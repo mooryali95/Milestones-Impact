@@ -73,10 +73,13 @@ describe('حراس المصدر', () => {
     expect(mail).not.toMatch(/mail_events[^\n]*to_email|to_email: to[^\n]*eventsOf/);
     expect(mail).toMatch(/if \(error\) \(\{ error \} = await eventsOf\(client\)\.insert\(row\)\)/);
   });
-  it('إرسال المدير اليدوي يبقى تحت السقف الكلي: force يتجاوز الحصة لا السقف', () => {
-    expect(mail).toContain("mailDecision(force ? 'alert' : kind, counts, cap)");
-    expect(mailDecision('alert', { sent: 80, nonCode: 0 }, 80).ok).toBe(false);
-    expect(mailDecision('alert', { sent: 50, nonCode: 40 }, 80).ok).toBe(true);
+  it('إرسال المدير اليدوي يبقى تحت السقف الكلي: force يتجاوز الحصة لا السقف، ولا يأخذ احتياط التنبيه فوقه', () => {
+    expect(mail).toContain("mailDecision(force ? 'code' : kind, counts, cap)");
+    expect(mailDecision('code', { sent: 80, nonCode: 0 }, 80).ok).toBe(false);
+    expect(mailDecision('code', { sent: 50, nonCode: 40 }, 80).ok).toBe(true);
+    // التنبيه وحده يمر فوق السقف باحتياطه (P1-12)
+    expect(mailDecision('alert', { sent: 80, nonCode: 0 }, 80).ok).toBe(true);
+    expect(mailDecision('alert', { sent: 85, nonCode: 0 }, 80).ok).toBe(false);
   });
   it('الإشعار المحجوب يدخل الطابور، والرمز لا يُؤجَّل، والقديم يُترك', () => {
     expect(core).toContain("(kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");

@@ -97,3 +97,41 @@ Deno.test('العداد غير مقروء: ما سوى الرموز والتنب
   assertEquals(inserts.map((r) => [r.kind, r.status]), [['notify', 'blocked'], ['contact', 'blocked'], ['bulk', 'blocked'], ['code', 'sent'], ['alert', 'sent']]);
   Deno.env.delete('LEADERS_ALERT_WEBHOOK');
 });
+
+Deno.test('P1-12: التنبيه يخرج عند السقف باحتياطه ويُحجب بعد خمس فوقه، والرمز يُحجب عند السقف', async () => {
+  await withResend(200, async (calls) => {
+    const full = fakeDb([...sent('code', 10)]);
+    assertEquals(await sendCounted(full.client, 'o@x.sa', 's', 'x', opts('alert')), { ok: true, id: 're_123' });
+    assertEquals((await sendCounted(full.client, 'a@x.sa', 's', 'x', opts('code'))).reason, 'mail_cap');
+    const over = fakeDb([...sent('code', 10), ...sent('alert', 5)]);
+    assertEquals(await sendCounted(over.client, 'o@x.sa', 's', 'x', opts('alert')), { ok: false, reason: 'mail_cap' });
+    assertEquals(over.inserts.map((r) => [r.kind, r.status]), [['alert', 'blocked']]);
+    assertEquals(calls.filter((u) => u.includes('resend.com')).length, 1);
+  });
+});
+
+Deno.test('P1-12: قناة المرسل تتلقى امتلاء السقف ورفض المزوّد وعبور 70% بدل الرابط، وحجب الحصة لا ينبّه، والتنبيه لا ينبّه عن نفسه', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const got: [string, Record<string, unknown>][] = [];
+  const alert = (k: string, d: Record<string, unknown>) => { got.push([k, d]); return Promise.resolve(true); };
+  try {
+    await withResend(200, async (calls) => {
+      assertEquals((await sendCounted(fakeDb([...sent('code', 10)]).client, 'a@x.sa', 's', 'x', opts('notify', { alert }))).reason, 'mail_cap');
+      assertEquals((await sendCounted(fakeDb([...sent('notify', 5)]).client, 'a@x.sa', 's', 'x', opts('notify', { alert }))).reason, 'mail_share');
+      await sendCounted(fakeDb([...sent('code', 6)]).client, 'a@x.sa', 's', 'x', opts('code', { alert }));
+      // رسالة التنبيه المحجوبة بعد احتياطها لا تستدعي القناة
+      await sendCounted(fakeDb([...sent('code', 15)]).client, 'o@x.sa', 's', 'x', opts('alert', { alert }));
+      assertEquals(calls.filter((u) => u.includes('hooks.example')).length, 0);
+    });
+    await withResend(403, async () => {
+      assertEquals(await sendCounted(fakeDb([]).client, 'a@x.sa', 's', 'x', opts('notify', { alert })), { ok: false, reason: 'mail_failed' });
+    });
+    assertEquals(got.map(([k]) => k), ['mail_cap', 'mail_quota_70', 'mail_rejected']);
+    assertEquals(got[0][1], { source: 'leaders-api', kind: 'notify', sent: 10, cap: 10 });
+    // قناة ترمي لا تُفشل الإرسال
+    await withResend(403, async () => {
+      const boom = () => Promise.reject(new Error('down'));
+      assertEquals(await sendCounted(fakeDb([]).client, 'a@x.sa', 's', 'x', opts('notify', { alert: boom })), { ok: false, reason: 'mail_failed' });
+    });
+  } finally { Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});

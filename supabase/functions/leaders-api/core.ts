@@ -214,7 +214,7 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null }: { kind?: MailKind; ref?: string | null } = {}) {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
-  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments });
+  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, alert: alertOps });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
     // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
@@ -247,7 +247,7 @@ export async function drainMailQueue(limit = 40) {
       await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
       continue;
     }
-    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom });
+    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps });
     if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;
@@ -255,6 +255,31 @@ export async function drainMailQueue(limit = 40) {
   }
   const { count } = await db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null);
   return { sent, pending: count ?? 0 };
+}
+
+// من المهمة الساعية بعد التفريغ: رسالة انتظرت في الطابور أكثر من QUEUE_ALERT_HOURS تنبيه واحد للمالك يجمع ما تأخر.
+// كل رسالة يُنبَّه إليها مرة واحدة: علامتها سطر في audit_log (mail.queue-stuck بمعرّفها)، تُكتب بعد وصول التنبيه
+// من إحدى القناتين، فلا يضيع التنبيه إن لم يصل، ويُعاد في الساعة التالية
+export const QUEUE_ALERT_HOURS = 6;
+export async function stuckQueueAlert() {
+  const before = new Date(Date.now() - QUEUE_ALERT_HOURS * 36e5).toISOString();
+  const read = (cols: string) => db.from('mail_queue').select(cols).is('sent_at', null).is('gave_up_at', null).lt('created_at', before).order('created_at').limit(200);
+  let { data, error } = await read('id, created_at, kind, reason');
+  if (error) ({ data, error } = await read('id, created_at, kind'));   // قبل ترحيل مركز البريد: بلا عمود السبب
+  if (error) return { stuck: null, alerted: 0 };
+  const rows = (data || []) as unknown as { id: string; created_at: string; kind: string; reason?: string | null }[];
+  if (!rows.length) return { stuck: 0, alerted: 0 };
+  const marks = await db.from('audit_log').select('entity_id').eq('action', 'mail.queue-stuck').in('entity_id', rows.map((m) => m.id));
+  // تعذّر قراءة العلامات: التنبيه مكررًا أهون من ضياعه
+  const seen = new Set(marks.error ? [] : (marks.data || []).map((x: any) => String(x.entity_id)));
+  const fresh = rows.filter((m) => !seen.has(m.id));
+  if (!fresh.length) return { stuck: rows.length, alerted: 0 };
+  const hours = Math.floor((Date.now() - Date.parse(fresh[0].created_at)) / 36e5);
+  const r = await raiseAlert('mail_queue_stuck', { messages: fresh.length, waiting_over_hours: QUEUE_ALERT_HOURS, oldest_hours: hours, ...(fresh[0].reason ? { reason: fresh[0].reason } : {}) });
+  if (!r.webhook && !r.email) return { stuck: rows.length, alerted: 0 };
+  const { error: markError } = await db.from('audit_log').insert(fresh.map((m) => ({ actor_type: 'system', actor: 'cron', action: 'mail.queue-stuck', entity: 'mail_queue', entity_id: m.id })));
+  if (markError) console.error('mail.queue-stuck marks:', markError.message);
+  return { stuck: rows.length, alerted: fresh.length };
 }
 
 // ── الدخول ──
@@ -591,35 +616,55 @@ export function healthMail(rows: [string, string][], issues: string[]) {
 }
 
 // ── تنبيه التشغيل الفوري ──
-// خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة كل عشر
-// دقائق لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
-export function alertMail(kind: string, detail: Record<string, unknown>) {
+// خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة في كل مهلة تهدئة
+// لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
+const ALERT_WINDOW_MS = 10 * 60e3;
+// حوادث البريد تدوم ساعات (السقف نافذة 24 ساعة، ورفض النطاق حتى يُصلح)، فمهلتها أطول: حادثة واحدة لا تُرسل تنبيهات كثيرة.
+// mail_queue_stuck بلا مهلة نوع: يُهدَّأ لكل رسالة في stuckQueueAlert. وتجربة القناة مرة في الدقيقة
+export const ALERT_COOLDOWN_MS: Record<string, number> = {
+  mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
+};
+export const alertCooldown = (kind: string) => ALERT_COOLDOWN_MS[kind] ?? ALERT_WINDOW_MS;
+const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات' };
+export function alertMail(kind: string, detail: Record<string, unknown>, windowMs = ALERT_WINDOW_MS) {
   const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
+  const calm = windowMs > 0 ? ` لن يصلك تنبيه آخر من النوع نفسه خلال ${SPAN_AR[windowMs] ?? `${Math.round(windowMs / 6e4)} دقيقة`}.` : '';
   return shell('admin', `تنبيه تشغيلي: ${kind}`,
-    mailText(`وقع <b>${bdi(kind)}</b> في leaders-api الآن. لن يصلك تنبيه آخر من النوع نفسه خلال عشر دقائق.`)
+    mailText(`وقع <b>${bdi(kind)}</b> في leaders-api الآن.${esc(calm)}`)
     + mailRows(rows)
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
     `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
-const ALERT_WINDOW_MS = 10 * 60e3;
 // تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
 const lastAlert = new Map<string, number>();
-export async function alertOps(kind: string, detail: Record<string, unknown>) {
-  if ((lastAlert.get(kind) ?? 0) > Date.now() - ALERT_WINDOW_MS) return false;
+// cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين
+export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean };
+export async function raiseAlert(kind: string, detail: Record<string, unknown>): Promise<AlertResult> {
+  const windowMs = alertCooldown(kind);
+  const cooled = { cooled: true, webhook: false, email: false };
+  if (windowMs > 0 && (lastAlert.get(kind) ?? 0) > Date.now() - windowMs) return cooled;
   try {
-    const since = new Date(Date.now() - ALERT_WINDOW_MS).toISOString();
-    const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
-      .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
-    if (!error && (count ?? 0) > 0) return false;
-    lastAlert.set(kind, Date.now());
+    if (windowMs > 0) {
+      const since = new Date(Date.now() - windowMs).toISOString();
+      const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+        .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
+      if (!error && (count ?? 0) > 0) return cooled;
+      lastAlert.set(kind, Date.now());
+    }
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
     await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
     // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه
-    const hooked = await alertWebhook(kind, detail);
-    if (!CONFIG.alertEmail || !CONFIG.resendKey) return hooked;
-    await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail), [], { kind: 'alert' });
-    return true;
-  } catch (e) { console.error('alertOps:', e); return false; }
+    const webhook = await alertWebhook(kind, detail);
+    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, email: false };
+    // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
+    const email = await sendMail(CONFIG.alertEmail, `تنبيه: ${kind} في leaders-api`, alertMail(kind, detail, windowMs), [], { kind: 'alert' })
+      .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
+    return { cooled: false, webhook, email };
+  } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false }; }
+}
+export async function alertOps(kind: string, detail: Record<string, unknown>) {
+  const r = await raiseAlert(kind, detail);
+  return r.webhook || r.email;
 }
 
 // معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل

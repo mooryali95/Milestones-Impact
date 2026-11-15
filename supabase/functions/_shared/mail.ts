@@ -183,9 +183,16 @@ async function logEvent(client: Client, row: Record<string, any>, extra: Record<
   if (error) console.error('mail_events insert:', error);
 }
 
-// force: قرار صريح من المدير بإرسال رسالة من صندوق «لم يُرسل»: يتجاوز حصة غير الرموز ويبقى تحت السقف الكلي
+// force: قرار صريح من المدير بإرسال رسالة من صندوق «لم يُرسل»: يتجاوز حصة غير الرموز ويبقى تحت السقف الكلي كالرمز
+// (لا احتياط التنبيه فوق السقف)
+// alert: قناة تنبيه المالك لأحداث البريد (السقف، و70%، ورفض المزوّد، وتعذّر العداد). leaders-api يمرر alertOps
+// (الرابط والبريد بتهدئة لكل نوع)، وما سواه الرابط وحده. رسالة التنبيه نفسها تنبّه بالرابط وحده، فلا حلقة
+export type MailAlert = (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
 export async function sendCounted(client: Client, to: string, subject: string, html: string,
-  { kind, source, ref = null, cap, sourceShare, force = false, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean }): Promise<SendOutcome> {
+  { kind, source, ref = null, cap, sourceShare, force = false, alert, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert }): Promise<SendOutcome> {
+  const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;
+  // التنبيه لا يُفشل الإرسال أبدًا
+  const raise = (k: string, d: Record<string, unknown>) => Promise.resolve().then(() => via(k, d)).catch((e) => console.error('mail alert:', k, e));
   const counts = await mailCounts(client);
   // عنوان رسالة الرمز لا يُحفظ: بعض الدوال تكتب الرمز في عنوانها، والسجل لا يحمل رمزًا أبدًا (D15)
   const extra = { to_hash: await addressHash(to), subject: kind === 'code' ? null : String(subject || '').slice(0, 300) };
@@ -199,18 +206,24 @@ export async function sendCounted(client: Client, to: string, subject: string, h
   }
   const log = (status: string, resend_id: string | null = null) => logEvent(client, { kind, source, ref, status, resend_id, to_domain: domainOf(to) }, extra);
   if (counts) {
-    const d = mailDecision(force ? 'alert' : kind, counts, cap);
-    if (!d.ok) { await log('blocked'); return { ok: false, reason: d.reason as SendOutcome['reason'] }; }
+    const d = mailDecision(force ? 'code' : kind, counts, cap);
+    if (!d.ok) {
+      await log('blocked');
+      // امتلاء السقف حدث يُنبَّه إليه (والتهدئة عند القناة)؛ حجب الحصة سير عادي يدخل به الإشعار الطابور.
+      // التنبيه المحجوب بعد احتياطه لا ينبّه عن نفسه: وصل الرابط قبله
+      if (d.reason === 'mail_cap' && kind !== 'alert') await raise('mail_cap', { source, kind, sent: counts.sent, cap });
+      return { ok: false, reason: d.reason as SendOutcome['reason'] };
+    }
   } else {
     // تعذّر العداد (D15): لا رسالة بلا قرار سقف إلا الرموز والتنبيه. ما سواها يُحجب بسبب السقف، والجماعي يدخل
-    // الطابور عند مرسله، والمالك يُنبَّه عبر الرابط
-    if (Date.now() - counterAlertAt > COUNTER_ALERT_MS) { counterAlertAt = Date.now(); await alertWebhook('mail_counter_unavailable', { source, kind }); }
+    // الطابور عند مرسله، والمالك يُنبَّه
+    if (Date.now() - counterAlertAt > COUNTER_ALERT_MS) { counterAlertAt = Date.now(); await raise('mail_counter_unavailable', { source, kind }); }
     if (!PRIORITY_KINDS.has(kind)) { await log('blocked'); return { ok: false, reason: 'mail_cap' }; }
   }
   const r = await deliverResult(to, subject, html, opts);
   await log(r.ok ? 'sent' : 'failed', r.ok ? (r.id ?? null) : null);
-  if (!r.ok && r.rejected) await alertWebhook('mail_rejected', { source, kind, status: r.status, from: opts.from || MAIL_FROM_DEFAULT });
-  if (r.ok && counts && crossesAlert(counts.sent, cap)) await alertWebhook('mail_quota_70', { sent: counts.sent + 1, cap, source });
+  if (!r.ok && r.rejected) await raise('mail_rejected', { source, kind, status: r.status, from: opts.from || MAIL_FROM_DEFAULT });
+  if (r.ok && counts && crossesAlert(counts.sent, cap)) await raise('mail_quota_70', { sent: counts.sent + 1, cap, source });
   if (r.ok) return { ok: true, id: r.id ?? null };
   return { ok: false, reason: r.unconfigured ? 'mail_unconfigured' : 'mail_failed' };
 }
