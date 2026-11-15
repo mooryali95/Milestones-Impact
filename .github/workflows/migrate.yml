@@ -5,20 +5,22 @@ name: Apply migrations (production)
 # المسجّل سلفًا في leaders.schema_migrations يُتخطى، وأول فشل يوقف السلسلة ويُظهر خطأ القاعدة في السجل.
 # الوضع check قراءة فقط: يطبع الجدولة الحية (cron.job وآخر تشغيلاتها) وأسماء أسرار Vault بلا قيم
 # وسجل الترحيلات وأسماء أسرار الدوال (ومنها مفتاحا Turnstile)، ولا يغيّر شيئًا (RUNBOOK.md §3).
+# الوضع verify قراءة فقط: يشغّل فحوص ملف scripts/db/verify-*.sql (يُسمّى في migrations)، كل فحص في معاملة للقراءة فقط.
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'apply = تطبيق الترحيلات المسمّاة · check = قراءة الجدولة والسجل فقط'
+        description: 'apply = تطبيق الترحيلات المسمّاة · check = قراءة الجدولة والسجل فقط · verify = فحوص قراءة من scripts/db/verify-*.sql'
         required: true
         type: choice
         default: apply
         options:
           - apply
           - check
+          - verify
       migrations:
-        description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)؛ تُهمل في وضع check'
+        description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)؛ تُهمل في وضع check. في وضع verify: مسار ملف الفحص'
         required: false
         type: string
 
@@ -48,6 +50,9 @@ jobs:
       - name: Function secrets the sign-in needs (names only)
         if: ${{ !cancelled() && env.MODE == 'check' }}
         run: node scripts/ops/function-secrets.mjs --require=signin
+      - name: Verify (read only)
+        if: env.MODE == 'verify'
+        run: node scripts/db/apply-migration.mjs --verify "$MIGRATIONS"
       - name: Nothing to apply
         if: env.MODE == 'apply' && env.MIGRATIONS == ''
         run: echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations" && exit 1
