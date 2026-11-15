@@ -73,3 +73,37 @@ describe('الخادم: مصدر واحد للاعتماد، والحكم يُع
     expect(sig).toContain('baselineProgress(ids)');
   });
 });
+
+import { notesFor, planUniform } from '../../supabase/functions/leaders-api/approval.js';
+describe('المرحلة 2: اعتماد المحددين بمستوى واحد', () => {
+  const pend = (id, levels) => ({ id, full_name: id, status: 'pending_approval', placements: Object.entries(levels).map(([dimension, level]) => ({ dimension, level })) });
+  const a = pend('a', { milestone: 'advanced', impact: 'beginner', leadership: 'beginner' });
+  const b = pend('b', { milestone: 'beginner', impact: 'beginner', leadership: 'beginner' });
+  it('المفروض يستبدل بُعده وحده، والفارغ يبقى على المحسوب، وتُسمّى كل مخالفة', () => {
+    const p = planUniform([a, b], { milestone: 'beginner' }, '');
+    expect(p.ready.map((r) => r.levels.milestone)).toEqual(['beginner', 'beginner']);
+    expect(p.ready[0].changes).toEqual([{ dim: 'milestone', from: 'advanced', to: 'beginner' }]);
+    expect(p.ready[1].changes).toEqual([]);
+    expect(p.needs_reason).toBe(true);
+    expect(p.reason_ok).toBe(false);
+  });
+  it('التعليل الكافي يقبل، ويُكتب لكل بُعد خالفه وحده', () => {
+    const p = planUniform([a, b], { milestone: 'beginner' }, 'قرار اللجنة: بداية موحّدة للدفعة');
+    expect(p.reason_ok).toBe(true);
+    expect(notesFor(p.ready[0], ' قرار اللجنة ')).toEqual({ milestone: 'قرار اللجنة' });
+    expect(notesFor(p.ready[1], 'قرار')).toEqual({});
+  });
+  it('بلا مخالفة لا يلزم تعليل، وغير المنتظر للاعتماد والناقص بلا فرض يُستبقيان', () => {
+    expect(planUniform([b], { milestone: 'beginner' }, '').reason_ok).toBe(true);
+    const p = planUniform([{ ...a, status: 'placed' }, pend('c', { milestone: 'beginner', impact: 'beginner' })], { milestone: 'beginner' }, '');
+    expect(p.held.map((h) => h.holds[0].key)).toEqual(['status', 'missing']);
+    expect(planUniform([pend('c', { milestone: 'beginner', impact: 'beginner' })], { leadership: 'intermediate' }, '').ready).toHaveLength(1);
+  });
+  it('الخادم: للمدير العام وحده، والتعليل يُرفض ناقصًا قبل أي اعتماد، ويمر بـapproveOne', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
+    const body = src.slice(src.indexOf('async function approveBulkSet'), src.indexOf('// تغيير الحالة، المدخل الواحد'));
+    expect(body).toContain('requireSuper(a);');
+    expect(body.indexOf("if (!plan.reason_ok)")).toBeLessThan(body.indexOf('approveOne('));
+    expect(body).toContain('await approveOne(a, p, r.levels, notesFor(r, reason)');
+  });
+});
