@@ -1482,6 +1482,57 @@ export function pickCohort({ enrollments = [], cohorts = [], organizationId = nu
   return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
 }
 
+// ── حراس المشاركين الأحياء ──
+// التقدم مربوط بمعرف المتطلب، ومعرفات برنامج آخر غيرها، فمن ينتقل بين برنامجين يفقد ما أنجزه من رحلته
+const byParticipant = (enrollments) => {
+  const m = new Map();
+  for (const e of enrollments || []) { if (!m.has(e.participant_id)) m.set(e.participant_id, []); m.get(e.participant_id).push(e); }
+  return m;
+};
+// أعضاء الجهة الذين ينقلهم pickCohort من دفعة جهتهم على برنامج آخر إلى الدفعة المرشحة، ولهم تقدم.
+// cohorts: الدفعات كما هي الآن، وcohort: الدفعة بعد الحفظ. الملحق يدويًا باقٍ في دفعته فلا يُعد
+/** @param {{ cohorts?: any[], participants?: any[], enrollments?: any[], progress?: any[] }} world @param {any} cohort */
+export function orgMoveImpact({ cohorts = [], participants = [], enrollments = [], progress = [] } = {}, cohort) {
+  if (!cohort?.organization_id || cohort.is_default) return { count: 0, from: [] };
+  const after = [...cohorts.filter((c) => c.id !== cohort.id), cohort];
+  const has = new Set((progress || []).map((r) => r.participant_id));
+  const byP = byParticipant(enrollments);
+  const from = new Map();
+  let count = 0;
+  for (const p of participants || []) {
+    if (p.organization_id !== cohort.organization_id || !has.has(p.id)) continue;
+    const ctx = { enrollments: byP.get(p.id) || [], organizationId: p.organization_id };
+    const now = pickCohort({ ...ctx, cohorts });
+    if (now.via !== 'organization' || now.cohort.id === cohort.id || now.cohort.program_id === cohort.program_id) continue;
+    if (pickCohort({ ...ctx, cohorts: after }).cohort?.id !== cohort.id) continue;
+    count++;
+    from.set(now.cohort.id, now.cohort.name || '');
+  }
+  return { count, from: [...from].map(([id, name]) => ({ id, name })) };
+}
+// أعضاء الدفعة فعلًا (pickCohort) الذين لهم تقدم: بهم يُرفض تغيير برنامجها
+/** @param {{ cohorts?: any[], participants?: any[], enrollments?: any[], progress?: any[] }} world @param {string} cohortId */
+export function cohortProgressCount({ cohorts = [], participants = [], enrollments = [], progress = [] } = {}, cohortId) {
+  const has = new Set((progress || []).map((r) => r.participant_id));
+  const byP = byParticipant(enrollments);
+  return (participants || []).filter((p) => has.has(p.id)
+    && pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id === cohortId).length;
+}
+// مراحل قاعدة اكتمالها «بمتطلباتها الإلزامية» يتركها الإخفاء بلا بند إلزامي ظاهر، فلا تكتمل أبدًا وتُقفل ما بعدها
+/** @param {any[]} stages @param {any[]} requirements @param {string[]} hidden */
+export function hideBreaksStage(stages = [], requirements = [], hidden = []) {
+  const h = new Set(hidden || []);
+  if (!h.size) return [];
+  return (stages || []).filter((s) => s.active !== false && stageRules(s).complete === 'required').filter((s) => {
+    const req = (requirements || []).filter((r) => r.active !== false && r.stage_key === s.key && r.required !== false);
+    return req.length > 0 && req.every((r) => h.has(r.code));
+  }).map((s) => ({ key: s.key, title_ar: s.title_ar }));
+}
+/** @param {{ key: string, title_ar?: string }[]} broken */
+export const hideBreaksMessage = (broken) => `إخفاء هذه البنود يترك مرحلة «${broken.map((s) => s.title_ar || s.key).join('»، «')}» بلا بند إلزامي ظاهر، فلا تكتمل أبدًا وتُقفل ما بعدها لكل الأعضاء. أبقِ فيها بندًا إلزاميًا ظاهرًا، أو غيّر قاعدة اكتمالها في رحلة البرنامج أولًا.`;
+// رموز تعتمد عليها ميزة أخرى: إخفاؤها جائز، والتحذير ظاهر في نموذج الدفعة
+export const CODE_FEATURES = { 'E-MGR': 'يكتمل بتقدير المدير المباشر بعد البرنامج، وإخفاؤه يوقف هذا الاكتمال لأعضاء الدفعة' };
+
 // ما يُخصَّص لكل دفعة من إعداد النشاط. الباقي ثابت في البرنامج.
 export const DELIVERY_FIELDS = {
   workshop: ['verify', 'format'],
@@ -2126,7 +2177,7 @@ export * from './final.js';
 export * from './katon.js';
 export * from './hall.js';
 export * from './peer.js';
-import { resolveStages } from './journey.js';
+import { resolveStages, stageRules } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════
 // الخبراء: تنقية الملف، وما يُعرض لغير الإدارة

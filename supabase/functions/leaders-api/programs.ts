@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cohortProgressCount, hideBreaksMessage, hideBreaksStage, orgMoveImpact, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -320,6 +320,47 @@ export async function programCompare(b: Body) {
 const STATUSES = ['planned', 'open', 'running', 'closed'];
 const day = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
 
+// حراس المشاركين الأحياء قبل أي كتابة: التقدم مربوط بمعرف المتطلب، فلا يُنقل أحد بين برنامجين بصمت،
+// ولا يُترك إخفاء مرحلة إلزامية بلا بند يكملها، ولا يتغير برنامج دفعة لأعضائها تقدم
+async function liveWorld(orgId: string | null, cohortId: string | null) {
+  const [cohorts, enr] = await Promise.all([
+    db.from('cohorts').select(COHORT_COLS),
+    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
+  ]);
+  const enrollments = (must(enr) ?? []) as any[];
+  const ids = new Set(cohortId ? enrollments.filter((e) => e.cohort_id === cohortId && e.status !== 'withdrawn').map((e) => e.participant_id) : []);
+  if (orgId) for (const r of (must(await db.from('participants').select('id').eq('organization_id', orgId).eq('is_demo', false).limit(5000)) ?? []) as any[]) ids.add(r.id);
+  const list = [...ids] as string[];
+  const participants = list.length ? (must(await db.from('participants').select('id, organization_id').in('id', list).eq('is_demo', false)) ?? []) as any[] : [];
+  const progress = list.length ? (must(await db.from('participant_requirements').select('participant_id').in('participant_id', list).limit(50000)) ?? []) as any[] : [];
+  return { cohorts: (must(cohorts) ?? []) as any[], participants, enrollments: enrollments.filter((e) => ids.has(e.participant_id)), progress };
+}
+async function guardLive(b: Body, row: Body, prev: any, programId: string) {
+  const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
+  if (programChanged) {
+    const w = await liveWorld(prev.organization_id || null, prev.id);
+    const n = cohortProgressCount(w, prev.id);
+    if (n) throw new Fail(`لا يتغير برنامج دفعة لأعضائها تقدم (${n} مشاركًا)، فتقدمهم مربوط بمتطلبات برنامجها. أنشئ دفعة جديدة على البرنامج الآخر.`, 409, 'program_locked', { affected: n });
+  }
+  const hidden = 'hidden_requirements' in row ? row.hidden_requirements : (prev?.hidden_requirements || []);
+  const versionChanged = 'program_version_id' in row && row.program_version_id !== (prev?.program_version_id ?? null);
+  if (hidden.length && ('hidden_requirements' in row || programChanged || versionChanged)) {
+    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
+    const def = vid ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data || { stages: [], requirements: [] }) : await liveRows(programId);
+    const broken = hideBreaksStage(def.stages || [], def.requirements || [], hidden);
+    if (broken.length) throw new Fail(hideBreaksMessage(broken), 400, 'hide_breaks_stage', { stages: broken.map((s: any) => s.key) });
+  }
+  const next = { ...(prev || {}), ...row, id: prev?.id || 'new', created_at: prev?.created_at || new Date().toISOString() };
+  const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);
+  if (b.confirm_move === true || !touched || !next.organization_id || next.is_default || !['open', 'running'].includes(next.status)) return;
+  const impact = orgMoveImpact(await liveWorld(next.organization_id, null), next);
+  if (impact.count) {
+    const names = impact.from.map((c) => `«${c.name}»`).join('، ');
+    throw new Fail(`حفظ هذه الدفعة ينقل ${impact.count} مشاركًا من ${names} على برنامج آخر إليها تلقائيًا، ويفقدون ما أنجزوه من رحلتهم. أكّد النقل إن كان مقصودًا، أو أبقِ الدفعة «مخطط لها» حتى تُغلق السابقة.`,
+      409, 'confirm_move', { affected: impact.count, from: impact.from });
+  }
+}
+
 export async function cohortSave(a: Admin, b: Body) {
   const prev = isUuid(b.id) ? must(await db.from('cohorts').select('*').eq('id', b.id).maybeSingle()) : null;
   if (isUuid(b.id) && !prev) throw new Fail('الدفعة غير موجودة', 404);
@@ -421,6 +462,7 @@ export async function cohortSave(a: Admin, b: Body) {
       if ((ok || []).length !== team.length) throw new Fail('في فريق الدفعة خبير غير معتمد. اختر من الخبراء المعتمدين');
     }
   }
+  await guardLive(b, row, prev, programId);
   row.updated_at = new Date().toISOString();
   const saved: any = prev
     ? must(await db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
