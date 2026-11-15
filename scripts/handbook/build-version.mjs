@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lintHandbookMd, lintQuiz } from '../../supabase/functions/leaders-api/logic.js';
 import { dirOf, loadChapters, ROOT, versions } from './content.mjs';
+import { impactPath, renderImpact, versionImpact } from './impact.mjs';
 
 const TAG = '$hb$';
 const q = (s) => { if (s.includes(TAG)) throw new Error(`النص يحوي ${TAG}`); return `${TAG}${s}${TAG}`; };
@@ -98,7 +99,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const name = arg('name') || `${stamp()}_leaders_handbook_${to.replace(/\W/g, '_')}`;
   if (!/^\d{14}_[a-z0-9_]+$/.test(name)) { console.error(`اسم ترحيل غير صالح: ${name}`); process.exit(2); }
   const sql = buildVersion(from, to, name);
+  // تقرير الأثر (المرحلة 3 من «الكتاب الأم»): يُكتب بجانب الإصدار، وما يكسر إحالة يرفض البناء قبل كتابة الترحيل
+  const impact = await versionImpact(from, to);
+  writeFileSync(impactPath(to), renderImpact(impact));
+  if (impact.errors.length) { console.error(`الإصدار يكسر ما يعتمد عليه، فلم يُكتب ترحيله:\n${impact.errors.map((e) => `✗ ${e}`).join('\n')}\nالتقرير: ${impactPath(to)}`); process.exit(1); }
   writeFileSync(join(ROOT, 'supabase/migrations', `${name}.sql`), sql);
   writeFileSync(join(dirOf(to), 'VERSION.json'), `${JSON.stringify({ from, migration: name }, null, 2)}\n`);
-  console.log(`كُتب ${name}.sql و${to}/VERSION.json. ثم: node scripts/db/migrations-list.mjs && node scripts/db/snapshot.mjs --from-migrations`);
+  console.log(`كُتب ${name}.sql و${to}/VERSION.json و${to}/IMPACT.md (تقرير الأثر للعرض على اللجنة). ثم: node scripts/db/migrations-list.mjs && node scripts/db/snapshot.mjs --from-migrations`);
 }
