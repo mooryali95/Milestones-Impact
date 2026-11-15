@@ -1,6 +1,6 @@
 // حراس المشاركين الأحياء: عدّ من ينقلهم فتح دفعة جهة على برنامج آخر، وكشف الإخفاء الذي يكسر مرحلة، وسؤال التأكيد
 import { describe, expect, it, vi } from 'vitest';
-import { cohortProgressCount, hideBreaksStage, orgMoveImpact } from '../../supabase/functions/leaders-api/logic.js';
+import { cohortProgressCount, cohortsAfter, hideBreaksStage, moveConfirmText, moveImpact, newlyBroken, orgMoveImpact, programLockedText } from '../../supabase/functions/leaders-api/logic.js';
 import { confirmMoveText, MOVE_CANCELLED, saveCohort } from './cohort-guard.js';
 
 const old = { id: 'c1', name: 'سفراء 2026', organization_id: 'o1', program_id: 'pa', status: 'running', starts_on: '2026-09-01' };
@@ -28,9 +28,41 @@ describe('orgMoveImpact', () => {
     expect(orgMoveImpact(world, { id: 'new', organization_id: 'o1', program_id: 'pb', status: 'open', starts_on: '2025-01-01' }).count).toBe(0);
     expect(orgMoveImpact(world, { id: 'new', organization_id: null, program_id: 'pb', status: 'open' }).count).toBe(0);
   });
-  it('من يتبع الدفعة المفتوحة لا يُحسب: الحارس لدفعة الجهة القائمة وحدها', () => {
+  it('أول دفعة للجهة تنقل من يتبع الدفعة المفتوحة على برنامج آخر، ومنهم من ضاعت دفعة تسجيله', () => {
     const w = { ...world, cohorts: [world.cohorts[1]] };
-    expect(orgMoveImpact(w, { id: 'new', organization_id: 'o1', program_id: 'pb', status: 'open' }).count).toBe(0);
+    expect(orgMoveImpact(w, { id: 'new', organization_id: 'o1', program_id: 'pb', status: 'open' })).toEqual({ count: 2, from: [{ id: 'c0', name: '' }] });
+    expect(orgMoveImpact(w, { id: 'new', organization_id: 'o1', program_id: 'pa', status: 'open' }).count).toBe(0);
+  });
+});
+
+describe('moveImpact', () => {
+  const newer = { id: 'c2', name: 'دفعة 2027', organization_id: 'o1', program_id: 'pb', status: 'running', starts_on: '2027-01-01' };
+  const cohorts = [...world.cohorts, newer];
+  it('إغلاق دفعة الجهة أو إرجاعها مخططًا لها أو نقلها لجهة أخرى يُخرج أعضاءها إلى برنامج آخر', () => {
+    for (const change of [{ status: 'closed' }, { status: 'planned' }, { organization_id: null }]) {
+      const r = moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, ...change }));
+      expect(r.moved).toBe(1);
+      expect(r.from).toEqual([{ id: 'c2', name: 'دفعة 2027' }]);
+      expect(r.to).toEqual([{ id: 'c1', name: 'سفراء 2026' }]);
+    }
+  });
+  it('نقلها لجهة أخرى يُخرج أعضاء الأولى ويُدخل أعضاء الثانية من الدفعة المفتوحة', () => {
+    const r = moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, organization_id: 'o2' }));
+    expect(r.moved).toBe(2);
+    expect(r.from.map((c) => c.id).sort()).toEqual(['c0', 'c2']);
+  });
+  it('تبكير بداية الدفعة الأحدث حتى تسبقها القديمة يُخرج أعضاءها كذلك', () => {
+    expect(moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, starts_on: '2025-01-01' })).moved).toBe(1);
+  });
+  it('تغيير برنامج الدفعة يُعد بقاءً على برنامج آخر، ومنه الدفعة المفتوحة', () => {
+    expect(moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, program_id: 'pa' }))).toMatchObject({ moved: 0, stay: 1 });
+    const def = world.cohorts[1];
+    const solo = { ...world, participants: [{ id: 'p1', organization_id: null }] };
+    expect(moveImpact(solo, world.cohorts, cohortsAfter(world.cohorts, { ...def, program_id: 'pb' }))).toMatchObject({ moved: 0, stay: 1 });
+  });
+  it('بلا تغيير ولا تقدم: لا شيء', () => {
+    expect(moveImpact(world, cohorts, cohorts)).toEqual({ moved: 0, stay: 0, from: [], to: [] });
+    expect(moveImpact({ ...world, progress: [] }, cohorts, cohortsAfter(cohorts, { ...newer, status: 'closed' })).moved).toBe(0);
   });
 });
 
@@ -56,9 +88,33 @@ describe('hideBreaksStage', () => {
     expect(hideBreaksStage(stages, reqs, ['A'])).toEqual([{ key: 's1', title_ar: 'التمهيد' }]);
     expect(hideBreaksStage(stages, reqs, ['D', 'E']).map((s) => s.key)).toEqual(['s3']);
   });
-  it('يبقى بند إلزامي ظاهر، أو المرحلة تكتمل بأي بند، أو البند اختياري: لا كسر', () => {
+  it('مرحلة تكتمل بأي بند تنكسر بإخفاء كل بنودها', () => {
+    expect(hideBreaksStage(stages, reqs, ['C']).map((s) => s.key)).toEqual(['s2']);
+    const more = [...reqs, { code: 'F', stage_key: 's2', required: false }];
+    expect(hideBreaksStage(stages, more, ['C'])).toEqual([]);
+  });
+  it('مرحلة اختيارية لا يقف عليها شيء يُخفى ما فيها، والمسماة في «بعد مراحل» تُحرس', () => {
+    const opt = [{ key: 's1', title_ar: 'إثراء', rules: { mode: 'optional' } }, { key: 's2', title_ar: 'التطبيق' }];
+    const r = [{ code: 'A', stage_key: 's1', required: true }, { code: 'C', stage_key: 's2', required: true }];
+    expect(hideBreaksStage(opt, r, ['A'])).toEqual([]);
+    const gated = [opt[0], { key: 's2', title_ar: 'التطبيق', rules: { unlock: 'stages', after: ['s1'] } }];
+    expect(hideBreaksStage(gated, r, ['A']).map((s) => s.key)).toEqual(['s1']);
+  });
+  it('البنود المقيدة بمستوى: إخفاء بند المتقدمين وحده يكسر مرحلتهم ولو بقي بند المبتدئين', () => {
+    const lv = [
+      { code: 'R1', stage_key: 's1', required: true, dimension: 'milestone', level: 'beginner' },
+      { code: 'R2', stage_key: 's1', required: true, dimension: 'milestone', level: 'advanced' },
+    ];
+    expect(hideBreaksStage([stages[0]], lv, ['R2']).map((s) => s.key)).toEqual(['s1']);
+    // بند عام إلزامي ظاهر يكمل المرحلة للجميع
+    expect(hideBreaksStage([stages[0]], [...lv, { code: 'G', stage_key: 's1', required: true }], ['R2'])).toEqual([]);
+  });
+  it('newlyBroken: ما كان مكسورًا قبل الحفظ لا يُحتسب', () => {
+    expect(newlyBroken([{ key: 's1' }, { key: 's2' }], [{ key: 's1' }])).toEqual([{ key: 's2' }]);
+    expect(newlyBroken([{ key: 's1' }], [{ key: 's1' }])).toEqual([]);
+  });
+  it('يبقى بند إلزامي ظاهر، أو البند اختياري: لا كسر', () => {
     expect(hideBreaksStage(stages, reqs, ['D'])).toEqual([]);
-    expect(hideBreaksStage(stages, reqs, ['C'])).toEqual([]);
     expect(hideBreaksStage(stages, reqs, ['B'])).toEqual([]);
     expect(hideBreaksStage(stages, reqs, [])).toEqual([]);
   });
@@ -71,7 +127,7 @@ describe('saveCohort', () => {
     const confirm = vi.fn().mockResolvedValue(true);
     expect(await saveCohort({ name: 'د' }, confirm, call)).toEqual({ success: true });
     expect(confirm.mock.calls[0][0]).toBe(confirmMoveText(refused));
-    expect(confirm.mock.calls[0][0]).toContain('3 مشاركًا');
+    expect(confirm.mock.calls[0][0]).toContain('3 مشاركين');
     expect(confirm.mock.calls[0][0]).toContain('«سفراء 2026»');
     expect(call.mock.calls[1][1]).toEqual({ name: 'د', confirm_move: true });
   });
@@ -83,5 +139,20 @@ describe('saveCohort', () => {
     const ask = vi.fn();
     expect(await saveCohort({}, ask, other)).toEqual({ success: false, message: 'خطأ' });
     expect(ask).not.toHaveBeenCalled();
+  });
+});
+
+describe('صياغة العدد', () => {
+  it('المفرد والمثنى والجمع والتمييز، في السؤال ورفض تغيير البرنامج', () => {
+    const t = (n) => moveConfirmText({ affected: n, from: [{ id: 'c1', name: 'أ' }], to: [{ id: 'c2', name: 'ب' }] });
+    expect(t(1)).toContain('ينتقل تلقائيًا مشارك واحد من «أ» إلى «ب»');
+    expect(t(1)).toContain('ويفقد ما أنجزه');
+    expect(t(2)).toContain('مشاركان');
+    expect(t(7)).toContain('7 مشاركين');
+    expect(t(11)).toContain('11 مشاركًا');
+    expect(moveConfirmText({ affected: 3, from: [{ id: 'c1', name: 'أ' }], to: [{ id: null, name: '' }] })).toContain('إلى بلا دفعة');
+    expect(programLockedText(1)).toContain('فيها مشارك واحد');
+    expect(programLockedText(4)).toContain('فيها 4 مشاركين');
+    expect(t(5)).not.toMatch(/[\u2013\u2014]/);
   });
 });

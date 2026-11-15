@@ -37,7 +37,7 @@ async function setup(page) {
       'admin.program': { success: true, program: programs[0], stages: [], requirements: reqs },
       // دفعة جهة على برنامج آخر: الخادم يرفض بعدد المتأثرين حتى يصله التأكيد
       'admin.cohort-save': b.confirm_move || b.program_id !== 'pb' ? { success: true, cohort: { id: 'c9', name: b.name } }
-        : { success: false, code: 'confirm_move', message: 'ينقل', affected: 7, from: [{ id: 'c1', name: 'سفراء 2026' }] },
+        : { success: false, code: 'confirm_move', message: 'ينقل', affected: 7, from: [{ id: 'c1', name: 'سفراء 2026' }], to: [{ id: 'c2', name: 'أفراد الربيع' }] },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
@@ -97,9 +97,10 @@ for (const width of [1440, 390]) {
     await form.locator('#f-status').selectOption('open');
     await form.getByRole('button', { name: 'حفظ' }).click();
     const ask = page.getByRole('alertdialog');
-    await expect(ask).toContainText('7 مشاركًا من جهة هذه الدفعة لهم تقدم في «سفراء 2026»');
+    // العدد بصيغته العربية الصحيحة، ومن أين وإلى أين
+    await expect(ask).toContainText('بهذا الحفظ ينتقل تلقائيًا 7 مشاركين من «سفراء 2026» إلى «أفراد الربيع» على برنامج آخر');
     await shot(page, 'confirm-move');
-    await ask.getByRole('button', { name: 'انقلهم إلى الدفعة الجديدة' }).click();
+    await ask.getByRole('button', { name: 'احفظ وانقلهم' }).click();
     await expect.poll(() => calls.filter((c) => c.action === 'admin.cohort-save').length).toBe(2);
     expect(calls.filter((c) => c.action === 'admin.cohort-save')[1]).toMatchObject({ id: 'c2', organization_id: 'o1', program_id: 'pb', confirm_move: true });
     expect(calls.filter((c) => c.action === 'admin.cohort-save')[0]).not.toHaveProperty('confirm_move');

@@ -81,6 +81,13 @@ describe('نموذج الدفعة: أسماء البنود كما يقرؤها �
     expect(hiddenHelp({ hidden_requirements: ['R-A'] }, reqs)).not.toContain('لن يُحفظ');
     expect(hiddenHelp({ hidden_requirements: ['E-MGR'] }, reqs)).toContain('تنبيه: «إفادة المدير (التطبيق)» يكتمل بتقدير المدير المباشر');
   });
+  it('إخفاء كاسر محفوظ قبل فتح النموذج لا يُنبَّه إليه بمنع الحفظ، ولا يُرسل المحفوظ مع الدفعة', async () => {
+    const { cohortToForm, formToCohort } = await import('./methodology.js');
+    const v = cohortToForm({ hidden_requirements: ['T-ATTEND'] });
+    expect(hiddenHelp(v, reqs)).not.toContain('لن يُحفظ');
+    expect(formToCohort(v)).not.toHaveProperty('hidden_before');
+    expect(formToCohort(v).hidden_requirements).toEqual(['T-ATTEND']);
+  });
 });
 
 // P3: المقاعد من العقد مصدرًا واحدًا في العرض، والسعة التشغيلية مطوية لدفعة الجهة وظاهرة لغيرها

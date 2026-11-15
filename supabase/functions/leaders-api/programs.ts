@@ -4,8 +4,8 @@
 // البرنامج: المراحل والمتطلبات وإعداد كل نشاط، يُبنى مرة ويُحفظ بنسخ.
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
-import { audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cohortProgressCount, hideBreaksMessage, hideBreaksStage, orgMoveImpact, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { all, allFor, audit, db, Fail, must } from './core.ts';
+import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -331,44 +331,59 @@ const STATUSES = ['planned', 'open', 'running', 'closed'];
 const day = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
 
 // حراس المشاركين الأحياء قبل أي كتابة: التقدم مربوط بمعرف المتطلب، فلا يُنقل أحد بين برنامجين بصمت،
-// ولا يُترك إخفاء مرحلة إلزامية بلا بند يكملها، ولا يتغير برنامج دفعة لأعضائها تقدم
-async function liveWorld(orgId: string | null, cohortId: string | null) {
-  const [cohorts, enr] = await Promise.all([
-    db.from('cohorts').select(COHORT_COLS),
-    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
+// ولا يُترك إخفاء مرحلة بلا بند يكملها، ولا يتغير برنامج دفعة لأعضائها تقدم.
+// كل قراءة بصفحات (all/allFor): القراءة الواحدة تقف عند max_rows بلا خطأ، والرابط بمعرفات كثيرة يتجاوز حده
+async function liveWorld(scope: { orgs: (string | null)[]; cohortId: string | null; everyone: boolean }) {
+  const cohorts = await all((f, t) => db.from('cohorts').select(COHORT_COLS).order('id').range(f, t));
+  let ids: string[] | null = null;
+  if (!scope.everyone) {
+    const set = new Set<string>();
+    if (scope.cohortId) {
+      for (const e of await all((f, t) => db.from('enrollments').select('participant_id').eq('cohort_id', scope.cohortId).neq('status', 'withdrawn').order('id').range(f, t))) set.add(e.participant_id);
+    }
+    for (const o of new Set(scope.orgs.filter(Boolean))) {
+      for (const r of await all((f, t) => db.from('participants').select('id').eq('organization_id', o).eq('is_demo', false).order('id').range(f, t))) set.add(r.id);
+    }
+    ids = [...set];
+    if (!ids.length) return { cohorts, participants: [] as any[], enrollments: [] as any[], progress: [] as any[] };
+  }
+  const [participants, enrollments, progress] = await Promise.all([
+    allFor(ids, () => db.from('participants').select('id, organization_id').eq('is_demo', false).order('id'), 'id'),
+    allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
+    // يكفي وجود صف: من له صف تقدم واحد يفقده بالنقل
+    allFor(ids, () => db.from('participant_requirements').select('participant_id').order('participant_id').order('requirement_id')),
   ]);
-  const enrollments = (must(enr) ?? []) as any[];
-  const ids = new Set(cohortId ? enrollments.filter((e) => e.cohort_id === cohortId && e.status !== 'withdrawn').map((e) => e.participant_id) : []);
-  if (orgId) for (const r of (must(await db.from('participants').select('id').eq('organization_id', orgId).eq('is_demo', false).limit(5000)) ?? []) as any[]) ids.add(r.id);
-  const list = [...ids] as string[];
-  const participants = list.length ? (must(await db.from('participants').select('id, organization_id').in('id', list).eq('is_demo', false)) ?? []) as any[] : [];
-  const progress = list.length ? (must(await db.from('participant_requirements').select('participant_id').in('participant_id', list).limit(50000)) ?? []) as any[] : [];
-  return { cohorts: (must(cohorts) ?? []) as any[], participants, enrollments: enrollments.filter((e) => ids.has(e.participant_id)), progress };
+  return { cohorts, participants, enrollments, progress };
 }
+const defOf = async (vid: string | null | undefined, programId: string) => vid
+  ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data || { stages: [], requirements: [] })
+  : await liveRows(programId);
 async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
-  if (programChanged) {
-    const w = await liveWorld(prev.organization_id || null, prev.id);
-    const n = cohortProgressCount(w, prev.id);
-    if (n) throw new Fail(`لا يتغير برنامج دفعة لأعضائها تقدم (${n} مشاركًا)، فتقدمهم مربوط بمتطلبات برنامجها. أنشئ دفعة جديدة على البرنامج الآخر.`, 409, 'program_locked', { affected: n });
-  }
-  const hidden = 'hidden_requirements' in row ? row.hidden_requirements : (prev?.hidden_requirements || []);
-  const versionChanged = 'program_version_id' in row && row.program_version_id !== (prev?.program_version_id ?? null);
+  const hidden = ('hidden_requirements' in row ? row.hidden_requirements : prev?.hidden_requirements) || [];
+  const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id ?? null;
+  const versionChanged = !!prev && vid !== (prev.program_version_id ?? null);
   if (hidden.length && ('hidden_requirements' in row || programChanged || versionChanged)) {
-    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
-    const def = vid ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data || { stages: [], requirements: [] }) : await liveRows(programId);
+    const def = await defOf(vid, programId);
     const broken = hideBreaksStage(def.stages || [], def.requirements || [], hidden);
-    if (broken.length) throw new Fail(hideBreaksMessage(broken), 400, 'hide_breaks_stage', { stages: broken.map((s: any) => s.key) });
+    // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها
+    const was = broken.length && prev?.hidden_requirements?.length
+      ? await defOf(prev.program_version_id, prev.program_id).then((d: any) => hideBreaksStage(d.stages || [], d.requirements || [], prev.hidden_requirements))
+      : [];
+    const worse = newlyBroken(broken, was);
+    if (worse.length) throw new Fail(hideBreaksMessage(worse), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
   }
-  const next = { ...(prev || {}), ...row, id: prev?.id || 'new', created_at: prev?.created_at || new Date().toISOString() };
   const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);
-  if (b.confirm_move === true || !touched || !next.organization_id || next.is_default || !['open', 'running'].includes(next.status)) return;
-  const impact = orgMoveImpact(await liveWorld(next.organization_id, null), next);
-  if (impact.count) {
-    const names = impact.from.map((c) => `«${c.name}»`).join('، ');
-    throw new Fail(`حفظ هذه الدفعة ينقل ${impact.count} مشاركًا من ${names} على برنامج آخر إليها تلقائيًا، ويفقدون ما أنجزوه من رحلتهم. أكّد النقل إن كان مقصودًا، أو أبقِ الدفعة «مخطط لها» حتى تُغلق السابقة.`,
-      409, 'confirm_move', { affected: impact.count, from: impact.from });
-  }
+  // الدفعة المفتوحة ملاذ من لا دفعة له أيًا كانت حالتها (pickCohort)، فلا يتغير لأعضائها إلا البرنامج
+  if (!touched || (prev?.is_default && !programChanged)) return;
+  const next = { ...(prev || {}), ...row, id: prev?.id || 'new', created_at: prev?.created_at || new Date().toISOString() };
+  // من قد تتغير دفعته: أعضاء الجهة قبل الحفظ وبعده، والملحقون بالدفعة، والجميع إن كانت الدفعة المفتوحة
+  const w = await liveWorld({ orgs: [prev?.organization_id ?? null, next.organization_id ?? null], cohortId: prev?.id || null, everyone: !!next.is_default });
+  const impact = moveImpact(w, w.cohorts, cohortsAfter(w.cohorts, next));
+  if (programChanged && impact.stay) throw new Fail(programLockedText(impact.stay), 409, 'program_locked', { affected: impact.stay });
+  if (b.confirm_move === true || !impact.moved) return;
+  const extra = { affected: impact.moved, from: impact.from, to: impact.to };
+  throw new Fail(`${moveConfirmText(extra)} أكّد النقل إن كان مقصودًا، أو أبقِ الدفعة على حالها حتى تُغلق السابقة.`, 409, 'confirm_move', extra);
 }
 
 export async function cohortSave(a: Admin, b: Body) {

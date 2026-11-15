@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -236,7 +236,9 @@ const stagesOfReqs = (reqs) => [...new Map(reqs.filter((r) => r.stage_key).map((
 const HIDE_HELP = 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.';
 export function hiddenHelp(v, reqs = []) {
   const hidden = Array.isArray(v?.hidden_requirements) ? v.hidden_requirements : [];
-  const broken = hideBreaksStage(stagesOfReqs(reqs), reqs, hidden);
+  // ما كان مكسورًا قبل فتح النموذج لا يمنع الحفظ، كما في cohortSave
+  const stages = stagesOfReqs(reqs);
+  const broken = newlyBroken(hideBreaksStage(stages, reqs, hidden), hideBreaksStage(stages, reqs, v?.hidden_before || []));
   const notes = hidden.filter((c) => CODE_FEATURES[c]).map((c) => {
     const r = reqs.find((x) => x.code === c);
     return `تنبيه: «${r ? reqLabel(r, reqs) : c}» ${CODE_FEATURES[c]}.`;
@@ -320,7 +322,9 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
 export function cohortToForm(c = {}) {
   const v = { ...c, program_version_id: c.program_version_id || '', organization_id: c.organization_id || '',
     capacity_on: c.capacity != null && c.capacity !== '',
-    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert' };
+    level_mode: c.level_mode || 'mixed', content_level: c.content_level || '', project_mode: c.project_mode || 'individual', hidden_requirements: c.hidden_requirements || [], supervision: c.supervision || 'peers_expert',
+    // المخفي كما حُفظ، للمقارنة وحدها فلا يُرسل
+    hidden_before: c.hidden_requirements || [] };
   // الفريق والمستشار لا يُرسَلان من نموذج الدفعة: حفظه كان يستبدل الفريق بنسخة قديمة لو تغيّر من «الفريق والمجموعات» بعد فتحه
   delete v.schedule; delete v.stage_modes; delete v.advisor_expert_id; delete v.team_expert_ids; delete v.team_ready;
   for (const [code, d] of Object.entries(c.delivery || {})) for (const [k, x] of Object.entries(d)) v[`d:${code}:${k}`] = x;
@@ -336,6 +340,7 @@ export function formToCohort(v) {
   }
   // إلغاء اختيار السعة التشغيلية في دفعة الجهة يمحوها، فلا تبقى قيمة مخفية تحذّر بلا سبب
   if ('capacity_on' in out) { if (!out.capacity_on) out.capacity = null; delete out.capacity_on; }
+  delete out.hidden_before;
   return { ...out, delivery };
 }
 
