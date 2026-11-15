@@ -167,5 +167,5 @@ export const MIGRATION_GATES = {
   '20261114140000_leaders_initiative_business_case': ["tolerant", "محتوى نماذج فقط: الدوال تقرأ النماذج كما هي في القاعدة، وفحص فصل الشراء يُطبَّق متى وُجد الفصل"],
   '20261115100000_leaders_initiative_reality': ["tolerant", "محتوى نماذج فقط: حقول اختيارية تُضاف إلى بطاقة المبادرة، والدوال تقرأ الحقول كما هي في القاعدة"],
   '20261115110000_leaders_pin_sponsor_seat_guard': ["tolerant", "الدالة تفحص الشرط نفسه قبل استدعاء الدالة (entitlements.ts seatStopped)، فتعمل قبله وبعده"],
-  '20261115120000_leaders_rater_token_hashes': ["tolerant", "الدالة تطابق token_hash أولًا ثم token_hashes وتتحمل غياب العمود (impact.ts raterFrom وtokenPatch)، فقبله يعمل الرابط الأحدث كما كان وبعده كل رابط صادر"],
+  '20261115120000_leaders_rater_token_hashes': ["tolerant", "الدالة تطابق token_hash أولًا ثم token_hashes وتتحمل غياب العمود (impact.ts raterFrom وtokenPatch)، فتعمل قبله وبعده"],
 };
