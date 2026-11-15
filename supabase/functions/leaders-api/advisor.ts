@@ -10,7 +10,7 @@ import { all, db, Fail, sendMail } from './core.ts';
 import { cohortOf } from './programs.ts';
 import { reviewSubmissionBy } from './admin.ts';
 import { firstName } from './hall.js';
-import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId } from './logic.js';
+import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved } from './logic.js';
 
 type Body = Record<string, any>;
 
@@ -33,8 +33,9 @@ export async function advisorOf(p: { id: string; organization_id?: string | null
   const ids = { group: await groupAdvisorId(c?.id, p.id), cohort: c?.advisor_expert_id || null };
   const want = [ids.group, ids.cohort].filter(Boolean) as string[];
   if (!want.length) return null;
-  const { data } = await db.from('experts').select('id, full_name, email, status').in('id', want);
-  const approved = (data || []).filter((e: any) => ['active', 'paused'].includes(e.status));
+  // خدمة الرحلة وحدها (journeyApproved): عضو اللجنة بلا دور لا يكون مستشار أحد ولو بقي معيَّنًا
+  const { data } = await db.from('experts').select('id, full_name, email, status, roles').in('id', want);
+  const approved = (data || []).filter(journeyApproved);
   const id = effectiveAdvisorId(ids, approved.map((e: any) => e.id));
   return approved.find((e: any) => e.id === id) || null;
 }
@@ -89,9 +90,9 @@ async function groupScoped(expertId: string, cohortIds: string[], myCohorts: str
   if (!groups.size) return cohortIds;
   const [{ data: links }, { data: ex }] = await Promise.all([
     db.from('cohort_group_members').select('participant_id, group_id').in('group_id', [...groups.keys()]),
-    db.from('experts').select('id, status').in('id', [...new Set(groups.values())]),
+    db.from('experts').select('id, status, roles').in('id', [...new Set(groups.values())]),
   ]);
-  const approved = (ex || []).filter((e: any) => ['active', 'paused'].includes(e.status)).map((e: any) => e.id);
+  const approved = (ex || []).filter(journeyApproved).map((e: any) => e.id);
   return advisedParticipantIds(expertId, cohortIds, (links || []).map((l: any) => ({ participant_id: l.participant_id, advisor_expert_id: groups.get(l.group_id) || null })), approved);
 }
 

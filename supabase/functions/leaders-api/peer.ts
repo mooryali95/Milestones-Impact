@@ -11,6 +11,7 @@ import { bdi, esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { answerBlock, authorNameFor, cleanPeerRequest, cleanPeerText, cleanSupervision, PEER_ANSWER_STATUS_AR, PEER_SOURCE_AR, PEER_STATUS_AR, requestStatusFor, SUPERVISION_AR } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
+import { journeyApproved } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { advisorCohorts, advisorOf } from './advisor.ts';
 
@@ -131,7 +132,9 @@ export async function close(p: any, b: Body) {
 }
 
 // ── للخبير من بوابته (مستشار الدفعة) ──
+// خدمة الرحلة وحدها (journeyApproved): عضو اللجنة بلا دور لا يرى طلبات أقران ولو بقي مستشارًا معيَّنًا
 async function cohortsOf(e: any) {
+  if (!journeyApproved(e)) return { cohorts: [] as any[], ids: new Set<string>() };
   const cohorts = await advisorCohorts(e.id);
   return { cohorts, ids: new Set(cohorts.map((c: any) => c.id)) };
 }

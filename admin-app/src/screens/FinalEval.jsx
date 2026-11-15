@@ -158,7 +158,7 @@ export function FinalConfig({ program, onClose }) {
     if (r.cancelled) return;
     if (!r.success) return toast(r.message);
     // أعضاء اللجنة كما قرأهم الخادم فعلًا، فلا يُظن الاعتماد مقصورًا على من لم يُحفظ
-    const members = r.config?.approval !== 'expert' && r.config?.committee?.length ? `، أعضاء اللجنة: ${r.config.committee.join('، ')}` : r.config?.approval !== 'expert' ? '، والاعتماد لأي حساب إدارة' : '';
+    const members = r.config?.approval !== 'expert' && r.config?.committee?.length ? `، أعضاء فريق الاعتماد: ${r.config.committee.join('، ')}` : r.config?.approval !== 'expert' ? '، والاعتماد لأي حساب إدارة' : '';
     toast(`حُفظ إعداد التقييم الختامي (الإصدار ${r.config?.version ?? ''})${members}`); onClose(true);
   };
   const w = (k, v) => setC({ ...c, weights: { ...c.weights, [k]: v } });
@@ -201,8 +201,8 @@ export function FinalConfig({ program, onClose }) {
         <label className="field"><span>طريقة الاعتماد</span>
           <select value={c.approval} onChange={(e) => setC({ ...c, approval: e.target.value })}>{Object.entries(FINAL_APPROVAL_AR).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
         {c.approval !== 'expert' && <>
-          <label className="field"><span>عدد أعضاء اللجنة</span><input type="number" min="2" max="9" value={c.committee_size} onChange={(e) => setC({ ...c, committee_size: e.target.value })} /></label>
-          <label className="field"><span>أعضاء اللجنة بالبريد (فارغ = أي حساب إدارة)</span><textarea rows={2} value={Array.isArray(c.committee) ? c.committee.join(', ') : c.committee || ''} onChange={(e) => setC({ ...c, committee: e.target.value })} /></label>
+          <label className="field"><span>عدد أعضاء فريق اعتماد التقييم النهائي</span><input type="number" min="2" max="9" value={c.committee_size} onChange={(e) => setC({ ...c, committee_size: e.target.value })} /></label>
+          <label className="field"><span>أعضاء فريق اعتماد التقييم النهائي بالبريد (فارغ = أي حساب إدارة)</span><textarea rows={2} value={Array.isArray(c.committee) ? c.committee.join(', ') : c.committee || ''} onChange={(e) => setC({ ...c, committee: e.target.value })} /></label>
         </>}
         <label className="field"><span>فرق تعديل الدرجة الذي يحتاج توقيعين</span><input type="number" min="1" max="100" value={c.large_adjust} onChange={(e) => setC({ ...c, large_adjust: e.target.value })} /></label>
         <label className="field"><span>هامش «قريب من الحد» بالنقاط (معلومة للخبير؛ صفر يعطّله)</span><input type="number" min="0" max="20" value={c.near_cut} onChange={(e) => setC({ ...c, near_cut: e.target.value })} /></label>

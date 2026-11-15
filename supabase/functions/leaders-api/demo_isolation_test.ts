@@ -73,7 +73,7 @@ function install(tables: Record<string, Row[]>) {
 const DEMO = { id: 'demo', full_name: 'مشارك العرض', email: 'demo@demo.milestone-impact.org', is_demo: true, organization_id: null };
 const REAL = { id: 'real', full_name: 'مشارك حقيقي', email: 'real@example.com', is_demo: false, organization_id: null };
 const REAL2 = { id: 'real2', full_name: 'زميل حقيقي', email: 'real2@example.com', is_demo: false, organization_id: null };
-const ADVISOR = { id: 'adv', full_name: 'مستشار الدفعة', email: 'adv@example.com', status: 'active' };
+const ADVISOR = { id: 'adv', full_name: 'مستشار الدفعة', email: 'adv@example.com', status: 'active', roles: ['advisor'] };
 const OPEN = '11111111-1111-4111-8111-111111111111';
 
 function world(supervision: string) {

@@ -21,6 +21,7 @@ import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
 import Advisor360 from './Advisor360.jsx';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
+import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
 const MasterBook = React.lazy(() => import('../../../shared/master-book/MasterBook.jsx'));
@@ -45,7 +46,8 @@ function takeInvite() {
 }
 
 // قبل الاعتماد: المدعو يستكمل ملفه، ومن أرسله يرى أنه بانتظار المراجعة ويعدّله إن شاء
-function Onboarding({ expert, onOut, reload }) {
+// reviewer: عضو لجنة مدعو بلا دور في الرحلة، يؤكد اسمه ونبذته وإطاره وحدها، وبعد اعتماده يُفتح له الكتاب
+function Onboarding({ expert, onOut, reload, reviewer = false }) {
   const [edit, setEdit] = useState(expert.status === 'invited');
   return (
     <div className="page narrow">
@@ -53,11 +55,13 @@ function Onboarding({ expert, onOut, reload }) {
         <span className="row"><AccountSwitch here="expert" light doors={expert.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
         <button className="link small" onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button></span></div>
       {edit
-        ? <ExpertApply expert={expert} save={(v) => xpCall('xp.profile-save', v)} onSaved={() => { setEdit(false); reload(); }} />
+        ? <ExpertApply expert={expert} reviewer={reviewer} save={(v) => xpCall('xp.profile-save', v)} onSaved={() => { setEdit(false); reload(); }} />
         : <div className="card milestone-card stack">
             <div className="badge"><span>✓</span></div>
             <h1 className="as-h2">ملفك بانتظار الاعتماد</h1>
-            <p className="muted">شكرًا {expert.full_name}. نراجع ملفك ونراسلك على {expert.email} حين تُفعَّل لوحتك، وفيها طلبات الخدمة وجلساتك وساعاتك.</p>
+            {reviewer
+              ? <p className="muted">شكرًا {expert.full_name}. نعتمد عضويتك ونراسلك على {expert.email} حين يُفتح لك الكتاب الأم في هذه البوابة.</p>
+              : <p className="muted">شكرًا {expert.full_name}. نراجع ملفك ونراسلك على {expert.email} حين تُفعَّل لوحتك، وفيها طلبات الخدمة وجلساتك وساعاتك.</p>}
             <button className="btn ghost" onClick={() => setEdit(true)}>عدّل ملفك</button>
           </div>}
     </div>
@@ -338,6 +342,73 @@ function ExpertHall({ cohorts }) {
   );
 }
 
+// ── مراجعو الكتاب الأم (تصور فصل خدمة الرحلة عن لجان الكتاب، المرحلة 1، اعتمده المالك 2026-11-15) ──
+// اللجنة التي يحملها: «لجنة المحتوى» أو «لجنتا المحتوى والقياس»
+const committeesText = (cs) => {
+  const on = Object.keys(COMMITTEE_AR).filter((k) => (cs || []).includes(k));
+  return on.length === 2 ? 'لجنتا المحتوى والقياس' : on.map((k) => COMMITTEE_AR[k]).join('');
+};
+// تعهد السرية في أول دخول قبل الكتاب: فيه بنك الأسئلة بإجاباته. نصه من الخادم (BOOK_PLEDGE_AR) فيُسجَّل ما قُرئ
+function BookPledge({ lines, onAccept, onCancel }) {
+  const [ok, setOk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const accept = async () => {
+    setBusy(true); setErr('');
+    const r = await onAccept();
+    setBusy(false);
+    if (!r?.success) setErr(r?.message || 'تعذّر تسجيل تعهدك الآن، حاول بعد قليل');
+  };
+  return (
+    <div className="page narrow">
+      <section className="card stack" aria-labelledby="xp-pledge">
+        <p className="eyebrow">الكتاب الأم</p>
+        <h1 className="as-h2" id="xp-pledge">تعهد السرية</h1>
+        <p className="muted">قبل أن تفتح الكتاب أول مرة: فيه المتن والمسودات وبنك الأسئلة بإجاباته الصحيحة.</p>
+        <ul className="stack">{(lines || []).map((l) => <li key={l}>{l}</li>)}</ul>
+        <label className="row"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> <span>قرأت التعهد وألتزم به</span></label>
+        {err && <div className="alert err" role="alert">{err}</div>}
+        <div className="row">
+          <button className="btn" disabled={!ok || busy} onClick={accept}>{busy ? 'لحظة…' : 'أتعهد وأفتح الكتاب'}</button>
+          {onCancel && <button className="btn ghost" onClick={onCancel}>ليس الآن</button>}
+        </div>
+      </section>
+    </div>
+  );
+}
+// لوحة عضو اللجنة بلا دور في الرحلة: الكتاب وحده، بلا مشاركين ولا دفعات ولا قاعة ولا ساعات
+function ReviewerHome({ d, onOut, openBook }) {
+  const e = d.expert;
+  return (
+    <div className="page wide xpp">
+      <section className="hero">
+        <div className="stack">
+          <p className="eyebrow">بوابة الخبراء</p>
+          <h1>أهلًا {e.full_name}</h1>
+          <p className="muted">{[e.title, committeesText(e.committees)].filter(Boolean).join(' · ')}</p>
+        </div>
+        <div className="row xpp-head-acts">
+          <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
+          <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button>
+        </div>
+      </section>
+      {d.book_access
+        ? <BookCard label={committeesText(e.committees)} onOpen={openBook} />
+        : <section className="card stack"><p className="muted">عضويتك في اللجنة غير فعّالة الآن، فالكتاب مغلق. تواصل مع إدارة البرنامج.</p></section>}
+    </div>
+  );
+}
+// بطاقة الكتاب: لعضو اللجنة وحدها، ولمن جمع الخدمتين فوق أقسام الرحلة
+function BookCard({ label = 'للجنتي المحتوى والقياس', onOpen }) {
+  return (
+    <button type="button" className="xpp-book" onClick={onOpen}>
+      <span className="xpp-book-ic" aria-hidden="true"><i /><i /><i /></span>
+      <span><small>{label}</small><b>الكتاب الأم</b><em>اقرأ الأطر الثلاثة كاملة بمستوياتها، وعلّق على أي قسم باسمك</em></span>
+      <span className="xpp-book-go" aria-hidden="true">←</span>
+    </button>
+  );
+}
+
 // هيكل اللوحة أثناء التحميل بدل دائرة في صفحة فارغة: يرى الخبير شكل ما سيأتي (البند 6.2)
 function DashboardSkeleton() {
   return (
@@ -368,7 +439,8 @@ function FirstSteps({ e }) {
 
 function Dashboard({ onOut }) {
   const [view, setView] = useState(null);
-  const [book, setBook] = useState(false);
+  // null: لم يختر بعد، فعضو اللجنة بلا دور يدخل القارئ مباشرة ومن جمع الخدمتين يرى لوحته
+  const [book, setBook] = useState(null);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
   const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
@@ -380,9 +452,15 @@ function Dashboard({ onOut }) {
   if (!d) return <DashboardSkeleton />;
   if (!d.success) return <div className="page narrow"><div className="alert err" role="alert">{d.message}</div></div>;
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) setD(r); return r; }} />;
-  if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
+  if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
-  if (book) return <React.Suspense fallback={<DashboardSkeleton />}><MasterBook api={BOOK_API} place="expert" onClose={() => setBook(false)} /></React.Suspense>;
+  const reading = book ?? (!!d.content_only && !!d.book_access);
+  if (reading && d.pledge_needed) {
+    return <BookPledge lines={d.pledge} onCancel={d.content_only ? null : () => setBook(false)}
+      onAccept={async () => { const r = await xpCall('xp.pledge'); if (r.success) setD(r); return r; }} />;
+  }
+  if (reading) return <React.Suspense fallback={<DashboardSkeleton />}><MasterBook api={BOOK_API} place="expert" onClose={() => setBook(false)} /></React.Suspense>;
+  if (d.content_only) return <ReviewerHome d={d} onOut={onOut} openBook={() => setBook(true)} />;
   const e = d.expert;
   const pre = d.preload || {};
   const roles = (e.roles || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean);
@@ -434,13 +512,7 @@ function Dashboard({ onOut }) {
       {/* منطقة إعلان ثابتة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4)، والخطأ بتنبيه وعلامته */}
       <Notice note={note} onClose={() => say(null)} />
 
-      {d.book_access && (
-        <button type="button" className="xpp-book" onClick={() => setBook(true)}>
-          <span className="xpp-book-ic" aria-hidden="true"><i /><i /><i /></span>
-          <span><small>للجنتي المحتوى والقياس</small><b>الكتاب الأم</b><em>اقرأ الأطر الثلاثة كاملة بمستوياتها، وعلّق على أي قسم باسمك</em></span>
-          <span className="xpp-book-go" aria-hidden="true">←</span>
-        </button>
-      )}
+      {d.book_access && <BookCard onOpen={() => setBook(true)} />}
 
       <div className="xpp-kpis">
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>

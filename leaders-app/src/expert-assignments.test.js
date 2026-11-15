@@ -38,7 +38,7 @@ describe('بريد التكليف', () => {
   it('المدعو الجديد: رسالة واحدة تجمع الدعوة والتكليف', () => {
     expect(add).toMatch(/expertCreate\(a, \{[^}]*send_invite: true \},\s*\{ assignment: await mailOf\(/);
     const experts = read('experts.ts');
-    expect(fnBody(experts, 'adminSave')).toMatch(/await invite\(saved, opts\.assignment\)/);
+    expect(fnBody(experts, 'adminSave', 4000)).toMatch(/await invite\(saved, opts\.assignment\)/);
     expect(fnBody(experts, 'invite')).toMatch(/\(assignment \? assignmentNote\(assignment\) : ''\)/);
     // لا بريد ثانٍ للمدعو من team.ts
     expect(add).not.toMatch(/sendMail\(invite/);

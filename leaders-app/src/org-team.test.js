@@ -63,9 +63,9 @@ describe('السعة: تنبيه في الفريق، والقاعدة نفسها
     expect(loadText({ hours: 6, used: 7, full: true, cohorts: 2 })).toBe('الحمل 7/6 ساعة أسبوعيًا · مكلّف في دفعتين');
     expect(loadText({ hours: 0, used: 0, cohorts: 0 })).toBe('لم يعلن ساعاته الأسبوعية · بلا تكليف في دفعة قائمة');
     const experts = [
-      { id: 'a', full_name: 'أحمد', roles: ['coach'], load: { full: true, used: 9 } },
-      { id: 'b', full_name: 'بدر', roles: ['assessor'], load: { used: 0 } },
-      { id: 'c', full_name: 'جود', roles: ['coach'], load: { used: 2 } },
+      { id: 'a', full_name: 'أحمد', status: 'active', roles: ['coach'], load: { full: true, used: 9 } },
+      { id: 'b', full_name: 'بدر', status: 'active', roles: ['assessor'], load: { used: 0 } },
+      { id: 'c', full_name: 'جود', status: 'active', roles: ['coach'], load: { used: 2 } },
     ];
     expect(rankForAdd(experts, { role: 'coach' }).map((e) => e.id)).toEqual(['c', 'a', 'b']);
     expect(rankForAdd(experts, { q: 'بدر' }).map((e) => e.id)).toEqual(['b']);
@@ -103,7 +103,8 @@ describe('نقطة واحدة للتحرير، بلا ترحيل ولا مساس
     // المدعو لا يُعيَّن مستشارًا ولا خبير مجموعة قبل اعتماده، والمعتمد يُكلَّف بدور من ملفه
     expect(src).toMatch(/if \(scope !== 'cohort'\) throw new Fail\('المدعو الجديد يُضاف إلى الفريق أولًا/);
     expect(src).toMatch(/if \(!\(e\.roles \|\| \[\]\)\.includes\(role\)\) throw new Fail/);
-    expect(src).toMatch(/if \(!APPROVED\.includes\(e\.status\)\) throw new Fail/);
+    // خدمة الرحلة وحدها تُضاف (journeyApproved)، وعضو اللجنة بلا دور يُرد بسببه
+    expect(src).toMatch(/if \(!journeyApproved\(e\)\) throw new Fail/);
   });
 });
 
@@ -115,8 +116,8 @@ describe('مصدر واحد لحالات الخبير المعتمد ولاسم 
   });
   it('منسق الجهة لا يرى خبيرًا غير معتمد بالقائمة نفسها', () => {
     const rows = teamRows({ advisor_expert_id: 'a' }, [{ expert_id: 'b' }], []);
-    const v = coordTeamView({ cohort: { name: 'د' }, rows, experts: [{ id: 'a', full_name: 'أ', status: 'invited' }, { id: 'b', full_name: 'ب', status: 'paused', email: 'x@y' }], groups: [], members: [] }, { team: true });
+    const v = coordTeamView({ cohort: { name: 'د' }, rows, experts: [{ id: 'a', full_name: 'أ', status: 'invited', roles: ['advisor'] }, { id: 'b', full_name: 'ب', status: 'paused', roles: ['coach'], email: 'x@y' }], groups: [], members: [] }, { team: true });
     expect(v.advisor).toBeNull();
-    expect(v.team).toEqual([{ full_name: 'ب', title: null, roles: [], groups: [] }]);
+    expect(v.team).toEqual([{ full_name: 'ب', title: null, roles: ['coach'], groups: [] }]);
   });
 });

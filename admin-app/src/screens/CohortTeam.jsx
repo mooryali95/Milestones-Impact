@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { Empty, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { APPROVED, coverageNotes, loadText, OVER_AR, peopleAr, periodAr, rankForAdd, roleAr, rolesAr, scopeText, statusChip } from '../team.js';
+import { coverageNotes, journeyApproved, loadText, OVER_AR, peopleAr, periodAr, rankForAdd, roleAr, rolesAr, scopeText, statusChip } from '../team.js';
 import { GroupsPanel } from './Groups.jsx';
 
 const TABS = [['team', 'الفريق'], ['groups', 'المجموعات ونمط العمل']];
@@ -180,7 +180,7 @@ function TeamTab({ cohortId, canWrite, onChanged }) {
                 <div className="ct-who"><b>{r.expert.full_name}</b><small className="la-muted">{r.expert.title || ''}</small></div>
                 <div className="ct-what"><span>{scopeText(r)}</span><small className="la-muted">{rolesAr(r.expert.roles)}</small></div>
                 <div className="ct-state"><span className={`la-chip ${tone}`}>{st}</span>{r.expert.load?.full && <span className="la-chip warn" title={OVER_AR}>▲ بلغ سعته</span>}</div>
-                <div className="ct-load"><small className="la-muted">{[(r.advisor || r.groups.length) && APPROVED.includes(r.expert.status) ? `يخدم هنا ${peopleAr(r.serves_here)}` : null, loadText(r.expert.load)].filter(Boolean).join(' · ')}</small></div>
+                <div className="ct-load"><small className="la-muted">{[(r.advisor || r.groups.length) && journeyApproved(r.expert) ? `يخدم هنا ${peopleAr(r.serves_here)}` : null, loadText(r.expert.load)].filter(Boolean).join(' · ')}</small></div>
                 {canWrite && <button className="la-link" onClick={() => remove(r)} aria-label={`إزالة ${r.expert.full_name} من الفريق`}>إزالة</button>}
               </li>
             );

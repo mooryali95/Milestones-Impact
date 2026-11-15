@@ -12,7 +12,7 @@ import { applyFilters, presetCounts, recallState, sortRows } from '../filters.js
 import { RequestsBoard, requestView } from './ExpertMatch.jsx';
 import { readQuery } from '../route.js';
 import { COACH_STATUS_ADMIN as COACH_AR, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
-import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
+import { COMMITTEE_AR, contentOnly, expertService } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 import { COHORT_STATUS } from '../methodology.js';
 import { periodAr, scopeText } from '../team.js';
@@ -51,16 +51,20 @@ function Toggles({ value, options, onChange, disabled }) {
   );
 }
 
-// نموذج الملف: الإضافة والتعديل بالحقول نفسها
+// حقول المطابقة: للرحلة وحدها، فلا تُطلب ممن يخدم في اللجان وحدها ولا تُعرض في ملفه (تقليل البيانات)
+const MATCH_EMPTY = { roles: [], levels: [], sectors: '', weekly_hours: '', hourly_rate: '' };
+// نموذج الملف: الإضافة والتعديل بالحقول نفسها. خدمتاه من سجله الواحد (expertService): الرحلة بأدوارها، واللجان بعضويتها
 function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
   const { toast } = useUI();
   const [v, setV] = useState(() => ({ ...EMPTY, ...initial, sectors: (initial?.sectors || []).join('، '), hourly_rate: initial?.hourly_rate ?? '', weekly_hours: initial?.weekly_hours ?? '', years_experience: initial?.years_experience ?? '' }));
+  // خدمة الرحلة ظاهرة للجديد ولمن له دور، ومخفية لعضو اللجنة بلا دور حتى تُختار
+  const [journey, setJourney] = useState(() => (isNew ? true : !contentOnly(initial)));
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
   const save = async (e) => {
     e.preventDefault();
     setBusy(true);
-    const r = await L('admin.expert-save', { ...v, ...(isNew ? {} : { id: initial.id }) });
+    const r = await L('admin.expert-save', { ...v, ...(journey ? {} : MATCH_EMPTY), ...(isNew ? {} : { id: initial.id }) });
     setBusy(false);
     toast(r.success ? (isNew ? (r.invited ? 'أُضيف الخبير وأُرسلت دعوته' : 'أُضيف الخبير') : r.committees_ready === false ? 'حُفظ الملف. عضوية اللجنة تُحفظ بعد تطبيق ترحيلها' : 'حُفظ الملف') : r.message);
     if (r.success) onSaved(r.expert);
@@ -79,29 +83,31 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
         </div>
         <label className="of-field"><span className="of-label">نبذة عن الخبرة</span><textarea rows={4} value={v.bio || ''} onChange={set('bio')} maxLength={3000} /></label>
 
-        <h4>الأدوار والتخصص</h4>
-        <span className="of-label">الأدوار</span>
-        <Toggles value={v.roles} options={ROLES.map(([k, [l]]) => [k, l])} onChange={(roles) => setV({ ...v, roles })} />
+        <h4>الخدمة <small className="la-muted">· الأدوار للرحلة، والعضوية للكتاب الأم. يُعتمد بأحدهما أو بهما</small></h4>
+        <label className="ex-tg-line"><input type="checkbox" checked={journey} onChange={(e) => setJourney(e.target.checked)} /> يخدم في رحلة المشاركين <small className="la-muted">(يُرشَّح ويُكلَّف بأدواره، ويُطلب منه سطر الموافقة D18)</small></label>
+        <span className="of-label">لجان الحوكمة <small className="la-muted">· من يراجع المحتوى والقياس ويعتمده. المصدر الوحيد لعضوية اللجنتين، ويقرأ أعضاؤهما الكتاب الأم</small></span>
+        <Toggles value={v.committees || []} options={Object.entries(COMMITTEE_AR)} onChange={(committees) => setV({ ...v, committees })} />
+
+        <h4>{journey ? 'الأدوار والتخصص' : 'التخصص'}</h4>
+        {journey && <>
+          <span className="of-label">الأدوار</span>
+          <Toggles value={v.roles} options={ROLES.map(([k, [l]]) => [k, l])} onChange={(roles) => setV({ ...v, roles })} />
+        </>}
         <div className="ex-grid">
-          <div><span className="of-label">الأبعاد</span><Toggles value={v.dimensions} options={Object.entries(DIM_AR)} onChange={(dimensions) => setV({ ...v, dimensions })} /></div>
-          <div><span className="of-label">المستويات التي يخدمها</span><Toggles value={v.levels} options={Object.entries(LEVEL_AR)} onChange={(levels) => setV({ ...v, levels })} /></div>
+          <div><span className="of-label">{journey ? 'الأبعاد' : 'الإطار الذي يراجعه'}</span><Toggles value={v.dimensions} options={Object.entries(DIM_AR)} onChange={(dimensions) => setV({ ...v, dimensions })} />
+            {(v.committees || []).includes('content') && <small className="la-muted">مقعده في لجنة المحتوى يُقرأ من هنا، فلا يُكتب مرتين. ويلزم إطار واحد على الأقل قبل الاعتماد.</small>}</div>
+          {journey && <div><span className="of-label">المستويات التي يخدمها</span><Toggles value={v.levels} options={Object.entries(LEVEL_AR)} onChange={(levels) => setV({ ...v, levels })} /></div>}
           <div><span className="of-label">اللغات</span><Toggles value={v.languages} options={Object.entries(LANG)} onChange={(languages) => setV({ ...v, languages })} /></div>
-          <label className="of-field"><span className="of-label">القطاعات</span><input value={v.sectors} onChange={set('sectors')} placeholder="حكومي، طاقة، صحة" /><small className="la-muted">افصل بينها بفاصلة</small></label>
+          {journey && <label className="of-field"><span className="of-label">القطاعات</span><input value={v.sectors} onChange={set('sectors')} placeholder="حكومي، طاقة، صحة" /><small className="la-muted">افصل بينها بفاصلة</small></label>}
         </div>
 
-        {!isNew && (
-          <>
-            <h4>لجان الحوكمة <small className="la-muted">· من يراجع المحتوى والقياس ويعتمده. المصدر الوحيد لعضوية اللجنتين</small></h4>
-            <Toggles value={v.committees || []} options={Object.entries(COMMITTEE_AR)} onChange={(committees) => setV({ ...v, committees })} />
-            <small className="la-muted">مقعد كل إطار في لجنة المحتوى يُقرأ من «الأبعاد» أعلاه، فلا يُكتب مرتين.</small>
-          </>
-        )}
-
-        <h4>الطاقة والتكلفة <small className="la-muted">· للإدارة وحدها، لا تظهر للخبير ولا للمشارك</small></h4>
-        <div className="ex-grid">
-          <label className="of-field"><span className="of-label">الساعات المتاحة أسبوعيًا</span><input inputMode="numeric" value={v.weekly_hours} onChange={set('weekly_hours')} /></label>
-          <label className="of-field"><span className="of-label">سعر الساعة (ريال)</span><input inputMode="decimal" value={v.hourly_rate} onChange={set('hourly_rate')} placeholder="0 للمتطوع" /><small className="la-muted">يُحسب منه تكلفة كل خدمة ولو كان متطوعًا</small></label>
-        </div>
+        {journey && <>
+          <h4>الطاقة والتكلفة <small className="la-muted">· للإدارة وحدها، لا تظهر للخبير ولا للمشارك</small></h4>
+          <div className="ex-grid">
+            <label className="of-field"><span className="of-label">الساعات المتاحة أسبوعيًا</span><input inputMode="numeric" value={v.weekly_hours} onChange={set('weekly_hours')} /></label>
+            <label className="of-field"><span className="of-label">سعر الساعة (ريال)</span><input inputMode="decimal" value={v.hourly_rate} onChange={set('hourly_rate')} placeholder="0 للمتطوع" /><small className="la-muted">يُحسب منه تكلفة كل خدمة ولو كان متطوعًا</small></label>
+          </div>
+        </>}
         <label className="of-field"><span className="of-label">ملاحظة داخلية</span><textarea rows={2} value={v.admin_note || ''} onChange={set('admin_note')} maxLength={2000} /></label>
       </fieldset>
       {canWrite && <div className="la-row"><button className="btn-sm primary" disabled={busy}>{busy ? 'لحظة…' : isNew ? 'إضافة وإرسال الدعوة' : 'حفظ الملف'}</button>
@@ -172,6 +178,15 @@ function Assignments({ list }) {
   );
 }
 
+// خدمتاه بجملة: مشتقة من أدواره وعضويته، لا تُخزَّن
+const serviceAr = (e) => {
+  const s = expertService(e);
+  const cs = (e.committees || []).map((k) => COMMITTEE_AR[k]).filter(Boolean).join(' و');
+  if (s.journey && s.content) return `يخدم في الرحلة وفي ${cs}`;
+  if (s.content) return `عضو ${cs}، يقرأ الكتاب الأم ولا يخدم في الرحلة`;
+  if (s.journey) return 'يخدم في رحلة المشاركين';
+  return 'لم تُحدَّد خدمته بعد';
+};
 function Profile({ id, canWrite, onBack }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
@@ -198,13 +213,17 @@ function Profile({ id, canWrite, onBack }) {
         </div>
         <div className="ex-side">
           <span className={`la-chip ${TONE[e.status]}`}>{EXPERT_STATUS[e.status]}</span>
+          <span className="la-chip">{serviceAr(e)}</span>
           {canWrite && <div className="la-row">{(NEXT[e.status] || []).map(([to, l, tone]) => <button key={to} className={`btn-sm ${tone}`} onClick={() => move(to, l)}>{l}</button>)}
             {['applied', 'invited', 'active', 'paused'].includes(e.status) && <button className="btn-sm ghost" onClick={async () => { const r = await L('admin.expert-invite', { id: e.id }); toast(r.success ? 'أُرسلت الدعوة' : r.message); if (r.success) load(); }}>إرسال دعوة</button>}</div>}
         </div>
       </section>
-      <Assignments list={d.assignments} />
-      <Service s={d.service} rate={e.hourly_rate} />
-      <Ratings r={d.ratings} />
+      {/* عضو اللجنة بلا دور: لا تكليف ولا خدمات ولا تقييم ولا تكلفة في ملفه، فهي للرحلة */}
+      {!contentOnly(e) && <>
+        <Assignments list={d.assignments} />
+        <Service s={d.service} rate={e.hourly_rate} />
+        <Ratings r={d.ratings} />
+      </>}
       <ExpertForm key={e.updated_at} initial={e} canWrite={canWrite} onSaved={load} />
       <section className="la-card"><h4>السجل</h4>
         <ul className="la-log">{d.activity.length ? d.activity.map((x, i) => <li key={i}><small>{date(x.created_at)}</small> {ACT[x.action.replace('expert.', '')] || x.action} <small className="la-muted">{x.actor}</small></li>) : <li className="la-muted">لا شيء</li>}</ul>
@@ -295,7 +314,9 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
                   <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>
-                  <td data-label="الأدوار"><Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />{e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>
+                  <td data-label="الأدوار">{contentOnly(e) ? <span className="la-chip">عضو لجنة، لا يخدم في الرحلة</span> : <Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />}
+                    {expertService(e).journey && expertService(e).content && <><br /><span className="la-chip ok">يخدم أيضًا في {(e.committees || []).includes('content') ? 'لجنة المحتوى' : 'لجنة القياس'}</span></>}
+                    {e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>
                   <td data-label="الأبعاد"><Chips list={e.dimensions} labels={DIM_AR} /></td>
                   <td data-label="الطاقة">{e.weekly_hours != null ? `${e.weekly_hours} س/أسبوع` : '·'}</td>
                   <td data-label="ما قدّمه">{e.stats?.attended ? `${e.stats.hours} ساعة · ${e.stats.participants} مشارك` : <span className="la-muted">·</span>}</td>

@@ -10,10 +10,11 @@ import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, 
 import { visibilityOfParticipant } from './visibility.ts';
 import { requireWrite } from './admin.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertFieldError, expertPublic, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
+import { cleanExpert, cleanRating, expertFieldError, expertPublic, journeyApproved, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
-import { cleanCommittees, committeeCoverage } from './committees.js';
+import { approvalBlock, cleanCommittees, COMMITTEE_AR, committeeCoverage, contentOnly } from './committees.js';
+import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null };
@@ -29,6 +30,7 @@ import { firstName } from './hall.js';
 // وتنبيه المالك مرة على الأكثر في كل نافذة من ست ساعات، جماعيًا يدخل الطابور ولا يزاحم الرموز.
 // بريد واحد لملف واحد، وحد لكل شبكة في الساعة، ولا يكشف الرد إن كان البريد مسجلًا
 export const APPLY_ALERT_HOURS = 6;
+// journey-guard: طلب الانضمام العام للرحلة، يقرأ البريد والشبكة ولا يرشّح أحدًا
 export async function apply(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
@@ -58,6 +60,7 @@ export async function apply(b: Body, ctx: Ctx) {
 
 // أول طلب في النافذة (ست ساعات بتوقيت ثابت) وحده ينبّه المالك، وزر الرسالة يفتح الطلبات كلها. الأقدم في النافذة
 // هو من ينبّه، فطلبان متزامنان لا يرسلان رسالتين ولا يضيعانها
+// journey-guard: تنبيه المالك بطلب جديد، لا ترشيح فيه
 async function alertApplication(id: string, fields: { full_name: string | null; title?: string | null }) {
   const span = APPLY_ALERT_HOURS * 36e5;
   const since = new Date(Math.floor(Date.now() / span) * span).toISOString();
@@ -71,6 +74,7 @@ async function alertApplication(id: string, fields: { full_name: string | null; 
 }
 
 // ── لوحة الإدارة ──
+// journey-guard: لوحة الإدارة تعرض الشبكة كلها بخدمتيها
 export async function adminList() {
   const [rows, { data: sessions }] = await Promise.all([
     db.from('experts').select('*').order('created_at', { ascending: false }).limit(500).then((r) => must(r) as any[]),
@@ -82,6 +86,7 @@ export async function adminList() {
   return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })), committees: committeeCoverage(rows), ...(rows.length >= 500 ? { capped: true, limit: 500 } : {}) };
 }
 
+// journey-guard: ملف الخبير في الإدارة بخدمتيه
 export async function adminGet(_a: Admin, b: Body) {
   const e = must(await db.from('experts').select('*').eq('id', String(b.id || '')).maybeSingle());
   if (!e) throw new Fail('الخبير غير موجود', 404);
@@ -102,6 +107,7 @@ export async function adminGet(_a: Admin, b: Body) {
 
 // إضافة خبير من الإدارة (يُدعى) أو تعديل ملف قائم. opts.assignment من «ادعُ وأضف» في فريق الدفعة (team.ts) وحده:
 // سطر التكليف في الدعوة نفسها، فلا يُرسل للمدعو بريدان. الفعل admin.expert-save يمرر ctx هنا، ولا assignment فيه
+// journey-guard: حفظ الملف من الإدارة، لا ترشيح فيه
 export async function adminSave(a: Admin, b: Body, opts: { assignment?: AssignmentMail } = {}) {
   requireWrite(a);
   const fieldError = expertFieldError(b, { withAdmin: true });
@@ -131,20 +137,30 @@ export async function adminSave(a: Admin, b: Body, opts: { assignment?: Assignme
   if (!isEmail(email)) throw new Fail('بريد الخبير غير صحيح');
   const { data: dup } = await db.from('experts').select('id, status').eq('email', email).maybeSingle();
   if (dup) throw new Fail(`لهذا البريد ملف خبير قائم (${(EXPERT_STATUS as Record<string, string>)[dup.status] || dup.status})`, 409);
-  const saved = must(await db.from('experts').insert({ ...fields, email, phone, status: 'invited', source: 'admin', invited_at: now }).select('*').single());
+  let saved = must(await db.from('experts').insert({ ...fields, email, phone, status: 'invited', source: 'admin', invited_at: now }).select('*').single());
+  // عضوية اللجان تُحدَّد عند الإنشاء أيضًا (عضو اللجنة يُدعى من هنا، فالانضمام العام للرحلة وحدها)، في تحديث مستقل كالتعديل
+  let committees_ready = true;
+  const cs = cleanCommittees(b.committees);
+  if (cs.length) {
+    const up = await db.from('experts').update({ committees: cs }).eq('id', saved.id).select('*').single();
+    if (up.error) committees_ready = false; else saved = up.data;
+  }
   await audit('admin', a.email, 'expert.create', 'experts', saved.id, null, saved);
   if (b.send_invite !== false) await invite(saved, opts.assignment);
-  return { success: true, expert: saved, invited: b.send_invite !== false };
+  return { success: true, expert: saved, invited: b.send_invite !== false, committees_ready };
 }
 
 // الدعوة رابط دخول إلى لوحة الخبير نفسها (لا إلى تطبيق المشارك): رمز طويل صالح سبعة أيام ولمرة واحدة،
 // يمر بمسار التحقق نفسه (expert_challenges)، فيدخل المدعو ويستكمل ملفه بأسئلة الخبير ثم ينتظر الاعتماد.
 const INVITE_DAYS = 7;
 export const portalUrl = () => `${SITES.leaders}/x`;
+// journey-guard: الدعوة تحدّث وقت الإرسال وحده
 async function invite(e: any, assignment?: AssignmentMail) {
   const code = randomToken();
   must(await db.from('expert_challenges').insert({ expert_id: e.id, email: e.email, code_hash: await hash(code), ip: null, expires_at: new Date(Date.now() + INVITE_DAYS * 864e5).toISOString() }));
   const link = `${portalUrl()}${expertInviteHash(e.email, code)}`;
+  // عضو اللجنة بلا دور في الرحلة: دعوة لمراجعة الكتاب الأم، بلا «أدوارك» ولا «طلبات الخدمة»
+  if (contentOnly(e) && !assignment) return inviteReviewer(e, link);
   await sendMail(e.email, 'دعوة إلى شبكة خبراء برنامج القادة', shell(`أهلًا ${firstName(e.full_name)}`,
     mailText('يسعدنا أن ندعوك للانضمام إلى شبكة خبراء برنامج القادة، لتقديم خبرتك لقادة المشاريع في مراحل البرنامج.')
     + (assignment ? assignmentNote(assignment) : '')
@@ -154,7 +170,23 @@ async function invite(e: any, assignment?: AssignmentMail) {
     + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا.`)));
   await db.from('experts').update({ invited_at: new Date().toISOString() }).eq('id', e.id);
 }
+// لجانه بأسمائها: «لجنة المحتوى» أو «لجنتي المحتوى والقياس»
+const committeesAr = (e: any) => {
+  const cs = cleanCommittees(e.committees);
+  return cs.length === 2 ? 'لجنتي المحتوى والقياس' : (COMMITTEE_AR as Record<string, string>)[cs[0]] || 'لجنة المحتوى';
+};
+// journey-guard: دعوة عضو اللجنة تحدّث وقت الإرسال وحده
+async function inviteReviewer(e: any, link: string) {
+  await sendMail(e.email, 'دعوة لمراجعة الكتاب الأم لبرنامج القادة', shell(`أهلًا ${firstName(e.full_name)}`,
+    mailText(`يسعدنا أن ندعوك لمراجعة الكتاب الأم لبرنامج القادة عضوًا في ${bdi(committeesAr(e))}: تقرأ الأطر الثلاثة بأبوابها ومستوياتها، وتعلّق على أي قسم باسمك.`)
+    + (e.status === 'active'
+      ? mailText('عضويتك معتمدة، والكتاب متاح لك في بوابة الخبير.') + mailButton(link, 'افتح الكتاب الأم')
+      : mailText('ابدأ بتأكيد اسمك ونبذة قصيرة عن خبرتك والإطار الذي تراجعه، ثم نعتمد عضويتك ويُفتح لك الكتاب.') + mailButton(link, 'أكّد بياناتك'))
+    + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا.`)));
+  await db.from('experts').update({ invited_at: new Date().toISOString() }).eq('id', e.id);
+}
 
+// journey-guard: إعادة الدعوة من الإدارة
 export async function adminInvite(a: Admin, b: Body) {
   requireWrite(a);
   const e = must(await db.from('experts').select('*').eq('id', String(b.id || '')).maybeSingle());
@@ -170,18 +202,25 @@ const MOVES: Record<string, string[]> = {
   applied: ['active', 'rejected'], invited: ['active', 'rejected'], active: ['paused', 'suspended'],
   paused: ['active', 'suspended'], suspended: ['active'], rejected: ['active'],
 };
+// journey-guard: الاعتماد نفسه، وشرطه approvalBlock في committees.js
 export async function adminSetStatus(a: Admin, b: Body) {
   requireWrite(a);
   const e = must(await db.from('experts').select('*').eq('id', String(b.id || '')).maybeSingle());
   if (!e) throw new Fail('الخبير غير موجود', 404);
   const to = String(b.status || '');
   if (!(MOVES[e.status] || []).includes(to)) throw new Fail('لا يمكن نقل الخبير إلى هذه الحالة من حالته الآن');
-  if (to === 'active' && !e.roles?.length) throw new Fail('حدّد دورًا واحدًا على الأقل قبل الاعتماد');
+  // دور في الرحلة أو عضوية في لجنة، وعضو لجنة المحتوى بإطار (approvalBlock في committees.js)
+  const block = to === 'active' ? approvalBlock(e) : null;
+  if (block) throw new Fail(block);
   const now = new Date().toISOString();
   const patch: Body = { status: to, updated_at: now, ...(to === 'active' && !e.approved_at ? { approved_by: a.email, approved_at: now } : {}) };
   const saved = must(await db.from('experts').update(patch).eq('id', e.id).select('*').single());
   await audit('admin', a.email, `expert.${to}`, 'experts', e.id, { status: e.status }, { status: to, reason: b.reason || null });
-  if (to === 'active' && ['applied', 'invited', 'rejected'].includes(e.status)) {
+  if (to === 'active' && ['applied', 'invited', 'rejected'].includes(e.status) && contentOnly(saved)) {
+    sendMail(e.email, 'صار الكتاب الأم متاحًا لك', shell(`مرحبًا بك ${firstName(e.full_name)}`,
+      mailText(`اعتُمدت عضويتك في ${bdi(committeesAr(saved))}، وصار الكتاب متاحًا لك في بوابة الخبير: اقرأه وعلّق على أي قسم باسمك.`)
+      + mailButton(portalUrl(), 'افتح الكتاب الأم'))).catch(() => {});
+  } else if (to === 'active' && ['applied', 'invited', 'rejected'].includes(e.status)) {
     sendMail(e.email, 'اعتُمدت في شبكة خبراء برنامج القادة', shell(`مرحبًا بك ${firstName(e.full_name)}`,
       mailText('اعتُمد ملفك في شبكة خبراء برنامج القادة. ستصلك طلبات الخدمة المناسبة لأدوارك وتخصصك، وتتابعها من لوحة الخبير.')
       + mailButton(portalUrl(), 'افتح لوحة الخبير'))).catch(() => {});
@@ -221,6 +260,8 @@ async function candidates(need: any, participantId: string, tried: string[] = []
     db.from('coaching_sessions').select('expert_id').eq('participant_id', participantId).not('expert_id', 'is', null),
     db.from('participants').select('id, email, organization_id').eq('id', participantId).maybeSingle(),
   ]);
+  // خدمة الرحلة وحدها (journeyApproved): الاستعلام يشترط الدور، والحارس هنا يبقيه شرطًا واحدًا مع بقية المواضع
+  experts = (experts || []).filter(journeyApproved) as any;
   // الخبير لا يُرشَّح لنفسه حين يكون مشاركًا بالبريد نفسه
   const self = String((me as any)?.email || '').toLowerCase();
   if (self) experts = (experts || []).filter((e: any) => String(e.email || '').toLowerCase() !== self) as any;
@@ -493,9 +534,11 @@ export async function rateExpert(p: any, b: Body) {
 const SESSION_DAYS = 14;
 // الدخول للمعتمد وللمدعو ومن قدّم طلبه؛ العمل (الطلبات والجلسات والتقييم) للمعتمد وحده
 const portalOk = (e: any) => e && ['active', 'paused', 'invited', 'applied'].includes(e.status);
+// journey-guard: باب البوابة للخدمتين، وأفعال الرحلة يحرسها journeyApproved في index.ts
 export const portalWorking = (e: any) => ['active', 'paused'].includes(e?.status);
 const SENT = { success: true, sent: true };
 
+// journey-guard: الدخول إلى البوابة للخدمتين
 export async function portalStart(b: Body, ctx: Ctx) {
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
@@ -512,6 +555,7 @@ export async function portalStart(b: Body, ctx: Ctx) {
   return SENT;
 }
 
+// journey-guard: الدخول إلى البوابة للخدمتين
 export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
   const email = normalizeEmail(b.email);
   const { data: ch } = await db.from('expert_challenges').select('*').eq('email', email).is('consumed_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -527,6 +571,7 @@ export async function portalVerify(b: Body, ctx: Ctx & { ua?: string | null }) {
 }
 
 // الدخول بحساب جوجل: البريد الموثّق من جوجل يجب أن يطابق بريد ملف خبير معتمد. لا إنشاء حساب من هنا
+// journey-guard: الدخول إلى البوابة للخدمتين
 export async function portalGoogle(b: Body, ctx: Ctx & { ua?: string | null }) {
   const credential = String(b.credential || '');
   if (credential.length < 100) throw new Fail('لم يكتمل الدخول بحساب Google، حاول مرة أخرى');
@@ -541,6 +586,7 @@ export async function portalGoogle(b: Body, ctx: Ctx & { ua?: string | null }) {
   return { success: true, token: await openSession(e, ctx, 'google'), expert: { full_name: e.full_name } };
 }
 
+// journey-guard: تسجيل الدخول
 async function openSession(e: any, ctx: Ctx & { ua?: string | null }, method: string) {
   const token = randomToken();
   must(await db.from('expert_sessions').insert({ expert_id: e.id, token_hash: await hash(token), ip: ctx.ip, user_agent: ctx.ua || null, expires_at: new Date(Date.now() + SESSION_DAYS * 864e5).toISOString() }));
@@ -549,6 +595,7 @@ async function openSession(e: any, ctx: Ctx & { ua?: string | null }, method: st
   return token;
 }
 
+// journey-guard: جلسة البوابة للخدمتين
 export async function expertFromToken(token: unknown) {
   if (typeof token !== 'string' || token.length < 20) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
   const { data: s } = await db.from('expert_sessions').select('id, expert_id, expires_at, revoked_at').eq('token_hash', await hash(token)).maybeSingle();
@@ -571,12 +618,45 @@ export async function portalConsent(e: any) {
   return portalDashboard(e);
 }
 
+// ── تعهد السرية لمراجعي الكتاب الأم (تصور فصل خدمة الرحلة عن لجان الكتاب، المرحلة 1، اعتمده المالك 2026-11-15) ──
+// الكتاب يحوي بنك الأسئلة بإجاباته الصحيحة، فيتعهد كل عضو لجنة بسريته في أول دخول قبل أن يقرأه. مستقل عن D18 لأن عضو
+// اللجنة وحدها لا يرى بيانات مشاركين. يُسجَّل في سجل التدقيق (لا يُعدَّل ولا يُحذف، audit_append_only) بنسخة نصه، لأن
+// consent_events مقيد بأنواع D18 ولا ترحيل في هذه المرحلة. تعذّر القراءة يرمي، فلا يُعفى أحد من التعهد بعطل
+export const BOOK_PLEDGE_VERSION = '2026-11-15';
+export const BOOK_PLEDGE_AR = [
+  'أطّلع على الكتاب الأم بصفتي عضوًا في لجنة مراجعته، وما فيه من متن ومسودات وأسئلة وإجابات سري لا أنقله ولا أنسخه ولا أشاركه خارج اللجنة.',
+  'أستعمل ما أطّلع عليه للمراجعة والتعليق وحدهما، وأعرف أن نسختي تحمل اسمي وبريدي وتاريخ الاطلاع.',
+  'تنتهي صلاحيتي بانتهاء عضويتي، ويبقى التزامي بالسرية بعدها.',
+];
+const PLEDGE_ACTION = `expert.book-pledge.${BOOK_PLEDGE_VERSION}`;
+export async function pledgeNeeded(e: any) {
+  if (!bookAccess(e)) return false;
+  const { data, error } = await db.from('audit_log').select('id').eq('entity', 'experts').eq('entity_id', e.id).eq('action', PLEDGE_ACTION).limit(1);
+  if (error) throw new Fail('تعذّر التحقق من تعهد السرية الآن، حاول بعد قليل', 503, 'pledge_unavailable');
+  return !data?.length;
+}
+export async function requirePledge(e: any) {
+  if (await pledgeNeeded(e)) throw new Fail('أكّد تعهد السرية أولًا ثم افتح الكتاب', 403, 'pledge');
+}
+export async function portalPledge(e: any) {
+  if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
+  if (await pledgeNeeded(e)) await audit('system', `expert:${e.email}`, PLEDGE_ACTION, 'experts', e.id, null, { version: BOOK_PLEDGE_VERSION });
+  return portalDashboard(e);
+}
+
 export async function portalDashboard(e: any) {
   // قبل الاعتماد: الملف وحده (يستكمله المدعو، ويراجعه من قدّم طلبه)
   const switch_to = (await rolesOf(e.email)).filter((d) => d !== 'expert');
+  const pub = expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined });
+  // عضو اللجنة بلا دور في الرحلة: لا يرى بيانات مشاركين فلا يُطلب منه D18، ولا تُجلب له أقسام الرحلة. بعد الاعتماد
+  // تعهد السرية ثم القارئ مباشرة. ومن يُضاف له دور لاحقًا يُطلب منه D18 في دخوله التالي (consentNeeded لم يسجل له قبولًا)
+  if (contentOnly(e)) {
+    if (!portalWorking(e)) return { success: true, onboarding: true, content_only: true, switch_to, consent_needed: false, expert: pub };
+    return { success: true, content_only: true, switch_to, consent_needed: false, book_access: bookAccess(e), pledge_needed: await pledgeNeeded(e), pledge: BOOK_PLEDGE_AR, expert: pub };
+  }
   // D18: سطر الموافقة عند أول دخول، قبل أي بيانات مشاركين
   const consent_needed = await consentNeeded('expert', e.id);
-  if (!portalWorking(e)) return { success: true, onboarding: true, switch_to, consent_needed, expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }) };
+  if (!portalWorking(e)) return { success: true, onboarding: true, switch_to, consent_needed, expert: pub };
   const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
     db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
       .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
@@ -606,6 +686,8 @@ export async function portalDashboard(e: any) {
   const advisorCohorts = ((await db.from('cohorts').select('*').eq('advisor_expert_id', e.id).neq('status', 'closed')).data || []).map((c: any) => ({ id: c.id, name: c.name, supervision: c.supervision || 'peers_expert' }));
   return {
     success: true, switch_to, consent_needed,
+    // من جمع الخدمتين: يفتح الكتاب من بطاقته بعد تعهد السرية
+    ...(bookAccess(e) ? { pledge_needed: await pledgeNeeded(e), pledge: BOOK_PLEDGE_AR } : {}),
     // دفعاته بصفته مستشارها: للقاعة من بوابته (المرحلة 9)
     advisor_cohorts: advisorCohorts,
     expert: expertPublic({ ...e, hourly_rate: undefined, admin_note: undefined }),
@@ -619,14 +701,20 @@ export async function portalDashboard(e: any) {
 }
 
 // الخبير قبل اعتماده يستكمل ملفه بأسئلة الخبير نفسها في طلب الانضمام، فينتقل «مدعو» إلى «بانتظار المراجعة»
+// journey-guard: الخبير يستكمل ملفه قبل الاعتماد
 export async function portalProfileSave(e: any, b: Body) {
   if (portalWorking(e)) throw new Fail('ملفك معتمد؛ تعديله من الإدارة', 409);
   const fieldError = expertFieldError(b);
   if (fieldError) throw new Fail(fieldError);
-  const fields = cleanExpert(b);
+  const fields: Record<string, any> = cleanExpert(b);
+  // عضو اللجنة المدعو بلا دور: الاسم والنبذة والإطار وحدها، بلا حقول المطابقة (الأدوار والمستويات والقطاع والساعات)،
+  // ولا تُعاد حالته إلى «بانتظار المراجعة» لغياب الأدوار. الإطار شرط للجنة المحتوى وحدها لأن مقعدها يُشتق منه
+  const reviewer = contentOnly(e);
+  if (reviewer) for (const k of ['roles', 'levels', 'sectors', 'weekly_hours']) delete fields[k];
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
-  if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
-  if (!fields.dimensions.length) throw new Fail('اختر بُعدًا واحدًا على الأقل من أبعاد البرنامج');
+  if (!reviewer && !fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
+  if (!reviewer && !fields.dimensions.length) throw new Fail('اختر بُعدًا واحدًا على الأقل من أبعاد البرنامج');
+  if (reviewer && cleanCommittees(e.committees).includes('content') && !fields.dimensions.length) throw new Fail('اختر الإطار الذي تراجعه في لجنة المحتوى');
   if (!fields.bio || fields.bio.length < 80) throw new Fail('عرّف بخبرتك في 80 حرفًا على الأقل');
   const phone = b.phone ? normalizePhone(b.phone) : null;
   if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح');

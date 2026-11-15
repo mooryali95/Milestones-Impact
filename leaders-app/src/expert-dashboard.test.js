@@ -22,7 +22,8 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
   });
   it('لا تجميع قبل الموافقة أو الاعتماد، ولا في إعادة التحميل الخفيفة', () => {
     // «تكليفاتي» (فريق الجهة والدفعة، المرحلة 2) تُضاف بعد الموافقة والاعتماد وقبل عودة الخفيفة، والتجميع بعدها كما كان
-    expect(dash).toContain('if (!d?.success || d.consent_needed || d.onboarding) return d;');
+    // وعضو اللجنة بلا دور في الرحلة لا يُجمع له شيء منها (content_only)
+    expect(dash).toContain('if (!d?.success || d.consent_needed || d.onboarding || d.content_only) return d;');
     expect(dash).toContain('if (b.lite === true) return d;');
     expect(dash.indexOf('if (b.lite === true) return d;')).toBeLessThan(dash.indexOf('await Promise.all(['));
     expect(dash.indexOf("d.assignments = await settle('xp.assignments'")).toBeGreaterThan(dash.indexOf('d.onboarding) return d;'));

@@ -71,7 +71,7 @@ function captureTokens() {
 
 const P = { id: '00000000-0000-4000-8000-000000000001', email: 'sara@org.sa', full_name: 'سارة', organization_id: null, is_demo: false };
 const CYCLE = '00000000-0000-4000-8000-0000000000c1';
-const E = { id: 'e1', email: 'adv@x.sa', full_name: 'المستشار' };
+const E = { id: 'e1', email: 'adv@x.sa', full_name: 'المستشار', status: 'active', roles: ['advisor'] };
 
 function world(withColumn = true) {
   const rater = (n: number) => ({ id: `r${n}`, cycle_id: CYCLE, participant_id: P.id, instrument_id: 'i1', email: `p${n}@other.sa`, relation: 'peer', phase: 'f360',

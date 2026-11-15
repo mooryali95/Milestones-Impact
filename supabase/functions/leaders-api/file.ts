@@ -18,7 +18,7 @@ import { mePayload } from './participant.ts';
 import { forParticipant as peerFor } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
-import { overallLevel } from './logic.js';
+import { journeyApproved, overallLevel } from './logic.js';
 import * as OB from './observations.ts';
 import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { flagsOf, timelineOf } from './observations.js';
@@ -142,7 +142,13 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
 }
 
 // ── نطاق الخبير ──
+// حارس الرحلة: من لا يخدم فيها (journeyApproved) لا يصل مشاركًا ولا دفعة ولا قاعة ولو بقي له تكليف قديم.
+// الموزع في index.ts يرفض قبله، وهذا الحارس يبقى لكل نداء مباشر
+function requireJourney(e: any) {
+  if (!journeyApproved(e)) throw new Fail('هذا لخدمة الرحلة، ولوحتك للكتاب الأم', 403, 'journey');
+}
 export async function expertScope(e: any) {
+  requireJourney(e);
   const [adv, { data: reqs }] = await Promise.all([
     myParticipantIds(e.id),
     db.from('expert_requests').select('participant_id, role').eq('expert_id', e.id).eq('status', 'accepted'),
@@ -150,11 +156,13 @@ export async function expertScope(e: any) {
   return { advisor: new Set<string>(adv), assigned: new Map<string, string>((reqs || []).map((r: any) => [r.participant_id, r.role])) };
 }
 async function requireAdvisorOf(e: any, participantId: string) {
+  requireJourney(e);
   if (!isUuid(participantId)) throw new Fail('بيانات ناقصة');
   const adv = await myParticipantIds(e.id);
   if (!adv.includes(participantId)) throw new Fail('هذا المشارك ليس في دفعة أنت مستشارها', 403);
 }
 async function requireAdvisorCohort(e: any, cohortId: unknown) {
+  requireJourney(e);
   const ids = (await advisorCohorts(e.id)).map((c: any) => c.id);
   if (!isUuid(cohortId) || !ids.includes(String(cohortId))) throw new Fail('هذه الدفعة لست مستشارها', 403);
 }

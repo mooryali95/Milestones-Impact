@@ -3,11 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 // يقرؤها تبويب «الفريق» في الدفعة، وقسم الفريق في صفحة الجهة، و«تكليفاته» في ملف الخبير، فلا يُكتب السطر نفسه ثلاث مرات.
 import { countAr, EXPERT_STATUS, expertRoleAr } from '../../supabase/functions/leaders-api/labels.js';
-import { assignmentScopeAr, cohortPeriodAr, EXPERT_APPROVED } from '../../supabase/functions/leaders-api/logic.js';
+import { assignmentScopeAr, cohortPeriodAr, EXPERT_APPROVED, journeyApproved } from '../../supabase/functions/leaders-api/logic.js';
 
 export const roleAr = expertRoleAr;
 export const rolesAr = (rs) => (rs || []).map(roleAr).join('، ');
 export const APPROVED = EXPERT_APPROVED;
+// من يخدم في الرحلة: معتمد وله دور (المصدر في logic.js). عضو اللجنة بلا دور لا يُعرض للإضافة ولا يُحسب «يخدم هنا»
+export { journeyApproved };
 const cohortsAr = (n) => countAr(n, 'دفعة واحدة', 'دفعتين', 'دفعات', 'دفعة');
 export const peopleAr = (n) => countAr(n, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا');
 export const expertsAr = (n) => countAr(n, 'خبير واحد', 'خبيران', 'خبراء', 'خبيرًا');
@@ -48,6 +50,7 @@ export function coverageNotes(cv) {
 export function rankForAdd(experts, { q = '', role = '' } = {}) {
   const s = q.trim().toLowerCase();
   return (experts || [])
+    .filter(journeyApproved)
     .filter((e) => !s || `${e.full_name} ${e.title || ''}`.toLowerCase().includes(s))
     .map((e) => ({ e, k: [role && !(e.roles || []).includes(role) ? 1 : 0, e.load?.full ? 1 : 0, e.load?.used || 0] }))
     .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.k[2] - b.k[2] || String(a.e.full_name).localeCompare(String(b.e.full_name), 'ar'))
