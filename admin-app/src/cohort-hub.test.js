@@ -93,3 +93,14 @@ describe('معالج الدفعة الجديدة', () => {
     expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1', pin: true }, { canPin: false }).program_version_id).toBe('');
   });
 });
+
+describe('مقاعد الدفعة تنبيه لا منع', () => {
+  it('تجاوزها نقص في بند الأعضاء بزر، وبلا مقاعد لا تنبيه', () => {
+    const over = cohortHub({ cohort: { ...base, capacity: 25 }, cohorts: [base], orgs: [org], programs: [prog] }).items.find((x) => x.key === 'members');
+    expect(over).toMatchObject({ ok: false, action: 'participants' });
+    expect(over.detail).toContain('29 عضوًا وللدفعة 25 مقعدًا');
+    const fits = cohortHub({ cohort: { ...base, capacity: 40 }, cohorts: [base], orgs: [org], programs: [prog] }).items.find((x) => x.key === 'members');
+    expect(fits).toMatchObject({ ok: true });
+    expect(fits.detail).toContain('40 مقعدًا');
+  });
+});

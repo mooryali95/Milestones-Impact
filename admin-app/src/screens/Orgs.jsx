@@ -188,8 +188,8 @@ function Sources({ d, total }) {
 // جاهزية الجهة في رأس صفحتها: سبعة بنود، لكل ناقص زر ضبطه (org-hub.js). الدفعة بند واحد يقود إلى ملفها
 const ORG_ACTION = { edit: 'تحرير الجهة', cohort: 'افتح ملف الدفعة', 'new-cohort': 'أنشئ دفعة لها', coordinator: 'قسم المنسق', approve: 'اعتمدهم' };
 const WRITE_ONLY = new Set(['edit', 'new-cohort']);
-function OrgReadiness({ org, access, journey, members, pending, canWrite, onEdit }) {
-  const r = orgReadiness({ org, access, journey, members, pending });
+function OrgReadiness({ org, access, journey, members, seatsUsed, pending, canWrite, onEdit }) {
+  const r = orgReadiness({ org, access, journey, members, seatsUsed, pending });
   const run = (x) => {
     if (x.action === 'edit') return onEdit();
     if (x.action === 'cohort') return navigate({ ctx: 'leaders', tab: 'programs', id: x.other });
@@ -316,7 +316,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
       </section>
 
       {!isNone && <OrgReadiness org={o} access={orgs.find((x) => x.id === o.id)?.access || null} journey={journey?.success ? journey : null}
-        members={all.length} pending={fn.pending_approval || 0} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
+        members={all.length} seatsUsed={orgs.find((x) => x.id === o.id)?.seats_used ?? null} pending={fn.pending_approval || 0} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
       <SectionIndex label="أقسام صفحة الجهة" sections={ORG_SECTIONS} />
       {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} data={journey} /></div>}
       {!isNone && <div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
