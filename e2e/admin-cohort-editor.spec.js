@@ -13,7 +13,8 @@ const programs = [
 const cohorts = [
   { id: 'c0', name: 'الدفعة المفتوحة', is_default: true, program_id: 'pa', status: 'running', delivery: {}, members: 40 },
   { id: 'c1', name: 'سفراء 2026', organization_id: 'o1', program_id: 'pb', status: 'running', starts_on: '2026-09-01', ends_on: '2027-01-31', delivery: {}, hidden_requirements: ['R-B'], members: 31, schedule: {} },
-  { id: 'c2', name: 'دفعة مثبتة', organization_id: null, program_id: 'pa', program_version_id: 'v1', status: 'planned', delivery: {}, capacity: 20, members: 0, schedule: {} },
+  // مثبتة على النسخة 1، وفي جدولها موعد قديم لمرحلة من البرنامج الحي ليست في نسختها
+  { id: 'c2', name: 'دفعة مثبتة', organization_id: null, program_id: 'pa', program_version_id: 'v1', status: 'planned', delivery: {}, capacity: 20, members: 0, schedule: { s1: { start: '2026-09-01' } } },
 ];
 const organizations = [
   { id: 'o1', name: 'جمعية سفراء', status: 'active', invite_code: 'sufara', seats: 50, seats_used: 31, delivery_default: 'in_person', auto_cohort: { id: 'c1', name: 'سفراء 2026', via: 'organization' } },
@@ -68,7 +69,8 @@ async function setup(page) {
       'admin.program': { success: true, program: programs[0], stages: defs.pa.stages, requirements: defs.pa.requirements },
       'admin.cohort-definition': () => definition(b),
       'admin.milestones': { success: true, milestones: [] },
-      'admin.cohort-save': () => ({ success: true, cohort: { id: b.id || 'c9', name: b.name, schedule: b.schedule || {} } }),
+      'admin.cohort-save': () => ({ success: true, cohort: { id: b.id || 'c9', name: b.name, schedule: b.schedule || {} },
+        ...(b.schedule?.s1 && b.id === 'c2' ? { schedule_dropped: 'لم تُحفظ مواعيد مرحلة «التأسيس»، لأنها ليست من مراحل برنامج الدفعة أو نسختها المثبتة. بقية الجدول حُفظ.' } : {}) }),
     };
     const r = replies[b.action];
     await route.fulfill({ json: (typeof r === 'function' ? r() : r) ?? { success: false, message: 'غير متوقع' } });
@@ -131,4 +133,18 @@ test('«أنشئ له دفعة» من بطاقة البرنامج يبقى عل�
   await wiz.getByRole('button', { name: 'التالي' }).click();
   await expect(wiz.getByRole('combobox', { name: 'البرنامج' })).toHaveValue('pa');
   await expect(wiz.locator('.wiz-source.warn')).toContainText('برنامج الجهة «برنامج سفراء»');
+});
+
+test('جدول الدفعة المثبتة يعرض مراحل نسختها وحدها، وما أسقطه الخادم يُقال (P5)', async ({ page }) => {
+  const calls = await setup(page);
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' }).getByRole('button', { name: /^الجدول/ }).click();
+  const dlg = page.getByRole('dialog', { name: 'جدول الدفعة' });
+  await expect(dlg).toContainText('مراحل النسخة 1 المثبتة للدفعة (الإطلاق).');
+  await expect(dlg.locator('tbody tr')).toHaveCount(1);
+  await expect(dlg.locator('tbody tr')).toContainText('مرحلة النسخة الأولى');
+  await expect(dlg).not.toContainText('التأسيس');
+  expect(calls.find((c) => c.action === 'admin.cohort-definition')).toMatchObject({ cohort_id: 'c2' });
+  await dlg.getByLabel('بداية مرحلة النسخة الأولى').fill('2026-10-01');
+  await dlg.getByRole('button', { name: 'حفظ الجدول' }).click();
+  await expect(page.getByRole('status').getByText(/لم تُحفظ مواعيد مرحلة «التأسيس»/)).toBeVisible();
 });

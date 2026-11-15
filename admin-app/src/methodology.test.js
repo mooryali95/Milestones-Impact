@@ -104,6 +104,11 @@ describe('نموذج الدفعة: أسماء البنود كما يقرؤها �
     expect(hiddenHelp({ hidden_requirements: ['R-A'], program_version_id: 'v2' }, reqs)).toContain('يُفحص الإخفاء عند الحفظ على النسخة المثبتة.');
     expect(hiddenHelp({ hidden_requirements: ['R-A'], program_version_id: 'v2' }, reqs)).not.toContain('حسب آخر تعديل');
   });
+  it('البنود من تعريف الدفعة نفسها (P5): الحكم قاطع ما دامت نسختها هي المقروءة، وإن غيّرها المدير قبل الحفظ عاد إلى الإشارة', () => {
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: 'v2' }, reqs, 'v2')).toContain('لن يُحفظ: إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: 'v3' }, reqs, 'v2')).toContain('يُفحص الإخفاء عند الحفظ على النسخة المثبتة.');
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: '' }, reqs, '')).toContain('لن يُحفظ');
+  });
 });
 
 // P3: المقاعد من العقد مصدرًا واحدًا في العرض، والسعة التشغيلية مطوية لدفعة الجهة وظاهرة لغيرها

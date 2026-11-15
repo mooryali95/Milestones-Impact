@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, latinDigits, milestoneDue, milestoneStatuses, milestoneSummary } from '../../supabase/functions/leaders-api/logic.js';
+import { cleanDueOverride, cleanMilestone, cleanSchedule, cleanScheduleReport, distributeSchedule, latinDigits, milestoneDue, milestoneStatuses, milestoneSummary } from '../../supabase/functions/leaders-api/logic.js';
 
 const stages = [
   { key: 'intro', sort: 1, duration_days: 1 },
@@ -87,5 +87,19 @@ describe('المدة الحرة والمعالم', () => {
     expect(ui).toMatch(/\{ name: 'due_override', label: 'الموعد الجديد', type: 'date' \}/);
     expect(ui).not.toMatch(/\(YYYY-MM-DD\)/);
     expect(ui).toMatch(/due_override: null \}\)/);
+  });
+});
+
+// P5: ما أُسقط من الجدول يُقال برسالة بدل الإسقاط الصامت، والخانة الفارغة ليست إسقاطًا
+describe('cleanScheduleReport', () => {
+  it('names the dropped stages and keeps the rest', () => {
+    const r = cleanScheduleReport({ intro: { start: '2026-01-01' }, ghost: { start: '2026-01-01' }, old: { end: '2026-02-01' }, blank: { start: '' } }, ['intro'], { ghost: 'الشبح' });
+    expect(r.schedule).toEqual({ intro: { start: '2026-01-01' } });
+    expect(r.dropped).toEqual(['ghost', 'old']);
+    expect(r.message).toBe('لم تُحفظ مواعيد مرحلتين: «الشبح»، «old»، لأنها ليست من مراحل برنامج الدفعة أو نسختها المثبتة. بقية الجدول حُفظ.');
+  });
+  it('nothing dropped, no message; cleanSchedule keeps its shape', () => {
+    expect(cleanScheduleReport({ intro: { start: '2026-01-01' } }, ['intro']).message).toBe('');
+    expect(cleanSchedule({ intro: { start: '2026-01-01' }, ghost: { start: '2026-01-01' } }, ['intro'])).toEqual({ intro: { start: '2026-01-01' } });
   });
 });

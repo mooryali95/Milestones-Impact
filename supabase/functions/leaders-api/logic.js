@@ -1672,6 +1672,23 @@ export function cohortDefinition({ live, version, cohort }) {
   };
 }
 
+// تعريف الدفعة كما تقرؤه نوافذها (P5): مراحل نسختها المثبتة أو البرنامج الحي، ومتطلباتها كما في البرنامج بلا تخصيص
+// التنفيذ (حقول التنفيذ تقارن به)، ولكل متطلب مرحلته وقاعدتها وعلامة hidden. المخفي لا يُحذف: يبقى في القائمة بعلامته،
+// ورموز الإخفاء التي لا بند لها في هذا التعريف تبقى في hidden كما هي فلا يمحوها حفظ.
+/** @param {{ live?: any, version?: any, cohort?: any }} input */
+export function cohortDefinitionView({ live, version, cohort }) {
+  const base = cohortDefinition({ live, version, cohort: null });
+  const stages = [...base.stages].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const order = new Map(stages.map((s, i) => [s.key, i]));
+  const stageOf = new Map(stages.map((s) => [s.key, s]));
+  const hidden = Array.isArray(cohort?.hidden_requirements) ? cohort.hidden_requirements : [];
+  const h = new Set(hidden);
+  const requirements = base.requirements
+    .map((r) => ({ ...r, stage_title_ar: stageOf.get(r.stage_key)?.title_ar || null, stage_rules: stageOf.get(r.stage_key)?.rules || {}, stage_active: stageOf.has(r.stage_key), hidden: h.has(r.code) }))
+    .sort((a, b) => (order.get(a.stage_key) ?? 1e9) - (order.get(b.stage_key) ?? 1e9) || (a.sort ?? 0) - (b.sort ?? 0));
+  return { stages, requirements, hidden };
+}
+
 // لقطة البرنامج: المراحل والمتطلبات بمعرفاتها، بلا أعمدة التتبع.
 const SNAP_DROP = new Set(['program_id', 'created_at', 'updated_at']);
 const snapRow = (r) => Object.fromEntries(Object.entries(r).filter(([k]) => !SNAP_DROP.has(k)));

@@ -1,7 +1,7 @@
 // البرامج والدفعات: اختيار الدفعة، تخصيص طريقة التنفيذ، النسخ والاسترجاع
 import { describe, expect, it } from 'vitest';
 import {
-  applyDelivery, cleanDelivery, cohortDefinition, orgProgram, orgProgramLine, pickCohort, programDiff, programSnapshot, restorePlan,
+  applyDelivery, cleanDelivery, cohortDefinition, cohortDefinitionView, orgProgram, orgProgramLine, pickCohort, programDiff, programSnapshot, restorePlan,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const open = { id: 'c-open', is_default: true, status: 'running', program_id: 'p1' };
@@ -130,5 +130,23 @@ describe('orgProgram', () => {
     const list = [{ id: 'a', organization_id: 'o', status: 'running', starts_on: '2026-10-01', program_id: 'p3' }, { id: 'b', organization_id: 'o', status: 'closed', starts_on: '2026-01-01', program_id: 'p1' }];
     expect(orgProgram(list, programs, 'o')).toMatchObject({ program_id: 'p1', cohort_id: 'b', via: 'latest' });
     expect(orgProgram([list[0]], programs, 'o')).toBeNull();
+  });
+});
+
+// P5: تعريف الدفعة لنوافذها من نسختها المثبتة وحدها، والمخفي بعلامة لا محذوفًا، بلا تخصيص التنفيذ
+describe('cohortDefinitionView', () => {
+  const live = { stages: [{ key: 'live', title_ar: 'الحي', sort: 1 }], requirements: [{ code: 'L-1', stage_key: 'live', kind: 'check' }] };
+  const version = { data: { stages: [{ key: 'b', title_ar: 'ثانية', sort: 2, rules: { complete: 'any' } }, { key: 'a', title_ar: 'أولى', sort: 1 }, { key: 'off', active: false }],
+    requirements: [{ code: 'B-1', stage_key: 'b', sort: 1, kind: 'workshop', config: { verify: 'qr', sessions_required: 2 } }, { code: 'A-1', stage_key: 'a', sort: 1, kind: 'check' }, { code: 'X', stage_key: 'a', active: false }] } };
+  it('a pinned cohort sees only its version, ordered, with hidden flags and no delivery applied', () => {
+    const r = cohortDefinitionView({ live, version, cohort: { hidden_requirements: ['B-1', 'GONE'], delivery: { 'B-1': { verify: 'join' } } } });
+    expect(r.stages.map((s) => s.key)).toEqual(['a', 'b']);
+    expect(r.requirements.map((x) => [x.code, x.stage_title_ar, x.hidden])).toEqual([['A-1', 'أولى', false], ['B-1', 'ثانية', true]]);
+    expect(r.requirements[1].config.verify).toBe('qr');
+    expect(r.requirements[1].stage_rules).toEqual({ complete: 'any' });
+    expect(r.hidden).toEqual(['B-1', 'GONE']);
+  });
+  it('without a version reads the live program', () => {
+    expect(cohortDefinitionView({ live, version: null, cohort: null }).requirements.map((x) => x.code)).toEqual(['L-1']);
   });
 });

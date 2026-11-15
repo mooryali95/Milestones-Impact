@@ -31,6 +31,7 @@ async function setup(page) {
       'admin.participants': { success: true, participants: [] },
       'admin.programs': { success: true, programs, cohorts, organizations: [{ id: 'o1', name: 'جمعية سفراء', status: 'active', invite_code: 'sufara' }, { id: 'o2', name: 'منظومة', status: 'active' }] },
       'admin.program': { success: true, program: programs[0], stages: [], requirements: reqs },
+      'admin.cohort-definition': { success: true, program_id: 'pa', version: null, stages: [], requirements: reqs, hidden: [] },
       'admin.program-version': { success: true, version: { id: 'v3', number: 3 } },
       'admin.program-compare': { success: true, version: { number: 1, label: 'الإطلاق' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [{ code: 'T-ATTEND', title: 'حضور الأيام التدريبية' }] } },
       'admin.program-restore': { success: true, restored: 1, backup: { number: 3 } },

@@ -199,9 +199,11 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     // دفعة جهة جديدة تُقترح على برنامج الجهة (P4، orgProgram)، والمؤرشف لا يُقترح
     const pid = c.program_id || orgProgram(d.cohorts, programs, c.organization_id || null)?.program_id || programs.find((p) => p.is_default)?.id;
     const p = programs.find((x) => x.id === pid);
-    L('admin.program', { id: pid }).then((pr) => setForm({
+    // خيارات البنود من تعريف الدفعة (P5): نسختها المثبتة أو برنامجها الحي، لا البرنامج الحي دائمًا
+    const vid = c.id ? c.program_version_id || '' : p?.versions[0]?.id || '';
+    L('admin.cohort-definition', { ...(c.id ? { cohort_id: c.id } : {}), program_id: pid, program_version_id: vid }).then((pr) => setForm({
       title: c.id ? `دفعة: ${c.name}` : 'دفعة جديدة',
-      fields: cohortFields({ orgs: d.organizations, programs, versions: p?.versions || [], reqs: pr.success ? pr.requirements : [], isDefault: !!c.is_default }),
+      fields: cohortFields({ orgs: d.organizations, programs, versions: p?.versions || [], reqs: pr.success ? pr.requirements : [], isDefault: !!c.is_default, defVersion: vid }),
       values: cohortToForm(c.id ? c : { program_id: pid, status: 'planned', program_version_id: p?.versions[0]?.id || '' }),
       onSave: (v) => saveCohort({ ...(c.id ? { id: c.id } : {}), ...formToCohort(v) }, confirm),
     }));

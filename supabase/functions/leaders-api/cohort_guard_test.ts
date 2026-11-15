@@ -4,7 +4,7 @@
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
-const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups } = await import('./programs.ts');
+const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups, cohortDefinitionFor, cohortGroups } = await import('./programs.ts');
 
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
@@ -246,5 +246,56 @@ Deno.test('جاهزية دفعة الجهة تحمل برنامج الجهة ا�
     assertEquals(r[ORG].program, { id: PA, name: 'برنامج القادة', via: 'current', cohort_id: C1, cohort_name: 'سفراء 2026' });
     w.tables.programs[0].archived_at = '2026-11-01T00:00:00Z';
     assertEquals(((await orgCohortSetups([ORG])) as any)[ORG].program, null);
+  } finally { w.restore(); }
+});
+
+// ── P5: تعريف الدفعة مصدرًا واحدًا لنوافذها ──
+const V1 = U(30);
+function pinned() {
+  const w = world();
+  w.tables.program_versions = [{ id: V1, program_id: PA, number: 1, label: 'الإطلاق', data: {
+    stages: [{ key: 's9', title_ar: 'مرحلة النسخة', sort: 1, active: true, rules: {} }],
+    requirements: [
+      { id: R1, stage_key: 's9', code: 'A-ONE', title_ar: 'بند النسخة', kind: 'check', required: true, active: true, sort: 1 },
+      { id: U(31), stage_key: 's9', code: 'V-OPT', title_ar: 'اختياري النسخة', kind: 'check', required: false, active: true, sort: 2 },
+    ],
+  } }];
+  Object.assign(w.tables.cohorts[0], { program_version_id: V1, hidden_requirements: ['V-OPT'], schedule: {} });
+  return w;
+}
+
+Deno.test('دفعة مثبتة على نسخة تختلف عن الحي: تعريفها مراحل النسخة وحدها، والمخفي يرجع بعلامة hidden', async () => {
+  const w = pinned();
+  try {
+    const r: any = await cohortDefinitionFor({ cohort_id: C1 });
+    assertEquals(r.version, { id: V1, number: 1, label: 'الإطلاق' });
+    assertEquals(r.stages.map((s: any) => s.key), ['s9']);
+    assertEquals(r.requirements.map((x: any) => [x.code, x.hidden, x.stage_title_ar]), [['A-ONE', false, 'مرحلة النسخة'], ['V-OPT', true, 'مرحلة النسخة']]);
+    assertEquals(r.hidden, ['V-OPT']);
+    // ما يختاره المحرر قبل الحفظ: برنامج آخر بلا نسخة يعني آخر تعديل عليه
+    w.tables.journey_stages.push({ program_id: PB, key: 'b1', title_ar: 'مرحلة سفراء', sort: 1, active: true, rules: {} });
+    const other: any = await cohortDefinitionFor({ cohort_id: C1, program_id: PB });
+    assertEquals([other.version, other.stages.map((s: any) => s.key)], [null, ['b1']]);
+    const live: any = await cohortDefinitionFor({ cohort_id: C1, program_version_id: '' });
+    assertEquals(live.stages.map((s: any) => s.key), ['s1']);
+    const e = await failOf(() => cohortDefinitionFor({ cohort_id: U(99) }));
+    assertEquals(e.status, 404);
+  } finally { w.restore(); }
+});
+
+Deno.test('جدول الدفعة المثبتة يُحفظ بمراحل النسخة، وما ليس منها يُسقط برسالة لا بصمت', async () => {
+  const w = pinned();
+  try {
+    const r: any = await cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01', end: '2026-10-01' }, s1: { start: '2026-09-01' }, empty: { start: '' } } });
+    assertEquals(w.tables.cohorts[0].schedule, { s9: { start: '2026-09-01', end: '2026-10-01' } });
+    assertEquals(r.schedule_dropped, 'لم تُحفظ مواعيد مرحلة «التمهيد»، لأنها ليست من مراحل برنامج الدفعة أو نسختها المثبتة. بقية الجدول حُفظ.');
+    const ok: any = await cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01' } } });
+    assertEquals(ok.schedule_dropped, undefined);
+    // وضع المراحل والمجموعات من التعريف نفسه
+    await cohortSave(admin, { id: C1, stage_modes: { s9: 'groups', s1: 'groups' } });
+    assertEquals(w.tables.cohorts[0].stage_modes, { s9: 'groups' });
+    w.tables.cohort_groups = []; w.tables.cohort_group_members = []; w.tables.experts = []; w.tables.placements = [];
+    const g: any = await cohortGroups({ cohort_id: C1 });
+    assertEquals(g.stages, [{ key: 's9', title_ar: 'مرحلة النسخة' }]);
   } finally { w.restore(); }
 });

@@ -37,6 +37,7 @@ async function setup(page) {
       'admin.participants': { success: true, participants: [] },
       'admin.programs': { success: true, programs, cohorts, organizations },
       'admin.program': { success: true, program: programs[0], stages: [], requirements: reqs },
+      'admin.cohort-definition': { success: true, program_id: 'pa', version: null, stages: [], requirements: reqs, hidden: [] },
       // دفعة جهة على برنامج آخر: الخادم يرفض بعدد المتأثرين حتى يصله التأكيد
       'admin.cohort-save': b.confirm_move || b.program_id !== 'pb' ? { success: true, cohort: { id: 'c9', name: b.name } }
         : { success: false, code: 'confirm_move', message: 'ينقل', affected: 7, from: [{ id: 'c1', name: 'سفراء 2026' }], to: [{ id: 'c2', name: 'أفراد الربيع' }] },

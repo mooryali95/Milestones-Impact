@@ -234,7 +234,9 @@ export function reqLabel(r, reqs = []) {
 // مراحل البرنامج من متطلباته (admin.program يرفق بكل متطلب مرحلته وقاعدتها)، لفحص الإخفاء قبل الحفظ
 const stagesOfReqs = (reqs) => [...new Map(reqs.filter((r) => r.stage_key).map((r) => [r.stage_key, { key: r.stage_key, title_ar: r.stage_title_ar || r.stage_key, rules: r.stage_rules || {}, active: r.stage_active !== false }])).values()];
 const HIDE_HELP = 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.';
-export function hiddenHelp(v, reqs = []) {
+// defVersion: النسخة التي قُرئت منها البنود (admin.cohort-definition). ما دامت هي نسخة الدفعة فالحكم قاطع، وإن غيّرها
+// المدير في النموذج قبل الحفظ فالبنود من غيرها، فيُشار ولا يُقطع، والخادم يفحص عند الحفظ
+export function hiddenHelp(v, reqs = [], defVersion) {
   const hidden = Array.isArray(v?.hidden_requirements) ? v.hidden_requirements : [];
   // ما كان مكسورًا قبل فتح النموذج لا يمنع الحفظ، كما في cohortSave
   const stages = stagesOfReqs(reqs);
@@ -243,8 +245,8 @@ export function hiddenHelp(v, reqs = []) {
     const r = reqs.find((x) => x.code === c);
     return `تنبيه: «${r ? reqLabel(r, reqs) : c}» ${CODE_FEATURES[c]}.`;
   });
-  // المتطلبات هنا من آخر تعديل على البرنامج، والخادم يفحص المثبتة على نسختها: فلا حكم قاطع لها، بل إشارة
-  const verdict = v?.program_version_id
+  const exact = defVersion !== undefined && (v?.program_version_id || '') === (defVersion || '');
+  const verdict = !exact && v?.program_version_id
     ? `يُفحص الإخفاء عند الحفظ على النسخة المثبتة.${broken.length ? ` وحسب آخر تعديل على البرنامج: ${hideBreaksMessage(broken)}` : ''}`
     : broken.length ? `لن يُحفظ: ${hideBreaksMessage(broken)}` : '';
   return [HIDE_HELP, verdict, ...notes].filter(Boolean).join(' ');
@@ -275,7 +277,7 @@ export function capacityWarning(org, capacity) {
   return `تنبيه: السعة ${n} تتجاوز مقاعد عقد الجهة (${org.seats}). العقد هو الحد الملزم على الجهة كلها، فلن يُعفى أكثر منه.`;
 }
 
-export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false }) {
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, defVersion }) {
   const orgOf = (v) => orgs.find((o) => o.id === v.organization_id);
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const base = [
@@ -299,7 +301,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'hidden_before', label: '', type: 'multi', options: {}, show: () => false },
     { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
       options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, reqLabel(r, reqs)])),
-      help: (v) => hiddenHelp(v, reqs) },
+      help: (v) => hiddenHelp(v, reqs, defVersion) },
     { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
       help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
