@@ -9,6 +9,7 @@
 // مصدر واحد يقرؤه الخادم (admin.ts وkaton.ts) ولوحة الإدارة واختباراتهما.
 import { AUTO_CHECKS } from './logic.js';
 
+export const BOOK_EDIT_AR = 'متن الباب وسؤال تأمله يُعدَّلان بمقترح: يُعرض على اللجنة، ويعتمده المدير العام، ثم يدخل الإصدار التالي من الكتاب';
 export const REPO_EDIT_AR = 'محتوى مُقاس يُعدَّل من المستودع (supabase/content) بترحيل مولّد، لا من اللوحة';
 
 // رموز متطلبات يقرؤها الكود باسمها: تغيير رمزها أو نوعها يكسر ما يحسمها
@@ -18,7 +19,8 @@ export const SYSTEM_REQUIREMENT_CODES = Object.freeze([...Object.keys(AUTO_CHECK
 // editable بدل locked: كل ما عداه مقفل
 export const CONTENT_LOCK = Object.freeze({
   questions:          { editable: ['help_ar', 'sort'], create: false, remove: false },
-  handbook_modules:   { locked: ['quiz_md', 'min_level', 'dimension', 'chapter_key'], create: false, remove: false },
+  // متن الباب وتأمله: مقترح في الكتاب الأم يُعتمد ثم يدخل إصدارًا (المرحلة 4، الخطوة 3)، فللكتاب كاتب واحد
+  handbook_modules:   { locked: ['quiz_md', 'min_level', 'dimension', 'chapter_key', 'body_md', 'reflection_ar'], create: false, remove: false, why: { body_md: 'BOOK', reflection_ar: 'BOOK' } },
   learning_models:    { locked: ['key'] },
   stage_requirements: { locked: [] },
   instruments:        { locked: ['active'] },
@@ -43,7 +45,7 @@ export function lockedChanges(entity, row, current) {
   }
   const changed = Object.keys(row).filter((f) => !same(row[f], current[f]));
   const locked = rule.editable ? changed.filter((f) => !rule.editable.includes(f)) : changed.filter((f) => rule.locked.includes(f));
-  for (const f of locked) out.push({ field: f, msg: `الحقل ${f}: ${REPO_EDIT_AR}` });
+  for (const f of locked) out.push({ field: f, msg: rule.why?.[f] === 'BOOK' ? BOOK_EDIT_AR : `الحقل ${f}: ${REPO_EDIT_AR}` });
   if (entity === 'stage_requirements') {
     if (changed.includes('code')) out.push({ field: 'code', msg: 'رمز المتطلب ثابت بعد إنشائه، لأن الرحلة والتقارير تقرأ التقدم به' });
     if (SYSTEM_REQUIREMENT_CODES.includes(current.code) && changed.includes('kind')) {

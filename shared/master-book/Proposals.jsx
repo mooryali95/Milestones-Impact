@@ -8,7 +8,7 @@ import { mdHtml } from '../../src/lib/brand/book.js';
 import { LEVEL_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { filterHandbookMd } from '../../supabase/functions/leaders-api/logic.js';
 import { markTiers } from '../../supabase/functions/leaders-api/master-book.js';
-import { PROPOSED_MAX, REASON_MIN, sectionSource, wordDiff } from '../../supabase/functions/leaders-api/book-proposals.js';
+import { PROPOSED_MAX, REASON_MIN, REFLECTION, REFLECTION_MAX, targetLabel, targetSource, wordDiff } from '../../supabase/functions/leaders-api/book-proposals.js';
 import { chapterDeps } from './deps.js';
 
 const PREVIEW = [['all', 'كما في الكتاب الأم'], ['beginner', LEVEL_AR.beginner], ['intermediate', LEVEL_AR.intermediate], ['advanced', LEVEL_AR.advanced]];
@@ -32,7 +32,8 @@ export function Diff({ a, b }) {
 }
 
 export function ProposalEditor({ chapter, section, proposal = null, data, api, onSaved, onClose }) {
-  const base = useMemo(() => sectionSource(chapter.md, section) ?? '', [chapter.md, section]);
+  const isR = section === REFLECTION;
+  const base = useMemo(() => targetSource({ body_md: chapter.md, reflection_ar: chapter.reflection }, section) ?? '', [chapter.md, chapter.reflection, section]);
   const [text, setText] = useState(proposal?.proposed_md || base);
   const [reason, setReason] = useState(proposal?.reason || '');
   const [tab, setTab] = useState('edit');
@@ -55,17 +56,18 @@ export function ProposalEditor({ chapter, section, proposal = null, data, api, o
       <aside className="mb-sheet tall wide" role="dialog" aria-modal="true" aria-label="اقتراح تعديل">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h">
-          <div><small>{chapter.title} · {proposal ? 'تحديث مقترح' : 'اقتراح تعديل'}</small><b>{section || 'مقدمة الباب'}</b></div>
+          <div><small>{chapter.title} · {proposal ? 'تحديث مقترح' : 'اقتراح تعديل'}</small><b>{targetLabel(section)}</b></div>
           <button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button>
         </header>
         <div className="mb-tabs" role="tablist">
-          {[['edit', 'النص'], ['preview', 'المعاينة'], ['diff', 'الفرق']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
+          {[['edit', 'النص'], ...(isR ? [] : [['preview', 'المعاينة']]), ['diff', 'الفرق']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
         </div>
         <div className="mb-sheet-body">
           {proposal?.stale && <p className="mb-note">القسم تغيّر بعد كتابة هذا المقترح. الحفظ يحدّث أصله إلى النص الحالي، فراجع الفرق قبل العرض.</p>}
           {tab === 'edit' && <>
-            <p className="mb-hint">النص بصيغة الكتاب: <code>##</code> عنوان القسم، و<code>:::min=intermediate</code> … <code>:::</code> لفقرة تبدأ من مستوى. الوسوم كما هي تحدد من يقرأ ماذا.</p>
-            <textarea className="mb-src" dir="rtl" spellCheck={false} value={text} maxLength={PROPOSED_MAX} onChange={(e) => setText(e.target.value)} aria-label="النص المقترح" />
+            <p className="mb-hint">{isR ? 'سؤال التأمل يقرؤه المشارك بعد الباب، ويجيب عنه بعمله الحقيقي. سؤال واحد واضح.'
+              : <>النص بصيغة الكتاب: <code>##</code> عنوان القسم، و<code>:::min=intermediate</code> … <code>:::</code> لفقرة تبدأ من مستوى. الوسوم كما هي تحدد من يقرأ ماذا.</>}</p>
+            <textarea className={`mb-src${isR ? ' short' : ''}`} dir="rtl" spellCheck={false} value={text} maxLength={isR ? REFLECTION_MAX : PROPOSED_MAX} onChange={(e) => setText(e.target.value)} aria-label="النص المقترح" />
           </>}
           {tab === 'preview' && <>
             <div className="mb-levels in" role="radiogroup" aria-label="المعاينة بمستوى">
@@ -118,7 +120,7 @@ function Card({ p, chapter, viewer, api, onChanged, onEdit, onGo }) {
     <article className={`mb-pr st-${p.status}${p.stale ? ' stale' : ''}`}>
       <header>
         <span className={`mb-pr-st st-${p.status}`}>{p.status_ar}</span>
-        <button type="button" className="mb-pr-where" onClick={() => onGo?.(p)}><small>{chapter?.title}</small><b>{p.section || 'مقدمة الباب'}</b></button>
+        <button type="button" className="mb-pr-where" onClick={() => onGo?.(p)}><small>{chapter?.title}</small><b>{targetLabel(p.section)}</b></button>
         <button type="button" className="mb-ic sm" aria-expanded={open} onClick={() => setOpen(!open)} aria-label={open ? 'طي' : 'عرض الفرق'}>{open ? '−' : '+'}</button>
       </header>
       <p className="mb-pr-why">{p.reason}</p>
@@ -168,7 +170,7 @@ export function ProposalsSheet({ data, api, scope = null, onEdit, onGo, onChange
       <aside className="mb-sheet tall wide" role="dialog" aria-modal="true" aria-label="مقترحات التعديل">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h">
-          <div><small>{scope ? scope.chapter.title : 'الكتاب الأم'}</small><b>{scope ? `مقترحات «${scope.section || 'مقدمة الباب'}»` : 'مقترحات التعديل'}</b></div>
+          <div><small>{scope ? scope.chapter.title : 'الكتاب الأم'}</small><b>{scope ? `مقترحات «${targetLabel(scope.section)}»` : 'مقترحات التعديل'}</b></div>
           <button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button>
         </header>
         {!scope && <div className="mb-filters"><select value={f} onChange={(e) => setF(e.target.value)} aria-label="الحالة">{FILTERS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>}

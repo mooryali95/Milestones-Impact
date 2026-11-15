@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  canEdit, canMove, checkProposal, isStale, proposalCounts, proposalView, rawSections, replaceSection, sectionSource, visibleTo, wordDiff,
+  canEdit, canMove, checkProposal, isStale, proposalCounts, proposalView, rawSections, REFLECTION, replaceSection, sectionSource, splitEdit, targetLabel, targetSource, visibleTo, wordDiff,
 } from '../../supabase/functions/leaders-api/book-proposals.js';
 import { headingsOf } from '../../supabase/functions/leaders-api/master-book.js';
 import { loadChapters, VERSION } from '../../scripts/handbook/content.mjs';
@@ -106,6 +106,40 @@ describe('مقترحات الكتاب الأم: من يفعل ماذا', () => {
   });
 });
 
+describe('محرر الاستوديو ← مقترح لكل قسم تغيّر (الخطوة 3)', () => {
+  const B = `مقدمة\n\n## أ\nنص أ\n\n:::min=intermediate\n## ب\nنص ب\n:::\n\n## ج\nنص ج`;
+  it('بلا تغيير: لا مقترح', () => expect(splitEdit(B, B)).toEqual({ changes: [] }));
+  it('تعديل قسمين: مقترحان، ولكل منهما نص قسمه كاملًا بوسومه', () => {
+    const r = splitEdit(B, B.replace('نص أ', 'نص أ معدل').replace('نص ب', 'نص ب معدل'));
+    expect(r.changes.map((c) => c.section)).toEqual(['أ', 'ب']);
+    expect(r.changes[1].proposed).toBe(':::min=intermediate\n## ب\nنص ب معدل\n:::');
+  });
+  it('تغيير عنوان قسم: مقترح على القسم بعنوانه القديم', () => {
+    expect(splitEdit(B, B.replace('## ج', '## ج الجديد')).changes).toEqual([{ section: 'ج', proposed: '## ج الجديد\nنص ج' }]);
+  });
+  it('قسم جديد يُلحق بالقسم الذي قبله، ويمر بتحقق المقترح', () => {
+    const r = splitEdit(B, B.replace('نص أ', 'نص أ\n\n## أ2\nقسم جديد'));
+    expect(r.changes).toEqual([{ section: 'أ', proposed: '## أ\nنص أ\n\n## أ2\nقسم جديد' }]);
+    expect(checkProposal({ section: 'أ', proposed_md: r.changes[0].proposed, reason: 'إضافة قسم جديد' }, { id: 'm', body_md: B }).value).toBeTruthy();
+    const end = splitEdit(B, `${B}\n\n## د\nآخر`);
+    expect(end.changes).toEqual([{ section: 'ج', proposed: '## ج\nنص ج\n\n## د\nآخر' }]);
+  });
+  it('حذف قسم أو دمج قسمين يُرفض برسالة', () => {
+    expect(splitEdit(B, B.replace('\n\n## ج\nنص ج', '')).error).toMatch(/حذف/);
+  });
+  it('سؤال التأمل هدف مستقل: نصه وتحققه وتقادمه', () => {
+    const mod = { id: 'm', body_md: B, reflection_ar: 'ما معلمك؟' };
+    expect(targetSource(mod, REFLECTION)).toBe('ما معلمك؟');
+    expect(targetLabel(REFLECTION)).toBe('سؤال التأمل');
+    const ok = checkProposal({ section: REFLECTION, proposed_md: 'ما المعلم الذي تقرر عنده؟', reason: 'سؤال أقرب للقرار' }, mod);
+    expect(ok.value).toMatchObject({ section: REFLECTION, base_md: 'ما معلمك؟' });
+    expect(checkProposal({ section: REFLECTION, proposed_md: 'ما معلمك؟', reason: 'سؤال أقرب للقرار' }, mod).error).toMatch(/لم يتغير/);
+    expect(checkProposal({ section: REFLECTION, proposed_md: 'x'.repeat(601), reason: 'سؤال أقرب للقرار' }, mod).error).toMatch(/أطول/);
+    expect(isStale({ section: REFLECTION, base_md: 'ما معلمك؟' }, mod)).toBe(false);
+    expect(isStale({ section: REFLECTION, base_md: 'قديم' }, mod)).toBe(true);
+  });
+});
+
 describe('مقترحات الكتاب الأم: الفرق', () => {
   it('كلمة بكلمة، والتجميع يعيد النصين', () => {
     const d = wordDiff('المعلم نقطة تحقق واضحة', 'المعلم نقطة قرار واضحة');
@@ -120,7 +154,7 @@ describe('مقترحات الكتاب الأم: الربط', () => {
   const ts = readFileSync(join(process.cwd(), 'supabase/functions/leaders-api/book-proposals.ts'), 'utf8');
   const sql = readFileSync(join(process.cwd(), 'supabase/migrations/20261116000000_leaders_book_proposals.sql'), 'utf8');
   it('الكتابة بالعامل الثاني (writer)، ولا فعل للخبير، ولا كتابة في نص الكتاب', () => {
-    for (const a of ['admin.book-proposal-save', 'admin.book-proposal-status']) expect(index).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(a, b\\) => A\\.writer\\(`));
+    for (const a of ['admin.book-proposal-save', 'admin.book-proposal-status', 'admin.book-proposal-edit']) expect(index).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(a, b\\) => A\\.writer\\(`));
     expect(index).not.toMatch(/'xp\.book-proposal/);
     expect(ts).not.toMatch(/from\('handbook_modules'\)\.(update|insert|upsert)/);
   });
