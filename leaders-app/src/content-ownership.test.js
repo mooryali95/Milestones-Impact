@@ -98,7 +98,7 @@ describe('الخادم يطبّق القفل ويحفظ المصدر والقي�
     expect(hb).not.toMatch(/\+ باب جديد|entity: 'handbook_modules', id: m\.id/);
     // العنوان وحده يُحفظ مباشرة، والمتن والتأمل مقترح (المرحلة 4، الخطوة 3)
     expect(hb).toMatch(/L\('admin\.save', \{ entity: 'handbook_modules', row: \{ id: m\.id, title_ar: v\.title_ar\.trim\(\) \} \}\)/);
-    expect(hb).toMatch(/L\('admin\.book-proposal-edit', \{ module_id: m\.id, body_md: v\.body_md, reflection_ar: v\.reflection_ar,/);
+    expect(hb).toMatch(/L\('admin\.book-proposal-edit', \{ module_id: m\.id, body_md: v\.body_md, reflection_ar: v\.reflection_ar, base_body_md: m\.body_md/);
     expect(CONTENT_LOCK.questions.editable).toEqual(['help_ar', 'sort']);
   });
 });

@@ -75,13 +75,16 @@ function QuizView({ qs, reflection, right = 'الصحيحة' }) {
 
 // حماية التعديل: مسودة تلقائية، وعرض استعادتها عند الفتح، وتأكيد قبل الإغلاق
 // دون حفظ، وتنبيه المتصفح عند مغادرة الصفحة والتعديلات قائمة
-function useGuard(key, v, setV) {
-  const { confirm } = useUI();
+function useGuard(key, v, setV, stale = null) {
+  const { confirm, toast } = useUI();
   const base = useRef(JSON.stringify(v));
   const dirty = JSON.stringify(v) !== base.current;
   useEffect(() => {
     const d = readDraft(key);
     if (!d || JSON.stringify(d) === base.current) return;
+    // مسودة كُتبت على نسخة أقدم من الأصل (تغيّر بعدها بإصدار): استعادتها تُرجع ما تغيّر، فلا تُعرض
+    const why = stale?.(d);
+    if (why) { clearDraft(key); toast(why); return; }
     confirm('توجد مسودة لم تُحفظ من آخر تعديل هنا. استعادتها؟', { ok: 'استعادة المسودة' }).then((ok) => (ok ? setV(d) : clearDraft(key)));
   }, []); // eslint-disable-line
   useEffect(() => {
@@ -116,8 +119,10 @@ function LintBar({ items, onPick }) {
 export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const { toast } = useUI();
   const d = m?.dimension || dim;
-  const [v, setV] = useState({ title_ar: m?.title_ar || '', min_level: m?.min_level || 'beginner', body_md: m?.body_md || '', reflection_ar: m?.reflection_ar || '', quiz_md: m?.quiz_md || '' });
-  const guard = useGuard(draftKey('chapter', m, d), v, setV);
+  // _at: آخر تحديث للباب حين فُتح المحرر، يُحفظ مع المسودة فلا تُستعاد مسودة كُتبت على نص أقدم
+  const [v, setV] = useState({ title_ar: m?.title_ar || '', min_level: m?.min_level || 'beginner', body_md: m?.body_md || '', reflection_ar: m?.reflection_ar || '', quiz_md: m?.quiz_md || '', _at: m?.updated_at || '' });
+  const guard = useGuard(draftKey('chapter', m, d), v, setV, (dr) => ((dr._at || '') !== (m?.updated_at || '')
+    ? 'كانت لك مسودة على هذا الباب كُتبت قبل تحديثه (صدر إصدار جديد)، فلم تُستعد كي لا تُرجع ما تغيّر. أعد تعديلك على النص الحالي.' : null));
   const [pane, setPane] = useState('content');
   const [view, setView] = useState(m?.min_level || 'beginner');
   const [scope, setScope] = useState('project');
@@ -175,7 +180,7 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
       msgs.push('حُفظ العنوان');
     }
     if (contentChanged) {
-      const r = await L('admin.book-proposal-edit', { module_id: m.id, body_md: v.body_md, reflection_ar: v.reflection_ar, reason: reason.trim(), submit: btn !== 'draft' });
+      const r = await L('admin.book-proposal-edit', { module_id: m.id, body_md: v.body_md, reflection_ar: v.reflection_ar, base_body_md: m.body_md || '', base_reflection_ar: m.reflection_ar || '', reason: reason.trim(), submit: btn !== 'draft' });
       if (!r.success) { setBusy(false); return setErr(r.message); }
       msgs.push(`${btn === 'draft' ? 'حُفظ مسودةَ مقترح' : 'عُرض على اللجنة'}: ${r.sections.join('، ')}`);
     }

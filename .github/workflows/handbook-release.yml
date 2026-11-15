@@ -47,12 +47,15 @@ jobs:
       - name: Build the release from approved proposals
         id: rel
         run: |
-          set -o pipefail
           args="--live"
           [ -n "$TO" ] && args="$args --to=$TO"
           [ "$DRY" = "true" ] && args="$args --dry"
-          RELEASE_SUMMARY="$RUNNER_TEMP/release.json" node scripts/handbook/release.mjs $args | tee "$RUNNER_TEMP/release.log"
+          # السجل يصل ملخص التشغيل ولو فشل البناء (كل المقترحات متخطاة مثلًا)، فيُعرف السبب من صفحة التشغيل
+          rc=0
+          RELEASE_SUMMARY="$RUNNER_TEMP/release.json" node scripts/handbook/release.mjs $args > "$RUNNER_TEMP/release.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/release.log"
           cat "$RUNNER_TEMP/release.log" >> "$GITHUB_STEP_SUMMARY"
+          [ "$rc" = "0" ] || exit "$rc"
           if [ -f "$RUNNER_TEMP/release.json" ]; then
             echo "to=$(node -p "require('$RUNNER_TEMP/release.json').to")" >> "$GITHUB_OUTPUT"
             echo "applied=$(node -p "require('$RUNNER_TEMP/release.json').applied")" >> "$GITHUB_OUTPUT"
@@ -97,7 +100,9 @@ jobs:
             echo "يطبق المالك الترحيلين بالترتيب بسير migrate، فيتغير نص الكتاب للمشاركين وتُعلَّم المقترحات «في إصدار»."
             echo
             echo '```'
-            cat "$RUNNER_TEMP/release.log"
+            # نص المقترحات من كتّابها: لا يكسر الإطار (```)، ولا ينبّه حسابًا على GitHub (@)، ولا يتجاوز حد الطلب
+            node -e "const s=require('fs').readFileSync(process.argv[1],'utf8').replace(/\`\`\`/g,'ˋˋˋ').replace(/@/g,'@\u200b');process.stdout.write(s.length>60000?s.slice(0,60000)+'\n… (اقتُطع، والكامل في PROPOSALS.md)':s)" "$RUNNER_TEMP/release.log"
+            echo
             echo '```'
           } > "$RUNNER_TEMP/body.md"
           if ! url=$(gh pr create --base main --head "$branch" --title "كتاب القائد ${VER}: المقترحات المعتمدة من الكتاب الأم" --body-file "$RUNNER_TEMP/body.md"); then

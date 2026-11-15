@@ -30,6 +30,8 @@ export function buildVersion(from, to, name) {
   }
   const changed = b.filter((c) => { const p = a[`${c.dimension}/${c.chapter_key}`]; return fingerprint(c) !== fingerprint(p) || (c.min_level || null) !== (p.min_level || null); });
   const tag = `$${to.replace(/\W/g, '_')}$`;
+  // الوسم الخارجي للكتلة لا يظهر في أي نص يُكتب داخلها، وإلا انكسر الترحيل عند تطبيقه
+  for (const c of changed) if ([c.body_md, c.quiz_md, c.reflection_ar].some((x) => x.includes(tag))) throw new Error(`${c.file}: النص يحوي ${tag}`);
   const blocks = changed.map((c) => {
     const old = fingerprint(a[`${c.dimension}/${c.chapter_key}`]);
     const now = fingerprint(c);
