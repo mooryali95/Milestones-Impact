@@ -128,6 +128,7 @@ export const MIGRATIONS = [
   '20261115130000_leaders_slack_threads',
   '20261115140000_leaders_ops_status',
   '20261115160000_leaders_capstone_shares',
+  '20261115170000_leaders_agent_conversations',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -174,4 +175,5 @@ export const MIGRATION_GATES = {
   '20261115130000_leaders_slack_threads': ["tolerant", "الدالة تتحمل غياب الجدول (_shared/slack.ts: findOrCreate ينشر بلا سلاسل، وslackHello لا يرسل)، فقبله يعمل سلاك بلا تجميع"],
   '20261115140000_leaders_ops_status': ["tolerant", "الدالة تتحمل غياب الجدول (_shared/slack.ts: recordSlack يكتب بلا انتظار ويتوقف عشر دقائق، وopsHealth يعرض حالة سلاك «غير مقروءة»)، فقبله تعمل البطاقة بلا آخر نشر"],
   '20261115160000_leaders_capstone_shares': ["tolerant", "الدالة تتحمل غياب الجدولين (share.ts): قبلهما تقول لوحة المشاركة إن الميزة لم تُفعَّل بعد، ولا يتعطل شيء"],
+  '20261115170000_leaders_agent_conversations': ["tolerant", "الدالة agent-chat ترد agent_unavailable (503) بلا الجداول فتعرض النافذة «اترك رسالتك» عبر النموذج، وsend-otp لا تقرؤها"],
 };

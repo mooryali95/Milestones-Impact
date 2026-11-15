@@ -4,9 +4,9 @@
 // يحفظ بالإجراء نفسه الذي يحفظ به نموذج الدفعة الكامل (admin.cohort-save)، فلا مدخل ثانٍ ولا قاعدة ثانية.
 // ما لا يحتاجه الإنشاء (صيغ الأنشطة والبنود المخفية والإشراف) يبقى في «تحرير الدفعة» من ملفها.
 import React, { useState } from 'react';
-import { L } from '../leaders.js';
 import { COHORT_STATUS } from '../methodology.js';
 import { useEscape, useGuardedClose, useUI } from '../ui.jsx';
+import { saveCohort } from '../cohort-guard.js';
 import { WIZARD_STEPS, wizardBlock, wizardBody, wizardNotes } from '../cohort-hub.js';
 
 const defaultName = (v, orgs) => {
@@ -16,7 +16,7 @@ const defaultName = (v, orgs) => {
 
 /** @param {{ preset?: any, data: any, onClose: (created?: any) => void }} props */
 export default function CohortWizard({ preset = {}, data, onClose }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const orgs = data.organizations || [];
   const programs = (data.programs || []).filter((p) => !p.archived_at);
   const [step, setStep] = useState(0);
@@ -48,7 +48,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
     if (block) return toast(block);
     if (!last) return setStep(step + 1);
     setBusy(true);
-    const r = await L('admin.cohort-save', wizardBody(v, { canPin: !!prog?.versions?.length }));
+    const r = await saveCohort(wizardBody(v, { canPin: !!prog?.versions?.length }), confirm);
     setBusy(false);
     if (!r.success) return toast(r.message);
     toast('أُنشئت الدفعة. أكمل فريقها وجدولها من ملفها.');

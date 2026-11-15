@@ -3,7 +3,7 @@
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
-const { pinSponsor, pinSponsorFor, settings } = await import('./entitlements.ts');
+const { countSeats, pinSponsor, pinSponsorFor, seatsUsed, seatsUsedByOrg, settings } = await import('./entitlements.ts');
 const { access } = await import('./payments.ts');
 const { suspendForReopen } = await import('./certificates.ts');
 
@@ -91,5 +91,46 @@ Deno.test('تعذّر تعليق الشهادة (قيد الحالة) يرمي،
     const ups = f.writes.filter((w) => w.table === 'certificates');
     assertEquals(ups.map((w) => (w.row as any).status), ['suspended']);
     assertEquals(f.writes.filter((w) => w.table === 'audit_log').length, 0);
+  } finally { f.restore(); }
+});
+
+// P3: عدّ المقاعد قاعدة واحدة. seatsUsedByOrg يعد الجهات كلها بقراءة واحدة ويطابق seatsUsed لكل جهة:
+// مشاركون مميزون بإعفاء رعاية حي، والمسحوب لا يُعد، ولا يُعد بندا المشارك الواحد مقعدين
+Deno.test('seatsUsedByOrg يطابق seatsUsed لكل جهة', async () => {
+  const ents = [
+    { participant_id: 'p1', organization_id: 'o1', source: 'sponsor', revoked_at: null, item: 'assessment' },
+    { participant_id: 'p1', organization_id: 'o1', source: 'sponsor', revoked_at: null, item: 'program' },
+    { participant_id: 'p2', organization_id: 'o1', source: 'sponsor', revoked_at: null, item: 'program' },
+    { participant_id: 'p3', organization_id: 'o1', source: 'sponsor', revoked_at: '2026-11-01', item: 'program' },
+    { participant_id: 'p4', organization_id: 'o2', source: 'sponsor', revoked_at: null, item: 'program' },
+    { participant_id: 'p5', organization_id: 'o2', source: 'payment', revoked_at: null, item: 'program' },
+  ];
+  // المرشحات كما يرسلها الاستعلام: eq وis على صفوف الذاكرة
+  const f = install((table, ops) => {
+    if (table !== 'entitlements') return { data: [], error: null };
+    const rows = ents.filter((r: any) => ops.every(([k, a]) => (k === 'eq' || k === 'is') ? (r[a[0] as string] ?? null) === a[1] : true));
+    return { data: rows, error: null };
+  });
+  try {
+    const all = await seatsUsedByOrg();
+    assertEquals(all, { o1: 2, o2: 1 });
+    for (const o of ['o1', 'o2', 'o3']) assertEquals(all[o] || 0, await seatsUsed(o));
+    assertEquals(countSeats([{ participant_id: 'x', organization_id: null }]), {});
+  } finally { f.restore(); }
+});
+
+// القراءة الواحدة تقف عند max_rows (1000) بلا خطأ: العد يقرأ بصفحات range مرتبة فلا يخرج أقل من حقيقته
+Deno.test('seatsUsedByOrg يعد ما بعد الألف صف الأولى', async () => {
+  const ents = Array.from({ length: 1200 }, (_, i) => ['assessment', 'program'].map((item) => ({ id: `e${i}${item}`, participant_id: `p${i}`, organization_id: i % 3 ? 'o1' : 'o2', source: 'sponsor', item }))).flat();
+  const f = install((table, ops) => {
+    if (table !== 'entitlements') return { data: [], error: null };
+    const range = ops.find(([k]) => k === 'range')?.[1] as number[] | undefined;
+    const rows = ents.filter((r: any) => ops.every(([k, a]) => k === 'eq' ? r[a[0] as string] === a[1] : true));
+    const [from, to] = range || [0, rows.length];
+    return { data: rows.slice(from, Math.min(to + 1, from + 1000)), error: null };
+  });
+  try {
+    assertEquals(await seatsUsedByOrg(), { o1: 800, o2: 400 });
+    assertEquals(await seatsUsed('o1'), 800);
   } finally { f.restore(); }
 });

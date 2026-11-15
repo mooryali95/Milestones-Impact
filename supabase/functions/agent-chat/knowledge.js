@@ -1,0 +1,318 @@
+// مولَّد بـ scripts/assistant/knowledge.mjs من supabase/content/assistant/v1، لا يُحرَّر يدويًا.
+export const KNOWLEDGE_VERSION = "v1-379397bea072f3eb";
+export const KNOWLEDGE = "# معرفة المساعد الآلي في موقع Milestone Impact (v1)\n\n## 1. من نحن\n\nMilestone Impact منهجية مؤسسية تربط القرار بالقيمة والأثر، وتترجم الطموح إلى برامج ومنصات وخدمات تنفيذية للقادة والمؤسسات. الشعار: «من النية... إلى الأثر» (Where decisions become impact). تعمل ضمن منظومة شراكات مع «منظومة» (Manzoma) و«Sunk Value» (القيمة المؤسسية)، وبدعم من Sunk Value.\n\nالنموذج الموحد «سلسلة الأثر» خماسي: القرار، ثم العملية، ثم المخرج، ثم النتيجة، ثم الأثر. ومنه تتفرع ثلاثة مسارات:\n1. إدارة المشروعات للقادة (MI Leaders): برنامج تنفيذي لصناع القرار.\n2. مصفوفة التأثير (MI Impact Matrix): منصة رقمية لبناء خطط الأثر.\n3. إدارة المشروعات التنموية (MI Projects): خدمة مُدارة بفريق متخصص.\n\nوفي الموقع أيضًا أداة مجانية اسمها «مقياس جاهزية الأثر»، وصفحة للحوكمة.\n\nالموقع: https://mi.sunkvalue.com\n\n## 2. برنامج إدارة المشروعات للقادة (MI Leaders)\n\nصفحة البرنامج: https://mi.sunkvalue.com/leaders/ ، والمنصة والتسجيل: https://leaders.sunkvalue.com\n\n- ما هو: برنامج تنفيذي ممتد للدورة 2026/2027، يؤهل القادة والمؤسسات لقيادة المشروعات والبرامج والمحافظ بمعيار ما تحدثه من تحول، لا بعدد ما تنجزه من مهام. جمهوره القادة وصناع السياسات.\n- المنهجية: ثلاثة أطر مترابطة:\n  - إطار Milestone: من إدارة الزمن إلى قيادة القيمة. يعيد تعريف المعلم من نقطة زمنية في جدول إلى نقطة قيادة وتحكم، ويبني حوكمة عبر المشروع والبرنامج والمحفظة ونقاط التحكم.\n  - إطار Impact: من إثبات الإنجاز إلى قيادة الأثر. يقيس القيمة عبر سلسلة خماسية: المخرجات، والنتائج المباشرة، والمنافع، والتحول، والأثر المستدام.\n  - إطار Leadership: من إدارة المهام إلى قيادة الأشخاص، عبر أربع جدارات: سرعة الاستجابة، والتسليم والتسلم، والجدارات الاتجاهية الأربع، والقيادة الموقفية.\n- المستويات: يُقيَّم المشارك مستقلًا في كل بعد من الأبعاد الثلاثة، فيتشكل له ملف كفاءة بثلاثة مستويات ممكنة لكل بعد: تأسيسي، ومتوسط، واحترافي.\n- الرحلة بوصفها العام (للأفراد): يُنشئ المشارك حسابه وملفه، ثم يجيب عن قياس مبدئي يحدد مستواه في المعالم والأثر والقيادة، ثم يعتمد مستشار نتيجته ومساره خلال يومي عمل، ثم رحلة تأهيل على مقاسه ومبادرة أو مشروع حقيقي من جهته، ثم قياس بعدي وتقييم ختامي، وتصدر عند اعتماده بنجاح «شهادة إتمام بنجاح» برقم تحقق عام.\n- مراحل رحلة التأهيل كما في صفحة البرنامج: التدريب (4 أيام تدريبية)، والتوجيه على رأس العمل (4 أسابيع)، والاستشارة (أسبوعان)، والتوجيه القيادي (4 أسابيع)، والدعم والتمكين (3 أشهر)، والتقييم والقياس (أسبوعان).\n- مسار المؤسسات: التشخيص المؤسسي، ثم تصميم البرنامج المؤسسي، ثم التنفيذ والتأهيل، ثم بناء القدرة المؤسسية، ثم المتابعة وقياس الأثر، ثم التقييم والتقرير.\n- المخرجات: خطط تنموية، واستراتيجيات تنموية، ومشروعات ومبادرات، وتقارير تقدم.\n- الأدوات المساندة: كتيب إدارة المشروعات للقادة، ومنصة تعليمية دائمة، ومنصة تواصل ومتابعة مع المدرب المرافق.\n- مستهدفات الدورة 2026/2027 المعلنة: أكثر من 200 قائد، و40 جهة، و3 كتب مرجعية، و1,000 نسخة توزع على الجهات، وأكثر من 2,000 قائد عند التوسع عبر المنصة.\n- الدخول: لكل دور بوابته. الدخول بالبريد برمز يصل إليه، أو بحساب Google، أو بمفتاح مرور، بلا كلمات مرور.\n  - المشارك: يبدأ من https://leaders.sunkvalue.com ، ومن رشحته جهة يستخدم رابطها أو رمزها عند التسجيل.\n  - منسق الجهة: يتابع مشاركي جهته وتقدمهم من لوحة الجهة بحسب الصلاحيات التي يمنحها البرنامج.\n  - الخبير: موجه ومستشار ومقيم. ومن ليس في الشبكة يقدم طلب الانضمام من https://leaders.sunkvalue.com/expert\n  - الجهة التي تريد ترشيح قادتها: تتواصل مع الفريق لإصدار رابط جهتها ورمزها. عروض الجهات وأسعارها يعدها الفريق.\n- الرسوم (بلا أرقام): رسم القياس المبدئي ورسم إكمال البرنامج دفعة واحدة لكل منهما، ورسم البرنامج بعد اعتماد المستشار للمسار. الدفع عبر Creem بوصفه البائع الرسمي على صفحة دفع باسم المشارك، والأسعار بالدولار الأمريكي، وتُحصَّل الضرائب المطبقة (ومنها ضريبة القيمة المضافة في السعودية) عند الدفع. الحق في القياس أو البرنامج يُفتح بعد تأكيد الدفع من Creem. ومن رشحته جهة تغطي جهته رسومه بحسب عقدها. الرقم نفسه يظهر في شاشة الدفع بعد التسجيل، ولا يذكره المساعد إلا إن وصله من إعداد الدفع الحي في سياق المحادثة.\n- ما تراه الجهة الراعية: الاسم والمسمى والمرحلة ونسبة الإنجاز، وقد يُمنح الاطلاع على آخر دخول أو بيانات التواصل. المسار والمستويات لا تصل الجهة إلا بموافقة المشارك، ولا ترى الجهة أبدًا إجابات القياس ولا النماذج والتأملات ولا ملاحظات المستشار ولا مسودة المبادرة قبل اعتمادها.\n- التحقق من شهادة: من صفحة التحقق العامة https://leaders.sunkvalue.com/v برقم الشهادة، بلا دخول. المساعد لا يتحقق بنفسه ولا يذكر اسم حامل أي شهادة.\n- اللغة: الموقع والمنصة بالعربية. لا معلومة مؤكدة لدى المساعد عن نسخة إنجليزية من البرنامج، ويجيب الفريق عن ذلك.\n\n### سياسات برنامج القادة (تخص برنامج القادة وحده)\n\n- سياسة الاسترداد: https://leaders.sunkvalue.com/legal/refund\n  - رسم القياس المبدئي: يُسترد خلال 14 يومًا من الدفع وقبل بدء القياس.\n  - رسم إكمال البرنامج: يُسترد خلال 14 يومًا من الدفع وقبل فتح الرحلة (أول باب يُقرأ، أو نموذج يُحفظ، أو جلسة تُحجز).\n  - بعد ذلك لا يُسترد الرسم إلا بتقدير البرنامج لظرف قاهر.\n  - الطلب: رسالة إلى mi@sunkvalue.com من بريد الحساب مع رقم الإيصال، ويُنفَّذ الاسترداد عبر Creem إلى وسيلة الدفع نفسها خلال أيام العمل المعتادة لمزود البطاقة.\n  - بعد الاسترداد أو النزاع على الدفع يُلغى الحق المرتبط به تلقائيًا، وتُلغى الشهادة إن استُردت رسوم برنامجها.\n  - الجهات الراعية بحسب عقودها.\n- سياسة الخصوصية: https://leaders.sunkvalue.com/legal/privacy ، والشروط: https://leaders.sunkvalue.com/legal/terms\n- المساعد لا يعد بأي استرداد ولا خصم ولا موعد دفعة، ويحول طلب الاسترداد أو مشكلة الدفع إلى الفريق.\n\n## 3. مصفوفة التأثير (Impact Matrix)\n\nالمنصة: https://matrix.sunkvalue.com ، والأسعار: https://mi.sunkvalue.com/pricing.html\n\n- منصة تفاعلية لبناء خطط التأثير عبر أربعة محاور (التكوين، والإبداع، والإنشاء، والتشكيل) تتشابك في ست عشرة عملية استراتيجية. جمهورها المؤسسات والمستشارون.\n- الخطط المنشورة:\n  - الخطة الفردية: 200 دولار أمريكي سنويًا. وصول كامل للمنصة، والعمليات الست عشرة، ونموذج التحليل الديموغرافي، وتقرير تحليلي تلقائي، وحفظ الجلسة 24 ساعة، ودعم بالبريد.\n  - خطة المؤسسات: 5,000 دولار أمريكي سنويًا. كل مزايا الفردية، ووصول حتى 20 مستخدمًا، ولوحة المستشار، وتقارير مقارنة، وجلسة توجيهية مع الفريق، وأولوية الدعم، وتخصيص الهوية البصرية.\n  - أكثر من 20 مستخدمًا: عرض مخصص من الفريق.\n- الدفع سنوي، وطريقة الدفع يحددها الفريق بالتواصل. ويتجدد الاشتراك تلقائيًا ما لم يُلغَ قبل 30 يومًا من تاريخ التجديد.\n\n### سياسات المصفوفة (تخص منتج المصفوفة وحده، لا برنامج القادة)\n\n- سياسة الاسترداد: https://mi.sunkvalue.com/refund.html\n  - استرداد كامل خلال 14 يومًا من الاشتراك إن لم يتم الوصول الكامل للمنهجية أو البدء في إنشاء خطة.\n  - خطة المؤسسات وحدها: بعد 14 يومًا وخلال الأشهر الثلاثة الأولى يُسترد 50% من قيمة الاشتراك السنوي.\n  - بعد الوصول الكامل والاستخدام أكثر من 14 يومًا لا استرداد في الحالات الاعتيادية.\n  - إن أوقفت Milestone Impact الخدمة أو تعذر الوصول أكثر من 30 يومًا متتالية بقرار منها: استرداد المتبقي بالتناسب.\n  - الطلب بالبريد إلى mi@sunkvalue.com بالاسم والبريد المسجل والسبب. يرد الفريق خلال 3 أيام عمل، والمبالغ المعتمدة تُعالج خلال 7 إلى 14 يوم عمل بطريقة الدفع الأصلية.\n  - غير مؤهل: انتهاك الشروط، والطلب بعد 14 يومًا مع الاستخدام الفعلي (للفردية)، وعدم الرضا عن النتائج الاستراتيجية الشخصية، والاشتراكات المنتهية.\n  - الإلغاء قبل 30 يومًا من التجديد، ولا يعني الإلغاء استردادًا تلقائيًا.\n- شروط الخدمة: https://mi.sunkvalue.com/terms.html ، وتخضع لنظام التجارة الإلكترونية في المملكة العربية السعودية.\n- سياسة الخصوصية: https://mi.sunkvalue.com/privacy.html\n\n## 4. إدارة المشروعات التنموية (MI Projects)\n\nالصفحة: https://mi.sunkvalue.com/projects/\n\n- فريق متخصص يتولى المشروع التنموي من التصميم والإطار المنطقي إلى التنفيذ المدار ثم قياس الأثر وتقارير المانحين.\n- منهجية DBOTC: التصميم (Design)، والبناء (Build)، والتشغيل (Operate)، والنقل (Transfer)، والاستشارة (Consult). ويمكن التعاقد على المنهجية كاملة أو على مرحلة بعينها.\n- رحلة العمل: التقييم المبدئي، ثم التصميم والبناء، ثم التشغيل المدار، ثم القياس والتقارير، ثم النقل والاستدامة.\n- الفئات: الجمعيات والمؤسسات غير الربحية، والمؤسسات المانحة، وبرامج المسؤولية المجتمعية في الشركات، والجهات الحكومية.\n- البدء بطلب تقييم مبدئي عبر الفريق. لا أسعار منشورة لهذا المسار.\n\n## 5. مقياس جاهزية الأثر (أداة مجانية في الموقع)\n\nالصفحة: https://mi.sunkvalue.com/assessment/\n\n- خمس عشرة عبارة تمر بحلقات سلسلة النتائج الخمس (المدخلات، والأنشطة، والمخرجات، والنتائج، والأثر)، عن مشاريع الجهة في الاثني عشر شهرًا الماضية. يستغرق نحو أربع دقائق، ولا تُطلب بيانات قبل رؤية النتيجة.\n- يعطي قراءة أولية لموضع الجهة والحلقة الأضعف، والتقرير التفصيلي بأولويات التحسين يُطلب بالاسم والجهة والبريد.\n- هذه الأداة غير «القياس المبدئي» في برنامج القادة. أسئلة القياس المبدئي وطريقة تصحيحه محفوظة لضمان عدالته، والمساعد لا يعرضها ولا يلمح إليها.\n\n## 6. الحوكمة\n\nالصفحة: https://mi.sunkvalue.com/governance/\nأربعة مجالس وسلسلة قيمة واحدة: مجلس الأمناء (المفهوم والرؤية، نصف سنوي)، والمجلس التأسيسي (العلامة ومعاييرها، ربع سنوي)، والمجلس التنفيذي (الخطة والمحفظة، شهري)، والمجلس التشغيلي (الأداء والإنجاز، أسبوعي).\n\n## 7. أين تُحفظ البيانات وتُعالج (بصدق)\n\n- قاعدة البيانات والملفات لدى Supabase على خوادم AWS في مومباي بالهند. أي أن البيانات تُحفظ اليوم خارج المملكة العربية السعودية، ولا يقول المساعد لأحد إنها داخل المملكة.\n- البريد عبر Resend، والاستضافة والحماية والتحقق البشري عبر Cloudflare، والنسخ الاحتياطية المشفرة لدى Cloudflare R2، والدفع الفردي لبرنامج القادة عبر Creem، وقناة التشغيل الداخلية عبر Slack ببريد مقنع.\n- محادثة هذا المساعد تعالجها Anthropic على خوادمها في الولايات المتحدة، ولا يرى المساعد بيانات أي حساب في المنصة.\n- إن اشترطت جهة الاستضافة داخل المملكة فهذا يبحثه الفريق قبل التعاقد، فيحولها المساعد إلى الفريق.\n\n## 8. التواصل وساعات العمل\n\n- البريد الوحيد المنشور: mi@sunkvalue.com . لا رقم هاتف منشور.\n- نموذج «تواصل معنا» في كل صفحة من الموقع.\n- ساعات عمل الفريق: الأحد إلى الخميس، من 9:00 إلى 17:00 بتوقيت الرياض. ما يصل في ساعات العمل يرد عليه الفريق خلال 4 ساعات عمل، وما يصل خارجها يرد عليه في يوم العمل التالي. المساعد الآلي متاح في أغلب الأوقات، وإن توقف فاترك رسالتك للفريق، ولا يعد برد فوري من الفريق.\n\n## 9. ما يحوله المساعد إلى الفريق\n\nطلب صريح لإنسان، وعرض أو سعر لجهة أو شراكة، واشتراط الاستضافة داخل المملكة، والاسترداد أو مشكلة الدفع، والشكوى، وطلب حذف البيانات أو الاطلاع عليها، والسؤال عن حساب أو نتيجة أو دفعة بعينها، وما لا مصدر له هنا، والمحتوى الإعلامي أو القانوني.\n\n## English summary (same facts as the Arabic text above; the policies are published in Arabic)\n\n- Milestone Impact is an institutional methodology linking decisions to value and impact (site: https://mi.sunkvalue.com). Three tracks: MI Leaders (executive programme for decision makers, https://mi.sunkvalue.com/leaders/ , platform https://leaders.sunkvalue.com), Impact Matrix (digital planning platform, https://matrix.sunkvalue.com), and MI Projects (managed development projects, https://mi.sunkvalue.com/projects/). There is also a free Impact Readiness Scale (https://mi.sunkvalue.com/assessment/).\n- MI Leaders: three frameworks (Milestone, Impact, Leadership); three levels per dimension (foundational, intermediate, professional). Journey: profile, initial assessment, advisor approval within two working days, tailored qualification, a real initiative, post assessment, final evaluation and a certificate verifiable at https://leaders.sunkvalue.com/v . Fees are paid via Creem in USD; the amount is shown at checkout and is not stated here. Refunds for MI Leaders: within 14 days of payment and before starting (details at https://leaders.sunkvalue.com/legal/refund).\n- Impact Matrix pricing: Individual 200 USD per year; Organisations 5,000 USD per year (up to 20 users). Matrix refunds follow https://mi.sunkvalue.com/refund.html (different from MI Leaders).\n- Data location: stored today with Supabase on AWS in Mumbai, India, outside Saudi Arabia. This assistant is processed by Anthropic in the United States.\n- Contact: mi@sunkvalue.com . Team hours: Sunday to Thursday, 9:00 to 17:00 Riyadh time; replies within 4 business hours, otherwise the next business day.\n- The website and platform are in Arabic; for an English version of the programme, the team answers.";
+export const FAQ = [
+  {
+    "id": "greeting",
+    "product": "any",
+    "max_words": 6,
+    "only": true,
+    "match": [
+      [
+        "مرحبا",
+        "السلام",
+        "سلام",
+        "عليكم",
+        "ورحمه",
+        "الله",
+        "وبركاته",
+        "هلا",
+        "والله",
+        "اهلا",
+        "وسهلا",
+        "مساء",
+        "صباح",
+        "الخير",
+        "النور",
+        "حياك",
+        "hello",
+        "hi",
+        "hey",
+        "salam",
+        "there",
+        "good",
+        "morning",
+        "evening",
+        "afternoon"
+      ]
+    ],
+    "ar": "أهلًا بك. أنا المساعد الآلي لـ Milestone Impact، أجيبك من معلوماتنا المعتمدة عن برنامج إدارة المشروعات للقادة، ومصفوفة التأثير، وإدارة المشروعات التنموية. بماذا أخدمك؟",
+    "en": "Hello. I am the Milestone Impact automated assistant. I answer from our approved information about the MI Leaders programme, the Impact Matrix and MI Projects. How can I help?"
+  },
+  {
+    "id": "matrix_price",
+    "product": "any",
+    "max_words": 10,
+    "match": [
+      [
+        "سعر",
+        "اسعار",
+        "تكلفه",
+        "بكم",
+        "كم",
+        "قيمه",
+        "رسوم",
+        "اشتراك",
+        "price",
+        "prices",
+        "pricing",
+        "cost",
+        "much",
+        "fee",
+        "fees"
+      ],
+      [
+        "مصفوفه",
+        "matrix"
+      ]
+    ],
+    "not": [
+      "استرداد",
+      "استرجاع",
+      "ارجاع",
+      "refund",
+      "refunds",
+      "قاده",
+      "leaders",
+      "leader",
+      "يسترد",
+      "مسترد",
+      "تسترد",
+      "refundable",
+      "refunded",
+      "refunding",
+      "money back"
+    ],
+    "ar": "خطط مصفوفة التأثير المنشورة: الخطة الفردية 200 دولار أمريكي سنويًا، وخطة المؤسسات 5,000 دولار أمريكي سنويًا وتشمل حتى 20 مستخدمًا، وما يزيد على 20 مستخدمًا له عرض مخصص من الفريق. يتجدد الاشتراك تلقائيًا ما لم يُلغَ قبل 30 يومًا من التجديد. التفاصيل في https://mi.sunkvalue.com/pricing.html",
+    "en": "Published Impact Matrix plans: Individual 200 USD per year, and Organisations 5,000 USD per year for up to 20 users; larger groups get a custom offer from the team. Subscriptions renew automatically unless cancelled 30 days before renewal. Details: https://mi.sunkvalue.com/pricing.html"
+  },
+  {
+    "id": "data_location",
+    "product": "any",
+    "max_words": 10,
+    "match": [
+      [
+        "وين",
+        "اين",
+        "مكان",
+        "موقع",
+        "تحفظ",
+        "تخزن",
+        "محفوظه",
+        "مخزنه",
+        "تخزين",
+        "where",
+        "stored",
+        "hosted",
+        "location",
+        "residency"
+      ],
+      [
+        "بيانات",
+        "بياناتي",
+        "بياناتنا",
+        "data"
+      ]
+    ],
+    "ar": "تُحفظ بيانات المنصة اليوم لدى Supabase على خوادم AWS في مومباي بالهند، أي خارج المملكة العربية السعودية، ولا ترى الجهة الراعية إلا ما توضحه سياسة الخصوصية. وهذه المحادثة تعالجها Anthropic في الولايات المتحدة. إن كانت جهتكم تشترط الاستضافة داخل المملكة فأستطيع تحويلكم إلى الفريق لبحث ذلك قبل التعاقد.",
+    "en": "Platform data is stored today with Supabase on AWS servers in Mumbai, India, which is outside Saudi Arabia, and a sponsoring organisation only sees what the privacy policy describes. This chat is processed by Anthropic in the United States. If your organisation requires in-Kingdom hosting, I can connect you with the team to discuss it before contracting."
+  },
+  {
+    "id": "certificate_verify",
+    "product": "any",
+    "max_words": 10,
+    "match": [
+      [
+        "تحقق",
+        "اتحقق",
+        "التحقق",
+        "صحه",
+        "verify",
+        "validate",
+        "check"
+      ],
+      [
+        "شهاده",
+        "certificate"
+      ]
+    ],
+    "ar": "يمكن التحقق من شهادة برنامج القادة من صفحة التحقق العامة https://leaders.sunkvalue.com/v برقم الشهادة، بلا حاجة إلى دخول. لا أستطيع التحقق بنفسي من شهادة أو ذكر اسم حاملها.",
+    "en": "MI Leaders certificates can be checked on the public verification page https://leaders.sunkvalue.com/v using the certificate number, with no sign in. I cannot verify a certificate myself or name its holder."
+  },
+  {
+    "id": "leaders_register",
+    "product": "any",
+    "max_words": 10,
+    "match": [
+      [
+        "تسجيل",
+        "اسجل",
+        "التسجيل",
+        "انضم",
+        "اشترك",
+        "register",
+        "signup",
+        "join",
+        "enrol",
+        "enroll"
+      ],
+      [
+        "برنامج",
+        "القاده",
+        "قاده",
+        "leaders",
+        "program",
+        "programme"
+      ]
+    ],
+    "not": [
+      "مصفوفه",
+      "matrix"
+    ],
+    "ar": "يبدأ التسجيل في برنامج القادة من https://leaders.sunkvalue.com بالبريد برمز يصلك أو بحساب Google، ثم ملفك والقياس المبدئي، ويعتمد مستشار نتيجتك ومسارك خلال يومي عمل. وإن رشحتك جهة فاستخدم رابطها أو رمزها عند التسجيل. هل تحب أن أشرح لك مراحل الرحلة؟",
+    "en": "Registration for MI Leaders starts at https://leaders.sunkvalue.com with an email code or a Google account, then your profile and the initial assessment; an advisor approves your result and path within two working days. If an organisation nominated you, use its link or code when registering."
+  },
+  {
+    "id": "contact_hours",
+    "product": "any",
+    "max_words": 8,
+    "match": [
+      [
+        "تواصل",
+        "اتواصل",
+        "التواصل",
+        "نتواصل",
+        "تردون",
+        "ايميل",
+        "بريد",
+        "دوام",
+        "الدوام",
+        "contact",
+        "email",
+        "reach",
+        "office",
+        "ساعات العمل",
+        "اوقات العمل",
+        "ساعات الدوام",
+        "working hours",
+        "business hours",
+        "office hours",
+        "opening hours"
+      ]
+    ],
+    "not": [
+      "رمز",
+      "كود",
+      "حساب",
+      "حسابي",
+      "تحقق",
+      "دخول",
+      "كلمه",
+      "يصلني",
+      "وصلني",
+      "وصل",
+      "اغير",
+      "تغيير",
+      "otp",
+      "code",
+      "account",
+      "login",
+      "password",
+      "sign",
+      "arrive",
+      "change",
+      "verification",
+      "برنامج",
+      "البرنامج",
+      "تدريب",
+      "التدريب",
+      "دوره",
+      "خبير",
+      "الخبير",
+      "مستشار",
+      "مدرب",
+      "مده",
+      "program",
+      "programme",
+      "training",
+      "course",
+      "expert",
+      "advisor",
+      "coach",
+      "duration",
+      "long"
+    ],
+    "ar": "البريد المنشور الوحيد mi@sunkvalue.com ، ولا رقم هاتف منشور. ساعات عمل الفريق الأحد إلى الخميس، من 9:00 إلى 17:00 بتوقيت الرياض، ويرد خلال 4 ساعات عمل، وما يصل خارجها يُرد عليه في يوم العمل التالي. وأستطيع تحويل سؤالك إلى الفريق من هنا.",
+    "en": "Our only published email is mi@sunkvalue.com , and no phone number is published. The team works Sunday to Thursday, 9:00 to 17:00 Riyadh time, and replies within 4 business hours; messages outside these hours are answered on the next business day. I can also pass your question to the team from here."
+  },
+  {
+    "id": "refund_leaders",
+    "product": "leaders",
+    "max_words": 10,
+    "match": [
+      [
+        "استرداد",
+        "استرجاع",
+        "ارجاع",
+        "يسترد",
+        "مسترد",
+        "refund",
+        "refunds",
+        "refundable",
+        "refunded"
+      ]
+    ],
+    "not": [
+      "مصفوفه",
+      "matrix",
+      "سعر",
+      "اسعار",
+      "تكلفه",
+      "بكم",
+      "price",
+      "prices",
+      "pricing",
+      "cost",
+      "costs"
+    ],
+    "ar": "في برنامج القادة: يُسترد رسم القياس المبدئي خلال 14 يومًا من الدفع وقبل بدء القياس، ورسم إكمال البرنامج خلال 14 يومًا من الدفع وقبل فتح رحلتك، وبعد ذلك لا يُسترد إلا بتقدير البرنامج لظرف قاهر. الطلب برسالة إلى mi@sunkvalue.com من بريد حسابك مع رقم الإيصال. التفاصيل في https://leaders.sunkvalue.com/legal/refund ، وإن كان لديك طلب استرداد قائم فأحوله إلى الفريق.",
+    "en": "For MI Leaders: the initial assessment fee is refundable within 14 days of payment and before you start the assessment, and the programme fee within 14 days of payment and before your journey opens; after that only at the programme's discretion for force majeure. Email mi@sunkvalue.com from your account email with the receipt number. Details: https://leaders.sunkvalue.com/legal/refund"
+  },
+  {
+    "id": "refund_matrix",
+    "product": "matrix",
+    "max_words": 10,
+    "match": [
+      [
+        "استرداد",
+        "استرجاع",
+        "ارجاع",
+        "يسترد",
+        "مسترد",
+        "refund",
+        "refunds",
+        "refundable",
+        "refunded"
+      ]
+    ],
+    "not": [
+      "قاده",
+      "برنامج",
+      "leaders",
+      "leader",
+      "program",
+      "programme",
+      "سعر",
+      "اسعار",
+      "تكلفه",
+      "بكم",
+      "price",
+      "prices",
+      "pricing",
+      "cost",
+      "costs"
+    ],
+    "ar": "في مصفوفة التأثير: استرداد كامل خلال 14 يومًا من الاشتراك إن لم يتم الوصول الكامل للمنهجية أو البدء في إنشاء خطة، ولخطة المؤسسات وحدها 50% بعد 14 يومًا وخلال الأشهر الثلاثة الأولى. الطلب بالبريد إلى mi@sunkvalue.com ، ويرد الفريق خلال 3 أيام عمل. التفاصيل في https://mi.sunkvalue.com/refund.html",
+    "en": "For the Impact Matrix: a full refund within 14 days of subscribing if the methodology was not fully accessed and no plan was started; for the Organisations plan only, 50% after 14 days and within the first three months. Email mi@sunkvalue.com ; the team replies within 3 business days. Details: https://mi.sunkvalue.com/refund.html"
+  }
+];
