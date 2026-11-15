@@ -57,3 +57,5 @@ verify_jwt = true
 verify_jwt = false
 [functions.leaders-hooks]
 verify_jwt = false
+[functions.agent-chat]
+verify_jwt = true

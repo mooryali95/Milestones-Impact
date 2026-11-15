@@ -65,6 +65,7 @@ jobs:
           deploy send-otp
           deploy admin-api
           deploy user-api
+          deploy agent-chat
       - name: Verify the live functions answer real requests
         if: steps.gate.outputs.skip != 'true'
         run: |
