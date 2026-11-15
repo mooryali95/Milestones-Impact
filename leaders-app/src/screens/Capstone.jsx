@@ -215,15 +215,18 @@ export default function Capstone({ me, onEditProfile, onBack }) {
             {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}
           </section>
 
-          <section className="card cp-example" aria-labelledby="cp-ex-h">
-            <h3 id="cp-ex-h">مبادرة محلولة كاملة</h3>
-            <p className="muted small">قبل أن تكتب، شاهد كيف تبدو وثيقة مكتملة من أول البطاقة إلى قصة التحول. للتعلم من بنيتها لا لنقلها: مبادرتك من واقع جهتك.</p>
-            <div className="row">
-              {examplesFor(me?.sector).map((ex, i) => (
-                <button key={ex.sector} type="button" className={`btn ${i ? 'ghost' : 'gold'} sm`} onClick={() => openCapstoneDoc(exampleDoc(ex))}>مثال {ex.sector_title}</button>
-              ))}
-            </div>
-          </section>
+          {/* المبادرات المحلولة كاملة: يعرضها أو يحجبها المالك عامةً أو للدفعة، وكل قطاع وحده (examples من الخادم) */}
+          {d.examples?.doc !== false && examplesFor(me?.sector, d.examples?.sectors ?? null).length > 0 && (
+            <section className="card cp-example" aria-labelledby="cp-ex-h">
+              <h3 id="cp-ex-h">مبادرة محلولة كاملة</h3>
+              <p className="muted small">قبل أن تكتب، شاهد كيف تبدو وثيقة مكتملة من أول البطاقة إلى قصة التحول. للتعلم من بنيتها لا لنقلها: مبادرتك من واقع جهتك.</p>
+              <div className="row">
+                {examplesFor(me?.sector, d.examples?.sectors ?? null).map((ex, i) => (
+                  <button key={ex.sector} type="button" className={`btn ${i ? 'ghost' : 'gold'} sm`} onClick={() => openCapstoneDoc(exampleDoc(ex))}>مثال {ex.sector_title}</button>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="card cp-case" aria-labelledby="cp-case-h">
             <h3 id="cp-case-h">حالة العمل</h3>

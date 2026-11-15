@@ -7,8 +7,7 @@ import React, { useEffect, useId, useState } from 'react';
 import { call } from '../api.js';
 import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
-import { exampleFor, guideFor } from '../guide.js';
-import { nearCopy } from '../../../supabase/functions/leaders-api/example-check.js';
+import { guideFor, nearExample } from '../guide.js';
 import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
@@ -260,10 +259,10 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             return (
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b>{f.label}{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
-                {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector)} />}
+                {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, d.examples)} />}
                 <Field f={f} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* المثال للتعلم لا للنقل: تنبيه لا يمنع، ويراه المستشار في مراجعة الوثيقة أيضًا (example-check.js) */}
-                {!locked && nearCopy(answers[f.key], exampleFor(m.key, f.key, d.sector)?.value) && <p className="alert warn small" role="status">هذا قريب جدًا من المثال المحلول. اكتبه من واقع مبادرتك، فالمستشار يرى هذا التنبيه أيضًا.</p>}
+                {!locked && nearExample(m.key, f.key, answers[f.key]) && <p className="alert warn small" role="status">هذا قريب جدًا من المثال المحلول. اكتبه من واقع مبادرتك، فالمستشار يرى هذا التنبيه أيضًا.</p>}
                 {/* بريد الراعي اختياري، لكن الناقص منه لا يصله طلب التأييد: يُنبَّه عند الكتابة لا في فحوص الوثيقة لاحقًا */}
                 {f.key === 'sponsor_email' && String(answers[f.key] || '').trim() && !isEmail(String(answers[f.key]).trim()) && <p className="alert err small" role="alert">هذا البريد غير مكتمل، فلن يصل الراعي طلب التأييد. صحّحه أو اتركه فارغًا.</p>}
               </div>
