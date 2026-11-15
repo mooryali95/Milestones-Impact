@@ -27,7 +27,7 @@ import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from 
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
 import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { appSettings } from './settings.ts';
-import { BULK_APPROVE_MAX, mailPlan, splitForApproval } from './approval.js';
+import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
 export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
@@ -707,6 +707,8 @@ export async function approveBulk(a: Admin, b: Body) {
   if (!ids.length) throw new Fail('اختر من تعتمدهم');
   if (ids.length > BULK_APPROVE_MAX) throw new Fail(`الحد ${BULK_APPROVE_MAX} مشاركًا في المرة الواحدة`);
   const signals = await approvalSignals(ids);
+  // المرحلة 2: «بمستوى محدد» للمدير العام وحده، بتعليل إلزامي يُحفظ لكل من خالف مستواه المحسوب
+  if (b.mode === 'set') return approveBulkSet(a, b, signals);
   const { ready, held } = splitForApproval(signals);
   const used = await mailUsage().catch(() => null);
   const mail = mailPlan(ready.filter((r) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
@@ -717,10 +719,39 @@ export async function approveBulk(a: Admin, b: Body) {
     try { await approveOne(a, p, r.levels, {}, { bulk: true }); results.push({ id: r.id, full_name: r.full_name, ok: true }); }
     catch (e) { results.push({ id: r.id, full_name: r.full_name, ok: false, error: (e as Error).message }); }
   }
+  // المرحلة 3: عينة عشوائية مما اعتُمد آليًا تُراجع يدويًا، وتُحفظ في السجل الجامع فيُعرف ما رُوجع وما بقي
+  const approved = results.filter((x) => x.ok);
+  const sample = pickSample(approved.map((x) => x.id)).map((id) => approved.find((x) => x.id === id));
   await audit('admin', a.email, 'placement.approve-bulk', 'participants', 'bulk', null, {
-    approved: results.filter((x) => x.ok).map((x) => x.id), failed: results.filter((x) => !x.ok).map((x) => x.id), held: held.map((x) => ({ id: x.id, holds: x.holds.map((h: any) => h.key) })),
+    approved: approved.map((x) => x.id), failed: results.filter((x) => !x.ok).map((x) => x.id), held: held.map((x) => ({ id: x.id, holds: x.holds.map((h: any) => h.key) })),
+    sample: sample.map((x: any) => x.id),
   });
-  return { success: true, results, held, mail };
+  return { success: true, results, held, mail, sample };
+}
+
+// اعتماد المحددين بمستوى واحد (المرحلة 2): قرار صريح من المدير العام، فلا تُستبقى الإشارات، والتعليل يلزم إن خالف
+// مستوًى مفروضٌ محسوبَ أحد. كل مخالفة تُحفظ في ملف صاحبها بالتعليل نفسه، ويمر الاعتماد بـapproveOne كغيره
+async function approveBulkSet(a: Admin, b: Body, signals: any[]) {
+  requireSuper(a);
+  const reason = String(b.reason || '').trim().slice(0, 500);
+  const plan = planUniform(signals, b.levels || {}, reason);
+  if (!Object.keys(plan.levels).length) throw new Fail('اختر مستوى لبُعد واحد على الأقل');
+  const used = await mailUsage().catch(() => null);
+  const mail = mailPlan(plan.ready.filter((r: any) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
+  if (b.dry_run) return { success: true, mode: 'set', ready: plan.ready, held: plan.held, needs_reason: plan.needs_reason, mail, mail_read: used != null };
+  if (!plan.reason_ok) throw new Fail(`اكتب تعليل مخالفة المستوى المحسوب (${OVERRIDE_REASON_MIN} أحرف على الأقل). يُحفظ في ملف كل من خالفه`, 400, 'override_reason');
+  const results: any[] = [];
+  for (const r of plan.ready) {
+    const p = signals.find((x: any) => x.id === r.id);
+    try { await approveOne(a, p, r.levels, notesFor(r, reason), { bulk: 'set' }); results.push({ id: r.id, full_name: r.full_name, ok: true }); }
+    catch (e) { results.push({ id: r.id, full_name: r.full_name, ok: false, error: (e as Error).message }); }
+  }
+  await audit('admin', a.email, 'placement.approve-bulk', 'participants', 'bulk', null, {
+    mode: 'set', levels: plan.levels, reason: reason || null,
+    approved: results.filter((x) => x.ok).map((x) => x.id), failed: results.filter((x) => !x.ok).map((x) => x.id),
+    overridden: plan.ready.filter((r: any) => r.changes.length).map((r: any) => ({ id: r.id, changes: r.changes })),
+  });
+  return { success: true, mode: 'set', results, held: plan.held, mail };
 }
 
 // تغيير الحالة، المدخل الواحد لشخص من ملفه أو لمجموعة من القائمة (participant_ids، حتى BULK_MAX):

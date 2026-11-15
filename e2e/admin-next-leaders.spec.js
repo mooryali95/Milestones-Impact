@@ -355,14 +355,14 @@ test('الاعتماد الجماعي بالمستوى المحسوب: معاي�
     calls.push(b);
     return route.fulfill({ json: b.dry_run
       ? { success: true, ready, held, mail: { now: 1, queued: 0 } }
-      : { success: true, results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held, mail: { now: 1, queued: 0 } } });
+      : { success: true, results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held, mail: { now: 1, queued: 0 }, sample: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }] } });
   });
   // في عرض «بانتظار الاعتماد»: اختصار لاعتماد المتسقين من الظاهرين
   await page.getByRole('button', { name: /بانتظار الاعتماد/ }).first().click();
   await page.getByRole('button', { name: /اعتمد المتسقين/ }).click();
   const dlg = page.getByRole('dialog', { name: 'اعتماد جماعي' });
   await expect(dlg.locator('.ba-sum')).toContainText('سيُعتمد 1');
-  await expect(dlg.locator('.ba-sum')).toContainText('يُستبقى للمراجعة 1');
+  await expect(dlg.locator('.ba-sum')).toContainText('يُستبقى 1');
   await expect(dlg.locator('li.held', { hasText: 'خالد ب.' })).toContainText('حالة حدّية في إدارة المشروعات');
   await expect(dlg.locator('li.held', { hasText: 'خالد ب.' })).toContainText('أجاب باستعجال');
   // الدلالة على المحتوى الموحّد بدل تزوير القياس
@@ -370,10 +370,50 @@ test('الاعتماد الجماعي بالمستوى المحسوب: معاي�
   expect(calls.find((c) => c.action === 'admin.approve-bulk')).toMatchObject({ dry_run: true, participant_ids: ['p1', 'p3'] });
   await dlg.getByRole('button', { name: 'اعتمد 1' }).click();
   await expect(dlg.locator('.ba-sum')).toContainText('اعتُمد 1');
+  // المرحلة 3: عيّنة للتحقق مما اعتُمد آليًا، كل اسم يفتح ملفه
+  await expect(dlg.locator('.ba-sample')).toContainText('عيّنة للتحقق (1)');
+  await expect(dlg.locator('.ba-sample').getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
   const run = calls.filter((c) => c.action === 'admin.approve-bulk').pop();
   expect(run).toMatchObject({ participant_ids: ['p1', 'p3'] });
   expect(run).not.toHaveProperty('dry_run');
   // المستبقى يُفتح ملفه للمراجعة الفردية
   await dlg.locator('li.held').getByRole('button', { name: 'خالد ب.' }).click();
   await expect(page).toHaveURL(/#\/leaders\/participants\/p3/);
+});
+
+test('الاعتماد بمستوى محدد للمدير العام: المخالفة تُسمّى، والتعليل إلزامي، ويُرسل مع المستوى المفروض', async ({ page }) => {
+  const calls = await setup(page, {});
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير عام', email: 's@x', role_id: 'super_admin' }, ts: Date.now() })));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action !== 'admin.approve-bulk') return route.fallback();
+    calls.push(b);
+    if (b.mode !== 'set') return route.fulfill({ json: { success: true, ready: [], held: [], mail: { now: 0, queued: 0 } } });
+    const ready = [{ id: 'p1', full_name: 'سارة الأحمد', levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' }, changes: [{ dim: 'leadership', from: 'intermediate', to: 'beginner' }] }];
+    return route.fulfill({ json: b.dry_run ? { success: true, mode: 'set', ready, held: [], needs_reason: true, mail: { now: 1, queued: 0 } }
+      : { success: true, mode: 'set', results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held: [], mail: { now: 1, queued: 0 } } });
+  });
+  await page.reload();
+  await page.getByLabel('تحديد سارة الأحمد').check();
+  await page.getByRole('button', { name: /اعتماد جماعي/ }).click();
+  const dlg = page.getByRole('dialog', { name: 'اعتماد جماعي' });
+  await dlg.getByRole('radio', { name: /بمستوى محدد/ }).check();
+  await expect(dlg).toContainText('اختر مستوى لبُعد واحد على الأقل');
+  await dlg.getByLabel('مستوى تمكين القائد').selectOption('beginner');
+  await expect(dlg.locator('li', { hasText: 'سارة الأحمد' })).toContainText('يخالف المحسوب');
+  // التعليل إلزامي قبل التنفيذ
+  const go = dlg.getByRole('button', { name: 'اعتمد 1' });
+  await expect(go).toBeDisabled();
+  await dlg.getByRole('textbox').fill('قرار لجنة البرنامج: بداية موحّدة في القيادة');
+  await go.click();
+  await expect(dlg.locator('.ba-sum')).toContainText('اعتُمد 1');
+  const run = calls.filter((c) => c.action === 'admin.approve-bulk' && !c.dry_run).pop();
+  expect(run).toMatchObject({ mode: 'set', levels: { leadership: 'beginner' }, reason: 'قرار لجنة البرنامج: بداية موحّدة في القيادة', participant_ids: ['p1'] });
+});
+
+test('المدير غير العام لا يرى «بمستوى محدد»', async ({ page }) => {
+  await setup(page, { 'admin.approve-bulk': { success: true, ready: [], held: [], mail: { now: 0, queued: 0 } } });
+  await page.getByLabel('تحديد سارة الأحمد').check();
+  await page.getByRole('button', { name: /اعتماد جماعي/ }).click();
+  await expect(page.getByRole('dialog', { name: 'اعتماد جماعي' }).getByRole('radio')).toHaveCount(0);
 });

@@ -73,3 +73,60 @@ describe('الخادم: مصدر واحد للاعتماد، والحكم يُع
     expect(sig).toContain('baselineProgress(ids)');
   });
 });
+
+import { notesFor, planUniform } from '../../supabase/functions/leaders-api/approval.js';
+describe('المرحلة 2: اعتماد المحددين بمستوى واحد', () => {
+  const pend = (id, levels) => ({ id, full_name: id, status: 'pending_approval', placements: Object.entries(levels).map(([dimension, level]) => ({ dimension, level })) });
+  const a = pend('a', { milestone: 'advanced', impact: 'beginner', leadership: 'beginner' });
+  const b = pend('b', { milestone: 'beginner', impact: 'beginner', leadership: 'beginner' });
+  it('المفروض يستبدل بُعده وحده، والفارغ يبقى على المحسوب، وتُسمّى كل مخالفة', () => {
+    const p = planUniform([a, b], { milestone: 'beginner' }, '');
+    expect(p.ready.map((r) => r.levels.milestone)).toEqual(['beginner', 'beginner']);
+    expect(p.ready[0].changes).toEqual([{ dim: 'milestone', from: 'advanced', to: 'beginner' }]);
+    expect(p.ready[1].changes).toEqual([]);
+    expect(p.needs_reason).toBe(true);
+    expect(p.reason_ok).toBe(false);
+  });
+  it('التعليل الكافي يقبل، ويُكتب لكل بُعد خالفه وحده', () => {
+    const p = planUniform([a, b], { milestone: 'beginner' }, 'قرار اللجنة: بداية موحّدة للدفعة');
+    expect(p.reason_ok).toBe(true);
+    expect(notesFor(p.ready[0], ' قرار اللجنة ')).toEqual({ milestone: 'قرار اللجنة' });
+    expect(notesFor(p.ready[1], 'قرار')).toEqual({});
+  });
+  it('بلا مخالفة لا يلزم تعليل، وغير المنتظر للاعتماد والناقص بلا فرض يُستبقيان', () => {
+    expect(planUniform([b], { milestone: 'beginner' }, '').reason_ok).toBe(true);
+    const p = planUniform([{ ...a, status: 'placed' }, pend('c', { milestone: 'beginner', impact: 'beginner' })], { milestone: 'beginner' }, '');
+    expect(p.held.map((h) => h.holds[0].key)).toEqual(['status', 'missing']);
+    expect(planUniform([pend('c', { milestone: 'beginner', impact: 'beginner' })], { leadership: 'intermediate' }, '').ready).toHaveLength(1);
+  });
+  it('الخادم: للمدير العام وحده، والتعليل يُرفض ناقصًا قبل أي اعتماد، ويمر بـapproveOne', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
+    const body = src.slice(src.indexOf('async function approveBulkSet'), src.indexOf('// تغيير الحالة، المدخل الواحد'));
+    expect(body).toContain('requireSuper(a);');
+    expect(body.indexOf("if (!plan.reason_ok)")).toBeLessThan(body.indexOf('approveOne('));
+    expect(body).toContain('await approveOne(a, p, r.levels, notesFor(r, reason)');
+  });
+});
+
+import { pickSample } from '../../supabase/functions/leaders-api/approval.js';
+describe('المرحلة 3: التحقق بالعينة', () => {
+  const ids = Array.from({ length: 23 }, (_, i) => `p${i}`);
+  it('10% مقرّبة إلى أعلى وواحد على الأقل، بلا تكرار، ومن المعتمدين وحدهم', () => {
+    expect(pickSample(ids)).toHaveLength(3);
+    expect(pickSample(['a'])).toEqual(['a']);
+    expect(pickSample([])).toEqual([]);
+    const s = pickSample(ids);
+    expect(new Set(s).size).toBe(s.length);
+    expect(s.every((x) => ids.includes(x))).toBe(true);
+  });
+  it('عشوائية فعلًا: مولّد مختلف يعطي عينة مختلفة', () => {
+    let k = 0.1; const a = pickSample(ids, { rnd: () => (k = (k * 7.3) % 1) });
+    let m = 0.9; const b = pickSample(ids, { rnd: () => (m = (m * 3.1) % 1) });
+    expect(a).not.toEqual(b);
+  });
+  it('الخادم يختارها مما نجح اعتماده ويحفظها في السجل الجامع', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
+    expect(src).toContain('const sample = pickSample(approved.map((x) => x.id))');
+    expect(src).toContain('sample: sample.map((x: any) => x.id),');
+  });
+});
