@@ -73,8 +73,17 @@ describe('كشف الانحراف بين الإنتاج والمستودع', () 
 
 describe('مولّد إصدارات الكتاب', () => {
   it('الإصدارات مرتبة ترتيبًا رقميًا، والحالي أحدثها', () => {
-    expect(versions()).toEqual(['v2', 'v3']);
-    expect(VERSION).toBe('v3');
+    expect(versions()).toEqual(['v2', 'v3', 'v3.1']);
+    expect(VERSION).toBe('v3.1');
+  });
+  it('v3.1 يغيّر باب المعالم الرابع وحده: علاقة انتهاء ← بدء والإزاحة لكل المستويات، والأنواع الثلاثة الأخرى للمتوسط فأعلى', () => {
+    const sql = buildVersion('v3', 'v3.1', '20991231000000_leaders_handbook_test');
+    expect(sql).toMatch(/الأبواب المتغيرة: 1 من 27: milestone_5_ch4\.md\./);
+    const md = read('supabase/content/handbook/v3.1/milestone_5_ch4.md');
+    const base = md.split(':::min=intermediate\n- **بقية أنواع الاعتماديات**')[0];
+    expect(base).toContain('**انتهاء ← بدء (FS)**');
+    expect(base).toContain('**إزاحة (Lag)**');
+    expect(md).toMatch(/:::min=intermediate\n- \*\*بقية أنواع الاعتماديات\*\*[^\n]*\(SS\)[^\n]*\(FF\)[^\n]*\(SF\)/);
   });
   it('v2 إلى v3 بالمولّد الجديد يغيّر الأبواب نفسها التي غيّرها ترحيل v3، بحارس البصمة', () => {
     const sql = buildVersion('v2', 'v3', '20991231000000_leaders_handbook_test');

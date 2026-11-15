@@ -1194,6 +1194,17 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 /* لوحة الخبير (/x) */
 .xpp-in .eyebrow, .xpp .eyebrow { margin: 0; font-size: 14px; letter-spacing: .3em; color: var(--accent); }
 .xpp-head-acts { gap: 12px; align-items: center; }
+/* بطاقة الكتاب الأم في بوابة الخبير: مدخل إلى القارئ المشترك (shared/master-book) */
+.xpp-book { display: flex; align-items: center; gap: 16px; width: 100%; margin: 16px 0 0; padding: 16px 18px; text-align: start; border: 1px solid rgba(217, 168, 90, .45); border-radius: 14px; cursor: pointer;
+  background: radial-gradient(600px 200px at 80% -40%, rgba(217, 168, 90, .22), transparent 60%), linear-gradient(135deg, var(--brand-graphite), var(--brand-ink)); color: var(--brand-sand-soft); font: inherit; transition: transform .2s, box-shadow .2s; }
+.xpp-book:hover { transform: translateY(-2px); box-shadow: 0 18px 36px -20px rgba(6, 19, 24, .8); }
+.xpp-book > span:nth-child(2) { flex: 1; display: grid; gap: 2px; line-height: 1.7; }
+.xpp-book small { font-size: 11.5px; color: var(--brand-gold-light); } .xpp-book b { font: 400 22px/1.4 "Amiri", "Noto Kufi Arabic", serif; } .xpp-book em { font-style: normal; font-size: 13px; color: rgba(244, 238, 226, .78); }
+.xpp-book-ic { position: relative; width: 46px; height: 58px; flex: none; perspective: 200px; }
+.xpp-book-ic i { position: absolute; inset: 0; border-radius: 3px 6px 6px 3px; background: linear-gradient(135deg, var(--brand-slate), var(--brand-ink)); border: 1px solid rgba(217, 168, 90, .6); transform: rotateY(-22deg); }
+.xpp-book-ic i:nth-child(1) { translate: 6px 4px; opacity: .45; } .xpp-book-ic i:nth-child(2) { translate: 3px 2px; opacity: .7; }
+.xpp-book-ic i:nth-child(3)::after { content: ''; position: absolute; inset: 20% 22%; border-block: 1px solid var(--brand-gold-light); }
+.xpp-book-go { font-size: 20px; color: var(--brand-gold-light); }
 .xpp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
 .xpp-kpis > div { display: grid; gap: 4px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .xpp-kpis b { font-size: 26px; color: var(--graphite); font-weight: 600; }
