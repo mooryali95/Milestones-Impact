@@ -4,8 +4,8 @@
 // القارئ واحد في اللوحة وبوابة الخبير. الخبير يقرأ إن كان عضوًا فاعلًا في لجنة المحتوى أو القياس (bookAccess)،
 // والمدير بأي دور (المراقب يقرأ ولا يكتب). يكتب التعليق الخبير والمدير الكاتب، ويحذفه كاتبه، ويحسمه المدير الكاتب.
 // المتن والاختبار يُرسلان كما هما: هذا كتاب المراجعين، والإجابة الصحيحة جزء مما يراجعونه.
-import { audit, db, Fail, must, sha256Hex } from './core.ts';
-import { canDelete, canResolve, cleanComment, openCounts, orderChapters, threads, versionFromMigration, authorRole, bookAccess } from './master-book.js';
+import { audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
+import { canDelete, canResolve, cleanComment, openCounts, orderChapters, threads, versionFromMigration, authorRole, bookAccess, shareRoster, toggleCommittee } from './master-book.js';
 
 type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean };
 
@@ -41,8 +41,12 @@ export async function book(v: Viewer) {
   const prints = Object.fromEntries(await Promise.all(mods.map(async (m) => [m.id, await fp(m)])));
   const list = threads(rows || [], prints);
   const mine = (c: any) => ({ ...c, mine: canDelete(v, c), replies: (c.replies || []).map((r: any) => ({ ...r, mine: canDelete(v, r) })) });
+  // للإدارة وحدها: من يقرأ الكتاب الآن ومن يمكن إضافته، ورابط بوابة الخبراء
+  const share = v.kind === 'admin'
+    ? { portal_url: `${CONFIG.appUrl}/x`, ...shareRoster(((await db.from('experts').select('id, full_name, email, title, status, committees').neq('status', 'rejected').limit(500)).data || []) as any[]) }
+    : null;
   return {
-    success: true, version: ver, generated_at: new Date().toISOString(),
+    success: true, version: ver, generated_at: new Date().toISOString(), share,
     viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, resolve: canResolve(v) },
     comments_ready: rows !== null,
     chapters: mods.map((m) => ({
@@ -93,4 +97,18 @@ export async function setStatus(v: Viewer, b: any) {
     : { status, resolved_by: null, resolved_at: null }).eq('id', id));
   await audit('admin', v.ref, `book.comment-${status}`, 'book_comments', id, { status: c.status }, { status });
   return { success: true };
+}
+
+// إضافة خبير إلى لجنة أو إزالته منها من نافذة المشاركة: العضوية نفسها التي يضبطها ملف الخبير (experts.committees)
+export async function setReader(a: { email: string }, b: any) {
+  const id = String(b?.expert_id || '');
+  const { data: e } = await db.from('experts').select('id, full_name, status, committees').eq('id', id).maybeSingle();
+  if (!e) throw new Fail('الخبير غير موجود', 404, 'not_found');
+  const next = toggleCommittee(e.committees || [], String(b?.committee || ''), b?.on !== false);
+  if (!next) throw new Fail('اللجنة غير معروفة', 400, 'invalid');
+  if (b?.on !== false && e.status !== 'active') throw new Fail('فعّل ملف الخبير أولًا من قسم الخبراء، ثم أضفه إلى اللجنة', 400, 'inactive');
+  const { error } = await db.from('experts').update({ committees: next }).eq('id', e.id);
+  if (error) throw new Fail('تعذّر حفظ العضوية، حاول بعد قليل', 503, 'db_error');
+  await audit('admin', a.email, 'book.reader', 'experts', e.id, { committees: e.committees || [] }, { committees: next });
+  return { success: true, committees: next };
 }

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   authorRole, bookAccess, bookSections, canDelete, canResolve, chapterVisible, cleanComment, markTiers, openCounts, orderChapters,
-  sectionsOf, threads, tierAr, tierVisible, versionFromMigration,
+  sectionsOf, shareRoster, threads, tierAr, tierVisible, toggleCommittee, versionFromMigration,
 } from '../../supabase/functions/leaders-api/master-book.js';
 
 const MD = `## أولًا
@@ -121,12 +121,33 @@ describe('الكتاب الأم: التعليقات', () => {
   });
 });
 
+describe('الكتاب الأم: المشاركة مع الخبراء', () => {
+  const ex = [
+    { id: '1', full_name: 'بدر', status: 'active', committees: ['content'] },
+    { id: '2', full_name: 'أحمد', status: 'active', committees: [] },
+    { id: '3', full_name: 'جود', status: 'suspended', committees: ['measurement'] },
+    { id: '4', full_name: 'دانة', status: 'applied', committees: [] },
+  ];
+  it('من يقرأ، ومن في لجنة وملفه غير فعّال، ومن يمكن إضافته (الفاعل وحده)', () => {
+    const r = shareRoster(ex);
+    expect(r.readers.map((x) => x.name)).toEqual(['بدر']);
+    expect(r.blocked.map((x) => x.name)).toEqual(['جود']);
+    expect(r.candidates.map((x) => x.name)).toEqual(['أحمد']);
+  });
+  it('إضافة اللجنة وإزالتها بلا تكرار، واللجنة غير المعروفة تُرفض', () => {
+    expect(toggleCommittee(['content'], 'measurement', true)).toEqual(['content', 'measurement']);
+    expect(toggleCommittee(['content'], 'content', true)).toEqual(['content']);
+    expect(toggleCommittee(['content', 'x'], 'content', false)).toEqual([]);
+    expect(toggleCommittee([], 'board', true)).toBe(null);
+  });
+});
+
 describe('الكتاب الأم: الربط', () => {
   const index = readFileSync(join(process.cwd(), 'supabase/functions/leaders-api/index.ts'), 'utf8');
   const sql = readFileSync(join(process.cwd(), 'supabase/migrations/20261115160000_leaders_book_comments.sql'), 'utf8');
   it('أفعال الخبير تمر بشرط اللجنة، وكتابة المدير بالعامل الثاني (writer)', () => {
     for (const a of ['xp.book', 'xp.book-comment', 'xp.book-comment-delete']) expect(index).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(e[^)]*\\) => MB\\.\\w+\\(MB\\.expertViewer\\(e\\)`));
-    for (const a of ['admin.book-comment', 'admin.book-comment-delete', 'admin.book-comment-status']) expect(index).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(a, b\\) => A\\.writer\\(`));
+    for (const a of ['admin.book-comment', 'admin.book-comment-delete', 'admin.book-comment-status', 'admin.book-reader']) expect(index).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(a, b\\) => A\\.writer\\(`));
     expect(index).toContain('d.book_access = bookAccess(e);');
   });
   it('الجدول لدور الخدمة وحده، وترحيله لا يحجب النشر', () => {

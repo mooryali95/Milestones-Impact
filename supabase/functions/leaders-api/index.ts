@@ -451,6 +451,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.book-comment': (a, b) => A.writer(a, (x, y) => MB.addComment(MB.adminViewer(x), y), b),
   'admin.book-comment-delete': (a, b) => A.writer(a, (x, y) => MB.deleteComment(MB.adminViewer(x), y), b),
   'admin.book-comment-status': (a, b) => A.writer(a, (x, y) => MB.setStatus(MB.adminViewer(x), y), b),
+  // مشاركة الكتاب: إضافة خبير إلى لجنة المحتوى أو القياس أو إزالته (العضوية نفسها في ملفه)
+  'admin.book-reader': (a, b) => A.writer(a, MB.setReader, b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),
   'admin.org': (_a, b) => A.org(b),

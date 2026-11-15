@@ -110,7 +110,7 @@ export default function Leaders({ canWrite, pending, isSuper = false }) {
   else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;
-  else if (tab === 'book') body = <MasterBookScreen onClose={() => at('handbook')} />;
+  else if (tab === 'book') body = <MasterBookScreen onClose={() => at('handbook')} onExperts={() => at('experts')} />;
   else if (tab === 'katon') body = <KatonBank canWrite={canWrite} />;
   else if (tab === 'hall') body = <HallScreen canWrite={canWrite} />;
   else if (tab === 'capstones') body = <Capstones canWrite={canWrite} capId={capId} onOpen={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} onPerson={openPerson} />;

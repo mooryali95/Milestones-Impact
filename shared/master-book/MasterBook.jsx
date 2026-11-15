@@ -139,6 +139,66 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
   );
 }
 
+// ── المشاركة مع الخبراء (للإدارة): المشاركة عضوية في لجنة، لا رابط منفصل يُرسل ──
+const COMM = [['content', 'لجنة المحتوى'], ['measurement', 'لجنة القياس']];
+function ShareSheet({ share, viewer, api, onChanged, onExperts, onClose }) {
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState(null);
+  useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [onClose]);
+  const invite = `السلام عليكم،\nيسعدنا اطلاعك على «الكتاب الأم» لبرنامج القادة ومراجعته. ادخل بوابة الخبراء ببريدك المسجل لدينا:\n${share.portal_url}\nوستجد في لوحتك بطاقة «الكتاب الأم»: اقرأ الأطر الثلاثة بمستوياتها، وعلّق على أي قسم أو جملة، ويظهر تعليقك باسمك.`;
+  const copy = async (text, done) => { try { await navigator.clipboard.writeText(text); setMsg({ ok: true, t: done }); } catch { setMsg({ ok: false, t: 'تعذّر النسخ، انسخ النص يدويًا' }); } };
+  const toggle = async (x, c, on) => {
+    setBusy(`${x.id}|${c}`); setMsg(null);
+    const r = await api.reader(x.id, c, on);
+    setBusy('');
+    if (!r?.success) { setMsg({ ok: false, t: r?.message || 'تعذّر الحفظ' }); return; }
+    setMsg({ ok: true, t: on ? `أُضيف ${x.name} إلى ${COMM.find(([k]) => k === c)[1]}، ويرى الكتاب عند دخوله البوابة` : `أُزيل ${x.name} من ${COMM.find(([k]) => k === c)[1]}` });
+    onChanged();
+  };
+  const needle = q.trim();
+  const cands = share.candidates.filter((x) => !needle || `${x.name} ${x.title}`.includes(needle));
+  return (
+    <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <aside className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="مشاركة الكتاب الأم مع الخبراء">
+        <span className="mb-grip" aria-hidden="true" />
+        <header className="mb-sheet-h"><div><small>الكتاب الأم</small><b>المشاركة مع الخبراء</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
+        <div className="mb-sheet-body">
+          <ol className="mb-howto">
+            <li><b>اجعله عضوًا في لجنة</b><span>يقرأ الكتاب ويعلّق عليه عضو فاعل في لجنة المحتوى أو لجنة القياس. أضفه من القائمة أدناه بنقرة.</span></li>
+            <li><b>أرسل له رابط البوابة</b><span>يدخل بوابة الخبراء ببريده المسجل لدينا، برمز يصله على البريد.</span></li>
+            <li><b>يجد «الكتاب الأم» في لوحته</b><span>يقرأ الأطر الثلاثة، ويعلّق باسمه وصفته، وترى تعليقه هنا.</span></li>
+          </ol>
+          <div className="mb-link-box">
+            <code dir="ltr">{share.portal_url}</code>
+            <div className="mb-row"><button type="button" className="mb-btn" onClick={() => copy(share.portal_url, 'نُسخ رابط البوابة')}>انسخ الرابط</button><button type="button" className="mb-btn" onClick={() => copy(invite, 'نُسخ نص الدعوة، ألصقه في البريد أو الواتساب')}>انسخ نص دعوة جاهز</button></div>
+          </div>
+          {msg && <p className={msg.ok ? 'mb-ok' : 'mb-err'} role="status">{msg.t}</p>}
+          <h3 className="mb-h">يقرؤه الآن <small>{share.readers.length}</small></h3>
+          {!share.readers.length && <p className="mb-empty">لا أحد بعد. أضف أول قارئ من القائمة أدناه.</p>}
+          <ul className="mb-people">{share.readers.map((x) => (
+            <li key={x.id}><span className="mb-av expert" aria-hidden="true">{initials(x.name)}</span>
+              <span className="mb-pp"><b>{x.name}</b><small>{x.title || ' '}</small></span>
+              <span className="mb-pp-acts">{COMM.map(([c, l]) => x.committees.includes(c) && (
+                <button key={c} type="button" className="mb-tag on" disabled={!viewer.write || !!busy} onClick={() => toggle(x, c, false)} title={`أزل من ${l}`}>{l} ×</button>))}</span></li>
+          ))}</ul>
+          {share.blocked.length > 0 && <p className="mb-note">{share.blocked.map((x) => x.name).join('، ')}: {share.blocked.length === 1 ? 'عضو' : 'أعضاء'} في لجنة وملفه غير فعّال، فلا يرى الكتاب حتى يُفعَّل من قسم الخبراء.</p>}
+          <h3 className="mb-h">أضف خبيرًا <small>{share.candidates.length} خبيرًا فاعلًا</small></h3>
+          {share.candidates.length > 6 && <input className="mb-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث باسم الخبير" aria-label="بحث في الخبراء" />}
+          {!share.candidates.length && <p className="mb-empty">كل الخبراء الفاعلين يقرؤون الكتاب.</p>}
+          <ul className="mb-people">{cands.slice(0, 60).map((x) => (
+            <li key={x.id}><span className="mb-av expert" aria-hidden="true">{initials(x.name)}</span>
+              <span className="mb-pp"><b>{x.name}</b><small>{x.title || ' '}</small></span>
+              <span className="mb-pp-acts">{COMM.map(([c, l]) => (
+                <button key={c} type="button" className="mb-tag" disabled={!viewer.write || !!busy} onClick={() => toggle(x, c, true)}>{busy === `${x.id}|${c}` ? '…' : `+ ${l}`}</button>))}</span></li>
+          ))}</ul>
+          <p className="mb-muted mb-foot">خبير غير مسجل بعد؟ {onExperts ? <button type="button" className="mb-link" onClick={onExperts}>ادعُه من قسم الخبراء</button> : 'ادعُه من قسم الخبراء'}، ثم أضفه هنا بعد تفعيل ملفه.{!viewer.write && ' الإضافة تحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.'}</p>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 // ── كل التعليقات: تصفية بالحالة والإطار والمعلّق، والنقر يفتح موضعها ──
 function AllComments({ data, onGo, onClose }) {
   const [st, setSt] = useState('open');
@@ -301,8 +361,8 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, flip }) {
   );
 }
 
-/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any> }, onClose?: () => void, place?: string }} props */
-export default function MasterBook({ api, onClose, place = 'admin' }) {
+/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
+export default function MasterBook({ api, onClose, onExperts, place = 'admin' }) {
   const saved = store.get(KEY) || {};
   const [data, setData] = useState(null);
   const [view, setView] = useState('shelf');
@@ -310,6 +370,7 @@ export default function MasterBook({ api, onClose, place = 'admin' }) {
   const [level, setLevel] = useState(saved.level || 'all');
   const [toc, setToc] = useState(false);
   const [all, setAll] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [thread, setThread] = useState(null);
   const [opening, setOpening] = useState(false);
   const [flip, setFlip] = useState(null);
@@ -419,6 +480,7 @@ export default function MasterBook({ api, onClose, place = 'admin' }) {
                 <button type="button" className="mb-btn gold" onClick={open}>{saved.idx ? 'تابع القراءة' : 'افتح الكتاب'}</button>
                 <button type="button" className="mb-btn line" onClick={() => setAll(true)}>التعليقات{total ? ` (${total})` : ''}</button>
                 <button type="button" className="mb-btn line" onClick={exportPdf}>نسخة PDF</button>
+                {data.share && api.reader && <button type="button" className="mb-btn line" onClick={() => setSharing(true)}>شارك مع الخبراء{data.share.readers.length ? ` (${data.share.readers.length})` : ''}</button>}
               </div>
               <p className="mb-who">تقرأ بصفتك: <b>{data.viewer.name}</b> · {data.viewer.role}</p>
             </div>
@@ -463,6 +525,7 @@ export default function MasterBook({ api, onClose, place = 'admin' }) {
       )}
       {toc && <Toc data={data} level={level} current={view === 'read' ? ch : null} onGo={goChapter} onClose={() => setToc(false)} />}
       {all && <AllComments data={data} onGo={(c) => { const at = data.chapters.findIndex((x) => x.id === c.module_id); setAll(false); go(at, c.section || null); setThread({ section: c.section || '' }); }} onClose={() => setAll(false)} />}
+      {sharing && data.share && <ShareSheet share={data.share} viewer={data.viewer} api={api} onChanged={load} onExperts={onExperts} onClose={() => setSharing(false)} />}
       {thread && ch && <Thread target={thread} chapter={ch} list={threadList} viewer={data.viewer} api={api} onChanged={load} onClose={() => setThread(null)} />}
     </div>
   );

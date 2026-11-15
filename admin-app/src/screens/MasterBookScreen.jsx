@@ -6,12 +6,13 @@ import React, { useMemo } from 'react';
 import MasterBook from '../../../shared/master-book/MasterBook.jsx';
 import { L } from '../leaders.js';
 
-export default function MasterBookScreen({ onClose }) {
+export default function MasterBookScreen({ onClose, onExperts }) {
   const api = useMemo(() => ({
     get: () => L('admin.book'),
     add: (b) => L('admin.book-comment', b),
     del: (id) => L('admin.book-comment-delete', { id }),
     status: (id, status) => L('admin.book-comment-status', { id, status }),
+    reader: (expert_id, committee, on) => L('admin.book-reader', { expert_id, committee, on }),
   }), []);
-  return <MasterBook api={api} onClose={onClose} place="admin" />;
+  return <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" />;
 }

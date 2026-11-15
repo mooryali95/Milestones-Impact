@@ -317,3 +317,23 @@
 .mb-loading { min-height: 100%; display: grid; place-content: center; gap: 14px; text-align: center; background: linear-gradient(160deg, #0E2E37, var(--ink)); color: var(--gold-light); }
 .mb-spin { width: 34px; height: 34px; margin: 0 auto; border-radius: 50%; border: 2px solid rgba(217, 168, 90, .2); border-top-color: var(--gold-light); animation: mb-rot 1s linear infinite; }
 @keyframes mb-rot { to { transform: rotate(360deg); } }
+
+/* ── نافذة المشاركة ── */
+.mb-howto { list-style: none; counter-reset: s; margin: 4px 0 14px; padding: 0; display: grid; gap: 8px; }
+.mb-howto li { counter-increment: s; display: grid; grid-template-columns: 32px 1fr; column-gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.mb-howto li::before { content: counter(s); grid-row: span 2; width: 30px; height: 30px; border-radius: 50%; background: var(--graphite); color: var(--gold-light); font: 400 13px/30px "Noto Sans", sans-serif; text-align: center; }
+.mb-howto b { font-weight: 500; font-size: 14.5px; color: var(--graphite); } .mb-howto span { font-size: 13px; line-height: 1.85; color: var(--slate); }
+.mb-link-box { border: 1px dashed rgba(169, 122, 46, .5); border-radius: 12px; padding: 10px 12px; background: rgba(217, 168, 90, .07); }
+.mb-link-box code { display: block; font: 400 13.5px "Noto Sans", monospace; color: var(--graphite); overflow-wrap: anywhere; margin-bottom: 6px; }
+.mb-link-box .mb-row { justify-content: flex-start; } .mb-link-box .mb-btn { padding: 6px 14px; font-size: 13px; }
+.mb-h { display: flex; align-items: baseline; gap: 8px; margin: 18px 0 8px; font: 400 17px/1.5 var(--display); color: var(--graphite); }
+.mb-h small { font: 400 12px var(--body); color: var(--gold-text); }
+.mb-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mb-people li { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; flex-wrap: wrap; }
+.mb-pp { flex: 1 1 140px; min-width: 0; display: grid; line-height: 1.6; } .mb-pp b { font-weight: 500; font-size: 14px; color: var(--graphite); } .mb-pp small { font-size: 12px; color: var(--muted); }
+.mb-pp-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.mb-tag { border: 1px solid var(--gold); background: transparent; color: var(--gold-text); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.mb-tag.on { background: var(--graphite); border-color: var(--graphite); color: var(--gold-light); }
+.mb-tag:disabled { opacity: .5; cursor: not-allowed; }
+.mb-ok { color: var(--ok); font-size: 13px; margin: 8px 0 0; }
+.mb-foot { margin: 16px 0 6px; line-height: 1.9; }

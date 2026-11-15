@@ -146,3 +146,21 @@ export function tierVisible(spec, level) {
   });
 }
 export const chapterVisible = (ch, level) => level === 'all' || RANK[level] >= (RANK[ch.min_level] ?? 0);
+
+// ── مشاركة الكتاب مع الخبراء (لوحة الإدارة): من يقرأ الآن، ومن يمكن إضافته بنقرة ──
+// القارئ عضو فاعل في لجنة المحتوى أو القياس (bookAccess نفسها)، فالمشاركة هي العضوية لا رابط منفصل
+const expertRow = (e) => ({ id: e.id, name: e.full_name || e.email || '', title: e.title || '', status: e.status, committees: (e.committees || []).filter((c) => COMMITTEES.includes(c)) });
+export function shareRoster(experts = []) {
+  const readers = experts.filter(bookAccess).map(expertRow);
+  // عضو لجنة غير فاعل: لا يقرأ حتى يُفعَّل ملفه، فيُذكر ليعرف المدير لماذا لا يرى الكتاب
+  const blocked = experts.filter((e) => !bookAccess(e) && (e.committees || []).some((c) => COMMITTEES.includes(c))).map(expertRow);
+  const candidates = experts.filter((e) => e.status === 'active' && !bookAccess(e)).map(expertRow);
+  const byName = (a, b) => a.name.localeCompare(b.name, 'ar');
+  return { readers: readers.sort(byName), blocked: blocked.sort(byName), candidates: candidates.sort(byName) };
+}
+// عضوية لجنة بعد إضافة أو إزالة، بلا تكرار ولا قيمة غريبة
+export function toggleCommittee(list = [], committee, on) {
+  if (!COMMITTEES.includes(committee)) return null;
+  const cur = (list || []).filter((c) => COMMITTEES.includes(c));
+  return on ? [...new Set([...cur, committee])] : cur.filter((c) => c !== committee);
+}
