@@ -47,4 +47,4 @@ end $$;
 revoke all on function leaders.pin_sponsor_seat(uuid, uuid, integer, text, text) from public, anon, authenticated;
 grant execute on function leaders.pin_sponsor_seat(uuid, uuid, integer, text, text) to service_role;
 
-insert into leaders.schema_migrations (name) values ('20261115100000_leaders_pin_sponsor_seat_guard') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261115110000_leaders_pin_sponsor_seat_guard') on conflict do nothing;

@@ -28,7 +28,7 @@ export type PinResult = 'granted' | 'exists' | 'full' | 'before' | 'after' | 'in
 export const SEAT_BLOCKED: PinResult[] = ['full', 'before', 'after'];
 export const SEAT_ALERTS = [0.8, 1];
 // P1-06: ما يوقف التثبيت ولا يمنح شيئًا. كان رد المقعد عند الانسحاب وسحب الإعفاء يُنقضان في أول قراءة للملف.
-// out: خارج البرنامج (inProgram)، لكل تثبيت، وهو وحده في leaders.pin_sponsor_seat (ترحيل 20261115100000).
+// out: خارج البرنامج (inProgram)، لكل تثبيت، وهو وحده في leaders.pin_sponsor_seat (ترحيل 20261115110000).
 // cancelled وrejected: قرار للإدارة في رعاية هذه الجهة له (sponsorDecision)، للتثبيت الآلي وحده (auto: access()، والربط
 // بالنطاق، ورمز يكتبه المشارك، ورابط الجهة عند الدخول، وعودة الحالة). والفعل الصريح من الإدارة (نقله إلى الجهة، قبول طلب رعايته) يتخطاهما إلى فحص
 // المقاعد والعقد. ورد المقعد عند الانسحاب (seat-return) ليس قرارًا: يحرسه out ما دام منسحبًا، ويعود التثبيت بعودته
