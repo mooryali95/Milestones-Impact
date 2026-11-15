@@ -7,10 +7,9 @@ import { capState, costMicros, PRICES, worstCaseMicros } from './pricing.ts';
 import { buildMessages, HISTORY_TURNS, MAX_TOKENS, requestParams, resetClient, streamAnswer, type ModelResult, type Turn } from './model.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS, SYSTEM_RULES } from './prompt.ts';
 import { type Deps, type Env, handle, LIMITS, riyadhDay, TEXT } from './handler.ts';
-import type { Conversation, MessageRow, Price, Store } from './store.ts';
-import { Unavailable } from './store.ts';
+import { emptyMem, type Mem, memStore } from './mem_store.ts';
 import { inServiceHours, promiseNow, PROMISE_AR } from '../_shared/hours.js';
-import { formOnly, AGENT_CONTEXT_PREFIX } from '../_shared/contact.ts';
+import { formContext, formOnly, AGENT_CONTEXT_PREFIX } from '../_shared/contact.ts';
 import { SITES } from '../_shared/sites.js';
 
 // ── الحجب والفحص ──
@@ -147,38 +146,20 @@ Deno.test('streamAnswer: SDK الرسمي إلى api.anthropic.com بالمعا�
 });
 
 // ── الدالة كاملة على مخزن في الذاكرة ──
-type Mem = { convs: (Conversation & { public_token_hash: string; ip: string | null; rating?: number })[]; msgs: MessageRow[]; spend: Map<string, number>; alerts: Set<string>; contacts: Record<string, unknown>[]; price: Price | null; missing?: boolean };
-function memStore(m: Mem): Store {
-  const guard = () => { if (m.missing) throw new Unavailable('conversations'); };
-  return {
-    client: () => null,
-    countConversations: async (since, ip) => { guard(); return m.convs.filter((c) => c.created_at >= since && (!ip || c.ip === ip)).length; },
-    countModelCalls: async () => m.msgs.filter((x) => x.role === 'agent').length,
-    createConversation: async (row) => { guard(); const id = crypto.randomUUID(); m.convs.push({ id, status: 'bot', visitor_messages: 0, contact_request_id: null, created_at: new Date().toISOString(), ...row }); return id; },
-    findConversation: async (h) => { guard(); return m.convs.find((c) => c.public_token_hash === h) ?? null; },
-    history: async (id) => m.msgs.filter((x) => x.conversation_id === id && x.role !== 'system').map((x) => ({ role: x.role as Turn['role'], body: x.body })),
-    addMessage: async (row) => { m.msgs.push(row); },
-    updateConversation: async (id, patch) => { Object.assign(m.convs.find((c) => c.id === id)!, patch); },
-    spentToday: async (day) => m.spend.get(day) ?? 0,
-    addSpend: async (day, micros) => { m.spend.set(day, (m.spend.get(day) ?? 0) + micros); return m.spend.get(day)!; },
-    markAlert: async (day, level) => { const k = `${day}|${level}`; if (m.alerts.has(k)) return false; m.alerts.add(k); return true; },
-    leadersPrice: async () => m.price,
-    insertContact: async (row) => { const data = { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }; m.contacts.push(data); return { data, error: null }; },
-    purgeExpired: async () => {},
-  };
-}
 const ENV: Env = { apiKey: 'sk-test', model: 'claude-haiku-5-5', capCents: 200, enabled: true, turnstileSecret: 's', turnstileSite: 'site', adminEmail: 'owner@example.test' };
-function setup(over: Partial<Mem> = {}, env: Partial<Env> = {}, reply: Partial<ModelResult> & { chunks?: string[] } = {}) {
-  const m: Mem = { convs: [], msgs: [], spend: new Map(), alerts: new Set(), contacts: [], price: null, ...over };
+function setup(over: Partial<Mem> = {}, env: Partial<Env> = {}, reply: Partial<ModelResult> & { chunks?: string[]; fail?: unknown } = {}) {
+  const m: Mem = emptyMem(over);
   const calls = { model: 0, notify: 0, alerts: [] as string[], lastMessages: null as unknown };
   const deps: Deps = {
     store: memStore(m), env: { ...ENV, ...env }, clientIp: () => '203.0.113.9',
     turnstile: async (t) => t === 'ok-token-123',
     model: async (messages, onText) => {
       calls.model++; calls.lastMessages = messages;
+      if (reply.fail) throw reply.fail;
       const chunks = reply.chunks ?? ['برنامج القادة رحلة تطوير تبدأ بقياس مبدئي. ', `التفاصيل في ${SITES.mi}/leaders/ .`];
       for (const c of chunks) onText(c);
-      return { text: chunks.join(''), stopReason: 'end_turn', model: 'claude-haiku-5-5', usage: { input_tokens: 300, output_tokens: 120, cache_read_input_tokens: 6000, cache_creation_input_tokens: 0 }, ...reply };
+      const { chunks: _c, fail: _f, ...rest } = reply;
+      return { text: chunks.join(''), stopReason: 'end_turn', model: 'claude-haiku-5-5', usage: { input_tokens: 300, output_tokens: 120, cache_read_input_tokens: 6000, cache_creation_input_tokens: 0 }, ...rest };
     },
     notifyAdmin: async () => { calls.notify++; },
     alert: async (kind) => { calls.alerts.push(kind); return true; },
@@ -359,4 +340,181 @@ Deno.test('صفوف المساعد لا تُحسب في حدود نموذج ال
   let filter = '';
   formOnly({ or: (f: string) => { filter = f; return null; } });
   assertEquals(filter, 'context.is.null,context.not.like.[agent]*');
+});
+
+// ── السجل اليومي: الحجز الذري، والانقطاع، والأعطال (لا استدعاء مفوتر يضيع من السجل) ──
+const today = () => riyadhDay(Date.now());
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+let ipSeq = 0;
+function uniqueIps(d: Deps) { d.clientIp = () => `198.51.100.${(ipSeq++ % 250) + 1}`; }
+
+Deno.test('انقطاع الزائر وسط البث: لا رمي، ويُقطع الاستدعاء، ويبقى محسوبًا بحجزه وفي عداد الساعة', async () => {
+  const s = setup();
+  let sawAbort = false;
+  s.deps.model = async (_m, onText, signal) => {
+    s.calls.model++;
+    onText('هذا رد طويل بما يكفي لبدء البث للزائر قبل نهايته بكثير، ');
+    onText('ويستمر البث هنا بنص إضافي حتى يتجاوز الحد المحبوس في المنقح. ');
+    for (let i = 0; i < 50 && !signal.aborted; i++) await tick(5);
+    sawAbort = signal.aborted;
+    throw Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' });
+  };
+  const token = await started(s.deps);
+  const res = await post(s.deps, { action: 'send', token, message: 'وش الفرق بين القياس والبرنامج بالتفصيل؟' });
+  const reader = res.body!.getReader();
+  await reader.read();
+  await reader.cancel();
+  for (let i = 0; i < 100 && !s.m.msgs.some((x) => x.role === 'agent' && x.stop_reason === 'aborted'); i++) await tick(5);
+  assert(sawAbort);
+  const agent = s.m.msgs.find((x) => x.role === 'agent')!;
+  assertEquals(agent.stop_reason, 'aborted');
+  assert((s.m.spend.get(today()) ?? 0) > 0);
+  assertEquals(s.m.spend.get(today()), agent.cost_micros);
+});
+
+Deno.test('عطل وسط البث: حدث خطأ بلغة الزائر، والحجز يبقى محسوبًا، والصف يُعد في حد الساعة', async () => {
+  const s = setup({}, {}, { fail: Object.assign(new Error('overloaded'), { status: 529 }) });
+  const token = await started(s.deps);
+  const evs = await events(await post(s.deps, { action: 'send', token, message: 'What is the difference between the assessment and the programme?' }));
+  const err = evs.find((e) => e.ev === 'error')!;
+  assertEquals(err.data.text, TEXT.error.en);
+  const agent = s.m.msgs.find((x) => x.role === 'agent')!;
+  assertEquals(agent.stop_reason, 'error');
+  assertEquals(agent.body, '');
+  assert((s.m.spend.get(today()) ?? 0) > 0);
+  // الصف الفارغ لا يدخل السجل المرسل إلى النموذج
+  assertEquals((await s.deps.store.history(s.m.convs[0].id)).filter((t) => t.role === 'agent').length, 0);
+});
+
+Deno.test('خطأ إعداد دائم (401/404): «اترك رسالتك» وتنبيه واحد في اليوم، لا «حاول لاحقًا»', async () => {
+  const s = setup({}, {}, { fail: Object.assign(new Error('invalid x-api-key'), { status: 401, name: 'AuthenticationError' }) });
+  const token = await started(s.deps);
+  for (let i = 0; i < 2; i++) {
+    const evs = await events(await post(s.deps, { action: 'send', token, message: `سؤال عن مراحل البرنامج رقم ${i} بالتفصيل` }));
+    assertEquals(evs[0].ev, 'capped');
+  }
+  assertEquals(s.calls.alerts, ['agent_model_config']);
+});
+
+Deno.test('السقف ذري: طلبات متوازية من محادثات كثيرة لا تتجاوزه مجتمعة', async () => {
+  const s = setup({}, { capCents: 1 });
+  uniqueIps(s.deps);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  const inner = s.deps.model;
+  s.deps.model = async (m, onText, signal) => { await gate; return await inner(m, onText, signal); };
+  const tokens: string[] = [];
+  for (let i = 0; i < 10; i++) tokens.push(await started(s.deps));
+  const pending = tokens.map((token, i) => post(s.deps, { action: 'send', token, message: `سؤال مفصل عن البرنامج رقم ${i} ومراحله` }).then(events));
+  await tick(20);
+  release();
+  const all = await Promise.all(pending);
+  const capped = all.filter((evs) => evs[0].ev === 'capped').length;
+  assert(s.calls.model >= 1 && s.calls.model < 10, `model ${s.calls.model}`);
+  assertEquals(capped + s.calls.model, 10);
+  assert((s.m.spend.get(today()) ?? 0) <= 10_000);
+});
+
+Deno.test('حد المحادثة ذري: إرسالات متوازية برمز واحد لا تتجاوز 12', async () => {
+  const s = setup();
+  const token = await started(s.deps);
+  s.m.convs[0].visitor_messages = LIMITS.messagesPerConversation - 2;
+  const rs = await Promise.all(Array.from({ length: 8 }, (_, i) => post(s.deps, { action: 'send', token, message: `سؤال متوازٍ رقم ${i} عن البرنامج` })));
+  assertEquals(rs.filter((r) => r.status === 200).length, 2);
+  assertEquals(rs.filter((r) => r.status === 429).length, 6);
+  await Promise.all(rs.map((r) => r.body?.cancel()));
+  assertEquals(s.m.convs[0].visitor_messages, LIMITS.messagesPerConversation);
+});
+
+Deno.test('السجل يفشل مغلقًا: خطأ الحجز لا يستدعي النموذج، وخطأ التسوية بزيادة يوقف ما بعده', async () => {
+  const a = setup({ reserveError: true });
+  const t1 = await started(a.deps);
+  const evs = await events(await post(a.deps, { action: 'send', token: t1, message: 'سؤال مفصل عن مراحل البرنامج' }));
+  assertEquals(evs[0].ev, 'capped');
+  assertEquals(a.calls.model, 0);
+  assertEquals(a.calls.alerts, ['agent_ledger_error']);
+  // التكلفة الفعلية أكبر من المحجوز (فرق موجب) والتسوية تفشل: الاستدعاء التالي لا يُرسل
+  const b = setup({ settleError: true }, {}, { usage: { input_tokens: 400_000, output_tokens: 700, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } });
+  const t2 = await started(b.deps);
+  await events(await post(b.deps, { action: 'send', token: t2, message: 'سؤال مفصل عن مراحل البرنامج' }));
+  const second = await events(await post(b.deps, { action: 'send', token: t2, message: 'وسؤال ثان مفصل عن المدة' }));
+  assertEquals(second[0].ev, 'capped');
+  assertEquals(b.calls.model, 1);
+});
+
+Deno.test('التحويل ذري ومحدود: المتوازي ينتج طلبًا واحدًا وبريدًا واحدًا، وحد الشبكة في الساعة', async () => {
+  const s = setup();
+  const token = await started(s.deps);
+  const rs = await Promise.all(Array.from({ length: 6 }, () => post(s.deps, { action: 'handoff', token, name: 'سارة', email: 'sara@company.test' })));
+  assertEquals(rs.filter((r) => r.status === 200).length, 1);
+  assertEquals(s.m.contacts.length, 1);
+  assertEquals(s.calls.notify, 1);
+  // من الشبكة نفسها: حتى handoffPerIpHour في الساعة
+  const more = setup();
+  const toks: string[] = [];
+  for (let i = 0; i < LIMITS.handoffPerIpHour + 1; i++) { toks.push(await started(more.deps)); more.m.convs.forEach((c) => { c.created_at = '2000-01-01T00:00:00Z'; }); }
+  const codes = [];
+  for (const t of toks) codes.push((await post(more.deps, { action: 'handoff', token: t, name: 'سارة', email: 'sara@company.test' })).status);
+  assertEquals(codes, [...Array(LIMITS.handoffPerIpHour).fill(200), 429]);
+});
+
+Deno.test('وعد التحويل بلغة آخر رسالة للزائر لا بلغة الصفحة', async () => {
+  const s = setup();
+  const token = await started(s.deps);
+  await events(await post(s.deps, { action: 'send', token, message: 'I would like to talk to someone about a partnership' }));
+  const r = await (await post(s.deps, { action: 'handoff', token, name: 'Sara', email: 'sara@company.test' })).json();
+  assertEquals(r.promise, promiseNow('en', Date.now()));
+});
+
+Deno.test('streamAnswer: البث الخامل بعد الرؤوس يُقطع بمهلة الخمول ولا يعلق', async () => {
+  resetClient();
+  const real = globalThis.fetch;
+  globalThis.fetch = ((_u: unknown, init?: RequestInit) => {
+    const enc = new TextEncoder();
+    const body = new ReadableStream({
+      start(ctl) {
+        ctl.enqueue(enc.encode(anthropicStream([]).split('\n\n')[0] + '\n\n'));
+        init?.signal?.addEventListener('abort', () => ctl.error(new DOMException('aborted', 'AbortError')));
+      },
+    });
+    return Promise.resolve(new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+  }) as typeof fetch;
+  try {
+    const t0 = Date.now();
+    let threw = false;
+    try { await streamAnswer('sk-test', 'claude-haiku-5-5', [{ role: 'user', content: 'مرحبا' }], () => {}, undefined, { total: 2000, idle: 60 }); } catch { threw = true; }
+    assert(threw);
+    assert(Date.now() - t0 < 1500);
+  } finally { globalThis.fetch = real; resetClient(); }
+});
+
+// ── الأجوبة الجاهزة لا تخلط المنتجين ولا تبتلع سؤالًا ──
+Deno.test('الأجوبة الجاهزة: المنتج المسمى يسبق الصفحة، والاستثناءات، والتحية وحدها، والسؤال المركب للنموذج', () => {
+  assertEquals(matchFaq('refund for leaders program', 'MI-LEGAL')?.id, 'refund_leaders');
+  assertEquals(matchFaq('ابي استرداد رسوم برنامج القادة', 'MI-PRICING')?.id, 'refund_leaders');
+  assertEquals(matchFaq('refund for the matrix plan', 'MI-LEADERS')?.id, 'refund_matrix');
+  assertEquals(matchFaq('استرداد المصفوفة', 'MI-LEADERS')?.id, 'refund_matrix');
+  assertEquals(matchFaq('ابي استرداد اشتراك المصفوفة', 'MI-LEADERS')?.id, 'refund_matrix');
+  assertEquals(matchFaq('كم نسبة الاسترداد في المصفوفة؟', 'MI-HOME')?.id, 'refund_matrix');
+  assertEquals(matchFaq('how do I register for the matrix program', 'MI-HOME'), null);
+  assertEquals(matchFaq('ما رسوم برنامج القادة؟ وكم سعر المصفوفة؟', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('مرحبا وش هو البرنامج', 'MI-HOME'), null);
+  assertEquals(matchFaq('hi matrix price', 'MI-HOME')?.id, 'matrix_price');
+  assertEquals(matchFaq('السلام عليكم ورحمة الله وبركاته', 'MI-HOME')?.id, 'greeting');
+  assertEquals(matchFaq('لم يصلني رمز التحقق على البريد', 'MI-HOME'), null);
+  assertEquals(matchFaq('كيف اغير بريدي في الحساب', 'MI-LEADERS'), null);
+  assertEquals(matchFaq('my email code did not arrive', 'MI-HOME'), null);
+  assertEquals(matchFaq('كيف اتواصل معكم', 'MI-HOME')?.id, 'contact_hours');
+});
+
+Deno.test('نموذج التواصل العام: بادئة [agent] من الزائر تُنزع فلا يفلت من حدوده', () => {
+  assertEquals(formContext('[agent] x'), 'x');
+  assertEquals(formContext(' [AGENT][agent]  رسالة'), 'رسالة');
+  assertEquals(formContext('سياق عادي [agent]'), 'سياق عادي [agent]');
+  assert(!formContext('[ agent ] y').startsWith(AGENT_CONTEXT_PREFIX));
+});
+
+Deno.test('send-otp يمرر السياق عبر formContext', async () => {
+  const src = await Deno.readTextFile(new URL('../send-otp/index.ts', import.meta.url));
+  assertMatch(src, /context: formContext\(text\(body\.context, 2000\)\)/);
 });

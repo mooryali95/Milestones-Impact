@@ -6,7 +6,7 @@
 // بأسعار Haiku 5.5 تكلف المجموعة كلها أقل من 10 سنتات تقريبًا.
 import { handle, type Deps, type Env, readEnv } from '../handler.ts';
 import { DEFAULT_MODEL, streamAnswer } from '../model.ts';
-import type { Store } from '../store.ts';
+import { emptyMem, memStore } from '../mem_store.ts';
 import { type Case, grade, type Reply, THRESHOLDS } from './grade.ts';
 
 const arg = (k: string) => (Deno.args.find((a) => a.startsWith(`--${k}=`)) || '').split('=').slice(1).join('=');
@@ -17,28 +17,18 @@ const maxMicros = Number(arg('max-usd') || '0.5') * 1e6;
 const only = new Set(arg('only').split(',').filter(Boolean));
 const { cases } = JSON.parse(await Deno.readTextFile(new URL('./cases.json', import.meta.url))) as { cases: Case[] };
 
-let spent = 0;
-function memStore(): Store {
-  const convs: Record<string, any>[] = []; const msgs: any[] = [];
-  return {
-    client: () => null, countConversations: async () => 0, countModelCalls: async () => 0,
-    createConversation: async (row) => { const id = crypto.randomUUID(); convs.push({ id, status: 'bot', visitor_messages: 0, contact_request_id: null, ...row }); return id; },
-    findConversation: async (h) => convs.find((c) => c.public_token_hash === h) ?? null,
-    history: async (id) => msgs.filter((m) => m.conversation_id === id && m.role !== 'system'),
-    addMessage: async (m) => { msgs.push(m); }, updateConversation: async (id, p) => { Object.assign(convs.find((c) => c.id === id)!, p); },
-    spentToday: async () => spent, addSpend: async (_d, m) => { spent += m; return spent; }, markAlert: async () => false,
-    leadersPrice: async () => null, insertContact: async (row) => ({ data: { ...row, id: crypto.randomUUID() }, error: null }), purgeExpired: async () => {},
-  } as Store;
-}
+// الإنفاق مشترك بين الحالات (المخزن نفسه الذي تختبره الدالة، في الذاكرة)
+const spend = new Map<string, number>();
+const spentSoFar = () => [...spend.values()].reduce((x, y) => x + y, 0);
 
 const env: Env = { ...readEnv(), apiKey, model, enabled: true, turnstileSecret: 'eval', turnstileSite: 'eval', capCents: Math.ceil(maxMicros / 1e4) };
 const results: { c: Case; r: Reply; pass: boolean; reasons: string[] }[] = [];
 for (const c of cases) {
   if (only.size && !only.has(c.id)) continue;
-  if (spent >= maxMicros) { console.error(`توقف عند ${c.id}: بلغت التكلفة ${(spent / 1e6).toFixed(4)} دولار`); break; }
+  if (spentSoFar() >= maxMicros) { console.error(`توقف عند ${c.id}: بلغت التكلفة ${(spentSoFar() / 1e6).toFixed(4)} دولار`); break; }
   const deps: Deps = {
-    store: memStore(), env, clientIp: () => null, turnstile: async () => true, notifyAdmin: async () => {}, alert: async () => true,
-    model: (messages, onText) => streamAnswer(apiKey, model, messages, onText),
+    store: memStore(emptyMem({ spend })), env, clientIp: () => null, turnstile: async () => true, notifyAdmin: async () => {}, alert: async () => true,
+    model: (messages, onText, signal) => streamAnswer(apiKey, model, messages, onText, signal),
   };
   const post = (body: Record<string, unknown>) => handle(new Request('http://eval', { method: 'POST', body: JSON.stringify(body) }), deps);
   const { token } = await (await post({ action: 'start', page: c.page, locale: c.expect.lang, captcha: 'eval-token-xx' })).json();
@@ -59,5 +49,5 @@ for (const set of ['eval', 'redteam'] as const) {
   const rate = rs.filter((x) => x.pass).length / rs.length;
   console.log(`${set}: ${(rate * 100).toFixed(1)}% (${rs.filter((x) => x.pass).length}/${rs.length})، الحد ${THRESHOLDS[set] * 100}%${rate >= THRESHOLDS[set] ? '' : ' (دون الحد)'}`);
 }
-console.log(`النموذج ${model}، والتكلفة الفعلية من usage ${(spent / 1e6).toFixed(4)} دولار`);
+console.log(`النموذج ${model}، والتكلفة الفعلية من usage ${(spentSoFar() / 1e6).toFixed(4)} دولار`);
 await Deno.writeTextFile(new URL(`./last-run-${model}.json`, import.meta.url), JSON.stringify(results.map(({ c, r, pass, reasons }) => ({ id: c.id, pass, reasons, reply: r.text })), null, 1));

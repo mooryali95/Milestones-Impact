@@ -18,6 +18,9 @@ export type MailSend = (to: string, subject: string, html: string) => Promise<bo
 export const AGENT_CONTEXT_PREFIX = '[agent]';
 // صفوف النموذج وحدها: context فارغ أو لا يبدأ بالبادئة
 export const formOnly = (q: SB) => q.or(`context.is.null,context.not.like.${AGENT_CONTEXT_PREFIX}*`);
+// البادئة يضعها الخادم وحده: نص الزائر في النموذج العام تُنزع منه أي بادئة مماثلة قبل الحفظ، فلا يفلت صف
+// من حدود النموذج بكتابة [agent] في أول السياق
+export const formContext = (s: string) => String(s ?? '').replace(/^(?:\s*\[\s*agent\s*\]\s*)+/i, '').trim();
 
 export const CONTACT_SELECT = 'id, name, organization, email, phone, interest, interest_label, product, created_at';
 

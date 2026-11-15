@@ -5,7 +5,9 @@
 -- المصدر الواحد للمحادثة هنا، وسلاك (المرحلة 2) نافذة عليها لا مكان حفظها. لا يقرؤها إلا دور الخدمة.
 -- الاحتفاظ: غير المحولة 90 يومًا (expires_at) ثم تحذفها agent-chat تباعًا، والمحولة تبقى مع طلب التواصل المرتبط.
 -- السقف اليومي (قرار المالك: 2 دولار في يوم الرياض): agent_spend_daily يُجمع فيه ما كلّفه كل استدعاء من usage،
--- ويُقرأ قبل كل استدعاء. التكلفة بالميكرو دولار (جزء من مليون) فلا يضيع كسر سنت.
+-- بحجز ذري قبل كل استدعاء (agent_spend_reserve: أسوأ تكلفة، ويُرفض إن تجاوز السقف) ثم تسوية بالتكلفة الفعلية
+-- بعده (agent_spend_settle). الاستدعاء الذي يفشل أو ينقطع يبقى محسوبًا بحجزه، فلا يضيع ما فوتره Anthropic.
+-- التكلفة بالميكرو دولار (جزء من مليون) فلا يضيع كسر سنت.
 -- آمن لإعادة التشغيل.
 
 create table if not exists leaders.conversations (
@@ -20,6 +22,7 @@ create table if not exists leaders.conversations (
   visitor_messages integer not null default 0,
   contact_request_id uuid references public.contact_requests(id) on delete set null,
   handoff_reason text check (char_length(handoff_reason) <= 300),
+  handoff_at timestamptz,
   rating smallint check (rating between 1 and 5),
   last_visitor_at timestamptz,
   created_at timestamptz not null default now(),
@@ -27,6 +30,7 @@ create table if not exists leaders.conversations (
 );
 create index if not exists conversations_ip_created_idx on leaders.conversations (ip, created_at desc);
 create index if not exists conversations_created_idx on leaders.conversations (created_at desc);
+create index if not exists conversations_handoff_idx on leaders.conversations (handoff_at desc) where handoff_at is not null;
 create index if not exists conversations_expires_idx on leaders.conversations (expires_at) where contact_request_id is null;
 
 -- role: visitor ما كتبه الزائر بعد الحجب، وagent رد النموذج بعد فحص المخرج، وcanned جواب جاهز بلا نموذج، وsystem سطر آلي
@@ -54,18 +58,37 @@ create table if not exists leaders.agent_spend_daily (
   calls integer not null default 0,
   alerted_80 timestamptz,
   alerted_100 timestamptz,
+  alerted_config timestamptz,
   updated_at timestamptz not null default now()
 );
 
--- إضافة ذرية لتكلفة استدعاء إلى يومه، وتعيد مجموع اليوم بعدها
-create or replace function leaders.agent_spend_add(p_day date, p_micros bigint)
+-- حجز ذري قبل الاستدعاء: يضيف p_micros إلى يومه إن بقي المجموع ضمن p_cap، ويعيد المجموع بعده، أو null إن رُفض
+create or replace function leaders.agent_spend_reserve(p_day date, p_micros bigint, p_cap bigint)
 returns bigint language sql as $$
-  insert into leaders.agent_spend_daily as d (day, micros, calls) values (p_day, greatest(p_micros, 0), 1)
-  on conflict (day) do update set micros = d.micros + greatest(excluded.micros, 0), calls = d.calls + 1, updated_at = now()
+  insert into leaders.agent_spend_daily as d (day, micros, calls)
+  select p_day, greatest(p_micros, 0), 1 where greatest(p_micros, 0) <= p_cap
+  on conflict (day) do update set micros = d.micros + excluded.micros, calls = d.calls + 1, updated_at = now()
+  where d.micros + excluded.micros <= p_cap
   returning micros;
 $$;
 
--- تنبيه واحد لكل حد (80 و100) في اليوم: يعيد true لمن سجّله أولًا وحده
+-- تسوية بعد الاستدعاء: الفرق بين التكلفة الفعلية والمحجوز (سالب غالبًا)، والمجموع لا ينزل تحت الصفر
+create or replace function leaders.agent_spend_settle(p_day date, p_delta bigint)
+returns bigint language sql as $$
+  update leaders.agent_spend_daily set micros = greatest(micros + p_delta, 0), updated_at = now()
+  where day = p_day
+  returning micros;
+$$;
+
+-- رسالة الزائر تُحجز ذريًا: تزيد العداد إن كانت المحادثة مع المساعد ودون حدها، وتعيد العدد بعدها أو null
+create or replace function leaders.agent_claim_message(p_id uuid, p_max integer, p_at timestamptz)
+returns integer language sql as $$
+  update leaders.conversations set visitor_messages = visitor_messages + 1, last_visitor_at = p_at
+  where id = p_id and status = 'bot' and visitor_messages < p_max
+  returning visitor_messages;
+$$;
+
+-- تنبيه واحد لكل حد في اليوم (80 و100، و1 لخطأ إعداد النموذج): يعيد true لمن سجّله أولًا وحده
 create or replace function leaders.agent_spend_alert(p_day date, p_level integer)
 returns boolean language plpgsql as $$
 declare n integer;
@@ -73,6 +96,8 @@ begin
   insert into leaders.agent_spend_daily (day) values (p_day) on conflict (day) do nothing;
   if p_level >= 100 then
     update leaders.agent_spend_daily set alerted_100 = now() where day = p_day and alerted_100 is null;
+  elsif p_level = 1 then
+    update leaders.agent_spend_daily set alerted_config = now() where day = p_day and alerted_config is null;
   else
     update leaders.agent_spend_daily set alerted_80 = now() where day = p_day and alerted_80 is null;
   end if;
@@ -85,7 +110,9 @@ alter table leaders.conversations enable row level security;
 alter table leaders.conversation_messages enable row level security;
 alter table leaders.agent_spend_daily enable row level security;
 revoke all on leaders.conversations, leaders.conversation_messages, leaders.agent_spend_daily from anon, authenticated;
-revoke all on function leaders.agent_spend_add(date, bigint), leaders.agent_spend_alert(date, integer) from public, anon, authenticated;
-grant execute on function leaders.agent_spend_add(date, bigint), leaders.agent_spend_alert(date, integer) to service_role;
+revoke all on function leaders.agent_spend_reserve(date, bigint, bigint), leaders.agent_spend_settle(date, bigint),
+  leaders.agent_claim_message(uuid, integer, timestamptz), leaders.agent_spend_alert(date, integer) from public, anon, authenticated;
+grant execute on function leaders.agent_spend_reserve(date, bigint, bigint), leaders.agent_spend_settle(date, bigint),
+  leaders.agent_claim_message(uuid, integer, timestamptz), leaders.agent_spend_alert(date, integer) to service_role;
 
 insert into leaders.schema_migrations (name) values ('20261115150000_leaders_agent_conversations') on conflict do nothing;

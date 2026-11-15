@@ -472,17 +472,16 @@
    "page": "MI-LEADERS",
    "message": "سياسة الاسترداد للبرنامج نفس المصفوفة؟ يعني 50% بعد شهر؟",
    "expect": {
-    "behavior": "canned",
-    "canned": "refund_leaders",
+    "behavior": "answer",
     "must_include": [
      "14"
     ],
     "must_not_include": [
-     "50%"
+     "البرنامج[^.]*50%"
     ],
     "lang": "ar"
    },
-   "note": "صفحة البرنامج: سياسة البرنامج وحدها، بلا نسبة المصفوفة"
+   "note": "مقارنة بين المنتجين: للنموذج لا جواب جاهز، وسياسة البرنامج 14 يومًا، ولا ينسب 50% إلى البرنامج"
   },
   {
    "id": "r07",
@@ -671,6 +670,136 @@
     ],
     "lang": "ar"
    }
+  },
+  {
+   "id": "e40",
+   "set": "eval",
+   "page": "MI-LEGAL",
+   "message": "refund for leaders program",
+   "expect": {
+    "behavior": "canned",
+    "canned": "refund_leaders",
+    "must_include": [
+     "14 days"
+    ],
+    "must_not_include": [
+     "50%"
+    ],
+    "lang": "en"
+   },
+   "note": "خلط المنتجين: المنتج الذي سماه الزائر يسبق منتج الصفحة"
+  },
+  {
+   "id": "e41",
+   "set": "eval",
+   "page": "MI-PRICING",
+   "message": "ابي استرداد رسوم برنامج القادة",
+   "expect": {
+    "behavior": "canned",
+    "canned": "refund_leaders",
+    "must_include": [
+     "14 يومًا"
+    ],
+    "must_not_include": [
+     "50%"
+    ],
+    "lang": "ar"
+   },
+   "note": "خلط المنتجين: المنتج الذي سماه الزائر يسبق منتج الصفحة"
+  },
+  {
+   "id": "e42",
+   "set": "eval",
+   "page": "MI-LEADERS",
+   "message": "refund for the matrix plan",
+   "expect": {
+    "behavior": "canned",
+    "canned": "refund_matrix",
+    "must_include": [
+     "50%"
+    ],
+    "must_not_include": [
+     "journey"
+    ],
+    "lang": "en"
+   },
+   "note": "خلط المنتجين: المنتج الذي سماه الزائر يسبق منتج الصفحة"
+  },
+  {
+   "id": "e43",
+   "set": "eval",
+   "page": "MI-LEADERS",
+   "message": "ابي استرداد اشتراك المصفوفة",
+   "expect": {
+    "behavior": "canned",
+    "canned": "refund_matrix",
+    "must_include": [
+     "50%"
+    ],
+    "must_not_include": [
+     "رحلتك"
+    ],
+    "lang": "ar"
+   },
+   "note": "خلط المنتجين: المنتج الذي سماه الزائر يسبق منتج الصفحة"
+  },
+  {
+   "id": "e44",
+   "set": "eval",
+   "page": "MI-HOME",
+   "message": "how do I register for the matrix program",
+   "expect": {
+    "behavior": "answer",
+    "must_include": [
+     "matrix|Matrix"
+    ],
+    "must_not_include": [],
+    "lang": "en"
+   },
+   "note": "المصفوفة مع «البرنامج» مقارنة أو خلط: للنموذج، ولا يوجه زائر المصفوفة إلى تسجيل القادة"
+  },
+  {
+   "id": "e45",
+   "set": "eval",
+   "page": "MI-LEADERS",
+   "message": "ما رسوم برنامج القادة؟ وكم سعر المصفوفة؟",
+   "expect": {
+    "behavior": "answer",
+    "must_include": [
+     "200"
+    ],
+    "must_not_include": [],
+    "lang": "ar"
+   },
+   "note": "سؤال مركب لا يُجاب جاهزًا بنصفه"
+  },
+  {
+   "id": "e46",
+   "set": "eval",
+   "page": "MI-HOME",
+   "message": "مرحبا وش هو البرنامج",
+   "expect": {
+    "behavior": "answer",
+    "must_include": [
+     "برنامج|القادة"
+    ],
+    "must_not_include": [],
+    "lang": "ar"
+   },
+   "note": "التحية لا تبتلع السؤال بعدها"
+  },
+  {
+   "id": "e47",
+   "set": "eval",
+   "page": "MI-HOME",
+   "message": "لم يصلني رمز التحقق على البريد",
+   "expect": {
+    "behavior": "handoff",
+    "must_include": [],
+    "must_not_include": [],
+    "lang": "ar"
+   },
+   "note": "مشكلة حساب: تحويل لا ساعات العمل"
   }
  ]
 }

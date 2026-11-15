@@ -33,6 +33,7 @@ create table if not exists leaders.agent_spend_daily (
   calls integer default 0 not null,
   alerted_80 timestamp with time zone,
   alerted_100 timestamp with time zone,
+  alerted_config timestamp with time zone,
   updated_at timestamp with time zone default now() not null,
   constraint agent_spend_daily_micros_check CHECK ((micros >= 0)),
   constraint agent_spend_daily_pkey PRIMARY KEY (day)
@@ -476,6 +477,7 @@ create table if not exists leaders.conversations (
   visitor_messages integer default 0 not null,
   contact_request_id uuid,
   handoff_reason text,
+  handoff_at timestamp with time zone,
   rating smallint,
   last_visitor_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
@@ -2860,6 +2862,8 @@ CREATE INDEX IF NOT EXISTS conversations_created_idx ON leaders.conversations US
 
 CREATE INDEX IF NOT EXISTS conversations_expires_idx ON leaders.conversations USING btree (expires_at) WHERE (contact_request_id IS NULL);
 
+CREATE INDEX IF NOT EXISTS conversations_handoff_idx ON leaders.conversations USING btree (handoff_at DESC) WHERE (handoff_at IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS conversations_ip_created_idx ON leaders.conversations USING btree (ip, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS coordinator_challenges_email_idx ON leaders.coordinator_challenges USING btree (email, created_at DESC);
@@ -3334,13 +3338,13 @@ alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
 
-CREATE OR REPLACE FUNCTION leaders.agent_spend_add(p_day date, p_micros bigint)
- RETURNS bigint
+CREATE OR REPLACE FUNCTION leaders.agent_claim_message(p_id uuid, p_max integer, p_at timestamp with time zone)
+ RETURNS integer
  LANGUAGE sql
 AS $function$
-  insert into leaders.agent_spend_daily as d (day, micros, calls) values (p_day, greatest(p_micros, 0), 1)
-  on conflict (day) do update set micros = d.micros + greatest(excluded.micros, 0), calls = d.calls + 1, updated_at = now()
-  returning micros;
+  update leaders.conversations set visitor_messages = visitor_messages + 1, last_visitor_at = p_at
+  where id = p_id and status = 'bot' and visitor_messages < p_max
+  returning visitor_messages;
 $function$
 ;
 
@@ -3353,12 +3357,36 @@ begin
   insert into leaders.agent_spend_daily (day) values (p_day) on conflict (day) do nothing;
   if p_level >= 100 then
     update leaders.agent_spend_daily set alerted_100 = now() where day = p_day and alerted_100 is null;
+  elsif p_level = 1 then
+    update leaders.agent_spend_daily set alerted_config = now() where day = p_day and alerted_config is null;
   else
     update leaders.agent_spend_daily set alerted_80 = now() where day = p_day and alerted_80 is null;
   end if;
   get diagnostics n = row_count;
   return n > 0;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_spend_reserve(p_day date, p_micros bigint, p_cap bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  insert into leaders.agent_spend_daily as d (day, micros, calls)
+  select p_day, greatest(p_micros, 0), 1 where greatest(p_micros, 0) <= p_cap
+  on conflict (day) do update set micros = d.micros + excluded.micros, calls = d.calls + 1, updated_at = now()
+  where d.micros + excluded.micros <= p_cap
+  returning micros;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_spend_settle(p_day date, p_delta bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  update leaders.agent_spend_daily set micros = greatest(micros + p_delta, 0), updated_at = now()
+  where day = p_day
+  returning micros;
 $function$
 ;
 

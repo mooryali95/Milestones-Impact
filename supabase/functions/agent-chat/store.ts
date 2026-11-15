@@ -14,19 +14,28 @@ export type MessageRow = {
   conversation_id: string; role: 'visitor' | 'agent' | 'canned' | 'system'; body: string; lang?: string | null; model?: string | null; stop_reason?: string | null;
   input_tokens?: number | null; cache_read_tokens?: number | null; cache_write_tokens?: number | null; output_tokens?: number | null; cost_micros?: number | null;
 };
+export type Reserve = { ok: true; total: number } | { ok: false; reason: 'refused' | 'error' };
 export type Price = { enabled: boolean; currency: string; assessment_cents: number; program_cents: number };
 
 export interface Store {
   countConversations(sinceIso: string, ip?: string | null): Promise<number | null>;
   countModelCalls(sinceIso: string): Promise<number | null>;
+  countHandoffs(sinceIso: string, ip?: string | null): Promise<number | null>;
   createConversation(row: { public_token_hash: string; product: string; source_url: string; locale: string; ip: string | null }): Promise<string>;
   findConversation(tokenHash: string): Promise<Conversation | null>;
   history(conversationId: string): Promise<Turn[]>;
-  addMessage(row: MessageRow): Promise<void>;
+  addMessage(row: MessageRow): Promise<string>;
+  updateMessage(id: string, patch: Partial<MessageRow>): Promise<void>;
   updateConversation(id: string, patch: Record<string, unknown>): Promise<void>;
+  // رسالة الزائر ذريًا: العدد بعدها، أو null إن بلغت المحادثة حدها أو لم تعد مع المساعد
+  claimMessage(id: string, max: number, atIso: string): Promise<number | null>;
+  // التحويل ذريًا: true لطلب واحد فقط (المحادثة مع المساعد وبلا طلب تواصل)
+  claimHandoff(id: string, reason: string, atIso: string): Promise<boolean>;
   spentToday(day: string): Promise<number | null>;
-  addSpend(day: string, micros: number): Promise<number | null>;
-  markAlert(day: string, level: 80 | 100): Promise<boolean>;
+  // حجز أسوأ تكلفة قبل الاستدعاء (ذري ومقيد بالسقف)، ثم تسويته بالفعلية بعده
+  reserveSpend(day: string, micros: number, capMicros: number): Promise<Reserve>;
+  settleSpend(day: string, deltaMicros: number): Promise<number | null>;
+  markAlert(day: string, level: 80 | 100 | 1): Promise<boolean>;
   leadersPrice(): Promise<Price | null>;
   insertContact(row: Record<string, unknown>, ip: string | null): Promise<{ data: Record<string, unknown> | null; error: unknown }>;
   purgeExpired(): Promise<void>;
@@ -42,6 +51,7 @@ function check(error: { code?: string; message?: string } | null, what: string) 
 
 export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Record<string, unknown>, ip: string | null) => Promise<{ data: Record<string, unknown> | null; error: unknown }>): Store {
   const lead = () => base.schema('leaders');
+  let ledgerBroken: string | null = null;
   return {
     client: () => base,
     async countConversations(since, ip) {
@@ -54,6 +64,13 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
     async countModelCalls(since) {
       const { count, error } = await lead().from('conversation_messages').select('id', { count: 'exact', head: true }).eq('role', 'agent').gte('created_at', since);
       if (missing(error)) throw new Unavailable('conversation_messages');
+      return error ? null : (count ?? 0);
+    },
+    async countHandoffs(since, ip) {
+      let q = lead().from('conversations').select('id', { count: 'exact', head: true }).gte('handoff_at', since);
+      if (ip) q = q.eq('ip', ip);
+      const { count, error } = await q;
+      if (missing(error)) throw new Unavailable('conversations');
       return error ? null : (count ?? 0);
     },
     async createConversation(row) {
@@ -71,17 +88,33 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
     },
     async history(id) {
       const { data, error } = await lead().from('conversation_messages').select('role, body').eq('conversation_id', id)
-        .in('role', ['visitor', 'agent', 'canned']).order('id', { ascending: true }).limit(200);
+        .in('role', ['visitor', 'agent', 'canned']).neq('body', '').order('id', { ascending: true }).limit(200);
       check(error, 'history read');
       return (data ?? []) as Turn[];
     },
     async addMessage(row) {
-      const { error } = await lead().from('conversation_messages').insert(row);
+      const { data, error } = await lead().from('conversation_messages').insert(row).select('id').single();
       check(error, 'message insert');
+      return String(data.id);
+    },
+    async updateMessage(id, patch) {
+      const { error } = await lead().from('conversation_messages').update(patch).eq('id', id);
+      check(error, 'message update');
     },
     async updateConversation(id, patch) {
       const { error } = await lead().from('conversations').update(patch).eq('id', id);
       check(error, 'conversation update');
+    },
+    async claimMessage(id, max, at) {
+      const { data, error } = await lead().rpc('agent_claim_message', { p_id: id, p_max: max, p_at: at });
+      check(error, 'message claim');
+      return data === null || data === undefined ? null : Number(data);
+    },
+    async claimHandoff(id, reason, at) {
+      const { data, error } = await lead().from('conversations').update({ status: 'waiting', handoff_reason: reason, handoff_at: at })
+        .eq('id', id).eq('status', 'bot').is('contact_request_id', null).select('id');
+      check(error, 'handoff claim');
+      return Array.isArray(data) && data.length === 1;
     },
     async spentToday(day) {
       const { data, error } = await lead().from('agent_spend_daily').select('micros').eq('day', day).maybeSingle();
@@ -89,9 +122,22 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
       if (error) { console.error('agent spend read:', error.message); return null; }
       return Number(data?.micros ?? 0);
     },
-    async addSpend(day, micros) {
-      const { data, error } = await lead().rpc('agent_spend_add', { p_day: day, p_micros: micros });
-      if (error) { console.error('agent spend add:', error.message); return null; }
+    // السجل يفشل مغلقًا: خطأ في الحجز = لا استدعاء، وخطأ في التسوية يوقف الاستدعاءات في هذه النسخة بقية اليوم
+    // (المحجوز يبقى محسوبًا، فلا يضيع ما فوتره Anthropic إلا زيادة الفعلية على الأسوأ).
+    async reserveSpend(day, micros, cap) {
+      if (ledgerBroken === day) return { ok: false, reason: 'error' };
+      const { data, error } = await lead().rpc('agent_spend_reserve', { p_day: day, p_micros: micros, p_cap: cap });
+      if (error) { console.error('agent spend reserve:', error.code, error.message); return { ok: false, reason: 'error' }; }
+      if (data === null || data === undefined) return { ok: false, reason: 'refused' };
+      return { ok: true, total: Number(data) };
+    },
+    async settleSpend(day, delta) {
+      const { data, error } = await lead().rpc('agent_spend_settle', { p_day: day, p_delta: delta });
+      if (error || data === null || data === undefined) {
+        console.error('agent spend settle:', error?.code, error?.message);
+        if (delta > 0) ledgerBroken = day;
+        return null;
+      }
       return Number(data);
     },
     async markAlert(day, level) {

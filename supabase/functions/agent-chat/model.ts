@@ -11,6 +11,9 @@ import { contextBlock, type Context, SYSTEM_BLOCKS } from './prompt.ts';
 export const DEFAULT_MODEL = 'claude-haiku-5-5';
 export const MAX_TOKENS = 700;
 export const HISTORY_TURNS = 8;
+// مهلة SDK تغطي انتظار الرؤوس وحدها، فللبث مهلتان هنا: كلية، وخمول بلا أي حدث من الخادم
+export const STREAM_TOTAL_MS = 45_000;
+export const STREAM_IDLE_MS = 25_000;
 
 export type Turn = { role: 'visitor' | 'agent' | 'canned'; body: string };
 export type ModelResult = {
@@ -57,11 +60,26 @@ export function anthropic(apiKey: string) {
 }
 export const resetClient = () => { client = null; };
 
-// البث: كل دفعة نص تمر بـ onText، والنتيجة النهائية من finalMessage (الاستخدام وسبب التوقف)
-export async function streamAnswer(apiKey: string, model: string, messages: Anthropic.MessageParam[], onText: (t: string) => void, signal?: AbortSignal): Promise<ModelResult> {
-  const stream = anthropic(apiKey).messages.stream(requestParams(model, messages), { signal });
-  stream.on('text', (t) => onText(t));
-  const msg = await stream.finalMessage();
+// البث: كل دفعة نص تمر بـ onText، والنتيجة النهائية من finalMessage (الاستخدام وسبب التوقف). يُقطع الطلب
+// إن انقطع الزائر (signal) أو تجاوز المهلة الكلية أو خمل البث، فيرمي، ويبقى الاستدعاء محسوبًا بحجزه في السجل.
+export async function streamAnswer(apiKey: string, model: string, messages: Anthropic.MessageParam[], onText: (t: string) => void, signal?: AbortSignal, timing = { total: STREAM_TOTAL_MS, idle: STREAM_IDLE_MS }): Promise<ModelResult> {
+  const ac = new AbortController();
+  const stop = () => ac.abort();
+  if (signal?.aborted) ac.abort();
+  signal?.addEventListener('abort', stop, { once: true });
+  const total = setTimeout(stop, timing.total);
+  let idle = setTimeout(stop, timing.idle);
+  let msg: Anthropic.Message;
+  try {
+    const stream = anthropic(apiKey).messages.stream(requestParams(model, messages), { signal: ac.signal });
+    stream.on('streamEvent', () => { clearTimeout(idle); idle = setTimeout(stop, timing.idle); });
+    stream.on('text', (t) => onText(t));
+    msg = await stream.finalMessage();
+  } finally {
+    clearTimeout(total);
+    clearTimeout(idle);
+    signal?.removeEventListener('abort', stop);
+  }
   const text = msg.content.filter((b) => b.type === 'text').map((b) => (b as Anthropic.TextBlock).text).join('');
   const u = msg.usage;
   return {

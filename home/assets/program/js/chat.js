@@ -83,7 +83,7 @@
 
   const launch = el('button', { class: 'mi-chat-launch', type: 'button', 'aria-haspopup': 'dialog', 'aria-expanded': 'false', hidden: '' },
     el('span', { class: 'mi-chat-launch__dot', 'aria-hidden': 'true' }), el('span', { text: T.launch }));
-  const log = el('div', { class: 'mi-chat__log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions text' });
+  const log = el('div', { class: 'mi-chat__log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
   const input = el('textarea', { class: 'mi-chat__input', rows: '1', maxlength: String(MAX_CHARS), placeholder: T.placeholder, 'aria-label': T.placeholder, dir: 'auto' });
   const sendBtn = el('button', { class: 'mi-chat__send', type: 'submit', text: T.send });
   const form = el('form', { class: 'mi-chat__form' }, input, sendBtn);
@@ -193,7 +193,8 @@
     addMsg('me', text);
     setBusy(true);
     const dots = typing();
-    let bubble = null; let streamed = '';
+    // فقاعة البث مخفية عن قارئ الشاشة (تتغير مع كل دفعة)، ويُعلن الرد مرة واحدة كاملًا عند done
+    let bubble = null; let streamed = ''; let ended = false;
     try {
       const res = await call({ action: 'send', token: state.token, message: text });
       const type = res.headers.get('content-type') || '';
@@ -221,25 +222,27 @@
           let data = {};
           try { data = JSON.parse((block.match(/^data: (.+)$/m) || [])[1] || '{}'); } catch { /* سطر ناقص */ }
           if (ev === 'delta') {
-            if (!bubble) { dots.remove(); bubble = el('div', { class: 'mi-chat__msg mi-chat__msg--bot', dir: 'auto' }); log.append(bubble); }
+            if (!bubble) { dots.remove(); bubble = el('div', { class: 'mi-chat__msg mi-chat__msg--bot', dir: 'auto', 'aria-hidden': 'true' }); log.append(bubble); }
             streamed += data.t || '';
             bubble.textContent = streamed;
             log.scrollTop = log.scrollHeight;
           } else if (ev === 'done') {
-            dots.remove();
+            ended = true; dots.remove();
             if (bubble) bubble.remove();
             addMsg('bot', data.text || '');
             if (data.handoff) showHandoff('agent');
           } else if (ev === 'capped') {
-            dots.remove();
+            ended = true; dots.remove();
             addMsg('bot', data.text || '');
             showHandoff('capped');
           } else if (ev === 'error') {
-            dots.remove(); if (bubble) bubble.remove();
+            ended = true; dots.remove(); if (bubble) bubble.remove();
             addMsg('note', data.text || T.failed, { transient: true });
           }
         }
       }
+      // انتهى الاتصال بلا حدث ختامي (انقطاع أو مهلة): لا تبقى النافذة في الانتظار
+      if (!ended) { dots.remove(); if (bubble) bubble.remove(); addMsg('note', T.failed, { transient: true }); }
     } catch {
       dots.remove();
       addMsg('note', T.failed, { transient: true });

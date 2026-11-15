@@ -2,6 +2,7 @@
 // والنافذة في كل صفحات الموقع بلا HTML من الخادم، والدالة منشورة بالبوابة نفسها، والترحيل متسامح.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import { render, OUT } from '../../scripts/assistant/knowledge.mjs';
 import { HOURS_AR, PROMISE_AR, promiseNow } from '../../supabase/functions/_shared/hours.js';
@@ -63,4 +64,32 @@ describe('المساعد الآلي في الموقع', () => {
     expect(code).not.toMatch(/\btools:|temperature|budget_tokens|thinking:/);
     expect(read('supabase/functions/agent-chat/handler.ts')).toContain("Number(get('LEADERS_AGENT_DAILY_CAP_CENTS') || '200')");
   });
+
+  it('السجل ذري في القاعدة: الحجز يُرفض فوق السقف، والتسوية لا تنزل تحت الصفر، والرسالة والتحويل مرة واحدة', async () => {
+    const db = new PGlite();
+    await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
+      create role anon; create role authenticated; create role service_role;
+      create table public.contact_requests (id uuid primary key default gen_random_uuid());`);
+    const sql = read('supabase/migrations/20261115150000_leaders_agent_conversations.sql');
+    await db.exec(sql);
+    await db.exec(sql);
+    const one = async (q, p) => Object.values((await db.query(q, p)).rows[0] ?? {})[0] ?? null;
+    const reserve = (m, cap) => one('select leaders.agent_spend_reserve($1::date, $2::bigint, $3::bigint) as v', ['2026-11-15', m, cap]);
+    expect(await reserve(3000, 1000)).toBe(null);
+    expect(Number(await reserve(600, 1000))).toBe(600);
+    expect(await reserve(600, 1000)).toBe(null);
+    expect(Number(await reserve(400, 1000))).toBe(1000);
+    expect(Number(await one("select leaders.agent_spend_settle('2026-11-15', -1500) as v"))).toBe(0);
+    expect(Number(await one("select calls from leaders.agent_spend_daily where day = '2026-11-15'"))).toBe(2);
+    const id = await one("insert into leaders.conversations (public_token_hash) values ('h') returning id");
+    const claim = () => one('select leaders.agent_claim_message($1::uuid, 2, now()) as v', [id]);
+    expect(await claim()).toBe(1);
+    expect(await claim()).toBe(2);
+    expect(await claim()).toBe(null);
+    const handoff = () => db.query("update leaders.conversations set status = 'waiting', handoff_at = now() where id = $1 and status = 'bot' and contact_request_id is null returning id", [id]);
+    expect((await handoff()).rows.length).toBe(1);
+    expect((await handoff()).rows.length).toBe(0);
+    expect(await one("select leaders.agent_spend_alert('2026-11-15', 1) as v")).toBe(true);
+    expect(await one("select leaders.agent_spend_alert('2026-11-15', 1) as v")).toBe(false);
+  }, 30_000);
 });

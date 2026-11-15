@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { MAIL_FROM_DEFAULT, sendCounted } from "../_shared/mail.ts";
 import { clientIp, turnstileOk as turnstileCheck } from "../_shared/guard.ts";
-import { CONTACT_SELECT, confirmSender as confirmContact, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";
+import { CONTACT_SELECT, confirmSender as confirmContact, formContext, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";
 
 // send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
 // الإدراج والرسالتان في _shared/contact.ts، والتحقق البشري وعنوان الشبكة في _shared/guard.ts (يشاركها agent-chat).
@@ -106,7 +106,7 @@ async function contact(sb: SB, body: Record<string, unknown>, req: Request) {
   const row: Row = {
     product: text(body.product, 40) || "MI-HOME", source_url: text(body.source_url, 500), name, organization: text(body.organization, 200),
     email, phone: text(body.phone, 40), interest: text(body.interest, 40), interest_label: text(body.interest_label, 120),
-    context: text(body.context, 2000), user_agent: text(body.user_agent, 300), language: text(body.language, 40), status: "new",
+    context: formContext(text(body.context, 2000)), user_agent: text(body.user_agent, 300), language: text(body.language, 40), status: "new",
   };
   const ins = await insertContactRequest(sb, row, ip);
   if (ins.error || !ins.data) {

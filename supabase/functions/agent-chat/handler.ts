@@ -20,7 +20,7 @@ import { redactInput, StreamSanitizer } from './redact.ts';
 import { type Store, Unavailable } from './store.ts';
 import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
 
-export const LIMITS = { convPerIpHour: 5, convGlobalHour: 120, modelCallsHour: 300, messagesPerConversation: 12, messageChars: 1500 };
+export const LIMITS = { convPerIpHour: 5, convGlobalHour: 120, modelCallsHour: 300, messagesPerConversation: 12, messageChars: 1500, handoffPerIpHour: 3, handoffGlobalHour: 30 };
 
 export type Env = {
   apiKey: string; model: string; capCents: number; enabled: boolean;
@@ -44,7 +44,7 @@ export type Deps = {
   env: Env;
   now?: () => number;
   turnstile: (token: unknown, ip: string | null) => Promise<boolean>;
-  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void) => Promise<ModelResult>;
+  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void, signal: AbortSignal) => Promise<ModelResult>;
   notifyAdmin: (row: ContactRow) => Promise<void>;
   alert: (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
   clientIp: (req: Request) => string | null;
@@ -104,18 +104,38 @@ const asksPrice = (q: string) => normalizeText(q).split(' ').some((t) => PRICE_W
 const money = (cents: number, cur: string) => `${(cents / 100).toFixed(2)} ${cur}`;
 
 // ── بث SSE ──
-function sse(run: (send: (event: string, data: unknown) => void) => Promise<void>) {
+// الإرسال لا يرمي أبدًا: إن أغلق الزائر الاتصال تُهمل الأحداث، ويُقطع استدعاء النموذج بالإشارة، ويكمل المعالج
+// حتى يسوّي حجز الإنفاق ويحفظ صف الاستدعاء. فلا يضيع استدعاء مفوتر من السجل اليومي ولا من عداد الساعة.
+export function sse(lang: 'ar' | 'en', run: (send: (event: string, data: unknown) => void, signal: AbortSignal) => Promise<void>) {
   const enc = new TextEncoder();
+  const ac = new AbortController();
+  let closed = false;
   const body = new ReadableStream({
-    async start(ctl) {
-      const send = (event: string, data: unknown) => ctl.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-      try { await run(send); } catch (e) {
-        console.error('agent-chat stream:', e);
-        send('error', { code: 'internal', text: TEXT.error.ar });
-      } finally { ctl.close(); }
+    start(ctl) {
+      const send = (event: string, data: unknown) => {
+        if (closed) return;
+        try { ctl.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)); } catch { closed = true; ac.abort(); }
+      };
+      (async () => {
+        try { await run(send, ac.signal); } catch (e) {
+          console.error('agent-chat stream:', e);
+          send('error', { code: 'internal', text: TEXT.error[lang] });
+        } finally {
+          if (!closed) { closed = true; try { ctl.close(); } catch { /* أُغلق */ } }
+        }
+      })();
     },
+    cancel() { closed = true; ac.abort(); },
   });
   return new Response(body, { headers: { ...corsHeaders, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } });
+}
+
+// أخطاء إعداد لا يصلحها التكرار (مفتاح ملغى، أو اسم نموذج خاطئ، أو طلب يرفضه النموذج): تنبيه واحد في اليوم و«اترك رسالتك»
+const CONFIG_STATUSES = new Set([400, 401, 403, 404]);
+const errStatus = (e: unknown) => { const v = (e as { status?: unknown })?.status; return typeof v === 'number' ? v : null; };
+async function configAlert(d: Deps, day: string, kind: string, detail: Record<string, unknown>) {
+  if (!(await d.store.markAlert(day, 1).catch(() => false))) return;
+  await d.alert(kind, { day, model: d.env.model, ...detail }).catch((e) => console.error('agent alert:', e));
 }
 
 async function spendAlert(d: Deps, day: string, level: 80 | 100, spent: number) {
@@ -167,14 +187,17 @@ async function send(d: Deps, b: Record<string, unknown>) {
   if (raw.length > LIMITS.messageChars) return json({ success: false, code: 'too_long', max: LIMITS.messageChars }, 400);
   const lang = langOf(raw);
   if (conv.status !== 'bot') return json({ success: false, code: 'handed_off', text: promiseNow(lang, d.now?.() ?? Date.now()) }, 409);
-  if (conv.visitor_messages >= LIMITS.messagesPerConversation) return json({ success: false, code: 'conv_cap', text: TEXT.convCap[lang], handoff: true }, 429);
+  const convCap = () => json({ success: false, code: 'conv_cap', text: TEXT.convCap[lang], handoff: true }, 429);
+  if (conv.visitor_messages >= LIMITS.messagesPerConversation) return convCap();
 
   const now = d.now?.() ?? Date.now();
+  // الحجز ذري: الطلبات المتوازية برمز واحد لا تتجاوز حد المحادثة
+  const claimed = await d.store.claimMessage(conv.id, LIMITS.messagesPerConversation, new Date(now).toISOString());
+  if (claimed === null) return convCap();
   const { text: message } = redactInput(raw);
   await d.store.addMessage({ conversation_id: conv.id, role: 'visitor', body: message, lang });
-  await d.store.updateConversation(conv.id, { visitor_messages: conv.visitor_messages + 1, last_visitor_at: new Date(now).toISOString() });
 
-  return sse(async (emit) => {
+  return sse(lang, async (emit, signal) => {
     // 1) الجواب الجاهز: بلا نموذج ولا تكلفة
     const canned = matchFaq(message, conv.product);
     if (canned) {
@@ -197,29 +220,48 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
     const rest = estimateTokens(messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
     const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
-    const spent = await d.store.spentToday(day);
+    const capMicros = d.env.capCents * 1e4;
     const calls = await d.store.countModelCalls(new Date(now - 36e5).toISOString());
-    const state = spent === null ? 'capped' : capState(spent, worst, d.env.capCents);
-    if (state === 'capped' || !d.env.apiKey || calls === null || calls >= LIMITS.modelCallsHour) {
-      if (spent !== null && state === 'capped') await spendAlert(d, day, 100, spent);
+    const capped = async () => {
       await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: 'capped', lang });
       emit('capped', { text: TEXT.capped[lang] });
-      return;
+    };
+    if (!d.env.apiKey || calls === null || calls >= LIMITS.modelCallsHour) return await capped();
+    // حجز أسوأ تكلفة قبل الاستدعاء، ذريًا ومقيدًا بالسقف: المتوازي لا يتجاوزه، والفاشل يبقى محسوبًا
+    const res = await d.store.reserveSpend(day, worst, capMicros);
+    if (!res.ok) {
+      if (res.reason === 'refused') {
+        const spent = await d.store.spentToday(day).catch(() => null);
+        await spendAlert(d, day, 100, spent ?? capMicros);
+      } else {
+        await configAlert(d, day, 'agent_ledger_error', {});
+      }
+      return await capped();
     }
+    if (res.total >= capMicros * 0.8) await spendAlert(d, day, 80, res.total);
+    // صف الاستدعاء قبل إرساله (نص فارغ لا يدخل السجل)، فيحسبه عداد الساعة وهو جارٍ، ويُسوّى بعده
+    const callId = await d.store.addMessage({ conversation_id: conv.id, role: 'agent', body: '', lang, model: d.env.model, stop_reason: 'pending', cost_micros: worst });
     // 3) النموذج ببث، وكل دفعة تمر بفحص المخرج
     const san = new StreamSanitizer(48, (t) => t.split(HANDOFF_MARK).join(''));
     let result: ModelResult;
     try {
-      result = await d.model(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); });
+      result = await d.model(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); }, signal);
     } catch (e) {
-      console.error('agent model:', (e as Error)?.name, (e as Error)?.message);
+      const st = errStatus(e);
+      console.error('agent model:', (e as Error)?.name, st, (e as Error)?.message);
+      // لا usage: يبقى الحجز (أسوأ تكلفة) محسوبًا كما هو
+      await d.store.updateMessage(callId, { stop_reason: signal.aborted ? 'aborted' : 'error' });
+      if (st !== null && CONFIG_STATUSES.has(st)) {
+        await configAlert(d, day, 'agent_model_config', { status: st, type: (e as Error)?.name });
+        return await capped();
+      }
       emit('error', { code: 'model', text: TEXT.error[lang] });
       return;
     }
     const cost = costMicros(result.model || d.env.model, result.usage);
-    const total = await d.store.addSpend(day, cost);
+    const total = await d.store.settleSpend(day, cost - worst);
     if (total !== null) {
-      if (total >= d.env.capCents * 1e4 * 0.8) await spendAlert(d, day, 80, total);
+      if (total >= capMicros * 0.8) await spendAlert(d, day, 80, total);
       if (capState(total, worst, d.env.capCents) === 'capped') await spendAlert(d, day, 100, total);
     }
     const fin = san.finish();
@@ -227,8 +269,8 @@ async function send(d: Deps, b: Record<string, unknown>) {
     let handoff = result.text.includes(HANDOFF_MARK);
     if (result.stopReason === 'refusal' || !text) { text = TEXT.refusal[lang]; handoff = true; }
     if (fin.tail && result.stopReason !== 'refusal') emit('delta', { t: fin.tail });
-    await d.store.addMessage({
-      conversation_id: conv.id, role: 'agent', body: text.slice(0, 6000), lang, model: result.model, stop_reason: result.stopReason,
+    await d.store.updateMessage(callId, {
+      body: text.slice(0, 6000), model: result.model, stop_reason: result.stopReason,
       input_tokens: result.usage.input_tokens, cache_read_tokens: result.usage.cache_read_input_tokens,
       cache_write_tokens: result.usage.cache_creation_input_tokens, output_tokens: result.usage.output_tokens, cost_micros: cost,
     });
@@ -254,21 +296,34 @@ async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
   const interest = INTERESTS[String(b.interest)] ? String(b.interest) : (productOf(conv.product) === 'leaders' ? 'leaders' : 'general');
   const note = redactInput(clip(b.note, 1000)).text;
   const now = d.now?.() ?? Date.now();
+  // حدود التحويل للشبكة وللجميع في الساعة: البريد المشترك لطلبات التواصل لا يستنزفه طرف واحد
+  const ip = d.clientIp(req);
+  const hourAgo = new Date(now - 36e5).toISOString();
+  const perIp = ip ? await d.store.countHandoffs(hourAgo, ip) : 0;
+  const global = await d.store.countHandoffs(hourAgo);
+  if (perIp === null || global === null || perIp >= LIMITS.handoffPerIpHour || global >= LIMITS.handoffGlobalHour) return json({ success: false, code: 'rate' }, 429);
+  // الحجز ذري: طلب واحد فقط من الطلبات المتوازية يصل إلى الإدراج والبريد
+  if (!(await d.store.claimHandoff(conv.id, REASONS[reason], new Date(now).toISOString()))) return json({ success: false, code: 'already' }, 409);
   // السياق للإدارة: الوسم ورقم المحادثة وسببها ورسائل الزائر بعد الحجب (لا ردود المساعد)
-  const turns = (await d.store.history(conv.id)).filter((t) => t.role === 'visitor').map((t) => `- ${t.body}`);
+  const visitorTurns = (await d.store.history(conv.id)).filter((t) => t.role === 'visitor');
+  const turns = visitorTurns.map((t) => `- ${t.body}`);
   const context = [`${AGENT_CONTEXT_PREFIX} conversation ${conv.id} · ${REASONS[reason]}`, note ? `ملاحظة: ${note}` : '', ...turns].filter(Boolean).join('\n').slice(0, 3900);
   const row: ContactRow = {
     product: conv.product, source_url: conv.source_url || '', name, organization: clip(b.organization, 200), email, phone,
     interest, interest_label: `${INTERESTS[interest]} (المساعد الآلي)`, context, user_agent: clip(req.headers.get('user-agent'), 300),
     language: clip(conv.locale, 35), status: 'new',
   };
-  const ins = await d.store.insertContact(row, d.clientIp(req));
+  const ins = await d.store.insertContact(row, ip);
   if (ins.error || !ins.data) {
     console.error('agent handoff insert:', ins.error);
+    // يُفك الحجز فيعيد الزائر المحاولة
+    await d.store.updateConversation(conv.id, { status: 'bot', handoff_at: null, handoff_reason: null });
     return json({ success: false, code: 'db' }, 500);
   }
-  await d.store.updateConversation(conv.id, { status: 'waiting', contact_request_id: ins.data.id, handoff_reason: REASONS[reason] });
-  const lang = String(conv.locale || '').startsWith('en') ? 'en' : 'ar';
+  await d.store.updateConversation(conv.id, { contact_request_id: ins.data.id });
+  // لغة الوعد من آخر رسالة للزائر (كما في send)، لا من لغة الصفحة
+  const lastVisitor = visitorTurns[visitorTurns.length - 1]?.body;
+  const lang = lastVisitor ? langOf(lastVisitor) : (String(conv.locale || '').startsWith('en') ? 'en' : 'ar');
   const promise = promiseNow(lang, now);
   await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `handoff: ${reason}`, lang });
   // بريد الإدارة القائم (بلا بريد تأكيد للزائر: الوعد قيل في المحادثة) وسطر في قناة التشغيل بلا نص

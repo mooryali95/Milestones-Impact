@@ -5,7 +5,8 @@
   position: fixed;
   inset-inline-end: 18px;
   bottom: 18px;
-  z-index: 9990;
+  /* تحت درج قائمة الجوال (200) وغطائه (190)، فلا يطفو فوق زر الدرج؛ واللوحة المفتوحة فوق الكل */
+  z-index: 150;
   display: inline-flex; align-items: center; gap: 10px;
   min-height: 52px;
   padding: 0 20px 0 18px;
@@ -125,6 +126,10 @@
   width: 100%; min-width: 0; box-sizing: border-box;
   min-height: 42px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line);
   font: 15px/1.5 var(--font-ar); background: var(--off-white); color: var(--ink);
+}
+/* 16px على الأقل في الحقول على الجوال: Safari في iOS يكبّر الصفحة عند التركيز على ما دونه (بعد قواعدها لتغلب) */
+@media (max-width: 520px) {
+  .mi-chat__input, .mi-chat__handoff input, .mi-chat__handoff textarea { font-size: 16px; }
 }
 .mi-chat__err { color: #9b2c2c; font-size: 13px; margin: 0; }
 .mi-chat__captcha { display: flex; justify-content: center; padding: 8px 0; }

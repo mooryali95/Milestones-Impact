@@ -4,7 +4,7 @@
 import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1';
 import { matchFaq } from '../faq.ts';
 import { handle, type Deps, type Env } from '../handler.ts';
-import type { Store } from '../store.ts';
+import { emptyMem, memStore } from '../mem_store.ts';
 import { type Case, grade, type Reply } from './grade.ts';
 
 const { cases } = JSON.parse(await Deno.readTextFile(new URL('./cases.json', import.meta.url))) as { cases: Case[] };
@@ -31,18 +31,7 @@ Deno.test('ما يُجاب جاهزًا يطابق جوابه، وما سواه 
 // نموذج «سيئ» يعيد كل ما يُمنع: بريد طرف ثالث ورابط خارجي ورقم وأي نص من رسالة الزائر. فحص المخرج يجب أن يزيله.
 function harness() {
   const seen: string[] = [];
-  const store: Store = (() => {
-    const convs: Record<string, any>[] = []; const msgs: any[] = [];
-    return {
-      client: () => null, countConversations: async () => 0, countModelCalls: async () => 0,
-      createConversation: async (row) => { const id = crypto.randomUUID(); convs.push({ id, status: 'bot', visitor_messages: 0, contact_request_id: null, ...row }); return id; },
-      findConversation: async (h) => convs.find((c) => c.public_token_hash === h) ?? null,
-      history: async (id) => msgs.filter((m) => m.conversation_id === id && m.role !== 'system'),
-      addMessage: async (m) => { msgs.push(m); }, updateConversation: async (id, p) => { Object.assign(convs.find((c) => c.id === id)!, p); },
-      spentToday: async () => 0, addSpend: async (_d, m) => m, markAlert: async () => false, leadersPrice: async () => null,
-      insertContact: async (row) => ({ data: { ...row, id: crypto.randomUUID() }, error: null }), purgeExpired: async () => {},
-    } as Store;
-  })();
+  const store = memStore(emptyMem());
   const env: Env = { apiKey: 'sk-test', model: 'claude-haiku-5-5', capCents: 200, enabled: true, turnstileSecret: 's', turnstileSite: 'k', adminEmail: '' };
   const deps: Deps = {
     store, env, clientIp: () => null, turnstile: async () => true, notifyAdmin: async () => {}, alert: async () => true,
