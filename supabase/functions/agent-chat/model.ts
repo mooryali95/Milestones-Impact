@@ -48,11 +48,16 @@ export function requestParams(model: string, messages: Anthropic.MessageParam[])
   };
 }
 
+// العميل مربوط بمفتاحه: تدوير المفتاح من اللوحة يبني عميلًا جديدًا (كان يبقى العميل الأول بمفتاحه القديم حتى تُعاد النسخة)
 let client: Anthropic | null = null;
+let clientKey = '';
 export function anthropic(apiKey: string) {
-  if (!client) {
+  if (!client || clientKey !== apiKey) {
+    clientKey = apiKey;
     client = new Anthropic({
       apiKey,
+      // المفتاح الممرر وحده: لا يُلتقط ANTHROPIC_AUTH_TOKEN من البيئة إن وُجد فيُرسل رأسًا آخر
+      authToken: null,
       baseURL: 'https://api.anthropic.com',
       maxRetries: 1,
       timeout: 30_000,
@@ -62,7 +67,7 @@ export function anthropic(apiKey: string) {
   }
   return client;
 }
-export const resetClient = () => { client = null; };
+export const resetClient = () => { client = null; clientKey = ''; };
 
 // البث: كل دفعة نص تمر بـ onText، والنتيجة النهائية من finalMessage (الاستخدام وسبب التوقف). يُقطع الطلب
 // إن انقطع الزائر (signal) أو تجاوز المهلة الكلية أو خمل البث، فيرمي، ويبقى الاستدعاء محسوبًا بحجزه في السجل.

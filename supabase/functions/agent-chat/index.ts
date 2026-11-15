@@ -6,6 +6,8 @@ import { insertContactRequest, notifyAdmin } from '../_shared/contact.ts';
 import { slackUse } from '../_shared/slack.ts';
 import { handle, readEnv } from './handler.ts';
 import { streamAnswer } from './model.ts';
+import { readRuntime } from './runtime.ts';
+import { versions } from './version.ts';
 import { supabaseStore } from './store.ts';
 
 // agent-chat: المساعد الآلي في الموقع العام. المنطق كله في handler.ts، وهنا ربطه بالأسرار والقاعدة والشبكة.
@@ -22,14 +24,25 @@ const store = supabaseStore(db, insertContactRequest);
 const sendEmail = async (to: string, subject: string, html: string) =>
   (await sendCounted(db, to, subject, html, { kind: 'contact', source: 'agent-chat', cap: MAIL_CAP, key: RESEND_API_KEY, from: MAIL_FROM_DEFAULT })).ok;
 
+const lead = () => db.schema('leaders');
+
 Deno.serve((req: Request) => {
   const env = readEnv();
+  // التفعيل والمفتاح من صف الإعداد (اللوحة) بخزن 60 ثانية، وLEADERS_AGENT_ENABLED مفتاح طوارئ فوقه (runtime.ts)
+  const runtime = () => readRuntime(() => lead().rpc('agent_runtime'), {
+    mode: Deno.env.get('LEADERS_AGENT_ENABLED'), envKey: env.apiKey, fingerprint: async () => (await versions(env.model)).fingerprint,
+  });
   return handle(req, {
     store,
     env,
+    runtime,
+    keyStatus: async (ok, code, source) => {
+      const { error } = await lead().rpc('agent_key_status', { p_ok: ok, p_error: code, p_source: source });
+      if (error) console.error('agent key status:', error.code);
+    },
     clientIp,
     turnstile: (token, ip) => turnstileOk(env.turnstileSecret, token, ip),
-    model: (messages, onText, signal) => streamAnswer(env.apiKey, env.model, messages, onText, signal),
+    model: (messages, onText, signal, apiKey) => streamAnswer(apiKey || '', env.model, messages, onText, signal),
     notifyAdmin: (row) => notifyAdmin(db, row, sendEmail, env.adminEmail, `المساعد الآلي من ${row.product}`),
     alert: (kind, detail) => alertWebhook(kind, detail),
   });

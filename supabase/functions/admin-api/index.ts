@@ -7,6 +7,7 @@ import {
 import { slackUse } from "../_shared/slack.ts";
 import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
+import { STEP_UP_ACTIONS, stepUp } from "./step_up.ts";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
 // النشر: supabase functions deploy admin-api
@@ -97,11 +98,15 @@ async function hotp(secret: string, counter: bigint): Promise<string> {
   const off = sig[19] & 0xf;
   return ((((sig[off] & 0x7f) << 24) | ((sig[off + 1] & 0xff) << 16) | ((sig[off + 2] & 0xff) << 8) | (sig[off + 3] & 0xff)) % 1_000_000).toString().padStart(6, "0");
 }
-async function verifyTotp(secret: string, token: string, win = 1): Promise<boolean> {
-  if (!/^\d{6}$/.test(token)) return false;
+// الخطوة الزمنية المطابقة (للتحقق الإضافي الذي يمنع الرمز نفسه مرتين)، أو null
+async function totpMatch(secret: string, token: string, win = 1): Promise<bigint | null> {
+  if (!/^\d{6}$/.test(token)) return null;
   const t = BigInt(Math.floor(Date.now() / 1000 / 30));
-  for (let i = -win; i <= win; i++) if (await hotp(secret, t + BigInt(i)) === token) return true;
-  return false;
+  for (let i = -win; i <= win; i++) if (await hotp(secret, t + BigInt(i)) === token) return t + BigInt(i);
+  return null;
+}
+async function verifyTotp(secret: string, token: string, win = 1): Promise<boolean> {
+  return (await totpMatch(secret, token, win)) !== null;
 }
 function genSecret(): string { return b32enc(crypto.getRandomValues(new Uint8Array(20))); }
 function totpUri(secret: string, email: string): string {
@@ -245,7 +250,7 @@ function challengeOf(response: unknown): string {
     return String(JSON.parse(atob(b64)).challenge || "");
   } catch { return ""; }
 }
-async function saveChallenge(sb: SB, challenge: string, purpose: "register" | "authenticate", subject: string | null) {
+async function saveChallenge(sb: SB, challenge: string, purpose: "register" | "authenticate" | "step_up", subject: string | null) {
   const { error } = await sb.from("webauthn_challenges").insert({
     scope: "admin", purpose, subject, challenge, expires_at: new Date(Date.now() + CHALLENGE_TTL_MS).toISOString(),
   });
@@ -456,6 +461,18 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       try { await sb.from("admin_audit_log").insert({ user_id: session.userId, user_email: adminEmail, action: act, meta }); } catch { /* best-effort */ }
     };
 
+    // ══ التحقق الإضافي قبل تغيير مفتاح المساعد (step_up.ts): مفتاح مرور بالبصمة أو رمز تطبيق المصادقة ══
+    if (STEP_UP_ACTIONS.includes(action)) {
+      const r = await stepUp(action, body, {
+        userId: String(session.userId), role, email: adminEmail, method: session.method, passkeyOnly: session.passkeyOnly,
+      }, {
+        sb, sessionHash: await sha256hex(tok), ip: clientCtx(req).ip, rpId: RP_ID, origins: ORIGINS,
+        genOptions: generateAuthenticationOptions, verifyAuth: verifyAuthenticationResponse, matchTotp: (sec, code) => totpMatch(sec, code),
+        tooManyFails, saveChallenge, takeChallenge, challengeFlood, challengeOf, fromBytea,
+      });
+      return json(r.body, r.status);
+    }
+
     if (WRITE_ACTIONS.includes(action) && role !== "admin" && role !== "super_admin") {
       return json({ success: false, message: "صلاحية المراقب للقراءة فقط" }, 403);
     }
@@ -550,8 +567,10 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
 
     if (action === "security-status") {
       const pks = await myPasskeys();
+      // حال تطبيق المصادقة الآن لا من جلسة الدخول، فنافذة التحقق الإضافي لا تعرض طريقة أُطفئت أو تخفي طريقة فُعّلت بعده
+      const { data: mine } = await sb.from("admin_users").select("totp_enabled").eq("id", session.userId).maybeSingle();
       return json({
-        success: true, is_owner: session.isOwner, passkey_only: session.passkeyOnly, method: session.method,
+        success: true, is_owner: session.isOwner, passkey_only: session.passkeyOnly, method: session.method, totp_enabled: !!mine?.totp_enabled,
         passkeys: pks.map(({ credential_id: _c, ...p }: any) => p),
       });
     }

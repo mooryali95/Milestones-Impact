@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115200000_leaders_book_comment_section_ids
+-- as-of migration: 20261115230000_leaders_agent_admin
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -26,6 +26,88 @@ create sequence if not exists public.email_otps_id_seq as integer;
 create sequence if not exists public.process_details_id_seq as integer;
 
 create sequence if not exists public.reports_id_seq as integer;
+
+create table if not exists leaders.agent_eval_results (
+  run_id uuid not null,
+  case_id text not null,
+  set_name text not null,
+  pass boolean not null,
+  reasons text[] default '{}'::text[] not null,
+  source text,
+  handoff boolean,
+  reply text,
+  cost_micros bigint default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  constraint agent_eval_results_case_id_check CHECK ((char_length(case_id) <= 20)),
+  constraint agent_eval_results_reply_check CHECK ((char_length(reply) <= 6000)),
+  constraint agent_eval_results_set_name_check CHECK ((set_name = ANY (ARRAY['eval'::text, 'redteam'::text]))),
+  constraint agent_eval_results_source_check CHECK ((source = ANY (ARRAY['canned'::text, 'model'::text, 'capped'::text, 'error'::text]))),
+  constraint agent_eval_results_pkey PRIMARY KEY (run_id, case_id)
+);
+
+create table if not exists leaders.agent_eval_runs (
+  id uuid default gen_random_uuid() not null,
+  status text default 'running'::text not null,
+  stop_reason text,
+  model text not null,
+  knowledge_version text not null,
+  prompt_version text not null,
+  cases_version text not null,
+  fingerprint text not null,
+  key_source text,
+  total_cases integer not null,
+  done_cases integer default 0 not null,
+  eval_pass integer default 0 not null,
+  eval_total integer default 0 not null,
+  redteam_pass integer default 0 not null,
+  redteam_total integer default 0 not null,
+  cost_micros bigint default 0 not null,
+  max_micros bigint default 500000 not null,
+  lease_until timestamp with time zone,
+  last_step_at timestamp with time zone,
+  started_by text not null,
+  started_at timestamp with time zone default now() not null,
+  finished_at timestamp with time zone,
+  constraint agent_eval_runs_cases_version_check CHECK ((char_length(cases_version) <= 40)),
+  constraint agent_eval_runs_cost_micros_check CHECK ((cost_micros >= 0)),
+  constraint agent_eval_runs_fingerprint_check CHECK ((char_length(fingerprint) <= 80)),
+  constraint agent_eval_runs_key_source_check CHECK ((key_source = ANY (ARRAY['db'::text, 'env'::text]))),
+  constraint agent_eval_runs_knowledge_version_check CHECK ((char_length(knowledge_version) <= 60)),
+  constraint agent_eval_runs_max_micros_check CHECK ((max_micros > 0)),
+  constraint agent_eval_runs_model_check CHECK ((char_length(model) <= 60)),
+  constraint agent_eval_runs_prompt_version_check CHECK ((char_length(prompt_version) <= 40)),
+  constraint agent_eval_runs_started_by_check CHECK ((char_length(started_by) <= 254)),
+  constraint agent_eval_runs_status_check CHECK ((status = ANY (ARRAY['running'::text, 'passed'::text, 'failed'::text, 'stopped'::text, 'error'::text]))),
+  constraint agent_eval_runs_stop_reason_check CHECK ((stop_reason = ANY (ARRAY['max_cost'::text, 'daily_cap'::text, 'ledger'::text, 'key'::text, 'cancelled'::text, 'stale'::text, 'model'::text]))),
+  constraint agent_eval_runs_total_cases_check CHECK ((total_cases > 0)),
+  constraint agent_eval_runs_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.agent_settings (
+  id boolean default true not null,
+  enabled boolean default false not null,
+  enabled_by text,
+  enabled_at timestamp with time zone,
+  enabled_run_id uuid,
+  enabled_fingerprint text,
+  key_secret_id uuid,
+  key_last4 text,
+  key_set_at timestamp with time zone,
+  key_set_by text,
+  key_ok_at timestamp with time zone,
+  key_error_at timestamp with time zone,
+  key_error text,
+  key_source text,
+  updated_at timestamp with time zone default now() not null,
+  constraint agent_settings_enabled_by_check CHECK ((char_length(enabled_by) <= 254)),
+  constraint agent_settings_enabled_fingerprint_check CHECK ((char_length(enabled_fingerprint) <= 80)),
+  constraint agent_settings_id_check CHECK (id),
+  constraint agent_settings_key_error_check CHECK ((key_error = ANY (ARRAY['http_400'::text, 'http_401'::text, 'http_403'::text, 'http_404'::text, 'http_429'::text, 'http_5xx'::text, 'network'::text, 'timeout'::text]))),
+  constraint agent_settings_key_last4_check CHECK ((key_last4 ~ '^[A-Za-z0-9_-]{4}$'::text)),
+  constraint agent_settings_key_set_by_check CHECK ((char_length(key_set_by) <= 254)),
+  constraint agent_settings_key_source_check CHECK ((key_source = ANY (ARRAY['db'::text, 'env'::text]))),
+  constraint agent_settings_pkey PRIMARY KEY (id)
+);
 
 create table if not exists leaders.agent_spend_daily (
   day date not null,
@@ -1256,6 +1338,7 @@ create table if not exists leaders.organizations (
   show_value boolean default true not null,
   contract_starts date,
   contract_ends date,
+  companion_allowed boolean default true not null,
   constraint organizations_cert_check CHECK (((jsonb_typeof(cert) = 'object'::text) AND (pg_column_size(cert) <= 320000))),
   constraint organizations_color_check CHECK (((color IS NULL) OR (color ~ '^#[0-9A-Fa-f]{6}$'::text))),
   constraint organizations_contract_cents_check CHECK (((contract_cents IS NULL) OR (contract_cents >= 0))),
@@ -1941,6 +2024,22 @@ create table if not exists public.admin_roles (
   constraint admin_roles_pkey PRIMARY KEY (id)
 );
 
+create table if not exists public.admin_step_ups (
+  id uuid default gen_random_uuid() not null,
+  admin_id uuid not null,
+  session_hash text not null,
+  purpose text not null,
+  method text not null,
+  totp_step bigint,
+  created_at timestamp with time zone default now() not null,
+  expires_at timestamp with time zone not null,
+  consumed_at timestamp with time zone,
+  constraint admin_step_ups_method_check CHECK ((method = ANY (ARRAY['passkey'::text, 'totp'::text]))),
+  constraint admin_step_ups_purpose_check CHECK ((purpose = 'agent_key'::text)),
+  constraint admin_step_ups_session_hash_check CHECK ((char_length(session_hash) = 64)),
+  constraint admin_step_ups_pkey PRIMARY KEY (id)
+);
+
 create table if not exists public.admin_users (
   id uuid not null,
   email text not null,
@@ -2231,11 +2330,15 @@ create table if not exists public.webauthn_challenges (
   expires_at timestamp with time zone not null,
   consumed_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  constraint webauthn_challenges_purpose_check CHECK ((purpose = ANY (ARRAY['register'::text, 'authenticate'::text]))),
+  constraint webauthn_challenges_purpose_check CHECK ((purpose = ANY (ARRAY['register'::text, 'authenticate'::text, 'step_up'::text]))),
   constraint webauthn_challenges_scope_check CHECK ((scope = ANY (ARRAY['admin'::text, 'user'::text]))),
   constraint webauthn_challenges_pkey PRIMARY KEY (id),
   constraint webauthn_challenges_challenge_key UNIQUE (challenge)
 );
+
+do $$ begin
+  alter table leaders.agent_eval_results add constraint agent_eval_results_run_id_fkey FOREIGN KEY (run_id) REFERENCES leaders.agent_eval_runs(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.assessment_answers add constraint assessment_answers_assessment_id_fkey FOREIGN KEY (assessment_id) REFERENCES leaders.assessments(id) ON DELETE CASCADE;
@@ -2842,6 +2945,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table public.admin_step_ups add constraint admin_step_ups_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES admin_users(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table public.admin_users add constraint admin_users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2904,6 +3011,10 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   alter table public.user_passkeys add constraint user_passkeys_registration_id_fkey FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS agent_eval_runs_one_running ON leaders.agent_eval_runs USING btree ((true)) WHERE (status = 'running'::text);
+
+CREATE INDEX IF NOT EXISTS agent_eval_runs_started_idx ON leaders.agent_eval_runs USING btree (started_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS assessments_one_in_progress ON leaders.assessments USING btree (participant_id, instrument_id) WHERE (status = 'in_progress'::text);
 
@@ -3149,6 +3260,12 @@ CREATE INDEX IF NOT EXISTS workshop_sessions_req_idx ON leaders.workshop_session
 
 CREATE INDEX IF NOT EXISTS admin_passkeys_admin_idx ON public.admin_passkeys USING btree (admin_id);
 
+CREATE INDEX IF NOT EXISTS admin_step_ups_admin_idx ON public.admin_step_ups USING btree (admin_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS admin_step_ups_session_idx ON public.admin_step_ups USING btree (session_hash, purpose) WHERE (consumed_at IS NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS admin_step_ups_totp_once ON public.admin_step_ups USING btree (admin_id, totp_step) WHERE (totp_step IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS api_sessions_expires_idx ON public.api_sessions USING btree (expires_at);
 
 CREATE INDEX IF NOT EXISTS contact_requests_created_idx ON public.contact_requests USING btree (created_at DESC);
@@ -3208,6 +3325,12 @@ CREATE INDEX IF NOT EXISTS planner_shares_with_idx ON public.planner_project_sha
 CREATE INDEX IF NOT EXISTS user_passkeys_reg_idx ON public.user_passkeys USING btree (registration_id);
 
 CREATE INDEX IF NOT EXISTS webauthn_challenges_created_idx ON public.webauthn_challenges USING btree (created_at);
+
+alter table leaders.agent_eval_results enable row level security;
+
+alter table leaders.agent_eval_runs enable row level security;
+
+alter table leaders.agent_settings enable row level security;
 
 alter table leaders.agent_spend_daily enable row level security;
 
@@ -3411,6 +3534,8 @@ alter table public.admin_role_permissions enable row level security;
 
 alter table public.admin_roles enable row level security;
 
+alter table public.admin_step_ups enable row level security;
+
 alter table public.admin_users enable row level security;
 
 alter table public.api_sessions enable row level security;
@@ -3457,6 +3582,55 @@ alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
 
+CREATE OR REPLACE FUNCTION leaders.agent_admin_conversations(p_from timestamp with time zone, p_to timestamp with time zone, p_limit integer, p_offset integer, p_who text)
+ RETURNS TABLE(id uuid, created_at timestamp with time zone, product text, locale text, status text, rating smallint, visitor_messages integer, model_calls integer, cost_micros bigint, handoff_reason text, contact_request_id uuid, contact_name text, contact_email text, total bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with c as (
+    select c.* from leaders.conversations c
+    where c.created_at >= p_from and c.created_at < p_to
+      and (p_who = 'all' or (p_who = 'contact' and c.contact_request_id is not null) or (p_who = 'visitor' and c.contact_request_id is null))
+  )
+  select c.id, c.created_at, c.product, c.locale, c.status, c.rating, c.visitor_messages,
+    coalesce(m.calls, 0), coalesce(m.cost, 0)::bigint, c.handoff_reason, c.contact_request_id,
+    r.name, r.email, count(*) over ()
+  from c
+  left join lateral (select (count(*) filter (where x.role = 'agent'))::integer calls, sum(x.cost_micros)::bigint cost
+                     from leaders.conversation_messages x where x.conversation_id = c.id) m on true
+  left join public.contact_requests r on r.id = c.contact_request_id
+  order by c.created_at desc limit least(greatest(p_limit, 1), 100) offset greatest(p_offset, 0);
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_admin_counts(p_since timestamp with time zone)
+ RETURNS TABLE(conversations bigint, handoffs bigint, with_calls bigint, canned bigint, agent bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select
+    (select count(*) from leaders.conversations c where c.created_at >= p_since),
+    (select count(*) from leaders.conversations c where c.handoff_at >= p_since),
+    (select count(distinct m.conversation_id) from leaders.conversation_messages m where m.role = 'agent' and m.created_at >= p_since),
+    (select count(*) from leaders.conversation_messages m where m.role = 'canned' and m.created_at >= p_since),
+    (select count(*) from leaders.conversation_messages m where m.role = 'agent' and m.created_at >= p_since);
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_admin_usage(p_since timestamp with time zone)
+ RETURNS TABLE(model text, calls bigint, input_tokens bigint, cache_read_tokens bigint, cache_write_tokens bigint, output_tokens bigint, cost_micros bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select m.model, count(*), coalesce(sum(m.input_tokens), 0)::bigint, coalesce(sum(m.cache_read_tokens), 0)::bigint,
+    coalesce(sum(m.cache_write_tokens), 0)::bigint, coalesce(sum(m.output_tokens), 0)::bigint, coalesce(sum(m.cost_micros), 0)::bigint
+  from leaders.conversation_messages m where m.role = 'agent' and m.created_at >= p_since and m.model is not null group by m.model;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.agent_claim_message(p_id uuid, p_max integer, p_at timestamp with time zone)
  RETURNS integer
  LANGUAGE sql
@@ -3464,6 +3638,26 @@ AS $function$
   update leaders.conversations set visitor_messages = visitor_messages + 1, last_visitor_at = p_at
   where id = p_id and status = 'bot' and visitor_messages < p_max
   returning visitor_messages;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_eval_add_cost(p_id uuid, p_delta bigint)
+ RETURNS bigint
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  update leaders.agent_eval_runs set cost_micros = cost_micros + greatest(p_delta, 0) where id = p_id returning cost_micros;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_eval_lease(p_id uuid, p_seconds integer)
+ RETURNS SETOF leaders.agent_eval_runs
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  update leaders.agent_eval_runs set lease_until = now() + make_interval(secs => least(greatest(p_seconds, 10), 300)), last_step_at = now()
+  where id = p_id and status = 'running' and (lease_until is null or lease_until < now())
+  returning *;
 $function$
 ;
 
@@ -3478,6 +3672,64 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.agent_key_clear(p_by text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare sid uuid;
+begin
+  select s.key_secret_id into sid from leaders.agent_settings s where s.id for update;
+  if sid is not null and to_regclass('vault.secrets') is not null then
+    execute 'delete from vault.secrets where id = $1' using sid;
+  end if;
+  update leaders.agent_settings s set key_secret_id = null, key_last4 = null, key_set_at = now(), key_set_by = left(p_by, 254),
+    key_ok_at = null, key_error_at = null, key_error = null, key_source = null, updated_at = now() where s.id;
+end; $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_key_set(p_key text, p_by text)
+ RETURNS TABLE(key_last4 text, key_set_at timestamp with time zone)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare sid uuid; l4 text; at timestamptz := now();
+begin
+  if p_key is null or p_key !~ '^sk-ant-[A-Za-z0-9_-]{20,200}$' then raise exception 'invalid_key' using errcode = '22023'; end if;
+  if to_regclass('vault.secrets') is null then raise exception 'vault_unavailable' using errcode = '55000'; end if;
+  l4 := right(p_key, 4);
+  select s.key_secret_id into sid from leaders.agent_settings s where s.id for update;
+  if sid is null or not exists (select 1 from vault.secrets v where v.id = sid) then
+    sid := vault.create_secret(p_key, 'leaders_agent_anthropic_key_' || to_char(at, 'YYYYMMDDHH24MISS'), 'مفتاح المساعد الآلي، يُدار من اللوحة');
+  else
+    perform vault.update_secret(sid, p_key);
+  end if;
+  update leaders.agent_settings s set key_secret_id = sid, key_last4 = l4, key_set_at = at, key_set_by = left(p_by, 254),
+    key_ok_at = at, key_error_at = null, key_error = null, key_source = 'db', updated_at = at where s.id;
+  return query select l4, at;
+end; $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_key_status(p_ok boolean, p_error text, p_source text)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  update leaders.agent_settings s set
+    key_ok_at = case when p_ok then now() else s.key_ok_at end,
+    key_error_at = case when p_ok then s.key_error_at else now() end,
+    key_error = case when p_ok then s.key_error
+      when p_error in ('http_400', 'http_401', 'http_403', 'http_404', 'http_429', 'http_5xx', 'network', 'timeout') then p_error else 'network' end,
+    key_source = case when p_source in ('db', 'env') then p_source else s.key_source end, updated_at = now()
+  where s.id and (
+    (p_ok and (s.key_ok_at is null or s.key_ok_at < now() - interval '1 minute'))
+    or (not p_ok and (s.key_error_at is null or s.key_error_at < now() - interval '1 minute' or s.key_error is distinct from p_error)));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.agent_purge_expired()
  RETURNS integer
  LANGUAGE plpgsql
@@ -3489,6 +3741,21 @@ begin
   return n;
 end;
 $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_runtime()
+ RETURNS TABLE(enabled boolean, enabled_fingerprint text, api_key text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare k text;
+begin
+  if to_regclass('vault.decrypted_secrets') is not null then
+    execute 'select d.decrypted_secret from vault.decrypted_secrets d join leaders.agent_settings s on s.key_secret_id = d.id where s.id' into k;
+  end if;
+  return query select s.enabled, s.enabled_fingerprint, k from leaders.agent_settings s where s.id;
+end; $function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.agent_spend_alert(p_day date, p_level integer)
@@ -3800,6 +4067,20 @@ begin
   end if;
   return new;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.admin_step_up_consume(p_session_hash text, p_admin uuid, p_purpose text)
+ RETURNS text
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  update public.admin_step_ups s set consumed_at = now()
+  where s.id = (
+    select x.id from public.admin_step_ups x
+    where x.session_hash = p_session_hash and x.admin_id = p_admin and x.purpose = p_purpose and x.consumed_at is null and x.expires_at > now()
+    order by x.created_at desc limit 1 for update skip locked)
+  returning s.method;
 $function$
 ;
 
