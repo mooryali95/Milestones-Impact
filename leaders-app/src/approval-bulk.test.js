@@ -130,3 +130,13 @@ describe('المرحلة 3: التحقق بالعينة', () => {
     expect(src).toContain('sample: sample.map((x: any) => x.id),');
   });
 });
+
+describe('بريد قرار المراجعة يحوّل رموز العنوان ولا يرسلها خامًا (تنسيق الزميل)', () => {
+  it('notifyReview يمر بـrenderJourneyText بإعداد متطلبات البرنامج نفسه', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('async function notifyReview'), src.indexOf('async function notifyReview') + 1500);
+    expect(fn).toContain("renderJourneyText(r?.title_ar || '', { reqs })");
+    expect(fn).toContain(".select('code, config').eq('program_id', r.program_id)");
+    expect(fn).not.toMatch(/reviewMail\(p\.full_name, r\?\.title_ar/);
+  });
+});
