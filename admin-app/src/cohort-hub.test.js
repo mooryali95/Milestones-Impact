@@ -101,9 +101,24 @@ describe('مقاعد الدفعة تنبيه لا منع', () => {
   it('تجاوزها نقص في بند الأعضاء بزر، وبلا مقاعد لا تنبيه', () => {
     const over = cohortHub({ cohort: { ...base, capacity: 25 }, cohorts: [base], orgs: [org], programs: [prog] }).items.find((x) => x.key === 'members');
     expect(over).toMatchObject({ ok: false, action: 'participants' });
-    expect(over.detail).toContain('29 عضوًا وللدفعة 25 مقعدًا');
+    expect(over.detail).toContain('29 عضوًا وسعة الدفعة التشغيلية 25');
     const fits = cohortHub({ cohort: { ...base, capacity: 40 }, cohorts: [base], orgs: [org], programs: [prog] }).items.find((x) => x.key === 'members');
     expect(fits).toMatchObject({ ok: true });
     expect(fits.detail).toContain('40 مقعدًا');
+  });
+});
+
+describe('المقاعد من العقد في معالج دفعة الجهة (تقييم P3)', () => {
+  it('دفعة الجهة لا تُرسل سعة من المعالج، ودفعة الأفراد ترسل ما كُتب', () => {
+    expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1', capacity: '50' })).not.toHaveProperty('capacity');
+    expect(wizardBody({ kind: 'individuals', name: 'أ', program_id: 'p1', capacity: '20' }).capacity).toBe(20);
+  });
+  it('تجاوز سعة دفعة الجهة يقود إلى السعة التشغيلية ويسمي العقد في ملف الجهة', () => {
+    const org = { id: 'o1', name: 'سفراء', status: 'active', invite_code: 'sufara-leaders' };
+    const prog = { id: 'p1', name: 'القادة', requirements: 10, versions: [] };
+    const c = { id: 'c1', name: 'د', organization_id: 'o1', program_id: 'p1', status: 'open', members: 30, capacity: 25 };
+    const m = cohortHub({ cohort: c, cohorts: [c], orgs: [org], programs: [prog] }).items.find((x) => x.key === 'members');
+    expect(m.detail).toMatch(/سعة الدفعة التشغيلية 25/);
+    expect(m.detail).toMatch(/مقاعد العقد الملزمة في ملف الجهة/);
   });
 });
