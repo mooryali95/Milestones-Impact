@@ -32,9 +32,10 @@ export default function BulkApprove({ ids, onClose, onPerson }) {
   const key = JSON.stringify([mode, chosen]);
   useEffect(() => {
     setPreview(null);
-    if (mode === 'set' && !Object.keys(chosen).length) return;
-    L('admin.approve-bulk', { ...body, dry_run: true }).then(setPreview);
-  }, [ids, key]); // eslint-disable-line react-hooks/exhaustive-deps
+    const [m, lv] = JSON.parse(key);
+    if (m === 'set' && !Object.keys(lv).length) return;
+    L('admin.approve-bulk', { participant_ids: ids, dry_run: true, ...(m === 'set' ? { mode: 'set', levels: lv } : {}) }).then(setPreview);
+  }, [ids, key]);
 
   const reasonShort = preview?.needs_reason && reason.trim().length < OVERRIDE_REASON_MIN;
   const run = async () => {
