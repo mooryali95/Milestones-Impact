@@ -223,6 +223,11 @@ export async function expertDoc(participantId: string) {
   return withTracking(await recordFor(p, 'sponsor'), p.id);
 }
 
+// لمن يفتح رابط المشاركة (share.ts): الوثيقة كما يقرؤها الراعي، وshare.js publicDoc يحذف منها ما ليس للقارئ
+export async function shareDocFor(p: any) {
+  return withTracking(await recordFor(p, 'sponsor'), p.id);
+}
+
 export async function doc(p: any) {
   return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
 }

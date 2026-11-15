@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMissingMs: 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -91,7 +91,8 @@ async function postOnce(text: string, threadTs?: string): Promise<Sent> {
 // ── آخر نجاح وآخر خطأ في leaders.ops_status (صف channel=slack) ──
 // النسخ كثيرة وقصيرة العمر، وما تذكره نسخة لا تعرفه أختها: نسخة تحجب نجاحها لأنها كتبت نجاحًا قبل قليل تُبقي خطأ نسخة
 // أخرى ظاهرًا بعده. فكل نتيجة تُرسل، والقاعدة تحكم (مشغّل ops_status_keep_latest): الأحدث يبقى ولو وصل قبل الأقدم، وما لا
-// يغير الحال خلال دقيقة لا يُكتب. لا يُنتظر ولا يُفشل النشر، وغياب الجدول (قبل ترحيله) يوقف الإرسال مدة missingTableMs.
+// يغير الحال خلال دقيقة لا يُكتب. لا يُنتظر ولا يُفشل النشر، وغياب الجدول (قبل ترحيله) يوقف الإرسال مدة statusMissingMs
+// (دقيقة: نسخة دافئة سألت قبل الترحيل لا تحجب الحال طويلًا بعده). غير الغياب (صلاحية مثلًا) يُسجَّل ولا يوقف.
 // 'paused' ليس ردًا من سلاك (توقف بعد 429 داخل النسخة) فلا يُسجَّل
 const statusOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('ops_status');
 let statusMissingUntil = 0;
@@ -108,7 +109,7 @@ function recordSlack(r: Sent) {
       .then(() => statusOf(client).upsert(row, { onConflict: 'channel' }))
       .then((res: { error?: { code?: string; message?: string } } | null) => {
         if (!res?.error) return;
-        if (isMissing(res.error, 'ops_status')) statusMissingUntil = Date.now() + SLACK.missingTableMs;
+        if (isMissing(res.error, 'ops_status')) statusMissingUntil = Date.now() + SLACK.statusMissingMs;
         console.error('ops_status write:', res.error.message || res.error);
       })
       .catch((e: unknown) => console.error('ops_status write:', e))
@@ -129,7 +130,13 @@ type Thread = { ts: string; cache?: boolean } | { flat: true; settled?: boolean 
 const threads = new Map<string, Promise<Thread>>();
 const flatUntil = new Map<string, number>();
 let missingUntil = 0;
-const isMissing = (e: { code?: string; message?: string }, table = 'slack_threads') => e?.code === '42P01' || e?.code === 'PGRST205' || String(e?.message || '').includes(table);
+// غياب الجدول وحده: رمزه، أو رسالة الغياب نفسها باسمه. «permission denied for table ...» يحمل الاسم وليس غيابًا
+export const isMissing = (e: { code?: string; message?: string }, table = 'slack_threads') => {
+  if (e?.code === '42P01' || e?.code === 'PGRST205') return true;
+  if (e?.code) return false;
+  const m = String(e?.message || '');
+  return m.includes(table) && /does not exist|could not find/i.test(m);
+};
 
 // الحجز قبل النشر (كرسالة الربط): الصف (day, category, ts='') أولًا، ومن ينجح إدراجه وحده ينشر الأم ثم يكتب ts.
 // نسخة أخرى سبقت: تنتظر ts قليلًا، وإن لم يظهر نشرت هذه الدفعة بلا سلسلة

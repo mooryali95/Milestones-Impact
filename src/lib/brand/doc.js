@@ -75,15 +75,19 @@ export const callout = (title, text) => `<div class="callout"><b>${esc(title)}</
 export const points = (items, empty = 'لا شيء') => (items.length ? `<ul class="points">${items.map((t) => `<li>${t && t.html != null ? t.html : esc(t)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
 
 // ── الوثيقة ──
-// meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص, pageAr?: ترقيم الصفحات بالعربية }
-export function documentHtml(meta, body) {
+// meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص, pageAr?: ترقيم الصفحات بالعربية,
+//         selfFonts?: خطوط المنصة المستضافة ذاتيًا (/fonts/fonts.css): سياسة CSP في تطبيقي القادة والإدارة تمنع Google Fonts,
+//         pdfName?: اسم ملف PDF الجاهز، فيظهر في الشريط زر «تحميل PDF» (pdf.js) }
+// opts.pdf: الوثيقة تُرسم لتصدير PDF (pdf.js): بلا شريط ولا ظل ولا هامش حول الورقة
+// opts.embed: الوثيقة داخل صفحة (رابط المشاركة): بلا شريط، والصفحة المضيفة تحمل أزرارها
+export function documentHtml(meta, body, opts = {}) {
   const id = meta.id || docId(meta.kind || 'DOC');
   const year = new Date().getFullYear();
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
-  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+  return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : ''}><head><meta charset="utf-8">
 <title>${esc(meta.title)} · Milestone Impact</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
+${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">`}
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
   @bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }
@@ -94,6 +98,13 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .sheet { max-width: 210mm; margin: 0 auto; background: ${C.paper}; padding: 0 0 14mm; }
 @media screen { .sheet { margin: 12mm auto; box-shadow: 0 0 0 1px ${C.line}; } .sheet > *:not(.mast) { padding-inline: 18mm; } }
 @media print { html { background: none; } .sheet { max-width: none; padding: 0; } .toolbar { display: none !important; } }
+html.pdf { background: ${C.paper}; } html.pdf .toolbar { display: none !important; }
+html.pdf .sheet { margin: 0; box-shadow: none; max-width: 210mm; width: 210mm; padding-bottom: 0; }
+html.embed { background: transparent; } html.embed .toolbar { display: none !important; }
+html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
+@media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
+p, li { orphans: 3; widows: 3; }
+h2, h3 { break-after: avoid; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
 @media screen { .toolbar { display: flex; } }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
@@ -166,7 +177,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 .rights b { font-weight: 400; color: ${C.slate}; }
 .dm { display: inline-block; vertical-align: middle; }
 </style></head><body>
-<div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
+<div class="toolbar">${meta.pdfName ? '<button class="pri" data-act="pdf">تحميل PDF</button><button data-act="print">طباعة</button>' : '<button class="pri" data-act="print">طباعة أو حفظ PDF</button>'}<button data-act="close">إغلاق</button></div>
 <article class="sheet">
   <header class="mast">
     <div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>
@@ -202,6 +213,23 @@ export function writeDocument(win, meta, body) {
   win.document.write(documentHtml(meta, body));
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
+  // «تحميل PDF»: يُبنى الملف في نافذة المنصة (pdf.js) ويُحفظ من النافذة نفسها، والزر يعرض تقدمه
+  const pdfBtn = win.document.querySelector('[data-act="pdf"]');
+  pdfBtn?.addEventListener('click', async () => {
+    if (pdfBtn.disabled) return;
+    pdfBtn.disabled = true;
+    const label = pdfBtn.textContent;
+    try {
+      const { downloadPdf } = await import('./pdf.js');
+      await downloadPdf(meta, body, { onProgress: (t) => { pdfBtn.textContent = t; } });
+      pdfBtn.textContent = 'حُفظ الملف';
+    } catch (e) {
+      console.error(e);
+      pdfBtn.textContent = 'تعذّر التحميل، استعمل «طباعة»';
+    } finally {
+      setTimeout(() => { pdfBtn.textContent = label; pdfBtn.disabled = false; }, 2500);
+    }
+  });
   win.document.querySelector('[data-act="close"]')?.addEventListener('click', () => win.close());
   return true;
 }
