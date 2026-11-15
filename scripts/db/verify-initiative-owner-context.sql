@@ -61,8 +61,8 @@ with t as (
     lateral (select key k, value val from jsonb_each_text(to_jsonb(m) - 'fields' - 'id')
              union all select (f->>'key') || '.' || p.key, p.value from jsonb_array_elements(m.fields) f, jsonb_each_text(f) p) v
    where m.capstone_sort is not null
-  union all select 'req:' || code, 'help_ar', help_ar from leaders.stage_requirements where code like 'CP-%'),
-hits as (select distinct src, fld, substring(txt from '[^.\n،]*(?:جهتك|جهته|هيكل الجهة|استراتيجية الجهة|خطة الجهة|يقنع الجهة|تكلّف الجهة|من الجهة نفسها)[^.\n،]*') snip
+  union all select 'req:' || code || ':' || left(program_id::text, 8), 'help_ar', help_ar from leaders.stage_requirements where code like 'CP-%'),
+hits as (select distinct src, fld, case when src like 'req:%' then txt else substring(txt from '[^.\n،]*(?:جهتك|جهته|هيكل الجهة|استراتيجية الجهة|خطة الجهة|يقنع الجهة|تكلّف الجهة|من الجهة نفسها)[^.\n،]*') end snip
            from t where txt ~ 'جهتك|جهته|هيكل الجهة|استراتيجية الجهة|خطة الجهة|يقنع الجهة|تكلّف الجهة|من الجهة نفسها')
 select not exists (select 1 from hits) as ok,
        'نماذج الوثيقة: ' || (select count(*) from leaders.learning_models where capstone_sort is not null) || ' · مواضع: ' || (select count(*) from hits)
