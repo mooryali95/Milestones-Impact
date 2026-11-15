@@ -4,7 +4,7 @@
 // القارئ واحد في اللوحة وبوابة الخبير. الخبير يقرأ إن كان عضوًا فاعلًا في لجنة المحتوى أو القياس (bookAccess)،
 // والمدير بأي دور (المراقب يقرأ ولا يكتب). يكتب التعليق الخبير والمدير الكاتب، ويحذفه كاتبه، ويحسمه المدير الكاتب.
 // المتن والاختبار يُرسلان كما هما: هذا كتاب المراجعين، والإجابة الصحيحة جزء مما يراجعونه.
-import { audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
+import { all, audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
 import { canDelete, canResolve, cleanComment, commentTarget, draftChapters, openCounts, orderChapters, rowChapterId, threads, versionFromMigration, authorRole, bookAccess, shareRoster, toggleCommittee } from './master-book.js';
 import { DRAFTS } from './master-book-drafts.js';
 import { sectionById, sectionIdOf } from './section-refs.js';
@@ -55,8 +55,11 @@ export async function book(v: Viewer) {
   const share = v.kind === 'admin'
     ? { portal_url: `${CONFIG.appUrl}/x`, ...shareRoster(((await db.from('experts').select('id, full_name, email, title, status, committees').neq('status', 'rejected').limit(500)).data || []) as any[]) }
     : null;
+  // للإدارة وحدها (المرحلة 3 من «الكتاب الأم»): ما يعتمد على كل باب من القاعدة، فيُعرف حجم أي تعديل قبله.
+  // تعذّر القراءة لا يُسقط الكتاب: تُعرض اللوحة بلا هذه الأجزاء
+  const deps = v.kind === 'admin' ? await bookDeps().catch(() => null) : null;
   return {
-    success: true, version: ver, generated_at: new Date().toISOString(), share,
+    success: true, version: ver, generated_at: new Date().toISOString(), share, deps,
     viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, resolve: canResolve(v) },
     comments_ready: rows !== null,
     chapters: [...mods.map((m) => ({
@@ -128,4 +131,24 @@ export async function setReader(a: { email: string }, b: any) {
   if (error) throw new Fail('تعذّر حفظ العضوية، حاول بعد قليل', 503, 'db_error');
   await audit('admin', a.email, 'book.reader', 'experts', e.id, { committees: e.committees || [] }, { committees: next });
   return { success: true, committees: next };
+}
+
+// ما يعتمد على الأبواب في القاعدة: فقرات القياس في الأدوات الفاعلة، وأدوات المختبر، ومن أكمل الباب (فاختباره مقفل).
+// المسارات ووثيقة المبادرة محتوى في المستودع، فيقرؤها القارئ من مصدرها (shared/master-book/deps.js)
+async function bookDeps() {
+  const [ins, questions, labs, progress] = await Promise.all([
+    db.from('instruments').select('id, key, title_ar, active').then((r: any) => (r.data || []) as any[]),
+    all((f, t) => db.from('questions').select('code, dimension, chapter_key, competency_ar, instrument_id').eq('active', true).order('id').range(f, t)),
+    db.from('lab_items').select('key, dimension, chapter_key, title_ar, min_level, active').order('sort').then((r: any) => (r.data || []) as any[]),
+    all((f, t) => db.from('handbook_progress').select('module_id').order('participant_id').order('module_id').range(f, t)),
+  ]);
+  const live = new Map(ins.filter((i: any) => i.active).map((i: any) => [i.id, i.title_ar || i.key]));
+  const completions: Record<string, number> = {};
+  for (const r of progress as any[]) completions[r.module_id] = (completions[r.module_id] || 0) + 1;
+  return {
+    questions: (questions as any[]).filter((q) => live.has(q.instrument_id) && q.chapter_key)
+      .map((q) => ({ code: q.code, dimension: q.dimension, chapter_key: q.chapter_key, competency: q.competency_ar || null, instrument: live.get(q.instrument_id) })),
+    labs: labs.filter((l: any) => l.active !== false).map((l: any) => ({ key: l.key, dimension: l.dimension, chapter_key: l.chapter_key, title: l.title_ar, min_level: l.min_level })),
+    completions,
+  };
 }

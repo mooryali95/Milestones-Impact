@@ -345,3 +345,20 @@
 .mb-vol.draft .mb-vol-img { opacity: .18; }
 .mb-vol.draft .mb-vol-in i { font: 400 30px/1 var(--body); }
 @media (min-width: 720px) { .mb-vols:has(.mb-vol.draft) { grid-template-columns: repeat(4, 1fr); } }
+
+/* ── ما يعتمد على هذا (المرحلة 3) ── */
+.mb-chip.deps { cursor: pointer; border-color: var(--gold-light); color: #FFF3DC; background: rgba(6, 19, 24, .45); font: inherit; font-size: 11px; }
+.mb-chip.deps:hover { background: var(--gold); color: var(--ink); }
+.mb-sec-ref { position: absolute; top: 32px; inset-inline-end: 84px; border: 1px dashed var(--gold); background: transparent; color: var(--gold-text); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+.mb-dep-lead { margin: 4px 0 12px; font-size: 14px; line-height: 1.9; color: var(--slate); }
+.mb-dep { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; }
+.mb-dep header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mb-dep header b { font-weight: 500; font-size: 14px; color: var(--graphite); }
+.mb-dep-n { min-width: 28px; height: 28px; border-radius: 14px; padding: 0 8px; display: inline-grid; place-items: center; background: var(--graphite); color: var(--gold-light); font: 400 13px "Noto Sans", sans-serif; }
+.mb-dep.none { opacity: .55; } .mb-dep.none .mb-dep-n { background: var(--line); color: var(--muted); }
+.mb-dep.warn:not(.none) { border-color: rgba(154, 91, 18, .45); } .mb-dep.warn:not(.none) .mb-dep-n { background: var(--warn); color: #fff; }
+.mb-dep p { margin: 6px 0 0; font-size: 13px; line-height: 1.85; color: var(--slate); }
+.mb-dep-list { margin: 6px 0 0; padding-inline-start: 18px; font-size: 13.5px; line-height: 1.9; color: var(--slate); }
+.mb-dep-list small { color: var(--muted); }
+.mb-dep-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.mb-dep-tags .mb-tag { font-size: 11px; padding: 2px 8px; }
