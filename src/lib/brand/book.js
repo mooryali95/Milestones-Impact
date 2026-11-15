@@ -329,7 +329,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .cards.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .card { border: 1px solid ${C.line}; border-top: 0.6mm solid ${C.gold}; padding: 3.5mm 4mm; break-inside: avoid; background: #fff; }
 .card { min-width: 0; overflow-wrap: anywhere; }
-.card .n { font: 300 8pt "Noto Sans", sans-serif; color: ${C.gold}; } .card b { display: block; font-weight: 400; font-size: 10.5pt; margin: .5mm 0 1mm; color: ${C.graphite}; }
+.card .n { font: 300 8pt "Noto Sans", sans-serif; color: ${C.gold}; } .card > b { display: block; font-weight: 400; font-size: 10.5pt; margin: .5mm 0 1mm; color: ${C.graphite}; }
 .card p { margin: 0; font-size: 9.6pt; line-height: 1.85; color: ${C.graphite}; text-align: start; }
 /* إنفوجرافيك: مسار خطوات */
 .steps { list-style: none; margin: 4mm 0 5mm; padding: 0; position: relative; }
