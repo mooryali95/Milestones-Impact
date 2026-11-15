@@ -1325,7 +1325,7 @@ export async function save(a: Admin, b: Body) {
     for (const k of e.key) q = q.eq(k, b.row[k]);
     return q.select('*').single();
   };
-  // companion_allowed (ترحيل 20261115200000) لا يرسله نموذج الجهة قبل وجود العمود في صفها المقروء (OrgForm companionKnown)
+  // companion_allowed (ترحيل 20261115230000) لا يرسله نموذج الجهة قبل وجود العمود في صفها المقروء (OrgForm companionKnown)
   const saved = must(await write(stamp), isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
   const before = current ? Object.fromEntries(Object.keys(row).filter((k) => JSON.stringify(row[k] ?? null) !== JSON.stringify(current![k] ?? null)).map((k) => [k, current![k] ?? null])) : null;
   await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);

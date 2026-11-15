@@ -35,7 +35,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const METHOD_AR: Record<string, string> = { passkey: 'مفتاح المرور', totp: 'تطبيق المصادقة' };
 
 export class NotMigrated extends Error {}
-const notMigrated = () => new Fail('لم يُطبَّق ترحيل 20261115200000 بعد', 409, 'not_migrated');
+const notMigrated = () => new Fail('لم يُطبَّق ترحيل 20261115230000 بعد', 409, 'not_migrated');
 const missing = (e: any) => !!e && ['42P01', 'PGRST205', 'PGRST202', '42883'].includes(String(e.code));
 
 export type Settings = {

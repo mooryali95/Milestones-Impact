@@ -1,11 +1,11 @@
-// ترحيل 20261115200000 (إدارة المساعد) على قاعدة مؤقتة: Vault محاكى بجدول ودالتين ومنظر كما في Supabase، فالمفتاح
+// ترحيل 20261115230000 (إدارة المساعد) على قاعدة مؤقتة: Vault محاكى بجدول ودالتين ومنظر كما في Supabase، فالمفتاح
 // يُحفظ ويُقرأ ويُحذف ولا يُعاد من دالة الحفظ، والتحقق الإضافي يُستهلك مرة واحدة ولجلسته، وتشغيل واحد جارٍ، والعقد ذري.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 
-const SQL = readFileSync(join(__dirname, '../../supabase/migrations/20261115200000_leaders_agent_admin.sql'), 'utf8');
+const SQL = readFileSync(join(__dirname, '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'), 'utf8');
 const BEFORE = `create role anon; create role authenticated; create role service_role; create schema leaders;
   create table leaders.schema_migrations (name text primary key);
   create table leaders.organizations (id uuid primary key default gen_random_uuid(), name text);
@@ -32,13 +32,13 @@ async function db(vault = true) {
 }
 const one = async (d, q, p = []) => (await d.query(q, p)).rows[0];
 
-describe('ترحيل 20261115200000_leaders_agent_admin', () => {
+describe('ترحيل 20261115230000_leaders_agent_admin', () => {
   it('صف إعداد واحد مطفأ افتراضيًا، والجهة تسمح بالمرافق افتراضيًا، والترحيل مسجل ويُعاد بأمان', async () => {
     const d = await db();
     expect((await d.query('select enabled from leaders.agent_settings')).rows).toEqual([{ enabled: false }]);
     await d.exec(`insert into leaders.organizations (name) values ('جهة')`);
     expect((await one(d, 'select companion_allowed from leaders.organizations')).companion_allowed).toBe(true);
-    expect((await one(d, `select count(*)::int n from leaders.schema_migrations where name = '20261115200000_leaders_agent_admin'`)).n).toBe(1);
+    expect((await one(d, `select count(*)::int n from leaders.schema_migrations where name = '20261115230000_leaders_agent_admin'`)).n).toBe(1);
     await expect(d.exec('insert into leaders.agent_settings (id) values (false)')).rejects.toThrow();
   });
 

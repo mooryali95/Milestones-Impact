@@ -159,7 +159,7 @@ function domainHint(email, domains) {
   return `⚠ نطاق البريد «${d}» ليس من نطاقات الجهة (${domains.join('، ')}). تأكد من كتابته، فالدعوة تُرسل إليه.`;
 }
 
-// مفتاح المرافق الذكي يُرسل بعد ترحيل 20261115200000 وحده: العمود في صف الجهة المقروء (أو في أي جهة للجهة الجديدة)
+// مفتاح المرافق الذكي يُرسل بعد ترحيل 20261115230000 وحده: العمود في صف الجهة المقروء (أو في أي جهة للجهة الجديدة)
 export const companionKnown = (org, ready = false) => ready || !!(org && 'companion_allowed' in org);
 
 export default function OrgForm({ org, coordinator, onClose, companionReady = false }) {
@@ -319,7 +319,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
                 <span>{v.companion_allowed ? 'مسموح' : 'غير مسموح'}</span></label>
             </Field>
             <p className="la-muted small">المرافق الذكي داخل تطبيق القادة يعمل حين تسمح به الجهة ويُفعَّل في الدفعة، والأفراد بلا جهة مسموح لهم افتراضيًا. مساعد الموقع العام متاح لكل زائر ولا يتأثر بهذا الإعداد.</p>
-            {!companionKnown(org, companionReady) && <p className="la-muted small">يُحفظ هذا الإعداد بعد تطبيق ترحيل 20261115200000.</p>}
+            {!companionKnown(org, companionReady) && <p className="la-muted small">يُحفظ هذا الإعداد بعد تطبيق ترحيل 20261115230000.</p>}
           </section>
 
           <section className="of-sec">

@@ -67,7 +67,7 @@ describe('خلاصة الأقسام', () => {
       .toBe('آخر تشغيل: ناجح، أسئلة الجودة 92.9% (39/42) واختبار الحماية 100% (21/21)، 0.07 دولار');
   });
   it('خريطة أخطاء المفتاح تغطي كل رمز يقبله القيد في القاعدة', () => {
-    const sql = readFileSync(join(__dirname, '../../supabase/migrations/20261115200000_leaders_agent_admin.sql'), 'utf8');
+    const sql = readFileSync(join(__dirname, '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'), 'utf8');
     const codes = sql.match(/key_error text check \(key_error in \(([^)]+)\)\)/)[1].match(/'([^']+)'/g).map((x) => x.slice(1, -1));
     for (const c of codes) expect(KEY_ERROR_AR[c], c).toBeTruthy();
     expect(keyMessage({ code: 'key_rejected' })).toMatch(/رفضت Anthropic/);
@@ -117,7 +117,7 @@ describe('مفتاح المرافق في نموذج الجهة وتبويب ال
   });
   it('لا شرطة طويلة ولا متوسطة في الملفات الجديدة', () => {
     const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',
-      '../../supabase/functions/agent-chat/version.ts', '../../supabase/functions/agent-chat/evals/runner.ts', '../../supabase/functions/admin-api/step_up.ts', '../../supabase/migrations/20261115200000_leaders_agent_admin.sql'];
+      '../../supabase/functions/agent-chat/version.ts', '../../supabase/functions/agent-chat/evals/runner.ts', '../../supabase/functions/admin-api/step_up.ts', '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'];
     for (const f of files) expect(/[\u2013\u2014]/.test(readFileSync(join(__dirname, f), 'utf8')), f).toBe(false);
   });
 });

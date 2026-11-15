@@ -478,10 +478,10 @@ export default function Agent({ isSuper = false }) {
 
   if (!s) return <Spinner />;
   if (!s.success) {
-    if (s.code === 'not_migrated') return <Empty title="لم يُطبَّق ترحيل 20261115200000 بعد" hint="طبّقه من RUNBOOK §7، ثم أعد فتح الشاشة." />;
+    if (s.code === 'not_migrated') return <Empty title="لم يُطبَّق ترحيل 20261115230000 بعد" hint="طبّقه من RUNBOOK §7، ثم أعد فتح الشاشة." />;
     return <div className="la-err" role="alert">{s.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={load}>أعد المحاولة</button></div>;
   }
-  if (!s.ready) return <Empty title="لم يُطبَّق ترحيل 20261115200000 بعد" hint="طبّقه من RUNBOOK §7، ثم أعد فتح الشاشة." />;
+  if (!s.ready) return <Empty title="لم يُطبَّق ترحيل 20261115230000 بعد" hint="طبّقه من RUNBOOK §7، ثم أعد فتح الشاشة." />;
   const writable = isSuper && s.can_write;
   const sec = (id) => ({ open: !shut.has(id), onToggle: () => toggle(id) });
   const lastRun = runs?.[0] || s.latest_run;

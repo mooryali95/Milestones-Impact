@@ -1514,6 +1514,23 @@ export function moveImpact({ participants = [], enrollments = [], progress = [] 
   const list = (m) => [...m].map(([id, name]) => ({ id: id || null, name }));
   return { moved, stay, from: list(from), to: list(to) };
 }
+// الإلحاق الصريح بدفعة (admin.cohort-enroll): من له تقدم وتنقله الإلحاقة من دفعة على برنامج إلى دفعة على برنامج آخر.
+// الإلحاقة تسحب تسجيلاته الأخرى وتجعل الدفعة صريحة له، فدفعته بعدها هي الهدف أيًا كانت جهته (pickCohort)
+/** @param {{ participants?: any[], enrollments?: any[], progress?: any[], cohorts?: any[] }} world @param {any} target */
+export function enrollImpact({ participants = [], enrollments = [], progress = [], cohorts = [] } = {}, target) {
+  const has = new Set((progress || []).map((r) => r.participant_id));
+  const byP = byParticipant(enrollments);
+  const from = new Map();
+  let moved = 0;
+  for (const p of participants || []) {
+    if (!has.has(p.id) || !target) continue;
+    const a = pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort;
+    if (!a || a.id === target.id || a.program_id === target.program_id) continue;
+    moved++;
+    from.set(a.id, a.name || '');
+  }
+  return { moved, from: [...from].map(([id, name]) => ({ id, name })), to: target ? [{ id: target.id, name: target.name || '' }] : [] };
+}
 // الدفعات بعد حفظ cohort: تحل محل نسختها القائمة أو تُضاف
 export const cohortsAfter = (cohorts = [], cohort) => [...(cohorts || []).filter((c) => c.id !== cohort.id), cohort];
 // فتح دفعة جهة: من ينقلهم إليها من دفعة جهتهم أو من الدفعة المفتوحة على برنامج آخر

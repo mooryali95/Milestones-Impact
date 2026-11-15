@@ -10,7 +10,7 @@ export const EXPORT_TABLES = {
   participant_requirements: ['reviewed_by'], participant_milestones: [], participant_stage_overrides: [],
   handbook_progress: [], handbook_views: [], handbook_exports: [], reading_progress: [], video_progress: [], content_progress: [],
   lab_attempts: [], lab_grants: [], model_submissions: [], katon_answers: [], points_ledger: [],
-  capstones: ['reviewed_by', 'approved_by'], capstone_updates: [], certificates: ['issued_by', 'revoked_by'], reports: [],
+  capstones: ['reviewed_by', 'approved_by'], capstone_updates: [], capstone_shares: [], capstone_share_notes: ['ip_hash'], certificates: ['issued_by', 'revoked_by'], reports: [],
   coaching_sessions: ['confirmed_by'], expert_requests: ['created_by', 'tried'], expert_ratings: [], peer_requests: ['closed_by'],
   cohort_group_members: [], cohort_roles: [], hall_presence: [], workshop_attendance: [],
   sponsor_requests: ['decided_by'],

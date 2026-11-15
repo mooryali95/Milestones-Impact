@@ -12,6 +12,7 @@ import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tr
 import { DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { businessCase, charterData, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
+import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
 import { closureData } from '../../../supabase/functions/leaders-api/closure.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
@@ -53,9 +54,9 @@ const STYLE = `<style>
 .cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: 9pt; margin-top: 6mm; }
 .cp-score b { font: 200 30pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
 .cp-break { break-before: page; }
-.cp-charter { width: 100%; border-collapse: collapse; font-size: 9.2pt; }
-.cp-charter th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; color: #5F7176; padding: 1.8mm 0; border-bottom: 1px solid #EEF1F0; }
-.cp-charter td { padding: 1.8mm 0 1.8mm 2mm; border-bottom: 1px solid #EEF1F0; line-height: 1.8; color: #2C4148; white-space: pre-line; }
+.cp-charter { width: 100%; border-collapse: collapse; font-size: 8.9pt; }
+.cp-charter th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; color: #5F7176; padding: 1.3mm 0; border-bottom: 1px solid #EEF1F0; }
+.cp-charter td { padding: 1.3mm 0 1.3mm 2mm; border-bottom: 1px solid #EEF1F0; line-height: 1.7; color: #2C4148; white-space: pre-line; }
 .cp-case { margin: 0 0 5mm; break-inside: avoid; }
 .cp-case h3 { margin: 0 0 1mm; } .cp-case > small { display: block; color: #5F7176; font-size: 8pt; margin-bottom: 2mm; }
 /* الوثيقة عربية: عناوين الأقسام الصغيرة بالعربية بلا تباعد أحرف يقطع وصلها */
@@ -67,7 +68,14 @@ const STYLE = `<style>
 .tbl { table-layout: fixed; }
 .tbl th { white-space: normal; line-height: 1.5; vertical-align: bottom; }
 .tbl td { overflow-wrap: break-word; }
-#ch-charter + .sec { break-before: page; }
+/* صفحات تبدأ من أعلى الورقة: الفهرس، والميثاق، وحالة العمل، وخطة الانطلاق، وأول الفصول، والملاحق. قاعدة واحدة تحكم الطباعة وملف PDF (pdf.js) */
+.cp-np + .sec { break-before: page; }
+.cp-why { break-after: avoid; }
+.tbl thead { break-after: avoid; }
+.kpis, .cp-case, .cp-launch > div, .cp-toc2 li, .cp-charter tr, .cp-gloss tr, .points li, .cp-check li, .cp-tree li { break-inside: avoid; }
+/* رقم الصفحة في الفهرس: مكانه محجوز في الملف وحده، يكتبه pdf.js بعد تقسيم الصفحات */
+.cp-pgno { display: none; }
+html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 300 8pt "Noto Sans", sans-serif; color: #5F7176; }
 .cp-anchor { display: block; height: 0; }
 .cp-toc2 { display: grid; gap: 3mm; }
 .cp-toc2 .ph { break-inside: avoid; }
@@ -97,6 +105,13 @@ const STYLE = `<style>
 .cp-gloss th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; color: #0B272F; }
 .cp-gloss td { padding: 1.6mm 0 1.6mm 2mm; border-bottom: 1px solid #EEF1F0; color: #2C4148; line-height: 1.7; }
 .cp-gloss tr { break-inside: avoid; }
+.cp-fig svg.mi-narrow { max-width: 105mm !important; display: block; margin: 0 auto; }
+.mi-legend { display: flex; gap: 4mm; flex-wrap: wrap; font-size: 7.4pt; color: #5F7176; margin-top: 1.5mm; }
+.mi-lg { display: inline-flex; align-items: center; gap: 1.2mm; }
+.mi-lg i { display: inline-block; width: 4mm; height: 1.6mm; border-radius: 1px; }
+.mi-lg i.dash { height: 0; border-top: 1px dashed #5F7176; background: none; }
+.mi-lg i.dm { width: 2mm; height: 2mm; transform: rotate(45deg); }
+.mi-lg i.ln { height: 0; border-top: 1px solid #5F7176; background: none; }
 .cp-case .cp-miss { color: #5F7176; font-size: 8.6pt; border: 1px dashed #DCE2E1; padding: 2mm 3mm; border-radius: 2px; }
 </style>`;
 
@@ -172,15 +187,19 @@ export function heatmap(columns, rows) {
 <figcaption>خريطة المخاطر: عدد البنود في كل خانة</figcaption></figure>`;
 }
 
-function costBlock(cost) {
+function costBlock(cost, doc = null) {
   if (!cost) return '';
+  // منحنى الإنفاق والتكلفة بالحزمة (visuals.js) حين تكتمل بياناتهما، وإلا أشرطة البنود
+  const curve = doc ? sCurveSvg(doc) : null, bars2 = doc ? costBarsSvg(doc) : null;
+  const figs = [curve?.svg && `<figure class="cp-fig">${curve.svg}<figcaption>الإنفاق التراكمي المخطط على أنشطة الجدول، مقابل الموازنة والتكلفة مع الاحتياطي</figcaption></figure>`,
+    bars2?.svg && `<figure class="cp-fig">${bars2.svg}<figcaption>التكلفة بالحزمة الأولى في هيكل التجزئة</figcaption></figure>`].filter(Boolean).join('');
   const rows = Object.entries(cost.by || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => ({ label: k, value: Math.round(v) }));
   return `${kpis([
     { value: money(cost.total), label: 'التكلفة التقديرية' },
     { value: `${cost.contingency || 0}%`, label: 'الاحتياطي' },
     { value: money(cost.withContingency), label: 'مع الاحتياطي' },
     { value: money(cost.envelope), label: 'الميزانية المتاحة', hint: cost.envelope != null ? (cost.withContingency <= cost.envelope ? 'ضمن الميزانية' : 'تتجاوز الميزانية') : '' },
-  ])}${rows.length > 1 ? `<div class="cp-fig">${bars(rows, Math.max(...rows.map((r) => r.value)), { ltr: true })}<p class="cp-legend">التكلفة بحسب رمز الحزمة</p></div>` : ''}`;
+  ])}${figs || (rows.length > 1 ? `<div class="cp-fig">${bars(rows, Math.max(...rows.map((r) => r.value)), { ltr: true })}<p class="cp-legend">التكلفة بحسب رمز الحزمة</p></div>` : '')}`;
 }
 
 // عرض كل عمود بقدر محتواه: الرقم القصير لا يأخذ عرض الوصف الطويل فينكسر الوصف كلمةً في كل سطر
@@ -210,11 +229,20 @@ function fieldHtml(f) {
 }
 
 // أبواب الوثيقة: عنوان صغير عربي برقم الفصل وإطاره، ومرساة يقفز إليها الفهرس
-const anchor = (key) => `<span class="cp-anchor" id="ch-${esc(key)}"></span>`;
+// np: القسم يبدأ صفحة جديدة
+const anchor = (key, np = false) => `<span class="cp-anchor${np ? ' cp-np' : ''}" id="ch-${esc(key)}"></span>`;
 const eyebrow = (s, n) => `الفصل ${n}${DIM_AR[s.dimension] ? ` · إطار ${DIM_AR[s.dimension]}` : ''}`;
 
 // skip: حقول عُرضت في الميثاق فلا تُكرر في فصل البطاقة
-function chapter(s, i, skip = null) {
+// رسم الفصل في الوثيقة من سجل اللوحات نفسه (visuals.js BOARDS): ما يقرأ فصلًا يُطبع داخله. الجدول والإنفاق لهما موضعاهما
+const INLINE = Object.freeze({ wbs: 'wbs', 'milestone-register': 'roadmap', raid: 'risk', 'stakeholder-map': 'stakeholders', 'theory-of-change': 'change', 'benefits-register': 'benefits', governance: 'raci' });
+function boardFigures(key, doc, viz) {
+  const b = BOARDS.find((x) => x.key === INLINE[key]);
+  if (!b || !doc) return '';
+  return b.parts(doc, viz).filter((p) => p.svg).map((p) => `<figure class="cp-fig">${p.svg}${p.legend || ''}<figcaption>${esc(p.title || b.title)}: يُولَّد من هذا الفصل</figcaption></figure>`).join('');
+}
+
+function chapter(s, i, skip = null, viz = null, doc = null) {
   const info = chapterInfo(s.key);
   let body = info?.why ? `<p class="cp-why">${esc(info.why)}</p>` : '';
   const shown = s.fields.filter((f) => !NEVER_PRINTED.has(f.key) && !skip?.has(f.key));
@@ -222,11 +250,16 @@ function chapter(s, i, skip = null) {
   for (const f of shown) {
     body += fieldHtml(f);
     const rows = Array.isArray(f.value) ? f.value : [];
-    if (s.key === 'wbs' && f.key === 'packages') body += wbsTree(f.columns, rows);
-    if (s.key === 'schedule' && f.key === 'activities') body += gantt(f.columns, rows);
-    if ((s.key === 'raid' && f.key === 'items') || (s.key === 'stage-gate' && f.key === 'risks')) body += heatmap(f.columns, rows);
+    if (s.key === 'wbs' && f.key === 'packages' && !boardFigures('wbs', doc, viz)) body += wbsTree(f.columns, rows);
+    if (s.key === 'schedule' && f.key === 'activities') {
+      // جانت المتكامل بعلاقاته ومساره الحرج (visuals.js)، وإن لم يُرسم فالمخطط البسيط
+      const g = viz ? ganttSvg(viz, { today: null }) : null;
+      body += g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني بعلاقات الأنشطة؛ الذهبي على المسار الحرج${g.stats.finish ? ` (${g.stats.finish} يومًا)` : ''}</figcaption></figure>` : gantt(f.columns, rows);
+    }
+    if ((s.key === 'raid' && f.key === 'items' && !boardFigures('raid', doc, viz)) || (s.key === 'stage-gate' && f.key === 'risks')) body += heatmap(f.columns, rows);
   }
-  return anchor(s.key) + section(eyebrow(s, i + 1), `${i + 1}. ${s.title}`, body);
+  body += boardFigures(s.key, doc, viz);
+  return anchor(s.key, i === 0) + section(eyebrow(s, i + 1), `${i + 1}. ${s.title}`, body);
 }
 
 // ── المتابعة بعد الاعتماد: الخطة المعتمدة وما تحقق منها ──
@@ -263,7 +296,7 @@ const CHARTER_FIELDS = new Set(['sponsor_email', 'title', 'objective', 'problem'
 function charterBlock(doc) {
   const c = charterData(doc);
   if (!c || !c.rows.length) return '';
-  return anchor('charter') + section('للقرار · صفحة واحدة', 'ميثاق المبادرة', `
+  return anchor('charter', true) + section('للقرار · صفحة واحدة', 'ميثاق المبادرة', `
     <table class="cp-charter"><tbody>${c.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
     ${c.deliverables ? `<div class="cp-f" style="margin-top:4mm"><b>المخرجات الرئيسة</b>${tableOf(c.deliverables.columns, c.deliverables.rows)}</div>` : ''}`,
   'يُولَّد من البطاقة والتكلفة والمنافع والمخاطر، فلا يُكتب مرتين. به يُؤذن بالبدء.');
@@ -280,7 +313,7 @@ function caseBlock(doc) {
     const n = t.rows.length;
     return `<p class="cp-ref"><b>${esc(t.label)}</b> (${n} ${n === 1 ? 'صف' : n === 2 ? 'صفان' : n <= 10 ? 'صفوف' : 'صفًا'}): ${i >= 0 ? `<a href="#ch-${esc(secs[i].key)}">الفصل ${i + 1} «${esc(secs[i].title)}»</a>` : 'في فصله'}.</p>`;
   };
-  return anchor('case') + section('للقرار · خمسة أسئلة', 'حالة العمل', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
+  return anchor('case', true) + section('للقرار · خمسة أسئلة', 'حالة العمل', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
     ${c.missing ? `<p class="cp-miss">${esc(c.missing)}</p>` : `${points(c.points.map(([k, v]) => raw(`<b>${esc(k)}:</b> ${esc(v)}`)), '')}${c.table ? ref(c.table) : ''}`}</div>`).join(''),
   'خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصول الوثيقة نفسها.');
 }
@@ -290,7 +323,7 @@ function launchBlock(doc) {
   const l = launchPlan(doc);
   if (!l) return '';
   const list = (items, empty) => (items.length ? `<ul>${items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : `<p class="cp-ref">${esc(empty)}</p>`);
-  return anchor('launch') + section('للتنفيذ', 'خطة الانطلاق: أول 90 يومًا', l.empty ? `<p class="cp-miss">${esc(l.missing.join('، و'))}، فتظهر هنا خطة أول 90 يومًا.</p>` : `
+  return anchor('launch', true) + section('للتنفيذ', 'خطة الانطلاق: أول 90 يومًا', l.empty ? `<p class="cp-miss">${esc(l.missing.join('، و'))}، فتظهر هنا خطة أول 90 يومًا.</p>` : `
     <div class="cp-launch">${l.windows.map((w) => `<div><h3>${esc(w.title)}</h3><small>${esc(w.range || 'من تاريخ البداية')}</small>${list(w.items, 'لا شيء مؤرخ في هذه المدة.')}</div>`).join('')}</div>
     ${points([
       ...l.measure.map((t) => raw(`<b>أول قياس:</b> ${esc(t)}`)),
@@ -310,11 +343,23 @@ function tocBlock(doc, front, { draft }) {
     const missing = (s.fields || []).filter((f) => (f.type === 'table' ? !(Array.isArray(f.value) && f.value.some(filled)) : !String(f.value ?? '').trim())).length;
     return missing ? `<i class="no">${missing} ${missing === 1 ? 'حقل فارغ' : missing === 2 ? 'حقلان فارغان' : missing <= 10 ? 'حقول فارغة' : 'حقلًا فارغًا'}</i>` : '<i>مكتمل</i>';
   };
-  return section('الفهرس', 'فهرس الوثيقة', `<div class="cp-toc2">
-    <div class="ph"><h3>للقرار والتنفيذ</h3><ol class="front">${front.map(([k, t]) => `<li><a href="#${k === 'charter' || k === 'case' || k === 'launch' ? `ch-${k}` : k}">${esc(t)}</a></li>`).join('')}</ol></div>
+  return anchor('toc', true) + section('الفهرس', 'فهرس الوثيقة', `<div class="cp-toc2">
+    <div class="ph"><h3>للقرار والتنفيذ</h3><ol class="front">${front.map(([k, t]) => `<li><a href="#ch-${k}">${esc(t)}</a><span class="cp-pgno"></span></li>`).join('')}</ol></div>
     ${groups.map((g, gi) => `<div class="ph"><h3>${gi + 1}. ${esc(g.title)} <small>${g.items.length} ${g.items.length === 1 ? 'فصل' : g.items.length === 2 ? 'فصلان' : 'فصول'}</small></h3>${g.lead ? `<p>${esc(g.lead)}</p>` : ''}
-      <ol>${g.items.map((s) => `<li><span class="n">${String(s.n).padStart(2, '0')}</span><a href="#ch-${esc(s.key)}">${esc(s.title)}</a>${state(s)}</li>`).join('')}</ol></div>`).join('')}
+      <ol>${g.items.map((s) => `<li><span class="n">${String(s.n).padStart(2, '0')}</span><a href="#ch-${esc(s.key)}">${esc(s.title)}</a>${state(s)}<span class="cp-pgno"></span></li>`).join('')}</ol></div>`).join('')}
   </div>`, draft ? 'الفصول مجمّعة بالأسئلة التي تجيب عنها، وأمام كل فصل حالته. انقر عنوانًا لتنتقل إليه.' : 'الفصول مجمّعة بالأسئلة التي تجيب عنها. انقر عنوانًا لتنتقل إليه.');
+}
+
+// ملحق اللوحات المرئية: ما لا يقع في فصل بعينه (visuals.js). يُبنى منه ما اكتملت بياناته وحده
+function visualsBlock(viz) {
+  const net = networkSvg(viz, { vertical: true, width: 800 });
+  if (!net.svg) return '';
+  const st = net.stats;
+  return anchor('visuals', true) + section('ملحق', 'اللوحات المرئية', `
+    <h3>مخطط الشبكة والمسار الحرج</h3>
+    ${kpis([{ value: st.activities, label: 'نشاطًا' }, { value: st.finish, label: 'يومًا على المسار الحرج' }, { value: st.critical, label: 'نشاطًا حرجًا' }])}
+    <figure class="cp-fig">${net.svg}${networkLegend()}<figcaption>المسار الحرج: ${esc(st.path.join(' ← '))}</figcaption></figure>`,
+  'رسوم تُولَّد من فصول الوثيقة نفسها، فلا تُكتب مرتين.');
 }
 
 // مسرد ملحق: المصطلحات التي وردت في هذه الوثيقة وحدها، من مسرد واحد (anatomy.json)
@@ -322,7 +367,7 @@ function glossaryBlock(doc) {
   const txt = [doc.summary, ...(doc.sections || []).flatMap((s) => [s.title, ...(s.fields || []).flatMap((f) => [f.label, ...(f.columns || []), ...(Array.isArray(f.value) ? f.value.flat() : [f.value])])])].join(' \n ');
   const terms = termsIn(txt);
   if (!terms.length) return '';
-  return anchor('glossary') + section('ملحق', 'مسرد المصطلحات', `<table class="cp-gloss"><tbody>${terms.map((g) => `<tr><th>${esc(g.term)}</th><td>${esc(g.def)}</td></tr>`).join('')}</tbody></table>`,
+  return anchor('glossary', true) + section('ملحق', 'مسرد المصطلحات', `<table class="cp-gloss"><tbody>${terms.map((g) => `<tr><th>${esc(g.term)}</th><td>${esc(g.def)}</td></tr>`).join('')}</tbody></table>`,
     'المصطلحات التي وردت في هذه الوثيقة بمعناها في البرنامج.');
 }
 
@@ -389,14 +434,18 @@ export function capstoneReport(doc) {
     ${approved || example ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
 
   const charter = charterBlock(doc), bcase = caseBlock(doc), launch = launchBlock(doc);
-  const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'حالة العمل'], launch && ['launch', 'خطة الانطلاق'], ['glossary', 'مسرد المصطلحات']].filter(Boolean);
+  const viz = scheduleModel(doc);
+  const visuals = visualsBlock(viz);
+  const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'حالة العمل'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات']].filter(Boolean);
   body += tocBlock(doc, front, { draft: !approved && !example });
   body += charter + bcase + launch;
 
   secs.forEach((s, i) => {
-    body += chapter(s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null);
-    if (s.key === 'cost-plan') body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost));
+    body += chapter(s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null, viz, doc);
+    if (s.key === 'cost-plan') body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost, doc));
   });
+
+  body += visuals;
 
   if (!approved && !example && (doc.checks || []).length) {
     body += section('فحوص آلية', 'فحوص الاتساق بين الفصول', `<ul class="cp-check">${doc.checks.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${esc(c.title)}${c.detail ? `<small>${esc(c.detail)}</small>` : ''}</li>`).join('')}</ul>`,
@@ -433,7 +482,9 @@ export function capstoneReport(doc) {
 
   return {
     meta: {
-      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true,
+      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
+      // اسم الملف لاتيني ثابت (رقم الوثيقة وإصدارها): بعض المتصفحات وأنظمة البريد تُسقط الاسم العربي فيصير «download». العنوان العربي في خصائص الملف
+      pdfName: `Milestone-Impact-Initiative-${m.ref || 'MI-CP'}-V${m.version || 1}`,
       eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['القائد', m.participant?.name || '·'], ['الجهة', m.org?.name || '·'], ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],

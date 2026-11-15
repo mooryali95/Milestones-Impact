@@ -1194,6 +1194,17 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 /* لوحة الخبير (/x) */
 .xpp-in .eyebrow, .xpp .eyebrow { margin: 0; font-size: 14px; letter-spacing: .3em; color: var(--accent); }
 .xpp-head-acts { gap: 12px; align-items: center; }
+/* بطاقة الكتاب الأم في بوابة الخبير: مدخل إلى القارئ المشترك (shared/master-book) */
+.xpp-book { display: flex; align-items: center; gap: 16px; width: 100%; margin: 16px 0 0; padding: 16px 18px; text-align: start; border: 1px solid rgba(217, 168, 90, .45); border-radius: 14px; cursor: pointer;
+  background: radial-gradient(600px 200px at 80% -40%, rgba(217, 168, 90, .22), transparent 60%), linear-gradient(135deg, var(--brand-graphite), var(--brand-ink)); color: var(--brand-sand-soft); font: inherit; transition: transform .2s, box-shadow .2s; }
+.xpp-book:hover { transform: translateY(-2px); box-shadow: 0 18px 36px -20px rgba(6, 19, 24, .8); }
+.xpp-book > span:nth-child(2) { flex: 1; display: grid; gap: 2px; line-height: 1.7; }
+.xpp-book small { font-size: 11.5px; color: var(--brand-gold-light); } .xpp-book b { font: 400 22px/1.4 "Amiri", "Noto Kufi Arabic", serif; } .xpp-book em { font-style: normal; font-size: 13px; color: rgba(244, 238, 226, .78); }
+.xpp-book-ic { position: relative; width: 46px; height: 58px; flex: none; perspective: 200px; }
+.xpp-book-ic i { position: absolute; inset: 0; border-radius: 3px 6px 6px 3px; background: linear-gradient(135deg, var(--brand-slate), var(--brand-ink)); border: 1px solid rgba(217, 168, 90, .6); transform: rotateY(-22deg); }
+.xpp-book-ic i:nth-child(1) { translate: 6px 4px; opacity: .45; } .xpp-book-ic i:nth-child(2) { translate: 3px 2px; opacity: .7; }
+.xpp-book-ic i:nth-child(3)::after { content: ''; position: absolute; inset: 20% 22%; border-block: 1px solid var(--brand-gold-light); }
+.xpp-book-go { font-size: 20px; color: var(--brand-gold-light); }
 .xpp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
 .xpp-kpis > div { display: grid; gap: 4px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .xpp-kpis b { font-size: 26px; color: var(--graphite); font-weight: 600; }
@@ -1691,3 +1702,98 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .term-tip b { display: block; color: var(--brand-gold-light); font-weight: 500; }
 .term.on .term-tip { opacity: 1; visibility: visible; }
 @media (max-width: 520px) { .im-next { flex-wrap: wrap; } .im-chnav .row { width: 100%; } }
+
+/* ── المشاركة والملاحظات (Share.jsx) وصفحة الوثيقة المشاركة (SharedInitiative.jsx) ── */
+.sh-card h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sh-hero { margin: 10px 0 18px; display: grid; gap: 4px; }
+.sh-hero h1 { margin: 0; font-size: 26px; }
+.sh-hero p { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.9; }
+.sh-tabs { margin-bottom: 14px; }
+.sh-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr); gap: 16px; align-items: start; }
+.sh-grid h2, .sh-panel .card > h2 { font-size: 18px; margin: 0 0 12px; }
+.sh-new { display: grid; gap: 14px; }
+.sh-days { border: 0; padding: 0; margin: 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.sh-days legend, .sh-opts legend { font-size: 14px; color: var(--muted); margin-bottom: 6px; padding: 0; }
+.sh-days label { border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; cursor: pointer; font-size: 14px; background: var(--surface); }
+.sh-days label.on { border-color: var(--gold); background: var(--brand-cream-light); }
+.sh-days input { position: absolute; opacity: 0; pointer-events: none; }
+.sh-days label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
+.sh-opts { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
+.sh-opts.inline { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin: 8px 0; }
+.sh-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.sh-toggle.off { opacity: .55; cursor: not-allowed; }
+.sh-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.sh-switch { flex: none; width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; transition: background .2s; margin-top: 2px; }
+.sh-switch::after { content: ''; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: inset-inline-start .2s; }
+.sh-toggle input:checked + .sh-switch { background: var(--gold); }
+.sh-toggle input:checked + .sh-switch::after { inset-inline-start: 19px; }
+.sh-toggle input:focus-visible + .sh-switch { outline: 2px solid var(--gold); outline-offset: 2px; }
+.sh-toggle b { display: block; font-weight: 500; font-size: 15px; } .sh-toggle small { display: block; color: var(--muted); font-size: 13px; }
+.sh-created { border: 1px solid var(--gold); background: var(--brand-cream-light); border-radius: 12px; padding: 14px; display: grid; gap: 8px; }
+.sh-url { background: var(--surface); border: 1px dashed var(--gold); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; font-size: 13px; }
+.sh-links, .sh-note-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sh-link { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.sh-link:not(.active) { background: var(--mist); opacity: .8; }
+.sh-link header { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.sh-link header b { font-size: 16px; }
+.sh-link p { margin: 4px 0 0; }
+.link.danger { color: var(--bad); }
+.sh-empty { padding: 18px 0; text-align: center; }
+.sh-filter { min-width: 200px; margin: 0; }
+.sh-note { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surface); }
+.sh-note.new { border-color: var(--gold); box-shadow: inset 3px 0 0 var(--gold); }
+.sh-note header { display: flex; gap: 10px; align-items: center; }
+.sh-note header .grow { display: grid; } .sh-note header small { font-size: 13px; }
+.sh-note > p { margin: 10px 0; line-height: 1.9; white-space: pre-line; }
+.sh-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--brand-gold-light); display: grid; place-items: center; font-size: 15px; flex: none; }
+.sh-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); flex: none; }
+.si-hero { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; justify-content: space-between; background: var(--ink); color: #fff; border-radius: var(--radius); padding: 22px 24px; margin-bottom: 14px; }
+.si-hero .book-eyebrow { color: var(--brand-gold-light); }
+.si-hero h1 { margin: 4px 0; font-size: 26px; color: #fff; }
+.si-hero p { margin: 0; color: rgba(255, 255, 255, .78); line-height: 1.9; }
+.si-hero b { color: #fff; }
+.si-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.si-acts .btn.ghost { color: #fff; border-color: rgba(255, 255, 255, .45); }
+.si-frame { display: block; width: 100%; min-height: 900px; border: 0; background: transparent; }
+.si-note { display: grid; gap: 12px; } .si-note h2 { margin: 0; font-size: 19px; }
+.si-thanks { border-color: var(--gold); }
+.si-foot { text-align: center; margin-top: 14px; }
+.si-closed { text-align: center; }
+@media (max-width: 760px) { .sh-grid { grid-template-columns: 1fr; } .si-hero { padding: 18px; } .si-hero h1 { font-size: 22px; } }
+.sh-tabs { border-bottom: 1px solid var(--line); gap: 2px; }
+.sh-tabs [role=tab] { background: none; border: 0; border-bottom: 3px solid transparent; font: inherit; font-weight: 600; font-size: 15px; color: var(--muted); padding: 10px 16px 12px; cursor: pointer; margin-bottom: -1px; }
+.sh-tabs [role=tab].on { color: var(--fg); border-bottom-color: var(--gold); }
+.sh-tabs [role=tab]:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.sh-note .sh-who { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+
+/* ── لوحة المبادرة المرئية (Visuals.jsx) ومعاينة الجدول وأداة العلاقات (Models.jsx) ── */
+.viz-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.viz-stats > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; }
+.viz-stats b { font-size: 26px; font-weight: 600; color: var(--ink); line-height: 1.2; }
+.viz-stats span { font-size: 13px; color: var(--muted); }
+.viz-stats .crit b { color: var(--gold-text); } .viz-stats .bad b { color: var(--bad); } .viz-stats .ok b { color: var(--ok); }
+.viz-card { display: grid; gap: 12px; }
+.viz-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.viz-scroll svg { min-width: 760px; display: block; }
+.viz-scroll [data-chapter]:hover rect { filter: brightness(1.12); }
+.viz-missing { border: 1px dashed var(--gold); background: var(--brand-cream-light); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; justify-items: start; }
+.viz-missing ul { margin: 0; padding-inline-start: 18px; }
+.mi-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.mi-lg { display: inline-flex; align-items: center; gap: 6px; }
+.mi-lg i { display: inline-block; width: 18px; height: 8px; border-radius: 2px; }
+.mi-lg i.dash { height: 0; border-top: 2px dashed var(--muted); background: none; }
+.mi-lg i.dm { width: 9px; height: 9px; transform: rotate(45deg); border-radius: 0; }
+.mi-lg i.ln { height: 0; border-top: 1.5px solid var(--muted); background: none; }
+.dep-cell { display: grid; gap: 4px; margin-top: 4px; }
+.dep-list { list-style: none; margin: 0; padding: 0; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+.dep-list li::before { content: '↤ '; color: var(--gold); }
+.dep-add { justify-self: start; font-size: 12.5px !important; }
+.dep-pop { border: 1px solid var(--gold); background: var(--surface); border-radius: 10px; padding: 10px; display: grid; gap: 8px; min-width: 200px; box-shadow: var(--shadow); }
+.dep-pop label { display: grid; gap: 2px; font-size: 13px; } .dep-pop span { color: var(--muted); }
+.dep-pop select, .dep-pop input { font: inherit; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; background: var(--surface); }
+.sched-preview { margin: 6px 0 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); display: grid; gap: 8px; }
+.viz-scroll svg.mi-narrow { min-width: 0; margin-inline: auto; }
+.viz-tabs { overflow-x: auto; flex-wrap: nowrap; }
+.viz-tabs [role=tab] { white-space: nowrap; }
+.viz-part { display: grid; gap: 10px; } .viz-part + .viz-part { border-top: 1px solid var(--line); padding-top: 14px; }
+.viz-part h3 { margin: 0; font-size: 16px; }

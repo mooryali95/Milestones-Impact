@@ -19,7 +19,8 @@ describe('العمليات اليدوية صارت إجراءات على الخ�
   });
   it('التسجيل الصريح في دفعة له واجهة، والشهادة لا تُصدر يدويًا (D05)', () => {
     expect(ui).toMatch(/L\('admin\.programs'/);
-    expect(ui).toMatch(/act\('admin\.cohort-enroll'/);
+    // بحارس النقل (cohort-guard.js): من له تقدم وتنقله الإلحاقة إلى برنامج آخر يُسأل عنه المدير أولًا
+    expect(ui).toMatch(/enrollCohort\(\{ cohort_id: cohortTo, participant_ids: \[p\.id\] \}, confirm\)/);
     expect(ui).not.toMatch(/admin\.certificate-issue/);
   });
   it('حذف المشارك بأثر: عرض الأثر، موانع، تأكيد بالبريد، للمدير الأعلى', () => {

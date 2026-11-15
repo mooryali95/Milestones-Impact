@@ -46,3 +46,43 @@
 @media (max-width: 860px) { .ops-grid { grid-template-columns: 1fr; } }
 /* رمز الخطأ الخام تفصيل ثانوي بعد معناه العربي */
 .ops-code { font-size: .72rem; direction: ltr; unicode-bidi: isolate; background: var(--sand-light); color: var(--ink-mid); padding: 1px 6px; border-radius: 4px; }
+
+/* الطي والفتح: زر العنوان يحمل الحال (aria-expanded)، والسهم يدور بلا حركة لمن طلب تقليلها */
+.ops-toggle { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font: inherit; font-weight: 700; color: var(--ink); border-radius: 4px; padding: 2px 4px; margin: -2px -4px; }
+.ops-toggle:hover { color: var(--petrol-mid); }
+.ops-toggle:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 2px; }
+.ops-chev { inline-size: 8px; block-size: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin-block-start: -4px; opacity: .6; transition: transform .2s var(--ease); }
+.ops-toggle[aria-expanded="false"] .ops-chev { transform: rotate(-45deg); margin-block-start: 0; }
+[dir="rtl"] .ops-toggle[aria-expanded="false"] .ops-chev { transform: rotate(135deg); }
+.ops-body[hidden] { display: none; }
+
+/* السطر الملخص: أربع خانات هادئة بخط رفيع، تلتف على الهاتف */
+.ops-strip { list-style: none; margin: 12px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; }
+.ops-sum { display: inline-flex; align-items: center; gap: 8px; min-inline-size: 0; }
+.ops-sum + .ops-sum { padding-inline-start: 22px; border-inline-start: 1px solid var(--line); }
+.ops-sum-l { font-size: .76rem; color: var(--ink-light); white-space: nowrap; }
+.ops-pills { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ops-pill { display: inline-flex; align-items: center; gap: 4px; font-size: .78rem; line-height: 1.5; padding: 2px 9px; border-radius: 999px; background: var(--sand-light); color: var(--ink-mid); white-space: nowrap; }
+.ops-pill b { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ops-pill.ok { background: var(--st-ok-bg); color: var(--st-ok-text); }
+.ops-pill.ok b { color: var(--st-ok-text); }
+.ops-pill.warn { background: var(--st-warn-bg); color: var(--st-warn-text); }
+.ops-pill.warn b { color: var(--st-warn-text); }
+.ops-pill.bad { background: var(--st-bad-bg); color: var(--st-bad); }
+.ops-pill.bad b { color: var(--st-bad); }
+.ops-ring { display: inline-flex; align-items: center; gap: 6px; }
+.ops-ring svg { inline-size: 28px; block-size: 28px; transform: rotate(-90deg); flex: none; }
+.ops-ring circle { fill: none; stroke-width: 3.5; }
+.ops-ring .trk { stroke: var(--line-strong); }
+.ops-ring .val { stroke: var(--petrol-soft); stroke-linecap: round; }
+.ops-ring.warn .val { stroke: var(--st-warn); }
+.ops-ring.bad .val { stroke: var(--st-bad); }
+.ops-ring-txt { font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.ops-ring-txt b { font-size: .95rem; }
+.ops-ring-txt small { font-size: .74rem; color: var(--ink-light); }
+@media (max-width: 600px) {
+  .ops-strip { gap: 10px 14px; }
+  .ops-sum + .ops-sum { padding-inline-start: 0; border-inline-start: 0; }
+  .ops-sum.codes { flex-basis: 100%; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .ops-chev { transition: none; } }

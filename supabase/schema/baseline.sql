@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115200000_leaders_agent_admin
+-- as-of migration: 20261115230000_leaders_agent_admin
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -209,6 +209,74 @@ create table if not exists leaders.auth_sessions (
   constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text, 'google'::text, 'demo'::text, 'switch'::text]))),
   constraint auth_sessions_pkey PRIMARY KEY (id),
   constraint auth_sessions_token_hash_key UNIQUE (token_hash)
+);
+
+create table if not exists leaders.book_comments (
+  id uuid default gen_random_uuid() not null,
+  module_id uuid,
+  section text default ''::text not null,
+  quote text default ''::text not null,
+  body text not null,
+  fingerprint text default ''::text not null,
+  author_kind text not null,
+  author_ref text not null,
+  author_name text default ''::text not null,
+  author_role text default ''::text not null,
+  parent_id uuid,
+  status text default 'open'::text not null,
+  resolved_by text,
+  resolved_at timestamp with time zone,
+  deleted_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  draft_key text,
+  section_id text,
+  constraint book_comments_author_kind_check CHECK ((author_kind = ANY (ARRAY['expert'::text, 'admin'::text]))),
+  constraint book_comments_body_check CHECK (((char_length(body) >= 2) AND (char_length(body) <= 4000))),
+  constraint book_comments_draft_key_check CHECK (((draft_key IS NULL) OR (draft_key ~ '^[a-z0-9-]{2,60}$'::text))),
+  constraint book_comments_quote_check CHECK ((char_length(quote) <= 600)),
+  constraint book_comments_section_check CHECK ((char_length(section) <= 200)),
+  constraint book_comments_section_id_check CHECK (((section_id IS NULL) OR (section_id ~ '^[MIL]-[A-Z0-9]{2,10}-[0-9]{2,3}$'::text))),
+  constraint book_comments_status_check CHECK ((status = ANY (ARRAY['open'::text, 'resolved'::text]))),
+  constraint book_comments_target CHECK ((num_nonnulls(module_id, draft_key) = 1)),
+  constraint book_comments_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.capstone_share_notes (
+  id uuid default gen_random_uuid() not null,
+  share_id uuid not null,
+  participant_id uuid not null,
+  author_name text not null,
+  author_role text,
+  section_key text,
+  body text not null,
+  ip_hash text,
+  read_at timestamp with time zone,
+  archived_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint capstone_share_notes_author_name_check CHECK (((char_length(author_name) >= 2) AND (char_length(author_name) <= 80))),
+  constraint capstone_share_notes_author_role_check CHECK (((author_role IS NULL) OR (char_length(author_role) <= 80))),
+  constraint capstone_share_notes_body_check CHECK (((char_length(body) >= 2) AND (char_length(body) <= 2000))),
+  constraint capstone_share_notes_section_key_check CHECK (((section_key IS NULL) OR (char_length(section_key) <= 60))),
+  constraint capstone_share_notes_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.capstone_shares (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  token_hash text not null,
+  label text not null,
+  allow_notes boolean default false not null,
+  allow_download boolean default true not null,
+  show_levels boolean default false not null,
+  expires_at timestamp with time zone not null,
+  revoked_at timestamp with time zone,
+  views integer default 0 not null,
+  last_viewed_at timestamp with time zone,
+  notified_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint capstone_shares_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 80))),
+  constraint capstone_shares_pkey PRIMARY KEY (id),
+  constraint capstone_shares_token_hash_key UNIQUE (token_hash)
 );
 
 create table if not exists leaders.capstone_updates (
@@ -2305,6 +2373,26 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.book_comments add constraint book_comments_module_id_fkey FOREIGN KEY (module_id) REFERENCES leaders.handbook_modules(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.book_comments add constraint book_comments_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES leaders.book_comments(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.capstone_share_notes add constraint capstone_share_notes_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.capstone_share_notes add constraint capstone_share_notes_share_id_fkey FOREIGN KEY (share_id) REFERENCES leaders.capstone_shares(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.capstone_shares add constraint capstone_shares_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.capstone_updates add constraint capstone_updates_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.capstones(participant_id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2940,6 +3028,18 @@ CREATE INDEX IF NOT EXISTS audit_log_entity_idx ON leaders.audit_log USING btree
 
 CREATE INDEX IF NOT EXISTS auth_sessions_participant_idx ON leaders.auth_sessions USING btree (participant_id);
 
+CREATE INDEX IF NOT EXISTS book_comments_draft_idx ON leaders.book_comments USING btree (draft_key, created_at) WHERE (draft_key IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS book_comments_module_idx ON leaders.book_comments USING btree (module_id, created_at);
+
+CREATE INDEX IF NOT EXISTS book_comments_parent_idx ON leaders.book_comments USING btree (parent_id);
+
+CREATE INDEX IF NOT EXISTS capstone_share_notes_owner ON leaders.capstone_share_notes USING btree (participant_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS capstone_share_notes_share ON leaders.capstone_share_notes USING btree (share_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS capstone_shares_participant ON leaders.capstone_shares USING btree (participant_id, created_at DESC);
+
 CREATE UNIQUE INDEX IF NOT EXISTS capstone_updates_checkpoint ON leaders.capstone_updates USING btree (participant_id, checkpoint) WHERE (checkpoint IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS capstones_status_idx ON leaders.capstones USING btree (status, submitted_at);
@@ -3245,6 +3345,12 @@ alter table leaders.assessments enable row level security;
 alter table leaders.audit_log enable row level security;
 
 alter table leaders.auth_sessions enable row level security;
+
+alter table leaders.book_comments enable row level security;
+
+alter table leaders.capstone_share_notes enable row level security;
+
+alter table leaders.capstone_shares enable row level security;
 
 alter table leaders.capstone_updates enable row level security;
 

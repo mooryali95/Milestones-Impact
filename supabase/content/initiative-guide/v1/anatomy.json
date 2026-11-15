@@ -24,7 +24,7 @@
       { "title": "ليست قائمة مخرجات", "is": "المخرج ما تسلّمه، والمنفعة ما يتحسن بسببه. المبادرة تُحكم بالمنافع لا بعدد المخرجات." }
     ],
     "components": "كل مبادرة تجيب عن خمسة أسئلة يطرحها صاحب القرار قبل أن يموّل: لماذا هي؟ وهل هي أفضل حل؟ وهل يمكن شراء ما تحتاجه؟ وهل تكفيها الموازنة؟ وهل يمكن تنفيذها وقياسها؟ وفصول وثيقتك تجيب عن هذه الأسئلة، ومنها يُولَّد الميثاق وحالة العمل.",
-    "handbook": { "dimension": "milestone", "chapter_key": "ch5", "look_for": "الطبقة الأولى: المشروع" }
+    "handbook": { "section_id": "M-CH5-01" }
   },
   "phases": [
     { "key": "why", "title": "لماذا هذه المبادرة؟", "lead": "المشكلة برقمها، والبدائل، ومنطق التغيير. هنا يُحسم أن المبادرة تستحق.", "chapters": ["initiative-charter", "options-analysis", "theory-of-change", "portfolio-review"] },
@@ -40,25 +40,25 @@
     "closure": "تقرير الإغلاق"
   },
   "chapters": {
-    "initiative-charter": { "why": "ما المبادرة، ولمن، وحدودها، ومتى، ومن يرعاها ويشغّلها بعدك.", "feeds": ["charter", "case", "launch", "closure"], "handbook": { "dimension": "milestone", "chapter_key": "ch3", "look_for": "الهيكلة المؤقتة مقابل الهيكلة الدائمة" } },
-    "options-analysis": { "why": "الدليل على المشكلة، والبدائل بما فيها عدم التدخل، ولماذا اخترت هذا الحل.", "feeds": ["case"], "handbook": { "dimension": "milestone", "chapter_key": "ch3", "look_for": "حلقة صناعة القرار" } },
-    "theory-of-change": { "why": "كيف تقود أنشطتك إلى الأثر خطوة خطوة، وما الافتراض الذي يحمل كل خطوة.", "feeds": ["case"], "handbook": { "dimension": "milestone", "chapter_key": "ch2", "look_for": "الإطار المنطقي ونظرية التغيير" } },
-    "portfolio-review": { "why": "أين تقع المبادرة بين أولويات الجهة، وما الذي يُوقف أو يُؤجل لتبدأ.", "feeds": ["case"], "handbook": { "dimension": "milestone", "chapter_key": "ch5", "look_for": "الطبقة الثالثة: المحفظة" } },
-    "benefits-register": { "why": "كل منفعة بمؤشرها وخط أساسها ومستهدفها ومالكها بعد التسليم.", "feeds": ["charter", "case", "closure"], "handbook": { "dimension": "impact", "chapter_key": "ch4", "look_for": "تشريح المؤشر" } },
-    "evidence-plan": { "why": "من يقيس ماذا، ومن أين، وكل كم، وكيف يُتحقق من الرقم.", "feeds": ["case", "launch"], "handbook": { "dimension": "impact", "chapter_key": "ch4", "look_for": "سلّم الأدلة" } },
-    "wbs": { "why": "العمل كله مجزأً إلى حزم لكل منها مخرج ومالك ومدة.", "feeds": ["case"], "handbook": { "dimension": "milestone", "chapter_key": "ch4", "look_for": "أساسيات الضبط حول المعلم" } },
-    "milestone-register": { "why": "نقاط القرار في الطريق: ما يُتحقق منه عند كل معلم، ومن يقرر.", "feeds": ["case", "launch", "closure"], "handbook": { "dimension": "milestone", "chapter_key": "ch4", "look_for": "أنواع المعالم الأربعة" } },
-    "schedule": { "why": "الأنشطة بتواريخها واعتمادياتها، والمسار الذي لا يحتمل تأخيرًا.", "feeds": ["case", "launch"], "handbook": { "dimension": "milestone", "chapter_key": "ch4", "look_for": "أساسيات الضبط حول المعلم" } },
-    "cost-plan": { "why": "بنود التكلفة والاحتياطي والموازنة المتاحة ومصدر التمويل.", "feeds": ["charter", "case"], "handbook": { "dimension": "milestone", "chapter_key": "ch4", "look_for": "القيمة المكتسبة (EVM)" } },
-    "procurement": { "why": "هل تحتاج شراء أو تعاقدًا، وكم يستغرق، ومتى تحتاجه.", "feeds": ["case"], "handbook": { "dimension": "milestone", "chapter_key": "ch2", "look_for": "المعلم في المشروع الحكومي" } },
-    "stakeholder-map": { "why": "من يؤثر في المبادرة ومن تؤثر فيه، وكيف تتعامل مع كل منهم.", "feeds": [], "handbook": { "dimension": "leadership", "chapter_key": "ch4", "look_for": "التأثير بلا سلطة" } },
-    "governance": { "why": "من يقرر ماذا، ومتى تجتمعون، ومن المسؤول عن كل حزمة، وكيف يُصعَّد.", "feeds": ["case"], "handbook": { "dimension": "leadership", "chapter_key": "ch4", "look_for": "التفويض الواضح: مصفوفة RACI" } },
-    "raid": { "why": "المخاطر والافتراضات والاعتماديات والمشكلات، بدرجتها ومالكها واستجابتها.", "feeds": ["charter", "case", "launch"], "handbook": { "dimension": "milestone", "chapter_key": "ch4", "look_for": "أساسيات الضبط حول المعلم" } },
-    "stage-gate": { "why": "ورقة القرار عند البوابة: هل ما زال مبرر المبادرة قائمًا، ونستمر أم نعدّل أم نوقف؟", "feeds": [], "handbook": { "dimension": "milestone", "chapter_key": "ch3", "look_for": "حلقة صناعة القرار" } },
-    "change-sustain": { "why": "من سيتغير عمله، وكيف يُسلَّم ما بُني لمن يشغّله، وما يحمي المنافع بعدك.", "feeds": ["closure"], "handbook": { "dimension": "leadership", "chapter_key": "ch3", "look_for": "حلقة التسليم والتسلم" } },
-    "impact-report": { "why": "ما تغير فعلًا بأدلته، وما لم يتحقق ولماذا، والدروس.", "feeds": ["closure"], "handbook": { "dimension": "impact", "chapter_key": "ch3", "look_for": "من تقارير الإنجاز إلى تقارير الأثر" } },
-    "transformation-story": { "why": "القرارات التي غيّرتك قائدًا وما تعلمته منها.", "feeds": ["closure"], "handbook": { "dimension": "leadership", "chapter_key": "ch2", "look_for": "من جدارة فردية إلى نظام مؤسسي" } },
-    "development-plan": { "why": "الجدارات التي تطورها بسلوك أسبوعي ومؤشر تقدم.", "feeds": [], "handbook": { "dimension": "leadership", "chapter_key": "ch4", "look_for": "الجدارات الأربع للتأثير في الاتجاهات" } }
+    "initiative-charter": { "why": "ما المبادرة، ولمن، وحدودها، ومتى، ومن يرعاها ويشغّلها بعدك.", "feeds": ["charter", "case", "launch", "closure"], "handbook": { "section_id": "M-CH3-03" } },
+    "options-analysis": { "why": "الدليل على المشكلة، والبدائل بما فيها عدم التدخل، ولماذا اخترت هذا الحل.", "feeds": ["case"], "handbook": { "section_id": "M-CH3-02" } },
+    "theory-of-change": { "why": "كيف تقود أنشطتك إلى الأثر خطوة خطوة، وما الافتراض الذي يحمل كل خطوة.", "feeds": ["case"], "handbook": { "section_id": "M-CH2-03" } },
+    "portfolio-review": { "why": "أين تقع المبادرة بين أولويات الجهة، وما الذي يُوقف أو يُؤجل لتبدأ.", "feeds": ["case"], "handbook": { "section_id": "M-CH5-03" } },
+    "benefits-register": { "why": "كل منفعة بمؤشرها وخط أساسها ومستهدفها ومالكها بعد التسليم.", "feeds": ["charter", "case", "closure"], "handbook": { "section_id": "I-CH4-03" } },
+    "evidence-plan": { "why": "من يقيس ماذا، ومن أين، وكل كم، وكيف يُتحقق من الرقم.", "feeds": ["case", "launch"], "handbook": { "section_id": "I-CH4-07" } },
+    "wbs": { "why": "العمل كله مجزأً إلى حزم لكل منها مخرج ومالك ومدة.", "feeds": ["case"], "handbook": { "section_id": "M-CH4-05" } },
+    "milestone-register": { "why": "نقاط القرار في الطريق: ما يُتحقق منه عند كل معلم، ومن يقرر.", "feeds": ["case", "launch", "closure"], "handbook": { "section_id": "M-CH4-03" } },
+    "schedule": { "why": "الأنشطة بتواريخها واعتمادياتها، والمسار الذي لا يحتمل تأخيرًا.", "feeds": ["case", "launch"], "handbook": { "section_id": "M-CH4-05" } },
+    "cost-plan": { "why": "بنود التكلفة والاحتياطي والموازنة المتاحة ومصدر التمويل.", "feeds": ["charter", "case"], "handbook": { "section_id": "M-CH4-06" } },
+    "procurement": { "why": "هل تحتاج شراء أو تعاقدًا، وكم يستغرق، ومتى تحتاجه.", "feeds": ["case"], "handbook": { "section_id": "M-CH2-05" } },
+    "stakeholder-map": { "why": "من يؤثر في المبادرة ومن تؤثر فيه، وكيف تتعامل مع كل منهم.", "feeds": [], "handbook": { "section_id": "L-CH4-06" } },
+    "governance": { "why": "من يقرر ماذا، ومتى تجتمعون، ومن المسؤول عن كل حزمة، وكيف يُصعَّد.", "feeds": ["case"], "handbook": { "section_id": "L-CH4-08" } },
+    "raid": { "why": "المخاطر والافتراضات والاعتماديات والمشكلات، بدرجتها ومالكها واستجابتها.", "feeds": ["charter", "case", "launch"], "handbook": { "section_id": "M-CH4-05" } },
+    "stage-gate": { "why": "ورقة القرار عند البوابة: هل ما زال مبرر المبادرة قائمًا، ونستمر أم نعدّل أم نوقف؟", "feeds": [], "handbook": { "section_id": "M-CH3-02" } },
+    "change-sustain": { "why": "من سيتغير عمله، وكيف يُسلَّم ما بُني لمن يشغّله، وما يحمي المنافع بعدك.", "feeds": ["closure"], "handbook": { "section_id": "L-CH3-02" } },
+    "impact-report": { "why": "ما تغير فعلًا بأدلته، وما لم يتحقق ولماذا، والدروس.", "feeds": ["closure"], "handbook": { "section_id": "I-CH3-01" } },
+    "transformation-story": { "why": "القرارات التي غيّرتك قائدًا وما تعلمته منها.", "feeds": ["closure"], "handbook": { "section_id": "L-CH2-04" } },
+    "development-plan": { "why": "الجدارات التي تطورها بسلوك أسبوعي ومؤشر تقدم.", "feeds": [], "handbook": { "section_id": "L-CH4-03" } }
   },
   "glossary": [
     { "term": "المبادرة", "def": "عمل مؤقت تقوده لتنقل جهتك من وضع قائم إلى وضع أفضل يُقاس. قد تكون مشروعًا أو برنامجًا أو مراجعة محفظة." },

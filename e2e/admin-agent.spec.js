@@ -188,7 +188,7 @@ test('نموذج الجهة: مفتاح المرافق بنصه المساعد،
 
 test('قبل الترحيل: رسالة الترحيل وحدها', async ({ page }) => {
   await setup(page, { ready: false });
-  await expect(page.getByText('لم يُطبَّق ترحيل 20261115200000 بعد')).toBeVisible();
+  await expect(page.getByText('لم يُطبَّق ترحيل 20261115230000 بعد')).toBeVisible();
   await expect(sec(page, 'الحالة والتحكم')).toHaveCount(0);
 });
 
