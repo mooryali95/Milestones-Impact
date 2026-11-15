@@ -162,7 +162,7 @@ describe('نموذج الدفعة: مقاعد العقد والسعة التشغ
 
 // P6: محرر الدفعة والمعالج من تعريف واحد للحقول وتحقق واحد، والرحلة بمفاتيح لا تحذف شيئًا
 describe('محرر الدفعة: الأقسام والرحلة', async () => {
-  const { COHORT_SECTIONS, cohortErrors, cohortFields, cohortOut, cohortToForm, formToCohort, journeyView } = await import('./methodology.js');
+  const { COHORT_SECTIONS, cohortErrors, cohortFields, cohortOut, cohortToForm, formToCohort, itemsAr, journeyView, stagesAr } = await import('./methodology.js');
   const { wizardBlock } = await import('./cohort-hub.js');
   const stages = [{ key: 's1', title_ar: 'التأسيس', rules: {} }, { key: 's2', title_ar: 'التطبيق', rules: { complete: 'any', mode: 'optional' } }];
   const reqs = [
@@ -182,6 +182,14 @@ describe('محرر الدفعة: الأقسام والرحلة', async () => {
     expect(cap.filter((f) => f.show({ organization_id: '' })).map((f) => f.section)).toEqual(['basics']);
     expect(cap.filter((f) => f.show({ organization_id: 'o', capacity_on: true })).map((f) => f.section)).toEqual(['advanced']);
   });
+  it('أعداد الرحلة بتمييز عربي صحيح', () => {
+    expect([0, 1, 2, 5, 11].map(itemsAr)).toEqual(['لا بنود', 'بند واحد', 'بندان', '5 بنود', '11 بندًا']);
+    expect([1, 2, 3, 12].map(stagesAr)).toEqual(['مرحلة واحدة', 'مرحلتان', '3 مراحل', '12 مرحلة']);
+  });
+  it('رأس مجموعة التنفيذ: اسم النشاط ومرحلته بلا قوسين متتاليين', () => {
+    const f = cohortFields({ reqs }).find((x) => x.name === 'd:T-ATTEND:verify');
+    expect([f.group, f.groupStage]).toEqual(['حضور (ثلاثة أيام)', 'التأسيس']);
+  });
   it('التحقق واحد للمعالج والمحرر', () => {
     expect(cohortErrors({ name: ' ' })).toEqual({ name: 'اكتب اسم الدفعة' });
     expect(cohortErrors({ name: 'د', starts_on: '2027-02-01', ends_on: '2027-01-01', level_mode: 'uniform' })).toEqual({ ends_on: 'تاريخ النهاية قبل البداية', content_level: 'اختر مستوى المحتوى للدفعة المتجانسة' });
@@ -193,7 +201,10 @@ describe('محرر الدفعة: الأقسام والرحلة', async () => {
     expect([j.shown, j.total]).toEqual([2, 3]);
     const [attend, opt] = j.stages[0].items;
     expect(attend).toMatchObject({ title: 'حضور (ثلاثة أيام)', label: 'حضور (ثلاثة أيام) (التأسيس)', required: true });
-    expect(attend.lock).toContain('إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    // سبب قصير تحت المفتاح، والشرح مرة واحدة للمرحلة
+    expect(attend.lock).toBe('آخر ما يكمل هذه المرحلة');
+    expect(j.stages[0].lockNote).toBe('البند المقفل هنا لا يُخفى لأن إخفاءه يترك مرحلة «التأسيس» بلا بند ظاهر يكملها لبعض الأعضاء أو كلهم، فلا تكتمل لهم وتُقفل ما بعدها. لإخفائه غيّر قاعدة اكتمالها في رحلة البرنامج أولًا.');
+    expect(j.stages[1].lockNote).toBe('');
     expect(opt.lock).toBe('');
     expect(j.stages[1].items[0]).toMatchObject({ shown: false, lock: '' });
     expect(j.stages[1].items[0].warn).toContain('يكتمل بتقدير المدير المباشر');

@@ -4,7 +4,7 @@
 // يحفظ بالإجراء نفسه الذي يحفظ به نموذج الدفعة الكامل (admin.cohort-save)، فلا مدخل ثانٍ ولا قاعدة ثانية.
 // ما لا يحتاجه الإنشاء (صيغ الأنشطة والبنود المخفية والإشراف) يبقى في «تحرير الدفعة» من ملفها.
 import React, { useState } from 'react';
-import { COHORT_STATUS, cohortFields, contractLine } from '../methodology.js';
+import { COHORT_STATUS, cohortFields, contractLine, itemsAr } from '../methodology.js';
 import { CohortField } from './CohortEditor.jsx';
 import { useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
@@ -102,7 +102,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
             <legend>أي برنامج يمر به المشاركون؟</legend>
             <label className="wiz-field">البرنامج
               <select aria-label="البرنامج" value={v.program_id} onChange={(e) => { setPicked(true); set({ program_id: e.target.value }); }} autoFocus>
-                {programs.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.requirements} متطلب</option>)}
+                {programs.map((p) => <option key={p.id} value={p.id}>{p.name} · {itemsAr(p.requirements || 0)}</option>)}
               </select>
             </label>
             {orgProg && (orgProg.program_id === v.program_id

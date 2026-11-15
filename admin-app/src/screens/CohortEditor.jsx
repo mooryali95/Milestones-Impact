@@ -8,8 +8,8 @@
 // والرؤية والعقد) لا يُحرَّر هنا، بل يُذكر للقراءة برابط إلى نافذته.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
-import { COACH_MODE, COHORT_SECTIONS, COHORT_STATUS, cohortErrors, cohortFields, cohortOut, cohortToForm, formToCohort, journeyView, KIND } from '../methodology.js';
-import { LEVEL_MODE_AR, orgProgram, orgProgramLine, PROJECT_MODE_AR } from '../../../supabase/functions/leaders-api/logic.js';
+import { COACH_MODE, COHORT_SECTIONS, COHORT_STATUS, cohortErrors, cohortFields, cohortOut, cohortToForm, formToCohort, itemsAr, journeyView, KIND, stagesAr } from '../methodology.js';
+import { LEVEL_MODE_AR, orgProgram, PROJECT_MODE_AR } from '../../../supabase/functions/leaders-api/logic.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
 import { KIND_AR, cohortKind } from '../cohort-hub.js';
@@ -17,20 +17,20 @@ import '../cohort-editor.css';
 
 // حقل واحد بنوعه، كما يعرضه Form.jsx: العنوان ثم الإرشاد ثم المدخل. يستعمله المحرر والمعالج فلا يختلف حقل بينهما.
 // short: ما يظهر من العنوان حين يكرر رأسُ المجموعة أوله (حقول التنفيذ)، ويبقى العنوان كاملًا لقارئ الشاشة
-/** @param {{ f: any, v: any, set: (patch: any) => void, error?: string, className?: string, short?: string, autoFocus?: boolean }} props */
-export function CohortField({ f, v, set, error = '', className = '', short = '', autoFocus = false }) {
+/** @param {{ f: any, v: any, set: (patch: any) => void, error?: string, className?: string, short?: string, autoFocus?: boolean, disabled?: boolean }} props */
+export function CohortField({ f, v, set, error = '', className = '', short = '', autoFocus = false, disabled = false }) {
   const id = `f-${f.name}`;
   const help = typeof f.help === 'function' ? f.help(v) : f.help;
   const label = short ? <span><span className="sr-only">{f.label.slice(0, f.label.length - short.length)}</span>{short}</span> : <span>{f.label}</span>;
   if (f.type === 'check') {
     return (
       <label htmlFor={id} className={`la-check ${className}`}>
-        <input id={id} type="checkbox" checked={!!v[f.name]} onChange={(e) => set({ [f.name]: e.target.checked })} /> {label}
+        <input id={id} type="checkbox" disabled={disabled} checked={!!v[f.name]} onChange={(e) => set({ [f.name]: e.target.checked })} /> {label}
       </label>
     );
   }
   const common = {
-    id, name: f.name, value: v[f.name] ?? '', dir: f.dir, autoFocus, onChange: (e) => set({ [f.name]: e.target.value }),
+    id, name: f.name, value: v[f.name] ?? '', dir: f.dir, autoFocus, disabled, onChange: (e) => set({ [f.name]: e.target.value }),
     'aria-invalid': error ? true : undefined, 'aria-describedby': error ? `${id}-err` : undefined,
   };
   return (
@@ -66,24 +66,20 @@ function Section({ k, title, open, onToggle, pills = [], summary = '', children 
 const TOGGLE_HELP = 'البند المخفي يختفي فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته. لا يُحذف شيء.';
 const sameHidden = (x) => JSON.stringify({ ...x, hidden_requirements: [...(x.hidden_requirements || [])].sort() });
 
-/** @param {{ cohort?: any, data: any, canWrite?: boolean, onClose: (saved?: boolean) => void, onOpen?: (k: string) => void }} props
- *  onOpen: يفتح نافذة ما لا يُحرَّر هنا بعد إغلاق المحرر (schedule، team، vis، journey) */
+/** @param {{ cohort?: any, data: any, canWrite?: boolean, onClose: (saved?: boolean) => void, onOpen?: (k: string, at?: { program_id?: string }) => void }} props
+ *  onOpen: يفتح نافذة ما لا يُحرَّر هنا بعد إغلاق المحرر (schedule، team، vis، journey)، والرحلة لبرنامج المحرر المختار */
 export default function CohortEditor({ cohort = {}, data, canWrite = true, onClose, onOpen }) {
   const { confirm } = useUI();
   const programs = data.programs || [];
   const orgs = data.organizations || [];
+  // الدفعة الجديدة تُنشأ بالمعالج وحده (CohortWizard.jsx) وفيه اقتراح برنامج الجهة (P4)، فالمحرر لدفعة قائمة
   const isNew = !cohort.id;
   const isDefault = !!cohort.is_default;
   const suggest = (orgId) => orgProgram(data.cohorts || [], programs, orgId || null);
-  const [start] = useState(() => {
-    if (!isNew) return cohortToForm(cohort);
-    // دفعة جديدة: برنامج الجهة إن كان لها (P4)، وإلا الافتراضي. المؤرشف لا يُقترح
-    const pid = cohort.program_id || suggest(cohort.organization_id)?.program_id || programs.find((p) => p.is_default && !p.archived_at)?.id || '';
-    return cohortToForm({ status: 'planned', ...cohort, program_id: pid });
-  });
+  const [start] = useState(() => cohortToForm(cohort));
   const [v, setV] = useState(start);
-  const [picked, setPicked] = useState(!isNew || !!cohort.program_id);
   const [def, setDef] = useState(null);
+  const [retry, setRetry] = useState(0);
   const [open, setOpen] = useState({ journey: true, delivery: false, advanced: false });
   const [tried, setTried] = useState(false);
   const [error, setError] = useState('');
@@ -92,15 +88,10 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
 
   const set = (patch) => setV((cur) => {
     const next = { ...cur, ...patch };
-    // برنامج آخر: النسخة من برنامجه، فتعود إلى «آخر تعديل» حتى يُختار غيرها
-    if ('program_id' in patch && patch.program_id !== cur.program_id) next.program_version_id = '';
-    if (isNew && !picked && 'organization_id' in patch) {
-      const op = suggest(patch.organization_id);
-      if (op && op.program_id !== cur.program_id) { next.program_id = op.program_id; next.program_version_id = ''; }
-    }
+    // برنامج آخر: النسخة من برنامجه، فتعود إلى «آخر تعديل» حتى يُختار غيرها. والعودة إلى برنامج الدفعة تعيد نسختها المثبتة
+    if ('program_id' in patch && patch.program_id !== cur.program_id) next.program_version_id = patch.program_id === start.program_id ? start.program_version_id : '';
     return next;
   });
-  const setField = (patch) => { if ('program_id' in patch) setPicked(true); set(patch); };
 
   // الرحلة من تعريف الدفعة، وتُعاد قراءتها عند تغيير البرنامج أو النسخة
   useEffect(() => {
@@ -109,7 +100,9 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
     L('admin.cohort-definition', { ...(isNew ? {} : { cohort_id: cohort.id }), program_id: v.program_id, program_version_id: v.program_version_id || '' })
       .then((r) => { if (live) setDef(r?.success ? r : { error: r?.message || 'تعذّرت قراءة رحلة الدفعة' }); });
     return () => { live = false; };
-  }, [v.program_id, v.program_version_id]); // cohort.id ثابت ما دام المحرر مفتوحًا
+  }, [v.program_id, v.program_version_id, retry]); // cohort.id ثابت ما دام المحرر مفتوحًا
+  // حقول التنفيذ من بنود التعريف، فلا يُرسل التنفيذ قبل أن يُقرأ: إرسال «لا تخصيص» يمحو تخصيص الدفعة كله
+  const defReady = !!def && !def.loading && !def.error;
 
   const prog = programs.find((p) => p.id === v.program_id);
   const org = orgs.find((o) => o.id === v.organization_id);
@@ -131,7 +124,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
   const go = (k) => async () => {
     if (dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق دون حفظ' }))) return;
     onClose();
-    onOpen?.(k);
+    onOpen?.(k, { program_id: v.program_id });
   };
 
   const toggle = (code) => setV((cur) => {
@@ -152,7 +145,9 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
     const out = cohortOut(fields, v);
     // البرنامج المؤرشف يرفضه الخادم إن أُرسل، فلا يُرسل ما لم يتغير
     if (prog?.archived_at && v.program_id === start.program_id) delete out.program_id;
-    const r = await saveCohort({ ...(isNew ? {} : { id: cohort.id }), ...formToCohort(out) }, confirm);
+    const body = formToCohort(out);
+    if (!defReady) delete body.delivery;
+    const r = await saveCohort({ ...(isNew ? {} : { id: cohort.id }), ...body }, confirm);
     setBusy(false);
     if (r?.success) onClose(true); else setError(r?.message || 'تعذّر الحفظ');
   };
@@ -166,10 +161,12 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
   const deliveryN = bySection('delivery').length;
   const deliveryPills = !deliveryN ? [] : customized ? [{ text: `${customized === 1 ? 'نشاط واحد مخصص' : `${customized} أنشطة مخصصة`}`, tone: 'info' }] : [{ text: 'كما في البرنامج', tone: '' }];
   const version = prog?.versions?.find((x) => x.id === v.program_version_id);
-  const advSummary = [version ? `مثبتة على النسخة ${version.number}` : 'تتبع آخر تعديل على البرنامج', LEVEL_MODE_AR[v.level_mode] || '', PROJECT_MODE_AR[v.project_mode] || '',
+  const advSummary = [version ? `مثبتة على النسخة ${version.number}` : 'تتبع البرنامج كما هو الآن', LEVEL_MODE_AR[v.level_mode] || '', PROJECT_MODE_AR[v.project_mode] || '',
     v.organization_id && v.capacity_on && v.capacity ? `سعة تشغيلية ${v.capacity}` : ''].filter(Boolean).join(' · ');
   const advPills = errs.content_level ? [{ text: 'ينقصه مستوى المحتوى', tone: 'bad', icon: '✕' }] : [];
   const op = !isDefault && v.organization_id ? suggest(v.organization_id) : null;
+  // النسخة المثبتة التي ألغاها تغيير البرنامج أو اختيار «آخر تعديل»: يُقال صراحة لا بتغير السطر وحده
+  const unpinned = start.program_version_id && !v.program_version_id ? (programs.find((p) => p.id === start.program_id)?.versions || []).find((x) => x.id === start.program_version_id) || { number: '' } : null;
   const groups = [...new Set(bySection('delivery').map((f) => f.req))];
   const title = isNew ? 'دفعة جديدة' : `دفعة: ${cohort.name}`;
 
@@ -179,6 +176,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
         <header className="ce-head">
           <h3>{isNew ? 'دفعة جديدة' : cohort.name}</h3>
           <p className="la-muted">{KIND_AR[cohortKind({ ...cohort, organization_id: v.organization_id })]}{!isNew && ` · ${COHORT_STATUS[cohort.status] || ''}`}</p>
+          {!canWrite && <p className="ce-ro" role="note">للقراءة فقط: لا تملك صلاحية تعديل الدفعات، فالحقول معطلة.</p>}
         </header>
 
         <section className="ce-sec ce-basics" aria-labelledby="ce-basics-h">
@@ -186,12 +184,13 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
           <div className="ce-grid">
             {bySection('basics').map((f) => (
               <React.Fragment key={`${f.name}-${f.label}`}>
-                <CohortField f={f} v={v} set={setField} error={errOf(f.name)} className={`ce-field ce-${f.name}${['name', 'organization_id', 'program_id'].includes(f.name) ? ' wide' : ''}`} />
+                <CohortField f={f} v={v} set={set} disabled={!canWrite} error={errOf(f.name)} className={`ce-field ce-${f.name}${['name', 'organization_id', 'program_id'].includes(f.name) ? ' wide' : ''}`} />
                 {f.name === 'program_id' && (
                   <p className="ce-source wide" role="note">
-                    {op && op.program_id === v.program_id && isNew ? orgProgramLine(op) + ' ' : ''}
-                    {op && op.program_id !== v.program_id ? <span className="ce-warn-txt">برنامج الجهة «{op.program_name}». اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الحفظ. </span> : null}
-                    {def?.version ? `الرحلة من النسخة ${def.version.number} المثبتة (${def.version.label}).` : 'الرحلة من آخر تعديل على البرنامج.'}{' '}
+                    {op && op.program_id !== v.program_id ? <span className="ce-warn-txt">برنامج الجهة «{op.program_name}». اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الحفظ.{' '}
+                      {canWrite && <button type="button" className="la-link" onClick={() => set({ program_id: op.program_id })}>ارجع إلى برنامج الجهة</button>} </span> : null}
+                    {unpinned ? <span className="ce-warn-txt">أُلغي تثبيت النسخة {unpinned.number}: بعد الحفظ تتبع الدفعة البرنامج كما هو الآن. </span> : null}
+                    {def?.version ? `الرحلة من النسخة ${def.version.number} المثبتة (${def.version.label}).` : 'الرحلة تتبع البرنامج كما هو الآن.'}{' '}
                     <button type="button" className="la-link" onClick={() => { setOpen((o) => ({ ...o, advanced: true })); setTimeout(() => advRef.current?.querySelector('#f-program_version_id')?.focus(), 0); }}>غيّر النسخة</button>
                   </p>
                 )}
@@ -201,9 +200,9 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
         </section>
 
         <Section k="journey" title={COHORT_SECTIONS[1].title} open={open.journey} onToggle={() => setOpen((o) => ({ ...o, journey: !o.journey }))} pills={journeyPills}
-          summary={def?.loading ? 'جارٍ تحميل الرحلة…' : `${jv.stages.length} مراحل، ${jv.total} بندًا.${hiddenN ? ` ${hiddenN} مخفية من رحلة هذه الدفعة.` : ''}`}>
+          summary={def?.error ? 'تعذّرت قراءة الرحلة. افتح القسم لإعادة المحاولة.' : !defReady ? 'جارٍ تحميل الرحلة…' : `${stagesAr(jv.stages.length)}، ${itemsAr(jv.total)}.${hiddenN ? ` المخفي منها في هذه الدفعة: ${hiddenN}.` : ''}`}>
           {def?.loading && <Spinner />}
-          {def?.error && <div className="la-err" role="alert">{def.error}</div>}
+          {def?.error && <div className="la-err" role="alert">{def.error} <button type="button" className="la-link" onClick={() => setRetry((n) => n + 1)}>أعد المحاولة</button></div>}
           {def && !def.loading && !def.error && (
             <>
               <p className="la-muted ce-help">{TOGGLE_HELP}{onOpen && <> <button type="button" className="la-link" onClick={go('journey')}>حرّر رحلة البرنامج نفسها</button></>}</p>
@@ -211,6 +210,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
               {jv.stages.map((st) => (
                 <section key={st.key} className="ce-stage" aria-label={st.title}>
                   <h5>{st.title} <span className={`ce-pill ${st.shown === st.total ? 'ok' : 'info'}`}>{st.shown} ظاهرة من {st.total}</span></h5>
+                  {st.lockNote && <p className="ce-stage-note" id={`ce-note-${st.key}`}><span aria-hidden="true">⚠ </span>{st.lockNote}</p>}
                   <ul className="ce-items">
                     {st.items.map((it) => (
                       <li key={it.code} className={`ce-item${it.shown ? '' : ' off'}`}>
@@ -221,7 +221,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
                           {it.warn && <small className={it.shown ? 'la-muted' : 'ce-lock'}>{it.shown ? '' : 'تنبيه: '}{it.warn}</small>}
                         </div>
                         <button type="button" role="switch" className="ce-switch" aria-checked={it.shown} aria-label={`إظهار ${it.label} في رحلة الدفعة`}
-                          aria-describedby={it.lock ? `ce-lock-${it.code}` : undefined} disabled={!canWrite || (it.shown && !!it.lock)} onClick={() => toggle(it.code)}>
+                          aria-describedby={it.lock ? `ce-lock-${it.code} ce-note-${st.key}` : undefined} disabled={!canWrite || (it.shown && !!it.lock)} onClick={() => toggle(it.code)}>
                           <span className="ce-knob" aria-hidden="true" /><span className="ce-switch-txt">{it.shown ? 'ظاهر' : 'مخفي'}</span>
                         </button>
                       </li>
@@ -229,7 +229,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
                   </ul>
                 </section>
               ))}
-              {jv.total > 0 && <p className="ce-total">مجموع الدفعة: <b>{jv.shown} ظاهرًا من {jv.total} بندًا</b>{jv.stages.length ? ` في ${jv.stages.length} مراحل` : ''}.</p>}
+              {jv.total > 0 && <p className="ce-total">مجموع الدفعة: <b>{itemsAr(jv.total)} في {stagesAr(jv.stages.length)}، الظاهر منها {jv.shown}</b>.</p>}
             </>
           )}
         </Section>
@@ -246,8 +246,8 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
               const head = list[0].label.slice(0, list[0].label.lastIndexOf(': '));
               return (
                 <fieldset key={code} className="ce-act">
-                  <legend>{head}</legend>
-                  {list.map((f) => <CohortField key={f.name} f={f} v={v} set={set} className="ce-field" short={f.label.slice(head.length + 2)} />)}
+                  <legend>{list[0].group || head}{list[0].groupStage && <small> · {list[0].groupStage}</small>}</legend>
+                  {list.map((f) => <CohortField key={f.name} f={f} v={v} set={set} disabled={!canWrite} className="ce-field" short={f.label.slice(head.length + 2)} />)}
                 </fieldset>
               );
             })}
@@ -258,7 +258,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
           <Section k="advanced" title={COHORT_SECTIONS[3].title} open={open.advanced} onToggle={() => setOpen((o) => ({ ...o, advanced: !o.advanced }))} pills={advPills} summary={advSummary}>
             <div className="ce-grid">
               {bySection('advanced').map((f) => (
-                <CohortField key={`${f.name}-${f.label}`} f={f} v={v} set={setField} error={errOf(f.name)} className={`ce-field ce-${f.name}${['notes_ar', 'capacity_on'].includes(f.name) ? ' wide' : ''}`} />
+                <CohortField key={`${f.name}-${f.label}`} f={f} v={v} set={set} disabled={!canWrite} error={errOf(f.name)} className={`ce-field ce-${f.name}${['notes_ar', 'capacity_on'].includes(f.name) ? ' wide' : ''}`} />
               ))}
             </div>
           </Section>
@@ -268,8 +268,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
           <nav className="ce-links" aria-label="يُضبط في نوافذه">
             <span className="la-muted">يُضبط في نافذته:</span>
             <button type="button" className="la-link" onClick={go('schedule')}>الجدول</button>
-            <button type="button" className="la-link" onClick={go('team')}>الفريق والمجموعات</button>
-            <button type="button" className="la-link" onClick={go('team')}>وضع المراحل</button>
+            <button type="button" className="la-link" onClick={go('team')}>الفريق والمجموعات ووضع المراحل</button>
             <button type="button" className="la-link" onClick={go('vis')}>الرؤية</button>
           </nav>
         )}

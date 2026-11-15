@@ -120,6 +120,8 @@ describe('orgProgram', () => {
     expect(r.program_id).toBe(pickCohort({ cohorts, organizationId: 'org-s' }).cohort.program_id);
     expect(r).toMatchObject({ cohort_id: 'c-saf', program_name: 'القادة', via: 'current' });
     expect(orgProgramLine({ ...r, cohort_name: 'سفراء 2026' })).toBe('من دفعة الجهة الحالية «سفراء 2026»: برنامج «القادة».');
+    // الاسم الذي يبدأ بكلمة «برنامج» لا تتكرر قبله
+    expect(orgProgramLine({ ...r, cohort_name: 'سفراء 2026', program_name: 'برنامج سفراء' })).toBe('من دفعة الجهة الحالية «سفراء 2026»: «برنامج سفراء».');
   });
   it('without a live cohort falls to the newest org cohort, and never to the open default', () => {
     expect(orgProgram(cohorts, programs, 'org-m')).toMatchObject({ program_id: 'p2', cohort_id: 'c-closed', via: 'latest' });

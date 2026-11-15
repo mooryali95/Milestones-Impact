@@ -223,7 +223,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
   const keepAccount = !!coordinator && !isSuperAdminUser(me);
 
   const close = async (saved) => {
-    if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق' }))) return;
+    if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق دون حفظ' }))) return;
     onClose(saved);
   };
   useEscape(() => close(false));
@@ -231,7 +231,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
   const goCohort = async (e) => {
     e.preventDefault();
     const to = e.currentTarget.getAttribute('href');
-    if (dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق' }))) return;
+    if (dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق دون حفظ' }))) return;
     onClose(false);
     window.location.hash = to;
   };

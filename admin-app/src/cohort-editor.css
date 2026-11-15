@@ -43,7 +43,7 @@
 .ce-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .ce-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: var(--off-white, #FFFDF8); border: 1px solid var(--line); min-inline-size: 0; }
 .ce-item.off { background: repeating-linear-gradient(135deg, var(--sand-light, #EFEBE2) 0 8px, transparent 8px 16px); }
-.ce-item.off b { color: var(--ink-mid); text-decoration: line-through; text-decoration-thickness: 1px; }
+.ce-item.off b { color: var(--ink-mid); }
 .ce-item-main { display: grid; gap: 2px; min-inline-size: 0; }
 .ce-item-main b { font-size: .88rem; font-weight: 600; overflow-wrap: anywhere; }
 .ce-item-main small { font-size: .78rem; line-height: 1.6; font-weight: 400; }
@@ -67,3 +67,12 @@
   .ce-sec { padding: 12px; }
   .ce-item { flex-wrap: wrap; }
 }
+
+/* مربع اختيار المعالج بجانب نصه لا فوقه: قاعدة .la-form label (grid) كانت تغلب .wiz-check */
+.la-form label.wiz-check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; }
+.la-form label.wiz-check input { inline-size: auto; flex: none; margin-block-start: 4px; }
+
+/* للقراءة فقط: الحقول معطلة بسببها المكتوب */
+.ce-ro { margin: 0; padding: 8px 12px; border-radius: 6px; background: var(--st-warn-bg); color: var(--st-warn-text); font-size: .84rem; }
+.ce-stage-note { margin: 0 0 6px; padding: 6px 10px; border-radius: 6px; background: var(--st-warn-bg); color: var(--st-warn-text); font-size: .8rem; line-height: 1.7; }
+.ce-act legend small { font-weight: 400; color: var(--ink-mid); }

@@ -1498,9 +1498,11 @@ export function orgProgram(cohorts = [], programs = [], orgId = null) {
 }
 // سطر مصدر البرنامج المقترح لدفعة جهة جديدة، واحد للمعالج والمحرر وملف الجهة
 /** @param {{ program_name?: string, cohort_name?: string, via?: string }|null} op */
+// اسم يبدأ بكلمة «برنامج» لا تسبقه الكلمة نفسها مرة أخرى
+const programRef = (name = '') => (/^برنامج(\s|$)/.test(name) ? `«${name}»` : `برنامج «${name}»`);
 export const orgProgramLine = (op) => (!op ? ''
-  : op.via === 'current' ? `من دفعة الجهة الحالية «${op.cohort_name}»: برنامج «${op.program_name}».`
-    : `من آخر دفعة للجهة «${op.cohort_name}»: برنامج «${op.program_name}».`);
+  : op.via === 'current' ? `من دفعة الجهة الحالية «${op.cohort_name}»: ${programRef(op.program_name)}.`
+    : `من آخر دفعة للجهة «${op.cohort_name}»: ${programRef(op.program_name)}.`);
 
 // ── حراس المشاركين الأحياء ──
 // التقدم مربوط بمعرف المتطلب، ومعرفات برنامج آخر غيرها، فمن ينتقل بين برنامجين يفقد ما أنجزه من رحلته

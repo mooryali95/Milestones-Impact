@@ -479,7 +479,8 @@ export async function cohortSave(a: Admin, b: Body) {
   // جدول المراحل: يحفظه الأدمن كما وضعه، أو يوزعه النظام على مدة الدفعة ثم يعدّله
   let scheduleNote = '';
   if ('schedule' in b || b.distribute === true) {
-    const stages = ((await def()).stages || []).filter((x: any) => x.active !== false);
+    // كل مراحل التعريف، والموقوفة منها: موعد مرحلة أُوقفت يبقى ويعود إن فُعّلت (الإيقاف لا يحذف). التوزيع يتخطاها وحده
+    const stages = (await def()).stages || [];
     if (b.distribute === true) {
       const s0 = row.starts_on ?? prev?.starts_on, e0 = row.ends_on ?? prev?.ends_on;
       if (!s0 || !e0) throw new Fail('حدد تاريخي بداية الدفعة ونهايتها أولًا ليتوزع الجدول عليها');

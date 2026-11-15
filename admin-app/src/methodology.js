@@ -5,7 +5,7 @@
 // لتُختبر وحدها. الاحتساب الرسمي للتسكين على الخادم؛ هنا نسخة العرض.
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
-import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
+import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
@@ -327,7 +327,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
   const delivery = [];
   for (const r of reqs.filter((x) => x.active !== false)) {
     const t = reqLabel(r, reqs);
-    const d = { section: 'delivery', req: r.code };
+    // رأس مجموعة النشاط في المحرر: اسمه ثم مرحلته، بلا قوسين متتاليين
+    const d = { section: 'delivery', req: r.code, group: renderJourneyText(r.title_ar || r.code, { reqs }), groupStage: r.stage_title_ar ? renderJourneyText(r.stage_title_ar, { reqs }) : '' };
     if (r.kind === 'workshop') {
       delivery.push(
         { ...d, name: `d:${r.code}:format`, label: `${t}: الصيغة`, type: 'select', empty: 'أيام حضورية أو عن بعد (كما في البرنامج)', options: { handbook: 'تدريب ذاتي بالكتيب: كل باب يوم' },
@@ -344,12 +345,16 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
       );
     }
   }
-  if (delivery.length) delivery[0] = { ...delivery[0], help: 'التنفيذ في هذه الدفعة. اتركه فارغًا ليبقى كما في البرنامج.' };
+  if (delivery.length) delivery[0] = { ...delivery[0], help: 'التنفيذ في هذه الدفعة. ما تبقيه على «كما في البرنامج» يتبع إعداد البرنامج.' };
   return [...base, ...delivery];
 }
 
 // تحقق الدفعة، واحد للمعالج والمحرر وبرسائل الخادم نفسها: لكل حقل خطؤه أو لا شيء
 /** @param {any} v */
+// أعداد الرحلة بتمييز عربي صحيح: «بند واحد»، «بندان»، «5 بنود»، «11 بندًا»
+export const itemsAr = (n) => (n ? countAr(n, 'بند واحد', 'بندان', 'بنود', 'بندًا') : 'لا بنود');
+export const stagesAr = (n) => (n ? countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة') : 'لا مراحل');
+
 export function cohortErrors(v = {}) {
   const e = {};
   if (!String(v.name || '').trim()) e.name = 'اكتب اسم الدفعة';
@@ -388,11 +393,18 @@ export function journeyView(def = {}, hidden = [], before = []) {
       return {
         code: r.code, kind: r.kind, required: r.required !== false, shown,
         title: renderJourneyText(r.title_ar || r.code, { reqs }), label: reqLabel(r, reqs),
-        lock: broken.length ? hideBreaksMessage(broken) : '',
+        lock: !broken.length ? '' : broken.length === 1 && broken[0].key === st.key ? 'آخر ما يكمل هذه المرحلة'
+          : `يكمل مرحلة «${broken.map((s) => s.title_ar || s.key).join('»، «')}»`,
+        broken,
         warn: CODE_FEATURES[r.code] ? `«${reqLabel(r, reqs)}» ${CODE_FEATURES[r.code]}.` : '',
       };
     });
-    return { key: st.key, title: renderJourneyText(st.title_ar || st.key, { reqs }), items, shown: items.filter((x) => x.shown).length, total: items.length };
+    // سبب المنع يُقال مرة للمرحلة لا تحت كل بند: ما يُقفل فيها ولماذا، وكيف يُفك
+    const hit = [...new Map(items.flatMap((x) => x.broken).map((b) => [b.key, b])).values()];
+    const one = items.filter((x) => x.lock).length === 1;
+    const lockNote = hit.length ? `${one ? 'البند المقفل هنا لا يُخفى لأن إخفاءه' : 'البنود المقفلة هنا لا تُخفى لأن إخفاء أي منها'} يترك مرحلة «${hit.map((b) => b.title_ar || b.key).join('»، «')}» بلا بند ظاهر يكملها لبعض الأعضاء أو كلهم، فلا تكتمل لهم وتُقفل ما بعدها. ${one ? 'لإخفائه' : 'لإخفائها'} غيّر قاعدة اكتمالها في رحلة البرنامج أولًا.` : '';
+    for (const x of items) delete x.broken;
+    return { key: st.key, title: renderJourneyText(st.title_ar || st.key, { reqs }), items, lockNote, shown: items.filter((x) => x.shown).length, total: items.length };
   }).filter((st) => st.total);
   return { stages: out, shown: out.reduce((n, st) => n + st.shown, 0), total: out.reduce((n, st) => n + st.total, 0) };
 }

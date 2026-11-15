@@ -300,6 +300,16 @@ Deno.test('جدول الدفعة المثبتة يُحفظ بمراحل النس
   } finally { w.restore(); }
 });
 
+Deno.test('موعد مرحلة موقوفة في النسخة يبقى عند حفظ الجدول، ولا يُعد مُسقطًا', async () => {
+  const w = pinned();
+  try {
+    (w.tables.program_versions[0].data as any).stages.push({ key: 's8', title_ar: 'مرحلة موقوفة', sort: 2, active: false, rules: {} });
+    const r: any = await cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01' }, s8: { start: '2026-10-01' } } });
+    assertEquals(w.tables.cohorts[0].schedule, { s9: { start: '2026-09-01' }, s8: { start: '2026-10-01' } });
+    assertEquals(r.schedule_dropped, undefined);
+  } finally { w.restore(); }
+});
+
 // ── P6: ما يحفظه المحرر من الإخفاء يختفي من رحلة العضو، ولا يُحذف تقدمه ──
 Deno.test('إخفاء بند من المحرر يحفظ hidden_requirements نفسها ويختفي من رحلة عضو الدفعة، وتقدمه باقٍ', async () => {
   const w = world();

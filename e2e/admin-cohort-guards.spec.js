@@ -81,7 +81,7 @@ for (const width of [1440, 390]) {
     // الإخفاء الكاسر معطل بشرحه قبل الحفظ، والاختياري يُخفى
     const attend = sw('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)');
     await expect(attend).toBeDisabled();
-    await expect(form.locator('#ce-lock-T-ATTEND')).toContainText('لا يُخفى: إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    await expect(form.locator('#ce-lock-T-ATTEND')).toContainText('لا يُخفى: آخر ما يكمل هذه المرحلة');
     await attend.scrollIntoViewIfNeeded();
     await shot(page, 'cohort-form-names');
     await form.getByRole('button', { name: 'حفظ', exact: true }).click();
@@ -134,7 +134,7 @@ test('إخفاء كاسر محفوظ قبل فتح النموذج لا يُنب�
   await expect(sw('حضور الأيام التدريبية (ثلاثة أيام) (التأسيس)')).toBeEnabled();
   // كسر جديد: إخفاء آخر بند إلزامي في «التطبيق» معطل بشرحه
   await expect(sw('جلسات التوجيه (أربع جلسات) (التطبيق)')).toBeDisabled();
-  await expect(form.locator('#ce-lock-O-SESS')).toContainText('لا يُخفى: إخفاء هذه البنود يترك مرحلة «التطبيق»');
+  await expect(form.locator('#ce-lock-O-SESS')).toContainText('لا يُخفى: آخر ما يكمل هذه المرحلة');
   await form.getByLabel('اسم الدفعة').fill('دفعة قديمة معدلة');
   await form.getByRole('button', { name: 'حفظ', exact: true }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c3', name: 'دفعة قديمة معدلة', hidden_requirements: ['T-ATTEND'] });
