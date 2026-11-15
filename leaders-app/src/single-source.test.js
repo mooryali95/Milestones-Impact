@@ -66,7 +66,8 @@ describe('مصدر واحد لكل معلومة', () => {
   });
   it('عناوين المواقع تُعرَّف في _shared/sites.js وحده', () => {
     const js = (p) => /\.(jsx?|ts)$/.test(p);
-    expect(offenders(/https:\/\/(leaders|admin|mi|matrix)\.sunkvalue\.com/, ['supabase/functions/_shared/sites.js']).filter(js)).toEqual([]);
+    // knowledge.js مولَّد من معرفة المساعد (supabase/content/assistant)، وروابطه نص المعرفة نفسه لا تعريف ثانٍ للمواقع
+    expect(offenders(/https:\/\/(leaders|admin|mi|matrix)\.sunkvalue\.com/, ['supabase/functions/_shared/sites.js', 'supabase/functions/agent-chat/knowledge.js']).filter(js)).toEqual([]);
   });
   it('ألوان الحالات تُعرَّف في shared/css/status.css وحده', () => {
     const STATUS_HEX = /#(A8322D|B4442F|A82828|B3261E|B42828|2E7D5B|276B4E|3C8D5A|B26B00|FBECEA|E7F3ED|FDF1DE)\b/i;

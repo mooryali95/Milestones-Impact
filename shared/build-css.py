@@ -23,7 +23,7 @@ PAGES = {
     'home': {
         'css_dir': os.path.join(ROOT, 'home', 'assets', 'css'),
         'page_file': '05-home-sections.css',
-        'extra': ['typeform.css'],     # من shared
+        'extra': ['typeform.css', 'chat.css'],     # من shared (chat.css: المساعد الآلي)
         'html': os.path.join(ROOT, 'home', 'index.html'),
         # الصفحات القانونية والتسعير تستعمل main.css نفسه — يتحدّث رقم نسختها معه
         'also_html': [os.path.join(ROOT, 'home', f) for f in
@@ -37,7 +37,7 @@ PAGES = {
     'program': {
         'css_dir': os.path.join(ROOT, 'home', 'assets', 'program', 'css'),
         'page_file': '05-sections.css',
-        'extra': ['typeform.css'],
+        'extra': ['typeform.css', 'chat.css'],
         'html': os.path.join(ROOT, 'home', 'leaders', 'index.html'),
         'also_html': [os.path.join(ROOT, 'home', 'projects', 'index.html'),
                       os.path.join(ROOT, 'home', 'governance', 'index.html'),
