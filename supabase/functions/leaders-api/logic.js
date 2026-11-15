@@ -4,7 +4,7 @@
 // بلا اعتماد على قاعدة البيانات ولا على Deno، حتى يُختبر في vitest
 // (leaders-app/src/logic.test.js) ويُستورد كما هو في دالة الحافة.
 
-import { DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
+import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
 
@@ -1482,6 +1482,102 @@ export function pickCohort({ enrollments = [], cohorts = [], organizationId = nu
   return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
 }
 
+// ── حراس المشاركين الأحياء ──
+// التقدم مربوط بمعرف المتطلب، ومعرفات برنامج آخر غيرها، فمن ينتقل بين برنامجين يفقد ما أنجزه من رحلته
+const byParticipant = (enrollments) => {
+  const m = new Map();
+  for (const e of enrollments || []) { if (!m.has(e.participant_id)) m.set(e.participant_id, []); m.get(e.participant_id).push(e); }
+  return m;
+};
+const peopleCount = (n) => countAr(n, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا');
+// أثر الحفظ على من لهم تقدم: pickCohort بالدفعات قبل الحفظ وبعده لكل مشارك.
+// moved: من تتغير دفعته إلى دفعة على برنامج آخر (أو بلا دفعة)، دخولًا إلى الدفعة أو خروجًا منها أو من الدفعة المفتوحة.
+// stay: من يبقى في الدفعة نفسها ويتغير برنامجها. الملحق يدويًا يبقى في دفعته فلا يُعد إلا إن تغير برنامجها
+/** @param {{ participants?: any[], enrollments?: any[], progress?: any[] }} world @param {any[]} before @param {any[]} after */
+export function moveImpact({ participants = [], enrollments = [], progress = [] } = {}, before = [], after = []) {
+  const has = new Set((progress || []).map((r) => r.participant_id));
+  const byP = byParticipant(enrollments);
+  const from = new Map(), to = new Map();
+  let moved = 0, stay = 0;
+  for (const p of participants || []) {
+    if (!has.has(p.id)) continue;
+    const ctx = { enrollments: byP.get(p.id) || [], organizationId: p.organization_id || null };
+    const a = pickCohort({ ...ctx, cohorts: before }).cohort;
+    if (!a) continue;
+    const z = pickCohort({ ...ctx, cohorts: after }).cohort;
+    if ((z?.program_id ?? null) === a.program_id) continue;
+    if (z?.id === a.id) { stay++; continue; }
+    moved++;
+    from.set(a.id, a.name || '');
+    to.set(z?.id || '', z?.name || '');
+  }
+  const list = (m) => [...m].map(([id, name]) => ({ id: id || null, name }));
+  return { moved, stay, from: list(from), to: list(to) };
+}
+// الدفعات بعد حفظ cohort: تحل محل نسختها القائمة أو تُضاف
+export const cohortsAfter = (cohorts = [], cohort) => [...(cohorts || []).filter((c) => c.id !== cohort.id), cohort];
+// فتح دفعة جهة: من ينقلهم إليها من دفعة جهتهم أو من الدفعة المفتوحة على برنامج آخر
+/** @param {{ cohorts?: any[], participants?: any[], enrollments?: any[], progress?: any[] }} world @param {any} cohort */
+export function orgMoveImpact(world = {}, cohort) {
+  if (!cohort?.organization_id || cohort.is_default) return { count: 0, from: [] };
+  const cohorts = world.cohorts || [];
+  const people = (world.participants || []).filter((p) => p.organization_id === cohort.organization_id);
+  const r = moveImpact({ ...world, participants: people }, cohorts, cohortsAfter(cohorts, cohort));
+  return { count: r.moved, from: r.from };
+}
+// أعضاء الدفعة فعلًا (pickCohort) الذين لهم تقدم: بهم يُرفض تغيير برنامجها
+/** @param {{ cohorts?: any[], participants?: any[], enrollments?: any[], progress?: any[] }} world @param {string} cohortId */
+export function cohortProgressCount({ cohorts = [], participants = [], enrollments = [], progress = [] } = {}, cohortId) {
+  const has = new Set((progress || []).map((r) => r.participant_id));
+  const byP = byParticipant(enrollments);
+  return (participants || []).filter((p) => has.has(p.id)
+    && pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id === cohortId).length;
+}
+const cohortNames = (list) => (list || []).map((c) => (c.id ? `«${c.name}»` : 'بلا دفعة')).join('، ');
+// نص سؤال النقل، واحد للخادم ونموذج الدفعة. العدد فاعل «ينتقل» فيُصاغ بالرفع
+/** @param {{ affected?: number, from?: any[], to?: any[] }} r */
+export function moveConfirmText(r) {
+  const n = Number(r?.affected) || 0;
+  const from = cohortNames(r?.from) || 'دفعتهم الحالية';
+  const to = r?.to?.length ? cohortNames(r.to) : 'دفعة أخرى';
+  const lose = n === 1 ? 'ويفقد ما أنجزه من رحلته' : 'ويفقد كل منهم ما أنجزه من رحلته';
+  return `بهذا الحفظ ينتقل تلقائيًا ${peopleCount(n)} من ${from} إلى ${to} على برنامج آخر، ${lose}، فالتقدم مربوط بمتطلبات البرنامج. الملحقون يدويًا بدفعة أخرى باقون فيها.`;
+}
+export const programLockedText = (n) => `لا يتغير برنامج دفعة لأعضائها تقدم: فيها ${peopleCount(n)} بتقدم مربوط بمتطلبات برنامجها. أنشئ دفعة جديدة على البرنامج الآخر.`;
+
+// هل يستطيع جمهور المرحلة إكمالها؟ الجمهور null: من لا يطابق مستواه بندًا مقيدًا فيرى العامة وحدها،
+// و{d, l}: من مستواه l في البعد d فيرى العامة ومقيدات (d, l). البند بلا بعد أو بلا مستوى للجميع (requirementApplies)
+const seesItem = (r, aud) => !r.dimension || !r.level || (!!aud && aud.d === r.dimension && aud.l === r.level);
+function canComplete(items, complete, aud, hidden) {
+  const mine = items.filter((x) => seesItem(x, aud) && !hidden.has(x.code));
+  return complete === 'any' ? mine.length > 0 : mine.some((x) => x.required !== false);
+}
+// مراحل يتركها الإخفاء بلا بند ظاهر يكملها لجمهور ما كان يكملها قبله: «بمتطلباتها الإلزامية» بلا إلزامي ظاهر،
+// و«بأي متطلب» بلا بند ظاهر. تُعد فقط المرحلة التي يقف عليها غيرها: إلزامية (تنتظرها ما بعدها) أو مسماة في «بعد مراحل»
+/** @param {any[]} stages @param {any[]} requirements @param {string[]} hidden */
+export function hideBreaksStage(stages = [], requirements = [], hidden = []) {
+  const h = new Set(hidden || []);
+  if (!h.size) return [];
+  const live = (stages || []).filter((s) => s.active !== false);
+  const gating = new Set(live.filter((s) => stageRules(s).mode === 'required').map((s) => s.key));
+  for (const s of live) { const r = stageRules(s); if (r.unlock === 'stages') for (const k of r.after) gating.add(k); }
+  const none = new Set();
+  return live.filter((s) => {
+    const { complete } = stageRules(s);
+    if (!gating.has(s.key) || complete === 'approval') return false;
+    const items = (requirements || []).filter((r) => r.active !== false && r.stage_key === s.key);
+    const auds = [null, ...new Map(items.filter((r) => r.dimension && r.level).map((r) => [`${r.dimension}|${r.level}`, { d: r.dimension, l: r.level }])).values()];
+    return auds.some((a) => canComplete(items, complete, a, none) && !canComplete(items, complete, a, h));
+  }).map((s) => ({ key: s.key, title_ar: s.title_ar }));
+}
+// ما كسره الإخفاء الجديد ولم يكن مكسورًا قبله: مجموعة قائمة لم تُمس لا تمنع حفظ الدفعة
+/** @param {{ key: string }[]} now @param {{ key: string }[]} was */
+export const newlyBroken = (now = [], was = []) => (now || []).filter((s) => !(was || []).some((w) => w.key === s.key));
+/** @param {{ key: string, title_ar?: string }[]} broken */
+export const hideBreaksMessage = (broken) => `إخفاء هذه البنود يترك مرحلة «${broken.map((s) => s.title_ar || s.key).join('»، «')}» بلا بند ظاهر يكملها لبعض الأعضاء أو كلهم، فلا تكتمل لهم أبدًا وتُقفل ما بعدها. أبقِ فيها بندًا ظاهرًا يكملها، أو غيّر قاعدة اكتمالها في رحلة البرنامج أولًا.`;
+// رموز تعتمد عليها ميزة أخرى: إخفاؤها جائز، والتحذير ظاهر في نموذج الدفعة
+export const CODE_FEATURES = { 'E-MGR': 'يكتمل بتقدير المدير المباشر بعد البرنامج، وإخفاؤه يوقف هذا الاكتمال لأعضاء الدفعة' };
+
 // ما يُخصَّص لكل دفعة من إعداد النشاط. الباقي ثابت في البرنامج.
 export const DELIVERY_FIELDS = {
   workshop: ['verify', 'format'],
@@ -2126,7 +2222,7 @@ export * from './final.js';
 export * from './katon.js';
 export * from './hall.js';
 export * from './peer.js';
-import { resolveStages } from './journey.js';
+import { resolveStages, stageRules } from './journey.js';
 
 // ════════════════════════════════════════════════════════════════
 // الخبراء: تنقية الملف، وما يُعرض لغير الإدارة

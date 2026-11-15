@@ -4,12 +4,13 @@
 // البرنامج: المراحل والمتطلبات وإعداد كل نشاط، يُبنى مرة ويُحفظ بنسخ.
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
-import { audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { all, allFor, audit, db, Fail, must } from './core.ts';
+import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
+import { seatsUsedByOrg } from './entitlements.ts';
 
 type Body = Record<string, any>;
 
@@ -163,7 +164,7 @@ export async function list() {
     db.from('program_versions').select('id, program_id, number, label, created_by, created_at').order('number', { ascending: false }),
     db.from('cohorts').select(COHORT_COLS).order('created_at', { ascending: false }),
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
-    db.from('organizations').select('id, name, short_name, delivery_default, invite_code, status').order('name'),
+    db.from('organizations').select('id, name, short_name, delivery_default, invite_code, status, seats, contract_starts, contract_ends').order('name'),
     db.from('stage_requirements').select('program_id, kind, active'),
   ]);
   // فريق خبراء كل دفعة (الترحيل 20261110190000 مطبّق على الإنتاج منذ 2026-11-10)
@@ -187,6 +188,7 @@ export async function list() {
     advIds.length ? db.from('experts').select('id, full_name').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
   const advisorName = new Map((advs.data || []).map((x: any) => [x.id, x.full_name]));
+  const seated = await seatsUsedByOrg().catch(() => null);
   return {
     success: true,
     programs: (programs.data || []).map((pr: any) => ({
@@ -200,7 +202,12 @@ export async function list() {
       pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
     })),
-    organizations: orgs.data || [],
+    // عقد الجهة مصدرًا لسطر المقاعد في نموذج دفعتها: الحد والمستهلك من العقد كله (seatsUsedByOrg)، والدفعة التي
+    // يدخلها أعضاؤها الجدد الآن (pickCohort). تعذّر عد المقاعد يترك seats_used فارغًا فلا يُعرض رقم خاطئ
+    organizations: (orgs.data || []).map((o: any) => {
+      const auto = pickCohort({ enrollments: [], cohorts: cohorts.data || [], organizationId: o.id });
+      return { ...o, seats_used: seated ? seated[o.id] || 0 : null, auto_cohort: auto.cohort ? { id: auto.cohort.id, name: auto.cohort.name, via: auto.via } : null };
+    }),
     // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
     // team_ready باقٍ للوحة المنشورة التي تُظهر حقل الفريق به؛ الجدول مطبّق فهو صحيح دائمًا
     team_ready: true,
@@ -214,8 +221,11 @@ export async function program(b: Body) {
   const live = await liveRows(id);
   const { data: last } = await db.from('program_versions').select('id, number, label, data').eq('program_id', id).order('number', { ascending: false }).limit(1);
   const latest = last?.[0] || null;
+  // اسم مرحلة كل متطلب وقاعدتها معه: نموذج الدفعة يميز بها العناوين المتطابقة ويكشف الإخفاء الكاسر قبل الحفظ
+  const stageOf = new Map(live.stages.map((st: any) => [st.key, st]));
+  const requirements = live.requirements.map((r: any) => ({ ...r, stage_title_ar: stageOf.get(r.stage_key)?.title_ar || null, stage_rules: stageOf.get(r.stage_key)?.rules || {}, stage_active: stageOf.get(r.stage_key)?.active !== false }));
   return {
-    success: true, program: pr, ...live,
+    success: true, program: pr, ...live, requirements,
     latest: latest ? { id: latest.id, number: latest.number, label: latest.label } : null,
     // ما تغيّر في المسودة منذ آخر نسخة محفوظة
     unsaved: latest ? programDiff(latest.data, programSnapshot(live.stages, live.requirements)) : null,
@@ -320,6 +330,62 @@ export async function programCompare(b: Body) {
 const STATUSES = ['planned', 'open', 'running', 'closed'];
 const day = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
 
+// حراس المشاركين الأحياء قبل أي كتابة: التقدم مربوط بمعرف المتطلب، فلا يُنقل أحد بين برنامجين بصمت،
+// ولا يُترك إخفاء مرحلة بلا بند يكملها، ولا يتغير برنامج دفعة لأعضائها تقدم.
+// كل قراءة بصفحات (all/allFor): القراءة الواحدة تقف عند max_rows بلا خطأ، والرابط بمعرفات كثيرة يتجاوز حده
+async function liveWorld(scope: { orgs: (string | null)[]; cohortId: string | null; everyone: boolean }) {
+  const cohorts = await all((f, t) => db.from('cohorts').select(COHORT_COLS).order('id').range(f, t));
+  let ids: string[] | null = null;
+  if (!scope.everyone) {
+    const set = new Set<string>();
+    if (scope.cohortId) {
+      for (const e of await all((f, t) => db.from('enrollments').select('participant_id').eq('cohort_id', scope.cohortId).neq('status', 'withdrawn').order('id').range(f, t))) set.add(e.participant_id);
+    }
+    for (const o of new Set(scope.orgs.filter(Boolean))) {
+      for (const r of await all((f, t) => db.from('participants').select('id').eq('organization_id', o).eq('is_demo', false).order('id').range(f, t))) set.add(r.id);
+    }
+    ids = [...set];
+    if (!ids.length) return { cohorts, participants: [] as any[], enrollments: [] as any[], progress: [] as any[] };
+  }
+  const [participants, enrollments, progress] = await Promise.all([
+    allFor(ids, () => db.from('participants').select('id, organization_id').eq('is_demo', false).order('id'), 'id'),
+    allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
+    // يكفي وجود صف: من له صف تقدم واحد يفقده بالنقل
+    allFor(ids, () => db.from('participant_requirements').select('participant_id').order('participant_id').order('requirement_id')),
+  ]);
+  return { cohorts, participants, enrollments, progress };
+}
+const defOf = async (vid: string | null | undefined, programId: string) => vid
+  ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data || { stages: [], requirements: [] })
+  : await liveRows(programId);
+async function guardLive(b: Body, row: Body, prev: any, programId: string) {
+  const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
+  const hidden = ('hidden_requirements' in row ? row.hidden_requirements : prev?.hidden_requirements) || [];
+  const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id ?? null;
+  const versionChanged = !!prev && vid !== (prev.program_version_id ?? null);
+  if (hidden.length && ('hidden_requirements' in row || programChanged || versionChanged)) {
+    const def = await defOf(vid, programId);
+    const broken = hideBreaksStage(def.stages || [], def.requirements || [], hidden);
+    // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها
+    const was = broken.length && prev?.hidden_requirements?.length
+      ? await defOf(prev.program_version_id, prev.program_id).then((d: any) => hideBreaksStage(d.stages || [], d.requirements || [], prev.hidden_requirements))
+      : [];
+    const worse = newlyBroken(broken, was);
+    if (worse.length) throw new Fail(hideBreaksMessage(worse), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+  }
+  const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);
+  // الدفعة المفتوحة ملاذ من لا دفعة له أيًا كانت حالتها (pickCohort)، فلا يتغير لأعضائها إلا البرنامج
+  if (!touched || (prev?.is_default && !programChanged)) return;
+  const next = { ...(prev || {}), ...row, id: prev?.id || 'new', created_at: prev?.created_at || new Date().toISOString() };
+  // من قد تتغير دفعته: أعضاء الجهة قبل الحفظ وبعده، والملحقون بالدفعة، والجميع إن كانت الدفعة المفتوحة
+  const w = await liveWorld({ orgs: [prev?.organization_id ?? null, next.organization_id ?? null], cohortId: prev?.id || null, everyone: !!next.is_default });
+  const impact = moveImpact(w, w.cohorts, cohortsAfter(w.cohorts, next));
+  if (programChanged && impact.stay) throw new Fail(programLockedText(impact.stay), 409, 'program_locked', { affected: impact.stay });
+  if (b.confirm_move === true || !impact.moved) return;
+  const extra = { affected: impact.moved, from: impact.from, to: impact.to };
+  throw new Fail(`${moveConfirmText(extra)} أكّد النقل إن كان مقصودًا، أو أبقِ الدفعة على حالها حتى تُغلق السابقة.`, 409, 'confirm_move', extra);
+}
+
 export async function cohortSave(a: Admin, b: Body) {
   const prev = isUuid(b.id) ? must(await db.from('cohorts').select('*').eq('id', b.id).maybeSingle()) : null;
   if (isUuid(b.id) && !prev) throw new Fail('الدفعة غير موجودة', 404);
@@ -421,6 +487,7 @@ export async function cohortSave(a: Admin, b: Body) {
       if ((ok || []).length !== team.length) throw new Fail('في فريق الدفعة خبير غير معتمد. اختر من الخبراء المعتمدين');
     }
   }
+  await guardLive(b, row, prev, programId);
   row.updated_at = new Date().toISOString();
   const saved: any = prev
     ? must(await db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
