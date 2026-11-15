@@ -111,6 +111,7 @@ export function exampleDoc(ex) {
       ref: `MI-EX-${ex.sector.toUpperCase()}`, version: 1, example: true, status: 'example', status_title: 'مثال محلول',
       initiative: ex.initiative, scope: 'project', scope_title: 'مشروع', readiness: 100,
       participant: { name: 'مثال محلول' }, org: { name: ex.sector_title },
+      host: val('initiative-charter', 'host') || null, context: val('initiative-charter', 'context') || null,
       sponsor: val('initiative-charter', 'sponsor'), start: val('initiative-charter', 'start'), end: val('initiative-charter', 'end'),
     },
     summary: ex.about,
