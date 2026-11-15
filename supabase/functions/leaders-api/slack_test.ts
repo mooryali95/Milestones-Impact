@@ -455,3 +455,126 @@ Deno.test('سلاك: رمز leaders-api بلا مفتاح البريد يُبل�
     teardown();
   }
 });
+
+// يعدّ قراءات slack_threads على القاعدة المزيفة
+function counting(client: ReturnType<typeof fakeDb>) {
+  const n = { reads: 0 };
+  const from = client.from;
+  const wrapped = (t: string) => { const q = from(t); if (t === 'slack_threads') { const s = q.select; q.select = (...a: unknown[]) => { n.reads++; return s(...a); }; } return q; };
+  return { client: { ...client, from: wrapped, schema: () => ({ from: wrapped }) }, n };
+}
+
+Deno.test('سلاك: حجز عالق قديم يُحكم عليه فورًا بلا انتظار، ويُذكر القرار فلا تعيد الدفعات التالية القراءة', async () => {
+  setup();
+  Object.assign(S.SLACK, { claimWaitMs: 200, claimTries: 4 });
+  const base = fakeDb();
+  const day = S.riyadhDay();
+  base.rows.set(`${day}|codes`, { day, category: 'codes', ts: '', created_at: new Date(Date.now() - 60e3).toISOString() } as Row);
+  const { client, n } = counting(base);
+  try {
+    await withNet(async (calls) => {
+      const t0 = Date.now();
+      await S.slackPost('codes', 'c1', { client });
+      await S.slackIdle();
+      await S.slackPost('codes', 'c2', { client });
+      await S.slackIdle();
+      await S.slackPost('codes', 'c3', { client });
+      await S.slackIdle();
+      assert(Date.now() - t0 < 200, 'لا انتظار للحجز العالق');
+      assertEquals(n.reads, 1, 'قراءة واحدة ثم يُذكر القرار');
+      const sc = slackCalls(calls);
+      assertEquals(sc.map((c) => c.body.text), ['🔐 رموز الدخول\nc1', '🔐 رموز الدخول\nc2', '🔐 رموز الدخول\nc3']);
+      assert(sc.every((c) => c.body.thread_ts === undefined));
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: حجز حديث لا يكتمل ينتظر مرة واحدة ثم يُذكر قراره، ومهلة أم هذه النسخة لا تعيد الانتظار', async () => {
+  setup();
+  Object.assign(S.SLACK, { claimWaitMs: 1, claimTries: 3 });
+  const base = fakeDb();
+  const day = S.riyadhDay();
+  base.rows.set(`${day}|mail`, { day, category: 'mail', ts: '', created_at: new Date().toISOString() } as Row);
+  const { client, n } = counting(base);
+  try {
+    await withNet(async () => {
+      await S.slackPost('mail', 'm1', { client });
+      await S.slackIdle();
+      assertEquals(n.reads, 4, 'قراءة ثم ثلاث محاولات');
+      await S.slackPost('mail', 'm2', { client });
+      await S.slackIdle();
+      assertEquals(n.reads, 4, 'الدفعة التالية لا تقرأ ولا تنتظر');
+    });
+  } finally { teardown(); }
+  // مهلة أم هذه النسخة: يبقى الحجز، والدفعة التالية بلا سلسلة دون قراءة
+  setup();
+  S.SLACK.timeoutMs = 30;
+  const h = counting(fakeDb());
+  try {
+    await withNet(async (calls) => {
+      await S.slackPost('alerts', 'a1', { client: h.client });
+      await S.slackIdle();
+      const reads = h.n.reads;
+      await S.slackPost('alerts', 'a2', { client: h.client });
+      await S.slackIdle();
+      assertEquals(h.n.reads, reads);
+      assertEquals(slackCalls(calls).length, 2, 'لا أم ثانية');
+      assertEquals(slackCalls(calls)[1].body.thread_ts, undefined);
+    }, { slack: 'hang' });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: رسالة في الطابور تعيدها المهمة الساعية فتُحجب بالحصة لا تُنشر مرة أخرى، وحجبها الأول يُنشر', async () => {
+  setup();
+  const full = fakeDb();
+  const fullFrom = full.from;
+  (full as any).from = (t: string) => {
+    const q = fullFrom(t);
+    if (t !== 'mail_events') return q;
+    const then = q.then;
+    q.then = (ok: any, bad: any) => then((x: any) => ok({ ...x, count: 999 }), bad);
+    return q;
+  };
+  (full as any).schema = () => ({ from: (full as any).from });
+  try {
+    await withNet(async (calls) => {
+      const opts = { kind: 'bulk' as const, source: 'leaders-api', cap: 80, key: 'k' };
+      assertEquals((await sendCounted(full, 'first@corp.com', 's', '<p>x</p>', opts)).ok, false);
+      assertEquals((await sendCounted(full, 'again@corp.com', 's', '<p>x</p>', { ...opts, queued: true })).ok, false);
+      assertEquals((await sendCounted(full, 'share@corp.com', 's', '<p>x</p>', { ...opts, sourceShare: 0.5, queued: true })).reason, 'mail_share');
+      await S.slackIdle();
+      const texts = slackCalls(calls).map((c) => c.body.text).join('\n');
+      assert(texts.includes('f***@corp.com'), texts);
+      assert(!texts.includes('a***@corp.com'), texts);
+      assert(!texts.includes('s***@corp.com'), texts);
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: تنبيه تعذّر العداد في نسخة باردة (user-api) يصل في سلسلة التنبيهات لا خارجها', async () => {
+  setup();
+  const base = fakeDb();
+  const baseFrom = base.from;
+  const from = (t: string) => {
+    const q = baseFrom(t);
+    if (t !== 'mail_events') return q;
+    const then = q.then;
+    q.then = (ok: any, bad: any) => then(() => ok({ data: null, count: null, error: { message: 'boom' } }), bad);
+    return q;
+  };
+  const client = { ...base, from, schema: () => ({ from }) };
+  const realNow = Date.now;
+  const later = realNow() + 3 * 36e5;   // بعد تهدئة تنبيه العداد في النسخة
+  Date.now = () => later;
+  try {
+    await withNet(async (calls) => {
+      await sendCounted(client, 'u@corp.com', 'رمز', '<p>x</p>', { kind: 'code', source: 'user-api', cap: 80, key: 'k', purpose: 'مصفوفة التأثير' });
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      const alert = sc.find((c) => String(c.body.text).includes('mail_counter_unavailable'));
+      assert(alert, sc.map((c) => c.body.text).join('\n'));
+      assert(alert.body.thread_ts, 'رد في سلسلة التنبيهات');
+      assertEquals(base.rows.get(`${S.riyadhDay()}|alerts`)?.ts, alert.body.thread_ts);
+    });
+  } finally { Date.now = realNow; teardown(); }
+});

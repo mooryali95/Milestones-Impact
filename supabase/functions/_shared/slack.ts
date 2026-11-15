@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, claimWaitMs: 500, claimTries: 4 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -84,8 +84,10 @@ async function post(text: string, threadTs?: string): Promise<Sent> {
 
 // ── سلسلة اليوم لكل فئة ──
 // cache=false: سلسلة لا يعرفها الجدول، تُستعمل لهذه الدفعة ولا تُحفظ
-type Thread = { ts: string; cache?: boolean } | { flat: true } | { fail: true; error?: string };
+// settled: حجز عالق حُكم عليه، فتبقى الفئة بلا سلسلة مدة flatMs بلا قراءة ولا انتظار
+type Thread = { ts: string; cache?: boolean } | { flat: true; settled?: boolean } | { fail: true; error?: string };
 const threads = new Map<string, Promise<Thread>>();
+const flatUntil = new Map<string, number>();
 let missingUntil = 0;
 const isMissing = (e: { code?: string; message?: string }) => e?.code === '42P01' || e?.code === 'PGRST205' || /slack_threads/.test(String(e?.message || ''));
 
@@ -93,7 +95,7 @@ const isMissing = (e: { code?: string; message?: string }) => e?.code === '42P01
 // نسخة أخرى سبقت: تنتظر ts قليلًا، وإن لم يظهر نشرت هذه الدفعة بلا سلسلة
 async function findOrCreate(client: Client, category: SlackCategory, day: string): Promise<Thread> {
   if (!client || missingUntil > Date.now()) return { flat: true };
-  const read = () => tableOf(client).select('ts').eq('day', day).eq('category', category).maybeSingle();
+  const read = () => tableOf(client).select('ts, created_at').eq('day', day).eq('category', category).maybeSingle();
   const { data, error } = await read();
   if (error) {
     if (isMissing(error)) missingUntil = Date.now() + SLACK.missingTableMs;
@@ -107,8 +109,10 @@ async function findOrCreate(client: Client, category: SlackCategory, day: string
       const again = await read();
       if (again.data?.ts) return { ts: String(again.data.ts) };
     }
-    return { flat: true };
+    return { flat: true, settled: true };
   };
+  // حجز فارغ أقدم من staleClaimMs لن يكتمل (مهلة غامضة أو نسخة ماتت): بلا سلسلة فورًا
+  if (data && Date.now() - Date.parse(data.created_at) > SLACK.staleClaimMs) return { flat: true, settled: true };
   if (data) return await waitOther();
   const claim = await tableOf(client).insert({ day, category, ts: '' });
   if (claim.error?.code === '23505') return await waitOther();
@@ -131,12 +135,16 @@ async function findOrCreate(client: Client, category: SlackCategory, day: string
 }
 function threadFor(client: Client, category: SlackCategory): Promise<Thread> {
   const key = `${riyadhDay()}|${category}`;
+  if ((flatUntil.get(key) ?? 0) > Date.now()) return Promise.resolve({ flat: true });
   let t = threads.get(key);
   if (!t) {
     t = findOrCreate(client, category, key.slice(0, 10)).catch((e) => { console.error('slack thread:', e); return { flat: true } as Thread; });
     threads.set(key, t);
-    // ما ليس سلسلة لا يُحفظ: يُعاد البحث في الرسالة التالية
-    t.then((r) => { if (!('ts' in r) || r.cache === false) threads.delete(key); });
+    // ما ليس سلسلة لا يُحفظ: يُعاد البحث في الرسالة التالية، إلا حجزًا عالقًا (أو مهلة أم هذه النسخة) فيُذكر قراره مدة
+    t.then((r) => {
+      if (!('ts' in r) || r.cache === false) threads.delete(key);
+      if (('settled' in r && r.settled) || ('fail' in r && r.error === 'timeout')) flatUntil.set(key, Date.now() + SLACK.flatMs);
+    });
   }
   return t;
 }
@@ -242,5 +250,5 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
 
 // للاختبار
 export function resetSlack() {
-  threads.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
+  threads.clear(); flatUntil.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
 }

@@ -9,7 +9,7 @@
 // الاتجاه على كل جدول وخلية وفقرة لا على html وحده: Gmail يحذف سمات html وbody، فيرث المتن اتجاه واجهته.
 
 import { crossesAlert, domainOf, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
-import { slackAlert, slackCode, slackMail } from './slack.ts';
+import { slackAlert, slackCode, slackMail, slackUse } from './slack.ts';
 
 // ألوان البريد من ألوان الهوية (shared/js/brand.js) بالقيم نفسها؛ دوال الحافة لا تستورد من خارج
 // supabase/functions، فتُنسخ هنا ويطابقها single-source.test.js. القيم مكتوبة لأن برامج البريد لا تقرأ متغيرات CSS.
@@ -208,9 +208,12 @@ async function logEvent(client: Client, row: Record<string, any>, extra: Record<
 // (لا احتياط التنبيه فوق السقف)
 // alert: قناة تنبيه المالك لأحداث البريد (السقف، و70%، ورفض المزوّد، وتعذّر العداد). leaders-api يمرر alertOps
 // (الرابط والبريد بتهدئة لكل نوع)، وما سواه الرابط وحده. رسالة التنبيه نفسها تنبّه بالرابط وحده، فلا حلقة
+// queued: رسالة في الطابور أصلًا (تفريغ المهمة الساعية): حجبها بالحصة أُبلغ عنه سلاك عند دخولها فلا يُعاد كل ساعة
 export type MailAlert = (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
 export async function sendCounted(client: Client, to: string, subject: string, html: string,
-  { kind, source, ref = null, cap, sourceShare, force = false, alert, purpose = null, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert; purpose?: string | null }): Promise<SendOutcome> {
+  { kind, source, ref = null, cap, sourceShare, force = false, alert, purpose = null, queued = false, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert; purpose?: string | null; queued?: boolean }): Promise<SendOutcome> {
+  // عميل سلاسل سلاك قبل أي تنبيه: user-api وsend-otp لا يمررانه في غير هذا
+  slackUse(client);
   const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;
   // التنبيه لا يُفشل الإرسال أبدًا
   const raise = (k: string, d: Record<string, unknown>) => {
@@ -234,7 +237,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
       .gte('created_at', new Date(Date.now() - 864e5).toISOString());
     if (!error && (count ?? 0) >= Math.floor(cap * sourceShare)) {
       await logEvent(client, { kind, source, ref, status: 'blocked', to_domain: domainOf(to) }, extra);
-      report('blocked', 'mail_share');
+      if (!queued) report('blocked', 'mail_share');
       return { ok: false, reason: 'mail_share' };
     }
   }
@@ -243,7 +246,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
     const d = mailDecision(force ? 'code' : kind, counts, cap);
     if (!d.ok) {
       await log('blocked');
-      report('blocked', String(d.reason));
+      if (!queued || (d.reason !== 'mail_cap' && d.reason !== 'mail_share')) report('blocked', String(d.reason));
       // امتلاء السقف حدث يُنبَّه إليه (والتهدئة عند alertOps، أو في raise للرابط وحده)؛ حجب الحصة سير عادي يدخل به الإشعار الطابور.
       // التنبيه المحجوب بعد احتياطه لا ينبّه عن نفسه: وصل الرابط قبله
       if (d.reason === 'mail_cap' && kind !== 'alert') await raise('mail_cap', { source, kind, sent: counts.sent, cap });
@@ -253,7 +256,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
     // تعذّر العداد (D15): لا رسالة بلا قرار سقف إلا الرموز والتنبيه. ما سواها يُحجب بسبب السقف، والجماعي يدخل
     // الطابور عند مرسله، والمالك يُنبَّه
     if (Date.now() - counterAlertAt > COUNTER_ALERT_MS) { counterAlertAt = Date.now(); await raise('mail_counter_unavailable', { source, kind }); }
-    if (!PRIORITY_KINDS.has(kind)) { await log('blocked'); report('blocked', 'mail_counter_unavailable'); return { ok: false, reason: 'mail_cap' }; }
+    if (!PRIORITY_KINDS.has(kind)) { await log('blocked'); if (!queued) report('blocked', 'mail_counter_unavailable'); return { ok: false, reason: 'mail_cap' }; }
   }
   const r = await deliverResult(to, subject, html, opts);
   await log(r.ok ? 'sent' : 'failed', r.ok ? (r.id ?? null) : null);
