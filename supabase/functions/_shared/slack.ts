@@ -54,7 +54,13 @@ let pausedUntil = 0;
 let lastSendAt = 0;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 type Sent = { ok: boolean; ts?: string; error?: string };
+// كل نشر يُسجَّل نتيجته في leaders.ops_status (بطاقة صحة البريد والتنبيه)، ولا يُنتظر التسجيل
 async function post(text: string, threadTs?: string): Promise<Sent> {
+  const r = await postOnce(text, threadTs);
+  recordSlack(r);
+  return r;
+}
+async function postOnce(text: string, threadTs?: string): Promise<Sent> {
   const { token, channel } = cfg();
   const wait = lastSendAt + SLACK.gapMs - Date.now();
   if (wait > 0) await sleep(wait);
@@ -82,6 +88,40 @@ async function post(text: string, threadTs?: string): Promise<Sent> {
   } finally { clearTimeout(timer); }
 }
 
+// ── آخر نجاح وآخر خطأ في leaders.ops_status (صف channel=slack) ──
+// النسخ كثيرة وقصيرة العمر، وما تذكره نسخة لا تعرفه أختها: نسخة تحجب نجاحها لأنها كتبت نجاحًا قبل قليل تُبقي خطأ نسخة
+// أخرى ظاهرًا بعده. فكل نتيجة تُرسل، والقاعدة تحكم (مشغّل ops_status_keep_latest): الأحدث يبقى ولو وصل قبل الأقدم، وما لا
+// يغير الحال خلال دقيقة لا يُكتب. لا يُنتظر ولا يُفشل النشر، وغياب الجدول (قبل ترحيله) يوقف الإرسال مدة missingTableMs.
+// 'paused' ليس ردًا من سلاك (توقف بعد 429 داخل النسخة) فلا يُسجَّل
+const statusOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('ops_status');
+let statusMissingUntil = 0;
+let statusWrite: Promise<void> | null = null;
+function recordSlack(r: Sent) {
+  try {
+    if (!r.ok && r.error === 'paused') return;
+    const now = Date.now();
+    if (!lastClient || statusMissingUntil > now) return;
+    const at = new Date(now).toISOString();
+    const row = r.ok ? { channel: 'slack', ok_at: at, updated_at: at } : { channel: 'slack', error_at: at, error: String(r.error || 'unknown').slice(0, 80), updated_at: at };
+    const client = lastClient;
+    const w: Promise<void> = Promise.resolve()
+      .then(() => statusOf(client).upsert(row, { onConflict: 'channel' }))
+      .then((res: { error?: { code?: string; message?: string } } | null) => {
+        if (!res?.error) return;
+        if (isMissing(res.error, 'ops_status')) statusMissingUntil = Date.now() + SLACK.missingTableMs;
+        console.error('ops_status write:', res.error.message || res.error);
+      })
+      .catch((e: unknown) => console.error('ops_status write:', e))
+      .finally(() => { if (statusWrite === w) statusWrite = null; });
+    statusWrite = w;
+    // الكتابة تبقى حية بعد رد الدالة كالنشر نفسه: waitUntil لا يحميها إلا إن سُجّلت فيه
+    try {
+      // deno-lint-ignore no-explicit-any
+      (globalThis as any).EdgeRuntime?.waitUntil?.(w);
+    } catch { /* بيئة بلا waitUntil */ }
+  } catch (e) { console.error('ops_status:', e); }
+}
+
 // ── سلسلة اليوم لكل فئة ──
 // cache=false: سلسلة لا يعرفها الجدول، تُستعمل لهذه الدفعة ولا تُحفظ
 // settled: حجز عالق حُكم عليه، فتبقى الفئة بلا سلسلة مدة flatMs بلا قراءة ولا انتظار
@@ -89,7 +129,7 @@ type Thread = { ts: string; cache?: boolean } | { flat: true; settled?: boolean 
 const threads = new Map<string, Promise<Thread>>();
 const flatUntil = new Map<string, number>();
 let missingUntil = 0;
-const isMissing = (e: { code?: string; message?: string }) => e?.code === '42P01' || e?.code === 'PGRST205' || /slack_threads/.test(String(e?.message || ''));
+const isMissing = (e: { code?: string; message?: string }, table = 'slack_threads') => e?.code === '42P01' || e?.code === 'PGRST205' || String(e?.message || '').includes(table);
 
 // الحجز قبل النشر (كرسالة الربط): الصف (day, category, ts='') أولًا، ومن ينجح إدراجه وحده ينشر الأم ثم يكتب ts.
 // نسخة أخرى سبقت: تنتظر ts قليلًا، وإن لم يظهر نشرت هذه الدفعة بلا سلسلة
@@ -202,7 +242,7 @@ export function slackPost(category: SlackCategory, text: string, { client }: { c
     return start() ?? Promise.resolve();
   } catch (e) { console.error('slack:', e); return Promise.resolve(); }
 }
-export async function slackIdle() { while (pump) await pump; }
+export async function slackIdle() { while (pump || statusWrite) await (pump ?? statusWrite); }
 
 // ── السطور الجاهزة ──
 // رمز الدخول: الحالة والغرض والبريد المقنّع والدالة، وأي ستة أرقام متتالية تُطمس احتياطًا
@@ -251,4 +291,5 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
 // للاختبار
 export function resetSlack() {
   threads.clear(); flatUntil.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
+  statusMissingUntil = 0; statusWrite = null;
 }

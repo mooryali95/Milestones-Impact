@@ -1,0 +1,48 @@
+/* صحة البريد والتنبيه (OpsHealth.jsx): بطاقة النظرة العامة وشريط العطل. ألوان الحالة من shared/css/status.css،
+   واللون لا يحمل المعنى وحده: رمز وكلمة مع كل حال */
+.ops-card { border-inline-start: 4px solid var(--st-ok); scroll-margin-top: 16px; }
+.ops-card.ops-amber { border-inline-start-color: var(--st-warn); }
+.ops-card.ops-red { border-inline-start-color: var(--st-bad); background: linear-gradient(var(--st-bad-bg), #fff 120px); }
+.ops-card:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 2px; }
+.ops-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ops-head h3 { margin: 0; }
+.ops-ic { display: inline-flex; align-items: center; justify-content: center; inline-size: 26px; block-size: 26px; border-radius: 50%; font-weight: 700; font-size: .85rem; color: #fff; background: var(--st-ok); flex: none; }
+.ops-amber > .ops-ic, .ops-amber > .ops-head > .ops-ic, li.ops-amber .ops-ic { background: var(--st-warn-text); }
+.ops-red > .ops-ic, .ops-red > .ops-head > .ops-ic, li.ops-red .ops-ic, .ops-banner .ops-ic { background: var(--st-bad); }
+.ops-ic.sm { inline-size: 20px; block-size: 20px; font-size: .72rem; margin-top: 2px; }
+.ops-badge { margin-inline-start: auto; font-size: .78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--st-ok-bg); color: var(--st-ok-text); }
+.ops-badge.ops-amber { background: var(--st-warn-bg); color: var(--st-warn-text); }
+.ops-badge.ops-red { background: var(--st-bad-bg); color: var(--st-bad); }
+.ops-summary { margin: 10px 0 6px; font-size: .9rem; color: var(--ink-soft); }
+.ops-issues { list-style: none; margin: 8px 0 14px; padding: 0; display: grid; gap: 8px; }
+.ops-issues li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: 6px; font-size: .86rem; line-height: 1.7; }
+.ops-issues li.ops-red { background: var(--st-bad-bg); }
+.ops-issues li.ops-amber { background: var(--st-warn-bg); }
+.ops-issues small { display: block; color: var(--ink-mid); font-size: .8rem; }
+.ops-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.ops-grid h4 { font-size: .86rem; color: var(--petrol-mid); margin: 0 0 8px; }
+.ops-grid dl { margin: 0; display: grid; gap: 8px; }
+.ops-row { display: grid; gap: 2px; }
+.ops-row dt { font-size: .76rem; color: var(--ink-light); }
+.ops-row dd { margin: 0; font-size: .86rem; color: var(--ink); overflow-wrap: anywhere; }
+.ops-row code, .ops-codes code { font-size: .76rem; direction: ltr; unicode-bidi: isolate; background: var(--sand-light); padding: 1px 6px; border-radius: 4px; margin-inline-end: 4px; }
+.ops-codes { display: block; margin-top: 4px; color: var(--ink-mid); font-size: .78rem; }
+.ops-meter { display: block; block-size: 6px; border-radius: 3px; background: var(--line-strong); margin-top: 6px; overflow: hidden; }
+.ops-meter i { display: block; block-size: 100%; background: var(--petrol-soft); }
+.ops-meter.near i { background: var(--st-warn); }
+.ops-meter.full i { background: var(--st-bad); }
+.ops-flag { font-weight: 600; }
+.ops-flag.on { color: var(--st-ok-text); }
+.ops-flag.off { color: var(--ink-mid); }
+.ops-test { display: grid; gap: 6px; margin-top: 12px; justify-items: start; }
+.ops-test-out { font-size: .8rem; color: var(--st-ok-text); }
+.ops-test-out.bad { color: var(--st-bad); }
+.ops-at { margin: 12px 0 0; }
+.ops-unread { margin: 8px 0; }
+.ops-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 16px; background: var(--st-bad-bg); color: var(--st-bad); border-block-end: 2px solid var(--st-bad); font-size: .85rem; }
+.ops-banner-text { flex: 1 1 220px; }
+.ops-banner-link { color: var(--st-bad); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.ops-banner-link:focus-visible, .ops-test button:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 2px; border-radius: 3px; }
+@media (max-width: 860px) { .ops-grid { grid-template-columns: 1fr; } }
+/* رمز الخطأ الخام تفصيل ثانوي بعد معناه العربي */
+.ops-code { font-size: .72rem; direction: ltr; unicode-bidi: isolate; background: var(--sand-light); color: var(--ink-mid); padding: 1px 6px; border-radius: 4px; }

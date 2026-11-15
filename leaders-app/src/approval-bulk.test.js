@@ -107,3 +107,36 @@ describe('المرحلة 2: اعتماد المحددين بمستوى واحد'
     expect(body).toContain('await approveOne(a, p, r.levels, notesFor(r, reason)');
   });
 });
+
+import { pickSample } from '../../supabase/functions/leaders-api/approval.js';
+describe('المرحلة 3: التحقق بالعينة', () => {
+  const ids = Array.from({ length: 23 }, (_, i) => `p${i}`);
+  it('10% مقرّبة إلى أعلى وواحد على الأقل، بلا تكرار، ومن المعتمدين وحدهم', () => {
+    expect(pickSample(ids)).toHaveLength(3);
+    expect(pickSample(['a'])).toEqual(['a']);
+    expect(pickSample([])).toEqual([]);
+    const s = pickSample(ids);
+    expect(new Set(s).size).toBe(s.length);
+    expect(s.every((x) => ids.includes(x))).toBe(true);
+  });
+  it('عشوائية فعلًا: مولّد مختلف يعطي عينة مختلفة', () => {
+    let k = 0.1; const a = pickSample(ids, { rnd: () => (k = (k * 7.3) % 1) });
+    let m = 0.9; const b = pickSample(ids, { rnd: () => (m = (m * 3.1) % 1) });
+    expect(a).not.toEqual(b);
+  });
+  it('الخادم يختارها مما نجح اعتماده ويحفظها في السجل الجامع', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
+    expect(src).toContain('const sample = pickSample(approved.map((x) => x.id))');
+    expect(src).toContain('sample: sample.map((x: any) => x.id),');
+  });
+});
+
+describe('بريد قرار المراجعة يحوّل رموز العنوان ولا يرسلها خامًا (تنسيق الزميل)', () => {
+  it('notifyReview يمر بـrenderJourneyText بإعداد متطلبات البرنامج نفسه', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
+    const fn = src.slice(src.indexOf('async function notifyReview'), src.indexOf('async function notifyReview') + 1500);
+    expect(fn).toContain("renderJourneyText(r?.title_ar || '', { reqs })");
+    expect(fn).toContain(".select('code, config').eq('program_id', r.program_id)");
+    expect(fn).not.toMatch(/reviewMail\(p\.full_name, r\?\.title_ar/);
+  });
+});

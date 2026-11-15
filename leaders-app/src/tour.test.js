@@ -6,7 +6,7 @@ import { TOUR_ACTS, TOUR_PEER_SAMPLE, TOUR_STEPS, spoken } from './tour-steps.js
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
-const SCREENS = ['App.jsx', 'screens/SignIn.jsx', 'screens/Profile.jsx', 'screens/Assessment.jsx', 'screens/Journey.jsx', 'screens/PeerRequests.jsx', 'screens/Handbook.jsx', 'screens/Capstone.jsx', 'screens/Hall.jsx'];
+const SCREENS = ['App.jsx', 'screens/SignIn.jsx', 'screens/Profile.jsx', 'screens/Assessment.jsx', 'screens/Journey.jsx', 'screens/PeerRequests.jsx', 'screens/Handbook.jsx', 'screens/Capstone.jsx', 'screens/InitiativeMap.jsx', 'screens/Hall.jsx'];
 const src = SCREENS.map((f) => read(`leaders-app/src/${f}`)).join('\n');
 
 describe('خطوات الجولة الحيّة', () => {
