@@ -294,7 +294,7 @@ export async function authStart(b: Body, ctx: Ctx) {
   }).select('id').single()) as { id: string };
   const url = `${CONFIG.appUrl}/verify?e=${encodeURIComponent(email)}&t=${link}`;
   await sendOrDiscard('email_challenges', row.id, email, existing ? 'رمز الدخول إلى رحلتك' : 'أكمل تسجيلك في برنامج القادة',
-    signInMail(existing?.full_name || pending?.full_name || '', code, url, !existing));
+    signInMail(existing?.full_name || pending?.full_name || '', code, url, !existing), existing ? 'دخول مشارك' : 'تسجيل مشارك');
   return { success: true, sent: true };
 }
 

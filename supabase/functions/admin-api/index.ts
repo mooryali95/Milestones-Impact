@@ -4,6 +4,7 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
+import { slackUse } from "../_shared/slack.ts";
 import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 
@@ -111,8 +112,9 @@ function totpUri(secret: string, email: string): string {
 // كل رسالة بالعداد الموحد (D15): رمز الدخول code، والتنبيه الأمني alert، وما سواهما notify
 const MAIL_CAP = Number(Deno.env.get("LEADERS_MAIL_DAILY_CAP") || "80") || 80;
 const counter = createClient(SB_URL, SB_KEY);
+slackUse(counter);
 const sendEmail = async (to: string, subject: string, html: string, kind: MailKind = "notify") =>
-  (await sendCounted(counter, to, subject, html, { kind, source: "admin-api", cap: MAIL_CAP, key: RESEND, from: FROM })).ok;
+  (await sendCounted(counter, to, subject, html, { kind, source: "admin-api", cap: MAIL_CAP, key: RESEND, from: FROM, purpose: kind === "code" ? "دخول الإدارة" : null })).ok;
 const ADMIN_MAIL = { family: "access" as const };
 const otpHtml = (code: string) => mailShell("رمز الدخول إلى لوحة الإدارة", `
 ${mailText("أدخل هذا الرمز في صفحة الدخول لإكمال تسجيل دخولك.")}

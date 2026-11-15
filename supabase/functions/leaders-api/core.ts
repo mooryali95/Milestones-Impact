@@ -6,6 +6,7 @@ import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
 import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
+import { slackCode, slackMail, slackUse } from '../_shared/slack.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
@@ -57,6 +58,8 @@ export const db = createClient(CONFIG.url, CONFIG.serviceKey, {
   db: { schema: 'leaders' },
   auth: { persistSession: false },
 });
+// سلاسل سلاك اليومية تُحفظ في leaders.slack_threads بهذا العميل
+slackUse(db);
 
 // المخطط العام: لجلسات الإدارة (api_sessions) والتخزين فقط
 export const publicDb = createClient(CONFIG.url, CONFIG.serviceKey, { auth: { persistSession: false } });
@@ -211,10 +214,16 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 
 // كل بريد يمر بالعداد الموحد (D15): kind يحدد نصيبه من السقف، وref الكيان المرتبط (مشارك أو مقيّم) بلا عنوان.
 // الجماعي (bulk) حين تُحجب حصته يدخل الطابور ولا يفشل، وتفرغه المهمة الساعية (drainMailQueue).
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null }: { kind?: MailKind; ref?: string | null } = {}) {
+// purpose: غرض الرمز كما يظهر في سلسلة الرموز في سلاك (دخول مشارك، دخول جهة...)
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null }: { kind?: MailKind; ref?: string | null; purpose?: string | null } = {}) {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
-  if (!CONFIG.resendKey) throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
-  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, alert: alertOps });
+  if (!CONFIG.resendKey) {
+    // يُبلَّغ في سلاك كما تبلغه الدوال الأخرى من sendCounted: سلاك هو الاحتياط حين يتعطل البريد
+    if (kind === 'code') slackCode(db, { status: 'failed', purpose, to, source: 'leaders-api', reason: 'mail_unconfigured' });
+    else slackMail(db, { kind, to, source: 'leaders-api', reason: 'mail_unconfigured' });
+    throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
+  }
+  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, purpose, alert: alertOps });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
     // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
@@ -247,7 +256,7 @@ export async function drainMailQueue(limit = 40) {
       await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
       continue;
     }
-    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps });
+    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
     if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;
@@ -755,8 +764,9 @@ export async function mailUsage(since = new Date(Date.now() - 864e5).toISOString
   return (await mailCounts(db, since))?.sent ?? null;
 }
 // الرمز يُحتسب في السقف فقط إن أُرسل فعلًا: فشل الإرسال يحذف صفه ويرفع الخطأ نفسه
-export async function sendOrDiscard(table: string, id: string, to: string, subject: string, html: string) {
-  try { await sendMail(to, subject, html, [], { kind: 'code' }); }
+const CODE_PURPOSE: Record<string, string> = { email_challenges: 'دخول مشارك', coordinator_challenges: 'دخول جهة', expert_challenges: 'دخول خبير' };
+export async function sendOrDiscard(table: string, id: string, to: string, subject: string, html: string, purpose = CODE_PURPOSE[table] ?? table) {
+  try { await sendMail(to, subject, html, [], { kind: 'code', purpose }); }
   catch (e) { await db.from(table).delete().eq('id', id); throw e; }
 }
 

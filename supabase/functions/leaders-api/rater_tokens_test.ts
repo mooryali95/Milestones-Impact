@@ -171,7 +171,7 @@ Deno.test('P1-14: الإغلاق 23:59 بتوقيت الرياض، ويوم ال
 
 Deno.test('P1-14: الترحيل في القائمة ومتسامح بتعليل', () => {
   const name = '20261115120000_leaders_rater_token_hashes';
-  assertEquals(MIGRATIONS.at(-1), name);
+  assert(MIGRATIONS.includes(name));
   assertEquals((MIGRATION_GATES as Record<string, string[]>)[name][0], 'tolerant');
   assert((MIGRATION_GATES as Record<string, string[]>)[name][1].length > 20);
 });
