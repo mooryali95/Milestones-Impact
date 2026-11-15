@@ -67,7 +67,9 @@ test('البرامج: حفظ نسخة، المقارنة، الاسترجاع، 
 
   await page.getByRole('button', { name: 'النسخ (2)' }).click();
   await page.getByRole('button', { name: 'قارن بالحالي' }).last().click();
-  await expect(page.getByText(/أُضيف: T-VID فيديو التمهيد/)).toBeVisible();
+  await expect(page.getByText(/أُضيف: فيديو التمهيد/)).toBeVisible();
+  // الرمز الداخلي لا يظهر للمدير في الفروق
+  await expect(page.locator('.la-diff')).not.toContainText('T-VID');
   await page.getByRole('button', { name: 'إغلاق' }).click();
 
   await page.getByRole('button', { name: 'استرجع' }).last().click();
@@ -95,7 +97,7 @@ test('الدفعات: طريقة التنفيذ لكل نشاط، والترقي
 
   await row.getByRole('button', { name: 'رقِّ إلى 2' }).click();
   await expect(page.getByText('ترقية «سفراء 2026» إلى النسخة 2')).toBeVisible();
-  await expect(page.getByText(/أُضيف: T-VID/)).toBeVisible();
+  await expect(page.getByText(/أُضيف: فيديو التمهيد/)).toBeVisible();
   await page.getByRole('button', { name: 'رقِّ الدفعة' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-upgrade' && c.confirm)?.id).toBe('c1');
 });
@@ -140,6 +142,9 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   const advisor = card.locator('.cohort-setup li.no', { hasText: 'المستشار والفريق' });
   await expect(advisor.getByRole('button', { name: 'الفريق والمجموعات' })).toBeVisible();
   await expect(card.getByRole('link', { name: /المشاركون/ })).toHaveAttribute('href', '#/leaders/participants?cohort=c1');
+  // «أين توقفوا» يحمل الدفعة نفسها، والجاهزية تُقرأ «كذا من كذا» لا كسرًا ينقلب في العربية
+  await expect(card.getByRole('link', { name: /أين توقفوا/ })).toHaveAttribute('href', '#/leaders/insight?cohort=c1');
+  await expect(card.locator('.stat-card', { hasText: 'الجاهزية' }).locator('.stat-value')).toContainText(' من ');
   // نوعها بجملة، والالتحاق تلقائي برابط الجهة، والإعدادات كلها في لوحة واحدة
   await expect(card.locator('.cohort-kind')).toContainText('يدخلها تلقائيًا كل من يسجّل برابط الجهة');
   await expect(card.locator('.cohort-setup li', { hasText: 'الالتحاق' })).toContainText('دون أي إلحاق يدوي');

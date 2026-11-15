@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orgReadiness, readinessSummary } from './org-hub.js';
+import { orgReadiness, readinessSummary, seatsUsedOf, seatsView } from './org-hub.js';
 
 const org = { id: 'o1', name: 'سفراء', status: 'active', invite_code: 'sufara', seats: 40, contract_ends: '2027-06-30', logo: 'data:x', cert_cobrand: true };
 const journey = { cohort: { id: 'c1', name: 'دفعة سفراء' }, setup_missing: 0 };
@@ -78,5 +78,25 @@ describe('مقاعد العقد من مصدرها الواحد (seatsUsed: إع�
   it('المكتملة تقول إن التسجيلات التالية تنتظر قرار الرعاية، وبلا رقم الخادم يُعتمد عدد الأعضاء', () => {
     expect(orgReadiness({ org: { ...org, seats: 30 }, access, journey, seatsUsed: 30, now: '2026-11-14' }).items.find((i) => i.key === 'contract').detail).toContain('تنتظر قرار الرعاية');
     expect(orgReadiness({ org: { ...org, seats: 30 }, access, journey, members: 30, now: '2026-11-14' }).items.find((i) => i.key === 'contract').ok).toBe(false);
+  });
+});
+
+describe('سطر المقاعد في بطاقة الجهة ورأس ملفها (seatsView)', () => {
+  it('يقرأ seats_used من الخادم لا عدد المسجلين، ويُكتب «كذا من كذا»', () => {
+    const v = seatsView({ seats: 50, seats_used: 31 }, 22);
+    expect(v).toMatchObject({ label: 'المقاعد', value: '31 من 50', hint: null });
+    expect(v.pct).toBeCloseTo(62);
+  });
+  it('تعذّر العد في الخادم (seats_used فارغ) يعرض عدد الأعضاء كما كان', () => {
+    expect(seatsUsedOf({ seats: 50, seats_used: null }, 22)).toBe(22);
+    expect(seatsUsedOf({ seats: 50 }, 22)).toBe(22);
+    expect(seatsUsedOf({ seats: 50, seats_used: 0 }, 22)).toBe(0);
+    expect(seatsView({ seats: 50, seats_used: null }, 22).value).toBe('22 من 50');
+  });
+  it('النسبة لا تتجاوز 100 حين تفيض المقاعد', () => {
+    expect(seatsView({ seats: 10, seats_used: 14 }, 0).pct).toBe(100);
+  });
+  it('بلا مقاعد في العقد: عدد المشاركين وتنبيه بلا شريط', () => {
+    expect(seatsView({ seats: null, seats_used: 4 }, 7)).toEqual({ label: 'المشاركون', value: '7', hint: 'بلا حد في العقد', pct: null });
   });
 });

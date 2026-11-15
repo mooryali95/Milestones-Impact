@@ -25,7 +25,7 @@ function DiffList({ diff }) {
   if (!rows.length) return <p className="la-muted">لا فرق في المتطلبات.</p>;
   return (
     <ul className="la-diff">
-      {rows.map(([t, l]) => <li key={t}><b>{t}:</b> {l.map((x) => `${x.code} ${x.title || ''}`.trim()).join('، ')}</li>)}
+      {rows.map(([t, l]) => <li key={t}><b>{t}:</b> {l.map((x) => x.title || x.code).join('، ')}</li>)}
     </ul>
   );
 }
@@ -46,7 +46,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
     ['الأساسيات', 'الاسم والجهة والبرنامج ونسخته والمدة والحالة والمقاعد، وصيغة كل نشاط (حضوري أو عن بعد)، والبنود المخفية', on.edit, true],
     ['الجدول', 'موعد كل مرحلة، ويوزَّع تلقائيًا على مدة الدفعة', on.schedule, true],
     ['الفريق والمجموعات', 'المستشار الأساسي وفريق الخبراء ومجموعات المشاركين', on.team, true],
-    ['الرؤية', 'ما يراه المشارك ومسؤول الجهة من هذه الدفعة', on.vis, true],
+    ['الرؤية', 'ما يراه مستشار الدفعة والخبير المسند من مشاركيها', on.vis, true],
     ['رحلة البرنامج', `مراحل «${progName(c.program_id)}» ومتطلباته. تسري على كل دفعاته`, on.journey, false],
     ['الشهادة', 'شهادة البرنامج، وتضيف الجهة شعارها فوقها', on.cert, true],
     ['التقييم الختامي', 'معايير الحكم على المشروع والاجتياز في البرنامج', on.final, true],
@@ -80,7 +80,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
           <div className="stat-card"><div className="stat-label">الأعضاء</div><div className="stat-value">{c.members ?? 0}{Number(c.capacity) > 0 && <small> / {c.capacity}</small>}</div><div className="stat-sub">{c.enrolled ? `${c.enrolled} بإلحاق يدوي، والباقي تلقائيًا` : kind === 'individuals' ? 'بالإلحاق اليدوي' : 'كلهم تلقائيًا'}</div></div>
           <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className={`stat-value ${c.pending_approval ? 's-new' : ''}`}>{c.pending_approval || 0}</div><div className="stat-sub">{c.pending_approval ? <a href={`${people}&status=pending_approval`}>اعتمدهم</a> : 'لا أحد'}</div></div>
           <div className="stat-card"><div className="stat-label">فريق الخبراء</div><div className="stat-value">{(c.team_expert_ids || []).length + (c.advisor_expert_id ? 1 : 0)}</div><div className="stat-sub">{c.advisor_name || (c.advisor_expert_id ? 'بمستشار أساسي' : 'بلا مستشار أساسي')}</div></div>
-          <div className="stat-card"><div className="stat-label">الجاهزية</div><div className={`stat-value ${missing ? 's-new' : 's-replied'}`}>{items.length - missing}<small> / {items.length}</small></div><div className="stat-sub">{hubSummary(hub)}</div></div>
+          <div className="stat-card"><div className="stat-label">الجاهزية</div><div className={`stat-value ${missing ? 's-new' : 's-replied'}`}>{items.length - missing}<small> من {items.length}</small></div><div className="stat-sub">{hubSummary(hub)}</div></div>
         </div>
 
         <h3 className="la-phase">الجاهزية</h3>
@@ -101,7 +101,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
             <button key={t} type="button" className="cohort-tile" onClick={fn}><b>{t}</b><span>{d}</span></button>
           ))}
           <a className="cohort-tile" href={people}><b>المشاركون ({c.members ?? 0})</b><span>قائمة أعضاء الدفعة وحالاتهم، ومنها الاعتماد والنقل</span></a>
-          <a className="cohort-tile" href="#/leaders/insight"><b>أين توقفوا</b><span>الرؤية الشاملة لتقدم المشاركين</span></a>
+          <a className="cohort-tile" href={`#/leaders/insight?cohort=${encodeURIComponent(c.id)}`}><b>أين توقفوا</b><span>الرؤية الشاملة لتقدم المشاركين</span></a>
         </div>
       </section>
     </>
@@ -256,7 +256,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
       journey: () => onEditJourney(shown.program_id), upgrade: () => upgrade(shown),
       cert: prog && (() => editCert(prog)), final: prog && (() => setFinalCfg(prog)),
       org: shown.organization_id && (() => navigate({ ctx: 'leaders', tab: 'orgs', id: shown.organization_id })),
-      other: (x) => onCohort(x.other), activities: () => navigate({ ctx: 'leaders', tab: 'activities' }),
+      other: (x) => onCohort(x.other), activities: () => { window.location.hash = `#/leaders/activities?cohort=${encodeURIComponent(shown.id)}`; },
       participants: () => { window.location.hash = people; }, approve: () => { window.location.hash = `${people}&status=pending_approval`; },
     };
     return (

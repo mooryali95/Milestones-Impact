@@ -231,7 +231,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
 
       <div className="la-grid2">
         {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox): كان هنا أربعة أنواع والباقي موزع على شاشاته */}
-        <Inbox contacts={pending?.contacts || 0} />
+        <Inbox contacts={pending?.contacts || 0} canWrite={canWrite} onPerson={onPerson} />
         <section className="la-card">
           <div className="la-row between"><h3>المستوى العام</h3><span className="la-muted">{placed} مُسكَّن</span></div>
           {o.overall ? (

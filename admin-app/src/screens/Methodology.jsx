@@ -4,7 +4,7 @@
 // كلها تقرأ من admin.catalog وتكتب عبر admin.save / admin.delete / admin.reorder.
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useState } from 'react';
-import { DIM, DIM_EN, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
+import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { completionSource, journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { COMPLETION_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -119,7 +119,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                   <li key={r.id} className={r.active ? '' : 'off'}>
                     <span>
                       <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small> <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
-                      {r.dimension && <small className="la-chip">{DIM_EN[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
+                      {r.dimension && <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}
                       {!r.required && <small className="la-chip">اختياري</small>}
                       {r.needs_review && <small className="la-chip warn">مراجعة</small>}
                     </span>
@@ -147,6 +147,9 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
 }
 
 // ══ أسئلة القياس ══
+// الأسئلة مجمعة بالجانب، والجانب الذي لا سؤال له في الأداة لا يظهر: «انتقال التعلم» للبعدي وحده، فكان عنوانه يظهر فارغًا في القبلي
+export const tierGroups = (qs) => Object.entries(TIER).map(([t, title]) => ({ t, title, qs: qs.filter((q) => q.tier === t) })).filter((g) => g.qs.length);
+
 export function Assessment({ catalog, reload, canWrite }) {
   const [edit, editor] = useEditor(reload);
   const insts = [...catalog.instruments].sort((a, b) => (a.kind + b.version).localeCompare(b.kind + a.version));
@@ -174,13 +177,14 @@ export function Assessment({ catalog, reload, canWrite }) {
       {quality && <ItemQuality instrumentId={inst.id} />}
       <div className="la-note" role="note">{QUESTIONS_LOCK_AR}{locked ? ' ولهذا الإصدار نتائج سابقة.' : ''}</div>
       <nav className="la-subtabs" aria-label="الأطر">
-        {DIMS.map((d) => <button key={d} className={dim === d ? 'on' : ''} aria-current={dim === d ? 'true' : undefined} onClick={() => setDim(d)}>{DIM_EN[d]} <small>{count(d)}</small></button>)}
+        {DIMS.map((d) => <button key={d} className={dim === d ? 'on' : ''} aria-current={dim === d ? 'true' : undefined} onClick={() => setDim(d)}>{DIM[d]} <small>{count(d)}</small></button>)}
       </nav>
-      {Object.entries(TIER).map(([t, tl]) => (
+      {!qs.length && <p className="la-muted">لا أسئلة لهذا الإطار في هذه الأداة.</p>}
+      {tierGroups(qs).map(({ t, title, qs: list }) => (
         <React.Fragment key={t}>
-          <h4 className="la-phase">{tl}</h4>
+          <h4 className="la-phase">{title}</h4>
           <ol className="la-qs">
-            {qs.filter((q) => q.tier === t).map((q) => (
+            {list.map((q) => (
               <li key={q.id} className={q.active ? '' : 'off'}>
                 <div className="la-row between">
                   <span><code>{q.code}</code> {q.text_ar}</span>
@@ -267,7 +271,7 @@ export function Levels({ catalog, reload, canWrite }) {
         <p className="la-muted">لا تظهر للمشارك: يرى مستواه العام وملف تعريف مساره. عنوان المسار في الخلية يراه الخبير في ملف المشارك، والوصف مرجع للفريق هنا.</p>
         <div className="la-cells">
           <div />
-          {DIMS.map((d) => <div key={d} className="la-ch">{DIM_EN[d]}<small>{DIM[d]}</small></div>)}
+          {DIMS.map((d) => <div key={d} className="la-ch">{DIM[d]}</div>)}
           {LVLS.map((l) => (
             <React.Fragment key={l}>
               <div className="la-ch">{LVL[l]}</div>
@@ -275,7 +279,7 @@ export function Levels({ catalog, reload, canWrite }) {
                 const c = cell(d, l);
                 const body = <><b>{c.path_title_ar || 'بلا عنوان مسار'}</b><p>{c.description_ar || ''}</p></>;
                 return canWrite
-                  ? <button key={d} className="la-cell" onClick={() => edit({ title: `${DIM_EN[d]} · ${LVL[l]}`, fields: CELL_FIELDS, values: c, onSave: save('grid_cells', { dimension: d, level: l }) })}>{body}</button>
+                  ? <button key={d} className="la-cell" onClick={() => edit({ title: `${DIM[d]} · ${LVL[l]}`, fields: CELL_FIELDS, values: c, onSave: save('grid_cells', { dimension: d, level: l }) })}>{body}</button>
                   : <div key={d} className="la-cell">{body}</div>;
               })}
             </React.Fragment>

@@ -15,7 +15,7 @@ import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 import OrgTeam from './OrgTeam.jsx';
 import OrgJourney from './OrgJourney.jsx';
-import { orgReadiness, readinessSummary } from '../org-hub.js';
+import { orgReadiness, readinessSummary, seatsUsedOf, seatsView } from '../org-hub.js';
 import { navigate } from '../route.js';
 
 
@@ -27,11 +27,13 @@ export function Funnel({ f, big }) {
     ))}</div>
   );
 }
-function Seats({ n, seats }) {
+// المقاعد المستهلكة من seats_used (seatsView)، لا من عدد المسجلين
+function Seats({ org, members }) {
+  const v = seatsView(org, members);
   return (
     <div className="la-seats">
-      <div className="la-row between"><span>{seats ? 'المقاعد' : 'المشاركون'}</span><b>{n}{seats ? <small> / {seats}</small> : null}</b></div>
-      {seats ? <span className="la-fn-bar"><i style={{ width: `${Math.min(100, (n / seats) * 100).toFixed(1)}%` }} /></span> : null}
+      <div className="la-row between"><span>{v.label}</span><b>{v.value}{v.hint ? <small> · {v.hint}</small> : null}</b></div>
+      {v.pct != null ? <span className="la-fn-bar"><i style={{ width: `${v.pct.toFixed(1)}%` }} /></span> : null}
     </div>
   );
 }
@@ -39,7 +41,7 @@ function Seats({ n, seats }) {
 const ORG_PRESETS = [
   { key: 'waiting', label: 'لديها ما ينتظر اعتمادك', test: (o) => o.stats.pending_approval > 0 },
   { key: 'quiet', label: 'بلا نشاط هذا الأسبوع', test: (o) => o.stats.total > 0 && !o.stats.active_week },
-  { key: 'full', label: 'اكتملت مقاعدها', test: (o) => o.seats && o.stats.total >= o.seats },
+  { key: 'full', label: 'اكتملت مقاعدها', test: (o) => o.seats && seatsUsedOf(o, o.stats.total) >= o.seats },
   { key: 'empty', label: 'بلا مشاركين', test: (o) => !o.stats.total },
   { key: 'off', label: 'موقوفة', test: (o) => o.status === 'inactive' },
   { key: 'no-coord', label: 'منسقها لم يدخل بعد', test: (o) => o.status !== 'inactive' && ['none', 'contact', 'invited', 'lapsed'].includes(o.access?.state) },
@@ -88,7 +90,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const counts = useMemo(() => presetCounts(list, ORG_PRESETS), [list]);
   const total = list.reduce((a, o) => a + o.stats.total, 0) + (un.total || 0);
   const seats = list.reduce((a, o) => a + (o.seats || 0), 0);
-  const filled = list.reduce((a, o) => a + (o.seats ? o.stats.total : 0), 0);
+  const filled = list.reduce((a, o) => a + (o.seats ? seatsUsedOf(o, o.stats.total) : 0), 0);
 
   // الجهة يختارها المدير صراحةً (لا أول جهة في القائمة)، ويؤكد الربط باسمها وعدد من يُنقلون
   const linkTyped = async (t) => {
@@ -105,7 +107,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
       <div className="stats-grid">
         <div className="stat-card"><div className="stat-label">الجهات</div><div className="stat-value">{list.length}</div><div className="stat-sub">{list.filter((o) => o.status !== 'inactive').length} نشطة</div></div>
         <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{total}</div><div className="stat-sub">من كل الجهات</div></div>
-        <div className="stat-card"><div className="stat-label">المقاعد المشغولة</div><div className="stat-value s-replied">{filled}<small> / {seats || '·'}</small></div><div className="stat-sub">من المتعاقد عليه</div></div>
+        <div className="stat-card"><div className="stat-label">المقاعد المشغولة</div><div className="stat-value s-replied">{filled}{seats ? <small> من {seats}</small> : null}</div><div className="stat-sub">{seats ? 'في عقود الجهات' : 'لا حد مقاعد في العقود'}</div></div>
         <div className="stat-card"><div className="stat-label">بدون جهة</div><div className="stat-value s-new">{un.total || 0}</div><div className="stat-sub">اربطهم بجهاتهم</div></div>
       </div>
       <div className="la-row between la-tracks-bar">
@@ -126,7 +128,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
               <div><b>{o.name}</b><small>{o.sector}{o.status === 'inactive' ? ' · موقوفة' : ''}</small></div>
             </header>
             {domainsOf(o).length > 0 && <div className="la-domains">{domainsOf(o).map((d) => <span key={d} dir="ltr">{d}</span>)}</div>}
-            <Seats n={o.stats.total} seats={o.seats} />
+            <Seats org={o} members={o.stats.total} />
             <Funnel f={o.stats} />
             <AccessLine o={o} canWrite={canWrite} onEdit={onEdit} toast={toast} />
             <div className="la-org-foot">
@@ -309,7 +311,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
           </div>
         )}
         <div className="la-org-hero-grid">
-          <div><Seats n={all.length} seats={o.seats} /><div className="la-org-kpis">
+          <div><Seats org={{ ...o, seats_used: orgs.find((x) => x.id === o.id)?.seats_used ?? null }} members={all.length} /><div className="la-org-kpis">
             <span><b>{fn.pending_approval}</b>{STATUS.pending_approval}</span><span><b>{fn.approved}</b>اعتُمد مسارهم</span>
             <span><b>{fn.completed}</b>أنهوا</span><span><b>{fn.withdrawn}</b>منسحب أو موقوف</span></div></div>
           <div><Funnel f={fn} big /></div>
