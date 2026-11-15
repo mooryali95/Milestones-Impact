@@ -160,7 +160,7 @@ export function ProposalsSheet({ data, api, scope = null, onEdit, onGo, onChange
   useEsc(onClose);
   const byId = useMemo(() => Object.fromEntries(data.chapters.map((c) => [c.id, c])), [data.chapters]);
   const list = (data.proposals || []).filter((p) => (!scope || (p.module_id === scope.chapter.id && p.section === scope.section)) && (scope || pass(f, p)));
-  const rule = data.viewer.decide ? 'تعتمد ما قيد المراجعة أو ترده بملاحظة. المعتمد يدخل الإصدار التالي من الكتاب.'
+  const rule = data.viewer.decide ? 'تعتمد ما قيد المراجعة أو ترده بملاحظة. المعتمد يجمعه سير «Handbook release» في GitHub Actions في إصدار جديد بطلب دمج، ويصل المشاركين بعد دمجه وتطبيق ترحيله.'
     : data.viewer.propose ? 'تكتب المقترح وتعرضه، ويعتمده المدير العام. التعليق عليه من زر التعليق في القسم نفسه.'
       : 'تقرأ المقترحات المعروضة وتعلّق عليها من زر التعليق في القسم نفسه. الاعتماد للإدارة.';
   return (

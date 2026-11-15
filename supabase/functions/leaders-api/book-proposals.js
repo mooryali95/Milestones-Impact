@@ -35,8 +35,9 @@ export function replaceSection(md, key, next) {
   const secs = rawSections(md);
   const i = secs.findIndex((s) => s.key === key);
   if (i < 0) return null;
-  secs[i] = { key, md: String(next).replace(/\s+$/, '') };
-  return secs.map((s) => s.md).join('\n').replace(/\n{3,}/g, '\n\n');
+  // السطر الفارغ الذي يفصل القسم عن تاليه يبقى كما كان، فلا يتغير في الملف إلا ما اقتُرح
+  secs[i] = { key, md: String(next).replace(/\s+$/, '') + (secs[i].md.match(/\n*$/)?.[0] || '') };
+  return secs.map((s) => s.md).join('\n');
 }
 
 /** تحقق المقترح: القسم قائم، والنص مختلف وغير فارغ، والكتل متوازنة، والسبب مكتوب
