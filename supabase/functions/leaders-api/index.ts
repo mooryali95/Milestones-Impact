@@ -54,6 +54,7 @@ import * as OB from './observations.ts';
 import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
 import * as MC from './mail-center.ts';
+import * as AG from './agent-admin.ts';
 
 type Body = Record<string, any>;
 
@@ -561,6 +562,19 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.capstone-review': (a, b) => A.writer(a, X.adminReview, b),
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
   'admin.outcomes': (_a, b) => T.adminOutcomes(b),
+  // المساعد الآلي (agent-admin.ts): القراءة للمدير الأعلى أو المالك، والكتابة superWriter، والمفتاح بتحقق إضافي من admin-api
+  'admin.agent-state': (a) => AG.state(a),
+  'admin.agent-usage': (a) => AG.usage(a),
+  'admin.agent-conversations': (a, b) => AG.conversations(a, b),
+  'admin.agent-transcript': (a, b) => AG.transcript(a, b),
+  'admin.agent-eval-runs': (a) => AG.evalRuns(a),
+  'admin.agent-eval-run': (a, b) => AG.evalRun(a, b),
+  'admin.agent-enable': (a, b) => A.superWriter(a, AG.enable, b),
+  'admin.agent-eval-start': (a, b) => A.superWriter(a, AG.evalStart, b),
+  'admin.agent-eval-step': (a, b) => A.superWriter(a, AG.evalStep, b),
+  'admin.agent-eval-cancel': (a, b) => A.superWriter(a, AG.evalCancel, b),
+  'admin.agent-key-set': (a, b) => A.superWriter(a, AG.keySet, b),
+  'admin.agent-key-clear': (a, b) => A.superWriter(a, AG.keyClear, b),
 };
 
 Deno.serve(async (req) => {
