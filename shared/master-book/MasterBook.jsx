@@ -137,7 +137,7 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
             {err && <p className="mb-err" role="alert">{err}</p>}
             <div className="mb-row"><small className="mb-muted">يظهر تعليقك باسمك وصفتك للإدارة ولأعضاء اللجنتين</small><button type="button" className="mb-btn gold" disabled={busy || text.trim().length < 2} onClick={send}>{busy ? 'يُحفظ…' : replyTo ? 'أرسل الرد' : 'أضف التعليق'}</button></div>
           </footer>
-        ) : <footer className="mb-compose"><p className="mb-muted">{viewer.kind === 'expert' ? 'عضويتك موقوفة مؤقتًا، فتقرأ الكتاب والتعليقات ولا تكتب حتى يُعاد تفعيل ملفك.' : 'حسابك للقراءة. التعليق يحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.'}</p></footer>}
+        ) : <footer className="mb-compose"><p className="mb-muted">{viewer.paused ? 'عضويتك موقوفة مؤقتًا، فتقرأ الكتاب والتعليقات ولا تكتب حتى يُعاد تفعيل ملفك.' : viewer.kind === 'expert' ? 'حسابك للقراءة فقط، فتقرأ الكتاب والتعليقات ولا تكتب.' : 'حسابك للقراءة. التعليق يحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.'}</p></footer>}
       </aside>
     </div>
   );
@@ -419,7 +419,6 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, onProposals,
   );
 }
 
-/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
 // العلامة المائية بنمط الكتيب الشخصي (leaders-app/src/screens/Handbook.jsx): اسم القارئ وبريده وتاريخ اليوم، مائلة
 // متكررة بشفافية خفيفة فوق الصفحة كلها، فأي تصوير يُعرف مصدره. لا تلتقط النقر ولا تُقرأ لقارئ الشاشة
 const xmlEsc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -429,11 +428,16 @@ function watermarkUrl(text, date = new Date()) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="150"><text x="190" y="80" text-anchor="middle" direction="rtl" font-family="Noto Kufi Arabic, Tahoma, sans-serif" font-size="15" font-weight="600" fill="#5a6468" fill-opacity="0.09" transform="rotate(-25.7 190 75)">${stamp}</text></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
+// التاريخ يتجدد إن بقي القارئ مفتوحًا بعد منتصف الليل: فحص كل دقيقة، ولا يُعاد الرسم إلا إن تغيّر اليوم
+const today = () => new Date().toDateString();
 function Watermark({ text }) {
-  const url = useMemo(() => watermarkUrl(text), [text]);
+  const [day, setDay] = useState(today);
+  useEffect(() => { const t = setInterval(() => setDay(today()), 60000); return () => clearInterval(t); }, []);
+  const url = useMemo(() => watermarkUrl(text, new Date(day)), [text, day]);
   return url ? <div className="mb-wm" aria-hidden="true" style={{ backgroundImage: url }} /> : null;
 }
 
+/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
 export default function MasterBook({ api, onClose, onExperts, place = 'admin' }) {
   const saved = store.get(KEY) || {};
   const [data, setData] = useState(null);

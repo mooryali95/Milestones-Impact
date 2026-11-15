@@ -164,10 +164,14 @@ describe('الكتاب الأم بعد دمج #358: المشاركة لأعضا�
     expect(mb).toContain("if (b?.on !== false && hasJourneyRole(e) && !hasCommittee(e)) throw");
   });
   it('العضو الموقوف مؤقتًا يقرأ ولا يكتب ولا يحذف، والعلامة المائية باسمه وبريده', () => {
-    expect(mb).toContain("write: e.status === 'active', email: String(e.email || '')");
+    expect(mb).toContain("write: e.status === 'active', paused: e.status === 'paused', email: String(e.email || '')");
     expect(mb).toContain("if (v.kind === 'expert' && !v.write) throw new Fail('حسابك للقراءة فقط', 403, 'read_only');");
-    expect(mb).toContain("watermark: [v.name, v.email].filter(Boolean).join(' · ')");
+    expect(mb).toContain('watermark: watermark(v)');
     expect(read('shared/master-book/MasterBook.jsx')).toContain('<Watermark text={data.viewer.watermark} />');
+    // السلوك نفسه في master_book_test.ts (Deno)؛ وهنا ما يُرى: فوق النوافذ وفي الطباعة
+    const css = read('shared/master-book/master-book.css');
+    expect(css).toMatch(/\.mb-wm \{[^}]*z-index: 70;/);
+    expect(css).not.toMatch(/@media print \{ \.mb-wm \{ display: none/);
   });
 });
 

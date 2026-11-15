@@ -11,12 +11,12 @@ import { hasCommittee, hasJourneyRole } from './committees.js';
 import { sectionById, sectionIdOf } from './section-refs.js';
 import { proposalsFor } from './book-proposals.ts';
 
-type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; superAdmin?: boolean; email?: string };
+type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; paused?: boolean; superAdmin?: boolean; email?: string };
 
 // العضو الموقوف مؤقتًا (paused) يقرأ ولا يكتب: bookAccess تفتح له القراءة، والكتابة للفاعل وحده
 export const expertViewer = (e: any): Viewer => {
   if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
-  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active', email: String(e.email || '') };
+  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active', paused: e.status === 'paused', email: String(e.email || '') };
 };
 // يكتب المدير بصلاحية الكتابة وعامل ثانٍ (كما في writer)، ويقرأ الباقون
 export const adminViewer = (a: { email: string; role: string; method?: string }): Viewer => ({
@@ -49,6 +49,13 @@ async function version() {
   return versionFromMigration(data?.[0]?.name) || null;
 }
 
+// العلامة المائية: الاسم والبريد، ويسقط الاسم إن كان هو البريد أو جزءه قبل @ (اسم المدير يُشتق منه)، فلا يتكرر
+export const watermark = (v: Viewer) => {
+  const email = v.email || '';
+  const name = v.name && v.name !== email && v.name !== email.split('@')[0] ? v.name : '';
+  return [name, email].filter(Boolean).join(' · ');
+};
+
 export async function book(v: Viewer) {
   const [mods, rows, ver] = await Promise.all([modules(), commentRows(), version()]);
   const ds = drafts();
@@ -67,7 +74,7 @@ export async function book(v: Viewer) {
   const props = await proposalsFor(v, mods).catch(() => ({ ready: false, list: [], counts: null }));
   return {
     success: true, version: ver, generated_at: new Date().toISOString(), share, deps,
-    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, watermark: [v.name, v.email].filter(Boolean).join(' · '), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin },
+    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, paused: !!v.paused, watermark: watermark(v), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin },
     proposals_ready: props.ready, proposals: props.list, proposal_counts: props.counts,
     comments_ready: rows !== null,
     chapters: [...mods.map((m) => ({

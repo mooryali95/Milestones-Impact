@@ -24,7 +24,7 @@ async function mount(page, first) {
     if (b.action === 'xp.dashboard') return route.fulfill({ json: state });
     // ردّ xp.pledge هو portalDashboard وحده كما على الخادم: بلا بطاقة الكتاب ولا التكليفات لمن جمع الخدمتين، فالواجهة تعيد التحميل
     if (b.action === 'xp.pledge') { state = { ...state, pledge_needed: false }; const { book_access, assignments, ...plain } = state; return route.fulfill({ json: state.content_only ? state : plain }); }
-    if (b.action === 'xp.book') return route.fulfill({ json: state.pledge_needed ? { success: false, code: 'pledge', message: 'أكّد تعهد السرية أولًا ثم افتح الكتاب' } : state.expert?.status === 'paused' ? { ...BOOK, viewer: { ...BOOK.viewer, write: false } } : BOOK });
+    if (b.action === 'xp.book') return route.fulfill({ json: state.pledge_needed ? { success: false, code: 'pledge', message: 'أكّد تعهد السرية أولًا ثم افتح الكتاب' } : state.expert?.status === 'paused' ? { ...BOOK, viewer: { ...BOOK.viewer, write: false, paused: true } } : BOOK });
     return route.fulfill({ json: { success: false, message: `غير متوقع: ${b.action}` } });
   });
   await page.addInitScript((t) => localStorage.setItem('mi_leaders_expert_session', t), XP_TOKEN);
@@ -125,4 +125,7 @@ test('القارئ: علامة مائية باسم العضو وبريده، و�
   await page.getByRole('button', { name: 'تعليقات القسم: المدخل' }).click();
   await expect(page.getByText('عضويتك موقوفة مؤقتًا، فتقرأ الكتاب والتعليقات ولا تكتب حتى يُعاد تفعيل ملفك.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'أضف التعليق' })).toHaveCount(0);
+  // العلامة فوق نافذة السلسلة، فلا تخلو لقطتها منها
+  const above = await page.evaluate(() => Number(getComputedStyle(document.querySelector('.mb-wm')).zIndex) > Number(getComputedStyle(document.querySelector('.mb-sheet-wrap')).zIndex));
+  expect(above).toBe(true);
 });
