@@ -77,7 +77,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
   it('تعذّر العداد لا يرفع السقف: الرموز والتنبيه وحدها تمر، وما سواها محجوب والجماعي للطابور، والمالك يُنبَّه', () => {
     expect(mail).not.toMatch(/لا عداد بعد|: Promise\.resolve\(\)/);
     expect(mail).toMatch(/await raise\('mail_counter_unavailable', \{ source, kind \}\)/);
-    expect(mail).toMatch(/if \(!PRIORITY_KINDS\.has\(kind\)\) \{ await log\('blocked'\); return \{ ok: false, reason: 'mail_cap' \}; \}/);
+    expect(mail).toMatch(/if \(!PRIORITY_KINDS\.has\(kind\)\) \{ await log\('blocked'\); report\('blocked', 'mail_counter_unavailable'\); return \{ ok: false, reason: 'mail_cap' \}; \}/);
     expect(read('supabase/functions/leaders-api/core.ts')).not.toMatch(/contactMailCount|الصيغة القديمة/);
   });
   it('حدود الشبكة تفشل مغلقة، ولا إعادة بلا عمود الشبكة', () => {

@@ -1,0 +1,319 @@
+// قناة سلاك (#mi-ops) على قاعدة مزيفة وشبكة محاكاة: سلسلة واحدة لكل فئة في يوم الرياض، والرمز لا يُنشر،
+// والبريد مقنّع، وتعطل سلاك لا يُفشل المستدعي، وغياب الجدول ينشر بلا سلاسل، والفيض يُجمع، ورسالة الربط مرة.
+import './_test_env.ts';
+import { assert, assertEquals } from 'jsr:@std/assert@1';
+const S = await import('../_shared/slack.ts');
+const { sendCounted, alertWebhook } = await import('../_shared/mail.ts');
+const { db, raiseAlert } = await import('./core.ts');
+const { MIGRATIONS, MIGRATION_GATES } = await import('./migrations.js');
+
+type Row = { day: string; category: string; ts: string };
+function fakeDb({ missing = false } = {}) {
+  const rows = new Map<string, Row>();
+  const from = (table: string) => {
+    const st = { op: 'select', filters: {} as Record<string, unknown>, payload: null as any, single: false };
+    const exec = () => {
+      if (table !== 'slack_threads') return { data: [], count: 0, error: null };
+      if (missing) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'leaders.slack_threads'" } };
+      const match = [...rows.values()].filter((r: any) => Object.entries(st.filters).every(([k, v]) => r[k] === v));
+      if (st.op === 'insert') {
+        const k = `${st.payload.day}|${st.payload.category}`;
+        if (rows.has(k)) return { error: { code: '23505', message: 'duplicate key' } };
+        rows.set(k, { ...st.payload });
+        return { error: null };
+      }
+      if (st.op === 'update') { match.forEach((r) => Object.assign(r, st.payload)); return { error: null }; }
+      if (st.op === 'delete') { for (const [k, r] of rows) if (match.includes(r)) rows.delete(k); return { error: null }; }
+      return { data: st.single ? (match[0] ?? null) : match, error: null };
+    };
+    const q: any = {
+      select: () => q, gte: () => q, not: () => q, in: () => q, limit: () => q, order: () => q,
+      eq: (k: string, v: unknown) => { st.filters[k] = v; return q; },
+      maybeSingle: () => { st.single = true; return q; },
+      insert: (p: unknown) => { st.op = 'insert'; st.payload = p; return q; },
+      update: (p: unknown) => { st.op = 'update'; st.payload = p; return q; },
+      delete: () => { st.op = 'delete'; return q; },
+      then: (ok: (x: unknown) => unknown, bad: (e: unknown) => unknown) => Promise.resolve().then(exec).then(ok, bad),
+    };
+    return q;
+  };
+  return { from, schema: () => ({ from }), rows };
+}
+
+type Call = { url: string; body: any };
+type SlackMode = 'ok' | 'hang' | 'error' | 'throw' | 'rate';
+async function withNet<T>(fn: (calls: Call[]) => Promise<T>, { slack = 'ok' as SlackMode } = {}) {
+  const real = globalThis.fetch;
+  const calls: Call[] = [];
+  let n = 0;
+  globalThis.fetch = ((url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    calls.push({ url: u, body });
+    if (u.includes('resend.com')) return Promise.resolve(new Response('{"id":"re_1"}', { status: 200 }));
+    if (!u.startsWith('https://slack.com/api/')) return Promise.resolve(new Response('ok'));
+    if (slack === 'hang') {
+      return new Promise((_ok, bad) => init?.signal?.addEventListener('abort', () => bad(new DOMException('aborted', 'AbortError'))));
+    }
+    if (slack === 'throw') return Promise.reject(new TypeError('network down'));
+    if (slack === 'error') return Promise.resolve(new Response('{"ok":false,"error":"channel_not_found"}', { status: 200 }));
+    if (slack === 'rate') return Promise.resolve(new Response('{"ok":false,"error":"ratelimited"}', { status: 429, headers: { 'Retry-After': '30' } }));
+    n += 1;
+    return Promise.resolve(new Response(JSON.stringify({ ok: true, ts: `17000.${n}` }), { status: 200 }));
+  }) as typeof fetch;
+  try { return await fn(calls); } finally { globalThis.fetch = real; }
+}
+const slackCalls = (calls: Call[]) => calls.filter((c) => c.url.startsWith('https://slack.com/api/'));
+
+function setup() {
+  S.resetSlack();
+  Object.assign(S.SLACK, { timeoutMs: 4000, gapMs: 0, maxLines: 20, maxPending: 60 });
+  Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
+  Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
+}
+function teardown() {
+  S.resetSlack();
+  Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
+  Deno.env.delete('LEADERS_SLACK_CHANNEL');
+}
+
+Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعربية، والبريد مقنّع بحرفه الأول ونطاقه', () => {
+  const sunday = Date.parse('2026-11-15T10:00:00Z');
+  assertEquals(S.parentText('codes', sunday), '🔐 رموز الدخول · الأحد 15 نوفمبر');
+  assertEquals(S.parentText('alerts', sunday), '⚠️ التنبيهات · الأحد 15 نوفمبر');
+  assertEquals(S.parentText('mail', sunday), '📨 بريد لم يصل · الأحد 15 نوفمبر');
+  // 22:00 بتوقيت غرينتش بعد منتصف الليل في الرياض: يوم جديد
+  assertEquals(S.riyadhDay(Date.parse('2026-11-15T22:00:00Z')), '2026-11-16');
+  assertEquals(S.parentText('codes', Date.parse('2026-11-15T22:00:00Z')), '🔐 رموز الدخول · الاثنين 16 نوفمبر');
+  assertEquals(S.maskEmail('Mona.Ali@Gmail.com'), 'm***@gmail.com');
+  assertEquals(S.maskEmail('bad'), '***');
+});
+
+Deno.test('سلاك: غير مضبوط لا ينشر شيئًا', async () => {
+  teardown();
+  await withNet(async (calls) => {
+    await S.slackPost('alerts', 'x', { client: fakeDb() });
+    assertEquals(await S.slackHello(fakeDb()), 'off');
+    assertEquals(slackCalls(calls).length, 0);
+  });
+});
+
+Deno.test('سلاك: رسالة أم واحدة لكل فئة في اليوم، والأحداث ردود فيها، وتُعاد من الجدول في نسخة جديدة وتتجدد في اليوم التالي', async () => {
+  setup();
+  const client = fakeDb();
+  const realNow = Date.now;
+  try {
+    await withNet(async (calls) => {
+      await S.slackPost('codes', 'one', { client });
+      await S.slackPost('codes', 'two', { client });
+      await S.slackIdle();
+      let sc = slackCalls(calls);
+      assertEquals(sc.length, 3);
+      assertEquals(sc[0].body.text, S.parentText('codes'));
+      assertEquals(sc[0].body.thread_ts, undefined);
+      assertEquals(sc[0].body.channel, 'C0TEST');
+      assertEquals(sc[1].body, { ...sc[1].body, text: 'one', thread_ts: '17000.1' });
+      assertEquals(sc[2].body.thread_ts, '17000.1');
+      assertEquals(client.rows.get(`${S.riyadhDay()}|codes`)?.ts, '17000.1');
+
+      // فئة أخرى: سلسلتها
+      await S.slackPost('mail', 'm1', { client });
+      sc = slackCalls(calls);
+      assertEquals(sc.length, 5);
+      assertEquals(sc[3].body.text, S.parentText('mail'));
+      assertEquals(sc[4].body.thread_ts, sc[3].body.thread_ts ?? '17000.4');
+
+      // نسخة جديدة من الدالة: السلسلة من الجدول، بلا أم جديدة
+      S.resetSlack();
+      await S.slackPost('codes', 'three', { client });
+      sc = slackCalls(calls);
+      assertEquals(sc.length, 6);
+      assertEquals(sc[5].body.thread_ts, '17000.1');
+
+      // اليوم التالي في الرياض: أم جديدة
+      const tomorrow = realNow() + 864e5;
+      Date.now = () => tomorrow;
+      await S.slackPost('codes', 'four', { client });
+      sc = slackCalls(calls);
+      assertEquals(sc.length, 8);
+      assertEquals(sc[6].body.text, S.parentText('codes', tomorrow));
+      assertEquals(sc[7].body.thread_ts, sc[6].body.thread_ts ?? '17000.7');
+      assertEquals(sc[7].body.thread_ts, '17000.7');
+    });
+  } finally { Date.now = realNow; teardown(); }
+});
+
+Deno.test('سلاك: رمز الدخول يُبلَّغ بحالته وغرضه وبريد مقنّع، ولا يحمل الرمز ولا البريد الكامل ولا متن الرسالة', async () => {
+  setup();
+  const client = fakeDb();
+  try {
+    await withNet(async (calls) => {
+      const r = await sendCounted(client, 'mona.ali@gmail.com', 'رمز الدخول: 987654', '<p>رمزك 987654</p>', { kind: 'code', source: 'admin-api', cap: 80, key: 'k', purpose: 'دخول الإدارة' });
+      assertEquals(r.ok, true);
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      assertEquals(sc.length, 2);
+      const all = JSON.stringify(sc.map((c) => c.body));
+      assert(!all.includes('987654'), 'الرمز لا يصل سلاك');
+      assert(!all.includes('mona.ali'), 'البريد الكامل لا يصل سلاك');
+      assert(!all.includes('رمزك'), 'متن الرسالة لا يصل سلاك');
+      assertEquals(sc[0].body.text, S.parentText('codes'));
+      assertEquals(sc[1].body.text, '✅ أُرسل · دخول الإدارة · m***@gmail.com · admin-api');
+      // سطر الرمز يطمس ستة أرقام متتالية احتياطًا حتى لو مُرّرت خطأ
+      assert(!S.codeLine({ status: 'sent', purpose: 'x 123456', to: 'a@b.co', source: 's' }).includes('123456'));
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: رمز تعذّر إرساله يُبلَّغ تعذّرًا، والبريد غير الرمز المحجوب بالسقف سطر في سلسلة البريد، والمرسل لا يُبلَّغ', async () => {
+  setup();
+  const client = fakeDb();
+  try {
+    await withNet(async (calls) => {
+      // بلا مفتاح Resend: تعذّر
+      const r = await sendCounted(client, 'sara@org.sa', 'رمز', '<p>111222</p>', { kind: 'code', source: 'user-api', cap: 80, key: '', purpose: 'مصفوفة التأثير' });
+      assertEquals(r.ok, false);
+      // إشعار بنصيب مصدر ممتلئ: محجوب
+      const full = fakeDb();
+      const fullFrom = full.from;
+      (full as any).from = (t: string) => {
+        const q = fullFrom(t);
+        if (t !== 'mail_events') return q;
+        const then = q.then;
+        q.then = (ok: any, bad: any) => then((x: any) => ok({ ...x, count: 999 }), bad);
+        return q;
+      };
+      (full as any).schema = () => ({ from: (full as any).from });
+      const b = await sendCounted(full, 'khalid@corp.com', 'تذكير', '<p>x</p>', { kind: 'notify', source: 'leaders-api', cap: 80, key: 'k' });
+      assertEquals(b.ok, false);
+      // إشعار أُرسل: لا سطر
+      assertEquals((await sendCounted(client, 'ok@corp.com', 'تذكير', '<p>x</p>', { kind: 'notify', source: 'leaders-api', cap: 80, key: 'k' })).ok, true);
+      await S.slackIdle();
+      const texts = slackCalls(calls).map((c) => c.body.text);
+      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · s***@org.sa · user-api · mail_unconfigured'), texts.join('\n'));
+      assert(texts.some((t) => t.startsWith('notify · k***@corp.com · leaders-api · mail_')), texts.join('\n'));
+      assert(!texts.some((t) => t.includes('o***@corp.com')));
+      assert(!texts.some((t) => t.includes('111222')));
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: تعطله أو بطؤه أو رفضه لا يُفشل المستدعي ولا يؤخره، ولا إعادة محاولة', async () => {
+  for (const mode of ['hang', 'throw', 'error'] as const) {
+    setup();
+    S.SLACK.timeoutMs = 60;
+    const client = fakeDb();
+    try {
+      await withNet(async (calls) => {
+        let settled = false;
+        const p = S.slackPost('codes', 'x', { client }).then(() => { settled = true; });
+        const r = await sendCounted(client, 'a@b.co', 's', '<p>x</p>', { kind: 'notify', source: 'leaders-api', cap: 80, key: 'k' });
+        assertEquals(r.ok, true);
+        if (mode === 'hang') assertEquals(settled, false, 'المستدعي لم ينتظر سلاك');
+        await p;   // لا يرمي
+        await S.slackIdle();
+        // أم فشلت: لا رد ولا إعادة
+        assertEquals(slackCalls(calls).length, 1, mode);
+        assertEquals(client.rows.size, 0);
+      }, { slack: mode });
+    } finally { teardown(); }
+  }
+});
+
+Deno.test('سلاك: الجدول غائب (قبل الترحيل) فينشر بلا سلاسل، ويبقى يعمل', async () => {
+  setup();
+  const client = fakeDb({ missing: true });
+  try {
+    await withNet(async (calls) => {
+      await S.slackPost('alerts', '*mail_cap* {}', { client });
+      await S.slackPost('alerts', '*mail_rejected* {}', { client });
+      const sc = slackCalls(calls);
+      assertEquals(sc.length, 2);
+      assertEquals(sc[0].body.thread_ts, undefined);
+      assertEquals(sc[0].body.text, '⚠️ التنبيهات\n*mail_cap* {}');
+      assertEquals(sc[1].body.thread_ts, undefined);
+      assertEquals(await S.slackHello(client), 'no_table');
+      assertEquals(slackCalls(calls).length, 2);
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: الفيض يُجمع في رسائل قليلة، وما فاض يُترك ويُذكر عدده، و429 يوقف النشر بلا إعادة', async () => {
+  setup();
+  const client = fakeDb();
+  try {
+    await withNet(async (calls) => {
+      for (let i = 0; i < 100; i++) S.slackPost('codes', `line ${i}`, { client });
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      assertEquals(sc.length, 3);   // الأم، والسطر الأول، ثم دفعة مجمّعة
+      const last = sc[2].body.text as string;
+      assertEquals(last.split('\n').filter((l) => l.startsWith('line ')).length, 20);
+      assert(last.includes('(و40 أخرى من النوع نفسه)'), last);
+      assert(last.includes('(تُرك 39 سطرًا لازدحام القناة)'), last);
+    });
+    S.resetSlack();
+    await withNet(async (calls) => {
+      await S.slackPost('codes', 'a', { client: fakeDb() });
+      for (let i = 0; i < 10; i++) await S.slackPost('codes', `b${i}`, { client: fakeDb() });
+      await S.slackIdle();
+      assertEquals(slackCalls(calls).length, 1, 'بعد 429 لا طلب حتى Retry-After');
+    }, { slack: 'rate' });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: رسالة الربط مرة واحدة، وتُعاد في الساعة التالية إن لم تصل', async () => {
+  setup();
+  const client = fakeDb();
+  try {
+    await withNet(async (calls) => {
+      assertEquals(await S.slackHello(client), 'failed');
+      assertEquals(client.rows.size, 0, 'لا علامة لما لم يصل');
+    }, { slack: 'error' });
+    await withNet(async (calls) => {
+      assertEquals(await S.slackHello(client), 'sent');
+      assertEquals(await S.slackHello(client), 'exists');
+      S.resetSlack();
+      assertEquals(await S.slackHello(client), 'exists');
+      const sc = slackCalls(calls);
+      assertEquals(sc.length, 1);
+      assertEquals(sc[0].body.text, S.SLACK_HELLO);
+      assertEquals(S.SLACK_HELLO, '✅ تم ربط Milestone Impact بسلاك');
+      const row = [...client.rows.values()].find((r) => r.category === 'hello');
+      assertEquals(row?.ts, '17000.1');
+    });
+  } finally { teardown(); }
+});
+
+Deno.test('سلاك: alertOps ومسار تنبيه البريد المشترك ينشران في سلسلة التنبيهات، والرابط يبقى كما هو', async () => {
+  setup();
+  const fake = fakeDb();
+  Object.assign(db as any, { from: fake.from, schema: () => ({ from: fake.from }) });
+  S.slackUse(db);
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  try {
+    await withNet(async (calls) => {
+      const r = await raiseAlert('slack_probe_kind', { note: 'x' });
+      assertEquals(r.webhook, true);
+      await alertWebhook('mail_cap', { source: 'user-api' });
+      await S.slackIdle();
+      const sc = slackCalls(calls);
+      assertEquals(sc[0].body.text, S.parentText('alerts'));
+      assertEquals(sc.slice(1).map((c) => c.body.thread_ts), ['17000.1', '17000.1']);
+      assertEquals(sc[1].body.text, '*slack_probe_kind* {"note":"x"}');
+      assertEquals(sc[2].body.text, '*mail_cap* {"source":"user-api"}');
+      assertEquals(calls.filter((c) => c.url.includes('hooks.example')).length, 2);
+    });
+  } finally {
+    delete (db as any).from; delete (db as any).schema;
+    Deno.env.delete('LEADERS_ALERT_WEBHOOK');
+    teardown();
+  }
+});
+
+Deno.test('سلاك: ترحيل الجدول في القائمة ومتسامح بتعليل', () => {
+  const name = '20261115130000_leaders_slack_threads';
+  assert(MIGRATIONS.includes(name));
+  assertEquals((MIGRATION_GATES as Record<string, string[]>)[name][0], 'tolerant');
+  assert((MIGRATION_GATES as Record<string, string[]>)[name][1].length > 20);
+});

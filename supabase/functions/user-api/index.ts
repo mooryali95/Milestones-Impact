@@ -79,7 +79,7 @@ const otpHash = (email: string, code: string) => sha256hex(`user-otp:${email}:${
 
 // البريد بالقالب الموحّد (_shared/mail.ts)، وكل رسالة بالعداد الموحد (D15)
 const sendEmail = (sb: SB, to: string, subject: string, html: string, kind: "code" | "notify", ref: string | null = null) =>
-  sendCounted(sb, to, subject, html, { kind, source: "user-api", ref, cap: MAIL_CAP, sourceShare: USER_MAIL_SHARE, key: RESEND, from: FROM });
+  sendCounted(sb, to, subject, html, { kind, source: "user-api", ref, cap: MAIL_CAP, sourceShare: USER_MAIL_SHARE, key: RESEND, from: FROM, purpose: kind === "code" ? "مصفوفة التأثير" : null });
 const otpHtml = (code: string) => mailShell("رمز التحقق إلى مصفوفة التأثير", `
 ${mailText("أدخل هذا الرمز في الصفحة التي طلبته منها لإكمال الدخول.")}
 ${mailCode(code, "صالح 10 دقائق ولمرة واحدة.")}`, { family: "access", preheader: `رمزك ${code} · صالح 10 دقائق` });

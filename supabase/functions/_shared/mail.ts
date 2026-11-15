@@ -9,6 +9,7 @@
 // الاتجاه على كل جدول وخلية وفقرة لا على html وحده: Gmail يحذف سمات html وbody، فيرث المتن اتجاه واجهته.
 
 import { crossesAlert, domainOf, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
+import { slackAlert, slackCode, slackMail } from './slack.ts';
 
 // ألوان البريد من ألوان الهوية (shared/js/brand.js) بالقيم نفسها؛ دوال الحافة لا تستورد من خارج
 // supabase/functions، فتُنسخ هنا ويطابقها single-source.test.js. القيم مكتوبة لأن برامج البريد لا تقرأ متغيرات CSS.
@@ -153,6 +154,8 @@ export const deliver = async (to: string, subject: string, html: string, opts: D
 // حين يكون العطل في البريد نفسه لا يصل تنبيه بالبريد، فهذه القناة لا تعتمد عليه.
 const WEBHOOK_TIMEOUT_MS = 5000;
 export async function alertWebhook(kind: string, detail: Record<string, unknown>) {
+  // سلسلة التنبيهات في سلاك إن ضُبط البوت: لا يُنتظر ولا يُحسب في نتيجة الرابط (slack.ts)
+  slackAlert(kind, detail);
   const url = Deno.env.get('LEADERS_ALERT_WEBHOOK') || '';
   if (!url) { console.error('alert (no webhook):', kind, JSON.stringify(detail)); return false; }
   try {
@@ -207,7 +210,7 @@ async function logEvent(client: Client, row: Record<string, any>, extra: Record<
 // (الرابط والبريد بتهدئة لكل نوع)، وما سواه الرابط وحده. رسالة التنبيه نفسها تنبّه بالرابط وحده، فلا حلقة
 export type MailAlert = (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
 export async function sendCounted(client: Client, to: string, subject: string, html: string,
-  { kind, source, ref = null, cap, sourceShare, force = false, alert, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert }): Promise<SendOutcome> {
+  { kind, source, ref = null, cap, sourceShare, force = false, alert, purpose = null, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert; purpose?: string | null }): Promise<SendOutcome> {
   const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;
   // التنبيه لا يُفشل الإرسال أبدًا
   const raise = (k: string, d: Record<string, unknown>) => {
@@ -218,6 +221,11 @@ export async function sendCounted(client: Client, to: string, subject: string, h
     }
     return Promise.resolve().then(() => via(k, d)).catch((e) => console.error('mail alert:', k, e));
   };
+  // سلاك (slack.ts): كل رمز بحالته، وكل بريد غيره لم يصل بسببه. لا يُنتظر، ولا يمر بالعداد
+  const report = (status: 'sent' | 'blocked' | 'failed', reason: string | null = null) => {
+    if (kind === 'code') slackCode(client, { status, purpose, to, source, reason });
+    else if (status !== 'sent') slackMail(client, { kind, to, source, reason: reason || status });
+  };
   const counts = await mailCounts(client);
   // عنوان رسالة الرمز لا يُحفظ: بعض الدوال تكتب الرمز في عنوانها، والسجل لا يحمل رمزًا أبدًا (D15)
   const extra = { to_hash: await addressHash(to), subject: kind === 'code' ? null : String(subject || '').slice(0, 300) };
@@ -226,6 +234,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
       .gte('created_at', new Date(Date.now() - 864e5).toISOString());
     if (!error && (count ?? 0) >= Math.floor(cap * sourceShare)) {
       await logEvent(client, { kind, source, ref, status: 'blocked', to_domain: domainOf(to) }, extra);
+      report('blocked', 'mail_share');
       return { ok: false, reason: 'mail_share' };
     }
   }
@@ -234,6 +243,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
     const d = mailDecision(force ? 'code' : kind, counts, cap);
     if (!d.ok) {
       await log('blocked');
+      report('blocked', String(d.reason));
       // امتلاء السقف حدث يُنبَّه إليه (والتهدئة عند alertOps، أو في raise للرابط وحده)؛ حجب الحصة سير عادي يدخل به الإشعار الطابور.
       // التنبيه المحجوب بعد احتياطه لا ينبّه عن نفسه: وصل الرابط قبله
       if (d.reason === 'mail_cap' && kind !== 'alert') await raise('mail_cap', { source, kind, sent: counts.sent, cap });
@@ -243,10 +253,11 @@ export async function sendCounted(client: Client, to: string, subject: string, h
     // تعذّر العداد (D15): لا رسالة بلا قرار سقف إلا الرموز والتنبيه. ما سواها يُحجب بسبب السقف، والجماعي يدخل
     // الطابور عند مرسله، والمالك يُنبَّه
     if (Date.now() - counterAlertAt > COUNTER_ALERT_MS) { counterAlertAt = Date.now(); await raise('mail_counter_unavailable', { source, kind }); }
-    if (!PRIORITY_KINDS.has(kind)) { await log('blocked'); return { ok: false, reason: 'mail_cap' }; }
+    if (!PRIORITY_KINDS.has(kind)) { await log('blocked'); report('blocked', 'mail_counter_unavailable'); return { ok: false, reason: 'mail_cap' }; }
   }
   const r = await deliverResult(to, subject, html, opts);
   await log(r.ok ? 'sent' : 'failed', r.ok ? (r.id ?? null) : null);
+  report(r.ok ? 'sent' : 'failed', r.ok ? null : r.unconfigured ? 'mail_unconfigured' : r.rejected ? `rejected ${r.status}` : `mail_failed ${r.status ?? 0}`);
   if (!r.ok && r.rejected) await raise('mail_rejected', { source, kind, status: r.status, from: opts.from || MAIL_FROM_DEFAULT });
   if (r.ok && counts && crossesAlert(counts.sent, cap)) await raise('mail_quota_70', { sent: counts.sent + 1, cap, source });
   if (r.ok) return { ok: true, id: r.id ?? null };

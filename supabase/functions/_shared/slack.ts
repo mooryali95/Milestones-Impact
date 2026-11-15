@@ -1,0 +1,215 @@
+// ════════════════════════════════════════════════════════════════
+// قناة التشغيل في سلاك (#mi-ops): بوت بصلاحية chat:write وحدها
+// ════════════════════════════════════════════════════════════════
+// احتياط لا أصل: لا يؤخر الطلب الذي أطلقه ولا يُفشله ولا يمس حصة البريد. كل نشر يدخل طابورًا في النسخة
+// ويخرج منه برسالة كل ثانية تقريبًا (حد سلاك للقناة)، وما تراكم من فئة واحدة يُجمع في رسالة، وما فاض يُترك ويُذكر عدده.
+// لا إعادة محاولة: الفشل يُسجَّل ويُترك، و429 يوقف النشر حتى Retry-After.
+// كل فئة لها سلسلة واحدة في يوم الرياض: رسالة أم مرة في اليوم، والأحداث ردود فيها. ts الأم في leaders.slack_threads،
+// وغياب الجدول (قبل ترحيله) ينشر بلا سلاسل ويبقى يعمل.
+// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (m***@gmail.com) والدالة.
+
+export type SlackCategory = 'alerts' | 'codes' | 'mail';
+export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: string }> = {
+  alerts: { icon: '⚠️', label: 'التنبيهات' },
+  codes: { icon: '🔐', label: 'رموز الدخول' },
+  mail: { icon: '📨', label: 'بريد لم يصل' },
+};
+export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
+
+// قابلة للضبط في الاختبار وحده
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3 };
+
+// deno-lint-ignore no-explicit-any
+type Client = any;
+const cfg = () => ({ token: Deno.env.get('LEADERS_SLACK_BOT_TOKEN') || '', channel: Deno.env.get('LEADERS_SLACK_CHANNEL') || '' });
+export const slackConfigured = () => { const c = cfg(); return !!(c.token && c.channel); };
+const tableOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('slack_threads');
+
+// ── يوم الرياض (UTC+3 بلا توقيت صيفي) ──
+const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const riyadh = (now = Date.now()) => new Date(now + 3 * 36e5);
+export const riyadhDay = (now = Date.now()) => riyadh(now).toISOString().slice(0, 10);
+export function parentText(category: SlackCategory, now = Date.now()) {
+  const d = riyadh(now);
+  const c = SLACK_CATEGORIES[category];
+  return `${c.icon} ${c.label} · ${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
+// الحرف الأول والنطاق وحدهما
+export function maskEmail(email: unknown) {
+  const e = String(email ?? '').trim().toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at < 1) return '***';
+  return `${e[0]}***@${e.slice(at + 1)}`;
+}
+
+// ── الاستدعاء: مهلة قصيرة، ولا إعادة ──
+let pausedUntil = 0;
+let lastSendAt = 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Sent = { ok: boolean; ts?: string; error?: string };
+async function post(text: string, threadTs?: string): Promise<Sent> {
+  const { token, channel } = cfg();
+  const wait = lastSendAt + SLACK.gapMs - Date.now();
+  if (wait > 0) await sleep(wait);
+  if (pausedUntil > Date.now()) return { ok: false, error: 'paused' };
+  lastSendAt = Date.now();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), SLACK.timeoutMs);
+  try {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ channel, text, unfurl_links: false, unfurl_media: false, ...(threadTs ? { thread_ts: threadTs } : {}) }),
+      signal: ctl.signal,
+    });
+    if (res.status === 429) {
+      pausedUntil = Date.now() + (Number(res.headers.get('retry-after')) || 30) * 1000;
+      await res.body?.cancel();
+      return { ok: false, error: 'rate_limited' };
+    }
+    const j = await res.json().catch(() => null);
+    if (!j?.ok) return { ok: false, error: String(j?.error || res.status) };
+    return { ok: true, ts: String(j.ts || '') };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.name === 'AbortError' ? 'timeout' : String((e as Error)?.message || e) };
+  } finally { clearTimeout(timer); }
+}
+
+// ── سلسلة اليوم لكل فئة ──
+type Thread = { ts: string } | { flat: true } | { fail: true };
+const threads = new Map<string, Promise<Thread>>();
+let missingUntil = 0;
+const isMissing = (e: { code?: string; message?: string }) => e?.code === '42P01' || e?.code === 'PGRST205' || /slack_threads/.test(String(e?.message || ''));
+
+async function findOrCreate(client: Client, category: SlackCategory, day: string): Promise<Thread> {
+  if (!client || missingUntil > Date.now()) return { flat: true };
+  const read = () => tableOf(client).select('ts').eq('day', day).eq('category', category).maybeSingle();
+  const { data, error } = await read();
+  if (error) {
+    if (isMissing(error)) missingUntil = Date.now() + SLACK.missingTableMs;
+    console.error('slack_threads read:', error.message || error);
+    return { flat: true };
+  }
+  if (data?.ts) return { ts: String(data.ts) };
+  const parent = await post(parentText(category));
+  if (!parent.ok || !parent.ts) { console.error('slack parent:', parent.error); return { fail: true }; }
+  const ins = await tableOf(client).insert({ day, category, ts: parent.ts });
+  if (ins.error?.code === '23505') {
+    // نسخة أخرى سبقت: سلسلتها هي المعتمدة
+    const again = await read();
+    if (again.data?.ts) return { ts: String(again.data.ts) };
+  } else if (ins.error) console.error('slack_threads insert:', ins.error.message || ins.error);
+  return { ts: parent.ts };
+}
+function threadFor(client: Client, category: SlackCategory): Promise<Thread> {
+  const key = `${riyadhDay()}|${category}`;
+  let t = threads.get(key);
+  if (!t) {
+    t = findOrCreate(client, category, key.slice(0, 10)).catch((e) => { console.error('slack thread:', e); return { flat: true } as Thread; });
+    threads.set(key, t);
+    // ما ليس سلسلة لا يُحفظ: يُعاد البحث في الرسالة التالية
+    t.then((r) => { if (!('ts' in r)) threads.delete(key); });
+  }
+  return t;
+}
+
+// ── الطابور ──
+const pending = new Map<SlackCategory, string[]>();
+let pendingCount = 0;
+let dropped = 0;
+let lastClient: Client = null;
+let pump: Promise<void> | null = null;
+
+async function drain() {
+  while (pendingCount > 0) {
+    const [category, lines] = pending.entries().next().value as [SlackCategory, string[]];
+    pending.delete(category);
+    pendingCount -= lines.length;
+    const shown = lines.slice(0, SLACK.maxLines);
+    let text = shown.join('\n');
+    if (lines.length > shown.length) text += `\n(و${lines.length - shown.length} أخرى من النوع نفسه)`;
+    if (dropped) { text += `\n(تُرك ${dropped} سطرًا لازدحام القناة)`; dropped = 0; }
+    const t = await threadFor(lastClient, category);
+    if ('fail' in t) continue;
+    const c = SLACK_CATEGORIES[category];
+    const r = 'ts' in t ? await post(text, t.ts) : await post(`${c.icon} ${c.label}\n${text}`);
+    if (!r.ok) console.error('slack post:', category, r.error);
+  }
+}
+function start() {
+  if (pump || !pendingCount) return pump;
+  pump = drain().catch((e) => console.error('slack:', e)).finally(() => { pump = null; start(); });
+  try {
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil?.(pump);
+  } catch { /* بيئة بلا waitUntil */ }
+  return pump;
+}
+
+// عميل القاعدة الذي تُحفظ فيه السلاسل (كل دالة تمرر عميلها مرة)
+export function slackUse(client: Client) { if (client) lastClient = client; }
+
+// النشر نفسه: لا ينتظره المستدعي، ولا يرمي أبدًا. الوعد يُنتظر في الاختبار والمهمة الساعية وحدهما
+export function slackPost(category: SlackCategory, text: string, { client }: { client?: Client } = {}): Promise<void> {
+  try {
+    if (!slackConfigured() || !SLACK_CATEGORIES[category]) return Promise.resolve();
+    slackUse(client);
+    if (pausedUntil > Date.now() || pendingCount >= SLACK.maxPending) { dropped++; return pump ?? Promise.resolve(); }
+    const line = String(text || '').slice(0, 600);
+    const list = pending.get(category) ?? [];
+    list.push(line);
+    pending.set(category, list);
+    pendingCount++;
+    return start() ?? Promise.resolve();
+  } catch (e) { console.error('slack:', e); return Promise.resolve(); }
+}
+export async function slackIdle() { while (pump) await pump; }
+
+// ── السطور الجاهزة ──
+// رمز الدخول: الحالة والغرض والبريد المقنّع والدالة، وأي ستة أرقام متتالية تُطمس احتياطًا
+const STATUS = { sent: '✅ أُرسل', blocked: '⛔ حُجب', failed: '❌ تعذّر' } as const;
+export function codeLine({ status, purpose, to, source, reason }: { status: keyof typeof STATUS; purpose?: string | null; to: string; source: string; reason?: string | null }) {
+  const parts = [STATUS[status], purpose || 'رمز دخول', maskEmail(to), source, ...(reason ? [reason] : [])];
+  return parts.join(' · ').replace(/\d{6}/g, '••••••');
+}
+export function mailLine({ kind, to, source, reason }: { kind: string; to: string; source: string; reason: string }) {
+  return [`${kind}`, maskEmail(to), source, reason].join(' · ');
+}
+export function alertLine(kind: string, detail: Record<string, unknown>) {
+  let d = '';
+  try { d = JSON.stringify(detail); } catch { d = ''; }
+  return `*${kind}* ${d}`.slice(0, 1200);
+}
+export const slackCode = (client: Client, o: Parameters<typeof codeLine>[0]) => slackPost('codes', codeLine(o), { client });
+export const slackMail = (client: Client, o: Parameters<typeof mailLine>[0]) => slackPost('mail', mailLine(o), { client });
+export const slackAlert = (kind: string, detail: Record<string, unknown>) => slackPost('alerts', alertLine(kind, detail));
+
+// ── رسالة الربط: مرة واحدة من المهمة الساعية، وعلامتها صف category=hello ──
+// بلا الجدول لا تُرسل (لا علامة تمنع تكرارها كل ساعة)
+export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no_table' | 'sent' | 'failed'> {
+  try {
+    if (!slackConfigured()) return 'off';
+    slackUse(client);
+    const { data, error } = await tableOf(client).select('ts').eq('category', 'hello').limit(1);
+    if (error) return 'no_table';
+    if (data?.length) return 'exists';
+    // الحجز قبل الإرسال: نسختان معًا لا ترسلان مرتين
+    const claim = await tableOf(client).insert({ day: riyadhDay(), category: 'hello', ts: '' });
+    if (claim.error) return claim.error.code === '23505' ? 'exists' : 'failed';
+    const r = await post(SLACK_HELLO);
+    if (!r.ok) {
+      console.error('slack hello:', r.error);
+      await tableOf(client).delete().eq('category', 'hello');
+      return 'failed';
+    }
+    await tableOf(client).update({ ts: r.ts }).eq('category', 'hello');
+    return 'sent';
+  } catch (e) { console.error('slack hello:', e); return 'failed'; }
+}
+
+// للاختبار
+export function resetSlack() {
+  threads.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
+}
