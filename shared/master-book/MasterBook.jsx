@@ -13,7 +13,9 @@ import './master-book.css';
 
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
 const PART = { milestone: 'الجزء الأول', impact: 'الجزء الثاني', leadership: 'الجزء الثالث' };
-const PARTS = DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short }));
+// الأجزاء الثلاثة بترتيبها الثابت، ثم «مسودات للمراجعة»: وثائق معروضة على اللجنة تُقرأ ويُعلَّق عليها كالأبواب
+const DRAFT = { key: 'draft', roman: '✎', label: 'ملحق · مسودات للمراجعة', title: 'مسودات للمراجعة', short: 'مسودات' };
+const PARTS = [...DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short })), DRAFT];
 const LEVELS = [['all', 'الكتاب كاملًا'], ['beginner', LEVEL_AR.beginner], ['intermediate', LEVEL_AR.intermediate], ['advanced', LEVEL_AR.advanced]];
 const two = (n) => String(n).padStart(2, '0');
 const anchor = (s) => `mb-s-${encodeURIComponent(s || 'top').replace(/%/g, '')}`;
@@ -255,6 +257,7 @@ function Toc({ data, level, current, onGo, onClose }) {
           <div className="mb-toc-body">
             {PARTS.map((p) => {
               const chs = data.chapters.filter((c) => c.dimension === p.key);
+              if (!chs.length) return null;
               return (
                 <section key={p.key} className="mb-toc-part">
                   <h3><span>{p.roman}</span>{p.title}</h3>
@@ -319,13 +322,15 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, flip }) {
             <small>{part?.label}</small>
             <h1>{ch.title}</h1>
             <p className="mb-ch-meta">
-              <span className="mb-chip lvl">{ch.min_level === 'beginner' ? 'لكل المستويات' : `من المستوى ${LEVEL_AR[ch.min_level]}`}</span>
+              {ch.draft ? <span className="mb-chip draft">مسودة · {ch.status}</span>
+                : <span className="mb-chip lvl">{ch.min_level === 'beginner' ? 'لكل المستويات' : `من المستوى ${LEVEL_AR[ch.min_level]}`}</span>}
               <span className="mb-chip">{sections.filter((s) => s.title).length} أقسام</span>
               {n > 0 && <span className="mb-chip open">{n} تعليق مفتوح</span>}
             </p>
           </div>
         </div>
       </header>
+      {ch.draft && <p className="mb-note draft">مسودة معروضة على لجنة المحتوى، وليست جزءًا من الكتاب الذي يقرؤه المشاركون. علّق على أي قسم أو جملة، ويظهر تعليقك باسمك.</p>}
       {!visible && <p className="mb-note">هذا الباب لا يظهر لمستوى «{LEVEL_AR[level]}»: يبدأ من {LEVEL_AR[ch.min_level]}. يُعرض هنا للمراجعة.</p>}
       {sections.filter((s) => s.title).length > 1 && (
         <nav className="mb-inside" aria-label="في هذا الباب">
@@ -445,8 +450,8 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
     writeBook(win, {
       ref: `MB-${(data.version || 'v').replace(/\W/g, '')}-${now.slice(0, 10).replace(/-/g, '')}`, issued_at: now, name: data.viewer.name, email: data.viewer.role,
       code: `MASTER ${data.version || ''}`.trim(), edition: 'نسخة المراجعة',
-      chapters: data.chapters.map((c) => ({ id: c.id, dimension: c.dimension, title: c.title, md: markTiers(c.md), reflection: c.reflection })), tools: [],
-    }, PARTS);
+      chapters: data.chapters.filter((c) => !c.draft).map((c) => ({ id: c.id, dimension: c.dimension, title: c.title, md: markTiers(c.md), reflection: c.reflection })), tools: [],
+    }, PARTS.filter((p) => p.key !== 'draft'));
   };
 
   const threadList = thread && ch ? data.comments.filter((c) => c.module_id === ch.id && (c.section || '') === (thread.section || '')) : [];
@@ -473,7 +478,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
               <p className="mb-lede">المرجع الواحد لبرنامج القادة: الأطر الثلاثة كاملة بكل مستوياتها، ومنه تُشتق نسخة كل مشارك بحسب مستواه ونطاق عمله.</p>
               <dl className="mb-facts">
                 <div><dt>الإصدار</dt><dd>{data.version || '·'}</dd></div>
-                <div><dt>الأبواب</dt><dd>{data.chapters.length}</dd></div>
+                <div><dt>الأبواب</dt><dd>{data.chapters.filter((c) => !c.draft).length}</dd></div>
                 <div><dt>تعليقات مفتوحة</dt><dd>{total}</dd></div>
               </dl>
               <div className="mb-actions">
@@ -490,9 +495,9 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
               const chs = data.chapters.filter((c) => c.dimension === p.key);
               const n = chs.reduce((s, c) => s + (data.counts.byModule[c.id] || 0), 0);
               return (
-                <button key={p.key} type="button" className="mb-vol" style={{ '--vimg': `url('${partImage(p.key)}')` }} onClick={() => chs[0] && goChapter(chs[0])}>
+                chs.length > 0 && <button key={p.key} type="button" className={`mb-vol${p.key === 'draft' ? ' draft' : ''}`} style={{ '--vimg': `url('${partImage(p.key)}')` }} onClick={() => chs[0] && goChapter(chs[0])}>
                   <span className="mb-vol-img" aria-hidden="true" />
-                  <span className="mb-vol-in"><i>{p.roman}</i><small>{PART[p.key]}</small><b>{p.title}</b><em>{chs.length} أبواب{n ? ` · ${n} تعليق مفتوح` : ''}</em></span>
+                  <span className="mb-vol-in"><i>{p.roman}</i><small>{PART[p.key] || 'للجنة المحتوى'}</small><b>{p.title}</b><em>{p.key === 'draft' ? `${chs.length === 1 ? 'مسودة واحدة' : `${chs.length} مسودات`}` : `${chs.length} أبواب`}{n ? ` · ${n} تعليق مفتوح` : ''}</em></span>
                 </button>
               );
             })}
