@@ -147,11 +147,13 @@ create table if not exists leaders.book_comments (
   deleted_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
   draft_key text,
+  section_id text,
   constraint book_comments_author_kind_check CHECK ((author_kind = ANY (ARRAY['expert'::text, 'admin'::text]))),
   constraint book_comments_body_check CHECK (((char_length(body) >= 2) AND (char_length(body) <= 4000))),
   constraint book_comments_draft_key_check CHECK (((draft_key IS NULL) OR (draft_key ~ '^[a-z0-9-]{2,60}$'::text))),
   constraint book_comments_quote_check CHECK ((char_length(quote) <= 600)),
   constraint book_comments_section_check CHECK ((char_length(section) <= 200)),
+  constraint book_comments_section_id_check CHECK (((section_id IS NULL) OR (section_id ~ '^[MIL]-[A-Z0-9]{2,10}-[0-9]{2,3}$'::text))),
   constraint book_comments_status_check CHECK ((status = ANY (ARRAY['open'::text, 'resolved'::text]))),
   constraint book_comments_target CHECK ((num_nonnulls(module_id, draft_key) = 1)),
   constraint book_comments_pkey PRIMARY KEY (id)

@@ -1,0 +1,1030 @@
+{
+  "version": "v3.1",
+  "about": "هوية ثابتة لكل قسم في الكتاب. القواعد في scripts/handbook/sections.mjs",
+  "sections": [
+    {
+      "id": "I-INTRO-01",
+      "dim": "impact",
+      "chapter": "intro",
+      "level": 2,
+      "key": "لماذا إطار الأثر؟",
+      "aliases": []
+    },
+    {
+      "id": "I-INTRO-02",
+      "dim": "impact",
+      "chapter": "intro",
+      "level": 2,
+      "key": "موقع هذا الإطار وأهدافه",
+      "aliases": []
+    },
+    {
+      "id": "I-INTRO-03",
+      "dim": "impact",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للتأسيسي فقط",
+      "aliases": []
+    },
+    {
+      "id": "I-INTRO-04",
+      "dim": "impact",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للمتوسط فقط",
+      "aliases": []
+    },
+    {
+      "id": "I-INTRO-05",
+      "dim": "impact",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للاحترافي فقط",
+      "aliases": []
+    },
+    {
+      "id": "I-CH1-01",
+      "dim": "impact",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "مبدأ العودة إلى المستخلص",
+      "aliases": []
+    },
+    {
+      "id": "I-CH1-02",
+      "dim": "impact",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "خريطة المدارس وما نأخذه منها",
+      "aliases": []
+    },
+    {
+      "id": "I-CH1-03",
+      "dim": "impact",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "المقارنة المنهجية: BRM مقابل MSP",
+      "aliases": []
+    },
+    {
+      "id": "I-CH2-01",
+      "dim": "impact",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "سلسلة القيمة الخماسية",
+      "aliases": []
+    },
+    {
+      "id": "I-CH2-02",
+      "dim": "impact",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "لكل حلقة سؤالها ومقياسها ومالكها",
+      "aliases": []
+    },
+    {
+      "id": "I-CH2-03",
+      "dim": "impact",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "الإسناد مقابل المساهمة",
+      "aliases": []
+    },
+    {
+      "id": "I-CH2-04",
+      "dim": "impact",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "قياس الأثر في السياق التنموي",
+      "aliases": []
+    },
+    {
+      "id": "I-CH3-01",
+      "dim": "impact",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "من تقارير الإنجاز إلى تقارير الأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH3-02",
+      "dim": "impact",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "حلقة قيادة الأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH3-03",
+      "dim": "impact",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "المحاذاة الاستراتيجية: KPI و OKR",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-01",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "إعادة تعريف الأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-02",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "قاموس المفاهيم الأساسية",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-03",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "تشريح المؤشر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-04",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "المنافع السلبية والآثار غير المقصودة",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-05",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "تصنيف الأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-06",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "النماذج العاملة",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-07",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "سلّم الأدلة",
+      "aliases": []
+    },
+    {
+      "id": "I-CH4-08",
+      "dim": "impact",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "منتجات العمل المعرفية",
+      "aliases": []
+    },
+    {
+      "id": "I-CH5-01",
+      "dim": "impact",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الأولى: المشروع",
+      "aliases": []
+    },
+    {
+      "id": "I-CH5-02",
+      "dim": "impact",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الثانية: البرنامج",
+      "aliases": []
+    },
+    {
+      "id": "I-CH5-03",
+      "dim": "impact",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الثالثة: المحفظة",
+      "aliases": []
+    },
+    {
+      "id": "I-CH5-04",
+      "dim": "impact",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "تجميع الأثر عبر الطبقات",
+      "aliases": []
+    },
+    {
+      "id": "I-CH5-05",
+      "dim": "impact",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "انتقال الأثر عبر الطبقات",
+      "aliases": []
+    },
+    {
+      "id": "I-CH6-01",
+      "dim": "impact",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "النظام البيئي المحيط بالأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH6-02",
+      "dim": "impact",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "أخلاقيات بيانات الأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH6-03",
+      "dim": "impact",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "جدارات القائد في إطار الأثر",
+      "aliases": []
+    },
+    {
+      "id": "I-CH6-04",
+      "dim": "impact",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "مؤشرات الإتقان على ثلاثة مستويات",
+      "aliases": []
+    },
+    {
+      "id": "I-LABS-01",
+      "dim": "impact",
+      "chapter": "labs",
+      "level": 2,
+      "key": "من المعرفة إلى الممارسة",
+      "aliases": []
+    },
+    {
+      "id": "I-LABS-02",
+      "dim": "impact",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: سجل المنافع الأول",
+      "aliases": []
+    },
+    {
+      "id": "I-LABS-03",
+      "dim": "impact",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: نظرية التغيير",
+      "aliases": []
+    },
+    {
+      "id": "I-LABS-04",
+      "dim": "impact",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: تقرير أثر",
+      "aliases": []
+    },
+    {
+      "id": "I-LABS-05",
+      "dim": "impact",
+      "chapter": "labs",
+      "level": 2,
+      "key": "كيف يُقيَّم عملك",
+      "aliases": []
+    },
+    {
+      "id": "I-CLOSE-01",
+      "dim": "impact",
+      "chapter": "close",
+      "level": 2,
+      "key": "خمس رسائل جوهرية",
+      "aliases": []
+    },
+    {
+      "id": "I-CLOSE-02",
+      "dim": "impact",
+      "chapter": "close",
+      "level": 2,
+      "key": "ما بعد هذا الإطار",
+      "aliases": []
+    },
+    {
+      "id": "I-CLOSE-03",
+      "dim": "impact",
+      "chapter": "close",
+      "level": 2,
+      "key": "طبيعة المفاهيم والمراجع",
+      "aliases": []
+    },
+    {
+      "id": "I-CLOSE-04",
+      "dim": "impact",
+      "chapter": "close",
+      "level": 2,
+      "key": "مسرد المصطلحات",
+      "aliases": []
+    },
+    {
+      "id": "L-INTRO-01",
+      "dim": "leadership",
+      "chapter": "intro",
+      "level": 2,
+      "key": "لماذا إطار القيادة؟",
+      "aliases": []
+    },
+    {
+      "id": "L-INTRO-02",
+      "dim": "leadership",
+      "chapter": "intro",
+      "level": 2,
+      "key": "موقع هذا الإطار وأهدافه",
+      "aliases": []
+    },
+    {
+      "id": "L-INTRO-03",
+      "dim": "leadership",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للتأسيسي فقط",
+      "aliases": []
+    },
+    {
+      "id": "L-INTRO-04",
+      "dim": "leadership",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للمتوسط فقط",
+      "aliases": []
+    },
+    {
+      "id": "L-INTRO-05",
+      "dim": "leadership",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للاحترافي فقط",
+      "aliases": []
+    },
+    {
+      "id": "L-CH1-01",
+      "dim": "leadership",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "مبدأ العودة إلى المستخلص",
+      "aliases": []
+    },
+    {
+      "id": "L-CH1-02",
+      "dim": "leadership",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "خريطة المدارس وما نأخذه منها",
+      "aliases": []
+    },
+    {
+      "id": "L-CH1-03",
+      "dim": "leadership",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "الإدارة مقابل القيادة (Kotter)",
+      "aliases": []
+    },
+    {
+      "id": "L-CH2-01",
+      "dim": "leadership",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "سلسلة الاستجابة الخماسية",
+      "aliases": []
+    },
+    {
+      "id": "L-CH2-02",
+      "dim": "leadership",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "لكل مرحلة سؤالها وفخها",
+      "aliases": []
+    },
+    {
+      "id": "L-CH2-03",
+      "dim": "leadership",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "الاستجابة المنضبطة مقابل التسرع",
+      "aliases": []
+    },
+    {
+      "id": "L-CH2-04",
+      "dim": "leadership",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "من جدارة فردية إلى نظام مؤسسي",
+      "aliases": []
+    },
+    {
+      "id": "L-CH3-01",
+      "dim": "leadership",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "من التسليم الشكلي إلى التسليم القيادي",
+      "aliases": []
+    },
+    {
+      "id": "L-CH3-02",
+      "dim": "leadership",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "حلقة التسليم والتسلم",
+      "aliases": []
+    },
+    {
+      "id": "L-CH3-03",
+      "dim": "leadership",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "مسؤوليتان متقابلتان",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-01",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "إعادة تعريف قائد المشاريع",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-02",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "قاموس المفاهيم الأساسية",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-03",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "الجدارات الأربع للتأثير في الاتجاهات",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-04",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "النماذج العاملة",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-05",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "قيادة القادة",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-06",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "التأثير بلا سلطة",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-07",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "الملاحظة على الأداء (التغذية الراجعة)",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-08",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "التفويض الواضح: مصفوفة RACI",
+      "aliases": []
+    },
+    {
+      "id": "L-CH4-09",
+      "dim": "leadership",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "منتجات العمل المعرفية",
+      "aliases": []
+    },
+    {
+      "id": "L-CH5-01",
+      "dim": "leadership",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الأولى: المشروع",
+      "aliases": []
+    },
+    {
+      "id": "L-CH5-02",
+      "dim": "leadership",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الثانية: البرنامج",
+      "aliases": []
+    },
+    {
+      "id": "L-CH5-03",
+      "dim": "leadership",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الثالثة: المحفظة",
+      "aliases": []
+    },
+    {
+      "id": "L-CH5-04",
+      "dim": "leadership",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "انتقال القائد بين الطبقات",
+      "aliases": []
+    },
+    {
+      "id": "L-CH5-05",
+      "dim": "leadership",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "اتساع القيادة عبر الطبقات",
+      "aliases": []
+    },
+    {
+      "id": "L-CH6-01",
+      "dim": "leadership",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "النظام البيئي المحيط بالقائد",
+      "aliases": []
+    },
+    {
+      "id": "L-CH6-02",
+      "dim": "leadership",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "جدارات القائد في إطار القيادة",
+      "aliases": []
+    },
+    {
+      "id": "L-CH6-03",
+      "dim": "leadership",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "أداة DIRECT",
+      "aliases": []
+    },
+    {
+      "id": "L-CH6-04",
+      "dim": "leadership",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "مؤشرات الإتقان على ثلاثة مستويات",
+      "aliases": []
+    },
+    {
+      "id": "L-LABS-01",
+      "dim": "leadership",
+      "chapter": "labs",
+      "level": 2,
+      "key": "من المعرفة إلى الممارسة",
+      "aliases": []
+    },
+    {
+      "id": "L-LABS-02",
+      "dim": "leadership",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: خريطة أصحاب المصلحة",
+      "aliases": []
+    },
+    {
+      "id": "L-LABS-03",
+      "dim": "leadership",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: خطة التطوير القيادي",
+      "aliases": []
+    },
+    {
+      "id": "L-LABS-04",
+      "dim": "leadership",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: DIRECT على تحدٍّ حقيقي",
+      "aliases": []
+    },
+    {
+      "id": "L-LABS-05",
+      "dim": "leadership",
+      "chapter": "labs",
+      "level": 2,
+      "key": "كيف يُقيَّم عملك",
+      "aliases": []
+    },
+    {
+      "id": "L-CLOSE-01",
+      "dim": "leadership",
+      "chapter": "close",
+      "level": 2,
+      "key": "خمس رسائل جوهرية",
+      "aliases": []
+    },
+    {
+      "id": "L-CLOSE-02",
+      "dim": "leadership",
+      "chapter": "close",
+      "level": 2,
+      "key": "النموذج المتكامل",
+      "aliases": []
+    },
+    {
+      "id": "L-CLOSE-03",
+      "dim": "leadership",
+      "chapter": "close",
+      "level": 2,
+      "key": "طبيعة المفاهيم والمراجع",
+      "aliases": []
+    },
+    {
+      "id": "L-CLOSE-04",
+      "dim": "leadership",
+      "chapter": "close",
+      "level": 2,
+      "key": "مسرد المصطلحات",
+      "aliases": []
+    },
+    {
+      "id": "M-INTRO-01",
+      "dim": "milestone",
+      "chapter": "intro",
+      "level": 2,
+      "key": "لماذا هذه المنهجية؟",
+      "aliases": []
+    },
+    {
+      "id": "M-INTRO-02",
+      "dim": "milestone",
+      "chapter": "intro",
+      "level": 2,
+      "key": "الأطر الثلاثة",
+      "aliases": []
+    },
+    {
+      "id": "M-INTRO-03",
+      "dim": "milestone",
+      "chapter": "intro",
+      "level": 2,
+      "key": "موقع هذا الإطار وأهدافه",
+      "aliases": []
+    },
+    {
+      "id": "M-INTRO-04",
+      "dim": "milestone",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للتأسيسي فقط",
+      "aliases": []
+    },
+    {
+      "id": "M-INTRO-05",
+      "dim": "milestone",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للمتوسط فقط",
+      "aliases": []
+    },
+    {
+      "id": "M-INTRO-06",
+      "dim": "milestone",
+      "chapter": "intro",
+      "level": 2,
+      "key": "تركيزك في هذا الإطار · للاحترافي فقط",
+      "aliases": []
+    },
+    {
+      "id": "M-CH1-01",
+      "dim": "milestone",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "لماذا نبدأ من المستخلص العالمي؟",
+      "aliases": []
+    },
+    {
+      "id": "M-CH1-02",
+      "dim": "milestone",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "خريطة المدارس وما نأخذه منها",
+      "aliases": []
+    },
+    {
+      "id": "M-CH1-03",
+      "dim": "milestone",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "المقارنة المنهجية: PMI مقابل Axelos",
+      "aliases": []
+    },
+    {
+      "id": "M-CH1-04",
+      "dim": "milestone",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "نضج المؤسسات (P3M3)",
+      "aliases": []
+    },
+    {
+      "id": "M-CH1-05",
+      "dim": "milestone",
+      "chapter": "ch1",
+      "level": 2,
+      "key": "الاتجاهات العالمية الحديثة",
+      "aliases": []
+    },
+    {
+      "id": "M-CH2-01",
+      "dim": "milestone",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "خصوصية المشاريع التنموية والإنسانية",
+      "aliases": []
+    },
+    {
+      "id": "M-CH2-02",
+      "dim": "milestone",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "الإدارة القائمة على النتائج (RBM)",
+      "aliases": []
+    },
+    {
+      "id": "M-CH2-03",
+      "dim": "milestone",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "الإطار المنطقي ونظرية التغيير",
+      "aliases": []
+    },
+    {
+      "id": "M-CH2-04",
+      "dim": "milestone",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "المعلم في السياق التنموي",
+      "aliases": []
+    },
+    {
+      "id": "M-CH2-05",
+      "dim": "milestone",
+      "chapter": "ch2",
+      "level": 2,
+      "key": "المعلم في المشروع الحكومي",
+      "aliases": []
+    },
+    {
+      "id": "M-CH2-06",
+      "dim": "milestone",
+      "chapter": "ch2",
+      "level": 3,
+      "key": "حالة للنقد",
+      "aliases": []
+    },
+    {
+      "id": "M-CH3-01",
+      "dim": "milestone",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "من إدارة الأنشطة إلى صناعة القرار",
+      "aliases": []
+    },
+    {
+      "id": "M-CH3-02",
+      "dim": "milestone",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "حلقة صناعة القرار",
+      "aliases": []
+    },
+    {
+      "id": "M-CH3-03",
+      "dim": "milestone",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "الهيكلة المؤقتة مقابل الهيكلة الدائمة",
+      "aliases": []
+    },
+    {
+      "id": "M-CH3-04",
+      "dim": "milestone",
+      "chapter": "ch3",
+      "level": 2,
+      "key": "سؤال للتطبيق",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-01",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "إعادة تعريف المعلم",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-02",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "قاموس المفاهيم الأساسية",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-03",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "أنواع المعالم الأربعة",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-04",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "النماذج العاملة",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-05",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "أساسيات الضبط حول المعلم",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-06",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 3,
+      "key": "القيمة المكتسبة (EVM)",
+      "aliases": []
+    },
+    {
+      "id": "M-CH4-07",
+      "dim": "milestone",
+      "chapter": "ch4",
+      "level": 2,
+      "key": "منتجات العمل المعرفية",
+      "aliases": []
+    },
+    {
+      "id": "M-CH5-01",
+      "dim": "milestone",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الأولى: المشروع",
+      "aliases": []
+    },
+    {
+      "id": "M-CH5-02",
+      "dim": "milestone",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الثانية: البرنامج",
+      "aliases": []
+    },
+    {
+      "id": "M-CH5-03",
+      "dim": "milestone",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "الطبقة الثالثة: المحفظة",
+      "aliases": []
+    },
+    {
+      "id": "M-CH5-04",
+      "dim": "milestone",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "حين تتعارض الطبقات",
+      "aliases": []
+    },
+    {
+      "id": "M-CH5-05",
+      "dim": "milestone",
+      "chapter": "ch5",
+      "level": 2,
+      "key": "انتقال القيمة عبر الطبقات",
+      "aliases": []
+    },
+    {
+      "id": "M-CH6-01",
+      "dim": "milestone",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "النظام البيئي المحيط بالمعلم",
+      "aliases": []
+    },
+    {
+      "id": "M-CH6-02",
+      "dim": "milestone",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "جدارات القائد في إطار المعلم",
+      "aliases": []
+    },
+    {
+      "id": "M-CH6-03",
+      "dim": "milestone",
+      "chapter": "ch6",
+      "level": 2,
+      "key": "مؤشرات الإتقان على ثلاثة مستويات",
+      "aliases": []
+    },
+    {
+      "id": "M-LABS-01",
+      "dim": "milestone",
+      "chapter": "labs",
+      "level": 2,
+      "key": "من المعرفة إلى الممارسة",
+      "aliases": []
+    },
+    {
+      "id": "M-LABS-02",
+      "dim": "milestone",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: سجل المعالم الأول",
+      "aliases": []
+    },
+    {
+      "id": "M-LABS-03",
+      "dim": "milestone",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: بوابة مرحلة",
+      "aliases": []
+    },
+    {
+      "id": "M-LABS-04",
+      "dim": "milestone",
+      "chapter": "labs",
+      "level": 2,
+      "key": "تمرين: مراجعة محفظة",
+      "aliases": []
+    },
+    {
+      "id": "M-LABS-05",
+      "dim": "milestone",
+      "chapter": "labs",
+      "level": 2,
+      "key": "كيف يُقيَّم عملك",
+      "aliases": []
+    },
+    {
+      "id": "M-CLOSE-01",
+      "dim": "milestone",
+      "chapter": "close",
+      "level": 2,
+      "key": "خمس رسائل جوهرية",
+      "aliases": []
+    },
+    {
+      "id": "M-CLOSE-02",
+      "dim": "milestone",
+      "chapter": "close",
+      "level": 2,
+      "key": "ما بعد هذا الإطار",
+      "aliases": []
+    },
+    {
+      "id": "M-CLOSE-03",
+      "dim": "milestone",
+      "chapter": "close",
+      "level": 2,
+      "key": "طبيعة المفاهيم والمراجع",
+      "aliases": []
+    },
+    {
+      "id": "M-CLOSE-04",
+      "dim": "milestone",
+      "chapter": "close",
+      "level": 2,
+      "key": "مسرد المصطلحات",
+      "aliases": []
+    }
+  ]
+}
