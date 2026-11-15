@@ -11,7 +11,7 @@ const model = (level) => ({ id: 'm1', key: 'cost-plan', dimension: 'milestone', 
     { key: 'funding', type: 'textarea', label: 'مصدر التمويل ومن يعتمده', required: true },
   ] });
 
-async function open(page, level, viewport = { width: 1280, height: 900 }) {
+async function open(page, level, viewport = { width: 1280, height: 900 }, examples = undefined) {
   await page.setViewportSize(viewport);
   const srv = createMockServer();
   Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
@@ -19,7 +19,7 @@ async function open(page, level, viewport = { width: 1280, height: 900 }) {
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     if (b.action === 'models.list') return route.fulfill({ json: { success: true, points: { total: 0, rank: null }, models: [{ ...m, capstone: true, fields_n: 3, progress: { filled: 0, total: 3 }, submission: null }] } });
-    if (b.action === 'models.get') return route.fulfill({ json: { success: true, model: m, submission: null, initiative: 'رقمنة خدمات المستفيدين', sector: 'القطاع الصحي', imports: {}, capstone: { status: 'draft', locked: false } } });
+    if (b.action === 'models.get') return route.fulfill({ json: { success: true, model: m, submission: null, initiative: 'رقمنة خدمات المستفيدين', sector: 'القطاع الصحي', examples, imports: {}, capstone: { status: 'draft', locked: false } } });
     await route.fulfill({ json: srv.reply(b) });
   });
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 'tok-demo-recording-000000000000'); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
@@ -70,4 +70,17 @@ test('المتقدم: «سؤال الخبير» تحدٍّ لا شرح', async (
   await expect(page.getByText('المطلوب:')).toHaveCount(0);
   await expect(page.getByText('مثال من الصحة:')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('المالك حجب مثال الصحة: يرى المشارك أقرب مثال مفتوح، وحجب العرض بجانب الحقل يخفي المثال ويبقي الدليل', async ({ page }) => {
+  await open(page, 'beginner', undefined, { field: true, doc: true, sectors: ['gov'] });
+  const notes = page.getByRole('note').filter({ hasText: 'المطلوب:' });
+  await expect(notes.first()).toContainText('مثال من الخدمات الحكومية:');
+  await expect(page.getByText('مثال من الصحة:')).toHaveCount(0);
+});
+
+test('المالك حجب الأمثلة بجانب الحقل: الدليل باقٍ بلا مثال', async ({ page }) => {
+  await open(page, 'beginner', undefined, { field: false, doc: true, sectors: ['gov', 'health'] });
+  await expect(page.getByRole('note').filter({ hasText: 'المطلوب:' })).toHaveCount(3);
+  await expect(page.getByText(/مثال من /)).toHaveCount(0);
 });

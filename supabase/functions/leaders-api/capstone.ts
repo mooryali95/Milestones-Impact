@@ -9,7 +9,7 @@
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { esc, mailNote, mailShell, mailText } from '../_shared/mail.ts';
-import { award, CAPSTONE_LOCKED, initiativeFor, mePayload, participantPriority } from './participant.ts';
+import { award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
 import { approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
@@ -95,7 +95,7 @@ const cardOf = (d: any) => { const c = d.sections.find((s: any) => s.model.key =
 
 // ── المشارك ──
 export async function get(p: any) {
-  const d = await build(p);
+  const [d, examples] = await Promise.all([build(p), examplesFor(p)]);
   const c = d.capstone;
   const status = c?.status || 'draft';
   const card = cardOf(d);
@@ -117,6 +117,8 @@ export async function get(p: any) {
     card: card ? { state: cardGate(card.status).state, sla: APPROVAL_SLA_AR } : null,
     can_submit: gate.ok, blocker: gate.ok ? null : gate.reason,
     rubric: rubricFor(d.levels).map((r) => ({ key: r.key, title: r.title, dimension: r.dimension, level: r.level, anchors: r.anchors })),
+    // المبادرات المحلولة كما يضبطها المالك (examplesFor): أي القطاعات تُعرض، والوثيقة الكاملة أم لا
+    examples,
   };
 }
 

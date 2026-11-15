@@ -34,10 +34,29 @@ export const VISIBILITY = {
   // المشارك نفسه
   par_advisor: key('participant', 'اسم مستشاره', 'سطر «مستشارك» في رحلته بعد اعتماد مستواه.'),
   par_final_policy: key('participant', 'كيف يُقيَّم', 'أوزان التقييم الختامي وحدوده كما تُطبَّق على برنامجه.'),
+  // المبادرات المحلولة (مرافق بناء المبادرة 4ب): تُعرض أو تُحجب عامةً أو لدفعة، وكل قطاع وحده، فيُحجب مثال قطاع
+  // حتى يراجعه خبير المحتوى، أو تُحجب الأمثلة عن دفعة متقدمة. يحسمها الخادم في examplesView قبل أن تصل المشارك
+  par_examples_field: key('participant', 'المثال المحلول بجانب الحقل', 'مثال من قطاعه تحت دليل كل حقل في فصول وثيقة المبادرة (للتأسيسي والمتوسط).'),
+  par_examples_doc: key('participant', 'المبادرات المحلولة كاملة', 'زر «مبادرة محلولة كاملة» في صفحة المبادرة، يفتح الوثيقة الكاملة للمثال.'),
+  par_example_gov: key('participant', 'مثال الخدمات الحكومية', '«تجديد الترخيص المهني رقميًا في يوم واحد». بحجبه لا يظهر بجانب الحقل ولا كاملًا.'),
+  par_example_health: key('participant', 'مثال الصحة', '«موعد أول أقرب: خفض انتظار العيادات الخارجية». بحجبه لا يظهر بجانب الحقل ولا كاملًا.'),
 };
 export const VISIBILITY_KEYS = Object.keys(VISIBILITY);
 export const VISIBILITY_DEFAULTS = Object.fromEntries(VISIBILITY_KEYS.map((k) => [k, VISIBILITY[k].default]));
 export const visibilityLabel = (k) => (VISIBILITY[k] ? `${AUDIENCE_AR[VISIBILITY[k].audience]}: ${VISIBILITY[k].label_ar}` : k);
+
+// قطاعات المبادرات المحلولة بترتيب العرض: لكل قطاع مفتاح par_example_<القطاع> (المحتوى في supabase/content/initiative-guide)
+export const EXAMPLE_SECTORS = Object.freeze(['gov', 'health']);
+
+/**
+ * ما يُعرض للمشارك من المبادرات المحلولة. يمرّر الخادم مفاتيحه بأسمائها (participant.ts examplesFor)
+ * @param {{ field?: boolean, doc?: boolean, sectors?: Record<string, boolean | undefined> }} flags
+ * @returns {{ field: boolean, doc: boolean, sectors: string[] }}
+ */
+export function examplesView(flags) {
+  const sectors = EXAMPLE_SECTORS.filter((k) => flags?.sectors?.[k] !== false);
+  return { field: flags?.field !== false && sectors.length > 0, doc: flags?.doc !== false && sectors.length > 0, sectors };
+}
 
 /** استثناء الدفعة: المفاتيح المعروفة بقيم منطقية وحدها. ما لم يُذكر يتبع الافتراضي العام */
 export function cleanVisibility(v) {
