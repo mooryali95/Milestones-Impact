@@ -75,7 +75,7 @@ export const callout = (title, text) => `<div class="callout"><b>${esc(title)}</
 export const points = (items, empty = 'لا شيء') => (items.length ? `<ul class="points">${items.map((t) => `<li>${t && t.html != null ? t.html : esc(t)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
 
 // ── الوثيقة ──
-// meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص }
+// meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص, pageAr?: ترقيم الصفحات بالعربية }
 export function documentHtml(meta, body) {
   const id = meta.id || docId(meta.kind || 'DOC');
   const year = new Date().getFullYear();
@@ -87,7 +87,7 @@ export function documentHtml(meta, body) {
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
   @bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }
-  @bottom-left { content: "PAGE " counter(page) " OF " counter(pages); font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em; color: ${C.muted}; } }
+  @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 300 7pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${C.muted}; } }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html { background: ${C.faint}; }
 body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-serif; font-weight: 300; color: ${C.graphite}; font-size: 10pt; line-height: 1.65; }

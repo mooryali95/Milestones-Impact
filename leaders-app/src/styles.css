@@ -1642,3 +1642,52 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .notice h2 { margin: 2px 0 6px; font-size: 18px; }
 .notice p { margin: 0 0 10px; white-space: pre-wrap; }
 .notice .eyebrow { margin: 0; }
+
+/* ── خريطة المبادرة (InitiativeMap.jsx): المعنى، والفهرس بمراحله، والتنقل بين الفصول، والإحالة إلى الكتيب ── */
+.im-meaning > summary { cursor: pointer; list-style: none; display: grid; gap: 2px; }
+.im-meaning > summary::-webkit-details-marker { display: none; }
+.im-meaning > summary b { font-size: 19px; }
+.im-meaning[open] > summary { margin-bottom: 12px; }
+.im-def { font-size: 17px; line-height: 1.9; margin: 0 0 6px; }
+.im-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 14px 0; }
+.im-level { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--mist); display: grid; gap: 4px; align-content: start; }
+.im-level.lead { background: var(--surface); border-color: var(--gold); }
+.im-level.mine { box-shadow: 0 0 0 2px var(--gold); }
+.im-level b { font-size: 16px; display: flex; gap: 8px; align-items: center; }
+.im-level p { margin: 0; font-size: 14px; line-height: 1.8; }
+.im-level small { color: var(--muted); font-size: 13px; }
+.im-q { color: var(--gold-text); font-size: 13px; }
+.im-not { display: grid; gap: 4px; border-inline-start: 3px solid var(--gold); padding-inline-start: 12px; margin: 10px 0; }
+.im-not p { margin: 0; font-size: 14px; line-height: 1.8; }
+.im-test { background: var(--brand-cream-light); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.im-nav-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.im-strip { display: flex; gap: 3px; margin: 12px 0 6px; direction: rtl; }
+.im-seg { flex: 1; height: 12px; border: 0; border-radius: 3px; cursor: pointer; padding: 0; background: var(--line); }
+.im-seg:hover, .im-seg:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.im-seg.ok, .im-dot.ok { background: var(--ok); } .im-seg.warn, .im-dot.warn { background: var(--gold); } .im-seg.bad, .im-dot.bad { background: var(--bad); }
+.im-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.im-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--line); margin-inline-end: 5px; vertical-align: middle; }
+.im-next { display: flex; gap: 12px; align-items: center; margin: 14px 0 4px; padding: 12px 14px; border: 1px solid var(--gold); border-radius: 12px; background: var(--brand-cream-light); }
+.im-next .grow { display: grid; gap: 2px; } .im-next small { color: var(--gold-text); }
+.im-filter { display: flex; gap: 6px; margin: 14px 0 4px; }
+.im-filter button { font: inherit; font-size: 14px; border: 1px solid var(--line); background: var(--surface); color: inherit; border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+.im-filter button.on { border-color: var(--gold); background: var(--brand-cream-light); }
+.im-phase { margin-top: 16px; }
+.im-phase > header { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.im-phase > header .grow { display: grid; } .im-phase > header small { font-size: 13px; }
+.im-ph-n { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--gold); color: var(--gold-text); display: grid; place-items: center; font-size: 14px; flex: none; }
+.im-row { display: grid; gap: 2px; }
+.im-row .im-book { justify-self: end; }
+.im-meta { font-size: 13px !important; opacity: .85; }
+.im-chnav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.im-chnav-where { display: grid; gap: 2px; } .im-chnav-where small { color: var(--gold-text); }
+.book-seek { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--gold); background: var(--brand-cream-light); }
+.book-seek.miss { border-color: var(--line); background: var(--mist); }
+.book-seek .grow { display: grid; gap: 2px; } .book-seek small { color: var(--muted); }
+/* تلميح المصطلح (Term.jsx): يظهر بالمرور والتركيز واللمس */
+.term { position: relative; border-bottom: 1px dotted var(--gold); cursor: help; outline: none; }
+.term:focus-visible { box-shadow: 0 0 0 2px var(--gold); border-radius: 2px; }
+.term-tip { position: fixed; z-index: 60; width: max-content; max-width: min(300px, 80vw); background: var(--ink); color: #fff; font-size: 13px; font-weight: 400; line-height: 1.8; padding: 8px 10px; border-radius: 8px; box-shadow: var(--shadow); opacity: 0; visibility: hidden; transition: opacity .15s; pointer-events: none; white-space: normal; text-align: start; }
+.term-tip b { display: block; color: var(--brand-gold-light); font-weight: 500; }
+.term.on .term-tip { opacity: 1; visibility: visible; }
+@media (max-width: 520px) { .im-next { flex-wrap: wrap; } .im-chnav .row { width: 100%; } }
