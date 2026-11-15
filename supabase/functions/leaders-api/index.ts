@@ -338,6 +338,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   // المرحلة 9: مشاركوه وملف كل منهم، والختامي والمعالم والقاعة لمستشار الدفعة
   'xp.participants': (e) => FL.participants(e),
   'xp.participant': (e, b) => FL.participant(e, b),
+  'xp.capstone-doc': (e, b) => FL.capstoneDoc(e, b),
   'xp.assessment-answers': (e, b) => FL.assessmentAnswers(e, b),
   'xp.observation-add': (e, b) => FL.observationAdd(e, b),
   'xp.final-eval': (e, b) => FL.finalGet(e, b),

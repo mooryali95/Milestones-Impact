@@ -11,6 +11,7 @@ import { participant as adminParticipant, answersReview } from './admin.ts';
 import type { Actor } from './admin.ts';
 import { advisorCohorts, myParticipantIds } from './advisor.ts';
 import * as F from './final.ts';
+import { expertDoc } from './capstone.ts';
 import * as H from './hall.ts';
 import { participantMilestone } from './programs.ts';
 import { mePayload } from './participant.ts';
@@ -205,6 +206,19 @@ export async function participant(e: any, b: Body) {
   const scope = await expertScope(e);
   if (!scope.advisor.has(id) && !scope.assigned.has(id)) throw new Fail('هذا المشارك ليس من مشاركيك', 403);
   return participantFile(id, 'expert', { viewer: { email: e.email }, advisor: scope.advisor.has(id) });
+}
+
+// ── وثيقة المبادرة من البوابة (مرافق بناء المبادرة 4د): يقرؤها الخبير وهو يجيب سؤالًا عن فصل فيها ──
+// لمستشار الدفعة ولمن أُسند إليه المشارك بطلب خدمة، وللمسند بمفتاح الرؤية asg_models نفسه الذي يكشف له نماذجه.
+// قراءة فقط، بلا معيار المستشار ودرجته، وكل اطلاع يُسجَّل باسم الخبير.
+export async function capstoneDoc(e: any, b: Body) {
+  const pid = String(b.participant_id || '');
+  if (!isUuid(pid)) throw new Fail('بيانات ناقصة');
+  const scope = await expertScope(e);
+  if (!scope.advisor.has(pid) && !scope.assigned.has(pid)) throw new Fail('هذا المشارك ليس من مشاركيك', 403);
+  if (!scope.advisor.has(pid)) requireVisible(await visibilityOfParticipant(pid), 'asg_models');
+  await audit('system', e.email, 'expert.capstone-view', 'participants', pid, null, {});
+  return { success: true, doc: await expertDoc(pid) };
 }
 
 // ── إجابات القياس من البوابة: لمستشار الدفعة فيمن يشرف عليهم (قرار المالك 2026-11-11) ──

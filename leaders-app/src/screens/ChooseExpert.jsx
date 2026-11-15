@@ -10,15 +10,17 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { CONTACT_EMAIL } from '../../../supabase/functions/leaders-api/labels.js';
 
-export default function ChooseExpert({ context = 'program', note: presetNote = '', dimension: presetDim = '', title = 'اطلب استشارة', open: startOpen = false }) {
+export default function ChooseExpert({ context = 'program', note: presetNote = '', dimension: presetDim = '', role: presetRole = 'coach', title = 'اطلب استشارة', open: startOpen = false }) {
   const [d, setD] = useState(null);
-  const [form, setForm] = useState({ role: 'coach', dimension: presetDim, context, note: presetNote });
+  const [form, setForm] = useState({ role: presetRole, dimension: presetDim, context, note: presetNote });
   const [open, setOpen] = useState(startOpen);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
   const load = (f = form) => call('experts.suggest', { role: f.role, dimension: f.dimension || null }).then(setD);
   useEffect(() => { load(); }, [form.role, form.dimension]);
   useEffect(() => { setForm((f) => ({ ...f, note: presetNote || f.note })); }, [presetNote]);
+  // الدور المختار من نوع الحاجة (stuck.js roleForNeed) يتبع تغيّره
+  useEffect(() => { setForm((f) => ({ ...f, role: presetRole })); }, [presetRole]);
   if (!d?.success || !Array.isArray(d.roles) || !Array.isArray(d.requests)) return null;
 
   const choose = async (e) => {

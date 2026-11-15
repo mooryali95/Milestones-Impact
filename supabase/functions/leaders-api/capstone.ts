@@ -77,6 +77,8 @@ async function build(p: any) {
 const sectionView = (s: any) => ({
   id: s.model.id, key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension, points: s.model.points,
   complete: s.state.complete, missing: s.state.missing.length, status: s.state.status, rating: s.state.rating,
+  // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
+  updated_at: s.sub?.updated_at || null,
 });
 
 function reviewView(c: any, full = true) {
@@ -195,6 +197,12 @@ async function recordFor(p: any, audience: 'participant' | 'admin' | 'sponsor' |
 // الوثيقة المعتمدة تحمل متابعتها، فيطبع التقرير الخطة وما تحقق منها معًا
 async function withTracking(doc: any, participantId: string) {
   return doc?.meta?.status === 'approved' ? { ...doc, tracking: await trackingOf(participantId) } : doc;
+}
+
+// للخبير من بوابته (file.ts capstoneDoc بعد فحص نطاقه ومفتاح الرؤية): الوثيقة كما يقرؤها الراعي، بلا معيار المستشار ودرجته
+export async function expertDoc(participantId: string) {
+  const p = await participantRow(participantId);
+  return withTracking(await recordFor(p, 'sponsor'), p.id);
 }
 
 export async function doc(p: any) {

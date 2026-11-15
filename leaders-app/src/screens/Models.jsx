@@ -8,6 +8,7 @@ import { call } from '../api.js';
 import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
 import { canStart, guideFor, nearExample, starterFor, untouchedStarters } from '../guide.js';
+import AskExpert from './AskExpert.jsx';
 import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
@@ -151,6 +152,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
   const [attempt, setAttempt] = useState(0);
+  const [asking, setAsking] = useState(false);
   const uid = useId();
 
   useEffect(() => {
@@ -288,6 +290,10 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           </div>
         </form>
       </div>
+      {/* «عندي سؤال هنا» في فصول الوثيقة (4د): إلى مختص يعرف الفصل، بدور يناسب نوع الحاجة */}
+      {d.capstone && !locked && (asking
+        ? <AskExpert chapterTitle={m.title_ar} dimension={m.dimension} onClose={() => setAsking(false)} />
+        : <p className="row"><button type="button" className="btn ghost sm" onClick={() => setAsking(true)}>عندي سؤال هنا</button><small className="muted">مختص يعرف هذا الفصل، يرد عليك بعد أن يقرأ وثيقتك.</small></p>)}
     </div>
   );
 }

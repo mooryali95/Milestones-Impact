@@ -95,3 +95,10 @@ test('هيكل البداية: يُدرج في الجدول الفارغ وحد�
   await page.getByLabel('الكمية 1').fill('2');
   await expect(page.getByRole('status').filter({ hasText: '4 صفوف من الهيكل' })).toBeVisible();
 });
+
+test('«عندي سؤال هنا» في الفصل يفتح السؤال عن الفصل نفسه', async ({ page }) => {
+  await open(page, 'beginner');
+  await page.getByRole('button', { name: 'عندي سؤال هنا' }).click();
+  await expect(page.getByRole('region', { name: 'اسأل مختصًا عن «الموارد والتكلفة»' })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'ما الذي تحتاجه؟' }).getByRole('radio')).toHaveCount(3);
+});
