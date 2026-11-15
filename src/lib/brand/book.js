@@ -130,21 +130,27 @@ function figureHtml(f) {
   return `<figure class="fig f-${f.kind}-w">${head}${body}</figure>`;
 }
 
+function blockHtml(b) {
+  if (b.type === 'h2') return `<h3>${inline(b.text)}</h3>`;
+  if (b.type === 'h3') return `<h4>${inline(b.text)}</h4>`;
+  if (b.type === 'list') return listHtml(b);
+  if (b.type === 'fig') return figureHtml(b);
+  if (b.type === 'quote') return `<blockquote class="pull"><span dir="ltr">«</span>${inline(b.text)}</blockquote>`;
+  return `<p>${inline(b.text)}</p>`;
+}
 function chapterBody(md) {
   const blocks = layout(parseMd(md));
   const quotes = blocks.filter((b) => b.type === 'quote');
   const key = quotes[quotes.length - 1];
-  const html = blocks.map((b) => {
-    if (b === key) return '';
-    if (b.type === 'h2') return `<h3>${inline(b.text)}</h3>`;
-    if (b.type === 'h3') return `<h4>${inline(b.text)}</h4>`;
-    if (b.type === 'list') return listHtml(b);
-    if (b.type === 'fig') return figureHtml(b);
-    if (b.type === 'quote') return `<blockquote class="pull"><span dir="ltr">«</span>${inline(b.text)}</blockquote>`;
-    return `<p>${inline(b.text)}</p>`;
-  }).join('');
+  const html = blocks.map((b) => (b === key ? '' : blockHtml(b))).join('');
   return { html, key: key?.text, heads: blocks.filter((b) => b.type === 'h2').map((b) => b.text.replace(/\*\*/g, '')) };
 }
+// متن مقطع بالإخراج نفسه (البطاقات ومسار الخطوات والرسوم) بلا استخراج الفكرة المحورية: يقرؤه قارئ الكتاب الأم
+// على الشاشة مقطعًا مقطعًا، فيبقى الإخراج واحدًا بين القارئ والنسخة المطبوعة
+export const mdHtml = (md) => layout(parseMd(md)).map(blockHtml).join('');
+export const partImage = (key) => PART_IMG[key] || COVER_IMG;
+export const coverImage = COVER_IMG;
+export { chapterImg as chapterImage };
 
 // تعريف كل إطار كما ورد في القسم التمهيدي من الكتاب (عام، لا يخص مسارًا)
 const FW_LINE = {
@@ -159,7 +165,7 @@ function frameworks(parts, active) {
 }
 
 // ── الغلاف الداكن (يُستعمل داخل المنصة وأول صفحة في النسخة) ──
-// c: { name?, code?, ref?, issued_at? }
+// c: { name?, code?, ref?, issued_at?, edition? } (edition: «نسخة المراجعة» للكتاب الأم، وبلاها «نسخة شخصية»)
 export const COVER_CSS = `
 .bk-cover { position: relative; aspect-ratio: 210 / 297; width: 100%; overflow: hidden; color: #F7F8F6; background: ${C.graphite}; font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; container-type: inline-size; }
 .bk-cover .bk-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: .55; }
@@ -191,7 +197,7 @@ export function coverHtml(c) {
     <p class="bk-sub">Milestone <i>◆</i> Impact <i>◆</i> Leadership</p>
     ${c.code ? `<span class="bk-code">${esc(c.code)}</span>` : ''}
   </div>
-  <div class="bk-meta">${c.name ? `نسخة شخصية مرخصة لـ<br><b>${esc(c.name)}</b><br>` : ''}${c.ref ? `<bdi dir="ltr">${esc(c.ref)}</bdi> · ${esc(fmt(c.issued_at))}` : ''}</div>
+  <div class="bk-meta">${c.name ? `${esc(c.edition || 'نسخة شخصية')} مرخصة لـ<br><b>${esc(c.name)}</b><br>` : ''}${c.ref ? `<bdi dir="ltr">${esc(c.ref)}</bdi> · ${esc(fmt(c.issued_at))}` : ''}</div>
 </div></div>`;
 }
 
@@ -255,7 +261,7 @@ ${g.items.map((c, i) => {
 @page { size: A4; margin: 22mm 22mm 22mm;
   @top-right { content: "كتاب القائد"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.gold}; }
   @top-left { content: "${esc(book.code || '')}"; font: 300 7pt "Noto Sans", sans-serif; letter-spacing: .2em; color: ${C.muted}; }
-  @bottom-right { content: "نسخة شخصية مرخصة لـ ${esc(book.name).replace(/"/g, '')} · يُمنع النسخ والتداول"; font: 300 6.8pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }
+  @bottom-right { content: "${esc(book.edition || 'نسخة شخصية')} مرخصة لـ ${esc(book.name).replace(/"/g, '')} · يُمنع النسخ والتداول"; font: 300 6.8pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }
   @bottom-left { content: "${esc(book.ref)}   ·   " counter(page); font: 300 6.8pt "Noto Sans", sans-serif; color: ${C.muted}; } }
 @page full { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -409,7 +415,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 </style></head><body>
 <div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
 <main class="sheet">
-<section class="full">${coverHtml({ name: book.name, code: book.code, issued_at: book.issued_at, ref: book.ref })}</section>
+<section class="full">${coverHtml({ name: book.name, code: book.code, issued_at: book.issued_at, ref: book.ref, edition: book.edition })}</section>
 <section class="title-pg">
   <div class="lg">${LOGO}</div>
   <p style="font:300 8pt 'Noto Sans';letter-spacing:.42em;color:${C.gold}">THE LEADER'S BOOK</p>
@@ -438,7 +444,7 @@ ${body}
 ${tools}
 <section class="end">
   <div class="lg">${LOGO}</div>
-  <p>انتهت النسخة الشخصية من كتاب القائد · ${total} بابًا</p>
+  <p>انتهت ${book.edition ? esc(book.edition) : 'النسخة الشخصية'} من كتاب القائد · ${total} بابًا</p>
   <p>صدرت لـ ${esc(book.name)} في ${esc(fmt(book.issued_at))} برقم <bdi dir="ltr">${esc(book.ref)}</bdi></p>
   <p>هذا المحتوى ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>، ومرخص لصاحب النسخة للاستخدام الشخصي فقط.<br>يُمنع نسخه أو نشره أو مشاركته مع أي طرف آخر، وكل صفحة تحمل اسم صاحبها ورقم نسختها.</p>
   <p>جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(book.issued_at).getFullYear()} Milestone Impact</bdi></p>

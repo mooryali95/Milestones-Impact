@@ -54,6 +54,8 @@ import * as OB from './observations.ts';
 import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
 import * as MC from './mail-center.ts';
+import * as MB from './master-book.ts';
+import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
 
@@ -315,6 +317,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     if (!d?.success || d.consent_needed || d.onboarding) return d;
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
     d.assignments = await settle('xp.assignments', TM.assignmentsOf(e.id, { withCounts: true }));
+    // الكتاب الأم لأعضاء لجنتي المحتوى والقياس (master-book.js)
+    d.book_access = bookAccess(e);
     if (b.lite === true) return d;
     // تقييم 360 (feedback360.ts): قوائم بانتظار اعتماد المستشار ودوراته، في الرحلة نفسها
     const [reviews, participants, peers, sus, f360] = await Promise.all([
@@ -324,6 +328,10 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     return { ...d, preload: { reviews, participants, peers, sus, f360 } };
   },
   'xp.consent': (e) => E.portalConsent(e),
+  // الكتاب الأم: قراءة وتعليق لأعضاء لجنتي المحتوى والقياس (master-book.ts)
+  'xp.book': (e) => MB.book(MB.expertViewer(e)),
+  'xp.book-comment': (e, b) => MB.addComment(MB.expertViewer(e), b),
+  'xp.book-comment-delete': (e, b) => MB.deleteComment(MB.expertViewer(e), b),
   'xp.rater-confirm': (e, b) => FL.raterConfirm(e, b),
   // تقييم 360: المستشار الفعلي يعتمد قائمة المقيّمين أو يعيدها بملاحظة
   'xp.f360': (e) => FB.advisorList(e),
@@ -438,6 +446,13 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.sus': () => SU.adminSummary(),
   'admin.erasures': () => PV.pendingList(),
   'admin.catalog': (_a, b) => A.catalog(b),
+  // الكتاب الأم: يقرؤه كل مدير، ويعلّق ويحسم المدير الكاتب بعامل ثانٍ (master-book.ts)
+  'admin.book': (a) => MB.book(MB.adminViewer(a)),
+  'admin.book-comment': (a, b) => A.writer(a, (x, y) => MB.addComment(MB.adminViewer(x), y), b),
+  'admin.book-comment-delete': (a, b) => A.writer(a, (x, y) => MB.deleteComment(MB.adminViewer(x), y), b),
+  'admin.book-comment-status': (a, b) => A.writer(a, (x, y) => MB.setStatus(MB.adminViewer(x), y), b),
+  // مشاركة الكتاب: إضافة خبير إلى لجنة المحتوى أو القياس أو إزالته (العضوية نفسها في ملفه)
+  'admin.book-reader': (a, b) => A.writer(a, MB.setReader, b),
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),
   'admin.org': (_a, b) => A.org(b),

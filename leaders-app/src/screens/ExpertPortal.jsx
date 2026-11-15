@@ -22,6 +22,15 @@ import ExpertFile from './ExpertFile.jsx';
 import Advisor360 from './Advisor360.jsx';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 
+// الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
+const MasterBook = React.lazy(() => import('../../../shared/master-book/MasterBook.jsx'));
+const BOOK_API = {
+  get: () => xpCall('xp.book'),
+  add: (b) => xpCall('xp.book-comment', b),
+  del: (id) => xpCall('xp.book-comment-delete', { id }),
+  status: () => Promise.resolve({ success: false, message: 'حسم التعليقات للإدارة' }),
+};
+
 const HALL_ACTION = { state: 'xp.hall', open: 'xp.hall-open', step: 'xp.hall-step', split: 'xp.hall-split', assign: 'xp.hall-assign', close: 'xp.hall-close' };
 
 // رابط الدعوة: /x#invite=<البريد>.<الرمز> يُقرأ مرة بصيغة الخادم نفسها (readExpertInvite)، ثم يُتحقق منه بمسار الرمز نفسه.
@@ -359,6 +368,7 @@ function FirstSteps({ e }) {
 
 function Dashboard({ onOut }) {
   const [view, setView] = useState(null);
+  const [book, setBook] = useState(false);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
   const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
@@ -372,6 +382,7 @@ function Dashboard({ onOut }) {
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) setD(r); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
+  if (book) return <React.Suspense fallback={<DashboardSkeleton />}><MasterBook api={BOOK_API} place="expert" onClose={() => setBook(false)} /></React.Suspense>;
   const e = d.expert;
   const pre = d.preload || {};
   const roles = (e.roles || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean);
@@ -422,6 +433,14 @@ function Dashboard({ onOut }) {
       </section>
       {/* منطقة إعلان ثابتة: ما يُحفظ ويُرسل ويُعتمد يسمعه قارئ الشاشة (البند 6.4)، والخطأ بتنبيه وعلامته */}
       <Notice note={note} onClose={() => say(null)} />
+
+      {d.book_access && (
+        <button type="button" className="xpp-book" onClick={() => setBook(true)}>
+          <span className="xpp-book-ic" aria-hidden="true"><i /><i /><i /></span>
+          <span><small>للجنتي المحتوى والقياس</small><b>الكتاب الأم</b><em>اقرأ الأطر الثلاثة كاملة بمستوياتها، وعلّق على أي قسم باسمك</em></span>
+          <span className="xpp-book-go" aria-hidden="true">←</span>
+        </button>
+      )}
 
       <div className="xpp-kpis">
         <div><b>{d.stats.hours}</b><span>ساعة قدّمتها</span></div>
