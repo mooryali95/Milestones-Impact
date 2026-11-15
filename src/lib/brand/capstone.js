@@ -6,10 +6,12 @@
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
 import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js';
-import { parseDate, parseNumber, PRIORITY_WEIGHT, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
 import { DIMENSIONS, DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { businessCase, charterData } from '../../../supabase/functions/leaders-api/business-case.js';
+import { closureData } from '../../../supabase/functions/leaders-api/closure.js';
 
 const DIM_EN = Object.fromEntries(DIMENSIONS.map((d) => [d.key, d.en]));
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
@@ -121,13 +123,13 @@ export function heatmap(columns, rows) {
   for (let a = 5; a >= 1; a--) {
     cells += `<div class="ax">${a}</div>`;
     for (let b = 1; b <= 5; b++) {
-      const k = a * b >= 12 ? 'hi' : a * b >= 6 ? 'md' : 'lo';
+      const k = a * b >= RISK_HIGH ? 'hi' : a * b >= RISK_MID ? 'md' : 'lo';
       cells += `<div class="${k}">${grid[`${a}:${b}`] ? `<b>${grid[`${a}:${b}`]}</b>` : ''}</div>`;
     }
   }
   cells += `<div class="ax"></div>${[1, 2, 3, 4, 5].map((b) => `<div class="ax">${b}</div>`).join('')}`;
   return `<figure class="cp-fig"><div class="cp-heat">${cells}</div>
-<div class="cp-legend"><span><i style="background:#E1BE85"></i>عالٍ (12 فأكثر)</span><span><i style="background:#F2E6D0"></i>متوسط</span><span><i style="background:#EEF1F0"></i>منخفض</span><span>المحور الرأسي: الاحتمال · الأفقي: الأثر</span></div>
+<div class="cp-legend"><span><i style="background:#E1BE85"></i>عالٍ (${RISK_HIGH} فأكثر)</span><span><i style="background:#F2E6D0"></i>متوسط</span><span><i style="background:#EEF1F0"></i>منخفض</span><span>المحور الرأسي: الاحتمال · الأفقي: الأثر</span></div>
 <figcaption>خريطة المخاطر: عدد البنود في كل خانة</figcaption></figure>`;
 }
 
@@ -172,7 +174,7 @@ function trackingBlock(t) {
   const st = t.statuses || {};
   const ms = (t.state?.milestones || []).map((x) => [x.title, x.due || '·', st[x.status] || 'لم يُحدَّث', x.actual || '', x.note || '']);
   const bs = (t.state?.benefits || []).map((x) => [x.title, x.baseline || '·', x.target || '·', x.value ?? '·', x.realization == null ? '·' : `${Math.round(x.realization * 100)}%`]);
-  const cps = (s.checkpoints || []).map((c) => raw(`<b>${esc(c.title)}:</b> ${esc({ upcoming: 'لم يحن موعدها', due: 'حان موعدها', missed: 'فاتت', submitted: c.verify_title || 'أُرسلت', verified: 'أكّدها الراعي', disputed: 'اعترض الراعي' }[c.status] || '')}`));
+  const cps = (s.checkpoints || []).map((c) => raw(`<b>${esc(c.title)}:</b> ${esc((c.status === 'submitted' && c.verify_title) || CHECKPOINT_STATUS_AR[c.status] || '')}`));
   const last = (t.updates || [])[0];
   return section('Implementation & impact', 'متابعة التنفيذ والأثر', `
     ${kpis([
@@ -206,6 +208,37 @@ function caseBlock(doc) {
   return section('Business case', 'حالة العمل', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
     ${c.missing ? `<p class="cp-miss">${esc(c.missing)}</p>` : `${points(c.points.map(([k, v]) => raw(`<b>${esc(k)}:</b> ${esc(v)}`)), '')}${c.table ? `<div class="cp-f"><b>${esc(c.table.label)}</b>${table(c.table.columns.map((x) => ({ label: x })), c.table.rows)}</div>` : ''}`}</div>`).join(''),
   'خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصول الوثيقة نفسها.');
+}
+
+// ── المرحلة الخامسة: سجل قرارات البوابات وتقرير الإغلاق (closure.js) ──
+function decisionsBlock(list) {
+  if (!Array.isArray(list) || !list.length) return '';
+  return section('Gate decisions', 'سجل قرارات البوابات', table([{ label: 'التاريخ', width: '30mm' }, { label: 'البوابة', width: '34mm' }, { label: 'القرار' }, { label: 'من', width: '24mm' }],
+    list.map((x) => [fmt(x.at), x.gate, x.decision, x.by])), 'من سجل التدقيق كما وقع، لا يُعدَّل ولا يُحذف. الأدوار لا الأسماء.');
+}
+
+function closureBlock(doc) {
+  const c = closureData(doc);
+  if (!c) return '';
+  const pct = (v) => (v == null ? '·' : `${v}%`);
+  return section('Closure report', `تقرير إغلاق المبادرة (${c.status})`, `
+    ${kpis([
+      { value: `${c.delivered.done} من ${c.delivered.total}`, label: 'معالم تحققت', hint: c.delivered.on_time != null ? `${c.delivered.on_time}% في موعدها` : '' },
+      { value: pct(c.realization), label: 'تحقق المنافع' },
+      { value: c.sponsor || '·', label: 'مراجعة اليوم 180' },
+    ])}
+    ${c.benefits.length ? `<h3>ما تحقق من المنافع</h3>${table([{ label: 'المنفعة' }, { label: 'خط الأساس', width: '22mm' }, { label: 'المستهدف', width: '22mm' }, { label: 'الفعلي', width: '22mm' }, { label: 'التحقق', width: '18mm' }],
+      c.benefits.map((b) => [b.title, b.baseline ?? '·', b.target ?? '·', b.value ?? '·', pct(b.pct)]))}` : ''}
+    <h3>ما لم يتحقق ولماذا</h3>
+    ${points([
+      ...c.open.map((t) => raw(`<b>معلم لم يكتمل:</b> ${esc(t)}`)),
+      ...c.dropped.map((t) => raw(`<b>معلم أُسقط:</b> ${esc(t)}`)),
+      c.not_achieved && raw(`<b>تفسير القائد:</b> ${esc(c.not_achieved)}`),
+    ].filter(Boolean), 'تحقق كل ما خُطط له.')}
+    <h3>التشغيل بعد المبادرة</h3>
+    ${points([c.operator && raw(`<b>من يشغّل:</b> ${esc(c.operator)}`), c.handover && raw(`<b>التسليم والتسلم:</b> ${esc(c.handover)}`), c.sustain && raw(`<b>ما يحمي المنافع:</b> ${esc(c.sustain)}`)].filter(Boolean), 'لم يُكتب بعد.')}
+    ${c.lessons.length ? `<h3>الدروس</h3>${points(c.lessons)}` : ''}`,
+  'يُبنى من الوثيقة المعتمدة والمتابعة وفصلي تقرير الأثر وقصة التحول، فلا يُكتب مرتين. يصير نهائيًا حين يؤكد الراعي مراجعة اليوم 180 أو تنتهي المتابعة.');
 }
 
 // ── الوثيقة ──
@@ -278,6 +311,8 @@ export function capstoneReport(doc) {
   }
 
   if (approved && doc.tracking?.summary) body += trackingBlock(doc.tracking);
+  body += closureBlock(doc);
+  if (!example) body += decisionsBlock(doc.decisions);
 
   return {
     meta: {

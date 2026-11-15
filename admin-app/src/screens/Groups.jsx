@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // نمط العمل لكل مرحلة (جماعي مع الدفعة، فردي، في مجموعات)، والمجموعات نفسها:
 // توزيع آلي متنوع أو متقارب المستوى، ثم نقل أي مشارك يدويًا.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { L, LVL } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { overallLevel, WORK_MODE_AR } from '../../../supabase/functions/leaders-api/logic.js';
@@ -27,7 +27,9 @@ export function GroupsPanel({ cohort, canWrite = true, onDirty, onChanged, onFai
   }, [cohort.id]); // toast وonFail من الأب تتغير كل عرض
   useEffect(() => { load(); }, [load]);
   const dirty = !!d && modesKey(modes) !== savedModes;
-  useEffect(() => { onDirty?.(dirty); }, [dirty]); // onDirty من الأب تتغير كل عرض
+  // يُبلَّغ الأب قبل الحدث التالي (useLayoutEffect لا useEffect): كان Esc الضاغط بعد التغيير مباشرة يسبق البلاغ،
+  // فتُغلق النافذة دون سؤال «لديك تعديلات لم تُحفظ». onDirty من الأب تتغير كل عرض
+  useLayoutEffect(() => { onDirty?.(dirty); }, [dirty]);
   const ro = !canWrite;
 
   const run = async (action, body, ok) => {

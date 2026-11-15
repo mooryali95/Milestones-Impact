@@ -16,6 +16,7 @@ import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
+import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
@@ -183,15 +184,32 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
   };
 }
 
-// المعتمدة تُعرض من لقطتها، فلا يغيّرها تعديل لاحق على نموذج أو حقل
+// سجل قرارات البوابات (المرحلة الخامسة): يُقرأ من سجل التدقيق لحظة العرض، فلا نسخة ثانية ولا لقطة تتجمد قبل مراجعات الأثر.
+// أفعال الوثيقة على كيانها، واعتماد البطاقة على تسليمها، ومراجعات الأثر على صفوف المتابعة. تعذّر القراءة يعيد سجلًا فارغًا
+async function decisionsFor(participantId: string, approvedAt: string | null) {
+  try {
+    const [{ data: card }, { data: ups }] = await Promise.all([
+      db.from('model_submissions').select('id, learning_models!inner(key)').eq('participant_id', participantId).eq('learning_models.key', CHARTER_KEY).maybeSingle(),
+      db.from('capstone_updates').select('id').eq('participant_id', participantId),
+    ]);
+    const ids = [participantId, (card as any)?.id, ...((ups || []) as any[]).map((u) => u.id)].filter(Boolean).map(String);
+    const { data: ev } = await db.from('audit_log').select('action, created_at, after').in('entity_id', ids).in('action', GATE_ACTIONS).order('created_at').limit(200);
+    return gateDecisions((ev || []) as any[], { approved_at: approvedAt });
+  } catch (e) {
+    console.error('capstone decisions:', e);
+    return [];
+  }
+}
+
+// المعتمدة تُعرض من لقطتها، فلا يغيّرها تعديل لاحق على نموذج أو حقل. سجل القرارات يُضاف حيًا فوق أي منهما
 async function recordFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org') {
-  const { data: c } = await db.from('capstones').select('status, snapshot').eq('participant_id', p.id).maybeSingle();
+  const { data: c } = await db.from('capstones').select('status, snapshot, approved_at').eq('participant_id', p.id).maybeSingle();
   if (c?.status === 'approved' && c.snapshot) {
     const doc = c.snapshot;
     if (audience !== 'admin' && audience !== 'participant') doc.review = null;
-    return doc;
+    return { ...doc, decisions: await decisionsFor(p.id, c.approved_at || null) };
   }
-  return docFor(p, audience);
+  return { ...(await docFor(p, audience)), decisions: await decisionsFor(p.id, null) };
 }
 
 // الوثيقة المعتمدة تحمل متابعتها، فيطبع التقرير الخطة وما تحقق منها معًا

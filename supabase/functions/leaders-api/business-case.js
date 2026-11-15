@@ -4,7 +4,7 @@
 // التصور: docs/content/2026-11-14-تصور-بناء-المبادرة-وحالة-العمل-v1.md (اعتمده المالك، الخيار ج).
 // لكل معلومة مصدر واحد: الموازنة من «الموارد والتكلفة»، والمنافع من «سجل المنافع»، والمخاطر من «سجل المخاطر».
 // يعمل على الوثيقة كما يبنيها الخادم (docFor) وعلى لقطة الوثيقة المعتمدة معًا، فلا يمس الخادم ولا القاعدة.
-import { norm, parseNumber } from './capstone.js';
+import { norm, parseNumber, RISK_HIGH } from './capstone.js';
 import { countAr } from './labels.js';
 
 // التاريخ بصيغة 2026-03-15 داخل جملة عربية: يُعزل اتجاهه (LRI…PDI) فلا تنقلب أجزاؤه
@@ -50,14 +50,14 @@ function tableOf(doc, key, field) {
   return { columns, rows, col, cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
 }
 
-// المخاطر العالية: الاحتمال × الأثر 12 فأكثر، كما في محرك الاتساق وخريطة المخاطر
+// المخاطر العالية: الاحتمال × الأثر من RISK_HIGH فأكثر، الحد نفسه في محرك الاتساق وخريطة المخاطر
 export function highRisks(doc, limit = 5) {
   const t = tableOf(doc, 'raid', 'items');
   if (!t) return [];
   const p = t.col('الاحتمال'), i = t.col('الأثر'), d = t.col('الوصف'), o = t.col('المالك'), res = t.col('الاستجابة');
   return t.rows
     .map((r) => ({ title: t.cell(r, d) || t.cell(r, 0), owner: t.cell(r, o), response: t.cell(r, res), score: (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) }))
-    .filter((x) => x.score >= 12)
+    .filter((x) => x.score >= RISK_HIGH)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

@@ -244,6 +244,8 @@ export function costSummary(model, answers) {
 // كل فحص يطبَّق متى وُجد فصلاه في وثيقة المشارك، وإلا يُتجاوز.
 // فحوص حاجبة: لا تُسلَّم وثيقة تخالفها مهما بلغت الجاهزية. هي ما يجعل المبادرة قابلة للاعتماد
 // في أي جهة: راعٍ حقيقي، ومحاسب واحد، وتكلفة ضمن الميزانية، ومنفعة لها مالك، وخطر عالٍ له مالك.
+// حدود شدة الخطر (الاحتمال × الأثر من 1 إلى 5): مصدر واحد للفحص وخريطة المخاطر وحالة العمل
+export const RISK_HIGH = 12, RISK_MID = 6;
 export const BLOCKING = new Set(['raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
 export function capstoneChecks(ctx) {
   const M = ctx.models || {}, A = ctx.answers || {};
@@ -319,7 +321,7 @@ export function capstoneChecks(ctx) {
   if (raid) {
     const t = raid;
     const p = t.col('الاحتمال'), i = t.col('الاثر'), o = t.col('المالك'), res = t.col('الاستجابه'), link = t.col('مرتبط');
-    const high = t.rows.filter((r) => (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) >= 12);
+    const high = t.rows.filter((r) => (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) >= RISK_HIGH);
     const weak = high.filter((r) => !t.cell(r, o) || !t.cell(r, res)).map((r) => t.cell(r, 0) || t.cell(r, 2));
     add('risk-owner', 'لكل خطر عالٍ مالك واستجابة', !weak.length, `مخاطر عالية بلا مالك أو استجابة: ${weak.slice(0, 6).join('، ')}`);
     if (wbs) {
@@ -387,12 +389,14 @@ export function sectionState(model, fields, sub) {
 // ولها راعٍ. كان الحكم الأول على المبادرة يأتي عند الوثيقة كاملة في آخر الرحلة، فتُكتشف المبادرة غير المناسبة بعد بنائها.
 // البوابة لا تقفل الفصول: المشارك يكمل البناء أثناء الانتظار، والذي ينتظر الاعتماد هو تسليم الوثيقة وحده.
 // المبادرة قد تكون افتراضية (قرار المالك 2026-11-14): المعيار واقعيتها في سياق جهته، والراعي توضيح لدوره لا اسم ولا بريد.
-export const CARD_REVIEW_CRITERIA = [
-  'واقعية في سياق جهته، حقيقية كانت أو افتراضية',
-  'بحجم يُخطَّط له في زمن البرنامج',
-  'موضّح فيها من يرعاها في هيكل الجهة وما يقرره',
-  'مشكلتها ومنفعتها المتوقعة واضحتان',
-];
+// مصدر واحد بصيغتين: للمستشار حين يعتمد البطاقة، وللمشارك حين يفاضل بين أفكاره في الاكتشاف (guide.js DISCOVERY_CRITERIA)
+export const CARD_CRITERIA = Object.freeze([
+  { key: 'real', advisor: 'واقعية في سياق جهته، حقيقية كانت أو افتراضية', self: 'قائمة في جهتك، أو افتراضية واقعية في سياقها' },
+  { key: 'size', advisor: 'بحجم يُخطَّط له في زمن البرنامج', self: 'يمكن البدء بها وإثبات قيمتها في مدة البرنامج' },
+  { key: 'owner', advisor: 'موضّح فيها من يرعاها في هيكل الجهة وما يقرره', self: 'لها صاحب قرار في جهتك يهمه حلها' },
+  { key: 'measure', advisor: 'مشكلتها ومنفعتها المتوقعة واضحتان', self: 'يمكن قياسها برقم: الآن، والمستهدف' },
+]);
+export const CARD_REVIEW_CRITERIA = CARD_CRITERIA.map((c) => c.advisor);
 /** @param {string | null | undefined} status حالة تسليم نموذج البطاقة */
 export function cardGate(status) {
   if (status === 'reviewed') return { state: 'approved', ok: true, reason: null };

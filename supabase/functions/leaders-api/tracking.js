@@ -22,6 +22,8 @@ export const UPDATE_POINTS = 10;
 export const VERIFIED_POINTS = 50;
 export const M_STATUS = { on_track: 'في موعده', at_risk: 'معرّض للتأخر', late: 'متأخر', done: 'تحقق', dropped: 'أُلغي بقرار' };
 export const HEALTH = { pending: 'لم تبدأ المتابعة', green: 'على المسار', amber: 'يحتاج انتباهًا', red: 'متعثر', stale: 'بلا تحديث', closed: 'اكتملت المتابعة' };
+// حالة نقطة المراجعة (اليوم 90 و180) بالعربية: مصدر واحد للقائد ولوحة الإدارة والوثيقة وتقرير الإغلاق
+export const CHECKPOINT_STATUS_AR = Object.freeze({ upcoming: 'لم يحن موعدها', due: 'حان موعدها', missed: 'فاتت', submitted: 'أُرسلت', verified: 'أكّدها الراعي', disputed: 'اعترض الراعي' });
 export const VERIFY = { pending: 'بانتظار تأكيد الراعي', confirmed: 'أكّده الراعي', disputed: 'اعترض الراعي', expired: 'تحتاج إعادة إرسال إلى الراعي', none: 'بلا راعٍ للتأكيد' };
 
 const DAY = 864e5;

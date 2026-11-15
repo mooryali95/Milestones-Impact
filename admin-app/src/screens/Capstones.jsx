@@ -5,8 +5,7 @@
 // نفسه الذي يراه المشارك والراعي، وتقيّمها بالمعيار السداسي، ثم تعيدها
 // للتحسين مرة أو تقبلها فيُطلب تأييد راعيها. الفصول نفسها نماذج تعليمية،
 // فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
-import GOV from '../../../supabase/content/initiative-guide/v1/sectors/gov.json';
-import HEALTH from '../../../supabase/content/initiative-guide/v1/sectors/health.json';
+import { EXAMPLES } from '../../../supabase/content/initiative-guide/v1/examples.js';
 import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
@@ -31,9 +30,6 @@ async function openDoc(doc, toast) {
   const { meta, body } = capstoneReport(doc);
   if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
 }
-
-// الأمثلة المحلولة نفسها التي يراها المشارك (leaders-app/src/guide.js)
-const EXAMPLES = [GOV, HEALTH];
 
 function Review({ d, canWrite, onSaved, onFailed }) {
   const { toast, confirm } = useUI();
