@@ -31,7 +31,8 @@ describe('معرفة المساعد', () => {
       }
     }
     const hdir = join(root, 'supabase/content/handbook');
-    for (const v of readdirSync(hdir)) {
+    // مجلدات الإصدارات وحدها: في المجلد سجل هويات الأقسام (sections.json) وقفله أيضًا
+    for (const v of readdirSync(hdir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
       for (const f of readdirSync(join(hdir, v)).filter((x) => x.endsWith('.md'))) {
         const lines = readFileSync(join(hdir, v, f), 'utf8').split('\n').map((l) => l.trim()).filter((l) => l.length > 60);
         for (const l of lines) expect(K, `${v}/${f}`).not.toContain(l.slice(0, 60));

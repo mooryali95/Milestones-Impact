@@ -8,7 +8,7 @@ const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
 
 describe('التحكم في الرؤية', () => {
   it('كل مفتاح له جمهور وتسمية وشرح، وافتراضه «مرئي» فلا يتغير شيء عند النشر', () => {
-    expect(VISIBILITY_KEYS.length).toBe(23);
+    expect(VISIBILITY_KEYS.length).toBe(25);
     for (const k of VISIBILITY_KEYS) {
       expect(['advisor', 'assigned', 'coordinator', 'participant']).toContain(VISIBILITY[k].audience);
       expect(VISIBILITY[k].label_ar && VISIBILITY[k].hint_ar).toBeTruthy();
@@ -41,13 +41,15 @@ describe('التحكم في الرؤية', () => {
     expect(f).toContain('const vis = await visibilityOfCohort(cohort?.id || null);');
     for (const k of ['adv_answers', 'adv_observations_write', 'adv_final_edit', 'adv_hall_control']) expect(f, k).toContain(`'${k}')`);
     // كل مفتاح مستعمل في الخادم، فلا مفتاح يُعرض للمالك ولا أثر له
-    const server = ['file.ts', 'feedback360.ts', 'coordinator.ts', 'participant.ts'].map((x) => read(`supabase/functions/leaders-api/${x}`)).join('\n');
+    const server = ['file.ts', 'feedback360.ts', 'coordinator.ts', 'participant.ts', 'share.ts'].map((x) => read(`supabase/functions/leaders-api/${x}`)).join('\n');
     for (const k of VISIBILITY_KEYS) expect(server, k).toContain(k);
     // مفاتيح المنسق والمشارك وتقرير 360: كل واحد عند موضعه
     expect(read('supabase/functions/leaders-api/feedback360.ts')).toContain("requireVisible(await visibilityOfParticipant(c.participant_id), 'adv_f360')");
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/vis\.coord_initiatives \? initiativesFor/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/\.scores && vis\.coord_f360/);
     expect(read('supabase/functions/leaders-api/participant.ts')).toMatch(/audience === 'admin' \|\| vis\.par_advisor/);
+    // المشاركة برابط: الحجب يوقف الروابط القائمة عند فتحها، وحجب الملاحظات يغلقها ولو فتحها المشارك
+    expect(read('supabase/functions/leaders-api/share.ts')).toMatch(/share: vis\.par_share !== false, notes: vis\.par_share_notes !== false/);
     // تعليل الإدارة لا يخرج للخبير المسند مهما كانت المفاتيح
     expect(f).toContain("const withNotes = adv && on('adv_admin_notes');");
   });

@@ -1,6 +1,7 @@
 // يولّد مرجع الخبير من المصدر الواحد anatomy.json: node scripts/content/anatomy-doc.mjs
 // المرجع للقراءة والمراجعة لا للتحرير: التعديل في anatomy.json ثم يُعاد التوليد، ويحرس اختبار تطابقهما.
 import { readFileSync, writeFileSync } from 'node:fs';
+import { handbookRef } from '../../supabase/functions/leaders-api/section-refs.js';
 
 export const OUT = 'docs/content/2026-11-15-مرجع-معنى-المبادرة-وخريطة-الوثيقة-v1.md';
 const A = JSON.parse(readFileSync('supabase/content/initiative-guide/v1/anatomy.json', 'utf8'));
@@ -10,7 +11,7 @@ const DIM = { milestone: 'إطار المعالم', impact: 'إطار الأثر
 const cell = (t) => String(t ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 export function render() {
-  const m = A.meaning;
+  const m = { ...A.meaning, handbook: handbookRef(A.meaning.handbook) };
   const out = [];
   out.push('# مرجع معنى المبادرة وخريطة وثيقتها ومسرد مصطلحاتها (v1)', '');
   out.push('> **مولَّد، لا يُحرَّر يدويًا.** المصدر الواحد `supabase/content/initiative-guide/v1/anatomy.json`. أي تعديل يُكتب هناك ثم يُعاد التوليد بالأمر `node scripts/content/anatomy-doc.mjs`.', '');
@@ -38,7 +39,8 @@ export function render() {
     out.push(`### ${i + 1}. ${p.title}`, '', p.lead, '');
     out.push('| الفصل | المفتاح | لماذا هو | يغذي | في الكتيب |', '|---|---|---|---|---|');
     for (const k of p.chapters) {
-      const c = A.chapters[k] || {};
+      const c0 = A.chapters[k] || {};
+      const c = { ...c0, handbook: c0.handbook ? handbookRef(c0.handbook) : null };
       const feeds = (c.feeds || []).map((f) => A.feeds[f]).join('، ') || '·';
       const h = c.handbook ? `${DIM[c.handbook.dimension]} · ${c.handbook.chapter_key} · «${c.handbook.look_for}»` : '·';
       out.push(`| ${cell(TITLES[k] || k)} | \`${k}\` | ${cell(c.why)} | ${cell(feeds)} | ${cell(h)} |`);

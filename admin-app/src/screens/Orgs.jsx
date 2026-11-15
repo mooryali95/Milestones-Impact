@@ -289,7 +289,8 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
       <section className="la-org-hero" style={{ '--org': orgColor(o) }}>
         <div className="la-row between">
           <div className="la-row"><span className="la-org-mark lg">{(o.short_name || o.name).slice(0, 2)}</span>
-            <div><h2>{o.name}</h2><small>{[o.sector, o.contact_name, o.contact_email].filter(Boolean).join(' · ')}</small></div></div>
+            <div><h2>{o.name}</h2><small>{[o.sector, o.contact_name, o.contact_email].filter(Boolean).join(' · ')}</small>
+              {!isNone && 'companion_allowed' in o && <span className={`la-chip ${o.companion_allowed === false ? 'warn' : 'ok'} org-companion`}>المرافق: {o.companion_allowed === false ? 'غير مسموح' : 'مسموح'}</span>}</div></div>
           <div className="la-row">
             {!isNone && <button className="btn-sm ghost" onClick={() => copy(inviteUrl(o), 'نُسخ رابط الدعوة')}>نسخ رابط الدعوة</button>}
             <ExportButton scope="org-members" className="btn-sm ghost" meta={{ kind: 'ORG', title: `مشاركو ${o.name}`, subtitle: 'برنامج القادة', for: o.name, sheet: 'المشاركون', file: 'Organization', code: o.invite_code }}
@@ -387,7 +388,7 @@ export default function Orgs({ data, reload, canWrite, orgId, onOpen, onPerson }
       {orgId
         ? <OrgView key={`${orgId}-${ver}`} id={orgId} orgs={orgs} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} onEdit={edit} />
         : <OrgCards data={data} canWrite={canWrite} onOpen={onOpen} reload={reload} onAdd={() => edit(null)} onEdit={edit} />}
-      {form && <OrgForm org={form.org} coordinator={form.coordinator} onClose={close} />}
+      {form && <OrgForm org={form.org} coordinator={form.coordinator} onClose={close} companionReady={orgs.some((x) => 'companion_allowed' in x)} />}
     </>
   );
 }

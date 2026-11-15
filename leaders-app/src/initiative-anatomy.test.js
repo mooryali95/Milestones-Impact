@@ -3,7 +3,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import A from '../../supabase/content/initiative-guide/v1/anatomy.json';
-import { annotate, chapterInfo, define, GLOSSARY, groupByPhase, PHASES, termsIn } from '../../supabase/content/initiative-guide/v1/anatomy.js';
+import { annotate, chapterInfo, define, GLOSSARY, groupByPhase, MEANING, PHASES, termsIn } from '../../supabase/content/initiative-guide/v1/anatomy.js';
 import { EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
 import { RISK_HIGH } from '../../supabase/functions/leaders-api/capstone.js';
 import { launchPlan, LAUNCH_WINDOWS } from '../../supabase/functions/leaders-api/business-case.js';
@@ -13,7 +13,7 @@ import { exampleDoc } from './guide.js';
 import { bookRef, chapterTone, nextChapter } from './screens/InitiativeMap.jsx';
 import { OUT, render } from '../../scripts/content/anatomy-doc.mjs';
 
-const BOOK = 'supabase/content/handbook/v3';
+const BOOK = 'supabase/content/handbook/v3.1';
 const bookFile = (dim, key) => readdirSync(BOOK).map((f) => `${BOOK}/${f}`).find((f) => f.includes(`/${dim}_`) && readFileSync(f, 'utf8').includes(`chapter_key: ${key}\n`));
 const KEYS = EXAMPLES[0].sections.map((s) => s.key);
 
@@ -23,8 +23,11 @@ describe('خريطة الوثيقة: كل فصل في مرحلة واحدة، و
     for (const p of PHASES) for (const k of p.chapters) expect(chapterInfo(k)?.why, k).toBeTruthy();
     expect(Object.keys(A.chapters).sort()).toEqual(PHASES.flatMap((p) => p.chapters).sort());
   });
-  it('كل إحالة إلى الكتيب تشير إلى باب موجود وقسم موجود فيه بعنوانه', () => {
-    const refs = [A.meaning.handbook, ...Object.values(A.chapters).map((c) => c.handbook)];
+  it('كل إحالة إلى الكتيب بهوية قسم (section_id)، تُقرأ منها الباب والعنوان، والعنوان موجود في بابه', () => {
+    const raw = [A.meaning.handbook, ...Object.values(A.chapters).map((c) => c.handbook)];
+    for (const h of raw) expect(Object.keys(h), JSON.stringify(h)).toEqual(['section_id']);
+    const refs = [MEANING.handbook, ...Object.keys(A.chapters).map((k) => chapterInfo(k).handbook)];
+    for (const h of refs) expect(h, 'إحالة لا تُقرأ').toBeTruthy();
     for (const h of refs) {
       const f = bookFile(h.dimension, h.chapter_key);
       expect(f, `${h.dimension} ${h.chapter_key}`).toBeTruthy();

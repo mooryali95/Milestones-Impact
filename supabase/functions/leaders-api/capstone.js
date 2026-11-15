@@ -144,6 +144,8 @@ export const initiativeOf = (charterAnswers) => String(charterAnswers?.title || 
 // فلا يبقيان إلا بموافقة المشارك، ومع صلاحية المستويات حين يطّلع منسق الجهة
 export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => (show || !doc?.meta ? doc : { ...doc, meta: { ...doc.meta, level: null, track: null } });
 
+import { depAr, scheduleOf } from './schedule.js';
+
 export const norm = (t) => String(t || '').replace(/\(.*?\)/g, '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 const SYNONYMS = [['الخطر', 'البند', 'الوصف'], ['الاجراء', 'الاستجابه', 'التدخل'], ['المسؤول', 'المالك'], ['المؤشر', 'المقياس']].map((g) => g.map(norm));
 // أقرب عمود في المصدر لعمود الهدف: نفس الاسم، أو اسم يحتوي الآخر
@@ -183,7 +185,7 @@ function table(model, answers, fieldKey) {
   const rows = (Array.isArray(answers?.[fieldKey]) ? answers[fieldKey] : []).filter((r) => Array.isArray(r) && r.some((c) => String(c || '').trim()));
   const cols = (f.columns || []).map(norm);
   const col = (...words) => cols.findIndex((c) => words.some((w) => c.includes(norm(w))));
-  return { rows, col, cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
+  return { rows, col, columns: f.columns || [], cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
 }
 
 export function parseNumber(v) {
@@ -307,13 +309,26 @@ export function capstoneChecks(ctx) {
     // جدول بلا صفوف يفشل الفحص، وتفصيله يقول ذلك بدل قائمة فارغة («…معكوس: .»)
     add('dates', 'تواريخ الجدول واضحة والنهاية بعد البداية', t && t.rows.length && !bad.length,
       t && t.rows.length ? `صفوف بتاريخ غير واضح أو معكوس: ${bad.slice(0, 6).join('، ')}. اكتب التاريخ هكذا 2026-03-15.` : 'لم تُدخل أنشطة في الجدول الزمني بعد.');
-    const orphan = t ? t.rows.flatMap((r) => listCodes(t.cell(r, dep))).filter((c) => !codes.includes(c) && !wbsCodes.includes(c)) : [];
-    add('deps', 'الاعتماديات تشير إلى أنشطة موجودة', !orphan.length, `اعتماديات لا تجد نشاطها: ${[...new Set(orphan)].slice(0, 6).join('، ')}`);
+    // العلاقات بصيغتها (schedule.js): A1، A2 SS+3. الرمز قد يكون نشاطًا أو حزمة في هيكل التجزئة
+    const sc = scheduleOf(t.columns, t.rows, { extraCodes: wbsCodes });
+    add('deps', 'الاعتماديات تشير إلى أنشطة موجودة', !sc.orphan.length, `اعتماديات لا تجد نشاطها: ${sc.orphan.slice(0, 6).join('، ')}`);
+    if (sc.acts.some((a) => a.deps.length)) {
+      add('dep-cycle', 'لا حلقة في علاقات الأنشطة', !sc.analysis.cycle, `أنشطة يعتمد بعضها على بعض في حلقة: ${(sc.analysis.cycle || []).slice(0, 6).join('، ')}. احذف إحدى العلاقات.`);
+      add('dep-logic', 'تواريخ الأنشطة تحترم علاقاتها', !sc.broken.length,
+        `${sc.broken.slice(0, 4).map((b) => `${b.code} (${depAr(b.dep)})`).join('، ')}. عدّل التاريخ أو نوع العلاقة.`);
+    }
+    void codes; void dep;
     if (has(CHARTER_KEY) && t) {
       const from = parseDate(A[CHARTER_KEY]?.start), to = parseDate(A[CHARTER_KEY]?.end);
       if (from != null && to != null) {
         const out2 = t.rows.filter((r) => { const a = parseDate(t.cell(r, s)), b = parseDate(t.cell(r, e)); return (a != null && a < from) || (b != null && b > to); });
         add('window', 'الجدول داخل مدة المبادرة في بطاقتها', !out2.length, `${out2.length} نشاط خارج المدة بين ${A[CHARTER_KEY].start} و${A[CHARTER_KEY].end}.`);
+        // المسار الحرج بعلاقاته (لا بالتواريخ المكتوبة) يجب أن يتسع في مدة المبادرة
+        const an = sc.analysis;
+        if (an.origin != null && !an.cycle && an.order.length) {
+          const lastDay = an.origin + (an.finish - 1) * 864e5;
+          add('critical-window', 'المسار الحرج ينتهي داخل مدة المبادرة', lastDay <= to, `المسار الحرج يحتاج ${an.finish} يومًا، فينتهي بعد ${A[CHARTER_KEY].end}. قصّر أنشطته أو مدّد المبادرة.`);
+        }
       }
     }
   }

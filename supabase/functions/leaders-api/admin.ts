@@ -31,7 +31,8 @@ import { renderJourneyText } from './journey.js';
 import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
-export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string };
+// id وowner وsessionHash لشاشة المساعد: المالك يقرؤها، والتحقق الإضافي مربوط بهاش الجلسة نفسها (agent-admin.ts)
+export type Admin = { email: string; role: 'super_admin' | 'admin' | 'viewer'; method?: string; id?: string; owner?: boolean; sessionHash?: string };
 // من يُنفّذ إجراء مشتركًا بين اللوحة وبوابة الخبير: المدير (admin) أو الخبير بهويته (system + بريده في السجل)
 export type Actor = { email: string; actor?: 'admin' | 'system' };
 
@@ -41,17 +42,18 @@ async function sha256hex(s: string) {
 }
 
 // صف المدير الحي. تعذّر القراءة (لا غياب الصف) يُسقط الطلب: لا صلاحية بلا تحقق
-async function liveAdmin(subject: unknown): Promise<{ email: string; role_id: string; is_active: boolean; passkey_only: boolean } | null> {
+async function liveAdmin(subject: unknown): Promise<{ email: string; role_id: string; is_active: boolean; passkey_only: boolean; is_owner: boolean } | null> {
   if (!/^[0-9a-f-]{36}$/i.test(String(subject || ''))) return null;
-  const { data, error } = await publicDb.from('admin_users').select('email, role_id, is_active, passkey_only').eq('id', String(subject)).limit(1);
+  const { data, error } = await publicDb.from('admin_users').select('email, role_id, is_active, passkey_only, is_owner').eq('id', String(subject)).limit(1);
   if (error) throw new Fail('تعذّر التحقق من صلاحية الحساب، حاول بعد قليل', 503, 'db_error');
   return (data?.[0] as any) || null;
 }
 
 export async function adminFromToken(token: unknown): Promise<Admin> {
   if (typeof token !== 'string' || token.length < 32) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
+  const sessionHash = await sha256hex(token);
   const { data } = await publicDb.from('api_sessions').select('subject, meta, expires_at')
-    .eq('token_hash', await sha256hex(token)).eq('kind', 'admin').limit(1);
+    .eq('token_hash', sessionHash).eq('kind', 'admin').limit(1);
   const s = data?.[0];
   if (!s || new Date(s.expires_at).getTime() < Date.now()) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
   // الدور والتفعيل من admin_users الآن لا من نسخة الجلسة (كما في admin-api): سحب الصلاحية أو إيقاف الحساب يسري فورًا،
@@ -60,7 +62,7 @@ export async function adminFromToken(token: unknown): Promise<Admin> {
   if (!live || live.is_active === false) throw new Fail('جلسة الإدارة منتهية', 401, 'session');
   // كما في admin-api: حساب «مفتاح المرور وحده» لا تُقبل له إلا جلسة مفتاح مرور (لا رمز بريد ولا TOTP)
   if (live.passkey_only && s.meta?.method !== 'passkey') throw new Fail('جلسة الإدارة منتهية', 401, 'session');
-  return { email: String(live.email || s.meta?.email || ''), role: live.role_id as Admin['role'], method: s.meta?.method };
+  return { email: String(live.email || s.meta?.email || ''), role: live.role_id as Admin['role'], method: s.meta?.method, id: String(s.subject), owner: !!live.is_owner, sessionHash };
 }
 
 const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
@@ -929,7 +931,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
-                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes', 'contract_cents', 'show_value', 'contract_starts', 'contract_ends'] },
+                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes', 'contract_cents', 'show_value', 'contract_starts', 'contract_ends', 'companion_allowed'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
 };
 
@@ -1266,6 +1268,7 @@ export async function save(a: Admin, b: Body) {
       row.invite_code = code;
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
+    if ('companion_allowed' in row) row.companion_allowed = row.companion_allowed !== false;
     // تخصيص شهادة الجهة: ما لا يُذكر يُورث من الإعداد العام
     if ('cert' in row) row.cert = cleanProfile(row.cert && typeof row.cert === 'object' ? row.cert : {}, true);
     if ('domains' in row) {
@@ -1322,6 +1325,7 @@ export async function save(a: Admin, b: Body) {
     for (const k of e.key) q = q.eq(k, b.row[k]);
     return q.select('*').single();
   };
+  // companion_allowed (ترحيل 20261115230000) لا يرسله نموذج الجهة قبل وجود العمود في صفها المقروء (OrgForm companionKnown)
   const saved = must(await write(stamp), isNew ? 'تعذّر الحفظ، تأكد من عدم تكرار الرمز' : 'تعذّر الحفظ') as Body;
   const before = current ? Object.fromEntries(Object.keys(row).filter((k) => JSON.stringify(row[k] ?? null) !== JSON.stringify(current![k] ?? null)).map((k) => [k, current![k] ?? null])) : null;
   await audit('admin', a.email, `${b.entity}.save`, b.entity, e.key.map((k) => saved[k]).join(':'), before, row);
