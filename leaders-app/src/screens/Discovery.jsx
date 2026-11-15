@@ -40,14 +40,14 @@ export default function Discovery({ level, charterId, onDone, onSkip }) {
         <h2 id="disc-h" className="as-h3">ابدأ من فكرة</h2>
         <button type="button" className="link small" onClick={onSkip}>لدي مبادرة، اكتب البطاقة مباشرة</button>
       </div>
-      <p className="muted small">ثلاث خطوات قصيرة تخرج منها بمسودة بطاقة مبادرتك: من واقع عملك، حقيقية أو افتراضية واقعية تستطيع تنفيذها.</p>
+      <p className="muted small">ثلاث خطوات قصيرة تخرج منها بمسودة بطاقة مبادرتك: من واقع تعرفه، في جهة أو مجتمع أو سوق، حقيقية أو افتراضية واقعية تستطيع تنفيذها.</p>
       <ol className="mstepper">
         {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
       </ol>
 
       {step === 0 && (
         <div className="stack">
-          <p className="small">اكتب حتى ثلاث مشكلات أو فرص تراها في عملك. جملة لكل منها تكفي.</p>
+          <p className="small">اكتب حتى ثلاث مشكلات أو فرص تراها حولك: في عمل أو مجتمع أو سوق. جملة لكل منها تكفي.</p>
           {ideas.map((v, i) => (
             <label key={i} className="disc-idea">فكرة {i + 1}{i ? ' (اختيارية)' : ''}
               <input className="input" value={v} maxLength={200} placeholder={i === 0 && level === 'beginner' ? 'مثال: تجديد الترخيص يأخذ أسبوعين ويحتاج زيارة' : ''}
