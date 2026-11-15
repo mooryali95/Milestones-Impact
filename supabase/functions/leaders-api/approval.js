@@ -4,7 +4,7 @@
 // الإدارة بالاستثناء: الآلة تعتمد الواضح، والإنسان يقرر في الاستثناء. الإشارات نفسها التي يراها المدير في ملف
 // المشارك (evaluatePlacement: الحدّية والأعلام، وجدية الإجابة، وطلب الإعادة)، فلا يحكم الاعتماد الجماعي بغير ما في الملف.
 // الحالة الحدّية تُستبقى (قرار المالك 2026-11-15): المستوى التالي في متناول هامش صغير، فيقرره إنسان.
-import { DIMENSIONS, LEVELS } from './logic.js';
+import { DIMENSIONS, LEVELS, OVERRIDE_REASON_MIN } from './logic.js';
 import { DIM_AR, LEVEL_AR } from './labels.js';
 
 // حد الطلب الواحد، كالإجراءات الجماعية الأخرى (BULK_MAX في admin.ts)
@@ -46,4 +46,38 @@ export function splitForApproval(rows = []) {
 export function mailPlan(count, { used = 0, cap = 80 } = {}) {
   const room = Math.max(0, Number(cap) - Number(used || 0));
   return { now: Math.min(count, room), queued: Math.max(0, count - room) };
+}
+
+// ── المرحلة 2: اعتماد المحددين بمستوى واحد (للمدير العام، بتعليل إلزامي) ──
+// levels: لكل بُعد مستوى يُفرض، والفارغ يبقى على المحسوب. التعليل يلزم إن خالف مستوًى مفروضٌ محسوبَ أحدٍ منهم،
+// ويُحفظ لكل من خالفه (admin_note) فيظهر في ملفه كمخالفة فردية بتعليلها. لا تُستبقى الإشارات هنا: القرار صريح من صاحبه
+/** @param {any[]} rows @param {Record<string, string>} levels @param {string} reason */
+export function planUniform(rows = [], levels = {}, reason = '') {
+  const set = Object.fromEntries(Object.entries(levels || {}).filter(([d, l]) => DIMENSIONS.includes(d) && LEVELS.includes(l)));
+  const ready = [], held = [];
+  for (const r of rows) {
+    if (r.status !== 'pending_approval') { held.push({ id: r.id, full_name: r.full_name, holds: [{ key: 'status', text: 'ليس بانتظار الاعتماد' }] }); continue; }
+    const now = Object.fromEntries((r.placements || []).map((x) => [x.dimension, x.level]));
+    const next = { ...now, ...set };
+    const missing = DIMENSIONS.filter((d) => !LEVELS.includes(next[d]));
+    if (missing.length) { held.push({ id: r.id, full_name: r.full_name, holds: missing.map((d) => ({ key: 'missing', dim: d, text: `لا مستوى محسوب في ${DIM_AR[d]}: اختر له مستوى` })) }); continue; }
+    const changes = DIMENSIONS.filter((d) => now[d] && now[d] !== next[d]).map((d) => ({ dim: d, from: now[d], to: next[d] }));
+    ready.push({ id: r.id, full_name: r.full_name, levels: next, changes });
+  }
+  const overrides = ready.some((r) => r.changes.length);
+  return { ready, held, levels: set, needs_reason: overrides, reason_ok: !overrides || String(reason || '').trim().length >= OVERRIDE_REASON_MIN };
+}
+// علة كل بُعد خالفه المستوى المفروض: التعليل الواحد نفسه، فيقبله approveOne بقاعدته (overrideNeedsReason)
+export const notesFor = (row, reason) => Object.fromEntries((row.changes || []).map((c) => [c.dim, String(reason).trim()]));
+
+// ── المرحلة 3: التحقق بالعينة ──
+// مراجعة نسبة عشوائية مما اعتُمد آليًا تكشف إن كانت القاعدة نفسها تخطئ (ضبط جودة لا مراجعة كاملة). 10% وواحد على الأقل.
+// rnd قابل للحقن في الاختبار؛ الخادم يمرر Math.random
+export const SAMPLE_RATE = 0.1;
+export function pickSample(ids = [], { rate = SAMPLE_RATE, rnd = Math.random } = {}) {
+  if (!ids.length) return [];
+  const n = Math.min(ids.length, Math.max(1, Math.ceil(ids.length * rate)));
+  const pool = [...ids];
+  for (let i = pool.length - 1; i > 0; i -= 1) { const j = Math.floor(rnd() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  return pool.slice(0, n);
 }

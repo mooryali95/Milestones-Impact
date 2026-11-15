@@ -37,7 +37,8 @@ export function intake({ cohort: c, cohorts = [], org = null }) {
   }
   const active = pickCohort({ enrollments: [], cohorts, organizationId: c.organization_id }).cohort;
   if (active && active.id !== c.id && active.organization_id === c.organization_id) {
-    return { ok: false, detail: `دفعة «${active.name}» أحدث لجهة «${org.name}»، وهي التي تستقبل المنضمين الجدد. أعضاء هذه الدفعة الحاليون باقون فيها.`, action: 'other', other: active.id };
+    // بقاعدة pickCohort: الملحق يدويًا (تسجيل صريح) يبقى في دفعته، ومن تبع الدفعة بجهته ينتقل إلى أحدث دفعة لها
+    return { ok: false, detail: `دفعة «${active.name}» أحدث لجهة «${org.name}»، وهي التي يتبعها منضموها: الملحقون يدويًا بهذه الدفعة باقون فيها، والبقية ينتقلون إلى الدفعة الأحدث.`, action: 'other', other: active.id };
   }
   return { ok: true, detail: `كل من يسجّل برابط «${org.name}» يدخل هذه الدفعة تلقائيًا، دون أي إلحاق يدوي.`, action: null };
 }
@@ -118,7 +119,8 @@ export function wizardNotes({ v, cohorts = [], orgs = [], programs = [] }) {
   if (org && org.status && org.status !== 'active') out.push(`جهة «${org.name}» غير فعّالة: رابط تسجيلها لا يعمل حتى تُفعَّل.`);
   if (org) {
     const live = pickCohort({ enrollments: [], cohorts, organizationId: org.id }).cohort;
-    if (live && live.organization_id === org.id) out.push(`لجهة «${org.name}» دفعة قائمة: «${live.name}». أعضاؤها باقون فيها، ومن يسجّل بعد الإنشاء يدخل أحدث دفعة مفتوحة أو جارية للجهة.`);
+    // بقاعدة pickCohort: من تبع الدفعة القائمة بجهته ينتقل إلى الأحدث، والملحق بها يدويًا يبقى (صياغة الزميل في تنسيق P1)
+    if (live && live.organization_id === org.id) out.push(`لجهة «${org.name}» دفعة قائمة: «${live.name}». الملحقون يدويًا باقون، والبقية ينتقلون إلى الدفعة الأحدث.`);
   }
   const p = programs.find((x) => x.id === v.program_id);
   if (p && !p.requirements) out.push(`البرنامج «${p.name}» بلا متطلبات بعد: لا رحلة يمر بها المشارك حتى تُبنى.`);

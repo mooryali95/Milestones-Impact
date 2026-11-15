@@ -44,6 +44,18 @@ describe('مصدر واحد لكل معلومة في بناء المبادرة',
     const mig = readdirSync(resolve(root, 'supabase/migrations')).filter((f) => f >= '20261114140000').map((f) => read(`supabase/migrations/${f}`)).join('\n');
     for (const name of ['business_case', 'charter_page', 'closure', 'gate_decisions', 'decisions']) expect(mig, name).not.toMatch(new RegExp(`create table if not exists leaders\\.(?!backup_)\\w*${name}`, 'i'));
   });
+  it('معنى المبادرة وخريطة فصولها ومسردها: anatomy.json يُقرأ عبر anatomy.js وحده، والمرجع مولَّد منه', () => {
+    // لا يستورد الملف الخام أحد غير anatomy.js (وهو خارج مجلدات المصدر هنا)
+    expect(SOURCES.filter((p) => /from '[^']*anatomy\.json'/.test(read(p)))).toEqual([]);
+    expect(read('supabase/content/initiative-guide/v1/anatomy.js')).toContain("import A from './anatomy.json';");
+    expect(holding('initiative-guide/v1/anatomy.js').sort()).toEqual(['leaders-app/src/Term.jsx', 'leaders-app/src/screens/InitiativeMap.jsx', 'src/lib/brand/capstone.js']);
+    // المصطلح يُعرَّف في المسرد وحده: لا تعريف مكتوب لخط الأساس في شاشة
+    expect(holding('قيمة المؤشر اليوم قبل أن تبدأ')).toEqual([]);
+  });
+  it('خطة الانطلاق عرض مولّد: لا حقل ولا جدول لها', () => {
+    const mig = readdirSync(resolve(root, 'supabase/migrations')).filter((f) => f >= '20261115000000').map((f) => read(`supabase/migrations/${f}`)).join('\n');
+    expect(mig).not.toMatch(/launch_plan|launch-plan/);
+  });
   it('ما يكتبه الاكتشاف يُحفظ في بطاقة المبادرة نفسها، لا في مكان ثانٍ', () => {
     const d = read('leaders-app/src/screens/Discovery.jsx');
     expect(d).toContain("call('models.save', { id: charterId, answers: answersOut, submit: false })");

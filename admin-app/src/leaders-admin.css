@@ -1054,3 +1054,9 @@
 .bulk-approve h4 { margin: 14px 0 4px; }
 .bulk-approve .ba-hint { margin-top: 14px; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--brand-gold) 7%, transparent); font-size: .84rem; }
 .bulk-approve summary { cursor: pointer; font-weight: 600; }
+.bulk-approve .ba-modes { display: grid; gap: 6px; margin: 6px 0 10px; }
+.bulk-approve .ba-modes label { display: flex; gap: 8px; align-items: baseline; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line-strong); cursor: pointer; }
+.bulk-approve .ba-modes label:has(input:checked) { border-color: var(--gold); background: color-mix(in srgb, var(--brand-gold) 6%, transparent); }
+.bulk-approve .ba-modes small { color: var(--ink-mid); }
+.bulk-approve .ba-levels { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+.bulk-approve .ba-sample { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-gold); }
