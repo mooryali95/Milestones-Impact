@@ -8,14 +8,17 @@
 const today = () => new Date().toISOString().slice(0, 10);
 const plural = (n) => (n === 1 ? 'بند واحد' : n === 2 ? 'بندان' : `${n} بنود`);
 
-/** @param {{ org: any, access?: any, journey?: any, members?: number, pending?: number, now?: string }} d */
-export function orgReadiness({ org: o, access = null, journey = null, members = 0, pending = 0, now = today() }) {
+/** @param {{ org: any, access?: any, journey?: any, members?: number, seatsUsed?: number|null, pending?: number, now?: string }} d
+ *  seatsUsed: المقاعد المستهلكة من العقد (admin.orgs ← seatsUsed: إعفاء حي من الجهة)، وبلاها عدد الأعضاء */
+export function orgReadiness({ org: o, access = null, journey = null, members = 0, seatsUsed = null, pending = 0, now = today() }) {
   if (!o || o.id === 'none') return { items: [], missing: 0 };
   const active = !o.status || o.status === 'active';
   const cohort = journey?.cohort || null;
   const left = journey?.setup_missing || 0;
   const gaps = (journey?.setup || []).filter((x) => !x.ok).map((x) => x.title);   // أسماء ما بقي كما في ملف الدفعة
-  const seatsFull = o.seats && members >= o.seats;
+  // المقعد يُستهلك بإعفاء الرعاية لا بالتسجيل: المنسحب قبل أول باب يُرد مقعده، والمسجّل قبل الرعاية لا يستهلك
+  const used = seatsUsed ?? members;
+  const seatsFull = o.seats && used >= o.seats;
   const expired = o.contract_ends && o.contract_ends < now;
 
   const items = [
@@ -38,9 +41,9 @@ export function orgReadiness({ org: o, access = null, journey = null, members = 
     {
       key: 'contract', title: 'العقد والمقاعد', action: 'edit',
       ok: !!(o.seats && o.contract_ends) && !expired && !seatsFull,
-      detail: expired ? `انتهى العقد في ${o.contract_ends}` : seatsFull ? `اكتملت المقاعد (${members} من ${o.seats})`
+      detail: expired ? `انتهى العقد في ${o.contract_ends}` : seatsFull ? `اكتملت المقاعد (${used} من ${o.seats}): التسجيلات التالية تنتظر قرار الرعاية`
         : !o.seats || !o.contract_ends ? `ينقصه ${[!o.seats && 'عدد المقاعد', !o.contract_ends && 'تاريخ نهاية العقد'].filter(Boolean).join(' و')}`
-          : `${members} من ${o.seats} مقعدًا، والعقد حتى ${o.contract_ends}`,
+          : `${used} من ${o.seats} مقعدًا مستهلكًا، والعقد حتى ${o.contract_ends}`,
     },
     {
       key: 'brand', title: 'هوية الشهادة', action: 'edit',

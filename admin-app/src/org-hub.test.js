@@ -69,3 +69,14 @@ describe('رمز رابط الجهة في النموذج بشرط الخادم �
     expect(validateOrg(v('wt01'), coord, 'wt01').invite_code).toBeUndefined();
   });
 });
+
+describe('مقاعد العقد من مصدرها الواحد (seatsUsed: إعفاء الرعاية الحي)، لا من عدد الأعضاء', () => {
+  it('المنسحب المردود مقعده لا يُعدّ، فلا تبدو المقاعد مكتملة وهي ليست كذلك', () => {
+    const x = orgReadiness({ org: { ...org, seats: 30 }, access, journey, members: 32, seatsUsed: 28, now: '2026-11-14' });
+    expect(x.items.find((i) => i.key === 'contract')).toMatchObject({ ok: true, detail: '28 من 30 مقعدًا مستهلكًا، والعقد حتى 2027-06-30' });
+  });
+  it('المكتملة تقول إن التسجيلات التالية تنتظر قرار الرعاية، وبلا رقم الخادم يُعتمد عدد الأعضاء', () => {
+    expect(orgReadiness({ org: { ...org, seats: 30 }, access, journey, seatsUsed: 30, now: '2026-11-14' }).items.find((i) => i.key === 'contract').detail).toContain('تنتظر قرار الرعاية');
+    expect(orgReadiness({ org: { ...org, seats: 30 }, access, journey, members: 30, now: '2026-11-14' }).items.find((i) => i.key === 'contract').ok).toBe(false);
+  });
+});

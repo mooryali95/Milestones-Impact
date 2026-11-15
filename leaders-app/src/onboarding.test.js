@@ -90,6 +90,22 @@ describe('هل للدفعة جلسات؟ قاعدة واحدة لملف الدف
   });
 });
 
+import { statusAfterApprove } from '../../supabase/functions/leaders-api/logic.js';
+describe('اعتماد المستوى لا يرجع المشارك عن مرحلة تجاوزها (تدقيق الرحلة 2026-11-14)', () => {
+  it('من ينتظر الاعتماد أو قبله يصير «معتمد المستوى»', () => {
+    for (const s of ['registered', 'profiled', 'assessing', 'pending_approval']) expect(statusAfterApprove(s)).toBe('placed');
+  });
+  it('من في البرنامج أو أنهاه أو خرج منه تبقى حالته', () => {
+    for (const s of ['placed', 'enrolled', 'completed', 'withdrawn', 'suspended']) expect(statusAfterApprove(s)).toBeNull();
+  });
+  it('الخادم يضبط الحالة بالقاعدة نفسها، ويعدّ مقاعد كل جهة بإعفاء الرعاية الحي', () => {
+    const admin = readFileSync(join(__dirname, '../..', 'supabase/functions/leaders-api/admin.ts'), 'utf8');
+    expect(admin).toContain('const to = statusAfterApprove(p.status);');
+    expect(admin).not.toContain("update({ status: 'placed' }).eq('id', id)");
+    expect(admin).toMatch(/from\('entitlements'\)\.select\('participant_id, organization_id'\)\.eq\('source', 'sponsor'\)\.is\('revoked_at', null\)/);
+  });
+});
+
 describe('جاهزية الدفعة', () => {
   it('دفعة بأعضاء بلا مستشار ولا نهاية ولا جدول: أربعة بنود ناقصة بأسبابها', () => {
     const s = cohortSetup({ cohort: { starts_on: '2026-11-10', ends_on: null, schedule: {}, advisor_expert_id: null }, members: 27 });

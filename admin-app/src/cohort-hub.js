@@ -68,9 +68,13 @@ export function cohortHub({ cohort: c, cohorts = [], orgs = [], programs = [] })
   const byKey = Object.fromEntries(base.map((x) => [x.key, x]));
   const ACTION = { team: 'team', cohort: 'edit', schedule: 'schedule', activities: 'activities' };
   const from = (k) => byKey[k] && { key: k, title: byKey[k].title, ok: byKey[k].ok, detail: byKey[k].detail, action: byKey[k].ok ? null : ACTION[byKey[k].where] || null };
+  // مقاعد الدفعة (capacity) تنبيه لا منع: تجاوزها يُعلن ولا يُرفض به أحد، كمؤشر حمل الخبير
+  const cap = Number(c.capacity) || 0;
+  const over = cap > 0 && (c.members || 0) > cap;
   const members = byKey.members && {
-    key: 'members', title: 'الأعضاء', ok: byKey.members.ok, action: 'participants',
-    detail: byKey.members.ok ? byKey.members.detail : kind === 'org' ? 'لا أحد بعد: شارك رابط تسجيل الجهة' : kind === 'open' ? 'لا أحد بعد' : 'لا أحد بعد: ألحق بها المشاركين من شاشة المشاركين',
+    key: 'members', title: 'الأعضاء', ok: byKey.members.ok && !over, action: 'participants',
+    detail: over ? `${c.members} عضوًا وللدفعة ${cap} مقعدًا: زد المقاعد من «تحرير الدفعة» أو انقل بعضهم`
+      : byKey.members.ok ? `${byKey.members.detail}${cap ? ` · ${cap} مقعدًا` : ''}` : kind === 'org' ? 'لا أحد بعد: شارك رابط تسجيل الجهة' : kind === 'open' ? 'لا أحد بعد' : 'لا أحد بعد: ألحق بها المشاركين من شاشة المشاركين',
   };
   const pending = c.pending_approval || 0;
 
