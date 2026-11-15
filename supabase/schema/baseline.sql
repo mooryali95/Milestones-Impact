@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115110000_leaders_pin_sponsor_seat_guard
+-- as-of migration: 20261115120000_leaders_rater_token_hashes
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1540,6 +1540,7 @@ create table if not exists leaders.raters (
   contact_freq text,
   cycle_id uuid,
   comment_hidden boolean default false not null,
+  token_hashes text[] default '{}'::text[] not null,
   constraint raters_comment_check CHECK (((comment IS NULL) OR (char_length(comment) <= 2000))),
   constraint raters_contact_freq_check CHECK (((contact_freq IS NULL) OR (contact_freq = ANY (ARRAY['weekly'::text, 'monthly'::text, 'less'::text])))),
   constraint raters_cycle_phase_check CHECK (((phase = 'f360'::text) = (cycle_id IS NOT NULL))),
@@ -2921,6 +2922,8 @@ CREATE INDEX IF NOT EXISTS raters_cycle_idx ON leaders.raters USING btree (cycle
 CREATE UNIQUE INDEX IF NOT EXISTS raters_impact_email_phase_key ON leaders.raters USING btree (participant_id, email, phase) WHERE (cycle_id IS NULL);
 
 CREATE INDEX IF NOT EXISTS raters_participant_idx ON leaders.raters USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS raters_token_hashes_gin ON leaders.raters USING gin (token_hashes);
 
 CREATE INDEX IF NOT EXISTS reports_organization_idx ON leaders.reports USING btree (organization_id);
 

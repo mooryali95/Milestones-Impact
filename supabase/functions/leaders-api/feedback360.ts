@@ -10,13 +10,13 @@
 import { audit, CONFIG, db, Fail, feedbackMail, FEEDBACK_MAIL, hash, must, randomToken, raterMail, sendMail } from './core.ts';
 import { advisorOf, myParticipantIds } from './advisor.ts';
 import { lastBaseline } from './participant.ts';
-import { raterCheck, RELATION_AR } from './impact.ts';
+import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
 import { appSettings } from './settings.ts';
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR } from './domains.js';
 import { isEmail, normalizeEmail } from './logic.js';
 import { requireWrite, type Admin } from './admin.ts';
 import {
-  CYCLE_STATUS_AR, feedbackPromiseAr, feedbackReport, groupCaps, groupCounts, nextWave, NOMINEE_GROUPS, nominationCheck, orgTotals, raterItems, remindersDue, reportItems,
+  closesAtRiyadh, CYCLE_STATUS_AR, feedbackPromiseAr, feedbackReport, groupCaps, groupCounts, nextWave, NOMINEE_GROUPS, nominationCheck, orgTotals, raterItems, remindersDue, reportItems,
 } from './feedback360.js';
 import { FEEDBACK_GROUP_AR } from './labels.js';
 import { requireVisible, visibilityOfParticipant } from './visibility.ts';
@@ -25,7 +25,8 @@ type Body = Record<string, any>;
 type Settings = Awaited<ReturnType<typeof appSettings>>['feedback360'];
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
 const missingTable = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || /feedback_cycles/.test(String(e.message || '')));
-const dayAr = (d: string | null) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' }) : '');
+// اليوم بتوقيت الرياض: موعد قرب منتصف الليل بالتوقيت العالمي يُعرض بيومه عند المقيّم لا بيوم الخادم (P1-14)
+export const dayAr = (d: string | null) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' }) : '');
 
 // دورات المشارك؛ null إن لم يُرحَّل الجدول بعد (tolerant)
 async function cyclesOf(participantId: string): Promise<any[] | null> {
@@ -236,7 +237,7 @@ export async function advisorDecide(e: any, b: Body) {
   }
   const s = (await appSettings()).feedback360;
   const now = new Date();
-  const closes = new Date(now.getTime() + s.window_days * 864e5).toISOString();
+  const closes = closesAtRiyadh(now.getTime(), s.window_days);
   must(await db.from('feedback_cycles').update({ status: 'open', approved_by: who, approved_at: now.toISOString(), opens_at: now.toISOString(), closes_at: closes, reminded_days: [] })
     .eq('id', c.id).eq('status', 'approval'));
   // اعتماد المستشار للقائمة تأكيد لكل بريد فيها (D19: المستشار من يؤكد البريد خارج النطاق)، ثم دعوة كل مقيّم برابطه
@@ -244,7 +245,8 @@ export async function advisorDecide(e: any, b: Body) {
   let queued = 0;
   for (const r of raters) {
     const token = randomToken();
-    must(await db.from('raters').update({ status: 'invited', token_hash: await hash(token), invited_at: now.toISOString(), expires_at: closes,
+    // رمز الترشيح لم يُرسل لأحد، فالدعوة تبدأ بالرمز الجديد وحده
+    must(await db.from('raters').update({ status: 'invited', ...tokenPatch(r, await hash(token)), invited_at: now.toISOString(), expires_at: closes,
       ...(r.verification === 'org_domain' ? {} : { verification: 'confirmed', verified_by: who, verified_at: now.toISOString() }) }).eq('id', r.id).eq('status', 'nominated'));
     const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
     // bulk: يدخل طابور البريد عند بلوغ الحصة اليومية، فلا تضيع دعوة ولا يتجاوز سقف البريد (D15)
@@ -277,9 +279,10 @@ export async function sweep() {
     must(await db.from('feedback_cycles').update({ reminded_days: [...(c.reminded_days || []), ...due] }).eq('id', c.id));
     const late = (await cycleRaters(c.id)).filter((r) => r.status === 'invited');
     for (const r of late) {
-      // رابط جديد في التذكير (الرمز لا يُستعاد من بصمته)، بالمهلة نفسها
+      // رابط جديد في التذكير (الرمز لا يُستعاد من بصمته)، بالمهلة نفسها. بصمته تُضاف ولا تستبدل (P1-14): رابط الدعوة
+      // الأولى، والدعوة المنتظرة في الطابور، والنموذج المفتوح برمزه، تبقى صالحة حتى الإغلاق كما وعدت الدعوة
       const token = randomToken();
-      must(await db.from('raters').update({ token_hash: await hash(token) }).eq('id', r.id).eq('status', 'invited'));
+      must(await db.from('raters').update(tokenPatch(r, await hash(token), true)).eq('id', r.id).eq('status', 'invited'));
       await sendMail(r.email, `تذكير: تقديرك لـ${c.participants?.full_name || 'زميلك'}`, raterMail(r.full_name, c.participants?.full_name || 'زميلك', `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(c.closes_at), reminder: true }), [], { kind: 'bulk', ref: `rater:${r.id}` })
         .then(() => { reminded += 1; }).catch((x) => console.error('f360 reminder', r.id, x));
     }

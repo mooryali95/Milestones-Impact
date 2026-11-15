@@ -320,9 +320,12 @@ export async function invite(p: any, b: Body) {
   const row: Record<string, unknown> = { participant_id: p.id, instrument_id: instrumentId, email, full_name: name, relation, phase, token_hash: await hash(token),
     status: awaiting ? 'awaiting' : 'invited', invited_at: new Date().toISOString(), expires_at: new Date(Date.now() + 30 * 864e5).toISOString(),
     verification: check.verdict, verification_flags: check.flags, verified_by: awaiting ? null : 'system:org_domain', verified_at: awaiting ? null : new Date().toISOString() };
-  const { data: prev } = await db.from('raters').select('id, status, invited_at').eq('participant_id', p.id).eq('email', email).eq('phase', phase).maybeSingle();
+  // كل الأعمدة حتى لا يُفشل token_hashes قبل ترحيله القراءة
+  const { data: prev } = await db.from('raters').select('*').eq('participant_id', p.id).eq('email', email).eq('phase', phase).maybeSingle();
   if (prev?.status === 'submitted') throw new Fail('أرسل هذا المقيّم تقديره من قبل');
   if (prev && Date.now() - new Date(prev.invited_at).getTime() < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
+  // إعادة الإرسال لدعوة جارية تضيف الرابط ولا تميت الأول (P1-14)؛ وبعد الإلغاء أو للمنتظر تأكيدًا تبدأ بالجديد وحده
+  if (prev) Object.assign(row, tokenPatch(prev, row.token_hash as string, prev.status === 'invited' && !awaiting));
   const write = (r: Record<string, unknown>) => (prev ? db.from('raters').update(r).eq('id', prev.id).select('id').single() : db.from('raters').insert(r).select('id').single());
   // D19: تعذّر الحفظ (ومنه قيد الحالة أو الحكم) يفشل الدعوة، ولا تُرسل بلا علامات ولا تحقق
   const saved = must(await write(row)) as { id: string };
@@ -358,7 +361,7 @@ export async function awaitingFor(ids: string[]) {
 // allowed يحصر الصلاحية في نطاق المؤكِّد؛ وكل قرار في السجل بمن اتخذه
 export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: string }, b: Body, allowed: (participantId: string) => Promise<boolean>) {
   const id = String(b.id || '');
-  const r = must(await db.from('raters').select('id, participant_id, email, full_name, relation, phase, status, participants(full_name, email)').eq('id', id).maybeSingle()) as any;
+  const r = must(await db.from('raters').select('*, participants(full_name, email)').eq('id', id).maybeSingle()) as any;
   if (!r || r.status !== 'awaiting') throw new Fail('لا مقيّم بانتظار التأكيد بهذا المعرّف', 404, 'not_found');
   if (!(await allowed(r.participant_id))) throw new Fail('هذا المقيّم لمشارك ليس من نطاقك', 403, 'forbidden');
   const who = `${by.kind}:${by.email}`;
@@ -373,7 +376,8 @@ export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: 
     return { success: true, decision: 'reject' };
   }
   const token = randomToken();
-  must(await db.from('raters').update({ status: 'invited', verification: 'confirmed', verified_by: who, verified_at: now, token_hash: await hash(token),
+  // رمز المنتظر لم يُرسل، فالدعوة المؤكدة تبدأ بالجديد وحده
+  must(await db.from('raters').update({ status: 'invited', verification: 'confirmed', verified_by: who, verified_at: now, ...tokenPatch(r, await hash(token)),
     invited_at: now, expires_at: new Date(Date.now() + 30 * 864e5).toISOString() }).eq('id', id).eq('status', 'awaiting'));
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
   await sendMail(r.email, `طلب تقدير من ${r.participants?.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, r.participants?.full_name || 'زميلك', link, r.phase), [], { ref: `rater:${id}` });
@@ -382,10 +386,28 @@ export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: 
 }
 
 // ── المقيّم: رابط بريد بلا حساب ──
+// P1-14: token_hashes بصمات كل رمز صادر للدعوة الجارية (التذكير وإعادة الإرسال يضيفان)، وtoken_hash أحدثها.
+// keep يضيف إلى ما صدر، وبدونه تبدأ الدعوة بالرمز الجديد وحده. صف بلا العمود (قبل الترحيل) يُكتب له token_hash وحده كما كان
+export const TOKEN_HASHES_MAX = 12;
+export function tokenPatch(r: any, h: string, keep = false): Record<string, unknown> {
+  if (!r || !Array.isArray(r.token_hashes)) return { token_hash: h };
+  const prev = keep ? [...new Set([...r.token_hashes, r.token_hash].filter((x) => x && x !== h))] : [];
+  return { token_hash: h, token_hashes: [...prev, h].slice(-TOKEN_HASHES_MAX) };
+}
+// الأحدث أولًا بالقيد الفريد، ثم ما صدر قبله. غياب العمود قبل الترحيل لا يُفشل الرابط الأحدث
+async function raterByToken(h: string) {
+  const sel = '*, participants(full_name)';
+  const r = must(await db.from('raters').select(sel).eq('token_hash', h).maybeSingle());
+  if (r) return r;
+  const { data, error } = await db.from('raters').select(sel).contains('token_hashes', [h]).limit(1).maybeSingle();
+  if (error) { if (missingColumn(error)) return null; throw error; }
+  return data;
+}
 async function raterFrom(t: unknown) {
   const token = String(t || '');
   if (token.length < 20) throw new Fail('الرابط غير صالح', 400, 'invalid');
-  const r = must(await db.from('raters').select('*, participants(full_name)').eq('token_hash', await hash(token)).maybeSingle()) as any;
+  // رمز لا يُعرف صفه لا يُعلم أهو رابط قديم أم غير صالح، فالرسالة العامة نفسها
+  const r = await raterByToken(await hash(token)) as any;
   // nominated: رشّحه المشارك في تقييم 360 ولم يعتمد المستشار القائمة بعد، فلا رابط له
   if (!r || r.status === 'revoked' || r.status === 'nominated') throw new Fail('الرابط غير صالح أو أُلغي', 404, 'invalid');
   if (new Date(r.expires_at) < new Date() && r.status !== 'submitted') throw new Fail('انتهت صلاحية الرابط، اطلب دعوة جديدة', 410, 'expired');

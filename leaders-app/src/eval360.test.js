@@ -176,7 +176,7 @@ describe('المرحلة 2: الدورة والمجموعات', async () => {
   const srv = read('supabase/functions/leaders-api/feedback360.ts');
   const imp = read('supabase/functions/leaders-api/impact.ts');
   it('الخادم يعيد استعمال بنية المقيّمين: التحقق من النطاق والبريد بمرجع المقيّم وحصته والسجل', () => {
-    expect(srv).toMatch(/import \{ raterCheck, RELATION_AR \} from '\.\/impact\.ts';/);
+    expect(srv).toMatch(/import \{ raterCheck, RELATION_AR, tokenPatch \} from '\.\/impact\.ts';/);
     expect(srv).toMatch(/await raterCheck\(p, email\)/);
     expect(srv).toMatch(/raterMail\(r\.full_name, p\.full_name \|\| 'زميلك', link, 'f360'/);
     expect(srv.match(/\{ kind: 'bulk', ref: `rater:\$\{r\.id\}` \}/g)).toHaveLength(2);

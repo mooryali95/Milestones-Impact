@@ -85,6 +85,14 @@ export function nextWave(cycles = [], s, now = Date.now()) {
   return now >= at ? { ok: true, wave: 't2' } : { ok: false, reason: 'gap', at: new Date(at).toISOString() };
 }
 
+// موعد الإغلاق (P1-14): 23:59 بتوقيت الرياض (UTC+3 بلا توقيت صيفي) من اليوم الذي تبلغه النافذة، فالدعوة التي تقول
+// «صالح حتى الخميس» تعني نهاية خميس الرياض لا ساعة الاعتماد منه
+export const RIYADH_OFFSET_MS = 3 * 36e5;
+export function closesAtRiyadh(now, days) {
+  const local = new Date(now + days * day + RIYADH_OFFSET_MS);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 23, 59, 59) - RIYADH_OFFSET_MS).toISOString();
+}
+
 // أيام التذكير التي حلّت ولم يُرسل تذكيرها بعد، من فتح النافذة
 export function remindersDue(cycle, s, now = Date.now()) {
   if (cycle?.status !== 'open' || !cycle.opens_at) return [];
