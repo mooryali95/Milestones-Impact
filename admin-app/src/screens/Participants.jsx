@@ -9,6 +9,7 @@ import {
   date, dayMonth, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
+import { enrollCohort } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -195,7 +196,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     const c = cohorts.find((x) => x.id === cohortTo);
     if (!c) return toast('اختر الدفعة');
     if (!(await confirm(`نقل ${picked.size} مشارك إلى دفعة «${c.name}»؟ لا حاجة لهذا لمن انضم برابط جهة الدفعة: يدخلها تلقائيًا. من كان ملحقًا يدويًا بدفعة أخرى يُسحب منها.`))) return;
-    const r = await L('admin.cohort-enroll', { cohort_id: c.id, participant_ids: [...picked] });
+    const r = await enrollCohort({ cohort_id: c.id, participant_ids: [...picked] }, confirm);
     toast(r.success ? `نُقل ${r.enrolled} مشارك إلى دفعة «${c.name}»` : r.message);
     if (r.success) { setPicked(new Set()); setCohortTo(''); }
   };
@@ -465,8 +466,9 @@ function Person({ id, canWrite, onBack }) {
   const enroll = async () => {
     const c = (cohorts || []).find((x) => x.id === cohortTo);
     if (!(await confirm(`نقل ${p.full_name} إلى دفعة «${c?.name}»؟ يبقى فيها مهما كانت جهته، ويُسحب من أي دفعة أخرى أُلحق بها يدويًا.`))) return;
-    const d = await act('admin.cohort-enroll', { cohort_id: cohortTo, participant_ids: [p.id] }, 'نُقل إلى الدفعة');
-    if (d.success) setCohortTo('');
+    const d = await enrollCohort({ cohort_id: cohortTo, participant_ids: [p.id] }, confirm);
+    toast(d.success ? 'نُقل إلى الدفعة' : d.message);
+    if (d.success) { setCohortTo(''); load(); }
   };
 
   const pts = r.points || { total: 0, rank: { title: 'مستكشف' } };

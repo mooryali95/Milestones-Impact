@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -519,13 +519,27 @@ export async function cohortUpgrade(a: Admin, b: Body) {
   return { success: true, to: { number: to.number, label: to.label }, diff };
 }
 
-// تسجيل مشاركين في دفعة. تسجيلاتهم السابقة تُعلَّم منسحبة، وتقدمهم يبقى
-// لأن معرفات المتطلبات ثابتة داخل البرنامج.
+// تسجيل مشاركين في دفعة. تسجيلاتهم السابقة تُعلَّم منسحبة. التقدم يبقى داخل البرنامج نفسه (معرفات متطلباته ثابتة)،
+// ويضيع بالنقل إلى دفعة على برنامج آخر، فذلك لا يمر إلا بتأكيد صريح (enrollImpact وconfirm_move).
 export async function cohortEnroll(a: Admin, b: Body) {
-  const c = must(await db.from('cohorts').select('id, name').eq('id', String(b.cohort_id || '')).maybeSingle());
+  const c = must(await db.from('cohorts').select('id, name, program_id').eq('id', String(b.cohort_id || '')).maybeSingle());
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
   const ids = [...new Set((Array.isArray(b.participant_ids) ? b.participant_ids : []).filter(isUuid))].slice(0, 500) as string[];
   if (!ids.length) throw new Fail('اختر مشاركًا واحدًا على الأقل');
+  // حارس النقل كما في حفظ الدفعة (P1): من له تقدم وتنقله الإلحاقة إلى دفعة على برنامج آخر يفقد رحلته، فلا يُنقل بصمت
+  if (b.confirm_move !== true) {
+    const [cohorts, participants, enrollments, progress] = await Promise.all([
+      all((f, t) => db.from('cohorts').select(COHORT_COLS).order('id').range(f, t)),
+      allFor(ids, () => db.from('participants').select('id, organization_id').order('id'), 'id'),
+      allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
+      allFor(ids, () => db.from('participant_requirements').select('participant_id').order('participant_id').order('requirement_id')),
+    ]);
+    const impact = enrollImpact({ participants, enrollments, progress, cohorts }, cohorts.find((x: any) => x.id === c.id) || c);
+    if (impact.moved) {
+      const extra = { affected: impact.moved, from: impact.from, to: impact.to };
+      throw new Fail(`${moveConfirmText(extra)} أكّد النقل إن كان مقصودًا.`, 409, 'confirm_move', extra);
+    }
+  }
   const now = new Date().toISOString();
   must(await db.from('enrollments').update({ status: 'withdrawn', updated_at: now }).in('participant_id', ids).neq('cohort_id', c.id).neq('status', 'withdrawn'));
   must(await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, status: 'active', updated_at: now })), { onConflict: 'participant_id,cohort_id' }));

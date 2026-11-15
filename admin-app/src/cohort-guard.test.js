@@ -156,3 +156,35 @@ describe('صياغة العدد', () => {
     expect(t(5)).not.toMatch(/[\u2013\u2014]/);
   });
 });
+
+import { enrollCohort, ENROLL_CANCELLED } from './cohort-guard.js';
+describe('الإلحاق بدفعة بحارس النقل (enrollCohort)', () => {
+  it('confirm_move يُسأل عنه، والموافقة تعيد الإرسال بالتأكيد على admin.cohort-enroll', async () => {
+    const call = vi.fn().mockResolvedValueOnce({ success: false, code: 'confirm_move', affected: 1, from: [{ id: 'c1', name: 'سفراء' }], to: [{ id: 'c2', name: 'أفراد' }] }).mockResolvedValueOnce({ success: true, enrolled: 1 });
+    const ask = vi.fn().mockResolvedValue(true);
+    const r = await enrollCohort({ cohort_id: 'c2', participant_ids: ['p1'] }, ask, call);
+    expect(r).toEqual({ success: true, enrolled: 1 });
+    expect(ask.mock.calls[0][0]).toMatch(/مشارك واحد من «سفراء» إلى «أفراد»/);
+    expect(call.mock.calls[1]).toEqual(['admin.cohort-enroll', { cohort_id: 'c2', participant_ids: ['p1'], confirm_move: true }]);
+  });
+  it('الرفض لا يرسل شيئًا ويقول لم يُنقل أحد', async () => {
+    const call = vi.fn().mockResolvedValue({ success: false, code: 'confirm_move', affected: 2 });
+    expect(await enrollCohort({ cohort_id: 'c2', participant_ids: ['p1'] }, async () => false, call)).toEqual({ success: false, message: ENROLL_CANCELLED });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+});
+
+import { enrollImpact } from '../../supabase/functions/leaders-api/logic.js';
+describe('أثر الإلحاق (enrollImpact)', () => {
+  const cohorts = [
+    { id: 'c1', name: 'سفراء', organization_id: 'o1', program_id: 'A', status: 'running', created_at: '2026-09-01' },
+    { id: 'c2', name: 'أفراد ب', organization_id: null, program_id: 'B', status: 'open', created_at: '2026-10-01' },
+    { id: 'c3', name: 'أفراد أ', organization_id: null, program_id: 'A', status: 'open', created_at: '2026-10-01' },
+  ];
+  const world = { cohorts, participants: [{ id: 'p1', organization_id: 'o1' }, { id: 'p2', organization_id: 'o1' }], enrollments: [], progress: [{ participant_id: 'p1' }] };
+  it('يُعد من له تقدم ويتغير برنامجه وحده، والبرنامج نفسه لا يُعد', () => {
+    expect(enrollImpact(world, cohorts[1])).toEqual({ moved: 1, from: [{ id: 'c1', name: 'سفراء' }], to: [{ id: 'c2', name: 'أفراد ب' }] });
+    expect(enrollImpact(world, cohorts[2]).moved).toBe(0);
+    expect(enrollImpact(world, cohorts[0]).moved).toBe(0);
+  });
+});
