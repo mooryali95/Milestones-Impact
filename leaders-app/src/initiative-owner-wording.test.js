@@ -1,6 +1,6 @@
 // المبادرة ملك قائدها، والجهة سياق مساعد (قرار المالك 2026-11-15). قواعد الكتابة في anatomy.json writing_rules
 // يمنع هذا الحارس عودة صياغة تفترض أن للمشارك جهة، أو أن لها استراتيجية، أو أن المبادرة مبادرتها.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import A from '../../supabase/content/initiative-guide/v1/anatomy.json';
 import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
@@ -96,4 +96,45 @@ describe('سياق التنفيذ: أين تُنفَّذ المبادرة، وا
     expect(readFileSync('supabase/functions/leaders-api/participant.ts', 'utf8')).toMatch(/context: typeof card\?\.answers\?\.context === 'string'/);
     expect(readFileSync('leaders-app/src/screens/Models.jsx', 'utf8')).toContain("m.key === 'initiative-charter' ? answers.context : null");
   });
+});
+
+describe('خطوات البطاقة كما تصير في القاعدة بعد كل الترحيلات', () => {
+  it('زرعها الأول ثم كل استبدال لاحق عليها بالترتيب: لا يبقى فيها ما يفترض جهة', () => {
+    const dir = 'supabase/migrations';
+    const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
+    // الزرع الأول: نص خطوات البطاقة في إدراج نموذجها
+    const seed = readFileSync(`${dir}/20261029120000_leaders_capstone.sql`, 'utf8');
+    let steps = seed.match(/\$q\$(اختر مبادرة حقيقية تقودها[\s\S]*?)\$q\$/)[1];
+    // كل update على steps_ar للبطاقة: أزواج replace(…, 'قديم', 'جديد') بترتيب ظهورها من الداخل إلى الخارج
+    for (const f of files) {
+      for (const block of readFileSync(`${dir}/${f}`, 'utf8').matchAll(/update leaders\.learning_models\s+set steps_ar = ([\s\S]*?)\n\s*where key = 'initiative-charter'/g)) {
+        for (const [, from, to] of block[1].matchAll(/'([^']+)',\s*'([^']+)'\)/g)) steps = steps.replace(from, to);
+      }
+    }
+    expect(steps).not.toMatch(ASSUMES_ORG);
+    expect(steps).toMatch(/هدف أعلى بنصه ومصدره/);
+  });
+});
+
+describe('مساعدة متطلبات البطاقة والاعتماد كما تصير في القاعدة بعد كل الترحيلات', () => {
+  // يحاكي التسلسل: الزرع، ثم replace على help_ar، ثم set help_ar = جديد where help_ar = قديم (الحارس الحرفي)
+  const dir = 'supabase/migrations';
+  const all = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().map((f) => readFileSync(`${dir}/${f}`, 'utf8'));
+  const finalHelp = (code) => {
+    let help = null;
+    for (const sql of all) {
+      const seed = sql.match(new RegExp(`'${code}', \\d+, \\$q\\$[^$]*\\$q\\$,\\s*\\$q\\$([^$]+)\\$q\\$`));
+      if (seed && help == null) help = seed[1];
+      for (const [, from, to] of sql.matchAll(new RegExp(`set help_ar = replace\\(help_ar, '([^']+)', '([^']+)'\\) where code = '${code}'`, 'g'))) help = help?.replace(from, to);
+      for (const [, to, from] of sql.matchAll(new RegExp(`set help_ar = \\$q\\$([^$]+)\\$q\\$\\s*where code = '${code}'\\s*and help_ar = \\$q\\$([^$]+)\\$q\\$`, 'g'))) if (help === from) help = to;
+    }
+    return help;
+  };
+  for (const code of ['CP-CARD', 'CP-FINAL']) {
+    it(`${code}: نصه النهائي لا يفترض جهة`, () => {
+      const h = finalHelp(code);
+      expect(h, code).toBeTruthy();
+      expect(h).not.toMatch(ASSUMES_ORG);
+    });
+  }
 });

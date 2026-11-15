@@ -6,6 +6,8 @@
 // المسجّل سلفًا في السجل يُتخطى، وأول فشل يوقف السلسلة برمز خروج 1.
 // الوضع --check قراءة فقط: الامتدادات، الجدولة cron.job وآخر 10 تشغيلات، أسماء أسرار Vault (بلا قيم)، والسجل.
 // يخرج برمز 1 إن غابت مهمة متوقعة أو سرّ الجدولة أو امتداد.
+// الوضع --verify <ملف> قراءة فقط: يشغّل فحوص ملف في scripts/db (verify-*.sql) كلًا في معاملة للقراءة فقط،
+// ويطبع لكل فحص صفه (ok، detail)، ويخرج برمز 1 إن كان أي ok = false.
 import { existsSync, readFileSync } from 'node:fs';
 
 const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';
@@ -15,8 +17,9 @@ const NAME_RE = /^\d{14}_[a-z0-9_]+$/;
 
 if (!TOKEN) { console.error('SUPABASE_ACCESS_TOKEN مطلوب'); process.exit(2); }
 const CHECK = process.argv.includes('--check');
-const names = process.argv.slice(2).filter((a) => a !== '--check').map((n) => n.trim().replace(/\.sql$/, '')).filter(Boolean);
-if (!CHECK && !names.length) { console.error('سمِّ ترحيلًا واحدًا على الأقل، أو --check للقراءة فقط'); process.exit(2); }
+const VERIFY = process.argv.includes('--verify') ? process.argv[process.argv.indexOf('--verify') + 1] : null;
+const names = VERIFY ? [] : process.argv.slice(2).filter((a) => a !== '--check').map((n) => n.trim().replace(/\.sql$/, '')).filter(Boolean);
+if (!CHECK && !VERIFY && !names.length) { console.error('سمِّ ترحيلًا واحدًا على الأقل، أو --check للقراءة فقط'); process.exit(2); }
 for (const n of names) if (!NAME_RE.test(n)) { console.error(`اسم ترحيل غير صالح: ${n}`); process.exit(2); }
 
 async function query(sql) {
@@ -31,6 +34,27 @@ const inLedger = async (name) => {
   try { return (await query(`select name from leaders.schema_migrations where name = '${name}'`)).length > 0; }
   catch { return false; }   // السجل نفسه لم يُنشأ بعد (قبل 20261105110000)
 };
+
+// ── verify: فحوص قراءة فقط من ملف verify-*.sql، كل فحص في معاملة للقراءة فقط ──
+if (VERIFY) {
+  if (!/^scripts\/db\/verify-[a-z0-9-]+\.sql$/.test(VERIFY) || !existsSync(VERIFY)) { console.error(`ملف تحقق غير صالح: ${VERIFY}`); process.exit(2); }
+  // الفحوص مفصولة بسطر تعليق «-- n) العنوان»، وكل فحص استعلام select واحد
+  const checks = readFileSync(VERIFY, 'utf8').split(/^(?=-- \d+\) )/m).filter((c) => /^-- \d+\) /.test(c))
+    .map((c) => ({ title: c.split('\n')[0].slice(3).trim(), sql: c.split('\n').filter((l) => !l.startsWith('--')).join('\n').trim().replace(/;\s*$/, '') }));
+  let bad = 0;
+  for (const c of checks) {
+    if (!/^(select|with)\b/i.test(c.sql) || /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke)\b/i.test(c.sql)) { console.error(`✗ ${c.title}: ليس استعلام قراءة`); bad++; continue; }
+    try {
+      // المعاملة للقراءة فقط: أي كتابة تُرفض من القاعدة نفسها
+      const rows = await query(`set transaction read only; ${c.sql}`);
+      const r = rows[0] || {};
+      console.log(`${r.ok ? '✓' : '✗'} ${c.title}\n    ${r.detail ?? '(لا تفاصيل)'}`);
+      if (!r.ok) bad++;
+    } catch (e) { console.error(`✗ ${c.title}: ${e.message}`); bad++; }
+  }
+  console.log(bad ? `${bad} من ${checks.length} فحوص لم تجتز` : `اجتازت الفحوص ${checks.length} كلها`);
+  process.exit(bad ? 1 : 0);
+}
 
 // ── check: ما تنتظره الجدولة الحية (20261029140000_leaders_cron.sql ومتابعاته) ──
 const EXPECTED_JOBS = ['leaders-weekly-reminders', 'leaders-expert-offers'];
