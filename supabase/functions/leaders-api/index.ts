@@ -419,6 +419,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.mail-send-test': S.mailSendTest,
   // تنبيه تجريبي عبر alertOps، ويعيد القنوات المضبوطة بلا قيمها (للمدير الأعلى)
   'admin.alert-test': (a, b) => A.superWriter(a, S.alertTest, b),
+  // صحة البريد والتنبيه: حقائق بطاقة النظرة العامة وشريط اللوحة (للمدير ذي الكتابة، والحكم في ops-health.js)
+  'admin.ops-health': (a) => S.opsHealth(a),
   'admin.visits': (_a, b) => S.visits(b),
   'admin.trends': () => S.trends(),
   'admin.item-analysis': (_a, b) => S.itemReport(b),
