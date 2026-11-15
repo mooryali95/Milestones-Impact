@@ -32,6 +32,8 @@ const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gall
   'assessment-answers',
   // مركز البريد: الحصة والأعداد وحدها قراءة. تشخيص العنوان ونص الرسالة والإرسال بغلاف writer، ورابط الدخول بغلاف superWriter
   'mail-center',
+  // صحة البريد والتنبيه: أعداد وحالات بلا عناوين ولا قيم أسرار، يحصرها الخادم في المدير ذي الكتابة (ops_health_test.ts يحرس الفحص)
+  'ops-health',
   // تقييم 360: حالة الدورات وأعدادها بلا نتيجة فرد
   'f360']);
 

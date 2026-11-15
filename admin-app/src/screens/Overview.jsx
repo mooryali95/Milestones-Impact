@@ -4,7 +4,8 @@
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
-import { DIM, DIM_EN, DIMS, L, LVL, STATUS, VIA, date } from '../leaders.js';
+import { DIM, DIM_EN, DIMS, L, LVL, STATUS, VIA, date, isSuperAdmin } from '../leaders.js';
+import { OpsHealthCard } from '../OpsHealth.jsx';
 import { LVLS } from '../methodology.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { Funnel } from './Orgs.jsx';
@@ -206,6 +207,8 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
   const reqN = r?.submitted ? r.submitted.length : (o.pending_reviews || 0);
   return (
     <>
+      {/* صحة البريد والتنبيه أعلى الصفحة (للمدير ذي الكتابة): أخضر أو كهرماني أو أحمر، وشريطها الأحمر في App.jsx */}
+      <OpsHealthCard enabled={canWrite !== false} isSuper={isSuperAdmin()} />
       <Health h={h} />
       {canWrite !== false && <DemoCard />}
       {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
