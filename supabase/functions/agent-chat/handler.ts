@@ -1,0 +1,308 @@
+// ════════════════════════════════════════════════════════════════
+// agent-chat: المساعد الآلي في الموقع العام (المرحلة 1)
+// ════════════════════════════════════════════════════════════════
+// الإجراءات: status (هل المساعد مفعّل)، وstart (Turnstile مرة واحدة ثم محادثة برمز عام)، وsend (رسالة الزائر ثم
+// الرد ببث SSE)، وhandoff (تحويل إلى الفريق: صف في contact_requests مربوط بالمحادثة، وبريد الإدارة القائم، وسطر في
+// قناة التشغيل بلا نص)، وrate (تقييم واحد).
+// التكلفة (قرار المالك: لا تتجاوز 2 دولار في اليوم): أجوبة جاهزة بلا نموذج لأكثر الأسئلة تكرارًا، وحد للرسائل في
+// المحادثة، وحدود للشبكة وللجميع، وسجل إنفاق يومي من usage يُقرأ قبل كل استدعاء: إن كان الاستدعاء التالي قد
+// يتجاوز السقف لا يُستدعى النموذج بقية يوم الرياض، وتعرض النافذة «اترك رسالتك». تنبيه واحد عند 80% وآخر عند 100%.
+// لا أداة تقرأ بيانات المنصة. سعر برنامج القادة يُقرأ من payment_settings وحده حين يكون الدفع مفعّلًا.
+import { slackPost } from '../_shared/slack.ts';
+import { maskEmail } from '../_shared/slack.ts';
+import { AGENT_CONTEXT_PREFIX, type ContactRow } from '../_shared/contact.ts';
+import { inServiceHours, promiseNow } from '../_shared/hours.js';
+import { isArabic, matchFaq, normalizeText, productOf } from './faq.ts';
+import { buildMessages, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
+import { capState, costMicros, estimateTokens, worstCaseMicros } from './pricing.ts';
+import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
+import { redactInput, StreamSanitizer } from './redact.ts';
+import { type Store, Unavailable } from './store.ts';
+import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
+
+export const LIMITS = { convPerIpHour: 5, convGlobalHour: 120, modelCallsHour: 300, messagesPerConversation: 12, messageChars: 1500 };
+
+export type Env = {
+  apiKey: string; model: string; capCents: number; enabled: boolean;
+  turnstileSecret: string; turnstileSite: string; adminEmail: string;
+};
+export function readEnv(get: (k: string) => string | undefined = (k) => Deno.env.get(k)): Env {
+  const cap = Number(get('LEADERS_AGENT_DAILY_CAP_CENTS') || '200');
+  return {
+    apiKey: get('ANTHROPIC_API_KEY') || '',
+    model: (get('LEADERS_AGENT_MODEL') || DEFAULT_MODEL).trim(),
+    capCents: Number.isFinite(cap) && cap >= 0 ? cap : 200,
+    enabled: ['1', 'on', 'true'].includes(String(get('LEADERS_AGENT_ENABLED') || '').toLowerCase()),
+    turnstileSecret: get('LEADERS_TURNSTILE_SECRET') || '',
+    turnstileSite: get('LEADERS_TURNSTILE_SITE_KEY') || '',
+    adminEmail: (get('CONTACT_NOTIFY_EMAIL') || get('LEADERS_ALERT_EMAIL') || '').trim(),
+  };
+}
+
+export type Deps = {
+  store: Store;
+  env: Env;
+  now?: () => number;
+  turnstile: (token: unknown, ip: string | null) => Promise<boolean>;
+  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void) => Promise<ModelResult>;
+  notifyAdmin: (row: ContactRow) => Promise<void>;
+  alert: (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
+  clientIp: (req: Request) => string | null;
+};
+
+export const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+// نصوص الواجهة الثابتة
+export const TEXT = {
+  greeting: {
+    ar: 'أهلًا بك، أنا المساعد الآلي لـ Milestone Impact. أجيبك من معلوماتنا المعتمدة، ومتى احتجت أحدًا من الفريق حولتك إليه. لا تكتب هنا بيانات حساسة كرقم الهوية أو بيانات البطاقة.',
+    en: 'Welcome. I am the Milestone Impact automated assistant. I answer from our approved information and can connect you with our team whenever you need. Please do not share sensitive data such as ID or card numbers here.',
+  },
+  capped: {
+    ar: 'المساعد الآلي متوقف مؤقتًا لبقية اليوم. اترك رسالتك واسمك وبريدك، ويصلك رد الفريق.',
+    en: 'The automated assistant is paused for the rest of the day. Leave your message, name and email, and our team will reply.',
+  },
+  convCap: {
+    ar: 'وصلت هذه المحادثة إلى حدها. إن بقي لديك سؤال فاتركه للفريق مع اسمك وبريدك.',
+    en: 'This conversation has reached its limit. If you still have a question, leave it for our team with your name and email.',
+  },
+  refusal: {
+    ar: 'لا أستطيع المساعدة في هذا هنا، والأفضل أن يتولاه أحد من الفريق. اترك اسمك وبريدك وأحوله إليهم.',
+    en: 'I cannot help with this here; it is better handled by our team. Leave your name and email and I will pass it on.',
+  },
+  error: {
+    ar: 'تعذّر الرد الآن. حاول بعد قليل، أو اترك رسالتك للفريق.',
+    en: 'I could not reply just now. Please try again shortly, or leave a message for our team.',
+  },
+};
+
+// يوم الرياض (UTC+3 بلا توقيت صيفي) لسجل الإنفاق
+export const riyadhDay = (now: number) => new Date(now + 3 * 36e5).toISOString().slice(0, 10);
+
+async function sha256(s: string) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+function randomToken() {
+  const b = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+const clip = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+const isEmail = (s: string) => /^[^\s@<>"'();,]+@[^\s@<>"'();,]+\.[a-z]{2,}$/i.test(s) && s.length <= 254;
+const langOf = (s: string): 'ar' | 'en' => (isArabic(s) ? 'ar' : 'en');
+const PAGES = new Set(['MI-HOME', 'MI-LEADERS', 'MI-ASSESSMENT', 'MI-PROJECTS', 'MI-GOVERNANCE', 'MI-PRICING', 'MI-LEGAL']);
+const pageOf = (v: unknown) => (PAGES.has(String(v)) ? String(v) : 'MI-HOME');
+
+// السعر الحي يُطلب حين يسأل الزائر عن سعر، وتكون الصفحة صفحة البرنامج أو صفحة مشتركة
+const PRICE_WORDS = ['سعر', 'اسعار', 'تكلفه', 'بكم', 'كم', 'رسوم', 'رسم', 'مبلغ', 'price', 'cost', 'fee', 'fees', 'much'];
+const asksPrice = (q: string) => normalizeText(q).split(' ').some((t) => PRICE_WORDS.some((w) => t === w || t.endsWith(w)));
+const money = (cents: number, cur: string) => `${(cents / 100).toFixed(2)} ${cur}`;
+
+// ── بث SSE ──
+function sse(run: (send: (event: string, data: unknown) => void) => Promise<void>) {
+  const enc = new TextEncoder();
+  const body = new ReadableStream({
+    async start(ctl) {
+      const send = (event: string, data: unknown) => ctl.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      try { await run(send); } catch (e) {
+        console.error('agent-chat stream:', e);
+        send('error', { code: 'internal', text: TEXT.error.ar });
+      } finally { ctl.close(); }
+    },
+  });
+  return new Response(body, { headers: { ...corsHeaders, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' } });
+}
+
+async function spendAlert(d: Deps, day: string, level: 80 | 100, spent: number) {
+  if (!(await d.store.markAlert(day, level))) return;
+  await d.alert(level === 100 ? 'agent_spend_cap' : 'agent_spend_80', { day, spent_usd: (spent / 1e6).toFixed(4), cap_usd: (d.env.capCents / 100).toFixed(2), model: d.env.model })
+    .catch((e) => console.error('agent alert:', e));
+}
+
+// ════════ الإجراءات ════════
+async function status(d: Deps) {
+  return json({ success: true, enabled: d.env.enabled, site_key: d.env.enabled ? d.env.turnstileSite : null });
+}
+
+async function start(d: Deps, b: Record<string, unknown>, req: Request) {
+  if (!d.env.enabled) return json({ success: false, code: 'agent_off' }, 503);
+  if (!d.env.turnstileSecret || !d.env.turnstileSite) {
+    console.error('agent-chat: Turnstile keys missing; the assistant is closed');
+    return json({ success: false, code: 'captcha_unconfigured' }, 503);
+  }
+  const ip = d.clientIp(req);
+  if (!(await d.turnstile(b.captcha, ip))) return json({ success: false, code: 'captcha', site_key: d.env.turnstileSite }, 400);
+  const now = d.now?.() ?? Date.now();
+  const hourAgo = new Date(now - 36e5).toISOString();
+  const perIp = ip ? await d.store.countConversations(hourAgo, ip) : 0;
+  const global = await d.store.countConversations(hourAgo);
+  if (perIp === null || global === null) return json({ success: false, code: 'rate' }, 429);
+  if (perIp >= LIMITS.convPerIpHour || global >= LIMITS.convGlobalHour) return json({ success: false, code: 'rate' }, 429);
+  const token = randomToken();
+  const page = pageOf(b.page);
+  const locale = clip(b.locale, 10) || 'ar';
+  await d.store.createConversation({ public_token_hash: await sha256(token), product: page, source_url: clip(b.source_url, 500), locale, ip });
+  d.store.purgeExpired().catch((e) => console.error('agent purge:', e));
+  const spent = await d.store.spentToday(riyadhDay(now));
+  const lang = locale.startsWith('en') ? 'en' : 'ar';
+  return json({ success: true, token, greeting: TEXT.greeting[lang], capped: spent === null || capState(spent, 0, d.env.capCents) === 'capped' });
+}
+
+async function conversationOf(d: Deps, b: Record<string, unknown>) {
+  const token = typeof b.token === 'string' ? b.token : '';
+  if (token.length < 20 || token.length > 100) return null;
+  return await d.store.findConversation(await sha256(token));
+}
+
+async function send(d: Deps, b: Record<string, unknown>) {
+  const conv = await conversationOf(d, b);
+  if (!conv) return json({ success: false, code: 'expired' }, 404);
+  const raw = String(b.message ?? '').trim();
+  if (!raw) return json({ success: false, code: 'empty' }, 400);
+  if (raw.length > LIMITS.messageChars) return json({ success: false, code: 'too_long', max: LIMITS.messageChars }, 400);
+  const lang = langOf(raw);
+  if (conv.status !== 'bot') return json({ success: false, code: 'handed_off', text: promiseNow(lang, d.now?.() ?? Date.now()) }, 409);
+  if (conv.visitor_messages >= LIMITS.messagesPerConversation) return json({ success: false, code: 'conv_cap', text: TEXT.convCap[lang], handoff: true }, 429);
+
+  const now = d.now?.() ?? Date.now();
+  const { text: message } = redactInput(raw);
+  await d.store.addMessage({ conversation_id: conv.id, role: 'visitor', body: message, lang });
+  await d.store.updateConversation(conv.id, { visitor_messages: conv.visitor_messages + 1, last_visitor_at: new Date(now).toISOString() });
+
+  return sse(async (emit) => {
+    // 1) الجواب الجاهز: بلا نموذج ولا تكلفة
+    const canned = matchFaq(message, conv.product);
+    if (canned) {
+      await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: canned.text, lang: canned.lang, model: `faq:${canned.id}` });
+      emit('delta', { t: canned.text });
+      emit('done', { text: canned.text, handoff: false, source: 'canned' });
+      return;
+    }
+    // 2) السقف اليومي وحد الاستدعاءات في الساعة، قبل أي استدعاء
+    const day = riyadhDay(now);
+    const history = await d.store.history(conv.id);
+    const product = productOf(conv.product);
+    let leadersPrice: string | null = null;
+    if (product !== 'matrix' && asksPrice(message)) {
+      const p = await d.store.leadersPrice();
+      if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
+    }
+    const inHours = inServiceHours(now);
+    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(lang, now), inHours, droppedTurns: 0, leadersPrice });
+    const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
+    const rest = estimateTokens(messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
+    const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
+    const spent = await d.store.spentToday(day);
+    const calls = await d.store.countModelCalls(new Date(now - 36e5).toISOString());
+    const state = spent === null ? 'capped' : capState(spent, worst, d.env.capCents);
+    if (state === 'capped' || !d.env.apiKey || calls === null || calls >= LIMITS.modelCallsHour) {
+      if (spent !== null && state === 'capped') await spendAlert(d, day, 100, spent);
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: 'capped', lang });
+      emit('capped', { text: TEXT.capped[lang] });
+      return;
+    }
+    // 3) النموذج ببث، وكل دفعة تمر بفحص المخرج
+    const san = new StreamSanitizer(48, (t) => t.split(HANDOFF_MARK).join(''));
+    let result: ModelResult;
+    try {
+      result = await d.model(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); });
+    } catch (e) {
+      console.error('agent model:', (e as Error)?.name, (e as Error)?.message);
+      emit('error', { code: 'model', text: TEXT.error[lang] });
+      return;
+    }
+    const cost = costMicros(result.model || d.env.model, result.usage);
+    const total = await d.store.addSpend(day, cost);
+    if (total !== null) {
+      if (total >= d.env.capCents * 1e4 * 0.8) await spendAlert(d, day, 80, total);
+      if (capState(total, worst, d.env.capCents) === 'capped') await spendAlert(d, day, 100, total);
+    }
+    const fin = san.finish();
+    let text = fin.text.trim();
+    let handoff = result.text.includes(HANDOFF_MARK);
+    if (result.stopReason === 'refusal' || !text) { text = TEXT.refusal[lang]; handoff = true; }
+    if (fin.tail && result.stopReason !== 'refusal') emit('delta', { t: fin.tail });
+    await d.store.addMessage({
+      conversation_id: conv.id, role: 'agent', body: text.slice(0, 6000), lang, model: result.model, stop_reason: result.stopReason,
+      input_tokens: result.usage.input_tokens, cache_read_tokens: result.usage.cache_read_input_tokens,
+      cache_write_tokens: result.usage.cache_creation_input_tokens, output_tokens: result.usage.output_tokens, cost_micros: cost,
+    });
+    emit('done', { text, handoff, source: 'model' });
+  });
+}
+
+// أسباب التحويل مقيدة (لا نص حر من الزائر في سلاك)
+const REASONS: Record<string, string> = { request: 'طلب الزائر', agent: 'اقتراح المساعد', capped: 'السقف اليومي', conv_cap: 'حد المحادثة', refusal: 'امتناع النموذج', error: 'تعذر الرد' };
+const INTERESTS: Record<string, string> = { general: 'استفسار عام', partnership: 'شراكة أو عرض لجهة', leaders: 'برنامج القادة', matrix: 'منصة مصفوفة التأثير' };
+
+async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
+  const conv = await conversationOf(d, b);
+  if (!conv) return json({ success: false, code: 'expired' }, 404);
+  if (conv.contact_request_id) return json({ success: false, code: 'already' }, 409);
+  const name = clip(b.name, 120);
+  const email = clip(b.email, 254).toLowerCase();
+  const phone = clip(b.phone, 30);
+  if (name.length < 2) return json({ success: false, code: 'invalid', field: 'name' }, 400);
+  if (!isEmail(email)) return json({ success: false, code: 'invalid', field: 'email' }, 400);
+  if (phone && !/^[0-9٠-٩+() -]{0,30}$/.test(phone)) return json({ success: false, code: 'invalid', field: 'phone' }, 400);
+  const reason = REASONS[String(b.reason)] ? String(b.reason) : 'request';
+  const interest = INTERESTS[String(b.interest)] ? String(b.interest) : (productOf(conv.product) === 'leaders' ? 'leaders' : 'general');
+  const note = redactInput(clip(b.note, 1000)).text;
+  const now = d.now?.() ?? Date.now();
+  // السياق للإدارة: الوسم ورقم المحادثة وسببها ورسائل الزائر بعد الحجب (لا ردود المساعد)
+  const turns = (await d.store.history(conv.id)).filter((t) => t.role === 'visitor').map((t) => `- ${t.body}`);
+  const context = [`${AGENT_CONTEXT_PREFIX} conversation ${conv.id} · ${REASONS[reason]}`, note ? `ملاحظة: ${note}` : '', ...turns].filter(Boolean).join('\n').slice(0, 3900);
+  const row: ContactRow = {
+    product: conv.product, source_url: conv.source_url || '', name, organization: clip(b.organization, 200), email, phone,
+    interest, interest_label: `${INTERESTS[interest]} (المساعد الآلي)`, context, user_agent: clip(req.headers.get('user-agent'), 300),
+    language: clip(conv.locale, 35), status: 'new',
+  };
+  const ins = await d.store.insertContact(row, d.clientIp(req));
+  if (ins.error || !ins.data) {
+    console.error('agent handoff insert:', ins.error);
+    return json({ success: false, code: 'db' }, 500);
+  }
+  await d.store.updateConversation(conv.id, { status: 'waiting', contact_request_id: ins.data.id, handoff_reason: REASONS[reason] });
+  const lang = String(conv.locale || '').startsWith('en') ? 'en' : 'ar';
+  const promise = promiseNow(lang, now);
+  await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `handoff: ${reason}`, lang });
+  // بريد الإدارة القائم (بلا بريد تأكيد للزائر: الوعد قيل في المحادثة) وسطر في قناة التشغيل بلا نص
+  await d.notifyAdmin(ins.data).catch((e) => console.error('agent notify:', e));
+  slackPost('alerts', `💬 محادثة محولة من المساعد · ${conv.product} · ${lang} · ${maskEmail(email)} · ${REASONS[reason]}`, { client: d.store.client() });
+  return json({ success: true, promise });
+}
+
+async function rate(d: Deps, b: Record<string, unknown>) {
+  const conv = await conversationOf(d, b);
+  if (!conv) return json({ success: false, code: 'expired' }, 404);
+  const r = Number(b.rating);
+  if (!Number.isInteger(r) || r < 1 || r > 5) return json({ success: false, code: 'invalid' }, 400);
+  await d.store.updateConversation(conv.id, { rating: r });
+  return json({ success: true });
+}
+
+export async function handle(req: Request, d: Deps): Promise<Response> {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ success: false, code: 'method' }, 405);
+  let b: Record<string, unknown>;
+  try { b = await req.json(); } catch { return json({ success: false, code: 'bad_json' }, 400); }
+  try {
+    switch (b?.action) {
+      case 'status': return await status(d);
+      case 'start': return await start(d, b, req);
+      case 'send': return await send(d, b);
+      case 'handoff': return await handoff(d, b, req);
+      case 'rate': return await rate(d, b);
+      default: return json({ success: false, code: 'action' }, 400);
+    }
+  } catch (e) {
+    if (e instanceof Unavailable) return json({ success: false, code: 'agent_unavailable' }, 503);
+    console.error('agent-chat:', e);
+    return json({ success: false, code: 'internal' }, 500);
+  }
+}

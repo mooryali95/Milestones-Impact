@@ -1,9 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { bdi, MAIL_FROM_DEFAULT, mailButton, mailNote, mailRows, mailShell, mailText, mailTitle, plain, sendCounted } from "../_shared/mail.ts";
-import { SITES } from "../_shared/sites.js";
+import { MAIL_FROM_DEFAULT, sendCounted } from "../_shared/mail.ts";
+import { clientIp, turnstileOk as turnstileCheck } from "../_shared/guard.ts";
+import { CONTACT_SELECT, confirmSender as confirmContact, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";
 
 // send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
+// الإدراج والرسالتان في _shared/contact.ts، والتحقق البشري وعنوان الشبكة في _shared/guard.ts (يشاركها agent-chat).
+// صفوف المساعد الآلي (context يبدأ بـ [agent]) لا تُحسب في حدود النموذج، فلا تأكل التحويلات حده العام.
 // النشر: يتطلب جدول mail_log (supabase/migrations/20261022030000_mail_log.sql)،
 // وعمود contact_requests.ip (supabase/migrations/20261105100000_contact_requests_via_function.sql).
 //
@@ -48,45 +51,25 @@ const sendEmail = async (to: string, subject: string, html: string) =>
 type SB = any;
 type Row = Record<string, unknown>;
 
-const clientIp = (req: Request) =>
-  req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
 const text = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) && s.length <= 254;
 
-async function turnstileOk(token: unknown, ip: string | null) {
-  if (typeof token !== "string" || token.length < 10 || token.length > 4096) return false;
-  const form = new FormData();
-  form.append("secret", TURNSTILE_SECRET);
-  form.append("response", token);
-  if (ip) form.append("remoteip", ip);
-  try {
-    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body: form });
-    return !!(await r.json())?.success;
-  } catch { return false; }
-}
+const turnstileOk = (token: unknown, ip: string | null) => turnstileCheck(TURNSTILE_SECRET, token, ip);
 
 // أحدث طلب تواصل بهذا البريد في آخر 10 دقائق، أو لا شيء.
 async function freshContact(sb: SB, email: string) {
   if (!email || email.length > 254) return null;
   const { data } = await sb.from("contact_requests")
-    .select("id, name, organization, email, phone, interest, interest_label, product, created_at")
+    .select(CONTACT_SELECT)
     .eq("email", email.trim().toLowerCase())
     .gte("created_at", new Date(Date.now() - FRESH_MS).toISOString())
     .order("created_at", { ascending: false }).limit(1);
   return data?.[0] || null;
 }
 
-// يحجز الرسالة قبل إرسالها؛ القيد الفريد يمنع التكرار. أي خطأ آخر يمنع الإرسال.
-async function claim(sb: SB, kind: "notify" | "confirm", ref: string): Promise<boolean> {
-  const { error } = await sb.from("mail_log").insert({ kind, ref });
-  if (!error) return true;
-  if (error.code !== "23505") console.error("mail_log:", error);
-  return false;
-}
-
 // عدد الطلبات منذ وقت، أو null إن تعذّر العد فيفشل الطلب مغلقًا (لا طلب بلا حد)
 async function countSince(sb: SB, since: string, filter?: (q: any) => any): Promise<number | null> {
-  let q: any = sb.from("contact_requests").select("id", { count: "exact", head: true }).gte("created_at", since);
+  let q: any = formOnly(sb.from("contact_requests").select("id", { count: "exact", head: true }).gte("created_at", since));
   if (filter) q = filter(q);
   const { count, error } = await q;
   if (error) { console.error("contact count:", error); return null; }
@@ -94,39 +77,8 @@ async function countSince(sb: SB, since: string, filter?: (q: any) => any): Prom
 }
 
 const PAGE_LABEL: Record<string, string> = { "MI-HOME": "الصفحة الرئيسية", "MI-LEADERS": "صفحة برنامج القادة", "MI-ASSESSMENT": "مقياس جاهزية الأثر" };
-
-async function notifyAdmin(sb: SB, r: Row) {
-  if (!(await claim(sb, "notify", String(r.id)))) return;
-  const pageLabel = PAGE_LABEL[r.product as string] || (r.product as string) || "غير محدد";
-  const dateStr = new Date(r.created_at as string).toLocaleString("ar-SA", {
-    timeZone: "Asia/Riyadh", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
-  });
-  const html = mailShell(mailTitle`طلب تواصل جديد من ${r.name}`, `
-${mailText(`${bdi(dateStr)} · ${bdi(pageLabel)}`)}
-${mailRows([
-  ["الاسم", r.name as string],
-  ["الجهة", (r.organization as string) || "—"],
-  ["البريد", r.email as string, true],
-  ["الجوال", (r.phone as string) || "—", true],
-  ["نوع الطلب", (r.interest_label as string) || (r.interest as string) || "—"],
-  ["المصدر", pageLabel],
-])}
-${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "admin", preheader: "طلب تواصل جديد من الموقع", footnote: "" });
-  if (!ADMIN_EMAIL) { console.error("contact notify skipped: CONTACT_NOTIFY_EMAIL and LEADERS_ALERT_EMAIL are unset"); return; }
-  await sendEmail(ADMIN_EMAIL, `طلب جديد من ${plain(r.name as string)} — ${plain(pageLabel)}`, html);
-}
-
-async function confirmSender(sb: SB, r: Row) {
-  if (!(await claim(sb, "confirm", String(r.id)))) return;
-  const isLeaders = r.product === "MI-LEADERS";
-  const homeHtml = mailShell(mailTitle`وصلتنا رسالتكم، ${r.name}`, `
-${mailText(`شكرًا لتواصلكم مع Milestone Impact. سيتواصل معكم أحد أعضاء الفريق خلال <b>48 ساعة عمل</b>.`)}
-${mailNote(`طلبكم: ${bdi((r.interest_label as string) || (r.interest as string) || "استفسار عام")}`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب تواصل من موقعنا." });
-  const leadersHtml = mailShell(mailTitle`أهلًا بكم، ${r.name}`, `
-${mailText(`يسرّنا استلام طلب انضمامكم إلى برنامج القادة من Milestone Impact. سيتواصل معكم الفريق خلال <b>48 ساعة عمل</b>.`)}`, { family: "general", preheader: "يتواصل معكم الفريق خلال 48 ساعة عمل", footnote: "استلمتم هذه الرسالة لأنكم أرسلتم طلب انضمام من موقعنا." });
-  const subject = isLeaders ? `تأكيد طلبكم — برنامج القادة` : `استلمنا طلبكم — Milestone Impact`;
-  await sendEmail(r.email as string, subject, isLeaders ? leadersHtml : homeHtml);
-}
+const notifyAdmin = (sb: SB, r: Row) => notifyContact(sb, r, sendEmail, ADMIN_EMAIL, PAGE_LABEL[r.product as string] || (r.product as string) || "غير محدد");
+const confirmSender = (sb: SB, r: Row) => confirmContact(sb, r, sendEmail);
 
 // ════════ CONTACT ════════
 async function contact(sb: SB, body: Record<string, unknown>, req: Request) {
@@ -156,7 +108,7 @@ async function contact(sb: SB, body: Record<string, unknown>, req: Request) {
     email, phone: text(body.phone, 40), interest: text(body.interest, 40), interest_label: text(body.interest_label, 120),
     context: text(body.context, 2000), user_agent: text(body.user_agent, 300), language: text(body.language, 40), status: "new",
   };
-  const ins = await sb.from("contact_requests").insert({ ...row, ip }).select("id, name, organization, email, phone, interest, interest_label, product, created_at").single();
+  const ins = await insertContactRequest(sb, row, ip);
   if (ins.error || !ins.data) {
     console.error("contact insert:", ins.error);
     return json({ success: false, code: "db", message: "تعذّر حفظ الطلب الآن" }, 500);

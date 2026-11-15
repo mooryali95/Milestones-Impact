@@ -85,7 +85,10 @@
   }
 
   // متاحة قبل فحص النافذة: صفحة المقياس ترسل طلبها من هنا أيضًا (assessment.js)
-  window.MIContact = { send: postContact, loadTurnstile };
+  // fnUrl: عنوان دالة بالمنطقة نفسها ومفتاحها العام، يشاركه المساعد الآلي (chat.js) فلا يتكرر المفتاح
+  const fnUrl = (name) => `${CONFIG.supabaseUrl}/functions/v1/${name}?forceFunctionRegion=ap-south-1`;
+  const fnHeaders = () => ({ 'Content-Type': 'application/json', 'apikey': CONFIG.supabaseKey, 'Authorization': `Bearer ${CONFIG.supabaseKey}` });
+  window.MIContact = { send: postContact, loadTurnstile, fnUrl, fnHeaders };
 
   // ──────────────────────────────────────────────
   // 🎯 DOM References

@@ -105,6 +105,7 @@ npx wrangler r2 bucket lock add mi-backups --name archive-365d --prefix archive/
 | `LEADERS_REGISTER_PER_IP_DAY` (اختياري، 60) | Supabase ← Secrets | التسجيلات الجديدة من شبكة واحدة يوميًا؛ يُرفع قبل ورشتين على شبكة واحدة |
 | `CREEM_API_KEY`، `CREEM_WEBHOOK_SECRET` | Supabase ← Secrets | الدفع والإشعار |
 | `LEADERS_CALCOM_SECRET`، `LEADERS_CALENDLY_KEY` | Supabase ← Secrets | خطاف الحجز |
+| `ANTHROPIC_API_KEY`، `LEADERS_AGENT_MODEL`، `LEADERS_AGENT_DAILY_CAP_CENTS`، `LEADERS_AGENT_ENABLED` | Supabase ← Secrets | المساعد الآلي في الموقع (§7) |
 
 «الأسرار الناقصة» تظهر في لوحة الإدارة ← النظرة العامة.
 
@@ -116,3 +117,12 @@ npx wrangler r2 bucket lock add mi-backups --name archive-365d --prefix archive/
 4. إن وصل تنبيه `mail_cap` أو `mail_failed`: ارفع `LEADERS_MAIL_DAILY_CAP` بعد التأكد من خطة Resend، أو اطلب الدخول بـGoogle أو مفتاح المرور.
 5. ورشتان أو أكثر على شبكة واحدة في اليوم نفسه (أكثر من 60 تسجيلًا جديدًا): ارفع `LEADERS_REGISTER_PER_IP_DAY` قبلها وأعده بعدها. وإن وصل تنبيه `captcha_unconfigured` فمفتاحا Turnstile غابا: أعد ضبطهما فورًا، والدخول بـGoogle ومفتاح المرور يعمل في الأثناء.
 6. خطأ داخلي عند مشارك: اطلب رقم المرجع وابحث به في سجل الدالة.
+
+## 7. المساعد الآلي في الموقع (agent-chat)
+
+- **التشغيل:** بعد تطبيق ترحيل `20261115150000_leaders_agent_conversations`، اضبط `ANTHROPIC_API_KEY` ثم `LEADERS_AGENT_ENABLED=on`. بلا الثاني لا يظهر الزر. وقبله: شغّل التقييم على الواجهة الحقيقية (`ANTHROPIC_API_KEY=... deno run --allow-env --allow-read --allow-net=api.anthropic.com supabase/functions/agent-chat/evals/run.ts`) ولا تفعّل دون 90% في eval و95% في redteam.
+- **الإيقاف الفوري:** احذف `LEADERS_AGENT_ENABLED` أو اجعله `off`. يختفي الزر خلال عشر دقائق (مخزن في جلسة المتصفح)، ونموذج «تواصل معنا» يعمل كما هو.
+- **السقف اليومي** (`LEADERS_AGENT_DAILY_CAP_CENTS`، الافتراضي 200 سنت في يوم الرياض): تنبيه `agent_spend_80` ثم `agent_spend_cap` مرة واحدة لكل منهما في اليوم. عند السقف لا يُستدعى النموذج حتى منتصف ليل الرياض، والزائر يرى «اترك رسالتك» فيصل طلبه إلى `contact_requests` والبريد كالمعتاد. الإنفاق اليوم: `select * from leaders.agent_spend_daily order by day desc limit 7;`.
+- **إصابة الذاكرة المؤقتة:** `select avg(cache_read_tokens), avg(cache_write_tokens), sum(cost_micros)/1e6 from leaders.conversation_messages where role = 'agent' and created_at > now() - interval '1 day';`. قراءة قريبة من الصفر مع محادثات متتابعة تعني أن الموجه تغير بين الطلبات.
+- **التحويلات:** صفوف `contact_requests` التي يبدأ سياقها بـ`[agent]`، ومعها رقم المحادثة. سطر في سلسلة التنبيهات في #mi-ops ببريد مقنع بلا نص. والرد من الفريق اليوم بالبريد كأي طلب (سلاك ذو الاتجاهين مرحلة لاحقة).
+- **تعديل المعرفة:** حرر `supabase/content/assistant/v1/knowledge.md` أو `faq.json` ثم `node scripts/assistant/knowledge.mjs`، وأعد التقييم. لا يُكتب فيها سعر لبرنامج القادة ولا شيء من القياس أو الكتيب (حارس `assistant-knowledge.test.js`).

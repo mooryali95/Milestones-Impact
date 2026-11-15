@@ -19,7 +19,7 @@
 | `LEADERS_SLACK_BOT_TOKEN` | لا | `_shared/slack.ts` (من leaders-api وadmin-api وuser-api وsend-otp وleaders-hooks وcreem-webhook) | بوت سلاك (`xoxb-`) بصلاحية `chat:write` وحدها، ينشر في قناة التشغيل الخاصة #mi-ops: التنبيهات، وحالة رموز الدخول (أُرسل أو حُجب أو تعذّر، بلا الرمز)، والبريد الذي لم يصل، ببريد مقنّع. احتياط لا يؤخر طلبًا ولا يمس حصة البريد. بلاه (أو بلا القناة) لا ينشر شيئًا | من إعدادات تطبيق سلاك (OAuth & Permissions)، ثم يُضبط هنا |
 | `LEADERS_SLACK_CHANNEL` | لا (مع البوت) | `_shared/slack.ts` (من leaders-api وadmin-api وuser-api وsend-otp وleaders-hooks وcreem-webhook) | معرّف القناة (`C...`) لا اسمها، والبوت مدعو إليها | عند تغيير القناة |
 | `USER_OTP_PER_IP_DAY` | لا (60) | `user-api` | رموز مصفوفة التأثير من شبكة واحدة في اليوم | يُرفع قبل ورشة كبيرة على شبكة واحدة |
-| `CONTACT_NOTIFY_EMAIL` | لا (`LEADERS_ALERT_EMAIL`) | `send-otp` | من يُخطَر بطلب تواصل جديد من الموقع. كان بريدًا مكتوبًا في الكود حتى 2026-11-13 | بريد من يتابع الطلبات |
+| `CONTACT_NOTIFY_EMAIL` | لا (`LEADERS_ALERT_EMAIL`) | `send-otp`، `agent-chat` (تحويلات المساعد) | من يُخطَر بطلب تواصل جديد من الموقع. كان بريدًا مكتوبًا في الكود حتى 2026-11-13 | بريد من يتابع الطلبات |
 | `MATRIX_NOTIFY_EMAIL` | لا (`LEADERS_ALERT_EMAIL`) | `user-api` | من يُخطَر بخطة مقدَّمة في المصفوفة (D14، بدل Lambda) | بريد المستشار |
 | `LEADERS_REGISTER_PER_IP_DAY` | لا (60) | `core.ts` | التسجيلات الجديدة من شبكة واحدة في اليوم؛ يتسع لقاعة ورشة | يُرفع قبل ورشتين أو أكثر على شبكة واحدة في اليوم نفسه، ثم يُعاد |
 | `LEADERS_APP_URL` | لا (`SITES.leaders`) | `core.ts` | روابط البريد والتحقق | عند تغيير النطاق |
@@ -29,7 +29,11 @@
 | `LEADERS_CRON_SECRET` | نعم للجدولة | `core.ts` ← `cron.reminders` | يرسله pg_cron (من Vault) لتشغيل التذكيرات والتقرير والتنظيف | يُدوَّر في Vault والدالة معًا |
 | `LEADERS_ALERT_EMAIL` | موصى به | `core.ts` ← `alertOps`، التقرير الأسبوعي | بريد المالك للتنبيه الفوري والتقرير | عند تغيير المسؤول |
 | `LEADERS_TURNSTILE_SECRET` | **نعم** منذ المرحلة ل1 (بدونه يتوقف الدخول برمز البريد ونموذج التواصل: `captcha_unconfigured` وتنبيه فوري، وبوابة النشر ترفض النشر) | `core.ts`، `send-otp` | التحقق من رمز Cloudflare Turnstile قبل إرسال أي رمز وقبل أي رد يفرّق بين بريد مسجل وجديد | من لوحة Cloudflare مع `SITE_KEY`؛ ضبط الجديد قبل حذف القديم |
-| `LEADERS_TURNSTILE_SITE_KEY` | **نعم** مع السر | `core.ts`، `send-otp` | المفتاح العام للأداة في الواجهة (يُرسل للمتصفح) | مع السر |
+| `LEADERS_TURNSTILE_SITE_KEY` | **نعم** مع السر | `core.ts`، `send-otp`، `agent-chat` | المفتاح العام للأداة في الواجهة (يُرسل للمتصفح) | مع السر |
+| `ANTHROPIC_API_KEY` | نعم للمساعد الآلي (بلاه لا يُستدعى النموذج وتعرض النافذة «اترك رسالتك») | `agent-chat` (`model.ts`) | مفتاح Claude API لمساعد الموقع العام. الطلب إلى `api.anthropic.com` بـ`inference_geo: "us"` كما تقول سياسة الخصوصية، ولا يغادر الخادم | من Claude Console (Settings ← API keys)، ويُدوَّر عند أي اشتباه؛ يُنصح بمساحة عمل خاصة به وحد إنفاق شهري في Console احتياطًا فوق السقف اليومي |
+| `LEADERS_AGENT_MODEL` | لا (`claude-haiku-5-5`) | `agent-chat` | النموذج. الافتراضي الأقل تكلفة بقرار المالك؛ والترقية الموثقة `claude-sonnet-5-5` إن لم ينجح التقييم (`agent-chat/evals/run.ts`). أي اسم غير موجود في جدول `pricing.ts` يُحسب بأغلى سعر فيه، فلا يتجاوز السقف بخطأ | عند تغيير النموذج، بعد تشغيل التقييم عليه |
+| `LEADERS_AGENT_DAILY_CAP_CENTS` | لا (200، أي دولاران في يوم الرياض) | `agent-chat` | سقف تكلفة النموذج اليومي بالسنت، من `usage` في `leaders.agent_spend_daily`. قبل كل استدعاء: إن كان التالي قد يتجاوزه لا يُستدعى النموذج بقية اليوم وتعرض النافذة «اترك رسالتك». تنبيه واحد عند 80% وآخر عند 100% (قناة التنبيهات وسلاك) | بقرار المالك |
+| `LEADERS_AGENT_ENABLED` | لا (مطفأ) | `agent-chat` | `on` يُظهر زر المساعد في الموقع (`status`). مطفأ: لا زر ولا محادثة. يُشغَّل بعد نجاح التقييم وتجربة الإنتاج | يُطفأ فورًا عند أي خلل (لا نشر) |
 | `LEADERS_CALCOM_SECRET` | لا | `core.ts` ← `leaders-hooks` | توقيع خطاف Cal.com | من لوحة Cal.com |
 | `LEADERS_CALENDLY_KEY` | لا | `core.ts` ← `leaders-hooks` | مفتاح توقيع Calendly | من لوحة Calendly |
 | `CREEM_API_KEY` (أو `CAREEM_SECRET_KEY`) | نعم للدفع | `payments.ts` | إنشاء صفحات الدفع؛ البادئة `creem_test_` = وضع الاختبار | من لوحة Creem؛ الاسم البديل يبقى مقبولًا حتى تُوحَّد الأسماء في اللوحة |

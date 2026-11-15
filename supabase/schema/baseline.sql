@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115130000_leaders_slack_threads
+-- as-of migration: 20261115150000_leaders_agent_conversations
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -26,6 +26,17 @@ create sequence if not exists public.email_otps_id_seq as integer;
 create sequence if not exists public.process_details_id_seq as integer;
 
 create sequence if not exists public.reports_id_seq as integer;
+
+create table if not exists leaders.agent_spend_daily (
+  day date not null,
+  micros bigint default 0 not null,
+  calls integer default 0 not null,
+  alerted_80 timestamp with time zone,
+  alerted_100 timestamp with time zone,
+  updated_at timestamp with time zone default now() not null,
+  constraint agent_spend_daily_micros_check CHECK ((micros >= 0)),
+  constraint agent_spend_daily_pkey PRIMARY KEY (day)
+);
 
 create table if not exists leaders.app_settings (
   key text not null,
@@ -429,6 +440,55 @@ create table if not exists leaders.content_releases (
   constraint content_releases_note_check CHECK (((note IS NULL) OR (char_length(note) <= 2000))),
   constraint content_releases_sha256_check CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text)),
   constraint content_releases_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.conversation_messages (
+  id bigint generated always as identity not null,
+  conversation_id uuid not null,
+  role text not null,
+  body text not null,
+  lang text,
+  model text,
+  stop_reason text,
+  input_tokens integer,
+  cache_read_tokens integer,
+  cache_write_tokens integer,
+  output_tokens integer,
+  cost_micros bigint,
+  created_at timestamp with time zone default now() not null,
+  constraint conversation_messages_body_check CHECK ((char_length(body) <= 6000)),
+  constraint conversation_messages_lang_check CHECK ((char_length(lang) <= 10)),
+  constraint conversation_messages_model_check CHECK ((char_length(model) <= 60)),
+  constraint conversation_messages_role_check CHECK ((role = ANY (ARRAY['visitor'::text, 'agent'::text, 'canned'::text, 'system'::text]))),
+  constraint conversation_messages_stop_reason_check CHECK ((char_length(stop_reason) <= 40)),
+  constraint conversation_messages_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.conversations (
+  id uuid default gen_random_uuid() not null,
+  public_token_hash text not null,
+  channel text default 'web'::text not null,
+  product text default 'MI-HOME'::text not null,
+  source_url text,
+  locale text,
+  status text default 'bot'::text not null,
+  ip inet,
+  visitor_messages integer default 0 not null,
+  contact_request_id uuid,
+  handoff_reason text,
+  rating smallint,
+  last_visitor_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  expires_at timestamp with time zone default (now() + '90 days'::interval) not null,
+  constraint conversations_channel_check CHECK ((channel = 'web'::text)),
+  constraint conversations_handoff_reason_check CHECK ((char_length(handoff_reason) <= 300)),
+  constraint conversations_locale_check CHECK ((char_length(locale) <= 10)),
+  constraint conversations_product_check CHECK ((char_length(product) <= 40)),
+  constraint conversations_rating_check CHECK (((rating >= 1) AND (rating <= 5))),
+  constraint conversations_source_url_check CHECK ((char_length(source_url) <= 500)),
+  constraint conversations_status_check CHECK ((status = ANY (ARRAY['bot'::text, 'waiting'::text, 'closed'::text]))),
+  constraint conversations_pkey PRIMARY KEY (id),
+  constraint conversations_public_token_hash_key UNIQUE (public_token_hash)
 );
 
 create table if not exists leaders.coordinator_challenges (
@@ -2233,6 +2293,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.conversation_messages add constraint conversation_messages_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES leaders.conversations(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.conversations add constraint conversations_contact_request_id_fkey FOREIGN KEY (contact_request_id) REFERENCES contact_requests(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.coordinator_challenges add constraint coordinator_challenges_coordinator_id_fkey FOREIGN KEY (coordinator_id) REFERENCES leaders.org_coordinators(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2784,6 +2852,16 @@ CREATE INDEX IF NOT EXISTS consent_events_subject ON leaders.consent_events USIN
 
 CREATE INDEX IF NOT EXISTS content_items_order_idx ON leaders.content_items USING btree (dimension, sort);
 
+CREATE INDEX IF NOT EXISTS conversation_messages_conv_idx ON leaders.conversation_messages USING btree (conversation_id, id);
+
+CREATE INDEX IF NOT EXISTS conversation_messages_created_idx ON leaders.conversation_messages USING btree (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS conversations_created_idx ON leaders.conversations USING btree (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS conversations_expires_idx ON leaders.conversations USING btree (expires_at) WHERE (contact_request_id IS NULL);
+
+CREATE INDEX IF NOT EXISTS conversations_ip_created_idx ON leaders.conversations USING btree (ip, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS coordinator_challenges_email_idx ON leaders.coordinator_challenges USING btree (email, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS coordinator_sessions_coord_idx ON leaders.coordinator_sessions USING btree (coordinator_id);
@@ -3016,6 +3094,8 @@ CREATE INDEX IF NOT EXISTS user_passkeys_reg_idx ON public.user_passkeys USING b
 
 CREATE INDEX IF NOT EXISTS webauthn_challenges_created_idx ON public.webauthn_challenges USING btree (created_at);
 
+alter table leaders.agent_spend_daily enable row level security;
+
 alter table leaders.app_settings enable row level security;
 
 alter table leaders.assessment_answers enable row level security;
@@ -3059,6 +3139,10 @@ alter table leaders.content_patches enable row level security;
 alter table leaders.content_progress enable row level security;
 
 alter table leaders.content_releases enable row level security;
+
+alter table leaders.conversation_messages enable row level security;
+
+alter table leaders.conversations enable row level security;
 
 alter table leaders.coordinator_challenges enable row level security;
 
@@ -3249,6 +3333,34 @@ alter table public.totp_attempts enable row level security;
 alter table public.user_passkeys enable row level security;
 
 alter table public.webauthn_challenges enable row level security;
+
+CREATE OR REPLACE FUNCTION leaders.agent_spend_add(p_day date, p_micros bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  insert into leaders.agent_spend_daily as d (day, micros, calls) values (p_day, greatest(p_micros, 0), 1)
+  on conflict (day) do update set micros = d.micros + greatest(excluded.micros, 0), calls = d.calls + 1, updated_at = now()
+  returning micros;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.agent_spend_alert(p_day date, p_level integer)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+declare n integer;
+begin
+  insert into leaders.agent_spend_daily (day) values (p_day) on conflict (day) do nothing;
+  if p_level >= 100 then
+    update leaders.agent_spend_daily set alerted_100 = now() where day = p_day and alerted_100 is null;
+  else
+    update leaders.agent_spend_daily set alerted_80 = now() where day = p_day and alerted_80 is null;
+  end if;
+  get diagnostics n = row_count;
+  return n > 0;
+end;
+$function$
+;
 
 CREATE OR REPLACE FUNCTION leaders.audit_append_only()
  RETURNS trigger
