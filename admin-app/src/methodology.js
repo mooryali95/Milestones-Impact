@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, DEFAULT_MODEL, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -224,6 +224,26 @@ const INHERIT = 'كما في البرنامج';
 
 // حقول نموذج الدفعة: الأساسيات، ثم طريقة تنفيذ كل نشاط جماعي أو فردي في البرنامج
 // المستشار الأساسي وفريق الخبراء ليسا هنا: يُحرَّران من «الفريق والمجموعات» وحده (CohortTeam.jsx)، مصدر واحد للتحرير
+// اسم البند كما يقرؤه المدير: رموزه محوَّلة (renderJourneyText بإعدادات متطلبات البرنامج كلها) ثم مرحلته بين قوسين،
+// فيتميز عنوانان متطابقان، ولا يظهر الرمز الداخلي
+export function reqLabel(r, reqs = []) {
+  const t = renderJourneyText(r.title_ar || r.code, { reqs });
+  const st = r.stage_title_ar ? renderJourneyText(r.stage_title_ar, { reqs }) : '';
+  return st ? `${t} (${st})` : t;
+}
+// مراحل البرنامج من متطلباته (admin.program يرفق بكل متطلب مرحلته وقاعدتها)، لفحص الإخفاء قبل الحفظ
+const stagesOfReqs = (reqs) => [...new Map(reqs.filter((r) => r.stage_key).map((r) => [r.stage_key, { key: r.stage_key, title_ar: r.stage_title_ar || r.stage_key, rules: r.stage_rules || {}, active: r.stage_active !== false }])).values()];
+const HIDE_HELP = 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.';
+export function hiddenHelp(v, reqs = []) {
+  const hidden = Array.isArray(v?.hidden_requirements) ? v.hidden_requirements : [];
+  const broken = hideBreaksStage(stagesOfReqs(reqs), reqs, hidden);
+  const notes = hidden.filter((c) => CODE_FEATURES[c]).map((c) => {
+    const r = reqs.find((x) => x.code === c);
+    return `تنبيه: «${r ? reqLabel(r, reqs) : c}» ${CODE_FEATURES[c]}.`;
+  });
+  return [HIDE_HELP, broken.length ? `لن يُحفظ: ${hideBreaksMessage(broken)}` : '', ...notes].filter(Boolean).join(' ');
+}
+
 export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false }) {
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const base = [
@@ -239,8 +259,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
     { name: 'status', label: 'الحالة', type: 'select', options: isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running } : COHORT_STATUS },
     { name: 'capacity', label: 'المقاعد', type: 'number' },
     { name: 'hidden_requirements', label: 'بنود مخفية من رحلة هذه الدفعة', type: 'multi',
-      options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, `${r.code} · ${r.title_ar}`])),
-      help: 'يختفي البند فورًا من رحلات أعضاء الدفعة وتقدّمهم، ويبقى ما أنجزوه منه محفوظًا ويعود إن أظهرته.' },
+      options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, reqLabel(r, reqs)])),
+      help: (v) => hiddenHelp(v, reqs) },
     { name: 'supervision', label: 'الإشراف في طلبات التوجيه', type: 'select', options: SUPERVISION_AR,
       help: 'يرفع المشارك طلب توجيه فيجيب فريقه ويؤكّد المستشار (الافتراضي)، أو يجيب المستشار وحده، أو معًا. الإسهام المؤكَّد يُحسب لصاحبه في التقييم المستمر.' },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR,
@@ -251,7 +271,7 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
   ];
   const delivery = [];
   for (const r of reqs.filter((x) => x.active !== false)) {
-    const t = `${r.code} · ${r.title_ar}`;
+    const t = reqLabel(r, reqs);
     if (r.kind === 'workshop') {
       delivery.push(
         { name: `d:${r.code}:format`, label: `${t}: الصيغة`, type: 'select', empty: 'أيام حضورية أو عن بعد (كما في البرنامج)', options: { handbook: 'تدريب ذاتي بالكتيب: كل باب يوم' },

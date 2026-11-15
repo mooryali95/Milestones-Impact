@@ -214,8 +214,11 @@ export async function program(b: Body) {
   const live = await liveRows(id);
   const { data: last } = await db.from('program_versions').select('id, number, label, data').eq('program_id', id).order('number', { ascending: false }).limit(1);
   const latest = last?.[0] || null;
+  // اسم مرحلة كل متطلب وقاعدتها معه: نموذج الدفعة يميز بها العناوين المتطابقة ويكشف الإخفاء الكاسر قبل الحفظ
+  const stageOf = new Map(live.stages.map((st: any) => [st.key, st]));
+  const requirements = live.requirements.map((r: any) => ({ ...r, stage_title_ar: stageOf.get(r.stage_key)?.title_ar || null, stage_rules: stageOf.get(r.stage_key)?.rules || {}, stage_active: stageOf.get(r.stage_key)?.active !== false }));
   return {
-    success: true, program: pr, ...live,
+    success: true, program: pr, ...live, requirements,
     latest: latest ? { id: latest.id, number: latest.number, label: latest.label } : null,
     // ما تغيّر في المسودة منذ آخر نسخة محفوظة
     unsaved: latest ? programDiff(latest.data, programSnapshot(live.stages, live.requirements)) : null,

@@ -47,3 +47,38 @@ describe('خلايا المصفوفة في المنهجية: نص صادق', () 
     expect(src).toContain('لا يظهر للمشارك');
   });
 });
+
+// P2: أسماء مقروءة في نموذج الدفعة. خيارات البنود المخفية وتسميات حقول التنفيذ بلا رموز خام ولا رمز داخلي،
+// والعنوانان المتطابقان يتميزان بالمرحلة
+describe('نموذج الدفعة: أسماء البنود كما يقرؤها المدير', async () => {
+  const { cohortFields, hiddenHelp, reqLabel } = await import('./methodology.js');
+  const reqs = [
+    { code: 'O-SESS', title_ar: 'جلسات التوجيه ({sessions:O-SESS})', kind: 'coaching', active: true, stage_key: 's2', stage_title_ar: 'التطبيق', config: { sessions_required: 4, mode: 'online' } },
+    { code: 'T-ATTEND', title_ar: 'حضور الأيام التدريبية ({days:T-ATTEND})', kind: 'workshop', active: true, stage_key: 's1', stage_title_ar: 'التأسيس', required: true, config: { sessions_required: 3 } },
+    { code: 'R-A', title_ar: 'تأمل', kind: 'check', active: true, stage_key: 's1', stage_title_ar: 'التأسيس', required: false },
+    { code: 'R-B', title_ar: 'تأمل', kind: 'check', active: true, stage_key: 's2', stage_title_ar: 'التطبيق', required: false },
+    { code: 'E-MGR', title_ar: 'إفادة المدير', kind: 'check', active: true, stage_key: 's2', stage_title_ar: 'التطبيق', required: false },
+  ];
+  const fields = cohortFields({ reqs });
+  const texts = fields.flatMap((f) => [f.label, ...Object.values(f.options || {})]).map(String);
+  it('لا نمط {x:y} ولا رمز داخلي في المخرجات', () => {
+    expect(texts.filter((t) => /\{[a-z_]+(:[A-Z0-9-]+)?\}/.test(t))).toEqual([]);
+    expect(texts.filter((t) => /O-SESS|T-ATTEND|R-A|R-B/.test(t))).toEqual([]);
+  });
+  it('{sessions:O-SESS} يصير «أربع جلسات»، والمرحلة بين قوسين', () => {
+    expect(reqLabel(reqs[0], reqs)).toBe('جلسات التوجيه (أربع جلسات) (التطبيق)');
+    const hidden = fields.find((f) => f.name === 'hidden_requirements');
+    expect(hidden.options['O-SESS']).toBe('جلسات التوجيه (أربع جلسات) (التطبيق)');
+    expect(fields.find((f) => f.name === 'd:O-SESS:mode').label).toBe('جلسات التوجيه (أربع جلسات) (التطبيق): طريقة الجلسة');
+  });
+  it('عنوانان متطابقان يتميزان بالمرحلة', () => {
+    const hidden = fields.find((f) => f.name === 'hidden_requirements');
+    expect(hidden.options['R-A']).toBe('تأمل (التأسيس)');
+    expect(hidden.options['R-B']).toBe('تأمل (التطبيق)');
+  });
+  it('الإخفاء الكاسر يُنبَّه إليه قبل الحفظ، ورمز تعتمد عليه ميزة يُحذَّر منه', () => {
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'] }, reqs)).toContain('لن يُحفظ: إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    expect(hiddenHelp({ hidden_requirements: ['R-A'] }, reqs)).not.toContain('لن يُحفظ');
+    expect(hiddenHelp({ hidden_requirements: ['E-MGR'] }, reqs)).toContain('تنبيه: «إفادة المدير (التطبيق)» يكتمل بتقدير المدير المباشر');
+  });
+});
