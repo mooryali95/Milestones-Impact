@@ -57,7 +57,9 @@ export function cleanNote(b, sectionKeys = []) {
 export function publicDoc(doc, share) {
   if (!doc) return null;
   const sections = (doc.sections || []).map((s) => ({ ...s, fields: (s.fields || []).filter((f) => !/email/i.test(f.key)) }));
-  const shown = docLevelsFor({ ...doc, sections, review: null, checks: [], sponsor: null, rubric: [] }, !!share?.show_levels);
+  // جهة ملف المشارك لا تصل القارئ: هي راعية البرنامج لا مالكة المبادرة، ومكان المبادرة في meta.host من بطاقتها
+  const meta = doc.meta ? { ...doc.meta, org: null } : doc.meta;
+  const shown = docLevelsFor({ ...doc, meta, sections, review: null, checks: [], sponsor: null, rubric: [] }, !!share?.show_levels);
   return shown;
 }
 

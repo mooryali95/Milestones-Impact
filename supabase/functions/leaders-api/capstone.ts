@@ -168,6 +168,8 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
       cohort: cohort && !cohort.is_default ? cohort.name : null,
       track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
       level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
+      // مكان المبادرة من بطاقتها لا من ملف المشارك: الجهة المسجّلة في الملف راعية البرنامج، لا مالكة المبادرة (anatomy.json writing_rules)
+      host: String(d.charter.host || '').trim() || null, context: String(d.charter.context || '').trim() || null,
       initiative: d.initiative, sponsor: d.charter.sponsor || null, start: d.charter.start || null, end: d.charter.end || null,
       readiness: d.readiness,
     },

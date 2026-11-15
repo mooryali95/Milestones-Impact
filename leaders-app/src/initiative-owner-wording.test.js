@@ -40,10 +40,10 @@ describe('المبادرة ملك قائدها والجهة سياق مساعد'
     expect(t).toContain('ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد');
     expect(t).not.toMatch(/مخصص للقائد وجهته/);
   });
-  it('شاشات المبادرة (صفحتها، والمتابعة، وصفحة الراعي) لا تفترض جهة', () => {
-    for (const f of ['Capstone.jsx', 'Tracking.jsx', 'Sponsor.jsx']) {
+  it('شاشات المبادرة (صفحتها، والاكتشاف، والفصل، والمتابعة، والمشاركة، واللوحة، وصفحة الراعي) لا تفترض جهة ولا عملًا', () => {
+    for (const f of ['Capstone.jsx', 'Tracking.jsx', 'Sponsor.jsx', 'Discovery.jsx', 'Models.jsx', 'SharedInitiative.jsx', 'Share.jsx', 'InitiativeMap.jsx', 'Visuals.jsx']) {
       const t = readFileSync(`leaders-app/src/screens/${f}`, 'utf8');
-      expect(t, f).not.toMatch(/عملك الحقيقي|أولويات جهتك|ما تحتاجه من جهتك/);
+      expect(t, f).not.toMatch(/عملك الحقيقي|واقع عملك|تراها في عملك|أولويات جهتك|ما تحتاجه من جهتك/);
     }
   });
 });
@@ -137,4 +137,33 @@ describe('مساعدة متطلبات البطاقة والاعتماد كما �
       expect(h).not.toMatch(ASSUMES_ORG);
     });
   }
+});
+
+describe('مكان المبادرة في غلافها وصفحة مشاركتها: من بطاقتها لا من ملف صاحبها', () => {
+  it('الغلاف: الجهة المستضيفة، وإلا سياق التنفيذ، وإلا لا صف', async () => {
+    const { placeRow } = await import('../../src/lib/brand/capstone.js');
+    expect(placeRow({ host: 'جمعية خيرية', context: 'في جهة أخرى', org: { name: 'جهة الملف' } })).toEqual([['الجهة المستضيفة', 'جمعية خيرية']]);
+    expect(placeRow({ context: 'مبادرة ريادية أو مستقلة', org: { name: 'جهة الملف' } })).toEqual([['سياق التنفيذ', 'مبادرة ريادية أو مستقلة']]);
+    expect(placeRow({ org: { name: 'جهة الملف' } })).toEqual([]);
+    const t = readFileSync('src/lib/brand/capstone.js', 'utf8');
+    expect(t).not.toMatch(/\['الجهة', m\.org/);
+  });
+  it('الخادم يرسل مكانها من البطاقة، والقارئ برابط المشاركة لا تصله جهة ملف صاحبها', async () => {
+    expect(readFileSync('supabase/functions/leaders-api/capstone.ts', 'utf8')).toMatch(/host: String\(d\.charter\.host/);
+    const { publicDoc } = await import('../../supabase/functions/leaders-api/share.js');
+    const out = publicDoc({ meta: { org: { name: 'جهة الملف' }, host: 'جمعية', initiative: 'م' }, sections: [], levels: [] }, { show_levels: false });
+    expect(out.meta.org).toBeNull();
+    expect(out.meta.host).toBe('جمعية');
+    const page = readFileSync('leaders-app/src/screens/SharedInitiative.jsx', 'utf8');
+    expect(page).not.toMatch(/m\.org/);
+  });
+});
+
+describe('قطاع المشارك في صفحة المبادرة من مكانه في جواب الخادم', () => {
+  it('Capstone.jsx يقرأ me.participant.sector (حيث يرسله mePayload)، لا me.sector الذي لا يوجد', () => {
+    const t = readFileSync('leaders-app/src/screens/Capstone.jsx', 'utf8');
+    expect(t).not.toMatch(/me\?\.sector\b/);
+    expect(t).toContain('me?.participant?.sector');
+    expect(readFileSync('supabase/functions/leaders-api/participant.ts', 'utf8')).toMatch(/participant: \{[\s\S]{0,600}sector: p\.sector/);
+  });
 });

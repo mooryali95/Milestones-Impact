@@ -405,6 +405,14 @@ function closureBlock(doc) {
 // ── الوثيقة ──
 // doc: { meta, summary, sections, cost, checks, review, sponsor, rubric, tracking? }
 // الترتيب: نظرة أولى والملخص لصاحب القرار، ثم الفهرس، ثم الميثاق وحالة العمل وخطة الانطلاق، ثم الفصول بتفصيلها، ثم الملاحق.
+// مكان المبادرة في الغلاف: الجهة المستضيفة من البطاقة، وإلا سياق تنفيذها، وإلا لا صف.
+// لا جهة ملف المشارك: تلك راعية البرنامج لا مالكة المبادرة (anatomy.json writing_rules، القاعدة 6)
+export function placeRow(m) {
+  if (m?.host) return [['الجهة المستضيفة', m.host]];
+  if (m?.context) return [['سياق التنفيذ', m.context]];
+  return [];
+}
+
 export function capstoneReport(doc) {
   const m = doc.meta || {};
   const secs = doc.sections || [];
@@ -487,7 +495,7 @@ export function capstoneReport(doc) {
       pdfName: `Milestone-Impact-Initiative-${m.ref || 'MI-CP'}-V${m.version || 1}`,
       eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
-      rows: [['قائد المبادرة', m.participant?.name || '·'], ['الجهة', m.org?.name || '·'], ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],
+      rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']],
       confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد',
       closing: example
         ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع تعرفه، وقارن بنيتها بهذا المثال.'
