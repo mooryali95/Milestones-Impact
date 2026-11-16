@@ -1,0 +1,179 @@
+// استرداد Creem على قاعدة مزيفة بحالتها وشبكة محاكاة: الكامل يسحب الحق ويعلّم الدفعة مستردة ويرسل بريد الاسترداد،
+// والجزئي يبقي الدفعة مدفوعة وحقها قائمًا ويجمع المسترد في refund_cents ويرسل بريده الجزئي، وما بلغ المدفوع منه كامل.
+import './_test_env.ts';
+import { assert, assertEquals } from 'jsr:@std/assert@1';
+const { webhook } = await import('./payments.ts');
+const { CONFIG, db } = await import('./core.ts');
+const { refundOutcome, paymentTimeline } = await import('./payments-ledger.js');
+
+const SECRET = 'whsec-test';
+async function sign(raw: string) {
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(raw))), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+type Row = Record<string, any>;
+// جداول بحالتها: الفلاتر eq وis وin تُطبق على القراءة والتحديث، وما سواها يُتجاهل
+function install(tables: Record<string, Row[]>) {
+  const from = (table: string) => {
+    const st = { op: 'select', payload: null as any, filters: [] as ((r: Row) => boolean)[], single: false, head: false };
+    const rows = () => (tables[table] ||= []);
+    const exec = () => {
+      const hit = rows().filter((r) => st.filters.every((f) => f(r)));
+      if (st.op === 'insert') {
+        const list = ([] as Row[]).concat(st.payload);
+        if (table === 'payment_events' && list.some((x) => rows().some((r) => r.event_id === x.event_id))) return { error: { code: '23505', message: 'duplicate' } };
+        rows().push(...list.map((x) => ({ ...x })));
+        return { error: null };
+      }
+      if (st.op === 'update') { hit.forEach((r) => Object.assign(r, st.payload)); return { error: null }; }
+      if (st.head) return { data: null, count: table === 'mail_events' ? 0 : hit.length, error: null };
+      return { data: st.single ? (hit[0] ?? null) : hit, count: hit.length, error: null };
+    };
+    const q: any = new Proxy({}, {
+      get(_t, k: string) {
+        if (k === 'then') return (ok: any, bad: any) => Promise.resolve().then(exec).then(ok, bad);
+        return (...a: any[]) => {
+          if (k === 'insert' || k === 'update') { st.op = k; st.payload = a[0]; }
+          else if (k === 'select' && a[1]?.head) st.head = true;
+          else if (k === 'eq') st.filters.push((r) => r[a[0]] === a[1]);
+          else if (k === 'is') st.filters.push((r) => (r[a[0]] ?? null) === a[1]);
+          else if (k === 'in') st.filters.push((r) => (a[1] as unknown[]).includes(r[a[0]]));
+          else if (k === 'maybeSingle' || k === 'single') st.single = true;
+          return q;
+        };
+      },
+    });
+    return q;
+  };
+  const saved = (db as any).schema;
+  Object.assign(db as any, { from, schema: () => ({ from }) });
+  return () => { delete (db as any).from; (db as any).schema = saved; };
+}
+
+async function withMail<T>(fn: (mails: { to: string[]; subject: string; html: string }[]) => Promise<T>) {
+  const real = globalThis.fetch;
+  const mails: any[] = [];
+  globalThis.fetch = ((url: string | URL, init?: RequestInit) => {
+    if (String(url).includes('resend.com')) { mails.push(JSON.parse(String(init?.body))); return Promise.resolve(new Response('{"id":"re_1"}', { status: 200 })); }
+    return Promise.resolve(new Response('ok', { status: 200 }));
+  }) as typeof fetch;
+  try { return await fn(mails); } finally { globalThis.fetch = real; }
+}
+
+const PAY_ID = '11111111-2222-4333-8444-555555555555';
+const world = (over: Row = {}): Record<string, Row[]> => ({
+  payments: [{ id: PAY_ID, participant_id: 'p1', item: 'program', status: 'paid', amount_cents: 9900, currency: 'USD', mode: 'live', order_id: 'ord_1', checkout_id: 'ch_1', email: 'sara@example.com', refund_cents: null, ...over }],
+  entitlements: [{ id: 'e1', participant_id: 'p1', item: 'program', source: 'paid', payment_id: PAY_ID, revoked_at: null }],
+  participants: [{ id: 'p1', full_name: 'سارة', email: 'sara@example.com' }],
+  payment_settings: [{ id: true, enabled: true, currency: 'USD', notify: { refund: true, owner: true } }],
+  certificates: [{ id: 'cert1', participant_id: 'p1', status: 'valid' }],
+  payment_events: [], audit_log: [], mail_events: [],
+});
+const refundEvent = (id: string, amount: number | null, type = 'refund.created') => {
+  const raw = JSON.stringify({ id, eventType: type, object: { id: `ref_${id}`, order: 'ord_1', checkout: 'ch_1', ...(amount == null ? {} : { refund_amount: amount }), reason: 'طلب العميل' } });
+  return raw;
+};
+async function send(raw: string) { return await webhook(raw, new Headers({ 'creem-signature': await sign(raw) })); }
+
+function setupEnv() {
+  Deno.env.set('CREEM_WEBHOOK_SECRET', SECRET);
+  const saved = { resendKey: CONFIG.resendKey, alertEmail: CONFIG.alertEmail };
+  Object.assign(CONFIG, { resendKey: 're_test', alertEmail: 'owner@example.com' });
+  return () => Object.assign(CONFIG, saved);
+}
+
+Deno.test('refundOutcome: الكامل والجزئي والمجموع والنزاع والمبلغ المجهول', () => {
+  const pay = { status: 'paid', amount_cents: 9900, refund_cents: null };
+  assertEquals(refundOutcome(pay, { refund_cents: 9900 }, 'refund.created'), { full: true, cents: 9900, total: 9900 });
+  assertEquals(refundOutcome(pay, { refund_cents: 2000 }, 'refund.created'), { full: false, cents: 2000, total: 2000 });
+  // جزئي سابق يُجمع، وما بلغ المدفوع كامل، ولا يتجاوز المدفوع
+  assertEquals(refundOutcome({ ...pay, refund_cents: 2000 }, { refund_cents: 3000 }, 'refund.created'), { full: false, cents: 3000, total: 5000 });
+  assertEquals(refundOutcome({ ...pay, refund_cents: 5000 }, { refund_cents: 9000 }, 'refund.created'), { full: true, cents: 9000, total: 9900 });
+  // النزاع كامل دائمًا، والمبلغ المجهول كامل (السلوك السابق الآمن)
+  assertEquals(refundOutcome(pay, { refund_cents: 100 }, 'dispute.created').full, true);
+  assertEquals(refundOutcome(pay, { refund_cents: null }, 'refund.created'), { full: true, cents: 9900, total: 9900 });
+  // دفعة مستردة كاملة لا يُجمع عليها
+  assertEquals(refundOutcome({ ...pay, status: 'refunded', refund_cents: 9900 }, { refund_cents: 100 }, 'refund.created').total, 100);
+});
+
+Deno.test('استرداد كامل: الدفعة مستردة، والحق مسحوب، والشهادة ملغاة، وأثر في السجل، وبريد الاسترداد للعميل والإدارة', async () => {
+  const restoreEnv = setupEnv();
+  const t = world();
+  const restore = install(t);
+  try {
+    await withMail(async (mails) => {
+      const r: any = await send(refundEvent('evt_full', 9900));
+      assertEquals(r.success, true);
+      const pay = t.payments[0];
+      assertEquals([pay.status, pay.refund_cents, pay.refund_reason, !!pay.refunded_at], ['refunded', 9900, 'طلب العميل', true]);
+      assert(t.entitlements[0].revoked_at, 'الحق مسحوب');
+      assertEquals(t.entitlements[0].revoked_by, 'creem');
+      assertEquals(t.certificates[0].status, 'revoked');
+      const log = t.audit_log.find((a) => a.action === 'payment.refunded');
+      assertEquals(log?.after, { refund_cents: 9900, total_refunded_cents: 9900, paid_cents: 9900 });
+      assertEquals(t.audit_log.some((a) => a.action === 'payment.partially-refunded'), false);
+      assertEquals(mails.map((m) => m.subject).sort(), ['استُردّت دفعتك', 'دفعة مستردة'].sort());
+      const toClient = mails.find((m) => m.to[0] === 'sara@example.com')!;
+      assert(toClient.html.includes('99.00 USD'));
+      assert(toClient.html.includes('أُقفل ما فتحه'));
+      assert(t.payment_events[0].processed_at);
+      // الإشعار نفسه مكررًا: لا معالجة ثانية ولا بريد
+      assertEquals(((await send(refundEvent('evt_full', 9900))) as any).duplicate, true);
+      assertEquals(mails.length, 2);
+    });
+  } finally { restore(); restoreEnv(); }
+});
+
+Deno.test('استرداد جزئي: الدفعة تبقى مدفوعة وحقها قائم، والمسترد يُجمع، وبريد جزئي، ثم ما بلغ المدفوع يصير كاملًا', async () => {
+  const restoreEnv = setupEnv();
+  const t = world();
+  const restore = install(t);
+  try {
+    await withMail(async (mails) => {
+      await send(refundEvent('evt_p1', 2000));
+      const pay = t.payments[0];
+      assertEquals([pay.status, pay.refund_cents, pay.refunded_at ?? null, pay.note], ['paid', 2000, null, 'refund.created partial']);
+      assertEquals(t.entitlements[0].revoked_at, null);
+      assertEquals(t.certificates[0].status, 'valid');
+      assertEquals(t.audit_log.filter((a) => a.action === 'payment.partially-refunded').map((a) => a.after), [{ refund_cents: 2000, total_refunded_cents: 2000, paid_cents: 9900 }]);
+      assertEquals(t.audit_log.some((a) => a.action === 'payment.refunded'), false);
+      assertEquals(mails.map((m) => m.subject).sort(), ['استرداد جزئي', 'استُردّ جزء من دفعتك'].sort());
+      const toClient = mails.find((m) => m.to[0] === 'sara@example.com')!;
+      assert(toClient.html.includes('20.00 USD') && toClient.html.includes('99.00 USD'));
+      assert(!toClient.html.includes('أُقفل'), 'الحق باقٍ فلا يقول البريد أُقفل');
+
+      // جزئي ثانٍ يُجمع
+      await send(refundEvent('evt_p2', 3000));
+      assertEquals([pay.status, pay.refund_cents], ['paid', 5000]);
+      assertEquals(t.entitlements[0].revoked_at, null);
+
+      // الباقي: المجموع بلغ المدفوع فصار كاملًا
+      await send(refundEvent('evt_p3', 4900));
+      assertEquals([pay.status, pay.refund_cents], ['refunded', 9900]);
+      assert(t.entitlements[0].revoked_at);
+      assertEquals(t.certificates[0].status, 'revoked');
+      assertEquals(t.audit_log.find((a) => a.action === 'payment.refunded')?.after, { refund_cents: 4900, total_refunded_cents: 9900, paid_cents: 9900 });
+      assertEquals(mails.filter((m) => m.subject === 'استُردّت دفعتك').length, 1);
+
+      // الخط الزمني يذكر الجزئيين بمبالغهما
+      const tl = paymentTimeline(pay, [], [], t.audit_log.map((a) => ({ ...a, created_at: '2026-11-16T09:00:00Z' })));
+      const partials = tl.filter((x: any) => x.text.startsWith('استُردّ جزء'));
+      assertEquals(partials.length, 2);
+      assert(partials[0].detail.includes('20.00 USD من 99.00 USD'));
+    });
+  } finally { restore(); restoreEnv(); }
+});
+
+Deno.test('نزاع بعد استرداد جزئي: كامل، والحق مسحوب', async () => {
+  const restoreEnv = setupEnv();
+  const t = world({ refund_cents: 2000 });
+  const restore = install(t);
+  try {
+    await withMail(async () => {
+      await send(refundEvent('evt_d', 9900, 'dispute.created'));
+      assertEquals(t.payments[0].status, 'refunded');
+      assert(t.entitlements[0].revoked_at);
+    });
+  } finally { restore(); restoreEnv(); }
+});

@@ -27,6 +27,23 @@ export function refundFields(obj, type = '') {
   };
 }
 
+/** الاسترداد كامل أم جزئي. المسترد يُجمع عبر الإشعارات (كل إشعار استرداد بمعرّفه، وتكراره لا يُعالج مرتين) حتى المدفوع.
+ * كامل: ما بلغ المدفوع، أو نزاع (يسحب Creem المبلغ كله)، أو استرداد بلا مبلغ معروف أو لدفعة بلا مبلغ (السلوك السابق
+ * الآمن: يُقفل الحق ولا يُترك مفتوحًا على تخمين). جزئي: الدفعة تبقى paid وحقها قائم، والمسترد في refund_cents.
+ * @param {{ status?: string, amount_cents?: number|null, refund_cents?: number|null }} pay
+ * @param {{ refund_cents: number|null }} rf من refundFields @param {string} type */
+export function refundOutcome(pay, rf, type = '') {
+  const paid = int(pay?.amount_cents);
+  const now = int(rf?.refund_cents);
+  // ما استُرد قبل هذا الإشعار: جزئيًا وحده (الدفعة ما زالت مدفوعة)؛ المستردة كاملة لا تُجمع ثانية
+  const before = pay?.status === 'paid' ? int(pay?.refund_cents) || 0 : 0;
+  if (type === 'dispute.created' || now == null || now <= 0 || paid == null || paid <= 0) {
+    return { full: true, cents: now ?? paid, total: paid ?? now };
+  }
+  const total = Math.min(before + now, paid);
+  return { full: total >= paid, cents: now, total };
+}
+
 // ── مفاتيح البريد: كلها مغلقة حتى يفتحها المدير (قرار المالك 2026-11-13) ──
 export const NOTIFY = {
   receipt: { label: 'تأكيد الدفع للعميل', hint: 'بريد من المنصة عند كل دفعة مؤكدة: البند والمبلغ ورقم الطلب وخطوته التالية.' },
@@ -60,8 +77,9 @@ export function paymentTimeline(pay, events = [], ents = [], log = []) {
   }
   add(pay.receipt_sent_at, 'info', 'أُرسل تأكيد الدفع للعميل');
   add(pay.refunded_at, 'warn', 'استُردّت الدفعة', pay.refund_reason || '');
-  const LOG_AR = { 'payment.held': 'عُلّقت للمراجعة', 'payment.remind': 'ذُكِّر العميل بإكمال الدفع', 'payment.note': 'ملاحظة إدارية', 'payment.reconcile': 'طوبقت مع Creem', 'payment.expired': 'انتهت صفحة الدفع المتروكة' };
-  for (const h of log) if (LOG_AR[h.action]) add(h.created_at, h.action === 'payment.held' ? 'warn' : 'info', LOG_AR[h.action], h.action === 'payment.held' ? (h.after?.issues || []).join('؛ ') : h.actor && h.actor !== 'creem' ? `بواسطة ${h.actor}` : '');
+  const LOG_AR = { 'payment.partially-refunded': 'استُردّ جزء من الدفعة، وبقي الحق قائمًا', 'payment.held': 'عُلّقت للمراجعة', 'payment.remind': 'ذُكِّر العميل بإكمال الدفع', 'payment.note': 'ملاحظة إدارية', 'payment.reconcile': 'طوبقت مع Creem', 'payment.expired': 'انتهت صفحة الدفع المتروكة' };
+  const partialAr = (h) => `${money(h.after?.refund_cents, pay.currency)} من ${money(h.after?.paid_cents, pay.currency)}، والمسترد كله ${money(h.after?.total_refunded_cents, pay.currency)}`;
+  for (const h of log) if (LOG_AR[h.action]) add(h.created_at, h.action === 'payment.held' || h.action === 'payment.partially-refunded' ? 'warn' : 'info', LOG_AR[h.action], h.action === 'payment.held' ? (h.after?.issues || []).join('؛ ') : h.action === 'payment.partially-refunded' ? partialAr(h) : h.actor && h.actor !== 'creem' ? `بواسطة ${h.actor}` : '');
   return rows.sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
 

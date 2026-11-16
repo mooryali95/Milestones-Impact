@@ -378,7 +378,15 @@ export function paymentReceiptMail(name: string, item: string, amount: string, o
     + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
     'تأكيد الدفع', 'إيصال الدفع الرسمي يصلك من مزوّد الدفع Creem على البريد نفسه.');
 }
-export function paymentRefundMail(name: string, item: string, amount: string) {
+// of: المدفوع كله حين يكون الاسترداد جزئيًا (payments.ts): الحق باقٍ فلا يُقال «أُقفل»
+export function paymentRefundMail(name: string, item: string, amount: string, of = '') {
+  if (of) {
+    return shell('journey', 'استُردّ جزء من دفعتك',
+      mailText(`${hello(name)} استُردّ جزء من دفعتك، ويعود المبلغ المسترد إلى وسيلة الدفع نفسها خلال أيام بحسب مصرفك.`)
+      + mailRows([['البند', item], ['المبلغ المسترد', amount], ['من المدفوع', of]])
+      + mailText('ما فتحه هذا الدفع في حسابك باقٍ كما هو. إن كان الاسترداد خطأ أو لديك سؤال فردّ على هذه الرسالة.'),
+      'استرداد جزء من دفعة');
+  }
   return shell('journey', 'استُردّت دفعتك',
     mailText(`${hello(name)} استُردّت دفعتك، ويعود المبلغ إلى وسيلة الدفع نفسها خلال أيام بحسب مصرفك.`)
     + mailRows([['البند', item], ['المبلغ', amount]])
@@ -708,6 +716,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'approved-pay', family: 'journey', label: 'اعتماد المسار مع رابط الدفع', subject: 'اعتُمد مسارك في برنامج القادة', html: () => approvedMail('سارة', true) },
   { key: 'pay-receipt', family: 'journey', label: 'تأكيد الدفع للعميل (بمفتاح)', subject: 'وصلنا دفعك', html: () => paymentReceiptMail('سارة', 'القياس المبدئي', '1.99 USD', 'ord_123', 'القياس مفتوح لك الآن.') },
   { key: 'pay-refund', family: 'journey', label: 'إشعار الاسترداد للعميل (بمفتاح)', subject: 'استُردّت دفعتك', html: () => paymentRefundMail('سارة', 'القياس المبدئي', '1.99 USD') },
+  { key: 'pay-refund-partial', family: 'journey', label: 'إشعار الاسترداد الجزئي للعميل (بمفتاح)', subject: 'استُردّ جزء من دفعتك', html: () => paymentRefundMail('سارة', 'رسم البرنامج', '20.00 USD', '99.00 USD') },
   { key: 'pay-abandon', family: 'journey', label: 'تذكير من لم يكمل الدفع (يدوي)', subject: 'دفعك لم يكتمل', html: () => paymentAbandonMail('سارة', 'القياس المبدئي') },
   { key: 'pay-owner', family: 'admin', label: 'تنبيه الإدارة بدفعة (بمفتاح)', subject: 'دفعة جديدة', html: () => paymentOwnerMail('دفعة جديدة', [['المشارك', 'سارة الأحمد'], ['البند', 'القياس المبدئي'], ['المبلغ', '1.99 USD']]) },
   { key: 'pay-reminder', family: 'journey', label: 'تذكير إكمال التسجيل', subject: 'مسارك المعتمد بانتظارك', html: () => payReminderMail('سارة', 3) },
