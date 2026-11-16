@@ -151,7 +151,10 @@ describe('B6: شريط الجهة لا يعد بتغطية مطلقة (D20)', ()
 
 describe('B7: «طلبات التوجيه» كما في عنوان بطاقتها', () => {
   it('بطاقة «ما بعد ذلك» تسمي البطاقة باسمها', () => {
-    expect(nextCard(me())).toContain(FIXED[7]);
+    // القاعة تُذكر حين تكون ظاهرة وحدها (مفاتيح الميزات في me.features)
+    expect(nextCard({ ...me(), features: { hall: true } })).toContain(FIXED[7]);
+    expect(nextCard(me())).toContain('بعد الاعتماد تُفتح لك: كتابك، ومبادرتك، وطلبات التوجيه.');
+    expect(nextCard(me())).not.toContain('القاعة');
     expect(read('leaders-app/src/screens/PeerRequests.jsx')).toContain('<h3 id="pr-h">طلبات التوجيه</h3>');
   });
 });

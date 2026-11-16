@@ -9,7 +9,7 @@ function server() {
   const s = { profileDone: false, assessed: false, peers: [] };
   const stage = (key, title_ar, phase, status, items = []) => ({ key, title_ar, phase, status, items, done: items.filter((i) => i.status === 'done').length, total: items.length });
   const me = () => ({
-    success: true,
+    success: true, features: { hall: true, katon: false, f360: true },
     participant: { id: 'demo', full_name: 'مشارك العرض', email: 'demo@example.invalid', status: s.assessed ? 'placed' : 'registered', is_demo: true, consented_at: '2026-11-01T00:00:00Z' },
     profile: { full_name: 'مشارك العرض', phone: s.profileDone ? '0500000000' : '', job_title: s.profileDone ? 'مدير إدارة المشاريع' : '', organization_name: s.profileDone ? 'جهة العرض' : '', years_experience: s.profileDone ? 8 : null,
       approved: s.assessed, level: s.assessed ? 'intermediate' : null, track: s.assessed ? { title: 'القيادة من خلال الآخرين', summary: 'ملخص', strengths: 'قوة', journey: 'رحلة' } : null },

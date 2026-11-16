@@ -8,7 +8,7 @@ const SETTINGS = { min_group: 3, min_others: 3, caps: { manager: 1, peer: 6, rep
 const GROUPS = { manager: 'المدير المباشر', peer: 'الزملاء', report: 'أعضاء الفريق', stakeholder: 'أصحاب المصلحة' };
 const counts = (o = {}) => ({ manager: { invited: 0, submitted: 0 }, peer: { invited: 0, submitted: 0 }, report: { invited: 0, submitted: 0 }, stakeholder: { invited: 0, submitted: 0 }, ...o });
 const me = {
-  success: true,
+  success: true, features: { hall: true, katon: false, f360: true },
   participant: { id: 'p1', full_name: 'سارة الأحمد', email: 's@x.sa', status: 'enrolled', phone: '0500000000', job_title: 'مديرة', organization_name: 'جهة', consent: { needed: null } },
   profile: { approved: true, level: 'intermediate', track: null, dimensions: [] },
   journey: [{ key: 'profile', title_ar: 'الملف', phase: 'admission', sort: 1, status: 'done', items: [], done: 0, total: 0 }, { key: 'assessment', title_ar: 'القياس', phase: 'admission', sort: 2, status: 'done', items: [], done: 0, total: 0 }],
@@ -126,7 +126,7 @@ test('المقيّم في 360: تقدير واحد بسلم الإعدادات �
   expect(sent).toMatchObject({ answers: { q1: { now: 3 } }, contact_freq: 'monthly' });
 });
 
-const expertDash = { success: true, consent_needed: false, expert: { full_name: 'د. منى القحطاني', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 0, participants: 1, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [] };
+const expertDash = { success: true, features: { hall: true, katon: false, f360: true }, consent_needed: false, expert: { full_name: 'د. منى القحطاني', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 0, participants: 1, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [] };
 
 test('المستشار: يعتمد قائمة المقيّمين فتُرسل الدعوات، أو يعيدها بملاحظة', async ({ page }) => {
   const sent = [];

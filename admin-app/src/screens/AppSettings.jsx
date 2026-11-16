@@ -7,6 +7,17 @@ import React, { useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { cleanGroup, SETTINGS } from '../../../supabase/functions/leaders-api/settings.js';
+import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
+
+// الميزات قيد البناء (مفاتيح الميزات P2): ثلاثة مفاتيح متجاورة، لكل ميزة مفتاح واحد في المخزن. القاعة وكاتون في مجموعة
+// features، و360 هو feedback360.enabled نفسه (الخيار أ)، فلا يُعرض مرة ثانية في مجموعة 360. كل نقرة تحفظ فورًا وتُسجَّل في السجل
+export const FEATURE_SWITCHES = [
+  { key: 'hall', group: 'features', field: 'hall', title: 'القاعة الحية' },
+  { key: 'katon', group: 'features', field: 'katon', title: 'كاتون' },
+  { key: 'f360', group: 'feedback360', field: 'enabled', title: 'تقييم 360' },
+];
+// حقول تُرسم في «الميزات قيد البناء» وحدها، فلا تُعرض مرتين
+const IN_FEATURES = { feedback360: new Set(['enabled']) };
 
 // أيام التذكير تُعرض مفصولة بفاصلة وتُحرَّر نصًا، ويحولها التحقق نفسه (cleanField) إلى قائمة
 const asText = (v) => (Array.isArray(v) ? v.join('، ') : v ?? '');
@@ -71,7 +82,7 @@ function Group({ group, values, updated, canWrite, onSaved }) {
       <p className="la-muted">{def.note_ar}</p>
       {updated && <p className="la-muted small">آخر تعديل: {updated.by} · {date(updated.at)}</p>}
       <div className="of-grid">
-        {Object.entries(def.fields).map(([k, f]) => (
+        {Object.entries(def.fields).filter(([k]) => !IN_FEATURES[group]?.has(k)).map(([k, f]) => (
           <Field key={k} id={`st-${group}-${k}`} f={f} value={v[k]} error={errors[k]} disabled={!canWrite}
             onChange={(x) => setV((cur) => ({ ...cur, [k]: x }))} />
         ))}
@@ -87,15 +98,57 @@ function Group({ group, values, updated, canWrite, onSaved }) {
   );
 }
 
-export default function AppSettings({ canWrite }) {
-  const [d, setD] = useState(null);
+function FeatureSwitches({ d, canWrite, onSaved }) {
+  const { toast } = useUI();
+  const [busy, setBusy] = useState('');
+  const flags = featureFlags(d.values);
+  const def = SETTINGS.features;
+  const flip = async (s, on) => {
+    setBusy(s.key);
+    const r = await L('admin.settings-save', { group: s.group, values: { [s.field]: on } });
+    setBusy('');
+    if (!r.success) { toast(r.message); return; }
+    toast(`${s.title}: ${on ? 'ظاهرة للمستخدمين' : 'مخفية عن المستخدمين'}`);
+    onSaved(r);
+  };
+  return (
+    <section className="la-card ft-panel" aria-labelledby="st-features">
+      <h3 id="st-features">{def.title_ar}</h3>
+      <p className="la-muted">{def.note_ar}</p>
+      <div className="ft-grid">
+        {FEATURE_SWITCHES.map((s) => {
+          const on = flags[s.key];
+          const f = SETTINGS[s.group].fields[s.field];
+          const upd = d.updated?.[s.group];
+          return (
+            <div key={s.key} className={`ft-switch ${on ? 'on' : 'off'}`} data-feature={s.key}>
+              <label className="of-switch">
+                <input type="checkbox" role="switch" checked={on} disabled={!canWrite || !d.ready || busy === s.key}
+                  aria-describedby={`ft-${s.key}-h`} onChange={(e) => flip(s, e.target.checked)} />
+                <span><b>{s.title}</b><br /><span className={`la-chip ${on ? 'ok' : 'warn'}`}>{on ? 'ظاهرة للمستخدمين' : 'مخفية عن المستخدمين'}</span></span>
+              </label>
+              <small className="la-muted" id={`ft-${s.key}-h`}>{f.hint_ar}</small>
+              {upd && <small className="la-muted">آخر تعديل: {upd.by} · {date(upd.at)}</small>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// onSettings: يُبلَّغ به قسم القادة بعد كل حفظ، فتتحدث شارات «مخفي عن المستخدمين» على الأقسام فورًا
+export default function AppSettings({ canWrite, onSettings }) {
+  const [d, setRaw] = useState(null);
+  const setD = (r) => { setRaw(r); if (r?.success) onSettings?.(r); };
   useEffect(() => { L('admin.settings').then(setD); }, []);
   if (!d) return <Spinner />;
   if (!d.success) return <div className="la-err">{d.message}</div>;
   return (
     <div className="stack">
       {!d.ready && <div className="la-card la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فتعمل القيم الافتراضية ولا يُحفظ تعديل حتى يُطبَّق ترحيله.</div>}
-      {Object.keys(SETTINGS).map((g) => (
+      <FeatureSwitches d={d} canWrite={canWrite} onSaved={setD} />
+      {Object.keys(SETTINGS).filter((g) => g !== 'features').map((g) => (
         <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready} onSaved={setD} />
       ))}
     </div>

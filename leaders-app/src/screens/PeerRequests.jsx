@@ -37,7 +37,7 @@ export default function PeerRequests({ preset = null, onDone, compact = false })
     return true;
   };
   const ask = async () => {
-    if (await run('peer.ask', { text, source: preset?.source || 'free', ref_id: preset?.ref_id || null, target_team: team || null }, d.supervision === 'expert_only' ? `وصل طلبك إلى ${d.advisor || 'خبيرك'}.` : 'وصل طلبك إلى فريقك، ويؤكّد خبيرك ما يُجاب.')) { setText(''); setOpen(false); onDone?.(); }
+    if (await run('peer.ask', { text, source: preset?.source || 'free', ref_id: preset?.ref_id || null, target_team: team || null }, d.supervision === 'expert_only' ? `وصل طلبك إلى ${d.advisor || 'خبيرك'}.` : d.team_pick === false ? 'وصل طلبك إلى زملاء دفعتك، ويؤكّد خبيرك ما يُجاب.' : 'وصل طلبك إلى فريقك، ويؤكّد خبيرك ما يُجاب.')) { setText(''); setOpen(false); onDone?.(); }
   };
   const answer = async (r) => { if (await run('peer.answer', { request_id: r.id, text: reply[r.id] }, 'شكرًا لإسهامك؛ يُعرض على خبيرك للتأكيد ويُحسب لك بعده.')) setReply({ ...reply, [r.id]: '' }); };
   const mine = d.items.filter((x) => x.mine);
@@ -57,7 +57,8 @@ export default function PeerRequests({ preset = null, onDone, compact = false })
           {preset?.label && <p className="small muted">بشأن: {preset.label}</p>}
           <label className="field"><span>سؤالك أو الجزء الذي تريد توجيهًا فيه</span>
             <textarea className="input" rows={3} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} placeholder="اكتب ما يكفي ليفهم زميلك أو خبيرك ما تحتاجه" /></label>
-          {d.supervision !== 'expert_only' && (
+          {/* الفريق يُختار حين تكون القاعة ظاهرة وللمشارك فريق (team_pick من الخادم)، وإلا فالطلب إلى الجميع */}
+          {d.supervision !== 'expert_only' && d.team_pick !== false && (
             <label className="field"><span>لمن</span>
               <select className="input" value={team} onChange={(e) => setTeam(e.target.value)}>
                 <option value="">كل فرق دفعتي</option>

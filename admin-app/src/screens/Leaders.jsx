@@ -36,7 +36,15 @@ const Agent = lazyRetry(() => import('./Agent.jsx'));
 const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
-import { OWNER_TABS, TABS } from '../leaders-tabs.js';
+import { FEATURE_TABS, OWNER_TABS, TABS } from '../leaders-tabs.js';
+import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
+
+// قسم ميزة مخفية عن المستخدمين: ما يعنيه إخفاؤها هنا، والمدير يبني فيها كما يشاء (مفاتيح الميزات P2)
+const HIDDEN_NOTE_AR = {
+  hall: 'لا يدخلها مشارك ولا يديرها خبير، ولا تُفتح منها جلسة حتى تُظهرها. رسائل الورش تطلب الحضور برمز QR.',
+  katon: 'شاشة «كاتون» لا تظهر للمشاركين. ابنِ البنك هنا كما تشاء، ووزنه في التقييم لا يتغير بالمفتاح.',
+  f360: 'لا يراه مشارك ولا مستشار ولا منسق ولا مقيّم. الدورات الجارية متجمدة بلا بريد ولا إرسال، وبياناتها باقية وتُستأنف حين تُظهره.',
+};
 
 // الأقسام وأسماؤها في ملف صغير يقرؤه شريط البحث (Palette) دون أن يجرّ الأقسام كلها إلى الحزمة الرئيسية
 export { TABS };
@@ -76,6 +84,10 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   const pendingOf = (k) => (k === 'participants' ? pending?.participants : k === 'handbook' ? pending?.models : k === 'capstones' ? pending?.capstones : 0) || 0;
   const groupPending = (keys) => keys.reduce((n, k) => n + pendingOf(k), 0);
   const [catalog, setCatalog] = useState(null);
+  // مفاتيح الميزات من المخزن نفسه الذي تحرره «الإعدادات العامة»، وتُحدَّث بعد كل حفظ هناك (onSettings)
+  const [flags, setFlags] = useState(null);
+  useEffect(() => { L('admin.settings').then((r) => { if (r?.success) setFlags(featureFlags(r.values)); }); }, []);
+  const hiddenOf = (k) => !!flags && FEATURE_TABS[k] && !flags[FEATURE_TABS[k]];
   const [programId, setProgramId] = useState(null);
 
   const loadOrgs = useCallback(async () => {
@@ -104,7 +116,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
-  else if (tab === 'settings') body = <AppSettings canWrite={canWrite} />;
+  else if (tab === 'settings') body = <AppSettings canWrite={canWrite} onSettings={(r) => setFlags(featureFlags(r.values))} />;
   else if (tab === 'agent') body = <Agent isSuper={isSuper} />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
@@ -146,12 +158,19 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
             </button>
             {keys.filter(allowed).map((k) => {
               const n = pendingOf(k);
-              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}</button>;
+              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}{hiddenOf(k) && <span className="ft-hidden-badge">مخفي عن المستخدمين</span>}</button>;
             })}
           </div>
         ))}
       </nav>
-      <div className="la-body"><ScreenBoundary key={tab}><Suspense fallback={<Spinner />}>{body}</Suspense></ScreenBoundary></div>
+      <div className="la-body">
+        {hiddenOf(tab) && (
+          <div className="ft-banner" role="status" data-testid="feature-hidden-banner">
+            <b>مخفي عن المستخدمين.</b> {HIDDEN_NOTE_AR[FEATURE_TABS[tab]]}{' '}
+            <button type="button" className="btn-sm ghost" onClick={() => go('settings')}>أظهره من «الميزات قيد البناء»</button>
+          </div>
+        )}
+        <ScreenBoundary key={tab}><Suspense fallback={<Spinner />}>{body}</Suspense></ScreenBoundary></div>
       </div>
     </div>
   );

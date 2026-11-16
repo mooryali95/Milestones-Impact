@@ -38,10 +38,11 @@ test('الإعدادات العامة: التحقق نفسه قبل الإرسا
   await expect(form.getByRole('alert')).toContainText('داخل نافذة التقدير');
   expect(calls.some((c) => c.action === 'admin.settings-save')).toBe(false);
   await form.getByLabel('أيام التذكير').fill('4، 9');
-  await form.getByLabel('مفعّل للمشاركين').check();
+  // مفتاح 360 في «الميزات قيد البناء» لا في هذه المجموعة (مفاتيح الميزات P2)
+  await expect(form.getByRole('checkbox')).toHaveCount(0);
   await form.getByRole('button', { name: 'حفظ' }).click();
   await expect(page.getByText('حُفظت الإعدادات')).toBeVisible();
-  expect(calls.find((c) => c.action === 'admin.settings-save')).toMatchObject({ group: 'feedback360', values: { enabled: true, remind_days: [4, 9], min_group: 3 } });
+  expect(calls.find((c) => c.action === 'admin.settings-save')).toMatchObject({ group: 'feedback360', values: { enabled: false, remind_days: [4, 9], min_group: 3 } });
 });
 
 test('تقييم 360: الدورات بالأعداد، وتقرير فرد عند الطلب في نافذة تُغلق بـEsc', async ({ page }) => {

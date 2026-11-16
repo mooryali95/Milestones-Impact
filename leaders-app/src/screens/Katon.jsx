@@ -5,6 +5,7 @@
 // بعد الإجابة عن جمل الموضوع كلها يُكشف المفتاح والشرح والنقاط، وتُقفل الإجابات.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { isFeatureOff } from '../features.js';
 import KatonAnswer from '../KatonAnswer.jsx';
 import { KATON_CONFIDENCE, KATON_FAMILY_AR, KATON_KEY_AR, KATON_QUESTION_AR as Q_AR, KATON_STANCES } from '../../../supabase/functions/leaders-api/katon.js';
 import PeerRequests from './PeerRequests.jsx';
@@ -45,7 +46,8 @@ export default function Katon({ onBack }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ask, setAsk] = useState(null);   // ملاحظة على جملة تُرفع طلب توجيه (المرحلة 8)
-  useEffect(() => { call('katon.mine').then(setD); }, []);
+  // أُخفي «كاتون» والشاشة مفتوحة (katon_off): عودة إلى الرحلة بلا رسالة خطأ
+  useEffect(() => { call('katon.mine').then((r) => (isFeatureOff(r) ? onBack?.() : setD(r))); }, []);
   if (!d) return <div className="page"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   if (!d.success) return <div className="page"><div className="alert err">{d.message}</div></div>;
 
