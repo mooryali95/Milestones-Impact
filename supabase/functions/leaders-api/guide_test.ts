@@ -208,7 +208,9 @@ Deno.test('حراسة نصية: كل استعلام على المحادثات م
   const src = await Deno.readTextFile(new URL('./guide.ts', import.meta.url));
   const qs = src.match(/db\.from\('guidance_messages'\)[^;]*/g) || [];
   assert(qs.length >= 4);
-  for (const q of qs) assert(/\.eq\('participant_id', (p\.id|pid)\)|insert\(row\)/.test(q), q);
+  // الاستثناء الوحيد: توزيع الإدارة على الجهات والدفعات (guideBreakdown) يقرأ كل المشاركين بأعمدة بلا نص، محددة حرفيًا
+  const ADMIN_COUNTS = "db.from('guidance_messages').select('participant_id, role, verdict, confirmed_at, cost_micros')";
+  for (const q of qs) assert(/\.eq\('participant_id', (p\.id|pid)\)|insert\(row\)/.test(q) || q.startsWith(ADMIN_COUNTS), q);
   assert(!/b\.(participant_id|participant|pid|conversation_id)/.test(src), 'لا يُقرأ معرّف مشارك أو محادثة من الطلب');
   for (const line of src.split('\n').filter((l) => /console\.(log|error)/.test(l))) assert(!/text|answer|body|raw/.test(line.replace(/'[^']*'/g, '')), line);
 });
@@ -250,6 +252,7 @@ Deno.test('G3 حراسة: لا يقرأ جدول المحادثات إلا guide
   const file = await Deno.readTextFile(new URL('./file.ts', import.meta.url));
   assert(/guidance: adv \? await guideCounts\(p\.id\) : null/.test(file), 'للمستشار وحده من الخبراء');
   const src = await Deno.readTextFile(new URL('./guide.ts', import.meta.url));
-  const report = src.slice(src.indexOf('export async function guideReport'));
+  const from = src.indexOf('export async function guideReport');
+  const report = src.slice(from, src.indexOf('\nexport ', from + 10));
   assert(!/guidance_messages/.test(report), 'التقرير لا يقرأ الجدول مباشرة');
 });

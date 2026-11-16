@@ -36,7 +36,7 @@ function backend(over = {}) {
     // G4a: تقييم دقة التوجيه والدفعة التجريبية
     'admin.guide-eval': () => ({ success: true, ready: true, model: 'claude-opus-5-5', threshold: 0.99, fingerprint: 'fp',
       set: { version: '2026-11-16-draft-1', total: 40, kinds: { answer: 24, unsure: 6, refuse_model: 6, refuse_route: 4 }, approved_by: null, approved_at: null, errors: [] },
-      gate: { ok: false, reason: 'unapproved', message: 'مجموعة التقييم لم تعتمدها لجنة المحتوى بعد.' },
+      gate: { ok: false, reason: 'unapproved', message: 'مجموعة التقييم لم تُعتمد بعد.' },
       runs: st.evalRuns || [] }),
     'admin.guide-eval-start': () => { st.evalSteps = 0; return { success: true, run_id: '11111111-1111-4111-8111-111111111111', total: 40 }; },
     'admin.guide-eval-step': () => {
@@ -314,28 +314,10 @@ test('ملف القسم حذفه نشر أحدث: إعادة تحميل واحد
   await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
 });
 
-test('«التوجيه والإرشاد» داخل الرحلة: سقفه منفصل ورابطه، وتقرير أعداد بلا نص بنسبة «أريد التأكد»', async ({ page }) => {
+test('سقف «التوجيه والإرشاد» يظهر في الحالة برابط إلى تبويبه المستقل', async ({ page }) => {
   await setup(page);
   const state = sec(page, 'الحالة والتحكم');
   await expect(state).toContainText('سقف «التوجيه والإرشاد» داخل الرحلة منفصل: 5.00 دولار يوميًا');
-  const report = page.getByRole('region', { name: /«التوجيه والإرشاد» داخل الرحلة/ });
-  await expect(report).toContainText('مغلق للمشاركين');
-  await expect(report.getByRole('row', { name: /آخر 7 يومًا/ })).toContainText('3 (7.5٪)');
-  await expect(report).toContainText('أعلى يوم: $1.20 من سقف $5.00');
-  await expect(report).toContainText('نصوص المحادثات خاصة بأصحابها');
-});
-
-test('تقييم دقة التوجيه: المسودة غير المعتمدة تُغلق البوابة، والتشغيل بدفعات حتى ينتهي، والدفعة التجريبية تُفعَّل بنقرة', async ({ page }) => {
-  const { calls } = await setup(page);
-  const ev = page.getByRole('region', { name: /تقييم دقة «التوجيه والإرشاد»/ });
-  await expect(ev).toContainText('مجموعة التقييم لم تعتمدها لجنة المحتوى بعد');
-  await expect(ev).toContainText('40 حالة (يجيب 24، لا يتأكد 6، يرفض 6، يرفضه الموجّه 4)');
-  await expect(ev).toContainText('مسودة بانتظار اعتماد لجنة المحتوى');
-  await ev.getByRole('button', { name: 'شغّل التقييم' }).click();
-  await expect(ev.getByRole('row', { name: /ناجح/ })).toContainText('40/40');
-  expect(calls.filter((c) => c.action === 'admin.guide-eval-step').length).toBe(2);
-  await ev.getByRole('button', { name: 'النتائج' }).click();
-  await expect(ev.getByLabel('نتائج التشغيل')).toContainText('ما الفرق بين المعلم وبوابة المرحلة؟');
-  await ev.getByRole('checkbox', { name: 'دفعة سفراء' }).check();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')?.body).toMatchObject({ cohort_id: '22222222-2222-4222-8222-222222222222', on: true });
+  await state.getByRole('button', { name: 'افتح «التوجيه والإرشاد»' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/guidance$/);
 });
