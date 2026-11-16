@@ -29,6 +29,7 @@ const BULK_MAX = 50;
 import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
 import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
+import { NudgeLog, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
@@ -152,15 +153,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
   };
-  // تذكير المتعثرين من المحددين: الخادم يتخطى من أكمل ومن ذُكِّر قريبًا، والرد يقول كم أُرسل وكم تُخطّي ولماذا
-  const pickedStuck = all.filter((p) => picked.has(p.id) && STUCK.includes(p.onboarding?.step)).length;
-  const remind = async () => {
-    if (!(await confirm(`إرسال بريد تذكير إلى ${pickedStuck} ممن لم يكملوا التسجيل؟ كل بريد يسمّي ما بقي على صاحبه.`))) return;
-    const r = await L('admin.remind-stuck', { participant_ids: all.filter((p) => picked.has(p.id) && STUCK.includes(p.onboarding?.step)).map((p) => p.id) });
-    if (!r.success) return toast(r.message);
-    toast(`أُرسل ${r.sent} تذكير${r.skipped?.recent ? `، وتُخطّي ${r.skipped.recent} ذُكِّروا خلال ${r.gap_days} أيام` : ''}`);
-    setPicked(new Set());
-  };
+  // التذكير الموحد للمحددين في أي مرحلة (Nudges.jsx): معاينة مجمّعة بالمرحلة قبل الإرسال، والحد المشترك على الخادم
+  const [nudging, setNudging] = useState(null);
   // طلب إعادة القياس للمحددين ممن سلّموا ولم يُعتمدوا (can_retake من الخادم): المدخل نفسه الذي في ملف المشارك
   const pickedRetake = all.filter((p) => picked.has(p.id) && p.can_retake).length;
   // الاعتماد الجماعي بالمستوى المحسوب (BulkApprove): للمحددين ممن ينتظرون الاعتماد، والحكم والاستبقاء على الخادم
@@ -252,6 +246,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm primary" onClick={() => setBulkApprove(shownPending.slice(0, 50))}>اعتمد المتسقين{shownPending.length > 50 ? ' (أول 50)' : ''}…</button>
         </div>
       )}
+      {nudging && <NudgeSheet ids={nudging} onClose={(sent) => { setNudging(null); if (sent) setPicked(new Set()); }} />}
       {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onOpen} onClose={(changed) => { setBulkApprove(null); if (changed) { setPicked(new Set()); load(serverQ); } }} />}
       {canWrite && picked.size > 0 && (
         <div className="la-bulk">
@@ -270,7 +265,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
             <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo || enrolling}>{enrolling ? "يُنقل…" : "انقلهم"}</button>
           </>}
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
-          {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}
+          <button className="btn-sm ghost" onClick={() => setNudging([...picked].slice(0, BULK_MAX))} title="بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال">ذكّر المحددين ({Math.min(picked.size, BULK_MAX)})</button>
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
@@ -658,6 +653,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
           </>)}
 
           {panel('log', <>
+            <NudgeLog participantId={p.id} canWrite={canWrite} />
             <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
             <Timeline rows={r.timeline} />
           </>)}

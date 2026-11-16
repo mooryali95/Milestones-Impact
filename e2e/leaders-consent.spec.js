@@ -80,7 +80,8 @@ test('مشاركة المستويات مع الجهة: مفتاح في «ملف�
   expect(sent.filter((b) => b.action === 'org.share-consent').map((b) => b.share)).toEqual([true, false]);
 });
 
-test('D18: من وافق على نسخة أقدم يرى ما تغيّر، ويؤجل فتبقى رحلته بشريط، ثم يجدد', async ({ page }) => {
+// إشعار التحديث بسطر واحد (قرار المالك 2026-11-16): لا تفاصيل ولا أرقام نسخ، والشريط يوافق مباشرة بزر «موافق»
+test('D18: من وافق على نسخة أقدم يرى سطرًا واحدًا بلا تفاصيل، ويؤجل فتبقى رحلته بشريط، ثم يوافق منه', async ({ page }) => {
   const sent = [];
   let version = '2026-11-06';
   const consentOf = (v) => (v < '2026-11-07'
@@ -96,18 +97,18 @@ test('D18: من وافق على نسخة أقدم يرى ما تغيّر، وي�
   });
   await signedIn(page);
   await page.goto(APP);
-  await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية وشروط البرنامج' })).toBeVisible();
-  await expect(page.getByText('وافقت على النسخة 2026-11-06')).toBeVisible();
-  await expect(page.getByText('مومباي بالهند', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية والشروط' })).toBeVisible();
+  await expect(page.getByText('وافقت على النسخة', { exact: false })).toHaveCount(0);
+  await expect(page.getByText('مومباي بالهند', { exact: false })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'سجل التغييرات' })).toHaveAttribute('href', '/legal/changes');
   await page.getByRole('button', { name: 'لاحقًا' }).click();
   await expect(page.getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
-  const bar = page.getByRole('status').filter({ hasText: 'تحديثًا جوهريًا' });
+  const bar = page.getByRole('status').filter({ hasText: 'حدّثنا سياسة الخصوصية والشروط' });
   await expect(bar).toBeVisible();
-  await bar.getByRole('button', { name: 'راجع ووافق' }).click();
-  await page.getByRole('button', { name: 'أوافق وأتابع' }).click();
-  await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية وشروط البرنامج' })).toHaveCount(0);
-  await expect(page.getByRole('status').filter({ hasText: 'تحديثًا جوهريًا' })).toHaveCount(0);
+  await expect(bar).not.toContainText('جوهري');
+  await bar.getByRole('button', { name: 'موافق' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'حدّثنا سياسة الخصوصية والشروط' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية والشروط' })).toHaveCount(0);
   expect(sent).toContain('consent.accept');
 });
 

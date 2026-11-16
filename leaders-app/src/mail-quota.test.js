@@ -101,7 +101,8 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(core).toMatch(/sendOrDiscard[\s\S]{0,200}kind: 'code'/);
     expect(core).toMatch(/alertMail\(kind, detail, windowMs\), \[\], \{ kind: 'alert' \}/);
     expect(core).toContain("if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
-    expect(read('supabase/functions/leaders-api/admin.ts')).toMatch(/reminderMail\(p\.full_name, open\), \[\], \{ kind: 'bulk'/);
+    // كل تذكير (الأسبوعي والإدارة والمرشد والجهة) من المحرك الموحد في nudges.ts
+    expect(read('supabase/functions/leaders-api/nudges.ts')).toMatch(/nudgeMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/tracking.ts')).toMatch(/\{ kind: 'bulk', ref: `participant:/);
     expect(read('supabase/functions/admin-api/index.ts')).toMatch(/otpHtml\(code\), "code"\)/);

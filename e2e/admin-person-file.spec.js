@@ -24,7 +24,7 @@ const file = (status, extra = {}) => ({
   ...extra,
 });
 
-async function setup(page, status = 'enrolled', vp = { width: 1280, height: 900 }) {
+async function setup(page, status = 'enrolled', vp = { width: 1280, height: 900 }, more = {}) {
   await page.setViewportSize(vp);
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
@@ -34,6 +34,7 @@ async function setup(page, status = 'enrolled', vp = { width: 1280, height: 900 
     const replies = {
       'admin.orgs': { success: true, orgs: [{ id: 'o1', name: 'وزارة التجربة', short_name: 'التجربة' }], unassigned: { total: 0, typed: [] } },
       'admin.participant': file(status),
+      ...more,
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
@@ -120,4 +121,40 @@ test('قائمة «⋯»: تُفتح على أول بند، وتتنقل بال�
   await btn.click();
   await menu.getByRole('menuitem', { name: 'تعديل البيانات' }).click();
   await expect(page.getByRole('dialog', { name: /تعديل بيانات/ })).toBeVisible();
+});
+
+// التذكير الموحد (P3): في تبويب «السجل» ما سيصله الآن، ومن ذكّره ومتى، وأثر كل تذكير
+const ledger = (allowed) => ({
+  success: true, ledger: true, total: 2, progressed: 1, gap_days: 3,
+  now: { ok: true, allowed, stage: 'التدريب', days: 9, text: 'أنت في مرحلة «التدريب»، وقطعت 40% من رحلتك. خطوتك التالية: خطة المبادرة.' },
+  last: { by: 'المرشد', days: allowed ? 5 : 1 },
+  rows: [
+    { id: 'n2', by: 'المرشد', stage_title: 'التدريب', step: 'خطة المبادرة', created_at: '2026-11-11T10:00:00Z', outcome: 'waiting' },
+    { id: 'n1', by: 'الإدارة (omar)', stage_title: 'التهيئة', step: 'الملف', created_at: '2026-11-01T10:00:00Z', outcome: 'progressed', seen_at: '2026-11-02T10:00:00Z' },
+  ],
+});
+
+test('سجل التذكير في الملف: ما سيصله، ومن ذكّره، والأثر، والإرسال بتأكيد يذكر آخر تذكير', async ({ page }) => {
+  const calls = await setup(page, 'enrolled', undefined, { 'admin.nudge-ledger': ledger(true), 'admin.nudge': { success: true, sent: 1, skipped: {}, gap_days: 3 } });
+  await tab(page, 'السجل').click();
+  const card = page.getByRole('region', { name: /التذكيرات/ });
+  await expect(card).toContainText('· 2 · تقدّم بعد 1');
+  await expect(card.locator('.nd-sample')).toContainText('خطوتك التالية: خطة المبادرة');
+  await expect(card).toContainText('ذكّره المرشد قبل 5 أيام');
+  await expect(card.locator('.nd-list li')).toHaveCount(2);
+  await expect(card.locator('.nd-list li').first()).toContainText('ينتظر');
+  await expect(card.locator('.nd-list li').nth(1)).toContainText('تقدّم بعده');
+  await expect(card.locator('.nd-list li').nth(1)).toContainText('رآه في الموقع');
+  await card.getByRole('button', { name: 'ذكّره الآن' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('ذكّره المرشد قبل 5 أيام');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'أرسل التذكير' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.nudge')?.participant_ids).toEqual(['p1']);
+});
+
+test('الحد المشترك: ذُكِّر أمس فالزر معطل ويقول متى يُسمح', async ({ page }) => {
+  await setup(page, 'enrolled', undefined, { 'admin.nudge-ledger': ledger(false) });
+  await tab(page, 'السجل').click();
+  const card = page.getByRole('region', { name: /التذكيرات/ });
+  await expect(card.getByRole('button', { name: 'ذكّره الآن' })).toBeDisabled();
+  await expect(card).toContainText('ذكّره المرشد أمس، والتذكير التالي بعد 3 أيام من آخر تذكير');
 });
