@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116090000_leaders_org_coord_nudges
+-- as-of migration: 20261116110000_leaders_program_version_pin
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -3904,6 +3904,23 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.cohort_version_pinned()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if coalesce(current_setting('leaders.program_unpin', true), '') = 'on' then return new; end if;
+  if tg_op = 'UPDATE' and old.program_version_id is not null and new.program_version_id is null then
+    raise exception 'الدفعة «%» مثبتة على نسخة من برنامجها، ولا يُلغى تثبيتها؛ رقِّها إلى نسخة أخرى', old.name using errcode = '42501';
+  end if;
+  if new.program_version_id is not null
+     and not exists (select 1 from leaders.program_versions v where v.id = new.program_version_id and v.program_id = new.program_id) then
+    raise exception 'نسخة الدفعة «%» لا تخص برنامجها', new.name using errcode = '23514';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.consent_events_frozen()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4068,6 +4085,18 @@ begin
       from unnest(array['assessment', 'program']) as i
   on conflict do nothing;
   return 'granted';
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.program_version_frozen()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if new.data is distinct from old.data or new.program_id is distinct from old.program_id or new.number is distinct from old.number then
+    raise exception 'لقطة نسخة البرنامج لا تُعدَّل؛ احفظ نسخة جديدة' using errcode = '42501';
+  end if;
+  return new;
 end $function$
 ;
 
@@ -4684,6 +4713,8 @@ CREATE OR REPLACE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON leaders.audit
 
 CREATE OR REPLACE TRIGGER cohort_release_pinned BEFORE UPDATE OF content_release ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.cohort_release_pinned();
 
+CREATE OR REPLACE TRIGGER cohort_version_pinned BEFORE INSERT OR UPDATE OF program_version_id, program_id ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.cohort_version_pinned();
+
 CREATE OR REPLACE TRIGGER cohorts_touch BEFORE UPDATE ON leaders.cohorts FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
 CREATE OR REPLACE TRIGGER consent_events_frozen BEFORE DELETE OR UPDATE ON leaders.consent_events FOR EACH ROW EXECUTE FUNCTION leaders.consent_events_frozen();
@@ -4729,6 +4760,8 @@ CREATE OR REPLACE TRIGGER participants_org_name BEFORE INSERT OR UPDATE OF organ
 CREATE OR REPLACE TRIGGER participants_touch BEFORE UPDATE ON leaders.participants FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
 
 CREATE OR REPLACE TRIGGER placement_model_touch BEFORE UPDATE ON leaders.placement_model FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER program_versions_frozen BEFORE UPDATE ON leaders.program_versions FOR EACH ROW EXECUTE FUNCTION leaders.program_version_frozen();
 
 CREATE OR REPLACE TRIGGER questions_provenance BEFORE INSERT OR UPDATE ON leaders.questions FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
