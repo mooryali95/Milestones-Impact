@@ -1,6 +1,6 @@
 -- اسم المنتج «كتاب القائد» بدل «كتيب القائد» (قرار المالك 2026-11-16) على القاعدة الحية. قراءة فقط.
 -- يُشغَّل بسير migrate.yml في الوضع verify: يعدّ الصفوف التي فيها «كتيب» في كل عمود نصي بمخطط leaders.
--- سجلات التاريخ ونصوص المستخدمين لا تُحسب (audit_log وتعليقات الكتاب وإجابات المشاركين ورسائل المساعد): تبقى كما كُتبت.
+-- سجلات التاريخ ونصوص المستخدمين لا تُحسب (audit_log وتعليقات الكتاب وإجابات المشاركين ورسائل المساعد وسجل تقييمه): تبقى كما كُتبت.
 
 -- 1) لا «كتيب» في نصوص المحتوى والإعداد
 with cols as (
@@ -8,7 +8,7 @@ with cols as (
     from information_schema.columns c
     join information_schema.tables x on x.table_schema = c.table_schema and x.table_name = c.table_name and x.table_type = 'BASE TABLE'
    where c.table_schema = 'leaders' and c.data_type in ('text', 'jsonb', 'character varying', 'ARRAY')
-     and c.table_name not in ('audit_log', 'book_comments', 'book_proposals', 'conversation_messages', 'conversations', 'model_submissions',
+     and c.table_name not in ('audit_log', 'book_comments', 'book_proposals', 'conversation_messages', 'conversations', 'agent_eval_results', 'model_submissions',
                               'handbook_progress', 'katon_answers', 'notifications', 'mail_log', 'schema_migrations')
      and c.table_name not like 'backup\_%'
 ), hits as (
