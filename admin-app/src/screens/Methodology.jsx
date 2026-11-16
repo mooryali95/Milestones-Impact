@@ -94,10 +94,17 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el.querySelector('button.la-link')?.focus({ preventScroll: true });
   };
+  // الرحلة الفارغة: زر الخط الزمني ينقل إلى أول «+ مرحلة» (لمن يملك الكتابة)
+  const toAddStage = () => {
+    const btn = document.querySelector('[data-add-stage]');
+    if (!btn) return;
+    btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    btn.focus({ preventScroll: true });
+  };
   return (
     <>
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
-      <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} />
+      <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} />
       <Coherence stages={stages} reqs={reqs} />
       <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
       <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الطلب، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
@@ -105,7 +112,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
         <React.Fragment key={ph}>
           <div className="la-row between">
             <h3 className="la-phase">{phl}</h3>
-            {canWrite && <button className="btn-sm ghost" onClick={async () => {
+            {canWrite && <button className="btn-sm ghost" data-add-stage={ph} onClick={async () => {
               const title_ar = await prompt(`اسم المرحلة الجديدة في «${phl}»`, '');
               if (!title_ar) return;
               const r = await L('admin.stage-create', { program_id: pid, title_ar, phase: ph });

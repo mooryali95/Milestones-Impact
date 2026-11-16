@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // منفصلة عن logic.js لحجمها؛ تُصدَّر منه أيضًا فلا يتغير أي استيراد قائم.
 import { requirementApplies, SESSION_DEFAULTS } from './logic.js';
+import { PHASE_AR } from './labels.js';
 
 // ════════════════════════════════════════════════════════════════
 // نصوص الرحلة من الإعدادات: لا رقم جلسات أو مدة يُكتب في وصف
@@ -164,6 +165,49 @@ export function stageRules(stage) {
   };
 }
 
+// «تبدأ مع» تصنع مجموعة متجاورة: المرجع ومن يسير معه متتاليان في الترتيب ومن محور واحد.
+// بذلك يتفق الفتح (resolveStages) والنوافذ (stageWindows) والتوزيع (distributeSchedule) والخط الزمني على شكل واحد:
+// المجموعة تبدأ معًا، وما بعدها يبدأ بعد أطولها. مرحلة غريبة بين المرجع وتابعه تُرسم بعد المجموعة وتسري قبل نهايتها.
+const phaseOf = (s) => (s?.phase && PHASE_AR[s.phase] ? s.phase : 'qualification');
+// أول المجموعة: يتبع سلسلة «تبدأ مع» إلى مرحلة لا تبدأ مع غيرها (live مرتبة وظاهرة)
+function withRoot(live, key) {
+  const byKey = new Map(live.map((s) => [s.key, s]));
+  const seen = new Set();
+  let k = key;
+  for (;;) {
+    const s = byKey.get(k);
+    if (!s || seen.has(k)) return k;
+    seen.add(k);
+    const r = stageRules(s);
+    if (r.unlock !== 'with' || !r.with || !byKey.has(r.with)) return k;
+    k = r.with;
+  }
+}
+// سبب رفض مرجع قبل المرحلة في الترتيب، أو null: محور مختلف، أو مرحلة بينهما لا تسير معهما
+export function withPlacementIssue(live, self, refKey) {
+  const idx = live.findIndex((x) => x.key === self.key);
+  const at = live.findIndex((x) => x.key === refKey);
+  if (idx < 0 || at < 0 || at >= idx) return null;
+  const ref = live[at];
+  if (phaseOf(ref) !== phaseOf(self)) {
+    return `تبدأ مع «${ref.title_ar || ref.key}» وهي في محور «${PHASE_AR[phaseOf(ref)]}» وهذه في «${PHASE_AR[phaseOf(self)]}»، والمراحل التي تسير معًا من محور واحد`;
+  }
+  const root = withRoot(live, refKey);
+  const odd = live.slice(at + 1, idx).find((x) => !(stageRules(x).unlock === 'with' && withRoot(live, x.key) === root));
+  if (odd) return `تبدأ مع «${ref.title_ar || ref.key}» وبينهما «${odd.title_ar || odd.key}» لا تسير معهما؛ رتّب «${odd.title_ar || odd.key}» بعد المجموعة أو اختر مرجعًا يليها مباشرة`;
+  return null;
+}
+// المراجع المقبولة لمرحلة: ظاهرة قبلها في الترتيب، ومن محورها، ولا يفصلها عنها إلا من يسير معها.
+// المصدر الواحد لقائمة المحرر (withOptions) وللفحص على الخادم (stageRulesIssues)
+export function withCandidates(stages, selfKey) {
+  const all = stages || [];
+  const self = all.find((s) => s.key === selfKey);
+  const live = all.filter((s) => s.active !== false || s.key === selfKey).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  if (!self) return live.filter((s) => s.active !== false);
+  const idx = live.indexOf(self);
+  return live.slice(0, idx).filter((s) => s.active !== false && !withPlacementIssue(live, self, s.key));
+}
+
 // القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا.
 // stageKeys: مفاتيح مراحل البرنامج، أو المراحل نفسها ({ key, title_ar, sort, active }) ليُفحص مرجع «تبدأ مع»
 // بترتيبه وظهوره. بالمفاتيح وحدها يُفحص الوجود فقط، ويكمل stageRulesIssues الباقي.
@@ -235,8 +279,8 @@ export function stageRulesIssues(stages) {
       if (!byKey.has(k)) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: تُفتح بعد مرحلة غير موجودة (${k})` });
       else if (byKey.get(k).active === false) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: تُفتح بعد «${title(k)}» وهي مخفية، فلن تُفتح أبدًا` });
     }
-    // «تبدأ مع»: المرجع موجود وظاهر وقبلها في الترتيب. يُعاد عند النشر لا عند الحفظ فقط، لأن السحب أو الإخفاء أو الحذف
-    // بعد الضبط يجعل المرجع لاحقًا لها، وresolveStages يمر بالترتيب مرة واحدة فتبقى مقفلة إلى الأبد
+    // «تبدأ مع»: المرجع موجود وظاهر وقبلها في الترتيب ومجاور لها في محورها. يرفضه الخادم عند حفظ القواعد، وعند الترتيب بالأسهم
+    // وإخفاء المرحلة وحذفها (admin.ts: withGuard)، وعند النشر، لأن resolveStages يمر بالترتيب مرة واحدة فتبقى مقفلة إلى الأبد
     if (r.unlock === 'with') {
       const k = r.with;
       const idx = live.indexOf(s);
@@ -247,6 +291,10 @@ export function stageRulesIssues(stages) {
       else if (!byKey.has(k)) issue(`تبدأ مع مرحلة غير موجودة (${k})`);
       else if (byKey.get(k).active === false) issue(`تبدأ مع «${title(k)}» وهي مخفية، فلن تُفتح أبدًا`);
       else if (at > idx) issue(`تبدأ مع «${title(k)}» وهي بعدها في الترتيب، فلن تُفتح أبدًا. رتّب «${title(k)}» قبلها أو غيّر المرجع`);
+      else {
+        const why = withPlacementIssue(live, s, k);
+        if (why) issue(why);
+      }
     }
     if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
     if (r.unlock === 'day' && r.day == null) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح بالأيام بلا عدد أيام` });
@@ -308,7 +356,7 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     else if (r.unlock === 'always') unlocked = true;
     else if (r.unlock === 'approval') unlocked = false;
     // تبدأ مع X: تُفتح حين لا تكون X مقفلة (نشطة أو متاحة أو مكتملة). المرجع قبلها في الترتيب فحالته معروفة،
-    // والمرجع اللاحق أو المخفي أو المحذوف يبقيها مقفلة (ويمنع stageRulesIssues النشر بسببه)
+    // والمرجع اللاحق أو المخفي أو المحذوف يبقيها مقفلة؛ لذلك يرفض الخادم كل حفظ أو ترتيب أو إخفاء أو حذف يُحدثه (stageRulesIssues)
     else if (r.unlock === 'with') unlocked = !!r.with && state.has(r.with) && state.get(r.with) !== 'locked';
     else if (r.unlock === 'stages') { waits = r.after.filter((k) => !done.get(k)); unlocked = !waits.length; }
     else if (r.unlock === 'day' && start != null && r.day != null) unlocked = now >= start + r.day * DAY_MS;

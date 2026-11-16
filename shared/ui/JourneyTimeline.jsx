@@ -75,7 +75,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
       <section className="jt jt-empty" aria-labelledby={head}>
         <h3 id={head} className="jt-eyebrow">{model.title}</h3>
         <p>{model.empty_ar}</p>
-        {onEmpty && <button type="button" className="jt-open" onClick={onEmpty}>إلى المراحل</button>}
+        {onEmpty && <button type="button" className="jt-open" onClick={onEmpty}>أضف أول مرحلة</button>}
       </section>
     );
   }

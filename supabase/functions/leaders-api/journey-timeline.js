@@ -89,11 +89,36 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     slots.push(slot);
     slotOf.set(s.key, slot);
   }
+  // مدى كل خانة على المسار من مراحلها الإلزامية: المرحلة عند الطلب أو الاختيارية يمتد جدولها غالبًا على الدفعة كلها
+  // (distributeSchedule)، فلو حُسبت لابتلعت خانتها ما بعدها ورُسم اليوم والجلسات في غير مرحلتها. خانة بلا إلزامية
+  // تأخذ نافذتها محصورة بين نهاية ما قبلها وبداية ما بعدها، والخانات بعدها متتالية لا ترجع إلى الخلف
+  const byKey = new Map(stages.map((s) => [s.key, s]));
+  const span = (k) => [day(windows[k].from), day(windows[k].to)];
+  const required = (k) => stageRules(byKey.get(k)).mode === 'required';
+  for (const slot of slots) {
+    const req = slot.stages.filter(required);
+    slot.anchored = req.length > 0;
+    const w = (slot.anchored ? req : slot.stages).map(span);
+    slot.from = Math.min(...w.map((x) => x[0]));
+    slot.to = Math.max(...w.map((x) => x[1]));
+  }
+  let prevTo = null;
+  slots.forEach((slot, i) => {
+    if (prevTo != null) slot.from = Math.max(slot.from, prevTo);
+    const next = slot.anchored ? null : slots.slice(i + 1).find((x) => x.anchored);
+    if (next) slot.to = Math.min(slot.to, Math.max(next.from, slot.from));
+    slot.to = Math.max(slot.to, slot.from);
+    prevTo = slot.to;
+  });
+  // موضع المرحلة داخل خانتها: نافذتها محصورة في مدى الخانة
+  const place = (k) => {
+    const sl = slotOf.get(k);
+    const [f, e] = span(k);
+    const from = Math.min(Math.max(f, sl.from), sl.to);
+    return [from, Math.min(Math.max(e, from), sl.to)];
+  };
   let acc = 0;
   for (const slot of slots) {
-    const w = slot.stages.map((k) => windows[k]);
-    slot.from = Math.min(...w.map((x) => day(x.from)));
-    slot.to = Math.max(...w.map((x) => day(x.to)));
     slot.days = slot.to - slot.from;
     slot.weight = timelineWeight(slot.days);
     slot.together = slot.stages.length > 1;
@@ -110,8 +135,9 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     }
     return 100;
   };
-  const end = Math.max(...slots.map((s) => s.to));
-  const totalDays = end - Math.min(...slots.map((s) => s.from));
+  // النهاية والمدة من النوافذ نفسها لا من الخانات: أبعد نهاية بين كل المراحل
+  const end = Math.max(...stages.map((s) => span(s.key)[1]));
+  const totalDays = end - Math.min(...stages.map((s) => span(s.key)[0]));
   const titleOf = new Map(stages.map((s) => [s.key, renderJourneyText(s.title_ar, { reqs })]));
 
   // المراحل
@@ -131,7 +157,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
       key: s.key, title: titleOf.get(s.key), phase: PHASES.includes(s.phase) ? s.phase : 'qualification', days, label,
       weight: round(timelineWeight(days)), slot: slot.key, lane: slot.stages.indexOf(s.key), together: slot.together, with_note: withNote,
       // داخل الخانة: بداية المسار وعرضه بنسبة أيامه من أيام الخانة
-      lane_at: slot.days ? round(((day(w.from) - slot.from) / slot.days) * 100) : 0, lane_width: slot.days ? Math.max(8, round((days / slot.days) * 100)) : 100,
+      lane_at: slot.days ? round(((place(s.key)[0] - slot.from) / slot.days) * 100) : 0,
+      lane_width: slot.days ? Math.max(8, round(((place(s.key)[1] - place(s.key)[0]) / slot.days) * 100)) : 100,
       bar: totalDays ? Math.max(4, round((Math.max(days, 1) / totalDays) * 100)) : 100,
       window: dated ? { from: w.from, to: w.to } : null, window_ar: dated ? (w.from === w.to ? fmtDay(w.from) : `${fmtDay(w.from)} إلى ${fmtDay(w.to)}`) : '',
       status, status_ar: status ? TIMELINE_STATUS_AR[status] : '', optional: r.mode !== 'required',
@@ -145,8 +172,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   const phases = PHASES.map((key) => {
     const list = stageOut.filter((s) => s.phase === key);
     if (!list.length) return null;
-    const from = Math.min(...list.map((s) => day(windows[s.key].from)));
-    const to = Math.max(...list.map((s) => day(windows[s.key].to)));
+    const from = Math.min(...list.map((s) => place(s.key)[0]));
+    const to = Math.max(...list.map((s) => place(s.key)[1]));
     const ss = [...new Set(list.map((s) => s.slot))].map((k) => slots.find((x) => x.key === k));
     const at = Math.min(...ss.map((x) => x.at));
     const width = round(Math.max(...ss.map((x) => x.at + x.width)) - at);

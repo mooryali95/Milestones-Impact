@@ -55,7 +55,7 @@ export const ACTIVITY_OWNER_AR = Object.freeze({
 export const TIMELINE_STATUS_AR = Object.freeze({ done: 'انتهت', active: 'جارية', upcoming: 'قادمة' });
 export const TIMELINE_AR = Object.freeze({
   title: 'الرحلة في لمحة', together: 'تسير معًا', program_undated: 'الموعد والرابط يُحددان في الدفعة', outside: 'خارج نافذة المرحلة',
-  no_stages: 'لم تُبنَ الرحلة بعد. ابدأ بالمراحل أو استعمل قالب مثال المالك', no_activities: 'لا أنشطة بعد',
+  no_stages: 'لم تُبنَ الرحلة بعد. ابدأ بإضافة مرحلة من «+ مرحلة» تحت المحور الذي تبدأ به', no_activities: 'لا أنشطة بعد',
   no_dates: 'حدد تاريخ البداية لترى التواريخ', ended: 'انتهت الدفعة', table: 'عرض الرحلة جدولًا', required: 'إلزامي', optional: 'اختياري',
 });
 export const STAGE_OVERRIDE_AR = { open: 'فُتحت له', complete: 'اعتُمد اكتمالها', skip: 'أُعفي منها' };

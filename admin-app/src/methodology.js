@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, withCandidates, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -68,13 +68,9 @@ const RULE_HELP = {
   on_demand: 'تظهر للمشارك متاحة، يدخلها حين يحتاجها (مثل التوجيه على رأس العمل أو الاستشارة)، ولا توقف ما بعدها.',
   optional: 'مقترحة للمشارك، ولا تُنقص تقدمه إن تركها.',
 };
-// «تبدأ مع»: المرجع مرحلة ظاهرة قبل هذه في الترتيب فقط (يرفض الخادم غيرها، ويُعاد الفحص عند النشر)
+// «تبدأ مع»: المرجع مرحلة ظاهرة قبل هذه من محورها، لا يفصلها عنها إلا من يسير معها (withCandidates، والخادم يفحص بالدالة نفسها)
 export function withOptions(stages = [], selfKey = null) {
-  const self = stages.find((s) => s.key === selfKey);
-  const sorted = [...stages].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
-  return Object.fromEntries(sorted
-    .filter((s) => s.key !== selfKey && s.active !== false && (!self || (s.sort ?? 0) < (self.sort ?? 0)))
-    .map((s) => [s.key, s.title_ar]));
+  return Object.fromEntries(withCandidates(stages, selfKey).map((s) => [s.key, s.title_ar]));
 }
 export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'rule_mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.rule_mode] },
@@ -83,7 +79,7 @@ export const stageFields = (reqs = [], stages = [], selfKey = null) => [
     options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false).map((s) => [s.key, s.title_ar])) },
   { name: 'rule_with', label: 'تبدأ مع', type: 'select', show: (v) => v.rule_unlock === 'with', empty: 'اختر المرحلة',
     options: withOptions(stages, selfKey),
-    help: 'تُفتح مع بداية المرحلة المختارة وتسير معها في الأسابيع نفسها، والمرحلة التي بعد المجموعة تنتظر اكتمالها كلها. القائمة تعرض المراحل الظاهرة قبل هذه فقط.' },
+    help: 'تُفتح مع بداية المرحلة المختارة وتسير معها في الأسابيع نفسها، والمرحلة التي بعد المجموعة تنتظر اكتمالها كلها. القائمة تعرض المراحل الظاهرة قبل هذه في محورها نفسه، بشرط ألا تفصل بينهما مرحلة لا تسير معهما.' },
   { name: 'rule_day', label: 'بعد كم يومًا من بداية الدفعة', type: 'number', show: (v) => v.rule_unlock === 'day',
     help: 'يُحسب من تاريخ بداية دفعة المشارك. إن لم يكن للدفعة تاريخ بداية تُفتح بعد ما قبلها.' },
   { name: 'rule_complete', label: 'متى تكتمل', type: 'select', options: STAGE_COMPLETE_AR },

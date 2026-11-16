@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { journeyTimeline, timelineWeight, undatedAr } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import { stageWindows as shared } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { stageWindows } from '../../supabase/functions/leaders-api/journey-map.js';
+import { distributeSchedule } from '../../supabase/functions/leaders-api/milestones.js';
 
 const STAGES = [
   { key: 'profile', title_ar: 'الملف الشخصي', phase: 'admission', sort: 1, duration_days: 0, duration_label: 'دقائق' },
@@ -201,5 +202,38 @@ describe('journeyTimeline: الدفعة بالتواريخ', () => {
   it('جدول الدفعة المكتوب يبقى المرجع الأول للنوافذ', () => {
     const s = journeyTimeline({ stages: STAGES, requirements: REQS }, { cohort: { ...COHORT, schedule: { support: { start: '2026-12-10', end: '2027-02-10' } } }, today: TODAY });
     expect(s.stages.find((x) => x.key === 'support').window).toEqual({ from: '2026-12-10', to: '2027-02-10' });
+  });
+});
+
+describe('journeyTimeline: المرحلة عند الطلب الممتدة على الدفعة كلها', () => {
+  const OD = { mode: 'on_demand' };
+  const base = [
+    { key: 'adm', title_ar: 'القبول', phase: 'admission', sort: 1, duration_days: 14 },
+    { key: 'tr', title_ar: 'التدريب', phase: 'qualification', sort: 2, duration_days: 14 },
+    { key: 'ojt', title_ar: 'التوجيه', phase: 'qualification', sort: 3, duration_days: 28, rules: { unlock: 'with', with: 'tr' } },
+    { key: 'cons', title_ar: 'الاستشارة', phase: 'qualification', sort: 4, duration_days: 14, rules: { ...OD, unlock: 'with', with: 'tr' } },
+    { key: 'imp', title_ar: 'الأثر', phase: 'impact', sort: 5, duration_days: 60 },
+  ];
+  const cohortOf = (stages) => ({ id: 'c', starts_on: '2026-01-01', ends_on: '2026-06-30', schedule: distributeSchedule(stages, '2026-01-01', '2026-06-30') });
+  const slotAt = (m, key) => m.slots.find((x) => x.stages.includes(key));
+
+  it('اليوم والمسطرة في خانة الأثر لا في خانة التأهيل، والنهاية عند 100%', () => {
+    const m = journeyTimeline({ stages: base, requirements: [] }, { cohort: cohortOf(base), today: '2026-05-15T09:00:00Z' });
+    const imp = slotAt(m, 'imp');
+    expect(m.today.at).toBeGreaterThan(imp.at);
+    expect(m.today.at).toBeLessThanOrEqual(imp.at + imp.width);
+    expect(m.ticks.at(-1).at).toBe(100);
+    expect(m.ticks.map((t) => t.at)).toEqual([...m.ticks.map((t) => t.at)].sort((a, b) => a - b));
+    // المحور بطول مراحله الإلزامية لا الدفعة كلها
+    expect(m.phases.find((p) => p.key === 'qualification').to < '2026-04-01').toBe(true);
+  });
+
+  it('بلا «تبدأ مع»: خانة المرحلة عند الطلب محصورة بين جارتيها', () => {
+    const seq = base.map((s) => (s.key === 'cons' ? { ...s, rules: OD } : s.key === 'ojt' ? { ...s, rules: undefined } : s));
+    const m = journeyTimeline({ stages: seq, requirements: [] }, { cohort: cohortOf(seq), today: '2026-05-15T09:00:00Z' });
+    const imp = slotAt(m, 'imp');
+    expect(m.today.at).toBeGreaterThan(imp.at);
+    const order = m.slots.map((x) => x.at);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 });

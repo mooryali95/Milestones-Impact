@@ -2,7 +2,7 @@
 // غياب المفتاح يعني «بعد السابقة» كما اليوم، فالبرامج المتتابعة لا يتغير سلوكها.
 import { describe, expect, it } from 'vitest';
 import { buildJourney, cleanStageRules, distributeSchedule, journeyCoherence, resolveStages, stageRuleSummary, stageRules, stageRulesIssues } from '../../supabase/functions/leaders-api/logic.js';
-import { stageWindows } from '../../supabase/functions/leaders-api/journey-map.js';
+import { stageWindows, todayStage } from '../../supabase/functions/leaders-api/journey-map.js';
 import { STAGE_UNLOCK_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { formToStage, stageFields, stageToForm, withOptions } from '../../admin-app/src/methodology.js';
 
@@ -208,12 +208,13 @@ describe('«تبدأ مع»: النوافذ وجدول الدفعة', () => {
 });
 
 describe('«تبدأ مع»: محرر المرحلة', () => {
-  it('القائمة تعرض المراحل الظاهرة قبلها فقط', () => {
+  it('القائمة تعرض المراحل الظاهرة قبلها المجاورة لها فقط', () => {
     const list = STAGES.map((s) => (s.key === 'intro' ? { ...s, active: false } : s));
     expect(Object.keys(withOptions(list, 'consult'))).toEqual(['training', 'otj']);
     expect(withOptions(STAGES, 'intro')).toEqual({});
+    // الورشة التعريفية يفصلها عن التوجيه «التدريب» وهو لا يسير معها، فلا تُعرض
     const f = stageFields([], STAGES, 'otj').find((x) => x.name === 'rule_with');
-    expect(f.options).toEqual({ intro: 'الورشة التعريفية', training: 'التدريب' });
+    expect(f.options).toEqual({ training: 'التدريب' });
     expect(f.show({ rule_unlock: 'with' })).toBe(true);
     expect(f.show({ rule_unlock: 'previous' })).toBe(false);
   });
@@ -224,5 +225,53 @@ describe('«تبدأ مع»: محرر المرحلة', () => {
     expect(formToStage(v).rules).toMatchObject({ unlock: 'with', with: 'training' });
     expect(formToStage({ ...v, rule_unlock: 'previous' }).rules).not.toHaveProperty('with');
     expect(stageToForm(STAGES[1]).rule_with).toBe('');
+  });
+});
+
+describe('«تبدأ مع»: إصلاحات المراجعة', () => {
+  const S = (key, sort, days, rules, phase = 'qualification') => ({ key, sort, title_ar: key, duration_days: days, phase, ...(rules ? { rules } : {}) });
+
+  it('todayStage: مرحلة قصيرة تسير مع أطول منها وتأتي آخر الترتيب لا تنهي الرحلة', () => {
+    const stages = [S('a', 1, 30), S('b', 2, 10, W('a'))];
+    const w = stageWindows(stages, { starts_on: '2026-01-01' });
+    expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-11' });
+    expect(todayStage(stages, w, '2026-01-20')).toBe('a');
+    expect(todayStage(stages, w, '2026-01-05')).toBe('b');
+    expect(todayStage(stages, w, '2026-02-02')).toBeNull();
+    expect(todayStage(stages, w, '2025-12-30')).toBeNull();
+  });
+
+  it('todayStage: المرحلة الجارية بالاحتواء لا بآخر ما بدأ في الترتيب', () => {
+    // ترتيب قديم (A ثم C ثم B مع A) يرفضه الفحص اليوم، لكن الحساب لا يخطئ فيه
+    const stages = [S('a', 1, 10), S('c', 2, 10), S('b', 3, 30, W('a'))];
+    const w = stageWindows(stages, { starts_on: '2026-01-01' });
+    expect(todayStage(stages, w, '2026-02-05')).toBe('c');
+    expect(todayStage(stages, w, '2026-01-20')).toBe('b');
+  });
+
+  it('stageWindows وdistributeSchedule يتفقان: ما بين المرجع وتابعه يبدأ بعد المجموعة كلها', () => {
+    const stages = [S('a', 1, 10), S('c', 2, 10), S('b', 3, 30, W('a'))];
+    const w = stageWindows(stages, { starts_on: '2026-01-01' });
+    expect(w.a).toEqual({ from: '2026-01-01', to: '2026-01-11' });
+    expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-31' });
+    expect(w.c).toEqual({ from: '2026-01-31', to: '2026-02-10' });
+    const d = distributeSchedule(stages, '2026-01-01', '2026-03-01');
+    expect(d.c.start > d.b.end).toBe(true);
+    expect(d.b.start).toBe(d.a.start);
+  });
+
+  it('الفحص يرفض مرجعًا تفصله عنها مرحلة لا تسير معهما، ويقبل الفاصل الذي يسير معهما', () => {
+    const odd = [S('a', 1, 10), S('c', 2, 10), S('b', 3, 30, W('a'))];
+    const e = errors(odd).find((x) => x.rule === 'with');
+    expect(e).toMatchObject({ stage: 'b', msg: expect.stringContaining('«c» لا تسير معهما') });
+    expect(errors([S('a', 1, 10), S('c', 2, 10, W('a')), S('b', 3, 30, W('a'))])).toEqual([]);
+    expect(errors([S('a', 1, 10), S('c', 2, 10, W('a')), S('b', 3, 30, W('c'))])).toEqual([]);
+  });
+
+  it('الفحص والقائمة يرفضان مرجعًا من محور آخر', () => {
+    const cross = [S('p', 1, 3, null, 'admission'), S('t', 2, 14, W('p'))];
+    expect(errors(cross).find((x) => x.rule === 'with').msg).toContain('من محور واحد');
+    expect(withOptions(cross, 't')).toEqual({});
+    expect(withOptions([S('p', 1, 3, null, 'admission'), S('t', 2, 14)], 't')).toEqual({});
   });
 });
