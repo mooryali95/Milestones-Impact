@@ -1,37 +1,39 @@
 // ════════════════════════════════════════════════════════════════
 // سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
-import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import { lazyNamed, lazyRetry } from '../lazy-retry.js';
 import { L } from '../leaders.js';
 // كل قسم يُحمَّل عند أول فتح له (التدقيق 2026-11-10، البند 9.13): كانت الأقسام الاثنان والعشرون في الحزمة الرئيسية
 // (515 ك.ب)، فينتظر المدير تنزيلها كلها ليرى النظرة العامة
-const named = (load, key) => lazy(() => load().then((m) => ({ default: m[key] })));
-const Orgs = lazy(() => import('./Orgs.jsx'));
-const Participants = lazy(() => import('./Participants.jsx'));
-const Certificates = lazy(() => import('./Certificates.jsx'));
-const Overview = lazy(() => import('./Overview.jsx'));
-const Tracks = lazy(() => import('./Tracks.jsx'));
+// وملف قسم حذفه نشر أحدث يُعاد بإعادة تحميل الصفحة مرة واحدة (lazy-retry.js)
+const named = lazyNamed;
+const Orgs = lazyRetry(() => import('./Orgs.jsx'));
+const Participants = lazyRetry(() => import('./Participants.jsx'));
+const Certificates = lazyRetry(() => import('./Certificates.jsx'));
+const Overview = lazyRetry(() => import('./Overview.jsx'));
+const Tracks = lazyRetry(() => import('./Tracks.jsx'));
 const Assessment = named(() => import('./Methodology.jsx'), 'Assessment');
 const Journey = named(() => import('./Methodology.jsx'), 'Journey');
 const Levels = named(() => import('./Methodology.jsx'), 'Levels');
-const Handbook = lazy(() => import('./Handbook.jsx'));
-const Lab = lazy(() => import('./Lab.jsx'));
-const Activities = lazy(() => import('./Activities.jsx'));
-const Impact = lazy(() => import('./Impact.jsx'));
-const Capstones = lazy(() => import('./Capstones.jsx'));
-const Programs = lazy(() => import('./Programs.jsx'));
-const KatonBank = lazy(() => import('./Katon.jsx'));
-const Payments = lazy(() => import('./Payments.jsx'));
-const HallScreen = lazy(() => import('./Hall.jsx'));
-const ContentBank = lazy(() => import('./ContentBank.jsx'));
-const Experts = lazy(() => import('./Experts.jsx'));
-const MailGallery = lazy(() => import('./MailGallery.jsx'));
-const MailCenter = lazy(() => import('./MailCenter.jsx'));
-const AppSettings = lazy(() => import('./AppSettings.jsx'));
-const Feedback360 = lazy(() => import('./Feedback360.jsx'));
-const Insight = lazy(() => import('./Insight.jsx'));
-const Agent = lazy(() => import('./Agent.jsx'));
-const MasterBookScreen = lazy(() => import('./MasterBookScreen.jsx'));
+const Handbook = lazyRetry(() => import('./Handbook.jsx'));
+const Lab = lazyRetry(() => import('./Lab.jsx'));
+const Activities = lazyRetry(() => import('./Activities.jsx'));
+const Impact = lazyRetry(() => import('./Impact.jsx'));
+const Capstones = lazyRetry(() => import('./Capstones.jsx'));
+const Programs = lazyRetry(() => import('./Programs.jsx'));
+const KatonBank = lazyRetry(() => import('./Katon.jsx'));
+const Payments = lazyRetry(() => import('./Payments.jsx'));
+const HallScreen = lazyRetry(() => import('./Hall.jsx'));
+const ContentBank = lazyRetry(() => import('./ContentBank.jsx'));
+const Experts = lazyRetry(() => import('./Experts.jsx'));
+const MailGallery = lazyRetry(() => import('./MailGallery.jsx'));
+const MailCenter = lazyRetry(() => import('./MailCenter.jsx'));
+const AppSettings = lazyRetry(() => import('./AppSettings.jsx'));
+const Feedback360 = lazyRetry(() => import('./Feedback360.jsx'));
+const Insight = lazyRetry(() => import('./Insight.jsx'));
+const Agent = lazyRetry(() => import('./Agent.jsx'));
+const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { OWNER_TABS, TABS } from '../leaders-tabs.js';

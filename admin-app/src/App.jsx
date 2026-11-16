@@ -2,16 +2,17 @@
 // لوحة الإدارة (React) — الإطار: الدخول، الترويسة، السياقات، الإعدادات
 // ════════════════════════════════════════════════════════════════
 // السياقات: طلبات التواصل وتطبيق القادة ومصفوفة التأثير وزيارات الموقع.
-import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import { lazyRetry } from './lazy-retry.js';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
 import { UIProvider } from './ui.jsx';
 import Login from './screens/Login.jsx';
-const Settings = lazy(() => import('./screens/Settings.jsx'));
-const Contacts = lazy(() => import('./screens/Contacts.jsx'));
-const Leaders = lazy(() => import('./screens/Leaders.jsx'));
-const Visits = lazy(() => import('./screens/Visits.jsx'));
-const Matrix = lazy(() => import('./screens/Matrix.jsx'));
+const Settings = lazyRetry(() => import('./screens/Settings.jsx'));
+const Contacts = lazyRetry(() => import('./screens/Contacts.jsx'));
+const Leaders = lazyRetry(() => import('./screens/Leaders.jsx'));
+const Visits = lazyRetry(() => import('./screens/Visits.jsx'));
+const Matrix = lazyRetry(() => import('./screens/Matrix.jsx'));
 import { navigate, parseRoute, useRoute } from './route.js';
 import { leadersTotal, usePending } from './pending.js';
 import Palette from './Palette.jsx';

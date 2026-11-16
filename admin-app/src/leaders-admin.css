@@ -26,6 +26,7 @@
 .la-subtabs small { opacity: .7; }
 .la-load { padding: 60px; display: grid; place-items: center; }
 .la-err { background: var(--st-bad-bg); color: var(--st-bad); padding: 10px 14px; border-radius: 6px; font-size: .86rem; }
+.la-err-detail { display: block; margin-block-start: 6px; font-size: .74rem; opacity: .8; overflow-wrap: anywhere; }
 .la-note { background: var(--sand-light); border-inline-start: 3px solid var(--gold); padding: 10px 14px; margin: 14px 0; font-size: .84rem; }
 .la-muted { color: var(--ink-light); font-size: .82rem; }
 .la-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
@@ -1123,3 +1124,14 @@
 .bulk-approve .ba-modes small { color: var(--ink-mid); }
 .bulk-approve .ba-levels { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
 .bulk-approve .ba-sample { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--line-gold); }
+
+/* التذكير الموحد (Nudges.jsx): المعاينة مجمّعة بالمرحلة، وسجل الملف بمرسله وأثره */
+.nudge-sheet .nd-group { border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.nudge-sheet .nd-group > header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.nudge-sheet .nd-group > header .la-chip { margin-inline-start: auto; }
+.nd-sample { margin: 0; padding: 8px 12px; border-inline-start: 3px solid var(--gold); background: var(--sand-light); border-radius: 6px; font-size: .9rem; line-height: 1.8; }
+.nd-log .nd-now { display: grid; gap: 6px; margin: 8px 0 12px; }
+.nd-recent { color: var(--st-warn-text); }
+.nd-list { list-style: none; margin: 0; padding: 0; }
+.nd-list li { display: grid; grid-template-columns: 112px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .9rem; }
+.nd-list .la-chip { margin-inline-start: 6px; }

@@ -5,6 +5,7 @@
 // useEscape(إغلاق) ← Esc يغلق العليا وحدها · useGuardedClose(تغيّرت؟, إغلاق) ← إغلاق يسأل قبل أن يضيع ما كُتب
 // التركيز في كل نافذة role="dialog" aria-modal="true" من useModalFocus هنا، بلا سطر في النافذة نفسها.
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { isChunkError } from './lazy-retry.js';
 
 const Ctx = createContext(null);
 export const useUI = () => useContext(Ctx);
@@ -212,16 +213,29 @@ export function SectionIndex({ label, sections }) {
 
 // حاجز أخطاء لمنطقة الشاشة: خطأ في رسم شاشة واحدة يعرض رسالة وزر إعادة، ولا يُسقط اللوحة كلها صفحةً بيضاء.
 // يُعطى key بالتبويب فيُصفَّر عند الانتقال، والترويسة والتنقل خارجه فيبقيان يعملان.
+// خطأ تحميل ملف القسم (نشر أحدث حذف الملف القديم) لا يصلحه «حاول مرة أخرى» (React.lazy يحفظ الوعد المرفوض):
+// رسالته تطلب إعادة تحميل الصفحة. وأي خطأ آخر يُعرض نوعه ورسالته مختصرين، فتدل لقطة الشاشة على سببه
 export class ScreenBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error) { console.error('تعذّر رسم الشاشة:', error); }   // eslint-disable-line no-console
+  componentDidCatch(error) { console.error('تعذّر رسم الشاشة:', error?.message || error, error); }   // eslint-disable-line no-console
   render() {
-    if (!this.state.error) return this.props.children;
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    if (isChunkError(error)) {
+      return (
+        <div className="la-err" role="alert">
+          صدر تحديث للوحة، فأعد تحميل الصفحة لتفتح هذه الشاشة. بياناتك لم تتأثر.{' '}
+          <button className="btn-sm ghost" type="button" onClick={() => window.location.reload()}>أعد تحميل الصفحة</button>
+        </div>
+      );
+    }
+    const detail = String(`${error?.name || 'Error'}: ${error?.message || error}`).slice(0, 200);
     return (
       <div className="la-err" role="alert">
         تعذّر عرض هذه الشاشة. بقية اللوحة تعمل، وبياناتك لم تتأثر.{' '}
         <button className="btn-sm ghost" type="button" onClick={() => this.setState({ error: null })}>حاول مرة أخرى</button>
+        <small className="la-err-detail" dir="ltr">{detail}</small>
       </div>
     );
   }

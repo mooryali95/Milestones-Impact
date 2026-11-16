@@ -14,6 +14,8 @@ export const EXPORT_TABLES = {
   coaching_sessions: ['confirmed_by'], expert_requests: ['created_by', 'tried'], expert_ratings: [], peer_requests: ['closed_by'],
   cohort_group_members: [], cohort_roles: [], hall_presence: [], workshop_attendance: [],
   sponsor_requests: ['decided_by'],
+  // التذكيرات التي وصلته (nudges.ts): نصها ومرسلها ومرحلتها. بريد المدير المرسل ولقطة القياس الداخلية لا يخرجان
+  nudges: ['sender_ref', 'snapshot'],
   // المقيّمون: ما أدخله المشارك عنهم وحالة الدعوة. إجاباتهم وتعليقاتهم سرية لأصحابها فلا تخرج
   raters: ['answers', 'comment', 'verification', 'verification_flags', 'verified_by'],
   // التقييم الختامي: القرار والدرجة. أصوات المقيّمين وأسماؤهم لا تخرج

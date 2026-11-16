@@ -12,7 +12,8 @@ const leaders = section('## 2. برنامج إدارة المشروعات للق
 
 describe('معرفة المساعد', () => {
   it('حجمها بين 3 و6 آلاف رمز تقريبًا (نحو 2.2 حرف للرمز بالعربية)', () => {
-    const est = Math.round(K.length / 2.2);
+    // ما يقرؤه النموذج: بلا سطور «حالة الملف» (>) التي يحذفها المولّد (scripts/assistant/knowledge.mjs)
+    const est = Math.round(K.split('\n').filter((l) => !l.startsWith('>')).join('\n').length / 2.2);
     expect(est).toBeGreaterThan(3000);
     expect(est).toBeLessThan(6000);
   });

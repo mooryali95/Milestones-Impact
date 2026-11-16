@@ -55,7 +55,8 @@ describe('9.13 حزمة الإدارة', () => {
     expect(read('admin-app/src/Palette.jsx')).toMatch(/import \{ (OWNER_TABS, )?TABS \} from '\.\/leaders-tabs\.js';/);
     const l = read('admin-app/src/screens/Leaders.jsx');
     expect(l).not.toMatch(/^import \w+ from '\.\/\w+\.jsx';/m);
-    expect(l.match(/= (lazy|named)\(/g).length).toBeGreaterThanOrEqual(20);
+    // lazyRetry: الكسول نفسه بإعادة تحميل واحدة إن حذف نشر أحدث ملف القسم (admin-app/src/lazy-retry.js)
+    expect(l.match(/= (lazy|lazyRetry|named)\(/g).length).toBeGreaterThanOrEqual(20);
     expect(l).toContain('<Suspense fallback={<Spinner />}>{body}</Suspense>');
   });
   it('السياق المفتوح لا يُعاد التنقل إليه، فلا تضيع فلاتر العنوان قبل أن تقرأها الشاشة الكسولة', () => {
