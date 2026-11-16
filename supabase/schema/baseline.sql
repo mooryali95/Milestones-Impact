@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116130000_leaders_guidance_counts
+-- as-of migration: 20261116140000_leaders_guidance_eval
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -512,6 +512,7 @@ create table if not exists leaders.cohorts (
   supervision text default 'peers_expert'::text not null,
   content_release text,
   visibility jsonb default '{}'::jsonb not null,
+  guidance_pilot boolean default false not null,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
@@ -951,6 +952,44 @@ create table if not exists leaders.grid_cells (
   path_title_ar text,
   updated_by text,
   constraint grid_cells_pkey PRIMARY KEY (dimension, level)
+);
+
+create table if not exists leaders.guidance_eval_results (
+  run_id uuid not null,
+  case_id text not null,
+  ok boolean not null,
+  verdict text,
+  reasons text[] default '{}'::text[] not null,
+  reply text,
+  cost_micros bigint default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  constraint guidance_eval_results_case_id_check CHECK ((char_length(case_id) <= 20)),
+  constraint guidance_eval_results_reply_check CHECK ((char_length(reply) <= 6000)),
+  constraint guidance_eval_results_verdict_check CHECK ((char_length(verdict) <= 20)),
+  constraint guidance_eval_results_pkey PRIMARY KEY (run_id, case_id)
+);
+
+create table if not exists leaders.guidance_eval_runs (
+  id uuid default gen_random_uuid() not null,
+  fingerprint text not null,
+  cases_version text not null,
+  status text default 'running'::text not null,
+  stop_reason text,
+  total_cases integer not null,
+  done_cases integer default 0 not null,
+  passed_cases integer default 0 not null,
+  cost_micros bigint default 0 not null,
+  max_micros bigint not null,
+  started_by text not null,
+  started_at timestamp with time zone default now() not null,
+  finished_at timestamp with time zone,
+  lease_until timestamp with time zone,
+  constraint guidance_eval_runs_cases_version_check CHECK ((char_length(cases_version) <= 80)),
+  constraint guidance_eval_runs_fingerprint_check CHECK ((char_length(fingerprint) <= 200)),
+  constraint guidance_eval_runs_status_check CHECK ((status = ANY (ARRAY['running'::text, 'passed'::text, 'failed'::text, 'stopped'::text, 'error'::text]))),
+  constraint guidance_eval_runs_stop_reason_check CHECK ((char_length(stop_reason) <= 40)),
+  constraint guidance_eval_runs_total_cases_check CHECK ((total_cases > 0)),
+  constraint guidance_eval_runs_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.guidance_messages (
@@ -2683,6 +2722,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.guidance_eval_results add constraint guidance_eval_results_run_id_fkey FOREIGN KEY (run_id) REFERENCES leaders.guidance_eval_runs(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.guidance_messages add constraint guidance_messages_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3230,6 +3273,10 @@ CREATE INDEX IF NOT EXISTS feedback_cycles_status ON leaders.feedback_cycles USI
 
 CREATE INDEX IF NOT EXISTS final_evaluations_status_idx ON leaders.final_evaluations USING btree (status);
 
+CREATE UNIQUE INDEX IF NOT EXISTS guidance_eval_runs_one_running ON leaders.guidance_eval_runs USING btree ((true)) WHERE (status = 'running'::text);
+
+CREATE INDEX IF NOT EXISTS guidance_eval_runs_started_idx ON leaders.guidance_eval_runs USING btree (started_at DESC);
+
 CREATE INDEX IF NOT EXISTS guidance_messages_created_idx ON leaders.guidance_messages USING btree (created_at);
 
 CREATE INDEX IF NOT EXISTS guidance_messages_participant_idx ON leaders.guidance_messages USING btree (participant_id, created_at DESC);
@@ -3525,6 +3572,10 @@ alter table leaders.feedback_cycles enable row level security;
 alter table leaders.final_evaluations enable row level security;
 
 alter table leaders.grid_cells enable row level security;
+
+alter table leaders.guidance_eval_results enable row level security;
+
+alter table leaders.guidance_eval_runs enable row level security;
 
 alter table leaders.guidance_messages enable row level security;
 
@@ -4036,6 +4087,16 @@ AS $function$
          max(created_at) filter (where role = 'user')
     from leaders.guidance_messages
    where participant_id = p_participant and created_at >= p_since;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_eval_lease(p_id uuid, p_seconds integer)
+ RETURNS SETOF leaders.guidance_eval_runs
+ LANGUAGE sql
+AS $function$
+  update leaders.guidance_eval_runs set lease_until = now() + make_interval(secs => p_seconds)
+   where id = p_id and status = 'running' and (lease_until is null or lease_until < now())
+  returning *;
 $function$
 ;
 
