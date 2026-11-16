@@ -9,6 +9,7 @@ import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
 import { addressHash, mailCounts, plainText, sendCounted } from '../_shared/mail.ts';
 import { RETENTION_DAYS } from '../_shared/mail-budget.js';
+import { alertChannelOk } from './readiness.js';
 import { BUDGET_AR, dailySeries, deliveryAr, diagnose, mailBudget, mailtoUrl, nextFreeAt, tally } from './mail-center.js';
 
 type Body = Record<string, any>;
@@ -71,7 +72,8 @@ export async function center(a: Admin) {
     series: dailySeries(recent, 14),
     queue: (queue as any[]).map((m) => ({ ...m, to_email: writer ? m.to_email : null, state: m.gave_up_at ? (m.last_error === 'cancelled' ? 'cancelled' : m.last_error === 'stale' ? 'stale' : 'gave_up') : 'waiting' })),
     lost, provider, retention_days: RETENTION_DAYS, traceable: recent.length === 0 || recent.some((e: any) => 'to_hash' in e),
-    alert_channel: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'),
+    // سلاك أو الرابط، أيهما يكفي (readiness.js)
+    alert_channel: alertChannelOk((k: string) => !!Deno.env.get(k)),
   };
 }
 

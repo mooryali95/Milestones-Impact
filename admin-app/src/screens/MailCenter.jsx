@@ -258,7 +258,7 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
           <p className="la-muted small">حصة المزوّد المجانية تُحسب باليوم التقويمي وتُصفَّر 03:00 بتوقيت الرياض، وسقف المنصة يُحسب على آخر 24 ساعة متحركة ليبقى دونها.</p>
           {Object.keys(d.provider.quota).length > 0 && <p className="la-muted small">ما يعلنه المزوّد: {Object.entries(d.provider.quota).map(([k, v]) => <span key={k} dir="ltr" className="mc-q">{k}: {v}</span>)}</p>}
           <ul className="pay-health">
-            <li className={d.alert_channel ? 'ok' : 'bad'}><b>{d.alert_channel ? '✓' : '✗'}</b><span>قناة التنبيه</span><small className="la-muted">{d.alert_channel ? 'تنبيه عند 70% من السقف وعند رفض المزوّد' : 'غير مضبوطة: أضف رابط Slack في LEADERS_ALERT_WEBHOOK ليصلك تنبيه عند اقتراب السقف'}</small></li>
+            <li className={d.alert_channel ? 'ok' : 'bad'}><b>{d.alert_channel ? '✓' : '✗'}</b><span>قناة التنبيه</span><small className="la-muted">{d.alert_channel ? 'تنبيه عند 70% من السقف وعند رفض المزوّد' : 'غير مضبوطة: اضبط بوت سلاك (LEADERS_SLACK_BOT_TOKEN وLEADERS_SLACK_CHANNEL) أو رابطًا في LEADERS_ALERT_WEBHOOK ليصلك تنبيه عند اقتراب السقف'}</small></li>
             <li className={d.traceable ? 'ok' : 'bad'}><b>{d.traceable ? '✓' : '✗'}</b><span>البحث بالعنوان</span><small className="la-muted">{d.traceable ? 'السجل يحمل بصمة العنوان، ويُحفظ ' + d.retention_days + ' يومًا' : 'ينتظر ترحيل مركز البريد'}</small></li>
           </ul>
           <p className="la-muted small">حالات التسليم: {Object.values(DELIVERY_AR).slice(0, 3).map(([l]) => l).join('، ')}، وغيرها كما يعلنها المزوّد.</p>

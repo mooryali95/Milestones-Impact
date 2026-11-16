@@ -10,7 +10,7 @@ import { compositeReliability, DEFAULT_MODEL, itemAnalysis, journeyApproved, TIE
 import { fairnessReport, measurementEvidence } from './evidence.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATION_GATES, MIGRATIONS } from './migrations.js';
-import { launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
+import { ALERT_CHANNEL_KEY, alertChannelOk, launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
 import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { codeStreak, OPS } from './ops-health.js';
@@ -66,8 +66,8 @@ export async function health() {
     LEADERS_TURNSTILE_SECRET: !!CONFIG.turnstileSecret && !!CONFIG.turnstileSite,
     // D05: بلا مفتاح التوقيع المستقل لا تصدر شهادة
     LEADERS_CERT_SIGNING_KEY: certKeys().key.length >= 32,
-    // قناة التنبيه الفوري (alertWebhook)؛ بوابة المراحل تشترطها مع مفتاح التوقيع (REQUIRED_SECRETS في readiness.js)
-    LEADERS_ALERT_WEBHOOK: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'),
+    // قناة التنبيه الفوري: سلاك أو الرابط، أيهما يكفي؛ بوابة المراحل تشترطها مع مفتاح التوقيع (missingRequiredSecrets في readiness.js)
+    [ALERT_CHANNEL_KEY]: alertChannelOk((k) => !!Deno.env.get(k)),
   };
   return {
     success: true,
