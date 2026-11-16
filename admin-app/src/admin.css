@@ -1474,3 +1474,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .mx-text textarea { width: 100%; font: inherit; font-size: .86rem; padding: 6px 8px; border: 1px solid var(--brand-line); border-radius: 6px; resize: vertical; }
 .mx-text .la-row { grid-column: 2; }
 @media (max-width: 640px) { .mx-text { grid-template-columns: 1fr; } .mx-text .la-row { grid-column: 1; } }
+
+/* الحاجز الأخير حول اللوحة (ScreenBoundary scope="app" في main.jsx): رسالة في وسط الصفحة بدل صفحة بيضاء */
+.la-err-app { max-width: 640px; margin: 48px auto; padding: 16px 18px; }
+.la-err-app .btn-sm { margin-inline-start: 6px; }
