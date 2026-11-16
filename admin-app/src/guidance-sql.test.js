@@ -1,4 +1,4 @@
-// ترحيل 20261116110000 («التوجيه والإرشاد» G2) على قاعدة مؤقتة: ضمانات v4 في القاعدة نفسها.
+// ترحيل 20261116120000 («التوجيه والإرشاد» G2) على قاعدة مؤقتة: ضمانات v4 في القاعدة نفسها.
 // يُعاد بأمان، ولا يصل anon ولا authenticated إلى المحادثات ولا الدوال، وحذف المشارك يحذف محادثته وحدها،
 // والحدان لكل مشارك ولا يحسب أحد على غيره، والمرفوض لا يُحسب، والسقف اليومي، والحذف بعد مدة الحفظ من الإعدادات.
 import { readFileSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 
-const SQL = readFileSync(join(__dirname, '../../supabase/migrations/20261116110000_leaders_guidance.sql'), 'utf8');
+const SQL = readFileSync(join(__dirname, '../../supabase/migrations/20261116120000_leaders_guidance.sql'), 'utf8');
 const P1 = '00000000-0000-0000-0000-000000000001';
 const P2 = '00000000-0000-0000-0000-000000000002';
 const BEFORE = `create role anon; create role authenticated; create role service_role; create schema leaders;
@@ -29,10 +29,10 @@ const claim = async (d, p, o = {}) => Number((await d.query(
   [p, o.body || 'كيف أبدأ؟', 'program', null, o.day || DAY, o.month || MONTH, o.daily ?? 8, o.monthly ?? 30],
 )).rows[0].id);
 
-describe('ترحيل 20261116110000_leaders_guidance', { timeout: 30000 }, () => {
+describe('ترحيل 20261116120000_leaders_guidance', { timeout: 30000 }, () => {
   it('يُعاد بأمان ويُسجَّل، وRLS مفعّل على الجدولين', async () => {
     const d = await db();
-    expect((await d.query('select name from leaders.schema_migrations')).rows).toEqual([{ name: '20261116110000_leaders_guidance' }]);
+    expect((await d.query('select name from leaders.schema_migrations')).rows).toEqual([{ name: '20261116120000_leaders_guidance' }]);
     const rls = (await d.query("select relname, relrowsecurity from pg_class where relname in ('guidance_messages', 'guidance_spend_daily') order by relname")).rows;
     expect(rls).toEqual([{ relname: 'guidance_messages', relrowsecurity: true }, { relname: 'guidance_spend_daily', relrowsecurity: true }]);
   });

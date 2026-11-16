@@ -123,4 +123,4 @@ begin
 end;
 $$;
 
-insert into leaders.schema_migrations (name) values ('20261116110000_leaders_guidance') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261116120000_leaders_guidance') on conflict do nothing;
