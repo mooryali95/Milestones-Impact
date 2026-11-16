@@ -1482,6 +1482,28 @@ export function pickCohort({ enrollments = [], cohorts = [], organizationId = nu
   return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
 }
 
+// برنامج الجهة: يُشتق ولا يُخزَّن، بترتيب pickCohort نفسه فلا يخالف ما يمر به أعضاؤها فعلًا.
+// برنامج الدفعة التي يدخلها أعضاء الجهة الآن (via 'current')، وإلا برنامج أحدث دفعة للجهة أيًا كانت حالتها
+// (via 'latest')، والبرنامج المؤرشف لا يُقترح أبدًا. null: لا دفعة للجهة على برنامج فعّال، فيبقى الافتراضي.
+/** @param {any[]} cohorts @param {any[]} programs @param {string|null} orgId */
+export function orgProgram(cohorts = [], programs = [], orgId = null) {
+  if (!orgId) return null;
+  const live = new Map((programs || []).filter((p) => !p.archived_at).map((p) => [p.id, p]));
+  const of = (c, via) => ({ program_id: c.program_id, program_name: live.get(c.program_id)?.name || '', cohort_id: c.id, cohort_name: c.name || '', via });
+  const now = pickCohort({ enrollments: [], cohorts, organizationId: orgId }).cohort;
+  if (now && now.organization_id === orgId && live.has(now.program_id)) return of(now, 'current');
+  const own = (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && live.has(c.program_id))
+    .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
+  return own.length ? of(own[0], 'latest') : null;
+}
+// سطر مصدر البرنامج المقترح لدفعة جهة جديدة، واحد للمعالج والمحرر وملف الجهة
+/** @param {{ program_name?: string, cohort_name?: string, via?: string }|null} op */
+// اسم يبدأ بكلمة «برنامج» لا تسبقه الكلمة نفسها مرة أخرى
+const programRef = (name = '') => (/^برنامج(\s|$)/.test(name) ? `«${name}»` : `برنامج «${name}»`);
+export const orgProgramLine = (op) => (!op ? ''
+  : op.via === 'current' ? `من دفعة الجهة الحالية «${op.cohort_name}»: ${programRef(op.program_name)}.`
+    : `من آخر دفعة للجهة «${op.cohort_name}»: ${programRef(op.program_name)}.`);
+
 // ── حراس المشاركين الأحياء ──
 // التقدم مربوط بمعرف المتطلب، ومعرفات برنامج آخر غيرها، فمن ينتقل بين برنامجين يفقد ما أنجزه من رحلته
 const byParticipant = (enrollments) => {
@@ -1650,6 +1672,23 @@ export function cohortDefinition({ live, version, cohort }) {
     stages: (base.stages || []).filter((s) => s.active !== false),
     requirements: (base.requirements || []).filter((r) => r.active !== false).map((r) => applyDelivery(r, delivery[r.code])),
   };
+}
+
+// تعريف الدفعة كما تقرؤه نوافذها (P5): مراحل نسختها المثبتة أو البرنامج الحي، ومتطلباتها كما في البرنامج بلا تخصيص
+// التنفيذ (حقول التنفيذ تقارن به)، ولكل متطلب مرحلته وقاعدتها وعلامة hidden. المخفي لا يُحذف: يبقى في القائمة بعلامته،
+// ورموز الإخفاء التي لا بند لها في هذا التعريف تبقى في hidden كما هي فلا يمحوها حفظ.
+/** @param {{ live?: any, version?: any, cohort?: any }} input */
+export function cohortDefinitionView({ live, version, cohort }) {
+  const base = cohortDefinition({ live, version, cohort: null });
+  const stages = [...base.stages].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const order = new Map(stages.map((s, i) => [s.key, i]));
+  const stageOf = new Map(stages.map((s) => [s.key, s]));
+  const hidden = Array.isArray(cohort?.hidden_requirements) ? cohort.hidden_requirements : [];
+  const h = new Set(hidden);
+  const requirements = base.requirements
+    .map((r) => ({ ...r, stage_title_ar: stageOf.get(r.stage_key)?.title_ar || null, stage_rules: stageOf.get(r.stage_key)?.rules || {}, stage_active: stageOf.has(r.stage_key), hidden: h.has(r.code) }))
+    .sort((a, b) => (order.get(a.stage_key) ?? 1e9) - (order.get(b.stage_key) ?? 1e9) || (a.sort ?? 0) - (b.sort ?? 0));
+  return { stages, requirements, hidden };
 }
 
 // لقطة البرنامج: المراحل والمتطلبات بمعرفاتها، بلا أعمدة التتبع.

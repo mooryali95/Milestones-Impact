@@ -7,6 +7,7 @@
 import { pickCohort } from '../../supabase/functions/leaders-api/logic.js';
 import { cohortSetup } from '../../supabase/functions/leaders-api/cohort-setup.js';
 import { inviteUrl } from './leaders.js';
+import { cohortErrors } from './methodology.js';
 
 // نوع الدفعة بجملة واحدة: ثلاثة أنواع فقط، ولكل نوع طريقة دخول واحدة
 export function cohortKind(c) {
@@ -104,10 +105,8 @@ export const WIZARD_STEPS = ['لمن الدفعة', 'البرنامج', 'الم�
 export function wizardBlock(step, v) {
   if (step === 0 && v.kind === 'org' && !v.organization_id) return 'اختر الجهة';
   if (step === 1 && !v.program_id) return 'اختر البرنامج';
-  if (step === 2) {
-    if (!String(v.name || '').trim()) return 'اكتب اسم الدفعة';
-    if (v.starts_on && v.ends_on && v.ends_on < v.starts_on) return 'تاريخ النهاية قبل البداية';
-  }
+  // تحقق المعالج هو تحقق المحرر نفسه (cohortErrors)، فلا تختلف قاعدة الاسم والتاريخين بين الإنشاء والتحرير
+  if (step === 2) { const e = cohortErrors(v); return e.name || e.ends_on || ''; }
   return '';
 }
 

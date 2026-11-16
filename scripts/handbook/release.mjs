@@ -15,7 +15,7 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { rawSections, replaceSection, sectionSource } from '../../supabase/functions/leaders-api/book-proposals.js';
+import { rawSections, REFLECTION, replaceSection, sectionSource, targetLabel } from '../../supabase/functions/leaders-api/book-proposals.js';
 import { headingsOf } from '../../supabase/functions/leaders-api/master-book.js';
 import { dirOf, loadChapters, REPORTS, ROOT, VERSION } from './content.mjs';
 import { LOCK, moduleJs, OUT, readLock, REG, sync } from './sections.mjs';
@@ -38,6 +38,15 @@ export function applyProposals(chapters, proposals, registry) {
     const skip = (why) => skipped.push({ ...p, why });
     if (!UUID.test(String(p.id))) { skip('معرّف غير صالح'); continue; }
     if (!c) { skip('الباب غير موجود في الإصدار'); continue; }
+    // سؤال التأمل: يُستبدل كله بحارس الأصل نفسه
+    if (p.section === REFLECTION) {
+      if (touched.has(`${p.dimension}/${p.chapter_key}|${REFLECTION}`)) { skip('مقترح آخر على سؤال التأمل دخل هذا الإصدار قبله'); continue; }
+      if (String(c.reflection_ar ?? '').trim() !== String(p.base_md ?? '').trim()) { skip('سؤال التأمل في المستودع يختلف عن النص الذي كُتب عليه المقترح (تغيّر بعده)'); continue; }
+      c.reflection_ar = String(p.proposed_md).trim();
+      touched.add(`${p.dimension}/${p.chapter_key}|${REFLECTION}`);
+      applied.push({ ...p, new_section: REFLECTION });
+      continue;
+    }
     const s = p.section_id ? regById.get(p.section_id) : null;
     const key = s && !s.retired ? s.key : p.section;
     const src = sectionSource(c.body_md, key);
@@ -46,7 +55,11 @@ export function applyProposals(chapters, proposals, registry) {
     if (src !== p.base_md) { skip('القسم في المستودع يختلف عن النص الذي كُتب عليه المقترح (تغيّر بعده)'); continue; }
     const idx = rawSections(c.body_md).findIndex((x) => x.key === key);
     const next = replaceSection(c.body_md, key, p.proposed_md);
-    const newKey = rawSections(next)[idx]?.key ?? key;
+    // أقسام المقترح في الباب بعده: إن بقي بينها عنوان القسم القديم فهو هو (وما قبله أو بعده قسم جديد)،
+    // وإلا فالعنوان تغيّر، والقسم هو أول عناوين المقترح
+    const n = Math.max(1, String(p.proposed_md).split('\n').filter((l) => /^##\s+\S/.test(l)).length);
+    const got = rawSections(next).slice(idx, idx + n).map((x) => x.key);
+    const newKey = got.includes(key) ? key : (got[0] ?? key);
     // عنوان القسم تغيّر بالمقترح: الهوية نفسها بالعنوان الجديد، والقديم في aliases فتتبعه الإحالات
     if (s && !s.retired && newKey && newKey !== s.key) { s.aliases = [...new Set([...s.aliases, s.key])]; s.key = newKey; }
     c.body_md = next;
@@ -69,12 +82,12 @@ export function renderProposals({ from, to, applied, skipped }) {
     `**دخل الإصدار:** ${applied.length} · **تُخطّي:** ${skipped.length}`, ''];
   if (applied.length) {
     out.push('## ما دخل', '', '| الباب | القسم | السبب | كتبه | اعتمده |', '|---|---|---|---|---|');
-    for (const p of applied) out.push(`| ${p.dimension}/${p.chapter_key} | ${md(p.section || 'مقدمة الباب')}${p.new_section && p.new_section !== p.section ? ` ← ${md(p.new_section)}` : ''} | ${md(p.reason)} | ${md(p.author_name)} | ${md(String(p.decided_by || '').split('@')[0])} |`);
+    for (const p of applied) out.push(`| ${p.dimension}/${p.chapter_key} | ${md(targetLabel(p.section))}${p.new_section && p.new_section !== p.section ? ` ← ${md(p.new_section)}` : ''} | ${md(p.reason)} | ${md(p.author_name)} | ${md(String(p.decided_by || '').split('@')[0])} |`);
     out.push('');
   }
   if (skipped.length) {
     out.push('## ما تُخطّي (يبقى معتمدًا، ويحدّثه كاتبه ليدخل إصدارًا لاحقًا)', '');
-    for (const p of skipped) out.push(`- ${p.dimension || '?'}/${p.chapter_key || '?'} «${p.section || 'مقدمة الباب'}» (${p.author_name || ''}): ${p.why}`);
+    for (const p of skipped) out.push(`- ${p.dimension || '?'}/${p.chapter_key || '?'} «${targetLabel(p.section)}» (${p.author_name || ''}): ${p.why}`);
     out.push('');
   }
   return `${out.join('\n').trim()}\n`;
@@ -98,6 +111,14 @@ export function rewriteBody(text, oldBody, newBody) {
   const head = text.slice(0, at), tail = text.slice(at);
   if (!head.includes(oldBody)) throw new Error('متن الباب لم يوجد في ملفه');
   return head.replace(oldBody, () => newBody) + tail;
+}
+// وسؤال التأمل (ما بعد ---REFLECTION---) بالطريقة نفسها
+export function rewriteReflection(text, oldR, newR) {
+  const at = text.indexOf('---REFLECTION---');
+  const head = text.slice(0, at), tail = text.slice(at);
+  if (!oldR) return `${head}---REFLECTION---\n${newR}\n`;
+  if (!tail.includes(oldR)) throw new Error('سؤال التأمل لم يوجد في ملفه');
+  return head + tail.replace(oldR, () => newR);
 }
 
 const SQL = `select p.id, p.module_id, p.section, p.section_id, p.base_md, p.proposed_md, p.reason, p.author_name, p.decided_by, p.decided_at,
@@ -138,11 +159,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // 1. الإصدار الجديد: نسخة من الحالي بلا تقاريره، ثم متن كل باب تغيّر
   mkdirSync(dirOf(to));
   for (const f of readdirSync(dirOf(from))) if (f.endsWith('.md') && !REPORTS.includes(f)) cpSync(join(dirOf(from), f), join(dirOf(to), f));
-  const before = Object.fromEntries(chapters.map((c) => [c.file, c.body_md]));
+  const before = Object.fromEntries(chapters.map((c) => [c.file, c]));
   for (const c of r.chapters) {
-    if (before[c.file] === c.body_md) continue;
+    const o = before[c.file];
+    if (o.body_md === c.body_md && o.reflection_ar === c.reflection_ar) continue;
     const p = join(dirOf(to), c.file);
-    writeFileSync(p, rewriteBody(readFileSync(p, 'utf8'), before[c.file], c.body_md));
+    let text = readFileSync(p, 'utf8');
+    if (o.body_md !== c.body_md) text = rewriteBody(text, o.body_md, c.body_md);
+    if (o.reflection_ar !== c.reflection_ar) text = rewriteReflection(text, o.reflection_ar, c.reflection_ar);
+    writeFileSync(p, text);
   }
   // 2. سجل الهويات: التغييرات أعلاه، ثم هوية لكل عنوان جديد
   const heads = loadChapters(to).flatMap((c) => headingsOf(c.body_md).map((h) => ({ dim: c.dimension, chapter: c.chapter_key, level: h.level, key: h.key })));

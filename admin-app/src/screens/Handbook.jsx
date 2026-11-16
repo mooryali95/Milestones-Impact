@@ -75,13 +75,16 @@ function QuizView({ qs, reflection, right = 'الصحيحة' }) {
 
 // حماية التعديل: مسودة تلقائية، وعرض استعادتها عند الفتح، وتأكيد قبل الإغلاق
 // دون حفظ، وتنبيه المتصفح عند مغادرة الصفحة والتعديلات قائمة
-function useGuard(key, v, setV) {
-  const { confirm } = useUI();
+function useGuard(key, v, setV, stale = null) {
+  const { confirm, toast } = useUI();
   const base = useRef(JSON.stringify(v));
   const dirty = JSON.stringify(v) !== base.current;
   useEffect(() => {
     const d = readDraft(key);
     if (!d || JSON.stringify(d) === base.current) return;
+    // مسودة كُتبت على نسخة أقدم من الأصل (تغيّر بعدها بإصدار): استعادتها تُرجع ما تغيّر، فلا تُعرض
+    const why = stale?.(d);
+    if (why) { clearDraft(key); toast(why); return; }
     confirm('توجد مسودة لم تُحفظ من آخر تعديل هنا. استعادتها؟', { ok: 'استعادة المسودة' }).then((ok) => (ok ? setV(d) : clearDraft(key)));
   }, []); // eslint-disable-line
   useEffect(() => {
@@ -116,13 +119,16 @@ function LintBar({ items, onPick }) {
 export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const { toast } = useUI();
   const d = m?.dimension || dim;
-  const [v, setV] = useState({ title_ar: m?.title_ar || '', min_level: m?.min_level || 'beginner', body_md: m?.body_md || '', reflection_ar: m?.reflection_ar || '', quiz_md: m?.quiz_md || '' });
-  const guard = useGuard(draftKey('chapter', m, d), v, setV);
+  // _at: آخر تحديث للباب حين فُتح المحرر، يُحفظ مع المسودة فلا تُستعاد مسودة كُتبت على نص أقدم
+  const [v, setV] = useState({ title_ar: m?.title_ar || '', min_level: m?.min_level || 'beginner', body_md: m?.body_md || '', reflection_ar: m?.reflection_ar || '', quiz_md: m?.quiz_md || '', _at: m?.updated_at || '' });
+  const guard = useGuard(draftKey('chapter', m, d), v, setV, (dr) => ((dr._at || '') !== (m?.updated_at || '')
+    ? 'كانت لك مسودة على هذا الباب كُتبت قبل تحديثه (صدر إصدار جديد)، فلم تُستعد كي لا تُرجع ما تغيّر. أعد تعديلك على النص الحالي.' : null));
   const [pane, setPane] = useState('content');
   const [view, setView] = useState(m?.min_level || 'beginner');
   const [scope, setScope] = useState('project');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState('');
   const ta = useRef(null);
   const qa = useRef(null);
   const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
@@ -131,6 +137,9 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
   const quizLint = lintQuiz(v.quiz_md);
   const scoped = /^:::.*scope=/m.test(v.body_md);
   const labs = chapterLabs(catalog, m);
+  // المرحلة 4 (الخطوة 3): المتن والتأمل يُرسلان مقترحًا يُعتمد ثم يدخل إصدارًا، والعنوان وحده يُحفظ مباشرة
+  const contentChanged = !!m && (v.body_md !== (m.body_md || '') || v.reflection_ar.trim() !== (m.reflection_ar || '').trim());
+  const titleChanged = !!m && v.title_ar.trim() !== (m.title_ar || '').trim();
   // ينقل المؤشر إلى السطر أو السؤال ويمرر إليه
   const pick = (x) => {
     const isLine = !!x.line;
@@ -159,15 +168,25 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
     if (!v.title_ar.trim()) return setErr('عنوان الباب مطلوب');
     const blockErr = bodyLint.find((x) => x.level === 'error');
     if (blockErr) { pick(blockErr); return setErr(`لا يُحفظ الباب وفيه خطأ في الكتل: السطر ${blockErr.line}، ${blockErr.msg}`); }
-    // D01: الاختبار والمستوى محتوى مُقاس من المستودع، فلا يُرسلان؛ يحفظ المحرر النص غير المُقاس وحده.
-    // الأبواب الجديدة وحذفها من المستودع كذلك، فالمحرر لا يفتح إلا بابًا قائمًا.
-    const row = { id: m.id, title_ar: v.title_ar.trim(), body_md: v.body_md, reflection_ar: v.reflection_ar.trim() || null };
+    // D01: الاختبار والمستوى محتوى مُقاس من المستودع، فلا يُرسلان. الأبواب الجديدة وحذفها من المستودع كذلك.
+    // المتن وسؤال التأمل: مقترح لكل قسم تغيّر (admin.book-proposal-edit)، يراه المراجعون في الكتاب الأم ويعتمده المدير العام
+    if (!titleChanged && !contentChanged) return setErr('لم يتغير شيء بعد');
+    if (contentChanged && reason.trim().length < 10) return setErr('اكتب سبب التعديل (10 أحرف على الأقل): ما الذي يتحسن، ولمن');
     setBusy(true);
-    const r = await L('admin.save', { entity: 'handbook_modules', row });
+    const msgs = [];
+    if (titleChanged) {
+      const r = await L('admin.save', { entity: 'handbook_modules', row: { id: m.id, title_ar: v.title_ar.trim() } });
+      if (!r.success) { setBusy(false); return setErr(r.message); }
+      msgs.push('حُفظ العنوان');
+    }
+    if (contentChanged) {
+      const r = await L('admin.book-proposal-edit', { module_id: m.id, body_md: v.body_md, reflection_ar: v.reflection_ar, base_body_md: m.body_md || '', base_reflection_ar: m.reflection_ar || '', reason: reason.trim(), submit: btn !== 'draft' });
+      if (!r.success) { setBusy(false); return setErr(r.message); }
+      msgs.push(`${btn === 'draft' ? 'حُفظ مسودةَ مقترح' : 'عُرض على اللجنة'}: ${r.sections.join('، ')}`);
+    }
     setBusy(false);
-    if (!r.success) return setErr(r.message);
     guard.done();
-    toast('حُفظ الباب');
+    toast(msgs.join(' · '));
     onClose(true);
   };
 
@@ -178,7 +197,8 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
           <input aria-label="عنوان الباب" placeholder="عنوان الباب" value={v.title_ar} onChange={set('title_ar')} readOnly={!canWrite} /></div>
         <div className="hb-ed-lvl"><small>يظهر لمن مستواه (من المستودع)</small><LevelSeg value={v.min_level} onChange={() => {}} disabled /></div>
         <div className="hb-ed-btns">
-          {canWrite && <button className="btn-sm primary" value="save" disabled={busy}>حفظ الباب</button>}
+          {canWrite && contentChanged && <button className="btn-sm ghost" value="draft" disabled={busy}>احفظه مسودة</button>}
+          {canWrite && <button className="btn-sm primary" value="save" disabled={busy}>{contentChanged ? 'اعرض التعديل على اللجنة' : 'حفظ العنوان'}</button>}
           <button className="btn-sm ghost" value="cancel" formNoValidate>إغلاق</button>
         </div>
       </header>
@@ -225,6 +245,8 @@ export function ChapterEditor({ m, dim, catalog, canWrite, onClose }) {
         </div>
       )}
       <div className="hb-ed-foot">
+        {canWrite && <p className="la-note" role="note">تعديل المتن أو سؤال التأمل يُرسل مقترحًا لكل قسم تغيّر، يراه المراجعون في «الكتاب الأم» ويعتمده المدير العام، ثم يدخل الإصدار التالي. لا يتغير ما يقرؤه المشاركون بالحفظ. العنوان وحده يُحفظ مباشرة.</p>}
+        {canWrite && contentChanged && <label className="hb-ed-reason">سبب التعديل<textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="ما الذي يتحسن، ولمن. يظهر للجنة مع الفرق" /></label>}
         <LintBar items={pane === 'content' ? bodyLint : quizLint} onPick={pick} />
         {err && <div className="la-err" role="alert">{err}</div>}
       </div>

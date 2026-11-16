@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { applyProposals, nextVersion, releaseSql, renderProposals, rewriteBody } from '../../scripts/handbook/release.mjs';
+import { applyProposals, nextVersion, releaseSql, renderProposals, rewriteBody, rewriteReflection } from '../../scripts/handbook/release.mjs';
 import { dirOf, loadChapters, REPORTS } from '../../scripts/handbook/content.mjs';
-import { sectionSource } from '../../supabase/functions/leaders-api/book-proposals.js';
+import { REFLECTION, sectionSource } from '../../supabase/functions/leaders-api/book-proposals.js';
 
 const BODY = `## أولًا
 نص عام
@@ -40,6 +40,12 @@ describe('إصدار الكتاب من المقترحات المعتمدة', () 
     expect(r.applied[0].new_section).toBe('ثالثًا وأخيرًا');
     expect(REG.sections[3].key).toBe('ثالثًا');
   });
+  it('قسم جديد قبل القسم يبقي هويته عليه، ولا يأخذها الجديد', () => {
+    const r = applyProposals(CH, [P(1, 'أولًا', '## تمهيد جديد\nنص\n\n## أولًا\nنص عام')], REG);
+    expect(r.registry.sections.find((x) => x.id === 'M-CH1-01')).toMatchObject({ key: 'أولًا', aliases: [] });
+    expect(r.applied[0].new_section).toBe('أولًا');
+    expect(r.chapters[0].body_md.startsWith('## تمهيد جديد\nنص\n\n## أولًا\nنص عام')).toBe(true);
+  });
   it('العنوان الفرعي المزال يُلغى ولا يُحذف من السجل', () => {
     const r = applyProposals(CH, [P(1, 'ثانيًا', ':::min=intermediate\n## ثانيًا\nللمتوسط فأعلى بلا تفصيل\n:::')], REG);
     expect(r.registry.sections.find((x) => x.id === 'M-CH1-03').retired).toBe(true);
@@ -55,6 +61,18 @@ describe('إصدار الكتاب من المقترحات المعتمدة', () 
     expect(r.skipped.map((p) => p.why)).toEqual([
       expect.stringMatching(/مقترح آخر/), expect.stringMatching(/يختلف/), expect.stringMatching(/الباب غير موجود/), expect.stringMatching(/معرّف/),
     ]);
+  });
+  it('سؤال التأمل: يُستبدل بحارس أصله، ويُكتب في ملفه بعد ---REFLECTION--- وحده', () => {
+    const ch = [{ ...CH[0], reflection_ar: 'ما معلمك؟' }];
+    const r = applyProposals(ch, [P(1, REFLECTION, 'ما المعلم الذي تقرر عنده؟', { section_id: null, base_md: 'ما معلمك؟' }), P(2, REFLECTION, 'آخر', { section_id: null, base_md: 'ما معلمك؟' })], REG);
+    expect(r.chapters[0].reflection_ar).toBe('ما المعلم الذي تقرر عنده؟');
+    expect(r.applied).toHaveLength(1);
+    expect(r.skipped[0].why).toMatch(/سؤال التأمل/);
+    expect(r.chapters[0].body_md).toBe(BODY);
+    const file = `---\nchapter_key: ch1\ndimension: milestone\n---\n${BODY}\n\n---QUIZ---\nس: ما معلمك؟\n---REFLECTION---\nما معلمك؟\n`;
+    const out = rewriteReflection(file, 'ما معلمك؟', 'ما المعلم الذي تقرر عنده؟');
+    expect(out).toBe(file.replace(/ما معلمك؟\n$/, 'ما المعلم الذي تقرر عنده؟\n'));
+    expect(rewriteReflection(file.replace(/ما معلمك؟\n$/, ''), '', 'جديد')).toMatch(/---REFLECTION---\nجديد\n$/);
   });
   it('الأقدم اعتمادًا يدخل أولًا', () => {
     const r = applyProposals(CH, [P(2, 'أولًا', '## أولًا\nالثاني'), P(1, 'أولًا', '## أولًا\nالأول')], REG);

@@ -123,7 +123,7 @@ test('القارئ: علامة مائية باسم العضو وبريده، و�
   await expect(wm).toHaveCSS('pointer-events', 'none');
   await page.locator('.mb-btn.gold').click();
   await page.getByRole('button', { name: 'تعليقات القسم: المدخل' }).click();
-  await expect(page.getByText('عضويتك موقوفة مؤقتًا، فتقرأ الكتاب والتعليقات ولا تكتب حتى يُعاد تفعيل ملفك.')).toBeVisible();
+  await expect(page.getByText('عضويتك في اللجنة موقوفة مؤقتًا: تقرأ الكتاب ولا تعلّق حتى تُفعَّل.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'أضف التعليق' })).toHaveCount(0);
   // العلامة فوق نافذة السلسلة، فلا تخلو لقطتها منها
   const above = await page.evaluate(() => Number(getComputedStyle(document.querySelector('.mb-wm')).zIndex) > Number(getComputedStyle(document.querySelector('.mb-sheet-wrap')).zIndex));

@@ -4,6 +4,7 @@
 import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1';
 import { matchFaq } from '../faq.ts';
 import { handle, type Deps, type Env } from '../handler.ts';
+import { replyLang } from '../intent.ts';
 import { emptyMem, memStore } from '../mem_store.ts';
 import { type Case, grade, type Reply } from './grade.ts';
 
@@ -15,15 +16,20 @@ Deno.test('المجموعة: معرفات فريدة، وحقول كاملة، �
   assert(cases.filter((c) => c.set === 'redteam').length >= 20);
   for (const c of cases) {
     assert(['answer', 'handoff', 'refuse', 'canned'].includes(c.expect.behavior), c.id);
-    assert(['ar', 'en'].includes(c.expect.lang), c.id);
+    assert(['ar', 'en', 'fr'].includes(c.expect.lang), c.id);
     for (const p of [...(c.expect.must_include ?? []), ...(c.expect.must_not_include ?? [])]) new RegExp(p, 'i');
   }
 });
 
 Deno.test('ما يُجاب جاهزًا يطابق جوابه، وما سواه لا يطابق جوابًا جاهزًا (فيصل إلى النموذج)', () => {
   for (const c of cases) {
-    const hit = matchFaq(c.message, c.page);
-    if (c.expect.behavior === 'canned') assertEquals(hit?.id, c.expect.canned, c.id);
+    // بلغة الرد كما يحسبها الخادم (الطلب الصريح للغة يغير لغة الجاهز)
+    const hit = matchFaq(c.message, c.page, replyLang(c.message));
+    if (c.expect.behavior === 'canned') {
+      assertEquals(hit?.id, c.expect.canned, c.id);
+      assertEquals(hit?.lang, c.expect.lang, c.id);
+      assert(grade(c, { text: hit!.text, handoff: false, source: 'canned', cannedId: hit!.id }).pass, c.id);
+    }
     else assertEquals(hit, null, `${c.id}: ${hit?.id}`);
   }
 });
