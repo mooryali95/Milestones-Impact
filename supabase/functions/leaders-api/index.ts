@@ -61,6 +61,7 @@ import * as MB from './master-book.ts';
 import * as BP from './book-proposals.ts';
 import * as BR from './book-release.ts';
 import * as NU from './nudges.ts';
+import * as FT from './features.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -103,9 +104,16 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
     // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
     feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
-    mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
-    // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
-    mail_stuck: await stuckQueueAlert().catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
+    ...(await (async () => {
+      // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
+      const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
+      if (!hold) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true } };
+      return {
+        mail_queue: await drainMailQueue(40, hold).catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+        // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
+        mail_stuck: await stuckQueueAlert(hold).catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
+      };
+    })()),
     // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
     slack_hello: await slackHello(db) }),
   'xp.auth-start': E.portalStart,
@@ -183,6 +191,9 @@ function payGate(action: string, b: Body): 'assessment' | 'program' | null {
 // فعل مشارك ببواباته كلها (حساب العرض، والبرنامج، والدفع، وتجديد الموافقة)، في معالج الطلب وداخل الطلب المجمّع
 async function asAction(action: string, p: any, b: Body, sid: string, ctx: any) {
   if (p.is_demo && DEMO_BLOCKED.has(action)) throw new Fail('هذا غير متاح لحساب العرض', 403, 'demo');
+  // مفاتيح الميزات قبل كل بوابة (features.js): الميزة المخفية مخفية عن الجميع بالرد نفسه، وقراءتها تُجاب بلا شيء
+  const soft = await FT.gate(action);
+  if (soft) return soft;
   // قبل الدفع: المنسحب ومن لم يُعتمد مساره يعرف السبب الحقيقي لا «ادفع أولًا»
   await programGate(action, p);
   // بوابة الدفع: القياس المبدئي يحتاج حقه، وما بعده (الرحلة والقياس البعدي) يحتاج حق البرنامج
@@ -331,6 +342,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
   'xp.dashboard': async (e, b) => {
     const d: any = await E.portalDashboard(e);
+    // مفاتيح الميزات للواجهة (المرحلة P3): تخفي القاعة و360 بها، والرفض على الخادم وحده
+    if (d?.success) d.features = await FT.features();
     // من لا يخدم في الرحلة (عضو لجنة بلا دور، أو معتمد بلا خدمة): لا تكليفات ولا مشاركون ولا أقران ولا 360 (portalDashboard)
     if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
@@ -341,7 +354,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     // تقييم 360 (feedback360.ts): قوائم بانتظار اعتماد المستشار ودوراته، في الرحلة نفسها
     const [reviews, participants, peers, sus, f360] = await Promise.all([
       settle('xp.reviews', V2.reviews(e)), settle('xp.participants', FL.participants(e)),
-      settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)), settle('xp.f360', FB.advisorList(e)),
+      settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)), settle('xp.f360', FT.gate('xp.f360').then((soft) => soft || FB.advisorList(e))),
     ]);
     return { ...d, preload: { reviews, participants, peers, sus, f360 } };
   },
@@ -653,10 +666,15 @@ Deno.serve(async (req) => {
       // ولا دفعة ولا قاعة ولو بقي له تكليف قديم. والكتاب بعد تعهد السرية
       if (E.portalWorking(e) && !journeyApproved(e) && !XP_NO_JOURNEY.has(action)) throw new Fail('هذا لخدمة الرحلة، ولوحتك للكتاب الأم', 403, 'journey');
       if (action.startsWith('xp.book')) await E.requirePledge(e);
+      // مفاتيح الميزات: القاعة و360 المخفيان عن الخبير يُرفضان، وقراءتهما تُجاب بلا شيء
+      const soft = await FT.gate(action);
+      if (soft) return reply(req, soft);
       return reply(req, await expert[action](e, b, sessionId, ctx));
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);
+      // المدير مستثنى من مفاتيح الميزات ليبنيها، إلا فتح القاعة المخفية (features.js)
+      await FT.gate(action);
       return reply(req, await admin[action](a, b, ctx));
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');

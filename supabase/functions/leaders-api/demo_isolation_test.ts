@@ -8,6 +8,7 @@ const PR = await import('./peer.ts');
 const H = await import('./hall.ts');
 const KT = await import('./katon.ts');
 const { advisorOf } = await import('./advisor.ts');
+const { resetSettingsCache } = await import('./settings.ts');
 
 type Row = Record<string, any>;
 const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v == null ? v : v[k]), r);
@@ -67,7 +68,8 @@ function install(tables: Record<string, Row[]>) {
     return q;
   };
   Object.assign(db as any, { from });
-  return { reads, restore: () => { delete (db as any).from; } };
+  resetSettingsCache();
+  return { reads, restore: () => { delete (db as any).from; resetSettingsCache(); } };
 }
 
 const DEMO = { id: 'demo', full_name: 'مشارك العرض', email: 'demo@demo.milestone-impact.org', is_demo: true, organization_id: null };
@@ -90,6 +92,8 @@ function world(supervision: string) {
     peer_answers: [{ id: 'a-demo', request_id: 'q-real', author_id: 'demo', text: 'إجابة من حساب العرض', status: 'pending', created_at: '2026-11-10T10:00:00Z' }],
     hall_sessions: [{ id: 'hs', cohort_id: OPEN, stage: 'round', version: 1, mode: 'self', topic_id: 't', revealed: [] }],
     hall_presence: [],
+    // القاعة مُظهَرة (features.hall): هنا يُختبر عزل حساب العرض وحده
+    app_settings: [{ key: 'features', value: { hall: true } }],
     programs: [{ id: 'prog', is_default: true, name: 'البرنامج', katon_points: null }],
     katon_topics: [{ id: 't', title_ar: 'موضوع', status: 'published', sort: 1 }],
     katon_sentences: [{ id: 's1', topic_id: 't', sort: 1, key: 'true', text_ar: 'جملة', question: 'when' }],

@@ -42,10 +42,12 @@ select 'req_boilerplate' check_name, code, help_ar from leaders.stage_requiremen
  where code in ('O-MREG', 'O-GATE', 'O-CHAIN', 'L-MAP', 'L-DIRECT', 'T-AGREE', 'S-UPDATE')
    and (help_ar ~ 'مكتبة النماذج|يقيّمه المستشار|يقيّمها المستشار|فصل في وثيقة');
 
--- د) صيغة واحدة لتقييم 360
+-- د) صيغة واحدة لتقييم 360، وبندا التقدير قبل البرنامج وبعده باسمهما الجديد (20261116100000) لا باسم 360
 select 'req_360' check_name, code, title_ar from leaders.stage_requirements
  where code in ('T-360', 'L-360I', 'L-360A', 'E-360')
-   and (title_ar !~ '^تقييم 360 مختصر' or title_ar ~ '360 درجة|قبلي|بعدي|القبلية');
+   and ((code in ('T-360', 'E-360') and title_ar !~ '^(تقدير المدير والزملاء|تقييم 360 مختصر)')
+        or (code in ('L-360I', 'L-360A') and title_ar !~ '^تقييم 360 مختصر')
+        or title_ar ~ '360 درجة|قبلي|بعدي|القبلية');
 
 -- النسخة الاحتياطية موجودة ومحمية بـRLS (صف واحد هنا يعني أنها غائبة أو بلا RLS)
 select 'backup_missing_or_open' check_name

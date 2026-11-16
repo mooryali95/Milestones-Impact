@@ -18,6 +18,8 @@ import { portfolioOutcomes } from './tracking.js';
 import { coordTeam } from './team.ts';
 import { orgFeedback } from './feedback360.ts';
 import { visibilityOfOrg } from './visibility.ts';
+import { features } from './features.ts';
+import { coordFeedbackShown } from './features.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -261,7 +263,11 @@ export async function dashboard(c: any) {
   ]);
   r.raters_pending = raters;
   // تقييم 360: أعداد ونسبة استجابة، ومتوسط كل إطار فوق حد الجهة وحده (orgTotals)، لمن يرى الدرجات. لا صف فردي أبدًا
-  r.feedback360 = coordPermissions(c.permissions).scores && vis.coord_f360 ? await orgFeedback((r.participants || []).map((p: any) => p.id)).catch(() => null) : null;
+  // و360 المخفي (feedback360.enabled) لا يصل المنسق: null فتخفي البطاقة نفسها. يُضاف إلى مفتاح الرؤية ولا يحل محله،
+  // والمفاتيح الثلاثة في الحمولة لتقرأها الواجهة (المرحلة P3)
+  const flags = await features();
+  r.features = flags;
+  r.feedback360 = coordFeedbackShown(coordPermissions(c.permissions).scores, { coord_f360: vis.coord_f360 }, flags) ? await orgFeedback((r.participants || []).map((p: any) => p.id)).catch(() => null) : null;
   return r;
 }
 

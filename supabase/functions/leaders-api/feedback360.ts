@@ -259,8 +259,10 @@ export async function advisorDecide(e: any, b: Body) {
 }
 
 // ── المهمة الساعية: التذكير في أيامه، والإغلاق عند انقضاء النافذة وإبلاغ المستشار ──
+// و360 المخفي (feedback360.enabled مطفأ) متجمد: لا تذكير ولا إغلاق ولا بريد، والدورات على حالها حتى يُظهَر فتُستأنف منها
 export async function sweep() {
   const s = (await appSettings()).feedback360;
+  if (!s.enabled) return { skipped: 'off', reminded: 0, closed: 0 };
   const { data, error } = await db.from('feedback_cycles').select('*, participants(id, full_name, email, organization_id, is_demo)').eq('status', 'open');
   if (error) { if (missingTable(error)) return { reminded: 0, closed: 0 }; throw error; }
   let reminded = 0, closed = 0;
@@ -320,6 +322,11 @@ export async function adminClose(a: { email: string }, b: Body) {
   const c = must(await db.from('feedback_cycles').update({ closes_at: new Date().toISOString() }).eq('id', String(b.cycle_id)).eq('status', 'open').select('id').maybeSingle()) as any;
   if (!c) throw new Fail('الدورة ليست مفتوحة', 409, 'not_open');
   await audit('admin', a.email, 'admin.f360-close', 'feedback_cycles', c.id);
+  // والمخفي: إغلاق المدير قراره فيُنفَّذ، بلا بريد للمستشار (ولا تجري المهمة الساعية على غيرها)
+  if (!(await appSettings()).feedback360.enabled) {
+    must(await db.from('feedback_cycles').update({ status: 'closed', closed_at: new Date().toISOString() }).eq('id', c.id).eq('status', 'open'));
+    return { success: true, closed: 1, reminded: 0, mailed: false };
+  }
   return { success: true, ...(await sweep()) };
 }
 
