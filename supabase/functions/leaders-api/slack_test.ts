@@ -583,8 +583,9 @@ Deno.test('سلاك: تفاصيل التنبيه مطموسة: البريد مق
   // القيم الشبيهة بالأسرار تُركَّب هنا فلا يلتقطها فاحص المستودع (single-source.test.js) نصًا منشورًا
   const jwt = ['ey', 'JhbGciOiJIUzI1NiJ9', '.payload.sig'].join('');
   const mobile = ['05', '51234567'].join('');
+  const stripeKey = ['sk', 'live', 'abcdefghijklmnop'].join('_');
   const line = S.alertLine('creem-webhook', {
-    message: 'refund failed for Mona.Ali@Gmail.com (+966 55 123 4567) code 482913 key sk_live_abcdefghijklmnop',
+    message: `refund failed for Mona.Ali@Gmail.com (+966 55 123 4567) code 482913 key ${stripeKey}`,
     auth: `Bearer ${jwt}`,
     token: 'abc', webhook_secret: 'whsec_123', api_key: 'x',
     phone: mobile,
