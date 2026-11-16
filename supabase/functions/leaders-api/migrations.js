@@ -151,6 +151,7 @@ export const MIGRATIONS = [
   '20261116160000_leaders_erasure_decisions',
   '20261116170000_leaders_guidance_eval_sets',
   '20261116180000_leaders_guidance_transcripts',
+  '20261116190000_leaders_slack_digest_category',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -218,4 +219,5 @@ export const MIGRATION_GATES = {
   '20261116140000_leaders_guidance_eval': ["tolerant", "بلا الجدولين ترد مسارات التقييم not_migrated والبوابة مغلقة، وبلا العمود لا دفعة تجريبية فالبوابة مغلقة"],
   '20261116170000_leaders_guidance_eval_sets': ["tolerant", "بلا الجدول تعمل المجموعة من الملف (guide-eval/cases.json) مسودة كما كانت، والاعتماد يرد not_migrated"],
   '20261116180000_leaders_guidance_transcripts': ["tolerant", "قبل العمود يبقى «احذف محادثتي» حذفًا كما كان، ومسارات السجل ترد not_migrated"],
+  '20261116190000_leaders_slack_digest_category': ["tolerant", "قبله يرفض القيد حجز سلسلة الملخص، فينشر slack.ts الملخص رسالة مستقلة بلا سلسلة ويبقى يعمل"],
 };

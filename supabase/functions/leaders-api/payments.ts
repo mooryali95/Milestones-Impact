@@ -7,6 +7,8 @@
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { alertOps, audit, CONFIG, db, expiresIn, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
+import { ownerNoticeLater } from './notify.ts';
+import { notifySettings, withPaymentFallback } from '../_shared/notify-settings.ts';
 import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
@@ -178,8 +180,11 @@ const linkEvent = async (eventId: string, payId: string) => {
   const { error } = await db.from('payment_events').update({ payment_id: payId }).eq('event_id', eventId);
   if (error) console.error('payment event link:', error.message);
 };
-// بريد الدفع: كل واحد خلف مفتاحه في payment_settings.notify (مغلق حتى يفتحه المدير). تعذّر الإرسال لا يُسقط المعالجة
+// بريد الدفع للمشارك: الإيصال والاسترداد كلٌّ خلف مفتاحه في payment_settings.notify (مغلق حتى يفتحه المدير).
+// وإشعار المالك بالدفعة انتقل إلى مركز الإشعارات (payment_new وpayment_refund): سطر Slack فوري بلا اسم المشارك ويدخل
+// الملخص اليومي، والمفتاح القديم owner قراءة احتياطية حتى يُحفظ صفه في المركز (withPaymentFallback). تعذّر الإرسال لا يُسقط المعالجة
 const notifyOn = async () => cleanNotify(((await settings()) as any).notify);
+const ownerSettings = async (legacyOwner: unknown) => withPaymentFallback(await notifySettings(db), legacyOwner);
 async function payerOf(pay: any) {
   if (!pay.participant_id) return { name: '', email: pay.email };
   const { data } = await db.from('participants').select('full_name, email').eq('id', pay.participant_id).maybeSingle();
@@ -187,7 +192,6 @@ async function payerOf(pay: any) {
 }
 async function notifyPaid(payId: string) {
   const on = await notifyOn();
-  if (!on.receipt && !on.owner) return;
   const { data: pay } = await db.from('payments').select('*').eq('id', payId).maybeSingle();
   if (!pay || pay.status !== 'paid') return;
   const who = await payerOf(pay);
@@ -198,22 +202,25 @@ async function notifyPaid(payId: string) {
       .then(() => true).catch((e) => { console.error('pay receipt', e); return false; });
     if (sent) await saveLedger(pay.id, { receipt_sent_at: new Date().toISOString() });
   }
-  if (on.owner && CONFIG.alertEmail) {
-    await sendMail(CONFIG.alertEmail, 'دفعة جديدة', paymentOwnerMail('دفعة جديدة', [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ['رقم الطلب', pay.order_id || '']]), [], { ref: `payment:${pay.id}` })
-      .catch((e) => console.error('pay owner', e));
-  }
+  // لا يُنتظر سلاك: رد الخطاف لمزود الدفع لا يتأخر بمهلته
+  ownerNoticeLater('payment_new', {
+    line: `💳 دفعة جديدة · ${ITEM_AR[pay.item as Item]} · ${amount}`, ref: `payment:${pay.id}`, settings: await ownerSettings(on.owner),
+    mail: { subject: 'دفعة جديدة', html: paymentOwnerMail('دفعة جديدة', [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ['رقم الطلب', pay.order_id || '']]) },
+  });
 }
 // partial: استرداد جزء من الدفعة، والحق باقٍ؛ البريد يذكر المسترد ومن كم، ولا يقول «أُقفل»
 async function notifyRefunded(pay: any, cents: number | null, partial = false) {
   const on = await notifyOn();
-  if (!on.refund && !on.owner) return;
   const who = await payerOf(pay);
   const amount = money(cents ?? pay.amount_cents, pay.currency);
   const of = partial ? money(pay.amount_cents, pay.currency) : '';
   const subject = partial ? 'استُردّ جزء من دفعتك' : 'استُردّت دفعتك';
   const title = partial ? 'استرداد جزئي' : 'دفعة مستردة';
   if (on.refund && who.email) await sendMail(who.email, subject, paymentRefundMail(who.name, ITEM_AR[pay.item as Item], amount, of), [], { ref: `participant:${pay.participant_id}` }).catch((e) => console.error('pay refund mail', e));
-  if (on.owner && CONFIG.alertEmail) await sendMail(CONFIG.alertEmail, title, paymentOwnerMail(title, [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ...(partial ? [['من المدفوع', of], ['الحق', 'باقٍ، والقرار للإدارة إن لزم سحبه']] as [string, string][] : [])]), [], { ref: `payment:${pay.id}` }).catch((e) => console.error('pay owner', e));
+  ownerNoticeLater('payment_refund', {
+    line: `↩️ ${title} · ${ITEM_AR[pay.item as Item]} · ${amount}`, ref: `payment:${pay.id}`, settings: await ownerSettings(on.owner),
+    mail: { subject: title, html: paymentOwnerMail(title, [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ...(partial ? [['من المدفوع', of], ['الحق', 'باقٍ، والقرار للإدارة إن لزم سحبه']] as [string, string][] : [])]) },
+  });
 }
 
 async function revokeFor(pay: any, by: string) {

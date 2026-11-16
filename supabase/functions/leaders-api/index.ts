@@ -59,6 +59,7 @@ import * as VS from './visibility.ts';
 import * as MC from './mail-center.ts';
 import * as AG from './agent-admin.ts';
 import * as MB from './master-book.ts';
+import * as DG from './digest.ts';
 import * as BP from './book-proposals.ts';
 import * as BR from './book-release.ts';
 import * as NU from './nudges.ts';
@@ -132,6 +133,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       } : { mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } }),
       // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
       slack_hello: await slackHello(db),
+      // الملخص اليومي لإشعارات الإدارة: مرة في اليوم بعد 9:00 بالرياض، لا يُنشر فارغًا، وبريد واحد بدله إن لم يصل Slack
+      daily_digest: await DG.dailyDigest().catch((e) => ({ due: true, error: String(e?.message || e) })),
     };
   },
   'xp.auth-start': E.portalStart,

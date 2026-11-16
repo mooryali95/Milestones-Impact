@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116180000_leaders_guidance_transcripts
+-- as-of migration: 20261116190000_leaders_slack_digest_category
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1979,7 +1979,7 @@ create table if not exists leaders.slack_threads (
   category text not null,
   ts text default ''::text not null,
   created_at timestamp with time zone default now() not null,
-  constraint slack_threads_category_check CHECK ((category = ANY (ARRAY['alerts'::text, 'codes'::text, 'mail'::text, 'hello'::text]))),
+  constraint slack_threads_category_check CHECK ((category = ANY (ARRAY['alerts'::text, 'codes'::text, 'mail'::text, 'hello'::text, 'digest'::text]))),
   constraint slack_threads_pkey PRIMARY KEY (day, category)
 );
 

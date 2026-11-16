@@ -7,6 +7,9 @@ import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, CONFIG, Fail } = await import('./core.ts');
 const E = await import('./experts.ts');
 const R = await import('./sponsor.ts');
+// إشعار المالك يُطلق بلا انتظار (notify.ts ownerNoticeLater)، فالاختبار ينتظره قبل عدّ البريد
+const { noticesIdle } = await import('./notify.ts');
+const { resetNotifySettings } = await import('../_shared/notify-settings.ts');
 
 type Row = Record<string, any>;
 
@@ -121,6 +124,7 @@ Deno.test('بعد التحقق: يُحفظ الطلب، ولا رسالة إلى
       for (let i = 0; i < 20; i++) {
         assertEquals(await E.apply(form(`x${i}@attacker.test`, { captcha: HUMAN }), { ip: `10.0.${i}.1` }), { success: true, received: true });
       }
+      await noticesIdle();
       assertEquals(checks.length, 20);
       assertEquals(tables.experts.length, 20);
       assert(tables.experts.every((r) => r.status === 'applied' && r.source === 'application'));
@@ -129,6 +133,7 @@ Deno.test('بعد التحقق: يُحفظ الطلب، ولا رسالة إلى
       assertEquals(tables.mail_events.map((r) => [r.kind, r.status]), [['bulk', 'sent']]);
       // بريد مسجل بعد التحقق: الرد نفسه، ولا ملف ثانٍ ولا رسالة
       assertEquals(await E.apply(form('x0@attacker.test', { captcha: HUMAN }), { ip: '10.9.9.9' }), { success: true, received: true });
+      await noticesIdle();
       assertEquals(tables.experts.length, 20);
       assertEquals(mail.length, 1);
     });
@@ -143,6 +148,7 @@ Deno.test('طلب جديد في نافذة لاحقة ينبّه المالك م
   try {
     await withServices(async (mail) => {
       await E.apply(form('later@example.com', { captcha: HUMAN }), { ip: '10.1.1.1' });
+      await noticesIdle();
       assertEquals(mail.map((m) => m.to), ['owner@example.com']);
     });
   } finally { restore(); unconfig(); }
@@ -201,6 +207,7 @@ Deno.test('مسار المحتوى: يُحفظ بلا أدوار وباللجن�
       const row = tables.experts[0];
       assertEquals([row.status, row.source, row.roles, row.committees, row.dimensions], ['applied', 'application', [], ['content'], ['impact']]);
       assertEquals([row.levels, row.sectors, row.weekly_hours], [[], [], null]);
+      await noticesIdle();
       assertEquals(mail.map((m) => [m.to, m.subject]), [['owner@example.com', 'طلب عضوية لجنة: هند المراجعة']]);
       assertEquals(tables.audit_log[0].after, { track: 'content', committees: ['content'], dimensions: ['impact'] });
       const { bookAccess } = await import('./master-book.js');
@@ -226,6 +233,7 @@ Deno.test('مسار المحتوى: إن فشل حفظ اللجنة يبقى ا�
       assertEquals(await E.apply(contentForm('hind@example.sa'), { ip: '10.2.1.1' }), { success: true, received: true });
       assertEquals([tables.experts.length, tables.experts[0].committees], [1, undefined]);
       assertEquals(tables.audit_log[0].after, { track: 'content', committees: ['content'], dimensions: ['impact'], committees_saved: false });
+      await noticesIdle();
       assertEquals(mail.map((m) => m.subject), ['طلب انضمام خبير: هند المراجعة']);
     });
   } finally { restore(); unconfig(); }
@@ -271,8 +279,11 @@ Deno.test('مسار المحتوى: الحد والتحقق البشري وفح�
 // server-sec-3: المسمى يكتبه صاحب الملف، فلا يدخل بريد المالك وسمًا (رابط تصيّد أو صورة تتبع من مرسل المنصة)
 Deno.test('ملف الخبير المدعو: المسمى يصل المالك نصًا مرمّزًا لا رابطًا', async () => {
   const unconfig = configure();
-  const tables: Record<string, Row[]> = { experts: [{ id: 'ex1', email: 'invited@example.com', status: 'invited', source: 'admin' }], audit_log: [], mail_events: [] };
+  // «خبير استكمل ملفه» معلوماتي يدخل الملخص اليومي بلا بريد في «متوازن»، فالاختبار يفتح صف البريد في المركز ليرى متنه
+  const tables: Record<string, Row[]> = { experts: [{ id: 'ex1', email: 'invited@example.com', status: 'invited', source: 'admin' }], audit_log: [], mail_events: [],
+    app_settings: [{ key: 'notifications', value: { preset: 'balanced', rows: { expert_profile_done: { email: true, digest: true } } } }] };
   const restore = install(tables);
+  resetNotifySettings();
   const real = globalThis.fetch;
   const sent: { to: string; html: string }[] = [];
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
@@ -286,12 +297,12 @@ Deno.test('ملف الخبير المدعو: المسمى يصل المالك ن
   try {
     const title = '<a href="https://evil.example/login">راجع الطلب من هنا</a><img src="https://evil.example/t.gif">';
     await E.portalProfileSave(tables.experts[0], form('invited@example.com', { title }));
-    await new Promise((r) => setTimeout(r, 20));   // تنبيه المالك يُرسل بلا انتظار
+    await noticesIdle();   // تنبيه المالك يُرسل بلا انتظار
     assertEquals(sent.map((m) => m.to), ['owner@example.com']);
     const html = sent[0].html;
     assert(!html.includes('<a href="https://evil') && !html.includes('<img src="https://evil'), 'لا وسم من المسمى في البريد');
     assert(html.includes('&lt;a href=&quot;https://evil.example/login&quot;&gt;'), 'المسمى يظهر نصًا مرمّزًا');
-  } finally { globalThis.fetch = real; restore(); unconfig(); }
+  } finally { globalThis.fetch = real; restore(); unconfig(); resetNotifySettings(); }
 });
 
 // p-capstone-4: طلب الاستشارة الذي انتهى «لا خبير مطابق» كان يختفي من «طلباتك» بلا كلمة. يبقى ظاهرًا أسبوعين

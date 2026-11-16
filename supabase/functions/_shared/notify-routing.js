@@ -51,11 +51,12 @@ const NO_EMAIL = ['slack', 'digest'];
 const ev = (key, category, tier, label, extra = {}) => ({ key, category, tier, label, locked: false, allow: ALL, digest: false, ...extra });
 
 // فهرس الأحداث (جرد القسم 5). المفتاح ثابت: نوع التنبيه في raiseAlert كما هو، أو اسم الحدث للإشعارات التي تمر
-// بالوحدة في المراحل التالية. digest: يدخل الملخص اليومي بعدده حين يصل Slack فورًا (طابور عمل)
+// بالوحدة في المراحل التالية. digest: يدخل الملخص اليومي بعدده حين يصل Slack فورًا (طابور عمل).
+// screen: شاشة الحدث في لوحة الإدارة، رابط سطره في Slack والملخص (فارغ: اللوحة نفسها)
 export const EVENTS = [
   // ── الأمان والخصوصية ──
   ev('owner_login_new_device', 'security', 'critical', 'دخول المالك من جهاز جديد', { locked: true }),
-  ev('owner_login_known_device', 'security', 'important', 'دخول المالك من جهاز معروف', { digest: true }),
+  ev('owner_login_known_device', 'security', 'important', 'دخول المالك من جهاز معروف', { digest: true, screen: '#/leaders/overview' }),
   ev('admin_security_change', 'security', 'critical', 'تغيير وسيلة الدخول أو الدور أو إضافة حساب إدارة', { locked: true }),
   ev('admin_recovery_request', 'security', 'critical', 'طلب استعادة وصول', { locked: true }),
   ev('admin_access_restored', 'security', 'critical', 'أُعيد وصول حساب إدارة', { locked: true }),
@@ -73,8 +74,8 @@ export const EVENTS = [
   ev('payment_unmatched', 'money', 'critical', 'دفعة بلا مشارك معروف', { locked: true }),
   ev('creem-webhook', 'money', 'critical', 'خطأ في خطاف الدفع', { locked: true }),
   // قرار المالك: سطر فوري في Slack لكل دفعة، ويدخل الملخص اليومي
-  ev('payment_new', 'money', 'important', 'دفعة جديدة', { digest: true }),
-  ev('payment_refund', 'money', 'important', 'استرداد دفعة', { digest: true }),
+  ev('payment_new', 'money', 'important', 'دفعة جديدة', { digest: true, screen: '#/leaders/payments' }),
+  ev('payment_refund', 'money', 'important', 'استرداد دفعة', { digest: true, screen: '#/leaders/payments' }),
   ev('agent_spend_cap', 'money', 'critical', 'بلغ المساعد سقف إنفاقه اليومي'),
   ev('agent_spend_80', 'money', 'important', 'بلغ المساعد 80% من سقف إنفاقه'),
   ev('agent_ledger_error', 'money', 'critical', 'تعذر تسجيل إنفاق المساعد'),
@@ -95,7 +96,7 @@ export const EVENTS = [
   ev('mail_quota_70', 'ops', 'important', 'تجاوز البريد 70% من حصة اليوم'),
   ev('mail_queue_stuck', 'ops', 'important', 'رسائل عالقة في طابور البريد'),
   ev('mail_queue_carryover', 'ops', 'important', 'رسائل مرحلة إلى الغد بالحصة'),
-  ev('booking_not_eligible', 'ops', 'important', 'حجز من غير مؤهل', { digest: true }),
+  ev('booking_not_eligible', 'ops', 'important', 'حجز من غير مؤهل', { digest: true, screen: '#/leaders/overview' }),
   ev('seat_check_unavailable', 'ops', 'important', 'تعذر فحص المقاعد'),
   ev('leaders-hooks', 'ops', 'important', 'خطأ في خطاف الحجوزات'),
   ev('agent_enabled', 'ops', 'important', 'تشغيل المساعد'),
@@ -105,14 +106,14 @@ export const EVENTS = [
   ev('weekly_health', 'ops', 'important', 'تقرير الأسبوع بلا ما يحتاج تدخلًا'),
   // ── الطلبات ──
   // قرار المالك: طلب التواصل بالبريد وSlack معًا (وعد الرد خلال 4 ساعات عمل)
-  ev('contact_request', 'requests', 'critical', 'طلب تواصل جديد أو مساعد يطلب إنسانًا'),
-  ev('expert_application', 'requests', 'important', 'طلب انضمام خبير أو عضوية لجنة', { digest: true }),
-  ev('expert_no_match', 'requests', 'important', 'لا خبير متاح لطلب'),
-  ev('sponsor_request', 'requests', 'important', 'طلب رعاية', { digest: true }),
-  ev('seat_limit_owner', 'requests', 'important', 'حدود المقاعد (نسخة المالك)'),
+  ev('contact_request', 'requests', 'critical', 'طلب تواصل جديد أو مساعد يطلب إنسانًا', { screen: '' }),
+  ev('expert_application', 'requests', 'important', 'طلب انضمام خبير أو عضوية لجنة', { digest: true, screen: '#/leaders/experts' }),
+  ev('expert_no_match', 'requests', 'important', 'لا خبير متاح لطلب', { screen: '#/leaders/experts?view=requests' }),
+  ev('sponsor_request', 'requests', 'important', 'طلب رعاية', { digest: true, screen: '#/leaders/payments' }),
+  ev('seat_limit_owner', 'requests', 'important', 'حدود المقاعد (نسخة المالك)', { screen: '#/leaders/payments' }),
   // ── النشاط ──
-  ev('expert_profile_done', 'activity', 'info', 'خبير مدعو استكمل ملفه'),
-  ev('matrix_plan', 'activity', 'info', 'خطة مقدمة في مصفوفة التأثير'),
+  ev('expert_profile_done', 'activity', 'info', 'خبير مدعو استكمل ملفه', { screen: '#/leaders/experts' }),
+  ev('matrix_plan', 'activity', 'info', 'خطة مقدمة في مصفوفة التأثير', { screen: '#/matrix' }),
 ];
 export const EVENT_INDEX = Object.freeze(Object.fromEntries(EVENTS.map((e) => [e.key, Object.freeze(e)])));
 
@@ -142,6 +143,7 @@ export function normalizeSettings(settings) {
 }
 
 // القنوات المطلوبة للحدث بالإعداد وحده، قبل حال Slack
+/** @param {any} event @param {any} [settings] */
 export function wanted(event, settings = DEFAULT_SETTINGS) {
   const e = eventOf(event);
   const s = normalizeSettings(settings);
@@ -155,6 +157,7 @@ export function wanted(event, settings = DEFAULT_SETTINGS) {
 
 // القرار: القنوات الفعلية لهذا الإرسال {email, slack, digest, log}. log دائمًا: كل حدث يبقى في سجل التدقيق.
 // Slack مطلوب ولم يصل (أو غير مضبوط): البريد بدله إن سُمح به (القسم 6.4). والملخص له احتياطه البريدي الواحد في مهمته
+/** @param {any} event @param {any} [settings] @param {string} [slackState] */
 export function route(event, settings = DEFAULT_SETTINGS, slackState = 'ok') {
   const e = eventOf(event);
   const want = wanted(e, settings);
@@ -166,6 +169,14 @@ export function route(event, settings = DEFAULT_SETTINGS, slackState = 'ok') {
 
 // حال Slack من نتيجة الإرسال: وصل من إحدى القناتين، أو ضُبطت إحداهما ولم يصل، أو لم تُضبط أي منهما
 export const slackStateOf = ({ delivered, configured }) => (delivered ? 'ok' : configured ? 'failed' : 'unconfigured');
+
+// الملخص اليومي (6.3، قرار المالك): 9:00 بتوقيت الرياض في سلسلة «الملخص اليومي»، لا يُنشر فارغًا، وبريد واحد بدله إن
+// لم يُضبط Slack أو لم يصل. يدخله كل حدث يقرر له route ملخصًا (المعلوماتي، والمهم الموسوم digest بعد سطره الفوري)
+export const DIGEST_HOUR_RIYADH = 9;
+export const DIGEST_SUBJECT = 'الملخص اليومي لإشعارات الإدارة';
+export const digestEvents = (/** @type {any} */ settings = DEFAULT_SETTINGS) => EVENTS.filter((e) => wanted(e, settings).digest).map((e) => e.key);
+// رابط الشاشة في لوحة الإدارة لكل حدث (screen في الفهرس)، وما لا شاشة له فاللوحة الرئيسية
+export const screenOf = (event) => eventOf(event).screen ?? '#/leaders/overview';
 
 // بريد «Slack لا يستقبل التنبيهات»: مرة كل ست ساعات على الأكثر (6.4)
 export const SLACK_DOWN_MS = 6 * 36e5;

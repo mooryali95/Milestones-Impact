@@ -46,7 +46,9 @@ describe('مصدر مقياس الجاهزية', () => {
     const ui = read('admin-app/src/screens/Contacts.jsx');
     expect(ui).not.toContain("SOURCE_AR[r.product] || 'القادة'");
     expect(ui).not.toContain("'صفحة القادة'");
-    expect(read('supabase/functions/send-otp/index.ts')).toContain('"MI-ASSESSMENT": "مقياس جاهزية الأثر"');
+    // أسماء الصفحات في _shared/contact.ts مصدرًا واحدًا لعنوان البريد وسطر Slack (مركز الإشعارات، المرحلة 3)
+    expect(read('supabase/functions/_shared/contact.ts')).toContain("'MI-ASSESSMENT': 'مقياس جاهزية الأثر'");
+    expect(read('supabase/functions/send-otp/index.ts')).toContain('CONTACT_PAGES[r.product as string]');
     // رمز دخول اللوحة يقبل الأرقام العربية المشرقية بالمطبّع نفسه الذي في بوابات القادة
     const login = read('admin-app/src/screens/Login.jsx');
     expect(login).toContain('setCode(codeDigits(e.target.value))');

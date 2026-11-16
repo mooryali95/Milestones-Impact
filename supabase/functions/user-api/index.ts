@@ -6,6 +6,7 @@ import {
 } from "npm:@simplewebauthn/server@13.3.3";
 import { MAIL_FROM_DEFAULT, mailButton, mailCode, mailRows, mailShell, mailText, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
+import { route } from "../_shared/notify-routing.js";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
 //
@@ -43,7 +44,10 @@ const OTP_PER_IP_DAY = Number(Deno.env.get("USER_OTP_PER_IP_DAY") || "60") || 60
 const TURNSTILE_SECRET = Deno.env.get("LEADERS_TURNSTILE_SECRET") || "";
 const TURNSTILE_SITE = Deno.env.get("LEADERS_TURNSTILE_SITE_KEY") || "";
 // إشعار الخطة المقدَّمة (D14): بدل Lambda في us-east-1، من هنا وبأقل بيانات
-const NOTIFY_EMAIL = Deno.env.get("MATRIX_NOTIFY_EMAIL") || Deno.env.get("LEADERS_ALERT_EMAIL") || "";
+// المستقبل المستشار (MATRIX_NOTIFY_EMAIL) ببريد لكل خطة كما كان (ملخص المستشار لاحقًا بقرار المالك). وبلاه يصل المالك بجدول
+// التوجيه (matrix_plan، معلوماتي): يدخل الملخص اليومي بعدده ورابطه، ولا بريد لكل تسليم إلا إن قرره الجدول
+const ADVISOR_EMAIL = Deno.env.get("MATRIX_NOTIFY_EMAIL") || "";
+const NOTIFY_EMAIL = ADVISOR_EMAIL || Deno.env.get("LEADERS_ALERT_EMAIL") || "";
 const ADMIN_URL = SITES.admin;
 const clientIp = (req: Request) => (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0] || "").trim() || null;
 
@@ -152,6 +156,9 @@ async function networkLimit(sb: SB, ip: string | null): Promise<Response | null>
 
 // إشعار المستشار بخطة مقدَّمة (D14): معرّف الحدث ونوعه والاسم والبريد ورابط اللوحة، بلا جوال ولا تفاصيل الخطة
 async function notifyPlanSubmitted(sb: SB, reg: { id: string; name: string; email: string }) {
+  // سطر السجل يعدّه الملخص اليومي (leaders.audit_log، system.notify): مفتاح الحدث ومعرّف التسجيل وحدهما، بلا اسم ولا بريد
+  await planNoticeLog(sb, reg.id);
+  if (!ADVISOR_EMAIL && !route("matrix_plan").email) return;
   if (!NOTIFY_EMAIL) { console.error("user-api: MATRIX_NOTIFY_EMAIL missing; plan notification skipped"); return; }
   const html = mailShell("خطة مقدَّمة في مصفوفة التأثير", `
 ${mailText("قدّم مشارك خطته النهائية في مصفوفة التأثير، وهي بانتظار مراجعتك.")}
@@ -159,6 +166,13 @@ ${mailRows([["الحدث", "plan_submitted", true], ["المعرّف", reg.id, t
 ${mailButton(`${ADMIN_URL}/#/matrix`, "افتح الخطة في لوحة الإدارة")}`, { family: "admin", preheader: "خطة مقدَّمة بانتظار مراجعتك", footnote: "" });
   const r = await sendEmail(sb, NOTIFY_EMAIL, "خطة مقدَّمة في مصفوفة التأثير", html, "notify", `registration:${reg.id}`);
   if (!r.ok) console.error("user-api: plan notification not sent", r.reason);
+}
+
+async function planNoticeLog(sb: SB, id: string) {
+  try {
+    const { error } = await sb.schema("leaders").from("audit_log").insert({ actor_type: "system", actor: "user-api", action: "system.notify", entity: "notify", entity_id: "matrix_plan", after: { ref: `registration:${id}` } });
+    if (error) console.error("user-api: plan notice log", error.message);
+  } catch (e) { console.error("user-api: plan notice log", e); }
 }
 
 async function checkOtp(sb: SB, email: string, otp: string): Promise<boolean> {

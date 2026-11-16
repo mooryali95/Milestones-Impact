@@ -7,6 +7,7 @@ import { bdi, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { audit, CONFIG, db, Fail, must, sendMail } from './core.ts';
 import { requireWrite } from './admin.ts';
+import { ownerNoticeLater } from './notify.ts';
 import { coveredElsewhere, needsSeat, pinSponsorFor, seatsUsed } from './entitlements.ts';
 import { inProgram, isEmail, normalizeEmail } from './logic.js';
 import { suggestOrgs } from './sponsor-match.js';
@@ -36,10 +37,12 @@ export async function request(p: any, b: Body) {
   const { data, error } = await db.from('sponsor_requests').insert({ participant_id: p.id, typed_name: typed, contact_email: contact }).select('id').single();
   if (error) throw new Fail(error.code === '23505' ? 'لديك طلب رعاية قيد المراجعة' : 'تعذّر إرسال الطلب', error.code === '23505' ? 409 : 500);
   await audit('participant', p.id, 'sponsor.request', 'sponsor_requests', data.id, null, { typed });
-  if (CONFIG.alertEmail) {
-    sendMail(CONFIG.alertEmail, `طلب رعاية: ${p.full_name} · ${typed}`, shell('طلب رعاية جديد',
-      mailText(`${bdi(p.full_name)} (${bdi(p.email)}) يذكر أن «${bdi(typed)}» رشّحته للبرنامج.`) + mailButton(`${SITES.admin}/#/leaders/payments`, 'راجع الطلب'))).catch(() => {});
-  }
+  // سطر Slack «طلب رعاية جديد» ورابطه وحده: اسم المشارك واسم الجهة كما كتبه يبقيان في البريد الاحتياطي (sponsor_request)
+  ownerNoticeLater('sponsor_request', {
+    line: '🤝 طلب رعاية جديد', ref: `sponsor_request:${data.id}`,
+    mail: { subject: `طلب رعاية: ${p.full_name} · ${typed}`, html: shell('طلب رعاية جديد',
+      mailText(`${bdi(p.full_name)} (${bdi(p.email)}) يذكر أن «${bdi(typed)}» رشّحته للبرنامج.`) + mailButton(`${SITES.admin}/#/leaders/payments`, 'راجع الطلب')) },
+  });
   return { success: true, request: await mine(p) };
 }
 

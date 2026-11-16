@@ -830,7 +830,8 @@ export function slackDownMail(kind: string) {
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
     'Slack لا يستقبل التنبيهات', 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
-async function slackDownNotice(kind: string) {
+// يستعمله أيضًا إشعار المالك التشغيلي (notify.ts) حين لا يصل سطره
+export async function slackDownNotice(kind: string) {
   if (!(await slackDownDue())) return false;
   slackDownAt = Date.now();
   const ok = await sendMail(CONFIG.alertEmail, SLACK_DOWN_SUBJECT, slackDownMail(kind), [], { kind: 'alert' }).then(() => true, (e) => { console.error('slack down mail:', e); return false; });

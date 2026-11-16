@@ -4,6 +4,7 @@ import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1';
 const { webhook } = await import('./payments.ts');
 const { CONFIG, db } = await import('./core.ts');
+const { noticesIdle } = await import('./notify.ts');
 const { refundOutcome, paymentTimeline, revenueKpis, netCents } = await import('./payments-ledger.js');
 
 const SECRET = 'whsec-test';
@@ -74,7 +75,8 @@ const refundEvent = (id: string, amount: number | null, type = 'refund.created')
   const raw = JSON.stringify({ id, eventType: type, object: { id: `ref_${id}`, order: 'ord_1', checkout: 'ch_1', ...(amount == null ? {} : { refund_amount: amount }), reason: 'طلب العميل' } });
   return raw;
 };
-async function send(raw: string) { return await webhook(raw, new Headers({ 'creem-signature': await sign(raw) })); }
+// إشعار المالك بالدفعة يُطلق بلا انتظار (ownerNoticeLater) فلا يتأخر رد الخطاف، والاختبار ينتظره
+async function send(raw: string) { const r = await webhook(raw, new Headers({ 'creem-signature': await sign(raw) })); await noticesIdle(); return r; }
 
 function setupEnv() {
   Deno.env.set('CREEM_WEBHOOK_SECRET', SECRET);
