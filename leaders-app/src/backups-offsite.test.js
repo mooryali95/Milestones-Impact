@@ -79,6 +79,55 @@ describe('مراقب الحداثة (Worker)', () => {
   });
 });
 
+describe('تنبيه المراقب إلى سلاك والبريد، ونشره من GitHub', () => {
+  const stale = { at: '2026-11-01T00:00:00Z' };
+  const bucket = (store = {}) => ({
+    store,
+    get: async (k) => (k === 'latest.json' ? { text: async () => JSON.stringify(stale) } : store[k] ? { text: async () => store[k] } : null),
+    put: async (k, v) => { store[k] = v; },
+  });
+  const run = async (env, replies) => {
+    const calls = [];
+    const orig = globalThis.fetch;
+    globalThis.fetch = async (url, init) => { calls.push({ url: String(url), body: JSON.parse(init.body) }); return replies(String(url)); };
+    try {
+      const { default: w } = await import('../../workers/backup-monitor/index.js');
+      const waits = [];
+      await w.scheduled({}, env, { waitUntil: (p) => waits.push(p) });
+      await Promise.all(waits);
+    } finally { globalThis.fetch = orig; }
+    return calls;
+  };
+  const okAll = (url) => new Response(JSON.stringify({ ok: true }), { status: 200 });
+  it('نسخة متأخرة تُنشر في قناة سلاك بسببها وحده، وتبدأ مهلة الـ12 ساعة', async () => {
+    const b = bucket();
+    const calls = await run({ BACKUPS: b, SLACK_BOT_TOKEN: 'test-token', SLACK_CHANNEL: 'C123' }, okAll);
+    expect(calls.map((c) => c.url)).toEqual(['https://slack.com/api/chat.postMessage']);
+    expect(calls[0].body.channel).toBe('C123');
+    expect(calls[0].body.text).toMatch(/^⚠️ النسخ الاحتياطي متأخر: آخر نسخة عمرها \d+ ساعة، فوق 26\. الدليل: RUNBOOK\.md §4$/);
+    expect(JSON.parse(b.store['monitor/last-alert.json']).sent).toEqual(['slack']);
+    expect(await run({ BACKUPS: b, SLACK_BOT_TOKEN: 'test-token', SLACK_CHANNEL: 'C123' }, okAll)).toEqual([]);
+  });
+  it('القناتان معًا، وبلا أسرار لا طلب، وفشل القناتين لا يبدأ المهلة فيُعاد في الساعة التالية', async () => {
+    const both = await run({ BACKUPS: bucket(), SLACK_BOT_TOKEN: 't', SLACK_CHANNEL: 'C1', RESEND_API_KEY: 'k', ALERT_TO: 'ops@example.com' }, okAll);
+    expect(both.map((c) => c.url).sort()).toEqual(['https://api.resend.com/emails', 'https://slack.com/api/chat.postMessage']);
+    expect(await run({ BACKUPS: bucket() }, okAll)).toEqual([]);
+    const b = bucket();
+    await run({ BACKUPS: b, SLACK_BOT_TOKEN: 't', SLACK_CHANNEL: 'C1' }, () => new Response(JSON.stringify({ ok: false, error: 'not_in_channel' }), { status: 200 }));
+    expect(b.store['monitor/last-alert.json']).toBeUndefined();
+  });
+  it('سير النشر يتخطى بتحذير بلا رمز Cloudflare، وwrangler بإصدار مثبّت، ولا يمر به سر تنبيه', () => {
+    const t = read('.github/workflows/deploy-backup-monitor.yml');
+    expect(t).toMatch(/if \[ -z "\$CLOUDFLARE_API_TOKEN" \]; then\n\s+echo "::warning::/);
+    expect(t).toContain('echo "skip=true" >> "$GITHUB_OUTPUT"');
+    expect(t).toMatch(/npx --yes wrangler@\d+\.\d+\.\d+ deploy/);
+    expect(t).toContain("secrets.CLOUDFLARE_ACCOUNT_ID || secrets.R2_ACCOUNT_ID");
+    expect(t).toContain("- 'workers/backup-monitor/**'");
+    for (const s of ['SLACK_BOT_TOKEN', 'RESEND_API_KEY', 'ALERT_TO']) expect(t.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n'), s).not.toContain(s);
+    expect(read('RUNBOOK.md')).toContain('deploy-backup-monitor.yml');
+  });
+});
+
 describe('سكربتا النسخ والتمرين وسيرا العمل', () => {
   const bash = (f) => spawnSync('bash', ['-n', join(root, f)], { encoding: 'utf8' });
   it('السكربتان سليمان نحويًا، ويشفّران بالمفتاح العام، ويرفضان حفظ نسخة غير مشفرة', () => {

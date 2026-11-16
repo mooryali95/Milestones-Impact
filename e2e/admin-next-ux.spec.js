@@ -197,3 +197,44 @@ test('الرؤية الشاملة: الخانة تفتح أصحابها في ق�
   await page.goto(`${BASE}#/leaders/insight`);
   await expect(page.getByRole('tab', { name: 'ماذا تغيّر' })).toHaveAttribute('aria-selected', 'true');
 });
+
+test('«أين توقفوا» من ملف الدفعة: الرابط يفتح «بالدفعة» على الدفعة وحدها، و«كل الدفعات» يعيد الجميع', async ({ page }) => {
+  await setup(page);
+  const stages = (o) => ({ profile: 0, assessment_todo: 0, assessment_doing: 0, approval: 0, placed: 0, enrolled: 0, completed: 0, out: 0, ...o });
+  const g = (key, name, total, st, extra = {}) => ({ key, name, total, stages: stages(st), stuck: (st.profile || 0) + (st.assessment_doing || 0), waiting: st.approval || 0, active_week: 1, approved_pct: 50, completed_pct: 0, active_pct: 50, ...extra });
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'admin.insight') return route.fulfill({ json: { success: true,
+      by_org: { groups: [g('o1', 'وزارة التجربة', 7, { profile: 5, approval: 2 })], total: g('all', 'الإجمالي', 7, { profile: 5, approval: 2 }) },
+      by_cohort: { groups: [g('c1', 'دفعة الخريف', 4, { profile: 3, approval: 1 }, { status: 'running', org: 'وزارة التجربة' }), g('c2', 'دفعة الربيع', 3, { profile: 2, approval: 1 }, { status: 'open' })], total: g('all', 'الإجمالي', 7, { profile: 5, approval: 2 }) },
+      experts: [] } });
+    return route.fallback();
+  });
+  await page.goto(`${BASE}#/leaders/insight?cohort=c2`);
+  await expect(page.getByRole('tab', { name: 'بالدفعة' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('status').filter({ hasText: 'الدفعة: دفعة الربيع' })).toBeVisible();
+  const table = page.locator('.ins-table');
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody tr')).toContainText('دفعة الربيع');
+  await expect(table.locator('tfoot')).toHaveCount(0);
+  // البطاقات العليا للدفعة المختارة
+  await expect(page.locator('.stat-card').first().locator('.stat-value')).toHaveText('3');
+  await page.getByRole('button', { name: 'كل الدفعات' }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(page.locator('.stat-card').first().locator('.stat-value')).toHaveText('7');
+  await expect(page).not.toHaveURL(/cohort=/);
+  // دفعة من الرابط ثم دفعة أخرى ثم الرجوع إلى رابط بلا دفعة: الشاشة تتبع الرابط فتعود إلى كل الدفعات
+  await page.evaluate(() => { location.hash = '#/leaders/insight?cohort=c1'; });
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody tr')).toContainText('دفعة الخريف');
+  await page.evaluate(() => { location.hash = '#/leaders/insight?cohort=c2'; });
+  await expect(table.locator('tbody tr')).toContainText('دفعة الربيع');
+  await page.evaluate(() => { location.hash = '#/leaders/insight'; });
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(page.locator('.stat-card').first().locator('.stat-value')).toHaveText('7');
+  await expect(page.getByRole('status').filter({ hasText: 'الدفعة:' })).toHaveCount(0);
+  // دفعة بلا مشاركين: رسالة لا جدول فارغ
+  await page.goto(`${BASE}#/leaders/insight?cohort=zz`);
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: 'لا مشاركين في هذه الدفعة بعد' })).toBeVisible();
+});

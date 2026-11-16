@@ -5,7 +5,7 @@
 // useEscape(إغلاق) ← Esc يغلق العليا وحدها · useGuardedClose(تغيّرت؟, إغلاق) ← إغلاق يسأل قبل أن يضيع ما كُتب
 // التركيز في كل نافذة role="dialog" aria-modal="true" من useModalFocus هنا، بلا سطر في النافذة نفسها.
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { isChunkError } from './lazy-retry.js';
+import { isChunkError, reloadOnce } from './lazy-retry.js';
 
 const Ctx = createContext(null);
 export const useUI = () => useContext(Ctx);
@@ -215,26 +215,33 @@ export function SectionIndex({ label, sections }) {
 // يُعطى key بالتبويب فيُصفَّر عند الانتقال، والترويسة والتنقل خارجه فيبقيان يعملان.
 // خطأ تحميل ملف القسم (نشر أحدث حذف الملف القديم) لا يصلحه «حاول مرة أخرى» (React.lazy يحفظ الوعد المرفوض):
 // رسالته تطلب إعادة تحميل الصفحة. وأي خطأ آخر يُعرض نوعه ورسالته مختصرين، فتدل لقطة الشاشة على سببه
+// scope="app" (main.jsx): الحاجز الأخير حول اللوحة كلها، فما فات حواجز الشاشات (سياق أو نافذة أو الإطار نفسه) لا يترك صفحة
+// بيضاء. هناك خطأ الملف يعيد تحميل الصفحة مرة واحدة بنفسه (reloadOnce، بلا حلقة)، وإن سبقته إعادة قريبة بقي الزر
 export class ScreenBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error) { console.error('تعذّر رسم الشاشة:', error?.message || error, error); }   // eslint-disable-line no-console
+  componentDidCatch(error) {
+    console.error(this.props.scope === 'app' ? 'تعذّر رسم اللوحة:' : 'تعذّر رسم الشاشة:', error?.message || error, error);   // eslint-disable-line no-console
+    if (this.props.scope === 'app' && isChunkError(error)) (this.props.reloadPage || reloadOnce)();
+  }
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
+    const app = this.props.scope === 'app';
     if (isChunkError(error)) {
       return (
-        <div className="la-err" role="alert">
-          صدر تحديث للوحة، فأعد تحميل الصفحة لتفتح هذه الشاشة. بياناتك لم تتأثر.{' '}
+        <div className={`la-err${app ? ' la-err-app' : ''}`} role="alert">
+          {app ? 'صدر تحديث للوحة، فأعد تحميل الصفحة. بياناتك لم تتأثر.' : 'صدر تحديث للوحة، فأعد تحميل الصفحة لتفتح هذه الشاشة. بياناتك لم تتأثر.'}{' '}
           <button className="btn-sm ghost" type="button" onClick={() => window.location.reload()}>أعد تحميل الصفحة</button>
         </div>
       );
     }
     const detail = String(`${error?.name || 'Error'}: ${error?.message || error}`).slice(0, 200);
     return (
-      <div className="la-err" role="alert">
-        تعذّر عرض هذه الشاشة. بقية اللوحة تعمل، وبياناتك لم تتأثر.{' '}
+      <div className={`la-err${app ? ' la-err-app' : ''}`} role="alert">
+        {app ? 'تعذّر عرض اللوحة. بياناتك لم تتأثر.' : 'تعذّر عرض هذه الشاشة. بقية اللوحة تعمل، وبياناتك لم تتأثر.'}{' '}
         <button className="btn-sm ghost" type="button" onClick={() => this.setState({ error: null })}>حاول مرة أخرى</button>
+        {app && <button className="btn-sm ghost" type="button" onClick={() => window.location.reload()}>أعد تحميل الصفحة</button>}
         <small className="la-err-detail" dir="ltr">{detail}</small>
       </div>
     );

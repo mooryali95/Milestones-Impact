@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { launchReadiness, migrationsSummary, pendingMigrations, REQUIRED_SECRETS, setupReadiness } from '../../supabase/functions/leaders-api/readiness.js';
+import { ALERT_CHANNEL_KEY, alertChannelOk, launchReadiness, migrationsSummary, missingRequiredSecrets, pendingMigrations, REQUIRED_SECRETS, setupReadiness } from '../../supabase/functions/leaders-api/readiness.js';
 import { MIGRATION_GATES, MIGRATIONS } from '../../supabase/functions/leaders-api/migrations.js';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
 import * as gates from '../../scripts/ops/stage-gates.mjs';
@@ -95,6 +95,10 @@ describe('المصدر: اللوحة والبوابات تقرآن الوحدة 
     const sys = read('supabase/functions/leaders-api/system.ts');
     const secrets = sys.slice(sys.indexOf('const secrets = {'), sys.indexOf('};', sys.indexOf('const secrets = {')));
     for (const k of REQUIRED_SECRETS) expect(secrets, k).toMatch(new RegExp(`\\b${k}:`));
+    // قناة التنبيه بندًا واحدًا بحكم الوحدة نفسها، والبوابة تحكم بها
+    expect(secrets).toMatch(/\[ALERT_CHANNEL_KEY\]: alertChannelOk\(/);
+    expect(read('scripts/ops/stage-gates.mjs')).toMatch(/missingRequiredSecrets\(\(n\) => names\.has\(n\)\)/);
+    expect(read('supabase/functions/leaders-api/mail-center.ts')).toMatch(/alert_channel: alertChannelOk\(/);
   });
 
   it('حالة النظام وبوابات المراحل تحكمان بـ readiness.js ولا تكرران الأحكام', () => {
@@ -107,5 +111,26 @@ describe('المصدر: اللوحة والبوابات تقرآن الوحدة 
     expect(sg).toMatch(/pendingMigrations\(MIGRATIONS, applied, MIGRATION_GATES\)/);
     expect(sg).not.toMatch(/advisor_expert_id is not null has|final_eval <> '\{\}'::jsonb|content_release is not null has/);
     expect(sg).not.toMatch(/export const REQUIRED_SECRETS = \[/);
+  });
+});
+
+describe('قناة التنبيه: سلاك أو الرابط، أيهما يكفي', () => {
+  const env = (...names) => (n) => names.includes(n);
+  const SLACK = ['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'];
+  it('سلاك بسرّيه معًا يكفي بلا الرابط', () => {
+    expect(alertChannelOk(env(...SLACK))).toBe(true);
+    expect(missingRequiredSecrets(env('LEADERS_CERT_SIGNING_KEY', ...SLACK))).toEqual([]);
+  });
+  it('الرابط وحده يكفي بلا سلاك', () => {
+    expect(missingRequiredSecrets(env('LEADERS_CERT_SIGNING_KEY', 'LEADERS_ALERT_WEBHOOK'))).toEqual([]);
+  });
+  it('نصف سلاك لا يكفي، وغياب القناتين بند واحد باسم الخيارين', () => {
+    expect(alertChannelOk(env('LEADERS_SLACK_BOT_TOKEN'))).toBe(false);
+    expect(missingRequiredSecrets(env('LEADERS_SLACK_BOT_TOKEN'))).toEqual(['LEADERS_CERT_SIGNING_KEY', ALERT_CHANNEL_KEY]);
+    expect(ALERT_CHANNEL_KEY).toContain('LEADERS_ALERT_WEBHOOK');
+    expect(ALERT_CHANNEL_KEY).toContain('LEADERS_SLACK_BOT_TOKEN');
+  });
+  it('الرابط لم يعد سرًا مشترطًا بذاته', () => {
+    expect(REQUIRED_SECRETS).not.toContain('LEADERS_ALERT_WEBHOOK');
   });
 });

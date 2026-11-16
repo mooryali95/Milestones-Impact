@@ -1,4 +1,4 @@
-# مراقب حداثة النسخ الاحتياطية (D09). النشر من جهاز المالك: README.md في هذا المجلد.
+# مراقب حداثة النسخ الاحتياطية (D09). النشر: .github/workflows/deploy-backup-monitor.yml، أو من جهاز المالك (README.md).
 name = "mi-backup-monitor"
 main = "index.js"
 compatibility_date = "2025-01-01"
@@ -12,4 +12,4 @@ bucket_name = "mi-backups"
 
 [vars]
 ALERT_FROM = "Milestone Impact <alerts@sunkvalue.com>"
-# ALERT_TO وRESEND_API_KEY أسرار: wrangler secret put ALERT_TO ثم wrangler secret put RESEND_API_KEY
+# أسرار اختيارية تُضبط في Cloudflare لا هنا (README.md): ALERT_TO وRESEND_API_KEY للبريد، وSLACK_BOT_TOKEN وSLACK_CHANNEL لسلاك

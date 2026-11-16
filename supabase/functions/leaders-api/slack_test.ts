@@ -80,7 +80,7 @@ function teardown() {
   Deno.env.delete('LEADERS_SLACK_CHANNEL');
 }
 
-Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعربية، والبريد مقنّع بحرفه الأول ونطاقه', () => {
+Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعربية، والبريد مقنّع بأول ثلاثة أحرف بحد أقصى ونطاقه', () => {
   const sunday = Date.parse('2026-11-15T10:00:00Z');
   assertEquals(S.parentText('codes', sunday), '🔐 رموز الدخول · الأحد 15 نوفمبر');
   assertEquals(S.parentText('alerts', sunday), '⚠️ التنبيهات · الأحد 15 نوفمبر');
@@ -88,7 +88,9 @@ Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعر�
   // 22:00 بتوقيت غرينتش بعد منتصف الليل في الرياض: يوم جديد
   assertEquals(S.riyadhDay(Date.parse('2026-11-15T22:00:00Z')), '2026-11-16');
   assertEquals(S.parentText('codes', Date.parse('2026-11-15T22:00:00Z')), '🔐 رموز الدخول · الاثنين 16 نوفمبر');
-  assertEquals(S.maskEmail('Mona.Ali@Gmail.com'), 'm***@gmail.com');
+  assertEquals(S.maskEmail('Mona.Ali@Gmail.com'), 'mon***@gmail.com');
+  assertEquals(S.maskEmail('sara@org.sa'), 'sa***@org.sa');
+  assertEquals(S.maskEmail('lee@corp.com'), 'l***@corp.com');
   assertEquals(S.maskEmail('bad'), '***');
 });
 
@@ -161,7 +163,7 @@ Deno.test('سلاك: رمز الدخول يُبلَّغ بحالته وغرضه 
       assert(!all.includes('mona.ali'), 'البريد الكامل لا يصل سلاك');
       assert(!all.includes('رمزك'), 'متن الرسالة لا يصل سلاك');
       assertEquals(sc[0].body.text, S.parentText('codes'));
-      assertEquals(sc[1].body.text, '✅ أُرسل · دخول الإدارة · m***@gmail.com · admin-api');
+      assertEquals(sc[1].body.text, '✅ أُرسل · دخول الإدارة · mon***@gmail.com · admin-api');
       // سطر الرمز يطمس ستة أرقام متتالية احتياطًا حتى لو مُرّرت خطأ
       assert(!S.codeLine({ status: 'sent', purpose: 'x 123456', to: 'a@b.co', source: 's' }).includes('123456'));
     });
@@ -193,8 +195,8 @@ Deno.test('سلاك: رمز تعذّر إرساله يُبلَّغ تعذّرً�
       assertEquals((await sendCounted(client, 'ok@corp.com', 'تذكير', '<p>x</p>', { kind: 'notify', source: 'leaders-api', cap: 80, key: 'k' })).ok, true);
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text);
-      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · s***@org.sa · user-api · mail_unconfigured'), texts.join('\n'));
-      assert(texts.some((t) => t.startsWith('notify · k***@corp.com · leaders-api · mail_')), texts.join('\n'));
+      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · sa***@org.sa · user-api · خدمة البريد غير مهيأة (mail_unconfigured)'), texts.join('\n'));
+      assert(texts.some((t) => t.startsWith('إشعار · kha***@corp.com · ') && t.endsWith(' · leaders-api')), texts.join('\n'));
       assert(!texts.some((t) => t.includes('o***@corp.com')));
       assert(!texts.some((t) => t.includes('111222')));
     });
@@ -445,8 +447,8 @@ Deno.test('سلاك: رمز leaders-api بلا مفتاح البريد يُبل�
       try { await sendMail('lee@corp.com', 'تذكير', '<p>x</p>', [], { kind: 'notify' }); } catch { /* متوقع */ }
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text);
-      assert(texts.includes('❌ تعذّر · دخول مشارك · p***@corp.com · leaders-api · mail_unconfigured'), texts.join('\n'));
-      assert(texts.includes('notify · l***@corp.com · leaders-api · mail_unconfigured'), texts.join('\n'));
+      assert(texts.includes('❌ تعذّر · دخول مشارك · p***@corp.com · leaders-api · خدمة البريد غير مهيأة (mail_unconfigured)'), texts.join('\n'));
+      assert(texts.includes('إشعار · l***@corp.com · خدمة البريد غير مهيأة (mail_unconfigured) · leaders-api'), texts.join('\n'));
       assert(!texts.some((t) => t.includes('123456')));
     });
   } finally {
@@ -544,9 +546,9 @@ Deno.test('سلاك: رسالة في الطابور تعيدها المهمة ا
       assertEquals((await sendCounted(full, 'share@corp.com', 's', '<p>x</p>', { ...opts, sourceShare: 0.5, queued: true })).reason, 'mail_share');
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text).join('\n');
-      assert(texts.includes('f***@corp.com'), texts);
-      assert(!texts.includes('a***@corp.com'), texts);
-      assert(!texts.includes('s***@corp.com'), texts);
+      assert(texts.includes('fi***@corp.com'), texts);
+      assert(!texts.includes('ag***@corp.com'), texts);
+      assert(!texts.includes('sh***@corp.com'), texts);
     });
   } finally { teardown(); }
 });
@@ -577,4 +579,108 @@ Deno.test('سلاك: تنبيه تعذّر العداد في نسخة باردة
       assertEquals(base.rows.get(`${S.riyadhDay()}|alerts`)?.ts, alert.body.thread_ts);
     });
   } finally { Date.now = realNow; teardown(); }
+});
+
+Deno.test('سلاك: تفاصيل التنبيه مطموسة: البريد مقنّع، والرموز والمفاتيح والهاتف لا تُنشر، والمعرّفات والتواريخ تبقى', () => {
+  // القيم الشبيهة بالأسرار تُركَّب هنا فلا يلتقطها فاحص المستودع (single-source.test.js) نصًا منشورًا
+  const jwt = ['ey', 'JhbGciOiJIUzI1NiJ9', '.payload.sig'].join('');
+  const mobile = ['05', '51234567'].join('');
+  const stripeKey = ['sk', 'live', 'abcdefghijklmnop'].join('_');
+  const line = S.alertLine('creem-webhook', {
+    message: `refund failed for Mona.Ali@Gmail.com (+966 55 123 4567) code 482913 key ${stripeKey}`,
+    auth: `Bearer ${jwt}`,
+    token: 'abc', webhook_secret: 'whsec_123', api_key: 'x',
+    phone: mobile,
+    nested: { to: 'x.y@company.sa', items: ['otp 123456', 'ok'] },
+    cohort_id: '3f2b8c1e-9a4d-4b7e-8c2a-1d2e3f4a5b6c', day: '2026-11-16', at: '2026-11-16T08:30:00.000Z',
+    sent: 80, cap: 120, numeric_code: 654321, status: 403, key_source: 'env',
+    blob: 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4',
+  });
+  for (const leak of ['Mona.Ali', 'mona.ali@gmail.com', '123 4567', '1234567', '482913', 'sk_live', 'eyJhbG', 'whsec_123', '"abc"', 'x.y@', '123456', '654321', 'A1b2C3d4E5f6']) {
+    assert(!line.toLowerCase().includes(leak.toLowerCase()), `${leak} في: ${line}`);
+  }
+  for (const keep of ['mon***@gmail.com', 'x***@company.sa', '3f2b8c1e-9a4d-4b7e-8c2a-1d2e3f4a5b6c', '"day":"2026-11-16"', '2026-11-16T08:30:00.000Z', '"sent":80', '"cap":120', '"status":403', '"key_source":"env"', '••••67', '"token":"[مخفي]"']) {
+    assert(line.includes(keep), `${keep} غائب عن: ${line}`);
+  }
+  assert(line.startsWith('*creem-webhook* '));
+  // أسماء الأحداث الطويلة بلا أرقام ليست أسرارًا
+  assert(S.alertLine('mail_counter_unavailable', { reason: 'agent_model_config_unavailable' }).includes('agent_model_config_unavailable'));
+  assert(S.alertLine('mail_counter_unavailable', {}).startsWith('*mail_counter_unavailable*'));
+});
+
+Deno.test('سلاك: الطمس يُبقي UUID ومعرّفات البادئة كما هي، ويطمس الرمز والهاتف القائمين بأنفسهما', () => {
+  for (const id of ['3f2b8c1e-9a4d-4b7e-8c2a-1d2e123456ab', '550e8400-e29b-41d4-a716-446655440000', '11111111-2222-4333-8444-555555555555', 'ord_123456']) {
+    assertEquals(S.maskText(`pay ${id} failed`), `pay ${id} failed`);
+  }
+  assertEquals(S.maskText('code 482913'), 'code ••••••');
+  // الهاتف يُركَّب وقت التشغيل فلا يلتقطه فاحص المستودع (single-source.test.js)
+  assertEquals(S.maskText(`call ${['05', '51234567'].join('')} now`), 'call ••••67 now');
+  // UUID بجوار هاتف ورمز: يبقى، وما حوله يُطمس
+  assertEquals(S.maskText('p=550e8400-e29b-41d4-a716-446655440000 otp 123456 tel +966551234567'), 'p=550e8400-e29b-41d4-a716-446655440000 otp •••••• tel ••••67');
+  // محارف الحجز الداخلية في النص نفسه لا تُعيد ما ليس منه
+  assertEquals(S.maskText('0 482913'), '0 ••••••');
+});
+
+Deno.test('رابط التنبيه مطموس كنشر البوت: لا بريد كامل ولا هاتف ولا رمز ولا مفتاح في text وcontent وdetail', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const bearer = ['Bearer ', 'abcdefghijklmnopqrstuvwxyz0123'].join('');
+  try {
+    await withNet(async (calls) => {
+      const ok = await alertWebhook('payment_unmatched', { message: 'refund failed for mona@gmail.com +966551234567', auth: bearer, code: 'otp 482913', pay: '550e8400-e29b-41d4-a716-446655440000' });
+      assertEquals(ok, true);
+      const hook = calls.find((c) => c.url.includes('hooks.example'))!;
+      const raw = JSON.stringify(hook.body);
+      for (const leak of ['mona@gmail.com', '966551234567', 'abcdefghijklmnop', '482913']) assert(!raw.includes(leak), `${leak} في: ${raw}`);
+      assert(hook.body.text.includes('mo***@gmail.com') && hook.body.text.includes('••••67'));
+      assertEquals(hook.body.text, hook.body.content);
+      assertEquals(hook.body.detail.pay, '550e8400-e29b-41d4-a716-446655440000');
+      assertEquals(hook.body.kind, 'payment_unmatched');
+    });
+  } finally { Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+Deno.test('raiseAlert بسلاك وحده: نتيجة سلاك تُحسب في الوصول، وبريد الطابور العالق لا يُرسل إن وصل سلاك', async () => {
+  setup();
+  const fake = fakeDb();
+  Object.assign(db as any, { from: fake.from, schema: () => ({ from: fake.from }) });
+  S.slackUse(db);
+  const saved = { resendKey: CONFIG.resendKey, alertEmail: CONFIG.alertEmail };
+  Object.assign(CONFIG, { resendKey: 're_test', alertEmail: 'owner@example.com' });
+  Deno.env.delete('LEADERS_ALERT_WEBHOOK');
+  try {
+    await withNet(async (calls) => {
+      const r = await raiseAlert('mail_queue_stuck', { messages: 2 });
+      assertEquals([r.webhook, r.slack, r.email], [false, true, false]);
+      assertEquals(calls.filter((c) => c.url.includes('resend.com')).length, 0, 'لا بريد مع وصول سلاك');
+      assert(slackCalls(calls).some((c) => String(c.body.text).startsWith('*mail_queue_stuck*')));
+    });
+    S.resetSlack();
+    // سلاك يرفض: لا وصول منه، فيُرسل البريد احتياطًا
+    await withNet(async (calls) => {
+      const r = await raiseAlert('mail_queue_stuck', { messages: 3 });
+      assertEquals([r.webhook, r.slack], [false, false]);
+      assertEquals(r.email, true);
+      assertEquals(calls.filter((c) => c.url.includes('resend.com')).length, 1);
+    }, { slack: 'error' });
+  } finally {
+    Object.assign(CONFIG, saved);
+    delete (db as any).from; delete (db as any).schema;
+    teardown();
+  }
+});
+
+Deno.test('slackDeliver: false بلا ضبط، وfalse بعد المهلة، ولا يرمي', async () => {
+  S.resetSlack();
+  assertEquals(await S.slackDeliver('alerts', 'x'), false);
+  setup();
+  try {
+    await withNet(async () => { assertEquals(await S.slackDeliver('alerts', 'x', { waitMs: 30 }), false); }, { slack: 'hang' });
+  } finally { Object.assign(S.SLACK, { timeoutMs: 4000 }); teardown(); }
+});
+
+Deno.test('سلاك: سطر البريد الذي لم يصل يقول نوعه وسببه بالعربية، ولا يحمل عنوان الرسالة', () => {
+  assertEquals(S.mailLine({ kind: 'notify', to: 'ibrahim@gmail.com', source: 'leaders-api', reason: 'mail_share' }),
+    'إشعار · ibr***@gmail.com · امتلأت حصة الإشعارات لليوم (mail_share) · leaders-api');
+  assertEquals(S.mailLine({ kind: 'bulk', to: 'a@b.co', source: 's', reason: 'rejected 422' }), 'تذكير جماعي · a***@b.co · رفضه مزوّد البريد (rejected 422) · s');
+  assertEquals(S.reasonText('something_new'), 'something_new');
 });
