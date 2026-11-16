@@ -52,7 +52,9 @@
 | `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم (gpg). لا تُشفَّر به نسخة جديدة ما دام `BACKUP_PUBLIC_KEY` مضبوطًا، **ويبقى ولا يُحذف**: النسخ المتماثلة السابقة للانتقال باقية في `monthly/` (قفل 365 يومًا) و`archive/` ولا تُفك إلا به. قيمته في GitHub وفي مدير كلمات المرور (`RUNBOOK.md` §4) |
 | `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml` | سطر مفتاح age عام لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، ومفاتيحها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
 | `R2_ACCOUNT_ID`، `R2_ACCESS_KEY_ID`، `R2_SECRET_ACCESS_KEY`، `R2_BUCKET` | `backup.yml`، `restore-drill.yml`، `scripts/ops/r2.mjs` | دلو النسخ خارج GitHub. الرمز مقصور على الدلو بقراءة الكائنات وكتابتها، والحذف ممنوع بقفل الاحتفاظ |
-| `RESEND_API_KEY`، `ALERT_TO` (اختياريان) | Worker `mi-backup-monitor` | بريد تنبيه تأخر النسخ؛ بدونهما يبقى `/health` للمراقب الخارجي |
+| `RESEND_API_KEY`، `ALERT_TO` (اختياريان) | Worker `mi-backup-monitor` (Cloudflare ← Settings ← Variables and Secrets) | بريد تنبيه تأخر النسخ؛ بدونهما يبقى `/health` للمراقب الخارجي |
+| `SLACK_BOT_TOKEN`، `SLACK_CHANNEL` (اختياريان، موصى بهما) | Worker `mi-backup-monitor` (Cloudflare ← Settings ← Variables and Secrets) | تنبيه تأخر النسخ في `#mi-ops` فيصل الهاتف بإشعار سلاك. القيمتان هما `LEADERS_SLACK_BOT_TOKEN` و`LEADERS_SLACK_CHANNEL` نفسيهما |
+| `CLOUDFLARE_API_TOKEN` | GitHub ← Secrets، `deploy-backup-monitor.yml` | نشر `mi-backup-monitor` بـ wrangler (قالب «Edit Cloudflare Workers» مقصور على حساب المنصة). بلاه يتخطى السير بتحذير. `CLOUDFLARE_ACCOUNT_ID` اختياري، والبديل `R2_ACCOUNT_ID` |
 | `SUPABASE_SERVICE_ROLE_KEY` (في بيئة `backup`، إلزامي منذ #323) | `backup.yml` | نسخ دلو الملفات `leaders-private`: مفتاح سري باسم مستقل (`sb_secret_`) يُرسل في `apikey` وحده، أو service_role القديم حتى تقاعده أوائل 2027 |
 
 ## ليست أسرارًا (في المستودع عمدًا)
