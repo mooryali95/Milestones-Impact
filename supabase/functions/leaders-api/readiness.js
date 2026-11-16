@@ -95,7 +95,7 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
     { key: 'advisor', check: 'm2.advisor', where: 'programs',
       ...judge(advisor, noOrgCohort, 'دفعات جهات بلا مستشار أساسي', (n) => `${n} دفعة جهة، ولكلٍّ مستشار أساسي`) },
     { key: 'sessions', check: 'm2.sessions', where: 'activities',
-      ...judge(dated, noOrgCohort, 'دفعات جهات بلا مواعيد قادمة ولا صيغة الكتيب', () => 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب') },
+      ...judge(dated, noOrgCohort, 'دفعات جهات بلا مواعيد قادمة ولا صيغة الكتاب', () => 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتاب') },
     { key: 'final-eval', check: 'm2.final-eval', where: 'programs',
       ok: finalSaved, label: finalSaved ? 'إعداد التقييم الختامي محفوظ للبرنامج الافتراضي' : 'إعداد التقييم الختامي لم يُحفظ بعد للبرنامج الافتراضي' },
     // الإصدار يُقطع ويُثبَّت بترحيل من أداة إصدار المحتوى، لا من اللوحة

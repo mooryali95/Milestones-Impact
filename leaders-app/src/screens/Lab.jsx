@@ -5,7 +5,7 @@
 // التالية (قد يتفرع الموقف بحسب القرار). كل التفاعل بالنقر لا بالسحب،
 // فيعمل باللمس على الجوال (اللوحة board تضيف لوحة المفاتيح والسحب فوق النقر،
 // shared/lab/LabBoard.jsx). يظهر لمن فتحته له الإدارة أو لجهته، وتحت كل
-// باب في الكتيب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
+// باب في الكتاب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { call } from '../api.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
@@ -585,7 +585,7 @@ function ItemCard({ it, onOpen }) {
   );
 }
 
-// بطاقات "طبّق ما قرأت" تحت صفحة الباب في الكتيب
+// بطاقات "طبّق ما قرأت" تحت صفحة الباب في الكتاب
 export function ChapterLab({ items, onOpen }) {
   if (!items?.length) return null;
   return (
@@ -614,7 +614,7 @@ export function Lab({ items, open, onOpen, onPoints, reload }) {
         <div>
           <span className="book-eyebrow">The Leader's Lab</span>
           <h2>مختبر القائد</h2>
-          <p className="muted">أدوات ومواقف تُصحَّح فورًا مع سببها من الكتيب. تُمنح نقاط الأداة عند {MASTERY}%.</p>
+          <p className="muted">أدوات ومواقف تُصحَّح فورًا مع سببها من الكتاب. تُمنح نقاط الأداة عند {MASTERY}%.</p>
         </div>
         <div className="models-count"><b>{mastered}</b><small>من {items.length} أتقنتها</small></div>
       </div>

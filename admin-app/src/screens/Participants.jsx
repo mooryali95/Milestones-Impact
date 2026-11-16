@@ -454,7 +454,7 @@ function Person({ id, canWrite, onBack }) {
   const changeStatus = async () => {
     const to = `تغيير حالة ${p.full_name} من «${STATUS[p.status] || p.status}» إلى «${STATUS[status] || status}»؟`;
     const effect = {
-      withdrawn: ' يخرج من البرنامج، وإن لم يفتح أي باب من الكتيب بعدُ أُلغي إعفاء رعاية جهته ورُدّ مقعده إليها، ولا تعيده إعادة الحالة لاحقًا.',
+      withdrawn: ' يخرج من البرنامج، وإن لم يفتح أي باب من الكتاب بعدُ أُلغي إعفاء رعاية جهته ورُدّ مقعده إليها، ولا تعيده إعادة الحالة لاحقًا.',
       suspended: ' يخرج من البرنامج ولا يستطيع الدخول إلى حسابه حتى تعيد حالته.',
     }[status] || '';
     if (!(await confirm(to + effect, { danger: !!effect, ok: 'تغيير الحالة' }))) return;

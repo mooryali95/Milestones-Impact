@@ -1,5 +1,5 @@
 // خريطة المبادرة: «ما المبادرة؟»، وفهرس الوثيقة بمراحله وشريطه والناقص منه، والتنقل بين الفصول،
-// وتلميح المصطلح، والإحالة إلى الكتيب والعودة إلى الفصل نفسه.
+// وتلميح المصطلح، والإحالة إلى الكتاب والعودة إلى الفصل نفسه.
 // التصور: docs/content/2026-11-15-تصور-فهم-المبادرة-وإخراج-وثيقتها-v1.md
 import { test, expect } from '@playwright/test';
 
@@ -94,11 +94,11 @@ test('داخل الفصل: أين أنا، والسابق والتالي، وت�
   await expect(page.getByRole('heading', { name: 'المبرر والبدائل' })).toBeVisible();
 });
 
-test('«اقرأ في الكتيب» يفتح الباب نفسه وفوقه القسم المطلوب، و«عد» يعيد إلى الفصل الذي خرج منه', async ({ page }) => {
+test('«اقرأ في الكتاب» يفتح الباب نفسه وفوقه القسم المطلوب، و«عد» يعيد إلى الفصل الذي خرج منه', async ({ page }) => {
   const srv = server();
   await open(page, srv);
   await page.getByRole('region', { name: 'فهرس الوثيقة' }).getByRole('button', { name: /سجل المخاطر/ }).first().click();
-  await page.getByRole('navigation', { name: 'التنقل بين فصول الوثيقة' }).getByRole('button', { name: /اقرأ في الكتيب: أساسيات الضبط حول المعلم/ }).click();
+  await page.getByRole('navigation', { name: 'التنقل بين فصول الوثيقة' }).getByRole('button', { name: /اقرأ في الكتاب: أساسيات الضبط حول المعلم/ }).click();
   const seek = page.locator('[data-seek="found"]');
   await expect(seek).toContainText('اقرأ في هذا الباب قسم «أساسيات الضبط حول المعلم»');
   await expect.poll(() => srv.calls.some((c) => c.action === 'handbook.chapter' && c.id === 'hb-ch4')).toBe(true);
@@ -106,8 +106,8 @@ test('«اقرأ في الكتيب» يفتح الباب نفسه وفوقه ا�
   await expect(page.getByRole('heading', { name: 'سجل المخاطر والافتراضات والاعتماديات' })).toBeVisible();
 });
 
-test('باب ليس في كتيب المشارك: تقول الإحالة ذلك صراحة، ولا تفتح بابًا آخر بصمت', async ({ page }) => {
+test('باب ليس في كتاب المشارك: تقول الإحالة ذلك صراحة، ولا تفتح بابًا آخر بصمت', async ({ page }) => {
   await open(page, server({ chapters: [{ id: 'other', dimension: 'impact', chapter_key: 'ch1', title: 'باب آخر', done: null }] }));
-  await page.getByRole('region', { name: 'فهرس الوثيقة' }).getByRole('button', { name: 'في الكتيب' }).first().click();
-  await expect(page.locator('[data-seek="missing"]')).toContainText('ليس في كتيبك في مستواك الحالي');
+  await page.getByRole('region', { name: 'فهرس الوثيقة' }).getByRole('button', { name: 'في الكتاب' }).first().click();
+  await expect(page.locator('[data-seek="missing"]')).toContainText('ليس في كتابك في مستواك الحالي');
 });

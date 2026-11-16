@@ -44,7 +44,7 @@ describe('بنود الإطلاق: حكم واحد للوحة والبوابات
     expect(r['m2.release-pinned'].label).not.toContain('الدفعة المفتوحة');
   });
 
-  it('كما كانت استعلامات البوابات: نافذة 14 يومًا، والجلسة بلا دفعة تعمّ، وصيغة الكتيب، و{} ليس إعدادًا، ولا عبور بالفراغ', () => {
+  it('كما كانت استعلامات البوابات: نافذة 14 يومًا، والجلسة بلا دفعة تعمّ، وصيغة الكتاب، و{} ليس إعدادًا، ولا عبور بالفراغ', () => {
     const at = (days) => new Date(NOW + days * 864e5).toISOString();
     const items = (rows) => Object.fromEntries(launchReadiness(rows, NOW).map((x) => [x.check, x.ok]));
     const c = { ...cohort, advisor_expert_id: 'x', content_release: 'r' };

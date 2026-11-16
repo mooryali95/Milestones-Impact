@@ -608,7 +608,7 @@ function Continuous({ c }) {
         <h2 id="ca-h" className="as-h3">تقدمك في التقييم المستمر</h2>
         <b className="ca-index">{c.index}٪</b>
       </div>
-      <p className="small muted">يُجمع من اختبارات الكتيب، ونماذجك، ومعالم مشروعك، وأدوات المختبر، وإسهامك المؤكَّد في طلبات زملائك؛ ولا يدخل فيه مصدر قبل أن تكتمل له أحداث كافية. هو مرآة لتقدمك، ويُبنى عليه التقييم الختامي.</p>
+      <p className="small muted">يُجمع من اختبارات الكتاب، ونماذجك، ومعالم مشروعك، وأدوات المختبر، وإسهامك المؤكَّد في طلبات زملائك؛ ولا يدخل فيه مصدر قبل أن تكتمل له أحداث كافية. هو مرآة لتقدمك، ويُبنى عليه التقييم الختامي.</p>
       {c.trend && <p className="small">{TREND_AR[c.trend.dir]}</p>}
       <ul className="ca-list">{c.components.map((x) => (
         <li key={x.key}><span>{x.label}</span><small className="muted">{x.value != null ? `${x.value}٪ · ${x.reason}` : x.reason}</small></li>
@@ -727,7 +727,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <div className="grow">
             <b>ماذا يحدث الآن؟</b>
             <p className="small">
-              نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن. {reviewWait ? `تستغرق المراجعة عادةً ${reviewWait}. ` : ''}بعد اعتماد مسارك يُفتح برنامج التأهيل وكتيبك، ويصلك بريد بذلك.
+              نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن. {reviewWait ? `تستغرق المراجعة عادةً ${reviewWait}. ` : ''}بعد اعتماد مسارك يُفتح برنامج التأهيل وكتابك، ويصلك بريد بذلك.
               {' '}للاستفسار: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
             </p>
           </div>
@@ -736,7 +736,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
 
       {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
-          وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتيب والمختبر */}
+          وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتاب والمختبر */}
       <div className="j-layout">
         {/* بطاقات الطلب (دعوة المدير والترحيب ومفتاح المرور) تحت «خطوتك التالية» لا فوقها: على الهاتف كانت تدفعها
             تحت الشاشة الأولى (فحص الجاهزية p-entry-6). وعلى الحاسب أول العمود الأوسط فوق المراحل */}
@@ -762,7 +762,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 <div className="next-card">
                   <span className="k">تابع القراءة</span>
                   <b>{reading.title}</b>
-                  <span className="small muted">كتيبك</span>
+                  <span className="small muted">كتابك</span>
                   <div className="row"><button className="btn gold sm" onClick={onHandbook}>أكمل من حيث توقفت</button></div>
                 </div>
               )}
@@ -770,13 +770,13 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           )}
           <div className="j-tools">
             <div className="tool-card">
-              <span className="k">كتيبك</span>
-              <b>كتيب القائد</b>
+              <span className="k">كتابك</span>
+              <b>كتاب القائد</b>
               <p className="small muted">{approved
                 ? 'أبواب الأطر الثلاثة بعمق يناسب مستواك.'
                 : 'يُفتح بعد اعتماد مسارك.'}</p>
               <div className="row">{approved
-                ? <button className="btn gold sm" onClick={onHandbook}>افتح كتيبي</button>
+                ? <button className="btn gold sm" onClick={onHandbook}>افتح كتابي</button>
                 : <span className="chip"><Ico name="lock" size="14" /> مقفل</span>}</div>
             </div>
             {lab?.length > 0 && (

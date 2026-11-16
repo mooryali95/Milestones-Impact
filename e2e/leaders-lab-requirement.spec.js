@@ -11,7 +11,7 @@ const SPEC = validateLab(ITEMS[0].spec);
 const MAP_I = SPEC.steps.findIndex((s) => s.id === 'map');
 const ITEM = { id: 'L-pm', kind: 'tool', dimension: 'milestone', title: ITEMS[0].title_ar, summary: ITEMS[0].summary_ar, minutes: 25, points: 60, min_level: 'beginner', chapter_key: 'ch1', progress: { best: 62, open: null, attempts: 1, first: 62, last_at: null } };
 const REQ = { id: 'r9', code: 'T-PMMAP', kind: 'lab', title_ar: 'خريطة عمليات إدارة المشاريع في المختبر', required: true, status: 'pending',
-  help_ar: 'بعد الباب الأول من كتيب المعلم: ابنِ الخريطة الكلاسيكية للعمليات في المختبر.',
+  help_ar: 'بعد الباب الأول من كتاب المعلم: ابنِ الخريطة الكلاسيكية للعمليات في المختبر.',
   activity: { type: 'lab', done: false, lab_key: 'pm-process-map', item_id: 'L-pm', title: ITEM.title, attempts: 1, best: 62, accept: 'mastery', mastery: 70 } };
 
 test('الرحلة: متطلب الخريطة في التدريب يعرض أفضل نتيجة والإتقان، ولا يُؤشَّر يدويًا، ويفتح الأداة نفسها', async ({ page }) => {

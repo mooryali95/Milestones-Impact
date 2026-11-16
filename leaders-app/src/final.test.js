@@ -6,7 +6,7 @@ import {
 // المكسب كما كان قبل D06 صريحًا، والافتراضي الآن الإتقان المحكّي
 const GAIN = { measure: { mode: 'gain' } };
 const src = {
-  continuous: { index: 80, components: [{ label: 'اختبارات الكتيب', value: 80, in_index: true }, { label: 'النماذج', value: 60, in_index: true }, { label: 'المختبر', value: 30, in_index: false }], trend: { dir: 'up' } },
+  continuous: { index: 80, components: [{ label: 'اختبارات الكتاب', value: 80, in_index: true }, { label: 'النماذج', value: 60, in_index: true }, { label: 'المختبر', value: 30, in_index: false }], trend: { dir: 'up' } },
   milestones: { total: 4, done: 3, late: 1, max_late: 5, done_late: 1, max_done_late: 10 },
   capstone: { score: 72.4 },
   post: { pct: 66, test_pre: 50, test_post: 62, direction: 'up' },

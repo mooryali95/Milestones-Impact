@@ -516,7 +516,7 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
-// مصادر التقييم المستمر من جداولها: اختبارات الكتيب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها، والمختبر
+// مصادر التقييم المستمر من جداولها: اختبارات الكتاب، والنماذج المقيَّمة، وتقييم الخبراء، والمعالم بمعيارها، والمختبر
 async function continuousFor(participantId: string, milestones: any[], programId: string | null) {
   const [hb, subs, rt, lb, kt, prog, pa] = await Promise.all([
     db.from('handbook_progress').select('quiz_score, quiz_total, completed_at, handbook_modules(title_ar)').eq('participant_id', participantId),
@@ -1052,7 +1052,7 @@ export async function passkeyDismiss(p: any) {
   return { success: true };
 }
 
-// ── 7. الكتيب الشخصي ──
+// ── 7. الكتاب الشخصي ──
 // يُفتح بعد اعتماد المستوى. المحتوى يُرسل بابًا بابًا بعد تصفيته بمستوى
 // المشارك، ويُسجَّل كل فتح في handbook_views. العرض في المتصفح رسم على
 // لوحة (canvas) بعلامة مائية باسم المشارك، فلا نص قابل للنسخ في الصفحة.
@@ -1060,7 +1060,7 @@ const HANDBOOK_VIEWS_PER_HOUR = 120;
 
 export async function approvedLevels(p: any) {
   const a = approvalOf(must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? []);
-  if (!a.approved) throw new Fail('يُفتح كتيبك بعد اعتماد مسارك', 403, 'locked');
+  if (!a.approved) throw new Fail('يُفتح كتابك بعد اعتماد مسارك', 403, 'locked');
   return contentLevelsFor(p, a.levels as Record<string, string>);
 }
 
@@ -1109,7 +1109,7 @@ export async function handbookToc(p: any) {
       // chapter_key: إحالة فصول وثيقة المبادرة إلى الباب نفسه (anatomy.json)، فيقفز إليه المشارك من فصله
       id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
       done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
-      // تعريف واحد لإتمام الباب مع الرحلة (readingStatus): قراءة فعلية ثم الاختبار. الكتيب كان يعدّ الاختبار وحده
+      // تعريف واحد لإتمام الباب مع الرحلة (readingStatus): قراءة فعلية ثم الاختبار. الكتاب كان يعدّ الاختبار وحده
       // فيقول «أتممت 1 من 22» والرحلة «قرأت 0 من 22» (التدقيق 2026-11-10، البند 7.2)
       ...chapterCompletion(readingVerdict(read[m.id]), !!done[m.id]),
     })),
@@ -1159,7 +1159,7 @@ export async function handbookExport(p: any, ctx: Ctx) {
     db.from('learning_models').select('*'),
   ]);
   const chapters = handbookModulesFor(must(mods) ?? [], levels);
-  if (!chapters.length) throw new Fail('لا أبواب في كتيبك بعد', 404);
+  if (!chapters.length) throw new Fail('لا أبواب في كتابك بعد', 404);
   const now = new Date();
   const ref = `MI-BK-${now.toISOString().slice(0, 10).replace(/-/g, '')}-${randomToken(8).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5).padEnd(5, 'X')}`;
   must(await db.from('handbook_exports').insert({ ref, participant_id: p.id, chapters: chapters.length, ip: ctx.ip, user_agent: ctx.ua }));

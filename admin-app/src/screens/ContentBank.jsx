@@ -44,7 +44,7 @@ function Preview({ tracks }) {
               : <p className="la-muted">لا مواد لهذا المسار بعد.</p>}
           </div>
           <div>
-            <h4>أبواب الكتيب ({d.chapters.length})</h4>
+            <h4>أبواب الكتاب ({d.chapters.length})</h4>
             <ol>{d.chapters.map((c) => <li key={c.id}>{c.title} <small className="la-muted">{DIM[c.dimension]}</small></li>)}</ol>
           </div>
         </div>
@@ -68,7 +68,7 @@ export default function ContentBank({ catalog, reload, canWrite }) {
     <>
       <p className="la-muted">
         ارفع المادة مرة واحدة وحدد لمن هي، فتظهر تلقائيًا لكل مسار يناسبها. أضف نشاط «منهج المسار» في أي مرحلة من «الرحلة والمتطلبات»
-        ليعرض لكل مشارك مواد مساره، ويكتمل بمشاهدتها وفتحها فعلًا. أبواب الكتيب تبقى في «كتيب القائد».
+        ليعرض لكل مشارك مواد مساره، ويكتمل بمشاهدتها وفتحها فعلًا. أبواب الكتاب تبقى في «كتاب القائد».
       </p>
       <Preview tracks={catalog.tracks || []} />
       {groups.map(([dim, label]) => {

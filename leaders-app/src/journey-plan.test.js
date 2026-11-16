@@ -1,12 +1,12 @@
-// بنود خطة ملاحظات ما قبل الورشة: الكتيب أيامًا تدريبية، وخطة التطبيق من فصول الوثيقة
+// بنود خطة ملاحظات ما قبل الورشة: الكتاب أيامًا تدريبية، وخطة التطبيق من فصول الوثيقة
 import { describe, expect, it } from 'vitest';
 import { activityFor, applyDelivery, cleanConfig, cleanDelivery, cohortDefinition } from '../../supabase/functions/leaders-api/logic.js';
 import { renderJourney } from '../../supabase/functions/leaders-api/journey.js';
 
 const workshop = { id: 'r1', code: 'T-ATTEND', kind: 'workshop', title_ar: 'حضور الأيام التدريبية ({days:T-ATTEND})', config: { sessions_required: 4, verify: 'qr' } };
 
-describe('الكتيب بديلًا عن الأيام التدريبية', () => {
-  it('صيغة الكتيب تحوّل المتطلب نفسه إلى قراءة كل الأبواب باختباراتها، بمعرّفه ورمزه', () => {
+describe('الكتاب بديلًا عن الأيام التدريبية', () => {
+  it('صيغة الكتاب تحوّل المتطلب نفسه إلى قراءة كل الأبواب باختباراتها، بمعرّفه ورمزه', () => {
     const r = applyDelivery(workshop, { format: 'handbook' });
     expect(r).toMatchObject({ id: 'r1', code: 'T-ATTEND', kind: 'reading', config: { scope: 'all', quiz: true } });
     expect(renderJourney({ stages: [], requirements: [r] }).requirements[0].title_ar).not.toContain('{');
@@ -20,7 +20,7 @@ describe('الكتيب بديلًا عن الأيام التدريبية', () =>
     expect(cleanDelivery({ 'T-ATTEND': { format: 'sessions' } }, [workshop])).toEqual({});
     expect(cleanDelivery({ 'T-ATTEND': { format: 'handbook' } }, [workshop])).toEqual({ 'T-ATTEND': { format: 'handbook' } });
   });
-  it('الدفعة بالكتيب: يكتمل البند بقراءة الأبواب لا بالحضور', () => {
+  it('الدفعة بالكتاب: يكتمل البند بقراءة الأبواب لا بالحضور', () => {
     const def = cohortDefinition({ live: { stages: [], requirements: [workshop] }, cohort: { delivery: { 'T-ATTEND': { format: 'handbook' } } } });
     const ev = { chapters: [{ id: 'm1', dimension: 'milestone', sort: 1, title_ar: 'ب1' }], reading: {}, quizzes: {} };
     const a = activityFor(def.requirements[0], ev);

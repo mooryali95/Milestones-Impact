@@ -4,14 +4,14 @@
 // قائمة واحدة لكل الوثائق بحالتها، وصفحة لكل وثيقة: تقرأها بالقالب
 // نفسه الذي يراه المشارك والراعي، وتقيّمها بالمعيار السداسي، ثم تعيدها
 // للتحسين مرة أو تقبلها فيُطلب تأييد راعيها. الفصول نفسها نماذج تعليمية،
-// فتقييم كل فصل منفردًا يبقى في «كتيب القائد ← التقييم».
+// فتقييم كل فصل منفردًا يبقى في «كتاب القائد ← التقييم».
 import { EXAMPLES } from '../../../supabase/content/initiative-guide/v1/examples.js';
 import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
-// حالة الفصل في صفحة الوثيقة: الفصول يقيّمها المستشار في كتيب القائد لا المالك، فالتسليم والتقييم بلسانه،
+// حالة الفصل في صفحة الوثيقة: الفصول يقيّمها المستشار في كتاب القائد لا المالك، فالتسليم والتقييم بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
 export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
 import { Empty, Spinner, useUI } from '../ui.jsx';
@@ -230,7 +230,7 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
   return (
     <section className="la-card">
       <h3>مشاريع التخرج: وثائق المبادرات</h3>
-      <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقيّمها المستشار منفردة في «كتيب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
+      <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقيّمها المستشار منفردة في «كتاب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
       {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={presetCounts(all, CAP_PRESETS)}
         shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة"
         actions={<ExportButton scope="capstones" meta={{ kind: 'CAP', title: 'مشاريع التخرج', sheet: 'المبادرات', file: 'Capstones' }} columns={CAP_COLS} all={all} filtered={rows} noun="وثيقة" />} />}

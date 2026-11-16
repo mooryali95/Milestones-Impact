@@ -6,7 +6,7 @@
 
 // ── هل للدفعة جلسات؟ قاعدة واحدة يقرؤها ملف الدفعة وصفحة الجهة وجاهزية الإطلاق وبوابات المراحل ──
 // الجلسة الفعّالة بموعد قادم أو حديث (آخر 14 يومًا)، والجلسة بلا دفعة تعمّ الدفعات كلها (كما في القاعة).
-// والدفعة بصيغة الكتيب لا تلزمها جلسات: يكتمل تدريبها بقراءة الأبواب واجتياز أسئلتها.
+// والدفعة بصيغة الكتاب لا تلزمها جلسات: يكتمل تدريبها بقراءة الأبواب واجتياز أسئلتها.
 export const SESSION_WINDOW_MS = 14 * 864e5;
 // jsonb يصل كائنًا من العميل، وقد يصل نصًا من الاستعلام المباشر للبوابات
 const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
@@ -46,7 +46,7 @@ export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members
     },
     {
       key: 'sessions', title: 'الجلسات', ok: upcomingSessions > 0 || usesHandbook(cohort),
-      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة قادمة أو حديثة` : usesHandbook(cohort) ? 'صيغة الكتيب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
+      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة قادمة أو حديثة` : usesHandbook(cohort) ? 'صيغة الكتاب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
         : 'لا جلسة قادمة ولا حديثة: تُضاف من «الحضور والجلسات»',
       where: 'activities',
     },
