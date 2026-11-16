@@ -3,7 +3,7 @@ import { cohortHub, cohortKind, intake, wizardBlock, wizardBody, wizardNotes } f
 
 const org = { id: 'o1', name: 'سفراء', status: 'active', invite_code: 'sufara' };
 const prog = { id: 'p1', name: 'إدارة المشروعات', requirements: 40, versions: [{ id: 'v2', number: 2 }, { id: 'v1', number: 1 }] };
-const base = { id: 'c1', name: 'دفعة سفراء', organization_id: 'o1', program_id: 'p1', status: 'open', starts_on: '2026-11-10', ends_on: '2027-02-10', schedule: { s1: {} }, advisor_expert_id: 'e1', advisor_name: 'د. سلمان', team_expert_ids: ['e2'], members: 29, upcoming_sessions: 2, pending_approval: 0 };
+const base = { id: 'c1', name: 'دفعة سفراء', organization_id: 'o1', program_id: 'p1', program_version_id: 'v2', status: 'open', starts_on: '2026-11-10', ends_on: '2027-02-10', schedule: { s1: {} }, advisor_expert_id: 'e1', advisor_name: 'د. سلمان', team_expert_ids: ['e2'], members: 29, upcoming_sessions: 2, pending_approval: 0 };
 const hub = (c, extra = {}) => cohortHub({ cohort: c, cohorts: extra.cohorts || [c], orgs: [org], programs: [prog] });
 const item = (h, k) => h.items.find((x) => x.key === k);
 
@@ -56,6 +56,17 @@ describe('ملف الدفعة', () => {
     expect(item(empty, 'program')).toMatchObject({ ok: false, action: 'journey' });
   });
 
+  it('الدفعة غير المثبتة على نسخة نقص يُصلح بالترقية، وبلا نسخة للبرنامج بالتحرير', () => {
+    const un = item(hub({ ...base, program_version_id: null }), 'program');
+    expect(un).toMatchObject({ ok: false, action: 'pin' });
+    expect(un.detail).toContain('غير مثبتة على نسخة');
+    expect(un.detail).toContain('النسخة 2');
+    const none = cohortHub({ cohort: { ...base, program_version_id: null }, cohorts: [base], orgs: [org], programs: [{ ...prog, versions: [] }] });
+    expect(item(none, 'program')).toMatchObject({ ok: false, action: 'edit' });
+    expect(item(none, 'program').detail).toContain('تُحفظ نسخته الأولى');
+    expect(item(hub(base), 'program').detail).toContain('مثبتة على النسخة 2');
+  });
+
   it('ما ينقص يحمل زر ضبطه: المستشار والجدول والاعتماد', () => {
     const h = hub({ ...base, advisor_expert_id: null, schedule: {}, pending_approval: 12 });
     expect(item(h, 'advisor').action).toBe('team');
@@ -78,6 +89,9 @@ describe('معالج الدفعة الجديدة', () => {
     expect(wizardBlock(0, { kind: 'org' })).toBe('اختر الجهة');
     expect(wizardBlock(0, { kind: 'individuals' })).toBe('');
     expect(wizardBlock(1, {})).toBe('اختر البرنامج');
+    // البرنامج الفارغ يقف عند خطوته، لا عند «أنشئ الدفعة»
+    expect(wizardBlock(1, { program_id: 'p0' }, [{ id: 'p0', name: 'فارغ', requirements: 0 }])).toContain('بلا متطلبات بعد، فلا تُنشأ عليه دفعة');
+    expect(wizardBlock(1, { program_id: 'p1' }, [prog])).toBe('');
     expect(wizardBlock(2, { name: ' ' })).toBe('اكتب اسم الدفعة');
     expect(wizardBlock(2, { name: 'د', starts_on: '2027-02-01', ends_on: '2027-01-01' })).toBe('تاريخ النهاية قبل البداية');
     expect(wizardBlock(2, { name: 'د', starts_on: '2027-01-01', ends_on: '2027-02-01' })).toBe('');
@@ -89,11 +103,9 @@ describe('معالج الدفعة الجديدة', () => {
     expect(notes.join(' ')).toContain('الملحقون يدويًا باقون، والبقية ينتقلون إلى الدفعة الأحدث');
     expect(notes.join(' ')).toContain('مخطط لها');
   });
-  it('جسم الحفظ: دفعة الأفراد بلا جهة، والتثبيت على أحدث نسخة', () => {
-    expect(wizardBody({ kind: 'individuals', organization_id: 'o1', name: ' أ ', program_id: 'p1', pin: true })).toMatchObject({ organization_id: null, name: 'أ', program_version_id: 'latest', status: 'open' });
-    expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1' }).program_version_id).toBe('');
-    // برنامج بلا نسخة محفوظة (كل برنامج جديد): لا يُرسل 'latest' فيرفضه الخادم، بل يتبع آخر تعديل
-    expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1', pin: true }, { canPin: false }).program_version_id).toBe('');
+  it('جسم الحفظ: دفعة الأفراد بلا جهة، والتثبيت على أحدث نسخة دائمًا (والخادم ينشئ النسخة 1 إن لم توجد)', () => {
+    expect(wizardBody({ kind: 'individuals', organization_id: 'o1', name: ' أ ', program_id: 'p1' })).toMatchObject({ organization_id: null, name: 'أ', program_version_id: 'latest', status: 'open' });
+    expect(wizardBody({ kind: 'org', organization_id: 'o1', name: 'ب', program_id: 'p1', pin: false }).program_version_id).toBe('latest');
   });
 });
 

@@ -1,7 +1,7 @@
 // البرامج والدفعات: اختيار الدفعة، تخصيص طريقة التنفيذ، النسخ والاسترجاع
 import { describe, expect, it } from 'vitest';
 import {
-  applyDelivery, cleanDelivery, cohortDefinition, cohortDefinitionView, orgProgram, orgProgramLine, pickCohort, programDiff, programSnapshot, restorePlan,
+  applyDelivery, cleanDelivery, cohortDefinition, cohortDefinitionView, orgProgram, orgProgramLine, pickCohort, programDiff, programSnapshot, removedRequirementIds, restorePlan, upgradePlan,
 } from '../../supabase/functions/leaders-api/logic.js';
 
 const open = { id: 'c-open', is_default: true, status: 'running', program_id: 'p1' };
@@ -108,7 +108,26 @@ describe('versions', () => {
     const to = { requirements: [{ id: 'r1', code: 'A', title_ar: 'أ', kind: 'reading' }, { id: 'r3', code: 'C', title_ar: 'ج' }, { id: 'r2', code: 'B', active: false }] };
     expect(programDiff(from, to)).toEqual({
       added: [{ code: 'C', title: 'ج' }], removed: [{ code: 'B', title: 'ب' }], changed: [{ code: 'A', title: 'أ' }],
+      stages: { added: [], removed: [], changed: [] },
     });
+  });
+  it('diff names stage changes too: the stopped stage is removed, a renamed or re-ruled one changed', () => {
+    const from = { stages: [{ key: 'a', title_ar: 'أ', sort: 1 }, { key: 'b', title_ar: 'ب', sort: 2 }, { key: 'c', title_ar: 'ج', sort: 3, rules: {} }] };
+    const to = { stages: [{ key: 'a', title_ar: 'أ', sort: 1 }, { key: 'b', title_ar: 'ب', sort: 2, active: false }, { key: 'c', title_ar: 'ج', sort: 3, rules: { mode: 'required' } }, { key: 'd', title_ar: 'د', sort: 4 }] };
+    expect(programDiff(from, to).stages).toEqual({ added: [{ key: 'd', title: 'د' }], removed: [{ key: 'b', title: 'ب' }], changed: [{ key: 'c', title: 'ج' }] });
+  });
+  it('upgrade plan drops what has no place in the target and blocks a hide that breaks a target stage', () => {
+    const from = { stages: [{ key: 's1', title_ar: 'التمهيد', sort: 1, rules: { mode: 'required' } }, { key: 's2', title_ar: 'التطبيق', sort: 2 }],
+      requirements: [{ id: 'r1', code: 'A', stage_key: 's1', title_ar: 'أ', kind: 'check', required: true }, { id: 'r2', code: 'B', stage_key: 's1', title_ar: 'ب', kind: 'check', required: true },
+        { id: 'r3', code: 'O-SESS', stage_key: 's2', title_ar: 'التوجيه', kind: 'coaching', config: { sessions_required: 2, mode: 'online' } }] };
+    const to = { stages: [from.stages[0]], requirements: [from.requirements[0]] };
+    const cohort = { delivery: { 'O-SESS': { mode: 'in_person' } }, schedule: { s1: { start: '2026-09-01' }, s2: { start: '2026-10-01' } }, stage_modes: { s2: 'groups' }, hidden_requirements: [] };
+    const p = upgradePlan({ cohort, from, to });
+    expect(p.dropped).toEqual({ delivery: ['التوجيه'], schedule: ['التطبيق'], stage_modes: ['التطبيق'] });
+    expect(p.patch).toEqual({ delivery: {}, schedule: { s1: { start: '2026-09-01' } }, stage_modes: {} });
+    expect(p.blocked).toBe('');
+    expect(removedRequirementIds(from, to)).toEqual(['r2', 'r3']);
+    expect(upgradePlan({ cohort: { ...cohort, hidden_requirements: ['A'] }, from, to }).blocked).toContain('«التمهيد»');
   });
 });
 
