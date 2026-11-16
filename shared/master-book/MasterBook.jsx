@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { COVER_CSS, chapterImage, coverHtml, mdHtml, partImage, writeBook } from '../../src/lib/brand/book.js';
 import { DIMENSIONS, LEVEL_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { parseQuiz } from '../../supabase/functions/leaders-api/logic.js';
-import { bookSections, chapterVisible, markTiers, tierAr, tierVisible, BODY_MAX, QUOTE_MAX } from '../../supabase/functions/leaders-api/master-book.js';
+import { bookSections, chapterVisible, markTiers, outOfSeat, tierAr, tierVisible, BODY_MAX, OUT_OF_SEAT_AR, QUOTE_MAX } from '../../supabase/functions/leaders-api/master-book.js';
 import { chapterDeps } from './deps.js';
 import { ProposalEditor, ProposalsSheet, useDialogFocus } from './Proposals.jsx';
 import ReleaseSheet from './Release.jsx';
@@ -20,6 +20,15 @@ const PART = { milestone: 'الجزء الأول', impact: 'الجزء الثا�
 // الأجزاء الثلاثة بترتيبها الثابت، ثم «مسودات للمراجعة»: وثائق معروضة على اللجنة تُقرأ ويُعلَّق عليها كالأبواب
 const DRAFT = { key: 'draft', roman: '✎', label: 'ملحق · مسودات للمراجعة', title: 'مسودات للمراجعة', short: 'مسودات' };
 const PARTS = [...DIMENSIONS.map((d) => ({ key: d.key, roman: ROMAN[d.key], label: `${PART[d.key]} · ${d.short}`, title: d.title, short: d.short })), DRAFT];
+// المقعد (المرحلة 1 من «أجزاء الكتاب وخبير المحتوى»): سطر في الرف يسمي جزء العضو، أو نطاقه الكتاب كاملًا لعضو القياس
+const seatLine = (seat) => {
+  if (seat === 'all') return { label: 'نطاقك', text: 'الكتاب كاملًا' };
+  if (!Array.isArray(seat)) return null;
+  if (!seat.length) return { label: 'مقعدك', text: 'لم يُحدَّد إطارك بعد، فتعليقك يظهر موسومًا من خارج الإطار' };
+  return { label: 'مقعدك', text: PARTS.filter((p) => seat.includes(p.key)).map((p) => `${PART[p.key]} · ${p.title}`).join('، ') };
+};
+// شارة التعليق من خارج إطار كاتبه: محايدة لا توحي بالخطأ
+const OutSeat = () => <span className="mb-outseat">{OUT_OF_SEAT_AR}</span>;
 const LEVELS = [['all', 'الكتاب كاملًا'], ['beginner', LEVEL_AR.beginner], ['intermediate', LEVEL_AR.intermediate], ['advanced', LEVEL_AR.advanced]];
 const two = (n) => String(n).padStart(2, '0');
 const anchor = (s) => `mb-s-${encodeURIComponent(s || 'top').replace(/%/g, '')}`;
@@ -79,7 +88,7 @@ function Comment({ c, viewer, onReply, onDelete, onStatus, reply = false }) {
         <Avatar c={c} />
         <div className="mb-cm-who">
           <b>{c.deleted ? 'تعليق محذوف' : c.author_name}</b>
-          <small>{c.author_role}{c.created_at ? ` · ${ago(c.created_at)}` : ''}</small>
+          <small>{c.author_role}{c.out_of_seat && !c.deleted ? <> <OutSeat /></> : null}{c.created_at ? ` · ${ago(c.created_at)}` : ''}</small>
         </div>
         {!reply && <span className={`mb-chip ${c.status === 'resolved' ? 'ok' : 'open'}`}>{c.status === 'resolved' ? 'محسوم' : 'مفتوح'}</span>}
       </header>
@@ -134,6 +143,7 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
         </div>
         {viewer.write ? (
           <footer className="mb-compose">
+            {outOfSeat(viewer, chapter) && <p className="mb-seat-note">تعليقك هنا يظهر موسومًا: {OUT_OF_SEAT_AR}</p>}
             {replyTo && <p className="mb-replying">ردًا على {replyTo.author_name} <button type="button" className="mb-link" onClick={() => setReplyTo(null)}>إلغاء</button></p>}
             {!replyTo && quote && <blockquote className="mb-quote">{quote}<button type="button" className="mb-link" onClick={() => setQuote('')}>إزالة الاقتباس</button></blockquote>}
             <textarea ref={box} rows={3} value={text} maxLength={BODY_MAX} onChange={(e) => setText(e.target.value)} placeholder={replyTo ? 'اكتب ردك' : 'ملاحظتك على هذا القسم: ما الذي يُضاف أو يُصحح أو يُحذف، ولماذا'} />
@@ -248,9 +258,12 @@ function AllComments({ data, onGo, onClose }) {
   const [st, setSt] = useState('open');
   const [dim, setDim] = useState('');
   const [who, setWho] = useState('');
+  const [seat, setSeat] = useState('');
   const chap = Object.fromEntries(data.chapters.map((c) => [c.id, c]));
   const authors = [...new Map(data.comments.filter((c) => !c.deleted).map((c) => [c.author_ref, c.author_name])).entries()];
-  const list = data.comments.filter((c) => (!st || c.status === st) && (!dim || chap[c.module_id]?.dimension === dim) && (!who || c.author_ref === who));
+  const list = data.comments.filter((c) => (!st || c.status === st) && (!dim || chap[c.module_id]?.dimension === dim) && (!who || c.author_ref === who)
+    // «من أصحاب الإطار»: تعليق خبير في مقعده أو نطاقه، و«من خارج الإطار»: الموسوم. تعليق الإدارة لا هذا ولا ذاك
+    && (!seat || (seat === 'out' ? c.out_of_seat : c.author_kind === 'expert' && !c.out_of_seat)));
   return (
     <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside ref={dlg} tabIndex={-1} className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="كل التعليقات">
@@ -260,6 +273,7 @@ function AllComments({ data, onGo, onClose }) {
           <select value={st} onChange={(e) => setSt(e.target.value)} aria-label="الحالة"><option value="open">المفتوحة</option><option value="resolved">المحسومة</option><option value="">الكل</option></select>
           <select value={dim} onChange={(e) => setDim(e.target.value)} aria-label="الإطار"><option value="">الأطر الثلاثة</option>{PARTS.map((p) => <option key={p.key} value={p.key}>{p.title}</option>)}</select>
           <select value={who} onChange={(e) => setWho(e.target.value)} aria-label="المعلّق"><option value="">كل المعلّقين</option>{authors.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select>
+          <select value={seat} onChange={(e) => setSeat(e.target.value)} aria-label="صلة المعلّق بالإطار"><option value="">الكل</option><option value="in">من أصحاب الإطار</option><option value="out">من خارج الإطار</option></select>
         </div>
         <div className="mb-sheet-body">
           {!list.length && <p className="mb-empty">لا تعليقات بهذه التصفية.</p>}
@@ -267,7 +281,7 @@ function AllComments({ data, onGo, onClose }) {
             <button key={c.id} type="button" className="mb-cm-link" onClick={() => onGo(c)}>
               <Avatar c={c} />
               <span><small>{PARTS.find((p) => p.key === chap[c.module_id]?.dimension)?.short} · {chap[c.module_id]?.title}{c.section ? ` · ${c.section}` : ''}</small>
-                <b>{c.author_name} <i>{c.author_role}</i></b>
+                <b>{c.author_name} <i>{c.author_role}</i>{c.out_of_seat && !c.deleted ? <> <OutSeat /></> : null}</b>
                 <em>{c.deleted ? 'تعليق محذوف' : c.body}</em>
                 <small>{ago(c.created_at)}{c.replies?.length ? ` · ${c.replies.length} رد` : ''}{c.status === 'resolved' ? ' · محسوم' : ''}</small></span>
             </button>
@@ -548,6 +562,9 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const total = data.counts.total;
   const review = data.proposal_counts?.review || 0;
   const showProposals = data.proposals_ready && (data.viewer.propose || (data.proposals || []).length > 0);
+  // رف الخبير: أجزاء مقعده أولًا ثم الأجزاء الأخرى، والمسودات آخرًا. الإدارة ومن نطاقه الكتاب كله بالترتيب الثابت
+  const seatInfo = data.viewer.kind === 'expert' ? seatLine(data.viewer.seat) : null;
+  const shelfParts = [...PARTS].sort((a, b) => (a.key === 'draft') - (b.key === 'draft') || outOfSeat(data.viewer, { dimension: a.key }) - outOfSeat(data.viewer, { dimension: b.key }));
   return (
     <div className={`mb-root place-${place}`} ref={root}>
       <Watermark text={data.viewer.watermark} />
@@ -579,15 +596,19 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
                 {data.share && api.reader && <button type="button" className="mb-btn line" onClick={() => setSharing(true)}>شارك مع الخبراء{data.share.readers.length ? ` (${data.share.readers.length})` : ''}</button>}
               </div>
               <p className="mb-who">تقرأ بصفتك: <b>{data.viewer.name}</b> · {data.viewer.role}</p>
+              {seatInfo && <p className="mb-seat">{seatInfo.label}: <b>{seatInfo.text}</b></p>}
             </div>
           </section>
           <section className="mb-vols" aria-label="الأجزاء الثلاثة">
-            {PARTS.map((p) => {
+            {shelfParts.map((p) => {
               const chs = data.chapters.filter((c) => c.dimension === p.key);
               const n = chs.reduce((s, c) => s + (data.counts.byModule[c.id] || 0), 0);
+              // جزء خارج مقعد عضو المحتوى: يُقرأ كاملًا وعليه علامة خفيفة، فيعرف أن تعليقه فيه يُوسم
+              const away = p.key !== 'draft' && outOfSeat(data.viewer, { dimension: p.key });
               return (
-                chs.length > 0 && <button key={p.key} type="button" className={`mb-vol${p.key === 'draft' ? ' draft' : ''}`} style={{ '--vimg': `url('${partImage(p.key)}')` }} onClick={() => chs[0] && goChapter(chs[0])}>
+                chs.length > 0 && <button key={p.key} type="button" className={`mb-vol${p.key === 'draft' ? ' draft' : ''}${away ? ' away' : ''}`} style={{ '--vimg': `url('${partImage(p.key)}')` }} onClick={() => chs[0] && goChapter(chs[0])}>
                   <span className="mb-vol-img" aria-hidden="true" />
+                  {away && <span className="mb-vol-away">خارج إطارك</span>}
                   <span className="mb-vol-in"><i>{p.roman}</i><small>{PART[p.key] || 'للجنة المحتوى'}</small><b>{p.title}</b><em>{p.key === 'draft' ? `${chs.length === 1 ? 'مسودة واحدة' : `${chs.length} مسودات`}` : `${chs.length} أبواب`}{n ? ` · ${n} تعليق مفتوح` : ''}</em></span>
                 </button>
               );

@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   authorRole, bookAccess, bookSections, canDelete, canResolve, chapterVisible, cleanComment, markTiers, openCounts, orderChapters,
   commentTarget, draftChapters, rowChapterId, sectionsOf, shareRoster, threads, tierAr, tierVisible, toggleCommittee, versionFromMigration,
+  chapterPart, outOfSeat, seatOf,
 } from '../../supabase/functions/leaders-api/master-book.js';
+import { DRAFTS } from '../../supabase/functions/leaders-api/master-book-drafts.js';
 
 const MD = `## أولًا
 نص عام
@@ -180,5 +182,66 @@ describe('الكتاب الأم: المسودات المعروضة على الل
     expect(readFileSync(join(process.cwd(), 'supabase/functions/leaders-api/master-book-drafts.js'), 'utf8')).toBe(build());
     const md = toBookMd('# عنوان\n\n### الجدارة 1\n| أ | ب | ج |\n|---|---|---|\n| س | ص | `ع` |\n---\nنص');
     expect(md).toBe('## الجدارة 1\n\n@compare\nب | ج\nس | ص | ع\n\nنص');
+  });
+});
+
+// تصور «أجزاء الكتاب وخبير المحتوى» (اعتمده المالك 2026-11-16)، المرحلة 1: المقعد والتعليق من خارج الإطار
+describe('الكتاب الأم: المقعد والتعليق من خارج الإطار', () => {
+  const ch = (dimension) => ({ id: '22222222-2222-4222-8222-222222222222', dimension });
+  const draft = (part) => draftChapters([{ key: 'x-draft', title: 'مسودة', md: '## أ\nنص', part }])[0];
+  it('المقعد من experts.dimensions لعضو المحتوى، والكتاب كله لعضو القياس ولمن في اللجنتين', () => {
+    expect(seatOf({ committees: ['content'], dimensions: ['leadership', 'milestone'] })).toEqual(['milestone', 'leadership']);
+    expect(seatOf({ committees: ['content'], dimensions: ['impact', 'غريب'] })).toEqual(['impact']);
+    expect(seatOf({ committees: ['content'], dimensions: [] })).toEqual([]);
+    expect(seatOf({ committees: ['measurement'], dimensions: ['impact'] })).toBe('all');
+    expect(seatOf({ committees: ['content', 'measurement'], dimensions: ['impact'] })).toBe('all');
+    expect(seatOf({ committees: [], roles: ['coach'], dimensions: ['impact'] })).toBe(null);
+    expect(seatOf(null)).toBe(null);
+  });
+  it('عضو المحتوى: باب من إطار آخر خارج مقعده، وبابه في مقعده', () => {
+    const e = { committees: ['content'], dimensions: ['leadership'] };
+    expect(outOfSeat(e, ch('impact'))).toBe(true);
+    expect(outOfSeat(e, ch('milestone'))).toBe(true);
+    expect(outOfSeat(e, ch('leadership'))).toBe(false);
+    // بلا إطار مسجل: كل باب خارج مقعده
+    expect(outOfSeat({ committees: ['content'], dimensions: [] }, ch('leadership'))).toBe(true);
+  });
+  it('عضو القياس ومن في اللجنتين: لا وسم في أي جزء', () => {
+    for (const d of ['milestone', 'impact', 'leadership']) {
+      expect(outOfSeat({ committees: ['measurement'], dimensions: [] }, ch(d))).toBe(false);
+      expect(outOfSeat({ committees: ['content', 'measurement'], dimensions: ['impact'] }, ch(d))).toBe(false);
+    }
+  });
+  it('المسودة بإطارها إن عُرف، وبلا إطار في نطاق الجميع', () => {
+    const e = { committees: ['content'], dimensions: ['impact'] };
+    expect(draft('leadership')).toMatchObject({ dimension: 'draft', part: 'leadership' });
+    expect(chapterPart(draft('leadership'))).toBe('leadership');
+    expect(outOfSeat(e, draft('leadership'))).toBe(true);
+    expect(outOfSeat(e, draft('impact'))).toBe(false);
+    expect(draft(null).part).toBe(null);
+    expect(draft('غريب').part).toBe(null);
+    expect(outOfSeat(e, draft(null))).toBe(false);
+    // والمسودة كما يمررها الخادم إلى addComment (معرّف draft: وإطارها)
+    expect(outOfSeat(e, { id: 'draft:x-draft', body_md: '', part: 'milestone' })).toBe(true);
+  });
+  it('الإدارة لا يُوسم تعليقها أبدًا، والقارئ بمقعده من الخادم يُحسب بالقاعدة نفسها', () => {
+    expect(outOfSeat({ kind: 'admin', committees: ['content'], dimensions: [] }, ch('impact'))).toBe(false);
+    expect(outOfSeat({ kind: 'admin', seat: ['milestone'] }, ch('impact'))).toBe(false);
+    expect(outOfSeat({ kind: 'expert', seat: ['milestone'] }, ch('impact'))).toBe(true);
+    expect(outOfSeat({ kind: 'expert', seat: ['impact'] }, ch('impact'))).toBe(false);
+    expect(outOfSeat({ kind: 'expert', seat: 'all' }, ch('impact'))).toBe(false);
+    expect(outOfSeat({ kind: 'expert', seat: null }, ch('impact'))).toBe(false);
+    expect(outOfSeat(null, ch('impact'))).toBe(false);
+  });
+  it('السلسلة تحمل الوسم كما حُفظ، والغائب قبل الترحيل false', () => {
+    const [t] = threads([
+      { id: 'a', module_id: 'm', author_kind: 'expert', author_ref: 'x', body: 'أصل', status: 'open', created_at: '2026-11-16T10:00:00Z', out_of_seat: true },
+      { id: 'b', parent_id: 'a', module_id: 'm', author_kind: 'expert', author_ref: 'y', body: 'رد', status: 'open', created_at: '2026-11-16T11:00:00Z' },
+    ]);
+    expect(t.out_of_seat).toBe(true);
+    expect(t.replies[0].out_of_seat).toBe(false);
+  });
+  it('مسودة الجدارات القيادية السبع في إطار القيادة', () => {
+    expect(DRAFTS.find((d) => d.key === 'seven-competencies').part).toBe('leadership');
   });
 });

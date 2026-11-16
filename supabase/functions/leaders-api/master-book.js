@@ -5,7 +5,7 @@
 // لا نسخة ثانية من الكتاب: المتن من handbook_modules نفسه، والترتيب الثابت للأطر من DIMENSIONS (المعالم ← الأثر ← القيادة).
 // يقرؤه الخادم (master-book.ts) والقارئ في اللوحة وبوابة الخبير، فالقاعدة واحدة في الجهتين.
 import { DIMENSIONS } from './logic.js';
-import { COMMITTEES, COMMITTEE_AR, hasJourneyRole } from './committees.js';
+import { COMMITTEES, COMMITTEE_AR, cleanCommittees, hasJourneyRole } from './committees.js';
 
 export const SECTION_MAX = 200;
 export const QUOTE_MAX = 600;
@@ -19,6 +19,29 @@ export const isChapterId = (id) => UUID.test(String(id || '')) || DRAFT_ID.test(
 // من يقرأ الكتاب الأم من الخبراء: عضو فاعل في لجنة المحتوى أو القياس (experts.committees)، فالعضوية من سجل الخبير لا قائمة ثانية
 // journey-guard: قاعدة الكتاب نفسها (معتمد أو موقوف مؤقتًا وله عضوية لجنة)، لا مرشِّح للرحلة
 export const bookAccess = (e) => !!e && ['active', 'paused'].includes(e.status) && (e.committees || []).some((c) => COMMITTEES.includes(c));
+
+// ── المقعد (تصور «أجزاء الكتاب وخبير المحتوى»، المرحلة 1، اعتمده المالك 2026-11-16) ──
+// المقعد هو experts.dimensions نفسه بلا حقل جديد (القرار ج): عضو لجنة المحتوى مقعده أطره، وعضو القياس نطاقه الكتاب كله
+// (القرار ب)، ومن في اللجنتين نطاقه الكتاب كله لأن نطاق القياس يشمله. ومن ليس في لجنة لا مقعد له (null).
+/** @returns {'all' | string[] | null} */
+export function seatOf(e) {
+  const cs = cleanCommittees(e?.committees);
+  if (cs.includes('measurement')) return 'all';
+  if (cs.includes('content')) return DIMENSIONS.filter((d) => (e?.dimensions || []).includes(d));
+  return null;
+}
+// إطار الباب: الباب بإطاره، والمسودة بإطارها إن عُرف (part من master-book-drafts.js)، وإلا فهي في نطاق الجميع (null)
+export const chapterPart = (ch) => (ch?.draft || ch?.dimension === DRAFT_PART || String(ch?.id || '').startsWith('draft:') ? (DIMENSIONS.includes(ch?.part) ? ch.part : null) : (DIMENSIONS.includes(ch?.dimension) ? ch.dimension : null));
+/** هل الباب من إطار ليس في مقعد العضو؟ يقبل سجل الخبير أو القارئ ({ kind, seat }). القرار أ: يقرأ ويعلّق، ويُوسم تعليقه.
+ *  تعليق الإدارة لا يُوسم أبدًا، ولا من نطاقه الكتاب كله، ولا ما لا إطار له */
+export function outOfSeat(e, chapter) {
+  if (!e || e.kind === 'admin') return false;
+  const seat = e.seat !== undefined ? e.seat : seatOf(e);
+  if (seat === 'all' || !Array.isArray(seat)) return false;
+  const part = chapterPart(chapter);
+  return !!part && !seat.includes(part);
+}
+export const OUT_OF_SEAT_AR = 'خبير من خارج الإطار';
 
 // صفة المعلّق كما تظهر بجانب اسمه
 export function authorRole(kind, { committees = [], role = '' } = {}) {
@@ -71,7 +94,7 @@ export function threads(rows = [], fingerprints = {}) {
   const byTime = (a, b) => String(a.created_at).localeCompare(String(b.created_at));
   const view = (c) => ({
     id: c.id, module_id: c.module_id, section: c.section || '', quote: c.deleted_at ? '' : c.quote || '', body: c.deleted_at ? '' : c.body,
-    deleted: !!c.deleted_at, author_kind: c.author_kind, author_ref: c.author_ref, author_name: c.author_name || '', author_role: c.author_role || '',
+    deleted: !!c.deleted_at, author_kind: c.author_kind, author_ref: c.author_ref, author_name: c.author_name || '', author_role: c.author_role || '', out_of_seat: c.out_of_seat === true,
     status: c.status, resolved_by: c.resolved_by || null, resolved_at: c.resolved_at || null, created_at: c.created_at,
     stale: !!(c.fingerprint && fingerprints[c.module_id] && c.fingerprint !== fingerprints[c.module_id]),
   });
@@ -199,10 +222,10 @@ export function toggleCommittee(list = [], committee, on) {
 
 // ── المسودات في الكتاب الأم: وثيقة معروضة على اللجنة تُقرأ كبابٍ في جزء «مسودات للمراجعة» ويُعلَّق عليها ──
 export const DRAFT_PART = 'draft';
-/** @param {{ key: string, title: string, md: string, status?: string, source?: string, dimension?: string }[]} drafts */
+/** @param {{ key: string, title: string, md: string, status?: string, source?: string, part?: string|null }[]} drafts part إطار المسودة إن عُرف */
 export const draftChapters = (drafts = []) => drafts.map((d, i) => ({
   id: `draft:${d.key}`, dimension: DRAFT_PART, chapter_key: d.key, sort: i + 1, title: d.title, min_level: 'beginner',
-  md: d.md, quiz_md: '', reflection: '', draft: true, status: d.status || 'مسودة', source: d.source || '', about: d.dimension || null,
+  md: d.md, quiz_md: '', reflection: '', draft: true, status: d.status || 'مسودة', source: d.source || '', part: DIMENSIONS.includes(d.part) ? d.part : null,
 }));
 // هدف التعليق في الجدول: باب (module_id) أو مسودة (draft_key)، وفي القارئ معرّف واحد
 export const commentTarget = (id) => (String(id).startsWith('draft:') ? { module_id: null, draft_key: String(id).slice(6) } : { module_id: String(id), draft_key: null });

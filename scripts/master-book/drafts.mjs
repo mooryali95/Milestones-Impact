@@ -9,10 +9,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DIMENSIONS } from '../../supabase/functions/leaders-api/logic.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+// part: إطار المسودة (أحد الأطر الثلاثة) أو null، ومنه يُعرف أن تعليق عضو لجنة المحتوى عليها من خارج مقعده (seatOf في master-book.js)
 export const DRAFTS = [
-  { key: 'seven-competencies', title: 'مسودة: الجدارات القيادية السبع', dimension: 'leadership', source: 'docs/content/2026-11-15-مسودة-الجدارات-القيادية-السبع-v1.md', status: 'للعرض على لجنة المحتوى' },
+  { key: 'seven-competencies', title: 'مسودة: الجدارات القيادية السبع', part: 'leadership', source: 'docs/content/2026-11-15-مسودة-الجدارات-القيادية-السبع-v1.md', status: 'للعرض على لجنة المحتوى' },
 ];
 export const OUT = join(ROOT, 'supabase/functions/leaders-api/master-book-drafts.js');
 
@@ -43,6 +45,7 @@ export function toBookMd(md) {
 }
 
 export function build() {
+  for (const d of DRAFTS) if (d.part !== null && !DIMENSIONS.includes(d.part)) throw new Error(`إطار المسودة ${d.key} غير معروف: ${d.part}`);
   const items = DRAFTS.map((d) => ({ ...d, md: toBookMd(readFileSync(join(ROOT, d.source), 'utf8')) }));
   return `// مولَّد من وثائق المسودات بـ scripts/master-book/drafts.mjs. لا تحرّره يدويًا: عدّل الوثيقة ثم أعد التوليد.\nexport const DRAFTS = ${JSON.stringify(items, null, 2)};\n`;
 }

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116000000_leaders_book_proposals
+-- as-of migration: 20261116020000_leaders_book_comment_out_of_seat
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -230,6 +230,7 @@ create table if not exists leaders.book_comments (
   created_at timestamp with time zone default now() not null,
   draft_key text,
   section_id text,
+  out_of_seat boolean default false not null,
   constraint book_comments_author_kind_check CHECK ((author_kind = ANY (ARRAY['expert'::text, 'admin'::text]))),
   constraint book_comments_body_check CHECK (((char_length(body) >= 2) AND (char_length(body) <= 4000))),
   constraint book_comments_draft_key_check CHECK (((draft_key IS NULL) OR (draft_key ~ '^[a-z0-9-]{2,60}$'::text))),
