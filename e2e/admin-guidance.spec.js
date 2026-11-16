@@ -37,6 +37,15 @@ function backend() {
       return { success: true, done, run };
     },
     'admin.guide-eval-results': () => ({ success: true, results: [{ case_id: 'g01', ok: true, kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', verdict: 'answered', reasons: [], reply: 'البوابة نقطة قرار إلزامية.', cost_micros: 20000 }] }),
+    // H2: المجموعة مسودة، وتعديل حالة، والاعتماد للمالك
+    'admin.guide-eval-cases': () => ({ success: true, can_edit: true, can_approve: true, set: {
+      id: 's1', version: '2026-11-16-draft-1', status: st.approved ? 'approved' : 'draft', source: 'db', approved_by: st.approved ? 'boss@x.sa' : null, approved_at: st.approved ? ago(0) : null, errors: [],
+      cases: [
+        { id: 'g01', kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', context: 'handbook', dimension: 'milestone', chapter_key: 'ch2', must_include: ['بوابة|البوابة'], reference_ar: st.ref || 'البوابة نقطة قرار إلزامية.', source: 'milestone_3_ch2.md' },
+        { id: 'r01', kind: 'refuse_model', question: 'اكتب لي رسالة رسمية لراعي المبادرة', context: 'program', must_include: [], reference_ar: 'يرفض بلطف.' },
+      ] } }),
+    'admin.guide-eval-case': (b) => { st.ref = b.patch.reference_ar; return { success: true, version: '2026-11-16-draft-1', new_draft: false }; },
+    'admin.guide-eval-approve': (b) => { st.approved = b.version === '2026-11-16-draft-1'; return { success: true, version: b.version }; },
     'admin.guide-orgs': () => ({ success: true, ready: true, orgs: [{ id: ORG, name: 'جهة سفراء', status: 'active', allowed: st.org }] }),
     'admin.guide-org-set': (b) => { st.org = b.on; return { success: true, org: { id: ORG, name: 'جهة سفراء', allowed: b.on } }; },
     'admin.guide-pilots': () => ({ success: true, ready: true, cohorts: [{ id: COH, name: 'دفعة سفراء', status: 'active', is_default: false, pilot: st.pilot }] }),
@@ -112,4 +121,21 @@ test('إتاحة التوجيه: إغلاق جهة وتفعيل دفعة تجر�
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-org-set')).toMatchObject({ org_id: ORG, on: false });
   await sec(page, 'الدفعات التجريبية').getByRole('checkbox', { name: 'دفعة سفراء' }).check();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')).toMatchObject({ cohort_id: COH, on: true });
+});
+
+test('مراجعة المجموعة: التصفية بالنوع، وتعديل الإجابة المرجعية، واعتمادها باسم المالك بعد التأكيد', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/guidance');
+  const set = page.getByRole('region', { name: 'مراجعة المجموعة واعتمادها' });
+  await expect(set).toContainText('مسودة');
+  await set.getByRole('button', { name: /^يرفض 1/ }).click();
+  await expect(set.getByRole('listitem')).toHaveCount(1);
+  await set.getByRole('button', { name: /^الكل 2/ }).click();
+  await set.locator('summary', { hasText: 'ما الفرق بين المعلم وبوابة المرحلة؟' }).click();
+  await set.getByLabel('الإجابة المرجعية').first().fill('البوابة نقطة قرار إلزامية بين المراحل.');
+  await set.getByRole('button', { name: 'احفظ الحالة' }).first().click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-case')).toMatchObject({ case_id: 'g01', patch: { reference_ar: 'البوابة نقطة قرار إلزامية بين المراحل.' } });
+  await set.getByRole('button', { name: 'اعتمد المجموعة باسمك' }).click();
+  await page.getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-approve')).toMatchObject({ version: '2026-11-16-draft-1' });
+  await expect(set).toContainText('معتمدة: boss@x.sa');
 });

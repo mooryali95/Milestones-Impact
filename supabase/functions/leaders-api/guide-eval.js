@@ -81,3 +81,38 @@ export const EVAL_GATE_AR = {
   none: 'لم يُشغَّل تقييم الدقة على النسخة الحالية بعد.',
   failed: `آخر تقييم للنسخة الحالية دون ${EVAL_THRESHOLD * 100}٪.`,
 };
+
+// ── H2: تعديل حالة من اللوحة واعتماد المجموعة (قرار المالك v8) ──
+// الحقول التي تُعدَّل من اللوحة، وما سواها (المعرّف) ثابت
+export const CASE_FIELDS = ['kind', 'question', 'context', 'dimension', 'chapter_key', 'level', 'must_include', 'must_not_include', 'reference_ar', 'source'];
+const LEVELS = ['beginner', 'intermediate', 'advanced'];
+const lines = (v) => (Array.isArray(v) ? v : String(v ?? '').split('\n')).map((x) => String(x).trim()).filter(Boolean).slice(0, 12);
+
+/**
+ * حالة بعد تعديل: الحقول المسموحة وحدها، منظفة. يعيد { ok, cases } أو { ok: false, error }
+ */
+export function applyCaseEdit(cases, id, patch = {}) {
+  const i = (cases || []).findIndex((c) => c.id === id);
+  if (i < 0) return { ok: false, error: 'الحالة غير موجودة' };
+  const c = { ...cases[i] };
+  for (const k of Object.keys(patch || {})) {
+    if (!CASE_FIELDS.includes(k)) return { ok: false, error: `حقل لا يُعدَّل: ${k}` };
+    const v = patch[k];
+    if (k === 'must_include' || k === 'must_not_include') c[k] = lines(v);
+    else if (k === 'level') { if (v && !LEVELS.includes(v)) return { ok: false, error: 'مستوى غير معروف' }; c.level = v || undefined; }
+    else if (k === 'context') { if (!['handbook', 'program'].includes(v)) return { ok: false, error: 'سياق غير معروف' }; c.context = v; }
+    else c[k] = String(v ?? '').trim().slice(0, k === 'reference_ar' ? 2000 : 600);
+  }
+  const next = [...cases];
+  next[i] = c;
+  const errs = validateCases({ version: 'x', cases: next }).filter((e) => e.startsWith(`${id}:`));
+  if (errs.length) return { ok: false, error: errs[0] };
+  return { ok: true, cases: next };
+}
+
+// رقم النسخة التالية: تعديل نسخة معتمدة يبدأ مسودة برقم مراجعة جديد في اليوم نفسه
+export function nextVersion(version, day) {
+  const m = String(version || '').match(/^(\d{4}-\d{2}-\d{2})-r(\d+)$/);
+  if (m && m[1] === day) return `${day}-r${Number(m[2]) + 1}`;
+  return `${day}-r1`;
+}
