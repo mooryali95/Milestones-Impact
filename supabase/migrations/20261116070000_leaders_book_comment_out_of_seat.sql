@@ -6,4 +6,4 @@
 -- وتعليقه على باب من إطار آخر يظهر موسومًا «خبير من خارج الإطار». عضو القياس نطاقه الكتاب كله، وتعليق الإدارة لا يُوسم. آمن لإعادة التشغيل.
 alter table leaders.book_comments add column if not exists out_of_seat boolean not null default false;
 
-insert into leaders.schema_migrations (name) values ('20261116020000_leaders_book_comment_out_of_seat') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261116070000_leaders_book_comment_out_of_seat') on conflict do nothing;

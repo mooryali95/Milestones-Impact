@@ -108,7 +108,7 @@ export async function addComment(v: Viewer, b: any) {
   // وسم «خبير من خارج الإطار» يُحفظ لحظة الكتابة فلا يتغير إن تغيرت المقاعد بعده. يُرسل حين يصح وحده، فالعمود افتراضيه false
   if (outOfSeat(v, mod)) row.out_of_seat = true;
   let { data, error } = await db.from('book_comments').insert(row).select('id').single();
-  // قبل ترحيل out_of_seat (20261116020000) يُحفظ التعليق بلا الوسم، وقبل ترحيل section_id (20261115200000) بعنوانه وحده.
+  // قبل ترحيل out_of_seat (20261116070000) يُحفظ التعليق بلا الوسم، وقبل ترحيل section_id (20261115200000) بعنوانه وحده.
   // العمود الغائب وحده يبرر الإعادة: خطأ عابر لا يُسقط الوسم، فالوسم لا يُستدرك بعد الحفظ
   if (missingColumn(error) && row.out_of_seat) { delete row.out_of_seat; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
   if (missingColumn(error) && row.section_id) { delete row.section_id; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
