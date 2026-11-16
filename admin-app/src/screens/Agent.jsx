@@ -13,6 +13,7 @@ import { agoAr } from '../../../supabase/functions/leaders-api/ops-health.js';
 import { convSummary, count, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, LEVEL_ICON, orgsSummary, peakDay, pct, ringLevel,
   RUN_STATUS_AR, runEvalLoop, runSummary, seriesScale, SET_AR, short, spendSummary, stateSummary, stopAr, systemLine, usd, usd2 } from '../agent-admin.js';
 import { navigate } from '../route.js';
+import { GuidanceCap } from './AppSettings.jsx';
 import { normAction, normConversations, normKeySet, normRunDetail, normRuns, normState, normStep, normTranscript, normUsage } from '../agent-data.js';
 import '../agent-admin.css';
 
@@ -138,6 +139,7 @@ function StatusSection({ s, reload, writable }) {
         <Row label="بوابة التقييم"><span className={gate.ok ? 'ops-flag on' : 'ops-flag off'}>{gate.ok ? '✓' : '✕'} {gate.text}</span></Row>
       </dl>
       {s.enabled_at && <p className="la-muted small">آخر تغيير للتفعيل: {s.enabled_by} {when(s.enabled_at)}.</p>}
+      <GuidanceCap />
     </>
   );
 }

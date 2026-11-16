@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import { navigate } from '../route.js';
 import { cleanGroup, SETTINGS } from '../../../supabase/functions/leaders-api/settings.js';
 import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
 
@@ -81,6 +82,7 @@ function Group({ group, values, updated, canWrite, onSaved }) {
     <form className="la-card" onSubmit={save} aria-labelledby={`st-${group}`}>
       <h3 id={`st-${group}`}>{def.title_ar}</h3>
       <p className="la-muted">{def.note_ar}</p>
+      {def.super && !canWrite && <p className="la-muted small">التعديل للمدير الأعلى والمالك وحدهما.</p>}
       {updated && <p className="la-muted small">آخر تعديل: {updated.by} · {date(updated.at)}</p>}
       <div className="of-grid">
         {Object.entries(def.fields).filter(([k]) => !IN_FEATURES[group]?.has(k)).map(([k, f]) => (
@@ -96,6 +98,19 @@ function Group({ group, values, updated, canWrite, onSaved }) {
         </div>
       )}
     </form>
+  );
+}
+
+// التوجيه والإرشاد داخل الرحلة: سقفه منفصل عن سقف هذا المساعد، ومصدره الإعدادات العامة وحدها (settings.js)
+export function GuidanceCap() {
+  const [g, setG] = useState(null);
+  useEffect(() => { L('admin.settings').then((r) => setG(r?.success ? r.values?.guidance || null : null)); }, []);
+  if (!g) return null;
+  return (
+    <p className="la-muted small ag-guidance">
+      سقف «التوجيه والإرشاد» داخل الرحلة منفصل: {Number(g.daily_spend_usd).toFixed(2)} دولار يوميًا، و{g.monthly_questions} سؤالًا شهريًا و{g.daily_questions} يوميًا لكل مشارك.{' '}
+      <button type="button" className="link" onClick={() => navigate({ ctx: 'leaders', tab: 'settings', id: 'guidance' })}>عدّله من الإعدادات</button>
+    </p>
   );
 }
 
@@ -139,10 +154,12 @@ function FeatureSwitches({ d, canWrite, onSaved }) {
 }
 
 // onSettings: يُبلَّغ به قسم القادة بعد كل حفظ، فتتحدث شارات «مخفي عن المستخدمين» على الأقسام فورًا
-export default function AppSettings({ canWrite, onSettings }) {
+export default function AppSettings({ canWrite, onSettings, isSuper = false, focus = null }) {
   const [d, setRaw] = useState(null);
   const setD = (r) => { setRaw(r); if (r?.success) onSettings?.(r); };
   useEffect(() => { L('admin.settings').then(setD); }, []);
+  // رابط مباشر لمجموعة (#/leaders/settings/<group>)، كرابط سقف التوجيه من شاشة المساعد
+  useEffect(() => { if (d?.success && focus) document.getElementById(`st-${focus}`)?.scrollIntoView?.({ block: 'start' }); }, [d, focus]);
   if (!d) return <Spinner />;
   if (!d.success) return <div className="la-err">{d.message}</div>;
   return (
@@ -150,7 +167,7 @@ export default function AppSettings({ canWrite, onSettings }) {
       {!d.ready && <div className="la-card la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فتعمل القيم الافتراضية ولا يُحفظ تعديل حتى يُطبَّق ترحيله.</div>}
       <FeatureSwitches d={d} canWrite={canWrite} onSaved={setD} />
       {Object.keys(SETTINGS).filter((g) => g !== 'features').map((g) => (
-        <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready} onSaved={setD} />
+        <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready && (!SETTINGS[g].super || isSuper)} onSaved={setD} />
       ))}
     </div>
   );

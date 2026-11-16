@@ -15,7 +15,7 @@ import Tracking from './Tracking.jsx';
 import Discovery from './Discovery.jsx';
 import AskExpert from './AskExpert.jsx';
 import { CHECK_CHAPTERS, stuckSignals } from '../../../supabase/functions/leaders-api/stuck.js';
-import ChooseExpert from './ChooseExpert.jsx';
+import { GuidancePanel } from './Guidance.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -233,7 +233,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       })()}
       {ask && <AskExpert {...ask} onClose={() => setAsk(null)} />}
 
-      {c.status !== 'approved' && !ask && <ChooseExpert context="capstone" title="استشارة لمبادرتك" />}
+      {c.status !== 'approved' && !ask && <GuidancePanel guidance={me.guidance} context="capstone" consultTitle="استشارة لمبادرتك" />}
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}
