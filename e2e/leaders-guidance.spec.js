@@ -70,7 +70,8 @@ function chatServer({ ai = true, gateOk = true } = {}) {
   const route = async (r) => {
     const b = JSON.parse(r.request().postData() || '{}');
     if (b.action === 'guide.state') { calls.push(b); return r.fulfill({ json: { success: true, gate: { ok: gateOk, reason: gateOk ? null : 'policy' }, left: { day: 8, month: 30 }, retention_days: 90, messages: state.messages } }); }
-    if (b.action === 'guide.ask') { calls.push(b); return r.fulfill({ json: { success: true, reply: { text: 'المعلم نقطة قرار. ابدأ بتسمية معلمك الأول.', verdict: 'answered', sources: [] }, left: { day: 7, month: 29 } } }); }
+    if (b.action === 'guide.ask') { calls.push(b); return r.fulfill({ json: { success: true, reply: { id: 42, text: 'المعلم نقطة قرار. ابدأ بتسمية معلمك الأول.', verdict: 'answered', sources: [] }, left: { day: 7, month: 29 } } }); }
+    if (b.action === 'guide.confirm') { calls.push(b); return r.fulfill({ json: { success: true } }); }
     if (b.action === 'guide.clear') { calls.push(b); state.messages = []; return r.fulfill({ json: { success: true, deleted: 2 } }); }
     return base(r);
   };
@@ -92,6 +93,8 @@ test('«اسأل المساعد»: سؤال وإجابة، و«أريد التأ
   await chat.getByRole('button', { name: 'لم تقنعني، أريد التأكد' }).click();
   await expect(page.getByLabel(/ما الذي تحتاجه؟/)).toHaveValue(/سألت المساعد الذكي: «ما المعلم؟»/);
   expect(s.calls.some((c) => c.action === 'experts.choose')).toBe(false);
+  // G3: الضغط يُسجَّل عددًا بمعرّف الرد وحده، بلا نص
+  await expect.poll(() => { const { token: _t, ...rest } = s.calls.find((c) => c.action === 'guide.confirm') || {}; return rest; }).toEqual({ action: 'guide.confirm', message_id: 42 });
 
   page.once('dialog', (d) => d.accept());
   await chat.getByRole('button', { name: 'احذف محادثتي' }).click();

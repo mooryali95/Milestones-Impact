@@ -110,9 +110,10 @@ async function chapterTitles(p: any) {
   return handbookModulesFor(data || [], levels).map((m: any) => m.title_ar).slice(0, 40);
 }
 
-async function save(row: Record<string, unknown>) {
-  const { error } = await db.from('guidance_messages').insert(row);
+async function save(row: Record<string, unknown>): Promise<number | null> {
+  const { data, error } = await db.from('guidance_messages').insert(row).select('id').single();
   if (error) throw error;
+  return (data as any)?.id ?? null;
 }
 
 export async function guideAsk(p: any, b: Body) {
@@ -204,13 +205,13 @@ export async function guideAsk(p: any, b: Body) {
   answer = sanitizeOutput(answer).text;
   if (verdict === 'unsure' && answer.length < 20) answer = UNSURE_AR;
   const sources = chapter ? [chapter.title] : [];
-  await save({
+  const answerId = await save({
     participant_id: p.id, role: 'assistant', body: answer.slice(0, 6000), context: where, chapter_id: chapterId, verdict, sources,
     model: String(res?.model || GUIDE_MODEL).slice(0, 60), input_tokens: res?.usage?.input_tokens ?? null,
     cache_read_tokens: res?.usage?.cache_read_input_tokens ?? null, output_tokens: res?.usage?.output_tokens ?? null, cost_micros: cost,
   });
   console.log('guide ask', JSON.stringify({ q: questionId, verdict, cost_micros: cost }));
-  return { success: true, reply: { text: answer, verdict, sources }, left: left(await counts(p.id), s) };
+  return { success: true, reply: { id: answerId, text: answer, verdict, sources }, left: left(await counts(p.id), s) };
 }
 
 // «احذف محادثتي»: صفوف صاحب الجلسة وحده، فورًا. السجل بلا محتوى
@@ -219,4 +220,50 @@ export async function guideClear(p: any) {
   if (error) { if (missing(error)) return { success: true, deleted: 0 }; throw error; }
   await audit('participant', p.id, 'guide.clear', 'guidance_messages', p.id, null, { deleted: (data || []).length });
   return { success: true, deleted: (data || []).length };
+}
+
+// ── G3: «أريد التأكد» حدثًا، وأعداد بلا نص ──
+// يُسجَّل على رد من محادثة صاحب الجلسة وحده (المعرّف والمالك معًا). معرّف لا يخصه لا يغيّر شيئًا ولا يُقال له ذلك،
+// فلا يُعرف منه وجود رسالة لغيره. لا يُنقل شيء من المحادثة؛ طلب الاستشارة يرسله المشارك بنفسه.
+export async function guideConfirm(p: any, b: Body) {
+  const id = Number(b.message_id);
+  if (!Number.isSafeInteger(id) || id <= 0) return { success: true };
+  const { error } = await db.from('guidance_messages').update({ confirmed_at: new Date(GD.now()).toISOString() })
+    .eq('id', id).eq('participant_id', p.id).eq('role', 'assistant').is('confirmed_at', null);
+  if (error && !missing(error) && !/confirmed_at/.test(String(error.message || ''))) throw error;
+  return { success: true };
+}
+
+// أعداد مشارك للمستشار والإدارة (آخر 30 يومًا): من دالة لا تعيد إلا أرقامًا، وتعذّرها يخفي السطر
+export const GUIDE_COUNTS_DAYS = 30;
+export async function guideCounts(pid: string) {
+  const since = new Date(GD.now() - GUIDE_COUNTS_DAYS * 864e5).toISOString();
+  const { data, error } = await db.rpc('guidance_counts', { p_participant: pid, p_since: since });
+  if (error) return null;
+  const r = Array.isArray(data) ? data[0] : data;
+  if (!r || !Number(r.asked)) return r ? { asked: 0, unsure: 0, confirmed: 0, last_at: null, days: GUIDE_COUNTS_DAYS } : null;
+  return { asked: Number(r.asked), unsure: Number(r.unsure), confirmed: Number(r.confirmed), last_at: r.last_at || null, days: GUIDE_COUNTS_DAYS };
+}
+
+// تقرير الإدارة: أعداد 7 و30 يومًا، وإنفاق آخر 30 يومًا يومًا بيوم مع السقف. بلا نص ولا أسماء
+export async function guideReport() {
+  const now = GD.now();
+  const window = async (days: number) => {
+    const { data, error } = await db.rpc('guidance_report', { p_since: new Date(now - days * 864e5).toISOString() });
+    if (error) { if (missing(error)) return null; throw error; }
+    const r = Array.isArray(data) ? data[0] : data;
+    const n = (k: string) => Number(r?.[k] || 0);
+    const replies = n('answered') + n('unsure') + n('refused') + n('errors');
+    return { days, asked: n('asked'), participants: n('participants'), answered: n('answered'), unsure: n('unsure'), refused: n('refused'), errors: n('errors'),
+      confirmed: n('confirmed'), confirm_rate: replies ? Math.round((n('confirmed') / replies) * 1000) / 10 : null, usd: Math.round(n('micros') / 1e4) / 100 };
+  };
+  const [w7, w30] = await Promise.all([window(7), window(30)]);
+  const since = new Date(now - 30 * 864e5).toISOString().slice(0, 10);
+  const { data: spend } = await db.from('guidance_spend_daily').select('day, micros, calls').gte('day', since).order('day', { ascending: false });
+  const s = (await appSettings()).guidance as any;
+  return {
+    success: true, ready: !!w7, open: !!GD.policy() && !!s.enabled, cap_usd: Number(s.daily_spend_usd),
+    windows: [w7, w30].filter(Boolean),
+    spend: (spend || []).map((r: any) => ({ day: r.day, usd: Math.round(Number(r.micros) / 1e4) / 100, calls: r.calls })),
+  };
 }

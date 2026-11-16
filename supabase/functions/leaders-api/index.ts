@@ -136,7 +136,7 @@ const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f3
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
   'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
-const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
@@ -160,7 +160,7 @@ const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 
   'demo.fill-profile', 'demo.fill-assessment', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
-const GATE_PROGRAM = new Set(['guide.state', 'guide.ask', 'guide.clear', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
+const GATE_PROGRAM = new Set(['guide.state', 'guide.ask', 'guide.clear', 'guide.confirm', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
@@ -230,6 +230,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'guide.state': (p) => GU.guideState(p),
   'guide.ask': (p, b) => GU.guideAsk(p, b),
   'guide.clear': (p) => GU.guideClear(p),
+  'guide.confirm': (p, b) => GU.guideConfirm(p, b),
   'me.export': (p) => PV.exportData(p),
   'me.erase-request': (p, b) => PV.eraseRequest(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
@@ -642,6 +643,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
   'admin.outcomes': (_a, b) => T.adminOutcomes(b),
   // المساعد الآلي (agent-admin.ts): القراءة للمدير الأعلى أو المالك، والكتابة superWriter، والمفتاح بتحقق إضافي من admin-api
+  // «التوجيه والإرشاد» G3: أعداد وإنفاق بلا نص، للمدير الأعلى والمالك كشاشة المساعد
+  'admin.guide-report': (a) => { AG.requireAgentRead(a); return GU.guideReport(); },
   'admin.agent-state': (a) => AG.state(a),
   'admin.agent-usage': (a) => AG.usage(a),
   'admin.agent-conversations': (a, b) => AG.conversations(a, b),

@@ -41,10 +41,10 @@ test('بلا تذكير لم يره: لا لافتة', async ({ page }) => {
 });
 
 // ── المرشد (مشرف الرحلة) من بوابة الخبير ──
-function expertServer({ mentor = true, allowed = true } = {}) {
+function expertServer({ mentor = true, allowed = true, guidance = null } = {}) {
   const calls = [];
   const file = {
-    success: true, scope: 'assigned', mentor,
+    success: true, scope: 'assigned', mentor, guidance,
     participant: { id: 'p1', full_name: 'سارة الأحمد', email: null, phone: null, job_title: 'مديرة مشاريع', organization_name: 'جهة', status: 'enrolled' },
     profile: null, journey: [{ key: 'training', title_ar: 'التدريب', status: 'active', done: 1, total: 2 }], progress: 40, milestones: [], milestone_summary: { done: 0, total: 0, late: 0 },
     group: null, continuous: null, program: { id: 'pr1' }, assessments: [], models: [], points: { total: 0, rank: { title: 'مستكشف' } }, book: [],
@@ -141,4 +141,16 @@ test('المنسق: أوقفت الإدارة التذكير لجهته فلا �
   await coord(page, { nudges: false });
   await expect(page.getByRole('region', { name: 'يحتاج تدخلك' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'ذكّرهم' })).toHaveCount(0);
+});
+
+test('مستشار الدفعة يرى أعداد «التوجيه والإرشاد» وحدها، والمحادثة لا تظهر له', async ({ page }) => {
+  await openFile(page, expertServer({ mentor: false, guidance: { asked: 6, unsure: 2, confirmed: 1, last_at: '2026-11-15T10:00:00Z', days: 30 } }));
+  const card = page.getByRole('region', { name: 'التوجيه والإرشاد' });
+  await expect(card).toContainText('سأل المساعد الذكي 6 مرات، ولم يتأكد المساعد في 2، وطلب التأكد من خبير 1 مرة');
+  await expect(card).toContainText('المحادثة نفسها خاصة به ولا تظهر لك');
+});
+
+test('بلا أسئلة للمساعد أو لغير المستشار (guidance: null): لا بطاقة', async ({ page }) => {
+  await openFile(page, expertServer({ mentor: false }));
+  await expect(page.getByRole('region', { name: 'التوجيه والإرشاد' })).toHaveCount(0);
 });

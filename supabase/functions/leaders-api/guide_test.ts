@@ -15,7 +15,7 @@ function install(tables: Record<string, Row[]>, rpc: Record<string, (a: any) => 
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
-    let mode: 'select' | 'insert' | 'delete' = 'select';
+    let mode: 'select' | 'insert' | 'delete' | 'update' = 'select';
     let payload: any = null;
     let limit = Infinity, single = false;
     let order: { c: string; asc: boolean } | null = null;
@@ -24,10 +24,11 @@ function install(tables: Record<string, Row[]>, rpc: Record<string, (a: any) => 
       if (mode === 'insert') {
         const added = (Array.isArray(payload) ? payload : [payload]).map((x) => ({ id: ++seq, created_at: new Date(Date.now() + seq).toISOString(), ...x }));
         rows.push(...added);
-        return { data: added, error: null };
+        return { data: single ? added[0] : added, error: null };
       }
       const out = rows.filter((r) => filters.every((f) => f(r)));
       if (mode === 'delete') { tables[table] = rows.filter((r) => !out.includes(r)); return { data: out, error: null }; }
+      if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: out, error: null }; }
       let list = [...out];
       if (order) list.sort((a, b) => (a[order!.c] < b[order!.c] ? -1 : 1) * (order!.asc ? 1 : -1));
       list = list.slice(0, limit);
@@ -39,6 +40,8 @@ function install(tables: Record<string, Row[]>, rpc: Record<string, (a: any) => 
         if (k === 'select') return () => q;
         if (k === 'insert') return (x: any) => { mode = 'insert'; payload = x; return q; };
         if (k === 'delete') return () => { mode = 'delete'; return q; };
+        if (k === 'update') return (x: any) => { mode = 'update'; payload = x; return q; };
+        if (k === 'is') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; };
         if (k === 'eq') return (c: string, v: unknown) => { filters.push((r) => r[c] === v); return q; };
         if (k === 'gte') return (c: string, v: string) => { filters.push((r) => r[c] != null && r[c] >= v); return q; };
         if (k === 'order') return (c: string, o?: { ascending?: boolean }) => { order = { c, asc: o?.ascending !== false }; return q; };
@@ -208,4 +211,45 @@ Deno.test('حراسة نصية: كل استعلام على المحادثات م
   for (const q of qs) assert(/\.eq\('participant_id', (p\.id|pid)\)|insert\(row\)/.test(q), q);
   assert(!/b\.(participant_id|participant|pid|conversation_id)/.test(src), 'لا يُقرأ معرّف مشارك أو محادثة من الطلب');
   for (const line of src.split('\n').filter((l) => /console\.(log|error)/.test(l))) assert(!/text|answer|body|raw/.test(line.replace(/'[^']*'/g, '')), line);
+});
+
+Deno.test('G3 «أريد التأكد»: يُسجَّل على رد صاحب الجلسة وحده، ومعرّف رسالة غيره لا يغيّر شيئًا', async () => {
+  const x = setup({ guidance_messages: [
+    { id: 7, participant_id: 'p1', role: 'assistant', body: 'رد سارة', confirmed_at: null, created_at: new Date().toISOString() },
+    { id: 8, participant_id: 'p2', role: 'assistant', body: 'رد خالد', confirmed_at: null, created_at: new Date().toISOString() },
+  ] });
+  try {
+    assertEquals(await G.guideConfirm(p1, { message_id: 8 }), { success: true });
+    assertEquals(x.t.tables.guidance_messages.find((m) => m.id === 8)?.confirmed_at, null);
+    await G.guideConfirm(p1, { message_id: 7 });
+    assert(x.t.tables.guidance_messages.find((m) => m.id === 7)?.confirmed_at);
+    assertEquals(await G.guideConfirm(p1, { message_id: 'x; drop' }), { success: true });
+  } finally { x.restore(); }
+});
+
+Deno.test('G3 الأعداد: من دالة القاعدة بمعرّف المشارك، وأرقام وحدها', async () => {
+  const x = setup({});
+  try {
+    x.t.calls.length = 0;
+    (db as any).rpc = (fn: string, a: any) => { x.t.calls.push({ fn, args: a }); return Promise.resolve({ data: [{ asked: 5, unsure: 1, confirmed: 2, last_at: '2026-11-15T10:00:00Z' }], error: null }); };
+    assertEquals(await G.guideCounts('p1'), { asked: 5, unsure: 1, confirmed: 2, last_at: '2026-11-15T10:00:00Z', days: 30 });
+    assertEquals(x.t.calls[0].fn, 'guidance_counts');
+    assertEquals(x.t.calls[0].args.p_participant, 'p1');
+  } finally { x.restore(); }
+});
+
+Deno.test('G3 حراسة: لا يقرأ جدول المحادثات إلا guide.ts، والملف والتقرير يمرّان بدوال الأعداد', async () => {
+  const dir = new URL('./', import.meta.url);
+  const hits: string[] = [];
+  for await (const f of Deno.readDir(dir)) {
+    if (!f.isFile || !/\.(ts|js)$/.test(f.name) || /_test\.ts$/.test(f.name)) continue;
+    const src = await Deno.readTextFile(new URL(f.name, dir));
+    if (/from\('guidance_messages'\)/.test(src)) hits.push(f.name);
+  }
+  assertEquals(hits.sort(), ['guide.ts']);
+  const file = await Deno.readTextFile(new URL('./file.ts', import.meta.url));
+  assert(/guidance: adv \? await guideCounts\(p\.id\) : null/.test(file), 'للمستشار وحده من الخبراء');
+  const src = await Deno.readTextFile(new URL('./guide.ts', import.meta.url));
+  const report = src.slice(src.indexOf('export async function guideReport'));
+  assert(!/guidance_messages/.test(report), 'التقرير لا يقرأ الجدول مباشرة');
 });
