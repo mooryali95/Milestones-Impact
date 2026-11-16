@@ -1,0 +1,1 @@
+import"./index-CAWh5KtP.js";const s=["content","measurement"],a={content:"لجنة المحتوى",measurement:"لجنة القياس"},c=e=>[...new Set((Array.isArray(e)?e:[]).filter(o=>s.includes(o)))],t=e=>c(e?.committees).length>0,n=e=>(e?.roles||[]).length>0,m=e=>t(e)&&!n(e),i=e=>({journey:n(e),content:t(e)});export{a as C,c as a,m as c,i as e};

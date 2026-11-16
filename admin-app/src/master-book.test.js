@@ -245,3 +245,36 @@ describe('الكتاب الأم: المقعد والتعليق من خارج ا�
     expect(DRAFTS.find((d) => d.key === 'seven-competencies').part).toBe('leadership');
   });
 });
+
+// نصوص طبعة الجزء (المرحلة 2): ملف محتوى واحد تقرؤه الطبعة، ويُعرض على لجنة المحتوى مسودةً في الكتاب الأم
+describe('parts.json: نصوص طبعة الجزء', () => {
+  const PARTS_JSON = JSON.parse(readFileSync(join(__dirname, '../../supabase/content/handbook/parts.json'), 'utf8'));
+  const KEYS = ['milestone', 'impact', 'leadership'];
+  it('لكل إطار about وbridges كاملة، وbridges تعرّف بالجزأين الآخرين وحدهما', () => {
+    expect(Object.keys(PARTS_JSON.parts)).toEqual(KEYS);
+    for (const k of KEYS) {
+      const p = PARTS_JSON.parts[k];
+      expect(p.about.lead.length).toBeGreaterThan(80);
+      expect(p.about.read.length).toBeGreaterThanOrEqual(2);
+      expect(p.bridges.place.length).toBeGreaterThan(20);
+      expect(Object.keys(p.bridges.with).sort()).toEqual(KEYS.filter((x) => x !== k).sort());
+      expect(p.bridges.next.length).toBeGreaterThan(20);
+    }
+    expect(PARTS_JSON.legend.length).toBeGreaterThan(40);
+  });
+  it('بلا شرطة طويلة ولا متوسطة', () => {
+    expect(JSON.stringify(PARTS_JSON)).not.toMatch(/[\u2013\u2014]/);
+  });
+  it('معروض على اللجنة مسودةً في الكتاب الأم: قسمان لكل جزء، ولا إطار له فهو في نطاق الجميع', () => {
+    const d = DRAFTS.find((x) => x.key === 'book-parts');
+    expect(d.source).toBe('supabase/content/handbook/parts.json');
+    expect(d.part).toBe(null);
+    const heads = bookSections(d.md).map((s) => s.title).filter(Boolean);
+    expect(heads).toContain('الجزء الثاني · تحويل المشروع إلى أثر: عن هذا الجزء');
+    expect(heads).toContain('الجزء الثاني · تحويل المشروع إلى أثر: يتكامل مع');
+    expect(heads.filter((h) => /: (عن هذا الجزء|يتكامل مع)$/.test(h))).toHaveLength(6);
+    expect(d.md).toContain(PARTS_JSON.parts.impact.about.lead);
+    const [ch] = draftChapters([d]);
+    expect(outOfSeat({ kind: 'expert', seat: ['impact'] }, ch)).toBe(false);
+  });
+});

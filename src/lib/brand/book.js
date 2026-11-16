@@ -14,6 +14,8 @@ import IMG_MILESTONE from '../../assets/book/milestone.webp';
 import IMG_IMPACT from '../../assets/book/impact.webp';
 import IMG_LEADERSHIP from '../../assets/book/leadership.webp';
 import CH_MANIFEST from '../../assets/book/chapters/manifest.json';
+// نصوص طبعة الجزء («عن هذا الجزء» و«يتكامل مع»): ملف محتوى واحد تعرضه مسودات الكتاب الأم على لجنة المحتوى
+import PARTS_TEXT from '../../../supabase/content/handbook/parts.json';
 import { C, esc } from './doc.js';
 
 const svgOf = (s) => s.replace(/<\?xml[^>]*>\s*/, '');
@@ -165,7 +167,7 @@ function frameworks(parts, active) {
 }
 
 // ── الغلاف الداكن (يُستعمل داخل المنصة وأول صفحة في النسخة) ──
-// c: { name?, code?, ref?, issued_at?, edition? } (edition: «نسخة المراجعة» للكتاب الأم، وبلاها «نسخة شخصية»)
+// c: { name?, code?, ref?, issued_at?, edition?, part? } (part: سطر طبعة الجزء، مثل «الجزء الثاني من ثلاثة · …») (edition: «نسخة المراجعة» للكتاب الأم، وبلاها «نسخة شخصية»)
 export const COVER_CSS = `
 .bk-cover { position: relative; aspect-ratio: 210 / 297; width: 100%; overflow: hidden; color: #F7F8F6; background: ${C.graphite}; font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; container-type: inline-size; }
 .bk-cover .bk-bg { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: .55; }
@@ -182,6 +184,7 @@ export const COVER_CSS = `
 .bk-cover .bk-sub { font: 300 2.7cqi "Noto Sans", sans-serif; letter-spacing: .28em; text-transform: uppercase; color: rgba(247,248,246,.88); margin: 0; direction: ltr; }
 .bk-cover .bk-sub i { font-style: normal; color: ${C.goldLight}; font-size: 1.6cqi; margin: 0 1.6cqi; vertical-align: middle; }
 .bk-cover .bk-code { display: inline-block; margin-top: 5cqi; padding: 1cqi 3cqi; border: 1px solid rgba(217,168,90,.6); font: 300 2.6cqi "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.goldLight}; direction: ltr; }
+.bk-cover .bk-part { margin: 4cqi 0 0; font-size: 3.1cqi; font-weight: 300; color: ${C.goldLight}; }
 .bk-cover .bk-meta { font-size: 2cqi; color: rgba(247,248,246,.7); line-height: 2; }
 .bk-cover .bk-meta b { font-weight: 300; color: #fff; font-size: 2.6cqi; }
 .bk-cover .bk-meta bdi { font-family: "Noto Sans", sans-serif; letter-spacing: .06em; }
@@ -195,26 +198,43 @@ export function coverHtml(c) {
     <h1>كتاب القائد</h1>
     <div class="bk-rule"><i></i><b></b><i></i></div>
     <p class="bk-sub">Milestone <i>◆</i> Impact <i>◆</i> Leadership</p>
+    ${c.part ? `<p class="bk-part">${esc(c.part)}</p>` : ''}
     ${c.code ? `<span class="bk-code">${esc(c.code)}</span>` : ''}
   </div>
   <div class="bk-meta">${c.name ? `${esc(c.edition || 'نسخة شخصية')} مرخصة لـ<br><b>${esc(c.name)}</b><br>` : ''}${c.ref ? `<bdi dir="ltr">${esc(c.ref)}</bdi> · ${esc(fmt(c.issued_at))}` : ''}</div>
 </div></div>`;
 }
 
-// ── النسخة الشخصية PDF (A4 طولي) ──
-// book: { ref, issued_at, name, email, code, chapters: [{ dimension, title, md, reflection }], tools: [...] }
-// parts: [{ key, roman, label, title, short }] ترتيب الأجزاء ومسمياتها من التطبيق
-export function bookHtml(book, parts) {
-  const mark = `${book.name} · ${book.email} · ${book.ref}`;
-  const wm = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='560' height='320'><text x='280' y='160' text-anchor='middle' direction='rtl' transform='rotate(-28 280 160)' font-family='Noto Sans, Arial' font-size='14' fill='${C.graphite}' fill-opacity='.045'>${esc(mark)}</text></svg>`);
-  const groups = parts.map((p) => ({ ...p, items: book.chapters.filter((c) => c.dimension === p.key), tools: (book.tools || []).filter((t) => t.dimension === p.key) })).filter((p) => p.items.length);
-  const total = groups.reduce((s, g) => s + g.items.length, 0);
+// ── الغلاف الخلفي: ختام كل طبعة (الكتاب كاملًا والجزء)، بالشعار والإصدار والتاريخ والمرجع واسم القارئ وبريده ──
+function backCover(book) {
+  const stamp = [book.name, book.email].filter(Boolean).join(' · ');
+  return `<section class="full back"><div class="bk-back">
+  <div class="bk-back-in">
+    <div class="bk-logo">${LOGO_INV}</div>
+    <div class="bk-rule"><i></i><b></b><i></i></div>
+    <p class="bk-back-t">كتاب القائد${book.code ? ` · <bdi dir="ltr">${esc(book.code)}</bdi>` : ''}</p>
+    ${book.partLine ? `<p class="bk-back-p">${esc(book.partLine)}</p>` : ''}
+    <p class="bk-back-m">${esc(book.edition || 'نسخة شخصية')} · ${esc(fmt(book.issued_at))}<br><bdi dir="ltr">${esc(book.ref)}</bdi></p>
+    ${stamp ? `<p class="bk-back-wm">مرخصة لـ ${esc(stamp)}<br>يُمنع النسخ والتداول، وكل صفحة تحمل اسم صاحبها ورقم نسختها</p>` : ''}
+  </div>
+  <p class="bk-back-f">جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(book.issued_at).getFullYear()} Milestone Impact</bdi></p>
+</div></section>`;
+}
 
-  const toc = groups.map((g) => `<div class="toc-part"><span class="roman">${esc(g.roman)}</span><div><small>${esc(g.label)}</small><b>${esc(g.title)}</b></div><span class="cnt">${g.items.length} أبواب</span></div>
-    ${g.items.map((c, i) => `<p class="toc-ch"><span>${two(i + 1)}</span>${esc(c.title)}</p>`).join('')}`).join('')
-    + ((book.tools || []).length ? `<div class="toc-part"><span class="roman">◆</span><div><small>ملحق</small><b>عدّة القائد</b></div><span class="cnt">${book.tools.length} أدوات</span></div>` : '');
+// ترتيب الجزء بين الأجزاء: «الجزء الثاني من ثلاثة»
+const ORD = ['الجزء الأول', 'الجزء الثاني', 'الجزء الثالث', 'الجزء الرابع'];
+const COUNT_AR = { 2: 'اثنين', 3: 'ثلاثة', 4: 'أربعة' };
+export const partOrdinal = (parts, key) => {
+  const i = parts.findIndex((p) => p.key === key);
+  if (i < 0) return '';
+  return `${ORD[i] || ''}${COUNT_AR[parts.length] ? ` من ${COUNT_AR[parts.length]}` : ''}`;
+};
+// علامات المستويات كما تخرجها markTiers (master-book.js): «◆ لمن تظهر» في أول الفقرة و«◇ عودة إلى النص العام» في آخرها
+const tierMarks = (chapters) => [...new Set(chapters.flatMap((c) => [...String(c.md || '').matchAll(/\*\*◆ ([^*]+)\*\*/g)].map((m) => m[1].trim())))];
 
-  const body = groups.map((g) => `
+// ── صفحة الجزء ثم أبوابه، كما في الكتاب كاملًا وطبعة الجزء ──
+function groupHtml(g, parts) {
+  return `
 <section class="full part">
   <div class="part-img" style="background-image:url('${abs(PART_IMG[g.key] || COVER_IMG)}')"></div>
   <div class="part-in">
@@ -238,7 +258,24 @@ ${g.items.map((c, i) => {
   ${b.key ? `<div class="key"><small>الفكرة المحورية</small><p>${inline(b.key)}</p></div>` : ''}
   ${c.reflection ? `<div class="reflect"><small>تأمل</small><p>${inline(c.reflection)}</p><div class="lines"><i></i><i></i><i></i><i></i></div></div>` : ''}
 </article>`;
-  }).join('')}`).join('');
+  }).join('')}`;
+}
+
+// ── النسخة الشخصية PDF (A4 طولي) ──
+// book: { ref, issued_at, name, email, code, chapters: [{ dimension, title, md, reflection }], tools: [...] }
+// parts: [{ key, roman, label, title, short }] ترتيب الأجزاء ومسمياتها من التطبيق
+// opts.part: طبعة جزء واحد (مثل 'impact'): غلافه، ثم «عن هذا الجزء»، ثم فهرسه، ثم صفحته وأبوابه، ثم «يتكامل مع»، ثم الغلاف الخلفي.
+// opts.texts: نصوص الطبعة، وأصلها supabase/content/handbook/parts.json
+export function bookHtml(book, parts, opts = {}) {
+  if (opts.part) return partHtml(book, parts, opts.part, opts.texts || PARTS_TEXT);
+  const groups = parts.map((p) => ({ ...p, items: book.chapters.filter((c) => c.dimension === p.key), tools: (book.tools || []).filter((t) => t.dimension === p.key) })).filter((p) => p.items.length);
+  const total = groups.reduce((s, g) => s + g.items.length, 0);
+
+  const toc = groups.map((g) => `<div class="toc-part"><span class="roman">${esc(g.roman)}</span><div><small>${esc(g.label)}</small><b>${esc(g.title)}</b></div><span class="cnt">${g.items.length} أبواب</span></div>
+    ${g.items.map((c, i) => `<p class="toc-ch"><span>${two(i + 1)}</span>${esc(c.title)}</p>`).join('')}`).join('')
+    + ((book.tools || []).length ? `<div class="toc-part"><span class="roman">◆</span><div><small>ملحق</small><b>عدّة القائد</b></div><span class="cnt">${book.tools.length} أدوات</span></div>` : '');
+
+  const body = groups.map((g) => groupHtml(g, parts)).join('');
 
   const tools = (book.tools || []).length ? `
 <section class="appx">
@@ -254,7 +291,53 @@ ${g.items.map((c, i) => {
 </section>` : '';
 
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<title>كتاب القائد · ${esc(book.name)} · ${esc(book.ref)}</title>
+<title>كتاب القائد · ${esc(book.name)} · ${esc(book.ref)}</title>${docHead(book)}
+<div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
+<main class="sheet">
+<section class="full">${coverHtml({ name: book.name, code: book.code, issued_at: book.issued_at, ref: book.ref, edition: book.edition })}</section>
+<section class="title-pg">
+  <div class="lg">${LOGO}</div>
+  <p style="font:300 8pt 'Noto Sans';letter-spacing:.42em;color:${C.gold}">THE LEADER'S BOOK</p>
+  <h1>كتاب القائد</h1>
+  <div class="rule"><i></i><b></b><i></i></div>
+  <p>الأطر الثلاثة لبرنامج القادة من Milestone Impact</p>
+  <p style="margin-top:3mm;font-size:9pt;color:${C.muted}">${parts.map((p) => esc(p.title)).join(' · ')}</p>
+</section>
+<section class="howto">
+  <h2>كيف تقرأ هذا الكتاب</h2>
+  <p style="color:${C.slate}">يتألف الكتاب من ${groups.length} أجزاء و${total} بابًا، يبني كل جزء إطارًا من أطر البرنامج، ويسلّم الجزء التالي ما بناه. اقرأ الأبواب بترتيبها، وقف عند كل «تأمل» قبل أن تمضي.</p>
+  <div class="legend">
+    <div><b>في هذا الباب</b><p>خريطة الباب في أوله: عناوينه الكبرى قبل أن تقرأها.</p></div>
+    <div><b>بطاقات المفاهيم</b><p>المصطلحات الأساسية في بطاقات متجاورة تسهل المقارنة بينها.</p></div>
+    <div><b>مسار الخطوات</b><p>الخطوات والأهداف المرقّمة على خط واحد بترتيب تطبيقها.</p></div>
+    <div><b>الفكرة المحورية</b><p>خلاصة الباب في جملة واحدة تحملها معك.</p></div>
+    <div><b>تأمل</b><p>سؤال يربط الباب بعملك، مع مساحة لتكتب إجابتك.</p></div>
+    <div><b>عدّة القائد</b><p>ملحق الأدوات العملية بخطوات تطبيقها.</p></div>
+  </div>
+  <h3 class="hw-h">الأطر الثلاثة</h3>
+  <div class="f-chain hw-fw">${parts.map((p, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${esc(p.roman)}</span><b>${esc(p.title)}</b><p>${esc(FW_LINE[p.key] || '')}</p></div>`).join('')}</div>
+  <p class="hw-note">تُقرأ الأطر بترتيبها: يستلم كل إطار ما بناه الذي قبله، فالتنفيذ المنضبط يصنع قيمة مقيسة، والقيمة المقيسة تمكّن القائد من التحول.</p>
+</section>
+<section class="toc"><h2>المحتويات</h2>${toc}</section>
+${body}
+${tools}
+<section class="end">
+  <div class="lg">${LOGO}</div>
+  <p>انتهت ${book.edition ? esc(book.edition) : 'النسخة الشخصية'} من كتاب القائد · ${total} بابًا</p>
+  <p>صدرت لـ ${esc(book.name)} في ${esc(fmt(book.issued_at))} برقم <bdi dir="ltr">${esc(book.ref)}</bdi></p>
+  <p>هذا المحتوى ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>، ومرخص لصاحب النسخة للاستخدام الشخصي فقط.<br>يُمنع نسخه أو نشره أو مشاركته مع أي طرف آخر، وكل صفحة تحمل اسم صاحبها ورقم نسختها.</p>
+  <p>جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(book.issued_at).getFullYear()} Milestone Impact</bdi></p>
+</section>
+${backCover(book)}
+</main>
+</body></html>`;
+}
+
+// رأس المستند المشترك بين الطبعتين: الخطوط والهوامش وتنسيق الكتاب كله
+function docHead(book) {
+  const mark = `${book.name} · ${book.email} · ${book.ref}`;
+  const wm = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='560' height='320'><text x='280' y='160' text-anchor='middle' direction='rtl' transform='rotate(-28 280 160)' font-family='Noto Sans, Arial' font-size='14' fill='${C.graphite}' fill-opacity='.045'>${esc(mark)}</text></svg>`);
+  return `
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
@@ -412,52 +495,86 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 .end { break-before: page; text-align: center; padding-top: 70mm; color: ${C.muted}; font-size: 9pt; line-height: 2.2; }
 .end .lg svg { width: 34mm; height: auto; margin: 0 auto 10mm; display: block; }
 .end bdi { font-family: "Noto Sans", sans-serif; }
-</style></head><body>
+.full.back { break-before: page; }
+@media screen { .full.back { margin: 16mm -18mm -16mm; } }
+.bk-back { position: relative; height: 100%; background: ${C.graphite}; color: #F7F8F6; display: grid; grid-template-rows: 1fr auto; text-align: center; font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; }
+.bk-back::before { content: ''; position: absolute; inset: 4.5%; border: 1px solid rgba(217,168,90,.45); pointer-events: none; }
+.bk-back-in { align-self: center; padding: 0 30mm; }
+.bk-back .bk-logo svg { width: 46mm; height: auto; display: block; margin: 0 auto; }
+.bk-back .bk-rule { display: flex; align-items: center; gap: 3mm; width: 50mm; margin: 9mm auto; } .bk-back .bk-rule i { flex: 1; height: 1px; background: ${C.goldLight}; opacity: .6; } .bk-back .bk-rule b { width: 2mm; height: 2mm; background: ${C.goldLight}; transform: rotate(45deg); }
+.bk-back-t { font-size: 15pt; font-weight: 200; margin: 0; color: #fff; } .bk-back-t bdi { font-family: "Noto Sans", sans-serif; letter-spacing: .14em; font-size: 10pt; color: ${C.goldLight}; }
+.bk-back-p { margin: 3mm 0 0; color: ${C.goldLight}; font-size: 10pt; }
+.bk-back-m { margin: 8mm 0 0; font-size: 9pt; line-height: 2; color: rgba(247,248,246,.78); } .bk-back-m bdi { font-family: "Noto Sans", sans-serif; letter-spacing: .08em; }
+.bk-back-wm { margin: 8mm auto 0; max-width: 120mm; font-size: 8pt; line-height: 2; color: rgba(247,248,246,.6); border-top: 1px solid rgba(217,168,90,.35); padding-top: 4mm; }
+.bk-back-f { margin: 0 0 14mm; font-size: 7.5pt; color: rgba(247,248,246,.5); } .bk-back-f bdi { font-family: "Noto Sans", sans-serif; }
+/* طبعة الجزء: «عن هذا الجزء» و«يتكامل مع» */
+.pt-about, .pt-bridges { break-before: page; }
+.pt-about h2, .pt-bridges h2 { font-size: 22pt; margin-bottom: 4mm; }
+.pt-eyebrow { color: ${C.gold}; font-size: 8.5pt; letter-spacing: .14em; margin: 0 0 1mm; }
+.pt-lead { font-size: 12pt; line-height: 2.1; color: ${C.graphite}; margin: 6mm 0 2mm; }
+.pt-h { font-weight: 400; font-size: 13pt; margin: 8mm 0 3mm; }
+.pt-h::before { content: ''; display: inline-block; width: 2mm; height: 2mm; background: ${C.gold}; transform: rotate(45deg); margin-left: 2.5mm; vertical-align: middle; }
+.pt-note { color: ${C.slate}; font-size: 10pt; margin: 0 0 3mm; }
+.legend.tiers { grid-template-columns: 1fr 1fr; } .legend.tiers b { font-size: 9.6pt; }
+.pt-chain .node.on { background: ${C.gold}; } .pt-chain .node.on b, .pt-chain .node.on span, .pt-chain .node.on p { color: ${C.graphite}; }
+.pt-with { display: grid; gap: 4mm; margin: 4mm 0 6mm; }
+.pt-with div { border: 1px solid ${C.line}; border-right: .8mm solid ${C.gold}; padding: 4mm 5mm; break-inside: avoid; }
+.pt-with small { display: block; color: ${C.gold}; font-size: 8pt; } .pt-with b { display: block; font-weight: 300; font-size: 12pt; margin: .5mm 0 1.5mm; } .pt-with p { margin: 0; font-size: 10pt; line-height: 1.95; color: ${C.graphite}; }
+</style></head><body>`;
+}
+
+// ── طبعة الجزء: كتيب مكتمل له بداية ونهاية، يتكامل مع بداية الكتاب ونهايته ──
+function partHtml(book, parts, key, texts) {
+  const p = parts.find((x) => x.key === key);
+  if (!p) throw new Error(`جزء غير معروف: ${key}`);
+  const t = texts?.parts?.[key] || { about: { lead: '', read: [] }, bridges: { place: '', with: {}, next: '' } };
+  const items = book.chapters.filter((c) => c.dimension === key);
+  const partLine = `${partOrdinal(parts, key)} · ${p.title}`;
+  const b = { ...book, partLine };
+  const marks = tierMarks(items);
+  const toc = `<div class="toc-part"><span class="roman">${esc(p.roman)}</span><div><small>${esc(p.label)}</small><b>${esc(p.title)}</b></div><span class="cnt">${items.length} أبواب</span></div>
+    ${items.map((c, i) => `<p class="toc-ch"><span>${two(i + 1)}</span>${esc(c.title)}</p>`).join('')}`;
+  const others = parts.filter((x) => x.key !== key);
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<title>كتاب القائد · ${esc(partLine)} · ${esc(book.name)} · ${esc(book.ref)}</title>${docHead(book)}
 <div class="toolbar"><button class="pri" data-act="print">طباعة أو حفظ PDF</button><button data-act="close">إغلاق</button></div>
 <main class="sheet">
-<section class="full">${coverHtml({ name: book.name, code: book.code, issued_at: book.issued_at, ref: book.ref, edition: book.edition })}</section>
-<section class="title-pg">
-  <div class="lg">${LOGO}</div>
-  <p style="font:300 8pt 'Noto Sans';letter-spacing:.42em;color:${C.gold}">THE LEADER'S BOOK</p>
-  <h1>كتاب القائد</h1>
-  <div class="rule"><i></i><b></b><i></i></div>
-  <p>الأطر الثلاثة لبرنامج القادة من Milestone Impact</p>
-  <p style="margin-top:3mm;font-size:9pt;color:${C.muted}">${parts.map((p) => esc(p.title)).join(' · ')}</p>
-</section>
-<section class="howto">
-  <h2>كيف تقرأ هذا الكتاب</h2>
-  <p style="color:${C.slate}">يتألف الكتاب من ${groups.length} أجزاء و${total} بابًا، يبني كل جزء إطارًا من أطر البرنامج، ويسلّم الجزء التالي ما بناه. اقرأ الأبواب بترتيبها، وقف عند كل «تأمل» قبل أن تمضي.</p>
-  <div class="legend">
-    <div><b>في هذا الباب</b><p>خريطة الباب في أوله: عناوينه الكبرى قبل أن تقرأها.</p></div>
-    <div><b>بطاقات المفاهيم</b><p>المصطلحات الأساسية في بطاقات متجاورة تسهل المقارنة بينها.</p></div>
-    <div><b>مسار الخطوات</b><p>الخطوات والأهداف المرقّمة على خط واحد بترتيب تطبيقها.</p></div>
-    <div><b>الفكرة المحورية</b><p>خلاصة الباب في جملة واحدة تحملها معك.</p></div>
-    <div><b>تأمل</b><p>سؤال يربط الباب بعملك، مع مساحة لتكتب إجابتك.</p></div>
-    <div><b>عدّة القائد</b><p>ملحق الأدوات العملية بخطوات تطبيقها.</p></div>
+<section class="full">${coverHtml({ name: book.name, code: book.code, issued_at: book.issued_at, ref: book.ref, edition: book.edition, part: partLine })}</section>
+<section class="pt-about">
+  <p class="pt-eyebrow">${esc(partLine)}</p>
+  <h2>عن هذا الجزء</h2>
+  ${frameworks(parts, key)}
+  <p class="pt-lead">${inline(t.about.lead)}</p>
+  <h3 class="pt-h">كيف يُقرأ</h3>
+  <ol class="steps">${(t.about.read || []).map((r, i) => `<li><span class="dot">${i + 1}</span><p>${inline(r)}</p></li>`).join('')}</ol>
+  <h3 class="pt-h">علامات المستويات</h3>
+  <p class="pt-note">${inline(texts?.legend || '')}</p>
+  <div class="legend tiers">
+    ${marks.map((m) => `<div><b>◆ ${esc(m)}</b><p>تبدأ بها فقرة تظهر لهذه الفئة وحدها.</p></div>`).join('')}
+    <div><b>◇ عودة إلى النص العام</b><p>تنتهي بها الفقرة المعلّمة، وما بعدها يقرؤه الجميع.</p></div>
   </div>
-  <h3 class="hw-h">الأطر الثلاثة</h3>
-  <div class="f-chain hw-fw">${parts.map((p, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node"><span>${esc(p.roman)}</span><b>${esc(p.title)}</b><p>${esc(FW_LINE[p.key] || '')}</p></div>`).join('')}</div>
-  <p class="hw-note">تُقرأ الأطر بترتيبها: يستلم كل إطار ما بناه الذي قبله، فالتنفيذ المنضبط يصنع قيمة مقيسة، والقيمة المقيسة تمكّن القائد من التحول.</p>
 </section>
-<section class="toc"><h2>المحتويات</h2>${toc}</section>
-${body}
-${tools}
-<section class="end">
-  <div class="lg">${LOGO}</div>
-  <p>انتهت ${book.edition ? esc(book.edition) : 'النسخة الشخصية'} من كتاب القائد · ${total} بابًا</p>
-  <p>صدرت لـ ${esc(book.name)} في ${esc(fmt(book.issued_at))} برقم <bdi dir="ltr">${esc(book.ref)}</bdi></p>
-  <p>هذا المحتوى ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>، ومرخص لصاحب النسخة للاستخدام الشخصي فقط.<br>يُمنع نسخه أو نشره أو مشاركته مع أي طرف آخر، وكل صفحة تحمل اسم صاحبها ورقم نسختها.</p>
-  <p>جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(book.issued_at).getFullYear()} Milestone Impact</bdi></p>
+<section class="toc"><h2>محتويات الجزء</h2>${toc}</section>
+${groupHtml({ ...p, items }, parts)}
+<section class="pt-bridges">
+  <p class="pt-eyebrow">${esc(partLine)}</p>
+  <h2>يتكامل مع</h2>
+  <div class="f-chain pt-chain">${parts.map((x, i) => `${i ? '<i class="arw"></i>' : ''}<div class="node${x.key === key ? ' on' : ''}"><span>${esc(x.roman)}</span><b>${esc(x.title)}</b></div>`).join('')}</div>
+  <p class="pt-lead">${inline(t.bridges.place)}</p>
+  <h3 class="pt-h">ما يقدمه الجزآن الآخران</h3>
+  <div class="pt-with">${others.map((x) => `<div><small>${esc(partOrdinal(parts, x.key))}</small><b>${esc(x.title)}</b><p>${inline(t.bridges.with?.[x.key] || '')}</p></div>`).join('')}</div>
+  <div class="key"><small>ماذا تقرأ بعد هذا الجزء</small><p>${inline(t.bridges.next)}</p></div>
 </section>
+${backCover(b)}
 </main>
 </body></html>`;
 }
 
 // تُكتب في نافذة فُتحت متزامنة مع النقرة، وتُربط أزرارها من هنا (سياسة المحتوى تمنع السكربت في الصفحة)
-export function writeBook(win, book, parts) {
+export function writeBook(win, book, parts, opts = {}) {
   if (!win) return false;
   win.document.open();
-  win.document.write(bookHtml(book, parts));
+  win.document.write(bookHtml(book, parts, opts));
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
   win.document.querySelector('[data-act="close"]')?.addEventListener('click', () => win.close());

@@ -75,7 +75,7 @@ export async function book(v: Viewer) {
   const props = await proposalsFor(v, mods).catch(() => ({ ready: false, list: [], counts: null }));
   return {
     success: true, version: ver, generated_at: new Date().toISOString(), share, deps,
-    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, paused: !!v.paused, watermark: watermark(v), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin, seat: v.kind === 'expert' ? v.seat ?? null : null },
+    viewer: { kind: v.kind, name: v.name, role: v.role, email: v.email || '', write: v.write, paused: !!v.paused, watermark: watermark(v), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin, seat: v.kind === 'expert' ? v.seat ?? null : null },
     proposals_ready: props.ready, proposals: props.list, proposal_counts: props.counts,
     comments_ready: rows !== null,
     chapters: [...mods.map((m) => ({
