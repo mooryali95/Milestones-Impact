@@ -1,8 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
-import {
-  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
+import { all, audit, BUCKET, CONFIG, db, expiresIn, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, newDeviceMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
@@ -62,7 +61,7 @@ export async function issueSession(participantId: string, method: string, ctx: C
     const { data: p } = await db.from('participants').select('full_name, email, is_demo').eq('id', participantId).maybeSingle();
     if (p?.is_demo) return token;
     const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
-    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when)).catch((e) => console.error('new device mail', e));
+    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { expiresAt: expiresIn(24) }).catch((e) => console.error('new device mail', e));
   }
   return token;
 }

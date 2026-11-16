@@ -44,13 +44,15 @@ const hooks = (calls: Call[]) => calls.filter((c) => c.url.includes('hooks.examp
 const resend = (calls: Call[]) => calls.filter((c) => c.url.includes('resend.com'));
 const hoursAgo = (h: number) => new Date(Date.now() - h * 36e5).toISOString();
 
-Deno.test('P1-12: رسالة بقيت في الطابور أكثر من ست ساعات تنبيه واحد، ولكل رسالة مرة، ويُعاد إن لم يصل', async () => {
+Deno.test('P1-12: رسالة تعثرت في الطابور أكثر من ست ساعات تنبيه واحد، ولكل رسالة مرة، ويُعاد إن لم يصل', async () => {
   assertEquals(QUEUE_ALERT_HOURS, 6);
   Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
   const queue = [
-    { id: 'q1', created_at: hoursAgo(9), kind: 'notify', reason: 'mail_cap' },
-    { id: 'q2', created_at: hoursAgo(7), kind: 'bulk', reason: 'mail_share' },
-    { id: 'q5', created_at: hoursAgo(5), kind: 'bulk', reason: 'mail_share' },   // دون الست ساعات: لا تنبيه
+    { id: 'q1', created_at: hoursAgo(9), kind: 'notify', reason: 'mail_cap', attempts: 1 },
+    { id: 'q2', created_at: hoursAgo(7), kind: 'bulk', reason: 'mail_share', attempts: 1 },
+    { id: 'q5', created_at: hoursAgo(5), kind: 'bulk', reason: 'mail_share', attempts: 1 },   // دون الست ساعات: لا تنبيه
+    // انتظار الحصة وحده سير عادي يُرحَّل إلى الغد بسطر يومي (carryoverAlert)، لا تنبيه عالق لكل رسالة
+    { id: 'q6', created_at: hoursAgo(20), kind: 'notify', reason: 'mail_share', attempts: 0 },
   ];
   const marks = new Set<string>();
   const restore = install((t, ops) => {
@@ -81,13 +83,13 @@ Deno.test('P1-12: رسالة بقيت في الطابور أكثر من ست س�
       assertEquals(await stuckQueueAlert(), { stuck: 2, alerted: 0 });
       assertEquals(hooks(calls).length, 1);
       // رسالة جديدة تجاوزت الست ساعات: تنبيه لها وحدها
-      queue.push({ id: 'q3', created_at: hoursAgo(6.5), kind: 'notify', reason: 'mail_cap' });
+      queue.push({ id: 'q3', created_at: hoursAgo(6.5), kind: 'notify', reason: 'mail_cap', attempts: 1 });
       assertEquals(await stuckQueueAlert(), { stuck: 3, alerted: 1 });
       assertEquals(hooks(calls).length, 2);
       assertEquals(hooks(calls)[1].body.detail.messages, 1);
     });
     // التنبيه لم يصل من أي قناة: لا علامة، فيُعاد في الساعة التالية
-    queue.push({ id: 'q4', created_at: hoursAgo(8), kind: 'notify', reason: null as any });
+    queue.push({ id: 'q4', created_at: hoursAgo(8), kind: 'notify', reason: null as any, attempts: 0 });   // سبب غير معروف: يُنبَّه إليه
     await withFetch(async () => assertEquals((await stuckQueueAlert()).alerted, 0), { hookStatus: 500 });
     assertEquals(marks.has('q4'), false);
     await withFetch(async (calls) => {
@@ -103,7 +105,7 @@ Deno.test('P1-12: بريد الطابور المتأخر فشل: تعيده ال
   const saved = { alertEmail: CONFIG.alertEmail, resendKey: CONFIG.resendKey };
   Object.assign(CONFIG, { alertEmail: 'owner@x.sa', resendKey: 're_test' });
   Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
-  const queue = [{ id: 'f1', created_at: hoursAgo(7), kind: 'notify', reason: 'mail_share' }];
+  const queue = [{ id: 'f1', created_at: hoursAgo(7), kind: 'notify', reason: 'mail_share', attempts: 1 }];
   const marks = new Set<string>();
   const restore = install((t, ops) => {
     if (t === 'mail_queue') return { data: queue.filter((m) => m.created_at < String(arg(ops, 'lt'))), error: null };
@@ -143,7 +145,7 @@ Deno.test('P1-12: بريد الطابور المتأخر احتياط: لا يُ
   const saved = { alertEmail: CONFIG.alertEmail, resendKey: CONFIG.resendKey };
   Object.assign(CONFIG, { alertEmail: 'owner@x.sa', resendKey: 're_test' });
   Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
-  const queue = [{ id: 'm1', created_at: hoursAgo(7), kind: 'notify', reason: 'mail_share' }];
+  const queue = [{ id: 'm1', created_at: hoursAgo(7), kind: 'notify', reason: 'mail_share', attempts: 1 }];
   const marks = new Set<string>();
   const restore = install((t, ops) => {
     if (t === 'mail_queue') return { data: queue.filter((m) => m.created_at < String(arg(ops, 'lt'))), error: null };
@@ -161,11 +163,11 @@ Deno.test('P1-12: بريد الطابور المتأخر احتياط: لا يُ
       assertEquals([hooks(calls).length, resend(calls).length], [1, 0]);
     });
     // الرابط معطل: بريد واحد، ثم رسائل الساعات التالية لا بريد لها في المهلة ولا تُعلَّم، فتُعاد
-    queue.push({ id: 'm2', created_at: hoursAgo(6.5), kind: 'notify', reason: 'mail_share' });
+    queue.push({ id: 'm2', created_at: hoursAgo(6.5), kind: 'notify', reason: 'mail_share', attempts: 1 });
     await withFetch(async (calls) => {
       assertEquals(await stuckQueueAlert(), { stuck: 2, alerted: 1 });
       assertEquals(resend(calls).length, 1);
-      queue.push({ id: 'm3', created_at: hoursAgo(6.2), kind: 'notify', reason: 'mail_share' });
+      queue.push({ id: 'm3', created_at: hoursAgo(6.2), kind: 'notify', reason: 'mail_share', attempts: 1 });
       assertEquals(await stuckQueueAlert(), { stuck: 3, alerted: 0 });
       assertEquals(resend(calls).length, 1);
     }, { hookStatus: 500 });
@@ -210,7 +212,7 @@ Deno.test('P1-12: تقرير الأسبوع يعرض الطابور وأقدم �
       assertEquals(r.mail, { waiting: 4, oldest_hours: 9, expired: 2, dropped: 1, blocked: 3, rejected: 2 });
       const html = String(resend(calls)[0].body.html);
       for (const s of ['في طابور البريد الآن', '4، أقدمها منذ 9 ساعات', 'تُرك من الطابور هذا الأسبوع', 'حُجب بحصة البريد هذا الأسبوع', 'رفضه مزوّد البريد هذا الأسبوع',
-        'البريد المرسل آخر 24 ساعة (كل الأنواع)', '10 من 80',
+        'البريد المرسل اليوم (كل الأنواع، منذ 03:00 بالرياض)', '10 من 80',
         'طابور البريد: 4 تنتظر، أقدمها منذ 9 ساعات', 'تُرك من طابور البريد هذا الأسبوع بلا إرسال: 3', 'رفض مزوّد البريد هذا الأسبوع: 2', 'حُجب بحصة البريد اليومية هذا الأسبوع: 3']) {
         assertEquals(html.includes(s), true, s);
       }

@@ -179,7 +179,8 @@ describe('المرحلة 2: الدورة والمجموعات', async () => {
     expect(srv).toMatch(/import \{ raterCheck, RELATION_AR, tokenPatch \} from '\.\/impact\.ts';/);
     expect(srv).toMatch(/await raterCheck\(p, email\)/);
     expect(srv).toMatch(/raterMail\(r\.full_name, p\.full_name \|\| 'زميلك', link, 'f360'/);
-    expect(srv.match(/\{ kind: 'bulk', ref: `rater:\$\{r\.id\}` \}/g)).toHaveLength(2);
+    // ومؤرخة بإغلاق الدورة: دعوة أو تذكير انتظر في الطابور حتى أُغلقت النافذة يُترك (expiresAt)
+    expect(srv.match(/\{ kind: 'bulk', ref: `rater:\$\{r\.id\}`, expiresAt: (closes|c\.closes_at) \}/g)).toHaveLength(2);
     expect(srv).toMatch(/const s = \(await appSettings\(\)\)\.feedback360;/);
     // لا رقم من الحدود في الخادم: كلها من الإعدادات
     expect(srv).not.toMatch(/min_group: \d|window_days: \d|\* 14|\[5, 10\]/);

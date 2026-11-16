@@ -11,6 +11,20 @@ import { session } from '../api.js';
 import { Spinner, useEscape } from '../ui.jsx';
 import { DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { OVERRIDE_REASON_MIN } from '../../../supabase/functions/leaders-api/logic.js';
+import { etaAr } from '../../../supabase/functions/leaders-api/mail-center.js';
+
+// أثر البريد قبل التأكيد دائمًا: كم يخرج الآن، وكم ينتظر في صندوق «لم يُرسل» فيخرج الليلة أو بعدها، ومتى يُتوقع أن يخرج آخره (mailForecast في الخادم)
+export function mailLine(mail, read = true) {
+  const app = 'ويرى كل واحد اعتماده في رحلته فورًا، وصله البريد أم لم يصل.';
+  if (!mail) return `يصل كل واحد بريد الاعتماد بخطوته التالية. ${app}`;
+  if (!read) return `تعذّرت قراءة حصة البريد الآن: ما لا يتسع له اليوم ينتظر في صندوق «لم يُرسل» ويخرج آليًّا. ${app}`;
+  const total = mail.now + mail.queued;
+  if (!mail.queued) return `سيصل ${total} بريدًا الآن، بريد الاعتماد بخطوته التالية. ${app}`;
+  const ahead = mail.ahead ? ` بعد ${mail.ahead} إشعارًا ينتظر قبله` : '';
+  // الليلة: تفريغ المساء من 22:17 بما بقي من حصة اليوم، والباقي بعد تصفيرها 03:00 (mailForecast)
+  const when = mail.tonight == null ? '' : mail.later ? ` (${mail.tonight} الليلة من 22:17، و${mail.later} بعدها)` : ' الليلة من 22:17';
+  return `سيصل ${total} بريدًا: ${mail.now} الآن، والباقي ${mail.queued} ينتظر في صندوق «لم يُرسل» لامتلاء حصة الإشعارات، ويخرج آليًّا${ahead}${when}، آخره ${etaAr(mail.clear_at)}. ${app}`;
+}
 
 const DIMS = ['milestone', 'impact', 'leadership'];
 const levelsLine = (lv) => DIMS.map((d) => `${DIM_AR[d]}: ${LVL[lv?.[d]] || '·'}`).join(' · ');
@@ -116,7 +130,7 @@ export default function BulkApprove({ ids, onClose, onPerson }) {
                 </details>
               )}
               {preview.ready.length > 0 && (
-                <p className="la-muted ba-mail">يصل كل واحد بريد الاعتماد بخطوته التالية{preview.mail?.queued ? `: ${preview.mail.now} الآن، و${preview.mail.queued} في الطابور يصل بعد ساعات لبلوغ الحد اليومي للرسائل.` : '.'}</p>
+                <p className="la-muted ba-mail" data-mail-forecast>{mailLine(preview.mail, preview.mail_read)}</p>
               )}
             </>
           ) : (

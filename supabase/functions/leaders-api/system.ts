@@ -258,7 +258,7 @@ export async function weeklyHealth() {
     ...h.pending_migrations.filter((m) => m.gate === 'tolerant').map((m) => `ترحيل لم يُطبَّق تعمل الدوال قبله وبعده: ${m.name}.sql`),
     ...h.missing_secrets.map((k) => `سر ناقص في leaders-api: ${k}`),
     // العداد يعد كل بريد خرج من الدوال الأربع بأنواعه كلها، لا الرموز وحدها
-    ...(h.mail.today == null ? ['تعذّرت قراءة عداد البريد، فلا يخرج إلا الرموز والتنبيه'] : h.mail.today >= h.mail.cap * 0.8 ? [`البريد المرسل في آخر 24 ساعة ${h.mail.today} من ${h.mail.cap} (كل الأنواع)`] : []),
+    ...(h.mail.today == null ? ['تعذّرت قراءة عداد البريد، فلا يخرج إلا الرموز والتنبيه'] : h.mail.today >= h.mail.cap * 0.8 ? [`البريد المرسل اليوم ساعة ${h.mail.today} من ${h.mail.cap} (كل الأنواع)`] : []),
     ...(unread ? ['تعذّرت قراءة طابور البريد أو سجله، فبعض أرقام البريد غير مقروءة'] : []),
     ...(mail.waiting && mail.oldest_hours != null && mail.oldest_hours >= QUEUE_ALERT_HOURS ? [`طابور البريد: ${mail.waiting} تنتظر، أقدمها منذ ${hoursAr(mail.oldest_hours)}. راجع صندوق «لم يُرسل» في مركز البريد`] : []),
     ...(left ? [`تُرك من طابور البريد هذا الأسبوع بلا إرسال: ${left} (فات أوانها: ${mail.expired}، وفشلت ${QUEUE_MAX_ATTEMPTS} مرات: ${mail.dropped})`] : []),
@@ -269,7 +269,7 @@ export async function weeklyHealth() {
   await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
     ['مسجلون جدد هذا الأسبوع', String(joined)], ['نشطون هذا الأسبوع', String(active)],
     [PARTICIPANT_STATUS.pending_approval, String(pending)], ['متطلبات للمراجعة', String(submitted)],
-    ['البريد المرسل آخر 24 ساعة (كل الأنواع)', h.mail.today == null ? 'غير مقروء' : `${h.mail.today} من ${h.mail.cap}`],
+    ['البريد المرسل اليوم (كل الأنواع، منذ 03:00 بالرياض)', h.mail.today == null ? 'غير مقروء' : `${h.mail.today} من ${h.mail.cap}`],
     ['في طابور البريد الآن', mail.waiting == null ? 'غير مقروء' : mail.waiting && mail.oldest_hours != null ? `${mail.waiting}، أقدمها منذ ${hoursAr(mail.oldest_hours)}` : String(mail.waiting)],
     ['تُرك من الطابور هذا الأسبوع (فات أوانه أو استنفد محاولاته)', num(left)],
     ['حُجب بحصة البريد هذا الأسبوع', num(mail.blocked)],
@@ -306,7 +306,7 @@ export async function opsHealth(a: Admin) {
   const n = async (q: any) => { const { count, error } = await q; return error ? null : (count ?? 0); };
   const events = () => head('mail_events').gte('created_at', dayAgo);
   const [sent, codeSent, codeFailed, codeBlocked, matrixBlocked, failed, blocked, recent, waiting, oldest, slackRow] = await Promise.all([
-    mailUsage(dayAgo).catch(() => null),
+    mailUsage().catch(() => null),   // حصة اليوم (يوم المزوّد من 03:00 بالرياض)، كما يعد حارس الإرسال، وما سواها آخر 24 ساعة
     n(events().eq('kind', 'code').eq('status', 'sent')),
     n(events().eq('kind', 'code').eq('status', 'failed')),
     n(events().eq('kind', 'code').eq('status', 'blocked').neq('source', MATRIX_SOURCE)),

@@ -1,6 +1,7 @@
 // الاعتماد الجماعي بالاستثناء (تصور 2026-11-15، المرحلة 1): من يُعتمد بمستواه المحسوب ومن يُستبقى ولماذا
 import { describe, expect, it } from 'vitest';
-import { approvalHolds, mailPlan, splitForApproval } from '../../supabase/functions/leaders-api/approval.js';
+import { approvalHolds, mailForecast, splitForApproval } from '../../supabase/functions/leaders-api/approval.js';
+import { mailBudget, nextDrainAt } from '../../supabase/functions/leaders-api/mail-center.js';
 
 const placements = [{ dimension: 'milestone', level: 'beginner' }, { dimension: 'impact', level: 'intermediate' }, { dimension: 'leadership', level: 'beginner' }];
 const ev = (level, extra = {}) => ({ level, borderline: false, flags: [], ...extra });
@@ -44,10 +45,20 @@ describe('التقسيم وأثر البريد', () => {
     expect(held).toHaveLength(1);
     expect(held[0]).toMatchObject({ id: 'p2', holds: [{ key: 'effort' }] });
   });
-  it('السقف اليومي يصفّ الزائد ولا يُسقطه', () => {
-    expect(mailPlan(9, { used: 75, cap: 80 })).toEqual({ now: 5, queued: 4 });
-    expect(mailPlan(9, { used: 0, cap: 80 })).toEqual({ now: 9, queued: 0 });
-    expect(mailPlan(3, { used: 90, cap: 80 })).toEqual({ now: 0, queued: 3 });
+  it('أثر البريد بنصيب الإشعارات لا بالسقف الكلي: الآن، والليلة من 22:17، وبعدها', () => {
+    const now = Date.parse('2026-11-16T05:27:00Z');   // 08:27 بالرياض
+    // صباح 16 نوفمبر: 10 رموز و40 إشعارًا اليوم. السقف الكلي يتسع لثلاثين، ونصيب الإشعارات ممتلئ: الأربعة عشر كلها تنتظر
+    // والمساء يتسع إلى 70 من 80، فتخرج الأربعة عشر الليلة
+    const full = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), now });
+    expect(full).toEqual({ now: 0, queued: 14, tonight: 14, later: 0, clear_at: '2026-11-16T19:17:00.000Z', ahead: 0 });
+    const part = mailForecast(9, { budget: mailBudget({ sent: 35, nonCode: 35 }, 80), now });
+    expect([part.now, part.queued, part.tonight]).toEqual([5, 4, 4]);
+    expect(mailForecast(9, { budget: mailBudget({ sent: 0, nonCode: 0 }, 80), now })).toEqual({ now: 9, queued: 0, tonight: 0, later: 0, clear_at: null, ahead: 0 });
+    // ثلاثون إشعارًا تنتظر قبلها: يتسع المساء لعشرين، فعشرة منها ثم الأربعة عشر بعد التصفير 03:17 بالرياض
+    const behind = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), waiting: 30, now });
+    expect(behind).toEqual({ now: 0, queued: 14, tonight: 0, later: 14, clear_at: '2026-11-17T00:17:00.000Z', ahead: 30 });
+    // تعذّر قراءة الحصة: لا يُعد بخروج شيء الآن
+    expect(mailForecast(3, {})).toMatchObject({ now: 0, queued: 3 });
   });
 });
 

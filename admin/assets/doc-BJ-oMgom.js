@@ -1,5 +1,10 @@
+<<<<<<<< HEAD:admin/assets/doc-BJ-oMgom.js
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/pdf-DuyVhkSx.js","assets/index-BF6av5GF.js","assets/react-XDCjal2T.js","assets/index-CFHbbW-1.css"])))=>i.map(i=>d[i]);
 import{_ as $}from"./index-BF6av5GF.js";const u=`<?xml version="1.0" encoding="UTF-8"?>
+========
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/pdf-kvXCR4Yj.js","assets/index-DWA72EcW.js","assets/react-XDCjal2T.js","assets/index-CFHbbW-1.css"])))=>i.map(i=>d[i]);
+import{_ as $}from"./index-DWA72EcW.js";const u=`<?xml version="1.0" encoding="UTF-8"?>
+>>>>>>>> origin/main:admin/assets/doc-B5FXPnq1.js
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3200 1454" role="img" aria-label="Milestone Impact">
   <title>Milestone Impact</title>
   <g transform="translate(0,1454) scale(0.1,-0.1)" stroke="none">
@@ -533,4 +538,8 @@ h2, h3 { break-after: avoid; }
     <span class="mono"><bdi dir="ltr">${a(i)}</bdi> · ${a(c())}</span>
   </footer>
 </article>
+<<<<<<<< HEAD:admin/assets/doc-BJ-oMgom.js
 </body></html>`}const B=(n,e)=>b(window.open("","_blank"),n,e);function b(n,e,o){if(!n)return!1;n.document.open(),n.document.write(h(e,o)),n.document.close(),n.document.querySelector('[data-act="print"]')?.addEventListener("click",()=>n.print());const i=n.document.querySelector('[data-act="pdf"]');return i?.addEventListener("click",async()=>{if(i.disabled)return;i.disabled=!0;const l=i.textContent;try{const{downloadPdf:s}=await $(async()=>{const{downloadPdf:r}=await import("./pdf-DuyVhkSx.js");return{downloadPdf:r}},__vite__mapDeps([0,1,2,3]));await s(e,o,{onProgress:r=>{i.textContent=r}}),i.textContent="حُفظ الملف"}catch(s){console.error(s),i.textContent="تعذّر التحميل، استعمل «طباعة»"}finally{setTimeout(()=>{i.textContent=l,i.disabled=!1},2500)}}),n.document.querySelector('[data-act="close"]')?.addEventListener("click",()=>n.close()),!0}const C=Object.freeze(Object.defineProperty({__proto__:null,C:t,SEAL:g,bars:M,callout:A,chain:z,docId:p,documentHtml:h,esc:a,kpis:v,openDocument:B,points:I,progress:S,raw:N,section:k,table:F,today:c,writeDocument:b},Symbol.toStringTag,{value:"Module"}));export{t as C,u as L,h as a,M as b,A as c,p as d,a as e,F as f,S as g,z as h,C as i,v as k,I as p,N as r,k as s,c as t};
+========
+</body></html>`}const B=(n,e)=>b(window.open("","_blank"),n,e);function b(n,e,o){if(!n)return!1;n.document.open(),n.document.write(h(e,o)),n.document.close(),n.document.querySelector('[data-act="print"]')?.addEventListener("click",()=>n.print());const i=n.document.querySelector('[data-act="pdf"]');return i?.addEventListener("click",async()=>{if(i.disabled)return;i.disabled=!0;const l=i.textContent;try{const{downloadPdf:s}=await $(async()=>{const{downloadPdf:r}=await import("./pdf-kvXCR4Yj.js");return{downloadPdf:r}},__vite__mapDeps([0,1,2,3]));await s(e,o,{onProgress:r=>{i.textContent=r}}),i.textContent="حُفظ الملف"}catch(s){console.error(s),i.textContent="تعذّر التحميل، استعمل «طباعة»"}finally{setTimeout(()=>{i.textContent=l,i.disabled=!1},2500)}}),n.document.querySelector('[data-act="close"]')?.addEventListener("click",()=>n.close()),!0}const C=Object.freeze(Object.defineProperty({__proto__:null,C:t,SEAL:g,bars:M,callout:A,chain:z,docId:p,documentHtml:h,esc:a,kpis:v,openDocument:B,points:I,progress:S,raw:N,section:k,table:F,today:c,writeDocument:b},Symbol.toStringTag,{value:"Module"}));export{t as C,u as L,h as a,M as b,A as c,p as d,a as e,F as f,S as g,z as h,C as i,v as k,I as p,N as r,k as s,c as t};
+>>>>>>>> origin/main:admin/assets/doc-B5FXPnq1.js

@@ -27,7 +27,9 @@ describe('التنبيه الفوري والمسبار', () => {
   it('التنبيه مكبوح عشر دقائق لكل نوع من audit_log', () => {
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/export async function alertOps/);
-    expect(core).toMatch(/'system\.alert'[\s\S]*entity_id', kind/);
+    // مفتاح التهدئة النوع، أو النوع ومفتاحه (طلب حذف بعينه): `${kind}:${key}`
+    expect(core).toMatch(/const cool = key \? `\$\{kind\}:\$\{key\}` : kind;/);
+    expect(core).toMatch(/'system\.alert'[\s\S]*entity_id', cool/);
   });
 });
 
