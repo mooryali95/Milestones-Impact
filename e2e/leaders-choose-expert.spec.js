@@ -35,7 +35,7 @@ test('المشارك يختار خبيره من ثلاثة مرشحين', async 
   });
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_session', 'tok-choose-00000000000000000000'); });
   await page.goto(APP);
-  const card = page.locator('section', { has: page.locator('#cx-h') });
+  const card = page.locator('section.rx', { has: page.locator('#cx-h') });
   await card.getByRole('button', { name: 'اطلب الآن' }).click();
   await expect(card.getByText('خالد المطيري')).toBeVisible();
   await expect(card.getByRole('button', { name: 'اختره' }).first()).toBeDisabled();

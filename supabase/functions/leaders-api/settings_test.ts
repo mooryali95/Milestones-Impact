@@ -13,3 +13,7 @@ Deno.test('الإعدادات: دور العرض لا يحفظ، والمدخل 
 Deno.test('الإعدادات: بلا مخزن تعمل القيم الافتراضية', () => {
   assertEquals(resolveSettings([]), DEFAULTS);
 });
+
+Deno.test('الإعدادات: التوجيه والإرشاد ضابط مالي، فالمدير العادي لا يحفظه', async () => {
+  await assertRejects(() => adminSave({ email: 'a@x.sa', role: 'admin', method: 'passkey' }, { group: 'guidance', values: { daily_spend_usd: 9 } }), Fail);
+});

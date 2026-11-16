@@ -177,7 +177,7 @@ test('طلب الاستشارة المنتهي بلا خبير يبقى ظاهر
     }),
     'experts.choose': () => { chosen = 'خالد المطيري'; return { success: true, status: 'offered', expert: chosen }; },
   });
-  const card = page.locator('section', { has: page.locator('#cx-h') });
+  const card = page.locator('section.rx', { has: page.locator('#cx-h') });
   await expect(card.locator('[data-request="unmatched"]')).toContainText('لا خبير مطابق');
   await expect(card.locator('[data-request="unmatched"]')).toContainText(UNMATCHED);
   await card.getByRole('button', { name: 'اطلب الآن' }).click();

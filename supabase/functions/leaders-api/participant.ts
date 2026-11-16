@@ -17,6 +17,7 @@ import {
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
+import { guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -579,11 +580,11 @@ export async function journeyFor(p: any, { lite = false }: { lite?: boolean } = 
     ? { score: fe.score, decision: fe.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.decision], decided_at: fe.decided_at, notes: fe.adjust?.notes_to_participant || null } : null;
   // متى أنهى القياس المبدئي: منه موعد اعتماد المسار المعلن (يوما عمل، D04)
   const baselineAt = (assessments.data || []).filter((a: any) => a.status === 'submitted' && a.instruments?.kind === 'baseline').map((a: any) => a.submitted_at).filter(Boolean).sort().at(-1) || null;
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final, baselineAt };
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final, baselineAt, initiative: !!initiative };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt }, passkeys, cells, org, payAccess, adv] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt, initiative }, passkeys, cells, org, payAccess, adv] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -656,6 +657,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     notices: audience === 'participant' ? await noticesFor(p.id) : [],
     // لافتة التذكير الموحد (nudge-banner.ts): آخر تذكير لم يره، بنص بريده ومرسله
     nudge: audience === 'participant' ? await bannerFor(p.id) : null,
+    // «التوجيه والإرشاد» (guidance.js): هل بدأ ما يوجَّه إليه. للمعتمد وحده، فالكتاب والمبادرة يُفتحان بعد الاعتماد
+    guidance: audience === 'participant' && approved ? await guidanceFor(p.id, !!initiative) : null,
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
     // مفاتيح الميزات قيد البناء (features.js): الواجهة تخفي القاعة وكاتون و360 بها، والخادم يرفض أفعالها وحده
