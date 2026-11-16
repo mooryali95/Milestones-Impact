@@ -2521,6 +2521,11 @@ export function cleanTeamIds(ids, isId) {
 export const TEAM_SCOPES = ['cohort', 'group', 'advisor'];
 // الخبير المعتمد الذي يحمل صلاحية في الدفعة: مصدر واحد لفريق الدفعة وصفحة الجهة وبوابة المنسق ولوحة الإدارة
 export const EXPERT_APPROVED = ['active', 'paused'];
+// خدمة الرحلة (تصور فصل خدمة الرحلة عن لجان الكتاب، المرحلة 1، اعتمده المالك 2026-11-15): معتمد وله دور واحد على الأقل.
+// الأدوار للرحلة والعضوية في اللجان للكتاب (bookAccess في master-book.js)، فعضو اللجنة بلا دور لا يُرشَّح ولا يُكلَّف ولا يظهر
+// في أي موضع من الرحلة. كل مرشِّح للرحلة يمر بها (اختبار الحارس expert-service.test.js). والثابت أعلاه لا يتغير
+/** @param {{ status?: string | null, roles?: string[] | null } | null | undefined} e */
+export const journeyApproved = (e) => !!e && EXPERT_APPROVED.includes(String(e.status)) && (e.roles || []).length > 0;
 /** @param {{ advisor_expert_id?: string | null } | null} cohort
  *  @param {{ expert_id: string, created_at?: string | null, added_by?: string | null }[]} team صفوف cohort_experts للدفعة
  *  @param {{ id: string, name: string, advisor_expert_id?: string | null }[]} groups مجموعات الدفعة */
@@ -2560,7 +2565,7 @@ export function teamCoverage(cohort, members, groups, approved) {
  *  @param {{ team?: boolean, list?: boolean }} perms */
 export function coordTeamView({ cohort, rows, experts, groups, members }, perms) {
   if (!perms?.team) return null;
-  const ok = new Map((experts || []).filter((e) => EXPERT_APPROVED.includes(e.status)).map((e) => [e.id, e]));
+  const ok = new Map((experts || []).filter(journeyApproved).map((e) => [e.id, e]));
   const card = (e) => ({ full_name: e.full_name, title: e.title || null, roles: e.roles || [] });
   const adv = (rows || []).find((r) => r.advisor && ok.has(r.expert_id));
   const ms = members || [];

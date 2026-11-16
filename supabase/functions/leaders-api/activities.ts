@@ -12,7 +12,7 @@ import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
-  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf,
+  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
   bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule,
 } from './logic.js';
 
@@ -24,16 +24,18 @@ type Ctx = { ip: string | null; ua: string | null };
 // cohortId: دفعة المشارك؛ يرى جلسات دفعته والجلسات العامة لكل الدفعات.
 
 // الخبير صاحب الجلسة: يُختار صراحة، أو يُطابق نص المدرب (من الحجز أو المسجّل) ببريد خبير أو اسمه
-// وإلا فكوتش المشارك المسند إليه بطلب مقبول (expert_requests): مصدر واحد لـ«من كوتشه»
+// وإلا فكوتش المشارك المسند إليه بطلب مقبول (expert_requests): مصدر واحد لـ«من كوتشه».
+// الجلسة خدمة رحلة، فلا تُربط إلا بخبير يخدم فيها (journeyApproved): لا بعضو لجنة بلا دور ولا بموقوف يطابق اسمه
 async function expertFor(id: unknown, coach: unknown, participantId?: string): Promise<string | null> {
   if (id) {
-    const { data } = await db.from('experts').select('id').eq('id', String(id)).maybeSingle();
-    if (data) return data.id;
+    const { data } = await db.from('experts').select('id, status, roles').eq('id', String(id)).maybeSingle();
+    if (data && journeyApproved(data)) return data.id;
   }
   const c = String(coach || '').trim();
   if (c) {
-    const { data } = await db.from('experts').select('id').or(`email.eq.${c.toLowerCase().replace(/[,()]/g, '')},full_name.eq.${c.replace(/[,()]/g, '')}`).limit(1);
-    if (data?.[0]) return data[0].id;
+    const { data } = await db.from('experts').select('id, status, roles').or(`email.eq.${c.toLowerCase().replace(/[,()]/g, '')},full_name.eq.${c.replace(/[,()]/g, '')}`).limit(5);
+    const hit = (data || []).find(journeyApproved);
+    if (hit) return hit.id;
   }
   if (!participantId) return null;
   const { data: req } = await db.from('expert_requests').select('expert_id').eq('participant_id', participantId).eq('role', 'coach').eq('status', 'accepted').maybeSingle();

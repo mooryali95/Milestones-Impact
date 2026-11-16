@@ -62,7 +62,8 @@ describe('8.3 الخروج من الأدوار', () => {
     expect(api).not.toContain('window.confirm');
     expect(read('leaders-app/src/App.jsx')).toContain("if (!(await askSignOut('participant'))) return;");
     expect(read('leaders-app/src/screens/OrgPortal.jsx')).toContain("if (await askSignOut('org')) { setMe(null); setBootError(''); }");
-    expect(read('leaders-app/src/screens/ExpertPortal.jsx').match(/if \(await askSignOut\('expert'\)\) onOut\(\);/g)).toHaveLength(2);
+    // ثلاثة: الملف قبل الاعتماد، ولوحة الرحلة، ولوحة عضو اللجنة بلا دور (ReviewerHome)
+    expect(read('leaders-app/src/screens/ExpertPortal.jsx').match(/if \(await askSignOut\('expert'\)\) onOut\(\);/g)).toHaveLength(3);
   });
 });
 

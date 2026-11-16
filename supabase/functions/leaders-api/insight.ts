@@ -4,7 +4,7 @@
 import { all, db, must } from './core.ts';
 import { baselineProgress } from './admin.ts';
 import { onboardingOf } from './onboarding.js';
-import { pickCohort } from './logic.js';
+import { journeyApproved, pickCohort } from './logic.js';
 import { changeRow, expertLoad, pipelineBy } from './insight.js';
 
 type Body = Record<string, any>;
@@ -27,7 +27,8 @@ export async function adminInsight() {
     db.from('organizations').select('id, name').then((r) => (must(r) ?? []) as any[]),
     db.from('cohorts').select('id, name, status, is_default, organization_id, starts_on, ends_on, created_at').then((r) => (must(r) ?? []) as any[]),
     all((f, t) => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id').order('cohort_id').range(f, t)) as Promise<any[]>,
-    db.from('experts').select('id, full_name, title, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => (must(r) ?? []) as any[]),
+    // طاقة خبراء الرحلة وحدهم (journeyApproved): عضو اللجنة بلا دور لا يُحسب فيها
+    db.from('experts').select('id, full_name, title, status, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => ((must(r) ?? []) as any[]).filter(journeyApproved)),
     db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null).limit(5000),
     db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null).limit(5000),
     db.from('expert_requests').select('expert_id, participant_id').eq('status', 'accepted').not('expert_id', 'is', null).limit(5000),

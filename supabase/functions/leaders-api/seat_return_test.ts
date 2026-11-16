@@ -114,7 +114,7 @@ const world = (people: Row[], ents: Row[] = [], more: Record<string, Row[]> = {}
   entitlements: ents,
   programs: [{ id: 'prog', is_default: true, name: 'البرنامج', final_eval: null }],
   cohorts: [{ id: 'c1', name: 'الدفعة', is_default: true, organization_id: null, status: 'running', program_id: 'prog', starts_on: '2026-10-01' }],
-  experts: [{ id: EXPERT, email: 'expert@example.sa', status: 'active', full_name: 'خبير' }],
+  experts: [{ id: EXPERT, email: 'expert@example.sa', status: 'active', roles: ['mentor'], full_name: 'خبير' }],
   expert_requests: people.map((p) => ({ id: `req-${p.id}`, expert_id: EXPERT, participant_id: p.id, role: 'mentor', status: 'accepted' })),
   handbook_progress: [],
   sponsor_requests: [],
@@ -124,7 +124,7 @@ const liveSponsor = (t: Record<string, Row[]>, n: number) => (t.entitlements || 
 // الشاشات الثلاث التي كانت تعيد التثبيت، بالمدخل نفسه الذي تستدعيه index.ts
 const VIEWS: [string, (n: number) => Promise<unknown>][] = [
   ['admin.participant', (n) => participantFile(U(n), 'admin', { viewer: { email: ADMIN.email } })],
-  ['xp.participants', () => expertParticipants({ id: EXPERT, email: 'expert@example.sa' })],
+  ['xp.participants', () => expertParticipants({ id: EXPERT, email: 'expert@example.sa', status: 'active', roles: ['mentor'] })],
   ['admin.final-eval', (n) => F.get({ participant_id: U(n) }, ADMIN)],
 ];
 async function openViews(n: number) { for (const [, view] of VIEWS) await view(n); }

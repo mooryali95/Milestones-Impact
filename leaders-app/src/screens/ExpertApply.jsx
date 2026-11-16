@@ -32,8 +32,10 @@ const EMPTY = { full_name: '', email: '', phone: '', title: '', linkedin_url: ''
 const fromExpert = (e) => ({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).filter((k) => e[k] != null).map((k) => [k, e[k]])),
   sectors: (e.sectors || []).join('، '), years_experience: e.years_experience ?? '', weekly_hours: e.weekly_hours ?? '', languages: e.languages?.length ? e.languages : ['ar'] });
 
-// النموذج نفسه للطلب المفتوح، ولاستكمال المدعو ملفه في لوحة الخبير (expert + onSaved)
-export default function ExpertApply({ expert = null, save = null, onSaved = null }) {
+// النموذج نفسه للطلب المفتوح، ولاستكمال المدعو ملفه في لوحة الخبير (expert + onSaved).
+// reviewer: عضو لجنة مدعو بلا دور في الرحلة، يُطلب منه الاسم والنبذة والإطار وحدها بلا حقول المطابقة (portalProfileSave)
+export default function ExpertApply({ expert = null, save = null, onSaved = null, reviewer = false }) {
+  const needsDim = !reviewer || (expert?.committees || []).includes('content');
   const [v, setV] = useState(() => (expert ? fromExpert(expert) : EMPTY));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -67,8 +69,8 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
     <div className="page narrow">
       <form className="card stack xp" onSubmit={submit}>
         <p className="eyebrow">شبكة الخبراء</p>
-        <h1 className="as-h2">{expert ? 'استكمل ملفك كخبير' : 'انضم إلى شبكة خبراء برنامج القادة'}</h1>
-        {expert ? <p className="muted">أدوارك والأبعاد التي تتقنها ونبذة عن خبرتك، ليُسند إليك ما يناسبك. نراجع الملف ثم نفعّل لوحتك.</p> : <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>}
+        <h1 className="as-h2">{reviewer ? 'أكّد بياناتك لمراجعة الكتاب الأم' : expert ? 'استكمل ملفك كخبير' : 'انضم إلى شبكة خبراء برنامج القادة'}</h1>
+        {reviewer ? <p className="muted">اسمك ونبذة عن خبرتك{needsDim ? ' والإطار الذي تراجعه' : ''}، ليظهر تعليقك في الكتاب باسمك وصفتك. نعتمد عضويتك ثم يُفتح لك الكتاب.</p> : expert ? <p className="muted">أدوارك والأبعاد التي تتقنها ونبذة عن خبرتك، ليُسند إليك ما يناسبك. نراجع الملف ثم نفعّل لوحتك.</p> : <p className="muted">نبحث عن خبراء في إدارة المشروعات وتحويلها إلى أثر وتمكين القادة، يرافقون القادة موجّهين ومستشارين ومقيّمين. يُراجع كل طلب قبل إسناد أي خدمة.</p>}
 
         <div className="xp-grid">
           <label className="field"><span>الاسم الكامل *</span><input className="input" required value={v.full_name} onChange={set('full_name')} maxLength={120} autoComplete="name" /></label>
@@ -79,15 +81,15 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
           <label className="field"><span>سنوات الخبرة</span><input className="input" inputMode="numeric" value={v.years_experience} onChange={set('years_experience')} /></label>
         </div>
 
-        <Pick legend="كيف تحب أن تخدم؟ *" options={Object.entries(EXPERT_ROLE_AR).map(([k, [l, h]]) => [k, l, h])} value={v.roles} onChange={(roles) => setV({ ...v, roles })} />
-        <Pick legend="أبعاد البرنامج التي تتقنها *" options={Object.entries(DIM_AR).map(([k, l]) => [k, l])} value={v.dimensions} onChange={(dimensions) => setV({ ...v, dimensions })} />
-        <Pick legend="مستويات القادة التي تناسبك" options={Object.entries(LEVEL_AR).map(([k, l]) => [k, l])} value={v.levels} onChange={(levels) => setV({ ...v, levels })} />
+        {!reviewer && <Pick legend="كيف تحب أن تخدم؟ *" options={Object.entries(EXPERT_ROLE_AR).map(([k, [l, h]]) => [k, l, h])} value={v.roles} onChange={(roles) => setV({ ...v, roles })} />}
+        <Pick legend={reviewer ? `الإطار الذي تراجعه${needsDim ? ' *' : ''}` : 'أبعاد البرنامج التي تتقنها *'} options={Object.entries(DIM_AR).map(([k, l]) => [k, l])} value={v.dimensions} onChange={(dimensions) => setV({ ...v, dimensions })} />
+        {!reviewer && <Pick legend="مستويات القادة التي تناسبك" options={Object.entries(LEVEL_AR).map(([k, l]) => [k, l])} value={v.levels} onChange={(levels) => setV({ ...v, levels })} />}
         <Pick legend="لغات العمل" options={Object.entries(LANG)} value={v.languages} onChange={(languages) => setV({ ...v, languages })} />
 
-        <div className="xp-grid">
+        {!reviewer && <div className="xp-grid">
           <label className="field"><span>القطاعات التي عملت فيها</span><input className="input" value={v.sectors} onChange={set('sectors')} placeholder="حكومي، طاقة، صحة" /></label>
           <label className="field"><span>الساعات المتاحة أسبوعيًا</span><input className="input" inputMode="numeric" value={v.weekly_hours} onChange={set('weekly_hours')} /></label>
-        </div>
+        </div>}
         <label className="field"><span>عرّف بخبرتك *</span>
           <textarea className="input" rows={5} required minLength={80} maxLength={3000} value={v.bio} onChange={set('bio')} placeholder="مشاريع قدتها أو أشرفت عليها، والمنهجيات التي تعمل بها، وما تضيفه للقادة" />
           <small className="muted">{v.bio.length < 80 ? `${80 - v.bio.length} حرفًا على الأقل بعد` : 'ممتاز'}</small></label>
@@ -95,7 +97,7 @@ export default function ExpertApply({ expert = null, save = null, onSaved = null
         {error && <div className="alert err" role="alert">{error}</div>}
         {captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => submit(null, t)} />}
         <button className="btn" disabled={busy}>{busy ? 'جارٍ الإرسال…' : expert ? 'احفظ الملف وأرسله للمراجعة' : 'أرسل طلب الانضمام'}</button>
-        <p className="small muted">نستخدم بياناتك لمراجعة طلبك وإسناد الخدمات إليك فقط، ولا تُشارك مع أي جهة.</p>
+        <p className="small muted">{reviewer ? 'نستخدم بياناتك لعضويتك في اللجنة ونسبة تعليقك إليك فقط، ولا تُشارك مع أي جهة.' : 'نستخدم بياناتك لمراجعة طلبك وإسناد الخدمات إليك فقط، ولا تُشارك مع أي جهة.'}</p>
       </form>
     </div>
   );

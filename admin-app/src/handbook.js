@@ -9,7 +9,7 @@ import { RUBRIC_SCALE, rubricLevelAr, SUBMISSION_STATUS_ADMIN, TRACK_COUNT } fro
 export { filterHandbookMd, lintHandbookMd, lintQuiz, parseQuiz };
 export const RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 export const FTYPE = { text: 'نص قصير', textarea: 'نص طويل', select: 'اختيار', table: 'جدول' };
-export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', `الكتاب الأصلي والكتب الـ${TRACK_COUNT}`], ['reviews', 'التقييم']];
+export const HB_VIEWS = [['chapters', 'الأبواب'], ['models', 'النماذج التعليمية'], ['preview', `الكتاب الأم والكتب الـ${TRACK_COUNT}`], ['reviews', 'التقييم']];
 export const SUB_FILTER = [...['submitted', 'reviewed', 'returned'].map((k) => [k, SUBMISSION_STATUS_ADMIN[k]]), ['', 'الكل']];
 export const QUIZ_TEMPLATE = 'س: نص السؤال\n- خيار\n* الخيار الصحيح\n- خيار\nلماذا: شرح قصير';
 
@@ -41,7 +41,7 @@ export const SCOPE_VIEW = [['project', 'مشروع'], ['program', 'برنامج'
 export const nextSort = (rows, dim) => Math.max(0, ...rows.filter((x) => x.dimension === dim).map((x) => x.sort || 0)) + 1;
 export const splitList = (v) => String(v).split(/[,،]/).map((x) => x.trim()).filter(Boolean);
 
-// ── الكتاب الأصلي الكامل: مصدر الكتب الـ27 ──
+// ── الكتاب الأم كاملًا: مصدر الكتب الـ27 (المحتوى نفسه الذي يُراجع في «الكتاب الأم») ──
 // كل الأبواب والنماذج بكل كتلها، وكل كتلة موسومة بمن يقرؤها، فيرى المحرر
 // الأصل كاملًا وما يصل كل مسار منه. يُبنى من بيانات اللوحة بلا طلب للخادم.
 export const MASTER = 'MASTER';

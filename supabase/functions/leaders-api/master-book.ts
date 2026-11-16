@@ -7,19 +7,20 @@
 import { all, audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
 import { canDelete, canResolve, cleanComment, commentTarget, draftChapters, openCounts, orderChapters, rowChapterId, threads, versionFromMigration, authorRole, bookAccess, shareRoster, toggleCommittee } from './master-book.js';
 import { DRAFTS } from './master-book-drafts.js';
+import { hasCommittee, hasJourneyRole } from './committees.js';
 import { sectionById, sectionIdOf } from './section-refs.js';
 import { proposalsFor } from './book-proposals.ts';
 
-type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; superAdmin?: boolean };
+type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; paused?: boolean; superAdmin?: boolean; email?: string };
 
+// العضو الموقوف مؤقتًا (paused) يقرأ ولا يكتب: bookAccess تفتح له القراءة، والكتابة للفاعل وحده
 export const expertViewer = (e: any): Viewer => {
   if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
-  // الموقوف مؤقتًا يقرأ ولا يعلّق: التعليق لعضو فاعل في اللجنة
-  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active' };
+  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active', paused: e.status === 'paused', email: String(e.email || '') };
 };
 // يكتب المدير بصلاحية الكتابة وعامل ثانٍ (كما في writer)، ويقرأ الباقون
 export const adminViewer = (a: { email: string; role: string; method?: string }): Viewer => ({
-  kind: 'admin', ref: a.email, name: a.email.split('@')[0], role: authorRole('admin', { role: a.role }),
+  kind: 'admin', ref: a.email, name: a.email.split('@')[0], role: authorRole('admin', { role: a.role }), email: a.email,
   write: (a.role === 'admin' || a.role === 'super_admin') && a.method !== 'email',
   superAdmin: a.role === 'super_admin' && a.method !== 'email',
 });
@@ -48,6 +49,13 @@ async function version() {
   return versionFromMigration(data?.[0]?.name) || null;
 }
 
+// العلامة المائية: الاسم والبريد، ويسقط الاسم إن كان هو البريد أو جزءه قبل @ (اسم المدير يُشتق منه)، فلا يتكرر
+export const watermark = (v: Viewer) => {
+  const email = v.email || '';
+  const name = v.name && v.name !== email && v.name !== email.split('@')[0] ? v.name : '';
+  return [name, email].filter(Boolean).join(' · ');
+};
+
 export async function book(v: Viewer) {
   const [mods, rows, ver] = await Promise.all([modules(), commentRows(), version()]);
   const ds = drafts();
@@ -55,8 +63,9 @@ export async function book(v: Viewer) {
   const list = threads(rows || [], prints);
   const mine = (c: any) => ({ ...c, mine: canDelete(v, c), replies: (c.replies || []).map((r: any) => ({ ...r, mine: canDelete(v, r) })) });
   // للإدارة وحدها: من يقرأ الكتاب الآن ومن يمكن إضافته، ورابط بوابة الخبراء
+  // journey-guard: قائمة قراء الكتاب لا الرحلة؛ الأدوار تُقرأ ليُستبعد خبير الرحلة من المرشحين (shareRoster)
   const share = v.kind === 'admin'
-    ? { portal_url: `${CONFIG.appUrl}/x`, ...shareRoster(((await db.from('experts').select('id, full_name, email, title, status, committees').neq('status', 'rejected').limit(500)).data || []) as any[]) }
+    ? { portal_url: `${CONFIG.appUrl}/x`, ...shareRoster(((await db.from('experts').select('id, full_name, email, title, status, roles, committees').neq('status', 'rejected').limit(500)).data || []) as any[]) }
     : null;
   // للإدارة وحدها (المرحلة 3 من «الكتاب الأم»): ما يعتمد على كل باب من القاعدة، فيُعرف حجم أي تعديل قبله.
   // تعذّر القراءة لا يُسقط الكتاب: تُعرض اللوحة بلا هذه الأجزاء
@@ -65,7 +74,7 @@ export async function book(v: Viewer) {
   const props = await proposalsFor(v, mods).catch(() => ({ ready: false, list: [], counts: null }));
   return {
     success: true, version: ver, generated_at: new Date().toISOString(), share, deps,
-    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin },
+    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, paused: !!v.paused, watermark: watermark(v), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin },
     proposals_ready: props.ready, proposals: props.list, proposal_counts: props.counts,
     comments_ready: rows !== null,
     chapters: [...mods.map((m) => ({
@@ -107,6 +116,7 @@ export async function deleteComment(v: Viewer, b: any) {
   const { data: c } = await db.from('book_comments').select('id, author_kind, author_ref, deleted_at').eq('id', id).maybeSingle();
   if (!c || c.deleted_at) throw new Fail('التعليق غير موجود', 404, 'not_found');
   if (!canDelete(v, c)) throw new Fail('يحذف التعليق كاتبه وحده', 403, 'forbidden');
+  if (v.kind === 'expert' && !v.write) throw new Fail('حسابك للقراءة فقط', 403, 'read_only');
   must(await db.from('book_comments').update({ deleted_at: new Date().toISOString() }).eq('id', id));
   await audit(v.kind === 'admin' ? 'admin' : 'system', v.kind === 'admin' ? v.ref : `expert:${v.ref}`, 'book.comment-delete', 'book_comments', id);
   return { success: true };
@@ -126,12 +136,14 @@ export async function setStatus(v: Viewer, b: any) {
 }
 
 // إضافة خبير إلى لجنة أو إزالته منها من نافذة المشاركة: العضوية نفسها التي يضبطها ملف الخبير (experts.committees)
+// journey-guard: عضوية الكتاب لا خدمة الرحلة؛ خبير الرحلة لا يُضاف من هنا (المنح الاستثنائي في المرحلة 4)، وإزالته متاحة
 export async function setReader(a: { email: string }, b: any) {
   const id = String(b?.expert_id || '');
-  const { data: e } = await db.from('experts').select('id, full_name, status, committees').eq('id', id).maybeSingle();
+  const { data: e } = await db.from('experts').select('id, full_name, status, roles, committees').eq('id', id).maybeSingle();
   if (!e) throw new Fail('الخبير غير موجود', 404, 'not_found');
   const next = toggleCommittee(e.committees || [], String(b?.committee || ''), b?.on !== false);
   if (!next) throw new Fail('اللجنة غير معروفة', 400, 'invalid');
+  if (b?.on !== false && hasJourneyRole(e) && !hasCommittee(e)) throw new Fail('خبير الرحلة لا يُضاف إلى الكتاب من هنا. عضوية اللجنة تُضبط من ملفه في قسم الخبراء', 400, 'journey_expert');
   if (b?.on !== false && e.status !== 'active') throw new Fail('فعّل ملف الخبير أولًا من قسم الخبراء، ثم أضفه إلى اللجنة', 400, 'inactive');
   const { error } = await db.from('experts').update({ committees: next }).eq('id', e.id);
   if (error) throw new Fail('تعذّر حفظ العضوية، حاول بعد قليل', 503, 'db_error');

@@ -11,6 +11,7 @@ import { parseQuiz } from '../../supabase/functions/leaders-api/logic.js';
 import { bookSections, chapterVisible, markTiers, tierAr, tierVisible, BODY_MAX, QUOTE_MAX } from '../../supabase/functions/leaders-api/master-book.js';
 import { chapterDeps } from './deps.js';
 import { ProposalEditor, ProposalsSheet, useDialogFocus } from './Proposals.jsx';
+import ReleaseSheet from './Release.jsx';
 import { REFLECTION } from '../../supabase/functions/leaders-api/book-proposals.js';
 import './master-book.css';
 
@@ -89,7 +90,7 @@ function Comment({ c, viewer, onReply, onDelete, onStatus, reply = false }) {
         <footer>
           {!reply && viewer.write && <button type="button" className="mb-link" onClick={() => onReply(c)}>رد</button>}
           {!reply && viewer.resolve && <button type="button" className="mb-link" onClick={() => onStatus(c, c.status === 'resolved' ? 'open' : 'resolved')}>{c.status === 'resolved' ? 'أعد الفتح' : 'حسم'}</button>}
-          {c.mine && <button type="button" className="mb-link danger" onClick={() => onDelete(c)}>حذف</button>}
+          {c.mine && (viewer.write || viewer.kind === 'admin') && <button type="button" className="mb-link danger" onClick={() => onDelete(c)}>حذف</button>}
           {c.status === 'resolved' && c.resolved_at && !reply && <small className="mb-muted">حُسم {ago(c.resolved_at)}</small>}
         </footer>
       )}
@@ -139,7 +140,7 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
             {err && <p className="mb-err" role="alert">{err}</p>}
             <div className="mb-row"><small className="mb-muted">يظهر تعليقك باسمك وصفتك للإدارة ولأعضاء اللجنتين</small><button type="button" className="mb-btn gold" disabled={busy || text.trim().length < 2} onClick={send}>{busy ? 'يُحفظ…' : replyTo ? 'أرسل الرد' : 'أضف التعليق'}</button></div>
           </footer>
-        ) : <footer className="mb-compose"><p className="mb-muted">{viewer.kind === 'expert' ? 'عضويتك في اللجنة موقوفة مؤقتًا: تقرأ الكتاب ولا تعلّق حتى تُفعَّل.' : 'حسابك للقراءة. التعليق يحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.'}</p></footer>}
+        ) : <footer className="mb-compose"><p className="mb-muted">{viewer.paused ? 'عضويتك في اللجنة موقوفة مؤقتًا: تقرأ الكتاب ولا تعلّق حتى تُفعَّل.' : viewer.kind === 'expert' ? 'حسابك للقراءة فقط، فتقرأ الكتاب والتعليقات ولا تكتب.' : 'حسابك للقراءة. التعليق يحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.'}</p></footer>}
       </aside>
     </div>
   );
@@ -190,9 +191,9 @@ function ShareSheet({ share, viewer, api, onChanged, onExperts, onClose }) {
                 <button key={c} type="button" className="mb-tag on" disabled={!viewer.write || !!busy} onClick={() => toggle(x, c, false)} title={`أزل من ${l}`}>{l} ×</button>))}</span></li>
           ))}</ul>
           {share.blocked.length > 0 && <p className="mb-note">{share.blocked.map((x) => x.name).join('، ')}: {share.blocked.length === 1 ? 'عضو' : 'أعضاء'} في لجنة وملفه غير فعّال، فلا يرى الكتاب حتى يُفعَّل من قسم الخبراء.</p>}
-          <h3 className="mb-h">أضف خبيرًا <small>{share.candidates.length} خبيرًا فاعلًا</small></h3>
+          <h3 className="mb-h">أضف عضوًا <small>{share.candidates.length} خبيرًا فاعلًا خارج الرحلة</small></h3>
           {share.candidates.length > 6 && <input className="mb-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث باسم الخبير" aria-label="بحث في الخبراء" />}
-          {!share.candidates.length && <p className="mb-empty">كل الخبراء الفاعلين يقرؤون الكتاب.</p>}
+          {!share.candidates.length && <p className="mb-empty">لا خبير فاعل خارج الرحلة ينتظر الإضافة. خبراء الرحلة لا يُعرضون هنا، وعضوية اللجنة لأحدهم تُضبط من ملفه في قسم الخبراء.</p>}
           <ul className="mb-people">{cands.slice(0, 60).map((x) => (
             <li key={x.id}><span className="mb-av expert" aria-hidden="true">{initials(x.name)}</span>
               <span className="mb-pp"><b>{x.name}</b><small>{x.title || ' '}</small></span>
@@ -426,7 +427,24 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, onProposals,
   );
 }
 
-/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string, seen?: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
+// العلامة المائية بنمط الكتيب الشخصي (leaders-app/src/screens/Handbook.jsx): اسم القارئ وبريده وتاريخ اليوم، مائلة
+// متكررة بشفافية خفيفة فوق الصفحة كلها، فأي تصوير يُعرف مصدره. لا تلتقط النقر ولا تُقرأ لقارئ الشاشة
+const xmlEsc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+function watermarkUrl(text, date = new Date()) {
+  if (!text) return '';
+  const stamp = xmlEsc(`${text} · ${date.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn')}`);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="150"><text x="190" y="80" text-anchor="middle" direction="rtl" font-family="Noto Kufi Arabic, Tahoma, sans-serif" font-size="15" font-weight="600" fill="#5a6468" fill-opacity="0.09" transform="rotate(-25.7 190 75)">${stamp}</text></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+// التاريخ يتجدد إن بقي القارئ مفتوحًا بعد منتصف الليل: فحص كل دقيقة، ولا يُعاد الرسم إلا إن تغيّر اليوم
+const today = () => new Date().toDateString();
+function Watermark({ text }) {
+  const [day, setDay] = useState(today);
+  useEffect(() => { const t = setInterval(() => setDay(today()), 60000); return () => clearInterval(t); }, []);
+  const url = useMemo(() => watermarkUrl(text, new Date(day)), [text, day]);
+  return url ? <div className="mb-wm" aria-hidden="true" style={{ backgroundImage: url }} /> : null;
+}
+/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string, seen?: string) => Promise<any>, release?: () => Promise<any>, releaseStart?: () => Promise<any>, releasePr?: () => Promise<any>, releasePublish?: (n: number, sha: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
 export default function MasterBook({ api, onClose, onExperts, place = 'admin' }) {
   const saved = store.get(KEY) || {};
   const [data, setData] = useState(null);
@@ -439,6 +457,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const [depsOf, setDepsOf] = useState(null);
   const [propsOf, setPropsOf] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [releasing, setReleasing] = useState(false);
   const [thread, setThread] = useState(null);
   const [opening, setOpening] = useState(false);
   const [flip, setFlip] = useState(null);
@@ -531,6 +550,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const showProposals = data.proposals_ready && (data.viewer.propose || (data.proposals || []).length > 0);
   return (
     <div className={`mb-root place-${place}`} ref={root}>
+      <Watermark text={data.viewer.watermark} />
       <style>{COVER_CSS}</style>
       {view === 'shelf' ? (
         <div className="mb-shelf">
@@ -554,6 +574,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
                 <button type="button" className="mb-btn gold" onClick={open}>{saved.idx ? 'تابع القراءة' : 'افتح الكتاب'}</button>
                 <button type="button" className="mb-btn line" onClick={() => setAll(true)}>التعليقات{total ? ` (${total})` : ''}</button>
                 {showProposals && <button type="button" className="mb-btn line" onClick={() => setPropsOf({})}>المقترحات{review ? ` (${review})` : ''}</button>}
+                {data.viewer.decide && api.release && data.proposals_ready && <button type="button" className="mb-btn line" onClick={() => setReleasing(true)}>إصدار الكتاب{data.proposal_counts?.approved ? ` (${data.proposal_counts.approved} معتمد)` : ''}</button>}
                 <button type="button" className="mb-btn line" onClick={exportPdf}>نسخة PDF</button>
                 {data.share && api.reader && <button type="button" className="mb-btn line" onClick={() => setSharing(true)}>شارك مع الخبراء{data.share.readers.length ? ` (${data.share.readers.length})` : ''}</button>}
               </div>
@@ -612,6 +633,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
         onEdit={(p, sc) => { const c = data.chapters.find((x) => x.id === (p ? p.module_id : sc.chapter.id)); setEditing({ chapter: c, section: p ? p.section : sc.section, proposal: p }); }} />}
       {editing && <ProposalEditor chapter={editing.chapter} section={editing.section} proposal={editing.proposal} data={data} api={api}
         onSaved={() => { setEditing(null); load(); }} onClose={() => setEditing(null)} />}
+      {releasing && <ReleaseSheet api={api} onClose={() => { setReleasing(false); load(); }} />}
       {thread && ch && <Thread target={thread} chapter={ch} list={threadList} viewer={data.viewer} api={api} onChanged={load} onClose={() => setThread(null)} />}
     </div>
   );
