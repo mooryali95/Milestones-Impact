@@ -48,6 +48,7 @@ export const STAGES = [
       { id: 'm2.sessions', title: 'لكل دفعة جارية مواعيد أيام تدريبية أو صيغة الكتيب', kind: 'auto' },
       { id: 'm2.final-eval', title: 'إعداد التقييم الختامي محفوظ للبرنامج الافتراضي', kind: 'auto' },
       { id: 'm2.release-pinned', title: 'إصدار محتوى مثبّت على كل دفعة جارية', kind: 'auto' },
+      { id: 'm2.version-pinned', title: 'كل دفعة مفتوحة أو جارية مثبتة على نسخة من برنامجها', kind: 'auto' },
       { id: 'm2.golden-paths', title: 'المسارات الذهبية خضراء على main', kind: 'auto' },
       { id: 'm2.thresholds-signed', title: 'توقيع الحدود المؤقتة للدفعة الأولى', kind: 'attest' },
       { id: 'm2.dpa', title: 'اتفاقيات معالجة البيانات مقبولة لدى المعالجين الأربعة', kind: 'attest' },
@@ -234,17 +235,17 @@ export async function collect() {
   f['m2.golden-paths'] = await safe(() => lastRun('integration.yml', 24 * 7, ['push', 'schedule', 'workflow_dispatch']));
   const q = async (id, query, fn) => { f[id] = await safe(async () => fn(await sql(query))); };
   // بنود م2 الآلية بأحكام readiness.js على الصفوف نفسها التي تقرؤها حالة النظام (لا عبور بالفراغ: بلا جهة فعّالة أو
-  // دفعة جهة مفتوحة أو جارية تبقى النقطة مفتوحة). تعذّر أي قراءة يجعل النقاط الخمس «تعذّر الفحص»
+  // دفعة جهة مفتوحة أو جارية تبقى النقطة مفتوحة). تعذّر أي قراءة يجعل النقاط الست «تعذّر الفحص»
   const m2 = await safe(async () => {
     const [organizations, cohorts, sessions, prog] = await Promise.all([
       sql(`select id, name, status from leaders.organizations where status = 'active'`),
-      sql(`select id, name, organization_id, status, advisor_expert_id, content_release, delivery from leaders.cohorts`),
+      sql(`select id, name, organization_id, status, is_default, advisor_expert_id, content_release, program_version_id, delivery from leaders.cohorts`),
       sql(`select cohort_id, active, starts_at, ends_at from leaders.workshop_sessions where active`),
       sql(`select final_eval from leaders.programs where is_default`),
     ]);
     return { items: launchReadiness({ organizations, cohorts, sessions, finalEval: prog[0]?.final_eval ?? null }) };
   });
-  for (const id of ['m2.cohort-per-org', 'm2.advisor', 'm2.sessions', 'm2.final-eval', 'm2.release-pinned']) {
+  for (const id of ['m2.cohort-per-org', 'm2.advisor', 'm2.sessions', 'm2.final-eval', 'm2.release-pinned', 'm2.version-pinned']) {
     const item = m2.items?.find((x) => x.check === id);
     f[id] = item ? { ok: item.ok, reason: item.label } : { status: 'unknown', reason: m2.reason || 'تعذّر الفحص' };
   }

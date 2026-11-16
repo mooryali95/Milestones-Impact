@@ -2,10 +2,11 @@
 // البرامج (القوالب) ونسخها، والدفعات
 // ════════════════════════════════════════════════════════════════
 // البرنامج: المراحل والمتطلبات وإعداد كل نشاط، يُبنى مرة ويُحفظ بنسخ.
-// الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
+// الدفعة: جهة + برنامج + نسخة مثبتة + تواريخ + طريقة التنفيذ. كل دفعة تُثبَّت على نسخة عند إنشائها (ترحيل
+// 20261116110000 ثبّت القائم)، فتعديل البرنامج يمس مسودته وحدها حتى تُحفظ نسخة وتُرقّى إليها كل دفعة بنفسها.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan, stageRulesIssues } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, upgradePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -33,6 +34,21 @@ async function liveRows(programId: string) {
     db.from('stage_requirements').select('*').eq('program_id', programId).order('sort'),
   ]);
   return { stages: must(st) ?? [], requirements: must(rq) ?? [] };
+}
+
+// أحدث نسخة للبرنامج بلا لقطتها. نسخ البرنامج قليلة فتُقرأ كلها ويُختار أكبرها رقمًا، فلا يتعلق الحكم بترتيب القراءة
+async function latestVersion(programId: string): Promise<{ id: string; number: number; label: string; created_at?: string } | null> {
+  const rows = (must(await db.from('program_versions').select('id, number, label, created_at').eq('program_id', programId)) || []) as any[];
+  return rows.reduce((m: any, v: any) => (!m || Number(v.number) > Number(m.number) ? v : m), null);
+}
+
+// ما يمنع حفظ نسخة من البرنامج كما هو: برنامج بلا متطلب فعّال (نسخة فارغة تصير «أحدث نسخة» فتُثبَّت عليها دفعات بلا
+// رحلة)، و«تبدأ مع» يُعاد فحصه، فمرجع صار بعدها بالترتيب أو مخفيًا أو محذوفًا يقفلها إلى الأبد. يقرؤه حفظ النسخة وإنشاء
+// البرنامج وإنشاء نسخة الدفعة الأولى، فلا تُكتب نسخة فارغة ولا بقاعدة كاسرة من أي مدخل
+function versionBlock(live: { stages: any[]; requirements: any[] }): { code: string; msg: string } | null {
+  if (!live.requirements.some((r: any) => r.active !== false)) return { code: 'program_empty', msg: 'البرنامج بلا متطلبات بعد، فلا تُحفظ له نسخة. ابنِ رحلته أولًا.' };
+  const bad = stageRulesIssues(live.stages).find((x: any) => x.level === 'error' && x.rule === 'with');
+  return bad ? { code: 'rules', msg: `لا تُحفظ النسخة: ${bad.msg}` } : null;
 }
 
 // ── للمشارك ──
@@ -65,6 +81,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   if (cohort?.program_version_id) {
     version = (await db.from('program_versions').select('id, number, label, data').eq('id', cohort.program_version_id).maybeSingle()).data;
   }
+  // بعد ترحيل التثبيت لا تبقى دفعة بلا نسخة، فالقراءة الحية هنا ملاذ لما لم يُثبَّت بعد (أو بلا دفعة أصلًا)
+  if (cohort && !cohort.program_version_id) console.warn('cohort without program version:', cohort.id);
   const live = version ? null : await liveRows(programId);
   const def = cohortDefinition({ live, version, cohort });
   // بنود أخفتها الدفعة: تختفي من رحلة أعضائها فورًا، ولا يُحذف ما أُنجز منها
@@ -75,8 +93,13 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
     const ids = def.requirements.filter((r: any) => r.kind === 'coaching').map((r: any) => r.id);
     if (ids.length) {
       const { data } = await db.from('stage_requirements').select('id, config').in('id', ids);
-      const until = new Map((data || []).map((r: any) => [r.id, r.config?.instant_until || null]));
-      def.requirements = def.requirements.map((r: any) => until.get(r.id) ? { ...r, config: { ...r.config, instant_until: until.get(r.id) } } : r);
+      // ومعها رابط الغرفة إن لم يكن في النسخة: توفر يُعلن على الصف الحي (activities.ts) لا يُرى بلا رابطه. رابط الدفعة أو النسخة أولى
+      const live = new Map((data || []).map((r: any) => [r.id, r.config || {}]));
+      def.requirements = def.requirements.map((r: any) => {
+        const c: any = live.get(r.id);
+        if (!c?.instant_until) return r;
+        return { ...r, config: { ...r.config, instant_until: c.instant_until, ...(!r.config?.instant_url && c.instant_url ? { instant_url: c.instant_url } : {}) } };
+      });
     }
   }
   // نصوص المراحل تُملأ رموزها من إعدادات المتطلبات، فلا يُكتب رقم في وصف
@@ -163,6 +186,28 @@ export async function orgCohortSetups(orgIds: string[]) {
 }
 
 // ── للإدارة ──
+// هل في مسودة كل برنامج ما لم يُحفظ في أحدث نسخه؟ بالفرق نفسه الذي يعرضه admin.program (unsaved)، من ثلاث قراءات
+// للبرامج كلها لا قراءة لكل برنامج. تعذّر القراءة يترك الحكم فارغًا فلا تُعرض شارة خاطئة
+async function draftChanges(programIds: string[], versions: any[]): Promise<Record<string, boolean>> {
+  const latest = new Map<string, any>();
+  for (const v of versions) if (programIds.includes(v.program_id) && (!latest.has(v.program_id) || v.number > latest.get(v.program_id).number)) latest.set(v.program_id, v);
+  if (!latest.size) return {};
+  try {
+    const ids = [...latest.keys()];
+    const [st, rq, data] = await Promise.all([
+      allFor(ids, () => db.from('journey_stages').select('*').order('program_id').order('key'), 'program_id'),
+      allFor(ids, () => db.from('stage_requirements').select('*').order('id'), 'program_id'),
+      allFor([...latest.values()].map((v) => v.id), () => db.from('program_versions').select('id, program_id, data').order('id'), 'id'),
+    ]);
+    const out: Record<string, boolean> = {};
+    for (const v of data) {
+      const d = programDiff(v.data, programSnapshot(st.filter((x: any) => x.program_id === v.program_id), rq.filter((x: any) => x.program_id === v.program_id)));
+      out[v.program_id] = !!(d.added.length || d.removed.length || d.changed.length || d.stages.added.length || d.stages.removed.length || d.stages.changed.length);
+    }
+    return out;
+  } catch (e) { console.error('draftChanges:', (e as Error).message); return {}; }
+}
+
 export async function list() {
   const [programs, versions, cohorts, enr, orgs, reqs] = await Promise.all([
     db.from('programs').select('*').order('created_at'),
@@ -197,13 +242,21 @@ export async function list() {
   // جاهزية «المستشار الأساسي» في ملف الدفعة (cohort-hub.js): يُحتسب من يخدم في الرحلة وحده
   const advisorServing = new Set((advs.data || []).filter(journeyApproved).map((x: any) => x.id));
   const seated = await seatsUsedByOrg().catch(() => null);
+  const drafts = await draftChanges((programs.data || []).filter((p: any) => !p.archived_at).map((p: any) => p.id), versions.data || []);
   return {
     success: true,
-    programs: (programs.data || []).map((pr: any) => ({
-      ...pr,
-      requirements: count(reqs.data || [], (r) => r.program_id === pr.id && r.active !== false),
-      versions: (versions.data || []).filter((v: any) => v.program_id === pr.id),
-    })),
+    programs: (programs.data || []).map((pr: any) => {
+      const vs = (versions.data || []).filter((v: any) => v.program_id === pr.id);
+      // كم دفعة على كل نسخة، والجارية منها: «قيد الاستعمال» في قائمة النسخ
+      const on = (vid: string, live = false) => (cohorts.data || []).filter((c: any) => c.program_version_id === vid && (!live || c.status === 'open' || c.status === 'running')).length;
+      return {
+        ...pr,
+        requirements: count(reqs.data || [], (r) => r.program_id === pr.id && r.active !== false),
+        versions: vs.map((v: any) => ({ ...v, cohorts: on(v.id), live_cohorts: on(v.id, true) })),
+        draft_changed: pr.id in drafts ? drafts[pr.id] : null,
+        unpinned_cohorts: (cohorts.data || []).filter((c: any) => c.program_id === pr.id && !c.program_version_id).length,
+      };
+    }),
     cohorts: (cohorts.data || []).map((c: any) => ({
       ...c, enrolled: enrolled[c.id] || 0, members: members[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: true,
       // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
@@ -274,8 +327,15 @@ export async function programSave(a: Admin, b: Body) {
       return { ...rest, program_id: pr.id };
     })));
   }
+  // كل برنامج يولد بنسخته الأولى، فأول دفعة عليه تُثبَّت على شيء محفوظ. برنامج بلا متطلبات أو بقاعدة «تبدأ مع»
+  // كاسرة لا تُحفظ له نسخة الآن، وتُنشأ عند أول دفعة بعد إصلاحه (cohortSave)
+  let version: any = null;
+  if (!versionBlock(source)) {
+    version = await snapshotVersion(a, pr.id, 'النسخة 1');
+    await audit('admin', a.email, 'program.version', 'program_versions', version.id, null, { number: version.number, label: version.label, auto: 'program.create' });
+  }
   await audit('admin', a.email, 'program.create', 'programs', pr.id, null, { from: b.from || null, from_version: b.from_version || null });
-  return { success: true, program: pr };
+  return { success: true, program: pr, version };
 }
 
 export async function programArchive(a: Admin, b: Body) {
@@ -292,26 +352,37 @@ export async function programArchive(a: Admin, b: Body) {
   return { success: true };
 }
 
-async function snapshotVersion(a: Admin, programId: string, label: string): Promise<any> {
+// لقطة من البرنامج كما هو برقم بعد أحدث نسخه. حفظان في اللحظة نفسها يأخذان الرقم نفسه فيرد القيد الفريد
+// (program_id, number) الثاني: يُعاد بالرقم التالي مرتين، ثم رسالة بالعربية لا «تعذّر تنفيذ العملية».
+// reuse: من يريد «أي نسخة من البرنامج» لا نسخة جديدة بعينها (النسخة 1 لأول دفعة) يأخذ النسخة التي سبقته بدل أن يكرر لقطتها
+async function snapshotVersion(a: Admin, programId: string, label: string, { reuse = false } = {}): Promise<any> {
   const live = await liveRows(programId);
-  const { data: last } = await db.from('program_versions').select('number').eq('program_id', programId).order('number', { ascending: false }).limit(1);
-  const number = (last?.[0]?.number || 0) + 1;
-  return must(await db.from('program_versions').insert({
-    program_id: programId, number, label: label.slice(0, 160) || `النسخة ${number}`,
-    data: programSnapshot(live.stages, live.requirements), created_by: a.email,
-  }).select('id, number, label, created_at').single());
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const last = await latestVersion(programId);
+    if (reuse && last) return { ...last, reused: true };
+    const number = (last?.number || 0) + 1;
+    const res = await db.from('program_versions').insert({
+      program_id: programId, number, label: label.slice(0, 160) || `النسخة ${number}`,
+      data: programSnapshot(live.stages, live.requirements), created_by: a.email,
+    }).select('id, number, label, created_at').single();
+    if ((res.error as any)?.code === '23505') continue;
+    return must(res);
+  }
+  throw new Fail('حُفظت نسخة أخرى لهذا البرنامج في اللحظة نفسها. أعد المحاولة.', 409, 'version_race');
 }
 
 // حفظ نسخة: لقطة ثابتة من البرنامج كما هو الآن
 export async function programPublish(a: Admin, b: Body) {
   const id = String(b.id || '');
   if (!isUuid(id)) throw new Fail('اختر البرنامج');
-  // «تبدأ مع» يُعاد فحصه عند النشر: مرجع صار بعدها بالترتيب أو مخفيًا أو محذوفًا يقفلها إلى الأبد، فلا تُنشر نسخة به
-  const bad = stageRulesIssues((await liveRows(id)).stages).find((x: any) => x.level === 'error' && x.rule === 'with');
-  if (bad) throw new Fail(`لا تُحفظ النسخة: ${bad.msg}`, 400, 'rules');
+  const block = versionBlock(await liveRows(id));
+  if (block) throw new Fail(block.msg, 400, block.code);
   const v = await snapshotVersion(a, id, String(b.label || '').trim());
   await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label });
-  return { success: true, version: v };
+  // حفظ النسخة لا يمس أي دفعة: كل دفعة باقية على نسختها حتى تُرقّى بنفسها، ويُقال كم دفعة بقيت على نسخة أقدم
+  const behind = ((must(await db.from('cohorts').select('id, status, program_version_id').eq('program_id', id)) || []) as any[])
+    .filter((c) => c.status !== 'closed' && c.program_version_id !== v.id).length;
+  return { success: true, version: v, behind };
 }
 
 // استرجاع نسخة إلى البرنامج. يُحفظ الوضع الحالي نسخةً أولًا فلا يضيع شيء،
@@ -326,8 +397,15 @@ export async function programRestore(a: Admin, b: Body) {
   if (plan.disableStages.length) must(await db.from('journey_stages').update({ active: false }).eq('program_id', v.program_id).in('key', plan.disableStages));
   if (plan.requirements.length) must(await db.from('stage_requirements').upsert(plan.requirements.map((r: any) => ({ ...r, program_id: v.program_id }))));
   if (plan.disableRequirements.length) must(await db.from('stage_requirements').update({ active: false }).in('id', plan.disableRequirements));
-  await audit('admin', a.email, 'program.restore', 'program_versions', v.id, null, { number: v.number, backup: backup.number });
-  return { success: true, restored: v.number, backup };
+  // المسترجع يُحفظ نسخةً أحدث من النسخة الاحتياطية: «أحدث نسخة» (الدفعة الجديدة، وتغيير البرنامج، وزر الترقية) تقرأ
+  // ما اختار المدير الرجوع إليه، لا ما تراجع عنه. نسخة مسترجعة لا تُحفظ (فارغة أو بقاعدة كاسرة) تُترك للمسودة ويُقال ذلك
+  const after = await liveRows(v.program_id);
+  const block = versionBlock(after);
+  const restoredAs = block ? null : await snapshotVersion(a, v.program_id, `استرجاع النسخة ${v.number}`);
+  if (restoredAs) await audit('admin', a.email, 'program.version', 'program_versions', restoredAs.id, null, { number: restoredAs.number, label: restoredAs.label, auto: 'program.restore' });
+  await audit('admin', a.email, 'program.restore', 'program_versions', v.id, null, { number: v.number, backup: backup.number, restored_as: restoredAs?.number ?? null });
+  // الدفعات مثبتة على نسخها: الاسترجاع لا يصل إلى دفعة قائمة حتى تُرقّى إلى النسخة المسترجعة
+  return { success: true, restored: v.number, backup, restored_as: restoredAs, ...(block ? { restored_note: block.msg } : {}) };
 }
 
 // الفرق بين نسخة والبرنامج الحالي
@@ -374,17 +452,14 @@ const defOf = async (vid: string | null | undefined, programId: string) => vid
   : await liveRows(programId);
 
 // admin.cohort-definition: مراحل الدفعة ومتطلباتها كما تسري عليها، والمخفي بعلامة hidden لا محذوفًا.
-// program_id وprogram_version_id اختياريان لما يختاره المحرر قبل الحفظ: برنامج آخر يعني آخر تعديل عليه ما لم تُسمَّ نسخة،
-// و'latest' أحدث نسخة محفوظة، كما في cohortSave
+// program_id وprogram_version_id اختياريان لما يختاره المحرر قبل الحفظ: 'latest' أحدث نسخة محفوظة (وبلا نسخة البرنامج
+// كما هو، وهو ما تُنشأ منه نسخته الأولى عند الحفظ، كما في cohortSave)، و'' معاينة البرنامج كما هو الآن (المسودة)
 export async function cohortDefinitionFor(b: Body) {
   const c = isUuid(b.cohort_id) ? must(await db.from('cohorts').select(COHORT_COLS).eq('id', b.cohort_id).maybeSingle()) : null;
   if (b.cohort_id && !c) throw new Fail('الدفعة غير موجودة', 404);
   const programId = isUuid(b.program_id) ? String(b.program_id) : c?.program_id || await defaultProgramId();
   let vid: string | null = 'program_version_id' in b ? (b.program_version_id || null) : (c && c.program_id === programId ? c.program_version_id || null : null);
-  if (vid === 'latest') {
-    const { data } = await db.from('program_versions').select('id').eq('program_id', programId).order('number', { ascending: false }).limit(1);
-    vid = data?.[0]?.id || null;
-  }
+  if (vid === 'latest') vid = (await latestVersion(programId))?.id || null;
   let version: any = null;
   if (vid) {
     if (!isUuid(vid)) throw new Fail('نسخة غير صالحة');
@@ -462,18 +537,42 @@ export async function cohortSave(a: Admin, b: Body) {
     row.program_id = pid;
   }
   const programId = row.program_id || prev?.program_id;
-  // النسخة: معرف نسخة، أو 'latest' لأحدث نسخة محفوظة، أو فارغ لاتباع آخر تعديل
-  if ('program_version_id' in b) {
-    if (b.program_version_id === 'latest') {
-      const { data } = await db.from('program_versions').select('id').eq('program_id', programId).order('number', { ascending: false }).limit(1);
-      if (!data?.[0]) throw new Fail('لا توجد نسخة محفوظة لهذا البرنامج بعد؛ احفظ نسخة أولًا');
-      row.program_version_id = data[0].id;
-    } else if (isUuid(b.program_version_id)) {
-      const { data } = await db.from('program_versions').select('id').eq('id', b.program_version_id).eq('program_id', programId).maybeSingle();
+  // النسخة: كل دفعة مثبتة على نسخة من برنامجها، ولا تُحفظ دفعة «تتبع آخر تعديل» (ترحيل 20261116110000).
+  // الدفعة الجديدة وتغيير البرنامج: النسخة المسماة من البرنامج، وإلا أحدث نسخه، وبرنامج بلا نسخة تُنشأ نسخته الأولى من
+  // حاله الآن بعد أن تمر الحراس (pinNew). الدفعة القائمة على برنامجها نفسه لا تتغير نسختها من هنا أبدًا: الانتقال إلى
+  // نسخة أخرى (أو تثبيت غير المثبتة على نسخة قائمة) بالترقية وحدها (cohortUpgrade)، بمعاينة من له تقدم فيما يختفي وما يُسقط
+  // من الجدول ووضع المراحل والتنفيذ. ما يرسله المحرر مع كل حفظ (نسختها نفسها، أو الفارغ لغير المثبتة) لا يغيّر شيئًا،
+  // إلا غير المثبتة على برنامج بلا نسخة: تُنشأ نسخته الأولى من حاله الآن، وهو ما يمر به أعضاؤها بالضبط فلا فرق يُراجع.
+  // وإن تعذّرت تلك النسخة (برنامج بلا متطلبات أو بقاعدة كاسرة) يُحفظ الباقي وتبقى غير مثبتة، فلا يقف تعديل لا صلة له
+  const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
+  const askedVersion = 'program_version_id' in b ? b.program_version_id : undefined;
+  const asked = isUuid(askedVersion) ? String(askedVersion) : askedVersion === 'latest' ? 'latest' : askedVersion == null || askedVersion === '' ? '' : 'bad';
+  let pinNew = false;
+  const pinTo = async (strict: boolean) => {
+    const latest = await latestVersion(programId);
+    if (latest) { row.program_version_id = latest.id; return; }
+    const block = versionBlock(await liveRows(programId));
+    if (block && strict) throw new Fail(block.code === 'program_empty' ? 'البرنامج بلا متطلبات بعد، فلا نسخة تُثبَّت عليها الدفعة. ابنِ رحلته أولًا.' : block.msg, 400, block.code);
+    // الحراس والتعريف يقرؤون البرنامج كما هو، وهو ما تُكتب منه النسخة 1 بعدها
+    if (!block) { row.program_version_id = null; pinNew = true; }
+  };
+  if (!prev || programChanged) {
+    if (isUuid(asked)) {
+      const { data } = await db.from('program_versions').select('id').eq('id', asked).eq('program_id', programId).maybeSingle();
       if (!data) throw new Fail('النسخة لا تخص هذا البرنامج');
       row.program_version_id = data.id;
-    } else row.program_version_id = null;
-  } else if (row.program_id && prev && row.program_id !== prev.program_id) row.program_version_id = null;
+    } else await pinTo(true);
+  } else if (askedVersion !== undefined) {
+    if (prev.program_version_id) {
+      const same = asked === prev.program_version_id || (asked === 'latest' && (await latestVersion(programId))?.id === prev.program_version_id);
+      if (asked === '' || asked === 'bad') throw new Fail('الدفعة مثبتة على نسخة من برنامجها ولا يُلغى تثبيتها. لتغيير ما يمر به أعضاؤها رقِّها إلى نسخة أحدث.', 400, 'version_required');
+      if (!same) throw new Fail('نسخة الدفعة تتغير بالترقية من ملفها، بعد معاينة ما يتغير على أعضائها.', 400, 'use_upgrade');
+    } else if (asked === '' || asked === 'latest') {
+      if (await latestVersion(programId)) {
+        if (asked === 'latest') throw new Fail('الدفعة غير مثبتة: ثبّتها من ملفها بعد معاينة الفرق بين ما تمر به الآن والنسخة.', 400, 'use_upgrade');
+      } else await pinTo(false);
+    } else throw new Fail('الدفعة غير مثبتة: ثبّتها من ملفها بعد معاينة الفرق بين ما تمر به الآن والنسخة.', 400, 'use_upgrade');
+  }
   if ('starts_on' in b) row.starts_on = day(b.starts_on);
   if ('ends_on' in b) row.ends_on = day(b.ends_on);
   const s = row.starts_on ?? prev?.starts_on, e = row.ends_on ?? prev?.ends_on;
@@ -534,35 +633,84 @@ export async function cohortSave(a: Admin, b: Body) {
     }
   }
   await guardLive(b, row, prev, programId);
+  let versionCreated: any = null;
+  if (pinNew) {
+    // حفظان متزامنان على برنامج بلا نسخة: الثاني يُثبَّت على النسخة التي أنشأها الأول، لا يرد بخطأ ولا يكرر لقطتها
+    const v = await snapshotVersion(a, programId, 'النسخة 1', { reuse: true });
+    if (!v.reused) {
+      versionCreated = v;
+      await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label, auto: 'cohort.pin' });
+    }
+    row.program_version_id = v.id;
+  }
   row.updated_at = new Date().toISOString();
+  // نسخة أُنشئت لهذا الحفظ ثم رُفض حفظ الدفعة نفسه: تُحذف فلا تبقى نسخة بلا سبب (لم تُثبَّت عليها دفعة بعد)
+  const writeCohort = async (q: any, msg?: string) => {
+    const res = await q;
+    if (res.error && versionCreated) {
+      await db.from('program_versions').delete().eq('id', versionCreated.id).then(() => {}, () => {});
+      versionCreated = null;
+    }
+    return must(res, msg);
+  };
   const saved: any = prev
-    ? must(await db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
-    : must(await db.from('cohorts').insert(row).select(COHORT_COLS).single(), 'تعذّر إنشاء الدفعة');
+    ? await writeCohort(db.from('cohorts').update(row).eq('id', prev.id).select(COHORT_COLS).single())
+    : await writeCohort(db.from('cohorts').insert(row).select(COHORT_COLS).single(), 'تعذّر إنشاء الدفعة');
   if (team) {
     // استبدال كامل: القائمة المرسلة هي الفريق
     must(await db.from('cohort_experts').delete().eq('cohort_id', saved.id), 'تعذّر حفظ فريق الخبراء');
     if (team.length) must(await db.from('cohort_experts').insert(team.map((expert_id) => ({ cohort_id: saved.id, expert_id, added_by: a.email }))), 'تعذّر حفظ فريق الخبراء');
   }
   await audit('admin', a.email, prev ? 'cohort.save' : 'cohort.create', 'cohorts', saved.id, null, team ? { ...row, team_expert_ids: team } : row);
-  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined }, ...(scheduleNote ? { schedule_dropped: scheduleNote } : {}) };
+  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined }, ...(scheduleNote ? { schedule_dropped: scheduleNote } : {}),
+    ...(versionCreated ? { version_created: { id: versionCreated.id, number: versionCreated.number, label: versionCreated.label } } : {}) };
 }
 
-// ترقية دفعة إلى أحدث نسخة من برنامجها، مع ما سيتغير على مشاركيها
+// ترقية دفعة إلى نسخة من برنامجها (أحدثها ما لم تُسمَّ version_id)، مع ما سيتغير على مشاركيها. بلا confirm معاينة:
+// الفرق في المتطلبات والمراحل، وكم عضوًا له تقدم فيما يختفي، وما يُسقط من إعداد الدفعة، وما يمنع الترقية.
+// بالتأكيد يمر الحارس نفسه الذي في cohortSave (الإخفاء الكاسر في النسخة الهدف)، ويُعاد ضبط التنفيذ والجدول ووضع
+// المراحل على الهدف. التقدم لا يُحذف: ما أنجزه العضو من متطلب اختفى يبقى محفوظًا ويعود إن عاد المتطلب
 export async function cohortUpgrade(a: Admin, b: Body) {
   const c = must(await db.from('cohorts').select('*').eq('id', String(b.id || '')).maybeSingle());
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
-  const { data: last } = await db.from('program_versions').select('id, number, label, data').eq('program_id', c.program_id).order('number', { ascending: false }).limit(1);
-  const to = last?.[0];
-  if (!to) throw new Fail('لا توجد نسخة محفوظة لهذا البرنامج');
+  let toId: string | null;
+  if (b.version_id != null && b.version_id !== '') {
+    if (!isUuid(b.version_id)) throw new Fail('نسخة غير صالحة');
+    toId = String(b.version_id);
+  } else toId = (await latestVersion(c.program_id))?.id || null;
+  if (!toId) throw new Fail('لا توجد نسخة محفوظة لهذا البرنامج');
+  const to = must(await db.from('program_versions').select('id, number, label, data').eq('id', toId).eq('program_id', c.program_id).maybeSingle());
+  if (!to) throw new Fail('النسخة لا تخص برنامج الدفعة');
   if (to.id === c.program_version_id) return { success: true, unchanged: true };
   let from;
   if (c.program_version_id) from = (await db.from('program_versions').select('data').eq('id', c.program_version_id).single()).data?.data;
   else { const live = await liveRows(c.program_id); from = programSnapshot(live.stages, live.requirements); }
-  const diff = programDiff(from, to.data);
-  if (b.confirm !== true) return { success: true, preview: true, to: { number: to.number, label: to.label }, diff };
-  must(await db.from('cohorts').update({ program_version_id: to.id, updated_at: new Date().toISOString() }).eq('id', c.id));
-  await audit('admin', a.email, 'cohort.upgrade', 'cohorts', c.id, null, { to: to.number });
-  return { success: true, to: { number: to.number, label: to.label }, diff };
+  const plan = upgradePlan({ cohort: c, from, to: to.data });
+  const affected = await progressOn(c, removedRequirementIds(from, to.data));
+  const out = { success: true, to: { id: to.id, number: to.number, label: to.label }, diff: plan.diff, dropped: plan.dropped, affected, blocked: plan.blocked || null };
+  if (b.confirm !== true) return { ...out, preview: true };
+  if (plan.blocked) throw new Fail(plan.blocked, 400, 'upgrade_blocked');
+  const fromN = c.program_version_id ? (await db.from('program_versions').select('number').eq('id', c.program_version_id).maybeSingle()).data?.number ?? null : null;
+  must(await db.from('cohorts').update({ program_version_id: to.id, ...plan.patch, updated_at: new Date().toISOString() }).eq('id', c.id));
+  await audit('admin', a.email, 'cohort.upgrade', 'cohorts', c.id, null, { from: fromN, to: to.number, affected, dropped: plan.dropped });
+  return out;
+}
+
+// كم عضوًا في الدفعة له تقدم في متطلبات تختفي من رحلته: صفوف التقدم في هذه المتطلبات وحدها، ثم العضوية بقاعدة
+// pickCohort نفسها التي تحدد دفعة كل مشارك، فلا يُعد من له تقدم فيها وهو في دفعة أخرى على البرنامج نفسه
+async function progressOn(c: any, requirementIds: string[]) {
+  if (!requirementIds.length) return 0;
+  const rows = await allFor(requirementIds, () => db.from('participant_requirements').select('participant_id, requirement_id').order('participant_id').order('requirement_id'), 'requirement_id');
+  const ids = [...new Set(rows.map((r: any) => r.participant_id))] as string[];
+  if (!ids.length) return 0;
+  const [cohorts, people, enrollments] = await Promise.all([
+    all((f, t) => db.from('cohorts').select(COHORT_COLS).order('id').range(f, t)),
+    allFor(ids, () => db.from('participants').select('id, organization_id').eq('is_demo', false).order('id'), 'id'),
+    allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
+  ]);
+  const byP = new Map<string, any[]>();
+  for (const e of enrollments) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
+  return people.filter((p: any) => pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id === c.id).length;
 }
 
 // تسجيل مشاركين في دفعة. تسجيلاتهم السابقة تُعلَّم منسحبة. التقدم يبقى داخل البرنامج نفسه (معرفات متطلباته ثابتة)،

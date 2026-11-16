@@ -3,7 +3,8 @@
 // ════════════════════════════════════════════════════════════════
 // لا يخزّن شيئًا ولا يكرر قاعدة: الالتحاق بقاعدة pickCohort نفسها التي تحدد دفعة كل مشارك، والبنود الخمسة
 // (الأعضاء والمستشار والمدة والجدول والجلسات) من cohortSetup نفسه الذي تقرؤه صفحة الجهة ولوحة المنسق.
-// يضيف ثلاثة بنود لا تُرى إلا من مكان واحد يجمع الدفعة: هل يدخلها المنضمون تلقائيًا، والبرنامج ونسخته، ومن ينتظر الاعتماد.
+// يضيف ثلاثة بنود لا تُرى إلا من مكان واحد يجمع الدفعة: هل يدخلها المنضمون تلقائيًا، والبرنامج ونسخته (والدفعة غير
+// المثبتة نقص)، ومن ينتظر الاعتماد.
 import { pickCohort } from '../../supabase/functions/leaders-api/logic.js';
 import { cohortSetup } from '../../supabase/functions/leaders-api/cohort-setup.js';
 import { inviteUrl } from './leaders.js';
@@ -61,7 +62,13 @@ export function cohortHub({ cohort: c, cohorts = [], orgs = [], programs = [] })
       ? { ok: false, detail: `البرنامج «${p.name}» مؤرشف. اختر برنامجًا فعّالًا.`, action: 'edit' }
       : !p.requirements
         ? { ok: false, detail: `البرنامج «${p.name}» بلا متطلبات بعد: لا رحلة يمر بها المشارك.`, action: 'journey' }
-        : { ok: true, detail: `«${p.name}» · ${p.requirements} متطلب · ${pinned ? `مثبتة على النسخة ${pinned.number}${newer ? `، وتوجد نسخة أحدث (${newer.number}) يمكن الترقية إليها` : ''}` : 'تتبع آخر تعديل على البرنامج'}`, action: newer ? 'upgrade' : null };
+        // الدفعة غير المثبتة (قبل ترحيل التثبيت) تتغير رحلة أعضائها مع كل تعديل على البرنامج: نقص يُصلح بالترقية
+        : !pinned
+          // الفعل واحد في النص والزر والنافذة: «ثبّت». وبلا نسخة للبرنامج يحفظها «تحرير الدفعة» من حاله الآن (لا فرق يُراجع)
+          ? p.versions?.[0]
+            ? { ok: false, detail: `«${p.name}» · الدفعة غير مثبتة على نسخة: كل تعديل على البرنامج يصل إلى أعضائها فورًا. ثبّتها على النسخة ${p.versions[0].number} بعد مراجعة الفرق.`, action: 'pin' }
+            : { ok: false, detail: `«${p.name}» · الدفعة غير مثبتة، ولا نسخة محفوظة للبرنامج: احفظ الدفعة من «تحرير الدفعة» فتُحفظ نسخته الأولى من حاله الآن وتُثبَّت عليها.`, action: 'edit' }
+          : { ok: true, detail: `«${p.name}» · ${p.requirements} متطلب · مثبتة على النسخة ${pinned.number}${newer ? `، وتوجد نسخة أحدث (${newer.number}) يمكن الترقية إليها` : ''}`, action: newer ? 'upgrade' : null };
 
   const base = cohortSetup({
     cohort: c, advisorName: c.advisor_name || null, advisorServes: c.advisor_serves !== false, teamCount: (c.team_expert_ids || []).length,
@@ -102,9 +109,12 @@ export const WIZARD_STEPS = ['لمن الدفعة', 'البرنامج', 'الم�
 
 // ما يمنع الانتقال من الخطوة، بجملة تُقرأ؛ وفارغ يعني «تابع»
 /** @param {number} step @param {any} v */
-export function wizardBlock(step, v) {
+// programs: برنامج بلا متطلب فعّال لا تُنشأ عليه دفعة (لا نسخة تُثبَّت عليها، cohortSave)، فيقف المعالج عنده لا عند الإنشاء
+export function wizardBlock(step, v, programs = []) {
   if (step === 0 && v.kind === 'org' && !v.organization_id) return 'اختر الجهة';
   if (step === 1 && !v.program_id) return 'اختر البرنامج';
+  const p = programs.find((x) => x.id === v.program_id);
+  if (step === 1 && p && !p.requirements) return `البرنامج «${p.name}» بلا متطلبات بعد، فلا تُنشأ عليه دفعة. ابنِ رحلته أولًا أو اختر برنامجًا آخر.`;
   // تحقق المعالج هو تحقق المحرر نفسه (cohortErrors)، فلا تختلف قاعدة الاسم والتاريخين بين الإنشاء والتحرير
   if (step === 2) { const e = cohortErrors(v); return e.name || e.ends_on || ''; }
   return '';
@@ -122,17 +132,17 @@ export function wizardNotes({ v, cohorts = [], orgs = [], programs = [] }) {
     if (live && live.organization_id === org.id) out.push(`لجهة «${org.name}» دفعة قائمة: «${live.name}». الملحقون يدويًا باقون، والبقية ينتقلون إلى الدفعة الأحدث.`);
   }
   const p = programs.find((x) => x.id === v.program_id);
-  if (p && !p.requirements) out.push(`البرنامج «${p.name}» بلا متطلبات بعد: لا رحلة يمر بها المشارك حتى تُبنى.`);
+  if (p && !p.requirements) out.push(`البرنامج «${p.name}» بلا متطلبات بعد: لا تُنشأ عليه دفعة حتى تُبنى رحلته.`);
   if (v.status === 'planned' && v.kind === 'org') out.push('الحالة «مخطط لها»: لن يدخلها أحد تلقائيًا حتى تجعلها «التسجيل مفتوح».');
   return out;
 }
 
-// جسم الحفظ: النسخة «أحدث نسخة محفوظة» تثبّت الدفعة عليها، وإلا تتبع آخر تعديل.
-// canPin: للبرنامج نسخة محفوظة. بلاها يرفض الخادم 'latest'، والمعالج يعرض «تتبع آخر تعديل» بلا خيار
-export function wizardBody(v, { canPin = true } = {}) {
+// جسم الحفظ: الدفعة الجديدة تُثبَّت دائمًا على أحدث نسخة من برنامجها ('latest')، والخادم ينشئ النسخة 1 من البرنامج
+// كما هو إن لم تُحفظ له نسخة بعد (cohortSave). لا دفعة جديدة «تتبع آخر تعديل»
+export function wizardBody(v) {
   return {
     name: String(v.name || '').trim(), organization_id: v.kind === 'org' ? v.organization_id : null, program_id: v.program_id,
-    program_version_id: v.pin && canPin ? 'latest' : '', status: v.status || 'open',
+    program_version_id: 'latest', status: v.status || 'open',
     ...(v.starts_on ? { starts_on: v.starts_on } : {}), ...(v.ends_on ? { ends_on: v.ends_on } : {}),
     // دفعة الجهة بلا سعة من المعالج: مقاعدها من عقد الجهة (P3)، والسعة التشغيلية اختيار لاحق في «تحرير الدفعة»
     ...(v.capacity && v.kind !== 'org' ? { capacity: Number(v.capacity) } : {}),

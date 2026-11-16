@@ -7,6 +7,8 @@
 import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
+import { cleanScheduleReport } from './milestones.js';
+import { cleanStageModes } from './groups.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -1721,7 +1723,9 @@ export function cohortDefinitionView({ live, version, cohort }) {
 }
 
 // لقطة البرنامج: المراحل والمتطلبات بمعرفاتها، بلا أعمدة التتبع.
-const SNAP_DROP = new Set(['program_id', 'created_at', 'updated_at']);
+// الأعمدة نفسها يحذفها ترحيل التثبيت 20261116110000 من لقطته (اختبار تطابق في vitest)
+export const SNAP_COLUMNS_DROPPED = ['program_id', 'created_at', 'updated_at'];
+const SNAP_DROP = new Set(SNAP_COLUMNS_DROPPED);
 const snapRow = (r) => Object.fromEntries(Object.entries(r).filter(([k]) => !SNAP_DROP.has(k)));
 export function programSnapshot(stages, requirements) {
   return {
@@ -1743,18 +1747,56 @@ export function restorePlan(snapshot, live) {
   };
 }
 
-// الفرق بين نسختين (أو نسخة والمسودة): ما أُضيف وما حُذف وما تغيّر من المتطلبات.
-export function programDiff(from, to) {
-  const key = (r) => r.id;
-  const a = new Map((from?.requirements || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
-  const b = new Map((to?.requirements || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
-  const fields = ['stage_key', 'title_ar', 'kind', 'required', 'dimension', 'level', 'config', 'help_ar'];
+// الفرق بين نسختين (أو نسخة والمسودة): ما أُضيف وما حُذف وما تغيّر من المتطلبات، والمراحل في stages بالشكل نفسه.
+// مفاتيح المتطلبات في أعلى الكائن كما كانت، فما يقرؤها قبل المراحل لا يتأثر
+const REQ_DIFF_FIELDS = ['stage_key', 'title_ar', 'kind', 'required', 'dimension', 'level', 'config', 'help_ar'];
+// المرحلة الموقوفة كالمحذوفة، فتغيّر «active» يظهر إضافةً أو حذفًا لا تغيّرًا
+const STAGE_DIFF_FIELDS = ['title_ar', 'sort', 'rules', 'phase'];
+function diffBy(fromRows, toRows, key, fields, label) {
+  const a = new Map((fromRows || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
+  const b = new Map((toRows || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
   const same = (x, y) => fields.every((f) => JSON.stringify(x[f] ?? null) === JSON.stringify(y[f] ?? null));
   return {
-    added: [...b.values()].filter((r) => !a.has(key(r))).map((r) => ({ code: r.code, title: r.title_ar })),
-    removed: [...a.values()].filter((r) => !b.has(key(r))).map((r) => ({ code: r.code, title: r.title_ar })),
-    changed: [...b.values()].filter((r) => a.has(key(r)) && !same(a.get(key(r)), r)).map((r) => ({ code: r.code, title: r.title_ar })),
+    added: [...b.values()].filter((r) => !a.has(key(r))).map(label),
+    removed: [...a.values()].filter((r) => !b.has(key(r))).map(label),
+    changed: [...b.values()].filter((r) => a.has(key(r)) && !same(a.get(key(r)), r)).map(label),
   };
+}
+export function programDiff(from, to) {
+  const reqs = diffBy(from?.requirements, to?.requirements, (r) => r.id, REQ_DIFF_FIELDS, (r) => ({ code: r.code, title: r.title_ar }));
+  const stages = diffBy(from?.stages, to?.stages, (s) => s.key, STAGE_DIFF_FIELDS, (s) => ({ key: s.key, title: s.title_ar }));
+  return { ...reqs, stages };
+}
+// معرفات المتطلبات التي تختفي من رحلة الدفعة بالانتقال من لقطة إلى أخرى (المحذوف والموقوف)، لعدّ من له تقدم فيها
+export function removedRequirementIds(from, to) {
+  const kept = new Set((to?.requirements || []).filter((r) => r.active !== false).map((r) => r.id));
+  return (from?.requirements || []).filter((r) => r.active !== false && !kept.has(r.id)).map((r) => r.id);
+}
+
+// خطة ترقية دفعة من نسخة إلى أخرى: ما يتغير على أعضائها، وما يُسقط من إعداد الدفعة لأنه لا مكان له في الهدف
+// (تخصيص تنفيذ لنشاط غير موجود، وموعد مرحلة ليست فيه، ووضع عمل لمرحلة ليست فيه)، وهل يكسر إخفاؤها مرحلة في الهدف.
+// blocked: نص الرفض إن ترك الإخفاء مرحلة في الهدف بلا بند يكملها (كما في cohortSave) أو لم يصلح تخصيص التنفيذ عليه
+/** @param {{ cohort: any, from: any, to: any }} input */
+export function upgradePlan({ cohort, from, to }) {
+  const c = cohort || {};
+  const toStages = to?.stages || [], toReqs = to?.requirements || [];
+  const keys = toStages.map((s) => s.key);
+  const titles = Object.fromEntries([...(from?.stages || []), ...toStages].map((s) => [s.key, s.title_ar]));
+  const reqTitle = new Map([...(from?.requirements || []), ...toReqs].map((r) => [r.code, r.title_ar]));
+  let delivery = c.delivery || {}, deliveryError = '';
+  try { delivery = cleanDelivery(c.delivery || {}, toReqs); } catch (e) { deliveryError = /** @type {Error} */ (e).message; }
+  let schedule = c.schedule || {}, droppedStages = [];
+  try { const rep = cleanScheduleReport(c.schedule || {}, keys, titles); schedule = rep.schedule; droppedStages = rep.dropped; } catch { /* جدول قائم غير صالح يبقى كما هو */ }
+  const modes = cleanStageModes(c.stage_modes || {}, keys);
+  const hidden = Array.isArray(c.hidden_requirements) ? c.hidden_requirements : [];
+  const worse = newlyBroken(hideBreaksStage(toStages, toReqs, hidden), hideBreaksStage(from?.stages || [], from?.requirements || [], hidden));
+  const dropped = {
+    delivery: Object.keys(c.delivery || {}).filter((k) => !(k in delivery)).map((k) => reqTitle.get(k) || k),
+    schedule: droppedStages.map((k) => titles[k] || k),
+    stage_modes: Object.keys(c.stage_modes || {}).filter((k) => !(k in modes)).map((k) => titles[k] || k),
+  };
+  const blocked = deliveryError ? `تخصيص التنفيذ في الدفعة لا يصلح على هذه النسخة: ${deliveryError}` : worse.length ? hideBreaksMessage(worse) : '';
+  return { diff: programDiff(from, to), dropped, blocked, patch: { delivery, schedule, stage_modes: modes } };
 }
 
 // ── القياس البعدي: هل تغيّر شيء فعلًا؟ ──

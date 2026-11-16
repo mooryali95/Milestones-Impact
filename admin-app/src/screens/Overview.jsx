@@ -103,9 +103,9 @@ function Readiness({ items, onTab }) {
           <li key={x.key} className={x.ok ? 'ok' : ''}>
             <span aria-hidden="true">{x.ok ? '✓' : '○'}</span>
             <span>{x.label}
-              {/* الناقص بأسمائه: كل اسم يفتح ملف الجهة أو الدفعة نفسها، لا التبويب العام */}
+              {/* الناقص بأسمائه: كل اسم يفتح ملف الجهة أو الدفعة نفسها، والبرنامج قائمة البرامج (لا ملف لكل برنامج) */}
               {!x.ok && x.refs?.length > 0 && <span className="la-ready-refs">{x.refs.map((r) => (
-                <a key={r.id} className="la-chip warn" href={r.kind === 'org' ? `#/leaders/orgs/${encodeURIComponent(r.id)}` : `#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a>
+                <a key={r.id} className="la-chip warn" href={r.kind === 'org' ? `#/leaders/orgs/${encodeURIComponent(r.id)}` : r.kind === 'program' ? '#/leaders/programs' : `#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a>
               ))}</span>}
             </span>
             {!x.ok && onTab && x.where && !x.refs?.length && <button className="la-link" onClick={() => onTab(x.where)}>اضبطه</button>}
