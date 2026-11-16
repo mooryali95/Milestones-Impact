@@ -1,4 +1,4 @@
-// تشريح المبادرة: المعنى، وخريطة الفصول بمراحلها، والمسرد، والإحالة إلى الكتيب، وخطة الانطلاق، وإخراج الوثيقة.
+// تشريح المبادرة: المعنى، وخريطة الفصول بمراحلها، والمسرد، والإحالة إلى الكتاب، وخطة الانطلاق، وإخراج الوثيقة.
 // التصور: docs/content/2026-11-15-تصور-فهم-المبادرة-وإخراج-وثيقتها-v1.md
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -23,7 +23,7 @@ describe('خريطة الوثيقة: كل فصل في مرحلة واحدة، و
     for (const p of PHASES) for (const k of p.chapters) expect(chapterInfo(k)?.why, k).toBeTruthy();
     expect(Object.keys(A.chapters).sort()).toEqual(PHASES.flatMap((p) => p.chapters).sort());
   });
-  it('كل إحالة إلى الكتيب بهوية قسم (section_id)، تُقرأ منها الباب والعنوان، والعنوان موجود في بابه', () => {
+  it('كل إحالة إلى الكتاب بهوية قسم (section_id)، تُقرأ منها الباب والعنوان، والعنوان موجود في بابه', () => {
     const raw = [A.meaning.handbook, ...Object.values(A.chapters).map((c) => c.handbook)];
     for (const h of raw) expect(Object.keys(h), JSON.stringify(h)).toEqual(['section_id']);
     const refs = [MEANING.handbook, ...Object.keys(A.chapters).map((k) => chapterInfo(k).handbook)];

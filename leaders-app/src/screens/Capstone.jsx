@@ -59,7 +59,7 @@ export async function openCapstoneDoc(doc, win = window.open('', '_blank')) {
   return writeDocument(win, meta, body);
 }
 
-// onHandbook: إحالة فصل إلى بابه في الكتيب؛ reopen: الفصل الذي يُفتح عند العودة من الكتيب
+// onHandbook: إحالة فصل إلى بابه في الكتاب؛ reopen: الفصل الذي يُفتح عند العودة من الكتاب
 export default function Capstone({ me, onEditProfile, onBack, onHandbook = null, reopen = null, onReopened = () => {} }) {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(null);
@@ -76,7 +76,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const [dismissed, setDismissed] = useState(readDismissed);
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
   useEffect(() => { load(); call('capstone.shares').then(setShares).catch(() => {}); }, []);
-  // العودة من الكتيب تفتح الفصل الذي خرج منه المشارك
+  // العودة من الكتاب تفتح الفصل الذي خرج منه المشارك
   useEffect(() => { if (reopen && d?.success) { setOpen(reopen); onReopened(); } }, [reopen, d]);
   // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
   const summaryDirty = !!d?.success && ['draft', 'returned'].includes(d.capstone.status) && summary !== (d.capstone.summary || '');

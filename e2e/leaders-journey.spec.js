@@ -1,5 +1,5 @@
 // رحلة المشارك كاملة في منصة القادة: التسجيل بالبريد والرمز، ثم الملف، ثم
-// القياس القبلي والنتيجة المبدئية، ثم الاعتماد والرحلة، ثم الكتيب والنماذج.
+// القياس القبلي والنتيجة المبدئية، ثم الاعتماد والرحلة، ثم الكتاب والنماذج.
 // الخلفية مُحاكاة بحالة واحدة تتقدم مع كل خطوة كما يفعل الخادم.
 import { test, expect } from '@playwright/test';
 
@@ -26,7 +26,7 @@ function server() {
       stage('profile', 'الملف الشخصي', 'admission', s.profileDone ? 'done' : 'active'),
       stage('assessment', 'تحديد المستوى', 'admission', s.assessed ? 'done' : s.profileDone ? 'active' : 'locked'),
       stage('training', 'التدريب', 'qualification', s.approved ? 'active' : 'locked', [
-        { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتيبك الشخصي', required: true, status: s.chapterDone ? 'done' : 'pending' },
+        { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتابك الشخصي', required: true, status: s.chapterDone ? 'done' : 'pending' },
       ]),
     ],
     progress: s.approved ? 30 : s.assessed ? 20 : 5, passkeys: 1, prompt_passkey: false,
@@ -133,10 +133,10 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await expect(page.getByRole('heading', { name: 'أنهيت الأسئلة كلها' })).toBeVisible();
   await page.getByRole('button', { name: 'أرسل واعرض نتيجتي' }).click();
 
-  // قبل الاعتماد: النتيجة مبدئية والكتيب مقفل
+  // قبل الاعتماد: النتيجة مبدئية والكتاب مقفل
   await expect(page.getByRole('heading', { name: /نتيجتك قيد المراجعة/ })).toBeVisible();
   await expect(page.getByText('نتيجتك المبدئية جاهزة، ويراجعها المستشار الآن')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'افتح كتيبي' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'افتح كتابي' })).toHaveCount(0);
 
   const sent = (a) => srv.calls.filter((c) => c.action === a);
   expect(sent('auth.start').at(-1)).toMatchObject({ email: 'sara@x.sa' });
@@ -151,7 +151,7 @@ test('رحلة المشارك: التسجيل والملف والقياس حتى
   await expect(page.getByRole('heading', { name: /نتيجتك قيد المراجعة/ })).toBeVisible();
 });
 
-test('رحلة المشارك: بعد الاعتماد يفتح الكتيب، ويتم الباب بالاختبار والتأمل، ثم النماذج', async ({ page }) => {
+test('رحلة المشارك: بعد الاعتماد يفتح الكتاب، ويتم الباب بالاختبار والتأمل، ثم النماذج', async ({ page }) => {
   const srv = await mount(page);
   Object.assign(srv.s, { profileDone: true, assessed: true, approved: true });
   await page.addInitScript(() => localStorage.setItem('mi_leaders_session', 'tok-journey-000000000000000000'));
@@ -161,8 +161,8 @@ test('رحلة المشارك: بعد الاعتماد يفتح الكتيب، �
   await expect(page.getByRole('heading', { name: 'القيادة من خلال الآخرين' })).toBeVisible();
   await expect(page.getByText('أقوى أطرك: إدارة المشروعات وتحويل المشروع إلى أثر.', { exact: false })).toBeVisible();
   await expect(page.getByText('خريطة أصحاب المصلحة، والأسبوع الصعب', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'افتح كتيبي' }).click();
-  await expect(page.getByRole('heading', { name: 'كتيب القائد' }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'افتح كتابي' }).click();
+  await expect(page.getByRole('heading', { name: 'كتاب القائد' }).first()).toBeVisible();
   await expect(page.getByText('نسخة شخصية مرخصة باسم')).toBeVisible();
 
   await page.getByRole('button', { name: 'ابدأ القراءة' }).click();

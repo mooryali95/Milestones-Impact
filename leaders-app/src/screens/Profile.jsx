@@ -265,7 +265,7 @@ export default function Profile({ me, onSaved, onboarding, onCancel }) {
           {!onboarding && sectorField}
           <label className="field"><span>سنوات الخبرة</span>
             <input className="input" {...need('years_experience')} inputMode="numeric" value={f.years_experience} onChange={set('years_experience')} /></label>
-          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد فصول وثيقة مبادرتك وأمثلة الكتيب)</em></span>
+          <label className="field"><span>نطاق ما تقوده الآن <em>(يحدد فصول وثيقة مبادرتك وأمثلة الكتاب)</em></span>
             <select className="input" value={f.work_scope} onChange={set('work_scope')}>
               <option value="">لم أحدد بعد</option>
               <option value="project">مشروع أو أكثر</option>

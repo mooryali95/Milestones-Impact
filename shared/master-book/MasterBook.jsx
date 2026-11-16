@@ -474,7 +474,7 @@ function PdfSheet({ parts, data, onPick, onClose }) {
   );
 }
 
-// العلامة المائية بنمط الكتيب الشخصي (leaders-app/src/screens/Handbook.jsx): اسم القارئ وبريده وتاريخ اليوم، مائلة
+// العلامة المائية بنمط الكتاب الشخصي (leaders-app/src/screens/Handbook.jsx): اسم القارئ وبريده وتاريخ اليوم، مائلة
 // متكررة بشفافية خفيفة فوق الصفحة كلها، فأي تصوير يُعرف مصدره. لا تلتقط النقر ولا تُقرأ لقارئ الشاشة
 const xmlEsc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 function watermarkUrl(text, date = new Date()) {

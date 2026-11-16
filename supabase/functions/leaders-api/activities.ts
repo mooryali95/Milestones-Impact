@@ -59,7 +59,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
     kinds.has('workshop') ? db.from('workshop_attendance').select('session_id').eq('participant_id', p.id) : none,
     kinds.has('coaching') ? db.from('coaching_sessions').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
-    // منهج المسار يُفتح مع الكتيب بعد اعتماد المستويات
+    // منهج المسار يُفتح مع الكتاب بعد اعتماد المستويات
     kinds.has('curriculum') && approved ? db.from('content_items').select(CONTENT_COLS).eq('active', true) : none,
     kinds.has('curriculum') ? db.from('content_progress').select('*').eq('participant_id', p.id) : none,
     // متطلب «نموذج»: حالة تسليم النموذج نفسه في مكتبة النماذج، لا ملف مرفوع

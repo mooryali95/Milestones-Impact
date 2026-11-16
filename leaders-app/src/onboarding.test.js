@@ -76,14 +76,14 @@ describe('هل للدفعة جلسات؟ قاعدة واحدة لملف الدف
     expect(sessionsFor({ id: 'c1' }, [w(), w({ active: false }), w({ starts_at: '2026-10-01T09:00:00Z' }), w({ cohort_id: null }), w({ cohort_id: 'c2' })], now)).toBe(2);
     expect(sessionsFor({ id: 'c1' }, [w({ starts_at: '2026-11-05T09:00:00Z' })], now)).toBe(1);
   });
-  it('صيغة الكتيب لا تلزمها جلسات، والبند سليم بها في الملف وفي جاهزية الإطلاق معًا', () => {
-    const c = { id: 'c1', name: 'دفعة الكتيب', organization_id: 'o1', status: 'open', advisor_expert_id: 'e1', starts_on: '2026-11-01', ends_on: '2027-01-01', schedule: { s: {} }, delivery: { 'T-ATTEND': { format: 'handbook' } } };
+  it('صيغة الكتاب لا تلزمها جلسات، والبند سليم بها في الملف وفي جاهزية الإطلاق معًا', () => {
+    const c = { id: 'c1', name: 'دفعة الكتاب', organization_id: 'o1', status: 'open', advisor_expert_id: 'e1', starts_on: '2026-11-01', ends_on: '2027-01-01', schedule: { s: {} }, delivery: { 'T-ATTEND': { format: 'handbook' } } };
     expect(usesHandbook(c)).toBe(true);
     const file = cohortSetup({ cohort: c, members: 3, upcomingSessions: 0 }).find((x) => x.key === 'sessions');
     expect(file).toMatchObject({ ok: true });
     const launch = launchReadiness({ organizations: [{ id: 'o1', name: 'أ', status: 'active' }], cohorts: [c], sessions: [] }, now).find((x) => x.key === 'sessions');
     expect(launch.ok).toBe(file.ok);
-    // وبلا كتيب ولا جلسات: ناقص في الاثنين
+    // وبلا كتاب ولا جلسات: ناقص في الاثنين
     const bare = { ...c, delivery: {} };
     expect(cohortSetup({ cohort: bare, members: 3 }).find((x) => x.key === 'sessions').ok).toBe(false);
     expect(launchReadiness({ organizations: [{ id: 'o1', name: 'أ', status: 'active' }], cohorts: [bare], sessions: [] }, now).find((x) => x.key === 'sessions').ok).toBe(false);

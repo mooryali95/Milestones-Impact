@@ -48,7 +48,7 @@ export function JourneySkeleton() {
 
 export function BookSkeleton() {
   return (
-    <div className="page book" aria-busy="true" aria-label="جارٍ تحميل الكتيب">
+    <div className="page book" aria-busy="true" aria-label="جارٍ تحميل الكتاب">
       <div className="skel-hero"><Skel h={14} w="20%" /><Skel h={30} w="55%" /><Skel h={14} w="70%" /></div>
       <div className="book-grid">
         <div className="card">{[0, 1, 2, 3, 4, 5].map((i) => <Skel key={i} h={14} style={{ marginTop: i ? 12 : 0 }} />)}</div>

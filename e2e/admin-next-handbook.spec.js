@@ -31,7 +31,7 @@ async function setup(page) {
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
-  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'كتيب القائد' }).click();
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'كتاب القائد' }).click();
   return calls;
 }
 
@@ -104,7 +104,7 @@ test('النماذج: إضافة حقل جدول ومعاينته، ثم الح�
 test('المعاينة كمشارك، والتقييم بالسلّم الرباعي والملاحظات', async ({ page }) => {
   const calls = await setup(page);
   const views = page.getByRole('navigation', { name: 'أقسام الكتاب' });
-  await views.getByRole('button', { name: /الكتاب الأصلي/ }).click();
+  await views.getByRole('button', { name: /الكتاب الأم والكتب/ }).click();
   await expect(page.getByText('الإجابة الصحيحة')).toBeVisible();
   await expect(page.getByText('أقصى نقاط هذا الباب: 20')).toBeVisible();
   await views.getByRole('button', { name: /التقييم/ }).click();

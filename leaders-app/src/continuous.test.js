@@ -79,7 +79,7 @@ describe('التقييم المستمر', () => {
 
   it('يرفع علامة لمكوّن دون المنتصف', () => {
     const c = continuousAssessment({ quizzes: [{ quiz_score: 2, quiz_total: 10, completed_at: '2026-01-01', title: 'ب' }] });
-    expect(c.flags[0]).toContain('اختبارات الكتيب');
+    expect(c.flags[0]).toContain('اختبارات الكتاب');
   });
 
   it('ينظف معيار المعلم ويحسب نسبته بالخريطة', () => {
