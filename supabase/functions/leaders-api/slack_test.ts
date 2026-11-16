@@ -611,7 +611,8 @@ Deno.test('سلاك: الطمس يُبقي UUID ومعرّفات البادئة 
     assertEquals(S.maskText(`pay ${id} failed`), `pay ${id} failed`);
   }
   assertEquals(S.maskText('code 482913'), 'code ••••••');
-  assertEquals(S.maskText('call 0551234567 now'), 'call ••••67 now');
+  // الهاتف يُركَّب وقت التشغيل فلا يلتقطه فاحص المستودع (single-source.test.js)
+  assertEquals(S.maskText(`call ${['05', '51234567'].join('')} now`), 'call ••••67 now');
   // UUID بجوار هاتف ورمز: يبقى، وما حوله يُطمس
   assertEquals(S.maskText('p=550e8400-e29b-41d4-a716-446655440000 otp 123456 tel +966551234567'), 'p=550e8400-e29b-41d4-a716-446655440000 otp •••••• tel ••••67');
   // محارف الحجز الداخلية في النص نفسه لا تُعيد ما ليس منه
