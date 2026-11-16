@@ -34,6 +34,8 @@ export const GD = {
   gate: (p: any): Promise<any> => gateFor(p),
   chapter: (p: any, id: string): Promise<any> => chapterFor(p, id),
   titles: (p: any): Promise<string[]> => chapterTitles(p),
+  // حكم تقييم الدقة (guide-eval.ts) باستيراد متأخر، فلا حلقة بين الملفين
+  evalOk: async (): Promise<boolean> => (await (await import('./guide-eval.ts')).evalGateNow()).ok,
   key: async (): Promise<string> => {
     const { data } = await db.rpc('agent_runtime').then((r: any) => r, () => ({ data: null }));
     const row = Array.isArray(data) ? data[0] : data;
@@ -49,8 +51,9 @@ export const GD = {
 async function gateFor(p: any) {
   const s = (await appSettings()).guidance as any;
   // المغلق للجميع (السياسة أو الإعدادات) يُحكم فيه قبل قراءة الرحلة، فلا كلفة على كل مشارك
-  const closed = guideGate({ policyVersion: GD.policy(), consentVersion: GD.policy(), enabled: !!s.enabled, companion: true, ready: true, hasKey: true });
-  if (closed.reason === 'policy' || closed.reason === 'off') return { s, j: null as any, gate: closed, key: '' };
+  const evalOk = GD.policy() && s.enabled ? await GD.evalOk().catch(() => false) : false;
+  const closed = guideGate({ policyVersion: GD.policy(), consentVersion: GD.policy(), enabled: !!s.enabled, evalOk, pilot: true, companion: true, ready: true, hasKey: true });
+  if (closed.reason === 'policy' || closed.reason === 'off' || closed.reason === 'eval') return { s, j: null as any, gate: closed, key: '' };
   const j = await journeyFor(p, { lite: true });
   const org = p.organization_id
     ? (await db.from('organizations').select('companion_allowed').eq('id', p.organization_id).maybeSingle()).data
@@ -58,7 +61,7 @@ async function gateFor(p: any) {
   const signals = j.approved ? await guidanceFor(p.id, !!j.initiative) : null;
   const key = await GD.key().catch(() => '');
   const gate = guideGate({
-    policyVersion: GD.policy(), consentVersion: p.consent_version || null, enabled: !!s.enabled, companion: companionAllowed(org, j.def?.cohort || null),
+    policyVersion: GD.policy(), consentVersion: p.consent_version || null, enabled: !!s.enabled, evalOk, pilot: !!j.def?.cohort?.guidance_pilot, companion: companionAllowed(org, j.def?.cohort || null),
     ready: !!signals?.ready, hasKey: !!key,
   });
   return { s, j, gate, key };
@@ -116,6 +119,43 @@ async function save(row: Record<string, unknown>): Promise<number | null> {
   return (data as any)?.id ?? null;
 }
 
+// ── التوليد: مسار واحد يجيب به المشارك ويُقيَّم به قبل الإطلاق (guide-eval.ts)، فما يُقيَّم هو ما يعمل ──
+type Chapter = { title: string; md: string; quiz: any[] } | null;
+type Turn = { role: string; body: string };
+export function worstFor(o: { chapter: Chapter; ctx: string; text: string; past: Turn[] }) {
+  const prefix = estimateTokens(GUIDE_RULES) + (o.chapter ? estimateTokens(o.chapter.md) : 0);
+  const rest = estimateTokens(o.ctx) + estimateTokens(o.text) + o.past.reduce((a, m) => a + estimateTokens(m.body), 0);
+  return worstCaseMicros(GUIDE_MODEL, prefix, rest, GUIDE_MAX_TOKENS);
+}
+export async function generate(o: { key: string; chapter: Chapter; ctx: string; text: string; past: Turn[] }) {
+  // الرسائل تتناوب بدءًا بالمشارك: يُسقط ما قبل أول سؤال، ويُدمج المتتالي من الدور نفسه
+  const messages: { role: 'user' | 'assistant'; content: any }[] = [];
+  for (const m of o.past) {
+    const role = m.role === 'user' ? 'user' : 'assistant';
+    if (!messages.length && role !== 'user') continue;
+    if (messages.length && messages[messages.length - 1].role === role) messages[messages.length - 1].content += `\n\n${m.body}`;
+    else messages.push({ role, content: m.body });
+  }
+  if (messages.length && messages[messages.length - 1].role === 'user') messages.pop();
+  messages.push({ role: 'user', content: [{ type: 'text', text: o.ctx }, { type: 'text', text: o.text }] });
+  const system: any[] = [{ type: 'text', text: GUIDE_RULES, cache_control: { type: 'ephemeral' } }];
+  if (o.chapter) system.push({ type: 'text', text: `نص باب «${o.chapter.title}» من كتاب المشارك:\n\n${o.chapter.md}`, cache_control: { type: 'ephemeral' } });
+  const res = await GD.model({
+    model: GUIDE_MODEL, max_tokens: GUIDE_MAX_TOKENS, system, messages,
+    thinking: { type: 'adaptive' }, output_config: { effort: 'high' }, inference_geo: 'us',
+  }, o.key);
+  const cost = costMicros(String(res?.model || GUIDE_MODEL), res?.usage || {});
+  const raw = (res?.content || []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
+  let { verdict, text } = parseReply(raw);
+  if (verdict !== 'error') {
+    // الحارس: لا إجابة اختبار، ولا بريد ولا رابط ولا رقم
+    if (o.chapter && quizLeak(text, o.chapter.quiz)) { verdict = 'refused'; text = REFUSAL_AR.quiz; }
+    text = sanitizeOutput(text).text;
+    if (verdict === 'unsure' && text.length < 20) text = UNSURE_AR;
+  }
+  return { verdict, text, res, cost };
+}
+
 export async function guideAsk(p: any, b: Body) {
   const text = String(b.text ?? '').replace(/\s+\n/g, '\n').trim();
   const where = CONTEXTS.has(String(b.context)) ? String(b.context) : 'program';
@@ -156,24 +196,8 @@ export async function guideAsk(p: any, b: Body) {
   const past = (await history(p.id, s.retention_days, GUIDE_HISTORY * 2 + 1))
     .filter((m: any) => m.id !== questionId && m.verdict !== 'refused' && m.verdict !== 'error')
     .slice(-GUIDE_HISTORY);
-  // الرسائل تتناوب بدءًا بالمشارك: يُسقط ما قبل أول سؤال، ويُدمج المتتالي من الدور نفسه
-  const messages: { role: 'user' | 'assistant'; content: any }[] = [];
-  for (const m of past) {
-    const role = m.role === 'user' ? 'user' : 'assistant';
-    if (!messages.length && role !== 'user') continue;
-    if (messages.length && messages[messages.length - 1].role === role) messages[messages.length - 1].content += `\n\n${m.body}`;
-    else messages.push({ role, content: m.body });
-  }
-  if (messages.length && messages[messages.length - 1].role === 'user') messages.pop();
-  messages.push({ role: 'user', content: [{ type: 'text', text: ctx }, { type: 'text', text }] });
-
-  const system: any[] = [{ type: 'text', text: GUIDE_RULES, cache_control: { type: 'ephemeral' } }];
-  if (chapter) system.push({ type: 'text', text: `نص باب «${chapter.title}» من كتاب المشارك:\n\n${chapter.md}`, cache_control: { type: 'ephemeral' } });
-
   // السقف اليومي: حجز أسوأ تكلفة قبل الاستدعاء
-  const prefix = estimateTokens(GUIDE_RULES) + (chapter ? estimateTokens(chapter.md) : 0);
-  const rest = estimateTokens(ctx) + estimateTokens(text) + past.reduce((a: number, m: any) => a + estimateTokens(m.body), 0);
-  const worst = worstCaseMicros(GUIDE_MODEL, prefix, rest, GUIDE_MAX_TOKENS);
+  const worst = worstFor({ chapter, ctx, text, past });
   const cap = Math.round(Number(s.daily_spend_usd) * 1e6);
   const { data: reserved, error: re } = await db.rpc('guidance_spend_reserve', { p_day: w.dayKey, p_micros: worst, p_cap: cap });
   if (re || reserved === null || reserved === undefined) {
@@ -182,28 +206,18 @@ export async function guideAsk(p: any, b: Body) {
     throw new Fail('بلغ المساعد الذكي حده اليومي. اطلب استشارة، أو عد غدًا.', 429, 'guide_cap');
   }
 
-  let res: any;
+  let g: Awaited<ReturnType<typeof generate>>;
   try {
-    res = await GD.model({
-      model: GUIDE_MODEL, max_tokens: GUIDE_MAX_TOKENS, system, messages,
-      thinking: { type: 'adaptive' }, output_config: { effort: 'high' }, inference_geo: 'us',
-    }, key);
+    g = await generate({ key, chapter, ctx, text, past });
   } catch (e) {
     // الحجز يبقى محسوبًا (قد يكون فوتر)، والسؤال لا يُحسب على المشارك
     console.error('guide model', (e as any)?.status || (e as Error)?.name);
     await unclaim();
     throw new Fail(ERROR_AR, 502, 'guide_model');
   }
-  const cost = costMicros(String(res?.model || GUIDE_MODEL), res?.usage || {});
-  await db.rpc('guidance_spend_settle', { p_day: w.dayKey, p_delta: cost - worst }).then(() => null, () => null);
-
-  const raw = (res?.content || []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
-  let { verdict, text: answer } = parseReply(raw);
-  if (verdict === 'error') { await unclaim(); throw new Fail(ERROR_AR, 502, 'guide_empty'); }
-  // الحارس: لا إجابة اختبار، ولا بريد ولا رابط ولا رقم
-  if (chapter && quizLeak(answer, chapter.quiz)) { verdict = 'refused'; answer = REFUSAL_AR.quiz; }
-  answer = sanitizeOutput(answer).text;
-  if (verdict === 'unsure' && answer.length < 20) answer = UNSURE_AR;
+  await db.rpc('guidance_spend_settle', { p_day: w.dayKey, p_delta: g.cost - worst }).then(() => null, () => null);
+  if (g.verdict === 'error') { await unclaim(); throw new Fail(ERROR_AR, 502, 'guide_empty'); }
+  const { verdict, text: answer, res, cost } = g;
   const sources = chapter ? [chapter.title] : [];
   const answerId = await save({
     participant_id: p.id, role: 'assistant', body: answer.slice(0, 6000), context: where, chapter_id: chapterId, verdict, sources,
