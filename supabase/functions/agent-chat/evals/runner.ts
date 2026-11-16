@@ -16,6 +16,8 @@ export type CaseOutcome = {
   errorStatus: number | null;
   // سبب «اترك رسالتك» من السجل: refused = امتلأ سقف اليوم، وerror = تعذر السجل
   ledger: 'refused' | 'error' | null;
+  // التكرار (runCaseRepeated): عدد التشغيلات وعدد الناجح منها. الحالة ناجحة إن نجحت في كل تشغيل
+  runs?: number; passes?: number;
 };
 
 // مخزن مركب: كل شيء من الذاكرة، إلا الإنفاق وعلامات التنبيه من المخزن الحقيقي. note يسجل رفض الحجز أو تعذره
@@ -67,6 +69,27 @@ export async function runCase(c: Case, o: { env: Env; model: Deps['model']; stor
   if (reply.source === 'canned') reply.cannedId = c.expect.canned ?? null;
   const g = grade(c, reply);
   return { id: c.id, set: c.set, pass: g.pass, reasons: g.reasons, reply, costMicros: cost, errorStatus, ledger: note.ledger };
+}
+
+// تشغيل الحالة n مرة (1 إلى 3): ناجحة إن نجحت في كل تشغيل، والتذبذب يُذكر في الأسباب (نجح k من n). الرد المحفوظ
+// رد أول تشغيل راسب (أو آخر تشغيل إن نجحت كلها)، والتكلفة مجموع التشغيلات. خطأ النموذج أو رفض السجل يوقف التكرار
+// ويعيد تلك النتيجة كما هي، فيعاملها المتصل كما يعامل التشغيل الواحد.
+export const MAX_REPEATS = 3;
+export const repeatsOf = (v: unknown) => Math.min(MAX_REPEATS, Math.max(1, Math.round(Number(v) || 1)));
+export async function runCaseRepeated(c: Case, o: Parameters<typeof runCase>[1], n: number): Promise<CaseOutcome> {
+  const times = repeatsOf(n);
+  const all: CaseOutcome[] = [];
+  let cost = 0;
+  for (let i = 0; i < times; i++) {
+    const r = await runCase(c, o);
+    cost += r.costMicros;
+    if (r.errorStatus !== null || r.ledger !== null) return { ...r, costMicros: cost, runs: all.length + 1, passes: all.filter((x) => x.pass).length };
+    all.push(r);
+  }
+  const passes = all.filter((x) => x.pass).length;
+  const shown = all.find((x) => !x.pass) ?? all[all.length - 1];
+  const reasons = times > 1 && passes > 0 && passes < times ? [`تذبذب: نجح ${passes} من ${times}`, ...shown.reasons] : shown.reasons;
+  return { ...shown, pass: passes === times, reasons, costMicros: cost, runs: times, passes };
 }
 
 export type SetSummary = { pass: number; total: number; rate: number };
