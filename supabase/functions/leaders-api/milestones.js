@@ -27,6 +27,7 @@ export const MILESTONE_STATUS_AR = { done: 'منجز', on_time: 'في الموع
 
 // توزيع المراحل على مدة الدفعة نسبيًا بحسب duration_days (مرحلة بلا أيام تأخذ نصيبًا متوسطًا).
 // المراحل عند الطلب والاختيارية تمتد على مدة الدفعة كلها فلا تأخذ من نصيب غيرها.
+// المراحل التي تسير معًا («تبدأ مع») تأخذ نصيبًا واحدًا بطول أطولها، كما في stageWindows.
 export function distributeSchedule(stages, startsOn, endsOn) {
   if (!ISO.test(startsOn || '') || !ISO.test(endsOn || '') || endsOn < startsOn) return {};
   const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
@@ -37,14 +38,28 @@ export function distributeSchedule(stages, startsOn, endsOn) {
   if (!seq.length) return out;
   const known = seq.map((s) => Number(s.duration_days) || 0);
   const avg = known.filter(Boolean).length ? known.filter(Boolean).reduce((a, b) => a + b, 0) / known.filter(Boolean).length : 1;
-  const w = known.map((d) => d || avg);
+  const weight = new Map(seq.map((s, i) => [s.key, known[i] || avg]));
+  // «تبدأ مع» X (rules.with): المرحلة تنضم إلى مجموعة مرجعها إن كان إلزاميًا قبلها، والسلسلة (C مع B وB مع A) تُحل إلى A.
+  // المجموعة نصيب واحد بطول أطول مراحلها، وكل مرحلة فيها تبدأ ببدايتها وتمتد بنسبة مدتها من أطولها
+  const groups = [], groupOf = new Map();
+  for (const s of seq) {
+    const ref = s.rules && s.rules.unlock === 'with' && s.rules.with != null ? String(s.rules.with) : null;
+    const g = ref != null ? groupOf.get(ref) : null;
+    if (g) g.push(s); else groups.push([s]);
+    groupOf.set(s.key, g || groups.at(-1));
+  }
+  const w = groups.map((g) => Math.max(...g.map((s) => weight.get(s.key))));
   const total = w.reduce((a, b) => a + b, 0);
   const span = daysBetween(startsOn, endsOn) + 1;
   let cursor = 0, acc = 0;
-  seq.forEach((s, i) => {
+  groups.forEach((g, i) => {
     acc += w[i];
-    const endIdx = i === seq.length - 1 ? span - 1 : Math.max(cursor, Math.round((acc / total) * span) - 1);
-    out[s.key] = { start: addDays(startsOn, cursor), end: addDays(startsOn, endIdx) };
+    const endIdx = i === groups.length - 1 ? span - 1 : Math.max(cursor, Math.round((acc / total) * span) - 1);
+    const len = endIdx - cursor + 1;
+    for (const s of g) {
+      const own = weight.get(s.key) >= w[i] ? endIdx : Math.min(endIdx, cursor + Math.max(1, Math.round((weight.get(s.key) / w[i]) * len)) - 1);
+      out[s.key] = { start: addDays(startsOn, cursor), end: addDays(startsOn, own) };
+    }
     cursor = Math.min(span - 1, endIdx + 1);
   });
   return out;

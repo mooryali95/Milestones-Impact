@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan, stageRulesIssues } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -306,6 +306,9 @@ async function snapshotVersion(a: Admin, programId: string, label: string): Prom
 export async function programPublish(a: Admin, b: Body) {
   const id = String(b.id || '');
   if (!isUuid(id)) throw new Fail('اختر البرنامج');
+  // «تبدأ مع» يُعاد فحصه عند النشر: مرجع صار بعدها بالترتيب أو مخفيًا أو محذوفًا يقفلها إلى الأبد، فلا تُنشر نسخة به
+  const bad = stageRulesIssues((await liveRows(id)).stages).find((x: any) => x.level === 'error' && x.rule === 'with');
+  if (bad) throw new Fail(`لا تُحفظ النسخة: ${bad.msg}`, 400, 'rules');
   const v = await snapshotVersion(a, id, String(b.label || '').trim());
   await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label });
   return { success: true, version: v };
@@ -389,7 +392,13 @@ export async function cohortDefinitionFor(b: Body) {
     if (!version) throw new Fail('النسخة لا تخص هذا البرنامج');
   }
   const view = cohortDefinitionView({ live: version ? null : await liveRows(programId), version, cohort: c });
-  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view };
+  // جلسات الدفعة لخطها الزمني (J1b): موعد كل جلسة جماعية أو «يُحدد لاحقًا»، قراءة فقط وبلا السر
+  const wsIds = c ? view.requirements.filter((r: any) => r.kind === 'workshop' && r.id).map((r: any) => r.id) : [];
+  const sessions = wsIds.length
+    ? (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, starts_at, ends_at, mode, active').in('requirement_id', wsIds)) || [])
+      .filter((s: any) => !s.cohort_id || s.cohort_id === c.id)
+    : [];
+  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view, sessions };
 }
 async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);

@@ -12,6 +12,7 @@ import QRCode from 'qrcode';
 import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { readQuery } from '../route.js';
 
 import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
@@ -132,6 +133,14 @@ function Workshops({ data, reload, canWrite }) {
   const [att, setAtt] = useState(null);
   const reqs = data.requirements.filter((r) => r.kind === 'workshop');
   const save = (base) => async (row) => L('admin.workshop-save', { row: { ...base, ...row } });
+  // القفز من «الرحلة في لمحة» (‎?req=<المتطلب>‎): إلى جلسات النشاط وزر «+ موعد» عنده
+  useEffect(() => {
+    const req = new URLSearchParams(readQuery()).get('req');
+    const el = req && document.getElementById(`ws-${req}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    (el.querySelector('.ws-add') || el).focus?.({ preventScroll: true });
+  }, []);
   if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «جلسات جماعية بمواعيد». أضفه في أي مرحلة من «الرحلة والمتطلبات».</p>;
   return (
     <>
@@ -140,10 +149,10 @@ function Workshops({ data, reload, canWrite }) {
         const cohorts = (data.cohorts || []).filter((c) => c.program_id === r.program_id);
         const cohortName = (id) => cohorts.find((c) => c.id === id)?.name || 'دفعة مغلقة';
         return (
-          <section key={r.id} className="la-card">
+          <section key={r.id} id={`ws-${r.id}`} className="la-card" tabIndex={-1}>
             <div className="la-row between">
               <div><b title={r.code}>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted">المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
-              {canWrite && <button className="btn-sm primary" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts), values: { active: true, mode: 'in_person', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
+              {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts), values: { active: true, mode: 'in_person', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
