@@ -1247,7 +1247,9 @@ export async function save(a: Admin, b: Body) {
     const pid = String(b.row.program_id);
     const { data: siblings } = await db.from('journey_stages').select('key, title_ar, sort, active, rules').eq('program_id', pid);
     const list = siblings || [];
-    try { row.rules = cleanStageRules(row.rules, list.map((s: any) => s.key), String(b.row.key)); }
+    // المراحل نفسها لا مفاتيحها: مرجع «تبدأ مع» يُفحص بترتيبه وظهوره كما ستكون بعد الحفظ
+    const shaped = list.map((s: any) => (s.key === b.row.key ? { ...s, ...('sort' in row ? { sort: row.sort } : {}), ...('active' in row ? { active: row.active } : {}) } : s));
+    try { row.rules = cleanStageRules(row.rules, shaped, String(b.row.key)); }
     catch (err) { throw new Fail((err as Error).message, 400, 'rules'); }
     const after = list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s));
     const bad = stageRulesIssues(after).find((x: any) => x.level === 'error' && (x.stage === b.row.key || /حلقة/.test(x.msg)));

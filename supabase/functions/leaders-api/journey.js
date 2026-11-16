@@ -147,7 +147,8 @@ export function programHours(requirements, levels = null) {
 // إلزامية، تُفتح بعد اكتمال الإلزامية قبلها، وتكتمل بمتطلباتها الإلزامية.
 // تدخل الأدمن لمشارك بعينه (فتح، اعتماد اكتمال، إعفاء) يأتي من overrides.
 const MODES = ['required', 'on_demand', 'optional'];
-const UNLOCKS = ['previous', 'always', 'stages', 'day', 'approval'];
+// with: تبدأ مع مرحلة قبلها في الترتيب (rules.with)، فتُفتح حين تُفتح مرجعها وتسير معها (المراحل المتوازية P1)
+const UNLOCKS = ['previous', 'with', 'always', 'stages', 'day', 'approval'];
 const COMPLETES = ['required', 'any', 'approval'];
 
 // القواعد كما تُقرأ: كل مفتاح بقيمته الافتراضية إن غاب
@@ -157,15 +158,19 @@ export function stageRules(stage) {
     mode: MODES.includes(r.mode) ? r.mode : 'required',
     unlock: UNLOCKS.includes(r.unlock) ? r.unlock : 'previous',
     after: Array.isArray(r.after) ? r.after.map(String) : [],
+    with: r.with != null && r.with !== '' ? String(r.with) : null,
     day: Number.isFinite(Number(r.day)) && r.day !== null && r.day !== '' ? Math.max(0, Math.round(Number(r.day))) : null,
     complete: COMPLETES.includes(r.complete) ? r.complete : 'required',
   };
 }
 
-// القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا
-/** @param {any} raw @param {string[]} stageKeys @param {string} [selfKey] */
+// القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا.
+// stageKeys: مفاتيح مراحل البرنامج، أو المراحل نفسها ({ key, title_ar, sort, active }) ليُفحص مرجع «تبدأ مع»
+// بترتيبه وظهوره. بالمفاتيح وحدها يُفحص الوجود فقط، ويكمل stageRulesIssues الباقي.
+/** @param {any} raw @param {Array<string | { key: string, title_ar?: string, sort?: number, active?: boolean }>} stageKeys @param {string} [selfKey] */
 export function cleanStageRules(raw, stageKeys, selfKey) {
   const r = raw && typeof raw === 'object' ? raw : {};
+  const list = (stageKeys || []).map((x) => (x && typeof x === 'object' ? x : { key: String(x) }));
   const out = {};
   if (r.mode != null && r.mode !== '') {
     if (!MODES.includes(r.mode)) throw new Error('نوع المرحلة غير معروف');
@@ -176,12 +181,26 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     if (r.unlock !== 'previous') out.unlock = r.unlock;
   }
   if (out.unlock === 'stages') {
-    const keys = new Set(stageKeys || []);
+    const keys = new Set(list.map((x) => x.key));
     const after = [...new Set((Array.isArray(r.after) ? r.after : []).map(String))];
     if (!after.length) throw new Error('اختر المرحلة أو المراحل التي تُفتح هذه بعد اكتمالها');
     const bad = after.find((k) => !keys.has(k) || k === selfKey);
     if (bad) throw new Error(bad === selfKey ? 'المرحلة لا تشترط نفسها' : `مرحلة غير موجودة في البرنامج: ${bad}`);
     out.after = after;
+  }
+  if (out.unlock === 'with') {
+    const k = r.with != null && r.with !== '' ? String(r.with) : '';
+    if (!k) throw new Error('اختر المرحلة التي تبدأ هذه معها');
+    if (k === selfKey) throw new Error('المرحلة لا تبدأ مع نفسها');
+    const target = list.find((x) => x.key === k);
+    if (!target) throw new Error(`مرحلة غير موجودة في البرنامج: ${k}`);
+    const name = target.title_ar || k;
+    if (target.active === false) throw new Error(`«${name}» مخفية، فلا تبدأ معها مرحلة`);
+    const self = list.find((x) => x.key === selfKey);
+    if (self && Number.isFinite(Number(self.sort)) && Number.isFinite(Number(target.sort)) && Number(target.sort) >= Number(self.sort)) {
+      throw new Error(`«${name}» بعد هذه المرحلة في الترتيب؛ اختر مرحلة قبلها، أو رتّب المراحل أولًا`);
+    }
+    out.with = k;
   }
   if (out.unlock === 'day') {
     const d = Number(r.day);
@@ -206,6 +225,7 @@ export function stageRulesIssues(stages) {
   const deps = new Map(live.map((s, i) => {
     const r = stageRules(s);
     if (r.unlock === 'stages') return [s.key, r.after];
+    if (r.unlock === 'with') return [s.key, r.with ? [r.with] : []];
     if (r.unlock === 'previous') return [s.key, live.slice(0, i).filter((x) => stageRules(x).mode === 'required').map((x) => x.key)];
     return [s.key, []];
   }));
@@ -214,6 +234,19 @@ export function stageRulesIssues(stages) {
     for (const k of r.unlock === 'stages' ? r.after : []) {
       if (!byKey.has(k)) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: تُفتح بعد مرحلة غير موجودة (${k})` });
       else if (byKey.get(k).active === false) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: تُفتح بعد «${title(k)}» وهي مخفية، فلن تُفتح أبدًا` });
+    }
+    // «تبدأ مع»: المرجع موجود وظاهر وقبلها في الترتيب. يُعاد عند النشر لا عند الحفظ فقط، لأن السحب أو الإخفاء أو الحذف
+    // بعد الضبط يجعل المرجع لاحقًا لها، وresolveStages يمر بالترتيب مرة واحدة فتبقى مقفلة إلى الأبد
+    if (r.unlock === 'with') {
+      const k = r.with;
+      const idx = live.indexOf(s);
+      const at = live.findIndex((x) => x.key === k);
+      const issue = (msg) => out.push({ level: 'error', stage: s.key, rule: 'with', msg: `«${s.title_ar}»: ${msg}` });
+      if (!k) issue('شرط الفتح «تبدأ مع» بلا مرحلة محددة');
+      else if (k === s.key) issue('تبدأ مع نفسها، فلن تُفتح أبدًا');
+      else if (!byKey.has(k)) issue(`تبدأ مع مرحلة غير موجودة (${k})`);
+      else if (byKey.get(k).active === false) issue(`تبدأ مع «${title(k)}» وهي مخفية، فلن تُفتح أبدًا`);
+      else if (at > idx) issue(`تبدأ مع «${title(k)}» وهي بعدها في الترتيب، فلن تُفتح أبدًا. رتّب «${title(k)}» قبلها أو غيّر المرجع`);
     }
     if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
     if (r.unlock === 'day' && r.day == null) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح بالأيام بلا عدد أيام` });
@@ -243,6 +276,7 @@ export function stageRuleSummary(stage, stages = []) {
     previous: 'تُفتح بعد اكتمال الإلزامية قبلها',
     always: 'متاحة من البداية',
     stages: `تُفتح بعد اكتمال: ${r.after.map(title).join('، ')}`,
+    with: `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»`,
     day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${r.day ?? '؟'} يومًا من بداية الدفعة`,
     approval: 'يفتحها الأدمن أو الخبير',
   }[r.unlock];
@@ -257,6 +291,7 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
   const now = new Date(today).getTime();
   const start = cohortStart ? new Date(`${cohortStart}T00:00:00Z`).getTime() : null;
   const done = new Map();
+  const state = new Map();   // حالة كل مرحلة مرّ بها الحل، لقاعدة «تبدأ مع»
   const out = [];
   const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
   for (let i = 0; i < stages.length; i++) {
@@ -272,6 +307,9 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     if (ov === 'open') unlocked = true;
     else if (r.unlock === 'always') unlocked = true;
     else if (r.unlock === 'approval') unlocked = false;
+    // تبدأ مع X: تُفتح حين لا تكون X مقفلة (نشطة أو متاحة أو مكتملة). المرجع قبلها في الترتيب فحالته معروفة،
+    // والمرجع اللاحق أو المخفي أو المحذوف يبقيها مقفلة (ويمنع stageRulesIssues النشر بسببه)
+    else if (r.unlock === 'with') unlocked = !!r.with && state.has(r.with) && state.get(r.with) !== 'locked';
     else if (r.unlock === 'stages') { waits = r.after.filter((k) => !done.get(k)); unlocked = !waits.length; }
     else if (r.unlock === 'day' && start != null && r.day != null) unlocked = now >= start + r.day * DAY_MS;
     else { waits = before.filter((x) => !done.get(x.key)).map((x) => x.key); unlocked = !waits.length; }
@@ -282,9 +320,11 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     else if (byItems) status = 'done';
     else status = r.mode === 'required' ? 'active' : 'available';
     done.set(s.key, status === 'done');
+    state.set(s.key, status);
     let lock_reason = null;
     if (status === 'locked') {
-      if (r.unlock === 'approval') lock_reason = 'تُفتح حين يفتحها لك فريق البرنامج';
+      if (r.unlock === 'with') lock_reason = `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»`;
+      else if (r.unlock === 'approval') lock_reason = 'تُفتح حين يفتحها لك فريق البرنامج';
       else if (r.unlock === 'day' && start != null && r.day != null) lock_reason = `تُفتح في ${new Date(start + r.day * DAY_MS).toISOString().slice(0, 10)}`;
       else if (waits.length) lock_reason = `تُفتح بعد اكتمال: ${waits.map(title).join('، ')}`;
     }

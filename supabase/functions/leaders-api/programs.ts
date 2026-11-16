@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan, stageRulesIssues } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -306,6 +306,9 @@ async function snapshotVersion(a: Admin, programId: string, label: string): Prom
 export async function programPublish(a: Admin, b: Body) {
   const id = String(b.id || '');
   if (!isUuid(id)) throw new Fail('اختر البرنامج');
+  // «تبدأ مع» يُعاد فحصه عند النشر: مرجع صار بعدها بالترتيب أو مخفيًا أو محذوفًا يقفلها إلى الأبد، فلا تُنشر نسخة به
+  const bad = stageRulesIssues((await liveRows(id)).stages).find((x: any) => x.level === 'error' && x.rule === 'with');
+  if (bad) throw new Fail(`لا تُحفظ النسخة: ${bad.msg}`, 400, 'rules');
   const v = await snapshotVersion(a, id, String(b.label || '').trim());
   await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label });
   return { success: true, version: v };

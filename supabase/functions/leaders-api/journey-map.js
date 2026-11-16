@@ -6,29 +6,35 @@
 // الخصوصية: الأعداد والأسباب المجمّعة لكل منسق، والأسماء لمن له صلاحية «القائمة» (list)، وما ينقص كل شخص لمن له
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
 import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
-import { renderJourneyText } from './journey.js';
+import { renderJourneyText, stageRules } from './journey.js';
 import { inProgram } from './logic.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
 export const STAGE_GRACE_DAYS = MILESTONE_GRACE_DAYS;
 const isoDay = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
-// نافذة كل مرحلة: من جدول الدفعة إن ضُبط لها، وإلا متتابعة بمددها المخططة من بداية الدفعة
+// نافذة كل مرحلة: من جدول الدفعة إن ضُبط لها، وإلا متتابعة بمددها المخططة من بداية الدفعة.
+// المرحلة التي «تبدأ مع» X تبدأ ببداية X وتمتد بمدتها، والمؤشر يتقدم إلى أبعد نهاية في المجموعة،
+// فالمرحلة التالية تبدأ حين تنتهي أطول مراحل المجموعة. المرجع بلا نافذة معروفة يُعامل «بعد السابقة».
 export function stageWindows(stages, cohort = {}) {
   const sched = cohort?.schedule || {};
   let cursor = cohort?.starts_on || null;
   const out = {};
+  const later = (a, b) => (!a ? b : !b ? a : a > b ? a : b);
   for (const s of stages) {
+    const r = stageRules(s);
+    const ref = r.unlock === 'with' && r.with ? out[r.with] : null;
     const fixed = sched[s.key];
     if (fixed?.start) {
       out[s.key] = { from: fixed.start, to: fixed.end || fixed.start };
-      cursor = fixed.end || fixed.start;
+      cursor = ref ? later(cursor, fixed.end || fixed.start) : fixed.end || fixed.start;
       continue;
     }
-    if (!cursor) continue;
-    const to = addDays(cursor, Number(s.duration_days) || 0);
-    out[s.key] = { from: cursor, to };
-    cursor = to;
+    const from = ref ? ref.from : cursor;
+    if (!from) continue;
+    const to = addDays(from, Number(s.duration_days) || 0);
+    out[s.key] = { from, to };
+    cursor = ref ? later(cursor, to) : to;
   }
   return out;
 }

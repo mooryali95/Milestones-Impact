@@ -37,7 +37,7 @@ export const PHASE_AR = { admission: 'القبول', qualification: 'التأه�
 // إلزامية، تُفتح بعد اكتمال ما قبلها، وتكتمل بمتطلباتها الإلزامية.
 export const STAGE_MODE_AR = { required: 'إلزامية', on_demand: 'عند الطلب', optional: 'اختيارية مقترحة' };
 export const STAGE_UNLOCK_AR = {
-  previous: 'بعد اكتمال المراحل الإلزامية قبلها', always: 'متاحة من البداية', stages: 'بعد اكتمال مراحل أختارها',
+  previous: 'بعد اكتمال المراحل الإلزامية قبلها', with: 'تبدأ مع مرحلة أختارها', always: 'متاحة من البداية', stages: 'بعد اكتمال مراحل أختارها',
   day: 'بعد عدد أيام من بداية الدفعة', approval: 'حين يفتحها الأدمن أو الخبير',
 };
 export const STAGE_COMPLETE_AR = { required: 'بإنجاز متطلباتها الإلزامية', any: 'بإنجاز أي متطلب فيها', approval: 'باعتماد الأدمن أو الخبير' };
