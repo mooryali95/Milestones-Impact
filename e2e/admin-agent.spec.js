@@ -27,6 +27,28 @@ function backend(over = {}) {
   const series = Array.from({ length: 30 }, (_, i) => ({ day: new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10), micros: i === 29 ? 420000 : (i % 5) * 60000, calls: 3, eval_micros: i === 29 ? 41000 : 0 }));
   const replies = {
     'admin.agent-state': () => state(),
+    // «التوجيه والإرشاد» داخل الرحلة: سقفه من الإعدادات العامة، وتقريره أعداد بلا نص (G3)
+    'admin.settings': () => ({ success: true, ready: true, values: { guidance: { enabled: false, daily_spend_usd: 5, monthly_questions: 30, daily_questions: 8, retention_days: 90 } } }),
+    'admin.guide-report': () => ({ success: true, ready: true, open: false, cap_usd: 5,
+      windows: [{ days: 7, asked: 40, participants: 9, answered: 31, unsure: 5, refused: 4, errors: 0, confirmed: 3, confirm_rate: 7.5, usd: 2.4 },
+        { days: 30, asked: 120, participants: 22, answered: 95, unsure: 14, refused: 11, errors: 0, confirmed: 8, confirm_rate: 6.7, usd: 7.1 }],
+      spend: [{ day: '2026-11-16', usd: 1.2, calls: 18 }] }),
+    // G4a: تقييم دقة التوجيه والدفعة التجريبية
+    'admin.guide-eval': () => ({ success: true, ready: true, model: 'claude-opus-5-5', threshold: 0.99, fingerprint: 'fp',
+      set: { version: '2026-11-16-draft-1', total: 40, kinds: { answer: 24, unsure: 6, refuse_model: 6, refuse_route: 4 }, approved_by: null, approved_at: null, errors: [] },
+      gate: { ok: false, reason: 'unapproved', message: 'مجموعة التقييم لم تعتمدها لجنة المحتوى بعد.' },
+      runs: st.evalRuns || [] }),
+    'admin.guide-eval-start': () => { st.evalSteps = 0; return { success: true, run_id: '11111111-1111-4111-8111-111111111111', total: 40 }; },
+    'admin.guide-eval-step': () => {
+      st.evalSteps = (st.evalSteps || 0) + 1;
+      const done = st.evalSteps >= 2;
+      const run = { id: '11111111-1111-4111-8111-111111111111', status: done ? 'passed' : 'running', total_cases: 40, done_cases: done ? 40 : 3, passed_cases: done ? 40 : 3, cost_micros: 900000, started_at: ago(1), fingerprint: 'fp', current: true };
+      if (done) st.evalRuns = [run];
+      return { success: true, done, run };
+    },
+    'admin.guide-eval-results': () => ({ success: true, results: [{ case_id: 'g01', ok: true, kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', verdict: 'answered', reasons: [], reply: 'البوابة نقطة قرار إلزامية.', cost_micros: 20000 }] }),
+    'admin.guide-pilots': () => ({ success: true, ready: true, cohorts: [{ id: '22222222-2222-4222-8222-222222222222', name: 'دفعة سفراء', status: 'active', is_default: false, pilot: !!st.pilot }] }),
+    'admin.guide-pilot-set': (b) => { st.pilot = b.on; return { success: true, cohort: { id: b.cohort_id, name: 'دفعة سفراء', pilot: b.on } }; },
     'admin.agent-usage': () => ({ success: true, today: { day: series[29].day, spent_micros: 420000, cap_micros: 2000000, calls: 12 }, series, conversations: 128, handoffs: 9, avg_cost_micros: 1300, cache: { read_tokens: 500000, saved_micros: 44550, hit_ratio: 0.82 }, canned_share: 0.31, eval_micros: 41000 }),
     'admin.agent-conversations': (b) => {
       const rows = [
@@ -290,4 +312,30 @@ test('ملف القسم حذفه نشر أحدث: إعادة تحميل واحد
   block = false;
   await page.getByRole('button', { name: 'أعد تحميل الصفحة' }).click();
   await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+});
+
+test('«التوجيه والإرشاد» داخل الرحلة: سقفه منفصل ورابطه، وتقرير أعداد بلا نص بنسبة «أريد التأكد»', async ({ page }) => {
+  await setup(page);
+  const state = sec(page, 'الحالة والتحكم');
+  await expect(state).toContainText('سقف «التوجيه والإرشاد» داخل الرحلة منفصل: 5.00 دولار يوميًا');
+  const report = page.getByRole('region', { name: /«التوجيه والإرشاد» داخل الرحلة/ });
+  await expect(report).toContainText('مغلق للمشاركين');
+  await expect(report.getByRole('row', { name: /آخر 7 يومًا/ })).toContainText('3 (7.5٪)');
+  await expect(report).toContainText('أعلى يوم: $1.20 من سقف $5.00');
+  await expect(report).toContainText('نصوص المحادثات خاصة بأصحابها');
+});
+
+test('تقييم دقة التوجيه: المسودة غير المعتمدة تُغلق البوابة، والتشغيل بدفعات حتى ينتهي، والدفعة التجريبية تُفعَّل بنقرة', async ({ page }) => {
+  const { calls } = await setup(page);
+  const ev = page.getByRole('region', { name: /تقييم دقة «التوجيه والإرشاد»/ });
+  await expect(ev).toContainText('مجموعة التقييم لم تعتمدها لجنة المحتوى بعد');
+  await expect(ev).toContainText('40 حالة (يجيب 24، لا يتأكد 6، يرفض 6، يرفضه الموجّه 4)');
+  await expect(ev).toContainText('مسودة بانتظار اعتماد لجنة المحتوى');
+  await ev.getByRole('button', { name: 'شغّل التقييم' }).click();
+  await expect(ev.getByRole('row', { name: /ناجح/ })).toContainText('40/40');
+  expect(calls.filter((c) => c.action === 'admin.guide-eval-step').length).toBe(2);
+  await ev.getByRole('button', { name: 'النتائج' }).click();
+  await expect(ev.getByLabel('نتائج التشغيل')).toContainText('ما الفرق بين المعلم وبوابة المرحلة؟');
+  await ev.getByRole('checkbox', { name: 'دفعة سفراء' }).check();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')?.body).toMatchObject({ cohort_id: '22222222-2222-4222-8222-222222222222', on: true });
 });

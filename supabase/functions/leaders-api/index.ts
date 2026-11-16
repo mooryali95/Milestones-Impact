@@ -19,7 +19,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
+import { alertOps, carryoverAlert, clientIp, CONFIG, db, drainMailQueue, Fail, must, preflight, reply, secretEquals, stuckQueueAlert } from './core.ts';
 import { slackHello } from '../_shared/slack.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram, journeyApproved } from './logic.js';
@@ -63,6 +63,8 @@ import * as BR from './book-release.ts';
 import * as NU from './nudges.ts';
 import * as FT from './features.ts';
 import * as NB from './nudge-banner.ts';
+import * as GU from './guide.ts';
+import * as GE from './guide-eval.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -98,29 +100,35 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'expert.apply': E.apply,
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
-  // كل ساعة: العروض المنتهية تنتقل للتالي، ثم تذكير جلسات الغد
-  // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
-  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
-    pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
-    pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
-    // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
-    feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
-    // بداية إخفاء مقيّمي الأثر مع 360: علامة واحدة في أول تشغيل بعد النشر (feedback360.ts impactPausedSince)
-    impact_pause_mark: await FB.markImpactPause().catch((e) => ({ error: String(e?.message || e) })),
-    ...(await (async () => {
-      // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
-      const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
-      // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
-      const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
-      if (!hold || !rewrite) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true } };
-      return {
-        mail_queue: await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })),
-        // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
+  // كل ساعة: يُفرَّغ طابور البريد أولًا، ثم تنتقل العروض المنتهية للتالي، ثم التذكيرات.
+  // التفريغ قبل ما يولّده المسح من بريد: ما اتسعت له حصة اليوم (من 03:00 بالرياض، وفي تفريغ المساء من 22:17) يأخذه الأقدم انتظارًا قبل الجديد، فلا
+  // يسبق تذكير هذه الساعة إشعارًا ينتظر منذ أمس (وعليه يُبنى الموعد المتوقع في مركز البريد، queueEta). سر المجدول يُتحقق منه قبل كل شيء
+  'cron.expert-offers': async (b) => {
+    if (!secretEquals(b.secret, CONFIG.cronSecret)) throw new Fail('غير مصرّح', 403, 'forbidden');
+    // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
+    const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
+    // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
+    const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
+    const mail_queue = hold && rewrite ? await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })) : { sent: 0, deferred: true };
+    const sweeps = { ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
+      pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+      pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
+      // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار
+      feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
+      // بداية إخفاء مقيّمي الأثر مع 360: علامة واحدة في أول تشغيل بعد النشر (feedback360.ts impactPausedSince)
+      impact_pause_mark: await FB.markImpactPause().catch((e) => ({ error: String(e?.message || e) })) };
+    return {
+      ...sweeps, mail_queue,
+      ...(hold && rewrite ? {
+        // ما بقي في الطابور أكثر من ست ساعات لغير الحصة بعد التفريغ والمسح: تنبيه واحد، ولكل رسالة مرة
         mail_stuck: await stuckQueueAlert(hold).catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
-      };
-    })()),
-    // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
-    slack_hello: await slackHello(db) }),
+        // وما ينتظر الحصة يُرحَّل إلى الغد آليًّا: سطر واحد في اليوم للمالك بعدده وموعد فراغه المتوقع
+        mail_carryover: await carryoverAlert(hold).catch((e) => ({ alerted: false, error: String(e?.message || e) })),
+      } : { mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } }),
+      // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
+      slack_hello: await slackHello(db),
+    };
+  },
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
   'xp.auth-google': E.portalGoogle,
@@ -133,11 +141,11 @@ const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility',
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 // ورابطه يُعرض على شاشة: لا يدخل القاعة الحية الحقيقية، ولا يرفع ملفات، ولا يسجّل مفتاح مرور، ولا يبدّل إلى دور آخر (M5)
 // ورابط الجلسة عن بعد يُعرض على شاشة الورشة، ورمز الجهة يربطه بجهة حقيقية، وتقييم 360 يفتح دورة ترشيح (P1-04)
-const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
+const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
   'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
-const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
@@ -161,7 +169,7 @@ const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 
   'demo.fill-profile', 'demo.fill-assessment', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
-const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
+const GATE_PROGRAM = new Set(['guide.state', 'guide.ask', 'guide.clear', 'guide.confirm', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
@@ -227,6 +235,11 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me.privacy': (p) => PV.state(p),
   'me.notice-ack': (p, b) => OB.ack(p, b),
   'me.nudge-seen': (p, b) => NB.seen(p, b),
+  // «التوجيه والإرشاد» (guide.ts): المشارك من جلسته وحدها، ولا معرّف من جسم الطلب
+  'guide.state': (p) => GU.guideState(p),
+  'guide.ask': (p, b) => GU.guideAsk(p, b),
+  'guide.clear': (p) => GU.guideClear(p),
+  'guide.confirm': (p, b) => GU.guideConfirm(p, b),
   'me.export': (p) => PV.exportData(p),
   'me.erase-request': (p, b) => PV.eraseRequest(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
@@ -639,6 +652,15 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
   'admin.outcomes': (_a, b) => T.adminOutcomes(b),
   // المساعد الآلي (agent-admin.ts): القراءة للمدير الأعلى أو المالك، والكتابة superWriter، والمفتاح بتحقق إضافي من admin-api
+  // «التوجيه والإرشاد» G3: أعداد وإنفاق بلا نص، للمدير الأعلى والمالك كشاشة المساعد
+  'admin.guide-report': (a) => { AG.requireAgentRead(a); return GU.guideReport(); },
+  // G4a: تقييم الدقة والدفعة التجريبية، للمدير الأعلى والمالك. البدء والخطوة والتفعيل بغلاف superWriter
+  'admin.guide-eval': (a) => GE.evalState(a),
+  'admin.guide-eval-results': (a, b) => GE.evalResults(a, b),
+  'admin.guide-eval-start': (a, b) => A.superWriter(a, GE.evalStart, b),
+  'admin.guide-eval-step': (a, b) => A.superWriter(a, GE.evalStep, b),
+  'admin.guide-pilots': (a) => GE.pilotList(a),
+  'admin.guide-pilot-set': (a, b) => A.superWriter(a, GE.pilotSet, b),
   'admin.agent-state': (a) => AG.state(a),
   'admin.agent-usage': (a) => AG.usage(a),
   'admin.agent-conversations': (a, b) => AG.conversations(a, b),

@@ -294,7 +294,7 @@ export async function coachingInstant(p: any, b: Body) {
   if (c.coach_email) {
     sendMail(c.coach_email, `اتصال فوري: ${p.full_name}`, mailShell('مشارك ينضم إليك الآن',
       mailText(`${bdi(p.full_name)} طلب اتصالًا فوريًا في «${bdi(r.title_ar)}» وهو في طريقه إلى غرفتك الآن.`) + mailButton(c.instant_url, 'افتح الغرفة'),
-      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' })).catch((e) => console.error(e));
+      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' }), [], { expiresAt: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString() }).catch((e) => console.error(e));
   }
   await audit('participant', p.email, 'coaching.instant', 'stage_requirements', r.id);
   return { success: true, join_url: c.instant_url };
@@ -608,9 +608,10 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
+  // التذكير والدعوة مؤرخان بموعد الجلسة: إن انتظرا في الطابور حتى بدأت يُتركان ولا يخرجان بعدها (expiresAt)
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link)), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link)), link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };

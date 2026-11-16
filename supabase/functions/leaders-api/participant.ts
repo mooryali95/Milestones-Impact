@@ -1,8 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
-import {
-  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
+import { all, audit, BUCKET, CONFIG, db, expiresIn, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, newDeviceMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
@@ -17,7 +16,7 @@ import {
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
-import { guidanceFor } from './guidance.ts';
+import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -62,7 +61,7 @@ export async function issueSession(participantId: string, method: string, ctx: C
     const { data: p } = await db.from('participants').select('full_name, email, is_demo').eq('id', participantId).maybeSingle();
     if (p?.is_demo) return token;
     const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
-    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when)).catch((e) => console.error('new device mail', e));
+    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { expiresAt: expiresIn(24) }).catch((e) => console.error('new device mail', e));
   }
   return token;
 }
@@ -658,7 +657,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     // لافتة التذكير الموحد (nudge-banner.ts): آخر تذكير لم يره، بنص بريده ومرسله
     nudge: audience === 'participant' ? await bannerFor(p.id) : null,
     // «التوجيه والإرشاد» (guidance.js): هل بدأ ما يوجَّه إليه. للمعتمد وحده، فالكتاب والمبادرة يُفتحان بعد الاعتماد
-    guidance: audience === 'participant' && approved ? await guidanceFor(p.id, !!initiative) : null,
+    guidance: audience === 'participant' && approved ? await guidanceFor(p.id, !!initiative).then(async (g) => g && { ...g, ai: await guidanceAi() }) : null,
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
     // مفاتيح الميزات قيد البناء (features.js): الواجهة تخفي القاعة وكاتون و360 بها، والخادم يرفض أفعالها وحده

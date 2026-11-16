@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, mailUsage, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { recentlyNudged, weeklyNudges } from './nudges.ts';
@@ -18,7 +18,7 @@ import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition, orgCohortSetups, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
-import { closeOnDelete as closeErasure } from './privacy.ts';
+import { closeOnDelete as closeErasure, pendingEraseId } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
@@ -29,7 +29,7 @@ import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retake
 import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
-import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
+import { BULK_APPROVE_MAX, mailForecast, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
 // id وowner وsessionHash لشاشة المساعد: المالك يقرؤها، والتحقق الإضافي مربوط بهاش الجلسة نفسها (agent-admin.ts)
@@ -494,26 +494,91 @@ export async function participantImpact(b: Body) {
     counts: { assessments, submissions, capstones, certificates, payments, requirements, sessions }, blockers,
   };
 }
+// الترتيب (المرحلة 0 من تصور طلب الحذف): يُلتقط البريد والاسم ورقم الطلب وقائمة الملفات ومراجع مقيّميه أولًا، وأي تعذّر
+// في قراءتها يوقف التنفيذ قبل أن يُمس شيء. ثم يُحذف صف المشارك، فإن فشل أو لم يجد صفًّا (حذف متزامن) لا يُمس شيء آخر.
+// ثم يُغلق الطلب برقمه، وتُحذف الملفات وما ينتظر في طابور البريد له، ثم يصله تأكيد التنفيذ.
+// ملف تعذّر حذفه: الطلب يُغلق بملاحظة تسمي مجلده، والتنبيه يحمل مساراته، والتأكيد لا يُرسل (لا يُقال له «حُذفت ملفاتك»
+// وهي باقية)، ويعود عنوانه إلى المدير ليرسله بنفسه بعد حذفها
 export async function participantDelete(a: Admin, b: Body) {
   requireSuper(a);
   const impact = await participantImpact(b);
   if (impact.blockers.length) throw new Fail(impact.blockers[0], 409, 'blocked');
-  const { id, email } = impact.participant;
+  const { id, email, full_name } = impact.participant;
   if (String(b.confirm_email || '').trim().toLowerCase() !== email) throw new Fail('اكتب بريد المشارك كما هو للتأكيد', 400, 'confirm');
-  // ملفاته في المخزن الخاص: <id>/<الغرض>/<ملف>
-  const { data: folders } = await storage.from(BUCKET).list(id, { limit: 100 });
-  const paths: string[] = [];
-  for (const f of folders || []) {
-    if (f.id) { paths.push(`${id}/${f.name}`); continue; }
-    const { data: files } = await storage.from(BUCKET).list(`${id}/${f.name}`, { limit: 1000 });
-    for (const x of files || []) if (x.id) paths.push(`${id}/${f.name}/${x.name}`);
+  const request = await pendingEraseId(id);
+  const paths = await participantFiles(id);
+  // مقيّموه يُحذفون معه (on delete cascade)، ودعواتهم في الطابور بمرجعهم وتحمل اسمه: تُلتقط مراجعهم قبل الحذف
+  const raters = await db.from('raters').select('id').eq('participant_id', id);
+  if (raters.error) throw new Fail('تعذّرت قراءة مقيّميه. لم يُحذف شيء، والطلب قائم', 503, 'busy');
+  const refs = [`participant:${id}`, ...((raters.data || []) as any[]).map((r) => `rater:${r.id}`)];
+  const del = await db.from('participants').delete().eq('id', id).select('id');
+  if (del.error) {
+    // شهادة غير سارية (ملغاة أو موقوفة أو مستبدلة) تمنع الحذف بقيدها (on delete restrict)، والمانع لا يعدّ إلا الساري
+    if (del.error.code === '23503') throw new Fail('له شهادة ملغاة أو مستبدلة تمنع الحذف. لم يُحذف شيء، والطلب قائم', 409, 'certificate');
+    throw new Fail('تعذّر الحذف. لم يُحذف شيء، والطلب قائم', 500, 'db_error');
   }
-  if (paths.length) await storage.from(BUCKET).remove(paths);
-  // طلب الحذف القائم يُغلق بتنفيذه، ويبقى أثره بعد حذف صاحبه
-  await closeErasure(id, a.email);
-  must(await db.from('participants').delete().eq('id', id), 'تعذّر الحذف');
-  await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, ...impact.counts });
-  return { success: true, files: paths.length };
+  if (!(del.data || []).length) throw new Fail('حُذف هذا المشارك للتو في عملية أخرى', 409, 'gone');
+  // ما ينتظر له في طابور البريد يُحذف: لا يخرج إلى من حُذفت بياناته، ولا يبقى عنوانه محفوظًا
+  const purged = await purgeQueuedMail(email, refs);
+  let filesError: string | null = null;
+  if (paths.length) {
+    const remove = () => storage.from(BUCKET).remove(paths).then((r: any) => r.error, (e: unknown) => e as Error);
+    const err = (await remove()) && (await remove());   // محاولة ثانية لعطل عابر
+    if (err) filesError = String((err as Error).message || err).slice(0, 200);
+  }
+  const closed = await closeErasure(request, a.email, filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن تحت المجلد ${id}/ (${filesError}). تُحذف يدويًّا ثم يُرسل التأكيد للمشارك` : null);
+  if (filesError || !closed) {
+    await alertOps(filesError ? 'erase_files_failed' : 'erase_close_failed', {
+      request, participant: id, ...(filesError ? { files: paths.length, folder: `${id}/`, paths: paths.slice(0, 20).join(' '), error: filesError } : {}),
+      ...(closed ? {} : { request_open: 'طلب الحذف لم يُغلق: يُغلق برقمه في erasure_requests' }),
+    }, { key: request || id }).catch((e) => console.error('erase alert:', e));
+  }
+  // تأكيد التنفيذ إلى العنوان الملتقط، خارج الطابور، حين حُذف كل شيء: إن تعذّر أو بقيت ملفات يُعاد العنوان إلى المدير
+  const mailed = filesError ? false : await sendMail(email, ERASE_DONE_SUBJECT, eraseDoneMail(full_name, new Date().toISOString()), [], { force: true, queue: false })
+    .then(() => true, (e) => { console.error('erase done mail:', e); return false; });
+  // الحذف تم ولا رجعة فيه: تعذّر سطر السجل لا يحجب الرد (ففيه العنوان للإرسال اليدوي)، ويُبلَّغ
+  const audited = await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, request, request_closed: closed, mailed, queue_purged: purged, ...(filesError ? { files_failed: true } : {}), ...impact.counts })
+    .then(() => true, async (e) => {
+      console.error('participant.delete audit:', e);
+      await alertOps('erase_audit_failed', { participant: id, request }, { key: id }).catch(() => {});
+      return false;
+    });
+  return { success: true, files: paths.length, request, mailed, ...(mailed ? {} : { email }), ...(filesError ? { files_failed: true, folder: `${id}/` } : {}),
+    ...(closed ? {} : { request_open: true }), ...(audited ? {} : { audit_failed: true }) };
+}
+// ملفاته في المخزن الخاص: <id>/<الغرض>/<ملف>، بالصفحات. تعذّر القراءة يوقف الحذف قبل أن يبدأ: قائمة فارغة بالخطأ
+// تعني ملفات بلا صاحب لا يُنبَّه إليها
+const LIST_PAGE = 1000;
+async function listAll(path: string) {
+  const out: any[] = [];
+  for (let offset = 0; ; offset += LIST_PAGE) {
+    const { data, error } = await storage.from(BUCKET).list(path, { limit: LIST_PAGE, offset });
+    if (error) throw new Fail('تعذّرت قراءة ملفاته في المخزن. لم يُحذف شيء، والطلب قائم', 503, 'storage');
+    out.push(...(data || []));
+    if ((data || []).length < LIST_PAGE) return out;
+  }
+}
+async function participantFiles(id: string) {
+  const paths: string[] = [];
+  for (const f of await listAll(id)) {
+    if (f.id) { paths.push(`${id}/${f.name}`); continue; }
+    for (const x of await listAll(`${id}/${f.name}`)) if (x.id) paths.push(`${id}/${f.name}/${x.name}`);
+  }
+  return paths;
+}
+// رسائل الطابور لمشارك حُذف (المنتظرة والمرسلة، فكلها تحفظ عنوانه ومتنه): بمرجعه ومراجع مقيّميه، وبعنوانه ما لا مرجع له.
+// ما يحمل عنوانه بمرجع كيان آخر (هو مقيّم لغيره، أو منسق) لا يُمس: ليس من بياناته في البرنامج. وإن كان العنوان لخبير
+// أو منسق قائم فما لا مرجع له يبقى (عروض الخبراء بلا مرجع). تعذّر الحذف لا يُفشل التنفيذ ويُسجَّل
+async function purgeQueuedMail(email: string, refs: string[]) {
+  const count = (r: any) => { if (r.error) { console.error('mail_queue purge:', r.error.message); return 0; } return (r.data || []).length; };
+  let n = await db.from('mail_queue').delete().in('ref', refs).select('id').then(count, () => 0);
+  // journey-guard: يُسأل هل العنوان لخبير قائم فقط، لحفظ بريده في الطابور، لا ترشيح فيه ولا عرض
+  const [xp, co] = await Promise.all([
+    db.from('experts').select('id').eq('email', email).limit(1).then((r: any) => (r.error ? null : (r.data || []).length > 0), () => null),
+    db.from('org_coordinators').select('id').eq('email', email).limit(1).then((r: any) => (r.error ? null : (r.data || []).length > 0), () => null),
+  ]);
+  if (xp === false && co === false) n += await db.from('mail_queue').delete().eq('to_email', email).is('ref', null).select('id').then(count, () => 0);
+  return n;
 }
 
 // قائمة المراجعة: كل ما أرسله المشاركون وينتظر قرار المستشار
@@ -651,8 +716,10 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
   const to = statusAfterApprove(p.status);
   if (to) await db.from('participants').update({ status: to }).eq('id', id);
   await audit('admin', a.email, 'placement.approve', 'participants', id, before, { rows, ...extra });
+  // البريد يُنتظر: نسخة الدالة قد تنتهي بعد الرد فتضيع رسالة لم تُنتظر، والاعتماد الجماعي يرسل واحدة بعد أخرى فلا تتسابق
+  // قراءة العداد فتتجاوز الحصة. المحجوب بالحصة يدخل الطابور (sendMail)، والمشارك يرى اعتماده في رحلته على كل حال
   const pay = await programPaymentDue(id).catch(() => false);
-  sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
+  await sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
 }
 
 // إشارات الاعتماد لمجموعة: المستوى المحفوظ، وتقييم آخر قياس مسلَّم لكل بُعد بالنموذج الحالي (evaluatePlacement
@@ -692,9 +759,10 @@ export async function approveBulk(a: Admin, b: Body) {
   // المرحلة 2: «بمستوى محدد» للمدير العام وحده، بتعليل إلزامي يُحفظ لكل من خالف مستواه المحسوب
   if (b.mode === 'set') return approveBulkSet(a, b, signals);
   const { ready, held } = splitForApproval(signals);
-  const used = await mailUsage().catch(() => null);
-  const mail = mailPlan(ready.filter((r) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
-  if (b.dry_run) return { success: true, ready, held, mail, mail_read: used != null };
+  // بريد الاعتماد إشعار: يحكمه نصيب غير الرموز، والزائد ينتظر في صندوق «لم يُرسل» ويخرج آليًّا حين تتحرر الحصة
+  const win = await mailWindow().catch(() => null);
+  const mail = mailForecast(ready.filter((r) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, win ?? {});
+  if (b.dry_run) return { success: true, ready, held, mail, mail_read: !!win?.read };
   const results: any[] = [];
   for (const r of ready) {
     const p = signals.find((x: any) => x.id === r.id);
@@ -718,9 +786,10 @@ async function approveBulkSet(a: Admin, b: Body, signals: any[]) {
   const reason = String(b.reason || '').trim().slice(0, 500);
   const plan = planUniform(signals, b.levels || {}, reason);
   if (!Object.keys(plan.levels).length) throw new Fail('اختر مستوى لبُعد واحد على الأقل');
-  const used = await mailUsage().catch(() => null);
-  const mail = mailPlan(plan.ready.filter((r: any) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
-  if (b.dry_run) return { success: true, mode: 'set', ready: plan.ready, held: plan.held, needs_reason: plan.needs_reason, mail, mail_read: used != null };
+  // بريد الاعتماد إشعار: يحكمه نصيب غير الرموز، والزائد ينتظر في صندوق «لم يُرسل» ويخرج آليًّا حين تتحرر الحصة
+  const win = await mailWindow().catch(() => null);
+  const mail = mailForecast(plan.ready.filter((r: any) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, win ?? {});
+  if (b.dry_run) return { success: true, mode: 'set', ready: plan.ready, held: plan.held, needs_reason: plan.needs_reason, mail, mail_read: !!win?.read };
   if (!plan.reason_ok) throw new Fail(`اكتب تعليل مخالفة المستوى المحسوب (${OVERRIDE_REASON_MIN} أحرف على الأقل). يُحفظ في ملف كل من خالفه`, 400, 'override_reason');
   const results: any[] = [];
   for (const r of plan.ready) {

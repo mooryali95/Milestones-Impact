@@ -27,12 +27,15 @@ export async function gate(action: string): Promise<Record<string, unknown> | nu
 // ورسالتا التأكيد من بريد مقيّمي الأثر (impact)، وما سواهما من بريد الدورة (f360): لكل نطاق بداية إخفاء تخصه عند الاستئناف
 const IMPACT_SUBJECTS = ['مقيّم بانتظار تأكيدك', 'لم يُعتمد أحد مقيّميك'];
 const F360_SUBJECTS = [...Object.values(FEEDBACK_MAIL).map((m) => (m.subject as (w: string) => string)('').trim()), ...IMPACT_SUBJECTS];
-export type QueuedF360 = { id: string; created_at: string; scope: 'f360' | 'impact' };
+export type QueuedF360 = { id: string; created_at: string; expires_at?: string | null; scope: 'f360' | 'impact' };
 // كل ما في الطابور مما يمسكه المفتاح وهو مطفأ، أيًا كانت حاله الآن (heldMail يمسكه، وresumeHeldMail يعيد عمره عند الإظهار)
 export async function f360QueuedMail(): Promise<QueuedF360[]> {
-  const { data, error } = await db.from('mail_queue').select('id, ref, subject, created_at').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1000);
+  // expires_at (ترحيل 20261116150000) يُقرأ إن وُجد، وقبله بدونه
+  const read = (cols: string) => db.from('mail_queue').select(cols).is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1000);
+  let { data, error } = await read('id, ref, subject, created_at, expires_at');
+  if (error) ({ data, error } = await read('id, ref, subject, created_at'));
   if (error) throw error;
-  const rows = (data || []) as { id: string; ref: string | null; subject: string; created_at: string }[];
+  const rows = (data || []) as unknown as { id: string; ref: string | null; subject: string; created_at: string; expires_at?: string | null }[];
   const scope = new Map<string, 'f360' | 'impact'>();
   for (const m of rows) {
     const sub = String(m.subject || '');
@@ -46,14 +49,15 @@ export async function f360QueuedMail(): Promise<QueuedF360[]> {
     const phase = new Map((rs || []).map((r: any) => [`rater:${r.id}`, r.phase === 'f360' ? 'f360' as const : 'impact' as const]));
     for (const m of rows) { const ph = m.ref ? phase.get(m.ref) : undefined; if (ph) scope.set(m.id, ph); }
   }
-  return rows.filter((m) => scope.has(m.id)).map((m) => ({ id: m.id, created_at: m.created_at, scope: scope.get(m.id)! }));
+  return rows.filter((m) => scope.has(m.id)).map((m) => ({ id: m.id, created_at: m.created_at, expires_at: m.expires_at ?? null, scope: scope.get(m.id)! }));
 }
 export async function heldMail(): Promise<Set<string>> {
   if ((await features()).f360) return new Set();
   return new Set((await f360QueuedMail()).map((m) => m.id));
 }
-// عند الإظهار: عمر الرسالة الممسَكة لا يُحسب فيه ما مضى مخفيًا، وإلا عدّها التفريغ فائتة (QUEUE_STALE_HOURS) فلا تُرسل
-// دعوة أو تأكيد عاد رابطه حيًا. يُزاح created_at بقدر ما مضى منها في الإخفاء (من بداية نطاقها أو من دخولها الطابور، أيهما أحدث)
+// عند الإظهار: ما مضى مخفيًا لا يُحسب على الرسالة الممسَكة، وإلا عدّها التفريغ فائتة فلا تُرسل دعوة أو تأكيد عاد رابطه حيًا.
+// يُزاح created_at (ترتيبها في الطابور، وقاعدة العمر قبل ترحيل الموعد) وexpires_at (موعدها، كما يُزاح موعد المقيّم في
+// resumeFrozen) بقدر ما مضى منها في الإخفاء (من بداية نطاقها أو من دخولها الطابور، أيهما أحدث)
 export async function resumeHeldMail(since: { f360: number | null; impact: number | null }, now = Date.now()): Promise<number> {
   let n = 0;
   for (const m of await f360QueuedMail()) {
@@ -62,7 +66,10 @@ export async function resumeHeldMail(since: { f360: number | null; impact: numbe
     if (from === null || !Number.isFinite(created)) continue;
     const delta = now - Math.max(from, created);
     if (delta <= 0) continue;
-    const { error } = await db.from('mail_queue').update({ created_at: new Date(created + delta).toISOString() }).eq('id', m.id).is('sent_at', null);
+    const exp = m.expires_at ? Date.parse(m.expires_at) : NaN;
+    const patch: Record<string, string> = { created_at: new Date(created + delta).toISOString() };
+    if (Number.isFinite(exp)) patch.expires_at = new Date(exp + delta).toISOString();
+    const { error } = await db.from('mail_queue').update(patch).eq('id', m.id).is('sent_at', null);
     if (error) throw error;
     n += 1;
   }

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116110000_leaders_program_version_pin
+-- as-of migration: 20261116150000_leaders_mail_queue_expiry
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -512,6 +512,7 @@ create table if not exists leaders.cohorts (
   supervision text default 'peers_expert'::text not null,
   content_release text,
   visibility jsonb default '{}'::jsonb not null,
+  guidance_pilot boolean default false not null,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
@@ -953,6 +954,79 @@ create table if not exists leaders.grid_cells (
   constraint grid_cells_pkey PRIMARY KEY (dimension, level)
 );
 
+create table if not exists leaders.guidance_eval_results (
+  run_id uuid not null,
+  case_id text not null,
+  ok boolean not null,
+  verdict text,
+  reasons text[] default '{}'::text[] not null,
+  reply text,
+  cost_micros bigint default 0 not null,
+  created_at timestamp with time zone default now() not null,
+  constraint guidance_eval_results_case_id_check CHECK ((char_length(case_id) <= 20)),
+  constraint guidance_eval_results_reply_check CHECK ((char_length(reply) <= 6000)),
+  constraint guidance_eval_results_verdict_check CHECK ((char_length(verdict) <= 20)),
+  constraint guidance_eval_results_pkey PRIMARY KEY (run_id, case_id)
+);
+
+create table if not exists leaders.guidance_eval_runs (
+  id uuid default gen_random_uuid() not null,
+  fingerprint text not null,
+  cases_version text not null,
+  status text default 'running'::text not null,
+  stop_reason text,
+  total_cases integer not null,
+  done_cases integer default 0 not null,
+  passed_cases integer default 0 not null,
+  cost_micros bigint default 0 not null,
+  max_micros bigint not null,
+  started_by text not null,
+  started_at timestamp with time zone default now() not null,
+  finished_at timestamp with time zone,
+  lease_until timestamp with time zone,
+  constraint guidance_eval_runs_cases_version_check CHECK ((char_length(cases_version) <= 80)),
+  constraint guidance_eval_runs_fingerprint_check CHECK ((char_length(fingerprint) <= 200)),
+  constraint guidance_eval_runs_status_check CHECK ((status = ANY (ARRAY['running'::text, 'passed'::text, 'failed'::text, 'stopped'::text, 'error'::text]))),
+  constraint guidance_eval_runs_stop_reason_check CHECK ((char_length(stop_reason) <= 40)),
+  constraint guidance_eval_runs_total_cases_check CHECK ((total_cases > 0)),
+  constraint guidance_eval_runs_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.guidance_messages (
+  id bigint generated always as identity not null,
+  participant_id uuid not null,
+  role text not null,
+  body text not null,
+  context text default 'program'::text not null,
+  chapter_id text,
+  verdict text,
+  sources jsonb,
+  model text,
+  input_tokens integer,
+  cache_read_tokens integer,
+  output_tokens integer,
+  cost_micros bigint,
+  created_at timestamp with time zone default now() not null,
+  confirmed_at timestamp with time zone,
+  constraint guidance_messages_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 6000))),
+  constraint guidance_messages_chapter_id_check CHECK ((char_length(chapter_id) <= 80)),
+  constraint guidance_messages_context_check CHECK ((context = ANY (ARRAY['program'::text, 'handbook'::text, 'capstone'::text]))),
+  constraint guidance_messages_model_check CHECK ((char_length(model) <= 60)),
+  constraint guidance_messages_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
+  constraint guidance_messages_verdict_check CHECK ((verdict = ANY (ARRAY['answered'::text, 'refused'::text, 'unsure'::text, 'error'::text]))),
+  constraint guidance_messages_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.guidance_spend_daily (
+  day date not null,
+  micros bigint default 0 not null,
+  calls integer default 0 not null,
+  alerted_100 timestamp with time zone,
+  updated_at timestamp with time zone default now() not null,
+  constraint guidance_spend_daily_micros_check CHECK ((micros >= 0)),
+  constraint guidance_spend_daily_pkey PRIMARY KEY (day)
+);
+
 create table if not exists leaders.hall_presence (
   session_id uuid not null,
   participant_id uuid not null,
@@ -1273,6 +1347,7 @@ create table if not exists leaders.mail_queue (
   gave_up_at timestamp with time zone,
   reason text,
   cancelled_by text,
+  expires_at timestamp with time zone,
   constraint mail_queue_cancelled_by_check CHECK ((char_length(cancelled_by) <= 254)),
   constraint mail_queue_kind_check CHECK ((kind = ANY (ARRAY['bulk'::text, 'notify'::text]))),
   constraint mail_queue_reason_check CHECK ((char_length(reason) <= 40)),
@@ -2648,6 +2723,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.guidance_eval_results add constraint guidance_eval_results_run_id_fkey FOREIGN KEY (run_id) REFERENCES leaders.guidance_eval_runs(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.guidance_messages add constraint guidance_messages_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.hall_presence add constraint hall_presence_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3191,6 +3274,14 @@ CREATE INDEX IF NOT EXISTS feedback_cycles_status ON leaders.feedback_cycles USI
 
 CREATE INDEX IF NOT EXISTS final_evaluations_status_idx ON leaders.final_evaluations USING btree (status);
 
+CREATE UNIQUE INDEX IF NOT EXISTS guidance_eval_runs_one_running ON leaders.guidance_eval_runs USING btree ((true)) WHERE (status = 'running'::text);
+
+CREATE INDEX IF NOT EXISTS guidance_eval_runs_started_idx ON leaders.guidance_eval_runs USING btree (started_at DESC);
+
+CREATE INDEX IF NOT EXISTS guidance_messages_created_idx ON leaders.guidance_messages USING btree (created_at);
+
+CREATE INDEX IF NOT EXISTS guidance_messages_participant_idx ON leaders.guidance_messages USING btree (participant_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS hall_presence_last_seen_idx ON leaders.hall_presence USING btree (last_seen);
 
 CREATE INDEX IF NOT EXISTS hall_sessions_cohort_idx ON leaders.hall_sessions USING btree (cohort_id, stage);
@@ -3224,6 +3315,8 @@ CREATE INDEX IF NOT EXISTS mail_events_window ON leaders.mail_events USING btree
 CREATE INDEX IF NOT EXISTS mail_queue_pending ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
 
 CREATE INDEX IF NOT EXISTS mail_queue_pending_idx ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
+
+CREATE INDEX IF NOT EXISTS mail_queue_waiting_kind_idx ON leaders.mail_queue USING btree (kind DESC, created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
 
 CREATE INDEX IF NOT EXISTS model_submissions_status_idx ON leaders.model_submissions USING btree (status);
 
@@ -3482,6 +3575,14 @@ alter table leaders.feedback_cycles enable row level security;
 alter table leaders.final_evaluations enable row level security;
 
 alter table leaders.grid_cells enable row level security;
+
+alter table leaders.guidance_eval_results enable row level security;
+
+alter table leaders.guidance_eval_runs enable row level security;
+
+alter table leaders.guidance_messages enable row level security;
+
+alter table leaders.guidance_spend_daily enable row level security;
 
 alter table leaders.hall_presence enable row level security;
 
@@ -3955,6 +4056,108 @@ begin
   end if;
   return new;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_claim(p_participant uuid, p_body text, p_context text, p_chapter text, p_day_start timestamp with time zone, p_month_start timestamp with time zone, p_daily integer, p_monthly integer)
+ RETURNS bigint
+ LANGUAGE plpgsql
+AS $function$
+declare d integer; m integer; new_id bigint;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('guidance:' || p_participant::text, 0));
+  select count(*) filter (where created_at >= p_day_start), count(*) into d, m
+    from leaders.guidance_messages
+   where participant_id = p_participant and role = 'user' and verdict is distinct from 'refused'
+     and created_at >= least(p_day_start, p_month_start);
+  if d >= p_daily then return -1; end if;
+  if m >= p_monthly then return -2; end if;
+  insert into leaders.guidance_messages (participant_id, role, body, context, chapter_id)
+  values (p_participant, 'user', p_body, p_context, p_chapter)
+  returning id into new_id;
+  return new_id;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_counts(p_participant uuid, p_since timestamp with time zone)
+ RETURNS TABLE(asked integer, unsure integer, confirmed integer, last_at timestamp with time zone)
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select count(*) filter (where role = 'user' and verdict is distinct from 'refused')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'unsure')::integer,
+         count(*) filter (where role = 'assistant' and confirmed_at is not null)::integer,
+         max(created_at) filter (where role = 'user')
+    from leaders.guidance_messages
+   where participant_id = p_participant and created_at >= p_since;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_eval_lease(p_id uuid, p_seconds integer)
+ RETURNS SETOF leaders.guidance_eval_runs
+ LANGUAGE sql
+AS $function$
+  update leaders.guidance_eval_runs set lease_until = now() + make_interval(secs => p_seconds)
+   where id = p_id and status = 'running' and (lease_until is null or lease_until < now())
+  returning *;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_purge_expired()
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+declare days integer := 90; n integer; raw text;
+begin
+  if to_regclass('leaders.app_settings') is not null then
+    select value->>'retention_days' into raw from leaders.app_settings where key = 'guidance';
+    if raw ~ '^[0-9]{1,3}$' and raw::integer between 7 and 365 then days := raw::integer; end if;
+  end if;
+  delete from leaders.guidance_messages where created_at < now() - make_interval(days => days);
+  get diagnostics n = row_count;
+  return n;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_report(p_since timestamp with time zone)
+ RETURNS TABLE(asked integer, participants integer, answered integer, unsure integer, refused integer, errors integer, confirmed integer, micros bigint)
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select count(*) filter (where role = 'user' and verdict is distinct from 'refused')::integer,
+         count(distinct participant_id) filter (where role = 'user')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'answered')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'unsure')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'refused')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'error')::integer,
+         count(*) filter (where role = 'assistant' and confirmed_at is not null)::integer,
+         coalesce(sum(cost_micros), 0)::bigint
+    from leaders.guidance_messages
+   where created_at >= p_since;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_spend_reserve(p_day date, p_micros bigint, p_cap bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  insert into leaders.guidance_spend_daily as d (day, micros, calls)
+  select p_day, greatest(p_micros, 0), 1 where greatest(p_micros, 0) <= p_cap
+  on conflict (day) do update set micros = d.micros + excluded.micros, calls = d.calls + 1, updated_at = now()
+  where d.micros + excluded.micros <= p_cap
+  returning micros;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_spend_settle(p_day date, p_delta bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  update leaders.guidance_spend_daily set micros = greatest(micros + p_delta, 0), updated_at = now()
+  where day = p_day
+  returning micros;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.handbook_quiz_locked()

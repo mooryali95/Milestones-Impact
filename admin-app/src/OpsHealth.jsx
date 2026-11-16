@@ -134,7 +134,7 @@ const PILL_IC = { sent: '✓', failed: '✕', blocked: '⊘' };
 function OpsStrip({ s }) {
   return (
     <ul className="ops-strip" aria-label="ملخص صحة البريد والتنبيه">
-      <li className="ops-sum mail"><Ring m={s.mail} /><span className="ops-sum-l">البريد في 24 ساعة</span></li>
+      <li className="ops-sum mail"><Ring m={s.mail} /><span className="ops-sum-l">البريد اليوم</span></li>
       <li className="ops-sum codes">
         <span className="ops-sum-l">رموز الدخول</span>
         <span className="ops-pills">
@@ -191,14 +191,14 @@ export function OpsHealthCard({ enabled, isSuper }) {
       )}
       <div className="ops-grid">
         <div>
-          <h4>البريد في آخر 24 ساعة</h4>
+          <h4>البريد اليوم</h4>
           <dl>
             <Row label="أُرسل">{mail.sent == null ? 'غير مقروء' : <><b>{mail.sent}</b> من {mail.cap}</>}
               {pct != null && <span className={`ops-meter${meter ? ` ${meter}` : ''}`} role="img" aria-label={`${pct}٪ من السقف اليومي`}><i style={{ inlineSize: `${pct}%` }} /></span>}</Row>
-            <Row label="رموز الدخول">وصل {n(mail.codes?.sent)} · تعذّر {n(mail.codes?.failed)} · حُجب {n(mail.codes?.blocked)}
+            <Row label="رموز الدخول في 24 ساعة">وصل {n(mail.codes?.sent)} · تعذّر {n(mail.codes?.failed)} · حُجب {n(mail.codes?.blocked)}
               {mail.codes?.matrix_blocked > 0 && <small className="ops-codes">ومصفوفة التأثير: حُجب {mail.codes.matrix_blocked} (نصيبها أو السقف)</small>}</Row>
             <Row label="طابور البريد">{q.waiting == null ? 'غير مقروء' : q.waiting ? `${q.waiting} تنتظر${q.oldest_minutes != null ? `، أقدمها منذ ${minutesAr(q.oldest_minutes)}` : ''}` : 'فارغ'}</Row>
-            <Row label="رسائل أخرى لم تصل">تعذّر {n(mail.failed_24h)} · حُجب {n(mail.blocked_24h)}</Row>
+            <Row label="رسائل أخرى لم تصل في 24 ساعة">تعذّر {n(mail.failed_24h)} · حُجب {n(mail.blocked_24h)}</Row>
           </dl>
         </div>
         <div>

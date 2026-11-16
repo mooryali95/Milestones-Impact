@@ -241,7 +241,7 @@ Deno.test('مقيّمو الأثر: بداية إخفائهم لا تسبق نش
       { id: RID, cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 20), expires_at: at(-24 * 9) },
     ],
     // دعوته في الطابور منذ اثني عشر يومًا (السقف اليومي): لا تُعد فائتة عند أول تفريغ بعد الإظهار
-    mail_queue: [{ id: 'm1', kind: 'notify', created_at: at(-24 * 12), to_email: 'boss@x.sa', subject: 'طلب تقدير من سارة', html: '<p/>', ref: `rater:${RID}`, attempts: 0, sent_at: null, gave_up_at: null }],
+    mail_queue: [{ id: 'm1', kind: 'notify', created_at: at(-24 * 12), to_email: 'boss@x.sa', subject: 'طلب تقدير من سارة', html: '<p/>', ref: `rater:${RID}`, attempts: 0, sent_at: null, gave_up_at: null, expires_at: at(-24 * 9) }],
   });
   const from = (db as any).from;
   (db as any).from = (t: string) => t !== 'feedback_cycles' ? from(t) : new Proxy({}, {
@@ -254,6 +254,8 @@ Deno.test('مقيّمو الأثر: بداية إخفائهم لا تسبق نش
     assertEquals(w.tables.raters.map((x) => [x.id, x.expires_at]), [['r-gone', at(-24 * 20)], [RID, at(24 * 1)]]);
     // عمرها في الطابور بلا أيام الإخفاء: يومان قبل النشر، فتُرسل ولا تُترك «فائتة»
     assertEquals(w.tables.mail_queue[0].created_at, at(-24 * 2));
+    // وموعدها يُزاح بأيام الإخفاء كموعد المقيّم، فلا يتركها التفريغ «فات أوانه» والرابط حي
+    assertEquals(w.tables.mail_queue[0].expires_at, at(24 * 1));
     assertEquals(w.tables.audit_log.filter((l) => l.action === 'mail.resume').map((l) => l.after), [{ messages: 1 }]);
   } finally { w.restore(); }
 });

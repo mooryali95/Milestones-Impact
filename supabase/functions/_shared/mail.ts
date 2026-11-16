@@ -8,7 +8,7 @@
 // كل قيمة متغيرة تمر عبر esc() قبل وضعها في HTML، والقيمة داخل جملة عبر bdi() التي ترمّز وتعزل.
 // الاتجاه على كل جدول وخلية وفقرة لا على html وحده: Gmail يحذف سمات html وbody، فيرث المتن اتجاه واجهته.
 
-import { crossesAlert, domainOf, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
+import { crossesAlert, domainOf, mailDayStart, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
 import { maskAlertDetail, maskText, slackAlert, slackCode, slackMail, slackUse } from './slack.ts';
 export { slackAlertDelivered } from './slack.ts';
 
@@ -179,7 +179,8 @@ export type SendOutcome = { ok: boolean; reason?: 'mail_cap' | 'mail_share' | 'm
 type Client = any;
 const eventsOf = (client: Client) => (typeof client?.schema === 'function' ? client.schema('leaders') : client).from('mail_events');
 
-export async function mailCounts(client: Client, since = new Date(Date.now() - 864e5).toISOString()) {
+// since: بداية يوم المزوّد (mailDayStart) افتراضًا، فالعد يطابق حصة Resend التي تُصفَّر 00:00 UTC
+export async function mailCounts(client: Client, since = mailDayStart()) {
   const base = () => eventsOf(client).select('id', { count: 'exact', head: true }).eq('status', 'sent').gte('created_at', since);
   const [all, non] = await Promise.all([base(), base().not('kind', 'in', '(code,alert)')]);
   if (all.error || non.error) { console.error('mail_events count:', all.error || non.error); return null; }   // العداد غير مقروء الآن
@@ -215,9 +216,10 @@ async function logEvent(client: Client, row: Record<string, any>, extra: Record<
 // alert: قناة تنبيه المالك لأحداث البريد (السقف، و70%، ورفض المزوّد، وتعذّر العداد). leaders-api يمرر alertOps
 // (الرابط والبريد بتهدئة لكل نوع)، وما سواه الرابط وحده. رسالة التنبيه نفسها تنبّه بالرابط وحده، فلا حلقة
 // queued: رسالة في الطابور أصلًا (تفريغ المهمة الساعية): حجبها بالحصة أُبلغ عنه سلاك عند دخولها فلا يُعاد كل ساعة
+// flush: تفريغ المساء (inFlush، من التفريغ الساعي وحده): نصيب غير الرموز يتسع إلى السقف إلا FLUSH_KEEP (mailDecision)
 export type MailAlert = (kind: string, detail: Record<string, unknown>) => Promise<unknown>;
 export async function sendCounted(client: Client, to: string, subject: string, html: string,
-  { kind, source, ref = null, cap, sourceShare, force = false, alert, purpose = null, queued = false, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert; purpose?: string | null; queued?: boolean }): Promise<SendOutcome> {
+  { kind, source, ref = null, cap, sourceShare, force = false, alert, purpose = null, queued = false, flush = false, ...opts }: DeliverOpts & { kind: MailKind; source: string; ref?: string | null; cap: number; sourceShare?: number; force?: boolean; alert?: MailAlert; purpose?: string | null; queued?: boolean; flush?: boolean }): Promise<SendOutcome> {
   // عميل سلاسل سلاك قبل أي تنبيه: user-api وsend-otp لا يمررانه في غير هذا
   slackUse(client);
   const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;
@@ -240,7 +242,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
   const extra = { to_hash: await addressHash(to), subject: kind === 'code' ? null : String(subject || '').slice(0, 300) };
   if (counts && sourceShare != null) {
     const { count, error } = await eventsOf(client).select('id', { count: 'exact', head: true }).eq('status', 'sent').eq('source', source)
-      .gte('created_at', new Date(Date.now() - 864e5).toISOString());
+      .gte('created_at', mailDayStart());
     if (!error && (count ?? 0) >= Math.floor(cap * sourceShare)) {
       await logEvent(client, { kind, source, ref, status: 'blocked', to_domain: domainOf(to) }, extra);
       if (!queued) report('blocked', 'mail_share');
@@ -249,7 +251,7 @@ export async function sendCounted(client: Client, to: string, subject: string, h
   }
   const log = (status: string, resend_id: string | null = null) => logEvent(client, { kind, source, ref, status, resend_id, to_domain: domainOf(to) }, extra);
   if (counts) {
-    const d = mailDecision(force ? 'code' : kind, counts, cap);
+    const d = mailDecision(force ? 'code' : kind, counts, cap, { flush });
     if (!d.ok) {
       await log('blocked');
       if (!queued || (d.reason !== 'mail_cap' && d.reason !== 'mail_share')) report('blocked', String(d.reason));

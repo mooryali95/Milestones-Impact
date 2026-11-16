@@ -251,8 +251,9 @@ export async function advisorDecide(e: any, b: Body) {
     must(await db.from('raters').update({ status: 'invited', ...tokenPatch(r, await hash(token)), invited_at: now.toISOString(), expires_at: closes,
       ...(r.verification === 'org_domain' ? {} : { verification: 'confirmed', verified_by: who, verified_at: now.toISOString() }) }).eq('id', r.id).eq('status', 'nominated'));
     const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
-    // bulk: يدخل طابور البريد عند بلوغ الحصة اليومية، فلا تضيع دعوة ولا يتجاوز سقف البريد (D15)
-    await sendMail(r.email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, p.full_name || 'زميلك', link, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(closes) }), [], { kind: 'bulk', ref: `rater:${r.id}` })
+    // bulk: يدخل طابور البريد عند بلوغ الحصة اليومية، فلا تضيع دعوة ولا يتجاوز سقف البريد (D15). ومؤرخة بإغلاق الدورة:
+    // دعوة انتظرت حتى أُغلقت النافذة تُترك (expiresAt)
+    await sendMail(r.email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, p.full_name || 'زميلك', link, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(closes) }), [], { kind: 'bulk', ref: `rater:${r.id}`, expiresAt: closes })
       .then(() => { queued += 1; }).catch((x) => console.error('f360 invite mail', r.id, x));
   }
   await audit('system', who, 'f360.approve', 'feedback_cycles', c.id, null, { participant_id: p.id, invited: raters.length, mailed: queued });
@@ -287,7 +288,7 @@ export async function sweep() {
       // الأولى، والدعوة المنتظرة في الطابور، والنموذج المفتوح برمزه، تبقى صالحة حتى الإغلاق كما وعدت الدعوة
       const token = randomToken();
       must(await db.from('raters').update(tokenPatch(r, await hash(token), true)).eq('id', r.id).eq('status', 'invited'));
-      await sendMail(r.email, `تذكير: تقديرك لـ${c.participants?.full_name || 'زميلك'}`, raterMail(r.full_name, c.participants?.full_name || 'زميلك', `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(c.closes_at), reminder: true }), [], { kind: 'bulk', ref: `rater:${r.id}` })
+      await sendMail(r.email, `تذكير: تقديرك لـ${c.participants?.full_name || 'زميلك'}`, raterMail(r.full_name, c.participants?.full_name || 'زميلك', `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(c.closes_at), reminder: true }), [], { kind: 'bulk', ref: `rater:${r.id}`, expiresAt: c.closes_at })
         .then(() => { reminded += 1; }).catch((x) => console.error('f360 reminder', r.id, x));
     }
   }

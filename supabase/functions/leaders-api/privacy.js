@@ -16,6 +16,8 @@ export const EXPORT_TABLES = {
   sponsor_requests: ['decided_by'],
   // التذكيرات التي وصلته (nudges.ts): نصها ومرسلها ومرحلتها. بريد المدير المرسل ولقطة القياس الداخلية لا يخرجان
   nudges: ['sender_ref', 'snapshot'],
+  // محادثته مع «التوجيه والإرشاد» (guide.ts): السؤال والرد والحكم والمصدر. النموذج والرموز والكلفة داخلية
+  guidance_messages: ['model', 'input_tokens', 'cache_read_tokens', 'output_tokens', 'cost_micros'],
   // المقيّمون: ما أدخله المشارك عنهم وحالة الدعوة. إجاباتهم وتعليقاتهم سرية لأصحابها فلا تخرج
   raters: ['answers', 'comment', 'verification', 'verification_flags', 'verified_by'],
   // التقييم الختامي: القرار والدرجة. أصوات المقيّمين وأسماؤهم لا تخرج

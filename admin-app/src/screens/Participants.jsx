@@ -2,6 +2,7 @@
 // المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { deleteFollowUp } from '../erase-follow.js';
 import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
@@ -329,14 +330,18 @@ function StageOverride({ s, onPick }) {
 
 // حذف مشارك بأثر: ما سيُمحى معه، وما يمنعه (شهادة سارية أو دفع مؤكد)؛ للمدير الأعلى بكتابة البريد
 function PersonDanger({ p, onDeleted }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [open, setOpen] = useState(false);
   const [impact, setImpact] = useState(null);
   const [typed, setTyped] = useState('');
   useEffect(() => { if (open && !impact) L('admin.participant-impact', { participant_id: p.id }).then(setImpact); }, [open, impact, p.id]);
   const remove = async () => {
     const r = await L('admin.participant-delete', { participant_id: p.id, confirm_email: typed });
-    if (r.success) { toast('حُذف المشارك'); onDeleted(); } else toast(r.message);
+    if (!r.success) return toast(r.message);
+    // ما بقي عليه في نافذة لا تختفي وحدها: فيها العنوان الوحيد الباقي لإرسال التأكيد يدويًّا
+    const follow = deleteFollowUp(r);
+    if (follow) await confirm(follow, { ok: 'فهمت' }); else toast('حُذف المشارك');
+    onDeleted();
   };
   const c = impact?.counts || {};
   return (
@@ -577,6 +582,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
               <span><b>{sc[1] ? Math.round((sc[0] / sc[1]) * 100) : 0}%</b>دقة الاختبارات</span>
               <span><b>{(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
             </div>
+            {/* «التوجيه والإرشاد» G3: أعداد بلا نص، والمحادثة خاصة بالمشارك */}
+            {r.guidance?.asked > 0 && <p className="la-muted small" data-guidance-counts>المساعد الذكي في آخر {r.guidance.days} يومًا: {r.guidance.asked} سؤالًا، ولم يتأكد في {r.guidance.unsure}، وطلب التأكد من خبير {r.guidance.confirmed}. المحادثة خاصة به.</p>}
             {(r.models || []).length > 0 && (
               <ul className="la-reqs">{r.models.map((x) => (
                 <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span>{x.rating ? <span className="stars-c"> {stars(x.rating)}</span> : null}</span>

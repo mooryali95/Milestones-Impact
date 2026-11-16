@@ -6,9 +6,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { dateTime, L } from '../leaders.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
-import { DELIVERY_AR, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
+import { DELIVERY_AR, etaAr, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
 
 const QUEUE_ST = { waiting: ['ينتظر الحصة', 'warn'], gave_up: ['تعذّر بعد محاولات', 'bad'], stale: ['فات أوانه', ''], cancelled: ['أُغلق يدويًّا', ''] };
+// «يُتوقع إرساله» للمنتظر: الممسَك بميزة مخفية لا موعد له، والمؤرخ الذي يمضي موعده قبل دوره يُترك
+export const etaCell = (m) => (m.state !== 'waiting' ? '·' : m.held ? 'ممسَك حتى تُظهَر ميزته' : m.eta_expires ? `يُترك: يمضي موعده قبل ${etaAr(m.eta)}` : etaAr(m.eta));
 const EV_TONE = { sent: 'ok', failed: 'bad', blocked: 'warn' };
 const copy = async (text, toast, ok) => {
   try { await navigator.clipboard.writeText(text); toast(ok); } catch { toast('تعذّر النسخ: انسخ النص يدويًّا'); }
@@ -18,7 +20,7 @@ const copy = async (text, toast, ok) => {
 function Gauge({ b }) {
   const share = b.cap ? Math.round((b.nonCodeLimit / b.cap) * 100) : 0;
   return (
-    <div className="mc-gauge" role="img" aria-label={`أُرسل ${b.sent} من ${b.cap} في آخر 24 ساعة`}>
+    <div className="mc-gauge" role="img" aria-label={`أُرسل ${b.sent} من ${b.cap} اليوم`}>
       <div className="mc-gauge-bar"><i className={b.state} style={{ inlineSize: `${b.pct}%` }} /><em style={{ insetInlineStart: `${share}%` }} title="حد الإشعارات: ما بعده محجوز لرموز الدخول" /></div>
       <div className="mc-gauge-scale"><span>0</span><span>حد الإشعارات {b.nonCodeLimit}</span><span>{b.cap}</span></div>
     </div>
@@ -166,11 +168,11 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
     <div className="mc">
       <div className={`pay-hero mc-hero ${b.state}`}>
         <div>
-          <p className="pay-eyebrow">البريد · آخر 24 ساعة</p>
+          <p className="pay-eyebrow">البريد · اليوم</p>
           <b className="pay-total" dir="ltr">{b.remaining}</b>
           <span className="la-muted">رسالة باقية من {b.cap} · أُرسل {b.sent}</span>
           <span className={`la-chip ${b.state === 'ok' ? 'ok' : b.state === 'warn' ? 'warn' : 'bad'}`}>{d.budget_ar}</span>
-          {d.next_free_at && <span className="la-muted">أول رسالة تتحرر {dateTime(d.next_free_at)}</span>}
+          {d.next_free_at && <span className="la-muted">تُصفَّر الحصة {dateTime(d.next_free_at)}</span>}
         </div>
         <div><Gauge b={b} /><Series rows={d.series} /></div>
       </div>
@@ -188,12 +190,12 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
         : <section className="la-card"><h3>لماذا لم يصل البريد؟</h3><p className="la-muted">البحث بعنوان ونصوص الرسائل المنتظرة لمن له صلاحية التعديل، لأنها قد تحمل روابط دخول.</p></section>}
 
       <section className="la-card">
-        <div className="la-row between"><h3>لم يُرسل <small className="la-muted">· آخر 7 أيام</small></h3><button className="btn-sm ghost" onClick={load}>حدّث</button></div>
-        <p className="la-muted small">الإشعار الذي يحجبه السقف ينتظر هنا ويخرج آليًّا حين تتسع الحصة، وما انتظر أكثر من يومين يُترك. لك أن ترسله الآن، أو تنسخ نصه وترسله بنفسك ثم تغلقه. رمز الدخول لا ينتظر: صاحبه يطلبه من جديد، أو تنشئ له رابطًا من البحث أعلاه.</p>
+        <div className="la-row between"><h3>لم يُرسل <small className="la-muted">· كل ما ينتظر، وما تُرك في آخر 7 أيام</small></h3><button className="btn-sm ghost" onClick={load}>حدّث</button></div>
+        <p className="la-muted small">الإشعار الذي يحجبه السقف ينتظر هنا حتى يُرسل، ويخرج آليًّا الأقدم أولًا: مع تصفير الحصة 03:00 بتوقيت الرياض، ومن 22:17 بما بقي من حصة اليوم، يومًا بعد يوم. لا يُترك إلا المؤرخ الذي مضى موعده (تذكير جلسة بدأت، دعوة تقييم أُغلق، عرض خدمة انتهت مهلته). لك أن ترسله الآن، أو تنسخ نصه وترسله بنفسك ثم تغلقه. رمز الدخول لا ينتظر: صاحبه يطلبه من جديد، أو تنشئ له رابطًا من البحث أعلاه.</p>
         {d.queue.length === 0 ? <Empty compact title="لا رسائل منتظرة" hint="كل ما طُلب إرساله خرج." /> : (
           <div className="la-table-wrap">
             <table className="la-table">
-              <thead><tr><th scope="col">منذ</th><th scope="col">إلى</th><th scope="col">الرسالة</th><th scope="col">الحالة</th><th scope="col"><span className="sr-only">أفعال</span></th></tr></thead>
+              <thead><tr><th scope="col">منذ</th><th scope="col">إلى</th><th scope="col">الرسالة</th><th scope="col">الحالة</th><th scope="col">يُتوقع إرساله</th><th scope="col"><span className="sr-only">أفعال</span></th></tr></thead>
               <tbody>
                 {d.queue.map((m) => {
                   const [st, tone] = QUEUE_ST[m.state] || [m.state, ''];
@@ -204,13 +206,14 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
                         <td dir="ltr">{m.to_email || '·'}</td>
                         <td>{m.subject}<br /><small className="la-muted">{KIND_AR[m.kind] || m.kind}{m.attempts ? ` · ${m.attempts} محاولة` : ''}</small></td>
                         <td><span className={`la-chip ${tone}`}>{st}</span></td>
+                        <td data-eta>{etaCell(m)}</td>
                         <td className="la-row">
                           {canWrite && <button className="btn-sm ghost" onClick={() => setOpen(open === m.id ? null : m.id)} aria-expanded={open === m.id}>النص</button>}
                           {canWrite && m.state !== 'cancelled' && <button className="btn-sm primary" disabled={busy} onClick={() => sendNow(m)}>أرسل الآن</button>}
                           {canWrite && m.state === 'waiting' && <button className="btn-sm ghost" disabled={busy} onClick={() => closeIt(m)}>أرسلتها بنفسي</button>}
                         </td>
                       </tr>
-                      {open === m.id && <tr><td colSpan={5}><QueueBody id={m.id} onClose={() => setOpen(null)} /></td></tr>}
+                      {open === m.id && <tr><td colSpan={6}><QueueBody id={m.id} onClose={() => setOpen(null)} /></td></tr>}
                     </React.Fragment>
                   );
                 })}
@@ -239,7 +242,7 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
       <div className="la-grid2">
         <section className="la-card">
           <h3>توزيع اليوم</h3>
-          {b.sent === 0 ? <Empty compact title="لم يُرسل شيء في آخر 24 ساعة" /> : <>
+          {b.sent === 0 ? <Empty compact title="لم يُرسل شيء اليوم" /> : <>
             <ul className="mc-split">{Object.entries(d.by_kind).map(([k, n]) => <li key={k}><span>{KIND_AR[k] || k}</span><i style={{ inlineSize: `${(n / b.sent) * 100}%` }} /><b>{n}</b></li>)}</ul>
             <h4>من أين</h4>
             <ul className="mc-split">{Object.entries(d.by_source).map(([k, n]) => <li key={k}><span>{SOURCE_AR[k] || k}</span><i style={{ inlineSize: `${(n / b.sent) * 100}%` }} /><b>{n}</b></li>)}</ul>
@@ -255,7 +258,7 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
             </ul>
           ) : <p className="la-muted">{d.provider.reason}</p>}
           {d.provider.usage && Object.keys(d.provider.usage).length > 0 && <p className="la-muted small">استهلاك الحساب عند المزوّد: {Object.entries(d.provider.usage).map(([k, v]) => <span key={k} dir="ltr" className="mc-q">{k}: {v}</span>)}</p>}
-          <p className="la-muted small">حصة المزوّد المجانية تُحسب باليوم التقويمي وتُصفَّر 03:00 بتوقيت الرياض، وسقف المنصة يُحسب على آخر 24 ساعة متحركة ليبقى دونها.</p>
+          <p className="la-muted small">المنصة تعد البريد بيوم المزوّد نفسه، ويُصفَّر 03:00 بتوقيت الرياض، وسقفها دون حصته. ما ينتظر يخرج من 22:17 بتوقيت الرياض بما بقي من حصة اليوم، ويبقى 10 لرموز الدخول ليلًا، والباقي ينتقل إلى ما بعد 03:00.</p>
           {Object.keys(d.provider.quota).length > 0 && <p className="la-muted small">ما يعلنه المزوّد: {Object.entries(d.provider.quota).map(([k, v]) => <span key={k} dir="ltr" className="mc-q">{k}: {v}</span>)}</p>}
           <ul className="pay-health">
             <li className={d.alert_channel ? 'ok' : 'bad'}><b>{d.alert_channel ? '✓' : '✗'}</b><span>قناة التنبيه</span><small className="la-muted">{d.alert_channel ? 'تنبيه عند 70% من السقف وعند رفض المزوّد' : 'غير مضبوطة: اضبط بوت سلاك (LEADERS_SLACK_BOT_TOKEN وLEADERS_SLACK_CHANNEL) أو رابطًا في LEADERS_ALERT_WEBHOOK ليصلك تنبيه عند اقتراب السقف'}</small></li>

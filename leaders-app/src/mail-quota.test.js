@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
-import { ALERT_AT, ALERT_OVER_CAP, CODE_RESERVE, crossesAlert, domainOf, mailDecision, simulateCodes } from '../../supabase/functions/_shared/mail-budget.js';
+import { ALERT_AT, ALERT_OVER_CAP, CODE_RESERVE, crossesAlert, domainOf, FLUSH_FROM_UTC_HOUR, FLUSH_KEEP, inFlush, mailDayStart, mailDecision, nextMailDay, simulateCodes } from '../../supabase/functions/_shared/mail-budget.js';
 import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
 
 const root = join(__dirname, '../..');
@@ -40,6 +40,32 @@ describe('سياسة الحصة', () => {
     expect(simulateCodes(100, 200, { sent: 100, nonCode: 100 })).toBe(100);
     expect(simulateCodes(10, 80, { sent: 75, nonCode: 40 })).toBe(5);
   });
+  it('العد بيوم المزوّد (00:00 UTC، أي 03:00 بالرياض) لا 24 ساعة متحركة', () => {
+    expect(mailDayStart(Date.parse('2026-11-16T23:59:59Z'))).toBe('2026-11-16T00:00:00.000Z');
+    expect(mailDayStart(Date.parse('2026-11-17T00:00:00Z'))).toBe('2026-11-17T00:00:00.000Z');
+    expect(new Date(nextMailDay(Date.parse('2026-11-16T05:27:00Z'))).toISOString()).toBe('2026-11-17T00:00:00.000Z');
+    expect([FLUSH_FROM_UTC_HOUR, FLUSH_KEEP]).toEqual([19, 10]);
+    // تفريغ المساء من 22:00 بالرياض حتى التصفير
+    expect(['2026-11-16T18:59:59Z', '2026-11-16T19:00:00Z', '2026-11-16T23:59:00Z', '2026-11-17T00:00:00Z'].map((t) => inFlush(Date.parse(t)))).toEqual([false, true, true, false]);
+  });
+  it('تفريغ المساء: غير الرموز إلى السقف إلا عشرة، والرموز والتنبيه والسقف الكلي كما هي، وبلا flush لا يتغير شيء', () => {
+    const flush = { flush: true };
+    for (const k of ['notify', 'bulk', 'contact']) {
+      expect(mailDecision(k, { sent: 50, nonCode: 40 }, 80).reason, k).toBe('mail_share');
+      expect(mailDecision(k, { sent: 50, nonCode: 40 }, 80, flush), k).toEqual({ ok: true });
+      expect(mailDecision(k, { sent: 69, nonCode: 59 }, 80, flush), k).toEqual({ ok: true });
+      expect(mailDecision(k, { sent: 70, nonCode: 60 }, 80, flush), k).toEqual({ ok: false, reason: 'mail_share' });
+      // يوسّع ولا يضيّق: ما يمر بنصيب النهار يمر في المساء
+      expect(mailDecision(k, { sent: 75, nonCode: 20 }, 80, flush), k).toEqual({ ok: true });
+      expect(mailDecision(k, { sent: 80, nonCode: 20 }, 80, flush), k).toEqual({ ok: false, reason: 'mail_cap' });
+    }
+    // العشرة الباقية لرموز الدخول ليلًا
+    expect(simulateCodes(20, 80, { sent: 70, nonCode: 60 })).toBe(FLUSH_KEEP);
+    expect(mailDecision('code', { sent: 79, nonCode: 69 }, 80, flush)).toEqual({ ok: true });
+    expect(mailDecision('code', { sent: 80, nonCode: 0 }, 80, flush).reason).toBe('mail_cap');
+    expect(mailDecision('alert', { sent: 84, nonCode: 0 }, 80, flush).ok).toBe(true);
+    expect(mailDecision('alert', { sent: 85, nonCode: 0 }, 80, flush).reason).toBe('mail_cap');
+  });
   it('التنبيه مرة واحدة عند عبور 70%، والنطاق وحده يُحفظ لا العنوان', () => {
     expect(ALERT_AT).toBe(0.7);
     expect([68, 69, 70].map((n) => crossesAlert(n, 100))).toEqual([false, true, false]);
@@ -71,9 +97,12 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(mail).toContain("const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;");
     expect(mail).toMatch(/Deno\.env\.get\('LEADERS_ALERT_WEBHOOK'\)/);
     const core = read('supabase/functions/leaders-api/core.ts');
-    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps(, queued: true)? \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
+    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps(, queued: true, flush: inFlush\(\))? \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
     // التفريغ الساعي يعيد رسالة في الطابور: حجبها بالحصة لا يُنشر في سلاك كل ساعة
-    expect(core).toMatch(/sendCounted\(db, m\.to_email,[^\n]*alert: alertOps, queued: true \}\)/);
+    expect(core).toMatch(/sendCounted\(db, m\.to_email,[^\n]*alert: alertOps, queued: true, flush: inFlush\(\) \}\)/);
+    // تفريغ المساء للطابور وحده: الإرسال المباشر لا يمرر flush
+    expect(core.match(/flush: inFlush\(\)/g)?.length).toBe(1);
+    expect(core.match(/sendCounted\([^\n]*flush/g)?.length).toBe(1);
     expect(read('supabase/functions/leaders-api/mail-center.ts')).toMatch(/force: true, alert: alertOps \}/);
   });
   it('تعذّر العداد لا يرفع السقف: الرموز والتنبيه وحدها تمر، وما سواها محجوب والجماعي للطابور، والمالك يُنبَّه', () => {
@@ -100,19 +129,21 @@ describe('العداد الموحد في الدوال الأربع', () => {
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/sendOrDiscard[\s\S]{0,200}kind: 'code'/);
     expect(core).toMatch(/alertMail\(kind, detail, windowMs\), \[\], \{ kind: 'alert' \}/);
-    expect(core).toContain("if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
+    expect(core).toContain("if (queue && (kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
     // كل تذكير (الأسبوعي والإدارة والمرشد والجهة) من المحرك الموحد في nudges.ts
     expect(read('supabase/functions/leaders-api/nudges.ts')).toMatch(/nudgeMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/tracking.ts')).toMatch(/\{ kind: 'bulk', ref: `participant:/);
     expect(read('supabase/functions/admin-api/index.ts')).toMatch(/otpHtml\(code\), "code"\)/);
   });
-  it('المهمة الساعية تفرغ الطابور بعد سر المجدول، وتكتب العلامة بعد نجاح الإرسال وحده', () => {
+  it('المهمة الساعية تفرغ الطابور بعد سر المجدول وقبل ما يولّده المسح من بريد، وتكتب العلامة بعد نجاح الإرسال وحده', () => {
     const idx = read('supabase/functions/leaders-api/index.ts');
-    expect(idx).toMatch(/'cron\.expert-offers': async \(b\) => \(\{ \.\.\.\(await E\.sweepOffers\(b\)\)[\s\S]*mail_queue: await drainMailQueue\(40, hold, rewrite\)/);
+    expect(idx).toMatch(/'cron\.expert-offers': async \(b\) => \{\s*if \(!secretEquals\(b\.secret, CONFIG\.cronSecret\)\) throw[\s\S]*await drainMailQueue\(40, hold, rewrite\)[\s\S]*await E\.sweepOffers\(b\)[\s\S]*await Y\.payReminders\(\)[\s\S]*await FB\.sweep\(\)/);
     const core = read('supabase/functions/leaders-api/core.ts');
-    expect(core).toMatch(/if \(r\.ok\) \{ await db\.from\('mail_queue'\)\.update\(\{ sent_at:/);
-    expect(core).toMatch(/if \(r\.reason === 'mail_cap' \|\| r\.reason === 'mail_share'\) break;/);
+    // المطالبة بالرسالة قبل الإرسال (sent_at بشرط الانتظار)، وتعذّر الإرسال يعيدها إلى الانتظار
+    expect(core).toMatch(/update\(\{ sent_at: new Date\(\)\.toISOString\(\) \}\)\.eq\('id', id\)\.is\('sent_at', null\)\.is\('gave_up_at', null\)/);
+    expect(core).toMatch(/if \(!\(await claimQueued\(m\.id\)\)\) continue;[\s\S]*sendCounted\(db, m\.to_email/);
+    expect(core).toMatch(/if \(r\.reason === 'mail_cap' \|\| r\.reason === 'mail_share'\) \{ await releaseQueued\(m\.id\); break; \}/);
   });
   it('دعوة المقيّم تحمل معرّفه فتُحسب نسب الاستجابة، ولا عنوان كامل في السجل', () => {
     expect(read('supabase/functions/leaders-api/impact.ts')).toMatch(/\{ ref: `rater:\$\{saved\.id\}` \}/);
