@@ -32,7 +32,9 @@ async function db(vault = true) {
 }
 const one = async (d, q, p = []) => (await d.query(q, p)).rows[0];
 
-describe('ترحيل 20261115230000_leaders_agent_admin', () => {
+// كل اختبار يبني قاعدة PGlite جديدة ويطبق الترحيل مرتين (نحو 1.6 ث محليًا)، فيتجاوز الحد الافتراضي (5 ث) تحت حمل CI المتوازي.
+// المهلة كما في الاختبارات الأخرى التي تبني قاعدة كاملة (baseline-schema: 60 ث)
+describe('ترحيل 20261115230000_leaders_agent_admin', { timeout: 30000 }, () => {
   it('صف إعداد واحد مطفأ افتراضيًا، والجهة تسمح بالمرافق افتراضيًا، والترحيل مسجل ويُعاد بأمان', async () => {
     const d = await db();
     expect((await d.query('select enabled from leaders.agent_settings')).rows).toEqual([{ enabled: false }]);
