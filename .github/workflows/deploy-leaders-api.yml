@@ -78,3 +78,4 @@ jobs:
           ping leaders-api system.ping
           ping admin-api ping
           ping user-api ping
+          ping agent-chat ping

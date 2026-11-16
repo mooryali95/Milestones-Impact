@@ -1578,11 +1578,14 @@ export async function reminders(b: Record<string, any>) {
   // ويُكتب في السجل الواحد بحده المشترك، فلا يصله تذكير آلي بعد يوم من تذكير الإدارة أو المرشد
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   // من ذُكِّر خلال الأسبوع من أي مرسل يُستبعد من السجل الواحد (recentlyNudged)، لا من reminded_at (المرحلة 3)
+  // ومن لم يدخل قط (last_login_at فارغ) أحوج الناس إلى التذكير: كان lt وحده يُسقطه لأن المقارنة مع الفارغ لا تنجح،
+  // فيُضم بشرط أو ويتقدم الترتيب. الحدان كما هما (600 قراءةً و200 إرسالًا في التشغيلة)، فلا يزيد العدد على ما كان،
+  // والتذكير من نوع bulk: إن بلغ نصيب غير الرموز من السقف اليومي دخل الطابور ولم يزاحم رموز الدخول (mail-budget.js)
   const { data: people } = await db.from('participants')
     .select('id, reminded_at')
     .neq('status', 'suspended').eq('is_demo', false)
-    .lt('last_login_at', weekAgo)
-    .order('last_login_at', { ascending: true })
+    .or(`last_login_at.lt.${weekAgo},last_login_at.is.null`)
+    .order('last_login_at', { ascending: true, nullsFirst: true })
     .limit(600);
   const recent = await recentlyNudged(people || [], 7);
   const due = (people || []).filter((p: any) => !recent.has(p.id)).slice(0, 200);

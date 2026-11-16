@@ -184,6 +184,23 @@ async function started(d: Deps) {
   return r.token as string;
 }
 
+Deno.test('ping مسبار النشر: يقرأ المخزن وحده، بلا نموذج ولا Turnstile ولا حالة التفعيل، ويعمل والمساعد مطفأ', async () => {
+  let runtimeReads = 0, captchas = 0;
+  const off = setup({}, { enabled: false });
+  off.deps.runtime = async () => { runtimeReads++; return { enabled: false, reason: 'db_off', apiKey: '', keySource: null }; };
+  off.deps.turnstile = async () => { captchas++; return true; };
+  const r = await post(off.deps, { action: 'ping' });
+  assertEquals(r.status, 200);
+  const b = await r.json();
+  assertEquals([b.success, b.fn], [true, 'agent-chat']);
+  assertEquals(Object.keys(b).sort(), ['db_ms', 'fn', 'success'], 'لا عدد ولا إعداد في الرد');
+  assertEquals([off.calls.model, runtimeReads, captchas], [0, 0, 0]);
+  // القاعدة لا تُقرأ: 503 فيفشل فحص الدخان
+  off.deps.store = { ...off.deps.store, countModelCalls: async () => null };
+  const bad = await post(off.deps, { action: 'ping' });
+  assertEquals([bad.status, (await bad.json()).success], [503, false]);
+});
+
 Deno.test('مطفأ أو بلا مفاتيح Turnstile: لا محادثة، والحالة تقول ذلك', async () => {
   const off = setup({}, { enabled: false });
   assertEquals((await (await post(off.deps, { action: 'status' })).json()).enabled, false);

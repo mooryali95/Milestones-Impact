@@ -4,12 +4,13 @@
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
 
-const { db, DEMO_MAIL_DOMAIN } = await import('./core.ts');
+const { db, DEMO_MAIL_DOMAIN, CONFIG } = await import('./core.ts');
 const NU = await import('./nudges.ts');
+const ADMIN = await import('./admin.ts');
 const { NUDGE_GAP_DAYS } = await import('./nudge.js');
 
 type Row = Record<string, any>;
-// جداول في الذاكرة: eq وis وnot(is null) وgte وlte وin وlimit وmaybeSingle وsingle، والإدراج والتحديث. order وor لا يغيّران النتيجة
+// جداول في الذاكرة: eq وis وnot(is null) وgte وlte وin وor (lt وis.null) وlimit وmaybeSingle وsingle، والإدراج والتحديث. order لا يغيّر النتيجة
 function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
   let seq = 0;
   const from = (table: string) => {
@@ -47,6 +48,18 @@ function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
         if (k === 'lt') return (c: string, v: string) => { cmp(c, (a) => a < v); return q; };
         if (k === 'gte') return (c: string, v: string) => { cmp(c, (a) => a >= v); return q; };
         if (k === 'lte') return (c: string, v: string) => { cmp(c, (a) => a <= v); return q; };
+        // or بصيغة PostgREST للمقارنات التي يستعملها التذكير الأسبوعي: lt وis.null (القيمة قد تحمل نقاطًا كالتاريخ)
+        if (k === 'or') return (expr: string) => {
+          const alts = expr.split(',').map((part) => {
+            const [c, op, ...rest] = part.split('.');
+            const v = rest.join('.');
+            if (op === 'is' && v === 'null') return (r: Row) => r[c] == null;
+            if (op === 'lt') return (r: Row) => r[c] != null && r[c] < v;
+            return () => false;
+          });
+          filters.push((r) => alts.some((f) => f(r)));
+          return q;
+        };
         if (k === 'limit') return (n: number) => { limit = n; return q; };
         if (k === 'maybeSingle' || k === 'single') return () => { single = true; return q; };
         return () => q;
@@ -113,6 +126,28 @@ Deno.test('المساعد ينوب عن المرشد في الأسبوعي، إ�
     assertEquals(fresh.map((n) => [n.participant_id, n.sender]).sort(), [[pid(1), 'assistant'], [pid(3), 'auto']]);
     assertEquals(fresh.find((n) => n.sender === 'assistant')!.sender_label, 'المساعد نيابة عن المرشد خالد');
   } finally { t.restore(); }
+});
+
+Deno.test('الأسبوعي يذكّر من لم يدخل قط (last_login_at فارغ)، ويستبعد من دخل هذا الأسبوع ومن ذُكِّر خلاله', async () => {
+  const t = install(world({
+    participants: [
+      stuck(1, { last_login_at: null }),
+      stuck(2),
+      stuck(3, { last_login_at: ago(2) }),
+      stuck(4, { last_login_at: null }),
+      stuck(5, { last_login_at: null, is_demo: true }),
+    ],
+    nudges: [{ participant_id: pid(4), sender: 'admin', sender_label: 'الإدارة', created_at: ago(3), snapshot: {} }],
+  }));
+  const prev = (CONFIG as any).cronSecret;
+  (CONFIG as any).cronSecret = 'cron-test';
+  try {
+    await assertRejects(() => ADMIN.reminders({ secret: 'wrong' }));
+    const r = await ADMIN.reminders({ secret: 'cron-test' });
+    assertEquals(r.sent, 2);
+    const fresh = t.tables.nudges.filter((n) => n.created_at > ago(1));
+    assertEquals(fresh.map((n) => n.participant_id).sort(), [pid(1), pid(2)], 'من لم يدخل قط ومن غاب أسبوعًا، لا من دخل قبل يومين ولا من ذُكِّر ولا التجريبي');
+  } finally { (CONFIG as any).cronSecret = prev; t.restore(); }
 });
 
 const coord = (perms: Row = { list: true, activity: true }) => ({ email: 'c@x', organization_id: ORG, permissions: perms, template: 'program' });
