@@ -2,9 +2,11 @@
 // دون اتصال بـ Anthropic. لا يقيس جودة النموذج (ذلك run.ts على الواجهة الحقيقية)، بل يضمن أن المجموعة صحيحة الشكل،
 // وأن ما يحسمه الكود (الجواب الجاهز، والحجب، وفحص المخرج) يحسمه فعلًا، وأن المصحح يميز الصحيح من الخاطئ.
 import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1';
-import { matchFaq } from '../faq.ts';
+import { matchFaq, productOf } from '../faq.ts';
 import { handle, type Deps, type Env } from '../handler.ts';
 import { replyLang } from '../intent.ts';
+import { redactInput } from '../redact.ts';
+import { route } from '../router.ts';
 import { emptyMem, memStore } from '../mem_store.ts';
 import { type Case, grade, type Reply } from './grade.ts';
 
@@ -21,8 +23,11 @@ Deno.test('المجموعة: معرفات فريدة، وحقول كاملة، �
   }
 });
 
-Deno.test('ما يُجاب جاهزًا يطابق جوابه، وما سواه لا يطابق جوابًا جاهزًا (فيصل إلى النموذج)', () => {
+Deno.test('ما يُجاب جاهزًا يطابق جوابه، وما سواه لا يطابق جوابًا جاهزًا (فيصل إلى النموذج)، وما يحوله الموجّه حالته تحويل', () => {
   for (const c of cases) {
+    // الموجّه قبل الأجوبة الجاهزة: ما يحوله برد ثابت لا يصل إلى المطابقة أصلًا
+    const r = redactInput(c.message);
+    if (route(r.text, { hits: r.hits, product: productOf(c.page) }).kind === 'handoff') { assertEquals(c.expect.behavior, 'handoff', c.id); continue; }
     // بلغة الرد كما يحسبها الخادم (الطلب الصريح للغة يغير لغة الجاهز)
     const hit = matchFaq(c.message, c.page, replyLang(c.message));
     if (c.expect.behavior === 'canned') {

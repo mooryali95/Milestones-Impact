@@ -13,11 +13,13 @@ import { maskEmail } from '../_shared/slack.ts';
 import { AGENT_CONTEXT_PREFIX, type ContactRow } from '../_shared/contact.ts';
 import { inServiceHours, promiseNow } from '../_shared/hours.js';
 import { matchFaq, productOf } from './faq.ts';
+import { allowedAmounts, correctionNote, guardReply, type Violation } from './guard.ts';
 import { asksPrice, conversationLang, orgQuote, replyLang, uiLang } from './intent.ts';
 import { buildMessages, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
 import { capState, costMicros, estimateTokens, knownModel, worstCaseMicros } from './pricing.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
-import { redactInput, StreamSanitizer } from './redact.ts';
+import { neutralizeAmounts, redactInput, sanitizeOutput, StreamSanitizer } from './redact.ts';
+import { FORCED_LINE, fixedLang, fixedReply, paidSignal, route } from './router.ts';
 import { type Store, Unavailable } from './store.ts';
 import { keyErrorCode, type Runtime } from './runtime.ts';
 import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
@@ -238,15 +240,27 @@ async function send(d: Deps, b: Record<string, unknown>) {
   // الحجز ذري: الطلبات المتوازية برمز واحد لا تتجاوز حد المحادثة
   const claimed = await d.store.claimMessage(conv.id, LIMITS.messagesPerConversation, new Date(now).toISOString());
   if (claimed === null) return convCap();
-  const { text: message } = redactInput(raw);
+  const { text: message, hits } = redactInput(raw);
   await d.store.addMessage({ conversation_id: conv.id, role: 'visitor', body: message, lang });
 
   return sse(lang, async (emit, signal) => {
     // لغة الرد: طلب الزائر الصريح (في هذه الرسالة أو قبلها) وإلا لغة رسالته
     const history = await d.store.history(conv.id);
     const reply = conversationLang(history.filter((t) => t.role === 'visitor').map((t) => t.body));
+    const product = productOf(conv.product);
+    // 0) الموجّه الحتمي (router.ts): ما يُحوَّل دائمًا يُرد عليه برد ثابت بلغة الزائر بلا نموذج، وتُعرض نافذة التحويل.
+    // البيانات الحساسة بأي لغة (لا تصل النموذج أصلًا)، وما سواها بالعربية أو الإنجليزية (لغة ثالثة يكتبها النموذج والتحويل مفروض)
+    const routed = route(message, { hits, product });
+    if (routed.kind === 'handoff' && (routed.reason === 'pii' || reply === 'ar' || reply === 'en')) {
+      const fl = fixedLang(reply, message);
+      const text = sanitizeOutput(fixedReply(routed.reason, fl, promiseNow(fl, now), { message, product })).text;
+      await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: text, lang: fl, model: `route:${routed.reason}` });
+      emit('delta', { t: text });
+      emit('done', { text, handoff: true, source: 'route', route: routed.reason });
+      return;
+    }
     // 1) الجواب الجاهز: بلا نموذج ولا تكلفة، بلغة الرد إن كانت عربية أو إنجليزية (وغيرهما للنموذج، والجواب الجاهز معتمد في سياقه)
-    const canned = matchFaq(message, conv.product, reply);
+    const canned = routed.kind === 'handoff' ? null : matchFaq(message, conv.product, reply);
     if (canned) {
       await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: canned.text, lang: canned.lang, model: `faq:${canned.id}` });
       emit('delta', { t: canned.text });
@@ -255,21 +269,26 @@ async function send(d: Deps, b: Record<string, unknown>) {
     }
     // 2) السقف اليومي وحد الاستدعاءات في الساعة، قبل أي استدعاء
     const day = riyadhDay(now);
-    const product = productOf(conv.product);
     let leadersPrice: string | null = null;
-    // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق)
+    // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق). ولا يُقرأ لرسالة يحولها الموجّه
+    // ولا لرسالة عن دفع تم («رسوم دفعتها»): تلك ليست سؤال سعر
     const quote = orgQuote(message, product);
-    if (!quote && product !== 'matrix' && asksPrice(message)) {
+    // ويُقرأ في متابعة سؤال سعر سابق كذلك («وهل يشمل الضريبة؟»)، فلا يقطع الحارس سعرًا صحيحًا يكرره النموذج من السجل
+    const priceThread = asksPrice(message) || history.filter((t) => t.role === 'visitor').slice(-6).some((t) => asksPrice(t.body) && !orgQuote(t.body, product));
+    if (!quote && routed.kind !== 'handoff' && product !== 'matrix' && priceThread && !paidSignal(message)) {
       const p = await d.store.leadersPrice();
       if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
     }
     const inHours = inServiceHours(now);
     // لغة ثالثة: الجواب الجاهز (بالإنجليزية) يصير جوابًا معتمدًا يترجمه النموذج
-    const approved = reply !== 'ar' && reply !== 'en' ? matchFaq(message, conv.product, 'en') : null;
-    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text } });
+    const approved = reply !== 'ar' && reply !== 'en' && routed.kind !== 'handoff' ? matchFaq(message, conv.product, 'en') : null;
+    // التحويل المفروض (لغة ثالثة في فئة تحويل، أو طلب سعر لجهة في البرنامج): النموذج يكتب الصياغة والخادم يحول
+    const forced = routed.kind === 'handoff' || routed.kind === 'forced' ? FORCED_LINE[routed.reason] : null;
+    const answerOnly = routed.kind === 'answer';
+    // المبلغ الذي كتبه الزائر لا يصل النموذج (redact.ts)، والمحفوظ يبقى كما كتبه
+    const modelHistory = history.map((t) => (t.role === 'visitor' ? { ...t, body: neutralizeAmounts(t.body, uiLang(reply)) } : t));
+    const { messages } = buildMessages(modelHistory, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text }, forced, answerOnly });
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
-    const rest = estimateTokens(messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
-    const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
     const capMicros = d.env.capCents * 1e4;
     const calls = await d.store.countModelCalls(new Date(now - 36e5).toISOString());
     // حصة الشبكة في يوم الرياض (الطلبات بلا عنوان دلو واحد)
@@ -285,58 +304,111 @@ async function send(d: Deps, b: Record<string, unknown>) {
       await configAlert(d, day, 'agent_model_unknown', {});
       return await capped();
     }
-    // حجز أسوأ تكلفة قبل الاستدعاء، ذريًا ومقيدًا بالسقف: المتوازي لا يتجاوزه، والفاشل يبقى محسوبًا
-    const res = await d.store.reserveSpend(day, worst, capMicros);
-    if (!res.ok) {
-      if (res.reason === 'refused') {
-        const spent = await d.store.spentToday(day).catch(() => null);
-        await spendAlert(d, day, 100, spent ?? capMicros);
-      } else {
-        await configAlert(d, day, 'agent_ledger_error', {});
+    // استدعاء واحد: حجز أسوأ تكلفة قبله ذريًا ومقيدًا بالسقف (المتوازي لا يتجاوزه، والفاشل يبقى محسوبًا)، وصف الاستدعاء
+    // قبل إرساله (نص فارغ لا يدخل السجل) فيحسبه عداد الساعة وهو جارٍ، ثم التسوية من usage
+    type Call = { result: ModelResult; callId: string; cost: number } | { fail: 'capped' | 'error' };
+    const callModel = async (msgs: Anthropic.MessageParam[], onText: (t: string) => void): Promise<Call> => {
+      const rest = estimateTokens(msgs.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
+      const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
+      const res = await d.store.reserveSpend(day, worst, capMicros);
+      if (!res.ok) {
+        if (res.reason === 'refused') {
+          const spent = await d.store.spentToday(day).catch(() => null);
+          await spendAlert(d, day, 100, spent ?? capMicros);
+        } else {
+          await configAlert(d, day, 'agent_ledger_error', {});
+        }
+        return { fail: 'capped' };
       }
-      return await capped();
-    }
-    if (res.total >= capMicros * 0.8) await spendAlert(d, day, 80, res.total);
-    // صف الاستدعاء قبل إرساله (نص فارغ لا يدخل السجل)، فيحسبه عداد الساعة وهو جارٍ، ويُسوّى بعده
-    const callId = await d.store.addMessage({ conversation_id: conv.id, role: 'agent', body: '', lang, model: d.env.model, stop_reason: 'pending', cost_micros: worst });
-    // 3) النموذج ببث، وكل دفعة تمر بفحص المخرج
-    const san = new StreamSanitizer(48, (t) => t.split(HANDOFF_MARK).join(''));
-    let result: ModelResult;
-    try {
-      result = await d.model(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); }, signal, r.apiKey);
-    } catch (e) {
-      const st = errStatus(e);
-      console.error('agent model:', (e as Error)?.name, st, (e as Error)?.message);
-      // انقطاع الزائر ليس خطأ مفتاح
-      if (!signal.aborted && d.keyStatus) background(d.keyStatus(false, keyErrorCode(e), r.keySource));
-      // لا usage: يبقى الحجز (أسوأ تكلفة) محسوبًا كما هو
-      await d.store.updateMessage(callId, { stop_reason: signal.aborted ? 'aborted' : 'error' });
-      if (st !== null && CONFIG_STATUSES.has(st)) {
-        await configAlert(d, day, 'agent_model_config', { status: st, type: (e as Error)?.name, key_source: r.keySource });
-        return await capped();
+      if (res.total >= capMicros * 0.8) await spendAlert(d, day, 80, res.total);
+      const callId = await d.store.addMessage({ conversation_id: conv.id, role: 'agent', body: '', lang, model: d.env.model, stop_reason: 'pending', cost_micros: worst });
+      let result: ModelResult;
+      try {
+        result = await d.model(msgs, onText, signal, r.apiKey);
+      } catch (e) {
+        const st = errStatus(e);
+        console.error('agent model:', (e as Error)?.name, st, (e as Error)?.message);
+        // انقطاع الزائر ليس خطأ مفتاح
+        if (!signal.aborted && d.keyStatus) background(d.keyStatus(false, keyErrorCode(e), r.keySource));
+        // لا usage: يبقى الحجز (أسوأ تكلفة) محسوبًا كما هو
+        await d.store.updateMessage(callId, { stop_reason: signal.aborted ? 'aborted' : 'error' });
+        if (st !== null && CONFIG_STATUSES.has(st)) {
+          await configAlert(d, day, 'agent_model_config', { status: st, type: (e as Error)?.name, key_source: r.keySource });
+          return { fail: 'capped' };
+        }
+        return { fail: 'error' };
       }
+      if (d.keyStatus) background(d.keyStatus(true, null, r.keySource));
+      // بسعر النموذج الذي خدم الطلب إن كان في الجدول، وإلا فبسعر المطلوب (وهو في الجدول بالتحقق أعلاه)
+      const cost = costMicros(knownModel(result.model) ? result.model : d.env.model, result.usage);
+      const total = await d.store.settleSpend(day, cost - worst);
+      if (total !== null) {
+        if (total >= capMicros * 0.8) await spendAlert(d, day, 80, total);
+        if (capState(total, worst, d.env.capCents) === 'capped') await spendAlert(d, day, 100, total);
+      }
+      return { result, callId, cost };
+    };
+    const saveCall = (c: { result: ModelResult; callId: string; cost: number }, body: string, stop?: string) => d.store.updateMessage(c.callId, {
+      body: body.slice(0, 6000), model: c.result.model, stop_reason: (stop ?? c.result.stopReason ?? '').slice(0, 40) || null,
+      input_tokens: c.result.usage.input_tokens, cache_read_tokens: c.result.usage.cache_read_input_tokens,
+      cache_write_tokens: c.result.usage.cache_creation_input_tokens, output_tokens: c.result.usage.output_tokens, cost_micros: c.cost,
+    });
+    // 3) النموذج ببث، وكل دفعة تمر بفحص المخرج وحارسه (guard.ts): لا تخرج إلا جمل تامة، والجملة المخالفة تُستبدل بالحقيقة
+    const gctx = { allow: allowedAmounts(leadersPrice), lang: uiLang(reply), product };
+    const stripMark = (t: string) => t.split(HANDOFF_MARK).join('');
+    const san = new StreamSanitizer(48, (t) => guardReply(stripMark(t), gctx).text, true);
+    const first = await callModel(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); });
+    if ('fail' in first) {
+      if (first.fail === 'capped') return await capped();
       emit('error', { code: 'model', text: TEXT.error[lang] });
       return;
     }
-    if (d.keyStatus) background(d.keyStatus(true, null, r.keySource));
-    // بسعر النموذج الذي خدم الطلب إن كان في الجدول، وإلا فبسعر المطلوب (وهو في الجدول بالتحقق أعلاه)
-    const cost = costMicros(knownModel(result.model) ? result.model : d.env.model, result.usage);
-    const total = await d.store.settleSpend(day, cost - worst);
-    if (total !== null) {
-      if (total >= capMicros * 0.8) await spendAlert(d, day, 80, total);
-      if (capState(total, worst, d.env.capCents) === 'capped') await spendAlert(d, day, 100, total);
-    }
     const fin = san.finish();
     let text = fin.text.trim();
-    let handoff = result.text.includes(HANDOFF_MARK);
-    if (result.stopReason === 'refusal' || !text) { text = TEXT.refusal[lang]; handoff = true; }
-    if (fin.tail && result.stopReason !== 'refusal') emit('delta', { t: fin.tail });
-    await d.store.updateMessage(callId, {
-      body: text.slice(0, 6000), model: result.model, stop_reason: result.stopReason,
-      input_tokens: result.usage.input_tokens, cache_read_tokens: result.usage.cache_read_input_tokens,
-      cache_write_tokens: result.usage.cache_creation_input_tokens, output_tokens: result.usage.output_tokens, cost_micros: cost,
-    });
-    emit('done', { text, handoff, source: 'model' });
+    let call = first;
+    // المخالفات على النص الخام قبل إصلاحه، وإشارة التحويل على سؤال يجيبه الموجّه مخالفة كذلك (تُهمل)
+    const violationsOf = (raw: string): Violation[] => {
+      const v = guardReply(stripMark(raw), gctx).violations;
+      return answerOnly && raw.includes(HANDOFF_MARK) ? [...v, 'marker'] : v;
+    };
+    const violations = first.result.stopReason === 'refusal' ? [] : violationsOf(first.result.text);
+    let retry: 'ok' | 'still' | 'skipped' | null = null;
+    // مخالفة: إعادة توليد واحدة بملاحظة تصحيح قصيرة، بلا بث (النص النهائي في done يستبدل ما بُث). وإن بقيت المخالفة
+    // فالنص المصلح بالحارس هو الرد الآمن (الجمل المخالفة صارت حقائق معتمدة)
+    // إشارة التحويل وحدها لا تستحق استدعاءً ثانيًا: تُنزع من النص وتُهمل في قرار التحويل. والاستدعاء الثاني يمر بحد
+    // الساعة كالأول، فلا تضاعف الردود المخالفة الاستدعاءات
+    const needsRetry = violations.some((x) => x !== 'marker');
+    const hourOk = async () => { const n = await d.store.countModelCalls(new Date(now - 36e5).toISOString()); return n !== null && n < LIMITS.modelCallsHour; };
+    if (violations.length && !needsRetry) {
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: skipped`, lang });
+    } else if (violations.length && !signal.aborted && !(await hourOk())) {
+      retry = 'skipped';
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: ${retry}`, lang });
+    } else if (violations.length && !signal.aborted) {
+      const last = messages[messages.length - 1];
+      const again = [...messages.slice(0, -1), { ...last, content: `${String(last.content)}\n${correctionNote(violations)}` }] as Anthropic.MessageParam[];
+      const second = await callModel(again, () => {});
+      if ('fail' in second) retry = 'skipped';
+      else {
+        const t2 = sanitizeOutput(guardReply(stripMark(second.result.text), gctx).text).text.trim();
+        const v2 = second.result.stopReason === 'refusal' ? ['refusal'] : violationsOf(second.result.text);
+        retry = v2.length ? 'still' : 'ok';
+        if (t2 && second.result.stopReason !== 'refusal') {
+          // الاستدعاء الأول يبقى بتكلفته ونوع مخالفته، بلا نص (لا يدخل السجل الذي يقرؤه النموذج)
+          await saveCall(first, '', `superseded:${violations.join(',')}`);
+          call = second;
+          text = t2;
+        }
+      }
+      // نوع المخالفة وحده (بلا نص ولا بيانات) في سجل المحادثة، لمراجعة المالك ولعدها
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: ${retry}`, lang });
+    }
+    let handoff = forced !== null || (call.result.text.includes(HANDOFF_MARK) && !answerOnly);
+    const refused = call.result.stopReason === 'refusal';
+    if (refused || !text) { text = TEXT.refusal[lang]; handoff = true; }
+    if (call === first && fin.tail && !refused) emit('delta', { t: fin.tail });
+    await saveCall(call, text);
+    emit('done', { text, handoff, source: 'model', ...(violations.length ? { guarded: violations } : {}) });
   });
 }
 

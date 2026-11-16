@@ -380,6 +380,8 @@ function EvalSection({ s, writable, reload, onRuns }) {
   const { confirm } = useUI();
   const [runs, setRuns] = useState(null);
   const [starting, setStarting] = useState(false);
+  // تكرار كل حالة لكشف التذبذب: مرة، أو ثلاث (تنجح الحالة إن نجحت في الثلاث)
+  const [repeats, setRepeats] = useState(1);
   const [live, setLive] = useState(null);
   const [err, setErr] = useState('');
   const [view, setView] = useState(null);
@@ -400,10 +402,11 @@ function EvalSection({ s, writable, reload, onRuns }) {
   };
   const start = async () => {
     if (starting || ac.current) return;
-    if (!(await confirm(`تشغيل التقييم الآن؟ ${s.total_cases} حالة بتكلفة تقديرية أقل من ${usd2(EVAL_ESTIMATE_MICROS)} دولار، والحد 0.50 دولار، وتُحسب من سقف اليوم.`, { ok: 'شغّل' }))) return;
+    const times = repeats === 3 ? '، كل حالة ثلاث مرات' : '';
+    if (!(await confirm(`تشغيل التقييم الآن؟ ${s.total_cases} حالة${times} بتكلفة تقديرية أقل من ${usd2(EVAL_ESTIMATE_MICROS * repeats)} دولار، والحد ${usd2(500_000 * repeats)} دولار، وتُحسب من سقف اليوم.`, { ok: 'شغّل' }))) return;
     setErr('');
     setStarting(true);
-    const r = await L('admin.agent-eval-start');
+    const r = await L('admin.agent-eval-start', { repeats });
     setStarting(false);
     if (!r.success) { if (r.code === 'eval_running' && r.run_id) return loop(r.run_id); return setErr(r.message); }
     setLive({ run_id: r.run_id, done_cases: 0, total: r.total, cost_micros: 0 });
@@ -427,7 +430,14 @@ function EvalSection({ s, writable, reload, onRuns }) {
           ) : (
             <>
               <button type="button" className="btn-sm primary" disabled={starting} onClick={start}>شغّل التقييم الآن</button>
-              <small className="la-muted">{s.total_cases} حالة، أقل من {usd2(EVAL_ESTIMATE_MICROS)} دولار تقديرًا، والحد 0.50 دولار للتشغيل، ضمن سقف اليوم.</small>
+              <label className="la-muted">
+                <span>التكرار </span>
+                <select value={repeats} onChange={(e) => setRepeats(Number(e.target.value))} aria-label="تكرار كل حالة">
+                  <option value={1}>مرة</option>
+                  <option value={3}>ثلاث مرات (يكشف التذبذب)</option>
+                </select>
+              </label>
+              <small className="la-muted">{s.total_cases} حالة، أقل من {usd2(EVAL_ESTIMATE_MICROS * repeats)} دولار تقديرًا، والحد {usd2(500_000 * repeats)} دولار للتشغيل، ضمن سقف اليوم.</small>
             </>
           )}
         </div>
@@ -440,7 +450,7 @@ function EvalSection({ s, writable, reload, onRuns }) {
             <tbody>
               {runs.runs.map((r) => (
                 <tr key={r.id}>
-                  <td><button type="button" className="la-link" onClick={() => setView(r.id)}>{RUN_STATUS_AR[r.status] || r.status}{r.stop_reason ? ` (${stopAr(r.stop_reason)})` : ''}</button>{r.fingerprint === s.versions?.fingerprint && <small className="la-chip ok">هذا الإعداد</small>}</td>
+                  <td><button type="button" className="la-link" onClick={() => setView(r.id)}>{RUN_STATUS_AR[r.status] || r.status}{r.stop_reason ? ` (${stopAr(r.stop_reason)})` : ''}</button>{r.repeats > 1 && <small className="la-chip">كل حالة {r.repeats} مرات</small>}{r.fingerprint === s.versions?.fingerprint && <small className="la-chip ok">هذا الإعداد</small>}</td>
                   <td>{r.eval_total ? `${pct(r.eval_pass / r.eval_total)} (${r.eval_pass}/${r.eval_total})` : 'بلا'}</td>
                   <td>{r.redteam_total ? `${pct(r.redteam_pass / r.redteam_total)} (${r.redteam_pass}/${r.redteam_total})` : 'بلا'}</td>
                   <td>{usd(r.cost_micros)}</td><td><code dir="ltr">{r.model}</code></td><td><code dir="ltr">{r.knowledge_version}</code></td><td>{r.started_by}</td><td>{dateTime(r.started_at)}</td>
