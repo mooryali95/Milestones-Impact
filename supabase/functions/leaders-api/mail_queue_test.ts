@@ -158,6 +158,20 @@ Deno.test('سطر الترحيل اليومي: بعد التاسعة مساءً 
   } finally { w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
 });
 
+Deno.test('raiseAlert بمفتاح: طلبا حذف في عشر دقائق تنبيهان، والطلب نفسه مرة', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const w = installFake({ audit_log: [] });
+  try {
+    await withNet(async (calls) => {
+      assertEquals((await core.raiseAlert('erase_request', { request: 'r1' }, { key: 'r1' })).cooled, false);
+      assertEquals((await core.raiseAlert('erase_request', { request: 'r2' }, { key: 'r2' })).cooled, false);
+      assertEquals((await core.raiseAlert('erase_request', { request: 'r1' }, { key: 'r1' })).cooled, true);
+      assertEquals(calls.filter((c) => c.url.includes('hooks.example')).length, 2);
+      assertEquals(w.tables.audit_log.map((x) => x.entity_id), ['erase_request:r1', 'erase_request:r2']);
+    });
+  } finally { w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
 Deno.test('المرسلون المؤرخون يمررون موعدهم، والمهمة الساعية تنبّه بالترحيل بعد التفريغ', async () => {
   const read = (f: string) => Deno.readTextFile(new URL(`./${f}`, import.meta.url));
   const [act, f360, exp, coord, index] = await Promise.all(['activities.ts', 'feedback360.ts', 'experts.ts', 'coordinator.ts', 'index.ts'].map(read));

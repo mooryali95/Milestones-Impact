@@ -91,16 +91,23 @@ export async function eraseRequest(p: any, b: Body) {
   if (!row) throw new Fail('تعذّر تسجيل الطلب', 500, 'db_error');
   await audit('participant', p.id, 'participant.erase-request', 'participants', p.id, null, { request: row.id });
   const view = eraseView(row)!;
-  // المالك يُبلَّغ فورًا، والمشارك يصله تأكيد بالمهلة وطريقة السحب. تعذّر البريد لا يُسقط الطلب المسجَّل
-  await alertOps('erase_request', { request: row.id, participant: p.id, due_at: view.due_at }).catch((e) => console.error('erase alert:', e));
+  // المالك يُبلَّغ فورًا بتهدئة لكل طلب (لا يُسقط طلب ثانٍ في المهلة نفسها)، والمشارك يصله تأكيد بالمهلة وطريقة السحب. تعذّر البريد لا يُسقط الطلب المسجَّل
+  await alertOps('erase_request', { request: row.id, participant: p.id, due_at: view.due_at }, { key: row.id }).catch((e) => console.error('erase alert:', e));
   await sendMail(p.email, ERASE_MAIL_SUBJECT, eraseRequestMail(p.full_name, ERASE_REPLY_DAYS)).catch((e) => console.error('erase mail:', e));
   return { success: true, erase: view };
 }
 
-// عند تنفيذ المدير للحذف: يُغلق الطلب القائم قبل أن يُحذف صف المشارك (فيبقى أثر الطلب بلا معرّف صاحبه)
-export async function closeOnDelete(participantId: string, by: string) {
-  const { error } = await db.from('erasure_requests').update({ status: 'done', decided_at: new Date().toISOString(), decided_by: by })
-    .eq('participant_id', participantId).eq('status', 'pending');
+// عند تنفيذ المدير للحذف: رقم الطلب القائم يُلتقط قبل حذف صف المشارك (بعده يصير participant_id فارغًا بقيد on delete set null)،
+// ثم يُغلق الطلب برقمه بعد نجاح الحذف وحده، فلا يُغلق طلب لم يُنفذ. note: ما بقي معلقًا (ملفات تعذّر حذفها)
+export async function pendingEraseId(participantId: string) {
+  const { data, error } = await db.from('erasure_requests').select('id').eq('participant_id', participantId).eq('status', 'pending').limit(1);
+  if (error) { if (!missingTable(error)) console.error('erasure read:', error.message); return null; }
+  return (data?.[0]?.id as string) ?? null;
+}
+export async function closeOnDelete(requestId: string | null, by: string, note: string | null = null) {
+  if (!requestId) return;
+  const { error } = await db.from('erasure_requests').update({ status: 'done', decided_at: new Date().toISOString(), decided_by: by, ...(note ? { note: note.slice(0, 1000) } : {}) })
+    .eq('id', requestId).eq('status', 'pending');
   if (error && !missingTable(error)) console.error('erasure close:', error.message);
 }
 

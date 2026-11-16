@@ -572,6 +572,21 @@ export function eraseRequestMail(name: string, days: number) {
     'طلب حذف البيانات', 'وصلتك هذه الرسالة لأن طلب حذف سُجّل من حسابك.');
 }
 
+// تأكيد تنفيذ الحذف: آخر رسالة لمن حُذفت بياناته، إلى عنوانه الملتقط قبل الحذف. لا تدخل الطابور (sendMail queue:false):
+// الطابور يحفظ عنوان من مُحيت بياناته. تذكر تاريخ التنفيذ وما بقي ولماذا وإلى متى
+export const ERASE_DONE_SUBJECT = 'نُفّذ طلب حذف بياناتك';
+export function eraseDoneMail(name: string | null, doneAt: string) {
+  return shell('access', ERASE_DONE_SUBJECT,
+    mailText(`${hello(name)} حذفنا حسابك وبياناتك من منصة Milestone Impact في ${bdi(new Date(doneAt).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' }))}.`)
+    + mailRows([
+      ['ما حُذف', 'ملفك وإجاباتك ونتائجك وأعمالك وملفاتك المرفوعة وجلسات دخولك'],
+      ['ما بقي', 'سطر في سجل التدقيق بلا اسم ولا بريد يثبت أن الحذف نُفّذ، وطلبك نفسه بتاريخه دليلًا على الالتزام بالمهلة'],
+      ['سجلات الدفع', 'إن وُجدت تبقى عشر سنوات كما يلزم النظام، منفصلة عن أي بيانات أخرى'],
+    ])
+    + mailNote('لا تُسترد البيانات بعد الحذف. إن عدت إلى البرنامج يومًا فسجّل من جديد.'),
+    'نُفّذ طلب الحذف', 'وصلتك هذه الرسالة الأخيرة لأنك طلبت حذف بياناتك، ولن يصلك منا بعدها شيء.');
+}
+
 // دخول من جهاز جديد: تنبيه لصاحب الحساب مع طريقة إنهاء الجلسة إن لم يكن هو
 export function passkeyAddedMail(name: string, device: string, when: string) {
   return shell('access', 'أُضيف مفتاح مرور إلى حسابك',
@@ -724,21 +739,24 @@ async function stuckMailDue() {
 const lastAlert = new Map<string, number>();
 // cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين
 export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; slack?: boolean };
-export async function raiseAlert(kind: string, detail: Record<string, unknown>): Promise<AlertResult> {
+// key: مفتاح تهدئة داخل النوع (رقم طلب الحذف مثلًا): لكل طلب تنبيهه، فطلبان في عشر دقائق لا يُسقط ثانيهما.
+// المهلة وسطر السجل بالمفتاح المركب `${kind}:${key}`، والنوع في القناتين كما هو
+export async function raiseAlert(kind: string, detail: Record<string, unknown>, { key = null }: { key?: string | null } = {}): Promise<AlertResult> {
   const windowMs = alertCooldown(kind);
+  const cool = key ? `${kind}:${key}` : kind;
   const cooled = { cooled: true, webhook: false, email: false, slack: false };
-  if (windowMs > 0 && (lastAlert.get(kind) ?? 0) > Date.now() - windowMs) return cooled;
+  if (windowMs > 0 && (lastAlert.get(cool) ?? 0) > Date.now() - windowMs) return cooled;
   // المهلة تُحجز قبل أول انتظار: دفعة متزامنة (رموز محجوبة بالسقف) تنبيه واحد لا تستنفد احتياط البريد
-  if (windowMs > 0) lastAlert.set(kind, Date.now());
+  if (windowMs > 0) lastAlert.set(cool, Date.now());
   try {
     if (windowMs > 0) {
       const since = new Date(Date.now() - windowMs).toISOString();
       const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
-        .eq('action', 'system.alert').eq('entity_id', kind).gte('created_at', since);
+        .eq('action', 'system.alert').eq('entity_id', cool).gte('created_at', since);
       if (!error && (count ?? 0) > 0) return cooled;
     }
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
-    await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
+    await audit('system', 'alert', 'system.alert', 'system', cool, null, detail).catch((e) => console.error('alertOps audit:', e));
     // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه. سلاك والرابط معًا، وكلاهما قناة كافية
     // (readiness.js ALERT_CHANNELS)، فنتيجة سلاك تُنتظر (بمهلة) لتُحسب في «وصل» كما يُحسب الرابط
     const [webhook, slack] = await Promise.all([alertWebhook(kind, detail, { slack: false }), slackAlertDelivered(kind, detail)]);
@@ -758,8 +776,8 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
     return { cooled: false, webhook, slack, email };
   } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false, slack: false }; }
 }
-export async function alertOps(kind: string, detail: Record<string, unknown>) {
-  const r = await raiseAlert(kind, detail);
+export async function alertOps(kind: string, detail: Record<string, unknown>, opts: { key?: string | null } = {}) {
+  const r = await raiseAlert(kind, detail, opts);
   return r.webhook || !!r.slack || r.email;
 }
 
@@ -800,6 +818,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
   { key: 'erase-request', family: 'access', label: 'تأكيد طلب حذف البيانات', subject: ERASE_MAIL_SUBJECT, html: () => eraseRequestMail('سارة', 30) },
+  { key: 'erase-done', family: 'access', label: 'تأكيد تنفيذ حذف البيانات', subject: ERASE_DONE_SUBJECT, html: () => eraseDoneMail('سارة', '2026-11-16T09:00:00Z') },
   { key: 'passkey-added', family: 'access', label: 'إضافة مفتاح مرور', subject: 'أُضيف مفتاح مرور إلى حسابك', html: () => passkeyAddedMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
