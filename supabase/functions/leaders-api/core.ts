@@ -241,7 +241,7 @@ export async function sendMail(to: string, subject: string, html: string, attach
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
 }
 
-// الأعمدة الأحدث تُكتب إن وُجدت، ويُعاد الإدراج بدونها قبل ترحيلها (السبب 20261114110000، والموعد 20261116120000)
+// الأعمدة الأحدث تُكتب إن وُجدت، ويُعاد الإدراج بدونها قبل ترحيلها (السبب 20261114110000، والموعد 20261116140000)
 export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null, expiresAt: string | null = null) {
   const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
   let { error } = await db.from('mail_queue').insert({ ...row, reason, ...(expiresAt ? { expires_at: expiresAt } : {}) });

@@ -343,6 +343,15 @@ export default function ExpertFile({ id, onBack }) {
         </section>
       )}
 
+      {/* «التوجيه والإرشاد» G3: لمستشار الدفعة أعداد وحدها، والمحادثة خاصة بالمشارك (قرار المالك) */}
+      {d.guidance && d.guidance.asked > 0 && (
+        <section className="card stack" aria-label="التوجيه والإرشاد">
+          <h3>التوجيه والإرشاد</h3>
+          <p className="small">في آخر {d.guidance.days} يومًا: سأل المساعد الذكي {d.guidance.asked} {d.guidance.asked === 1 ? 'مرة' : 'مرات'}، ولم يتأكد المساعد في {d.guidance.unsure}، وطلب التأكد من خبير {d.guidance.confirmed} {d.guidance.confirmed === 1 ? 'مرة' : 'مرات'}.</p>
+          {d.guidance.confirmed > 0 && <p className="small">طلب التأكد إشارة إلى أنه يحتاج متابعتك. ما يرسله إليك من أسئلته يصلك في طلب استشارة.</p>}
+          <p className="muted small">المحادثة نفسها خاصة به ولا تظهر لك.</p>
+        </section>
+      )}
       {d.mentor && <MentorNudge pid={p.id} />}
       <PeerPending peer={d.peer} advisor={advisor} reload={load} />
       <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />

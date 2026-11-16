@@ -59,6 +59,8 @@ Deno.test('حالة النظام: المؤجل بقرار منفصل عن الم
     const r = Object.fromEntries(h.readiness.map((x: any) => [x.key, x.ok]));
     // الإعداد مكتمل («4 من 4» كما كانت اللوحة تقول)، وم2 ليست كذلك
     assertEquals([r.baseline, r.post, r.program, r.certificate], [true, true, true, true]);
-    assertEquals([r['cohort-per-org'], r.advisor, r.sessions, r['final-eval'], r['release-pinned']], [true, false, false, false, false]);
+    assertEquals([r['cohort-per-org'], r.advisor, r.sessions, r['final-eval'], r['release-pinned'], r['version-pinned']], [true, false, false, false, false, false]);
+    // قائمة البرامج لم تُقرأ صفوفًا في هذه القاعدة المزيفة، فلا يُحكم ببند نسخ البرامج
+    assertEquals('program-versions' in r, false);
   } finally { f.restore(); for (const k of ['LEADERS_ALERT_WEBHOOK', 'LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL']) Deno.env.delete(k); }
 });

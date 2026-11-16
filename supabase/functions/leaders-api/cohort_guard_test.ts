@@ -58,10 +58,13 @@ function world() {
   return install({
     programs: [{ id: PA, is_default: true, archived_at: null }, { id: PB, is_default: false, archived_at: null }],
     program_versions: [],
-    journey_stages: [{ program_id: PA, key: 's1', title_ar: 'التمهيد', sort: 1, active: true, rules: {} }],
+    // البرنامج الآخر برحلة من مرحلة وبند: الدفعة الجديدة تُثبَّت على نسخة، والبرنامج بلا متطلبات لا نسخة له (program_pin_test.ts)
+    journey_stages: [{ program_id: PA, key: 's1', title_ar: 'التمهيد', sort: 1, active: true, rules: {} },
+      { program_id: PB, key: 'b1', title_ar: 'مرحلة سفراء', sort: 1, active: true, rules: {} }],
     stage_requirements: [
       { id: R1, program_id: PA, stage_key: 's1', code: 'A-ONE', title_ar: 'بند', kind: 'check', required: true, active: true, sort: 1 },
       { id: R2, program_id: PA, stage_key: 's1', code: 'A-TWO', title_ar: 'بند اختياري', kind: 'check', required: false, active: true, sort: 2 },
+      { id: U(40), program_id: PB, stage_key: 'b1', code: 'S-ONE', title_ar: 'بند سفراء', kind: 'check', required: false, active: true, sort: 1 },
     ],
     cohorts: [{ id: C1, name: 'سفراء 2026', organization_id: ORG, program_id: PA, program_version_id: null, status: 'running', starts_on: '2026-09-01', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] }],
     enrollments: [],
@@ -272,8 +275,7 @@ Deno.test('دفعة مثبتة على نسخة تختلف عن الحي: تعر�
     assertEquals(r.stages.map((s: any) => s.key), ['s9']);
     assertEquals(r.requirements.map((x: any) => [x.code, x.hidden, x.stage_title_ar]), [['A-ONE', false, 'مرحلة النسخة'], ['V-OPT', true, 'مرحلة النسخة']]);
     assertEquals(r.hidden, ['V-OPT']);
-    // ما يختاره المحرر قبل الحفظ: برنامج آخر بلا نسخة يعني آخر تعديل عليه
-    w.tables.journey_stages.push({ program_id: PB, key: 'b1', title_ar: 'مرحلة سفراء', sort: 1, active: true, rules: {} });
+    // ما يختاره المحرر قبل الحفظ: برنامج آخر بلا نسخة يُعاين كما هو، وهو ما تُنشأ منه نسخته الأولى عند الحفظ
     const other: any = await cohortDefinitionFor({ cohort_id: C1, program_id: PB });
     assertEquals([other.version, other.stages.map((s: any) => s.key)], [null, ['b1']]);
     const live: any = await cohortDefinitionFor({ cohort_id: C1, program_version_id: '' });

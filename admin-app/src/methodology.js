@@ -293,9 +293,19 @@ export const COHORT_SECTIONS = [
   { key: 'advanced', title: 'متقدم' },
 ];
 
+export const VERSION_ON_SAVE = 'أحدث نسخة عند الحفظ (تُنشأ النسخة 1 إن لم توجد)';
+// الخيار الفارغ لدفعة قائمة غير مثبتة على برنامجها: الحفظ يتركها كما هي، والتثبيت على نسخة قائمة بالترقية من ملفها
+export const UNPINNED_UPGRADE = 'غير مثبتة (تُثبَّت من ملف الدفعة بعد مراجعة الفرق)';
+export const UNPINNED_EMPTY = 'غير مثبتة حتى تُبنى رحلة البرنامج';
+// دفعة جديدة (أو برنامج آخر) على برنامج بلا متطلبات: لا نسخة تُثبَّت عليها، ويرفض الخادم الحفظ
+export const NEW_EMPTY = 'لا نسخة: البرنامج بلا متطلبات بعد';
+
 // حقول الدفعة: المصدر الواحد لتعريف كل حقل، يقرؤه المحرر (CohortEditor.jsx) والمعالج (CohortWizard.jsx) معًا.
-// section: قسمه في المحرر. req: رمز المتطلب لحقول التنفيذ، فتُجمع بالنشاط. isNew: دفعة تُنشأ الآن فلا تُعرض «مغلقة»
-export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, defVersion, isNew = false }) {
+// section: قسمه في المحرر. req: رمز المتطلب لحقول التنفيذ، فتُجمع بالنشاط. isNew: دفعة تُنشأ الآن فلا تُعرض «مغلقة».
+// versionEmpty: خيار «أحدث نسخة عند الحفظ» للنسخة، لما ليس له نسخة مثبتة في النموذج بعد (دفعة جديدة، أو برنامج
+// آخر). نص بدل true يسمّي ما يعنيه الفارغ (UNPINNED_UPGRADE وأخواتها). الدفعة المثبتة لا خيار فارغ لها: لا يُلغى
+// تثبيتها، ونسختها تتغير بالترقية وحدها
+export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [], isDefault = false, defVersion, isNew = false, versionEmpty = false }) {
   const orgOf = (v) => orgs.find((o) => o.id === v.organization_id);
   const verN = Object.fromEntries(versions.map((x) => [x.id, `مثبتة على النسخة ${x.number}: ${x.label}`]));
   const status = isDefault ? { open: COHORT_STATUS.open, running: COHORT_STATUS.running }
@@ -317,8 +327,8 @@ export function cohortFields({ orgs = [], programs = [], versions = [], reqs = [
       options: Object.fromEntries(reqs.filter((r) => r.active !== false).map((r) => [r.code, reqLabel(r, reqs)])),
       help: (v) => hiddenHelp(v, reqs, defVersion), section: 'journey' },
     {
-      name: 'program_version_id', label: 'نسخة البرنامج', type: 'select', empty: 'تتبع آخر تعديل على البرنامج', options: verN,
-      help: 'التثبيت على نسخة يحمي الدفعة الجارية من أي تعديل لاحق على البرنامج حتى ترقيها بنفسك.', section: 'advanced',
+      name: 'program_version_id', label: 'نسخة البرنامج', type: 'select', empty: typeof versionEmpty === 'string' ? versionEmpty : versionEmpty || !versions.length ? VERSION_ON_SAVE : undefined, options: verN,
+      help: 'الدفعة تبقى على نسختها حتى ترقيها بنفسك، فلا يصل إليها أي تعديل لاحق على البرنامج.', section: 'advanced',
     },
     { name: 'level_mode', label: 'مستويات المشاركين', type: 'select', options: LEVEL_MODE_AR, section: 'advanced',
       help: 'المتجانس يوحّد المحتوى (الرحلة والكتاب والنماذج) للجميع، ويبقى قياس كل مشارك ومساره من نتيجته.' },

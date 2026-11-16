@@ -1,4 +1,4 @@
-// طابور البريد بلا ترك أعمى (ترحيل 20261116120000): ما لا موعد له ينتظر يومًا بعد يوم حتى يُرسل، والمؤرخ يُترك حين يمضي
+// طابور البريد بلا ترك أعمى (ترحيل 20261116140000): ما لا موعد له ينتظر يومًا بعد يوم حتى يُرسل، والمؤرخ يُترك حين يمضي
 // موعده، والإشعار قبل الجماعي، والتوقف عند الحصة، والممسَك ممسَك، والعمل قبل الترحيل، وسطر الترحيل اليومي مرة في اليوم.
 // قاعدة في الذاكرة وشبكة محاكاة (_fake_db.ts)، ولا يخرج طلب حقيقي.
 import './_test_env.ts';
@@ -185,8 +185,8 @@ Deno.test('المرسلون المؤرخون يمررون موعدهم، وال�
   assertEquals('QUEUE_STALE_HOURS' in core, false);
 });
 
-Deno.test('ترحيل 20261116120000: الإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير، لا لعروض الخبراء', async () => {
-  const sql = await Deno.readTextFile(new URL('../../migrations/20261116120000_leaders_mail_queue_expiry.sql', import.meta.url));
+Deno.test('ترحيل 20261116140000: الإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير، لا لعروض الخبراء', async () => {
+  const sql = await Deno.readTextFile(new URL('../../migrations/20261116140000_leaders_mail_queue_expiry.sql', import.meta.url));
   const rescue = sql.match(/update leaders\.mail_queue set gave_up_at = null, last_error = null[\s\S]*?;/)?.[0] || '';
   for (const c of ["sent_at is null", "last_error = 'stale'", "kind = 'notify'", 'expires_at is null', "gave_up_at >= now() - interval '7 days'", "subject not like 'طلب خدمة:%'"]) assertEquals([c, rescue.includes(c)], [c, true]);
   assertEquals(sql.includes('add column if not exists expires_at timestamptz'), true);

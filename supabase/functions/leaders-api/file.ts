@@ -15,6 +15,7 @@ import { expertDoc } from './capstone.ts';
 import * as H from './hall.ts';
 import { participantMilestone } from './programs.ts';
 import { mePayload } from './participant.ts';
+import { guideCounts } from './guide.ts';
 import { forParticipant as peerFor, hallTeams } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
@@ -105,7 +106,8 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
   const observations = await OB.listFor(base.participant.id);
   if (audience === 'admin') {
     const more = await moreFor(base.participant.id);
-    const file = { ...base, ...common, ...more, observations };
+    // «التوجيه والإرشاد» G3: أعداد بلا نص (guidance_counts). المحادثة نفسها لا تُقرأ هنا أبدًا
+    const file = { ...base, ...common, ...more, observations, guidance: await guideCounts(base.participant.id) };
     return { ...file, flags: flagsOf(file), timeline: timelineOf({ history: base.history || [], observations }) };
   }
   // للخبير: بلا سجل الإدارة ولا السيرة ولا حقول الحساب الداخلية. ما يراه مستشار الدفعة والخبير المسند تحسمه مفاتيح
@@ -137,6 +139,8 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
     ...common,
     final: adv ? (on('adv_final_edit') ? common.final : finalSummary) : (on('asg_final') ? finalSummary : null),
     observations: seen,
+    // «التوجيه والإرشاد» G3: لمستشار الدفعة وحده، أعداد بلا نص. المحادثة خاصة بالمشارك (قرار المالك)
+    guidance: adv ? await guideCounts(p.id) : null,
     flags: adv && on('adv_flags') ? flagsOf({ participant: p, effort: on('adv_effort') ? base.effort : null, retake: base.retake, onboarding: base.onboarding, milestone_summary: base.milestone_summary, sessions: extra.sessions, models: base.models, continuous: base.continuous, observations: seen }) : [],
     // ما يحق له فعله بمفاتيحه: الواجهة تخفي الزر، والخادم يرفض الفعل نفسه (requireVisible)
     can: { answers: adv && on('adv_answers'), observe: adv && on('adv_observations_write'), final_edit: adv && on('adv_final_edit'), hall: adv && on('adv_hall_control') },

@@ -154,6 +154,27 @@ function FeatureSwitches({ d, canWrite, onSaved }) {
 }
 
 // onSettings: يُبلَّغ به قسم القادة بعد كل حفظ، فتتحدث شارات «مخفي عن المستخدمين» على الأقسام فورًا
+// تقرير «التوجيه والإرشاد» (G3): أعداد وإنفاق بلا نص ولا أسماء، للمدير الأعلى والمالك. نسبة «أريد التأكد» مؤشر الدقة في التجربة
+export function GuidanceReport() {
+  const [r, setR] = useState(null);
+  useEffect(() => { L('admin.guide-report').then(setR); }, []);
+  if (!r?.success || !r.ready) return null;
+  return (
+    <section className="ag-guide-report stack" aria-labelledby="ag-guide-h">
+      <h4 id="ag-guide-h">«التوجيه والإرشاد» داخل الرحلة {r.open ? <span className="ops-flag on">مفتوح</span> : <span className="ops-flag off">مغلق للمشاركين</span>}</h4>
+      <table className="la-table">
+        <thead><tr><th>المدة</th><th>أسئلة</th><th>مشاركون</th><th>أجاب</th><th>لم يتأكد</th><th>خارج النطاق</th><th>تعذّر</th><th>«أريد التأكد»</th><th>الكلفة</th></tr></thead>
+        <tbody>{r.windows.map((w) => (
+          <tr key={w.days}><td>آخر {w.days} يومًا</td><td>{w.asked}</td><td>{w.participants}</td><td>{w.answered}</td><td>{w.unsure}</td><td>{w.refused}</td><td>{w.errors}</td>
+            <td>{w.confirmed}{w.confirm_rate != null ? ` (${w.confirm_rate}٪)` : ''}</td><td dir="ltr">${w.usd.toFixed(2)}</td></tr>
+        ))}</tbody>
+      </table>
+      {r.spend.length > 0 && <p className="la-muted small">أعلى يوم: ${Math.max(...r.spend.map((x) => x.usd)).toFixed(2)} من سقف ${Number(r.cap_usd).toFixed(2)}.</p>}
+      <p className="la-muted small">أعداد وحدها: نصوص المحادثات خاصة بأصحابها ولا تُعرض في أي شاشة.</p>
+    </section>
+  );
+}
+
 export default function AppSettings({ canWrite, onSettings, isSuper = false, focus = null }) {
   const [d, setRaw] = useState(null);
   const setD = (r) => { setRaw(r); if (r?.success) onSettings?.(r); };

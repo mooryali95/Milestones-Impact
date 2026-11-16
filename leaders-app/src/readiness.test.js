@@ -56,7 +56,7 @@ describe('بنود الإطلاق: حكم واحد للوحة والبوابات
     expect(items({ finalEval: {} })['m2.final-eval']).toBe(false);
     expect(items({ finalEval: '{"weights":{}}' })['m2.final-eval']).toBe(true);
     const none = items({});
-    for (const k of ['m2.cohort-per-org', 'm2.advisor', 'm2.sessions', 'm2.release-pinned']) expect(none[k], k).toBe(false);
+    for (const k of ['m2.cohort-per-org', 'm2.advisor', 'm2.sessions', 'm2.release-pinned', 'm2.version-pinned']) expect(none[k], k).toBe(false);
     // جهة غير فعّالة لا تُشترط لها دفعة، ودفعة مغلقة لا تُحسب لجهتها
     expect(items({ organizations: [org, { id: 'o2', name: 'ب', status: 'paused' }], cohorts: [c] })['m2.cohort-per-org']).toBe(true);
     expect(items({ organizations: [org], cohorts: [{ ...c, status: 'closed' }] })['m2.cohort-per-org']).toBe(false);
@@ -65,6 +65,24 @@ describe('بنود الإطلاق: حكم واحد للوحة والبوابات
   it('كل نقطة آلية في م2 تقرأ القاعدة لها بند في اللوحة بالمعرّف نفسه (عدا المسارات الذهبية من GitHub)', () => {
     const auto = gates.STAGES.find((s) => s.id === 2).checks.filter((c) => c.kind === 'auto').map((c) => c.id).filter((id) => id !== 'm2.golden-paths');
     expect(launchReadiness({}, NOW).map((x) => x.check).sort()).toEqual(auto.sort());
+  });
+
+  it('نسخة البرنامج: كل دفعة مفتوحة أو جارية والمفتوحة العامة مثبتة، والمغلقة والمخطط لها لا تُشترط', () => {
+    const r = (cohorts) => launchReadiness({ cohorts }, NOW).find((x) => x.check === 'm2.version-pinned');
+    expect(r([])).toMatchObject({ ok: false, where: 'programs', label: 'لا دفعة مفتوحة أو جارية بعد' });
+    const bare = r([cohort, { ...open, status: 'planned' }, { id: 'c3', name: 'مغلقة', status: 'closed' }, { id: 'c4', name: 'مخطط لها', status: 'planned' }]);
+    expect(bare.ok).toBe(false);
+    expect(bare.label).toBe('دفعات تتبع البرنامج كما هو بلا نسخة مثبتة: دفعة أ، الدفعة المفتوحة');
+    expect(bare.refs).toEqual([{ kind: 'cohort', id: 'c1', name: 'دفعة أ' }, { kind: 'cohort', id: 'd', name: 'الدفعة المفتوحة' }]);
+    expect(r([{ ...cohort, program_version_id: 'v1' }, { ...open, program_version_id: 'v1' }])).toMatchObject({ ok: true, label: '2 دفعة مفتوحة أو جارية، وكلٌّ على نسخة مثبتة' });
+  });
+
+  it('برامج فعّالة بلا نسخة محفوظة بأسمائها، والمؤرشف لا يُشترط، وبلا قراءة البرامج لا بند', () => {
+    const progs = [{ id: 'p1', name: 'القادة', versions: 2 }, { id: 'p2', name: 'سفراء', versions: 0 }, { id: 'p3', name: 'قديم', archived_at: '2026-01-01', versions: 0 }];
+    const item = setupReadiness({ programs: progs }).find((x) => x.key === 'program-versions');
+    expect(item).toMatchObject({ ok: false, where: 'programs', label: 'برامج فعّالة بلا نسخة محفوظة: سفراء', refs: [{ kind: 'program', id: 'p2', name: 'سفراء' }] });
+    expect(setupReadiness({ programs: progs.slice(0, 1) }).find((x) => x.key === 'program-versions').ok).toBe(true);
+    expect(setupReadiness({}).map((x) => x.key)).not.toContain('program-versions');
   });
 
   it('بنود الإعداد كما كانت في حالة النظام', () => {

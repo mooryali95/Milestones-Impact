@@ -7,6 +7,8 @@
 // (guidance_test.ts يثبت ألا تدخل صفوف مشارك في حكم غيره).
 import { db } from './core.ts';
 import { GUIDANCE_READ_SECONDS, guidanceState } from './guidance.js';
+import { GUIDE_POLICY_VERSION } from './guide.js';
+import { appSettings } from './settings.ts';
 
 export async function guidanceFor(participantId: string, initiative: boolean) {
   try {
@@ -25,4 +27,11 @@ export async function guidanceFor(participantId: string, initiative: boolean) {
     console.error('guidance signals', e);
     return null;
   }
+}
+
+// هل المساعد الذكي مفتوح أصلًا (نسخة السياسة مضبوطة ومفعّل من الإعدادات): فحص رخيص في me، فلا تطلب الواجهة
+// المحادثة (guide.state) من كل مشارك والمساعد مغلق. الحكم الكامل لكل مشارك في guide.ts
+export async function guidanceAi(): Promise<boolean> {
+  if (!GUIDE_POLICY_VERSION) return false;
+  return !!((await appSettings().catch(() => null)) as any)?.guidance?.enabled;
 }
