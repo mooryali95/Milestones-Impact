@@ -5,7 +5,7 @@
 // أي تغيير في واحد منها يغير البصمة، فيطفئ المساعد حتى يُعاد التقييم (agent_eval_stale).
 import { KNOWLEDGE_VERSION } from './knowledge.js';
 import { HISTORY_TURNS, MAX_TOKENS, requestParams } from './model.ts';
-import { SYSTEM_RULES } from './prompt.ts';
+import { contextBlock, SYSTEM_RULES } from './prompt.ts';
 import { CASES_SOURCE } from './evals/cases.ts';
 
 export type Versions = { model: string; knowledge_version: string; prompt_version: string; cases_version: string; fingerprint: string };
@@ -18,7 +18,10 @@ export async function sha16(s: string) {
 // ثوابت الطلب التي تغير السلوك: effort وinference_geo من requestParams نفسها، لا نسخة منها
 function requestConstants() {
   const p = requestParams('x', []);
-  return JSON.stringify({ max_tokens: MAX_TOKENS, effort: p.output_config, geo: p.inference_geo, history: HISTORY_TURNS });
+  // نص سياق الخادم بقيم ثابتة: تعليماته (اللغة والسعر وطلب الجهة) تغير السلوك كالموجه، فتدخل البصمة
+  const ctx = ([false, 'leaders', 'open'] as const).map((orgQuote) => contextBlock({ product: 'shared', page: 'P', promise: 'W', inHours: true, droppedTurns: 1, leadersPrice: orgQuote ? 'X' : null, lang: orgQuote ? 'en' : 'ar', orgQuote }))
+    .concat(contextBlock({ product: 'leaders', page: 'P', promise: 'W', inHours: false, droppedTurns: 0, leadersPrice: 'X', lang: 'fr', approved: { id: 'I', text: 'T' } }));
+  return JSON.stringify({ max_tokens: MAX_TOKENS, effort: p.output_config, geo: p.inference_geo, history: HISTORY_TURNS, context: ctx });
 }
 
 export async function computeVersions(model: string, src: { rules?: string; knowledge?: string; cases?: string } = {}): Promise<Versions> {

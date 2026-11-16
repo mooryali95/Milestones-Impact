@@ -44,9 +44,24 @@ export function isArabic(s: string) {
   return ar > 0 && ar >= lat;
 }
 
+// لغة رسالة الزائر بعدّ الكلمات لا الحروف، بعد حذف البريد والروابط: رسالة عربية فيها بريد طويل أو اسم منتج لاتيني
+// تبقى عربية. (isArabic بالحروف باقية للمصحح في evals/grade.ts، فلا يتغير التصحيح.)
+export function messageIsArabic(s: string) {
+  const words = String(s ?? '').replace(/\S+@\S+/g, ' ').replace(/(https?:\/\/|www\.)\S+/gi, ' ').split(/\s+/);
+  const ar = words.filter((w) => /[؀-ۿ]/.test(w)).length;
+  const lat = words.filter((w) => /[A-Za-z]/.test(w) && !/[؀-ۿ]/.test(w)).length;
+  return ar > 0 && ar >= lat;
+}
+
 const ENTRIES: { e: FaqEntry; keys: string[][]; not: string[] }[] = (FAQ as FaqEntry[]).map((e) => ({ e, keys: e.match.map((g) => g.map(normalizeText)), not: (e.not ?? []).map(normalizeText) }));
 
 const hasKey = (norm: string, tokens: string[], k: string) => (k.includes(' ') ? ` ${norm} `.includes(` ${k} `) : tokens.some((t) => tokenHits(t, k)));
+// هل في السؤال كلمة من القائمة بمطابقة الكلمة نفسها (سوابقها ولواحقها المعروفة)، أو عبارة متصلة إن كان فيها مسافة
+export function hasWord(question: string, words: string[]) {
+  const norm = normalizeText(question);
+  const tokens = norm.split(' ');
+  return words.map(normalizeText).some((k) => hasKey(norm, tokens, k));
+}
 const LEADERS_WORDS = ['قاده', 'leaders', 'leader'].map(normalizeText);
 const MATRIX_WORDS = ['مصفوفه', 'matrix'].map(normalizeText);
 // «البرنامج» مع ذكر المصفوفة مقارنة بين المنتجين (أو خلط بينهما): لا جواب جاهز لأحدهما
@@ -60,7 +75,9 @@ export function mentionedProduct(question: string): 'leaders' | 'matrix' | 'both
   return l && m ? 'both' : l ? 'leaders' : m ? 'matrix' : null;
 }
 
-export function matchFaq(question: string, page: string): { id: string; text: string; lang: 'ar' | 'en' } | null {
+// lang: لغة الرد التي حسبها الخادم (intent.ts)؛ بدونها لغة السؤال. ولغة غير العربية والإنجليزية لا جواب جاهز لها.
+export function matchFaq(question: string, page: string, lang?: string): { id: string; text: string; lang: 'ar' | 'en' } | null {
+  if (lang && lang !== 'ar' && lang !== 'en') return null;
   const norm = normalizeText(question);
   if (!norm) return null;
   if ((String(question).match(/[?؟]/g) || []).length >= 2) return null;
@@ -74,8 +91,8 @@ export function matchFaq(question: string, page: string): { id: string; text: st
     if (!all) continue;
     if (not.some((k) => hasKey(norm, tokens, k))) continue;
     if (e.only && !tokens.every((t) => keys.some((g) => g.some((k) => !k.includes(' ') && tokenHits(t, k))))) continue;
-    const lang = isArabic(question) ? 'ar' : 'en';
-    return { id: e.id, text: lang === 'ar' ? e.ar : e.en, lang };
+    const l = lang === 'ar' || lang === 'en' ? lang : (messageIsArabic(question) ? 'ar' : 'en');
+    return { id: e.id, text: l === 'ar' ? e.ar : e.en, lang: l };
   }
   return null;
 }
