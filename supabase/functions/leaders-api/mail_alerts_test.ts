@@ -255,12 +255,12 @@ Deno.test('P1-12: admin.alert-test للمدير الأعلى وحده، يرسل
       assertEquals(calls.length, 0);   // لا تنبيه ولا بريد لمن لا يملك الإجراء
       assertEquals(audits.length, 0);
       const r: any = await alertTest({ email: 'boss@x.sa', role: 'super_admin', method: 'passkey' });
-      // سلاك غير مضبوط في بيئة الاختبار: قناة ثالثة تُذكر بلا نتيجة (لا يُنتظر)
-      assertEquals(r, { success: true, channels: { webhook: true, email: true, slack: false }, mail_key: true, delivered: { webhook: true, email: true, slack: false } });
+      // سلاك غير مضبوط في بيئة الاختبار. والتجربة تتبع التوجيه الفعلي: alert_test «مهم»، فوصول الرابط يغني عن البريد،
+      // والبريد لا يُذكر قناةً لم يقصدها الجدول (فلا تقول اللوحة إنه لم يصل)
+      assertEquals(r, { success: true, channels: { webhook: true, email: false, slack: false }, mail_key: true, delivered: { webhook: true, email: false, slack: false }, routed: { email: false, slack: true } });
       assertEquals(hooks(calls).length, 1);
       assertEquals(hooks(calls)[0].body.kind, 'alert_test');
-      assertEquals(resend(calls).length, 1);
-      assertEquals(resend(calls)[0].body.to, ['owner-secret@x.sa']);
+      assertEquals(resend(calls).length, 0);
       // الرد لا يحمل الرابط ولا العنوان
       assertEquals(/secret|hooks\.example|owner/.test(JSON.stringify(r)), false);
       assertEquals(audits.map((a) => a.action), ['system.alert', 'system.alert-test']);
@@ -292,10 +292,12 @@ Deno.test('تنبيه سقف المساعد: سجل system.alert والرابط 
       assertEquals(await alertOps('agent_spend_cap', { fn: 'agent-chat', day: '2026-11-16', spent_usd: '5.0000', cap_usd: '5.00' }), true);
       assertEquals(audits.filter((r) => r.action === 'system.alert').map((r) => r.entity_id), ['agent_spend_80', 'agent_spend_cap']);
       assertEquals(hooks(calls).map((c) => c.body.kind), ['agent_spend_80', 'agent_spend_cap']);
+      // agent_spend_80 «مهم»: وصل الرابط فلا بريد. agent_spend_cap «حرج»: بريد مع الرابط
       const mails = resend(calls);
-      assertEquals(mails.length, 2);
-      assertEquals(mails[1].body.to, ['owner@x.sa']);
-      assertEquals(String(mails[1].body.html).includes('agent-chat'), true);
+      assertEquals(mails.length, 1);
+      assertEquals(mails[0].body.to, ['owner@x.sa']);
+      assertEquals(String(mails[0].body.subject).includes('agent_spend_cap'), true);
+      assertEquals(String(mails[0].body.html).includes('agent-chat'), true);
     });
   } finally { restore(); Object.assign(CONFIG, saved); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
 });

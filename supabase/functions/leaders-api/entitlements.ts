@@ -9,6 +9,7 @@ import { alertOps, all, audit, CONFIG, db, Fail, must, sendMail } from './core.t
 import { bdi, mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { inProgram } from './logic.js';
+import { ownerNoticeLater } from './notify.ts';
 
 export type Item = 'assessment' | 'program';
 export const ITEMS: Item[] = ['assessment', 'program'];
@@ -157,7 +158,8 @@ async function holdSponsorship(participantId: string, org: { id: string; name: s
   if (error) { console.error('hold sponsorship', error.message); return; }
   await audit('system', 'seats', 'sponsor.hold', 'participants', participantId, null, { org: org.id, why });
   const reason = why === 'full' ? 'اكتملت مقاعد العقد' : why === 'before' ? 'العقد لم يبدأ بعد' : 'انتهت مدة العقد';
-  await notifyOrg(org, `تسجيل بانتظار قرار الرعاية: ${reason}`, `سجّل مشارك برعاية ${bdi(org.name)}، و${reason}. القرار خلال يومي عمل: مقعد يُضاف إلى العقد بتعليل، أو يتابع المشارك بدفع فردي.`);
+  await notifyOrg(org, `تسجيل بانتظار قرار الرعاية: ${reason}`, `سجّل مشارك برعاية ${bdi(org.name)}، و${reason}. القرار خلال يومي عمل: مقعد يُضاف إلى العقد بتعليل، أو يتابع المشارك بدفع فردي.`,
+    `💺 تسجيل بانتظار قرار الرعاية: ${reason}`);
 }
 
 // تنبيه الاستهلاك عند 80% و100% من المقاعد، مرة لكل حد (D20)
@@ -171,17 +173,22 @@ async function seatAlerts(org: { id: string; name: string }) {
   if (count) return;
   await audit('system', 'seats', 'seats.alert', 'organizations', org.id, null, { level, seats: o.seats, used });
   await notifyOrg(org, level === 1 ? `اكتملت مقاعد ${org.name}` : `استُهلك ${Math.round(level * 100)}% من مقاعد ${org.name}`,
-    `استُهلك ${used} من ${o.seats} مقعدًا في عقد ${bdi(org.name)}.${level === 1 ? ' التسجيلات التالية تنتظر قرار الرعاية.' : ''}`);
+    `استُهلك ${used} من ${o.seats} مقعدًا في عقد ${bdi(org.name)}.${level === 1 ? ' التسجيلات التالية تنتظر قرار الرعاية.' : ''}`,
+    level === 1 ? '💺 اكتملت مقاعد عقد جهة' : `💺 استُهلك ${Math.round(level * 100)}% من مقاعد عقد جهة`);
 }
 
-// المنسق يُخطَر ببوابة جهته (لا يدخل لوحة الإدارة)، والإدارة بصفحة الطلبات حيث يُتخذ القرار
-async function notifyOrg(org: { id: string; name: string }, subject: string, text: string) {
+// المنسق يُخطَر ببوابة جهته (لا يدخل لوحة الإدارة) كما كان، والمالك بجدول التوجيه (seat_limit_owner): سطر Slack بلا اسم
+// الجهة (line)، والبريد بصفحة الطلبات حيث يُتخذ القرار احتياطًا حين لا يصل Slack، إلا أن يكون المالك منسقها فوصله بريدها
+async function notifyOrg(org: { id: string; name: string }, subject: string, text: string, line: string) {
   const { data: coords } = await db.from('org_coordinators').select('email, status').eq('organization_id', org.id).neq('status', 'suspended');
   const coordEmails = [...new Set((coords || []).map((c: any) => c.email).filter(Boolean))] as string[];
   const send = (to: string, url: string, label: string) => sendMail(to, subject, mailShell(subject, mailText(text) + mailButton(url, label), { family: 'admin', footnote: '' }), [], { ref: `organization:${org.id}` })
     .catch((e) => console.error('seat notify', e));
   for (const t of coordEmails) await send(t, `${CONFIG.appUrl}/org`, 'افتح بوابة جهتك');
-  if (CONFIG.alertEmail && !coordEmails.includes(CONFIG.alertEmail)) await send(CONFIG.alertEmail, `${SITES.admin}/#/leaders/payments`, 'افتح الطلبات');
+  const mail = CONFIG.alertEmail && !coordEmails.includes(CONFIG.alertEmail)
+    ? { subject, html: mailShell(subject, mailText(text) + mailButton(`${SITES.admin}/#/leaders/payments`, 'افتح الطلبات'), { family: 'admin', footnote: '' }) }
+    : null;
+  ownerNoticeLater('seat_limit_owner', { line, mail, ref: `organization:${org.id}` });
 }
 
 // يثبّت لمشارك بمعرّفه إن كانت جهته نشطة؛ يُستدعى من مسارات الربط كلها. لا يرمي: الربط نفسه نجح، والتثبيت له احتياط في access()

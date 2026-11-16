@@ -14,6 +14,10 @@ import { ALERT_CHANNEL_KEY, alertChannelOk, launchReadiness, pendingMigrations, 
 import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { codeStreak, OPS } from './ops-health.js';
+import { route, slackStateOf } from '../_shared/notify-routing.js';
+import { notifySettings } from '../_shared/notify-settings.ts';
+import { slackConfigured, slackDeliver } from '../_shared/slack.ts';
+import { SITES } from '../_shared/sites.js';
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
@@ -236,9 +240,19 @@ export async function mailWeek(weekAgo = new Date(Date.now() - 7 * 864e5).toISOS
 const hoursAr = (h: number) => (h === 1 ? 'ساعة' : h === 2 ? 'ساعتين' : h >= 3 && h <= 10 ? `${h} ساعات` : `${h} ساعة`);
 const num = (v: number | null) => (v == null ? 'غير مقروء' : String(v));
 
-// تقرير الصحة الأسبوعي للمالك: يُرسل من تشغيلة cron.reminders نفسها
+// سطر تقرير الأسبوع في سلسلة التنبيهات: أعداد وأسماء ترحيلات وأسرار وحدها، بلا اسم ولا بريد، وأي ستة أرقام قائمة بنفسها تُطمس احتياطًا،
+// وأول ثلاثة أمور مختصرة، والباقي في البريد ولوحة الإدارة. سلاك يقطع السطر عند 600 حرف
+export function weeklyLine(issues: string[], rows: [string, string][]) {
+  const head = issues.length ? `📋 تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : '📋 تقرير الأسبوع: كل شيء على ما يرام';
+  const nums = rows.map(([k, v]) => `${k}: ${v}`).join(' · ');
+  const top = issues.slice(0, 3).map((x) => `• ${x.slice(0, 120)}`).join('\n');
+  return [head, nums, top, `${SITES.admin}/#/leaders/overview`].filter(Boolean).join('\n').replace(/(?<![A-Za-z0-9_])\d{6}(?![A-Za-z0-9_])/g, '••••••').slice(0, 600);
+}
+
+// تقرير الصحة الأسبوعي للمالك: يُرسل من تشغيلة cron.reminders نفسها. في سلسلة التنبيهات دائمًا، والبريد بجدول التوجيه:
+// فيه ما يحتاج تدخلًا (weekly_health_action، حرج) بريد وسلاك، وإلا (weekly_health، مهم) سلاك وحده والبريد إن لم يصل
 export async function weeklyHealth() {
-  if (!CONFIG.alertEmail) return { sent: false, reason: 'no LEADERS_ALERT_EMAIL' };
+  if (!CONFIG.alertEmail && !slackConfigured()) return { sent: false, reason: 'no LEADERS_ALERT_EMAIL' };
   const h = await health();
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const count = async (q: any) => (await q).count ?? 0;
@@ -266,7 +280,13 @@ export async function weeklyHealth() {
     ...(mail.blocked ? [`حُجب بحصة البريد اليومية هذا الأسبوع: ${mail.blocked}. إن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend`] : []),
     ...(pending ? [`${pending} مشاركًا ينتظرون اعتماد مستواهم`] : []),
   ];
-  await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
+  const event = issues.length ? 'weekly_health_action' : 'weekly_health';
+  const settings = await notifySettings(db);
+  const plan = route(event, settings);
+  const slack = plan.slack ? await slackDeliver('alerts', weeklyLine(issues, [['مسجلون جدد', String(joined)], ['نشطون', String(active)], ['ينتظرون الاعتماد', String(pending)], ['متطلبات للمراجعة', String(submitted)]])) : false;
+  const { email: wantEmail } = route(event, settings, slackStateOf({ delivered: slack, configured: slackConfigured() }));
+  const email = wantEmail && !!CONFIG.alertEmail;
+  if (email) await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
     ['مسجلون جدد هذا الأسبوع', String(joined)], ['نشطون هذا الأسبوع', String(active)],
     [PARTICIPANT_STATUS.pending_approval, String(pending)], ['متطلبات للمراجعة', String(submitted)],
     ['البريد المرسل اليوم (كل الأنواع، منذ 03:00 بالرياض)', h.mail.today == null ? 'غير مقروء' : `${h.mail.today} من ${h.mail.cap}`],
@@ -275,7 +295,7 @@ export async function weeklyHealth() {
     ['حُجب بحصة البريد هذا الأسبوع', num(mail.blocked)],
     ['رفضه مزوّد البريد هذا الأسبوع', num(mail.rejected)],
   ], issues));
-  return { sent: true, issues: issues.length, mail };
+  return { sent: email || slack, slack, email, issues: issues.length, mail };
 }
 
 // تجربة قناة التنبيه (للمدير الأعلى): تنبيه واحد عبر alertOps بمساره الحقيقي (سلاك والرابط ثم البريد)، ويعيد أي القنوات
@@ -286,9 +306,12 @@ export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
   const channels = { webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), email: !!CONFIG.alertEmail, slack: SLACK_SECRETS.every((k) => !!Deno.env.get(k)) };
   const r = await raiseAlert('alert_test', { note: 'تجربة قناة التنبيه من لوحة الإدارة، لا عطل' });
   if (r.cooled) throw new Fail('جُرّبت قناة التنبيه قبل أقل من دقيقة، أعد بعد قليل', 429, 'rate');
+  // التجربة تتبع التوجيه الفعلي (التصور، البند 23): «مهم» لا بريد له ما دام سلاك أو الرابط وصل، فالبريد يُذكر قناةً
+  // حين يقرره الجدول وحده، فلا تقول اللوحة «لم يصل عبر البريد» عن بريد لم يُقصد. وrouted يحمل القرار نفسه
+  channels.email = channels.email && !!r.routed?.email;
   const delivered = { webhook: r.webhook, email: r.email, slack: !!r.slack };
   await audit('admin', a.email, 'system.alert-test', 'system', 'alert_test', null, { channels, delivered });
-  return { success: true, channels, mail_key: !!CONFIG.resendKey, delivered };
+  return { success: true, channels, mail_key: !!CONFIG.resendKey, delivered, routed: r.routed ?? null };
 }
 
 // صحة البريد والتنبيه (بطاقة النظرة العامة وشريط اللوحة): الحقائق وحدها، والحكم بالألوان في ops-health.js على المتصفح.

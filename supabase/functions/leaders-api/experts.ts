@@ -9,6 +9,7 @@ import { verifyGoogleToken } from './google.ts';
 import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard, secretEquals } from './core.ts';
 import { visibilityOfParticipant } from './visibility.ts';
 import { requireWrite } from './admin.ts';
+import { ownerNoticeLater } from './notify.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertFieldError, expertPublic, journeyApproved, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
 import { cohortOf } from './programs.ts';
@@ -79,27 +80,31 @@ export async function apply(b: Body, ctx: Ctx) {
     if (error) { console.error('expert.apply committees', error); saved = []; }
   }
   await audit('system', email, 'expert.apply', 'experts', row.id, null, content ? { track, committees, dimensions: fields.dimensions, ...(saved.length ? {} : { committees_saved: false }) } : null);
-  if (CONFIG.alertEmail) await alertApplication(row.id, { ...fields, committees: saved }).catch(() => {});
+  await alertApplication(row.id, { ...fields, committees: saved }).catch(() => {});
   return { success: true, received: true };
 }
 
-// أول طلب في النافذة (ست ساعات بتوقيت ثابت) وحده ينبّه المالك، وزر الرسالة يفتح الطلبات كلها. الأقدم في النافذة
-// هو من ينبّه، فطلبان متزامنان لا يرسلان رسالتين ولا يضيعانها
+// كل طلب سطر في Slack (expert_application، مركز الإشعارات): نوعه ورابط الطلبات، بلا اسم ولا بريد، ويدخل الملخص اليومي.
+// والبريد احتياط حين لا يصل Slack، ولأول طلب في النافذة (ست ساعات بتوقيت ثابت) وحده، وزره يفتح الطلبات كلها. الأقدم
+// في النافذة هو من يحمل البريد، فطلبان متزامنان لا يرسلان رسالتين ولا يضيعانها
 // journey-guard: تنبيه المالك بطلب جديد، لا ترشيح فيه
 async function alertApplication(id: string, fields: { full_name: string | null; title?: string | null; committees?: string[]; dimensions?: string[] }) {
   const span = APPLY_ALERT_HOURS * 36e5;
   const since = new Date(Math.floor(Date.now() / span) * span).toISOString();
   const { data: first } = await db.from('experts').select('id').eq('source', 'application').gte('created_at', since)
     .order('created_at').order('id').limit(1).maybeSingle();
-  if (first?.id !== id) return;
   // طلب عضوية لجنة يُسمّى باسمه في البريد، ولجنته وإطاره تحت الاسم
   const committee = (fields.committees || []).length ? committeeApplicationAr(fields) : '';
   const kind = committee ? 'طلب عضوية لجنة' : 'طلب انضمام خبير';
-  await sendMail(CONFIG.alertEmail, `${kind}: ${fields.full_name}`, shell(kind,
-    mailText(`${bdi(fields.full_name)}${fields.title ? ` · ${bdi(fields.title)}` : ''}`)
-    + (committee ? mailText(committee) : '')
-    + mailText(`تصلك رسالة واحدة على الأكثر كل ${APPLY_ALERT_HOURS} ساعات، وما يصل بعدها من طلبات تجده في القائمة نفسها.`)
-    + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلبات')), [], { kind: 'bulk' });
+  const mail = first?.id === id ? {
+    subject: `${kind}: ${fields.full_name}`, kind: 'bulk' as const,
+    html: shell(kind,
+      mailText(`${bdi(fields.full_name)}${fields.title ? ` · ${bdi(fields.title)}` : ''}`)
+      + (committee ? mailText(committee) : '')
+      + mailText(`تصلك رسالة واحدة على الأكثر كل ${APPLY_ALERT_HOURS} ساعات، وما يصل بعدها من طلبات تجده في القائمة نفسها.`)
+      + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلبات')),
+  } : null;
+  ownerNoticeLater('expert_application', { line: `🧑‍🏫 ${kind} جديد`, mail, ref: `expert:${id}` });
 }
 
 // ── لوحة الإدارة ──
@@ -349,11 +354,13 @@ async function offerNext(req: any, pick?: any) {
   if (!list.length) {
     await db.from('expert_requests').update({ status: 'unmatched', expert_id: null, offer_token_hash: null, expires_at: null, updated_at: now.toISOString() }).eq('id', req.id);
     await audit('system', null, 'expert-request.unmatched', 'expert_requests', req.id);
-    if (CONFIG.alertEmail) {
-      sendMail(CONFIG.alertEmail, `لا خبير متاح: ${roleAr(req.role)} لـ ${p.full_name}`, shell('طلب بلا خبير مطابق',
+    // سطر Slack بالدور وحده (لا اسم المشارك)، والبريد بالاسم احتياطًا حين لا يصل Slack (expert_no_match)
+    ownerNoticeLater('expert_no_match', {
+      line: `🔎 لا خبير متاح لطلب ${roleAr(req.role)}`, ref: `expert_request:${req.id}`,
+      mail: { subject: `لا خبير متاح: ${roleAr(req.role)} لـ ${p.full_name}`, html: shell('طلب بلا خبير مطابق',
         mailText(`لم يقبل أحد من الخبراء المطابقين طلب ${roleAr(req.role)} للمشارك ${bdi(p.full_name)}، أو لا أحد متاح. أسنده يدويًا أو أضف خبيرًا.`)
-        + mailButton(`${SITES.admin}/#/leaders/experts?view=requests`, 'افتح الطلبات'))).catch(() => {});
-    }
+        + mailButton(`${SITES.admin}/#/leaders/experts?view=requests`, 'افتح الطلبات')) },
+    });
     return { status: 'unmatched' };
   }
   const e = list[0];
@@ -772,9 +779,13 @@ export async function portalProfileSave(e: any, b: Body) {
   const first = e.status === 'invited';
   const saved = must(await db.from('experts').update({ ...fields, phone, status: 'applied', updated_at: new Date().toISOString() }).eq('id', e.id).select('*').single());
   await audit('system', e.email, 'expert.profile', 'experts', e.id, { status: e.status }, { status: 'applied' });
-  if (first && CONFIG.alertEmail) {
-    sendMail(CONFIG.alertEmail, `خبير مدعو استكمل ملفه: ${fields.full_name}`, shell('ملف خبير جاهز للاعتماد',
-      mailText(`${bdi(fields.full_name)}${fields.title ? ` · ${bdi(fields.title)}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف'))).catch(() => {});
+  // معلوماتي (expert_profile_done): يدخل الملخص اليومي، والبريد والسطر الفوري إن اختارهما المالك في المركز
+  if (first) {
+    ownerNoticeLater('expert_profile_done', {
+      line: '✅ خبير مدعو استكمل ملفه', ref: `expert:${e.id}`,
+      mail: { subject: `خبير مدعو استكمل ملفه: ${fields.full_name}`, html: shell('ملف خبير جاهز للاعتماد',
+        mailText(`${bdi(fields.full_name)}${fields.title ? ` · ${bdi(fields.title)}` : ''}`) + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الملف')) },
+    });
   }
   return { success: true, expert: expertPublic({ ...saved, hourly_rate: undefined, admin_note: undefined }) };
 }

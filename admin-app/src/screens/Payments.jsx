@@ -64,10 +64,13 @@ function SettingsCard({ d, canWrite, reload }) {
       <h3>بريد الدفع</h3>
       <p className="la-muted small">كل بريد مغلق حتى تفتحه. المفتوح يُرسل آليًّا ويُحسب من سقف البريد اليومي. تذكير من لم يكمل الدفع فعل يدوي من صفحة العملية ولا مفتاح له.</p>
       <div className="pay-notify">
-        {Object.entries(NOTIFY).map(([k, n]) => (
+        {/* تنبيه الإدارة عند كل دفعة انتقل إلى «التوجيه» في مركز البريد (صفا الدفعة والاسترداد). يبقى مخزنه كما هو
+            ويُرسل مع الحفظ بلا تغيير، فالقراءة الاحتياطية له لا تتبدل بحفظ هذه الشاشة */}
+        {Object.entries(NOTIFY).filter(([k]) => k !== 'owner').map(([k, n]) => (
           <label key={k} className="la-check"><input type="checkbox" checked={!!notify[k]} disabled={!canWrite} onChange={(e) => setNotify({ ...notify, [k]: e.target.checked })} /> <span><b>{n.label}</b><br /><small className="la-muted">{n.hint}</small></span></label>
         ))}
       </div>
+      <p className="la-muted small" data-moved="owner">إشعار الإدارة بكل دفعة واسترداد في «التوجيه» بمركز البريد: سطر فوري في Slack ويدخل الملخص اليومي.{s.notify?.owner ? ' والمفتاح القديم مفتوح، فيصل معه بريد حتى يُحفظ صفاهما هناك.' : ''}</p>
       {canWrite && (
         <div className="la-row">
           <button className="btn-sm ghost" disabled={busy} onClick={() => save(s.enabled)}>احفظ</button>

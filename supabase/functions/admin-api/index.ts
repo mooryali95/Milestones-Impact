@@ -4,7 +4,9 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { slackUse } from "../_shared/slack.ts";
+import { slackConfigured, slackDeliver, slackPost, slackUse } from "../_shared/slack.ts";
+import { loginFingerprint } from "../_shared/login-device.js";
+import { knownDevice, METHOD_LABELS, ownerLoginNotice } from "./login_notice.ts";
 import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 import { hasSecondFactor } from "../_shared/second_factor.js";
@@ -188,14 +190,18 @@ async function authUserId(sb: SB, email: string): Promise<string | null> {
   return null;
 }
 
-type Ctx = { ip: string; ua: string };
+// trustedIp: عنوان رأس الوكيل وحده (cf-connecting-ip يكتبه Cloudflare ولا يمرره من العميل). أول x-forwarded-for يرسله العميل
+// فيُزوَّر، فلا يدخل قرارًا أمنيًا: بصمة «الجهاز المعروف» منه وحده، وبلاه لا بصمة فيُعد الجهاز جديدًا ويُرسل البريد
+type Ctx = { ip: string; ua: string; trustedIp?: string };
 const clientCtx = (req: Request): Ctx => ({
   ip: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "",
+  trustedIp: req.headers.get("cf-connecting-ip")?.trim() || "",
   ua: (req.headers.get("user-agent") || "").slice(0, 300),
 });
 
 // يُصدر جلسة إدارة. method وauth_at يحددان ما تسمح به الجلسة من عمليات حساسة.
-async function issueSession(sb: SB, user: Record<string, unknown>, email: string, method: "passkey" | "totp" | "email", ctx: Ctx) {
+// passkeyUsedBefore: مفتاح المرور الذي دخل به سبق استعماله (last_used_at قبل هذا الدخول)، أحد شرطي «الجهاز المعروف»
+async function issueSession(sb: SB, user: Record<string, unknown>, email: string, method: "passkey" | "totp" | "email", ctx: Ctx, passkeyUsedBefore = false) {
   const token = randomToken();
   const { error } = await sb.from("api_sessions").insert({
     token_hash: await sha256hex(token), kind: "admin", subject: String(user.id),
@@ -204,16 +210,31 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
   });
   if (error) throw error;
   await sb.from("admin_users").update({ last_login: new Date().toISOString() }).eq("id", user.id);
+  // بصمة الجهاز (تجزئة العنوان المقرب من رأس الوكيل الموثوق ووصف المتصفح، _shared/login-device.js) تُحفظ في سطر الدخول بلا نص المتصفح.
+  // والمعرفة تُسأل قبل كتابة السطر، فلا يطابق الدخول نفسه
+  let fp: string | null = null;
+  try { fp = await loginFingerprint(ctx.trustedIp ?? "", ctx.ua); } catch { fp = null; }
+  const device = user.is_owner
+    ? ((await knownDevice(sb, { userId: String(user.id), method, fp, passkeyUsedBefore })) ? "known" : "new")
+    : null;
   try {
     await sb.from("admin_audit_log").insert({
-      user_id: user.id, user_email: email, action: "login", meta: { role: user.role_id, method, ip: ctx.ip },
+      user_id: user.id, user_email: email, action: "login",
+      meta: { role: user.role_id, method, ip: ctx.ip, ...(fp ? { fp } : {}), ...(device ? { device } : {}) },
     });
   } catch { /* audit best-effort */ }
-  // المالك يُبلَّغ بكل دخول إلى حسابه.
-  if (user.is_owner) {
-    await securityMail(email, "دخول جديد إلى حسابك", [
-      ["الطريقة", METHOD_LABELS[method]], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"],
-    ]);
+  // المالك: جهاز جديد بالبريد وSlack، وجهاز معروف بسطر Slack وحده (والبريد احتياطه)، login_notice.ts.
+  // يُكمل بعد الرد إن أمكن، فلا ينتظر الدخول نشر Slack
+  if (device) {
+    const job = ownerLoginNotice({
+      sb, mail: (title, rows) => securityMail(email, title, rows),
+      slackPost: (text) => slackPost("alerts", text), slackDeliver: (text) => slackDeliver("alerts", text), slackConfigured,
+    }, method, device, [["الطريقة", METHOD_LABELS[method]], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"]])
+      .catch((e) => console.error("admin-api owner login notice:", e));
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (typeof rt?.waitUntil === "function") rt.waitUntil(job);
+    else await job;
   }
   return {
     token,
@@ -225,9 +246,7 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
   };
 }
 
-const METHOD_LABELS: Record<string, string> = { passkey: "مفتاح المرور", totp: "تطبيق المصادقة", email: "رمز البريد" };
-
-// تنبيه أمني بالبريد: إضافة مفتاح أو حذفه، تغيير وضع الدخول، دخول المالك.
+// تنبيه أمني بالبريد: إضافة مفتاح أو حذفه، تغيير وضع الدخول، دخول المالك (login_notice.ts يقرر متى).
 async function securityMail(to: string, title: string, rows: [string, string][]) {
   const when = new Date().toLocaleString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh" });
   const html = mailShell(title, `
@@ -351,6 +370,7 @@ Deno.serve(async (req: Request) => {
 
     // ══ recovery-request: فقد المدير مفتاح مروره أو تطبيق المصادقة ══
     // الرد واحد لكل بريد. يُبلَّغ المالك ليعيد الوصول من «المستخدمون»، ويُبلَّغ صاحب الحساب بما يحدث.
+    // الرسالتان بنوع alert (صف admin_recovery_request المقفل في notify-routing.js): استرداد حساب لا تحجبه حصة الإشعارات.
     if (action === "recovery-request") {
       const email = String(body.email || "").trim().toLowerCase();
       if (!isEmail(email)) return json({ success: false, message: "البريد غير صحيح" }, 400);
@@ -372,11 +392,11 @@ Deno.serve(async (req: Request) => {
         await sendEmail(o.email, `طلب استعادة وصول: ${user.name} — ${APP}`, mailShell("طلب استعادة وصول", `
 ${mailText(`طلب <b>${bdi(user.name)}</b> (<span dir="ltr">${bdi(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only || hasKey ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
 ${mailNote("إن عرفت أنه طلبه: من «المستخدمون» اضغط «إعادة الوصول» لحسابه، فيدخل برمز البريد ثم يضبط وسيلته من جديد. وإن لم تعرف، تجاهل الطلب.")}
-${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }));
+${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }), "alert");
       }
       await sendEmail(user.email, `وصل طلب استعادة الوصول — ${APP}`, mailShell("وصل طلب استعادة الوصول", `
 ${mailText(`أهلًا ${bdi(user.name)}، أُبلغ مالك اللوحة بطلبك. حين يعيد وصولك تدخل برمز يصل إلى بريدك، ثم تضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
-${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, { family: "access", preheader: "أُبلغ مالك اللوحة بطلبك" }));
+${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, { family: "access", preheader: "أُبلغ مالك اللوحة بطلبك" }), "alert");
       return reply;
     }
 
@@ -442,13 +462,14 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
       }
       if (!v.verified) return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      const usedBefore = !!pk.last_used_at;
       await sb.from("admin_passkeys").update({ sign_count: v.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", pk.id);
       const { data: us } = await sb.from("admin_users")
         .select("id, name, email, role_id, is_active, totp_enabled, is_owner, passkey_only").eq("id", pk.admin_id).limit(1);
       const user = us?.[0];
       if (!user?.is_active) return json({ success: false, message: "الحساب غير نشط" }, 403);
       const email = String(user.email || "").toLowerCase();
-      return json({ success: true, ...(await issueSession(sb, user, email, "passkey", clientCtx(req))) });
+      return json({ success: true, ...(await issueSession(sb, user, email, "passkey", clientCtx(req), usedBefore)) });
     }
 
     // ══ everything below requires a valid admin session ══

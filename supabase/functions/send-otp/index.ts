@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { MAIL_FROM_DEFAULT, sendCounted } from "../_shared/mail.ts";
 import { clientIp, turnstileOk as turnstileCheck } from "../_shared/guard.ts";
-import { CONTACT_SELECT, confirmSender as confirmContact, formContext, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";
+import { CONTACT_PAGES, CONTACT_SELECT, confirmSender as confirmContact, formContext, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";
 
 // send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
 // الإدراج والرسالتان في _shared/contact.ts، والتحقق البشري وعنوان الشبكة في _shared/guard.ts (يشاركها agent-chat).
@@ -76,8 +76,8 @@ async function countSince(sb: SB, since: string, filter?: (q: any) => any): Prom
   return count ?? 0;
 }
 
-const PAGE_LABEL: Record<string, string> = { "MI-HOME": "الصفحة الرئيسية", "MI-LEADERS": "صفحة برنامج القادة", "MI-ASSESSMENT": "مقياس جاهزية الأثر" };
-const notifyAdmin = (sb: SB, r: Row) => notifyContact(sb, r, sendEmail, ADMIN_EMAIL, PAGE_LABEL[r.product as string] || (r.product as string) || "غير محدد");
+// طلب التواصل بالبريد وسطر في Slack معًا (قرار المالك، مركز الإشعارات): السطر بلا اسم ولا بريد (contactLine)
+const notifyAdmin = (sb: SB, r: Row) => notifyContact(sb, r, sendEmail, ADMIN_EMAIL, CONTACT_PAGES[r.product as string] || (r.product as string) || "غير محدد", "", { slack: true });
 const confirmSender = (sb: SB, r: Row) => confirmContact(sb, r, sendEmail);
 
 // ════════ CONTACT ════════

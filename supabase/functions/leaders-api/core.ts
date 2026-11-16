@@ -7,7 +7,9 @@ import { stageText } from './nudge.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
 import { alertWebhook, slackAlertDelivered, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
-import { slackCode, slackMail, slackUse } from '../_shared/slack.ts';
+import { slackCode, slackConfigured, slackMail, slackUse } from '../_shared/slack.ts';
+import { route, SLACK_DOWN_MS, SLACK_DOWN_SUBJECT, slackStateOf } from '../_shared/notify-routing.js';
+import { notifySettings } from '../_shared/notify-settings.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
@@ -767,6 +769,17 @@ export function agentKeyMail(kind: 'changed' | 'reverted', rows: [string, string
     AGENT_KEY_MAIL_SUBJECT[kind], 'يصلك هذا لأنك من مالكي لوحة الإدارة.');
 }
 
+// بريد الملاك الأمني لتغيير توجيه الإشعارات (مركز الإشعارات، المرحلة 4، صف notify_routing_changed المقفل): ما تغير
+// بتسميات الفهرس وحدها، ومن حفظ ومتى
+export const ROUTING_MAIL_SUBJECT = 'تنبيه أمني: تغير توجيه إشعارات الإدارة';
+export function routingMail(rows: [string, string][]) {
+  return shell('admin', ROUTING_MAIL_SUBJECT,
+    mailRows(rows)
+    + mailNote('إن لم تكن أنت أو أحد الملاك، ادخل وأعد الإعداد من قسم «التوجيه» في مركز البريد، وأنهِ الجلسات الأخرى وغيّر وسيلة الدخول.')
+    + mailButton(`${SITES.admin}/#/leaders/mailcenter`, 'افتح مركز البريد'),
+    ROUTING_MAIL_SUBJECT, 'يصلك هذا لأنك من مالكي لوحة الإدارة.');
+}
+
 // ── تنبيه التشغيل الفوري ──
 // خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة في كل مهلة تهدئة
 // لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
@@ -812,13 +825,41 @@ async function stuckMailDue() {
 }
 // تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
 const lastAlert = new Map<string, number>();
-// cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين
-export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; slack?: boolean };
+// بريد «Slack لا يستقبل التنبيهات»: سلاك مضبوط ولم يصل منه تنبيه، فيُبلَّغ المالك مرة كل ست ساعات على الأكثر (التصور 6.4).
+// العلامة من سجل البريد بعنوانه كبريد الطابور العالق، وما لم يصل لا يُعلَّم فيُعاد مع التنبيه التالي
+let slackDownAt = 0;
+export const resetSlackDown = () => { slackDownAt = 0; };   // للاختبار
+async function slackDownDue() {
+  if (slackDownAt > Date.now() - SLACK_DOWN_MS) return false;
+  const { count, error } = await db.from('mail_events').select('id', { count: 'exact', head: true })
+    .eq('kind', 'alert').eq('status', 'sent').eq('subject', SLACK_DOWN_SUBJECT).gte('created_at', new Date(Date.now() - SLACK_DOWN_MS).toISOString());
+  return !!error || !(count ?? 0);
+}
+export function slackDownMail(kind: string) {
+  return shell('admin', SLACK_DOWN_SUBJECT,
+    mailText(`لم يصل تنبيه <b>${bdi(kind)}</b> إلى سلسلة التنبيهات في Slack. التنبيهات المهمة تصلك بالبريد بدلها حتى يعود.`)
+    + mailNote('راجع حالة Slack في بطاقة صحة البريد والتنبيه، ثم أرسل تنبيهًا تجريبيًا. لن يصلك هذا البريد ثانية قبل ست ساعات.')
+    + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
+    'Slack لا يستقبل التنبيهات', 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
+}
+// يستعمله أيضًا إشعار المالك التشغيلي (notify.ts) حين لا يصل سطره
+export async function slackDownNotice(kind: string) {
+  if (!(await slackDownDue())) return false;
+  slackDownAt = Date.now();
+  const ok = await sendMail(CONFIG.alertEmail, SLACK_DOWN_SUBJECT, slackDownMail(kind), [], { kind: 'alert' }).then(() => true, (e) => { console.error('slack down mail:', e); return false; });
+  if (!ok) slackDownAt = 0;
+  return ok;
+}
+// cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين، وrouted: ما قرره جدول التوجيه بعد حال سلاك
+export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; slack?: boolean; routed?: { email: boolean; slack: boolean } };
 // key: مفتاح تهدئة داخل النوع (رقم طلب الحذف مثلًا): لكل طلب تنبيهه، فطلبان في عشر دقائق لا يُسقط ثانيهما.
 // المهلة وسطر السجل بالمفتاح المركب `${kind}:${key}`، والنوع في القناتين كما هو
 // mail: ما يدخل متن بريد المالك وحده (اسم المشارك وسببه في طلب الحذف): لا يُكتب في سجل التدقيق الذي لا يُحذف منه
 // (system.alert)، ولا يصل سلاك ولا الرابط، ولا يدخل العنوان المحفوظ في سجل البريد
 export type AlertOpts = { key?: string | null; mail?: Record<string, unknown> | null };
+// القناة يقررها جدول التوجيه وحده (_shared/notify-routing.js): الحرج بريد وسلاك دائمًا، والمهم سلاك والبريد احتياط
+// حين لا يصل سلاك ولا الرابط، ومفتاح المساعد بلا بريد (يغطيه بريد الملاك الأمني). والإعداد ما حفظه المالك في قسم
+// «التوجيه» (notifySettings، ذاكرة الدقيقة)، و«متوازن» الافتراضي إن لم يُحفظ أو تعذّرت قراءته
 export async function raiseAlert(kind: string, detail: Record<string, unknown>, { key = null, mail = null }: AlertOpts = {}): Promise<AlertResult> {
   const windowMs = alertCooldown(kind);
   const cool = key ? `${kind}:${key}` : kind;
@@ -837,15 +878,24 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>, 
     await audit('system', 'alert', 'system.alert', 'system', cool, null, detail).catch((e) => console.error('alertOps audit:', e));
     // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه. سلاك والرابط معًا، وكلاهما قناة كافية
     // (readiness.js ALERT_CHANNELS)، فنتيجة سلاك تُنتظر (بمهلة) لتُحسب في «وصل» كما يُحسب الرابط
-    const [webhook, slack] = await Promise.all([alertWebhook(kind, detail, { slack: false }), slackAlertDelivered(kind, detail)]);
-    const other = webhook || slack;
-    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, slack, email: false };
+    const settings = await notifySettings(db);
+    const plan = route(kind, settings);
+    const [webhook, slack] = plan.slack
+      ? await Promise.all([alertWebhook(kind, detail, { slack: false }), slackAlertDelivered(kind, detail)])
+      : [false, false];
+    const state = plan.slack ? slackStateOf({ delivered: webhook || slack, configured: slackConfigured() || !!Deno.env.get('LEADERS_ALERT_WEBHOOK') }) : 'ok';
+    const decided = route(kind, settings, state);
+    const routed = { email: decided.email, slack: plan.slack };
+    const base = { cooled: false, webhook, slack, routed };
+    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { ...base, email: false };
+    // سلاك مضبوط ولم يستقبل: بريد واحد بذلك كل ست ساعات، مستقل عن بريد التنبيه نفسه
+    if (plan.slack && !slack && slackConfigured()) await slackDownNotice(kind);
+    if (!decided.email) return { ...base, email: false };
+    // بريد الطابور العالق احتياط مقيّد فوق قاعدة «المهم»: مرة كل ست ساعات بين النسخ
     if (kind === 'mail_queue_stuck') {
-      if (other || !(await stuckMailDue())) return { cooled: false, webhook, slack, email: false };
+      if (!(await stuckMailDue())) return { ...base, email: false };
       stuckMailAt = Date.now();
     }
-    // سطر الترحيل اليومي بالبريد من نصيب الرموز في يوم مزدحم: لا يُرسل إلا حين لا يصل سلاك ولا الرابط
-    if (kind === 'mail_queue_carryover' && other) return { cooled: false, webhook, slack, email: false };
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
     // طلب الحذف وتذكيره بقالبهما (الاسم والمهلة وزر الورقة)، وغيرهما بقالب الحادثة العام
     const owner = ERASE_OWNER_KINDS.includes(kind);
@@ -853,7 +903,7 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>, 
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
     // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
     if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
-    return { cooled: false, webhook, slack, email };
+    return { ...base, email };
   } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false, slack: false }; }
 }
 export async function alertOps(kind: string, detail: Record<string, unknown>, opts: AlertOpts = {}) {

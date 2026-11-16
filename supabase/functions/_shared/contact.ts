@@ -8,6 +8,9 @@
 import { bdi, mailButton, mailNote, mailRows, mailShell, mailText, mailTitle, plain } from './mail.ts';
 import { SITES } from './sites.js';
 import { PROMISE_AR } from './hours.js';
+import { slackPost } from './slack.ts';
+import { route } from './notify-routing.js';
+import { notifySettings } from './notify-settings.ts';
 
 // deno-lint-ignore no-explicit-any
 type SB = any;
@@ -36,9 +39,18 @@ async function claim(sb: SB, kind: 'notify' | 'confirm', ref: string): Promise<b
   return false;
 }
 
+// أسماء صفحات النموذج (send-otp). المصدر الواحد لعنوان البريد وسطر Slack
+export const CONTACT_PAGES: Record<string, string> = { 'MI-HOME': 'الصفحة الرئيسية', 'MI-LEADERS': 'صفحة برنامج القادة', 'MI-ASSESSMENT': 'مقياس جاهزية الأثر' };
+// سطر Slack لطلب التواصل (contact_request، قرار المالك: بريد وSlack معًا): نوعه وصفحته من القائمة الثابتة ورابط اللوحة.
+// لا اسم ولا جهة ولا بريد ولا جوال ولا نوع الطلب كما كتبه الزائر: كلها في البريد وحده (التصور 6.6)
+export const contactLine = (product: unknown) => `📬 طلب تواصل جديد · ${CONTACT_PAGES[String(product ?? '')] ?? 'صفحة أخرى'}\n${SITES.admin}/`;
+
 // pageLabel: اسم المصدر من الدالة المستدعية (أسماء صفحات النموذج في send-otp)
-export async function notifyAdmin(sb: SB, r: ContactRow, send: MailSend, adminEmail: string, pageLabel: string, sourceLabel = '') {
+// slack: سطر Slack من هنا (النموذج العام). المساعد الآلي ينشر سطر التحويل الخاص به (agent-chat/handler.ts) فلا يطلبه
+export async function notifyAdmin(sb: SB, r: ContactRow, send: MailSend, adminEmail: string, pageLabel: string, sourceLabel = '', { slack = false }: { slack?: boolean } = {}) {
   if (!(await claim(sb, 'notify', String(r.id)))) return;
+  // البريد مقفل (يُرسل دائمًا)، وسطر Slack بما حفظه المالك في «التوجيه»
+  if (slack && route('contact_request', await notifySettings(sb)).slack) slackPost('alerts', contactLine(r.product), { client: sb });
   const dateStr = new Date(r.created_at as string).toLocaleString('ar-SA', {
     timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });

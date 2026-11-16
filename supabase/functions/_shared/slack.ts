@@ -8,11 +8,14 @@
 // وغياب الجدول (قبل ترحيله) ينشر بلا سلاسل ويبقى يعمل.
 // لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (mon***@gmail.com) والدالة، وتفاصيل التنبيه مطموسة (alertLine).
 
-export type SlackCategory = 'alerts' | 'codes' | 'mail';
+// digest: سلسلة «الملخص اليومي» (مركز الإشعارات 6.3). قيدها في القاعدة بترحيل 20261116190000، وقبله يُرفض حجز
+// سلسلتها فيُنشر الملخص رسالة مستقلة (findOrCreate) ولا يتعطل
+export type SlackCategory = 'alerts' | 'codes' | 'mail' | 'digest';
 export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: string }> = {
   alerts: { icon: '⚠️', label: 'التنبيهات' },
   codes: { icon: '🔐', label: 'رموز الدخول' },
   mail: { icon: '📨', label: 'بريد لم يصل' },
+  digest: { icon: '🗞️', label: 'الملخص اليومي' },
 };
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 

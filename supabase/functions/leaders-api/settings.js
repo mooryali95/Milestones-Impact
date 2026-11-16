@@ -8,6 +8,7 @@
 // كل مجموعة صف واحد في المخزن (key = اسم المجموعة، value = ما حُرِّر منها). ما لم يُحرَّر يبقى على افتراضيه.
 
 import { VISIBILITY, VISIBILITY_KEYS, visibilityLabel } from './visibility.js';
+import { DEFAULT_PRESET, DIGEST_HOUR_RIYADH, PRESETS, rowError } from '../_shared/notify-routing.js';
 
 const int = (d, min, max, label_ar, hint_ar = '') => ({ type: 'int', default: d, min, max, label_ar, hint_ar });
 const num = (d, min, max, step, label_ar, hint_ar = '') => ({ type: 'number', default: d, min, max, step, label_ar, hint_ar });
@@ -74,6 +75,20 @@ export const SETTINGS = {
       retention_days: int(90, 7, 365, 'مدة حفظ المحادثة بالأيام', 'ثم تُحذف آليًا. وللمشارك أن يحذفها متى شاء.'),
     },
   },
+  // مركز الإشعارات (تصور 2026-11-16، المرحلة 4): أين يصل كل إشعار للإدارة. الفهرس والقرار في _shared/notify-routing.js،
+  // وهنا ما يحفظه المالك: الإعداد الجاهز، والصفوف المعدلة عنه وحدها، وساعة الملخص. يُحرَّر من قسم «التوجيه» في مركز البريد
+  // لا من الإعدادات العامة (panel)، وحفظه للمالك وحده (owner) ويرسل بريدًا أمنيًا للملاك (settings.ts)
+  notifications: {
+    title_ar: 'توجيه إشعارات الإدارة',
+    note_ar: 'أين يصل كل إشعار: البريد أو Slack أو الملخص اليومي. الصفوف المقفلة بريدها دائم.',
+    owner: true,
+    panel: 'mailcenter',
+    fields: {
+      preset: { type: 'choice', default: DEFAULT_PRESET, options: Object.keys(PRESETS), label_ar: 'الإعداد الجاهز' },
+      rows: { type: 'routing', default: {}, label_ar: 'الصفوف المعدلة عن الإعداد الجاهز' },
+      digest_hour: int(DIGEST_HOUR_RIYADH, 0, 23, 'ساعة الملخص اليومي بتوقيت الرياض'),
+    },
+  },
   // الرؤية (visibility.js): الحقول تُولَّد من المفاتيح نفسها، فلا يُكتب مفتاح مرتين
   visibility: {
     title_ar: 'الرؤية: ما يراه المستشار والخبير والمشارك',
@@ -107,6 +122,18 @@ export function cleanField(f, v) {
     if (!Array.isArray(v) || v.length !== f.count) return bad(`${f.count} مراسٍ`);
     const out = v.map((x) => String(x ?? '').trim().slice(0, 60));
     if (out.some((x) => !x)) return bad('لا مرساة فارغة');
+    return { ok: true, value: out };
+  }
+  if (f.type === 'choice') return f.options.includes(v) ? { ok: true, value: v } : bad('اختيار غير معروف');
+  // صفوف التوجيه: لكل حدث معروف قنواته الثلاث، والصف المقفل لا يُطفأ بريده (rowError في notify-routing.js)
+  if (f.type === 'routing') {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return bad('صفوف غير صالحة');
+    const out = {};
+    for (const [k, row] of Object.entries(v)) {
+      const err = rowError(k, row);
+      if (err) return bad(err);
+      out[k] = { email: row.email === true, slack: row.slack === true, digest: row.digest === true };
+    }
     return { ok: true, value: out };
   }
   return bad('نوع غير معروف');

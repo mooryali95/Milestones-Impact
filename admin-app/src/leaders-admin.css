@@ -1190,3 +1190,15 @@
 .inbox-list li.soon .inbox-age { color: var(--st-warn-text); }
 /* على الجوال الورقة كاملة الشاشة */
 @media (max-width: 640px) { .mi-form.er-sheet { max-inline-size: none; inline-size: 100vw; max-height: 100dvh; block-size: 100dvh; border-radius: 0; } }
+
+/* قسم «التوجيه» في مركز البريد (NotifyRouting.jsx) */
+.nr-presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-block: 12px; }
+.nr-preset { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+.nr-preset.on { border-color: var(--petrol); background: color-mix(in srgb, var(--petrol) 10%, transparent); }
+.nr-matrix td, .nr-matrix th[scope="col"] { text-align: center; }
+.nr-matrix th[scope="row"] { text-align: start; font-weight: 500; }
+.nr-matrix tr.nr-cat th { text-align: start; background: color-mix(in srgb, var(--petrol) 6%, transparent); }
+.nr-matrix tr.custom th[scope="row"] { font-weight: 700; }
+.nr-lock { margin-inline-start: 6px; }
+.nr-impact p { margin: 0 0 4px; }
+.nr-health { margin-block: 8px; }

@@ -6,6 +6,7 @@ const S = await import('../_shared/slack.ts');
 const { sendCounted, alertWebhook } = await import('../_shared/mail.ts');
 const { db, raiseAlert, sendMail, CONFIG } = await import('./core.ts');
 const { MIGRATIONS, MIGRATION_GATES } = await import('./migrations.js');
+const { SLACK_DOWN_SUBJECT } = await import('../_shared/notify-routing.js');
 
 type Row = { day: string; category: string; ts: string };
 function fakeDb({ missing = false, insertError = null as null | { code: string; message: string } } = {}) {
@@ -655,12 +656,12 @@ Deno.test('raiseAlert بسلاك وحده: نتيجة سلاك تُحسب في �
       assert(slackCalls(calls).some((c) => String(c.body.text).startsWith('*mail_queue_stuck*')));
     });
     S.resetSlack();
-    // سلاك يرفض: لا وصول منه، فيُرسل البريد احتياطًا
+    // سلاك يرفض: لا وصول منه، فيُرسل البريد احتياطًا، ومعه بريد «Slack لا يستقبل» مرة واحدة
     await withNet(async (calls) => {
       const r = await raiseAlert('mail_queue_stuck', { messages: 3 });
       assertEquals([r.webhook, r.slack], [false, false]);
       assertEquals(r.email, true);
-      assertEquals(calls.filter((c) => c.url.includes('resend.com')).length, 1);
+      assertEquals(calls.filter((c) => c.url.includes('resend.com')).map((c) => c.body.subject), [SLACK_DOWN_SUBJECT, 'تنبيه: mail_queue_stuck في leaders-api']);
     }, { slack: 'error' });
   } finally {
     Object.assign(CONFIG, saved);

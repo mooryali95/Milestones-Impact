@@ -81,7 +81,9 @@ test('مفاتيح بريد الدفع مغلقة أصلًا وتُحفظ مع �
   await page.getByRole('button', { name: 'الإعداد', exact: true }).click();
   const box = page.getByRole('checkbox', { name: /تأكيد الدفع للعميل/ });
   await expect(box).not.toBeChecked();
-  await expect(page.getByRole('checkbox', { name: /تنبيه الإدارة/ })).not.toBeChecked();
+  // تنبيه الإدارة بكل دفعة انتقل إلى «التوجيه» في مركز البريد (مركز الإشعارات، المرحلة 4)
+  await expect(page.getByRole('checkbox', { name: /تنبيه الإدارة/ })).toHaveCount(0);
+  await expect(page.getByText(/في «التوجيه» بمركز البريد/)).toBeVisible();
   await box.check();
   await page.getByRole('button', { name: 'احفظ', exact: true }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.payment-settings')?.notify).toMatchObject({ receipt: true });

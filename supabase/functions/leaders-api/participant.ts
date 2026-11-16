@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import { all, audit, BUCKET, CONFIG, db, expiresIn, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, newDeviceMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
+import { deviceOf } from '../_shared/login-device.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
@@ -37,13 +38,8 @@ type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
 
 // ── الجلسة ──
-// وصف مختصر للجهاز من المتصفح، لرسالة الدخول الجديد
-export const deviceOf = (ua: string | null) => {
-  const s = String(ua || '');
-  const os = /iPhone|iPad/.test(s) ? 'iPhone/iPad' : /Android/.test(s) ? 'Android' : /Mac OS X/.test(s) ? 'Mac' : /Windows/.test(s) ? 'Windows' : /Linux/.test(s) ? 'Linux' : 'جهاز';
-  const br = /Edg\//.test(s) ? 'Edge' : /Chrome\//.test(s) ? 'Chrome' : /Safari\//.test(s) ? 'Safari' : /Firefox\//.test(s) ? 'Firefox' : '';
-  return br ? `${os} · ${br}` : os;
-};
+// وصف مختصر للجهاز من المتصفح، لرسالة الدخول الجديد. مصدره الواحد _shared/login-device.js (وتقرؤه بصمة دخول الإدارة)
+export { deviceOf } from '../_shared/login-device.js';
 
 // bornAt: لحظة الدخول الأصلية حين تُصدر الجلسة بتبديل من بوابة أخرى (switch.ts)، فيبقى السقف المطلق محسوبًا منها
 export async function issueSession(participantId: string, method: string, ctx: Ctx, bornAt: string | null = null) {

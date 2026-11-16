@@ -39,7 +39,7 @@ describe('مفاتيح البريد', () => {
   it('لا بريد دفع آلي في الخادم إلا خلف مفتاحه', () => {
     const s = src('supabase/functions/leaders-api/payments.ts');
     // كل سطر يرسل بريد دفع آليًّا يبدأ بشرط مفتاحه
-    const gate = { paymentReceiptMail: 'on.receipt', paymentRefundMail: 'on.refund', paymentOwnerMail: 'on.owner' };
+    const gate = { paymentReceiptMail: 'on.receipt', paymentRefundMail: 'on.refund' };
     for (const [mail, key] of Object.entries(gate)) {
       const lines = s.split('\n');
       const at = lines.map((l, i) => (l.includes(`${mail}(`) ? i : -1)).filter((i) => i >= 0);
@@ -47,6 +47,17 @@ describe('مفاتيح البريد', () => {
       // الشرط في السطر نفسه أو في فاتحة كتلته قبله بسطرين على الأكثر
       for (const i of at) expect(lines.slice(Math.max(0, i - 2), i + 1).some((l) => l.trim().startsWith(`if (${key} &&`)), `${mail} سطر ${i + 1}`).toBe(true);
     }
+    // بريد المالك بالدفعة انتقل إلى جدول التوجيه (payment_new وpayment_refund): يمر بـ ownerNoticeLater وحده، والمفتاح القديم
+    // owner قراءته الاحتياطية (ownerSettings)، فلا بريد مالك يُرسل مباشرة
+    const lines = s.split('\n');
+    const owner = lines.map((l, i) => (l.includes('paymentOwnerMail(') ? i : -1)).filter((i) => i >= 0);
+    expect(owner.length).toBe(2);
+    for (const i of owner) {
+      const block = lines.slice(Math.max(0, i - 3), i + 1).join('\n');
+      expect(block, `paymentOwnerMail سطر ${i + 1}`).toMatch(/ownerNoticeLater\('payment_(new|refund)'/);
+      expect(block).toContain('settings: await ownerSettings(on.owner)');
+    }
+    expect(s).not.toMatch(/sendMail\(CONFIG\.alertEmail/);
     // التذكير فعل يدوي من المدير وحده: لا يُستدعى من المهمة الدورية
     const expire = s.slice(s.indexOf('export async function expireAbandoned'));
     expect(expire.slice(0, expire.indexOf('\n}\n'))).not.toContain('paymentAbandonMail');

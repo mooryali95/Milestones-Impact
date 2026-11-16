@@ -45,6 +45,8 @@ describe('إصلاح ما كشفه التوثيق', () => {
     const e = read('supabase/functions/leaders-api/entitlements.ts');
     const fn = e.slice(e.indexOf('async function notifyOrg('), e.indexOf('// يثبّت لمشارك بمعرّفه'));
     expect(fn).toMatch(/for \(const t of coordEmails\) await send\(t, `\$\{CONFIG\.appUrl\}\/org`, 'افتح بوابة جهتك'\);/);
-    expect(fn).toMatch(/await send\(CONFIG\.alertEmail, `\$\{SITES\.admin\}\/#\/leaders\/payments`, 'افتح الطلبات'\);/);
+    // المالك بجدول التوجيه (مركز الإشعارات، المرحلة 3): سطر Slack، والبريد بصفحة الطلبات احتياطًا
+    expect(fn).toMatch(/mailButton\(`\$\{SITES\.admin\}\/#\/leaders\/payments`, 'افتح الطلبات'\)/);
+    expect(fn).toMatch(/ownerNoticeLater\('seat_limit_owner', \{ line, mail, ref: `organization:\$\{org\.id\}` \}\);/);
   });
 });

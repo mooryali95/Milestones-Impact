@@ -57,8 +57,10 @@ import * as OB from './observations.ts';
 import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
 import * as MC from './mail-center.ts';
+import * as NC from './notify-center.ts';
 import * as AG from './agent-admin.ts';
 import * as MB from './master-book.ts';
+import * as DG from './digest.ts';
 import * as BP from './book-proposals.ts';
 import * as BR from './book-release.ts';
 import * as NU from './nudges.ts';
@@ -113,7 +115,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
     const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
     const mail_queue = hold && rewrite ? await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })) : { sent: 0, deferred: true };
-    const sweeps = { ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
+    // كل خطوة بحارسها: خطوة ترمي لا توقف ما بعدها (الملخص اليومي آخرها، فلا يتأخر ساعة بعطل في غيره)
+    const sweeps = { ...(await E.sweepOffers(b).catch((e) => ({ offers_error: String(e?.message || e) }))),
+      session_reminders: await V.sessionReminders().catch((e) => ({ error: String(e?.message || e) })), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
       pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
       pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
       // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار
@@ -131,7 +135,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
         mail_carryover: await carryoverAlert(hold).catch((e) => ({ alerted: false, error: String(e?.message || e) })),
       } : { mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } }),
       // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
-      slack_hello: await slackHello(db),
+      slack_hello: await slackHello(db).catch((e) => { console.error('slack hello', e); return 'failed' as const; }),
+      // الملخص اليومي لإشعارات الإدارة: مرة في اليوم في أول تشغيل بعد 9:00 بالرياض (المهمة في الدقيقة 17، فنحو 9:17)، لا يُنشر فارغًا، وبريد واحد بدله إن لم يصل Slack
+      daily_digest: await DG.dailyDigest().catch((e) => ({ due: true, error: String(e?.message || e) })),
     };
   },
   'xp.auth-start': E.portalStart,
@@ -471,6 +477,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
   // مركز البريد: الحصة للجميع. تشخيص عنوان ونص رسالة منتظرة (قد يحمل رابط دخول) لمن يكتب وحده، ورابط الدخول اليدوي للمدير الأعلى
   'admin.mail-center': (a) => MC.center(a),
+  // قسم «التوجيه» في مركز البريد: الإعداد ومعاينة أثر 7 أيام للجميع، والحفظ للمالك وحده عبر admin.settings-save
+  'admin.notify-routing': (a) => NC.routingState(a),
   'admin.mail-trace': (a, b) => A.writer(a, MC.trace, b),
   'admin.mail-queue-body': (a, b) => A.writer(a, MC.queueBody, b),
   'admin.mail-queue-send': (a, b) => A.writer(a, MC.queueSend, b),
