@@ -149,7 +149,7 @@ describe('بوابة حمل القاعة واختبارها', () => {
 describe('دليل التشغيل: قسم مفاتيح الميزات', () => {
   const rb = read('RUNBOOK.md');
   it('يقول أين المفاتيح وما يخفيه كل منها وكيف تُظهَر', () => {
-    expect(rb).toContain('## 8. مفاتيح الميزات');
+    expect(rb).toContain('## 9. مفاتيح الميزات');
     for (const s of ['الميزات قيد البناء', 'features.hall', 'features.katon', 'feedback360.enabled', 'hall_off', 'katon_off', 'f360_off', 'تتجمد', 'm4.hall-load', 'كيف تُظهَر ميزة']) expect(rb).toContain(s);
   });
 });
