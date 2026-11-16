@@ -107,6 +107,6 @@ Deno.test('حراسة نصية: كل استعلام مقيد بالمشارك، 
   assertEquals(froms.length, 3);
   for (const f of froms) assert(f.includes(".eq('participant_id', participantId)"), f);
   const me = await Deno.readTextFile(new URL('./participant.ts', import.meta.url));
-  assert(/guidance: audience === 'participant' && approved \? await guidanceFor\(p\.id, !!initiative\) : null/.test(me));
+  assert(/guidance: audience === 'participant' && approved \? await guidanceFor\(p\.id, !!initiative\)/.test(me));
   assert(!/guidanceFor\(b\./.test(me));
 });

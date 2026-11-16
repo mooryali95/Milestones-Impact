@@ -17,7 +17,7 @@ import {
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
-import { guidanceFor } from './guidance.ts';
+import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -658,7 +658,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     // لافتة التذكير الموحد (nudge-banner.ts): آخر تذكير لم يره، بنص بريده ومرسله
     nudge: audience === 'participant' ? await bannerFor(p.id) : null,
     // «التوجيه والإرشاد» (guidance.js): هل بدأ ما يوجَّه إليه. للمعتمد وحده، فالكتاب والمبادرة يُفتحان بعد الاعتماد
-    guidance: audience === 'participant' && approved ? await guidanceFor(p.id, !!initiative) : null,
+    guidance: audience === 'participant' && approved ? await guidanceFor(p.id, !!initiative).then(async (g) => g && { ...g, ai: await guidanceAi() }) : null,
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
     // مفاتيح الميزات قيد البناء (features.js): الواجهة تخفي القاعة وكاتون و360 بها، والخادم يرفض أفعالها وحده

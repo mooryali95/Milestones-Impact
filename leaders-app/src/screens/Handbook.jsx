@@ -600,7 +600,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
           </div>
           <span className="spacer" />
           <button className="link small book-act" onClick={exportBook} title="نسخة PDF باسمك ورقم إصدار، حتى 3 نسخ يوميًا">⤓ نسخة PDF شخصية</button>
-          <GuidanceButton guidance={me.guidance} note={tab === 'read' && data?.chapter?.title ? `في باب «${data.chapter.title}»: ` : ''} dimension={tab === 'read' && data?.chapter?.dimension ? data.chapter.dimension : ''} />
+          <GuidanceButton guidance={me.guidance} context="handbook" chapterId={tab === 'read' && data?.chapter?.id ? data.chapter.id : null} note={tab === 'read' && data?.chapter?.title ? `في باب «${data.chapter.title}»: ` : ''} dimension={tab === 'read' && data?.chapter?.dimension ? data.chapter.dimension : ''} />
           <button className="link small book-act book-back" onClick={onBack}>→ رحلتي</button>
         </nav>
       </section>
