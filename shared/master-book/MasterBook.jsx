@@ -446,7 +446,7 @@ function Chapter({ ch, idx, partIdx, level, data, scope, onThread, onDeps, onPro
   );
 }
 
-// ── اختيار نسخة PDF: الكتاب كاملًا أو جزء واحد كتيبًا مكتملًا ببدايته ونهايته ──
+// ── اختيار نسخة PDF: الكتاب كاملًا أو جزء واحد كتابًا مكتملًا ببدايته ونهايته ──
 function PdfSheet({ parts, data, onPick, onClose }) {
   const dlg = useDialogFocus();
   useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [onClose]);
@@ -457,7 +457,7 @@ function PdfSheet({ parts, data, onPick, onClose }) {
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h"><div><small>نسخة المراجعة</small><b>نسخة PDF</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
         <div className="mb-sheet-body">
-          <p className="mb-muted">الجزء يأتي كتيبًا مكتملًا: غلافه، ثم «عن هذا الجزء»، ثم فهرسه وأبوابه، ثم «يتكامل مع»، ثم الغلاف الخلفي. وكل صفحة تحمل اسمك وبريدك.</p>
+          <p className="mb-muted">الجزء يأتي كتابًا مكتملًا: غلافه، ثم «عن هذا الجزء»، ثم فهرسه وأبوابه، ثم «يتكامل مع»، ثم الغلاف الخلفي. وكل صفحة تحمل اسمك وبريدك.</p>
           <ul className="mb-pdf">
             <li><button type="button" onClick={() => onPick(null)}><i>◆</i><span><b>الكتاب كاملًا</b><small>الأجزاء الثلاثة · {n(null)} بابًا</small></span></button></li>
             {parts.map((p) => {

@@ -524,7 +524,7 @@ h1, h2, h3, h4 { font-weight: 200; margin: 0; }
 </style></head><body>`;
 }
 
-// ── طبعة الجزء: كتيب مكتمل له بداية ونهاية، يتكامل مع بداية الكتاب ونهايته ──
+// ── طبعة الجزء: كتاب مكتمل له بداية ونهاية، يتكامل مع بداية الكتاب ونهايته ──
 function partHtml(book, parts, key, texts) {
   const p = parts.find((x) => x.key === key);
   if (!p) throw new Error(`جزء غير معروف: ${key}`);
