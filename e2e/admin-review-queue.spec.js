@@ -41,7 +41,7 @@ async function setup(page) {
   return calls;
 }
 const nav = (page) => page.getByRole('navigation', { name: 'التنقل بين ملفات القائمة' });
-const heading = (page, name) => expect(page.locator('.la-person h3').first()).toHaveText(name);
+const heading = (page, name) => expect(page.locator('.pf-head h3').first()).toHaveText(name);
 
 for (const vp of [{ name: 'الحاسوب', size: { width: 1280, height: 900 } }, { name: 'الجوال 390', size: { width: 390, height: 844 } }]) {
   test(`المراجعة المتتالية (${vp.name}): الموضع، والسابق والتالي، والعودة بالفلتر نفسه`, async ({ page }) => {
@@ -77,7 +77,7 @@ test('اختصارات لوحة المفاتيح تتنقل، ولا تعمل د
   await page.keyboard.press('ArrowRight');
   await heading(page, 'سارة الأحمد');
   // داخل حقل: السهم يحرك المؤشر فقط
-  const field = page.locator('.la-person input, .la-person textarea').first();
+  const field = page.locator('.pf-main input, .pf-main textarea').first();
   if (await field.count()) {
     await field.focus();
     await page.keyboard.press('ArrowLeft');

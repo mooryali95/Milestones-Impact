@@ -15,23 +15,12 @@ import { CYCLE_STATUS_AR as F360_AR } from '../../../supabase/functions/leaders-
 const TONE = { bad: 'bad', warn: 'warn', info: '', ok: 'ok' };
 
 // ما يستحق نظر المراجع الآن، في سطر واحد أعلى الملف
-export function FileFlags({ flags }) {
-  if (!flags?.length) return <p className="pf-flags la-muted">لا أعلام على هذا الملف.</p>;
+export function FileFlags({ flags, quiet = false }) {
+  if (!flags?.length) return quiet ? null : <p className="pf-flags la-muted">لا أعلام على هذا الملف.</p>;
   return (
     <ul className="pf-flags" aria-label="ملخص الأعلام">
       {flags.map((f, i) => <li key={`${f.key}-${i}`}><span className={`la-chip ${TONE[f.tone] ?? ''}`} title={f.detail || undefined}>{f.label}</span></li>)}
     </ul>
-  );
-}
-
-// فهرس الملف: الملف ثلاثة عشر قسمًا في تمرير واحد، وهذا ينقل إلى القسم مباشرة. يعرض ما هو موجود في الصفحة فقط
-const SECTIONS = [['lc-title', 'المستوى'], ['pf-journey-h', 'الرحلة'], ['pf-book-h', 'الكتاب والنماذج'], ['pf-x-h', 'الجلسات والمبادرة'], ['pf-obs-h', 'الملاحظات'], ['pf-t-h', 'الخط الزمني']];
-export function FileIndex() {
-  const go = (id) => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } };
-  return (
-    <nav className="pf-index" aria-label="أقسام الملف">
-      {SECTIONS.map(([id, label]) => <button key={id} type="button" className="la-pill" onClick={() => go(id)}>{label}</button>)}
-    </nav>
   );
 }
 
