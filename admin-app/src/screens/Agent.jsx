@@ -13,7 +13,7 @@ import { agoAr } from '../../../supabase/functions/leaders-api/ops-health.js';
 import { convSummary, count, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, LEVEL_ICON, orgsSummary, peakDay, pct, ringLevel,
   RUN_STATUS_AR, runEvalLoop, runSummary, seriesScale, SET_AR, short, spendSummary, stateSummary, stopAr, systemLine, usd, usd2 } from '../agent-admin.js';
 import { navigate } from '../route.js';
-import { GuidanceCap, GuidanceEval, GuidanceReport } from './AppSettings.jsx';
+import { GuidanceCap } from './AppSettings.jsx';
 import { normAction, normConversations, normKeySet, normRunDetail, normRuns, normState, normStep, normTranscript, normUsage } from '../agent-data.js';
 import '../agent-admin.css';
 
@@ -512,11 +512,6 @@ export default function Agent({ isSuper = false }) {
       <AgentSection id="ag-spend" title="الإنفاق" summary={spendSummary(u)} {...sec('ag-spend')}><SpendSection u={u} reload={load} /></AgentSection>
       <AgentSection id="ag-conv" title="المحادثات" summary={convSummary(conv)} {...sec('ag-conv')}><ConversationsSection onCount={onCount} /></AgentSection>
       <AgentSection id="ag-eval" title="التقييم" summary={runSummary(lastRun)} {...sec('ag-eval')}><EvalSection s={s} writable={writable} reload={load} onRuns={onRuns} /></AgentSection>
-      {/* «التوجيه والإرشاد» داخل الرحلة: مساعد آخر غير مساعد الموقع، بتقريره وتقييم دقته ودفعاته التجريبية (G3 وG4a) */}
-      <AgentSection id="ag-guide" title="التوجيه والإرشاد داخل الرحلة" summary={{ level: 'green', text: 'أعداد بلا نص، وتقييم الدقة قبل الإطلاق، والدفعات التجريبية' }} open fixed>
-        <GuidanceReport />
-        <GuidanceEval canWrite={writable} />
-      </AgentSection>
       <AgentSection id="ag-orgs" title="مرافق الجهات" summary={orgsSummary(s.companion_off)} {...sec('ag-orgs')}>
         <p>يُضبط لكل جهة من نموذجها. مساعد الموقع عام ولا يتأثر بالجهة.</p>
         <button type="button" className="btn-sm ghost" onClick={() => navigate({ ctx: 'leaders', tab: 'orgs' })}>افتح الجهات</button>

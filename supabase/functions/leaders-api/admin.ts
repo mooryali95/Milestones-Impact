@@ -18,11 +18,12 @@ import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition, orgCohortSetups, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
-import { closeOnDelete as closeErasure, pendingEraseId } from './privacy.ts';
+import { closeOnDelete as closeErasure, markNotified, noteOnDone, pendingEraseId } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
 import { inboxOf } from './inbox.js';
+import { daysLeft, leftAr } from './erasure.js';
 import * as OB from './observations.ts';
 import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from './notice-rules.js';
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
@@ -494,30 +495,53 @@ export async function participantImpact(b: Body) {
     counts: { assessments, submissions, capstones, certificates, payments, requirements, sessions }, blockers,
   };
 }
-// الترتيب (المرحلة 0 من تصور طلب الحذف): يُلتقط البريد والاسم ورقم الطلب وقائمة الملفات ومراجع مقيّميه أولًا، وأي تعذّر
-// في قراءتها يوقف التنفيذ قبل أن يُمس شيء. ثم يُحذف صف المشارك، فإن فشل أو لم يجد صفًّا (حذف متزامن) لا يُمس شيء آخر.
-// ثم يُغلق الطلب برقمه، وتُحذف الملفات وما ينتظر في طابور البريد له، ثم يصله تأكيد التنفيذ.
-// ملف تعذّر حذفه: الطلب يُغلق بملاحظة تسمي مجلده، والتنبيه يحمل مساراته، والتأكيد لا يُرسل (لا يُقال له «حُذفت ملفاتك»
-// وهي باقية)، ويعود عنوانه إلى المدير ليرسله بنفسه بعد حذفها
+// الحذف الإداري من منطقة الخطر (تسجيل مكرر مثلًا) بلا طلب قائم. من له طلب قائم يُنفَّذ طلبه من ورقة الطلب
+// (admin.erasure-execute، erasure.ts) ليُغلق برقمه ويُبلَّغ، فللتنفيذ مسار واحد (التصور 4.9)
 export async function participantDelete(a: Admin, b: Body) {
   requireSuper(a);
   const impact = await participantImpact(b);
   if (impact.blockers.length) throw new Fail(impact.blockers[0], 409, 'blocked');
-  const { id, email, full_name } = impact.participant;
+  const { id, email } = impact.participant;
   if (String(b.confirm_email || '').trim().toLowerCase() !== email) throw new Fail('اكتب بريد المشارك كما هو للتأكيد', 400, 'confirm');
   const request = await pendingEraseId(id);
+  if (request) throw new Fail('لهذا المشارك طلب حذف قائم. نفّذه من بطاقة الطلب أعلى الملف ليُغلق الطلب ويُبلَّغ', 409, 'erasure_pending');
+  return removeParticipant(a, impact, null);
+}
+// القلب المشترك بين الحذف الإداري وتنفيذ الطلب. الترتيب (المرحلة 0 من تصور طلب الحذف): يُلتقط البريد والاسم ورقم الطلب وقائمة
+// الملفات ومراجع مقيّميه أولًا، وأي تعذّر في قراءتها يوقف التنفيذ قبل أن يُمس شيء. ثم يُحذف صف المشارك، فإن فشل أو لم يجد صفًّا
+// (حذف متزامن) لا يُمس شيء آخر. في تنفيذ الطلب تُحذف شهاداته وصفه معًا في معاملة واحدة (erasure_purge، قرار المالك 1).
+// ثم يُغلق الطلب برقمه، وتُحذف الملفات وما ينتظر في طابور البريد له، ثم يصله تأكيد التنفيذ.
+// ملف تعذّر حذفه: الطلب يُغلق بملاحظة تسمي مجلده، والتنبيه يحمل مساراته، والتأكيد لا يُرسل (لا يُقال له «حُذفت ملفاتك»
+// وهي باقية)، ويعود عنوانه إلى المدير ليرسله بنفسه بعد حذفها
+export async function removeParticipant(a: Admin, impact: Awaited<ReturnType<typeof participantImpact>>, request: string | null, { purgeCertificates = false } = {}) {
+  const { id, email, full_name } = impact.participant;
   const paths = await participantFiles(id);
   // مقيّموه يُحذفون معه (on delete cascade)، ودعواتهم في الطابور بمرجعهم وتحمل اسمه: تُلتقط مراجعهم قبل الحذف
   const raters = await db.from('raters').select('id').eq('participant_id', id);
   if (raters.error) throw new Fail('تعذّرت قراءة مقيّميه. لم يُحذف شيء، والطلب قائم', 503, 'busy');
   const refs = [`participant:${id}`, ...((raters.data || []) as any[]).map((r) => `rater:${r.id}`)];
-  const del = await db.from('participants').delete().eq('id', id).select('id');
-  if (del.error) {
-    // شهادة غير سارية (ملغاة أو موقوفة أو مستبدلة) تمنع الحذف بقيدها (on delete restrict)، والمانع لا يعدّ إلا الساري
-    if (del.error.code === '23503') throw new Fail('له شهادة ملغاة أو مستبدلة تمنع الحذف. لم يُحذف شيء، والطلب قائم', 409, 'certificate');
-    throw new Fail('تعذّر الحذف. لم يُحذف شيء، والطلب قائم', 500, 'db_error');
+  const email_hash = await hash(email);
+  if (purgeCertificates) {
+    // في معاملة واحدة: يُحجز الطلب بشرط أنه قائم ويُغلق، ثم سجل الدفع والشهادات والصف (20261116160000). سحب المشارك أو
+    // قرار مدير آخر في اللحظة نفسها يسبقه فلا يُحذف شيء
+    if (!request) throw new Fail('رقم الطلب مطلوب للتنفيذ', 400);
+    const del = await db.rpc('erasure_purge', { p_participant: id, p_request: request, p_by: a.email, p_email_hash: email_hash });
+    if (del.error) {
+      if (del.error.code === 'P0002') throw new Fail('حُذف هذا المشارك للتو في عملية أخرى', 409, 'gone');
+      if (del.error.code === 'P0003') throw new Fail('قُرِّر في هذا الطلب للتو (سحبه صاحبه أو قرر فيه مدير آخر). لم يُحذف شيء. حدّث الصفحة', 409, 'decided');
+      if (del.error.code === 'P0004') throw new Fail('له صفحة دفع لم تكتمل بعد. لم يُحذف شيء، فنفّذ بعد انتهائها', 409, 'blocked');
+      console.error('erasure_purge:', del.error.message);
+      throw new Fail('تعذّر الحذف. لم يُحذف شيء، والطلب قائم', 500, 'db_error');
+    }
+  } else {
+    const del = await db.from('participants').delete().eq('id', id).select('id');
+    if (del.error) {
+      // شهادة غير سارية (ملغاة أو موقوفة أو مستبدلة) تمنع الحذف بقيدها (on delete restrict)، والمانع لا يعدّ إلا الساري
+      if (del.error.code === '23503') throw new Fail('له شهادة ملغاة أو مستبدلة تمنع الحذف. لم يُحذف شيء، والطلب قائم', 409, 'certificate');
+      throw new Fail('تعذّر الحذف. لم يُحذف شيء، والطلب قائم', 500, 'db_error');
+    }
+    if (!(del.data || []).length) throw new Fail('حُذف هذا المشارك للتو في عملية أخرى', 409, 'gone');
   }
-  if (!(del.data || []).length) throw new Fail('حُذف هذا المشارك للتو في عملية أخرى', 409, 'gone');
   // ما ينتظر له في طابور البريد يُحذف: لا يخرج إلى من حُذفت بياناته، ولا يبقى عنوانه محفوظًا
   const purged = await purgeQueuedMail(email, refs);
   let filesError: string | null = null;
@@ -526,7 +550,11 @@ export async function participantDelete(a: Admin, b: Body) {
     const err = (await remove()) && (await remove());   // محاولة ثانية لعطل عابر
     if (err) filesError = String((err as Error).message || err).slice(0, 200);
   }
-  const closed = await closeErasure(request, a.email, filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن تحت المجلد ${id}/ (${filesError}). تُحذف يدويًّا ثم يُرسل التأكيد للمشارك` : null);
+  const filesNote = filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن تحت المجلد ${id}/ (${filesError}). تُحذف يدويًّا ثم يُرسل التأكيد للمشارك` : null;
+  // في التنفيذ أغلقت erasure_purge الطلب مع الحذف، فلا يبقى إلا ملاحظة الملفات إن تعذّرت
+  // (تعذّر كتابة الملاحظة لا يفتحه: التنبيه بعده يحمل المجلد ومساراته)
+  if (purgeCertificates && filesNote) await noteOnDone(request!, filesNote);
+  const closed = purgeCertificates ? true : await closeErasure(request, a.email, filesNote, email_hash);
   if (filesError || !closed) {
     await alertOps(filesError ? 'erase_files_failed' : 'erase_close_failed', {
       request, participant: id, ...(filesError ? { files: paths.length, folder: `${id}/`, paths: paths.slice(0, 20).join(' '), error: filesError } : {}),
@@ -536,8 +564,9 @@ export async function participantDelete(a: Admin, b: Body) {
   // تأكيد التنفيذ إلى العنوان الملتقط، خارج الطابور، حين حُذف كل شيء: إن تعذّر أو بقيت ملفات يُعاد العنوان إلى المدير
   const mailed = filesError ? false : await sendMail(email, ERASE_DONE_SUBJECT, eraseDoneMail(full_name, new Date().toISOString()), [], { force: true, queue: false })
     .then(() => true, (e) => { console.error('erase done mail:', e); return false; });
+  if (mailed && request) await markNotified(request);
   // الحذف تم ولا رجعة فيه: تعذّر سطر السجل لا يحجب الرد (ففيه العنوان للإرسال اليدوي)، ويُبلَّغ
-  const audited = await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, request, request_closed: closed, mailed, queue_purged: purged, ...(filesError ? { files_failed: true } : {}), ...impact.counts })
+  const audited = await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash, files: paths.length, request, request_closed: closed, mailed, queue_purged: purged, ...(purgeCertificates ? { certificates_purged: impact.counts.certificates } : {}), ...(filesError ? { files_failed: true } : {}), ...impact.counts })
     .then(() => true, async (e) => {
       console.error('participant.delete audit:', e);
       await alertOps('erase_audit_failed', { participant: id, request }, { key: id }).catch(() => {});
@@ -623,7 +652,8 @@ export async function inbox(_b: Body = {}) {
     expert_application: rows.expert_application.map((r) => ({ id: r.id, title: r.full_name, sub: r.title || '', at: r.created_at })),
     expert_unmatched: rows.expert_unmatched.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: expertRoleAr(r.role), at: r.created_at })),
     sponsor: rows.sponsor.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: r.kind === 'contract' ? 'خارج مدة العقد' : 'المقاعد ممتلئة', at: r.created_at })),
-    erasure: rows.erasure.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'مهلته 30 يومًا', at: r.created_at })),
+    // سطر المهلة بأيامها المتبقية بتقويم الرياض (erasure.js)، لا «مهلته 30 يومًا» الثابتة
+    erasure: rows.erasure.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: leftAr(daysLeft(r.created_at)), at: r.created_at })),
     coaching_confirm: rows.coaching_confirm.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'حضر أم لم يحضر؟', at: r.ends_at || r.starts_at })),
   };
   return { success: true, ...inboxOf(src), skipped };

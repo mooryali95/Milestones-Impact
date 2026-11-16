@@ -24,7 +24,7 @@ function bodyOf(impl) {
 }
 // أفعال الإدارة للقراءة وحدها: تُفتح لكل أدوار اللوحة بما فيها «عرض فقط»
 const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'peer', 'reviews', 'evidence-url',
-  'participant-impact', 'sus', 'erasures', 'catalog', 'nudge-preview', 'nudge-ledger', 'nudge-report', 'track', 'orgs', 'org', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'book-preview',
+  'participant-impact', 'sus', 'erasures', 'erasure-get', 'catalog', 'nudge-preview', 'nudge-ledger', 'nudge-report', 'track', 'orgs', 'org', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'impact',
   'curriculum', 'programs', 'payments', 'payment', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones', 'cohort-definition',
   'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'outcomes',
@@ -42,7 +42,7 @@ const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gall
   // وفتح نص محادثة أو تشغيل يُسجَّل. الكتابة كلها بغلاف superWriter
   'agent-state', 'agent-usage', 'agent-conversations', 'agent-transcript', 'agent-eval-runs', 'agent-eval-run',
   // «التوجيه والإرشاد»: أعداد وإنفاق بلا نص، يحصرها الخادم في المدير الأعلى والمالك (requireAgentRead)
-  'guide-report', 'guide-eval', 'guide-eval-results', 'guide-pilots']);
+  'guide-report', 'guide-eval', 'guide-eval-results', 'guide-pilots', 'guide-dashboard', 'guide-orgs']);
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {

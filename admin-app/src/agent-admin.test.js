@@ -113,7 +113,9 @@ describe('مفتاح المرافق في نموذج الجهة وتبويب ال
     expect(TABS.find(([k]) => k === 'agent')?.[1]).toBe('المساعد الآلي');
     expect(OWNER_TABS.has('agent')).toBe(true);
     const src = readFileSync(join(__dirname, 'screens/Leaders.jsx'), 'utf8');
-    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent'\]\]/);
+    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent', 'guidance', 'guidance-access'\]\]/);
+    // «التوجيه والإرشاد» و«إتاحة التوجيه» (H1) مقصوران مثله
+    expect(OWNER_TABS.has('guidance') && OWNER_TABS.has('guidance-access')).toBe(true);
   });
   it('لا شرطة طويلة ولا متوسطة في الملفات الجديدة', () => {
     const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',
