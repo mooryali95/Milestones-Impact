@@ -31,7 +31,7 @@ describe('استوديو الكتاب', () => {
     expect(splitList('أ، ب ,ج,')).toEqual(['أ', 'ب', 'ج']);
   });
 
-  it('الكتاب الأصلي الكامل: كل الأبواب بكتلها كاملة، والكتب الـ27 مشتقة منه', () => {
+  it('الكتاب الأم كاملًا: كل الأبواب بكتلها كاملة، والكتب الـ27 مشتقة منه', () => {
     const body = 'أساس\n:::min=advanced scope=program\nللاحترافي في البرامج\n:::\nختام';
     const mods = [
       { id: 2, dimension: 'leadership', sort: 1, min_level: 'beginner', title_ar: 'ق', body_md: 'نص', quiz_md: 'س: ؟\n- أ\n* ب' },
