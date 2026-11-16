@@ -453,3 +453,17 @@ test('فاعلية التذكير: النسب بحسب المرسل والمرح
   await expect(dlg).toHaveCount(0);
   await expect(page).toHaveURL(/participants\/p2/);
 });
+
+// خارطة إصلاح 2026-11-16 (البند 5): التذكير 50 في كل مرة، والزر يقول ذلك صراحةً حين يُحدَّد أكثر
+test('تحديد أكثر من 50 للتذكير: الزر يقول «أول 50» والمعاينة تُطلب لخمسين وحدهم', async ({ page }) => {
+  const many = Array.from({ length: 55 }, (_, i) => ({ id: `q${i}`, full_name: `مشارك ${i}`, email: `q${i}@x.com`, status: 'enrolled', placements: [], created_at: '2026-10-01' }));
+  const calls = await setup(page, {
+    'admin.participants': { success: true, participants: many },
+    'admin.nudge-preview': { success: true, count: 0, groups: [], skipped: [] },
+  });
+  await page.getByRole('checkbox', { name: 'تحديد الكل' }).check();
+  const btn = page.getByRole('button', { name: 'ذكّر أول 50 من المحددين' });
+  await expect(btn).toHaveAttribute('title', /يُذكَّر أول 50 من المحددين، ثم حدّد الباقين/);
+  await btn.click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.nudge-preview')?.participant_ids.length).toBe(50);
+});

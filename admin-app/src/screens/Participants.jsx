@@ -268,7 +268,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
             <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo || enrolling}>{enrolling ? "يُنقل…" : "انقلهم"}</button>
           </>}
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
-          <button className="btn-sm ghost" onClick={() => setNudging([...picked].slice(0, BULK_MAX))} title="بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال">ذكّر المحددين ({Math.min(picked.size, BULK_MAX)})</button>
+          <button className="btn-sm ghost" onClick={() => setNudging([...picked].slice(0, BULK_MAX))} title={picked.size > BULK_MAX ? `التذكير ${BULK_MAX} في كل مرة: يُذكَّر أول ${BULK_MAX} من المحددين، ثم حدّد الباقين` : 'بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال'}>
+            {picked.size > BULK_MAX ? `ذكّر أول ${BULK_MAX} من المحددين` : `ذكّر المحددين (${picked.size})`}</button>
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
@@ -516,6 +517,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
     <>
       <PersonHeader r={r} org={orgOf} tab={tab} setTab={(t) => show(t)} primary={primary} onPrimary={() => show(primary.tab, primary.focus)} menu={menu}
         nav={<QueueNav pos={pos} onBack={onBack} onNav={onNav} />} />
+      {/* إجابات القياس نافذة فوق الملف لا داخل تبويب: رابطها المنسوخ (?answers=) يفتحها أيًا كان التبويب الافتتاحي */}
+      {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       <div className="pf-body">
         <div className="pf-main">
           {panel('decision', <>
@@ -532,7 +535,6 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
           <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
             notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={() => approve(false)}
             onApproveNext={pos?.next ? () => approve(true) : null} onAnswers={canWrite ? openAnswers : null} />
-          {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
           </>)}
 
           {panel('journey', <>

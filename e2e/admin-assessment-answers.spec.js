@@ -149,3 +149,28 @@ test('دور العرض: لا زر لإجابات القياس ولا طلب، �
   await expect(dialog(page)).toHaveCount(0);
   expect(calls.some((c) => c.action === 'admin.assessment-answers')).toBe(false);
 });
+
+// خارطة إصلاح 2026-11-16 (البند 1): منذ ملف المشارك بتبويبات كانت اللوحة داخل «القرار» وحده، فرابطها المنسوخ
+// لمشارك معتمد (يفتح ملفه على «الرحلة») لا يفتحها. اللوحة الآن فوق الملف أيًا كان التبويب
+test('رابط الإجابات المنسوخ لمشارك معتمد يفتح اللوحة ولو فُتح ملفه على «الرحلة»', async ({ page }) => {
+  const approved = { ...participant, status: 'enrolled' };
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    const replies = {
+      'admin.orgs': { success: true, orgs: [], unassigned: { total: 0, typed: [] } },
+      'admin.participant': { ...person, participant: approved, profile: { ...person.profile, approved: true } },
+      'admin.assessment-answers': answersReply(),
+    };
+    await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
+  });
+  await page.goto(BASE);
+  await page.evaluate((h) => {
+    sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() }));
+    window.location.hash = h;
+  }, `#/leaders/participants/${participant.id}?answers=impact`);
+  await page.reload();
+  await expect(page.getByRole('tab', { name: /^الرحلة/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog(page)).toBeVisible();
+  await expect(dialog(page).getByLabel('البُعد')).toHaveValue('impact');
+});
