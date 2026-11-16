@@ -4,7 +4,7 @@
 // ════════════════════════════════════════════════════════════════
 import React, { useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
-import { DIM, DIM_EN, DIMS, L, LVL, STATUS, VIA, date, isSuperAdmin } from '../leaders.js';
+import { DIM, DIMS, L, LVL, STATUS, VIA, date, isSuperAdmin } from '../leaders.js';
 import { OpsHealthCard } from '../OpsHealth.jsx';
 import { LVLS } from '../methodology.js';
 import { Spinner, useUI } from '../ui.jsx';
@@ -213,11 +213,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
       {canWrite !== false && <DemoCard />}
       {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
       {canWrite !== false && onOrg && <OrgsReadiness orgs={orgs} onOrg={onOrg} />}
-      {o.mfa_required && (
-        <div className="la-note" role="alert">
-          دخلت برمز البريد وحده، فاللوحة للعرض فقط في هذه الجلسة. فعّل مفتاح المرور أو تطبيق المصادقة من الإعدادات (⚙)، ثم اخرج وادخل به لتتمكن من التعديل.
-        </div>
-      )}
+      {/* جلسة رمز البريد: شريط «للقراءة فقط» بزر «فعّل الكتابة» في إطار اللوحة (App.jsx) لا هنا، فيظهر في كل صفحة */}
       <div className="la-row between la-ov-bar">
         <span className="la-muted">{org ? 'تعرض الأرقام لجهة واحدة' : 'كل الجهات'}</span>
         <OrgSelect orgs={orgs} value={org} onChange={setOrg} />
@@ -246,7 +242,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
         <section className="la-card">
           <h3>توزيع المستويات حسب الإطار (3×3)</h3>
           <table className="la-matrix">
-            <thead><tr><th />{DIMS.map((x) => <th key={x}>{DIM_EN[x]}<small>{DIM[x]}</small></th>)}</tr></thead>
+            <thead><tr><th />{DIMS.map((x) => <th key={x}>{DIM[x]}</th>)}</tr></thead>
             <tbody>{[...LVLS].reverse().map((l) => (
               <tr key={l}><th>{LVL[l]}</th>{DIMS.map((x) => <td key={x} style={{ '--a': (cellOf(x, l) / max).toFixed(2) }}><b>{cellOf(x, l)}</b></td>)}</tr>
             ))}</tbody>

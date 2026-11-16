@@ -74,9 +74,9 @@ for (const width of [1024, 1280, 1366]) {
     // بطاقة المستوى تطوي التفاصيل (تصور 2026-11-11): يُفتح بُعد Impact وحقل ملاحظته، فيُقاس الفيض بأعرض حالاتها
     await tab(page, 'القرار').click();
     const lc = page.locator('section.lc');
-    await lc.getByRole('button', { name: /^Impact/ }).click();
+    await lc.getByRole('button', { name: /^تحويل المشروع إلى أثر/ }).click();
     await lc.locator('#lc-det-impact').getByRole('button', { name: '+ ملاحظة' }).click();
-    await expect(page.getByLabel('ملاحظة Impact')).toBeVisible();
+    await expect(page.getByLabel('ملاحظة تحويل المشروع إلى أثر')).toBeVisible();
     const over = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(await over()).toBeLessThanOrEqual(0);
     // ولا يفيض أي تبويب آخر

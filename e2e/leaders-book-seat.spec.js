@@ -35,7 +35,7 @@ async function mount(page, { seat = ['leadership'], committees = ['content'], ro
     if (b.action === 'xp.book-comment') return route.fulfill({ json: { success: true, id: 'new' } });
     return route.fulfill({ json: { success: false, message: `غير متوقع: ${b.action}` } });
   });
-  await page.addInitScript((t) => { localStorage.setItem('mi_leaders_expert_session', t); localStorage.removeItem('mi-master-book'); }, XP_TOKEN);
+  await page.addInitScript((t) => { localStorage.setItem('mi_leaders_expert_session', t); Object.keys(localStorage).filter((k) => k.startsWith('mi-master-book')).forEach((k) => localStorage.removeItem(k)); }, XP_TOKEN);
   await page.goto(PORTAL);
   // الكتاب يُفتح على رفه، وفيه سطر المقعد
   await expect(page.getByText('تقرأ بصفتك:')).toBeVisible();

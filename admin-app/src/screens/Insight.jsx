@@ -20,12 +20,16 @@ const listHref = (group, key, stage) => `#/leaders/participants?${encodeState({ 
 
 // الدفعة من الرابط (#/leaders/insight?cohort=<id>، من بطاقة «أين توقفوا» في ملف الدفعة): تُفتح «بالدفعة» عليها وحدها
 export const cohortFromQuery = (qs = readQuery()) => new URLSearchParams(qs).get('cohort') || null;
+// صف الدفعة المختارة من «بالدفعة»، أو null إن لم تُختر أو خلت أو أُغلقت
+export const focusedGroup = (byCohort, focus) => (focus ? (byCohort?.groups || []).find((g) => g.key === focus) || null : null);
+// صفوف الجدول: المجموعة المختارة وحدها، وإلا كلها
+export const pipelineRows = (groups, only) => (only ? groups.filter((g) => g.key === only) : groups);
 
 // جدول المراحل: صف لكل جهة أو دفعة، وعمود لكل مرحلة، والخانة رابط إلى أصحابها. only: صف مجموعة واحدة بلا الإجمالي
 function Pipeline({ data, group, noun, extra, only = null }) {
   const [f, setF] = useFilters(['sort'], {}, { scope: `insight-${group}`, url: false });
   const sorts = useMemo(() => ({ name: (g) => g.name, total: (g) => g.total, stuck: (g) => g.stuck, waiting: (g) => g.waiting, approved: (g) => g.approved_pct, active: (g) => g.active_pct, ...Object.fromEntries(PIPELINE.map((k) => [k, (g) => g.stages[k]])) }), []);
-  const rows = sortRows(only ? data.groups.filter((g) => g.key === only) : data.groups, sorts, f.sort);
+  const rows = sortRows(pipelineRows(data.groups, only), sorts, f.sort);
   const cols = [
     { key: 'name', label: noun, width: 28, get: (g) => g.name }, { key: 'total', label: 'المشاركون', width: 12, get: (g) => g.total },
     ...PIPELINE.map((k) => ({ key: k, label: PIPELINE_AR[k], width: 16, get: (g) => g.stages[k] })),
@@ -158,7 +162,7 @@ export default function Insight({ onPerson, onExpert }) {
   }, []);
   const clearFocus = () => { setFocus(null); writeQuery(''); };
   const pick = (v) => { setView(v); if (v !== 'cohort' && focus) clearFocus(); try { sessionStorage.setItem('mi_admin_insight_view', v); } catch { /* اختياري */ } };
-  const focused = focus && d?.success ? d.by_cohort.groups.find((g) => g.key === focus) || null : null;
+  const focused = d?.success ? focusedGroup(d.by_cohort, focus) : null;
   // البطاقات العليا للدفعة المختارة وحدها إن وُجدت، وإلا للجميع
   const t = d?.success ? (focused || d.by_org.total) : null;
   return (

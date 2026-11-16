@@ -8,7 +8,7 @@ import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
 import {
-  date, DIM, DIM_EN, DIMS, isSuperAdmin, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+  date, DIM, DIMS, isSuperAdmin, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import { enrollCohort } from '../cohort-guard.js';
@@ -212,7 +212,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
     { key: 'org', label: 'الجهة', width: 24, get: (p) => orgOf(p)?.name || p.organization_name },
     { key: 'years', label: 'سنوات الخبرة', width: 12, get: (p) => p.years_experience },
-    ...DIMS.map((d) => ({ key: `lvl_${d}`, label: DIM_EN[d], width: 12, get: (p) => lv(p, d) })),
+    ...DIMS.map((d) => ({ key: `lvl_${d}`, label: DIM[d], width: 12, get: (p) => lv(p, d) })),
     { key: 'cohort', label: 'الدفعة', width: 22, get: (p) => listCohorts.find((c) => c.id === p.cohort_id)?.name },
     { key: 'track', label: 'المسار', width: 10, get: (p) => trackOfPlacements(p.placements) },
     { key: 'status', label: 'الحالة', width: 18, get: (p) => STATUS[p.status] || p.status },
@@ -270,7 +270,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
       <div className="table-wrap"><table className="data-table la-cards">
         <thead><tr>
           {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
-          <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
+          <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
         </tr></thead>
         <tbody>
           {!list ? <tr className="loading-row"><td colSpan={10}><Spinner /></td></tr>
@@ -440,7 +440,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
   };
 
   // ما يمنع الاعتماد ظاهر تحت الزر: مستوى ناقص، أو مخالفة المستوى القائم بلا تعليل (الخادم يرفض بدونه)
-  const blocker = approveBlocker(DIMS, { levels, notes, currentLevel, dimName: (d) => DIM_EN[d] });
+  const blocker = approveBlocker(DIMS, { levels, notes, currentLevel, dimName: (d) => DIM[d] });
   const approve = async (next = false) => {
     if (blocker) return toast(blocker.text);
     if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;

@@ -7,7 +7,7 @@
 // في Participants.jsx، والحالة من placement-card.js. (تصور بطاقة المستوى، المرحلة 1، قرار المالك 2026-11-11)
 import React, { useState } from 'react';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
-import { DIM, DIM_EN, DIMS, LVL, date } from '../leaders.js';
+import { DIM, DIMS, LVL, date } from '../leaders.js';
 import { compositeScale, rowState } from '../placement-card.js';
 
 // عدد الأسئلة بصيغة عربية سليمة: سؤال واحد، سؤالان، 3–10 أسئلة، 11+ سؤالًا
@@ -114,9 +114,9 @@ export default function LevelCard({ prof, latest, model, effort, canWrite, level
           return (
             <li key={d} className={`lc-row${open ? ' open' : ''}${st.attention ? ' attn' : ''}`}>
               <button type="button" className="lc-sum" aria-expanded={open} aria-controls={`lc-det-${d}`} onClick={() => toggle(d)}
-                aria-label={`${DIM_EN[d]}، ${DIM[d]}: ${LVL[shown] || 'لم يُحدَّد'}${x?.approved ? '، معتمد' : '، مبدئي'}${st.attention ? `، ${st.attention} تستحق المراجعة` : ''}`}>
+                aria-label={`${DIM[d]}: ${LVL[shown] || 'لم يُحدَّد'}${x?.approved ? '، معتمد' : '، مبدئي'}${st.attention ? `، ${st.attention} تستحق المراجعة` : ''}`}>
                 <span className="lc-caret" aria-hidden="true">{open ? '▾' : '▸'}</span>
-                <span className="lc-dim"><b>{DIM_EN[d]}</b><small>{DIM[d]}</small></span>
+                <span className="lc-dim"><b>{DIM[d]}</b></span>
                 <LevelChip level={shown} approved={!!x?.approved} attention={st.attention} />
                 <CompositeBar value={ev?.composite} scale={scale} />
                 <TierBars rr={rr} />
@@ -135,7 +135,7 @@ export default function LevelCard({ prof, latest, model, effort, canWrite, level
                   <div className="lc-decide">
                     {canWrite ? (
                       <label className="lc-field">المستوى
-                        <select aria-label={`مستوى ${DIM_EN[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
+                        <select aria-label={`مستوى ${DIM[d]}`} value={levels[d] || ''} onChange={(e) => setLevels({ ...levels, [d]: e.target.value })}>
                           <option value="">...</option>{Object.entries(LVL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                         </select>
                       </label>
@@ -145,7 +145,7 @@ export default function LevelCard({ prof, latest, model, effort, canWrite, level
                   </div>
                   {canWrite && showNote && (
                     <label className="lc-field lc-note">{st.override ? 'سبب المخالفة (إلزامي، 10 أحرف على الأقل)' : 'ملاحظة (اختيارية)'}
-                      <input id={`lc-note-${d}`} aria-label={`ملاحظة ${DIM_EN[d]}`} value={notes[d] || ''} aria-required={st.override} aria-invalid={st.needsReason}
+                      <input id={`lc-note-${d}`} aria-label={`ملاحظة ${DIM[d]}`} value={notes[d] || ''} aria-required={st.override} aria-invalid={st.needsReason}
                         onChange={(e) => setNotes({ ...notes, [d]: e.target.value })} />
                     </label>
                   )}

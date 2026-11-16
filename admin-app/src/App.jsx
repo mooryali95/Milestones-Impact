@@ -2,11 +2,13 @@
 // لوحة الإدارة (React) — الإطار: الدخول، الترويسة، السياقات، الإعدادات
 // ════════════════════════════════════════════════════════════════
 // السياقات: طلبات التواصل وتطبيق القادة ومصفوفة التأثير وزيارات الموقع.
-import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { lazyRetry } from './lazy-retry.js';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
-import { UIProvider } from './ui.jsx';
+import { UIProvider, useUI } from './ui.jsx';
+import { writeState } from './write-access.js';
+import StepUp from './StepUp.jsx';
 import Login from './screens/Login.jsx';
 const Settings = lazyRetry(() => import('./screens/Settings.jsx'));
 const Contacts = lazyRetry(() => import('./screens/Contacts.jsx'));
@@ -25,7 +27,7 @@ const CTX_KEY = 'mi_admin_next_ctx';
 // الدخول يفتح تطبيق القادة على نظرته العامة (صندوق «ينتظرني»)، لا طلبات التواصل: هناك ما ينتظر القرار. ومن ترك سياقًا آخر في جلسته يعود إليه
 const savedCtx = () => { try { const c = sessionStorage.getItem(CTX_KEY); return ['contacts', 'matrix', 'visits'].includes(c) ? c : 'leaders'; } catch { return 'leaders'; } };
 
-function Dashboard({ user, onUser, onLogout }) {
+function Dashboard({ user, onUser, onLogout, sessionGen = 0 }) {
   const [settings, setSettings] = useState(false);
   // السياق من عنوان الصفحة، وإن خلا فآخر سياق في الجلسة
   const route = useRoute();
@@ -38,12 +40,34 @@ function Dashboard({ user, onUser, onLogout }) {
   const setCtx = (c) => { if (c !== ctx) navigate({ ctx: c }); };
   const pending = usePending(ctx);
   const badge = { contacts: pending?.contacts || 0, leaders: leadersTotal(pending) };
-  const canWrite = (user.role_id || user.role) !== 'viewer';
+  // صلاحية الكتابة من حكم الخادم (me): جلسة رمز البريد للقراءة حتى «فعّل الكتابة» (write-access.js)
+  const { toast } = useUI();
+  const [me, setMe] = useState(null);
+  const [elevate, setElevate] = useState(false);
+  // كل قراءة برقمها: رد جلسة سابقة يصل متأخرًا لا يغلب رد الجلسة الحالية
+  const meSeq = useRef(0);
+  const readMe = useCallback(() => {
+    const n = ++meSeq.current;
+    return call('me').then((r) => { if (n !== meSeq.current) return; setMe(r); if (r?.success && r.method) onUser({ method: r.method }); })
+      .catch(() => { if (n === meSeq.current) setMe(null); });
+  }, [onUser]);
+  // إعادة الدخول بعد انتهاء الجلسة تبقي اللوحة (المفتاح بالبريد) لكنها جلسة جديدة قد تختلف طريقتها: يُنسى حكم الجلسة
+  // السابقة ويُقرأ «me» من جديد، فلا يبقى شريط «للقراءة فقط» لجلسة تكتب ولا تُعرض الكتابة لجلسة رمز البريد
+  useEffect(() => { setMe(null); readMe(); }, [readMe, sessionGen]);
+  const { canWrite, readOnly } = writeState(user, me);
+  const elevated = async (m) => { setElevate(false); onUser({ method: m }); await readMe(); toast('فُعّلت الكتابة لهذه الجلسة'); };
   const closeSettings = useCallback(() => setSettings(false), []);
   return (
     <div id="screen-dashboard" className="visible">
       {/* عطل البريد الآن: شريط أحمر رفيع أعلى كل صفحة يفتح بطاقة الصحة (للمدير ذي الكتابة) */}
       <OpsBanner enabled={canWrite} />
+      {readOnly && (
+        <div className="ro-banner" role="status">
+          <span className="ro-banner-text"><b>للقراءة فقط.</b> دخلت برمز البريد، فالتعديل مقفل في هذه الجلسة حتى تؤكد بمفتاح المرور أو تطبيق المصادقة.</span>
+          <button type="button" className="btn-sm primary" onClick={() => setElevate(true)}>فعّل الكتابة</button>
+        </div>
+      )}
+      {elevate && <StepUp purpose="write" title="فعّل الكتابة في هذه الجلسة" onCancel={() => setElevate(false)} onDone={elevated} />}
       <header className="dash-header">
         <div className="dash-header-left">
           <div className="mi-logo"><img className="mi-logo-img" src={LOGO} alt="Milestone Impact" width="132" height="60" /></div>
@@ -70,7 +94,8 @@ function Dashboard({ user, onUser, onLogout }) {
       {/* حد التعليق هنا لا في main.jsx وحده: الإطار (الترويسة والسياقات والبحث الشامل) يظهر فورًا
           ويستقبل Ctrl+K، وتنتظر منطقة الشاشة وحدها قطعتها الكسولة */}
       <Suspense fallback={<div className="la-loading">جارٍ التحميل…</div>}>
-        {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} isSuper={(user.role_id || user.role) === 'super_admin'} isOwner={!!user.is_owner} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
+        {/* تغيّر الصلاحية (فعّل الكتابة) يعيد رسم الشاشة فتقرأ أزرارها وبياناتها من جديد */}
+        {ctx === 'leaders' ? <Leaders key={canWrite ? 'w' : 'r'} canWrite={canWrite} pending={pending} isSuper={(user.role_id || user.role) === 'super_admin'} isOwner={!!user.is_owner} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
       </Suspense>
 
       <Palette owner={(user.role_id || user.role) === 'super_admin' || !!user.is_owner} />
@@ -93,7 +118,9 @@ export default function App() {
   }, []);
 
   // من يدخل بحساب آخر تُفتح له اللوحة من جديد (المفتاح بالبريد)، فلا يرث ما فتحه غيره
-  const signedIn = (token, u) => { session.save(token, u); setUser(u); setExpired(false); };
+  // ورقم الجلسة يتقدم مع كل دخول، فتعيد اللوحة قراءة صلاحيتها (me) لجلسة إعادة الدخول
+  const [sessionGen, setSessionGen] = useState(0);
+  const signedIn = (token, u) => { session.save(token, u); setUser(u); setExpired(false); setSessionGen((g) => g + 1); };
   const patchUser = useCallback((patch) => { session.patchUser(patch); setUser((u) => ({ ...u, ...patch })); }, []);
   const logout = async () => {
     await call('logout').catch(() => {});
@@ -108,7 +135,7 @@ export default function App() {
         <>
           {/* inert="" (React 18) يخرج اللوحة من التركيز والنقر ما دامت نافذة إعادة الدخول ظاهرة */}
           <div inert={expired ? '' : undefined}>
-            <Dashboard key={user.email} user={user} onUser={patchUser} onLogout={logout} />
+            <Dashboard key={user.email} user={user} onUser={patchUser} onLogout={logout} sessionGen={sessionGen} />
           </div>
           {expired && (
             <div className="reauth-overlay" role="dialog" aria-modal="true" aria-label="انتهت الجلسة">
