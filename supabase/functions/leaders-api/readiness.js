@@ -6,11 +6,25 @@
 // والبوابات «1 من 8» (لا تعرف اللوحة مستشار الدفعة ولا المواعيد ولا الإعداد الختامي ولا إصدار المحتوى ولا قناة
 // التنبيه)، وكانت تطلب تطبيق ترحيل مؤجل بقرار. منطق نقي بلا قاعدة، فيُختبر في vitest.
 
-// أسرار الدالة التي لا قيمة افتراضية آمنة لها: بلا مفتاح التوقيع لا تصدر شهادة، وبلا قناة التنبيه لا إنذار بغير البريد.
+// أسرار الدالة التي لا قيمة افتراضية آمنة لها: بلا مفتاح التوقيع لا تصدر شهادة، وبلا قناة التنبيه (ALERT_CHANNELS) لا إنذار بغير البريد.
 // البقية لها افتراضي آمن في docs/SECRETS.md. البوابة تشترطها بأسمائها، وحالة النظام تفحص قيمها
 import { sessionsFor, undatedAr, usesHandbook } from './cohort-setup.js';
 
-export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY', 'LEADERS_ALERT_WEBHOOK'];
+export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY'];
+
+// قناة التنبيه بغير البريد: بوت سلاك (سرّاه معًا) أو رابط الويب، وأيهما ضُبط يكفي. كلاهما يحمل التنبيه نفسه
+// (alertWebhook في _shared/mail.ts ينشر في سلاك ثم يرسل إلى الرابط)، فضبطهما معًا يوصل إلى قناتين لا مرتين إلى قناة.
+export const ALERT_CHANNELS = [['LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL'], ['LEADERS_ALERT_WEBHOOK']];
+// اسم البند الناقص حين لا تُضبط أي منهما (يظهر في حالة النظام وتقرير الأسبوع وبوابات المراحل)
+export const ALERT_CHANNEL_KEY = 'LEADERS_SLACK_BOT_TOKEN+LEADERS_SLACK_CHANNEL أو LEADERS_ALERT_WEBHOOK';
+
+/** هل ضُبطت قناة تنبيه بغير البريد @param {(name: string) => boolean} has */
+export const alertChannelOk = (has) => ALERT_CHANNELS.some((group) => group.every((n) => has(n)));
+
+/** الأسرار المشترطة الناقصة بأسمائها، وقناة التنبيه بندًا واحدًا @param {(name: string) => boolean} has */
+export function missingRequiredSecrets(has) {
+  return [...REQUIRED_SECRETS.filter((n) => !has(n)), ...(alertChannelOk(has) ? [] : [ALERT_CHANNEL_KEY])];
+}
 
 // ── الترحيلات ──
 // الوسم من سطور الترحيل الأولى (gateOf في scripts/ops/pending-migrations.mjs، مولَّد في migrations.js بـ migrations-list.mjs):

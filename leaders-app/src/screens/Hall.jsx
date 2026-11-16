@@ -13,6 +13,7 @@ import KatonAnswer from '../KatonAnswer.jsx';
 import { useHallTimer, timerLabel } from '../../../shared/hall/HallTimer.jsx';
 import { HALL_ATTEND_SHARE, HALL_TEAM_TASK_AR, HALL_STAGE_AR } from '../../../supabase/functions/leaders-api/hall.js';
 import PeerRequests from './PeerRequests.jsx';
+import { isFeatureOff } from '../features.js';
 
 const PENDING_KEY = 'mi_leaders_hall_pending';
 const HALL_RETRY_MS = 800;
@@ -27,7 +28,8 @@ const PREVIEW = {
   teams: { support: { count: 4, present: 4 }, lead: { count: 1, present: 1 }, guide: { count: 3, present: 3 }, eval: { count: 3, present: 3 } },
 };
 
-export default function Hall({ onBack }) {
+// onHidden: أُخفيت القاعة من الإدارة والشاشة مفتوحة (رد hall_off): يتوقف السؤال الدوري ويعود المشارك إلى رحلته
+export default function Hall({ onBack, onHidden }) {
   const [v, setV] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -50,8 +52,12 @@ export default function Hall({ onBack }) {
   useEffect(() => { try { pending.current = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null'); } catch { pending.current = null; } }, []);
   const fails = useRef(0);
   const [pollErr, setPollErr] = useState('');
+  const gone = useRef(false);
   const load = useCallback(async (force) => {
+    if (gone.current) return;
     const r = await call('hall.state', { since: force ? 0 : ver.current });
+    // رفض نهائي لا عارض: لا إعادة محاولة ولا رسالة خطأ
+    if (isFeatureOff(r)) { gone.current = true; (onHidden || onBack)?.(); return; }
     // أول تحميل يعرض خطأه فورًا (لا شيء على الشاشة غيره)، والسؤال الدوري لا يعرضه إلا إن توالى
     if (!r.success) { fails.current += 1; if (force || fails.current >= POLL_FAIL_LIMIT) (force ? setErr : setPollErr)(r.message); return; }
     fails.current = 0; setPollErr('');
@@ -62,7 +68,7 @@ export default function Hall({ onBack }) {
     if (r.unchanged) return;
     ver.current = r.session?.version || 0;
     setV(r);
-  }, [send]);
+  }, [send, onHidden, onBack]);
   const period = pollPeriod(v);
   const left = useHallTimer(v);
   useEffect(() => { load(true); }, [load]);

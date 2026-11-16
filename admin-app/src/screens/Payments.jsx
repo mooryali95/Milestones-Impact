@@ -91,6 +91,8 @@ const PAY_PRESETS = [
   { key: 'abandoned', label: 'لم يكملوا الدفع', test: (p, now) => isAbandoned(p, now) },
   { key: 'held', label: 'معلّقة للمراجعة', test: (p) => p.status === 'pending' && String(p.note || '').startsWith('held') },
   { key: 'refunded', label: 'مستردة', test: (p) => p.status === 'refunded' },
+  // الاسترداد الجزئي يُبقي الدفعة مدفوعة وحقها قائمًا (payments.ts)، والمسترد في refund_cents
+  { key: 'partial', label: 'مستردة جزئيًا', test: (p) => p.status === 'paid' && p.refund_cents > 0 },
 ];
 const PAY_SORTS = { at: (p) => p.paid_at || p.created_at, who: (p) => p.participants?.full_name || p.email, item: (p) => ITEM[p.item], amount: (p) => p.amount_cents || 0, status: (p) => PAY_ST[p.status]?.[0] || p.status };
 const ENT_FIELDS = [
@@ -193,7 +195,7 @@ export default function Payments({ canWrite, onPerson, payId = null, onOpen = ()
                   <td>{p.participant_id ? <button className="la-link" onClick={() => onPerson?.(p.participant_id)}>{p.participants?.full_name || p.email}</button> : p.email}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                   <td>{ITEM[p.item]}{p.mode === 'test' && <small className="la-chip">اختبار</small>}</td>
                   <td dir="ltr">{money(p.amount_cents, p.currency || 'USD')}</td>
-                  <td><span className={`la-chip ${PAY_ST[p.status]?.[1] || ''}`}>{PAY_ST[p.status]?.[0] || p.status}</span>{p.note && <small className="la-muted"> {p.note}</small>}</td>
+                  <td><span className={`la-chip ${PAY_ST[p.status]?.[1] || ''}`}>{PAY_ST[p.status]?.[0] || p.status}</span>{p.status === 'paid' && p.refund_cents > 0 && <span className="la-chip warn">استُرد منها {money(p.refund_cents, p.currency)}</span>}{p.note && <small className="la-muted"> {p.note}</small>}</td>
                   <td><small className="la-muted" dir="ltr">{p.order_id || p.checkout_id || '·'}</small></td>
                   <td className="la-row">{p.status === 'pending' && canWrite && <button className="btn-sm ghost" onClick={() => reconcile(p)}>تحقق من Creem</button>}
                     {creemOrderUrl(p) && <a className="btn-sm ghost" href={creemOrderUrl(p)} target="_blank" rel="noopener noreferrer" title={p.status === 'paid' ? 'الاسترداد والإيصال من لوحة Creem' : 'افتح الطلب في Creem'}>Creem ↗</a>}</td>

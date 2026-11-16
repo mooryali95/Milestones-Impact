@@ -5,6 +5,7 @@ import { assertEquals } from 'jsr:@std/assert@1';
 const { db } = await import('./core.ts');
 const { health } = await import('./system.ts');
 const { MIGRATIONS } = await import('./migrations.js');
+const { ALERT_CHANNEL_KEY } = await import('./readiness.js');
 
 type Res = { data?: unknown; error?: unknown; count?: number | null };
 function install(route: (table: string, ops: string[]) => Res) {
@@ -28,6 +29,8 @@ const TOLERANT = '20261110130000_leaders_hall_timer';
 
 Deno.test('حالة النظام: المؤجل بقرار منفصل عن المطلوب تطبيقه، وقناة التنبيه مفحوصة، وبنود م2 في الجاهزية', async () => {
   Deno.env.delete('LEADERS_ALERT_WEBHOOK');
+  Deno.env.delete('LEADERS_SLACK_BOT_TOKEN');
+  Deno.env.delete('LEADERS_SLACK_CHANNEL');
   const f = install((t, ops) => {
     if (t === 'schema_migrations') return { data: MIGRATIONS.filter((n) => n !== DEFERRED && n !== TOLERANT).map((name) => ({ name })), error: null };
     if (t === 'mail_events') return { data: null, count: 0, error: null };
@@ -43,12 +46,21 @@ Deno.test('حالة النظام: المؤجل بقرار منفصل عن الم
     const h: any = await health();
     assertEquals(h.missing_migrations, [TOLERANT]);
     assertEquals(h.pending_migrations.map((m: any) => [m.name, m.gate]), [[DEFERRED, 'deferred'], [TOLERANT, 'tolerant']]);
-    assertEquals(h.missing_secrets.includes('LEADERS_ALERT_WEBHOOK'), true);
+    assertEquals(h.missing_secrets.includes(ALERT_CHANNEL_KEY), true);
+    assertEquals(h.missing_secrets.includes('LEADERS_ALERT_WEBHOOK'), false);
+    // سلاك بسرّيه يكفي قناةً بلا الرابط
+    Deno.env.set('LEADERS_SLACK_BOT_TOKEN', 'xoxb-test');
+    Deno.env.set('LEADERS_SLACK_CHANNEL', 'C0TEST');
+    assertEquals(((await health()) as any).missing_secrets.includes(ALERT_CHANNEL_KEY), false);
+    Deno.env.delete('LEADERS_SLACK_CHANNEL');
+    assertEquals(((await health()) as any).missing_secrets.includes(ALERT_CHANNEL_KEY), true);
+    Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/a');
+    assertEquals(((await health()) as any).missing_secrets.includes(ALERT_CHANNEL_KEY), false);
     const r = Object.fromEntries(h.readiness.map((x: any) => [x.key, x.ok]));
     // الإعداد مكتمل («4 من 4» كما كانت اللوحة تقول)، وم2 ليست كذلك
     assertEquals([r.baseline, r.post, r.program, r.certificate], [true, true, true, true]);
     assertEquals([r['cohort-per-org'], r.advisor, r.sessions, r['final-eval'], r['release-pinned'], r['version-pinned']], [true, false, false, false, false, false]);
     // قائمة البرامج لم تُقرأ صفوفًا في هذه القاعدة المزيفة، فلا يُحكم ببند نسخ البرامج
     assertEquals('program-versions' in r, false);
-  } finally { f.restore(); }
+  } finally { f.restore(); for (const k of ['LEADERS_ALERT_WEBHOOK', 'LEADERS_SLACK_BOT_TOKEN', 'LEADERS_SLACK_CHANNEL']) Deno.env.delete(k); }
 });

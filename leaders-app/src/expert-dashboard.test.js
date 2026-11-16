@@ -16,7 +16,8 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
       expect(index, action).toContain(`'${action}': (e) => ${fn},`);
     }
     // تقييم 360 (feedback360.ts) في الرحلة نفسها
-    expect(dash).toContain("settle('xp.f360', FB.advisorList(e))");
+    // 360 المخفي يُجاب بالحارس نفسه الذي يجيب xp.f360 وحده (features.js)
+    expect(dash).toContain("settle('xp.f360', FT.gate('xp.f360').then((soft) => soft || FB.advisorList(e)))");
     expect(index).toContain("'xp.f360': (e) => FB.advisorList(e),");
     expect(dash).toContain('return { ...d, preload: { reviews, participants, peers, sus, f360 } };');
   });

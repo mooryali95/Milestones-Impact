@@ -59,9 +59,21 @@ const Flag = ({ on, yes = 'مضبوط', no = 'غير مضبوط' }) => (
   <span className={`ops-flag ${on ? 'on' : 'off'}`}><span aria-hidden="true">{on ? '✓' : '○'}</span> {on ? yes : no}</span>
 );
 
-// أين ذهب التنبيه التجريبي: الرابط والبريد بنتيجتهما، وسلاك (لا يُنتظر) إلى سلسلة التنبيهات إن ضُبط
+// أين ذهب التنبيه التجريبي: الرابط والبريد وسلاك بنتيجتها. الدالة تنتظر نتيجة سلاك بمهلة (delivered.slack)،
+// ورد نسخة أقدم بلا نتيجة له يُقرأ كما كان: أُرسل إلى السلسلة إن ضُبط
 export function alertTestText(r, slackOn) {
-  const slack = r.channels?.slack ?? slackOn;
+  const known = typeof r.delivered?.slack === 'boolean';
+  const slackSet = r.channels?.slack ?? slackOn;
+  const slackName = 'سلسلة التنبيهات في سلاك';
+  if (known) {
+    const went = [r.delivered.webhook && 'رابط التنبيه', r.delivered.slack && slackName, r.delivered.email && 'بريد التنبيه'].filter(Boolean);
+    const set = [r.channels?.webhook && 'رابط التنبيه', slackSet && slackName, r.channels?.email && 'بريد التنبيه'].filter(Boolean);
+    const missed = set.filter((x) => !went.includes(x));
+    if (went.length) return { bad: false, text: `وصل التنبيه التجريبي عبر: ${went.join(' و')}.${missed.length ? ` ولم يصل عبر ${missed.join(' و')}: راجع القيمة في أسرار الدالة.` : ''}` };
+    if (set.length) return { bad: true, text: `ضُبط ${set.join(' و')} ولم يصل التنبيه منه: راجع القيمة في أسرار الدالة.` };
+    return { bad: true, text: 'لا قناة تنبيه مضبوطة، فلم يصل التنبيه إلى أحد. اضبط سلاك، أو أضف LEADERS_ALERT_WEBHOOK أو LEADERS_ALERT_EMAIL.' };
+  }
+  const slack = slackSet;
   const went = [r.delivered?.webhook && 'رابط التنبيه', r.delivered?.email && 'بريد التنبيه'].filter(Boolean);
   const set = [r.channels?.webhook && 'رابط التنبيه', r.channels?.email && 'بريد التنبيه'].filter(Boolean);
   const inSlack = 'أُرسل إلى سلسلة التنبيهات في سلاك';

@@ -5,10 +5,12 @@
 // البحث بعنوان يمر ببصمته (addressHash)، والمتن يُقرأ من الطابور وحده (ما حُجب فانتظر).
 import { alertOps, all, audit, CONFIG, db, Fail, hash, must, randomCode, randomToken } from './core.ts';
 import { isEmail } from './logic.js';
+import { mailRewrite } from './features.ts';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
 import { addressHash, mailCounts, plainText, sendCounted } from '../_shared/mail.ts';
 import { RETENTION_DAYS } from '../_shared/mail-budget.js';
+import { alertChannelOk } from './readiness.js';
 import { BUDGET_AR, dailySeries, deliveryAr, diagnose, mailBudget, mailtoUrl, nextFreeAt, tally } from './mail-center.js';
 
 type Body = Record<string, any>;
@@ -71,7 +73,8 @@ export async function center(a: Admin) {
     series: dailySeries(recent, 14),
     queue: (queue as any[]).map((m) => ({ ...m, to_email: writer ? m.to_email : null, state: m.gave_up_at ? (m.last_error === 'cancelled' ? 'cancelled' : m.last_error === 'stale' ? 'stale' : 'gave_up') : 'waiting' })),
     lost, provider, retention_days: RETENTION_DAYS, traceable: recent.length === 0 || recent.some((e: any) => 'to_hash' in e),
-    alert_channel: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'),
+    // سلاك أو الرابط، أيهما يكفي (readiness.js)
+    alert_channel: alertChannelOk((k: string) => !!Deno.env.get(k)),
   };
 }
 
@@ -114,7 +117,8 @@ const queued = async (id: unknown) => {
   if (!isId(id)) throw new Fail('بيانات ناقصة');
   const m = must(await db.from('mail_queue').select('*').eq('id', String(id)).maybeSingle()) as any;
   if (!m) throw new Fail('الرسالة غير موجودة', 404);
-  return m;
+  // المتن كما يخرج الآن: بريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت يُعرض ويُرسل بالملاحظة العامة (features.ts)
+  return { ...m, html: (await mailRewrite())(m) };
 };
 export async function queueBody(a: Admin, b: Body) {
   requireWrite(a);

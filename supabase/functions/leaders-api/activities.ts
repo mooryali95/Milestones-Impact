@@ -3,6 +3,8 @@
 // ════════════════════════════════════════════════════════════════
 // الدليل يجمعه الخادم: نبضات القراءة والمشاهدة بسقف زمني، ورمز QR متغير
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
+import { features } from './features.ts';
+import { attendNoteMethod } from './features.js';
 import { alertOps, audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
@@ -13,7 +15,7 @@ import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
-  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule,
+  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -582,6 +584,13 @@ async function openStageFor(ids: string[], requirementId: string) {
   }
   return open;
 }
+// طريقة توثيق حضور الجلسة: من متطلبها، وتخصيص دفعتها يغلبه (applyDelivery). تعذّرها يرمي فيُكتب البريد بملاحظة عامة
+async function workshopVerify(s: any): Promise<string> {
+  const req = must(await db.from('stage_requirements').select('code, kind, config').eq('id', s.requirement_id).maybeSingle()) as any;
+  if (!req) throw new Error('requirement');
+  const cohort = s.cohort_id ? (must(await db.from('cohorts').select('delivery').eq('id', s.cohort_id).maybeSingle()) as any) : null;
+  return applyDelivery(req, cohort?.delivery?.[req.code])?.config?.verify || 'qr';
+}
 async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   // غير المؤرخة لا دعوة لها ولا تذكير ولا ملف تقويم (الدعوة تمنعها، وفلتر التذكير يتجاهلها، وهذا حارس ثالث)
   if (isUndated(s)) return { sent: 0, failed: 0, total: 0 };
@@ -592,12 +601,16 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   // عن بعد بلا رابط بعد: البريد يقول إن الرابط يصل قبل الجلسة، لا تعليمات القاعة
   const linkLater = s.mode === 'online' && !s.join_url;
   const open = online ? await openStageFor(people.map((m: any) => m.id), s.requirement_id) : new Set<string>();
+  // القاعة المخفية (features.hall) لا تُذكر في البريد، وتعذّر القراءة يعامَل مطفأً. والملاحظة حينها بطريقة توثيق حضور
+  // الجلسة نفسها (config.verify بتخصيص الدفعة كما في workshop.checkin)، فلا يُقال لمن ينضم عن بعد «امسح رمز QR»
+  const hall = await features().then((f) => f.hall).catch(() => false);
+  const verify = hall ? null : await workshopVerify(s).catch(() => null);
   const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link)), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };

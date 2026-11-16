@@ -10,7 +10,7 @@ import { compositeReliability, DEFAULT_MODEL, itemAnalysis, journeyApproved, TIE
 import { fairnessReport, measurementEvidence } from './evidence.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATION_GATES, MIGRATIONS } from './migrations.js';
-import { launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
+import { ALERT_CHANNEL_KEY, alertChannelOk, launchReadiness, pendingMigrations, setupReadiness } from './readiness.js';
 import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { codeStreak, OPS } from './ops-health.js';
@@ -66,8 +66,8 @@ export async function health() {
     LEADERS_TURNSTILE_SECRET: !!CONFIG.turnstileSecret && !!CONFIG.turnstileSite,
     // D05: بلا مفتاح التوقيع المستقل لا تصدر شهادة
     LEADERS_CERT_SIGNING_KEY: certKeys().key.length >= 32,
-    // قناة التنبيه الفوري (alertWebhook)؛ بوابة المراحل تشترطها مع مفتاح التوقيع (REQUIRED_SECRETS في readiness.js)
-    LEADERS_ALERT_WEBHOOK: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'),
+    // قناة التنبيه الفوري: سلاك أو الرابط، أيهما يكفي؛ بوابة المراحل تشترطها مع مفتاح التوقيع (missingRequiredSecrets في readiness.js)
+    [ALERT_CHANNEL_KEY]: alertChannelOk((k) => !!Deno.env.get(k)),
   };
   return {
     success: true,
@@ -282,11 +282,11 @@ export async function weeklyHealth() {
 // مضبوطة وما وصل منها، بلا قيمها (لا رابط ولا عنوان). مرة في الدقيقة
 export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
   requireSuper(a);
-  // سلاك يحمل كل تنبيه إلى سلسلة التنبيهات إن ضُبط سرّاه (alertWebhook في _shared/mail.ts)، ولا يُنتظر فلا نتيجة له هنا
+  // سلاك يحمل كل تنبيه إلى سلسلة التنبيهات إن ضُبط سرّاه، ونتيجته تُنتظر بمهلة (slackAlertDelivered في raiseAlert)
   const channels = { webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), email: !!CONFIG.alertEmail, slack: SLACK_SECRETS.every((k) => !!Deno.env.get(k)) };
   const r = await raiseAlert('alert_test', { note: 'تجربة قناة التنبيه من لوحة الإدارة، لا عطل' });
   if (r.cooled) throw new Fail('جُرّبت قناة التنبيه قبل أقل من دقيقة، أعد بعد قليل', 429, 'rate');
-  const delivered = { webhook: r.webhook, email: r.email };
+  const delivered = { webhook: r.webhook, email: r.email, slack: !!r.slack };
   await audit('admin', a.email, 'system.alert-test', 'system', 'alert_test', null, { channels, delivered });
   return { success: true, channels, mail_key: !!CONFIG.resendKey, delivered };
 }

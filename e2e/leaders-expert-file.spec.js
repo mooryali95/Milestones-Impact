@@ -49,7 +49,7 @@ function server({ finalStatus = 'pending', fail = {} } = {}) {
   const reply = (b) => {
     if (fail[b.action]) return { success: false, message: fail[b.action] };
     switch (b.action) {
-      case 'xp.dashboard': return { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة محافظ', roles: ['advisor'] }, stats: { hours: 7.5, participants: 1, attended: 2, upcoming: 0, no_show: 0 }, rating: { count: 1, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر', supervision: 'peers_expert' }] };
+      case 'xp.dashboard': return { success: true, features: { hall: true, katon: false, f360: true }, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة محافظ', roles: ['advisor'] }, stats: { hours: 7.5, participants: 1, attended: 2, upcoming: 0, no_show: 0 }, rating: { count: 1, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر', supervision: 'peers_expert' }] };
       case 'xp.participants': return { success: true, items: [{ id: 'p1', name: 'سارة الأحمد', first: 'سارة', title: 'مديرة مشاريع', org: 'جهة الاختبار', status: 'enrolled', cohort: 'دفعة نوفمبر', advisor: true, role_ar: null, level: 'intermediate', level_ar: 'متوسط', approved: true, stage: 'التوجيه على رأس العمل', progress: 55, late: 1, continuous: 72, needs: 4 }], cohorts: [] };
       case 'xp.participant': return file();
       case 'xp.reviews': return { success: true, advisor: true, items: [] };

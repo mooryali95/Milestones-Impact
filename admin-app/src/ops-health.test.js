@@ -165,6 +165,16 @@ describe('الأدوات', () => {
     expect(alertTestText({ channels: { webhook: true, email: true, slack: true }, delivered: { webhook: true, email: false } }, true).text)
       .toBe('وصل التنبيه التجريبي عبر: رابط التنبيه. وأُرسل إلى سلسلة التنبيهات في سلاك.');
   });
+  it('التنبيه التجريبي بنتيجة سلاك الفعلية: وصل منه، أو لم يصل منه وهو مضبوط', () => {
+    const ch = { webhook: false, email: false, slack: true };
+    expect(alertTestText({ channels: ch, delivered: { webhook: false, email: false, slack: true } }, true))
+      .toEqual({ bad: false, text: 'وصل التنبيه التجريبي عبر: سلسلة التنبيهات في سلاك.' });
+    expect(alertTestText({ channels: ch, delivered: { webhook: false, email: false, slack: false } }, true))
+      .toEqual({ bad: true, text: 'ضُبط سلسلة التنبيهات في سلاك ولم يصل التنبيه منه: راجع القيمة في أسرار الدالة.' });
+    expect(alertTestText({ channels: { webhook: true, email: false, slack: true }, delivered: { webhook: true, email: false, slack: false } }, true).text)
+      .toBe('وصل التنبيه التجريبي عبر: رابط التنبيه. ولم يصل عبر سلسلة التنبيهات في سلاك: راجع القيمة في أسرار الدالة.');
+    expect(alertTestText({ channels: { webhook: false, email: false, slack: false }, delivered: { webhook: false, email: false, slack: false } }, false).bad).toBe(true);
+  });
   it('السؤال كل 60 ثانية والصفحة ظاهرة، ولا سؤال وهي مخفية', () => {
     expect(POLL_MS).toBe(60e3);
     expect(dueIn(NOW - 10e3, NOW, true)).toBe(50e3);

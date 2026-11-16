@@ -7,7 +7,7 @@
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { alertOps, audit, CONFIG, db, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
-import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, REMIND_GAP_HOURS, whatsappUrl } from './payments-ledger.js';
+import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, SEAT_STOPPED, settings, type Item } from './entitlements.ts';
@@ -203,13 +203,17 @@ async function notifyPaid(payId: string) {
       .catch((e) => console.error('pay owner', e));
   }
 }
-async function notifyRefunded(pay: any, cents: number | null) {
+// partial: استرداد جزء من الدفعة، والحق باقٍ؛ البريد يذكر المسترد ومن كم، ولا يقول «أُقفل»
+async function notifyRefunded(pay: any, cents: number | null, partial = false) {
   const on = await notifyOn();
   if (!on.refund && !on.owner) return;
   const who = await payerOf(pay);
   const amount = money(cents ?? pay.amount_cents, pay.currency);
-  if (on.refund && who.email) await sendMail(who.email, 'استُردّت دفعتك', paymentRefundMail(who.name, ITEM_AR[pay.item as Item], amount), [], { ref: `participant:${pay.participant_id}` }).catch((e) => console.error('pay refund mail', e));
-  if (on.owner && CONFIG.alertEmail) await sendMail(CONFIG.alertEmail, 'دفعة مستردة', paymentOwnerMail('دفعة مستردة', [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount]]), [], { ref: `payment:${pay.id}` }).catch((e) => console.error('pay owner', e));
+  const of = partial ? money(pay.amount_cents, pay.currency) : '';
+  const subject = partial ? 'استُردّ جزء من دفعتك' : 'استُردّت دفعتك';
+  const title = partial ? 'استرداد جزئي' : 'دفعة مستردة';
+  if (on.refund && who.email) await sendMail(who.email, subject, paymentRefundMail(who.name, ITEM_AR[pay.item as Item], amount, of), [], { ref: `participant:${pay.participant_id}` }).catch((e) => console.error('pay refund mail', e));
+  if (on.owner && CONFIG.alertEmail) await sendMail(CONFIG.alertEmail, title, paymentOwnerMail(title, [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ...(partial ? [['من المدفوع', of], ['الحق', 'باقٍ، والقرار للإدارة إن لزم سحبه']] as [string, string][] : [])]), [], { ref: `payment:${pay.id}` }).catch((e) => console.error('pay owner', e));
 }
 
 async function revokeFor(pay: any, by: string) {
@@ -253,16 +257,26 @@ export async function webhook(raw: string, headers: Headers) {
       const pay = await findPayment(obj);
       if (pay) {
         await linkEvent(id, pay.id);
-        const already = pay.status === 'refunded';
-        await db.from('payments').update({ status: 'refunded', refunded_at: new Date().toISOString(), note: type }).eq('id', pay.id);
         const rf = refundFields(obj, type);
-        await saveLedger(pay.id, rf);
-        // إشعار ثانٍ للدفعة نفسها (استرداد ثم نزاع مثلًا) لا يكرر البريد
-        if (!already) await notifyRefunded(pay, rf.refund_cents).catch((e) => console.error('refund notify', e));
-        await revokeFor(pay, 'creem');
-        // D05 وسياسة الاسترداد: استرداد رسم البرنامج يلغي الشهادة
-        if (pay.item === 'program' && pay.participant_id) await revokeForRefund(pay.participant_id);
-        await audit('system', 'creem', 'payment.refunded', 'payments', pay.id);
+        // كامل أم جزئي (refundOutcome): الجزئي يُبقي الدفعة مدفوعة وحقها قائمًا، ويجمع المسترد في refund_cents بلا عمود
+        // ولا حالة جديدين، فلا يمس قيد الحالة ولا ما يقرؤها (التسوية والقمع واللوحة)
+        const out = refundOutcome(pay, rf, type);
+        if (!out.full) {
+          await db.from('payments').update({ note: `${type} partial` }).eq('id', pay.id);
+          await saveLedger(pay.id, { refund_cents: out.total, refund_reason: rf.refund_reason });
+          await notifyRefunded(pay, out.cents, true).catch((e) => console.error('refund notify', e));
+          await audit('system', 'creem', 'payment.partially-refunded', 'payments', pay.id, null, { refund_cents: out.cents, total_refunded_cents: out.total, paid_cents: pay.amount_cents });
+        } else {
+          const already = pay.status === 'refunded';
+          await db.from('payments').update({ status: 'refunded', refunded_at: new Date().toISOString(), note: type }).eq('id', pay.id);
+          await saveLedger(pay.id, { ...rf, refund_cents: out.total });
+          // إشعار ثانٍ للدفعة نفسها (استرداد ثم نزاع مثلًا) لا يكرر البريد. بعد جزئي سابق يذكر البريد ما تبقى
+          if (!already) await notifyRefunded(pay, out.cents).catch((e) => console.error('refund notify', e));
+          await revokeFor(pay, 'creem');
+          // D05 وسياسة الاسترداد: استرداد رسم البرنامج يلغي الشهادة
+          if (pay.item === 'program' && pay.participant_id) await revokeForRefund(pay.participant_id);
+          await audit('system', 'creem', 'payment.refunded', 'payments', pay.id, null, { refund_cents: out.cents, total_refunded_cents: out.total, paid_cents: pay.amount_cents, ...(already ? { repeat: true } : {}) });
+        }
       } else {
         // استرداد أو نزاع لم تُعرف دفعته: لا يمر صامتًا. يُنبَّه التشغيل ليسحب الحق يدويًا، ويُذكر في صف الحدث
         await alertOps('payment_unmatched', { event: id, type, refs: paymentRefs(obj) }).catch((e) => console.error('alert:', e));
@@ -342,11 +356,10 @@ export async function adminOverview() {
   ]);
   const live = (pays || []).filter((x: any) => x.mode === 'live');
   const paid = live.filter((x: any) => x.status === 'paid');
-  const sum = (rows: any[]) => rows.reduce((t, x) => t + (x.amount_cents || 0), 0);
   const by = (i: Item) => paid.filter((x: any) => x.item === i);
   const payers = (i: Item) => new Set(by(i).map((x: any) => x.participant_id)).size;
   const days = [...Array(30)].map((_, i) => new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10));
-  const daily = days.map((d) => ({ day: d, cents: sum(paid.filter((x: any) => String(x.paid_at).slice(0, 10) === d)) }));
+  const daily = days.map((d) => ({ day: d, cents: paid.filter((x: any) => String(x.paid_at).slice(0, 10) === d).reduce((t: number, x: any) => t + netCents(x), 0) }));
   const key = apiKey();
   // قيمة ما غطّته كل جهة (بأسعار اليوم)، ومن دفع ثم ارتبط بجهة (قرار استرداد للإدارة)
   const liveEnts = (ents || []).filter((e: any) => !e.revoked_at);
@@ -367,7 +380,8 @@ export async function adminOverview() {
       last_event: evs?.[0] || null, failed_events: (evs || []).filter((e: any) => e.error).length,
     },
     kpis: {
-      revenue_cents: sum(paid), refunds_cents: sum(live.filter((x: any) => x.status === 'refunded')),
+      // الإيراد صافٍ بعد الجزئي، والمسترد: المستردة كاملة بمبلغها ومعها الجزئي (revenueKpis)
+      ...revenueKpis(live),
       assessment_paid: payers('assessment'), program_paid: payers('program'),
       conversion: payers('assessment') ? Math.round((payers('program') / payers('assessment')) * 100) : null,
       pending: live.filter((x: any) => x.status === 'pending').length, participants: participants ?? 0,

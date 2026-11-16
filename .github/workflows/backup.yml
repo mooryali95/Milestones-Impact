@@ -6,7 +6,7 @@ name: Nightly database backup
 # الأسرار:
 #   SUPABASE_DB_URL         سلسلة الاتصال (Session pooler)
 #   BACKUP_PUBLIC_KEY       سطر age1 لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح. المفتاح الخاص عند المالك خارج GitHub وCloudflare
-#   BACKUP_PASSPHRASE       التشفير المتماثل القديم، يُحذف بعد أول نسخة بالمفتاح العام (RUNBOOK.md §4)
+#   BACKUP_PASSPHRASE       التشفير المتماثل القديم، احتياط إن غاب المفتاح العام. يبقى ولا يُحذف: يفك النسخ القديمة (RUNBOOK.md §4)
 #   SUPABASE_SERVICE_ROLE_KEY  نسخ دلو الملفات الخاصة
 #   R2_ACCOUNT_ID وR2_ACCESS_KEY_ID وR2_SECRET_ACCESS_KEY وR2_BUCKET  رمز مقصور على الدلو، وقفل احتفاظ في الدلو
 # الاستعادة والتمرين: RUNBOOK.md §4 وscripts/ops/restore-drill.sh.
@@ -38,8 +38,8 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       BACKUP_OUT: backup-out
     steps:
-      # سرّ ناقص يُفشل التشغيل فيصل بريد الفشل، ولا يمر أخضر بلا نسخة: بعد حذف BACKUP_PASSPHRASE يصير ضياع
-      # BACKUP_PUBLIC_KEY ليلة حمراء لا تخطيًا صامتًا. وR2 إلزامي: بلا أدوات سير في المستودع العام هو المكان الوحيد للنسخة
+      # سرّ ناقص يُفشل التشغيل فيصل بريد الفشل، ولا يمر أخضر بلا نسخة. BACKUP_PASSPHRASE باقٍ، فضياع BACKUP_PUBLIC_KEY
+      # يعيد النسخة متماثلة بتحذير، ويكشفه فحص restore-drill.yml اليومي. وR2 إلزامي: بلا أدوات سير في المستودع العام هو المكان الوحيد للنسخة
       - name: Required secrets are set
         run: |
           if [ -z "$SUPABASE_DB_URL" ] || { [ -z "$BACKUP_PUBLIC_KEY" ] && [ -z "$BACKUP_PASSPHRASE" ]; }; then

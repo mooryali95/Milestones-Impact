@@ -11,6 +11,7 @@ const { db, hash, CONFIG, WORKSHOP_STAGED_NOTE } = await import('./core.ts');
 const { ACTION_GATES } = (await import('./index.ts')) as any;
 const P = await import('./participant.ts');
 const V = await import('./activities.ts');
+const { resetSettingsCache } = await import('./settings.ts');
 
 type Row = Record<string, any>;
 const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v == null ? v : v[k]), r);
@@ -143,8 +144,11 @@ async function world() {
     hall_presence: [], cohort_roles: [], peer_requests: [], peer_answers: [], audit_log: [], experts: [], expert_requests: [],
     assessments: [], instruments: [], questions: [], assessment_answers: [], certificates: [], workshop_attendance: [],
     coaching_sessions: [], participant_stage_overrides: [],
+    // مفاتيح الميزات مُظهَرة: هنا تُختبر بوابة البرنامج وحدها، ورفض الميزة المخفية قبلها في features_test.ts
+    app_settings: [{ key: 'features', value: { hall: true, katon: true } }, { key: 'feedback360', value: { enabled: true } }],
   };
   const f = install(tables);
+  resetSettingsCache();
   const call = async (who: keyof typeof ps, action: string, body: Row = {}) => {
     const res = await handler(new Request('http://leaders.test/', {
       method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://leaders.test' },
@@ -152,7 +156,7 @@ async function world() {
     }));
     return { status: res.status, ...(await res.json()) } as Row;
   };
-  return { ps, tables, call, restore: f.restore };
+  return { ps, tables, call, restore: () => { f.restore(); resetSettingsCache(); } };
 }
 
 // ما ذكره التدقيق: الأقران والقاعة وطلب الخبير، ورابط الجلسة وغرفة الموجّه (هذان بحال مرحلة متطلبهما في رحلته)
@@ -499,4 +503,31 @@ Deno.test('حساب العرض: لا رابط حجز ولا اتصال فوري�
     const alert = w.tables.audit_log.find((x) => x.action === 'system.alert' && String(x.entity_id) === 'booking_not_eligible:calcom:d1');
     assertEquals(alert?.after?.reason, 'demo');
   } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
+});
+
+// مفاتيح الميزات (features.js) في الموجّه الحقيقي: المخزن بلا صف فالثلاثة مطفأة. المعتمد داخل البرنامج يُرد برمز كل ميزة
+// قبل أي بوابة أخرى ولا يُكتب شيء، وقراءة 360 تُجاب بلا شيء، والرئيسية تحمل المفاتيح، وما سواها كما كان
+Deno.test('مفاتيح الميزات مطفأة: القاعة وكاتون و360 مرفوضة برموزها للمعتمد، وقراءة 360 فارغة، والقياس والأثر كما كانا', async () => {
+  const w = await world();
+  w.tables.app_settings = [];
+  resetSettingsCache();
+  try {
+    for (const [action, body, code] of [['hall.state', {}, 'hall_off'], ['hall.join', {}, 'hall_off'], ['hall.hand', { up: true }, 'hall_off'], ['katon.mine', {}, 'katon_off'],
+      ['f360.start', {}, 'f360_off'], ['f360.nominate', { cycle_id: U(1), email: 'x@y.sa' }, 'f360_off'], ['f360.submit', { cycle_id: U(1) }, 'f360_off'], ['f360.report', { cycle_id: U(1) }, 'f360_off']] as [string, Row, string][]) {
+      const r = await w.call('approved', action, body);
+      assertEquals([action, r.status, r.code, r.message], [action, 404, code, 'هذا غير متاح الآن.']);
+    }
+    // والمنسحب ومن لم يُعتمد يرون الرد نفسه: الميزة المخفية مخفية عن الجميع
+    assertEquals((await w.call('pending', 'hall.state')).code, 'hall_off');
+    assertEquals((await w.call('withdrawn', 'f360.report', { cycle_id: U(1) })).code, 'f360_off');
+    const mine = await w.call('approved', 'f360.mine');
+    assertEquals([mine.status, mine.success, mine.enabled, mine.cycles], [200, true, false, undefined]);
+    assertEquals(w.tables.hall_presence.length, 0);
+    const me = await w.call('approved', 'me', { with_home: true });
+    assertEquals([me.status, me.features], [200, { hall: false, katon: false, f360: false }]);
+    for (const a of ['impact.mine', 'peer.list', 'lab.list']) {
+      const r = await w.call('approved', a);
+      assertEquals([a, r.status, r.success], [a, 200, true]);
+    }
+  } finally { w.restore(); }
 });

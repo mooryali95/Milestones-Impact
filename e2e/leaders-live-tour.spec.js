@@ -9,7 +9,7 @@ function server() {
   const s = { profileDone: false, assessed: false, peers: [] };
   const stage = (key, title_ar, phase, status, items = []) => ({ key, title_ar, phase, status, items, done: items.filter((i) => i.status === 'done').length, total: items.length });
   const me = () => ({
-    success: true,
+    success: true, features: { hall: true, katon: false, f360: true },
     participant: { id: 'demo', full_name: 'مشارك العرض', email: 'demo@example.invalid', status: s.assessed ? 'placed' : 'registered', is_demo: true, consented_at: '2026-11-01T00:00:00Z' },
     profile: { full_name: 'مشارك العرض', phone: s.profileDone ? '0500000000' : '', job_title: s.profileDone ? 'مدير إدارة المشاريع' : '', organization_name: s.profileDone ? 'جهة العرض' : '', years_experience: s.profileDone ? 8 : null,
       approved: s.assessed, level: s.assessed ? 'intermediate' : null, track: s.assessed ? { title: 'القيادة من خلال الآخرين', summary: 'ملخص', strengths: 'قوة', journey: 'رحلة' } : null },
@@ -52,7 +52,9 @@ test('الجولة الحيّة: ثماني عشرة خطوة على شاشات 
 
   const tour = page.getByRole('region', { name: 'الجولة الحيّة' });
   await expect(tour).toBeVisible();
-  await expect(tour.getByText('الخطوة 1 من 18')).toBeVisible();
+  // قبل الدخول لا تُعرف المفاتيح، فالقاعة مخفية: 17 خطوة بلا القاعة في قائمة الانتقال، ثم 18 بعد الدخول والقاعة ظاهرة
+  await expect(tour.getByText('الخطوة 1 من 17')).toBeVisible();
+  await expect(tour.locator('select option', { hasText: 'القاعة' })).toHaveCount(0);
   await expect(tour.getByRole('heading', { name: 'الترحيب' })).toBeVisible();
   await tour.getByRole('button', { name: 'التالي' }).click();
 
@@ -63,6 +65,7 @@ test('الجولة الحيّة: ثماني عشرة خطوة على شاشات 
 
   // 3: الملف يُملأ بضغطة
   await expect(tour.getByRole('heading', { name: 'الملف الشخصي' })).toBeVisible();
+  await expect(tour.getByText('الخطوة 3 من 18')).toBeVisible();
   await expect(page.getByRole('heading', { name: /عرّفنا بك/ })).toBeVisible();
   await tour.getByRole('button', { name: 'املأ الملف وأكمل' }).click();
 

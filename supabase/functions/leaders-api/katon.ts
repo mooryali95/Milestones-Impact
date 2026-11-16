@@ -11,7 +11,8 @@ import {
 import { defaultProgramId, journeyDefinition } from './programs.ts';
 import { approvalOf } from './logic.js';
 import { REPO_EDIT_AR } from './content-lock.js';
-import { KATON_ENABLED } from './labels.js';
+import { features } from './features.ts';
+import { FEATURE_OFF_AR } from './features.js';
 import { hallAnswered, hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
 
@@ -29,13 +30,15 @@ async function pointsFor(p: any) {
   return katonPoints(data?.katon_points);
 }
 
-// «كاتون» مخفي عن المشاركين (KATON_ENABLED): الخادم يقفله أيضًا، ولا يبقى منه إلا الإجابة داخل القاعة.
+// «كاتون» يظهر بمفتاحه (features.katon في الإعدادات العامة، مطفأ افتراضيًا): الخادم يقفله أيضًا، ولا يبقى منه إلا الإجابة
+// داخل القاعة، ويحكمها مفتاح القاعة (hallGate). ووزنه في التقييم مستقل عن المفتاح (KATON_ENABLED في labels.js للدرجة وحدها).
 // كان katon.mine يعيد نص كل جملة منشورة، ومنها جمل القاعة القادمة، ومفاتيحها لمن أجاب عن جمل موضوعها كلها
-const KATON_OFF_AR = '«كاتون» غير متاح الآن؛ تجد جمله في القاعة حين يفتحها خبيرك';
+// الرسالة لا تسمّي الميزة ولا القاعة: من ليس مديرًا لا يُذكر له ما أُخفي عنه (features.js)
+const KATON_OFF_AR = FEATURE_OFF_AR;
 
 // ── للمشارك ──
 export async function mine(p: any) {
-  if (!KATON_ENABLED) throw new Fail(KATON_OFF_AR, 404, 'katon_off');
+  if (!(await features()).katon) throw new Fail(KATON_OFF_AR, 404, 'katon_off');
   await approved(p);
   const [tp, ss, ans, pts] = await Promise.all([
     db.from('katon_topics').select('id, key, title_ar, dimension, layers, sort').eq('status', 'published').order('sort'),
@@ -74,7 +77,7 @@ export async function answer(p: any, b: Body) {
   // في القاعة يفتح الخبير موضوع الجلسة، وقفل الإجابة كله في hallGate: الكشف والجملة المعروضة والوقت
   const gate = await hallGate(p, s.id);
   if (!gate.inHall) {
-    if (!KATON_ENABLED) throw new Fail(KATON_OFF_AR, 404, 'katon_off');
+    if (!(await features()).katon) throw new Fail(KATON_OFF_AR, 404, 'katon_off');
     if (s.katon_topics?.status !== 'published') throw new Fail('الجملة غير متاحة', 404);
   }
   let a;

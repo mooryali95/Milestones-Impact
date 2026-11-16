@@ -51,7 +51,7 @@ describe('«كيف يُقيَّم عملك»', () => {
   it('يعرض الأوزان والمحك والحدود بإعلانها مؤقتة، وما لا يدخل الدرجة، والتظلم، بلا مفاتيح', () => {
     const fc = finalConfig({});
     const html = renderToStaticMarkup(React.createElement(HowEvaluated, { policy: { weights: fc.weights, thresholds: fc.thresholds, measure: fc.measure, version: fc.version } }));
-    for (const s of ['30%', '20%', 'محك 70%', 'هذه الحدود مؤقتة للدفعة الأولى', 'كاتون والقاعة', 'لجنة لم تشارك فيه', 'لا يدخل الدرجة']) expect(html).toContain(s);
+    for (const s of ['30%', '20%', 'محك 70%', 'هذه الحدود مؤقتة للدفعة الأولى', 'أنشطة التعلم التفاعلية', 'لجنة لم تشارك فيه', 'لا يدخل الدرجة']) expect(html).toContain(s);
     expect(renderToStaticMarkup(React.createElement(HowEvaluated, { policy: null }))).toBe('');
   });
 });
