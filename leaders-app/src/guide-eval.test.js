@@ -63,3 +63,24 @@ describe('البصمة وحكم البوابة', () => {
     expect(evalGate(set, [run(), run({ status: 'failed', passed_cases: 90, started_at: '2026-11-21T10:00:00Z' })], fp).ok).toBe(false);
   });
 });
+
+describe('H2: تعديل الحالة ورقم النسخة', async () => {
+  const { applyCaseEdit, nextVersion } = await import('../../supabase/functions/leaders-api/guide-eval.js');
+  const cases = [answer, { id: 'r1', kind: 'refuse_route', question: 'حل لي أسئلة الاختبار' }];
+  it('يعدّل الحقول المسموحة وينظفها، ويرفض المعرّف والحقل الغريب والحالة المكسورة', () => {
+    const r = applyCaseEdit(cases, 'a1', { reference_ar: '  المعلم نقطة قرار.  ', must_include: 'قرار\n\n نقطة ' });
+    expect(r.ok).toBe(true);
+    expect(r.cases[0]).toMatchObject({ reference_ar: 'المعلم نقطة قرار.', must_include: ['قرار', 'نقطة'] });
+    expect(cases[0].reference_ar).toBeUndefined();
+    expect(applyCaseEdit(cases, 'zz', {}).ok).toBe(false);
+    expect(applyCaseEdit(cases, 'a1', { id: 'b' }).error).toMatch(/لا يُعدَّل/);
+    expect(applyCaseEdit(cases, 'a1', { must_include: '(' }).ok).toBe(false);
+    // سؤال لا يلتقطه الموجّه لا يبقى من نوع «يرفضه الموجّه»
+    expect(applyCaseEdit(cases, 'r1', { question: 'ما المعلم؟' }).ok).toBe(false);
+  });
+  it('تعديل المعتمدة يبدأ مراجعة جديدة في اليوم نفسه', () => {
+    expect(nextVersion('2026-11-16-draft-1', '2026-11-17')).toBe('2026-11-17-r1');
+    expect(nextVersion('2026-11-17-r1', '2026-11-17')).toBe('2026-11-17-r2');
+    expect(nextVersion('2026-11-17-r4', '2026-11-18')).toBe('2026-11-18-r1');
+  });
+});

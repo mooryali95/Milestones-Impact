@@ -90,6 +90,85 @@ function GuidanceEval({ canWrite = false }) {
 }
 
 
+// H2: مراجعة مجموعة التقييم وتعديلها واعتمادها (قرار المالك v8). تعديل نسخة معتمدة يبدأ مسودة جديدة، والاعتماد للمالك وحده
+const FIELD_KIND = Object.entries(KIND_AR);
+function CaseEditor({ c, canWrite, onSaved }) {
+  const { toast } = useUI();
+  const [v, setV] = useState(() => ({ kind: c.kind, question: c.question, reference_ar: c.reference_ar || '', must_include: (c.must_include || []).join('\n'), must_not_include: (c.must_not_include || []).join('\n') }));
+  const [busy, setBusy] = useState(false);
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const r = await L('admin.guide-eval-case', { case_id: c.id, patch: { ...v, must_include: v.must_include.split('\n'), must_not_include: v.must_not_include.split('\n') } });
+    setBusy(false);
+    if (!r.success) { toast(r.message); return; }
+    toast(r.new_draft ? `حُفظت في مسودة جديدة ${r.version}، والمعتمدة باقية كما هي` : 'حُفظت الحالة');
+    onSaved();
+  };
+  return (
+    <form className="stack gd-case-form" onSubmit={save}>
+      <label className="of-field"><span className="of-label">النوع المتوقع</span>
+        <select value={v.kind} disabled={!canWrite} onChange={(e) => setV({ ...v, kind: e.target.value })}>{FIELD_KIND.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
+      <label className="of-field"><span className="of-label">السؤال</span>
+        <textarea rows={2} value={v.question} disabled={!canWrite} onChange={(e) => setV({ ...v, question: e.target.value })} /></label>
+      <label className="of-field"><span className="of-label">الإجابة المرجعية</span>
+        <textarea rows={4} value={v.reference_ar} disabled={!canWrite} onChange={(e) => setV({ ...v, reference_ar: e.target.value })} /></label>
+      <label className="of-field"><span className="of-label">ما يجب أن يرد في الإجابة (نمط في كل سطر، و | تعني «أو»)</span>
+        <textarea dir="auto" rows={3} value={v.must_include} disabled={!canWrite} onChange={(e) => setV({ ...v, must_include: e.target.value })} /></label>
+      <label className="of-field"><span className="of-label">ما يُمنع أن يرد</span>
+        <textarea dir="auto" rows={2} value={v.must_not_include} disabled={!canWrite} onChange={(e) => setV({ ...v, must_not_include: e.target.value })} /></label>
+      {c.source && <small className="la-muted">المصدر: {c.source}</small>}
+      {canWrite && <div className="la-row"><button className="btn-sm primary" disabled={busy}>{busy ? 'لحظة…' : 'احفظ الحالة'}</button></div>}
+    </form>
+  );
+}
+
+function SetReview({ canWrite, onChanged }) {
+  const { toast, confirm } = useUI();
+  const [d, setD] = useState(null);
+  const [kind, setKind] = useState('all');
+  const load = () => L('admin.guide-eval-cases').then(setD);
+  useEffect(() => { load(); }, []);
+  if (!d?.success) return null;
+  const set = d.set;
+  const changed = () => { load(); onChanged?.(); };
+  const approve = async () => {
+    if (!(await confirm(`اعتماد المجموعة ${set.version} (${set.cases.length} حالة) باسمك؟ بعد الاعتماد لا تتغير، وأي تعديل يبدأ مسودة جديدة ويلزمه تقييم جديد.`))) return;
+    const r = await L('admin.guide-eval-approve', { version: set.version });
+    if (!r.success) { toast(r.message); return; }
+    toast(`اعتُمدت المجموعة ${set.version}`);
+    changed();
+  };
+  const shown = set.cases.filter((c) => kind === 'all' || c.kind === kind);
+  return (
+    <section className="stack gd-set" aria-labelledby="gd-set-h">
+      <div className="la-row between">
+        <h4 id="gd-set-h">مراجعة المجموعة واعتمادها</h4>
+        <span className={`la-chip ${set.status === 'approved' ? 'ok' : 'warn'}`}>{set.status === 'approved' ? `معتمدة: ${set.approved_by} في ${date(set.approved_at)}` : 'مسودة'}</span>
+      </div>
+      <p className="la-muted small">النسخة {set.version}{set.updated_by && set.updated_by !== 'seed' ? `، آخر تعديل ${set.updated_by} في ${date(set.updated_at)}` : ''}. {set.source === 'file' ? 'جدول المجموعة لم يُرحَّل بعد، فلا تعديل ولا اعتماد حتى يُطبَّق ترحيله.' : 'كل تعديل يُسجَّل، ويُسقط نجاح التقييم السابق حتى يُشغَّل من جديد.'}</p>
+      {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء تمنع الاعتماد: {set.errors.slice(0, 5).join('؛ ')}</div>}
+      <div className="la-row" role="group" aria-label="تصفية بالنوع">
+        {[['all', `الكل ${set.cases.length}`], ...FIELD_KIND.map(([k, t]) => [k, `${t} ${set.cases.filter((c) => c.kind === k).length}`])].map(([k, t]) => (
+          <button key={k} type="button" className={`btn-sm ${kind === k ? 'primary' : 'ghost'}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{t}</button>
+        ))}
+      </div>
+      <ol className="gd-cases">{shown.map((c) => (
+        <li key={`${set.version}-${c.id}`}>
+          <details>
+            <summary><b>{c.id}</b> · {KIND_AR[c.kind] || c.kind} · {c.question}</summary>
+            <CaseEditor c={c} canWrite={canWrite && d.can_edit} onSaved={changed} />
+          </details>
+        </li>
+      ))}</ol>
+      {d.can_approve && set.status !== 'approved' && (
+        <div className="la-row"><button type="button" className="btn-sm primary" disabled={set.errors.length > 0} onClick={approve}>اعتمد المجموعة باسمك</button></div>
+      )}
+      {!d.can_approve && set.status !== 'approved' && <p className="la-muted small">الاعتماد للمالك وحده.</p>}
+    </section>
+  );
+}
+
 function StatusPart({ d, reload, setD }) {
   const { toast } = useUI();
   const [busy, setBusy] = useState(false);
@@ -169,6 +248,7 @@ function UsagePart({ d }) {
 
 export default function GuidanceAdmin() {
   const [d, setD] = useState(null);
+  const [evalKey, setEvalKey] = useState(0);
   const load = () => L('admin.guide-dashboard').then(setD);
   useEffect(() => { load(); }, []);
   if (!d) return <Spinner />;
@@ -183,7 +263,7 @@ export default function GuidanceAdmin() {
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'} summary={open ? 'مفتوح للدفعات التجريبية' : `مغلق: ${d.blockers.length} ${d.blockers.length === 1 ? 'شرط' : 'شروط'} قبل الفتح`}><StatusPart d={d} reload={load} setD={setD} /></Section>
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${usd(d.today.usd)} من ${usd(d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
-      <Section id="gd-accuracy" title="الدقة"><GuidanceEval canWrite={d.can_write} /></Section>
+      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} /><SetReview canWrite={d.can_write} onChanged={() => setEvalKey((k) => k + 1)} /></Section>
     </div>
   );
 }

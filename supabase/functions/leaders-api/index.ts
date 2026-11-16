@@ -670,6 +670,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.guide-orgs': (a) => GA.orgs(a),
   'admin.guide-org-set': (a, b) => A.superWriter(a, GA.orgSet, b),
   'admin.guide-eval': (a) => GE.evalState(a),
+  // H2: مراجعة المجموعة وتعديل حالاتها، والاعتماد للمالك وحده (يُفحص داخل الدالة)
+  'admin.guide-eval-cases': (a) => GE.setGet(a),
+  'admin.guide-eval-case': (a, b) => A.superWriter(a, GE.caseSave, b),
+  'admin.guide-eval-approve': (a, b) => A.superWriter(a, GE.setApprove, b),
   'admin.guide-eval-results': (a, b) => GE.evalResults(a, b),
   'admin.guide-eval-start': (a, b) => A.superWriter(a, GE.evalStart, b),
   'admin.guide-eval-step': (a, b) => A.superWriter(a, GE.evalStep, b),
