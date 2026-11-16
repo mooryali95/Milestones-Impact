@@ -33,6 +33,8 @@ const AppSettings = lazyRetry(() => import('./AppSettings.jsx'));
 const Feedback360 = lazyRetry(() => import('./Feedback360.jsx'));
 const Insight = lazyRetry(() => import('./Insight.jsx'));
 const Agent = lazyRetry(() => import('./Agent.jsx'));
+const GuidanceAdmin = lazyRetry(() => import('./GuidanceAdmin.jsx'));
+const GuidanceAccess = lazyRetry(() => import('./GuidanceAdmin.jsx').then((m) => ({ default: m.GuidanceAccess })));
 const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
@@ -55,7 +57,7 @@ const TAB_KEYS = new Set(TABS.map(([k]) => k));
 const TAB_GROUPS = [
   ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'book', 'handbook', 'katon', 'lab', 'assessment', 'content']],
-  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent']],
+  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent', 'guidance', 'guidance-access']],
   ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mailcenter', 'mail']],
 ];
 const TAB_LABEL = Object.fromEntries(TABS);
@@ -118,6 +120,8 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} isSuper={isSuper || isOwner} focus={route.id} onSettings={(r) => setFlags(featureFlags(r.values))} />;
   else if (tab === 'agent') body = <Agent isSuper={isSuper} />;
+  else if (tab === 'guidance') body = <GuidanceAdmin />;
+  else if (tab === 'guidance-access') body = <GuidanceAccess />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
   else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} payId={payId} onOpen={(id) => { at('payments', id); window.scrollTo({ top: 0 }); }} />;

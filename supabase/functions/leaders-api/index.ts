@@ -65,6 +65,7 @@ import * as FT from './features.ts';
 import * as NB from './nudge-banner.ts';
 import * as GU from './guide.ts';
 import * as GE from './guide-eval.ts';
+import * as GA from './guide-admin.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -653,6 +654,11 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   // «التوجيه والإرشاد» G3: أعداد وإنفاق بلا نص، للمدير الأعلى والمالك كشاشة المساعد
   'admin.guide-report': (a) => { AG.requireAgentRead(a); return GU.guideReport(); },
   // G4a: تقييم الدقة والدفعة التجريبية، للمدير الأعلى والمالك. البدء والخطوة والتفعيل بغلاف superWriter
+  // H1: تبويبا «التوجيه والإرشاد» و«إتاحة التوجيه»
+  'admin.guide-dashboard': (a) => GA.dashboard(a),
+  'admin.guide-toggle': (a, b) => A.superWriter(a, GA.toggle, b),
+  'admin.guide-orgs': (a) => GA.orgs(a),
+  'admin.guide-org-set': (a, b) => A.superWriter(a, GA.orgSet, b),
   'admin.guide-eval': (a) => GE.evalState(a),
   'admin.guide-eval-results': (a, b) => GE.evalResults(a, b),
   'admin.guide-eval-start': (a, b) => A.superWriter(a, GE.evalStart, b),

@@ -109,7 +109,7 @@ export function GuidanceCap() {
   return (
     <p className="la-muted small ag-guidance">
       سقف «التوجيه والإرشاد» داخل الرحلة منفصل: {Number(g.daily_spend_usd).toFixed(2)} دولار يوميًا، و{g.monthly_questions} سؤالًا شهريًا و{g.daily_questions} يوميًا لكل مشارك.{' '}
-      <button type="button" className="link" onClick={() => navigate({ ctx: 'leaders', tab: 'settings', id: 'guidance' })}>عدّله من الإعدادات</button>
+      <button type="button" className="link" onClick={() => navigate({ ctx: 'leaders', tab: 'guidance' })}>افتح «التوجيه والإرشاد»</button>
     </p>
   );
 }
@@ -154,112 +154,6 @@ function FeatureSwitches({ d, canWrite, onSaved }) {
 }
 
 // onSettings: يُبلَّغ به قسم القادة بعد كل حفظ، فتتحدث شارات «مخفي عن المستخدمين» على الأقسام فورًا
-// تقرير «التوجيه والإرشاد» (G3): أعداد وإنفاق بلا نص ولا أسماء، للمدير الأعلى والمالك. نسبة «أريد التأكد» مؤشر الدقة في التجربة
-export function GuidanceReport() {
-  const [r, setR] = useState(null);
-  useEffect(() => { L('admin.guide-report').then(setR); }, []);
-  if (!r?.success || !r.ready) return null;
-  return (
-    <section className="ag-guide-report stack" aria-labelledby="ag-greport-h">
-      <h4 id="ag-greport-h">«التوجيه والإرشاد» داخل الرحلة {r.open ? <span className="ops-flag on">مفتوح</span> : <span className="ops-flag off">مغلق للمشاركين</span>}</h4>
-      <table className="la-table">
-        <thead><tr><th>المدة</th><th>أسئلة</th><th>مشاركون</th><th>أجاب</th><th>لم يتأكد</th><th>خارج النطاق</th><th>تعذّر</th><th>«أريد التأكد»</th><th>الكلفة</th></tr></thead>
-        <tbody>{r.windows.map((w) => (
-          <tr key={w.days}><td>آخر {w.days} يومًا</td><td>{w.asked}</td><td>{w.participants}</td><td>{w.answered}</td><td>{w.unsure}</td><td>{w.refused}</td><td>{w.errors}</td>
-            <td>{w.confirmed}{w.confirm_rate != null ? ` (${w.confirm_rate}٪)` : ''}</td><td dir="ltr">${w.usd.toFixed(2)}</td></tr>
-        ))}</tbody>
-      </table>
-      {r.spend.length > 0 && <p className="la-muted small">أعلى يوم: ${Math.max(...r.spend.map((x) => x.usd)).toFixed(2)} من سقف ${Number(r.cap_usd).toFixed(2)}.</p>}
-      <p className="la-muted small">أعداد وحدها: نصوص المحادثات خاصة بأصحابها ولا تُعرض في أي شاشة.</p>
-    </section>
-  );
-}
-
-// G4a: تقييم دقة «التوجيه والإرشاد» والدفعة التجريبية (للمدير الأعلى والمالك). البوابة لا تفتح إلا بمجموعة اعتمدتها لجنة
-// المحتوى وآخر تشغيل ناجح بنسبة لا تقل عن 99٪ لبصمة اليوم (النموذج والقواعد والمجموعة)، ثم للدفعات المفعّلة وحدها
-const RUN_AR = { running: 'يعمل', passed: 'ناجح', failed: 'دون الحد', stopped: 'متوقف', error: 'تعذّر' };
-const KIND_AR = { answer: 'يجيب', unsure: 'لا يتأكد', refuse_model: 'يرفض', refuse_route: 'يرفضه الموجّه' };
-export function GuidanceEval({ canWrite = false }) {
-  const { toast } = useUI();
-  const [s, setS] = useState(null);
-  const [pilots, setPilots] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [live, setLive] = useState(null);
-  const [results, setResults] = useState(null);
-  const load = () => Promise.all([L('admin.guide-eval').then(setS), L('admin.guide-pilots').then(setPilots)]);
-  useEffect(() => { load(); }, []);
-  if (!s?.success || !s.ready) return null;
-  const run = async () => {
-    setBusy(true);
-    const r = await L('admin.guide-eval-start', {});
-    if (!r.success) { setBusy(false); toast(r.message); return; }
-    // الدفعات من اللوحة حتى ينتهي التشغيل: كل طلب بضع حالات، فلا يتجاوز حد زمن الدالة
-    for (let i = 0; i < 200; i++) {
-      const st = await L('admin.guide-eval-step', { run_id: r.run_id });
-      if (!st.success) { toast(st.message); break; }
-      setLive(st.run);
-      if (st.done) break;
-    }
-    setBusy(false);
-    setLive(null);
-    load();
-  };
-  const flip = async (c, on) => {
-    // يظهر التغيير فورًا، ويعود إن رفضه الخادم
-    setPilots((x) => ({ ...x, cohorts: x.cohorts.map((y) => (y.id === c.id ? { ...y, pilot: on } : y)) }));
-    const r = await L('admin.guide-pilot-set', { cohort_id: c.id, on });
-    if (!r.success) { toast(r.message); L('admin.guide-pilots').then(setPilots); return; }
-    toast(on ? `«${c.name}» دفعة تجريبية للمساعد` : `أُوقف المساعد لـ«${c.name}»`);
-    L('admin.guide-pilots').then(setPilots);
-  };
-  const showResults = async (id) => setResults(await L('admin.guide-eval-results', { run_id: id }));
-  const set = s.set;
-  return (
-    <section className="ag-guide-eval stack" aria-labelledby="ag-geval-h">
-      <h4 id="ag-geval-h">تقييم دقة «التوجيه والإرشاد» قبل الإطلاق</h4>
-      <p className={s.gate.ok ? 'ops-flag on' : 'ops-flag off'} role="status">{s.gate.ok ? `✓ اجتاز التقييم (${s.threshold * 100}٪ فأكثر) على النسخة الحالية` : `✕ ${s.gate.message}`}</p>
-      <p className="la-muted small">
-        المجموعة {set.version}: {set.total} حالة ({Object.entries(set.kinds).map(([k, n]) => `${KIND_AR[k] || k} ${n}`).join('، ')}).{' '}
-        {set.approved_by ? `اعتمدتها لجنة المحتوى (${set.approved_by}، ${date(set.approved_at)}).` : 'مسودة بانتظار اعتماد لجنة المحتوى للإجابات المرجعية.'}
-        {' '}النموذج <code dir="ltr">{s.model}</code>.
-      </p>
-      {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء في المجموعة: {set.errors.slice(0, 5).join('؛ ')}</div>}
-      {canWrite && <div className="la-row"><button type="button" className="btn-sm primary" disabled={busy || set.errors.length > 0} onClick={run}>{busy ? 'يعمل…' : 'شغّل التقييم'}</button>
-        {live && <span className="la-muted small" role="status">{live.done_cases} من {live.total_cases} · ناجح {live.passed_cases} · ${(Number(live.cost_micros) / 1e6).toFixed(2)}</span>}</div>}
-      {s.runs.length > 0 && (
-        <table className="la-table">
-          <thead><tr><th>البدء</th><th>الحال</th><th>النجاح</th><th>الكلفة</th><th>النسخة</th><th></th></tr></thead>
-          <tbody>{s.runs.map((r) => (
-            <tr key={r.id}><td>{date(r.started_at)}</td><td>{RUN_AR[r.status] || r.status}{r.stop_reason ? ` (${r.stop_reason})` : ''}</td>
-              <td>{r.passed_cases}/{r.total_cases}{r.done_cases ? ` (${Math.round((r.passed_cases / r.total_cases) * 1000) / 10}٪)` : ''}</td>
-              <td dir="ltr">${(Number(r.cost_micros) / 1e6).toFixed(2)}</td><td>{r.current ? 'الحالية' : 'أقدم'}</td>
-              <td><button type="button" className="la-link" onClick={() => showResults(r.id)}>النتائج</button></td></tr>
-          ))}</tbody>
-        </table>
-      )}
-      {results?.success && (
-        <div className="stack" aria-label="نتائج التشغيل">
-          <div className="la-row between"><b>النتائج ({results.results.filter((x) => !x.ok).length} راسبة)</b><button type="button" className="la-link" onClick={() => setResults(null)}>إغلاق</button></div>
-          <ul className="la-reqs">{results.results.map((x) => (
-            <li key={x.case_id} data-ok={x.ok ? 'ok' : 'fail'}><span><b>{x.case_id}</b> {x.ok ? '✓' : '✕'} {KIND_AR[x.kind] || x.kind} · {x.question}</span>
-              {!x.ok && <small className="la-err">{(x.reasons || []).join('؛ ')}</small>}
-              {x.reply && <details><summary className="la-muted small">الرد</summary><p className="small" style={{ whiteSpace: 'pre-wrap' }}>{x.reply}</p></details>}</li>
-          ))}</ul>
-        </div>
-      )}
-      {pilots?.ready && (
-        <fieldset className="stack">
-          <legend>الدفعات التجريبية</legend>
-          <p className="la-muted small">المساعد لا يعمل إلا لأعضاء دفعة مفعّلة هنا، وبعد اجتياز التقييم ونسخة السياسة. كل تغيير يُسجَّل.</p>
-          {pilots.cohorts.map((c) => (
-            <label key={c.id} className="row"><input type="checkbox" checked={c.pilot} disabled={!canWrite} onChange={(e) => flip(c, e.target.checked)} /> <span>{c.name}{c.is_default ? ' (المفتوحة)' : ''}</span></label>
-          ))}
-        </fieldset>
-      )}
-    </section>
-  );
-}
-
 export default function AppSettings({ canWrite, onSettings, isSuper = false, focus = null }) {
   const [d, setRaw] = useState(null);
   const setD = (r) => { setRaw(r); if (r?.success) onSettings?.(r); };
