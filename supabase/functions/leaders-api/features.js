@@ -6,6 +6,9 @@
 // الخادم هو الحارس الحقيقي (features.ts وindex.ts)، وإخفاء الواجهة تجميل. أفعال المدير مستثناة ليبني الميزة،
 // إلا فتح القاعة: لا يُفتح ما لا يدخله أحد فيُظن أن جلسة انعقدت.
 // المفتاح للظهور وحده: لا يمس الدرجة ولا الاكتمال (وزن كاتون في final.js وcontinuous.js مستقل عنه).
+// ومفتاح 360 يضم تقدير المدير والزملاء قبل البرنامج وبعده (قرار المالك 2026-11-16: يُدمج لاحقًا مع 360): حين يُطفأ تختفي
+// بنود الرحلة T-360 وE-360 وE-MGR كالبنود المخفية، وتُرفض دعوة مقيّمي الأثر وتأكيدهم، ويتوقف رابط المقيّم مؤقتًا.
+// ما أُرسل من تقديرات باقٍ كما هو ويدخل حساب الأثر.
 
 export const FEATURE_KEYS = ['hall', 'katon', 'f360'];
 export const FEATURE_OFF_CODE = { hall: 'hall_off', katon: 'katon_off', f360: 'f360_off' };
@@ -29,7 +32,9 @@ export function featureFlags(settings) {
 const REFUSED = {
   hall: ['hall.state', 'hall.join', 'hall.hand', 'hall.pick', 'xp.hall-open', 'xp.hall-step', 'xp.hall-split', 'xp.hall-assign', 'xp.hall-close', 'admin.hall-open'],
   katon: ['katon.mine'],
-  f360: ['f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan', 'xp.f360-decide', 'xp.f360-report', 'xp.f360-release'],
+  f360: ['f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan', 'xp.f360-decide', 'xp.f360-report', 'xp.f360-release',
+    // مقيّمو الأثر (pre وpost): الدعوة وإعادة الإرسال (rater.invite) والإلغاء، وتأكيد المستشار للمنتظر
+    'rater.invite', 'rater.revoke', 'xp.rater-confirm'],
 };
 // قراءات تُجاب بحال «لا شيء» لا بخطأ: الواجهة القائمة تخفي بطاقتها بنفسها (Feedback360Entry وAdvisor360 وExpertHall)
 const SOFT = {
@@ -48,6 +53,25 @@ export function featureGate(action, flags) {
   if (!f || flags[f]) return null;
   if (action === 'admin.hall-open') return { fail: { message: HALL_OPEN_OFF_AR, status: 409, code: FEATURE_OFF_CODE.hall } };
   return { fail: { message: FEATURE_OFF_AR, status: 404, code: FEATURE_OFF_CODE[f] } };
+}
+
+// بنود الرحلة التي يخفيها مفتاح 360 وهو مطفأ: تقدير المدير والزملاء قبل البرنامج (T-360) وبعده (E-360) وإفادة المدير (E-MGR).
+// تُخفى في طبقة التعريف (journeyDefinition) كبنود الدفعة المخفية، فلا تُعد في التقدم ولا تحبس مرحلة ولا تُذكَّر بها
+export const F360_JOURNEY_CODES = ['T-360', 'E-360', 'E-MGR'];
+/** @param {{ f360?: boolean } | null | undefined} flags @returns {string[]} */
+export const featureHiddenCodes = (flags) => (flags?.f360 ? [] : [...F360_JOURNEY_CODES]);
+// ما يُخفى فعلًا من رموز المفتاح فوق إخفاء الدفعة: رمز يترك إخفاؤه مرحلة بلا بند يكملها لا يُخفى (احتياط، لا يقع في البرنامج الحالي)،
+// فالمفتاح لا يحبس مرحلة أبدًا. breaks هو hideBreaksStage من logic.js (يُمرَّر حتى لا تحمل الواجهة منطق الرحلة كله)
+/** @param {{ stages?: any[], requirements?: any[], cohortHidden?: string[], flags: any, breaks: (stages: any[], reqs: any[], hidden: string[]) => { key: string }[] }} a */
+export function featureHiddenFor({ stages = [], requirements = [], cohortHidden = [], flags, breaks }) {
+  const codes = featureHiddenCodes(flags).filter((c) => !cohortHidden.includes(c) && requirements.some((r) => r.code === c));
+  if (!codes.length) return { hidden: [], kept: [] };
+  const was = new Set(breaks(stages, requirements, cohortHidden).map((s) => s.key));
+  const now = breaks(stages, requirements, [...cohortHidden, ...codes]).filter((s) => !was.has(s.key)).map((s) => s.key);
+  if (!now.length) return { hidden: codes, kept: [] };
+  const stageOf = new Map(requirements.map((r) => [r.code, r.stage_key]));
+  const kept = codes.filter((c) => now.includes(stageOf.get(c)));
+  return { hidden: codes.filter((c) => !kept.includes(c)), kept };
 }
 
 // ملاحظة رسائل الورشة حين تُخفى القاعة، بطريقة توثيق حضور الجلسة نفسها (config.verify في متطلبها) بلا ذكر القاعة:

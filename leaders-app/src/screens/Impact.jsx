@@ -3,11 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 // المشارك يرى مؤشرًا عامًا واحدًا قبل وبعد (لا تفصيل لكل إطار)، وتقديره
 // لممارسته الآن وقبل البرنامج. ثم يدعو مديره ليقدّر التغير من موقعه،
-// لأن الحكم بالتغير لا يقوم على التقدير الذاتي وحده.
+// لأن الحكم بالتغير لا يقوم على التقدير الذاتي وحده. والدعوة مع مفتاح 360: مطفأ فلا بطاقة دعوة
+// (الخادم يقول invite:false في impact.mine)، ويقوم الحكم على القياسين ودليل المبادرة.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call } from '../api.js';
 import Assessment from './Assessment.jsx';
 import { ErrorBox } from '../ui.jsx';
+import { flagsOf } from '../features.js';
 
 const RELATIONS = [
   { key: 'manager', title: 'المدير المباشر' },
@@ -116,12 +118,13 @@ export default function Impact({ me, onUpdate, onBack }) {
   useEffect(() => { if (submitted) load(); }, [submitted, load]);
 
   if (!submitted) {
-    return <Assessment kind="post" onBack={onBack} onSubmitted={onUpdate} />;
+    return <Assessment kind="post" invite={flagsOf(me).f360} onBack={onBack} onSubmitted={onUpdate} />;
   }
   if (error) return <div className="page narrow"><ErrorBox message={error} onRetry={load} /></div>;
   if (!data) return <div className="center-load"><div className="spinner" /></div>;
 
   const s = data.summary;
+  const invite = data.invite !== false;
   return (
     <div className="page narrow stack">
       <div className="row"><button className="link small" onClick={onBack}>→ رحلتي</button></div>
@@ -132,11 +135,11 @@ export default function Impact({ me, onUpdate, onBack }) {
           <>
             <Bars label="المؤشر العام في الأطر الثلاثة" before={s.before} after={s.after} beforeLabel="البداية" afterLabel="الآن" />
             <Bars label="ممارستك كما تقدّرها اليوم" before={s.practice_then} after={s.practice_now} beforeLabel="قبل البرنامج" afterLabel="الآن" />
-            <p className="small muted">نقارن الأسئلة المشتركة بين القياسين فقط، ونعدّ الفرق تغيرًا إذا كان أكبر من تذبذب القياس الطبيعي. يكتمل الحكم بتقدير مديرك ودليل مبادرتك.</p>
+            <p className="small muted">نقارن الأسئلة المشتركة بين القياسين فقط، ونعدّ الفرق تغيرًا إذا كان أكبر من تذبذب القياس الطبيعي. {invite ? 'يكتمل الحكم بتقدير مديرك ودليل مبادرتك.' : 'يكتمل الحكم بدليل مبادرتك.'}</p>
           </>
         ) : <p className="muted">أُرسل قياسك البعدي. تظهر المقارنة هنا حين تكتمل نتائج القياسين.</p>}
       </div>
-      <Invite data={data} onChange={setData} />
+      {invite && <Invite data={data} onChange={setData} />}
     </div>
   );
 }

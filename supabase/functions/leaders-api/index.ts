@@ -12,7 +12,7 @@
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · lab.draft · lab.hint · lab.check · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
-//             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
+//             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه؛ الدعوة والإلغاء مع مفتاح 360)
 //             f360.mine · f360.start · f360.self · f360.nominate · f360.remove · f360.submit · f360.report · f360.plan (تقييم 360 للتطوير)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
 //             capstone.shares · capstone.share-create · capstone.share-update · capstone.share-revoke · capstone.note-mark (المشاركة برابط وملاحظات القراء)

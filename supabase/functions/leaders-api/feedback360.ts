@@ -353,9 +353,9 @@ export async function pausedSince(): Promise<number | null> {
 }
 export async function resumeFrozen(by: string, now = Date.now()) {
   const since = await pausedSince();
-  if (since === null || since >= now) return { extended: 0, paused_ms: 0 };
+  if (since === null || since >= now) return { extended: 0, raters: 0, paused_ms: 0 };
   const { data, error } = await db.from('feedback_cycles').select('id, closes_at, opens_at').eq('status', 'open');
-  if (error) { if (missingTable(error)) return { extended: 0, paused_ms: 0 }; throw error; }
+  if (error) { if (missingTable(error)) return { extended: 0, raters: 0, paused_ms: 0 }; throw error; }
   let extended = 0;
   for (const c of (data || []) as any[]) {
     const closes = Date.parse(c.closes_at);
@@ -374,7 +374,20 @@ export async function resumeFrozen(by: string, now = Date.now()) {
     await audit('system', by, 'f360.resume', 'feedback_cycles', c.id, { closes_at: c.closes_at }, { closes_at: next, paused_ms: delta });
     extended += 1;
   }
-  return { extended, paused_ms: now - since };
+  // مقيّمو الأثر (pre وpost) مؤجلون مع 360: رابط دعوة جارية لم تنقض مهلته قبل الإخفاء يُمد بقدر ما مضى منه في الإخفاء،
+  // فلا يجد المقيّم رابطه منتهيًا لأن المفتاح أُطفئ. ما انقضى قبل الإخفاء يبقى كما كان
+  const { data: imp, error: ie } = await db.from('raters').select('id, expires_at, invited_at').in('phase', ['pre', 'post']).eq('status', 'invited').gt('expires_at', new Date(since).toISOString());
+  if (ie) throw ie;
+  let raters = 0;
+  for (const r of (imp || []) as any[]) {
+    const exp = Date.parse(r.expires_at);
+    const delta = now - Math.max(since, Date.parse(r.invited_at) || since);
+    if (!Number.isFinite(exp) || delta <= 0) continue;
+    must(await db.from('raters').update({ expires_at: new Date(exp + delta).toISOString() }).eq('id', r.id).eq('status', 'invited'));
+    raters += 1;
+  }
+  if (raters) await audit('system', by, 'rater.resume', 'raters', null, null, { raters, paused_ms: now - since });
+  return { extended, raters, paused_ms: now - since };
 }
 
 
