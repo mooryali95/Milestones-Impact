@@ -5,7 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { stageText } from './nudge.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
-import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
+import { alertWebhook, slackAlertDelivered, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { slackCode, slackMail, slackUse } from '../_shared/slack.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
@@ -286,7 +286,7 @@ export async function stuckQueueAlert() {
   if (!fresh.length) return { stuck: rows.length, alerted: 0 };
   const hours = Math.floor((Date.now() - Date.parse(fresh[0].created_at)) / 36e5);
   const r = await raiseAlert('mail_queue_stuck', { messages: fresh.length, waiting_over_hours: QUEUE_ALERT_HOURS, oldest_hours: hours, ...(fresh[0].reason ? { reason: fresh[0].reason } : {}) });
-  if (!r.webhook && !r.email) return { stuck: rows.length, alerted: 0 };
+  if (!r.webhook && !r.slack && !r.email) return { stuck: rows.length, alerted: 0 };
   const { error: markError } = await db.from('audit_log').insert(fresh.map((m) => ({ actor_type: 'system', actor: 'cron', action: 'mail.queue-stuck', entity: 'mail_queue', entity_id: m.id })));
   if (markError) console.error('mail.queue-stuck marks:', markError.message);
   return { stuck: rows.length, alerted: fresh.length };
@@ -671,10 +671,10 @@ async function stuckMailDue() {
 // تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
 const lastAlert = new Map<string, number>();
 // cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين
-export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean };
+export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; slack?: boolean };
 export async function raiseAlert(kind: string, detail: Record<string, unknown>): Promise<AlertResult> {
   const windowMs = alertCooldown(kind);
-  const cooled = { cooled: true, webhook: false, email: false };
+  const cooled = { cooled: true, webhook: false, email: false, slack: false };
   if (windowMs > 0 && (lastAlert.get(kind) ?? 0) > Date.now() - windowMs) return cooled;
   // المهلة تُحجز قبل أول انتظار: دفعة متزامنة (رموز محجوبة بالسقف) تنبيه واحد لا تستنفد احتياط البريد
   if (windowMs > 0) lastAlert.set(kind, Date.now());
@@ -687,11 +687,13 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
     }
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
     await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
-    // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه
-    const webhook = await alertWebhook(kind, detail);
-    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, email: false };
+    // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه. سلاك والرابط معًا، وكلاهما قناة كافية
+    // (readiness.js ALERT_CHANNELS)، فنتيجة سلاك تُنتظر (بمهلة) لتُحسب في «وصل» كما يُحسب الرابط
+    const [webhook, slack] = await Promise.all([alertWebhook(kind, detail, { slack: false }), slackAlertDelivered(kind, detail)]);
+    const other = webhook || slack;
+    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, slack, email: false };
     if (kind === 'mail_queue_stuck') {
-      if (webhook || !(await stuckMailDue())) return { cooled: false, webhook, email: false };
+      if (other || !(await stuckMailDue())) return { cooled: false, webhook, slack, email: false };
       stuckMailAt = Date.now();
     }
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
@@ -699,12 +701,12 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
     // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
     if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
-    return { cooled: false, webhook, email };
-  } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false }; }
+    return { cooled: false, webhook, slack, email };
+  } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false, slack: false }; }
 }
 export async function alertOps(kind: string, detail: Record<string, unknown>) {
   const r = await raiseAlert(kind, detail);
-  return r.webhook || r.email;
+  return r.webhook || !!r.slack || r.email;
 }
 
 // معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل

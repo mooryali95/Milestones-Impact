@@ -605,3 +605,72 @@ Deno.test('سلاك: تفاصيل التنبيه مطموسة: البريد مق
   assert(S.alertLine('mail_counter_unavailable', { reason: 'agent_model_config_unavailable' }).includes('agent_model_config_unavailable'));
   assert(S.alertLine('mail_counter_unavailable', {}).startsWith('*mail_counter_unavailable*'));
 });
+
+Deno.test('سلاك: الطمس يُبقي UUID ومعرّفات البادئة كما هي، ويطمس الرمز والهاتف القائمين بأنفسهما', () => {
+  for (const id of ['3f2b8c1e-9a4d-4b7e-8c2a-1d2e123456ab', '550e8400-e29b-41d4-a716-446655440000', '11111111-2222-4333-8444-555555555555', 'ord_123456']) {
+    assertEquals(S.maskText(`pay ${id} failed`), `pay ${id} failed`);
+  }
+  assertEquals(S.maskText('code 482913'), 'code ••••••');
+  assertEquals(S.maskText('call 0551234567 now'), 'call ••••67 now');
+  // UUID بجوار هاتف ورمز: يبقى، وما حوله يُطمس
+  assertEquals(S.maskText('p=550e8400-e29b-41d4-a716-446655440000 otp 123456 tel +966551234567'), 'p=550e8400-e29b-41d4-a716-446655440000 otp •••••• tel ••••67');
+  // محارف الحجز الداخلية في النص نفسه لا تُعيد ما ليس منه
+  assertEquals(S.maskText('0 482913'), '0 ••••••');
+});
+
+Deno.test('رابط التنبيه مطموس كنشر البوت: لا بريد كامل ولا هاتف ولا رمز ولا مفتاح في text وcontent وdetail', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const bearer = ['Bearer ', 'abcdefghijklmnopqrstuvwxyz0123'].join('');
+  try {
+    await withNet(async (calls) => {
+      const ok = await alertWebhook('payment_unmatched', { message: 'refund failed for mona@gmail.com +966551234567', auth: bearer, code: 'otp 482913', pay: '550e8400-e29b-41d4-a716-446655440000' });
+      assertEquals(ok, true);
+      const hook = calls.find((c) => c.url.includes('hooks.example'))!;
+      const raw = JSON.stringify(hook.body);
+      for (const leak of ['mona@gmail.com', '966551234567', 'abcdefghijklmnop', '482913']) assert(!raw.includes(leak), `${leak} في: ${raw}`);
+      assert(hook.body.text.includes('m***@gmail.com') && hook.body.text.includes('••••67'));
+      assertEquals(hook.body.text, hook.body.content);
+      assertEquals(hook.body.detail.pay, '550e8400-e29b-41d4-a716-446655440000');
+      assertEquals(hook.body.kind, 'payment_unmatched');
+    });
+  } finally { Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+Deno.test('raiseAlert بسلاك وحده: نتيجة سلاك تُحسب في الوصول، وبريد الطابور العالق لا يُرسل إن وصل سلاك', async () => {
+  setup();
+  const fake = fakeDb();
+  Object.assign(db as any, { from: fake.from, schema: () => ({ from: fake.from }) });
+  S.slackUse(db);
+  const saved = { resendKey: CONFIG.resendKey, alertEmail: CONFIG.alertEmail };
+  Object.assign(CONFIG, { resendKey: 're_test', alertEmail: 'owner@example.com' });
+  Deno.env.delete('LEADERS_ALERT_WEBHOOK');
+  try {
+    await withNet(async (calls) => {
+      const r = await raiseAlert('mail_queue_stuck', { messages: 2 });
+      assertEquals([r.webhook, r.slack, r.email], [false, true, false]);
+      assertEquals(calls.filter((c) => c.url.includes('resend.com')).length, 0, 'لا بريد مع وصول سلاك');
+      assert(slackCalls(calls).some((c) => String(c.body.text).startsWith('*mail_queue_stuck*')));
+    });
+    S.resetSlack();
+    // سلاك يرفض: لا وصول منه، فيُرسل البريد احتياطًا
+    await withNet(async (calls) => {
+      const r = await raiseAlert('mail_queue_stuck', { messages: 3 });
+      assertEquals([r.webhook, r.slack], [false, false]);
+      assertEquals(r.email, true);
+      assertEquals(calls.filter((c) => c.url.includes('resend.com')).length, 1);
+    }, { slack: 'error' });
+  } finally {
+    Object.assign(CONFIG, saved);
+    delete (db as any).from; delete (db as any).schema;
+    teardown();
+  }
+});
+
+Deno.test('slackDeliver: false بلا ضبط، وfalse بعد المهلة، ولا يرمي', async () => {
+  S.resetSlack();
+  assertEquals(await S.slackDeliver('alerts', 'x'), false);
+  setup();
+  try {
+    await withNet(async () => { assertEquals(await S.slackDeliver('alerts', 'x', { waitMs: 30 }), false); }, { slack: 'hang' });
+  } finally { Object.assign(S.SLACK, { timeoutMs: 4000 }); teardown(); }
+});

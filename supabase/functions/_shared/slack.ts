@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMissingMs: 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMissingMs: 60e3, deliverWaitMs: 8000, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -198,6 +198,8 @@ function threadFor(client: Client, category: SlackCategory): Promise<Thread> {
 
 // ── الطابور ──
 const pending = new Map<SlackCategory, string[]>();
+// من ينتظر نتيجة سطره (slackDeliver): يُخبَر بنجاح الرسالة التي حملته أو فشلها، وما تُرك لازدحام يُخبَر بالفشل فورًا
+const waiters = new Map<SlackCategory, ((ok: boolean) => void)[]>();
 let pendingCount = 0;
 let dropped = 0;
 let lastClient: Client = null;
@@ -208,6 +210,9 @@ async function drain() {
     const [category, lines] = pending.entries().next().value as [SlackCategory, string[]];
     pending.delete(category);
     pendingCount -= lines.length;
+    const told = waiters.get(category) ?? [];
+    waiters.delete(category);
+    const tell = (ok: boolean) => told.forEach((f) => { try { f(ok); } catch { /* لا يرمي */ } });
     const shown = lines.slice(0, SLACK.maxLines);
     let text = shown.join('\n');
     if (lines.length > shown.length) text += `\n(و${lines.length - shown.length} أخرى من النوع نفسه)`;
@@ -216,15 +221,21 @@ async function drain() {
     // ما لم يُنشر لازدحام (429 أو التوقف بعده) يُحسب في المتروك فيُذكر في أول رسالة بعده
     const lost = (error?: string) => { if (error === 'paused' || error === 'rate_limited') dropped += carried + lines.length; };
     const t = await threadFor(lastClient, category);
-    if ('fail' in t) { lost(t.error); continue; }
+    if ('fail' in t) { lost(t.error); tell(false); continue; }
     const c = SLACK_CATEGORIES[category];
     const r = 'ts' in t ? await post(text, t.ts) : await post(`${c.icon} ${c.label}\n${text}`);
     if (!r.ok) { console.error('slack post:', category, r.error); lost(r.error); }
+    tell(r.ok);
   }
 }
 function start() {
   if (pump || !pendingCount) return pump;
-  pump = drain().catch((e) => console.error('slack:', e)).finally(() => { pump = null; start(); });
+  pump = drain().catch((e) => console.error('slack:', e)).finally(() => {
+    pump = null;
+    // عطل غير متوقع في الطابور: من بقي ينتظر لا يبقى معلقًا
+    if (!pendingCount) { for (const list of waiters.values()) list.forEach((f) => f(false)); waiters.clear(); }
+    start();
+  });
   try {
     // deno-lint-ignore no-explicit-any
     (globalThis as any).EdgeRuntime?.waitUntil?.(pump);
@@ -236,18 +247,29 @@ function start() {
 export function slackUse(client: Client) { if (client) lastClient = client; }
 
 // النشر نفسه: لا ينتظره المستدعي، ولا يرمي أبدًا. الوعد يُنتظر في الاختبار والمهمة الساعية وحدهما
-export function slackPost(category: SlackCategory, text: string, { client }: { client?: Client } = {}): Promise<void> {
+export function slackPost(category: SlackCategory, text: string, { client, onResult }: { client?: Client; onResult?: (ok: boolean) => void } = {}): Promise<void> {
   try {
-    if (!slackConfigured() || !SLACK_CATEGORIES[category]) return Promise.resolve();
+    if (!slackConfigured() || !SLACK_CATEGORIES[category]) { onResult?.(false); return Promise.resolve(); }
     slackUse(client);
-    if (pausedUntil > Date.now() || pendingCount >= SLACK.maxPending) { dropped++; return pump ?? Promise.resolve(); }
+    if (pausedUntil > Date.now() || pendingCount >= SLACK.maxPending) { dropped++; onResult?.(false); return pump ?? Promise.resolve(); }
     const line = slackEscape(String(text || '').slice(0, 600));
     const list = pending.get(category) ?? [];
     list.push(line);
     pending.set(category, list);
+    if (onResult) waiters.set(category, [...(waiters.get(category) ?? []), onResult]);
     pendingCount++;
     return start() ?? Promise.resolve();
-  } catch (e) { console.error('slack:', e); return Promise.resolve(); }
+  } catch (e) { console.error('slack:', e); onResult?.(false); return Promise.resolve(); }
+}
+// النشر مع نتيجته: true إن نُشر السطر فعلًا في سلاك، وfalse إن لم يُضبط أو تُرك أو رُفض أو لم يُنشر قبل waitMs.
+// لمن يقرر بالنتيجة قناة احتياطية (raiseAlert: بريد الطابور العالق لا يُرسل إن وصل سلاك)، ولا يرمي أبدًا
+export function slackDeliver(category: SlackCategory, text: string, { client, waitMs = SLACK.deliverWaitMs }: { client?: Client; waitMs?: number } = {}): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => { if (!done) { done = true; clearTimeout(timer); resolve(ok); } };
+    const timer = setTimeout(() => finish(false), waitMs);
+    slackPost(category, text, { client, onResult: finish });
+  });
 }
 export async function slackIdle() { while (pump || statusWrite) await (pump ?? statusWrite); }
 
@@ -270,16 +292,23 @@ const SECRET_RE = /\b(?:xox[a-z]-|sk-|sk_|pk_|rk_|re_|whsec_|ghp_|gho_|github_pa
 // طويل بحروف وأرقام معًا: mail_counter_unavailable اسم لا سر
 const LONG_RE = /\b(?=[A-Za-z0-9_]*\d)(?=[A-Za-z0-9_]*[A-Za-z])[A-Za-z0-9_]{24,}\b/g;
 const PHONE_RE = /(?<![\w.:])\+?\d(?:[\s-]?\d){8,14}(?![\w.:])/g;
-const CODE_RE = /(?<!\d)\d{6}(?!\d)/g;
+// ستة أرقام قائمة بنفسها: ما التصق بحرف أو شرطة سفلية جزء من معرّف (ord_123456) لا رمز
+const CODE_RE = /(?<![A-Za-z0-9_])\d{6}(?![A-Za-z0-9_])/g;
+// UUID يُحجز قبل الطمس ويعود بعده كما هو: مقاطعه الرقمية تشبه الهاتف والرمز، وهو ما يدل على موضع العطل
+const UUID_RE = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g;
 const SECRET_KEY = /^(?:token|secret|password|passwd|otp|pin|code_value|api_?key|authorization|cookie|signature)$|_(?:token|secret|key)$/i;
 export const MASKED = '[مخفي]';
 export function maskText(t: string) {
+  const held: string[] = [];
   return String(t)
+    .replace(/[\uE000\uE001]/g, '')
+    .replace(UUID_RE, (u) => `\uE000${held.push(u) - 1}\uE001`)
     .replace(SECRET_RE, MASKED)
     .replace(EMAIL_RE, (e) => maskEmail(e))
     .replace(PHONE_RE, (p) => `${'•'.repeat(4)}${p.replace(/\D/g, '').slice(-2)}`)
     .replace(LONG_RE, MASKED)
-    .replace(CODE_RE, '••••••');
+    .replace(CODE_RE, '••••••')
+    .replace(/\uE000(\d+)\uE001/g, (_m, i) => held[Number(i)] ?? '');
 }
 function maskDetail(v: unknown, key = '', depth = 0): unknown {
   if (key && SECRET_KEY.test(key) && v != null && v !== '') return MASKED;
@@ -289,6 +318,8 @@ function maskDetail(v: unknown, key = '', depth = 0): unknown {
   if (Array.isArray(v)) return v.map((x) => maskDetail(x, '', depth + 1));
   return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, maskDetail(x, k, depth + 1)]));
 }
+// التفاصيل نفسها مطموسة لكل قناة غير البريد (رابط التنبيه في mail.ts كذلك): لا قناة تحمل ما تخفيه أختها
+export const maskAlertDetail = (detail: Record<string, unknown>) => maskDetail(detail) as Record<string, unknown>;
 export function alertLine(kind: string, detail: Record<string, unknown>) {
   let d = '';
   try { d = JSON.stringify(maskDetail(detail)); } catch { d = ''; }
@@ -297,6 +328,7 @@ export function alertLine(kind: string, detail: Record<string, unknown>) {
 export const slackCode = (client: Client, o: Parameters<typeof codeLine>[0]) => slackPost('codes', codeLine(o), { client });
 export const slackMail = (client: Client, o: Parameters<typeof mailLine>[0]) => slackPost('mail', mailLine(o), { client });
 export const slackAlert = (kind: string, detail: Record<string, unknown>) => slackPost('alerts', alertLine(kind, detail));
+export const slackAlertDelivered = (kind: string, detail: Record<string, unknown>) => slackDeliver('alerts', alertLine(kind, detail));
 
 // ── رسالة الربط: مرة واحدة من المهمة الساعية، وعلامتها صف category=hello ──
 // بلا الجدول لا تُرسل (لا علامة تمنع تكرارها كل ساعة)
@@ -327,4 +359,6 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
 export function resetSlack() {
   threads.clear(); flatUntil.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
   statusMissingUntil = 0; statusWrite = null;
+  for (const list of waiters.values()) list.forEach((f) => f(false));
+  waiters.clear();
 }

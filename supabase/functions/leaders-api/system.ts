@@ -276,11 +276,11 @@ export async function weeklyHealth() {
 // مضبوطة وما وصل منها، بلا قيمها (لا رابط ولا عنوان). مرة في الدقيقة
 export async function alertTest(a: Admin, _b: Record<string, any> = {}) {
   requireSuper(a);
-  // سلاك يحمل كل تنبيه إلى سلسلة التنبيهات إن ضُبط سرّاه (alertWebhook في _shared/mail.ts)، ولا يُنتظر فلا نتيجة له هنا
+  // سلاك يحمل كل تنبيه إلى سلسلة التنبيهات إن ضُبط سرّاه، ونتيجته تُنتظر بمهلة (slackAlertDelivered في raiseAlert)
   const channels = { webhook: !!Deno.env.get('LEADERS_ALERT_WEBHOOK'), email: !!CONFIG.alertEmail, slack: SLACK_SECRETS.every((k) => !!Deno.env.get(k)) };
   const r = await raiseAlert('alert_test', { note: 'تجربة قناة التنبيه من لوحة الإدارة، لا عطل' });
   if (r.cooled) throw new Fail('جُرّبت قناة التنبيه قبل أقل من دقيقة، أعد بعد قليل', 429, 'rate');
-  const delivered = { webhook: r.webhook, email: r.email };
+  const delivered = { webhook: r.webhook, email: r.email, slack: !!r.slack };
   await audit('admin', a.email, 'system.alert-test', 'system', 'alert_test', null, { channels, delivered });
   return { success: true, channels, mail_key: !!CONFIG.resendKey, delivered };
 }
