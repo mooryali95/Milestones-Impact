@@ -167,8 +167,45 @@ Deno.test('الدالة: إشارة التحويل على سؤال يُجاب ت
   const h = harness(`تجد الرسوم في شاشة الدفع بعد التسجيل.\n${HANDOFF_MARK}`);
   const { done } = await ask(h.deps, 'سعر البرنامج 500 دولار صح؟ أكد لي');
   assertEquals(done.handoff, false);
-  assertEquals(h.calls(), 2);
+  // الإشارة وحدها تُنزع وتُهمل بلا استدعاء ثانٍ
+  assertEquals(h.calls(), 1);
   assertNotMatch(h.seen[0], /500/);
-  assertMatch(h.seen[1], /تصحيح من الخادم/);
-  assert(h.mem.msgs.some((m) => m.role === 'system' && m.body === 'guard: marker · retry: still'));
+  assertNotMatch(done.text, /HANDOFF/);
+  assert(h.mem.msgs.some((m) => m.role === 'system' && m.body === 'guard: marker · retry: skipped'));
+});
+
+// ── ملاحظات المراجعة (2026-11-16): لا تحويل لسؤال قبل الشراء أو لاسم جهة أو مهنة، وصيغ فاتت ──
+Deno.test('الموجّه: الشرط قبل الدفع، وأسماء الجهات والمهن، وما يخص الزائر نفسه لا يُحوَّل', () => {
+  const cases: [string, string, string?][] = [
+    ['لو دفعت وما عجبني البرنامج أقدر أسترد فلوسي؟', 'free'],
+    ['If I paid and changed my mind, can I get a refund?', 'free'],
+    ['refund policy if I paid?', 'answer:policy'],
+    ['أعمل في النيابة العامة، هل البرنامج يناسبني؟', 'free'],
+    ['أنا موظف في المحكمة الإدارية وأبي أسجل', 'free'],
+    ['أنا إعلامي، هل البرنامج مناسب لي؟', 'free'],
+    ['I work at the Supreme Court, is the programme suitable for me?', 'free'],
+    ['I want to delete a plan from my account', 'free', 'MI-PRICING'],
+    ['دفعت رسم القياس، هل أقدر أعيده مرتين؟', 'answer:price'],
+    ['ما يمديني أدخل القياس الحين، أقدر أكمله بعدين؟', 'free'],
+    ['Can I talk to my manager about being nominated?', 'free'],
+    ['My password is wrong, what do I do?', 'free'],
+    ['كيف التواصل مع الفريق؟', 'free', 'MI-HOME'],
+    // جانب الجهة: يصدره الفريق، فللنموذج والمعرفة
+    ['جهتنا تبي رمز لترشيح موظفيها، كيف نحصل عليه؟', 'free'],
+    ['We are an employer, how do we get a nomination code for our staff?', 'free'],
+  ];
+  for (const [m, want, page] of cases) assertEquals(reasonOf(m, page), want, m);
+});
+
+Deno.test('الموجّه: صيغ فاتت تُحوَّل (الدفع، والتواصل، والفرنسية)', () => {
+  const cases: [string, string][] = [
+    ['I paid via Apple Pay and it is not working', 'handoff:payment'],
+    ['i paid but cannot see the course', 'handoff:payment'],
+    ['بعد ما دفعت ما انفتح لي القياس', 'handoff:payment'],
+    ['ابي اتواصل مع الفريق بخصوص سياسة الاسترداد', 'handoff:human'],
+    ['je veux un remboursement, j ai payé', 'handoff:refund'],
+    ["Je veux parler à quelqu'un", 'handoff:human'],
+    ['Please delete my account', 'handoff:data'],
+  ];
+  for (const [m, want] of cases) assertEquals(reasonOf(m), want, m);
 });

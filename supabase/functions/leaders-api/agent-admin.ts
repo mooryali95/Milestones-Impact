@@ -489,9 +489,10 @@ const progress = (r: Run, extra: Record<string, unknown> = {}) => ({
   cost_micros: num(r.cost_micros), rates: { eval: r.eval_total ? r.eval_pass / r.eval_total : 0, redteam: r.redteam_total ? r.redteam_pass / r.redteam_total : 0 }, ...extra,
 });
 
-// أسوأ تكلفة لحالة قبل تشغيلها (البادئة كتابة في الذاكرة، والرسالة دخل، والخرج حتى max_tokens)
+// أسوأ تكلفة لحالة قبل تشغيلها (البادئة كتابة في الذاكرة، والرسالة دخل، والخرج حتى max_tokens)، لاستدعاءين: المخالفة
+// يتبعها توليد ثانٍ بملاحظة تصحيح (agent-chat/handler.ts)
 const PREFIX_TOKENS = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
-export const caseWorst = (model: string, c: Case) => worstCaseMicros(model, PREFIX_TOKENS, estimateTokens(c.message) + 200, MAX_TOKENS);
+export const caseWorst = (model: string, c: Case) => 2 * worstCaseMicros(model, PREFIX_TOKENS, estimateTokens(c.message) + 400, MAX_TOKENS);
 
 export async function evalStep(a: Admin, b: Body) {
   requireAgentRead(a);

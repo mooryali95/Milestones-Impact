@@ -85,7 +85,7 @@
       "product": "any",
       "max_words": 14,
       "match": [["رمز", "الرمز", "كود", "الكود", "code"], ["جهه", "جهتي", "جهتنا", "جهتكم", "الجهه", "الراعيه", "رشحتني", "رشحني", "رشحوني", "ترشيح", "ترشيحي", "sponsor", "sponsoring", "nominated", "nomination", "employer"]],
-      "not": ["وصل", "يصلني", "وصلني", "يوصل", "يجيني", "جاني", "تحقق", "التحقق", "دخول", "الدخول", "otp", "verification", "login", "arrive", "arrived", "received", "سعر", "اسعار", "price", "خطا", "error", "يشتغل", "working", "invalid", "صالح"],
+      "not": ["وصل", "يصلني", "وصلني", "يوصل", "يجيني", "جاني", "تحقق", "التحقق", "دخول", "الدخول", "otp", "verification", "login", "arrive", "arrived", "received", "سعر", "اسعار", "price", "خطا", "error", "يشتغل", "working", "invalid", "صالح", "نحصل", "نصدر", "نطلب", "نرشح", "موظفي", "موظفينا", "منسوبي", "منسوبينا", "our staff", "our employees", "our team", "how do we", "can we get", "issue"],
       "ar": "رمز الجهة الراعية تكتبه بنفسك في منصة برنامج إدارة المشروعات للقادة https://leaders.sunkvalue.com : عند إنشاء حسابك في خانة «رمز الجهة الراعية» (اختيارية)، وإن كان لديك حساب فمن «ملفي» في قسم «الجهة الراعية»، أو من شاشة الدفع عند «رشّحتك جهة؟». بعد ربط الرمز تُغطى رسومك بحسب عقد جهتك. وإن لم يُقبل الرمز فتأكد منه مع منسق جهتك، أو راسل الفريق على mi@sunkvalue.com .",
       "en": "You enter your sponsoring organisation's code yourself on the MI Leaders platform https://leaders.sunkvalue.com : when creating your account, in the optional sponsoring organisation code field; if you already have an account, under My profile in the sponsoring organisation section; or on the payment screen where it asks whether an organisation nominated you. Once the code is linked, your fees are covered under your organisation's agreement. If the code is not accepted, check it with your organisation's coordinator or email mi@sunkvalue.com ."
     },
@@ -93,7 +93,7 @@
       "id": "policy_language",
       "product": "any",
       "max_words": 14,
-      "match": [["سياسه", "سياسات", "السياسه", "السياسات", "شروط", "الشروط", "الخصوصيه", "policy", "policies", "terms", "privacy"], ["لغه", "اللغه", "بالعربي", "بالعربيه", "عربي", "انجليزي", "بالانجليزي", "الانجليزيه", "بالانجليزيه", "ترجمه", "مترجمه", "ملزم", "الملزم", "يعتد", "language", "languages", "english", "arabic", "translation", "translated", "binding", "version"]],
+      "match": [["سياسه", "سياسات", "السياسه", "السياسات", "شروط", "الشروط", "الخصوصيه", "policy", "policies", "terms", "privacy"], ["لغه", "اللغه", "بالعربي", "بالعربيه", "عربي", "انجليزي", "بالانجليزي", "الانجليزيه", "بالانجليزيه", "ترجمه", "مترجمه", "يعتد", "language", "languages", "english", "arabic", "translation", "translated", "version"]],
       "ar": "سياساتنا (الخصوصية والشروط والاسترداد) منشورة بالعربية في موقع كل منتج: برنامج إدارة المشروعات للقادة في https://leaders.sunkvalue.com/legal/privacy ، ومصفوفة التأثير في https://mi.sunkvalue.com/privacy.html ، والشروط والاسترداد بجوارها. وإن كان لديك سؤال نظامي محدد فراسل الفريق على mi@sunkvalue.com ، ويمكن مراسلته بالعربية أو بالإنجليزية.",
       "en": "Our policies (privacy, terms and refund) are published in Arabic on each product's site: MI Leaders at https://leaders.sunkvalue.com/legal/privacy and the Impact Matrix at https://mi.sunkvalue.com/privacy.html , with the terms and refund policy alongside. For a specific legal question, please email our team at mi@sunkvalue.com , in Arabic or English."
     }

@@ -273,7 +273,9 @@ async function send(d: Deps, b: Record<string, unknown>) {
     // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق). ولا يُقرأ لرسالة يحولها الموجّه
     // ولا لرسالة عن دفع تم («رسوم دفعتها»): تلك ليست سؤال سعر
     const quote = orgQuote(message, product);
-    if (!quote && routed.kind !== 'handoff' && product !== 'matrix' && asksPrice(message) && !paidSignal(message)) {
+    // ويُقرأ في متابعة سؤال سعر سابق كذلك («وهل يشمل الضريبة؟»)، فلا يقطع الحارس سعرًا صحيحًا يكرره النموذج من السجل
+    const priceThread = asksPrice(message) || history.filter((t) => t.role === 'visitor').slice(-6).some((t) => asksPrice(t.body) && !orgQuote(t.body, product));
+    if (!quote && routed.kind !== 'handoff' && product !== 'matrix' && priceThread && !paidSignal(message)) {
       const p = await d.store.leadersPrice();
       if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
     }
@@ -284,7 +286,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const forced = routed.kind === 'handoff' || routed.kind === 'forced' ? FORCED_LINE[routed.reason] : null;
     const answerOnly = routed.kind === 'answer';
     // المبلغ الذي كتبه الزائر لا يصل النموذج (redact.ts)، والمحفوظ يبقى كما كتبه
-    const modelHistory = history.map((t) => (t.role === 'visitor' ? { ...t, body: neutralizeAmounts(t.body) } : t));
+    const modelHistory = history.map((t) => (t.role === 'visitor' ? { ...t, body: neutralizeAmounts(t.body, uiLang(reply)) } : t));
     const { messages } = buildMessages(modelHistory, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text }, forced, answerOnly });
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
     const capMicros = d.env.capCents * 1e4;
@@ -352,7 +354,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
       cache_write_tokens: c.result.usage.cache_creation_input_tokens, output_tokens: c.result.usage.output_tokens, cost_micros: c.cost,
     });
     // 3) النموذج ببث، وكل دفعة تمر بفحص المخرج وحارسه (guard.ts): لا تخرج إلا جمل تامة، والجملة المخالفة تُستبدل بالحقيقة
-    const gctx = { allow: allowedAmounts(leadersPrice), lang: uiLang(reply) };
+    const gctx = { allow: allowedAmounts(leadersPrice), lang: uiLang(reply), product };
     const stripMark = (t: string) => t.split(HANDOFF_MARK).join('');
     const san = new StreamSanitizer(48, (t) => guardReply(stripMark(t), gctx).text, true);
     const first = await callModel(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); });
@@ -373,7 +375,16 @@ async function send(d: Deps, b: Record<string, unknown>) {
     let retry: 'ok' | 'still' | 'skipped' | null = null;
     // مخالفة: إعادة توليد واحدة بملاحظة تصحيح قصيرة، بلا بث (النص النهائي في done يستبدل ما بُث). وإن بقيت المخالفة
     // فالنص المصلح بالحارس هو الرد الآمن (الجمل المخالفة صارت حقائق معتمدة)
-    if (violations.length && !signal.aborted) {
+    // إشارة التحويل وحدها لا تستحق استدعاءً ثانيًا: تُنزع من النص وتُهمل في قرار التحويل. والاستدعاء الثاني يمر بحد
+    // الساعة كالأول، فلا تضاعف الردود المخالفة الاستدعاءات
+    const needsRetry = violations.some((x) => x !== 'marker');
+    const hourOk = async () => { const n = await d.store.countModelCalls(new Date(now - 36e5).toISOString()); return n !== null && n < LIMITS.modelCallsHour; };
+    if (violations.length && !needsRetry) {
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: skipped`, lang });
+    } else if (violations.length && !signal.aborted && !(await hourOk())) {
+      retry = 'skipped';
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: ${retry}`, lang });
+    } else if (violations.length && !signal.aborted) {
       const last = messages[messages.length - 1];
       const again = [...messages.slice(0, -1), { ...last, content: `${String(last.content)}\n${correctionNote(violations)}` }] as Anthropic.MessageParam[];
       const second = await callModel(again, () => {});
