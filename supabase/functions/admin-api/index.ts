@@ -189,9 +189,12 @@ async function authUserId(sb: SB, email: string): Promise<string | null> {
   return null;
 }
 
-type Ctx = { ip: string; ua: string };
+// trustedIp: عنوان رأس الوكيل وحده (cf-connecting-ip يكتبه Cloudflare ولا يمرره من العميل). أول x-forwarded-for يرسله العميل
+// فيُزوَّر، فلا يدخل قرارًا أمنيًا: بصمة «الجهاز المعروف» منه وحده، وبلاه لا بصمة فيُعد الجهاز جديدًا ويُرسل البريد
+type Ctx = { ip: string; ua: string; trustedIp?: string };
 const clientCtx = (req: Request): Ctx => ({
   ip: req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "",
+  trustedIp: req.headers.get("cf-connecting-ip")?.trim() || "",
   ua: (req.headers.get("user-agent") || "").slice(0, 300),
 });
 
@@ -206,10 +209,10 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
   });
   if (error) throw error;
   await sb.from("admin_users").update({ last_login: new Date().toISOString() }).eq("id", user.id);
-  // بصمة الجهاز (تجزئة العنوان المقرب ووصف المتصفح، _shared/login-device.js) تُحفظ في سطر الدخول بلا نص المتصفح.
+  // بصمة الجهاز (تجزئة العنوان المقرب من رأس الوكيل الموثوق ووصف المتصفح، _shared/login-device.js) تُحفظ في سطر الدخول بلا نص المتصفح.
   // والمعرفة تُسأل قبل كتابة السطر، فلا يطابق الدخول نفسه
   let fp: string | null = null;
-  try { fp = await loginFingerprint(ctx.ip, ctx.ua); } catch { fp = null; }
+  try { fp = await loginFingerprint(ctx.trustedIp ?? "", ctx.ua); } catch { fp = null; }
   const device = user.is_owner
     ? ((await knownDevice(sb, { userId: String(user.id), method, fp, passkeyUsedBefore })) ? "known" : "new")
     : null;

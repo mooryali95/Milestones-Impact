@@ -13,6 +13,7 @@ const R = await import('./sponsor.ts');
 const NS = await import('../_shared/notify-settings.ts');
 const { contactLine } = await import('../_shared/contact.ts');
 const { SLACK_DOWN_SUBJECT, DIGEST_SUBJECT, route } = await import('../_shared/notify-routing.js');
+const DG_ROUTING: any = await import('../_shared/notify-routing.js');
 
 type Row = Record<string, any>;
 // المسار jsonb (meta->>device) يُقرأ من الحقل المتداخل كما في PostgREST
@@ -170,6 +171,9 @@ Deno.test('دفعة المالك: «مغلق» القديم سطر Slack وال�
   assertEquals([route('payment_new', legacy, 'ok').email, route('payment_refund', legacy, 'ok').email, route('payment_new', legacy, 'ok').slack], [true, true, true]);
   const stored = NS.withPaymentFallback({ preset: 'balanced', rows: { payment_new: { email: false, slack: true, digest: false } } }, true);
   assertEquals([route('payment_new', stored, 'ok').email, route('payment_new', stored, 'ok').digest, route('payment_refund', stored, 'ok').email], [false, false, true]);
+  // حفظ المالك صف الدفعة بلا بريد يطابق «متوازن» فلا يُخزَّن، والمفتاح القديم لا يعيد البريد بعد الحفظ
+  const saved = NS.withPaymentFallback({ preset: 'balanced', rows: {}, saved: true }, true);
+  assertEquals([route('payment_new', saved, 'ok').email, route('payment_refund', saved, 'ok').email, route('payment_new', saved, 'ok').slack], [false, false, true]);
 });
 
 Deno.test('إعداد المركز المخزن: يُقرأ من app_settings، ويبقى آخر ما قُرئ عند تعذر عابر، وغيابه «متوازن»', async () => {
@@ -178,11 +182,11 @@ Deno.test('إعداد المركز المخزن: يُقرأ من app_settings، 
   const fail = new Set<string>();
   const restore = install(tables, fail);
   try {
-    assertEquals(await NS.notifySettings(db), { preset: 'balanced', rows: {}, digest_hour: 9 });
+    assertEquals(await NS.notifySettings(db), { preset: 'balanced', rows: {}, digest_hour: 9, saved: false });
     NS.resetNotifySettings();
     tables.app_settings.push({ key: 'notifications', value: { preset: 'all', rows: { sponsor_request: { email: true }, unknown_row: { email: true } } } });
     const s = await NS.notifySettings(db);
-    assertEquals(s, { preset: 'all', rows: { sponsor_request: { email: true, slack: false, digest: false } }, digest_hour: 9 });
+    assertEquals(s, { preset: 'all', rows: { sponsor_request: { email: true, slack: false, digest: false } }, digest_hour: 9, saved: true });
     // تعذّر عابر بعد قراءة ناجحة: القيم الأخيرة لا الافتراضي (الذاكرة منتهية، فالقراءة تُعاد وتفشل)
     fail.add('app_settings');
     NS.expireNotifySettings();
@@ -287,6 +291,68 @@ Deno.test('الملخص: مصدر تعذرت قراءته لا يُعلَّم ا
       assertEquals(calls.length, 0);
       fail.clear();
       assertEquals((await DG.dailyDigest(at(10))).posted, true);
+    }, mode);
+  } finally { restore(); done(); }
+});
+
+Deno.test('الملخص: لا يُقص. كل نوع بعدده ورابطه ولو كثرت الأنواع وبلغت الأعداد ثلاثة أرقام، وكل رسالة 600 حرف على الأكثر', () => {
+  const { EVENTS, digestEvents } = DG_ROUTING;
+  for (const keys of [digestEvents({ preset: 'balanced' }), EVENTS.map((e: { key: string }) => e.key)]) {
+    const rows = keys.map((key: string, i: number) => ({ key, label: EVENTS.find((e: { key: string }) => e.key === key).label, count: 100 + i, ...(i % 3 ? {} : { more: true }) }));
+    const parts = DG.digestTexts(rows);
+    for (const p of parts) assert(p.length <= DG.DIGEST_CHUNK, `${p.length}`);
+    const all = parts.join('\n');
+    assert(parts[0].startsWith(`🗞️ ${rows.reduce((n: number, r: { count: number }) => n + r.count, 0)} إشعارًا`));
+    for (const r of rows) assert(all.includes(`• ${r.label}: ${r.more ? 'أكثر من ' : ''}${r.count} `), r.key);
+    assertEquals(all.split('\n').length, rows.length + 1);
+  }
+  assertEquals(DG.digestTexts([]).length, 1);
+});
+
+Deno.test('الملخص: تعذّر كتابة العلامة بعد الوصول لا يعيد الإرسال من النسخة نفسها، ولا يتكرر بريد الاحتياط', async () => {
+  for (const state of ['ok', 'unconfigured'] as State[]) {
+    const mode = env(state);
+    const tables = world();
+    seeded(tables, at(9) - 864e5);
+    const restore = install(tables);
+    const from = (db as any).from;
+    (db as any).from = (t: string) => {
+      const q = from(t);
+      if (t === 'audit_log') {
+        const ins = q.insert;
+        q.insert = (x: any) => (x?.action === DG.DIGEST_ACTION ? { then: (ok: any) => Promise.resolve({ data: null, error: { message: 'down' } }).then(ok) } : ins(x));
+      }
+      return q;
+    };
+    try {
+      await withNet(async (calls) => {
+        const r = await DG.dailyDigest(at(9));
+        assertEquals(r.posted, true, state);
+        assertEquals(tables.audit_log.filter((x) => x.action === DG.DIGEST_ACTION).length, 0);
+        assertEquals(await DG.dailyDigest(at(10)), { due: false });
+        assertEquals(await DG.dailyDigest(at(11)), { due: false });
+        assertEquals(resend(calls).length, state === 'ok' ? 0 : 1, state);
+      }, mode);
+    } finally { restore(); done(); }
+  }
+});
+
+Deno.test('الملخص: النافذة التالية تبدأ من لحظة القراءة (until) لا من وقت كتابة العلامة', async () => {
+  const mode = env('ok');
+  const tables = world();
+  // علامة أمس: كُتبت بعد قراءتها بدقيقتين، وحدث بينهما
+  const until = new Date(at(9) - 864e5).toISOString();
+  const written = new Date(at(9) - 864e5 + 120e3).toISOString();
+  tables.audit_log.push({ action: DG.DIGEST_ACTION, entity_id: '2026-11-16', created_at: written, after: { until } });
+  tables.audit_log.push({ action: 'system.notify', entity_id: 'sponsor_request', created_at: new Date(at(9) - 864e5 + 60e3).toISOString() });
+  const restore = install(tables);
+  try {
+    await withNet(async (calls) => {
+      const r = await DG.dailyDigest(at(9));
+      assertEquals(r.posted, true);
+      assert(slackTexts(calls).some((t) => t.includes('طلب رعاية: 1')));
+      const mark = tables.audit_log.filter((x) => x.action === DG.DIGEST_ACTION).at(-1);
+      assertEquals([mark?.after.since, mark?.after.until], [until, new Date(at(9)).toISOString()]);
     }, mode);
   } finally { restore(); done(); }
 });

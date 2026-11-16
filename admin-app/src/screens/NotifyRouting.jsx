@@ -68,10 +68,10 @@ export default function NotifyRouting() {
   const load = useCallback(async () => {
     const r = await L('admin.notify-routing');
     setD(r);
-    if (r?.success) setDraft(paymentFallback(r.settings, r.legacy_payment_owner));
+    if (r?.success) setDraft(paymentFallback(r.settings, r.legacy_payment_owner, r.saved));
   }, []);
   useEffect(() => { load(); }, [load]);
-  const base = useMemo(() => (d?.success ? paymentFallback(d.settings, d.legacy_payment_owner) : null), [d]);
+  const base = useMemo(() => (d?.success ? paymentFallback(d.settings, d.legacy_payment_owner, d.saved) : null), [d]);
   const matrix = useMemo(() => (draft ? matrixOf(draftValue(draft)) : []), [draft]);
   if (!d) return <section className="la-card" aria-labelledby="nr-title"><h3 id="nr-title">التوجيه</h3><Spinner /></section>;
   if (!d.success) return <section className="la-card" aria-labelledby="nr-title"><h3 id="nr-title">التوجيه</h3><p className="la-err" role="alert">{d.message}</p></section>;
@@ -101,7 +101,7 @@ export default function NotifyRouting() {
       <p className="la-muted small">الحرج بالبريد وSlack معًا، والمهم في Slack فورًا والبريد احتياطه إن لم يصل، والمعلوماتي في الملخص اليومي. الصفوف المقفلة (الأمان والمال والحذف وطلبات التواصل) بريدها دائم، ويمكن إضافة Slack إليها فقط. رموز الدخول وبريد المشاركين لا يمر بهذا الجدول.</p>
       {!d.ready && <p className="la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فيعمل «متوازن» ولا يُحفظ تعديل.</p>}
       {!d.owner && <p className="la-muted small" data-owner-only>الحفظ للمالك وحده. ترى هنا ما يجري الآن.</p>}
-      {d.legacy_payment_owner && <p className="la-chip warn">مفتاح «تنبيه الإدارة عند كل دفعة» القديم مفتوح، فصفا الدفعة والاسترداد بالبريد مع Slack. عدّلهما هنا واحفظ ليحل المركز محله.</p>}
+      {d.legacy_payment_owner && !d.saved && <p className="la-chip warn">مفتاح «تنبيه الإدارة عند كل دفعة» القديم مفتوح، فصفا الدفعة والاسترداد بالبريد مع Slack. عدّلهما هنا واحفظ ليحل المركز محله.</p>}
 
       <div className="nr-presets" role="radiogroup" aria-label="الإعداد الجاهز">
         {Object.entries(PRESETS).map(([k, p]) => (

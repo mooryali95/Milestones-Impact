@@ -9,7 +9,8 @@ import { DEFAULT_SETTINGS, normalizeSettings, paymentFallback } from './notify-r
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
-export type NotifySettings = { preset: string; rows: Record<string, { email: boolean; slack: boolean; digest: boolean }>; digest_hour?: number };
+// saved: للمركز صف محفوظ (حفظه المالك مرة على الأقل)، فلا يُقرأ مفتاح الدفعة القديم بعده
+export type NotifySettings = { preset: string; rows: Record<string, { email: boolean; slack: boolean; digest: boolean }>; digest_hour?: number; saved?: boolean };
 
 const TTL = 60e3;
 const RETRY = 5e3;
@@ -23,7 +24,7 @@ export async function notifySettings(client: Client): Promise<NotifySettings> {
   try {
     const { data, error } = await tableOf(client).select('value').eq('key', 'notifications').maybeSingle();
     if (error && !missing(error)) throw error;
-    const value = normalizeSettings(error ? null : data?.value) as NotifySettings;
+    const value = { ...normalizeSettings(error ? null : data?.value), saved: !error && !!data } as NotifySettings;
     cache = { at: Date.now(), value };
     return value;
   } catch (e) {
@@ -38,8 +39,8 @@ export const resetNotifySettings = () => { cache = null; };
 export const expireNotifySettings = () => { if (cache) cache.at = 0; };
 
 // مفتاح دفعة المالك القديم (payment_settings.notify.owner) انتقل إلى صفّي «دفعة جديدة» و«استرداد دفعة» في المركز (التصور 6.1).
-// في الانتقال: صف المركز إن حُفظ، وإلا فالقيمة القديمة: «مفتوح» كان بريدًا لكل دفعة، فيبقى البريد مع سطر Slack والملخص.
+// في الانتقال: إعداد المركز إن حُفظ مرة (saved)، وإلا فالقيمة القديمة: «مفتوح» كان بريدًا لكل دفعة، فيبقى البريد مع سطر Slack والملخص.
 // و«مغلق» (الافتراضي) لا يُسكت الدفعة: سطر Slack فوري والملخص بقرار المالك (القسم 11)
 export function withPaymentFallback(settings: NotifySettings, legacyOwner: unknown): NotifySettings {
-  return paymentFallback(settings, legacyOwner) as NotifySettings;
+  return paymentFallback(settings, legacyOwner, settings.saved === true) as NotifySettings;
 }

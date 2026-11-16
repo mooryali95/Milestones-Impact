@@ -6,7 +6,8 @@ import {
 } from "npm:@simplewebauthn/server@13.3.3";
 import { MAIL_FROM_DEFAULT, mailButton, mailCode, mailRows, mailShell, mailText, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
-import { route } from "../_shared/notify-routing.js";
+import { planNotice, type PlanNoticeResult } from "../_shared/plan-notice.ts";
+import { slackConfigured, slackDeliver } from "../_shared/slack.ts";
 import { notifySettings } from "../_shared/notify-settings.ts";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
@@ -46,7 +47,8 @@ const TURNSTILE_SECRET = Deno.env.get("LEADERS_TURNSTILE_SECRET") || "";
 const TURNSTILE_SITE = Deno.env.get("LEADERS_TURNSTILE_SITE_KEY") || "";
 // إشعار الخطة المقدَّمة (D14): بدل Lambda في us-east-1، من هنا وبأقل بيانات
 // المستقبل المستشار (MATRIX_NOTIFY_EMAIL) ببريد لكل خطة كما كان (ملخص المستشار لاحقًا بقرار المالك). وبلاه يصل المالك بجدول
-// التوجيه (matrix_plan، معلوماتي): يدخل الملخص اليومي بعدده ورابطه، ولا بريد لكل تسليم إلا إن قرره الجدول
+// التوجيه (matrix_plan، معلوماتي): يدخل الملخص اليومي بعدده ورابطه، أو سطر Slack إن قرره الجدول (والبريد احتياطه إن لم يصل)،
+// ولا بريد لكل تسليم إلا إن قرره الجدول (_shared/plan-notice.ts)
 const ADVISOR_EMAIL = Deno.env.get("MATRIX_NOTIFY_EMAIL") || "";
 const NOTIFY_EMAIL = ADVISOR_EMAIL || Deno.env.get("LEADERS_ALERT_EMAIL") || "";
 const ADMIN_URL = SITES.admin;
@@ -155,23 +157,30 @@ async function networkLimit(sb: SB, ip: string | null): Promise<Response | null>
   return json({ success: false, code: "rate", message: "طلبات كثيرة اليوم من هذه الشبكة. ادخل بمفتاح المرور، أو حاول غدًا" }, 429);
 }
 
-// إشعار المستشار بخطة مقدَّمة (D14): معرّف الحدث ونوعه والاسم والبريد ورابط اللوحة، بلا جوال ولا تفاصيل الخطة
+// إشعار المستشار بخطة مقدَّمة (D14): معرّف الحدث ونوعه والاسم والبريد ورابط اللوحة، بلا جوال ولا تفاصيل الخطة.
+// وسطر Slack (إن قرره الجدول) ثابت برابط الشاشة وحده، بلا اسم ولا بريد
 async function notifyPlanSubmitted(sb: SB, reg: { id: string; name: string; email: string }) {
-  // سطر السجل يعدّه الملخص اليومي (leaders.audit_log، system.notify): مفتاح الحدث ومعرّف التسجيل وحدهما، بلا اسم ولا بريد
-  await planNoticeLog(sb, reg.id);
-  if (!ADVISOR_EMAIL && !route("matrix_plan", await notifySettings(sb)).email) return;
-  if (!NOTIFY_EMAIL) { console.error("user-api: MATRIX_NOTIFY_EMAIL missing; plan notification skipped"); return; }
-  const html = mailShell("خطة مقدَّمة في مصفوفة التأثير", `
+  const r = await planNotice({
+    settings: await notifySettings(sb), advisor: !!ADVISOR_EMAIL, slackConfigured,
+    slackDeliver: (text) => slackDeliver("alerts", text, { client: sb }),
+    mail: async () => {
+      if (!NOTIFY_EMAIL) { console.error("user-api: MATRIX_NOTIFY_EMAIL missing; plan notification skipped"); return false; }
+      const html = mailShell("خطة مقدَّمة في مصفوفة التأثير", `
 ${mailText("قدّم مشارك خطته النهائية في مصفوفة التأثير، وهي بانتظار مراجعتك.")}
 ${mailRows([["الحدث", "plan_submitted", true], ["المعرّف", reg.id, true], ["الاسم", reg.name], ["البريد", reg.email, true]])}
 ${mailButton(`${ADMIN_URL}/#/matrix`, "افتح الخطة في لوحة الإدارة")}`, { family: "admin", preheader: "خطة مقدَّمة بانتظار مراجعتك", footnote: "" });
-  const r = await sendEmail(sb, NOTIFY_EMAIL, "خطة مقدَّمة في مصفوفة التأثير", html, "notify", `registration:${reg.id}`);
-  if (!r.ok) console.error("user-api: plan notification not sent", r.reason);
+      const m = await sendEmail(sb, NOTIFY_EMAIL, "خطة مقدَّمة في مصفوفة التأثير", html, "notify", `registration:${reg.id}`);
+      if (!m.ok) console.error("user-api: plan notification not sent", m.reason);
+      return m.ok;
+    },
+  });
+  // سطر السجل يعدّه الملخص اليومي (leaders.audit_log، system.notify): مفتاح الحدث ومعرّف التسجيل وما وصل، بلا اسم ولا بريد
+  await planNoticeLog(sb, reg.id, r);
 }
 
-async function planNoticeLog(sb: SB, id: string) {
+async function planNoticeLog(sb: SB, id: string, r: PlanNoticeResult) {
   try {
-    const { error } = await sb.schema("leaders").from("audit_log").insert({ actor_type: "system", actor: "user-api", action: "system.notify", entity: "notify", entity_id: "matrix_plan", after: { ref: `registration:${id}` } });
+    const { error } = await sb.schema("leaders").from("audit_log").insert({ actor_type: "system", actor: "user-api", action: "system.notify", entity: "notify", entity_id: "matrix_plan", after: { ref: `registration:${id}`, ...r } });
     if (error) console.error("user-api: plan notice log", error.message);
   } catch (e) { console.error("user-api: plan notice log", e); }
 }
@@ -468,7 +477,12 @@ Deno.serve(async (req: Request) => {
       if (error) throw error;
       // أول تقديم للخطة: إشعار المستشار من الخادم (D14)، ولا يوقف الرد إن تعذّر
       if (updates.submitted === true && before?.[0] && !before[0].submitted) {
-        await notifyPlanSubmitted(sb, before[0]).catch((e) => console.error("user-api: plan notification", e));
+        // لا ينتظر الرد Slack ولا البريد إن أمكن الإكمال بعده
+        const job = notifyPlanSubmitted(sb, before[0]).catch((e) => console.error("user-api: plan notification", e));
+        // deno-lint-ignore no-explicit-any
+        const rt = (globalThis as any).EdgeRuntime;
+        if (typeof rt?.waitUntil === "function") rt.waitUntil(job);
+        else await job;
       }
       return json({ success: true });
     }

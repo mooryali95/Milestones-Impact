@@ -59,14 +59,16 @@ export async function ownerLoginNotice(d: LoginNoticeDeps, method: string, devic
   const title = device === 'known' ? KNOWN_DEVICE_TITLE : NEW_DEVICE_TITLE;
   const settings = d.settings ?? await notifySettings(d.sb);
   let routed = route(kind, settings);
+  // Slack حسب الصف وحده: ما أطفأه المالك من «التوجيه» لا يُنشر ولو ضُبط Slack
+  const wantSlack = configured && routed.slack;
   if (routed.email) {
     // البريد مقرر من غير نظر إلى Slack (الجهاز الجديد): لا ننتظر Slack
-    if (configured) d.slackPost(line);
+    if (wantSlack) d.slackPost(line);
     await d.mail(title, rows);
-    return { kind, routed: { ...routed, slack: configured } };
+    return { kind, routed: { ...routed, slack: wantSlack } };
   }
-  const delivered = configured ? await d.slackDeliver(line) : false;
-  routed = route(kind, settings, slackStateOf({ delivered, configured }));
+  const delivered = wantSlack ? await d.slackDeliver(line) : false;
+  routed = route(kind, settings, routed.slack ? slackStateOf({ delivered, configured }) : 'ok');
   if (routed.email) await d.mail(title, rows);
   return { kind, routed };
 }

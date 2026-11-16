@@ -115,7 +115,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
     const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
     const mail_queue = hold && rewrite ? await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })) : { sent: 0, deferred: true };
-    const sweeps = { ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
+    // كل خطوة بحارسها: خطوة ترمي لا توقف ما بعدها (الملخص اليومي آخرها، فلا يتأخر ساعة بعطل في غيره)
+    const sweeps = { ...(await E.sweepOffers(b).catch((e) => ({ offers_error: String(e?.message || e) }))),
+      session_reminders: await V.sessionReminders().catch((e) => ({ error: String(e?.message || e) })), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
       pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
       pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
       // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار
@@ -133,8 +135,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
         mail_carryover: await carryoverAlert(hold).catch((e) => ({ alerted: false, error: String(e?.message || e) })),
       } : { mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } }),
       // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
-      slack_hello: await slackHello(db),
-      // الملخص اليومي لإشعارات الإدارة: مرة في اليوم بعد 9:00 بالرياض، لا يُنشر فارغًا، وبريد واحد بدله إن لم يصل Slack
+      slack_hello: await slackHello(db).catch((e) => { console.error('slack hello', e); return 'failed' as const; }),
+      // الملخص اليومي لإشعارات الإدارة: مرة في اليوم في أول تشغيل بعد 9:00 بالرياض (المهمة في الدقيقة 17، فنحو 9:17)، لا يُنشر فارغًا، وبريد واحد بدله إن لم يصل Slack
       daily_digest: await DG.dailyDigest().catch((e) => ({ due: true, error: String(e?.message || e) })),
     };
   },

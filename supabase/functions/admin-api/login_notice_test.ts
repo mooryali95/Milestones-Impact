@@ -146,6 +146,34 @@ Deno.test('جهاز جديد: بريد وSlack معًا، ولا ينتظر Slac
   assertEquals([off.mails, off.posted], [[NEW_DEVICE_TITLE], []]);
 });
 
+Deno.test('صف التوجيه يطفئ Slack: لا سطر ولو ضُبط Slack، والبريد كما يقرره الصف', async () => {
+  // جهاز معروف إلى الملخص وحده: لا سطر فوري ولا بريد
+  const digestOnly = { preset: 'balanced', rows: { owner_login_known_device: { email: false, slack: false, digest: true } } };
+  const k = deps();
+  const rk = await ownerLoginNotice({ ...k.d, settings: digestOnly }, 'passkey', 'known', ROWS);
+  assertEquals([k.posted, k.deliveredLines, k.mails], [[], [], []]);
+  assertEquals([rk.routed.email, rk.routed.slack, rk.routed.digest], [false, false, true]);
+  // جهاز معروف إلى البريد وحده: بريد بلا سطر
+  const mailOnly = { preset: 'balanced', rows: { owner_login_known_device: { email: true, slack: false, digest: false } } };
+  const m = deps();
+  const rm = await ownerLoginNotice({ ...m.d, settings: mailOnly }, 'totp', 'known', ROWS);
+  assertEquals([m.posted, m.deliveredLines, m.mails], [[], [], [KNOWN_DEVICE_TITLE]]);
+  assertEquals(rm.routed.slack, false);
+  // جهاز جديد (مقفل البريد) وSlack مطفأ: البريد وحده
+  const newMail = { preset: 'balanced', rows: { owner_login_new_device: { email: true, slack: false, digest: false } } };
+  const n = deps();
+  const rn = await ownerLoginNotice({ ...n.d, settings: newMail }, 'email', 'new', ROWS);
+  assertEquals([n.posted, n.deliveredLines, n.mails], [[], [], [NEW_DEVICE_TITLE]]);
+  assertEquals([rn.routed.email, rn.routed.slack], [true, false]);
+});
+
+Deno.test('index.ts: بصمة الجهاز من رأس الوكيل الموثوق وحده، لا من x-forwarded-for', async () => {
+  const src = await Deno.readTextFile(new URL('./index.ts', import.meta.url));
+  assert(src.includes('trustedIp: req.headers.get("cf-connecting-ip")?.trim() || ""'));
+  assert(src.includes('loginFingerprint(ctx.trustedIp ?? "", ctx.ua)'));
+  assert(!src.includes('loginFingerprint(ctx.ip'));
+});
+
 Deno.test('سطر Slack: الطريقة والجهاز فقط، بلا بريد ولا عنوان ولا متصفح ولا ستة أرقام', () => {
   for (const m of ['passkey', 'totp', 'email', 'other']) {
     for (const dv of ['known', 'new'] as const) {

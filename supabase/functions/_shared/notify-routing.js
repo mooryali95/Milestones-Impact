@@ -190,10 +190,12 @@ export const SLACK_DOWN_SUBJECT = 'تنبيه: Slack لا يستقبل التن�
 // ── مركز الإعدادات في لوحة الإدارة (المرحلة 4، التصور 6.2) ──
 // كل ما يلي نقي يقرؤه الخادم (التحقق في settings.js والبريد الأمني في settings.ts) واللوحة (قسم «التوجيه») معًا.
 
-// مفتاح دفعة المالك القديم (payment_settings.notify.owner): صف المركز إن حُفظ، وإلا «مفتوح» يبقي البريد مع سطر Slack والملخص
-export function paymentFallback(settings, legacyOwner) {
+// مفتاح دفعة المالك القديم (payment_settings.notify.owner): لا يُقرأ بعد أول حفظ للمركز (saved)، فما حفظه المالك هو القرار
+// ولو طابق صف الدفعة الإعداد الجاهز فلم يُخزَّن (compactRows). وقبل الحفظ: «مفتوح» يبقي البريد مع سطر Slack والملخص
+/** @param {any} settings @param {unknown} legacyOwner @param {boolean} [saved] */
+export function paymentFallback(settings, legacyOwner, saved = false) {
   const s = normalizeSettings(settings);
-  if (legacyOwner !== true) return s;
+  if (legacyOwner !== true || saved === true) return s;
   const rows = { ...s.rows };
   for (const key of ['payment_new', 'payment_refund']) rows[key] ??= { email: true, slack: true, digest: true };
   return { ...s, rows };
@@ -202,7 +204,7 @@ export function paymentFallback(settings, legacyOwner) {
 // تحقق صف واحد كما يُحفظ: قنوات ثلاث منطقية، وما لا يسمح به الحدث لا يُطلب، والصف المقفل لا يُطفأ بريده.
 // يعيد سبب الرفض بالعربية أو null
 export function rowError(key, row) {
-  const e = EVENT_INDEX[key];
+  const e = Object.hasOwn(EVENT_INDEX, key) ? EVENT_INDEX[key] : null;
   if (!e) return 'حدث غير معروف';
   if (!row || typeof row !== 'object' || Array.isArray(row)) return 'صف غير صالح';
   for (const k of Object.keys(row)) if (!CHANNELS.includes(k)) return `قناة غير معروفة: ${k}`;
@@ -214,7 +216,7 @@ export function rowError(key, row) {
 
 // الصفوف المقفلة التي يطفئ بريدها هذا الإدخال (يرفضها الخادم برمز locked_row قبل أي تحقق آخر)
 export const lockedOff = (rows) => Object.entries(rows && typeof rows === 'object' ? rows : {})
-  .filter(([k, r]) => EVENT_INDEX[k]?.locked && !(r && r.email === true)).map(([k]) => k);
+  .filter(([k, r]) => Object.hasOwn(EVENT_INDEX, k) && EVENT_INDEX[k].locked && !(r && r.email === true)).map(([k]) => k);
 
 // المصفوفة الفعلية لكل حدث بإعداد ما (ما يقرره wanted حين يعمل Slack)، وهل عُدّل صفه عن الإعداد الجاهز
 export const matrixOf = (settings) => {
@@ -226,8 +228,8 @@ export const matrixOf = (settings) => {
 export function compactRows(preset, rows) {
   const out = {};
   for (const [key, row] of Object.entries(rows || {})) {
+    if (!Object.hasOwn(EVENT_INDEX, key) || !row || typeof row !== 'object') continue;
     const e = EVENT_INDEX[key];
-    if (!e) continue;
     const base = wanted(e, { preset, rows: {} });
     const r = Object.fromEntries(CHANNELS.map((c) => [c, row[c] === true || (c === 'email' && e.locked)]));
     if (CHANNELS.some((c) => r[c] !== base[c])) out[key] = r;

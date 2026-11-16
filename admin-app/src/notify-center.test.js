@@ -54,6 +54,9 @@ describe('نوع الحقل routing في settings.js', () => {
     expect(cleanGroup('notifications', { preset: 'loud' }).ok).toBe(false);
     expect(cleanGroup('notifications', { digest_hour: 24 }).ok).toBe(false);
     expect(cleanGroup('notifications', { rows: 'x' }).ok).toBe(false);
+    // اسم موروث من النموذج: رفض صريح لا صف تالف يُخزَّن ولا خطأ 500
+    expect(cleanGroup('notifications', { rows: { constructor: { email: false } } }).ok).toBe(false);
+    expect(cleanGroup('notifications', { rows: { constructor: { email: true } } }).ok).toBe(false);
   });
   it('مخزن تالف يعود إلى الافتراضي حقلًا حقلًا، والقراءة في الدوال تطابقه', () => {
     const v = resolveSettings([{ key: 'notifications', value: { preset: 'all', rows: { erase_request: { email: false } }, digest_hour: 'x' } }]).notifications;
@@ -82,6 +85,23 @@ describe('الصفوف الدنيا وما تغير', () => {
     expect(route('payment_new', paymentFallback({}, true), 'ok').email).toBe(true);
     expect(route('payment_new', paymentFallback({}, false), 'ok').email).toBe(false);
     expect(route('payment_new', paymentFallback({ rows: { payment_new: { email: false, slack: true } } }, true), 'ok').email).toBe(false);
+  });
+  it('المفتاح القديم مفتوح ثم حفظ المالك الدفعة بلا بريد: الصف يطابق «متوازن» فيُطوى، ولا يعود البريد بعد الحفظ', () => {
+    const draft = paymentFallback({ preset: 'balanced' }, true, false);
+    expect(route('payment_new', draft, 'ok').email).toBe(true);
+    const rows = compactRows('balanced', { ...draft.rows, payment_new: { email: false, slack: true, digest: true } });
+    expect(rows.payment_new).toBeUndefined();
+    const after = paymentFallback({ preset: 'balanced', rows }, true, true);
+    expect(route('payment_new', after, 'ok').email).toBe(false);
+    expect(route('payment_refund', after, 'ok').email).toBe(true);
+  });
+  it('أسماء موروثة من النموذج ليست أحداثًا: rowError وlockedOff وcompactRows لا تقبلها ولا ترمي', () => {
+    for (const k of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(rowError(k, { email: false })).toBe('حدث غير معروف');
+      expect(rowError(k, { email: true })).toBe('حدث غير معروف');
+    }
+    expect(lockedOff(JSON.parse('{"constructor":{"email":false},"__proto__":{"email":false}}'))).toEqual([]);
+    expect(compactRows('balanced', JSON.parse('{"constructor":{"email":true},"toString":{"slack":true}}'))).toEqual({});
   });
 });
 
