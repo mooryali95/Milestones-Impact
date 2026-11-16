@@ -6,7 +6,7 @@
 // لا إعادة محاولة: الفشل يُسجَّل ويُترك، و429 يوقف النشر حتى Retry-After.
 // كل فئة لها سلسلة واحدة في يوم الرياض: رسالة أم مرة في اليوم، والأحداث ردود فيها. ts الأم في leaders.slack_threads،
 // وغياب الجدول (قبل ترحيله) ينشر بلا سلاسل ويبقى يعمل.
-// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (m***@gmail.com) والدالة.
+// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (m***@gmail.com) والدالة، وتفاصيل التنبيه مطموسة (alertLine).
 
 export type SlackCategory = 'alerts' | 'codes' | 'mail';
 export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: string }> = {
@@ -261,10 +261,38 @@ export function codeLine({ status, purpose, to, source, reason }: { status: keyo
 export function mailLine({ kind, to, source, reason }: { kind: string; to: string; source: string; reason: string }) {
   return [`${kind}`, maskEmail(to), source, reason].join(' · ');
 }
+// تفاصيل التنبيه تأتي من مواضع كثيرة (رسالة خطأ، أو رد مزوّد، أو حقل من الطلب)، فتُطمس قبل النشر: البريد مقنّعًا
+// (maskEmail)، والرمز السري ومفاتيح الواجهات والقيم الطويلة الشبيهة بها، والهاتف (يبقى آخر رقمين)، وأي ستة أرقام
+// متتالية (رمز الدخول). الحقل باسم سرّي (token وsecret وpassword وotp وapi_key وما ينتهي بـ _token أو _secret أو _key)
+// تُطمس قيمته كلها. المعرّفات بشكل UUID والتواريخ والأعداد القصيرة تبقى، فهي ما يدل على موضع العطل
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+const SECRET_RE = /\b(?:xox[a-z]-|sk-|sk_|pk_|rk_|re_|whsec_|ghp_|gho_|github_pat_|eyJ)[A-Za-z0-9._-]{6,}|\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g;
+// طويل بحروف وأرقام معًا: mail_counter_unavailable اسم لا سر
+const LONG_RE = /\b(?=[A-Za-z0-9_]*\d)(?=[A-Za-z0-9_]*[A-Za-z])[A-Za-z0-9_]{24,}\b/g;
+const PHONE_RE = /(?<![\w.:])\+?\d(?:[\s-]?\d){8,14}(?![\w.:])/g;
+const CODE_RE = /(?<!\d)\d{6}(?!\d)/g;
+const SECRET_KEY = /^(?:token|secret|password|passwd|otp|pin|code_value|api_?key|authorization|cookie|signature)$|_(?:token|secret|key)$/i;
+export const MASKED = '[مخفي]';
+export function maskText(t: string) {
+  return String(t)
+    .replace(SECRET_RE, MASKED)
+    .replace(EMAIL_RE, (e) => maskEmail(e))
+    .replace(PHONE_RE, (p) => `${'•'.repeat(4)}${p.replace(/\D/g, '').slice(-2)}`)
+    .replace(LONG_RE, MASKED)
+    .replace(CODE_RE, '••••••');
+}
+function maskDetail(v: unknown, key = '', depth = 0): unknown {
+  if (key && SECRET_KEY.test(key) && v != null && v !== '') return MASKED;
+  if (typeof v === 'string') return maskText(v);
+  if (typeof v === 'number') return Number.isInteger(v) && Math.abs(v) >= 1e5 && Math.abs(v) < 1e7 ? maskText(String(v)) : v;
+  if (depth > 4 || v == null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => maskDetail(x, '', depth + 1));
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, maskDetail(x, k, depth + 1)]));
+}
 export function alertLine(kind: string, detail: Record<string, unknown>) {
   let d = '';
-  try { d = JSON.stringify(detail); } catch { d = ''; }
-  return `*${kind}* ${d}`.slice(0, 1200);
+  try { d = JSON.stringify(maskDetail(detail)); } catch { d = ''; }
+  return `*${maskText(kind)}* ${d}`.slice(0, 1200);
 }
 export const slackCode = (client: Client, o: Parameters<typeof codeLine>[0]) => slackPost('codes', codeLine(o), { client });
 export const slackMail = (client: Client, o: Parameters<typeof mailLine>[0]) => slackPost('mail', mailLine(o), { client });

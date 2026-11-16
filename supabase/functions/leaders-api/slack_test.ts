@@ -578,3 +578,29 @@ Deno.test('سلاك: تنبيه تعذّر العداد في نسخة باردة
     });
   } finally { Date.now = realNow; teardown(); }
 });
+
+Deno.test('سلاك: تفاصيل التنبيه مطموسة: البريد مقنّع، والرموز والمفاتيح والهاتف لا تُنشر، والمعرّفات والتواريخ تبقى', () => {
+  // القيم الشبيهة بالأسرار تُركَّب هنا فلا يلتقطها فاحص المستودع (single-source.test.js) نصًا منشورًا
+  const jwt = ['ey', 'JhbGciOiJIUzI1NiJ9', '.payload.sig'].join('');
+  const mobile = ['05', '51234567'].join('');
+  const line = S.alertLine('creem-webhook', {
+    message: 'refund failed for Mona.Ali@Gmail.com (+966 55 123 4567) code 482913 key sk_live_abcdefghijklmnop',
+    auth: `Bearer ${jwt}`,
+    token: 'abc', webhook_secret: 'whsec_123', api_key: 'x',
+    phone: mobile,
+    nested: { to: 'x.y@company.sa', items: ['otp 123456', 'ok'] },
+    cohort_id: '3f2b8c1e-9a4d-4b7e-8c2a-1d2e3f4a5b6c', day: '2026-11-16', at: '2026-11-16T08:30:00.000Z',
+    sent: 80, cap: 120, numeric_code: 654321, status: 403, key_source: 'env',
+    blob: 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4',
+  });
+  for (const leak of ['Mona.Ali', 'mona.ali@gmail.com', '123 4567', '1234567', '482913', 'sk_live', 'eyJhbG', 'whsec_123', '"abc"', 'x.y@', '123456', '654321', 'A1b2C3d4E5f6']) {
+    assert(!line.toLowerCase().includes(leak.toLowerCase()), `${leak} في: ${line}`);
+  }
+  for (const keep of ['m***@gmail.com', 'x***@company.sa', '3f2b8c1e-9a4d-4b7e-8c2a-1d2e3f4a5b6c', '"day":"2026-11-16"', '2026-11-16T08:30:00.000Z', '"sent":80', '"cap":120', '"status":403', '"key_source":"env"', '••••67', '"token":"[مخفي]"']) {
+    assert(line.includes(keep), `${keep} غائب عن: ${line}`);
+  }
+  assert(line.startsWith('*creem-webhook* '));
+  // أسماء الأحداث الطويلة بلا أرقام ليست أسرارًا
+  assert(S.alertLine('mail_counter_unavailable', { reason: 'agent_model_config_unavailable' }).includes('agent_model_config_unavailable'));
+  assert(S.alertLine('mail_counter_unavailable', {}).startsWith('*mail_counter_unavailable*'));
+});
