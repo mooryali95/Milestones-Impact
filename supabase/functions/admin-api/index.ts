@@ -7,6 +7,7 @@ import {
 import { slackUse } from "../_shared/slack.ts";
 import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
+import { hasSecondFactor } from "../_shared/second_factor.js";
 import { STEP_UP_ACTIONS, stepUp, writeAccess } from "./step_up.ts";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
@@ -490,7 +491,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       return json({ success: false, message: "صلاحية المراقب للقراءة فقط" }, 403);
     }
     // كتابات هذه الدالة بعامل ثانٍ، كحارس الكتابة في leaders-api (requireWrite): جلسة رمز البريد للقراءة
-    if (WRITE_ACTIONS.includes(action) && session.method !== "passkey" && session.method !== "totp") {
+    if (WRITE_ACTIONS.includes(action) && !hasSecondFactor(session.method)) {
       return json({ success: false, code: "reauth_second_factor", message: "هذه العملية تتطلب تأكيدًا بمفتاح مرور أو تطبيق مصادقة: اضغط «فعّل الكتابة» أعلى اللوحة" }, 403);
     }
 
@@ -510,7 +511,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
     // (sec-authn-v-totp-enroll، تدقيق الجاهزية 14 نوفمبر). القاعدة: الجلسة حديثة دائمًا، ومن له عامل ثانٍ لا يسجّل غيره
     // إلا بجلسة عامل ثانٍ (مفتاح أو TOTP)، وحساب بلا عامل ثانٍ (جديد، أو أعاد المالك وصوله) يسجّل أول عامل برمز البريد
     // ويُبلَّغ المالكون بذلك. وكل تفعيل أو تعطيل أو أول مفتاح يصل صاحب الحساب والمالكين ببريد أمني.
-    const SECOND_FACTOR = session.method === "passkey" || session.method === "totp";
+    const SECOND_FACTOR = hasSecondFactor(session.method);
     const totpEnrollBlocked = async () => {
       if (!fresh) return json(STALE, 403);
       if (!SECOND_FACTOR && (await myPasskeys()).length) return json(NEED_PASSKEY, 403);

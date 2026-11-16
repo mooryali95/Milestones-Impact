@@ -12,6 +12,8 @@ function fakeDb(tables: Record<string, Row[]>, fail: Record<string, { code: stri
     let lim = Infinity;
     const run = () => {
       if (fail[t] && op === 'insert') return { data: null, error: fail[t] };
+      // challenge فريد في webauthn_challenges كما في القاعدة: حجز خطوة الرمز يعتمد عليه
+      if (op === 'insert' && t === 'webauthn_challenges' && tables[t].some((r) => r.challenge === payload.challenge)) return { data: null, error: { code: '23505' } };
       if (op === 'insert') { tables[t].push({ id: crypto.randomUUID(), created_at: new Date().toISOString(), ...payload }); return { data: null, error: null }; }
       const rows = tables[t].filter((r) => f.every((x) => x(r)));
       if (op === 'update') { rows.forEach((r) => Object.assign(r, payload)); return { data: rows, error: null }; }
@@ -133,7 +135,7 @@ Deno.test('writeAccess: المراقب لا يكتب أبدًا، والمدير
   assertEquals(writeAccess('admin', 'email'), { can_write: false, can_elevate: true, read_only_reason: 'second_factor' });
   assertEquals(writeAccess('super_admin', 'email'), { can_write: false, can_elevate: true, read_only_reason: 'second_factor' });
   for (const m of ['passkey', 'totp']) for (const r of ['admin', 'super_admin']) assertEquals(writeAccess(r, m), { can_write: true, can_elevate: false, read_only_reason: null });
-  // جلسة قديمة بلا طريقة مسجلة تُعامل كرمز البريد، كحارس الكتابة في admin-api
+  // جلسة قديمة بلا طريقة مسجلة تُعامل كرمز البريد في الحارسين معًا (leaders-api/write_parity_test.ts)
   assertEquals(writeAccess('super_admin', '').can_write, false);
 });
 
@@ -178,4 +180,24 @@ Deno.test('فعّل الكتابة: المراقب مرفوض، وجلسة ال�
   const gone = setup({ tables: { api_sessions: [] } });
   assertEquals((await stepUp('step-up-totp', { purpose: 'write', code: '123456' }, EMAIL, gone.d)).status, 401);
   assertEquals((await stepUp('step-up-totp', { purpose: 'write', code: '123456' }, { ...EMAIL, passkeyOnly: true }, d)).body.code, 'reauth_passkey');
+});
+
+Deno.test('الرمز نفسه في طلبين معًا: جلستا بريد للمدير نفسه، تُرفع إحداهما وحدها، ولو امتلأ سجل التدقيق بمحاولات فاشلة', async () => {
+  const OTHER_HASH = 'b'.repeat(64);
+  const noise = Array.from({ length: 80 }, () => ({ user_id: ADMIN, action: 'step-up', created_at: new Date().toISOString(), meta: { purpose: 'write', ok: false, why: 'challenge' } }));
+  const { tables, d } = setup({ tables: { api_sessions: [sessRow(), { ...sessRow(), token_hash: OTHER_HASH }], admin_audit_log: noise } });
+  const d2 = { ...d, sessionHash: OTHER_HASH };
+  const [a, b] = await Promise.all([
+    stepUp('step-up-totp', { purpose: 'write', code: '123456' }, EMAIL, d),
+    stepUp('step-up-totp', { purpose: 'write', code: '123456' }, EMAIL, d2),
+  ]);
+  assertEquals([a.status, b.status].sort(), [200, 409]);
+  assertEquals(tables.api_sessions.filter((x) => x.meta.method === 'totp').length, 1);
+  // العلامة مستهلكة ومنتهية عند كتابتها: لا يأخذها takeChallenge الحقيقي (consumed_at is null)
+  const mark = tables.webauthn_challenges.find((x) => String(x.challenge).startsWith('totp-step:'));
+  assertEquals([mark?.purpose, mark?.subject, typeof mark?.consumed_at], ['step_up', ADMIN, 'string']);
+  // وغرض المفتاح بعدها بالرمز نفسه replay، ورمز الخطوة التالية يمر
+  assertEquals((await stepUp('step-up-totp', { purpose: 'agent_key', code: '123456' }, SESSION, d)).body.code, 'replay');
+  const next = setup({ step: 1001n, tables: { webauthn_challenges: tables.webauthn_challenges } });
+  assertEquals((await stepUp('step-up-totp', { purpose: 'agent_key', code: '123456' }, SESSION, next.d)).status, 200);
 });

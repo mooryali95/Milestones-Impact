@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
+import { hasSecondFactor } from '../_shared/second_factor.js';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
@@ -69,9 +70,9 @@ export async function adminFromToken(token: unknown): Promise<Admin> {
 }
 
 const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
-// رمز البريد وحده عامل واحد: من دخل به يقرأ، ولا يعدّل بيانات المشاركين
-// حتى يدخل بمفتاح المرور أو تطبيق المصادقة
-export const needsSecondFactor = (a: Admin) => canWrite(a) && a.method === 'email';
+// رمز البريد وحده عامل واحد: من دخل به يقرأ، ولا يعدّل بيانات المشاركين حتى يفعّل الكتابة بمفتاح المرور أو تطبيق
+// المصادقة. والجلسة بلا طريقة مسجلة كذلك، بالقاعدة نفسها التي يحكم بها admin-api في «me» (_shared/second_factor.js)
+export const needsSecondFactor = (a: Admin) => canWrite(a) && !hasSecondFactor(a.method);
 export function requireWrite(a: Admin) {
   if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden');
   if (needsSecondFactor(a)) throw new Fail('التعديل يتطلب تأكيدًا بمفتاح المرور أو تطبيق المصادقة: اضغط «فعّل الكتابة» أعلى اللوحة، ومن لا يملك أحدهما يضيفه من الإعدادات أولًا', 403, 'mfa_required');

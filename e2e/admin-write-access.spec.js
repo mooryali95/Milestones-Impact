@@ -12,19 +12,30 @@ const activities = {
   workshops: [],
 };
 
-async function open(page, { role, method, me }) {
+async function open(page, { role, method, me, passkeys = [], already = false }) {
   const adminCalls = [];
-  const state = { method };
+  const state = { method, meDown: false, expire: false };
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     adminCalls.push(b);
+    if (state.expire && b.token) { state.expire = false; return route.fulfill({ json: { success: false, message: 'انتهت الجلسة، سجّل دخولك مجددًا' }, status: 401 }); }
+    if (b.action === 'login-send') return route.fulfill({ json: { success: true } });
+    // إعادة الدخول بطريقة أخرى: الجلسة الجديدة بطريقتها، و«me» يجيب عنها
+    if (b.action === 'login-verify') {
+      state.method = state.relogin;
+      return route.fulfill({ json: { success: true, token: 'n'.repeat(40), user: { name: 'مدير', email: 'a@x.sa', role_id: role, totp_enabled: true, method: state.relogin } } });
+    }
     if (b.action === 'me') {
+      // بعد التفعيل يتعطل «me»: ما يبقى الكتابة مفتوحة بعد التحديث طريقة الجلسة المحفوظة وحدها
+      if (state.meDown) return route.fulfill({ json: { success: false, message: 'تعذّر' }, status: 500 });
       if (me === 'unknown') return route.fulfill({ json: { success: false, message: 'action غير معروف' }, status: 400 });
       const writer = role === 'admin' || role === 'super_admin';
       const second = state.method === 'passkey' || state.method === 'totp';
       return route.fulfill({ json: { success: true, role, method: state.method, can_write: writer && second, can_elevate: writer && !second, read_only_reason: !writer ? 'role' : second ? null : 'second_factor' } });
     }
-    if (b.action === 'security-status') return route.fulfill({ json: { success: true, passkeys: [], passkey_only: false, method: state.method, totp_enabled: true } });
+    if (b.action === 'security-status') return route.fulfill({ json: { success: true, passkeys, passkey_only: false, method: state.method, totp_enabled: true } });
+    // فُعّلت الكتابة من نافذة أخرى: الخادم يرد «already» بلا خيارات
+    if (already && (b.action === 'step-up-options' || b.action === 'step-up-totp')) { state.method = 'passkey'; return route.fulfill({ json: { success: true, already: true, method: 'passkey' } }); }
     if (b.action === 'step-up-totp') {
       if (b.purpose !== 'write' || b.code !== '123456') return route.fulfill({ json: { success: false, code: 'bad_code', message: 'x' }, status: 403 });
       state.method = 'totp';
@@ -48,14 +59,14 @@ async function open(page, { role, method, me }) {
   }, [role, me === 'unknown' ? null : method]);
   await page.goto(`${ADMIN}#/leaders/activities`);
   await page.reload();
-  return { adminCalls };
+  return { adminCalls, state };
 }
 
 const banner = (page) => page.getByRole('status').filter({ hasText: 'للقراءة فقط' });
 const addSession = (page) => page.getByRole('button', { name: '+ موعد' });
 
 test('جلسة رمز البريد: للقراءة فقط بزر «فعّل الكتابة»، والتأكيد بالرمز يفتح الكتابة في مكانها بلا خروج', async ({ page }) => {
-  const { adminCalls } = await open(page, { role: 'admin', method: 'email' });
+  const { adminCalls, state } = await open(page, { role: 'admin', method: 'email' });
   await expect(banner(page)).toBeVisible();
   await expect(page.getByText('حضور اليومين التدريبيين')).toBeVisible();
   await expect(addSession(page)).toHaveCount(0);
@@ -68,7 +79,10 @@ test('جلسة رمز البريد: للقراءة فقط بزر «فعّل ال
   await expect(banner(page)).toHaveCount(0);
   await expect(addSession(page)).toBeVisible();
   expect(adminCalls.find((c) => c.action === 'step-up-totp')).toMatchObject({ purpose: 'write', code: '123456' });
-  // الطريقة الجديدة محفوظة مع الجلسة: التحديث لا يعيد الشريط
+  // الطريقة الجديدة محفوظة مع الجلسة: التحديث لا يعيد الشريط ولو تعطل «me» بعده
+  const saved = await page.evaluate(() => JSON.parse(sessionStorage.getItem('mi_admin_v3') || '{}').user?.method);
+  expect(saved).toBe('totp');
+  state.meDown = true;
   await page.reload();
   await expect(addSession(page)).toBeVisible();
   await expect(banner(page)).toHaveCount(0);
@@ -91,4 +105,51 @@ test('المراقب: لا كتابة ولا زر «فعّل الكتابة»', 
   await expect(page.getByText('حضور اليومين التدريبيين')).toBeVisible();
   await expect(addSession(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'فعّل الكتابة' })).toHaveCount(0);
+});
+
+test('فُعّلت الكتابة من نافذة أخرى: «فعّل الكتابة» بالبصمة يأخذ «already» فلا يبدأ WebAuthn ولا يظهر خطأ', async ({ page }) => {
+  const { adminCalls } = await open(page, { role: 'admin', method: 'email', passkeys: [{ id: 'k1' }], already: true });
+  await page.evaluate(() => { navigator.credentials.get = () => Promise.reject(new Error('webauthn-called')); });
+  await banner(page).getByRole('button', { name: 'فعّل الكتابة' }).click();
+  const dlg = page.getByRole('dialog', { name: 'فعّل الكتابة في هذه الجلسة' });
+  await dlg.getByRole('button', { name: 'أكّد بالبصمة (مفتاح المرور)' }).click();
+  await expect(dlg).toHaveCount(0);
+  await expect(banner(page)).toHaveCount(0);
+  await expect(addSession(page)).toBeVisible();
+  expect(adminCalls.some((c) => c.action === 'step-up-verify')).toBe(false);
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('mi_admin_v3') || '{}').user?.method)).toBe('passkey');
+});
+
+for (const [from, to, writes] of [['email', 'totp', true], ['passkey', 'email', false]]) {
+  test(`انتهاء الجلسة وإعادة الدخول في النافذة نفسها (${from} ثم ${to}): الشريط والكتابة بحكم الجلسة الجديدة`, async ({ page }) => {
+    const { state } = await open(page, { role: 'super_admin', method: from });
+    await expect(from === 'email' ? banner(page) : addSession(page)).toBeVisible();
+    state.relogin = to;
+    state.expire = true;
+    // أول طلب بعدها (قائمة طلبات التواصل) يرد انتهاء الجلسة فتظهر نافذة إعادة الدخول فوق اللوحة، بلا تحديث للصفحة
+    await page.locator('.ctx-tab[data-ctx="contacts"]').click();
+    const re = page.getByRole('dialog', { name: 'انتهت الجلسة' });
+    await expect(re).toBeVisible();
+    await re.getByRole('button', { name: 'متابعة' }).click();
+    await re.getByLabel('الرمز المكوّن من 6 أرقام').fill('654321');
+    await re.getByRole('button', { name: 'تأكيد الدخول' }).click();
+    await expect(re).toHaveCount(0);
+    // العودة بالعنوان لا بتحميل الصفحة: اللوحة نفسها (المفتاح بالبريد) بلا إعادة تركيب
+    await page.evaluate(() => { window.location.hash = '#/leaders/activities'; });
+    if (writes) {
+      await expect(addSession(page)).toBeVisible();
+      await expect(banner(page)).toHaveCount(0);
+    } else {
+      await expect(banner(page)).toBeVisible();
+      await expect(addSession(page)).toHaveCount(0);
+    }
+  });
+}
+
+test('زر «فعّل الكتابة» على شاشة 390: هدف لمس 44 بكسل على الأقل', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, { role: 'admin', method: 'email' });
+  const box = await banner(page).getByRole('button', { name: 'فعّل الكتابة' }).boundingBox();
+  expect(box.height).toBeGreaterThanOrEqual(44);
+  expect(box.width).toBeGreaterThanOrEqual(44);
 });

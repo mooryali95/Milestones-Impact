@@ -482,6 +482,16 @@
 .mb-reader.theme-night .mb-top { background: rgba(18, 25, 27, .9); border-color: var(--line); color: var(--text); }
 .mb-reader.theme-night .mb-top-t b, .mb-reader.theme-night .mb-inside a, .mb-reader.theme-night .mb-txt h3, .mb-reader.theme-night .mb-txt b, .mb-reader.theme-night .mb-txt .pull { color: var(--graphite); }
 .mb-reader.theme-night .mb-txt .f-compare thead th { background: #0B272F; }
+/* أشكال الكتاب ذات الخلفية الداكنة (السلسلة والهرم والربع المميز في المصفوفة، ودوائر الخطوات والمستوى والدورة) تبقى
+   داكنة في الليلي: --graphite فيه فاتح للنصوص، فيُعاد محليًا على الشكل نفسه وحده، لا على حاويته، فلا يمس نص ما حوله.
+   والعناوين الغامقة داخلها بلونها الأصلي لا بقاعدة b العامة لليلي. وما خلفيته بيضاء ثابتة (أرباع المصفوفة والطبقات)
+   يأخذ ورقة الوضع ونصه في الدافئ والليلي */
+.mb-reader.theme-night :is(.mb-txt .f-chain .node, .mb-txt .f-pyramid .lvl, .mb-txt .f-matrix .q.hi, .mb-txt .steps .dot, .mb-txt .f-cycle .cnode span, .mb-tier-l) { --graphite: #0B272F; }
+.mb-reader.theme-night .mb-txt :is(.f-chain .node, .f-pyramid .lvl) b { color: #fff; }
+.mb-reader.theme-night .mb-txt .f-pyramid .lvl:first-child b { color: var(--ink); }
+.mb-reader.theme-night .mb-txt .f-matrix .q.hi b { color: var(--gold-light); }
+.mb-reader:is(.theme-sepia, .theme-night) .mb-txt .f-matrix .q:not(.hi) { background: var(--sheet); color: var(--slate); border-color: var(--line); }
+.mb-reader:is(.theme-sepia, .theme-night) .mb-txt .f-layers .ly { background: var(--sheet); color: var(--slate); }
 /* العلامة المائية تبقى مقروءة على الوضع الليلي: الرمادي نفسه معكوسًا إلى فاتح */
 .mb-root.theme-night .mb-wm { filter: invert(1); }
 

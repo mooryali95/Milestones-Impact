@@ -1502,4 +1502,5 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 /* شريط «للقراءة فقط» لجلسة رمز البريد (App.jsx): كهرماني لا أحمر، فهو حال الجلسة لا عطل */
 .ro-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 16px; background: var(--st-warn-bg); color: var(--st-warn-text); border-block-end: 2px solid var(--st-warn-text); font-size: .86rem; }
 .ro-banner-text { flex: 1 1 260px; }
-.ro-banner .btn-sm { min-block-size: 36px; }
+/* المخرج الوحيد من وضع القراءة: هدف لمس 44 بكسل على الأقل (WCAG 2.5.5) كأزرار القارئ */
+.ro-banner .btn-sm { min-block-size: 44px; min-inline-size: 44px; }

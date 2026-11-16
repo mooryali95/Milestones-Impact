@@ -8,21 +8,20 @@
 // والغرض «write» (فعّل الكتابة، المرحلة 2 من تصور لوحة الإدارة) يرفع جلسة رمز البريد نفسها إلى عامل ثانٍ: لمدير أو مدير
 // أعلى، بالتحقق نفسه، ونجاحه يكتب طريقة التحقق في meta الجلسة (api_sessions) فيمر بحارسي الكتابة في admin-api وleaders-api.
 // هو مكافئ الدخول بمفتاح المرور أو الرمز من جديد بلا خروج، فلا يُكتب له صف في admin_step_ups (قيد الغرض فيه agent_key وحده).
+// والرمز نفسه لا يُقبل مرتين لأي غرض: خطوته تُحجز ذريًا قبل المنح (step-up-totp أدناه).
 // deno-lint-ignore no-explicit-any
 type SB = any;
+import { hasSecondFactor } from '../_shared/second_factor.js';
 
 export const STEP_UP_TTL_MS = 5 * 60 * 1000;
-// الرمز نفسه لا يُقبل مرتين لهذا المدير خلال نافذته (الخطوة الحالية وجارتاها = 90 ثانية)
-export const TOTP_REPLAY_MS = 90 * 1000;
 export const STEP_UP_PURPOSES = ['agent_key', 'write'];
-const SECOND = new Set(['passkey', 'totp']);
 export const STEP_UP_ACTIONS = ['step-up-options', 'step-up-verify', 'step-up-totp'];
 
-// صلاحية الكتابة الآن لهذه الجلسة: مصدر واحد لرد «me» ولحارس الكتابة، ويطابق requireWrite في leaders-api.
+// صلاحية الكتابة الآن لهذه الجلسة: مصدر واحد لرد «me» ولحارس الكتابة، والعامل الثاني من _shared/second_factor.js كما في requireWrite بـleaders-api.
 // المراقب لا يكتب أبدًا، والمدير بجلسة رمز البريد يقرأ حتى يفعّل الكتابة بعامل ثانٍ (can_elevate)
 export function writeAccess(role: string, method: string) {
   const writer = role === 'admin' || role === 'super_admin';
-  const second = SECOND.has(method);
+  const second = hasSecondFactor(method);
   return { can_write: writer && second, can_elevate: writer && !second, read_only_reason: !writer ? 'role' : second ? null : 'second_factor' };
 }
 
@@ -63,10 +62,10 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
   if (write) {
     if (session.role !== 'admin' && session.role !== 'super_admin') return out({ success: false, code: 'forbidden', message: 'صلاحية المراقب للقراءة فقط' }, 403);
     // جلسة بعامل ثانٍ تكتب أصلًا: لا تحقق ولا كتابة
-    if (SECOND.has(session.method)) return out({ success: true, already: true, method: session.method });
+    if (hasSecondFactor(session.method)) return out({ success: true, already: true, method: session.method });
   } else {
     if (session.role !== 'super_admin') return out({ success: false, code: 'super_required', message: 'التحقق الإضافي للمدير الأعلى وحده' }, 403);
-    if (!SECOND.has(session.method)) {
+    if (!hasSecondFactor(session.method)) {
       return out({ success: false, code: 'reauth_second_factor', message: 'هذه العملية تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة، سجّل خروجك وادخل بأحدهما' }, 403);
     }
     if (!STEP_UP_PURPOSES.includes(purpose)) return out({ success: false, code: 'bad_purpose', message: 'غرض غير معروف' }, 400);
@@ -146,16 +145,21 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
     if (await d.tooManyFails(sb, session.email, d.ip)) return out({ success: false, code: 'rate', message: 'تجاوزت عدد المحاولات، انتظر 15 دقيقة' }, 429);
     const step = await d.matchTotp(String(us[0].totp_secret), String(body.code || ''));
     if (step !== null) {
-      const since = new Date(now - TOTP_REPLAY_MS).toISOString();
-      const { data: used } = await sb.from('admin_step_ups').select('id').eq('admin_id', session.userId).eq('method', 'totp').eq('totp_step', Number(step)).gte('created_at', since).limit(1);
-      // تفعيل الكتابة لا يكتب صفًا في admin_step_ups، فخطوته المقبولة في سجل التدقيق: الرمز نفسه لا يرفع جلسة ثانية ولا يؤكد مفتاحًا
-      const { data: raised } = await sb.from('admin_audit_log').select('meta').eq('user_id', session.userId).eq('action', 'step-up').gte('created_at', since).limit(50);
-      const reused = (raised || []).some((x: { meta?: Record<string, unknown> }) => x.meta?.ok === true && x.meta?.totp_step === Number(step));
-      if (used?.length || reused) {
+      // حجز الخطوة ذري قبل أي منح، للغرضين معًا: صف علامة في webauthn_challenges (challenge فريد) مستهلك ومنتهٍ عند
+      // كتابته فلا يأخذه takeChallenge أبدًا، ولا يشبه تحدي WebAuthn حقيقيًا (لا «:» في base64url). طلبان معًا بالرمز
+      // نفسه، من جلستين أو غرضين، يقبل الفهرس أولهما وحده. الخطوات تتزايد مع الوقت، فالعلامة لا تلزم إلا نافذة الرمز،
+      // ويمسحها purge مع التحديات بعد 90 يومًا. بلا ترحيل: الغرض step_up مسموح في قيد الجدول منذ 20261115230000.
+      const at = new Date(now).toISOString();
+      const { error: held } = await sb.from('webauthn_challenges').insert({
+        scope: 'admin', purpose: 'step_up', subject: session.userId, challenge: `totp-step:${session.userId}:${step}`, expires_at: at, consumed_at: at,
+      });
+      if (held && String(held.code) === '23505') {
         await sb.from('totp_attempts').insert({ email: session.email, success: false, ip: d.ip || null });
         await log(false, 'totp', { why: 'replay' });
         return out({ success: false, code: 'replay', message: 'استُعمل هذا الرمز للتو، انتظر الرمز التالي' }, 409);
       }
+      if (held && MISSING.has(String(held.code))) return out({ success: false, code: 'step_up_unavailable', message: 'لم يُطبَّق ترحيل التحقق الإضافي بعد' }, 503);
+      if (held) throw new Error(`webauthn_challenges: ${held.code}`);
     }
     await sb.from('totp_attempts').insert({ email: session.email, success: step !== null, ip: d.ip || null });
     if (step === null) { await log(false, 'totp', { why: 'code' }); return out({ success: false, code: 'bad_code', message: 'الرمز غير صحيح، أدخل الرمز الحالي من تطبيق المصادقة' }, 403); }

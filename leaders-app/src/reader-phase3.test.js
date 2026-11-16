@@ -121,7 +121,16 @@ describe('السحب ومناطق اللمس', () => {
     expect(inHScroll(document.getElementById('in'), stop)).toBe(true);
     expect(inHScroll(document.getElementById('lv'), stop)).toBe(true);
     expect(inHScroll(document.getElementById('out'), stop)).toBe(false);
-    expect(read('shared/master-book/MasterBook.jsx')).toMatch(/if \(inHScroll\(e\.target, reader\.current\)\)/);
+  });
+  test('عنصر يفيض أفقيًا بـ overflow-x: auto أو scroll لا يقلب الباب، وما يفيض بلا تمرير يقلبه (السلوك في e2e)', () => {
+    document.body.innerHTML = '<div id="r"><div id="w" style="overflow-x:auto"><span id="in">عريض</span></div><div id="h" style="overflow-x:hidden"><span id="hid">مقصوص</span></div><div id="n" style="overflow-x:scroll"><span id="fit">يتسع</span></div></div>';
+    const stop = document.getElementById('r');
+    // jsdom لا يحسب الأبعاد: تُعطى للعنصرين المقيسين
+    for (const id of ['w', 'h']) { const el = document.getElementById(id); Object.defineProperty(el, 'scrollWidth', { value: 900 }); Object.defineProperty(el, 'clientWidth', { value: 360 }); }
+    expect(inHScroll(document.getElementById('in'), stop)).toBe(true);
+    expect(inHScroll(document.getElementById('hid'), stop)).toBe(false);
+    // قابل للتمرير لكنه لا يفيض: السحب يقلب الباب
+    expect(inHScroll(document.getElementById('fit'), stop)).toBe(false);
   });
   test('أزرار القارئ 44 بكسل على الأقل، وخط النسخ مستضاف مع القارئ', () => {
     const css = read('shared/master-book/master-book.css');

@@ -25,6 +25,14 @@ describe('writeState: حكم الخادم أولًا، ولا حجب خاطئ ل
     expect(writeState({ role_id: 'admin', method: 'totp' }, { success: false })).toMatchObject({ canWrite: true });
     expect(writeState({ role_id: 'viewer', method: 'email' }, null)).toMatchObject({ canWrite: false, readOnly: false });
   });
+  it('حكم «me» لطريقة غير طريقة الجلسة الحالية قديم: إعادة الدخول أو التفعيل لا يرثان حكم الجلسة السابقة', () => {
+    // جلسة مفتاح انتهت وأُعيد الدخول برمز البريد: لا كتابة مع أن «me» القديم قال can_write
+    expect(writeState({ ...su, method: 'email' }, { success: true, method: 'passkey', can_write: true, can_elevate: false })).toMatchObject({ canWrite: false, readOnly: true, source: 'session' });
+    // جلسة بريد انتهت وأُعيد الدخول بتطبيق المصادقة: لا شريط
+    expect(writeState({ ...su, method: 'totp' }, { success: true, method: 'email', can_write: false, can_elevate: true })).toMatchObject({ canWrite: true, readOnly: false, source: 'session' });
+    // والطريقة نفسها: حكم الخادم
+    expect(writeState({ ...su, method: 'totp' }, { success: true, method: 'totp', can_write: true, can_elevate: false }).source).toBe('server');
+  });
   it('خادم أقدم بلا «me» وجلسة بلا طريقة: الحكم القديم بالدور، فالمدير الأعلى يكتب', () => {
     expect(writeState(su, { success: false, message: 'action غير معروف' })).toMatchObject({ canWrite: true, readOnly: false, source: 'role' });
     expect(writeState({ role: 'admin' }, { success: true, contacts: [] })).toMatchObject({ canWrite: true, source: 'role' });

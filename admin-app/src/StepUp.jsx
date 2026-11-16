@@ -38,6 +38,8 @@ export default function StepUp({ onDone, onCancel, title, purpose = 'agent_key' 
     try {
       const o = await call('step-up-options', { purpose });
       if (!o.success) throw new Error(stepUpMessage(o));
+      // الجلسة بعامل ثانٍ أصلًا (فُعّلت الكتابة من نافذة أخرى): لا خيارات ولا WebAuthn، والطريقة طريقة الجلسة
+      if (o.already) { setBusy(false); onDone(o.method || 'passkey'); return; }
       const response = await passkeyGet(o.options);
       const v = await call('step-up-verify', { purpose, response });
       if (!v.success) throw new Error(stepUpMessage(v));
@@ -52,7 +54,8 @@ export default function StepUp({ onDone, onCancel, title, purpose = 'agent_key' 
     setBusy(false);
     if (!v.success) return setErr(stepUpMessage(v));
     setCode('');
-    onDone('totp');
+    // «already» يحمل طريقة الجلسة الفعلية (قد تكون مفتاح المرور)، لا طريقة هذا الزر
+    onDone(v.already ? v.method || 'totp' : 'totp');
   };
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>

@@ -140,7 +140,9 @@ describe('P1-02: جلسة رمز البريد لا ترتقي إلى عامل ث
   it('الحراس قبل كتلة TOTP: حداثة دائمًا، ومن له مفتاح لا يسجّل TOTP إلا بجلسة مفتاح أو TOTP', () => {
     expect(a.indexOf('const fresh = ')).toBeLessThan(totp);
     expect(a.indexOf('const myPasskeys = ')).toBeLessThan(totp);
-    expect(a).toContain('const SECOND_FACTOR = session.method === "passkey" || session.method === "totp";');
+    expect(a).toContain('const SECOND_FACTOR = hasSecondFactor(session.method);');
+    // القاعدة نفسها في مصدرها الواحد: مفتاح المرور وتطبيق المصادقة وحدهما (_shared/second_factor.js)
+    expect(read('supabase/functions/_shared/second_factor.js')).toContain("SECOND_FACTOR_METHODS = Object.freeze(['passkey', 'totp'])");
     const gate = block('const totpEnrollBlocked = ', 'const notifyAccountAndOwners = ');
     expect(gate).toMatch(/if \(!fresh\) return json\(STALE, 403\);/);
     expect(gate).toMatch(/if \(!SECOND_FACTOR && \(await myPasskeys\(\)\)\.length\) return json\(NEED_PASSKEY, 403\);/);
@@ -169,7 +171,7 @@ describe('P1-02: جلسة رمز البريد لا ترتقي إلى عامل ث
     expect(u).toContain('if (!fresh) return json(STALE, 403);');
     expect(u).toMatch(/notifyAccountAndOwners\("أُضيف حساب إلى لوحة الإدارة"/);
     expect(u).toMatch(/if \(field === "role_id"\) await notifyAccountAndOwners\("تغيّر دور حساب إدارة"/);
-    expect(a).toMatch(/WRITE_ACTIONS\.includes\(action\) && session\.method !== "passkey" && session\.method !== "totp"/);
+    expect(a).toMatch(/WRITE_ACTIONS\.includes\(action\) && !hasSecondFactor\(session\.method\)/);
   });
   it('إعادة الوصول تحذف مفاتيح الحساب القديمة بمعرّفه القانوني، وطلب الاستعادة يقبل صاحب المفتاح، والزر يظهر له', () => {
     const r = block('if (field === "reset_access")', 'return json({ success: true });');
