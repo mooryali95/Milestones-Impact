@@ -101,14 +101,18 @@ export async function eraseRequest(p: any, b: Body) {
 // ثم يُغلق الطلب برقمه بعد نجاح الحذف وحده، فلا يُغلق طلب لم يُنفذ. note: ما بقي معلقًا (ملفات تعذّر حذفها)
 export async function pendingEraseId(participantId: string) {
   const { data, error } = await db.from('erasure_requests').select('id').eq('participant_id', participantId).eq('status', 'pending').limit(1);
-  if (error) { if (!missingTable(error)) console.error('erasure read:', error.message); return null; }
+  // تعذّر القراءة (غير غياب الجدول) يوقف الحذف قبل أن يبدأ: بعده يصير participant_id فارغًا فلا يُعرف الطلب ولا يُغلق
+  if (error) { if (missingTable(error)) return null; console.error('erasure read:', error.message); throw new Fail('تعذّرت قراءة طلب الحذف. لم يُحذف شيء، حاول بعد قليل', 503, 'busy'); }
   return (data?.[0]?.id as string) ?? null;
 }
+// يعيد true إن أُغلق الطلب أو لم يكن طلب، وfalse إن بقي قائمًا بتعذّر الكتابة (يُبلَّغ ويُعاد في الرد)
 export async function closeOnDelete(requestId: string | null, by: string, note: string | null = null) {
-  if (!requestId) return;
+  if (!requestId) return true;
   const { error } = await db.from('erasure_requests').update({ status: 'done', decided_at: new Date().toISOString(), decided_by: by, ...(note ? { note: note.slice(0, 1000) } : {}) })
     .eq('id', requestId).eq('status', 'pending');
-  if (error && !missingTable(error)) console.error('erasure close:', error.message);
+  if (!error || missingTable(error)) return true;
+  console.error('erasure close:', error.message);
+  return false;
 }
 
 // للوحة: الطلبات القائمة بأقدمها أولًا

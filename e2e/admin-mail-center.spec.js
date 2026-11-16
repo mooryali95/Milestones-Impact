@@ -7,7 +7,7 @@ const center = (over = {}) => ({
   success: true, counter_ok: true, budget: { cap: 80, sent: 46, remaining: 34, pct: 58, codes: 6, nonCode: 40, nonCodeLimit: 40, nonCodeLeft: 0, state: 'share' },
   budget_ar: 'حصة الإشعارات انتهت: رموز الدخول وحدها تخرج، والإشعارات تنتظر في الصندوق', next_free_at: null,
   by_kind: { code: 6, notify: 40 }, by_source: { 'leaders-api': 46 }, blocked_24h: 2, failed_24h: 0, series,
-  queue: [{ id: 'q1', created_at: '2026-11-14T08:00:00Z', kind: 'notify', to_email: 's@x.com', subject: 'موعد جلستك غدًا', attempts: 0, state: 'waiting', eta: '2026-12-20T05:17:00Z', eta_expires: false }],
+  queue: [{ id: 'q1', created_at: '2026-11-14T08:00:00Z', kind: 'notify', to_email: 's@x.com', subject: 'موعد جلستك غدًا', attempts: 0, state: 'waiting', eta: '2099-12-20T05:17:00Z', eta_expires: false }],
   lost: [{ id: 9, at: '2026-11-14T08:00:00Z', kind: 'notify', source: 'leaders-api', status: 'blocked', subject: 'موعد جلستك غدًا', to_domain: 'x.com' }],
   provider: { readable: true, reason: null, domains: [{ name: 'sunkvalue.com', status: 'verified', sender: true }], quota: {}, usage: null },
   retention_days: 180, traceable: true, alert_channel: false, ...over,
@@ -100,14 +100,14 @@ test('المدير غير الأعلى لا يرى زر رابط الدخول، 
 
 test('صندوق «لم يُرسل»: موعد الإرسال المتوقع لكل منتظر، والممسَك، والمؤرخ الذي يُترك، وبلا قاعدة اليومين', async ({ page }) => {
   await setup(page, 'super_admin', { queue: [
-      { id: 'q1', created_at: '2026-11-16T05:27:00Z', kind: 'notify', to_email: 's@x.com', subject: 'اعتُمد مستواك في برنامج القادة', attempts: 0, state: 'waiting', eta: '2026-12-20T05:17:00Z', eta_expires: false },
+      { id: 'q1', created_at: '2026-11-16T05:27:00Z', kind: 'notify', to_email: 's@x.com', subject: 'اعتُمد مستواك في برنامج القادة', attempts: 0, state: 'waiting', eta: '2099-12-20T05:17:00Z', eta_expires: false },
       { id: 'q2', created_at: '2026-11-16T05:00:00Z', kind: 'bulk', to_email: 'r@x.com', subject: 'طلب تقدير من سارة', attempts: 0, state: 'waiting', held: true },
-      { id: 'q3', created_at: '2026-11-16T04:00:00Z', kind: 'bulk', to_email: 'h@x.com', subject: 'جلستك التدريبية بعد ساعة', attempts: 0, state: 'waiting', eta: '2026-12-20T05:17:00Z', eta_expires: true },
+      { id: 'q3', created_at: '2026-11-16T04:00:00Z', kind: 'bulk', to_email: 'h@x.com', subject: 'جلستك التدريبية بعد ساعة', attempts: 0, state: 'waiting', eta: '2099-12-20T05:17:00Z', eta_expires: true },
       { id: 'q4', created_at: '2026-11-12T04:00:00Z', kind: 'bulk', to_email: 'o@x.com', subject: 'جلستك التدريبية غدًا', attempts: 0, state: 'stale' },
     ] });
   await expect(page.getByRole('columnheader', { name: 'يُتوقع إرساله' })).toBeVisible();
   const row = (t) => page.locator('tr', { hasText: t }).locator('td[data-eta]');
-  await expect(row('اعتُمد مستواك')).toHaveText('2026-12-20 نحو 08:17');
+  await expect(row('اعتُمد مستواك')).toHaveText('2099-12-20 نحو 08:17');
   await expect(row('طلب تقدير')).toContainText('ممسَك');
   await expect(row('بعد ساعة')).toContainText('يُترك: يمضي موعده');
   await expect(row('جلستك التدريبية غدًا')).toHaveText('·');

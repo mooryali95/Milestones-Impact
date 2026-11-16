@@ -137,6 +137,12 @@ describe('متى يخرج المنتظر (queueEta)', () => {
     expect(days).toEqual([0, 1, 2, 3, 4]);
     expect(Object.values(eta).every((e) => !e.expires)).toBe(true);
   });
+  it('ما أُرسل بقرار المدير فوق الحصة: أول ما يتحرر يعيد العدد إلى النصيب ولا يفتح مكانًا', () => {
+    // النصيب 40 وأُرسل 46 (ستة بـ«أرسل الآن»): سبعة يجب أن تتحرر قبل أن يخرج المنتظر الأول
+    const sent = Array.from({ length: 46 }, (_, i) => hAgo(23 - i * 0.3));
+    const eta = queueEta([{ id: 'a', kind: 'notify', created_at: hAgo(1) }], { budget: mailBudget({ sent: 50, nonCode: 46 }, 80), nonCodeSent: sent, now });
+    expect(eta.a.at).toBe(new Date(nextDrainAt(Date.parse(sent[6]) + 864e5)).toISOString());
+  });
   it('المؤرخ الذي يمضي موعده قبل دوره يُعلَّم، ولا حصة إطلاقًا: لا موعد', () => {
     const eta = queueEta([{ id: 'x', kind: 'bulk', created_at: hAgo(1), expires_at: new Date(now + 36e5).toISOString() }], { budget: { nonCodeLeft: 0 }, nonCodeSent: [hAgo(2)], now });
     expect(eta.x.expires).toBe(true);

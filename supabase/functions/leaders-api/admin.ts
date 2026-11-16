@@ -494,9 +494,11 @@ export async function participantImpact(b: Body) {
     counts: { assessments, submissions, capstones, certificates, payments, requirements, sessions }, blockers,
   };
 }
-// الترتيب (المرحلة 0 من تصور طلب الحذف): يُلتقط البريد والاسم ورقم الطلب أولًا، ثم يُحذف صف المشارك، فإن فشل لا يُمس
-// شيء (لا ملف ولا طلب). ثم يُغلق الطلب برقمه، وتُحذف الملفات وما ينتظر في طابور البريد له، ثم يصله تأكيد التنفيذ.
-// حذف الملفات بعد الصف: ملف بلا صاحب يُعاد حذفه بتنبيه، وصاحب بلا ملفات مع طلب مغلق لا يُصلح
+// الترتيب (المرحلة 0 من تصور طلب الحذف): يُلتقط البريد والاسم ورقم الطلب وقائمة الملفات ومراجع مقيّميه أولًا، وأي تعذّر
+// في قراءتها يوقف التنفيذ قبل أن يُمس شيء. ثم يُحذف صف المشارك، فإن فشل أو لم يجد صفًّا (حذف متزامن) لا يُمس شيء آخر.
+// ثم يُغلق الطلب برقمه، وتُحذف الملفات وما ينتظر في طابور البريد له، ثم يصله تأكيد التنفيذ.
+// ملف تعذّر حذفه: الطلب يُغلق بملاحظة تسمي مجلده، والتنبيه يحمل مساراته، والتأكيد لا يُرسل (لا يُقال له «حُذفت ملفاتك»
+// وهي باقية)، ويعود عنوانه إلى المدير ليرسله بنفسه بعد حذفها
 export async function participantDelete(a: Admin, b: Body) {
   requireSuper(a);
   const impact = await participantImpact(b);
@@ -504,43 +506,79 @@ export async function participantDelete(a: Admin, b: Body) {
   const { id, email, full_name } = impact.participant;
   if (String(b.confirm_email || '').trim().toLowerCase() !== email) throw new Fail('اكتب بريد المشارك كما هو للتأكيد', 400, 'confirm');
   const request = await pendingEraseId(id);
-  // ملفاته في المخزن الخاص: <id>/<الغرض>/<ملف>. تُجمع قبل الحذف ولا تُحذف إلا بعده
-  const { data: folders } = await storage.from(BUCKET).list(id, { limit: 100 });
-  const paths: string[] = [];
-  for (const f of folders || []) {
-    if (f.id) { paths.push(`${id}/${f.name}`); continue; }
-    const { data: files } = await storage.from(BUCKET).list(`${id}/${f.name}`, { limit: 1000 });
-    for (const x of files || []) if (x.id) paths.push(`${id}/${f.name}/${x.name}`);
-  }
-  const del = await db.from('participants').delete().eq('id', id);
+  const paths = await participantFiles(id);
+  // مقيّموه يُحذفون معه (on delete cascade)، ودعواتهم في الطابور بمرجعهم وتحمل اسمه: تُلتقط مراجعهم قبل الحذف
+  const raters = await db.from('raters').select('id').eq('participant_id', id);
+  if (raters.error) throw new Fail('تعذّرت قراءة مقيّميه. لم يُحذف شيء، والطلب قائم', 503, 'busy');
+  const refs = [`participant:${id}`, ...((raters.data || []) as any[]).map((r) => `rater:${r.id}`)];
+  const del = await db.from('participants').delete().eq('id', id).select('id');
   if (del.error) {
     // شهادة غير سارية (ملغاة أو موقوفة أو مستبدلة) تمنع الحذف بقيدها (on delete restrict)، والمانع لا يعدّ إلا الساري
     if (del.error.code === '23503') throw new Fail('له شهادة ملغاة أو مستبدلة تمنع الحذف. لم يُحذف شيء، والطلب قائم', 409, 'certificate');
     throw new Fail('تعذّر الحذف. لم يُحذف شيء، والطلب قائم', 500, 'db_error');
   }
+  if (!(del.data || []).length) throw new Fail('حُذف هذا المشارك للتو في عملية أخرى', 409, 'gone');
   // ما ينتظر له في طابور البريد يُحذف: لا يخرج إلى من حُذفت بياناته، ولا يبقى عنوانه محفوظًا
-  const purged = await purgeQueuedMail(id, email);
+  const purged = await purgeQueuedMail(email, refs);
   let filesError: string | null = null;
   if (paths.length) {
-    const { error } = await storage.from(BUCKET).remove(paths).catch((e: unknown) => ({ error: e as Error }));
-    if (error) filesError = String((error as Error).message || error).slice(0, 200);
+    const remove = () => storage.from(BUCKET).remove(paths).then((r: any) => r.error, (e: unknown) => e as Error);
+    const err = (await remove()) && (await remove());   // محاولة ثانية لعطل عابر
+    if (err) filesError = String((err as Error).message || err).slice(0, 200);
   }
-  await closeErasure(request, a.email, filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن: ${filesError}` : null);
-  if (filesError) {
-    await alertOps('erase_files_failed', { request, participant: id, files: paths.length, error: filesError }, { key: request || id })
-      .catch((e) => console.error('erase files alert:', e));
+  const closed = await closeErasure(request, a.email, filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن تحت المجلد ${id}/ (${filesError}). تُحذف يدويًّا ثم يُرسل التأكيد للمشارك` : null);
+  if (filesError || !closed) {
+    await alertOps(filesError ? 'erase_files_failed' : 'erase_close_failed', {
+      request, participant: id, ...(filesError ? { files: paths.length, folder: `${id}/`, paths: paths.slice(0, 20).join(' '), error: filesError } : {}),
+      ...(closed ? {} : { request_open: 'طلب الحذف لم يُغلق: يُغلق برقمه في erasure_requests' }),
+    }, { key: request || id }).catch((e) => console.error('erase alert:', e));
   }
-  // تأكيد التنفيذ إلى العنوان الملتقط، خارج الطابور: إن تعذّر يُعاد إلى المدير ليرسله بنفسه
-  const mailed = await sendMail(email, ERASE_DONE_SUBJECT, eraseDoneMail(full_name, new Date().toISOString()), [], { force: true, queue: false })
+  // تأكيد التنفيذ إلى العنوان الملتقط، خارج الطابور، حين حُذف كل شيء: إن تعذّر أو بقيت ملفات يُعاد العنوان إلى المدير
+  const mailed = filesError ? false : await sendMail(email, ERASE_DONE_SUBJECT, eraseDoneMail(full_name, new Date().toISOString()), [], { force: true, queue: false })
     .then(() => true, (e) => { console.error('erase done mail:', e); return false; });
-  await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, request, mailed, queue_purged: purged, ...(filesError ? { files_failed: true } : {}), ...impact.counts });
-  return { success: true, files: paths.length, request, mailed, ...(mailed ? {} : { email }), ...(filesError ? { files_failed: true } : {}) };
+  // الحذف تم ولا رجعة فيه: تعذّر سطر السجل لا يحجب الرد (ففيه العنوان للإرسال اليدوي)، ويُبلَّغ
+  const audited = await audit('admin', a.email, 'participant.delete', 'participants', id, null, { email_hash: await hash(email), files: paths.length, request, request_closed: closed, mailed, queue_purged: purged, ...(filesError ? { files_failed: true } : {}), ...impact.counts })
+    .then(() => true, async (e) => {
+      console.error('participant.delete audit:', e);
+      await alertOps('erase_audit_failed', { participant: id, request }, { key: id }).catch(() => {});
+      return false;
+    });
+  return { success: true, files: paths.length, request, mailed, ...(mailed ? {} : { email }), ...(filesError ? { files_failed: true, folder: `${id}/` } : {}),
+    ...(closed ? {} : { request_open: true }), ...(audited ? {} : { audit_failed: true }) };
 }
-// رسائل الطابور لمشارك حُذف (المنتظرة والمرسلة، فكلها تحفظ عنوانه ومتنه): بعنوانه أو بمرجعه. تعذّر الحذف لا يُفشل التنفيذ ويُسجَّل
-async function purgeQueuedMail(id: string, email: string) {
-  const del = (col: string, v: string) => db.from('mail_queue').delete().eq(col, v).select('id')
-    .then((r: any) => { if (r.error) { console.error('mail_queue purge:', r.error.message); return 0; } return (r.data || []).length; }, () => 0);
-  return (await del('to_email', email)) + (await del('ref', `participant:${id}`));
+// ملفاته في المخزن الخاص: <id>/<الغرض>/<ملف>، بالصفحات. تعذّر القراءة يوقف الحذف قبل أن يبدأ: قائمة فارغة بالخطأ
+// تعني ملفات بلا صاحب لا يُنبَّه إليها
+const LIST_PAGE = 1000;
+async function listAll(path: string) {
+  const out: any[] = [];
+  for (let offset = 0; ; offset += LIST_PAGE) {
+    const { data, error } = await storage.from(BUCKET).list(path, { limit: LIST_PAGE, offset });
+    if (error) throw new Fail('تعذّرت قراءة ملفاته في المخزن. لم يُحذف شيء، والطلب قائم', 503, 'storage');
+    out.push(...(data || []));
+    if ((data || []).length < LIST_PAGE) return out;
+  }
+}
+async function participantFiles(id: string) {
+  const paths: string[] = [];
+  for (const f of await listAll(id)) {
+    if (f.id) { paths.push(`${id}/${f.name}`); continue; }
+    for (const x of await listAll(`${id}/${f.name}`)) if (x.id) paths.push(`${id}/${f.name}/${x.name}`);
+  }
+  return paths;
+}
+// رسائل الطابور لمشارك حُذف (المنتظرة والمرسلة، فكلها تحفظ عنوانه ومتنه): بمرجعه ومراجع مقيّميه، وبعنوانه ما لا مرجع له.
+// ما يحمل عنوانه بمرجع كيان آخر (هو مقيّم لغيره، أو منسق) لا يُمس: ليس من بياناته في البرنامج. وإن كان العنوان لخبير
+// أو منسق قائم فما لا مرجع له يبقى (عروض الخبراء بلا مرجع). تعذّر الحذف لا يُفشل التنفيذ ويُسجَّل
+async function purgeQueuedMail(email: string, refs: string[]) {
+  const count = (r: any) => { if (r.error) { console.error('mail_queue purge:', r.error.message); return 0; } return (r.data || []).length; };
+  let n = await db.from('mail_queue').delete().in('ref', refs).select('id').then(count, () => 0);
+  // journey-guard: يُسأل هل العنوان لخبير قائم فقط، لحفظ بريده في الطابور، لا ترشيح فيه ولا عرض
+  const [xp, co] = await Promise.all([
+    db.from('experts').select('id').eq('email', email).limit(1).then((r: any) => (r.error ? null : (r.data || []).length > 0), () => null),
+    db.from('org_coordinators').select('id').eq('email', email).limit(1).then((r: any) => (r.error ? null : (r.data || []).length > 0), () => null),
+  ]);
+  if (xp === false && co === false) n += await db.from('mail_queue').delete().eq('to_email', email).is('ref', null).select('id').then(count, () => 0);
+  return n;
 }
 
 // قائمة المراجعة: كل ما أرسله المشاركون وينتظر قرار المستشار

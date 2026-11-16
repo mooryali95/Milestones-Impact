@@ -107,12 +107,14 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(read('supabase/functions/leaders-api/tracking.ts')).toMatch(/\{ kind: 'bulk', ref: `participant:/);
     expect(read('supabase/functions/admin-api/index.ts')).toMatch(/otpHtml\(code\), "code"\)/);
   });
-  it('المهمة الساعية تفرغ الطابور بعد سر المجدول، وتكتب العلامة بعد نجاح الإرسال وحده', () => {
+  it('المهمة الساعية تفرغ الطابور بعد سر المجدول وقبل ما يولّده المسح من بريد، وتكتب العلامة بعد نجاح الإرسال وحده', () => {
     const idx = read('supabase/functions/leaders-api/index.ts');
-    expect(idx).toMatch(/'cron\.expert-offers': async \(b\) => \(\{ \.\.\.\(await E\.sweepOffers\(b\)\)[\s\S]*mail_queue: await drainMailQueue\(40, hold, rewrite\)/);
+    expect(idx).toMatch(/'cron\.expert-offers': async \(b\) => \{\s*if \(!secretEquals\(b\.secret, CONFIG\.cronSecret\)\) throw[\s\S]*await drainMailQueue\(40, hold, rewrite\)[\s\S]*await E\.sweepOffers\(b\)[\s\S]*await Y\.payReminders\(\)[\s\S]*await FB\.sweep\(\)/);
     const core = read('supabase/functions/leaders-api/core.ts');
-    expect(core).toMatch(/if \(r\.ok\) \{ await db\.from\('mail_queue'\)\.update\(\{ sent_at:/);
-    expect(core).toMatch(/if \(r\.reason === 'mail_cap' \|\| r\.reason === 'mail_share'\) break;/);
+    // المطالبة بالرسالة قبل الإرسال (sent_at بشرط الانتظار)، وتعذّر الإرسال يعيدها إلى الانتظار
+    expect(core).toMatch(/update\(\{ sent_at: new Date\(\)\.toISOString\(\) \}\)\.eq\('id', id\)\.is\('sent_at', null\)\.is\('gave_up_at', null\)/);
+    expect(core).toMatch(/if \(!\(await claimQueued\(m\.id\)\)\) continue;[\s\S]*sendCounted\(db, m\.to_email/);
+    expect(core).toMatch(/if \(r\.reason === 'mail_cap' \|\| r\.reason === 'mail_share'\) \{ await releaseQueued\(m\.id\); break; \}/);
   });
   it('دعوة المقيّم تحمل معرّفه فتُحسب نسب الاستجابة، ولا عنوان كامل في السجل', () => {
     expect(read('supabase/functions/leaders-api/impact.ts')).toMatch(/\{ ref: `rater:\$\{saved\.id\}` \}/);

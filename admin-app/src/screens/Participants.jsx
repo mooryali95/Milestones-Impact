@@ -2,6 +2,7 @@
 // المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { deleteFollowUp } from '../erase-follow.js';
 import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
@@ -329,14 +330,18 @@ function StageOverride({ s, onPick }) {
 
 // حذف مشارك بأثر: ما سيُمحى معه، وما يمنعه (شهادة سارية أو دفع مؤكد)؛ للمدير الأعلى بكتابة البريد
 function PersonDanger({ p, onDeleted }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [open, setOpen] = useState(false);
   const [impact, setImpact] = useState(null);
   const [typed, setTyped] = useState('');
   useEffect(() => { if (open && !impact) L('admin.participant-impact', { participant_id: p.id }).then(setImpact); }, [open, impact, p.id]);
   const remove = async () => {
     const r = await L('admin.participant-delete', { participant_id: p.id, confirm_email: typed });
-    if (r.success) { toast('حُذف المشارك'); onDeleted(); } else toast(r.message);
+    if (!r.success) return toast(r.message);
+    // ما بقي عليه في نافذة لا تختفي وحدها: فيها العنوان الوحيد الباقي لإرسال التأكيد يدويًّا
+    const follow = deleteFollowUp(r);
+    if (follow) await confirm(follow, { ok: 'فهمت' }); else toast('حُذف المشارك');
+    onDeleted();
   };
   const c = impact?.counts || {};
   return (

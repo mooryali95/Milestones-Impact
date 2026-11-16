@@ -45,18 +45,20 @@ export function splitForApproval(rows = []) {
 
 // أثر البريد قبل التنفيذ: كم يخرج الآن وكم ينتظر في صندوق «لم يُرسل»، ومتى يُتوقع أن يخرج آخره.
 // بريد الاعتماد إشعار (notify)، فيحكمه نصيب غير الرموز من السقف (mailBudget.nonCodeLeft) لا السقف الكلي، ويُقدَّر
-// موعد المنتظر بالحساب نفسه الذي يعرضه مركز البريد (queueEta)
-/** @param {number} count @param {{ budget?: any, nonCodeSent?: string[], now?: number }} o */
-export function mailForecast(count, { budget = {}, nonCodeSent = [], now = Date.now() } = {}) {
+// موعد المنتظر بالحساب نفسه الذي يعرضه مركز البريد (queueEta). waiting: إشعارات تنتظر في الطابور قبلها، فتأخذ ما يتحرر أولًا
+/** @param {number} count @param {{ budget?: any, nonCodeSent?: string[], waiting?: number, now?: number }} o */
+export function mailForecast(count, { budget = {}, nonCodeSent = [], waiting = 0, now = Date.now() } = {}) {
   const n = Math.max(0, Number(count) || 0);
   const nowCount = Math.min(n, Math.max(0, budget.nonCodeLeft ?? 0));
   const queued = n - nowCount;
-  if (!queued) return { now: nowCount, queued: 0, clear_at: null };
-  // ما يخرج الآن يأخذ ما بقي من الحصة ويحرر مكانه بعد 24 ساعة كغيره، والمنتظر يأخذ ما يتحرر بعده
+  const ahead = Math.max(0, Number(waiting) || 0);
+  if (!queued) return { now: nowCount, queued: 0, clear_at: null, ahead };
+  // ما يخرج الآن يأخذ ما بقي من الحصة ويحرر مكانه بعد 24 ساعة كغيره، والمنتظر قبلها ثم الجديد يأخذان ما يتحرر بعده
   const sentNow = Array.from({ length: nowCount }, () => new Date(now).toISOString());
-  const rows = Array.from({ length: queued }, (_, i) => ({ id: String(i), kind: 'notify', created_at: new Date(now + i).toISOString() }));
-  const eta = queueEta(rows, { nonCodeSent: [...nonCodeSent, ...sentNow], budget: { nonCodeLeft: 0 }, now });
-  return { now: nowCount, queued, clear_at: eta[String(queued - 1)]?.at ?? null };
+  const rows = Array.from({ length: ahead + queued }, (_, i) => ({ id: String(i), kind: 'notify', created_at: new Date(now - ahead + i).toISOString() }));
+  const nonCode = Math.max(Number(budget.nonCode ?? 0), 0) + nowCount;
+  const eta = queueEta(rows, { nonCodeSent: [...nonCodeSent, ...sentNow], budget: { nonCodeLeft: 0, nonCodeLimit: budget.nonCodeLimit, nonCode: budget.nonCodeLimit == null ? undefined : nonCode }, now });
+  return { now: nowCount, queued, clear_at: eta[String(ahead + queued - 1)]?.at ?? null, ahead };
 }
 
 // ── المرحلة 2: اعتماد المحددين بمستوى واحد (للمدير العام، بتعليل إلزامي) ──

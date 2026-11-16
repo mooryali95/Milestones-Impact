@@ -20,7 +20,8 @@ export function mailLine(mail, read = true) {
   if (!read) return `تعذّرت قراءة حصة البريد الآن: ما لا يتسع له اليوم ينتظر في صندوق «لم يُرسل» ويخرج آليًّا. ${app}`;
   const total = mail.now + mail.queued;
   if (!mail.queued) return `سيصل ${total} بريدًا الآن، بريد الاعتماد بخطوته التالية. ${app}`;
-  return `سيصل ${total} بريدًا: ${mail.now} الآن، والباقي ${mail.queued} ينتظر في صندوق «لم يُرسل» لامتلاء حصة الإشعارات، ويخرج آليًّا، آخره ${etaAr(mail.clear_at)}. ${app}`;
+  const ahead = mail.ahead ? ` بعد ${mail.ahead} إشعارًا ينتظر قبله` : '';
+  return `سيصل ${total} بريدًا: ${mail.now} الآن، والباقي ${mail.queued} ينتظر في صندوق «لم يُرسل» لامتلاء حصة الإشعارات، ويخرج آليًّا${ahead}، آخره ${etaAr(mail.clear_at)}. ${app}`;
 }
 
 const DIMS = ['milestone', 'impact', 'leadership'];

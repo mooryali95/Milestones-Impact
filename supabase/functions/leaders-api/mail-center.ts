@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // القراءة من العداد الموحد leaders.mail_events (D15) وطابور leaders.mail_queue. السجل بلا عناوين ولا متون:
 // البحث بعنوان يمر ببصمته (addressHash)، والمتن يُقرأ من الطابور وحده (ما حُجب فانتظر).
-import { alertOps, all, audit, CONFIG, db, Fail, hash, must, randomCode, randomToken } from './core.ts';
+import { alertOps, all, audit, claimQueued, CONFIG, db, Fail, hash, must, randomCode, randomToken, releaseQueued } from './core.ts';
 import { isEmail } from './logic.js';
 import { heldMail, mailRewrite } from './features.ts';
 import { requireSuper, requireWrite } from './admin.ts';
@@ -148,10 +148,16 @@ export async function queueSend(a: Admin, b: Body) {
   requireWrite(a);
   const m = await queued(b.id);
   if (m.sent_at) throw new Fail('أُرسلت من قبل', 409, 'done');
+  // المطالبة بها قبل الإرسال: التفريغ الساعي قد يكون يرسلها الآن من دفعة قرأها، فلا تخرج مرتين.
+  // المتروكة («فات أوانه» أو بعد المحاولات) تُعاد إلى الانتظار أولًا بشرط أنها لم تُرسل، ثم يُطالب بها
+  if (m.gave_up_at) await db.from('mail_queue').update({ gave_up_at: null, last_error: null }).eq('id', m.id).is('sent_at', null);
+  if (!(await claimQueued(m.id))) throw new Fail('أُرسلت من قبل أو يرسلها الطابور الآن', 409, 'done');
   // قرار صريح من المدير: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي
   const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, force: true, alert: alertOps });
-  if (!r.ok) throw new Fail(r.reason === 'mail_cap' ? 'السقف اليومي ممتلئ: انسخ نص الرسالة وأرسلها بنفسك، أو انتظر تحرر الحصة' : 'تعذّر الإرسال الآن', r.reason === 'mail_cap' ? 429 : 502, r.reason);
-  await db.from('mail_queue').update({ sent_at: new Date().toISOString(), gave_up_at: null, last_error: null }).eq('id', m.id);
+  if (!r.ok) {
+    await releaseQueued(m.id, m.gave_up_at ? { gave_up_at: m.gave_up_at, last_error: m.last_error } : {});
+    throw new Fail(r.reason === 'mail_cap' ? 'السقف اليومي ممتلئ: انسخ نص الرسالة وأرسلها بنفسك، أو انتظر تحرر الحصة' : 'تعذّر الإرسال الآن', r.reason === 'mail_cap' ? 429 : 502, r.reason);
+  }
   await audit('admin', a.email, 'mail.queue-send', 'mail_queue', m.id, null, { subject: m.subject });
   return { success: true };
 }

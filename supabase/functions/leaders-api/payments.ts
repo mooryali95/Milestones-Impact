@@ -6,7 +6,7 @@
 // الحساب أولًا ثم الدفع: صفحة الدفع تُنشأ من الخادم باسم المشارك ومعرّفه، والحق لا يُكتب إلا من إشعار Creem
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
-import { alertOps, audit, CONFIG, db, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
+import { alertOps, audit, CONFIG, db, expiresIn, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
 import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
@@ -333,7 +333,7 @@ export async function payReminders(now = Date.now()) {
     if (count) continue;
     if (!(await programPaymentDue(p.id))) continue;
     await audit('system', 'payments', 'payment.reminder', 'participants', p.id, null, { day: due });
-    await sendMail(p.email, 'مسارك المعتمد بانتظارك', payReminderMail(p.full_name, days), [], { ref: `participant:${p.id}` }).catch((e) => console.error('pay reminder', e));
+    await sendMail(p.email, 'مسارك المعتمد بانتظارك', payReminderMail(p.full_name, days), [], { ref: `participant:${p.id}`, expiresAt: expiresIn(24) }).catch((e) => console.error('pay reminder', e));
     sent++;
   }
   return { sent };
@@ -575,7 +575,7 @@ export async function adminPaymentRemind(a: Admin, b: Body) {
   if (pay.reminded_at && Date.now() - Date.parse(pay.reminded_at) < REMIND_GAP_HOURS * 36e5) throw new Fail(`ذُكِّر خلال آخر ${REMIND_GAP_HOURS} ساعة`, 409, 'recent');
   const who = await payerOf(pay);
   if (!who.email) throw new Fail('لا بريد لهذا العميل');
-  await sendMail(who.email, 'دفعك لم يكتمل', paymentAbandonMail(who.name, ITEM_AR[pay.item as Item]), [], { ref: `participant:${pay.participant_id}` });
+  await sendMail(who.email, 'دفعك لم يكتمل', paymentAbandonMail(who.name, ITEM_AR[pay.item as Item]), [], { ref: `participant:${pay.participant_id}`, expiresAt: expiresIn(24) });
   await saveLedger(pay.id, { reminded_at: new Date().toISOString() });
   await audit('admin', a.email, 'payment.remind', 'payments', pay.id);
   return { success: true };

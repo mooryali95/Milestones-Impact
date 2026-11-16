@@ -78,10 +78,11 @@ Deno.test('الطابور: حجب الحصة يوقف التفريغ عند أو
     await withMail(() => withNet(async () => {
       const r: any = await drainMailQueue();
       assertEquals([r.sent, r.pending], [0, 3]);
-      // محاولة واحدة حُجبت وسُجّلت، ولا كتابة على الطابور
+      // محاولة واحدة حُجبت وسُجّلت، والرسالة التي طولب بها عادت إلى الانتظار بلا محاولة تُعد
       assertEquals(w.writes.filter((x) => x.table === 'mail_events').length, 1);
-      assertEquals(w.writes.filter((x) => x.table === 'mail_queue'), []);
-      assertEquals(tables.mail_queue.map((m) => m.attempts), [0, 0, 0]);
+      const qw = w.writes.filter((x) => x.table === 'mail_queue');
+      assertEquals([qw.length, typeof qw[0].value.sent_at, qw[1].value], [2, 'string', { sent_at: null }]);
+      assertEquals(tables.mail_queue.map((m) => [m.attempts, m.sent_at]), [[0, null], [0, null], [0, null]]);
     }));
   } finally { w.restore(); }
 });
@@ -100,14 +101,17 @@ Deno.test('الطابور: بريد 360 الممسَك يبقى ممسَكًا �
   } finally { w.restore(); }
 });
 
-Deno.test('الطابور قبل ترحيل الموعد: القراءة بلا expires_at، ولا شيء ينتهي، والإدراج يعاد بلا العمود', async () => {
+Deno.test('الطابور قبل ترحيل الموعد: القراءة بلا expires_at، وقاعدة اليومين القديمة للإشعار كما كانت، والإدراج يعاد بلا العمود', async () => {
   const noCol = (_t: string, op: { kind: string; cols?: string; value?: any }) =>
     (op.kind === 'select' && op.cols?.includes('expires_at')) || (op.kind === 'insert' && op.value && 'expires_at' in op.value) ? { code: '42703', message: 'column mail_queue.expires_at does not exist' } : null;
-  const tables: Record<string, Row[]> = { mail_queue: [q('a', { created_at: hoursAgo(80) })], mail_events: [], audit_log: [] };
+  const tables: Record<string, Row[]> = { mail_queue: [q('a', { created_at: hoursAgo(80) }), q('n', { created_at: hoursAgo(5) }), q('c', { kind: 'bulk', created_at: hoursAgo(80) })], mail_events: [], audit_log: [] };
   const w = installFake(tables, { fail: (t, op) => (t === 'mail_queue' ? noCol(t, op) : null) });
   try {
     await withMail(() => withNet(async () => {
-      assertEquals((await drainMailQueue()).sent, 1);
+      // سلوك الإنتاج قبل الترحيل لا يتغير: الإشعار بعد يومين يُترك، والأحدث والجماعي يخرجان
+      const r: any = await drainMailQueue();
+      assertEquals([r.sent, r.expired], [2, 1]);
+      assertEquals(Object.fromEntries(tables.mail_queue.map((m) => [m.id, state(m)])), { a: 'gave_up:stale', n: 'sent', c: 'sent' });
       assertEquals(await enqueueMail('b@x.sa', 'تذكير', '<p>x</p>', null, 'bulk', 'mail_share', hoursAgo(-5)), true);
       const row = tables.mail_queue.find((m) => m.to_email === 'b@x.sa')!;
       assertEquals([row.reason, 'expires_at' in row], ['mail_share', false]);
@@ -185,10 +189,58 @@ Deno.test('المرسلون المؤرخون يمررون موعدهم، وال�
   assertEquals('QUEUE_STALE_HOURS' in core, false);
 });
 
-Deno.test('ترحيل 20261116140000: الإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير، لا لعروض الخبراء', async () => {
+Deno.test('ترحيل 20261116140000: حاجب للنشر، ويحذف ما بقي لمحذوف، والإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير وحده', async () => {
   const sql = await Deno.readTextFile(new URL('../../migrations/20261116140000_leaders_mail_queue_expiry.sql', import.meta.url));
-  const rescue = sql.match(/update leaders\.mail_queue set gave_up_at = null, last_error = null[\s\S]*?;/)?.[0] || '';
-  for (const c of ["sent_at is null", "last_error = 'stale'", "kind = 'notify'", 'expires_at is null', "gave_up_at >= now() - interval '7 days'", "subject not like 'طلب خدمة:%'"]) assertEquals([c, rescue.includes(c)], [c, true]);
+  const rescue = sql.match(/update leaders\.mail_queue q set gave_up_at = null, last_error = null[\s\S]*?;/)?.[0] || '';
+  for (const c of ["q.sent_at is null", "q.last_error = 'stale'", "q.kind = 'notify'", 'q.expires_at is null', "q.gave_up_at >= now() - interval '7 days'",
+    "not like 'طلب خدمة:%'", "not like 'اتصال فوري:%'", "'دخول جديد إلى حسابك'", "'أُضيف مفتاح مرور إلى حسابك'", "'مسارك المعتمد بانتظارك'", "'دفعك لم يكتمل'",
+    'exists (select 1 from leaders.participants p', 'exists (select 1 from leaders.raters r']) assertEquals([c, rescue.includes(c)], [c, true]);
+  // ما بقي لمشارك أو مقيّم لم يعد موجودًا يُحذف قبل الإنقاذ
+  const purge = sql.match(/delete from leaders\.mail_queue q[\s\S]*?;/)?.[0] || '';
+  assertEquals([purge.includes("q.ref like 'participant:%' and not exists"), purge.includes("q.ref like 'rater:%' and not exists"), sql.indexOf(purge) < sql.indexOf(rescue)], [true, true, true]);
   assertEquals(sql.includes('add column if not exists expires_at timestamptz'), true);
-  assertEquals(sql.startsWith('-- deploy-gate: tolerant'), true);
+  assertEquals(/^--\s*deploy-gate:/m.test(sql.split('\n').slice(0, 15).join('\n')), false);
+});
+
+Deno.test('الإشعار الذي لا معنى له متأخرًا يحمل موعده: الاتصال الفوري، والتنبيه الأمني، وتذكير الدفع', async () => {
+  const read = (f: string) => Deno.readTextFile(new URL(`./${f}`, import.meta.url));
+  const [act, pay, part, pk] = await Promise.all(['activities.ts', 'payments.ts', 'participant.ts', 'passkeys.ts'].map(read));
+  assertEquals(/اتصال فوري[\s\S]{0,600}expiresAt: new Date\(now\.getTime\(\)/.test(act), true);
+  assertEquals((pay.match(/expiresAt: expiresIn\(24\)/g) || []).length, 2);
+  assertEquals(part.includes("newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { expiresAt: expiresIn(24) })"), true);
+  assertEquals(pk.includes("[], { expiresAt: expiresIn(24) })"), true);
+});
+
+Deno.test('المطالبة قبل الإرسال: ما أرسله المدير بعد قراءة الدفعة لا يرسله التفريغ ثانية، والمطالبة الثانية تُرفض', async () => {
+  const tables: Record<string, Row[]> = { mail_queue: [q('x', { created_at: hoursAgo(3) }), q('y', { created_at: hoursAgo(2) })], mail_events: [], audit_log: [] };
+  const w = installFake(tables);
+  const fakeFrom = (core.db as any).from;
+  // المدير يضغط «أرسل الآن» على x بعد أن قرأ التفريغ دفعته
+  let read = false;
+  (core.db as any).from = (t: string) => {
+    const b = fakeFrom(t);
+    if (t !== 'mail_queue' || read) return b;
+    const then = b.then;
+    b.then = (ok: any, bad: any) => then((r: any) => { if (Array.isArray(r?.data) && r.data.some((m: Row) => 'html' in m)) { read = true; tables.mail_queue[0].sent_at = new Date().toISOString(); } return ok(r); }, bad);
+    return b;
+  };
+  try {
+    await withMail(() => withNet(async (calls) => {
+      assertEquals((await drainMailQueue()).sent, 1);
+      assertEquals(resendCalls(calls).map((c) => c.body.subject), ['رسالة y']);
+      assertEquals([await core.claimQueued('y'), await core.claimQueued('x')], [false, false]);
+    }));
+  } finally { w.restore(); }
+});
+
+Deno.test('المطالبة: تعذّر الإرسال يعيد الرسالة إلى الانتظار بمحاولتها', async () => {
+  const tables: Record<string, Row[]> = { mail_queue: [q('f')], mail_events: [], audit_log: [] };
+  const w = installFake(tables);
+  try {
+    await withMail(() => withNet(async () => {
+      await drainMailQueue();
+      assertEquals([tables.mail_queue[0].sent_at, tables.mail_queue[0].attempts, state(tables.mail_queue[0])], [null, 1, 'waiting']);
+      assertEquals(await core.claimQueued('f'), true);
+    }, { resendStatus: 500 }));
+  } finally { w.restore(); }
 });

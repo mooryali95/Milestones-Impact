@@ -260,24 +260,38 @@ export const QUEUE_MAX_ATTEMPTS = 5;
 // hold: رسائل تُمسك فلا تُرسل ولا تُعد محاولة (بريد ميزة مطفأة، heldMail في features.ts)، ويُقرأ بعددها زيادةً فلا تحجب ما بعدها
 // rewrite: نص الرسالة كما يُرسل الآن (بريد ورشة دخل الطابور بملاحظة القاعة ثم أُخفيت، mailRewrite في features.ts)
 export const QUEUE_QUOTA_REASONS = ['mail_cap', 'mail_share'];
+// قبل ترحيل الموعد (لا عمود expires_at): قاعدة العمر القديمة للإشعار تبقى كما كانت، فلا يتغير سلوك الإنتاج قبل الترحيل
+const LEGACY_STALE_HOURS = 48;
+// المطالبة بالرسالة قبل إرسالها: sent_at يُكتب بشرط أنها ما زالت منتظرة، فلا يرسلها مساران معًا (التفريغ و«أرسل الآن»).
+// تعذّر الإرسال يعيدها إلى الانتظار (releaseQueued)
+export async function claimQueued(id: string) {
+  const { data, error } = await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', id).is('sent_at', null).is('gave_up_at', null).select('id');
+  return !error && (data || []).length > 0;
+}
+export const releaseQueued = (id: string, patch: Record<string, unknown> = {}) => db.from('mail_queue').update({ sent_at: null, ...patch }).eq('id', id);
+// موعد بعد ساعات من الآن: للإشعار الذي لا معنى له بعد وقته (اتصال فوري، تنبيه أمني، تذكير دفع)
+export const expiresIn = (hours: number) => new Date(Date.now() + hours * 36e5).toISOString();
 export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), rewrite: (m: { subject: string; html: string }) => string = (m) => m.html) {
   const read = (cols: string) => db.from('mail_queue').select(cols)
     .is('sent_at', null).is('gave_up_at', null).order('kind', { ascending: false }).order('created_at').limit(limit + hold.size);
   let { data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at');
-  if (error) ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts'));   // قبل ترحيل الموعد: لا شيء ينتهي
+  let legacy = false;
+  if (error) { ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts')); legacy = true; }
   if (error) return { sent: 0, pending: null };
   let sent = 0, expired = 0;
   for (const m of ((data || []) as any[]).filter((x: any) => !hold.has(x.id)).slice(0, limit)) {
-    if (m.expires_at && Date.parse(m.expires_at) <= Date.now()) {
-      await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
+    const over = m.expires_at ? Date.parse(m.expires_at) <= Date.now() : legacy && m.kind === 'notify' && Date.now() - Date.parse(m.created_at) > LEGACY_STALE_HOURS * 36e5;
+    if (over) {
+      await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id).is('sent_at', null);
       expired++;
       continue;
     }
+    if (!(await claimQueued(m.id))) continue;   // أرسلها المدير أو ألغاها بعد قراءة الدفعة
     const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
-    if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
-    if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
+    if (r.ok) { sent++; continue; }   // sent_at كُتب بالمطالبة، ويبقى بعد نجاح الإرسال وحده
+    if (r.reason === 'mail_cap' || r.reason === 'mail_share') { await releaseQueued(m.id); break; }   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;
-    await db.from('mail_queue').update({ attempts, last_error: r.reason, ...(attempts >= QUEUE_MAX_ATTEMPTS ? { gave_up_at: new Date().toISOString() } : {}) }).eq('id', m.id);
+    await releaseQueued(m.id, { attempts, last_error: r.reason, ...(attempts >= QUEUE_MAX_ATTEMPTS ? { gave_up_at: new Date().toISOString() } : {}) });
   }
   const { count } = await db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null);
   return { sent, pending: count ?? 0, ...(expired ? { expired } : {}), ...(hold.size ? { held: hold.size } : {}) };
@@ -313,14 +327,17 @@ export async function stuckQueueAlert(hold: Set<string> = new Set()) {
 
 // نافذة الحصة الآن: الأعداد كما يقرؤها حارس الإرسال (mailCounts)، وأوقات ما أُرسل من غير الرموز في آخر 24 ساعة،
 // فيُقدَّر متى يتحرر كل مكان (queueEta). تعذّر العداد يُعامل حصة ممتلئة: التقدير يتأخر ولا يعد بما لا يُرسل
+// waiting: الإشعارات المنتظرة في الطابور الآن، فما يدخل بعدها يخرج بعدها (الطابور يفرّغ الإشعار بالأقدم)
 export async function mailWindow(now = Date.now()) {
-  const [counts, sent] = await Promise.all([
+  const [counts, sent, waiting] = await Promise.all([
     mailCounts(db),
     db.from('mail_events').select('created_at').eq('status', 'sent').not('kind', 'in', '(code,alert)').gte('created_at', new Date(now - 864e5).toISOString())
       .order('created_at').limit(500).then((x: any) => (x.error ? [] : x.data || []), () => []),
+    db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null).eq('kind', 'notify')
+      .then((x: any) => (x.error ? 0 : x.count ?? 0), () => 0),
   ]);
   const budget = mailBudget(counts ?? { sent: CONFIG.mailDailyCap, nonCode: CONFIG.mailDailyCap }, CONFIG.mailDailyCap);
-  return { budget, nonCodeSent: (sent as any[]).map((e) => String(e.created_at)), read: counts != null };
+  return { budget, nonCodeSent: (sent as any[]).map((e) => String(e.created_at)), waiting: waiting as number, read: counts != null };
 }
 
 // سطر يومي واحد للمالك: ما بقي في الطابور بالحصة يُرحَّل إلى الغد آليًّا، وكم هو، ومتى يُتوقع أن يفرغ (queueEta).

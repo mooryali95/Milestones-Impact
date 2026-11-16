@@ -55,7 +55,13 @@ describe('التقسيم وأثر البريد', () => {
     expect(full.clear_at).toBe(new Date(nextDrainAt(Date.parse(sent[13]) + 864e5)).toISOString());
     const part = mailForecast(9, { budget: mailBudget({ sent: 35, nonCode: 35 }, 80), nonCodeSent: sent.slice(0, 35), now });
     expect([part.now, part.queued]).toEqual([5, 4]);
-    expect(mailForecast(9, { budget: mailBudget({ sent: 0, nonCode: 0 }, 80), now })).toEqual({ now: 9, queued: 0, clear_at: null });
+    expect(mailForecast(9, { budget: mailBudget({ sent: 0, nonCode: 0 }, 80), now })).toEqual({ now: 9, queued: 0, clear_at: null, ahead: 0 });
+    // ثلاثون إشعارًا من أمس تنتظر قبلها: تأخذ ما يتحرر أولًا، فآخر الأربعة عشر بعد تحرر الرابع والأربعين لا الرابع عشر
+    const behind = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), nonCodeSent: sent, waiting: 30, now });
+    expect([behind.queued, behind.ahead]).toEqual([14, 30]);
+    expect(Date.parse(behind.clear_at)).toBeGreaterThan(Date.parse(full.clear_at));
+    // أربعون مكانًا تتحرر في اليوم الأول (30 قبلها و10 منها)، والأربعة الباقية في اليوم التالي بعد أن يتحرر ما أرسله الطابور
+    expect(behind.clear_at).toBe(new Date(nextDrainAt(nextDrainAt(Date.parse(sent[3]) + 864e5) + 864e5)).toISOString());
     // تعذّر قراءة الحصة: لا يُعد بخروج شيء الآن
     expect(mailForecast(3, {})).toMatchObject({ now: 0, queued: 3 });
   });

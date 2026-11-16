@@ -19,7 +19,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, carryoverAlert, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
+import { alertOps, carryoverAlert, clientIp, CONFIG, db, drainMailQueue, Fail, must, preflight, reply, secretEquals, stuckQueueAlert } from './core.ts';
 import { slackHello } from '../_shared/slack.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram, journeyApproved } from './logic.js';
@@ -99,29 +99,33 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'expert.apply': E.apply,
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
-  // كل ساعة: العروض المنتهية تنتقل للتالي، ثم تذكير جلسات الغد
-  // sweepOffers يتحقق من سر المجدول أولًا، ثم يُفرغ طابور البريد الجماعي ضمن الحصة (D15)
-  'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
-    pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
-    pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
-    // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
-    feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
-    ...(await (async () => {
-      // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
-      const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
-      // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
-      const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
-      if (!hold || !rewrite) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } };
-      return {
-        mail_queue: await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })),
-        // ما بقي في الطابور أكثر من ست ساعات لغير الحصة بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
+  // كل ساعة: يُفرَّغ طابور البريد أولًا، ثم تنتقل العروض المنتهية للتالي، ثم التذكيرات.
+  // التفريغ قبل ما يولّده المسح من بريد: ما تحرر من الحصة في نافذة الـ24 ساعة يأخذه الأقدم انتظارًا قبل الجديد، فلا
+  // يسبق تذكير هذه الساعة إشعارًا ينتظر منذ أمس (وعليه يُبنى الموعد المتوقع في مركز البريد، queueEta). سر المجدول يُتحقق منه قبل كل شيء
+  'cron.expert-offers': async (b) => {
+    if (!secretEquals(b.secret, CONFIG.cronSecret)) throw new Fail('غير مصرّح', 403, 'forbidden');
+    // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
+    const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
+    // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
+    const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
+    const mail_queue = hold && rewrite ? await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })) : { sent: 0, deferred: true };
+    const sweeps = { ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
+      pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+      pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
+      // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار
+      feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })) };
+    return {
+      ...sweeps, mail_queue,
+      ...(hold && rewrite ? {
+        // ما بقي في الطابور أكثر من ست ساعات لغير الحصة بعد التفريغ والمسح: تنبيه واحد، ولكل رسالة مرة
         mail_stuck: await stuckQueueAlert(hold).catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
         // وما ينتظر الحصة يُرحَّل إلى الغد آليًّا: سطر واحد في اليوم للمالك بعدده وموعد فراغه المتوقع
         mail_carryover: await carryoverAlert(hold).catch((e) => ({ alerted: false, error: String(e?.message || e) })),
-      };
-    })()),
-    // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
-    slack_hello: await slackHello(db) }),
+      } : { mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } }),
+      // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)
+      slack_hello: await slackHello(db),
+    };
+  },
   'xp.auth-start': E.portalStart,
   'xp.auth-verify': E.portalVerify,
   'xp.auth-google': E.portalGoogle,

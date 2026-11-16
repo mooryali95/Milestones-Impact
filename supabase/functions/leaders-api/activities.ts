@@ -294,7 +294,7 @@ export async function coachingInstant(p: any, b: Body) {
   if (c.coach_email) {
     sendMail(c.coach_email, `اتصال فوري: ${p.full_name}`, mailShell('مشارك ينضم إليك الآن',
       mailText(`${bdi(p.full_name)} طلب اتصالًا فوريًا في «${bdi(r.title_ar)}» وهو في طريقه إلى غرفتك الآن.`) + mailButton(c.instant_url, 'افتح الغرفة'),
-      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' })).catch((e) => console.error(e));
+      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' }), [], { expiresAt: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString() }).catch((e) => console.error(e));
   }
   await audit('participant', p.email, 'coaching.instant', 'stage_requirements', r.id);
   return { success: true, join_url: c.instant_url };

@@ -97,13 +97,18 @@ const byDrainOrder = (a, b) => (a.kind === b.kind ? String(a.created_at).localeC
  * غير رمز أُرسلت في آخر 24 ساعة تحرر مكانها بعد 24 ساعة من إرسالها، وكل رسالة يرسلها الطابور تحرر مكانها بعد 24 ساعة كذلك.
  * تقدير لا وعد: بريد مباشر يُرسل بين التشغيلات يأخذ ما يتحرر قبل الطابور.
  * @param {{ id: string, kind?: string, created_at?: string, expires_at?: string | null }[]} rows المنتظرة غير الممسَكة
- * @param {{ nonCodeSent?: string[], budget?: { nonCodeLeft?: number, nonCodeLimit?: number }, now?: number }} o
+ * @param {{ nonCodeSent?: string[], budget?: { nonCodeLeft?: number, nonCodeLimit?: number, nonCode?: number }, now?: number }} o
  * @returns {Record<string, { at: string | null, expires: boolean }>}
  */
 export function queueEta(rows = [], { nonCodeSent = [], budget = {}, now = Date.now() } = {}) {
   const free = [];
   for (let i = 0; i < Math.max(0, budget.nonCodeLeft ?? 0); i++) free.push(now);
-  for (const t of nonCodeSent) { const ms = Date.parse(t); if (Number.isFinite(ms)) free.push(Math.max(now, ms + 864e5)); }
+  // ما أُرسل بقرار المدير فوق الحصة (force) يرفع العدد فوق نصيب غير الرموز: أول ما يتحرر منه يعيد العدد إلى النصيب
+  // ولا يفتح مكانًا، فيُسقط من التقدير بقدر الزيادة (mailDecision يحجب ما دام العدد عند النصيب أو فوقه)
+  const sentAt = nonCodeSent.map((t) => Date.parse(t)).filter(Number.isFinite).sort((x, y) => x - y);
+  const limit = Number(budget.nonCodeLimit);
+  const over = Number.isFinite(limit) ? Math.max(0, Number(budget.nonCode ?? sentAt.length) - limit) : 0;
+  for (const ms of sentAt.slice(over)) free.push(Math.max(now, ms + 864e5));
   const out = {};
   for (const m of [...rows].sort(byDrainOrder)) {
     if (!free.length) { out[m.id] = { at: null, expires: false }; continue; }
