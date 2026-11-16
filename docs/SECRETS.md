@@ -49,7 +49,7 @@
 |---|---|---|
 | `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال الست، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
 | `SUPABASE_DB_URL` | `backup.yml`، `restore-drill.yml` | النسخ الليلي وتمرين الاستعادة |
-| `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم. يُحذف من GitHub بعد 30 يومًا من أول نسخة بالمفتاح العام، حين ينقضي قفل آخر نسخة متماثلة (`RUNBOOK.md` §4) |
+| `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم (gpg). لا تُشفَّر به نسخة جديدة ما دام `BACKUP_PUBLIC_KEY` مضبوطًا، **ويبقى ولا يُحذف**: النسخ المتماثلة السابقة للانتقال باقية في `monthly/` (قفل 365 يومًا) و`archive/` ولا تُفك إلا به. قيمته في GitHub وفي مدير كلمات المرور (`RUNBOOK.md` §4) |
 | `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml` | سطر مفتاح age عام لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، ومفاتيحها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
 | `R2_ACCOUNT_ID`، `R2_ACCESS_KEY_ID`، `R2_SECRET_ACCESS_KEY`، `R2_BUCKET` | `backup.yml`، `restore-drill.yml`، `scripts/ops/r2.mjs` | دلو النسخ خارج GitHub. الرمز مقصور على الدلو بقراءة الكائنات وكتابتها، والحذف ممنوع بقفل الاحتفاظ |
 | `RESEND_API_KEY`، `ALERT_TO` (اختياريان) | Worker `mi-backup-monitor` | بريد تنبيه تأخر النسخ؛ بدونهما يبقى `/health` للمراقب الخارجي |
