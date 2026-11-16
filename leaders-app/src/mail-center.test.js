@@ -25,9 +25,11 @@ describe('الحصة', () => {
   it('الإشعارات لا تتجاوز المتبقي الكلي', () => {
     expect(mailBudget({ sent: 78, nonCode: 10 }, 80).nonCodeLeft).toBe(2);
   });
-  it('أول تحرر للحصة: أقدم مُرسل + 24 ساعة', () => {
-    expect(nextFreeAt(['2026-11-14T10:00:00Z', '2026-11-14T08:00:00Z'])).toBe('2026-11-15T08:00:00.000Z');
-    expect(nextFreeAt([])).toBeNull();
+  it('تحرر الحصة: بداية يوم المزوّد التالي (03:00 بالرياض) إن أُرسل شيء اليوم', () => {
+    const now = Date.parse('2026-11-14T12:00:00Z');
+    expect(nextFreeAt(['2026-11-14T10:00:00Z', '2026-11-14T08:00:00Z'], now)).toBe('2026-11-15T00:00:00.000Z');
+    expect(nextFreeAt(['2026-11-13T23:00:00Z'], now)).toBeNull();
+    expect(nextFreeAt([], now)).toBeNull();
   });
   it('السلسلة اليومية بتوقيت الرياض', () => {
     const now = Date.parse('2026-11-14T12:00:00Z');
@@ -76,7 +78,7 @@ describe('حراس المصدر', () => {
     expect(mail).toMatch(/if \(error\) \(\{ error \} = await eventsOf\(client\)\.insert\(row\)\)/);
   });
   it('إرسال المدير اليدوي يبقى تحت السقف الكلي: force يتجاوز الحصة لا السقف، ولا يأخذ احتياط التنبيه فوقه', () => {
-    expect(mail).toContain("mailDecision(force ? 'code' : kind, counts, cap)");
+    expect(mail).toContain("mailDecision(force ? 'code' : kind, counts, cap, { flush })");
     expect(mailDecision('code', { sent: 80, nonCode: 0 }, 80).ok).toBe(false);
     expect(mailDecision('code', { sent: 50, nonCode: 40 }, 80).ok).toBe(true);
     // التنبيه وحده يمر فوق السقف باحتياطه (P1-12)
@@ -123,28 +125,44 @@ describe('متى يخرج المنتظر (queueEta)', () => {
     expect(new Date(nextDrainAt(Date.parse('2026-11-16T05:27:00Z'))).toISOString()).toBe('2026-11-16T06:17:00.000Z');
     expect(new Date(nextDrainAt(Date.parse('2026-11-16T05:17:00Z'))).toISOString()).toBe('2026-11-16T05:17:00.000Z');
   });
-  it('ما بقي من الحصة في التشغيلة التالية، ثم ما يتحرر بعد 24 ساعة من كل إرسال، والإشعار قبل الجماعي', () => {
+  // يوم 16 نوفمبر: النصيب 40 والسقف 80، والمساء (22:17 بالرياض) يتسع إلى السقف إلا 10
+  const at = (iso) => new Date(Date.parse(iso)).toISOString();
+  it('قبل المساء: ما بقي من النصيب في التشغيلة التالية، ثم تفريغ المساء 22:17 بالرياض، والإشعار قبل الجماعي', () => {
     const rows = [{ id: 'b', kind: 'bulk', created_at: hAgo(9) }, { id: 'n1', kind: 'notify', created_at: hAgo(2) }, { id: 'n2', kind: 'notify', created_at: hAgo(1) }];
-    const eta = queueEta(rows, { budget: { nonCodeLeft: 1 }, nonCodeSent: [hAgo(20), hAgo(3)], now });
-    expect(eta.n1.at).toBe('2026-11-16T06:17:00.000Z');
-    expect(eta.n2.at).toBe(new Date(nextDrainAt(Date.parse(hAgo(20)) + 864e5)).toISOString());
-    expect(eta.b.at).toBe(new Date(nextDrainAt(Date.parse(hAgo(3)) + 864e5)).toISOString());
+    const eta = queueEta(rows, { budget: mailBudget({ sent: 50, nonCode: 39 }, 80), now });
+    expect(eta.n1.at).toBe(at('2026-11-16T06:17:00Z'));
+    // أُرسل 50 ثم واحد من الطابور: يتسع المساء لـ 70 - 51 = 19
+    expect(eta.n2.at).toBe(at('2026-11-16T19:17:00Z'));
+    expect(eta.b.at).toBe(at('2026-11-16T19:17:00Z'));
   });
-  it('أكثر من حصة يوم: يُرحَّل إلى اليوم التالي فالذي بعده، ولا يُترك', () => {
-    const rows = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, kind: 'notify', created_at: hAgo(5 - i) }));
-    const eta = queueEta(rows, { budget: { nonCodeLeft: 0 }, nonCodeSent: [hAgo(23)], now });
-    const days = rows.map((r) => Math.round((Date.parse(eta[r.id].at) - now) / 864e5));
-    expect(days).toEqual([0, 1, 2, 3, 4]);
-    expect(Object.values(eta).every((e) => !e.expires)).toBe(true);
+  it('في المساء: التشغيلة التالية تأخذ ما بقي إلى السقف إلا 10، والباقي بعد تصفير الحصة 03:17 بالرياض', () => {
+    const evening = Date.parse('2026-11-16T19:40:00Z');   // 22:40 بالرياض
+    const rows = Array.from({ length: 25 }, (_, i) => ({ id: `r${i}`, kind: 'notify', created_at: hAgo(30 - i) }));
+    const eta = queueEta(rows, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), now: evening });
+    const by = (iso) => rows.filter((r) => eta[r.id].at === at(iso)).length;
+    expect(by('2026-11-16T20:17:00Z')).toBe(20);
+    expect(by('2026-11-17T00:17:00Z')).toBe(5);
+    // بعد منتصف ليل UTC يوم جديد: النصيب كاملًا في 03:17 بالرياض
+    const late = queueEta(rows.slice(0, 3), { budget: mailBudget({ sent: 80, nonCode: 40 }, 80), now: Date.parse('2026-11-16T23:30:00Z') });
+    expect(late.r0.at).toBe(at('2026-11-17T00:17:00Z'));
   });
-  it('ما أُرسل بقرار المدير فوق الحصة: أول ما يتحرر يعيد العدد إلى النصيب ولا يفتح مكانًا', () => {
-    // النصيب 40 وأُرسل 46 (ستة بـ«أرسل الآن»): سبعة يجب أن تتحرر قبل أن يخرج المنتظر الأول
-    const sent = Array.from({ length: 46 }, (_, i) => hAgo(23 - i * 0.3));
-    const eta = queueEta([{ id: 'a', kind: 'notify', created_at: hAgo(1) }], { budget: mailBudget({ sent: 50, nonCode: 46 }, 80), nonCodeSent: sent, now });
-    expect(eta.a.at).toBe(new Date(nextDrainAt(Date.parse(sent[6]) + 864e5)).toISOString());
+  it('أكثر من يوم: 40 في 03:17 و30 في 22:17 من كل يوم تالٍ، ولا يُترك', () => {
+    const rows = Array.from({ length: 150 }, (_, i) => ({ id: `r${i}`, kind: 'notify', created_at: new Date(now - 1e6 + i).toISOString() }));
+    const eta = queueEta(rows, { budget: mailBudget({ sent: 80, nonCode: 40 }, 80), now });
+    const count = (iso) => rows.filter((r) => eta[r.id].at === at(iso)).length;
+    expect(count('2026-11-17T00:17:00Z')).toBe(40);
+    expect(count('2026-11-17T19:17:00Z')).toBe(30);
+    expect(count('2026-11-18T00:17:00Z')).toBe(40);
+    expect(count('2026-11-18T19:17:00Z')).toBe(30);
+    expect(count('2026-11-19T00:17:00Z')).toBe(10);
+    expect(Object.values(eta).every((e) => e.at && !e.expires)).toBe(true);
   });
-  it('المؤرخ الذي يمضي موعده قبل دوره يُعلَّم، ولا حصة إطلاقًا: لا موعد', () => {
-    const eta = queueEta([{ id: 'x', kind: 'bulk', created_at: hAgo(1), expires_at: new Date(now + 36e5).toISOString() }], { budget: { nonCodeLeft: 0 }, nonCodeSent: [hAgo(2)], now });
+  it('ما أُرسل بقرار المدير فوق النصيب لا يفتح مكانًا قبل المساء', () => {
+    const eta = queueEta([{ id: 'a', kind: 'notify', created_at: hAgo(1) }], { budget: mailBudget({ sent: 50, nonCode: 46 }, 80), now });
+    expect(eta.a.at).toBe(at('2026-11-16T19:17:00Z'));
+  });
+  it('المؤرخ الذي يمضي موعده قبل دوره يُعلَّم، وبلا سقف معروف: لا موعد بعد ما بقي الآن', () => {
+    const eta = queueEta([{ id: 'x', kind: 'bulk', created_at: hAgo(1), expires_at: new Date(now + 36e5).toISOString() }], { budget: mailBudget({ sent: 80, nonCode: 40 }, 80), now });
     expect(eta.x.expires).toBe(true);
     expect(queueEta([{ id: 'y', kind: 'notify' }], { budget: { nonCodeLeft: 0 }, now }).y).toEqual({ at: null, expires: false });
   });
@@ -167,6 +185,8 @@ describe('العرض في اللوحة', () => {
     expect(mailLine({ now: 14, queued: 0, clear_at: null })).toMatch(/^سيصل 14 بريدًا الآن/);
     const q = mailLine({ now: 0, queued: 14, clear_at: '2026-11-17T05:17:00Z' });
     expect(q).toContain('سيصل 14 بريدًا: 0 الآن، والباقي 14 ينتظر في صندوق «لم يُرسل»');
+    expect(mailLine({ now: 0, queued: 14, tonight: 14, later: 0, clear_at: '2026-11-16T19:17:00Z' })).toContain('ويخرج آليًّا الليلة من 22:17');
+    expect(mailLine({ now: 2, queued: 50, tonight: 30, later: 20, clear_at: '2026-11-17T00:17:00Z' })).toContain('(30 الليلة من 22:17، و20 بعدها)');
     expect(q).toContain('ويرى كل واحد اعتماده في رحلته فورًا');
     expect(mailLine({ now: 0, queued: 3 }, false)).toMatch(/^تعذّرت قراءة حصة البريد/);
     for (const t of [q, mailLine(null)]) expect(t).not.toMatch(/[\u2013\u2014]/);

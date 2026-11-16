@@ -96,7 +96,7 @@ export function opsVerdict(f, now = Date.now()) {
   const sent = mail.sent;
 
   if (mail.key === false) add('red', 'mail_key', 'مفتاح البريد غير مضبوط: لا يخرج أي بريد ولا رمز دخول', 'أضف السر RESEND_API_KEY في دالة leaders-api', 'البريد متوقف: مفتاح البريد غير مضبوط، ورموز الدخول لا تخرج');
-  if (sent != null && cap && sent >= cap) add('red', 'mail_cap', `بلغ البريد سقفه اليومي (${sent} من ${cap}): رموز الدخول لا تخرج حتى تخف نافذة 24 ساعة`, 'يبقى الدخول بمفتاح المرور. إن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend', 'البريد متوقف: بلغ السقف اليومي، ورموز الدخول لا تخرج');
+  if (sent != null && cap && sent >= cap) add('red', 'mail_cap', `بلغ البريد سقفه اليومي (${sent} من ${cap}): رموز الدخول لا تخرج حتى تُصفَّر حصة اليوم 03:00 بتوقيت الرياض`, 'يبقى الدخول بمفتاح المرور. إن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend', 'البريد متوقف: بلغ السقف اليومي، ورموز الدخول لا تخرج');
 
   const s = mail.code_streak;
   const recent = s && s.count > 0 && now - ms(s.last_at) <= OPS.codeRecentMin * 60e3;
@@ -109,7 +109,7 @@ export function opsVerdict(f, now = Date.now()) {
   }
 
   if (sent == null) add('amber', 'mail_counter', 'تعذّرت قراءة عداد البريد: لا يخرج الآن إلا الرموز والتنبيه', 'غالبًا عارض في القاعدة يزول وحده؛ إن بقي فراجع سجل الدالة');
-  else if (cap && sent < cap && sent >= Math.ceil(cap * ALERT_AT)) add('amber', 'mail_near', `البريد في آخر 24 ساعة ${sent} من ${cap}: اقترب من السقف`, 'عند السقف تتوقف رموز الدخول، فأجّل الرسائل الجماعية إن أمكن');
+  else if (cap && sent < cap && sent >= Math.ceil(cap * ALERT_AT)) add('amber', 'mail_near', `البريد اليوم ${sent} من ${cap}: اقترب من السقف`, 'عند السقف تتوقف رموز الدخول، فأجّل الرسائل الجماعية إن أمكن');
 
   const lost = mail.codes ? (mail.codes.failed ?? 0) + (mail.codes.blocked ?? 0) : 0;
   if (!recent && lost >= OPS.codeLostWatch) add('amber', 'codes_lost_day', `رموز دخول لم تصل في آخر 24 ساعة: ${lost}`, 'عاد الإرسال بعدها، فراجع في مركز البريد سبب ما لم يصل');

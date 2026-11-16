@@ -32,7 +32,7 @@ export function opsSummary(data, verdict, now = Date.now()) {
       sent, cap, pct,
       tone: pct == null ? 'mute' : meter === 'full' ? 'bad' : meter === 'near' ? 'warn' : 'ok',
       text: sent == null ? 'غير مقروء' : `${sent} من ${cap}`,
-      aria: sent == null ? 'البريد في آخر 24 ساعة غير مقروء' : `البريد في آخر 24 ساعة: أُرسل ${sent} من ${cap} (${pct}٪ من السقف اليومي)`,
+      aria: sent == null ? 'البريد اليوم غير مقروء' : `البريد اليوم: أُرسل ${sent} من ${cap} (${pct}٪ من السقف اليومي)`,
     },
     codes: [
       code('sent', 'وصل', c.sent, 'ok'),
