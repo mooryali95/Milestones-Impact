@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كلها تقرأ من admin.catalog وتكتب عبر admin.save / admin.delete / admin.reorder.
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { completionSource, journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
@@ -16,6 +16,8 @@ import Form from '../Form.jsx';
 import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
 import { useUI } from '../ui.jsx';
+import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
+import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 
 const save = (entity, base) => (row) => L('admin.save', { entity, row: { ...base, ...row } });
 const del = (entity, id) => () => L('admin.delete', { entity, id });
@@ -84,9 +86,25 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
   const shown = (t, s) => renderJourneyText(t, { reqs, durationDays: s?.duration_days, readyMin: READY_MIN });
+  // الرحلة في لمحة (J1b): من الحمولة نفسها، فتتحدث فور الحفظ. النقر المزدوج أو «افتحه» ينقل إلى النشاط في القائمة تحتها
+  const timeline = useMemo(() => journeyTimeline({ stages: catalog.journey_stages, requirements: reqs }, { title: 'رحلة البرنامج' }), [catalog.journey_stages, reqs]);
+  const openReq = (a) => {
+    const el = document.getElementById(`jreq-${a.requirement_id}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.querySelector('button.la-link')?.focus({ preventScroll: true });
+  };
+  // الرحلة الفارغة: زر الخط الزمني ينقل إلى أول «+ مرحلة» (لمن يملك الكتابة)
+  const toAddStage = () => {
+    const btn = document.querySelector('[data-add-stage]');
+    if (!btn) return;
+    btn.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    btn.focus({ preventScroll: true });
+  };
   return (
     <>
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
+      <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} />
       <Coherence stages={stages} reqs={reqs} />
       <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
       <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الطلب، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
@@ -94,7 +112,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
         <React.Fragment key={ph}>
           <div className="la-row between">
             <h3 className="la-phase">{phl}</h3>
-            {canWrite && <button className="btn-sm ghost" onClick={async () => {
+            {canWrite && <button className="btn-sm ghost" data-add-stage={ph} onClick={async () => {
               const title_ar = await prompt(`اسم المرحلة الجديدة في «${phl}»`, '');
               if (!title_ar) return;
               const r = await L('admin.stage-create', { program_id: pid, title_ar, phase: ph });
@@ -116,7 +134,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
               {s.description_ar && <p className="la-muted">{shown(s.description_ar, s)}</p>}
               <ul className="la-reqs">
                 {reqs.filter((r) => r.stage_key === s.key).sort((a, b) => a.sort - b.sort).map((r) => (
-                  <li key={r.id} className={r.active ? '' : 'off'}>
+                  <li key={r.id} id={`jreq-${r.id}`} className={r.active ? '' : 'off'}>
                     <span>
                       <code>{r.code}</code> {shown(r.title_ar)} <small className="la-chip">{KIND[r.kind]}</small> <small className={`la-chip ${completionSource(r) === 'manual' ? 'warn' : ''}`} title="كيف يكتمل">{COMPLETION_AR[completionSource(r)]}</small>
                       {r.dimension && <small className="la-chip">{DIM[r.dimension]}{r.level ? ` · ${LVL[r.level]}` : ''}</small>}

@@ -1223,13 +1223,19 @@ export async function save(a: Admin, b: Body) {
   // قواعد المرحلة: قيم معروفة فقط، ولا حلقة ولا مرجع لمرحلة مخفية في الرحلة بعد الحفظ
   if (b.entity === 'journey_stages' && 'rules' in row) {
     const pid = String(b.row.program_id);
-    const { data: siblings } = await db.from('journey_stages').select('key, title_ar, sort, active, rules').eq('program_id', pid);
+    const { data: siblings } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules').eq('program_id', pid);
     const list = siblings || [];
-    try { row.rules = cleanStageRules(row.rules, list.map((s: any) => s.key), String(b.row.key)); }
+    // المراحل نفسها لا مفاتيحها: مرجع «تبدأ مع» يُفحص بترتيبه وظهوره كما ستكون بعد الحفظ
+    const shaped = list.map((s: any) => (s.key === b.row.key ? { ...s, ...('sort' in row ? { sort: row.sort } : {}), ...('active' in row ? { active: row.active } : {}) } : s));
+    try { row.rules = cleanStageRules(row.rules, shaped, String(b.row.key)); }
     catch (err) { throw new Fail((err as Error).message, 400, 'rules'); }
     const after = list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s));
     const bad = stageRulesIssues(after).find((x: any) => x.level === 'error' && (x.stage === b.row.key || /حلقة/.test(x.msg)));
     if (bad) throw new Fail(bad.msg, 400, 'rules');
+  }
+  // إخفاء مرحلة أو نقلها لمحور آخر أو تغيير قاعدتها قد يكسر «تبدأ مع» لمرحلة غيرها، فيُرفض كما يُرفض في النشر
+  if (b.entity === 'journey_stages' && !isNew && ['rules', 'active', 'sort', 'phase'].some((k) => k in row)) {
+    await withGuard(String(b.row.program_id), (list) => list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s)));
   }
 
   // كتلة لم تُغلق أو وسم غير معروف يغيّر ما يصل كل مسار، فلا يُحفظ
@@ -1352,12 +1358,27 @@ export async function remove(a: Admin, b: Body) {
   return { success: true };
 }
 
+// «تبدأ مع» لا تُكسر بحفظ أو ترتيب: الدفعات التي تتبع آخر تعديل تقرأ الصفوف الحية فورًا ولا تمر بالنشر،
+// فخطأ «تبدأ مع» جديد في الرحلة بعد التغيير (مرجع صار بعدها، أو مخفيًا، أو مفصولًا عنها، أو في محور آخر) يُرفض.
+// الأخطاء القائمة قبل التغيير لا تمنع تعديلًا لا يمسها، وتبقى ظاهرة في لوحة اتساق الرحلة
+async function withGuard(pid: string, change: (list: any[]) => any[]) {
+  const { data } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules').eq('program_id', pid);
+  const list = data || [];
+  const known = new Set(stageRulesIssues(list).filter((x: any) => x.rule === 'with').map((x: any) => x.stage));
+  const bad = stageRulesIssues(change(list)).find((x: any) => x.level === 'error' && x.rule === 'with' && !known.has(x.stage));
+  if (bad) throw new Fail(bad.msg, 409, 'rules');
+}
+
 export async function reorder(a: Admin, b: Body) {
   requireWrite(a);
   const e = ENTITIES[b.entity];
   if (!e?.sortable || !Array.isArray(b.ids)) throw new Fail('ترتيب غير صالح');
   // المراحل تتكرر مفاتيحها بين البرامج، فيُرتَّب داخل برنامج واحد
   const programId = b.entity === 'journey_stages' ? (/^[0-9a-f-]{36}$/.test(String(b.program_id || '')) ? String(b.program_id) : await defaultProgramId()) : null;
+  if (programId) {
+    const order = new Map(b.ids.map((id: string, i: number) => [String(id), i + 1]));
+    await withGuard(programId, (list) => list.map((s: any) => (order.has(s.key) ? { ...s, sort: order.get(s.key) } : s)));
+  }
   await Promise.all(b.ids.map((id: string, i: number) => {
     let q = db.from(e.table).update({ sort: i + 1 }).eq(e.key[programId ? 1 : 0], id);
     if (programId) q = q.eq('program_id', programId);

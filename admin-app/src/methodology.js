@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, withCandidates, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 
 export const LVLS = Object.keys(LVL);
@@ -53,12 +53,13 @@ const preview = (reqs, f) => (v) => {
 // قواعد المرحلة في النموذج: حقول rule_* تُجمع في rules عند الحفظ
 export function stageToForm(s) {
   const r = stageRules(s);
-  return { ...s, rule_mode: r.mode, rule_unlock: r.unlock, rule_after: r.after, rule_day: r.day ?? '', rule_complete: r.complete };
+  return { ...s, rule_mode: r.mode, rule_unlock: r.unlock, rule_after: r.after, rule_with: r.with ?? '', rule_day: r.day ?? '', rule_complete: r.complete };
 }
 export function formToStage(v) {
-  const { rule_mode, rule_unlock, rule_after, rule_day, rule_complete, ...rest } = v;
+  const { rule_mode, rule_unlock, rule_after, rule_with, rule_day, rule_complete, ...rest } = v;
   const rules = { mode: rule_mode, unlock: rule_unlock, complete: rule_complete };
   if (rule_unlock === 'stages') rules.after = rule_after || [];
+  if (rule_unlock === 'with') rules.with = rule_with || null;
   if (rule_unlock === 'day') rules.day = rule_day;
   return { ...rest, rules };
 }
@@ -67,11 +68,18 @@ const RULE_HELP = {
   on_demand: 'تظهر للمشارك متاحة، يدخلها حين يحتاجها (مثل التوجيه على رأس العمل أو الاستشارة)، ولا توقف ما بعدها.',
   optional: 'مقترحة للمشارك، ولا تُنقص تقدمه إن تركها.',
 };
+// «تبدأ مع»: المرجع مرحلة ظاهرة قبل هذه من محورها، لا يفصلها عنها إلا من يسير معها (withCandidates، والخادم يفحص بالدالة نفسها)
+export function withOptions(stages = [], selfKey = null) {
+  return Object.fromEntries(withCandidates(stages, selfKey).map((s) => [s.key, s.title_ar]));
+}
 export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'rule_mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.rule_mode] },
   { name: 'rule_unlock', label: 'متى تُفتح', type: 'select', options: STAGE_UNLOCK_AR },
   { name: 'rule_after', label: 'تُفتح بعد اكتمال', type: 'multi', show: (v) => v.rule_unlock === 'stages',
     options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false).map((s) => [s.key, s.title_ar])) },
+  { name: 'rule_with', label: 'تبدأ مع', type: 'select', show: (v) => v.rule_unlock === 'with', empty: 'اختر المرحلة',
+    options: withOptions(stages, selfKey),
+    help: 'تُفتح مع بداية المرحلة المختارة وتسير معها في الأسابيع نفسها، والمرحلة التي بعد المجموعة تنتظر اكتمالها كلها. القائمة تعرض المراحل الظاهرة قبل هذه في محورها نفسه، بشرط ألا تفصل بينهما مرحلة لا تسير معهما.' },
   { name: 'rule_day', label: 'بعد كم يومًا من بداية الدفعة', type: 'number', show: (v) => v.rule_unlock === 'day',
     help: 'يُحسب من تاريخ بداية دفعة المشارك. إن لم يكن للدفعة تاريخ بداية تُفتح بعد ما قبلها.' },
   { name: 'rule_complete', label: 'متى تكتمل', type: 'select', options: STAGE_COMPLETE_AR },

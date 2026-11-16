@@ -201,7 +201,8 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const dialogs = (
     <>
       {editor && <CohortEditor cohort={editor} data={d} canWrite={canWrite} onClose={(saved) => { setEditor(null); if (saved) { toast('تم الحفظ'); load(); } }}
-        onOpen={(k, at = {}) => { const c = editor; if (k === 'schedule') setSchedule(c); else if (k === 'team') setGroups(c); else if (k === 'vis') setVis(c); else if (k === 'journey') onEditJourney(at.program_id || c.program_id); }} />}
+        onOpen={(k, at = {}) => { const c = editor; if (k === 'schedule') setSchedule(c); else if (k === 'team') setGroups(c); else if (k === 'vis') setVis(c); else if (k === 'journey') onEditJourney(at.program_id || c.program_id);
+          else if (k === 'activities') window.location.hash = `#/leaders/activities${at.req ? `?req=${encodeURIComponent(at.req)}` : ''}`; }} />}
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
