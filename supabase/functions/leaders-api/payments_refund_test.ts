@@ -4,7 +4,7 @@ import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1';
 const { webhook } = await import('./payments.ts');
 const { CONFIG, db } = await import('./core.ts');
-const { refundOutcome, paymentTimeline } = await import('./payments-ledger.js');
+const { refundOutcome, paymentTimeline, revenueKpis, netCents } = await import('./payments-ledger.js');
 
 const SECRET = 'whsec-test';
 async function sign(raw: string) {
@@ -93,8 +93,9 @@ Deno.test('refundOutcome: الكامل والجزئي والمجموع والن�
   // النزاع كامل دائمًا، والمبلغ المجهول كامل (السلوك السابق الآمن)
   assertEquals(refundOutcome(pay, { refund_cents: 100 }, 'dispute.created').full, true);
   assertEquals(refundOutcome(pay, { refund_cents: null }, 'refund.created'), { full: true, cents: 9900, total: 9900 });
-  // دفعة مستردة كاملة لا يُجمع عليها
-  assertEquals(refundOutcome({ ...pay, status: 'refunded', refund_cents: 9900 }, { refund_cents: 100 }, 'refund.created').total, 100);
+  // دفعة مستردة كاملة: الإشعار اللاحق تكرار للكامل، فلا ينزل المسترد ولا يصير جزئيًا
+  assertEquals(refundOutcome({ ...pay, status: 'refunded', refund_cents: 9900 }, { refund_cents: 100 }, 'refund.created'), { full: true, repeat: true, cents: 100, total: 9900 });
+  assertEquals(refundOutcome({ ...pay, status: 'refunded', refund_cents: null }, { refund_cents: 2000 }, 'refund.created'), { full: true, repeat: true, cents: 2000, total: 9900 });
 });
 
 Deno.test('استرداد كامل: الدفعة مستردة، والحق مسحوب، والشهادة ملغاة، وأثر في السجل، وبريد الاسترداد للعميل والإدارة', async () => {
@@ -176,4 +177,34 @@ Deno.test('نزاع بعد استرداد جزئي: كامل، والحق مسح
       assert(t.entitlements[0].revoked_at);
     });
   } finally { restore(); restoreEnv(); }
+});
+
+Deno.test('استرداد بمبلغ أصغر بعد استرداد كامل (نزاع): تكرار للكامل، لا ينزل المسترد ولا بريد جزئي', async () => {
+  const restoreEnv = setupEnv();
+  const t = world();
+  const restore = install(t);
+  try {
+    await withMail(async (mails) => {
+      await send(refundEvent('evt_d1', null, 'dispute.created'));
+      const pay = t.payments[0];
+      assertEquals([pay.status, pay.refund_cents], ['refunded', 9900]);
+      const sent = mails.length;
+      await send(refundEvent('evt_r2', 2000));
+      assertEquals([pay.status, pay.refund_cents, pay.note], ['refunded', 9900, 'refund.created']);
+      assertEquals(mails.length, sent, 'لا بريد ثانٍ');
+      assertEquals(mails.some((m) => m.subject === 'استُردّ جزء من دفعتك' || m.subject === 'استرداد جزئي'), false);
+      assertEquals(t.audit_log.some((a) => a.action === 'payment.partially-refunded'), false);
+      assertEquals(t.audit_log.filter((a) => a.action === 'payment.refunded').at(-1)?.after?.repeat, true);
+    });
+  } finally { restore(); restoreEnv(); }
+});
+
+Deno.test('revenueKpis: الإيراد صافٍ بعد الجزئي، والكامل يخرج منه، والمسترد يجمع الاثنين بالمعنى نفسه', () => {
+  const p = (o: Row) => ({ status: 'paid', amount_cents: 9900, refund_cents: null, ...o });
+  assertEquals(revenueKpis([p({}), p({ refund_cents: 2000 })]), { revenue_cents: 17800, refunds_cents: 2000 });
+  assertEquals(revenueKpis([p({}), p({ status: 'refunded', refund_cents: 9900 })]), { revenue_cents: 9900, refunds_cents: 9900 });
+  assertEquals(revenueKpis([p({ status: 'pending' })]), { revenue_cents: 0, refunds_cents: 0 });
+  // مسترد مسجل أكبر من المدفوع لا يجعل الصافي سالبًا
+  assertEquals(netCents(p({ refund_cents: 12000 })), 0);
+  assertEquals(revenueKpis([]), { revenue_cents: 0, refunds_cents: 0 });
 });

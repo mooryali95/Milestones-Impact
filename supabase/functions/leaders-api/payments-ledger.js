@@ -37,11 +37,27 @@ export function refundOutcome(pay, rf, type = '') {
   const now = int(rf?.refund_cents);
   // ما استُرد قبل هذا الإشعار: جزئيًا وحده (الدفعة ما زالت مدفوعة)؛ المستردة كاملة لا تُجمع ثانية
   const before = pay?.status === 'paid' ? int(pay?.refund_cents) || 0 : 0;
+  // دفعة مستردة كاملة من قبل: أي إشعار بعدها (استرداد بمبلغ أصغر أو نزاع) تكرار للكامل، فلا ينزل
+  // refund_cents عما سُجل، ولا يُرسل بريد جزئي عن حق سُحب فعلًا
+  if (pay?.status === 'refunded') {
+    return { full: true, repeat: true, cents: now ?? paid, total: Math.max(int(pay?.refund_cents) || 0, paid ?? 0, now ?? 0) };
+  }
   if (type === 'dispute.created' || now == null || now <= 0 || paid == null || paid <= 0) {
     return { full: true, cents: now ?? paid, total: paid ?? now };
   }
   const total = Math.min(before + now, paid);
   return { full: total >= paid, cents: now, total };
+}
+
+// صافي الدفعة المدفوعة بعد ما استُرد منها جزئيًا: الكامل يخرج من الإيراد بحالته، والجزئي يُنقص بمبلغه،
+// فيقرأ الإيراد والمسترد بالمعنى نفسه في الحالتين (مدفوعتان 99 واسترداد 20 من إحداهما: 178 · مسترد 20)
+export const netCents = (p) => Math.max(0, (int(p?.amount_cents) || 0) - Math.min(int(p?.refund_cents) || 0, int(p?.amount_cents) || 0));
+export function revenueKpis(live) {
+  const rows = live || [];
+  const paid = rows.filter((x) => x?.status === 'paid');
+  const full = rows.filter((x) => x?.status === 'refunded').reduce((t, x) => t + (int(x.amount_cents) || 0), 0);
+  const partial = paid.reduce((t, x) => t + ((int(x.amount_cents) || 0) - netCents(x)), 0);
+  return { revenue_cents: paid.reduce((t, x) => t + netCents(x), 0), refunds_cents: full + partial };
 }
 
 // ── مفاتيح البريد: كلها مغلقة حتى يفتحها المدير (قرار المالك 2026-11-13) ──

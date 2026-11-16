@@ -7,7 +7,7 @@
 // الموقّع (لا من عودة المتصفح)، والإشعار يُسجَّل بمعرّفه فلا يُحتسب مرتين.
 // المفاتيح من أسرار الدالة وحدها: CAREEM_SECRET_KEY (أو CREEM_API_KEY) وCAREEM_WEBHOOK_SECRET (أو CREEM_WEBHOOK_SECRET).
 import { alertOps, audit, CONFIG, db, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
-import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, refundOutcome, REMIND_GAP_HOURS, whatsappUrl } from './payments-ledger.js';
+import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, SEAT_STOPPED, settings, type Item } from './entitlements.ts';
@@ -356,11 +356,10 @@ export async function adminOverview() {
   ]);
   const live = (pays || []).filter((x: any) => x.mode === 'live');
   const paid = live.filter((x: any) => x.status === 'paid');
-  const sum = (rows: any[]) => rows.reduce((t, x) => t + (x.amount_cents || 0), 0);
   const by = (i: Item) => paid.filter((x: any) => x.item === i);
   const payers = (i: Item) => new Set(by(i).map((x: any) => x.participant_id)).size;
   const days = [...Array(30)].map((_, i) => new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10));
-  const daily = days.map((d) => ({ day: d, cents: sum(paid.filter((x: any) => String(x.paid_at).slice(0, 10) === d)) }));
+  const daily = days.map((d) => ({ day: d, cents: paid.filter((x: any) => String(x.paid_at).slice(0, 10) === d).reduce((t: number, x: any) => t + netCents(x), 0) }));
   const key = apiKey();
   // قيمة ما غطّته كل جهة (بأسعار اليوم)، ومن دفع ثم ارتبط بجهة (قرار استرداد للإدارة)
   const liveEnts = (ents || []).filter((e: any) => !e.revoked_at);
@@ -381,8 +380,8 @@ export async function adminOverview() {
       last_event: evs?.[0] || null, failed_events: (evs || []).filter((e: any) => e.error).length,
     },
     kpis: {
-      // المسترد: المستردة كاملة بمبلغها، ومعها ما استُرد جزئيًا من دفعات بقيت مدفوعة
-      revenue_cents: sum(paid), refunds_cents: sum(live.filter((x: any) => x.status === 'refunded')) + paid.reduce((t: number, x: any) => t + (x.refund_cents || 0), 0),
+      // الإيراد صافٍ بعد الجزئي، والمسترد: المستردة كاملة بمبلغها ومعها الجزئي (revenueKpis)
+      ...revenueKpis(live),
       assessment_paid: payers('assessment'), program_paid: payers('program'),
       conversion: payers('assessment') ? Math.round((payers('program') / payers('assessment')) * 100) : null,
       pending: live.filter((x: any) => x.status === 'pending').length, participants: participants ?? 0,
