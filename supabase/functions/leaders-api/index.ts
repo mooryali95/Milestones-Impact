@@ -60,6 +60,7 @@ import * as AG from './agent-admin.ts';
 import * as MB from './master-book.ts';
 import * as BP from './book-proposals.ts';
 import * as BR from './book-release.ts';
+import * as NU from './nudges.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -460,7 +461,11 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.insight': () => IN.adminInsight(),
   'admin.changes': (_a, b) => IN.adminChanges(b),
   'admin.inbox': (_a, b) => A.inbox(b),
-  'admin.remind-stuck': A.remindStuck,
+  // التذكير الموحد (nudges.ts): المحرك نفسه والسجل الواحد لكل مرسل. remind-stuck اسم قديم يبقى للتوافق
+  'admin.remind-stuck': (a, b) => A.writer(a, NU.adminSend, b),
+  'admin.nudge': (a, b) => A.writer(a, NU.adminSend, b),
+  'admin.nudge-preview': NU.adminPreview,
+  'admin.nudge-ledger': NU.adminLedger,
   'admin.observation-add': (a, b) => A.writer(a, OB.adminAdd, b),
   'admin.observation-remove': (a, b) => A.writer(a, OB.adminRemove, b),
   'admin.participant-impact': (_a, b) => A.participantImpact(b),

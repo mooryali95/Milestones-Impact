@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
+import { stageText } from './nudge.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
 import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
@@ -310,16 +311,9 @@ export function reviewMail(name: string, title: string, returned: boolean, note?
     returned ? `ملاحظة على «${title}» قبل اعتماده` : `اعتُمد «${title}»`);
 }
 
-export function reminderMail(name: string, open: number) {
-  return shell('journey', 'رحلتك بانتظارك',
-    mailText(`${hello(name)} لديك ${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك القيادية. بضع دقائق اليوم تقرّبك من المرحلة التالية.`)
-    + mailButton(CONFIG.appUrl, 'أكمل رحلتي'),
-    `${open} ${open === 1 ? 'خطوة مفتوحة' : 'خطوات مفتوحة'} في رحلتك`);
-}
-
-// تذكير المتعثر قبل الاعتماد بما بقي عليه هو (onboarding.js stuckMailText): يرسله المدير لمن يختارهم
-export function stuckMail(name: string, text: string) {
-  return shell('journey', 'خطوة واحدة لتبدأ رحلتك', mailText(`${hello(name)} ${esc(text)}`) + mailButton(CONFIG.appUrl, 'أكمل الآن'), text);
+// التذكير الموحد (nudges.ts): النص الذي بناه المحرك من رحلته (nudge.js)، وتوقيع مرسله إن لم يكن آليًا
+export function nudgeMail(name: string, heading: string, text: string, signature = '') {
+  return shell('journey', esc(heading), mailText(`${hello(name)} ${esc(text)}`) + (signature ? mailText(esc(signature)) : '') + mailButton(CONFIG.appUrl, 'أكمل رحلتي'), text.slice(0, 140));
 }
 
 // ملاحظة أو تنبيه أو إشادة مرئية للمشارك (observations.ts): النص نفسه الذي تعرضه بطاقته في الموقع
@@ -723,8 +717,11 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'pay-reminder', family: 'journey', label: 'تذكير إكمال التسجيل', subject: 'مسارك المعتمد بانتظارك', html: () => payReminderMail('سارة', 3) },
   { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },
-  { key: 'reminder', family: 'journey', label: 'تذكير أسبوعي', subject: 'رحلتك القيادية بانتظارك', html: () => reminderMail('سارة', 3) },
-  { key: 'stuck', family: 'journey', label: 'تذكير من لم يكمل التسجيل (يدوي)', subject: STUCK_MAIL_SUBJECT, html: () => stuckMail('سارة', stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })!) },
+  // التذكير الموحد (nudge.js): نص المحرك نفسه لكل مرسل. المفتاحان القديمان باقيان لسجل البريد
+  { key: 'reminder', family: 'journey', label: 'تذكير: الخطوة التالية في الرحلة (كل المرسلين)', subject: 'خطوتك التالية في «التدريب»',
+    html: () => nudgeMail('سارة', 'خطوتك التالية في «التدريب»', stageText({ stage: 'التدريب', need: 'خطة المبادرة', progress: 40, days: 9 }), '— فريق برنامج القادة') },
+  { key: 'stuck', family: 'journey', label: 'تذكير: إكمال التسجيل والقياس (كل المرسلين)', subject: STUCK_MAIL_SUBJECT,
+    html: () => nudgeMail('سارة', STUCK_MAIL_SUBJECT, stuckMailText({ step: 'assessment_doing', answered: 42, total: 63 })!, '— فريق برنامج القادة') },
   { key: 'retake', family: 'journey', label: 'طلب إعادة قياس تحديد المستوى', subject: RETAKE_MAIL_SUBJECT, html: () => retakeMail('سارة', retakeText('effort', 35)) },
   { key: 'observation', family: 'journey', label: 'تنبيه أو ملاحظة مرئية للمشارك', subject: 'تنبيه في رحلتك: غياب عن جلسة توجيه', html: () => observationMail('سارة', 'غياب عن جلسة توجيه', 'سُجّل غيابك عن جلسة التوجيه يوم الأحد 15 نوفمبر. إن كان لديك عذر فأخبر مستشارك، واحجز موعدًا بديلًا من صفحة الأنشطة.') },
   { key: 'certificate', family: 'journey', label: 'صدور شهادة الإتمام بنجاح', subject: 'شهادة إتمامك بنجاح برنامج القادة', html: () => certificateMail('سارة', `${CONFIG.appUrl}/v/MI-LDR-2026-SAMPLE`) },

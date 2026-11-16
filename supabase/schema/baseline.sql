@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116070000_leaders_book_comment_out_of_seat
+-- as-of migration: 20261116080000_leaders_nudges
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1300,6 +1300,26 @@ create table if not exists leaders.model_submissions (
   constraint model_submissions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'reviewed'::text, 'returned'::text]))),
   constraint model_submissions_pkey PRIMARY KEY (id),
   constraint model_submissions_participant_id_model_id_key UNIQUE (participant_id, model_id)
+);
+
+create table if not exists leaders.nudges (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  sender text not null,
+  sender_label text,
+  sender_ref text,
+  stage_key text not null,
+  stage_title text,
+  step text,
+  channels text[] default ARRAY['email'::text] not null,
+  subject text,
+  body text not null,
+  snapshot jsonb default '{}'::jsonb not null,
+  created_at timestamp with time zone default now() not null,
+  seen_at timestamp with time zone,
+  constraint nudges_body_check CHECK (((char_length(body) >= 3) AND (char_length(body) <= 2000))),
+  constraint nudges_sender_check CHECK ((sender = ANY (ARRAY['admin'::text, 'mentor'::text, 'assistant'::text, 'coordinator'::text, 'auto'::text]))),
+  constraint nudges_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.ops_status (
@@ -2751,6 +2771,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.nudges add constraint nudges_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.org_coordinators add constraint org_coordinators_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3202,6 +3226,10 @@ CREATE INDEX IF NOT EXISTS mail_queue_pending_idx ON leaders.mail_queue USING bt
 
 CREATE INDEX IF NOT EXISTS model_submissions_status_idx ON leaders.model_submissions USING btree (status);
 
+CREATE INDEX IF NOT EXISTS nudges_person ON leaders.nudges USING btree (participant_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS nudges_sender ON leaders.nudges USING btree (sender, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS org_coordinators_email_idx ON leaders.org_coordinators USING btree (email);
 
 CREATE UNIQUE INDEX IF NOT EXISTS org_coordinators_org_email_uniq ON leaders.org_coordinators USING btree (organization_id, lower(email));
@@ -3491,6 +3519,8 @@ alter table leaders.mail_events enable row level security;
 alter table leaders.mail_queue enable row level security;
 
 alter table leaders.model_submissions enable row level security;
+
+alter table leaders.nudges enable row level security;
 
 alter table leaders.ops_status enable row level security;
 
