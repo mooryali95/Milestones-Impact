@@ -782,3 +782,10 @@ Deno.test('إعادة الرد الفارغ بلا تفكير: Haiku 5.5 disable
   assertEquals('thinking' in requestParams('claude-haiku-5-5', []), false);
   assertEquals('thinking' in requestParams('claude-opus-5-5', [], { thinking: 'off' }), false);
 });
+
+Deno.test('تنبيهات المساعد (سقف الإنفاق والإعداد) تمر بـ alertOps الموحد لا بالرابط وحده', async () => {
+  const src = await Deno.readTextFile(new URL('./index.ts', import.meta.url));
+  assertMatch(src, /import \{ alertOps \} from '\.\.\/leaders-api\/core\.ts';/);
+  assertMatch(src, /alert: \(kind, detail\) => alertOps\(kind, \{ fn: 'agent-chat', \.\.\.detail \}\)/);
+  assert(!/alertWebhook/.test(src));
+});

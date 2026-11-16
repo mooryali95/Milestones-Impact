@@ -633,17 +633,21 @@ export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
   // كل تغيير في المساعد يُبلَّغ (بلا تهدئة)
   agent_key_changed: 0, agent_key_reverted: 0, agent_enabled: 0, agent_disabled: 0,
+  // تنبيهات agent-chat تُهدَّأ هناك بعلامة يومية في القاعدة (agent_spend_alert)، فلا تهدئة ثانية تحجب مستوى عن آخر
+  agent_spend_80: 0, agent_spend_cap: 0, agent_eval_stale: 0, agent_model_unknown: 0, agent_ledger_error: 0, agent_model_config: 0,
 };
 export const alertCooldown = (kind: string) => ALERT_COOLDOWN_MS[kind] ?? ALERT_WINDOW_MS;
 const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات' };
 export function alertMail(kind: string, detail: Record<string, unknown>, windowMs = ALERT_WINDOW_MS) {
   const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
+  // fn: الدالة التي رفعت التنبيه إن لم تكن leaders-api (agent-chat مثلًا)
+  const where = typeof detail.fn === 'string' && detail.fn ? detail.fn : 'leaders-api';
   const calm = windowMs > 0 ? ` لن يصلك تنبيه آخر من النوع نفسه خلال ${SPAN_AR[windowMs] ?? `${Math.round(windowMs / 6e4)} دقيقة`}.` : '';
   return shell('admin', `تنبيه تشغيلي: ${kind}`,
-    mailText(`وقع <b>${bdi(kind)}</b> في leaders-api الآن.${esc(calm)}`)
+    mailText(`وقع <b>${bdi(kind)}</b> في ${bdi(where)} الآن.${esc(calm)}`)
     + mailRows(rows)
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
-    `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
+    `${kind} في ${where}`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 // بريد mail_queue_stuck: التنبيه بالبريد من نصيب الرموز في السقف، والطابور يتأخر في الأيام المزدحمة نفسها،
 // فلا يُرسل إلا حين لا يصل الرابط، ومرة كل ست ساعات بين النسخ (من سجل البريد بعنوانه). ما لم يصل لا يُعلَّم ويُعاد

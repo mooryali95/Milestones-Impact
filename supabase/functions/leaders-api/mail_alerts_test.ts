@@ -272,3 +272,28 @@ Deno.test('P1-12: admin.alert-test للمدير الأعلى وحده، يرسل
   const index = await Deno.readTextFile(new URL('./index.ts', import.meta.url));
   assertEquals(index.includes("'admin.alert-test': (a, b) => A.superWriter(a, S.alertTest, b),"), true);
 });
+
+// تنبيه سقف إنفاق المساعد (agent-chat) يمر بالمسار الموحد: أثر في السجل، والرابط، وبريد المالك باسم الدالة
+Deno.test('تنبيه سقف المساعد: سجل system.alert والرابط والبريد، بلا تهدئة ثانية فوق علامة المساعد اليومية', async () => {
+  const saved = { alertEmail: CONFIG.alertEmail, resendKey: CONFIG.resendKey };
+  Object.assign(CONFIG, { alertEmail: 'owner@x.sa', resendKey: 're_test' });
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const audits: any[] = [];
+  const restore = install((t, ops) => {
+    if (t === 'audit_log' && has(ops, 'insert')) { audits.push(...([] as any[]).concat(arg(ops, 'insert', 0))); return { error: null }; }
+    return { data: [], count: 0, error: null };
+  });
+  try {
+    await withFetch(async (calls) => {
+      const { alertOps } = await import('./core.ts');
+      assertEquals(await alertOps('agent_spend_80', { fn: 'agent-chat', day: '2026-11-16', spent_usd: '4.0000', cap_usd: '5.00' }), true);
+      assertEquals(await alertOps('agent_spend_cap', { fn: 'agent-chat', day: '2026-11-16', spent_usd: '5.0000', cap_usd: '5.00' }), true);
+      assertEquals(audits.filter((r) => r.action === 'system.alert').map((r) => r.entity_id), ['agent_spend_80', 'agent_spend_cap']);
+      assertEquals(hooks(calls).map((c) => c.body.kind), ['agent_spend_80', 'agent_spend_cap']);
+      const mails = resend(calls);
+      assertEquals(mails.length, 2);
+      assertEquals(mails[1].body.to, ['owner@x.sa']);
+      assertEquals(String(mails[1].body.html).includes('agent-chat'), true);
+    });
+  } finally { restore(); Object.assign(CONFIG, saved); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
