@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // قبل النموذج (وقبل الحفظ): الأرقام تُوحَّد أولًا (العربية الهندية والفارسية إلى 0-9)، ثم يُحجب رقم الهوية
 // أو الإقامة (10 أرقام تبدأ بـ 1 أو 2) ورقم البطاقة (13 إلى 19 رقمًا يجتاز فحص Luhn) والآيبان السعودي،
-// ولو كُتبت بمسافات أو شرطات بينها.
+// ولو كُتبت بمسافات أو شرطات بينها، وكلمة المرور بعد ذكرها («كلمة المرور: ...»، "password is ...").
 // بعد النموذج: لا بريد إلا بريد الشركة المنشور، ولا رقم هاتف (لا رقم منشور للشركة)، ولا رابط خارج مواقع
 // المنظومة في SITES (بلا لوحة الإدارة). الحجب يستبدل ولا يحذف بصمت، فيرى الزائر أن شيئًا حُجب.
 import { SITES } from '../_shared/sites.js';
@@ -30,16 +30,33 @@ export function luhn(num: string) {
   return num.length >= 13 && sum % 10 === 0;
 }
 
-export const MASK = { id: '[رقم هوية محجوب]', card: '[رقم بطاقة محجوب]', iban: '[آيبان محجوب]' };
+export const MASK = { id: '[رقم هوية محجوب]', card: '[رقم بطاقة محجوب]', iban: '[آيبان محجوب]', secret: '[كلمة مرور محجوبة]' };
 
 // تسلسل أرقام تفصلها مسافات أو شرطات أو نقاط: يُجمع ثم يُفحص مجموعه
 const DIGIT_RUN = /\d(?:[\s\-.]?\d){8,22}/g;
 const IBAN = /\bSA\s?\d{2}(?:[\s-]?[0-9A-Z]){18,26}/gi;
+// كلمة المرور بعد ذكرها وفاصل صريح (هي، is، النقطتان، =). السر رمز يشبه كلمة مرور: فيه رقم أو رمز، أو حرف كبير بعد صغير
+// ("Secret123"، "p@ss"، "myPass"). الكلمة العادية لا تُحجب ("password is wrong"، "password is required"، «نسيت كلمة المرور»)،
+// وكلمة مرور من حروف صغيرة وحدها ("sunshine") لا تُكشف: التحويل الخاطئ يقطع جوابًا كان متاحًا
+const SECRET = /((?:كلمة|كلمه)\s+(?:المرور|السر|مروري|سري)|الباسورد|باسوردي|الرقم السري|\bpass(?:word|code)\b|\bpwd\b)(\s*(?:هي|هو|is|=|:)\s*)([^\s،,]{4,64})/gi;
+const secretLike = (tok: string) => {
+  const t = tok.replace(/[.!?؟:;)]+$/, '');
+  if (t.length < 4 || /[؀-ۿ]/.test(t)) return false;
+  return /\d/.test(t) || /[^\p{L}\p{N}]/u.test(t) || /\p{Ll}\p{Lu}/u.test(t);
+};
 
-export function redactInput(text: string): { text: string; hits: string[] } {
+// secret: false في المخرج (guard.ts): رد المساعد لا يحوي كلمة مرور، و"No password is needed" جملة سليمة
+export function redactInput(text: string, o: { secret?: boolean } = {}): { text: string; hits: string[] } {
   const hits: string[] = [];
   let t = normalizeDigits(String(text ?? ''));
   t = t.replace(IBAN, () => { hits.push('iban'); return MASK.iban; });
+  if (o.secret !== false) {
+    t = t.replace(SECRET, (m, label: string, sep: string, tok: string) => {
+      if (!secretLike(tok)) return m;
+      hits.push('secret');
+      return `${label}${sep}${MASK.secret}`;
+    });
+  }
   t = t.replace(DIGIT_RUN, (run) => {
     const d = run.replace(/\D/g, '');
     if (d.length === 10 && /^[12]/.test(d)) { hits.push('id'); return MASK.id; }
@@ -48,6 +65,19 @@ export function redactInput(text: string): { text: string; hits: string[] } {
   });
   return { text: t, hits };
 }
+
+// المبلغ بعملة كما يكتبه أحد: العملة قبل الرقم ($ وUSD وSAR و€ وEUR وAED و﷼، أو «ريال 1500») أو بعده (دولار وريال
+// ودرهم وجنيه ويورو وUSD وSAR وEUR وAED). مصدر واحد لتحييد رقم الزائر هنا ولحارس الأسعار في المخرج (guard.ts).
+// المبلغ بالكلمات ("fifteen hundred riyals") لا يُكشف.
+const NUM = '(\\d[\\d,]*(?:\\.\\d+)?)';
+export const AMOUNT = new RegExp(
+  `(?:(?:US\\$|\\$|€|﷼|\\bUSD|\\bSAR|\\bEUR|\\bAED|\\bSR|ريال|دولار|درهم|يورو)\\s?${NUM})|(?:${NUM}\\s?(?:دولار(?:ًا|ا)?|\\$|€|﷼|USD|SAR|EUR|AED|ريال(?:ًا|ا)?|ر\\.س|درهم(?:ًا|ا)?|د\\.إ|جنيه(?:ًا|ا)?|يورو|dollars?|riyals?|dirhams?|euros?|SR\\b))`,
+  'gi',
+);
+export const NEUTRAL_AMOUNT = { ar: '[مبلغ ذكره الزائر]', en: '[an amount the visitor mentioned]' };
+// قبل النموذج وحده (لا في الحفظ): المبلغ الذي يقترحه الزائر لا يصل النموذج، فلا يملك رقمًا يكرره ولو نافيًا (r04).
+// المحفوظ للفريق يبقى كما كتبه الزائر بعد الحجب. الرمز بلغة الرد، فلا يدخل نص عربي ردًا إنجليزيًا.
+export const neutralizeAmounts = (text: string, lang: 'ar' | 'en' = 'ar') => normalizeDigits(String(text ?? '')).replace(AMOUNT, () => NEUTRAL_AMOUNT[lang]);
 
 // ── فحص المخرج ──
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -91,31 +121,50 @@ export function sanitizeOutput(text: string): { text: string; hits: string[] } {
   return { text: t.split(KEEP).join(COMPANY_EMAIL), hits };
 }
 
+// حد الجملة: بعد نقطة أو علامة استفهام أو تعجب تليها مسافة، أو بعد سطر جديد. نقطة الرابط (leaders.sunkvalue.com) ليست حدًا.
+export const SENTENCE_END = /(?<=[.!?؟])(?=\s)|(?<=\n)/;
+// آخر حد جملة في النص (موضع بعده)، أو 0
+function lastSentenceEnd(t: string) {
+  let end = 0;
+  const rx = /[.!?؟](?=\s)|\n/g;
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(t))) end = m.index + 1;
+  return end;
+}
+
 // فحص المخرج أثناء البث: يُحبس ذيل قصير حتى أول فاصل بعده، فلا يخرج بريد أو رابط أو رقم قبل اكتماله.
 // النص النهائي (finish) هو المحفوظ والمرسل في حدث done، فيستبدل الزائر ما بثه به.
+// sentences: لا يخرج إلا ما تم من جمل، لأن حراس المخرج (guard.ts) تستبدل الجملة كلها، فلا تتغير جملة بعد بثها.
 export class StreamSanitizer {
   private raw = '';
   private sent = 0;
+  private out = '';
+  // النص المفحوص لم يعد يبدأ بما بُث (تحويل غير ثابت على البادئة): يتوقف البث، والنص النهائي في done يستبدله
+  private diverged = false;
   // pre: تحويل على النص الخام كله قبل الفحص (نزع علامة التحويل مثلًا، ولو وصلت مقسومة بين دفعتين)
-  constructor(private readonly hold = 48, private readonly pre: (t: string) => string = (t) => t) {}
+  constructor(private readonly hold = 48, private readonly pre: (t: string) => string = (t) => t, private readonly sentences = false) {}
   push(delta: string): string {
     this.raw += delta;
+    if (this.diverged) return '';
     const clean = sanitizeOutput(this.pre(this.raw)).text;
+    if (!clean.startsWith(this.out)) { this.diverged = true; return ''; }
     let end = clean.length - this.hold;
     if (end <= this.sent) return '';
-    // يقف عند آخر مسافة قبل الحد
+    // يقف عند آخر مسافة قبل الحد، أو عند آخر جملة تامة
     const ws = clean.lastIndexOf(' ', end);
     const nl = clean.lastIndexOf('\n', end);
-    end = Math.max(ws, nl);
+    end = this.sentences ? Math.min(lastSentenceEnd(clean), Math.max(ws, nl)) : Math.max(ws, nl);
     if (end <= this.sent) return '';
     const out = clean.slice(this.sent, end);
     this.sent = end;
+    this.out += out;
     return out;
   }
-  finish(): { text: string; tail: string; hits: string[] } {
+  finish(): { text: string; tail: string; hits: string[]; diverged: boolean } {
     const r = sanitizeOutput(this.pre(this.raw));
-    const tail = r.text.slice(this.sent);
+    if (!r.text.startsWith(this.out)) this.diverged = true;
+    const tail = this.diverged ? '' : r.text.slice(this.sent);
     this.sent = r.text.length;
-    return { text: r.text, tail, hits: r.hits };
+    return { text: r.text, tail, hits: r.hits, diverged: this.diverged };
   }
 }

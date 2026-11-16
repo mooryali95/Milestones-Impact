@@ -5,10 +5,11 @@
 // وفي only كل كلمة من السؤال يجب أن تكون من المجموعة (التحية وحدها لا تبتلع سؤالًا بعدها). والسؤال المركب (علامتا
 // استفهام) لا يُجاب جاهزًا. ما لا يطابق مطابقة واضحة يذهب إلى النموذج. والجواب بلغة السؤال، والمنتج هو ما سماه
 // الزائر صراحة، وإلا فمنتج الصفحة التي فُتحت منها المحادثة؛ وإن سمى المنتجين فلا جواب جاهز لمنتج بعينه.
+// والجواب المشترك (product: shared) للصفحة المشتركة بلا منتج مسمى، أو حين سمى المنتجين: يذكر كلًا منهما باسمه.
 import { FAQ } from './knowledge.js';
 import { normalizeDigits } from './redact.ts';
 
-export type FaqEntry = { id: string; product: 'any' | 'leaders' | 'matrix'; max_words?: number; match: string[][]; not?: string[]; only?: boolean; ar: string; en: string };
+export type FaqEntry = { id: string; product: 'any' | 'leaders' | 'matrix' | 'shared'; max_words?: number; match: string[][]; not?: string[]; only?: boolean; ar: string; en: string };
 export type Product = 'leaders' | 'matrix' | 'shared';
 
 // المنتج من صفحة الموقع (data-product): صفحة البرنامج للقادة، والأسعار ووثائق الموقع للمصفوفة، وما سواها مشترك
@@ -86,7 +87,7 @@ export function matchFaq(question: string, page: string, lang?: string): { id: s
   const product = named === 'both' ? null : (named ?? productOf(page));
   for (const { e, keys, not } of ENTRIES) {
     if (tokens.length > (e.max_words ?? 10)) continue;
-    if (e.product !== 'any' && e.product !== product) continue;
+    if (e.product === 'shared' ? !(product === null || (named === null && product === 'shared')) : (e.product !== 'any' && e.product !== product)) continue;
     const all = keys.every((group) => group.some((k) => hasKey(norm, tokens, k)));
     if (!all) continue;
     if (not.some((k) => hasKey(norm, tokens, k))) continue;
