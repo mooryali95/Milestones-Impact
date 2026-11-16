@@ -22,19 +22,21 @@ const VAULT = `create schema vault;
   create view vault.decrypted_secrets as select id, name, secret as decrypted_secret from vault.secrets;`;
 const KEY = 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz-WXYZ';
 
-async function db(vault = true) {
+// التطبيق مرتين (إعادة آمنة) يُفحص في الاختبار الأول وحده؛ البقية بتطبيق واحد، لأن كل قاعدة PGlite مكلفة
+async function db(vault = true, twice = false) {
   const d = new PGlite();
   await d.exec(BEFORE);
   if (vault) await d.exec(VAULT);
   await d.exec(SQL);
-  await d.exec(SQL);
+  if (twice) await d.exec(SQL);
   return d;
 }
 const one = async (d, q, p = []) => (await d.query(q, p)).rows[0];
 
-describe('ترحيل 20261115230000_leaders_agent_admin', () => {
+// مهلة صريحة: كل اختبار يبني قاعدة PGlite كاملة (والثالث قاعدتين)، وهذا يتجاوز 5 ثوان على عدّاء CI المزدحم
+describe('ترحيل 20261115230000_leaders_agent_admin', { timeout: 30_000 }, () => {
   it('صف إعداد واحد مطفأ افتراضيًا، والجهة تسمح بالمرافق افتراضيًا، والترحيل مسجل ويُعاد بأمان', async () => {
-    const d = await db();
+    const d = await db(true, true);
     expect((await d.query('select enabled from leaders.agent_settings')).rows).toEqual([{ enabled: false }]);
     await d.exec(`insert into leaders.organizations (name) values ('جهة')`);
     expect((await one(d, 'select companion_allowed from leaders.organizations')).companion_allowed).toBe(true);
