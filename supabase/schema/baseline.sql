@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116110000_leaders_program_version_pin
+-- as-of migration: 20261116120000_leaders_guidance
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -951,6 +951,40 @@ create table if not exists leaders.grid_cells (
   path_title_ar text,
   updated_by text,
   constraint grid_cells_pkey PRIMARY KEY (dimension, level)
+);
+
+create table if not exists leaders.guidance_messages (
+  id bigint generated always as identity not null,
+  participant_id uuid not null,
+  role text not null,
+  body text not null,
+  context text default 'program'::text not null,
+  chapter_id text,
+  verdict text,
+  sources jsonb,
+  model text,
+  input_tokens integer,
+  cache_read_tokens integer,
+  output_tokens integer,
+  cost_micros bigint,
+  created_at timestamp with time zone default now() not null,
+  constraint guidance_messages_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 6000))),
+  constraint guidance_messages_chapter_id_check CHECK ((char_length(chapter_id) <= 80)),
+  constraint guidance_messages_context_check CHECK ((context = ANY (ARRAY['program'::text, 'handbook'::text, 'capstone'::text]))),
+  constraint guidance_messages_model_check CHECK ((char_length(model) <= 60)),
+  constraint guidance_messages_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
+  constraint guidance_messages_verdict_check CHECK ((verdict = ANY (ARRAY['answered'::text, 'refused'::text, 'unsure'::text, 'error'::text]))),
+  constraint guidance_messages_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.guidance_spend_daily (
+  day date not null,
+  micros bigint default 0 not null,
+  calls integer default 0 not null,
+  alerted_100 timestamp with time zone,
+  updated_at timestamp with time zone default now() not null,
+  constraint guidance_spend_daily_micros_check CHECK ((micros >= 0)),
+  constraint guidance_spend_daily_pkey PRIMARY KEY (day)
 );
 
 create table if not exists leaders.hall_presence (
@@ -2648,6 +2682,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.guidance_messages add constraint guidance_messages_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.hall_presence add constraint hall_presence_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3191,6 +3229,10 @@ CREATE INDEX IF NOT EXISTS feedback_cycles_status ON leaders.feedback_cycles USI
 
 CREATE INDEX IF NOT EXISTS final_evaluations_status_idx ON leaders.final_evaluations USING btree (status);
 
+CREATE INDEX IF NOT EXISTS guidance_messages_created_idx ON leaders.guidance_messages USING btree (created_at);
+
+CREATE INDEX IF NOT EXISTS guidance_messages_participant_idx ON leaders.guidance_messages USING btree (participant_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS hall_presence_last_seen_idx ON leaders.hall_presence USING btree (last_seen);
 
 CREATE INDEX IF NOT EXISTS hall_sessions_cohort_idx ON leaders.hall_sessions USING btree (cohort_id, stage);
@@ -3482,6 +3524,10 @@ alter table leaders.feedback_cycles enable row level security;
 alter table leaders.final_evaluations enable row level security;
 
 alter table leaders.grid_cells enable row level security;
+
+alter table leaders.guidance_messages enable row level security;
+
+alter table leaders.guidance_spend_daily enable row level security;
 
 alter table leaders.hall_presence enable row level security;
 
@@ -3955,6 +4001,66 @@ begin
   end if;
   return new;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_claim(p_participant uuid, p_body text, p_context text, p_chapter text, p_day_start timestamp with time zone, p_month_start timestamp with time zone, p_daily integer, p_monthly integer)
+ RETURNS bigint
+ LANGUAGE plpgsql
+AS $function$
+declare d integer; m integer; new_id bigint;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('guidance:' || p_participant::text, 0));
+  select count(*) filter (where created_at >= p_day_start), count(*) into d, m
+    from leaders.guidance_messages
+   where participant_id = p_participant and role = 'user' and verdict is distinct from 'refused'
+     and created_at >= least(p_day_start, p_month_start);
+  if d >= p_daily then return -1; end if;
+  if m >= p_monthly then return -2; end if;
+  insert into leaders.guidance_messages (participant_id, role, body, context, chapter_id)
+  values (p_participant, 'user', p_body, p_context, p_chapter)
+  returning id into new_id;
+  return new_id;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_purge_expired()
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+declare days integer := 90; n integer; raw text;
+begin
+  if to_regclass('leaders.app_settings') is not null then
+    select value->>'retention_days' into raw from leaders.app_settings where key = 'guidance';
+    if raw ~ '^[0-9]{1,3}$' and raw::integer between 7 and 365 then days := raw::integer; end if;
+  end if;
+  delete from leaders.guidance_messages where created_at < now() - make_interval(days => days);
+  get diagnostics n = row_count;
+  return n;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_spend_reserve(p_day date, p_micros bigint, p_cap bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  insert into leaders.guidance_spend_daily as d (day, micros, calls)
+  select p_day, greatest(p_micros, 0), 1 where greatest(p_micros, 0) <= p_cap
+  on conflict (day) do update set micros = d.micros + excluded.micros, calls = d.calls + 1, updated_at = now()
+  where d.micros + excluded.micros <= p_cap
+  returning micros;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_spend_settle(p_day date, p_delta bigint)
+ RETURNS bigint
+ LANGUAGE sql
+AS $function$
+  update leaders.guidance_spend_daily set micros = greatest(micros + p_delta, 0), updated_at = now()
+  where day = p_day
+  returning micros;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.handbook_quiz_locked()

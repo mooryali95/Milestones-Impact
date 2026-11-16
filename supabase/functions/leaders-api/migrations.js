@@ -144,6 +144,7 @@ export const MIGRATIONS = [
   '20261116090000_leaders_org_coord_nudges',
   '20261116100000_leaders_t360_rename',
   '20261116110000_leaders_program_version_pin',
+  '20261116120000_leaders_guidance',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -206,4 +207,5 @@ export const MIGRATION_GATES = {
   '20261116090000_leaders_org_coord_nudges': ["tolerant", "الدوال تعدّه مفعّلًا إن غاب العمود (coord_nudges !== false)، ونموذج الجهة لا يرسله قبل وجوده في صفها"],
   '20261116100000_leaders_t360_rename': ["tolerant", "نص فقط: الدالة والواجهة تعملان قبله وبعده، والبندان يُعرفان برمزهما لا بعنوانهما"],
   '20261116110000_leaders_program_version_pin': ["tolerant", "الدوال تقرأ نسخة الدفعة إن وُجدت وإلا البرنامج كما هو (programs.ts journeyDefinition)، وتثبّت كل دفعة جديدة على نسخة قبله وبعده"],
+  '20261116120000_leaders_guidance': ["tolerant", "مسارات guide.* ترد not_migrated قبل الجدول فيبقى المساعد مخفيًا، و«اطلب استشارة» يعمل كما هو"],
 };
