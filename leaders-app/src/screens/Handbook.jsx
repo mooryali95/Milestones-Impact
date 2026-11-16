@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// الكتيب الشخصي: قراءة فقط داخل المنصة
+// الكتاب الشخصي: قراءة فقط داخل المنصة
 // ════════════════════════════════════════════════════════════════
 // الحماية طبقات، ولا يوجد موقع يمنع التصوير منعًا مطلقًا:
 //   • الخادم يرسل بابًا واحدًا بعد تصفيته بمستوى المشارك، ويسجل كل فتح
@@ -134,7 +134,7 @@ function render(canvas, chapter, watermark, cssWidth, meta, logo) {
     ctx.textBaseline = 'alphabetic';
     let y = pad - 14;
 
-    // الترويسة الجارية: الشعار يسارًا، واسم الكتيب والجزء يمينًا
+    // الترويسة الجارية: الشعار يسارًا، واسم الكتاب والجزء يمينًا
     y += 22;
     if (draw) {
       ctx.font = `500 11.5px ${KUFI}`;
@@ -424,7 +424,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
   const [toast, setToast] = useState('');
   const [reading, setReading] = useState(null);
   const [attempt, setAttempt] = useState(0);   // «حاول مرة أخرى» بعد فشل تحميل باب: يعيد الطلب ولو لم يتغير الباب
-  const [seek, setSeek] = useState(null);       // الإحالة الواردة من وثيقة المبادرة، ومعها هل الباب في كتيب المشارك
+  const [seek, setSeek] = useState(null);       // الإحالة الواردة من وثيقة المبادرة، ومعها هل الباب في كتاب المشارك
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   // التمرير إلى رأس الباب بعد رسمه لا قبله: اللوحة تكبر عند الرسم (بعد تحميل الخطوط)، والتمرير قبله كان ينتهي
@@ -564,10 +564,10 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
 
   return (
     <div className="page book">
-      <FirstOpen id="handbook" icon="book" title="كتيبك على مستواك" lines={[
+      <FirstOpen id="handbook" icon="book" title="كتابك على مستواك" lines={[
         'الأبواب مرتبة بمستواك في كل إطار؛ ابدأ بالباب المعلّم «التالي».',
         'في نهاية كل باب سؤال تأمل واختبار قصير يوثّقان قراءتك في رحلتك تلقائيًا.',
-        'يحفظ الكتيب موضعك، فتعود إليه من حيث توقفت على أي جهاز.',
+        'يحفظ الكتاب موضعك، فتعود إليه من حيث توقفت على أي جهاز.',
       ]} />
       <section className="book-hero">
         <div className="book-hero-main">
@@ -591,9 +591,9 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
             <small>{pts.rank.next ? `${pts.rank.next.left} نقطة إلى ${pts.rank.next.title}` : 'أعلى لقب في البرنامج'}</small>
           </div>
         </div>
-        <nav className="book-tabs" aria-label="أقسام الكتيب">
+        <nav className="book-tabs" aria-label="أقسام الكتاب">
           <div className="book-tablist" role="tablist">
-            {[['read', 'الكتيب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
+            {[['read', 'الكتاب'], ['models', `النماذج التعليمية${toc.models?.total ? ` · ${toc.models.submitted}/${toc.models.total}` : ''}`], ['wins', 'إنجازاتي']].map(([k, l]) => (
               <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
             ))}
           </div>
@@ -608,7 +608,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
 
       {tab === 'read' && (
         <div className="book-grid">
-          <nav className="book-toc" data-tour="handbook-toc" aria-label="فهرس الكتيب">
+          <nav className="book-toc" data-tour="handbook-toc" aria-label="فهرس الكتاب">
             <button className={`toc-ch toc-cover${current === COVER ? ' on' : ''}`} onClick={() => setCurrent(COVER)}>
               <span className="toc-num">◆</span><span className="toc-t">الغلاف</span>
             </button>
@@ -642,7 +642,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
                   <small>من فصل «{seek.from}» في وثيقة مبادرتك</small>
                   {seek.found
                     ? <b>اقرأ في هذا الباب قسم «{seek.look_for}»</b>
-                    : <b>الباب الذي يشرح هذا الفصل ليس في كتيبك في مستواك الحالي. اسأل مختصًا من صفحة مبادرتك.</b>}
+                    : <b>الباب الذي يشرح هذا الفصل ليس في كتابك في مستواك الحالي. اسأل مختصًا من صفحة مبادرتك.</b>}
                 </div>
                 {onReturn && <button type="button" className="btn ghost sm" onClick={onReturn}>عد إلى «{seek.from}»</button>}
                 <button type="button" className="link small" aria-label="إخفاء" onClick={() => setSeek(null)}>×</button>
@@ -665,8 +665,8 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
             <div hidden={current === COVER || (!data && !loading)} className={`book-page hb-sheet${shield ? ' shield' : ''}${loading ? ' loading' : ''}`}>
               {/* اللوحة صورة لا يقرؤها قارئ الشاشة؛ وصفها يدله على النسخة الشخصية القائمة (نص مسجل بعلامة مائية)، ولا نص للباب في DOM
                   حتى يحسم المالك القرار 9 (وضع قراءة نصي بطلب مسجل، ux-05) */}
-              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتيب'} aria-describedby="hb-text-note" />
-              <p id="hb-text-note" className="sr-only">صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتيب، ففيها أبوابك كلها نصًا في نافذة جديدة.</p>
+              <canvas ref={canvasRef} role="img" aria-label={data?.chapter.title || 'صفحة الكتاب'} aria-describedby="hb-text-note" />
+              <p id="hb-text-note" className="sr-only">صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتاب، ففيها أبوابك كلها نصًا في نافذة جديدة.</p>
               {shield && <div className="hb-cover">عد إلى الصفحة لمتابعة القراءة</div>}
             </div>
             {error && <div style={{ marginTop: 10 }}><ErrorBox message={error} onRetry={current !== COVER ? () => { setError(''); setAttempt((n) => n + 1); } : null} /></div>}

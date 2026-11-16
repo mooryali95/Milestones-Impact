@@ -1,5 +1,5 @@
 // معرفة المساعد الآلي (supabase/content/assistant/v1): مصدر واحد منشور بطبيعته، فلا يدخله ما لا يُنشر.
-// لا سعر لبرنامج القادة (يُقرأ حيًا من payment_settings)، ولا نص من بنك الأسئلة أو الكتيب، ولا موضع بيانات غير صادق.
+// لا سعر لبرنامج القادة (يُقرأ حيًا من payment_settings)، ولا نص من بنك الأسئلة أو الكتاب، ولا موضع بيانات غير صادق.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,7 +23,7 @@ describe('معرفة المساعد', () => {
     expect(K).not.toMatch(/\b(9900|99\.00|1\.00)\b/);
   });
 
-  it('لا نص من فقرات القياس ولا من متن الكتيب', () => {
+  it('لا نص من فقرات القياس ولا من متن الكتاب', () => {
     const qdir = join(root, 'supabase/content/questions');
     for (const v of readdirSync(qdir)) {
       for (const item of JSON.parse(readFileSync(join(qdir, v, 'items.json'), 'utf8'))) {

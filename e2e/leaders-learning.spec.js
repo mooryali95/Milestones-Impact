@@ -1,4 +1,4 @@
-// تعلّم المشارك (تدقيق الجاهزية 2026-11-11): القاعة الحية، والكتيب، والحضور، والمختبر. الخلفية مُحاكاة.
+// تعلّم المشارك (تدقيق الجاهزية 2026-11-11): القاعة الحية، والكتاب، والحضور، والمختبر. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 import { createMockServer } from '../shared/video/mock-server.js';
 
@@ -71,7 +71,7 @@ test('القاعة: ملاحظة المشارك تبقى في حقلها وتُ�
   await expect(page.getByRole('button', { name: 'ارفعها طلب توجيه لفريقك' })).toBeVisible();
 });
 
-// ── الكتيب ──
+// ── الكتاب ──
 const PARA = 'المعلم في هذه المنهجية **نقطة قرار** يقف عندها الفريق ليسأل: هل ما زالت القيمة التي بدأنا من أجلها قائمة، وهل نستمر أم نعدّل المسار أم نتوقف؟ ومن غير هذا السؤال يتحول المعلم إلى تاريخ يمر في الخطة دون أن يغيّر شيئًا في قرارات المشروع.';
 const LONG_MD = Array.from({ length: 10 }, (_, i) => `## القسم ${i + 1}\n${PARA}\n\n${PARA}\n\n- بند أول في القسم ${i + 1}\n- بند ثانٍ في القسم ${i + 1}`).join('\n\n');
 async function openHandbook(page, chapter) {
@@ -87,7 +87,7 @@ async function openHandbook(page, chapter) {
   return calls;
 }
 
-test('الكتيب على الجوال: «ابدأ القراءة» من الغلاف تنتهي عند رأس الباب لا عند اختباره', async ({ page }) => {
+test('الكتاب على الجوال: «ابدأ القراءة» من الغلاف تنتهي عند رأس الباب لا عند اختباره', async ({ page }) => {
   await openHandbook(page, () => undefined);
   await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
   const sheet = page.locator('.hb-sheet');
@@ -100,7 +100,7 @@ test('الكتيب على الجوال: «ابدأ القراءة» من الغ�
   expect(await top()).toBeLessThan(200);
 });
 
-test('الكتيب: فشل تحميل باب لا يُبقي نص الباب السابق واختباره، و«حاول مرة أخرى» يعيد الطلب', async ({ page }) => {
+test('الكتاب: فشل تحميل باب لا يُبقي نص الباب السابق واختباره، و«حاول مرة أخرى» يعيد الطلب', async ({ page }) => {
   let failC4 = true;
   const calls = await openHandbook(page, (b, srv) => {
     if (b.id === 'c4' && failC4) return { success: false, code: 'rate', message: 'فتحت صفحات كثيرة خلال ساعة' };
@@ -108,7 +108,7 @@ test('الكتيب: فشل تحميل باب لا يُبقي نص الباب ا�
   });
   await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
   await expect(page.getByRole('img', { name: 'لماذا هذه المنهجية؟' })).toBeVisible();
-  await page.getByRole('navigation', { name: 'فهرس الكتيب' }).getByRole('button', { name: /سلسلة القيمة الخماسية/ }).click();
+  await page.getByRole('navigation', { name: 'فهرس الكتاب' }).getByRole('button', { name: /سلسلة القيمة الخماسية/ }).click();
   const alert = page.getByRole('alert').filter({ hasText: 'فتحت صفحات كثيرة خلال ساعة' });
   await expect(alert).toBeVisible();
   await expect(page.getByRole('img', { name: 'لماذا هذه المنهجية؟' })).toHaveCount(0);
@@ -121,12 +121,12 @@ test('الكتيب: فشل تحميل باب لا يُبقي نص الباب ا�
 
 // نص الباب لا يوضع في DOM قبل قرار المالك 9 (أدوات عرض القارئ و«حفظ الصفحة» تعد المخفي بـsr-only ظاهرًا)؛
 // وقارئ الشاشة يُدل على النسخة الشخصية القائمة، وهي مسجلة بعلامة مائية
-test('الكتيب: قارئ الشاشة يُدل على النسخة النصية القائمة، ولا نص للباب في الصفحة', async ({ page }) => {
+test('الكتاب: قارئ الشاشة يُدل على النسخة النصية القائمة، ولا نص للباب في الصفحة', async ({ page }) => {
   await openHandbook(page, (b, srv) => srv.reply(b));
   await page.getByRole('button', { name: 'ابدأ القراءة' }).click();
   const sheet = page.getByRole('img', { name: 'لماذا هذه المنهجية؟' });
   await expect(sheet).toBeVisible();
-  await expect(sheet).toHaveAccessibleDescription('صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتيب، ففيها أبوابك كلها نصًا في نافذة جديدة.');
+  await expect(sheet).toHaveAccessibleDescription('صفحة الباب مرسومة صورةً لا يقرؤها قارئ الشاشة. لقراءة نصه افتح «نسخة PDF شخصية» أعلى الكتاب، ففيها أبوابك كلها نصًا في نافذة جديدة.');
   await expect(page.getByRole('button', { name: /نسخة PDF شخصية/ })).toBeVisible();
   for (const t of ['أبعاد المعلم الخمسة', 'المعلم الذي لا يرتبط بالمسار الحرج', 'توقيت: متى تُطرح الأسئلة']) {
     expect(await page.locator('body').evaluate((el, s) => el.textContent.includes(s), t)).toBe(false);

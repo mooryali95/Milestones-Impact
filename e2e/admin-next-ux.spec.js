@@ -54,7 +54,7 @@ test('أعداد ما ينتظر القرار على السياقات والتب
   await page.getByRole('button', { name: /تطبيق القادة/ }).click();
   const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
   await expect(tabs.getByRole('button', { name: /المشاركون/ }).locator('.la-badge')).toHaveText('1');
-  await expect(tabs.getByRole('button', { name: /كتيب القائد/ }).locator('.la-badge')).toHaveText('2');
+  await expect(tabs.getByRole('button', { name: /كتاب القائد/ }).locator('.la-badge')).toHaveText('2');
   await tabs.getByRole('button', { name: 'نظرة عامة' }).click();
   await expect(page.getByRole('link', { name: 'طلبات تواصل جديدة' })).toBeVisible();
 });
@@ -84,7 +84,7 @@ test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النت
   await box.press('Enter');
   await expect(page).toHaveURL(/#\/leaders\/participants\/p1$/);
   await page.getByRole('button', { name: /^بحث/ }).click();
-  await page.getByRole('combobox', { name: 'البحث الشامل' }).fill('كتيب');
+  await page.getByRole('combobox', { name: 'البحث الشامل' }).fill('كتاب');
   await page.getByRole('combobox', { name: 'البحث الشامل' }).press('Enter');
   await expect(page).toHaveURL(/#\/leaders\/handbook$/);
 });

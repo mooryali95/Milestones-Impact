@@ -1,5 +1,5 @@
 // فحص مقروئية شاشة على عرض الجوال: لا تمرير أفقي، ولا نص يُقرأ دون 13 بكسل.
-// المستثنى زخرفي: ما داخل svg، وما وُسم aria-hidden، وغلاف الكتيب المصغّر.
+// المستثنى زخرفي: ما داخل svg، وما وُسم aria-hidden، وغلاف الكتاب المصغّر.
 export async function readable(page) {
   return page.evaluate(() => {
     const vis = (el) => { const b = el.getBoundingClientRect(); const cs = getComputedStyle(el); return b.width > 0 && b.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
