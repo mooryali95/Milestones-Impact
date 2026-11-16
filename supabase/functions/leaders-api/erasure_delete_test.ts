@@ -5,11 +5,14 @@ import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 import { installFake, resendCalls, withNet } from './_fake_db.ts';
 const { CONFIG, db, ERASE_DONE_SUBJECT, Fail, storage } = await import('./core.ts');
 const { participantDelete } = await import('./admin.ts');
+const { execute } = await import('./erasure.ts');
 
 type Row = Record<string, any>;
 const PID = '11111111-1111-4111-8111-111111111111';
 const RID = '22222222-2222-4222-8222-222222222222';
 const boss = { email: 'owner@x.sa', role: 'super_admin' as const, method: 'passkey' };
+// من له طلب قائم يُنفَّذ طلبه من ورقة الطلب (admin.erasure-execute) بتأكيد اسمه، لا من منطقة الخطر
+const exec = () => execute(boss as any, { request_id: RID, confirm_name: 'سارة' });
 const seed = (): Record<string, Row[]> => ({
   participants: [{ id: PID, full_name: 'سارة', email: 'sara@x.sa', is_demo: false }],
   erasure_requests: [{ id: RID, participant_id: PID, status: 'pending', created_at: '2026-11-10T00:00:00Z', note: null }],
@@ -55,7 +58,7 @@ Deno.test('الحذف: الصف قبل الملفات، والطلب يُغلق 
   const unstore = fakeStorage(log);
   try {
     await withMail(() => withNet(async (calls) => {
-      const r: any = await participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' });
+      const r: any = await exec();
       assertEquals([r.success, r.files, r.request, r.mailed, 'email' in r], [true, 2, RID, true, false]);
       assertEquals(log, ['participant', 'remove:2']);
       assertEquals(w.tables.participants, []);
@@ -66,13 +69,19 @@ Deno.test('الحذف: الصف قبل الملفات، والطلب يُغلق 
       assertEquals([mail.length, String(mail[0].body.to), mail[0].body.subject], [1, 'sara@x.sa', ERASE_DONE_SUBJECT]);
       const audit = w.tables.audit_log.find((x) => x.action === 'participant.delete')!;
       assertEquals([audit.after.request, audit.after.mailed, audit.after.queue_purged, JSON.stringify(audit.after).includes('sara@x.sa')], [RID, true, 3, false]);
+      // الطلب يحمل بصمة البريد ووقت الإبلاغ، وسطر القرار برقمه
+      const req = w.tables.erasure_requests[0];
+      assertEquals([req.email_hash, typeof req.notified_at], [audit.after.email_hash, 'string']);
+      assertEquals(w.tables.audit_log.filter((x) => x.action === 'erasure.execute').map((x) => x.entity_id), [RID]);
     }));
   } finally { unstore(); w.restore(); }
 });
 
-Deno.test('الحذف: شهادة ملغاة تمنعه بقيدها فلا يُمس شيء: لا ملف، والطلب قائم، والطابور كما هو، ولا بريد', async () => {
+Deno.test('الحذف الإداري بلا طلب: شهادة ملغاة تمنعه بقيدها فلا يُمس شيء: لا ملف، والطابور كما هو، ولا بريد', async () => {
   const log: string[] = [];
-  const w = installFake(seed(), { fail: (t, op) => (t === 'participants' && op.kind === 'delete' ? { code: '23503', message: 'violates foreign key constraint certificates_participant_id_fkey' } : null) });
+  const t = seed();
+  t.erasure_requests = [];
+  const w = installFake(t, { fail: (t, op) => (t === 'participants' && op.kind === 'delete' ? { code: '23503', message: 'violates foreign key constraint certificates_participant_id_fkey' } : null) });
   const unstore = fakeStorage(log);
   try {
     await withMail(() => withNet(async (calls) => {
@@ -81,9 +90,34 @@ Deno.test('الحذف: شهادة ملغاة تمنعه بقيدها فلا يُ
       assertEquals(e.message.includes('شهادة ملغاة'), true);
       assertEquals(log, []);
       assertEquals(w.tables.participants.length, 1);
-      assertEquals(w.tables.erasure_requests[0].status, 'pending');
       assertEquals(w.tables.mail_queue.length, 5);
       assertEquals(resendCalls(calls).length, 0);
+    }));
+  } finally { unstore(); w.restore(); }
+});
+
+Deno.test('الحذف الإداري: من له طلب قائم لا يُحذف من منطقة الخطر، فلا يُمس شيء ويُحال إلى بطاقة الطلب', async () => {
+  const w = installFake(seed(), { onDelete: setNull });
+  const unstore = fakeStorage([]);
+  try {
+    const e = await assertRejects(() => participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' }), Fail) as InstanceType<typeof Fail>;
+    assertEquals([e.status, e.code, e.message.includes('بطاقة الطلب')], [409, 'erasure_pending', true]);
+    assertEquals([w.tables.participants.length, w.tables.erasure_requests[0].status], [1, 'pending']);
+  } finally { unstore(); w.restore(); }
+});
+
+Deno.test('تنفيذ الطلب: الشهادة الملغاة لا تمنعه، فتُحذف شهاداته مع صفه في معاملة واحدة (قرار المالك 1)', async () => {
+  const t = seed();
+  t.certificates = [{ id: 'c1', participant_id: PID, status: 'revoked' }, { id: 'c2', participant_id: PID, status: 'valid' }, { id: 'c3', participant_id: 'other', status: 'valid' }];
+  const w = installFake(t, { onDelete: setNull });
+  const unstore = fakeStorage([]);
+  try {
+    await withMail(() => withNet(async () => {
+      const r: any = await exec();
+      assertEquals(r.success, true);
+      assertEquals(w.tables.certificates.map((c) => c.id), ['c3']);
+      assertEquals(w.tables.participants, []);
+      assertEquals(w.tables.erasure_requests[0].status, 'done');
     }));
   } finally { unstore(); w.restore(); }
 });
@@ -93,7 +127,7 @@ Deno.test('الحذف: تعذّر التأكيد يُعيد العنوان لل�
   const unstore = fakeStorage([]);
   try {
     await withMail(() => withNet(async () => {
-      const r: any = await participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' });
+      const r: any = await exec();
       assertEquals([r.mailed, r.email, 'files_failed' in r], [false, 'sara@x.sa', false]);
       assertEquals(w.tables.mail_queue.map((m) => m.id), ['q3', 'q5']);
       assertEquals(w.tables.erasure_requests[0].status, 'done');
@@ -108,7 +142,7 @@ Deno.test('الحذف: تعذّر حذف الملفات بعد محاولتين 
   const unstore = fakeStorage(log, { message: 'storage down' });
   try {
     await withMail(() => withNet(async (calls) => {
-      const r: any = await participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' });
+      const r: any = await exec();
       assertEquals([r.mailed, r.email, r.files_failed, r.folder], [false, 'sara@x.sa', true, `${PID}/`]);
       assertEquals(log, ['remove:2', 'remove:2']);
       assertEquals(resendCalls(calls).length, 0);
@@ -132,7 +166,7 @@ Deno.test('الحذف: تعذّر قراءة المخزن أو طلب الحذف
     const unstore = fakeStorage([], null, listError);
     try {
       await withMail(() => withNet(async (calls) => {
-        const e = await assertRejects(() => participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' }), Fail) as InstanceType<typeof Fail>;
+        const e = await assertRejects(() => exec(), Fail) as InstanceType<typeof Fail>;
         assertEquals([e.status, e.code], [503, code]);
         assertEquals([w.tables.participants.length, w.tables.erasure_requests[0].status, w.tables.mail_queue.length, resendCalls(calls).length], [1, 'pending', 5, 0]);
       }));
@@ -141,18 +175,12 @@ Deno.test('الحذف: تعذّر قراءة المخزن أو طلب الحذف
 });
 
 Deno.test('الحذف: تشغيلتان متزامنتان، الثانية لا تجد صفًّا فلا تنظف ولا ترسل ولا تكتب سطرًا ثانيًا', async () => {
-  const w = installFake(seed(), { onDelete: setNull });
-  // الثانية مرت بقراءة الأثر قبل أن تحذف الأولى: صف المشارك يختفي بين القراءة والحذف
+  // الثانية مرت بقراءة الأثر قبل أن تحذف الأولى: الدالة لا تجد الصف فترجع P0002 ولا تمس الشهادات
+  const w = installFake(seed(), { onDelete: setNull, rpc: (name) => (name === 'erasure_purge' ? { data: null, error: { code: 'P0002', message: 'erasure_purge: participant not found' } } : null) });
   const unstore = fakeStorage([]);
   try {
     await withMail(() => withNet(async (calls) => {
-      const fakeFrom = (db as any).from;
-      (db as any).from = (t: string) => {
-        const q = fakeFrom(t);
-        if (t === 'participants') { const del = q.delete; q.delete = () => { w.tables.participants = []; return del(); }; }
-        return q;
-      };
-      const e = await assertRejects(() => participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' }), Fail) as InstanceType<typeof Fail>;
+      const e = await assertRejects(() => exec(), Fail) as InstanceType<typeof Fail>;
       assertEquals([e.status, e.code], [409, 'gone']);
       assertEquals([w.tables.mail_queue.length, resendCalls(calls).length, w.tables.audit_log.length, w.tables.erasure_requests[0].status], [5, 0, 0, 'pending']);
     }));
@@ -165,7 +193,7 @@ Deno.test('الحذف: تعذّر سطر السجل بعد التنفيذ لا �
   const unstore = fakeStorage([]);
   try {
     await withMail(() => withNet(async (calls) => {
-      const r: any = await participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' });
+      const r: any = await exec();
       assertEquals([r.success, r.audit_failed, r.mailed, r.email], [true, true, false, 'sara@x.sa']);
       assertEquals(calls.filter((c) => c.url.includes('hooks.example')).map((c) => c.body.kind), ['erase_audit_failed']);
     }, { resendStatus: 500 }));
@@ -178,7 +206,7 @@ Deno.test('الحذف: تعذّر إغلاق الطلب يُعاد في الرد
   const unstore = fakeStorage([]);
   try {
     await withMail(() => withNet(async (calls) => {
-      const r: any = await participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' });
+      const r: any = await exec();
       assertEquals([r.success, r.request_open, r.request], [true, true, RID]);
       const hook = calls.filter((c) => c.url.includes('hooks.example'));
       assertEquals([hook.map((c) => c.body.kind), hook[0].body.detail.request], [['erase_close_failed'], RID]);
@@ -193,7 +221,7 @@ Deno.test('الحذف: عنوانه لخبير قائم، فما لا مرجع �
   const unstore = fakeStorage([]);
   try {
     await withMail(() => withNet(async () => {
-      await participantDelete(boss as any, { participant_id: PID, confirm_email: 'sara@x.sa' });
+      await exec();
       assertEquals(w.tables.mail_queue.map((m) => m.id), ['q1', 'q3', 'q5']);
     }));
   } finally { unstore(); w.restore(); }

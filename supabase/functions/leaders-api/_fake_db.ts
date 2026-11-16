@@ -8,6 +8,8 @@ export type FakeOpts = {
   fail?: (table: string, op: { kind: string; cols?: string; value?: any }) => { code?: string; message: string } | null;
   // أثر القيود بعد الحذف (on delete set null مثلًا)
   onDelete?: (table: string, rows: Row[], tables: Record<string, Row[]>) => void;
+  // دوال القاعدة (db.rpc). erasure_purge محاكاة افتراضيًا: الشهادات ثم الصف في معاملة واحدة، ولا صف = P0002 بلا أثر
+  rpc?: (name: string, args: any, tables: Record<string, Row[]>) => { data: unknown; error: { code?: string; message: string } | null } | null;
 };
 
 export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) {
@@ -70,8 +72,25 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     };
     return q;
   };
-  const saved = { from: (db as any).from, schema: (db as any).schema };
-  Object.assign(db as any, { from, schema: () => ({ from }) });
+  const rpc = (name: string, args: any) => Promise.resolve().then(() => {
+    const err = opts.fail?.(`rpc:${name}`, { kind: 'rpc', value: args });
+    if (err) return { data: null, error: err };
+    const own = opts.rpc?.(name, args, tables);
+    if (own) return own;
+    if (name === 'erasure_purge') {
+      const hit = (tables.participants || []).filter((r) => r.id === args.p_participant && !r.is_demo);
+      if (!hit.length) return { data: null, error: { code: 'P0002', message: 'erasure_purge: participant not found' } };
+      writes.push({ table: 'certificates', kind: 'delete', ids: (tables.certificates || []).filter((c) => c.participant_id === args.p_participant).map((c) => c.id) });
+      tables.certificates = (tables.certificates || []).filter((c) => c.participant_id !== args.p_participant);
+      writes.push({ table: 'participants', kind: 'delete', ids: hit.map((r) => r.id) });
+      tables.participants = tables.participants.filter((r) => !hit.includes(r));
+      opts.onDelete?.('participants', hit, tables);
+      return { data: 1, error: null };
+    }
+    return { data: null, error: { message: `rpc ${name} not faked` } };
+  });
+  const saved = { from: (db as any).from, schema: (db as any).schema, rpc: (db as any).rpc };
+  Object.assign(db as any, { from, rpc, schema: () => ({ from, rpc }) });
   return { tables, writes, restore: () => { Object.assign(db as any, saved); } };
 }
 

@@ -13,6 +13,7 @@ import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
 import { WORKSHOP_NO_HALL_NOTE } from './features.js';
 import { mailBudget, queueEta } from './mail-center.js';
+import { ERASE_DELETED, ERASE_GROUNDS, ERASE_KEPT, leftAr, PAYMENT_RETENTION_YEARS } from './erasure.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -583,25 +584,77 @@ export const ERASE_MAIL_SUBJECT = 'استلمنا طلب حذف بياناتك';
 export function eraseRequestMail(name: string, days: number) {
   return shell('access', ERASE_MAIL_SUBJECT,
     mailText(`${hello(name)} سجّلنا طلبك حذف حسابك وبياناتك من منصة Milestone Impact.`)
-    + mailText(`ننفذه خلال ${days} يومًا على الأكثر، ويصلك تأكيد عند تنفيذه. ما يُلزمنا النظام بحفظه (سجلات الدفع) يبقى للمدة النظامية وحدها.`)
+    + mailText(`نرد عليه خلال ${days} يومًا على الأكثر، ويصلك بريد بقرارنا. عند تنفيذه تُحذف شهادتك إن صدرت، ويبقى ما يُلزمنا النظام بحفظه (سجلات الدفع) ${PAYMENT_RETENTION_YEARS} سنوات وحدها.`)
     + mailButton(CONFIG.appUrl, 'افتح ملفي')
     + mailNote('إن لم تطلب ذلك أو غيّرت رأيك فاسحب الطلب من صفحة ملفك في التطبيق قبل تنفيذه. بعد التنفيذ لا تُسترد البيانات.'),
     'طلب حذف البيانات', 'وصلتك هذه الرسالة لأن طلب حذف سُجّل من حسابك.');
 }
 
 // تأكيد تنفيذ الحذف: آخر رسالة لمن حُذفت بياناته، إلى عنوانه الملتقط قبل الحذف. لا تدخل الطابور (sendMail queue:false):
-// الطابور يحفظ عنوان من مُحيت بياناته. تذكر تاريخ التنفيذ وما بقي ولماذا وإلى متى
+// الطابور يحفظ عنوان من مُحيت بياناته. تذكر تاريخ التنفيذ وما حُذف وما بقي ولماذا وإلى متى (erasure.js، المصدر الواحد)
+const arDay = (iso: string) => new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' });
 export const ERASE_DONE_SUBJECT = 'نُفّذ طلب حذف بياناتك';
 export function eraseDoneMail(name: string | null, doneAt: string) {
   return shell('access', ERASE_DONE_SUBJECT,
-    mailText(`${hello(name)} حذفنا حسابك وبياناتك من منصة Milestone Impact في ${bdi(new Date(doneAt).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric' }))}.`)
+    mailText(`${hello(name)} حذفنا حسابك وبياناتك من منصة Milestone Impact في ${bdi(arDay(doneAt))}.`)
     + mailRows([
-      ['ما حُذف', 'ملفك وإجاباتك ونتائجك وأعمالك وملفاتك المرفوعة وجلسات دخولك'],
-      ['ما بقي', 'سطر في سجل التدقيق بلا اسم ولا بريد يثبت أن الحذف نُفّذ، وطلبك نفسه بتاريخه دليلًا على الالتزام بالمهلة'],
-      ['سجلات الدفع', 'إن وُجدت تبقى عشر سنوات كما يلزم النظام، منفصلة عن أي بيانات أخرى'],
+      ['ما حُذف', ERASE_DELETED.join('، ')],
+      ...ERASE_KEPT.map((k) => [k.title, k.text] as [string, string]),
     ])
     + mailNote('لا تُسترد البيانات بعد الحذف. إن عدت إلى البرنامج يومًا فسجّل من جديد.'),
     'نُفّذ طلب الحذف', 'وصلتك هذه الرسالة الأخيرة لأنك طلبت حذف بياناتك، ولن يصلك منا بعدها شيء.');
+}
+
+// الرد برفض الطلب: السبب وأساسه، وما يبقى، وحق الشكوى إلى سدايا، وأن له إعادة الطلب متى زال السبب
+export const ERASE_DECLINED_SUBJECT = 'ردنا على طلب حذف بياناتك';
+export function eraseDeclinedMail(name: string | null, ground: keyof typeof ERASE_GROUNDS, note: string | null, at: string) {
+  const g = ERASE_GROUNDS[ground] || ERASE_GROUNDS.other;
+  return shell('access', ERASE_DECLINED_SUBJECT,
+    mailText(`${hello(name)} درسنا طلبك حذف حسابك وبياناتك من منصة Milestone Impact، وقررنا في ${bdi(arDay(at))} ألّا ننفذه الآن، وحسابك باقٍ كما هو.`)
+    + mailRows([
+      ['السبب', g.ar],
+      ...(g.basis ? [['الأساس النظامي', g.basis] as [string, string]] : []),
+      ...(note ? [['التوضيح', note] as [string, string]] : []),
+    ])
+    + mailText('لك أن تعيد الطلب من صفحة ملفك في التطبيق متى زال هذا السبب، ولك أن تراسلنا بالرد على هذه الرسالة إن رأيت أن قرارنا لا يصح.')
+    + mailButton(CONFIG.appUrl, 'افتح ملفي')
+    + mailNote('إن لم يرضك ردنا فلك الحق في تقديم شكوى إلى الهيئة السعودية للبيانات والذكاء الاصطناعي (سدايا) بوصفها الجهة المختصة بحماية البيانات الشخصية.'),
+    'ردنا على طلب الحذف', 'وصلتك هذه الرسالة ردًّا على طلب حذف سُجّل من حسابك.');
+}
+
+// تأكيد السحب حين أبلغ المشارك المدير بنفسه (بريد أو اتصال أو رسالة): هذا هو الضمان أن السحب صدر منه فعلًا
+export const ERASE_WITHDRAWN_SUBJECT = 'أُغلق طلب حذف بياناتك بناءً على طلبك';
+export function eraseWithdrawnMail(name: string | null, via: string, at: string) {
+  return shell('access', ERASE_WITHDRAWN_SUBJECT,
+    mailText(`${hello(name)} أبلغتنا ${esc(via)} أنك تسحب طلب حذف حسابك وبياناتك، فأغلقناه في ${bdi(arDay(at))}، وحسابك باقٍ كما هو.`)
+    + mailButton(CONFIG.appUrl, 'افتح ملفي')
+    + mailNote('إن لم تطلب سحبه فأعد الطلب من صفحة ملفك في التطبيق، أو رد على هذه الرسالة لنتابعه معك.'),
+    'أُغلق طلب الحذف', 'وصلتك هذه الرسالة لأن طلب حذف من حسابك أُغلق.');
+}
+
+// بريد المالك عن طلب حذف (عند وصوله وفي كل تذكير): الاسم والمهلة والأيام المتبقية، وزر يفتح ورقة الطلب نفسها
+// لا النظرة العامة. erase_request وerase_reminder في طبقة الحرج: بريد وسلاك معًا ولا يُجمعان
+export const ERASE_OWNER_KINDS = ['erase_request', 'erase_reminder'];
+export const erasureUrl = (participantId: string) => `${SITES.admin}/#/leaders/participants/${encodeURIComponent(participantId)}?erasure=open`;
+export function eraseOwnerSubject(kind: string, detail: Record<string, unknown>) {
+  const who = String(detail.name || 'مشارك');
+  const left = Number(detail.days_left);
+  return kind === 'erase_request' ? `طلب حذف بيانات من ${who}` : left < 0 ? `طلب حذف ${who} تجاوز المهلة` : `تذكير: طلب حذف ${who}، ${leftAr(left)}`;
+}
+export function eraseOwnerMail(kind: string, detail: Record<string, unknown>) {
+  const who = String(detail.name || 'مشارك');
+  const left = Number(detail.days_left);
+  const due = detail.due_at ? bdi(arDay(String(detail.due_at))) : '';
+  const lead = kind === 'erase_request'
+    ? `وصل طلب حذف بيانات من ${bdi(who)}. المهلة النظامية للرد ${due} (${esc(leftAr(left))}).`
+    : left < 0 ? `تجاوز طلب حذف بيانات ${bdi(who)} المهلة النظامية (${due}). قرر الآن.`
+    : `طلب حذف بيانات ${bdi(who)} ينتظر قرارك، ${esc(leftAr(left))} (المهلة ${due}).`;
+  return shell('admin', eraseOwnerSubject(kind, detail),
+    mailText(lead)
+    + mailRows([...(detail.reason ? [['سببه', String(detail.reason)] as [string, string]] : []), ['رقم الطلب', String(detail.request || ''), true]])
+    + mailButton(String(detail.url || `${SITES.admin}/#/leaders/participants`), 'افتح الطلب')
+    + mailNote('من الورقة تنفّذ الحذف، أو ترفضه بسبب نظامي، أو تغلقه إن سحبه صاحبه. القرار للمدير الأعلى.'),
+    `${who} · ${leftAr(left)}`, 'يصلك هذا لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 
 // دخول من جهاز جديد: تنبيه لصاحب الحساب مع طريقة إنهاء الجلسة إن لم يكن هو
@@ -723,6 +776,8 @@ export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
   // سطر الترحيل اليومي (carryoverAlert): مرة في اليوم، فمهلته أقل من يوم بقليل
   mail_queue_carryover: 20 * 36e5,
+  // تذكير طلب الحذف: مفتاحه رقم الطلب ومرحلته، فمرة لكل طلب في اليوم على الأكثر
+  erase_reminder: 20 * 36e5,
   // كل تغيير في المساعد يُبلَّغ (بلا تهدئة)
   agent_key_changed: 0, agent_key_reverted: 0, agent_enabled: 0, agent_disabled: 0,
   // تنبيهات agent-chat تُهدَّأ هناك بعلامة يومية في القاعدة (agent_spend_alert)، فلا تهدئة ثانية تحجب مستوى عن آخر
@@ -786,7 +841,9 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>, 
     // سطر الترحيل اليومي بالبريد من نصيب الرموز في يوم مزدحم: لا يُرسل إلا حين لا يصل سلاك ولا الرابط
     if (kind === 'mail_queue_carryover' && other) return { cooled: false, webhook, slack, email: false };
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
-    const email = await sendMail(CONFIG.alertEmail, alertSubject(kind), alertMail(kind, detail, windowMs), [], { kind: 'alert' })
+    // طلب الحذف وتذكيره بقالبهما (الاسم والمهلة وزر الورقة)، وغيرهما بقالب الحادثة العام
+    const owner = ERASE_OWNER_KINDS.includes(kind);
+    const email = await sendMail(CONFIG.alertEmail, owner ? eraseOwnerSubject(kind, detail) : alertSubject(kind), owner ? eraseOwnerMail(kind, detail) : alertMail(kind, detail, windowMs), [], { kind: 'alert' })
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
     // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
     if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
@@ -836,6 +893,9 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },
   { key: 'erase-request', family: 'access', label: 'تأكيد طلب حذف البيانات', subject: ERASE_MAIL_SUBJECT, html: () => eraseRequestMail('سارة', 30) },
   { key: 'erase-done', family: 'access', label: 'تأكيد تنفيذ حذف البيانات', subject: ERASE_DONE_SUBJECT, html: () => eraseDoneMail('سارة', '2026-11-16T09:00:00Z') },
+  { key: 'erase-declined', family: 'access', label: 'الرد برفض طلب حذف البيانات', subject: ERASE_DECLINED_SUBJECT, html: () => eraseDeclinedMail('سارة', 'litigation', 'البيانات مطلوبة في دعوى منظورة أمام المحكمة التجارية', '2026-11-16T09:00:00Z') },
+  { key: 'erase-withdrawn', family: 'access', label: 'تأكيد سحب طلب الحذف بطلب المشارك', subject: ERASE_WITHDRAWN_SUBJECT, html: () => eraseWithdrawnMail('سارة', 'بالبريد', '2026-11-16T09:00:00Z') },
+  { key: 'erase-owner', family: 'admin', label: 'تذكير المالك بطلب حذف ينتظر قراره', subject: eraseOwnerSubject('erase_reminder', { name: 'سارة الأحمد', days_left: 3 }), html: () => eraseOwnerMail('erase_reminder', { name: 'سارة الأحمد', days_left: 3, due_at: '2026-12-10T09:00:00Z', request: '22222222-2222-4222-8222-222222222222', reason: 'انتهى البرنامج', url: erasureUrl('11111111-1111-4111-8111-111111111111') }) },
   { key: 'passkey-added', family: 'access', label: 'إضافة مفتاح مرور', subject: 'أُضيف مفتاح مرور إلى حسابك', html: () => passkeyAddedMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
