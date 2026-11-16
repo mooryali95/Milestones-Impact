@@ -14,4 +14,4 @@ alter table leaders.workshop_sessions add constraint workshop_sessions_dates_che
 );
 -- الرجوع: يُعاد NOT NULL والقيد القديم فقط بعد حذف الجلسات غير المؤرخة أو تأريخها
 
-insert into leaders.schema_migrations (name) values ('20261116010000_leaders_journey_blocks') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261116060000_leaders_journey_blocks') on conflict do nothing;

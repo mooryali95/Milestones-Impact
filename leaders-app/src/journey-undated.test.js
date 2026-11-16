@@ -20,7 +20,7 @@ import { NextSession, nextSession, sessionIcs } from './screens/Journey.jsx';
 import Activity from './screens/Activities.jsx';
 
 const ROOT = join(__dirname, '../..');
-const MIG = '20261116010000_leaders_journey_blocks';
+const MIG = '20261116060000_leaders_journey_blocks';
 const NOW = Date.parse('2026-11-16T09:00:00Z');
 const H = 36e5;
 const at = (h) => new Date(NOW + h * H).toISOString();

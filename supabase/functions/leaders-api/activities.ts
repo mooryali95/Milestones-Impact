@@ -401,7 +401,7 @@ export async function workshopSave(a: any, b: Body) {
   if ('cohort_id' in row || !row.id) out.cohort_id = /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null;
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
   if (when.error) throw new Fail(when.error);
-  // قبل الترحيل 20261116010000 يرفض القيد الموعد الفارغ (23502 أو 23514): رسالة تقول السبب بدل «تعذّر الحفظ»
+  // قبل الترحيل 20261116060000 يرفض القيد الموعد الفارغ (23502 أو 23514): رسالة تقول السبب بدل «تعذّر الحفظ»
   const undatedBlocked = (res: any) => {
     if (res.error && !out.starts_at && ['23502', '23514'].includes(String(res.error.code))) throw new Fail('الجلسة بلا موعد تحتاج تحديث قاعدة البيانات أولًا؛ حدد موعدها الآن أو أعد المحاولة بعد التحديث');
     return res;

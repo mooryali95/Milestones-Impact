@@ -137,8 +137,8 @@ export const MIGRATIONS = [
   '20261115230000_leaders_agent_admin',
   '20261115240000_leaders_initiative_owner_steps',
   '20261116000000_leaders_book_proposals',
-  '20261116010000_leaders_journey_blocks',
   '20261116050000_leaders_handbook_name',
+  '20261116060000_leaders_journey_blocks',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -194,6 +194,6 @@ export const MIGRATION_GATES = {
   '20261115230000_leaders_agent_admin': ["tolerant", "agent-chat بلا الجدول يعد المساعد مطفأ (يفشل مغلقًا)، وleaders-api يرد not_migrated لشاشة المساعد، وحفظ الجهة لا يرسل companion_allowed قبل وجوده، وadmin-api يرد step_up_unavailable"],
   '20261115240000_leaders_initiative_owner_steps': ["tolerant", "محتوى فقط: جملة في خطوات البطاقة ونص مساعدة متطلب CP-FINAL"],
   '20261116000000_leaders_book_proposals': ["tolerant", "قبله يُقرأ الكتاب بلا مقترحات (book-proposals.ts: proposalRows يرجع null)، والاقتراح يُرفض برسالة"],
-  '20261116010000_leaders_journey_blocks': ["tolerant", "الدوال تقبل الجلسة غير المؤرخة وتعرضها «يُحدد لاحقًا»، وقبله يرفض القيد حفظها برسالة الحفظ (activities.ts: workshopSave) وتبقى المؤرخة كما هي"],
   '20261116050000_leaders_handbook_name': ["tolerant", "نصوص عرض وحدها، والدوال والواجهات تعمل قبله وبعده (يبقى الاسم القديم في هذه النصوص حتى يُطبَّق)"],
+  '20261116060000_leaders_journey_blocks': ["tolerant", "الدوال تقبل الجلسة غير المؤرخة وتعرضها «يُحدد لاحقًا»، وقبله يرفض القيد حفظها برسالة الحفظ (activities.ts: workshopSave) وتبقى المؤرخة كما هي"],
 };
