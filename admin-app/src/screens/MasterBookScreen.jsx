@@ -16,6 +16,11 @@ export default function MasterBookScreen({ onClose, onExperts }) {
     reader: (expert_id, committee, on) => L('admin.book-reader', { expert_id, committee, on }),
     propose: (b) => L('admin.book-proposal-save', b),
     move: (id, to, note, seen) => L('admin.book-proposal-status', { id, to, note, seen }),
+    // «أصدر الكتاب» للمدير العام (book-release.ts)
+    release: () => L('admin.book-release'),
+    releaseStart: () => L('admin.book-release-start'),
+    releasePr: () => L('admin.book-release-pr'),
+    releasePublish: (number, sha) => L('admin.book-release-publish', { number, sha }),
   }), []);
   return <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" />;
 }
