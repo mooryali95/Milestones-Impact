@@ -59,7 +59,7 @@ describe('تعليل تجاوز التسكين', () => {
 });
 
 describe('بنك القياس v5.1', () => {
-  it('يجتاز التحقق (الأطوال، مسميات الأُطر، التوأمة، التقارب مع كتيب v3)', () => {
+  it('يجتاز التحقق (الأطوال، مسميات الأُطر، التوأمة، التقارب مع كتاب v3)', () => {
     execFileSync('node', ['scripts/questions/verify-v5_1.mjs'], { cwd: root, stdio: 'pipe' });
     execFileSync('node', ['scripts/questions/verify-v5.mjs'], { cwd: root, stdio: 'pipe' });
   });

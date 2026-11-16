@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════
-// المسارات الـ27: لوحات المستويات، وصفحة المسار بمشاركيه وكتيبه
+// المسارات الـ27: لوحات المستويات، وصفحة المسار بمشاركيه وكتابه
 // ════════════════════════════════════════════════════════════════
 // كل لوحة مستوى في Milestone، صفوفها مستوى Impact وأعمدتها مستوى Leadership.
-// تحرير أبواب الكتيب في استوديو الكتيب (الخطوة التالية)؛ هنا عرض كما يقرؤه المشارك.
+// تحرير أبواب الكتاب في استوديو الكتاب (الخطوة التالية)؛ هنا عرض كما يقرؤه المشارك.
 import React, { useEffect, useState } from 'react';
 import { DIM, DIM_EN, DIMS, L, LVL, STATUS } from '../leaders.js';
 import { LVLS, ROMAN, TRACK_FIELDS, lines, shortTitle, trackKey, trackLevels } from '../methodology.js';
@@ -50,7 +50,7 @@ function Board({ tracks, onOpen }) {
       <section className="tx-hero">
         <div className="tx-hero-head">
           <div><span className="tx-eyebrow">Leadership Tracks</span><h2>المسارات السبعة والعشرون</h2>
-            <p>كل مسار تركيبة فريدة من مستويات الأطر الثلاثة، له هويته وكتيبه ورحلته. افتح أي مسار لترى مشاركيه وكتيبه كاملًا.</p></div>
+            <p>كل مسار تركيبة فريدة من مستويات الأطر الثلاثة، له هويته وكتابه ورحلته. افتح أي مسار لترى مشاركيه وكتابه كاملًا.</p></div>
         </div>
         <div className="tx-kpis">
           <div><b>{used}<small>/{TRACK_COUNT}</small></b><span>مسار به مشاركون</span></div>
@@ -150,11 +150,11 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
       </section>
 
       <section className="la-card">
-        <div className="la-row between"><h3>كتيب المسار كما يقرؤه المشارك</h3><span className="la-muted">{r.handbook.length} بابًا</span></div>
-        <p className="la-muted">الكتيب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه، ويتم من «كتيب القائد».</p>
+        <div className="la-row between"><h3>كتاب المسار كما يقرؤه المشارك</h3><span className="la-muted">{r.handbook.length} بابًا</span></div>
+        <p className="la-muted">الكتاب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه، ويتم من «كتاب القائد».</p>
         {r.handbook.length ? (
           <div className="la-hb">
-            <nav className="la-hb-toc" aria-label="أبواب الكتيب">{groups.map((g) => g.items.length > 0 && (
+            <nav className="la-hb-toc" aria-label="أبواب الكتاب">{groups.map((g) => g.items.length > 0 && (
               <div key={g.d}><b>{DIM_EN[g.d]} · {LVL[r.levels[g.d]]}</b>{g.items.map((c) => (
                 <button key={c.id} className="la-link" onClick={() => document.getElementById(`hb-${c.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{c.title}</button>
               ))}</div>

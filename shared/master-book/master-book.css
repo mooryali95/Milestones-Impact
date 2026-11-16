@@ -15,6 +15,9 @@
   -webkit-font-smoothing: antialiased; scroll-behavior: smooth;
 }
 .mb-root *, .mb-root *::before, .mb-root *::after { box-sizing: border-box; }
+/* فوق النوافذ (.mb-sheet-wrap عند 60) فلا تخلو لقطة سلسلة تعليقات منها، وتبقى في الطباعة فلا تخرج نسخة ورقية بلا مصدر */
+.mb-wm { position: fixed; inset: 0; z-index: 70; pointer-events: none; background-repeat: repeat; }
+@media print { .mb-wm { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 .mb-root button { font: inherit; color: inherit; cursor: pointer; }
 .mb-root :focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .mb-root, .mb-root * { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }

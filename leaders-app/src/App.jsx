@@ -315,11 +315,11 @@ function Participant() {
     requestAnimationFrame(() => document.getElementById('main')?.focus({ preventScroll: true }));
   }, []);
   const openLab = (id = null) => { setLabOpen(id); go('lab'); };
-  // إحالة من فصل في وثيقة المبادرة إلى بابه في الكتيب، والعودة إلى الفصل نفسه (anatomy.json)
+  // إحالة من فصل في وثيقة المبادرة إلى بابه في الكتاب، والعودة إلى الفصل نفسه (anatomy.json)
   const [bookTarget, setBookTarget] = useState(null);
   const [capReturn, setCapReturn] = useState(null);
   const openBook = (t) => { setBookTarget(t); setCapReturn(t?.chapter_id || null); go('handbook'); };
-  useEffect(() => { if (view !== 'handbook') setBookTarget(null); }, [view]);   // «كتيبي» من القائمة يفتح الكتيب عاديًا لا على إحالة قديمة
+  useEffect(() => { if (view !== 'handbook') setBookTarget(null); }, [view]);   // «كتابي» من القائمة يفتح الكتاب عاديًا لا على إحالة قديمة
 
   const logout = async () => {
     if (!(await askSignOut('participant'))) return;
@@ -328,7 +328,7 @@ function Participant() {
     setView('home');
   };
 
-  // الأقسام المتاحة الآن فقط: الكتيب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
+  // الأقسام المتاحة الآن فقط: الكتاب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
   // الحق في البرنامج (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ (hasAccess في gates.js)
   const paidFor = (item) => hasAccess(me, item);
   const inJourney = me && gateDone(me, 'profile') && gateDone(me, 'assessment') && paidFor('program') && !checkin;
@@ -341,7 +341,7 @@ function Participant() {
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
     // ما لم يُفتح بعد يظهر مقفلًا بسبب فتحه، فيعرف المشارك ما ينتظره ولا يظن المنصة أصغر مما هي
-    { key: 'handbook', label: 'كتيبي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
+    { key: 'handbook', label: 'كتابي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'capstone', label: 'مبادرتي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     // «كاتون» مخفي حتى يُعاد تصميمه مع المالك (قرار 2026-11-03)
     SHOW_KATON && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },

@@ -559,6 +559,7 @@ export async function inbox(_b: Body = {}) {
     requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
     model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
     capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
+    // journey-guard: صندوق الإدارة يعدّ طلبات الانضمام بانتظار المراجعة، لا ترشيح فيه
     expert_application: db.from('experts').select('id, full_name, title, created_at').eq('status', 'applied').limit(100),
     expert_unmatched: db.from('expert_requests').select(`id, participant_id, role, created_at, ${P}`).eq('status', 'unmatched').limit(100),
     sponsor: db.from('sponsor_requests').select(`id, participant_id, kind, created_at, ${P}`).eq('status', 'pending').limit(100),
@@ -1004,7 +1005,7 @@ async function trackStats() {
   return out;
 }
 
-// تفصيل مسار: هويته، ومشاركوه، وكتيبه كما يراه المشارك بابًا بابًا
+// تفصيل مسار: هويته، ومشاركوه، وكتابه كما يراه المشارك بابًا بابًا
 export async function track(b: Body) {
   const key = String(b.key || '');
   if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
@@ -1037,7 +1038,7 @@ export async function track(b: Body) {
 
 // مراحل البرنامج ومتطلباته: البرنامج المطلوب، أو الافتراضي
 const PROGRAM_SCOPED = new Set(['journey_stages', 'stage_requirements']);
-// منهج مسار كما يراه صاحبه: مواد البنك التي تخصه، وأبواب الكتيب
+// منهج مسار كما يراه صاحبه: مواد البنك التي تخصه، وأبواب الكتاب
 export async function curriculum(b: Body) {
   const levels = trackLevels(b.track);
   if (!levels) throw new Fail('اختر مسارًا');

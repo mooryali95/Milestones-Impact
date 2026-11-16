@@ -6,7 +6,7 @@
 import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, QUEUE_ALERT_HOURS, QUEUE_MAX_ATTEMPTS, raiseAlert, sendMail } from './core.ts';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
-import { compositeReliability, DEFAULT_MODEL, itemAnalysis, TIERS, weeklySeries } from './logic.js';
+import { compositeReliability, DEFAULT_MODEL, itemAnalysis, journeyApproved, TIERS, weeklySeries } from './logic.js';
 import { fairnessReport, measurementEvidence } from './evidence.js';
 import { PARTICIPANT_STATUS } from './labels.js';
 import { MIGRATION_GATES, MIGRATIONS } from './migrations.js';
@@ -17,7 +17,7 @@ import { codeStreak, OPS } from './ops-health.js';
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
-// المنتهية أو الملغاة، سجلات التحقق العام من الشهادات، وعناوين مشاهدات الكتيب (يبقى عدّها).
+// المنتهية أو الملغاة، سجلات التحقق العام من الشهادات، وعناوين مشاهدات الكتاب (يبقى عدّها).
 const RETENTION_DAYS = 90;
 export async function purge() {
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 864e5).toISOString();
@@ -94,7 +94,11 @@ async function readiness() {
   const setup = setupReadiness({ instruments: ins.data || [], certificate: cert.data, defaultPrograms: programs.count ?? 0 });
   // بنود م2 تحتاج قراءاتها كلها: قراءة تعذّرت لا تُعرض «لا دفعة» ولا «لم يُحفظ»
   if ([orgs, cohorts, sessions, prog].some((r) => r.error)) return setup;
-  return [...setup, ...launchReadiness({ organizations: orgs.data || [], cohorts: cohorts.data || [], sessions: sessions.data || [], finalEval: (prog.data as any)?.final_eval ?? null })];
+  // المستشار الأساسي يُحتسب إن كان يخدم في الرحلة (journeyApproved)، لا لمجرد بقاء إسناده على عضو لجنة بلا دور
+  const ids = [...new Set((cohorts.data || []).map((c: any) => c.advisor_expert_id).filter(Boolean))] as string[];
+  const ex = ids.length ? await db.from('experts').select('id, status, roles').in('id', ids) : { data: [] as any[], error: null };
+  const advisors = ex.error ? null : (ex.data || []).filter(journeyApproved).map((e: any) => e.id);
+  return [...setup, ...launchReadiness({ organizations: orgs.data || [], cohorts: cohorts.data || [], sessions: sessions.data || [], finalEval: (prog.data as any)?.final_eval ?? null, advisors })];
 }
 
 // زيارات الموقع: آخر days يومًا (7 إلى 90)، وموقع واحد أو الكل

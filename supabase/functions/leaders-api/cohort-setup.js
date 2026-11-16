@@ -6,7 +6,7 @@
 
 // ── هل للدفعة جلسات؟ قاعدة واحدة يقرؤها ملف الدفعة وصفحة الجهة وجاهزية الإطلاق وبوابات المراحل ──
 // الجلسة الفعّالة بموعد قادم أو حديث (آخر 14 يومًا)، والجلسة بلا دفعة تعمّ الدفعات كلها (كما في القاعة).
-// والدفعة بصيغة الكتيب لا تلزمها جلسات: يكتمل تدريبها بقراءة الأبواب واجتياز أسئلتها.
+// والدفعة بصيغة الكتاب لا تلزمها جلسات: يكتمل تدريبها بقراءة الأبواب واجتياز أسئلتها.
 export const SESSION_WINDOW_MS = 14 * 864e5;
 // jsonb يصل كائنًا من العميل، وقد يصل نصًا من الاستعلام المباشر للبوابات
 const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return v; } };
@@ -18,9 +18,10 @@ export function sessionsFor(cohort, sessions = [], now = Date.now()) {
     && Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS).length;
 }
 
-/** @param {{ cohort: any, advisorName?: string|null, teamCount?: number, members?: number, upcomingSessions?: number }} d
- *  upcomingSessions: عدد sessionsFor للدفعة */
-export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members = 0, upcomingSessions = 0 }) {
+/** @param {{ cohort: any, advisorName?: string|null, advisorServes?: boolean, teamCount?: number, members?: number, upcomingSessions?: number }} d
+ *  upcomingSessions: عدد sessionsFor للدفعة. advisorServes: المستشار المعيَّن يخدم في الرحلة (journeyApproved)، فإسناد بقي
+ *  على عضو لجنة بلا دور أو معتمد بلا خدمة لا يُحتسب مستشارًا، لأن advisorOf لا يعيده */
+export function cohortSetup({ cohort, advisorName = null, advisorServes = true, teamCount = 0, members = 0, upcomingSessions = 0 }) {
   if (!cohort) return [];
   const stages = Object.keys(cohort.schedule || {}).length;
   return [
@@ -30,8 +31,9 @@ export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members
       where: null,
     },
     {
-      key: 'advisor', title: 'المستشار الأساسي', ok: !!cohort.advisor_expert_id,
-      detail: cohort.advisor_expert_id ? `${advisorName || 'معيَّن'}${teamCount ? `، ومعه ${teamCount} في الفريق` : ''}` : 'غير معيَّن: لا خبير يرى ملفات المشاركين ولا إجاباتهم',
+      key: 'advisor', title: 'المستشار الأساسي', ok: !!cohort.advisor_expert_id && advisorServes,
+      detail: cohort.advisor_expert_id && !advisorServes ? `${advisorName || 'المعيَّن'} لا يخدم في الرحلة الآن: لا يراه المشاركون مستشارًا. عيّن غيره`
+        : cohort.advisor_expert_id ? `${advisorName || 'معيَّن'}${teamCount ? `، ومعه ${teamCount} في الفريق` : ''}` : 'غير معيَّن: لا خبير يرى ملفات المشاركين ولا إجاباتهم',
       where: 'team',
     },
     {
@@ -46,7 +48,7 @@ export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members
     },
     {
       key: 'sessions', title: 'الجلسات', ok: upcomingSessions > 0 || usesHandbook(cohort),
-      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة قادمة أو حديثة` : usesHandbook(cohort) ? 'صيغة الكتيب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
+      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة قادمة أو حديثة` : usesHandbook(cohort) ? 'صيغة الكتاب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
         : 'لا جلسة قادمة ولا حديثة: تُضاف من «الحضور والجلسات»',
       where: 'activities',
     },

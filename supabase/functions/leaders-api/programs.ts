@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -46,7 +46,7 @@ export async function cohortOf(p: { id?: string | null; organization_id?: string
   return pickCohort({ enrollments: enr.data || [], cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
 }
 
-// إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتيب فيه لحساب بند القراءة على إصدار الدفعة.
+// إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتاب فيه لحساب بند القراءة على إصدار الدفعة.
 // null لدفعة لم يُقطع إصدارها وحدها، فيُحسب كل شيء على المحتوى الحي؛ وخطأ القراءة يرمي
 export async function releaseOf(p: { id?: string | null; organization_id?: string | null }) {
   const { cohort } = await cohortOf(p, { strict: true });
@@ -142,13 +142,15 @@ export async function orgCohortSetups(orgIds: string[]) {
     own[id] = c && c.organization_id === id ? c : null;
   }
   const advIds = [...new Set(Object.values(own).map((c: any) => c?.advisor_expert_id).filter(Boolean))] as string[];
-  const advs = advIds.length ? must(await db.from('experts').select('id, full_name').in('id', advIds)) as any[] : [];
+  // journey-guard: اسم المستشار المعيَّن للعرض في قائمة الدفعات، والتعيين نفسه يحرسه journeyApproved عند الحفظ
+  const advs = advIds.length ? must(await db.from('experts').select('id, full_name, status, roles').in('id', advIds)) as any[] : [];
   const advName = new Map(advs.map((x: any) => [x.id, x.full_name]));
+  const serving = new Set(advs.filter(journeyApproved).map((x: any) => x.id));
   for (const id of orgIds) {
     const c = own[id];
     if (!c) { out[id] = null; continue; }
     const setup = cohortSetup({
-      cohort: c, advisorName: advName.get(c.advisor_expert_id) || null,
+      cohort: c, advisorName: advName.get(c.advisor_expert_id) || null, advisorServes: serving.has(c.advisor_expert_id),
       teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
       members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []),
     });
@@ -188,9 +190,12 @@ export async function list() {
   const [sess, advs] = await Promise.all([
     // الجلسات الفعّالة الحديثة والقادمة، وبلا دفعة كذلك (تعمّ الدفعات)، ثم sessionsFor لكل دفعة: القاعدة الواحدة
     db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
-    advIds.length ? db.from('experts').select('id, full_name').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
+    // journey-guard: اسم المستشار المعيَّن للعرض، والتعيين نفسه يحرسه journeyApproved عند الحفظ
+    advIds.length ? db.from('experts').select('id, full_name, status, roles').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
   const advisorName = new Map((advs.data || []).map((x: any) => [x.id, x.full_name]));
+  // جاهزية «المستشار الأساسي» في ملف الدفعة (cohort-hub.js): يُحتسب من يخدم في الرحلة وحده
+  const advisorServing = new Set((advs.data || []).filter(journeyApproved).map((x: any) => x.id));
   const seated = await seatsUsedByOrg().catch(() => null);
   return {
     success: true,
@@ -204,6 +209,7 @@ export async function list() {
       // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
       pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
+      advisor_serves: c.advisor_expert_id ? advisorServing.has(c.advisor_expert_id) : null,
     })),
     // عقد الجهة مصدرًا لسطر المقاعد في نموذج دفعتها: الحد والمستهلك من العقد كله (seatsUsedByOrg)، والدفعة التي
     // يدخلها أعضاؤها الجدد الآن (pickCohort). تعذّر عد المقاعد يترك seats_used فارغًا فلا يُعرض رقم خاطئ
@@ -431,8 +437,10 @@ export async function cohortSave(a: Admin, b: Body) {
   if ('advisor_expert_id' in b) {
     if (b.advisor_expert_id && !isUuid(b.advisor_expert_id)) throw new Fail('مستشار غير صالح');
     if (b.advisor_expert_id) {
-      const { data: e } = await db.from('experts').select('status').eq('id', b.advisor_expert_id).maybeSingle();
-      if (!e || !['active', 'paused'].includes(e.status)) throw new Fail('اختر خبيرًا معتمدًا مستشارًا للدفعة');
+      // خدمة الرحلة بدور «مستشار» (journeyApproved): عضو اللجنة بلا دور لا يُعيَّن مستشارًا
+      const { data: e } = await db.from('experts').select('status, roles').eq('id', b.advisor_expert_id).maybeSingle();
+      if (!journeyApproved(e)) throw new Fail('اختر خبيرًا معتمدًا في خدمة الرحلة مستشارًا للدفعة');
+      if (!(e?.roles || []).includes('advisor')) throw new Fail('ليس في ملف هذا الخبير دور «مستشار». أضف الدور إلى ملفه من «الخبراء» ثم عيّنه');
     }
     row.advisor_expert_id = b.advisor_expert_id || null;
   }
@@ -512,8 +520,8 @@ export async function cohortSave(a: Admin, b: Body) {
     try { team = cleanTeamIds(b.team_expert_ids, isUuid); }
     catch (err) { throw new Fail((err as Error).message); }
     if (team.length) {
-      const ok = must(await db.from('experts').select('id').in('id', team).in('status', ['active', 'paused'])) as any[];
-      if ((ok || []).length !== team.length) throw new Fail('في فريق الدفعة خبير غير معتمد. اختر من الخبراء المعتمدين');
+      const ok = ((must(await db.from('experts').select('id, status, roles').in('id', team)) as any[]) || []).filter(journeyApproved);
+      if (ok.length !== team.length) throw new Fail('في فريق الدفعة خبير لا يخدم في الرحلة (غير معتمد، أو عضو لجنة بلا دور). اختر من خبراء الرحلة المعتمدين');
     }
   }
   await guardLive(b, row, prev, programId);
@@ -674,11 +682,12 @@ export async function cohortGroups(b: Body) {
   const gOf = new Map((links.data || []).map((l: any) => [l.participant_id, l.group_id]));
   // الخبراء المعتمدون، وفريق الدفعة منهم أولًا في القائمة
   const [experts, team] = await Promise.all([
-    db.from('experts').select('id, full_name, status').in('status', ['active', 'paused']).order('full_name'),
+    // خبراء الرحلة المعتمدون (journeyApproved): عضو اللجنة بلا دور لا يُعرض خبيرًا للمجموعة
+    db.from('experts').select('id, full_name, status, roles').in('status', ['active', 'paused']).order('full_name'),
     db.from('cohort_experts').select('expert_id').eq('cohort_id', c.id),
   ]);
   const inTeam = new Set([c.advisor_expert_id, ...((team.data || []).map((t: any) => t.expert_id))].filter(Boolean));
-  const list = (experts.data || []).map((e: any) => ({ id: e.id, full_name: e.full_name, team: inTeam.has(e.id) }));
+  const list = (experts.data || []).filter(journeyApproved).map((e: any) => ({ id: e.id, full_name: e.full_name, team: inTeam.has(e.id) }));
   return {
     success: true, cohort: c,
     // group_advisor_ready باقٍ للوحة المنشورة التي تُظهر الاختيار به؛ العمود مطبّق فهو صحيح دائمًا
@@ -703,8 +712,8 @@ export async function cohortGroupSave(a: Admin, b: Body) {
     const adv = b.advisor_expert_id || null;
     if (adv && !isUuid(adv)) throw new Fail('خبير غير صالح');
     if (adv) {
-      const { data: e } = await db.from('experts').select('status').eq('id', adv).maybeSingle();
-      if (!e || !['active', 'paused'].includes(e.status)) throw new Fail('اختر خبيرًا معتمدًا لهذه المجموعة');
+      const { data: e } = await db.from('experts').select('status, roles').eq('id', adv).maybeSingle();
+      if (!journeyApproved(e)) throw new Fail('اختر خبيرًا معتمدًا في خدمة الرحلة لهذه المجموعة');
     }
     const up = await db.from('cohort_groups').update({ advisor_expert_id: adv }).eq('id', b.id).eq('cohort_id', c.id).select('*').maybeSingle();
     if (up.error) throw new Fail('تعذّر حفظ خبير المجموعة الآن، حاول بعد قليل', 503, 'busy');

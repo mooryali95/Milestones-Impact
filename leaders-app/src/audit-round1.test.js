@@ -14,14 +14,14 @@ import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
-describe('7.2 إتمام الباب بتعريف واحد في الكتيب والرحلة', () => {
+describe('7.2 إتمام الباب بتعريف واحد في الكتاب والرحلة', () => {
   const read80 = { words: 400, active_seconds: 600, slices: Array(20).fill(30) };
   it('الاختبار وحده لا يُتم الباب، والقراءة وحدها لا تُتمه', () => {
     expect(chapterCompletion(readingVerdict(null), true)).toMatchObject({ complete: false, reading: { state: 'unread' } });
     expect(chapterCompletion(readingVerdict(read80), false).complete).toBe(false);
     expect(chapterCompletion(readingVerdict(read80), true)).toMatchObject({ complete: true, reading: { state: 'read', pct: 100 } });
   });
-  it('الخادم يرسل complete في فهرس الكتيب، والكتيب يعدّ به', () => {
+  it('الخادم يرسل complete في فهرس الكتاب، والكتاب يعدّ به', () => {
     expect(read('supabase/functions/leaders-api/participant.ts')).toContain('...chapterCompletion(readingVerdict(read[m.id]), !!done[m.id]),');
     const hb = read('leaders-app/src/screens/Handbook.jsx');
     expect(hb).toContain('const complete = (c) => (c.complete ?? !!c.done);');

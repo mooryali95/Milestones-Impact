@@ -71,14 +71,15 @@ const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.p
 // «هل للدفعة جلسات؟» من cohort-setup.js وحده: الحكم نفسه في ملف الدفعة وصفحة الجهة وهنا
 
 /** بنود م2 الآلية من صفوف القاعدة. check معرّف نقطة البوابة، وwhere تبويب ضبطه في اللوحة (null: يُضبط خارجها)
- * @param {{ organizations?: any[], cohorts?: any[], sessions?: any[], finalEval?: unknown }} rows
+ * @param {{ organizations?: any[], cohorts?: any[], sessions?: any[], finalEval?: unknown, advisors?: string[] | null }} rows
  *   organizations: id, name, status · cohorts: id, name, organization_id, status, advisor_expert_id, content_release, delivery
- *   sessions: cohort_id, active, starts_at, ends_at · finalEval: programs.final_eval للبرنامج الافتراضي */
-export function launchReadiness({ organizations = [], cohorts = [], sessions = [], finalEval = null } = {}, now = Date.now()) {
+ *   sessions: cohort_id, active, starts_at, ends_at · finalEval: programs.final_eval للبرنامج الافتراضي
+ *   advisors: معرّفات المستشارين الذين يخدمون في الرحلة فعلًا (journeyApproved)؛ غيابها يكتفي بوجود الإسناد */
+export function launchReadiness({ organizations = [], cohorts = [], sessions = [], finalEval = null, advisors = null } = {}, now = Date.now()) {
   const orgCohorts = cohorts.filter((c) => c.organization_id && LIVE.includes(c.status));
   const perOrg = organizations.filter((o) => o.status === 'active')
     .map((o) => ({ kind: 'org', id: o.id, name: o.name, has: cohorts.some((c) => c.organization_id === o.id && LIVE.includes(c.status)) }));
-  const advisor = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.advisor_expert_id }));
+  const advisor = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.advisor_expert_id && (!advisors || advisors.includes(c.advisor_expert_id)) }));
   const dated = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: sessionsFor(c, sessions, now) > 0 || usesHandbook(c) }));
   const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
   const fe = asJson(finalEval);
@@ -95,7 +96,7 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
     { key: 'advisor', check: 'm2.advisor', where: 'programs',
       ...judge(advisor, noOrgCohort, 'دفعات جهات بلا مستشار أساسي', (n) => `${n} دفعة جهة، ولكلٍّ مستشار أساسي`) },
     { key: 'sessions', check: 'm2.sessions', where: 'activities',
-      ...judge(dated, noOrgCohort, 'دفعات جهات بلا مواعيد قادمة ولا صيغة الكتيب', () => 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب') },
+      ...judge(dated, noOrgCohort, 'دفعات جهات بلا مواعيد قادمة ولا صيغة الكتاب', () => 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتاب') },
     { key: 'final-eval', check: 'm2.final-eval', where: 'programs',
       ok: finalSaved, label: finalSaved ? 'إعداد التقييم الختامي محفوظ للبرنامج الافتراضي' : 'إعداد التقييم الختامي لم يُحفظ بعد للبرنامج الافتراضي' },
     // الإصدار يُقطع ويُثبَّت بترحيل من أداة إصدار المحتوى، لا من اللوحة

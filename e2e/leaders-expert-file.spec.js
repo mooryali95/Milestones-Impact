@@ -31,7 +31,7 @@ function server({ finalStatus = 'pending', fail = {} } = {}) {
     progress: 55,
     milestones: [{ id: 'm1', title_ar: 'نهاية التدريب', status: 'done', done: true, scores: {}, due: '2026-10-20' }, { id: 'm2', title_ar: 'تسليم هيكل المشروع', status: 'late', done: false, late_days: 4, due: '2026-10-31', scores: {} }],
     milestone_summary: { done: 1, total: 2, late: 1, max_late: 4 },
-    group: null, continuous: { index: 72, trend: { dir: 'up', delta: 6 }, components: [{ key: 'quizzes', label: 'اختبارات الكتيب', value: 80, reason: 'الصواب في 12 سؤالًا' }, { key: 'peer', label: 'الإسهام المؤكَّد في طلبات الأقران', value: null, reason: 'لم يؤكّد الخبير له إسهامًا في طلبات زملائه بعد' }], engagement: { label: 'الانخراط', value: 75 }, flags: [], events: [] },
+    group: null, continuous: { index: 72, trend: { dir: 'up', delta: 6 }, components: [{ key: 'quizzes', label: 'اختبارات الكتاب', value: 80, reason: 'الصواب في 12 سؤالًا' }, { key: 'peer', label: 'الإسهام المؤكَّد في طلبات الأقران', value: null, reason: 'لم يؤكّد الخبير له إسهامًا في طلبات زملائه بعد' }], engagement: { label: 'الانخراط', value: 75 }, flags: [], events: [] },
     program: { id: 'pr1' }, assessments: [], models: [{ id: 's1', status: 'submitted', status_ar: 'بانتظار تقييمك', rating: null, submitted_at: '2026-11-01T10:00:00Z', title: 'اتفاق التعلم الثلاثي' }],
     points: { total: 40, rank: { title: 'مستكشف' } }, book: [],
     team: 'guide', team_ar: 'فريق التوجيه',

@@ -17,7 +17,7 @@ const cohorts = [
 const reqs = [
   { id: 'r1', code: 'T-ATTEND', title_ar: 'حضور الأيام التدريبية', kind: 'workshop', active: true, config: { sessions_required: 4, verify: 'qr' } },
   { id: 'r2', code: 'O-SESS', title_ar: 'جلسات التوجيه', kind: 'coaching', active: true, config: { sessions_required: 2, mode: 'online' } },
-  { id: 'r3', code: 'T-HB', title_ar: 'قراءة الكتيب', kind: 'reading', active: true, config: {} },
+  { id: 'r3', code: 'T-HB', title_ar: 'قراءة الكتاب', kind: 'reading', active: true, config: {} },
 ];
 
 async function setup(page) {

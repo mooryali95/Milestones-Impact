@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// خريطة المبادرة: معناها، وفهرس فصولها بمراحل بنائها، والتنقل بين الفصول، والإحالة إلى الكتيب
+// خريطة المبادرة: معناها، وفهرس فصولها بمراحل بنائها، والتنقل بين الفصول، والإحالة إلى الكتاب
 // ════════════════════════════════════════════════════════════════
 // المحتوى كله من anatomy.json (مصدر واحد يراجعه الخبير عند الطلب)، وحالة الفصول من الخادم كما هي.
 // التصور: docs/content/2026-11-15-تصور-فهم-المبادرة-وإخراج-وثيقتها-v1.md
@@ -16,7 +16,7 @@ const TONE_AR = { ok: 'مكتمل', warn: 'قيد العمل', bad: 'أُعيد 
 /** الفصل التالي المقترح: أول فصل معاد، وإلا أول فصل لم يكتمل بترتيب الوثيقة */
 export const nextChapter = (sections) => (sections || []).find((s) => s.status === 'returned') || (sections || []).find((s) => !s.complete) || null;
 
-/** إحالة الفصل في الكتيب بصيغة يفهمها الكتيب، أو null */
+/** إحالة الفصل في الكتاب بصيغة يفهمها الكتاب، أو null */
 export function bookRef(section) {
   const h = chapterInfo(section?.key)?.handbook;
   return h ? { ...h, from: section.title, chapter_id: section.id } : null;
@@ -44,7 +44,7 @@ export function Meaning({ scope, open, onHandbook }) {
       </div>
       <p className="im-test"><b>اختبار سريع:</b> {MEANING.test}</p>
       <p className="small">{MEANING.components}</p>
-      {onHandbook && <button type="button" className="btn ghost sm" onClick={() => onHandbook({ ...MEANING.handbook, from: MEANING.title })}>اقرأ الطبقات الثلاث في الكتيب</button>}
+      {onHandbook && <button type="button" className="btn ghost sm" onClick={() => onHandbook({ ...MEANING.handbook, from: MEANING.title })}>اقرأ الطبقات الثلاث في الكتاب</button>}
     </details>
   );
 }
@@ -117,7 +117,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
                       </span>
                       <span className={`chip ${t === 'idle' ? '' : t}`}>{t === 'warn' && s.status === 'submitted' ? 'مسلّم' : TONE_AR[t]}</span>
                     </button>
-                    {ref && onHandbook && <button type="button" className="link small im-book" onClick={() => onHandbook(ref)} aria-describedby={`im-t-${s.id}`}>في الكتيب</button>}
+                    {ref && onHandbook && <button type="button" className="link small im-book" onClick={() => onHandbook(ref)} aria-describedby={`im-t-${s.id}`}>في الكتاب</button>}
                   </li>
                 );
               })}
@@ -130,7 +130,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
   );
 }
 
-// ── داخل الفصل: أين أنا في الوثيقة، والسابق والتالي، وما يشرحه في الكتيب ──
+// ── داخل الفصل: أين أنا في الوثيقة، والسابق والتالي، وما يشرحه في الكتاب ──
 export function ChapterNav({ sections, id, onOpen, onHandbook }) {
   const i = sections.findIndex((s) => s.id === id);
   if (i < 0) return null;
@@ -146,7 +146,7 @@ export function ChapterNav({ sections, id, onOpen, onHandbook }) {
       </div>
       <div className="row">
         {prev && <button type="button" className="btn ghost sm" onClick={() => onOpen(prev.id)} title={prev.title}>→ السابق</button>}
-        {ref && onHandbook && <button type="button" className="btn ghost sm" onClick={() => onHandbook(ref)}>اقرأ في الكتيب: {ref.look_for}</button>}
+        {ref && onHandbook && <button type="button" className="btn ghost sm" onClick={() => onHandbook(ref)}>اقرأ في الكتاب: {ref.look_for}</button>}
         {next && <button type="button" className="btn ghost sm" onClick={() => onOpen(next.id)} title={next.title}>التالي ←</button>}
       </div>
     </nav>
