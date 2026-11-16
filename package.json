@@ -8,7 +8,7 @@
   "description": "Milestone Impact — مصفوفة التأثير • هندسة اجتماعية",
   "dependencies": {
     "@simplewebauthn/browser": "13.3.0",
-    "html-to-image": "1.11.11",
+    "html-to-image": "1.11.13",
     "jspdf": "4.2.1",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
@@ -38,15 +38,15 @@
     "video:excerpt": "node shared/video/excerpt-audio.mjs"
   },
   "devDependencies": {
-    "@babel/eslint-parser": "^7.29.7",
+    "@babel/eslint-parser": "^7.29.13",
     "@babel/plugin-syntax-jsx": "^7.29.7",
-    "@electric-sql/pglite": "^0.2.17",
-    "@playwright/test": "1.56.1",
+    "@electric-sql/pglite": "^0.5.16",
+    "@playwright/test": "1.65.0",
     "@vitejs/plugin-react": "^5.2.0",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^25.0.1",
-    "vite": "^7.3.7",
+    "vite": "^7.3.8",
     "vitest": "^3.2.7"
   }
 }

@@ -217,7 +217,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       {editable && (() => {
         const sig = stuckSignals({ sections: d.sections, checks: d.checks, card: d.card }).find((x) => !dismissed.includes(x.key));
         if (!sig) return null;
-        const ex = d.examples?.doc !== false ? examplesFor(me?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null)[0] : null;
+        const ex = d.examples?.doc !== false ? examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null)[0] : null;
         return (
           <section className="card stuck" aria-labelledby="stuck-h" data-stuck={sig.kind}>
             <h3 id="stuck-h">تحتاج توجيهًا؟</h3>
@@ -282,12 +282,12 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           </section>
 
           {/* المبادرات المحلولة كاملة: يعرضها أو يحجبها المالك عامةً أو للدفعة، وكل قطاع وحده (examples من الخادم) */}
-          {d.examples?.doc !== false && examplesFor(me?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).length > 0 && (
+          {d.examples?.doc !== false && examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).length > 0 && (
             <section className="card cp-example" aria-labelledby="cp-ex-h">
               <h3 id="cp-ex-h">مبادرة محلولة كاملة</h3>
               <p className="muted small">قبل أن تكتب، شاهد كيف تبدو وثيقة مكتملة من أول البطاقة إلى قصة التحول. للتعلم من بنيتها لا لنقلها: مبادرتك من واقع تعرفه.</p>
               <div className="row">
-                {examplesFor(me?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).map((ex, i) => (
+                {examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).map((ex, i) => (
                   <button key={ex.sector} type="button" className={`btn ${i ? 'ghost' : 'gold'} sm`} onClick={() => openCapstoneDoc(exampleDoc(ex))}>مثال {ex.sector_title}</button>
                 ))}
               </div>

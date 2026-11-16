@@ -140,6 +140,34 @@ describe('محرر الاستوديو ← مقترح لكل قسم تغيّر (�
   });
 });
 
+describe('إصلاحات مراجعة اليوم (2026-11-15)', () => {
+  const M = { id: 'm', body_md: '## A\na\n\n## B\nb\n\n## C\nc' };
+  const r = (p, reason = 'سبب واضح للتعديل') => checkProposal({ section: 'B', proposed_md: p, reason }, M);
+  it('عنوان بلا نص يُرفض، فلا تنزاح مفاتيح الأقسام', () => {
+    expect(r('## \nنص').error).toMatch(/عنوان بلا نص/);
+    expect(r('## B\n### ****\nنص').error).toMatch(/عنوان بلا نص/);
+    expect(rawSections('## \nx\n## B\ny').map((x) => x.key)).toEqual(['', 'B']);
+  });
+  it('وسم $…$ محجوز لترحيل الكتاب، والسبب له حد أعلى', () => {
+    expect(r('## B\n$v3_2$').error).toMatch(/\$/);
+    expect(r('## B\nb2', 'س'.repeat(2001)).error).toMatch(/أطول/);
+    expect(r('## B\nسعر 5$ فقط').value).toBeTruthy();
+  });
+  it('مقترح يغيّر ترقيم عنوان مكرر في قسم آخر يُرفض', () => {
+    const D = { id: 'm', body_md: '## مقدمة\n### مثال\nx\n\n## متن\n### مثال\ny' };
+    expect(checkProposal({ section: 'مقدمة', proposed_md: '## مقدمة\n### مثال\nx\n### مثال\nz', reason: 'سبب واضح للتعديل' }, D).error).toMatch(/مثال \(2\)/);
+    expect(checkProposal({ section: 'مقدمة', proposed_md: '## مقدمة\n### مثال\nx أوضح', reason: 'سبب واضح للتعديل' }, D).value).toBeTruthy();
+  });
+  it('المعتمد الذي تخطاه الإصدار له مخرج: يعيده كاتبه مسودة، ويسحبه هو أو المدير العام', () => {
+    expect(canMove(ADMIN, P({ status: 'approved' }), 'draft')).toBe(true);
+    expect(canMove(ADMIN, P({ status: 'approved' }), 'withdrawn')).toBe(true);
+    expect(canMove(SUPER, P({ status: 'approved' }), 'withdrawn')).toBe(true);
+    expect(canMove(SUPER, P({ status: 'approved' }), 'draft')).toBe(false);
+    expect(canMove(ADMIN, P({ status: 'review' }), 'review')).toBe(false);
+    expect(canMove(ADMIN, P({ status: 'released' }), 'draft')).toBe(false);
+  });
+});
+
 describe('مقترحات الكتاب الأم: الفرق', () => {
   it('كلمة بكلمة، والتجميع يعيد النصين', () => {
     const d = wordDiff('المعلم نقطة تحقق واضحة', 'المعلم نقطة قرار واضحة');

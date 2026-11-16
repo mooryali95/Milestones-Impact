@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المحرر: نص القسم كما هو بوسوم مستواه، ومعاينة حية بكل مستوى، وما يعتمد على القسم قبل الحفظ.
 // المراجعة: الفرق كلمة بكلمة، وسبب التعديل، والاعتماد أو الرد للمدير العام. القواعد على الخادم (book-proposals.js).
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { mdHtml } from '../../src/lib/brand/book.js';
 import { LEVEL_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { filterHandbookMd } from '../../supabase/functions/leaders-api/logic.js';
@@ -12,7 +12,22 @@ import { PROPOSED_MAX, REASON_MIN, REFLECTION, REFLECTION_MAX, targetLabel, targ
 import { chapterDeps } from './deps.js';
 
 const PREVIEW = [['all', 'كما في الكتاب الأم'], ['beginner', LEVEL_AR.beginner], ['intermediate', LEVEL_AR.intermediate], ['advanced', LEVEL_AR.advanced]];
-const useEsc = (fn) => useEffect(() => { const k = (e) => e.key === 'Escape' && fn(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [fn]);
+// Escape للنافذة العليا وحدها (active)، والتركيز ينتقل إلى النافذة عند فتحها ويعود إلى ما كان عليه عند إغلاقها
+const useEsc = (fn, active = true) => useEffect(() => {
+  if (!active) return undefined;
+  const k = (e) => { if (e.key === 'Escape') { e.stopPropagation(); fn(); } };
+  addEventListener('keydown', k); return () => removeEventListener('keydown', k);
+}, [fn, active]);
+export function useDialogFocus() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const was = document.activeElement;
+    const el = ref.current;
+    (el?.querySelector('textarea, input, select') || el)?.focus?.({ preventScroll: true });
+    return () => { if (was && typeof was.focus === 'function' && document.contains(was)) was.focus({ preventScroll: true }); };
+  }, []);
+  return ref;
+}
 const when = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' }) : '');
 
 /** الفرق كلمة بكلمة: المحذوف مشطوب والمضاف مظلل، وما لم يتغير يُطوى إن طال */
@@ -40,9 +55,13 @@ export function ProposalEditor({ chapter, section, proposal = null, data, api, o
   const [lvl, setLvl] = useState('all');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  useEsc(onClose);
-  const deps = chapterDeps({ chapter, section, deps: data.deps, counts: data.counts });
   const changed = text.trim() !== base.trim();
+  // الإغلاق والنص مكتوب يسأل أولًا، فلا يضيع ما كُتب بـ Escape أو بنقرة خارج النافذة
+  const dirty = text !== (proposal?.proposed_md || base) || reason !== (proposal?.reason || '');
+  const close = useCallback(() => { if (!dirty || confirm('إغلاق دون حفظ؟ يضيع ما كتبته في هذا المقترح.')) onClose(); }, [dirty, onClose]);
+  useEsc(close);
+  const box = useDialogFocus();
+  const deps = chapterDeps({ chapter, section, deps: data.deps, counts: data.counts });
   const preview = useMemo(() => mdHtml(lvl === 'all' ? markTiers(text) : filterHandbookMd(text, lvl)), [text, lvl]);
   const save = async (submit) => {
     setBusy(true); setErr('');
@@ -52,12 +71,12 @@ export function ProposalEditor({ chapter, section, proposal = null, data, api, o
     onSaved(r);
   };
   return (
-    <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="mb-sheet tall wide" role="dialog" aria-modal="true" aria-label="اقتراح تعديل">
+    <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <aside ref={box} tabIndex={-1} className="mb-sheet tall wide" role="dialog" aria-modal="true" aria-label="اقتراح تعديل">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h">
           <div><small>{chapter.title} · {proposal ? 'تحديث مقترح' : 'اقتراح تعديل'}</small><b>{targetLabel(section)}</b></div>
-          <button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button>
+          <button type="button" className="mb-x" onClick={close} aria-label="إغلاق">×</button>
         </header>
         <div className="mb-tabs" role="tablist">
           {[['edit', 'النص'], ...(isR ? [] : [['preview', 'المعاينة']]), ['diff', 'الفرق']].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>)}
@@ -92,7 +111,7 @@ export function ProposalEditor({ chapter, section, proposal = null, data, api, o
           <div className="mb-row">
             <small className="mb-muted">لا يتغير الكتاب بالحفظ. المعتمد يدخل الإصدار التالي</small>
             <span className="mb-row-end">
-              <button type="button" className="mb-btn ghost" disabled={busy || !changed || reason.trim().length < REASON_MIN} onClick={() => save(false)}>احفظ مسودة</button>
+              <button type="button" className="mb-btn ghost" disabled={busy || !changed || reason.trim().length < REASON_MIN} onClick={() => save(false)}>{proposal?.status === 'review' ? 'احفظ التعديل (يبقى قيد المراجعة)' : 'احفظ مسودة'}</button>
               <button type="button" className="mb-btn gold" disabled={busy || !changed || reason.trim().length < REASON_MIN} onClick={() => save(true)}>{busy ? 'يُحفظ…' : 'اعرضه على اللجنة'}</button>
             </span>
           </div>
@@ -111,7 +130,8 @@ function Card({ p, chapter, viewer, api, onChanged, onEdit, onGo }) {
   const move = async (to) => {
     if (to === 'withdrawn' && !confirm('سحب المقترح؟ يبقى في السجل ولا يُراجع.')) return;
     setBusy(true); setErr('');
-    const r = await api.move(p.id, to, note);
+    // الاعتماد بالنسخة المعروضة (updated_at): إن عدّلها كاتبها بعد فتحها يُرفض القرار ويُعاد العرض
+    const r = await api.move(p.id, to, note, p.updated_at);
     setBusy(false);
     if (!r?.success) { setErr(r?.message || 'تعذّر التحديث'); return; }
     setDeciding(null); setNote(''); onChanged();
@@ -157,9 +177,10 @@ const FILTERS = [['open', 'المفتوحة'], ['review', 'قيد المراجع
 const pass = (f, p) => f === 'all' || (f === 'open' ? ['draft', 'review', 'approved'].includes(p.status) : f === 'closed' ? ['rejected', 'withdrawn'].includes(p.status) : p.status === f);
 
 /** كل المقترحات، أو مقترحات قسم بعينه إن سُمّي */
-export function ProposalsSheet({ data, api, scope = null, onEdit, onGo, onChanged, onClose }) {
+export function ProposalsSheet({ data, api, scope = null, onEdit, onGo, onChanged, onClose, inactive = false }) {
   const [f, setF] = useState('open');
-  useEsc(onClose);
+  useEsc(onClose, !inactive);
+  const box = useDialogFocus();
   const byId = useMemo(() => Object.fromEntries(data.chapters.map((c) => [c.id, c])), [data.chapters]);
   const list = (data.proposals || []).filter((p) => (!scope || (p.module_id === scope.chapter.id && p.section === scope.section)) && (scope || pass(f, p)));
   const rule = data.viewer.decide ? 'تعتمد ما قيد المراجعة أو ترده بملاحظة. المعتمد يجمعه سير «Handbook release» في GitHub Actions في إصدار جديد بطلب دمج، ويصل المشاركين بعد دمجه وتطبيق ترحيله.'
@@ -167,7 +188,7 @@ export function ProposalsSheet({ data, api, scope = null, onEdit, onGo, onChange
       : 'تقرأ المقترحات المعروضة وتعلّق عليها من زر التعليق في القسم نفسه. الاعتماد للإدارة.';
   return (
     <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="mb-sheet tall wide" role="dialog" aria-modal="true" aria-label="مقترحات التعديل">
+      <aside ref={box} tabIndex={-1} className="mb-sheet tall wide" role="dialog" aria-modal="true" aria-label="مقترحات التعديل">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h">
           <div><small>{scope ? scope.chapter.title : 'الكتاب الأم'}</small><b>{scope ? `مقترحات «${targetLabel(scope.section)}»` : 'مقترحات التعديل'}</b></div>

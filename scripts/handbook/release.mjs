@@ -55,7 +55,11 @@ export function applyProposals(chapters, proposals, registry) {
     if (src !== p.base_md) { skip('القسم في المستودع يختلف عن النص الذي كُتب عليه المقترح (تغيّر بعده)'); continue; }
     const idx = rawSections(c.body_md).findIndex((x) => x.key === key);
     const next = replaceSection(c.body_md, key, p.proposed_md);
-    const newKey = rawSections(next)[idx]?.key ?? key;
+    // أقسام المقترح في الباب بعده: إن بقي بينها عنوان القسم القديم فهو هو (وما قبله أو بعده قسم جديد)،
+    // وإلا فالعنوان تغيّر، والقسم هو أول عناوين المقترح
+    const n = Math.max(1, String(p.proposed_md).split('\n').filter((l) => /^##\s+\S/.test(l)).length);
+    const got = rawSections(next).slice(idx, idx + n).map((x) => x.key);
+    const newKey = got.includes(key) ? key : (got[0] ?? key);
     // عنوان القسم تغيّر بالمقترح: الهوية نفسها بالعنوان الجديد، والقديم في aliases فتتبعه الإحالات
     if (s && !s.retired && newKey && newKey !== s.key) { s.aliases = [...new Set([...s.aliases, s.key])]; s.key = newKey; }
     c.body_md = next;
