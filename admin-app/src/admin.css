@@ -1422,6 +1422,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .ex-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .ex-head h3 { margin: 0 0 4px; }
 .ex-side { display: grid; gap: 10px; justify-items: end; }
+.ex-app { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 14px; }
 @media (max-width: 640px) { .ex-side { justify-items: start; } }
 .ex-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 10px 0 14px; }
 .ex-kpis span { display: grid; gap: 2px; padding: 12px; border: 1px solid var(--brand-line); border-radius: 8px; font-size: .8rem; color: var(--brand-ink-mid); background: var(--brand-white); }

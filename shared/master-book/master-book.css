@@ -433,3 +433,22 @@
 .mb-sheet a { color: var(--gold-text); }
 .mb-ltr { display: block; direction: ltr; text-align: left; unicode-bidi: isolate; margin: 4px 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--paper-2); font: 400 12.5px/1.7 "Noto Sans Mono", ui-monospace, monospace; color: var(--graphite); overflow-wrap: anywhere; }
 .mb-rel-setup li { margin-bottom: 8px; }
+
+/* المقعد والتعليق من خارج الإطار (تصور «أجزاء الكتاب وخبير المحتوى»، المرحلة 1): لون محايد واضح لا يوحي بالخطأ */
+.mb-outseat { display: inline-block; vertical-align: 1px; font-size: 10.5px; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid rgba(43, 76, 88, .28); background: rgba(43, 76, 88, .07); color: #2B4C58; font-weight: 400; font-style: normal; white-space: nowrap; }
+.mb-seat { margin: 4px 0 0; font-size: 12px; color: rgba(237, 230, 216, .6); } .mb-seat b { font-weight: 400; color: var(--gold-light); }
+.mb-seat-note { margin: 0 0 6px; font-size: 12px; color: #2B4C58; }
+.mb-vol.away { border-color: rgba(244, 238, 226, .16); }
+.mb-vol-away { position: absolute; top: 12px; inset-inline-end: 12px; z-index: 2; font-size: 10.5px; line-height: 1.6; padding: 1px 9px; border-radius: 999px; border: 1px solid rgba(244, 238, 226, .3); background: rgba(6, 19, 24, .55); color: rgba(244, 238, 226, .8); }
+
+/* نطاق القراءة واختيار نسخة PDF (المرحلة 2 من «أجزاء الكتاب وخبير المحتوى») */
+.mb-levels { align-items: center; }
+.mb-levels.mb-scope { padding-bottom: 0; }
+.mb-row-l { flex: none; min-width: 44px; font-size: 12px; color: var(--muted); }
+.mb-scope button.on { background: var(--gold-light); color: var(--graphite); border-color: var(--gold-light); }
+.mb-pdf { list-style: none; margin: 12px 0 4px; padding: 0; display: grid; gap: 8px; }
+.mb-pdf button { width: 100%; display: flex; align-items: center; gap: 12px; text-align: start; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; transition: border-color .2s, transform .2s; }
+.mb-pdf button:hover, .mb-pdf button:focus-visible { border-color: var(--gold); }
+.mb-pdf i { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--graphite); color: var(--gold-light); font: 300 14px/38px "Noto Sans", sans-serif; text-align: center; font-style: normal; }
+.mb-pdf span { display: grid; min-width: 0; } .mb-pdf b { font-weight: 400; font-size: 15px; color: var(--graphite); } .mb-pdf small { font-size: 12.5px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .mb-pdf button:active { transform: scale(.99); } }

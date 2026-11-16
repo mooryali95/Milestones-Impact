@@ -12,7 +12,7 @@ import { applyFilters, presetCounts, recallState, sortRows } from '../filters.js
 import { RequestsBoard, requestView } from './ExpertMatch.jsx';
 import { readQuery } from '../route.js';
 import { COACH_STATUS_ADMIN as COACH_AR, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
-import { COMMITTEE_AR, contentOnly, expertService } from '../../../supabase/functions/leaders-api/committees.js';
+import { COMMITTEE_AR, committeeApplication, committeeApplicationAr, CONTENT_TRACK_AR, contentOnly, expertService } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 import { COHORT_STATUS } from '../methodology.js';
 import { periodAr, scopeText } from '../team.js';
@@ -216,7 +216,9 @@ function Profile({ id, canWrite, onBack }) {
           <h3>{e.full_name}</h3>
           <p className="la-muted">{[e.title, e.years_experience != null ? `${e.years_experience} سنة خبرة` : null].filter(Boolean).join(' · ')}</p>
           <p className="la-muted" dir="ltr">{e.email}{e.phone ? ` · ${e.phone}` : ''}</p>
-          <small className="la-muted">{e.source === 'admin' ? 'أضافته الإدارة' : 'طلب انضمام'} · {date(e.created_at)}{e.approved_at ? ` · اعتُمد ${date(e.approved_at)}` : ''}</small>
+          <small className="la-muted">{e.source === 'admin' ? 'أضافته الإدارة' : committeeApplication(e) ? CONTENT_TRACK_AR : 'طلب انضمام'} · {date(e.created_at)}{e.approved_at ? ` · اعتُمد ${date(e.approved_at)}` : ''}</small>
+          {/* طلب عضوية لجنة من «انضم كخبير محتوى»: اللجنة والإطار في سطر، والاعتماد يرسل دعوة بوابة الكتاب بتعهد السرية */}
+          {committeeApplication(e) && <p className="ex-app"><span className="la-chip warn">{CONTENT_TRACK_AR}</span> {committeeApplicationAr(e)}</p>}
         </div>
         <div className="ex-side">
           <span className={`la-chip ${TONE[e.status]}`}>{EXPERT_STATUS[e.status]}</span>
@@ -312,7 +314,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
       {adding && <ExpertForm isNew canWrite={canWrite} onCancel={() => setAdding(false)} onSaved={(e) => { setAdding(false); onOpen(e.id); }} />}
       <section className="la-card">
         <div className="la-row between"><h3>شبكة الخبراء</h3>{canWrite && !adding && <button className="btn-sm primary" onClick={() => setAdding(true)}>+ خبير</button>}</div>
-        <p className="la-muted">ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير»، ولا يُسند إليه شيء قبل اعتماده.</p>
+        <p className="la-muted">ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير» بمساريها: خبير الرحلة، وخبير المحتوى (طلب عضوية لجنة). لا يُسند إليه شيء ولا يُفتح له الكتاب قبل اعتماده.</p>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <FilterBar scope="experts" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
             shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
@@ -323,7 +325,8 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
               <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>
-                  <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small></td>
+                  <td data-label="الخبير"><b>{e.full_name}</b><br /><small className="la-muted">{e.title || e.email}</small>
+                    {e.status === 'applied' && committeeApplication(e) && <><br /><span className="la-chip warn" title={committeeApplicationAr(e)}>{CONTENT_TRACK_AR}</span> <small className="la-muted">{committeeApplicationAr(e)}</small></>}</td>
                   <td data-label="الأدوار">{contentOnly(e) ? <span className="la-chip">عضو لجنة، لا يخدم في الرحلة</span> : <Chips list={e.roles} labels={Object.fromEntries(ROLES.map(([k, [l]]) => [k, l]))} />}
                     {expertService(e).journey && expertService(e).content && <><br /><span className="la-chip ok">يخدم أيضًا في {(e.committees || []).map((k) => COMMITTEE_AR[k]).filter(Boolean).join(' و')}</span></>}
                     {e.committees?.length > 0 && <><br /><Chips list={e.committees} labels={COMMITTEE_AR} /></>}</td>

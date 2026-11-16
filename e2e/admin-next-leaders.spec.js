@@ -84,6 +84,10 @@ test('النقل الجماعي إلى جهة بتأكيد', async ({ page }) =>
   await expect.poll(() => calls.find((c) => c.action === 'admin.assign-org')).toMatchObject({ participant_ids: ['p2'], organization_id: 'o1' });
 });
 
+// ملف المشارك بتبويبات (P2، 2026-11-16): كل قسم في تبويبه، والإجراءات الأقل تكرارًا في «⋯»
+const tab = (page, name) => page.getByRole('tab', { name: new RegExp(`^${name}`) });
+const more = async (page, item) => { await page.getByRole('button', { name: 'إجراءات أخرى' }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+
 test('ملف المشارك: اعتماد المستويات، وإعادة بند بملاحظة', async ({ page }) => {
   const calls = await setup(page);
   await page.getByText('سارة الأحمد').click();
@@ -107,11 +111,12 @@ test('ملف المشارك: اعتماد المستويات، وإعادة بن
   await expect.poll(() => calls.find((c) => c.action === 'admin.approve')?.levels).toEqual({ milestone: 'beginner', impact: 'advanced', leadership: 'intermediate' });
   expect(calls.find((c) => c.action === 'admin.approve').notes).toMatchObject({ impact: 'تقاريره الميدانية ومختبره يفوقان المحسوب بوضوح' });
 
+  await tab(page, 'الرحلة').click();
   await page.getByRole('button', { name: 'إعادة مع ملاحظة' }).click();
   await page.getByRole('dialog').locator('input').fill('أضف المؤشرات');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.review')).toMatchObject({ status: 'returned', note: 'أضف المؤشرات', requirement_id: 'r1' });
-  await page.getByRole('button', { name: '→ كل المشاركين' }).click();
+  await page.getByRole('button', { name: /^→ (كل المشاركين|القائمة)$/ }).click();
   await expect(page.locator('.data-table tbody tr')).toHaveCount(2);
 });
 
@@ -123,6 +128,7 @@ test('ملف المشارك: التدخل في مرحلة يصل إلى الخا
   ];
   const calls = await setup(page, { 'admin.participant': { ...person, journey }, 'admin.stage-override': { success: true } });
   await page.getByText('سارة الأحمد').click();
+  await tab(page, 'الرحلة').click();
   await page.getByRole('button', { name: 'اعتمد اكتمالها' }).click();
   await page.getByRole('dialog').locator('input').fill('أنجزها في ورشة حضورية موثقة');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
@@ -266,10 +272,13 @@ test('ملف المشارك الكامل: ملخص الأعلام، وإضافة
   const flags = page.getByRole('list', { name: 'ملخص الأعلام' });
   await expect(flags.locator('.la-chip.bad')).toHaveText('أجاب القياس باستعجال');
   await expect(flags).toContainText('غاب عن جلسة توجيه');
+  await tab(page, 'المبادرة والجلسات').click();
   // ما كان غائبًا: الجلسات بحالتها من المصدر الواحد، والمبادرة بعدد إعاداتها
   await expect(page.getByText('لم يحضر')).toBeVisible();
   await expect(page.getByText('أُعيدت 2 مرة')).toBeVisible();
-  // ملاحظة النظام بلا حذف، وحالتها عند المشارك ظاهرة
+  // ملاحظة النظام بلا حذف، وحالتها عند المشارك ظاهرة. التبويب يحمل عدد الملاحظات
+  await expect(tab(page, 'السجل')).toContainText('1');
+  await tab(page, 'السجل').click();
   const list = page.locator('.pf-obs-list');
   await expect(list).toContainText('مرئية للمشارك، ولم يطّلع عليها بعد');
   await expect(list.getByRole('button', { name: 'حذف' })).toHaveCount(0);
@@ -298,7 +307,7 @@ test('عاين بعين الخبير: ما يُرى وما حُجب عن الم�
     await route.fulfill({ json: { success: true, as: b.as, name: 'سارة الأحمد', sees: sees(b.as === 'advisor'), can: { answers: b.as === 'advisor', observe: false, final_edit: false, hall: false } } });
   });
   await page.locator('.data-table tbody tr').filter({ hasText: 'سارة الأحمد' }).click();
-  await page.getByRole('button', { name: 'عاين بعين الخبير' }).click();
+  await more(page, 'عاين بعين الخبير');
   const dlg = page.getByRole('dialog', { name: 'معاينة بعين الخبير' });
   await expect(dlg.locator('.cv-sees li.ok')).toHaveCount(2);
   await expect(dlg).toContainText('ما يحق له فعله: فتح الإجابات.');

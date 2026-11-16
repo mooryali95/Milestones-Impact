@@ -26,10 +26,12 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 
 // حد الإجراء الجماعي (يطابق BULK_MAX في admin.ts، والخادم هو الحكم)
 const BULK_MAX = 50;
-import { FileExtras, FileFlags, FileIndex, Observations, Timeline } from './PersonFile.jsx';
+import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
+import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
+import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
@@ -134,6 +136,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   }), [orgs]); // eslint-disable-line
   const shown = useMemo(() => sortRows(applyFilters(all, spec, f), SORTS, f.sort), [all, f, fields, SORTS]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
+  // فتح مشارك يحفظ ترتيب ما يظهر الآن، فيتنقل المدير في الملفات بالسابق والتالي (review-queue.js)
+  const open = (id) => { saveQueue(shown.map((p) => p.id), queueLabel(PRESETS, f.view)); onOpen(id); };
 
   const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allOn = shown.length > 0 && shown.every((p) => picked.has(p.id));
@@ -283,7 +287,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);
                   return (
-                    <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
+                    <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
                       <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                       <td data-label="الجهة">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
@@ -367,8 +371,17 @@ const EDIT_FIELDS = [
   { name: 'organization_name', label: 'جهة العمل (نص يكتبه المشارك)' },
 ];
 
-function Person({ id, canWrite, onBack }) {
+function Person({ id, orgs, canWrite, onBack, onNav }) {
   const { toast, confirm, prompt } = useUI();
+  const [picked, setTab] = useState(null); // التبويب الذي اختاره المدير في هذا الملف
+  // موضعه في القائمة التي فُتح منها (لقطة الجلسة)، وإلا فلا شريط تنقل
+  const pos = useMemo(() => position(readQueue(), id), [id]);
+  useEffect(() => {
+    if (!pos) return undefined;
+    const k = (e) => { const to = navKey(e); const dest = to && pos[to]; if (dest) { e.preventDefault(); onNav(dest); } };
+    addEventListener('keydown', k);
+    return () => removeEventListener('keydown', k);
+  }, [pos, onNav]);
   const [previewAs, setPreviewAs] = useState(false);
   const [r, setR] = useState(null);
   const [status, setStatus] = useState('');
@@ -423,10 +436,12 @@ function Person({ id, canWrite, onBack }) {
 
   // ما يمنع الاعتماد ظاهر تحت الزر: مستوى ناقص، أو مخالفة المستوى القائم بلا تعليل (الخادم يرفض بدونه)
   const blocker = approveBlocker(DIMS, { levels, notes, currentLevel, dimName: (d) => DIM_EN[d] });
-  const approve = async () => {
+  const approve = async (next = false) => {
     if (blocker) return toast(blocker.text);
     if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
-    act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
+    const d = await act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
+    // «اعتمد وانتقل للتالي»: في مراجعة متتالية يفتح التالي في القائمة بعد نجاح الاعتماد
+    if (d.success && next && pos?.next) onNav(pos.next);
   };
   const reset = async () => {
     if (!(await confirm('يُلغى القياس الحالي ويعيده المشارك من البداية، وتظهر له بطاقة في الموقع ويصله بريد يطلب الإعادة. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
@@ -480,162 +495,204 @@ function Person({ id, canWrite, onBack }) {
   const book = r.book || [];
   const sc = book.reduce((a, b) => [a[0] + (b.quiz_score || 0), a[1] + (b.quiz_total || 0)], [0, 0]);
 
+  const tab = picked || startTab(p, keptTab());
+  const orgOf = (orgs || []).find((o) => o.id === p.organization_id);
+  // التبويب الظاهر: المنتظر اعتماده يفتح على القرار، وغيره على آخر تبويب في الجلسة (PersonShell.jsx)
+  const show = (t, focus) => {
+    setTab(t); keepTab(t);
+    if (focus) setTimeout(() => { const el = document.getElementById(focus); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } }, 0);
+  };
+  const primary = primaryAction(r, canWrite);
+  const panel = (k, body) => tab === k && <div id={`pf-panel-${k}`} role="tabpanel" aria-labelledby={`pf-tab-${k}`} className="pf-panel">{body}</div>;
+  const menu = canWrite && <MoreMenu items={[
+    { label: 'تعديل البيانات', run: () => setEditing(true) },
+    { label: 'إعادة القياس', run: reset },
+    // ما يصل المستشار أو الخبير المسند عن هذا المشارك بمفاتيح الرؤية النافذة (visibility.js)
+    { label: 'عاين بعين الخبير', run: () => setPreviewAs(true) },
+    // حساب اختبار داخلي: خارج الإحصاءات وحدها، ويبقى حسابًا عاديًا (قرار المالك 2026-11-11)
+    { label: p.is_test ? 'إلغاء علامة الاختبار' : 'اجعله حساب اختبار', title: 'يُستبعد من النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر',
+      run: () => act('admin.participant-save', { participant_id: p.id, fields: { is_test: !p.is_test } }, p.is_test ? 'عاد محسوبًا في الإحصاءات' : 'صار حساب اختبار، خارج الإحصاءات') },
+  ]} />;
+
   return (
     <>
-      <button className="la-link" onClick={onBack}>→ كل المشاركين</button>
-      <div className="la-person">
-        <section className="la-card">
-          <div className="la-row between"><h3>{p.full_name}</h3><span className="la-row">{p.is_test && <span className="la-chip warn" title="خارج النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر، وحساب عادي في كل ما سواها">حساب اختبار</span>}<span className="la-chip">{STATUS[p.status] || p.status}</span></span></div>
-          <dl className="la-dl">
-            <dt>البريد</dt><dd dir="ltr">{p.email}</dd>
-            <dt>الجوال</dt><dd dir="ltr">{p.phone}</dd>
-            <dt>المسمى</dt><dd>{p.job_title}</dd>
-            <dt>جهة العمل</dt><dd>{p.organization_name}</dd>
-            <dt>القطاع</dt><dd>{p.sector}</dd>
-            <dt>الخبرة</dt><dd>{p.years_experience != null ? `${p.years_experience} سنة` : ''}</dd>
-            <dt>النطاق</dt><dd>{SCOPE[p.work_scope] || 'لم يحدد'}</dd>
-            <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
-            <dt>السيرة</dt><dd>{!p.cv_path ? 'لم تُرفع' : canWrite
-              ? <button className="la-link" onClick={() => evidence(p.cv_path)}>فتح (رابط مؤقت، يُسجَّل الفتح)</button>
-              : <span className="la-muted">مرفوعة · فتحها للمدير</span>}</dd>
-            <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
-            <dt>الدفعة</dt><dd>
-              {r.program?.cohort?.id ? <a href={`#/leaders/programs/${encodeURIComponent(r.program.cohort.id)}`}>{r.program.cohort.is_default ? 'الدفعة المفتوحة' : r.program.cohort.name}</a> : 'بلا دفعة'}
-              {VIA_COHORT[r.program?.via] && <small className="la-muted"> ({VIA_COHORT[r.program.via]})</small>}{r.team_ar ? ` · ${r.team_ar}` : ''}{r.program?.cohort?.content_release ? ` · إصدار المحتوى ${r.program.cohort.content_release}` : ''}
-              {canWrite && cohorts?.length > 0 && (
-                <span className="la-row">
-                  <select aria-label="نقل إلى دفعة أخرى (استثناء)" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
-                    <option value="">نقل إلى دفعة أخرى (استثناء)…</option>
-                    {cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                  <button className="btn-sm ghost" disabled={!cohortTo} onClick={enroll}>انقله</button>
-                </span>
+      <PersonHeader r={r} org={orgOf} tab={tab} setTab={(t) => show(t)} primary={primary} onPrimary={() => show(primary.tab, primary.focus)} menu={menu}
+        nav={<QueueNav pos={pos} onBack={onBack} onNav={onNav} />} />
+      <div className="pf-body">
+        <div className="pf-main">
+          {panel('decision', <>
+              {r.retake && <p className="la-where" role="status"><b>طُلبت إعادة القياس</b> {date(r.retake.requested_at)} ({r.retake.reason === 'effort' ? 'لاستعجال في الإجابة' : 'بقرار إداري'})، ولم يسلّم قياسًا جديدًا بعد.</p>}
+              {STUCK.includes(r.onboarding?.step) && (
+                <p className="la-where" role="status">
+                  <b>أين توقف:</b> {r.onboarding.label}. {r.onboarding.remaining}.
+                  {r.onboarding.started_at && <> بدأ القياس {date(r.onboarding.started_at)}.</>}
+                  {r.onboarding.last_answer_at && <> آخر إجابة {date(r.onboarding.last_answer_at)}.</>}
+                  {!p.last_login_at ? ' لم يدخل بعد التسجيل.' : <> آخر دخول {date(p.last_login_at)}.</>}
+                </p>
               )}
-            </dd>
-            {/* D05: لا إصدار يدويًا؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات */}
-            <dt>الشهادة</dt><dd>تصدر آليًا عند اعتماد التقييم الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»</dd>
-            <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
-          </dl>
-          {p.bio && <p className="la-bio">{p.bio}</p>}
-          <FileFlags flags={r.flags} />
-          <FileIndex />
-          {r.retake && <p className="la-where" role="status"><b>طُلبت إعادة القياس</b> {date(r.retake.requested_at)} ({r.retake.reason === 'effort' ? 'لاستعجال في الإجابة' : 'بقرار إداري'})، ولم يسلّم قياسًا جديدًا بعد.</p>}
-          {STUCK.includes(r.onboarding?.step) && (
-            <p className="la-where" role="status">
-              <b>أين توقف:</b> {r.onboarding.label}. {r.onboarding.remaining}.
-              {r.onboarding.started_at && <> بدأ القياس {date(r.onboarding.started_at)}.</>}
-              {r.onboarding.last_answer_at && <> آخر إجابة {date(r.onboarding.last_answer_at)}.</>}
-              {!p.last_login_at ? ' لم يدخل بعد التسجيل.' : <> آخر دخول {date(p.last_login_at)}.</>}
-            </p>
-          )}
-          {r.needs?.length > 0 && <p className="la-muted">المطلوب الآن: {r.needs.map((n) => n.text).join(' · ')}</p>}
-          {canWrite && (
-            <div className="la-row">
-              <select aria-label="الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>
-                {Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
-              <button className="btn-sm ghost" disabled={status === p.status} onClick={changeStatus}>تغيير الحالة</button>
-              <button className="btn-sm ghost" onClick={reset}>إعادة القياس</button>
-              <button className="btn-sm ghost" onClick={() => setEditing(true)}>تعديل البيانات</button>
-              {/* ما يصل المستشار أو الخبير المسند عن هذا المشارك بمفاتيح الرؤية النافذة (visibility.js) */}
-              <button className="btn-sm ghost" onClick={() => setPreviewAs(true)}>عاين بعين الخبير</button>
-              {/* حساب اختبار داخلي: خارج الإحصاءات وحدها، ويبقى حسابًا عاديًا (قرار المالك 2026-11-11) */}
-              <button className="btn-sm ghost" title="يُستبعد من النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر"
-                onClick={() => act('admin.participant-save', { participant_id: p.id, fields: { is_test: !p.is_test } }, p.is_test ? 'عاد محسوبًا في الإحصاءات' : 'صار حساب اختبار، خارج الإحصاءات')}>
-                {p.is_test ? 'إلغاء علامة الاختبار' : 'حساب اختبار'}</button>
+              {r.needs?.length > 0 && <p className="la-muted">المطلوب الآن: {r.needs.map((n) => n.text).join(' · ')}</p>}
+          <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
+            notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={() => approve(false)}
+            onApproveNext={pos?.next ? () => approve(true) : null} onAnswers={canWrite ? openAnswers : null} />
+          {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
+          </>)}
+
+          {panel('journey', <>
+          <ContinuousCard c={r.continuous} />
+          <FinalEvalCard participantId={p.id} canWrite={canWrite} />
+          <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
+          <section className="la-card">
+            <div className="la-row between"><h3 id="pf-journey-h">الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
+            <div className="la-journey">{r.journey.map((s) => (
+              <div key={s.key} className={`la-stage ${s.status}`}>
+                <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{s.skipped ? 'أُعفي منها' : STAGE_STATUS_AR[s.status]}</span></div>
+                {s.lock_reason && <small className="la-muted">{s.lock_reason}</small>}
+                {canWrite && <StageOverride s={s} onPick={(action) => stageAct(s, action)} />}
+                <ul>{s.items.length ? s.items.map((it) => (
+                  <li key={it.id} className={it.status}>
+                    <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small>
+                      <ActivitySummary a={it.activity} /></span>
+                    <span className="la-row">
+                      {it.evidence_path && (canWrite
+                        ? <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>
+                        : <small className="la-muted">ملف مرفق</small>)}
+                      {canWrite && !it.auto && s.status !== 'locked' && <>
+                        {it.status !== 'done' && <button className="btn-sm primary" onClick={() => review(it.id, 'done')}>اعتماد</button>}
+                        {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => review(it.id, 'returned')}>إعادة مع ملاحظة</button>}
+                        {it.status === 'done' && <button className="btn-sm ghost" onClick={() => review(it.id, 'pending')}>إلغاء</button>}
+                      </>}
+                    </span>
+                  </li>
+                )) : <li className="la-muted">لا متطلبات</li>}</ul>
+              </div>
+            ))}</div>
+          </section>
+          </>)}
+
+          {panel('learning', <>
+          <section className="la-card la-book-card">
+            <div className="la-row between"><h3 id="pf-book-h">كتاب القائد والنماذج</h3><span className="rank-chip">{pts.rank.title} · {pts.total} نقطة</span></div>
+            <div className="la-book-kpis">
+              <span><b>{book.length}</b>باب أتمّه</span>
+              <span><b>{sc[1] ? Math.round((sc[0] / sc[1]) * 100) : 0}%</b>دقة الاختبارات</span>
+              <span><b>{(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
             </div>
-          )}
-          {editing && (
-            <Form title={`تعديل بيانات ${p.full_name}`} fields={EDIT_FIELDS}
-              values={{ full_name: p.full_name, email: p.email, phone: p.phone || '', job_title: p.job_title || '', organization_name: p.organization_name || '' }}
-              onSave={(fields) => L('admin.participant-save', { participant_id: p.id, fields })}
-              onClose={(saved) => { setEditing(false); if (saved) { toast('حُفظت البيانات'); load(); } }} />
-          )}
-        </section>
+            {(r.models || []).length > 0 && (
+              <ul className="la-reqs">{r.models.map((x) => (
+                <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span>{x.rating ? <span className="stars-c"> {stars(x.rating)}</span> : null}</span>
+                  {x.status !== 'draft' && <button className="la-link" onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button>}</li>
+              ))}</ul>
+            )}
+            {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) load(); }} />}
+            {(r.labs || []).length > 0 && (
+              <>
+                <h4 className="la-phase">المختبر</h4>
+                <ul className="la-reqs la-labs">{r.labs.map((x) => (
+                  <li key={x.item_id}>
+                    <span>{x.title} <span className={`la-chip ${x.best >= LAB_MASTERY ? 'ok' : ''}`}>أفضل نتيجة {x.best}%</span></span>
+                    <small className="la-muted">
+                      {x.attempts === 1 ? 'محاولة واحدة' : x.attempts === 2 ? 'محاولتان' : `${x.attempts} محاولات`}{x.first != null && x.attempts > 1 ? ` (الأولى ${x.first}%)` : ''}
+                      {x.hints ? ` · عدد التلميحات ${x.hints}` : ''}
+                      {x.mix ? ` · أكثر خلط: من ${x.mix.expected_ar} إلى ${x.mix.chosen_ar} (${x.mix.n})` : ''}
+                    </small>
+                  </li>
+                ))}</ul>
+              </>
+            )}
+          </section>
+          </>)}
 
-        <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
-          notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} onAnswers={canWrite ? openAnswers : null} />
-        {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
-      </div>
+          {panel('initiative', <>
+          {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}
+          <ExpertAssign participantId={id} canWrite={canWrite} />
+            <FileExtras r={r} />
+          </>)}
 
-      {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}
-      <ContinuousCard c={r.continuous} />
-      <FinalEvalCard participantId={p.id} canWrite={canWrite} />
-      <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
+          {panel('profile', <>
+            <section className="la-card" aria-labelledby="pf-data-h">
+              <h3 id="pf-data-h">البيانات والدفعة</h3>
+              <dl className="la-dl">
+                <dt>البريد</dt><dd dir="ltr">{p.email}</dd>
+                <dt>الجوال</dt><dd dir="ltr">{p.phone}</dd>
+                <dt>المسمى</dt><dd>{p.job_title}</dd>
+                <dt>جهة العمل</dt><dd>{p.organization_name}</dd>
+                <dt>القطاع</dt><dd>{p.sector}</dd>
+                <dt>الخبرة</dt><dd>{p.years_experience != null ? `${p.years_experience} سنة` : ''}</dd>
+                <dt>النطاق</dt><dd>{SCOPE[p.work_scope] || 'لم يحدد'}</dd>
+                <dt>LinkedIn</dt><dd>{p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer">فتح</a>}</dd>
+                <dt>السيرة</dt><dd>{!p.cv_path ? 'لم تُرفع' : canWrite
+                  ? <button className="la-link" onClick={() => evidence(p.cv_path)}>فتح (رابط مؤقت، يُسجَّل الفتح)</button>
+                  : <span className="la-muted">مرفوعة · فتحها للمدير</span>}</dd>
+                <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
+                <dt>الدفعة</dt><dd>
+                  {r.program?.cohort?.id ? <a href={`#/leaders/programs/${encodeURIComponent(r.program.cohort.id)}`}>{r.program.cohort.is_default ? 'الدفعة المفتوحة' : r.program.cohort.name}</a> : 'بلا دفعة'}
+                  {VIA_COHORT[r.program?.via] && <small className="la-muted"> ({VIA_COHORT[r.program.via]})</small>}{r.team_ar ? ` · ${r.team_ar}` : ''}{r.program?.cohort?.content_release ? ` · إصدار المحتوى ${r.program.cohort.content_release}` : ''}
+                  {canWrite && cohorts?.length > 0 && (
+                    <span className="la-row">
+                      <select aria-label="نقل إلى دفعة أخرى (استثناء)" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
+                        <option value="">نقل إلى دفعة أخرى (استثناء)…</option>
+                        {cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                      <button className="btn-sm ghost" disabled={!cohortTo} onClick={enroll}>انقله</button>
+                    </span>
+                  )}
+                </dd>
+                {/* D05: لا إصدار يدويًا؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات */}
+                <dt>الشهادة</dt><dd>تصدر آليًا عند اعتماد التقييم الختامي بقرار «اجتاز» أو «اجتاز بملاحظات»</dd>
+                <dt>الدفع</dt><dd><PersonAccess participantId={p.id} canWrite={canWrite} /></dd>
+              </dl>
+              {p.bio && <p className="la-bio">{p.bio}</p>}
+            </section>
+            {canWrite && (
+              <section className="la-card" aria-labelledby="pf-status-h">
+                <h3 id="pf-status-h">حالة المشاركة</h3>
+                <div className="la-row">
+                  <select aria-label="الحالة" value={status} onChange={(e) => setStatus(e.target.value)}>
+                    {Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                  <button className="btn-sm ghost" disabled={status === p.status} onClick={changeStatus}>تغيير الحالة</button>
+                </div>
+              </section>
+            )}
+            {canWrite && <PersonDanger p={p} onDeleted={onBack} />}
+          </>)}
 
-      <section className="la-card">
-        <div className="la-row between"><h3 id="pf-journey-h">الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
-        <div className="la-journey">{r.journey.map((s) => (
-          <div key={s.key} className={`la-stage ${s.status}`}>
-            <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{s.skipped ? 'أُعفي منها' : STAGE_STATUS_AR[s.status]}</span></div>
-            {s.lock_reason && <small className="la-muted">{s.lock_reason}</small>}
-            {canWrite && <StageOverride s={s} onPick={(action) => stageAct(s, action)} />}
-            <ul>{s.items.length ? s.items.map((it) => (
-              <li key={it.id} className={it.status}>
-                <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small>
-                  <ActivitySummary a={it.activity} /></span>
-                <span className="la-row">
-                  {it.evidence_path && (canWrite
-                    ? <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>
-                    : <small className="la-muted">ملف مرفق</small>)}
-                  {canWrite && !it.auto && s.status !== 'locked' && <>
-                    {it.status !== 'done' && <button className="btn-sm primary" onClick={() => review(it.id, 'done')}>اعتماد</button>}
-                    {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => review(it.id, 'returned')}>إعادة مع ملاحظة</button>}
-                    {it.status === 'done' && <button className="btn-sm ghost" onClick={() => review(it.id, 'pending')}>إلغاء</button>}
-                  </>}
-                </span>
-              </li>
-            )) : <li className="la-muted">لا متطلبات</li>}</ul>
-          </div>
-        ))}</div>
-      </section>
-
-      <section className="la-card la-book-card">
-        <div className="la-row between"><h3 id="pf-book-h">كتاب القائد والنماذج</h3><span className="rank-chip">{pts.rank.title} · {pts.total} نقطة</span></div>
-        <div className="la-book-kpis">
-          <span><b>{book.length}</b>باب أتمّه</span>
-          <span><b>{sc[1] ? Math.round((sc[0] / sc[1]) * 100) : 0}%</b>دقة الاختبارات</span>
-          <span><b>{(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
+          {panel('log', <>
+            <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
+            <Timeline rows={r.timeline} />
+          </>)}
         </div>
-        {(r.models || []).length > 0 && (
-          <ul className="la-reqs">{r.models.map((x) => (
-            <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span>{x.rating ? <span className="stars-c"> {stars(x.rating)}</span> : null}</span>
-              {x.status !== 'draft' && <button className="la-link" onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button>}</li>
-          ))}</ul>
-        )}
-        {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) load(); }} />}
-        {(r.labs || []).length > 0 && (
-          <>
-            <h4 className="la-phase">المختبر</h4>
-            <ul className="la-reqs la-labs">{r.labs.map((x) => (
-              <li key={x.item_id}>
-                <span>{x.title} <span className={`la-chip ${x.best >= LAB_MASTERY ? 'ok' : ''}`}>أفضل نتيجة {x.best}%</span></span>
-                <small className="la-muted">
-                  {x.attempts === 1 ? 'محاولة واحدة' : x.attempts === 2 ? 'محاولتان' : `${x.attempts} محاولات`}{x.first != null && x.attempts > 1 ? ` (الأولى ${x.first}%)` : ''}
-                  {x.hints ? ` · عدد التلميحات ${x.hints}` : ''}
-                  {x.mix ? ` · أكثر خلط: من ${x.mix.expected_ar} إلى ${x.mix.chosen_ar} (${x.mix.n})` : ''}
-                </small>
-              </li>
-            ))}</ul>
-          </>
-        )}
-      </section>
-
-      <ExpertAssign participantId={id} canWrite={canWrite} />
-
-      {/* ملف المشارك الكامل (تصور 2026-11-13): ما لم يكن يُعرض، ثم الملاحظات، ثم خط زمني واحد بالعربية بدل رموز السجل */}
-      <FileExtras r={r} />
-      <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
-      <Timeline rows={r.timeline} />
-
+        <Glance r={r} />
+      </div>
+      {editing && (
+        <Form title={`تعديل بيانات ${p.full_name}`} fields={EDIT_FIELDS}
+          values={{ full_name: p.full_name, email: p.email, phone: p.phone || '', job_title: p.job_title || '', organization_name: p.organization_name || '' }}
+          onSave={(fields) => L('admin.participant-save', { participant_id: p.id, fields })}
+          onClose={(saved) => { setEditing(false); if (saved) { toast('حُفظت البيانات'); load(); } }} />
+      )}
       {previewAs && <PreviewAs participantId={p.id} onClose={() => setPreviewAs(false)} />}
-      {canWrite && <PersonDanger p={p} onDeleted={onBack} />}
     </>
   );
 }
 
+// شريط أعلى الملف: العودة للقائمة (بفلاترها كما تُركت)، وموضعه فيها، والسابق والتالي
+function QueueNav({ pos, onBack, onNav }) {
+  if (!pos) return <button className="la-link" onClick={onBack}>→ كل المشاركين</button>;
+  return (
+    <nav className="la-qnav" aria-label="التنقل بين ملفات القائمة">
+      <button className="la-link" onClick={onBack}>→ القائمة</button>
+      <span className="la-qnav-at" aria-live="polite"><b>{pos.index}</b> من {pos.total}{pos.label ? ` · ${pos.label}` : ' في قائمتك'}</span>
+      <span className="la-row">
+        <button className="btn-sm ghost" disabled={!pos.prev} onClick={() => onNav(pos.prev)} title="السابق (→ أو K)">→ السابق</button>
+        <button className="btn-sm ghost" disabled={!pos.next} onClick={() => onNav(pos.next)} title="التالي (← أو J)">التالي ←</button>
+      </span>
+    </nav>
+  );
+}
+
 export default function Participants({ orgs, canWrite, personId, onOpen, initialStatus }) {
+  // key: كل ملف يبدأ بحالة نظيفة (لا تبقى لوحة أو تعديل مفتوح من المشارك السابق عند التنقل)
   return personId
-    ? <Person id={personId} canWrite={canWrite} onBack={() => onOpen(null)} />
+    ? <Person key={personId} id={personId} orgs={orgs} canWrite={canWrite} onBack={() => onOpen(null)} onNav={onOpen} />
     : <List orgs={orgs} canWrite={canWrite} onOpen={onOpen} initialStatus={initialStatus} />;
 }

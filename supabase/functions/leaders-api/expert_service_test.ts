@@ -97,6 +97,8 @@ Deno.test('الاعتماد: دور في الرحلة أو عضوية لجنة،
       assertEquals(m.subject, 'صار الكتاب الأم متاحًا لك');
       assert(m.html.includes('صار الكتاب متاحًا لك في بوابة الخبير'));
       assert(!m.html.includes('طلبات الخدمة'));
+      // بريد اعتماد العضوية يحمل تعهد السرية الذي يُوقَّع في أول دخول (المرحلة 3 من تصور أجزاء الكتاب)
+      assert(m.html.includes(E.BOOK_PLEDGE_MAIL_AR));
     });
   } finally { restore(); }
 });
@@ -166,6 +168,7 @@ Deno.test('دعوة عضو اللجنة: لمراجعة الكتاب الأم، 
       assert(mail[0].html.includes('لجنة المحتوى'));
       assert(!mail[0].html.includes('أدوارك'));
       assert(!mail[0].html.includes('طلبات الخدمة'));
+      assert(mail[0].html.includes(E.BOOK_PLEDGE_MAIL_AR));
     });
   } finally { restore(); }
 });
