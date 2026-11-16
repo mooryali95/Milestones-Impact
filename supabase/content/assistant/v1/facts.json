@@ -1,0 +1,30 @@
+{
+  "_note": "حقائق موضوعية يحقنها الموجّه الحتمي (router.ts) في سياق الخادم حين يتعرف موضوع السؤال، ويضمنها الحارس في الرد (guard.ts). كل حقيقة منقولة من knowledge.md بلا زيادة، وأرقامها فيه (يحرس ذلك agent_test.ts). org_quote_open رد ثابت بلا نموذج لطلب سعر لجهة لم يتضح منتجه (قرار المالك: يُسأل أولًا أي المنتجين بالاسم الرسمي).",
+  "facts": [
+    {
+      "id": "assessment_vs_program",
+      "ar": "القياس المبدئي خطوة أولى مستقلة برسمها، يحدد مستوى المشارك في المعالم والأثر والقيادة، ثم يعتمد مستشار نتيجته ومساره خلال يومي عمل. والبرنامج هو رحلة التأهيل بعد ذلك، ومراحلها: التدريب (4 أيام تدريبية)، والتوجيه على رأس العمل (4 أسابيع)، والاستشارة (أسبوعان)، والتوجيه القيادي (4 أسابيع)، والدعم والتمكين (3 أشهر)، والتقييم والقياس (أسبوعان).",
+      "en": "The initial assessment is a separate first step with its own fee that sets the participant's level in Milestone, Impact and Leadership; an advisor then approves the result and path within two working days. The programme is the qualification journey after that, in stages: Training (4 training days), On-the-job coaching (4 weeks), Consulting (2 weeks), Leadership coaching (4 weeks), Support and enablement (3 months), and Evaluation and measurement (2 weeks)."
+    },
+    {
+      "id": "training_hours",
+      "ar": "ساعات التدريب تُضبط مع كل جهة وفق برنامجها، فلا عدد ساعات منشور. والمنشور مدد المراحل: التدريب (4 أيام تدريبية)، والتوجيه على رأس العمل (4 أسابيع)، والاستشارة (أسبوعان)، والتوجيه القيادي (4 أسابيع)، والدعم والتمكين (3 أشهر)، والتقييم والقياس (أسبوعان).",
+      "en": "Training hours are set with each organisation according to its programme, so no number of hours is published. What is published are the stage durations: Training (4 training days), On-the-job coaching (4 weeks), Consulting (2 weeks), Leadership coaching (4 weeks), Support and enablement (3 months), and Evaluation and measurement (2 weeks)."
+    },
+    {
+      "id": "projects_start",
+      "ar": "يبدأ العمل في إدارة المشروعات التنموية (MI Projects) بطلب تقييم مبدئي من الفريق عبر نموذج «تواصل معنا» أو البريد mi@sunkvalue.com ، ثم رحلة العمل: التقييم المبدئي، ثم التصميم والبناء، ثم التشغيل المدار، ثم القياس والتقارير، ثم النقل والاستدامة. ويخدم المسار الجمعيات والمؤسسات غير الربحية والمؤسسات المانحة وبرامج المسؤولية المجتمعية والجهات الحكومية.",
+      "en": "MI Projects starts with a request for an initial assessment from the team through the Contact us form or mi@sunkvalue.com , followed by the work journey: initial assessment, design and build, managed operation, measurement and reporting, then transfer and sustainability. It serves non-profits and associations, donor foundations, corporate social responsibility programmes and government bodies."
+    },
+    {
+      "id": "identity",
+      "ar": "أنا «مساعد Milestone Impact الآلي»، مساعد آلي لست إنسانًا، أجيب من المعلومات المعتمدة. وإن أردت أحدًا من الفريق فزر «تحدث مع الفريق» متاح.",
+      "en": "I am the Milestone Impact automated assistant, not a human, and I answer from approved information. If you would like someone from the team, the Talk to the team button is available."
+    },
+    {
+      "id": "org_quote_open",
+      "ar": "هل تقصدون برنامج إدارة المشروعات للقادة أم مصفوفة التأثير؟ عروض برنامج إدارة المشروعات للقادة للجهات يعدها الفريق، فأحولكم إليه إن قصدتموه. وأسعار مصفوفة التأثير منشورة، ومنها خطة المؤسسات، في https://mi.sunkvalue.com/pricing.html .",
+      "en": "Do you mean the MI Leaders programme or the Impact Matrix? Organisation offers for MI Leaders are prepared by our team, so I can pass you to them if that is what you mean. Impact Matrix prices are published, including the Organisations plan, at https://mi.sunkvalue.com/pricing.html ."
+    }
+  ]
+}

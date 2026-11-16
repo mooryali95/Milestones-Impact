@@ -42,7 +42,7 @@ Deno.serve((req: Request) => {
     },
     clientIp,
     turnstile: (token, ip) => turnstileOk(env.turnstileSecret, token, ip),
-    model: (messages, onText, signal, apiKey) => streamAnswer(apiKey || '', env.model, messages, onText, signal),
+    model: (messages, onText, signal, apiKey, opts) => streamAnswer(apiKey || '', env.model, messages, onText, signal, undefined, opts),
     notifyAdmin: (row) => notifyAdmin(db, row, sendEmail, env.adminEmail, `المساعد الآلي من ${row.product}`),
     alert: (kind, detail) => alertWebhook(kind, detail),
   });

@@ -43,7 +43,7 @@ describe('الخطوط والعامل والتحميل', () => {
     for (const s of ['Handbook', 'Capstone', 'Hall', 'Katon', 'OrgPortal', 'ExpertPortal', 'Legal', 'Impact']) expect(app).toMatch(new RegExp(`const ${s}(?:Screen)? = lazy\\(\\(\\) => import\\('./screens/${s}\\.jsx'\\)\\)`));
     expect(read('leaders-app/src/main.jsx')).toMatch(/<Suspense fallback=/);
     const admin = read('admin-app/src/App.jsx');
-    for (const s of ['Leaders', 'Matrix', 'Visits', 'Contacts', 'Settings']) expect(admin).toContain(`const ${s} = lazy(() => import('./screens/${s}.jsx'))`);
+    for (const s of ['Leaders', 'Matrix', 'Visits', 'Contacts', 'Settings']) expect(admin).toContain(`const ${s} = lazyRetry(() => import('./screens/${s}.jsx'))`);
     expect(read('admin-app/src/main.jsx')).toMatch(/<Suspense fallback=/);
     // قطعة React مستقلة، وتصدير Excel باسمين ثابتين كي لا يختلف ناتج البناء بين الجهاز وCI
     for (const v of ['leaders-app/vite.config.js', 'admin-app/vite.config.js']) expect(read(v)).toMatch(/manualChunks: \{ react: \['react', 'react-dom'\], fflate: \['fflate'\], excel: \['write-excel-file\/browser'\] \}/);

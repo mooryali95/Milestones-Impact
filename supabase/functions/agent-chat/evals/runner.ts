@@ -45,9 +45,9 @@ export async function runCase(c: Case, o: { env: Env; model: Deps['model']; stor
     store, env: { ...o.env, enabled: true }, clientIp: () => null, turnstile: async () => true, notifyAdmin: async () => {},
     alert: o.alert ?? (async () => true),
     // الاستدعاء ملفوف: تكلفة كل استدعاء للحالة من usage، وحالة الخطأ إن رمى
-    model: async (messages, onText, signal, apiKey) => {
+    model: async (messages, onText, signal, apiKey, opts) => {
       try {
-        const r = await o.model(messages, onText, signal, apiKey);
+        const r = await o.model(messages, onText, signal, apiKey, opts);
         cost += costMicros(knownModel(r.model) ? r.model : o.env.model, r.usage);
         return r;
       } catch (e) {
