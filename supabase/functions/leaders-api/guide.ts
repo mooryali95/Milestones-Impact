@@ -12,7 +12,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
 import { audit, db, Fail } from './core.ts';
 import { appSettings } from './settings.ts';
 import { approvedLevels, journeyFor } from './participant.ts';
-import { companionAllowed, filterHandbookMd, handbookModulesFor, quizFor } from './logic.js';
+import { companionAllowed, filterHandbookMd, handbookModulesFor, pickCohort, quizFor } from './logic.js';
 import { guidanceFor } from './guidance.ts';
 import {
   contextLine, GATE_AR, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RULES,
@@ -280,4 +280,50 @@ export async function guideReport() {
     windows: [w7, w30].filter(Boolean),
     spend: (spend || []).map((r: any) => ({ day: r.day, usd: Math.round(Number(r.micros) / 1e4) / 100, calls: r.calls })),
   };
+}
+
+// ── H1: لوحة «التوجيه والإرشاد» للإدارة: التوزيع على الجهات والدفعات (أعداد وكلفة بلا نص) ──
+// يُقرأ من الجدول ما لا نص فيه: المشارك والدور والحكم و«أريد التأكد» والكلفة. والدفعة بالقاعدة نفسها التي تختار بها
+// الرحلة دفعة المشارك (pickCohort)، فلا يُحسب المشارك في دفعة غير دفعته
+export async function guideBreakdown(days = 30) {
+  const since = new Date(GD.now() - days * 864e5).toISOString();
+  const { data, error } = await db.from('guidance_messages').select('participant_id, role, verdict, confirmed_at, cost_micros').gte('created_at', since).limit(20000);
+  if (error) { if (missing(error)) return null; throw error; }
+  const rows = data || [];
+  const ids = [...new Set(rows.map((r: any) => r.participant_id))];
+  if (!ids.length) return { days, orgs: [], cohorts: [] };
+  const [parts, enr, cohorts, orgs] = await Promise.all([
+    db.from('participants').select('id, organization_id').in('id', ids),
+    db.from('enrollments').select('participant_id, cohort_id, status, created_at').in('participant_id', ids),
+    db.from('cohorts').select('*'),
+    db.from('organizations').select('id, name'),
+  ]);
+  const orgOf = new Map((parts.data || []).map((p: any) => [p.id, p.organization_id || null]));
+  const cohortOfP = new Map(ids.map((id) => {
+    const c = pickCohort({ enrollments: (enr.data || []).filter((e: any) => e.participant_id === id), cohorts: cohorts.data || [], organizationId: orgOf.get(id) || null });
+    return [id, (c as any)?.cohort || null];
+  }));
+  const orgName = new Map((orgs.data || []).map((o: any) => [o.id, o.name]));
+  const bucket = () => ({ asked: 0, participants: new Set<string>(), unsure: 0, confirmed: 0, errors: 0, micros: 0 });
+  const byOrg = new Map<string, any>();
+  const byCohort = new Map<string, any>();
+  for (const r of rows as any[]) {
+    const o = orgOf.get(r.participant_id) || 'none';
+    const c = cohortOfP.get(r.participant_id);
+    for (const [m, k] of [[byOrg, o], [byCohort, c?.id || 'none']] as const) {
+      const acc = m.get(k) || bucket();
+      if (r.role === 'user' && r.verdict !== 'refused') acc.asked++;
+      if (r.role === 'user') acc.participants.add(r.participant_id);
+      if (r.role === 'assistant' && r.verdict === 'unsure') acc.unsure++;
+      if (r.role === 'assistant' && r.verdict === 'error') acc.errors++;
+      if (r.role === 'assistant' && r.confirmed_at) acc.confirmed++;
+      acc.micros += Number(r.cost_micros || 0);
+      m.set(k, acc);
+    }
+  }
+  const cohortName = new Map((cohorts.data || []).map((c: any) => [c.id, c.name]));
+  const out = (m: Map<string, any>, name: (k: string) => string) => [...m.entries()].map(([k, acc]) => ({
+    id: k === 'none' ? null : k, name: name(k), asked: acc.asked, participants: acc.participants.size, unsure: acc.unsure, confirmed: acc.confirmed, errors: acc.errors, usd: Math.round(acc.micros / 1e4) / 100,
+  })).sort((x, y) => y.asked - x.asked);
+  return { days, orgs: out(byOrg, (k) => (k === 'none' ? 'بلا جهة (أفراد)' : orgName.get(k) || '؟')), cohorts: out(byCohort, (k) => (k === 'none' ? 'بلا دفعة' : cohortName.get(k) || '؟')) };
 }

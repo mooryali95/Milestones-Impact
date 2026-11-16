@@ -105,3 +105,8 @@
 .ag-guide-eval fieldset { border: 1px solid rgba(11, 39, 47, .15); border-radius: 10px; padding: 10px 14px; margin: 0; }
 .ag-guide-eval legend { padding: 0 6px; font-weight: 600; }
 .ag-guide-eval > p.ops-flag { font-size: inherit; }
+.gd-bars { list-style: none; display: flex; align-items: flex-end; gap: 3px; height: 120px; margin: 8px 0; padding: 0; direction: ltr; }
+.gd-bars li { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 6px; }
+.gd-bars li span { display: block; width: 100%; background: #0b272f; border-radius: 3px 3px 0 0; }
+.gd-bars li small { font-size: 9px; color: #6b7a80; margin-top: 2px; }
+.gd-toggles { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
