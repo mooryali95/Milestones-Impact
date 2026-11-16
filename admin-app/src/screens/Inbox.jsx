@@ -10,6 +10,7 @@ import { formatRoute, navigate } from '../route.js';
 import { refreshPending } from '../pending.js';
 import { Spinner } from '../ui.jsx';
 import BulkApprove from './BulkApprove.jsx';
+import { askOpen } from './Erasure.jsx';
 import { ageAr, approvalIdsOf, INBOX_KINDS, readyLineAr } from '../../../supabase/functions/leaders-api/inbox.js';
 import { BULK_APPROVE_MAX } from '../../../supabase/functions/leaders-api/approval.js';
 
@@ -42,6 +43,8 @@ export default function Inbox({ contacts = 0, canWrite, onPerson }) {
   const kinds = Object.keys(INBOX_KINDS).filter((k) => counts[k] > 0);
   const open = (i) => {
     const to = { ctx: 'leaders', tab: i.to.tab, id: i.to.id || undefined };
+    // طلب الحذف يفتح ملفه وورقة الطلب فوقه مباشرة
+    if (i.kind === 'erasure' && i.to.id) askOpen(i.to.id);
     // وجهة بعرض مصفّى (طلب خبير بلا مطابق ← الخبراء بعرض «يحتاج تدخلًا»): العرض بعد «?» كفلاتر الشاشات
     if (i.to.query) window.location.hash = `${formatRoute(to)}?${i.to.query}`;
     else navigate(to);
@@ -70,9 +73,9 @@ export default function Inbox({ contacts = 0, canWrite, onPerson }) {
           </div>
           <ul className="inbox-list">
             {shown.slice(0, 60).map((i) => (
-              <li key={`${i.kind}-${i.id}`} className={i.late ? 'late' : ''}>
+              <li key={`${i.kind}-${i.id}`} className={i.late ? 'late' : i.soon ? 'soon' : ''}>
                 <button type="button" className="la-link" onClick={() => open(i)}>{i.title || INBOX_KINDS[i.kind].label}</button>
-                <span className={`la-chip ${i.late ? 'warn' : ''}`}>{i.kind_ar}</span>
+                <span className={`la-chip ${i.late ? 'bad' : i.soon ? 'warn' : ''}`}>{i.kind_ar}{i.late ? ' · متأخر' : i.soon ? ' · قريب' : ''}</span>
                 {i.sub && <small className="la-muted">{i.sub}</small>}
                 <small className="inbox-age">{ageAr(i.days)}</small>
               </li>

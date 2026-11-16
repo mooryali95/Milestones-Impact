@@ -3,11 +3,12 @@
 // ════════════════════════════════════════════════════════════════
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { deleteFollowUp } from '../erase-follow.js';
+import { ErasureBanner, ErasureCard, ErasureLogLine, ErasureSheet, takeOpen } from './Erasure.jsx';
 import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
 import {
-  date, dayMonth, DIM, DIM_EN, DIMS, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+  date, DIM, DIM_EN, DIMS, isSuperAdmin, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import { enrollCohort } from '../cohort-guard.js';
@@ -112,9 +113,9 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   }, []);
   useEffect(() => { load(); }, [load]);
   // طلبات حذف البيانات القائمة من المشاركين أنفسهم: تُنفَّذ من صفحة المشارك بمسار الحذف القائم
-  const [erasures, setErasures] = useState([]);
+  const [erasures, setErasures] = useState(null);   // رد admin.erasures كما هو: ready والطلبات بأيامها
   // بعد كل تحميل للقائمة مرة واحدة: list تبدأ null ثم تُملأ، فكان يُطلب مرتين عند الفتح
-  useEffect(() => { if (list) L('admin.erasures', {}).then((r) => setErasures(r.success ? r.items || [] : [])); }, [list]);
+  useEffect(() => { if (list) L('admin.erasures', {}).then((r) => setErasures(r.success ? r : null)); }, [list]);
 
   const all = list || [];
   const tracks = useMemo(() => [...new Set(all.map((p) => trackOfPlacements(p.placements)).filter(Boolean))].sort(), [all]);
@@ -233,16 +234,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
         </>} />
       {serverQ && <div className="flt-cap" role="status">نتائج البحث في كل المشاركين عن «{serverQ}». <button type="button" className="flt-link" onClick={() => load()}>عُد إلى القائمة</button></div>}
-      {erasures.length > 0 && (
-        <div className="la-bulk" role="status">
-          <span><b>{erasures.length}</b> طلب حذف بيانات قائم، ومهلة كل طلب 30 يومًا:</span>
-          {erasures.map((e) => (
-            <button key={e.id} className="btn-sm ghost" type="button" onClick={() => onOpen(e.participant_id)}>
-              {e.name || e.email} · قبل {dayMonth(e.due_at)}
-            </button>
-          ))}
-        </div>
-      )}
+      <ErasureBanner data={erasures} isSuper={isSuperAdmin()} onOpen={onOpen} />
       {canWrite && !picked.size && f.view === 'approval' && shownPending.length > 0 && (
         <div className="la-bulk" role="note">
           <span>{shownPending.length} بانتظار الاعتماد في هذه القائمة. المتسق قياسه يُعتمد دفعة واحدة، ومن عليه إشارة يُستبقى لتراجعه.</span>
@@ -329,7 +321,7 @@ function StageOverride({ s, onPick }) {
 }
 
 // حذف مشارك بأثر: ما سيُمحى معه، وما يمنعه (شهادة سارية أو دفع مؤكد)؛ للمدير الأعلى بكتابة البريد
-function PersonDanger({ p, onDeleted }) {
+function PersonDanger({ p, onDeleted, erasurePending = false }) {
   const { toast, confirm } = useUI();
   const [open, setOpen] = useState(false);
   const [impact, setImpact] = useState(null);
@@ -348,8 +340,10 @@ function PersonDanger({ p, onDeleted }) {
     <section className="la-card of-danger">
       <div className="of-danger-head">
         <div><b>منطقة الخطر</b><small>الإيقاف (تغيير الحالة) يحفظ البيانات. الحذف نهائي ويمحو ملفاته المرفوعة، وهو للمدير الأعلى.</small></div>
-        <button type="button" className="btn-sm danger" aria-expanded={open} onClick={() => setOpen(!open)}>حذف المشارك…</button>
+        {!erasurePending && <button type="button" className="btn-sm danger" aria-expanded={open} onClick={() => setOpen(!open)}>حذف المشارك…</button>}
       </div>
+      {/* للتنفيذ مسار واحد: من له طلب قائم يُنفَّذ طلبه من بطاقته فيُغلق ويُبلَّغ (التصور 4.9) */}
+      {erasurePending && <p className="la-where" role="note">لهذا المشارك طلب حذف قائم. نفّذه من بطاقة الطلب أعلى الملف ليُغلق الطلب ويُبلَّغ.</p>}
       {open && (
         <div className="of-danger-body">
           {!impact ? <small>جارٍ حساب الأثر…</small> : !impact.success ? <p className="of-err">{impact.message}</p> : impact.blockers.length ? (
@@ -387,6 +381,12 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
     return () => removeEventListener('keydown', k);
   }, [pos, onNav]);
   const [previewAs, setPreviewAs] = useState(false);
+  // طلب الحذف: بطاقته أعلى الملف، وورقته تُفتح من البطاقة أو الشريط أو رابط بريد المالك (?erasure=open)
+  const [erasure, setErasure] = useState(null);
+  const [erasureOpen, setErasureOpen] = useState(() => takeOpen(id) || /(^|&)erasure=open(&|$)/.test(readQuery()));
+  const loadErasure = useCallback(() => L('admin.erasure-get', { participant_id: id }).then((x) => setErasure(x.success ? x : null)), [id]);
+  useEffect(() => { loadErasure(); }, [loadErasure]);
+  const closeErasure = () => { setErasureOpen(false); if (/erasure=open/.test(readQuery())) writeQuery(''); };
   const [r, setR] = useState(null);
   const [status, setStatus] = useState('');
   const [levels, setLevels] = useState({});
@@ -522,6 +522,11 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
     <>
       <PersonHeader r={r} org={orgOf} tab={tab} setTab={(t) => show(t)} primary={primary} onPrimary={() => show(primary.tab, primary.focus)} menu={menu}
         nav={<QueueNav pos={pos} onBack={onBack} onNav={onNav} />} />
+      <ErasureCard e={erasure} onOpen={() => setErasureOpen(true)} />
+      {erasureOpen && erasure?.request && (
+        <ErasureSheet e={erasure} onClose={closeErasure}
+          onDecided={() => { closeErasure(); loadErasure(); load(); }} onDeleted={() => { closeErasure(); onBack(); }} />
+      )}
       {/* إجابات القياس نافذة فوق الملف لا داخل تبويب: رابطها المنسوخ (?answers=) يفتحها أيًا كان التبويب الافتتاحي */}
       {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       <div className="pf-body">
@@ -661,10 +666,11 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
                 </div>
               </section>
             )}
-            {canWrite && <PersonDanger p={p} onDeleted={onBack} />}
+            {canWrite && <PersonDanger p={p} onDeleted={onBack} erasurePending={!!erasure?.request} />}
           </>)}
 
           {panel('log', <>
+            {!erasure?.request && <ErasureLogLine last={erasure?.last} />}
             <NudgeLog participantId={p.id} canWrite={canWrite} />
             <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
             <Timeline rows={r.timeline} />

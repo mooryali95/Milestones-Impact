@@ -1142,3 +1142,49 @@
 .nudge-report .nr-kpis b { font-size: 1.3rem; color: var(--ink); font-variant-numeric: tabular-nums; }
 .nudge-report h4 { margin: 6px 0; }
 .nudge-report .nr-table td, .nudge-report .nr-table th { font-variant-numeric: tabular-nums; }
+
+/* طلب حذف البيانات (Erasure.jsx): الشريط والبطاقة والورقة. اللون بالإلحاح: تنبيه، وأحمر بعد المهلة */
+.er-banner { display: grid; gap: 8px; margin: 8px 0; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--st-warn); border-inline-start: 4px solid var(--st-warn); background: color-mix(in srgb, var(--st-warn) 9%, #fff); }
+.er-banner.late { border-color: var(--st-bad); background: var(--st-bad-bg); }
+.er-banner.off { border-color: var(--line-strong); background: var(--sand-light); font-size: .88rem; }
+.er-banner p { margin: 0; font-weight: 600; }
+.er-banner > button { justify-self: start; }
+.er-banner ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.er-banner li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.er-banner li small { color: var(--muted, #666); }
+.er-card { border-inline-start: 4px solid var(--st-warn); display: grid; gap: 12px; }
+.er-card.late { border-inline-start-color: var(--st-bad); }
+.er-card .er-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.er-card h3 { margin: 0; }
+.er-card > button { justify-self: start; }
+.er-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 0; }
+.er-facts div { display: grid; gap: 2px; }
+.er-facts dt { font-size: .78rem; color: var(--muted, #666); }
+.er-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.er-facts .er-left dd { font-size: 1.15rem; }
+.er-card.late .er-left dd { color: var(--st-bad); }
+.er-bar { block-size: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.er-bar > span { display: block; block-size: 100%; background: var(--st-ok); }
+.er-bar.soon > span { background: var(--st-warn); }
+.er-bar.late > span { background: var(--st-bad); }
+.er-actions { display: grid; gap: 8px; }
+.er-act { display: grid; gap: 4px; text-align: start; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff; cursor: pointer; font: inherit; }
+.er-act:hover:not(:disabled) { border-color: var(--petrol-mid); }
+.er-act.danger b { color: var(--st-bad); }
+.er-act:disabled { opacity: .55; cursor: not-allowed; }
+.er-act small { color: var(--muted, #666); }
+.er-step { display: grid; gap: 8px; }
+.er-step h4 { margin: 4px 0 0; font-size: .92rem; }
+.er-step ul { margin: 0; padding-inline-start: 18px; display: grid; gap: 4px; }
+.er-step fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.er-step legend { font-weight: 600; margin-bottom: 4px; }
+.er-radio { display: flex; gap: 8px; align-items: flex-start; }
+.er-radio span { display: grid; }
+.er-radio small { color: var(--muted, #666); font-size: .78rem; }
+.er-step .field { display: grid; gap: 4px; }
+.er-step input, .er-step textarea { inline-size: 100%; }
+.er-tl ol { margin: 6px 0 0; padding-inline-start: 18px; display: grid; gap: 4px; }
+.er-log { margin: 0 0 12px; }
+.inbox-list li.soon .inbox-age { color: var(--st-warn-text); }
+/* على الجوال الورقة كاملة الشاشة */
+@media (max-width: 640px) { .mi-form.er-sheet { max-inline-size: none; inline-size: 100vw; max-height: 100dvh; block-size: 100dvh; border-radius: 0; } }
