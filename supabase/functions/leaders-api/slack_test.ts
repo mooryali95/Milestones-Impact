@@ -80,7 +80,7 @@ function teardown() {
   Deno.env.delete('LEADERS_SLACK_CHANNEL');
 }
 
-Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعربية، والبريد مقنّع بحرفه الأول ونطاقه', () => {
+Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعربية، والبريد مقنّع بأول ثلاثة أحرف بحد أقصى ونطاقه', () => {
   const sunday = Date.parse('2026-11-15T10:00:00Z');
   assertEquals(S.parentText('codes', sunday), '🔐 رموز الدخول · الأحد 15 نوفمبر');
   assertEquals(S.parentText('alerts', sunday), '⚠️ التنبيهات · الأحد 15 نوفمبر');
@@ -88,7 +88,9 @@ Deno.test('سلاك: عنوان السلسلة بيوم الرياض بالعر�
   // 22:00 بتوقيت غرينتش بعد منتصف الليل في الرياض: يوم جديد
   assertEquals(S.riyadhDay(Date.parse('2026-11-15T22:00:00Z')), '2026-11-16');
   assertEquals(S.parentText('codes', Date.parse('2026-11-15T22:00:00Z')), '🔐 رموز الدخول · الاثنين 16 نوفمبر');
-  assertEquals(S.maskEmail('Mona.Ali@Gmail.com'), 'm***@gmail.com');
+  assertEquals(S.maskEmail('Mona.Ali@Gmail.com'), 'mon***@gmail.com');
+  assertEquals(S.maskEmail('sara@org.sa'), 'sa***@org.sa');
+  assertEquals(S.maskEmail('lee@corp.com'), 'l***@corp.com');
   assertEquals(S.maskEmail('bad'), '***');
 });
 
@@ -161,7 +163,7 @@ Deno.test('سلاك: رمز الدخول يُبلَّغ بحالته وغرضه 
       assert(!all.includes('mona.ali'), 'البريد الكامل لا يصل سلاك');
       assert(!all.includes('رمزك'), 'متن الرسالة لا يصل سلاك');
       assertEquals(sc[0].body.text, S.parentText('codes'));
-      assertEquals(sc[1].body.text, '✅ أُرسل · دخول الإدارة · m***@gmail.com · admin-api');
+      assertEquals(sc[1].body.text, '✅ أُرسل · دخول الإدارة · mon***@gmail.com · admin-api');
       // سطر الرمز يطمس ستة أرقام متتالية احتياطًا حتى لو مُرّرت خطأ
       assert(!S.codeLine({ status: 'sent', purpose: 'x 123456', to: 'a@b.co', source: 's' }).includes('123456'));
     });
@@ -193,8 +195,8 @@ Deno.test('سلاك: رمز تعذّر إرساله يُبلَّغ تعذّرً�
       assertEquals((await sendCounted(client, 'ok@corp.com', 'تذكير', '<p>x</p>', { kind: 'notify', source: 'leaders-api', cap: 80, key: 'k' })).ok, true);
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text);
-      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · s***@org.sa · user-api · خدمة البريد غير مهيأة (mail_unconfigured)'), texts.join('\n'));
-      assert(texts.some((t) => t.startsWith('إشعار · k***@corp.com · ') && t.endsWith(' · leaders-api')), texts.join('\n'));
+      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · sa***@org.sa · user-api · خدمة البريد غير مهيأة (mail_unconfigured)'), texts.join('\n'));
+      assert(texts.some((t) => t.startsWith('إشعار · kha***@corp.com · ') && t.endsWith(' · leaders-api')), texts.join('\n'));
       assert(!texts.some((t) => t.includes('o***@corp.com')));
       assert(!texts.some((t) => t.includes('111222')));
     });
@@ -544,9 +546,9 @@ Deno.test('سلاك: رسالة في الطابور تعيدها المهمة ا
       assertEquals((await sendCounted(full, 'share@corp.com', 's', '<p>x</p>', { ...opts, sourceShare: 0.5, queued: true })).reason, 'mail_share');
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text).join('\n');
-      assert(texts.includes('f***@corp.com'), texts);
-      assert(!texts.includes('a***@corp.com'), texts);
-      assert(!texts.includes('s***@corp.com'), texts);
+      assert(texts.includes('fi***@corp.com'), texts);
+      assert(!texts.includes('ag***@corp.com'), texts);
+      assert(!texts.includes('sh***@corp.com'), texts);
     });
   } finally { teardown(); }
 });
@@ -597,7 +599,7 @@ Deno.test('سلاك: تفاصيل التنبيه مطموسة: البريد مق
   for (const leak of ['Mona.Ali', 'mona.ali@gmail.com', '123 4567', '1234567', '482913', 'sk_live', 'eyJhbG', 'whsec_123', '"abc"', 'x.y@', '123456', '654321', 'A1b2C3d4E5f6']) {
     assert(!line.toLowerCase().includes(leak.toLowerCase()), `${leak} في: ${line}`);
   }
-  for (const keep of ['m***@gmail.com', 'x***@company.sa', '3f2b8c1e-9a4d-4b7e-8c2a-1d2e3f4a5b6c', '"day":"2026-11-16"', '2026-11-16T08:30:00.000Z', '"sent":80', '"cap":120', '"status":403', '"key_source":"env"', '••••67', '"token":"[مخفي]"']) {
+  for (const keep of ['mon***@gmail.com', 'x***@company.sa', '3f2b8c1e-9a4d-4b7e-8c2a-1d2e3f4a5b6c', '"day":"2026-11-16"', '2026-11-16T08:30:00.000Z', '"sent":80', '"cap":120', '"status":403', '"key_source":"env"', '••••67', '"token":"[مخفي]"']) {
     assert(line.includes(keep), `${keep} غائب عن: ${line}`);
   }
   assert(line.startsWith('*creem-webhook* '));
@@ -629,7 +631,7 @@ Deno.test('رابط التنبيه مطموس كنشر البوت: لا بريد
       const hook = calls.find((c) => c.url.includes('hooks.example'))!;
       const raw = JSON.stringify(hook.body);
       for (const leak of ['mona@gmail.com', '966551234567', 'abcdefghijklmnop', '482913']) assert(!raw.includes(leak), `${leak} في: ${raw}`);
-      assert(hook.body.text.includes('m***@gmail.com') && hook.body.text.includes('••••67'));
+      assert(hook.body.text.includes('mo***@gmail.com') && hook.body.text.includes('••••67'));
       assertEquals(hook.body.text, hook.body.content);
       assertEquals(hook.body.detail.pay, '550e8400-e29b-41d4-a716-446655440000');
       assertEquals(hook.body.kind, 'payment_unmatched');
@@ -678,7 +680,7 @@ Deno.test('slackDeliver: false بلا ضبط، وfalse بعد المهلة، و�
 
 Deno.test('سلاك: سطر البريد الذي لم يصل يقول نوعه وسببه بالعربية، ولا يحمل عنوان الرسالة', () => {
   assertEquals(S.mailLine({ kind: 'notify', to: 'ibrahim@gmail.com', source: 'leaders-api', reason: 'mail_share' }),
-    'إشعار · i***@gmail.com · امتلأت حصة الإشعارات لليوم (mail_share) · leaders-api');
+    'إشعار · ibr***@gmail.com · امتلأت حصة الإشعارات لليوم (mail_share) · leaders-api');
   assertEquals(S.mailLine({ kind: 'bulk', to: 'a@b.co', source: 's', reason: 'rejected 422' }), 'تذكير جماعي · a***@b.co · رفضه مزوّد البريد (rejected 422) · s');
   assertEquals(S.reasonText('something_new'), 'something_new');
 });

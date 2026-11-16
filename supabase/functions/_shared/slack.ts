@@ -6,7 +6,7 @@
 // لا إعادة محاولة: الفشل يُسجَّل ويُترك، و429 يوقف النشر حتى Retry-After.
 // كل فئة لها سلسلة واحدة في يوم الرياض: رسالة أم مرة في اليوم، والأحداث ردود فيها. ts الأم في leaders.slack_threads،
 // وغياب الجدول (قبل ترحيله) ينشر بلا سلاسل ويبقى يعمل.
-// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (m***@gmail.com) والدالة، وتفاصيل التنبيه مطموسة (alertLine).
+// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (mon***@gmail.com) والدالة، وتفاصيل التنبيه مطموسة (alertLine).
 
 export type SlackCategory = 'alerts' | 'codes' | 'mail';
 export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: string }> = {
@@ -36,14 +36,16 @@ export function parentText(category: SlackCategory, now = Date.now()) {
   return `${c.icon} ${c.label} · ${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
-// الحرف الأول والنطاق وحدهما، والنطاق بحروف النطاقات وحدها: ما سواها (< > ! |) يُطمس كله
+// أول ثلاثة أحرف بحد أقصى والنطاق، والنطاق بحروف النطاقات وحدها: ما سواها (< > ! |) يُطمس كله
 export function maskEmail(email: unknown) {
   const e = String(email ?? '').trim().toLowerCase();
   const at = e.lastIndexOf('@');
   if (at < 1) return '***';
-  const first = /[a-z0-9]/.test(e[0]) ? e[0] : '*';
+  // أول ثلاثة أحرف بحد أقصى، ولا تزيد على نصف الاسم: تكفي لتمييز الشخص في القائمة ولا تكشف بريده (قرار المالك 2026-11-16)
+  const local = e.slice(0, at);
+  const shown = [...local.slice(0, Math.min(3, Math.max(1, Math.floor(local.length / 2))))].map((c) => /[a-z0-9._-]/.test(c) ? c : '*').join('');
   const domain = e.slice(at + 1);
-  return `${first}***@${/^[a-z0-9.-]+$/.test(domain) ? domain : '***'}`;
+  return `${shown}***@${/^[a-z0-9.-]+$/.test(domain) ? domain : '***'}`;
 }
 
 // نص من خارج المنصة لا يصير أمرًا في سلاك (<!channel> ورابط مقنّع): الرموز الثلاثة تُرمَّز في كل سطر
