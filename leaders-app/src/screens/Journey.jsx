@@ -14,7 +14,7 @@ import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
-import { surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
+import { SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity from './Activities.jsx';
 import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
@@ -363,21 +363,25 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
 
 // الخطوة التالية: أول متطلب يستطيع المشارك إنجازه بنفسه في المرحلة الحالية
 // جلستك القادمة: أقرب جلسة ورشة لم تنتهِ، من بنود الرحلة نفسها (مصدرها workshop_sessions). في نافذتها تفتح القاعة.
+// وبلا جلسة مؤرخة قادمة: أول جلسة لم يُحدد موعدها بعد (J1)، فيظهر «لك جلسة سيُعلن موعدها» لا تاريخ 1970
 export function nextSession(journey, now = Date.now()) {
   const all = (journey || []).flatMap((st) => (st.items || []).filter((i) => i.activity?.type === 'workshop').flatMap((i) => i.activity.sessions || []));
-  return all.filter((x) => new Date(x.ends_at).getTime() > now).sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)))[0] || null;
+  const dated = all.filter((x) => x.starts_at && x.ends_at && new Date(x.ends_at).getTime() > now).sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
+  return dated[0] || all.find((x) => (!x.starts_at || !x.ends_at) && !x.attended) || null;
 }
 const two = (n) => String(n).padStart(2, '0');
 const icsStamp = (iso) => { const d = new Date(iso); return `${d.getUTCFullYear()}${two(d.getUTCMonth() + 1)}${two(d.getUTCDate())}T${two(d.getUTCHours())}${two(d.getUTCMinutes())}00Z`; };
 // ملف تقويم يُنزَّل من الجهاز: الموعد نفسه بلا طلب للخادم
 export function sessionIcs(x) {
+  if (!x?.starts_at || !x?.ends_at) return '';   // غير المؤرخة لا تقويم لها
   const esc = (v) => String(v || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', 'BEGIN:VEVENT', `UID:${x.id}@sunkvalue.com`, `DTSTAMP:${icsStamp(new Date().toISOString())}`,
     `DTSTART:${icsStamp(x.starts_at)}`, `DTEND:${icsStamp(x.ends_at)}`, `SUMMARY:${esc(x.title)}`, ...(x.location ? [`LOCATION:${esc(x.location)}`] : []),
     'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${esc(x.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
 }
-function NextSession({ session, onHall }) {
-  const when = new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+export function NextSession({ session, onHall }) {
+  const undated = !session.starts_at || !session.ends_at;
+  const when = undated ? `الموعد ${SESSION_TBD_AR}` : new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   const download = () => {
     const url = URL.createObjectURL(new Blob([sessionIcs(session)], { type: 'text/calendar;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = 'session.ics'; a.click();
@@ -385,13 +389,13 @@ function NextSession({ session, onHall }) {
   };
   return (
     <div className={`next-card j-session${session.open ? ' live' : ''}`} data-tour="next-session">
-      <span className="k">{session.open ? 'جلستك الآن' : 'جلستك القادمة'}</span>
+      <span className="k">{session.open ? 'جلستك الآن' : undated ? 'لك جلسة سيُعلن موعدها' : 'جلستك القادمة'}</span>
       <b>{session.title}</b>
-      <span className="small muted">{when}{session.mode === 'online' ? ' · عن بعد' : session.location ? ` · ${session.location}` : ''}</span>
+      <span className="small muted">{when}{session.mode === 'online' ? ' · عن بعد' : session.location ? ` · ${session.location}` : ''}{session.link_later ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span>
       {session.attended && <span className="chip ok">سُجّل حضورك</span>}
       <div className="row">
         {session.open && onHall && <button className="btn sm" onClick={onHall}>ادخل القاعة</button>}
-        <button className="btn ghost sm" onClick={download}>أضفها إلى تقويمك</button>
+        {!undated && <button className="btn ghost sm" onClick={download}>أضفها إلى تقويمك</button>}
       </div>
     </div>
   );

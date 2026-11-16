@@ -13,14 +13,19 @@ const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.p
 export const usesHandbook = (cohort) => Object.values(asJson(cohort?.delivery) || {}).some((d) => d?.format === 'handbook');
 /** عدد جلسات الدفعة بالقاعدة الواحدة
  * @param {{ id?: string }} cohort @param {{ cohort_id?: string|null, active?: boolean, starts_at?: string, ends_at?: string|null }[]} sessions */
+// والجلسة غير المؤرخة (J1، قرار المالك): «يُحدد لاحقًا» لا يمنع الإطلاق، فتُعد في الجلسات ويظهر عددها منفصلًا (undatedFor)
 export function sessionsFor(cohort, sessions = [], now = Date.now()) {
   return (sessions || []).filter((w) => w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id)
-    && Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS).length;
+    && (!w.starts_at || Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS)).length;
+}
+/** ما يُحدد موعده لاحقًا من جلسات الدفعة الفعّالة (جزء من sessionsFor) */
+export function undatedFor(cohort, sessions = []) {
+  return (sessions || []).filter((w) => w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id) && !w.starts_at).length;
 }
 
-/** @param {{ cohort: any, advisorName?: string|null, teamCount?: number, members?: number, upcomingSessions?: number }} d
- *  upcomingSessions: عدد sessionsFor للدفعة */
-export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members = 0, upcomingSessions = 0 }) {
+/** @param {{ cohort: any, advisorName?: string|null, teamCount?: number, members?: number, upcomingSessions?: number, undatedSessions?: number }} d
+ *  upcomingSessions: عدد sessionsFor للدفعة، وundatedSessions: منها ما يُحدد موعده لاحقًا (undatedFor) */
+export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members = 0, upcomingSessions = 0, undatedSessions = 0 }) {
   if (!cohort) return [];
   const stages = Object.keys(cohort.schedule || {}).length;
   return [
@@ -46,10 +51,17 @@ export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members
     },
     {
       key: 'sessions', title: 'الجلسات', ok: upcomingSessions > 0 || usesHandbook(cohort),
-      detail: upcomingSessions > 0 ? `${upcomingSessions} جلسة قادمة أو حديثة` : usesHandbook(cohort) ? 'صيغة الكتيب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
+      detail: upcomingSessions > 0 ? sessionsDetail(upcomingSessions, undatedSessions) : usesHandbook(cohort) ? 'صيغة الكتيب: يكتمل التدريب بالقراءة، فلا تلزم جلسات'
         : 'لا جلسة قادمة ولا حديثة: تُضاف من «الحضور والجلسات»',
       where: 'activities',
     },
   ];
+}
+// «3 جلسات قادمة أو حديثة، منها 1 يُحدد موعدها لاحقًا»، أو «2 جلسة يُحدد موعدها لاحقًا» حين لا مؤرخ
+function sessionsDetail(all, undated) {
+  const u = Math.min(Math.max(0, Number(undated) || 0), all);
+  if (!u) return `${all} جلسة قادمة أو حديثة`;
+  if (u === all) return `${u} جلسة يُحدد موعدها لاحقًا`;
+  return `${all} جلسة قادمة أو حديثة، منها ${u} يُحدد موعدها لاحقًا`;
 }
 export const setupMissing = (items) => (items || []).filter((x) => !x.ok).length;

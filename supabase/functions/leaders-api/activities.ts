@@ -13,6 +13,7 @@ import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf,
+  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -238,6 +239,7 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   const s = must(await db.from('workshop_sessions').select('*').eq('id', parsed.sessionId).maybeSingle());
   if (!s) throw new Fail('رمز الحضور غير صالح', 400, 'qr_invalid');
   if (!(await verifyQrToken(t, s.secret))) throw new Fail('انتهت صلاحية الرمز، امسح الرمز المعروض الآن', 400, 'qr_expired');
+  if (isUndated(s)) throw new Fail('موعد هذه الجلسة لم يُحدد بعد، فلا يُسجل حضورها الآن', 400, 'undated');
   if (!checkinOpen(s)) throw new Fail('تسجيل الحضور لهذه الجلسة غير متاح الآن', 400, 'closed');
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
@@ -253,7 +255,9 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
 // يعيد رابط الاجتماع في نافذة الجلسة فقط. إن كان التوثيق بالانضمام يُسجَّل الحضور.
 export async function workshopJoin(p: any, b: Body, ctx: Ctx) {
   const s = must(await db.from('workshop_sessions').select('*').eq('id', String(b.session_id || '')).maybeSingle());
-  if (!s || s.mode !== 'online' || !s.join_url) throw new Fail('الجلسة غير موجودة', 404);
+  if (!s || s.mode !== 'online') throw new Fail('الجلسة غير موجودة', 404);
+  if (!s.join_url) throw new Fail('رابط الجلسة لم يُضف بعد، ويصلك قبل موعدها', 400, 'link_later');
+  if (isUndated(s)) throw new Fail('موعد هذه الجلسة لم يُحدد بعد', 400, 'undated');
   if (!checkinOpen(s)) throw new Fail('رابط الجلسة يُفتح قبل موعدها بساعة', 400, 'closed');
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if (!(await sessionOpen(p, r.id))) throw new Fail(STAGE_LOCKED, 403, 'locked');
@@ -360,7 +364,7 @@ export async function overview() {
   const [reqs, ws, att, coach, programs, cohorts] = await Promise.all([
     db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
     // بـ* لتحمل invited_at بعد الترحيل 20261110140000 وتعمل قبله؛ والسر لا يخرج إلى اللوحة (يُحذف أدناه)
-    db.from('workshop_sessions').select('*').order('starts_at'),
+    db.from('workshop_sessions').select('*').order('starts_at', { nullsFirst: false }),
     db.from('workshop_attendance').select('session_id'),
     db.from('coaching_sessions').select('*, participants(full_name, email), experts(full_name)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
@@ -372,7 +376,7 @@ export async function overview() {
   return {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
-    workshops: (ws.data || []).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0 }; delete row.secret; return row; }),
+    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0 }; delete row.secret; return row; }),
     coaching: coach.data || [],
     programs: programs.data || [], cohorts: cohorts.data || [],
   };
@@ -381,26 +385,32 @@ export async function overview() {
 export async function workshopSave(a: any, b: Body) {
   const row = b.row || {};
   const mode = row.mode === 'online' ? 'online' : 'in_person';
+  // الموعد والرابط اختياريان (J1): فارغان يعنيان «يُحدد لاحقًا»، والجزئي والمقلوب يُرفضان برسالته (workshopSchedule)
+  const when = workshopSchedule({ ...row, mode });
   const out: Body = {
     title_ar: String(row.title_ar || '').trim().slice(0, 200),
     mode,
     location_ar: mode === 'in_person' ? String(row.location_ar || '').trim().slice(0, 300) || null : null,
-    join_url: mode === 'online' ? String(row.join_url || '').trim().slice(0, 500) || null : null,
-    starts_at: row.starts_at, ends_at: row.ends_at, active: row.active !== false,
+    join_url: when.join_url ?? null,
+    starts_at: when.starts_at ?? null, ends_at: when.ends_at ?? null, active: row.active !== false,
   };
   // فارغ صراحة: الجلسة لكل الدفعات. وغياب الحقل في التحرير يُبقي ربطها القائم؛ كان يكتب null فيفك
   // ربط الجلسة بدفعتها بصمت فتسقط دعوتها وتذكيرها (التدقيق 2026-11-11، admin-program-3)
   if ('cohort_id' in row || !row.id) out.cohort_id = /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null;
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
-  if (mode === 'online' && !/^https:\/\/\S+$/.test(out.join_url || '')) throw new Fail('الجلسة عن بعد تحتاج رابط اجتماع يبدأ بـ https');
-  if (!(new Date(out.ends_at) > new Date(out.starts_at))) throw new Fail('وقت الانتهاء بعد وقت البدء');
+  if (when.error) throw new Fail(when.error);
+  // قبل الترحيل 20261116010000 يرفض القيد الموعد الفارغ (23502 أو 23514): رسالة تقول السبب بدل «تعذّر الحفظ»
+  const undatedBlocked = (res: any) => {
+    if (res.error && !out.starts_at && ['23502', '23514'].includes(String(res.error.code))) throw new Fail('الجلسة بلا موعد تحتاج تحديث قاعدة البيانات أولًا؛ حدد موعدها الآن أو أعد المحاولة بعد التحديث');
+    return res;
+  };
   let saved: any;
   if (row.id) {
-    saved = must(await db.from('workshop_sessions').update(out).eq('id', row.id).select('id').single(), 'تعذّر الحفظ');
+    saved = must(undatedBlocked(await db.from('workshop_sessions').update(out).eq('id', row.id).select('id').single()), 'تعذّر الحفظ');
   } else {
     const r = must(await db.from('stage_requirements').select('id, kind').eq('id', String(row.requirement_id || '')).maybeSingle());
     if (!r || r.kind !== 'workshop') throw new Fail('اختر متطلب ورشة');
-    saved = must(await db.from('workshop_sessions').insert({ ...out, requirement_id: r.id, secret: randomToken(32) }).select('id').single(), 'تعذّر الحفظ');
+    saved = must(undatedBlocked(await db.from('workshop_sessions').insert({ ...out, requirement_id: r.id, secret: randomToken(32) }).select('id').single()), 'تعذّر الحفظ');
   }
   await audit('admin', a.email, row.id ? 'workshop.update' : 'workshop.create', 'workshop_sessions', saved.id, null, out);
   return { success: true, id: saved.id };
@@ -542,7 +552,7 @@ export async function sessionReminders() {
 // المصدر جلسة الورشة نفسها (workshop_sessions): موعدها ومكانها ودفعتها. الدعوة بيد المشرف مرة واحدة ومعها ملف تقويم،
 // والتذكيران من المهمة الساعية: قبل يوم (23 إلى 25 ساعة) وقبل ساعة (30 إلى 90 دقيقة). كلٌّ مرة واحدة لكل جلسة.
 // جلسة بلا دفعة (لكل الدفعات) لا يُعرف مدعووها، فلا تُرسل دعوتها ولا تذكيرها آليًا.
-const workshopWhen = (iso: string) => new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
+const workshopWhen = (iso: string | null) => (!iso ? SESSION_TBD_AR : new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' }));
 async function workshopRecipients(s: any) {
   if (!s.cohort_id) return [];
   const cohort = (await db.from('cohorts').select('*').eq('id', s.cohort_id).maybeSingle()).data as any;
@@ -564,17 +574,21 @@ async function openStageFor(ids: string[], requirementId: string) {
   return open;
 }
 async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
+  // غير المؤرخة لا دعوة لها ولا تذكير ولا ملف تقويم (الدعوة تمنعها، وفلتر التذكير يتجاهلها، وهذا حارس ثالث)
+  if (isUndated(s)) return { sent: 0, failed: 0, total: 0 };
   const people = await workshopRecipients(s);
   const when = workshopWhen(s.starts_at);
   // ومن لا تفتح له مرحلتها يُدعى بموعدها، ونص البريد له أن الرابط في رحلته حين تُفتح، لا تعليمات القاعة
   const online = s.mode === 'online' && !!s.join_url;
+  // عن بعد بلا رابط بعد: البريد يقول إن الرابط يصل قبل الجلسة، لا تعليمات القاعة
+  const linkLater = s.mode === 'online' && !s.join_url;
   const open = online ? await openStageFor(people.map((m: any) => m.id), s.requirement_id) : new Set<string>();
   const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };
@@ -584,6 +598,7 @@ export async function workshopInvite(a: any, b: Body) {
   const s = must(await db.from('workshop_sessions').select('*').eq('id', String(b.id || '')).maybeSingle()) as any;
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
   if (!s.cohort_id) throw new Fail('هذه الجلسة لكل الدفعات؛ حدّد دفعتها لتُرسل الدعوة إلى أعضائها');
+  if (isUndated(s)) throw new Fail('حدد موعد الجلسة أولًا لتُرسل دعوتها، ثم أرسلها من هنا', 400, 'undated');
   if (new Date(s.ends_at).getTime() < Date.now()) throw new Fail('انتهت هذه الجلسة');
   if (s.invited_at && b.again !== true) throw new Fail('أُرسلت دعوة هذه الجلسة من قبل', 409, 'invited');
   const r = await workshopSend(s, 'invite');

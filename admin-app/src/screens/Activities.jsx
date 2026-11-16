@@ -14,8 +14,10 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 
 import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
+import { isUndated, minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
+// موعد الجلسة أو «يُحدد لاحقًا» (J1): لا خانة فارغة ولا تاريخ 1970
+const sessionWhen = (s) => (isUndated(s) ? SESSION_TBD_AR : when(s.starts_at));
 // عنوان المتطلب برموزه مملوءة كما يراه المشارك: «حضور الأيام التدريبية (أربعة أيام)» لا «({days:T-ATTEND})» (التدقيق 2026-11-10، البند 9.9)
 const reqTitle = (r) => renderJourneyText(r?.title_ar || '', { reqs: r ? [r] : [] });
 
@@ -24,8 +26,9 @@ const SESSION_FIELDS = [
   { name: 'mode', label: 'الطريقة', type: 'select', options: { in_person: SESSION_MODE_AR.in_person, online: SESSION_MODE_AR.online } },
   { name: 'location_ar', label: 'المكان (القاعة والمدينة)', show: (v) => v.mode !== 'online' },
   { name: 'join_url', label: 'رابط الاجتماع (Zoom أو Teams أو Google Meet)', dir: 'ltr', show: (v) => v.mode === 'online',
-    help: 'يظهر للمشارك قبل الجلسة بساعة فقط.' },
-  { name: 'starts_at', label: 'تبدأ', type: 'datetime' },
+    help: (v) => (v.join_url ? 'يظهر للمشارك قبل الجلسة بساعة فقط.' : `اختياري: اتركه فارغًا ليُضاف لاحقًا، ويرى المشارك «${SESSION_LINK_LATER_AR}».`) },
+  { name: 'starts_at', label: 'تبدأ', type: 'datetime',
+    help: (v) => (!v.starts_at && !v.ends_at ? `اختياري: اترك البدء والانتهاء فارغين إن لم يُحدد الموعد بعد، فتظهر الجلسة «${SESSION_TBD_AR}» بلا دعوة ولا تذكير.` : null) },
   { name: 'ends_at', label: 'تنتهي', type: 'datetime' },
   { name: 'active', label: 'مفعّلة', type: 'check' },
 ];
@@ -41,7 +44,7 @@ const sessionFields = (cohorts, current = null) => {
     ...SESSION_FIELDS,
   ];
 };
-const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا' };
+const VERIFY_AR = { qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا', auto: 'التوثيق آلي بانتهاء الجلسة' };
 const MODE_AR = SESSION_MODE_AR;
 const COACH_ST = Object.fromEntries(Object.entries({ booked: '', requested: 'warn', attended: 'ok', no_show: 'bad', cancelled: '' }).map(([k, tone]) => [k, [COACH_STATUS_ADMIN[k], tone]]));
 
@@ -67,8 +70,8 @@ function QrScreen({ id, onClose }) {
       <button className="la-qr-x" onClick={onClose} aria-label="إغلاق">✕</button>
       {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
         <h2>{d.session.title}</h2>
-        <p>{d.session.location} · {when(d.session.starts_at)}</p>
-        {d.open ? <img src={img} alt="رمز الحضور" /> : <div className="la-err">تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة).</div>}
+        <p>{[d.session.location, sessionWhen(d.session)].filter(Boolean).join(' · ')}</p>
+        {d.open ? <img src={img} alt="رمز الحضور" /> : <div className="la-err">{isUndated(d.session) ? 'حدد موعد الجلسة أولًا: تسجيل الحضور يُفتح قبل البدء بساعة.' : 'تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة).'}</div>}
         <p className="la-qr-hint">امسح الرمز بكاميرا جوالك لتسجيل حضورك. يتجدد الرمز كل {QR_WINDOW} ثانية.</p>
         <b className="la-qr-count">{d.attended} حاضر</b>
       </>}
@@ -93,7 +96,7 @@ function Attendance({ id, canWrite, onClose }) {
       <div className="la-form mi-form" role="dialog" aria-modal="true" aria-label="الحضور" style={{ maxWidth: 720 }}>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <h3>{d.session.title_ar} · {d.people.filter((p) => p.attendance).length} من {d.people.length}</h3>
-          <p className="la-muted">{reqTitle(d.requirement)} · {when(d.session.starts_at)}</p>
+          <p className="la-muted">{reqTitle(d.requirement)} · {sessionWhen(d.session)}</p>
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>الجهة</th><th>الحضور</th><th /></tr></thead>
             <tbody>{d.people.map((p) => (
@@ -148,12 +151,13 @@ function Workshops({ data, reload, canWrite }) {
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
                     <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
-                    <td>{when(s.starts_at)}</td>
-                    <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? '' : s.location_ar ? ` · ${s.location_ar}` : ''}</td>
+                    <td>{isUndated(s) ? <span className="la-chip warn">{SESSION_TBD_AR}</span> : when(s.starts_at)}</td>
+                    <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? (s.join_url ? '' : ' · الرابط لاحقًا') : s.location_ar ? ` · ${s.location_ar}` : ''}</td>
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">
-                      {(r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
-                      {canWrite && s.cohort_id && new Date(s.ends_at) > new Date() && (
+                      {(r.config?.verify || 'qr') === 'qr' && (s.mode || 'in_person') === 'in_person' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+                      {canWrite && s.cohort_id && isUndated(s) && <small className="la-muted" title="الدعوة وملف التقويم والتذكير تحتاج موعدًا">الدعوة بعد تحديد الموعد</small>}
+                      {canWrite && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
                       {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: sessionFields(cohorts, s.cohort_id), values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
