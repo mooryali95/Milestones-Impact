@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116120000_leaders_guidance
+-- as-of migration: 20261116130000_leaders_guidance_counts
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -968,6 +968,7 @@ create table if not exists leaders.guidance_messages (
   output_tokens integer,
   cost_micros bigint,
   created_at timestamp with time zone default now() not null,
+  confirmed_at timestamp with time zone,
   constraint guidance_messages_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 6000))),
   constraint guidance_messages_chapter_id_check CHECK ((char_length(chapter_id) <= 80)),
   constraint guidance_messages_context_check CHECK ((context = ANY (ARRAY['program'::text, 'handbook'::text, 'capstone'::text]))),
@@ -4024,6 +4025,20 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.guidance_counts(p_participant uuid, p_since timestamp with time zone)
+ RETURNS TABLE(asked integer, unsure integer, confirmed integer, last_at timestamp with time zone)
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select count(*) filter (where role = 'user' and verdict is distinct from 'refused')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'unsure')::integer,
+         count(*) filter (where role = 'assistant' and confirmed_at is not null)::integer,
+         max(created_at) filter (where role = 'user')
+    from leaders.guidance_messages
+   where participant_id = p_participant and created_at >= p_since;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.guidance_purge_expired()
  RETURNS integer
  LANGUAGE plpgsql
@@ -4038,6 +4053,24 @@ begin
   get diagnostics n = row_count;
   return n;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_report(p_since timestamp with time zone)
+ RETURNS TABLE(asked integer, participants integer, answered integer, unsure integer, refused integer, errors integer, confirmed integer, micros bigint)
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select count(*) filter (where role = 'user' and verdict is distinct from 'refused')::integer,
+         count(distinct participant_id) filter (where role = 'user')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'answered')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'unsure')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'refused')::integer,
+         count(*) filter (where role = 'assistant' and verdict = 'error')::integer,
+         count(*) filter (where role = 'assistant' and confirmed_at is not null)::integer,
+         coalesce(sum(cost_micros), 0)::bigint
+    from leaders.guidance_messages
+   where created_at >= p_since;
 $function$
 ;
 

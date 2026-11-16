@@ -33,7 +33,7 @@ export function GuideChat({ context = 'program', chapterId = null, onConfirm }) 
     setBusy(false);
     if (!r.success) { setErr(r.message); return; }
     setText('');
-    setD((x) => ({ ...x, left: r.left, messages: [...x.messages, { id: `q${Date.now()}`, role: 'user', body: q }, { id: `a${Date.now()}`, role: 'assistant', body: r.reply.text, verdict: r.reply.verdict, sources: r.reply.sources, question: q }] }));
+    setD((x) => ({ ...x, left: r.left, messages: [...x.messages, { id: `q${Date.now()}`, role: 'user', body: q }, { id: r.reply.id || `a${Date.now()}`, role: 'assistant', body: r.reply.text, verdict: r.reply.verdict, sources: r.reply.sources, question: q }] }));
   };
   const clear = async () => {
     if (!window.confirm('تُحذف محادثتك مع المساعد كلها نهائيًا. متابعة؟')) return;
@@ -57,7 +57,11 @@ export function GuideChat({ context = 'program', chapterId = null, onConfirm }) 
               <p>{m.body}</p>
               {m.role === 'assistant' && m.sources?.length > 0 && <small className="muted">المصدر: {m.sources.map((t) => `«${t}»`).join('، ')}</small>}
               {m.role === 'assistant' && m.verdict !== 'refused' && (
-                <button type="button" className="link small" onClick={() => onConfirm?.(questionOf(i))}>لم تقنعني، أريد التأكد</button>
+                <button type="button" className="link small" onClick={() => {
+                  // يُسجَّل الضغط عددًا لمتابعة المستشار (G3)، ولا يُنقل شيء من المحادثة
+                  if (Number.isInteger(m.id)) call('guide.confirm', { message_id: m.id });
+                  onConfirm?.(questionOf(i));
+                }}>لم تقنعني، أريد التأكد</button>
               )}
             </li>
           ))}

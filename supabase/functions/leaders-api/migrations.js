@@ -145,6 +145,7 @@ export const MIGRATIONS = [
   '20261116100000_leaders_t360_rename',
   '20261116110000_leaders_program_version_pin',
   '20261116120000_leaders_guidance',
+  '20261116130000_leaders_guidance_counts',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -208,4 +209,5 @@ export const MIGRATION_GATES = {
   '20261116100000_leaders_t360_rename': ["tolerant", "نص فقط: الدالة والواجهة تعملان قبله وبعده، والبندان يُعرفان برمزهما لا بعنوانهما"],
   '20261116110000_leaders_program_version_pin': ["tolerant", "الدوال تقرأ نسخة الدفعة إن وُجدت وإلا البرنامج كما هو (programs.ts journeyDefinition)، وتثبّت كل دفعة جديدة على نسخة قبله وبعده"],
   '20261116120000_leaders_guidance': ["tolerant", "مسارات guide.* ترد not_migrated قبل الجدول فيبقى المساعد مخفيًا، و«اطلب استشارة» يعمل كما هو"],
+  '20261116130000_leaders_guidance_counts': ["tolerant", "guide.confirm يُتجاهل بلا العمود، والأعداد ترجع null فلا يظهر سطرها في الملف ولا التقرير"],
 };
