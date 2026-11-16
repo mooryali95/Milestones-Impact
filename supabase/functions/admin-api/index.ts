@@ -4,7 +4,9 @@ import {
   generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse,
   verifyRegistrationResponse,
 } from "npm:@simplewebauthn/server@13.3.3";
-import { slackUse } from "../_shared/slack.ts";
+import { slackConfigured, slackDeliver, slackPost, slackUse } from "../_shared/slack.ts";
+import { loginFingerprint } from "../_shared/login-device.js";
+import { knownDevice, METHOD_LABELS, ownerLoginNotice } from "./login_notice.ts";
 import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 import { STEP_UP_ACTIONS, stepUp } from "./step_up.ts";
@@ -194,7 +196,8 @@ const clientCtx = (req: Request): Ctx => ({
 });
 
 // يُصدر جلسة إدارة. method وauth_at يحددان ما تسمح به الجلسة من عمليات حساسة.
-async function issueSession(sb: SB, user: Record<string, unknown>, email: string, method: "passkey" | "totp" | "email", ctx: Ctx) {
+// passkeyUsedBefore: مفتاح المرور الذي دخل به سبق استعماله (last_used_at قبل هذا الدخول)، أحد شرطي «الجهاز المعروف»
+async function issueSession(sb: SB, user: Record<string, unknown>, email: string, method: "passkey" | "totp" | "email", ctx: Ctx, passkeyUsedBefore = false) {
   const token = randomToken();
   const { error } = await sb.from("api_sessions").insert({
     token_hash: await sha256hex(token), kind: "admin", subject: String(user.id),
@@ -203,16 +206,31 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
   });
   if (error) throw error;
   await sb.from("admin_users").update({ last_login: new Date().toISOString() }).eq("id", user.id);
+  // بصمة الجهاز (تجزئة العنوان المقرب ووصف المتصفح، _shared/login-device.js) تُحفظ في سطر الدخول بلا نص المتصفح.
+  // والمعرفة تُسأل قبل كتابة السطر، فلا يطابق الدخول نفسه
+  let fp: string | null = null;
+  try { fp = await loginFingerprint(ctx.ip, ctx.ua); } catch { fp = null; }
+  const device = user.is_owner
+    ? ((await knownDevice(sb, { userId: String(user.id), method, fp, passkeyUsedBefore })) ? "known" : "new")
+    : null;
   try {
     await sb.from("admin_audit_log").insert({
-      user_id: user.id, user_email: email, action: "login", meta: { role: user.role_id, method, ip: ctx.ip },
+      user_id: user.id, user_email: email, action: "login",
+      meta: { role: user.role_id, method, ip: ctx.ip, ...(fp ? { fp } : {}), ...(device ? { device } : {}) },
     });
   } catch { /* audit best-effort */ }
-  // المالك يُبلَّغ بكل دخول إلى حسابه.
-  if (user.is_owner) {
-    await securityMail(email, "دخول جديد إلى حسابك", [
-      ["الطريقة", METHOD_LABELS[method]], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"],
-    ]);
+  // المالك: جهاز جديد بالبريد وSlack، وجهاز معروف بسطر Slack وحده (والبريد احتياطه)، login_notice.ts.
+  // يُكمل بعد الرد إن أمكن، فلا ينتظر الدخول نشر Slack
+  if (device) {
+    const job = ownerLoginNotice({
+      sb, mail: (title, rows) => securityMail(email, title, rows),
+      slackPost: (text) => slackPost("alerts", text), slackDeliver: (text) => slackDeliver("alerts", text), slackConfigured,
+    }, method, device, [["الطريقة", METHOD_LABELS[method]], ["عنوان IP", ctx.ip || "غير معروف"], ["المتصفح", ctx.ua || "غير معروف"]])
+      .catch((e) => console.error("admin-api owner login notice:", e));
+    // deno-lint-ignore no-explicit-any
+    const rt = (globalThis as any).EdgeRuntime;
+    if (typeof rt?.waitUntil === "function") rt.waitUntil(job);
+    else await job;
   }
   return {
     token,
@@ -223,9 +241,7 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
   };
 }
 
-const METHOD_LABELS: Record<string, string> = { passkey: "مفتاح المرور", totp: "تطبيق المصادقة", email: "رمز البريد" };
-
-// تنبيه أمني بالبريد: إضافة مفتاح أو حذفه، تغيير وضع الدخول، دخول المالك.
+// تنبيه أمني بالبريد: إضافة مفتاح أو حذفه، تغيير وضع الدخول، دخول المالك (login_notice.ts يقرر متى).
 async function securityMail(to: string, title: string, rows: [string, string][]) {
   const when = new Date().toLocaleString("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh" });
   const html = mailShell(title, `
@@ -441,13 +457,14 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
       }
       if (!v.verified) return json({ success: false, message: "تعذّر التحقق من مفتاح المرور" }, 400);
+      const usedBefore = !!pk.last_used_at;
       await sb.from("admin_passkeys").update({ sign_count: v.authenticationInfo.newCounter, last_used_at: new Date().toISOString() }).eq("id", pk.id);
       const { data: us } = await sb.from("admin_users")
         .select("id, name, email, role_id, is_active, totp_enabled, is_owner, passkey_only").eq("id", pk.admin_id).limit(1);
       const user = us?.[0];
       if (!user?.is_active) return json({ success: false, message: "الحساب غير نشط" }, 403);
       const email = String(user.email || "").toLowerCase();
-      return json({ success: true, ...(await issueSession(sb, user, email, "passkey", clientCtx(req))) });
+      return json({ success: true, ...(await issueSession(sb, user, email, "passkey", clientCtx(req), usedBefore)) });
     }
 
     // ══ everything below requires a valid admin session ══
