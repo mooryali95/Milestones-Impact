@@ -36,7 +36,7 @@ async function lastBy(rows: any[]) {
 }
 
 /** المشاركون بما يلزم المحرك: صفوفهم، وتقدمهم في القياس قبل الاعتماد، ورحلتهم بعده (journeyFor نفسه الذي يراه المشارك) */
-async function subjects(ids: string[]) {
+async function subjects(ids: string[], lanes = 6) {
   if (!ids.length) return [];
   const { data: rows, error } = await db.from('participants').select('*').in('id', ids);
   if (error) throw error;
@@ -44,7 +44,7 @@ async function subjects(ids: string[]) {
   const progress = await baselineProgress(pre.map((r: any) => r.id));
   const out: any[] = [];
   const queue = [...(rows || [])];
-  await Promise.all(Array.from({ length: 6 }, async () => {
+  await Promise.all(Array.from({ length: lanes }, async () => {
     for (let p = queue.shift(); p; p = queue.shift()) {
       const onboarding = onboardingOf(p, progress[p.id]?.id ? progress[p.id] : null);
       let journey: any[] = [], pct = 0, dates: any[] = [];
@@ -89,8 +89,9 @@ export async function sendNudges(sender: Sender, ids: string[]) {
       });
       if (error && !missingTable(error)) throw error;
     }
-    // reminded_at يبقى حدًا مشتركًا لما يقرؤه قبل السجل (الجدولة الأسبوعية وقائمة المشاركين)
-    await db.from('participants').update({ reminded_at: now }).eq('id', p.id);
+    // المصدر الواحد لآخر تذكير هو السجل (خارطة 16 نوفمبر، المرحلة 3). reminded_at يُكتب فقط إن غاب السجل
+    // (قبل ترحيله)، ويبقى للقراءة في lastBy لما سبق السجل من تذكيرات
+    if (!ledger) await db.from('participants').update({ reminded_at: now }).eq('id', p.id);
     await sendMail(p.email, nudge.subject, nudgeMail(p.full_name, nudge.subject, nudge.text, sign), [], { kind: 'bulk', ref: `participant:${p.id}` });
     await audit(sender.kind === 'admin' ? 'admin' : 'system', sender.by, 'participant.nudge', 'participants', p.id, null, { sender: sender.kind, stage: nudge.key });
     sent += 1;
@@ -259,6 +260,7 @@ export async function coordSend(c: any, b: Record<string, any>) {
 // ── تقرير فاعلية التذكير (P5): للإدارة، من السجل الواحد وحال كل مشارك الآن (effectReport في nudge.js) ──
 const REPORT_PEOPLE_MAX = 300; // حال كل مشارك من رحلته (journeyFor)؛ النافذة الأوسع تُقصّ على الأحدث
 export async function adminReport(_a: unknown, b: Record<string, any>) {
+  const t0 = Date.now();
   const days = NUDGE_REPORT_WINDOWS.includes(Number(b.days)) ? Number(b.days) : 30;
   const since = new Date(Date.now() - days * 864e5).toISOString();
   const { data, error } = await db.from('nudges').select('participant_id, sender, stage_key, stage_title, snapshot, created_at, seen_at')
@@ -270,9 +272,23 @@ export async function adminReport(_a: unknown, b: Record<string, any>) {
   const order = [...new Set((data || []).map((r: any) => r.participant_id))];
   const ids = order.slice(0, REPORT_PEOPLE_MAX);
   const keep = new Set(ids);
-  const subs = await subjects(ids);
+  // اثنا عشر مسارًا متوازيًا: التقرير يقرأ رحلة كل مشارك في النافذة، فالتوازي أوسع من الإرسال (المرحلة 2)
+  const subs = await subjects(ids, 12);
   const current = new Map(subs.map((s) => [s.p.id, s.nudge]));
   const names = new Map(subs.map((s) => [s.p.id, s.p.full_name]));
   const rows = (data || []).filter((r: any) => keep.has(r.participant_id));
-  return { success: true, ledger: true, days, capped: order.length > ids.length, ...effectReport(rows, current, names) };
+  // ms: زمن الحساب، يظهر في التقرير فيُقاس على الإنتاج لا يُقدَّر
+  return { success: true, ledger: true, days, capped: order.length > ids.length, ...effectReport(rows, current, names), ms: Date.now() - t0 };
+}
+
+/** من ذُكِّر خلال days يومًا من أي مرسل: من السجل الواحد، وإلا (قبل ترحيله) من reminded_at */
+export async function recentlyNudged(rows: { id: string; reminded_at?: string | null }[], days: number) {
+  const since = new Date(Date.now() - days * 864e5).toISOString();
+  const ids = rows.map((r) => r.id);
+  const { data, error } = ids.length
+    ? await db.from('nudges').select('participant_id').in('participant_id', ids).gte('created_at', since)
+    : { data: [], error: null };
+  if (error && !missingTable(error)) throw error;
+  if (error) return new Set(rows.filter((r) => r.reminded_at && r.reminded_at >= since).map((r) => r.id));
+  return new Set((data || []).map((r: any) => r.participant_id));
 }
