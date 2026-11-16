@@ -12,7 +12,8 @@ import { slackPost } from '../_shared/slack.ts';
 import { maskEmail } from '../_shared/slack.ts';
 import { AGENT_CONTEXT_PREFIX, type ContactRow } from '../_shared/contact.ts';
 import { inServiceHours, promiseNow } from '../_shared/hours.js';
-import { isArabic, matchFaq, normalizeText, productOf } from './faq.ts';
+import { matchFaq, productOf } from './faq.ts';
+import { asksPrice, conversationLang, orgQuote, replyLang, uiLang } from './intent.ts';
 import { buildMessages, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
 import { capState, costMicros, estimateTokens, knownModel, worstCaseMicros } from './pricing.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
@@ -113,13 +114,12 @@ function randomToken() {
 }
 const clip = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const isEmail = (s: string) => /^[^\s@<>"'();,]+@[^\s@<>"'();,]+\.[a-z]{2,}$/i.test(s) && s.length <= 254;
-const langOf = (s: string): 'ar' | 'en' => (isArabic(s) ? 'ar' : 'en');
+// لغة النصوص الثابتة من رسالة الزائر (عربية أو إنجليزية)، ولغة رد النموذج من المحادثة (conversationLang)
+const langOf = (message: string) => uiLang(replyLang(message));
 const PAGES = new Set(['MI-HOME', 'MI-LEADERS', 'MI-ASSESSMENT', 'MI-PROJECTS', 'MI-GOVERNANCE', 'MI-PRICING', 'MI-LEGAL']);
 const pageOf = (v: unknown) => (PAGES.has(String(v)) ? String(v) : 'MI-HOME');
 
-// السعر الحي يُطلب حين يسأل الزائر عن سعر، وتكون الصفحة صفحة البرنامج أو صفحة مشتركة
-const PRICE_WORDS = ['سعر', 'اسعار', 'تكلفه', 'بكم', 'كم', 'رسوم', 'رسم', 'مبلغ', 'price', 'cost', 'fee', 'fees', 'much'];
-const asksPrice = (q: string) => normalizeText(q).split(' ').some((t) => PRICE_WORDS.some((w) => t === w || t.endsWith(w)));
+// السعر الحي يُطلب حين يسأل فرد عن سعر (asksPrice في intent.ts)، وتكون الصفحة صفحة البرنامج أو صفحة مشتركة
 const money = (cents: number, cur: string) => `${(cents / 100).toFixed(2)} ${cur}`;
 
 // ── بث SSE ──
@@ -242,8 +242,11 @@ async function send(d: Deps, b: Record<string, unknown>) {
   await d.store.addMessage({ conversation_id: conv.id, role: 'visitor', body: message, lang });
 
   return sse(lang, async (emit, signal) => {
-    // 1) الجواب الجاهز: بلا نموذج ولا تكلفة
-    const canned = matchFaq(message, conv.product);
+    // لغة الرد: طلب الزائر الصريح (في هذه الرسالة أو قبلها) وإلا لغة رسالته
+    const history = await d.store.history(conv.id);
+    const reply = conversationLang(history.filter((t) => t.role === 'visitor').map((t) => t.body));
+    // 1) الجواب الجاهز: بلا نموذج ولا تكلفة، بلغة الرد إن كانت عربية أو إنجليزية (وغيرهما للنموذج، والجواب الجاهز معتمد في سياقه)
+    const canned = matchFaq(message, conv.product, reply);
     if (canned) {
       await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: canned.text, lang: canned.lang, model: `faq:${canned.id}` });
       emit('delta', { t: canned.text });
@@ -252,15 +255,18 @@ async function send(d: Deps, b: Record<string, unknown>) {
     }
     // 2) السقف اليومي وحد الاستدعاءات في الساعة، قبل أي استدعاء
     const day = riyadhDay(now);
-    const history = await d.store.history(conv.id);
     const product = productOf(conv.product);
     let leadersPrice: string | null = null;
-    if (product !== 'matrix' && asksPrice(message)) {
+    // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق)
+    const quote = orgQuote(message, product);
+    if (!quote && product !== 'matrix' && asksPrice(message)) {
       const p = await d.store.leadersPrice();
       if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
     }
     const inHours = inServiceHours(now);
-    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(lang, now), inHours, droppedTurns: 0, leadersPrice });
+    // لغة ثالثة: الجواب الجاهز (بالإنجليزية) يصير جوابًا معتمدًا يترجمه النموذج
+    const approved = reply !== 'ar' && reply !== 'en' ? matchFaq(message, conv.product, 'en') : null;
+    const { messages } = buildMessages(history, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text } });
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
     const rest = estimateTokens(messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
     const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
@@ -336,7 +342,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
 
 // أسباب التحويل مقيدة (لا نص حر من الزائر في سلاك)
 const REASONS: Record<string, string> = { request: 'طلب الزائر', agent: 'اقتراح المساعد', capped: 'السقف اليومي', conv_cap: 'حد المحادثة', refusal: 'امتناع النموذج', error: 'تعذر الرد' };
-const INTERESTS: Record<string, string> = { general: 'استفسار عام', partnership: 'شراكة أو عرض لجهة', leaders: 'برنامج القادة', matrix: 'منصة مصفوفة التأثير' };
+const INTERESTS: Record<string, string> = { general: 'استفسار عام', partnership: 'شراكة أو عرض لجهة', leaders: 'برنامج إدارة المشروعات للقادة', matrix: 'منصة مصفوفة التأثير' };
 
 async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
   const conv = await conversationOf(d, b);
@@ -379,9 +385,8 @@ async function handoff(d: Deps, b: Record<string, unknown>, req: Request) {
     return json({ success: false, code: 'db' }, 500);
   }
   await d.store.updateConversation(conv.id, { contact_request_id: ins.data.id });
-  // لغة الوعد من آخر رسالة للزائر (كما في send)، لا من لغة الصفحة
-  const lastVisitor = visitorTurns[visitorTurns.length - 1]?.body;
-  const lang = lastVisitor ? langOf(lastVisitor) : (String(conv.locale || '').startsWith('en') ? 'en' : 'ar');
+  // لغة الوعد من رسائل الزائر (كما في send: طلبه الصريح وإلا لغة آخر رسالة)، لا من لغة الصفحة
+  const lang = visitorTurns.length ? uiLang(conversationLang(visitorTurns.map((t) => t.body))) : (String(conv.locale || '').startsWith('en') ? 'en' : 'ar');
   const promise = promiseNow(lang, now);
   await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `handoff: ${reason}`, lang });
   // بريد الإدارة القائم (بلا بريد تأكيد للزائر: الوعد قيل في المحادثة) وسطر في قناة التشغيل بلا نص

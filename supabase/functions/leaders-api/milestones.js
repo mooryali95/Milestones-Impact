@@ -52,17 +52,28 @@ export function distributeSchedule(stages, startsOn, endsOn) {
 
 // جدول كما يُحفظ: مراحل معروفة فقط، وتواريخ صحيحة، ونهاية لا تسبق البداية
 export function cleanSchedule(raw, stageKeys) {
+  return cleanScheduleReport(raw, stageKeys).schedule;
+}
+// الجدول مع ما أُسقط منه (P5): مواعيد مكتوبة لمرحلة ليست في تعريف الدفعة (نسختها المثبتة أو برنامجها) لا تُحفظ،
+// ويُقال ذلك برسالة بدل الإسقاط الصامت. الخانة الفارغة ليست إسقاطًا. titles: اسم كل مرحلة يُعرف اسمها
+/** @param {any} raw @param {string[]} stageKeys @param {Record<string, string>} [titles] */
+export function cleanScheduleReport(raw, stageKeys, titles = {}) {
   const keys = new Set(stageKeys || []);
-  const out = {};
+  const schedule = {}, dropped = [];
   for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
-    if (!keys.has(k) || !v || typeof v !== 'object') continue;
+    if (!v || typeof v !== 'object') continue;
     const start = ISO.test(v.start || '') ? v.start : null;
     const end = ISO.test(v.end || '') ? v.end : null;
     if (!start && !end) continue;
+    if (!keys.has(k)) { dropped.push(k); continue; }
     if (start && end && end < start) throw new Error('نهاية مرحلة قبل بدايتها');
-    out[k] = { ...(start ? { start } : {}), ...(end ? { end } : {}) };
+    schedule[k] = { ...(start ? { start } : {}), ...(end ? { end } : {}) };
   }
-  return out;
+  const names = dropped.map((k) => `«${titles[k] || k}»`).join('، ');
+  const message = dropped.length
+    ? `لم تُحفظ مواعيد ${dropped.length === 1 ? `مرحلة ${names}` : `${dropped.length === 2 ? 'مرحلتين' : `${dropped.length} مراحل`}: ${names}`}، لأنها ليست من مراحل برنامج الدفعة أو نسختها المثبتة. بقية الجدول حُفظ.`
+    : '';
+  return { schedule, dropped, message };
 }
 
 // معلم كما يُحفظ
