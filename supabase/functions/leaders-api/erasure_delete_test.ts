@@ -200,18 +200,54 @@ Deno.test('الحذف: تعذّر سطر السجل بعد التنفيذ لا �
   } finally { unstore(); w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
 });
 
-Deno.test('الحذف: تعذّر إغلاق الطلب يُعاد في الرد وينبّه برقمه', async () => {
-  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
-  const w = installFake(seed(), { onDelete: setNull, fail: (t, op) => (t === 'erasure_requests' && op.kind === 'update' ? { code: 'PGRST000', message: 'timeout' } : null) });
-  const unstore = fakeStorage([]);
+Deno.test('الحذف: سحب المشارك أو قرار مدير آخر بعد قراءة الطلب يسبق الحذف، فلا يُحذف شيء ولا يصله «نُفّذ»', async () => {
+  // يُسحب الطلب بين قراءته (loadPending) والحذف: erasure_purge تحجزه في المعاملة نفسها فتجده غير قائم (P0003)
+  const w = installFake(seed(), { onDelete: setNull, rpc: (name, _args, tables) => {
+    if (name !== 'erasure_purge') return null;
+    Object.assign(tables.erasure_requests[0], { status: 'cancelled', decided_by: 'participant' });
+    return { data: null, error: { code: 'P0003', message: 'erasure_purge: request not pending' } };
+  } });
+  const log: string[] = [];
+  const unstore = fakeStorage(log);
   try {
     await withMail(() => withNet(async (calls) => {
-      const r: any = await exec();
-      assertEquals([r.success, r.request_open, r.request], [true, true, RID]);
-      const hook = calls.filter((c) => c.url.includes('hooks.example'));
-      assertEquals([hook.map((c) => c.body.kind), hook[0].body.detail.request], [['erase_close_failed'], RID]);
+      const e = (await assertRejects(exec, Fail)) as InstanceType<typeof Fail>;
+      assertEquals([e.status, e.code], [409, 'decided']);
+      assertEquals([w.tables.participants.length, w.tables.erasure_requests[0].status, w.tables.mail_queue.length, log, resendCalls(calls).length], [1, 'cancelled', 5, [], 0]);
     }));
-  } finally { unstore(); w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+  } finally { unstore(); w.restore(); }
+});
+
+Deno.test('الحذف: الطلب يُغلق مع الحذف في معاملة واحدة ويُمحى سببه، وسجل الدفع يبقى للمكتمل وحده بلا اسم ولا ملاحظات', async () => {
+  const t = seed();
+  t.erasure_requests[0].reason = 'انتقلت إلى وزارة أخرى، جوالي رقم-جوالي-الخاص';
+  t.payments = [
+    { id: 'paid', participant_id: PID, status: 'paid', email: 'sara@x.sa', customer_name: 'Sara A', note: 'n', admin_note: 'm', country: 'SA' },
+    { id: 'exp', participant_id: PID, status: 'expired', email: 'sara@x.sa', customer_name: 'Sara A' },
+  ];
+  const w = installFake(t, { onDelete: (table, rows, tables) => { setNull(table, rows, tables); if (table === 'participants') for (const x of tables.payments) if (x.participant_id === PID) x.participant_id = null; } });
+  const unstore = fakeStorage([]);
+  try {
+    await withMail(() => withNet(async () => {
+      const r: any = await exec();
+      assertEquals([r.success, r.request_open ?? false], [true, false]);
+      const req = w.tables.erasure_requests[0];
+      assertEquals([req.status, req.reason, req.decided_by, typeof req.email_hash], ['done', null, 'owner@x.sa', 'string']);
+      assertEquals(w.tables.payments.map((x) => [x.id, x.participant_id, x.customer_name, x.note, x.admin_note, x.email, x.country]), [['paid', null, null, null, null, 'sara@x.sa', 'SA']]);
+    }));
+  } finally { unstore(); w.restore(); }
+});
+
+Deno.test('الحذف: صفحة دفع معلّقة تمنع التنفيذ قبل أن يُمس شيء (لو اكتملت بعده لخُصم ماله بلا حساب)', async () => {
+  const t = seed();
+  t.payments = [{ id: 'p1', participant_id: PID, status: 'pending', email: 'sara@x.sa' }];
+  const w = installFake(t, { onDelete: setNull });
+  const log: string[] = [];
+  const unstore = fakeStorage(log);
+  try {
+    const e = (await assertRejects(exec, Fail)) as InstanceType<typeof Fail>;
+    assertEquals([e.status, e.code, w.tables.participants.length, w.tables.erasure_requests[0].status, log], [409, 'blocked', 1, 'pending', []]);
+  } finally { unstore(); w.restore(); }
 });
 
 Deno.test('الحذف: عنوانه لخبير قائم، فما لا مرجع له بعنوانه يبقى (عروض الخبراء بلا مرجع)', async () => {

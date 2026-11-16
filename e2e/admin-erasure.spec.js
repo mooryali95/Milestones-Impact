@@ -49,7 +49,9 @@ async function setup(page, hash, { role = 'super_admin', can = true, erasures = 
 
 test('الشريط يقول ماذا تفعل، و«افتح الطلب» يفتح الملف والورقة فوقه، والرفض بسبب يرسل السبب والنص', async ({ page }) => {
   const calls = await setup(page, '#/leaders/participants', { extra: { 'admin.erasure-decline': { success: true, mailed: true } } });
-  const banner = page.getByRole('alert', { name: 'طلبات حذف البيانات' });
+  // منطقة معنونة لا alert: لا تقاطع قارئ الشاشة مع كل تحميل للقائمة
+  const banner = page.getByRole('region', { name: 'طلبات حذف البيانات' });
+  await expect(page.getByRole('alert', { name: 'طلبات حذف البيانات' })).toHaveCount(0);
   await expect(banner).toContainText('طلب حذف بيانات ينتظر قرارك: سارة الأحمد، بقي 24 يومًا. افتح الطلب لتنفّذه أو ترفضه بسبب.');
   await banner.getByRole('button', { name: 'افتح الطلب' }).click();
   const sheet = page.getByRole('dialog', { name: /طلب حذف بيانات: سارة الأحمد/ });
@@ -108,10 +110,14 @@ test('رابط بريد المالك يفتح الورقة، والسحب بطل
 
 test('غير المدير الأعلى يقرأ الورقة كاملة والأزرار معطلة بسطر «القرار للمدير الأعلى» وزر مراسلة، ومنطقة الخطر تحيل إلى البطاقة', async ({ page }) => {
   await setup(page, '#/leaders/participants/p1', { role: 'admin', can: false });
+  const card = page.getByRole('region', { name: 'طلب حذف بيانات' });
+  await expect(card).toContainText('ينتظر قرار المدير الأعلى');
+  await expect(card).not.toContainText('ينتظر قرارك');
   await page.getByRole('tab', { name: /^الملف/ }).click();
   await expect(page.getByText('لهذا المشارك طلب حذف قائم. نفّذه من بطاقة الطلب أعلى الملف')).toBeVisible();
   await expect(page.getByRole('button', { name: 'حذف المشارك…' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'افتح الطلب واتخذ القرار' }).click();
+  await expect(page.getByRole('button', { name: 'افتح الطلب واتخذ القرار' })).toHaveCount(0);
+  await card.getByRole('button', { name: 'افتح الطلب', exact: true }).click();
   const sheet = page.getByRole('dialog', { name: /طلب حذف بيانات/ });
   await expect(sheet).toContainText('القرار للمدير الأعلى');
   await expect(sheet.getByRole('link', { name: 'راسل المشارك' })).toHaveAttribute('href', 'mailto:s@x.com');
@@ -121,4 +127,67 @@ test('غير المدير الأعلى يقرأ الورقة كاملة والأ
 test('سجل الطلبات غير مفعّل: سطر للمدير الأعلى وحده', async ({ page }) => {
   await setup(page, '#/leaders/participants', { erasures: { success: true, ready: false, items: [] } });
   await expect(page.getByText('سجل طلبات الحذف غير مفعّل')).toBeVisible();
+});
+
+test('غير المدير الأعلى: الشريط يقول لمن القرار، لا «افتح الطلب لتنفّذه»', async ({ page }) => {
+  await setup(page, '#/leaders/participants', { role: 'admin', can: false });
+  const banner = page.getByRole('region', { name: 'طلبات حذف البيانات' });
+  await expect(banner).toContainText('طلب حذف بيانات ينتظر قرار المدير الأعلى: سارة الأحمد، بقي 24 يومًا. لك أن تقرأه وتراسل صاحبه.');
+  await expect(banner).not.toContainText('لتنفّذه');
+});
+
+test('طلب تجاوز المهلة: الشريط والبطاقة بلون التأخر و«متأخر»، وطلبان مرتبان بالأقرب', async ({ page }) => {
+  const late = { ...request, days_left: -2, urgency: 'late' };
+  const items = [
+    { ...request, id: 'r2', participant_id: 'p2', name: 'خالد', email: 'k@x.com', days_left: 12 },
+    { ...late, participant_id: 'p1', name: 'سارة الأحمد', email: 's@x.com' },
+  ];
+  await setup(page, '#/leaders/participants', { erasures: { success: true, ready: true, items } });
+  const banner = page.getByRole('region', { name: 'طلبات حذف البيانات' });
+  await expect(banner).toHaveClass(/late/);
+  await expect(banner).toContainText('طلبا حذف بيانات ينتظران قرارك، منها 1 تجاوز المهلة.');
+  await expect(banner.getByRole('listitem').first()).toContainText('سارة الأحمد');
+  await expect(banner.getByRole('listitem').first()).toContainText('تجاوز المهلة بيومين');
+  await expect(banner.getByRole('listitem').nth(1)).toContainText('خالد');
+});
+
+test('البطاقة لطلب متأخر تقول «متأخر»', async ({ page }) => {
+  await setup(page, '#/leaders/participants/p1', { extra: { 'admin.erasure-get': { ...erasureGet(true), request: { ...request, days_left: -3, urgency: 'late' } } } });
+  const card = page.getByRole('region', { name: 'طلب حذف بيانات' });
+  await expect(card).toHaveClass(/late/);
+  await expect(card).toContainText('متأخر');
+  await expect(card).toContainText('تجاوز المهلة بـ3 أيام');
+});
+
+test('تعذّر بريد القرار: يقول للمدير إن القرار حُفظ ويعطيه العنوان ليرسل بنفسه', async ({ page }) => {
+  await setup(page, '#/leaders/participants/p1?erasure=open', { extra: { 'admin.erasure-decline': { success: true, mailed: false, email: 's@x.com' } } });
+  const sheet = page.getByRole('dialog', { name: /طلب حذف بيانات/ });
+  await sheet.getByRole('button', { name: /ارفض مع السبب/ }).click();
+  await sheet.getByRole('radio', { name: /طلب مكرر/ }).check();
+  await sheet.getByRole('button', { name: 'ارفض وأبلغه' }).click();
+  await expect(page.getByText('حُفظ القرار، ولم تصله الرسالة. أرسلها بنفسك إلى s@x.com.')).toBeVisible();
+});
+
+test('حساب العرض أو دفعة معلّقة: «نفّذ الحذف» معطل والمانع ظاهر، والرفض متاح', async ({ page }) => {
+  await setup(page, '#/leaders/participants/p1?erasure=open', { extra: { 'admin.erasure-get': { ...erasureGet(true), blockers: ['له صفحة دفع لم تكتمل بعد. تنتهي من تلقاء نفسها خلال 3 أيام، فنفّذ بعدها'] } } });
+  const sheet = page.getByRole('dialog', { name: /طلب حذف بيانات/ });
+  await expect(sheet.getByRole('alert')).toContainText('صفحة دفع لم تكتمل');
+  await expect(sheet.getByRole('button', { name: /نفّذ الحذف/ })).toBeDisabled();
+  await expect(sheet.getByRole('button', { name: /ارفض مع السبب/ })).toBeEnabled();
+});
+
+test('الحد الأدنى للنص ظاهر بعدّاد، وما كُتب لا يضيع بنقرة خارج الورقة أو Esc دون سؤال', async ({ page }) => {
+  await setup(page, '#/leaders/participants/p1?erasure=open');
+  const sheet = page.getByRole('dialog', { name: /طلب حذف بيانات/ });
+  await sheet.getByRole('button', { name: /تواصلت معه وسحب الطلب/ }).click();
+  await sheet.getByRole('radio', { name: 'باتصال' }).check();
+  await expect(sheet.getByText(/5 أحرف على الأقل/).first()).toBeVisible();
+  await sheet.getByLabel(/ما قاله باختصار/).fill('وافق');
+  await expect(sheet).toContainText('كتبت 4 من 5 أحرف على الأقل.');
+  await expect(sheet.getByRole('button', { name: 'أغلق الطلب وأبلغه' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByText('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟')).toBeVisible();
+  await page.getByRole('button', { name: 'إلغاء' }).click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByLabel(/ما قاله باختصار/)).toHaveValue('وافق');
 });

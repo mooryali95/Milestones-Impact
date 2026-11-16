@@ -636,10 +636,10 @@ export function eraseWithdrawnMail(name: string | null, via: string, at: string)
 // لا النظرة العامة. erase_request وerase_reminder في طبقة الحرج: بريد وسلاك معًا ولا يُجمعان
 export const ERASE_OWNER_KINDS = ['erase_request', 'erase_reminder'];
 export const erasureUrl = (participantId: string) => `${SITES.admin}/#/leaders/participants/${encodeURIComponent(participantId)}?erasure=open`;
+// العنوان بلا اسم: يُحفظ في سجل البريد 180 يومًا، ولا يُمحى بحذف صاحب الطلب (عنوانه بريد المالك لا بريده)
 export function eraseOwnerSubject(kind: string, detail: Record<string, unknown>) {
-  const who = String(detail.name || 'مشارك');
   const left = Number(detail.days_left);
-  return kind === 'erase_request' ? `طلب حذف بيانات من ${who}` : left < 0 ? `طلب حذف ${who} تجاوز المهلة` : `تذكير: طلب حذف ${who}، ${leftAr(left)}`;
+  return kind === 'erase_request' ? `طلب حذف بيانات جديد، ${leftAr(left)}` : left < 0 ? `طلب حذف بيانات ${leftAr(left)}` : `تذكير: طلب حذف بيانات، ${leftAr(left)}`;
 }
 export function eraseOwnerMail(kind: string, detail: Record<string, unknown>) {
   const who = String(detail.name || 'مشارك');
@@ -776,8 +776,9 @@ export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
   // سطر الترحيل اليومي (carryoverAlert): مرة في اليوم، فمهلته أقل من يوم بقليل
   mail_queue_carryover: 20 * 36e5,
-  // تذكير طلب الحذف: مفتاحه رقم الطلب ومرحلته، فمرة لكل طلب في اليوم على الأكثر
-  erase_reminder: 20 * 36e5,
+  // تذكير طلب الحذف بلا تهدئة: المرحلة تُحجز في الصف قبل التنبيه (erasure.ts remindSweep) فلا يتكرر، والتهدئة كانت
+  // تحجب إعادة تذكير لم يصل من أي قناة (تُكتب قبل أي قناة) ثم يُعدّ واصلًا
+  erase_reminder: 0,
   // كل تغيير في المساعد يُبلَّغ (بلا تهدئة)
   agent_key_changed: 0, agent_key_reverted: 0, agent_enabled: 0, agent_disabled: 0,
   // تنبيهات agent-chat تُهدَّأ هناك بعلامة يومية في القاعدة (agent_spend_alert)، فلا تهدئة ثانية تحجب مستوى عن آخر
@@ -813,7 +814,10 @@ const lastAlert = new Map<string, number>();
 export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; slack?: boolean };
 // key: مفتاح تهدئة داخل النوع (رقم طلب الحذف مثلًا): لكل طلب تنبيهه، فطلبان في عشر دقائق لا يُسقط ثانيهما.
 // المهلة وسطر السجل بالمفتاح المركب `${kind}:${key}`، والنوع في القناتين كما هو
-export async function raiseAlert(kind: string, detail: Record<string, unknown>, { key = null }: { key?: string | null } = {}): Promise<AlertResult> {
+// mail: ما يدخل متن بريد المالك وحده (اسم المشارك وسببه في طلب الحذف): لا يُكتب في سجل التدقيق الذي لا يُحذف منه
+// (system.alert)، ولا يصل سلاك ولا الرابط، ولا يدخل العنوان المحفوظ في سجل البريد
+export type AlertOpts = { key?: string | null; mail?: Record<string, unknown> | null };
+export async function raiseAlert(kind: string, detail: Record<string, unknown>, { key = null, mail = null }: AlertOpts = {}): Promise<AlertResult> {
   const windowMs = alertCooldown(kind);
   const cool = key ? `${kind}:${key}` : kind;
   const cooled = { cooled: true, webhook: false, email: false, slack: false };
@@ -843,14 +847,14 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>, 
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
     // طلب الحذف وتذكيره بقالبهما (الاسم والمهلة وزر الورقة)، وغيرهما بقالب الحادثة العام
     const owner = ERASE_OWNER_KINDS.includes(kind);
-    const email = await sendMail(CONFIG.alertEmail, owner ? eraseOwnerSubject(kind, detail) : alertSubject(kind), owner ? eraseOwnerMail(kind, detail) : alertMail(kind, detail, windowMs), [], { kind: 'alert' })
+    const email = await sendMail(CONFIG.alertEmail, owner ? eraseOwnerSubject(kind, detail) : alertSubject(kind), owner ? eraseOwnerMail(kind, { ...detail, ...(mail || {}) }) : alertMail(kind, detail, windowMs), [], { kind: 'alert' })
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
     // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
     if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
     return { cooled: false, webhook, slack, email };
   } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false, slack: false }; }
 }
-export async function alertOps(kind: string, detail: Record<string, unknown>, opts: { key?: string | null } = {}) {
+export async function alertOps(kind: string, detail: Record<string, unknown>, opts: AlertOpts = {}) {
   const r = await raiseAlert(kind, detail, opts);
   return r.webhook || !!r.slack || r.email;
 }

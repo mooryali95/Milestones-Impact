@@ -185,7 +185,7 @@ Deno.test('التذكير: قبل 10 أيام وقبل 3 ويوم المهلة �
   Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
   const created = Date.parse('2026-11-01T09:00:00Z');   // المهلة 1 ديسمبر
   const at = (iso: string) => Date.parse(iso);
-  const w = installFake({ ...seed(), erasure_requests: [{ id: RID, participant_id: PID, status: 'pending', reason: null, created_at: new Date(created).toISOString(), reminder_stage: 0 }] });
+  const w = installFake({ ...seed(), erasure_requests: [{ id: RID, participant_id: PID, status: 'pending', reason: 'انتهى البرنامج', created_at: new Date(created).toISOString(), reminder_stage: 0 }] });
   try {
     await withMail(() => withNet(async (calls) => {
       const run = async (iso: string) => (await ER.remindSweep(at(iso))).reminded;
@@ -204,8 +204,13 @@ Deno.test('التذكير: قبل 10 أيام وقبل 3 ويوم المهلة �
       assertEquals(w.tables.audit_log.filter((x) => x.action === 'erasure.remind').length, 5);
       // البريد بقالب المالك لا قالب الحادثة العام
       const mail = resendCalls(calls);
-      assertEquals(mail.map((m) => m.body.subject).slice(-1)[0], 'طلب حذف سارة أحمد الأحمد تجاوز المهلة');
-      assertEquals(String(mail[0].body.html).includes('افتح الطلب'), true);
+      // العنوان يُحفظ في سجل البريد فلا يحمل الاسم، والمتن (لا يُحفظ) يحمل الاسم والسبب
+      assertEquals(mail.map((m) => m.body.subject).slice(-1)[0], 'طلب حذف بيانات تجاوز المهلة بيومين');
+      assertEquals(mail.some((m) => String(m.body.subject).includes('سارة')), false);
+      for (const x of ['افتح الطلب', 'سارة أحمد الأحمد', 'انتهى البرنامج']) assertEquals(String(mail[0].body.html).includes(x), true, x);
+      // سجل التدقيق لا يُحذف منه، وسلاك والرابط خارج المنصة: معرّفات ومهلة وحدها، بلا اسم ولا سبب
+      const kept = JSON.stringify([w.tables.audit_log, hooks.map((c) => c.body)]);
+      assertEquals([kept.includes('سارة'), kept.includes('انتهى البرنامج')], [false, false]);
     }), 'owner@x.sa');
   } finally { w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
 });
@@ -222,7 +227,45 @@ Deno.test('التذكير: إن لم يصل من أي قناة تُعاد مرح
       const r = await ER.remindSweep(now);
       assertEquals([r.reminded, (r as any).failed], [0, 1]);
       assertEquals(w.tables.erasure_requests.map((x) => x.reminder_stage), [0, 0]);
+      // الساعة التالية يُعاد فعلًا: لا تهدئة تحجبه ثم تعدّه واصلًا
+      const again = await ER.remindSweep(now + 36e5);
+      assertEquals([again.reminded, (again as any).failed], [0, 1]);
+      assertEquals(w.tables.audit_log.filter((x) => x.action === 'erasure.remind').length, 0);
     }));
+    // وحين تعود قناة يصل ويُعلَّم
+    Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+    await withMail(() => withNet(async (calls) => {
+      assertEquals((await ER.remindSweep(now + 2 * 36e5)).reminded, 1);
+      assertEquals(calls.filter((c) => c.url.includes('hooks.example')).length, 1);
+      assertEquals(w.tables.erasure_requests[0].reminder_stage, 1);
+    }));
+  } finally { w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+Deno.test('تنبيه الطلب عند وصوله: الاسم والسبب في متن بريد المالك وحده، لا في سجل التدقيق ولا العنوان ولا الرابط', async () => {
+  Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
+  const { eraseRequest } = await import('./privacy.ts');
+  const w = installFake({ ...seed(), erasure_requests: [] });
+  try {
+    await withMail(() => withNet(async (calls) => {
+      const p = { id: PID, full_name: 'سارة أحمد الأحمد', email: 'sara@x.sa', is_demo: false };
+      const r: any = await eraseRequest(p, { confirm_email: 'sara@x.sa', reason: 'جوالي رقم-جوالي-الخاص' });
+      assertEquals(r.success, true);
+      const owner = resendCalls(calls).find((m) => String(m.body.to) === 'owner@x.sa')!;
+      assertEquals([String(owner.body.subject).includes('سارة'), String(owner.body.html).includes('سارة أحمد الأحمد'), String(owner.body.html).includes('رقم-جوالي-الخاص')], [false, true, true]);
+      const kept = JSON.stringify([w.tables.audit_log, calls.filter((c) => c.url.includes('hooks.example')).map((c) => c.body)]);
+      assertEquals([kept.includes('سارة'), kept.includes('رقم-جوالي-الخاص')], [false, false]);
+    }), 'owner@x.sa');
+  } finally { w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
+});
+
+Deno.test('سحب المشارك بعد قرار المدير في اللحظة نفسها لا يقول «سحبنا»', async () => {
+  const { eraseRequest } = await import('./privacy.ts');
+  // الطلب يُقرأ قائمًا ثم يسبق القرار كتابة السحب
+  const w = installFake(seed(), { fail: (t, op) => { if (t === 'erasure_requests' && op.kind === 'update') w.tables.erasure_requests[0].status = 'rejected'; return null; } });
+  try {
+    const e = await failOf(() => eraseRequest({ id: PID, full_name: 'سارة', email: 'sara@x.sa', is_demo: false }, { cancel: true }));
+    assertEquals([e.status, e.code, w.tables.erasure_requests[0].status], [409, 'decided', 'rejected']);
   } finally { w.restore(); }
 });
 

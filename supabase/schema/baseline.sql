@@ -4016,7 +4016,7 @@ begin
 end $function$
 ;
 
-CREATE OR REPLACE FUNCTION leaders.erasure_purge(p_participant uuid)
+CREATE OR REPLACE FUNCTION leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text)
  RETURNS integer
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -4024,10 +4024,19 @@ CREATE OR REPLACE FUNCTION leaders.erasure_purge(p_participant uuid)
 AS $function$
 declare n integer;
 begin
+  perform 1 from leaders.erasure_requests where id = p_request and participant_id = p_participant and status = 'pending' for update;
+  if not found then raise exception 'erasure_purge: request not pending' using errcode = 'P0003'; end if;
+  if exists (select 1 from leaders.payments where participant_id = p_participant and status = 'pending') then
+    raise exception 'erasure_purge: pending payment' using errcode = 'P0004';
+  end if;
+  update leaders.erasure_requests set status = 'done', decided_at = now(), decided_by = p_by, email_hash = p_email_hash, reason = null
+    where id = p_request;
+  delete from leaders.payments where participant_id = p_participant and status in ('failed', 'expired');
+  update leaders.payments set customer_name = null, note = null, admin_note = null where participant_id = p_participant;
   delete from leaders.certificates where participant_id = p_participant;
   delete from leaders.participants where id = p_participant and coalesce(is_demo, false) = false;
   get diagnostics n = row_count;
-  -- لا صف (حذف متزامن أو حساب العرض): ترجع الشهادات كما كانت
+  -- لا صف (حذف متزامن أو حساب العرض): يرجع كل ما سبق كما كان
   if n = 0 then raise exception 'erasure_purge: participant not found' using errcode = 'P0002'; end if;
   return n;
 end $function$

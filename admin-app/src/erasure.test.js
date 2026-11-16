@@ -46,6 +46,12 @@ describe('الشريط يقول ماذا تفعل', () => {
     expect(bannerAr([{ name: 'أ', days_left: 20 }, { name: 'ب', days_left: 4 }, { name: 'ج', days_left: 12 }]).text).toBe('3 طلبات حذف بيانات تنتظر قرارك، أقربها ينتهي بعد 4 أيام.');
     expect(bannerAr([{ name: 'أ', days_left: 20 }, { name: 'ب', days_left: -1 }])).toEqual({ tone: 'late', text: 'طلبا حذف بيانات ينتظران قرارك، منها 1 تجاوز المهلة.' });
     expect(bannerAr([])).toBe(null);
+    // من لا يقرر لا يُقال له «قرر الآن» ثم تُعطَّل أزراره
+    const off = { decide: false };
+    expect(bannerAr([{ name: 'سارة الأحمد', days_left: 24 }], off).text).toBe('طلب حذف بيانات ينتظر قرار المدير الأعلى: سارة الأحمد، بقي 24 يومًا. لك أن تقرأه وتراسل صاحبه.');
+    expect(bannerAr([{ name: 'سارة الأحمد', days_left: -2 }], off).text).toBe('تجاوز طلب حذف بيانات سارة الأحمد المهلة النظامية بيومين. القرار للمدير الأعلى، فذكّره به.');
+    expect(bannerAr([{ name: 'أ', days_left: 20 }, { name: 'ب', days_left: 4 }], off).text).toBe('طلبا حذف بيانات ينتظران قرار المدير الأعلى، أقربها ينتهي بعد 4 أيام.');
+    for (const b of [[{ days_left: 24 }], [{ days_left: -2 }], [{ days_left: 1 }, { days_left: 2 }]]) expect(bannerAr(b, off).text).not.toMatch(/قرارك|قرر الآن|لتنفّذه/);
   });
 });
 
@@ -81,6 +87,14 @@ describe('الصندوق', () => {
     const r = inboxOf({ erasure: [{ id: 'a', participant_id: 'p', at: at(10) }, { id: 'b', participant_id: 'p', at: at(24) }, { id: 'c', participant_id: 'p', at: at(31) }] }, now);
     expect(r.items.map((i) => [i.id, !!i.soon, i.late])).toEqual([['c', false, true], ['b', true, false], ['a', false, false]]);
     expect([r.soon, r.late]).toEqual([1, 1]);
+  });
+  it('«قريب» بأيام الرياض كسطر البند نفسه، لا بأيام UTC منذ الطلب (قرب منتصف ليل الرياض)', () => {
+    // استُلم 23:00 بالرياض فمهلته 10 ديسمبر. الساعة 01:00 من 3 ديسمبر بالرياض: بقي 7 أيام، ومضت 22 يومًا UTC
+    const created = '2026-11-10T20:00:00Z';
+    const now = T('2026-12-02T22:00:00Z');
+    expect(daysLeft(created, now)).toBe(7);
+    const r = inboxOf({ erasure: [{ id: 'a', participant_id: 'p', at: created }] }, now);
+    expect([r.items[0].soon, r.items[0].late]).toEqual([true, false]);
   });
 });
 

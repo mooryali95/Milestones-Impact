@@ -7,9 +7,9 @@ import React, { useState } from 'react';
 import { L } from '../leaders.js';
 import { date, dateTime } from '../dates.js';
 import { deleteFollowUp } from '../erase-follow.js';
-import { useEscape, useUI } from '../ui.jsx';
+import { useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import {
-  bannerAr, ERASE_DELETED, ERASE_GROUNDS, ERASE_KEPT, ERASE_NOTE_MIN, ERASE_STATUS_AR, leftAr, nameMatches, WITHDRAW_VIA,
+  bannerAr, ERASE_DELETED, ERASE_GROUNDS, ERASE_KEPT, ERASE_NOTE_MIN, ERASE_STATUS_AR, leftAr, nameMatches, WITHDRAW_NOTE_MIN, WITHDRAW_VIA,
 } from '../../../supabase/functions/leaders-api/erasure.js';
 
 // طلب فتح الورقة عند الوصول إلى الملف من الشريط (المسار يُبدَّل قبل أن يُركَّب الملف)
@@ -26,11 +26,12 @@ export function ErasureBanner({ data, isSuper, onOpen }) {
     return isSuper ? <div className="er-banner off" role="status">سجل طلبات الحذف غير مفعّل، فطلبات المشاركين تصلك بالبريد ولا تُتتبع هنا. فعّله بسير الترحيلات.</div> : null;
   }
   const items = data.items || [];
-  const b = bannerAr(items);
+  const b = bannerAr(items, { decide: !!isSuper });
   if (!b) return null;
   const go = (id) => { askOpen(id); onOpen(id); };
   return (
-    <div className={`er-banner ${b.tone}`} role="alert" aria-label="طلبات حذف البيانات">
+    // منطقة معنونة لا role=alert: الشريط يُركَّب من جديد مع كل تحميل للقائمة، فالتنبيه كان يقاطع قارئ الشاشة في كل بحث
+    <section className={`er-banner ${b.tone}`} aria-label="طلبات حذف البيانات">
       <p>{b.text}</p>
       {items.length === 1 ? (
         <button type="button" className="btn-sm primary" onClick={() => go(items[0].participant_id)}>افتح الطلب</button>
@@ -40,7 +41,7 @@ export function ErasureBanner({ data, isSuper, onOpen }) {
             <button type="button" className="btn-sm ghost" onClick={() => go(e.participant_id)}>افتح الطلب</button></li>
         ))}</ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -52,7 +53,7 @@ export function ErasureCard({ e, onOpen }) {
     <section className={`la-card er-card ${r.urgency}`} aria-labelledby="er-card-h">
       <div className="er-card-head">
         <h3 id="er-card-h">طلب حذف بيانات</h3>
-        <span className={`la-chip ${r.urgency === 'late' ? 'bad' : 'warn'}`}>{r.urgency === 'late' ? 'متأخر' : 'ينتظر قرارك'}</span>
+        <span className={`la-chip ${r.urgency === 'late' ? 'bad' : 'warn'}`}>{r.urgency === 'late' ? 'متأخر' : e.can_decide ? 'ينتظر قرارك' : 'ينتظر قرار المدير الأعلى'}</span>
       </div>
       <dl className="er-facts">
         <div><dt>استُلم</dt><dd>{date(r.created_at)}</dd></div>
@@ -60,7 +61,7 @@ export function ErasureCard({ e, onOpen }) {
         <div className="er-left"><dt>المتبقي</dt><dd>{leftAr(r.days_left)}</dd></div>
         <div><dt>السبب</dt><dd>{r.reason || 'لم يذكر سببًا'}</dd></div>
       </dl>
-      <button type="button" className="btn-sm primary" onClick={onOpen}>افتح الطلب واتخذ القرار</button>
+      <button type="button" className="btn-sm primary" onClick={onOpen}>{e.can_decide ? 'افتح الطلب واتخذ القرار' : 'افتح الطلب'}</button>
     </section>
   );
 }
@@ -86,7 +87,10 @@ export function ErasureSheet({ e, onClose, onDecided, onDeleted }) {
   const [ground, setGround] = useState('');
   const [note, setNote] = useState('');
   const [via, setVia] = useState('');
-  useEscape(() => !busy && onClose(), true);
+  // ما كُتب (توضيح الرفض، ما قاله المشارك، الاسم للتأكيد) لا يضيع بنقرة خارج الورقة أو Esc دون سؤال
+  const dirty = !!(typed.trim() || note.trim());
+  const close = useGuardedClose(dirty, onClose);
+  useEscape(() => !busy && close(), true);
   const r = e.request;
   const p = e.participant || {};
   const c = e.counts || {};
@@ -109,10 +113,14 @@ export function ErasureSheet({ e, onClose, onDecided, onDeleted }) {
   const unsent = (x, ok) => (x.mailed ? toast(ok) : confirm(`حُفظ القرار، ولم تصله الرسالة. أرسلها بنفسك إلى ${x.email}.`, { ok: 'فهمت' }));
   const decline = () => run('admin.erasure-decline', { ground, note }, async (x) => { await unsent(x, 'رُفض الطلب وأُبلغ المشارك بالسبب'); onDecided(); });
   const withdrawn = () => run('admin.erasure-withdrawn', { via, note }, async (x) => { await unsent(x, 'أُغلق الطلب ووصله تأكيد السحب'); onDecided(); });
-  const noteOk = ground === 'other' ? note.trim().length >= ERASE_NOTE_MIN : true;
+  // الطول بعد ضم المسافات كما يحسبه الخادم (cleanNote)، فلا يُفعَّل الزر ثم يرفضه الخادم
+  const len = note.replace(/\s+/g, ' ').trim().length;
+  const noteMin = ground === 'other' ? ERASE_NOTE_MIN : 0;
+  const noteOk = len >= noteMin;
+  const withdrawOk = len >= WITHDRAW_NOTE_MIN;
 
   return (
-    <div className="mid-ov" onMouseDown={(ev) => ev.target === ev.currentTarget && !busy && onClose()}>
+    <div className="mid-ov" onMouseDown={(ev) => ev.target === ev.currentTarget && !busy && close()}>
       <div className="la-form mi-form bulk-approve er-sheet" role="dialog" aria-modal="true" aria-labelledby="er-sheet-h">
         <h3 id="er-sheet-h">طلب حذف بيانات: {p.full_name}</h3>
         <div className="ba-body">
@@ -168,8 +176,9 @@ export function ErasureSheet({ e, onClose, onDecided, onDeleted }) {
                     <span>{g.ar}{g.basis && <small>{g.basis}</small>}</span></label>
                 ))}
               </fieldset>
-              <label className="field"><span>توضيح يصل المشارك {ground === 'other' ? '(إلزامي)' : '(اختياري)'}</span>
-                <textarea rows={3} maxLength={1000} value={note} onChange={(ev) => setNote(ev.target.value)} /></label>
+              <label className="field"><span>توضيح يصل المشارك {ground === 'other' ? `(إلزامي، ${ERASE_NOTE_MIN} أحرف على الأقل)` : '(اختياري)'}</span>
+                <textarea rows={3} maxLength={1000} value={note} onChange={(ev) => setNote(ev.target.value)} aria-describedby={noteMin ? 'er-note-hint' : undefined} /></label>
+              {noteMin > 0 && <p id="er-note-hint" className={`la-muted er-hint${len && !noteOk ? ' short' : ''}`} aria-live="polite">{noteOk ? 'يكفي.' : `كتبت ${len} من ${noteMin} أحرف على الأقل.`}</p>}
               <p className="la-muted">يصله بريد «ردنا على طلب حذف بياناتك» فيه السبب وأساسه وتوضيحك، وأن له إعادة الطلب متى زال السبب، وحقه في الشكوى إلى سدايا.</p>
             </section>
           )}
@@ -181,17 +190,18 @@ export function ErasureSheet({ e, onClose, onDecided, onDeleted }) {
                   <label key={k} className="er-radio"><input type="radio" name="er-via" value={k} checked={via === k} onChange={() => setVia(k)} /><span>{l}</span></label>
                 ))}
               </fieldset>
-              <label className="field"><span>ما قاله باختصار (إلزامي)</span>
-                <textarea rows={2} maxLength={1000} value={note} onChange={(ev) => setNote(ev.target.value)} /></label>
+              <label className="field"><span>ما قاله باختصار (إلزامي، {WITHDRAW_NOTE_MIN} أحرف على الأقل)</span>
+                <textarea rows={2} maxLength={1000} value={note} onChange={(ev) => setNote(ev.target.value)} aria-describedby="er-withdraw-hint" /></label>
+              <p id="er-withdraw-hint" className={`la-muted er-hint${len && !withdrawOk ? ' short' : ''}`} aria-live="polite">{withdrawOk ? 'يكفي.' : `كتبت ${len} من ${WITHDRAW_NOTE_MIN} أحرف على الأقل.`}</p>
               <p className="la-muted">يصله بريد «أُغلق طلب حذف بياناتك بناءً على طلبك» مع رابط ملفه إن أراد إعادته.</p>
             </section>
           )}
         </div>
         <div className="la-row between ba-foot">
-          <button type="button" className="btn-sm ghost" disabled={busy} onClick={() => (mode ? setMode(null) : onClose())}>{mode ? 'رجوع' : 'إغلاق'}</button>
+          <button type="button" className="btn-sm ghost" disabled={busy} onClick={() => (mode ? setMode(null) : close())}>{mode ? 'رجوع' : 'إغلاق'}</button>
           {mode === 'execute' && <button type="button" className="btn-sm danger" disabled={busy || !nameMatches(typed, p.full_name)} onClick={execute}>{busy ? 'يُنفَّذ…' : 'نفّذ الحذف نهائيًا'}</button>}
           {mode === 'decline' && <button type="button" className="btn-sm primary" disabled={busy || !ground || !noteOk} onClick={decline}>{busy ? 'يُرسل…' : 'ارفض وأبلغه'}</button>}
-          {mode === 'withdrawn' && <button type="button" className="btn-sm primary" disabled={busy || !via || note.trim().length < 5} onClick={withdrawn}>{busy ? 'يُرسل…' : 'أغلق الطلب وأبلغه'}</button>}
+          {mode === 'withdrawn' && <button type="button" className="btn-sm primary" disabled={busy || !via || !withdrawOk} onClick={withdrawn}>{busy ? 'يُرسل…' : 'أغلق الطلب وأبلغه'}</button>}
         </div>
       </div>
     </div>

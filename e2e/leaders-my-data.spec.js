@@ -49,9 +49,12 @@ test('المشارك ينزّل نسخة بياناته، ويطلب الحذف 
 
   await card.getByRole('button', { name: 'اطلب الحذف' }).click();
   // ما يُحذف وما يبقى بنص الإدارة والسياسة: الشهادة تُلغى، والدفع 10 سنوات، والنسخ الاحتياطية بمدتها
-  await expect(card).toContainText('تُلغى ويُحذف رقم تحققها');
-  await expect(card).toContainText('سجلات الدفع 10 سنوات');
-  await expect(card).toContainText('30 يومًا لليومية وسنة للشهرية');
+  await expect(card).toContainText('الشهادة ورقم تحققها: تُلغى وتُحذف');
+  await expect(card).toContainText('10 سنوات');
+  // ما يبقى كاملًا كما في الورقة والسياسة: سجل الدفع بالبريد، وأثر الطلب، وسجل الموافقات بمعرّف بلا اسم
+  await expect(card).toContainText('أثر الطلب');
+  await expect(card).toContainText('سجل الموافقات بمعرّف بلا اسم');
+  await expect(card).toContainText('اليومية 30 يومًا والشهرية سنة');
   const send = card.getByRole('button', { name: 'أرسل طلب الحذف' });
   await expect(send).toBeDisabled();
   await card.getByLabel(/للتأكيد اكتب بريدك/).fill('sara@x.sa');

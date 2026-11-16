@@ -78,8 +78,17 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     const own = opts.rpc?.(name, args, tables);
     if (own) return own;
     if (name === 'erasure_purge') {
+      // كالدالة في 20261116150000: الطلب القائم أولًا، ثم الدفعة المعلّقة، ثم الإغلاق وسجل الدفع والشهادات والصف
+      const req = (tables.erasure_requests || []).find((r) => r.id === args.p_request && r.participant_id === args.p_participant && r.status === 'pending');
+      if (!req) return { data: null, error: { code: 'P0003', message: 'erasure_purge: request not pending' } };
+      const pays = () => (tables.payments || []).filter((x) => x.participant_id === args.p_participant);
+      if (pays().some((x) => x.status === 'pending')) return { data: null, error: { code: 'P0004', message: 'erasure_purge: pending payment' } };
       const hit = (tables.participants || []).filter((r) => r.id === args.p_participant && !r.is_demo);
       if (!hit.length) return { data: null, error: { code: 'P0002', message: 'erasure_purge: participant not found' } };
+      Object.assign(req, { status: 'done', decided_at: new Date().toISOString(), decided_by: args.p_by, email_hash: args.p_email_hash, reason: null });
+      writes.push({ table: 'erasure_requests', kind: 'update', ids: [req.id] });
+      if (tables.payments) tables.payments = tables.payments.filter((x) => !(x.participant_id === args.p_participant && ['failed', 'expired'].includes(x.status)));
+      for (const x of pays()) Object.assign(x, { customer_name: null, note: null, admin_note: null });
       writes.push({ table: 'certificates', kind: 'delete', ids: (tables.certificates || []).filter((c) => c.participant_id === args.p_participant).map((c) => c.id) });
       tables.certificates = (tables.certificates || []).filter((c) => c.participant_id !== args.p_participant);
       writes.push({ table: 'participants', kind: 'delete', ids: hit.map((r) => r.id) });

@@ -5,7 +5,7 @@
 // ما يُحذف وما يبقى من erasure.js، المصدر الواحد مع ورقة الإدارة وبريد التنفيذ وسياسة الخصوصية.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
-import { BACKUP_DAILY_DAYS, PAYMENT_RETENTION_YEARS } from '../../../supabase/functions/leaders-api/erasure.js';
+import { ERASE_DELETED, ERASE_KEPT } from '../../../supabase/functions/leaders-api/erasure.js';
 
 const day = (iso) => new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -83,8 +83,11 @@ export default function MyData({ me }) {
         </div>
       ) : (
         <form className="stack" onSubmit={request}>
-          <p className="small"><b>ما الذي يُحذف؟</b> حسابك وقياسك وتقدمك ومبادرتك وملفاتك المرفوعة، وشهادتك إن صدرت: تُلغى ويُحذف رقم تحققها.</p>
-          <p className="small"><b>ما الذي يبقى؟</b> سجلات الدفع {PAYMENT_RETENTION_YEARS} سنوات كما يلزم النظام، بلا ربط بحسابك. ونسخنا الاحتياطية تزول منها بياناتك بانقضاء مدتها ({BACKUP_DAILY_DAYS} يومًا لليومية وسنة للشهرية)، ولا تُستعاد منها.</p>
+          {/* النصوص نفسها في ورقة الإدارة وبريد التنفيذ (erasure.js)، فلا يقرأ المشارك هنا غير ما يصله بعد التنفيذ */}
+          <div className="small"><b>ما الذي يُحذف؟</b>
+            <ul>{ERASE_DELETED.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          <div className="small"><b>ما الذي يبقى؟</b>
+            <ul>{ERASE_KEPT.map((k) => <li key={k.key}><b>{k.title}:</b> {k.text}</li>)}</ul></div>
           <label className="field"><span>سبب الطلب <em>(اختياري)</em></span>
             <input className="input" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
           <label className="field"><span>للتأكيد اكتب بريدك: <span className="ltr">{email}</span></span>

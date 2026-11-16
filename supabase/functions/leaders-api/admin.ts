@@ -18,7 +18,7 @@ import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition, orgCohortSetups, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
-import { closeOnDelete as closeErasure, markNotified, pendingEraseId } from './privacy.ts';
+import { closeOnDelete as closeErasure, markNotified, noteOnDone, pendingEraseId } from './privacy.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
@@ -522,9 +522,14 @@ export async function removeParticipant(a: Admin, impact: Awaited<ReturnType<typ
   const refs = [`participant:${id}`, ...((raters.data || []) as any[]).map((r) => `rater:${r.id}`)];
   const email_hash = await hash(email);
   if (purgeCertificates) {
-    const del = await db.rpc('erasure_purge', { p_participant: id });
+    // في معاملة واحدة: يُحجز الطلب بشرط أنه قائم ويُغلق، ثم سجل الدفع والشهادات والصف (20261116150000). سحب المشارك أو
+    // قرار مدير آخر في اللحظة نفسها يسبقه فلا يُحذف شيء
+    if (!request) throw new Fail('رقم الطلب مطلوب للتنفيذ', 400);
+    const del = await db.rpc('erasure_purge', { p_participant: id, p_request: request, p_by: a.email, p_email_hash: email_hash });
     if (del.error) {
       if (del.error.code === 'P0002') throw new Fail('حُذف هذا المشارك للتو في عملية أخرى', 409, 'gone');
+      if (del.error.code === 'P0003') throw new Fail('قُرِّر في هذا الطلب للتو (سحبه صاحبه أو قرر فيه مدير آخر). لم يُحذف شيء. حدّث الصفحة', 409, 'decided');
+      if (del.error.code === 'P0004') throw new Fail('له صفحة دفع لم تكتمل بعد. لم يُحذف شيء، فنفّذ بعد انتهائها', 409, 'blocked');
       console.error('erasure_purge:', del.error.message);
       throw new Fail('تعذّر الحذف. لم يُحذف شيء، والطلب قائم', 500, 'db_error');
     }
@@ -545,7 +550,11 @@ export async function removeParticipant(a: Admin, impact: Awaited<ReturnType<typ
     const err = (await remove()) && (await remove());   // محاولة ثانية لعطل عابر
     if (err) filesError = String((err as Error).message || err).slice(0, 200);
   }
-  const closed = await closeErasure(request, a.email, filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن تحت المجلد ${id}/ (${filesError}). تُحذف يدويًّا ثم يُرسل التأكيد للمشارك` : null, email_hash);
+  const filesNote = filesError ? `تعذّر حذف ${paths.length} ملفًا من المخزن تحت المجلد ${id}/ (${filesError}). تُحذف يدويًّا ثم يُرسل التأكيد للمشارك` : null;
+  // في التنفيذ أغلقت erasure_purge الطلب مع الحذف، فلا يبقى إلا ملاحظة الملفات إن تعذّرت
+  // (تعذّر كتابة الملاحظة لا يفتحه: التنبيه بعده يحمل المجلد ومساراته)
+  if (purgeCertificates && filesNote) await noteOnDone(request!, filesNote);
+  const closed = purgeCertificates ? true : await closeErasure(request, a.email, filesNote, email_hash);
   if (filesError || !closed) {
     await alertOps(filesError ? 'erase_files_failed' : 'erase_close_failed', {
       request, participant: id, ...(filesError ? { files: paths.length, folder: `${id}/`, paths: paths.slice(0, 20).join(' '), error: filesError } : {}),

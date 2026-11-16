@@ -9,7 +9,8 @@ import { audit, db, ERASE_DECLINED_SUBJECT, ERASE_WITHDRAWN_SUBJECT, eraseDeclin
 import { type Admin, needsSecondFactor, participantImpact, removeParticipant, requireSuper } from './admin.ts';
 import { markNotified } from './privacy.ts';
 import { eraseView } from './privacy.js';
-import { daysLeft, ERASE_GROUNDS, ERASE_NOTE_MAX, ERASE_NOTE_MIN, ERASE_STATUS_AR, nameMatches, reminderDue, urgency, WITHDRAW_VIA } from './erasure.js';
+import { daysLeft, ERASE_GROUNDS, ERASE_NOTE_MAX, ERASE_NOTE_MIN, ERASE_STATUS_AR, nameMatches, reminderDue, urgency, WITHDRAW_NOTE_MIN, WITHDRAW_VIA } from './erasure.js';
+import { EXPIRE_AFTER_DAYS } from './payments-ledger.js';
 
 type Body = Record<string, any>;
 const missingTable = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || /erasure_requests/.test(String(e.message || '')));
@@ -56,9 +57,18 @@ export async function get(a: Admin, b: Body) {
   return {
     ...base, request: requestView(pending), timeline: await timelineOf(pending),
     participant: impact.participant, counts: impact.counts,
-    // حساب العرض وحده يمنع التنفيذ. الدفع المؤكد لا يمنع (يبقى سجله)، والشهادة تُلغى وتُحذف (قرار المالك 1)
-    blockers: impact.blockers.filter((x) => x.startsWith('حساب العرض')),
+    // حساب العرض ودفعة معلّقة يمنعان التنفيذ. الدفع المؤكد لا يمنع (يبقى سجله)، والشهادة تُلغى وتُحذف (قرار المالك 1)
+    blockers: await executeBlockers(impact),
   };
+}
+// صفحة دفع مفتوحة: لو اكتملت بعد الحذف لخُصم ماله بلا حساب ووصله إيصال على عنوانه. تنتهي وحدها بعد أيام (expireAbandoned)
+export const PENDING_PAY_AR = `له صفحة دفع لم تكتمل بعد. تنتهي من تلقاء نفسها خلال ${EXPIRE_AFTER_DAYS} أيام، فنفّذ بعدها`;
+async function executeBlockers(impact: Awaited<ReturnType<typeof participantImpact>>) {
+  const out = impact.blockers.filter((x) => x.startsWith('حساب العرض'));
+  const { count, error } = await db.from('payments').select('id', { count: 'exact', head: true }).eq('participant_id', impact.participant.id).eq('status', 'pending');
+  if (error) throw new Fail('تعذّر قراءة دفعاته', 503, 'busy');
+  if ((count ?? 0) > 0) out.push(PENDING_PAY_AR);
+  return out;
 }
 
 async function loadPending(b: Body) {
@@ -94,8 +104,8 @@ export async function execute(a: Admin, b: Body) {
   requireSuper(a);
   const req = await loadPending(b);
   const impact = await participantImpact({ participant_id: req.participant_id });
-  const demo = impact.blockers.find((x) => x.startsWith('حساب العرض'));
-  if (demo) throw new Fail(demo, 409, 'blocked');
+  const [block] = await executeBlockers(impact);
+  if (block) throw new Fail(block, 409, 'blocked');
   if (!nameMatches(b.confirm_name, impact.participant.full_name)) throw new Fail('اكتب اسم المشارك كما يظهر في ملفه للتأكيد', 400, 'confirm');
   const r = await removeParticipant(a, impact, req.id, { purgeCertificates: true });
   await note(a, 'erasure.execute', req.id, { mailed: r.mailed, files: r.files, certificates: impact.counts.certificates, payments_kept: impact.counts.payments });
@@ -108,7 +118,7 @@ export async function decline(a: Admin, b: Body) {
   const ground = String(b.ground || '') as keyof typeof ERASE_GROUNDS;
   if (!(ground in ERASE_GROUNDS)) throw new Fail('اختر سبب الرفض', 400, 'ground');
   const text = cleanNote(b.note);
-  if (ground === 'other' && (text || '').length < ERASE_NOTE_MIN) throw new Fail('اكتب السبب بوضوح، فهو يصل المشارك', 400, 'note');
+  if (ground === 'other' && (text || '').length < ERASE_NOTE_MIN) throw new Fail(`اكتب السبب بوضوح (${ERASE_NOTE_MIN} أحرف على الأقل)، فهو يصل المشارك`, 400, 'note');
   const req = await loadPending(b);
   const p = await ownerOf(req.participant_id);
   const at = new Date().toISOString();
@@ -125,7 +135,7 @@ export async function withdrawn(a: Admin, b: Body) {
   const via = String(b.via || '') as keyof typeof WITHDRAW_VIA;
   if (!(via in WITHDRAW_VIA)) throw new Fail('اختر كيف أبلغك المشارك بسحب طلبه', 400, 'via');
   const text = cleanNote(b.note);
-  if ((text || '').length < 5) throw new Fail('اكتب ما قاله المشارك باختصار', 400, 'note');
+  if ((text || '').length < WITHDRAW_NOTE_MIN) throw new Fail(`اكتب ما قاله المشارك باختصار (${WITHDRAW_NOTE_MIN} أحرف على الأقل)`, 400, 'note');
   const req = await loadPending(b);
   const p = await ownerOf(req.participant_id);
   const at = new Date().toISOString();
@@ -151,12 +161,12 @@ export async function remindSweep(now = Date.now()) {
     const claim = await db.from('erasure_requests').update({ reminder_stage: stage, reminded_at: new Date(now).toISOString() }).eq('id', r.id).eq('status', 'pending').eq('reminder_stage', old).select('id');
     if (claim.error || !(claim.data || []).length) continue;   // سبقته تشغيلة أخرى أو قُرِّر فيه
     const left = daysLeft(r.created_at, now);
+    // التفاصيل تُكتب في سجل التدقيق الذي لا يُحذف منه: معرّفات ومهلة وحدها، والاسم والسبب في متن البريد وحده
     const sent = await raiseAlert('erase_reminder', {
-      request: r.id, participant: r.participant_id, name: nameOf.get(r.participant_id) || null, due_at: eraseView(r)!.due_at, days_left: left, stage,
-      ...(r.reason ? { reason: r.reason } : {}), url: erasureUrl(r.participant_id),
-    }, { key: `${r.id}:${stage}` }).catch(() => null);
-    // المهدَّأ وصل من قبل بالمفتاح نفسه، فلا يُعاد
-    const delivered = !!sent && (sent.cooled || sent.webhook || !!sent.slack || sent.email);
+      request: r.id, participant: r.participant_id, due_at: eraseView(r)!.due_at, days_left: left, stage, url: erasureUrl(r.participant_id),
+    }, { key: `${r.id}:${stage}`, mail: { name: nameOf.get(r.participant_id) || null, ...(r.reason ? { reason: r.reason } : {}) } }).catch(() => null);
+    // لا تهدئة لهذا النوع (المرحلة المحجوزة تمنع التكرار)، فالمهدَّأ لم يصل: لا يُعدّ واصلًا
+    const delivered = !!sent && !sent.cooled && (sent.webhook || !!sent.slack || sent.email);
     if (!delivered) { failed++; await db.from('erasure_requests').update({ reminder_stage: old }).eq('id', r.id).eq('reminder_stage', stage); continue; }
     reminded++;
     await audit('system', 'erasure', 'erasure.remind', 'erasure_requests', r.id, null, { stage, days_left: left }).catch((e) => console.error('erasure.remind audit:', e));
