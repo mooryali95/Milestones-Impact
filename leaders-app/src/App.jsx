@@ -51,6 +51,8 @@ const Legal = lazy(() => import('./screens/Legal.jsx'));
 import Consent, { PolicyBanner } from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
+import { SectionBoundary } from './ErrorBoundary.jsx';
+import { useModalFocus } from '../../shared/ui/modal-focus.js';
 // الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
 
 
@@ -124,6 +126,9 @@ const isOrgPortal = () => location.pathname === '/org' || location.pathname.star
 const isVerify = () => location.pathname === '/v' || location.pathname.startsWith('/v/');
 
 export default function App() {
+  // حبس التركيز في كل نافذة aria-modal من مكان واحد مع لوحة الإدارة (shared/ui/modal-focus.js)، ومنها نوافذ الكتاب الأم
+  // في لوحة الخبير («اقتراح تعديل» والتعليقات): يُركَّب قبل اختيار البوابة فيشمل البوابات كلها
+  useModalFocus();
   if (isVerify()) return <Shell tag="التحقق من الشهادات"><Verify /></Shell>;
   if (location.pathname === '/rate') return <Shell tag="تقدير الأثر" back={false}><Rater /></Shell>;
   if (location.pathname === '/sponsor') return <Shell tag="تأييد المبادرة" back={false}><Sponsor /></Shell>;
@@ -195,7 +200,8 @@ function Shell({ tag, back = true, home = null, children }) {
           : back ? <a className="topbar-logo" href="/" aria-label="Milestone Impact: الرئيسية"><img src={logo} alt="" /></a> : <img src={logo} alt="Milestone Impact" />}
         <span className="tag">{tag}</span><span className="spacer" />{back && <BackLink ownHome={!!home} />}
       </div></header>
-      <main id="main" tabIndex={-1}>{children}</main>
+      {/* البوابات المستقلة (الخبير والجهة والمقيّم...) قسم واحد: خطؤها لا يُسقط الترويسة ولا التذييل */}
+      <main id="main" tabIndex={-1}><SectionBoundary key={tag} onHome={home ? () => { location.href = home; } : null} homeLabel="الرئيسية">{children}</SectionBoundary></main>
       <footer className="foot">© Milestone Impact. جميع الحقوق محفوظة. <LegalLink /></footer>
     </>
   );
@@ -410,7 +416,8 @@ function Participant() {
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
         {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}
-        {screen}
+        {/* حاجز لكل قسم يُصفَّر بمفتاحه: خطأ في رسم «كتابي» مثلًا لا يُسقط الترويسة والتنقل، والانتقال إلى قسم آخر يعيده سليمًا */}
+        <SectionBoundary key={navView} onHome={navView === 'home' ? null : () => go('home')}>{screen}</SectionBoundary>
       </main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
       {!booting && (demo || me?.participant?.is_demo) && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}

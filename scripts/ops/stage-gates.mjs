@@ -51,7 +51,7 @@ export const STAGES = [
       { id: 'm2.version-pinned', title: 'كل دفعة مفتوحة أو جارية مثبتة على نسخة من برنامجها', kind: 'auto' },
       { id: 'm2.golden-paths', title: 'المسارات الذهبية خضراء على main', kind: 'auto' },
       { id: 'm2.thresholds-signed', title: 'توقيع الحدود المؤقتة للدفعة الأولى', kind: 'attest' },
-      { id: 'm2.dpa', title: 'اتفاقيات معالجة البيانات مقبولة لدى المعالجين الأربعة', kind: 'attest' },
+      { id: 'm2.dpa', title: 'اتفاقيات معالجة البيانات مقبولة لدى المعالجين الستة (Supabase وResend وCloudflare وCreem وSlack وAnthropic)', kind: 'attest' },
     ],
   },
   {

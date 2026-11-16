@@ -4,12 +4,13 @@
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
 
-const { db, DEMO_MAIL_DOMAIN } = await import('./core.ts');
+const { db, DEMO_MAIL_DOMAIN, CONFIG } = await import('./core.ts');
 const NU = await import('./nudges.ts');
+const ADMIN = await import('./admin.ts');
 const { NUDGE_GAP_DAYS } = await import('./nudge.js');
 
 type Row = Record<string, any>;
-// جداول في الذاكرة: eq وis وnot(is null) وgte وlte وin وlimit وmaybeSingle وsingle، والإدراج والتحديث. order وor لا يغيّران النتيجة
+// جداول في الذاكرة: eq وis وnot(is null وin) وgte وlte وin وorder (كما في Postgres: الفارغ آخرًا تصاعديًا وأولًا تنازليًا) وlimit وmaybeSingle وsingle، والإدراج والتحديث
 function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
   let seq = 0;
   const from = (table: string) => {
@@ -17,6 +18,7 @@ function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
     let mode: 'select' | 'insert' | 'update' | 'delete' = 'select';
     let payload: any = null;
     let head = false, single = false, limit = Infinity;
+    const sorts: { c: string; asc: boolean; nullsFirst: boolean }[] = [];
     const run = () => {
       const rows = tables[table] ||= [];
       if (mode === 'insert') {
@@ -29,6 +31,15 @@ function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
       if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: single ? out[0] ?? null : out, error: null }; }
       if (mode === 'delete') { tables[table] = rows.filter((r) => !out.includes(r)); return { data: out, error: null }; }
       if (head) return { data: null, count: out.length, error: null };
+      if (sorts.length) out.sort((x, y) => {
+        for (const { c, asc, nullsFirst } of sorts) {
+          const a = x[c] ?? null, b = y[c] ?? null;
+          if (a === b) continue;
+          if (a === null || b === null) return (a === null) === nullsFirst ? -1 : 1;
+          return (a < b ? -1 : 1) * (asc ? 1 : -1);
+        }
+        return 0;
+      });
       const lim = out.slice(0, limit);
       return { data: single ? lim[0] ?? null : lim, error: null };
     };
@@ -41,7 +52,17 @@ function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
         if (k === 'delete') return () => { mode = 'delete'; return q; };
         if (k === 'eq' || k === 'is') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; };
         if (k === 'in') return (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; };
-        if (k === 'not') return (c: string, op: string, v: unknown) => { if (op === 'is' && v === null) filters.push((r) => r[c] != null); return q; };
+        if (k === 'not') return (c: string, op: string, v: unknown) => {
+          if (op === 'is' && v === null) filters.push((r) => r[c] != null);
+          // not in بصيغة PostgREST: (a,b,c)
+          if (op === 'in') { const vs = String(v).replace(/^\(|\)$/g, '').split(','); filters.push((r) => r[c] != null && !vs.includes(r[c])); }
+          return q;
+        };
+        if (k === 'order') return (c: string, o: { ascending?: boolean; nullsFirst?: boolean } = {}) => {
+          const asc = o.ascending !== false;
+          sorts.push({ c, asc, nullsFirst: o.nullsFirst ?? !asc });
+          return q;
+        };
         // كما في Postgres: المقارنة مع الفارغ لا تنجح، فغير المؤرخة تسقط من مرشحات الموعد
         if (k === 'neq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) !== v); return q; };
         if (k === 'lt') return (c: string, v: string) => { cmp(c, (a) => a < v); return q; };
@@ -112,6 +133,72 @@ Deno.test('المساعد ينوب عن المرشد في الأسبوعي، إ�
     const fresh = t.tables.nudges.filter((n) => n.created_at > ago(1));
     assertEquals(fresh.map((n) => [n.participant_id, n.sender]).sort(), [[pid(1), 'assistant'], [pid(3), 'auto']]);
     assertEquals(fresh.find((n) => n.sender === 'assistant')!.sender_label, 'المساعد نيابة عن المرشد خالد');
+  } finally { t.restore(); }
+});
+
+// التذكير الأسبوعي بمساره الحقيقي (reminders): السر، ثم القراءة والمحرك والسجل
+async function runWeekly() {
+  const prev = (CONFIG as any).cronSecret;
+  (CONFIG as any).cronSecret = 'cron-test';
+  try { return await ADMIN.reminders({ secret: 'cron-test' }); } finally { (CONFIG as any).cronSecret = prev; }
+}
+const auto = (n: number, d: number) => ({ participant_id: pid(n), sender: 'auto', sender_label: 'التذكير الآلي', created_at: ago(d), snapshot: {} });
+
+Deno.test('الأسبوعي يذكّر من لم يدخل قط وعمر حسابه أسبوع، مرتين في جملته، ويستبعد الحديث ومن لا تذكير له', async () => {
+  const t = install(world({
+    participants: [
+      stuck(1, { last_login_at: null }),
+      stuck(2),
+      stuck(3, { last_login_at: ago(2) }),
+      stuck(4, { last_login_at: null }),
+      stuck(5, { last_login_at: null, is_demo: true }),
+      stuck(6, { last_login_at: null, created_at: ago(1) }),
+      stuck(7, { last_login_at: null }),
+      stuck(8, { last_login_at: null }),
+      stuck(9, { last_login_at: null, status: 'withdrawn' }),
+      stuck(10, { last_login_at: null, email: null }),
+    ],
+    nudges: [
+      { participant_id: pid(4), sender: 'admin', sender_label: 'الإدارة', created_at: ago(3), snapshot: {} },
+      auto(7, 17), auto(7, 10), auto(8, 10),
+    ],
+  }));
+  const prev = (CONFIG as any).cronSecret;
+  (CONFIG as any).cronSecret = 'cron-test';
+  try { await assertRejects(() => ADMIN.reminders({ secret: 'wrong' })); } finally { (CONFIG as any).cronSecret = prev; }
+  try {
+    const r = await runWeekly();
+    assertEquals(r.sent, 3);
+    const fresh = t.tables.nudges.filter((n) => n.created_at > ago(1));
+    assertEquals(fresh.map((n) => n.participant_id).sort(), [pid(1), pid(2), pid(8)],
+      'من لم يدخل قط ومن غاب أسبوعًا ومن ذُكِّر مرة؛ لا من دخل قبل يومين ولا من ذُكِّر هذا الأسبوع ولا التجريبي ولا المضاف أمس ولا من بلغ حده ولا المنسحب ولا من بلا بريد');
+  } finally { t.restore(); }
+});
+
+Deno.test('الأسبوعي: من لم يدخل قط يُذكَّر مرتين عبر الأسابيع ثم يُترك', async () => {
+  const t = install(world({ participants: [stuck(1, { last_login_at: null })] }));
+  try {
+    const sent: number[] = [];
+    for (let week = 0; week < 4; week++) {
+      sent.push((await runWeekly()).sent);
+      // أسبوع يمضي: يتقادم ما في السجل فلا يحجبه الحد الأسبوعي، ويبقى في العدّ
+      for (const n of t.tables.nudges) n.created_at = new Date(Date.parse(n.created_at) - 8 * 864e5).toISOString();
+    }
+    assertEquals(sent, [1, 1, 0, 0]);
+    assertEquals(t.tables.nudges.length, 2);
+  } finally { t.restore(); }
+});
+
+Deno.test('الأسبوعي: من يتخطاه المحرك لا يأكل الحد، ولا يحجب من لم يدخل قط من غاب', async () => {
+  // 210 غابوا أقدم من غيره، و250 لم يدخلوا قط، وكلهم سلّم القياس ينتظر ما ليس منه فلا تذكير لهم (nothing)
+  const away = Array.from({ length: 210 }, (_, i) => stuck(100 + i, { last_login_at: ago(40 + i / 1000) }));
+  const never = Array.from({ length: 250 }, (_, i) => stuck(400 + i, { last_login_at: null }));
+  const assessments = [...away, ...never].map((p, i) => ({ id: `a${i}`, participant_id: p.id, instrument_id: 'i1', status: 'submitted', 'instruments.kind': 'baseline', started_at: ago(30) }));
+  const t = install(world({ participants: [...away, ...never, stuck(1, { last_login_at: ago(10) })], assessments }));
+  try {
+    const r = await runWeekly();
+    assertEquals(r.sent, 1);
+    assertEquals(t.tables.nudges.map((n) => n.participant_id), [pid(1)], 'الغائب يصله تذكيره رغم من سبقوه في الترتيب بلا تذكير');
   } finally { t.restore(); }
 });
 

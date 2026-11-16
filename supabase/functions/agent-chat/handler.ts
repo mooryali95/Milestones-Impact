@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // agent-chat: المساعد الآلي في الموقع العام (المرحلة 1)
 // ════════════════════════════════════════════════════════════════
-// الإجراءات: status (هل المساعد مفعّل)، وstart (Turnstile مرة واحدة ثم محادثة برمز عام)، وsend (رسالة الزائر ثم
+// الإجراءات: ping (مسبار النشر بلا نموذج)، وstatus (هل المساعد مفعّل)، وstart (Turnstile مرة واحدة ثم محادثة برمز عام)، وsend (رسالة الزائر ثم
 // الرد ببث SSE)، وhandoff (تحويل إلى الفريق: صف في contact_requests مربوط بالمحادثة، وبريد الإدارة القائم، وسطر في
 // قناة التشغيل بلا نص)، وrate (تقييم واحد).
 // التكلفة (قرار المالك: لا تتجاوز 2 دولار في اليوم): أجوبة جاهزة بلا نموذج لأكثر الأسئلة تكرارًا، وحد للرسائل في
@@ -181,6 +181,15 @@ function staleAlert(d: Deps, r: Runtime) {
 }
 
 // ════════ الإجراءات ════════
+// ping: مسبار النشر (فحص الدخان في ci.yml) كمسبار admin-api وuser-api: يثبت أن الدالة أقلعت وأن مخزنها في القاعدة
+// يُقرأ، بلا نموذج ولا Turnstile ولا قراءة حالة التفعيل ولا تنبيه، فلا يكلف شيئًا ولا يكشف عددًا ولا إعدادًا
+async function ping(d: Deps) {
+  const t0 = d.now?.() ?? Date.now();
+  const n = await d.store.countModelCalls(new Date(t0 - 36e5).toISOString());
+  if (n == null) return json({ success: false, code: 'db' }, 503);
+  return json({ success: true, fn: 'agent-chat', db_ms: (d.now?.() ?? Date.now()) - t0 });
+}
+
 async function status(d: Deps) {
   const r = await rt(d);
   staleAlert(d, r);
@@ -553,6 +562,7 @@ export async function handle(req: Request, d: Deps): Promise<Response> {
   try { b = await req.json(); } catch { return json({ success: false, code: 'bad_json' }, 400); }
   try {
     switch (b?.action) {
+      case 'ping': return await ping(d);
       case 'status': return await status(d);
       case 'start': return await start(d, b, req);
       case 'send': return await send(d, b);

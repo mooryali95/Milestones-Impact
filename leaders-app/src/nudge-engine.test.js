@@ -1,6 +1,6 @@
 // التذكير الموحد (P3): المحرك يبني التذكير من الرحلة نفسها، والحد مشترك بين كل المرسلين، والأثر يُقاس من اللقطة
 import { describe, expect, it } from 'vitest';
-import { gate, groupPreview, lastLine, ledgerSummary, NUDGE_GAP_DAYS, nudgeFor, outcomeOf, stageText } from '../../supabase/functions/leaders-api/nudge.js';
+import { gate, groupPreview, lastLine, ledgerSummary, NEVER_LOGGED_MAX, NEVER_LOGGED_SHARE, NUDGE_GAP_DAYS, nudgeFor, outcomeOf, stageText, WEEKLY_CANDIDATES, WEEKLY_OUT_STATUSES, weeklyCandidates } from '../../supabase/functions/leaders-api/nudge.js';
 import { onboardingOf } from '../../supabase/functions/leaders-api/onboarding.js';
 import { readFileSync } from 'node:fs';
 
@@ -203,5 +203,25 @@ describe('تقرير فاعلية التذكير', () => {
     expect(e.total).toMatchObject({ sent: 0, progressed_pct: null });
     expect(e.stuck).toEqual([]);
     expect(NUDGE_REPORT_WINDOWS).toEqual([7, 30, 90]);
+  });
+});
+
+describe('weeklyCandidates: من يمر بالمحرك في التذكير الأسبوعي', () => {
+  const rows = (pre, n) => Array.from({ length: n }, (_, i) => ({ id: `${pre}${i}` }));
+  it('نصيب من لم يدخل قط أولًا، ثم من غاب، ثم ما بقي، والحد WEEKLY_CANDIDATES', () => {
+    const ids = weeklyCandidates({ away: rows('a', 300), never: rows('n', 300), recent: new Set(), autoCounts: new Map() });
+    expect(ids).toHaveLength(WEEKLY_CANDIDATES);
+    expect(ids.slice(0, NEVER_LOGGED_SHARE).every((id) => id.startsWith('n'))).toBe(true);
+    expect(ids.slice(NEVER_LOGGED_SHARE, NEVER_LOGGED_SHARE + 300).every((id) => id.startsWith('a'))).toBe(true);
+  });
+  it('يسقط من ذُكِّر هذا الأسبوع، ومن لم يدخل قط وبلغ حده، ولا يُعدّ حد من غاب', () => {
+    const ids = weeklyCandidates({
+      away: [{ id: 'a1' }, { id: 'a2' }], never: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
+      recent: new Set(['a2', 'n3']), autoCounts: new Map([['n1', NEVER_LOGGED_MAX], ['a1', 9]]),
+    });
+    expect(ids).toEqual(['n2', 'a1']);
+  });
+  it('الحالات المستبعدة هي التي لا يذكّرها المحرك أبدًا', () => {
+    for (const status of WEEKLY_OUT_STATUSES) expect(nudgeFor({ p: person({ status }) }).ok).toBe(false);
   });
 });

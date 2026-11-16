@@ -315,7 +315,7 @@ jobs:
       - name: Functions not deployed
         if: env.SUPABASE_ACCESS_TOKEN == ''
         run: echo "::warning::SUPABASE_ACCESS_TOKEN is not set; edge functions were not deployed (see RUNBOOK.md)."
-      # كل دالة تخدم واجهة تُسأل طلبًا حقيقيًا يمر بالقاعدة: leaders-api (system.ping) وadmin-api وuser-api (ping)
+      # كل دالة تخدم واجهة تُسأل طلبًا حقيقيًا يمر بالقاعدة: leaders-api (system.ping) وadmin-api وuser-api وagent-chat (ping)
       - name: Smoke test the deployed functions with real requests
         if: env.SUPABASE_ACCESS_TOKEN != ''
         run: |
@@ -328,5 +328,7 @@ jobs:
           ping leaders-api system.ping
           ping admin-api ping
           ping user-api ping
+          # agent-chat بمسباره ping: يقرأ مخزنه في القاعدة ولا يستدعي النموذج ولا يكلف شيئًا (handler.ts)
+          ping agent-chat ping
       - name: Promote to release (Cloudflare Pages production branch)
         run: git push --force origin "$GITHUB_SHA:refs/heads/release"

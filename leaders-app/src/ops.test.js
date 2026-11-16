@@ -66,6 +66,9 @@ describe('بوابة النشر', () => {
       expect(text).toMatch(/ping admin-api ping/);
       expect(text).toMatch(/ping user-api ping/);
     }
+    // agent-chat تُنشر في السيرين، فتُسأل بمسبارها الذي لا يستدعي النموذج (handler.ts ping)
+    for (const text of [deploy, manual]) expect(text).toMatch(/ping agent-chat ping/);
+    expect(read('supabase/functions/agent-chat/handler.ts')).toMatch(/case 'ping': return await ping\(d\)/);
     for (const fn of ['admin-api', 'user-api']) {
       const src = read(`supabase/functions/${fn}/index.ts`);
       const at = src.indexOf('action === "ping"');

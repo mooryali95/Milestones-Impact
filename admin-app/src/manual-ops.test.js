@@ -71,7 +71,8 @@ describe('عزل حساب العرض', () => {
     expect(admin).toMatch(/participants!inner\(full_name, email, is_demo[^)]*\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
     expect(admin).toMatch(/\.eq\('status', 'pending_approval'\)\.eq\('is_demo', false\)/);
     expect(admin).toMatch(/model_submissions[\s\S]*participants!inner\([^)]*is_demo\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
-    expect(admin).toMatch(/\.neq\('status', 'suspended'\)\.eq\('is_demo', false\)/);
+    // التذكير الأسبوعي: حالات لا تذكير لها (ومنها الموقوف) تُستبعد في الاستعلام، ومعها حساب العرض
+    expect(admin).toMatch(/\.not\('status', 'in', out\)\.eq\('is_demo', false\)/);
     expect(api('capstone.ts')).toMatch(/participants!inner\([^)]*is_demo\)'\)\s*\.eq\('participants\.is_demo', false\)/);
     expect(api('programs.ts')).toMatch(/\.in\('id', all\)\.eq\('is_demo', false\)/);
   });
