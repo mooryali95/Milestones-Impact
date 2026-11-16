@@ -105,6 +105,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
     // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
     feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
+    // بداية إخفاء مقيّمي الأثر مع 360: علامة واحدة في أول تشغيل بعد النشر (feedback360.ts impactPausedSince)
+    impact_pause_mark: await FB.markImpactPause().catch((e) => ({ error: String(e?.message || e) })),
     ...(await (async () => {
       // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
       const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });

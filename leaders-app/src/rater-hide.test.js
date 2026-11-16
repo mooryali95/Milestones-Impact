@@ -22,7 +22,7 @@ describe('بنود 360 في الرحلة', () => {
     const j = buildJourney({ stages: STAGES, requirements: reqs, progress: { r1: { status: 'done' } }, levels: {}, state: { postSubmitted: true } });
     expect(j.map((s) => s.status)).toEqual(['done', 'done', 'active']);
   });
-  it('مرحلة لا يكملها إلا بند منها: يبقى ظاهرًا فلا تُقفل ما بعدها', () => {
+  it('مرحلة لا يكملها إلا بند منها: يبقى ظاهرًا (kept) ولا تخلو المرحلة، وتنتظر الإظهار', () => {
     const lone = [req(1, 'training', 'T-AGREE'), req(2, 'evaluation', 'E-360'), req(3, 'after', 'A-LAST')];
     expect(featureHiddenFor({ stages: STAGES, requirements: lone, flags: { f360: false }, breaks: hideBreaksStage })).toEqual({ hidden: [], kept: ['E-360'] });
   });

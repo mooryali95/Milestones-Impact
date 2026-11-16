@@ -1,7 +1,9 @@
 // تقدير المدير والزملاء مؤجل مع تقييم 360 (قرار المالك 2026-11-16): مفتاح 360 مطفأ فلا بند T-360 في التدريب ولا E-360
 // ولا E-MGR في التقييم، ولا دعوة المدير قبل البرنامج في الرحلة ولا في «ملفي»، ولا بطاقة دعوة في القياس البعدي ولا ذكرها
 // في نصه، وعمودا المدير والمقيّمين في شاشة الأثر بالإدارة بشارة «مخفي عن المستخدمين». ومُظهَرًا يعود كل شيء.
-// ما يظهر من البنود يحسبه featureHiddenFor نفسه الذي تمر به journeyDefinition على الخادم. الخلفية مُحاكاة.
+// الخلفية مُحاكاة: بنود الرحلة يحذفها الخادم (journeyDefinition، rater_hide_test.ts) والواجهة تعرض ما يصلها، فلا تُختبر هنا.
+// يُختبر هنا ما تقرره الواجهة بإشارات الخادم: دعوة المدير قبل البرنامج (pre_available)، ونص القياس البعدي (المفتاح)،
+// وبطاقة الدعوة (invite)، وشارة الإدارة.
 import { test, expect } from '@playwright/test';
 import { createMockServer } from '../shared/video/mock-server.js';
 import { featureHiddenFor } from '../supabase/functions/leaders-api/features.js';
@@ -71,33 +73,53 @@ async function participant(page, f360, { evaluationActive = false } = {}) {
   return calls;
 }
 
-test('مطفأ: الرحلة بلا بنود تقدير المدير والزملاء ولا دعوة المدير قبل البرنامج، ولا رفض يظهر', async ({ page }) => {
+test('مطفأ: لا دعوة المدير قبل البرنامج (pre_available:false) ولا طلب دعوة، ولا رفض يظهر', async ({ page }) => {
   const calls = await participant(page, false);
   await page.goto(APP);
   await expect(page.getByRole('heading', { name: 'مراحل الرحلة' })).toBeVisible();
   await expect(page.getByText('قراءة كتابك الشخصي').first()).toBeVisible();
   await expect.poll(() => calls.includes('impact.mine')).toBe(true);
-  await expect(page.getByText(T360)).toHaveCount(0);
   await expect(page.getByText(PRE_INVITE)).toHaveCount(0);
   expect(calls).not.toContain('rater.invite');
 });
 
-test('مُظهَرًا: بند التدريب ودعوة المدير قبل البرنامج كما كانا', async ({ page }) => {
+test('مُظهَرًا: دعوة المدير قبل البرنامج كما كانت', async ({ page }) => {
   await participant(page, true);
   await page.goto(APP);
   await expect(page.getByRole('heading', { name: 'مراحل الرحلة' })).toBeVisible();
-  await expect(page.getByText(T360).first()).toBeVisible();
   await expect(page.getByText(PRE_INVITE)).toBeVisible();
 });
 
-test('مطفأ: مرحلة التقييم بلا E-360 وE-MGR، والقياس البعدي وحده يكملها', async ({ page }) => {
-  await participant(page, false, { evaluationActive: true });
-  await page.goto(APP);
-  await expect(page.getByRole('heading', { name: 'مراحل الرحلة' })).toBeVisible();
-  await expect(page.getByText('القياس البعدي').first()).toBeVisible();
-  await expect(page.getByText(E360)).toHaveCount(0);
-  await expect(page.getByText(EMGR)).toHaveCount(0);
-});
+// القياس البعدي قبل إرساله: نص الإرسال يذكر دعوة المدير بمفتاح 360 من me.features وحده
+for (const on of [false, true]) {
+  test(`القياس البعدي قبل الإرسال ${on ? 'مُظهَرًا: يذكر دعوة المدير' : 'مطفأ: بلا «ادعُ مديرك»'}`, async ({ page }) => {
+    const srv = createMockServer();
+    Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true, features: { hall: true, katon: false, f360: on } });
+    await page.route(/functions\/v1\/leaders-api/, async (route) => {
+      const b = JSON.parse(route.request().postData() || '{}');
+      let r = null;
+      if (b.action === 'me') {
+        r = srv.reply(b);
+        const ev = r.journey.find((st) => st.key === 'evaluation');
+        Object.assign(ev, { status: 'active', done: 0, total: 1, items: [{ id: 'e1', code: 'E-POST', title_ar: 'القياس البعدي', kind: 'system', auto: true, required: true, status: 'pending' }] });
+      }
+      // كل الأسئلة مجابة: «تابع» ثم «التالي» يصل إلى صفحة الإرسال
+      if (b.action === 'assessment.get') { r = srv.reply(b); r.assessment = { ...r.assessment, kind: 'post' }; r.answers = { q1: 3, q2: 1, q3: 3 }; }
+      await route.fulfill({ json: r || srv.reply(b) });
+    });
+    await page.route(/cloudflareinsights|challenges\.cloudflare/, (rt) => rt.abort());
+    await page.addInitScript(() => {
+      localStorage.setItem('mi_leaders_session', 't'.repeat(40));
+      localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_next_seen', 'true');
+    });
+    await page.goto(APP);
+    await page.getByRole('button', { name: 'أثري' }).first().click();
+    await page.getByRole('button', { name: /^تابع/ }).click();
+    await page.getByRole('button', { name: 'التالي' }).click();
+    await expect(page.getByText('أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها', { exact: false })).toBeVisible();
+    await expect(page.getByText('ادعُ مديرك ليقدّر التغير من موقعه', { exact: false })).toHaveCount(on ? 1 : 0);
+  });
+}
 
 // شاشة ما تغيّر بعد القياس البعدي: بطاقة الدعوة ونص الحكم بإشارة الخادم invite
 for (const invite of [false, true]) {

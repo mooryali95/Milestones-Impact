@@ -221,8 +221,49 @@ Deno.test('استئناف 360 بلا إطفاء في السجل: بداية ال
   } finally { w.restore(); }
   w = install({ schema_migrations: [], audit_log: [], feedback_cycles: [{ id: 'c1', status: 'open', closes_at: new Date(now - 864e5).toISOString() }], raters: [] });
   try {
-    assertEquals(await FB.resumeFrozen('admin@x.sa', now), { extended: 0, raters: 0, paused_ms: 0 });
+    assertEquals(await FB.resumeFrozen('admin@x.sa', now), { extended: 0, raters: 0, mail: 0, paused_ms: 0 });
     assertEquals(w.writes, []);
+  } finally { w.restore(); }
+});
+
+Deno.test('مقيّمو الأثر: بداية إخفائهم لا تسبق نشر ربطهم بـ360 (علامة rater.pause-start)، ولا يمنع استئنافهم غياب جدول الدورات', async () => {
+  const H = 36e5, now = Date.parse('2026-11-25T09:00:00Z');
+  const at = (h: number) => new Date(now + h * H).toISOString();
+  const RID = '00000000-0000-4000-8000-0000000000a1';
+  const w = install({
+    app_settings: [], schema_migrations: [{ name: FB.F360_FREEZE_MIGRATION, applied_at: at(-24 * 30) }],
+    // مطفأ منذ الافتراضي بلا حفظ أطفأه، والربط نُشر قبل عشرة أيام (العلامة)
+    audit_log: [{ action: FB.IMPACT_PAUSE_MARK, created_at: at(-24 * 10) }],
+    raters: [
+      // انقضى قبل النشر وهو يعمل: لا يُحيا
+      { id: 'r-gone', cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 28), expires_at: at(-24 * 20) },
+      // بقي منه يوم حين نُشر الربط: يُمد بالعشرة لا بالثلاثين
+      { id: RID, cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 20), expires_at: at(-24 * 9) },
+    ],
+    // دعوته في الطابور منذ اثني عشر يومًا (السقف اليومي): لا تُعد فائتة عند أول تفريغ بعد الإظهار
+    mail_queue: [{ id: 'm1', kind: 'notify', created_at: at(-24 * 12), to_email: 'boss@x.sa', subject: 'طلب تقدير من سارة', html: '<p/>', ref: `rater:${RID}`, attempts: 0, sent_at: null, gave_up_at: null }],
+  });
+  const from = (db as any).from;
+  (db as any).from = (t: string) => t !== 'feedback_cycles' ? from(t) : new Proxy({}, {
+    get: (_x, k: string) => k === 'then' ? (ok: any) => Promise.resolve({ data: null, error: { code: '42P01', message: 'relation "feedback_cycles" does not exist' } }).then(ok) : () => (db as any).from('feedback_cycles'),
+  });
+  try {
+    assertEquals(await FB.impactPausedSince(), now - 10 * 24 * H);
+    const r: any = await FB.resumeFrozen('admin@x.sa', now);
+    assertEquals([r.extended, r.raters, r.mail], [0, 1, 1]);
+    assertEquals(w.tables.raters.map((x) => [x.id, x.expires_at]), [['r-gone', at(-24 * 20)], [RID, at(24 * 1)]]);
+    // عمرها في الطابور بلا أيام الإخفاء: يومان قبل النشر، فتُرسل ولا تُترك «فائتة»
+    assertEquals(w.tables.mail_queue[0].created_at, at(-24 * 2));
+    assertEquals(w.tables.audit_log.filter((l) => l.action === 'mail.resume').map((l) => l.after), [{ messages: 1 }]);
+  } finally { w.restore(); }
+});
+
+Deno.test('علامة بداية إخفاء مقيّمي الأثر تُكتب مرة واحدة', async () => {
+  const w = install({ audit_log: [] });
+  try {
+    assertEquals(await FB.markImpactPause(), true);
+    assertEquals(await FB.markImpactPause(), false);
+    assertEquals(w.tables.audit_log.filter((l) => l.action === FB.IMPACT_PAUSE_MARK).length, 1);
   } finally { w.restore(); }
 });
 
@@ -323,6 +364,21 @@ Deno.test('مقيّمو الأثر قبل البرنامج وبعده (pre وpos
       assertEquals(typeof w.tables.raters[0].opened_at, 'string');
     } finally { w.restore(); }
   }
+});
+
+Deno.test('رابط مقيّم أثر انقضت مهلته أثناء الإخفاء: «متوقف مؤقتًا» لا «انتهت الصلاحية»، ومُظهَرًا بلا مد يقول انتهى', async () => {
+  let w = await raterWorld('post', false);
+  w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
+  try {
+    const e = await codeOf(() => raterGet({ t: TOKEN }));
+    assertEquals([e.code, e.status, e.message], ['f360_off', 409, RATER_PAUSED_AR]);
+    assertEquals((await codeOf(() => raterSubmit({ t: TOKEN, contact_freq: 'daily', answers: {} }))).code, 'f360_off');
+  } finally { w.restore(); }
+  w = await raterWorld('post', true);
+  w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
+  try {
+    assertEquals((await codeOf(() => raterGet({ t: TOKEN }))).code, 'expired');
+  } finally { w.restore(); }
 });
 
 Deno.test('رسائل الورشة والقاعة مخفية: ملاحظة بلا «القاعة» والحضور برمز QR، ومُظهَرة كما كانت', () => {

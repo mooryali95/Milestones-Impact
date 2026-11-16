@@ -68,7 +68,9 @@ export default function LiveTour({ me, onAccept, onGo }) {
   // قبل الدخول لا تُعرف المفاتيح، فالقاعة مخفية حتى يقول الخادم غير ذلك: الزائر برابط العرض لا يرى ميزة مخفية.
   // وحين تتغير الخطوات (الدخول أو تبدّل المفتاح) تبقى الجولة على الخطوة نفسها بمفتاحها لا برقمها
   const hallOn = !!me && flagsOf(me).hall;
-  const STEPS = useMemo(() => tourStepsFor(TOUR_STEPS, { hall: hallOn, katon: true, f360: true }), [hallOn]);
+  // وتقدير المدير والزملاء مع مفتاح 360: مطفأ أو قبل الدخول فخطوة الأثر بلا ذكره (noF360)
+  const f360On = !!me && flagsOf(me).f360;
+  const STEPS = useMemo(() => tourStepsFor(TOUR_STEPS, { hall: hallOn, katon: true, f360: f360On }), [hallOn, f360On]);
   const [at, setI] = useState(() => Math.max(0, Number(store.get(KEY)) || 0));
   const prevSteps = useRef(STEPS);
   useEffect(() => {

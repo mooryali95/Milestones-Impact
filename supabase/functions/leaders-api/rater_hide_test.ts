@@ -4,7 +4,7 @@
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
-const { journeyDefinition, requirementIdByCode } = await import('./programs.ts');
+const { cohortSave, journeyDefinition, requirementIdByCode } = await import('./programs.ts');
 const I = await import('./impact.ts');
 const { resetSettingsCache } = await import('./settings.ts');
 const { buildJourney, hideBreaksStage, impactVerdict } = await import('./logic.js');
@@ -146,6 +146,23 @@ Deno.test('إخفاء الدفعة باقٍ مع المفتاح: مُظهَرً�
   w.tables.cohorts[0].hidden_requirements = ['A-LAST'];
   try {
     assertEquals(codes(await journeyDefinition({ id: P1, organization_id: ORG })), ['T-AGREE', 'E-POST']);
+  } finally { w.restore(); }
+});
+
+Deno.test('مطفأ: الدفعة لا تخفي ما يجعل بند 360 وحده ما يكمل مرحلة (لا يكتمل وهو مطفأ)، ومُظهَرًا يمر', async () => {
+  const admin = { email: 'a@x.sa', role: 'admin' as const };
+  let w = world([], { cohort_experts: [] });
+  try {
+    const e = await failOf(() => cohortSave(admin, { id: C1, hidden_requirements: ['T-AGREE'] }));
+    assertEquals(e.code, 'hide_breaks_stage');
+    assertEquals([e.message.includes('«training»'), e.message.includes('مع تقييم 360')], [true, true]);
+    assertEquals(w.tables.cohorts[0].hidden_requirements, []);
+    // ما لا يمس ما يكمل المرحلة يمر وهو مطفأ
+    assertEquals(((await cohortSave(admin, { id: C1, hidden_requirements: ['E-MGR'] })) as any).success, true);
+  } finally { w.restore(); }
+  w = world(ON, { cohort_experts: [] });
+  try {
+    assertEquals(((await cohortSave(admin, { id: C1, hidden_requirements: ['T-AGREE'] })) as any).success, true);
   } finally { w.restore(); }
 });
 

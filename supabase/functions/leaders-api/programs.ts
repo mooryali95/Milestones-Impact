@@ -13,7 +13,7 @@ import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 import { seatsUsedByOrg } from './entitlements.ts';
 import { features } from './features.ts';
-import { featureHiddenFor } from './features.js';
+import { featureHiddenCodes, featureHiddenFor } from './features.js';
 
 type Body = Record<string, any>;
 
@@ -488,13 +488,20 @@ async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const versionChanged = !!prev && vid !== (prev.program_version_id ?? null);
   if (hidden.length && ('hidden_requirements' in row || programChanged || versionChanged)) {
     const def = await defOf(vid, programId);
-    const broken = hideBreaksStage(def.stages || [], def.requirements || [], hidden);
-    // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها
-    const was = broken.length && prev?.hidden_requirements?.length
-      ? await defOf(prev.program_version_id, prev.program_id).then((d: any) => hideBreaksStage(d.stages || [], d.requirements || [], prev.hidden_requirements))
-      : [];
+    // وما يخفيه مفتاح ميزة مطفأ الآن (بنود تقدير المدير والزملاء مع 360) يُحسب مع إخفاء الدفعة: بند يبقيه featureHiddenFor
+    // ظاهرًا لئلا تفرغ مرحلته لا يكتمل ما دام المفتاح مطفأ، فلا يُسمح بإخفاء يجعله وحده ما يكمل مرحلة
+    const fcodes = featureHiddenCodes(await features());
+    const broken = hideBreaksStage(def.stages || [], def.requirements || [], [...hidden, ...fcodes]);
+    // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها، ولا كسر من شكل البرنامج والمفتاح وحدهما
+    const was = !broken.length ? []
+      : prev?.hidden_requirements?.length
+        ? await defOf(prev.program_version_id, prev.program_id).then((d: any) => hideBreaksStage(d.stages || [], d.requirements || [], [...prev.hidden_requirements, ...fcodes]))
+        : hideBreaksStage(def.stages || [], def.requirements || [], fcodes);
     const worse = newlyBroken(broken, was);
-    if (worse.length) throw new Fail(hideBreaksMessage(worse), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+    if (worse.length) {
+      const byFeature = fcodes.length && newlyBroken(worse, hideBreaksStage(def.stages || [], def.requirements || [], hidden)).length > 0;
+      throw new Fail(hideBreaksMessage(worse) + (byFeature ? ' وبنود تقدير المدير والزملاء مخفية الآن مع تقييم 360، فلا تُحسب مما يكمل المرحلة.' : ''), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+    }
   }
   const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);
   // الدفعة المفتوحة ملاذ من لا دفعة له أيًا كانت حالتها (pickCohort)، فلا يتغير لأعضائها إلا البرنامج

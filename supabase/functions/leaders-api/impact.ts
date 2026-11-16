@@ -423,13 +423,16 @@ async function raterByToken(h: string) {
   if (data?.token_hash && Array.isArray(data.token_hashes) && !data.token_hashes.includes(data.token_hash)) return null;
   return data;
 }
-async function raterFrom(t: unknown) {
+// paused: حارس «متوقف مؤقتًا» (raterPaused) يسبق فحص الانتهاء، فرابط انقضت مهلته أثناء الإخفاء لا يُقال عنه «انتهى، اطلب دعوة»
+// وهو يعود حين يُظهَر 360 (resumeFrozen يمده)، ولا دعوة جديدة تُطلب ما دام مطفأ
+async function raterFrom(t: unknown, paused: (r: any) => Promise<void> = async () => {}) {
   const token = String(t || '');
   if (token.length < 20) throw new Fail('الرابط غير صالح', 400, 'invalid');
   // رمز لا يُعرف صفه لا يُعلم أهو رابط قديم أم غير صالح، فالرسالة العامة نفسها
   const r = await raterByToken(await hash(token)) as any;
   // nominated: رشّحه المشارك في تقييم 360 ولم يعتمد المستشار القائمة بعد، فلا رابط له
   if (!r || r.status === 'revoked' || r.status === 'nominated') throw new Fail('الرابط غير صالح أو أُلغي', 404, 'invalid');
+  await paused(r);
   if (new Date(r.expires_at) < new Date() && r.status !== 'submitted') throw new Fail('انتهت صلاحية الرابط، اطلب دعوة جديدة', 410, 'expired');
   // بعد الإرسال: اطلاع محدود المدة (4.5)
   if (r.status === 'submitted' && !linkAfterDecisionOk(r.submitted_at)) throw new Fail(LINK_CLOSED_AR, 410, 'closed');
@@ -453,8 +456,7 @@ async function raterPaused(r: any) {
 }
 
 export async function raterGet(b: Body) {
-  const r = await raterFrom(b.t);
-  await raterPaused(r);
+  const r = await raterFrom(b.t, raterPaused);
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
   const qs = await raterQuestions(r.instrument_id, r.relation);
   // تقييم 360: مراسي السلم ووعد الإخفاء من الإعدادات العامة (scale_labels وmin_group)، بحسب مجموعة المقيّم
@@ -472,8 +474,7 @@ export async function raterGet(b: Body) {
 }
 
 export async function raterSubmit(b: Body) {
-  const r = await raterFrom(b.t);
-  await raterPaused(r);
+  const r = await raterFrom(b.t, raterPaused);
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
   // تقييم 360: بعد إغلاق الدورة (ولو مبكرًا من الإدارة) لا يُقبل تقدير يغيّر تقريرًا سُلِّم (N15)
   if (r.cycle_id) {

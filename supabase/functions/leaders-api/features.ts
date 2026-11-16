@@ -24,21 +24,49 @@ export async function gate(action: string): Promise<Record<string, unknown> | nu
 // بريد 360 المنتظر في الطابور حين يُطفأ: يُمسك ولا يُرسل ولا يُلغى، فيخرج حين يُظهَر (الدورة متجمدة لا ملغاة).
 // دعوات المقيّمين وتذكيراتهم بمرجع rater:<id> لمقيّم بمرحلة f360 أو مقيّم أثر (pre وpost، مؤجل مع 360)، ورسائل الدورة
 // بعناوينها (FEEDBACK_MAIL)، ورسالتا تأكيد مقيّم الأثر (للمؤكِّد وللمشارك عند عدم الاعتماد)
-const F360_SUBJECTS = [...Object.values(FEEDBACK_MAIL).map((m) => (m.subject as (w: string) => string)('').trim()), 'مقيّم بانتظار تأكيدك', 'لم يُعتمد أحد مقيّميك'];
-export async function heldMail(): Promise<Set<string>> {
-  if ((await features()).f360) return new Set();
-  const { data, error } = await db.from('mail_queue').select('id, ref, subject').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1000);
+// ورسالتا التأكيد من بريد مقيّمي الأثر (impact)، وما سواهما من بريد الدورة (f360): لكل نطاق بداية إخفاء تخصه عند الاستئناف
+const IMPACT_SUBJECTS = ['مقيّم بانتظار تأكيدك', 'لم يُعتمد أحد مقيّميك'];
+const F360_SUBJECTS = [...Object.values(FEEDBACK_MAIL).map((m) => (m.subject as (w: string) => string)('').trim()), ...IMPACT_SUBJECTS];
+export type QueuedF360 = { id: string; created_at: string; scope: 'f360' | 'impact' };
+// كل ما في الطابور مما يمسكه المفتاح وهو مطفأ، أيًا كانت حاله الآن (heldMail يمسكه، وresumeHeldMail يعيد عمره عند الإظهار)
+export async function f360QueuedMail(): Promise<QueuedF360[]> {
+  const { data, error } = await db.from('mail_queue').select('id, ref, subject, created_at').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(1000);
   if (error) throw error;
-  const rows = (data || []) as { id: string; ref: string | null; subject: string }[];
-  const held = new Set(rows.filter((m) => F360_SUBJECTS.some((s) => String(m.subject || '').startsWith(s))).map((m) => m.id));
+  const rows = (data || []) as { id: string; ref: string | null; subject: string; created_at: string }[];
+  const scope = new Map<string, 'f360' | 'impact'>();
+  for (const m of rows) {
+    const sub = String(m.subject || '');
+    if (IMPACT_SUBJECTS.some((x) => sub.startsWith(x))) scope.set(m.id, 'impact');
+    else if (F360_SUBJECTS.some((x) => sub.startsWith(x))) scope.set(m.id, 'f360');
+  }
   const raterIds = [...new Set(rows.map((m) => /^rater:([0-9a-f-]{36})$/i.exec(m.ref || '')?.[1]).filter(Boolean))] as string[];
   for (let i = 0; i < raterIds.length; i += 100) {
-    const { data: rs, error: re } = await db.from('raters').select('id').in('id', raterIds.slice(i, i + 100)).in('phase', ['f360', 'pre', 'post']);
+    const { data: rs, error: re } = await db.from('raters').select('id, phase').in('id', raterIds.slice(i, i + 100)).in('phase', ['f360', 'pre', 'post']);
     if (re) throw re;
-    const f360 = new Set((rs || []).map((r: any) => `rater:${r.id}`));
-    for (const m of rows) if (m.ref && f360.has(m.ref)) held.add(m.id);
+    const phase = new Map((rs || []).map((r: any) => [`rater:${r.id}`, r.phase === 'f360' ? 'f360' as const : 'impact' as const]));
+    for (const m of rows) { const ph = m.ref ? phase.get(m.ref) : undefined; if (ph) scope.set(m.id, ph); }
   }
-  return held;
+  return rows.filter((m) => scope.has(m.id)).map((m) => ({ id: m.id, created_at: m.created_at, scope: scope.get(m.id)! }));
+}
+export async function heldMail(): Promise<Set<string>> {
+  if ((await features()).f360) return new Set();
+  return new Set((await f360QueuedMail()).map((m) => m.id));
+}
+// عند الإظهار: عمر الرسالة الممسَكة لا يُحسب فيه ما مضى مخفيًا، وإلا عدّها التفريغ فائتة (QUEUE_STALE_HOURS) فلا تُرسل
+// دعوة أو تأكيد عاد رابطه حيًا. يُزاح created_at بقدر ما مضى منها في الإخفاء (من بداية نطاقها أو من دخولها الطابور، أيهما أحدث)
+export async function resumeHeldMail(since: { f360: number | null; impact: number | null }, now = Date.now()): Promise<number> {
+  let n = 0;
+  for (const m of await f360QueuedMail()) {
+    const from = since[m.scope];
+    const created = Date.parse(m.created_at);
+    if (from === null || !Number.isFinite(created)) continue;
+    const delta = now - Math.max(from, created);
+    if (delta <= 0) continue;
+    const { error } = await db.from('mail_queue').update({ created_at: new Date(created + delta).toISOString() }).eq('id', m.id).is('sent_at', null);
+    if (error) throw error;
+    n += 1;
+  }
+  return n;
 }
 
 // بريد ورشة دخل الطابور بملاحظة القاعة (السقف اليومي) ثم أُخفيت القاعة قبل خروجه: تُستبدل الملاحظة عند الإرسال
