@@ -1,0 +1,128 @@
+// حراس مفاتيح الميزات P4: ما يقرؤه المستخدم والقاعة والميزات مطفأة لا يسمّي القاعة ولا كاتون ولا 360.
+// الخصوصية بصياغة عامة صادقة، ووصف الفيديو في الموقع عام، وبندا الرحلة T-360 وE-360 باسمهما الجديد بترحيل مشروط،
+// والتذكير الموحد يسمّي البند باسمه الجديد، وبوابة m4.hall-load مؤجلة لا تحجب ولا تُحتسب، واختبار الحمل يُظهر القاعة.
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { PGlite } from '@electric-sql/pglite';
+import { describe, expect, it } from 'vitest';
+import { POLICY_CHANGES } from '../../supabase/functions/leaders-api/labels.js';
+import { nudgeFor } from '../../supabase/functions/leaders-api/nudge.js';
+import { MIGRATIONS } from '../../supabase/functions/leaders-api/migrations.js';
+import { evaluate, STAGES } from '../../scripts/ops/stage-gates.mjs';
+import { gateOf } from '../../scripts/ops/pending-migrations.mjs';
+
+const root = join(__dirname, '../..');
+const read = (p) => readFileSync(join(root, p), 'utf8');
+const FEATURE_WORDS = /القاعة|كاتون|360/;
+const MIG = '20261116100000_leaders_t360_rename';
+const SQL = read(`supabase/migrations/${MIG}.sql`);
+const T_OLD = 'تقييم 360 مختصر قبل البرنامج (المدير والزملاء)';
+const E_OLD = 'تقييم 360 مختصر بعد البرنامج';
+const T_NEW = 'تقدير المدير والزملاء قبل البرنامج';
+const E_NEW = 'تقدير المدير والزملاء بعد البرنامج';
+
+describe('الخصوصية: صياغة عامة لأنشطة التعلم', () => {
+  const src = read('leaders-app/src/screens/Legal.jsx');
+  const html = src.slice(src.indexOf('function Privacy()'), src.indexOf('function Terms()'));
+  it('لا تسمّي القاعة ولا كاتون، وتبقى إفصاحًا صادقًا: ما يُجمع ولماذا ولا يدخل التقييم الختامي', () => {
+    expect(html).toContain('سياسة خصوصية برنامج القادة');
+    expect(html).not.toMatch(/القاعة|كاتون/);
+    expect(html).toContain('إجاباتك في أنشطة التعلم التفاعلية، ونقاطك');
+    expect(html).toContain('إجاباتك في أنشطة التعلم التفاعلية للتعلم وحده، ولا تدخل تقييمك الختامي');
+  });
+  it('تغيير الصياغة بنسخة غير جوهرية في السجل، فلا تُعاد الموافقة', () => {
+    const c = POLICY_CHANGES[0];
+    expect(c.material).toBe(false);
+    expect(c.items.join(' ')).toContain('أنشطة التعلم التفاعلية');
+    expect(c.items.join(' ')).not.toMatch(/القاعة|كاتون/);
+  });
+});
+
+describe('الموقع: وصف الفيديو التعريفي عام', () => {
+  it('الفيديو باقٍ حتى التسجيل القادم، ووصفه لا يسمّي القاعة', () => {
+    const cap = read('home/leaders/index.html').match(/<figcaption>([^<]*)<\/figcaption>/)[1];
+    expect(cap).toContain('وأنشطة التعلم التفاعلية');
+    expect(cap).not.toMatch(FEATURE_WORDS);
+  });
+});
+
+describe(`بندا الرحلة باسم لا يُقرأ 360 (${MIG})`, () => {
+  it('مسجّل ومتسامح وفي قائمة الترحيلات', () => {
+    expect(SQL).toContain(`insert into leaders.schema_migrations (name) values ('${MIG}') on conflict do nothing;`);
+    expect(gateOf(SQL).gate).toBe('tolerant');
+    expect(MIGRATIONS).toContain(MIG);
+  });
+  it('النص الأصلي الذي يشترطه هو آخر ما كتبته الترحيلات قبله للبندين', () => {
+    const files = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql') && f < `${MIG}.sql`).sort();
+    const last = (code) => {
+      let t = null;
+      for (const f of files) for (const m of read(`supabase/migrations/${f}`).matchAll(new RegExp(`\\('${code}',\\s*'([^']+)'\\)`, 'g'))) t = m[1];
+      return t;
+    };
+    expect(last('T-360')).toBe(T_OLD);
+    expect(last('E-360')).toBe(E_OLD);
+  });
+  it('يغيّر ما على النص الأصلي وحده في كل برنامج، ولا يمس ما حرّرته الإدارة، وآمن لإعادة التشغيل', async () => {
+    const db = new PGlite();
+    await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
+      create table leaders.stage_requirements (program_id int, code text, title_ar text);
+      create table leaders.journey_stages (program_id int, key text, activities_ar text);
+      insert into leaders.stage_requirements values (1, 'T-360', '${T_OLD}'), (1, 'E-360', '${E_OLD}'), (2, 'T-360', 'عنوان حرّرته الإدارة'), (2, 'E-360', '${E_OLD}');
+      insert into leaders.journey_stages values (1, 'leadership_coaching', 'جلسات توجيه، وتقييم 360 مختصر من مديرك وزملائك وفريقك، وخطة تطوير'), (2, 'leadership_coaching', 'نص حرّرته الإدارة');`);
+    await db.exec(SQL);
+    await db.exec(SQL);
+    const reqs = (await db.query('select program_id, code, title_ar from leaders.stage_requirements order by program_id, code')).rows;
+    expect(reqs.map((r) => [r.program_id, r.code, r.title_ar])).toEqual([
+      [1, 'E-360', E_NEW], [1, 'T-360', T_NEW], [2, 'E-360', E_NEW], [2, 'T-360', 'عنوان حرّرته الإدارة'],
+    ]);
+    const st = (await db.query('select activities_ar from leaders.journey_stages order by program_id')).rows.map((r) => r.activities_ar);
+    expect(st).toEqual(['جلسات توجيه، وتقدير مختصر من مديرك وزملائك وفريقك، وخطة تطوير', 'نص حرّرته الإدارة']);
+    expect((await db.query('select name from leaders.schema_migrations')).rows).toEqual([{ name: MIG }]);
+  });
+  it('لا ترحيل لاحق يعيد «360» إلى عنوان بند', () => {
+    const later = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql') && f > `${MIG}.sql`);
+    for (const f of later) expect(read(`supabase/migrations/${f}`)).not.toMatch(/title_ar[^;]*360/);
+  });
+});
+
+describe('التذكير الموحد والميزات مطفأة', () => {
+  const journey = (title) => [{ key: 'evaluation', title_ar: 'التقييم', status: 'active', items: [{ code: 'E-360', title_ar: title, required: true, status: 'pending' }] }];
+  const p = { status: 'enrolled', email: 'p@example.org', created_at: '2026-11-01T00:00:00Z' };
+  it('يسمّي بند تقدير المدير والزملاء باسمه الجديد، فلا يذكر 360 في الموضوع ولا النص', () => {
+    const n = nudgeFor({ p, journey: journey(E_NEW), progress: 80, now: '2026-11-16T00:00:00Z' });
+    expect(n.ok).toBe(true);
+    expect(n.text).toContain(E_NEW);
+    expect(`${n.subject} ${n.text} ${n.step}`).not.toMatch(FEATURE_WORDS);
+  });
+  it('مصدر التذكير لا يحمل نصًا يسمّي ميزة مخفية', () => {
+    const strip = (s) => s.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const f of ['nudge.js', 'nudges.ts', 'onboarding.js', 'journey-map.js']) expect(strip(read(`supabase/functions/leaders-api/${f}`))).not.toMatch(FEATURE_WORDS);
+  });
+});
+
+describe('بوابة حمل القاعة واختبارها', () => {
+  it('m4.hall-load مؤجلة: لا تُحكم ولا تُعد، فلا تحجب المرحلة ولا تُحتسب ناجحة', () => {
+    const check = STAGES.flatMap((s) => s.checks).find((c) => c.id === 'm4.hall-load');
+    expect(check.deferred_ar).toContain('القاعة مخفية');
+    const m4 = evaluate({}, {}).stages.find((s) => s.checks.some((c) => c.id === 'm4.hall-load'));
+    const c = m4.checks.find((x) => x.id === 'm4.hall-load');
+    expect(c.status).toBe('deferred');
+    expect(m4.total).toBe(m4.checks.length - 1);
+    expect(m4.passed).toBeLessThanOrEqual(m4.total);
+  });
+  it('اختبار الحمل في CI يُظهر القاعة في قاعدته قبل القياس، ثم يعيد ما كان', () => {
+    const s = read('scripts/integration/hall-load.mjs');
+    const on = s.indexOf(`'{"hall": true}'::jsonb`);
+    expect(on).toBeGreaterThan(0);
+    expect(on).toBeLessThan(s.indexOf('const started = Date.now()'));
+    expect(s).toMatch(/featuresWas \? `update leaders\.app_settings set value = \$\{q\(featuresWas\)\}::jsonb where key = 'features'`/);
+  });
+});
+
+describe('دليل التشغيل: قسم مفاتيح الميزات', () => {
+  const rb = read('RUNBOOK.md');
+  it('يقول أين المفاتيح وما يخفيه كل منها وكيف تُظهَر', () => {
+    expect(rb).toContain('## 8. مفاتيح الميزات');
+    for (const s of ['الميزات قيد البناء', 'features.hall', 'features.katon', 'feedback360.enabled', 'hall_off', 'katon_off', 'f360_off', 'تتجمد', 'm4.hall-load', 'كيف تُظهَر ميزة']) expect(rb).toContain(s);
+  });
+});
