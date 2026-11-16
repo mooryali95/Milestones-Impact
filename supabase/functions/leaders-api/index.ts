@@ -107,9 +107,11 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     ...(await (async () => {
       // بريد ميزة مخفية (360) يُمسك في الطابور حتى تُظهَر (FT.heldMail). تعذّر حسابه يؤجل التفريغ ساعة ولا يرسل ما يجب إمساكه
       const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
-      if (!hold) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true } };
+      // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
+      const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
+      if (!hold || !rewrite) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true } };
       return {
-        mail_queue: await drainMailQueue(40, hold).catch((e) => ({ sent: 0, error: String(e?.message || e) })),
+        mail_queue: await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })),
         // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
         mail_stuck: await stuckQueueAlert(hold).catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
       };

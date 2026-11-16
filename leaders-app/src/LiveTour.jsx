@@ -65,10 +65,20 @@ function useSpotlight(anchor, active) {
 
 export default function LiveTour({ me, onAccept, onGo }) {
   // خطوة الميزة المخفية (القاعة) تُحذف قبل العداد، فلا تقود الجولة إلى شاشة مخفية ولا يُذكر ما أُخفي (مفاتيح الميزات)
-  // قبل الدخول لا تُعرف المفاتيح، فتُعد الخطوات كلها، وخطوة القاعة بعد الدخول بكثير فلا يتغير ما قبلها
-  const hallOn = !me || flagsOf(me).hall;
+  // قبل الدخول لا تُعرف المفاتيح، فالقاعة مخفية حتى يقول الخادم غير ذلك: الزائر برابط العرض لا يرى ميزة مخفية.
+  // وحين تتغير الخطوات (الدخول أو تبدّل المفتاح) تبقى الجولة على الخطوة نفسها بمفتاحها لا برقمها
+  const hallOn = !!me && flagsOf(me).hall;
   const STEPS = useMemo(() => tourStepsFor(TOUR_STEPS, { hall: hallOn, katon: true, f360: true }), [hallOn]);
   const [at, setI] = useState(() => Math.max(0, Number(store.get(KEY)) || 0));
+  const prevSteps = useRef(STEPS);
+  useEffect(() => {
+    const prev = prevSteps.current;
+    prevSteps.current = STEPS;
+    if (prev === STEPS) return;
+    const key = prev[Math.min(prev.length - 1, at)]?.key;
+    const k = STEPS.findIndex((s) => s.key === key);
+    if (k >= 0 && k !== at) { setI(k); store.set(KEY, String(k)); }
+  }, [STEPS, at]);
   const i = Math.min(STEPS.length - 1, at);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -163,7 +173,7 @@ export default function LiveTour({ me, onAccept, onGo }) {
           <div className="tour-tools">
             {/* مقطع الخطوة تسجيل said القديم: لا يُعرض حيث صُحّح نصها (d) حتى يُعاد التسجيل */}
             {audioOk && !step.said && (
-              <button type="button" className="link small" onClick={() => { const a = audio.current; if (!a) return; if (a.paused) { a.src = `${TOUR_AUDIO_BASE}${i + 1}.mp3`; a.play().catch(() => setAudioOk(false)); } else a.pause(); }}>▶ الصوت</button>
+              <button type="button" className="link small" onClick={() => { const a = audio.current; if (!a) return; if (a.paused) { a.src = `${TOUR_AUDIO_BASE}${TOUR_STEPS.findIndex((s) => s.key === step.key) + 1}.mp3`; a.play().catch(() => setAudioOk(false)); } else a.pause(); }}>▶ الصوت</button>
             )}
             <button type="button" className="link small" onClick={togglePresenter} aria-pressed={presenter}>{presenter ? 'نص عادي' : 'وضع المقدِّم'}</button>
             <button type="button" className="link small" onClick={() => setMin(true)}>إخفاء</button>

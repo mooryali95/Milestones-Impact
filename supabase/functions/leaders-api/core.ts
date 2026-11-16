@@ -236,7 +236,7 @@ export async function sendMail(to: string, subject: string, html: string, attach
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
 }
 
-async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null) {
+export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null) {
   const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
   let { error } = await db.from('mail_queue').insert({ ...row, reason });
   if (error) ({ error } = await db.from('mail_queue').insert(row));   // قبل ترحيل مركز البريد: بلا عمود السبب
@@ -249,7 +249,8 @@ export const QUEUE_MAX_ATTEMPTS = 5;
 // إشعار انتظر أكثر من يومين فات أوانه (تذكير بموعد مضى): يُترك ولا يُرسل متأخرًا، ويبقى في الصندوق للمدير
 export const QUEUE_STALE_HOURS = 48;
 // hold: رسائل تُمسك فلا تُرسل ولا تُعد محاولة (بريد ميزة مطفأة، heldMail في features.ts)، ويُقرأ بعددها زيادةً فلا تحجب ما بعدها
-export async function drainMailQueue(limit = 40, hold: Set<string> = new Set()) {
+// rewrite: نص الرسالة كما يُرسل الآن (بريد ورشة دخل الطابور بملاحظة القاعة ثم أُخفيت، mailRewrite في features.ts)
+export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), rewrite: (m: { subject: string; html: string }) => string = (m) => m.html) {
   const { data, error } = await db.from('mail_queue').select('id, kind, created_at, to_email, subject, html, ref, attempts')
     .is('sent_at', null).is('gave_up_at', null).order('created_at').limit(limit + hold.size);
   if (error) return { sent: 0, pending: null };
@@ -259,7 +260,7 @@ export async function drainMailQueue(limit = 40, hold: Set<string> = new Set()) 
       await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
       continue;
     }
-    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
+    const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
     if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;
@@ -496,14 +497,14 @@ export const WORKSHOP_MAIL = {
 export const WORKSHOP_STAGED_NOTE = 'رابط الانضمام يظهر في رحلتك حين تُفتح لك مرحلة هذه الجلسة، فافتح رحلتك يومها.';
 // later: جلسة عن بعد لم يُضف رابطها بعد (J1)، فلا تعليمات القاعة: الرابط يصل قبلها ويظهر في رحلته
 export const WORKSHOP_LINK_LATER_NOTE = 'هذه الجلسة عن بعد، ورابط الانضمام يُضاف لاحقًا ويظهر في رحلتك قبل بدئها بساعة.';
-// hall: مفتاح القاعة (features.hall). مطفأة: ملاحظة بلا ذكرها، والحضور برمز QR (WORKSHOP_NO_HALL_NOTE)
-export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false, hall = true) {
+// hall: مفتاح القاعة (features.hall). مطفأة: ملاحظة بلا ذكرها بطريقة توثيق حضور الجلسة (method، WORKSHOP_NO_HALL_NOTE)
+export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false, hall = true, method: 'qr' | 'join' | 'other' = 'qr') {
   const m = WORKSHOP_MAIL[kind];
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
     + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(CONFIG.appUrl, 'افتح رحلتي')
-    + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : hall ? m.note : WORKSHOP_NO_HALL_NOTE[kind]),
+    + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : hall ? m.note : WORKSHOP_NO_HALL_NOTE[method][kind]),
     `${title} · ${when}`, '');
 }
 

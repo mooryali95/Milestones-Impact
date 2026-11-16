@@ -46,6 +46,8 @@ const answerView = (a: any, viewerId: string | null) => ({
   author: a.expert_id ? `${a.experts?.full_name || 'الخبير'} (الخبير)` : authorNameFor(a, a.participants?.full_name),
   by_expert: !!a.expert_id, mine: !!viewerId && a.author_id === viewerId,
 });
+// فرق القاعة تُعرض ما دامت القاعة ظاهرة، لكل جمهور بالحكم نفسه (المشارك والخبير وملفه)، وتعذّر القراءة يخفيها
+export const hallTeams = () => features().then((f) => !!f.hall).catch(() => false);
 // teams: false حين تُخفى القاعة، فالطلب الموجّه قديمًا إلى فريق يُعرض للجميع ويجيبه الجميع (peer.js)
 const requestView = (r: any, answers: any[], viewerId: string | null, teams = true) => ({
   id: r.id, text: r.text, source: r.source, source_ar: (PEER_SOURCE_AR as Record<string, string>)[r.source], ref_id: r.ref_id,
@@ -84,7 +86,7 @@ export async function list(p: any) {
   });
   return {
     success: true, supervision, supervision_ar: (SUPERVISION_AR as Record<string, string>)[supervision],
-    team: teams ? team : null, team_ar: teams && team ? (HALL_TEAM_AR as Record<string, string>)[team] : null, teams: HALL_TEAM_AR,
+    team: teams ? team : null, team_ar: teams && team ? (HALL_TEAM_AR as Record<string, string>)[team] : null, teams: teams ? HALL_TEAM_AR : {},
     // اختيار الفريق في نموذج الطلب: القاعة ظاهرة وللمشارك فريق، وإلا فالطلب إلى الجميع (peer.js)
     team_pick: peerTeamsOn(teams, team),
     advisor: adv ? firstName(adv.full_name) : null, items,
@@ -156,9 +158,9 @@ export async function expertList(e: any) {
   const { cohorts, ids } = await cohortsOf(e);
   if (!ids.size) return { success: true, advisor: false, cohorts: [], items: [] };
   const { data: reqs } = await db.from('peer_requests').select(REQ_COLS).in('cohort_id', [...ids]).eq('participants.is_demo', false).neq('status', 'closed').order('created_at', { ascending: false }).limit(200);
-  const answers = await answersFor((reqs || []).map((r: any) => r.id));
+  const [answers, teams] = await Promise.all([answersFor((reqs || []).map((r: any) => r.id)), hallTeams()]);
   const items = (reqs || []).map((r: any) => ({
-    ...requestView(r, answers.filter((a: any) => a.request_id === r.id), null),
+    ...requestView(r, answers.filter((a: any) => a.request_id === r.id), null, teams),
     cohort: cohorts.find((c: any) => c.id === r.cohort_id)?.name || '',
     pending: answers.filter((a: any) => a.request_id === r.id && a.status === 'pending').length,
   }));
@@ -220,12 +222,13 @@ export async function adminList(b: Body) {
 }
 
 // ── للملف (المرحلة 9): طلبات المشارك وإجابات زملائه التي تنتظر الخبير ──
-export async function forParticipant(participantId: string) {
+// show: فرق القاعة تُعرض (المدير يراها ليبنيها)، وإلا فبمفتاح القاعة
+export async function forParticipant(participantId: string, show?: boolean) {
   const { data: reqs } = await db.from('peer_requests').select('*, participants(full_name)').eq('participant_id', participantId).order('created_at', { ascending: false }).limit(50);
-  const answers = await answersFor((reqs || []).map((r: any) => r.id));
+  const [answers, teams] = await Promise.all([answersFor((reqs || []).map((r: any) => r.id)), show ?? hallTeams()]);
   const { data: given } = await db.from('peer_answers').select('id, status, created_at, confirmed_at').eq('author_id', participantId).order('created_at', { ascending: false }).limit(50);
   return {
-    requests: (reqs || []).map((r: any) => requestView(r, answers.filter((a: any) => a.request_id === r.id), null)),
+    requests: (reqs || []).map((r: any) => requestView(r, answers.filter((a: any) => a.request_id === r.id), null, teams)),
     pending_answers: answers.filter((a: any) => a.status === 'pending').map((a: any) => answerView(a, null)),
     given: (given || []).map((a: any) => ({ id: a.id, status: a.status, status_ar: (PEER_ANSWER_STATUS_AR as Record<string, string>)[a.status], at: a.created_at })),
   };

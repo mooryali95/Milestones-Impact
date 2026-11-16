@@ -64,7 +64,7 @@ describe(`بندا الرحلة باسم لا يُقرأ 360 (${MIG})`, () => {
   });
   it('يغيّر ما على النص الأصلي وحده في كل برنامج، ولا يمس ما حرّرته الإدارة، وآمن لإعادة التشغيل', async () => {
     const db = new PGlite();
-    await db.exec(`create schema leaders; create table leaders.schema_migrations (name text primary key);
+    await db.exec(`create schema leaders; create role anon; create role authenticated; create table leaders.schema_migrations (name text primary key);
       create table leaders.stage_requirements (program_id int, code text, title_ar text);
       create table leaders.journey_stages (program_id int, key text, activities_ar text);
       insert into leaders.stage_requirements values (1, 'T-360', '${T_OLD}'), (1, 'E-360', '${E_OLD}'), (2, 'T-360', 'عنوان حرّرته الإدارة'), (2, 'E-360', '${E_OLD}');
@@ -78,6 +78,33 @@ describe(`بندا الرحلة باسم لا يُقرأ 360 (${MIG})`, () => {
     const st = (await db.query('select activities_ar from leaders.journey_stages order by program_id')).rows.map((r) => r.activities_ar);
     expect(st).toEqual(['جلسات توجيه، وتقدير مختصر من مديرك وزملائك وفريقك، وخطة تطوير', 'نص حرّرته الإدارة']);
     expect((await db.query('select name from leaders.schema_migrations')).rows).toEqual([{ name: MIG }]);
+  });
+  it('ونسخ البرامج المجمدة: الدفعة المثبتة على نسخة لا ترى «تقييم 360»، وما حُرّر يبقى، واللقطة السابقة محفوظة', async () => {
+    const db = new PGlite();
+    const V1 = '00000000-0000-4000-8000-0000000000a1', V2 = '00000000-0000-4000-8000-0000000000a2', V3 = '00000000-0000-4000-8000-0000000000a3';
+    const data = (t, e, act) => JSON.stringify({
+      stages: [{ key: 'intake', title_ar: 'القبول', activities_ar: 'قياس' }, { key: 'leadership_coaching', title_ar: 'التوجيه', activities_ar: act }],
+      requirements: [{ code: 'T-360', title_ar: t, sort: 1 }, { code: 'X-1', title_ar: 'بند آخر', sort: 2 }, { code: 'E-360', title_ar: e, sort: 3 }],
+    });
+    await db.exec(`create schema leaders; create role anon; create role authenticated; create table leaders.schema_migrations (name text primary key);
+      create table leaders.stage_requirements (program_id int, code text, title_ar text);
+      create table leaders.journey_stages (program_id int, key text, activities_ar text);
+      create table leaders.program_versions (id uuid primary key, data jsonb not null);
+      insert into leaders.program_versions values
+        ('${V1}', '${data(T_OLD, E_OLD, 'جلسات، وتقييم 360 مختصر من مديرك وزملائك وفريقك، وخطة')}'),
+        ('${V2}', '${data('عنوان حرّرته الإدارة', E_OLD, 'نص حرّرته الإدارة')}'),
+        ('${V3}', '${data(T_NEW, E_NEW, 'نص آخر')}');`);
+    await db.exec(SQL);
+    await db.exec(SQL);
+    const rows = Object.fromEntries((await db.query('select id, data from leaders.program_versions')).rows.map((r) => [r.id, r.data]));
+    expect(rows[V1].requirements.map((r) => [r.code, r.title_ar, r.sort])).toEqual([['T-360', T_NEW, 1], ['X-1', 'بند آخر', 2], ['E-360', E_NEW, 3]]);
+    expect(rows[V1].stages.map((s) => s.activities_ar)).toEqual(['قياس', 'جلسات، وتقدير مختصر من مديرك وزملائك وفريقك، وخطة']);
+    expect(rows[V2].requirements.map((r) => r.title_ar)).toEqual(['عنوان حرّرته الإدارة', 'بند آخر', E_NEW]);
+    expect(rows[V2].stages[1].activities_ar).toBe('نص حرّرته الإدارة');
+    expect(JSON.stringify(rows[V1])).not.toMatch(/360 مختصر/);
+    const backup = (await db.query('select version_id, data from leaders.backup_20261116_t360_rename order by version_id')).rows;
+    expect(backup.map((b) => b.version_id)).toEqual([V1, V2]);
+    expect(backup[0].data.requirements[0].title_ar).toBe(T_OLD);
   });
   it('لا ترحيل لاحق يعيد «360» إلى عنوان بند', () => {
     const later = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql') && f > `${MIG}.sql`);

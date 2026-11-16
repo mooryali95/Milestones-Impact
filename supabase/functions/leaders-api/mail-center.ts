@@ -5,6 +5,7 @@
 // البحث بعنوان يمر ببصمته (addressHash)، والمتن يُقرأ من الطابور وحده (ما حُجب فانتظر).
 import { alertOps, all, audit, CONFIG, db, Fail, hash, must, randomCode, randomToken } from './core.ts';
 import { isEmail } from './logic.js';
+import { mailRewrite } from './features.ts';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
 import { addressHash, mailCounts, plainText, sendCounted } from '../_shared/mail.ts';
@@ -114,7 +115,8 @@ const queued = async (id: unknown) => {
   if (!isId(id)) throw new Fail('بيانات ناقصة');
   const m = must(await db.from('mail_queue').select('*').eq('id', String(id)).maybeSingle()) as any;
   if (!m) throw new Fail('الرسالة غير موجودة', 404);
-  return m;
+  // المتن كما يخرج الآن: بريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت يُعرض ويُرسل بالملاحظة العامة (features.ts)
+  return { ...m, html: (await mailRewrite())(m) };
 };
 export async function queueBody(a: Admin, b: Body) {
   requireWrite(a);

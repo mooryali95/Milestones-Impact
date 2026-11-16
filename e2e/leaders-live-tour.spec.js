@@ -52,7 +52,9 @@ test('الجولة الحيّة: ثماني عشرة خطوة على شاشات 
 
   const tour = page.getByRole('region', { name: 'الجولة الحيّة' });
   await expect(tour).toBeVisible();
-  await expect(tour.getByText('الخطوة 1 من 18')).toBeVisible();
+  // قبل الدخول لا تُعرف المفاتيح، فالقاعة مخفية: 17 خطوة بلا القاعة في قائمة الانتقال، ثم 18 بعد الدخول والقاعة ظاهرة
+  await expect(tour.getByText('الخطوة 1 من 17')).toBeVisible();
+  await expect(tour.locator('select option', { hasText: 'القاعة' })).toHaveCount(0);
   await expect(tour.getByRole('heading', { name: 'الترحيب' })).toBeVisible();
   await tour.getByRole('button', { name: 'التالي' }).click();
 
@@ -63,6 +65,7 @@ test('الجولة الحيّة: ثماني عشرة خطوة على شاشات 
 
   // 3: الملف يُملأ بضغطة
   await expect(tour.getByRole('heading', { name: 'الملف الشخصي' })).toBeVisible();
+  await expect(tour.getByText('الخطوة 3 من 18')).toBeVisible();
   await expect(page.getByRole('heading', { name: /عرّفنا بك/ })).toBeVisible();
   await tour.getByRole('button', { name: 'املأ الملف وأكمل' }).click();
 

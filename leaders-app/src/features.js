@@ -31,9 +31,11 @@ const OFF_CODES = new Set(Object.values(FEATURE_OFF_CODE));
 /** هل هذا الرد رفض ميزة مخفية؟ */
 export const isFeatureOff = (r) => !!r && r.success === false && OFF_CODES.has(r.code);
 
-/** خطوات الجولة الحيّة بلا خطوة ميزة مخفية، قبل العداد («الخطوة 3 من 9»)
- * @template {{ key: string }} T @param {T[]} steps @param {Flags} flags @returns {T[]} */
-export const tourStepsFor = (steps, flags) => steps.filter((s) => viewShown(s.key, flags));
+/** خطوات الجولة الحيّة بلا خطوة ميزة مخفية، قبل العداد («الخطوة 3 من 9»)، وبنص لا يذكر القاعة حين تُخفى (noHall)
+ * @template {{ key: string, d?: string, noHall?: string }} T @param {T[]} steps @param {Flags} flags @returns {T[]} */
+export const tourStepsFor = (steps, flags) => steps
+  .filter((s) => viewShown(s.key, flags))
+  .map((s) => (flags?.hall || !s.noHall ? s : { ...s, d: s.noHall }));
 
 /** ما يُفتح بعد الاعتماد كما يُقال للمشارك: لا يُذكر ما أُخفي
  * @param {Flags} flags */

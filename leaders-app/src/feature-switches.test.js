@@ -51,6 +51,23 @@ describe('الجولة الحيّة والنصوص', () => {
     expect(tourStepsFor(TOUR_STEPS, OFF)).toHaveLength(TOUR_STEPS.length - 1);
     expect(tourStepsFor(TOUR_STEPS, ON)).toHaveLength(TOUR_STEPS.length);
   });
+  it('حين تُخفى القاعة لا تذكرها الجولة ولا فرقها في أي خطوة، وتبقى كما هي حين تظهر', () => {
+    const off = tourStepsFor(TOUR_STEPS, OFF);
+    for (const s of off) {
+      expect(s.d, s.key).not.toMatch(/القاعة|على فريقه|فريق آخر/);   // «أعضاء فريقه» في الأثر فريق عمله لا فرق القاعة
+      expect(s.d.length, s.key).toBeGreaterThan(80);
+      expect(s.d, s.key).not.toMatch(/[-‐-―−ـ]/);
+    }
+    expect(tourStepsFor(TOUR_STEPS, ON).map((s) => s.d)).toEqual(TOUR_STEPS.map((s) => s.d));
+    expect(TOUR_STEPS.filter((s) => s.noHall).map((s) => s.key).sort()).toEqual(['peer', 'portals']);
+  });
+  it('الجولة قبل الدخول تعامل القاعة مخفية، وتبقى على خطوتها بمفتاحها حين تتغير الخطوات، والصوت برقم الخطوة الأصلي', () => {
+    const tour = read('leaders-app/src/LiveTour.jsx');
+    expect(tour).toContain('const hallOn = !!me && flagsOf(me).hall;');
+    expect(tour).not.toContain('!me || flagsOf(me).hall');
+    expect(tour).toMatch(/findIndex\(\(s\) => s\.key === key\)/);
+    expect(tour).toMatch(/TOUR_AUDIO_BASE\}\$\{TOUR_STEPS\.findIndex/);
+  });
   it('ما يُفتح بعد الاعتماد ونص الباقة لا يذكران المخفي', () => {
     expect(afterApprovalAr(OFF)).toBe('كتابك، ومبادرتك، وطلبات التوجيه');
     expect(afterApprovalAr(ON)).toBe('كتابك، ومبادرتك، والقاعة، وطلبات التوجيه');
@@ -110,5 +127,18 @@ describe('الخبير والمقيّم', () => {
     const src = read('leaders-app/src/screens/Rater.jsx');
     expect(src).toContain('if (data.paused)');
     expect(src).toContain('else if (res.paused) setData(res)');
+  });
+});
+
+describe('مفاتيح الإدارة: الصياغة والتباين', () => {
+  it('حال كل مفتاح بجنس اسمه كما في عنوان حقله، والشارة بلون نص يحقق التباين', () => {
+    const src = read('admin-app/src/screens/AppSettings.jsx');
+    expect(src).toContain("title: 'القاعة الحية', on_ar: 'ظاهرة للمستخدمين', off_ar: 'مخفية عن المستخدمين'");
+    expect(src).toContain("title: 'كاتون', on_ar: 'ظاهر للمستخدمين', off_ar: 'مخفي عن المستخدمين'");
+    expect(src).toContain("title: 'تقييم 360', on_ar: 'ظاهر للمستخدمين', off_ar: 'مخفي عن المستخدمين'");
+    expect(src).not.toMatch(/on \? 'ظاهرة للمستخدمين' : 'مخفية عن المستخدمين'/);
+    const badge = read('admin-app/src/admin.css').match(/\.ft-hidden-badge \{[^}]*\}/)[0];
+    expect(badge).toContain('color: var(--st-warn-text)');
+    expect(badge).not.toMatch(/color: var\(--st-warn\);/);
   });
 });

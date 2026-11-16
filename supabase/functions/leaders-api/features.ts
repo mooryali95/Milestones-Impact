@@ -2,9 +2,10 @@
 // مفاتيح الميزات على الخادم: القراءة من المخزن الواحد، والحارس المركزي لكل فعل، وما يُمسك في طابور البريد
 // ════════════════════════════════════════════════════════════════
 // المنطق الصافي في features.js. القيم من appSettings() بذاكرة دقيقة، وتعذّر القراءة يعيد الافتراضي (مطفأ).
-import { db, Fail, FEEDBACK_MAIL } from './core.ts';
+import { db, Fail, FEEDBACK_MAIL, WORKSHOP_MAIL } from './core.ts';
+import { mailNote } from '../_shared/mail.ts';
 import { appSettings } from './settings.ts';
-import { featureFlags, featureGate } from './features.js';
+import { featureFlags, featureGate, WORKSHOP_NO_HALL_NOTE } from './features.js';
 
 export type Features = { hall: boolean; katon: boolean; f360: boolean };
 
@@ -37,4 +38,20 @@ export async function heldMail(): Promise<Set<string>> {
     for (const m of rows) if (m.ref && f360.has(m.ref)) held.add(m.id);
   }
   return held;
+}
+
+// بريد ورشة دخل الطابور بملاحظة القاعة (السقف اليومي) ثم أُخفيت القاعة قبل خروجه: تُستبدل الملاحظة عند الإرسال
+// بالملاحظة العامة (لا تُعرف طريقة الحضور من الطابور)، وما سواه يخرج كما خُزّن. والقاعة ظاهرة: لا تغيير
+type Queued = { subject: string; html: string };
+export function hallNoteRewrite(hallOn: boolean): (m: Queued) => string {
+  if (hallOn) return (m) => m.html;
+  const swaps = (Object.keys(WORKSHOP_MAIL) as (keyof typeof WORKSHOP_MAIL)[])
+    .map((k) => ({ subject: WORKSHOP_MAIL[k].subject as string, from: mailNote(WORKSHOP_MAIL[k].note), to: mailNote(WORKSHOP_NO_HALL_NOTE.other[k]) }));
+  return (m) => {
+    const w = swaps.find((x) => x.subject === m.subject);
+    return w ? String(m.html || '').split(w.from).join(w.to) : m.html;
+  };
+}
+export async function mailRewrite(): Promise<(m: Queued) => string> {
+  return hallNoteRewrite((await features()).hall);
 }

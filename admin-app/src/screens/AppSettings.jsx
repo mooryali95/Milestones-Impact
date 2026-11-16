@@ -12,9 +12,10 @@ import { featureFlags } from '../../../supabase/functions/leaders-api/features.j
 // الميزات قيد البناء (مفاتيح الميزات P2): ثلاثة مفاتيح متجاورة، لكل ميزة مفتاح واحد في المخزن. القاعة وكاتون في مجموعة
 // features، و360 هو feedback360.enabled نفسه (الخيار أ)، فلا يُعرض مرة ثانية في مجموعة 360. كل نقرة تحفظ فورًا وتُسجَّل في السجل
 export const FEATURE_SWITCHES = [
-  { key: 'hall', group: 'features', field: 'hall', title: 'القاعة الحية' },
-  { key: 'katon', group: 'features', field: 'katon', title: 'كاتون' },
-  { key: 'f360', group: 'feedback360', field: 'enabled', title: 'تقييم 360' },
+  // حال كل مفتاح بجنس اسمه كما في عنوان حقله (settings.js): القاعة ظاهرة، وكاتون و360 ظاهر
+  { key: 'hall', group: 'features', field: 'hall', title: 'القاعة الحية', on_ar: 'ظاهرة للمستخدمين', off_ar: 'مخفية عن المستخدمين' },
+  { key: 'katon', group: 'features', field: 'katon', title: 'كاتون', on_ar: 'ظاهر للمستخدمين', off_ar: 'مخفي عن المستخدمين' },
+  { key: 'f360', group: 'feedback360', field: 'enabled', title: 'تقييم 360', on_ar: 'ظاهر للمستخدمين', off_ar: 'مخفي عن المستخدمين' },
 ];
 // حقول تُرسم في «الميزات قيد البناء» وحدها، فلا تُعرض مرتين
 const IN_FEATURES = { feedback360: new Set(['enabled']) };
@@ -108,7 +109,7 @@ function FeatureSwitches({ d, canWrite, onSaved }) {
     const r = await L('admin.settings-save', { group: s.group, values: { [s.field]: on } });
     setBusy('');
     if (!r.success) { toast(r.message); return; }
-    toast(`${s.title}: ${on ? 'ظاهرة للمستخدمين' : 'مخفية عن المستخدمين'}`);
+    toast(`${s.title}: ${on ? s.on_ar : s.off_ar}`);
     onSaved(r);
   };
   return (
@@ -125,7 +126,7 @@ function FeatureSwitches({ d, canWrite, onSaved }) {
               <label className="of-switch">
                 <input type="checkbox" role="switch" checked={on} disabled={!canWrite || !d.ready || busy === s.key}
                   aria-describedby={`ft-${s.key}-h`} onChange={(e) => flip(s, e.target.checked)} />
-                <span><b>{s.title}</b><br /><span className={`la-chip ${on ? 'ok' : 'warn'}`}>{on ? 'ظاهرة للمستخدمين' : 'مخفية عن المستخدمين'}</span></span>
+                <span><b>{s.title}</b><br /><span className={`la-chip ${on ? 'ok' : 'warn'}`}>{on ? s.on_ar : s.off_ar}</span></span>
               </label>
               <small className="la-muted" id={`ft-${s.key}-h`}>{f.hint_ar}</small>
               {upd && <small className="la-muted">آخر تعديل: {upd.by} · {date(upd.at)}</small>}

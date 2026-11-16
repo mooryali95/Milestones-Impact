@@ -8,9 +8,9 @@ const FT = await import('./features.ts');
 const FB = await import('./feedback360.ts');
 const H = await import('./hall.ts');
 const { raterGet, raterSubmit } = await import('./impact.ts');
-const { resetSettingsCache } = await import('./settings.ts');
+const { appSettings, expireSettingsCache, resetSettingsCache } = await import('./settings.ts');
 const { DEFAULTS, resolveSettings } = await import('./settings.js');
-const { coordFeedbackShown, featureFlags, featureGate, FEATURE_ACTIONS, FEATURE_OFF_AR, RATER_PAUSED_AR, WORKSHOP_NO_HALL_NOTE } = await import('./features.js');
+const { coordFeedbackShown, featureFlags, featureGate, FEATURE_ACTIONS, FEATURE_OFF_AR, RATER_PAUSED_AR, WORKSHOP_NO_HALL_NOTE, attendNoteMethod } = await import('./features.js');
 
 type Row = Record<string, any>;
 // قاعدة في الذاكرة: eq وneq وin وis وcontains وlimit والعدّ، والإدراج والتحديث، وكل كتابة تُسجَّل
@@ -144,13 +144,96 @@ Deno.test('360 المخفي متجمد: المهمة الساعية لا تذك�
   } finally { w.restore(); }
 });
 
-Deno.test('360 المخفي: إغلاق المدير المبكر يُنفَّذ بلا بريد ولا يجري المهمة على غير دورته', async () => {
+Deno.test('360 المخفي: إغلاق المدير المبكر يُنفَّذ بلا إرسال، وبريد «التقرير جاهز» يُمسك في الطابور ويخرج عند الإظهار', async () => {
   const w = f360World(false);
+  w.tables.cohorts = [{ id: 'co1', is_default: true, organization_id: null, status: 'running', advisor_expert_id: 'x1', created_at: '2026-10-01' }];
+  w.tables.enrollments = [];
+  w.tables.cohort_group_members = [];
+  w.tables.experts = [{ id: 'x1', full_name: 'المستشار خالد', email: 'adv@x.sa', status: 'active', roles: ['advisor'] }];
+  for (const c of w.tables.feedback_cycles) c.participants = { id: PID, full_name: 'سارة', email: 'p@x.sa', organization_id: null, is_demo: false };
   try {
     const r: any = await FB.adminClose({ email: 'admin@x.sa' }, { cycle_id: CYC });
-    assertEquals([r.success, r.closed, r.mailed], [true, 1, false]);
+    assertEquals([r.success, r.closed, r.mailed, r.queued], [true, 1, false, true]);
     assertEquals(w.tables.feedback_cycles.map((c) => c.status), ['closed', 'open']);
     assertEquals(w.tables.feedback_cycles[0].reminded_days, []);
+    // في الطابور لا مرسَل، وممسَك ما دام 360 مخفيًا، ثم يخرج حين يُظهَر
+    assertEquals(w.tables.mail_queue.map((m) => [m.to_email, m.subject, m.reason, m.sent_at ?? null]), [['adv@x.sa', FEEDBACK_MAIL.ready.subject('سارة'), 'f360_off', null]]);
+    assertEquals((await FT.heldMail()).has(w.tables.mail_queue[0].id), true);
+    w.tables.app_settings = [{ key: 'feedback360', value: { enabled: true } }];
+    resetSettingsCache();
+    assertEquals((await FT.heldMail()).size, 0);
+  } finally { w.restore(); }
+});
+
+Deno.test('استئناف 360: الساعة توقفت مع الإخفاء، فتُمد النافذة وروابط المقيّمين بقدر مدة الإخفاء، وما انقضى قبله لا يُمد', async () => {
+  const H = 36e5, now = Date.parse('2026-11-25T09:00:00Z');
+  const at = (h: number) => new Date(now + h * H).toISOString();
+  const w = install({
+    app_settings: [{ key: 'feedback360', value: { enabled: false } }],
+    schema_migrations: [{ name: FB.F360_FREEZE_MIGRATION, applied_at: at(-24 * 30) }],
+    // أُطفئ قبل سبعة أيام (وكان قبلها حفظ لا يمس المفتاح، وإطفاء أقدم)
+    audit_log: [
+      { action: 'admin.settings-save', entity_id: 'feedback360', created_at: at(-24 * 20), before: { value: { enabled: true } }, after: { value: { enabled: false } } },
+      { action: 'admin.settings-save', entity_id: 'feedback360', created_at: at(-24 * 7), before: { value: { enabled: true } }, after: { value: { enabled: false } } },
+      { action: 'admin.settings-save', entity_id: 'feedback360', created_at: at(-24 * 3), before: { value: { enabled: false, min_group: 3 } }, after: { value: { enabled: false, min_group: 4 } } },
+    ],
+    feedback_cycles: [
+      // مفتوحة قبل الإخفاء وتنقضي أثناءه: بقي يومان من نافذتها حين أُطفئ
+      { id: 'c-open', status: 'open', opens_at: at(-24 * 12), closes_at: at(-24 * 5) },
+      // انقضت قبل الإخفاء ولم تُغلق بعد: تُغلق كما كانت
+      { id: 'c-old', status: 'open', opens_at: at(-24 * 30), closes_at: at(-24 * 8) },
+      { id: 'c-closed', status: 'closed', opens_at: at(-24 * 12), closes_at: at(-24 * 5) },
+    ],
+    raters: [
+      { id: 'r-inv', cycle_id: 'c-open', phase: 'f360', status: 'invited', expires_at: at(-24 * 5) },
+      { id: 'r-done', cycle_id: 'c-open', phase: 'f360', status: 'submitted', expires_at: at(-24 * 5) },
+    ],
+  });
+  try {
+    assertEquals(await FB.pausedSince(), now - 7 * 24 * H);
+    const r: any = await FB.resumeFrozen('admin@x.sa', now);
+    assertEquals([r.extended, r.paused_ms], [1, 7 * 24 * H]);
+    const cyc = Object.fromEntries(w.tables.feedback_cycles.map((c) => [c.id, c.closes_at]));
+    assertEquals(cyc, { 'c-open': at(24 * 2), 'c-old': at(-24 * 8), 'c-closed': at(-24 * 5) });
+    assertEquals(w.tables.raters.map((x) => [x.id, x.expires_at]), [['r-inv', at(24 * 2)], ['r-done', at(-24 * 5)]]);
+    assertEquals(w.tables.audit_log.filter((l) => l.action === 'f360.resume').map((l) => l.entity_id), ['c-open']);
+  } finally { w.restore(); }
+});
+
+Deno.test('استئناف 360 بلا إطفاء في السجل: بداية الإخفاء نشر المفاتيح، وبلا أي منهما لا يُمد شيء', async () => {
+  const now = Date.parse('2026-11-25T09:00:00Z');
+  let w = install({ schema_migrations: [{ name: FB.F360_FREEZE_MIGRATION, applied_at: new Date(now - 3 * 864e5).toISOString() }], audit_log: [],
+    feedback_cycles: [{ id: 'c1', status: 'open', opens_at: new Date(now - 10 * 864e5).toISOString(), closes_at: new Date(now - 864e5).toISOString() }], raters: [] });
+  try {
+    assertEquals((await FB.resumeFrozen('admin@x.sa', now)).extended, 1);
+    assertEquals(w.tables.feedback_cycles[0].closes_at, new Date(now + 2 * 864e5).toISOString());
+  } finally { w.restore(); }
+  w = install({ schema_migrations: [], audit_log: [], feedback_cycles: [{ id: 'c1', status: 'open', closes_at: new Date(now - 864e5).toISOString() }], raters: [] });
+  try {
+    assertEquals(await FB.resumeFrozen('admin@x.sa', now), { extended: 0, paused_ms: 0 });
+    assertEquals(w.writes, []);
+  } finally { w.restore(); }
+});
+
+Deno.test('إظهار 360 من الإعدادات يستأنف الدورات المجمدة، وحفظ لا يُظهره لا يمسها', async () => {
+  const { adminSave } = await import('./settings.ts');
+  const since = Date.now() - 4 * 864e5;
+  const world = () => install({
+    app_settings: [{ key: 'feedback360', value: { enabled: false } }],
+    schema_migrations: [{ name: FB.F360_FREEZE_MIGRATION, applied_at: new Date(since).toISOString() }], audit_log: [],
+    feedback_cycles: [{ id: 'c1', status: 'open', opens_at: new Date(since - 864e5).toISOString(), closes_at: new Date(since + 864e5).toISOString() }], raters: [],
+  });
+  const a = { email: 'admin@x.sa', role: 'admin', method: 'passkey' } as any;
+  let w = world();
+  try {
+    await adminSave(a, { group: 'feedback360', values: { enabled: false, max_peer: 7 } });
+    assertEquals(w.tables.feedback_cycles[0].closes_at, new Date(since + 864e5).toISOString());
+  } finally { w.restore(); }
+  w = world();
+  try {
+    await adminSave(a, { group: 'feedback360', values: { enabled: true } });
+    const ext = Date.parse(w.tables.feedback_cycles[0].closes_at) - (since + 864e5);
+    assertEquals(ext >= 4 * 864e5 - 5e3 && ext <= 4 * 864e5 + 5e3, true);
   } finally { w.restore(); }
 });
 
@@ -224,11 +307,19 @@ Deno.test('مقيّمو الأثر قبل البرنامج وبعده (pre وpos
 Deno.test('رسائل الورشة والقاعة مخفية: ملاحظة بلا «القاعة» والحضور برمز QR، ومُظهَرة كما كانت', () => {
   for (const kind of ['invite', 'day', 'hour'] as const) {
     const off = workshopMail(kind, 'سارة', 'اليوم الأول', 'الأحد', 'قاعة التدريب', null, false, false);
-    assertEquals([kind, off.includes(WORKSHOP_NO_HALL_NOTE[kind]), off.includes('«القاعة»'), off.includes('الجولات'), off.includes('QR')], [kind, true, false, false, true]);
+    assertEquals([kind, off.includes(WORKSHOP_NO_HALL_NOTE.qr[kind]), off.includes('«القاعة»'), off.includes('الجولات'), off.includes('QR')], [kind, true, false, false, true]);
     const on = workshopMail(kind, 'سارة', 'اليوم الأول', 'الأحد', 'قاعة التدريب', null);
     assertEquals([kind, on.includes(WORKSHOP_MAIL[kind].note)], [kind, true]);
-    for (const n of Object.values(WORKSHOP_NO_HALL_NOTE)) assertEquals(/القاعة|كاتون|360|[\u2013\u2014]/.test(n), false);
+    // جلسة عن بعد برابطها وتوثيقها بالانضمام: لا «QR»، بل زر الانضمام في الرحلة. ويدوي أو آلي: ملاحظة عامة لا تَعِد بطريقة
+    const join = workshopMail(kind, 'سارة', 'اليوم الأول', 'الأحد', null, 'https://meet.example/x', false, false, 'join');
+    assertEquals([kind, join.includes(WORKSHOP_NO_HALL_NOTE.join[kind]), join.includes('QR'), join.includes('«القاعة»')], [kind, true, false, false]);
+    const other = workshopMail(kind, 'سارة', 'اليوم الأول', 'الأحد', 'قاعة التدريب', null, false, false, 'other');
+    assertEquals([kind, other.includes(WORKSHOP_NO_HALL_NOTE.other[kind]), other.includes('QR')], [kind, true, false]);
+    for (const m of ['qr', 'join', 'other'] as const) assertEquals([m, kind, /القاعة|كاتون|360|[\u2013\u2014]/.test(WORKSHOP_NO_HALL_NOTE[m][kind])], [m, kind, false]);
   }
+  // الطريقة من توثيق الحضور: join لا يصح إلا لجلسة عن بعد يصل المشارك رابطها
+  assertEquals([attendNoteMethod(undefined, false), attendNoteMethod('qr', true), attendNoteMethod('join', true), attendNoteMethod('join', false), attendNoteMethod('manual', true), attendNoteMethod('auto', false)],
+    ['qr', 'qr', 'join', 'other', 'other', 'other']);
   // الجلسة عن بعد بملاحظتها كما كانت، فلا قاعة فيها أصلًا
   assertEquals(workshopMail('invite', 'سارة', 'اليوم', 'الأحد', null, null, 'later', false).includes('رابط الانضمام يُضاف لاحقًا'), true);
 });
@@ -249,5 +340,65 @@ Deno.test('المفتاح للظهور وحده: وزن كاتون في الخت
   for (const f of ['continuous.js', 'final.js']) {
     const src = await Deno.readTextFile(new URL(`./${f}`, import.meta.url));
     assertEquals([f, /features|appSettings|settings\.(js|ts)/.test(src)], [f, false]);
+  }
+});
+
+Deno.test('خطأ لحظي في قراءة الإعدادات لا يطفئ ميزة ظاهرة: تبقى آخر قيم ناجحة ويُعاد الطلب بعد ثوانٍ', async () => {
+  const w = install({ app_settings: structuredClone(ON) });
+  const ok = (db as any).from;
+  try {
+    assertEquals(await FT.features(), { hall: true, katon: true, f360: true });
+    expireSettingsCache();
+    (db as any).from = (t: string) => (t === 'app_settings'
+      ? { select: () => Promise.resolve({ data: null, error: { code: '08006', message: 'connection reset' } }) }
+      : ok(t));
+    assertEquals(await FT.features(), { hall: true, katon: true, f360: true });
+    assertEquals(await FT.gate('hall.state'), null);
+    // تعود القراءة: تُقرأ القيم من جديد بعد انقضاء مهلة الإعادة
+    (db as any).from = ok;
+    expireSettingsCache();
+    w.tables.app_settings = [];
+    assertEquals(await FT.features(), { hall: false, katon: false, f360: false });
+  } finally { w.restore(); }
+  // بلا قراءة سابقة في هذه النسخة: الافتراضي (مطفأ)، فلا تُظهَر ميزة بخطأ
+  const w2 = install({ app_settings: [] });
+  try {
+    (db as any).from = () => ({ select: () => Promise.resolve({ data: null, error: { code: '08006', message: 'x' } }) });
+    assertEquals((await appSettings()).features, DEFAULTS.features);
+  } finally { w2.restore(); }
+});
+
+Deno.test('بريد ورشة دخل الطابور بملاحظة القاعة ثم أُخفيت: يخرج بالملاحظة العامة، وغيره كما خُزّن، والقاعة ظاهرة لا تغيير', async () => {
+  const { hallNoteRewrite } = FT;
+  const html = workshopMail('invite', 'سارة', 'اليوم الأول', 'الأحد', 'قاعة التدريب', null);
+  assertEquals(html.includes(WORKSHOP_MAIL.invite.note), true);
+  const off = hallNoteRewrite(false)({ subject: WORKSHOP_MAIL.invite.subject, html });
+  assertEquals([off.includes(WORKSHOP_MAIL.invite.note), off.includes(WORKSHOP_NO_HALL_NOTE.other.invite), off.includes('«القاعة»')], [false, true, false]);
+  assertEquals(hallNoteRewrite(true)({ subject: WORKSHOP_MAIL.invite.subject, html }), html);
+  assertEquals(hallNoteRewrite(false)({ subject: 'موضوع آخر', html }), html);
+  for (const k of ['day', 'hour'] as const) {
+    const h = workshopMail(k, 'سارة', 'اليوم', 'الأحد', null, null);
+    assertEquals([k, hallNoteRewrite(false)({ subject: WORKSHOP_MAIL[k].subject, html: h }).includes(WORKSHOP_NO_HALL_NOTE.other[k])], [k, true]);
+  }
+  // التفريغ والإرسال اليدوي من صندوق «لم يُرسل» يرسلان المتن بعد الاستبدال، والمهمة الساعية تمرره
+  const core = await Deno.readTextFile(new URL('./core.ts', import.meta.url));
+  assertEquals(/sendCounted\(db, m\.to_email, m\.subject, rewrite\(m\),/.test(core), true);
+  assertEquals((await Deno.readTextFile(new URL('./index.ts', import.meta.url))).includes('drainMailQueue(40, hold, rewrite)'), true);
+  assertEquals((await Deno.readTextFile(new URL('./mail-center.ts', import.meta.url))).includes('html: (await mailRewrite())(m)'), true);
+});
+
+Deno.test('فرق القاعة المخفية لا تظهر للخبير: قائمة طلبات الأقران وملف المشارك «الجميع»، والمدير يراها، والقاعة ظاهرة كما كانت', async () => {
+  const PR = await import('./peer.ts');
+  const reqs = () => [{ id: 'q1', participant_id: PID, cohort_id: 'co1', text: 'سؤال', source: 'free', target_team: 'lead', status: 'open', created_at: '2026-11-10', participants: { full_name: 'سارة', is_demo: false } }];
+  for (const [settings, team] of [[[], 'الجميع'], [structuredClone(ON), null]] as const) {
+    const w = install({ app_settings: settings as any, peer_requests: reqs(), peer_answers: [], peer_given: [] });
+    try {
+      const f: any = await PR.forParticipant(PID);
+      if (team) assertEquals([f.requests[0].target_team, f.requests[0].target_team_ar], [null, team]);
+      else assertEquals(f.requests[0].target_team, 'lead');
+      const adm: any = await PR.forParticipant(PID, true);
+      assertEquals(adm.requests[0].target_team, 'lead');
+      assertEquals(await PR.hallTeams(), !team);
+    } finally { w.restore(); }
   }
 });
