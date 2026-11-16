@@ -4,7 +4,7 @@ import {
   contextLine, GUIDE_MAX_INPUT, GUIDE_MODEL, GUIDE_POLICY_VERSION, GUIDE_RULES, guideGate, left, parseReply, quizLeak, riyadhWindow, routeQuestion,
 } from '../../supabase/functions/leaders-api/guide.js';
 
-const open = { policyVersion: '2026-12-01', consentVersion: '2026-12-01', enabled: true, companion: true, ready: true, hasKey: true };
+const open = { policyVersion: '2026-12-01', consentVersion: '2026-12-01', enabled: true, evalOk: true, pilot: true, companion: true, ready: true, hasKey: true };
 
 describe('البوابة', () => {
   it('مغلقة لكل أحد حتى تُضبط نسخة السياسة الجوهرية في G4', () => {
@@ -16,6 +16,8 @@ describe('البوابة', () => {
     expect(guideGate({ ...open, consentVersion: '2026-11-19' }).reason).toBe('consent');
     expect(guideGate({ ...open, consentVersion: null }).reason).toBe('consent');
     expect(guideGate({ ...open, enabled: false }).reason).toBe('off');
+    expect(guideGate({ ...open, evalOk: false }).reason).toBe('eval');
+    expect(guideGate({ ...open, pilot: false }).reason).toBe('pilot');
     expect(guideGate({ ...open, companion: false }).reason).toBe('org');
     expect(guideGate({ ...open, ready: false }).reason).toBe('start');
     expect(guideGate({ ...open, hasKey: false }).reason).toBe('key');
@@ -40,6 +42,10 @@ describe('الموجّه قبل النموذج', () => {
     'كيف أطبق فكرة الباب على مشروعي في الإدارة؟',
     'ما خطوتي التالية بعد تسمية مبادرتي؟',
     'كيف أبدأ قسم المنافع في المبادرة؟',
+    // ما كان يُرفض خطأ لتطابق داخل كلمة: «الدفعة» فيها «الدفع»، و«مرحلة» فيها «حل»
+    'متى تبدأ الدفعة القادمة ورش العمل وكيف أستعد لها؟',
+    'في مرحلة سؤال الراعي عن المنافع، كيف أعرضها؟',
+    'كيف أحلل أصحاب المصلحة في مشروعي؟',
   ])('«%s» يمر إلى النموذج', (q) => expect(routeQuestion(q)).toEqual({ kind: 'ok' }));
   it('الفارغ والطويل', () => {
     expect(routeQuestion('  ').reason).toBe('empty');

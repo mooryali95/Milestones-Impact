@@ -20,13 +20,15 @@ export const GATE_AR = {
   policy: 'المساعد الذكي لم يُفعَّل بعد. الاستشارة مع خبير متاحة لك الآن.',
   consent: 'وافق على سياسة الخصوصية المحدّثة ليعمل المساعد الذكي.',
   off: 'المساعد الذكي متوقف الآن. الاستشارة مع خبير متاحة لك.',
+  eval: 'المساعد الذكي لم يُفعَّل بعد. الاستشارة مع خبير متاحة لك الآن.',
+  pilot: 'المساعد الذكي في تجربة لدفعات محددة الآن. الاستشارة مع خبير متاحة لك.',
   org: 'جهتك لم تفعّل المساعد الذكي لمشاركيها. الاستشارة مع خبير متاحة لك.',
   start: 'ابدأ بقراءة الباب الأول من كتابك، وسيكون التوجيه معك من هناك.',
   key: 'المساعد الذكي غير متاح الآن. الاستشارة مع خبير متاحة لك.',
 };
 
 /**
- * @param {{ policyVersion?: string|null, consentVersion?: string|null, enabled?: boolean, companion?: boolean, ready?: boolean|null, hasKey?: boolean }} g
+ * @param {{ policyVersion?: string|null, consentVersion?: string|null, enabled?: boolean, evalOk?: boolean, pilot?: boolean, companion?: boolean, ready?: boolean|null, hasKey?: boolean }} g
  * @returns {{ ok: boolean, reason: keyof typeof GATE_AR | null }}
  */
 export function guideGate(g) {
@@ -34,6 +36,9 @@ export function guideGate(g) {
   if (!policy) return { ok: false, reason: 'policy' };
   if (!g.consentVersion || String(g.consentVersion) < String(policy)) return { ok: false, reason: 'consent' };
   if (!g.enabled) return { ok: false, reason: 'off' };
+  // G4a: تقييم الدقة ناجح على مجموعة معتمدة، ثم الدفعة التجريبية وحدها
+  if (!g.evalOk) return { ok: false, reason: 'eval' };
+  if (!g.pilot) return { ok: false, reason: 'pilot' };
   if (g.companion === false) return { ok: false, reason: 'org' };
   if (!g.ready) return { ok: false, reason: 'start' };
   if (!g.hasKey) return { ok: false, reason: 'key' };
@@ -42,11 +47,16 @@ export function guideGate(g) {
 
 // ── الموجّه قبل النموذج: ما لا يُرسل للنموذج أصلًا، فلا كلفة ولا يُحسب من الحد ──
 const norm = (s) => String(s ?? '').replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase();
+// كل قاعدة تبدأ عند أول الكلمة (B) وبعضها ينتهي عند آخرها (E): التطابق داخل كلمة كان يرفض أسئلة عادية
+// («الدفعة» فيها «الدفع»، و«مرحلة» فيها «حل»)، وguide-chat.test.js يحرس هذه الحالات
+const B = '(?:^|[\\s،,.؟?!:؛«»"()])';
+const E = '(?=$|[\\s،,.؟?!:؛«»"()])';
+const rule = (src) => new RegExp(src.replaceAll('<B>', B).replaceAll('<E>', E));
 const RULES = [
-  { reason: 'quiz', re: /(اجاب|حل|جواب)\S*\s+((لي|عن|على)\s+)?(سؤال|اسئل|الاختبار|اختبار|الكويز)|(الاختبار|اختبار|الكويز|القياس)\S*\s+.*(الاجابه|الحل|الصحيح)|ما\s+(الاجابه|الخيار)\s+الصحيح|اي\s+خيار\s+صحيح/ },
-  { reason: 'write', re: /(اكتب|صغ|حرر|جهز|اعد)\s*(لي)?\s*(مبادرت|المبادره|الفصل|فصل|الوثيقه|وثيقت|النموذج|نموذج|الخطه|خطت|الميثاق)/ },
-  { reason: 'grade', re: /(درجت|درجتي|علامت|تقييمي|كم\s+ساخذ|هل\s+ساجتاز|هل\s+سانجح|نتيجتي|سيقبل\s+المستشار)/ },
-  { reason: 'account', re: /(كلمه\s+المرور|الدفع|فاتور|استرداد|اشتراك|حسابي|بريدي|رقم\s+جوالي|الشهاده\s+متي|احذف\s+حسابي)/ },
+  { reason: 'quiz', re: rule('<B>(اجاب|حل|جواب)\\S*\\s+((لي|عن|على)\\s+)?(سؤال|اسئل|الاختبار|اختبار|الكويز)|<B>(الاختبار|اختبار|الكويز|القياس)\\S*\\s+.*<B>(الاجابه|الحل|الصحيح)|<B>ما\\s+(الاجابه|الخيار)\\s+الصحيح|<B>اي\\s+خيار\\s+صحيح') },
+  { reason: 'write', re: rule('<B>(اكتب|صغ|حرر|جهز|اعد)(\\s+لي)?\\s+(مبادرت|المبادره|الفصل|فصل|الوثيقه|وثيقت|النموذج|نموذج|الخطه|خطت|الميثاق)') },
+  { reason: 'grade', re: rule('<B>(درجت|علامت|تقييمي|نتيجتي)|<B>(كم\\s+ساخذ|هل\\s+ساجتاز|هل\\s+سانجح|سيقبل\\s+المستشار)') },
+  { reason: 'account', re: rule('<B>(كلمه\\s+المرور|(ال)?دفع<E>|(ال)?فاتور|(ال)?استرداد|(ال)?اشتراك|حسابي<E>|بريدي<E>|رقم\\s+جوالي|الشهاده\\s+متي|احذف\\s+حسابي)') },
 ];
 export const REFUSAL_AR = {
   empty: 'اكتب سؤالك عن فكرة في كتابك أو خطوتك التالية.',
