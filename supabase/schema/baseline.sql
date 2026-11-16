@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116150000_leaders_mail_queue_expiry
+-- as-of migration: 20261116160000_leaders_erasure_decisions
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -766,10 +766,19 @@ create table if not exists leaders.erasure_requests (
   decided_at timestamp with time zone,
   decided_by text,
   note text,
+  ground text,
+  withdrawn_via text,
+  notified_at timestamp with time zone,
+  reminder_stage smallint default 0 not null,
+  reminded_at timestamp with time zone,
+  email_hash text,
   constraint erasure_requests_decided_by_check CHECK (((decided_by IS NULL) OR (char_length(decided_by) <= 200))),
+  constraint erasure_requests_email_hash_check CHECK (((email_hash IS NULL) OR (char_length(email_hash) <= 128))),
+  constraint erasure_requests_ground_check CHECK (((ground IS NULL) OR (ground = ANY (ARRAY['repeat'::text, 'litigation'::text, 'legal_retention'::text, 'other'::text])))),
   constraint erasure_requests_note_check CHECK (((note IS NULL) OR (char_length(note) <= 1000))),
   constraint erasure_requests_reason_check CHECK (((reason IS NULL) OR (char_length(reason) <= 500))),
   constraint erasure_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'done'::text, 'cancelled'::text, 'rejected'::text]))),
+  constraint erasure_requests_withdrawn_via_check CHECK (((withdrawn_via IS NULL) OR (withdrawn_via = ANY (ARRAY['email'::text, 'phone'::text, 'message'::text])))),
   constraint erasure_requests_pkey PRIMARY KEY (id)
 );
 
@@ -4055,6 +4064,32 @@ begin
     new.updated_by := 'db:' || current_user;
   end if;
   return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'leaders', 'pg_temp'
+AS $function$
+declare n integer;
+begin
+  perform 1 from leaders.erasure_requests where id = p_request and participant_id = p_participant and status = 'pending' for update;
+  if not found then raise exception 'erasure_purge: request not pending' using errcode = 'P0003'; end if;
+  if exists (select 1 from leaders.payments where participant_id = p_participant and status = 'pending') then
+    raise exception 'erasure_purge: pending payment' using errcode = 'P0004';
+  end if;
+  update leaders.erasure_requests set status = 'done', decided_at = now(), decided_by = p_by, email_hash = p_email_hash, reason = null
+    where id = p_request;
+  delete from leaders.payments where participant_id = p_participant and status in ('failed', 'expired');
+  update leaders.payments set customer_name = null, note = null, admin_note = null where participant_id = p_participant;
+  delete from leaders.certificates where participant_id = p_participant;
+  delete from leaders.participants where id = p_participant and coalesce(is_demo, false) = false;
+  get diagnostics n = row_count;
+  -- لا صف (حذف متزامن أو حساب العرض): يرجع كل ما سبق كما كان
+  if n = 0 then raise exception 'erasure_purge: participant not found' using errcode = 'P0002'; end if;
+  return n;
 end $function$
 ;
 

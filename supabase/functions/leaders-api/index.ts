@@ -49,6 +49,7 @@ import * as PR from './peer.ts';
 import * as FL from './file.ts';
 import * as SU from './sus.ts';
 import * as PV from './privacy.ts';
+import * as ER from './erasure.ts';
 import * as TM from './team.ts';
 import * as ST from './settings.ts';
 import * as FB from './feedback360.ts';
@@ -115,7 +116,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
       pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
       // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار
-      feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })) };
+      feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
+      // طلبات الحذف: تذكير المالك قبل 10 أيام وقبل 3 ويوم المهلة ثم يوميًا بعد التأخر (erasure.ts remindSweep)
+      erasure_reminders: await ER.remindSweep().catch((e) => ({ reminded: 0, error: String(e?.message || e) })) };
     return {
       ...sweeps, mail_queue,
       ...(hold && rewrite ? {
@@ -510,6 +513,11 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.participant-delete': A.participantDelete,
   'admin.sus': () => SU.adminSummary(),
   'admin.erasures': () => PV.pendingList(),
+  // قرار طلب الحذف من ملف المشارك (erasure.ts): القراءة لكل مدير، والقرار للمدير الأعلى (requireSuper داخل كل دالة)
+  'admin.erasure-get': (a, b) => ER.get(a, b),
+  'admin.erasure-execute': ER.execute,
+  'admin.erasure-decline': ER.decline,
+  'admin.erasure-withdrawn': ER.withdrawn,
   'admin.catalog': (_a, b) => A.catalog(b),
   // الكتاب الأم: يقرؤه كل مدير، ويعلّق ويحسم المدير الكاتب بعامل ثانٍ (master-book.ts)
   'admin.book': (a) => MB.book(MB.adminViewer(a)),

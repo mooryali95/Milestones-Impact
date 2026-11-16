@@ -2,9 +2,10 @@
 // خصوصية المشارك: نسخة من بياناته، وطلب حذفها (خدمة ذاتية)
 // ════════════════════════════════════════════════════════════════
 // me.privacy: حالة طلب الحذف وما بقي من نسخ اليوم. me.export: نسخة JSON من كل ما تحمله المنصة عنه.
-// me.erase-request: طلب حذف يصل المالك وينفذه المدير العام بمسار الحذف القائم (admin.participant-delete)،
-// أو يسحبه المشارك قبل تنفيذه. الحذف نفسه لا ينفذه المشارك: فيه موانع (شهادة صادرة، دفعة جارية) يقرأها إنسان.
-import { alertOps, audit, db, ERASE_MAIL_SUBJECT, eraseRequestMail, Fail, must, sendMail } from './core.ts';
+// me.erase-request: طلب حذف يصل المالك فيقرر فيه المدير الأعلى من ورقة الطلب (erasure.ts: تنفيذ أو رفض بسبب أو إغلاق بسحب)،
+// أو يسحبه المشارك قبل القرار. الحذف نفسه لا ينفذه المشارك: فيه موانع (شهادة صادرة، دفعة جارية) يقرأها إنسان.
+import { alertOps, audit, db, ERASE_MAIL_SUBJECT, eraseRequestMail, erasureUrl, Fail, must, sendMail } from './core.ts';
+import { daysLeft } from './erasure.js';
 import { answersExportable, cleanReason, ERASE_REPLY_DAYS, eraseView, EXPORT_ANSWER_COLUMNS, EXPORT_FEEDBACK_COLUMNS, EXPORT_PER_DAY, EXPORT_ROW_CAP, EXPORT_TABLES, exportable, scrubRow } from './privacy.js';
 import { CONTACT_EMAIL, POLICY_VERSION } from './labels.js';
 
@@ -80,7 +81,9 @@ export async function eraseRequest(p: any, b: Body) {
   if (!cur.ready) throw new Fail(`طلب الحذف من التطبيق غير متاح الآن. راسلنا على ${CONTACT_EMAIL} وننفذه خلال ${ERASE_REPLY_DAYS} يومًا`, 503, 'not_ready');
   if (b.cancel) {
     if (!cur.row) throw new Fail('لا طلب حذف قائم لتسحبه', 404, 'none');
-    must(await db.from('erasure_requests').update({ status: 'cancelled', decided_at: new Date().toISOString(), decided_by: 'participant' }).eq('id', cur.row.id).eq('status', 'pending'), 'تعذّر سحب الطلب');
+    // بشرط أنه ما زال قائمًا: قرار المدير في اللحظة نفسها يسبقه، فلا يُقال للمشارك «سحبنا» وقد قُرِّر فيه
+    const done = must(await db.from('erasure_requests').update({ status: 'cancelled', decided_at: new Date().toISOString(), decided_by: 'participant' }).eq('id', cur.row.id).eq('status', 'pending').select('id'), 'تعذّر سحب الطلب');
+    if (!((done as any[]) || []).length) throw new Fail('قُرِّر في طلبك للتو، ويصلك بريد بالقرار', 409, 'decided');
     await audit('participant', p.id, 'participant.erase-cancel', 'participants', p.id, null, { request: cur.row.id });
     return { success: true, erase: null };
   }
@@ -92,7 +95,10 @@ export async function eraseRequest(p: any, b: Body) {
   await audit('participant', p.id, 'participant.erase-request', 'participants', p.id, null, { request: row.id });
   const view = eraseView(row)!;
   // المالك يُبلَّغ فورًا بتهدئة لكل طلب (لا يُسقط طلب ثانٍ في المهلة نفسها)، والمشارك يصله تأكيد بالمهلة وطريقة السحب. تعذّر البريد لا يُسقط الطلب المسجَّل
-  await alertOps('erase_request', { request: row.id, participant: p.id, due_at: view.due_at }, { key: row.id }).catch((e) => console.error('erase alert:', e));
+  // بقالب المالك (eraseOwnerMail): الاسم والمهلة وزر يفتح ورقة الطلب نفسها. التفاصيل (detail) تُكتب في سجل التدقيق الذي
+  // لا يُحذف منه وتصل سلاك والرابط، فلا تحمل إلا المعرّفات والمهلة. الاسم والسبب في متن البريد وحده (mail)، ولا يُحفظ متنه
+  await alertOps('erase_request', { request: row.id, participant: p.id, due_at: view.due_at, days_left: daysLeft(row.created_at), url: erasureUrl(p.id) },
+    { key: row.id, mail: { name: p.full_name, ...(row.reason ? { reason: row.reason } : {}) } }).catch((e) => console.error('erase alert:', e));
   await sendMail(p.email, ERASE_MAIL_SUBJECT, eraseRequestMail(p.full_name, ERASE_REPLY_DAYS)).catch((e) => console.error('erase mail:', e));
   return { success: true, erase: view };
 }
@@ -106,19 +112,33 @@ export async function pendingEraseId(participantId: string) {
   return (data?.[0]?.id as string) ?? null;
 }
 // يعيد true إن أُغلق الطلب أو لم يكن طلب، وfalse إن بقي قائمًا بتعذّر الكتابة (يُبلَّغ ويُعاد في الرد)
-export async function closeOnDelete(requestId: string | null, by: string, note: string | null = null) {
+// email_hash: بصمة بريده تربط الطلب بسطر الحذف في سجل التدقيق بلا بريد صريح (20261116160000)
+export async function closeOnDelete(requestId: string | null, by: string, note: string | null = null, emailHash: string | null = null) {
   if (!requestId) return true;
-  const { error } = await db.from('erasure_requests').update({ status: 'done', decided_at: new Date().toISOString(), decided_by: by, ...(note ? { note: note.slice(0, 1000) } : {}) })
-    .eq('id', requestId).eq('status', 'pending');
-  if (!error || missingTable(error)) return true;
-  console.error('erasure close:', error.message);
-  return false;
+  // السبب نص حر من المشارك: يُمحى عند الإغلاق فلا يبقى من الطلب إلا تاريخه وقراره ومن نفذه (erasure.js ERASE_KEPT.request).
+  // بلا صف مطابق (قُرِّر فيه في اللحظة نفسها) يُعاد false، لا «أُغلق»
+  const { data, error } = await db.from('erasure_requests').update({ status: 'done', decided_at: new Date().toISOString(), decided_by: by, reason: null, ...(note ? { note: note.slice(0, 1000) } : {}), ...(emailHash ? { email_hash: emailHash } : {}) })
+    .eq('id', requestId).eq('status', 'pending').select('id');
+  if (error) { if (missingTable(error)) return true; console.error('erasure close:', error.message); return false; }
+  return ((data || []) as any[]).length > 0;
+}
+// ملاحظة على طلب أغلقه التنفيذ (erasure_purge) بعده، كتعذّر حذف ملفاته. true إن كُتبت
+export async function noteOnDone(requestId: string, note: string) {
+  const { data, error } = await db.from('erasure_requests').update({ note: note.slice(0, 1000) }).eq('id', requestId).eq('status', 'done').select('id');
+  if (error) { console.error('erasure note:', error.message); return false; }
+  return ((data || []) as any[]).length > 0;
 }
 
-// للوحة: الطلبات القائمة بأقدمها أولًا
+// وقت إبلاغ المشارك بالنتيجة. تعذّره لا يُفشل القرار المنفَّذ (الرسالة وصلت)، ويُسجَّل
+export async function markNotified(requestId: string) {
+  const { error } = await db.from('erasure_requests').update({ notified_at: new Date().toISOString() }).eq('id', requestId);
+  if (error) console.error('erasure notified:', error.message);
+}
+
+// للوحة: الطلبات القائمة بأقدمها أولًا، بأيامها المتبقية بتقويم الرياض (erasure.js daysLeft)
 export async function pendingList() {
   const { data, error } = await db.from('erasure_requests').select('id, participant_id, reason, created_at, participants(full_name, email)')
     .eq('status', 'pending').order('created_at').limit(200);
   if (error) { if (missingTable(error)) return { success: true, ready: false, items: [] }; throw new Fail('تعذّر قراءة طلبات الحذف', 503, 'busy'); }
-  return { success: true, ready: true, items: (data || []).map((r: any) => ({ ...eraseView(r), participant_id: r.participant_id, name: r.participants?.full_name ?? null, email: r.participants?.email ?? null })) };
+  return { success: true, ready: true, items: (data || []).map((r: any) => ({ ...eraseView(r), days_left: daysLeft(r.created_at), participant_id: r.participant_id, name: r.participants?.full_name ?? null, email: r.participants?.email ?? null })) };
 }

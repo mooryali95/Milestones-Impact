@@ -1,9 +1,11 @@
 // ════════════════════════════════════════════════════════════════
 // بياناتي: نسخة من بيانات المشارك، وطلب حذفها (خدمة ذاتية)
 // ════════════════════════════════════════════════════════════════
-// تُعرض تحت الملف الشخصي بعد إكماله. الحذف طلب ينفذه المدير العام خلال المهلة، ويُسحب من هنا قبل تنفيذه.
+// تُعرض تحت الملف الشخصي بعد إكماله. الحذف طلب يقرر فيه المدير العام خلال المهلة، ويُسحب من هنا قبل القرار بتأكيد.
+// ما يُحذف وما يبقى من erasure.js، المصدر الواحد مع ورقة الإدارة وبريد التنفيذ وسياسة الخصوصية.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { ERASE_DELETED, ERASE_KEPT } from '../../../supabase/functions/leaders-api/erasure.js';
 
 const day = (iso) => new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -22,6 +24,7 @@ export default function MyData({ me }) {
   const [asking, setAsking] = useState(false);
   const [typed, setTyped] = useState('');
   const [reason, setReason] = useState('');
+  const [withdrawing, setWithdrawing] = useState(false);   // تأكيد السحب قبل تنفيذه
   useEffect(() => { call('me.privacy').then((r) => { if (r.success && typeof r.exports_left === 'number') setSt(r); }); }, []);
   if (!st || me.participant.is_demo) return null;
 
@@ -41,7 +44,7 @@ export default function MyData({ me }) {
     setSt((s) => ({ ...s, erase: r.erase })); setAsking(false); setTyped(''); setReason('');
     setMsg({ text: 'سجّلنا طلبك، ووصلك تأكيد على بريدك.' });
   }); };
-  const cancel = () => run('me.erase-request', { cancel: true }, () => { setSt((s) => ({ ...s, erase: null })); setMsg({ text: 'سحبنا طلب الحذف، وحسابك باقٍ كما هو.' }); });
+  const cancel = () => run('me.erase-request', { cancel: true }, () => { setSt((s) => ({ ...s, erase: null })); setWithdrawing(false); setMsg({ text: 'سحبنا طلب الحذف، وحسابك باقٍ كما هو.' }); });
 
   return (
     <section className="card stack my-data" aria-labelledby="my-data-title">
@@ -56,21 +59,35 @@ export default function MyData({ me }) {
       </div>
 
       {st.erase ? (
-        <div className="alert small" role="status">
-          <b>طلب حذف قائم</b> منذ {day(st.erase.created_at)}. ننفذه في موعد أقصاه {day(st.erase.due_at)}، ويصلك تأكيد على بريدك.
-          <br /><button type="button" className="link small" disabled={busy} onClick={cancel}>اسحب الطلب وأبقِ حسابي</button>
+        <div className="alert small stack" role="status">
+          <span><b>طلب حذف قائم</b> منذ {day(st.erase.created_at)}. نرد عليه في موعد أقصاه {day(st.erase.due_at)}، ويصلك بريد بقرارنا.</span>
+          {!withdrawing ? (
+            <div><button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setWithdrawing(true); setMsg(null); }}>اسحب الطلب وأبقِ حسابي</button></div>
+          ) : (
+            <div className="stack" role="group" aria-label="تأكيد سحب الطلب">
+              <span>سحب طلب الحذف؟ يبقى حسابك وبياناتك كما هي، ولك أن تطلب الحذف من جديد متى شئت.</span>
+              <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
+                <button type="button" className="btn sm" disabled={busy} onClick={cancel}>نعم، اسحب الطلب</button>
+                <button type="button" className="btn ghost sm" disabled={busy} onClick={() => setWithdrawing(false)}>تراجع</button>
+              </div>
+            </div>
+          )}
         </div>
       ) : !st.erase_ready ? (
         <p className="small muted">لحذف حسابك وبياناتك راسلنا على <span className="ltr">{st.contact}</span> وننفذ طلبك خلال {st.reply_days} يومًا.</p>
       ) : !asking ? (
         <div className="row between" style={{ gap: '.75rem', flexWrap: 'wrap' }}>
           <div><b>حذف حسابي وبياناتي</b>
-            <br /><small className="muted">ننفذه خلال {st.reply_days} يومًا، ولك سحب الطلب قبل تنفيذه. بعد التنفيذ لا تُسترد البيانات.</small></div>
+            <br /><small className="muted">نرد عليه خلال {st.reply_days} يومًا، ولك سحب الطلب قبل ردنا. بعد التنفيذ لا تُسترد البيانات.</small></div>
           <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setAsking(true); setMsg(null); }}>اطلب الحذف</button>
         </div>
       ) : (
         <form className="stack" onSubmit={request}>
-          <p className="small"><b>ما الذي يُحذف؟</b> ملفك وقياسك وتقدمك ومبادرتك وشهادتك إن صدرت. يبقى ما يُلزمنا النظام بحفظه (سجلات الدفع) للمدة النظامية وحدها.</p>
+          {/* النصوص نفسها في ورقة الإدارة وبريد التنفيذ (erasure.js)، فلا يقرأ المشارك هنا غير ما يصله بعد التنفيذ */}
+          <div className="small"><b>ما الذي يُحذف؟</b>
+            <ul>{ERASE_DELETED.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          <div className="small"><b>ما الذي يبقى؟</b>
+            <ul>{ERASE_KEPT.map((k) => <li key={k.key}><b>{k.title}:</b> {k.text}</li>)}</ul></div>
           <label className="field"><span>سبب الطلب <em>(اختياري)</em></span>
             <input className="input" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
           <label className="field"><span>للتأكيد اكتب بريدك: <span className="ltr">{email}</span></span>
