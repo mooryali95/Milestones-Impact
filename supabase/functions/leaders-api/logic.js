@@ -1110,17 +1110,45 @@ export function videoSource(url) {
 export const VERIFY_METHODS = ['qr', 'join', 'manual', 'auto'];
 export const SESSION_MODES = ['in_person', 'online'];
 
+// ── الجلسة غير المؤرخة (J1): الموعد والرابط يُحددان لاحقًا ──
+// starts_at وends_at فارغان معًا أو محددان معًا (قيد workshop_sessions_dates_check). غير المؤرخة لا تُفتح ولا تُحتسب آليًا،
+// ولا تقويم لها ولا تذكير ولا دعوة، وتُرتب بعد المؤرخة. والعرض يقول «يُحدد لاحقًا»، لا تاريخ 1970.
+export const SESSION_TBD_AR = 'يُحدد لاحقًا';
+export const SESSION_LINK_LATER_AR = 'يصلك الرابط قبل الجلسة';
+// «يصلك الرابط قبل الجلسة» وعد لما قبلها: للجلسة غير المؤرخة أو التي لم تبدأ بعد، لا للجارية ولا المنتهية
+export const linkPending = (s, now = Date.now()) => !!s?.link_later && !s.attended && (!s.starts_at || Date.parse(s.starts_at) > now);
+export const isUndated = (s) => !s?.starts_at || !s?.ends_at;
+/** ترتيب الجلسات: المؤرخة بموعدها، ثم غير المؤرخة بترتيب إنشائها */
+export const bySessionTime = (a, b) => (Number(isUndated(a)) - Number(isUndated(b)))
+  || String(a.starts_at || a.created_at || '').localeCompare(String(b.starts_at || b.created_at || ''));
+/** موعد الجلسة ورابطها من نموذج الإدارة: { error } أو القيم المنظفة. الفراغ مقبول (يُحدد لاحقًا) والجزئي مرفوض
+ * @param {{ mode?: string, starts_at?: unknown, ends_at?: unknown, join_url?: unknown }} row */
+export function workshopSchedule(row = {}) {
+  const blank = (v) => v == null || String(v).trim() === '';
+  const join_url = row.mode === 'online' ? String(row.join_url || '').trim().slice(0, 500) || null : null;
+  if (join_url && !/^https:\/\/\S+$/.test(join_url)) return { error: 'رابط الاجتماع يبدأ بـ https، أو اتركه فارغًا ليُضاف لاحقًا' };
+  const [s, e] = [row.starts_at, row.ends_at];
+  if (blank(s) && blank(e)) return { starts_at: null, ends_at: null, join_url };
+  if (blank(s) || blank(e)) return { error: 'حدد وقتي البدء والانتهاء معًا، أو اتركهما فارغين ليُحدد الموعد لاحقًا' };
+  const [ts, te] = [Date.parse(String(s)), Date.parse(String(e))];
+  if (Number.isNaN(ts) || Number.isNaN(te)) return { error: 'صيغة الموعد غير صحيحة' };
+  if (!(te > ts)) return { error: 'وقت الانتهاء يجب أن يكون بعد وقت البدء' };
+  return { starts_at: new Date(ts).toISOString(), ends_at: new Date(te).toISOString(), join_url };
+}
+
 export function workshopStatus(config, sessions, attended, now = Date.now()) {
   const verify = VERIFY_METHODS.includes(config?.verify) ? config.verify : 'qr';
   const list = (sessions || []).filter((s) => s.active !== false)
-    .sort((a, b) => String(a.starts_at).localeCompare(String(b.starts_at)))
+    .sort(bySessionTime)
     .map((s) => {
       const mode = s.mode === 'online' ? 'online' : 'in_person';
       const open = checkinOpen(s, now);
-      // رابط الاجتماع لا يظهر إلا في نافذة الجلسة
+      const undated = isUndated(s);
+      // رابط الاجتماع لا يظهر إلا في نافذة الجلسة، والجلسة عن بعد بلا رابط بعد تُعلَّم بذلك (link_later) بلا كشف شيء
       return {
-        id: s.id, title: s.title_ar, mode, location: s.location_ar || null, starts_at: s.starts_at, ends_at: s.ends_at,
-        attended: attended.has(s.id) || (verify === 'auto' && Date.parse(s.ends_at) <= now), open, can_join: mode === 'online' && open && !!s.join_url,
+        id: s.id, title: s.title_ar, mode, location: s.location_ar || null, starts_at: undated ? null : s.starts_at, ends_at: undated ? null : s.ends_at,
+        undated, link_later: mode === 'online' && !s.join_url,
+        attended: attended.has(s.id) || (verify === 'auto' && !undated && Date.parse(s.ends_at) <= now), open, can_join: mode === 'online' && open && !!s.join_url,
       };
     });
   const need = Math.max(1, Number(config?.sessions_required) || list.length || 1);
@@ -1128,8 +1156,9 @@ export function workshopStatus(config, sessions, attended, now = Date.now()) {
   return { type: 'workshop', done: count >= need, count, total: need, verify, sessions: list };
 }
 
-// نافذة الحضور: من ساعة قبل البدء إلى نصف ساعة بعد الانتهاء
+// نافذة الحضور: من ساعة قبل البدء إلى نصف ساعة بعد الانتهاء. غير المؤرخة لا نافذة لها
 export function checkinOpen(session, now = Date.now()) {
+  if (isUndated(session)) return false;
   return session.active !== false && now >= new Date(session.starts_at).getTime() - 3600e3 && now <= new Date(session.ends_at).getTime() + 1800e3;
 }
 

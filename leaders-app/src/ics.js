@@ -15,7 +15,9 @@ function fold(line) {
   return out.join('\r\n ');
 }
 
+// جلسة بلا موعد بعد (J1) لا ملف تقويم لها: نص فارغ، وdownloadIcs لا ينزّل شيئًا
 export function icsFor({ uid, title, start, end, location, url, description }) {
+  if (!start || Number.isNaN(new Date(start).getTime())) return '';
   const lines = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT',
@@ -35,11 +37,14 @@ export function icsFor({ uid, title, start, end, location, url, description }) {
 }
 
 export function downloadIcs(ev, name = 'session.ics') {
-  const blob = new Blob([icsFor(ev)], { type: 'text/calendar;charset=utf-8' });
+  const text = icsFor(ev);
+  if (!text) return false;
+  const blob = new Blob([text], { type: 'text/calendar;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  return true;
 }

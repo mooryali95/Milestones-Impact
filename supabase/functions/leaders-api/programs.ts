@@ -7,7 +7,7 @@
 import { all, allFor, audit, db, Fail, must } from './core.ts';
 import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
-import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
+import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 import { seatsUsedByOrg } from './entitlements.ts';
@@ -130,7 +130,7 @@ export async function orgCohortSetups(orgIds: string[]) {
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
     db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
     db.from('cohort_experts').select('cohort_id, expert_id'),
-    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
+    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
     db.from('programs').select('id, name, archived_at'),
   ]);
   for (const r of [cohorts, enr, people, team, sess]) if (r.error) throw r.error;
@@ -152,7 +152,7 @@ export async function orgCohortSetups(orgIds: string[]) {
     const setup = cohortSetup({
       cohort: c, advisorName: advName.get(c.advisor_expert_id) || null, advisorServes: serving.has(c.advisor_expert_id),
       teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
-      members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []),
+      members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []), undatedSessions: undatedFor(c, sess.data || []),
     });
     // برنامج الجهة للقراءة (P4): مشتق بترتيب pickCohort نفسه (orgProgram)، وتعذّر قراءة البرامج يتركه فارغًا
     const op = progs.error ? null : orgProgram(all, progs.data || [], id);
@@ -189,7 +189,7 @@ export async function list() {
   const advIds = [...new Set((cohorts.data || []).map((c: any) => c.advisor_expert_id).filter(Boolean))] as string[];
   const [sess, advs] = await Promise.all([
     // الجلسات الفعّالة الحديثة والقادمة، وبلا دفعة كذلك (تعمّ الدفعات)، ثم sessionsFor لكل دفعة: القاعدة الواحدة
-    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
+    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
     // journey-guard: اسم المستشار المعيَّن للعرض، والتعيين نفسه يحرسه journeyApproved عند الحفظ
     advIds.length ? db.from('experts').select('id, full_name, status, roles').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
@@ -207,7 +207,7 @@ export async function list() {
     cohorts: (cohorts.data || []).map((c: any) => ({
       ...c, enrolled: enrolled[c.id] || 0, members: members[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: true,
       // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
-      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []),
+      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []), undated_sessions: sess.error ? null : undatedFor(c, sess.data || []),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
       advisor_serves: c.advisor_expert_id ? advisorServing.has(c.advisor_expert_id) : null,
     })),
