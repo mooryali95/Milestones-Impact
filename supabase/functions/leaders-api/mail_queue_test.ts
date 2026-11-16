@@ -1,4 +1,4 @@
-// طابور البريد بلا ترك أعمى (ترحيل 20261116140000): ما لا موعد له ينتظر يومًا بعد يوم حتى يُرسل، والمؤرخ يُترك حين يمضي
+// طابور البريد بلا ترك أعمى (ترحيل 20261116150000): ما لا موعد له ينتظر يومًا بعد يوم حتى يُرسل، والمؤرخ يُترك حين يمضي
 // موعده، والإشعار قبل الجماعي، والتوقف عند الحصة، والممسَك ممسَك، والعمل قبل الترحيل، وسطر الترحيل اليومي مرة في اليوم.
 // قاعدة في الذاكرة وشبكة محاكاة (_fake_db.ts)، ولا يخرج طلب حقيقي.
 import './_test_env.ts';
@@ -226,8 +226,8 @@ Deno.test('المرسلون المؤرخون يمررون موعدهم، وال�
   assertEquals('QUEUE_STALE_HOURS' in core, false);
 });
 
-Deno.test('ترحيل 20261116140000: حاجب للنشر، ويحذف ما بقي لمحذوف، والإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير وحده', async () => {
-  const sql = await Deno.readTextFile(new URL('../../migrations/20261116140000_leaders_mail_queue_expiry.sql', import.meta.url));
+Deno.test('ترحيل 20261116150000: حاجب للنشر، ويحذف ما بقي لمحذوف، والإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير وحده', async () => {
+  const sql = await Deno.readTextFile(new URL('../../migrations/20261116150000_leaders_mail_queue_expiry.sql', import.meta.url));
   const rescue = sql.match(/update leaders\.mail_queue q set gave_up_at = null, last_error = null[\s\S]*?;/)?.[0] || '';
   for (const c of ["q.sent_at is null", "q.last_error = 'stale'", "q.kind = 'notify'", 'q.expires_at is null', "q.gave_up_at >= now() - interval '7 days'",
     "not like 'طلب خدمة:%'", "not like 'اتصال فوري:%'", "'دخول جديد إلى حسابك'", "'أُضيف مفتاح مرور إلى حسابك'", "'مسارك المعتمد بانتظارك'", "'دفعك لم يكتمل'",

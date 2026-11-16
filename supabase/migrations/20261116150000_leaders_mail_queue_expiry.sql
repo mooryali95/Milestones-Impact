@@ -26,4 +26,4 @@ update leaders.mail_queue q set gave_up_at = null, last_error = null
    and (q.ref is null or q.ref not like 'participant:%' or exists (select 1 from leaders.participants p where p.id::text = substr(q.ref, 13)))
    and (q.ref is null or q.ref not like 'rater:%' or exists (select 1 from leaders.raters r where r.id::text = substr(q.ref, 7)));
 
-insert into leaders.schema_migrations (name) values ('20261116140000_leaders_mail_queue_expiry') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261116150000_leaders_mail_queue_expiry') on conflict do nothing;

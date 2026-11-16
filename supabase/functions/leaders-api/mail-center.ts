@@ -47,7 +47,7 @@ function flat(o: any, pre = '', out: Record<string, number> = {}, depth = 0): Re
 }
 
 // صندوق «لم يُرسل»: كل منتظر أيًّا كان عمره (ما لا موعد له ينتظر حتى يُرسل، فلا يُخفى بعد أسبوع)، والمتروك والملغى
-// في الأسبوع الأخير. الأعمدة الأحدث تُقرأ إن وُجدت (السبب 20261114110000، والموعد 20261116140000)
+// في الأسبوع الأخير. الأعمدة الأحدث تُقرأ إن وُجدت (السبب 20261114110000، والموعد 20261116150000)
 const QUEUE_COLS = 'id, created_at, kind, to_email, subject, ref, attempts, last_error, sent_at, gave_up_at';
 async function queueRows() {
   const week = new Date(Date.now() - 7 * 864e5).toISOString();
