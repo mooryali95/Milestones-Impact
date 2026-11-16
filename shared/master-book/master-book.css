@@ -452,3 +452,74 @@
 .mb-pdf i { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--graphite); color: var(--gold-light); font: 300 14px/38px "Noto Sans", sans-serif; text-align: center; font-style: normal; }
 .mb-pdf span { display: grid; min-width: 0; } .mb-pdf b { font-weight: 400; font-size: 15px; color: var(--graphite); } .mb-pdf small { font-size: 12.5px; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .mb-pdf button:active { transform: scale(.99); } }
+
+/* ════════════════════════════════════════════════════════════════
+   المرحلة 3 من «فصل خبراء الرحلة عن لجان المحتوى»: خط المتن وحجمه ومسافاته وأوضاعه، والعلامات، ومناطق اللمس
+   ════════════════════════════════════════════════════════════════ */
+/* القرار 9: المتن Noto Naskh Arabic وزن 400 بحجم 18. الملفان من Fontsource (OFL 1.1، Noto Project) لمجموعة العربية،
+   يضمهما Vite إلى الناتج مع هذا الملف، فلا يُنزَّلان إلا حين يُرسم متن بهذا الخط */
+@font-face { font-family: 'Noto Naskh Arabic'; font-style: normal; font-weight: 400; font-display: swap; src: url(./fonts/NotoNaskhArabic-400-arabic.woff2) format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+@font-face { font-family: 'Noto Naskh Arabic'; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/NotoNaskhArabic-700-arabic.woff2) format('woff2'); unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+.mb-reader { --mb-size: 18px; --mb-lh: 2.15; }
+.mb-reader .mb-txt { font-size: var(--mb-size); line-height: var(--mb-lh); }
+.mb-reader.font-naskh .mb-txt { font-family: "Noto Naskh Arabic", "Amiri", var(--body); font-weight: 400; }
+.mb-reader.font-naskh .mb-txt b, .mb-reader.font-naskh .mb-txt strong { font-weight: 700; }
+.mb-reader.font-kufi .mb-txt { font-family: var(--body); font-weight: 300; }
+.mb-reader .mb-txt .card p, .mb-reader .mb-txt .f-compare { font-size: calc(var(--mb-size) * .88); }
+
+/* الأوضاع: ورقي (الافتراضي)، ودافئ، وليلي. الألوان على متغيرات القارئ نفسها، وما كان أبيض صريحًا يأخذ --sheet */
+.mb-reader { --sheet: #fff; --text: #1F3238; }
+.mb-reader.theme-sepia { --paper: #F3E9D6; --sheet: #FBF4E6; --line: #DCCBAA; --text: #3B2F22; --slate: #4A3B2A; --graphite: #2E2418; --muted: #7A6A55; }
+.mb-reader.theme-night { --paper: #12191B; --sheet: #1A2427; --line: #2D3B3F; --text: #DCD6CB; --slate: #C9C2B6; --graphite: #EDE6D8; --muted: #93A0A2; --gold-text: #D9A85A; }
+.mb-reader.theme-sepia, .mb-reader.theme-night { background-color: var(--paper); }
+.mb-reader.theme-night { background-image: none; color: var(--text); }
+.mb-reader .mb-txt { color: var(--text); }
+.mb-reader:is(.theme-sepia, .theme-night) :is(.mb-inside, .mb-reflect, .mb-quiz, .mb-pager button, .mb-levels button, .mb-sec-c, .mb-sec-p, .mb-sec-m, .mb-txt .card, .mb-txt .f-compare, .mb-txt .f-cycle .cnode) { background: var(--sheet); color: var(--slate); border-color: var(--line); }
+.mb-reader:is(.theme-sepia, .theme-night) .mb-levels button.on { background: var(--graphite); color: var(--paper); border-color: var(--graphite); }
+.mb-reader:is(.theme-sepia, .theme-night) .mb-scope button.on { background: var(--gold-light); color: #0B272F; border-color: var(--gold-light); }
+.mb-reader:is(.theme-sepia, .theme-night) .mb-sec-c.has { background: var(--graphite); color: var(--paper); }
+.mb-reader.theme-sepia .mb-top { background: rgba(243, 233, 214, .9); }
+.mb-reader.theme-night .mb-top { background: rgba(18, 25, 27, .9); border-color: var(--line); color: var(--text); }
+.mb-reader.theme-night .mb-top-t b, .mb-reader.theme-night .mb-inside a, .mb-reader.theme-night .mb-txt h3, .mb-reader.theme-night .mb-txt b, .mb-reader.theme-night .mb-txt .pull { color: var(--graphite); }
+.mb-reader.theme-night .mb-txt .f-compare thead th { background: #0B272F; }
+/* العلامة المائية تبقى مقروءة على الوضع الليلي: الرمادي نفسه معكوسًا إلى فاتح */
+.mb-root.theme-night .mb-wm { filter: invert(1); }
+
+/* زر «Aa» ولوحته: نافذة صغيرة تحت الشريط، وكل خيار فيها زر راديو */
+.mb-ic.mb-aa { font: 400 17px/1 var(--latin); letter-spacing: -.02em; }
+.mb-look { padding: 6px 18px 18px; display: grid; gap: 14px; }
+.mb-look fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mb-look legend { padding: 0; margin-bottom: 4px; font-size: 12.5px; color: var(--muted); }
+.mb-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.mb-seg button { flex: 1 1 0; min-width: 64px; min-height: 44px; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 6px 10px; font-size: 14px; color: var(--graphite); }
+.mb-seg button[aria-checked="true"] { background: var(--graphite); color: var(--gold-light); border-color: var(--graphite); }
+.mb-seg .f-naskh { font-family: "Noto Naskh Arabic", "Amiri", serif; font-size: 16px; }
+.mb-seg .t-sepia { background: #FBF4E6; color: #3B2F22; } .mb-seg .t-night { background: #1A2427; color: #DCD6CB; border-color: #2D3B3F; }
+.mb-seg .t-sepia[aria-checked="true"], .mb-seg .t-night[aria-checked="true"] { box-shadow: 0 0 0 2px var(--gold); }
+.mb-look-sample { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--paper-2); color: #1F3238; }
+
+/* العلامات: زر القسم، والقائمة في الفهرس */
+.mb-sec-m { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 10px; color: var(--muted); transition: all .2s; }
+.mb-sec-m svg { width: 15px; height: 15px; }
+.mb-sec-m[aria-pressed="true"] { color: var(--gold-text); border-color: var(--gold); background: rgba(169, 122, 46, .12); }
+.mb-sec-m[aria-pressed="true"] svg path { fill: currentColor; }
+.mb-marks { margin: 8px 0 4px; }
+.mb-marks h3 { margin: 10px 0 4px; font: 400 15px/1.6 var(--display); color: var(--gold-text); }
+.mb-marks ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.mb-marks li { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); }
+.mb-marks li > button:first-child { flex: 1; min-width: 0; text-align: start; border: 0; background: none; padding: 8px 0; min-height: 44px; }
+.mb-marks small { display: block; font-size: 11.5px; color: var(--muted); } .mb-marks b { font-weight: 400; font-size: 14px; color: var(--graphite); }
+.mb-hit em { display: block; font-style: normal; font-size: 12.5px; line-height: 1.9; color: var(--slate); }
+.mb-hit mark { background: rgba(217, 168, 90, .35); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* مناطق اللمس 44 بكسل على الأقل لكل زر في القارئ وفهرسه ولوحاته (WCAG 2.5.5)، والمظهر كما هو */
+.mb-ic, .mb-x { width: 44px; height: 44px; }
+.mb-more { width: 44px; height: 44px; border-color: transparent; background: transparent; position: relative; }
+.mb-more::before { content: ''; position: absolute; inset: 8px; border-radius: 50%; border: 1px solid var(--line); background: #fff; z-index: -1; }
+.mb-more { isolation: isolate; }
+.mb-levels button, .mb-sec-c, .mb-sec-p, .mb-sec-m, .mb-sec-ref { min-height: 44px; }
+.mb-sec-m { min-width: 44px; }
+.mb-toc-ch > button:first-child, .mb-toc-part li ul button, .mb-hit, .mb-inside a { min-height: 44px; align-items: center; }
+.mb-cm footer .mb-link, .mb-replying .mb-link, .mb-quote .mb-link { min-height: 44px; display: inline-flex; align-items: center; }
+.mb-pager button { min-height: 56px; }
+.mb-sec-ref { top: 30px; }
