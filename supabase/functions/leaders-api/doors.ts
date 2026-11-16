@@ -19,6 +19,7 @@ export const DOOR = {
 export async function rolesOf(email: string): Promise<Door[]> {
   const [{ data: p }, { data: e }, { data: c }] = await Promise.all([
     db.from('participants').select('id, status').eq('email', email).eq('is_demo', false).maybeSingle(),
+    // journey-guard: باب /x واحد للخدمتين (رحلة وكتاب)، والبوابة تتفرع بعد الدخول (experts.ts portalDashboard)
     db.from('experts').select('status').eq('email', email).maybeSingle(),
     db.from('org_coordinators').select('status').eq('email', email).limit(5),
   ]);

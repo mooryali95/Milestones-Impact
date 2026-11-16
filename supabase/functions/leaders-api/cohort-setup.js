@@ -18,9 +18,10 @@ export function sessionsFor(cohort, sessions = [], now = Date.now()) {
     && Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS).length;
 }
 
-/** @param {{ cohort: any, advisorName?: string|null, teamCount?: number, members?: number, upcomingSessions?: number }} d
- *  upcomingSessions: عدد sessionsFor للدفعة */
-export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members = 0, upcomingSessions = 0 }) {
+/** @param {{ cohort: any, advisorName?: string|null, advisorServes?: boolean, teamCount?: number, members?: number, upcomingSessions?: number }} d
+ *  upcomingSessions: عدد sessionsFor للدفعة. advisorServes: المستشار المعيَّن يخدم في الرحلة (journeyApproved)، فإسناد بقي
+ *  على عضو لجنة بلا دور أو معتمد بلا خدمة لا يُحتسب مستشارًا، لأن advisorOf لا يعيده */
+export function cohortSetup({ cohort, advisorName = null, advisorServes = true, teamCount = 0, members = 0, upcomingSessions = 0 }) {
   if (!cohort) return [];
   const stages = Object.keys(cohort.schedule || {}).length;
   return [
@@ -30,8 +31,9 @@ export function cohortSetup({ cohort, advisorName = null, teamCount = 0, members
       where: null,
     },
     {
-      key: 'advisor', title: 'المستشار الأساسي', ok: !!cohort.advisor_expert_id,
-      detail: cohort.advisor_expert_id ? `${advisorName || 'معيَّن'}${teamCount ? `، ومعه ${teamCount} في الفريق` : ''}` : 'غير معيَّن: لا خبير يرى ملفات المشاركين ولا إجاباتهم',
+      key: 'advisor', title: 'المستشار الأساسي', ok: !!cohort.advisor_expert_id && advisorServes,
+      detail: cohort.advisor_expert_id && !advisorServes ? `${advisorName || 'المعيَّن'} لا يخدم في الرحلة الآن: لا يراه المشاركون مستشارًا. عيّن غيره`
+        : cohort.advisor_expert_id ? `${advisorName || 'معيَّن'}${teamCount ? `، ومعه ${teamCount} في الفريق` : ''}` : 'غير معيَّن: لا خبير يرى ملفات المشاركين ولا إجاباتهم',
       where: 'team',
     },
     {

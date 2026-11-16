@@ -84,6 +84,7 @@ export async function trace(a: Admin, b: Body) {
   const [ev, person, expert, coord, counts, waiting] = await Promise.all([
     db.from('mail_events').select('id, created_at, kind, source, status, resend_id, subject, ref').eq('to_hash', h).order('created_at', { ascending: false }).limit(40),
     db.from('participants').select('id, full_name, status, phone, last_login_at').eq('email', email).maybeSingle().then((r: any) => r.data),
+    // journey-guard: من صاحب البريد في مركز البريد، هوية لا ترشيح
     db.from('experts').select('id, full_name').eq('email', email).maybeSingle().then((r: any) => r.data),
     db.from('org_coordinators').select('id, full_name').eq('email', email).limit(1).maybeSingle().then((r: any) => r.data),
     mailCounts(db),

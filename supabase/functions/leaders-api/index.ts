@@ -22,7 +22,7 @@
 import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
 import { slackHello } from '../_shared/slack.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
-import { approvalOf, inProgram } from './logic.js';
+import { approvalOf, inProgram, journeyApproved } from './logic.js';
 import * as P from './participant.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
@@ -331,7 +331,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   // وتبقى الأفعال الأربعة كما هي لإعادة التحميل بعد أي إجراء
   'xp.dashboard': async (e, b) => {
     const d: any = await E.portalDashboard(e);
-    if (!d?.success || d.consent_needed || d.onboarding) return d;
+    // من لا يخدم في الرحلة (عضو لجنة بلا دور، أو معتمد بلا خدمة): لا تكليفات ولا مشاركون ولا أقران ولا 360 (portalDashboard)
+    if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
     d.assignments = await settle('xp.assignments', TM.assignmentsOf(e.id, { withCounts: true }));
     // الكتاب الأم لأعضاء لجنتي المحتوى والقياس (master-book.js)
@@ -345,6 +346,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     return { ...d, preload: { reviews, participants, peers, sus, f360 } };
   },
   'xp.consent': (e) => E.portalConsent(e),
+  // تعهد السرية لمراجعي الكتاب الأم في أول دخول (experts.ts)
+  'xp.pledge': (e) => E.portalPledge(e),
   // الكتاب الأم: قراءة وتعليق لأعضاء لجنتي المحتوى والقياس (master-book.ts)
   'xp.book': (e) => MB.book(MB.expertViewer(e)),
   'xp.book-comment': (e, b) => MB.addComment(MB.expertViewer(e), b),
@@ -387,6 +390,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.peer-review': (e, b) => PR.expertReview(e, b),
   'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
+// أفعال اللوحة التي لا تمس الرحلة: لعضو اللجنة بلا دور، ولكل خبير
+const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   // with_dashboard: لوحة الجهة في رحلة واحدة (البند 8.1): الهوية والموافقة واللوحة واستبيان السهولة معًا، بدل ثلاثة
@@ -640,6 +645,10 @@ Deno.serve(async (req) => {
       const { expert: e, sessionId } = await E.expertFromToken(b.token);
       // قبل الاعتماد: الملف والخروج فقط
       if (!E.portalWorking(e) && !['xp.dashboard', 'xp.consent', 'xp.profile-save', 'xp.logout', 'xp.switch'].includes(action)) throw new Fail('يُفتح هذا بعد اعتماد ملفك', 403, 'pending');
+      // خدمة الرحلة وحدها تفتح أفعال الرحلة (journeyApproved): عضو اللجنة بلا دور يدخل لوحته وكتابه ولا يصل مشاركًا
+      // ولا دفعة ولا قاعة ولو بقي له تكليف قديم. والكتاب بعد تعهد السرية
+      if (E.portalWorking(e) && !journeyApproved(e) && !XP_NO_JOURNEY.has(action)) throw new Fail('هذا لخدمة الرحلة، ولوحتك للكتاب الأم', 403, 'journey');
+      if (action.startsWith('xp.book')) await E.requirePledge(e);
       return reply(req, await expert[action](e, b, sessionId, ctx));
     }
     if (admin[action]) {
