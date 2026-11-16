@@ -4,17 +4,24 @@
 -- deploy-gate: tolerant الدوال تقرأ نسخة الدفعة إن وُجدت وإلا البرنامج كما هو (programs.ts journeyDefinition)، وتثبّت كل دفعة جديدة على نسخة قبله وبعده
 -- المشكلة: الدفعة بلا نسخة تقرأ صفوف البرنامج الحية، فكل حفظ في محرر الرحلة وكل استرجاع نسخة يغيّر رحلة أعضائها فورًا.
 -- هذا الترحيل:
---   1) يحفظ نسخة لكل برنامج له متطلبات ولا نسخة له، ولكل برنامج عليه دفعة غير مثبتة وأحدث نسخه تختلف عن حاله الآن،
---      فتُثبَّت الدفعة على ما تمر به اليوم بالضبط لا على نسخة أقدم (اللقطة بشكل programSnapshot في logic.js).
+--   1) يحفظ نسخة لكل برنامج له متطلب فعّال ولا نسخة له، ولكل برنامج له متطلب فعّال عليه دفعة غير مثبتة وأحدث نسخه
+--      تختلف عن حاله الآن، فتُثبَّت الدفعة على ما تمر به اليوم بالضبط لا على نسخة أقدم (اللقطة بشكل programSnapshot في logic.js).
 --   2) يثبّت كل دفعة بلا نسخة، بكل حالاتها (والمفتوحة والمغلقة)، على أحدث نسخة من برنامجها. لا يمس قيمة قائمة.
+--      الاستثناء الوحيد: البرنامج بلا متطلب فعّال لا تُحفظ له نسخة (الخادم يرفض النسخة الفارغة كذلك، versionBlock في
+--      programs.ts)، ولا تُثبَّت دفعاته هنا ولو كانت له نسخة قديمة، لأن تلك النسخة غير ما يمر به أعضاؤها الآن. تبقى تتبعه
+--      كما هو، وتعرضها «البرامج والدفعات» غير مثبتة وبوابة m2.version-pinned إن كانت مفتوحة أو جارية، وتُثبَّت من ملفها
+--      بعد أن تُبنى رحلته وتُحفظ نسخته.
 --   3) حارس cohort_version_pinned: لا تُلغى نسخة دفعة مثبتة، ولا تُثبَّت دفعة على نسخة برنامج آخر، إلا بترحيل يضبط
---      leaders.program_unpin = on. وحارس program_versions_frozen: لقطة النسخة وبرنامجها ورقمها لا تتغير.
+--      leaders.program_unpin = on. وحارس program_versions_frozen: لقطة النسخة وبرنامجها ورقمها لا تتغير، إلا بترحيل يضبط
+--      leaders.program_version_fix = on (تصحيح نص في لقطة تمر بها دفعات، بعلم أنه يصل إلى أعضائها فورًا).
 --   4) سطر في السجل لكل نسخة أُنشئت ولكل دفعة ثُبّتت.
 -- تغيير في طريقة العمل: ترحيل تصحيح نص في البرنامج (مثل 20261116050000) لم يعد يصل إلى الدفعات بتعديل الصفوف الحية.
---   يُقطع بعده نسخة جديدة، وتُرقّى إليها الدفعات المسماة من «البرامج والدفعات»، أو يُصحَّح بيان نسخها صراحة.
--- آمن لإعادة التشغيل: الإعادة لا تجد برنامجًا بلا نسخة له متطلبات ولا دفعة بلا نسخة، فلا تكتب شيئًا.
--- التحقق بعد التطبيق (صفر في الاثنين):
---   select count(*) from leaders.cohorts where program_version_id is null;
+--   إما أن يُقطع بعده نسخة جديدة وتُرقّى إليها الدفعات من «البرامج والدفعات»، وإما أن يُصحَّح بيان نسخها صراحة في معاملة
+--   تبدأ بـ set local leaders.program_version_fix = 'on'.
+-- آمن لإعادة التشغيل: الإعادة لا تجد برنامجًا له متطلب فعّال بلا نسخة ولا دفعة غير مثبتة عليه، فلا تكتب شيئًا.
+-- التحقق بعد التطبيق (صفر في الاثنين؛ الأول يستثني دفعات البرامج بلا متطلب فعّال، وهي في الاستثناء أعلاه):
+--   select count(*) from leaders.cohorts c where c.program_version_id is null
+--     and exists (select 1 from leaders.stage_requirements r where r.program_id = c.program_id and r.active);
 --   select count(*) from leaders.cohorts c join leaders.program_versions v on v.id = c.program_version_id where v.program_id <> c.program_id;
 
 do $pin$
@@ -33,8 +40,8 @@ begin
       'requirements', coalesce((select jsonb_agg(to_jsonb(r) - 'program_id' - 'created_at' - 'updated_at' order by r.stage_key, r.sort, r.code)
         from leaders.stage_requirements r where r.program_id = pr.id), '[]'::jsonb));
     select v.id, v.number, v.data into latest from leaders.program_versions v where v.program_id = pr.id order by v.number desc limit 1;
-    -- برنامج بلا متطلبات لا نسخة له ولا دفعة تُثبَّت عليه هنا؛ تعرضه جاهزية الإعداد
-    if jsonb_array_length(snap -> 'requirements') = 0 then continue; end if;
+    -- برنامج بلا متطلب فعّال لا تُحفظ له نسخة ولا تُثبَّت دفعاته هنا (حلقة التثبيت تستثنيه بالشرط نفسه)؛ تعرضه جاهزية الإعداد
+    if not exists (select 1 from leaders.stage_requirements r where r.program_id = pr.id and r.active) then continue; end if;
     -- المقارنة بلا ترتيب: المراحل بمفاتيحها والمتطلبات بمعرفاتها، فترتيب اللغة لا يصنع فرقًا وهميًا
     if latest.id is null or (exists (select 1 from leaders.cohorts u where u.program_id = pr.id and u.program_version_id is null)
        and ((select coalesce(jsonb_agg(e order by e ->> 'key'), '[]'::jsonb) from jsonb_array_elements(latest.data -> 'stages') e)
@@ -59,6 +66,7 @@ begin
       (select v.id from leaders.program_versions v where v.program_id = co.program_id order by v.number desc limit 1) as vid,
       (select v.number from leaders.program_versions v where v.program_id = co.program_id order by v.number desc limit 1) as num
     from leaders.cohorts co where co.program_version_id is null
+      and exists (select 1 from leaders.stage_requirements r where r.program_id = co.program_id and r.active)
   loop
     continue when pin.vid is null;
     update leaders.cohorts set program_version_id = pin.vid where id = pin.id and program_version_id is null;
@@ -85,9 +93,11 @@ drop trigger if exists cohort_version_pinned on leaders.cohorts;
 create trigger cohort_version_pinned before insert or update of program_version_id, program_id on leaders.cohorts
   for each row execute function leaders.cohort_version_pinned();
 
--- لقطة النسخة ثابتة: ما ثُبّتت عليه دفعة لا يتغير تحتها. الاسم وحده يُصحَّح
+-- لقطة النسخة ثابتة: ما ثُبّتت عليه دفعة لا يتغير تحتها. الاسم وحده يُصحَّح، والبيان بترحيل تصحيح صريح
 create or replace function leaders.program_version_frozen() returns trigger language plpgsql as $$
 begin
+  if coalesce(current_setting('leaders.program_version_fix', true), '') = 'on'
+     and new.program_id is not distinct from old.program_id and new.number is not distinct from old.number then return new; end if;
   if new.data is distinct from old.data or new.program_id is distinct from old.program_id or new.number is distinct from old.number then
     raise exception 'لقطة نسخة البرنامج لا تُعدَّل؛ احفظ نسخة جديدة' using errcode = '42501';
   end if;

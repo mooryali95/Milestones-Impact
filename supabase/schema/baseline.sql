@@ -4093,6 +4093,8 @@ CREATE OR REPLACE FUNCTION leaders.program_version_frozen()
  LANGUAGE plpgsql
 AS $function$
 begin
+  if coalesce(current_setting('leaders.program_version_fix', true), '') = 'on'
+     and new.program_id is not distinct from old.program_id and new.number is not distinct from old.number then return new; end if;
   if new.data is distinct from old.data or new.program_id is distinct from old.program_id or new.number is distinct from old.number then
     raise exception 'لقطة نسخة البرنامج لا تُعدَّل؛ احفظ نسخة جديدة' using errcode = '42501';
   end if;

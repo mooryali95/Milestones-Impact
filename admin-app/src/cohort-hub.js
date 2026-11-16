@@ -64,7 +64,10 @@ export function cohortHub({ cohort: c, cohorts = [], orgs = [], programs = [] })
         ? { ok: false, detail: `البرنامج «${p.name}» بلا متطلبات بعد: لا رحلة يمر بها المشارك.`, action: 'journey' }
         // الدفعة غير المثبتة (قبل ترحيل التثبيت) تتغير رحلة أعضائها مع كل تعديل على البرنامج: نقص يُصلح بالترقية
         : !pinned
-          ? { ok: false, detail: `«${p.name}» · الدفعة غير مثبتة على نسخة: كل تعديل على البرنامج يصل إلى أعضائها فورًا. ثبّتها على ${p.versions?.[0] ? `النسخة ${p.versions[0].number}` : 'نسخة تُحفظ الآن'} بعد مراجعة الفرق.`, action: p.versions?.[0] ? 'upgrade' : 'edit' }
+          // الفعل واحد في النص والزر والنافذة: «ثبّت». وبلا نسخة للبرنامج يحفظها «تحرير الدفعة» من حاله الآن (لا فرق يُراجع)
+          ? p.versions?.[0]
+            ? { ok: false, detail: `«${p.name}» · الدفعة غير مثبتة على نسخة: كل تعديل على البرنامج يصل إلى أعضائها فورًا. ثبّتها على النسخة ${p.versions[0].number} بعد مراجعة الفرق.`, action: 'pin' }
+            : { ok: false, detail: `«${p.name}» · الدفعة غير مثبتة، ولا نسخة محفوظة للبرنامج: احفظ الدفعة من «تحرير الدفعة» فتُحفظ نسخته الأولى من حاله الآن وتُثبَّت عليها.`, action: 'edit' }
           : { ok: true, detail: `«${p.name}» · ${p.requirements} متطلب · مثبتة على النسخة ${pinned.number}${newer ? `، وتوجد نسخة أحدث (${newer.number}) يمكن الترقية إليها` : ''}`, action: newer ? 'upgrade' : null };
 
   const base = cohortSetup({
@@ -106,9 +109,12 @@ export const WIZARD_STEPS = ['لمن الدفعة', 'البرنامج', 'الم�
 
 // ما يمنع الانتقال من الخطوة، بجملة تُقرأ؛ وفارغ يعني «تابع»
 /** @param {number} step @param {any} v */
-export function wizardBlock(step, v) {
+// programs: برنامج بلا متطلب فعّال لا تُنشأ عليه دفعة (لا نسخة تُثبَّت عليها، cohortSave)، فيقف المعالج عنده لا عند الإنشاء
+export function wizardBlock(step, v, programs = []) {
   if (step === 0 && v.kind === 'org' && !v.organization_id) return 'اختر الجهة';
   if (step === 1 && !v.program_id) return 'اختر البرنامج';
+  const p = programs.find((x) => x.id === v.program_id);
+  if (step === 1 && p && !p.requirements) return `البرنامج «${p.name}» بلا متطلبات بعد، فلا تُنشأ عليه دفعة. ابنِ رحلته أولًا أو اختر برنامجًا آخر.`;
   // تحقق المعالج هو تحقق المحرر نفسه (cohortErrors)، فلا تختلف قاعدة الاسم والتاريخين بين الإنشاء والتحرير
   if (step === 2) { const e = cohortErrors(v); return e.name || e.ends_on || ''; }
   return '';
@@ -126,7 +132,7 @@ export function wizardNotes({ v, cohorts = [], orgs = [], programs = [] }) {
     if (live && live.organization_id === org.id) out.push(`لجهة «${org.name}» دفعة قائمة: «${live.name}». الملحقون يدويًا باقون، والبقية ينتقلون إلى الدفعة الأحدث.`);
   }
   const p = programs.find((x) => x.id === v.program_id);
-  if (p && !p.requirements) out.push(`البرنامج «${p.name}» بلا متطلبات بعد: لا رحلة يمر بها المشارك حتى تُبنى.`);
+  if (p && !p.requirements) out.push(`البرنامج «${p.name}» بلا متطلبات بعد: لا تُنشأ عليه دفعة حتى تُبنى رحلته.`);
   if (v.status === 'planned' && v.kind === 'org') out.push('الحالة «مخطط لها»: لن يدخلها أحد تلقائيًا حتى تجعلها «التسجيل مفتوح».');
   return out;
 }

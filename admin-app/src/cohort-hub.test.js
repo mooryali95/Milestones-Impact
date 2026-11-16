@@ -58,11 +58,12 @@ describe('ملف الدفعة', () => {
 
   it('الدفعة غير المثبتة على نسخة نقص يُصلح بالترقية، وبلا نسخة للبرنامج بالتحرير', () => {
     const un = item(hub({ ...base, program_version_id: null }), 'program');
-    expect(un).toMatchObject({ ok: false, action: 'upgrade' });
+    expect(un).toMatchObject({ ok: false, action: 'pin' });
     expect(un.detail).toContain('غير مثبتة على نسخة');
     expect(un.detail).toContain('النسخة 2');
     const none = cohortHub({ cohort: { ...base, program_version_id: null }, cohorts: [base], orgs: [org], programs: [{ ...prog, versions: [] }] });
     expect(item(none, 'program')).toMatchObject({ ok: false, action: 'edit' });
+    expect(item(none, 'program').detail).toContain('تُحفظ نسخته الأولى');
     expect(item(hub(base), 'program').detail).toContain('مثبتة على النسخة 2');
   });
 
@@ -88,6 +89,9 @@ describe('معالج الدفعة الجديدة', () => {
     expect(wizardBlock(0, { kind: 'org' })).toBe('اختر الجهة');
     expect(wizardBlock(0, { kind: 'individuals' })).toBe('');
     expect(wizardBlock(1, {})).toBe('اختر البرنامج');
+    // البرنامج الفارغ يقف عند خطوته، لا عند «أنشئ الدفعة»
+    expect(wizardBlock(1, { program_id: 'p0' }, [{ id: 'p0', name: 'فارغ', requirements: 0 }])).toContain('بلا متطلبات بعد، فلا تُنشأ عليه دفعة');
+    expect(wizardBlock(1, { program_id: 'p1' }, [prog])).toBe('');
     expect(wizardBlock(2, { name: ' ' })).toBe('اكتب اسم الدفعة');
     expect(wizardBlock(2, { name: 'د', starts_on: '2027-02-01', ends_on: '2027-01-01' })).toBe('تاريخ النهاية قبل البداية');
     expect(wizardBlock(2, { name: 'د', starts_on: '2027-01-01', ends_on: '2027-02-01' })).toBe('');

@@ -86,6 +86,32 @@ describe(`ترحيل ${NAME}`, { timeout: 30000 }, () => {
     expect(await rows(d, `select number from leaders.program_versions where program_id = '${PA}'`)).toEqual([{ number: 4 }]);
   });
 
+  it('برنامج بلا متطلب فعّال له نسخة قديمة: لا نسخة جديدة ولا تثبيت على القديمة، وفحص ما بعد التطبيق صفر', async () => {
+    const d = new PGlite();
+    await d.exec(BEFORE);
+    // «فارغ»: نسخة قديمة بمرحلتين، ثم عُدّلت مراحله وبقي بلا متطلبات، ودفعة مخطط لها تتبعه كما هو، ومتطلب موقوف لا يُحتسب
+    await d.exec(`insert into leaders.program_versions (id, program_id, number, label, data) values ('00000000-0000-0000-0000-0000000000e1', '${PE}', 1, 'قديمة',
+        '{"stages":[{"key":"e1","title_ar":"قديمة"},{"key":"e2","title_ar":"ب"}],"requirements":[]}');
+      insert into leaders.journey_stages (program_id, key, sort, title_ar) values ('${PE}', 'e1', 1, 'جديدة');
+      insert into leaders.stage_requirements (id, program_id, stage_key, code, title_ar, active) values ('00000000-0000-0000-0000-000000000301', '${PE}', 'e1', 'E-OFF', 'موقوف', false);
+      insert into leaders.cohorts (name, program_id, status) values ('على الفارغ', '${PE}', 'planned');`);
+    await d.exec(SQL);
+    expect(await rows(d, `select number from leaders.program_versions where program_id = '${PE}'`)).toEqual([{ number: 1 }]);
+    expect(await rows(d, `select program_version_id from leaders.cohorts where name = 'على الفارغ'`)).toEqual([{ program_version_id: null }]);
+    const check = SQL.match(/--\s+(select count\(\*\) from leaders\.cohorts c where c\.program_version_id is null[\s\S]*?;)/)[1].replace(/\n--\s*/g, ' ');
+    expect(await rows(d, check.replace('count(*)', 'count(*)::int n'))).toEqual([{ n: 0 }]);
+  });
+
+  it('تصحيح بيان نسخة بترحيل صريح يضبط leaders.program_version_fix، ولا يغيّر برنامجها ولا رقمها', async () => {
+    const d = await db();
+    const [pa] = await rows(d, `select id from leaders.program_versions where program_id = '${PA}'`);
+    await d.exec(`begin; set local leaders.program_version_fix = 'on';
+      update leaders.program_versions set data = jsonb_set(data, '{stages,0,title_ar}', '"مصحح"') where id = '${pa.id}'; commit;`);
+    expect((await rows(d, `select data->'stages'->0->>'title_ar' t from leaders.program_versions where id = '${pa.id}'`))[0].t).toBe('مصحح');
+    await expect(d.exec(`begin; set local leaders.program_version_fix = 'on'; update leaders.program_versions set number = 9 where id = '${pa.id}'; commit;`)).rejects.toThrow(/لا تُعدَّل/);
+    await d.exec('rollback');
+  });
+
   it('الحارسان: لا يُلغى تثبيت، ولا نسخة من برنامج آخر، ولا تتغير لقطة؛ والإعادة لا تكتب شيئًا', async () => {
     const d = await db();
     await expect(d.exec(`update leaders.cohorts set program_version_id = null where name = 'مثبتة'`)).rejects.toThrow(/لا يُلغى تثبيتها/);

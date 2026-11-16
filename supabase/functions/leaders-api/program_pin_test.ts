@@ -9,19 +9,31 @@ const { cohortSave, cohortUpgrade, journeyDefinition, programPublish, programRes
 type Row = Record<string, any>;
 // نمط cohort_guard_test.ts: eq وneq وin وrange وlimit وmaybeSingle وsingle، والإدراج والتحديث والحذف. الترتيب لا يغيّر النتيجة،
 // فما يعتمد على «أحدث نسخة» يُختبر بترتيب إدراج معكوس
+// hooks[table]: يُنادى قبل كل إدراج في الجدول، وما يرده خطأ يُعاد بدل الإدراج (القيد الفريد، أو رفض قيد الدفعة)
 function install(tables: Record<string, Row[]>) {
   let seq = 0;
+  const hooks: Record<string, (payload: any) => any> = {};
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
-    let mode: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let mode: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
+    let conflict = ['id'];
     let payload: any = null;
     let single = false, limit = Infinity, range: [number, number] | null = null;
     const run = () => {
       const rows = tables[table] ||= [];
       if (mode === 'insert') {
+        const err = hooks[table]?.(payload);
+        if (err) return { data: null, error: err };
         const added = (Array.isArray(payload) ? payload : [payload]).map((x) => ({ id: `${table}-${++seq}`, created_at: new Date(Date.now() + seq).toISOString(), ...x }));
         rows.push(...added);
         return { data: single ? added[0] : added, error: null };
+      }
+      if (mode === 'upsert') {
+        for (const x of Array.isArray(payload) ? payload : [payload]) {
+          const hit = rows.find((r) => conflict.every((c) => r[c] === x[c]));
+          if (hit) Object.assign(hit, x); else rows.push({ id: `${table}-${++seq}`, ...x });
+        }
+        return { data: null, error: null };
       }
       const out = rows.filter((r) => filters.every((f) => f(r)));
       if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: single ? out[0] ?? null : out, error: null }; }
@@ -34,6 +46,7 @@ function install(tables: Record<string, Row[]>) {
         if (k === 'then') return (ok: any, bad: any) => Promise.resolve(run()).then(ok, bad);
         if (k === 'insert' || k === 'update') return (x: any) => { mode = k; payload = x; return q; };
         if (k === 'delete') return () => { mode = 'delete'; return q; };
+        if (k === 'upsert') return (x: any, o?: { onConflict?: string }) => { mode = 'upsert'; payload = x; if (o?.onConflict) conflict = o.onConflict.split(','); return q; };
         if (k === 'eq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; };
         if (k === 'neq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) !== v); return q; };
         if (k === 'in') return (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; };
@@ -47,7 +60,7 @@ function install(tables: Record<string, Row[]>) {
   };
   const prev = { from: (db as any).from };
   Object.assign(db as any, { from });
-  return { tables, restore: () => Object.assign(db as any, prev) };
+  return { tables, hooks, restore: () => Object.assign(db as any, prev) };
 }
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -137,9 +150,9 @@ Deno.test('تغيير البرنامج بلا نسخة صريحة يثبّت ع�
   } finally { w.restore(); }
 });
 
-Deno.test('إلغاء تثبيت دفعة مثبتة يُرفض، والدفعة القديمة غير المثبتة يثبّتها الفارغ، والحفظ بلا الحقل لا يمسها', async () => {
+Deno.test('إلغاء تثبيت دفعة مثبتة يُرفض، ونسختها لا تتغير من الحفظ إلا بالترقية، والحفظ بلا الحقل أو بنسختها نفسها لا يمسها', async () => {
   const w = world();
-  w.tables.program_versions = [{ id: V1, program_id: PA, number: 1, label: 'أ', data: snap([], []) }];
+  w.tables.program_versions = [{ id: V1, program_id: PA, number: 1, label: 'أ', data: snap([], []) }, { id: V2, program_id: PA, number: 2, label: 'ب', data: snap([], []) }];
   w.tables.cohorts = [
     { id: C1, name: 'مثبتة', organization_id: null, program_id: PA, program_version_id: V1, status: 'planned', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] },
     { id: U(30), name: 'قديمة', organization_id: null, program_id: PA, program_version_id: null, status: 'planned', created_at: '2026-09-02T00:00:00Z', hidden_requirements: [] },
@@ -149,11 +162,54 @@ Deno.test('إلغاء تثبيت دفعة مثبتة يُرفض، والدفعة
       const e = await failOf(() => cohortSave(admin, { id: C1, program_version_id: v }));
       assertEquals(e.code, 'version_required');
     }
-    assertEquals(w.tables.cohorts[0].program_version_id, V1);
+    // نسخة أخرى (مسماة أو «الأحدث») من المحرر تتجاوز معاينة الترقية: تُرفض وتُحال إلى الترقية
+    for (const v of [V2, 'latest']) assertEquals((await failOf(() => cohortSave(admin, { id: C1, program_version_id: v }))).code, 'use_upgrade');
+    await cohortSave(admin, { id: C1, name: 'مثبتة أ', program_version_id: V1 });
+    assertEquals([w.tables.cohorts[0].name, w.tables.cohorts[0].program_version_id], ['مثبتة أ', V1]);
+    // غير المثبتة وللبرنامج نسخة: الحفظ (والمحرر يرسل الفارغ دائمًا) لا يثبّتها بصمت، والتثبيت بالترقية بمعاينة الفرق
     await cohortSave(admin, { id: U(30), name: 'قديمة أ' });
-    assertEquals(w.tables.cohorts[1].program_version_id, null);
-    await cohortSave(admin, { id: U(30), program_version_id: '' });
-    assertEquals(w.tables.cohorts[1].program_version_id, V1);
+    await cohortSave(admin, { id: U(30), name: 'قديمة ب', program_version_id: '' });
+    assertEquals([w.tables.cohorts[1].name, w.tables.cohorts[1].program_version_id], ['قديمة ب', null]);
+    for (const v of ['latest', V2]) assertEquals((await failOf(() => cohortSave(admin, { id: U(30), program_version_id: v }))).code, 'use_upgrade');
+    assertEquals(w.tables.program_versions.length, 2);
+  } finally { w.restore(); }
+});
+
+Deno.test('غير المثبتة على برنامج بلا نسخة: الحفظ ينشئ نسخته الأولى من حاله الآن، والبرنامج الفارغ لا يمنع إغلاقها أو تسميتها', async () => {
+  const w = world();
+  w.tables.cohorts = [
+    { id: C1, name: 'على القادة', organization_id: null, program_id: PA, program_version_id: null, status: 'planned', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] },
+    { id: U(31), name: 'على الفارغ', organization_id: null, program_id: PE, program_version_id: null, status: 'open', created_at: '2026-09-02T00:00:00Z', hidden_requirements: [] },
+  ];
+  try {
+    const r: any = await cohortSave(admin, { id: C1, name: 'على القادة أ', program_version_id: '' });
+    assertEquals(r.version_created?.number, 1);
+    assertEquals(w.tables.cohorts[0].program_version_id, w.tables.program_versions[0].id);
+    await cohortSave(admin, { id: U(31), name: 'على الفارغ (مغلقة)', status: 'closed', program_version_id: '' });
+    assertEquals([w.tables.cohorts[1].status, w.tables.cohorts[1].program_version_id], ['closed', null]);
+    assertEquals(w.tables.program_versions.map((v: Row) => v.program_id), [PA]);
+  } finally { w.restore(); }
+});
+
+Deno.test('حفظان متزامنان لأول دفعة على برنامج بلا نسخة: الثاني يُثبَّت على النسخة التي سبقته، ورفض حفظ الدفعة لا يترك نسخة', async () => {
+  const w = world();
+  try {
+    // حفظ آخر أدرج النسخة 1 بين قراءة الرقم والإدراج: القيد الفريد يرد هذا الإدراج
+    let raced = false;
+    w.hooks.program_versions = () => {
+      if (raced) return null;
+      raced = true;
+      w.tables.program_versions.push({ id: V1, program_id: PA, number: 1, label: 'النسخة 1', data: snap([], []) });
+      return { code: '23505', message: 'duplicate key' };
+    };
+    const r: any = await cohortSave(admin, fresh(PA));
+    assertEquals(w.tables.cohorts[0].program_version_id, V1);
+    assertEquals([w.tables.program_versions.length, r.version_created], [1, undefined]);
+    // ونسخة أُنشئت ثم رُفض إدراج الدفعة: تُحذف
+    delete w.hooks.program_versions;
+    w.hooks.cohorts = () => ({ code: '23514', message: 'check' });
+    await failOf(() => cohortSave(admin, fresh(PB)));
+    assertEquals(w.tables.program_versions.map((v: Row) => v.program_id), [PA]);
   } finally { w.restore(); }
 });
 
@@ -163,6 +219,18 @@ Deno.test('برنامج بلا متطلبات لا تُنشأ عليه دفعة�
     const e = await failOf(() => cohortSave(admin, fresh(PE)));
     assertEquals(e.code, 'program_empty');
     assertEquals([w.tables.program_versions.length, w.tables.cohorts.length], [0, 0]);
+  } finally { w.restore(); }
+});
+
+Deno.test('برنامج بلا متطلب فعّال لا تُحفظ له نسخة، فلا تصير نسخة فارغة «أحدث نسخة» تُثبَّت عليها الدفعات', async () => {
+  const w = world();
+  w.tables.stage_requirements.push(req(U(40), PE, 'e1', 'E-OFF', { active: false }));
+  try {
+    for (const id of [PE, PA]) {
+      if (id === PA) for (const r of w.tables.stage_requirements) if (r.program_id === PA) r.active = false;
+      assertEquals((await failOf(() => programPublish(admin, { id }))).code, 'program_empty');
+    }
+    assertEquals(w.tables.program_versions.length, 0);
   } finally { w.restore(); }
 });
 
@@ -206,6 +274,44 @@ Deno.test('حفظ نسخة واسترجاع أخرى لا يغيّران رحل�
     const after: any = await journeyDefinition({ id: P1, organization_id: ORG });
     assertEquals(after.requirements.map((r: Row) => [r.code, r.title_ar]), before.requirements.map((r: Row) => [r.code, r.title_ar]));
     assertEquals(after.version.number, 1);
+  } finally { w.restore(); }
+});
+
+Deno.test('بعد الاسترجاع «أحدث نسخة» هي المسترجعة لا الاحتياطية: الدفعة الجديدة وزر الترقية يقرآن ما رجع إليه المدير', async () => {
+  const w = world();
+  try {
+    await cohortSave(admin, fresh(PA));
+    const v1 = w.tables.program_versions[0];
+    // تعديل سيئ يُحفظ نسخة 2، ثم يُسترجع 1
+    w.tables.stage_requirements.find((r: Row) => r.id === R2)!.title_ar = 'تعديل سيئ';
+    await programPublish(admin, { id: PA, label: 'تعديل سيئ' });
+    const r: any = await programRestore(admin, { version_id: v1.id });
+    assertEquals([r.backup.number, r.restored_as.number], [3, 4]);
+    const v4 = w.tables.program_versions.find((v: Row) => v.number === 4)!;
+    assertEquals(v4.data.requirements.find((x: Row) => x.id === R2).title_ar, 'A-TWO');
+    await cohortSave(admin, fresh(PA, { name: 'بعد الاسترجاع' }));
+    assertEquals(w.tables.cohorts[1].program_version_id, v4.id);
+    assertEquals(((await cohortUpgrade(admin, { id: w.tables.cohorts[0].id })) as any).to.number, 4);
+  } finally { w.restore(); }
+});
+
+Deno.test('الاتصال الفوري لدفعة مثبتة: التوفر ورابط الغرفة من البرنامج الحالي إن خلت النسخة منه، ورابط النسخة أولى', async () => {
+  const w = world();
+  const C = U(90);
+  const until = new Date(Date.now() + 30 * 6e4).toISOString();
+  w.tables.stage_requirements.push(req(C, PA, 's1', 'O-COACH', { kind: 'coaching', config: { mode: 'online' } }));
+  try {
+    await cohortSave(admin, fresh(PA));
+    const live = w.tables.stage_requirements.find((r: Row) => r.id === C)!;
+    live.config = { mode: 'online', instant_url: 'https://meet.example/room', instant_until: until };
+    const coach = async () => ((await journeyDefinition({ id: P1, organization_id: ORG })) as any).requirements.find((r: Row) => r.id === C).config;
+    assertEquals([(await coach()).instant_url, (await coach()).instant_until], ['https://meet.example/room', until]);
+    (w.tables.program_versions[0].data as any).requirements.find((r: Row) => r.id === C).config.instant_url = 'https://meet.example/pinned';
+    assertEquals((await coach()).instant_url, 'https://meet.example/pinned');
+    // بلا توفر معلن لا يُضاف الرابط
+    live.config = { mode: 'online', instant_url: 'https://meet.example/room' };
+    (w.tables.program_versions[0].data as any).requirements.find((r: Row) => r.id === C).config = { mode: 'online' };
+    assertEquals((await coach()).instant_url, undefined);
   } finally { w.restore(); }
 });
 

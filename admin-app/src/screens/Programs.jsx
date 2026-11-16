@@ -17,6 +17,11 @@ import CohortWizard from './CohortWizard.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
+import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+
+// العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
+const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
+const cohortsAr = (n) => countAr(n, 'دفعة واحدة', 'دفعتان', 'دفعات', 'دفعة');
 
 
 // الفرق في المتطلبات ثم في المراحل (programDiff)، والخادم قبل حقل المراحل يُقرأ بمتطلباته وحدها
@@ -36,7 +41,7 @@ function DiffList({ diff }) {
 function UpgradeImpact({ r }) {
   const d = r.dropped || {};
   const lines = [
-    r.affected ? `${r.affected === 1 ? 'عضو واحد له' : `${r.affected} عضوًا لهم`} تقدم في متطلبات تختفي من الرحلة. يبقى ما أنجزوه محفوظًا ويعود إن عادت.` : '',
+    r.affected ? `${membersAr(r.affected)} ${r.affected === 1 ? 'له' : r.affected === 2 ? 'لهما' : 'لهم'} تقدم في متطلبات تختفي من الرحلة. يبقى ما أُنجز محفوظًا ويعود إن عادت.` : '',
     d.delivery?.length ? `يُلغى تخصيص التنفيذ لما ليس في النسخة: ${d.delivery.join('، ')}.` : '',
     d.schedule?.length ? `تُسقط مواعيد مراحل ليست في النسخة: ${d.schedule.join('، ')}.` : '',
     d.stage_modes?.length ? `يُسقط وضع العمل لمراحل ليست في النسخة: ${d.stage_modes.join('، ')}.` : '',
@@ -54,7 +59,7 @@ function UpgradeImpact({ r }) {
 // الجدول وفي صفحة الجهة، فلا مدخل ثانٍ لأي إعداد.
 const ACTION_LABEL = {
   edit: 'تحرير الدفعة', schedule: 'الجدول', team: 'الفريق والمجموعات', participants: 'المشاركون', approve: 'اعتمدهم',
-  org: 'افتح الجهة', other: 'افتح الدفعة الأحدث', journey: 'حرّر الرحلة', upgrade: 'رقِّ النسخة', activities: 'أضف جلسة',
+  org: 'افتح الجهة', other: 'افتح الدفعة الأحدث', journey: 'حرّر الرحلة', upgrade: 'رقِّ النسخة', pin: 'ثبّت على نسخة', activities: 'أضف جلسة',
 };
 function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }) {
   const copy = useCopy();
@@ -181,12 +186,15 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     if (!label) return;
     const r = await act('admin.program-version', { id: p.id, label });
     // حفظ النسخة لا يمس الدفعات: كل منها على نسختها حتى تُرقّى بنفسها
-    if (r) toast(r.behind ? `حُفظت النسخة ${r.version.number}. ${r.behind === 1 ? 'دفعة واحدة باقية' : `${r.behind} دفعات باقية`} على نسخة أقدم؛ رقِّ كلًا منها بنفسك بعد مراجعة الفرق.` : `حُفظت النسخة ${r.version.number}`);
+    if (r) toast(r.behind ? `حُفظت النسخة ${r.version.number}. ${cohortsAr(r.behind)} ${r.behind === 1 ? 'باقية' : r.behind === 2 ? 'باقيتان' : 'باقية'} على نسخة أقدم أو غير مثبتة؛ رقِّ كلًا منها بنفسك بعد مراجعة الفرق.` : `حُفظت النسخة ${r.version.number}`);
   };
   const restore = async (v) => {
     if (!(await confirm(`استرجاع «${v.label}» إلى مسودة البرنامج؟ يُحفظ الوضع الحالي نسخةً أولًا، ولا يُحذف شيء من تقدم المشاركين. الدفعات باقية على نسخها المثبتة.`))) return;
     const r = await act('admin.program-restore', { version_id: v.id });
-    if (r) toast(`استُرجعت النسخة ${r.restored}، وحُفظ ما قبلها باسم النسخة ${r.backup.number}. الدفعات لا تتغير حتى تحفظ نسخة وترقّيها.`);
+    // المسترجع يُحفظ نسخة أحدث من الاحتياطية، فالدفعة الجديدة وزر الترقية يقرآن ما رجعت إليه لا ما تراجعت عنه
+    if (r) toast(r.restored_as
+      ? `استُرجعت النسخة ${r.restored} وحُفظت باسم النسخة ${r.restored_as.number}، وحُفظ ما قبلها باسم النسخة ${r.backup.number}. الدفعات الجديدة تُثبَّت على ${r.restored_as.number}، والقائمة باقية على نسخها حتى ترقّيها.`
+      : `استُرجعت النسخة ${r.restored} إلى المسودة، وحُفظ ما قبلها باسم النسخة ${r.backup.number}. ${r.restored_note || ''} احفظ نسخة بعد إصلاحها، فأحدث نسخة الآن هي ${r.backup.number}.`);
   };
   const showCompare = async (v) => setCompare({ v, r: await L('admin.program-compare', { version_id: v.id }) });
   const archive = async (p) => {
@@ -270,7 +278,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     const people = `#/leaders/participants?cohort=${encodeURIComponent(shown.id)}`;
     const on = {
       edit: () => editCohort(shown), schedule: () => setSchedule(shown), team: () => setGroups(shown), vis: () => setVis(shown),
-      journey: () => onEditJourney(shown.program_id), upgrade: () => upgrade(shown),
+      journey: () => onEditJourney(shown.program_id), upgrade: () => upgrade(shown), pin: () => upgrade(shown),
       cert: prog && (() => editCert(prog)), final: prog && (() => setFinalCfg(prog)),
       org: shown.organization_id && (() => navigate({ ctx: 'leaders', tab: 'orgs', id: shown.organization_id })),
       other: (x) => onCohort(x.other), activities: () => { window.location.hash = `#/leaders/activities?cohort=${encodeURIComponent(shown.id)}`; },
@@ -303,9 +311,9 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
               <b>{p.name}</b> {p.is_default && <small className="la-chip">الافتراضي</small>} {p.archived_at && <small className="la-chip">مؤرشف</small>}
               <div className="la-muted">
                 {p.requirements} متطلب · {p.versions[0] ? `آخر نسخة محفوظة: ${p.versions[0].number}، ${p.versions[0].label}، ${date(p.versions[0].created_at)}` : 'لم تُحفظ له نسخة بعد'}
-                {!p.versions[0] && !p.archived_at && <> <small className="la-chip warn">بلا نسخة: تُحفظ مع أول دفعة</small></>}
+                {!p.versions[0] && !p.archived_at && <> <small className="la-chip warn">{p.requirements ? 'بلا نسخة: تُحفظ مع أول دفعة' : 'بلا متطلبات: لا نسخة ولا دفعة حتى تُبنى رحلته'}</small></>}
                 {p.draft_changed && <> <small className="la-chip" title="ما عدّلته في رحلة البرنامج لا يصل إلى أي دفعة حتى تحفظه نسخة وترقّي الدفعة إليها">في المسودة تعديلات لم تُحفظ نسخة</small></>}
-                {p.unpinned_cohorts > 0 && <> <small className="la-chip warn">{p.unpinned_cohorts === 1 ? 'دفعة غير مثبتة' : `${p.unpinned_cohorts} دفعات غير مثبتة`}</small></>}
+                {p.unpinned_cohorts > 0 && <> <small className="la-chip warn">{p.unpinned_cohorts === 1 ? 'دفعة غير مثبتة' : `${cohortsAr(p.unpinned_cohorts)} غير مثبتة`}</small></>}
               </div>
               <div className={`la-reach${reach(p).on ? '' : ' none'}`}>{reach(p).text}</div>
               {p.description_ar && <p className="la-muted">{p.description_ar}</p>}
@@ -326,7 +334,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
               <ul className="la-reqs">
                 {p.versions.map((v) => (
                   <li key={v.id}>
-                    <span><b>{v.number}.</b> {v.label} <small className="la-muted">{date(v.created_at)}{v.created_by ? ` · ${v.created_by}` : ''}{v.cohorts ? ` · ${v.cohorts === 1 ? 'دفعة واحدة' : `${v.cohorts} دفعات`}` : ''}</small>
+                    <span><b>{v.number}.</b> {v.label} <small className="la-muted">{date(v.created_at)}{v.created_by ? ` · ${v.created_by}` : ''}{v.cohorts ? ` · ${cohortsAr(v.cohorts)}` : ''}</small>
                       {v.live_cohorts > 0 && <> <small className="la-chip ok">قيد الاستعمال</small></>}</span>
                     <span className="la-row">
                       <button className="la-link" onClick={() => showCompare(v)}>قارن بالحالي</button>
@@ -336,7 +344,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
                   </li>
                 ))}
               </ul>
-            ) : <p className="la-muted">لا نسخة بعد. تُحفظ النسخة 1 مع أول دفعة على البرنامج، أو احفظها الآن.</p>
+            ) : <p className="la-muted">{p.requirements ? 'لا نسخة بعد. تُحفظ النسخة 1 مع أول دفعة على البرنامج، أو احفظها الآن.' : 'لا نسخة بعد. ابنِ رحلة البرنامج أولًا، ثم تُحفظ نسخته الأولى مع أول دفعة أو بـ«احفظ نسخة».'}</p>
           )}
         </section>
       ))}

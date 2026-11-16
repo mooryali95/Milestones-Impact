@@ -18,9 +18,11 @@ const defaultName = (v, orgs) => {
 };
 
 // كل دفعة تُثبَّت على أحدث نسخة من برنامجها (ترحيل 20261116110000)، فلا خيار هنا: سطر يقول على أي نسخة ولماذا
+// والبرنامج بلا متطلبات لا يُعد بنسخة: لا تُنشأ عليه دفعة، ويقف المعالج عنده (wizardBlock)
 const versionLine = (p) => (p.versions?.length
   ? `تُثبَّت الدفعة على أحدث نسخة محفوظة (النسخة ${p.versions[0].number}: ${p.versions[0].label}). تحميها من أي تعديل لاحق على البرنامج حتى ترقّيها بنفسك.`
-  : 'لا نسخة محفوظة لهذا البرنامج بعد: تُحفظ نسخته الأولى من حاله الآن عند الإنشاء، وتُثبَّت الدفعة عليها.');
+  : !p.requirements ? 'البرنامج بلا متطلبات بعد، فلا نسخة تُثبَّت عليها الدفعة. ابنِ رحلته أولًا أو اختر برنامجًا آخر.'
+    : 'لا نسخة محفوظة لهذا البرنامج بعد: تُحفظ نسخته الأولى من حاله الآن عند الإنشاء، وتُثبَّت الدفعة عليها.');
 
 /** @param {{ preset?: any, data: any, onClose: (created?: any) => void }} props */
 export default function CohortWizard({ preset = {}, data, onClose }) {
@@ -58,7 +60,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
   const close = useGuardedClose(step > 0, () => onClose());
   useEscape(close, true);
 
-  const block = wizardBlock(step, v);
+  const block = wizardBlock(step, v, programs);
   const notes = wizardNotes({ v, cohorts: data.cohorts || [], orgs, programs });
   const prog = programs.find((p) => p.id === v.program_id);
   const org = orgs.find((o) => o.id === v.organization_id);
@@ -114,7 +116,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
               ? <p className="wiz-source" role="note">{orgProgramLine(orgProg)} <small className="la-muted">يمكنك تغييره.</small></p>
               : <p className="wiz-source warn" role="note">برنامج الجهة «{orgProg.program_name}» ({orgProg.via === 'current' ? 'من دفعتها الحالية' : 'من آخر دفعة لها'}). اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الإنشاء، لأن تقدمه مربوط ببرنامجه.{' '}
                   <button type="button" className="la-link" onClick={() => { setPicked(false); set({ program_id: orgProg.program_id }); }}>ارجع إلى برنامج الجهة</button></p>)}
-            {prog && <p className="la-muted wiz-version" role="note">{versionLine(prog)}</p>}
+            {prog && <p className={prog.requirements || prog.versions?.length ? 'la-muted wiz-version' : 'wiz-source warn wiz-version'} role="note">{versionLine(prog)}</p>}
           </fieldset>
         )}
 

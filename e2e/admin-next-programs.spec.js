@@ -34,7 +34,7 @@ async function setup(page) {
       'admin.cohort-definition': { success: true, program_id: 'pa', version: null, stages: [], requirements: reqs, hidden: [] },
       'admin.program-version': { success: true, version: { id: 'v3', number: 3 } },
       'admin.program-compare': { success: true, version: { number: 1, label: 'الإطلاق' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [{ code: 'T-ATTEND', title: 'حضور الأيام التدريبية' }] } },
-      'admin.program-restore': { success: true, restored: 1, backup: { number: 3 } },
+      'admin.program-restore': { success: true, restored: 1, backup: { number: 3 }, restored_as: { id: 'v4', number: 4 } },
       'admin.program-save': { success: true, program: { id: 'pc' } },
       'admin.cohort-save': { success: true, cohort: { id: 'c2' } },
       'admin.cohort-visibility': { success: true, ready: true, cohort: { id: 'c1', name: 'سفراء 2026' }, keys: [
@@ -78,7 +78,8 @@ test('البرامج: حفظ نسخة، المقارنة، الاسترجاع، 
   await page.getByRole('button', { name: 'استرجع' }).last().click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.program-restore')?.version_id).toBe('v1');
-  await expect(page.getByText(/استُرجعت النسخة 1، وحُفظ ما قبلها باسم النسخة 3/)).toBeVisible();
+  // المسترجع نسخة أحدث من الاحتياطية، فالدفعات الجديدة تُثبَّت عليه لا على ما تُرجع عنه
+  await expect(page.getByText(/استُرجعت النسخة 1 وحُفظت باسم النسخة 4، وحُفظ ما قبلها باسم النسخة 3. الدفعات الجديدة تُثبَّت على 4/)).toBeVisible();
 });
 
 test('الدفعات: طريقة التنفيذ لكل نشاط، والترقية بعد عرض الفرق', async ({ page }) => {
@@ -117,7 +118,7 @@ test('الدفعة غير المثبتة: شارتها وزر «ثبّت على�
   await expect(dlg).toContainText('مراحل أُضيفت: الختام');
   await expect(dlg).toContainText('مراحل تغيّرت: التمهيد');
   await expect(dlg).toContainText('حُذف: تأمل قديم');
-  await expect(dlg).toContainText('3 عضوًا لهم تقدم في متطلبات تختفي من الرحلة');
+  await expect(dlg).toContainText('3 أعضاء لهم تقدم في متطلبات تختفي من الرحلة');
   await expect(dlg).toContainText('تُسقط مواعيد مراحل ليست في النسخة: التطبيق.');
   await dlg.getByRole('button', { name: 'ثبّت الدفعة' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-upgrade' && c.confirm)).toMatchObject({ id: 'c0', version_id: 'v2' });

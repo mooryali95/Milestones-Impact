@@ -220,9 +220,9 @@ for (const width of [1440, 390]) {
 test('تغيير البرنامج يعيد تحميل الرحلة ويثبّت على أحدث نسخ البرنامج الجديد، لا «آخر تعديل»', async ({ page }) => {
   const calls = await setup(page);
   const ed = await openEditor(page, 'سفراء 2026');
-  // دفعة لم تُثبَّت بعد على برنامج بلا نسخة: تعاين ما ستُثبَّت عليه عند الحفظ
+  // دفعة لم تُثبَّت بعد على برنامجها بلا نسخة: الحفظ ينشئ نسخته الأولى من حاله الآن، فالمعاينة البرنامج كما هو ('')
   await expect(ed.locator('.ce-stage h5').first()).toContainText('الانطلاق');
-  expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ cohort_id: 'c1', program_id: 'pb', program_version_id: 'latest' });
+  expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ cohort_id: 'c1', program_id: 'pb', program_version_id: '' });
   await expect(ed.locator('.ce-source').first()).toContainText('لا نسخة محفوظة لهذا البرنامج بعد: تُحفظ نسخته الأولى من حاله الآن عند الحفظ');
   await ed.locator('#f-program_id').selectOption('pa');
   await expect(ed.locator('.ce-stage h5')).toHaveText([/مرحلة النسخة الأولى/]);
