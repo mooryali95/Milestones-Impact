@@ -179,8 +179,9 @@ export async function expertLedger(e: any, b: Record<string, any>) {
   return { ...r, rows: r.rows.map((n: any) => ({ ...n, by: n.sender === 'admin' ? 'الإدارة' : n.by })) };
 }
 
-/** التذكير الأسبوعي: من له مرشد لم يتابعه بنفسه مؤخرًا يذكّره المساعد نيابة عنه، وغيره التذكير الآلي */
-export async function weeklyNudges(ids: string[]) {
+/** التذكير الأسبوعي: من له مرشد لم يتابعه بنفسه مؤخرًا يذكّره المساعد نيابة عنه، وغيره التذكير الآلي.
+ *  budget: حد ما يُرسل فعلًا، يُعد بعد تخطي المحرك، فمن لا تذكير له (مقفلة مرحلته مثلًا) لا يأكل الحد */
+export async function weeklyNudges(ids: string[], budget = Infinity) {
   const mentors = await mentorsOf(ids);
   const since = new Date(Date.now() - MENTOR_ACTIVE_DAYS * 864e5).toISOString();
   const { data: active } = mentors.size
@@ -190,9 +191,12 @@ export async function weeklyNudges(ids: string[]) {
   let sent = 0;
   for (const g of weeklyPlan(ids, mentors, busy)) {
     const sender: Sender = g.mentor ? assistantSender(g.mentor) : { kind: 'auto', label: 'التذكير الآلي', by: 'cron', signature: '' };
-    for (let i = 0; i < g.ids.length; i += NUDGE_MAX) {
-      const r = await sendNudges(sender, g.ids.slice(i, i + NUDGE_MAX)).catch((e) => { console.error('weekly nudges:', e); return { sent: 0 }; });
+    // كل دفعة بقدر ما بقي من الحد، فلا يتجاوزه الإرسال ولو أُرسل للدفعة كلها
+    for (let i = 0; i < g.ids.length && sent < budget;) {
+      const n = Math.min(NUDGE_MAX, budget - sent);
+      const r = await sendNudges(sender, g.ids.slice(i, i + n)).catch((e) => { console.error('weekly nudges:', e); return { sent: 0 }; });
       sent += r.sent;
+      i += n;
     }
   }
   return { sent, mentor_active: busy.size };
@@ -281,14 +285,29 @@ export async function adminReport(_a: unknown, b: Record<string, any>) {
   return { success: true, ledger: true, days, capped: order.length > ids.length, ...effectReport(rows, current, names), ms: Date.now() - t0 };
 }
 
+/** كم ذكّر الأسبوعي (الآلي والمساعد) كل واحد في جملته، من السجل الواحد. null إن غاب السجل (قبل ترحيله)،
+ *  فيُترك من لم يدخل قط ولا يُذكَّر بلا عدّ. دفعات 200 فلا يقص حد الصفوف في PostgREST (1000) شيئًا: الحد اثنان لكل واحد */
+export async function autoNudgeCounts(ids: string[]) {
+  const counts = new Map<string, number>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db.from('nudges').select('participant_id').in('participant_id', ids.slice(i, i + 200)).in('sender', ['auto', 'assistant']);
+    if (error) { if (missingTable(error)) return null; throw error; }
+    for (const r of data || []) counts.set(r.participant_id, (counts.get(r.participant_id) || 0) + 1);
+  }
+  return counts;
+}
+
 /** من ذُكِّر خلال days يومًا من أي مرسل: من السجل الواحد، وإلا (قبل ترحيله) من reminded_at */
 export async function recentlyNudged(rows: { id: string; reminded_at?: string | null }[], days: number) {
   const since = new Date(Date.now() - days * 864e5).toISOString();
   const ids = rows.map((r) => r.id);
-  const { data, error } = ids.length
-    ? await db.from('nudges').select('participant_id').in('participant_id', ids).gte('created_at', since)
-    : { data: [], error: null };
-  if (error && !missingTable(error)) throw error;
-  if (error) return new Set(rows.filter((r) => r.reminded_at && r.reminded_at >= since).map((r) => r.id));
-  return new Set((data || []).map((r: any) => r.participant_id));
+  const out = new Set<string>();
+  // دفعات 200 معرّف: الأسبوعي يسأل عن فريقين (حتى 1200)، فلا يطول عنوان الطلب
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db.from('nudges').select('participant_id').in('participant_id', ids.slice(i, i + 200)).gte('created_at', since);
+    if (error && !missingTable(error)) throw error;
+    if (error) return new Set(rows.filter((r) => r.reminded_at && r.reminded_at >= since).map((r) => r.id));
+    for (const r of data || []) out.add(r.participant_id);
+  }
+  return out;
 }

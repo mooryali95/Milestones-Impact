@@ -6,7 +6,8 @@
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
-import { recentlyNudged, weeklyNudges } from './nudges.ts';
+import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
+import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
@@ -1578,19 +1579,26 @@ export async function reminders(b: Record<string, any>) {
   // ويُكتب في السجل الواحد بحده المشترك، فلا يصله تذكير آلي بعد يوم من تذكير الإدارة أو المرشد
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   // من ذُكِّر خلال الأسبوع من أي مرسل يُستبعد من السجل الواحد (recentlyNudged)، لا من reminded_at (المرحلة 3)
-  // ومن لم يدخل قط (last_login_at فارغ) أحوج الناس إلى التذكير: كان lt وحده يُسقطه لأن المقارنة مع الفارغ لا تنجح،
-  // فيُضم بشرط أو ويتقدم الترتيب. الحدان كما هما (600 قراءةً و200 إرسالًا في التشغيلة)، فلا يزيد العدد على ما كان،
+  // فريقان يُقرآن منفصلين فلا يزاحم أحدهما الآخر في نافذة القراءة (600 لكل فريق):
+  // من دخل ثم غاب أسبوعًا (lt، والفارغ لا يطابقه)، ومن لم يدخل قط وعمر حسابه أسبوع فأكثر: المضاف بالاستيراد قبل
+  // ساعة لم يغب أسبوعًا، ولا بريد يصله عند الاستيراد، فأول ما يصله بعد أسبوع. ويُذكَّر NEVER_LOGGED_MAX مرة في جملته
+  // لأن بريده لم يُتحقق منه قط: بعدها يُترك للإدارة أو المنسق، فلا يرتد بريد قديم كل أسبوع بلا نهاية.
+  // حالات لا تذكير لها (WEEKLY_OUT_STATUSES) تُستبعد في الاستعلام، والترتيب ثابت بالمعرّف عند التساوي.
   // والتذكير من نوع bulk: إن بلغ نصيب غير الرموز من السقف اليومي دخل الطابور ولم يزاحم رموز الدخول (mail-budget.js)
-  const { data: people } = await db.from('participants')
-    .select('id, reminded_at')
-    .neq('status', 'suspended').eq('is_demo', false)
-    .or(`last_login_at.lt.${weekAgo},last_login_at.is.null`)
-    .order('last_login_at', { ascending: true, nullsFirst: true })
-    .limit(600);
-  const recent = await recentlyNudged(people || [], 7);
-  const due = (people || []).filter((p: any) => !recent.has(p.id)).slice(0, 200);
-  // من له مرشد لم يتابعه بنفسه يذكّره المساعد نيابة عنه، وغيره التذكير الآلي (weeklyNudges)
-  const { sent } = await weeklyNudges(due.map((p: any) => p.id));
+  const out = `(${WEEKLY_OUT_STATUSES.join(',')})`;
+  const base = () => db.from('participants').select('id, reminded_at').not('status', 'in', out).eq('is_demo', false).not('email', 'is', null);
+  const [{ data: away, error: e1 }, { data: never, error: e2 }] = await Promise.all([
+    base().lt('last_login_at', weekAgo).order('last_login_at', { ascending: true }).order('id').limit(600),
+    base().is('last_login_at', null).lt('created_at', weekAgo).order('created_at', { ascending: false }).order('id').limit(600),
+  ]);
+  if (e1 || e2) console.error('weekly reminders read:', e1 || e2);
+  const recent = await recentlyNudged([...(away || []), ...(never || [])], 7);
+  const neverIds = (never || []).map((p: any) => p.id).filter((id: string) => !recent.has(id));
+  // بلا سجل لا يُعد كم ذُكِّر، فلا يُذكَّر من لم يدخل قط (كما كان قبل ضمه)
+  const autoCounts = await autoNudgeCounts(neverIds);
+  const ids = weeklyCandidates({ away: away || [], never: autoCounts ? never || [] : [], recent, autoCounts: autoCounts || new Map() });
+  // من له مرشد لم يتابعه بنفسه يذكّره المساعد نيابة عنه، وغيره التذكير الآلي (weeklyNudges). الحد يُعد بعد تخطي المحرك
+  const { sent } = await weeklyNudges(ids, WEEKLY_SEND_MAX);
   // المعالم المتأخرة: تُكتب في ملف صاحبها ويُبلَّغ بها مرة لكل معلم (كانت تظهر في الموقع وحده بلا بريد ولا أثر)
   const late = await lateMilestoneNotices().catch((e) => { console.error('late milestones:', e); return 0; });
   return { success: true, sent, late };

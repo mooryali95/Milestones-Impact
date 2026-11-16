@@ -143,6 +143,29 @@ export function groupPreview(items) {
   return { groups: [...groups.values()], skipped, count: [...groups.values()].reduce((n, g) => n + g.people.length, 0) };
 }
 
+// التذكير الأسبوعي (cron الأحد): حدود التشغيلة الواحدة، ومصدرها الواحد للخادم واختباره
+export const WEEKLY_SEND_MAX = 200; // رسائل في التشغيلة، كما كان
+export const WEEKLY_CANDIDATES = 400; // من يمر بالمحرك في التشغيلة: ضعف حد الإرسال، فمن يتخطاه المحرك لا يأكل الحد
+export const NEVER_LOGGED_SHARE = 100; // نصيب من لم يدخل قط مقدَّمًا، والباقي لمن غاب ثم يُكمل كل فريق ما فضل عن الآخر
+export const NEVER_LOGGED_MAX = 2; // من لم يدخل قط يذكّره الأسبوعي مرتين في جملته ثم يُترك لتدخل الإدارة أو المنسق
+// حالات لا يُذكَّر صاحبها أبدًا (nudgeFor): تُستبعد في الاستعلام فلا تملأ نافذة القراءة كل أسبوع
+export const WEEKLY_OUT_STATUSES = ['suspended', 'withdrawn', 'completed', 'pending_approval'];
+
+/**
+ * من يمر بالمحرك في التذكير الأسبوعي، بالترتيب، من فريقين يُقرآن منفصلين فلا يزاحم أحدهما الآخر:
+ * away من دخل ثم غاب أسبوعًا (الأقدم غيابًا أولًا)، وnever من لم يدخل قط وعمر حسابه أسبوع فأكثر (الأحدث أولًا،
+ * فمن بلغ حده يتأخر ولا يحجب من بعده). يُسقط من ذُكِّر خلال الأسبوع (recent)، ومن لم يدخل قط وبلغ حده (autoCounts).
+ * الترتيب: نصيب never أولًا، ثم away، ثم ما بقي من never، والحد WEEKLY_CANDIDATES. الإرسال نفسه يقف عند WEEKLY_SEND_MAX
+ * بعد تخطي المحرك (weeklyNudges)، فلا يأكل الحد من لا تذكير له.
+ * @param {{ away: {id: string}[], never: {id: string}[], recent: Set<string>, autoCounts: Map<string, number> }} o
+ * @returns {string[]}
+ */
+export function weeklyCandidates({ away, never, recent, autoCounts }) {
+  const a = away.filter((p) => !recent.has(p.id)).map((p) => p.id);
+  const n = never.filter((p) => !recent.has(p.id) && (autoCounts.get(p.id) || 0) < NEVER_LOGGED_MAX).map((p) => p.id);
+  return [...new Set([...n.slice(0, NEVER_LOGGED_SHARE), ...a, ...n.slice(NEVER_LOGGED_SHARE)])].slice(0, WEEKLY_CANDIDATES);
+}
+
 /**
  * خطة التذكير الأسبوعي (P4): من له مرشد يذكّره المساعد نيابة عن مرشده، ما لم يتابعه المرشد بنفسه مؤخرًا (busy)،
  * فحينها لا ينوب عنه المساعد ويُترك للمرشد. ومن لا مرشد له يذكّره التذكير الآلي.
