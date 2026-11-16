@@ -12,6 +12,8 @@ import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-set
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
 import { seatsUsedByOrg } from './entitlements.ts';
+import { features } from './features.ts';
+import { featureHiddenCodes, featureHiddenFor } from './features.js';
 
 type Body = Record<string, any>;
 
@@ -86,7 +88,11 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   const live = version ? null : await liveRows(programId);
   const def = cohortDefinition({ live, version, cohort });
   // بنود أخفتها الدفعة: تختفي من رحلة أعضائها فورًا، ولا يُحذف ما أُنجز منها
-  const hidden = new Set(((cohort as any)?.hidden_requirements || []) as string[]);
+  const cohortHidden = ((cohort as any)?.hidden_requirements || []) as string[];
+  // وبنود يخفيها مفتاح ميزة مطفأ (تقدير المدير والزملاء مع 360): الطبقة نفسها، فلا تُمس النسخة ولا الصفوف وتعود حين يُظهَر
+  const fh = featureHiddenFor({ stages: def.stages, requirements: def.requirements, cohortHidden, flags: await features(), breaks: hideBreaksStage });
+  if (fh.kept.length) console.warn('feature-hidden kept to avoid a stuck stage:', fh.kept.join(','), cohort?.id || '');
+  const hidden = new Set([...cohortHidden, ...fh.hidden]);
   if (hidden.size) def.requirements = def.requirements.filter((r: any) => !hidden.has(r.code));
   if (version) {
     // توفر الموجّه للاتصال الفوري حالة تشغيلية لا جزء من النسخة؛ تُقرأ من البرنامج الحالي
@@ -106,7 +112,7 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   const inst = (await db.from('instruments').select('est_minutes').eq('kind', 'baseline').eq('active', true).limit(1).maybeSingle()).data;
   const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
   return {
-    ...rendered, via, program_id: programId,
+    ...rendered, via, program_id: programId, feature_hidden: fh.hidden,
     cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on, schedule: cohort.schedule || {},
       level_mode: cohort.level_mode || 'mixed', content_level: cohort.content_level || null, stage_modes: cohort.stage_modes || {}, project_mode: cohort.project_mode || 'individual' } : null,
     milestones: ((await db.from('program_milestones').select('*').eq('program_id', programId).eq('active', true).order('sort')).data || []),
@@ -482,13 +488,20 @@ async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const versionChanged = !!prev && vid !== (prev.program_version_id ?? null);
   if (hidden.length && ('hidden_requirements' in row || programChanged || versionChanged)) {
     const def = await defOf(vid, programId);
-    const broken = hideBreaksStage(def.stages || [], def.requirements || [], hidden);
-    // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها
-    const was = broken.length && prev?.hidden_requirements?.length
-      ? await defOf(prev.program_version_id, prev.program_id).then((d: any) => hideBreaksStage(d.stages || [], d.requirements || [], prev.hidden_requirements))
-      : [];
+    // وما يخفيه مفتاح ميزة مطفأ الآن (بنود تقدير المدير والزملاء مع 360) يُحسب مع إخفاء الدفعة: بند يبقيه featureHiddenFor
+    // ظاهرًا لئلا تفرغ مرحلته لا يكتمل ما دام المفتاح مطفأ، فلا يُسمح بإخفاء يجعله وحده ما يكمل مرحلة
+    const fcodes = featureHiddenCodes(await features());
+    const broken = hideBreaksStage(def.stages || [], def.requirements || [], [...hidden, ...fcodes]);
+    // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها، ولا كسر من شكل البرنامج والمفتاح وحدهما
+    const was = !broken.length ? []
+      : prev?.hidden_requirements?.length
+        ? await defOf(prev.program_version_id, prev.program_id).then((d: any) => hideBreaksStage(d.stages || [], d.requirements || [], [...prev.hidden_requirements, ...fcodes]))
+        : hideBreaksStage(def.stages || [], def.requirements || [], fcodes);
     const worse = newlyBroken(broken, was);
-    if (worse.length) throw new Fail(hideBreaksMessage(worse), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+    if (worse.length) {
+      const byFeature = fcodes.length && newlyBroken(worse, hideBreaksStage(def.stages || [], def.requirements || [], hidden)).length > 0;
+      throw new Fail(hideBreaksMessage(worse) + (byFeature ? ' وبنود تقدير المدير والزملاء مخفية الآن مع تقييم 360، فلا تُحسب مما يكمل المرحلة.' : ''), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+    }
   }
   const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);
   // الدفعة المفتوحة ملاذ من لا دفعة له أيًا كانت حالتها (pickCohort)، فلا يتغير لأعضائها إلا البرنامج

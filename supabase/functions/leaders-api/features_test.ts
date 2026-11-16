@@ -1,6 +1,6 @@
 // مفاتيح الميزات قيد البناء (P1): القاعة وكاتون و360 مطفأة افتراضيًا، ويرفضها الخادم برمز كل منها، والمدير مستثنى
-// إلا فتح القاعة، والمهمة الساعية لا تذكّر ولا تغلق، وبريد 360 في الطابور يُمسك، ومقيّم 360 يرى «متوقف مؤقتًا» ومقيّم
-// الأثر قبل البرنامج وبعده كما كان، ورسائل الورشة بلا القاعة، وبطاقة المنسق null، وقفل القاعة مغلق، والدرجة لا تتغير.
+// إلا فتح القاعة، والمهمة الساعية لا تذكّر ولا تغلق، وبريد 360 في الطابور يُمسك، ومقيّم 360 يرى «متوقف مؤقتًا» ومثله مقيّم
+// الأثر قبل البرنامج وبعده (مؤجل مع 360 بقرار المالك 2026-11-16)، ورسائل الورشة بلا القاعة، وبطاقة المنسق null، وقفل القاعة مغلق، والدرجة لا تتغير.
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail, hash, workshopMail, WORKSHOP_MAIL, FEEDBACK_MAIL, drainMailQueue, stuckQueueAlert } = await import('./core.ts');
@@ -44,6 +44,7 @@ function install(tables: Record<string, Row[]>) {
       neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return q; },
       in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       is: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; },
+      gt: (c: string, v: string) => { filters.push((r) => r[c] != null && String(r[c]) > v); return q; },
       contains: (c: string, vs: unknown[]) => { filters.push((r) => Array.isArray(r[c]) && vs.every((v) => r[c].includes(v))); return q; },
       maybeSingle: () => { single = true; return q; }, single: () => { single = true; return q; },
       then: (ok: (x: unknown) => unknown, bad: (e: unknown) => unknown) => Promise.resolve(run()).then(ok, bad),
@@ -68,7 +69,9 @@ Deno.test('المفاتيح: الثلاثة مطفأة افتراضيًا، وم
 Deno.test('الحارس: كل فعل برمز ميزته ورسالة لا تسمّيها، وقراءات تُجاب بلا شيء، والمدير مستثنى إلا فتح القاعة', () => {
   const off = { hall: false, katon: false, f360: false };
   for (const [a, code] of [['hall.state', 'hall_off'], ['hall.join', 'hall_off'], ['xp.hall-open', 'hall_off'], ['xp.hall-close', 'hall_off'], ['katon.mine', 'katon_off'],
-    ['f360.start', 'f360_off'], ['f360.submit', 'f360_off'], ['f360.report', 'f360_off'], ['xp.f360-decide', 'f360_off'], ['xp.f360-release', 'f360_off']]) {
+    ['f360.start', 'f360_off'], ['f360.submit', 'f360_off'], ['f360.report', 'f360_off'], ['xp.f360-decide', 'f360_off'], ['xp.f360-release', 'f360_off'],
+    // تقدير المدير والزملاء مؤجل مع 360: دعوة مقيّمي الأثر وإعادة إرسالها (rater.invite) وإلغاؤها وتأكيد المستشار
+    ['rater.invite', 'f360_off'], ['rater.revoke', 'f360_off'], ['xp.rater-confirm', 'f360_off']]) {
     assertEquals([a, featureGate(a, off)?.fail?.code, featureGate(a, off)?.fail?.status, featureGate(a, off)?.fail?.message], [a, code, 404, FEATURE_OFF_AR]);
   }
   assertEquals(featureGate('f360.mine', off), { soft: { success: true, enabled: false, ready: true } });
@@ -80,7 +83,7 @@ Deno.test('الحارس: كل فعل برمز ميزته ورسالة لا تس�
   }
   assertEquals([featureGate('admin.hall-open', off)?.fail?.code, featureGate('admin.hall-open', off)?.fail?.status], ['hall_off', 409]);
   // ما لا تحكمه ميزة يمر، وكل فعل محكوم يمر حين تُظهَر ميزته
-  for (const a of ['me', 'impact.mine', 'rater.invite', 'peer.ask', 'workshop.checkin', 'katon.answer']) assertEquals([a, featureGate(a, off)], [a, null]);
+  for (const a of ['me', 'impact.mine', 'peer.ask', 'workshop.checkin', 'katon.answer']) assertEquals([a, featureGate(a, off)], [a, null]);
   const on = { hall: true, katon: true, f360: true };
   for (const a of [...Object.keys(FEATURE_ACTIONS), 'f360.mine', 'xp.f360', 'xp.hall']) assertEquals([a, featureGate(a, on)], [a, null]);
   // مفتاح ميزة لا يفتح غيرها
@@ -187,16 +190,24 @@ Deno.test('استئناف 360: الساعة توقفت مع الإخفاء، ف�
     raters: [
       { id: 'r-inv', cycle_id: 'c-open', phase: 'f360', status: 'invited', expires_at: at(-24 * 5) },
       { id: 'r-done', cycle_id: 'c-open', phase: 'f360', status: 'submitted', expires_at: at(-24 * 5) },
+      // مقيّمو الأثر مؤجلون مع 360: دعوة قبل الإخفاء بقي منها يومان تُمد بالسبعة، ودعوة أثناءه (قبل يومين) تُمد بما مضى منها،
+      // ودعوة انقضت قبل الإخفاء والمرسل تقديره لا يُمسان
+      { id: 'r-pre', cycle_id: null, phase: 'pre', status: 'invited', invited_at: at(-24 * 20), expires_at: at(-24 * 5) },
+      { id: 'r-post', cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 2), expires_at: at(24 * 28) },
+      { id: 'r-old', cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 40), expires_at: at(-24 * 10) },
+      { id: 'r-sub', cycle_id: null, phase: 'post', status: 'submitted', invited_at: at(-24 * 20), expires_at: at(24 * 3) },
     ],
   });
   try {
     assertEquals(await FB.pausedSince(), now - 7 * 24 * H);
     const r: any = await FB.resumeFrozen('admin@x.sa', now);
-    assertEquals([r.extended, r.paused_ms], [1, 7 * 24 * H]);
+    assertEquals([r.extended, r.raters, r.paused_ms], [1, 2, 7 * 24 * H]);
     const cyc = Object.fromEntries(w.tables.feedback_cycles.map((c) => [c.id, c.closes_at]));
     assertEquals(cyc, { 'c-open': at(24 * 2), 'c-old': at(-24 * 8), 'c-closed': at(-24 * 5) });
-    assertEquals(w.tables.raters.map((x) => [x.id, x.expires_at]), [['r-inv', at(24 * 2)], ['r-done', at(-24 * 5)]]);
+    assertEquals(w.tables.raters.map((x) => [x.id, x.expires_at]), [['r-inv', at(24 * 2)], ['r-done', at(-24 * 5)],
+      ['r-pre', at(24 * 2)], ['r-post', at(24 * 30)], ['r-old', at(-24 * 10)], ['r-sub', at(24 * 3)]]);
     assertEquals(w.tables.audit_log.filter((l) => l.action === 'f360.resume').map((l) => l.entity_id), ['c-open']);
+    assertEquals(w.tables.audit_log.filter((l) => l.action === 'rater.resume').map((l) => l.after), [{ raters: 2, paused_ms: 7 * 24 * H }]);
   } finally { w.restore(); }
 });
 
@@ -210,8 +221,51 @@ Deno.test('استئناف 360 بلا إطفاء في السجل: بداية ال
   } finally { w.restore(); }
   w = install({ schema_migrations: [], audit_log: [], feedback_cycles: [{ id: 'c1', status: 'open', closes_at: new Date(now - 864e5).toISOString() }], raters: [] });
   try {
-    assertEquals(await FB.resumeFrozen('admin@x.sa', now), { extended: 0, paused_ms: 0 });
+    assertEquals(await FB.resumeFrozen('admin@x.sa', now), { extended: 0, raters: 0, mail: 0, paused_ms: 0 });
     assertEquals(w.writes, []);
+  } finally { w.restore(); }
+});
+
+Deno.test('مقيّمو الأثر: بداية إخفائهم لا تسبق نشر ربطهم بـ360 (علامة rater.pause-start)، ولا يمنع استئنافهم غياب جدول الدورات', async () => {
+  const H = 36e5, now = Date.parse('2026-11-25T09:00:00Z');
+  const at = (h: number) => new Date(now + h * H).toISOString();
+  const RID = '00000000-0000-4000-8000-0000000000a1';
+  const w = install({
+    app_settings: [], schema_migrations: [{ name: FB.F360_FREEZE_MIGRATION, applied_at: at(-24 * 30) }],
+    // مطفأ منذ الافتراضي بلا حفظ أطفأه، والربط نُشر قبل عشرة أيام (العلامة)
+    audit_log: [{ action: FB.IMPACT_PAUSE_MARK, created_at: at(-24 * 10) }],
+    raters: [
+      // انقضى قبل النشر وهو يعمل: لا يُحيا
+      { id: 'r-gone', cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 28), expires_at: at(-24 * 20) },
+      // بقي منه يوم حين نُشر الربط: يُمد بالعشرة لا بالثلاثين
+      { id: RID, cycle_id: null, phase: 'post', status: 'invited', invited_at: at(-24 * 20), expires_at: at(-24 * 9) },
+    ],
+    // دعوته في الطابور منذ اثني عشر يومًا (السقف اليومي): لا تُعد فائتة عند أول تفريغ بعد الإظهار
+    mail_queue: [{ id: 'm1', kind: 'notify', created_at: at(-24 * 12), to_email: 'boss@x.sa', subject: 'طلب تقدير من سارة', html: '<p/>', ref: `rater:${RID}`, attempts: 0, sent_at: null, gave_up_at: null, expires_at: at(-24 * 9) }],
+  });
+  const from = (db as any).from;
+  (db as any).from = (t: string) => t !== 'feedback_cycles' ? from(t) : new Proxy({}, {
+    get: (_x, k: string) => k === 'then' ? (ok: any) => Promise.resolve({ data: null, error: { code: '42P01', message: 'relation "feedback_cycles" does not exist' } }).then(ok) : () => (db as any).from('feedback_cycles'),
+  });
+  try {
+    assertEquals(await FB.impactPausedSince(), now - 10 * 24 * H);
+    const r: any = await FB.resumeFrozen('admin@x.sa', now);
+    assertEquals([r.extended, r.raters, r.mail], [0, 1, 1]);
+    assertEquals(w.tables.raters.map((x) => [x.id, x.expires_at]), [['r-gone', at(-24 * 20)], [RID, at(24 * 1)]]);
+    // عمرها في الطابور بلا أيام الإخفاء: يومان قبل النشر، فتُرسل ولا تُترك «فائتة»
+    assertEquals(w.tables.mail_queue[0].created_at, at(-24 * 2));
+    // وموعدها يُزاح بأيام الإخفاء كموعد المقيّم، فلا يتركها التفريغ «فات أوانه» والرابط حي
+    assertEquals(w.tables.mail_queue[0].expires_at, at(24 * 1));
+    assertEquals(w.tables.audit_log.filter((l) => l.action === 'mail.resume').map((l) => l.after), [{ messages: 1 }]);
+  } finally { w.restore(); }
+});
+
+Deno.test('علامة بداية إخفاء مقيّمي الأثر تُكتب مرة واحدة', async () => {
+  const w = install({ audit_log: [] });
+  try {
+    assertEquals(await FB.markImpactPause(), true);
+    assertEquals(await FB.markImpactPause(), false);
+    assertEquals(w.tables.audit_log.filter((l) => l.action === FB.IMPACT_PAUSE_MARK).length, 1);
   } finally { w.restore(); }
 });
 
@@ -244,18 +298,21 @@ Deno.test('بريد 360 في الطابور يُمسك حين يُخفى: لا �
     { id: 'm-ready', kind: 'bulk', created_at: old, to_email: 'adv@x.sa', subject: FEEDBACK_MAIL.ready.subject('سارة'), html: '<p/>', ref: `participant:${PID}`, attempts: 0, sent_at: null, gave_up_at: null },
     { id: 'm-pre', kind: 'bulk', created_at: old, to_email: 'm@x.sa', subject: 'طلب تقدير من سارة', html: '<p/>', ref: `rater:${'0'.repeat(8)}-0000-4000-8000-0000000000f2`, attempts: 0, sent_at: null, gave_up_at: null },
     { id: 'm-ws', kind: 'bulk', created_at: old, to_email: 'p@x.sa', subject: WORKSHOP_MAIL.day.subject, html: '<p/>', ref: 'ws1', attempts: 0, sent_at: null, gave_up_at: null },
+    // تأكيد مقيّم الأثر (للمؤكِّد، ولعدم الاعتماد للمشارك) مؤجل مع 360
+    { id: 'm-conf', kind: 'bulk', created_at: old, to_email: 'adv@x.sa', subject: 'مقيّم بانتظار تأكيدك: سارة', html: '<p/>', ref: `participant:${PID}`, attempts: 0, sent_at: null, gave_up_at: null },
+    { id: 'm-rej', kind: 'bulk', created_at: old, to_email: 'p@x.sa', subject: 'لم يُعتمد أحد مقيّميك', html: '<p/>', ref: `participant:${PID}`, attempts: 0, sent_at: null, gave_up_at: null },
   ];
   const raters = [{ id: `${'0'.repeat(8)}-0000-4000-8000-0000000000f1`, phase: 'f360' }, { id: `${'0'.repeat(8)}-0000-4000-8000-0000000000f2`, phase: 'pre' }];
   let w = install({ app_settings: [], mail_queue: queue(), raters });
   try {
     const held = await FT.heldMail();
-    assertEquals([...held].sort(), ['m-inv', 'm-ready']);
+    assertEquals([...held].sort(), ['m-conf', 'm-inv', 'm-pre', 'm-ready', 'm-rej']);
     // الطابور كله ممسَك: لا محاولة ولا كتابة، ويُذكر عدد الممسَك
     w.tables.mail_queue = w.tables.mail_queue.filter((m) => held.has(m.id));
     const r: any = await drainMailQueue(40, held);
-    assertEquals([r.sent, r.held], [0, 2]);
+    assertEquals([r.sent, r.held], [0, 5]);
     assertEquals(w.writes.filter((x) => x.table === 'mail_queue'), []);
-    assertEquals(w.tables.mail_queue.map((m) => m.attempts), [0, 0]);
+    assertEquals(w.tables.mail_queue.map((m) => m.attempts), [0, 0, 0, 0, 0]);
     // الممسَك ليس عالقًا ولو مضت عليه ساعات
     assertEquals(await stuckQueueAlert(held), { stuck: 0, alerted: 0 });
   } finally { w.restore(); }
@@ -293,15 +350,37 @@ Deno.test('مقيّم 360 حين يُخفى: «متوقف مؤقتًا» بلا 
   } finally { w.restore(); }
 });
 
-Deno.test('مقيّمو الأثر قبل البرنامج وبعده (pre وpost) يعملون و360 مخفي: المسار نفسه لا يمسه المفتاح', async () => {
+Deno.test('مقيّمو الأثر قبل البرنامج وبعده (pre وpost) مؤجلون مع 360: مخفيًا «متوقف مؤقتًا» ولا إرسال وصفه باقٍ، ومُظهَرًا كما كانوا', async () => {
   for (const phase of ['pre', 'post'] as const) {
-    const w = await raterWorld(phase, false);
+    let w = await raterWorld(phase, false);
+    try {
+      const e = await codeOf(() => raterGet({ t: TOKEN }));
+      assertEquals([phase, e.code, e.status, e.message, e.extra], [phase, 'f360_off', 409, RATER_PAUSED_AR, { paused: true, phase }]);
+      assertEquals((await codeOf(() => raterSubmit({ t: TOKEN, contact_freq: 'daily', answers: {} }))).code, 'f360_off');
+      assertEquals([w.writes, w.tables.raters.length, w.tables.raters[0].status, w.tables.raters[0].opened_at], [[], 1, 'invited', null]);
+    } finally { w.restore(); }
+    w = await raterWorld(phase, true);
     try {
       const r: any = await raterGet({ t: TOKEN });
       assertEquals([phase, r.success, r.phase, r.done], [phase, true, phase, false]);
       assertEquals(typeof w.tables.raters[0].opened_at, 'string');
     } finally { w.restore(); }
   }
+});
+
+Deno.test('رابط مقيّم أثر انقضت مهلته أثناء الإخفاء: «متوقف مؤقتًا» لا «انتهت الصلاحية»، ومُظهَرًا بلا مد يقول انتهى', async () => {
+  let w = await raterWorld('post', false);
+  w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
+  try {
+    const e = await codeOf(() => raterGet({ t: TOKEN }));
+    assertEquals([e.code, e.status, e.message], ['f360_off', 409, RATER_PAUSED_AR]);
+    assertEquals((await codeOf(() => raterSubmit({ t: TOKEN, contact_freq: 'daily', answers: {} }))).code, 'f360_off');
+  } finally { w.restore(); }
+  w = await raterWorld('post', true);
+  w.tables.raters[0].expires_at = new Date(Date.now() - 864e5).toISOString();
+  try {
+    assertEquals((await codeOf(() => raterGet({ t: TOKEN }))).code, 'expired');
+  } finally { w.restore(); }
 });
 
 Deno.test('رسائل الورشة والقاعة مخفية: ملاحظة بلا «القاعة» والحضور برمز QR، ومُظهَرة كما كانت', () => {

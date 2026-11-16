@@ -12,7 +12,7 @@
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · lab.draft · lab.hint · lab.check · achievements · certificate
 //             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
-//             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه)
+//             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه؛ الدعوة والإلغاء مع مفتاح 360)
 //             f360.mine · f360.start · f360.self · f360.nominate · f360.remove · f360.submit · f360.report · f360.plan (تقييم 360 للتطوير)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
 //             capstone.shares · capstone.share-create · capstone.share-update · capstone.share-revoke · capstone.note-mark (المشاركة برابط وملاحظات القراء)
@@ -117,6 +117,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
       // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار
       feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
+      // بداية إخفاء مقيّمي الأثر مع 360: علامة واحدة في أول تشغيل بعد النشر (feedback360.ts impactPausedSince)
+      impact_pause_mark: await FB.markImpactPause().catch((e) => ({ error: String(e?.message || e) })),
       // طلبات الحذف: تذكير المالك قبل 10 أيام وقبل 3 ويوم المهلة ثم يوميًا بعد التأخر (erasure.ts remindSweep)
       erasure_reminders: await ER.remindSweep().catch((e) => ({ reminded: 0, error: String(e?.message || e) })) };
     return {

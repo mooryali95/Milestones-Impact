@@ -76,6 +76,8 @@ export async function adminSave(a: Admin, b: Body) {
   // إظهار 360 بعد إخفائه يستأنف الدورات المجمدة من حيث توقفت: تُمد نوافذها بقدر مدة الإخفاء (feedback360.ts)
   if (group === 'feedback360' && before?.enabled !== true && (c.value as any)?.enabled === true) {
     const FB = await import('./feedback360.ts');
+    // علامة بداية إخفاء مقيّمي الأثر إن لم تكتبها المهمة الساعية بعد: بلاها يُعد إطفاء أقدم من النشر بداية لإخفائهم
+    await FB.markImpactPause();
     await FB.resumeFrozen(a.email);
   }
   return adminGet();

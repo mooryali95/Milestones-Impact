@@ -50,13 +50,17 @@ function Settings({ model, running, onSaved, canWrite }) {
   );
 }
 
-function Cohort({ r }) {
+// تقدير المدير والزملاء مؤجل مع تقييم 360 (feedback360.enabled): مطفأ فلا دعوات جديدة، والأرقام القائمة تبقى كما هي
+const RaterOff = () => <span className="ft-hidden-badge" data-testid="rater-hidden">مخفي عن المستخدمين</span>;
+const RATER_OFF_AR = 'تقدير المدير والزملاء مخفي عن المستخدمين مع تقييم 360: لا دعوات ولا روابط تقدير جديدة الآن، وما أُرسل من قبل باقٍ في الأرقام. أظهره من «الميزات قيد البناء» في الإعدادات العامة.';
+
+function Cohort({ r, raterOff }) {
   return (
     <section className="la-card">
       <h3>الدفعة: قبل وبعد لكل إطار</h3>
       {r.caution && <div className="la-note">{r.caution}</div>}
       <table className="la-table" tabIndex={0} aria-label="قبل وبعد لكل إطار">
-        <thead><tr><th>الإطار</th><th>العدد</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>حجم الأثر dz</th><th>تحسن موثوق</th><th>تراجع موثوق</th><th>ارتقى مستوى</th><th>تقدير المدير قبل ← بعد</th></tr></thead>
+        <thead><tr><th>الإطار</th><th>العدد</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>حجم الأثر dz</th><th>تحسن موثوق</th><th>تراجع موثوق</th><th>ارتقى مستوى</th><th>تقدير المدير قبل ← بعد{raterOff && <RaterOff />}</th></tr></thead>
         <tbody>{DIMS.map((d) => {
           const c = r.cohort[d];
           return (
@@ -140,14 +144,14 @@ function Reaction({ s }) {
   );
 }
 
-function People({ list, onPerson }) {
+function People({ list, onPerson, raterOff }) {
   const rows = list.filter((p) => p.baseline_at);
   if (!rows.length) return null;
   return (
     <section className="la-card">
       <h3>المشاركون</h3>
       <table className="la-table" tabIndex={0} aria-label="أثر كل مشارك">
-        <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المقيّمون</th></tr></thead>
+        <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المقيّمون{raterOff && <RaterOff />}</th></tr></thead>
         <tbody>{rows.map((p) => (
           <tr key={p.id} className="la-click" tabIndex={0} onClick={() => onPerson(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onPerson(p.id); }}>
             <td><b>{p.full_name}</b><br /><small className="la-muted">{p.organization || ''}{p.forms?.[0] && ` · نموذج ${p.forms[0]}${p.forms[1] ? ` ← ${p.forms[1]}` : ''}`}</small></td>
@@ -176,12 +180,15 @@ function People({ list, onPerson }) {
           </tr>
         ))}</tbody>
       </table>
+      {raterOff && <p className="la-muted" role="note">{RATER_OFF_AR}</p>}
       <p className="la-muted">الحكم بالتثليث: «تغير مؤكد» يتطلب مصدرين على الأقل أحدهما خارجي غير مبني على التذكر: الاختبار بتغير موثوق، أو دليل المشروع المعتمد، أو تقدير المدير نفسه قبل البرنامج وبعده. تقدير المدير بأثر رجعي وحده يرفع الحكم إلى «مؤشرات أولية» فقط.</p>
     </section>
   );
 }
 
-export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, canWrite }) {
+export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, canWrite, f360 }) {
+  // false صراحة وحده يُظهر الشارة: مفاتيح لم تُقرأ بعد (null) لا تُعلَّم بها الأعمدة
+  const raterOff = f360 === false;
   const { toast } = useUI();
   const [org, setOrg] = useState('');
   const [r, setR] = useState(null);
@@ -219,12 +226,12 @@ export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, ca
         <div className="stat-card"><div className="stat-label">أجروا البعدي</div><div className="stat-value">{r.counts.post}</div></div>
         <div className="stat-card"><div className="stat-label">أزواج للمقارنة</div><div className="stat-value s-replied">{r.counts.paired}</div></div>
       </div>
-      {r.counts.paired > 0 ? <Cohort r={r} /> : <section className="la-card"><p className="la-muted">لا أزواج بعد: تظهر المقارنة حين يُتم مشارك القياسين.</p></section>}
+      {r.counts.paired > 0 ? <Cohort r={r} raterOff={raterOff} /> : <section className="la-card"><p className="la-muted">لا أزواج بعد: تظهر المقارنة حين يُتم مشارك القياسين.</p></section>}
       {r.counts.paired > 0 && <Overall o={r.overall} />}
       <Transfer rows={r.transfer} />
       <Reaction s={r.reaction} />
       <Outcomes org={org} onOpen={onCapstone} />
-      <People list={r.participants} onPerson={onPerson} />
+      <People list={r.participants} onPerson={onPerson} raterOff={raterOff} />
       {catalog?.success && <Settings model={catalog.placement_model?.[0]} running={catalog.running_cohort} canWrite={canWrite} onSaved={() => { reload(); load(); }} />}
     </>
   );
