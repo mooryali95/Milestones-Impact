@@ -9,7 +9,7 @@ const SHOTS = process.env.SHOTS_DIR;
 const later = (h) => new Date(Date.now() + h * 36e5).toISOString();
 
 const items = [
-  { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتيبك الشخصي', required: true, status: 'pending',
+  { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتابك الشخصي', required: true, status: 'pending',
     activity: { type: 'reading', done: false, count: 1, total: 3, quiz: true, chapters: [
       { id: 'c1', title: 'المعالم نقاط قرار', state: 'read', pct: 100, quiz: true },
       { id: 'c2', title: 'سلسلة القيمة', state: 'skimmed', pct: 40, quiz: false },
@@ -83,7 +83,7 @@ test('الرحلة: الأنشطة الموثقة بلا زر «أنجزته»',
 });
 
 // أيام التدريب ذروة الجوال: صف جلسة قابلة للانضمام (الطريقة و«انضم الآن» والحالة) كان يوسّع عمود
-// قائمة التحقق فتُقص بنود المرحلة كلها من اليسار ويخرج «افتح الكتيب» عن الشاشة
+// قائمة التحقق فتُقص بنود المرحلة كلها من اليسار ويخرج «افتح الكتاب» عن الشاشة
 test('الجوال: بند الورشة لا يوسّع قائمة المرحلة فتبقى البنود وأزرارها داخلها', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await participant(page);

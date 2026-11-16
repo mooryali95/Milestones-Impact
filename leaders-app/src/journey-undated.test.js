@@ -121,7 +121,7 @@ describe('الجاهزية: «يُحدد لاحقًا» لا يمنع الإطل
   });
   it('جاهزية الإطلاق (readiness.js، ومنها system.ts وبوابة المراحل) تعدّ غير المؤرخة', () => {
     const items = launchReadiness({ organizations: [{ id: 'o1', name: 'الجهة', status: 'active' }], cohorts: [cohort], sessions: [undated] }, NOW);
-    expect(items.find((x) => x.key === 'sessions')).toMatchObject({ ok: true, label: 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب، وجلسة واحدة بموعد يُحدد لاحقًا' });
+    expect(items.find((x) => x.key === 'sessions')).toMatchObject({ ok: true, label: 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتاب، وجلسة واحدة بموعد يُحدد لاحقًا' });
   });
   it('الجلسة بلا دفعة تُعد مرة واحدة لا مرة لكل دفعة', () => {
     const cohorts = ['c1', 'c2', 'c3'].map((id) => ({ ...cohort, id, name: id }));

@@ -134,7 +134,7 @@ const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.priv
   'capstone.shares', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark']);
 
 // بوابة البرنامج (P1-04): كل فعل للمشارك في واحدة من ثلاث، وprogram_gate_test.ts يُسقط فعلًا لم يُصنَّف.
-// المعتمد مساره: approvalOf (ثلاثة تسكينات معتمدة، القاعدة نفسها في الكتيب وكاتون والمبادرة). وداخل البرنامج: inProgram
+// المعتمد مساره: approvalOf (ثلاثة تسكينات معتمدة، القاعدة نفسها في الكتاب وكاتون والمبادرة). وداخل البرنامج: inProgram
 // (المنسحب والموقوف خارجه، والموقوف يُرد قبل هذا في participantFromToken). الاعتماد لا يُسحب بعد منحه، فيُحفظ في العامل
 // فلا يُقرأ مع كل سؤال من أسئلة القاعة. الأولى: يبقى لكل من يدخل ومنهم المنسحب (الحساب وبياناته وملفه وشهادته)
 const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name', 'certificate',
@@ -154,7 +154,7 @@ const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
   'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
   'capstone.shares', 'capstone.share-create', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark']);
-// وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتيبه، وتقدير أثره) وتقييم
+// وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتابه، وتقدير أثره) وتقييم
 // خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
 // GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
 // ومشاركة الوثيقة: يرى روابطه وملاحظاتها ويلغي ما شاء، ولا ينشئ رابطًا جديدًا

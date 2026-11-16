@@ -6,7 +6,7 @@
 //   content_level: مستوى المحتوى حين تكون uniform
 //   stage_modes: { [stage_key]: shared | individual | groups } نمط العمل في المرحلة
 //   project_mode: individual | group مشروع فردي أو لكل مجموعة
-// المستوى الموحد يسري على المحتوى فقط (الرحلة والكتيب والنماذج والمنهج)،
+// المستوى الموحد يسري على المحتوى فقط (الرحلة والكتاب والنماذج والمنهج)،
 // ولا يمس القياس ولا المسار ولا التقرير: تبقى من قياس المشارك نفسه.
 const LEVELS = ['beginner', 'intermediate', 'advanced'];
 const DIMS = ['milestone', 'impact', 'leadership'];

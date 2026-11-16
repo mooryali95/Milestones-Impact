@@ -46,7 +46,7 @@ export async function cohortOf(p: { id?: string | null; organization_id?: string
   return pickCohort({ enrollments: enr.data || [], cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
 }
 
-// إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتيب فيه لحساب بند القراءة على إصدار الدفعة.
+// إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتاب فيه لحساب بند القراءة على إصدار الدفعة.
 // null لدفعة لم يُقطع إصدارها وحدها، فيُحسب كل شيء على المحتوى الحي؛ وخطأ القراءة يرمي
 export async function releaseOf(p: { id?: string | null; organization_id?: string | null }) {
   const { cohort } = await cohortOf(p, { strict: true });

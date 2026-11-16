@@ -23,7 +23,7 @@ export function createMockServer() {
       stage('approval', 'اعتماد المستوى', 'admission', s.approved ? 'done' : s.assessed ? 'active' : 'locked', [], { duration_label: 'يومي عمل' }),
       stage('training', 'التدريب', 'qualification', s.approved ? 'active' : 'locked', [
         { id: 'r0', code: 'T-ATTEND', kind: 'attendance', title_ar: 'حضور الأيام التدريبية', required: true, status: 'done', auto: true },
-        { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتيبك الشخصي', required: true, status: s.chapterDone ? 'done' : 'pending' },
+        { id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتابك الشخصي', required: true, status: s.chapterDone ? 'done' : 'pending' },
         { id: 'r2', code: 'T-PLAN', kind: 'upload', title_ar: 'تسمية مبادرتك', required: true, status: 'pending' },
       ], { duration_label: '4 أيام تدريبية' }),
       stage('ojt_coaching', 'التوجيه على رأس العمل', 'qualification', 'locked', [], { duration_label: '4 أسابيع', lock_reason: 'تُفتح بعد التدريب' }),
@@ -41,7 +41,7 @@ export function createMockServer() {
     ] : [],
     milestone_summary: { done: 1, total: 3, late: 0, max_late: 0, pct: 33 },
     continuous: s.assessed ? { index: 68, trend: { dir: 'up' }, components: [
-      { key: 'quizzes', label: 'اختبارات الكتيب', value: 80, reason: '4 أبواب' },
+      { key: 'quizzes', label: 'اختبارات الكتاب', value: 80, reason: '4 أبواب' },
       { key: 'models', label: 'النماذج التطبيقية', value: 75, reason: 'نموذجان' },
       { key: 'milestones', label: 'المعالم', value: 75, reason: 'معلم واحد' },
       { key: 'peer', label: 'الإسهام المؤكَّد في طلبات الأقران', value: null, reason: 'لم تكتمل له أحداث كافية بعد' },
@@ -60,7 +60,7 @@ export function createMockServer() {
     teams: { support: 'فريق الدعم', lead: 'فريق القيادة', guide: 'فريق التوجيه', eval: 'فريق التقييم' }, advisor: 'م. عمر', mine_open: s.mine.length,
     items: [
       ...s.mine.map((t, i) => ({ id: `m${i}`, text: t, source: 'free', source_ar: 'سؤال حر', target_team: null, target_team_ar: 'الجميع', status: 'open', status_ar: 'بانتظار إجابة', at: '2026-11-05T09:00:00Z', mine: true, author: NAME, answers: [] })),
-      { id: 'q9', text: 'ما الفرق بين المخرج والمنفعة في سجل المنافع؟', source: 'sentence', source_ar: 'جملة في الكتيب', target_team: 'guide', target_team_ar: 'فريق التوجيه', status: 'answered', status_ar: 'أُجيب', at: '2026-11-04T10:00:00Z', mine: false, author: 'خالد السبيعي',
+      { id: 'q9', text: 'ما الفرق بين المخرج والمنفعة في سجل المنافع؟', source: 'sentence', source_ar: 'جملة في الكتاب', target_team: 'guide', target_team_ar: 'فريق التوجيه', status: 'answered', status_ar: 'أُجيب', at: '2026-11-04T10:00:00Z', mine: false, author: 'خالد السبيعي',
         answers: [{ id: 'a1', text: 'المخرج ما يسلّمه المشروع، والمنفعة ما يتغير بعده عند المستفيد.', status: 'pending', status_ar: 'بانتظار تأكيد الخبير', expert_note: null, at: '2026-11-04T12:00:00Z', author: 'نورة العتيبي' }] },
       { id: 'q8', text: 'كيف أقنع الراعي بتمويل المرحلة الثانية؟', source: 'free', source_ar: 'سؤال حر', target_team: null, target_team_ar: 'الجميع', status: 'confirmed', status_ar: 'أكّده الخبير', at: '2026-11-02T09:00:00Z', mine: false, author: 'محمد الغامدي',
         answers: [{ id: 'a0', text: 'اعرض عليه منفعة مقيسة من المرحلة الأولى قبل أي طلب.', status: 'confirmed', status_ar: 'أكّده الخبير', expert_note: null, at: '2026-11-02T10:00:00Z', author: 'فهد القحطاني' }] },

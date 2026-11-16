@@ -74,7 +74,7 @@ export async function adminPreviewAs(a: { email: string }, b: Body) {
       { label: 'وسائل التواصل', visible: has(f.participant.email) || has(f.participant.phone), value: f.participant.email || null },
       { label: 'المستويات ونتيجة القياس', visible: !!f.profile, value: null },
       { label: 'تعليل الإدارة لتعديل المستوى', visible: !!(f.profile?.dimensions || []).some((d: any) => d.note), value: null },
-      { label: 'النماذج واختبارات الكتيب', visible: has(f.models) || has(f.book), value: null },
+      { label: 'النماذج واختبارات الكتاب', visible: has(f.models) || has(f.book), value: null },
       { label: 'التقييم المستمر', visible: !!f.continuous, value: null },
       { label: 'التقييم الختامي', visible: !!f.final, value: f.final?.record && 'votes' in (f.final.record || {}) ? 'كاملًا' : f.final ? 'ملخصًا' : null },
       { label: 'مؤشر الجهد', visible: !!f.effort, value: null },

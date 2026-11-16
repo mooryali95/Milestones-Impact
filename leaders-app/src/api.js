@@ -20,7 +20,7 @@ const local = (key) => ({
 });
 export const lastRead = local('mi_leaders_last_read');
 export const welcomeSeen = local('mi_leaders_welcome_seen');
-// معالج البداية: بطاقة «ما بعد ذلك» بعد القياس، وبطاقات أول فتح للكتيب والقاعة والمبادرة (راحة عرض لا حالة رحلة)
+// معالج البداية: بطاقة «ما بعد ذلك» بعد القياس، وبطاقات أول فتح للكتاب والقاعة والمبادرة (راحة عرض لا حالة رحلة)
 export const nextSeen = local('mi_leaders_next_seen');
 export const firstOpenSeen = (key) => local(`mi_leaders_first_${key}`);
 

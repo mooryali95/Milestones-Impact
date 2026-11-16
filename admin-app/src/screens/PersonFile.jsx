@@ -25,7 +25,7 @@ export function FileFlags({ flags }) {
 }
 
 // فهرس الملف: الملف ثلاثة عشر قسمًا في تمرير واحد، وهذا ينقل إلى القسم مباشرة. يعرض ما هو موجود في الصفحة فقط
-const SECTIONS = [['lc-title', 'المستوى'], ['pf-journey-h', 'الرحلة'], ['pf-book-h', 'الكتيب والنماذج'], ['pf-x-h', 'الجلسات والمبادرة'], ['pf-obs-h', 'الملاحظات'], ['pf-t-h', 'الخط الزمني']];
+const SECTIONS = [['lc-title', 'المستوى'], ['pf-journey-h', 'الرحلة'], ['pf-book-h', 'الكتاب والنماذج'], ['pf-x-h', 'الجلسات والمبادرة'], ['pf-obs-h', 'الملاحظات'], ['pf-t-h', 'الخط الزمني']];
 export function FileIndex() {
   const go = (id) => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } };
   return (

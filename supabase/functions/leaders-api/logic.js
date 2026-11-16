@@ -507,12 +507,12 @@ export function normalizePhone(p) {
   return null;
 }
 
-// ── الكتيب ──
+// ── الكتاب ──
 const RANK = { beginner: 0, intermediate: 1, advanced: 2 };
 
-// أبواب الكتيب التي تخص المشارك: مستواه في البُعد ≥ أدنى مستوى للباب
+// أبواب الكتاب التي تخص المشارك: مستواه في البُعد ≥ أدنى مستوى للباب
 // المستوى الملخص الذي يراه المشارك: وسيط مستوياته في الأبعاد الثلاثة.
-// التفصيل لكل بُعد للإدارة فقط، ويبقى يوجّه الرحلة والكتيب داخليًا.
+// التفصيل لكل بُعد للإدارة فقط، ويبقى يوجّه الرحلة والكتاب داخليًا.
 export function overallLevel(levels) {
   const ranks = Object.values(levels || {}).filter((l) => l in RANK).map((l) => RANK[l]).sort((a, b) => a - b);
   if (!ranks.length) return null;
@@ -732,7 +732,7 @@ export function gradeQuiz(quiz, answers) {
 }
 
 // نص له معنى: طول أدنى وعدد كلمات أدنى مختلفة. يسد «حرف واحد» و«عشرون حرفًا عشوائيًا» دون أن يحكم على المضمون
-// (جودة المدخلات، تصور 2026-11-13). قاعدة واحدة للتأمل في الكتيب ولحقول النماذج النصية الطويلة.
+// (جودة المدخلات، تصور 2026-11-13). قاعدة واحدة للتأمل في الكتاب ولحقول النماذج النصية الطويلة.
 export const REFLECTION_MIN = { chars: 20, words: 4 };
 export const TEXTAREA_MIN = { chars: 15, words: 3 };
 export function meaningful(text, { chars, words }) {
@@ -1004,7 +1004,7 @@ export function readingVerdict(row) {
 }
 export const READING_STATE_AR = { read: 'قرأ', skimmed: 'تصفّح سريعًا', partial: 'قراءة جزئية', unread: 'لم يقرأ' };
 
-// إتمام الباب بتعريف الرحلة نفسه (readingStatus): قراءة فعلية ثم الاختبار. مصدر واحد للكتيب والرحلة،
+// إتمام الباب بتعريف الرحلة نفسه (readingStatus): قراءة فعلية ثم الاختبار. مصدر واحد للكتاب والرحلة،
 // فلا يقول أحدهما «أتممت» والآخر «لم يقرأ» عن الباب نفسه.
 export function chapterCompletion(verdict, quizDone) {
   const read = verdict?.state === 'read';
@@ -1288,7 +1288,7 @@ export function activityFor(req, ev, now = Date.now()) {
   if (req.kind === 'workshop') return workshopStatus(c, (ev.workshops || []).filter((s) => s.requirement_id === req.id), ev.attended || new Set(), now);
   if (req.kind === 'coaching') return coachingStatus(c, (ev.coaching || []).filter((s) => s.requirement_id === req.id), now);
   if (req.kind === 'curriculum') {
-    // يُفتح المنهج مع الكتيب بعد اعتماد المستويات
+    // يُفتح المنهج مع الكتاب بعد اعتماد المستويات
     if (ev.curriculumLocked) return { type: 'curriculum', done: false, locked: true, count: 0, total: 0, items: [] };
     return curriculumStatus(c, ev.content || [], ev.levels || {}, ev.contentProgress || {});
   }
@@ -1654,9 +1654,9 @@ export const DELIVERY_FIELDS = {
 
 // تخصيص الدفعة لمتطلب: يُدمج فوق إعداد البرنامج ويمر بالتحقق نفسه.
 // تخصيص غير صالح لا يكسر الرحلة؛ يبقى إعداد البرنامج.
-// صيغ الأيام التدريبية في دفعة: حضورية (الأصل)، أو تدريب ذاتي بالكتيب: كل باب يوم، ويكتمل بقراءة الأبواب واجتياز أسئلتها
+// صيغ الأيام التدريبية في دفعة: حضورية (الأصل)، أو تدريب ذاتي بالكتاب: كل باب يوم، ويكتمل بقراءة الأبواب واجتياز أسئلتها
 export const WORKSHOP_FORMATS = ['sessions', 'handbook'];
-export const HANDBOOK_DAYS_TITLE = 'الأيام التدريبية بالكتيب: باب لكل يوم ({days:T-ATTEND})';
+export const HANDBOOK_DAYS_TITLE = 'الأيام التدريبية بالكتاب: باب لكل يوم ({days:T-ATTEND})';
 export function applyDelivery(req, override) {
   const keys = DELIVERY_FIELDS[req?.kind];
   if (!keys || !override || typeof override !== 'object') return req;

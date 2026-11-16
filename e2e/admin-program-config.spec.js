@@ -132,7 +132,7 @@ test.describe('ما يُحرَّر على أنه للمشارك يقول من ي
   const track = {
     success: true, track: { key: 'M1I1L2', title_ar: 'مسار البداية', summary_ar: 'لمن يبدأ', focus_ar: '1. المعالم', journey_ar: 'التدريب' },
     levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' }, participants: [], handbook: [], project: null,
-    profile: { key: 'milestone-beginner', title_ar: 'من الخطة إلى نقاط القرار', title_en: 'From Plan to Decision Points', summary_ar: 'أولويتك الآن إدارة المشروعات', journey_ar: 'الكتيب: أبواب إدارة المشروعات\nالمختبر: مخطط الجدول' },
+    profile: { key: 'milestone-beginner', title_ar: 'من الخطة إلى نقاط القرار', title_en: 'From Plan to Decision Points', summary_ar: 'أولويتك الآن إدارة المشروعات', journey_ar: 'الكتاب: أبواب إدارة المشروعات\nالمختبر: مخطط الجدول' },
   };
   test('خلايا المصفوفة لا تَعِد بأنها للمشارك', async ({ page }) => {
     await open(page, '#/leaders/levels', { 'admin.catalog': catalog });

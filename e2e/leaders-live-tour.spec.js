@@ -16,7 +16,7 @@ function server() {
     journey: [
       stage('profile', 'الملف الشخصي', 'admission', s.profileDone ? 'done' : 'active', [{ id: 'i1', code: 'P-INFO', kind: 'system', title_ar: 'بيانات الملف', required: true, status: s.profileDone ? 'done' : 'pending' }]),
       stage('assessment', 'تحديد المستوى', 'admission', s.assessed ? 'done' : s.profileDone ? 'active' : 'locked', [{ id: 'i2', code: 'A-DONE', kind: 'system', title_ar: 'إرسال القياس', required: true, status: s.assessed ? 'done' : 'pending' }]),
-      stage('training', 'التدريب', 'qualification', s.assessed ? 'active' : 'locked', [{ id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتيبك', required: true, status: 'pending' }]),
+      stage('training', 'التدريب', 'qualification', s.assessed ? 'active' : 'locked', [{ id: 'r1', code: 'T-HB', kind: 'reading', title_ar: 'قراءة كتابك', required: true, status: 'pending' }]),
     ],
     milestones: s.assessed ? [{ id: 'm1', title_ar: 'تسمية المبادرة', due_on: '2026-12-01', status: 'on_time', days: 12 }] : [],
     milestone_summary: { done: 0, total: 1 },
@@ -78,8 +78,8 @@ test('الجولة الحيّة: ثماني عشرة خطوة على شاشات 
     await tour.getByRole('button', { name: 'التالي' }).click();
   }
 
-  // 10 إلى 12 تنقل إلى الكتيب والمبادرة والقاعة (بلا محاكاة لمحتواها هنا)؛ تُتجاوز بقائمة الانتقال
-  await expect(tour.getByRole('heading', { name: 'كتيب القائد' })).toBeVisible();
+  // 10 إلى 12 تنقل إلى الكتاب والمبادرة والقاعة (بلا محاكاة لمحتواها هنا)؛ تُتجاوز بقائمة الانتقال
+  await expect(tour.getByRole('heading', { name: 'كتاب القائد' })).toBeVisible();
   await tour.getByLabel('انتقل إلى خطوة').selectOption('12');
 
   // 13: طلب أقران تجريبي يظهر في البطاقة

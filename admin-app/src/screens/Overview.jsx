@@ -283,7 +283,7 @@ export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onT
           <Impact im={im} instruments={o.instruments} />
         </section>
         <section className="la-card">
-          <div className="la-row between"><h3>الكتاب والنماذج</h3>{onTab && <button className="la-link" onClick={() => onTab('handbook')}>فتح كتيب القائد</button>}</div>
+          <div className="la-row between"><h3>الكتاب والنماذج</h3>{onTab && <button className="la-link" onClick={() => onTab('handbook')}>فتح كتاب القائد</button>}</div>
           {bk ? (
             <>
               <div className="la-book-kpis">

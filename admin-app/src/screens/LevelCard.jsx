@@ -181,7 +181,7 @@ export default function LevelCard({ prof, latest, model, effort, canWrite, level
             }}>
             {prof?.approved ? 'تحديث الاعتماد' : 'اعتماد المسار وفتح البرنامج'}</button>
           {blocker ? <p id="lc-block" className="lc-block" role="status">{blocker.text}</p>
-            : <p className="la-muted">الاعتماد يفتح مراحل التأهيل والكتيب للمشارك ويرسل له بريدًا.</p>}
+            : <p className="la-muted">الاعتماد يفتح مراحل التأهيل والكتاب للمشارك ويرسل له بريدًا.</p>}
         </div>
       )}
     </section>

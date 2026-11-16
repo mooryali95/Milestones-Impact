@@ -44,7 +44,7 @@ function Reading({ a, onHandbook }) {
   return (
     <div className="act">
       <div className="row between"><b className="small">قرأت {a.count} من {countAr(a.total, 'باب واحد', 'بابين', 'أبواب', 'بابًا')}</b>
-        {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتيب</button>}</div>
+        {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتاب</button>}</div>
       <Bar value={a.total ? (a.count / a.total) * 100 : 0} label="تقدم القراءة" />
       <ReadFold on={a.chapters.length > READ_FOLD} label={`أبواب القراءة: ${countAr(a.total, 'باب واحد', 'بابان', 'أبواب', 'بابًا')}`}>
       <ul className="act-list">

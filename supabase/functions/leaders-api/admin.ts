@@ -1005,7 +1005,7 @@ async function trackStats() {
   return out;
 }
 
-// تفصيل مسار: هويته، ومشاركوه، وكتيبه كما يراه المشارك بابًا بابًا
+// تفصيل مسار: هويته، ومشاركوه، وكتابه كما يراه المشارك بابًا بابًا
 export async function track(b: Body) {
   const key = String(b.key || '');
   if (!/^M[1-3]I[1-3]L[1-3]$/.test(key)) throw new Fail('رمز مسار غير صالح');
@@ -1038,7 +1038,7 @@ export async function track(b: Body) {
 
 // مراحل البرنامج ومتطلباته: البرنامج المطلوب، أو الافتراضي
 const PROGRAM_SCOPED = new Set(['journey_stages', 'stage_requirements']);
-// منهج مسار كما يراه صاحبه: مواد البنك التي تخصه، وأبواب الكتيب
+// منهج مسار كما يراه صاحبه: مواد البنك التي تخصه، وأبواب الكتاب
 export async function curriculum(b: Body) {
   const levels = trackLevels(b.track);
   if (!levels) throw new Fail('اختر مسارًا');

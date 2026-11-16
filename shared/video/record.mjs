@@ -363,7 +363,7 @@ async function tourFlow() {
   // 5 إلى 9: الرحلة، بطاقة على كل جزء
   for (const i of [4, 5, 6, 7, 8]) await say(i);
 
-  // 10 الكتيب: تبويب كتيبي والفهرس، ويُفتح باب عند «يقرأ»
+  // 10 الكتاب: تبويب كتابي والفهرس، ويُفتح باب عند «يقرأ»
   await click(page.locator('[data-tour="nav-handbook"]').first());
   await page.locator('[data-tour="handbook-toc"]').waitFor({ timeout: 15000 });
   await cursorHide();

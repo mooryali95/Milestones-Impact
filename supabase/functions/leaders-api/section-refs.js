@@ -15,7 +15,7 @@ export const sectionById = (id) => BY_ID[id] || null;
 /** هوية القسم من بابه ومفتاحه (العنوان الحالي أو قديم في aliases)، أو null */
 export const sectionIdOf = (dim, chapter, key) => LIST.find((s) => !s.retired && s.dim === dim && s.chapter === chapter
   && (s.key === key || (s.aliases || []).includes(key)))?.id || null;
-/** إحالة إلى الكتيب بالهوية ← الباب والعنوان الحاليان، بالصيغة التي يقرؤها القارئ ({ dimension, chapter_key, look_for }) */
+/** إحالة إلى الكتاب بالهوية ← الباب والعنوان الحاليان، بالصيغة التي يقرؤها القارئ ({ dimension, chapter_key, look_for }) */
 export function handbookRef(h) {
   if (!h?.section_id) return null;
   const s = BY_ID[h.section_id];

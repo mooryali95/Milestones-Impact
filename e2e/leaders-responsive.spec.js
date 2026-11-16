@@ -1,5 +1,5 @@
 // حارس التجاوب: الجوال والآيباد (رأسي وأفقي) والحاسب. لا تمرير أفقي، وأهداف اللمس 44 بكسل على شاشات اللمس،
-// وفهرس الكتيب بجانب الباب من الآيباد الرأسي. الخلفية خادم محاكاة الفيديو.
+// وفهرس الكتاب بجانب الباب من الآيباد الرأسي. الخلفية خادم محاكاة الفيديو.
 import { test, expect } from '@playwright/test';
 import { createMockServer } from '../shared/video/mock-server.js';
 
@@ -12,7 +12,7 @@ const DEVICES = [
 ];
 
 for (const [name, viewport, touch] of DEVICES) {
-  test(`${name}: لا تمرير أفقي، وأهداف التنقل تُلمس، وفهرس الكتيب في موضعه`, async ({ browser }) => {
+  test(`${name}: لا تمرير أفقي، وأهداف التنقل تُلمس، وفهرس الكتاب في موضعه`, async ({ browser }) => {
     const ctx = await browser.newContext({ viewport, hasTouch: touch, isMobile: touch && viewport.width < 600, locale: 'ar-SA' });
     const page = await ctx.newPage();
     const srv = createMockServer();
@@ -34,7 +34,7 @@ for (const [name, viewport, touch] of DEVICES) {
 
     await page.locator('[data-tour="nav-handbook"]').filter({ visible: true }).first().click();
     await expect(page.locator('button.toc-ch').first()).toBeVisible();
-    expect(await overflow(), 'الكتيب').toBeLessThanOrEqual(1);
+    expect(await overflow(), 'الكتاب').toBeLessThanOrEqual(1);
     await page.locator('button.toc-ch').nth(1).click();
     await expect(page.locator('.toc-ch.on')).toHaveCount(1);
     // من 700 بكسل: الفهرس عمود بجانب الباب لا فوقه

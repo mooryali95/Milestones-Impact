@@ -1,3 +1,3 @@
 // مولَّد بـ scripts/legal/policy-digest.mjs، لا يُعدَّل يدويًا: بصمة نص الوثائق للنسخة النافذة،
 // تُسجَّل مع كل موافقة في consent_events (D18).
-export const POLICY_DIGEST = Object.freeze({ version: '2026-11-15', sha256: 'a2bed8ccad9aeff6b4397777eaebbe223652dec37a02c2de304a6beca6ea35ac' });
+export const POLICY_DIGEST = Object.freeze({ version: '2026-11-16', sha256: '3c93b45098b16a5d14a882752c888fc56ce92806eae7149ca53dabacba6a0d2a' });
