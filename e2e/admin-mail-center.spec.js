@@ -52,7 +52,7 @@ test('الحصة: المتبقي والحالة والمؤشرات وحالة ا
   await expect(page.locator('.mc-hero .pay-total')).toHaveText('34');
   await expect(page.getByText('رسالة باقية من 80 · أُرسل 46')).toBeVisible();
   await expect(page.locator('.mc-hero')).toContainText('حصة الإشعارات انتهت');
-  await expect(page.getByRole('img', { name: 'أُرسل 46 من 80 في آخر 24 ساعة' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'أُرسل 46 من 80 اليوم' })).toBeVisible();
   await expect(page.getByText('sunkvalue.com', { exact: true })).toBeVisible();
   await expect(page.getByText(/غير مضبوطة: اضبط بوت سلاك .* أو رابطًا في LEADERS_ALERT_WEBHOOK/)).toBeVisible();
 });

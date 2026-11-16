@@ -61,7 +61,7 @@ test('أخضر: البطاقة أعلى النظرة العامة بالكلمة
   await expect(card(page)).toContainText('12 من 80');
   await expect(card(page)).toContainText('وصل 9 · تعذّر 0 · حُجب 0');
   await expect(card(page)).toContainText('تعذّر 0 · حُجب 2');
-  await expect(card(page).getByRole('heading', { name: 'البريد في آخر 24 ساعة' })).toBeVisible();
+  await expect(card(page).getByRole('heading', { name: 'البريد اليوم' })).toBeVisible();
   await expect(card(page)).toContainText('منذ 4 دقائق');
   await expect(page.locator('.ops-banner')).toHaveCount(0);
   await expect(card(page).locator('.ops-meter')).not.toHaveClass(/near|full/);
@@ -80,7 +80,7 @@ test('كهرماني: اقتراب السقف وخطأ سلاك برمزه وإ�
   await expect(card(page).locator('.ops-issues code[dir="ltr"]')).toHaveText('not_in_channel');
   await expect(card(page).locator('.ops-issues')).toContainText('إضافة تطبيق');
   await expect(card(page).getByRole('status').first()).toContainText('البريد والتنبيه: يحتاج متابعتك (أمران).');
-  await expect(card(page)).toContainText('البريد في آخر 24 ساعة 61 من 80');
+  await expect(card(page)).toContainText('البريد اليوم 61 من 80');
   await expect(card(page).locator('.ops-meter')).toHaveClass(/near/);
   await expect(page.locator('.ops-banner')).toHaveCount(0);
 });
@@ -151,7 +151,7 @@ test('الطي: السليم مفتوح أول مرة، والزر يطويه ب
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#ops-body')).toBeHidden();
   await expect(strip).toBeVisible();
-  await expect(strip.getByRole('img')).toHaveAttribute('aria-label', 'البريد في آخر 24 ساعة: أُرسل 12 من 80 (15٪ من السقف اليومي)');
+  await expect(strip.getByRole('img')).toHaveAttribute('aria-label', 'البريد اليوم: أُرسل 12 من 80 (15٪ من السقف اليومي)');
   await expect(strip).toContainText('وصل 9');
   await expect(strip).toContainText('تعذّر 0');
   await expect(strip).toContainText('حُجب 0');

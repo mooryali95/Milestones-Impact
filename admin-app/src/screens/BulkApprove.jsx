@@ -13,7 +13,7 @@ import { DIM_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { OVERRIDE_REASON_MIN } from '../../../supabase/functions/leaders-api/logic.js';
 import { etaAr } from '../../../supabase/functions/leaders-api/mail-center.js';
 
-// أثر البريد قبل التأكيد دائمًا: كم يخرج الآن، وكم ينتظر في صندوق «لم يُرسل» ومتى يُتوقع أن يخرج آخره (mailForecast في الخادم)
+// أثر البريد قبل التأكيد دائمًا: كم يخرج الآن، وكم ينتظر في صندوق «لم يُرسل» فيخرج الليلة أو بعدها، ومتى يُتوقع أن يخرج آخره (mailForecast في الخادم)
 export function mailLine(mail, read = true) {
   const app = 'ويرى كل واحد اعتماده في رحلته فورًا، وصله البريد أم لم يصل.';
   if (!mail) return `يصل كل واحد بريد الاعتماد بخطوته التالية. ${app}`;
@@ -21,7 +21,9 @@ export function mailLine(mail, read = true) {
   const total = mail.now + mail.queued;
   if (!mail.queued) return `سيصل ${total} بريدًا الآن، بريد الاعتماد بخطوته التالية. ${app}`;
   const ahead = mail.ahead ? ` بعد ${mail.ahead} إشعارًا ينتظر قبله` : '';
-  return `سيصل ${total} بريدًا: ${mail.now} الآن، والباقي ${mail.queued} ينتظر في صندوق «لم يُرسل» لامتلاء حصة الإشعارات، ويخرج آليًّا${ahead}، آخره ${etaAr(mail.clear_at)}. ${app}`;
+  // الليلة: تفريغ المساء من 22:17 بما بقي من حصة اليوم، والباقي بعد تصفيرها 03:00 (mailForecast)
+  const when = mail.tonight == null ? '' : mail.later ? ` (${mail.tonight} الليلة من 22:17، و${mail.later} بعدها)` : ' الليلة من 22:17';
+  return `سيصل ${total} بريدًا: ${mail.now} الآن، والباقي ${mail.queued} ينتظر في صندوق «لم يُرسل» لامتلاء حصة الإشعارات، ويخرج آليًّا${ahead}${when}، آخره ${etaAr(mail.clear_at)}. ${app}`;
 }
 
 const DIMS = ['milestone', 'impact', 'leadership'];

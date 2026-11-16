@@ -9,13 +9,13 @@ import { heldMail, mailRewrite } from './features.ts';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
 import { addressHash, mailCounts, plainText, sendCounted } from '../_shared/mail.ts';
-import { RETENTION_DAYS } from '../_shared/mail-budget.js';
+import { mailDayStart, RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { alertChannelOk } from './readiness.js';
 import { BUDGET_AR, dailySeries, deliveryAr, diagnose, mailBudget, mailtoUrl, nextFreeAt, queueEta, tally } from './mail-center.js';
 
 type Body = Record<string, any>;
 const isId = (v: unknown) => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v);
-const dayAgo = () => new Date(Date.now() - 864e5).toISOString();
+// بداية يوم المزوّد (03:00 بالرياض): حصة اليوم وما حُجب ورُفض اليوم تُعد منها، كما يعد حارس الإرسال
 
 // ── المزوّد (Resend): حالة النطاق والحصة كما يعلنها، وحالة تسليم رسالة. مفتاح للإرسال وحده يُعيد «غير متاح» ──
 async function resend(path: string) {
@@ -47,7 +47,7 @@ function flat(o: any, pre = '', out: Record<string, number> = {}, depth = 0): Re
 }
 
 // صندوق «لم يُرسل»: كل منتظر أيًّا كان عمره (ما لا موعد له ينتظر حتى يُرسل، فلا يُخفى بعد أسبوع)، والمتروك والملغى
-// في الأسبوع الأخير. الأعمدة الأحدث تُقرأ إن وُجدت (السبب 20261114110000، والموعد 20261116140000)
+// في الأسبوع الأخير. الأعمدة الأحدث تُقرأ إن وُجدت (السبب 20261114110000، والموعد 20261116150000)
 const QUEUE_COLS = 'id, created_at, kind, to_email, subject, ref, attempts, last_error, sent_at, gave_up_at';
 async function queueRows() {
   const week = new Date(Date.now() - 7 * 864e5).toISOString();
@@ -74,17 +74,18 @@ export async function center(a: Admin) {
     providerStatus(),
     heldMail().catch(() => new Set<string>()),
   ]);
-  const day = recent.filter((e: any) => e.created_at >= dayAgo());
+  const now = Date.now();
+  const since = mailDayStart(now);
+  const day = recent.filter((e: any) => e.created_at >= since);
   const sentDay = day.filter((e: any) => e.status === 'sent');
   const budget = mailBudget(counts ?? { sent: sentDay.length, nonCode: sentDay.filter((e: any) => e.kind !== 'code' && e.kind !== 'alert').length }, CONFIG.mailDailyCap);
-  // الموعد المتوقع لكل منتظر غير ممسَك: ما بقي من حصة غير الرموز الآن، ثم ما يتحرر من نافذة الـ24 ساعة (queueEta)
-  const nonCodeSent = sentDay.filter((e: any) => e.kind !== 'code' && e.kind !== 'alert').map((e: any) => e.created_at);
-  const eta = queueEta((queue as any[]).filter((m) => !m.gave_up_at && !hold.has(m.id)), { nonCodeSent, budget, now: Date.now() });
+  // الموعد المتوقع لكل منتظر غير ممسَك: ما بقي من حصة غير الرموز الآن، ثم تفريغ المساء 22:17، ثم الأيام التالية (queueEta)
+  const eta = queueEta((queue as any[]).filter((m) => !m.gave_up_at && !hold.has(m.id)), { budget, now });
   const lost = recent.filter((e: any) => e.status !== 'sent').slice(0, 100)
     .map((e: any) => ({ id: e.id, at: e.created_at, kind: e.kind, source: e.source, status: e.status, subject: e.subject || null, to_domain: e.to_domain, ref: e.ref }));
   return {
     success: true, counter_ok: counts != null, budget, budget_ar: BUDGET_AR[budget.state as keyof typeof BUDGET_AR],
-    next_free_at: budget.remaining === 0 ? nextFreeAt(sentDay.map((e: any) => e.created_at)) : null,
+    next_free_at: budget.remaining === 0 ? nextFreeAt(sentDay.map((e: any) => e.created_at), now) : null,
     by_kind: tally(sentDay, 'kind'), by_source: tally(sentDay, 'source'),
     blocked_24h: day.filter((e: any) => e.status === 'blocked').length, failed_24h: day.filter((e: any) => e.status === 'failed').length,
     series: dailySeries(recent, 14),

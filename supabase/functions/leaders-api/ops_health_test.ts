@@ -72,7 +72,7 @@ Deno.test('صحة البريد: الحقائق للمدير ذي الكتابة 
     assertEquals(r.alerts.webhook, true);
     const text = JSON.stringify(r);
     assertEquals(text.includes('xoxb-secret-value') || text.includes('hooks.example'), false);
-    // كل قراءة من mail_events مقيدة بنافذة 24 ساعة، وقائمة الرموز محدودة
+    // كل قراءة من mail_events مقيدة بنافذة (حصة اليوم من بداية يوم المزوّد، وما سواها آخر 24 ساعة)، وقائمة الرموز محدودة
     for (const s of seen.filter((x) => x.table === 'mail_events')) assert(s.ops.some((o) => o.k === 'gte' && o.args[0] === 'created_at'));
     assert(seen.some((s) => s.table === 'mail_events' && has(s.ops, 'limit', OPS.codeWindow)));
     // والحكم من الحقائق نفسها: ثلاثة رموز متتالية لم تصل خلال الساعة أحمر

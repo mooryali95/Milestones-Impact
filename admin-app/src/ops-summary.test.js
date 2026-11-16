@@ -22,7 +22,7 @@ describe('opsSummary: سطر البطاقة المطوية', () => {
   it('حلقة البريد من المرسل والسقف، ورموز الدخول الثلاثة، وسلاك، والقنوات', () => {
     const s = sum(facts());
     expect(s.mail).toMatchObject({ sent: 9, cap: 80, pct: 11, tone: 'ok', text: '9 من 80' });
-    expect(s.mail.aria).toBe('البريد في آخر 24 ساعة: أُرسل 9 من 80 (11٪ من السقف اليومي)');
+    expect(s.mail.aria).toBe('البريد اليوم: أُرسل 9 من 80 (11٪ من السقف اليومي)');
     expect(s.codes.map((c) => [c.key, c.label, c.n, c.tone])).toEqual([['sent', 'وصل', 9, 'ok'], ['failed', 'تعذّر', 0, 'mute'], ['blocked', 'حُجب', 0, 'mute']]);
     expect(s.slack).toEqual({ state: 'ok', tone: 'ok', text: 'نُشر منذ 4 دقائق' });
     expect(s.alerts).toEqual({ on: 3, of: 3, tone: 'ok', text: '3 من 3' });

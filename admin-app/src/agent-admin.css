@@ -99,3 +99,9 @@
   .ag-msg { max-inline-size: 100%; }
 }
 .ag-sec-b > button { justify-self: start; }
+
+/* «التوجيه والإرشاد» داخل الرحلة (G3 وG4a): التقرير والتقييم والدفعات التجريبية */
+.ag-guide-eval code, .ag-guide-report code { white-space: nowrap; }
+.ag-guide-eval fieldset { border: 1px solid rgba(11, 39, 47, .15); border-radius: 10px; padding: 10px 14px; margin: 0; }
+.ag-guide-eval legend { padding: 0 6px; font-weight: 600; }
+.ag-guide-eval > p.ops-flag { font-size: inherit; }

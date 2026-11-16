@@ -45,23 +45,18 @@ describe('التقسيم وأثر البريد', () => {
     expect(held).toHaveLength(1);
     expect(held[0]).toMatchObject({ id: 'p2', holds: [{ key: 'effort' }] });
   });
-  it('أثر البريد بنصيب الإشعارات لا بالسقف الكلي، والزائد ينتظر بموعد آخره', () => {
+  it('أثر البريد بنصيب الإشعارات لا بالسقف الكلي: الآن، والليلة من 22:17، وبعدها', () => {
     const now = Date.parse('2026-11-16T05:27:00Z');   // 08:27 بالرياض
-    // صباح 16 نوفمبر: 10 رموز و40 إشعارًا في النافذة. السقف الكلي يتسع لثلاثين، ونصيب الإشعارات ممتلئ: الأربعة عشر كلها تنتظر
-    const sent = Array.from({ length: 40 }, (_, i) => new Date(now - (20 - i * 0.1) * 36e5).toISOString());
-    const full = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), nonCodeSent: sent, now });
-    expect([full.now, full.queued]).toEqual([0, 14]);
-    // تتحرر الأماكن بعد 24 ساعة من إرسال ما ملأها، فآخر الأربعة عشر في الدقيقة 17 بعد تحرر الرابع عشر
-    expect(full.clear_at).toBe(new Date(nextDrainAt(Date.parse(sent[13]) + 864e5)).toISOString());
-    const part = mailForecast(9, { budget: mailBudget({ sent: 35, nonCode: 35 }, 80), nonCodeSent: sent.slice(0, 35), now });
-    expect([part.now, part.queued]).toEqual([5, 4]);
-    expect(mailForecast(9, { budget: mailBudget({ sent: 0, nonCode: 0 }, 80), now })).toEqual({ now: 9, queued: 0, clear_at: null, ahead: 0 });
-    // ثلاثون إشعارًا من أمس تنتظر قبلها: تأخذ ما يتحرر أولًا، فآخر الأربعة عشر بعد تحرر الرابع والأربعين لا الرابع عشر
-    const behind = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), nonCodeSent: sent, waiting: 30, now });
-    expect([behind.queued, behind.ahead]).toEqual([14, 30]);
-    expect(Date.parse(behind.clear_at)).toBeGreaterThan(Date.parse(full.clear_at));
-    // أربعون مكانًا تتحرر في اليوم الأول (30 قبلها و10 منها)، والأربعة الباقية في اليوم التالي بعد أن يتحرر ما أرسله الطابور
-    expect(behind.clear_at).toBe(new Date(nextDrainAt(nextDrainAt(Date.parse(sent[3]) + 864e5) + 864e5)).toISOString());
+    // صباح 16 نوفمبر: 10 رموز و40 إشعارًا اليوم. السقف الكلي يتسع لثلاثين، ونصيب الإشعارات ممتلئ: الأربعة عشر كلها تنتظر
+    // والمساء يتسع إلى 70 من 80، فتخرج الأربعة عشر الليلة
+    const full = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), now });
+    expect(full).toEqual({ now: 0, queued: 14, tonight: 14, later: 0, clear_at: '2026-11-16T19:17:00.000Z', ahead: 0 });
+    const part = mailForecast(9, { budget: mailBudget({ sent: 35, nonCode: 35 }, 80), now });
+    expect([part.now, part.queued, part.tonight]).toEqual([5, 4, 4]);
+    expect(mailForecast(9, { budget: mailBudget({ sent: 0, nonCode: 0 }, 80), now })).toEqual({ now: 9, queued: 0, tonight: 0, later: 0, clear_at: null, ahead: 0 });
+    // ثلاثون إشعارًا تنتظر قبلها: يتسع المساء لعشرين، فعشرة منها ثم الأربعة عشر بعد التصفير 03:17 بالرياض
+    const behind = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), waiting: 30, now });
+    expect(behind).toEqual({ now: 0, queued: 14, tonight: 0, later: 14, clear_at: '2026-11-17T00:17:00.000Z', ahead: 30 });
     // تعذّر قراءة الحصة: لا يُعد بخروج شيء الآن
     expect(mailForecast(3, {})).toMatchObject({ now: 0, queued: 3 });
   });

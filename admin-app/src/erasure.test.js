@@ -71,7 +71,7 @@ describe('النصوص من مصدر واحد', () => {
     for (const s of ['10 سنوات', '30 يومًا', 'الشهرية سنة']) expect(kept).toContain(s);
     expect(Object.keys(ERASE_GROUNDS)).toEqual(['repeat', 'litigation', 'legal_retention', 'other']);
     // قائمة الترحيل هي القائمة نفسها
-    expect(read('supabase/migrations/20261116150000_leaders_erasure_decisions.sql')).toContain("ground in ('repeat', 'litigation', 'legal_retention', 'other')");
+    expect(read('supabase/migrations/20261116160000_leaders_erasure_decisions.sql')).toContain("ground in ('repeat', 'litigation', 'legal_retention', 'other')");
   });
   it('لا شرطة طويلة ولا متوسطة في النصوص العربية', () => {
     const all = [...ERASE_DELETED, ...ERASE_KEPT.map((k) => k.text), ...Object.values(ERASE_GROUNDS).map((g) => g.ar)].join(' ');

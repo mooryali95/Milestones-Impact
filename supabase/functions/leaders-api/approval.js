@@ -7,6 +7,7 @@
 import { DIMENSIONS, LEVELS, OVERRIDE_REASON_MIN } from './logic.js';
 import { DIM_AR, LEVEL_AR } from './labels.js';
 import { queueEta } from './mail-center.js';
+import { nextMailDay } from '../_shared/mail-budget.js';
 
 // حد الطلب الواحد، كالإجراءات الجماعية الأخرى (BULK_MAX في admin.ts)
 export const BULK_APPROVE_MAX = 50;
@@ -43,22 +44,26 @@ export function splitForApproval(rows = []) {
   return { ready, held };
 }
 
-// أثر البريد قبل التنفيذ: كم يخرج الآن وكم ينتظر في صندوق «لم يُرسل»، ومتى يُتوقع أن يخرج آخره.
-// بريد الاعتماد إشعار (notify)، فيحكمه نصيب غير الرموز من السقف (mailBudget.nonCodeLeft) لا السقف الكلي، ويُقدَّر
-// موعد المنتظر بالحساب نفسه الذي يعرضه مركز البريد (queueEta). waiting: إشعارات تنتظر في الطابور قبلها، فتأخذ ما يتحرر أولًا
-/** @param {number} count @param {{ budget?: any, nonCodeSent?: string[], waiting?: number, now?: number }} o */
-export function mailForecast(count, { budget = {}, nonCodeSent = [], waiting = 0, now = Date.now() } = {}) {
+// أثر البريد قبل التنفيذ: كم يخرج الآن، وكم ينتظر في صندوق «لم يُرسل» فيخرج الليلة في تفريغ المساء (من 22:17 بالرياض)،
+// وكم بعدها، ومتى يُتوقع أن يخرج آخره. بريد الاعتماد إشعار (notify)، فيحكمه نصيب غير الرموز من السقف (mailBudget.nonCodeLeft)
+// لا السقف الكلي، ويُقدَّر موعد المنتظر بالحساب نفسه الذي يعرضه مركز البريد (queueEta). waiting: إشعارات تنتظر في الطابور
+// قبلها، فتأخذ ما يتسع أولًا
+/** @param {number} count @param {{ budget?: any, waiting?: number, now?: number }} o */
+export function mailForecast(count, { budget = {}, waiting = 0, now = Date.now() } = {}) {
   const n = Math.max(0, Number(count) || 0);
   const nowCount = Math.min(n, Math.max(0, budget.nonCodeLeft ?? 0));
   const queued = n - nowCount;
   const ahead = Math.max(0, Number(waiting) || 0);
-  if (!queued) return { now: nowCount, queued: 0, clear_at: null, ahead };
-  // ما يخرج الآن يأخذ ما بقي من الحصة ويحرر مكانه بعد 24 ساعة كغيره، والمنتظر قبلها ثم الجديد يأخذان ما يتحرر بعده
-  const sentNow = Array.from({ length: nowCount }, () => new Date(now).toISOString());
+  if (!queued) return { now: nowCount, queued: 0, tonight: 0, later: 0, clear_at: null, ahead };
+  // ما يخرج الآن يأخذ ما بقي من نصيب اليوم، والمنتظر قبلها ثم الجديد يأخذان ما يتسع بعده
   const rows = Array.from({ length: ahead + queued }, (_, i) => ({ id: String(i), kind: 'notify', created_at: new Date(now - ahead + i).toISOString() }));
-  const nonCode = Math.max(Number(budget.nonCode ?? 0), 0) + nowCount;
-  const eta = queueEta(rows, { nonCodeSent: [...nonCodeSent, ...sentNow], budget: { nonCodeLeft: 0, nonCodeLimit: budget.nonCodeLimit, nonCode: budget.nonCodeLimit == null ? undefined : nonCode }, now });
-  return { now: nowCount, queued, clear_at: eta[String(ahead + queued - 1)]?.at ?? null, ahead };
+  const after = { ...budget, sent: (budget.sent ?? 0) + nowCount, nonCode: (budget.nonCode ?? 0) + nowCount, nonCodeLeft: 0 };
+  const eta = queueEta(rows, { budget: after, now });
+  const mine = rows.slice(ahead).map((r) => eta[r.id]?.at ?? null);
+  // الليلة: قبل تصفير حصة المزوّد (03:00 بالرياض)، أي في تفريغ المساء
+  const reset = new Date(nextMailDay(now)).toISOString();
+  const tonight = mine.filter((at) => at && at < reset).length;
+  return { now: nowCount, queued, tonight, later: queued - tonight, clear_at: mine[mine.length - 1], ahead };
 }
 
 // ── المرحلة 2: اعتماد المحددين بمستوى واحد (للمدير العام، بتعليل إلزامي) ──

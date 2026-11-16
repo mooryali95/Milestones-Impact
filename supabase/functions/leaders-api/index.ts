@@ -65,6 +65,7 @@ import * as NU from './nudges.ts';
 import * as FT from './features.ts';
 import * as NB from './nudge-banner.ts';
 import * as GU from './guide.ts';
+import * as GE from './guide-eval.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -101,7 +102,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'offer.get': E.offerGet,
   'offer.respond': E.offerRespond,
   // كل ساعة: يُفرَّغ طابور البريد أولًا، ثم تنتقل العروض المنتهية للتالي، ثم التذكيرات.
-  // التفريغ قبل ما يولّده المسح من بريد: ما تحرر من الحصة في نافذة الـ24 ساعة يأخذه الأقدم انتظارًا قبل الجديد، فلا
+  // التفريغ قبل ما يولّده المسح من بريد: ما اتسعت له حصة اليوم (من 03:00 بالرياض، وفي تفريغ المساء من 22:17) يأخذه الأقدم انتظارًا قبل الجديد، فلا
   // يسبق تذكير هذه الساعة إشعارًا ينتظر منذ أمس (وعليه يُبنى الموعد المتوقع في مركز البريد، queueEta). سر المجدول يُتحقق منه قبل كل شيء
   'cron.expert-offers': async (b) => {
     if (!secretEquals(b.secret, CONFIG.cronSecret)) throw new Fail('غير مصرّح', 403, 'forbidden');
@@ -659,6 +660,13 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   // المساعد الآلي (agent-admin.ts): القراءة للمدير الأعلى أو المالك، والكتابة superWriter، والمفتاح بتحقق إضافي من admin-api
   // «التوجيه والإرشاد» G3: أعداد وإنفاق بلا نص، للمدير الأعلى والمالك كشاشة المساعد
   'admin.guide-report': (a) => { AG.requireAgentRead(a); return GU.guideReport(); },
+  // G4a: تقييم الدقة والدفعة التجريبية، للمدير الأعلى والمالك. البدء والخطوة والتفعيل بغلاف superWriter
+  'admin.guide-eval': (a) => GE.evalState(a),
+  'admin.guide-eval-results': (a, b) => GE.evalResults(a, b),
+  'admin.guide-eval-start': (a, b) => A.superWriter(a, GE.evalStart, b),
+  'admin.guide-eval-step': (a, b) => A.superWriter(a, GE.evalStep, b),
+  'admin.guide-pilots': (a) => GE.pilotList(a),
+  'admin.guide-pilot-set': (a, b) => A.superWriter(a, GE.pilotSet, b),
   'admin.agent-state': (a) => AG.state(a),
   'admin.agent-usage': (a) => AG.usage(a),
   'admin.agent-conversations': (a, b) => AG.conversations(a, b),

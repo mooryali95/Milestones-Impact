@@ -1,4 +1,4 @@
-// طابور البريد بلا ترك أعمى (ترحيل 20261116140000): ما لا موعد له ينتظر يومًا بعد يوم حتى يُرسل، والمؤرخ يُترك حين يمضي
+// طابور البريد بلا ترك أعمى (ترحيل 20261116150000): ما لا موعد له ينتظر يومًا بعد يوم حتى يُرسل، والمؤرخ يُترك حين يمضي
 // موعده، والإشعار قبل الجماعي، والتوقف عند الحصة، والممسَك ممسَك، والعمل قبل الترحيل، وسطر الترحيل اليومي مرة في اليوم.
 // قاعدة في الذاكرة وشبكة محاكاة (_fake_db.ts)، ولا يخرج طلب حقيقي.
 import './_test_env.ts';
@@ -8,8 +8,22 @@ const { CONFIG, carryoverAlert, CARRYOVER_HOUR_RIYADH, drainMailQueue, enqueueMa
 const core = await import('./core.ts');
 
 type Row = Record<string, any>;
+// الحصة تُعد بيوم المزوّد (00:00 UTC) وتفريغ المساء من 19:00 UTC: ساعة الملف تُثبَّت على الثامنة صباحًا UTC من اليوم
+// (وتمضي معه)، فلا تتغير النتيجة بساعة التشغيل. inFlush وmailDayStart يقرآن Date.now
+const realNow = Date.now;
+const DAY = 864e5;
+const morning = Math.floor(realNow() / DAY) * DAY + 8 * 36e5;
+const offset = morning - realNow();
+Date.now = () => realNow() + offset;
+// تشغيل fn والساعة عند ms (ثم تعود إلى ساعة الملف)
+async function at<T>(ms: number, fn: () => Promise<T>) {
+  const saved = Date.now;
+  const shift = ms - Date.now();
+  Date.now = () => saved() + shift;
+  try { return await fn(); } finally { Date.now = saved; }
+}
 const cap = 80;   // السقف الساري (LEADERS_MAIL_DAILY_CAP غير مضبوط)، ونصيب غير الرموز 40
-// n رسالة غير رمز أُرسلت قبل h ساعة: تملأ نصيب الإشعارات في نافذة الـ24 ساعة
+// n رسالة غير رمز أُرسلت قبل h ساعة: تملأ نصيب الإشعارات في يوم المزوّد
 const sentNonCode = (n: number, h: number) => Array.from({ length: n }, () => ({ id: crypto.randomUUID(), kind: 'notify', status: 'sent', source: 'leaders-api', created_at: hoursAgo(h) }));
 const q = (id: string, o: Row = {}) => ({ id, kind: 'notify', to_email: `${id}@x.sa`, subject: `رسالة ${id}`, html: '<p>x</p>', ref: null, attempts: 0, last_error: null, sent_at: null, gave_up_at: null, reason: 'mail_share', expires_at: null, created_at: hoursAgo(1), ...o });
 
@@ -29,11 +43,33 @@ Deno.test('الطابور: إشعار بلا موعد انتظر 72 ساعة ل�
       assertEquals((await drainMailQueue()).sent, 0);
       assertEquals(state(tables.mail_queue[0]), 'waiting');
       assertEquals(resendCalls(calls).length, 0);
-      // الغد: ما ملأ الحصة تجاوز 24 ساعة، فيخرج في التشغيلة التالية
+      // الغد: ما ملأ الحصة في يوم مزوّد مضى، فيخرج في التشغيلة التالية
       for (const e of tables.mail_events) e.created_at = hoursAgo(25);
       assertEquals((await drainMailQueue()).sent, 1);
       assertEquals(state(tables.mail_queue[0]), 'sent');
       assertEquals(resendCalls(calls).length, 1);
+    }));
+  } finally { w.restore(); }
+});
+
+Deno.test('تفريغ المساء: من 22:00 بالرياض يأخذ الطابور ما بقي من حصة اليوم إلا عشرة للرموز، والإرسال المباشر لا', async () => {
+  const evening = morning + 12 * 36e5;   // 20:00 UTC، 23:00 بالرياض
+  const tables: Record<string, Row[]> = { mail_queue: Array.from({ length: 35 }, (_, i) => q(`e${i}`, { created_at: hoursAgo(5 - i * 0.01) })), mail_events: sentNonCode(40, 2), audit_log: [] };
+  const w = installFake(tables);
+  try {
+    await withMail(() => withNet(async (calls) => {
+      // صباحًا: النصيب ممتلئ فلا شيء
+      assertEquals((await drainMailQueue()).sent, 0);
+      // مساءً: من 40 إلى 70، فيخرج ثلاثون ويبقى خمسة للغد
+      const r: any = await at(evening, () => drainMailQueue());
+      assertEquals([r.sent, r.pending], [30, 5]);
+      assertEquals(resendCalls(calls).length, 30);
+      // الإشعار المباشر في الساعة نفسها لا يمرر flush: يُحجب بالنصيب ويدخل الطابور
+      await at(evening, () => sendMail('d@x.sa', 'إشعار', '<p>x</p>', [], { kind: 'notify' }).catch(() => null));
+      assertEquals(resendCalls(calls).length, 30);
+      // ورمز الدخول يجد العشرة الباقية
+      await at(evening, () => sendMail('c@x.sa', 'رمز', '<p>x</p>', [], { kind: 'code' }));
+      assertEquals(resendCalls(calls).length, 31);
     }));
   } finally { w.restore(); }
 });
@@ -136,11 +172,11 @@ Deno.test('sendMail: المؤرخ المحجوب يدخل الطابور بمو�
   } finally { w.restore(); }
 });
 
-Deno.test('سطر الترحيل اليومي: بعد التاسعة مساءً بالرياض مرة واحدة بعدد المنتظر بالحصة وموعد فراغه، وقبلها لا شيء', async () => {
-  assertEquals(CARRYOVER_HOUR_RIYADH, 21);
+Deno.test('سطر الترحيل اليومي: بعد الحادية عشرة مساءً بالرياض (بعد تفريغ المساء) مرة واحدة بعدد المنتظر بالحصة وموعد فراغه، وقبلها لا شيء', async () => {
+  assertEquals(CARRYOVER_HOUR_RIYADH, 23);
   Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
   const day = Date.parse('2026-11-16T00:00:00Z');
-  const evening = day + 19 * 36e5;   // 22:00 بالرياض
+  const evening = day + 20 * 36e5;   // 23:00 بالرياض
   const tables: Record<string, Row[]> = {
     mail_queue: [...Array.from({ length: 14 }, (_, i) => q(`ap${i}`, { created_at: new Date(day + 5 * 36e5).toISOString() })), q('held', { reason: 'f360_off' }), q('failed', { attempts: 2, reason: 'mail_share' })],
     mail_events: [], audit_log: [],
@@ -149,6 +185,7 @@ Deno.test('سطر الترحيل اليومي: بعد التاسعة مساءً 
   try {
     await withMail(() => withNet(async (calls) => {
       assertEquals(await carryoverAlert(new Set(), day + 10 * 36e5), { waiting: null, alerted: false });   // 13:00 بالرياض
+      assertEquals(await carryoverAlert(new Set(), day + 19.5 * 36e5), { waiting: null, alerted: false });   // 22:30: تفريغ المساء لم ينته
       const r = await carryoverAlert(new Set(['held']), evening);
       assertEquals(r, { waiting: 14, alerted: true });
       const hook = calls.filter((c) => c.url.includes('hooks.example'));
@@ -156,7 +193,7 @@ Deno.test('سطر الترحيل اليومي: بعد التاسعة مساءً 
       assertEquals([hook[0].body.kind, hook[0].body.detail.waiting], ['mail_queue_carryover', 14]);
       assertEquals(typeof hook[0].body.detail.expected_clear_day, 'string');
       // التشغيلة التالية في الليلة نفسها: مهلة النوع تكبحه
-      assertEquals((await carryoverAlert(new Set(['held']), evening + 36e5)).alerted, false);
+      assertEquals((await carryoverAlert(new Set(['held']), evening + 0.5 * 36e5)).alerted, false);
       assertEquals(calls.filter((c) => c.url.includes('hooks.example')).length, 1);
     }));
   } finally { w.restore(); Deno.env.delete('LEADERS_ALERT_WEBHOOK'); }
@@ -189,8 +226,8 @@ Deno.test('المرسلون المؤرخون يمررون موعدهم، وال�
   assertEquals('QUEUE_STALE_HOURS' in core, false);
 });
 
-Deno.test('ترحيل 20261116140000: حاجب للنشر، ويحذف ما بقي لمحذوف، والإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير وحده', async () => {
-  const sql = await Deno.readTextFile(new URL('../../migrations/20261116140000_leaders_mail_queue_expiry.sql', import.meta.url));
+Deno.test('ترحيل 20261116150000: حاجب للنشر، ويحذف ما بقي لمحذوف، والإنقاذ للإشعار غير المؤرخ المتروك بقاعدة اليومين في الأسبوع الأخير وحده', async () => {
+  const sql = await Deno.readTextFile(new URL('../../migrations/20261116150000_leaders_mail_queue_expiry.sql', import.meta.url));
   const rescue = sql.match(/update leaders\.mail_queue q set gave_up_at = null, last_error = null[\s\S]*?;/)?.[0] || '';
   for (const c of ["q.sent_at is null", "q.last_error = 'stale'", "q.kind = 'notify'", 'q.expires_at is null', "q.gave_up_at >= now() - interval '7 days'",
     "not like 'طلب خدمة:%'", "not like 'اتصال فوري:%'", "'دخول جديد إلى حسابك'", "'أُضيف مفتاح مرور إلى حسابك'", "'مسارك المعتمد بانتظارك'", "'دفعك لم يكتمل'",
