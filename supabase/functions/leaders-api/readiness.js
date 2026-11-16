@@ -44,9 +44,10 @@ const LIVE = ['open', 'running'];
 const newestOf = (list, kind) => list.filter((x) => x.kind === kind)
   .sort((a, b) => (b.version ?? 0) - (a.version ?? 0) || String(b.created_at).localeCompare(String(a.created_at)))[0];
 
-/** بنود الإعداد: القياسان والبرنامج الافتراضي والشهادة. where تبويب ضبطه في اللوحة
- * @param {{ instruments?: any[], certificate?: any, defaultPrograms?: number }} rows */
-export function setupReadiness({ instruments = [], certificate = null, defaultPrograms = 0 } = {}) {
+/** بنود الإعداد: القياسان والبرنامج الافتراضي والشهادة، ونسخ البرامج إن قُرئت. where تبويب ضبطه في اللوحة
+ * @param {{ instruments?: any[], certificate?: any, defaultPrograms?: number, programs?: any[] | null }} rows
+ *   programs: id, name, archived_at, versions (عدد نسخه). غيابها (قراءة تعذّرت) يُسقط البند بدل أن يحكم بلا صفوف */
+export function setupReadiness({ instruments = [], certificate = null, defaultPrograms = 0, programs = null } = {}) {
   const active = (kind) => instruments.find((x) => x.kind === kind && x.active);
   const base = active('baseline'), latest = newestOf(instruments, 'baseline'), post = active('post');
   const c = certificate || {};
@@ -58,7 +59,16 @@ export function setupReadiness({ instruments = [], certificate = null, defaultPr
     { key: 'program', ok: defaultPrograms > 0, where: 'programs', label: defaultPrograms ? 'برنامج افتراضي محدد' : 'لا برنامج افتراضي، فالدفعات الجديدة بلا قالب' },
     { key: 'certificate', ok: c.enabled !== false && !!c.signatory?.name && !!c.hours, where: 'certs',
       label: c.enabled === false ? 'الشهادات معطلة' : !c.signatory?.name ? 'الشهادة بلا موقّع' : !c.hours ? 'الشهادة بلا عدد ساعات' : 'الشهادة مكتملة الإعداد' },
+    ...(programs ? [programVersions(programs)] : []),
   ];
+}
+// كل برنامج فعّال له نسخة محفوظة: الدفعة تُثبَّت على نسخة، والبرنامج بلا نسخة لا تُنشأ عليه دفعة حتى تُحفظ له
+// (تُنشأ تلقائيًا من متطلباته، والبرنامج بلا متطلبات يبقى هنا حتى تُبنى رحلته)
+function programVersions(programs) {
+  const bare = programs.filter((p) => !p.archived_at && !(Number(p.versions) > 0));
+  return { key: 'program-versions', ok: !bare.length, where: 'programs',
+    label: bare.length ? `برامج فعّالة بلا نسخة محفوظة: ${bare.map((p) => p.name).join('، ')}` : 'لكل برنامج فعّال نسخة محفوظة',
+    ...(bare.length ? { refs: bare.map((p) => ({ kind: 'program', id: p.id, name: p.name })) } : {}) };
 }
 
 // ── الإطلاق التجريبي (م2): الجهات ودفعاتها ──
@@ -72,7 +82,7 @@ const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.p
 
 /** بنود م2 الآلية من صفوف القاعدة. check معرّف نقطة البوابة، وwhere تبويب ضبطه في اللوحة (null: يُضبط خارجها)
  * @param {{ organizations?: any[], cohorts?: any[], sessions?: any[], finalEval?: unknown, advisors?: string[] | null }} rows
- *   organizations: id, name, status · cohorts: id, name, organization_id, status, advisor_expert_id, content_release, delivery
+ *   organizations: id, name, status · cohorts: id, name, organization_id, status, is_default, advisor_expert_id, content_release, program_version_id, delivery
  *   sessions: cohort_id, active, starts_at, ends_at · finalEval: programs.final_eval للبرنامج الافتراضي
  *   advisors: معرّفات المستشارين الذين يخدمون في الرحلة فعلًا (journeyApproved)؛ غيابها يكتفي بوجود الإسناد */
 export function launchReadiness({ organizations = [], cohorts = [], sessions = [], finalEval = null, advisors = null } = {}, now = Date.now()) {
@@ -86,6 +96,8 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
   const undated = sessions.filter((w) => w.active !== false && !w.starts_at
     && orgCohorts.some((c) => !w.cohort_id || w.cohort_id === c.id)).length;
   const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
+  // نسخة البرنامج: كل دفعة مفتوحة أو جارية، والدفعة المفتوحة العامة أيًا كانت حالتها، مثبتة على نسخة (ترحيل 20261116110000)
+  const pinned = cohorts.filter((c) => c.is_default || LIVE.includes(c.status)).map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.program_version_id }));
   const fe = asJson(finalEval);
   const finalSaved = fe != null && JSON.stringify(fe) !== '{}';
   const noOrgCohort = 'لا دفعة جهة مفتوحة أو جارية بعد';
@@ -106,5 +118,8 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
     // الإصدار يُقطع ويُثبَّت بترحيل من أداة إصدار المحتوى، لا من اللوحة
     { key: 'release-pinned', check: 'm2.release-pinned', where: null,
       ...judge(running, 'لا دفعة جارية بعد', 'دفعات جارية بلا إصدار محتوى مثبّت (يُثبَّت بترحيل إصدار المحتوى)', () => 'كل دفعة جارية بإصدار محتوى مثبّت') },
+    // تُثبَّت بترحيل التثبيت للقائم، وكل دفعة تُنشأ بعده مثبتة؛ والدفعة الباقية تُرقّى من ملفها
+    { key: 'version-pinned', check: 'm2.version-pinned', where: 'programs',
+      ...judge(pinned, 'لا دفعة مفتوحة أو جارية بعد', 'دفعات تتبع البرنامج كما هو بلا نسخة مثبتة', (n) => `${n} دفعة مفتوحة أو جارية، وكلٌّ على نسخة مثبتة`) },
   ];
 }

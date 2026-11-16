@@ -82,7 +82,7 @@ export async function health() {
 // جاهزية الإطلاق: إعدادات اللوحة قبل أول دفعة، وبنود الإطلاق التجريبي (م2) للجهات ودفعاتها، كل بند بمكان ضبطه.
 // الأحكام والنصوص في readiness.js، وبوابات المراحل تحكم بها على الصفوف نفسها
 async function readiness() {
-  const [ins, cert, programs, orgs, cohorts, sessions, prog] = await Promise.all([
+  const [ins, cert, programs, orgs, cohorts, sessions, prog, plist, pvers] = await Promise.all([
     db.from('instruments').select('key, kind, active, version, created_at'),
     db.from('certificate_settings').select('*').eq('id', 1).maybeSingle(),
     db.from('programs').select('id', { count: 'exact', head: true }).eq('is_default', true),
@@ -90,8 +90,14 @@ async function readiness() {
     db.from('cohorts').select('*'),
     db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true),
     db.from('programs').select('final_eval').eq('is_default', true).maybeSingle(),
+    db.from('programs').select('id, name, archived_at'),
+    db.from('program_versions').select('program_id'),
   ]);
-  const setup = setupReadiness({ instruments: ins.data || [], certificate: cert.data, defaultPrograms: programs.count ?? 0 });
+  // نسخ البرامج: بند الإعداد يُعرض إن قُرئت القائمتان، وإلا سقط بدل أن يقول «بلا نسخة» عن قراءة فاشلة
+  const versionsOf = (id: string) => (pvers.data as any[]).filter((v) => v.program_id === id).length;
+  const progs = !plist.error && !pvers.error && Array.isArray(plist.data) && Array.isArray(pvers.data)
+    ? plist.data.map((p: any) => ({ ...p, versions: versionsOf(p.id) })) : null;
+  const setup = setupReadiness({ instruments: ins.data || [], certificate: cert.data, defaultPrograms: programs.count ?? 0, programs: progs });
   // بنود م2 تحتاج قراءاتها كلها: قراءة تعذّرت لا تُعرض «لا دفعة» ولا «لم يُحفظ»
   if ([orgs, cohorts, sessions, prog].some((r) => r.error)) return setup;
   // المستشار الأساسي يُحتسب إن كان يخدم في الرحلة (journeyApproved)، لا لمجرد بقاء إسناده على عضو لجنة بلا دور
