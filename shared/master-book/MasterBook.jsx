@@ -13,6 +13,7 @@ import { chapterDeps } from './deps.js';
 import { ProposalEditor, ProposalsSheet, useDialogFocus } from './Proposals.jsx';
 import ReleaseSheet from './Release.jsx';
 import { REFLECTION } from '../../supabase/functions/leaders-api/book-proposals.js';
+import { canResume, cleanPrefs, FONTS, inHScroll, isMarked, LEGACY_KEY, lineHeight, liveMarks, normalizeAr, readerKey, resumeAt, searchBook, SIZES, SPACINGS, THEMES, toggleMark } from './reader.js';
 import './master-book.css';
 
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -47,8 +48,13 @@ const initials = (n) => String(n || '؟').trim().split(/\s+/).slice(0, 2).map((w
 const store = {
   get: (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* التخزين غير متاح: يعمل القارئ بلا تذكّر */ } },
+  del: (k) => { try { localStorage.removeItem(k); } catch { /* */ } },
 };
-const KEY = 'mi-master-book';
+// أقسام الباب للبحث والعلامات: المفتاح والعنوان والمتن كله بمستوياته
+const sectionsOf = (c) => bookSections(c.md).map((s) => ({ key: s.key, title: s.title, md: s.parts.map((p) => p.md).join('\n') }));
+const sectionKeys = (c) => bookSections(c.md).filter((s) => s.title).map((s) => s.key);
+const SIZE_AR = { 16: 'صغير', 18: 'متوسط', 20: 'كبير', 22: 'أكبر' };
+const Ribbon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v16l-5-4-5 4z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ── الكتاب ثلاثي الأبعاد: الغلاف نفسه في المنصة والنسخة المطبوعة، بكعب وحافة صفحات، يميل مع المؤشر ──
@@ -297,25 +303,44 @@ function AllComments({ data, onGo, onClose }) {
 
 // ── الفهرس: الأجزاء ثم الأبواب ثم أقسامها، بعدد التعليقات المفتوحة، وبحث في العناوين والمتن ──
 // only: مفتاح الجزء في وضع «الجزء وحده»، فلا يعرض الفهرس ولا البحث إلا أبوابه
-function Toc({ data, level, current, only = null, onGo, onClose }) {
+// البحث بالتطبيع (reader.js): لا تفرق الحركات ولا صور الألف ولا التاء المربوطة، وكل نتيجة بمقتطف حول ما طابق.
+// والعلامات أعلى الفهرس حين لا بحث
+function Toc({ data, level, current, only = null, marks = [], onGo, onUnmark, onClose }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(current?.id || null);
-  const needle = q.trim();
+  const searching = normalizeAr(q).length >= 2;
   const pool = only ? data.chapters.filter((c) => c.dimension === only) : data.chapters;
-  const hits = needle.length >= 2 ? pool.flatMap((c) => bookSections(c.md).filter((s) => (s.title + s.parts.map((p) => p.md).join(' ')).includes(needle)).map((s) => ({ c, s }))).slice(0, 40) : [];
+  const hits = searching ? searchBook(pool, q, sectionsOf) : [];
+  const shown = only ? marks.filter((m) => m.chapter.dimension === only) : marks;
   useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [onClose]);
   return (
     <div className="mb-sheet-wrap side" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <nav className="mb-toc" aria-label="فهرس الكتاب الأم">
         <header className="mb-sheet-h"><div><small>{only ? PARTS.find((p) => p.key === only)?.label : 'الكتاب الأم'}</small><b>{only ? 'فهرس الجزء' : 'الفهرس'}</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
         <input className="mb-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={only ? 'ابحث في عناوين الجزء ومتنه' : 'ابحث في عناوين الكتاب ومتنه'} aria-label="بحث في الكتاب" />
-        {needle.length >= 2 ? (
-          <div className="mb-toc-body">
+        {searching ? (
+          <div className="mb-toc-body" role="region" aria-label="نتائج البحث" aria-live="polite">
             {!hits.length && <p className="mb-empty">لا نتائج.</p>}
-            {hits.map(({ c, s }, i) => <button key={i} type="button" className="mb-hit" onClick={() => onGo(c, s.key)}><small>{PARTS.find((p) => p.key === c.dimension)?.short} · {c.title}</small><b>{s.key || 'مدخل الباب'}</b></button>)}
+            {hits.map(({ c, s, snip }, i) => (
+              <button key={i} type="button" className="mb-hit" onClick={() => onGo(c, s.key)}>
+                <small>{PARTS.find((p) => p.key === c.dimension)?.short} · {c.title}</small><b>{s.key || 'مدخل الباب'}</b>
+                {snip && <em>{snip.before}<mark>{snip.match}</mark>{snip.after}</em>}
+              </button>
+            ))}
           </div>
         ) : (
           <div className="mb-toc-body">
+            {shown.length > 0 && (
+              <section className="mb-marks" aria-label="علاماتك">
+                <h3>علاماتك</h3>
+                <ul>{shown.map((m) => (
+                  <li key={`${m.id}|${m.section}`}>
+                    <button type="button" onClick={() => onGo(m.chapter, m.section || null)}><small>{PARTS.find((p) => p.key === m.chapter.dimension)?.short} · {m.chapter.title}</small><b>{m.section || 'مدخل الباب'}</b></button>
+                    <button type="button" className="mb-x" aria-label={`أزل العلامة: ${m.section || m.chapter.title}`} onClick={() => onUnmark(m)}>×</button>
+                  </li>
+                ))}</ul>
+              </section>
+            )}
             {PARTS.filter((p) => !only || p.key === only).map((p) => {
               const chs = data.chapters.filter((c) => c.dimension === p.key);
               if (!chs.length) return null;
@@ -367,7 +392,7 @@ function QuizReview({ md }) {
 }
 
 // ── صفحة الباب ──
-function Chapter({ ch, idx, partIdx, level, data, scope, onThread, onDeps, onProposals, flip }) {
+function Chapter({ ch, idx, partIdx, level, data, scope, marks = [], onMark, onThread, onDeps, onProposals, flip }) {
   const sections = useMemo(() => bookSections(ch.md), [ch.md]);
   const img = chapterImage(ch.id);
   const part = PARTS.find((p) => p.key === ch.dimension);
@@ -423,6 +448,10 @@ function Chapter({ ch, idx, partIdx, level, data, scope, onThread, onDeps, onPro
                       </button>
                     );
                   })()}
+                  {onMark && (() => {
+                    const on = isMarked(marks, { id: ch.id, section: s.key });
+                    return <button type="button" className="mb-sec-m" aria-pressed={on} aria-label={on ? `أزل العلامة عن القسم: ${s.key}` : `ضع علامة على القسم: ${s.key}`} onClick={() => onMark({ id: ch.id, section: s.key })}><Ribbon /></button>;
+                  })()}
                   <button type="button" className={`mb-sec-c${k ? ' has' : ''}`} onClick={() => onThread({ section: s.key })} aria-label={`تعليقات القسم: ${s.key}`}>
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
                     {k ? <b>{k}</b> : <span>علّق</span>}
@@ -474,6 +503,36 @@ function PdfSheet({ parts, data, onPick, onClose }) {
   );
 }
 
+// ── «Aa»: خط المتن وحجمه ومسافاته ووضع القراءة. يُطبَّق فورًا ويُحفظ لهذا القارئ وحده ──
+function Seg({ label, value, items, onPick, cls = () => '' }) {
+  return (
+    <fieldset>
+      <legend>{label}</legend>
+      <div className="mb-seg" role="radiogroup" aria-label={label}>
+        {items.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={value === k} className={cls(k)} onClick={() => onPick(k)}>{l}</button>)}
+      </div>
+    </fieldset>
+  );
+}
+function LookSheet({ prefs, onChange, onClose }) {
+  const dlg = useDialogFocus();
+  useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [onClose]);
+  return (
+    <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <aside ref={dlg} tabIndex={-1} className="mb-sheet" role="dialog" aria-modal="true" aria-label="إعدادات القراءة">
+        <span className="mb-grip" aria-hidden="true" />
+        <header className="mb-sheet-h"><div><small>يُحفظ لك على هذا الجهاز</small><b>إعدادات القراءة</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
+        <div className="mb-look">
+          <Seg label="الخط" value={prefs.font} items={FONTS} onPick={(font) => onChange({ font })} cls={(k) => `f-${k}`} />
+          <Seg label="حجم الخط" value={prefs.size} items={SIZES.map((n) => [n, SIZE_AR[n]])} onPick={(size) => onChange({ size })} />
+          <Seg label="المسافة بين الأسطر" value={prefs.spacing} items={SPACINGS} onPick={(spacing) => onChange({ spacing })} />
+          <Seg label="وضع القراءة" value={prefs.theme} items={THEMES} onPick={(theme) => onChange({ theme })} cls={(k) => `t-${k}`} />
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 // العلامة المائية بنمط الكتاب الشخصي (leaders-app/src/screens/Handbook.jsx): اسم القارئ وبريده وتاريخ اليوم، مائلة
 // متكررة بشفافية خفيفة فوق الصفحة كلها، فأي تصوير يُعرف مصدره. لا تلتقط النقر ولا تُقرأ لقارئ الشاشة
 const xmlEsc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -493,12 +552,12 @@ function Watermark({ text }) {
 }
 /** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string, seen?: string) => Promise<any>, release?: () => Promise<any>, releaseStart?: () => Promise<any>, releasePr?: () => Promise<any>, releasePublish?: (n: number, sha: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
 export default function MasterBook({ api, onClose, onExperts, place = 'admin' }) {
-  const saved = store.get(KEY) || {};
   const [data, setData] = useState(null);
   const [view, setView] = useState('shelf');
-  const [idx, setIdx] = useState(Number.isInteger(saved.idx) ? saved.idx : 0);
-  const [level, setLevel] = useState(saved.level || 'all');
-  const [scope, setScope] = useState(saved.scope === 'part' ? 'part' : 'book');
+  const [idx, setIdx] = useState(0);
+  // التفضيلات والموضع والعلامات لكل قارئ بمفتاحه (reader.js)، فتُقرأ بعد أن يعرّف الخادم القارئ
+  const [prefs, setPrefs] = useState(null);
+  const [look, setLook] = useState(false);
   const [pdfMenu, setPdfMenu] = useState(false);
   const [toc, setToc] = useState(false);
   const [all, setAll] = useState(false);
@@ -521,7 +580,14 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
 
   const load = useCallback(() => api.get().then(setData), [api]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { store.set(KEY, { idx, level, scope }); }, [idx, level, scope]);
+  const key = data?.success ? readerKey(data.viewer) : null;
+  useEffect(() => { if (!key) return; store.del(LEGACY_KEY); setPrefs(cleanPrefs(store.get(key))); }, [key]);
+  useEffect(() => { if (key && prefs) store.set(key, prefs); }, [key, prefs]);
+  const patch = useCallback((o) => setPrefs((p) => ({ ...(p || cleanPrefs(null)), ...o })), []);
+  const level = prefs?.level || 'all';
+  const scope = prefs?.scope || 'book';
+  const setLevel = (v) => patch({ level: v });
+  const setScope = (v) => patch({ scope: v });
 
   const ch = data?.chapters?.[idx];
   const partIdx = ch ? data.chapters.filter((c) => c.dimension === ch.dimension).findIndex((c) => c.id === ch.id) : 0;
@@ -530,10 +596,23 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   useEffect(() => {
     if (view !== 'read') return undefined;
     const sc = root.current;
-    const onScroll = () => {
+    const id = data?.chapters?.[idx]?.id;
+    // الاستئناف داخل الباب: القسم الذي بلغه القارئ يُحفظ بعد توقف التمرير، فيعود إليه «تابع القراءة»
+    let still = null;
+    const spot = () => {
+      if (!sc || !id) return;
+      // آخر قسم بلغ رأس الشاشة، وفي آخر الباب (لا تمرير بعده) آخر قسم بلغ منتصفها
+      const end = sc.scrollTop >= sc.scrollHeight - sc.clientHeight - 2;
+      const line = end ? sc.clientHeight * 0.6 : 150;
+      let section = '';
+      for (const el of sc.querySelectorAll('.mb-sec[data-section]')) { if (el.getBoundingClientRect().top <= line) section = el.dataset.section || ''; else break; }
+      setPrefs((p) => (p && (p.pos?.id !== id || p.pos.section !== section) ? { ...p, pos: { id, section } } : p));
+    };
+    const onScroll = (e) => {
       if (!sc) return;
       const total = sc.scrollHeight - sc.clientHeight;
       setProgress(total > 0 ? Math.min(1, Math.max(0, sc.scrollTop / total)) : 1);
+      if (e) { clearTimeout(still); still = setTimeout(spot, 350); }
     };
     const onSel = () => {
       const s = getSelection?.();
@@ -548,21 +627,22 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
     sc?.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('selectionchange', onSel);
     onScroll();
-    return () => { sc?.removeEventListener('scroll', onScroll); document.removeEventListener('selectionchange', onSel); };
-  }, [view, idx]);
+    return () => { clearTimeout(still); sc?.removeEventListener('scroll', onScroll); document.removeEventListener('selectionchange', onSel); };
+  }, [view, idx, data]);
 
   const go = useCallback((to, section = null, dir = null) => {
     if (!data) return;
     const n = Math.max(0, Math.min(data.chapters.length - 1, to));
     setFlip(dir && !reduced() ? dir : null);
     setIdx(n);
+    patch({ pos: { id: data.chapters[n].id, section: section || '' } });
     setView('read');
     setToc(false); setAll(false);
     requestAnimationFrame(() => {
       if (section) document.getElementById(anchor(section))?.scrollIntoView({ block: 'start' });
       else root.current?.scrollTo({ top: 0 });
     });
-  }, [data]);
+  }, [data, patch]);
   const goChapter = (c, section) => go(data.chapters.findIndex((x) => x.id === c.id), section);
   // في وضع الجزء يقف التقليب عند حدود الجزء الحالي، وفي وضع الكتاب يعبر الأجزاء كما كان
   const scoped = data && ch ? (scope === 'part' ? data.chapters.map((c, i) => [c, i]).filter(([c]) => c.dimension === ch.dimension).map(([, i]) => i) : data.chapters.map((_, i) => i)) : [];
@@ -572,7 +652,8 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const step = (d) => { const to = d > 0 ? nextIdx : prevIdx; if (to !== null) go(to, null, d > 0 ? 'next' : 'prev'); };
 
   // السحب أفقيًا على الهاتف يقلب الباب (يمينًا للسابق ويسارًا للتالي، كتقليب كتاب عربي)
-  const onTouchStart = (e) => { const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY, at: Date.now() }; };
+  // لمسة داخل جدول عريض أو شريط يتمرر أفقيًا لا تقلب الباب
+  const onTouchStart = (e) => { if (inHScroll(e.target, reader.current)) { touch.current = null; return; } const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY, at: Date.now() }; };
   const onTouchEnd = (e) => {
     const s = touch.current; touch.current = null;
     if (!s || getSelection?.()?.toString()) return;
@@ -581,7 +662,9 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
     if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 2 && Date.now() - s.at < 600) step(dx < 0 ? 1 : -1);
   };
 
-  const open = () => { if (reduced()) { setView('read'); return; } setOpening(true); setTimeout(() => { setOpening(false); go(idx); }, 900); };
+  // «تابع القراءة» تعود إلى الباب والقسم المحفوظين، والباب الأول كغيره؛ ومن لم يفتح بابًا بعد يبدأ من الأول
+  const resume = () => { const at = resumeAt(data.chapters, prefs?.pos); if (at >= 0) go(at, prefs.pos.section || null); else go(0); };
+  const open = () => { if (reduced()) { resume(); return; } setOpening(true); setTimeout(() => { setOpening(false); resume(); }, 900); };
 
   // part: مفتاح الجزء لطبعة الجزء، أو null للكتاب كاملًا. النافذة تُفتح في النقرة نفسها فلا يحجبها المتصفح
   const exportPdf = (part = null) => {
@@ -601,7 +684,11 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   if (!data) return <div className="mb-root" ref={root}><div className="mb-loading"><span className="mb-spin" aria-hidden="true" /><p>يُفتح الكتاب الأم…</p></div></div>;
   if (!data.success) return <div className="mb-root" ref={root}><div className="mb-loading"><p className="mb-err" role="alert">{data.message || 'تعذّر فتح الكتاب'}</p>{onClose && <button type="button" className="mb-btn" onClick={onClose}>رجوع</button>}</div></div>;
 
+  if (!prefs) return <div className="mb-root" ref={root}><div className="mb-loading"><span className="mb-spin" aria-hidden="true" /><p>يُفتح الكتاب الأم…</p></div></div>;
   const total = data.counts.total;
+  const marks = liveMarks(prefs.marks, data.chapters, sectionKeys);
+  const onMark = (spot) => patch({ marks: toggleMark(prefs.marks, spot) });
+  const lastAt = resumeAt(data.chapters, prefs.pos);
   const review = data.proposal_counts?.review || 0;
   const showProposals = data.proposals_ready && (data.viewer.propose || (data.proposals || []).length > 0);
   // رف الخبير: أجزاء مقعده أولًا ثم الأجزاء الأخرى، والمسودات آخرًا. الإدارة ومن نطاقه الكتاب كله بالترتيب الثابت
@@ -610,7 +697,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const pdfParts = PARTS.filter((p) => p.key !== 'draft' && data.chapters.some((c) => c.dimension === p.key)).sort((a, b) => outOfSeat(data.viewer, { dimension: a.key }) - outOfSeat(data.viewer, { dimension: b.key }));
   const shelfParts = [...PARTS].sort((a, b) => (a.key === 'draft') - (b.key === 'draft') || outOfSeat(data.viewer, { dimension: a.key }) - outOfSeat(data.viewer, { dimension: b.key }));
   return (
-    <div className={`mb-root place-${place}`} ref={root}>
+    <div className={`mb-root place-${place}${view === 'read' ? ` theme-${prefs.theme}` : ''}`} ref={root}>
       <Watermark text={data.viewer.watermark} />
       <style>{COVER_CSS}</style>
       {view === 'shelf' ? (
@@ -632,13 +719,14 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
                 <div><dt>تعليقات مفتوحة</dt><dd>{total}</dd></div>
               </dl>
               <div className="mb-actions">
-                <button type="button" className="mb-btn gold" onClick={open}>{saved.idx ? 'تابع القراءة' : 'افتح الكتاب'}</button>
+                <button type="button" className="mb-btn gold" onClick={open}>{canResume(data.chapters, prefs.pos) ? 'تابع القراءة' : 'افتح الكتاب'}</button>
                 <button type="button" className="mb-btn line" onClick={() => setAll(true)}>التعليقات{total ? ` (${total})` : ''}</button>
                 {showProposals && <button type="button" className="mb-btn line" onClick={() => setPropsOf({})}>المقترحات{review ? ` (${review})` : ''}</button>}
                 {data.viewer.decide && api.release && data.proposals_ready && <button type="button" className="mb-btn line" onClick={() => setReleasing(true)}>إصدار الكتاب{data.proposal_counts?.approved ? ` (${data.proposal_counts.approved} معتمد)` : ''}</button>}
                 <button type="button" className="mb-btn line" aria-haspopup="dialog" aria-expanded={pdfMenu} onClick={() => setPdfMenu(true)}>نسخة PDF</button>
                 {data.share && api.reader && <button type="button" className="mb-btn line" onClick={() => setSharing(true)}>شارك مع الخبراء{data.share.readers.length ? ` (${data.share.readers.length})` : ''}</button>}
               </div>
+              {lastAt >= 0 && <p className="mb-who mb-last">توقفت عند <b>{data.chapters[lastAt].title}</b>{prefs.pos.section ? ` · ${prefs.pos.section}` : ''}</p>}
               <p className="mb-who">تقرأ بصفتك: <b>{data.viewer.name}</b> · {data.viewer.role}</p>
               {seatInfo && <p className="mb-seat">{seatInfo.label}: <b>{seatInfo.text}</b></p>}
             </div>
@@ -661,10 +749,11 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
           {!data.comments_ready && <p className="mb-note">التعليقات تُفعَّل بعد تطبيق ترحيلها على الإنتاج. القراءة متاحة الآن.</p>}
         </div>
       ) : (
-        <div className="mb-reader" ref={reader} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div className={`mb-reader font-${prefs.font} theme-${prefs.theme}`} style={{ '--mb-size': `${prefs.size}px`, '--mb-lh': lineHeight(prefs.spacing) }} ref={reader} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           <header className="mb-top">
             <button type="button" className="mb-ic" onClick={() => setView('shelf')} aria-label="غلاف الكتاب">⌂</button>
             <div className="mb-top-t"><small>{PARTS.find((p) => p.key === ch.dimension)?.label}</small><b>{ch.title}</b></div>
+            <button type="button" className="mb-ic mb-aa" onClick={() => setLook(true)} aria-label="إعدادات القراءة" aria-haspopup="dialog" aria-expanded={look}>Aa</button>
             <button type="button" className="mb-ic" onClick={() => setAll(true)} aria-label="كل التعليقات">✎{total ? <i className="mb-dot">{total}</i> : null}</button>
             <button type="button" className="mb-ic" onClick={() => setToc(true)} aria-label="الفهرس">☰</button>
             <span className="mb-prog" style={{ transform: `scaleX(${progress})` }} aria-hidden="true" />
@@ -677,7 +766,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
             <span className="mb-row-l" aria-hidden="true">المستوى</span>
             {LEVELS.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={level === k ? 'on' : ''} onClick={() => setLevel(k)}>{l}</button>)}
           </div>
-          <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} scope={scope} flip={flip} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} onProposals={(t) => {
+          <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} scope={scope} flip={flip} marks={prefs.marks} onMark={onMark} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} onProposals={(t) => {
             // قسم بلا مقترحات: يفتح المحرر مباشرة لمن يقترح، وإلا قائمة مقترحات القسم
             const has = (data.proposals || []).some((p) => p.module_id === ch.id && p.section === t.section && ['draft', 'review', 'approved'].includes(p.status));
             if (!has && data.viewer.propose && api.propose) setEditing({ chapter: ch, section: t.section, proposal: null });
@@ -694,7 +783,8 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
           )}
         </div>
       )}
-      {toc && <Toc data={data} level={level} current={view === 'read' ? ch : null} only={view === 'read' && scope === 'part' ? ch.dimension : null} onGo={goChapter} onClose={() => setToc(false)} />}
+      {toc && <Toc data={data} level={level} current={view === 'read' ? ch : null} only={view === 'read' && scope === 'part' ? ch.dimension : null} marks={marks} onUnmark={onMark} onGo={goChapter} onClose={() => setToc(false)} />}
+      {look && <LookSheet prefs={prefs} onChange={patch} onClose={() => setLook(false)} />}
       {pdfMenu && <PdfSheet parts={pdfParts} data={data} onPick={exportPdf} onClose={() => setPdfMenu(false)} />}
       {all && <AllComments data={data} onGo={(c) => { const at = data.chapters.findIndex((x) => x.id === c.module_id); setAll(false); go(at, c.section || null); setThread({ section: c.section || '' }); }} onClose={() => setAll(false)} />}
       {depsOf && ch && <DepsSheet target={depsOf} chapter={ch} data={data} onClose={() => setDepsOf(null)} />}

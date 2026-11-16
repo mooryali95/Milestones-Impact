@@ -51,16 +51,16 @@ for (const vp of [{ name: 'الحاسوب', size: { width: 1280, height: 900 } }
     await open(page);
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     // الهادئ مطوي، والحدّي المعلَّم مفتوح تلقائيًا بعدد ما يستحق الانتباه
-    await expect(row(page, 'Milestone')).toHaveAttribute('aria-expanded', 'false');
-    await expect(row(page, 'Leadership')).toHaveAttribute('aria-expanded', 'false');
-    await expect(row(page, 'Impact')).toHaveAttribute('aria-expanded', 'true');
-    await expect(row(page, 'Impact')).toContainText('⚠2');
+    await expect(row(page, 'إدارة المشروعات')).toHaveAttribute('aria-expanded', 'false');
+    await expect(row(page, 'تمكين القائد')).toHaveAttribute('aria-expanded', 'false');
+    await expect(row(page, 'تحويل المشروع إلى أثر')).toHaveAttribute('aria-expanded', 'true');
+    await expect(row(page, 'تحويل المشروع إلى أثر')).toContainText('⚠2');
     const det = card(page).locator('#lc-det-impact');
     await expect(det.locator('.lc-flags li')).toHaveText(['حالة حدّية: المستوى التالي في متناول هامش صغير', 'ممارسة بأعلى درجة في كل العبارات']);
     await expect(det).toContainText('يفصله سؤالان عن المستوى التالي');
     // لا شارات أعلام مكدسة في الملخص، ولا حقل ملاحظة دائم الظهور
     await expect(card(page).locator('.la-chip.warn', { hasText: 'ممارسة بأعلى' })).toHaveCount(0);
-    await expect(card(page).getByLabel('ملاحظة Impact')).toHaveCount(0);
+    await expect(card(page).getByLabel('ملاحظة تحويل المشروع إلى أثر')).toHaveCount(0);
     await expect(det.getByRole('button', { name: '+ ملاحظة' })).toBeVisible();
     // مقياس المؤشر بحدود المستويات من النموذج
     await expect(card(page).getByRole('img', { name: 'المؤشر 48 من 100. حد متوسط 55، وحد احترافي 80' })).toBeVisible();
@@ -76,18 +76,18 @@ for (const vp of [{ name: 'الحاسوب', size: { width: 1280, height: 900 } }
 
 test('بطاقة المستوى بلوحة المفاتيح: Enter يفتح الصف، والاعتماد الناقص ينقل التركيز إلى التعليل ولا يُرسل', async ({ page }) => {
   const calls = await open(page);
-  await row(page, 'Milestone').focus();
+  await row(page, 'إدارة المشروعات').focus();
   await page.keyboard.press('Enter');
-  await expect(row(page, 'Milestone')).toHaveAttribute('aria-expanded', 'true');
+  await expect(row(page, 'إدارة المشروعات')).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Tab');
-  await expect(page.getByLabel('مستوى Milestone')).toBeFocused();
-  await page.getByLabel('مستوى Milestone').selectOption('advanced');
+  await expect(page.getByLabel('مستوى إدارة المشروعات')).toBeFocused();
+  await page.getByLabel('مستوى إدارة المشروعات').selectOption('advanced');
   const btn = page.getByRole('button', { name: 'اعتماد المسار وفتح البرنامج' });
   await expect(btn).toHaveAttribute('aria-disabled', 'true');
-  await expect(page.locator('#lc-block')).toHaveText('اكتب سبب مخالفة المستوى المحسوب في Milestone (10 أحرف على الأقل)');
+  await expect(page.locator('#lc-block')).toHaveText('اكتب سبب مخالفة المستوى المحسوب في إدارة المشروعات (10 أحرف على الأقل)');
   await btn.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('ملاحظة Milestone')).toBeFocused();
+  await expect(page.getByLabel('ملاحظة إدارة المشروعات')).toBeFocused();
   expect(calls.some((c) => c.action === 'admin.approve')).toBe(false);
   await page.keyboard.type('أداؤه في المختبر يفوق المحسوب بوضوح');
   await expect(btn).not.toHaveAttribute('aria-disabled', 'true');
@@ -100,8 +100,8 @@ test('بطاقة المستوى بلوحة المفاتيح: Enter يفتح ال
 
 test('بطاقة المستوى لدور العرض: المستوى نصًا بلا قائمة ولا زر اعتماد', async ({ page }) => {
   await open(page, { role: 'viewer' });
-  await row(page, 'Leadership').click();
+  await row(page, 'تمكين القائد').click();
   await expect(card(page).locator('#lc-det-leadership')).toContainText('المستوى: احترافي');
-  await expect(page.getByLabel('مستوى Leadership')).toHaveCount(0);
+  await expect(page.getByLabel('مستوى تمكين القائد')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'اعتماد المسار وفتح البرنامج' })).toHaveCount(0);
 });

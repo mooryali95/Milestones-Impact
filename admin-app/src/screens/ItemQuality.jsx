@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الصعوبة والتمييز لكل سؤال، والثبات لكل إطار، وأعلام لما يحتاج مراجعة.
 import React, { useEffect, useState } from 'react';
-import { DIM_EN, L } from '../leaders.js';
+import { DIM, L } from '../leaders.js';
 import { Spinner } from '../ui.jsx';
 
 const FLAG = {
@@ -26,7 +26,7 @@ function Evidence({ e }) {
       <table className="la-table" aria-label="خطأ القياس ودقة التصنيف">
         <thead><tr><th>الإطار</th><th>الثبات</th><th>خطأ القياس (نقطة)</th><th>الهامش الحدّي: المضبوط / المقترح</th><th>دقة التصنيف المتوقعة</th></tr></thead>
         <tbody>{e.dimensions.map((x) => (
-          <tr key={x.dimension}><td>{DIM_EN[x.dimension] || x.dimension}</td><td>{x.alpha ?? '·'}</td><td>{x.sem ?? '·'}</td>
+          <tr key={x.dimension}><td>{DIM[x.dimension] || x.dimension}</td><td>{x.alpha ?? '·'}</td><td>{x.sem ?? '·'}</td>
             <td>{x.borderline_now} / {x.borderline_suggested ?? '·'}</td>
             <td>{x.accuracy == null ? '·' : <>{pct(x.accuracy)} {x.below_target && <span className="la-chip warn" title={`دون الهدف ${pct(e.accuracy_target)}: يُنظر في إطالة جانبي المعرفة والمواقف`}>دون الهدف</span>}</>}</td></tr>
         ))}</tbody>
@@ -66,7 +66,7 @@ export default function ItemQuality({ instrumentId }) {
       <div className="iq-dims">
         {d.dimensions.map((x) => {
           const [l, c] = alphaNote(x.alpha);
-          return <div key={x.dimension} className="stat-card"><div className="stat-label">ثبات {DIM_EN[x.dimension] || x.dimension}</div><div className="stat-value">{x.alpha ?? '·'}</div><div className={`stat-sub iq-${c}`}>{l} · {x.complete} أجابوا كل أسئلته</div></div>;
+          return <div key={x.dimension} className="stat-card"><div className="stat-label">ثبات {DIM[x.dimension] || x.dimension}</div><div className="stat-value">{x.alpha ?? '·'}</div><div className={`stat-sub iq-${c}`}>{l} · {x.complete} أجابوا كل أسئلته</div></div>;
         })}
       </div>
       {d.correlations?.length > 0 && (
@@ -75,7 +75,7 @@ export default function ItemQuality({ instrumentId }) {
           <table className="la-table" aria-label="الارتباط بين الأطر">
             <thead><tr><th>الإطاران</th><th>المشاركون</th><th>الارتباط</th><th>بعد تصحيح الثبات</th><th>الحكم</th></tr></thead>
             <tbody>{d.correlations.map((c) => (
-              <tr key={c.a + c.b}><td>{DIM_EN[c.a] || c.a} و {DIM_EN[c.b] || c.b}</td><td>{c.n}</td><td>{c.r ?? '·'}</td><td>{c.corrected ?? '·'}</td>
+              <tr key={c.a + c.b}><td>{DIM[c.a] || c.a} و {DIM[c.b] || c.b}</td><td>{c.n}</td><td>{c.r ?? '·'}</td><td>{c.corrected ?? '·'}</td>
                 <td>{c.overlap ? <span className="la-chip warn" title="الإطاران يقيسان قدرة متقاربة، فلا تفرّق المسارات بينهما فعلًا">تداخل</span> : c.r == null ? '·' : 'منفصلان'}</td></tr>
             ))}</tbody>
           </table>
@@ -87,7 +87,7 @@ export default function ItemQuality({ instrumentId }) {
           <thead><tr><th>السؤال</th><th>المجيبون</th><th>الصعوبة</th><th>التمييز</th><th>ما يُراجع</th></tr></thead>
           <tbody>{items.map((x) => (
             <tr key={x.id}>
-              <td><small className="la-muted">{x.code || DIM_EN[x.dimension]}</small><br />{x.text}
+              <td><small className="la-muted">{x.code || DIM[x.dimension]}</small><br />{x.text}
                 <div className="iq-opts">{x.options.map((o) => <span key={o.k} title={o.label}><i style={{ width: `${o.share * 100}%` }} />{o.score > 0 ? '✓ ' : ''}{pct(o.share)}</span>)}</div></td>
               <td>{x.n}</td><td>{pct(x.p)}</td><td>{x.discrimination ?? '·'}</td>
               <td>{x.flags.map((f) => <span key={f} className="la-chip warn" title={FLAG[f][1]}>{FLAG[f][0]}</span>)}</td>

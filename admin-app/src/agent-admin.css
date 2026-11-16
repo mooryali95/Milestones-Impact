@@ -26,11 +26,6 @@
 .ag-key label { font-size: .8rem; color: var(--ink-light); }
 .ag-key .la-row { flex-wrap: wrap; gap: 8px; }
 .ag-key input { flex: 1 1 260px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
-.ag-stepup h3 { margin: 0 0 6px; }
-.ag-su-opts { display: grid; gap: 14px; margin: 12px 0; }
-.ag-su-code { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
-.ag-su-code label { display: grid; gap: 4px; font-size: .84rem; }
-.ag-su-code input { inline-size: 9em; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; letter-spacing: .2em; text-align: center; }
 .ag-spend { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 18px; align-items: center; }
 .ag-ring { display: flex; gap: 12px; align-items: center; }
 .ag-ring svg { inline-size: 84px; block-size: 84px; flex: none; }

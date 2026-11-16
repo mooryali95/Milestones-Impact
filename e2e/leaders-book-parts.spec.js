@@ -30,7 +30,7 @@ async function mount(page) {
     return route.fulfill({ json: { success: false, message: `غير متوقع: ${b.action}` } });
   });
   // موضع القراءة يُمسح في أول تحميل وحده، فتبقى إعادة التحميل على ما حُفظ
-  await page.addInitScript((t) => { localStorage.setItem('mi_leaders_expert_session', t); if (!sessionStorage.getItem('mb-fresh')) { localStorage.removeItem('mi-master-book'); sessionStorage.setItem('mb-fresh', '1'); } }, XP_TOKEN);
+  await page.addInitScript((t) => { localStorage.setItem('mi_leaders_expert_session', t); if (!sessionStorage.getItem('mb-fresh')) { Object.keys(localStorage).filter((k) => k.startsWith('mi-master-book')).forEach((k) => localStorage.removeItem(k)); sessionStorage.setItem('mb-fresh', '1'); } }, XP_TOKEN);
   await page.goto(PORTAL);
   await expect(page.locator('.mb-shelf')).toBeVisible();
 }
@@ -69,8 +69,9 @@ test('«الجزء وحده»: الفهرس والتقليب يقتصران عل
   await expect(toc.locator('.mb-hit').filter({ hasText: 'المعالم' })).toHaveCount(0);
   await toc.getByRole('button', { name: 'إغلاق' }).click();
   // يُحفظ مع موضع القراءة: بعد إعادة التحميل يعود القارئ إلى الجزء وحده والباب نفسه
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('mi-master-book')));
-  expect(saved).toMatchObject({ idx: 2, level: 'all', scope: 'part' });
+  // مفتاح لكل قارئ (المرحلة 3 من القارئ)، والموضع معرّف الباب لا رقم ترتيبه
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('mi-master-book:')))));
+  expect(saved).toMatchObject({ pos: { id: id('b1') }, level: 'all', scope: 'part' });
   await page.reload();
   await page.getByRole('button', { name: 'تابع القراءة' }).click();
   await expect(page.locator('.mb-top-t b')).toHaveText('تمهيد الأثر');

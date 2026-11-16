@@ -56,6 +56,10 @@ for (const vp of [{ name: 'الحاسوب', size: { width: 1200, height: 900 } }
     await expect(k01.locator('li.best')).toContainText('مفتاح الدرجة القصوى');
     await expect(d.getByRole('button', { name: 'طباعة' })).toBeVisible();
     await expect(d.getByRole('button', { name: 'CSV' })).toHaveCount(0);
+    // الإطار باسمه العربي وحده في لوحة الإجابات المشتركة (لا Milestone ولا Impact)
+    const dimSel = d.locator('select').filter({ has: page.locator('option', { hasText: 'كل الأبعاد' }) });
+    await expect(dimSel.locator('option')).toContainText(['كل الأبعاد', 'إدارة المشروعات', 'تحويل المشروع إلى أثر']);
+    expect(await dimSel.locator('option').allTextContents()).not.toContain('Milestone');
     expect(await d.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     // Tab يدور داخلها
     for (let i = 0; i < 25; i += 1) {

@@ -1492,3 +1492,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .la-tabs button.on .ft-hidden-badge { border-color: currentColor; color: inherit; }
 .ft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--st-warn); background: color-mix(in srgb, var(--st-warn) 10%, transparent); font-size: .86rem; }
 @media (max-width: 640px) { .ft-grid { grid-template-columns: 1fr; } }
+
+/* التحقق الإضافي (StepUp.jsx): نافذة مفتاح المساعد و«فعّل الكتابة»، في الحزمة الأولى لأن الشريط في الإطار */
+.ag-stepup h3 { margin: 0 0 6px; }
+.ag-su-opts { display: grid; gap: 14px; margin: 12px 0; }
+.ag-su-code { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.ag-su-code label { display: grid; gap: 4px; font-size: .84rem; }
+.ag-su-code input { inline-size: 9em; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; letter-spacing: .2em; text-align: center; }
+/* شريط «للقراءة فقط» لجلسة رمز البريد (App.jsx): كهرماني لا أحمر، فهو حال الجلسة لا عطل */
+.ro-banner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 16px; background: var(--st-warn-bg); color: var(--st-warn-text); border-block-end: 2px solid var(--st-warn-text); font-size: .86rem; }
+.ro-banner-text { flex: 1 1 260px; }
+/* المخرج الوحيد من وضع القراءة: هدف لمس 44 بكسل على الأقل (WCAG 2.5.5) كأزرار القارئ */
+.ro-banner .btn-sm { min-block-size: 44px; min-inline-size: 44px; }

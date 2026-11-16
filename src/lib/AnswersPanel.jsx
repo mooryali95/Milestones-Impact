@@ -8,14 +8,15 @@
 // وuseDialog في بوابة الخبير. والتصدير يُمرَّر من اللوحة وحدها (onCsv)، فلا زر له عند المستشار.
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DIM_AR, DIM_SHORT } from '../../supabase/functions/leaders-api/labels.js';
+import { DIM_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { ANSWER_CLASS_AR, EFFORT_AR, REVIEW_TIER_AR, secondsAr, sectionTitle, TIMING_DISCLAIMER_AR, TIMING_NOTE_AR } from '../../supabase/functions/leaders-api/answer-review.js';
 import './answers-panel.css';
 
 const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '');
 const KIND_AR = { baseline: 'المبدئي', post: 'البعدي', final: 'الختامي' };
 const assessmentName = (a) => [KIND_AR[a.kind] || 'القياس', a.form ? `الصيغة ${a.form}` : null, day(a.submitted_at)].filter(Boolean).join(' · ');
-const dimName = (d) => DIM_SHORT[d] || d;
+// الإطار باسمه العربي وحده (المرحلة 2 من تصور لوحة الإدارة)، كالملف وبطاقة المستوى
+const dimName = (d) => DIM_AR[d] || d;
 const CLASS_MARK = { full: '✓', partial: '◐', wrong: '✗', na: '∅', likert: '' };
 const FILTERS = [
   { key: 'all', label: 'الكل', test: () => true },
@@ -161,7 +162,7 @@ export default function AnswersPanel({ boxRef, who, data, error, onRetry, onClos
               {dims.length > 1 && (
                 <select aria-label="البُعد" value={dim} onChange={(e) => setDim(e.target.value)}>
                   <option value="">كل الأبعاد</option>
-                  {dims.map((d) => <option key={d} value={d}>{dimName(d)} · {DIM_AR[d]}</option>)}
+                  {dims.map((d) => <option key={d} value={d}>{dimName(d)}</option>)}
                 </select>
               )}
               <span className="ap-actions">
