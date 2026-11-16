@@ -1,6 +1,8 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { alertWebhook, MAIL_FROM_DEFAULT, sendCounted } from '../_shared/mail.ts';
+import { MAIL_FROM_DEFAULT, sendCounted } from '../_shared/mail.ts';
+// التنبيه بمسار التشغيل الموحد كـ leaders-hooks وcreem-webhook: أثر system.alert في السجل، ثم سلاك والرابط، ثم بريد LEADERS_ALERT_EMAIL
+import { alertOps } from '../leaders-api/core.ts';
 import { clientIp, turnstileOk } from '../_shared/guard.ts';
 import { insertContactRequest, notifyAdmin } from '../_shared/contact.ts';
 import { slackUse } from '../_shared/slack.ts';
@@ -44,6 +46,6 @@ Deno.serve((req: Request) => {
     turnstile: (token, ip) => turnstileOk(env.turnstileSecret, token, ip),
     model: (messages, onText, signal, apiKey, opts) => streamAnswer(apiKey || '', env.model, messages, onText, signal, undefined, opts),
     notifyAdmin: (row) => notifyAdmin(db, row, sendEmail, env.adminEmail, `المساعد الآلي من ${row.product}`),
-    alert: (kind, detail) => alertWebhook(kind, detail),
+    alert: (kind, detail) => alertOps(kind, { fn: 'agent-chat', ...detail }),
   });
 });

@@ -5,7 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { STUCK_MAIL_SUBJECT, stuckMailText } from './onboarding.js';
 import { stageText } from './nudge.js';
 import { RETAKE_BUTTON, RETAKE_MAIL_SUBJECT, RETAKE_TITLE, retakeText } from './retake.js';
-import { alertWebhook, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
+import { alertWebhook, slackAlertDelivered, bdi, esc, MAIL_FROM_DEFAULT, type MailAttachment, mailButton, mailCode, mailCounts, type MailKind, mailNote, mailRows, mailShell, mailText, type MailFamily, type MailTitle, mailTitle, sendCounted } from '../_shared/mail.ts';
 import { SITES } from '../_shared/sites.js';
 import { slackCode, slackMail, slackUse } from '../_shared/slack.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
@@ -290,7 +290,7 @@ export async function stuckQueueAlert(hold: Set<string> = new Set()) {
   if (!fresh.length) return { stuck: rows.length, alerted: 0 };
   const hours = Math.floor((Date.now() - Date.parse(fresh[0].created_at)) / 36e5);
   const r = await raiseAlert('mail_queue_stuck', { messages: fresh.length, waiting_over_hours: QUEUE_ALERT_HOURS, oldest_hours: hours, ...(fresh[0].reason ? { reason: fresh[0].reason } : {}) });
-  if (!r.webhook && !r.email) return { stuck: rows.length, alerted: 0 };
+  if (!r.webhook && !r.slack && !r.email) return { stuck: rows.length, alerted: 0 };
   const { error: markError } = await db.from('audit_log').insert(fresh.map((m) => ({ actor_type: 'system', actor: 'cron', action: 'mail.queue-stuck', entity: 'mail_queue', entity_id: m.id })));
   if (markError) console.error('mail.queue-stuck marks:', markError.message);
   return { stuck: rows.length, alerted: fresh.length };
@@ -382,7 +382,15 @@ export function paymentReceiptMail(name: string, item: string, amount: string, o
     + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
     'تأكيد الدفع', 'إيصال الدفع الرسمي يصلك من مزوّد الدفع Creem على البريد نفسه.');
 }
-export function paymentRefundMail(name: string, item: string, amount: string) {
+// of: المدفوع كله حين يكون الاسترداد جزئيًا (payments.ts): الحق باقٍ فلا يُقال «أُقفل»
+export function paymentRefundMail(name: string, item: string, amount: string, of = '') {
+  if (of) {
+    return shell('journey', 'استُردّ جزء من دفعتك',
+      mailText(`${hello(name)} استُردّ جزء من دفعتك، ويعود المبلغ المسترد إلى وسيلة الدفع نفسها خلال أيام بحسب مصرفك.`)
+      + mailRows([['البند', item], ['المبلغ المسترد', amount], ['من المدفوع', of]])
+      + mailText('ما فتحه هذا الدفع في حسابك باقٍ كما هو. إن كان الاسترداد خطأ أو لديك سؤال فردّ على هذه الرسالة.'),
+      'استرداد جزء من دفعة');
+  }
   return shell('journey', 'استُردّت دفعتك',
     mailText(`${hello(name)} استُردّت دفعتك، ويعود المبلغ إلى وسيلة الدفع نفسها خلال أيام بحسب مصرفك.`)
     + mailRows([['البند', item], ['المبلغ', amount]])
@@ -638,17 +646,21 @@ export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
   // كل تغيير في المساعد يُبلَّغ (بلا تهدئة)
   agent_key_changed: 0, agent_key_reverted: 0, agent_enabled: 0, agent_disabled: 0,
+  // تنبيهات agent-chat تُهدَّأ هناك بعلامة يومية في القاعدة (agent_spend_alert)، فلا تهدئة ثانية تحجب مستوى عن آخر
+  agent_spend_80: 0, agent_spend_cap: 0, agent_eval_stale: 0, agent_model_unknown: 0, agent_ledger_error: 0, agent_model_config: 0,
 };
 export const alertCooldown = (kind: string) => ALERT_COOLDOWN_MS[kind] ?? ALERT_WINDOW_MS;
 const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات' };
 export function alertMail(kind: string, detail: Record<string, unknown>, windowMs = ALERT_WINDOW_MS) {
   const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
+  // fn: الدالة التي رفعت التنبيه إن لم تكن leaders-api (agent-chat مثلًا)
+  const where = typeof detail.fn === 'string' && detail.fn ? detail.fn : 'leaders-api';
   const calm = windowMs > 0 ? ` لن يصلك تنبيه آخر من النوع نفسه خلال ${SPAN_AR[windowMs] ?? `${Math.round(windowMs / 6e4)} دقيقة`}.` : '';
   return shell('admin', `تنبيه تشغيلي: ${kind}`,
-    mailText(`وقع <b>${bdi(kind)}</b> في leaders-api الآن.${esc(calm)}`)
+    mailText(`وقع <b>${bdi(kind)}</b> في ${bdi(where)} الآن.${esc(calm)}`)
     + mailRows(rows)
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
-    `${kind} في leaders-api`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
+    `${kind} في ${where}`, 'يصلك هذا التنبيه لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 // بريد mail_queue_stuck: التنبيه بالبريد من نصيب الرموز في السقف، والطابور يتأخر في الأيام المزدحمة نفسها،
 // فلا يُرسل إلا حين لا يصل الرابط، ومرة كل ست ساعات بين النسخ (من سجل البريد بعنوانه). ما لم يصل لا يُعلَّم ويُعاد
@@ -664,10 +676,10 @@ async function stuckMailDue() {
 // تهدئة احتياطية داخل النسخة حين يتعذّر السجل نفسه (تنبيه audit_failed مثلًا)، فلا يفيض البريد
 const lastAlert = new Map<string, number>();
 // cooled: كُبح بالمهلة فلم يُرسل شيء، وwebhook وemail: ما وصل من القناتين
-export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean };
+export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; slack?: boolean };
 export async function raiseAlert(kind: string, detail: Record<string, unknown>): Promise<AlertResult> {
   const windowMs = alertCooldown(kind);
-  const cooled = { cooled: true, webhook: false, email: false };
+  const cooled = { cooled: true, webhook: false, email: false, slack: false };
   if (windowMs > 0 && (lastAlert.get(kind) ?? 0) > Date.now() - windowMs) return cooled;
   // المهلة تُحجز قبل أول انتظار: دفعة متزامنة (رموز محجوبة بالسقف) تنبيه واحد لا تستنفد احتياط البريد
   if (windowMs > 0) lastAlert.set(kind, Date.now());
@@ -680,11 +692,13 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
     }
     // أثر التنبيه يهدّئ التنبيهات بين النسخ؛ وتعذّره لا يمنع التنبيه، فقد يكون التنبيه عن تعذّر السجل نفسه
     await audit('system', 'alert', 'system.alert', 'system', kind, null, detail).catch((e) => console.error('alertOps audit:', e));
-    // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه
-    const webhook = await alertWebhook(kind, detail);
-    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, email: false };
+    // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه. سلاك والرابط معًا، وكلاهما قناة كافية
+    // (readiness.js ALERT_CHANNELS)، فنتيجة سلاك تُنتظر (بمهلة) لتُحسب في «وصل» كما يُحسب الرابط
+    const [webhook, slack] = await Promise.all([alertWebhook(kind, detail, { slack: false }), slackAlertDelivered(kind, detail)]);
+    const other = webhook || slack;
+    if (!CONFIG.alertEmail || !CONFIG.resendKey) return { cooled: false, webhook, slack, email: false };
     if (kind === 'mail_queue_stuck') {
-      if (webhook || !(await stuckMailDue())) return { cooled: false, webhook, email: false };
+      if (other || !(await stuckMailDue())) return { cooled: false, webhook, slack, email: false };
       stuckMailAt = Date.now();
     }
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
@@ -692,12 +706,12 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });
     // بريد الطابور لم يصل: تُرفع مهلته فيُعاد في الساعة التالية لا بعد ست ساعات
     if (kind === 'mail_queue_stuck' && !email) stuckMailAt = 0;
-    return { cooled: false, webhook, email };
-  } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false }; }
+    return { cooled: false, webhook, slack, email };
+  } catch (e) { console.error('alertOps:', e); return { cooled: false, webhook: false, email: false, slack: false }; }
 }
 export async function alertOps(kind: string, detail: Record<string, unknown>) {
   const r = await raiseAlert(kind, detail);
-  return r.webhook || r.email;
+  return r.webhook || !!r.slack || r.email;
 }
 
 // معرض المعاينة في لوحة الإدارة: كل قالب ببيانات تجريبية، من الدوال نفسها التي تُرسل
@@ -709,6 +723,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'approved-pay', family: 'journey', label: 'اعتماد المسار مع رابط الدفع', subject: 'اعتُمد مسارك في برنامج القادة', html: () => approvedMail('سارة', true) },
   { key: 'pay-receipt', family: 'journey', label: 'تأكيد الدفع للعميل (بمفتاح)', subject: 'وصلنا دفعك', html: () => paymentReceiptMail('سارة', 'القياس المبدئي', '1.99 USD', 'ord_123', 'القياس مفتوح لك الآن.') },
   { key: 'pay-refund', family: 'journey', label: 'إشعار الاسترداد للعميل (بمفتاح)', subject: 'استُردّت دفعتك', html: () => paymentRefundMail('سارة', 'القياس المبدئي', '1.99 USD') },
+  { key: 'pay-refund-partial', family: 'journey', label: 'إشعار الاسترداد الجزئي للعميل (بمفتاح)', subject: 'استُردّ جزء من دفعتك', html: () => paymentRefundMail('سارة', 'رسم البرنامج', '20.00 USD', '99.00 USD') },
   { key: 'pay-abandon', family: 'journey', label: 'تذكير من لم يكمل الدفع (يدوي)', subject: 'دفعك لم يكتمل', html: () => paymentAbandonMail('سارة', 'القياس المبدئي') },
   { key: 'pay-owner', family: 'admin', label: 'تنبيه الإدارة بدفعة (بمفتاح)', subject: 'دفعة جديدة', html: () => paymentOwnerMail('دفعة جديدة', [['المشارك', 'سارة الأحمد'], ['البند', 'القياس المبدئي'], ['المبلغ', '1.99 USD']]) },
   { key: 'pay-reminder', family: 'journey', label: 'تذكير إكمال التسجيل', subject: 'مسارك المعتمد بانتظارك', html: () => payReminderMail('سارة', 3) },

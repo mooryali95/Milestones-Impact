@@ -9,7 +9,8 @@
 // الاتجاه على كل جدول وخلية وفقرة لا على html وحده: Gmail يحذف سمات html وbody، فيرث المتن اتجاه واجهته.
 
 import { crossesAlert, domainOf, mailDecision, PRIORITY_KINDS } from './mail-budget.js';
-import { slackAlert, slackCode, slackMail, slackUse } from './slack.ts';
+import { maskAlertDetail, maskText, slackAlert, slackCode, slackMail, slackUse } from './slack.ts';
+export { slackAlertDelivered } from './slack.ts';
 
 // ألوان البريد من ألوان الهوية (shared/js/brand.js) بالقيم نفسها؛ دوال الحافة لا تستورد من خارج
 // supabase/functions، فتُنسخ هنا ويطابقها single-source.test.js. القيم مكتوبة لأن برامج البريد لا تقرأ متغيرات CSS.
@@ -153,15 +154,20 @@ export const deliver = async (to: string, subject: string, html: string, opts: D
 // تنبيه المالك عبر قناة غير البريد (D15): رابط ويب (Slack أو Teams أو Telegram أو غيرها) في LEADERS_ALERT_WEBHOOK.
 // حين يكون العطل في البريد نفسه لا يصل تنبيه بالبريد، فهذه القناة لا تعتمد عليه.
 const WEBHOOK_TIMEOUT_MS = 5000;
-export async function alertWebhook(kind: string, detail: Record<string, unknown>) {
-  // سلسلة التنبيهات في سلاك إن ضُبط البوت: لا يُنتظر ولا يُحسب في نتيجة الرابط (slack.ts)
-  slackAlert(kind, detail);
+export async function alertWebhook(kind: string, detail: Record<string, unknown>, { slack = true }: { slack?: boolean } = {}) {
+  // سلسلة التنبيهات في سلاك إن ضُبط البوت: لا يُنتظر ولا يُحسب في نتيجة الرابط (slack.ts). ومن يحتاج نتيجة سلاك
+  // (raiseAlert) يمرر slack:false وينشر بـ slackAlertDelivered، فلا يُنشر مرتين
+  if (slack) slackAlert(kind, detail);
   const url = Deno.env.get('LEADERS_ALERT_WEBHOOK') || '';
   if (!url) { console.error('alert (no webhook):', kind, JSON.stringify(detail)); return false; }
   try {
-    const text = `[Milestone Impact] ${kind}: ${JSON.stringify(detail)}`;
+    // الرابط كثيرًا ما يكون رابط سلاك وارد أو قناة دردشة: يُطمس كما يُطمس نشر البوت (maskAlertDetail)، فلا يحمل بريدًا كاملًا
+    // ولا هاتفًا ولا رمزًا ولا مفتاحًا. سجل الدالة (console) يبقى بالتفاصيل كاملة لمن يملك لوحة Supabase
+    const safeKind = maskText(kind);
+    const safe = maskAlertDetail(detail);
+    const text = `[Milestone Impact] ${safeKind}: ${JSON.stringify(safe)}`;
     // مهلة قصيرة: رابط بطيء لا يؤخر رد طلب الرمز المحجوب
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text, kind, detail }), signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS) });
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, content: text, kind: safeKind, detail: safe }), signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS) });
     return r.ok;
   } catch (e) { console.error('alertWebhook:', e); return false; }
 }

@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 // الأحكام المشتركة مع حالة النظام في اللوحة (system.ts): الأسرار، والترحيلات بوسم بوابة النشر، وبنود م2 الآلية
-import { launchReadiness, migrationsSummary, pendingMigrations, REQUIRED_SECRETS } from '../../supabase/functions/leaders-api/readiness.js';
+import { launchReadiness, migrationsSummary, missingRequiredSecrets, pendingMigrations, REQUIRED_SECRETS } from '../../supabase/functions/leaders-api/readiness.js';
 import { MIGRATION_GATES, MIGRATIONS } from '../../supabase/functions/leaders-api/migrations.js';
 
 export const BASE_SCORE = 7.5;
@@ -207,7 +207,7 @@ export async function collect() {
   });
   f['m1.secrets'] = await safe(async () => {
     const names = new Set((await supa('/secrets')).map((s) => String(s.name)));
-    const missing = REQUIRED_SECRETS.filter((n) => !names.has(n));
+    const missing = missingRequiredSecrets((n) => names.has(n));
     return { ok: !missing.length, reason: missing.length ? `ناقص: ${missing.join('، ')}` : 'كلها مضبوطة (أسماء فقط)' };
   });
   f['m1.ci-main'] = await safe(() => lastRun('ci.yml', null, ['push']));

@@ -6,7 +6,7 @@
 // لا إعادة محاولة: الفشل يُسجَّل ويُترك، و429 يوقف النشر حتى Retry-After.
 // كل فئة لها سلسلة واحدة في يوم الرياض: رسالة أم مرة في اليوم، والأحداث ردود فيها. ts الأم في leaders.slack_threads،
 // وغياب الجدول (قبل ترحيله) ينشر بلا سلاسل ويبقى يعمل.
-// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (m***@gmail.com) والدالة.
+// لا يُنشر رمز ولا متن رسالة ولا بريد كامل: الحالة والغرض وبريد مقنّع (mon***@gmail.com) والدالة، وتفاصيل التنبيه مطموسة (alertLine).
 
 export type SlackCategory = 'alerts' | 'codes' | 'mail';
 export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: string }> = {
@@ -17,7 +17,7 @@ export const SLACK_CATEGORIES: Record<SlackCategory, { icon: string; label: stri
 export const SLACK_HELLO = '✅ تم ربط Milestone Impact بسلاك';
 
 // قابلة للضبط في الاختبار وحده
-export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMissingMs: 60e3, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
+export const SLACK = { timeoutMs: 4000, gapMs: 1100, maxLines: 20, maxPending: 60, missingTableMs: 10 * 60e3, statusMissingMs: 60e3, deliverWaitMs: 8000, claimWaitMs: 500, claimTries: 4, staleClaimMs: 10e3, flatMs: 10 * 60e3 };
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
@@ -36,14 +36,16 @@ export function parentText(category: SlackCategory, now = Date.now()) {
   return `${c.icon} ${c.label} · ${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
-// الحرف الأول والنطاق وحدهما، والنطاق بحروف النطاقات وحدها: ما سواها (< > ! |) يُطمس كله
+// أول ثلاثة أحرف بحد أقصى والنطاق، والنطاق بحروف النطاقات وحدها: ما سواها (< > ! |) يُطمس كله
 export function maskEmail(email: unknown) {
   const e = String(email ?? '').trim().toLowerCase();
   const at = e.lastIndexOf('@');
   if (at < 1) return '***';
-  const first = /[a-z0-9]/.test(e[0]) ? e[0] : '*';
+  // أول ثلاثة أحرف بحد أقصى، ولا تزيد على نصف الاسم: تكفي لتمييز الشخص في القائمة ولا تكشف بريده (قرار المالك 2026-11-16)
+  const local = e.slice(0, at);
+  const shown = [...local.slice(0, Math.min(3, Math.max(1, Math.floor(local.length / 2))))].map((c) => /[a-z0-9._-]/.test(c) ? c : '*').join('');
   const domain = e.slice(at + 1);
-  return `${first}***@${/^[a-z0-9.-]+$/.test(domain) ? domain : '***'}`;
+  return `${shown}***@${/^[a-z0-9.-]+$/.test(domain) ? domain : '***'}`;
 }
 
 // نص من خارج المنصة لا يصير أمرًا في سلاك (<!channel> ورابط مقنّع): الرموز الثلاثة تُرمَّز في كل سطر
@@ -198,6 +200,8 @@ function threadFor(client: Client, category: SlackCategory): Promise<Thread> {
 
 // ── الطابور ──
 const pending = new Map<SlackCategory, string[]>();
+// من ينتظر نتيجة سطره (slackDeliver): يُخبَر بنجاح الرسالة التي حملته أو فشلها، وما تُرك لازدحام يُخبَر بالفشل فورًا
+const waiters = new Map<SlackCategory, ((ok: boolean) => void)[]>();
 let pendingCount = 0;
 let dropped = 0;
 let lastClient: Client = null;
@@ -208,6 +212,9 @@ async function drain() {
     const [category, lines] = pending.entries().next().value as [SlackCategory, string[]];
     pending.delete(category);
     pendingCount -= lines.length;
+    const told = waiters.get(category) ?? [];
+    waiters.delete(category);
+    const tell = (ok: boolean) => told.forEach((f) => { try { f(ok); } catch { /* لا يرمي */ } });
     const shown = lines.slice(0, SLACK.maxLines);
     let text = shown.join('\n');
     if (lines.length > shown.length) text += `\n(و${lines.length - shown.length} أخرى من النوع نفسه)`;
@@ -216,15 +223,21 @@ async function drain() {
     // ما لم يُنشر لازدحام (429 أو التوقف بعده) يُحسب في المتروك فيُذكر في أول رسالة بعده
     const lost = (error?: string) => { if (error === 'paused' || error === 'rate_limited') dropped += carried + lines.length; };
     const t = await threadFor(lastClient, category);
-    if ('fail' in t) { lost(t.error); continue; }
+    if ('fail' in t) { lost(t.error); tell(false); continue; }
     const c = SLACK_CATEGORIES[category];
     const r = 'ts' in t ? await post(text, t.ts) : await post(`${c.icon} ${c.label}\n${text}`);
     if (!r.ok) { console.error('slack post:', category, r.error); lost(r.error); }
+    tell(r.ok);
   }
 }
 function start() {
   if (pump || !pendingCount) return pump;
-  pump = drain().catch((e) => console.error('slack:', e)).finally(() => { pump = null; start(); });
+  pump = drain().catch((e) => console.error('slack:', e)).finally(() => {
+    pump = null;
+    // عطل غير متوقع في الطابور: من بقي ينتظر لا يبقى معلقًا
+    if (!pendingCount) { for (const list of waiters.values()) list.forEach((f) => f(false)); waiters.clear(); }
+    start();
+  });
   try {
     // deno-lint-ignore no-explicit-any
     (globalThis as any).EdgeRuntime?.waitUntil?.(pump);
@@ -236,39 +249,107 @@ function start() {
 export function slackUse(client: Client) { if (client) lastClient = client; }
 
 // النشر نفسه: لا ينتظره المستدعي، ولا يرمي أبدًا. الوعد يُنتظر في الاختبار والمهمة الساعية وحدهما
-export function slackPost(category: SlackCategory, text: string, { client }: { client?: Client } = {}): Promise<void> {
+export function slackPost(category: SlackCategory, text: string, { client, onResult }: { client?: Client; onResult?: (ok: boolean) => void } = {}): Promise<void> {
   try {
-    if (!slackConfigured() || !SLACK_CATEGORIES[category]) return Promise.resolve();
+    if (!slackConfigured() || !SLACK_CATEGORIES[category]) { onResult?.(false); return Promise.resolve(); }
     slackUse(client);
-    if (pausedUntil > Date.now() || pendingCount >= SLACK.maxPending) { dropped++; return pump ?? Promise.resolve(); }
+    if (pausedUntil > Date.now() || pendingCount >= SLACK.maxPending) { dropped++; onResult?.(false); return pump ?? Promise.resolve(); }
     const line = slackEscape(String(text || '').slice(0, 600));
     const list = pending.get(category) ?? [];
     list.push(line);
     pending.set(category, list);
+    if (onResult) waiters.set(category, [...(waiters.get(category) ?? []), onResult]);
     pendingCount++;
     return start() ?? Promise.resolve();
-  } catch (e) { console.error('slack:', e); return Promise.resolve(); }
+  } catch (e) { console.error('slack:', e); onResult?.(false); return Promise.resolve(); }
+}
+// النشر مع نتيجته: true إن نُشر السطر فعلًا في سلاك، وfalse إن لم يُضبط أو تُرك أو رُفض أو لم يُنشر قبل waitMs.
+// لمن يقرر بالنتيجة قناة احتياطية (raiseAlert: بريد الطابور العالق لا يُرسل إن وصل سلاك)، ولا يرمي أبدًا
+export function slackDeliver(category: SlackCategory, text: string, { client, waitMs = SLACK.deliverWaitMs }: { client?: Client; waitMs?: number } = {}): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => { if (!done) { done = true; clearTimeout(timer); resolve(ok); } };
+    const timer = setTimeout(() => finish(false), waitMs);
+    slackPost(category, text, { client, onResult: finish });
+  });
 }
 export async function slackIdle() { while (pump || statusWrite) await (pump ?? statusWrite); }
 
 // ── السطور الجاهزة ──
 // رمز الدخول: الحالة والغرض والبريد المقنّع والدالة، وأي ستة أرقام متتالية تُطمس احتياطًا
 const STATUS = { sent: '✅ أُرسل', blocked: '⛔ حُجب', failed: '❌ تعذّر' } as const;
+// نوع البريد وسبب عدم وصوله بالعربية، والرمز التقني بين قوسين ليُتتبع في السجل
+const MAIL_KIND_AR: Record<string, string> = { notify: 'إشعار', bulk: 'تذكير جماعي', contact: 'رسالة تواصل', alert: 'تنبيه للمالك', code: 'رمز دخول' };
+const REASON_AR: Record<string, string> = {
+  mail_share: 'امتلأت حصة الإشعارات لليوم',
+  mail_cap: 'بلغ البريد سقفه اليومي',
+  mail_unconfigured: 'خدمة البريد غير مهيأة',
+  mail_counter_unavailable: 'تعذّرت قراءة عداد البريد',
+  mail_kind: 'نوع بريد غير معروف',
+  rejected: 'رفضه مزوّد البريد',
+  mail_failed: 'تعذّر الإرسال',
+  blocked: 'حُجب',
+  failed: 'تعذّر',
+};
+export function reasonText(reason: string) {
+  const [code, ...rest] = String(reason).trim().split(/\s+/);
+  const ar = REASON_AR[code];
+  return ar ? `${ar} (${[code, ...rest].join(' ')})` : String(reason);
+}
 export function codeLine({ status, purpose, to, source, reason }: { status: keyof typeof STATUS; purpose?: string | null; to: string; source: string; reason?: string | null }) {
-  const parts = [STATUS[status], purpose || 'رمز دخول', maskEmail(to), source, ...(reason ? [reason] : [])];
+  const parts = [STATUS[status], purpose || 'رمز دخول', maskEmail(to), source, ...(reason ? [reasonText(reason)] : [])];
   return parts.join(' · ').replace(/\d{6}/g, '••••••');
 }
+// عنوان الرسالة لا يُنشر: يحمل أسماء المشاركين والجهات، والسياسة تعد بلا نص رسالة في سلاك. العنوان في مركز البريد
 export function mailLine({ kind, to, source, reason }: { kind: string; to: string; source: string; reason: string }) {
-  return [`${kind}`, maskEmail(to), source, reason].join(' · ');
+  return [MAIL_KIND_AR[kind] ?? kind, maskEmail(to), reasonText(reason), source].join(' · ');
 }
+// تفاصيل التنبيه تأتي من مواضع كثيرة (رسالة خطأ، أو رد مزوّد، أو حقل من الطلب)، فتُطمس قبل النشر: البريد مقنّعًا
+// (maskEmail)، والرمز السري ومفاتيح الواجهات والقيم الطويلة الشبيهة بها، والهاتف (يبقى آخر رقمين)، وأي ستة أرقام
+// متتالية (رمز الدخول). الحقل باسم سرّي (token وsecret وpassword وotp وapi_key وما ينتهي بـ _token أو _secret أو _key)
+// تُطمس قيمته كلها. المعرّفات بشكل UUID والتواريخ والأعداد القصيرة تبقى، فهي ما يدل على موضع العطل
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g;
+const SECRET_RE = /\b(?:xox[a-z]-|sk-|sk_|pk_|rk_|re_|whsec_|ghp_|gho_|github_pat_|eyJ)[A-Za-z0-9._-]{6,}|\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g;
+// طويل بحروف وأرقام معًا: mail_counter_unavailable اسم لا سر
+const LONG_RE = /\b(?=[A-Za-z0-9_]*\d)(?=[A-Za-z0-9_]*[A-Za-z])[A-Za-z0-9_]{24,}\b/g;
+const PHONE_RE = /(?<![\w.:])\+?\d(?:[\s-]?\d){8,14}(?![\w.:])/g;
+// ستة أرقام قائمة بنفسها: ما التصق بحرف أو شرطة سفلية جزء من معرّف (ord_123456) لا رمز
+const CODE_RE = /(?<![A-Za-z0-9_])\d{6}(?![A-Za-z0-9_])/g;
+// UUID يُحجز قبل الطمس ويعود بعده كما هو: مقاطعه الرقمية تشبه الهاتف والرمز، وهو ما يدل على موضع العطل
+const UUID_RE = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g;
+const SECRET_KEY = /^(?:token|secret|password|passwd|otp|pin|code_value|api_?key|authorization|cookie|signature)$|_(?:token|secret|key)$/i;
+export const MASKED = '[مخفي]';
+export function maskText(t: string) {
+  const held: string[] = [];
+  return String(t)
+    .replace(/[\uE000\uE001]/g, '')
+    .replace(UUID_RE, (u) => `\uE000${held.push(u) - 1}\uE001`)
+    .replace(SECRET_RE, MASKED)
+    .replace(EMAIL_RE, (e) => maskEmail(e))
+    .replace(PHONE_RE, (p) => `${'•'.repeat(4)}${p.replace(/\D/g, '').slice(-2)}`)
+    .replace(LONG_RE, MASKED)
+    .replace(CODE_RE, '••••••')
+    .replace(/\uE000(\d+)\uE001/g, (_m, i) => held[Number(i)] ?? '');
+}
+function maskDetail(v: unknown, key = '', depth = 0): unknown {
+  if (key && SECRET_KEY.test(key) && v != null && v !== '') return MASKED;
+  if (typeof v === 'string') return maskText(v);
+  if (typeof v === 'number') return Number.isInteger(v) && Math.abs(v) >= 1e5 && Math.abs(v) < 1e7 ? maskText(String(v)) : v;
+  if (depth > 4 || v == null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((x) => maskDetail(x, '', depth + 1));
+  return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, maskDetail(x, k, depth + 1)]));
+}
+// التفاصيل نفسها مطموسة لكل قناة غير البريد (رابط التنبيه في mail.ts كذلك): لا قناة تحمل ما تخفيه أختها
+export const maskAlertDetail = (detail: Record<string, unknown>) => maskDetail(detail) as Record<string, unknown>;
 export function alertLine(kind: string, detail: Record<string, unknown>) {
   let d = '';
-  try { d = JSON.stringify(detail); } catch { d = ''; }
-  return `*${kind}* ${d}`.slice(0, 1200);
+  try { d = JSON.stringify(maskDetail(detail)); } catch { d = ''; }
+  return `*${maskText(kind)}* ${d}`.slice(0, 1200);
 }
 export const slackCode = (client: Client, o: Parameters<typeof codeLine>[0]) => slackPost('codes', codeLine(o), { client });
 export const slackMail = (client: Client, o: Parameters<typeof mailLine>[0]) => slackPost('mail', mailLine(o), { client });
 export const slackAlert = (kind: string, detail: Record<string, unknown>) => slackPost('alerts', alertLine(kind, detail));
+export const slackAlertDelivered = (kind: string, detail: Record<string, unknown>) => slackDeliver('alerts', alertLine(kind, detail));
 
 // ── رسالة الربط: مرة واحدة من المهمة الساعية، وعلامتها صف category=hello ──
 // بلا الجدول لا تُرسل (لا علامة تمنع تكرارها كل ساعة)
@@ -299,4 +380,6 @@ export async function slackHello(client: Client): Promise<'off' | 'exists' | 'no
 export function resetSlack() {
   threads.clear(); flatUntil.clear(); pending.clear(); pendingCount = 0; dropped = 0; pausedUntil = 0; lastSendAt = 0; missingUntil = 0; lastClient = null;
   statusMissingUntil = 0; statusWrite = null;
+  for (const list of waiters.values()) list.forEach((f) => f(false));
+  waiters.clear();
 }

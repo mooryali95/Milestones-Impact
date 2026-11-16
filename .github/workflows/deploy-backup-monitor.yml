@@ -1,0 +1,74 @@
+name: Deploy backup monitor
+
+# ينشر workers/backup-monitor (مراقب حداثة النسخ، D09) إلى Cloudflare بـ wrangler، عند كل تغيير فيه على main أو يدويًا.
+# يعمل فقط إن وُجد السر CLOUDFLARE_API_TOKEN، وإلا يتخطى بتحذير ظاهر في ملخص التشغيل ولا يُفشل شيئًا.
+# معرّف الحساب: CLOUDFLARE_ACCOUNT_ID إن ضُبط، وإلا R2_ACCOUNT_ID المضبوط للنسخ (الحساب نفسه).
+# أسرار التنبيه (ALERT_TO وRESEND_API_KEY، وSLACK_BOT_TOKEN وSLACK_CHANNEL) أسرار Worker تُضبط مرة في Cloudflare
+# ولا يمسها النشر ولا تمر بهذا السير (RUNBOOK.md §4).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/backup-monitor/**'
+      - '.github/workflows/deploy-backup-monitor.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backup-monitor
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+    steps:
+      - name: Skip without a Cloudflare token
+        id: gate
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN is not set; the backup monitor was NOT deployed (RUNBOOK.md §4)."
+            echo "### Backup monitor not deployed: set the CLOUDFLARE_API_TOKEN secret (RUNBOOK.md §4)" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::Neither CLOUDFLARE_ACCOUNT_ID nor R2_ACCOUNT_ID is set; wrangler will pick the account from the token."
+          fi
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: '20'
+      - name: Unit check before deploy
+        if: steps.gate.outputs.skip != 'true'
+        run: node --check workers/backup-monitor/index.js
+      - name: Deploy with wrangler
+        if: steps.gate.outputs.skip != 'true'
+        id: deploy
+        working-directory: workers/backup-monitor
+        run: |
+          npx --yes wrangler@4.152.0 deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      # النشر نجح؛ هذه الخطوة تقرأ /health وتعرض حاله. 503 معناه نسخة متأخرة أو غائبة، وهذا ما يراقبه الـWorker
+      # نفسه، فيُعرض تحذيرًا لا فشلًا للنشر
+      - name: The monitor answers /health
+        if: steps.gate.outputs.skip != 'true' && steps.deploy.outputs.url != ''
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          sleep 5
+          code=$(curl -s -o "$RUNNER_TEMP/health.json" -w '%{http_code}' --max-time 20 "$URL/health" || true)
+          echo "/health: $code $(cat "$RUNNER_TEMP/health.json" 2>/dev/null)"
+          echo "### Backup monitor deployed: $URL/health answered $code" >> "$GITHUB_STEP_SUMMARY"
+          case "$code" in
+            200) ;;
+            503) echo "::warning::The monitor is live but reports the latest backup as stale or missing (see the body above)." ;;
+            *) echo "::error::The monitor did not answer /health (HTTP $code)."; exit 1 ;;
+          esac

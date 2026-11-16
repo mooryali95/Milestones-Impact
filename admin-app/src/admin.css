@@ -1475,6 +1475,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .mx-text .la-row { grid-column: 2; }
 @media (max-width: 640px) { .mx-text { grid-template-columns: 1fr; } .mx-text .la-row { grid-column: 1; } }
 
+/* الحاجز الأخير حول اللوحة (ScreenBoundary scope="app" في main.jsx): رسالة في وسط الصفحة بدل صفحة بيضاء */
+.la-err-app { max-width: 640px; margin: 48px auto; padding: 16px 18px; }
+.la-err-app .btn-sm { margin-inline-start: 6px; }
+
+/* «أين توقفوا» من ملف الدفعة (#/leaders/insight?cohort=): شريط الدفعة المختارة وزر العودة إلى كل الدفعات */
+.ins-focus { margin-bottom: 8px; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-radius: 6px; background: var(--brand-surface-soft, rgba(0, 0, 0, .03)); }
+.ins-focus p { margin: 0; }
+
 /* الميزات قيد البناء (مفاتيح الميزات P2): ثلاثة مفاتيح متجاورة، وشارة على القسم المخفي، وشريط في أعلى شاشته */
 .ft-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
 .ft-switch { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--brand-line); border-radius: 10px; border-inline-start: 3px solid var(--st-warn); }

@@ -12,16 +12,20 @@ import { Empty, NoMatch, Spinner } from '../ui.jsx';
 import { ACTOR_AR, CHANGE_AREAS, LOAD_AR, LOAD_TONE, PIPELINE, PIPELINE_AR, stageFilter, STUCK_STAGES, WAITING_STAGES } from '../../../supabase/functions/leaders-api/insight.js';
 import { EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { COHORT_STATUS as COHORT_STATUS_AR } from '../methodology.js';
+import { readQuery, writeQuery } from '../route.js';
 
 const VIEWS = [['org', 'بالجهة'], ['cohort', 'بالدفعة'], ['experts', 'حِمل الخبراء'], ['changes', 'ماذا تغيّر']];
 const tone = (stage) => (STUCK_STAGES.includes(stage) ? 'stuck' : WAITING_STAGES.includes(stage) ? 'wait' : stage === 'out' ? 'out' : 'ok');
 const listHref = (group, key, stage) => `#/leaders/participants?${encodeState({ ...(key === 'all' ? {} : { [group]: key }), ...(stage ? stageFilter(stage) : {}) })}`;
 
-// جدول المراحل: صف لكل جهة أو دفعة، وعمود لكل مرحلة، والخانة رابط إلى أصحابها
-function Pipeline({ data, group, noun, extra }) {
+// الدفعة من الرابط (#/leaders/insight?cohort=<id>، من بطاقة «أين توقفوا» في ملف الدفعة): تُفتح «بالدفعة» عليها وحدها
+export const cohortFromQuery = (qs = readQuery()) => new URLSearchParams(qs).get('cohort') || null;
+
+// جدول المراحل: صف لكل جهة أو دفعة، وعمود لكل مرحلة، والخانة رابط إلى أصحابها. only: صف مجموعة واحدة بلا الإجمالي
+function Pipeline({ data, group, noun, extra, only = null }) {
   const [f, setF] = useFilters(['sort'], {}, { scope: `insight-${group}`, url: false });
   const sorts = useMemo(() => ({ name: (g) => g.name, total: (g) => g.total, stuck: (g) => g.stuck, waiting: (g) => g.waiting, approved: (g) => g.approved_pct, active: (g) => g.active_pct, ...Object.fromEntries(PIPELINE.map((k) => [k, (g) => g.stages[k]])) }), []);
-  const rows = sortRows(data.groups, sorts, f.sort);
+  const rows = sortRows(only ? data.groups.filter((g) => g.key === only) : data.groups, sorts, f.sort);
   const cols = [
     { key: 'name', label: noun, width: 28, get: (g) => g.name }, { key: 'total', label: 'المشاركون', width: 12, get: (g) => g.total },
     ...PIPELINE.map((k) => ({ key: k, label: PIPELINE_AR[k], width: 16, get: (g) => g.stages[k] })),
@@ -55,11 +59,11 @@ function Pipeline({ data, group, noun, extra }) {
             </tr>
           ))}
         </tbody>
-        <tfoot><tr>
+        {!only && <tfoot><tr>
           <th scope="row">{data.total.name}</th><td><b>{data.total.total}</b></td>
           {PIPELINE.map((k) => <td key={k}>{data.total.stages[k] ? <a className={`ins-n ${tone(k)}`} href={listHref(group, 'all', k)}>{data.total.stages[k]}</a> : <span className="la-muted">·</span>}</td>)}
           <td><b>{data.total.approved_pct}%</b></td><td><b>{data.total.active_pct}%</b></td>
-        </tr></tfoot>
+        </tr></tfoot>}
       </table></div>
     </>
   );
@@ -139,12 +143,24 @@ function Changes({ onPerson }) {
 }
 
 export default function Insight({ onPerson, onExpert }) {
-  const [view, setView] = useState(() => { try { return sessionStorage.getItem('mi_admin_insight_view') || 'org'; } catch { return 'org'; } });
+  // دفعة من الرابط تفتح «بالدفعة» عليها، ولا تغيّر القسم المحفوظ للزيارة التالية
+  const [focus, setFocus] = useState(() => cohortFromQuery());
+  const [view, setView] = useState(() => { if (focus) return 'cohort'; try { return sessionStorage.getItem('mi_admin_insight_view') || 'org'; } catch { return 'org'; } });
   const [d, setD] = useState(null);
   const load = useCallback(async () => { setD(null); setD(await L('admin.insight', {})); }, []);
   useEffect(() => { load(); }, [load]);
-  const pick = (v) => { setView(v); try { sessionStorage.setItem('mi_admin_insight_view', v); } catch { /* اختياري */ } };
-  const t = d?.success ? d.by_org.total : null;
+  // رابط دفعة أخرى والشاشة مفتوحة (زر الرجوع أو بطاقة ثانية)
+  useEffect(() => {
+    // الرابط هو المصدر: دفعة فيه تُفتح عليها، وغيابها (رجوع إلى #/leaders/insight أو حذفها من الرابط) يعيد كل الدفعات
+    const on = () => { const c = cohortFromQuery(); setFocus(c); if (c) setView('cohort'); };
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  const clearFocus = () => { setFocus(null); writeQuery(''); };
+  const pick = (v) => { setView(v); if (v !== 'cohort' && focus) clearFocus(); try { sessionStorage.setItem('mi_admin_insight_view', v); } catch { /* اختياري */ } };
+  const focused = focus && d?.success ? d.by_cohort.groups.find((g) => g.key === focus) || null : null;
+  // البطاقات العليا للدفعة المختارة وحدها إن وُجدت، وإلا للجميع
+  const t = d?.success ? (focused || d.by_org.total) : null;
   return (
     <div className="ins">
       <div className="stats-grid">
@@ -161,7 +177,17 @@ export default function Insight({ onPerson, onExpert }) {
           : !d ? <Spinner />
             : !d.success ? <div className="la-err" role="alert">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div>
               : view === 'org' ? <Pipeline data={d.by_org} group="org" noun="الجهة" />
-                : view === 'cohort' ? <Pipeline data={d.by_cohort} group="cohort" noun="الدفعة" />
+                : view === 'cohort' ? (
+                  <>
+                    {focus && (
+                      <div className="la-row between ins-focus" role="status">
+                        <p>{focused ? <>الدفعة: <b>{focused.name}</b>{focused.org ? ` · ${focused.org}` : ''}</> : 'لا مشاركين في هذه الدفعة بعد، أو لم تعد موجودة.'}</p>
+                        <button type="button" className="btn-sm ghost" onClick={clearFocus}>كل الدفعات</button>
+                      </div>
+                    )}
+                    {(!focus || focused) && <Pipeline data={d.by_cohort} group="cohort" noun="الدفعة" only={focused ? focus : null} />}
+                  </>
+                )
                   : <Load experts={d.experts} onExpert={onExpert} />}
       </section>
     </div>
