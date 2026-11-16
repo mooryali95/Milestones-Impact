@@ -62,6 +62,11 @@
 
 /* minmax(0, …): الحد الأدنى لـ1fr عرض المحتوى، فكان جدول المستويات (نحو 760px) يدفع الشبكة خارج الشاشة
    بين 1024 و1366 (تدقيق الجاهزية admin-core-5). الآن يتمرر الجدول داخل بطاقته، ودون 1200 عمود واحد */
+/* المراجعة المتتالية: شريط ثابت أعلى الملف بموضعه في القائمة والسابق والتالي (review-queue.js). top تحت الشريط العلوي (58px) */
+.la-qnav { position: sticky; top: 66px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px; background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 2px 8px rgba(10,42,61,.06); }
+.la-qnav-at { color: var(--ink-muted); }
+.la-qnav-at b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .la-person { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 16px; margin-top: 12px; }
 .la-person .table-wrap { overflow-x: auto; }
 @media (max-width: 1200px) { .la-person { grid-template-columns: minmax(0, 1fr); } }
@@ -800,8 +805,8 @@
 .lc-note input[aria-invalid="true"] { border-color: var(--st-warn-text); }
 .lc-legend { font-size: .72rem; margin: 0 0 10px; }
 .lc-foot { margin-bottom: 10px; font-size: .84rem; }
-.lc-approve { display: grid; gap: 6px; justify-items: start; }
-.lc-approve p { margin: 0; }
+.lc-approve { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lc-approve p { margin: 0; flex-basis: 100%; }
 .lc-approve [aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
 .lc-block { color: var(--st-warn-text); font-size: .82rem; font-weight: 600; }
 @media (max-width: 640px) {

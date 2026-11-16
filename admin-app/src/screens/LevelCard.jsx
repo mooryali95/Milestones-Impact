@@ -60,7 +60,7 @@ function LevelChip({ level, approved, attention }) {
   );
 }
 
-export default function LevelCard({ prof, latest, model, effort, canWrite, levels, setLevels, notes, setNotes, currentLevel, blocker, onApprove, onAnswers }) {
+export default function LevelCard({ prof, latest, model, effort, canWrite, levels, setLevels, notes, setNotes, currentLevel, blocker, onApprove, onApproveNext, onAnswers }) {
   const scale = compositeScale(model);
   const res = (d) => latest?.assessment_results?.find((x) => x.dimension === d);
   const stateOf = (d) => rowState({ ev: res(d)?.evaluation, current: currentLevel(d), chosen: levels[d], note: notes[d], canWrite });
@@ -171,15 +171,18 @@ export default function LevelCard({ prof, latest, model, effort, canWrite, level
       )}
       {canWrite && (
         <div className="lc-approve">
-          <button type="button" className="btn-sm primary" aria-disabled={!!blocker} aria-describedby={blocker ? 'lc-block' : undefined}
+          {[[onApprove, prof?.approved ? 'تحديث الاعتماد' : 'اعتماد المسار وفتح البرنامج', 'primary'],
+            // في المراجعة المتتالية: يعتمد ثم يفتح ملف التالي في القائمة (review-queue.js)
+            [onApproveNext, prof?.approved ? 'حدّث وانتقل للتالي' : 'اعتمد وانتقل للتالي', 'ghost']].filter(([fn]) => fn).map(([fn, label, cls]) => (
+          <button key={label} type="button" className={`btn-sm ${cls}`} aria-disabled={!!blocker} aria-describedby={blocker ? 'lc-block' : undefined}
             onClick={() => {
-              if (!blocker) return onApprove();
+              if (!blocker) return fn();
               // الزر لا يرسل ما دام سبب ظاهر يمنعه: يُفتح الصف الناقص ويُنقل التركيز إلى حقله
               setManual({ ...manual, [blocker.dim]: true });
               if (blocker.field === 'note') setNoteOpen({ ...noteOpen, [blocker.dim]: true });
               setTimeout(() => document.querySelector(blocker.field === 'note' ? `#lc-note-${blocker.dim}` : `#lc-det-${blocker.dim} select`)?.focus(), 0);
             }}>
-            {prof?.approved ? 'تحديث الاعتماد' : 'اعتماد المسار وفتح البرنامج'}</button>
+            {label}</button>))}
           {blocker ? <p id="lc-block" className="lc-block" role="status">{blocker.text}</p>
             : <p className="la-muted">الاعتماد يفتح مراحل التأهيل والكتاب للمشارك ويرسل له بريدًا.</p>}
         </div>

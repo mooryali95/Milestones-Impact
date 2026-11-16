@@ -111,7 +111,7 @@ test('ملف المشارك: اعتماد المستويات، وإعادة بن
   await page.getByRole('dialog').locator('input').fill('أضف المؤشرات');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.review')).toMatchObject({ status: 'returned', note: 'أضف المؤشرات', requirement_id: 'r1' });
-  await page.getByRole('button', { name: '→ كل المشاركين' }).click();
+  await page.getByRole('button', { name: /^→ (كل المشاركين|القائمة)$/ }).click();
   await expect(page.locator('.data-table tbody tr')).toHaveCount(2);
 });
 
