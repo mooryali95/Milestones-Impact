@@ -349,6 +349,7 @@ Deno.serve(async (req: Request) => {
 
     // ══ recovery-request: فقد المدير مفتاح مروره أو تطبيق المصادقة ══
     // الرد واحد لكل بريد. يُبلَّغ المالك ليعيد الوصول من «المستخدمون»، ويُبلَّغ صاحب الحساب بما يحدث.
+    // الرسالتان بنوع alert (صف admin_recovery_request المقفل في notify-routing.js): استرداد حساب لا تحجبه حصة الإشعارات.
     if (action === "recovery-request") {
       const email = String(body.email || "").trim().toLowerCase();
       if (!isEmail(email)) return json({ success: false, message: "البريد غير صحيح" }, 400);
@@ -370,11 +371,11 @@ Deno.serve(async (req: Request) => {
         await sendEmail(o.email, `طلب استعادة وصول: ${user.name} — ${APP}`, mailShell("طلب استعادة وصول", `
 ${mailText(`طلب <b>${bdi(user.name)}</b> (<span dir="ltr">${bdi(user.email)}</span>) استعادة الدخول إلى لوحة الإدارة، لفقده ${user.passkey_only || hasKey ? "مفتاح المرور" : "تطبيق المصادقة"}.`)}
 ${mailNote("إن عرفت أنه طلبه: من «المستخدمون» اضغط «إعادة الوصول» لحسابه، فيدخل برمز البريد ثم يضبط وسيلته من جديد. وإن لم تعرف، تجاهل الطلب.")}
-${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }));
+${mailButton(SITES.admin, "افتح لوحة الإدارة")}`, { family: "access", preheader: `${user.name} يطلب استعادة الدخول`, footnote: "" }), "alert");
       }
       await sendEmail(user.email, `وصل طلب استعادة الوصول — ${APP}`, mailShell("وصل طلب استعادة الوصول", `
 ${mailText(`أهلًا ${bdi(user.name)}، أُبلغ مالك اللوحة بطلبك. حين يعيد وصولك تدخل برمز يصل إلى بريدك، ثم تضبط مفتاح مرور أو تطبيق مصادقة جديدًا من الإعدادات.`)}
-${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, { family: "access", preheader: "أُبلغ مالك اللوحة بطلبك" }));
+${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, { family: "access", preheader: "أُبلغ مالك اللوحة بطلبك" }), "alert");
       return reply;
     }
 
