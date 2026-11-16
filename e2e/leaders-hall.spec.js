@@ -59,7 +59,7 @@ test('الخبير: شاشة العرض آمنة قبل الكشف، وإعاد�
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b.action);
     const replies = {
-      'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
+      'xp.dashboard': { success: true, features: { hall: true, katon: false, f360: true }, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
       'xp.participants': { success: true, items: [], cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
     };
     const closed = { success: true, session: null, topics: [], workshops: [], attendance: { written: 31, eligible: 31, rounds: 3, workshop: 'اليوم التدريبي الأول', reason: null } };
@@ -194,7 +194,7 @@ test('الخبير: خمسون مشاركًا في قائمته بمن ينتظ�
     const h = hall({ admin: true });
     h.sentences = [{ id: 'k1', sort: 1, question: 'why', text_ar: 'المشروع الذي سلّم مخرجاته في موعدها مشروع ناجح بالضرورة.' }];
     const replies = {
-      'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
+      'xp.dashboard': { success: true, features: { hall: true, katon: false, f360: true }, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
       'xp.participants': { success: true, items, cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
     };
     await route.fulfill({ json: replies[b.action] || (b.action.startsWith('xp.hall') ? h : { success: true, items: [] }) });
@@ -252,7 +252,7 @@ test('الخبير: سؤال دوري متزامن مع الإغلاق لا يع
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     const replies = {
-      'xp.dashboard': { success: true, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
+      'xp.dashboard': { success: true, features: { hall: true, katon: false, f360: true }, expert: { full_name: 'د. سارة الحربي', title: 'مستشارة', roles: ['advisor'] }, stats: { hours: 1, participants: 50, attended: 0, upcoming: 0, no_show: 0 }, rating: { count: 0, min: 5 }, requests: [], sessions: [], criteria: {}, advisor_cohorts: [{ id: 'c1', name: 'دفعة نوفمبر 2026' }] },
       'xp.participants': { success: true, items: [], cohorts: [] }, 'xp.reviews': { success: true, advisor: true, items: [] }, 'xp.peer-list': { success: true, advisor: true, cohorts: [], items: [], pending: 0 },
     };
     if (b.action === 'xp.hall-close') {

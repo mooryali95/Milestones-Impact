@@ -10,7 +10,7 @@
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
 import React, { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
-import { KATON_ENABLED } from '../../supabase/functions/leaders-api/labels.js';
+import { flagsOf, shownView } from './features.js';
 import { bootPreload, call, session, setExpiredHandler } from './api.js';
 import { askSignOut } from './SignOutDialog.jsx';
 import logo from './milestone-impact-inverted.svg';
@@ -53,8 +53,6 @@ import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
 // الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
 
-// «كاتون» مخفي عن المشاركين حتى يُعاد تصميمه (المصدر الواحد: KATON_ENABLED، ويُستبعد معه من التقييم)
-const SHOW_KATON = KATON_ENABLED;
 
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
 const LOGO_KEY = 'mi_leaders_org_logo';
@@ -338,19 +336,22 @@ function Participant() {
   const onb = me && !checkin ? onboardingStep(me, { assessmentPaywall: !paidFor('assessment') }) : null;
   const rail = onb && onb.key !== 'next' && onbTick >= 0 ? <OnboardingRail step={onb} /> : null;
   const approved = !!me?.profile?.approved;
+  // مفاتيح الميزات قيد البناء من الخادم (me.features): القاعة وكاتون و360 لا تظهر ولا تُفتح حين تُخفى، ورابط /?tab=hall يقع على الرحلة
+  const ft = flagsOf(me);
   const navItems = inJourney ? [
     { key: 'home', label: 'رحلتي' },
     // ما لم يُفتح بعد يظهر مقفلًا بسبب فتحه، فيعرف المشارك ما ينتظره ولا يظن المنصة أصغر مما هي
     { key: 'handbook', label: 'كتابي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     { key: 'capstone', label: 'مبادرتي', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
-    // «كاتون» مخفي حتى يُعاد تصميمه مع المالك (قرار 2026-11-03)
-    SHOW_KATON && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
-    { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
+    ft.katon && { key: 'katon', label: 'كاتون', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
+    ft.hall && { key: 'hall', label: 'القاعة', ...(!approved && { locked: 'يُفتح بعد اعتماد مسارك' }) },
     hasLab && { key: 'lab', label: 'المختبر' },
     { key: 'impact', label: 'أثري', ...(!(approved && impactOpen(me)) && { locked: 'يُفتح مع القياس البعدي في طور الأثر' }) },
     { key: 'profile', label: 'ملفي' },
   ].filter(Boolean) : [];
-  const navView = view === 'lab' && !hasLab ? 'home' : view;
+  const navView = view === 'lab' && !hasLab ? 'home' : shownView(view, ft);
+  // ميزة أُخفيت والشاشة مفتوحة (رد hall_off وأخواته): تُحدَّث الرئيسية فيزول عنصرها، ويعود المشارك إلى رحلته
+  const featureGone = async () => { go('home'); const r = await call('me'); if (r.success) accept(r); };
   const onNav = (k) => (k === 'lab' ? openLab() : go(k));
 
   const consentNeed = me?.participant?.consent?.needed ?? null;
@@ -370,7 +371,7 @@ function Participant() {
   else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
-    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}{gateDone(me, 'profile') && me.profile?.approved && <Feedback360Entry onOpen={() => go('f360')} />}</>;
+    screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}{gateDone(me, 'profile') && me.profile?.approved && ft.f360 && <Feedback360Entry onOpen={() => go('f360')} />}</>;
   } else if (seatHold(me) && (!paidFor('assessment') || !paidFor('program'))) screen = <SponsorshipPending />;   // D20: لا بوابة دفع أثناء قرار الرعاية
   else if (!gateDone(me, 'assessment') && !paidFor('assessment')) screen = <>{rail}<Paywall item="assessment" me={me} onUpdate={accept} /></>;
   else if (!gateDone(me, 'assessment')) screen = <>{rail}{me.access?.sponsor && <div className="page narrow" style={{ paddingBottom: 0 }}><SponsorNote access={me.access} /></div>}<Assessment me={me} onSubmitted={accept} /></>;
@@ -378,12 +379,12 @@ function Participant() {
   else if (!paidFor('program')) screen = me.profile?.approved ? <Paywall item="program" me={me} onUpdate={accept} /> : <AwaitingApproval me={me} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
   else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => { setBookTarget(null); go('home'); }} target={bookTarget} onReturn={bookTarget ? () => { setBookTarget(null); go('capstone'); } : null} />;
-  else if (SHOW_KATON && view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
-  else if (view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} />;
+  else if (ft.katon && view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
+  else if (ft.hall && view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} onHidden={featureGone} />;
   else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} onHandbook={openBook} reopen={capReturn} onReopened={() => setCapReturn(null)} />;
   else if (view === 'impact' && me.profile?.approved) screen = <Impact me={me} onUpdate={accept} onBack={() => go('home')} />;
-  else if (view === 'f360' && me.profile?.approved) screen = <Feedback360 onBack={() => go('profile')} />;
-  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} onHall={() => go('hall')} lab={lab?.items} onLab={() => openLab()} onLabItem={(labId) => openLab(labId)} />;
+  else if (ft.f360 && view === 'f360' && me.profile?.approved) screen = <Feedback360 onBack={() => go('profile')} />;
+  else screen = <Journey me={me} onUpdate={accept} onEditProfile={() => go('profile')} onHandbook={() => go('handbook')} onImpact={() => go('impact')} onCapstone={() => go('capstone')} onHall={ft.hall ? () => go('hall') : undefined} lab={lab?.items} onLab={() => openLab()} onLabItem={(labId) => openLab(labId)} />;
 
   return (
     <>

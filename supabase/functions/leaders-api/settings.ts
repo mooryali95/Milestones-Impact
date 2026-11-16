@@ -24,15 +24,29 @@ async function readRows(): Promise<any[] | null> {
   return data || [];
 }
 
+// تعذّر القراءة العابر (لا غياب الجدول): تبقى آخر قيم قُرئت بنجاح ويُعاد الطلب بعد ثوانٍ، فلا يطفئ خطأ لحظي ميزة
+// ظاهرة عن الجميع دقيقة كاملة (مفاتيح الميزات مطفأة افتراضيًا). وبلا قراءة سابقة في هذه النسخة: الافتراضي لثوانٍ فقط
+const RETRY = 5e3;
+
 // كل القيم بعد دمج المحرَّر فوق الافتراضي. المصدر الواحد لكل وحدة على الخادم
 export async function appSettings(): Promise<Settings> {
   if (cache && Date.now() - cache.at < TTL) return cache.value;
-  const rows = await readRows().catch((e) => { console.error('app_settings read', e); return null; });
+  let rows: any[] | null;
+  try {
+    rows = await readRows();
+  } catch (e) {
+    console.error('app_settings read', e);
+    const value = cache?.value ?? (resolveSettings([]) as Settings);
+    cache = { at: Date.now() - TTL + RETRY, value, rows: cache?.rows ?? [] };
+    return value;
+  }
   const value = resolveSettings(rows || []) as Settings;
   cache = { at: Date.now(), value, rows: rows || [] };
   return value;
 }
 export const resetSettingsCache = () => { cache = null; };
+// للاختبار: تنتهي مدة الذاكرة الآن فتُقرأ القيم في النداء التالي، وتبقى آخر قيم ناجحة
+export const expireSettingsCache = () => { if (cache) cache.at = 0; };
 
 // اللوحة: التعريف (لترسم المحرر منه) والقيم ومن حرر كل مجموعة ومتى
 export async function adminGet() {
@@ -59,5 +73,10 @@ export async function adminSave(a: Admin, b: Body) {
   if (error) throw new Fail('تعذّر حفظ الإعدادات', 500, 'save_failed');
   await audit('admin', a.email, 'admin.settings-save', 'app_settings', group, { key: group, value: before }, { key: group, value: c.value });
   resetSettingsCache();
+  // إظهار 360 بعد إخفائه يستأنف الدورات المجمدة من حيث توقفت: تُمد نوافذها بقدر مدة الإخفاء (feedback360.ts)
+  if (group === 'feedback360' && before?.enabled !== true && (c.value as any)?.enabled === true) {
+    const FB = await import('./feedback360.ts');
+    await FB.resumeFrozen(a.email);
+  }
   return adminGet();
 }

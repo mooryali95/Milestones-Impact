@@ -1,6 +1,6 @@
 // katon.answer داخل القاعة في شيفرته الفعلية، على قاعدة مزيفة تجيب طلبات PostgREST من الذاكرة (بلا شبكة):
 // لا يخرج من الرد بنك الجمل ولا مفتاح قبل كشف الخبير، وقفل القاعة في hallGate وحده (لا قفل «أتممت الموضوع»)،
-// و«كاتون» المخفي (KATON_ENABLED) مقفل على الخادم أيضًا.
+// و«كاتون» المخفي (features.katon) مقفل على الخادم أيضًا، والقاعة المخفية (features.hall) لا تفتح جملة للإجابة.
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 
@@ -64,11 +64,15 @@ async function postgrest(input: string | URL | Request, init: RequestInit = {}) 
 globalThis.fetch = postgrest as typeof fetch;
 const { answer, mine } = await import('./katon.ts');
 const { Fail } = await import('./core.ts');
+const { resetSettingsCache } = await import('./settings.ts');
 
 const P = { id: 'p1', organization_id: null };
 const IDS = ['k1', 'k2', 'k3'];
-function seed({ stage = 'round', current = 'k3', revealed = ['k1', 'k2'], answered = ['k1', 'k2'], hall = true } = {}) {
+// hallOn وkatonOn: مفتاحا الميزتين في الإعدادات العامة (features.js). القاعة مُظهَرة وكاتون مخفي كما يُختبر أغلبه
+function seed({ stage = 'round', current = 'k3', revealed = ['k1', 'k2'], answered = ['k1', 'k2'], hall = true, hallOn = true, katonOn = false } = {}) {
+  resetSettingsCache();
   tables = {
+    app_settings: [{ key: 'features', value: { hall: hallOn, katon: katonOn } }],
     placements: ['milestone', 'impact', 'leadership'].map((dimension) => ({ participant_id: 'p1', dimension, level: 'intermediate', approved_at: '2026-11-01T00:00:00Z' })),
     enrollments: [{ participant_id: 'p1', cohort_id: 'c1', status: 'enrolled', created_at: '2026-11-01T00:00:00Z' }],
     cohorts: [{ id: 'c1', name: 'دفعة الاختبار', is_default: false, program_id: 'pr1' }],
@@ -116,4 +120,18 @@ Deno.test('«كاتون» مخفي: بنكه لا يُقرأ، والإجابة 
   assertEquals(((await assertRejects(() => mine(P), Fail)) as InstanceType<typeof Fail>).code, 'katon_off');
   assertEquals(((await assertRejects(() => answer(P, { sentence_id: 'k1', verdict: 'true', confidence: 1, stances: [] }), Fail)) as InstanceType<typeof Fail>).code, 'katon_off');
   assertEquals(writes.length, 0);
+});
+
+Deno.test('القاعة المخفية: جلستها المفتوحة لا تفتح جملة، فالإجابة فيها تُرفض بـkaton_off ولا كتابة', async () => {
+  seed({ hallOn: false });
+  assertEquals(((await assertRejects(() => answer(P, { sentence_id: 'k3', verdict: 'true', confidence: 3, stances: [] }), Fail)) as InstanceType<typeof Fail>).code, 'katon_off');
+  assertEquals(writes.length, 0);
+  assertEquals(tables.hall_sessions[0].version, 7);
+});
+
+Deno.test('كاتون مُظهَر وحده والقاعة مخفية: الإجابة خارج القاعة تمر بقاعدة «كاتون» نفسها', async () => {
+  seed({ hallOn: false, katonOn: true, answered: [] });
+  assertEquals((await answer(P, { sentence_id: 'k1', verdict: 'true', confidence: 2, stances: [] }) as any).success, true);
+  assertEquals(saved('k1')?.verdict, 'true');
+  assertEquals(tables.hall_sessions[0].version, 7);
 });

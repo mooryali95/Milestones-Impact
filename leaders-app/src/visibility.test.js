@@ -46,7 +46,7 @@ describe('التحكم في الرؤية', () => {
     // مفاتيح المنسق والمشارك وتقرير 360: كل واحد عند موضعه
     expect(read('supabase/functions/leaders-api/feedback360.ts')).toContain("requireVisible(await visibilityOfParticipant(c.participant_id), 'adv_f360')");
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/vis\.coord_initiatives \? initiativesFor/);
-    expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/\.scores && vis\.coord_f360/);
+    expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/\.scores, \{ coord_f360: vis\.coord_f360 \}, flags\)/);
     expect(read('supabase/functions/leaders-api/participant.ts')).toMatch(/audience === 'admin' \|\| vis\.par_advisor/);
     // المشاركة برابط: الحجب يوقف الروابط القائمة عند فتحها، وحجب الملاحظات يغلقها ولو فتحها المشارك
     expect(read('supabase/functions/leaders-api/share.ts')).toMatch(/share: vis\.par_share !== false, notes: vis\.par_share_notes !== false/);

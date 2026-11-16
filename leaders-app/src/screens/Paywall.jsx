@@ -7,7 +7,8 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { levelOf } from '../labels.js';
 import { stepTitle } from '../Onboarding.jsx';
-import { KATON_ENABLED, LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
+import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
+import { flagsOf, programPackageAr } from '../features.js';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -23,8 +24,8 @@ const COPY = {
   program: {
     eyebrow: 'نتيجتك جاهزة',
     title: 'أكمل رحلتك في البرنامج',
-    // نص الباقة من KATON_ENABLED (D04 وD17): لا وعد بما لم يُفعَّل
-    lead: `اعتُمد مسارك بعد مراجعة المستشار. أكمل البرنامج لتفتح رحلتك كاملة: الكتاب${KATON_ENABLED ? ' و«كاتون»' : ''} والقاعة والمبادرة والتقييم والشهادة.`,
+    // نص الباقة من مفاتيح الميزات في me.features (D04 وD17): لا وعد بما لم يُظهَر، فيُبنى عند العرض (lead دالة)
+    lead: (ft) => `اعتُمد مسارك بعد مراجعة المستشار. أكمل البرنامج لتفتح رحلتك كاملة: ${programPackageAr(ft)}.`,
     points: ['رحلة تأهيل على مقاس مستواك', 'مشروع حقيقي من جهتك بمعالم وتقييم خبير', 'تقييم ختامي وشهادة موثقة'],
     cta: 'ادفع وأكمل البرنامج',
   },
@@ -98,7 +99,7 @@ export default function Paywall({ item, me, onUpdate }) {
           </div>
         )}
         {item === 'program' && <PathSummary journey={me.journey} />}
-        <p className="muted">{c.lead}</p>
+        <p className="muted">{typeof c.lead === 'function' ? c.lead(flagsOf(me)) : c.lead}</p>
         <ul className="pay-points">{c.points.map((x) => <li key={x}>{x}</li>)}</ul>
         <div className="pay-price"><b dir="ltr">{money(price, cur)}</b><span>دفعة واحدة · بطاقة أو Apple Pay</span></div>
         {err && <div className="alert err" role="alert">{err}</div>}

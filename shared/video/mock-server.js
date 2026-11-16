@@ -6,9 +6,12 @@ const stage = (key, title_ar, phase, status, items = [], extra = {}) => ({ key, 
 
 export function createMockServer() {
   // approved منفصل عن assessed: الجولة الكاملة تعتمد فور الإرسال (approveOnSubmit)، وفيديو المشارك يُظهر «قيد المراجعة» ثم يعتمد
-  const s = { named: false, profileDone: false, assessed: false, approved: false, approveOnSubmit: true, chapterDone: false, points: 0, mine: [], answered: false };
+  // features: مفاتيح الميزات كما يرسلها الخادم في me (مفاتيح الميزات P3). المحاكاة تُظهر القاعة و360 كما سُجّل الفيديو،
+  // و«كاتون» مخفي كما كان، والاختبار الذي يريد غير ذلك يضبط s.features
+  const s = { named: false, profileDone: false, assessed: false, approved: false, approveOnSubmit: true, chapterDone: false, points: 0, mine: [], answered: false,
+    features: { hall: true, katon: false, f360: true } };
   const me = () => ({
-    success: true,
+    success: true, features: s.features,
     participant: { id: 'p1', full_name: NAME, email: 'sara@company.sa', status: s.assessed ? 'enrolled' : 'registered', consented_at: '2026-11-01T00:00:00Z', organization_name: 'هيئة التحوّل الرقمي', organization_linked: true },
     profile: {
       full_name: NAME, phone: s.profileDone ? '0551234567' : '', job_title: s.profileDone ? 'مديرة إدارة المشاريع' : '', organization_name: s.profileDone ? 'هيئة التحوّل الرقمي' : '',

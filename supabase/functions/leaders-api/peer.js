@@ -15,7 +15,8 @@ export const SUPERVISION_AR = {
   mixed: 'الأقران والخبير يجيبان معًا',
 };
 export const SUPERVISION_DEFAULT = 'peers_expert';
-export const PEER_SOURCE_AR = { sentence: 'جملة في «كاتون»', milestone: 'معلم', capstone: 'المبادرة', free: 'سؤال حر' };
+// «جملة نقاش» لا اسم ميزة: الجملة من بنك النقاش، والوسم يبقى صحيحًا أُظهرت الميزة أو أُخفيت (مفاتيح الميزات P3)
+export const PEER_SOURCE_AR = { sentence: 'جملة نقاش', milestone: 'معلم', capstone: 'المبادرة', free: 'سؤال حر' };
 export const PEER_STATUS_AR = { open: 'بانتظار إجابة', answered: 'أُجيب، بانتظار تأكيد الخبير', confirmed: 'أكّده الخبير', closed: 'أُغلق' };
 export const PEER_ANSWER_STATUS_AR = { pending: 'بانتظار تأكيد الخبير', confirmed: 'أكّده الخبير', corrected: 'صحّحه الخبير', hidden: 'أخفاه الخبير' };
 // الإسهام المؤكَّد مصدر في التقييم المستمر: مؤكَّد كاملًا، ومصحَّح جزئيًا، والمخفي لا يُحتسب
@@ -35,22 +36,29 @@ export function cleanPeerText(raw, what = 'النص') {
 /** نمط الإشراف كما يُحفظ: قيمة معروفة أو الافتراضي */
 export const cleanSupervision = (v) => (Object.hasOwn(SUPERVISION_AR, v) ? v : SUPERVISION_DEFAULT);
 
-/** الطلب كما يُحفظ: المصدر والمرجع والفريق المستهدف بحسب نمط الإشراف */
-export function cleanPeerRequest(b, supervision = SUPERVISION_DEFAULT) {
+// الفرق لا تُكتب إلا من القاعة (cohort_roles)، فحين تُخفى القاعة أو لا فريق للمشارك لا طلب يُوجَّه إلى فريق:
+// الطلب إلى الجميع، والطلب القديم الموجّه إلى فريق يجيبه الجميع، فلا يبقى طلب لا يجيبه أحد (مفاتيح الميزات P3)
+/** هل يُختار الفريق المستهدف الآن؟ القاعة ظاهرة وللمشارك فريق */
+export const peerTeamsOn = (hallOn, team) => !!hallOn && !!team;
+
+/** الطلب كما يُحفظ: المصدر والمرجع والفريق المستهدف بحسب نمط الإشراف
+ * @param {{ teams?: boolean }} [opts] teams: false حين تُخفى القاعة، فالطلب إلى الجميع */
+export function cleanPeerRequest(b, supervision = SUPERVISION_DEFAULT, { teams = true } = {}) {
   const text = cleanPeerText(b?.text, 'الطلب');
   const source = Object.hasOwn(PEER_SOURCE_AR, b?.source) ? b.source : 'free';
   const ref_id = source !== 'free' && /^[0-9a-f-]{36}$/.test(String(b?.ref_id || '')) ? String(b.ref_id) : null;
   // في «الخبير وحده» لا فريق: الطلب للمستشار مباشرة
-  const target_team = supervision === 'expert_only' ? null : HALL_TEAMS.includes(b?.target_team) ? b.target_team : null;
+  const target_team = supervision === 'expert_only' || !teams ? null : HALL_TEAMS.includes(b?.target_team) ? b.target_team : null;
   return { text, source, ref_id, target_team };
 }
 
-/** هل يحق لهذا العضو أن يجيب عن الطلب؟ null = نعم، وإلا السبب */
-export function answerBlock(request, member, supervision = SUPERVISION_DEFAULT) {
+/** هل يحق لهذا العضو أن يجيب عن الطلب؟ null = نعم، وإلا السبب
+ * @param {{ teams?: boolean }} [opts] teams: false حين تُخفى القاعة، فالفريق المستهدف لا يحجب أحدًا */
+export function answerBlock(request, member, supervision = SUPERVISION_DEFAULT, { teams = true } = {}) {
   if (supervision === 'expert_only') return 'في هذه الدفعة يجيب الخبير وحده';
   if (!request || request.status === 'closed') return 'الطلب مغلق';
   if (request.participant_id === member?.id) return 'لا تجيب عن طلبك';
-  if (request.target_team && member?.team !== request.target_team) return `الطلب موجّه إلى ${HALL_TEAM_AR[request.target_team]}`;
+  if (teams && request.target_team && member?.team !== request.target_team) return `الطلب موجّه إلى ${HALL_TEAM_AR[request.target_team]}`;
   return null;
 }
 

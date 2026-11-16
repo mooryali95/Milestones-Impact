@@ -19,7 +19,7 @@ export default function HowEvaluated({ policy }) {
       </ul>
       {mastery && <p className="small">القياس النهائي إتقان محكّي: نتيجتك في الاختبار الموضوعي بعد البرنامج (معرفة ومواقف، بلا تقدير ذاتي) مقابل محك {policy.measure.mastery_cut}%. تغيّرك عن القياس المبدئي يُعرض لك وصفًا ولا يدخل الدرجة.</p>}
       <p className="small">القرار بالدرجة: {FINAL_DECISION_AR.pass} من {t.pass}، و{FINAL_DECISION_AR.pass_notes} من {t.pass_notes}، و{FINAL_DECISION_AR.extend} من {t.extend}، و{FINAL_DECISION_AR.fail} دونها. <b>هذه الحدود مؤقتة للدفعة الأولى</b>، وتُراجع بعد بياناتها.</p>
-      <p className="small">لا يدخل الدرجة: كاتون والقاعة، فهما للتعلم. وكل حالة في نطاق نقطتين حول حد قرار يراجعها الخبير مراجعة بشرية بتعليل.</p>
+      <p className="small">لا يدخل الدرجة: أنشطة التعلم التفاعلية، فهي للتعلم. وكل حالة في نطاق نقطتين حول حد قرار يراجعها الخبير مراجعة بشرية بتعليل.</p>
       <p className="small muted">إن لم يُرضِك القرار فاطلب مراجعته بالرد على بريد القرار خلال عشرة أيام عمل، فتراجعه لجنة لم تشارك فيه. إصدار المعادلة {policy.version}.</p>
     </details>
   );

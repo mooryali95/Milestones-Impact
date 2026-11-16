@@ -18,6 +18,7 @@ import { cleanOpenAnswers, CONTACT_FREQ, feedbackPromiseAr, OPEN_KEYS, raterItem
 import { appSettings } from './settings.ts';
 import { FEEDBACK_OPEN_AR } from './labels.js';
 import { missingColumn } from './missing-column.ts';
+import { RATER_PAUSED_AR } from './features.js';
 
 type Body = Record<string, any>;
 
@@ -428,8 +429,16 @@ async function raterQuestions(instrumentId: string, relation: string) {
 }
 
 
+// مقيّم 360 حين يُخفى 360 (feedback360.enabled): الدورة متجمدة، فلا نموذج ولا إرسال، ورده «متوقف مؤقتًا» بلا اسم الميزة.
+// مقيّمو الأثر قبل البرنامج وبعده (pre وpost) على المسار نفسه ولا يمسهم المفتاح
+async function f360Paused(r: any) {
+  if (r.phase !== 'f360' || (await appSettings()).feedback360.enabled) return;
+  throw new Fail(RATER_PAUSED_AR, 409, 'f360_off', { paused: true, phase: 'f360' });
+}
+
 export async function raterGet(b: Body) {
   const r = await raterFrom(b.t);
+  await f360Paused(r);
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
   const qs = await raterQuestions(r.instrument_id, r.relation);
   // تقييم 360: مراسي السلم ووعد الإخفاء من الإعدادات العامة (scale_labels وmin_group)، بحسب مجموعة المقيّم
@@ -448,6 +457,7 @@ export async function raterGet(b: Body) {
 
 export async function raterSubmit(b: Body) {
   const r = await raterFrom(b.t);
+  await f360Paused(r);
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
   // تقييم 360: بعد إغلاق الدورة (ولو مبكرًا من الإدارة) لا يُقبل تقدير يغيّر تقريرًا سُلِّم (N15)
   if (r.cycle_id) {

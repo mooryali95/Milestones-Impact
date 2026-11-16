@@ -7,7 +7,7 @@
 // بنوع bulk يدخل الطابور عند الحد)، والسجل (audit).
 // للتطوير وحده: لا يقرؤه التقييم الختامي ولا الشهادة ولا تقارير الجهة الفردية (يحرسه eval360.test.js).
 // المشارك يرى أعدادًا لكل مجموعة بعد فتح النافذة، لا من أرسل ومن لم يرسل.
-import { audit, CONFIG, db, Fail, feedbackMail, FEEDBACK_MAIL, hash, must, randomToken, raterMail, sendMail } from './core.ts';
+import { audit, CONFIG, db, enqueueMail, Fail, feedbackMail, FEEDBACK_MAIL, hash, must, randomToken, raterMail, sendMail } from './core.ts';
 import { advisorOf, myParticipantIds } from './advisor.ts';
 import { lastBaseline } from './participant.ts';
 import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
@@ -259,8 +259,10 @@ export async function advisorDecide(e: any, b: Body) {
 }
 
 // ── المهمة الساعية: التذكير في أيامه، والإغلاق عند انقضاء النافذة وإبلاغ المستشار ──
+// و360 المخفي (feedback360.enabled مطفأ) متجمد: لا تذكير ولا إغلاق ولا بريد، والدورات على حالها حتى يُظهَر فتُستأنف منها
 export async function sweep() {
   const s = (await appSettings()).feedback360;
+  if (!s.enabled) return { skipped: 'off', reminded: 0, closed: 0 };
   const { data, error } = await db.from('feedback_cycles').select('*, participants(id, full_name, email, organization_id, is_demo)').eq('status', 'open');
   if (error) { if (missingTable(error)) return { reminded: 0, closed: 0 }; throw error; }
   let reminded = 0, closed = 0;
@@ -320,7 +322,59 @@ export async function adminClose(a: { email: string }, b: Body) {
   const c = must(await db.from('feedback_cycles').update({ closes_at: new Date().toISOString() }).eq('id', String(b.cycle_id)).eq('status', 'open').select('id').maybeSingle()) as any;
   if (!c) throw new Fail('الدورة ليست مفتوحة', 409, 'not_open');
   await audit('admin', a.email, 'admin.f360-close', 'feedback_cycles', c.id);
+  // والمخفي: إغلاق المدير قراره فيُنفَّذ، ولا تجري المهمة الساعية على غيرها. بريد «التقرير جاهز» للمستشار يدخل الطابور
+  // ولا يُرسل الآن: يمسكه heldMail ما دام 360 مخفيًا، ويخرج حين يُظهَر، فلا يضيع إبلاغ المستشار (الاستئناف)
+  if (!(await appSettings()).feedback360.enabled) {
+    const row = must(await db.from('feedback_cycles').select('id, participant_id, participants(id, full_name, email, organization_id, is_demo)').eq('id', c.id).maybeSingle()) as any;
+    must(await db.from('feedback_cycles').update({ status: 'closed', closed_at: new Date().toISOString() }).eq('id', c.id).eq('status', 'open'));
+    const adv = row?.participants ? await advisorOf(row.participants).catch(() => null) : null;
+    const name = row?.participants?.full_name || 'مشارك';
+    const queued = adv ? await enqueueMail(adv.email, FEEDBACK_MAIL.ready.subject(name), feedbackMail('ready', adv.full_name, name, { url: `${CONFIG.appUrl}/x` }), `participant:${row.participant_id}`, 'bulk', 'f360_off') : false;
+    return { success: true, closed: 1, reminded: 0, mailed: false, queued };
+  }
   return { success: true, ...(await sweep()) };
+}
+
+// ── استئناف 360 بعد إخفائه: الساعة توقفت معه ──
+// النافذة لا تنقضي وهو مخفي، فحين يُظهَر تُمدّ كل دورة مفتوحة بقدر ما بقي مخفيًا من عمرها، ومعها روابط مقيّميها
+// المنتظرين (expires_at = closes_at)، فيعمل الرابط نفسه كما وعدت صفحة «متوقف مؤقتًا». بداية الإخفاء: آخر حفظ أطفأه
+// (سجل admin.settings-save)، أو نشر المفاتيح (20261116100000) إن كان مطفأ قبله، أيهما أحدث. ما لم تُعرف بدايته لا يُمد.
+export const F360_FREEZE_MIGRATION = '20261116100000_leaders_t360_rename';
+export async function pausedSince(): Promise<number | null> {
+  const [{ data: logs }, { data: mig }] = await Promise.all([
+    db.from('audit_log').select('created_at, before, after').eq('action', 'admin.settings-save').eq('entity_id', 'feedback360').order('created_at', { ascending: false }).limit(100),
+    db.from('schema_migrations').select('applied_at').eq('name', F360_FREEZE_MIGRATION).maybeSingle(),
+  ]);
+  const off = ((logs || []) as any[])
+    .filter((l) => l?.before?.value?.enabled === true && l?.after?.value?.enabled !== true)
+    .map((l) => Date.parse(l.created_at)).filter(Number.isFinite);
+  const times = [...off, Date.parse((mig as any)?.applied_at)].filter(Number.isFinite);
+  return times.length ? Math.max(...times) : null;
+}
+export async function resumeFrozen(by: string, now = Date.now()) {
+  const since = await pausedSince();
+  if (since === null || since >= now) return { extended: 0, paused_ms: 0 };
+  const { data, error } = await db.from('feedback_cycles').select('id, closes_at, opens_at').eq('status', 'open');
+  if (error) { if (missingTable(error)) return { extended: 0, paused_ms: 0 }; throw error; }
+  let extended = 0;
+  for (const c of (data || []) as any[]) {
+    const closes = Date.parse(c.closes_at);
+    // ما انقضت نافذته قبل الإخفاء يُغلق كما كان، وما فُتح أثناءه يُمد بقدر ما مضى منذ فتحه
+    if (!Number.isFinite(closes) || closes <= since) continue;
+    const from = Math.max(since, Date.parse(c.opens_at) || since);
+    const delta = now - from;
+    if (delta <= 0) continue;
+    const next = new Date(closes + delta).toISOString();
+    must(await db.from('feedback_cycles').update({ closes_at: next }).eq('id', c.id).eq('status', 'open'));
+    const raters = (must(await db.from('raters').select('id, expires_at').eq('cycle_id', c.id).eq('phase', 'f360').eq('status', 'invited')) ?? []) as any[];
+    for (const r of raters) {
+      const exp = Date.parse(r.expires_at);
+      if (Number.isFinite(exp)) must(await db.from('raters').update({ expires_at: new Date(exp + delta).toISOString() }).eq('id', r.id).eq('status', 'invited'));
+    }
+    await audit('system', by, 'f360.resume', 'feedback_cycles', c.id, { closes_at: c.closes_at }, { closes_at: next, paused_ms: delta });
+    extended += 1;
+  }
+  return { extended, paused_ms: now - since };
 }
 
 

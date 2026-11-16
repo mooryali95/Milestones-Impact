@@ -53,9 +53,10 @@ describe('الواجهة', () => {
     expect(businessDays(thu, 2).getDay()).toBe(1);   // الاثنين
     expect(businessDays(new Date('2026-11-08T10:00:00'), 2).getDay()).toBe(2);   // الأحد ← الثلاثاء
   });
-  it('نص الباقة من KATON_ENABLED، والإفصاح أن النتيجة تحدد المسار لا السعر', () => {
+  it('نص الباقة من مفاتيح الميزات في me.features، والإفصاح أن النتيجة تحدد المسار لا السعر', () => {
     const pw = read('leaders-app/src/screens/Paywall.jsx');
-    expect(pw).toMatch(/\$\{KATON_ENABLED \? ' و«كاتون»' : ''\}/);
+    expect(pw).toContain('programPackageAr(ft)');
+    expect(pw).not.toContain('KATON_ENABLED');
     expect(pw).toContain('نتيجتك تحدد مسارك لا سعرك');
   });
 });

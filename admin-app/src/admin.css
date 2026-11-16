@@ -1482,3 +1482,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 /* «أين توقفوا» من ملف الدفعة (#/leaders/insight?cohort=): شريط الدفعة المختارة وزر العودة إلى كل الدفعات */
 .ins-focus { margin-bottom: 8px; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-radius: 6px; background: var(--brand-surface-soft, rgba(0, 0, 0, .03)); }
 .ins-focus p { margin: 0; }
+
+/* الميزات قيد البناء (مفاتيح الميزات P2): ثلاثة مفاتيح متجاورة، وشارة على القسم المخفي، وشريط في أعلى شاشته */
+.ft-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
+.ft-switch { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--brand-line); border-radius: 10px; border-inline-start: 3px solid var(--st-warn); }
+.ft-switch.on { border-inline-start-color: var(--st-ok); }
+.ft-switch .la-chip { margin-top: 4px; }
+.ft-hidden-badge { display: inline-block; margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--st-warn-text); color: var(--st-warn-text); font-size: 10.5px; line-height: 1.6; font-weight: 600; white-space: nowrap; vertical-align: middle; }
+.la-tabs button.on .ft-hidden-badge { border-color: currentColor; color: inherit; }
+.ft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--st-warn); background: color-mix(in srgb, var(--st-warn) 10%, transparent); font-size: .86rem; }
+@media (max-width: 640px) { .ft-grid { grid-template-columns: 1fr; } }
