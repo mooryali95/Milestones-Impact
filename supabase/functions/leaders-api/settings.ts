@@ -48,6 +48,8 @@ export async function adminSave(a: Admin, b: Body) {
   requireWrite(a);
   const group = String(b.group || '');
   if (!(group in SETTINGS)) throw new Fail('مجموعة إعدادات غير معروفة', 400, 'unknown_group');
+  // مجموعة ضابط مالي (super في التعريف): للمدير الأعلى والمالك وحدهما
+  if ((SETTINGS as any)[group].super && a.role !== 'super_admin' && !a.owner) throw new Fail('هذه الإعدادات للمدير الأعلى والمالك وحدهما', 403, 'super_required');
   const rows = await readRows();
   if (rows === null) throw new Fail('مخزن الإعدادات لم يُرحَّل بعد (20261111130100)، فتعمل القيم الافتراضية', 409, 'not_migrated');
   const before = rows.find((r: any) => r.key === group)?.value || null;

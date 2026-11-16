@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import { navigate } from '../route.js';
 import { cleanGroup, SETTINGS } from '../../../supabase/functions/leaders-api/settings.js';
 
 // أيام التذكير تُعرض مفصولة بفاصلة وتُحرَّر نصًا، ويحولها التحقق نفسه (cleanField) إلى قائمة
@@ -69,6 +70,7 @@ function Group({ group, values, updated, canWrite, onSaved }) {
     <form className="la-card" onSubmit={save} aria-labelledby={`st-${group}`}>
       <h3 id={`st-${group}`}>{def.title_ar}</h3>
       <p className="la-muted">{def.note_ar}</p>
+      {def.super && !canWrite && <p className="la-muted small">التعديل للمدير الأعلى والمالك وحدهما.</p>}
       {updated && <p className="la-muted small">آخر تعديل: {updated.by} · {date(updated.at)}</p>}
       <div className="of-grid">
         {Object.entries(def.fields).map(([k, f]) => (
@@ -87,16 +89,31 @@ function Group({ group, values, updated, canWrite, onSaved }) {
   );
 }
 
-export default function AppSettings({ canWrite }) {
+// التوجيه والإرشاد داخل الرحلة: سقفه منفصل عن سقف هذا المساعد، ومصدره الإعدادات العامة وحدها (settings.js)
+export function GuidanceCap() {
+  const [g, setG] = useState(null);
+  useEffect(() => { L('admin.settings').then((r) => setG(r?.success ? r.values?.guidance || null : null)); }, []);
+  if (!g) return null;
+  return (
+    <p className="la-muted small ag-guidance">
+      سقف «التوجيه والإرشاد» داخل الرحلة منفصل: {Number(g.daily_spend_usd).toFixed(2)} دولار يوميًا، و{g.monthly_questions} سؤالًا شهريًا و{g.daily_questions} يوميًا لكل مشارك.{' '}
+      <button type="button" className="link" onClick={() => navigate({ ctx: 'leaders', tab: 'settings', id: 'guidance' })}>عدّله من الإعدادات</button>
+    </p>
+  );
+}
+
+export default function AppSettings({ canWrite, isSuper = false, focus = null }) {
   const [d, setD] = useState(null);
   useEffect(() => { L('admin.settings').then(setD); }, []);
+  // رابط مباشر لمجموعة (#/leaders/settings/<group>)، كرابط سقف التوجيه من شاشة المساعد
+  useEffect(() => { if (d?.success && focus) document.getElementById(`st-${focus}`)?.scrollIntoView?.({ block: 'start' }); }, [d, focus]);
   if (!d) return <Spinner />;
   if (!d.success) return <div className="la-err">{d.message}</div>;
   return (
     <div className="stack">
       {!d.ready && <div className="la-card la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فتعمل القيم الافتراضية ولا يُحفظ تعديل حتى يُطبَّق ترحيله.</div>}
       {Object.keys(SETTINGS).map((g) => (
-        <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready} onSaved={setD} />
+        <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready && (!SETTINGS[g].super || isSuper)} onSaved={setD} />
       ))}
     </div>
   );

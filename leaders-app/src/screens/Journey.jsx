@@ -20,8 +20,7 @@ import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
-import ChooseExpert from './ChooseExpert.jsx';
-import PeerRequests from './PeerRequests.jsx';
+import { GuidancePanel } from './Guidance.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
 export function deviceLabel() {
@@ -831,8 +830,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
           )}
           {approved && me.continuous?.index != null && <Fold title="تقدمك في التقييم المستمر" meta={`${me.continuous.index}٪`}><Continuous c={me.continuous} /></Fold>}
-          {approved && <PeerRequests compact />}
-          {approved && <ChooseExpert />}
+          {/* «التوجيه والإرشاد»: الاستشارة وأسئلة الفريق في مكان واحد، وبطاقة «ابدأ» قبل أن يبدأ ما يوجَّه إليه */}
+          {approved && <GuidancePanel guidance={me.guidance} onHandbook={onHandbook} />}
 
           {profile && (
             <Fold title={profile.track?.title ? 'مسارك' : 'نتيجتك'} meta={profile.track?.title || 'حصيلة قياسك في الأطر الثلاثة'}>
