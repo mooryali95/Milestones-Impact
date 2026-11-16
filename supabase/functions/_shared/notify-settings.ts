@@ -4,12 +4,12 @@
 // في _shared لا في leaders-api/settings.ts: settings.ts يستورد core.ts، وcore.ts يقرر التوجيه، فالقراءة هنا بعميل يمرره
 // المستدعي وذاكرة خاصة بها (التصور 2.3). وعلى سلوك settings.ts: دقيقة في ذاكرة النسخة، وتعذّر القراءة العابر يُبقي آخر
 // قيم قُرئت بنجاح ويُعاد بعد خمس ثوانٍ، وبلا قراءة سابقة «متوازن» الافتراضي. غياب الجدول أو الصف: الافتراضي.
-// المجموعة لا تُحرَّر من اللوحة قبل المرحلة 4، فالصف غائب اليوم والنتيجة «متوازن».
-import { DEFAULT_SETTINGS, normalizeSettings } from './notify-routing.js';
+// يحررها المالك من قسم «التوجيه» في مركز البريد (المرحلة 4)، وحفظها يمسح هذه الذاكرة في النسخة التي حفظت.
+import { DEFAULT_SETTINGS, normalizeSettings, paymentFallback } from './notify-routing.js';
 
 // deno-lint-ignore no-explicit-any
 type Client = any;
-export type NotifySettings = { preset: string; rows: Record<string, { email: boolean; slack: boolean; digest: boolean }> };
+export type NotifySettings = { preset: string; rows: Record<string, { email: boolean; slack: boolean; digest: boolean }>; digest_hour?: number };
 
 const TTL = 60e3;
 const RETRY = 5e3;
@@ -41,8 +41,5 @@ export const expireNotifySettings = () => { if (cache) cache.at = 0; };
 // في الانتقال: صف المركز إن حُفظ، وإلا فالقيمة القديمة: «مفتوح» كان بريدًا لكل دفعة، فيبقى البريد مع سطر Slack والملخص.
 // و«مغلق» (الافتراضي) لا يُسكت الدفعة: سطر Slack فوري والملخص بقرار المالك (القسم 11)
 export function withPaymentFallback(settings: NotifySettings, legacyOwner: unknown): NotifySettings {
-  if (legacyOwner !== true) return settings;
-  const rows = { ...settings.rows };
-  for (const key of ['payment_new', 'payment_refund']) rows[key] ??= { email: true, slack: true, digest: true };
-  return { ...settings, rows };
+  return paymentFallback(settings, legacyOwner) as NotifySettings;
 }

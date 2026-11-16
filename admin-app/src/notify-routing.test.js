@@ -34,7 +34,7 @@ describe('route: «متوازن» الافتراضي بكل طبقة وكل حا
   it('الافتراضي «متوازن» بقرار المالك', () => {
     expect(DEFAULT_PRESET).toBe('balanced');
     expect(PRESETS.balanced.label).toBe('متوازن');
-    expect(DEFAULT_SETTINGS).toEqual({ preset: 'balanced', rows: {} });
+    expect(DEFAULT_SETTINGS).toEqual({ preset: 'balanced', rows: {}, digest_hour: 9 });
   });
 });
 
@@ -88,7 +88,7 @@ describe('route: الصف المقفل والقنوات المسموحة وال�
 describe('الإعداد التالف أو المتعذر يطبق الافتراضي', () => {
   for (const bad of [null, undefined, 'x', 42, { preset: 'loud' }, { rows: 'x' }]) {
     it(JSON.stringify(bad) ?? 'undefined', () => {
-      expect(normalizeSettings(bad)).toEqual({ preset: 'balanced', rows: {} });
+      expect(normalizeSettings(bad)).toEqual({ preset: 'balanced', rows: {}, digest_hour: 9 });
       expect(wanted(keyOfTier('info'), bad)).toEqual(wanted(keyOfTier('info')));
     });
   }

@@ -268,3 +268,25 @@ Deno.test('طلب استعادة الوصول بنوع alert للمالك ولل
   assertEquals((block.match(/\}\), "alert"\);/g) || []).length, 2);
   assert(!/sendEmail\([^;]*\)\);\n/.test(block.replace(/\}\), "alert"\);/g, '')));
 });
+
+// المرحلة 4: ما حفظه المالك في قسم «التوجيه» يحكم raiseAlert نفسه، لا الافتراضي وحده
+Deno.test('التوجيه: صف محفوظ يضيف البريد إلى تنبيه مهم وسلاك يعمل، وصف حرج غير مقفل يُطفأ بريده', async () => {
+  const NS = await import('../_shared/notify-settings.ts');
+  NS.resetNotifySettings();
+  const mode = env('ok');
+  const stored = { preset: 'balanced', rows: { seat_check_unavailable: { email: true, slack: true, digest: false }, cert_key_missing: { email: false, slack: true, digest: false } } };
+  const restore = install((table) => (table === 'app_settings' ? { data: { value: stored }, error: null } : { data: [], count: 0, error: null }));
+  try {
+    await withNet(async (calls) => {
+      const r = await raiseAlert('seat_check_unavailable', { note: 'x' }, { key: `t${seq++}` });
+      assertEquals([r.email, !!r.slack], [true, true]);
+      assertEquals(alertMails(calls).length, 1);
+    }, mode);
+    await withNet(async (calls) => {
+      // cert_key_missing حرج غير مقفل: الصف المحفوظ يطفئ بريده فيصل سلاك وحده
+      const r = await raiseAlert('cert_key_missing', { note: 'x' }, { key: `t${seq++}` });
+      assertEquals([r.email, !!r.slack], [false, true]);
+      assertEquals(alertMails(calls).length, 0);
+    }, mode);
+  } finally { restore(); done(); NS.resetNotifySettings(); }
+});

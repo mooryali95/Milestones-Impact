@@ -9,6 +9,7 @@ import { alertWebhook, slackAlertDelivered, bdi, esc, MAIL_FROM_DEFAULT, type Ma
 import { SITES } from '../_shared/sites.js';
 import { slackCode, slackConfigured, slackMail, slackUse } from '../_shared/slack.ts';
 import { route, SLACK_DOWN_MS, SLACK_DOWN_SUBJECT, slackStateOf } from '../_shared/notify-routing.js';
+import { notifySettings } from '../_shared/notify-settings.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
@@ -768,6 +769,17 @@ export function agentKeyMail(kind: 'changed' | 'reverted', rows: [string, string
     AGENT_KEY_MAIL_SUBJECT[kind], 'يصلك هذا لأنك من مالكي لوحة الإدارة.');
 }
 
+// بريد الملاك الأمني لتغيير توجيه الإشعارات (مركز الإشعارات، المرحلة 4، صف notify_routing_changed المقفل): ما تغير
+// بتسميات الفهرس وحدها، ومن حفظ ومتى
+export const ROUTING_MAIL_SUBJECT = 'تنبيه أمني: تغير توجيه إشعارات الإدارة';
+export function routingMail(rows: [string, string][]) {
+  return shell('admin', ROUTING_MAIL_SUBJECT,
+    mailRows(rows)
+    + mailNote('إن لم تكن أنت أو أحد الملاك، ادخل وأعد الإعداد من قسم «التوجيه» في مركز البريد، وأنهِ الجلسات الأخرى وغيّر وسيلة الدخول.')
+    + mailButton(`${SITES.admin}/#/leaders/mailcenter`, 'افتح مركز البريد'),
+    ROUTING_MAIL_SUBJECT, 'يصلك هذا لأنك من مالكي لوحة الإدارة.');
+}
+
 // ── تنبيه التشغيل الفوري ──
 // خطأ داخلي (500) أو تعطل البريد يصل المالك فورًا لا في تقرير الأحد، مرة في كل مهلة تهدئة
 // لكل نوع. النافذة تُقرأ من audit_log (action=system.alert) فلا جدول جديد.
@@ -846,8 +858,8 @@ export type AlertResult = { cooled: boolean; webhook: boolean; email: boolean; s
 // (system.alert)، ولا يصل سلاك ولا الرابط، ولا يدخل العنوان المحفوظ في سجل البريد
 export type AlertOpts = { key?: string | null; mail?: Record<string, unknown> | null };
 // القناة يقررها جدول التوجيه وحده (_shared/notify-routing.js): الحرج بريد وسلاك دائمًا، والمهم سلاك والبريد احتياط
-// حين لا يصل سلاك ولا الرابط، ومفتاح المساعد بلا بريد (يغطيه بريد الملاك الأمني). الإعداد المخزن يأتي مع المرحلة 4،
-// وإلى أن يأتي «متوازن» الافتراضي
+// حين لا يصل سلاك ولا الرابط، ومفتاح المساعد بلا بريد (يغطيه بريد الملاك الأمني). والإعداد ما حفظه المالك في قسم
+// «التوجيه» (notifySettings، ذاكرة الدقيقة)، و«متوازن» الافتراضي إن لم يُحفظ أو تعذّرت قراءته
 export async function raiseAlert(kind: string, detail: Record<string, unknown>, { key = null, mail = null }: AlertOpts = {}): Promise<AlertResult> {
   const windowMs = alertCooldown(kind);
   const cool = key ? `${kind}:${key}` : kind;
@@ -866,12 +878,13 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>, 
     await audit('system', 'alert', 'system.alert', 'system', cool, null, detail).catch((e) => console.error('alertOps audit:', e));
     // قناة غير البريد أولًا (D15): حين يكون العطل في البريد نفسه يصل التنبيه. سلاك والرابط معًا، وكلاهما قناة كافية
     // (readiness.js ALERT_CHANNELS)، فنتيجة سلاك تُنتظر (بمهلة) لتُحسب في «وصل» كما يُحسب الرابط
-    const plan = route(kind);
+    const settings = await notifySettings(db);
+    const plan = route(kind, settings);
     const [webhook, slack] = plan.slack
       ? await Promise.all([alertWebhook(kind, detail, { slack: false }), slackAlertDelivered(kind, detail)])
       : [false, false];
     const state = plan.slack ? slackStateOf({ delivered: webhook || slack, configured: slackConfigured() || !!Deno.env.get('LEADERS_ALERT_WEBHOOK') }) : 'ok';
-    const decided = route(kind, undefined, state);
+    const decided = route(kind, settings, state);
     const routed = { email: decided.email, slack: plan.slack };
     const base = { cooled: false, webhook, slack, routed };
     if (!CONFIG.alertEmail || !CONFIG.resendKey) return { ...base, email: false };

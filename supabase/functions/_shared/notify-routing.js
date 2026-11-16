@@ -44,7 +44,9 @@ export const PRESETS = {
 };
 // قرار المالك 2026-11-16 (القسم 11)
 export const DEFAULT_PRESET = 'balanced';
-export const DEFAULT_SETTINGS = Object.freeze({ preset: DEFAULT_PRESET, rows: Object.freeze({}) });
+// ساعة الملخص اليومي بتوقيت الرياض: 9:00 بقرار المالك، ويغيرها المالك من قسم «التوجيه» (المرحلة 4)
+export const DIGEST_HOUR_RIYADH = 9;
+export const DEFAULT_SETTINGS = Object.freeze({ preset: DEFAULT_PRESET, rows: Object.freeze({}), digest_hour: DIGEST_HOUR_RIYADH });
 
 const ALL = ['email', 'slack', 'digest'];
 const NO_EMAIL = ['slack', 'digest'];
@@ -61,6 +63,7 @@ export const EVENTS = [
   ev('admin_recovery_request', 'security', 'critical', 'طلب استعادة وصول', { locked: true }),
   ev('admin_access_restored', 'security', 'critical', 'أُعيد وصول حساب إدارة', { locked: true }),
   ev('agent_key_mail', 'security', 'critical', 'بريد الملاك الأمني لتغيير مفتاح المساعد', { locked: true }),
+  ev('notify_routing_changed', 'security', 'critical', 'بريد الملاك الأمني لتغيير توجيه الإشعارات', { locked: true, allow: ['email'] }),
   ev('agent_key_changed', 'security', 'important', 'تغيير مفتاح المساعد (سطر التشغيل)', { allow: NO_EMAIL }),
   ev('agent_key_reverted', 'security', 'important', 'إعادة مفتاح المساعد إلى سر الخادم (سطر التشغيل)', { allow: NO_EMAIL }),
   ev('erase_request', 'security', 'critical', 'طلب حذف بيانات', { locked: true }),
@@ -106,7 +109,8 @@ export const EVENTS = [
   ev('weekly_health', 'ops', 'important', 'تقرير الأسبوع بلا ما يحتاج تدخلًا'),
   // ── الطلبات ──
   // قرار المالك: طلب التواصل بالبريد وSlack معًا (وعد الرد خلال 4 ساعات عمل)
-  ev('contact_request', 'requests', 'critical', 'طلب تواصل جديد أو مساعد يطلب إنسانًا', { screen: '' }),
+  // وبريده مقفل (المرحلة 4): القرار بريد وSlack معًا، فلا يُطفأ البريد من المركز ويبقى Slack وحده قابلًا للتعديل
+  ev('contact_request', 'requests', 'critical', 'طلب تواصل جديد أو مساعد يطلب إنسانًا', { locked: true, screen: '' }),
   ev('expert_application', 'requests', 'important', 'طلب انضمام خبير أو عضوية لجنة', { digest: true, screen: '#/leaders/experts' }),
   ev('expert_no_match', 'requests', 'important', 'لا خبير متاح لطلب', { screen: '#/leaders/experts?view=requests' }),
   ev('sponsor_request', 'requests', 'important', 'طلب رعاية', { digest: true, screen: '#/leaders/payments' }),
@@ -139,7 +143,9 @@ export function normalizeSettings(settings) {
       rows[key] = Object.fromEntries(CHANNELS.map((c) => [c, row[c] === true]));
     }
   }
-  return { preset, rows };
+  const h = s.digest_hour;
+  const digest_hour = Number.isInteger(h) && h >= 0 && h <= 23 ? h : DIGEST_HOUR_RIYADH;
+  return { preset, rows, digest_hour };
 }
 
 // القنوات المطلوبة للحدث بالإعداد وحده، قبل حال Slack
@@ -172,7 +178,6 @@ export const slackStateOf = ({ delivered, configured }) => (delivered ? 'ok' : c
 
 // الملخص اليومي (6.3، قرار المالك): 9:00 بتوقيت الرياض في سلسلة «الملخص اليومي»، لا يُنشر فارغًا، وبريد واحد بدله إن
 // لم يُضبط Slack أو لم يصل. يدخله كل حدث يقرر له route ملخصًا (المعلوماتي، والمهم الموسوم digest بعد سطره الفوري)
-export const DIGEST_HOUR_RIYADH = 9;
 export const DIGEST_SUBJECT = 'الملخص اليومي لإشعارات الإدارة';
 export const digestEvents = (/** @type {any} */ settings = DEFAULT_SETTINGS) => EVENTS.filter((e) => wanted(e, settings).digest).map((e) => e.key);
 // رابط الشاشة في لوحة الإدارة لكل حدث (screen في الفهرس)، وما لا شاشة له فاللوحة الرئيسية
@@ -181,3 +186,86 @@ export const screenOf = (event) => eventOf(event).screen ?? '#/leaders/overview'
 // بريد «Slack لا يستقبل التنبيهات»: مرة كل ست ساعات على الأكثر (6.4)
 export const SLACK_DOWN_MS = 6 * 36e5;
 export const SLACK_DOWN_SUBJECT = 'تنبيه: Slack لا يستقبل التنبيهات';
+
+// ── مركز الإعدادات في لوحة الإدارة (المرحلة 4، التصور 6.2) ──
+// كل ما يلي نقي يقرؤه الخادم (التحقق في settings.js والبريد الأمني في settings.ts) واللوحة (قسم «التوجيه») معًا.
+
+// مفتاح دفعة المالك القديم (payment_settings.notify.owner): صف المركز إن حُفظ، وإلا «مفتوح» يبقي البريد مع سطر Slack والملخص
+export function paymentFallback(settings, legacyOwner) {
+  const s = normalizeSettings(settings);
+  if (legacyOwner !== true) return s;
+  const rows = { ...s.rows };
+  for (const key of ['payment_new', 'payment_refund']) rows[key] ??= { email: true, slack: true, digest: true };
+  return { ...s, rows };
+}
+
+// تحقق صف واحد كما يُحفظ: قنوات ثلاث منطقية، وما لا يسمح به الحدث لا يُطلب، والصف المقفل لا يُطفأ بريده.
+// يعيد سبب الرفض بالعربية أو null
+export function rowError(key, row) {
+  const e = EVENT_INDEX[key];
+  if (!e) return 'حدث غير معروف';
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return 'صف غير صالح';
+  for (const k of Object.keys(row)) if (!CHANNELS.includes(k)) return `قناة غير معروفة: ${k}`;
+  for (const c of CHANNELS) if (row[c] !== undefined && typeof row[c] !== 'boolean') return 'نعم أو لا لكل قناة';
+  if (e.locked && row.email !== true) return `«${e.label}» صف مقفل: بريده لا يُطفأ`;
+  for (const c of CHANNELS) if (row[c] === true && !e.allow.includes(c)) return `«${e.label}» لا يُرسل عبر ${CHANNEL_AR[c]}`;
+  return null;
+}
+
+// الصفوف المقفلة التي يطفئ بريدها هذا الإدخال (يرفضها الخادم برمز locked_row قبل أي تحقق آخر)
+export const lockedOff = (rows) => Object.entries(rows && typeof rows === 'object' ? rows : {})
+  .filter(([k, r]) => EVENT_INDEX[k]?.locked && !(r && r.email === true)).map(([k]) => k);
+
+// المصفوفة الفعلية لكل حدث بإعداد ما (ما يقرره wanted حين يعمل Slack)، وهل عُدّل صفه عن الإعداد الجاهز
+export const matrixOf = (settings) => {
+  const s = normalizeSettings(settings);
+  return EVENTS.map((e) => ({ ...e, want: wanted(e, s), custom: Object.hasOwn(s.rows, e.key) }));
+};
+
+// صفوف المحفوظ الدنيا: ما خالف الإعداد الجاهز وحده، فتبديل الإعداد الجاهز لاحقًا يحرك ما لم يُعدَّل
+export function compactRows(preset, rows) {
+  const out = {};
+  for (const [key, row] of Object.entries(rows || {})) {
+    const e = EVENT_INDEX[key];
+    if (!e) continue;
+    const base = wanted(e, { preset, rows: {} });
+    const r = Object.fromEntries(CHANNELS.map((c) => [c, row[c] === true || (c === 'email' && e.locked)]));
+    if (CHANNELS.some((c) => r[c] !== base[c])) out[key] = r;
+  }
+  return out;
+}
+
+// ما تغير بين إعدادين، سطرًا لكل فرق، للبريد الأمني إلى الملاك وسجل التدقيق. بلا أسماء ولا عناوين: تسميات الفهرس وحدها
+export function routingChanges(before, after) {
+  const a = normalizeSettings(before);
+  const b = normalizeSettings(after);
+  const out = [];
+  if (a.preset !== b.preset) out.push(['الإعداد الجاهز', `${PRESETS[a.preset].label} إلى ${PRESETS[b.preset].label}`]);
+  if (a.digest_hour !== b.digest_hour) out.push(['موعد الملخص اليومي', `${a.digest_hour}:00 إلى ${b.digest_hour}:00 بتوقيت الرياض`]);
+  const on = (w) => CHANNELS.filter((c) => w[c]).map((c) => CHANNEL_AR[c]).join(' و') || CHANNEL_AR.log;
+  for (const e of EVENTS) {
+    const x = wanted(e, a);
+    const y = wanted(e, b);
+    if (CHANNELS.some((c) => x[c] !== y[c])) out.push([e.label, `${on(x)} إلى ${on(y)}`]);
+  }
+  return out;
+}
+
+// معاينة الأثر (6.2): لو طُبق الإعداد على أحداث آخر 7 أيام. counts: عدد كل حدث بمفتاحه من السجل.
+// slackState حال Slack المفترضة (ok حين يعمل، وغيرها يحوّل المهم إلى البريد). الملخص: بريد واحد لكل يوم فيه أحداث
+// حين لا يعمل Slack. تقدير لا عدّ: التهدئة ونوافذ البريد القائمة تخفض الفعلي عنه
+export function impactOf(counts, settings, slackState = 'ok', days = 7) {
+  let email = 0;
+  let slack = 0;
+  let digest = 0;
+  for (const [key, n0] of Object.entries(counts || {})) {
+    const n = Number(n0) || 0;
+    if (!n) continue;
+    const r = route(key, settings, slackState);
+    if (r.email) email += n;
+    if (r.slack) slack += n;
+    if (r.digest) digest += n;
+  }
+  const digestMails = slackState === 'ok' || !digest ? 0 : Math.min(days, digest);
+  return { email: email + digestMails, slack: slack + (slackState === 'ok' && digest ? Math.min(days, digest) : 0), digest };
+}

@@ -166,7 +166,8 @@ export default function AppSettings({ canWrite, onSettings, isSuper = false, foc
     <div className="stack">
       {!d.ready && <div className="la-card la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فتعمل القيم الافتراضية ولا يُحفظ تعديل حتى يُطبَّق ترحيله.</div>}
       <FeatureSwitches d={d} canWrite={canWrite} onSaved={setD} />
-      {Object.keys(SETTINGS).filter((g) => g !== 'features').map((g) => (
+      {/* مجموعة لها لوحتها (panel: توجيه الإشعارات في مركز البريد) لا تُرسم هنا */}
+      {Object.keys(SETTINGS).filter((g) => g !== 'features' && !SETTINGS[g].panel).map((g) => (
         <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready && (!SETTINGS[g].super || isSuper)} onSaved={setD} />
       ))}
     </div>

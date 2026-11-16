@@ -10,6 +10,7 @@ import { SITES } from './sites.js';
 import { PROMISE_AR } from './hours.js';
 import { slackPost } from './slack.ts';
 import { route } from './notify-routing.js';
+import { notifySettings } from './notify-settings.ts';
 
 // deno-lint-ignore no-explicit-any
 type SB = any;
@@ -48,7 +49,8 @@ export const contactLine = (product: unknown) => `📬 طلب تواصل جدي�
 // slack: سطر Slack من هنا (النموذج العام). المساعد الآلي ينشر سطر التحويل الخاص به (agent-chat/handler.ts) فلا يطلبه
 export async function notifyAdmin(sb: SB, r: ContactRow, send: MailSend, adminEmail: string, pageLabel: string, sourceLabel = '', { slack = false }: { slack?: boolean } = {}) {
   if (!(await claim(sb, 'notify', String(r.id)))) return;
-  if (slack && route('contact_request').slack) slackPost('alerts', contactLine(r.product), { client: sb });
+  // البريد مقفل (يُرسل دائمًا)، وسطر Slack بما حفظه المالك في «التوجيه»
+  if (slack && route('contact_request', await notifySettings(sb)).slack) slackPost('alerts', contactLine(r.product), { client: sb });
   const dateStr = new Date(r.created_at as string).toLocaleString('ar-SA', {
     timeZone: 'Asia/Riyadh', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });

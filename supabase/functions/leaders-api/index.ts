@@ -57,6 +57,7 @@ import * as OB from './observations.ts';
 import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
 import * as MC from './mail-center.ts';
+import * as NC from './notify-center.ts';
 import * as AG from './agent-admin.ts';
 import * as MB from './master-book.ts';
 import * as DG from './digest.ts';
@@ -474,6 +475,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.mail-gallery': () => Promise.resolve(S.mailGallery()),
   // مركز البريد: الحصة للجميع. تشخيص عنوان ونص رسالة منتظرة (قد يحمل رابط دخول) لمن يكتب وحده، ورابط الدخول اليدوي للمدير الأعلى
   'admin.mail-center': (a) => MC.center(a),
+  // قسم «التوجيه» في مركز البريد: الإعداد ومعاينة أثر 7 أيام للجميع، والحفظ للمالك وحده عبر admin.settings-save
+  'admin.notify-routing': (a) => NC.routingState(a),
   'admin.mail-trace': (a, b) => A.writer(a, MC.trace, b),
   'admin.mail-queue-body': (a, b) => A.writer(a, MC.queueBody, b),
   'admin.mail-queue-send': (a, b) => A.writer(a, MC.queueSend, b),

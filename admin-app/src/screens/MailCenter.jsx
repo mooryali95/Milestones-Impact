@@ -3,10 +3,12 @@
 // ════════════════════════════════════════════════════════════════
 // قراءة من admin.mail-center (العداد الموحد leaders.mail_events وطابور mail_queue). القرار في الخادم
 // (_shared/mail-budget.js)؛ هنا العرض وأفعال المدير: أرسل الآن، انسخ النص، أرسلتها بنفسي، رابط دخول يدوي.
+// وقسم «التوجيه» (NotifyRouting.jsx): أين يصل كل إشعار للإدارة، فيجتمع هنا ما يُرسل وأين يُرسل.
 import React, { useCallback, useEffect, useState } from 'react';
 import { dateTime, L } from '../leaders.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { DELIVERY_AR, etaAr, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
+import NotifyRouting from './NotifyRouting.jsx';
 
 const QUEUE_ST = { waiting: ['ينتظر الحصة', 'warn'], gave_up: ['تعذّر بعد محاولات', 'bad'], stale: ['فات أوانه', ''], cancelled: ['أُغلق يدويًّا', ''] };
 // «يُتوقع إرساله» للمنتظر: الممسَك بميزة مخفية لا موعد له، والمؤرخ الذي يمضي موعده قبل دوره يُترك
@@ -238,6 +240,8 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
           </details>
         )}
       </section>
+
+      <NotifyRouting />
 
       <div className="la-grid2">
         <section className="la-card">

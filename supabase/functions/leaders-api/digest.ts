@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // الملخص اليومي لإشعارات الإدارة (مركز الإشعارات، المرحلة 3، التصور 6.3 وقرار المالك في القسم 11)
 // ════════════════════════════════════════════════════════════════
-// من المهمة الساعية (cron.expert-offers)، مرة في يوم الرياض بعد الساعة 9:00 (DIGEST_HOUR_RIYADH):
+// من المهمة الساعية (cron.expert-offers)، مرة في يوم الرياض بعد ساعة الملخص (9:00 افتراضيًا، ويغيرها المالك من «التوجيه»):
 // 1. يعدّ منذ آخر ملخص (وأربعًا وعشرين ساعة لأول مرة، وثمانيًا وأربعين على الأكثر) كل حدث يقرر له route ملخصًا:
 //    إشعارات المالك (audit_log: system.notify)، والتنبيهات الموسومة (system.alert، كالحجز من غير مؤهل)، ودخول المالك
 //    من جهاز معروف (public.admin_audit_log: login وmeta.device=known).
@@ -82,14 +82,16 @@ export const resetDigest = () => { doneDay = ''; };
 
 export async function dailyDigest(now = Date.now()): Promise<DigestResult> {
   const day = riyadhDay(now);
-  if (riyadhHour(now) < DIGEST_HOUR_RIYADH || doneDay === day) return { due: false };
+  if (doneDay === day) return { due: false };
+  // الساعة من إعداد المالك (قسم «التوجيه»، 9:00 افتراضيًا)، والقراءة من ذاكرة الدقيقة
+  const settings = await notifySettings(db);
+  if (riyadhHour(now) < (settings.digest_hour ?? DIGEST_HOUR_RIYADH)) return { due: false };
   const last = await db.from('audit_log').select('entity_id, created_at').eq('action', DIGEST_ACTION).order('created_at', { ascending: false }).limit(1);
   if (last.error) return { due: true, error: `digest marker: ${last.error.message || last.error}` };
   const prev = last.data?.[0];
   if (prev?.entity_id === day) { doneDay = day; return { due: false }; }
   const floor = now - MAX_WINDOW_MS;
   const since = new Date(Math.max(prev?.created_at ? Date.parse(prev.created_at) : now - DAY_MS, floor)).toISOString();
-  const settings = await notifySettings(db);
   const { rows, errors } = await digestRows(since, new Set(digestEvents(settings)));
   // مصدر لم يُقرأ: لا يُعلَّم اليوم، فيُعاد في الساعة التالية بدل ملخص ناقص يُعدّ كاملًا
   if (errors.length) return { due: true, error: errors.join('; ').slice(0, 300) };

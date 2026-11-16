@@ -9,6 +9,7 @@
 // سطر Slack: الطريقة و«جهاز معروف» أو «جهاز جديد» فقط، بلا بريد ولا اسم ولا عنوان ولا متصفح (القسم 7).
 import { KNOWN_DEVICE_DAYS } from '../_shared/login-device.js';
 import { route, slackStateOf } from '../_shared/notify-routing.js';
+import { notifySettings } from '../_shared/notify-settings.ts';
 
 // deno-lint-ignore no-explicit-any
 type SB = any;
@@ -21,6 +22,8 @@ export type LoginNoticeDeps = {
   slackPost: (text: string) => unknown;
   slackDeliver: (text: string) => Promise<boolean>;
   slackConfigured: () => boolean;
+  // إعداد المركز المحفوظ (قسم «التوجيه»)؛ بلاه يُقرأ من leaders.app_settings بذاكرة الدقيقة
+  settings?: unknown;
   now?: number;
 };
 export type LoginFacts = { userId: string; method: string; fp: string | null; passkeyUsedBefore?: boolean };
@@ -54,7 +57,8 @@ export async function ownerLoginNotice(d: LoginNoticeDeps, method: string, devic
   const line = loginLine(method, device);
   const configured = d.slackConfigured();
   const title = device === 'known' ? KNOWN_DEVICE_TITLE : NEW_DEVICE_TITLE;
-  let routed = route(kind);
+  const settings = d.settings ?? await notifySettings(d.sb);
+  let routed = route(kind, settings);
   if (routed.email) {
     // البريد مقرر من غير نظر إلى Slack (الجهاز الجديد): لا ننتظر Slack
     if (configured) d.slackPost(line);
@@ -62,7 +66,7 @@ export async function ownerLoginNotice(d: LoginNoticeDeps, method: string, devic
     return { kind, routed: { ...routed, slack: configured } };
   }
   const delivered = configured ? await d.slackDeliver(line) : false;
-  routed = route(kind, undefined, slackStateOf({ delivered, configured }));
+  routed = route(kind, settings, slackStateOf({ delivered, configured }));
   if (routed.email) await d.mail(title, rows);
   return { kind, routed };
 }

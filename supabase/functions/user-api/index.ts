@@ -7,6 +7,7 @@ import {
 import { MAIL_FROM_DEFAULT, mailButton, mailCode, mailRows, mailShell, mailText, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
 import { route } from "../_shared/notify-routing.js";
+import { notifySettings } from "../_shared/notify-settings.ts";
 
 // user-api: تسجيل مشاركي Matrix ودخولهم وحفظ بياناتهم.
 //
@@ -158,7 +159,7 @@ async function networkLimit(sb: SB, ip: string | null): Promise<Response | null>
 async function notifyPlanSubmitted(sb: SB, reg: { id: string; name: string; email: string }) {
   // سطر السجل يعدّه الملخص اليومي (leaders.audit_log، system.notify): مفتاح الحدث ومعرّف التسجيل وحدهما، بلا اسم ولا بريد
   await planNoticeLog(sb, reg.id);
-  if (!ADVISOR_EMAIL && !route("matrix_plan").email) return;
+  if (!ADVISOR_EMAIL && !route("matrix_plan", await notifySettings(sb)).email) return;
   if (!NOTIFY_EMAIL) { console.error("user-api: MATRIX_NOTIFY_EMAIL missing; plan notification skipped"); return; }
   const html = mailShell("خطة مقدَّمة في مصفوفة التأثير", `
 ${mailText("قدّم مشارك خطته النهائية في مصفوفة التأثير، وهي بانتظار مراجعتك.")}

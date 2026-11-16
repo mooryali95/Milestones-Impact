@@ -15,6 +15,7 @@ import { certKeys } from './certificates.ts';
 import { RETENTION_DAYS as MAIL_RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { codeStreak, OPS } from './ops-health.js';
 import { route, slackStateOf } from '../_shared/notify-routing.js';
+import { notifySettings } from '../_shared/notify-settings.ts';
 import { slackConfigured, slackDeliver } from '../_shared/slack.ts';
 import { SITES } from '../_shared/sites.js';
 
@@ -280,9 +281,10 @@ export async function weeklyHealth() {
     ...(pending ? [`${pending} مشاركًا ينتظرون اعتماد مستواهم`] : []),
   ];
   const event = issues.length ? 'weekly_health_action' : 'weekly_health';
-  const plan = route(event);
+  const settings = await notifySettings(db);
+  const plan = route(event, settings);
   const slack = plan.slack ? await slackDeliver('alerts', weeklyLine(issues, [['مسجلون جدد', String(joined)], ['نشطون', String(active)], ['ينتظرون الاعتماد', String(pending)], ['متطلبات للمراجعة', String(submitted)]])) : false;
-  const { email: wantEmail } = route(event, undefined, slackStateOf({ delivered: slack, configured: slackConfigured() }));
+  const { email: wantEmail } = route(event, settings, slackStateOf({ delivered: slack, configured: slackConfigured() }));
   const email = wantEmail && !!CONFIG.alertEmail;
   if (email) await sendMail(CONFIG.alertEmail, issues.length ? `تقرير الأسبوع: ${issues.length} يحتاج تدخلك` : 'تقرير الأسبوع: كل شيء على ما يرام', healthMail([
     ['مسجلون جدد هذا الأسبوع', String(joined)], ['نشطون هذا الأسبوع', String(active)],

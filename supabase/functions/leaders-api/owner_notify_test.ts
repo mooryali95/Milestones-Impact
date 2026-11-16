@@ -178,11 +178,11 @@ Deno.test('إعداد المركز المخزن: يُقرأ من app_settings، 
   const fail = new Set<string>();
   const restore = install(tables, fail);
   try {
-    assertEquals(await NS.notifySettings(db), { preset: 'balanced', rows: {} });
+    assertEquals(await NS.notifySettings(db), { preset: 'balanced', rows: {}, digest_hour: 9 });
     NS.resetNotifySettings();
     tables.app_settings.push({ key: 'notifications', value: { preset: 'all', rows: { sponsor_request: { email: true }, unknown_row: { email: true } } } });
     const s = await NS.notifySettings(db);
-    assertEquals(s, { preset: 'all', rows: { sponsor_request: { email: true, slack: false, digest: false } } });
+    assertEquals(s, { preset: 'all', rows: { sponsor_request: { email: true, slack: false, digest: false } }, digest_hour: 9 });
     // تعذّر عابر بعد قراءة ناجحة: القيم الأخيرة لا الافتراضي (الذاكرة منتهية، فالقراءة تُعاد وتفشل)
     fail.add('app_settings');
     NS.expireNotifySettings();
