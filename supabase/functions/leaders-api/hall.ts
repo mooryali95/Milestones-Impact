@@ -6,7 +6,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { answersClosed, answerSeconds, assignTables, hallAttendance, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
 import { katonPoints } from './katon.js';
-import { checkinOpen, inProgram, overallLevel } from './logic.js';
+import { checkinOpen, inProgram, isUndated, overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
 import type { Actor } from './admin.ts';
 
@@ -70,7 +70,8 @@ async function workshopsFor(cohortId: string) {
   const now = Date.now();
   const { data } = await db.from('workshop_sessions').select('id, title_ar, starts_at, ends_at, cohort_id, active')
     .eq('active', true).gte('ends_at', new Date(now - 864e5).toISOString()).lte('starts_at', new Date(now + 7 * 864e5).toISOString()).order('starts_at');
-  return ((data || []) as any[]).filter((w) => !w.cohort_id || w.cohort_id === cohortId)
+  // غير المؤرخة خارج النافذة أصلًا (مرشحا gte وlte يسقطان الفارغ)، وهذا حارس صريح لها
+  return ((data || []) as any[]).filter((w) => !isUndated(w) && (!w.cohort_id || w.cohort_id === cohortId))
     .map((w) => ({ id: w.id, title: w.title_ar, starts_at: w.starts_at, ends_at: w.ends_at, open: checkinOpen(w, now) }));
 }
 // من يُكتب حضوره لو أُغلقت القاعة الآن: من أجاب عن 60% من الجولات المكشوفة

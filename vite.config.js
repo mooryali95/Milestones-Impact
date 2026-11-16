@@ -27,6 +27,9 @@ export default defineConfig({
     // describe/it/expect بلا استيراد — كما كانت مع Jest، فلا تتغيّر الاختبارات.
     globals: true,
     environment: 'jsdom',
+    // 21 ملف اختبار تبني قاعدة PGlite (WASM) كاملة داخل الاختبار، وتهيئتها على عدّاء CI المزدحم تتجاوز مهلة vitest
+    // الافتراضية (5 ث) فتفشل بالتناوب ملفات لا علاقة لها بالتغيير. 20 ث مهلة واحدة للجميع بدل مهلة لكل ملف
+    testTimeout: 20_000,
     include: ['src/**/*.test.{js,jsx}', 'leaders-app/src/**/*.test.{js,jsx}', 'admin-app/src/**/*.test.{js,jsx}',
       // اختبارات سكربتات الموقع الثابت home/: خارج home/ لأن المجلد يُنشر كما هو
       'tests/home/**/*.test.js'],

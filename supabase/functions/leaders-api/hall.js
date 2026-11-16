@@ -15,6 +15,8 @@ export const HALL_TEAM_TASK_AR = {
   eval: 'يقيّم الأداء داخل القاعة ويجهّز أسئلة الجولة',
 };
 export const HALL_STAGE_AR = { enter: 'الدخول', train: 'التدريب', split: 'التقسيم', round: 'الجولة', reveal: 'الكشف', closed: 'أُغلقت' };
+// جلسة الورشة في قائمة ربط القاعة: عنوانها وموعدها، وغير المؤرخة «يُحدد لاحقًا» لا تاريخ 1970 (الخادم يستبعدها أصلًا)
+export const hallWorkshopLabel = (w) => `${w?.title || ''} · ${w?.starts_at ? new Date(w.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : 'يُحدد لاحقًا'}`;
 export const HALL_SPLIT_AR = { mixed: 'آلي متنوع المستويات', level: 'آلي متقارب المستوى', choose: 'يختار كل مشارك فريقه', manual: 'يدوي من الخبير' };
 export const HALL_PRESENT_SECONDS = 25;
 // مؤقت الإجابة: وقت نهايته في الخادم (hall_sessions.phase_ends_at)، والأجهزة تعدّ إليه بفرق ساعتها عن ساعة الخادم.

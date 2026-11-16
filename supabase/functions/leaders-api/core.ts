@@ -505,13 +505,15 @@ export const WORKSHOP_MAIL = {
 } as const;
 // staged: جلسة عن بعد لم تُفتح مرحلتها في رحلته بعد، فلا رابط في البريد ولا تعليمات القاعة: الرابط في رحلته حين تُفتح
 export const WORKSHOP_STAGED_NOTE = 'رابط الانضمام يظهر في رحلتك حين تُفتح لك مرحلة هذه الجلسة، فافتح رحلتك يومها.';
-export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged = false) {
+// later: جلسة عن بعد لم يُضف رابطها بعد (J1)، فلا تعليمات القاعة: الرابط يصل قبلها ويظهر في رحلته
+export const WORKSHOP_LINK_LATER_NOTE = 'هذه الجلسة عن بعد، ورابط الانضمام يُضاف لاحقًا ويظهر في رحلتك قبل بدئها بساعة.';
+export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false) {
   const m = WORKSHOP_MAIL[kind];
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
     + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(CONFIG.appUrl, 'افتح رحلتي')
-    + mailNote(staged ? WORKSHOP_STAGED_NOTE : m.note),
+    + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : m.note),
     `${title} · ${when}`, '');
 }
 
