@@ -223,6 +223,16 @@ test('«أين توقفوا» من ملف الدفعة: الرابط يفتح «
   await expect(table.locator('tbody tr')).toHaveCount(2);
   await expect(page.locator('.stat-card').first().locator('.stat-value')).toHaveText('7');
   await expect(page).not.toHaveURL(/cohort=/);
+  // دفعة من الرابط ثم دفعة أخرى ثم الرجوع إلى رابط بلا دفعة: الشاشة تتبع الرابط فتعود إلى كل الدفعات
+  await page.evaluate(() => { location.hash = '#/leaders/insight?cohort=c1'; });
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table.locator('tbody tr')).toContainText('دفعة الخريف');
+  await page.evaluate(() => { location.hash = '#/leaders/insight?cohort=c2'; });
+  await expect(table.locator('tbody tr')).toContainText('دفعة الربيع');
+  await page.evaluate(() => { location.hash = '#/leaders/insight'; });
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  await expect(page.locator('.stat-card').first().locator('.stat-value')).toHaveText('7');
+  await expect(page.getByRole('status').filter({ hasText: 'الدفعة:' })).toHaveCount(0);
   // دفعة بلا مشاركين: رسالة لا جدول فارغ
   await page.goto(`${BASE}#/leaders/insight?cohort=zz`);
   await page.reload();

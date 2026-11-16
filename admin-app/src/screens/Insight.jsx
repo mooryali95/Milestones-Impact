@@ -151,7 +151,8 @@ export default function Insight({ onPerson, onExpert }) {
   useEffect(() => { load(); }, [load]);
   // رابط دفعة أخرى والشاشة مفتوحة (زر الرجوع أو بطاقة ثانية)
   useEffect(() => {
-    const on = () => { const c = cohortFromQuery(); if (c) { setFocus(c); setView('cohort'); } };
+    // الرابط هو المصدر: دفعة فيه تُفتح عليها، وغيابها (رجوع إلى #/leaders/insight أو حذفها من الرابط) يعيد كل الدفعات
+    const on = () => { const c = cohortFromQuery(); setFocus(c); if (c) setView('cohort'); };
     window.addEventListener('hashchange', on);
     return () => window.removeEventListener('hashchange', on);
   }, []);
