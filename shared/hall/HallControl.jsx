@@ -7,7 +7,7 @@
 // يقيّد الخبير بدفعاته. أصناف CSS تُمرَّر (ui) لأن للتطبيقين نظامي أنماط مختلفين.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import HallView, { TEAM_AR, TEAM_COLOR, Q_AR, OPT_AR, CONF_AR } from './HallView.jsx';
-import { HALL_SPLIT_AR, HALL_STAGE_AR, publicView } from '../../supabase/functions/leaders-api/hall.js';
+import { HALL_SPLIT_AR, HALL_STAGE_AR, hallWorkshopLabel, publicView } from '../../supabase/functions/leaders-api/hall.js';
 import { useHallTimer, timerLabel } from './HallTimer.jsx';
 import { POLL_FAIL_LIMIT } from '../../leaders-app/src/hallPoll.js';
 
@@ -111,7 +111,7 @@ export default function HallControl({ cohortId, call, canWrite = true, toast = (
             <label className="field"><span>جلسة الورشة التي يُكتب فيها الحضور</span>
               <select className="input" aria-label="جلسة الورشة" value={form.workshop_session_id} onChange={(e) => setForm({ ...form, workshop_session_id: e.target.value })}>
                 <option value="">{(v.workshops || []).some((w) => w.open) ? 'الجلسة الجارية الآن (تلقائيًا)' : 'بلا جلسة: لا يُكتب حضور من القاعة'}</option>
-                {(v.workshops || []).map((w) => <option key={w.id} value={w.id}>{w.title} · {new Date(w.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</option>)}
+                {(v.workshops || []).map((w) => <option key={w.id} value={w.id}>{hallWorkshopLabel(w)}</option>)}
               </select>
               <small className={u.muted}>عند الإغلاق يُكتب حضور من شارك في 60% من الجولات المكشوفة، فيكتمل بند الورشة في رحلته.</small></label>
           )}

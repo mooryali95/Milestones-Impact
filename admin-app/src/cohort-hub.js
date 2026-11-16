@@ -65,7 +65,7 @@ export function cohortHub({ cohort: c, cohorts = [], orgs = [], programs = [] })
 
   const base = cohortSetup({
     cohort: c, advisorName: c.advisor_name || null, advisorServes: c.advisor_serves !== false, teamCount: (c.team_expert_ids || []).length,
-    members: c.members || 0, upcomingSessions: c.upcoming_sessions ?? 0,
+    members: c.members || 0, upcomingSessions: c.upcoming_sessions ?? 0, undatedSessions: c.undated_sessions ?? 0,
   }).filter((x) => x.key !== 'sessions' || c.upcoming_sessions != null);
   const byKey = Object.fromEntries(base.map((x) => [x.key, x]));
   const ACTION = { team: 'team', cohort: 'edit', schedule: 'schedule', activities: 'activities' };
