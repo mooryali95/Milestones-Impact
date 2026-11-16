@@ -52,4 +52,4 @@ end $$;
 revoke all on function leaders.erasure_purge(uuid, uuid, text, text) from public, anon, authenticated;
 grant execute on function leaders.erasure_purge(uuid, uuid, text, text) to service_role;
 
-insert into leaders.schema_migrations (name) values ('20261116150000_leaders_erasure_decisions') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261116160000_leaders_erasure_decisions') on conflict do nothing;

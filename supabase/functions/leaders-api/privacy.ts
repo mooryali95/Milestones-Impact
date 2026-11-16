@@ -112,7 +112,7 @@ export async function pendingEraseId(participantId: string) {
   return (data?.[0]?.id as string) ?? null;
 }
 // يعيد true إن أُغلق الطلب أو لم يكن طلب، وfalse إن بقي قائمًا بتعذّر الكتابة (يُبلَّغ ويُعاد في الرد)
-// email_hash: بصمة بريده تربط الطلب بسطر الحذف في سجل التدقيق بلا بريد صريح (20261116150000)
+// email_hash: بصمة بريده تربط الطلب بسطر الحذف في سجل التدقيق بلا بريد صريح (20261116160000)
 export async function closeOnDelete(requestId: string | null, by: string, note: string | null = null, emailHash: string | null = null) {
   if (!requestId) return true;
   // السبب نص حر من المشارك: يُمحى عند الإغلاق فلا يبقى من الطلب إلا تاريخه وقراره ومن نفذه (erasure.js ERASE_KEPT.request).

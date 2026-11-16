@@ -522,7 +522,7 @@ export async function removeParticipant(a: Admin, impact: Awaited<ReturnType<typ
   const refs = [`participant:${id}`, ...((raters.data || []) as any[]).map((r) => `rater:${r.id}`)];
   const email_hash = await hash(email);
   if (purgeCertificates) {
-    // في معاملة واحدة: يُحجز الطلب بشرط أنه قائم ويُغلق، ثم سجل الدفع والشهادات والصف (20261116150000). سحب المشارك أو
+    // في معاملة واحدة: يُحجز الطلب بشرط أنه قائم ويُغلق، ثم سجل الدفع والشهادات والصف (20261116160000). سحب المشارك أو
     // قرار مدير آخر في اللحظة نفسها يسبقه فلا يُحذف شيء
     if (!request) throw new Fail('رقم الطلب مطلوب للتنفيذ', 400);
     const del = await db.rpc('erasure_purge', { p_participant: id, p_request: request, p_by: a.email, p_email_hash: email_hash });

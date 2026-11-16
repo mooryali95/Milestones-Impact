@@ -78,7 +78,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     const own = opts.rpc?.(name, args, tables);
     if (own) return own;
     if (name === 'erasure_purge') {
-      // كالدالة في 20261116150000: الطلب القائم أولًا، ثم الدفعة المعلّقة، ثم الإغلاق وسجل الدفع والشهادات والصف
+      // كالدالة في 20261116160000: الطلب القائم أولًا، ثم الدفعة المعلّقة، ثم الإغلاق وسجل الدفع والشهادات والصف
       const req = (tables.erasure_requests || []).find((r) => r.id === args.p_request && r.participant_id === args.p_participant && r.status === 'pending');
       if (!req) return { data: null, error: { code: 'P0003', message: 'erasure_purge: request not pending' } };
       const pays = () => (tables.payments || []).filter((x) => x.participant_id === args.p_participant);
