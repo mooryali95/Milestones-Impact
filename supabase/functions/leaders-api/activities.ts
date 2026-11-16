@@ -406,6 +406,13 @@ export async function workshopSave(a: any, b: Body) {
   };
   let saved: any;
   if (row.id) {
+    // تغيّر الموعد يُسقط أختام الدعوة والتذكير: الموعد الجديد يُذكَّر به وتُرسل دعوته من جديد (كان يبقى «أُرسلت الدعوة» ويسقط التذكير)
+    // بـ* وبما يحمله الصف فقط: الأعمدة من ترحيلات لاحقة، فلا يُكتب عمود غير موجود قبلها
+    const prev = must(await db.from('workshop_sessions').select('*').eq('id', row.id).maybeSingle()) as any;
+    const at = (v: any) => (v ? Date.parse(v) : null);
+    if (prev && at(prev.starts_at) !== at(out.starts_at)) {
+      for (const k of ['invited_at', 'reminded_day_at', 'reminded_hour_at']) if (k in prev) out[k] = null;
+    }
     saved = must(undatedBlocked(await db.from('workshop_sessions').update(out).eq('id', row.id).select('id').single()), 'تعذّر الحفظ');
   } else {
     const r = must(await db.from('stage_requirements').select('id, kind').eq('id', String(row.requirement_id || '')).maybeSingle());

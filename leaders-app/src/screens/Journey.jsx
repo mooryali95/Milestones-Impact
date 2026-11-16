@@ -14,7 +14,7 @@ import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
-import { SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
+import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity from './Activities.jsx';
 import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
@@ -381,7 +381,8 @@ export function sessionIcs(x) {
 }
 export function NextSession({ session, onHall }) {
   const undated = !session.starts_at || !session.ends_at;
-  const when = undated ? `الموعد ${SESSION_TBD_AR}` : new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  // العنوان «لك جلسة سيُعلن موعدها» يقول ذلك، فلا يُكرر في السطر
+  const when = undated ? '' : new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   const download = () => {
     const url = URL.createObjectURL(new Blob([sessionIcs(session)], { type: 'text/calendar;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = 'session.ics'; a.click();
@@ -391,7 +392,7 @@ export function NextSession({ session, onHall }) {
     <div className={`next-card j-session${session.open ? ' live' : ''}`} data-tour="next-session">
       <span className="k">{session.open ? 'جلستك الآن' : undated ? 'لك جلسة سيُعلن موعدها' : 'جلستك القادمة'}</span>
       <b>{session.title}</b>
-      <span className="small muted">{when}{session.mode === 'online' ? ' · عن بعد' : session.location ? ` · ${session.location}` : ''}{session.link_later ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span>
+      <span className="small muted">{[when, session.mode === 'online' ? 'عن بعد' : session.location, !session.open && linkPending(session) ? SESSION_LINK_LATER_AR : ''].filter(Boolean).join(' · ')}</span>
       {session.attended && <span className="chip ok">سُجّل حضورك</span>}
       <div className="row">
         {session.open && onHall && <button className="btn sm" onClick={onHall}>ادخل القاعة</button>}

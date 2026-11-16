@@ -506,7 +506,7 @@ export const WORKSHOP_MAIL = {
 // staged: جلسة عن بعد لم تُفتح مرحلتها في رحلته بعد، فلا رابط في البريد ولا تعليمات القاعة: الرابط في رحلته حين تُفتح
 export const WORKSHOP_STAGED_NOTE = 'رابط الانضمام يظهر في رحلتك حين تُفتح لك مرحلة هذه الجلسة، فافتح رحلتك يومها.';
 // later: جلسة عن بعد لم يُضف رابطها بعد (J1)، فلا تعليمات القاعة: الرابط يصل قبلها ويظهر في رحلته
-export const WORKSHOP_LINK_LATER_NOTE = 'هذه الجلسة عن بعد، ويصلك رابط الانضمام قبل موعدها ويظهر في رحلتك يومها.';
+export const WORKSHOP_LINK_LATER_NOTE = 'هذه الجلسة عن بعد، ورابط الانضمام يُضاف لاحقًا ويظهر في رحلتك قبل بدئها بساعة.';
 export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false) {
   const m = WORKSHOP_MAIL[kind];
   return shell('sessions', m.subject,

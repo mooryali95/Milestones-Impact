@@ -8,7 +8,7 @@
 
 // أسرار الدالة التي لا قيمة افتراضية آمنة لها: بلا مفتاح التوقيع لا تصدر شهادة، وبلا قناة التنبيه لا إنذار بغير البريد.
 // البقية لها افتراضي آمن في docs/SECRETS.md. البوابة تشترطها بأسمائها، وحالة النظام تفحص قيمها
-import { sessionsFor, undatedFor, usesHandbook } from './cohort-setup.js';
+import { sessionsFor, undatedAr, usesHandbook } from './cohort-setup.js';
 
 export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY', 'LEADERS_ALERT_WEBHOOK'];
 
@@ -81,7 +81,9 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
   const advisor = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.advisor_expert_id }));
   const dated = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: sessionsFor(c, sessions, now) > 0 || usesHandbook(c) }));
   // الجلسة غير المؤرخة تُعد (قرار المالك: «يُحدد لاحقًا» لا يمنع الإطلاق) ويظهر عددها في السطر
-  const undated = orgCohorts.reduce((n, c) => n + undatedFor(c, sessions), 0);
+  // كل جلسة مرة واحدة: الجلسة بلا دفعة تعم الدفعات، وجمع undatedFor لكل دفعة كان يعدها مرة لكل دفعة
+  const undated = sessions.filter((w) => w.active !== false && !w.starts_at
+    && orgCohorts.some((c) => !w.cohort_id || w.cohort_id === c.id)).length;
   const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
   const fe = asJson(finalEval);
   const finalSaved = fe != null && JSON.stringify(fe) !== '{}';
@@ -97,7 +99,7 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
     { key: 'advisor', check: 'm2.advisor', where: 'programs',
       ...judge(advisor, noOrgCohort, 'دفعات جهات بلا مستشار أساسي', (n) => `${n} دفعة جهة، ولكلٍّ مستشار أساسي`) },
     { key: 'sessions', check: 'm2.sessions', where: 'activities',
-      ...judge(dated, noOrgCohort, 'دفعات جهات بلا مواعيد قادمة ولا صيغة الكتيب', () => `لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب${undated ? `، و${undated} جلسة يُحدد موعدها لاحقًا` : ''}`) },
+      ...judge(dated, noOrgCohort, 'دفعات جهات بلا مواعيد قادمة ولا صيغة الكتيب', () => `لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب${undated ? `، و${undatedAr(undated)}` : ''}`) },
     { key: 'final-eval', check: 'm2.final-eval', where: 'programs',
       ok: finalSaved, label: finalSaved ? 'إعداد التقييم الختامي محفوظ للبرنامج الافتراضي' : 'إعداد التقييم الختامي لم يُحفظ بعد للبرنامج الافتراضي' },
     // الإصدار يُقطع ويُثبَّت بترحيل من أداة إصدار المحتوى، لا من اللوحة

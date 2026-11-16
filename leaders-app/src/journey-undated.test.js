@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import {
-  bySessionTime, checkinOpen, isUndated, SESSION_LINK_LATER_AR, SESSION_TBD_AR, workshopSchedule, workshopStatus,
+  bySessionTime, checkinOpen, isUndated, linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, workshopSchedule, workshopStatus,
 } from '../../supabase/functions/leaders-api/logic.js';
 import { cohortSetup, sessionsFor, undatedFor } from '../../supabase/functions/leaders-api/cohort-setup.js';
 import { launchReadiness } from '../../supabase/functions/leaders-api/readiness.js';
@@ -49,6 +49,9 @@ describe('الترحيل: الموعد فارغ معًا أو محدد معًا'
     expect(rows[0].n).toBe(3);
     const { rows: m } = await db.query('select name from leaders.schema_migrations');
     expect(m.map((x) => x.name)).toEqual([MIG]);
+    // القيد القديم غير المسمى (workshop_sessions_check) سقط فعلًا: لا يبقى إلا القيد الجديد
+    const { rows: k } = await db.query(`select conname from pg_constraint where conrelid = 'leaders.workshop_sessions'::regclass and contype = 'c' order by conname`);
+    expect(k.map((x) => x.conname)).toEqual(['workshop_sessions_dates_check']);
   });
   it('اللقطة المجمّعة بالقيد الجديد والعمودين الاختياريين', () => {
     const base = readFileSync(join(ROOT, 'supabase/schema/baseline.sql'), 'utf8');
@@ -108,21 +111,30 @@ describe('الجاهزية: «يُحدد لاحقًا» لا يمنع الإطل
     expect(sessionsFor(cohort, [{ ...dated, starts_at: at(-30 * 24), ends_at: at(-30 * 24 + 1) }], NOW)).toBe(0);
     expect(undatedFor(cohort, [{ ...undated, active: false }])).toBe(0);
   });
-  it('بند الجلسات في ملف الدفعة جاهز ويقول «يُحدد موعدها لاحقًا»', () => {
+  it('بند الجلسات في ملف الدفعة جاهز ويقول «بموعد يُحدد لاحقًا» بعدده الصحيح', () => {
     const only = cohortSetup({ cohort, upcomingSessions: 1, undatedSessions: 1 }).find((x) => x.key === 'sessions');
-    expect(only).toMatchObject({ ok: true, detail: '1 جلسة يُحدد موعدها لاحقًا' });
+    expect(only).toMatchObject({ ok: true, detail: 'جلسة واحدة بموعد يُحدد لاحقًا' });
+    expect(cohortSetup({ cohort, upcomingSessions: 3, undatedSessions: 3 }).find((x) => x.key === 'sessions').detail).toBe('3 جلسات بموعد يُحدد لاحقًا');
     const mix = cohortSetup({ cohort, upcomingSessions: 3, undatedSessions: 1 }).find((x) => x.key === 'sessions');
-    expect(mix.detail).toBe('3 جلسة قادمة أو حديثة، منها 1 يُحدد موعدها لاحقًا');
+    expect(mix.detail).toBe('3 جلسة قادمة أو حديثة، منها جلسة واحدة بموعد يُحدد لاحقًا');
     expect(cohortSetup({ cohort, upcomingSessions: 2 }).find((x) => x.key === 'sessions').detail).toBe('2 جلسة قادمة أو حديثة');
   });
   it('جاهزية الإطلاق (readiness.js، ومنها system.ts وبوابة المراحل) تعدّ غير المؤرخة', () => {
     const items = launchReadiness({ organizations: [{ id: 'o1', name: 'الجهة', status: 'active' }], cohorts: [cohort], sessions: [undated] }, NOW);
-    expect(items.find((x) => x.key === 'sessions')).toMatchObject({ ok: true, label: 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب، و1 جلسة يُحدد موعدها لاحقًا' });
+    expect(items.find((x) => x.key === 'sessions')).toMatchObject({ ok: true, label: 'لكل دفعة جهة مواعيد قادمة أو صيغة الكتيب، وجلسة واحدة بموعد يُحدد لاحقًا' });
+  });
+  it('الجلسة بلا دفعة تُعد مرة واحدة لا مرة لكل دفعة', () => {
+    const cohorts = ['c1', 'c2', 'c3'].map((id) => ({ ...cohort, id, name: id }));
+    const all = { ...undated, cohort_id: null };
+    const label = (sessions) => launchReadiness({ organizations: [{ id: 'o1', name: 'الجهة', status: 'active' }], cohorts, sessions }, NOW).find((x) => x.key === 'sessions').label;
+    expect(label([all])).toContain('وجلسة واحدة بموعد يُحدد لاحقًا');
+    expect(label([all, { ...undated, id: 'u2', cohort_id: 'c2' }])).toContain('وجلستان بموعد يُحدد لاحقًا');
+    expect(label([all, { ...undated, id: 'u9', cohort_id: 'other' }])).toContain('وجلسة واحدة بموعد');
   });
   it('ملف الدفعة في اللوحة يمرر العدد (cohort-hub.js)', () => {
     const hub = cohortHub({ cohort: { ...cohort, members: 3, upcoming_sessions: 1, undated_sessions: 1, program_id: 'p1' }, programs: [{ id: 'p1', name: 'البرنامج', requirements: 3, versions: [] }], cohorts: [], orgs: [] });
     const item = (hub.items || hub.checklist || hub).find?.((x) => x.key === 'sessions') || JSON.stringify(hub);
-    expect(JSON.stringify(item)).toContain('1 جلسة يُحدد موعدها لاحقًا');
+    expect(JSON.stringify(item)).toContain('جلسة واحدة بموعد يُحدد لاحقًا');
   });
 });
 
@@ -137,7 +149,9 @@ describe('ما يراه المشارك: لا 1970 ولا تقويم ولا «ق�
   it('بطاقة «لك جلسة سيُعلن موعدها» بلا زر تقويم', () => {
     const html = renderToStaticMarkup(React.createElement(NextSession, { session: view([undated])[0] }));
     expect(html).toContain('لك جلسة سيُعلن موعدها');
-    expect(html).toContain(SESSION_TBD_AR);
+    // العنوان يقول إن الموعد يُعلن لاحقًا، فلا يُكرر في السطر
+    expect(html).not.toContain(`الموعد ${SESSION_TBD_AR}`);
+    expect(html).toContain('عن بعد · ' + SESSION_LINK_LATER_AR);
     expect(html).toContain(SESSION_LINK_LATER_AR);
     expect(html).not.toContain('1970');
     expect(html).not.toContain('أضفها إلى تقويمك');
@@ -154,6 +168,23 @@ describe('ما يراه المشارك: لا 1970 ولا تقويم ولا «ق�
     expect(html).not.toContain('امسح رمز الحضور');
     const inPerson = renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({ verify: 'qr' }, [dated], new Set(), NOW) }, open: true, setToast: () => {} }));
     expect(inPerson).toContain('امسح رمز الحضور');
+  });
+  it('«يصلك الرابط» لما قبل الجلسة وحدها: لا للجارية ولا المنتهية (linkPending)', () => {
+    const later = { ...dated, mode: 'online', join_url: null, location_ar: null };
+    const [past] = workshopStatus({ verify: 'join' }, [{ ...later, starts_at: at(-30), ends_at: at(-24) }], new Set(), NOW).sessions;
+    const [live] = workshopStatus({ verify: 'join' }, [{ ...later, starts_at: at(-1), ends_at: at(2) }], new Set(), NOW).sessions;
+    const [soon] = workshopStatus({ verify: 'join' }, [later], new Set(), NOW).sessions;
+    expect([linkPending(past, NOW), linkPending(live, NOW), linkPending(soon, NOW), linkPending(view([undated])[0], NOW)]).toEqual([false, false, true, true]);
+    const card = renderToStaticMarkup(React.createElement(NextSession, { session: { ...live, open: true } }));
+    expect(card).toContain('جلستك الآن');
+    expect(card).not.toContain(SESSION_LINK_LATER_AR);
+  });
+  it('تحقق بالانضمام ولا رابط بعد: لا «انضم من هنا» بلا زر، بل متى يظهر الزر', () => {
+    const render = (s) => renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({ verify: 'join' }, s, new Set(), NOW) }, open: true, setToast: () => {} }));
+    const html = render([undated]);
+    expect(html).not.toContain('انضم إلى الجلسة من هنا');
+    expect(html).toContain('يظهر زر الانضمام هنا حين يُضاف رابط الجلسة');
+    expect(render([{ ...undated, join_url: 'https://meet.example/x' }])).toContain('انضم إلى الجلسة من هنا');
   });
   it('نشاط حضور بلا جلسات: «لم تُجدول بعد» لا «حضرت 0 من 1»', () => {
     const html = renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({}, [], new Set(), NOW) }, open: true, setToast: () => {} }));

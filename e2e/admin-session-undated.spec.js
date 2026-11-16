@@ -59,7 +59,7 @@ async function adminCreates(page, width) {
   await expect(form).toHaveCount(0);
   const row = calls.find((c) => c.action === 'admin.workshop-save' && !c.row.starts_at)?.row;
   expect(row).toMatchObject({ requirement_id: 'r1', cohort_id: COHORT, mode: 'online', join_url: null, starts_at: null, ends_at: null });
-  // في الجدول: «يُحدد لاحقًا» و«الرابط لاحقًا»، ولا دعوة قبل الموعد، ولا رمز QR لجلسة عن بعد
+  // في الجدول: «يُحدد لاحقًا» و«الرابط لاحقًا»، ولا دعوة قبل الموعد، ولا رمز QR لنشاط تحققه بالانضمام
   const table = page.locator('.la-table');
   await expect(table.getByText('يُحدد لاحقًا')).toBeVisible();
   await expect(table.getByText('عن بعد · الرابط لاحقًا')).toBeVisible();
@@ -98,8 +98,9 @@ async function participantSees(page, sessions, width) {
   await page.goto(APP);
   const card = page.locator('[data-tour="next-session"]');
   await expect(card).toContainText('لك جلسة سيُعلن موعدها');
-  await expect(card).toContainText('يُحدد لاحقًا');
-  await expect(card).toContainText('يصلك الرابط قبل الجلسة');
+  // العنوان يقول إن الموعد يُعلن لاحقًا، فلا يُكرر في السطر
+  await expect(card).not.toContainText('الموعد يُحدد لاحقًا');
+  await expect(card).toContainText('عن بعد · يصلك الرابط قبل الجلسة');
   await expect(card.getByRole('button', { name: 'أضفها إلى تقويمك' })).toHaveCount(0);
   const stage = page.locator('.stage.active');
   await expect(stage.locator('.act-session')).toContainText('يُحدد لاحقًا');
@@ -107,6 +108,9 @@ async function participantSees(page, sessions, width) {
   await expect(stage.locator('.act-session')).not.toContainText('قادمة');
   await expect(page.getByRole('button', { name: 'أضف إلى تقويمي' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'انضم الآن' })).toHaveCount(0);
+  // لا «انضم إلى الجلسة من هنا» بلا زر ولا رابط
+  await expect(stage).not.toContainText('انضم إلى الجلسة من هنا');
+  await expect(stage).toContainText('يظهر زر الانضمام هنا حين يُضاف رابط الجلسة');
   await expect(page.locator('body')).not.toContainText('1970');
   const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(over).toBeLessThanOrEqual(0);

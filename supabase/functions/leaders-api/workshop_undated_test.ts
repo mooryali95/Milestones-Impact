@@ -98,6 +98,37 @@ Deno.test('الحفظ: عن بعد بلا رابط ولا موعد يُحفظ «
   } finally { w.restore(); }
 });
 
+Deno.test('تغيّر الموعد يُسقط أختام الدعوة والتذكير، وبقاؤه يحفظها', async () => {
+  const w = world();
+  try {
+    const row = () => w.tables.workshop_sessions.find((x) => x.id === DAT)!;
+    const stamp = hours(-1);
+    Object.assign(row(), { invited_at: stamp, reminded_day_at: stamp, reminded_hour_at: stamp });
+    // الموعد نفسه بصيغة أخرى: لا تغيير، فتبقى الأختام
+    await V.workshopSave(ADMIN, { row: { id: DAT, title_ar: 'اليوم الثاني بعنوان جديد', mode: 'online', starts_at: new Date(Date.parse(row().starts_at)).toISOString(), ends_at: row().ends_at } });
+    assertEquals([row().invited_at, row().reminded_day_at, row().reminded_hour_at], [stamp, stamp, stamp]);
+    // إلى «يُحدد لاحقًا» ثم موعد جديد: يُذكَّر بالموعد الجديد وتُرسل دعوته من جديد
+    await V.workshopSave(ADMIN, { row: { id: DAT, title_ar: 'اليوم الثاني', mode: 'online', starts_at: '', ends_at: '' } });
+    assertEquals([row().invited_at, row().reminded_day_at, row().reminded_hour_at], [null, null, null]);
+    Object.assign(row(), { reminded_day_at: stamp });
+    await V.workshopSave(ADMIN, { row: { id: DAT, title_ar: 'اليوم الثاني', mode: 'online', starts_at: hours(48), ends_at: hours(50) } });
+    assertEquals(row().reminded_day_at, null);
+  } finally { w.restore(); }
+});
+
+Deno.test('مسار المشارك الحقيقي (evidenceFor): غير المؤرخة بلا تاريخ ولا رابط، بعد المؤرخة ولا تُحتسب حضورًا', async () => {
+  const w = world();
+  try {
+    const req = { id: REQ, kind: 'workshop', active: true, config: { verify: 'join' } };
+    const ev: any = await V.evidenceFor({ id: 'p1' }, [req], {}, true, COHORT);
+    const sessions = ev[REQ].sessions;
+    assertEquals(sessions.map((s: Row) => s.id), [DAT, UND]);
+    const u = sessions.find((s: Row) => s.id === UND);
+    assertEquals([u.starts_at, u.ends_at, u.undated, u.link_later, u.attended, u.join_url ?? null], [null, null, true, true, false, null]);
+    assertEquals(ev[REQ].count, 0);
+  } finally { w.restore(); }
+});
+
 Deno.test('الحفظ قبل الترحيل: رفض القيد للفارغ برسالة تقول السبب، لا «تعذّر الحفظ»', async () => {
   const w = install({ stage_requirements: [{ id: REQ, kind: 'workshop' }], workshop_sessions: [], audit_log: [] }, { insert: { code: '23502', message: 'null value in column "starts_at"' } });
   try {
@@ -153,7 +184,7 @@ Deno.test('النظرة العامة ورمز QR: غير المؤرخة بعد �
   } finally { w.restore(); }
 });
 
-Deno.test('بريد الجلسة عن بعد بلا رابط: «يصلك رابط الانضمام قبل موعدها» لا تعليمات القاعة', async () => {
+Deno.test('بريد الجلسة عن بعد بلا رابط: «رابط الانضمام يُضاف لاحقًا» لا تعليمات القاعة', async () => {
   const { workshopMail, WORKSHOP_MAIL } = await import('./core.ts');
   const html = workshopMail('invite', 'سارة', 'اليوم الثاني', 'الأحد', null, null, 'later');
   assert(html.includes(WORKSHOP_LINK_LATER_NOTE));

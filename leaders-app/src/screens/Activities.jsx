@@ -148,7 +148,7 @@ function Video({ item, open, onRefresh }) {
 import { COACH_STATUS, countAr, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
-import { SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
+import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'امسح رمز الحضور الذي يعرضه المدرب في الجلسة بكاميرا جوالك.',
@@ -156,6 +156,7 @@ const VERIFY_HINT = {
   manual: 'يسجل المدرب حضورك في الجلسة.',
   auto: 'يُحتسب حضورك تلقائيًا بانتهاء الجلسة.',
 };
+const JOIN_LATER_HINT = 'يظهر زر الانضمام هنا حين يُضاف رابط الجلسة، ويُسجل حضورك عند الانضمام.';
 // رقاقة الجلسة: حضرت، أو انتهت بلا حضور، أو جارية الآن، أو قادمة (كانت الجارية تُوسم «قادمة»)
 // والجلسة غير المؤرخة (J1): «يُحدد لاحقًا»، لا «قادمة» ولا تاريخ 1970
 function SessionChip({ s }) {
@@ -174,7 +175,9 @@ function Workshop({ item, open, setToast }) {
   const upcoming = a.sessions.filter((s) => !s.attended && (!s.ends_at || new Date(s.ends_at) > new Date()));
   // رمز QR يشرحه نص البند نفسه غالبًا (help_ar فوق النشاط)، فلا يُكرر تحته؛ وهو للجلسة الحضورية وحدها
   const qrAsIs = a.verify === 'qr' && (item.help_ar || !upcoming.some((s) => s.mode === 'in_person'));
-  const hint = qrAsIs ? null : VERIFY_HINT[a.verify];
+  // الانضمام ولا رابط بعد لأي جلسة قادمة: لا «انضم من هنا» بلا زر، بل متى يظهر الزر
+  const joinLater = a.verify === 'join' && upcoming.length > 0 && upcoming.every((s) => s.link_later);
+  const hint = qrAsIs ? null : joinLater ? JOIN_LATER_HINT : VERIFY_HINT[a.verify];
   const join = async (s) => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
     setBusy(s.id);
@@ -192,7 +195,7 @@ function Workshop({ item, open, setToast }) {
         <ul className="act-list">
           {a.sessions.map((s) => (
             <li key={s.id} className="act-session">
-              <span className="grow"><b>{s.title}</b><span className="small muted">{s.starts_at ? ` · ${fmtDay(s.starts_at)}، ${fmtTime(s.starts_at)}` : ''}{s.location ? ` · ${s.location}` : ''}{!s.attended && s.link_later ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span></span>
+              <span className="grow"><b>{s.title}</b><span className="small muted">{s.starts_at ? ` · ${fmtDay(s.starts_at)}، ${fmtTime(s.starts_at)}` : ''}{s.location ? ` · ${s.location}` : ''}{linkPending(s) ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span></span>
               <span className="chip">{MODE_CHIP[s.mode]}</span>
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}

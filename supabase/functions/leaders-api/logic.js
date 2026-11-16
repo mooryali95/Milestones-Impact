@@ -1115,6 +1115,8 @@ export const SESSION_MODES = ['in_person', 'online'];
 // ولا تقويم لها ولا تذكير ولا دعوة، وتُرتب بعد المؤرخة. والعرض يقول «يُحدد لاحقًا»، لا تاريخ 1970.
 export const SESSION_TBD_AR = 'يُحدد لاحقًا';
 export const SESSION_LINK_LATER_AR = 'يصلك الرابط قبل الجلسة';
+// «يصلك الرابط قبل الجلسة» وعد لما قبلها: للجلسة غير المؤرخة أو التي لم تبدأ بعد، لا للجارية ولا المنتهية
+export const linkPending = (s, now = Date.now()) => !!s?.link_later && !s.attended && (!s.starts_at || Date.parse(s.starts_at) > now);
 export const isUndated = (s) => !s?.starts_at || !s?.ends_at;
 /** ترتيب الجلسات: المؤرخة بموعدها، ثم غير المؤرخة بترتيب إنشائها */
 export const bySessionTime = (a, b) => (Number(isUndated(a)) - Number(isUndated(b)))

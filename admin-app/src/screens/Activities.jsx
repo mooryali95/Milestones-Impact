@@ -155,7 +155,7 @@ function Workshops({ data, reload, canWrite }) {
                     <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? (s.join_url ? '' : ' · الرابط لاحقًا') : s.location_ar ? ` · ${s.location_ar}` : ''}</td>
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">
-                      {(r.config?.verify || 'qr') === 'qr' && (s.mode || 'in_person') === 'in_person' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+                      {(r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
                       {canWrite && s.cohort_id && isUndated(s) && <small className="la-muted" title="الدعوة وملف التقويم والتذكير تحتاج موعدًا">الدعوة بعد تحديد الموعد</small>}
                       {canWrite && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
