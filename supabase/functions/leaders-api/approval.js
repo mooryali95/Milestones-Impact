@@ -6,6 +6,8 @@
 // الحالة الحدّية تُستبقى (قرار المالك 2026-11-15): المستوى التالي في متناول هامش صغير، فيقرره إنسان.
 import { DIMENSIONS, LEVELS, OVERRIDE_REASON_MIN } from './logic.js';
 import { DIM_AR, LEVEL_AR } from './labels.js';
+import { queueEta } from './mail-center.js';
+import { nextMailDay } from '../_shared/mail-budget.js';
 
 // حد الطلب الواحد، كالإجراءات الجماعية الأخرى (BULK_MAX في admin.ts)
 export const BULK_APPROVE_MAX = 50;
@@ -42,10 +44,26 @@ export function splitForApproval(rows = []) {
   return { ready, held };
 }
 
-// أثر البريد قبل التنفيذ: كم يُرسل الآن وكم يدخل الطابور (السقف اليومي يصفّ الزائد ولا يُسقطه)
-export function mailPlan(count, { used = 0, cap = 80 } = {}) {
-  const room = Math.max(0, Number(cap) - Number(used || 0));
-  return { now: Math.min(count, room), queued: Math.max(0, count - room) };
+// أثر البريد قبل التنفيذ: كم يخرج الآن، وكم ينتظر في صندوق «لم يُرسل» فيخرج الليلة في تفريغ المساء (من 22:17 بالرياض)،
+// وكم بعدها، ومتى يُتوقع أن يخرج آخره. بريد الاعتماد إشعار (notify)، فيحكمه نصيب غير الرموز من السقف (mailBudget.nonCodeLeft)
+// لا السقف الكلي، ويُقدَّر موعد المنتظر بالحساب نفسه الذي يعرضه مركز البريد (queueEta). waiting: إشعارات تنتظر في الطابور
+// قبلها، فتأخذ ما يتسع أولًا
+/** @param {number} count @param {{ budget?: any, waiting?: number, now?: number }} o */
+export function mailForecast(count, { budget = {}, waiting = 0, now = Date.now() } = {}) {
+  const n = Math.max(0, Number(count) || 0);
+  const nowCount = Math.min(n, Math.max(0, budget.nonCodeLeft ?? 0));
+  const queued = n - nowCount;
+  const ahead = Math.max(0, Number(waiting) || 0);
+  if (!queued) return { now: nowCount, queued: 0, tonight: 0, later: 0, clear_at: null, ahead };
+  // ما يخرج الآن يأخذ ما بقي من نصيب اليوم، والمنتظر قبلها ثم الجديد يأخذان ما يتسع بعده
+  const rows = Array.from({ length: ahead + queued }, (_, i) => ({ id: String(i), kind: 'notify', created_at: new Date(now - ahead + i).toISOString() }));
+  const after = { ...budget, sent: (budget.sent ?? 0) + nowCount, nonCode: (budget.nonCode ?? 0) + nowCount, nonCodeLeft: 0 };
+  const eta = queueEta(rows, { budget: after, now });
+  const mine = rows.slice(ahead).map((r) => eta[r.id]?.at ?? null);
+  // الليلة: قبل تصفير حصة المزوّد (03:00 بالرياض)، أي في تفريغ المساء
+  const reset = new Date(nextMailDay(now)).toISOString();
+  const tonight = mine.filter((at) => at && at < reset).length;
+  return { now: nowCount, queued, tonight, later: queued - tonight, clear_at: mine[mine.length - 1], ahead };
 }
 
 // ── المرحلة 2: اعتماد المحددين بمستوى واحد (للمدير العام، بتعليل إلزامي) ──

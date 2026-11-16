@@ -369,7 +369,7 @@ test('الاعتماد الجماعي بالمستوى المحسوب: معاي�
     if (b.action !== 'admin.approve-bulk') return route.fallback();
     calls.push(b);
     return route.fulfill({ json: b.dry_run
-      ? { success: true, ready, held, mail: { now: 1, queued: 0 } }
+      ? { success: true, ready, held, mail: { now: 0, queued: 1, clear_at: '2026-12-20T05:17:00Z' }, mail_read: true }
       : { success: true, results: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }], held, mail: { now: 1, queued: 0 }, sample: [{ id: 'p1', full_name: 'سارة الأحمد', ok: true }] } });
   });
   // في عرض «بانتظار الاعتماد»: اختصار لاعتماد المتسقين من الظاهرين
@@ -383,6 +383,10 @@ test('الاعتماد الجماعي بالمستوى المحسوب: معاي�
   // الدلالة على المحتوى الموحّد بدل تزوير القياس
   await expect(dlg.locator('.ba-hint')).toContainText('مستويات المشاركين: متجانس');
   expect(calls.find((c) => c.action === 'admin.approve-bulk')).toMatchObject({ dry_run: true, participant_ids: ['p1', 'p3'] });
+  // أثر البريد قبل التأكيد دائمًا: حصة الإشعارات ممتلئة، فينتظر في الصندوق بموعد آخره، والاعتماد ظاهر في الرحلة
+  await expect(dlg.locator('[data-mail-forecast]')).toContainText('سيصل 1 بريدًا: 0 الآن، والباقي 1 ينتظر في صندوق «لم يُرسل»');
+  await expect(dlg.locator('[data-mail-forecast]')).toContainText('2026-12-20 نحو 08:17');
+  await expect(dlg.locator('[data-mail-forecast]')).toContainText('ويرى كل واحد اعتماده في رحلته فورًا');
   await dlg.getByRole('button', { name: 'اعتمد 1' }).click();
   await expect(dlg.locator('.ba-sum')).toContainText('اعتُمد 1');
   // المرحلة 3: عيّنة للتحقق مما اعتُمد آليًا، كل اسم يفتح ملفه
