@@ -1841,3 +1841,14 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .gd-drawer::backdrop { background: rgba(10, 20, 25, .45); }
 .gd-drawer-body { padding: 16px; overflow-y: auto; height: 100%; box-sizing: border-box; }
 .gd-close { display: block; margin-inline-start: auto; margin-bottom: 8px; }
+
+/* «اسأل المساعد» (GuideChat): رسائل المشارك والمساعد في سجل واحد */
+.gd-chat { border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.gd-chat h3 small { font-weight: 400; margin-inline-start: 6px; }
+.gd-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.gd-msg { padding: 10px 14px; border-radius: 14px; max-width: 92%; }
+.gd-msg p { margin: 0 0 4px; white-space: pre-wrap; }
+.gd-msg.user { align-self: flex-start; background: var(--mist); }
+.gd-msg.assistant { align-self: flex-end; background: var(--surface); border: 1px solid var(--line); }
+.gd-msg .chip { margin-bottom: 6px; }
+.gd-msg .link { display: block; margin-top: 6px; }

@@ -63,6 +63,7 @@ import * as BR from './book-release.ts';
 import * as NU from './nudges.ts';
 import * as FT from './features.ts';
 import * as NB from './nudge-banner.ts';
+import * as GU from './guide.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -131,11 +132,11 @@ const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility',
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 // ورابطه يُعرض على شاشة: لا يدخل القاعة الحية الحقيقية، ولا يرفع ملفات، ولا يسجّل مفتاح مرور، ولا يبدّل إلى دور آخر (M5)
 // ورابط الجلسة عن بعد يُعرض على شاشة الورشة، ورمز الجهة يربطه بجهة حقيقية، وتقييم 360 يفتح دورة ترشيح (P1-04)
-const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
+const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f360.nominate', 'f360.submit', 'coaching.instant', 'sponsor.request', 'pay.checkout',
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
   'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
-const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
@@ -159,7 +160,7 @@ const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 
   'demo.fill-profile', 'demo.fill-assessment', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
-const GATE_PROGRAM = new Set(['experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
+const GATE_PROGRAM = new Set(['guide.state', 'guide.ask', 'guide.clear', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
@@ -225,6 +226,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me.privacy': (p) => PV.state(p),
   'me.notice-ack': (p, b) => OB.ack(p, b),
   'me.nudge-seen': (p, b) => NB.seen(p, b),
+  // «التوجيه والإرشاد» (guide.ts): المشارك من جلسته وحدها، ولا معرّف من جسم الطلب
+  'guide.state': (p) => GU.guideState(p),
+  'guide.ask': (p, b) => GU.guideAsk(p, b),
+  'guide.clear': (p) => GU.guideClear(p),
   'me.export': (p) => PV.exportData(p),
   'me.erase-request': (p, b) => PV.eraseRequest(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
