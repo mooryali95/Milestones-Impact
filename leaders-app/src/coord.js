@@ -1,8 +1,10 @@
 // منطق لوحة المنسق بلا واجهة، ليُختبر وحده
 import { PARTICIPANT_STATUS } from '../../supabase/functions/leaders-api/labels.js';
 
-// من سجّل ولم يكمل القياس المبدئي: مصدر واحد لعدّ «يحتاج تدخلك» ولخيار المرشّح الذي يعرضهم
-export const PRE_BASELINE = ['registered', 'profiled', 'assessing'];
+// من سجّل ولم يكمل القياس، ومن توقف: مصدر واحد مع الخادم (coord-groups.js) لعدّ «يحتاج تدخلك» ولمرشّح القائمة
+// ولمن يذكّرهم المنسق (nudges.ts)
+import { isStale, PRE_BASELINE, STALE_DAYS } from '../../supabase/functions/leaders-api/coord-groups.js';
+export { isStale, PRE_BASELINE, STALE_DAYS };
 export const NOT_STARTED = '@pre';
 // المرحلة كما يعرضها عمود «المرحلة»: مرحلة الرحلة الجارية، ولمن خرج من البرنامج أو لم تُحسب رحلته حالته الإدارية
 export const stageOf = (p) => p.stage || PARTICIPANT_STATUS[p.status] || p.status;
@@ -14,11 +16,7 @@ export function stageOptions(rows, order = []) {
   return seen.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'ar'));
 }
 
-// «متوقف»: لم يدخل منذ أسبوعين ولم يخرج من الرحلة. مصدر واحد لعدّه في «يحتاج تدخلك» ولخيار المرشّح الذي يعرضه (org-7)
-export const STALE_DAYS = 14;
 export const STALE = '@stale';
-export const isStale = (p, now = Date.now()) => !['completed', 'withdrawn'].includes(p.status) && !!p.last_login_at
-  && now - new Date(p.last_login_at).getTime() > STALE_DAYS * 864e5;
 
 export function filterRows(rows, { q = '', stage = '', track = '' }, now = Date.now()) {
   const s = q.trim().toLowerCase();

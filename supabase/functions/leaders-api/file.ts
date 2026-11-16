@@ -216,7 +216,9 @@ export async function participant(e: any, b: Body) {
   const id = String(b.id || '');
   const scope = await expertScope(e);
   if (!scope.advisor.has(id) && !scope.assigned.has(id)) throw new Fail('هذا المشارك ليس من مشاركيك', 403);
-  return participantFile(id, 'expert', { viewer: { email: e.email }, advisor: scope.advisor.has(id) });
+  const f: any = await participantFile(id, 'expert', { viewer: { email: e.email }, advisor: scope.advisor.has(id) });
+  // المرشد (مشرف الرحلة) يذكّر من يرشده بالمحرك الموحد (xp.nudge، nudges.ts)، والخادم يتحقق من الإسناد نفسه
+  return f?.success ? { ...f, mentor: scope.assigned.get(id) === 'mentor' } : f;
 }
 
 // ── وثيقة المبادرة من البوابة (مرافق بناء المبادرة 4د): يقرؤها الخبير وهو يجيب سؤالًا عن فصل فيها ──

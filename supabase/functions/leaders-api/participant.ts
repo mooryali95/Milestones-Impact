@@ -8,6 +8,7 @@ import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
 import { noticesFor, record as recordObservation } from './observations.ts';
+import { bannerFor } from './nudge-banner.ts';
 import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-rules.js';
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
@@ -653,6 +654,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     final_policy: audience !== 'admin' && !vis.par_final_policy ? null : { weights: fc.weights, thresholds: fc.thresholds, measure: { mode: fc.measure.mode, mastery_cut: fc.measure.mastery_cut }, version: fc.version, provisional: true },
     // تنبيهات وملاحظات مرئية لم يطّلع عليها بعد (participant_observations): بطاقة في رحلته حتى يضغط «اطّلعت»
     notices: audience === 'participant' ? await noticesFor(p.id) : [],
+    // لافتة التذكير الموحد (nudge-banner.ts): آخر تذكير لم يره، بنص بريده ومرسله
+    nudge: audience === 'participant' ? await bannerFor(p.id) : null,
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
     // مفاتيح الميزات قيد البناء (features.js): الواجهة تخفي القاعة وكاتون و360 بها، والخادم يرفض أفعالها وحده

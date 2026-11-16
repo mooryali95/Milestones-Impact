@@ -100,7 +100,8 @@ export async function fromToken(token: unknown) {
   const { data: s } = await db.from('coordinator_sessions').select('id, coordinator_id, expires_at, revoked_at')
     .eq('token_hash', await hash(token)).maybeSingle();
   if (!s || s.revoked_at || new Date(s.expires_at) < new Date()) throw new Fail('الجلسة منتهية، سجّل الدخول من جديد', 401, 'session');
-  const { data: c } = await db.from('org_coordinators').select('*, organizations(id, name, status)').eq('id', s.coordinator_id).maybeSingle();
+  // organizations(*) لا أعمدة مسماة: عمود لم يُرحَّل بعد (coord_nudges) لا يُفشل الدخول
+  const { data: c } = await db.from('org_coordinators').select('*, organizations(*)').eq('id', s.coordinator_id).maybeSingle();
   if (!usable(c)) throw new Fail('أُوقف حساب الاطلاع، تواصل مع الإدارة', 403, 'suspended');
   db.from('coordinator_sessions').update({ last_seen_at: new Date().toISOString() }).eq('id', s.id).then(() => {});
   return { coordinator: c, sessionId: s.id as string };
@@ -108,7 +109,8 @@ export async function fromToken(token: unknown) {
 
 const mePayload = (c: any) => ({
   coordinator: { full_name: c.full_name, email: c.email, permissions: coordPermissions(c.permissions, c.template), template: c.template || 'program', expires_at: c.expires_at || null, weekly_report: c.weekly_report },
-  org: { name: c.organizations.name },
+  // nudges: تذكير مشاركي الجهة من البوابة (nudges.ts)، مفعّل ما لم توقفه الإدارة لهذه الجهة
+  org: { name: c.organizations.name, nudges: c.organizations.coord_nudges !== false },
 });
 export const me = async (c: any) => ({ success: true, ...mePayload(c), switch_to: (await rolesOf(c.email)).filter((d) => d !== 'org'),
   consent_needed: await consentNeeded('coordinator', c.id) });
