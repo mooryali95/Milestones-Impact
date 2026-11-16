@@ -132,12 +132,15 @@ describe('الكتاب الأم: المشاركة مع الخبراء', () => {
     { id: '5', full_name: 'سالم', status: 'active', roles: ['coach'], committees: [] },
     { id: '6', full_name: 'نورة', status: 'active', roles: ['coach'], committees: ['content'] },
     { id: '7', full_name: 'لمى', status: 'paused', roles: [], committees: ['measurement'] },
+    { id: '8', full_name: 'هند', status: 'applied', source: 'application', roles: [], committees: ['content'] },
   ];
   it('من يقرأ، ومن في لجنة وملفه غير فعّال، ومن يمكن إضافته (الفاعل خارج الرحلة وحده)', () => {
     const r = shareRoster(ex);
     // من جمع الخدمتين يقرأ بعضويته، والموقوف مؤقتًا يقرأ ولا يكتب (expertViewer)
     expect(r.readers.map((x) => x.name)).toEqual(['بدر', 'لمى', 'نورة']);
     expect(r.blocked.map((x) => x.name)).toEqual(['جود']);
+    // طلب عضوية من مسار المحتوى لم يُراجع: طلب لا عضو غير فعّال، ولا يقرأ ولا يُعرض للإضافة
+    expect(r.applicants.map((x) => x.name)).toEqual(['هند']);
     // خبير الرحلة (سالم) لا يُعرض للمشاركة أبدًا؛ المنح الاستثنائي في المرحلة 4
     expect(r.candidates.map((x) => x.name)).toEqual(['أحمد']);
   });

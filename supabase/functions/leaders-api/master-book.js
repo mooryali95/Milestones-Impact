@@ -206,12 +206,15 @@ const expertRow = (e) => ({ id: e.id, name: e.full_name || e.email || '', title:
 export const shareCandidate = (e) => !!e && e.status === 'active' && !bookAccess(e) && !hasJourneyRole(e);
 export function shareRoster(experts = []) {
   const readers = experts.filter(bookAccess).map(expertRow);
+  const inCommittee = (e) => (e.committees || []).some((c) => COMMITTEES.includes(c));
+  // طلب عضوية لم يُراجع (مسار المحتوى يحفظ لجنته المطلوبة وهو applied): يُذكر طلبًا لا عضوًا، فلم يُعتمد بعد
+  const applicants = experts.filter((e) => e.status === 'applied' && inCommittee(e)).map(expertRow);
   // عضو لجنة غير فاعل: لا يقرأ حتى يُفعَّل ملفه، فيُذكر ليعرف المدير لماذا لا يرى الكتاب
-  const blocked = experts.filter((e) => !bookAccess(e) && (e.committees || []).some((c) => COMMITTEES.includes(c))).map(expertRow);
+  const blocked = experts.filter((e) => e.status !== 'applied' && !bookAccess(e) && inCommittee(e)).map(expertRow);
   // المرشحون أعضاء لجان لا خبراء رحلة: من له دور في الرحلة لا يُعرض هنا أبدًا (المنح الاستثنائي في المرحلة 4)
   const candidates = experts.filter(shareCandidate).map(expertRow);
   const byName = (a, b) => a.name.localeCompare(b.name, 'ar');
-  return { readers: readers.sort(byName), blocked: blocked.sort(byName), candidates: candidates.sort(byName) };
+  return { readers: readers.sort(byName), blocked: blocked.sort(byName), applicants: applicants.sort(byName), candidates: candidates.sort(byName) };
 }
 // عضوية لجنة بعد إضافة أو إزالة، بلا تكرار ولا قيمة غريبة
 export function toggleCommittee(list = [], committee, on) {

@@ -31,7 +31,7 @@ const seatLine = (seat) => {
 const OutSeat = () => <span className="mb-outseat">{OUT_OF_SEAT_AR}</span>;
 // نطاق القراءة (المرحلة 2): الجزء وحده يقصر الفهرس والتقليب على أبواب الجزء الحالي، والكتاب كاملًا كما كان
 const SCOPES = [['part', 'الجزء وحده'], ['book', 'الكتاب كاملًا']];
-const LEVELS = [['all', 'الكتاب كاملًا'], ['beginner', LEVEL_AR.beginner], ['intermediate', LEVEL_AR.intermediate], ['advanced', LEVEL_AR.advanced]];
+const LEVELS = [['all', 'كل المستويات'], ['beginner', LEVEL_AR.beginner], ['intermediate', LEVEL_AR.intermediate], ['advanced', LEVEL_AR.advanced]];
 const two = (n) => String(n).padStart(2, '0');
 const anchor = (s) => `mb-s-${encodeURIComponent(s || 'top').replace(/%/g, '')}`;
 const dateAr = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
@@ -203,6 +203,7 @@ function ShareSheet({ share, viewer, api, onChanged, onExperts, onClose }) {
                 <button key={c} type="button" className="mb-tag on" disabled={!viewer.write || !!busy} onClick={() => toggle(x, c, false)} title={`أزل من ${l}`}>{l} ×</button>))}</span></li>
           ))}</ul>
           {share.blocked.length > 0 && <p className="mb-note">{share.blocked.map((x) => x.name).join('، ')}: {share.blocked.length === 1 ? 'عضو' : 'أعضاء'} في لجنة وملفه غير فعّال، فلا يرى الكتاب حتى يُفعَّل من قسم الخبراء.</p>}
+          {(share.applicants || []).length > 0 && <p className="mb-note">{share.applicants.map((x) => x.name).join('، ')}: {share.applicants.length === 1 ? 'طلب عضوية لم يُراجع بعد' : 'طلبات عضوية لم تُراجع بعد'}، ولا يُفتح الكتاب قبل اعتماده من قسم الخبراء.</p>}
           <h3 className="mb-h">أضف عضوًا <small>{share.candidates.length} خبيرًا فاعلًا خارج الرحلة</small></h3>
           {share.candidates.length > 6 && <input className="mb-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث باسم الخبير" aria-label="بحث في الخبراء" />}
           {!share.candidates.length && <p className="mb-empty">لا خبير فاعل خارج الرحلة ينتظر الإضافة. خبراء الرحلة لا يُعرضون هنا، وعضوية اللجنة لأحدهم تُضبط من ملفه في قسم الخبراء.</p>}

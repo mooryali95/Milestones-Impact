@@ -67,12 +67,19 @@ export async function apply(b: Body, ctx: Ctx) {
   // بعد الحد (لا يُستهلك رمز التحقق على طلب سيُرفض) وقبل قراءة البريد: المسجل والجديد يُطلب منهما التحقق نفسه
   await requireHuman(b, ctx, 'استقبال طلبات الانضمام متوقف مؤقتًا، حاول بعد قليل');
   const { data: exists } = await db.from('experts').select('id').eq('email', email).maybeSingle();
+  // حد معروف: بريد مسجل (ومنه خبير رحلة يطلب عضوية لجنة) يُرد بالاستلام نفسه ولا يُحفظ ولا ينبّه المالك، حفظًا لقاعدة
+  // ألا يكشف النموذج العام هل البريد مسجل. عضوية اللجنة لخبير قائم تُضاف من ملفه في قسم الخبراء
   if (exists) return { success: true, received: true };
   const row = must(await db.from('experts').insert({ ...fields, email, phone, status: 'applied', source: 'application', applied_ip: ctx.ip }).select('id').single()) as any;
   // اللجان في تحديث مستقل كما في adminSave: قبل ترحيلها (20261113100000) يبقى الطلب محفوظًا، والإدارة تحدد لجنته عند المراجعة
-  if (committees.length) await db.from('experts').update({ committees }).eq('id', row.id);
-  await audit('system', email, 'expert.apply', 'experts', row.id, null, content ? { track, committees, dimensions: fields.dimensions } : null);
-  if (CONFIG.alertEmail) await alertApplication(row.id, { ...fields, committees }).catch(() => {});
+  // وإن فشل حفظها يُسجَّل ذلك في السجل، ولا يذكر بريد المالك إلا ما حُفظ فعلًا، فلا يختلف التنبيه عن الصف
+  let saved = committees;
+  if (committees.length) {
+    const { error } = await db.from('experts').update({ committees }).eq('id', row.id);
+    if (error) { console.error('expert.apply committees', error); saved = []; }
+  }
+  await audit('system', email, 'expert.apply', 'experts', row.id, null, content ? { track, committees, dimensions: fields.dimensions, ...(saved.length ? {} : { committees_saved: false }) } : null);
+  if (CONFIG.alertEmail) await alertApplication(row.id, { ...fields, committees: saved }).catch(() => {});
   return { success: true, received: true };
 }
 

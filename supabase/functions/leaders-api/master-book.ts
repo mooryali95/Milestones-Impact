@@ -10,6 +10,7 @@ import { DRAFTS } from './master-book-drafts.js';
 import { hasCommittee, hasJourneyRole } from './committees.js';
 import { sectionById, sectionIdOf } from './section-refs.js';
 import { proposalsFor } from './book-proposals.ts';
+import { missingColumn } from './missing-column.ts';
 
 type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; paused?: boolean; superAdmin?: boolean; email?: string; seat?: 'all' | string[] | null };
 
@@ -107,9 +108,10 @@ export async function addComment(v: Viewer, b: any) {
   // وسم «خبير من خارج الإطار» يُحفظ لحظة الكتابة فلا يتغير إن تغيرت المقاعد بعده. يُرسل حين يصح وحده، فالعمود افتراضيه false
   if (outOfSeat(v, mod)) row.out_of_seat = true;
   let { data, error } = await db.from('book_comments').insert(row).select('id').single();
-  // قبل ترحيل out_of_seat (20261116020000) يُحفظ التعليق بلا الوسم، وقبل ترحيل section_id (20261115200000) بعنوانه وحده
-  if (error && row.out_of_seat) { delete row.out_of_seat; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
-  if (error && row.section_id) { delete row.section_id; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
+  // قبل ترحيل out_of_seat (20261116020000) يُحفظ التعليق بلا الوسم، وقبل ترحيل section_id (20261115200000) بعنوانه وحده.
+  // العمود الغائب وحده يبرر الإعادة: خطأ عابر لا يُسقط الوسم، فالوسم لا يُستدرك بعد الحفظ
+  if (missingColumn(error) && row.out_of_seat) { delete row.out_of_seat; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
+  if (missingColumn(error) && row.section_id) { delete row.section_id; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
   if (error) throw new Fail(target.draft_key ? 'التعليق على المسودات يُفعَّل بعد تطبيق ترحيله، وقراءتها متاحة الآن' : 'تعذّر حفظ التعليق، حاول بعد قليل', 503, 'db_error');
   await audit(v.kind === 'admin' ? 'admin' : 'system', v.kind === 'admin' ? v.ref : `expert:${v.ref}`, 'book.comment', 'book_comments', (data as any).id, null, { module_id: val.module_id, section: val.section, reply: !!val.parent_id, ...(row.out_of_seat ? { out_of_seat: true } : {}) });
   return { success: true, id: (data as any).id };

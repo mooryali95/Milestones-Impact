@@ -1181,8 +1181,7 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .xp-tracks { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .xp-track { display: grid; gap: 8px; align-content: start; text-align: start; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--fg); font: inherit; cursor: pointer; border-top: 3px solid var(--copper); transition: box-shadow .15s ease, border-color .15s ease; }
 .xp-track-content { border-top-color: var(--graphite); }
-.xp-track h2 { margin: 0; font-size: 20px; }
-.xp-track p { margin: 0; }
+.xp-track-t { font-size: 20px; font-weight: 700; line-height: 1.4; }
 .xp-track-lead { font-weight: 600; }
 .xp-track-more { color: var(--muted); font-size: 15px; }
 .xp-track-go { margin-top: 4px; color: var(--copper); font-weight: 600; }

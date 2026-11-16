@@ -114,10 +114,11 @@ function Tracks({ onPick }) {
         <h1 className="as-h2">انضم إلى خبراء برنامج القادة</h1>
         <p className="muted">للخبراء في البرنامج مساران، لكل منهما طلبه ومراجعته. اختر ما يناسب خبرتك.</p>
         <div className="xp-tracks">{TRACKS.map((t) => (
+          // الزر لا يحوي إلا محتوى سطريًا: العنوان والسطران span، فلا عنوان مسطّح داخل زر
           <button key={t.key} type="button" className={`xp-track xp-track-${t.key}`} onClick={() => onPick(t.key)}>
-            <h2>{t.title}</h2>
-            <p className="xp-track-lead">{t.lead}</p>
-            <p className="xp-track-more">{t.more}</p>
+            <span className="xp-track-t">{t.title}</span>
+            <span className="xp-track-lead">{t.lead}</span>
+            <span className="xp-track-more">{t.more}</span>
             <span className="xp-track-go">قدّم طلبك <span aria-hidden="true">←</span></span>
           </button>
         ))}</div>
@@ -162,13 +163,13 @@ function ContentForm({ onBack }) {
         </div>
 
         <Pick legend="اللجنة المطلوبة *" options={Object.entries(COMMITTEE_AR).map(([k, l]) => [k, l, COMMITTEE_HINT[k]])} value={v.committees} onChange={(committees) => setV({ ...v, committees })} />
-        <Pick legend={needsDim ? 'الإطار الذي تراجعه *' : 'الإطار الذي تراجعه'} hint={needsDim ? 'مقعدك في لجنة المحتوى هو إطارك، واختر إطارًا واحدًا على الأقل.' : 'لجنة القياس تراجع الكتاب كله، والإطار يعرّف بخبرتك.'}
+        <Pick legend={needsDim ? 'الإطار الذي تراجعه *' : 'الإطار الذي تراجعه'} hint={needsDim ? 'مقعدك في لجنة المحتوى هو إطارك، واختر إطارًا واحدًا على الأقل.' : v.committees.length ? 'لجنة القياس تراجع الكتاب كله، والإطار يعرّف بخبرتك.' : 'الإطار شرط لعضوية لجنة المحتوى، واختياري للجنة القياس.'}
           options={Object.entries(DIM_AR).map(([k, l]) => [k, l])} value={v.dimensions} onChange={(dimensions) => setV({ ...v, dimensions })} />
 
         <label className="field"><span>خبرتك في المحتوى *</span>
           <textarea className="input" rows={5} required minLength={80} maxLength={2900} value={v.bio} onChange={set('bio')} placeholder="تأليف، أو تصميم تعلم، أو بحث، أو قياس: ما أنجزته فيه، وأين، وما تضيفه للمراجعة" />
           <small className="muted">{v.bio.length < 80 ? `${80 - v.bio.length} حرفًا على الأقل بعد` : 'ممتاز'}</small></label>
-        <label className="field"><span>رابط لأعمالك أو سيرتك</span><input className="input" dir="ltr" type="url" inputMode="url" value={v.work_url} onChange={set('work_url')} maxLength={300} placeholder="https://…" /><small className="muted">اختياري: صفحة أعمال، أو سيرة، أو LinkedIn.</small></label>
+        <label className="field"><span>رابط لأعمالك أو سيرتك</span><input className="input" dir="ltr" type="text" inputMode="url" autoComplete="url" value={v.work_url} onChange={set('work_url')} maxLength={300} placeholder="https://…" /><small className="muted">اختياري: صفحة أعمال، أو سيرة، أو LinkedIn.</small></label>
 
         {gate}
         <button className="btn" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل طلب العضوية'}</button>

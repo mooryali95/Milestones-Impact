@@ -206,6 +206,7 @@ export function coverHtml(c) {
 }
 
 // ── الغلاف الخلفي: ختام كل طبعة (الكتاب كاملًا والجزء)، بالشعار والإصدار والتاريخ والمرجع واسم القارئ وبريده ──
+// سطور الترخيص ومنع النسخ وحقوق النشر هنا وحدها، فصفحة «انتهت» قبله في الكتاب كاملًا لا تكررها
 function backCover(book) {
   const stamp = [book.name, book.email].filter(Boolean).join(' · ');
   return `<section class="full back"><div class="bk-back">
@@ -325,8 +326,7 @@ ${tools}
   <div class="lg">${LOGO}</div>
   <p>انتهت ${book.edition ? esc(book.edition) : 'النسخة الشخصية'} من كتاب القائد · ${total} بابًا</p>
   <p>صدرت لـ ${esc(book.name)} في ${esc(fmt(book.issued_at))} برقم <bdi dir="ltr">${esc(book.ref)}</bdi></p>
-  <p>هذا المحتوى ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>، ومرخص لصاحب النسخة للاستخدام الشخصي فقط.<br>يُمنع نسخه أو نشره أو مشاركته مع أي طرف آخر، وكل صفحة تحمل اسم صاحبها ورقم نسختها.</p>
-  <p>جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(book.issued_at).getFullYear()} Milestone Impact</bdi></p>
+  <p>هذا المحتوى ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>، ومرخص لصاحب النسخة للاستخدام الشخصي فقط، ولا يُنشر ولا يُشارك مع أي طرف آخر.</p>
 </section>
 ${backCover(book)}
 </main>
@@ -360,6 +360,7 @@ body::before { content: ''; position: fixed; inset: 0; background: url("data:ima
 ${COVER_CSS}
 .full { page: full; break-after: page; width: 210mm; height: 296.5mm; position: relative; overflow: hidden; }
 .full .bk-cover { width: 210mm; height: 296.5mm; }
+.full.back { break-after: auto; }
 @media screen { .full { width: auto; height: auto; aspect-ratio: 210/297; margin: -16mm -18mm 16mm; } }
 .full .bk-cover { height: 100%; aspect-ratio: auto; }
 .roman { font: 200 22pt "Noto Sans", serif; color: ${C.gold}; }

@@ -8,7 +8,8 @@ const MB = await import('./master-book.ts');
 
 type Row = Record<string, any>;
 // missing: أعمدة لم يُطبَّق ترحيلها بعد، فإدراج صف يحملها يُرد بخطأ كما يرده PostgREST
-function install(tables: Record<string, Row[]>, { missing = [] as string[] } = {}) {
+// transient: عدد الإدراجات الأولى التي تفشل بخطأ عابر (لا عمود غائب)
+function install(tables: Record<string, Row[]>, { missing = [] as string[], transient = 0 } = {}) {
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
@@ -18,6 +19,7 @@ function install(tables: Record<string, Row[]>, { missing = [] as string[] } = {
     const run = () => {
       const rows = tables[table] ||= [];
       if (mode === 'insert') {
+        if (transient > 0) { transient--; return { data: null, error: { code: '08006', message: 'connection failure' } }; }
         const bad = (Array.isArray(payload) ? payload : [payload]).some((x: Row) => missing.some((c) => c in x));
         if (bad) return { data: null, error: { code: 'PGRST204', message: 'column not found' } };
         const added = (Array.isArray(payload) ? payload : [payload]).map((x) => ({ id: `${table}-${++seq}`, created_at: new Date().toISOString(), ...x }));
@@ -169,5 +171,16 @@ Deno.test('المقعد: قبل ترحيل out_of_seat يُحفظ التعليق
     assertEquals(tables.book_comments.length, 1);
     assertEquals('out_of_seat' in tables.book_comments[0], false);
     assertEquals((await MB.book(v)).comments[0].out_of_seat, false);
+  } finally { restore(); }
+});
+
+Deno.test('المقعد: خطأ عابر في الحفظ لا يُسقط الوسم، فلا يُحفظ التعليق بلا وسمه', async () => {
+  const tables = bookTables();
+  const restore = install(tables, { transient: 1 });
+  try {
+    const v = MB.expertViewer(expert({ committees: ['content'], dimensions: ['leadership'] }));
+    assertEquals(await code(MB.addComment(v, { module_id: MOD_I.id, body: 'ملاحظة من خارج الإطار' })), 'db_error');
+    assertEquals(tables.book_comments.length, 0);
+    assertEquals(tables.audit_log.length, 0);
   } finally { restore(); }
 });
