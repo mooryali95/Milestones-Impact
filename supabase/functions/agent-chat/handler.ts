@@ -283,12 +283,14 @@ async function send(d: Deps, b: Record<string, unknown>) {
     // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق). ولا يُقرأ لرسالة يحولها الموجّه
     // ولا لرسالة عن دفع تم («رسوم دفعتها»): تلك ليست سؤال سعر
     // ومتابعة «أي المنتجين؟» بالبرنامج طلب سعر لجهة فيه (الموجّه فرض التحويل)
-    const quote = routed.kind === 'forced' ? 'leaders' : routed.kind === 'reply' ? 'open' : projectsContext(message, conv.product) ? false : orgQuote(message, product);
+    // والمسار التنموي لا أسعار منشورة له: لا سعر حي ولا سياق عرض البرنامج (التحويل المفروض لعرض الجهة فيه من الموجّه)
+    const projects = projectsContext(message, conv.product);
+    const quote = projects ? false : routed.kind === 'forced' ? 'leaders' : routed.kind === 'reply' ? 'open' : orgQuote(message, product);
     // الموضوعات المعروفة (router.ts): حقيقتها في سياق الخادم، والحارس يحرس ما يخصها، والرد النهائي يحملها (ensureTopics)
     const topics = routed.kind === 'handoff' ? [] : topicsOf(message, { page: conv.product });
     // ويُقرأ في متابعة سؤال سعر سابق كذلك («وهل يشمل الضريبة؟»)، فلا يقطع الحارس سعرًا صحيحًا يكرره النموذج من السجل
     const priceThread = asksPrice(message) || history.filter((t) => t.role === 'visitor').slice(-6).some((t) => asksPrice(t.body) && !orgQuote(t.body, product));
-    if (!quote && routed.kind !== 'handoff' && product !== 'matrix' && priceThread && !paidSignal(message)) {
+    if (!quote && !projects && routed.kind !== 'handoff' && routed.kind !== 'forced' && product !== 'matrix' && priceThread && !paidSignal(message)) {
       const p = await d.store.leadersPrice();
       if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
     }
@@ -440,6 +442,26 @@ async function send(d: Deps, b: Record<string, unknown>) {
       await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${why} · retry: ${state}`, lang });
       if (!text && !refused) empty = why;
     }
+    // امتناع النموذج عن سؤال يجيبه الموجّه بموضوع معروف (بدء مشروع تنموي، هوية المساعد...): الامتناع هنا إيجابية كاذبة،
+    // فإعادة واحدة بلا تفكير بحد الساعة، وإن بقي فحقيقة الموضوع المعتمدة (ensureTopics أدناه) بلا تحويل. السبب في السجل
+    let refusedTopic = false;
+    if (refused && answerOnly && topics.length && (reply === 'ar' || reply === 'en')) {
+      let state: 'ok' | 'still' | 'skipped' = 'skipped';
+      if (!signal.aborted && (await hourOk())) {
+        const again = await callModel(messages, () => {}, { thinking: 'off' });
+        if (!('fail' in again)) {
+          const t4 = sanitizeOutput(guardReply(stripMark(again.result.text), gctx).text).text.trim();
+          state = t4 && again.result.stopReason !== 'refusal' ? 'ok' : 'still';
+          await saveCall(call, '', 'superseded:refusal');
+          call = again;
+          text = state === 'ok' ? t4 : '';
+        }
+      }
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: refusal · retry: ${state}`, lang });
+      if (state !== 'ok') text = '';
+      refused = false;
+      refusedTopic = true;
+    }
     let handoff = forced !== null || (call.result.text.includes(HANDOFF_MARK) && !answerOnly);
     if (refused) { text = TEXT.refusal[lang]; handoff = true; }
     // الرد يحمل حقيقة كل موضوع عُرف في السؤال (بالعربية أو الإنجليزية؛ لغة ثالثة يترجمها النموذج من سياقه)
@@ -454,7 +476,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
       text = TEXT.refusal[lang];
       handoff = true;
     }
-    if (call === first && fin.tail && !refused) emit('delta', { t: fin.tail });
+    if (call === first && fin.tail && !refused && !refusedTopic) emit('delta', { t: fin.tail });
     await saveCall(call, text);
     emit('done', { text, handoff, source: 'model', ...(violations.length ? { guarded: violations } : {}) });
   });

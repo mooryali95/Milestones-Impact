@@ -45,7 +45,14 @@ export const MATRIX_PRICE_FACT: Fact = {
 // حقيقة الموضوع من مصدرها (facts.json عبر knowledge.js) بلغة الرد
 export const topicFact = (t: Topic | 'org_quote_open', lang: 'ar' | 'en'): string => (TOPIC_FACTS as Record<string, { ar: string; en: string }>)[t][lang];
 // في رد عن ساعات التدريب: رقم ساعات، أو وقت (9:00)، أو ساعات عمل الفريق ودوامه. «4 أيام تدريبية» مدة مرحلة تبقى
-export const HOURS_BAD = /\d+\s*ساع|\b\d+\s*(?:[A-Za-z-]+\s+){0,2}hours?\b|\b\d{1,2}:\d{2}\b|\b(?:office|working|business|opening|team)\s+hours\b|ساعات\s+(?:ال)?عمل|[اأ]وقات\s+(?:ال)?عمل|الدوام/i;
+// والعدد بالكلمات كالرقم («ست ساعات»، «ساعتين»، "six hours")
+const AR_NUM = '(?:واحد[ةه]?|اثن(?:ين|ان|تين|تان)|ثلاث[ةه]?|[اأ]ربع[ةه]?|خمس[ةه]?|ست[ةه]?|سبع[ةه]?|ثماني?[ةه]?|تسع[ةه]?|عشر[ةه]?|[اإ]حدى|[اإ]ثنت?ا|[اأ]ربع(?:ين|ون)|عشر(?:ين|ون)|ثلاث(?:ين|ون)|بضع|عد[ةه])';
+const EN_NUM = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|a\\s+few|several|couple\\s+of)';
+export const HOURS_BAD = new RegExp([
+  String.raw`\d+\s*ساع`, `(?:^|[\\s،,(])${AR_NUM}\\s+ساع`, String.raw`(?:^|[\s،,(])(?:ال)?ساعت(?:ين|ان)(?:[\s.،,؟?!)]|$)`,
+  String.raw`\b\d+\s*(?:[A-Za-z-]+\s+){0,2}hours?\b`, String.raw`\b${EN_NUM}[\s-]+(?:[A-Za-z-]+\s+){0,2}hours?\b`,
+  String.raw`\b\d{1,2}:\d{2}\b`, String.raw`\b(?:office|working|business|opening|team)\s+hours\b`, 'ساعات\\s+(?:ال)?عمل', '[اأ]وقات\\s+(?:ال)?عمل', 'الدوام',
+].join('|'), 'i');
 
 export type GuardCtx = { allow: ReadonlySet<number>; lang: 'ar' | 'en'; product?: Product; topics?: readonly Topic[] };
 // يفحص الرد ويصلحه: الجمل المخالفة تُستبدل بالحقيقة (مرة واحدة لكل حقيقة)، والبيانات الحساسة تُحجب.

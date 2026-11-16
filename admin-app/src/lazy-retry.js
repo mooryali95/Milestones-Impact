@@ -11,17 +11,46 @@ export const CHUNK_ERROR = /dynamically imported module|Importing a module scrip
 export const isChunkError = (e) => CHUNK_ERROR.test(String((e && (e.message || e.reason?.message)) || e || ''));
 
 const FLAG = 'mi_admin_chunk_reload';
+// علامة الرابط حين يُمنع مخزن الجلسة: معامل في الاستعلام (قبل #، فلا يمس مسار اللوحة) بوقت آخر إعادة
+const PARAM = 'mi_reload';
 const WINDOW_MS = 60_000;
 const defaultReload = () => { if (typeof window !== 'undefined') window.location.reload(); };
 const defaultStorage = () => { try { return typeof sessionStorage === 'undefined' ? null : sessionStorage; } catch { return null; } };
+const defaultLocation = () => (typeof window === 'undefined' ? null : window.location);
+const defaultNavigate = (url) => { if (typeof window !== 'undefined') window.location.replace(url); };
+// علامة في الصفحة نفسها: لا تُعاد الصفحة مرتين قبل أن تُحمَّل من جديد، أيًا كان المخزن
+let reloadedThisPage = false;
+export const _resetReloadFlag = () => { reloadedThisPage = false; };
 
-// إعادة تحميل واحدة في الدقيقة: true إن أعاد التحميل الآن، وfalse إن سبقتها إعادة قريبة (فلا حلقة)
-export function reloadOnce({ storage = defaultStorage(), reload = defaultReload, now = Date.now() } = {}) {
-  let last = 0;
-  try { last = Number(storage?.getItem(FLAG)) || 0; } catch { /* المخزن ممنوع: يُعاد مرة على الأقل */ }
+// المخزن يعمل فعلًا: يُكتب ويُقرأ ما كُتب (المخزن الممنوع يرمي، والممتلئ يرمي عند الكتابة)
+function storageMark(storage, now) {
+  if (!storage) return null;
+  try {
+    const last = Number(storage.getItem(FLAG)) || 0;
+    if (last && now - last < WINDOW_MS) return { recent: true };
+    storage.setItem(FLAG, String(now));
+    return storage.getItem(FLAG) === String(now) ? { recent: false } : null;
+  } catch { return null; }
+}
+
+// إعادة تحميل واحدة في الدقيقة: true إن أعاد التحميل الآن، وfalse إن سبقتها إعادة قريبة (فلا حلقة). بمخزن الجلسة إن عمل،
+// وإلا بعلامة الرابط (تبقى بعد إعادة التحميل)، وإن تعذرت كذلك فلا إعادة: رسالة الشاشة بزرها أسلم من حلقة بلا نهاية
+export function reloadOnce({ storage = defaultStorage(), reload = defaultReload, now = Date.now(), location = defaultLocation(), navigate = defaultNavigate } = {}) {
+  if (reloadedThisPage) return false;
+  const mark = storageMark(storage, now);
+  if (mark?.recent) return false;
+  if (mark) {
+    reloadedThisPage = true;
+    reload();
+    return true;
+  }
+  let url;
+  try { url = new URL(location.href); } catch { return false; }
+  const last = Number(url.searchParams.get(PARAM)) || 0;
   if (last && now - last < WINDOW_MS) return false;
-  try { storage?.setItem(FLAG, String(now)); } catch { /* اختياري */ }
-  reload();
+  url.searchParams.set(PARAM, String(now));
+  reloadedThisPage = true;
+  navigate(url.toString());
   return true;
 }
 

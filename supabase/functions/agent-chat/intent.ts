@@ -122,12 +122,31 @@ export function conversationLang(visitorMessages: string[]): ReplyLang {
 }
 
 // كلمات السعر بمطابقة الكلمة (بسوابقها ولواحقها المعروفة)، لا بنهاية الكلمة: كانت «كم» تطابق «عندكم» و«جوالكم»
-const PRICE_WORDS = ['سعر', 'اسعار', 'تكلفه', 'تكلفت', 'بكم', 'رسوم', 'رسم', 'مبلغ', 'price', 'prices', 'pricing', 'cost', 'costs', 'fee', 'fees'];
-// «كم» وhow much وحدهما تسألان عن المدة والعدد كذلك («وكم المدة؟»، «كم ساعات البرنامج»): سؤال سعر إلا مع كلمة مدة أو عدد
-const HOW_MUCH = ['كم', 'how much'];
-const DURATION_WORDS = ['مده', 'مدته', 'مدتها', 'طول', 'يوم', 'ايام', 'اسبوع', 'اسابيع', 'شهر', 'اشهر', 'شهور', 'سنه', 'ساعه', 'ساعات', 'دقيقه', 'دقائق', 'مرحله', 'مراحل',
-  'long', 'duration', 'time', 'hour', 'hours', 'day', 'days', 'week', 'weeks', 'month', 'months'];
-export const asksPrice = (q: string) => hasWord(q, PRICE_WORDS) || (hasWord(q, HOW_MUCH) && !hasWord(q, DURATION_WORDS));
+const PRICE_WORDS = ['سعر', 'اسعار', 'تكلفه', 'تكلفت', 'بكم', 'رسوم', 'رسم', 'مبلغ', 'يكلف', 'يكلفنا', 'يكلفني', 'تكلف', 'تكلفنا', 'تكلفني',
+  'price', 'prices', 'pricing', 'cost', 'costs', 'fee', 'fees'];
+// «كم» وhow much وحدهما تسألان عن المدة والعدد كذلك («وكم المدة؟»، «كم ساعات البرنامج»، "how much time"): ليستا سؤال سعر إن
+// تلتهما مباشرة كلمة مدة أو عدد (المسؤول عنه). المدة في غير هذا الموضع ظرف للسعر («كم يكلفنا لمدة شهر؟»، «كم الاشتراك في
+// السنة؟»، "how much per month"): سؤال سعر
+const DURATION_WORDS = new Set(['مده', 'طول', 'يوم', 'ايام', 'اسبوع', 'اسابيع', 'شهر', 'اشهر', 'شهور', 'سنه', 'سنوات', 'ساعه', 'ساعات', 'دقيقه', 'دقائق',
+  'مرحله', 'مراحل', 'عدد', 'جلسه', 'جلسات', 'يوما', 'ساعتين', 'يومين', 'time', 'hour', 'hours', 'day', 'days', 'week', 'weeks', 'month', 'months']);
+// الكلمة بلا «ال» وبلا لاحقة الضمير («المدة»، «مدته»، «مدتها»): ة صارت ه بالتوحيد، فـ«مدته» ← «مده»
+const durationToken = (t: string | undefined) => {
+  if (!t) return false;
+  const b = t.replace(/^(ال|وال)/, '');
+  return DURATION_WORDS.has(b) || DURATION_WORDS.has(b.replace(/(ته|تها|تهم)$/, 'ه'));
+};
+function howMuchAsksPrice(q: string) {
+  const tokens = normalizeText(q).split(' ');
+  for (let i = 0; i < tokens.length; i++) {
+    if (['كم', 'وكم', 'فكم'].includes(tokens[i])) {
+      if (!durationToken(tokens[i + 1])) return true;
+    } else if (tokens[i] === 'how' && tokens[i + 1] === 'much') {
+      if (!durationToken(tokens[i + 2])) return true;
+    }
+  }
+  return false;
+}
+export const asksPrice = (q: string) => hasWord(q, PRICE_WORDS) || howMuchAsksPrice(q);
 
 // ما يدل على أن السائل جهة أو يسأل عن عدة مقاعد: عروض الجهات يعدها الفريق، فلا رقم ولا تقدير ويُحوَّل.
 // صيغ الجمع والجماعة فقط: الفرد يقول «أنا موظف في وزارة» أو «رشحتني جهة» ويسأل عن رسومه هو، فلا يُعد ذلك جهة.

@@ -225,6 +225,24 @@ Deno.test('الحارس: ساعات التدريب', () => {
   const office = 'ساعات عمل الفريق من 9:00 إلى 17:00 بتوقيت الرياض.';
   assertEquals(guardReply(office, { ...ar, topics: [] }).text, office);
 });
+Deno.test('الحارس: عدد ساعات التدريب بالكلمات كالرقم (e48 وe49 وe56)', () => {
+  const ar = { allow: new Set<number>(), lang: 'ar' as const, product: 'leaders' as const, topics: ['training_hours' as const] };
+  for (const t of ['مدة التدريب ست ساعات يوميًا.', 'اليوم التدريبي ساعتين فقط.', 'التدريب ثماني ساعات في اليوم.', 'كل يوم عدة ساعات.']) {
+    const r = guardReply(t, ar);
+    assertEquals(r.violations, ['hours'], t);
+    assertEquals(r.text, topicFact('training_hours', 'ar'), t);
+  }
+  for (const t of ['Each training day is six hours.', 'It runs for eight training hours a day.', 'Expect a few hours per day.']) {
+    const r = guardReply(t, { ...ar, lang: 'en' });
+    assertEquals(r.violations, ['hours'], t);
+    assertEquals(r.text, topicFact('training_hours', 'en'), t);
+  }
+  // الحقيقة نفسها لا تُعد مخالفة، ومدد المراحل تبقى
+  assertEquals(guardReply(topicFact('training_hours', 'ar'), ar).violations, []);
+  assertEquals(guardReply(topicFact('training_hours', 'en'), { ...ar, lang: 'en' }).violations, []);
+  assertEquals(guardReply('التدريب أربعة أيام تدريبية.', ar).violations, []);
+});
+
 Deno.test('ensureTopics: الحقيقة تُلحق إن غابت دلالتها، ولا تُكرر إن حضرت', () => {
   const a = ensureTopics('القياس أول خطوة.', ['assessment_vs_program'], 'ar');
   assertMatch(a.text, /يعتمد مستشار نتيجته ومساره خلال يومي عمل/);

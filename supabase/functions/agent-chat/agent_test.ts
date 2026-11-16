@@ -12,6 +12,7 @@ import { inServiceHours, promiseNow, PROMISE_AR } from '../_shared/hours.js';
 import { formContext, formOnly, AGENT_CONTEXT_PREFIX } from '../_shared/contact.ts';
 import { SITES } from '../_shared/sites.js';
 import { KNOWLEDGE, TOPIC_FACTS } from './knowledge.js';
+import { topicFact } from './guard.ts';
 
 // ── الحجب والفحص ──
 Deno.test('الأرقام العربية الهندية تُوحَّد، ورقم الهوية والبطاقة والآيبان تُحجب ولو بمسافات', () => {
@@ -716,6 +717,33 @@ Deno.test('e16: رد فارغ (max_tokens) ليس امتناعًا ولا تحو
   const t5 = await started(mark.deps);
   const d5 = await doneOf(mark.deps, t5, 'سؤال عام عن البرنامج بلا موضوع معروف');
   assertEquals([d5.data.handoff, mark.calls.model], [true, 1]);
+});
+
+Deno.test('e16 بامتناع النموذج: سؤال بموضوع معروف يُعاد مرة بلا تفكير، وإن بقي الامتناع فحقيقة الموضوع بلا تحويل', async () => {
+  const q = 'عندنا جمعية ونبي تصميم مشروع تنموي، كيف نبدأ؟';
+  const once = seqSetup([{ text: '', stopReason: 'refusal' }, { text: 'نبدأ معكم بطلب تقييم مبدئي من الفريق.' }]);
+  const t1 = await startedAt(once.deps, 'MI-PROJECTS');
+  const d1 = await doneOf(once.deps, t1, q);
+  assertEquals([d1.data.handoff, once.calls.model], [false, 2]);
+  assertMatch(d1.data.text, /تقييم مبدئي/);
+  assertEquals(once.opts[1], { thinking: 'off' });
+  assert(once.m.msgs.some((x) => x.role === 'system' && x.body === 'guard: refusal · retry: ok'));
+  assert(once.m.msgs.some((x) => x.role === 'agent' && x.stop_reason === 'superseded:refusal'));
+  const still = seqSetup([{ text: '', stopReason: 'refusal' }]);
+  const t2 = await startedAt(still.deps, 'MI-PROJECTS');
+  const d2 = await doneOf(still.deps, t2, q);
+  assertEquals([d2.data.handoff, still.calls.model], [false, 2]);
+  assertEquals(d2.data.text, topicFact('projects_start', 'ar'));
+  assertNotMatch(d2.data.text, new RegExp(TEXT.refusal.ar.slice(0, 20)));
+  assert(still.m.msgs.some((x) => x.role === 'system' && x.body === 'guard: refusal · retry: still'));
+});
+
+Deno.test('عرض سعر لجهة في المسار التنموي: تحويل مفروض، بلا سياق عرض البرنامج ولا سعره الحي', async () => {
+  const s = seqSetup([{ text: 'عروض المسار يعدها الفريق.' }], { price: { enabled: true, currency: 'USD', assessment_cents: 19900, program_cents: 99900 } });
+  const token = await startedAt(s.deps, 'MI-PROJECTS');
+  const d = await doneOf(s.deps, token, 'نبي عرض سعر لمشروع تنموي لجمعيتنا');
+  assertEquals(d.data.handoff, true);
+  assertNotMatch(s.sys[0], /برنامج إدارة المشروعات للقادة: عروض الجهات|199\.00|رسوم البرنامج الحية/);
 });
 
 Deno.test('r19: سؤال الهوية يُجاب، وإشارة النموذج تُهمل ولو عرض التحويل بكلماته', async () => {

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normConversations, normKeySet, normRun, normRunDetail, normRuns, normState, normStep, normTranscript, normUsage, num, text } from './agent-data.js';
-import { isChunkError, reloadOnce, retryImport } from './lazy-retry.js';
+import { _resetReloadFlag, isChunkError, reloadOnce, retryImport } from './lazy-retry.js';
 import { gateText, runSummary, spendSummary, stateSummary } from './agent-admin.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -100,6 +100,7 @@ describe('lazy-retry: ملف القسم بعد النشر', () => {
     expect(reloadPage).not.toHaveBeenCalled();
   });
   it('فشل المحاولتين يعيد تحميل الصفحة مرة، وإعادة قريبة سابقة لا تعيدها فيُرمى الخطأ', async () => {
+    _resetReloadFlag();
     const storage = memStorage();
     const reload = vi.fn();
     const load = () => Promise.reject(chunkErr);
@@ -109,7 +110,34 @@ describe('lazy-retry: ملف القسم بعد النشر', () => {
     expect(await Promise.race([pending.then(() => 'resolved'), new Promise((r) => setTimeout(() => r('pending'), 10))])).toBe('pending');
     await expect(retryImport(load, { reloadPage: () => reloadOnce({ storage, reload, now: 20_000 }) })).rejects.toBe(chunkErr);
     expect(reload).toHaveBeenCalledTimes(1);
+    _resetReloadFlag(); // صفحة جديدة بعد إعادة التحميل
     expect(reloadOnce({ storage, reload, now: 1000 + 61_000 })).toBe(true);
+  });
+  it('مخزن الجلسة ممنوع أو ممتلئ: علامة الرابط تمنع الحلقة، ولا إعادة ثانية في الصفحة نفسها', () => {
+    const blocked = { getItem() { throw new Error('SecurityError'); }, setItem() { throw new Error('SecurityError'); } };
+    const full = { getItem: () => null, setItem() { throw new Error('QuotaExceededError'); } };
+    for (const storage of [null, blocked, full]) {
+      _resetReloadFlag();
+      const reload = vi.fn();
+      const navigate = vi.fn();
+      const location = { href: 'https://admin.sunkvalue.com/?x=1#/leaders/agent' };
+      expect(reloadOnce({ storage, reload, navigate, location, now: 5000 })).toBe(true);
+      expect(reload).not.toHaveBeenCalled();
+      const next = new URL(navigate.mock.calls[0][0]);
+      expect(next.searchParams.get('mi_reload')).toBe('5000');
+      expect(next.searchParams.get('x')).toBe('1');
+      expect(next.hash).toBe('#/leaders/agent');
+      // في الصفحة نفسها: لا إعادة ثانية
+      expect(reloadOnce({ storage, reload, navigate, location, now: 5001 })).toBe(false);
+      // بعد التحميل بالعلامة، والفشل نفسه: لا حلقة
+      _resetReloadFlag();
+      expect(reloadOnce({ storage, reload, navigate, location: { href: next.toString() }, now: 30_000 })).toBe(false);
+      expect(navigate).toHaveBeenCalledTimes(1);
+      // بعد مرور الدقيقة تُسمح إعادة واحدة أخرى
+      expect(reloadOnce({ storage, reload, navigate, location: { href: next.toString() }, now: 70_000 })).toBe(true);
+    }
+    _resetReloadFlag();
+    expect(reloadOnce({ storage: null, reload: vi.fn(), navigate: vi.fn(), location: null, now: 1 })).toBe(false);
   });
   it('خطأ غير خطأ الملف يُرمى بلا محاولة ثانية', async () => {
     const err = new Error('boom');
