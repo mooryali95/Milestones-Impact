@@ -103,6 +103,9 @@ test('انضم كخبير: التحقق ثم الإرسال', async ({ page }) =
   });
   await page.setViewportSize({ width: 900, height: 1400 });
   await page.goto('http://localhost:4304/expert');
+  // الصفحة تبدأ ببطاقتي المسار (المرحلة 3 من تصور أجزاء الكتاب)، ونموذج خبير الرحلة كما كان
+  await page.getByRole('button', { name: /خبير رحلة/ }).click();
+  await expect(page).toHaveURL(/\/expert\?track=journey$/);
   await expect(page.getByRole('heading', { name: 'انضم إلى شبكة خبراء برنامج القادة' })).toBeVisible();
   if (SHOT) await page.screenshot({ path: `${SHOT}/apply.png`, fullPage: true });
   await page.getByLabel('الاسم الكامل *').fill('سارة الحربي');

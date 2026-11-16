@@ -13,7 +13,7 @@ import { DOOR, rolesOf, wrongDoor } from './doors.ts';
 import { cleanExpert, cleanRating, expertFieldError, expertPublic, journeyApproved, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
-import { approvalBlock, cleanCommittees, COMMITTEE_AR, committeeCoverage, contentOnly } from './committees.js';
+import { applyTrack, approvalBlock, cleanCommittees, COMMITTEE_AR, committeeApplicationAr, committeeCoverage, contentApplyError, contentOnly, workUrl } from './committees.js';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -30,17 +30,33 @@ import { firstName } from './hall.js';
 // وتنبيه المالك مرة على الأكثر في كل نافذة من ست ساعات، جماعيًا يدخل الطابور ولا يزاحم الرموز.
 // بريد واحد لملف واحد، وحد لكل شبكة في الساعة، ولا يكشف الرد إن كان البريد مسجلًا
 export const APPLY_ALERT_HOURS = 6;
-// journey-guard: طلب الانضمام العام للرحلة، يقرأ البريد والشبكة ولا يرشّح أحدًا
+// مسار خبير المحتوى (track: 'content'، تصور أجزاء الكتاب وخبير المحتوى، المرحلة 3): لا أدوار ولا حقول مطابقة، واللجنة
+// المطلوبة في committees نفسه. آمن لأن الطلب «بانتظار المراجعة» لا يفتح شيئًا (bookAccess يشترط الفاعل)، والاعتماد بـ approvalBlock.
+// الحد والتحقق البشري وفحص البريد والجوال كما هي للمسارين
+// journey-guard: طلب الانضمام العام للمسارين، يقرأ البريد والشبكة ولا يرشّح أحدًا
 export async function apply(b: Body, ctx: Ctx) {
+  const track = applyTrack(b);
+  if (!track) throw new Fail('مسار الطلب غير معروف');
+  const content = track === 'content';
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد الإلكتروني غير صحيح');
   const fieldError = expertFieldError(b);
   if (fieldError) throw new Fail(fieldError);
   const fields = cleanExpert(b);
   if (!fields.full_name || fields.full_name.length < 3) throw new Fail('اكتب اسمك الكامل');
-  if (!fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
-  if (!fields.dimensions.length) throw new Fail('اختر بُعدًا واحدًا على الأقل من أبعاد البرنامج');
-  if (!fields.bio || fields.bio.length < 80) throw new Fail('عرّف بخبرتك في 80 حرفًا على الأقل');
+  const contentError = content ? contentApplyError(b) : null;
+  if (contentError) throw new Fail(contentError);
+  if (!content && !fields.roles.length) throw new Fail('اختر دورًا واحدًا على الأقل');
+  if (!content && !fields.dimensions.length) throw new Fail('اختر بُعدًا واحدًا على الأقل من أبعاد البرنامج');
+  if (!fields.bio || fields.bio.length < 80) throw new Fail(content ? 'عرّف بخبرتك في المحتوى في 80 حرفًا على الأقل' : 'عرّف بخبرتك في 80 حرفًا على الأقل');
+  const committees = content ? cleanCommittees(b.committees) : [];
+  if (content) {
+    Object.assign(fields, { roles: [], levels: [], sectors: [], weekly_hours: null });
+    // الرابط الاختياري: رابط LinkedIn في خانته، وغيره سطر في آخر النبذة (لا خانة له في الملف، ولا ترحيل في هذه المرحلة)
+    const link = workUrl(b.work_url);
+    if (link && /^https:\/\/([a-z]+\.)?linkedin\.com\//i.test(link)) fields.linkedin_url = link;
+    else if (link) fields.bio = `${fields.bio.slice(0, 3000 - link.length - 40)}\n\nرابط الأعمال أو السيرة: ${link}`;
+  }
   const phone = b.phone ? normalizePhone(b.phone) : null;
   if (b.phone && !phone) throw new Fail('رقم الجوال غير صحيح');
   if (ctx.ip) {
@@ -51,24 +67,37 @@ export async function apply(b: Body, ctx: Ctx) {
   // بعد الحد (لا يُستهلك رمز التحقق على طلب سيُرفض) وقبل قراءة البريد: المسجل والجديد يُطلب منهما التحقق نفسه
   await requireHuman(b, ctx, 'استقبال طلبات الانضمام متوقف مؤقتًا، حاول بعد قليل');
   const { data: exists } = await db.from('experts').select('id').eq('email', email).maybeSingle();
+  // حد معروف: بريد مسجل (ومنه خبير رحلة يطلب عضوية لجنة) يُرد بالاستلام نفسه ولا يُحفظ ولا ينبّه المالك، حفظًا لقاعدة
+  // ألا يكشف النموذج العام هل البريد مسجل. عضوية اللجنة لخبير قائم تُضاف من ملفه في قسم الخبراء
   if (exists) return { success: true, received: true };
   const row = must(await db.from('experts').insert({ ...fields, email, phone, status: 'applied', source: 'application', applied_ip: ctx.ip }).select('id').single()) as any;
-  await audit('system', email, 'expert.apply', 'experts', row.id);
-  if (CONFIG.alertEmail) await alertApplication(row.id, fields).catch(() => {});
+  // اللجان في تحديث مستقل كما في adminSave: قبل ترحيلها (20261113100000) يبقى الطلب محفوظًا، والإدارة تحدد لجنته عند المراجعة
+  // وإن فشل حفظها يُسجَّل ذلك في السجل، ولا يذكر بريد المالك إلا ما حُفظ فعلًا، فلا يختلف التنبيه عن الصف
+  let saved = committees;
+  if (committees.length) {
+    const { error } = await db.from('experts').update({ committees }).eq('id', row.id);
+    if (error) { console.error('expert.apply committees', error); saved = []; }
+  }
+  await audit('system', email, 'expert.apply', 'experts', row.id, null, content ? { track, committees, dimensions: fields.dimensions, ...(saved.length ? {} : { committees_saved: false }) } : null);
+  if (CONFIG.alertEmail) await alertApplication(row.id, { ...fields, committees: saved }).catch(() => {});
   return { success: true, received: true };
 }
 
 // أول طلب في النافذة (ست ساعات بتوقيت ثابت) وحده ينبّه المالك، وزر الرسالة يفتح الطلبات كلها. الأقدم في النافذة
 // هو من ينبّه، فطلبان متزامنان لا يرسلان رسالتين ولا يضيعانها
 // journey-guard: تنبيه المالك بطلب جديد، لا ترشيح فيه
-async function alertApplication(id: string, fields: { full_name: string | null; title?: string | null }) {
+async function alertApplication(id: string, fields: { full_name: string | null; title?: string | null; committees?: string[]; dimensions?: string[] }) {
   const span = APPLY_ALERT_HOURS * 36e5;
   const since = new Date(Math.floor(Date.now() / span) * span).toISOString();
   const { data: first } = await db.from('experts').select('id').eq('source', 'application').gte('created_at', since)
     .order('created_at').order('id').limit(1).maybeSingle();
   if (first?.id !== id) return;
-  await sendMail(CONFIG.alertEmail, `طلب انضمام خبير: ${fields.full_name}`, shell('طلب انضمام خبير',
+  // طلب عضوية لجنة يُسمّى باسمه في البريد، ولجنته وإطاره تحت الاسم
+  const committee = (fields.committees || []).length ? committeeApplicationAr(fields) : '';
+  const kind = committee ? 'طلب عضوية لجنة' : 'طلب انضمام خبير';
+  await sendMail(CONFIG.alertEmail, `${kind}: ${fields.full_name}`, shell(kind,
     mailText(`${bdi(fields.full_name)}${fields.title ? ` · ${bdi(fields.title)}` : ''}`)
+    + (committee ? mailText(committee) : '')
     + mailText(`تصلك رسالة واحدة على الأكثر كل ${APPLY_ALERT_HOURS} ساعات، وما يصل بعدها من طلبات تجده في القائمة نفسها.`)
     + mailButton(`${SITES.admin}/#/leaders/experts`, 'راجع الطلبات')), [], { kind: 'bulk' });
 }
@@ -181,6 +210,8 @@ async function invite(e: any, assignment?: AssignmentMail) {
     + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا.`)));
   await db.from('experts').update({ invited_at: new Date().toISOString() }).eq('id', e.id);
 }
+// تعهد السرية في دعوة بوابة الكتاب وبريد اعتماد العضوية: يُعرف قبل الدخول، ويُوقَّع في أول دخول (BOOK_PLEDGE_AR)
+export const BOOK_PLEDGE_MAIL_AR = 'في أول دخول تقرأ تعهد السرية وتؤكده قبل أن يُفتح لك الكتاب، وكل نسخة منه تحمل علامة مائية باسمك وبريدك.';
 // لجانه بأسمائها: «لجنة المحتوى» أو «لجنتي المحتوى والقياس»
 const committeesAr = (e: any) => {
   const cs = cleanCommittees(e.committees);
@@ -193,7 +224,7 @@ async function inviteReviewer(e: any, link: string) {
     + (e.status === 'active'
       ? mailText('عضويتك معتمدة، والكتاب متاح لك في بوابة الخبير.') + mailButton(link, 'افتح الكتاب الأم')
       : mailText('ابدأ بتأكيد اسمك ونبذة قصيرة عن خبرتك والإطار الذي تراجعه، ثم نعتمد عضويتك ويُفتح لك الكتاب.') + mailButton(link, 'أكّد بياناتك'))
-    + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا.`)));
+    + mailNote(`الرابط شخصي، صالح ${INVITE_DAYS} أيام ولمرة واحدة. بعدها تدخل من ${portalUrl()} ببريدك هذا. ${BOOK_PLEDGE_MAIL_AR}`)));
   await db.from('experts').update({ invited_at: new Date().toISOString() }).eq('id', e.id);
 }
 
@@ -230,7 +261,8 @@ export async function adminSetStatus(a: Admin, b: Body) {
   if (to === 'active' && ['applied', 'invited', 'rejected'].includes(e.status) && contentOnly(saved)) {
     sendMail(e.email, 'صار الكتاب الأم متاحًا لك', shell(`مرحبًا بك ${firstName(e.full_name)}`,
       mailText(`اعتُمدت عضويتك في ${bdi(committeesAr(saved))}، وصار الكتاب متاحًا لك في بوابة الخبير: اقرأه وعلّق على أي قسم باسمك.`)
-      + mailButton(portalUrl(), 'افتح الكتاب الأم'))).catch(() => {});
+      + mailButton(portalUrl(), 'افتح الكتاب الأم')
+      + mailNote(`ادخل ببريدك هذا. ${BOOK_PLEDGE_MAIL_AR}`))).catch(() => {});
   } else if (to === 'active' && ['applied', 'invited', 'rejected'].includes(e.status)) {
     sendMail(e.email, 'اعتُمدت في شبكة خبراء برنامج القادة', shell(`مرحبًا بك ${firstName(e.full_name)}`,
       mailText('اعتُمد ملفك في شبكة خبراء برنامج القادة. ستصلك طلبات الخدمة المناسبة لأدوارك وتخصصك، وتتابعها من لوحة الخبير.')

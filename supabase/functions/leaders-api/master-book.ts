@@ -5,18 +5,20 @@
 // والمدير بأي دور (المراقب يقرأ ولا يكتب). يكتب التعليق الخبير والمدير الكاتب، ويحذفه كاتبه، ويحسمه المدير الكاتب.
 // المتن والاختبار يُرسلان كما هما: هذا كتاب المراجعين، والإجابة الصحيحة جزء مما يراجعونه.
 import { all, audit, CONFIG, db, Fail, must, sha256Hex } from './core.ts';
-import { canDelete, canResolve, cleanComment, commentTarget, draftChapters, openCounts, orderChapters, rowChapterId, threads, versionFromMigration, authorRole, bookAccess, shareRoster, toggleCommittee } from './master-book.js';
+import { canDelete, canResolve, cleanComment, commentTarget, draftChapters, openCounts, orderChapters, rowChapterId, threads, versionFromMigration, authorRole, bookAccess, outOfSeat, seatOf, shareRoster, toggleCommittee } from './master-book.js';
 import { DRAFTS } from './master-book-drafts.js';
 import { hasCommittee, hasJourneyRole } from './committees.js';
 import { sectionById, sectionIdOf } from './section-refs.js';
 import { proposalsFor } from './book-proposals.ts';
+import { missingColumn } from './missing-column.ts';
 
-type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; paused?: boolean; superAdmin?: boolean; email?: string };
+type Viewer = { kind: 'expert' | 'admin'; ref: string; name: string; role: string; write: boolean; paused?: boolean; superAdmin?: boolean; email?: string; seat?: 'all' | string[] | null };
 
-// العضو الموقوف مؤقتًا (paused) يقرأ ولا يكتب: bookAccess تفتح له القراءة، والكتابة للفاعل وحده
+// العضو الموقوف مؤقتًا (paused) يقرأ ولا يكتب: bookAccess تفتح له القراءة، والكتابة للفاعل وحده.
+// ومقعده (seatOf) من سجله لحظة الطلب: أطره في لجنة المحتوى، أو الكتاب كله لعضو القياس
 export const expertViewer = (e: any): Viewer => {
   if (!bookAccess(e)) throw new Fail('الكتاب الأم متاح لأعضاء لجنتي المحتوى والقياس', 403, 'book_access');
-  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active', paused: e.status === 'paused', email: String(e.email || '') };
+  return { kind: 'expert', ref: String(e.id), name: String(e.full_name || e.email || 'خبير'), role: authorRole('expert', { committees: e.committees || [] }), write: e.status === 'active', paused: e.status === 'paused', email: String(e.email || ''), seat: seatOf(e) };
 };
 // يكتب المدير بصلاحية الكتابة وعامل ثانٍ (كما في writer)، ويقرأ الباقون
 export const adminViewer = (a: { email: string; role: string; method?: string }): Viewer => ({
@@ -74,7 +76,7 @@ export async function book(v: Viewer) {
   const props = await proposalsFor(v, mods).catch(() => ({ ready: false, list: [], counts: null }));
   return {
     success: true, version: ver, generated_at: new Date().toISOString(), share, deps,
-    viewer: { kind: v.kind, name: v.name, role: v.role, write: v.write, paused: !!v.paused, watermark: watermark(v), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin },
+    viewer: { kind: v.kind, name: v.name, role: v.role, email: v.email || '', write: v.write, paused: !!v.paused, watermark: watermark(v), resolve: canResolve(v), propose: v.kind === 'admin' && v.write, decide: !!v.superAdmin, seat: v.kind === 'expert' ? v.seat ?? null : null },
     proposals_ready: props.ready, proposals: props.list, proposal_counts: props.counts,
     comments_ready: rows !== null,
     chapters: [...mods.map((m) => ({
@@ -88,7 +90,7 @@ export async function book(v: Viewer) {
 
 export async function addComment(v: Viewer, b: any) {
   if (!v.write) throw new Fail('حسابك للقراءة فقط', 403, 'read_only');
-  const mods = [...await modules(), ...drafts().map((d) => ({ id: d.id, body_md: d.md }))];
+  const mods = [...await modules(), ...drafts().map((d) => ({ id: d.id, body_md: d.md, draft: true, part: d.part }))];
   const c = cleanComment(b, { modules: mods.map((m) => ({ id: m.id, body_md: m.body_md })) });
   if (c.error) throw new Fail(c.error, 400, 'invalid');
   const val = c.value!;
@@ -103,11 +105,15 @@ export async function addComment(v: Viewer, b: any) {
   // هوية القسم للباب (لا للمسودة ولا للباب كله)، فيتبع التعليق قسمه إن تغيّر عنوانه
   const sid = !target.draft_key && val.section ? sectionIdOf(mod.dimension, mod.chapter_key, val.section) : null;
   if (sid) row.section_id = sid;
+  // وسم «خبير من خارج الإطار» يُحفظ لحظة الكتابة فلا يتغير إن تغيرت المقاعد بعده. يُرسل حين يصح وحده، فالعمود افتراضيه false
+  if (outOfSeat(v, mod)) row.out_of_seat = true;
   let { data, error } = await db.from('book_comments').insert(row).select('id').single();
-  // قبل ترحيل section_id (20261115200000) يُحفظ التعليق بعنوانه وحده
-  if (error && row.section_id) { delete row.section_id; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
+  // قبل ترحيل out_of_seat (20261116070000) يُحفظ التعليق بلا الوسم، وقبل ترحيل section_id (20261115200000) بعنوانه وحده.
+  // العمود الغائب وحده يبرر الإعادة: خطأ عابر لا يُسقط الوسم، فالوسم لا يُستدرك بعد الحفظ
+  if (missingColumn(error) && row.out_of_seat) { delete row.out_of_seat; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
+  if (missingColumn(error) && row.section_id) { delete row.section_id; ({ data, error } = await db.from('book_comments').insert(row).select('id').single()); }
   if (error) throw new Fail(target.draft_key ? 'التعليق على المسودات يُفعَّل بعد تطبيق ترحيله، وقراءتها متاحة الآن' : 'تعذّر حفظ التعليق، حاول بعد قليل', 503, 'db_error');
-  await audit(v.kind === 'admin' ? 'admin' : 'system', v.kind === 'admin' ? v.ref : `expert:${v.ref}`, 'book.comment', 'book_comments', (data as any).id, null, { module_id: val.module_id, section: val.section, reply: !!val.parent_id });
+  await audit(v.kind === 'admin' ? 'admin' : 'system', v.kind === 'admin' ? v.ref : `expert:${v.ref}`, 'book.comment', 'book_comments', (data as any).id, null, { module_id: val.module_id, section: val.section, reply: !!val.parent_id, ...(row.out_of_seat ? { out_of_seat: true } : {}) });
   return { success: true, id: (data as any).id };
 }
 
