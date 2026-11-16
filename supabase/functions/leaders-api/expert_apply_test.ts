@@ -13,7 +13,8 @@ type Row = Record<string, any>;
 // جداول في الذاكرة بما تستعمله الشيفرة هنا: eq وgte وnot(in) وorder وlimit وmaybeSingle وsingle والعدّ، والإدراج والتحديث،
 // والقيم الافتراضية للأعمدة كما في الترحيلات
 const DEFAULTS: Record<string, Row> = { sponsor_requests: { kind: 'claim', status: 'pending' } };
-function install(tables: Record<string, Row[]>) {
+// failUpdate: جدول يُرد تحديثه بخطأ (عمود لم يُرحَّل بعد)
+function install(tables: Record<string, Row[]>, { failUpdate = '' } = {}) {
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
@@ -29,6 +30,7 @@ function install(tables: Record<string, Row[]>) {
         return { data: single ? added[0] : added, error: null };
       }
       let out = rows.filter((r) => filters.every((f) => f(r)));
+      if (mode === 'update' && table === failUpdate) return { data: null, error: { code: '42703', message: 'column does not exist' } };
       if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: out, error: null }; }
       if (head) return { data: null, count: out.length, error: null };
       for (const k of [...orders].reverse()) out = [...out].sort((a, b) => String(a[k]).localeCompare(String(b[k])));
@@ -179,6 +181,89 @@ Deno.test('دورة طلب الرعاية وإلغائه: ثلاثة طلبات 
       await new Promise((r) => setTimeout(r, 20));   // تنبيه الطلب يُرسل بلا انتظار
       assertEquals(mail.length, R.SPONSOR_REQUESTS_PER_DAY);
       assertEquals(tables.sponsor_requests.filter((r) => r.kind === 'claim').length, R.SPONSOR_REQUESTS_PER_DAY);
+    });
+  } finally { restore(); unconfig(); }
+});
+
+// «انضم كخبير محتوى» (تصور أجزاء الكتاب وخبير المحتوى، المرحلة 3): مسار track: 'content' في الطلب العام نفسه، بلا أدوار،
+// واللجنة في committees، والإطار شرط للجنة المحتوى، وحقول الرحلة تُرفض. الحد والتحقق البشري كما هما
+const contentForm = (email: string, extra: Row = {}) => ({
+  track: 'content', email, full_name: 'هند المراجعة', title: 'مصممة تعلم', committees: ['content'], dimensions: ['impact'],
+  bio: 'خبرة اثني عشر عامًا في تأليف المحتوى المهني وتصميم برامج التعلم للقادة، وتحكيم الأطر المعرفية في الجهات الحكومية.', captcha: HUMAN, ...extra,
+});
+Deno.test('مسار المحتوى: يُحفظ بلا أدوار وباللجنة والإطار، ويُنبَّه المالك بـ«طلب عضوية لجنة»، ولا يفتح الكتاب قبل الاعتماد', async () => {
+  const unconfig = configure();
+  const tables: Record<string, Row[]> = { experts: [], audit_log: [], mail_events: [], mail_queue: [] };
+  const restore = install(tables);
+  try {
+    await withServices(async (mail) => {
+      assertEquals(await E.apply(contentForm('hind@example.sa'), { ip: '10.2.0.1' }), { success: true, received: true });
+      const row = tables.experts[0];
+      assertEquals([row.status, row.source, row.roles, row.committees, row.dimensions], ['applied', 'application', [], ['content'], ['impact']]);
+      assertEquals([row.levels, row.sectors, row.weekly_hours], [[], [], null]);
+      assertEquals(mail.map((m) => [m.to, m.subject]), [['owner@example.com', 'طلب عضوية لجنة: هند المراجعة']]);
+      assertEquals(tables.audit_log[0].after, { track: 'content', committees: ['content'], dimensions: ['impact'] });
+      const { bookAccess } = await import('./master-book.js');
+      assertEquals(bookAccess(row), false);
+      // لجنة القياس بلا إطار تمر، والرابط غير LinkedIn سطر في آخر النبذة، وLinkedIn في خانته
+      await E.apply(contentForm('m@example.sa', { committees: ['measurement'], dimensions: [], work_url: 'example.com/cv' }), { ip: '10.2.0.2' });
+      const m = tables.experts[1];
+      assertEquals([m.committees, m.dimensions, m.linkedin_url], [['measurement'], [], null]);
+      assert(m.bio.endsWith('رابط الأعمال أو السيرة: https://example.com/cv'));
+      await E.apply(contentForm('l@example.sa', { work_url: 'https://www.linkedin.com/in/hind' }), { ip: '10.2.0.3' });
+      assertEquals(tables.experts[2].linkedin_url, 'https://www.linkedin.com/in/hind');
+      assert(!tables.experts[2].bio.includes('linkedin'));
+    });
+  } finally { restore(); unconfig(); }
+});
+
+Deno.test('مسار المحتوى: إن فشل حفظ اللجنة يبقى الطلب محفوظًا، ويُسجَّل الفشل، ولا يذكر بريد المالك لجنة لم تُحفظ', async () => {
+  const unconfig = configure();
+  const tables: Record<string, Row[]> = { experts: [], audit_log: [], mail_events: [], mail_queue: [] };
+  const restore = install(tables, { failUpdate: 'experts' });
+  try {
+    await withServices(async (mail) => {
+      assertEquals(await E.apply(contentForm('hind@example.sa'), { ip: '10.2.1.1' }), { success: true, received: true });
+      assertEquals([tables.experts.length, tables.experts[0].committees], [1, undefined]);
+      assertEquals(tables.audit_log[0].after, { track: 'content', committees: ['content'], dimensions: ['impact'], committees_saved: false });
+      assertEquals(mail.map((m) => m.subject), ['طلب انضمام خبير: هند المراجعة']);
+    });
+  } finally { restore(); unconfig(); }
+});
+
+Deno.test('مسار المحتوى: الإطار شرط للجنة المحتوى، واللجنة شرط، وحقول الرحلة تُرفض، قبل أي تحقق أو أثر', async () => {
+  const unconfig = configure();
+  const tables: Record<string, Row[]> = { experts: [], audit_log: [], mail_events: [] };
+  const restore = install(tables);
+  try {
+    await withServices(async (mail, checks) => {
+      const why = async (extra: Row) => ((await assertRejects(() => E.apply(contentForm('x@example.sa', extra), { ip: '10.3.0.1' }), Fail)) as any).message;
+      assertEquals(await why({ dimensions: [] }), 'اختر الإطار الذي تراجعه في لجنة المحتوى');
+      assertEquals(await why({ committees: [] }), 'اختر اللجنة التي تطلب عضويتها');
+      for (const extra of [{ roles: ['coach'] }, { levels: ['advanced'] }, { weekly_hours: 5 }, { sectors: 'طاقة' }]) {
+        assertEquals(await why(extra), 'طلب عضوية اللجنة لا يسأل عن الأدوار ولا المستويات ولا الساعات ولا القطاعات', JSON.stringify(extra));
+      }
+      assertEquals(await why({ work_url: 'javascript:alert(1)' }), 'رابط أعمالك أو سيرتك غير صحيح، انسخه كاملًا مثل https://…');
+      assertEquals(await why({ bio: 'قصيرة' }), 'عرّف بخبرتك في المحتوى في 80 حرفًا على الأقل');
+      assertEquals(await why({ track: 'other' }), 'مسار الطلب غير معروف');
+      // مسار الرحلة بلا أدوار يبقى مرفوضًا كما كان، ولو أرسل لجنة
+      await assertRejects(() => E.apply(form('y@example.sa', { roles: [], committees: ['content'], captcha: HUMAN }), { ip: '10.3.0.2' }), Fail, 'اختر دورًا واحدًا على الأقل');
+      assertEquals([tables.experts.length, tables.audit_log.length, mail.length, checks.length], [0, 0, 0, 0]);
+    });
+  } finally { restore(); unconfig(); }
+});
+
+Deno.test('مسار المحتوى: الحد والتحقق البشري وفحص الجوال كما في مسار الرحلة', async () => {
+  const unconfig = configure();
+  const recent = new Date().toISOString();
+  const tables: Record<string, Row[]> = { experts: Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, email: `r${i}@x.sa`, applied_ip: '10.4.0.1', created_at: recent })), audit_log: [], mail_events: [] };
+  const restore = install(tables);
+  try {
+    await withServices(async () => {
+      assertEquals(((await assertRejects(() => E.apply(contentForm('z@example.sa'), { ip: '10.4.0.1' }), Fail)) as any).code, 'rate');
+      assertEquals(((await assertRejects(() => E.apply(contentForm('z@example.sa', { captcha: undefined }), { ip: '10.4.0.9' }), Fail)) as any).code, 'captcha');
+      await assertRejects(() => E.apply(contentForm('z@example.sa', { phone: 'abc' }), { ip: '10.4.0.9' }), Fail, 'رقم الجوال غير صحيح');
+      assertEquals(tables.experts.length, 5);
     });
   } finally { restore(); unconfig(); }
 });

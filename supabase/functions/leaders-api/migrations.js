@@ -139,6 +139,7 @@ export const MIGRATIONS = [
   '20261116000000_leaders_book_proposals',
   '20261116050000_leaders_handbook_name',
   '20261116060000_leaders_journey_blocks',
+  '20261116070000_leaders_book_comment_out_of_seat',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -196,4 +197,5 @@ export const MIGRATION_GATES = {
   '20261116000000_leaders_book_proposals': ["tolerant", "قبله يُقرأ الكتاب بلا مقترحات (book-proposals.ts: proposalRows يرجع null)، والاقتراح يُرفض برسالة"],
   '20261116050000_leaders_handbook_name': ["tolerant", "نصوص عرض وحدها، والدوال والواجهات تعمل قبله وبعده (يبقى الاسم القديم في هذه النصوص حتى يُطبَّق)"],
   '20261116060000_leaders_journey_blocks': ["tolerant", "الدوال تقبل الجلسة غير المؤرخة وتعرضها «يُحدد لاحقًا»، وقبله يرفض القيد حفظها برسالة الحفظ (activities.ts: workshopSave) وتبقى المؤرخة كما هي"],
+  '20261116070000_leaders_book_comment_out_of_seat': ["tolerant", "الدالة تكتب out_of_seat إن وُجد العمود، وتحفظ التعليق بلا الوسم إن غاب (master-book.ts)"],
 };

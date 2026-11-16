@@ -48,3 +48,86 @@ describe('رسوم الكتاب', () => {
     expect(h).toContain('class="f-compare"');
   });
 });
+
+// طبعة الجزء (تصور «أجزاء الكتاب وخبير المحتوى»، المرحلة 2): كتاب مكتمل ببداية ونهاية، ولا باب من جزء آخر
+describe('طبعة الجزء', () => {
+  const PARTS = [
+    { key: 'milestone', roman: 'I', label: 'الجزء الأول · Milestone', title: 'إدارة المشروعات' },
+    { key: 'impact', roman: 'II', label: 'الجزء الثاني · Impact', title: 'تحويل المشروع إلى أثر' },
+    { key: 'leadership', roman: 'III', label: 'الجزء الثالث · Leadership', title: 'تمكين القائد' },
+  ];
+  const BOOK = {
+    ref: 'MB-v31-20261116-II', issued_at: '2026-11-16T09:00:00Z', name: 'د. هند', email: 'h@x.sa', code: 'MASTER v3.1', edition: 'نسخة المراجعة',
+    chapters: [
+      { id: 'm1', dimension: 'milestone', title: 'باب المعالم الوحيد', md: 'نص' },
+      { id: 'i1', dimension: 'impact', title: 'تمهيد الأثر', md: '**◆ للمتوسط فأعلى**\nفقرة\n**◇ عودة إلى النص العام**' },
+      { id: 'i2', dimension: 'impact', title: 'خاتمة الأثر', md: 'نص' },
+      { id: 'l1', dimension: 'leadership', title: 'باب القيادة الوحيد', md: 'نص' },
+    ],
+  };
+  const h = bookHtml(BOOK, PARTS, { part: 'impact' });
+  const pos = (needle) => { const i = h.indexOf(needle); expect(i, needle).toBeGreaterThan(-1); return i; };
+
+  it('الترتيب: غلاف الجزء، ثم «عن هذا الجزء»، ثم فهرسه، ثم صفحة الجزء وأبوابه، ثم «يتكامل مع»، ثم الغلاف الخلفي', () => {
+    const order = [
+      pos('<p class="bk-part">الجزء الثاني من ثلاثة · تحويل المشروع إلى أثر</p>'),
+      pos('<h2>عن هذا الجزء</h2>'),
+      pos('<h2>محتويات الجزء</h2>'),
+      pos('<section class="full part">'),
+      pos('<h2>تمهيد الأثر</h2>'),
+      pos('<h2>خاتمة الأثر</h2>'),
+      pos('<h2>يتكامل مع</h2>'),
+      pos('<section class="full back">'),
+    ];
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(h).toContain('نسخة المراجعة');
+    expect(h).toContain('MASTER v3.1');
+  });
+  it('الفهرس فيه أبواب الجزء وحدها، ولا باب من جزء آخر في الطبعة كلها', () => {
+    const toc = h.slice(pos('<h2>محتويات الجزء</h2>'), pos('<section class="full part">'));
+    expect(toc).toContain('تمهيد الأثر');
+    expect(toc).toContain('خاتمة الأثر');
+    expect(h).not.toContain('باب المعالم الوحيد');
+    expect(h).not.toContain('باب القيادة الوحيد');
+    expect(h.match(/<article class="ch/g)).toHaveLength(2);
+    // لا شيء من مقدمات الكتاب الكامل ولا خاتمته
+    expect(h).not.toContain('كيف تقرأ هذا الكتاب');
+    expect(h).not.toContain('<section class="end">');
+  });
+  it('«عن هذا الجزء» فيه خريطة الأجزاء والجزء مميز، ونصوص parts.json، ودليل علامات المستويات الموجودة في الجزء', () => {
+    const about = h.slice(pos('<h2>عن هذا الجزء</h2>'), pos('<h2>محتويات الجزء</h2>'));
+    expect(about).toMatch(/<div class="fw-n on"><span>II<\/span>/);
+    expect(about.match(/class="fw-n/g)).toHaveLength(3);
+    expect(about).toContain('هذا الجزء جسر المنظومة');
+    expect(about).toContain('كيف يُقرأ');
+    expect(about).toContain('◆ للمتوسط فأعلى');
+    expect(about).toContain('◇ عودة إلى النص العام');
+  });
+  it('«يتكامل مع» يضع الجزء في السلسلة، ويعرّف بالجزأين الآخرين، ويقترح ما يُقرأ بعده', () => {
+    const br = h.slice(pos('<h2>يتكامل مع</h2>'), pos('<section class="full back">'));
+    expect(br).toMatch(/<div class="node on"><span>II<\/span>/);
+    expect(br).toContain('إدارة المشروعات');
+    expect(br).toContain('تمكين القائد');
+    expect(br).toContain('الحلقة الوسطى');
+    expect(br).toContain('ماذا تقرأ بعد هذا الجزء');
+  });
+  it('الغلاف الخلفي يحمل الإصدار والتاريخ والمرجع واسم القارئ وبريده، والعلامة المائية على الصفحات', () => {
+    const back = h.slice(pos('<section class="full back">'));
+    expect(back).toContain('MASTER v3.1');
+    expect(back).toContain('MB-v31-20261116-II');
+    expect(back).toContain('مرخصة لـ د. هند · h@x.sa');
+    expect(back).toContain('الجزء الثاني من ثلاثة');
+    expect(h).toContain(encodeURIComponent('h@x.sa'));
+  });
+  it('نصوص الطبعة قابلة للتمرير، والجزء غير المعروف يُرفض', () => {
+    const t = { legend: 'دليل', parts: { impact: { about: { lead: 'نص تجريبي', read: ['خطوة'] }, bridges: { place: 'موقع', with: { milestone: 'م', leadership: 'ق' }, next: 'التالي' } } } };
+    expect(bookHtml(BOOK, PARTS, { part: 'impact', texts: t })).toContain('نص تجريبي');
+    expect(() => bookHtml(BOOK, PARTS, { part: 'nope' })).toThrow();
+  });
+  it('الكتاب كاملًا يُختم بالغلاف الخلفي نفسه بعد صفحة الختام', () => {
+    const full = bookHtml(BOOK, PARTS);
+    expect(full.indexOf('<section class="full back">')).toBeGreaterThan(full.indexOf('<section class="end">'));
+    expect(full).toContain('مرخصة لـ د. هند · h@x.sa');
+    expect(full).toContain('باب المعالم الوحيد');
+  });
+});
