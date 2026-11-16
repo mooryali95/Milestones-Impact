@@ -29,7 +29,7 @@ const BULK_MAX = 50;
 import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
 import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
-import { NudgeLog, NudgeSheet } from './Nudges.jsx';
+import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
@@ -155,6 +155,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   };
   // التذكير الموحد للمحددين في أي مرحلة (Nudges.jsx): معاينة مجمّعة بالمرحلة قبل الإرسال، والحد المشترك على الخادم
   const [nudging, setNudging] = useState(null);
+  const [report, setReport] = useState(false);
   // طلب إعادة القياس للمحددين ممن سلّموا ولم يُعتمدوا (can_retake من الخادم): المدخل نفسه الذي في ملف المشارك
   const pickedRetake = all.filter((p) => picked.has(p.id) && p.can_retake).length;
   // الاعتماد الجماعي بالمستوى المحسوب (BulkApprove): للمحددين ممن ينتظرون الاعتماد، والحكم والاستبقاء على الخادم
@@ -227,6 +228,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
             all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
+          <button className="refresh-btn" type="button" onClick={() => setReport(true)}>فاعلية التذكير</button>
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
         </>} />
       {serverQ && <div className="flt-cap" role="status">نتائج البحث في كل المشاركين عن «{serverQ}». <button type="button" className="flt-link" onClick={() => load()}>عُد إلى القائمة</button></div>}
@@ -246,6 +248,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm primary" onClick={() => setBulkApprove(shownPending.slice(0, 50))}>اعتمد المتسقين{shownPending.length > 50 ? ' (أول 50)' : ''}…</button>
         </div>
       )}
+      {report && <NudgeReport onClose={() => setReport(false)} onOpen={(id) => { setReport(false); onOpen(id); }} />}
       {nudging && <NudgeSheet ids={nudging} onClose={(sent) => { setNudging(null); if (sent) setPicked(new Set()); }} />}
       {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onOpen} onClose={(changed) => { setBulkApprove(null); if (changed) { setPicked(new Set()); load(serverQ); } }} />}
       {canWrite && picked.size > 0 && (

@@ -7,7 +7,7 @@
 import { audit, db, Fail, nudgeMail, sendMail } from './core.ts';
 import { journeyFor } from './participant.ts';
 import { onboardingOf } from './onboarding.js';
-import { gate, groupPreview, ledgerSummary, NUDGE_GAP_DAYS, NUDGE_SENDER_AR, nudgeFor, weeklyPlan } from './nudge.js';
+import { effectReport, NUDGE_REPORT_WINDOWS, gate, groupPreview, ledgerSummary, NUDGE_GAP_DAYS, NUDGE_SENDER_AR, nudgeFor, weeklyPlan } from './nudge.js';
 import { baselineProgress } from './admin.ts';
 import { coordPermissions } from './logic.js';
 import { COORD_NUDGE_DAILY, COORD_NUDGE_GROUPS, inCoordGroup } from './coord-groups.js';
@@ -254,4 +254,25 @@ export async function coordSend(c: any, b: Record<string, any>) {
   }
   for (const s of p.skipped) skipped[s.why] = (skipped[s.why] || 0) + 1;
   return { success: true, sent, skipped, left: Math.max(0, left - sent) };
+}
+
+// ── تقرير فاعلية التذكير (P5): للإدارة، من السجل الواحد وحال كل مشارك الآن (effectReport في nudge.js) ──
+const REPORT_PEOPLE_MAX = 300; // حال كل مشارك من رحلته (journeyFor)؛ النافذة الأوسع تُقصّ على الأحدث
+export async function adminReport(_a: unknown, b: Record<string, any>) {
+  const days = NUDGE_REPORT_WINDOWS.includes(Number(b.days)) ? Number(b.days) : 30;
+  const since = new Date(Date.now() - days * 864e5).toISOString();
+  const { data, error } = await db.from('nudges').select('participant_id, sender, stage_key, stage_title, snapshot, created_at, seen_at')
+    .gte('created_at', since).order('created_at', { ascending: false }).limit(3000);
+  if (error) {
+    if (missingTable(error)) return { success: true, ledger: false, days };
+    throw error;
+  }
+  const order = [...new Set((data || []).map((r: any) => r.participant_id))];
+  const ids = order.slice(0, REPORT_PEOPLE_MAX);
+  const keep = new Set(ids);
+  const subs = await subjects(ids);
+  const current = new Map(subs.map((s) => [s.p.id, s.nudge]));
+  const names = new Map(subs.map((s) => [s.p.id, s.p.full_name]));
+  const rows = (data || []).filter((r: any) => keep.has(r.participant_id));
+  return { success: true, ledger: true, days, capped: order.length > ids.length, ...effectReport(rows, current, names) };
 }

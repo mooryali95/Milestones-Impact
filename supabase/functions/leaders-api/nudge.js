@@ -14,6 +14,8 @@ export const NUDGE_GAP_DAYS = REMIND_GAP_DAYS;
 export const NUDGE_OUTCOME_DAYS = 7;
 // لافتة التذكير في الرحلة تبقى ما لم يرها حتى هذه المدة، ثم يكفي البريد والسجل
 export const NUDGE_BANNER_DAYS = 14;
+// نوافذ تقرير الفاعلية (P5) بالأيام: مصدر واحد للخادم وأزرار اللوحة
+export const NUDGE_REPORT_WINDOWS = [7, 30, 90];
 export const NUDGE_SENDERS = ['admin', 'mentor', 'assistant', 'coordinator', 'auto'];
 export const NUDGE_SENDER_AR = {
   admin: 'الإدارة', mentor: 'المرشد', assistant: 'المساعد نيابة عن المرشد', coordinator: 'منسق الجهة', auto: 'التذكير الآلي',
@@ -158,3 +160,48 @@ export function weeklyPlan(ids, mentors, busy) {
   }
   return [...out.values()];
 }
+
+/**
+ * تقرير فاعلية التذكير (P5): من سجل التذكير الواحد وحال كل مشارك الآن، بلا مصدر ثانٍ.
+ * لكل مرسل ولكل مرحلة: كم أُرسل، وكم رآه في الموقع، وكم تلاه تقدم، وكم ينتظر. ومن ذُكِّر مرتين فأكثر بلا أثر
+ * يُسمّى «يحتاج تدخلًا شخصيًا»: التذكير لم يعد يكفيه.
+ * @param {any[]} rows صفوف nudges في النافذة، الأحدث أولًا
+ * @param {Map<string, any>} current ناتج nudgeFor لكل مشارك الآن
+ * @param {Map<string, string>} names
+ */
+export function effectReport(rows, current, names = new Map(), now = Date.now()) {
+  const byPerson = new Map();
+  for (const r of rows) {
+    if (!byPerson.has(r.participant_id)) byPerson.set(r.participant_id, []);
+    byPerson.get(r.participant_id).push(r);
+  }
+  const judged = [];
+  for (const [pid, list] of byPerson) {
+    const s = ledgerSummary(list, current.get(pid) || { ok: false, why: 'nothing' }, now);
+    for (const x of s.rows) judged.push({ ...x, participant_id: pid });
+  }
+  const tally = (key) => {
+    const m = new Map();
+    for (const x of judged) {
+      const k = key(x);
+      if (!m.has(k)) m.set(k, { key: k, sent: 0, seen: 0, progressed: 0, waiting: 0, none: 0 });
+      const t = m.get(k);
+      t.sent += 1; if (x.seen_at) t.seen += 1; t[x.outcome] += 1;
+    }
+    return [...m.values()].map((t) => ({ ...t, seen_pct: pct(t.seen, t.sent), progressed_pct: pct(t.progressed, t.sent - t.waiting) })).sort((a, b) => b.sent - a.sent);
+  };
+  const all = tally(() => 'all')[0] || { sent: 0, seen: 0, progressed: 0, waiting: 0, none: 0, seen_pct: null, progressed_pct: null };
+  const stuck = [...byPerson].map(([pid, list]) => {
+    const mine = judged.filter((x) => x.participant_id === pid);
+    const misses = mine.filter((x) => x.outcome === 'none').length;
+    return { id: pid, name: names.get(pid) || '', nudges: list.length, misses, stage: list[0].stage_title, last: list[0].created_at };
+  }).filter((x) => x.misses >= 2).sort((a, b) => b.misses - a.misses || b.nudges - a.nudges);
+  return {
+    total: all, people: byPerson.size,
+    by_sender: tally((x) => x.sender).map((t) => ({ ...t, label: NUDGE_SENDER_AR[t.key] || t.key })),
+    by_stage: tally((x) => x.stage_title || x.stage_key),
+    stuck,
+  };
+}
+// نسبة صحيحة، أو null حين لا يُحكم بعد (كل ما أُرسل ما زال ينتظر)
+const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : null);

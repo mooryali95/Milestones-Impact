@@ -474,6 +474,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.nudge': (a, b) => A.writer(a, NU.adminSend, b),
   'admin.nudge-preview': NU.adminPreview,
   'admin.nudge-ledger': NU.adminLedger,
+  'admin.nudge-report': NU.adminReport,
   'admin.observation-add': (a, b) => A.writer(a, OB.adminAdd, b),
   'admin.observation-remove': (a, b) => A.writer(a, OB.adminRemove, b),
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
