@@ -67,6 +67,7 @@ import * as NB from './nudge-banner.ts';
 import * as GU from './guide.ts';
 import * as GE from './guide-eval.ts';
 import * as GA from './guide-admin.ts';
+import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -670,11 +671,21 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.guide-orgs': (a) => GA.orgs(a),
   'admin.guide-org-set': (a, b) => A.superWriter(a, GA.orgSet, b),
   'admin.guide-eval': (a) => GE.evalState(a),
+  // H2: مراجعة المجموعة وتعديل حالاتها، والاعتماد للمالك وحده (يُفحص داخل الدالة)
+  'admin.guide-eval-cases': (a) => GE.setGet(a),
+  'admin.guide-eval-case': (a, b) => A.superWriter(a, GE.caseSave, b),
+  'admin.guide-eval-approve': (a, b) => A.superWriter(a, GE.setApprove, b),
   'admin.guide-eval-results': (a, b) => GE.evalResults(a, b),
   'admin.guide-eval-start': (a, b) => A.superWriter(a, GE.evalStart, b),
   'admin.guide-eval-step': (a, b) => A.superWriter(a, GE.evalStep, b),
   'admin.guide-pilots': (a) => GE.pilotList(a),
   'admin.guide-pilot-set': (a, b) => A.superWriter(a, GE.pilotSet, b),
+  // H3: سجل المحادثات. القراءة للمالك وللمدير الأعلى بمنحه (تُفحص حية وتُسجَّل)، والمنح للمالك وحده
+  'admin.guide-transcript-access': (a) => GT.accessState(a),
+  'admin.guide-transcripts': (a) => GT.list(a),
+  'admin.guide-transcript': (a, b) => GT.transcript(a, b),
+  'admin.guide-transcript-grants': (a) => GT.grants(a),
+  'admin.guide-transcript-grant': (a, b) => A.superWriter(a, GT.grantSet, b),
   'admin.agent-state': (a) => AG.state(a),
   'admin.agent-usage': (a) => AG.usage(a),
   'admin.agent-conversations': (a, b) => AG.conversations(a, b),

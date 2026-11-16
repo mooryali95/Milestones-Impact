@@ -36,7 +36,7 @@ export function GuideChat({ context = 'program', chapterId = null, onConfirm }) 
     setD((x) => ({ ...x, left: r.left, messages: [...x.messages, { id: `q${Date.now()}`, role: 'user', body: q }, { id: r.reply.id || `a${Date.now()}`, role: 'assistant', body: r.reply.text, verdict: r.reply.verdict, sources: r.reply.sources, question: q }] }));
   };
   const clear = async () => {
-    if (!window.confirm('تُحذف محادثتك مع المساعد كلها نهائيًا. متابعة؟')) return;
+    if (!window.confirm(`تختفي محادثتك من صفحتك الآن. وتبقى نسخة منها لدى فريق المنصة لضمان الجودة، ثم تُحذف نهائيًا بعد ${d.retention_days} يومًا من كتابتها. متابعة؟`)) return;
     const r = await call('guide.clear');
     if (r.success) load(); else setErr(r.message);
   };
@@ -48,7 +48,7 @@ export function GuideChat({ context = 'program', chapterId = null, onConfirm }) 
         <h3 id="gd-chat-h">اسأل المساعد <small className="muted">مساعد ذكي</small></h3>
         <span className="small muted" data-guide-left>بقي لك {d.left.day} اليوم و{d.left.month} هذا الشهر</span>
       </div>
-      <p className="small muted">يجيب من كتابك ويخطئ أحيانًا. إن لم تقنعك إجابته فاضغط «أريد التأكد» لتطلب استشارة خبير. محادثتك لك وحدك، وتُحذف بعد {d.retention_days} يومًا.</p>
+      <p className="small muted">يجيب من كتابك ويخطئ أحيانًا. إن لم تقنعك إجابته فاضغط «أريد التأكد» لتطلب استشارة خبير. محادثتك خاصة بك، ويطّلع عليها فريق المنصة لضمان الجودة عند الحاجة، وتُحذف بعد {d.retention_days} يومًا.</p>
       {msgs.length > 0 && (
         <ol className="gd-log" aria-label="محادثتك مع المساعد" aria-live="polite">
           {msgs.map((m, i) => (

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116160000_leaders_erasure_decisions
+-- as-of migration: 20261116180000_leaders_guidance_transcripts
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1001,6 +1001,26 @@ create table if not exists leaders.guidance_eval_runs (
   constraint guidance_eval_runs_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.guidance_eval_sets (
+  id uuid default gen_random_uuid() not null,
+  version text not null,
+  cases jsonb not null,
+  status text default 'draft'::text not null,
+  approved_by text,
+  approved_at timestamp with time zone,
+  updated_by text,
+  updated_at timestamp with time zone default now() not null,
+  created_at timestamp with time zone default now() not null,
+  constraint guidance_eval_sets_approved_by_check CHECK ((char_length(approved_by) <= 200)),
+  constraint guidance_eval_sets_cases_check CHECK ((jsonb_typeof(cases) = 'array'::text)),
+  constraint guidance_eval_sets_check CHECK (((status = 'approved'::text) = ((approved_by IS NOT NULL) AND (approved_at IS NOT NULL)))),
+  constraint guidance_eval_sets_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'approved'::text]))),
+  constraint guidance_eval_sets_updated_by_check CHECK ((char_length(updated_by) <= 200)),
+  constraint guidance_eval_sets_version_check CHECK (((char_length(version) >= 1) AND (char_length(version) <= 80))),
+  constraint guidance_eval_sets_pkey PRIMARY KEY (id),
+  constraint guidance_eval_sets_version_key UNIQUE (version)
+);
+
 create table if not exists leaders.guidance_messages (
   id bigint generated always as identity not null,
   participant_id uuid not null,
@@ -1017,6 +1037,7 @@ create table if not exists leaders.guidance_messages (
   cost_micros bigint,
   created_at timestamp with time zone default now() not null,
   confirmed_at timestamp with time zone,
+  hidden_at timestamp with time zone,
   constraint guidance_messages_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 6000))),
   constraint guidance_messages_chapter_id_check CHECK ((char_length(chapter_id) <= 80)),
   constraint guidance_messages_context_check CHECK ((context = ANY (ARRAY['program'::text, 'handbook'::text, 'capstone'::text]))),
@@ -1034,6 +1055,17 @@ create table if not exists leaders.guidance_spend_daily (
   updated_at timestamp with time zone default now() not null,
   constraint guidance_spend_daily_micros_check CHECK ((micros >= 0)),
   constraint guidance_spend_daily_pkey PRIMARY KEY (day)
+);
+
+create table if not exists leaders.guidance_transcript_grants (
+  admin_id text not null,
+  admin_email text not null,
+  granted_by text not null,
+  granted_at timestamp with time zone default now() not null,
+  constraint guidance_transcript_grants_admin_email_check CHECK (((char_length(admin_email) >= 3) AND (char_length(admin_email) <= 200))),
+  constraint guidance_transcript_grants_admin_id_check CHECK (((char_length(admin_id) >= 1) AND (char_length(admin_id) <= 80))),
+  constraint guidance_transcript_grants_granted_by_check CHECK (((char_length(granted_by) >= 3) AND (char_length(granted_by) <= 200))),
+  constraint guidance_transcript_grants_pkey PRIMARY KEY (admin_id)
 );
 
 create table if not exists leaders.hall_presence (
@@ -3287,6 +3319,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS guidance_eval_runs_one_running ON leaders.guid
 
 CREATE INDEX IF NOT EXISTS guidance_eval_runs_started_idx ON leaders.guidance_eval_runs USING btree (started_at DESC);
 
+CREATE INDEX IF NOT EXISTS guidance_eval_sets_created_idx ON leaders.guidance_eval_sets USING btree (created_at DESC);
+
 CREATE INDEX IF NOT EXISTS guidance_messages_created_idx ON leaders.guidance_messages USING btree (created_at);
 
 CREATE INDEX IF NOT EXISTS guidance_messages_participant_idx ON leaders.guidance_messages USING btree (participant_id, created_at DESC);
@@ -3589,9 +3623,13 @@ alter table leaders.guidance_eval_results enable row level security;
 
 alter table leaders.guidance_eval_runs enable row level security;
 
+alter table leaders.guidance_eval_sets enable row level security;
+
 alter table leaders.guidance_messages enable row level security;
 
 alter table leaders.guidance_spend_daily enable row level security;
+
+alter table leaders.guidance_transcript_grants enable row level security;
 
 alter table leaders.hall_presence enable row level security;
 
@@ -4114,6 +4152,27 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.guidance_conversations(p_since timestamp with time zone, p_limit integer)
+ RETURNS TABLE(participant_id uuid, asked integer, unsure integer, confirmed integer, errors integer, micros bigint, first_at timestamp with time zone, last_at timestamp with time zone, hidden integer)
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select m.participant_id,
+         count(*) filter (where m.role = 'user' and m.verdict is distinct from 'refused')::integer,
+         count(*) filter (where m.role = 'assistant' and m.verdict = 'unsure')::integer,
+         count(*) filter (where m.role = 'assistant' and m.confirmed_at is not null)::integer,
+         count(*) filter (where m.role = 'assistant' and m.verdict = 'error')::integer,
+         coalesce(sum(m.cost_micros), 0)::bigint,
+         min(m.created_at), max(m.created_at),
+         count(*) filter (where m.hidden_at is not null)::integer
+    from leaders.guidance_messages m
+   where m.created_at >= p_since
+   group by m.participant_id
+   order by max(m.created_at) desc
+   limit greatest(1, least(coalesce(p_limit, 200), 500));
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.guidance_counts(p_participant uuid, p_since timestamp with time zone)
  RETURNS TABLE(asked integer, unsure integer, confirmed integer, last_at timestamp with time zone)
  LANGUAGE sql
@@ -4135,6 +4194,19 @@ AS $function$
   update leaders.guidance_eval_runs set lease_until = now() + make_interval(secs => p_seconds)
    where id = p_id and status = 'running' and (lease_until is null or lease_until < now())
   returning *;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_eval_sets_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if old.status = 'approved' and (new.cases is distinct from old.cases or new.version is distinct from old.version or new.status <> 'approved') then
+    raise exception 'نسخة معتمدة من مجموعة التقييم لا تُعدَّل: عدّل نسخة مسودة جديدة' using errcode = 'P0001';
+  end if;
+  return new;
+end;
 $function$
 ;
 
@@ -4972,6 +5044,8 @@ CREATE OR REPLACE TRIGGER enrollments_touch BEFORE UPDATE ON leaders.enrollments
 CREATE OR REPLACE TRIGGER grid_cells_provenance BEFORE INSERT OR UPDATE ON leaders.grid_cells FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 
 CREATE OR REPLACE TRIGGER grid_cells_touch BEFORE UPDATE ON leaders.grid_cells FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER guidance_eval_sets_guard BEFORE UPDATE ON leaders.guidance_eval_sets FOR EACH ROW EXECUTE FUNCTION leaders.guidance_eval_sets_guard();
 
 CREATE OR REPLACE TRIGGER handbook_modules_provenance BEFORE INSERT OR UPDATE ON leaders.handbook_modules FOR EACH ROW EXECUTE FUNCTION leaders.content_provenance();
 

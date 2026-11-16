@@ -23,6 +23,7 @@ import { FinalEvalCard } from './FinalEval.jsx';
 import { stars } from '../handbook.js';
 import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
+import { GuideTranscriptButton } from '../GuideTranscripts.jsx';
 import { PreviewAs } from './CohortVisibility.jsx';
 import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/functions/leaders-api/notice-rules.js';
 
@@ -588,7 +589,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
               <span><b>{(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
             </div>
             {/* «التوجيه والإرشاد» G3: أعداد بلا نص، والمحادثة خاصة بالمشارك */}
-            {r.guidance?.asked > 0 && <p className="la-muted small" data-guidance-counts>المساعد الذكي في آخر {r.guidance.days} يومًا: {r.guidance.asked} سؤالًا، ولم يتأكد في {r.guidance.unsure}، وطلب التأكد من خبير {r.guidance.confirmed}. المحادثة خاصة به.</p>}
+            {r.guidance?.asked > 0 && <p className="la-muted small" data-guidance-counts>المساعد الذكي في آخر {r.guidance.days} يومًا: {r.guidance.asked} سؤالًا، ولم يتأكد في {r.guidance.unsure}، وطلب التأكد من خبير {r.guidance.confirmed}.</p>}
+            {r.guidance && <GuideTranscriptButton pid={r.participant.id} />}
             {(r.models || []).length > 0 && (
               <ul className="la-reqs">{r.models.map((x) => (
                 <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span>{x.rating ? <span className="stars-c"> {stars(x.rating)}</span> : null}</span>
