@@ -17,6 +17,11 @@ const defaultName = (v, orgs) => {
   return v.kind === 'org' && o ? `دفعة ${o.name}` : '';
 };
 
+// كل دفعة تُثبَّت على أحدث نسخة من برنامجها (ترحيل 20261116110000)، فلا خيار هنا: سطر يقول على أي نسخة ولماذا
+const versionLine = (p) => (p.versions?.length
+  ? `تُثبَّت الدفعة على أحدث نسخة محفوظة (النسخة ${p.versions[0].number}: ${p.versions[0].label}). تحميها من أي تعديل لاحق على البرنامج حتى ترقّيها بنفسك.`
+  : 'لا نسخة محفوظة لهذا البرنامج بعد: تُحفظ نسخته الأولى من حاله الآن عند الإنشاء، وتُثبَّت الدفعة عليها.');
+
 /** @param {{ preset?: any, data: any, onClose: (created?: any) => void }} props */
 export default function CohortWizard({ preset = {}, data, onClose }) {
   const { toast, confirm } = useUI();
@@ -32,7 +37,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
     const init = {
       kind: 'org', organization_id: preset.organization_id || '',
       program_id: preset.program_id || suggest(preset.organization_id)?.program_id || fallback,
-      pin: true, status: 'open', starts_on: '', ends_on: '', capacity: '', name: '',
+      status: 'open', starts_on: '', ends_on: '', capacity: '', name: '',
     };
     return { ...init, name: defaultName(init, orgs) };
   });
@@ -63,7 +68,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
     if (block) return toast(block);
     if (!last) return setStep(step + 1);
     setBusy(true);
-    const r = await saveCohort(wizardBody(v, { canPin: !!prog?.versions?.length }), confirm);
+    const r = await saveCohort(wizardBody(v), confirm);
     setBusy(false);
     if (!r.success) return toast(r.message);
     toast('أُنشئت الدفعة. أكمل فريقها وجدولها من ملفها.');
@@ -109,10 +114,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
               ? <p className="wiz-source" role="note">{orgProgramLine(orgProg)} <small className="la-muted">يمكنك تغييره.</small></p>
               : <p className="wiz-source warn" role="note">برنامج الجهة «{orgProg.program_name}» ({orgProg.via === 'current' ? 'من دفعتها الحالية' : 'من آخر دفعة لها'}). اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الإنشاء، لأن تقدمه مربوط ببرنامجه.{' '}
                   <button type="button" className="la-link" onClick={() => { setPicked(false); set({ program_id: orgProg.program_id }); }}>ارجع إلى برنامج الجهة</button></p>)}
-            {prog && (prog.versions?.length
-              ? <label className="wiz-check"><input type="checkbox" checked={v.pin} onChange={(e) => set({ pin: e.target.checked })} />
-                  <span>ثبّت الدفعة على أحدث نسخة محفوظة (النسخة {prog.versions[0].number}). <small className="la-muted">تحميها من أي تعديل لاحق على البرنامج حتى ترقّيها بنفسك.</small></span></label>
-              : <p className="la-muted">لا نسخة محفوظة لهذا البرنامج: ستتبع الدفعة آخر تعديل عليه.</p>)}
+            {prog && <p className="la-muted wiz-version" role="note">{versionLine(prog)}</p>}
           </fieldset>
         )}
 
@@ -140,7 +142,7 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
             <dl className="la-dl">
               <dt>الدفعة</dt><dd>{v.name}</dd>
               <dt>لمن</dt><dd>{v.kind === 'org' ? `جهة «${org?.name || ''}»، ويدخلها منضموها تلقائيًا` : 'أفراد، بالإلحاق اليدوي'}</dd>
-              <dt>البرنامج</dt><dd>{prog?.name}{v.pin && prog?.versions?.length ? ` · النسخة ${prog.versions[0].number}` : ' · آخر تعديل'}</dd>
+              <dt>البرنامج</dt><dd>{prog?.name} · {prog?.versions?.length ? `النسخة ${prog.versions[0].number}` : 'النسخة 1 (تُنشأ عند الإنشاء)'}</dd>
               <dt>المواعيد</dt><dd>{[v.starts_on, v.ends_on].filter(Boolean).join(' إلى ') || 'لم تُحدد بعد'} · {COHORT_STATUS[v.status]}</dd>
             </dl>
             <p className="la-muted">بعد الإنشاء يفتح ملف الدفعة: فيه رابط التسجيل، وما بقي لتعمل الدفعة (المستشار والفريق والجدول) بزر لكل بند.</p>

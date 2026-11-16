@@ -120,7 +120,9 @@ for (const width of [1440, 390]) {
     await wiz.getByRole('button', { name: 'التالي' }).click();
     await wiz.getByRole('button', { name: 'التالي' }).click();
     await wiz.getByRole('button', { name: 'أنشئ الدفعة' }).click();
-    await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ organization_id: 'o1', program_id: 'pb', program_version_id: '' });
+    // تُثبَّت دائمًا على أحدث نسخة، والبرنامج بلا نسخة تُنشأ نسخته الأولى في الخادم عند الإنشاء
+    await expect(wiz).toContainText('النسخة 1 (تُنشأ عند الإنشاء)');
+    await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ organization_id: 'o1', program_id: 'pb', program_version_id: 'latest' });
     expect(await noOverflow(page)).toBe(true);
   });
 }
@@ -168,7 +170,7 @@ for (const width of [1440, 390]) {
     await expect(ed.getByRole('button', { name: 'الرحلة' })).toHaveAttribute('aria-expanded', 'true');
     await expect(ed.getByRole('button', { name: 'التنفيذ' })).toHaveAttribute('aria-expanded', 'false');
     await expect(ed.getByRole('button', { name: 'متقدم' })).toHaveAttribute('aria-expanded', 'false');
-    await expect(ed.locator('.ce-summary')).toContainText(['كما في البرنامج', 'تتبع البرنامج كما هو الآن']);
+    await expect(ed.locator('.ce-summary')).toContainText(['كما في البرنامج', 'تُثبَّت على أحدث نسخة عند الحفظ']);
     // البرنامج المؤرشف لا يُعرض خيارًا
     await expect(ed.locator('#f-program_id option', { hasText: 'برنامج قديم' })).toHaveCount(0);
     // لكل مرحلة «كذا ظاهرة من كذا»، ومجموع الدفعة، والمخفي يبقى في القائمة بعلامته
@@ -215,20 +217,24 @@ for (const width of [1440, 390]) {
   });
 }
 
-test('تغيير البرنامج يعيد تحميل الرحلة، والنسخة تعود إلى «آخر تعديل»', async ({ page }) => {
+test('تغيير البرنامج يعيد تحميل الرحلة ويثبّت على أحدث نسخ البرنامج الجديد، لا «آخر تعديل»', async ({ page }) => {
   const calls = await setup(page);
   const ed = await openEditor(page, 'سفراء 2026');
+  // دفعة لم تُثبَّت بعد على برنامج بلا نسخة: تعاين ما ستُثبَّت عليه عند الحفظ
   await expect(ed.locator('.ce-stage h5').first()).toContainText('الانطلاق');
+  expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ cohort_id: 'c1', program_id: 'pb', program_version_id: 'latest' });
+  await expect(ed.locator('.ce-source').first()).toContainText('لا نسخة محفوظة لهذا البرنامج بعد: تُحفظ نسخته الأولى من حاله الآن عند الحفظ');
   await ed.locator('#f-program_id').selectOption('pa');
-  await expect(ed.locator('.ce-stage h5').first()).toContainText('التأسيس');
-  expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ cohort_id: 'c1', program_id: 'pa', program_version_id: '' });
-  await expect(ed.locator('.ce-source').first()).toContainText('برنامج الجهة «برنامج سفراء». اخترت برنامجًا آخر');
-  // الإخفاء نفسه يبقى بالرموز: «تأمل» في التطبيق رمزه R-B فيظهر مخفيًا
-  await expect(sw(ed, 'تأمل (التطبيق)')).toHaveAttribute('aria-checked', 'false');
-  // النسخة من «متقدم» تعيد التحميل كذلك: مراحل النسخة 1 وحدها
-  await ed.getByRole('button', { name: 'متقدم' }).click();
-  await ed.getByLabel('نسخة البرنامج').selectOption('v1');
   await expect(ed.locator('.ce-stage h5')).toHaveText([/مرحلة النسخة الأولى/]);
+  expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ cohort_id: 'c1', program_id: 'pa', program_version_id: 'v1' });
+  await expect(ed.locator('.ce-source').first()).toContainText('برنامج الجهة «برنامج سفراء». اخترت برنامجًا آخر');
+  await expect(ed.locator('.ce-source').first()).toContainText('الرحلة من النسخة 1 المثبتة (الإطلاق).');
+  // «أحدث نسخة عند الحفظ» خيار لهذه الدفعة لأنها لم تُثبَّت بعد
+  await ed.getByRole('button', { name: 'متقدم' }).click();
+  await expect(ed.getByLabel('نسخة البرنامج')).toHaveValue('v1');
+  await expect(ed.getByLabel('نسخة البرنامج').locator('option')).toHaveText([/أحدث نسخة عند الحفظ/, /مثبتة على النسخة 1/]);
+  await ed.getByRole('button', { name: 'حفظ', exact: true }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c1', program_id: 'pa', program_version_id: 'v1' });
 });
 
 test('Esc مع تعديل يسأل قبل الإغلاق، وبلا تعديل يغلق مباشرة', async ({ page }) => {
@@ -254,14 +260,17 @@ test('Esc مع تعديل يسأل قبل الإغلاق، وبلا تعديل �
   await expect(page.getByRole('dialog', { name: 'جدول الدفعة' })).toBeVisible();
 });
 
-test('العودة إلى برنامج الدفعة تعيد نسختها المثبتة، وإلغاء التثبيت يُقال صراحة', async ({ page }) => {
+test('الدفعة المثبتة: لا خيار لإلغاء تثبيتها، وتغيير النسخة يُقال صراحة، والعودة إلى برنامجها تعيد نسختها', async ({ page }) => {
   const calls = await setup(page);
   const ed = await openEditor(page, 'دفعة مثبتة');
+  await ed.getByRole('button', { name: 'متقدم' }).click();
+  await expect(ed.getByLabel('نسخة البرنامج').locator('option')).toHaveText([/مثبتة على النسخة 1/]);
   await ed.locator('#f-program_id').selectOption('pb');
-  await expect(ed.locator('.ce-source').first()).toContainText('أُلغي تثبيت النسخة 1: بعد الحفظ تتبع الدفعة البرنامج كما هو الآن.');
+  await expect(ed.locator('.ce-source').first()).toContainText('كانت الدفعة على النسخة 1 من برنامجها: بعد الحفظ تنتقل إلى ما تعرضه الرحلة أدناه.');
+  await expect(ed.locator('.ce-source').first()).toContainText('تُحفظ نسخته الأولى من حاله الآن عند الحفظ');
   await ed.locator('#f-program_id').selectOption('pa');
   await expect(ed.locator('.ce-source').first()).toContainText('الرحلة من النسخة 1 المثبتة (الإطلاق).');
-  await expect(ed.locator('.ce-source').first()).not.toContainText('أُلغي تثبيت');
+  await expect(ed.locator('.ce-source').first()).not.toContainText('كانت الدفعة');
   expect(calls.filter((c) => c.action === 'admin.cohort-definition').at(-1)).toMatchObject({ program_id: 'pa', program_version_id: 'v1' });
   await expect(ed.getByText('تعديلات غير محفوظة')).toHaveCount(0);
 });

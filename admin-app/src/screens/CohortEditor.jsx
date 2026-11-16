@@ -90,8 +90,10 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
 
   const set = (patch) => setV((cur) => {
     const next = { ...cur, ...patch };
-    // برنامج آخر: النسخة من برنامجه، فتعود إلى «آخر تعديل» حتى يُختار غيرها. والعودة إلى برنامج الدفعة تعيد نسختها المثبتة
-    if ('program_id' in patch && patch.program_id !== cur.program_id) next.program_version_id = patch.program_id === start.program_id ? start.program_version_id : '';
+    // برنامج آخر: النسخة أحدث نسخه (والفارغ إن لم تُحفظ له نسخة: يُنشئها الخادم عند الحفظ). والعودة إلى برنامج الدفعة تعيد نسختها
+    if ('program_id' in patch && patch.program_id !== cur.program_id) {
+      next.program_version_id = patch.program_id === start.program_id ? start.program_version_id : programs.find((p) => p.id === patch.program_id)?.versions?.[0]?.id || '';
+    }
     return next;
   });
 
@@ -99,7 +101,8 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
   useEffect(() => {
     let live = true;
     setDef((d) => ({ ...(d || {}), loading: true }));
-    L('admin.cohort-definition', { ...(isNew ? {} : { cohort_id: cohort.id }), program_id: v.program_id, program_version_id: v.program_version_id || '' })
+    // الفارغ «أحدث نسخة عند الحفظ»: يُعاين ما ستُثبَّت عليه (أحدث نسخة، أو البرنامج كما هو إن لم تُحفظ له نسخة)
+    L('admin.cohort-definition', { ...(isNew ? {} : { cohort_id: cohort.id }), program_id: v.program_id, program_version_id: v.program_version_id || 'latest' })
       .then((r) => { if (live) setDef(r?.success ? r : { error: r?.message || 'تعذّرت قراءة رحلة الدفعة' }); });
     return () => { live = false; };
   }, [v.program_id, v.program_version_id, retry]); // cohort.id ثابت ما دام المحرر مفتوحًا
@@ -109,10 +112,11 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
   const prog = programs.find((p) => p.id === v.program_id);
   const org = orgs.find((o) => o.id === v.organization_id);
   const reqs = def?.requirements || [];
-  const fields = useMemo(() => cohortFields({ orgs, programs, versions: prog?.versions || [], reqs, isDefault, isNew, defVersion: def?.loading || !def ? undefined : def.version?.id || '' })
+  const versionEmpty = !start.program_version_id || v.program_id !== start.program_id;
+  const fields = useMemo(() => cohortFields({ orgs, programs, versions: prog?.versions || [], reqs, isDefault, isNew, versionEmpty, defVersion: def?.loading || !def ? undefined : def.version?.id || '' })
     // دفعة قائمة على برنامج أُرشف بعد إغلاقها: يُعرض برنامجها الحالي بعلامته ولا يُقترح لغيرها
     .map((f) => (f.name === 'program_id' && prog?.archived_at ? { ...f, options: { ...f.options, [prog.id]: `${prog.name} (مؤرشف)` } } : f)),
-  [orgs, programs, prog, reqs, isDefault, isNew, def]);
+  [orgs, programs, prog, reqs, isDefault, isNew, def, versionEmpty]);
   const shown = (f) => !f.show || f.show(v);
   const bySection = (k) => fields.filter((f) => f.section === k && shown(f));
   const errs = cohortErrors(v);
@@ -163,12 +167,13 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
   const deliveryN = bySection('delivery').length;
   const deliveryPills = !deliveryN ? [] : customized ? [{ text: `${customized === 1 ? 'نشاط واحد مخصص' : `${customized} أنشطة مخصصة`}`, tone: 'info' }] : [{ text: 'كما في البرنامج', tone: '' }];
   const version = prog?.versions?.find((x) => x.id === v.program_version_id);
-  const advSummary = [version ? `مثبتة على النسخة ${version.number}` : 'تتبع البرنامج كما هو الآن', LEVEL_MODE_AR[v.level_mode] || '', PROJECT_MODE_AR[v.project_mode] || '',
+  const advSummary = [version ? `مثبتة على النسخة ${version.number}` : 'تُثبَّت على أحدث نسخة عند الحفظ', LEVEL_MODE_AR[v.level_mode] || '', PROJECT_MODE_AR[v.project_mode] || '',
     v.organization_id && v.capacity_on && v.capacity ? `سعة تشغيلية ${v.capacity}` : ''].filter(Boolean).join(' · ');
   const advPills = errs.content_level ? [{ text: 'ينقصه مستوى المحتوى', tone: 'bad', icon: '✕' }] : [];
   const op = !isDefault && v.organization_id ? suggest(v.organization_id) : null;
-  // النسخة المثبتة التي ألغاها تغيير البرنامج أو اختيار «آخر تعديل»: يُقال صراحة لا بتغير السطر وحده
-  const unpinned = start.program_version_id && !v.program_version_id ? (programs.find((p) => p.id === start.program_id)?.versions || []).find((x) => x.id === start.program_version_id) || { number: '' } : null;
+  // نسخة الدفعة تتغير بهذا الحفظ (برنامج آخر أو نسخة أخرى): يُقال صراحة من أي نسخة، لا بتغير السطر وحده
+  const was = start.program_version_id && v.program_version_id !== start.program_version_id
+    ? (programs.find((p) => p.id === start.program_id)?.versions || []).find((x) => x.id === start.program_version_id) || { number: '' } : null;
   const groups = [...new Set(bySection('delivery').map((f) => f.req))];
   // الرحلة في لمحة بتواريخ الدفعة (J1b): تعريفها كما في قسم الرحلة بإخفائها الحالي، وجلساتها، وتاريخ بدايتها في النموذج.
   // النقر على جلسة جماعية يقفز إلى «+ موعد» عندها في «الحضور والجلسات»، وغيرها إلى رحلة البرنامج
@@ -202,8 +207,10 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
                   <p className="ce-source wide" role="note">
                     {op && op.program_id !== v.program_id ? <span className="ce-warn-txt">برنامج الجهة «{op.program_name}». اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الحفظ.{' '}
                       {canWrite && <button type="button" className="la-link" onClick={() => set({ program_id: op.program_id })}>ارجع إلى برنامج الجهة</button>} </span> : null}
-                    {unpinned ? <span className="ce-warn-txt">أُلغي تثبيت النسخة {unpinned.number}: بعد الحفظ تتبع الدفعة البرنامج كما هو الآن. </span> : null}
-                    {def?.version ? `الرحلة من النسخة ${def.version.number} المثبتة (${def.version.label}).` : 'الرحلة تتبع البرنامج كما هو الآن.'}{' '}
+                    {was ? <span className="ce-warn-txt">كانت الدفعة على النسخة {was.number}{v.program_id !== start.program_id ? ' من برنامجها' : ''}: بعد الحفظ تنتقل إلى ما تعرضه الرحلة أدناه. </span> : null}
+                    {v.program_version_id && def?.version ? `الرحلة من النسخة ${def.version.number} المثبتة (${def.version.label}).`
+                      : def?.version ? `تُثبَّت عند الحفظ على النسخة ${def.version.number} (${def.version.label}).`
+                        : 'لا نسخة محفوظة لهذا البرنامج بعد: تُحفظ نسخته الأولى من حاله الآن عند الحفظ، وتُثبَّت الدفعة عليها.'}{' '}
                     <button type="button" className="la-link" onClick={() => { setOpen((o) => ({ ...o, advanced: true })); setTimeout(() => advRef.current?.querySelector('#f-program_version_id')?.focus(), 0); }}>غيّر النسخة</button>
                   </p>
                 )}

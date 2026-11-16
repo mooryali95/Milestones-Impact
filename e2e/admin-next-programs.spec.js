@@ -7,7 +7,7 @@ const versions = [
   { id: 'v1', program_id: 'pa', number: 1, label: 'الإطلاق', created_at: '2026-09-01' },
 ];
 const programs = [
-  { id: 'pa', name: 'برنامج القادة', is_default: true, requirements: 35, versions },
+  { id: 'pa', name: 'برنامج القادة', is_default: true, requirements: 35, versions, unpinned_cohorts: 1 },
   { id: 'pb', name: 'برنامج سفراء', is_default: false, requirements: 30, versions: [] },
 ];
 const cohorts = [
@@ -43,8 +43,10 @@ async function setup(page) {
         { key: 'asg_levels', audience: 'assigned', audience_ar: 'الخبير المسند بطلب خدمة', label: 'المستويات ونتيجة القياس', hint: 'مستوى المشارك.', general: true, override: null, effective: true },
       ] },
       'admin.cohort-visibility-save': { success: true, widened: [] },
-      'admin.cohort-upgrade': b.confirm ? { success: true, to: { number: 2 }, diff: { added: [], removed: [], changed: [] } }
-        : { success: true, preview: true, to: { number: 2, label: 'بعد مراجعة أكتوبر' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [] } },
+      'admin.cohort-upgrade': b.confirm ? { success: true, to: { id: 'v2', number: 2 }, diff: { added: [], removed: [], changed: [] } }
+        : { success: true, preview: true, to: { id: 'v2', number: 2, label: 'بعد مراجعة أكتوبر' },
+          diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [{ code: 'R-OLD', title: 'تأمل قديم' }], changed: [], stages: { added: [{ key: 's9', title: 'الختام' }], removed: [], changed: [{ key: 's1', title: 'التمهيد' }] } },
+          affected: b.id === 'c0' ? 3 : 0, dropped: { delivery: [], schedule: b.id === 'c0' ? ['التطبيق'] : [], stage_modes: [] }, blocked: null },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
@@ -102,6 +104,23 @@ test('الدفعات: طريقة التنفيذ لكل نشاط، والترقي
   await expect(page.getByText(/أُضيف: فيديو التمهيد/)).toBeVisible();
   await page.getByRole('button', { name: 'رقِّ الدفعة' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-upgrade' && c.confirm)?.id).toBe('c1');
+});
+
+test('الدفعة غير المثبتة: شارتها وزر «ثبّت على»، والمعاينة بفرق المراحل ومن له تقدم وما يُسقط، ثم التثبيت بنسخة مسماة', async ({ page }) => {
+  const calls = await setup(page);
+  const row = page.locator('.data-table tbody tr', { hasText: 'الدفعة المفتوحة' });
+  await expect(row.locator('.la-chip.warn', { hasText: 'غير مثبتة' })).toBeVisible();
+  await expect(page.locator('.la-card', { hasText: 'برنامج القادة' }).first()).toContainText('دفعة غير مثبتة');
+  await row.getByRole('button', { name: 'ثبّت على 2' }).click();
+  const dlg = page.getByRole('dialog', { name: 'الفرق' });
+  await expect(dlg).toContainText('تثبيت «الدفعة المفتوحة» على النسخة 2');
+  await expect(dlg).toContainText('مراحل أُضيفت: الختام');
+  await expect(dlg).toContainText('مراحل تغيّرت: التمهيد');
+  await expect(dlg).toContainText('حُذف: تأمل قديم');
+  await expect(dlg).toContainText('3 عضوًا لهم تقدم في متطلبات تختفي من الرحلة');
+  await expect(dlg).toContainText('تُسقط مواعيد مراحل ليست في النسخة: التطبيق.');
+  await dlg.getByRole('button', { name: 'ثبّت الدفعة' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-upgrade' && c.confirm)).toMatchObject({ id: 'c0', version_id: 'v2' });
 });
 
 test('الدفعة المفتوحة لا ترتبط بجهة ولا تُغلق', async ({ page }) => {
