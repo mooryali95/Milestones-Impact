@@ -145,3 +145,61 @@ npx wrangler r2 bucket lock add mi-backups --name archive-365d --prefix archive/
 - **إصابة الذاكرة المؤقتة:** `select avg(cache_read_tokens), avg(cache_write_tokens), sum(cost_micros)/1e6 from leaders.conversation_messages where role = 'agent' and created_at > now() - interval '1 day';`. قراءة قريبة من الصفر مع محادثات متتابعة تعني أن الموجه تغير بين الطلبات.
 - **التحويلات:** صفوف `contact_requests` التي يبدأ سياقها بـ`[agent]`، ومعها رقم المحادثة. سطر في سلسلة التنبيهات في #mi-ops ببريد مقنع بلا نص. والرد من الفريق اليوم بالبريد كأي طلب (سلاك ذو الاتجاهين مرحلة لاحقة).
 - **تعديل المعرفة:** حرر `supabase/content/assistant/v1/knowledge.md` أو `faq.json` ثم `node scripts/assistant/knowledge.mjs`، وأعد التقييم. لا يُكتب فيها سعر لبرنامج القادة ولا شيء من القياس أو الكتيب (حارس `assistant-knowledge.test.js`).
+
+## 8. كسر الزجاج: استعادة وصول المالك إلى لوحة الإدارة
+
+**متى:** فقد المالك مفتاح المرور وتطبيق المصادقة معًا (أو جهازهما)، أو ضبط «الدخول بمفتاح المرور وحده» ثم فقد المفتاح. لا يُستعمل لغير ذلك.
+
+**لماذا بهذه الطريقة:** طلب الاستعادة من شاشة الدخول (`recovery-request` في `admin-api`) يُبلغ المالكين، و«إعادة الوصول» في «المستخدمون» (`update-user` بالحقل `reset_access`) للمالك وحده، **ولا تعمل على حساب مالك**: كل مالك محمي من الآخر، ولا يُعدَّل حساب مالك إلا من SQL Editor (`20261022100000_passkeys_owner.sql`). فوسيلة المالك الوحيدة هي حساب Supabase نفسه، ومفتاح الثقة الأعلى هو دخول المالك إلى Supabase. لذلك يُشترط مسبقًا: عامل ثانٍ على حساب Supabase، ورموز استرداده محفوظة في مدير كلمات المرور خارج الجهاز. والإجراء لا يتجاوز الحراس: بعده يدخل المالك برمز البريد وحده، وهي جلسة عامل واحد **للقراءة**، ثم يسجّل عاملًا جديدًا فتعود الكتابة.
+
+**قبل البدء:** (أ) تأكد أنك تصل إلى بريد حساب المالك، لأن الدخول بعد الإجراء برمز يصل إليه. إن ضاع البريد نفسه فاستعِده من مزوّده أولًا، ولا تغيّر عمود `email` إلا بعد ذلك وبمراجعة ثانية. (ب) إن كان في اللوحة مالك ثانٍ فأبلغه قبل البدء، فهو يتلقى رسائل الأمان التالية. (ج) لا يُنفذ من جلسة سحابية ولا يُلصق مفتاح الخدمة في أي مكان: كل الخطوات من لوحة Supabase بحساب المالك.
+
+**الخطوات:**
+
+1. ادخل إلى Supabase بحسابك (بعامله الثاني) ← المشروع ← SQL Editor ← New query.
+2. تحقق من الحساب وحده، بلا تغيير:
+
+```sql
+select id, name, email, is_active, is_owner, passkey_only, totp_enabled,
+       (select count(*) from public.admin_passkeys p where p.admin_id = u.id) as passkeys
+from public.admin_users u
+where email = lower('<بريد المالك>');
+```
+
+   المتوقع صف واحد فيه `is_owner = true` و`is_active = true`. غير ذلك: توقف.
+3. أعد الوصول في معاملة واحدة، بسجل لا يُحذف (`admin_audit_log` للإلحاق وحده، ومحمي من التعديل والحذف والتفريغ):
+
+```sql
+begin;
+-- سجل أولًا: من نفّذ ولماذا. السبب نص قصير بلا أسرار
+insert into public.admin_audit_log (user_id, user_email, action, meta)
+select id, email, 'break-glass', jsonb_build_object('via', 'supabase-sql-editor', 'reason', '<السبب باختصار>', 'at', now())
+from public.admin_users where email = lower('<بريد المالك>') and is_owner;
+-- ما تفعله «إعادة الوصول» لغير المالك حرفيًا: لا وضع مفتاح وحده، ولا تطبيق مصادقة، ولا مفاتيح قديمة
+update public.admin_users set passkey_only = false, totp_enabled = false, totp_secret = null
+where email = lower('<بريد المالك>') and is_owner;
+delete from public.admin_passkeys
+where admin_id = (select id from public.admin_users where email = lower('<بريد المالك>') and is_owner);
+-- كل جلسة قائمة للحساب تسقط، فلا تبقى جلسة على الجهاز المفقود
+delete from public.api_sessions
+where kind = 'admin' and subject = (select id::text from public.admin_users where email = lower('<بريد المالك>') and is_owner);
+commit;
+```
+
+   إن لم يطابق `insert` صفًا واحدًا (`INSERT 0 1`) فنفّذ `rollback;` بدل `commit;` وراجع البريد.
+4. افتح `admin.sunkvalue.com` ← الدخول برمز البريد. تصلك رسالة الأمان «دخول جديد إلى حسابك» (المالك يُبلَّغ بكل دخول). الجلسة الآن للقراءة: أي كتابة ترد «تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة».
+5. خلال عشر دقائق من الدخول (حداثة الجلسة): الإعدادات (⚙ في رأس اللوحة) ← «أمان الحساب» ← سجّل مفتاح مرور جديدًا، ويستحسن معه تطبيق مصادقة احتياطًا. يُبلَّغ المالكون ببريد أمني عند تسجيل أول عامل.
+6. سجّل الخروج ثم ادخل بالعامل الجديد، فتعود الكتابة. فعّل «الدخول بمفتاح المرور وحده» من جديد إن كان مفعّلًا، بعد أن يكون لك مفتاحان على جهازين.
+7. **التحقق والتوثيق:** من SQL Editor:
+
+```sql
+select created_at, action, meta from public.admin_audit_log
+where user_email = lower('<بريد المالك>') and created_at > now() - interval '1 day'
+order by created_at;
+```
+
+   المتوقع بالترتيب: `break-glass`، ثم `login` بالطريقة `email`، ثم تسجيل العامل الجديد، ثم `login` بـ`passkey` أو `totp`. أضف صفًا في HANDOFF: التاريخ، والسبب، ومن نفّذ، ونتيجة هذا الاستعلام. وراجع في `admin_audit_log` ما جرى على الحساب منذ فقد الجهاز، فإن ظهر دخول لا تعرفه فهو حادث يُعالج بـ `docs/ops/خطة-الاستجابة-للحوادث-v1.md`.
+
+**ما لا يُفعل:** لا يُنشأ حساب مالك جديد بديلًا (يضاعف أسطح الهجوم ويكسر سجل الملكية)، ولا يُعطَّل `is_owner` لحساب ثم يُعاد، ولا يُضبط `totp_secret` بقيمة من خارج التطبيق، ولا يُستعمل مفتاح الخدمة من جهاز أو سكربت لهذا الغرض. وإن تعذّر الدخول إلى Supabase نفسه فالطريق دعم Supabase باستعادة الحساب، لا أي مسار في هذا المستودع.
+
+**مدير غير مالك فقد وسيلته:** لا يحتاج هذا الإجراء: يضغط «فقدت مفتاح المرور أو تطبيق المصادقة؟» في شاشة الدخول (`recovery-request`)، فيُبلَّغ المالك، ويعيد وصوله من «المستخدمون» ← «إعادة الوصول» بجلسة عامل ثانٍ، فتُحذف مفاتيحه وتسقط جلساته ويدخل برمز البريد ثم يضبط وسيلة جديدة.
