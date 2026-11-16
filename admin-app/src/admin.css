@@ -1478,3 +1478,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 /* الحاجز الأخير حول اللوحة (ScreenBoundary scope="app" في main.jsx): رسالة في وسط الصفحة بدل صفحة بيضاء */
 .la-err-app { max-width: 640px; margin: 48px auto; padding: 16px 18px; }
 .la-err-app .btn-sm { margin-inline-start: 6px; }
+
+/* «أين توقفوا» من ملف الدفعة (#/leaders/insight?cohort=): شريط الدفعة المختارة وزر العودة إلى كل الدفعات */
+.ins-focus { margin-bottom: 8px; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-radius: 6px; background: var(--brand-surface-soft, rgba(0, 0, 0, .03)); }
+.ins-focus p { margin: 0; }
