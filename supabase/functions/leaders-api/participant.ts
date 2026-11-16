@@ -2,7 +2,7 @@
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
 import {
-  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, isDemoMail, logConsent, mailGuard, must, networkGuard, policyChangeMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
+  all, audit, BUCKET, CONFIG, db, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage, newDeviceMail } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
@@ -21,7 +21,7 @@ import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
-import { CONTACT_EMAIL, consentState, POLICY_CHANGES, POLICY_MATERIAL_VERSION, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
+import { CONTACT_EMAIL, consentState, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
@@ -239,25 +239,7 @@ export async function orgShareConsent(p: any, b: Body) {
   return { success: true, share };
 }
 
-// إخطار النسخة الجوهرية مرة واحدة لكل نسخة (D18): بريد لكل من وافق على نسخة أقدم، في طابور البريد الجماعي
-// فيمر بالعداد الموحد (D15). يُكتب في الطابور دفعة واحدة، ثم يُسجَّل في السجل فلا يتكرر. من المهمة الساعية.
-export async function policyNotify() {
-  const v = POLICY_MATERIAL_VERSION;
-  const { data: done, error } = await db.from('audit_log').select('id').eq('action', 'policy.notify').eq('entity_id', v).limit(1);
-  if (error) return { queued: 0, error: error.message };
-  if (done?.length) return { queued: 0, done: true };
-  const rows = (await all((f, t) => db.from('participants').select('id, email, full_name, consent_version, is_demo')
-    .not('consented_at', 'is', null).or(`consent_version.is.null,consent_version.lt.${v}`).order('id').range(f, t)))
-    .filter((r: any) => !r.is_demo && r.email && !isDemoMail(r.email));
-  const items = POLICY_CHANGES.find((c) => c.version === v)?.items || [];
-  const subject = 'حدّثنا سياسة الخصوصية وشروط برنامج القادة';
-  if (rows.length) {
-    const { error: qe } = await db.from('mail_queue').insert(rows.map((r: any) => ({ to_email: r.email, subject, html: policyChangeMail(r.full_name, v, items), ref: `participant:${r.id}`, kind: 'bulk' })));
-    if (qe) return { queued: 0, error: qe.message };
-  }
-  await audit('system', null, 'policy.notify', 'policy', v, null, { version: v, recipients: rows.length });
-  return { queued: rows.length };
-}
+// لا بريد بتحديث الوثائق (قرار المالك 2026-11-16): التفاصيل في سجل التغييرات، والموافقة تُطلب عند الدخول (Consent.jsx)
 
 // ── 1. بدء الدخول أو التسجيل ──
 // بريد واحد يحمل رابطًا ورمزًا، والرد واحد لكل بريد مسجلًا كان أو جديدًا: { success, sent }، كبوابتي الخبير والجهة.

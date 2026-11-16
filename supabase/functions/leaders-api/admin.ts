@@ -3,9 +3,10 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, mailUsage, reminderMail, retakeMail, stuckMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, mailUsage, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
+import { NUDGE_MAX, sendNudges } from './nudges.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
@@ -25,7 +26,7 @@ import { inboxOf } from './inbox.js';
 import * as OB from './observations.ts';
 import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from './notice-rules.js';
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
-import { onboardingOf, REMIND_GAP_DAYS, servedTotal, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
+import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
 import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
@@ -327,31 +328,8 @@ export async function participants(b: Body) {
   }), cohorts: cohorts.map((c) => ({ id: c.id, name: c.name })), ...capInfo(rows) };
 }
 
-// تذكير يدوي لمن لم يكمل التسجيل: بريد يسمّي ما بقي على كل شخص (ملفه، أو القياس وكم أجاب منه).
-// يتخطى من أكمل، ومن ذُكِّر (آليًا أو يدويًا) خلال REMIND_GAP_DAYS، والبريد من حصة الرسائل الجماعية فيُصفّ عند بلوغ الحد اليومي.
-export async function remindStuck(a: Admin, b: Body) {
-  requireWrite(a);
-  const ids = [...new Set((Array.isArray(b.participant_ids) ? b.participant_ids : []).map(String).filter(isUuid))].slice(0, 50) as string[];
-  if (!ids.length) throw new Fail('اختر من تذكّرهم');
-  const rows = (must(await db.from('participants').select('id, full_name, email, phone, job_title, organization_name, years_experience, status, reminded_at, is_demo').in('id', ids)) ?? []) as any[];
-  const progress = await baselineProgress(ids);
-  const since = Date.now() - REMIND_GAP_DAYS * 864e5;
-  let sent = 0, done = 0, recent = 0;
-  for (const p of rows) {
-    const o = onboardingOf(p, progress[p.id] || null);
-    const text = stuckMailText(o);
-    if (p.is_demo || !p.email || !STUCK_STEPS.includes(o.step) || !text) { done += 1; continue; }
-    if (p.reminded_at && Date.parse(p.reminded_at) > since) { recent += 1; continue; }
-    await db.from('participants').update({ reminded_at: new Date().toISOString() }).eq('id', p.id);
-    await sendMail(p.email, STUCK_MAIL_SUBJECT, stuckMail(p.full_name, text), [], { kind: 'bulk', ref: `participant:${p.id}` });
-    await audit('admin', a.email, 'participant.remind', 'participants', p.id, null, { step: o.step });
-    sent += 1;
-  }
-  return { success: true, sent, skipped: { done, recent }, gap_days: REMIND_GAP_DAYS };
-}
+// التذكير اليدوي لمن تعثر صار في المحرك الموحد (nudges.ts): المعاينة والإرسال والسجل لكل المراحل ولكل مرسل
 
-// القياس المبدئي الأحدث غير الملغى لكل مشارك: حالته وكم أجاب من كم (بصيغته)، وآخر حفظ لإجابة.
-// قراءتان ثابتتان مهما كثر المشاركون: القياسات بعدّ إجاباتها، وأسئلة الأدوات المعنية.
 export async function baselineProgress(ids: string[]) {
   const out: Record<string, any> = {};
   if (!ids.length) return out;
@@ -1475,23 +1453,20 @@ export async function lateMilestoneNotices(limit = 200) {
 
 export async function reminders(b: Record<string, any>) {
   if (!secretEquals(b.secret, CONFIG.cronSecret)) throw new Fail('غير مصرّح', 403, 'forbidden');
+  // من غاب أسبوعًا ولم يُذكَّر خلاله: يمر بالمحرك الموحد (nudges.ts) فيصله ما بقي عليه بالاسم بدل «لديك خطوات»،
+  // ويُكتب في السجل الواحد بحده المشترك، فلا يصله تذكير آلي بعد يوم من تذكير الإدارة أو المرشد
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const { data: people } = await db.from('participants')
-    .select('id, full_name, email, status')
+    .select('id')
     .neq('status', 'suspended').eq('is_demo', false)
     .lt('last_login_at', weekAgo)
     .or(`reminded_at.is.null,reminded_at.lt.${weekAgo}`)
     .limit(200);
   let sent = 0;
-  for (const p of people || []) {
-    const { count } = await db.from('participant_requirements')
-      .select('requirement_id', { count: 'exact', head: true }).eq('participant_id', p.id).eq('status', 'returned');
-    const onboarding = ['registered', 'profiled', 'assessing'].includes(p.status) ? 1 : 0;
-    const open = (count ?? 0) + onboarding;
-    if (!open || !p.email) continue;
-    await db.from('participants').update({ reminded_at: new Date().toISOString() }).eq('id', p.id);
-    await sendMail(p.email, 'رحلتك القيادية بانتظارك', reminderMail(p.full_name, open), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error(e));
-    sent += 1;
+  const ids = (people || []).map((p: any) => p.id);
+  for (let i = 0; i < ids.length; i += NUDGE_MAX) {
+    const r = await sendNudges({ kind: 'auto', label: 'التذكير الآلي', by: 'cron', signature: '' }, ids.slice(i, i + NUDGE_MAX)).catch((e) => { console.error('weekly nudges:', e); return { sent: 0 }; });
+    sent += r.sent;
   }
   // المعالم المتأخرة: تُكتب في ملف صاحبها ويُبلَّغ بها مرة لكل معلم (كانت تظهر في الموقع وحده بلا بريد ولا أثر)
   const late = await lateMilestoneNotices().catch((e) => { console.error('late milestones:', e); return 0; });

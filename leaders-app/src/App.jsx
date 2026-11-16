@@ -408,7 +408,7 @@ function Participant() {
       </header>
       {!online && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
-        {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onRenew={() => setConsentLater(false)} />}
+        {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}
         {screen}
       </main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
