@@ -135,15 +135,41 @@ Deno.test('التخزين المؤقت على القواعد ونص الباب �
   } finally { x.restore(); }
 });
 
-Deno.test('الحذف: «احذف محادثتي» يحذف صفوف صاحب الجلسة وحده', async () => {
+Deno.test('الإخفاء (H3، قرار المالك v8 ب): «احذف محادثتي» يخفي صفوف صاحب الجلسة وحده، وتبقى النسخة ومحسوبة من الحد', async () => {
+  const now = new Date().toISOString();
   const x = setup({ guidance_messages: [
-    { id: 1, participant_id: 'p1', role: 'user', body: 'سؤالي', created_at: new Date().toISOString() },
-    { id: 2, participant_id: 'p2', role: 'user', body: 'سؤال خالد', created_at: new Date().toISOString() },
+    { id: 1, participant_id: 'p1', role: 'user', body: 'سؤالي', verdict: 'answered', created_at: now },
+    { id: 2, participant_id: 'p2', role: 'user', body: 'سؤال خالد', verdict: 'answered', created_at: now },
   ], audit_log: [] });
   try {
-    assertEquals((await G.guideClear(p1)).deleted, 1);
-    assertEquals(x.t.tables.guidance_messages.map((m) => m.participant_id), ['p2']);
+    const r = await G.guideClear(p1);
+    assertEquals([r.hidden, r.deleted], [1, 0]);
+    const rows = x.t.tables.guidance_messages;
+    assertEquals(rows.length, 2, 'النسخة باقية حتى نهاية مدة الحفظ');
+    assert(rows.find((m) => m.id === 1)!.hidden_at, 'صف صاحب الجلسة موسوم بوقت الإخفاء');
+    assertEquals(rows.find((m) => m.id === 2)!.hidden_at ?? null, null, 'صف مشارك آخر لا يُمس');
+    assertEquals((await G.guideState(p1)).messages, [], 'المخفي لا يعود إلى المشارك');
+    assertEquals((await G.guideState(p2)).messages.length, 1);
+    assertEquals((await G.guideState(p1)).left.day, S.daily_questions - 1, 'الإخفاء لا يفتح أسئلة جديدة');
+    assertEquals((await G.guideClear(p1)).hidden, 0, 'الإخفاء مرة ثانية لا يمس شيئًا');
+    const log: any = x.t.tables.audit_log.at(-2);
+    assertEquals(log.after, { hidden: 1 });
+    assert(!JSON.stringify(x.t.tables.audit_log).includes('سؤالي'), 'السجل بلا نص');
   } finally { x.restore(); }
+});
+
+Deno.test('الإخفاء قبل الترحيل 20261116180000: يبقى حذفًا كما كان', async () => {
+  const x = setup({ guidance_messages: [{ id: 1, participant_id: 'p1', role: 'user', body: 'سؤالي', created_at: new Date().toISOString() }], audit_log: [] });
+  const from = (db as any).from;
+  (db as any).from = (t: string) => {
+    const q = from(t);
+    return new Proxy(q, { get: (o, k: string) => k === 'update' ? () => ({ eq: () => ({ is: () => ({ select: () => Promise.resolve({ data: null, error: { code: '42703', message: 'column hidden_at does not exist' } }) }) }) }) : o[k] });
+  };
+  try {
+    const r = await G.guideClear(p1);
+    assertEquals([r.deleted, r.hidden], [1, 0]);
+    assertEquals(x.t.tables.guidance_messages.length, 0);
+  } finally { (db as any).from = from; x.restore(); }
 });
 
 Deno.test('الموجّه: سؤال الاختبار يُرفض بلا نموذج ولا يُحسب من الحد', async () => {
@@ -248,7 +274,8 @@ Deno.test('G3 حراسة: لا يقرأ جدول المحادثات إلا guide
     const src = await Deno.readTextFile(new URL(f.name, dir));
     if (/from\('guidance_messages'\)/.test(src)) hits.push(f.name);
   }
-  assertEquals(hits.sort(), ['guide.ts']);
+  // الاستثناء المسمى: سجل المحادثات (H3) بصلاحية المالك، ويُحرس في guide_transcripts_test.ts
+  assertEquals(hits.sort(), ['guide-transcripts.ts', 'guide.ts']);
   const file = await Deno.readTextFile(new URL('./file.ts', import.meta.url));
   assert(/guidance: adv \? await guideCounts\(p\.id\) : null/.test(file), 'للمستشار وحده من الخبراء');
   const src = await Deno.readTextFile(new URL('./guide.ts', import.meta.url));

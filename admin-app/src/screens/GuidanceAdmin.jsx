@@ -3,12 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 // «التوجيه والإرشاد»: الحالة والتحكم (التشغيل والإيقاف وما يمنع الفتح)، والإنفاق، والاستعمال موزعًا على الجهات والدفعات،
 // والدقة (التقييم قبل الإطلاق). «إتاحة التوجيه»: الجهات بمفتاحها القائم والدفعات التجريبية.
-// أعداد وكلفة بلا نص محادثة؛ سجل المحادثات في المرحلة H3 بصلاحية من المالك.
+// أعداد وكلفة بلا نص محادثة، وسجل المحادثات (H3) للمالك وللمدير الأعلى بمنحه، وكل فتح يُسجَّل.
 import React, { useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
 import '../agent-admin.css';
+import { GuideConversations, TranscriptGrants, transcriptAccess } from '../GuideTranscripts.jsx';
 
 const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
 
@@ -264,6 +265,7 @@ export default function GuidanceAdmin() {
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${usd(d.today.usd)} من ${usd(d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
       <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} /><SetReview canWrite={d.can_write} onChanged={() => setEvalKey((k) => k + 1)} /></Section>
+      <Section id="gd-transcripts" title="سجل المحادثات" summary="محادثة كل مشارك كاملة لتتبع أي مشكلة، بحكم كل رد ونموذجه وكلفته. للمالك، وللمدير الأعلى بصلاحية يمنحها المالك، وكل فتح يُسجَّل."><GuideConversations /></Section>
     </div>
   );
 }
@@ -274,7 +276,9 @@ export function GuidanceAccess() {
   const [orgs, setOrgs] = useState(null);
   const [pilots, setPilots] = useState(null);
   const [canWrite, setCanWrite] = useState(false);
+  const [owner, setOwner] = useState(false);
   useEffect(() => {
+    transcriptAccess().then((r) => setOwner(!!r?.owner));
     L('admin.guide-orgs').then(setOrgs);
     L('admin.guide-pilots').then(setPilots);
     L('admin.guide-dashboard').then((r) => setCanWrite(!!r?.can_write));
@@ -312,6 +316,11 @@ export function GuidanceAccess() {
           ))}</ul>
         )}
       </Section>
+      {owner && (
+        <Section id="gd-transcript-grants" title="الاطلاع على المحادثات" summary="أنت تطّلع دائمًا. امنح مديرًا أعلى الاطلاع على نص المحادثات أو اسحبه، ويسري فورًا. كل فتح يُسجَّل باسم صاحبه.">
+          <TranscriptGrants />
+        </Section>
+      )}
     </div>
   );
 }
