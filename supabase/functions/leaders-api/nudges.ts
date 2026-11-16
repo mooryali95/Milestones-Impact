@@ -7,8 +7,10 @@
 import { audit, db, Fail, nudgeMail, sendMail } from './core.ts';
 import { journeyFor } from './participant.ts';
 import { onboardingOf } from './onboarding.js';
-import { gate, groupPreview, ledgerSummary, NUDGE_GAP_DAYS, NUDGE_SENDER_AR, nudgeFor } from './nudge.js';
+import { gate, groupPreview, ledgerSummary, NUDGE_GAP_DAYS, NUDGE_SENDER_AR, nudgeFor, weeklyPlan } from './nudge.js';
 import { baselineProgress } from './admin.ts';
+import { coordPermissions } from './logic.js';
+import { COORD_NUDGE_DAILY, COORD_NUDGE_GROUPS, inCoordGroup } from './coord-groups.js';
 
 export const NUDGE_MAX = 50; // في الطلب الواحد، كحد الإجراء الجماعي في اللوحة
 export type Sender = { kind: 'admin' | 'mentor' | 'assistant' | 'coordinator' | 'auto'; label: string; by: string; ref?: string | null; signature?: string };
@@ -83,7 +85,7 @@ export async function sendNudges(sender: Sender, ids: string[]) {
     if (ledger) {
       const { error } = await db.from('nudges').insert({
         participant_id: p.id, sender: sender.kind, sender_label: sender.label, sender_ref: sender.ref || null,
-        stage_key: nudge.key, stage_title: nudge.stage, step: nudge.step, channels: ['email'], subject: nudge.subject, body: nudge.text, snapshot: nudge.snapshot,
+        stage_key: nudge.key, stage_title: nudge.stage, step: nudge.step, channels: ['email', 'banner'], subject: nudge.subject, body: nudge.text, snapshot: nudge.snapshot,
       });
       if (error && !missingTable(error)) throw error;
     }
@@ -126,3 +128,130 @@ export const adminLedger = (_a: unknown, b: Record<string, any>) => {
   if (!isUuid(id)) throw new Fail('معرّف المشارك غير صالح');
   return nudgeLedger(id);
 };
+
+// ── المرشد (مشرف الرحلة)، والمساعد نيابة عنه إلى أن يرد (قرار المالك 2026-11-16) ──
+// المرشد: الخبير المسند للمشارك بدور mentor بطلب مقبول (expert_requests). يذكّر من أُسند إليه وحدهم.
+// المساعد: في التذكير الأسبوعي، من له مرشد يصله التذكير موقّعًا «المساعد نيابة عن مرشدك»، ما لم يذكّره مرشده
+// بنفسه خلال MENTOR_ACTIVE_DAYS: المرشد إن رد وتابع بنفسه توقف المساعد عن النيابة عنه.
+export const MENTOR_ACTIVE_DAYS = 14;
+const firstOf = (n: string) => String(n || '').trim().split(/\s+/)[0] || '';
+
+/** مرشد كل مشارك من القائمة: { participant_id → { id, name, email } } */
+export async function mentorsOf(ids: string[]) {
+  const out = new Map<string, { id: string; name: string; email: string }>();
+  if (!ids.length) return out;
+  const { data } = await db.from('expert_requests').select('participant_id, expert_id, experts(full_name, email, status)')
+    .in('participant_id', ids).eq('role', 'mentor').eq('status', 'accepted');
+  for (const r of (data || []) as any[]) {
+    if (r.experts && r.experts.status !== 'paused' && !out.has(r.participant_id)) out.set(r.participant_id, { id: r.expert_id, name: r.experts.full_name, email: r.experts.email });
+  }
+  return out;
+}
+
+export const mentorSender = (e: { id: string; full_name: string; email: string }): Sender => ({
+  kind: 'mentor', label: `المرشد ${firstOf(e.full_name)}`, by: e.email, ref: e.id, signature: `— ${e.full_name}، مرشدك في برنامج القادة`,
+});
+export const assistantSender = (m: { id: string; name: string }): Sender => ({
+  kind: 'assistant', label: `المساعد نيابة عن المرشد ${firstOf(m.name)}`, by: 'cron', ref: m.id,
+  signature: `— المساعد الآلي في برنامج القادة، نيابة عن مرشدك ${m.name}`,
+});
+
+/** من أُسند إلى هذا الخبير مرشدًا، من بين المطلوبين. غيرهم يُرفض: لا يذكّر المرشد إلا من يرشدهم */
+async function assignedMentees(e: { id: string }, ids: string[]) {
+  const { data, error } = await db.from('expert_requests').select('participant_id').eq('expert_id', e.id).eq('role', 'mentor').eq('status', 'accepted');
+  if (error) throw new Fail('تعذّر قراءة من ترشدهم الآن، حاول بعد قليل', 503, 'busy');
+  const mine = new Set((data || []).map((r: any) => r.participant_id));
+  const ok = ids.filter((id) => mine.has(id));
+  if (!ok.length) throw new Fail('تذكّر من ترشدهم وحدهم', 403, 'forbidden');
+  return ok;
+}
+export async function expertPreview(e: any, b: Record<string, any>) {
+  return { success: true, ...(await previewNudges(await assignedMentees(e, cleanIds(b.participant_ids)))) };
+}
+export async function expertSend(e: any, b: Record<string, any>) {
+  return sendNudges(mentorSender(e), await assignedMentees(e, cleanIds(b.participant_ids)));
+}
+export async function expertLedger(e: any, b: Record<string, any>) {
+  const [id] = await assignedMentees(e, cleanIds([b.participant_id]));
+  const r: any = await nudgeLedger(id);
+  // الخبير يرى من ذكّر ومتى وأثره، بلا بداية بريد المدير المرسل
+  return { ...r, rows: r.rows.map((n: any) => ({ ...n, by: n.sender === 'admin' ? 'الإدارة' : n.by })) };
+}
+
+/** التذكير الأسبوعي: من له مرشد لم يتابعه بنفسه مؤخرًا يذكّره المساعد نيابة عنه، وغيره التذكير الآلي */
+export async function weeklyNudges(ids: string[]) {
+  const mentors = await mentorsOf(ids);
+  const since = new Date(Date.now() - MENTOR_ACTIVE_DAYS * 864e5).toISOString();
+  const { data: active } = mentors.size
+    ? await db.from('nudges').select('participant_id').in('participant_id', [...mentors.keys()]).eq('sender', 'mentor').gte('created_at', since)
+    : { data: [] as any[] };
+  const busy = new Set((active || []).map((r: any) => r.participant_id));
+  let sent = 0;
+  for (const g of weeklyPlan(ids, mentors, busy)) {
+    const sender: Sender = g.mentor ? assistantSender(g.mentor) : { kind: 'auto', label: 'التذكير الآلي', by: 'cron', signature: '' };
+    for (let i = 0; i < g.ids.length; i += NUDGE_MAX) {
+      const r = await sendNudges(sender, g.ids.slice(i, i + NUDGE_MAX)).catch((e) => { console.error('weekly nudges:', e); return { sent: 0 }; });
+      sent += r.sent;
+    }
+  }
+  return { sent, mentor_active: busy.size };
+}
+
+// ── منسق الجهة (P4، قرار المالك 2026-11-16) ──
+// يذكّر مجموعتي «يحتاج تدخلك» (coord-groups.js) بالمحرك نفسه والحد المشترك، موقّعًا باسم الجهة، بحد يومي للجهة.
+// الخادم يختار من يُذكَّر من مشاركي جهته (لا معرّفات من الواجهة)، والمعاينة أعداد بالمرحلة بلا نص ولا مستوى:
+// النص يبنيه الخادم ويصل المشارك وحده. مفعّل افتراضيًا، وللإدارة إيقافه لجهة (organizations.coord_nudges).
+async function coordTargets(c: any, group: string) {
+  const perms = coordPermissions(c.permissions, c.template);
+  if (!perms.list) throw new Fail('التذكير لمن يرى قائمة المشاركين', 403, 'forbidden');
+  if (!(group in COORD_NUDGE_GROUPS)) throw new Fail('اختر من تذكّرهم');
+  if (group === 'stale' && !perms.activity) throw new Fail('تذكير المتوقفين لمن يرى آخر دخول', 403, 'forbidden');
+  const { data: org } = await db.from('organizations').select('*').eq('id', c.organization_id).maybeSingle();
+  if (!org) throw new Fail('الجهة غير موجودة', 404);
+  if (org.coord_nudges === false) throw new Fail('التذكير من بوابة جهتك موقوف بقرار إدارة البرنامج', 403, 'disabled');
+  const { data: ps, error } = await db.from('participants').select('id, status, last_login_at, is_demo').eq('organization_id', org.id).eq('is_demo', false);
+  if (error) throw new Fail('تعذّر قراءة مشاركي جهتك الآن، حاول بعد قليل', 503, 'busy');
+  const now = Date.now();
+  return { org, ids: (ps || []).filter((p: any) => inCoordGroup(p, group, now)).map((p: any) => p.id) as string[] };
+}
+async function coordLeft(orgId: string) {
+  const since = new Date(Date.now() - 864e5).toISOString();
+  const { count } = await db.from('nudges').select('id', { count: 'exact', head: true }).eq('sender', 'coordinator').eq('sender_ref', orgId).gte('created_at', since);
+  return Math.max(0, COORD_NUDGE_DAILY - (count || 0));
+}
+const coordSender = (c: any, org: any): Sender => ({ kind: 'coordinator', label: `منسق ${org.short_name || org.name}`, by: c.email, ref: org.id, signature: `— ${org.name}` });
+async function previewAll(ids: string[]) {
+  const parts = [];
+  for (let i = 0; i < ids.length; i += NUDGE_MAX) parts.push(await previewNudges(ids.slice(i, i + NUDGE_MAX)));
+  return { groups: parts.flatMap((p) => p.groups), skipped: parts.flatMap((p) => p.skipped) };
+}
+
+/** ما سيصل مجموعة من «يحتاج تدخلك»: أعداد بالمرحلة، ومن يُتخطى بسببه، وما بقي من حد الجهة اليوم. بلا أسماء ولا نص */
+export async function coordPreview(c: any, b: Record<string, any>) {
+  const group = String(b.group || '');
+  const { org, ids } = await coordTargets(c, group);
+  const p = await previewAll(ids);
+  const stages = new Map<string, number>();
+  for (const g of p.groups) stages.set(g.stage, (stages.get(g.stage) || 0) + g.people.length);
+  const skipped: Record<string, number> = {};
+  for (const s of p.skipped) skipped[s.why] = (skipped[s.why] || 0) + 1;
+  const count = [...stages.values()].reduce((n, x) => n + x, 0);
+  return { success: true, group, label: (COORD_NUDGE_GROUPS as Record<string, string>)[group], count, stages: [...stages].map(([stage, n]) => ({ stage, n })), skipped, left: await coordLeft(org.id), signed: org.name, gap_days: NUDGE_GAP_DAYS };
+}
+export async function coordSend(c: any, b: Record<string, any>) {
+  const { org, ids } = await coordTargets(c, String(b.group || ''));
+  const left = await coordLeft(org.id);
+  if (!left) throw new Fail(`بلغت جهتك حد التذكير اليومي (${COORD_NUDGE_DAILY})، ويتجدد بعد 24 ساعة`, 429, 'rate');
+  // من يجتاز المحرك والحد المشترك وحدهم يُحسبون من حد اليوم
+  const p = await previewAll(ids);
+  const ready = p.groups.flatMap((g) => g.people.map((x: any) => x.id)).slice(0, left);
+  let sent = 0;
+  const skipped: Record<string, number> = {};
+  for (let i = 0; i < ready.length; i += NUDGE_MAX) {
+    const r = await sendNudges(coordSender(c, org), ready.slice(i, i + NUDGE_MAX));
+    sent += r.sent;
+    for (const [k, n] of Object.entries(r.skipped)) skipped[k] = (skipped[k] || 0) + (n as number);
+  }
+  for (const s of p.skipped) skipped[s.why] = (skipped[s.why] || 0) + 1;
+  return { success: true, sent, skipped, left: Math.max(0, left - sent) };
+}

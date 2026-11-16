@@ -61,6 +61,7 @@ import * as MB from './master-book.ts';
 import * as BP from './book-proposals.ts';
 import * as BR from './book-release.ts';
 import * as NU from './nudges.ts';
+import * as NB from './nudge-banner.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -115,7 +116,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
-  'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
+  'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 // ورابطه يُعرض على شاشة: لا يدخل القاعة الحية الحقيقية، ولا يرفع ملفات، ولا يسجّل مفتاح مرور، ولا يبدّل إلى دور آخر (M5)
@@ -124,7 +125,7 @@ const DEMO_BLOCKED = new Set(['experts.choose', 'rater.invite', 'f360.nominate',
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
   'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
-const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
@@ -138,7 +139,7 @@ const DEMO_OPEN = new Set(['me', 'sus.state', 'sus.submit', 'org.logo', 'me.priv
 // (المنسحب والموقوف خارجه، والموقوف يُرد قبل هذا في participantFromToken). الاعتماد لا يُسحب بعد منحه، فيُحفظ في العامل
 // فلا يُقرأ مع كل سؤال من أسئلة القاعة. الأولى: يبقى لكل من يدخل ومنهم المنسحب (الحساب وبياناته وملفه وشهادته)
 const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name', 'certificate',
-  'me.privacy', 'me.notice-ack', 'me.export', 'me.erase-request', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss',
+  'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'me.erase-request', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss',
   'consent.accept', 'org.share-consent', 'org.visibility', 'me.switch', 'pay.access', 'sponsor.cancel', 'sus.state', 'sus.submit']);
 // داخل البرنامج قبل الاعتماد وبعده: الملف والقياس المبدئي والدفع والرعاية، ودعوة المدير للتقدير القبلي (impact)،
 // ومتطلبات المرحلة المفتوحة (requirement.update يقفل المرحلة بنفسه)، والحضور بالرمز في القاعة، والمختبر بمنحته (lab.ts)،
@@ -210,6 +211,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
   'me.privacy': (p) => PV.state(p),
   'me.notice-ack': (p, b) => OB.ack(p, b),
+  'me.nudge-seen': (p, b) => NB.seen(p, b),
   'me.export': (p) => PV.exportData(p),
   'me.erase-request': (p, b) => PV.eraseRequest(p, b),
   'pay.access': async (p) => ({ success: true, access: await Y.access(p) }),
@@ -374,6 +376,10 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.capstone-doc': (e, b) => FL.capstoneDoc(e, b),
   'xp.assessment-answers': (e, b) => FL.assessmentAnswers(e, b),
   'xp.observation-add': (e, b) => FL.observationAdd(e, b),
+  // المرشد (مشرف الرحلة) يذكّر من يرشدهم بالمحرك نفسه والحد المشترك (nudges.ts)
+  'xp.nudge-preview': (e, b) => NU.expertPreview(e, b),
+  'xp.nudge': (e, b) => NU.expertSend(e, b),
+  'xp.nudge-ledger': (e, b) => NU.expertLedger(e, b),
   'xp.final-eval': (e, b) => FL.finalGet(e, b),
   'xp.final-eval-save': (e, b) => FL.finalSave(e, b),
   'xp.final-eval-vote': (e, b) => FL.finalVote(e, b),
@@ -406,6 +412,9 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any)
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b, sid, ctx) => switchTo(c.email, 'org', b.to, { ip: ctx?.ip ?? null, ua: ctx?.ua ?? null }, sid),
   'coord.dashboard': (c) => C.dashboard(c),
+  // تذكير مجموعتي «يحتاج تدخلك» بالمحرك الموحد (nudges.ts): بتوقيع الجهة وحد يومي، وللإدارة إيقافه لكل جهة
+  'coord.nudge-preview': (c, b) => NU.coordPreview(c, b),
+  'coord.nudge': (c, b) => NU.coordSend(c, b),
   // مفتاح الرؤية coord_initiatives يحجب المبادرات عن لوحة الجهة، فيحجب وثيقتها بالمعرّف أيضًا (N6)
   'coord.capstone': async (c, b) => { VS.requireVisible(await VS.visibilityOfOrg(c.organization_id), 'coord_initiatives'); return X.orgDoc(c.organization_id, b, c.permissions); },
   'coord.sus-state': (c) => SU.state('coordinator', c),

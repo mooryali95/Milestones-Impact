@@ -6,7 +6,7 @@
 import { all, allFor, approvedMail, audit, CONFIG, mailUsage, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
-import { NUDGE_MAX, sendNudges } from './nudges.ts';
+import { weeklyNudges } from './nudges.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
@@ -910,7 +910,7 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   tracks:             { table: 'tracks', key: ['key'], sortable: true,
                         fields: ['title_ar', 'title_en', 'summary_ar', 'focus_ar', 'journey_ar', 'priority_dimension'] },
   organizations:      { table: 'organizations', key: ['id'],
-                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes', 'contract_cents', 'show_value', 'contract_starts', 'contract_ends', 'companion_allowed'] },
+                        fields: ['name', 'name_en', 'logo', 'cert_cobrand', 'cert', 'short_name', 'sector', 'seats', 'color', 'invite_code', 'domains', 'contact_name', 'contact_email', 'contact_phone', 'status', 'notes', 'contract_cents', 'show_value', 'contract_starts', 'contract_ends', 'companion_allowed', 'coord_nudges'] },
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
 };
 
@@ -1248,6 +1248,7 @@ export async function save(a: Admin, b: Body) {
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
     if ('companion_allowed' in row) row.companion_allowed = row.companion_allowed !== false;
+    if ('coord_nudges' in row) row.coord_nudges = row.coord_nudges !== false;
     // تخصيص شهادة الجهة: ما لا يُذكر يُورث من الإعداد العام
     if ('cert' in row) row.cert = cleanProfile(row.cert && typeof row.cert === 'object' ? row.cert : {}, true);
     if ('domains' in row) {
@@ -1462,12 +1463,8 @@ export async function reminders(b: Record<string, any>) {
     .lt('last_login_at', weekAgo)
     .or(`reminded_at.is.null,reminded_at.lt.${weekAgo}`)
     .limit(200);
-  let sent = 0;
-  const ids = (people || []).map((p: any) => p.id);
-  for (let i = 0; i < ids.length; i += NUDGE_MAX) {
-    const r = await sendNudges({ kind: 'auto', label: 'التذكير الآلي', by: 'cron', signature: '' }, ids.slice(i, i + NUDGE_MAX)).catch((e) => { console.error('weekly nudges:', e); return { sent: 0 }; });
-    sent += r.sent;
-  }
+  // من له مرشد لم يتابعه بنفسه يذكّره المساعد نيابة عنه، وغيره التذكير الآلي (weeklyNudges)
+  const { sent } = await weeklyNudges((people || []).map((p: any) => p.id));
   // المعالم المتأخرة: تُكتب في ملف صاحبها ويُبلَّغ بها مرة لكل معلم (كانت تظهر في الموقع وحده بلا بريد ولا أثر)
   const late = await lateMilestoneNotices().catch((e) => { console.error('late milestones:', e); return 0; });
   return { success: true, sent, late };

@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
 import { xpCall } from '../api.js';
+import { lastLine, NUDGE_OUTCOME_AR, NUDGE_SKIP_AR } from '../../../supabase/functions/leaders-api/nudge.js';
 import ExpertAnswers from './ExpertAnswers.jsx';
 import { ErrorBox, Notice, useNotice } from '../ui.jsx';
 import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, RUBRIC_LEVEL_AR, rubricLevelAr, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -203,6 +204,49 @@ async function openInitiative(pid) {
   await openCapstoneDoc(r.doc, win);
 }
 
+// تذكير المرشد (مشرف الرحلة) لمن يرشده (P4، 2026-11-16): ما سيصله الآن بنص المحرك الموحد، ومن ذكّره ومتى،
+// وأثر كل تذكير. الإرسال بخطوتين (المعاينة ثم «أرسل»)، والحد المشترك مع الإدارة والجهة والمساعد على الخادم.
+const OUT_CHIP = { progressed: 'ok', waiting: '', none: 'warn' };
+function MentorNudge({ pid }) {
+  const [r, setR] = useState(null);
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, say] = useNotice();
+  const load = useCallback(() => xpCall('xp.nudge-ledger', { participant_id: pid }).then(setR), [pid]);
+  useEffect(() => { load(); }, [load]);
+  if (!r) return null;
+  if (!r.success) return <section className="card stack" aria-label="تذكيره"><h3>تذكيره</h3><p className="muted small">{r.message}</p></section>;
+  const send = async () => {
+    setBusy(true);
+    const d = await xpCall('xp.nudge', { participant_ids: [pid] });
+    setBusy(false); setAsk(false);
+    say(!d.success ? d.message : d.sent ? 'أُرسل التذكير باسمك، ويراه في بريده وأعلى رحلته' : `لم يُرسل: ${Object.keys(d.skipped || {}).map((k) => NUDGE_SKIP_AR[k] || k).join('، ')}`, !d.success || !d.sent);
+    load();
+  };
+  return (
+    <section className="card stack xf-nudge" aria-label="تذكيره">
+      <div className="row between"><h3>تذكيره</h3>{r.total > 0 && <small className="muted">{r.total} تذكير · تقدّم بعد {r.progressed}</small>}</div>
+      <Notice note={note} onClose={() => say(null)} />
+      {r.now?.ok ? (
+        <>
+          <p className="small muted">ما سيصله باسمك الآن · {r.now.stage}</p>
+          <blockquote className="xf-nudge-text">{r.now.text}</blockquote>
+          {r.last && <p className="small muted">{lastLine(r.last)}{r.now.allowed ? '' : `، والتذكير التالي بعد ${r.gap_days} أيام من آخر تذكير`}.</p>}
+          {!ask ? <button type="button" className="btn sm" disabled={!r.now.allowed} onClick={() => setAsk(true)}>ذكّره</button> : (
+            <div className="row"><button type="button" className="btn sm" disabled={busy} onClick={send}>{busy ? 'يُرسل…' : 'أرسل التذكير'}</button>
+              <button type="button" className="link small" onClick={() => setAsk(false)}>إلغاء</button></div>
+          )}
+        </>
+      ) : <p className="muted small">لا تذكير يناسبه الآن: {NUDGE_SKIP_AR[r.now?.why] || 'لا خطوة مطلوبة منه'}.</p>}
+      {r.rows.length > 0 && (
+        <ul className="ca-list">{r.rows.slice(0, 6).map((n) => (
+          <li key={n.id}><span>{n.by} · {n.stage_title}</span><small className="muted">{day(n.created_at)} · <span className={`chip ${OUT_CHIP[n.outcome]}`}>{NUDGE_OUTCOME_AR[n.outcome]}</span>{n.seen_at ? ' · رآه' : ''}</small></li>
+        ))}</ul>
+      )}
+    </section>
+  );
+}
+
 export default function ExpertFile({ id, onBack }) {
   const [d, setD] = useState(null);
   const [msNote, sayMs] = useNotice();
@@ -299,6 +343,7 @@ export default function ExpertFile({ id, onBack }) {
         </section>
       )}
 
+      {d.mentor && <MentorNudge pid={p.id} />}
       <PeerPending peer={d.peer} advisor={advisor} reload={load} />
       <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />
       {answers && advisor && <ExpertAnswers participant={p} onClose={() => setAnswers(false)} />}

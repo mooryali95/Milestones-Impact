@@ -186,6 +186,22 @@ test('نموذج الجهة: مفتاح المرافق بنصه المساعد،
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.body.row.companion_allowed).toBe(false);
 });
 
+// تذكير المنسق لمشاركي الجهة (التذكير الموحد P4، 2026-11-16): مفعّل افتراضيًا، وللإدارة إيقافه لكل جهة
+test('نموذج الجهة: مفتاح «تذكير المنسق» لجهة قائمة، والحفظ يرسل coord_nudges: false', async ({ page }) => {
+  const { calls } = await setup(page, { hash: '#/leaders/orgs', replies: {
+    'admin.orgs': () => ({ success: true, orgs: [{ id: 'o1', name: 'هيئة المثال', short_name: 'هم', color: '#12414E', invite_code: 'mithal-code1', status: 'active', domains: [], companion_allowed: true, coord_nudges: true, stats: { total: 0, registered: 0, pending_approval: 0, active_week: 0 } }], unassigned: { total: 0, typed: [] } }),
+    'admin.coordinator': () => ({ success: true, coordinator: null }),
+  } });
+  await page.getByRole('button', { name: 'تحرير' }).first().click();
+  const form = page.getByRole('dialog').filter({ hasText: 'تذكير المنسق لمشاركي الجهة' });
+  await expect(form).toContainText('يظهر «ذكّرهم» في «يحتاج تدخلك» ببوابة الجهة');
+  const sec = form.locator('.of-sec').filter({ hasText: 'تذكير المنسق لمشاركي الجهة' });
+  await sec.getByRole('checkbox').uncheck();
+  await expect(sec).toContainText('لا يذكّر منسق هذه الجهة أحدًا');
+  await form.getByRole('button', { name: /حفظ/ }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.body.row.coord_nudges).toBe(false);
+});
+
 test('قبل الترحيل: رسالة الترحيل وحدها', async ({ page }) => {
   await setup(page, { ready: false });
   await expect(page.getByText('لم يُطبَّق ترحيل 20261115230000 بعد')).toBeVisible();

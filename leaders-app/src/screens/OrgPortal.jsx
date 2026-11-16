@@ -343,7 +343,7 @@ function Dashboard({ me, onLogout }) {
       </section>
       <RatersAwaiting items={d.raters_pending} onDecide={decideRater} />
 
-      <NeedsYou d={d} onShow={show} />
+      <NeedsYou d={d} onShow={show} canNudge={me.org?.nudges !== false} />
       <SusCard call={coordCall} stateAction="coord.sus-state" submitAction="coord.sus-submit" initial={me.preload?.sus} />
 
       <div className="op-kpis">
@@ -423,15 +423,46 @@ export function needsYou(d, now = Date.now()) {
   if (raters) out.push({ key: 'raters', n: raters, text: 'مقيّمون بانتظار تأكيدك', hint: 'في بطاقة التأكيد أعلى هذا القسم', show: { to: 'ra-h' } });
   if (d.kpis?.seats_waiting) out.push({ key: 'seats', n: d.kpis.seats_waiting, text: 'مشاركون بانتظار قرار الرعاية', hint: 'بلغ العقد مقاعده؛ تواصل مع إدارة البرنامج لإضافة مقاعد', contact: true });
   const notStarted = ps.filter((p) => PRE_BASELINE.includes(p.status)).length;
-  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', show: { stage: NOT_STARTED } });
+  if (notStarted) out.push({ key: 'baseline', n: notStarted, text: 'سجّلوا ولم يكملوا القياس المبدئي', show: { stage: NOT_STARTED }, nudge: 'baseline' });
   if (d.permissions?.activity) {
     const stale = ps.filter((p) => isStale(p, now)).length;
-    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, show: { stage: STALE } });
+    if (stale) out.push({ key: 'stale', n: stale, text: `لم يدخلوا منذ ${STALE_DAYS} يومًا`, show: { stage: STALE }, nudge: 'stale' });
   }
   return out;
 }
-function NeedsYou({ d, onShow }) {
+// «ذكّرهم» للمنسق (التذكير الموحد P4، 2026-11-16): معاينة بأعداد كل مرحلة بلا أسماء ولا نص، ثم إرسال بتوقيع الجهة.
+// الخادم يختار من يُذكَّر ويبني النص ويطبّق الحد المشترك مع الإدارة والمرشد، وحد الجهة اليومي (nudges.ts)
+const SKIP_AR = { recent: 'ذُكِّروا قريبًا', approval: 'ينتظرون اعتماد الإدارة', locked: 'مرحلتهم بانتظار ما ليس بأيديهم', nothing: 'لا خطوة مطلوبة منهم', no_email: 'بلا بريد', finished: 'أتموا الرحلة', out: 'خارج البرنامج', demo: 'حسابات تجريبية' };
+const skipText = (sk) => Object.entries(sk || {}).map(([k, n]) => `${n} ${SKIP_AR[k] || k}`).join('، ');
+function CoordNudge({ group, onClose }) {
+  const [p, setP] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  useEffect(() => { coordCall('coord.nudge-preview', { group }).then(setP); }, [group]);
+  const send = async () => { setBusy(true); setDone(await coordCall('coord.nudge', { group })); setBusy(false); };
+  return (
+    <div className="op-nudge" role="region" aria-label="تذكيرهم">
+      {!p ? <p className="muted small">لحظة…</p> : !p.success ? <p className="alert err small" role="alert">{p.message}</p> : done ? (
+        <p className="small" role="status">{done.success ? <>أُرسل <b>{done.sent}</b> تذكيرًا باسم جهتك{Object.keys(done.skipped || {}).length ? `، وتُخطّي ${skipText(done.skipped)}` : ''}.</> : done.message}</p>
+      ) : (
+        <>
+          <p className="small">يصل كل واحد بريد يسمّي خطوته التالية في رحلته، ويظهر له أعلى رحلته، موقّعًا «{p.signed}». النص يكتبه البرنامج ولا يُعرض هنا.</p>
+          {p.count > 0 ? <ul className="small">{p.stages.map((x) => <li key={x.stage}><b>{x.n}</b> في «{x.stage}»</li>)}</ul> : <p className="muted small">لا أحد منهم يحتاج تذكيرًا الآن.</p>}
+          {Object.keys(p.skipped).length > 0 && <p className="muted small">لا يُذكَّر: {skipText(p.skipped)}.</p>}
+          <p className="muted small">بقي من حد جهتك اليوم {p.left}، ولا يُذكَّر أحد مرتين خلال {p.gap_days} أيام من أي مرسل.</p>
+          <div className="row">
+            <button type="button" className="btn sm" disabled={busy || !p.count || !p.left} onClick={send}>{busy ? 'يُرسل…' : `أرسل ${Math.min(p.count, p.left)} تذكير`}</button>
+            <button type="button" className="link small" onClick={onClose}>إلغاء</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function NeedsYou({ d, onShow, canNudge = false }) {
   const items = needsYou(d);
+  const [nudging, setNudging] = useState(null);
   if (!items.length) return null;
   return (
     <section className="card op-todo" aria-labelledby="op-todo-h">
@@ -441,6 +472,8 @@ function NeedsYou({ d, onShow }) {
           <span><b>{x.n}</b> {x.text}{x.hint && <small className="muted"> · {x.hint}</small>}</span>
           {x.contact && <a className="btn ghost sm" href={`mailto:${CONTACT_EMAIL}`}>راسل إدارة البرنامج</a>}
           {x.show && <button type="button" className="btn ghost sm" onClick={() => onShow(x.show)}>{x.show.to ? 'انتقل إليها' : 'اعرضهم في القائمة'}</button>}
+          {canNudge && x.nudge && <button type="button" className="btn ghost sm" aria-expanded={nudging === x.nudge} onClick={() => setNudging(nudging === x.nudge ? null : x.nudge)}>ذكّرهم</button>}
+          {nudging && nudging === x.nudge && <CoordNudge group={x.nudge} onClose={() => setNudging(null)} />}
         </li>
       ))}</ul>
     </section>

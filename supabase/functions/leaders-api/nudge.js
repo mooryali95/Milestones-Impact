@@ -12,6 +12,8 @@ import { needsOf, positionOf, stageEntry } from './journey-map.js';
 export const NUDGE_GAP_DAYS = REMIND_GAP_DAYS;
 // بعد هذه المدة بلا تقدم يُعدّ التذكير «بلا أثر»، وقبلها «ينتظر»
 export const NUDGE_OUTCOME_DAYS = 7;
+// لافتة التذكير في الرحلة تبقى ما لم يرها حتى هذه المدة، ثم يكفي البريد والسجل
+export const NUDGE_BANNER_DAYS = 14;
 export const NUDGE_SENDERS = ['admin', 'mentor', 'assistant', 'coordinator', 'auto'];
 export const NUDGE_SENDER_AR = {
   admin: 'الإدارة', mentor: 'المرشد', assistant: 'المساعد نيابة عن المرشد', coordinator: 'منسق الجهة', auto: 'التذكير الآلي',
@@ -137,4 +139,22 @@ export function groupPreview(items) {
     groups.get(k).people.push({ id: it.id, name: it.name, step: it.nudge.step, days: it.nudge.days, last: it.last || null });
   }
   return { groups: [...groups.values()], skipped, count: [...groups.values()].reduce((n, g) => n + g.people.length, 0) };
+}
+
+/**
+ * خطة التذكير الأسبوعي (P4): من له مرشد يذكّره المساعد نيابة عن مرشده، ما لم يتابعه المرشد بنفسه مؤخرًا (busy)،
+ * فحينها لا ينوب عنه المساعد ويُترك للمرشد. ومن لا مرشد له يذكّره التذكير الآلي.
+ * @param {string[]} ids @param {Map<string, {id: string, name: string}>} mentors @param {Set<string>} busy
+ * @returns {{ mentor: {id: string, name: string} | null, ids: string[] }[]}
+ */
+export function weeklyPlan(ids, mentors, busy) {
+  const out = new Map();
+  for (const id of ids) {
+    const m = mentors.get(id) || null;
+    if (m && busy.has(id)) continue;
+    const k = m ? `m:${m.id}` : 'auto';
+    if (!out.has(k)) out.set(k, { mentor: m, ids: [] });
+    out.get(k).ids.push(id);
+  }
+  return [...out.values()];
 }
