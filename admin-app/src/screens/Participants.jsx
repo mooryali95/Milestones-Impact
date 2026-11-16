@@ -29,7 +29,7 @@ const BULK_MAX = 50;
 import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
 import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
-import { NudgeLog, NudgeSheet } from './Nudges.jsx';
+import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
@@ -155,6 +155,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   };
   // التذكير الموحد للمحددين في أي مرحلة (Nudges.jsx): معاينة مجمّعة بالمرحلة قبل الإرسال، والحد المشترك على الخادم
   const [nudging, setNudging] = useState(null);
+  const [report, setReport] = useState(false);
   // طلب إعادة القياس للمحددين ممن سلّموا ولم يُعتمدوا (can_retake من الخادم): المدخل نفسه الذي في ملف المشارك
   const pickedRetake = all.filter((p) => picked.has(p.id) && p.can_retake).length;
   // الاعتماد الجماعي بالمستوى المحسوب (BulkApprove): للمحددين ممن ينتظرون الاعتماد، والحكم والاستبقاء على الخادم
@@ -227,6 +228,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
             all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
+          <button className="refresh-btn" type="button" onClick={() => setReport(true)}>فاعلية التذكير</button>
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
         </>} />
       {serverQ && <div className="flt-cap" role="status">نتائج البحث في كل المشاركين عن «{serverQ}». <button type="button" className="flt-link" onClick={() => load()}>عُد إلى القائمة</button></div>}
@@ -246,6 +248,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm primary" onClick={() => setBulkApprove(shownPending.slice(0, 50))}>اعتمد المتسقين{shownPending.length > 50 ? ' (أول 50)' : ''}…</button>
         </div>
       )}
+      {report && <NudgeReport onClose={() => setReport(false)} onOpen={(id) => { setReport(false); onOpen(id); }} />}
       {nudging && <NudgeSheet ids={nudging} onClose={(sent) => { setNudging(null); if (sent) setPicked(new Set()); }} />}
       {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onOpen} onClose={(changed) => { setBulkApprove(null); if (changed) { setPicked(new Set()); load(serverQ); } }} />}
       {canWrite && picked.size > 0 && (
@@ -265,7 +268,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
             <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo || enrolling}>{enrolling ? "يُنقل…" : "انقلهم"}</button>
           </>}
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
-          <button className="btn-sm ghost" onClick={() => setNudging([...picked].slice(0, BULK_MAX))} title="بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال">ذكّر المحددين ({Math.min(picked.size, BULK_MAX)})</button>
+          <button className="btn-sm ghost" onClick={() => setNudging([...picked].slice(0, BULK_MAX))} title={picked.size > BULK_MAX ? `التذكير ${BULK_MAX} في كل مرة: يُذكَّر أول ${BULK_MAX} من المحددين، ثم حدّد الباقين` : 'بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال'}>
+            {picked.size > BULK_MAX ? `ذكّر أول ${BULK_MAX} من المحددين` : `ذكّر المحددين (${picked.size})`}</button>
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
@@ -513,6 +517,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
     <>
       <PersonHeader r={r} org={orgOf} tab={tab} setTab={(t) => show(t)} primary={primary} onPrimary={() => show(primary.tab, primary.focus)} menu={menu}
         nav={<QueueNav pos={pos} onBack={onBack} onNav={onNav} />} />
+      {/* إجابات القياس نافذة فوق الملف لا داخل تبويب: رابطها المنسوخ (?answers=) يفتحها أيًا كان التبويب الافتتاحي */}
+      {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       <div className="pf-body">
         <div className="pf-main">
           {panel('decision', <>
@@ -529,7 +535,6 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
           <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
             notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={() => approve(false)}
             onApproveNext={pos?.next ? () => approve(true) : null} onAnswers={canWrite ? openAnswers : null} />
-          {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
           </>)}
 
           {panel('journey', <>

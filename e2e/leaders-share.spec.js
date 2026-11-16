@@ -80,8 +80,9 @@ test('صاحب الوثيقة: بطاقة المشاركة بملاحظتها ا
   await form.getByText('أسبوع', { exact: true }).click();
   await form.getByText('يرى مستواي ومساري').click();
   await page.getByRole('button', { name: 'أنشئ الرابط' }).click();
-  const made = srv.calls.find((c) => c.action === 'capstone.share-create');
-  expect(made).toMatchObject({ label: 'مديري المباشر', days: 7, allow_notes: true, allow_download: true, show_levels: true });
+  // ينتظر وصول الطلب: كان يُقرأ فور النقر فيسقط أحيانًا تحت حمل التشغيل الكامل قبل أن يُسجَّل الطلب
+  await expect.poll(() => srv.calls.find((c) => c.action === 'capstone.share-create'))
+    .toMatchObject({ label: 'مديري المباشر', days: 7, allow_notes: true, allow_download: true, show_levels: true });
   await expect(page.getByText('الرابط جاهز: «مديري المباشر»')).toBeVisible();
   await expect(page.locator('.sh-url code')).toHaveText(`https://leaders.example/i?t=${T}`);
   await expect(page.getByText('يظهر هنا مرة واحدة فقط')).toBeVisible();

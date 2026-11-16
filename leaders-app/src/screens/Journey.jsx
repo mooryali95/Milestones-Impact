@@ -651,6 +651,31 @@ function Notices({ list }) {
   );
 }
 
+// لافتة التذكير الموحد (nudge-banner.ts): آخر تذكير لم يره، بنص بريده نفسه ومرسله. هادئة لا تنبيهية:
+// «إلى خطوتي» يفتح مرحلته الجارية، و«حسنًا» يكتب الاطلاع فيرى المرسل في ملفه أنه رآه
+function NudgeBanner({ nudge, onGo }) {
+  const [n, setN] = useState(nudge || null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setN(nudge || null); }, [nudge]);
+  if (!n) return null;
+  const done = async () => {
+    setBusy(true);
+    const r = await call('me.nudge-seen', { id: n.id });
+    setBusy(false);
+    if (r.success) setN(r.nudge || null);
+  };
+  return (
+    <aside className="card nudge-banner" role="status" aria-label="تذكير برحلتك">
+      <p>{n.body}</p>
+      {n.by && <small className="muted">{n.by}</small>}
+      <div className="row">
+        {onGo && <button type="button" className="btn sm" onClick={() => { onGo(); done(); }}>إلى خطوتي</button>}
+        <button type="button" className="btn sm ghost" disabled={busy} onClick={done}>حسنًا</button>
+      </div>
+    </aside>
+  );
+}
+
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab, onLabItem }) {
   const { journey, profile, participant } = me;
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
@@ -696,6 +721,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   return (
     <div className="page wide">
       <Notices list={me.notices} />
+      <NudgeBanner nudge={me.nudge} onGo={current ? () => goTo(current.key) : null} />
       <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
