@@ -6,7 +6,9 @@ import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { lazyRetry } from './lazy-retry.js';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
-import { UIProvider } from './ui.jsx';
+import { UIProvider, useUI } from './ui.jsx';
+import { writeState } from './write-access.js';
+import StepUp from './StepUp.jsx';
 import Login from './screens/Login.jsx';
 const Settings = lazyRetry(() => import('./screens/Settings.jsx'));
 const Contacts = lazyRetry(() => import('./screens/Contacts.jsx'));
@@ -38,12 +40,26 @@ function Dashboard({ user, onUser, onLogout }) {
   const setCtx = (c) => { if (c !== ctx) navigate({ ctx: c }); };
   const pending = usePending(ctx);
   const badge = { contacts: pending?.contacts || 0, leaders: leadersTotal(pending) };
-  const canWrite = (user.role_id || user.role) !== 'viewer';
+  // صلاحية الكتابة من حكم الخادم (me): جلسة رمز البريد للقراءة حتى «فعّل الكتابة» (write-access.js)
+  const { toast } = useUI();
+  const [me, setMe] = useState(null);
+  const [elevate, setElevate] = useState(false);
+  const readMe = useCallback(() => call('me').then((r) => { setMe(r); if (r?.success && r.method) onUser({ method: r.method }); }).catch(() => setMe(null)), [onUser]);
+  useEffect(() => { readMe(); }, [readMe]);
+  const { canWrite, readOnly } = writeState(user, me);
+  const elevated = async (m) => { setElevate(false); onUser({ method: m }); await readMe(); toast('فُعّلت الكتابة لهذه الجلسة'); };
   const closeSettings = useCallback(() => setSettings(false), []);
   return (
     <div id="screen-dashboard" className="visible">
       {/* عطل البريد الآن: شريط أحمر رفيع أعلى كل صفحة يفتح بطاقة الصحة (للمدير ذي الكتابة) */}
       <OpsBanner enabled={canWrite} />
+      {readOnly && (
+        <div className="ro-banner" role="status">
+          <span className="ro-banner-text"><b>للقراءة فقط.</b> دخلت برمز البريد، فالتعديل مقفل في هذه الجلسة حتى تؤكد بمفتاح المرور أو تطبيق المصادقة.</span>
+          <button type="button" className="btn-sm primary" onClick={() => setElevate(true)}>فعّل الكتابة</button>
+        </div>
+      )}
+      {elevate && <StepUp purpose="write" title="فعّل الكتابة في هذه الجلسة" onCancel={() => setElevate(false)} onDone={elevated} />}
       <header className="dash-header">
         <div className="dash-header-left">
           <div className="mi-logo"><img className="mi-logo-img" src={LOGO} alt="Milestone Impact" width="132" height="60" /></div>
@@ -70,7 +86,8 @@ function Dashboard({ user, onUser, onLogout }) {
       {/* حد التعليق هنا لا في main.jsx وحده: الإطار (الترويسة والسياقات والبحث الشامل) يظهر فورًا
           ويستقبل Ctrl+K، وتنتظر منطقة الشاشة وحدها قطعتها الكسولة */}
       <Suspense fallback={<div className="la-loading">جارٍ التحميل…</div>}>
-        {ctx === 'leaders' ? <Leaders canWrite={canWrite} pending={pending} isSuper={(user.role_id || user.role) === 'super_admin'} isOwner={!!user.is_owner} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
+        {/* تغيّر الصلاحية (فعّل الكتابة) يعيد رسم الشاشة فتقرأ أزرارها وبياناتها من جديد */}
+        {ctx === 'leaders' ? <Leaders key={canWrite ? 'w' : 'r'} canWrite={canWrite} pending={pending} isSuper={(user.role_id || user.role) === 'super_admin'} isOwner={!!user.is_owner} /> : ctx === 'matrix' ? <Matrix canWrite={canWrite} tab={route.tab} id={route.id} /> : ctx === 'visits' ? <Visits /> : <Contacts />}
       </Suspense>
 
       <Palette owner={(user.role_id || user.role) === 'super_admin' || !!user.is_owner} />

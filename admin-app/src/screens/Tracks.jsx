@@ -4,7 +4,7 @@
 // كل لوحة مستوى في Milestone، صفوفها مستوى Impact وأعمدتها مستوى Leadership.
 // تحرير أبواب الكتاب في استوديو الكتاب (الخطوة التالية)؛ هنا عرض كما يقرؤه المشارك.
 import React, { useEffect, useState } from 'react';
-import { DIM, DIM_EN, DIMS, L, LVL, STATUS } from '../leaders.js';
+import { DIM, DIM_ROMAN, DIMS, L, LVL, STATUS } from '../leaders.js';
 import { LVLS, ROMAN, TRACK_FIELDS, lines, shortTitle, trackKey, trackLevels } from '../methodology.js';
 import Form from '../Form.jsx';
 import Md from '../Md.jsx';
@@ -21,7 +21,7 @@ const trackFields = (profile) => (!profile ? TRACK_FIELDS
 
 const LvlChips = ({ k }) => {
   const lv = trackLevels(k);
-  return DIMS.map((d) => <span key={d} className={`la-lvl ${lv[d]}`}>{DIM_EN[d][0]} {LVL[lv[d]]}</span>);
+  return DIMS.map((d) => <span key={d} className={`la-lvl ${lv[d]}`} title={DIM[d]}>{DIM_ROMAN[d]} {LVL[lv[d]]}</span>);
 };
 
 function Board({ tracks, onOpen }) {
@@ -155,14 +155,14 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
         {r.handbook.length ? (
           <div className="la-hb">
             <nav className="la-hb-toc" aria-label="أبواب الكتاب">{groups.map((g) => g.items.length > 0 && (
-              <div key={g.d}><b>{DIM_EN[g.d]} · {LVL[r.levels[g.d]]}</b>{g.items.map((c) => (
+              <div key={g.d}><b>{DIM[g.d]} · {LVL[r.levels[g.d]]}</b>{g.items.map((c) => (
                 <button key={c.id} className="la-link" onClick={() => document.getElementById(`hb-${c.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{c.title}</button>
               ))}</div>
             ))}</nav>
             <div className="la-hb-body">{r.handbook.map((c) => (
               <article key={c.id} className="la-hb-ch" id={`hb-${c.id}`}>
                 <div className="la-row between">
-                  <small className="la-muted">{DIM_EN[c.dimension]} · {DIM[c.dimension]}</small>
+                  <small className="la-muted">{DIM_ROMAN[c.dimension]} · {DIM[c.dimension]}</small>
                   {canWrite && <button className="btn-sm ghost" onClick={() => setChapter((catalog.handbook_modules || []).find((x) => x.id === c.id))}>تعديل الباب</button>}
                 </div>
                 <h3>{c.title}</h3>

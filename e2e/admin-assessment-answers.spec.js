@@ -59,11 +59,11 @@ test('إجابات القياس (الحاسوب): تُحمَّل عند الطل
   await expect(d).toContainText('من فتح القياس إلى إرساله 34د');
   // ملخص الأقسام بنسبها من assessment_results
   await expect(d.locator('.ap-sum tbody tr')).toHaveCount(4);
-  await expect(d.locator('.ap-sum tbody tr').nth(3)).toContainText('Impact · المعرفة');
+  await expect(d.locator('.ap-sum tbody tr').nth(3)).toContainText('تحويل المشروع إلى أثر · المعرفة');
   await expect(d.locator('.ap-sum tbody tr').nth(3)).toContainText('42%');
   // ما يستحق الانتباه مفتوح، والهادئ مطوي
-  await expect(d.getByRole('button', { name: /Impact · المعرفة/ })).toHaveAttribute('aria-expanded', 'true');
-  await expect(d.getByRole('button', { name: /Milestone · المواقف/ })).toHaveAttribute('aria-expanded', 'false');
+  await expect(d.getByRole('button', { name: /تحويل المشروع إلى أثر · المعرفة/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(d.getByRole('button', { name: /إدارة المشروعات · المواقف/ })).toHaveAttribute('aria-expanded', 'false');
   // السؤال: المختار والمفتاح بعلامتين مختلفتين، ودرجة كل خيار، والزمن ⚡
   const k01 = d.locator('.ap-item', { hasText: 'IM-K01' });
   await expect(k01.locator('li.chosen')).toContainText('نسبة المشاركين الراضين عن جودة الورش المقدمة');
@@ -115,7 +115,7 @@ test('«عرض إجابات هذا البُعد» يفتحها على البُع
   // صف Impact الحدّي مفتوح تلقائيًا، ومنه الرابط
   await page.locator('#lc-det-impact').getByRole('button', { name: 'عرض إجابات هذا البُعد ←' }).click();
   await expect(dialog(page).getByLabel('البُعد')).toHaveValue('impact');
-  await expect(dialog(page).getByRole('button', { name: /Milestone ·/ })).toHaveCount(0);
+  await expect(dialog(page).getByRole('button', { name: /إدارة المشروعات ·/ })).toHaveCount(0);
   expect(page.url()).toContain('answers=impact');
   // رابط منسوخ يفتح اللوحة على البُعد نفسه
   await page.reload();

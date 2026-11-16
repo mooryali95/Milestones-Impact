@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AnswersPanel from '../../../src/lib/AnswersPanel.jsx';
 import { reviewCsvRows } from '../../../supabase/functions/leaders-api/answer-review.js';
-import { DIM_EN, L } from '../leaders.js';
+import { DIM, L } from '../leaders.js';
 import { ExportDialog } from '../ExportButton.jsx';
 import { useEscape } from '../ui.jsx';
 
@@ -25,7 +25,7 @@ export default function AssessmentAnswers({ participant, dim, onClose }) {
   // الجدول من reviewCsvRows نفسه (رؤوسه وصفوفه)، ويخرج بنافذة التصدير الموحدة
   const [out, setOut] = useState(null);
   const csv = (d) => {
-    const { head, rows } = reviewCsvRows(d, (x) => DIM_EN[x] || x);
+    const { head, rows } = reviewCsvRows(d, (x) => DIM[x] || x);
     setOut({ kind: d.assessment.kind || 'assessment', rows, columns: head.map((label, i) => ({ key: `c${i}`, label, width: i === 3 ? 60 : i === 4 || i === 5 ? 36 : 14, get: (r) => r[i] })) });
   };
   return (<>

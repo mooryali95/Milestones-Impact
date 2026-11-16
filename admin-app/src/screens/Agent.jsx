@@ -5,8 +5,7 @@
 // المفتاح يُلصق في حقل كتابة فقط لا يُحفظ في أي مخزن، ويُمسح بعد الإرسال وعند الطي وعند مغادرة الشاشة.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { L } from '../leaders.js';
-import { call, session } from '../api.js';
-import { passkeyCancelled, passkeyGet, passkeySupported } from '../passkey.js';
+import StepUp from '../StepUp.jsx';
 import { Empty, Spinner, useEscape, useUI } from '../ui.jsx';
 import { dateTime } from '../dates.js';
 import { agoAr } from '../../../supabase/functions/leaders-api/ops-health.js';
@@ -42,67 +41,6 @@ function AgentSection({ id, title, summary, open, onToggle, fixed = false, child
       <p className="ag-sum"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>
       {open && <div id={`${id}-b`} className="ag-sec-b">{children}</div>}
     </section>
-  );
-}
-
-// ── التحقق الإضافي: بالبصمة (مفتاح المرور) أو برمز تطبيق المصادقة، بما يملكه الحساب وحده ──
-function StepUp({ onDone, onCancel, title }) {
-  const [sec, setSec] = useState(null);
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const me = session.load()?.user || {};
-  useEscape(onCancel);
-  // تعذر القراءة لا يترك النافذة على مؤشر التحميل: يُعرض الخطأ مع إعادة المحاولة
-  const readSec = useCallback(() => { setSec(null); call('security-status').then((r) => setSec(r?.success ? r : { failed: true })).catch(() => setSec({ failed: true })); }, []);
-  useEffect(() => { readSec(); }, [readSec]);
-  const hasKey = !!sec?.passkeys?.length && passkeySupported();
-  // حال تطبيق المصادقة الآن من security-status، وجلسة الدخول احتياط لخادم أقدم
-  const canTotp = !!(sec?.totp_enabled ?? me.totp_enabled) && !(sec?.passkey_only ?? me.passkey_only);
-  const viaKey = async () => {
-    setBusy(true); setErr('');
-    try {
-      const o = await call('step-up-options', { purpose: 'agent_key' });
-      if (!o.success) throw new Error(o.message);
-      const response = await passkeyGet(o.options);
-      const v = await call('step-up-verify', { purpose: 'agent_key', response });
-      if (!v.success) throw new Error(v.message);
-      onDone('passkey');
-    } catch (e) { if (!passkeyCancelled(e)) setErr(e.message || 'تعذّر التحقق'); }
-    setBusy(false);
-  };
-  const viaCode = async (e) => {
-    e.preventDefault();
-    setBusy(true); setErr('');
-    const v = await call('step-up-totp', { purpose: 'agent_key', code: code.trim() });
-    setBusy(false);
-    if (!v.success) return setErr(keyMessage(v));
-    setCode('');
-    onDone('totp');
-  };
-  return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <div className="mid-box ag-stepup" role="dialog" aria-modal="true" aria-labelledby="ag-su-h">
-        <h3 id="ag-su-h">{title}</h3>
-        <p className="la-muted">تأكيد لمرة واحدة صالح 5 دقائق لهذه الجلسة وحدها.</p>
-        {!sec ? <Spinner /> : sec.failed ? <div className="la-err" role="alert">تعذّرت قراءة طرق التحقق على حسابك. <button type="button" className="btn-sm ghost" onClick={readSec}>أعد المحاولة</button></div> : (
-          <div className="ag-su-opts">
-            {hasKey && <button type="button" className="btn-sm primary" disabled={busy} onClick={viaKey}>أكّد بالبصمة (مفتاح المرور)</button>}
-            {canTotp && (
-              <form onSubmit={viaCode} className="ag-su-code">
-                <label>أكّد برمز تطبيق المصادقة
-                  <input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} dir="ltr" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} aria-label="رمز تطبيق المصادقة" />
-                </label>
-                <button type="submit" className="btn-sm" disabled={busy || code.length !== 6}>أكّد بالرمز</button>
-              </form>
-            )}
-            {!hasKey && !canTotp && <p className="la-err" role="alert">لا مفتاح مرور ولا تطبيق مصادقة على حسابك. أضف أحدهما من «الإعدادات» أولًا.</p>}
-          </div>
-        )}
-        {err && <p className="la-err" role="alert">{err}</p>}
-        <div className="mid-act"><button type="button" className="mid-btn" onClick={onCancel}>إلغاء</button></div>
-      </div>
-    </div>
   );
 }
 

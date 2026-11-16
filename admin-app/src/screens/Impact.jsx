@@ -5,7 +5,7 @@
 // للدفعة، ومن تغيّر تغيرًا موثوقًا، وتثليث المصادر لكل مشارك، وإعدادات
 // الحكم. لا يُعرض فرق خام دون هامش خطأ القياس.
 import React, { useCallback, useEffect, useState } from 'react';
-import { DIM, DIM_EN, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
+import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import Outcomes from './Outcomes.jsx';
@@ -65,7 +65,7 @@ function Cohort({ r, raterOff }) {
           const c = r.cohort[d];
           return (
             <tr key={d}>
-              <td><b>{DIM_EN[d]}</b><br /><small className="la-muted">{DIM[d]}</small></td>
+              <td><b>{DIM[d]}</b></td>
               <td>{c.n}</td><td>{c.pre ?? '·'}</td><td>{c.post ?? '·'}</td><td><b>{sign(c.diff)}</b></td>
               <td>{c.dz ?? '·'}{c.effect && <small className="la-muted"> ({c.effect})</small>}</td>
               <td>{c.reliable_up}</td><td>{c.reliable_down}</td><td>{c.level_up}</td>
@@ -76,14 +76,14 @@ function Cohort({ r, raterOff }) {
       </table>
       <div className="la-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         {DIMS.map((d) => (
-          <span key={d} className="la-muted">{DIM_EN[d]}: {Object.entries(VERDICT).map(([k, [l]]) => `${l} ${r.cohort[d].verdicts[k] || 0}`).join(' · ')}
+          <span key={d} className="la-muted">{DIM[d]}: {Object.entries(VERDICT).map(([k, [l]]) => `${l} ${r.cohort[d].verdicts[k] || 0}`).join(' · ')}
             {r.cohort[d].response_shift != null && ` · انزياح الاستجابة ${sign(r.cohort[d].response_shift)}`}</span>
         ))}
       </div>
       <p className="la-muted">المقارنة بالجوانب المشتركة بين النموذجين فقط وبأوزان نموذج التسكين. انزياح الاستجابة الموجب يعني أن المشاركين قدّروا ممارستهم في البداية أعلى مما يرونها اليوم، وهو سبب الاعتماد على القياس الرجعي وتقدير المدير لا على الفرق الذاتي.</p>
       <p className="la-muted">الثبات المستعمل (ألفا الطبقية): {DIMS.map((d) => {
         const s = r.config.source?.[d] || {};
-        return `${DIM_EN[d]} ${s.from_data ? `α ${s.alpha} من ${s.n}` : `افتراضي ${r.config.rci_reliability} (لدينا ${s.n || 0})`}`;
+        return `${DIM[d]} ${s.from_data ? `α ${s.alpha} من ${s.n}` : `افتراضي ${r.config.rci_reliability} (لدينا ${s.n || 0})`}`;
       }).join(' · ')}{(() => {
         const o = r.config.source?.overall;
         return o ? ` · الكلي ${o.from_data ? `α ${o.alpha} من ${o.n}` : 'افتراضي بمعادلة Spearman و Brown'}` : '';
@@ -151,7 +151,7 @@ function People({ list, onPerson, raterOff }) {
     <section className="la-card">
       <h3>المشاركون</h3>
       <table className="la-table" tabIndex={0} aria-label="أثر كل مشارك">
-        <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM_EN[d]}</th>)}<th>المقيّمون{raterOff && <RaterOff />}</th></tr></thead>
+        <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<th>المقيّمون{raterOff && <RaterOff />}</th></tr></thead>
         <tbody>{rows.map((p) => (
           <tr key={p.id} className="la-click" tabIndex={0} onClick={() => onPerson(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onPerson(p.id); }}>
             <td><b>{p.full_name}</b><br /><small className="la-muted">{p.organization || ''}{p.forms?.[0] && ` · نموذج ${p.forms[0]}${p.forms[1] ? ` ← ${p.forms[1]}` : ''}`}</small></td>

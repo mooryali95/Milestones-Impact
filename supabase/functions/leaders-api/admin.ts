@@ -74,7 +74,7 @@ const canWrite = (a: Admin) => a.role === 'admin' || a.role === 'super_admin';
 export const needsSecondFactor = (a: Admin) => canWrite(a) && a.method === 'email';
 export function requireWrite(a: Admin) {
   if (!canWrite(a)) throw new Fail('صلاحيتك للعرض فقط', 403, 'forbidden');
-  if (needsSecondFactor(a)) throw new Fail('التعديل يتطلب الدخول بمفتاح المرور أو تطبيق المصادقة. فعّل أحدهما من الإعدادات ثم ادخل به', 403, 'mfa_required');
+  if (needsSecondFactor(a)) throw new Fail('التعديل يتطلب تأكيدًا بمفتاح المرور أو تطبيق المصادقة: اضغط «فعّل الكتابة» أعلى اللوحة، ومن لا يملك أحدهما يضيفه من الإعدادات أولًا', 403, 'mfa_required');
 }
 export const writer = <T>(a: Admin, fn: (a: Admin, b: Body) => Promise<T>, b: Body) => { requireWrite(a); return fn(a, b); };
 // الإجراءات الخطرة (حذف جهة أو مشارك أو منسق، استرجاع برنامج، إعدادات الدفع، إعادة إصدار

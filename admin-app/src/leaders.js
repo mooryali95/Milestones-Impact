@@ -23,10 +23,11 @@ export async function L(action, body = {}) {
   return d;
 }
 
-import { DIM_AR as DIM, DIM_SHORT as DIM_EN, FUNNEL, LEVEL_AR as LVL, PARTICIPANT_STATUS as STATUS, REQ_STATUS as REQ, SUBMISSION_STATUS_ADMIN } from '../../supabase/functions/leaders-api/labels.js';
+import { DIM_AR as DIM, DIM_ROMAN, FUNNEL, LEVEL_AR as LVL, PARTICIPANT_STATUS as STATUS, REQ_STATUS as REQ, SUBMISSION_STATUS_ADMIN } from '../../supabase/functions/leaders-api/labels.js';
 import { SITES } from '../../supabase/functions/_shared/sites.js';
 
-export { DIM, DIM_EN, FUNNEL, LVL, STATUS, REQ };
+// الإطار بالعربية وحدها (المرحلة 2 من تصور اللوحة): DIM_AR اسمه، وDIM_ROMAN رقمه حيث يضيق المكان، بلا Milestone وImpact وLeadership
+export { DIM, DIM_ROMAN, FUNNEL, LVL, STATUS, REQ };
 export const VIA = { link: 'رابط الجهة', domain: 'نطاق الجهة (موقعها أو بريدها)', admin: 'نقل يدوي', none: 'غير محدد' };
 export const SUB_ST = Object.fromEntries(Object.entries({ submitted: 'warn', reviewed: 'ok', returned: '', draft: '' }).map(([k, tone]) => [k, [SUBMISSION_STATUS_ADMIN[k], tone]]));
 export const DIMS = Object.keys(DIM);

@@ -36,6 +36,9 @@ const SESSION_FIELDS = [
 // الجلسة لدفعة بعينها، أو لكل الدفعات التي تتبع برنامج المتطلب. الحقل يظهر متى كانت للبرنامج دفعة واحدة على الأقل:
 // كان يختفي مع الدفعة الوحيدة، فتُحفظ الجلسة عامة بلا دعوة ولا تذكير، ويفك تحريرها ربطًا قائمًا (التدقيق 2026-11-11، admin-program-3).
 // current: دفعة الجلسة المحررة إن لم تعد في القائمة (القائمة للدفعات غير المغلقة)، فلا تظهر «كل الدفعات» مكانها
+// دفعات النشاط: دفعات برنامجه المفتوحة وحدها، فلا تُربط جلسة بدفعة برنامج آخر. والدفعة المغلقة (لا تصل في القائمة) باسمها العام
+export const cohortsOfProgram = (cohorts, programId) => (cohorts || []).filter((c) => c.program_id === programId);
+export const cohortNameOf = (cohorts, id) => cohorts.find((c) => c.id === id)?.name || 'دفعة مغلقة';
 const sessionFields = (cohorts, current = null) => {
   const options = Object.fromEntries(cohorts.map((c) => [c.id, c.name]));
   if (current && !options[current]) options[current] = 'دفعة مغلقة';
@@ -146,8 +149,8 @@ function Workshops({ data, reload, canWrite }) {
     <>
       {reqs.map((r) => {
         const list = data.workshops.filter((s) => s.requirement_id === r.id);
-        const cohorts = (data.cohorts || []).filter((c) => c.program_id === r.program_id);
-        const cohortName = (id) => cohorts.find((c) => c.id === id)?.name || 'دفعة مغلقة';
+        const cohorts = cohortsOfProgram(data.cohorts, r.program_id);
+        const cohortName = (id) => cohortNameOf(cohorts, id);
         return (
           <section key={r.id} id={`ws-${r.id}`} className="la-card" tabIndex={-1}>
             <div className="la-row between">

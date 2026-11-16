@@ -5,14 +5,26 @@
 // الحراس: جلسة صالحة لمدير أعلى بعامل ثانٍ (مفتاح مرور أو TOTP؛ جلسة رمز البريد ترد reauth_second_factor). لا يُشترط
 // الدخول الحديث لأن التحقق نفسه حديث. النجاح صف في public.admin_step_ups مربوط بهاش الجلسة، صالح 5 دقائق ولمرة
 // واحدة، وتستهلكه leaders-api ذريًا (admin_step_up_consume). كل نجاح وفشل في admin_audit_log.
+// والغرض «write» (فعّل الكتابة، المرحلة 2 من تصور لوحة الإدارة) يرفع جلسة رمز البريد نفسها إلى عامل ثانٍ: لمدير أو مدير
+// أعلى، بالتحقق نفسه، ونجاحه يكتب طريقة التحقق في meta الجلسة (api_sessions) فيمر بحارسي الكتابة في admin-api وleaders-api.
+// هو مكافئ الدخول بمفتاح المرور أو الرمز من جديد بلا خروج، فلا يُكتب له صف في admin_step_ups (قيد الغرض فيه agent_key وحده).
 // deno-lint-ignore no-explicit-any
 type SB = any;
 
 export const STEP_UP_TTL_MS = 5 * 60 * 1000;
 // الرمز نفسه لا يُقبل مرتين لهذا المدير خلال نافذته (الخطوة الحالية وجارتاها = 90 ثانية)
 export const TOTP_REPLAY_MS = 90 * 1000;
-export const STEP_UP_PURPOSES = ['agent_key'];
+export const STEP_UP_PURPOSES = ['agent_key', 'write'];
+const SECOND = new Set(['passkey', 'totp']);
 export const STEP_UP_ACTIONS = ['step-up-options', 'step-up-verify', 'step-up-totp'];
+
+// صلاحية الكتابة الآن لهذه الجلسة: مصدر واحد لرد «me» ولحارس الكتابة، ويطابق requireWrite في leaders-api.
+// المراقب لا يكتب أبدًا، والمدير بجلسة رمز البريد يقرأ حتى يفعّل الكتابة بعامل ثانٍ (can_elevate)
+export function writeAccess(role: string, method: string) {
+  const writer = role === 'admin' || role === 'super_admin';
+  const second = SECOND.has(method);
+  return { can_write: writer && second, can_elevate: writer && !second, read_only_reason: !writer ? 'role' : second ? null : 'second_factor' };
+}
 
 export type StepUpSession = { userId: string; role: string; email: string; method: string; passkeyOnly: boolean };
 export type StepUpDeps = {
@@ -47,13 +59,31 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
   const log = async (ok: boolean, method: string, extra: Record<string, unknown> = {}) => {
     try { await sb.from('admin_audit_log').insert({ user_id: session.userId, user_email: session.email, action: 'step-up', meta: { purpose, method, ok, ip: d.ip || null, ...extra } }); } catch { /* best-effort */ }
   };
-  if (session.role !== 'super_admin') return out({ success: false, code: 'super_required', message: 'التحقق الإضافي للمدير الأعلى وحده' }, 403);
-  if (session.method !== 'passkey' && session.method !== 'totp') {
-    return out({ success: false, code: 'reauth_second_factor', message: 'هذه العملية تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة، سجّل خروجك وادخل بأحدهما' }, 403);
+  const write = purpose === 'write';
+  if (write) {
+    if (session.role !== 'admin' && session.role !== 'super_admin') return out({ success: false, code: 'forbidden', message: 'صلاحية المراقب للقراءة فقط' }, 403);
+    // جلسة بعامل ثانٍ تكتب أصلًا: لا تحقق ولا كتابة
+    if (SECOND.has(session.method)) return out({ success: true, already: true, method: session.method });
+  } else {
+    if (session.role !== 'super_admin') return out({ success: false, code: 'super_required', message: 'التحقق الإضافي للمدير الأعلى وحده' }, 403);
+    if (!SECOND.has(session.method)) {
+      return out({ success: false, code: 'reauth_second_factor', message: 'هذه العملية تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة، سجّل خروجك وادخل بأحدهما' }, 403);
+    }
+    if (!STEP_UP_PURPOSES.includes(purpose)) return out({ success: false, code: 'bad_purpose', message: 'غرض غير معروف' }, 400);
   }
-  if (!STEP_UP_PURPOSES.includes(purpose)) return out({ success: false, code: 'bad_purpose', message: 'غرض غير معروف' }, 400);
 
+  // فعّل الكتابة: الجلسة نفسها (بهاشها) تصير بالطريقة التي تحقق بها، ولحظة التحقق دخول حديث
+  const elevate = async (method: 'passkey' | 'totp', totpStep: bigint | null): Promise<Out> => {
+    const { data: rows, error: readErr } = await sb.from('api_sessions').select('meta').eq('token_hash', d.sessionHash).eq('kind', 'admin').limit(1);
+    if (readErr || !rows?.length) return out({ success: false, message: 'انتهت الجلسة، سجّل دخولك مجددًا' }, 401);
+    const meta = { ...(rows[0].meta || {}), method, auth_at: now, elevated_from: String(rows[0].meta?.method || session.method || ''), elevated_at: now };
+    const { error } = await sb.from('api_sessions').update({ meta }).eq('token_hash', d.sessionHash).eq('kind', 'admin');
+    if (error) throw new Error(`api_sessions: ${error.code}`);
+    await log(true, method, totpStep === null ? {} : { totp_step: Number(totpStep) });
+    return out({ success: true, method, elevated: true });
+  };
   const grant = async (method: 'passkey' | 'totp', totpStep: bigint | null = null): Promise<Out> => {
+    if (write) return await elevate(method, totpStep);
     const expires = new Date(now + STEP_UP_TTL_MS).toISOString();
     const { error } = await sb.from('admin_step_ups').insert({
       admin_id: session.userId, session_hash: d.sessionHash, purpose, method, totp_step: totpStep === null ? null : Number(totpStep), expires_at: expires,
@@ -118,7 +148,10 @@ export async function stepUp(action: string, body: Record<string, unknown>, sess
     if (step !== null) {
       const since = new Date(now - TOTP_REPLAY_MS).toISOString();
       const { data: used } = await sb.from('admin_step_ups').select('id').eq('admin_id', session.userId).eq('method', 'totp').eq('totp_step', Number(step)).gte('created_at', since).limit(1);
-      if (used?.length) {
+      // تفعيل الكتابة لا يكتب صفًا في admin_step_ups، فخطوته المقبولة في سجل التدقيق: الرمز نفسه لا يرفع جلسة ثانية ولا يؤكد مفتاحًا
+      const { data: raised } = await sb.from('admin_audit_log').select('meta').eq('user_id', session.userId).eq('action', 'step-up').gte('created_at', since).limit(50);
+      const reused = (raised || []).some((x: { meta?: Record<string, unknown> }) => x.meta?.ok === true && x.meta?.totp_step === Number(step));
+      if (used?.length || reused) {
         await sb.from('totp_attempts').insert({ email: session.email, success: false, ip: d.ip || null });
         await log(false, 'totp', { why: 'replay' });
         return out({ success: false, code: 'replay', message: 'استُعمل هذا الرمز للتو، انتظر الرمز التالي' }, 409);

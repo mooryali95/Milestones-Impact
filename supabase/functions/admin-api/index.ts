@@ -7,7 +7,7 @@ import {
 import { slackUse } from "../_shared/slack.ts";
 import { bdi, MAIL_FROM_DEFAULT, mailButton, mailCode, type MailKind, mailNote, mailRows, mailShell, mailText, plain, sendCounted } from "../_shared/mail.ts";
 import { SITES } from "../_shared/sites.js";
-import { STEP_UP_ACTIONS, stepUp } from "./step_up.ts";
+import { STEP_UP_ACTIONS, stepUp, writeAccess } from "./step_up.ts";
 
 // admin-api: دخول لوحة الإدارة وكل عملياتها.
 // النشر: supabase functions deploy admin-api
@@ -218,7 +218,8 @@ async function issueSession(sb: SB, user: Record<string, unknown>, email: string
     token,
     user: {
       id: user.id, name: user.name, role: user.role_id, email, totp_enabled: !!user.totp_enabled,
-      is_owner: !!user.is_owner, passkey_only: !!user.passkey_only,
+      // طريقة الدخول: اللوحة تعرف من أول رسم أن جلسة رمز البريد للقراءة، ثم يؤكدها «me»
+      is_owner: !!user.is_owner, passkey_only: !!user.passkey_only, method,
     },
   };
 }
@@ -470,7 +471,19 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
         genOptions: generateAuthenticationOptions, verifyAuth: verifyAuthenticationResponse, matchTotp: (sec, code) => totpMatch(sec, code),
         tooManyFails, saveChallenge, takeChallenge, challengeFlood, challengeOf, fromBytea,
       });
+      // تفعيل الكتابة في جلسة المالك كدخوله: يصله بريد أمني
+      if (r.status === 200 && r.body.elevated && session.isOwner) {
+        await securityMail(adminEmail, "تفعيل الكتابة في جلستك", [["الطريقة", METHOD_LABELS[String(r.body.method)] || String(r.body.method)], ["عنوان IP", clientCtx(req).ip || "غير معروف"]]);
+      }
       return json(r.body, r.status);
+    }
+
+    // ══ من أنا الآن: الدور وطريقة دخول الجلسة وصلاحية الكتابة كما يحكم بها الخادم، فلا تخمّن اللوحة من الدور وحده ══
+    if (action === "me") {
+      return json({
+        success: true, role, method: session.method || null, is_owner: session.isOwner, passkey_only: session.passkeyOnly,
+        ...writeAccess(role, session.method),
+      });
     }
 
     if (WRITE_ACTIONS.includes(action) && role !== "admin" && role !== "super_admin") {
@@ -478,7 +491,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
     }
     // كتابات هذه الدالة بعامل ثانٍ، كحارس الكتابة في leaders-api (requireWrite): جلسة رمز البريد للقراءة
     if (WRITE_ACTIONS.includes(action) && session.method !== "passkey" && session.method !== "totp") {
-      return json({ success: false, code: "reauth_second_factor", message: "هذه العملية تتطلب دخولًا بمفتاح مرور أو تطبيق مصادقة، سجّل خروجك وادخل بأحدهما" }, 403);
+      return json({ success: false, code: "reauth_second_factor", message: "هذه العملية تتطلب تأكيدًا بمفتاح مرور أو تطبيق مصادقة: اضغط «فعّل الكتابة» أعلى اللوحة" }, 403);
     }
 
     // ══ حراس أمان الحساب: حداثة الدخول، ومفتاح المرور ══
