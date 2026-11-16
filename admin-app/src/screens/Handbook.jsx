@@ -562,7 +562,7 @@ function Models({ catalog, reload, canWrite, open, onReview }) {
   });
 }
 
-// المعاينة: الكتاب الأصلي الكامل (الافتراضي) أو أي من الكتب الـ27 كما يصل مساره
+// المعاينة: الكتاب الأم كاملًا (الافتراضي) أو أي من الكتب الـ27 كما يصل مساره
 function Preview({ catalog, canWrite, open }) {
   const tracks = catalog.tracks || [];
   const [track, setTrack] = useState(MASTER);
@@ -599,7 +599,7 @@ function Preview({ catalog, canWrite, open }) {
     <>
       <div className="pv-bar">
         <label>الكتاب <select value={track} onChange={(e) => setTrack(e.target.value)}>
-          <option value={MASTER}>الكتاب الأصلي الكامل</option>
+          <option value={MASTER}>الكتاب الأم كاملًا</option>
           <optgroup label={`الكتب الـ${TRACK_COUNT} بحسب المسار`}>{tracks.map((t) => <option key={t.key} value={t.key}>{t.key} · {shortTitle(t.title_ar)}</option>)}</optgroup>
         </select></label>
         {!master && <label>نطاق العمل <select value={scope} onChange={(e) => setScope(e.target.value)}>
@@ -607,10 +607,11 @@ function Preview({ catalog, canWrite, open }) {
           {SCOPE_VIEW.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select></label>}
         {master
-          ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ{TRACK_COUNT}: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط</span>
+          ? <span className="la-muted">الأصل الذي تُبنى منه الكتب الـ{TRACK_COUNT}: كل الأبواب بكل مستوياتها ونطاقاتها، والفقرات الموسومة تصل من ذُكر فقط. أي تعديل فيه يصل الكتب الـ{TRACK_COUNT} كلها، فلا نسخة ثانية</span>
           : <span className="la-row">{DIMS.map((d) => <span key={d} className={`la-lvl ${r.levels[d]}`} title={DIM[d]}>{DIM_ROMAN[d]} {LVL[r.levels[d]]}</span>)}</span>}
         <span className="la-muted">{chaptersAr(chs.length)} · {modelsAr(r.models.length)} · الإجابات الصحيحة ظاهرة لك فقط</span>
         {master && <button className={`btn-sm ${cur.all ? '' : 'ghost'}`} onClick={() => setCur(cur.all ? {} : { all: true })}>{cur.all ? 'باب باب' : 'الكتاب متصلًا'}</button>}
+        {master && <a className="btn-sm ghost" href="#/leaders/book">افتحه في الكتاب الأم (المراجعة والتعليق)</a>}
       </div>
       <div className="pv">
         <nav className="pv-toc" aria-label="فهرس المعاينة">
