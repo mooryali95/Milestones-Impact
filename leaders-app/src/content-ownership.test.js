@@ -22,13 +22,17 @@ describe('قفل المحتوى المُقاس', () => {
     expect(lockedChanges('questions', { text_ar: 'جديد' }, null)[0].field).toBe('*');
     expect(removeLocked('questions')).toBe(true);
   });
-  it('الباب: الاختبار والمستوى والهوية مقفلة، والمتن والتأمل والعنوان تُحرَّر، ولا إنشاء ولا حذف', () => {
+  it('الباب: الاختبار والمستوى والهوية مقفلة، والمتن والتأمل بمقترح من الكتاب الأم، والعنوان يُحرَّر، ولا إنشاء ولا حذف', () => {
     const m = { id: 'h1', title_ar: 'المعلم', body_md: 'متن', quiz_md: 'س: ؟\n- *أ\n- ب', reflection_ar: 'تأمل', min_level: 'beginner', dimension: 'milestone', chapter_key: 'ch1' };
-    expect(lockedChanges('handbook_modules', { title_ar: 'جديد', body_md: 'متن آخر', reflection_ar: 'تأمل آخر' }, m)).toEqual([]);
+    expect(lockedChanges('handbook_modules', { title_ar: 'جديد' }, m)).toEqual([]);
+    expect(lockedChanges('handbook_modules', { title_ar: 'جديد', body_md: 'متن', reflection_ar: 'تأمل' }, m)).toEqual([]);
+    const live = lockedChanges('handbook_modules', { body_md: 'متن آخر', reflection_ar: 'تأمل آخر' }, m);
+    expect(live.map((x) => x.field)).toEqual(['body_md', 'reflection_ar']);
+    expect(live[0].msg).toMatch(/بمقترح/);
     expect(lockedChanges('handbook_modules', { quiz_md: `${m.quiz_md}\n` }, m)).toEqual([]);   // المسافات ليست تغييرًا
     expect(lockedChanges('handbook_modules', { quiz_md: 'س: آخر' }, m).map((x) => x.field)).toEqual(['quiz_md']);
     expect(lockedChanges('handbook_modules', { min_level: 'advanced' }, m).map((x) => x.field)).toEqual(['min_level']);
-    expect(lockedChanges('handbook_modules', { reflection_ar: '' }, { ...m, reflection_ar: null })).toEqual([]);
+    expect(lockedChanges('handbook_modules', { reflection_ar: '' }, { ...m, reflection_ar: null })).toEqual([]);   // الفارغ وnull سواء
     expect(lockedChanges('handbook_modules', { title_ar: 'باب' }, null)).toHaveLength(1);
     expect(removeLocked('handbook_modules')).toBe(true);
   });
@@ -92,7 +96,9 @@ describe('الخادم يطبّق القفل ويحفظ المصدر والقي�
     expect(read('admin-app/src/methodology.js')).toMatch(/Q_SAFE = Q_FIELDS\.filter\(\(f\) => CONTENT_LOCK\.questions\.editable\.includes\(f\.name\)\)/);
     const hb = read('admin-app/src/screens/Handbook.jsx');
     expect(hb).not.toMatch(/\+ باب جديد|entity: 'handbook_modules', id: m\.id/);
-    expect(hb).toMatch(/const row = \{ id: m\.id, title_ar: v\.title_ar\.trim\(\), body_md: v\.body_md, reflection_ar: v\.reflection_ar\.trim\(\) \|\| null \};/);
+    // العنوان وحده يُحفظ مباشرة، والمتن والتأمل مقترح (المرحلة 4، الخطوة 3)
+    expect(hb).toMatch(/L\('admin\.save', \{ entity: 'handbook_modules', row: \{ id: m\.id, title_ar: v\.title_ar\.trim\(\) \} \}\)/);
+    expect(hb).toMatch(/L\('admin\.book-proposal-edit', \{ module_id: m\.id, body_md: v\.body_md, reflection_ar: v\.reflection_ar, base_body_md: m\.body_md/);
     expect(CONTENT_LOCK.questions.editable).toEqual(['help_ar', 'sort']);
   });
 });

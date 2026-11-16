@@ -107,7 +107,7 @@ export default function SharedInitiative() {
         <div className="grow">
           <span className="book-eyebrow">وثيقة مبادرة · مشاركة خاصة</span>
           <h1>{m.initiative || 'وثيقة المبادرة'}</h1>
-          <p>شاركك <b>{data.owner}</b> وثيقة مبادرته{m.org?.name ? ` في ${m.org.name}` : ''}. الرابط خاص بك وصالح حتى {dateAr(data.expires_at.slice(0, 10))}.</p>
+          <p>شاركك <b>{data.owner}</b> وثيقة مبادرته{m.host ? `، وتُنفَّذ في ${m.host}` : ''}. الرابط خاص بك وصالح حتى {dateAr(data.expires_at.slice(0, 10))}.</p>
         </div>
         <div className="si-acts">
           {data.allow_download && <button type="button" className="btn gold" onClick={download} disabled={!report || !!pdf} aria-live="polite">{pdf || 'تحميل PDF'}</button>}

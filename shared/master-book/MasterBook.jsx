@@ -10,6 +10,8 @@ import { DIMENSIONS, LEVEL_AR } from '../../supabase/functions/leaders-api/label
 import { parseQuiz } from '../../supabase/functions/leaders-api/logic.js';
 import { bookSections, chapterVisible, markTiers, tierAr, tierVisible, BODY_MAX, QUOTE_MAX } from '../../supabase/functions/leaders-api/master-book.js';
 import { chapterDeps } from './deps.js';
+import { ProposalEditor, ProposalsSheet, useDialogFocus } from './Proposals.jsx';
+import { REFLECTION } from '../../supabase/functions/leaders-api/book-proposals.js';
 import './master-book.css';
 
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -98,6 +100,7 @@ function Comment({ c, viewer, onReply, onDelete, onStatus, reply = false }) {
 
 // ── لوحة التعليقات: سلاسل قسم واحد، ومحرر تعليق جديد أو رد ──
 function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
+  const dlg = useDialogFocus();
   const [text, setText] = useState('');
   const [quote, setQuote] = useState(target.quote || '');
   const [replyTo, setReplyTo] = useState(null);
@@ -118,7 +121,7 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
   const status = async (c, s) => { const r = await api.status(c.id, s); if (r?.success) onChanged(); else setErr(r?.message || 'تعذّر التحديث'); };
   return (
     <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="mb-sheet" role="dialog" aria-modal="true" aria-label="التعليقات">
+      <aside ref={dlg} tabIndex={-1} className="mb-sheet" role="dialog" aria-modal="true" aria-label="التعليقات">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h">
           <div><small>{chapter.title}</small><b>{target.section || 'الباب كله'}</b></div>
@@ -136,7 +139,7 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
             {err && <p className="mb-err" role="alert">{err}</p>}
             <div className="mb-row"><small className="mb-muted">يظهر تعليقك باسمك وصفتك للإدارة ولأعضاء اللجنتين</small><button type="button" className="mb-btn gold" disabled={busy || text.trim().length < 2} onClick={send}>{busy ? 'يُحفظ…' : replyTo ? 'أرسل الرد' : 'أضف التعليق'}</button></div>
           </footer>
-        ) : <footer className="mb-compose"><p className="mb-muted">حسابك للقراءة. التعليق يحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.</p></footer>}
+        ) : <footer className="mb-compose"><p className="mb-muted">{viewer.kind === 'expert' ? 'عضويتك في اللجنة موقوفة مؤقتًا: تقرأ الكتاب ولا تعلّق حتى تُفعَّل.' : 'حسابك للقراءة. التعليق يحتاج صلاحية الكتابة ودخولًا بمفتاح المرور أو تطبيق المصادقة.'}</p></footer>}
       </aside>
     </div>
   );
@@ -145,6 +148,7 @@ function Thread({ target, chapter, list, viewer, api, onChanged, onClose }) {
 // ── المشاركة مع الخبراء (للإدارة): المشاركة عضوية في لجنة، لا رابط منفصل يُرسل ──
 const COMM = [['content', 'لجنة المحتوى'], ['measurement', 'لجنة القياس']];
 function ShareSheet({ share, viewer, api, onChanged, onExperts, onClose }) {
+  const dlg = useDialogFocus();
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
@@ -163,7 +167,7 @@ function ShareSheet({ share, viewer, api, onChanged, onExperts, onClose }) {
   const cands = share.candidates.filter((x) => !needle || `${x.name} ${x.title}`.includes(needle));
   return (
     <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="مشاركة الكتاب الأم مع الخبراء">
+      <aside ref={dlg} tabIndex={-1} className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="مشاركة الكتاب الأم مع الخبراء">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h"><div><small>الكتاب الأم</small><b>المشاركة مع الخبراء</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
         <div className="mb-sheet-body">
@@ -204,6 +208,7 @@ function ShareSheet({ share, viewer, api, onChanged, onExperts, onClose }) {
 
 // ── ما يعتمد على هذا (للإدارة، المرحلة 3): حجم أي تعديل قبل طلبه ──
 function DepsSheet({ target, chapter, data, onClose }) {
+  const dlg = useDialogFocus();
   const d = chapterDeps({ chapter, section: target.section, deps: data.deps, counts: data.counts });
   useEffect(() => { const k = (e) => e.key === 'Escape' && onClose(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, [onClose]);
   const row = (label, n, body = null, warn = false) => (
@@ -215,7 +220,7 @@ function DepsSheet({ target, chapter, data, onClose }) {
   const whole = !target.section;
   return (
     <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="ما يعتمد على هذا">
+      <aside ref={dlg} tabIndex={-1} className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="ما يعتمد على هذا">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h"><div><small>{chapter.title}</small><b>{whole ? 'ما يعتمد على هذا الباب' : `ما يعتمد على قسم «${target.section}»`}</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
         <div className="mb-sheet-body">
@@ -238,6 +243,7 @@ function DepsSheet({ target, chapter, data, onClose }) {
 
 // ── كل التعليقات: تصفية بالحالة والإطار والمعلّق، والنقر يفتح موضعها ──
 function AllComments({ data, onGo, onClose }) {
+  const dlg = useDialogFocus();
   const [st, setSt] = useState('open');
   const [dim, setDim] = useState('');
   const [who, setWho] = useState('');
@@ -246,7 +252,7 @@ function AllComments({ data, onGo, onClose }) {
   const list = data.comments.filter((c) => (!st || c.status === st) && (!dim || chap[c.module_id]?.dimension === dim) && (!who || c.author_ref === who));
   return (
     <div className="mb-sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="كل التعليقات">
+      <aside ref={dlg} tabIndex={-1} className="mb-sheet tall" role="dialog" aria-modal="true" aria-label="كل التعليقات">
         <span className="mb-grip" aria-hidden="true" />
         <header className="mb-sheet-h"><div><small>الكتاب الأم</small><b>كل التعليقات</b></div><button type="button" className="mb-x" onClick={onClose} aria-label="إغلاق">×</button></header>
         <div className="mb-filters">
@@ -341,7 +347,7 @@ function QuizReview({ md }) {
 }
 
 // ── صفحة الباب ──
-function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, flip }) {
+function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, onProposals, flip }) {
   const sections = useMemo(() => bookSections(ch.md), [ch.md]);
   const img = chapterImage(ch.id);
   const part = PARTS.find((p) => p.key === ch.dimension);
@@ -381,14 +387,27 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, flip }) {
           if (!parts.length && level !== 'all') return null;
           return (
             <section key={si} id={anchor(s.key)} className="mb-sec" data-section={s.key}>
-              {s.title && data.viewer.kind === 'admin' && !ch.draft && chapterDeps({ chapter: ch, section: s.key, deps: data.deps, counts: data.counts }).refs.length > 0 && (
-                <button type="button" className="mb-sec-ref" onClick={() => onDeps({ section: s.key })} title="أقسام تحيل إليها وثيقة المبادرة">↳ إحالة</button>
-              )}
               {s.title && (
-                <button type="button" className={`mb-sec-c${k ? ' has' : ''}`} onClick={() => onThread({ section: s.key })} aria-label={`تعليقات القسم: ${s.key}`}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
-                  {k ? <b>{k}</b> : <span>علّق</span>}
-                </button>
+                <div className="mb-sec-tools">
+                  {data.viewer.kind === 'admin' && !ch.draft && chapterDeps({ chapter: ch, section: s.key, deps: data.deps, counts: data.counts }).refs.length > 0 && (
+                    <button type="button" className="mb-sec-ref" onClick={() => onDeps({ section: s.key })} title="أقسام تحيل إليها وثيقة المبادرة">↳ إحالة</button>
+                  )}
+                  {!ch.draft && (() => {
+                    const all = (data.proposals || []).filter((p) => p.module_id === ch.id && p.section === s.key && ['draft', 'review', 'approved'].includes(p.status));
+                    if (!all.length && !data.viewer.propose) return null;
+                    const r = data.proposal_counts?.bySection?.[`${ch.id}|${s.key}`] || 0;
+                    return (
+                      <button type="button" className={`mb-sec-p${all.length ? ' has' : ''}`} onClick={() => onProposals({ section: s.key })} aria-label={`مقترحات تعديل القسم: ${s.key}`}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+                        {all.length ? <b>{r || all.length}</b> : <span>اقترح</span>}
+                      </button>
+                    );
+                  })()}
+                  <button type="button" className={`mb-sec-c${k ? ' has' : ''}`} onClick={() => onThread({ section: s.key })} aria-label={`تعليقات القسم: ${s.key}`}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+                    {k ? <b>{k}</b> : <span>علّق</span>}
+                  </button>
+                </div>
               )}
               {parts.map((p, pi) => (p.tier
                 ? <div key={pi} className="mb-tier"><span className="mb-tier-l">{tierAr(p.tier)}</span><div dangerouslySetInnerHTML={{ __html: mdHtml(p.md) }} /></div>
@@ -397,7 +416,9 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, flip }) {
           );
         })}
       </div>
-      {ch.reflection && <div className="mb-reflect"><small>تأمل</small><p>{ch.reflection}</p></div>}
+      {ch.reflection && <div className="mb-reflect"><small>تأمل</small><p>{ch.reflection}</p>
+        {!ch.draft && (data.viewer.propose || (data.proposals || []).some((p) => p.module_id === ch.id && p.section === REFLECTION && ['draft', 'review', 'approved'].includes(p.status)))
+          && <button type="button" className="mb-sec-p mb-reflect-p" onClick={() => onProposals({ section: REFLECTION })}>✎ اقترح تعديل السؤال</button>}</div>}
       <QuizReview md={ch.quiz_md} />
       <button type="button" className="mb-btn ghost wide" onClick={() => onThread({ section: '' })}>تعليق على الباب كله{(data.counts.bySection[`${ch.id}|`] || 0) ? ` (${data.counts.bySection[`${ch.id}|`]})` : ''}</button>
       <p className="mb-colophon">الباب {idx + 1} من {data.chapters.length}{ch.updated_at ? ` · آخر تعديل ${dateAr(ch.updated_at)}` : ''}</p>
@@ -405,7 +426,7 @@ function Chapter({ ch, idx, partIdx, level, data, onThread, onDeps, flip }) {
   );
 }
 
-/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
+/** @param {{ api: { get: () => Promise<any>, add: (b: any) => Promise<any>, del: (id: string) => Promise<any>, status: (id: string, s: string) => Promise<any>, reader?: (id: string, c: string, on: boolean) => Promise<any>, propose?: (b: any) => Promise<any>, move?: (id: string, to: string, note?: string, seen?: string) => Promise<any> }, onClose?: () => void, onExperts?: () => void, place?: string }} props */
 export default function MasterBook({ api, onClose, onExperts, place = 'admin' }) {
   const saved = store.get(KEY) || {};
   const [data, setData] = useState(null);
@@ -416,10 +437,13 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const [all, setAll] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [depsOf, setDepsOf] = useState(null);
+  const [propsOf, setPropsOf] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [thread, setThread] = useState(null);
   const [opening, setOpening] = useState(false);
   const [flip, setFlip] = useState(null);
   const [sel, setSel] = useState(null);
+  const selGone = useRef(null);
   const [progress, setProgress] = useState(0);
   const reader = useRef(null);
   const root = useRef(null);
@@ -448,7 +472,10 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
       const t = s && !s.isCollapsed ? s.toString().replace(/\s+/g, ' ').trim() : '';
       const node = s?.anchorNode && (s.anchorNode.nodeType === 1 ? s.anchorNode : s.anchorNode.parentElement);
       const sec = node?.closest?.('.mb-sec');
-      setSel(t.length >= 3 && sec ? { quote: t.slice(0, QUOTE_MAX), section: sec.dataset.section || '' } : null);
+      // على الهاتف تلغي لمسة الزر التحديد قبل أن تصله، فيبقى الزر لحظة بعد زوال التحديد
+      clearTimeout(selGone.current);
+      if (t.length >= 3 && sec) setSel({ quote: t.slice(0, QUOTE_MAX), section: sec.dataset.section || '' });
+      else selGone.current = setTimeout(() => setSel(null), 1500);
     };
     sc?.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('selectionchange', onSel);
@@ -500,6 +527,8 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   if (!data.success) return <div className="mb-root" ref={root}><div className="mb-loading"><p className="mb-err" role="alert">{data.message || 'تعذّر فتح الكتاب'}</p>{onClose && <button type="button" className="mb-btn" onClick={onClose}>رجوع</button>}</div></div>;
 
   const total = data.counts.total;
+  const review = data.proposal_counts?.review || 0;
+  const showProposals = data.proposals_ready && (data.viewer.propose || (data.proposals || []).length > 0);
   return (
     <div className={`mb-root place-${place}`} ref={root}>
       <style>{COVER_CSS}</style>
@@ -524,6 +553,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
               <div className="mb-actions">
                 <button type="button" className="mb-btn gold" onClick={open}>{saved.idx ? 'تابع القراءة' : 'افتح الكتاب'}</button>
                 <button type="button" className="mb-btn line" onClick={() => setAll(true)}>التعليقات{total ? ` (${total})` : ''}</button>
+                {showProposals && <button type="button" className="mb-btn line" onClick={() => setPropsOf({})}>المقترحات{review ? ` (${review})` : ''}</button>}
                 <button type="button" className="mb-btn line" onClick={exportPdf}>نسخة PDF</button>
                 {data.share && api.reader && <button type="button" className="mb-btn line" onClick={() => setSharing(true)}>شارك مع الخبراء{data.share.readers.length ? ` (${data.share.readers.length})` : ''}</button>}
               </div>
@@ -556,13 +586,18 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
           <div className="mb-levels" role="radiogroup" aria-label="اعرض الكتاب كما يراه مستوى">
             {LEVELS.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={level === k ? 'on' : ''} onClick={() => setLevel(k)}>{l}</button>)}
           </div>
-          <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} flip={flip} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} />
+          <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} flip={flip} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} onProposals={(t) => {
+            // قسم بلا مقترحات: يفتح المحرر مباشرة لمن يقترح، وإلا قائمة مقترحات القسم
+            const has = (data.proposals || []).some((p) => p.module_id === ch.id && p.section === t.section && ['draft', 'review', 'approved'].includes(p.status));
+            if (!has && data.viewer.propose && api.propose) setEditing({ chapter: ch, section: t.section, proposal: null });
+            else setPropsOf({ chapter: ch, section: t.section });
+          }} />
           <nav className="mb-pager" aria-label="التنقل بين الأبواب">
             <button type="button" disabled={idx === 0} onClick={() => step(-1)}><small>السابق</small><b>{data.chapters[idx - 1]?.title || '·'}</b></button>
             <button type="button" disabled={idx === data.chapters.length - 1} onClick={() => step(1)}><small>التالي</small><b>{data.chapters[idx + 1]?.title || '·'}</b></button>
           </nav>
           {sel && data.viewer.write && !thread && (
-            <button type="button" className="mb-selbtn" onMouseDown={(e) => e.preventDefault()} onClick={() => { setThread({ section: sel.section, quote: sel.quote }); getSelection?.()?.removeAllRanges(); setSel(null); }}>
+            <button type="button" className="mb-selbtn" onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { clearTimeout(selGone.current); setThread({ section: sel.section, quote: sel.quote }); getSelection?.()?.removeAllRanges(); setSel(null); }}>
               ✎ علّق على النص المحدد
             </button>
           )}
@@ -572,6 +607,11 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
       {all && <AllComments data={data} onGo={(c) => { const at = data.chapters.findIndex((x) => x.id === c.module_id); setAll(false); go(at, c.section || null); setThread({ section: c.section || '' }); }} onClose={() => setAll(false)} />}
       {depsOf && ch && <DepsSheet target={depsOf} chapter={ch} data={data} onClose={() => setDepsOf(null)} />}
       {sharing && data.share && <ShareSheet share={data.share} viewer={data.viewer} api={api} onChanged={load} onExperts={onExperts} onClose={() => setSharing(false)} />}
+      {propsOf && <ProposalsSheet data={data} api={api} scope={propsOf.chapter ? propsOf : null} onChanged={load} onClose={() => setPropsOf(null)} inactive={!!editing}
+        onGo={(p) => { const at = data.chapters.findIndex((x) => x.id === p.module_id); setPropsOf(null); go(at, p.section || null); }}
+        onEdit={(p, sc) => { const c = data.chapters.find((x) => x.id === (p ? p.module_id : sc.chapter.id)); setEditing({ chapter: c, section: p ? p.section : sc.section, proposal: p }); }} />}
+      {editing && <ProposalEditor chapter={editing.chapter} section={editing.section} proposal={editing.proposal} data={data} api={api}
+        onSaved={() => { setEditing(null); load(); }} onClose={() => setEditing(null)} />}
       {thread && ch && <Thread target={thread} chapter={ch} list={threadList} viewer={data.viewer} api={api} onChanged={load} onClose={() => setThread(null)} />}
     </div>
   );

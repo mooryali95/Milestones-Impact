@@ -9,6 +9,8 @@ import { session } from '../api.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from '../../../supabase/functions/leaders-api/domains.js';
 import { useEscape, useUI } from '../ui.jsx';
 import { CertOverride, Field } from '../cert.jsx';
+import { orgProgram, orgProgramLine } from '../../../supabase/functions/leaders-api/logic.js';
+import '../cohort-editor.css';
 
 export const SWATCHES = ['#12414E', '#0B272F', '#A97A2E', '#2E7D5B', '#1F5FA8', '#7A3E9D', '#A8322D', '#B26B00', '#4A6A72', '#00897B'];
 const HEX = /^#[0-9A-Fa-f]{6}$/;
@@ -187,13 +189,18 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
   const [programs, setPrograms] = useState([]);
   const [plan, setPlan] = useState({ cohort: true, program_id: '', starts_on: '' });
   const [orgCohorts, setOrgCohorts] = useState([]);
+  // برنامج الجهة للقراءة (P4): مشتق من دفعاتها بترتيب pickCohort (orgProgram)، ويُحرَّر من ملف الدفعة وحده
+  const [orgProg, setOrgProg] = useState(null);
   useEffect(() => {
     L('admin.programs').then((r) => {
       if (!r.success) return;
       const live = (r.programs || []).filter((p) => !p.archived_at);
       setPrograms(live);
       setPlan((x) => ({ ...x, program_id: x.program_id || live.find((p) => p.is_default)?.id || live[0]?.id || '' }));
-      if (org?.id) setOrgCohorts((r.cohorts || []).filter((c) => c.organization_id === org.id));
+      if (org?.id) {
+        setOrgCohorts((r.cohorts || []).filter((c) => c.organization_id === org.id));
+        setOrgProg(orgProgram(r.cohorts || [], r.programs || [], org.id));
+      }
     });
   }, [org?.id]);
   const [showNotes, setShowNotes] = useState(!!initial.notes);
@@ -216,10 +223,18 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
   const keepAccount = !!coordinator && !isSuperAdminUser(me);
 
   const close = async (saved) => {
-    if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق' }))) return;
+    if (!saved && dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق دون حفظ' }))) return;
     onClose(saved);
   };
   useEscape(() => close(false));
+  // الانتقال إلى ملف الدفعة يغلق النموذج، فيُسأل قبله إن كان فيه تعديل كأي إغلاق
+  const goCohort = async (e) => {
+    e.preventDefault();
+    const to = e.currentTarget.getAttribute('href');
+    if (dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق دون حفظ' }))) return;
+    onClose(false);
+    window.location.hash = to;
+  };
 
   const save = async (e, patch) => {
     e?.preventDefault();
@@ -329,11 +344,15 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
 
           <section className="of-sec">
             <h4>البرنامج والدفعة</h4>
-            {org ? (
+            {org ? (<>
+              {orgProg && (
+                <p className="of-program" aria-label="برنامج الجهة"><b>برنامج الجهة:</b> «{orgProg.program_name}» <small className="la-muted">{orgProgramLine(orgProg)} يُغيَّر من ملف الدفعة، ودفعة الجهة الجديدة تُقترح عليه.</small>{' '}
+                  <a className="la-link" href={`#/leaders/programs/${encodeURIComponent(orgProg.cohort_id)}`} onClick={goCohort}>افتح ملف الدفعة</a></p>
+              )}
               <p className="la-muted small">{orgCohorts.length
                 ? `دفعات الجهة: ${orgCohorts.map((c) => c.name).join('، ')}. الرحلة والحضور والمستشار والجدول تُضبط من «ملف الدفعة» (صفحة الجهة ← الرحلة والدفعة).`
                 : 'لا دفعة للجهة بعد، فمشاركوها في الدفعة المفتوحة. أنشئها من صفحة الجهة ← «أنشئ دفعة لهذه الجهة».'}</p>
-            ) : (
+            </>) : (
               <div className="of-grid">
                 <Field label="البرنامج" hint="يعرّف الرحلة: المراحل والمتطلبات">
                   <select value={plan.program_id} onChange={(e) => setPlan({ ...plan, program_id: e.target.value })}>

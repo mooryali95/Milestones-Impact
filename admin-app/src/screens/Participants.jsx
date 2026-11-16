@@ -175,6 +175,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   // تغيير الحالة والإلحاق بدفعة للمحددين: الإجراءان نفساهما اللذان في ملف المشارك (admin.status و admin.cohort-enroll)، بطلب واحد
   const [statusTo, setStatusTo] = useState('');
   const [cohortTo, setCohortTo] = useState('');
+  const [enrolling, setEnrolling] = useState(false);
   const [cohorts, setCohorts] = useState([]);
   useEffect(() => { if (canWrite) L('admin.programs', {}).then((x) => setCohorts(x.success ? (x.cohorts || []).filter((c) => !c.is_default && c.status !== 'closed') : [])); }, [canWrite]);
   const bulkStatus = async () => {
@@ -193,12 +194,16 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     setPicked(new Set()); setStatusTo(''); load(serverQ);
   };
   const bulkEnroll = async () => {
+    if (enrolling) return;
     const c = cohorts.find((x) => x.id === cohortTo);
     if (!c) return toast('اختر الدفعة');
+    if (picked.size > BULK_MAX) return toast(`الحد ${BULK_MAX} مشاركًا في المرة الواحدة`);
     if (!(await confirm(`نقل ${picked.size} مشارك إلى دفعة «${c.name}»؟ لا حاجة لهذا لمن انضم برابط جهة الدفعة: يدخلها تلقائيًا. من كان ملحقًا يدويًا بدفعة أخرى يُسحب منها.`))) return;
-    const r = await enrollCohort({ cohort_id: c.id, participant_ids: [...picked] }, confirm);
+    setEnrolling(true);
+    const r = await enrollCohort({ cohort_id: c.id, participant_ids: [...picked] }, confirm).finally(() => setEnrolling(false));
     toast(r.success ? `نُقل ${r.enrolled} مشارك إلى دفعة «${c.name}»` : r.message);
-    if (r.success) { setPicked(new Set()); setCohortTo(''); }
+    // القائمة تُقرأ من جديد، فيظهر عمود الدفعة والتصدير بالدفعة الجديدة
+    if (r.success) { setPicked(new Set()); setCohortTo(''); load(serverQ); }
   };
   const exportCols = [
     { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email },
@@ -258,7 +263,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
             <select className="filter-select" aria-label="نقل المحددين إلى دفعة أخرى (استثناء)" title="المشارك يدخل دفعة جهته تلقائيًا. هذا للاستثناء: فرد في دفعة جهة، أو نقل بين دفعتين" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
               <option value="">نقل إلى دفعة أخرى (استثناء)…</option>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo}>انقلهم</button>
+            <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo || enrolling}>{enrolling ? "يُنقل…" : "انقلهم"}</button>
           </>}
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
           {pickedStuck > 0 && <button className="btn-sm ghost" onClick={remind} title="بريد يسمّي لكل واحد ما بقي عليه: ملفه، أو القياس وكم أجاب منه">ذكّر من لم يكمل ({pickedStuck})</button>}

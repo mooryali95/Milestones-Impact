@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261115230000_leaders_agent_admin
+-- as-of migration: 20261116000000_leaders_book_proposals
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -239,6 +239,31 @@ create table if not exists leaders.book_comments (
   constraint book_comments_status_check CHECK ((status = ANY (ARRAY['open'::text, 'resolved'::text]))),
   constraint book_comments_target CHECK ((num_nonnulls(module_id, draft_key) = 1)),
   constraint book_comments_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.book_proposals (
+  id uuid default gen_random_uuid() not null,
+  module_id uuid not null,
+  section text default ''::text not null,
+  section_id text,
+  base_md text default ''::text not null,
+  proposed_md text not null,
+  reason text not null,
+  status text default 'draft'::text not null,
+  author_ref text not null,
+  author_name text default ''::text not null,
+  decided_by text,
+  decided_at timestamp with time zone,
+  decision_note text default ''::text not null,
+  release_version text,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint book_proposals_decision_note_check CHECK ((char_length(decision_note) <= 2000)),
+  constraint book_proposals_proposed_md_check CHECK (((char_length(proposed_md) >= 1) AND (char_length(proposed_md) <= 20000))),
+  constraint book_proposals_reason_check CHECK (((char_length(reason) >= 10) AND (char_length(reason) <= 2000))),
+  constraint book_proposals_section_check CHECK ((char_length(section) <= 200)),
+  constraint book_proposals_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'review'::text, 'approved'::text, 'rejected'::text, 'withdrawn'::text, 'released'::text]))),
+  constraint book_proposals_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.capstone_share_notes (
@@ -2381,6 +2406,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.book_proposals add constraint book_proposals_module_id_fkey FOREIGN KEY (module_id) REFERENCES leaders.handbook_modules(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.capstone_share_notes add constraint capstone_share_notes_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3034,6 +3063,10 @@ CREATE INDEX IF NOT EXISTS book_comments_module_idx ON leaders.book_comments USI
 
 CREATE INDEX IF NOT EXISTS book_comments_parent_idx ON leaders.book_comments USING btree (parent_id);
 
+CREATE INDEX IF NOT EXISTS book_proposals_module_idx ON leaders.book_proposals USING btree (module_id, status);
+
+CREATE INDEX IF NOT EXISTS book_proposals_status_idx ON leaders.book_proposals USING btree (status, updated_at DESC);
+
 CREATE INDEX IF NOT EXISTS capstone_share_notes_owner ON leaders.capstone_share_notes USING btree (participant_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS capstone_share_notes_share ON leaders.capstone_share_notes USING btree (share_id, created_at DESC);
@@ -3347,6 +3380,8 @@ alter table leaders.audit_log enable row level security;
 alter table leaders.auth_sessions enable row level security;
 
 alter table leaders.book_comments enable row level security;
+
+alter table leaders.book_proposals enable row level security;
 
 alter table leaders.capstone_share_notes enable row level security;
 

@@ -87,9 +87,10 @@ export function CohortSchedule({ cohort, onClose }) {
   const [busy, setBusy] = useState(false);
   useEscape(() => onClose());   // كبقية النوافذ: Esc يغلقها
   useEffect(() => {
-    Promise.all([L('admin.program', { id: cohort.program_id }), L('admin.milestones', { program_id: cohort.program_id })])
-      .then(([p, m]) => setD({ stages: (p.stages || []).filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort), ms: (m.milestones || []).filter((x) => x.active) }));
-  }, [cohort.program_id]);
+    // المراحل من تعريف الدفعة (admin.cohort-definition): نسختها المثبتة أو برنامجها الحي، وهي التي يحفظ بها الخادم الجدول
+    Promise.all([L('admin.cohort-definition', { cohort_id: cohort.id }), L('admin.milestones', { program_id: cohort.program_id })])
+      .then(([p, m]) => setD(p.success === false ? { error: p.message } : { stages: (p.stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), version: p.version || null, ms: (m.milestones || []).filter((x) => x.active) }));
+  }, [cohort.id, cohort.program_id]);
   const put = (k, f, v) => setSch({ ...sch, [k]: { ...(sch[k] || {}), [f]: v || undefined } });
   const save = async (extra) => {
     setBusy(true);
@@ -97,7 +98,8 @@ export function CohortSchedule({ cohort, onClose }) {
     setBusy(false);
     if (!r.success) return toast(r.message);
     setSch(r.cohort.schedule || {});
-    toast(extra.distribute ? 'وُزِّعت المراحل على مدة الدفعة؛ عدّل ما تشاء ثم احفظ' : 'حُفظ الجدول');
+    // ما لم يُحفظ لأنه ليس من مراحل الدفعة يُقال، لا يُسقط بصمت
+    toast(extra.distribute ? 'وُزِّعت المراحل على مدة الدفعة؛ عدّل ما تشاء ثم احفظ' : r.schedule_dropped || 'حُفظ الجدول');
     if (!extra.distribute) onClose(true);
   };
   return (
@@ -105,7 +107,8 @@ export function CohortSchedule({ cohort, onClose }) {
       <div className="la-form mi-form wide" role="dialog" aria-modal="true" aria-label="جدول الدفعة">
         <h3>جدول «{cohort.name}»</h3>
         <p className="la-muted">{cohort.starts_on && cohort.ends_on ? `من ${day(cohort.starts_on)} إلى ${day(cohort.ends_on)}. ` : 'حدد بداية الدفعة ونهايتها من «تحرير» لتوزيع آلي. '}ضع تاريخي كل مرحلة، أو وزّعها آليًا على المدة ثم عدّل.</p>
-        {!d ? <Spinner /> : (
+        {d && !d.error && <p className="la-muted">{d.version ? `مراحل النسخة ${d.version.number} المثبتة للدفعة (${d.version.label}).` : 'مراحل البرنامج كما هو الآن، فالدفعة تتبع آخر تعديل عليه.'}</p>}
+        {!d ? <Spinner /> : d.error ? <div className="la-err" role="alert">{d.error}</div> : (
           <>
             <div className="table-wrap"><table className="data-table">
               <thead><tr><th>المرحلة</th><th>تبدأ</th><th>تنتهي</th><th>المعالم</th></tr></thead>

@@ -58,6 +58,7 @@ import * as VS from './visibility.ts';
 import * as MC from './mail-center.ts';
 import * as AG from './agent-admin.ts';
 import * as MB from './master-book.ts';
+import * as BP from './book-proposals.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -466,6 +467,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.book-comment': (a, b) => A.writer(a, (x, y) => MB.addComment(MB.adminViewer(x), y), b),
   'admin.book-comment-delete': (a, b) => A.writer(a, (x, y) => MB.deleteComment(MB.adminViewer(x), y), b),
   'admin.book-comment-status': (a, b) => A.writer(a, (x, y) => MB.setStatus(MB.adminViewer(x), y), b),
+  'admin.book-proposal-save': (a, b) => A.writer(a, (x, y) => BP.saveProposal(MB.adminViewer(x), y), b),
+  'admin.book-proposal-status': (a, b) => A.writer(a, (x, y) => BP.moveProposal(MB.adminViewer(x), y), b),
+  'admin.book-proposal-edit': (a, b) => A.writer(a, (x, y) => BP.proposeFromEdit(MB.adminViewer(x), y), b),
   // مشاركة الكتاب: إضافة خبير إلى لجنة المحتوى أو القياس أو إزالته (العضوية نفسها في ملفه)
   'admin.book-reader': (a, b) => A.writer(a, MB.setReader, b),
   'admin.track': (_a, b) => A.track(b),
@@ -543,6 +547,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.expert-request-retry': E.adminRetryRequest,
   'admin.expert-request-complete': E.adminCompleteRequest,
   'admin.program': (_a, b) => G.program(b),
+  // تعريف الدفعة لنوافذها (P5): المحرر والجدول يقرآن المراحل والمتطلبات من نسختها المثبتة أو برنامجها الحي
+  'admin.cohort-definition': (_a, b) => G.cohortDefinitionFor(b),
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
   'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),
   'admin.program-version': (a, b) => A.writer(a, G.programPublish, b),

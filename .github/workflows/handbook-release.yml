@@ -1,0 +1,115 @@
+name: Handbook release (approved proposals)
+
+# إصدار الكتاب من مقترحات الكتاب الأم المعتمدة (المرحلة 4، الخطوة 2، اعتمدها المالك 2026-11-15).
+# يُشغَّل يدويًا بقرار المالك: يقرأ المقترحات المعتمدة من الإنتاج قراءة فقط (SUPABASE_ACCESS_TOKEN)، ويبني الإصدار
+# التالي بـ scripts/handbook/release.mjs (الأبواب، وهويات الأقسام، والترحيل، وتقرير الأثر IMPACT.md، وPROPOSALS.md،
+# وترحيل تعليم المقترحات released)، ويفحصه، ويعيد بناء التطبيقين، ثم يفتح طلب دمج ويشغّل عليه CI.
+# لا يكتب في القاعدة ولا في main: بعد مراجعة الطلب ودمجه يطبق المالك الترحيلين بسير migrate.
+# dry_run: يطبع ما سيدخل الإصدار وما يُتخطى، ولا يكتب شيئًا.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to:
+        description: 'اسم الإصدار الجديد (مثل v3.2). فارغ = التالي تلقائيًا'
+        required: false
+        type: string
+      dry_run:
+        description: 'معاينة فقط: ما سيدخل وما يُتخطى، بلا فرع ولا طلب'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: handbook-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      TO: ${{ inputs.to }}
+      DRY: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: ./.github/actions/node-deps
+
+      - name: Build the release from approved proposals
+        id: rel
+        run: |
+          args="--live"
+          [ -n "$TO" ] && args="$args --to=$TO"
+          [ "$DRY" = "true" ] && args="$args --dry"
+          # السجل يصل ملخص التشغيل ولو فشل البناء (كل المقترحات متخطاة مثلًا)، فيُعرف السبب من صفحة التشغيل
+          rc=0
+          RELEASE_SUMMARY="$RUNNER_TEMP/release.json" node scripts/handbook/release.mjs $args > "$RUNNER_TEMP/release.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/release.log"
+          cat "$RUNNER_TEMP/release.log" >> "$GITHUB_STEP_SUMMARY"
+          [ "$rc" = "0" ] || exit "$rc"
+          if [ -f "$RUNNER_TEMP/release.json" ]; then
+            echo "to=$(node -p "require('$RUNNER_TEMP/release.json').to")" >> "$GITHUB_OUTPUT"
+            echo "applied=$(node -p "require('$RUNNER_TEMP/release.json').applied")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the release like CI does
+        if: inputs.dry_run != true && steps.rel.outputs.applied != '0'
+        run: |
+          node scripts/handbook/sections.mjs --check
+          node scripts/handbook/build-version.mjs --check
+          node scripts/db/migrations-list.mjs --check
+          node scripts/db/snapshot.mjs --from-migrations --check
+          npx vitest run
+
+      - name: Rebuild the apps from the new source
+        if: inputs.dry_run != true && steps.rel.outputs.applied != '0'
+        run: npm run leaders:build && npm run admin:build
+
+      - name: Open the release pull request
+        if: inputs.dry_run != true && steps.rel.outputs.applied != '0'
+        env:
+          VER: ${{ steps.rel.outputs.to }}
+        run: |
+          branch="handbook/release-${VER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A
+          git commit -q -m "كتاب القائد ${VER}: المقترحات المعتمدة من الكتاب الأم (release.mjs)"
+          git push -u origin "$branch"
+          {
+            echo "## كتاب القائد ${VER} من مقترحات الكتاب الأم المعتمدة"
+            echo
+            echo "مولَّد بسير «Handbook release» (\`scripts/handbook/release.mjs\`). راجع \`supabase/content/handbook/${VER}/PROPOSALS.md\` (ما دخل ولماذا ومن كتبه واعتمده، وما تُخطّي) و\`IMPACT.md\` (الأثر)."
+            echo
+            echo "### يمس"
+            echo "- \`supabase/content/handbook/${VER}/\` (إصدار جديد)، و\`sections.json\` و\`sections.lock\` و\`handbook-section-ids.js\`"
+            echo "- ترحيلان جديدان (tolerant): $(node -p "require('$RUNNER_TEMP/release.json').migrations.join(' و')")"
+            echo "- \`migrations.js\` و\`baseline.sql\`، و\`leaders/\` و\`admin/\` معاد بناؤهما"
+            echo
+            echo "### بعد الدمج"
+            echo "يطبق المالك الترحيلين بالترتيب بسير migrate، فيتغير نص الكتاب للمشاركين وتُعلَّم المقترحات «في إصدار»."
+            echo
+            echo '```'
+            # نص المقترحات من كتّابها: لا يكسر الإطار (```)، ولا ينبّه حسابًا على GitHub (@)، ولا يتجاوز حد الطلب
+            node -e "const s=require('fs').readFileSync(process.argv[1],'utf8').replace(/\`\`\`/g,'ˋˋˋ').replace(/@/g,'@\u200b');process.stdout.write(s.length>60000?s.slice(0,60000)+'\n… (اقتُطع، والكامل في PROPOSALS.md)':s)" "$RUNNER_TEMP/release.log"
+            echo
+            echo '```'
+          } > "$RUNNER_TEMP/body.md"
+          if ! url=$(gh pr create --base main --head "$branch" --title "كتاب القائد ${VER}: المقترحات المعتمدة من الكتاب الأم" --body-file "$RUNNER_TEMP/body.md"); then
+            echo "::error::دُفع الفرع ${branch} وتعذّر فتح الطلب آليًا (فعّل «Allow GitHub Actions to create and approve pull requests» في إعدادات Actions، أو افتحه يدويًا)."
+            echo "افتح الطلب يدويًا: https://github.com/${{ github.repository }}/compare/main...${branch}" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "طلب الإصدار: $url" >> "$GITHUB_STEP_SUMMARY"
+          # طلب يفتحه GITHUB_TOKEN لا يشغّل CI بنفسه، فيُشغَّل على فرعه صراحة (workflow_dispatch مستثنى من ذلك القيد)
+          gh workflow run ci.yml --ref "$branch"

@@ -436,7 +436,7 @@ export async function adminJourney(a: Admin, b: Body) {
   await audit('admin', a.email, 'admin.org-journey', 'organizations', orgId);
   return {
     success: true, journey_map: d.journey_map || null,
-    cohort: own?.cohort || null, setup: own?.setup || [], setup_missing: own?.setup_missing || 0,
+    cohort: own?.cohort || null, setup: own?.setup || [], setup_missing: own?.setup_missing || 0, program: own?.program || null,
   };
 }
 

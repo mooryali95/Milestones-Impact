@@ -5,7 +5,7 @@
 // الدفعة: جهة + برنامج + نسخة مثبتة (أو آخر تعديل) + تواريخ + طريقة التنفيذ.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanSchedule, distributeSchedule, approvalOf, cohortDefinition, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
+import { cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, renderJourney, restorePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -19,13 +19,12 @@ type Body = Record<string, any>;
 const COHORT_COLS = '*';
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
-let defaultId: string | null = null;
+// يُقرأ في كل طلب بلا تخزين: التخزين في الذاكرة يبقى على القيمة القديمة في بقية نسخ دالة الحافة بعد تغيير
+// البرنامج الافتراضي، والقراءة استعلام واحد صغير (P4)
 export async function defaultProgramId() {
-  if (defaultId) return defaultId;
   const { data } = await db.from('programs').select('id').eq('is_default', true).maybeSingle();
   if (!data) throw new Fail('لا يوجد برنامج افتراضي', 500);
-  defaultId = data.id;
-  return defaultId as string;
+  return data.id as string;
 }
 
 async function liveRows(programId: string) {
@@ -126,12 +125,13 @@ export function memberCounts(participants: any[], enrollments: any[], cohorts: a
 export async function orgCohortSetups(orgIds: string[]) {
   const out: Record<string, any> = {};
   if (!orgIds.length) return out;
-  const [cohorts, enr, people, team, sess] = await Promise.all([
+  const [cohorts, enr, people, team, sess, progs] = await Promise.all([
     db.from('cohorts').select(COHORT_COLS),
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
     db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
     db.from('cohort_experts').select('cohort_id, expert_id'),
     db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(Date.now() - 60 * 864e5).toISOString()).limit(5000),
+    db.from('programs').select('id, name, archived_at'),
   ]);
   for (const r of [cohorts, enr, people, team, sess]) if (r.error) throw r.error;
   const all = cohorts.data || [];
@@ -152,7 +152,10 @@ export async function orgCohortSetups(orgIds: string[]) {
       teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
       members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []),
     });
-    out[id] = { cohort: { id: c.id, name: c.name, status: c.status }, setup, setup_missing: setupMissing(setup) };
+    // برنامج الجهة للقراءة (P4): مشتق بترتيب pickCohort نفسه (orgProgram)، وتعذّر قراءة البرامج يتركه فارغًا
+    const op = progs.error ? null : orgProgram(all, progs.data || [], id);
+    out[id] = { cohort: { id: c.id, name: c.name, status: c.status }, setup, setup_missing: setupMissing(setup),
+      program: op ? { id: op.program_id, name: op.program_name, via: op.via, cohort_id: op.cohort_id, cohort_name: op.cohort_name } : null };
   }
   return out;
 }
@@ -355,9 +358,33 @@ async function liveWorld(scope: { orgs: (string | null)[]; cohortId: string | nu
   ]);
   return { cohorts, participants, enrollments, progress };
 }
+// تعريف الدفعة من مصدره الواحد: لقطة نسختها المثبتة، أو صفوف برنامجها الحية. منه يقرأ الحارس والجدول ووضع المراحل
+// وتخصيص التنفيذ والمجموعات ونافذة admin.cohort-definition، فلا تعرض نافذة مراحل غير التي يتحقق بها الخادم (P5)
 const defOf = async (vid: string | null | undefined, programId: string) => vid
   ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data || { stages: [], requirements: [] })
   : await liveRows(programId);
+
+// admin.cohort-definition: مراحل الدفعة ومتطلباتها كما تسري عليها، والمخفي بعلامة hidden لا محذوفًا.
+// program_id وprogram_version_id اختياريان لما يختاره المحرر قبل الحفظ: برنامج آخر يعني آخر تعديل عليه ما لم تُسمَّ نسخة،
+// و'latest' أحدث نسخة محفوظة، كما في cohortSave
+export async function cohortDefinitionFor(b: Body) {
+  const c = isUuid(b.cohort_id) ? must(await db.from('cohorts').select(COHORT_COLS).eq('id', b.cohort_id).maybeSingle()) : null;
+  if (b.cohort_id && !c) throw new Fail('الدفعة غير موجودة', 404);
+  const programId = isUuid(b.program_id) ? String(b.program_id) : c?.program_id || await defaultProgramId();
+  let vid: string | null = 'program_version_id' in b ? (b.program_version_id || null) : (c && c.program_id === programId ? c.program_version_id || null : null);
+  if (vid === 'latest') {
+    const { data } = await db.from('program_versions').select('id').eq('program_id', programId).order('number', { ascending: false }).limit(1);
+    vid = data?.[0]?.id || null;
+  }
+  let version: any = null;
+  if (vid) {
+    if (!isUuid(vid)) throw new Fail('نسخة غير صالحة');
+    version = must(await db.from('program_versions').select('id, number, label, data').eq('id', vid).eq('program_id', programId).maybeSingle());
+    if (!version) throw new Fail('النسخة لا تخص هذا البرنامج');
+  }
+  const view = cohortDefinitionView({ live: version ? null : await liveRows(programId), version, cohort: c });
+  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view };
+}
 async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
   const hidden = ('hidden_requirements' in row ? row.hidden_requirements : prev?.hidden_requirements) || [];
@@ -441,26 +468,32 @@ export async function cohortSave(a: Admin, b: Body) {
     row.status = b.status;
   }
   if ('notes_ar' in b) row.notes_ar = String(b.notes_ar || '').trim().slice(0, 2000) || null;
+  // تعريف الدفعة بعد هذا الحفظ (برنامجها ونسختها)، يُقرأ مرة لما يحتاجه: التنفيذ والجدول ووضع المراحل
+  const vidAfter = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
+  let defAfter: any = null;
+  const def = async () => (defAfter ||= await defOf(vidAfter, programId));
   if ('delivery' in b) {
-    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
-    const reqs = vid
-      ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data?.requirements || [])
-      : (await liveRows(programId)).requirements;
-    try { row.delivery = cleanDelivery(b.delivery, reqs); }
+    try { row.delivery = cleanDelivery(b.delivery, (await def()).requirements || []); }
     catch (err) { throw new Fail((err as Error).message); }
   }
   // جدول المراحل: يحفظه الأدمن كما وضعه، أو يوزعه النظام على مدة الدفعة ثم يعدّله
+  let scheduleNote = '';
   if ('schedule' in b || b.distribute === true) {
-    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
-    const stages = vid
-      ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data?.stages || [])
-      : (await liveRows(programId)).stages;
+    // كل مراحل التعريف، والموقوفة منها: موعد مرحلة أُوقفت يبقى ويعود إن فُعّلت (الإيقاف لا يحذف). التوزيع يتخطاها وحده
+    const stages = (await def()).stages || [];
     if (b.distribute === true) {
       const s0 = row.starts_on ?? prev?.starts_on, e0 = row.ends_on ?? prev?.ends_on;
       if (!s0 || !e0) throw new Fail('حدد تاريخي بداية الدفعة ونهايتها أولًا ليتوزع الجدول عليها');
       row.schedule = distributeSchedule(stages, s0, e0);
     } else {
-      try { row.schedule = cleanSchedule(b.schedule, stages.map((x: any) => x.key)); }
+      try {
+        // ما أُسقط يُقال برسالة (cleanScheduleReport) بدل الإسقاط الصامت، وأسماء المراحل من البرنامج الحي إن عُرفت
+        const live = (b.schedule && Object.keys(b.schedule).some((k) => !stages.some((x: any) => x.key === k))) ? (await liveRows(programId)).stages : [];
+        const titles = Object.fromEntries([...live, ...stages].map((x: any) => [x.key, x.title_ar]));
+        const rep = cleanScheduleReport(b.schedule, stages.map((x: any) => x.key), titles);
+        row.schedule = rep.schedule;
+        scheduleNote = rep.message;
+      }
       catch (err) { throw new Fail((err as Error).message); }
     }
   }
@@ -471,11 +504,7 @@ export async function cohortSave(a: Admin, b: Body) {
     throw new Fail('اختر مستوى المحتوى للدفعة المتجانسة');
   }
   if ('stage_modes' in b) {
-    const vid = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id;
-    const stages = vid
-      ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data?.stages || [])
-      : (await liveRows(programId)).stages;
-    row.stage_modes = cleanStageModes(b.stage_modes, stages.map((x: any) => x.key));
+    row.stage_modes = cleanStageModes(b.stage_modes, ((await def()).stages || []).map((x: any) => x.key));
   }
   // فريق خبراء الدفعة: خبراء معتمدون يُعرضون على مشاركيها أولًا. المستشار الأساسي يبقى في advisor_expert_id وحده
   let team: string[] | null = null;
@@ -498,7 +527,7 @@ export async function cohortSave(a: Admin, b: Body) {
     if (team.length) must(await db.from('cohort_experts').insert(team.map((expert_id) => ({ cohort_id: saved.id, expert_id, added_by: a.email }))), 'تعذّر حفظ فريق الخبراء');
   }
   await audit('admin', a.email, prev ? 'cohort.save' : 'cohort.create', 'cohorts', saved.id, null, team ? { ...row, team_expert_ids: team } : row);
-  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined } };
+  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined }, ...(scheduleNote ? { schedule_dropped: scheduleNote } : {}) };
 }
 
 // ترقية دفعة إلى أحدث نسخة من برنامجها، مع ما سيتغير على مشاركيها
@@ -640,9 +669,7 @@ export async function cohortGroups(b: Body) {
     cohortMembers(c),
     db.from('cohort_groups').select('*').eq('cohort_id', c.id).order('sort'),
     db.from('cohort_group_members').select('participant_id, group_id').eq('cohort_id', c.id),
-    c.program_version_id
-      ? db.from('program_versions').select('data').eq('id', c.program_version_id).single().then((r: any) => r.data?.data?.stages || [])
-      : liveRows(c.program_id).then((r) => r.stages),
+    defOf(c.program_version_id, c.program_id).then((r: any) => r.stages || []),
   ]);
   const gOf = new Map((links.data || []).map((l: any) => [l.participant_id, l.group_id]));
   // الخبراء المعتمدون، وفريق الدفعة منهم أولًا في القائمة
