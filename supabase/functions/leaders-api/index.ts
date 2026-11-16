@@ -101,7 +101,6 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'cron.expert-offers': async (b) => ({ ...(await E.sweepOffers(b)), session_reminders: await V.sessionReminders(), workshop_reminders: await V.workshopReminders().catch((e) => ({ error: String(e?.message || e) })),
     pay_reminders: await Y.payReminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })),
     pay_expired: await Y.expireAbandoned().catch((e) => ({ expired: 0, error: String(e?.message || e) })),
-    policy_notice: await P.policyNotify().catch((e) => ({ queued: 0, error: String(e?.message || e) })),   // D18: مرة لكل نسخة جوهرية
     // تقييم 360: التذكير في أيامه المضبوطة، والإغلاق عند انقضاء النافذة وإبلاغ المستشار (قبل تفريغ طابور البريد)
     feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
     mail_queue: await drainMailQueue().catch((e) => ({ sent: 0, error: String(e?.message || e) })),

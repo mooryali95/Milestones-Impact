@@ -20,6 +20,7 @@ const api = (f) => read(`supabase/functions/leaders-api/${f}`);
 describe('سجل النسخ', () => {
   it('النسخ تواريخ فريدة بالأحدث أولًا، والنافذة أولها، والجوهرية آخر ما عُلّم جوهريًا', () => {
     const v = POLICY_CHANGES.map((c) => c.version);
+    // تاريخ وحده: يطابق قيد consent_events.version في القاعدة
     for (const x of v) expect(x).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect([...v].sort().reverse()).toEqual(v);
     expect(new Set(v).size).toBe(v.length);
@@ -71,31 +72,31 @@ describe('الخادم', () => {
     expect(CONSENT_GATED).toEqual(['rater.invite', 'sponsor.request', 'me.sponsor-code']);
     expect(api('index.ts')).toMatch(/if \(CONSENT_GATED\.includes\(action\) && 'consented_at' in p && consentState\(p\.consent_version, p\.consented_at\)\.needed\) \{\n\s+throw new Fail\([^)]+428, 'consent_renew'\);/);
   });
-  it('إخطار النسخة الجوهرية مرة واحدة، في الطابور دفعة واحدة، من المهمة الساعية', () => {
-    const n = p.slice(p.indexOf('export async function policyNotify('), p.indexOf('// ── 1. بدء الدخول'));
-    expect(n).toMatch(/eq\('action', 'policy\.notify'\)\.eq\('entity_id', v\)/);
-    expect(n).toMatch(/if \(done\?\.length\) return \{ queued: 0, done: true \};/);
-    expect(n).toMatch(/from\('mail_queue'\)\.insert\(rows\.map\(/);
-    expect(n).toMatch(/if \(qe\) return \{ queued: 0, error: qe\.message \};\n\s+\}\n\s+await audit\('system', null, 'policy\.notify', 'policy', v,/);
-    expect(n).toMatch(/!r\.is_demo && r\.email && !isDemoMail\(r\.email\)/);
-    expect(api('index.ts')).toMatch(/policy_notice: await P\.policyNotify\(\)\.catch\(/);
+  it('لا بريد بتحديث الوثائق ولا تفاصيل في الرحلة (قرار المالك 2026-11-16): التفاصيل في سجل التغييرات وحده', () => {
+    expect(p).not.toMatch(/policyNotify|policyChangeMail|POLICY_CHANGES/);
+    expect(api('core.ts')).not.toMatch(/policyChangeMail/);
+    expect(api('index.ts')).not.toMatch(/policy_notice|policyNotify/);
+    const ui = read('leaders-app/src/Consent.jsx');
+    expect(ui).not.toMatch(/consent\.changes|\.items\.map|POLICY_VERSION|غير جوهري|ما الذي تغيّر/);
   });
 });
 
 describe('الواجهة', () => {
-  it('أول مرة بلا تأجيل، والتجديد بما تغيّر وزر «لاحقًا»', () => {
+  it('أول مرة بلا تأجيل، والتجديد سطر واحد بلا تفاصيل وزر «لاحقًا»', () => {
     const first = renderToStaticMarkup(React.createElement(Consent, { consent: consentState(null, null), onAccepted: () => {} }));
     expect(first).toContain('خصوصيتك وشروط البرنامج');
     expect(first).toContain('مومباي');
     expect(first).not.toContain('لاحقًا');
     const renew = renderToStaticMarkup(React.createElement(Consent, { consent: consentState('2026-11-06', '2026-11-06T10:00:00Z'), onAccepted: () => {}, onLater: () => {} }));
-    for (const s of ['حدّثنا سياسة الخصوصية', 'وافقت على النسخة 2026-11-06', POLICY_CHANGES[0].items[0], 'لاحقًا', 'منفصلة']) expect(renew).toContain(s);
+    for (const s of ['حدّثنا سياسة الخصوصية والشروط', 'وافق لنتابع', 'أوافق وأتابع', 'لاحقًا', 'سجل التغييرات']) expect(renew).toContain(s);
+    for (const s of ['وافقت على النسخة', 'النسخة 2026', 'جوهرية', POLICY_CHANGES[0].items[0], POLICY_CHANGES.find((c) => c.material).items[0]]) expect(renew).not.toContain(s);
   });
-  it('الشريط للتجديد المؤجل وللنسخة غير الجوهرية، ولا شيء غير ذلك', () => {
-    const r = (props) => renderToStaticMarkup(React.createElement(PolicyBanner, props));
-    expect(r({ consent: { needed: 'renew' }, deferred: true })).toContain('راجع ووافق');
+  it('الشريط لمن أجّل التجديد وحده، بسطر وزر «موافق»، ولا شيء للنسخة غير الجوهرية', () => {
+    const r = (props) => renderToStaticMarkup(React.createElement(PolicyBanner, { onAccepted: () => {}, ...props }));
+    expect(r({ consent: { needed: 'renew' }, deferred: true })).toContain('موافق');
+    expect(r({ consent: { needed: 'renew' }, deferred: true })).not.toMatch(/جوهري|النسخة/);
     expect(r({ consent: { needed: 'renew' }, deferred: false })).toBe('');
-    expect(r({ consent: { needed: null, notice: true } })).toContain('غير جوهري');
+    expect(r({ consent: { needed: null, notice: true } })).toBe('');
     expect(r({ consent: { needed: null, notice: false } })).toBe('');
   });
   it('البوابة في التطبيق من حالة الخادم وحدها', () => {
@@ -103,7 +104,7 @@ describe('الواجهة', () => {
     expect(app).toMatch(/const consentNeed = me\?\.participant\?\.consent\?\.needed \?\? null;/);
     expect(app).not.toMatch(/الخادم الأقدم/);
     expect(app).toMatch(/consentNeed === 'renew' && !me\.participant\.is_demo && !consentLater\) screen = <Consent/);
-    expect(app).toMatch(/<PolicyBanner consent=\{me\.participant\.consent\} deferred=\{consentLater\}/);
+    expect(app).toMatch(/<PolicyBanner consent=\{me\.participant\.consent\} deferred=\{consentLater\} onAccepted=/);
   });
 });
 

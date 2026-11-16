@@ -395,14 +395,6 @@ export function paymentOwnerMail(what: string, rows: [string, string][]) {
   return shell('admin', what, mailRows(rows) + mailButton(`${SITES.admin}/#/leaders/payments`, 'افتح المدفوعات'), what);
 }
 
-// إخطار النسخة الجوهرية (D18): ما تغيّر بنصه من POLICY_CHANGES، ورابط السجل والسياسة، وأن الموافقة تُطلب عند الدخول
-export function policyChangeMail(name: string, version: string, items: readonly string[]) {
-  return shell('journey', 'حدّثنا سياسة الخصوصية وشروط البرنامج',
-    mailText(`${hello(name)} نشرنا النسخة ${bdi(version)} من سياسة الخصوصية وشروط برنامج القادة، وفيها تغيير جوهري نطلب عنده موافقتك مجددًا عند دخولك القادم. ما تغيّر:`)
-    + items.map((t) => mailText(`• ${esc(t)}`)).join('')
-    + mailButton(`${CONFIG.appUrl}/legal/changes`, 'اقرأ سجل التغييرات'),
-    'ما تغيّر في سياسة الخصوصية والشروط');
-}
 
 export function certificateMail(name: string, url: string) {
   return shell('journey', 'مبارك، صدرت شهادة إتمامك بنجاح',
