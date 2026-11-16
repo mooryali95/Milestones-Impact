@@ -119,9 +119,10 @@ for (const width of [1440, 390]) {
     await wiz.getByRole('button', { name: 'التالي' }).click();
     await wiz.getByRole('button', { name: 'التالي' }).click();
     await wiz.getByRole('button', { name: 'التالي' }).click();
-    await wiz.getByRole('button', { name: 'أنشئ الدفعة' }).click();
-    // تُثبَّت دائمًا على أحدث نسخة، والبرنامج بلا نسخة تُنشأ نسخته الأولى في الخادم عند الإنشاء
+    // تُثبَّت دائمًا على أحدث نسخة، والبرنامج بلا نسخة تُنشأ نسخته الأولى في الخادم عند الإنشاء.
+    // يُفحص في خطوة المراجعة قبل الإنشاء: النافذة تُغلق بعد نجاح الحفظ، فالفحص بعد النقر سباق معها
     await expect(wiz).toContainText('النسخة 1 (تُنشأ عند الإنشاء)');
+    await wiz.getByRole('button', { name: 'أنشئ الدفعة' }).click();
     await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ organization_id: 'o1', program_id: 'pb', program_version_id: 'latest' });
     expect(await noOverflow(page)).toBe(true);
   });
