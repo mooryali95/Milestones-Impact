@@ -52,7 +52,8 @@ describe('5.1 حساب الاختبار is_test: خارج الإحصاءات و�
     expect(read('supabase/functions/leaders-api/impact.ts')).toContain(".eq('is_demo', false).eq('is_test', false);");
     const ui = read('admin-app/src/screens/Participants.jsx');
     expect(ui).toContain("fields: { is_test: !p.is_test }");
-    expect(ui).toContain('حساب اختبار</span>');
+    // شارة الملف في رأسه (PersonShell.jsx منذ إعادة تصميم الملف 2026-11-16)
+    expect(read('admin-app/src/screens/PersonShell.jsx')).toContain('حساب اختبار</span>');
     // لا يمس سلوك الحساب: لا is_test في بوابات العرض وتبديل الأدوار والاعتماد الآلي
     for (const f of ['index.ts', 'switch.ts', 'doors.ts', 'participant.ts', 'demo.ts', 'entitlements.ts']) {
       expect(read(`supabase/functions/leaders-api/${f}`), f).not.toContain('is_test');

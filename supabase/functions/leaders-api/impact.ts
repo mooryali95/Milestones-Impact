@@ -17,6 +17,7 @@ import {
 import { cleanOpenAnswers, CONTACT_FREQ, feedbackPromiseAr, OPEN_KEYS, raterItems } from './feedback360.js';
 import { appSettings } from './settings.ts';
 import { FEEDBACK_OPEN_AR } from './labels.js';
+import { missingColumn } from './missing-column.ts';
 
 type Body = Record<string, any>;
 
@@ -426,8 +427,6 @@ async function raterQuestions(instrumentId: string, relation: string) {
   return raterItems(qs, relation);
 }
 
-// كتابة متسامحة: عمود لم يُرحَّل بعد (42703 أو PGRST204) لا يُفشل الحفظ، فيُعاد بلا الأعمدة الجديدة
-const missingColumn = (e: any) => e && (e.code === '42703' || e.code === 'PGRST204');
 
 export async function raterGet(b: Body) {
   const r = await raterFrom(b.t);

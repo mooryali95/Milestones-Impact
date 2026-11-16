@@ -9,10 +9,15 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DIMENSIONS } from '../../supabase/functions/leaders-api/logic.js';
+import { DIM_AR } from '../../supabase/functions/leaders-api/labels.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+// part: إطار المسودة (أحد الأطر الثلاثة) أو null، ومنه يُعرف أن تعليق عضو لجنة المحتوى عليها من خارج مقعده (seatOf في master-book.js)
 export const DRAFTS = [
-  { key: 'seven-competencies', title: 'مسودة: الجدارات القيادية السبع', dimension: 'leadership', source: 'docs/content/2026-11-15-مسودة-الجدارات-القيادية-السبع-v1.md', status: 'للعرض على لجنة المحتوى' },
+  { key: 'seven-competencies', title: 'مسودة: الجدارات القيادية السبع', part: 'leadership', source: 'docs/content/2026-11-15-مسودة-الجدارات-القيادية-السبع-v1.md', status: 'للعرض على لجنة المحتوى' },
+  // نصوص طبعة الجزء («عن هذا الجزء» و«يتكامل مع»): مصدرها ملف المحتوى نفسه الذي تقرؤه الطبعة، فما تعتمده اللجنة هو ما يُطبع
+  { key: 'book-parts', title: 'مسودة: نصوص طبعة الجزء', part: null, source: 'supabase/content/handbook/parts.json', status: 'للعرض على لجنة المحتوى' },
 ];
 export const OUT = join(ROOT, 'supabase/functions/leaders-api/master-book-drafts.js');
 
@@ -42,8 +47,24 @@ export function toBookMd(md) {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// parts.json إلى صيغة الكتاب: لكل جزء قسمان (## عن هذا الجزء، ## يتكامل مع)، فيعلّق الخبير على كل منهما وحده
+const ORDINAL = { milestone: 'الجزء الأول', impact: 'الجزء الثاني', leadership: 'الجزء الثالث' };
+export function partsMd(json) {
+  const j = typeof json === 'string' ? JSON.parse(json) : json;
+  const out = [`- **الحالة:** ${j.status || 'مسودة'}.`, `- **المصدر:** supabase/content/handbook/parts.json، وتقرؤه طبعة الجزء من نسخة PDF في أولها وآخرها.`, '', '## دليل علامات المستويات', '', j.legend || ''];
+  for (const k of DIMENSIONS) {
+    const p = j.parts?.[k];
+    if (!p) continue;
+    const name = `${ORDINAL[k]} · ${DIM_AR[k]}`;
+    out.push('', `## ${name}: عن هذا الجزء`, '', p.about.lead, '', '**كيف يُقرأ**', '', ...p.about.read.map((r, i) => `${i + 1}. ${r}`));
+    out.push('', `## ${name}: يتكامل مع`, '', p.bridges.place, '', ...DIMENSIONS.filter((o) => o !== k && p.bridges.with?.[o]).map((o) => `- **${ORDINAL[o]} · ${DIM_AR[o]}**: ${p.bridges.with[o]}`), '', `**ماذا تقرأ بعد هذا الجزء:** ${p.bridges.next}`);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function build() {
-  const items = DRAFTS.map((d) => ({ ...d, md: toBookMd(readFileSync(join(ROOT, d.source), 'utf8')) }));
+  for (const d of DRAFTS) if (d.part !== null && !DIMENSIONS.includes(d.part)) throw new Error(`إطار المسودة ${d.key} غير معروف: ${d.part}`);
+  const items = DRAFTS.map((d) => ({ ...d, md: (d.source.endsWith('.json') ? partsMd : toBookMd)(readFileSync(join(ROOT, d.source), 'utf8')) }));
   return `// مولَّد من وثائق المسودات بـ scripts/master-book/drafts.mjs. لا تحرّره يدويًا: عدّل الوثيقة ثم أعد التوليد.\nexport const DRAFTS = ${JSON.stringify(items, null, 2)};\n`;
 }
 
