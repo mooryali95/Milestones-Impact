@@ -193,8 +193,8 @@ Deno.test('سلاك: رمز تعذّر إرساله يُبلَّغ تعذّرً�
       assertEquals((await sendCounted(client, 'ok@corp.com', 'تذكير', '<p>x</p>', { kind: 'notify', source: 'leaders-api', cap: 80, key: 'k' })).ok, true);
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text);
-      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · s***@org.sa · user-api · mail_unconfigured'), texts.join('\n'));
-      assert(texts.some((t) => t.startsWith('notify · k***@corp.com · leaders-api · mail_')), texts.join('\n'));
+      assert(texts.includes('❌ تعذّر · مصفوفة التأثير · s***@org.sa · user-api · خدمة البريد غير مهيأة (mail_unconfigured)'), texts.join('\n'));
+      assert(texts.some((t) => t.startsWith('إشعار · k***@corp.com · ') && t.endsWith(' · leaders-api')), texts.join('\n'));
       assert(!texts.some((t) => t.includes('o***@corp.com')));
       assert(!texts.some((t) => t.includes('111222')));
     });
@@ -445,8 +445,8 @@ Deno.test('سلاك: رمز leaders-api بلا مفتاح البريد يُبل�
       try { await sendMail('lee@corp.com', 'تذكير', '<p>x</p>', [], { kind: 'notify' }); } catch { /* متوقع */ }
       await S.slackIdle();
       const texts = slackCalls(calls).map((c) => c.body.text);
-      assert(texts.includes('❌ تعذّر · دخول مشارك · p***@corp.com · leaders-api · mail_unconfigured'), texts.join('\n'));
-      assert(texts.includes('notify · l***@corp.com · leaders-api · mail_unconfigured'), texts.join('\n'));
+      assert(texts.includes('❌ تعذّر · دخول مشارك · p***@corp.com · leaders-api · خدمة البريد غير مهيأة (mail_unconfigured)'), texts.join('\n'));
+      assert(texts.includes('إشعار · l***@corp.com · خدمة البريد غير مهيأة (mail_unconfigured) · leaders-api'), texts.join('\n'));
       assert(!texts.some((t) => t.includes('123456')));
     });
   } finally {
@@ -674,4 +674,11 @@ Deno.test('slackDeliver: false بلا ضبط، وfalse بعد المهلة، و�
   try {
     await withNet(async () => { assertEquals(await S.slackDeliver('alerts', 'x', { waitMs: 30 }), false); }, { slack: 'hang' });
   } finally { Object.assign(S.SLACK, { timeoutMs: 4000 }); teardown(); }
+});
+
+Deno.test('سلاك: سطر البريد الذي لم يصل يقول نوعه وسببه بالعربية، ولا يحمل عنوان الرسالة', () => {
+  assertEquals(S.mailLine({ kind: 'notify', to: 'ibrahim@gmail.com', source: 'leaders-api', reason: 'mail_share' }),
+    'إشعار · i***@gmail.com · امتلأت حصة الإشعارات لليوم (mail_share) · leaders-api');
+  assertEquals(S.mailLine({ kind: 'bulk', to: 'a@b.co', source: 's', reason: 'rejected 422' }), 'تذكير جماعي · a***@b.co · رفضه مزوّد البريد (rejected 422) · s');
+  assertEquals(S.reasonText('something_new'), 'something_new');
 });

@@ -276,12 +276,31 @@ export async function slackIdle() { while (pump || statusWrite) await (pump ?? s
 // ── السطور الجاهزة ──
 // رمز الدخول: الحالة والغرض والبريد المقنّع والدالة، وأي ستة أرقام متتالية تُطمس احتياطًا
 const STATUS = { sent: '✅ أُرسل', blocked: '⛔ حُجب', failed: '❌ تعذّر' } as const;
+// نوع البريد وسبب عدم وصوله بالعربية، والرمز التقني بين قوسين ليُتتبع في السجل
+const MAIL_KIND_AR: Record<string, string> = { notify: 'إشعار', bulk: 'تذكير جماعي', contact: 'رسالة تواصل', alert: 'تنبيه للمالك', code: 'رمز دخول' };
+const REASON_AR: Record<string, string> = {
+  mail_share: 'امتلأت حصة الإشعارات لليوم',
+  mail_cap: 'بلغ البريد سقفه اليومي',
+  mail_unconfigured: 'خدمة البريد غير مهيأة',
+  mail_counter_unavailable: 'تعذّرت قراءة عداد البريد',
+  mail_kind: 'نوع بريد غير معروف',
+  rejected: 'رفضه مزوّد البريد',
+  mail_failed: 'تعذّر الإرسال',
+  blocked: 'حُجب',
+  failed: 'تعذّر',
+};
+export function reasonText(reason: string) {
+  const [code, ...rest] = String(reason).trim().split(/\s+/);
+  const ar = REASON_AR[code];
+  return ar ? `${ar} (${[code, ...rest].join(' ')})` : String(reason);
+}
 export function codeLine({ status, purpose, to, source, reason }: { status: keyof typeof STATUS; purpose?: string | null; to: string; source: string; reason?: string | null }) {
-  const parts = [STATUS[status], purpose || 'رمز دخول', maskEmail(to), source, ...(reason ? [reason] : [])];
+  const parts = [STATUS[status], purpose || 'رمز دخول', maskEmail(to), source, ...(reason ? [reasonText(reason)] : [])];
   return parts.join(' · ').replace(/\d{6}/g, '••••••');
 }
+// عنوان الرسالة لا يُنشر: يحمل أسماء المشاركين والجهات، والسياسة تعد بلا نص رسالة في سلاك. العنوان في مركز البريد
 export function mailLine({ kind, to, source, reason }: { kind: string; to: string; source: string; reason: string }) {
-  return [`${kind}`, maskEmail(to), source, reason].join(' · ');
+  return [MAIL_KIND_AR[kind] ?? kind, maskEmail(to), reasonText(reason), source].join(' · ');
 }
 // تفاصيل التنبيه تأتي من مواضع كثيرة (رسالة خطأ، أو رد مزوّد، أو حقل من الطلب)، فتُطمس قبل النشر: البريد مقنّعًا
 // (maskEmail)، والرمز السري ومفاتيح الواجهات والقيم الطويلة الشبيهة بها، والهاتف (يبقى آخر رقمين)، وأي ستة أرقام
