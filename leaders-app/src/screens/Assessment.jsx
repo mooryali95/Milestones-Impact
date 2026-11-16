@@ -32,7 +32,8 @@ const TRANSFER = { key: 'transfer', short: 'التجربة', title: 'تجربت�
 const secOf = (q) => (q?.tier === 'transfer' ? 'transfer' : q?.dimension);
 const secTitle = (k) => (k === 'transfer' ? TRANSFER.title : dimOf(k).title);
 
-export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
+// invite: دعوة المدير بعد القياس البعدي ظاهرة (مفتاح 360). تُذكر في نص الإرسال حين تظهر وحدها
+export default function Assessment({ kind = 'baseline', invite = false, onSubmitted, onBack }) {
   const post = kind === 'post';
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -302,7 +303,7 @@ export default function Assessment({ kind = 'baseline', onSubmitted, onBack }) {
             ? 'أجب عنها لتظهر نتيجتك.'
             : unsavedNow ? 'تعذّر حفظها بسبب الاتصال، وتُعاد المحاولة حين يعود. يُفتح الإرسال بعد حفظها.'
             : naOver.length ? `${BEHAVIOR_NA_MESSAGE}، واخترته في أكثر من عبارة في قسم ${naSecs.join(' وقسم ')}. غيّر ما زاد إلى أقرب تكرار لما تفعله.`
-            : post ? 'أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها، ثم ادعُ مديرك ليقدّر التغير من موقعه.'
+            : post ? `أرسل إجاباتك لترى ما تغيّر بين بداية رحلتك ونهايتها${invite ? '، ثم ادعُ مديرك ليقدّر التغير من موقعه' : ''}.`
               : 'أرسل إجاباتك لتظهر نتيجتك المبدئية في الأطر الثلاثة فورًا، ثم يراجعها المستشار ويعتمد مسارك.'}</p>
           {error && <div className="alert err" role="alert">{error}</div>}
           {saving > 0 && <p className="saving">جارٍ حفظ آخر إجابة…</p>}

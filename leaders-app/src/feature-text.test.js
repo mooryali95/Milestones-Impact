@@ -31,7 +31,7 @@ describe('الخصوصية: صياغة عامة لأنشطة التعلم', () =
     expect(html).toContain('إجاباتك في أنشطة التعلم التفاعلية للتعلم وحده، ولا تدخل تقييمك الختامي');
   });
   it('تغيير الصياغة بنسخة غير جوهرية في السجل، فلا تُعاد الموافقة', () => {
-    const c = POLICY_CHANGES[0];
+    const c = POLICY_CHANGES.find((x) => x.version === '2026-11-19');   // بنسختها لا بموضعها: تُضاف بعدها نسخ أحدث
     expect(c.material).toBe(false);
     expect(c.items.join(' ')).toContain('أنشطة التعلم التفاعلية');
     expect(c.items.join(' ')).not.toMatch(/القاعة|كاتون/);

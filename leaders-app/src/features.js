@@ -32,10 +32,12 @@ const OFF_CODES = new Set(Object.values(FEATURE_OFF_CODE));
 export const isFeatureOff = (r) => !!r && r.success === false && OFF_CODES.has(r.code);
 
 /** خطوات الجولة الحيّة بلا خطوة ميزة مخفية، قبل العداد («الخطوة 3 من 9»)، وبنص لا يذكر القاعة حين تُخفى (noHall)
- * @template {{ key: string, d?: string, noHall?: string }} T @param {T[]} steps @param {Flags} flags @returns {T[]} */
+ * ولا تقدير المدير والزملاء حين يُطفأ 360 (noF360)
+ * @template {{ key: string, d?: string, noHall?: string, noF360?: string }} T @param {T[]} steps @param {Flags} flags @returns {T[]} */
 export const tourStepsFor = (steps, flags) => steps
   .filter((s) => viewShown(s.key, flags))
-  .map((s) => (flags?.hall || !s.noHall ? s : { ...s, d: s.noHall }));
+  .map((s) => (flags?.hall || !s.noHall ? s : { ...s, d: s.noHall }))
+  .map((s) => (flags?.f360 || !s.noF360 ? s : { ...s, d: s.noF360 }));
 
 /** ما يُفتح بعد الاعتماد كما يُقال للمشارك: لا يُذكر ما أُخفي
  * @param {Flags} flags */

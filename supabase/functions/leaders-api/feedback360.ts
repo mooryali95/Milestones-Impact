@@ -12,6 +12,7 @@ import { advisorOf, myParticipantIds } from './advisor.ts';
 import { lastBaseline } from './participant.ts';
 import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
 import { appSettings } from './settings.ts';
+import * as FT from './features.ts';
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR } from './domains.js';
 import { isEmail, journeyApproved, normalizeEmail } from './logic.js';
 import { requireWrite, type Admin } from './admin.ts';
@@ -352,17 +353,41 @@ export async function pausedSince(): Promise<number | null> {
   const times = [...off, Date.parse((mig as any)?.applied_at)].filter(Number.isFinite);
   return times.length ? Math.max(...times) : null;
 }
+// مقيّمو الأثر (pre وpost) لم يتوقفوا مع 360 إلا منذ نُشر ربطهم به (قرار المالك 2026-11-16)، فبداية إخفائهم لا تسبق ذلك:
+// علامة rater.pause-start تُكتب مرة واحدة في أول تشغيل للمهمة الساعية بعد النشر (أو قبل استئناف من الإعدادات إن سبقها)،
+// وبداية إخفائهم آخر حفظ أطفأ 360 أو تلك العلامة، أيهما أحدث. بلا أي منهما لا يُمد شيء (لا تُعرف البداية)
+export const IMPACT_PAUSE_MARK = 'rater.pause-start';
+export async function markImpactPause() {
+  const { data, error } = await db.from('audit_log').select('id').eq('action', IMPACT_PAUSE_MARK).limit(1);
+  if (error) throw error;
+  if ((data || []).length) return false;
+  await audit('system', 'cron', IMPACT_PAUSE_MARK, 'raters', null, null, null);
+  return true;
+}
+export async function impactPausedSince(): Promise<number | null> {
+  const [{ data: logs }, { data: marks }] = await Promise.all([
+    db.from('audit_log').select('created_at, before, after').eq('action', 'admin.settings-save').eq('entity_id', 'feedback360').order('created_at', { ascending: false }).limit(100),
+    db.from('audit_log').select('created_at').eq('action', IMPACT_PAUSE_MARK).order('created_at', { ascending: true }).limit(1),
+  ]);
+  const off = ((logs || []) as any[])
+    .filter((l) => l?.before?.value?.enabled === true && l?.after?.value?.enabled !== true)
+    .map((l) => Date.parse(l.created_at)).filter(Number.isFinite);
+  const times = [...off, ...((marks || []) as any[]).map((m) => Date.parse(m.created_at))].filter(Number.isFinite);
+  return times.length ? Math.max(...times) : null;
+}
+
 export async function resumeFrozen(by: string, now = Date.now()) {
   const since = await pausedSince();
-  if (since === null || since >= now) return { extended: 0, paused_ms: 0 };
-  const { data, error } = await db.from('feedback_cycles').select('id, closes_at, opens_at').eq('status', 'open');
-  if (error) { if (missingTable(error)) return { extended: 0, paused_ms: 0 }; throw error; }
+  const live = since !== null && since < now;
+  // الدورات: جدولها قد لا يكون مرحّلًا بعد، فيُتخطى ولا يمنع استئناف مقيّمي الأثر (لا يعتمدون عليه)
   let extended = 0;
-  for (const c of (data || []) as any[]) {
+  const cycles = live ? await db.from('feedback_cycles').select('id, closes_at, opens_at').eq('status', 'open') : { data: [], error: null };
+  if (cycles.error && !missingTable(cycles.error)) throw cycles.error;
+  for (const c of (cycles.error ? [] : cycles.data || []) as any[]) {
     const closes = Date.parse(c.closes_at);
     // ما انقضت نافذته قبل الإخفاء يُغلق كما كان، وما فُتح أثناءه يُمد بقدر ما مضى منذ فتحه
-    if (!Number.isFinite(closes) || closes <= since) continue;
-    const from = Math.max(since, Date.parse(c.opens_at) || since);
+    if (!Number.isFinite(closes) || closes <= (since as number)) continue;
+    const from = Math.max(since as number, Date.parse(c.opens_at) || (since as number));
     const delta = now - from;
     if (delta <= 0) continue;
     const next = new Date(closes + delta).toISOString();
@@ -375,7 +400,27 @@ export async function resumeFrozen(by: string, now = Date.now()) {
     await audit('system', by, 'f360.resume', 'feedback_cycles', c.id, { closes_at: c.closes_at }, { closes_at: next, paused_ms: delta });
     extended += 1;
   }
-  return { extended, paused_ms: now - since };
+  // مقيّمو الأثر (pre وpost) مؤجلون مع 360: رابط دعوة جارية لم تنقض مهلته قبل إخفائهم يُمد بقدر ما مضى منه في الإخفاء،
+  // فلا يجد المقيّم رابطه منتهيًا لأن المفتاح أُطفئ. ما انقضى قبل الإخفاء يبقى كما كان
+  const isince = await impactPausedSince();
+  const ilive = isince !== null && isince < now;
+  let raters = 0;
+  if (ilive) {
+    const { data: imp, error: ie } = await db.from('raters').select('id, expires_at, invited_at').in('phase', ['pre', 'post']).eq('status', 'invited').gt('expires_at', new Date(isince).toISOString());
+    if (ie) throw ie;
+    for (const r of (imp || []) as any[]) {
+      const exp = Date.parse(r.expires_at);
+      const delta = now - Math.max(isince, Date.parse(r.invited_at) || isince);
+      if (!Number.isFinite(exp) || delta <= 0) continue;
+      must(await db.from('raters').update({ expires_at: new Date(exp + delta).toISOString() }).eq('id', r.id).eq('status', 'invited'));
+      raters += 1;
+    }
+    if (raters) await audit('system', by, 'rater.resume', 'raters', null, null, { raters, paused_ms: now - isince });
+  }
+  // وبريدهما الممسَك في الطابور: لا يُعد ما مضى مخفيًا من عمره، فلا يُترك «فائتًا» عند أول تفريغ
+  const mail = live || ilive ? await FT.resumeHeldMail({ f360: live ? since : null, impact: ilive ? isince : null }, now) : 0;
+  if (mail) await audit('system', by, 'mail.resume', 'mail_queue', null, null, { messages: mail });
+  return { extended, raters, mail, paused_ms: live ? now - (since as number) : 0 };
 }
 
 

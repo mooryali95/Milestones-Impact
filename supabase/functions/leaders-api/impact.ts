@@ -18,7 +18,8 @@ import { cleanOpenAnswers, CONTACT_FREQ, feedbackPromiseAr, OPEN_KEYS, raterItem
 import { appSettings } from './settings.ts';
 import { FEEDBACK_OPEN_AR } from './labels.js';
 import { missingColumn } from './missing-column.ts';
-import { RATER_PAUSED_AR } from './features.js';
+import { FEATURE_OFF_AR, RATER_PAUSED_AR } from './features.js';
+import { features } from './features.ts';
 
 type Body = Record<string, any>;
 
@@ -234,6 +235,12 @@ export function participantSummary(row: any) {
 
 // ── المشارك: ملخصه بعد القياس البعدي، ودعوة مقيّميه ──
 export async function mine(p: any) {
+  // مفتاح 360 مطفأ: تقدير المدير والزملاء مؤجل معه، فلا دعوة ولا قائمة (PreManager وبطاقة الدعوة تختفيان بهذه الإشارة).
+  // الملخص باقٍ، وما أُرسل من تقديرات يدخل حسابه كما هو
+  if (!(await features()).f360) {
+    const { rows } = await compareFor([p.id]);
+    return { success: true, summary: participantSummary(rows[p.id]), raters: [], limit: RATER_LIMIT, pre_available: false, invite: false };
+  }
   const [{ rows }, raters, pre] = await Promise.all([
     compareFor([p.id]),
     // كل الأعمدة حتى لا يُفشل عمود لم يُرحَّل القراءة (D19)، ثم ما يحق للمشارك رؤيته وحده
@@ -241,7 +248,7 @@ export async function mine(p: any) {
       .then((r: any) => ((must(r) ?? []) as any[]).map(raterView)),
     preRating(p),
   ]);
-  return { success: true, summary: participantSummary(rows[p.id]), raters, limit: RATER_LIMIT, pre_available: !!pre.ok };
+  return { success: true, summary: participantSummary(rows[p.id]), raters, limit: RATER_LIMIT, pre_available: !!pre.ok, invite: true };
 }
 
 async function postInstrument(p: any) {
@@ -291,7 +298,13 @@ async function notifyConfirmers(p: any, flags: string[]) {
   return to.length;
 }
 
+// حارس ثانٍ داخل الفعل لمسارات لا تمر بالحارس المركزي (تأكيد المنسق، والدفعات): رمز المفتاح ورسالته نفسها
+async function require360() {
+  if (!(await features()).f360) throw new Fail(FEATURE_OFF_AR, 404, 'f360_off');
+}
+
 export async function invite(p: any, b: Body) {
+  await require360();
   const email = normalizeEmail(b.email);
   if (!isEmail(email)) throw new Fail('البريد غير صحيح');
   const check = await raterCheck(p, email);
@@ -344,6 +357,7 @@ export async function invite(p: any, b: Body) {
 }
 
 export async function revoke(p: any, b: Body) {
+  await require360();
   must(await db.from('raters').update({ status: 'revoked' }).eq('id', String(b.id || '')).eq('participant_id', p.id).in('phase', IMPACT_PHASES).in('status', ['invited', 'awaiting']));
   return mine(p);
 }
@@ -351,7 +365,8 @@ export async function revoke(p: any, b: Body) {
 // ── D19: المقيّمون المنتظرون ومن يؤكدهم ──
 // القائمة لمشاركين بأعينهم (مشاركو المستشار، أو مشاركو جهة المنسق). تعذّر القراءة يرمي، فلا تظهر قائمة فارغة بصمت
 export async function awaitingFor(ids: string[]) {
-  if (!ids.length) return [];
+  // مفتاح 360 مطفأ: لا تأكيد الآن، فالقائمة فارغة عند المستشار والمنسق (المنتظر باقٍ ويعود حين يُظهَر)
+  if (!ids.length || !(await features()).f360) return [];
   const data = must(await db.from('raters').select('id, participant_id, email, full_name, relation, phase, verification_flags, invited_at, participants(full_name)')
     .in('participant_id', ids).eq('status', 'awaiting').order('invited_at')) as any[];
   return (data || []).map((r: any) => ({ id: r.id, participant_id: r.participant_id, participant: r.participants?.full_name || null, email: r.email, full_name: r.full_name,
@@ -362,6 +377,7 @@ export async function awaitingFor(ids: string[]) {
 // التأكيد يرسل الدعوة برابط جديد (الرمز لا يُستعاد من بصمته)، وعدم الاعتماد بسبب يُبلَّغ به المشارك.
 // allowed يحصر الصلاحية في نطاق المؤكِّد؛ وكل قرار في السجل بمن اتخذه
 export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: string }, b: Body, allowed: (participantId: string) => Promise<boolean>) {
+  await require360();
   const id = String(b.id || '');
   const r = must(await db.from('raters').select('*, participants(full_name, email)').eq('id', id).maybeSingle()) as any;
   if (!r || r.status !== 'awaiting') throw new Fail('لا مقيّم بانتظار التأكيد بهذا المعرّف', 404, 'not_found');
@@ -407,13 +423,16 @@ async function raterByToken(h: string) {
   if (data?.token_hash && Array.isArray(data.token_hashes) && !data.token_hashes.includes(data.token_hash)) return null;
   return data;
 }
-async function raterFrom(t: unknown) {
+// paused: حارس «متوقف مؤقتًا» (raterPaused) يسبق فحص الانتهاء، فرابط انقضت مهلته أثناء الإخفاء لا يُقال عنه «انتهى، اطلب دعوة»
+// وهو يعود حين يُظهَر 360 (resumeFrozen يمده)، ولا دعوة جديدة تُطلب ما دام مطفأ
+async function raterFrom(t: unknown, paused: (r: any) => Promise<void> = async () => {}) {
   const token = String(t || '');
   if (token.length < 20) throw new Fail('الرابط غير صالح', 400, 'invalid');
   // رمز لا يُعرف صفه لا يُعلم أهو رابط قديم أم غير صالح، فالرسالة العامة نفسها
   const r = await raterByToken(await hash(token)) as any;
   // nominated: رشّحه المشارك في تقييم 360 ولم يعتمد المستشار القائمة بعد، فلا رابط له
   if (!r || r.status === 'revoked' || r.status === 'nominated') throw new Fail('الرابط غير صالح أو أُلغي', 404, 'invalid');
+  await paused(r);
   if (new Date(r.expires_at) < new Date() && r.status !== 'submitted') throw new Fail('انتهت صلاحية الرابط، اطلب دعوة جديدة', 410, 'expired');
   // بعد الإرسال: اطلاع محدود المدة (4.5)
   if (r.status === 'submitted' && !linkAfterDecisionOk(r.submitted_at)) throw new Fail(LINK_CLOSED_AR, 410, 'closed');
@@ -429,16 +448,15 @@ async function raterQuestions(instrumentId: string, relation: string) {
 }
 
 
-// مقيّم 360 حين يُخفى 360 (feedback360.enabled): الدورة متجمدة، فلا نموذج ولا إرسال، ورده «متوقف مؤقتًا» بلا اسم الميزة.
-// مقيّمو الأثر قبل البرنامج وبعده (pre وpost) على المسار نفسه ولا يمسهم المفتاح
-async function f360Paused(r: any) {
-  if (r.phase !== 'f360' || (await appSettings()).feedback360.enabled) return;
-  throw new Fail(RATER_PAUSED_AR, 409, 'f360_off', { paused: true, phase: 'f360' });
+// كل مقيّم برابطه حين يُخفى 360 (feedback360.enabled): مقيّم 360 (الدورة متجمدة)، ومقيّمو الأثر قبل البرنامج وبعده
+// (pre وpost، مؤجلون مع 360 بقرار المالك 2026-11-16). لا نموذج ولا إرسال، ورده «متوقف مؤقتًا» بلا اسم الميزة، وصفه باقٍ
+async function raterPaused(r: any) {
+  if ((await features()).f360) return;
+  throw new Fail(RATER_PAUSED_AR, 409, 'f360_off', { paused: true, phase: r.phase || 'post' });
 }
 
 export async function raterGet(b: Body) {
-  const r = await raterFrom(b.t);
-  await f360Paused(r);
+  const r = await raterFrom(b.t, raterPaused);
   if (!r.opened_at) await db.from('raters').update({ opened_at: new Date().toISOString() }).eq('id', r.id);
   const qs = await raterQuestions(r.instrument_id, r.relation);
   // تقييم 360: مراسي السلم ووعد الإخفاء من الإعدادات العامة (scale_labels وmin_group)، بحسب مجموعة المقيّم
@@ -456,8 +474,7 @@ export async function raterGet(b: Body) {
 }
 
 export async function raterSubmit(b: Body) {
-  const r = await raterFrom(b.t);
-  await f360Paused(r);
+  const r = await raterFrom(b.t, raterPaused);
   if (r.status === 'submitted') throw new Fail('أُرسل التقدير من قبل، شكرًا لك', 409, 'done');
   // تقييم 360: بعد إغلاق الدورة (ولو مبكرًا من الإدارة) لا يُقبل تقدير يغيّر تقريرًا سُلِّم (N15)
   if (r.cycle_id) {

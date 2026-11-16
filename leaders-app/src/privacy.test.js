@@ -67,12 +67,16 @@ describe('الربط', () => {
   });
   it('تنفيذ المدير للحذف: رقم الطلب قبل الحذف، والصف قبل الملفات، والطلب يُغلق برقمه بعد نجاح الحذف وحده', () => {
     const admin = read('supabase/functions/leaders-api/admin.ts');
-    const fn = admin.slice(admin.indexOf('export async function participantDelete'), admin.indexOf('async function purgeQueuedMail'));
+    // الحذف الإداري يرفض من له طلب قائم قبل أي حذف، والقلب المشترك (removeParticipant) يحذف الصف قبل الملفات ثم يُغلق الطلب
+    const del = admin.slice(admin.indexOf('export async function participantDelete'), admin.indexOf('export async function removeParticipant'));
+    expect(del.indexOf('await pendingEraseId(id)')).toBeGreaterThan(0);
+    expect(del.indexOf('await pendingEraseId(id)')).toBeLessThan(del.indexOf('return removeParticipant('));
+    const fn = admin.slice(admin.indexOf('export async function removeParticipant'), admin.indexOf('async function purgeQueuedMail'));
     const at = (s) => { const i = fn.indexOf(s); expect(i, s).toBeGreaterThan(0); return i; };
-    expect(at('await pendingEraseId(id)')).toBeLessThan(at("db.from('participants').delete().eq('id', id)"));
+    expect(at("db.rpc('erasure_purge'")).toBeLessThan(at('storage.from(BUCKET).remove(paths)'));
     expect(at("db.from('participants').delete().eq('id', id)")).toBeLessThan(at('storage.from(BUCKET).remove(paths)'));
     expect(at("db.from('participants').delete().eq('id', id)")).toBeLessThan(at('await closeErasure(request, a.email'));
-    expect(read('supabase/functions/leaders-api/privacy.ts')).toMatch(/export async function closeOnDelete\(requestId[\s\S]{0,300}\.eq\('id', requestId\)/);
+    expect(read('supabase/functions/leaders-api/privacy.ts')).toMatch(/export async function closeOnDelete\(requestId[\s\S]{0,600}\.eq\('id', requestId\)/);
   });
   it('التطبيق يعرض الخدمة في صفحة الملف', () => {
     expect(read('leaders-app/src/App.jsx')).toMatch(/<MyData /);

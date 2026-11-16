@@ -61,6 +61,16 @@ describe('الجولة الحيّة والنصوص', () => {
     expect(tourStepsFor(TOUR_STEPS, ON).map((s) => s.d)).toEqual(TOUR_STEPS.map((s) => s.d));
     expect(TOUR_STEPS.filter((s) => s.noHall).map((s) => s.key).sort()).toEqual(['peer', 'portals']);
   });
+  it('حين يُطفأ 360 لا تذكر خطوة الأثر تقدير المدير والزملاء، وتبقى كما هي حين يظهر، وقبل الدخول مطفأ', () => {
+    const impactOf = (f) => tourStepsFor(TOUR_STEPS, f).find((s) => s.key === 'impact');
+    expect(impactOf({ hall: true, katon: true, f360: false }).d).not.toMatch(/مدير|زملاؤه|زميل/);
+    expect(impactOf({ hall: true, katon: true, f360: false }).d).not.toMatch(/[-‐-―−ـ]/);
+    expect(impactOf({ hall: true, katon: true, f360: true }).d).toBe(TOUR_STEPS.find((s) => s.key === 'impact').d);
+    expect(TOUR_STEPS.filter((s) => s.noF360).map((s) => s.key)).toEqual(['impact']);
+    const tour = read('leaders-app/src/LiveTour.jsx');
+    expect(tour).toContain('const f360On = !!me && flagsOf(me).f360;');
+    expect(tour).not.toMatch(/f360: true \}/);
+  });
   it('الجولة قبل الدخول تعامل القاعة مخفية، وتبقى على خطوتها بمفتاحها حين تتغير الخطوات، والصوت برقم الخطوة الأصلي', () => {
     const tour = read('leaders-app/src/LiveTour.jsx');
     expect(tour).toContain('const hallOn = !!me && flagsOf(me).hall;');

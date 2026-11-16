@@ -48,6 +48,13 @@ test('المشارك ينزّل نسخة بياناته، ويطلب الحذف 
   await expect(card).toContainText('بقي لك اليوم 2');
 
   await card.getByRole('button', { name: 'اطلب الحذف' }).click();
+  // ما يُحذف وما يبقى بنص الإدارة والسياسة: الشهادة تُلغى، والدفع 10 سنوات، والنسخ الاحتياطية بمدتها
+  await expect(card).toContainText('الشهادة ورقم تحققها: تُلغى وتُحذف');
+  await expect(card).toContainText('10 سنوات');
+  // ما يبقى كاملًا كما في الورقة والسياسة: سجل الدفع بالبريد، وأثر الطلب، وسجل الموافقات بمعرّف بلا اسم
+  await expect(card).toContainText('أثر الطلب');
+  await expect(card).toContainText('سجل الموافقات بمعرّف بلا اسم');
+  await expect(card).toContainText('اليومية 30 يومًا والشهرية سنة');
   const send = card.getByRole('button', { name: 'أرسل طلب الحذف' });
   await expect(send).toBeDisabled();
   await card.getByLabel(/للتأكيد اكتب بريدك/).fill('sara@x.sa');
@@ -56,7 +63,15 @@ test('المشارك ينزّل نسخة بياناته، ويطلب الحذف 
   await expect(card).toContainText('طلب حذف قائم');
   expect(sent.find((b) => b.action === 'me.erase-request')).toMatchObject({ confirm_email: 'sara@x.sa', reason: 'انتهى البرنامج' });
 
+  // السحب بتأكيد قصير، لا بنقرة واحدة: «تراجع» لا يرسل شيئًا
   await card.getByRole('button', { name: 'اسحب الطلب وأبقِ حسابي' }).click();
+  const ask = card.getByRole('group', { name: 'تأكيد سحب الطلب' });
+  await expect(ask).toContainText('يبقى حسابك وبياناتك كما هي');
+  await ask.getByRole('button', { name: 'تراجع' }).click();
+  await expect(card).toContainText('طلب حذف قائم');
+  expect(sent.filter((b) => b.action === 'me.erase-request' && b.cancel)).toHaveLength(0);
+  await card.getByRole('button', { name: 'اسحب الطلب وأبقِ حسابي' }).click();
+  await card.getByRole('button', { name: 'نعم، اسحب الطلب' }).click();
   await expect(card).toContainText('سحبنا طلب الحذف');
   await expect(card.getByRole('button', { name: 'اطلب الحذف' })).toBeVisible();
 });

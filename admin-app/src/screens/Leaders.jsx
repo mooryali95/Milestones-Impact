@@ -115,7 +115,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'overview') body = <Overview canWrite={canWrite} pending={pending} orgs={orgData?.orgs || []} onPerson={openPerson} onTrack={openTrack} onStatus={byStatus} onOrg={openOrg} onTab={go} />;
   else if (tab === 'participants') body = <Participants key={status} orgs={orgData?.orgs || []} canWrite={canWrite} personId={person} onOpen={(id) => (id ? openPerson(id) : at('participants'))} initialStatus={status} />;
   else if (tab === 'insight') body = <Insight onPerson={openPerson} onExpert={(id) => navigate({ ctx: 'leaders', tab: 'experts', id })} />;
-  else if (tab === 'impact') body = <Impact {...meth} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
+  else if (tab === 'impact') body = <Impact {...meth} f360={flags ? flags.f360 : undefined} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} isSuper={isSuper || isOwner} focus={route.id} onSettings={(r) => setFlags(featureFlags(r.values))} />;
