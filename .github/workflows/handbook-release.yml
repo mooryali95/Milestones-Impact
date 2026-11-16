@@ -105,11 +105,12 @@ jobs:
             echo
             echo '```'
           } > "$RUNNER_TEMP/body.md"
-          if ! url=$(gh pr create --base main --head "$branch" --title "كتاب القائد ${VER}: المقترحات المعتمدة من الكتاب الأم" --body-file "$RUNNER_TEMP/body.md"); then
-            echo "::error::دُفع الفرع ${branch} وتعذّر فتح الطلب آليًا (فعّل «Allow GitHub Actions to create and approve pull requests» في إعدادات Actions، أو افتحه يدويًا)."
-            echo "افتح الطلب يدويًا: https://github.com/${{ github.repository }}/compare/main...${branch}" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+          # إن منع إعداد Actions فتح الطلب بـ GITHUB_TOKEN يبقى الفرع جاهزًا، ويفتحه زر «أصدر الكتاب» بمفتاحه (book-release.ts)
+          if url=$(gh pr create --base main --head "$branch" --title "كتاب القائد ${VER}: المقترحات المعتمدة من الكتاب الأم" --body-file "$RUNNER_TEMP/body.md"); then
+            echo "طلب الإصدار: $url" >> "$GITHUB_STEP_SUMMARY"
+            # طلب يفتحه GITHUB_TOKEN لا يشغّل CI بنفسه، فيُشغَّل على فرعه صراحة (workflow_dispatch مستثنى من ذلك القيد)
+            gh workflow run ci.yml --ref "$branch"
+          else
+            echo "::warning::دُفع الفرع ${branch} ولم يُفتح طلبه آليًا. يفتحه زر «افتح طلب المراجعة» في لوحة الإصدار، أو يدويًا."
+            echo "الفرع جاهز: https://github.com/${{ github.repository }}/compare/main...${branch}" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "طلب الإصدار: $url" >> "$GITHUB_STEP_SUMMARY"
-          # طلب يفتحه GITHUB_TOKEN لا يشغّل CI بنفسه، فيُشغَّل على فرعه صراحة (workflow_dispatch مستثنى من ذلك القيد)
-          gh workflow run ci.yml --ref "$branch"

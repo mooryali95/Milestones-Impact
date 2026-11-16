@@ -59,6 +59,7 @@ import * as MC from './mail-center.ts';
 import * as AG from './agent-admin.ts';
 import * as MB from './master-book.ts';
 import * as BP from './book-proposals.ts';
+import * as BR from './book-release.ts';
 import { bookAccess } from './master-book.js';
 
 type Body = Record<string, any>;
@@ -475,6 +476,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.book-proposal-save': (a, b) => A.writer(a, (x, y) => BP.saveProposal(MB.adminViewer(x), y), b),
   'admin.book-proposal-status': (a, b) => A.writer(a, (x, y) => BP.moveProposal(MB.adminViewer(x), y), b),
   'admin.book-proposal-edit': (a, b) => A.writer(a, (x, y) => BP.proposeFromEdit(MB.adminViewer(x), y), b),
+  'admin.book-release': (a, b) => A.superWriter(a, () => BR.releaseState(), b),
+  'admin.book-release-start': (a, b) => A.superWriter(a, BR.releaseStart, b),
+  'admin.book-release-pr': (a, b) => A.superWriter(a, BR.releaseOpenPr, b),
+  'admin.book-release-publish': (a, b) => A.superWriter(a, BR.releasePublish, b),
   // مشاركة الكتاب: إضافة خبير إلى لجنة المحتوى أو القياس أو إزالته (العضوية نفسها في ملفه)
   'admin.book-reader': (a, b) => A.writer(a, MB.setReader, b),
   'admin.track': (_a, b) => A.track(b),
