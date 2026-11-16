@@ -13,14 +13,15 @@ import { type AssignmentMail, audit, db, Fail, must, sendMail, teamAssignedMail 
 import { cohortMembers } from './programs.ts';
 import { adminSave as expertCreate } from './experts.ts';
 import { firstName } from './hall.js';
-import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, EXPERT_APPROVED as APPROVED, expertAssignments, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
+import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, expertAssignments, journeyApproved, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
 import { EXPERT_ROLE_AR, expertRoleAr as roleAr } from './labels.js';
 
 type Body = Record<string, any>;
 type Admin = import('./admin.ts').Admin;
 
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
-const EXPERT_COLS = 'id, full_name, title, status, roles, dimensions, levels, weekly_hours';
+// committees مع roles: الحارس journeyApproved يقرأ الأدوار، والعرض يميّز من يخدم أيضًا في اللجان
+const EXPERT_COLS = 'id, full_name, title, status, roles, dimensions, levels, weekly_hours, committees';
 
 // حمل كل خبير: ساعاته (طلبات قائمة وجلسات قادمة، بالقاعدة نفسها في الترشيح)، وعدد الدفعات غير المغلقة التي يحمل فيها تكليفًا
 async function loads() {
@@ -76,7 +77,7 @@ export async function cohortTeam(b: Body) {
     c.organization_id ? db.from('organizations').select('name').eq('id', c.organization_id).maybeSingle().then((r: any) => r.data) : Promise.resolve(null),
   ]);
   const byId = new Map((experts || []).map((e: any) => [e.id, e]));
-  const approved = (experts || []).filter((e: any) => APPROVED.includes(e.status)).map((e: any) => e.id);
+  const approved = (experts || []).filter(journeyApproved).map((e: any) => e.id);
   const served = servedBy(c, st.members, st.groups, approved);
   const rows = teamRows(c, st.team, st.groups).filter((r) => byId.has(r.expert_id));
   const inTeam = new Set(rows.map((r) => r.expert_id));
@@ -88,8 +89,8 @@ export async function cohortTeam(b: Body) {
     rows: rows.map((r) => ({ ...r, expert: view(byId.get(r.expert_id)), serves_here: served[r.expert_id] || 0 })),
     groups: st.groups.map((g: any) => ({ id: g.id, name: g.name, advisor_expert_id: g.advisor_expert_id || null, count: st.members.filter((m: any) => m.group_id === g.id).length })),
     coverage: teamCoverage(c, st.members, st.groups, approved),
-    // للبحث في «أضف إلى الفريق»: المعتمدون، ومن في الفريق معلَّم
-    experts: (experts || []).filter((e: any) => APPROVED.includes(e.status)).map((e: any) => ({ ...view(e), in_team: inTeam.has(e.id) })),
+    // للبحث في «أضف إلى الفريق»: خبراء الرحلة المعتمدون (journeyApproved)، ومن في الفريق معلَّم
+    experts: (experts || []).filter(journeyApproved).map((e: any) => ({ ...view(e), in_team: inTeam.has(e.id) })),
   };
 }
 
@@ -101,7 +102,7 @@ export async function orgTeam(b: Body) {
   if (!cohorts?.length) return { success: true, cohorts: [] };
   const experts = must(await db.from('experts').select(EXPERT_COLS), msg) as any[];
   const byId = new Map((experts || []).map((e: any) => [e.id, e]));
-  const approved = (experts || []).filter((e: any) => APPROVED.includes(e.status)).map((e: any) => e.id);
+  const approved = (experts || []).filter(journeyApproved).map((e: any) => e.id);
   const out = [];
   for (const c of cohorts) {
     const st = await cohortState(c);
@@ -112,7 +113,7 @@ export async function orgTeam(b: Body) {
     out.push({
       id: c.id, name: c.name, status: c.status, starts_on: c.starts_on || null, ends_on: c.ends_on || null,
       advisor: adv ? { id: adv.id, full_name: adv.full_name, status: adv.status } : null,
-      team: rows.length, roles, not_approved: rows.filter((r) => !APPROVED.includes(byId.get(r.expert_id).status)).length,
+      team: rows.length, roles, not_approved: rows.filter((r) => !journeyApproved(byId.get(r.expert_id))).length,
       coverage: teamCoverage(c, st.members, st.groups, approved),
     });
   }
@@ -149,7 +150,7 @@ export async function teamAdd(a: Admin, b: Body) {
     if (!isUuid(b.expert_id)) throw new Fail('اختر الخبير، أو ادعُ شخصًا جديدًا ببريده');
     e = must(await db.from('experts').select(EXPERT_COLS + ', email').eq('id', b.expert_id).maybeSingle());
     if (!e) throw new Fail('الخبير غير موجود', 404);
-    if (!APPROVED.includes(e.status)) throw new Fail(`${e.full_name} لم يُعتمد بعد. اعتمد ملفه من «الخبراء» ثم أضفه`);
+    if (!journeyApproved(e)) throw new Fail((e.roles || []).length ? `${e.full_name} لم يُعتمد بعد. اعتمد ملفه من «الخبراء» ثم أضفه` : `${e.full_name} عضو لجنة لا يخدم في الرحلة. أضف له دورًا من «الخبراء» أولًا`);
     if (!(e.roles || []).includes(role)) throw new Fail(`ليس في ملف ${e.full_name} دور «${roleAr(role)}». اختر من أدواره، أو أضف الدور إلى ملفه من «الخبراء»`);
     if (!current.some((x) => x.expert_id === e.id) && current.length >= TEAM_MAX) throw new Fail(`فريق الدفعة ${TEAM_MAX} خبيرًا على الأكثر`);
   }
@@ -203,6 +204,7 @@ export async function coordTeam(orgId: string, perms: { team?: boolean; list?: b
   const states = await Promise.all(cohorts.map((c) => cohortState(c)));
   const rows = cohorts.map((c, i) => teamRows(c, states[i].team, states[i].groups));
   const ids = [...new Set(rows.flat().map((r) => r.expert_id))];
+  // journey-guard: يمر بـcoordTeamView (logic.js) التي تصفي بـjourneyApproved، فلا يرى المنسق عضو اللجنة في «فريق البرنامج»
   const experts = ids.length ? (must(await db.from('experts').select('id, full_name, title, status, roles, bio').in('id', ids), msg) as any[]) : [];
   return cohorts.map((c, i) => coordTeamView({ cohort: c, rows: rows[i], experts, groups: states[i].groups, members: states[i].members }, perms));
 }
@@ -232,7 +234,7 @@ export async function assignmentsOf(expertId: string, { withCounts = false } = {
     const c = byId.get(x.cohort_id);
     const st = await cohortState(c);
     const ids2 = [...new Set([c.advisor_expert_id, ...st.groups.map((g: any) => g.advisor_expert_id)].filter(Boolean))];
-    const ok = ids2.length ? ((must(await db.from('experts').select('id, status').in('id', ids2), msg) as any[]) || []).filter((e) => APPROVED.includes(e.status)).map((e) => e.id) : [];
+    const ok = ids2.length ? ((must(await db.from('experts').select('id, status, roles').in('id', ids2), msg) as any[]) || []).filter(journeyApproved).map((e) => e.id) : [];
     out.push({ ...x, participants: st.members.length, serves: servedBy(c, st.members, st.groups, ok)[expertId] || 0,
       groups: x.groups.map((g: any) => ({ ...g, count: st.members.filter((m: any) => m.group_id === g.id).length })) });
   }

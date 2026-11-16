@@ -167,7 +167,7 @@ describe('التقييم الختامي', () => {
     expect(voteBlock('x@x.sa', rec, {})).toMatch(/لا يعتمده بنفسه/);
     expect(voteBlock('y@x.sa', rec, {})).toBeNull();
     expect(voteBlock('x@x.sa', { submitted_by: 'x@x.sa', adjust: {} }, {})).toBeNull();
-    expect(voteBlock('y@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toMatch(/أعضاء اللجنة/);
+    expect(voteBlock('y@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toMatch(/أعضاء فريق اعتماد التقييم النهائي/);
     expect(voteBlock('a@x.sa', rec, { approval: 'committee_majority', committee_size: 2, committee: ['a@x.sa', 'b@x.sa'] })).toBeNull();
   });
 

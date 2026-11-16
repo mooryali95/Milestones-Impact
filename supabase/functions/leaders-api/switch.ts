@@ -29,6 +29,7 @@ export async function switchTo(email: string, from: Door, to: unknown, ctx: Ctx,
     if (!p) throw new Fail('لا حساب لك في هذه البوابة', 403, 'no_role');
     token = await issueSession(p.id, 'switch', { ip: ctx.ip, ua: ctx.ua ?? null } as any, bornAt);
   } else if (target === 'expert') {
+    // journey-guard: التبديل إلى باب /x للخدمتين، وأفعال الرحلة يحرسها journeyApproved في index.ts
     const { data: e } = await db.from('experts').select('id, status').eq('email', email).maybeSingle();
     if (!e || !EXPERT_OK.includes(e.status)) throw new Fail('لا حساب لك في هذه البوابة', 403, 'no_role');
     token = randomToken();

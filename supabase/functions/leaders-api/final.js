@@ -17,8 +17,9 @@ export const FINAL_COMPONENT_AR = {
 export const FINAL_DECISION_AR = { pass: 'اجتاز', pass_notes: 'اجتاز بملاحظات', extend: 'يُمدَّد', fail: 'لم يجتز' };
 export const FINAL_APPROVAL_AR = {
   expert: 'خبير واحد يعتمد',
-  committee_majority: 'لجنة بالأغلبية',
-  committee_unanimous: 'لجنة بالإجماع',
+  // «فريق اعتماد التقييم النهائي» (قرار المالك 2026-11-15): قائمة بريد لحسابات الإدارة، تمييزًا لها عن لجنتي المحتوى والقياس (experts.committees)
+  committee_majority: 'فريق اعتماد بالأغلبية',
+  committee_unanimous: 'فريق اعتماد بالإجماع',
 };
 export const FINAL_STATUS_AR = { draft: 'مسودة', pending: 'بانتظار الاعتماد', approved: 'معتمد', returned: 'أُعيد للمراجعة' };
 // طريقة تحويل القياس البعدي إلى درجة (قرار المالك 4.1)
@@ -46,7 +47,7 @@ export const FINAL_DEFAULTS = {
   thresholds: { pass: 70, pass_notes: 60, extend: 45 },
   approval: 'expert',
   committee_size: 3,
-  // أعضاء اللجنة بالبريد؛ فارغ = أي حساب إدارة له صلاحية الكتابة
+  // أعضاء «فريق اعتماد التقييم النهائي» بالبريد؛ فارغ = أي حساب إدارة له صلاحية الكتابة. لا صلة له بلجان الخبراء
   committee: [],
   // أقل تغطية (مجموع أوزان المكوّنات الموجودة) يُقبل بها اقتراح قرار
   min_coverage: 50,
@@ -123,8 +124,8 @@ export function cleanFinalConfig(raw, previous = null, now = new Date().toISOStr
   // أعضاء اللجنة بالبريد وحده: كان ما ليس بريدًا يسقط بصمت، فإن سقط الكل فرغت اللجنة وصار الاعتماد لأي حساب إدارة
   // (التدقيق 2026-11-11). فيُرفض الحفظ ويُسمّى ما ليس بريدًا
   const notEmail = listTokens(raw?.committee).filter((e) => !EMAIL_RE.test(e));
-  if (notEmail.length) throw new Error(`أعضاء اللجنة يُكتبون بالبريد. ليست بريدًا: ${notEmail.slice(0, 5).join('، ')}`);
-  if (c.approval !== 'expert' && c.committee.length && c.committee.length < c.committee_size) throw new Error(`أعضاء اللجنة المسمّون (${c.committee.length}) أقل من حجمها (${c.committee_size})`);
+  if (notEmail.length) throw new Error(`أعضاء فريق الاعتماد يُكتبون بالبريد. ليست بريدًا: ${notEmail.slice(0, 5).join('، ')}`);
+  if (c.approval !== 'expert' && c.committee.length && c.committee.length < c.committee_size) throw new Error(`أعضاء فريق الاعتماد المسمّون (${c.committee.length}) أقل من حجمه (${c.committee_size})`);
   // من عدّل التقييم لا يعتمده (voteBlock)، والتعديل الكبير يحتاج توقيعين. فاللجنة المسمّاة يلزمها بعد استبعاد المعدِّل
   // ما يكفي الاعتماد، وإلا صار مستحيلًا بلا مخرج (تدقيق الرحلة 2026-11-14). اللجنة غير المسمّاة يعتمد فيها أي حساب إدارة
   if (c.committee.length) {
@@ -298,7 +299,7 @@ export function votesNeeded(config) {
 export function voteBlock(email, record, config) {
   const cfg = finalConfig(config);
   const e = String(email || '').toLowerCase();
-  if (cfg.committee.length && !cfg.committee.includes(e)) return 'الاعتماد لأعضاء اللجنة المسمّين في إعداد البرنامج';
+  if (cfg.committee.length && !cfg.committee.includes(e)) return 'الاعتماد لأعضاء فريق اعتماد التقييم النهائي المسمّين في إعداد البرنامج';
   const adj = record?.adjust || {};
   const touched = Object.keys(adj.components || {}).length > 0 || !!adj.score || !!adj.decision;
   if (touched && finalEditors(record).includes(e)) return 'من عدّل التقييم لا يعتمده بنفسه؛ يعتمده خبير آخر';

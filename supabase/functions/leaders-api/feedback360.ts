@@ -13,7 +13,7 @@ import { lastBaseline } from './participant.ts';
 import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
 import { appSettings } from './settings.ts';
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR } from './domains.js';
-import { isEmail, normalizeEmail } from './logic.js';
+import { isEmail, journeyApproved, normalizeEmail } from './logic.js';
 import { requireWrite, type Admin } from './admin.ts';
 import {
   closesAtRiyadh, CYCLE_STATUS_AR, feedbackPromiseAr, feedbackReport, groupCaps, groupCounts, nextWave, NOMINEE_GROUPS, nominationCheck, orgTotals, raterItems, remindersDue, reportItems,
@@ -196,6 +196,7 @@ async function requireEffectiveAdvisor(e: any, participantId: string) {
 }
 
 export async function advisorList(e: any) {
+  if (!journeyApproved(e)) return { success: true, approvals: [], reports: [] };
   const ids = await myParticipantIds(e.id);
   if (!ids.length) return { success: true, approvals: [], reports: [] };
   const { data, error } = await db.from('feedback_cycles').select('*, participants(id, full_name, email, organization_id, is_demo)')

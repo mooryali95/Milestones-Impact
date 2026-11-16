@@ -12,7 +12,7 @@ import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
-  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf,
+  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -23,16 +23,18 @@ type Ctx = { ip: string | null; ua: string | null };
 // cohortId: دفعة المشارك؛ يرى جلسات دفعته والجلسات العامة لكل الدفعات.
 
 // الخبير صاحب الجلسة: يُختار صراحة، أو يُطابق نص المدرب (من الحجز أو المسجّل) ببريد خبير أو اسمه
-// وإلا فكوتش المشارك المسند إليه بطلب مقبول (expert_requests): مصدر واحد لـ«من كوتشه»
+// وإلا فكوتش المشارك المسند إليه بطلب مقبول (expert_requests): مصدر واحد لـ«من كوتشه».
+// الجلسة خدمة رحلة، فلا تُربط إلا بخبير يخدم فيها (journeyApproved): لا بعضو لجنة بلا دور ولا بموقوف يطابق اسمه
 async function expertFor(id: unknown, coach: unknown, participantId?: string): Promise<string | null> {
   if (id) {
-    const { data } = await db.from('experts').select('id').eq('id', String(id)).maybeSingle();
-    if (data) return data.id;
+    const { data } = await db.from('experts').select('id, status, roles').eq('id', String(id)).maybeSingle();
+    if (data && journeyApproved(data)) return data.id;
   }
   const c = String(coach || '').trim();
   if (c) {
-    const { data } = await db.from('experts').select('id').or(`email.eq.${c.toLowerCase().replace(/[,()]/g, '')},full_name.eq.${c.replace(/[,()]/g, '')}`).limit(1);
-    if (data?.[0]) return data[0].id;
+    const { data } = await db.from('experts').select('id, status, roles').or(`email.eq.${c.toLowerCase().replace(/[,()]/g, '')},full_name.eq.${c.replace(/[,()]/g, '')}`).limit(5);
+    const hit = (data || []).find(journeyApproved);
+    if (hit) return hit.id;
   }
   if (!participantId) return null;
   const { data: req } = await db.from('expert_requests').select('expert_id').eq('participant_id', participantId).eq('role', 'coach').eq('status', 'accepted').maybeSingle();
@@ -57,7 +59,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
     kinds.has('workshop') ? db.from('workshop_attendance').select('session_id').eq('participant_id', p.id) : none,
     kinds.has('coaching') ? db.from('coaching_sessions').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
-    // منهج المسار يُفتح مع الكتيب بعد اعتماد المستويات
+    // منهج المسار يُفتح مع الكتاب بعد اعتماد المستويات
     kinds.has('curriculum') && approved ? db.from('content_items').select(CONTENT_COLS).eq('active', true) : none,
     kinds.has('curriculum') ? db.from('content_progress').select('*').eq('participant_id', p.id) : none,
     // متطلب «نموذج»: حالة تسليم النموذج نفسه في مكتبة النماذج، لا ملف مرفوع

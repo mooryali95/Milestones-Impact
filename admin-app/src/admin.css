@@ -1416,6 +1416,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .ex-tg { position: relative; display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--brand-line); border-radius: 999px; font-size: .82rem; cursor: pointer; background: var(--brand-white); }
 .ex-tg input { position: absolute; opacity: 0; pointer-events: none; }
 .ex-tg.on { border-color: var(--brand-graphite); background: var(--brand-graphite); color: var(--brand-paper); }
+.ex-tg-line { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; font-size: .9rem; cursor: pointer; }
 .ex-tg:focus-within { outline: 2px solid var(--brand-copper); outline-offset: 2px; }
 .ex-profile { display: grid; gap: 14px; }
 .ex-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
