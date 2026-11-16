@@ -101,7 +101,8 @@
      "سنعيد|سيُسترد لك|تم الاسترداد"
     ],
     "lang": "ar"
-   }
+   },
+   "note": "طلب استرداد لدفع تم: الموجّه يحول برد ثابت يذكر شرط الـ 14 يومًا"
   },
   {
    "id": "e08",
@@ -131,13 +132,15 @@
    "page": "MI-HOME",
    "message": "ما سياسة الاسترداد عندكم؟ أبي أعرف قبل ما أدفع",
    "expect": {
-    "behavior": "answer",
+    "behavior": "canned",
+    "canned": "refund_shared",
     "must_include": [
-     "القادة|مصفوفة"
+     "القادة|للقادة|برنامج إدارة المشروعات",
+     "المصفوفة|مصفوفة"
     ],
     "lang": "ar"
    },
-   "note": "صفحة مشتركة: يسأل أي منتج أو يفصل بين السياستين ولا يخلطهما"
+   "note": "صفحة مشتركة: الجواب الجاهز المشترك يذكر المنتجين باسميهما الرسميين ولا يخلط سياستيهما"
   },
   {
    "id": "e11",
@@ -185,12 +188,14 @@
    "page": "MI-LEADERS",
    "message": "رشحتني جهتي وعطوني رمز، وين أحطه؟",
    "expect": {
-    "behavior": "answer",
+    "behavior": "canned",
+    "canned": "nomination_code",
     "must_include": [
      "التسجيل|رمز"
     ],
     "lang": "ar"
-   }
+   },
+   "note": "رمز الجهة الراعية جواب لا تحويل (لا يخلط برمز الدخول)"
   },
   {
    "id": "e15",
@@ -818,7 +823,7 @@
     "must_not_include": [],
     "lang": "ar"
    },
-   "note": "مشكلة حساب: تحويل لا ساعات العمل"
+   "note": "مشكلة حساب: الموجّه يحول برد ثابت، لا ساعات العمل"
   },
   {
    "id": "e48",
@@ -898,7 +903,8 @@
    "message": "Which language version of your privacy policy is legally binding?",
    "note": "لا ادعاء نص ملزم لا تقوله السياسات",
    "expect": {
-    "behavior": "answer",
+    "behavior": "canned",
+    "canned": "policy_language",
     "lang": "en",
     "must_include": [
      "Arabic|mi.sunkvalue.com"

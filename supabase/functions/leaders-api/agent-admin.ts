@@ -19,7 +19,7 @@ import { versions, type Versions } from '../agent-chat/version.ts';
 import { CASES } from '../agent-chat/evals/cases.ts';
 import type { Case } from '../agent-chat/evals/grade.ts';
 import { THRESHOLDS } from '../agent-chat/evals/grade.ts';
-import { type CaseOutcome, runCase } from '../agent-chat/evals/runner.ts';
+import { type CaseOutcome, repeatsOf, runCase, runCaseRepeated } from '../agent-chat/evals/runner.ts';
 
 type Body = Record<string, any>;
 
@@ -278,10 +278,14 @@ const GATE_WINDOW = 100;
 const runtimeOf = (env = agentEnv(), v?: Versions): Promise<Runtime> =>
   readRuntime(() => AG.repo.runtime(), { mode: AG.env('LEADERS_AGENT_ENABLED'), envKey: env.envKey, fingerprint: async () => (v ?? await versions(env.model)).fingerprint }, AG.now());
 
+// تكرار كل حالة (1 أو حتى 3) لكشف التذبذب: يُحفظ في حد التشغيل نفسه (حد المرة الواحدة مضروبًا في التكرار)، فلا عمود
+// جديد ولا ترحيل، ويُقرأ منه في كل دفعة. الحالة ناجحة إن نجحت في كل تكرار.
+export const repeatsOfRun = (r: Pick<Run, 'max_micros'>) => repeatsOf(num(r.max_micros) / AGENT.runMaxMicros);
+
 const publicRun = (r: Run | null | undefined) => r && {
   id: r.id, status: r.status, stop_reason: r.stop_reason, model: r.model, knowledge_version: r.knowledge_version, fingerprint: r.fingerprint,
   total_cases: r.total_cases, done_cases: r.done_cases, eval_pass: r.eval_pass, eval_total: r.eval_total, redteam_pass: r.redteam_pass, redteam_total: r.redteam_total,
-  cost_micros: num(r.cost_micros), max_micros: num(r.max_micros), started_by: r.started_by, started_at: r.started_at, finished_at: r.finished_at, key_source: r.key_source,
+  cost_micros: num(r.cost_micros), max_micros: num(r.max_micros), repeats: repeatsOfRun(r), started_by: r.started_by, started_at: r.started_at, finished_at: r.finished_at, key_source: r.key_source,
 };
 
 async function closeStale() {
@@ -443,8 +447,9 @@ export async function enable(a: Admin, b: Body) {
   return { success: true, enabled: want };
 }
 
-export async function evalStart(a: Admin) {
+export async function evalStart(a: Admin, b: Body = {}) {
   requireAgentRead(a);
+  const repeats = repeatsOf(b?.repeats);
   await settingsOr409();
   await closeStale();
   const env = agentEnv();
@@ -453,15 +458,15 @@ export async function evalStart(a: Admin) {
   if (!rt.apiKey) throw new Fail('لا مفتاح: اضبطه من قسم «المفتاح» أو في أسرار الخادم', 409, 'no_key');
   const spent = await AG.ledger().spentToday(riyadhDay(AG.now()));
   if (spent === null) throw new Fail('تعذّرت قراءة سجل الإنفاق، حاول بعد قليل', 503, 'ledger');
-  if (spent + AGENT.startReserveMicros > env.capCents * 1e4) throw new Fail('لا يتسع سقف اليوم للتقييم', 409, 'daily_cap');
+  if (spent + AGENT.startReserveMicros * repeats > env.capCents * 1e4) throw new Fail('لا يتسع سقف اليوم للتقييم', 409, 'daily_cap');
   const v = await versions(env.model);
   const made = await guard(() => AG.repo.createRun({
     model: env.model, knowledge_version: v.knowledge_version, prompt_version: v.prompt_version, cases_version: v.cases_version, fingerprint: v.fingerprint,
-    key_source: rt.keySource, total_cases: CASES.length, max_micros: AGENT.runMaxMicros, started_by: a.email,
+    key_source: rt.keySource, total_cases: CASES.length, max_micros: AGENT.runMaxMicros * repeats, started_by: a.email,
   }));
   if ('running' in made) throw new Fail('يجري تقييم آخر الآن', 409, 'eval_running', { run_id: made.running });
-  await AG.audit('admin', a.email, 'agent.eval-start', 'agent_eval_runs', made.id, null, { fingerprint: v.fingerprint });
-  return { success: true, run_id: made.id, total: CASES.length };
+  await AG.audit('admin', a.email, 'agent.eval-start', 'agent_eval_runs', made.id, null, { fingerprint: v.fingerprint, repeats });
+  return { success: true, run_id: made.id, total: CASES.length, repeats };
 }
 
 export async function evalCancel(a: Admin, b: Body) {
@@ -513,7 +518,9 @@ export async function evalStep(a: Admin, b: Body) {
     const rt = await runtimeOf(env, v);
     if (!rt.apiKey) return await finish('error', 'key');
     const done = new Set((await AG.repo.results(id)).map((r) => r.case_id));
-    const pending = CASES.filter((c) => !done.has(c.id)).slice(0, AGENT.batch);
+    // التكرار يضرب استدعاءات الحالة، فتصغر الدفعة لتبقى في حد الطلب الواحد
+    const repeats = repeatsOfRun(run);
+    const pending = CASES.filter((c) => !done.has(c.id)).slice(0, Math.max(1, Math.floor(AGENT.batch / repeats)));
     const evalEnv: Env = { apiKey: rt.apiKey, model: env.model, capCents: env.capCents, enabled: true, turnstileSecret: 'eval', turnstileSite: 'eval', adminEmail: '' };
     const real = AG.ledger();
     let cost = num(run.cost_micros);
@@ -525,13 +532,13 @@ export async function evalStep(a: Admin, b: Body) {
       while (queue.length && !stop) {
         const c = queue.shift()!;
         // حارس التشغيل: لا تبدأ حالة قد تتجاوز حده
-        const worst = caseWorst(env.model, c);
+        const worst = caseWorst(env.model, c) * repeats;
         if (cost + worst > num(run.max_micros)) { stop = { status: 'stopped', reason: 'max_cost' }; return; }
         cost += worst;
         let o: CaseOutcome;
         try {
           // التنبيه الحقيقي: علامة اليوم تُكتب في السجل الحقيقي، فتنبيه بلا إرسال يكتم تنبيه الزوار في اليوم نفسه
-          o = await runCase(c, { env: evalEnv, model: AG.model, real, alert: (k, d) => AG.alert(k, d) });
+          o = await runCaseRepeated(c, { env: evalEnv, model: AG.model, real, alert: (k, d) => AG.alert(k, d) }, repeats);
         } catch (e) {
           // رقم الحالة ونوع الخطأ وحدهما، لا نص ولا رد
           console.error('agent eval case:', c.id, (e as Error)?.name);
@@ -551,7 +558,8 @@ export async function evalStep(a: Admin, b: Body) {
         if (o.ledger === 'error') { stop = { status: 'error', reason: 'ledger' }; return; }
         if (o.errorStatus !== null) console.error('agent eval case:', c.id, o.errorStatus);
         if (o.errorStatus === 0 || o.errorStatus === 429 || (o.errorStatus !== null && o.errorStatus >= 500)) { transient++; continue; }
-        await AG.repo.addResult({ run_id: id, case_id: c.id, set_name: c.set, pass: o.pass, reasons: o.reasons.slice(0, 20).map((x) => x.slice(0, 300)), source: o.reply.source, handoff: o.reply.handoff, reply: o.reply.text.slice(0, 6000), cost_micros: o.costMicros });
+        // رد الموجّه الثابت يُحفظ بمصدر «جاهز» (قيد العمود)، وhandoff يميزه
+        await AG.repo.addResult({ run_id: id, case_id: c.id, set_name: c.set, pass: o.pass, reasons: o.reasons.slice(0, 20).map((x) => x.slice(0, 300)), source: o.reply.source === 'route' ? 'canned' : o.reply.source, handoff: o.reply.handoff, reply: o.reply.text.slice(0, 6000), cost_micros: o.costMicros });
       }
     };
     await Promise.all(Array.from({ length: Math.min(AGENT.parallel, pending.length) }, worker));

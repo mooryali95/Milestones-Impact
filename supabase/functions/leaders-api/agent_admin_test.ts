@@ -421,3 +421,27 @@ Deno.test('المفتاح: الحفظ يُفرغ خزن الحالة فيرى ا
   assert(h.alerts.filter(([k]) => k === 'agent_key_changed').length >= 2);
   assert(h.mails.length > before);
 });
+
+Deno.test('التقييم بالتكرار: ثلاث مرات لكل حالة بحد مضروب، ودفعات أصغر، وتشغيل كامل، ورد الموجّه يُحفظ بمصدر جاهز', async () => {
+  let calls = 0;
+  const h = install({ model: async (_m: unknown, onText: (t: string) => void) => { calls++; onText('لا أملك معلومة مؤكدة عن هذا.'); return { text: 'لا أملك معلومة مؤكدة عن هذا.', stopReason: 'end_turn', model: MODEL, usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } }; } });
+  const s = await AA.evalStart(SUPER, { repeats: 3 });
+  assertEquals(s.repeats, 3);
+  assertEquals(h.st.runs[0].max_micros, AA.AGENT.runMaxMicros * 3);
+  assertEquals(AA.repeatsOfRun(h.st.runs[0]), 3);
+  const first: any = await AA.evalStep(SUPER, { run_id: s.run_id });
+  assertEquals(first.done_cases, 2);
+  let r: any = first;
+  let steps = 1;
+  while (!r.done && steps < 60) { r = await AA.evalStep(SUPER, { run_id: s.run_id }); steps++; }
+  assertEquals(h.st.results.length, CASES.length);
+  assert(calls >= 3 * CASES.filter((c) => !['canned', 'handoff'].includes(c.expect.behavior)).length);
+  assert(h.st.results.every((x) => ['canned', 'model', 'capped', 'error'].includes(String(x.source))));
+  const e07 = h.st.results.find((x) => x.case_id === 'e07')!;
+  assertEquals([e07.source, e07.handoff, e07.pass], ['canned', true, true]);
+  // التكرار المرفوض يُقص إلى حده، وبلا قيمة مرة واحدة
+  install();
+  assertEquals((await AA.evalStart(SUPER, { repeats: 9 })).repeats, 3);
+  install();
+  assertEquals((await AA.evalStart(SUPER)).repeats, 1);
+});

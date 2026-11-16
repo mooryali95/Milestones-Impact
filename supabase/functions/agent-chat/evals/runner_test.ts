@@ -4,7 +4,7 @@ import type { Env } from '../handler.ts';
 import { emptyMem, type Mem, memStore } from '../mem_store.ts';
 import { matchFaq } from '../faq.ts';
 import { CASES } from './cases.ts';
-import { ledgerStore, runCase, summarize } from './runner.ts';
+import { ledgerStore, repeatsOf, runCase, runCaseRepeated, summarize } from './runner.ts';
 
 const ENV: Env = { apiKey: 'sk-test', model: 'claude-haiku-5-5', capCents: 200, enabled: true, turnstileSecret: 'eval', turnstileSite: 'eval', adminEmail: '' };
 const usage = { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
@@ -66,4 +66,30 @@ Deno.test('ledgerStore: الحجز والتسوية في المخزن الحقي
   // المخزن المركب نفسه: المحادثة من الذاكرة
   const s = ledgerStore(memStore(mem), memStore(real));
   assertEquals(await s.countConversations(new Date(0).toISOString()), 1);
+});
+
+Deno.test('runCaseRepeated: ناجحة إن نجحت في كل تكرار، والتذبذب في الأسباب، والتكلفة مجموعها، والخطأ يوقف التكرار', async () => {
+  assertEquals([repeatsOf(undefined), repeatsOf(0), repeatsOf(3), repeatsOf(9), repeatsOf('2')], [1, 1, 3, 3, 2]);
+  const c = CASES.find((x) => x.id === 'e02')!;
+  let n = 0;
+  // يتذبذب: ينجح في الأول والثالث ويرسب في الثاني بذكر رقم
+  const flaky = async (_m: unknown, onText: (t: string) => void) => {
+    n++;
+    const text = n === 2 ? 'السعر 500 دولار تقريبًا.' : 'تظهر الرسوم في شاشة الدفع بعد التسجيل.';
+    onText(text);
+    return { text, stopReason: 'end_turn', model: 'claude-haiku-5-5', usage };
+  };
+  const o = await runCaseRepeated(c, { env: ENV, model: flaky }, 3);
+  assertEquals(o.runs, 3);
+  assert(o.costMicros > 0);
+  // الرد الثاني أُصلح بالحارس فنجح، فالتذبذب لا يظهر هنا: الحارس يحول الرسوب إلى نجاح ثابت
+  assertEquals(o.passes, 3);
+  assertEquals(o.pass, true);
+  const bad = async (_m: unknown, onText: (t: string) => void) => { n++; const text = n % 2 ? 'Wrong language reply.' : 'تظهر الرسوم في شاشة الدفع بعد التسجيل.'; onText(text); return { text, stopReason: 'end_turn', model: 'claude-haiku-5-5', usage }; };
+  n = 0;
+  const f = await runCaseRepeated(c, { env: ENV, model: bad }, 3);
+  assertEquals(f.pass, false);
+  assertEquals(f.reasons[0], `تذبذب: نجح ${f.passes} من 3`);
+  const err = await runCaseRepeated(c, { env: ENV, model: () => Promise.reject(Object.assign(new Error('x'), { status: 529 })) }, 3);
+  assertEquals([err.runs, err.errorStatus], [1, 529]);
 });

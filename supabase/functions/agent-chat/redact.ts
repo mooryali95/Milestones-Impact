@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // قبل النموذج (وقبل الحفظ): الأرقام تُوحَّد أولًا (العربية الهندية والفارسية إلى 0-9)، ثم يُحجب رقم الهوية
 // أو الإقامة (10 أرقام تبدأ بـ 1 أو 2) ورقم البطاقة (13 إلى 19 رقمًا يجتاز فحص Luhn) والآيبان السعودي،
-// ولو كُتبت بمسافات أو شرطات بينها.
+// ولو كُتبت بمسافات أو شرطات بينها، وكلمة المرور بعد ذكرها («كلمة المرور: ...»، "password is ...").
 // بعد النموذج: لا بريد إلا بريد الشركة المنشور، ولا رقم هاتف (لا رقم منشور للشركة)، ولا رابط خارج مواقع
 // المنظومة في SITES (بلا لوحة الإدارة). الحجب يستبدل ولا يحذف بصمت، فيرى الزائر أن شيئًا حُجب.
 import { SITES } from '../_shared/sites.js';
@@ -30,16 +30,19 @@ export function luhn(num: string) {
   return num.length >= 13 && sum % 10 === 0;
 }
 
-export const MASK = { id: '[رقم هوية محجوب]', card: '[رقم بطاقة محجوب]', iban: '[آيبان محجوب]' };
+export const MASK = { id: '[رقم هوية محجوب]', card: '[رقم بطاقة محجوب]', iban: '[آيبان محجوب]', secret: '[كلمة مرور محجوبة]' };
 
 // تسلسل أرقام تفصلها مسافات أو شرطات أو نقاط: يُجمع ثم يُفحص مجموعه
 const DIGIT_RUN = /\d(?:[\s\-.]?\d){8,22}/g;
 const IBAN = /\bSA\s?\d{2}(?:[\s-]?[0-9A-Z]){18,26}/gi;
+// كلمة المرور بعد ذكرها وفاصل صريح (هي، is، النقطتان، =)، والسر كلمة فيها رقم أو حرف لاتيني: «نسيت كلمة المرور» لا تُحجب
+const SECRET = /((?:كلمة|كلمه)\s+(?:المرور|السر|مروري|سري)|الباسورد|باسوردي|الرقم السري|\bpass(?:word|code)\b|\bpwd\b)(\s*(?:هي|هو|is|=|:)\s*)(?=[^\s،,]*[A-Za-z0-9])([^\s،,]{4,64})/gi;
 
 export function redactInput(text: string): { text: string; hits: string[] } {
   const hits: string[] = [];
   let t = normalizeDigits(String(text ?? ''));
   t = t.replace(IBAN, () => { hits.push('iban'); return MASK.iban; });
+  t = t.replace(SECRET, (_m, label: string, sep: string) => { hits.push('secret'); return `${label}${sep}${MASK.secret}`; });
   t = t.replace(DIGIT_RUN, (run) => {
     const d = run.replace(/\D/g, '');
     if (d.length === 10 && /^[12]/.test(d)) { hits.push('id'); return MASK.id; }
@@ -48,6 +51,14 @@ export function redactInput(text: string): { text: string; hits: string[] } {
   });
   return { text: t, hits };
 }
+
+// المبلغ بعملة كما يكتبه أحد: قبل الرقم ($ وUSD) أو بعده (دولار وريال وUSD وSAR). مصدر واحد لتحييد رقم الزائر هنا
+// ولحارس الأسعار في المخرج (guard.ts)
+export const AMOUNT = /(?:(?:US\$|\$|USD|SAR)\s?(\d[\d,]*(?:\.\d+)?))|(?:(\d[\d,]*(?:\.\d+)?)\s?(?:دولار(?:ًا|ا)?|\$|USD|SAR|ريال(?:ًا|ا)?|ر\.س|dollars?|riyals?|SR\b))/gi;
+export const NEUTRAL_AMOUNT = { ar: '[مبلغ ذكره الزائر]', en: '[an amount the visitor mentioned]' };
+// قبل النموذج وحده (لا في الحفظ): المبلغ الذي يقترحه الزائر لا يصل النموذج، فلا يملك رقمًا يكرره ولو نافيًا (r04).
+// المحفوظ للفريق يبقى كما كتبه الزائر بعد الحجب.
+export const neutralizeAmounts = (text: string) => normalizeDigits(String(text ?? '')).replace(AMOUNT, () => NEUTRAL_AMOUNT.ar);
 
 // ── فحص المخرج ──
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
@@ -91,22 +102,34 @@ export function sanitizeOutput(text: string): { text: string; hits: string[] } {
   return { text: t.split(KEEP).join(COMPANY_EMAIL), hits };
 }
 
+// حد الجملة: بعد نقطة أو علامة استفهام أو تعجب تليها مسافة، أو بعد سطر جديد. نقطة الرابط (leaders.sunkvalue.com) ليست حدًا.
+export const SENTENCE_END = /(?<=[.!?؟])(?=\s)|(?<=\n)/;
+// آخر حد جملة في النص (موضع بعده)، أو 0
+function lastSentenceEnd(t: string) {
+  let end = 0;
+  const rx = /[.!?؟](?=\s)|\n/g;
+  let m: RegExpExecArray | null;
+  while ((m = rx.exec(t))) end = m.index + 1;
+  return end;
+}
+
 // فحص المخرج أثناء البث: يُحبس ذيل قصير حتى أول فاصل بعده، فلا يخرج بريد أو رابط أو رقم قبل اكتماله.
 // النص النهائي (finish) هو المحفوظ والمرسل في حدث done، فيستبدل الزائر ما بثه به.
+// sentences: لا يخرج إلا ما تم من جمل، لأن حراس المخرج (guard.ts) تستبدل الجملة كلها، فلا تتغير جملة بعد بثها.
 export class StreamSanitizer {
   private raw = '';
   private sent = 0;
   // pre: تحويل على النص الخام كله قبل الفحص (نزع علامة التحويل مثلًا، ولو وصلت مقسومة بين دفعتين)
-  constructor(private readonly hold = 48, private readonly pre: (t: string) => string = (t) => t) {}
+  constructor(private readonly hold = 48, private readonly pre: (t: string) => string = (t) => t, private readonly sentences = false) {}
   push(delta: string): string {
     this.raw += delta;
     const clean = sanitizeOutput(this.pre(this.raw)).text;
     let end = clean.length - this.hold;
     if (end <= this.sent) return '';
-    // يقف عند آخر مسافة قبل الحد
+    // يقف عند آخر مسافة قبل الحد، أو عند آخر جملة تامة
     const ws = clean.lastIndexOf(' ', end);
     const nl = clean.lastIndexOf('\n', end);
-    end = Math.max(ws, nl);
+    end = this.sentences ? Math.min(lastSentenceEnd(clean), Math.max(ws, nl)) : Math.max(ws, nl);
     if (end <= this.sent) return '';
     const out = clean.slice(this.sent, end);
     this.sent = end;
