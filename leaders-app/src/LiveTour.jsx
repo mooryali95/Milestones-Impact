@@ -6,8 +6,9 @@
 // بضغطة (الدخول، تعبئة الملف، إرسال القياس، طرح سؤال أقران تجريبي). التعتيم لا يحجب النقر، فالمقدِّم
 // يستطيع التفاعل مع الشاشة أثناء الشرح. وضع المقدِّم يكبّر النص لجهاز العرض، والأسهم تنقل بين الخطوات.
 // التصور: docs/journey/2026-11-05-تصور-الجولة-الحية-التفاعلية-v1.md
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { call } from './api.js';
+import { flagsOf, tourStepsFor } from './features.js';
 import { TOUR_ACTS, TOUR_AUDIO, TOUR_AUDIO_BASE, TOUR_PEER_SAMPLE, TOUR_STEPS } from './tour-steps.js';
 
 const KEY = 'mi_demo_step';
@@ -63,31 +64,46 @@ function useSpotlight(anchor, active) {
 }
 
 export default function LiveTour({ me, onAccept, onGo }) {
-  const [i, setI] = useState(() => Math.min(TOUR_STEPS.length - 1, Math.max(0, Number(store.get(KEY)) || 0)));
+  // خطوة الميزة المخفية (القاعة) تُحذف قبل العداد، فلا تقود الجولة إلى شاشة مخفية ولا يُذكر ما أُخفي (مفاتيح الميزات)
+  // قبل الدخول لا تُعرف المفاتيح، فالقاعة مخفية حتى يقول الخادم غير ذلك: الزائر برابط العرض لا يرى ميزة مخفية.
+  // وحين تتغير الخطوات (الدخول أو تبدّل المفتاح) تبقى الجولة على الخطوة نفسها بمفتاحها لا برقمها
+  const hallOn = !!me && flagsOf(me).hall;
+  const STEPS = useMemo(() => tourStepsFor(TOUR_STEPS, { hall: hallOn, katon: true, f360: true }), [hallOn]);
+  const [at, setI] = useState(() => Math.max(0, Number(store.get(KEY)) || 0));
+  const prevSteps = useRef(STEPS);
+  useEffect(() => {
+    const prev = prevSteps.current;
+    prevSteps.current = STEPS;
+    if (prev === STEPS) return;
+    const key = prev[Math.min(prev.length - 1, at)]?.key;
+    const k = STEPS.findIndex((s) => s.key === key);
+    if (k >= 0 && k !== at) { setI(k); store.set(KEY, String(k)); }
+  }, [STEPS, at]);
+  const i = Math.min(STEPS.length - 1, at);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [min, setMin] = useState(false);
   const [presenter, setPresenter] = useState(() => store.get(PRESENTER) === '1');
   const [audioOk, setAudioOk] = useState(TOUR_AUDIO);
   const audio = useRef(null);
-  const step = TOUR_STEPS[i];
-  const last = i === TOUR_STEPS.length - 1;
+  const step = STEPS[i];
+  const last = i === STEPS.length - 1;
   const signedIn = !!me;
   const rect = useSpotlight(step.anchor, !min && (signedIn || !step.go));
 
   const to = useCallback((n) => {
-    const k = Math.min(TOUR_STEPS.length - 1, Math.max(0, n));
+    const k = Math.min(STEPS.length - 1, Math.max(0, n));
     setI(k); store.set(KEY, String(k)); setErr('');
     audio.current?.pause();
-    if (TOUR_STEPS[k].go && me) onGo(TOUR_STEPS[k].go);
-  }, [me, onGo]);
+    if (STEPS[k].go && me) onGo(STEPS[k].go);
+  }, [me, onGo, STEPS]);
 
   // الأسهم تنقل بين الخطوات، وEscape يصغّر اللوحة (لا تعمل أثناء الكتابة في حقل)
   useEffect(() => {
     const onKey = (e) => {
       const tag = (e.target?.tagName || '').toLowerCase();
       if (['input', 'textarea', 'select'].includes(tag) || e.target?.isContentEditable) return;
-      if (e.key === 'ArrowLeft') { e.preventDefault(); if (!TOUR_STEPS[i].act || signedIn) to(i + 1); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); if (!STEPS[i].act || signedIn) to(i + 1); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); to(i - 1); }
       else if (e.key === 'Escape') setMin((m) => !m);
     };
@@ -129,17 +145,17 @@ export default function LiveTour({ me, onAccept, onGo }) {
   const canAct = step.act && (step.act === 'login' ? !signedIn : signedIn);
   const nextAllowed = !step.act || signedIn;
 
-  if (min) return <button type="button" className="tour-pill" onClick={() => setMin(false)}>الجولة الحيّة · {i + 1} من {TOUR_STEPS.length}</button>;
+  if (min) return <button type="button" className="tour-pill" onClick={() => setMin(false)}>الجولة الحيّة · {i + 1} من {STEPS.length}</button>;
   return (
     <>
       {rect && <div className="tour-spot" aria-hidden="true" style={{ left: rect.x - 8, top: rect.y - 8, width: rect.w + 16, height: rect.h + 16 }} />}
       <aside className={`tour${presenter ? ' presenter' : ''}`} role="region" aria-label="الجولة الحيّة">
-        <div className="tour-steps" aria-hidden="true">{TOUR_STEPS.map((s, k) => <i key={s.key} className={k < i ? 'done' : k === i ? 'on' : ''} />)}</div>
+        <div className="tour-steps" aria-hidden="true">{STEPS.map((s, k) => <i key={s.key} className={k < i ? 'done' : k === i ? 'on' : ''} />)}</div>
         <div className="tour-body">
           <div className="tour-head">
-            <p className="tour-eyebrow">الجولة الحيّة · الخطوة {i + 1} من {TOUR_STEPS.length}</p>
+            <p className="tour-eyebrow">الجولة الحيّة · الخطوة {i + 1} من {STEPS.length}</p>
             <select className="tour-jump" aria-label="انتقل إلى خطوة" value={i} onChange={(e) => to(Number(e.target.value))}>
-              {TOUR_STEPS.map((s, k) => <option key={s.key} value={k}>{k + 1}. {s.t}</option>)}
+              {STEPS.map((s, k) => <option key={s.key} value={k}>{k + 1}. {s.t}</option>)}
             </select>
           </div>
           <h2>{step.t}</h2>
@@ -157,7 +173,7 @@ export default function LiveTour({ me, onAccept, onGo }) {
           <div className="tour-tools">
             {/* مقطع الخطوة تسجيل said القديم: لا يُعرض حيث صُحّح نصها (d) حتى يُعاد التسجيل */}
             {audioOk && !step.said && (
-              <button type="button" className="link small" onClick={() => { const a = audio.current; if (!a) return; if (a.paused) { a.src = `${TOUR_AUDIO_BASE}${i + 1}.mp3`; a.play().catch(() => setAudioOk(false)); } else a.pause(); }}>▶ الصوت</button>
+              <button type="button" className="link small" onClick={() => { const a = audio.current; if (!a) return; if (a.paused) { a.src = `${TOUR_AUDIO_BASE}${TOUR_STEPS.findIndex((s) => s.key === step.key) + 1}.mp3`; a.play().catch(() => setAudioOk(false)); } else a.pause(); }}>▶ الصوت</button>
             )}
             <button type="button" className="link small" onClick={togglePresenter} aria-pressed={presenter}>{presenter ? 'نص عادي' : 'وضع المقدِّم'}</button>
             <button type="button" className="link small" onClick={() => setMin(true)}>إخفاء</button>

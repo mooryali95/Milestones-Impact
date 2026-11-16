@@ -6,6 +6,7 @@
 // بعد فتح النافذة يرى أعدادًا لكل مجموعة لا من أرسل ومن لم يرسل (حماية المقيّم).
 import React, { useCallback, useEffect, useState } from 'react';
 import { call } from '../api.js';
+import { isFeatureOff } from '../features.js';
 import { dimOf } from '../labels.js';
 import { ErrorBox } from '../ui.jsx';
 import { CYCLE_STATUS_AR, nominationCheck } from '../../../supabase/functions/leaders-api/feedback360.js';
@@ -150,8 +151,10 @@ export default function Feedback360({ onBack }) {
   const load = useCallback(async () => {
     setError('');
     const r = await call('f360.mine');
+    // أُخفي 360 والشاشة مفتوحة: يعود المشارك إلى ملفه بلا رسالة خطأ (مفاتيح الميزات)
+    if (isFeatureOff(r) || (r.success && r.enabled === false && !r.cycles)) { onBack?.(); return; }
     if (r.success) setData(r); else setError(r.message);
-  }, []);
+  }, [onBack]);
   useEffect(() => { load(); }, [load]);
   if (error) return <div className="page narrow"><ErrorBox message={error} onRetry={load} /></div>;
   if (!data) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;

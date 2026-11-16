@@ -28,6 +28,19 @@ export default function Rater() {
   useEffect(() => { call('rater.get', { t }).then(setData); }, [t]);
 
   if (!data) return <div className="center-load"><div className="spinner" /></div>;
+  // تقدير متوقف مؤقتًا (رد f360_off بـ paused من الخادم): لا نموذج ولا خطأ، ورسالة صادقة بلا اسم الميزة، والرابط يعمل حين يُستأنف
+  if (data.paused) {
+    return (
+      <div className="page narrow">
+        <div className="card stack" data-testid="rater-paused">
+          <p className="eyebrow">تقدير متوقف مؤقتًا</p>
+          <h1 className="as-h2">{data.rater ? `أهلًا ${data.rater}` : 'شكرًا لك'}</h1>
+          <p className="muted" role="status">{data.message}</p>
+          <p className="small muted">احتفظ بهذه الرسالة: الرابط نفسه يعمل حين يُستأنف التقدير، ولا يضيع شيء مما سبق.</p>
+        </div>
+      </div>
+    );
+  }
   if (!data.success) return <div className="page narrow"><div className="card stack"><h1 className="as-h2">الرابط غير متاح</h1><div className="alert err" role="alert">{data.message}</div></div></div>;
   const f360 = data.phase === 'f360';
   if (done || data.done) {
@@ -71,7 +84,7 @@ export default function Rater() {
     setBusy(true); setError('');
     const res = await call('rater.submit', { t, answers, contact_freq: contact, open });
     setBusy(false);
-    if (res.success) setDone(true); else setError(res.message);
+    if (res.success) setDone(true); else if (res.paused) setData(res); else setError(res.message);
   };
   // كل مجموعة تُسمّى بنص العبارة ووقتها («الآن» أو «قبل البرنامج»)، فقارئ الشاشة لا يسمع «مجموعة اختيار» مكررة بلا اسم (links-expert-8)
   const qid = (q) => `rq-${String(q.id).replace(/[^\w-]/g, '')}`;

@@ -20,6 +20,7 @@ import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
 import Advisor360 from './Advisor360.jsx';
+import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 
@@ -205,7 +206,8 @@ function AdvisorReviews({ initial }) {
 
 // مشاركو الخبير (المرحلة 9): دفعاته بصفته مستشارها، ومن أُسند إليه بطلب خدمة؛ لكلٍّ موجز وملف
 const MINE_PAGE = 12;
-function MyParticipants({ onOpen, initial, f360 }) {
+// show360: مفتاح 360 من لوحة الخبير (features)؛ مطفأ فلا بطاقة 360 ولا طلب لها
+function MyParticipants({ onOpen, initial, f360, show360 = false }) {
   const [d, setD] = useState(initial ?? null);
   const load = () => xpCall('xp.participants').then(setD);
   useEffect(() => { if (!initial) load(); }, []);
@@ -222,7 +224,7 @@ function MyParticipants({ onOpen, initial, f360 }) {
   return (
     <>
     <RatersAwaiting items={d?.raters_pending} onDecide={decide} />
-    <Advisor360 initial={f360} />
+    {show360 && <Advisor360 initial={f360} />}
     <section className="card stack" aria-labelledby="xp-mine">
       <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
@@ -541,7 +543,8 @@ function Dashboard({ onOut }) {
       {isNew && <FirstSteps e={e} />}
 
       {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
-      <ExpertHall cohorts={d.advisor_cohorts || []} />
+      {/* مفتاح القاعة من لوحة الخبير (features): مخفية فلا بطاقة لها */}
+      {flagsOf(d).hall && <ExpertHall cohorts={d.advisor_cohorts || []} />}
 
       {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
       <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" initial={pre.sus} />
@@ -549,7 +552,7 @@ function Dashboard({ onOut }) {
       <PeerQueue initial={pre.peers} />
 
       <div className="xpp-cols">
-        <MyParticipants onOpen={openFile} initial={pre.participants} f360={d.preload ? pre.f360 ?? null : undefined} />
+        <MyParticipants onOpen={openFile} initial={pre.participants} f360={d.preload ? pre.f360 ?? null : undefined} show360={flagsOf(d).f360} />
         <section className="card stack">
           <h2 className="as-h3">جلساتك القادمة</h2>
           {upcoming.length ? upcoming.map((s) => (

@@ -71,7 +71,8 @@ export const STAGES = [
     checks: [
       { id: 'm4.katon-coverage', title: 'كاتون بثلاثة موضوعات منشورة على الأقل في كل إطار', kind: 'auto' },
       { id: 'm4.dsar', title: 'خدمة ذاتية لتصدير المشارك بياناته وطلب حذفها', kind: 'auto' },
-      { id: 'm4.hall-load', title: 'اختبار حمل القاعة بمئة جهاز ناجح', kind: 'attest' },
+      // مؤجلة: القاعة مخفية عن المستخدمين حتى تكتمل (مفاتيح الميزات 2026-11-16)، فلا تحجب المرحلة حتى تُظهَر
+      { id: 'm4.hall-load', title: 'اختبار حمل القاعة بمئة جهاز ناجح', kind: 'attest', deferred_ar: 'مؤجلة: القاعة مخفية عن المستخدمين حتى تكتمل' },
       { id: 'm4.wcag', title: 'تدقيق WCAG 2.2 AA بلا خلل حرج', kind: 'attest' },
       { id: 'm4.sus', title: 'SUS لخمسة مستخدمين لكل دور فوق 75', kind: 'auto' },
     ],
@@ -95,7 +96,9 @@ export const TEACHING_CHAPTERS = 18;
 export { REQUIRED_SECRETS };
 
 // الحكم على نقطة: pass أو fail أو unknown (تعذّر الفحص)، مع سبب بجملة
+// والمؤجلة (deferred_ar) لا تُحكم ولا تُعد في المرحلة: ميزتها مخفية عن المستخدمين، فلا تحجب عبورها ولا تُحتسب ناجحة
 export function judge(check, facts, attest, now = Date.now()) {
+  if (check.deferred_ar) return { status: 'deferred', reason: check.deferred_ar };
   if (check.kind === 'attest') {
     const a = attest?.[check.id];
     if (!a?.by || !a?.at) return { status: 'fail', reason: 'بلا إقرار موثّق' };
@@ -115,13 +118,14 @@ export function evaluate(facts, attest, now = Date.now()) {
   let score = BASE_SCORE, open = true;
   const stages = STAGES.map((s) => {
     const checks = s.checks.map((c) => ({ ...c, ...judge(c, facts, attest, now) }));
-    const passed = checks.filter((c) => c.status === 'pass').length;
-    const crossed = passed === checks.length;
+    const counted = checks.filter((c) => c.status !== 'deferred');
+    const passed = counted.filter((c) => c.status === 'pass').length;
+    const crossed = passed === counted.length;
     // المكسب لا يُحسب إلا بعبور المرحلة وما قبلها: البوابات متسلسلة
     const effective = crossed && open;
     if (effective) score += s.gain; else open = false;
     // crossed: نقاطها كلها نجحت. effective: عُبرت وما قبلها، فيُحتسب مكسبها
-    return { ...s, checks, passed, total: checks.length, crossed, effective };
+    return { ...s, checks, passed, total: counted.length, crossed, effective };
   });
   return { stages, score: Math.round(score * 10) / 10, target: TARGET_SCORE };
 }
@@ -132,7 +136,7 @@ export const stateOf = (s) => (s.effective ? 'عُبرت' : s.crossed ? 'مكت�
 const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
 
 export function toMarkdown(r, at) {
-  const icon = { pass: '✅', fail: '❌', unknown: '⚪' };
+  const icon = { pass: '✅', fail: '❌', unknown: '⚪', deferred: '⏸️' };
   const out = [`# تقرير بوابات المراحل`, '', `**وقت الفحص:** ${at}`, '', `**الدرجة المحتسبة بالبوابات:** ${r.score} من 10، والهدف ${r.target}. لا يُحتسب مكسب مرحلة قبل عبورها وما قبلها.`, ''];
   out.push('| المرحلة | العابر | الحالة |', '|---|---|---|');
   const unknown = r.stages.flatMap((s) => s.checks).filter((c) => c.status === 'unknown').length;
@@ -300,7 +304,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const r = evaluate(await collect(), attest);
   const at = new Date().toISOString();
   const only = Number(process.argv.find((a) => a.startsWith('--stage='))?.slice(8)) || null;
-  const icon = { pass: '✓', fail: '✗', unknown: '?' };
+  const icon = { pass: '✓', fail: '✗', unknown: '?', deferred: '…' };
   for (const s of r.stages.filter((x) => !only || x.id === only)) {
     console.log(`\nم${s.id} ${s.title} (+${s.gain}): ${s.passed} من ${s.total} — ${stateOf(s)}`);
     for (const c of s.checks) console.log(`  ${icon[c.status]} ${c.title}: ${c.reason}`);

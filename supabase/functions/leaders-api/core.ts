@@ -11,6 +11,7 @@ import { slackCode, slackMail, slackUse } from '../_shared/slack.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
+import { WORKSHOP_NO_HALL_NOTE } from './features.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -235,7 +236,7 @@ export async function sendMail(to: string, subject: string, html: string, attach
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
 }
 
-async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null) {
+export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null) {
   const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
   let { error } = await db.from('mail_queue').insert({ ...row, reason });
   if (error) ({ error } = await db.from('mail_queue').insert(row));   // قبل ترحيل مركز البريد: بلا عمود السبب
@@ -247,37 +248,40 @@ async function enqueueMail(to: string, subject: string, html: string, ref: strin
 export const QUEUE_MAX_ATTEMPTS = 5;
 // إشعار انتظر أكثر من يومين فات أوانه (تذكير بموعد مضى): يُترك ولا يُرسل متأخرًا، ويبقى في الصندوق للمدير
 export const QUEUE_STALE_HOURS = 48;
-export async function drainMailQueue(limit = 40) {
+// hold: رسائل تُمسك فلا تُرسل ولا تُعد محاولة (بريد ميزة مطفأة، heldMail في features.ts)، ويُقرأ بعددها زيادةً فلا تحجب ما بعدها
+// rewrite: نص الرسالة كما يُرسل الآن (بريد ورشة دخل الطابور بملاحظة القاعة ثم أُخفيت، mailRewrite في features.ts)
+export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), rewrite: (m: { subject: string; html: string }) => string = (m) => m.html) {
   const { data, error } = await db.from('mail_queue').select('id, kind, created_at, to_email, subject, html, ref, attempts')
-    .is('sent_at', null).is('gave_up_at', null).order('created_at').limit(limit);
+    .is('sent_at', null).is('gave_up_at', null).order('created_at').limit(limit + hold.size);
   if (error) return { sent: 0, pending: null };
   let sent = 0;
-  for (const m of data || []) {
+  for (const m of (data || []).filter((x: any) => !hold.has(x.id)).slice(0, limit)) {
     if (m.kind === 'notify' && Date.now() - Date.parse(m.created_at) > QUEUE_STALE_HOURS * 36e5) {
       await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
       continue;
     }
-    const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
+    const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
     if (r.ok) { await db.from('mail_queue').update({ sent_at: new Date().toISOString() }).eq('id', m.id); sent++; continue; }
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') break;   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;
     await db.from('mail_queue').update({ attempts, last_error: r.reason, ...(attempts >= QUEUE_MAX_ATTEMPTS ? { gave_up_at: new Date().toISOString() } : {}) }).eq('id', m.id);
   }
   const { count } = await db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null);
-  return { sent, pending: count ?? 0 };
+  return { sent, pending: count ?? 0, ...(hold.size ? { held: hold.size } : {}) };
 }
 
 // من المهمة الساعية بعد التفريغ: رسالة انتظرت في الطابور أكثر من QUEUE_ALERT_HOURS تنبيه واحد للمالك يجمع ما تأخر.
 // كل رسالة يُنبَّه إليها مرة واحدة: علامتها سطر في audit_log (mail.queue-stuck بمعرّفها)، تُكتب بعد وصول التنبيه
 // من إحدى القناتين، فلا يضيع التنبيه إن لم يصل، ويُعاد في الساعة التالية
 export const QUEUE_ALERT_HOURS = 6;
-export async function stuckQueueAlert() {
+// والممسَك (hold) ليس عالقًا: انتظاره بقرار إخفاء ميزته، فلا يُنبَّه إليه
+export async function stuckQueueAlert(hold: Set<string> = new Set()) {
   const before = new Date(Date.now() - QUEUE_ALERT_HOURS * 36e5).toISOString();
   const read = (cols: string) => db.from('mail_queue').select(cols).is('sent_at', null).is('gave_up_at', null).lt('created_at', before).order('created_at').limit(200);
   let { data, error } = await read('id, created_at, kind, reason');
   if (error) ({ data, error } = await read('id, created_at, kind'));   // قبل ترحيل مركز البريد: بلا عمود السبب
   if (error) return { stuck: null, alerted: 0 };
-  const rows = (data || []) as unknown as { id: string; created_at: string; kind: string; reason?: string | null }[];
+  const rows = ((data || []) as unknown as { id: string; created_at: string; kind: string; reason?: string | null }[]).filter((m) => !hold.has(m.id));
   if (!rows.length) return { stuck: 0, alerted: 0 };
   const marks = await db.from('audit_log').select('entity_id').eq('action', 'mail.queue-stuck').in('entity_id', rows.map((m) => m.id));
   // تعذّر قراءة العلامات: التنبيه مكررًا أهون من ضياعه
@@ -501,13 +505,14 @@ export const WORKSHOP_MAIL = {
 export const WORKSHOP_STAGED_NOTE = 'رابط الانضمام يظهر في رحلتك حين تُفتح لك مرحلة هذه الجلسة، فافتح رحلتك يومها.';
 // later: جلسة عن بعد لم يُضف رابطها بعد (J1)، فلا تعليمات القاعة: الرابط يصل قبلها ويظهر في رحلته
 export const WORKSHOP_LINK_LATER_NOTE = 'هذه الجلسة عن بعد، ورابط الانضمام يُضاف لاحقًا ويظهر في رحلتك قبل بدئها بساعة.';
-export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false) {
+// hall: مفتاح القاعة (features.hall). مطفأة: ملاحظة بلا ذكرها بطريقة توثيق حضور الجلسة (method، WORKSHOP_NO_HALL_NOTE)
+export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false, hall = true, method: 'qr' | 'join' | 'other' = 'qr') {
   const m = WORKSHOP_MAIL[kind];
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
     + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(CONFIG.appUrl, 'افتح رحلتي')
-    + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : m.note),
+    + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : hall ? m.note : WORKSHOP_NO_HALL_NOTE[method][kind]),
     `${title} · ${when}`, '');
 }
 

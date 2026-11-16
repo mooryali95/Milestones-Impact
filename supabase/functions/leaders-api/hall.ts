@@ -9,6 +9,7 @@ import { katonPoints } from './katon.js';
 import { checkinOpen, inProgram, isUndated, overallLevel } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
 import type { Actor } from './admin.ts';
+import { features } from './features.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -218,7 +219,9 @@ export async function pick(p: any, b: Body) {
 }
 
 // هل الجملة مفتوحة للإجابة في قاعة المشارك؟ (يستعملها katon.answer)
+// والقاعة المخفية (features.hall) لا يدخلها أحد، فلا جملة مفتوحة فيها: katon.answer يمضي بمفتاح كاتون وحده
 export async function hallGate(p: any, sentenceId: string) {
+  if (!(await features()).hall) return { inHall: false, sessionId: null };
   const cohort = await hallCohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s) return { inHall: false, sessionId: null };

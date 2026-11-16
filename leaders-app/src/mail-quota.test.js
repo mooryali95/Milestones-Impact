@@ -109,7 +109,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
   });
   it('المهمة الساعية تفرغ الطابور بعد سر المجدول، وتكتب العلامة بعد نجاح الإرسال وحده', () => {
     const idx = read('supabase/functions/leaders-api/index.ts');
-    expect(idx).toMatch(/'cron\.expert-offers': async \(b\) => \(\{ \.\.\.\(await E\.sweepOffers\(b\)\)[\s\S]*mail_queue: await drainMailQueue\(\)/);
+    expect(idx).toMatch(/'cron\.expert-offers': async \(b\) => \(\{ \.\.\.\(await E\.sweepOffers\(b\)\)[\s\S]*mail_queue: await drainMailQueue\(40, hold, rewrite\)/);
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/if \(r\.ok\) \{ await db\.from\('mail_queue'\)\.update\(\{ sent_at:/);
     expect(core).toMatch(/if \(r\.reason === 'mail_cap' \|\| r\.reason === 'mail_share'\) break;/);

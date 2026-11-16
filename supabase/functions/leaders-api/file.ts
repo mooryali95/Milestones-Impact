@@ -15,7 +15,7 @@ import { expertDoc } from './capstone.ts';
 import * as H from './hall.ts';
 import { participantMilestone } from './programs.ts';
 import { mePayload } from './participant.ts';
-import { forParticipant as peerFor } from './peer.ts';
+import { forParticipant as peerFor, hallTeams } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { journeyApproved, overallLevel } from './logic.js';
@@ -28,16 +28,19 @@ type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
 
 // ما يسبق الملف لكل جمهور: الفريق، وجلسات التوجيه وطلبات الخبراء، وطلبات الأقران، والتقييم الختامي
-async function around(p: any, cohortId: string | null, viewer: { email: string } | null) {
-  const [team, sessions, reqs, peer, fe] = await Promise.all([
+async function around(p: any, cohortId: string | null, viewer: { email: string } | null, audience: 'admin' | 'expert' = 'expert') {
+  // فريق القاعة في رأس ملف الخبير ما دامت القاعة ظاهرة (features.hall)، كما يراه المشارك في طلباته. والمدير يراه ليبنيها
+  const [team, sessions, reqs, peer, fe, teams] = await Promise.all([
     cohortId ? db.from('cohort_roles').select('team').eq('cohort_id', cohortId).eq('participant_id', p.id).maybeSingle() : Promise.resolve({ data: null }),
     db.from('coaching_sessions').select('id, status, starts_at, ends_at, expert_id, experts(full_name)').eq('participant_id', p.id).order('starts_at', { ascending: false }).limit(50),
     db.from('expert_requests').select('id, role, dimension, status, accepted_at, created_at, experts(full_name)').eq('participant_id', p.id).order('created_at', { ascending: false }).limit(50),
-    peerFor(p.id),
+    peerFor(p.id, audience === 'admin' ? true : undefined),
     F.get({ participant_id: p.id }, viewer || undefined).catch(() => null),
+    audience === 'admin' ? true : hallTeams(),
   ]);
+  const t = teams ? team.data?.team || null : null;
   return {
-    team: team.data?.team || null, team_ar: team.data?.team ? (HALL_TEAM_AR as Record<string, string>)[team.data.team] : null,
+    team: t, team_ar: t ? (HALL_TEAM_AR as Record<string, string>)[t] : null,
     sessions: (sessions.data || []).map((s: any) => ({ id: s.id, status: s.status, starts_at: s.starts_at, ends_at: s.ends_at, expert: s.experts?.full_name || null })),
     expert_requests: (reqs.data || []).map((r: any) => ({ id: r.id, role: r.role, role_ar: roleAr(r.role), dimension: r.dimension, status: r.status, status_ar: (EXPERT_REQUEST_STATUS as Record<string, string>)[r.status] || r.status, expert: r.experts?.full_name || null, at: r.accepted_at || r.created_at })),
     peer,
@@ -94,7 +97,7 @@ export async function observationAdd(e: any, b: Body) {
 export async function participantFile(id: string, audience: 'admin' | 'expert', opts: { viewer?: { email: string }; advisor?: boolean } = {}) {
   const base: any = await adminParticipant({ id });
   const cohort = base.program?.cohort || null;
-  const extra = await around(base.participant, cohort?.id || null, opts.viewer || null);
+  const extra = await around(base.participant, cohort?.id || null, opts.viewer || null, audience);
   const needs = needsFor({ submissions: base.models || [], milestones: base.milestones || [], final: extra.final?.record || null, peerAnswers: extra.peer.pending_answers, sessions: [] });
   const common = { ...extra, needs, cohort: cohort ? { id: cohort.id, name: cohort.name, starts_on: cohort.starts_on, ends_on: cohort.ends_on, supervision: cohort.supervision || 'peers_expert', content_release: cohort.content_release ?? null } : null };
   // ملف المشارك الكامل (تصور 2026-11-13): الملاحظات، وما لم يكن يُعرض (المبادرة و360 والحضور)، ثم ملخص الأعلام

@@ -31,6 +31,7 @@ import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
 import { advisorOf, notifyAdvisor } from './advisor.ts';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
+import { features } from './features.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -657,6 +658,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     nudge: audience === 'participant' ? await bannerFor(p.id) : null,
     passkeys: passkeys.count ?? 0,
     prompt_passkey: (passkeys.count ?? 0) === 0 && !p.passkey_dismissed_at,
+    // مفاتيح الميزات قيد البناء (features.js): الواجهة تخفي القاعة وكاتون و360 بها، والخادم يرفض أفعالها وحده
+    features: await features(),
   };
 }
 

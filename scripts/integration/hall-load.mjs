@@ -160,6 +160,17 @@ function consistent(label, { answered = null, hands = null } = {}) {
   }
 }
 
+// مفتاح القاعة (settings.js features.hall): مطفأ افتراضيًا فيرفض الخادم أفعالها بـhall_off، فيُظهرها الاختبار ثم يعيد ما كان.
+// القيمة تُقرأ بذاكرة دقيقة في الدالة، فيُنتظر حتى تراها (سؤال مباشر لا يدخل القياس)
+const featuresWas = sql(`select value::text from leaders.app_settings where key = 'features'`);
+sql(`insert into leaders.app_settings (key, value, updated_by) values ('features', '{"hall": true}'::jsonb, 'hall-load') on conflict (key) do update set value = leaders.app_settings.value || '{"hall": true}'::jsonb`);
+for (let i = 0; i < 40; i++) {
+  const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN, ...(process.env.ANON_KEY ? { apikey: process.env.ANON_KEY, Authorization: `Bearer ${process.env.ANON_KEY}` } : {}) },
+    body: JSON.stringify({ action: 'hall.state', since: 0, token: devices[0].token }) }).then((x) => x.json()).catch(() => ({}));
+  if (r.code !== 'hall_off') break;
+  await sleep(2000);
+}
+
 console.log(`\nاختبار حمل القاعة: ${N} جهازًا، ${ROUNDS} جولات، الجولة ${ROUND_S} ثانية، الفاصل ${POLL_FAST_MS / 1000}/${POLL_SLOW_MS / 1000} ثانية\n`);
 const started = Date.now();
 
@@ -318,6 +329,7 @@ sql(`delete from leaders.cohorts where id = ${q(cohortId)}`);
 sql(`delete from public.api_sessions where subject = ${q(adminId)}`);
 sql(`delete from auth.users where id = ${q(adminId)}`);   // يحذف صف admin_users معه (cascade)
 sql(`update leaders.katon_topics set status = ${q(topicWas)} where id = ${q(topicId)}`);
+sql(featuresWas ? `update leaders.app_settings set value = ${q(featuresWas)}::jsonb where key = 'features'` : `delete from leaders.app_settings where key = 'features'`);
 
 console.log(fails ? `\n✗ ${fails} فحوص فشلت` : '\n✓ القاعة سليمة تحت الحمل');
 process.exit(fails ? 1 : 0);
