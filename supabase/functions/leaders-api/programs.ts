@@ -392,7 +392,13 @@ export async function cohortDefinitionFor(b: Body) {
     if (!version) throw new Fail('النسخة لا تخص هذا البرنامج');
   }
   const view = cohortDefinitionView({ live: version ? null : await liveRows(programId), version, cohort: c });
-  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view };
+  // جلسات الدفعة لخطها الزمني (J1b): موعد كل جلسة جماعية أو «يُحدد لاحقًا»، قراءة فقط وبلا السر
+  const wsIds = c ? view.requirements.filter((r: any) => r.kind === 'workshop' && r.id).map((r: any) => r.id) : [];
+  const sessions = wsIds.length
+    ? (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, starts_at, ends_at, mode, active').in('requirement_id', wsIds)) || [])
+      .filter((s: any) => !s.cohort_id || s.cohort_id === c.id)
+    : [];
+  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view, sessions };
 }
 async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
