@@ -30,6 +30,7 @@ import { FileExtras, FileFlags, FileIndex, Observations, Timeline } from './Pers
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
+import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
 import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
@@ -134,6 +135,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   }), [orgs]); // eslint-disable-line
   const shown = useMemo(() => sortRows(applyFilters(all, spec, f), SORTS, f.sort), [all, f, fields, SORTS]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
+  // فتح مشارك يحفظ ترتيب ما يظهر الآن، فيتنقل المدير في الملفات بالسابق والتالي (review-queue.js)
+  const open = (id) => { saveQueue(shown.map((p) => p.id), queueLabel(PRESETS, f.view)); onOpen(id); };
 
   const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allOn = shown.length > 0 && shown.every((p) => picked.has(p.id));
@@ -283,7 +286,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);
                   return (
-                    <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(p.id); }}>
+                    <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
                       <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                       <td data-label="الجهة">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
@@ -367,8 +370,16 @@ const EDIT_FIELDS = [
   { name: 'organization_name', label: 'جهة العمل (نص يكتبه المشارك)' },
 ];
 
-function Person({ id, canWrite, onBack }) {
+function Person({ id, canWrite, onBack, onNav }) {
   const { toast, confirm, prompt } = useUI();
+  // موضعه في القائمة التي فُتح منها (لقطة الجلسة)، وإلا فلا شريط تنقل
+  const pos = useMemo(() => position(readQueue(), id), [id]);
+  useEffect(() => {
+    if (!pos) return undefined;
+    const k = (e) => { const to = navKey(e); const dest = to && pos[to]; if (dest) { e.preventDefault(); onNav(dest); } };
+    addEventListener('keydown', k);
+    return () => removeEventListener('keydown', k);
+  }, [pos, onNav]);
   const [previewAs, setPreviewAs] = useState(false);
   const [r, setR] = useState(null);
   const [status, setStatus] = useState('');
@@ -423,10 +434,12 @@ function Person({ id, canWrite, onBack }) {
 
   // ما يمنع الاعتماد ظاهر تحت الزر: مستوى ناقص، أو مخالفة المستوى القائم بلا تعليل (الخادم يرفض بدونه)
   const blocker = approveBlocker(DIMS, { levels, notes, currentLevel, dimName: (d) => DIM_EN[d] });
-  const approve = async () => {
+  const approve = async (next = false) => {
     if (blocker) return toast(blocker.text);
     if (!(await confirm('اعتماد المسار وإبلاغ المشارك بالبريد؟'))) return;
-    act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
+    const d = await act('admin.approve', { participant_id: p.id, levels, notes }, 'اعتُمد المسار وأُبلغ المشارك');
+    // «اعتمد وانتقل للتالي»: في مراجعة متتالية يفتح التالي في القائمة بعد نجاح الاعتماد
+    if (d.success && next && pos?.next) onNav(pos.next);
   };
   const reset = async () => {
     if (!(await confirm('يُلغى القياس الحالي ويعيده المشارك من البداية، وتظهر له بطاقة في الموقع ويصله بريد يطلب الإعادة. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
@@ -482,7 +495,7 @@ function Person({ id, canWrite, onBack }) {
 
   return (
     <>
-      <button className="la-link" onClick={onBack}>→ كل المشاركين</button>
+      <QueueNav pos={pos} onBack={onBack} onNav={onNav} />
       <div className="la-person">
         <section className="la-card">
           <div className="la-row between"><h3>{p.full_name}</h3><span className="la-row">{p.is_test && <span className="la-chip warn" title="خارج النظرة العامة وأعداد الجهات ولوحتها والمالية وتقرير الأثر، وحساب عادي في كل ما سواها">حساب اختبار</span>}<span className="la-chip">{STATUS[p.status] || p.status}</span></span></div>
@@ -554,7 +567,8 @@ function Person({ id, canWrite, onBack }) {
         </section>
 
         <LevelCard prof={prof} latest={latest} model={r.placement_model} effort={r.effort} canWrite={canWrite} levels={levels} setLevels={setLevels}
-          notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={approve} onAnswers={canWrite ? openAnswers : null} />
+          notes={notes} setNotes={setNotes} currentLevel={currentLevel} blocker={blocker} onApprove={() => approve(false)}
+          onApproveNext={pos?.next ? () => approve(true) : null} onAnswers={canWrite ? openAnswers : null} />
         {answers && latest && <AssessmentAnswers participant={p} dim={answers} onClose={closeAnswers} />}
       </div>
 
@@ -634,8 +648,24 @@ function Person({ id, canWrite, onBack }) {
   );
 }
 
+// شريط أعلى الملف: العودة للقائمة (بفلاترها كما تُركت)، وموضعه فيها، والسابق والتالي
+function QueueNav({ pos, onBack, onNav }) {
+  if (!pos) return <button className="la-link" onClick={onBack}>→ كل المشاركين</button>;
+  return (
+    <nav className="la-qnav" aria-label="التنقل بين ملفات القائمة">
+      <button className="la-link" onClick={onBack}>→ القائمة</button>
+      <span className="la-qnav-at" aria-live="polite"><b>{pos.index}</b> من {pos.total}{pos.label ? ` · ${pos.label}` : ' في قائمتك'}</span>
+      <span className="la-row">
+        <button className="btn-sm ghost" disabled={!pos.prev} onClick={() => onNav(pos.prev)} title="السابق (→ أو K)">→ السابق</button>
+        <button className="btn-sm ghost" disabled={!pos.next} onClick={() => onNav(pos.next)} title="التالي (← أو J)">التالي ←</button>
+      </span>
+    </nav>
+  );
+}
+
 export default function Participants({ orgs, canWrite, personId, onOpen, initialStatus }) {
+  // key: كل ملف يبدأ بحالة نظيفة (لا تبقى لوحة أو تعديل مفتوح من المشارك السابق عند التنقل)
   return personId
-    ? <Person id={personId} canWrite={canWrite} onBack={() => onOpen(null)} />
+    ? <Person key={personId} id={personId} canWrite={canWrite} onBack={() => onOpen(null)} onNav={onOpen} />
     : <List orgs={orgs} canWrite={canWrite} onOpen={onOpen} initialStatus={initialStatus} />;
 }
