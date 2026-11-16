@@ -42,7 +42,9 @@ const ADMIN_READS = new Set(['health', 'inbox', 'insight', 'changes', 'mail-gall
   // وفتح نص محادثة أو تشغيل يُسجَّل. الكتابة كلها بغلاف superWriter
   'agent-state', 'agent-usage', 'agent-conversations', 'agent-transcript', 'agent-eval-runs', 'agent-eval-run',
   // «التوجيه والإرشاد»: أعداد وإنفاق بلا نص، يحصرها الخادم في المدير الأعلى والمالك (requireAgentRead)
-  'guide-report', 'guide-eval', 'guide-eval-results', 'guide-pilots', 'guide-dashboard', 'guide-orgs', 'guide-eval-cases']);
+  'guide-report', 'guide-eval', 'guide-eval-results', 'guide-pilots', 'guide-dashboard', 'guide-orgs', 'guide-eval-cases',
+  // H3 سجل المحادثات: القراءة يحصرها الخادم في المالك والمدير الأعلى بمنحه وبالعامل الثاني، وكل فتح نص يُسجَّل (guide_transcripts_test.ts)
+  'guide-transcript-access', 'guide-transcripts', 'guide-transcript', 'guide-transcript-grants']);
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {

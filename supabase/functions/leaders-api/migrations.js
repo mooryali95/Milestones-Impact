@@ -150,6 +150,7 @@ export const MIGRATIONS = [
   '20261116150000_leaders_mail_queue_expiry',
   '20261116160000_leaders_erasure_decisions',
   '20261116170000_leaders_guidance_eval_sets',
+  '20261116180000_leaders_guidance_transcripts',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -216,4 +217,5 @@ export const MIGRATION_GATES = {
   '20261116130000_leaders_guidance_counts': ["tolerant", "guide.confirm يُتجاهل بلا العمود، والأعداد ترجع null فلا يظهر سطرها في الملف ولا التقرير"],
   '20261116140000_leaders_guidance_eval': ["tolerant", "بلا الجدولين ترد مسارات التقييم not_migrated والبوابة مغلقة، وبلا العمود لا دفعة تجريبية فالبوابة مغلقة"],
   '20261116170000_leaders_guidance_eval_sets': ["tolerant", "بلا الجدول تعمل المجموعة من الملف (guide-eval/cases.json) مسودة كما كانت، والاعتماد يرد not_migrated"],
+  '20261116180000_leaders_guidance_transcripts': ["tolerant", "قبل العمود يبقى «احذف محادثتي» حذفًا كما كان، ومسارات السجل ترد not_migrated"],
 };

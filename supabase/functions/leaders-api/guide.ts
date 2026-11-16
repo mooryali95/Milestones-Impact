@@ -11,6 +11,7 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
 import { audit, db, Fail } from './core.ts';
 import { appSettings } from './settings.ts';
+import { missingColumn } from './missing-column.ts';
 import { approvedLevels, journeyFor } from './participant.ts';
 import { companionAllowed, filterHandbookMd, handbookModulesFor, pickCohort, quizFor } from './logic.js';
 import { guidanceFor } from './guidance.ts';
@@ -81,8 +82,11 @@ async function counts(pid: string) {
 // المحادثة ضمن مدة الحفظ: تُقرأ ما لم يتجاوزها ولو تأخر الحذف اليومي
 async function history(pid: string, retentionDays: number, limit: number) {
   const since = new Date(GD.now() - retentionDays * 864e5).toISOString();
-  const { data, error } = await db.from('guidance_messages').select('id, role, body, verdict, context, created_at')
+  const q = () => db.from('guidance_messages').select('id, role, body, verdict, context, created_at')
     .eq('participant_id', pid).gte('created_at', since).order('created_at', { ascending: false }).limit(limit);
+  // H3: ما أخفاه المشارك لا يعود إليه. قبل العمود (20261116180000) تُقرأ كما كانت
+  let { data, error } = await q().is('hidden_at', null);
+  if (error && missingColumn(error)) ({ data, error } = await q());
   if (error) throw error;
   return (data || []).reverse();
 }
@@ -228,12 +232,17 @@ export async function guideAsk(p: any, b: Body) {
   return { success: true, reply: { id: answerId, text: answer, verdict, sources }, left: left(await counts(p.id), s) };
 }
 
-// «احذف محادثتي»: صفوف صاحب الجلسة وحده، فورًا. السجل بلا محتوى
+// «احذف محادثتي» (قرار المالك v8 ب): تُخفى عن المشارك فورًا، وتبقى نسخة لضمان الجودة حتى نهاية مدة الحفظ ثم تحذفها
+// المهمة اليومية. صفوف صاحب الجلسة وحده، وأسئلتها تبقى محسوبة من الحدين. قبل العمود يبقى حذفًا كما كان. السجل بلا محتوى
 export async function guideClear(p: any) {
-  const { data, error } = await db.from('guidance_messages').delete().eq('participant_id', p.id).select('id');
-  if (error) { if (missing(error)) return { success: true, deleted: 0 }; throw error; }
-  await audit('participant', p.id, 'guide.clear', 'guidance_messages', p.id, null, { deleted: (data || []).length });
-  return { success: true, deleted: (data || []).length };
+  const at = new Date(GD.now()).toISOString();
+  let { data, error } = await db.from('guidance_messages').update({ hidden_at: at }).eq('participant_id', p.id).is('hidden_at', null).select('id');
+  let mode = 'hide';
+  if (error && missingColumn(error)) { mode = 'delete'; ({ data, error } = await db.from('guidance_messages').delete().eq('participant_id', p.id).select('id')); }
+  if (error) { if (missing(error)) return { success: true, deleted: 0, hidden: 0 }; throw error; }
+  const n = (data || []).length;
+  await audit('participant', p.id, 'guide.clear', 'guidance_messages', p.id, null, { [mode === 'hide' ? 'hidden' : 'deleted']: n });
+  return mode === 'hide' ? { success: true, hidden: n, deleted: 0 } : { success: true, deleted: n, hidden: 0 };
 }
 
 // ── G3: «أريد التأكد» حدثًا، وأعداد بلا نص ──

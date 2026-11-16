@@ -6,6 +6,8 @@ const BASE = 'http://localhost:4303/';
 const ago = (m) => new Date(Date.now() - m * 60e3).toISOString();
 const ORG = '33333333-3333-4333-8333-333333333333';
 const COH = '22222222-2222-4222-8222-222222222222';
+const PID = '44444444-4444-4444-8444-444444444444';
+const ADM = '55555555-5555-4555-8555-555555555555';
 
 function backend() {
   const st = { enabled: false, org: true, pilot: false, steps: 0, runs: [] };
@@ -50,12 +52,25 @@ function backend() {
     'admin.guide-org-set': (b) => { st.org = b.on; return { success: true, org: { id: ORG, name: 'جهة سفراء', allowed: b.on } }; },
     'admin.guide-pilots': () => ({ success: true, ready: true, cohorts: [{ id: COH, name: 'دفعة سفراء', status: 'active', is_default: false, pilot: st.pilot }] }),
     'admin.guide-pilot-set': (b) => { st.pilot = b.on; return { success: true, cohort: { id: COH, name: 'دفعة سفراء', pilot: b.on } }; },
+    // H3: سجل المحادثات والمنح
+    'admin.guide-transcript-access': () => (st.locked ? { success: true, can_read: false, owner: false, reason: 'no_grant', message: 'لم يمنحك المالك صلاحية الاطلاع على المحادثات.' } : { success: true, can_read: true, owner: true, reason: null }),
+    'admin.guide-transcripts': () => ({ success: true, retention_days: 90, conversations: [
+      { participant_id: PID, name: 'سارة القحطاني', email: 's@x.sa', org: 'جهة سفراء', asked: 2, unsure: 1, confirmed: 0, errors: 0, usd: 0.03, first_at: ago(60), last_at: ago(5), hidden: 2 },
+    ] }),
+    'admin.guide-transcript': () => ({ success: true, retention_days: 90, participant: { id: PID, name: 'سارة القحطاني' }, truncated: false, messages: [
+      { id: 1, role: 'user', body: 'كيف أحدد أول معلم؟', context: 'handbook', chapter_id: 'ch1', verdict: 'answered', created_at: ago(60), hidden_at: ago(2) },
+      { id: 2, role: 'assistant', body: 'المعلم نقطة قرار. خطوتك: سمِّ أول قرار.', context: 'handbook', verdict: 'unsure', model: 'claude-opus-5-5', input_tokens: 900, output_tokens: 200, cost_micros: 30000, usd: 0.03, created_at: ago(59), hidden_at: ago(2) },
+    ] }),
+    'admin.guide-transcript-grants': () => ({ success: true, ready: true, admins: [{ id: ADM, email: 'super@x.sa', granted: !!st.granted, granted_at: st.granted ? ago(0) : null }],
+      reads: [{ by: 'boss@x.sa', participant_id: PID, name: 'سارة القحطاني', messages: 2, at: ago(1) }] }),
+    'admin.guide-transcript-grant': (b) => { st.granted = b.on; return { success: true, admin_id: b.admin_id, granted: b.on }; },
   };
   return { st, replies };
 }
 
-async function setup(page, hash) {
+async function setup(page, hash, o = {}) {
   const b = backend();
+  Object.assign(b.st, o);
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, (route) => route.fulfill({ json: { success: true, contacts: [], sessions: [] } }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
@@ -138,4 +153,35 @@ test('مراجعة المجموعة: التصفية بالنوع، وتعديل 
   await page.getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-approve')).toMatchObject({ version: '2026-11-16-draft-1' });
   await expect(set).toContainText('معتمدة: boss@x.sa');
+});
+
+test('سجل المحادثات (H3): القائمة ثم المحادثة كاملة بحكم كل رد وكلفته، والمخفي موسوم', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/guidance');
+  const log = sec(page, 'سجل المحادثات');
+  const row = log.getByRole('row', { name: /سارة القحطاني/ });
+  await expect(row).toContainText('أخفاها');
+  await expect(row).toContainText('$0.03');
+  expect(calls.some((c) => c.action === 'admin.guide-transcript')).toBe(false);
+  await row.getByRole('button', { name: 'افتح' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript')).toMatchObject({ participant_id: PID });
+  const t = log.locator('[data-transcript]');
+  await expect(t).toContainText('كيف أحدد أول معلم؟');
+  await expect(t).toContainText('فتحك لها مسجَّل باسمك');
+  await expect(t.locator('[data-msg-role="assistant"]')).toContainText('لم يتأكد');
+  await expect(t.locator('[data-msg-role="assistant"]')).toContainText('claude-opus-5-5');
+  await expect(t.locator('[data-hidden]')).toHaveCount(2);
+});
+
+test('سجل المحادثات مقفل لمن لم يمنحه المالك، ولا يُطلب نص', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/guidance', { locked: true });
+  await expect(sec(page, 'سجل المحادثات')).toContainText('لم يمنحك المالك صلاحية');
+  expect(calls.some((c) => c.action === 'admin.guide-transcripts' || c.action === 'admin.guide-transcript')).toBe(false);
+});
+
+test('منح المالك: مدير أعلى يُمنح الاطلاع بطلبه، ويظهر من اطّلع على محادثة من', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/guidance-access');
+  const g = sec(page, 'الاطلاع على المحادثات');
+  await expect(g).toContainText('boss@x.sa فتح محادثة سارة القحطاني (2 رسالة)');
+  await g.getByRole('checkbox', { name: 'super@x.sa' }).check();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript-grant')).toMatchObject({ admin_id: ADM, on: true });
 });

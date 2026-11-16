@@ -114,3 +114,18 @@
 .gd-cases details { border: 1px solid rgba(11, 39, 47, .12); border-radius: 8px; padding: 8px 12px; }
 .gd-cases summary { cursor: pointer; }
 .gd-case-form textarea, .gd-case-form select { width: 100%; }
+
+/* H3: سجل المحادثات */
+.gd-table-wrap { overflow-x: auto; }
+.gd-transcript { margin-top: 8px; }
+.gd-msgs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gd-msg { border: 1px solid var(--ink-faint, #ddd); border-radius: 8px; padding: 8px 10px; background: var(--paper, #fff); }
+.gd-msg.gd-user { border-inline-start: 3px solid var(--petrol, #0b5560); }
+.gd-msg.gd-assistant { border-inline-start: 3px solid var(--ink-mid, #888); }
+.gd-msg.gd-hidden { opacity: .75; border-style: dashed; }
+.gd-msg-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .78rem; color: var(--ink-mid, #666); }
+.gd-msg-body { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gd-msg-tech { margin: 4px 0 0; font-size: .72rem; color: var(--ink-mid, #666); }
+.gd-file-transcript { margin-top: 6px; }
+.gd-sub { margin: 14px 0 6px; font-size: .9rem; }
+.gd-reads { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: .85rem; }

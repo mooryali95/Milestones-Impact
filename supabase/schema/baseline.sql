@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116170000_leaders_guidance_eval_sets
+-- as-of migration: 20261116180000_leaders_guidance_transcripts
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1037,6 +1037,7 @@ create table if not exists leaders.guidance_messages (
   cost_micros bigint,
   created_at timestamp with time zone default now() not null,
   confirmed_at timestamp with time zone,
+  hidden_at timestamp with time zone,
   constraint guidance_messages_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 6000))),
   constraint guidance_messages_chapter_id_check CHECK ((char_length(chapter_id) <= 80)),
   constraint guidance_messages_context_check CHECK ((context = ANY (ARRAY['program'::text, 'handbook'::text, 'capstone'::text]))),
@@ -1054,6 +1055,17 @@ create table if not exists leaders.guidance_spend_daily (
   updated_at timestamp with time zone default now() not null,
   constraint guidance_spend_daily_micros_check CHECK ((micros >= 0)),
   constraint guidance_spend_daily_pkey PRIMARY KEY (day)
+);
+
+create table if not exists leaders.guidance_transcript_grants (
+  admin_id text not null,
+  admin_email text not null,
+  granted_by text not null,
+  granted_at timestamp with time zone default now() not null,
+  constraint guidance_transcript_grants_admin_email_check CHECK (((char_length(admin_email) >= 3) AND (char_length(admin_email) <= 200))),
+  constraint guidance_transcript_grants_admin_id_check CHECK (((char_length(admin_id) >= 1) AND (char_length(admin_id) <= 80))),
+  constraint guidance_transcript_grants_granted_by_check CHECK (((char_length(granted_by) >= 3) AND (char_length(granted_by) <= 200))),
+  constraint guidance_transcript_grants_pkey PRIMARY KEY (admin_id)
 );
 
 create table if not exists leaders.hall_presence (
@@ -3617,6 +3629,8 @@ alter table leaders.guidance_messages enable row level security;
 
 alter table leaders.guidance_spend_daily enable row level security;
 
+alter table leaders.guidance_transcript_grants enable row level security;
+
 alter table leaders.hall_presence enable row level security;
 
 alter table leaders.hall_sessions enable row level security;
@@ -4135,6 +4149,27 @@ begin
   returning id into new_id;
   return new_id;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.guidance_conversations(p_since timestamp with time zone, p_limit integer)
+ RETURNS TABLE(participant_id uuid, asked integer, unsure integer, confirmed integer, errors integer, micros bigint, first_at timestamp with time zone, last_at timestamp with time zone, hidden integer)
+ LANGUAGE sql
+ STABLE
+AS $function$
+  select m.participant_id,
+         count(*) filter (where m.role = 'user' and m.verdict is distinct from 'refused')::integer,
+         count(*) filter (where m.role = 'assistant' and m.verdict = 'unsure')::integer,
+         count(*) filter (where m.role = 'assistant' and m.confirmed_at is not null)::integer,
+         count(*) filter (where m.role = 'assistant' and m.verdict = 'error')::integer,
+         coalesce(sum(m.cost_micros), 0)::bigint,
+         min(m.created_at), max(m.created_at),
+         count(*) filter (where m.hidden_at is not null)::integer
+    from leaders.guidance_messages m
+   where m.created_at >= p_since
+   group by m.participant_id
+   order by max(m.created_at) desc
+   limit greatest(1, least(coalesce(p_limit, 200), 500));
 $function$
 ;
 
