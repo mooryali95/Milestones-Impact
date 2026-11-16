@@ -23,7 +23,7 @@ function requestConstants() {
     .concat(contextBlock({ product: 'leaders', page: 'P', promise: 'W', inHours: false, droppedTurns: 0, leadersPrice: 'X', lang: 'fr', approved: { id: 'I', text: 'T' } }))
     // قرارا الموجّه في السياق (التحويل المفروض بسببه، والجواب بلا إشارة)
     .concat(contextBlock({ product: 'shared', page: 'P', promise: 'W', inHours: true, droppedTurns: 0, leadersPrice: null, lang: 'fr', forced: 'F' }))
-    .concat(contextBlock({ product: 'shared', page: 'P', promise: 'W', inHours: true, droppedTurns: 0, leadersPrice: null, lang: 'ar', answerOnly: true }));
+    .concat(contextBlock({ product: 'shared', page: 'P', promise: 'W', inHours: true, droppedTurns: 0, leadersPrice: null, lang: 'ar', answerOnly: true, facts: [{ id: 'I', text: 'T' }] }));
   return JSON.stringify({ max_tokens: MAX_TOKENS, effort: p.output_config, geo: p.inference_geo, history: HISTORY_TURNS, context: ctx });
 }
 

@@ -37,7 +37,16 @@ export function buildMessages(history: Turn[], context: Context): { messages: An
   return { messages, dropped };
 }
 
-export function requestParams(model: string, messages: Anthropic.MessageParam[]) {
+// thinking 'off': إعادة واحدة بعد رد فارغ (التفكير التكيفي استنفد max_tokens فلم يبق للنص شيء). Haiku 5.5 يقبل
+// disabled عند effort منخفض، وSonnet 5.5 يرفضه فبديله between_tools، وما سواهما يبقى على الافتراضي
+export type CallOpts = { thinking?: 'off' };
+export function thinkingOff(model: string): { type: 'disabled' } | { type: 'between_tools' } | null {
+  if (model.startsWith('claude-haiku-5-5')) return { type: 'disabled' };
+  if (model.startsWith('claude-sonnet-5-5')) return { type: 'between_tools' };
+  return null;
+}
+export function requestParams(model: string, messages: Anthropic.MessageParam[], opts: CallOpts = {}) {
+  const off = opts.thinking === 'off' ? thinkingOff(model) : null;
   return {
     model,
     max_tokens: MAX_TOKENS,
@@ -45,6 +54,7 @@ export function requestParams(model: string, messages: Anthropic.MessageParam[])
     messages,
     output_config: { effort: 'low' as const },
     inference_geo: 'us',
+    ...(off ? { thinking: off } : {}),
   };
 }
 
@@ -71,7 +81,7 @@ export const resetClient = () => { client = null; clientKey = ''; };
 
 // البث: كل دفعة نص تمر بـ onText، والنتيجة النهائية من finalMessage (الاستخدام وسبب التوقف). يُقطع الطلب
 // إن انقطع الزائر (signal) أو تجاوز المهلة الكلية أو خمل البث، فيرمي، ويبقى الاستدعاء محسوبًا بحجزه في السجل.
-export async function streamAnswer(apiKey: string, model: string, messages: Anthropic.MessageParam[], onText: (t: string) => void, signal?: AbortSignal, timing = { total: STREAM_TOTAL_MS, idle: STREAM_IDLE_MS }): Promise<ModelResult> {
+export async function streamAnswer(apiKey: string, model: string, messages: Anthropic.MessageParam[], onText: (t: string) => void, signal?: AbortSignal, timing = { total: STREAM_TOTAL_MS, idle: STREAM_IDLE_MS }, opts: CallOpts = {}): Promise<ModelResult> {
   const ac = new AbortController();
   const stop = () => ac.abort();
   if (signal?.aborted) ac.abort();
@@ -80,7 +90,7 @@ export async function streamAnswer(apiKey: string, model: string, messages: Anth
   let idle = setTimeout(stop, timing.idle);
   let msg: Anthropic.Message;
   try {
-    const stream = anthropic(apiKey).messages.stream(requestParams(model, messages), { signal: ac.signal });
+    const stream = anthropic(apiKey).messages.stream(requestParams(model, messages, opts) as Parameters<Anthropic['messages']['stream']>[0], { signal: ac.signal });
     stream.on('streamEvent', () => { clearTimeout(idle); idle = setTimeout(stop, timing.idle); });
     stream.on('text', (t) => onText(t));
     msg = await stream.finalMessage();

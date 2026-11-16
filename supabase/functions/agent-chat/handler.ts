@@ -13,13 +13,13 @@ import { maskEmail } from '../_shared/slack.ts';
 import { AGENT_CONTEXT_PREFIX, type ContactRow } from '../_shared/contact.ts';
 import { inServiceHours, promiseNow } from '../_shared/hours.js';
 import { matchFaq, productOf } from './faq.ts';
-import { allowedAmounts, correctionNote, guardReply, type Violation } from './guard.ts';
+import { allowedAmounts, correctionNote, ensureTopics, guardReply, topicFact, type Violation } from './guard.ts';
 import { asksPrice, conversationLang, orgQuote, replyLang, uiLang } from './intent.ts';
-import { buildMessages, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
+import { buildMessages, type CallOpts, DEFAULT_MODEL, MAX_TOKENS, type ModelResult } from './model.ts';
 import { capState, costMicros, estimateTokens, knownModel, worstCaseMicros } from './pricing.ts';
 import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
 import { neutralizeAmounts, redactInput, sanitizeOutput, StreamSanitizer } from './redact.ts';
-import { FORCED_LINE, fixedLang, fixedReply, paidSignal, route } from './router.ts';
+import { FORCED_LINE, fixedLang, fixedReply, paidSignal, projectsContext, route, topicsOf } from './router.ts';
 import { type Store, Unavailable } from './store.ts';
 import { keyErrorCode, type Runtime } from './runtime.ts';
 import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
@@ -52,7 +52,7 @@ export type Deps = {
   now?: () => number;
   turnstile: (token: unknown, ip: string | null) => Promise<boolean>;
   // apiKey: المفتاح الفعلي لهذا الطلب (القاعدة ثم البيئة، runtime.ts)
-  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void, signal: AbortSignal, apiKey?: string) => Promise<ModelResult>;
+  model: (messages: Anthropic.MessageParam[], onText: (t: string) => void, signal: AbortSignal, apiKey?: string, opts?: CallOpts) => Promise<ModelResult>;
   // حالة المساعد الفعلية (القاعدة ومفتاح الطوارئ والبصمة). بلاها (الاختبارات القديمة وrun.ts) تحكم env.enabled وenv.apiKey
   runtime?: () => Promise<Runtime>;
   // آخر نجاح وآخر خطأ للمفتاح بعد كل استدعاء (agent_key_status)، في الخلفية
@@ -250,13 +250,23 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const product = productOf(conv.product);
     // 0) الموجّه الحتمي (router.ts): ما يُحوَّل دائمًا يُرد عليه برد ثابت بلغة الزائر بلا نموذج، وتُعرض نافذة التحويل.
     // البيانات الحساسة بأي لغة (لا تصل النموذج أصلًا)، وما سواها بالعربية أو الإنجليزية (لغة ثالثة يكتبها النموذج والتحويل مفروض)
-    const routed = route(message, { hits, product });
+    const visitorTurns = history.filter((t) => t.role === 'visitor').map((t) => t.body);
+    const routed = route(message, { hits, product, page: conv.product, previous: visitorTurns.slice(0, -1) });
     if (routed.kind === 'handoff' && (routed.reason === 'pii' || reply === 'ar' || reply === 'en')) {
       const fl = fixedLang(reply, message);
       const text = sanitizeOutput(fixedReply(routed.reason, fl, promiseNow(fl, now), { message, product })).text;
       await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: text, lang: fl, model: `route:${routed.reason}` });
       emit('delta', { t: text });
       emit('done', { text, handoff: true, source: 'route', route: routed.reason });
+      return;
+    }
+    // طلب سعر لجهة لم يتضح منتجه: رد ثابت يسأل أي المنتجين بالاسم الرسمي، بلا نموذج ولا تحويل (لغة ثالثة يكتبها النموذج
+    // بسطر orgQuote 'open' في سياقه)
+    if (routed.kind === 'reply' && (reply === 'ar' || reply === 'en')) {
+      const text = sanitizeOutput(topicFact(routed.reason, reply)).text;
+      await d.store.addMessage({ conversation_id: conv.id, role: 'canned', body: text, lang: reply, model: `route:${routed.reason}` });
+      emit('delta', { t: text });
+      emit('done', { text, handoff: false, source: 'route', route: routed.reason });
       return;
     }
     // 1) الجواب الجاهز: بلا نموذج ولا تكلفة، بلغة الرد إن كانت عربية أو إنجليزية (وغيرهما للنموذج، والجواب الجاهز معتمد في سياقه)
@@ -272,7 +282,10 @@ async function send(d: Deps, b: Record<string, unknown>) {
     let leadersPrice: string | null = null;
     // طلب سعر لجهة أو لعدة مقاعد: لا يُقرأ السعر الحي أصلًا (عروض الجهات يعدها الفريق). ولا يُقرأ لرسالة يحولها الموجّه
     // ولا لرسالة عن دفع تم («رسوم دفعتها»): تلك ليست سؤال سعر
-    const quote = orgQuote(message, product);
+    // ومتابعة «أي المنتجين؟» بالبرنامج طلب سعر لجهة فيه (الموجّه فرض التحويل)
+    const quote = routed.kind === 'forced' ? 'leaders' : routed.kind === 'reply' ? 'open' : projectsContext(message, conv.product) ? false : orgQuote(message, product);
+    // الموضوعات المعروفة (router.ts): حقيقتها في سياق الخادم، والحارس يحرس ما يخصها، والرد النهائي يحملها (ensureTopics)
+    const topics = routed.kind === 'handoff' ? [] : topicsOf(message, { page: conv.product });
     // ويُقرأ في متابعة سؤال سعر سابق كذلك («وهل يشمل الضريبة؟»)، فلا يقطع الحارس سعرًا صحيحًا يكرره النموذج من السجل
     const priceThread = asksPrice(message) || history.filter((t) => t.role === 'visitor').slice(-6).some((t) => asksPrice(t.body) && !orgQuote(t.body, product));
     if (!quote && routed.kind !== 'handoff' && product !== 'matrix' && priceThread && !paidSignal(message)) {
@@ -287,7 +300,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const answerOnly = routed.kind === 'answer';
     // المبلغ الذي كتبه الزائر لا يصل النموذج (redact.ts)، والمحفوظ يبقى كما كتبه
     const modelHistory = history.map((t) => (t.role === 'visitor' ? { ...t, body: neutralizeAmounts(t.body, uiLang(reply)) } : t));
-    const { messages } = buildMessages(modelHistory, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text }, forced, answerOnly });
+    const { messages } = buildMessages(modelHistory, { product, page: conv.product, promise: promiseNow(uiLang(reply), now), inHours, droppedTurns: 0, leadersPrice, lang: reply, orgQuote: quote, approved: approved && { id: approved.id, text: approved.text }, forced, answerOnly, facts: topics.map((t) => ({ id: t, text: topicFact(t, uiLang(reply)) })) });
     const prefix = estimateTokens(SYSTEM_BLOCKS.map((x) => x.text).join(''));
     const capMicros = d.env.capCents * 1e4;
     const calls = await d.store.countModelCalls(new Date(now - 36e5).toISOString());
@@ -307,7 +320,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
     // استدعاء واحد: حجز أسوأ تكلفة قبله ذريًا ومقيدًا بالسقف (المتوازي لا يتجاوزه، والفاشل يبقى محسوبًا)، وصف الاستدعاء
     // قبل إرساله (نص فارغ لا يدخل السجل) فيحسبه عداد الساعة وهو جارٍ، ثم التسوية من usage
     type Call = { result: ModelResult; callId: string; cost: number } | { fail: 'capped' | 'error' };
-    const callModel = async (msgs: Anthropic.MessageParam[], onText: (t: string) => void): Promise<Call> => {
+    const callModel = async (msgs: Anthropic.MessageParam[], onText: (t: string) => void, opts?: CallOpts): Promise<Call> => {
       const rest = estimateTokens(msgs.map((m) => (typeof m.content === 'string' ? m.content : '')).join(''));
       const worst = worstCaseMicros(d.env.model, prefix, rest, MAX_TOKENS);
       const res = await d.store.reserveSpend(day, worst, capMicros);
@@ -324,7 +337,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
       const callId = await d.store.addMessage({ conversation_id: conv.id, role: 'agent', body: '', lang, model: d.env.model, stop_reason: 'pending', cost_micros: worst });
       let result: ModelResult;
       try {
-        result = await d.model(msgs, onText, signal, r.apiKey);
+        result = await d.model(msgs, onText, signal, r.apiKey, opts);
       } catch (e) {
         const st = errStatus(e);
         console.error('agent model:', (e as Error)?.name, st, (e as Error)?.message);
@@ -354,7 +367,7 @@ async function send(d: Deps, b: Record<string, unknown>) {
       cache_write_tokens: c.result.usage.cache_creation_input_tokens, output_tokens: c.result.usage.output_tokens, cost_micros: c.cost,
     });
     // 3) النموذج ببث، وكل دفعة تمر بفحص المخرج وحارسه (guard.ts): لا تخرج إلا جمل تامة، والجملة المخالفة تُستبدل بالحقيقة
-    const gctx = { allow: allowedAmounts(leadersPrice), lang: uiLang(reply), product };
+    const gctx = { allow: allowedAmounts(leadersPrice), lang: uiLang(reply), product, topics };
     const stripMark = (t: string) => t.split(HANDOFF_MARK).join('');
     const san = new StreamSanitizer(48, (t) => guardReply(stripMark(t), gctx).text, true);
     const first = await callModel(messages, (t) => { const out = san.push(t); if (out) emit('delta', { t: out }); });
@@ -377,7 +390,8 @@ async function send(d: Deps, b: Record<string, unknown>) {
     // فالنص المصلح بالحارس هو الرد الآمن (الجمل المخالفة صارت حقائق معتمدة)
     // إشارة التحويل وحدها لا تستحق استدعاءً ثانيًا: تُنزع من النص وتُهمل في قرار التحويل. والاستدعاء الثاني يمر بحد
     // الساعة كالأول، فلا تضاعف الردود المخالفة الاستدعاءات
-    const needsRetry = violations.some((x) => x !== 'marker');
+    // وساعات في جواب ساعات التدريب أصلحها الحارس بالحقيقة نفسها: لا تستحق استدعاءً ثانيًا كذلك
+    const needsRetry = violations.some((x) => x !== 'marker' && x !== 'hours');
     const hourOk = async () => { const n = await d.store.countModelCalls(new Date(now - 36e5).toISOString()); return n !== null && n < LIMITS.modelCallsHour; };
     if (violations.length && !needsRetry) {
       await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: skipped`, lang });
@@ -403,9 +417,43 @@ async function send(d: Deps, b: Record<string, unknown>) {
       // نوع المخالفة وحده (بلا نص ولا بيانات) في سجل المحادثة، لمراجعة المالك ولعدها
       await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${violations.join(',')} · retry: ${retry}`, lang });
     }
+    let refused = call.result.stopReason === 'refusal';
+    // رد فارغ بلا امتناع (التفكير استنفد max_tokens، أو إشارة وحدها): ليس امتناعًا ولا تحويلًا. يُعاد مرة واحدة بلا تفكير
+    // بحد الساعة كغيره، وسبب التوقف في سجل المحادثة. وإن بقي فارغًا فحقائق الموضوع إن عُرف، وإلا رسالة التعذر بلا تحويل
+    let empty: string | null = null;
+    // إشارة تحويل وحدها بلا نص (والتحويل غير مهمل) قرار تحويل لا رد فارغ
+    const markOnly = !answerOnly && call.result.text.includes(HANDOFF_MARK);
+    if (!refused && !text && !markOnly) {
+      const why = `empty:${call.result.stopReason ?? 'none'}`;
+      let state: 'ok' | 'still' | 'skipped' = 'skipped';
+      if (!signal.aborted && (await hourOk())) {
+        const again = await callModel(messages, () => {}, { thinking: 'off' });
+        if (!('fail' in again)) {
+          const t3 = sanitizeOutput(guardReply(stripMark(again.result.text), gctx).text).text.trim();
+          state = t3 && again.result.stopReason !== 'refusal' ? 'ok' : 'still';
+          await saveCall(call, '', `superseded:${why}`.slice(0, 40));
+          call = again;
+          text = state === 'ok' ? t3 : '';
+          refused = again.result.stopReason === 'refusal';
+        }
+      }
+      await d.store.addMessage({ conversation_id: conv.id, role: 'system', body: `guard: ${why} · retry: ${state}`, lang });
+      if (!text && !refused) empty = why;
+    }
     let handoff = forced !== null || (call.result.text.includes(HANDOFF_MARK) && !answerOnly);
-    const refused = call.result.stopReason === 'refusal';
-    if (refused || !text) { text = TEXT.refusal[lang]; handoff = true; }
+    if (refused) { text = TEXT.refusal[lang]; handoff = true; }
+    // الرد يحمل حقيقة كل موضوع عُرف في السؤال (بالعربية أو الإنجليزية؛ لغة ثالثة يترجمها النموذج من سياقه)
+    if (!refused && (reply === 'ar' || reply === 'en') && topics.length) text = sanitizeOutput(ensureTopics(text, topics, reply).text).text;
+    if (!text) {
+      if (empty && forced === null) {
+        // لا رد ولا موضوع معروف: تعذر الرد، والزائر يعيد أو يضغط «تحدث مع الفريق»
+        await saveCall(call, '', empty.slice(0, 40));
+        emit('error', { code: 'model', text: TEXT.error[lang] });
+        return;
+      }
+      text = TEXT.refusal[lang];
+      handoff = true;
+    }
     if (call === first && fin.tail && !refused) emit('delta', { t: fin.tail });
     await saveCall(call, text);
     emit('done', { text, handoff, source: 'model', ...(violations.length ? { guarded: violations } : {}) });

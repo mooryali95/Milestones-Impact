@@ -7,19 +7,25 @@
 //            لإنسان، والشكوى، وطلب حذف البيانات أو الاطلاع عليها، والتهديد القانوني أو الصحافة، وطلب التسجيل نيابة عنه.
 //            يُرد برد ثابت بلغة الزائر بلا نموذج (لا تكلفة ولا تذبذب)، وتُعرض نافذة التحويل.
 //   forced:  طلب سعر لجهة في برنامج القادة: النموذج يكتب الصياغة، والتحويل مفروض بعده مهما كتب.
-//   answer:  سؤال عن سياسة أو لغتها، أو عن رمز الجهة الراعية، أو سعر لفرد: يُجاب، وإشارة التحويل من النموذج تُهمل.
+//   reply:   طلب سعر لجهة لم يتضح منتجه (صفحة مشتركة): رد ثابت بلا نموذج يسأل أي المنتجين بالاسم الرسمي، بلا تحويل.
+//   answer:  سؤال عن سياسة أو لغتها، أو عن رمز الجهة الراعية، أو سعر لفرد، أو موضوع معروف (topicsOf أدناه: ساعات التدريب،
+//            والفرق بين القياس والبرنامج، وبدء مشروع تنموي، وهوية المساعد): يُجاب، وإشارة التحويل من النموذج تُهمل،
+//            وحقيقة الموضوع من المعرفة (facts.json) تصل النموذج في سياق الخادم ويضمنها الحارس في الرد.
 //   free:    ما سوى ذلك: إشارة النموذج وحدها.
 // الإيجابيات الكاذبة أخطر من السلبيات هنا (التحويل الخاطئ يقطع جوابًا كان متاحًا)، فكل فئة تشترط دلالتين معًا: فعل
 // استرداد مع دفع تم، ورمز مع «لم يصل»، وفعل كلام مع شخص. السؤال عن السياسة («ما سياسة الاسترداد») لا يُحوَّل.
 import { hasWord, mentionedProduct, messageIsArabic, normalizeText, type Product } from './faq.ts';
-import { orgQuote } from './intent.ts';
+import { asksPrice, orgQuote } from './intent.ts';
 import { SITES } from '../_shared/sites.js';
 
 export type HandoffReason = 'pii' | 'refund' | 'payment' | 'account' | 'human' | 'complaint' | 'data' | 'legal' | 'register';
-export type AnswerReason = 'policy' | 'nomination' | 'price';
+// موضوعات معروفة يُجاب عنها من المعرفة بحقيقتها (facts.json)، ويحرس الحارس ما يخصها (ساعات التدريب)
+export type Topic = 'training_hours' | 'assessment_vs_program' | 'projects_start' | 'identity';
+export type AnswerReason = 'policy' | 'nomination' | 'price' | Topic;
 export type Route =
   | { kind: 'handoff'; reason: HandoffReason }
   | { kind: 'forced'; reason: 'org_quote' }
+  | { kind: 'reply'; reason: 'org_quote_open' }
   | { kind: 'answer'; reason: AnswerReason }
   | { kind: 'free' };
 
@@ -97,6 +103,58 @@ const NOMINATION_ISSUER = ['نحصل', 'نصدر', 'نطلب', 'موظفي', 'م
   'our team', 'our leaders', 'how do we', 'can we get', 'we are an employer', 'we are a company', 'issue a code', 'issue codes'];
 const PRICE = ['سعر', 'اسعار', 'تكلفه', 'بكم', 'رسوم', 'رسم', 'مبلغ', 'price', 'prices', 'pricing', 'cost', 'costs', 'fee', 'fees'];
 
+// ── الموضوعات المعروفة: دلالتان معًا في كل موضوع، ولا موضوع إن طابقت فئة تحويل (الموجّه يفحصها قبله) ──
+// ساعات التدريب: كلمة ساعات مع تدريب أو برنامج أو دورة، لا ساعات الدوام والرد («كم ساعة الدوام عندكم» جواب التواصل الجاهز)
+const HOURS = ['ساعه', 'ساعات', 'hour', 'hours'];
+const TRAINING = ['تدريب', 'تدريبيه', 'تدريبي', 'برنامج', 'دوره', 'training', 'programme', 'program', 'course', 'workshop'];
+const OFFICE = ['دوام', 'الدوام', 'تردون', 'يردون', 'الرد', 'ردكم', 'تواصل', 'التواصل', 'مكتب', 'office', 'reply', 'respond', 'response', 'contact', 'business hours',
+  'working hours', 'opening hours', 'your team', 'support', 'ساعات العمل', 'اوقات العمل'];
+// الفرق بين القياس المبدئي والبرنامج: ذكر القياس مع البرنامج أو مع سؤال الفرق
+const ASSESSMENT = ['قياس', 'assessment'];
+const DIFF = ['فرق', 'الفرق', 'يختلف', 'تختلف', 'difference', 'differ', 'different', 'versus', 'vs', 'compared'];
+const PROGRAM = ['برنامج', 'program', 'programme'];
+// بدء مشروع تنموي: صفحة المسار (MI-PROJECTS) مع ذكر مشروع، أو اسم المسار في أي صفحة، مع سؤال البدء
+const PROJECT_NAMED = ['مشروع تنموي', 'مشاريع تنمويه', 'مشروعات تنمويه', 'المشروع التنموي', 'المشاريع التنمويه', 'المشروعات التنمويه', 'مشروعنا التنموي',
+  'mi projects', 'development project', 'development projects'];
+const PROJECT = ['مشروع', 'مشاريع', 'مشروعات', 'project', 'projects'];
+const START = ['نبدا', 'ابدا', 'نبدي', 'ابدي', 'البدء', 'بدء', 'نبتدي', 'نتعاقد', 'start', 'begin', 'get started', 'engage', 'كيف', 'how'];
+// هوية المساعد: «أنت إنسان؟» و«ما اسمك؟» و"are you a bot?"، لا طلب إنسان (TALK وHUMAN_DIRECT تُفحص قبله)
+const YOU = ['انت', 'انتي', 'انتم'];
+const BEING = ['انسان', 'بشر', 'بشري', 'روبوت', 'بوت', 'حقيقي', 'برنامج الي', 'ذكاء اصطناعي'];
+const NAME_RX = /(?:^|\s)(?:ما|وش|ايش|شو|شنو|ويش)\s+(?:هو\s+)?اسمك(?:\s|$)/;
+const EN_ID_RX = /\bare\s+you\s+(?:an?\s+)?(?:real\s+)?(?:human|bot|robot|real|ai|person|machine|chatbot|automated)\b|\bwhat(?:'s|\s+is)\s+your\s+name\b|\bwho\s+are\s+you\b/i;
+
+// سياق المسار التنموي: صفحته مع ذكر مشروع، أو اسمه في أي صفحة. طلب سعر لجهة فيه ليس سؤال «أي المنتجين؟» (البرنامج
+// والمصفوفة)، فيبقى للنموذج بمعرفة المسار (لا أسعار منشورة له)
+export const projectsContext = (q: string, page?: string) => hasWord(q, PROJECT_NAMED) || (page === 'MI-PROJECTS' && hasWord(q, PROJECT));
+
+// الموضوعات المعروفة في الرسالة. page: صفحة المحادثة (MI-PROJECTS للمسار التنموي)
+export function topicsOf(message: string, o: { page?: string } = {}): Topic[] {
+  const q = String(message ?? '');
+  const norm = normalizeText(q);
+  const out: Topic[] = [];
+  if ((NAME_RX.test(norm) || (hasWord(q, YOU) && (hasWord(q, BEING) || /(?:^|\s)(?:ال)?آلي(?:\s|[؟?.!،]|$)/.test(q)))) || EN_ID_RX.test(q)) out.push('identity');
+  if (hasWord(q, HOURS) && hasWord(q, TRAINING) && !hasWord(q, OFFICE)) out.push('training_hours');
+  if (hasWord(q, ASSESSMENT) && (hasWord(q, DIFF) || hasWord(q, PROGRAM))) out.push('assessment_vs_program');
+  const project = projectsContext(q, o.page);
+  // سعر المشروع التنموي ليس سؤال بدء: لا أسعار منشورة، ويقرره النموذج كما هو
+  if (project && hasWord(q, START) && !asksPrice(q)) out.push('projects_start');
+  return out;
+}
+
+// متابعة طلب سعر لجهة لم يتضح منتجه: سُئل الزائر أي المنتجين فأجاب باسمه («البرنامج»، «المصفوفة»)
+const LEADERS_REPLY = ['برنامج', 'البرنامج', 'القاده', 'قاده', 'leaders', 'program', 'programme', 'الاول'];
+const MATRIX_REPLY = ['مصفوفه', 'المصفوفه', 'matrix', 'الثاني', 'الثانيه'];
+export function openQuoteFollowUp(message: string, previous: string[], product: Product): 'leaders' | 'matrix' | null {
+  const last = previous[previous.length - 1];
+  if (!last || orgQuote(last, product) !== 'open') return null;
+  if (normalizeText(message).split(' ').length > 8) return null;
+  const named = mentionedProduct(message);
+  const l = named === 'leaders' || hasWord(message, LEADERS_REPLY);
+  const m = named === 'matrix' || hasWord(message, MATRIX_REPLY);
+  return l && !m ? 'leaders' : m && !l ? 'matrix' : null;
+}
+
 const any = (q: string, words: string[]) => hasWord(q, words);
 // دفع تم: فعل دفع لا يسبقه شرط بكلمتين على الأكثر («لو دفعت»، «إذا أنا دفعت»، "if I paid", "once we have paid")
 export function paidSignal(q: string): boolean {
@@ -113,8 +171,9 @@ export function paidSignal(q: string): boolean {
   return false;
 }
 
-// hits: ما حجبه redactInput من الرسالة (هوية أو بطاقة أو آيبان أو كلمة مرور)
-export function route(message: string, o: { hits?: string[]; product: Product }): Route {
+// hits: ما حجبه redactInput من الرسالة (هوية أو بطاقة أو آيبان أو كلمة مرور). page: صفحة المحادثة، وprevious: رسائل الزائر
+// السابقة في المحادثة (بلا الحالية)، لمتابعة سؤال «أي المنتجين؟»
+export function route(message: string, o: { hits?: string[]; product: Product; page?: string; previous?: string[] }): Route {
   const q = String(message ?? '');
   if (o.hits?.length) return { kind: 'handoff', reason: 'pii' };
   if (!normalizeText(q)) return { kind: 'free' };
@@ -130,10 +189,18 @@ export function route(message: string, o: { hits?: string[]; product: Product })
   const others = normalizeText(q).replace(OWN_PERSON, ' ');
   if ((any(q, TALK) && any(others, PERSON)) || any(q, HUMAN_DIRECT)) return { kind: 'handoff', reason: 'human' };
   if (any(q, REGISTER_ME)) return { kind: 'handoff', reason: 'register' };
-  if (orgQuote(q, o.product) === 'leaders') return { kind: 'forced', reason: 'org_quote' };
+  const quote = projectsContext(q, o.page) ? false : orgQuote(q, o.product);
+  if (quote === 'leaders') return { kind: 'forced', reason: 'org_quote' };
+  // لم يتضح المنتج: يُسأل أولًا أي المنتجين بالاسم الرسمي (قرار المالك)، فإن أجاب بالبرنامج حُوّل، وبالمصفوفة أُجيب بأسعارها
+  if (quote === 'open') return { kind: 'reply', reason: 'org_quote_open' };
+  const follow = openQuoteFollowUp(q, o.previous ?? [], o.product);
+  if (follow === 'leaders') return { kind: 'forced', reason: 'org_quote' };
+  if (follow === 'matrix') return { kind: 'answer', reason: 'price' };
   if (any(q, NOMINATION_CODE) && any(q, NOMINATION_ORG)) return any(q, NOMINATION_ISSUER) ? { kind: 'free' } : { kind: 'answer', reason: 'nomination' };
   if (any(q, POLICY)) return { kind: 'answer', reason: 'policy' };
-  if (any(q, PRICE) && !orgQuote(q, o.product)) return { kind: 'answer', reason: 'price' };
+  if (any(q, PRICE) && !quote) return { kind: 'answer', reason: 'price' };
+  const topics = topicsOf(q, { page: o.page });
+  if (topics.length) return { kind: 'answer', reason: topics[0] };
   return { kind: 'free' };
 }
 

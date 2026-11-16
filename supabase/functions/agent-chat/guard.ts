@@ -5,12 +5,14 @@
 // ولا في السعر الحي، أو ادعاء محظور (claims.ts)، تُستبدل كلها بالحقيقة المعتمدة بلغة الرد، وكل رقم هوية أو بطاقة أو آيبان
 // يُحجب. حتمي ونقي، فيعمل أثناء البث (StreamSanitizer بالجمل) وبعده، ويُختبر وحده. الحارس هو الضمان، والتعليمات تقلل
 // الحاجة إليه: المخالفة تُسجَّل، ويُعاد توليد الرد مرة واحدة بملاحظة تصحيح (handler.ts).
-import { FAQ, KNOWLEDGE } from './knowledge.js';
+import { FAQ, KNOWLEDGE, TOPIC_FACTS } from './knowledge.js';
 import { claimKinds, type ClaimKind } from './claims.ts';
 import { AMOUNT, normalizeDigits, redactInput, SENTENCE_END } from './redact.ts';
 import type { Product } from './faq.ts';
+import type { Topic } from './router.ts';
 
-export type Violation = 'price' | ClaimKind | 'pii' | 'marker';
+// hours: رقم ساعات أو ساعات عمل الفريق في رد عن ساعات التدريب (تُستبدل الجملة بالحقيقة، بلا إعادة توليد)
+export type Violation = 'price' | ClaimKind | 'pii' | 'marker' | 'hours';
 
 const value = (s: string) => Number(String(s).replace(/,/g, ''));
 export function amountsIn(text: string): number[] {
@@ -40,7 +42,12 @@ export const MATRIX_PRICE_FACT: Fact = {
   en: 'Impact Matrix published prices: Individual 200 USD per year, and Organisations 5,000 USD per year.',
 };
 
-export type GuardCtx = { allow: ReadonlySet<number>; lang: 'ar' | 'en'; product?: Product };
+// حقيقة الموضوع من مصدرها (facts.json عبر knowledge.js) بلغة الرد
+export const topicFact = (t: Topic | 'org_quote_open', lang: 'ar' | 'en'): string => (TOPIC_FACTS as Record<string, { ar: string; en: string }>)[t][lang];
+// في رد عن ساعات التدريب: رقم ساعات، أو وقت (9:00)، أو ساعات عمل الفريق ودوامه. «4 أيام تدريبية» مدة مرحلة تبقى
+export const HOURS_BAD = /\d+\s*ساع|\b\d+\s*(?:[A-Za-z-]+\s+){0,2}hours?\b|\b\d{1,2}:\d{2}\b|\b(?:office|working|business|opening|team)\s+hours\b|ساعات\s+(?:ال)?عمل|[اأ]وقات\s+(?:ال)?عمل|الدوام/i;
+
+export type GuardCtx = { allow: ReadonlySet<number>; lang: 'ar' | 'en'; product?: Product; topics?: readonly Topic[] };
 // يفحص الرد ويصلحه: الجمل المخالفة تُستبدل بالحقيقة (مرة واحدة لكل حقيقة)، والبيانات الحساسة تُحجب.
 // كل جملة تُقرر بما قبلها وحده (لا نظر إلى ما بعدها)، فالبث بالجمل (StreamSanitizer) لا يغير جملة بعد بثها.
 // product غائب: أسعار المصفوفة مسموحة دائمًا (الاستعمال بلا سياق محادثة)
@@ -55,7 +62,9 @@ export function guardReply(text: string, o: GuardCtx): { text: string; violation
     const kinds: ('price' | ClaimKind)[] = claimKinds(s);
     const amounts = amountsIn(s);
     if (amounts.some((n) => !o.allow.has(n) && !(matrixSeen && PUBLISHED_AMOUNTS.has(n)))) kinds.push('price');
-    if (!kinds.length) {
+    const hours = !!o.topics?.includes('training_hours') && HOURS_BAD.test(s);
+    if (hours) v.add('hours');
+    if (!kinds.length && !hours) {
       // جملة سليمة تحيل إلى شاشة الدفع: جملة سعر مخالفة بعدها تُحذف بلا تكرار الحقيقة
       if (!amounts.length && CHECKOUT.test(s)) used.add(FACTS.price[o.lang]);
       return s;
@@ -64,7 +73,7 @@ export function guardReply(text: string, o: GuardCtx): { text: string; violation
     const trail = s.match(/\s*$/)?.[0] ?? '';
     const lead = s.match(/^\s*/)?.[0] ?? '';
     const priceFact = o.product === 'matrix' || inMatrix ? MATRIX_PRICE_FACT : FACTS.price;
-    const facts = kinds.map((k) => (k === 'price' ? priceFact : FACTS[k])[o.lang]).filter((f) => !used.has(f));
+    const facts = [...kinds.map((k) => (k === 'price' ? priceFact : FACTS[k])[o.lang]), ...(hours ? [topicFact('training_hours', o.lang)] : [])].filter((f) => !used.has(f));
     facts.forEach((f) => used.add(f));
     return facts.length ? `${lead}${facts.join(' ')}${trail}` : (trail.includes('\n') ? trail : '');
   }).join('');
@@ -82,5 +91,26 @@ const NOTE: Record<Violation, string> = {
   guarantee: 'وعدت أو ضمنت نتيجة أو استردادًا: لا وعد ولا ضمان، والمرجع السياسات المنشورة.',
   pii: 'كتبت رقم هوية أو بطاقة أو آيبان: لا تكتب أي رقم من هذا النوع.',
   marker: 'هذا السؤال يُجاب من المعرفة: أجب ولا تضع إشارة التحويل، ولك أن تذكر أن زر «تحدث مع الفريق» متاح.',
+  hours: 'ذكرت رقم ساعات أو ساعات عمل الفريق في جواب عن ساعات التدريب: ساعات التدريب تُضبط مع كل جهة وفق برنامجها بلا رقم، وساعات عمل الفريق ليست مواعيد التدريب.',
 };
+
+// ما يثبت أن الرد حمل حقيقة الموضوع، وإلا أُلحقت به من مصدرها (ensureTopics)
+const TOPIC_MUST: Record<Topic, { ar: RegExp; en: RegExp }> = {
+  training_hours: { ar: /جه[ةه]|الجهات/, en: /organi[sz]ation/i },
+  assessment_vs_program: { ar: /مستشار|يومي عمل/, en: /advisor|two working days/i },
+  projects_start: { ar: /تقييم[\s\u0640]*مبدئي/, en: /initial assessment/i },
+  identity: { ar: /آلي|مساعد/, en: /automated|assistant/i },
+};
+// الرد النهائي يحمل حقيقة كل موضوع عُرف في السؤال: إن غابت دلالتها أُلحقت الحقيقة بنصها المعتمد. حتمي، بعد الحارس
+export function ensureTopics(text: string, topics: readonly Topic[], lang: 'ar' | 'en'): { text: string; added: Topic[] } {
+  let out = String(text ?? '').trim();
+  const added: Topic[] = [];
+  for (const t of topics) {
+    if (TOPIC_MUST[t][lang].test(out)) continue;
+    const f = topicFact(t, lang);
+    out = out ? `${out}\n\n${f}` : f;
+    added.push(t);
+  }
+  return { text: out, added };
+}
 export const correctionNote = (vs: Violation[]) => `- تصحيح من الخادم: ردك السابق خالف القواعد، فأعد كتابته كاملًا. ${vs.map((x) => NOTE[x]).join(' ')}`;

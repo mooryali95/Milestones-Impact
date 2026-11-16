@@ -1,7 +1,7 @@
 // حارس المخرج (guard.ts وclaims.ts): المبلغ خارج المنشور والسعر الحي، والادعاءات المحظورة بأي لغة ولو نافية، والبيانات
 // الحساسة، والبث بالجمل التامة، وإعادة التوليد مرة واحدة بتكلفتها في الدالة كاملة.
 import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
-import { allowedAmounts, amountsIn, FACTS, guardReply, MATRIX_PRICE_FACT, PUBLISHED_AMOUNTS } from './guard.ts';
+import { allowedAmounts, amountsIn, ensureTopics, FACTS, guardReply, MATRIX_PRICE_FACT, PUBLISHED_AMOUNTS, topicFact } from './guard.ts';
 import { claimKinds } from './claims.ts';
 import { neutralizeAmounts, redactInput, StreamSanitizer } from './redact.ts';
 import { FAQ } from './knowledge.js';
@@ -205,4 +205,32 @@ Deno.test('الدالة: السعر الحي يُقرأ في متابعة سؤا
   assertEquals(h.seen.length, 2);
   assertEquals(done.guarded, undefined);
   assertMatch(done.text, /99/);
+});
+
+// ساعات التدريب (e48 وe49 وe56): الحارس يستبدل رقم الساعات وساعات الدوام بالحقيقة في هذا الموضوع وحده، ومدد المراحل تبقى
+Deno.test('الحارس: ساعات التدريب', () => {
+  const ar = { allow: new Set<number>(), lang: 'ar' as const, product: 'leaders' as const, topics: ['training_hours' as const] };
+  const r = guardReply('التدريب 4 أيام تدريبية. وعدد الساعات 24 ساعة تقريبًا. ويرد الفريق من 9:00 إلى 17:00.', ar);
+  assertMatch(r.text, /التدريب 4 أيام تدريبية\./);
+  assertNotMatch(r.text, /24 ساعة|9:00|17:00/);
+  assertMatch(r.text, /تُضبط مع كل جهة/);
+  // الحقيقة مرة واحدة ولو خالفت جملتان
+  assertEquals(r.text.split('تُضبط مع كل جهة').length, 2);
+  assertEquals(r.violations, ['hours']);
+  const en = guardReply('Training takes 4 training days. Each day is 6 hours. Office hours are 9:00 to 17:00.', { ...ar, lang: 'en' });
+  assertMatch(en.text, /4 training days/);
+  assertNotMatch(en.text, /6 hours|9:00|17:00/);
+  assertMatch(en.text, /organisation/);
+  // بلا الموضوع: ساعات الدوام جواب صحيح لا يُمس
+  const office = 'ساعات عمل الفريق من 9:00 إلى 17:00 بتوقيت الرياض.';
+  assertEquals(guardReply(office, { ...ar, topics: [] }).text, office);
+});
+Deno.test('ensureTopics: الحقيقة تُلحق إن غابت دلالتها، ولا تُكرر إن حضرت', () => {
+  const a = ensureTopics('القياس أول خطوة.', ['assessment_vs_program'], 'ar');
+  assertMatch(a.text, /يعتمد مستشار نتيجته ومساره خلال يومي عمل/);
+  assertEquals(a.added, ['assessment_vs_program']);
+  const b = ensureTopics('يعتمد مستشار نتيجتك خلال يومي عمل.', ['assessment_vs_program'], 'ar');
+  assertEquals(b.added, []);
+  assertEquals(ensureTopics('', ['projects_start'], 'en').text, topicFact('projects_start', 'en'));
+  assertMatch(ensureTopics('Hi.', ['identity'], 'en').text, /automated assistant/);
 });

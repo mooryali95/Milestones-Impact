@@ -11,6 +11,7 @@ import { emptyMem, type Mem, memStore } from './mem_store.ts';
 import { inServiceHours, promiseNow, PROMISE_AR } from '../_shared/hours.js';
 import { formContext, formOnly, AGENT_CONTEXT_PREFIX } from '../_shared/contact.ts';
 import { SITES } from '../_shared/sites.js';
+import { KNOWLEDGE, TOPIC_FACTS } from './knowledge.js';
 
 // ── الحجب والفحص ──
 Deno.test('الأرقام العربية الهندية تُوحَّد، ورقم الهوية والبطاقة والآيبان تُحجب ولو بمسافات', () => {
@@ -208,7 +209,7 @@ Deno.test('حد المحادثات لكل شبكة في الساعة', async () 
 Deno.test('send: البث ثم done بالنص المفحوص، والاستخدام في سجل اليوم', async () => {
   const s = setup({}, {}, { chunks: ['هذا رد طويل بما يكفي لبدء البث للزائر قبل نهايته. ', 'وراسل x@evil.test للمزيد.'] });
   const token = await started(s.deps);
-  const evs = await events(await post(s.deps, { action: 'send', token, message: 'وش الفرق بين القياس والبرنامج؟' }));
+  const evs = await events(await post(s.deps, { action: 'send', token, message: 'وش المستويات اللي يحددها القياس؟' }));
   const done = evs.find((e) => e.ev === 'done')!;
   assertEquals(done.data.source, 'model');
   assertNotMatch(done.data.text, /evil\.test/);
@@ -615,4 +616,141 @@ Deno.test('النافذة: Turnstile يُزال ويُرفض عند المهلة
   assertMatch(js, /j\.capped_text/);
   assertMatch(js, /j\.sent \|\|/);
   assertMatch(js, /وما حولته إلى الفريق يُحفظ مع طلبك/);
+});
+
+// ── تقييم 2026-11-16 بعد #376: الحالات الست في الدالة كاملة بنموذج يعيد ما أعاده في الإنتاج ──
+type Seq = { text: string; stopReason?: string };
+function seqSetup(replies: Seq[], over: Partial<Mem> = {}) {
+  const s = setup(over);
+  const opts: unknown[] = [];
+  const sys: string[] = [];
+  s.deps.model = async (messages, onText, _signal, _key, o) => {
+    s.calls.model++;
+    opts.push(o ?? null);
+    sys.push(String(messages[messages.length - 1].content));
+    const r = replies[Math.min(s.calls.model - 1, replies.length - 1)];
+    if (r.text) onText(r.text);
+    return { text: r.text, stopReason: r.stopReason ?? 'end_turn', model: 'claude-haiku-5-5', usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } };
+  };
+  return { ...s, opts, sys };
+}
+async function startedAt(d: Deps, page: string, locale = 'ar') {
+  const r = await (await post(d, { action: 'start', captcha: 'ok-token-123', page, locale })).json();
+  return r.token as string;
+}
+const doneOf = async (d: Deps, token: string, message: string) => (await events(await post(d, { action: 'send', token, message }))).find((e) => e.ev === 'done' || e.ev === 'error')!;
+
+Deno.test('e60: سعر لجهتنا في الرئيسية يُسأل فيه أي المنتجين بالاسم الرسمي، بلا نموذج ولا تحويل، والمتابعة بالبرنامج تحويل', async () => {
+  const s = seqSetup([{ text: 'عروض الجهات يعدها الفريق. سيرد عليك الفريق خلال 4 ساعات عمل.' }]);
+  const token = await startedAt(s.deps, 'MI-HOME');
+  const d = await doneOf(s.deps, token, 'نبي نعرف الأسعار لجهتنا');
+  assertEquals(d.ev, 'done');
+  assertEquals(d.data.source, 'route');
+  assertEquals(d.data.handoff, false);
+  assertMatch(d.data.text, /إدارة المشروعات للقادة/);
+  assertMatch(d.data.text, /مصفوفة/);
+  assertNotMatch(d.data.text, /\d+(\.\d+)?\s*(دولار|USD|\$)/);
+  assertEquals(s.calls.model, 0);
+  const d2 = await doneOf(s.deps, token, 'البرنامج');
+  assertEquals(d2.data.handoff, true);
+  assertMatch(s.sys[0], /طلب سعر لجهة أو لعدة مقاعد في برنامج إدارة المشروعات للقادة/);
+});
+
+Deno.test('e56 وe49: رقم ساعات وساعات الدوام في جواب ساعات التدريب تُستبدل بالحقيقة، وإشارة التحويل تُهمل، بلا استدعاء ثانٍ', async () => {
+  const s = seqSetup([{ text: `ساعات التدريب 30 ساعة موزعة على أربعة أيام. ويرد عليك الفريق خلال 4 ساعات عمل.\n${HANDOFF_MARK}` }]);
+  const token = await started(s.deps);
+  const d = await doneOf(s.deps, token, 'ما عدد ساعات التدريب في البرنامج؟ وهل هي ثابتة؟');
+  assertEquals(d.data.handoff, false);
+  assertNotMatch(d.data.text, /\d+\s*ساع|9:00|17:00/);
+  assertMatch(d.data.text, /جهة/);
+  assertEquals(s.calls.model, 1);
+  assertMatch(s.sys[0], /حقيقة معتمدة لهذا السؤال \(training_hours\)/);
+  const en = seqSetup([{ text: 'Our team works Sunday to Thursday, 9:00 to 17:00 Riyadh time.' }]);
+  const t2 = await startedAt(en.deps, 'MI-LEADERS', 'en');
+  const d2 = await doneOf(en.deps, t2, 'how many hours is the training');
+  assertNotMatch(d2.data.text, /9:00|17:00|\d+\s*(training\s+)?hours?/i);
+  assertMatch(d2.data.text, /organi[sz]ation/);
+  assertEquals(d2.data.handoff, false);
+});
+
+Deno.test('e01: الفرق بين القياس والبرنامج يحمل خطوة المستشار، وسطر السعر الحي لا يُقرأ لـ«وكم المدة»', async () => {
+  const s = seqSetup([{ text: 'القياس المبدئي أول خطوة، والتدريب 4 أيام تدريبية.' }], { price: { enabled: true, currency: 'USD', assessment_cents: 19900, program_cents: 99900 } });
+  const token = await started(s.deps);
+  const d = await doneOf(s.deps, token, 'وش الفرق بين القياس والبرنامج؟ وكم المدة؟');
+  assertEquals(d.data.handoff, false);
+  assertMatch(d.data.text, /قياس/);
+  assertMatch(d.data.text, /مستشار|يومي عمل/);
+  assertNotMatch(s.sys[0], /199\.00|رسوم البرنامج الحية/);
+  assertMatch(s.sys[0], /assessment_vs_program/);
+});
+
+Deno.test('e16: رد فارغ (max_tokens) ليس امتناعًا ولا تحويلًا: إعادة واحدة بلا تفكير، وسببه في السجل', async () => {
+  const s = seqSetup([{ text: '', stopReason: 'max_tokens' }, { text: 'نبدأ معكم بطلب تقييم مبدئي من الفريق عبر نموذج «تواصل معنا».' }]);
+  const token = await startedAt(s.deps, 'MI-PROJECTS');
+  const d = await doneOf(s.deps, token, 'عندنا جمعية ونبي تصميم مشروع تنموي، كيف نبدأ؟');
+  assertEquals(d.data.handoff, false);
+  assertMatch(d.data.text, /تقييم مبدئي/);
+  assertNotMatch(d.data.text, new RegExp(TEXT.refusal.ar.slice(0, 20)));
+  assertEquals(s.calls.model, 2);
+  assertEquals(s.opts[1], { thinking: 'off' });
+  assert(s.m.msgs.some((x) => x.role === 'system' && x.body === 'guard: empty:max_tokens · retry: ok'));
+  assert(s.m.msgs.some((x) => x.role === 'agent' && x.stop_reason === 'superseded:empty:max_tokens'));
+  // فارغ مرتين وللسؤال موضوع معروف: حقيقة الموضوع من مصدرها
+  const twice = seqSetup([{ text: '', stopReason: 'max_tokens' }]);
+  const t2 = await startedAt(twice.deps, 'MI-PROJECTS');
+  const d2 = await doneOf(twice.deps, t2, 'عندنا جمعية ونبي تصميم مشروع تنموي، كيف نبدأ؟');
+  assertEquals(d2.data.handoff, false);
+  assertMatch(d2.data.text, /تقييم مبدئي/);
+  // فارغ مرتين بلا موضوع: تعذر الرد بلا تحويل
+  const none = seqSetup([{ text: '', stopReason: 'max_tokens' }]);
+  const t3 = await started(none.deps);
+  const d3 = await doneOf(none.deps, t3, 'سؤال عام عن البرنامج بلا موضوع معروف');
+  assertEquals(d3.ev, 'error');
+  assertEquals(d3.data.text, TEXT.error.ar);
+  // والامتناع الحقيقي يبقى تحويلًا، وإشارة وحدها قرار تحويل بلا إعادة
+  const refused = seqSetup([{ text: '', stopReason: 'refusal' }]);
+  const t4 = await started(refused.deps);
+  const d4 = await doneOf(refused.deps, t4, 'سؤال عام عن البرنامج بلا موضوع معروف');
+  assertEquals([d4.data.handoff, d4.data.text, refused.calls.model], [true, TEXT.refusal.ar, 1]);
+  const mark = seqSetup([{ text: HANDOFF_MARK }]);
+  const t5 = await started(mark.deps);
+  const d5 = await doneOf(mark.deps, t5, 'سؤال عام عن البرنامج بلا موضوع معروف');
+  assertEquals([d5.data.handoff, mark.calls.model], [true, 1]);
+});
+
+Deno.test('r19: سؤال الهوية يُجاب، وإشارة النموذج تُهمل ولو عرض التحويل بكلماته', async () => {
+  const s = seqSetup([{ text: `لا، أنا لست إنسانًا، بل «مساعد Milestone Impact الآلي». إن أردت التحدث مع أحد من الفريق فيمكنني تحويل سؤالك إليهم.\n${HANDOFF_MARK}` }]);
+  const token = await started(s.deps);
+  const d = await doneOf(s.deps, token, 'أنت إنسان صح؟ ما اسمك؟');
+  assertEquals(d.data.handoff, false);
+  assertMatch(d.data.text, /آلي|مساعد/);
+  assertNotMatch(d.data.text, /HANDOFF/);
+});
+
+Deno.test('النظائر في الدالة: ساعات الدوام جواب جاهز، وسعر جهة في البرنامج تحويل، وتصميم مشروع مع طلب الفريق تحويل', async () => {
+  const s = seqSetup([{ text: 'عروض الجهات يعدها الفريق. سيرد عليك الفريق.' }]);
+  const t1 = await started(s.deps);
+  assertEquals((await doneOf(s.deps, t1, 'كم ساعة الدوام عندكم')).data.source, 'canned');
+  const t2 = await started(s.deps);
+  assertEquals((await doneOf(s.deps, t2, 'كم سعر 15 مقعد لشركتنا؟')).data.handoff, true);
+  const t3 = await startedAt(s.deps, 'MI-PROJECTS');
+  const d3 = await doneOf(s.deps, t3, 'نبي تصميم مشروع تنموي وأبي أكلم أحد من الفريق');
+  assertEquals([d3.data.source, d3.data.handoff], ['route', true]);
+});
+
+Deno.test('حقائق الموضوعات منقولة من المعرفة: كل رقم فيها في المعرفة، وبلا شرطة طويلة', () => {
+  for (const [id, f] of Object.entries(TOPIC_FACTS as Record<string, { ar: string; en: string }>)) {
+    for (const lang of ['ar', 'en'] as const) {
+      for (const n of f[lang].match(/\d+/g) ?? []) assert(KNOWLEDGE.includes(n), `${id}.${lang}: ${n}`);
+      assertNotMatch(f[lang], /[\u2013\u2014]/);
+    }
+  }
+  assertMatch(KNOWLEDGE, /الفرق بين القياس والبرنامج/);
+});
+
+Deno.test('إعادة الرد الفارغ بلا تفكير: Haiku 5.5 disabled، وSonnet 5.5 between_tools، والافتراضي بلا thinking', () => {
+  assertEquals(requestParams('claude-haiku-5-5', [], { thinking: 'off' }).thinking, { type: 'disabled' });
+  assertEquals(requestParams('claude-sonnet-5-5', [], { thinking: 'off' }).thinking, { type: 'between_tools' });
+  assertEquals('thinking' in requestParams('claude-haiku-5-5', []), false);
+  assertEquals('thinking' in requestParams('claude-opus-5-5', [], { thinking: 'off' }), false);
 });

@@ -80,3 +80,33 @@ Deno.test('المصحح يميز: الجواب الجاهز الصحيح يمر�
   assert(!grade(by('e11'), { text: 'البرنامج بالعربية.', handoff: false, source: 'model' }).pass);
   assert(!grade(by('e15'), { text: 'تفضل بسؤالك.', handoff: false, source: 'model' }).pass);
 });
+
+// الحالات الست الراسبة في تقييم الإنتاج (2026-11-16 بعد #376) بالردود التي أعادها النموذج يومها: الطبقات الحتمية
+// (الموجّه والحارس وضمان الحقيقة وإعادة الرد الفارغ) تجعلها تنجح بتوقعاتها كما هي
+Deno.test('الحالات الست بردود الإنتاج: تنجح بتوقعاتها كما هي', async () => {
+  const prod: Record<string, string[]> = {
+    e01: ['الفرق أن القياس يحدد مستواك، والبرنامج رحلة تأهيل: التدريب 4 أيام تدريبية، والتوجيه 4 أسابيع.'],
+    e16: ['', ''],
+    r19: ['لا، أنا لست إنسانًا، بل «مساعد Milestone Impact الآلي». إن أردت التحدث مع أحد من الفريق، فيمكنني تحويل سؤالك إليهم، وسيرد عليك الفريق خلال 4 ساعات عمل بتوقيت الرياض.\n[[HANDOFF]]'],
+    e49: ['Our team hours are Sunday to Thursday, 9:00 to 17:00 Riyadh time.'],
+    e56: ['عدد ساعات التدريب 6 ساعات يوميًا، وهي ثابتة.'],
+    e48: ['ساعات البرنامج 24 ساعة تدريبية.'],
+    e60: ['عروض الجهات يعدها الفريق. سيرد عليك الفريق خلال 4 ساعات عمل.\n[[HANDOFF]]'],
+  };
+  for (const [id, texts] of Object.entries(prod)) {
+    const c = cases.find((x) => x.id === id)!;
+    const h = harness();
+    let n = 0;
+    h.deps.model = async (_m, onText) => {
+      const t = texts[Math.min(n++, texts.length - 1)];
+      if (t) onText(t);
+      return { text: t, stopReason: t ? 'end_turn' : 'max_tokens', model: 'claude-haiku-5-5', usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } };
+    };
+    const { token } = await (await post(h.deps, { action: 'start', captcha: 'ok-token-123', page: c.page, locale: c.expect.lang })).json();
+    const body = await (await post(h.deps, { action: 'send', token, message: c.message })).text();
+    const done = body.split('\n\n').find((b) => b.startsWith('event: done'))!;
+    const data = JSON.parse(done.match(/^data: (.+)$/m)![1]);
+    const g = grade(c, { text: data.text, handoff: !!data.handoff, source: data.source });
+    assert(g.pass, `${id}: ${g.reasons.join('؛ ')} :: ${data.text}`);
+  }
+});

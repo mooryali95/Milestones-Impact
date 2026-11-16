@@ -26,6 +26,7 @@
 .la-subtabs small { opacity: .7; }
 .la-load { padding: 60px; display: grid; place-items: center; }
 .la-err { background: var(--st-bad-bg); color: var(--st-bad); padding: 10px 14px; border-radius: 6px; font-size: .86rem; }
+.la-err-detail { display: block; margin-block-start: 6px; font-size: .74rem; opacity: .8; overflow-wrap: anywhere; }
 .la-note { background: var(--sand-light); border-inline-start: 3px solid var(--gold); padding: 10px 14px; margin: 14px 0; font-size: .84rem; }
 .la-muted { color: var(--ink-light); font-size: .82rem; }
 .la-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; padding: 20px; margin-bottom: 16px; }

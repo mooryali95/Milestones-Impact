@@ -199,3 +199,79 @@ test('الضيق 375 بكسل: لا تمرير أفقي للصفحة', async ({ 
   expect(over).toBeLessThanOrEqual(0);
   await shot(page, 'agent-phone');
 });
+
+// أشكال من الإنتاج لا تتوقعها الشاشة: تشغيل جارٍ بلا نهاية، وتشغيل قديم بلا تكرار، ومتوقف بلا بداية، ونسخ ومفتاح وبوابة
+// غائبة، ونموذج كائن، وسلسلة إنفاق غائبة، وصفوف تواصل بلا اسم ولا بريد، ونتائج بأسباب null وحالة محذوفة. تُرسم كلها
+const BOUNDARY = 'تعذّر عرض هذه الشاشة';
+const prodShapes = {
+  'admin.agent-state': () => ({
+    success: true, ready: true, env_mode: 'allow', enabled: false, effective: false, reason: null, enabled_by: null, enabled_at: null, model: { id: 'claude-haiku-5-5' },
+    known_model: true, cap_cents: null, key: null, versions: null, total_cases: 60, gate: null, companion_off: null, can_write: true,
+    latest_run: { id: '9d668ea8-0000-4000-8000-000000000009', status: 'running', finished_at: null, started_at: ago(2), eval_total: 0, redteam_total: 0, done_cases: 0, total_cases: 60, cost_micros: null },
+  }),
+  'admin.agent-usage': () => ({ success: true, today: { spent_micros: null, cap_micros: 2000000 }, conversations: null, handoffs: null }),
+  'admin.agent-conversations': () => ({ success: true, total: null, rows: [
+    { id: 'c0ffee00-0000-4000-8000-00000000000a', contact: true, name: null, email: null, locale: null, product: null, rating: null, created_at: null, status: null },
+    { id: 'c0ffee00-0000-4000-8000-00000000000b', contact: false, label: null, visitor_messages: null },
+  ] }),
+  'admin.agent-transcript': () => ({ success: true, conversation: null, messages: [{ role: 'visitor', body: null }, { role: 'agent', body: 'رد', tokens: null, cost_micros: null }, { role: 'system', body: null }] }),
+  'admin.agent-eval-runs': () => ({ success: true, runs: [
+    { id: '9d668ea8-0000-4000-8000-000000000009', status: 'running', finished_at: null, eval_total: 0, done_cases: 0, total_cases: 60 },
+    { id: 'old00000-0000-4000-8000-000000000001', status: 'failed', eval_pass: 40, eval_total: 45, redteam_pass: 14, redteam_total: 15, started_at: ago(900), finished_at: ago(890) },
+    { id: 'stop0000-0000-4000-8000-000000000002', status: 'stopped', stop_reason: 'cancelled', started_at: null, finished_at: null, repeats: 3 },
+    null,
+  ] }),
+  'admin.agent-eval-run': () => ({ success: true, run: null, results: [
+    { case_id: 'gone', set: 'eval', pass: false, reasons: null, message: null, reply: null },
+    { case_id: 'e01', set: 'eval', pass: false, reasons: ['ينقصه: مستشار|يومي عمل', null], message: 'وش الفرق بين القياس والبرنامج؟ وكم المدة؟', reply: 'نص' },
+    { case_id: 'e01', set: 'eval', pass: true },
+  ] }),
+};
+
+test('أشكال الإنتاج غير المتوقعة: الشاشة تُرسم ونافذتا التشغيل والمحادثة تفتحان', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await setup(page, { replies: prodShapes });
+  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+  await expect(page.getByText(BOUNDARY)).toHaveCount(0);
+  await expect(sec(page, 'التقييم').locator('.ag-sum')).toContainText('جارٍ');
+  await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText(/اليوم 0.00 من 2.00 دولار/);
+  await expect(sec(page, 'المحادثات').getByRole('button', { name: /بلا اسم/ })).toBeVisible();
+  await expect(sec(page, 'التقييم').getByText('كل حالة 3 مرات')).toBeVisible();
+  await sec(page, 'التقييم').getByRole('button', { name: 'راسب' }).click();
+  const run = page.getByRole('dialog', { name: /تشغيل #old00000/ });
+  await expect(run).toContainText('ينقصه: مستشار|يومي عمل');
+  await expect(run).toContainText('gone');
+  await page.keyboard.press('Escape');
+  await sec(page, 'المحادثات').getByRole('button', { name: /زائر #c0ffee00/ }).click();
+  await expect(page.getByRole('dialog', { name: /محادثة #c0ffee00/ })).toContainText('رد');
+  await page.keyboard.press('Escape');
+  await expect(page.getByText(BOUNDARY)).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('ردود ليست JSON أو فاشلة: رسالة تعذر القراءة في كل قسم، لا شاشة معطلة', async ({ page }) => {
+  await setup(page, { replies: { 'admin.agent-usage': () => 'not json', 'admin.agent-eval-runs': () => ({ success: false }), 'admin.agent-conversations': () => null } });
+  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+  await expect(page.getByText(BOUNDARY)).toHaveCount(0);
+  await expect(sec(page, 'الإنفاق')).toContainText('تعذّرت القراءة');
+  await expect(sec(page, 'التقييم')).toContainText('تعذّرت القراءة');
+});
+
+test('ملف القسم حذفه نشر أحدث: إعادة تحميل واحدة ثم رسالة «صدر تحديث للوحة» بزرها، والزر يفتح الشاشة', async ({ page }) => {
+  let block = true;
+  let hits = 0;
+  // كما يرد Cloudflare Pages على ملف محذوف بقاعدة /* /index.html 200
+  await page.route(/\/assets\/Agent-[^/]+\.js$/, async (route) => {
+    if (!block) return route.continue();
+    hits++;
+    await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><html></html>' });
+  });
+  await setup(page);
+  await expect(page.getByText('صدر تحديث للوحة، فأعد تحميل الصفحة')).toBeVisible();
+  await expect(page.getByText(BOUNDARY)).toHaveCount(0);
+  expect(hits).toBeGreaterThan(0);
+  block = false;
+  await page.getByRole('button', { name: 'أعد تحميل الصفحة' }).click();
+  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+});
