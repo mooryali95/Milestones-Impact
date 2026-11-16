@@ -432,3 +432,24 @@ test('المدير غير العام لا يرى «بمستوى محدد»', asy
   await page.getByRole('button', { name: /اعتماد جماعي/ }).click();
   await expect(page.getByRole('dialog', { name: 'اعتماد جماعي' }).getByRole('radio')).toHaveCount(0);
 });
+
+// تقرير فاعلية التذكير (P5، 2026-11-16): من المرسل والمرحلة، ومن لم يعد يكفيه التذكير، والمدة
+test('فاعلية التذكير: النسب بحسب المرسل والمرحلة، ومن يحتاج تدخلًا شخصيًا يفتح ملفه، والمدة تُعيد الطلب', async ({ page }) => {
+  const t = (key, extra) => ({ key, sent: 4, seen: 2, progressed: 2, waiting: 0, none: 2, seen_pct: 50, progressed_pct: 50, ...extra });
+  const calls = await setup(page, {
+    'admin.nudge-report': { success: true, ledger: true, days: 30, people: 2, capped: false, total: t('all', { sent: 5, progressed_pct: 25, seen_pct: 20 }),
+      by_sender: [t('auto', { label: 'التذكير الآلي', progressed_pct: 0 }), t('mentor', { label: 'المرشد', sent: 1, progressed_pct: 100 })],
+      by_stage: [t('التدريب')], stuck: [{ id: 'p2', name: 'Omar Ali', nudges: 3, misses: 3, stage: 'التدريب', last: '2026-11-20T10:00:00Z' }] },
+  });
+  await page.getByRole('button', { name: 'فاعلية التذكير' }).click();
+  const dlg = page.getByRole('dialog', { name: 'فاعلية التذكير' });
+  await expect(dlg.locator('.nr-kpis')).toContainText('25%تقدّم بعده');
+  await expect(dlg.getByRole('region', { name: 'بحسب المرسل' })).toContainText('المرشد');
+  await expect(dlg.getByRole('region', { name: 'بحسب المرحلة' })).toContainText('التدريب');
+  await expect(dlg.getByRole('region', { name: /يحتاجون تدخلًا شخصيًا/ })).toContainText('3 تذكير، 3 بلا أثر');
+  await dlg.getByRole('button', { name: 'آخر 90 يومًا' }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.nudge-report').map((c) => c.days)).toEqual([30, 90]);
+  await dlg.getByRole('button', { name: 'Omar Ali' }).click();
+  await expect(dlg).toHaveCount(0);
+  await expect(page).toHaveURL(/participants\/p2/);
+});

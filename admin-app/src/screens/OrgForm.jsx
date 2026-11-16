@@ -163,6 +163,8 @@ function domainHint(email, domains) {
 
 // مفتاح المرافق الذكي يُرسل بعد ترحيل 20261115230000 وحده: العمود في صف الجهة المقروء (أو في أي جهة للجهة الجديدة)
 export const companionKnown = (org, ready = false) => ready || !!(org && 'companion_allowed' in org);
+// تذكير المنسق (ترحيل 20261116090000): يُرسل الإعداد بعد وجود عموده في صف الجهة المقروء، وجهة جديدة تأخذ الافتراضي (مفعّل)
+export const coordNudgesKnown = (org) => !!(org && 'coord_nudges' in org);
 
 export default function OrgForm({ org, coordinator, onClose, companionReady = false }) {
   const { toast, confirm } = useUI();
@@ -170,7 +172,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
     name: org?.name || '', name_en: org?.name_en || '', logo: org?.logo || null, cert_cobrand: org?.cert_cobrand !== false, cert: org?.cert || {}, short_name: org?.short_name || '', sector: org?.sector || '', status: org?.status || 'active',
     color: org?.color || SWATCHES[0], seats: org?.seats ?? '', contract: org?.contract_cents != null ? String(org.contract_cents / 100) : '', show_value: org?.show_value !== false,
     contract_starts: org?.contract_starts || '', contract_ends: org?.contract_ends || '', invite_code: org?.invite_code || '', domains: domainsOf(org), notes: org?.notes || '',
-    companion_allowed: org?.companion_allowed !== false,
+    companion_allowed: org?.companion_allowed !== false, coord_nudges: org?.coord_nudges !== false,
   }), [org]);
   const initialCoord = useMemo(() => ({
     enabled: !!coordinator, email: coordinator?.email || org?.contact_email || '', full_name: coordinator?.full_name || org?.contact_name || '',
@@ -253,6 +255,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
       contact_name: coord.full_name.trim() || null, contact_email: coord.email.trim().toLowerCase() || null, contact_phone: coord.phone.trim() || null,
       ...(next.invite_code || !known ? { invite_code: next.invite_code.trim().toLowerCase() || null } : {}),
       ...(companionKnown(org, companionReady) ? { companion_allowed: next.companion_allowed } : {}),
+      ...(coordNudgesKnown(org) ? { coord_nudges: next.coord_nudges } : {}),
     };
     const r = await L('admin.save', { entity: 'organizations', row: { ...(known ? { id: known } : {}), ...row } });
     if (!r.success) { setBusy(false); return setServerErr(r.message || 'تعذّر الحفظ'); }
@@ -326,6 +329,17 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
                 <span>{v.cert_cobrand ? 'مفعّلة' : 'معطّلة'}</span></label>
             </Field>
           </section>
+
+          {coordNudgesKnown(org) && (
+            <section className="of-sec">
+              <h4>تذكير المنسق لمشاركي الجهة</h4>
+              <Field group label="السماح لمنسق الجهة بتذكير مشاركيها" hint={v.coord_nudges ? 'يظهر «ذكّرهم» في «يحتاج تدخلك» ببوابة الجهة، بتوقيع الجهة وحد يومي' : 'لا يذكّر منسق هذه الجهة أحدًا، ويبقى تذكير الإدارة والمرشد'}>
+                <label className="of-switch"><input type="checkbox" checked={v.coord_nudges} onChange={(e) => setV({ ...v, coord_nudges: e.target.checked })} />
+                  <span>{v.coord_nudges ? 'مسموح' : 'موقوف'}</span></label>
+              </Field>
+              <p className="la-muted small">تذكير واحد بنص البرنامج، يمر بالحد المشترك مع الإدارة والمرشد فلا يتكرر على المشارك، ويُكتب في سجل تذكيراته.</p>
+            </section>
+          )}
 
           <section className="of-sec">
             <h4>المرافق الذكي</h4>

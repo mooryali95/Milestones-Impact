@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116080000_leaders_nudges
+-- as-of migration: 20261116090000_leaders_org_coord_nudges
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1385,6 +1385,7 @@ create table if not exists leaders.organizations (
   contract_starts date,
   contract_ends date,
   companion_allowed boolean default true not null,
+  coord_nudges boolean default true not null,
   constraint organizations_cert_check CHECK (((jsonb_typeof(cert) = 'object'::text) AND (pg_column_size(cert) <= 320000))),
   constraint organizations_color_check CHECK (((color IS NULL) OR (color ~ '^#[0-9A-Fa-f]{6}$'::text))),
   constraint organizations_contract_cents_check CHECK (((contract_cents IS NULL) OR (contract_cents >= 0))),

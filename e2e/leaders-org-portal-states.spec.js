@@ -104,7 +104,7 @@ test('org-2 وorg-7: «يحتاج تدخلك» يعرضهم بنقرة في ال
   await expect(people).toContainText('فهد العتيبي');
   await expect(page.getByRole('heading', { name: 'المشاركون' })).toBeFocused();
   await expect(page.getByRole('heading', { name: 'المشاركون' })).toBeInViewport();
-  await todo.getByRole('listitem').filter({ hasText: 'لم يدخلوا منذ' }).getByRole('button').click();
+  await todo.getByRole('listitem').filter({ hasText: 'لم يدخلوا منذ' }).getByRole('button', { name: 'اعرضهم في القائمة' }).click();
   await expect(people.locator('tbody tr')).toHaveCount(1);
   await expect(people).toContainText('عمر الزهراني');
   // كل خيار مرحلة يعرض صفوفًا بعنوانه وحده

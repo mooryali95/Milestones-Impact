@@ -105,8 +105,103 @@ describe('المعاينة الجماعية', () => {
 describe('مصدر واحد للتذكير', () => {
   const read = (f) => readFileSync(f, 'utf8');
   it('كل إرسال تذكير من nudges.ts وحده: الإدارة والأسبوعي، ولا نص تذكير ثانٍ', () => {
-    expect(read('supabase/functions/leaders-api/admin.ts')).toContain('sendNudges(');
+    expect(read('supabase/functions/leaders-api/admin.ts')).toContain('weeklyNudges(');
+    expect(read('supabase/functions/leaders-api/nudges.ts')).toMatch(/export async function weeklyNudges[\s\S]*sendNudges\(sender/);
     expect(read('supabase/functions/leaders-api/admin.ts')).not.toMatch(/reminderMail|stuckMail/);
     expect(read('supabase/functions/leaders-api/index.ts')).toMatch(/'admin\.remind-stuck': \(a, b\) => A\.writer\(a, NU\.adminSend, b\)/);
+  });
+});
+
+// ── P4: المساعد نيابة عن المرشد، ومجموعات المنسق ──
+import { weeklyPlan, NUDGE_BANNER_DAYS } from '../../supabase/functions/leaders-api/nudge.js';
+import { COORD_NUDGE_DAILY, COORD_NUDGE_GROUPS, inCoordGroup, isStale, PRE_BASELINE, STALE_DAYS } from '../../supabase/functions/leaders-api/coord-groups.js';
+import * as coordUi from './coord.js';
+
+describe('التذكير الأسبوعي: المساعد ينوب عن المرشد إلى أن يرد', () => {
+  const m1 = { id: 'm1', name: 'خالد العمر' };
+  it('من له مرشد يذكّره المساعد باسم مرشده، ومن لا مرشد له التذكير الآلي', () => {
+    const plan = weeklyPlan(['a', 'b', 'c'], new Map([['a', m1], ['b', m1]]), new Set());
+    expect(plan).toEqual([{ mentor: m1, ids: ['a', 'b'] }, { mentor: null, ids: ['c'] }]);
+  });
+  it('من ذكّره مرشده بنفسه مؤخرًا لا ينوب عنه المساعد', () => {
+    const plan = weeklyPlan(['a', 'b'], new Map([['a', m1], ['b', m1]]), new Set(['a']));
+    expect(plan).toEqual([{ mentor: m1, ids: ['b'] }]);
+  });
+});
+
+describe('تذكير المنسق: مجموعتا «يحتاج تدخلك» من مصدر واحد مع الواجهة', () => {
+  const now = Date.parse('2026-11-16T10:00:00Z');
+  it('الواجهة تستعمل القاعدة نفسها التي يختار بها الخادم', () => {
+    expect(coordUi.PRE_BASELINE).toBe(PRE_BASELINE);
+    expect(coordUi.isStale).toBe(isStale);
+    expect(coordUi.STALE_DAYS).toBe(STALE_DAYS);
+  });
+  it('لم يكمل القياس، والمتوقف أسبوعين ممن لم يخرج', () => {
+    expect(inCoordGroup({ status: 'profiled' }, 'baseline', now)).toBe(true);
+    expect(inCoordGroup({ status: 'enrolled' }, 'baseline', now)).toBe(false);
+    expect(inCoordGroup({ status: 'enrolled', last_login_at: '2026-10-20T00:00:00Z' }, 'stale', now)).toBe(true);
+    expect(inCoordGroup({ status: 'withdrawn', last_login_at: '2026-10-20T00:00:00Z' }, 'stale', now)).toBe(false);
+    expect(inCoordGroup({ status: 'enrolled', last_login_at: '2026-11-10T00:00:00Z' }, 'stale', now)).toBe(false);
+    expect(inCoordGroup({ status: 'profiled' }, 'other', now)).toBe(false);
+    expect(Object.keys(COORD_NUDGE_GROUPS)).toEqual(['baseline', 'stale']);
+    expect(COORD_NUDGE_DAILY).toBeGreaterThan(0);
+    expect(NUDGE_BANNER_DAYS).toBe(14);
+  });
+});
+
+describe('الحراسة على الخادم', () => {
+  const read = (f) => readFileSync(f, 'utf8');
+  const nu = read('supabase/functions/leaders-api/nudges.ts');
+  it('المرشد يذكّر من يرشدهم وحدهم: إسناد mentor مقبول باسمه', () => {
+    expect(nu).toMatch(/async function assignedMentees[\s\S]{0,300}\.eq\('expert_id', e\.id\)\.eq\('role', 'mentor'\)\.eq\('status', 'accepted'\)/);
+    expect(nu).toMatch(/if \(!ok\.length\) throw new Fail\('تذكّر من ترشدهم وحدهم', 403/);
+  });
+  it('المنسق: الخادم يختار من مشاركي جهته وحدها، والإيقاف بيد الإدارة، والحد اليومي للجهة', () => {
+    expect(nu).toMatch(/from\('participants'\)\.select\('id, status, last_login_at, is_demo'\)\.eq\('organization_id', org\.id\)/);
+    expect(nu).toMatch(/if \(org\.coord_nudges === false\) throw new Fail/);
+    expect(nu).toMatch(/eq\('sender', 'coordinator'\)\.eq\('sender_ref', orgId\)/);
+    expect(nu).toMatch(/if \(!perms\.list\) throw new Fail/);
+    expect(nu).toMatch(/group === 'stale' && !perms\.activity/);
+    // المعاينة للمنسق بلا أسماء ولا نص
+    const prev = nu.slice(nu.indexOf('export async function coordPreview'), nu.indexOf('export async function coordSend'));
+    expect(prev).not.toMatch(/sample|\.text\b|full_name|people:|\.name\b(?!,)|x\.name/);
+    expect(prev).toMatch(/stages: \[\.\.\.stages\]\.map\(\(\[stage, n\]\) => \(\{ stage, n \}\)\)/);
+  });
+});
+
+// ── P5: تقرير الفاعلية ──
+import { effectReport, NUDGE_REPORT_WINDOWS } from '../../supabase/functions/leaders-api/nudge.js';
+
+describe('تقرير فاعلية التذكير', () => {
+  const NOWR = Date.parse('2026-11-30T10:00:00Z');
+  const at = (d) => new Date(NOWR - d * 864e5).toISOString();
+  const n = (pid, sender, d, snap, seen = false) => ({ participant_id: pid, sender, stage_key: snap.key, stage_title: snap.key === 'stage:a' ? 'التدريب' : 'المبادرة', snapshot: snap, created_at: at(d), seen_at: seen ? at(d - 1) : null });
+  const rows = [
+    // أ: ذكّره المرشد فتقدّم (انتقل إلى b)، ثم ذكّرته الإدارة قبل يومين فينتظر
+    n('a', 'admin', 2, { key: 'stage:b', done: 0 }), n('a', 'mentor', 10, { key: 'stage:a', done: 0 }, true),
+    // ب: ثلاثة تذكيرات آلية بلا حركة: يحتاج تدخلًا شخصيًا
+    n('b', 'auto', 8, { key: 'stage:a', done: 1 }), n('b', 'auto', 16, { key: 'stage:a', done: 1 }), n('b', 'auto', 24, { key: 'stage:a', done: 1 }),
+  ];
+  const current = new Map([['a', { ok: true, snapshot: { key: 'stage:b', done: 0 } }], ['b', { ok: true, snapshot: { key: 'stage:a', done: 1 } }]]);
+  const r = effectReport(rows, current, new Map([['a', 'سارة'], ['b', 'خالد']]), NOWR);
+  it('الإجمالي: ما ينتظر لا يدخل نسبة التقدم', () => {
+    expect(r.total).toMatchObject({ sent: 5, seen: 1, progressed: 1, waiting: 1, none: 3, seen_pct: 20, progressed_pct: 25 });
+    expect(r.people).toBe(2);
+  });
+  it('بحسب المرسل بتسميته، وبحسب المرحلة', () => {
+    const s = Object.fromEntries(r.by_sender.map((t) => [t.key, t]));
+    expect(s.mentor).toMatchObject({ label: 'المرشد', sent: 1, progressed_pct: 100, seen_pct: 100 });
+    expect(s.auto).toMatchObject({ label: 'التذكير الآلي', sent: 3, progressed_pct: 0 });
+    expect(s.admin).toMatchObject({ waiting: 1, progressed_pct: null });
+    expect(r.by_stage.find((t) => t.key === 'التدريب').sent).toBe(4);
+  });
+  it('من ذُكِّر مرتين فأكثر بلا أثر يُسمّى بالاسم، ومن تحرّك لا', () => {
+    expect(r.stuck).toEqual([{ id: 'b', name: 'خالد', nudges: 3, misses: 3, stage: 'التدريب', last: at(8) }]);
+  });
+  it('بلا تذكير: صفر بلا قسمة على صفر', () => {
+    const e = effectReport([], new Map());
+    expect(e.total).toMatchObject({ sent: 0, progressed_pct: null });
+    expect(e.stuck).toEqual([]);
+    expect(NUDGE_REPORT_WINDOWS).toEqual([7, 30, 90]);
   });
 });
