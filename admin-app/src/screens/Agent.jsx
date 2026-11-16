@@ -13,8 +13,11 @@ import { agoAr } from '../../../supabase/functions/leaders-api/ops-health.js';
 import { convSummary, count, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, LEVEL_ICON, orgsSummary, peakDay, pct, ringLevel,
   RUN_STATUS_AR, runEvalLoop, runSummary, seriesScale, SET_AR, short, spendSummary, stateSummary, stopAr, systemLine, usd, usd2 } from '../agent-admin.js';
 import { navigate } from '../route.js';
+import { normAction, normConversations, normKeySet, normRunDetail, normRuns, normState, normStep, normTranscript, normUsage } from '../agent-data.js';
 import '../agent-admin.css';
 
+// كل رد يمر بموحّده (agent-data.js) قبل أن يُرسم: شكل واحد مضمون، فلا يكسر الشاشة صف ناقص أو قديم من الإنتاج
+const A = (action, body, norm = normAction) => L(action, body).then(norm, () => norm(null));
 const when = (iso) => (iso ? agoAr(iso) || dateTime(iso) : null);
 const SHUT_KEY = 'ag.shut';
 const readShut = () => { try { return new Set(JSON.parse(localStorage.getItem(SHUT_KEY) || '[]')); } catch { return new Set(); } };
@@ -111,12 +114,12 @@ function StatusSection({ s, reload, writable }) {
   const toggle = async (on) => {
     if (!(await confirm(on ? 'تفعيل المساعد الآلي للزوار الآن؟ يظهر الزر في الموقع خلال دقيقة.' : 'إطفاء المساعد الآلي الآن؟ يتوقف عن الرد خلال دقيقة، ويختفي الزر من الصفحات المفتوحة خلال 10 دقائق.', { ok: on ? 'فعّل' : 'أطفئ', danger: !on }))) return;
     setBusy(true);
-    const r = await L('admin.agent-enable', { enabled: on });
+    const r = await A('admin.agent-enable', { enabled: on });
     setBusy(false);
     toast(r.success ? (on ? 'فُعّل المساعد' : 'أُطفئ المساعد') : r.message);
     reload();
   };
-  const k = s.key || {};
+  const k = s.key;
   return (
     <>
       <div className="ag-switch-row">
@@ -128,7 +131,7 @@ function StatusSection({ s, reload, writable }) {
       </div>
       <dl className="ag-grid">
         <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on">✓ في جدول الأسعار</span> : <span className="ops-flag off">✕ ليس في جدول الأسعار</span>}</Row>
-        <Row label="المعرفة"><code dir="ltr">{s.versions?.knowledge_version}</code></Row>
+        <Row label="المعرفة"><code dir="ltr">{s.versions.knowledge_version}</code></Row>
         <Row label="السقف اليومي">{(s.cap_cents / 100).toFixed(2)} دولار</Row>
         <Row label="مفتاح الطوارئ في الخادم">{s.env_mode === 'off' ? <span className="ops-flag off">✕ مفعّل: يطفئ المساعد مهما كان في هذه اللوحة</span> : <span className="ops-flag on">✓ غير مفعّل، فالتشغيل والإطفاء من هذه اللوحة</span>}</Row>
         <Row label="المفتاح">{keySummary(k).text} <small>التفاصيل في قسم «المفتاح»</small></Row>
@@ -148,10 +151,10 @@ function KeySection({ s, reload, writable }) {
   const [busy, setBusy] = useState(false);
   // يُمسح عند مغادرة الشاشة (والقسم يُفك عند الطي)
   useEffect(() => () => setKey(''), []);
-  const k = s.key || {};
+  const k = s.key;
   const save = async () => {
     setBusy(true);
-    const r = await L('admin.agent-key-set', { key: key.trim() });
+    const r = await A('admin.agent-key-set', { key: key.trim() }, normKeySet);
     setKey('');
     setBusy(false);
     if (!r.success) return setMsg({ bad: true, text: keyMessage(r) });
@@ -168,7 +171,7 @@ function KeySection({ s, reload, writable }) {
       if (!(await confirm('لا سر ANTHROPIC_API_KEY في الخادم، فيبقى المساعد بلا مفتاح حتى تحفظ مفتاحًا جديدًا، ولا يمكن تفعيله ولا تقييمه. المتابعة؟', { danger: true, ok: 'ارجع بلا مفتاح' }))) return;
     }
     setBusy(true);
-    const r = await L('admin.agent-key-clear', { force });
+    const r = await A('admin.agent-key-clear', { force });
     setBusy(false);
     setMsg(r.success ? { bad: false, text: 'عاد المفتاح إلى سر الخادم، وحُذف من Vault.' } : { bad: true, text: keyMessage(r) });
     reload();
@@ -254,7 +257,7 @@ function SpendSection({ u, reload }) {
         <div><b>{count(u.conversations)}</b><span>محادثة في 30 يومًا</span></div>
         <div><b>{count(u.handoffs)}</b><span>تحويل إلى الفريق</span></div>
         <div><b>{usd(u.avg_cost_micros)}</b><span>متوسط تكلفة المحادثة</span></div>
-        <div><b>{usd(u.cache?.saved_micros)}</b><span>توفير الذاكرة المؤقتة (الإصابة {pct(u.cache?.hit_ratio)})</span></div>
+        <div><b>{usd(u.cache.saved_micros)}</b><span>توفير الذاكرة المؤقتة (الإصابة {pct(u.cache.hit_ratio)})</span></div>
       </div>
       <p className="la-muted small">الأجوبة الجاهزة {pct(u.canned_share)} من الردود. الأرقام من سجل الخادم، وقد تزيد قليلًا على فاتورة Anthropic لأن الاستدعاء المنقطع يُحسب بأسوأ تكلفته.</p>
     </>
@@ -267,7 +270,7 @@ const STATUS_AR = { bot: 'مع المساعد', waiting: 'محولة', closed: '
 function Transcript({ id, onClose }) {
   const [d, setD] = useState(null);
   useEscape(onClose);
-  const read = useCallback(() => { setD(null); L('admin.agent-transcript', { id }).then(setD); }, [id]);
+  const read = useCallback(() => { setD(null); A('admin.agent-transcript', { id }, normTranscript).then(setD); }, [id]);
   useEffect(() => { read(); }, [read]);
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -299,15 +302,15 @@ function ConversationsSection({ onCount }) {
   const [open, setOpen] = useState(null);
   const load = useCallback(async () => {
     setD(null);
-    const r = await L('admin.agent-conversations', { from: `${f.from}T00:00:00+03:00`, to: `${f.to}T23:59:59+03:00`, who: f.who, page: f.page });
+    const r = await A('admin.agent-conversations', { from: `${f.from}T00:00:00+03:00`, to: `${f.to}T23:59:59+03:00`, who: f.who, page: f.page }, normConversations);
     setD(r);
     if (r.success && f.who === 'all') {
-      const c = await L('admin.agent-conversations', { from: `${f.from}T00:00:00+03:00`, to: `${f.to}T23:59:59+03:00`, who: 'contact', page: 1 });
+      const c = await A('admin.agent-conversations', { from: `${f.from}T00:00:00+03:00`, to: `${f.to}T23:59:59+03:00`, who: 'contact', page: 1 }, normConversations);
       onCount({ total: r.total, contacts: c.success ? c.total : null });
     }
   }, [f, onCount]);
   useEffect(() => { load(); }, [load]);
-  const pages = d?.success ? Math.max(1, Math.ceil(d.total / d.per_page)) : 1;
+  const pages = d && d.success ? Math.max(1, Math.ceil(d.total / d.per_page)) : 1;
   const badRange = !!f.from && !!f.to && f.from > f.to;
   return (
     <>
@@ -354,7 +357,7 @@ function ConversationsSection({ onCount }) {
 function RunView({ id, onClose }) {
   const [d, setD] = useState(null);
   useEscape(onClose);
-  const read = useCallback(() => { setD(null); L('admin.agent-eval-run', { run_id: id }).then(setD); }, [id]);
+  const read = useCallback(() => { setD(null); A('admin.agent-eval-run', { run_id: id }, normRunDetail).then(setD); }, [id]);
   useEffect(() => { read(); }, [read]);
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -362,11 +365,11 @@ function RunView({ id, onClose }) {
         <header className="ag-panel-h"><h3 id="ag-run-h">تشغيل #{short(id)}</h3><button type="button" className="modal-close" aria-label="إغلاق" onClick={onClose}>✕</button></header>
         {!d ? <Spinner /> : !d.success ? <div className="la-err" role="alert">{d.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={read}>أعد المحاولة</button></div> : (
           <ul className="ag-results">
-            {d.results.map((r) => (
-              <li key={r.case_id} className={r.pass ? 'ok' : 'no'}>
+            {d.results.map((r, i) => (
+              <li key={`${r.case_id}-${i}`} className={r.pass ? 'ok' : 'no'}>
                 <b><span aria-hidden="true">{r.pass ? '✓' : '✕'}</span> {r.case_id} <small>[{SET_AR[r.set] || r.set}] {r.pass ? 'ناجح' : 'راسب'}</small></b>
                 {r.message && <small className="la-muted">{r.message}</small>}
-                {!r.pass && <small className="ag-why">{r.reasons.join('؛ ')}</small>}
+                {!r.pass && r.reasons.length > 0 && <small className="ag-why">{r.reasons.join('؛ ')}</small>}
                 {r.reply && <details><summary>نص الرد</summary><p>{r.reply}</p></details>}
               </li>
             ))}
@@ -386,14 +389,14 @@ function EvalSection({ s, writable, reload, onRuns }) {
   const [err, setErr] = useState('');
   const [view, setView] = useState(null);
   const ac = useRef(null);
-  const load = useCallback(async () => { const r = await L('admin.agent-eval-runs'); setRuns(r); if (r.success) onRuns(r.runs); }, [onRuns]);
+  const load = useCallback(async () => { const r = await A('admin.agent-eval-runs', {}, normRuns); setRuns(r); if (r.success) onRuns(r.runs); }, [onRuns]);
   useEffect(() => { load(); return () => ac.current?.abort(); }, [load]);
   const loop = async (runId) => {
     // حلقة واحدة في كل وقت: نقرة ثانية لا تبدأ حلقة لا يوقفها «أوقف»
     if (ac.current) return;
     ac.current = new AbortController();
     setErr('');
-    const out = await runEvalLoop(L, runId, (p) => setLive(p), ac.current.signal);
+    const out = await runEvalLoop((a, b) => A(a, b, normStep), runId, (p) => setLive(p), ac.current.signal);
     ac.current = null;
     if (out.error) setErr(out.error);
     setLive(null);
@@ -406,14 +409,14 @@ function EvalSection({ s, writable, reload, onRuns }) {
     if (!(await confirm(`تشغيل التقييم الآن؟ ${s.total_cases} حالة${times} بتكلفة تقديرية أقل من ${usd2(EVAL_ESTIMATE_MICROS * repeats)} دولار، والحد ${usd2(500_000 * repeats)} دولار، وتُحسب من سقف اليوم.`, { ok: 'شغّل' }))) return;
     setErr('');
     setStarting(true);
-    const r = await L('admin.agent-eval-start', { repeats });
+    const r = await A('admin.agent-eval-start', { repeats }, normStep);
     setStarting(false);
     if (!r.success) { if (r.code === 'eval_running' && r.run_id) return loop(r.run_id); return setErr(r.message); }
     setLive({ run_id: r.run_id, done_cases: 0, total: r.total, cost_micros: 0 });
     return loop(r.run_id);
   };
-  const stop = async (id) => { ac.current?.abort(); await L('admin.agent-eval-cancel', { run_id: id }); setLive(null); load(); };
-  const running = runs?.success ? runs.runs.find((r) => r.status === 'running') : null;
+  const stop = async (id) => { ac.current?.abort(); await A('admin.agent-eval-cancel', { run_id: id }); setLive(null); load(); };
+  const running = runs && runs.success ? runs.runs.find((r) => r.status === 'running') : null;
   return (
     <>
       {writable && (
@@ -450,7 +453,7 @@ function EvalSection({ s, writable, reload, onRuns }) {
             <tbody>
               {runs.runs.map((r) => (
                 <tr key={r.id}>
-                  <td><button type="button" className="la-link" onClick={() => setView(r.id)}>{RUN_STATUS_AR[r.status] || r.status}{r.stop_reason ? ` (${stopAr(r.stop_reason)})` : ''}</button>{r.repeats > 1 && <small className="la-chip">كل حالة {r.repeats} مرات</small>}{r.fingerprint === s.versions?.fingerprint && <small className="la-chip ok">هذا الإعداد</small>}</td>
+                  <td><button type="button" className="la-link" onClick={() => setView(r.id)}>{RUN_STATUS_AR[r.status] || r.status}{r.stop_reason ? ` (${stopAr(r.stop_reason)})` : ''}</button>{r.repeats > 1 && <small className="la-chip">كل حالة {r.repeats} مرات</small>}{r.fingerprint === s.versions.fingerprint && <small className="la-chip ok">هذا الإعداد</small>}</td>
                   <td>{r.eval_total ? `${pct(r.eval_pass / r.eval_total)} (${r.eval_pass}/${r.eval_total})` : 'بلا'}</td>
                   <td>{r.redteam_total ? `${pct(r.redteam_pass / r.redteam_total)} (${r.redteam_pass}/${r.redteam_total})` : 'بلا'}</td>
                   <td>{usd(r.cost_micros)}</td><td><code dir="ltr">{r.model}</code></td><td><code dir="ltr">{r.knowledge_version}</code></td><td>{r.started_by}</td><td>{dateTime(r.started_at)}</td>
@@ -473,7 +476,7 @@ export default function Agent({ isSuper = false }) {
   const [runs, setRuns] = useState(null);
   const [shut, setShut] = useState(readShut);
   const load = useCallback(async () => {
-    const [a, b] = await Promise.all([L('admin.agent-state'), L('admin.agent-usage')]);
+    const [a, b] = await Promise.all([A('admin.agent-state', {}, normState), A('admin.agent-usage', {}, normUsage)]);
     setS(a); setU(b);
   }, []);
   useEffect(() => { load(); }, [load]);

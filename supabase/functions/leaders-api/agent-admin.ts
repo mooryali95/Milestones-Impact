@@ -235,7 +235,7 @@ export const AG = {
   audit,
   alert: (kind: string, detail: Record<string, unknown>) => raiseAlert(kind, detail),
   mail: (to: string, subject: string, html: string) => sendMail(to, subject, html, [], { kind: 'alert' }),
-  model: ((messages, onText, signal, apiKey) => streamAnswer(apiKey || '', agentEnv().model, messages, onText, signal)) as Parameters<typeof runCase>[1]['model'],
+  model: ((messages, onText, signal, apiKey, opts) => streamAnswer(apiKey || '', agentEnv().model, messages, onText, signal, undefined, opts)) as Parameters<typeof runCase>[1]['model'],
   // السجل الحقيقي للإنفاق (agent_spend_daily) بالمخزن نفسه الذي تستعمله agent-chat
   ledger: (() => supabaseStore(publicDb, async () => ({ data: null, error: 'unused' }))) as () => Store,
 };

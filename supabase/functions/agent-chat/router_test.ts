@@ -1,9 +1,10 @@
 // الموجّه الحتمي (router.ts): ما يُحوَّل دائمًا وما يُجاب دائمًا، باللهجة والفصحى والإنجليزية، والإيجابيات الكاذبة
 // (السؤال عن السياسة لا يُحوَّل)، والرد الثابت بلغة الزائر بلا بيانات حساسة، وأثره في الدالة كاملة.
 import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
-import { productOf } from './faq.ts';
+import { matchFaq, productOf } from './faq.ts';
 import { redactInput } from './redact.ts';
-import { fixedReply, route, type Route } from './router.ts';
+import { asksPrice } from './intent.ts';
+import { fixedReply, route, type Route, topicsOf } from './router.ts';
 import { type Deps, type Env, handle } from './handler.ts';
 import { emptyMem, memStore } from './mem_store.ts';
 import { HANDOFF_MARK } from './prompt.ts';
@@ -76,14 +77,16 @@ Deno.test('الموجّه: الأسئلة عن السياسة والرمز وا�
     ['متى تردون على الرسائل؟', 'free', 'MI-HOME'],
     ['هل يمكن التحدث بالإنجليزي مع المدرب؟', 'free'],
     ['ممكن تكلمني بالإنجليزي', 'free'],
-    ['أنت إنسان صح؟ ما اسمك؟', 'free'],
+    // هوية المساعد سؤال يُجاب (r19)، لا طلب إنسان
+    ['أنت إنسان صح؟ ما اسمك؟', 'answer:identity'],
     // الدخول بوجه عام، والتسجيل بنفسه، و«نسيت كلمة المرور» ليست بيانات حساسة
     ['كيف اسجل في البرنامج', 'free'],
     ['كيف ادخل للمنصة؟', 'free'],
     ['نسيت كلمة المرور حقتي', 'free'],
     ['هل تشوف جهتي إجاباتي في القياس؟', 'free'],
-    ['وش الفرق بين القياس والبرنامج؟ وكم المدة؟', 'free'],
-    ['نبي نعرف الأسعار لجهتنا', 'free', 'MI-HOME'],
+    // الفرق بين القياس والبرنامج موضوع يُجاب بحقيقته (e01)، وسعر جهة لم يتضح منتجه يُسأل فيه أي المنتجين بلا تحويل (e60)
+    ['وش الفرق بين القياس والبرنامج؟ وكم المدة؟', 'answer:assessment_vs_program'],
+    ['نبي نعرف الأسعار لجهتنا', 'reply:org_quote_open', 'MI-HOME'],
   ];
   for (const [m, want, page] of cases) assertEquals(reasonOf(m, page), want, m);
 });
@@ -208,4 +211,111 @@ Deno.test('الموجّه: صيغ فاتت تُحوَّل (الدفع، والت
     ['Please delete my account', 'handoff:data'],
   ];
   for (const [m, want] of cases) assertEquals(reasonOf(m), want, m);
+});
+
+// ── تقييم 2026-11-16 بعد #376: ست حالات بطبقات حتمية، ونظائرها القريبة التي لا يجوز أن تتغير ──
+const routeAt = (message: string, page: string, previous: string[] = []) => {
+  const r = route(message, { product: productOf(page), page, previous });
+  return r.kind === 'free' ? 'free' : `${r.kind}:${r.reason}`;
+};
+Deno.test('الموجّه: الحالات الست (e01 وe16 وr19 وe49 وe56 وe60) ونظيرتها e48', () => {
+  assertEquals(routeAt('وش الفرق بين القياس والبرنامج؟ وكم المدة؟', 'MI-LEADERS'), 'answer:assessment_vs_program');
+  assertEquals(routeAt('عندنا جمعية ونبي تصميم مشروع تنموي، كيف نبدأ؟', 'MI-PROJECTS'), 'answer:projects_start');
+  assertEquals(routeAt('أنت إنسان صح؟ ما اسمك؟', 'MI-LEADERS'), 'answer:identity');
+  assertEquals(routeAt('how many hours is the training', 'MI-LEADERS'), 'answer:training_hours');
+  assertEquals(routeAt('ما عدد ساعات التدريب في البرنامج؟ وهل هي ثابتة؟', 'MI-LEADERS'), 'answer:training_hours');
+  assertEquals(routeAt('كم ساعات البرنامج', 'MI-LEADERS'), 'answer:training_hours');
+  assertEquals(routeAt('نبي نعرف الأسعار لجهتنا', 'MI-HOME'), 'reply:org_quote_open');
+});
+Deno.test('الموجّه: النظائر القريبة تبقى كما هي (الدوام، وسعر الجهة في البرنامج، وطلب الفريق، وسعر المشروع)', () => {
+  // ساعات الدوام والرد: جواب التواصل الجاهز، لا ساعات التدريب
+  for (const [m, page] of [['كم ساعة الدوام عندكم', 'MI-LEADERS'], ['what are your office hours', 'MI-HOME'], ['متى تردون؟ وكم ساعات العمل؟', 'MI-LEADERS']]) {
+    assertEquals(routeAt(m, page), 'free', m);
+    assertEquals(topicsOf(m, { page }), [], m);
+  }
+  assertEquals(matchFaq('كم ساعة الدوام عندكم', 'MI-LEADERS', 'ar')?.id, 'contact_hours');
+  // سعر لجهة في البرنامج: التحويل مفروض كما كان، و«أسعار البرنامج لجهتنا» في الرئيسية كذلك
+  assertEquals(routeAt('كم سعر 15 مقعد لشركتنا؟', 'MI-LEADERS'), 'forced:org_quote');
+  assertEquals(routeAt('أسعار البرنامج لجهتنا', 'MI-HOME'), 'forced:org_quote');
+  assertEquals(routeAt('كم سعر برنامج القادة لموظفينا؟', 'MI-HOME'), 'forced:org_quote');
+  // المصفوفة لجهة: أسعارها المنشورة
+  assertEquals(routeAt('أسعار المصفوفة لجهتنا', 'MI-HOME'), 'answer:price');
+  // تصميم مشروع مع طلب صريح للفريق: تحويل
+  assertEquals(routeAt('نبي تصميم مشروع تنموي وأبي أكلم أحد من الفريق', 'MI-PROJECTS'), 'handoff:human');
+  assertEquals(routeAt('we need a development project, can I talk to someone from your team?', 'MI-PROJECTS'), 'handoff:human');
+  // سعر المشروع التنموي لجمعية: لا «أي المنتجين؟» ولا جواب البدء ولا جواب سعر (لا أسعار منشورة للمسار)، وعرض الجهة
+  // يتولاه الفريق (knowledge.md القسم 9): تحويل مفروض كما كان في main
+  assertEquals(routeAt('كم تكلفة تصميم مشروع تنموي لجمعيتنا؟', 'MI-PROJECTS'), 'forced:org_quote');
+  assertEquals(routeAt('نبي عرض سعر لمشروع تنموي لجمعيتنا', 'MI-HOME'), 'forced:org_quote');
+  assertEquals(routeAt('نبي عرض سعر لمشروع تنموي لجمعيتنا', 'MI-PROJECTS'), 'forced:org_quote');
+  // سعر المسار بلا جهة: للنموذج بمعرفته (لا أسعار منشورة)، لا جواب سعر يهمل إشارته
+  assertEquals(routeAt('كم سعر تصميم مشروع تنموي؟', 'MI-PROJECTS'), 'free');
+  assertEquals(topicsOf('كم تكلفة تصميم مشروع تنموي لجمعيتنا؟', { page: 'MI-PROJECTS' }), []);
+  // طلب إنسان صريح بعد سؤال الهوية: تحويل لا هوية
+  assertEquals(routeAt('أنت إنسان؟ أبي أكلم إنسان', 'MI-LEADERS'), 'handoff:human');
+  assertEquals(routeAt('Are you a bot? I want to talk to a human', 'MI-HOME'), 'handoff:human');
+  assertEquals(routeAt('are you a real person?', 'MI-HOME'), 'answer:identity');
+  // «أنت» في سؤال عادي ليست سؤال هوية
+  assertEquals(routeAt('هل انت متاح الحين؟', 'MI-HOME'), 'free');
+  // القياس وحده (المستويات) ليس سؤال الفرق
+  assertEquals(routeAt('وش المستويات اللي يحددها القياس؟', 'MI-LEADERS'), 'free');
+  // مشروع على صفحة البرنامج بلا ذكر التنموي: ليس بدء مسار المشروعات
+  assertEquals(routeAt('كيف أبدأ مشروع المبادرة في البرنامج؟', 'MI-LEADERS'), 'free');
+});
+Deno.test('الموجّه: متابعة «أي المنتجين؟» بالبرنامج تحويل، وبالمصفوفة جواب، وبلا سؤال سابق لا شيء', () => {
+  const prev = ['نبي نعرف الأسعار لجهتنا'];
+  assertEquals(routeAt('البرنامج', 'MI-HOME', prev), 'forced:org_quote');
+  assertEquals(routeAt('برنامج القادة', 'MI-HOME', prev), 'forced:org_quote');
+  assertEquals(routeAt('المصفوفة', 'MI-HOME', prev), 'answer:price');
+  assertEquals(routeAt('البرنامج', 'MI-HOME'), 'free');
+  assertEquals(routeAt('البرنامج', 'MI-HOME', ['وش المستويات اللي يحددها القياس؟']), 'free');
+});
+
+// ── ملاحظات المراجعة على الحالات الست: النظائر التي لا يجوز أن تُجاب بموضوع أو سعر فتسقط إشارة التحويل ──
+Deno.test('الموجّه: «كم» مع مدة ظرفًا للسعر سؤال سعر، ومع المدة مسؤولًا عنها ليس سؤال سعر', () => {
+  assertEquals(asksPrice('وكم المدة؟'), false);
+  assertEquals(asksPrice('كم مدة البرنامج'), false);
+  assertEquals(asksPrice('كم ساعات البرنامج'), false);
+  assertEquals(asksPrice('كم يوم التدريب؟'), false);
+  assertEquals(asksPrice('how much time does it take'), false);
+  assertEquals(asksPrice('كم الاشتراك في السنة؟'), true);
+  assertEquals(asksPrice('كم يكلفنا البرنامج لموظفينا العشرين لمدة شهر؟'), true);
+  assertEquals(asksPrice('how much per month for our team of 10'), true);
+  assertEquals(routeAt('كم يكلفنا البرنامج لموظفينا العشرين لمدة شهر؟', 'MI-LEADERS'), 'forced:org_quote');
+  assertEquals(routeAt('how much per month for our team of 10', 'MI-LEADERS'), 'forced:org_quote');
+  // «كم» وحدها ليست في كلمات جواب السعر الصريحة (الموجّه)، لكنها سؤال سعر فيُقرأ السعر الحي للنموذج كما في main
+  assertEquals(routeAt('كم الاشتراك في السنة؟', 'MI-LEADERS'), 'free');
+});
+Deno.test('الموجّه: بدء المشروع بفعل البدء لا بأداة السؤال، ولا شراكة', () => {
+  for (const m of ['كيف تقيسون أثر المشروع؟', 'how do you measure project impact', 'نبي شراكة معكم في مشروع تنموي كيف؟', 'نبي نبدأ شراكة معكم في مشروع تنموي']) {
+    assertEquals(routeAt(m, 'MI-PROJECTS'), 'free', m);
+    assertEquals(topicsOf(m, { page: 'MI-PROJECTS' }), [], m);
+  }
+  assertEquals(routeAt('how do we get started with a development project?', 'MI-HOME'), 'answer:projects_start');
+});
+Deno.test('الموجّه: الفرق بين القياس والبرنامج يشترط سؤال الفرق، لا نتيجة الزائر ولا مقياس الجاهزية', () => {
+  assertEquals(routeAt('نتيجة القياس ما وصلتني والبرنامج ما بدأ', 'MI-LEADERS'), 'free');
+  assertEquals(routeAt('ليش ما طلعت نتيجة القياس حقي في البرنامج؟', 'MI-LEADERS'), 'free');
+  assertEquals(routeAt('ما الفرق بين مقياس الجاهزية والقياس المبدئي', 'MI-HOME'), 'free');
+  assertEquals(routeAt('ما الفرق بين نتيجة القياس والبرنامج', 'MI-LEADERS'), 'free');
+  assertEquals(routeAt('what is the difference between the assessment and the programme?', 'MI-LEADERS'), 'answer:assessment_vs_program');
+});
+Deno.test('الموجّه: الهوية سؤال عن المساعد نفسه، لا عن الجهة أو الشهادة', () => {
+  for (const [m, page] of [['هل انت متأكد ان الشهادة حقيقية؟', 'MI-LEADERS'], ['هل انتم جهة حقيقية؟ نشترط بقاء بياناتنا في المملكة', 'MI-HOME'],
+    ['who are you guys and what do you offer', 'MI-HOME'], ['are you a real company?', 'MI-HOME']]) {
+    assertEquals(topicsOf(m, { page }).includes('identity'), false, m);
+    assertEquals(routeAt(m, page) === 'answer:identity', false, m);
+  }
+  for (const m of ['مين انت؟', 'اسمك ايش؟', 'إيش اسمك', 'انت بوت؟', 'هل أنت حقيقي ولا روبوت؟', 'who are you?', 'are you real?', 'أنت إنسان صح؟ ما اسمك؟']) {
+    assertEquals(routeAt(m, 'MI-LEADERS'), 'answer:identity', m);
+  }
+});
+Deno.test('الموجّه: متابعة «أي المنتجين؟» اختيار باسم المنتج وحده، لا سؤال آخر فيه «البرنامج»', () => {
+  const prev = ['نبي نعرف الأسعار لجهتنا'];
+  assertEquals(routeAt('لا شكرا، كم مدة البرنامج؟', 'MI-HOME', prev), 'free');
+  assertEquals(routeAt('وش يعني البرنامج؟', 'MI-HOME', prev), 'free');
+  assertEquals(routeAt('هل المصفوفة تشتغل على الجوال؟', 'MI-HOME', prev), 'free');
+  assertEquals(routeAt('نقصد برنامج إدارة المشروعات للقادة', 'MI-HOME', prev), 'forced:org_quote');
+  assertEquals(routeAt('مصفوفة التأثير لو سمحت', 'MI-HOME', prev), 'answer:price');
+  assertEquals(routeAt('the first one please', 'MI-HOME', prev), 'forced:org_quote');
 });

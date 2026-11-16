@@ -61,7 +61,10 @@ describe('المساعد الآلي في الموقع', () => {
     expect(model).toContain("output_config: { effort: 'low' as const }");
     expect(model).toMatch(/import Anthropic from 'npm:@anthropic-ai\/sdk@\d+\.\d+\.\d+';/);
     const code = model.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-    expect(code).not.toMatch(/\btools:|temperature|budget_tokens|thinking:/);
+    expect(code).not.toMatch(/\btools:|temperature|budget_tokens/);
+    // التفكير على الافتراضي، إلا إعادة واحدة بعد رد فارغ (التفكير استنفد max_tokens) فهي بلا تفكير
+    expect(code.match(/thinking:/g)).toEqual(['thinking:']);
+    expect(code).toContain("const off = opts.thinking === 'off' ? thinkingOff(model) : null;");
     expect(read('supabase/functions/agent-chat/handler.ts')).toContain("Number(get('LEADERS_AGENT_DAILY_CAP_CENTS') || '200')");
   });
 

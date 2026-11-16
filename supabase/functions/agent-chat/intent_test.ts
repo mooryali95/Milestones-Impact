@@ -68,7 +68,10 @@ Deno.test('لغة المحادثة: الطلب الصريح يبقى ساريً�
 
 // ── كلمات السعر ──
 Deno.test('السؤال عن السعر بمطابقة الكلمة: «كم» لا تطابق «عندكم» ولا «جوالكم»', () => {
-  for (const q of ['كم سعر برنامج القادة؟', 'ما رسوم برنامج القادة؟', 'بكم البرنامج', 'How much money does the program cost?', 'what is the fee', 'كم ساعات البرنامج']) assert(asksPrice(q), q);
+  for (const q of ['كم سعر برنامج القادة؟', 'ما رسوم برنامج القادة؟', 'بكم البرنامج', 'How much money does the program cost?', 'what is the fee', 'كم لـ 15 مقعد؟']) assert(asksPrice(q), q);
+  // «كم» مع مدة أو عدد ليس سؤال سعر (e01 وe48): فلا يُضاف سطر الرسوم إلى سياق الخادم
+  for (const q of ['كم ساعات البرنامج', 'وش الفرق بين القياس والبرنامج؟ وكم المدة؟', 'how much time does the programme take', 'كم يوم التدريب']) assert(!asksPrice(q), q);
+  assert(asksPrice('وكم المدة وكم السعر؟'));
   for (const q of ['هل عندكم فرع في جدة؟', 'وش رقم جوالكم؟', 'وش المستويات اللي يحددها القياس؟', 'Is the program available in English?']) assert(!asksPrice(q), q);
 });
 

@@ -18,11 +18,14 @@ export function render() {
   // سطور «حالة الملف» للمراجعة لا للنموذج
   const knowledge = md.split('\n').filter((l) => !l.startsWith('>')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
   const faq = JSON.parse(readFileSync(join(SRC, 'faq.json'), 'utf8')).entries;
-  const sha = createHash('sha256').update(knowledge + JSON.stringify(faq)).digest('hex').slice(0, 16);
+  // حقائق الموضوعات التي يحقنها الموجّه ويضمنها الحارس، وردوده الثابتة بلا نموذج (facts.json)
+  const facts = Object.fromEntries(JSON.parse(readFileSync(join(SRC, 'facts.json'), 'utf8')).facts.map((f) => [f.id, { ar: f.ar, en: f.en }]));
+  const sha = createHash('sha256').update(knowledge + JSON.stringify(faq) + JSON.stringify(facts)).digest('hex').slice(0, 16);
   return `// مولَّد بـ scripts/assistant/knowledge.mjs من supabase/content/assistant/${KNOWLEDGE_VERSION}، لا يُحرَّر يدويًا.
 export const KNOWLEDGE_VERSION = ${JSON.stringify(`${KNOWLEDGE_VERSION}-${sha}`)};
 export const KNOWLEDGE = ${JSON.stringify(knowledge)};
 export const FAQ = ${JSON.stringify(faq, null, 2)};
+export const TOPIC_FACTS = ${JSON.stringify(facts, null, 2)};
 `;
 }
 

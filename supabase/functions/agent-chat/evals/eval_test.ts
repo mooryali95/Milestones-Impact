@@ -80,3 +80,61 @@ Deno.test('المصحح يميز: الجواب الجاهز الصحيح يمر�
   assert(!grade(by('e11'), { text: 'البرنامج بالعربية.', handoff: false, source: 'model' }).pass);
   assert(!grade(by('e15'), { text: 'تفضل بسؤالك.', handoff: false, source: 'model' }).pass);
 });
+
+// الحالات الست الراسبة في تقييم الإنتاج (2026-11-16 بعد #376) بالردود التي أعادها النموذج يومها: الطبقات الحتمية
+// (الموجّه والحارس وضمان الحقيقة وإعادة الرد الفارغ) تجعلها تنجح بتوقعاتها كما هي
+Deno.test('الحالات الست بردود الإنتاج: تنجح بتوقعاتها كما هي', async () => {
+  const prod: Record<string, string[]> = {
+    e01: ['الفرق أن القياس يحدد مستواك، والبرنامج رحلة تأهيل: التدريب 4 أيام تدريبية، والتوجيه 4 أسابيع.'],
+    e16: ['', ''],
+    r19: ['لا، أنا لست إنسانًا، بل «مساعد Milestone Impact الآلي». إن أردت التحدث مع أحد من الفريق، فيمكنني تحويل سؤالك إليهم، وسيرد عليك الفريق خلال 4 ساعات عمل بتوقيت الرياض.\n[[HANDOFF]]'],
+    e49: ['Our team hours are Sunday to Thursday, 9:00 to 17:00 Riyadh time.'],
+    e56: ['عدد ساعات التدريب 6 ساعات يوميًا، وهي ثابتة.'],
+    e48: ['ساعات البرنامج 24 ساعة تدريبية.'],
+    e60: ['عروض الجهات يعدها الفريق. سيرد عليك الفريق خلال 4 ساعات عمل.\n[[HANDOFF]]'],
+  };
+  for (const [id, texts] of Object.entries(prod)) {
+    const c = cases.find((x) => x.id === id)!;
+    const h = harness();
+    let n = 0;
+    h.deps.model = async (_m, onText) => {
+      const t = texts[Math.min(n++, texts.length - 1)];
+      if (t) onText(t);
+      return { text: t, stopReason: t ? 'end_turn' : 'max_tokens', model: 'claude-haiku-5-5', usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } };
+    };
+    const { token } = await (await post(h.deps, { action: 'start', captcha: 'ok-token-123', page: c.page, locale: c.expect.lang })).json();
+    const body = await (await post(h.deps, { action: 'send', token, message: c.message })).text();
+    const done = body.split('\n\n').find((b) => b.startsWith('event: done'))!;
+    const data = JSON.parse(done.match(/^data: (.+)$/m)![1]);
+    const g = grade(c, { text: data.text, handoff: !!data.handoff, source: data.source });
+    assert(g.pass, `${id}: ${g.reasons.join('؛ ')} :: ${data.text}`);
+  }
+});
+
+// e16 بسببيه المحتملين يوم الإنتاج: الامتناع (refusal) كالرد الفارغ، وe56 وe49 بعدد ساعات مكتوب بالكلمات
+Deno.test('الحالات بأسباب أخرى للرسوب: امتناع في e16، وعدد الساعات بالكلمات في e56 وe49', async () => {
+  const prod: Record<string, { text: string; stop: string }[]> = {
+    e16: [{ text: '', stop: 'refusal' }],
+    e56: [{ text: 'مدة التدريب ست ساعات يوميًا.', stop: 'end_turn' }],
+    e49: [{ text: 'Each training day is six hours.', stop: 'end_turn' }],
+  };
+  for (const [id, seq] of Object.entries(prod)) {
+    const c = cases.find((x) => x.id === id)!;
+    const h = harness();
+    let n = 0;
+    h.deps.model = async (_m, onText) => {
+      const t = seq[Math.min(n++, seq.length - 1)];
+      if (t.text) onText(t.text);
+      return { text: t.text, stopReason: t.stop, model: 'claude-haiku-5-5', usage: { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } };
+    };
+    const { token } = await (await post(h.deps, { action: 'start', captcha: 'ok-token-123', page: c.page, locale: c.expect.lang })).json();
+    const body = await (await post(h.deps, { action: 'send', token, message: c.message })).text();
+    const done = body.split('\n\n').find((b) => b.startsWith('event: done'))!;
+    const data = JSON.parse(done.match(/^data: (.+)$/m)![1]);
+    const g = grade(c, { text: data.text, handoff: !!data.handoff, source: data.source });
+    assert(g.pass, `${id}: ${g.reasons.join('؛ ')} :: ${data.text}`);
+  }
+  // والمصحح نفسه يُسقط العدد بالكلمات (توقع أشد لا أضعف)
+  assert(!grade(cases.find((x) => x.id === 'e56')!, { text: 'مدة التدريب ست ساعات يوميًا، وتُضبط مع كل جهة.', handoff: false, source: 'model' }).pass);
+  assert(!grade(cases.find((x) => x.id === 'e49')!, { text: 'Each day is six hours, set with each organisation.', handoff: false, source: 'model' }).pass);
+});
