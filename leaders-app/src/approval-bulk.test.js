@@ -1,6 +1,7 @@
 // الاعتماد الجماعي بالاستثناء (تصور 2026-11-15، المرحلة 1): من يُعتمد بمستواه المحسوب ومن يُستبقى ولماذا
 import { describe, expect, it } from 'vitest';
-import { approvalHolds, mailPlan, splitForApproval } from '../../supabase/functions/leaders-api/approval.js';
+import { approvalHolds, mailForecast, splitForApproval } from '../../supabase/functions/leaders-api/approval.js';
+import { mailBudget, nextDrainAt } from '../../supabase/functions/leaders-api/mail-center.js';
 
 const placements = [{ dimension: 'milestone', level: 'beginner' }, { dimension: 'impact', level: 'intermediate' }, { dimension: 'leadership', level: 'beginner' }];
 const ev = (level, extra = {}) => ({ level, borderline: false, flags: [], ...extra });
@@ -44,10 +45,19 @@ describe('التقسيم وأثر البريد', () => {
     expect(held).toHaveLength(1);
     expect(held[0]).toMatchObject({ id: 'p2', holds: [{ key: 'effort' }] });
   });
-  it('السقف اليومي يصفّ الزائد ولا يُسقطه', () => {
-    expect(mailPlan(9, { used: 75, cap: 80 })).toEqual({ now: 5, queued: 4 });
-    expect(mailPlan(9, { used: 0, cap: 80 })).toEqual({ now: 9, queued: 0 });
-    expect(mailPlan(3, { used: 90, cap: 80 })).toEqual({ now: 0, queued: 3 });
+  it('أثر البريد بنصيب الإشعارات لا بالسقف الكلي، والزائد ينتظر بموعد آخره', () => {
+    const now = Date.parse('2026-11-16T05:27:00Z');   // 08:27 بالرياض
+    // صباح 16 نوفمبر: 10 رموز و40 إشعارًا في النافذة. السقف الكلي يتسع لثلاثين، ونصيب الإشعارات ممتلئ: الأربعة عشر كلها تنتظر
+    const sent = Array.from({ length: 40 }, (_, i) => new Date(now - (20 - i * 0.1) * 36e5).toISOString());
+    const full = mailForecast(14, { budget: mailBudget({ sent: 50, nonCode: 40 }, 80), nonCodeSent: sent, now });
+    expect([full.now, full.queued]).toEqual([0, 14]);
+    // تتحرر الأماكن بعد 24 ساعة من إرسال ما ملأها، فآخر الأربعة عشر في الدقيقة 17 بعد تحرر الرابع عشر
+    expect(full.clear_at).toBe(new Date(nextDrainAt(Date.parse(sent[13]) + 864e5)).toISOString());
+    const part = mailForecast(9, { budget: mailBudget({ sent: 35, nonCode: 35 }, 80), nonCodeSent: sent.slice(0, 35), now });
+    expect([part.now, part.queued]).toEqual([5, 4]);
+    expect(mailForecast(9, { budget: mailBudget({ sent: 0, nonCode: 0 }, 80), now })).toEqual({ now: 9, queued: 0, clear_at: null });
+    // تعذّر قراءة الحصة: لا يُعد بخروج شيء الآن
+    expect(mailForecast(3, {})).toMatchObject({ now: 0, queued: 3 });
   });
 });
 

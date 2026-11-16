@@ -369,7 +369,7 @@ async function offerNext(req: any, pick?: any) {
     mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${bdi(what)}</b>.`)
     + (req.note ? mailNote(`<b>ما يحتاجه:</b> ${bdi(req.note)}`) : '')
     + mailText(`لديك ${OFFER_HOURS} ساعة لتقبل أو تعتذر، وبعدها يُعرض الطلب على الخبير التالي.`)
-    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب'))).catch(() => {});
+    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب')), [], { expiresAt: expires.toISOString() }).catch(() => {});
   return { status: 'offered', expert_id: e.id };
 }
 

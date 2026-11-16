@@ -100,7 +100,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/sendOrDiscard[\s\S]{0,200}kind: 'code'/);
     expect(core).toMatch(/alertMail\(kind, detail, windowMs\), \[\], \{ kind: 'alert' \}/);
-    expect(core).toContain("if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
+    expect(core).toContain("if (queue && (kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
     // كل تذكير (الأسبوعي والإدارة والمرشد والجهة) من المحرك الموحد في nudges.ts
     expect(read('supabase/functions/leaders-api/nudges.ts')).toMatch(/nudgeMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ kind: 'bulk'/);

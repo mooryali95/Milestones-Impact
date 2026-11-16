@@ -6,9 +6,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { dateTime, L } from '../leaders.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
-import { DELIVERY_AR, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
+import { DELIVERY_AR, etaAr, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
 
 const QUEUE_ST = { waiting: ['ينتظر الحصة', 'warn'], gave_up: ['تعذّر بعد محاولات', 'bad'], stale: ['فات أوانه', ''], cancelled: ['أُغلق يدويًّا', ''] };
+// «يُتوقع إرساله» للمنتظر: الممسَك بميزة مخفية لا موعد له، والمؤرخ الذي يمضي موعده قبل دوره يُترك
+export const etaCell = (m) => (m.state !== 'waiting' ? '·' : m.held ? 'ممسَك حتى تُظهَر ميزته' : m.eta_expires ? `يُترك: يمضي موعده قبل ${etaAr(m.eta)}` : etaAr(m.eta));
 const EV_TONE = { sent: 'ok', failed: 'bad', blocked: 'warn' };
 const copy = async (text, toast, ok) => {
   try { await navigator.clipboard.writeText(text); toast(ok); } catch { toast('تعذّر النسخ: انسخ النص يدويًّا'); }
@@ -188,12 +190,12 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
         : <section className="la-card"><h3>لماذا لم يصل البريد؟</h3><p className="la-muted">البحث بعنوان ونصوص الرسائل المنتظرة لمن له صلاحية التعديل، لأنها قد تحمل روابط دخول.</p></section>}
 
       <section className="la-card">
-        <div className="la-row between"><h3>لم يُرسل <small className="la-muted">· آخر 7 أيام</small></h3><button className="btn-sm ghost" onClick={load}>حدّث</button></div>
-        <p className="la-muted small">الإشعار الذي يحجبه السقف ينتظر هنا ويخرج آليًّا حين تتسع الحصة، وما انتظر أكثر من يومين يُترك. لك أن ترسله الآن، أو تنسخ نصه وترسله بنفسك ثم تغلقه. رمز الدخول لا ينتظر: صاحبه يطلبه من جديد، أو تنشئ له رابطًا من البحث أعلاه.</p>
+        <div className="la-row between"><h3>لم يُرسل <small className="la-muted">· كل ما ينتظر، وما تُرك في آخر 7 أيام</small></h3><button className="btn-sm ghost" onClick={load}>حدّث</button></div>
+        <p className="la-muted small">الإشعار الذي يحجبه السقف ينتظر هنا حتى يُرسل، ويخرج آليًّا كل ساعة حين تتحرر الحصة، يومًا بعد يوم. لا يُترك إلا المؤرخ الذي مضى موعده (تذكير جلسة بدأت، دعوة تقييم أُغلق، عرض خدمة انتهت مهلته). لك أن ترسله الآن، أو تنسخ نصه وترسله بنفسك ثم تغلقه. رمز الدخول لا ينتظر: صاحبه يطلبه من جديد، أو تنشئ له رابطًا من البحث أعلاه.</p>
         {d.queue.length === 0 ? <Empty compact title="لا رسائل منتظرة" hint="كل ما طُلب إرساله خرج." /> : (
           <div className="la-table-wrap">
             <table className="la-table">
-              <thead><tr><th scope="col">منذ</th><th scope="col">إلى</th><th scope="col">الرسالة</th><th scope="col">الحالة</th><th scope="col"><span className="sr-only">أفعال</span></th></tr></thead>
+              <thead><tr><th scope="col">منذ</th><th scope="col">إلى</th><th scope="col">الرسالة</th><th scope="col">الحالة</th><th scope="col">يُتوقع إرساله</th><th scope="col"><span className="sr-only">أفعال</span></th></tr></thead>
               <tbody>
                 {d.queue.map((m) => {
                   const [st, tone] = QUEUE_ST[m.state] || [m.state, ''];
@@ -204,13 +206,14 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
                         <td dir="ltr">{m.to_email || '·'}</td>
                         <td>{m.subject}<br /><small className="la-muted">{KIND_AR[m.kind] || m.kind}{m.attempts ? ` · ${m.attempts} محاولة` : ''}</small></td>
                         <td><span className={`la-chip ${tone}`}>{st}</span></td>
+                        <td data-eta>{etaCell(m)}</td>
                         <td className="la-row">
                           {canWrite && <button className="btn-sm ghost" onClick={() => setOpen(open === m.id ? null : m.id)} aria-expanded={open === m.id}>النص</button>}
                           {canWrite && m.state !== 'cancelled' && <button className="btn-sm primary" disabled={busy} onClick={() => sendNow(m)}>أرسل الآن</button>}
                           {canWrite && m.state === 'waiting' && <button className="btn-sm ghost" disabled={busy} onClick={() => closeIt(m)}>أرسلتها بنفسي</button>}
                         </td>
                       </tr>
-                      {open === m.id && <tr><td colSpan={5}><QueueBody id={m.id} onClose={() => setOpen(null)} /></td></tr>}
+                      {open === m.id && <tr><td colSpan={6}><QueueBody id={m.id} onClose={() => setOpen(null)} /></td></tr>}
                     </React.Fragment>
                   );
                 })}

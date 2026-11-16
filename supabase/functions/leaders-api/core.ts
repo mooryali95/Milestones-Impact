@@ -12,6 +12,7 @@ import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
 import { POLICY_MATERIAL_VERSION } from './labels.js';
 import { WORKSHOP_NO_HALL_NOTE } from './features.js';
+import { mailBudget, queueEta } from './mail-center.js';
 
 const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 
@@ -215,9 +216,13 @@ export const DEMO_MAIL_DOMAIN = 'demo.milestone-impact.org';
 export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().endsWith(`@${DEMO_MAIL_DOMAIN}`);
 
 // كل بريد يمر بالعداد الموحد (D15): kind يحدد نصيبه من السقف، وref الكيان المرتبط (مشارك أو مقيّم) بلا عنوان.
-// الجماعي (bulk) حين تُحجب حصته يدخل الطابور ولا يفشل، وتفرغه المهمة الساعية (drainMailQueue).
+// الجماعي (bulk) والإشعار حين تُحجب حصتهما يدخلان الطابور ولا يفشلان، وتفرغه المهمة الساعية (drainMailQueue).
 // purpose: غرض الرمز كما يظهر في سلسلة الرموز في سلاك (دخول مشارك، دخول جهة...)
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null }: { kind?: MailKind; ref?: string | null; purpose?: string | null } = {}) {
+// expiresAt: موعد الرسالة المؤرخة (تذكير ورشة، دعوة تقييم، عرض خدمة): إن انتظرت في الطابور حتى مضى تُترك ولا تخرج متأخرة.
+// بلا موعد تنتظر حتى تُرسل، يومًا بعد يوم
+// force: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي (كإرسال المدير من الصندوق). queue:false لا يدخل الطابور أبدًا
+// (بريد إتمام الحذف: الطابور يحفظ عنوان من مُحيت بياناته)
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null, expiresAt = null, force = false, queue = true }: { kind?: MailKind; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean } = {}) {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) {
     // يُبلَّغ في سلاك كما تبلغه الدوال الأخرى من sendCounted: سلاك هو الاحتياط حين يتعطل البريد
@@ -225,20 +230,22 @@ export async function sendMail(to: string, subject: string, html: string, attach
     else slackMail(db, { kind, to, source: 'leaders-api', reason: 'mail_unconfigured' });
     throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
   }
-  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, purpose, alert: alertOps });
+  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, purpose, force, alert: alertOps });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
     // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
     // الرمز لا يُؤجَّل (ينتهي في دقائق)، والمرفقات لا تُخزَّن
-    if ((kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(to, subject, html, ref, kind, r.reason)) return;
+    if (queue && (kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(to, subject, html, ref, kind, r.reason, expiresAt)) return;
     throw new Fail('بلغت الرسائل حدها اليومي، وتصل بعد ساعات', 429, 'mail_cap');
   }
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
 }
 
-export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null) {
+// الأعمدة الأحدث تُكتب إن وُجدت، ويُعاد الإدراج بدونها قبل ترحيلها (السبب 20261114110000، والموعد 20261116120000)
+export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null, expiresAt: string | null = null) {
   const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
-  let { error } = await db.from('mail_queue').insert({ ...row, reason });
+  let { error } = await db.from('mail_queue').insert({ ...row, reason, ...(expiresAt ? { expires_at: expiresAt } : {}) });
+  if (error && expiresAt) ({ error } = await db.from('mail_queue').insert({ ...row, reason }));   // قبل ترحيل الموعد
   if (error) ({ error } = await db.from('mail_queue').insert(row));   // قبل ترحيل مركز البريد: بلا عمود السبب
   if (error) { console.error('mail_queue insert:', error); return false; }
   return true;
@@ -246,18 +253,24 @@ export async function enqueueMail(to: string, subject: string, html: string, ref
 
 // من المهمة الساعية: يرسل المعلّق بالترتيب ما دامت الحصة تسمح، ويكتب العلامة بعد نجاح الإرسال وحده
 export const QUEUE_MAX_ATTEMPTS = 5;
-// إشعار انتظر أكثر من يومين فات أوانه (تذكير بموعد مضى): يُترك ولا يُرسل متأخرًا، ويبقى في الصندوق للمدير
-export const QUEUE_STALE_HOURS = 48;
+// لا ترك أعمى بالعمر: ما لا موعد له ينتظر حتى يُرسل، ويُستأنف كل ساعة ويومًا بعد يوم حين تتحرر الحصة.
+// المؤرخ (expires_at) وحده يُترك حين يمضي موعده، بعلامة stale («فات أوانه» في مركز البريد وتقرير الأسبوع).
+// الترتيب: الإشعار الفردي (notify) قبل الجماعي (bulk)، ثم الأقدم. والتوقف عند الحصة صحيح لأن النوعين حصة واحدة
+// (mailDecision): ما حُجب منهما واحد حُجب ما بعده
 // hold: رسائل تُمسك فلا تُرسل ولا تُعد محاولة (بريد ميزة مطفأة، heldMail في features.ts)، ويُقرأ بعددها زيادةً فلا تحجب ما بعدها
 // rewrite: نص الرسالة كما يُرسل الآن (بريد ورشة دخل الطابور بملاحظة القاعة ثم أُخفيت، mailRewrite في features.ts)
+export const QUEUE_QUOTA_REASONS = ['mail_cap', 'mail_share'];
 export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), rewrite: (m: { subject: string; html: string }) => string = (m) => m.html) {
-  const { data, error } = await db.from('mail_queue').select('id, kind, created_at, to_email, subject, html, ref, attempts')
-    .is('sent_at', null).is('gave_up_at', null).order('created_at').limit(limit + hold.size);
+  const read = (cols: string) => db.from('mail_queue').select(cols)
+    .is('sent_at', null).is('gave_up_at', null).order('kind', { ascending: false }).order('created_at').limit(limit + hold.size);
+  let { data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at');
+  if (error) ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts'));   // قبل ترحيل الموعد: لا شيء ينتهي
   if (error) return { sent: 0, pending: null };
-  let sent = 0;
-  for (const m of (data || []).filter((x: any) => !hold.has(x.id)).slice(0, limit)) {
-    if (m.kind === 'notify' && Date.now() - Date.parse(m.created_at) > QUEUE_STALE_HOURS * 36e5) {
+  let sent = 0, expired = 0;
+  for (const m of ((data || []) as any[]).filter((x: any) => !hold.has(x.id)).slice(0, limit)) {
+    if (m.expires_at && Date.parse(m.expires_at) <= Date.now()) {
       await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'stale' }).eq('id', m.id);
+      expired++;
       continue;
     }
     const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true });
@@ -267,21 +280,23 @@ export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), 
     await db.from('mail_queue').update({ attempts, last_error: r.reason, ...(attempts >= QUEUE_MAX_ATTEMPTS ? { gave_up_at: new Date().toISOString() } : {}) }).eq('id', m.id);
   }
   const { count } = await db.from('mail_queue').select('id', { count: 'exact', head: true }).is('sent_at', null).is('gave_up_at', null);
-  return { sent, pending: count ?? 0, ...(hold.size ? { held: hold.size } : {}) };
+  return { sent, pending: count ?? 0, ...(expired ? { expired } : {}), ...(hold.size ? { held: hold.size } : {}) };
 }
 
-// من المهمة الساعية بعد التفريغ: رسالة انتظرت في الطابور أكثر من QUEUE_ALERT_HOURS تنبيه واحد للمالك يجمع ما تأخر.
+// من المهمة الساعية بعد التفريغ: رسالة انتظرت في الطابور أكثر من QUEUE_ALERT_HOURS لغير الحصة (فشل عند المزوّد، أو سبب
+// غير معروف) تنبيه واحد للمالك يجمع ما تأخر. انتظار الحصة سير عادي يُبلَّغ في سطر يومي واحد (carryoverAlert)، لا لكل رسالة.
 // كل رسالة يُنبَّه إليها مرة واحدة: علامتها سطر في audit_log (mail.queue-stuck بمعرّفها)، تُكتب بعد وصول التنبيه
 // من إحدى القناتين، فلا يضيع التنبيه إن لم يصل، ويُعاد في الساعة التالية
 export const QUEUE_ALERT_HOURS = 6;
 // والممسَك (hold) ليس عالقًا: انتظاره بقرار إخفاء ميزته، فلا يُنبَّه إليه
+const quotaWait = (m: { attempts?: number | null; reason?: string | null }) => !(m.attempts || 0) && QUEUE_QUOTA_REASONS.includes(String(m.reason));
 export async function stuckQueueAlert(hold: Set<string> = new Set()) {
   const before = new Date(Date.now() - QUEUE_ALERT_HOURS * 36e5).toISOString();
   const read = (cols: string) => db.from('mail_queue').select(cols).is('sent_at', null).is('gave_up_at', null).lt('created_at', before).order('created_at').limit(200);
-  let { data, error } = await read('id, created_at, kind, reason');
-  if (error) ({ data, error } = await read('id, created_at, kind'));   // قبل ترحيل مركز البريد: بلا عمود السبب
+  let { data, error } = await read('id, created_at, kind, reason, attempts');
+  if (error) ({ data, error } = await read('id, created_at, kind, attempts'));   // قبل ترحيل مركز البريد: بلا عمود السبب
   if (error) return { stuck: null, alerted: 0 };
-  const rows = ((data || []) as unknown as { id: string; created_at: string; kind: string; reason?: string | null }[]).filter((m) => !hold.has(m.id));
+  const rows = ((data || []) as unknown as { id: string; created_at: string; kind: string; reason?: string | null; attempts?: number | null }[]).filter((m) => !hold.has(m.id) && !quotaWait(m));
   if (!rows.length) return { stuck: 0, alerted: 0 };
   const marks = await db.from('audit_log').select('entity_id').eq('action', 'mail.queue-stuck').in('entity_id', rows.map((m) => m.id));
   // تعذّر قراءة العلامات: التنبيه مكررًا أهون من ضياعه
@@ -295,6 +310,36 @@ export async function stuckQueueAlert(hold: Set<string> = new Set()) {
   if (markError) console.error('mail.queue-stuck marks:', markError.message);
   return { stuck: rows.length, alerted: fresh.length };
 }
+
+// نافذة الحصة الآن: الأعداد كما يقرؤها حارس الإرسال (mailCounts)، وأوقات ما أُرسل من غير الرموز في آخر 24 ساعة،
+// فيُقدَّر متى يتحرر كل مكان (queueEta). تعذّر العداد يُعامل حصة ممتلئة: التقدير يتأخر ولا يعد بما لا يُرسل
+export async function mailWindow(now = Date.now()) {
+  const [counts, sent] = await Promise.all([
+    mailCounts(db),
+    db.from('mail_events').select('created_at').eq('status', 'sent').not('kind', 'in', '(code,alert)').gte('created_at', new Date(now - 864e5).toISOString())
+      .order('created_at').limit(500).then((x: any) => (x.error ? [] : x.data || []), () => []),
+  ]);
+  const budget = mailBudget(counts ?? { sent: CONFIG.mailDailyCap, nonCode: CONFIG.mailDailyCap }, CONFIG.mailDailyCap);
+  return { budget, nonCodeSent: (sent as any[]).map((e) => String(e.created_at)), read: counts != null };
+}
+
+// سطر يومي واحد للمالك: ما بقي في الطابور بالحصة يُرحَّل إلى الغد آليًّا، وكم هو، ومتى يُتوقع أن يفرغ (queueEta).
+// أول تشغيلة بعد التاسعة مساءً بالرياض (CARRYOVER_HOUR_RIYADH) فيها انتظار بالحصة، ومهلته نحو عشرين ساعة (ALERT_COOLDOWN_MS)
+// فلا يتكرر في اليوم نفسه. الممسَك لا يُعد
+export const CARRYOVER_HOUR_RIYADH = 21;
+export async function carryoverAlert(hold: Set<string> = new Set(), now = Date.now()) {
+  if (new Date(now + 3 * 36e5).getUTCHours() < CARRYOVER_HOUR_RIYADH) return { waiting: null, alerted: false };
+  const { data, error } = await db.from('mail_queue').select('id, created_at, reason, attempts').is('sent_at', null).is('gave_up_at', null).order('created_at').limit(500);
+  if (error) return { waiting: null, alerted: false };
+  const rows = ((data || []) as any[]).filter((m) => !hold.has(m.id) && quotaWait(m));
+  if (!rows.length) return { waiting: 0, alerted: false };
+  const w = await mailWindow(now);
+  const eta = queueEta(rows, { ...w, now });
+  const last = Object.values(eta).map((e: any) => e.at).filter(Boolean).sort().pop();
+  const r = await raiseAlert('mail_queue_carryover', { waiting: rows.length, oldest_hours: Math.floor((now - Date.parse(rows[0].created_at)) / 36e5), ...(last ? { expected_clear_day: riyadhDay(last) } : {}) });
+  return { waiting: rows.length, alerted: !r.cooled && (r.webhook || !!r.slack || r.email) };
+}
+const riyadhDay = (iso: string) => new Date(Date.parse(iso) + 3 * 36e5).toISOString().slice(0, 10);
 
 // ── الدخول ──
 export function signInMail(name: string, code: string, link: string, isNew: boolean) {
@@ -644,13 +689,15 @@ const ALERT_WINDOW_MS = 10 * 60e3;
 // وتجربة القناة مرة في الدقيقة
 export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
+  // سطر الترحيل اليومي (carryoverAlert): مرة في اليوم، فمهلته أقل من يوم بقليل
+  mail_queue_carryover: 20 * 36e5,
   // كل تغيير في المساعد يُبلَّغ (بلا تهدئة)
   agent_key_changed: 0, agent_key_reverted: 0, agent_enabled: 0, agent_disabled: 0,
   // تنبيهات agent-chat تُهدَّأ هناك بعلامة يومية في القاعدة (agent_spend_alert)، فلا تهدئة ثانية تحجب مستوى عن آخر
   agent_spend_80: 0, agent_spend_cap: 0, agent_eval_stale: 0, agent_model_unknown: 0, agent_ledger_error: 0, agent_model_config: 0,
 };
 export const alertCooldown = (kind: string) => ALERT_COOLDOWN_MS[kind] ?? ALERT_WINDOW_MS;
-const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات' };
+const SPAN_AR: Record<number, string> = { 60e3: 'دقيقة', 600e3: 'عشر دقائق', 36e5: 'ساعة', 216e5: 'ست ساعات', 72e6: 'عشرين ساعة' };
 export function alertMail(kind: string, detail: Record<string, unknown>, windowMs = ALERT_WINDOW_MS) {
   const rows = Object.entries(detail).map(([k, v]) => [k, String(v ?? '')] as [string, string]);
   // fn: الدالة التي رفعت التنبيه إن لم تكن leaders-api (agent-chat مثلًا)
@@ -701,6 +748,8 @@ export async function raiseAlert(kind: string, detail: Record<string, unknown>):
       if (other || !(await stuckMailDue())) return { cooled: false, webhook, slack, email: false };
       stuckMailAt = Date.now();
     }
+    // سطر الترحيل اليومي بالبريد من نصيب الرموز في يوم مزدحم: لا يُرسل إلا حين لا يصل سلاك ولا الرابط
+    if (kind === 'mail_queue_carryover' && other) return { cooled: false, webhook, slack, email: false };
     // التنبيه بالبريد يمر فوق السقف باحتياطه (ALERT_OVER_CAP)، فلا يحجبه امتلاء اليوم الذي ينبّه إليه
     const email = await sendMail(CONFIG.alertEmail, alertSubject(kind), alertMail(kind, detail, windowMs), [], { kind: 'alert' })
       .then(() => true, (e) => { console.error('alertOps mail:', e); return false; });

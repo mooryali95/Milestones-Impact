@@ -6,6 +6,7 @@
 // الحالة الحدّية تُستبقى (قرار المالك 2026-11-15): المستوى التالي في متناول هامش صغير، فيقرره إنسان.
 import { DIMENSIONS, LEVELS, OVERRIDE_REASON_MIN } from './logic.js';
 import { DIM_AR, LEVEL_AR } from './labels.js';
+import { queueEta } from './mail-center.js';
 
 // حد الطلب الواحد، كالإجراءات الجماعية الأخرى (BULK_MAX في admin.ts)
 export const BULK_APPROVE_MAX = 50;
@@ -42,10 +43,20 @@ export function splitForApproval(rows = []) {
   return { ready, held };
 }
 
-// أثر البريد قبل التنفيذ: كم يُرسل الآن وكم يدخل الطابور (السقف اليومي يصفّ الزائد ولا يُسقطه)
-export function mailPlan(count, { used = 0, cap = 80 } = {}) {
-  const room = Math.max(0, Number(cap) - Number(used || 0));
-  return { now: Math.min(count, room), queued: Math.max(0, count - room) };
+// أثر البريد قبل التنفيذ: كم يخرج الآن وكم ينتظر في صندوق «لم يُرسل»، ومتى يُتوقع أن يخرج آخره.
+// بريد الاعتماد إشعار (notify)، فيحكمه نصيب غير الرموز من السقف (mailBudget.nonCodeLeft) لا السقف الكلي، ويُقدَّر
+// موعد المنتظر بالحساب نفسه الذي يعرضه مركز البريد (queueEta)
+/** @param {number} count @param {{ budget?: any, nonCodeSent?: string[], now?: number }} o */
+export function mailForecast(count, { budget = {}, nonCodeSent = [], now = Date.now() } = {}) {
+  const n = Math.max(0, Number(count) || 0);
+  const nowCount = Math.min(n, Math.max(0, budget.nonCodeLeft ?? 0));
+  const queued = n - nowCount;
+  if (!queued) return { now: nowCount, queued: 0, clear_at: null };
+  // ما يخرج الآن يأخذ ما بقي من الحصة ويحرر مكانه بعد 24 ساعة كغيره، والمنتظر يأخذ ما يتحرر بعده
+  const sentNow = Array.from({ length: nowCount }, () => new Date(now).toISOString());
+  const rows = Array.from({ length: queued }, (_, i) => ({ id: String(i), kind: 'notify', created_at: new Date(now + i).toISOString() }));
+  const eta = queueEta(rows, { nonCodeSent: [...nonCodeSent, ...sentNow], budget: { nonCodeLeft: 0 }, now });
+  return { now: nowCount, queued, clear_at: eta[String(queued - 1)]?.at ?? null };
 }
 
 // ── المرحلة 2: اعتماد المحددين بمستوى واحد (للمدير العام، بتعليل إلزامي) ──

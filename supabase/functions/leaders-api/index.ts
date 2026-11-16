@@ -19,7 +19,7 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
+import { alertOps, carryoverAlert, clientIp, db, drainMailQueue, Fail, must, preflight, reply, stuckQueueAlert } from './core.ts';
 import { slackHello } from '../_shared/slack.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram, journeyApproved } from './logic.js';
@@ -110,11 +110,13 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       const hold = await FT.heldMail().catch((e) => { console.error('held mail', e); return null; });
       // وبريد ورشة خُزّن بملاحظة القاعة ثم أُخفيت: يخرج بملاحظة عامة (FT.mailRewrite)
       const rewrite = await FT.mailRewrite().catch((e) => { console.error('mail rewrite', e); return null; });
-      if (!hold || !rewrite) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true } };
+      if (!hold || !rewrite) return { mail_queue: { sent: 0, deferred: true }, mail_stuck: { alerted: 0, deferred: true }, mail_carryover: { alerted: false, deferred: true } };
       return {
         mail_queue: await drainMailQueue(40, hold, rewrite).catch((e) => ({ sent: 0, error: String(e?.message || e) })),
-        // ما بقي في الطابور أكثر من ست ساعات بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
+        // ما بقي في الطابور أكثر من ست ساعات لغير الحصة بعد التفريغ: تنبيه واحد، ولكل رسالة مرة
         mail_stuck: await stuckQueueAlert(hold).catch((e) => ({ alerted: 0, error: String(e?.message || e) })),
+        // وما ينتظر الحصة يُرحَّل إلى الغد آليًّا: سطر واحد في اليوم للمالك بعدده وموعد فراغه المتوقع
+        mail_carryover: await carryoverAlert(hold).catch((e) => ({ alerted: false, error: String(e?.message || e) })),
       };
     })()),
     // رسالة الربط في سلاك مرة واحدة بعد ضبط البوت (slack.ts slackHello)

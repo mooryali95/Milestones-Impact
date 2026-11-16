@@ -608,9 +608,10 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
+  // التذكير والدعوة مؤرخان بموعد الجلسة: إن انتظرا في الطابور حتى بدأت يُتركان ولا يخرجان بعدها (expiresAt)
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link)), link ? withLink : noLink, { kind: 'bulk', ref: s.id }); sent += 1; }
+    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link)), link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };

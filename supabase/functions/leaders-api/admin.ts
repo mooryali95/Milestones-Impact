@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
-import { all, allFor, approvedMail, audit, CONFIG, mailUsage, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { all, allFor, approvedMail, audit, CONFIG, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { recentlyNudged, weeklyNudges } from './nudges.ts';
@@ -29,7 +29,7 @@ import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retake
 import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
-import { BULK_APPROVE_MAX, mailPlan, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
+import { BULK_APPROVE_MAX, mailForecast, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 
 type Body = Record<string, any>;
 // id وowner وsessionHash لشاشة المساعد: المالك يقرؤها، والتحقق الإضافي مربوط بهاش الجلسة نفسها (agent-admin.ts)
@@ -651,8 +651,10 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
   const to = statusAfterApprove(p.status);
   if (to) await db.from('participants').update({ status: to }).eq('id', id);
   await audit('admin', a.email, 'placement.approve', 'participants', id, before, { rows, ...extra });
+  // البريد يُنتظر: نسخة الدالة قد تنتهي بعد الرد فتضيع رسالة لم تُنتظر، والاعتماد الجماعي يرسل واحدة بعد أخرى فلا تتسابق
+  // قراءة العداد فتتجاوز الحصة. المحجوب بالحصة يدخل الطابور (sendMail)، والمشارك يرى اعتماده في رحلته على كل حال
   const pay = await programPaymentDue(id).catch(() => false);
-  sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
+  await sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
 }
 
 // إشارات الاعتماد لمجموعة: المستوى المحفوظ، وتقييم آخر قياس مسلَّم لكل بُعد بالنموذج الحالي (evaluatePlacement
@@ -692,9 +694,10 @@ export async function approveBulk(a: Admin, b: Body) {
   // المرحلة 2: «بمستوى محدد» للمدير العام وحده، بتعليل إلزامي يُحفظ لكل من خالف مستواه المحسوب
   if (b.mode === 'set') return approveBulkSet(a, b, signals);
   const { ready, held } = splitForApproval(signals);
-  const used = await mailUsage().catch(() => null);
-  const mail = mailPlan(ready.filter((r) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
-  if (b.dry_run) return { success: true, ready, held, mail, mail_read: used != null };
+  // بريد الاعتماد إشعار: يحكمه نصيب غير الرموز، والزائد ينتظر في صندوق «لم يُرسل» ويخرج آليًّا حين تتحرر الحصة
+  const win = await mailWindow().catch(() => null);
+  const mail = mailForecast(ready.filter((r) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, win ?? {});
+  if (b.dry_run) return { success: true, ready, held, mail, mail_read: !!win?.read };
   const results: any[] = [];
   for (const r of ready) {
     const p = signals.find((x: any) => x.id === r.id);
@@ -718,9 +721,10 @@ async function approveBulkSet(a: Admin, b: Body, signals: any[]) {
   const reason = String(b.reason || '').trim().slice(0, 500);
   const plan = planUniform(signals, b.levels || {}, reason);
   if (!Object.keys(plan.levels).length) throw new Fail('اختر مستوى لبُعد واحد على الأقل');
-  const used = await mailUsage().catch(() => null);
-  const mail = mailPlan(plan.ready.filter((r: any) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, { used: used ?? 0, cap: CONFIG.mailDailyCap });
-  if (b.dry_run) return { success: true, mode: 'set', ready: plan.ready, held: plan.held, needs_reason: plan.needs_reason, mail, mail_read: used != null };
+  // بريد الاعتماد إشعار: يحكمه نصيب غير الرموز، والزائد ينتظر في صندوق «لم يُرسل» ويخرج آليًّا حين تتحرر الحصة
+  const win = await mailWindow().catch(() => null);
+  const mail = mailForecast(plan.ready.filter((r: any) => !signals.find((p: any) => p.id === r.id)?.is_demo).length, win ?? {});
+  if (b.dry_run) return { success: true, mode: 'set', ready: plan.ready, held: plan.held, needs_reason: plan.needs_reason, mail, mail_read: !!win?.read };
   if (!plan.reason_ok) throw new Fail(`اكتب تعليل مخالفة المستوى المحسوب (${OVERRIDE_REASON_MIN} أحرف على الأقل). يُحفظ في ملف كل من خالفه`, 400, 'override_reason');
   const results: any[] = [];
   for (const r of plan.ready) {

@@ -5,13 +5,13 @@
 // البحث بعنوان يمر ببصمته (addressHash)، والمتن يُقرأ من الطابور وحده (ما حُجب فانتظر).
 import { alertOps, all, audit, CONFIG, db, Fail, hash, must, randomCode, randomToken } from './core.ts';
 import { isEmail } from './logic.js';
-import { mailRewrite } from './features.ts';
+import { heldMail, mailRewrite } from './features.ts';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
 import { addressHash, mailCounts, plainText, sendCounted } from '../_shared/mail.ts';
 import { RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { alertChannelOk } from './readiness.js';
-import { BUDGET_AR, dailySeries, deliveryAr, diagnose, mailBudget, mailtoUrl, nextFreeAt, tally } from './mail-center.js';
+import { BUDGET_AR, dailySeries, deliveryAr, diagnose, mailBudget, mailtoUrl, nextFreeAt, queueEta, tally } from './mail-center.js';
 
 type Body = Record<string, any>;
 const isId = (v: unknown) => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v);
@@ -46,23 +46,40 @@ function flat(o: any, pre = '', out: Record<string, number> = {}, depth = 0): Re
   return out;
 }
 
+// صندوق «لم يُرسل»: كل منتظر أيًّا كان عمره (ما لا موعد له ينتظر حتى يُرسل، فلا يُخفى بعد أسبوع)، والمتروك والملغى
+// في الأسبوع الأخير. الأعمدة الأحدث تُقرأ إن وُجدت (السبب 20261114110000، والموعد 20261116120000)
+const QUEUE_COLS = 'id, created_at, kind, to_email, subject, ref, attempts, last_error, sent_at, gave_up_at';
+async function queueRows() {
+  const week = new Date(Date.now() - 7 * 864e5).toISOString();
+  const read = async (cols: string) => {
+    const [w, g] = await Promise.all([
+      db.from('mail_queue').select(cols).is('sent_at', null).is('gave_up_at', null).order('created_at', { ascending: false }).limit(500),
+      db.from('mail_queue').select(cols).is('sent_at', null).not('gave_up_at', 'is', null).gte('gave_up_at', week).order('created_at', { ascending: false }).limit(200),
+    ]);
+    return w.error || g.error ? null : [...(w.data || []), ...(g.data || [])];
+  };
+  return (await read(`${QUEUE_COLS}, reason, expires_at`)) ?? (await read(`${QUEUE_COLS}, reason`)) ?? (await read(QUEUE_COLS)) ?? [];
+}
+
 // ── 1. الصفحة: الحصة الآن، وتوزيعها، والسلسلة اليومية، وصندوق «لم يُرسل» ──
 export async function center(a: Admin) {
   // المراقب يرى الحصة والأعداد، ولا يرى عناوين المنتظرين (نص الرسالة وتشخيص العنوان مغلقان عليه في الموجّه)
   let writer = true;
   try { requireWrite(a); } catch { writer = false; }
   const since14 = new Date(Date.now() - 14 * 864e5).toISOString();
-  const [counts, recent, queue, provider] = await Promise.all([
+  const [counts, recent, queue, provider, hold] = await Promise.all([
     mailCounts(db),
     all((f, t) => db.from('mail_events').select('*').gte('created_at', since14).order('created_at', { ascending: false }).range(f, t)).catch(() => [] as any[]),
-    db.from('mail_queue').select('id, created_at, kind, to_email, subject, ref, attempts, last_error, sent_at, gave_up_at, reason')
-      .is('sent_at', null).gte('created_at', new Date(Date.now() - 7 * 864e5).toISOString()).order('created_at', { ascending: false }).limit(200)
-      .then((r: any) => (r.error ? db.from('mail_queue').select('id, created_at, kind, to_email, subject, ref, attempts, last_error, sent_at, gave_up_at').is('sent_at', null).order('created_at', { ascending: false }).limit(200).then((x: any) => x.data || []) : r.data || [])),
+    queueRows(),
     providerStatus(),
+    heldMail().catch(() => new Set<string>()),
   ]);
   const day = recent.filter((e: any) => e.created_at >= dayAgo());
   const sentDay = day.filter((e: any) => e.status === 'sent');
   const budget = mailBudget(counts ?? { sent: sentDay.length, nonCode: sentDay.filter((e: any) => e.kind !== 'code' && e.kind !== 'alert').length }, CONFIG.mailDailyCap);
+  // الموعد المتوقع لكل منتظر غير ممسَك: ما بقي من حصة غير الرموز الآن، ثم ما يتحرر من نافذة الـ24 ساعة (queueEta)
+  const nonCodeSent = sentDay.filter((e: any) => e.kind !== 'code' && e.kind !== 'alert').map((e: any) => e.created_at);
+  const eta = queueEta((queue as any[]).filter((m) => !m.gave_up_at && !hold.has(m.id)), { nonCodeSent, budget, now: Date.now() });
   const lost = recent.filter((e: any) => e.status !== 'sent').slice(0, 100)
     .map((e: any) => ({ id: e.id, at: e.created_at, kind: e.kind, source: e.source, status: e.status, subject: e.subject || null, to_domain: e.to_domain, ref: e.ref }));
   return {
@@ -71,7 +88,8 @@ export async function center(a: Admin) {
     by_kind: tally(sentDay, 'kind'), by_source: tally(sentDay, 'source'),
     blocked_24h: day.filter((e: any) => e.status === 'blocked').length, failed_24h: day.filter((e: any) => e.status === 'failed').length,
     series: dailySeries(recent, 14),
-    queue: (queue as any[]).map((m) => ({ ...m, to_email: writer ? m.to_email : null, state: m.gave_up_at ? (m.last_error === 'cancelled' ? 'cancelled' : m.last_error === 'stale' ? 'stale' : 'gave_up') : 'waiting' })),
+    queue: (queue as any[]).map((m) => ({ ...m, to_email: writer ? m.to_email : null, state: m.gave_up_at ? (m.last_error === 'cancelled' ? 'cancelled' : m.last_error === 'stale' ? 'stale' : 'gave_up') : 'waiting',
+      ...(m.gave_up_at ? {} : hold.has(m.id) ? { held: true } : { eta: eta[m.id]?.at ?? null, eta_expires: !!eta[m.id]?.expires }) })),
     lost, provider, retention_days: RETENTION_DAYS, traceable: recent.length === 0 || recent.some((e: any) => 'to_hash' in e),
     // سلاك أو الرابط، أيهما يكفي (readiness.js)
     alert_channel: alertChannelOk((k: string) => !!Deno.env.get(k)),

@@ -2,7 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { dailySeries, diagnose, mailBudget, mailtoUrl, nextFreeAt, tally } from '../../supabase/functions/leaders-api/mail-center.js';
+import { dailySeries, diagnose, etaAr, etaDay, mailBudget, mailtoUrl, nextDrainAt, nextFreeAt, queueEta, tally } from '../../supabase/functions/leaders-api/mail-center.js';
+import { etaCell } from '../../admin-app/src/screens/MailCenter.jsx';
+import { mailLine } from '../../admin-app/src/screens/BulkApprove.jsx';
 import { mailDecision } from '../../supabase/functions/_shared/mail-budget.js';
 
 const src = (p) => readFileSync(join(process.cwd(), p), 'utf8');
@@ -111,5 +113,64 @@ describe('حراس المصدر', () => {
       expect(b, fn).toContain('requireWrite(a)');
       expect(b, fn).toContain("await audit('admin'");
     }
+  });
+});
+
+describe('متى يخرج المنتظر (queueEta)', () => {
+  const now = Date.parse('2026-11-16T05:27:00Z');   // 08:27 بالرياض
+  const hAgo = (h) => new Date(now - h * 36e5).toISOString();
+  it('التشغيلة التالية في الدقيقة 17', () => {
+    expect(new Date(nextDrainAt(Date.parse('2026-11-16T05:27:00Z'))).toISOString()).toBe('2026-11-16T06:17:00.000Z');
+    expect(new Date(nextDrainAt(Date.parse('2026-11-16T05:17:00Z'))).toISOString()).toBe('2026-11-16T05:17:00.000Z');
+  });
+  it('ما بقي من الحصة في التشغيلة التالية، ثم ما يتحرر بعد 24 ساعة من كل إرسال، والإشعار قبل الجماعي', () => {
+    const rows = [{ id: 'b', kind: 'bulk', created_at: hAgo(9) }, { id: 'n1', kind: 'notify', created_at: hAgo(2) }, { id: 'n2', kind: 'notify', created_at: hAgo(1) }];
+    const eta = queueEta(rows, { budget: { nonCodeLeft: 1 }, nonCodeSent: [hAgo(20), hAgo(3)], now });
+    expect(eta.n1.at).toBe('2026-11-16T06:17:00.000Z');
+    expect(eta.n2.at).toBe(new Date(nextDrainAt(Date.parse(hAgo(20)) + 864e5)).toISOString());
+    expect(eta.b.at).toBe(new Date(nextDrainAt(Date.parse(hAgo(3)) + 864e5)).toISOString());
+  });
+  it('أكثر من حصة يوم: يُرحَّل إلى اليوم التالي فالذي بعده، ولا يُترك', () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, kind: 'notify', created_at: hAgo(5 - i) }));
+    const eta = queueEta(rows, { budget: { nonCodeLeft: 0 }, nonCodeSent: [hAgo(23)], now });
+    const days = rows.map((r) => Math.round((Date.parse(eta[r.id].at) - now) / 864e5));
+    expect(days).toEqual([0, 1, 2, 3, 4]);
+    expect(Object.values(eta).every((e) => !e.expires)).toBe(true);
+  });
+  it('المؤرخ الذي يمضي موعده قبل دوره يُعلَّم، ولا حصة إطلاقًا: لا موعد', () => {
+    const eta = queueEta([{ id: 'x', kind: 'bulk', created_at: hAgo(1), expires_at: new Date(now + 36e5).toISOString() }], { budget: { nonCodeLeft: 0 }, nonCodeSent: [hAgo(2)], now });
+    expect(eta.x.expires).toBe(true);
+    expect(queueEta([{ id: 'y', kind: 'notify' }], { budget: { nonCodeLeft: 0 }, now }).y).toEqual({ at: null, expires: false });
+  });
+  it('اليوم والغد بتوقيت الرياض بالعربية', () => {
+    expect(etaDay('2026-11-16T18:00:00Z', now)).toBe('today');
+    expect(etaDay('2026-11-16T22:00:00Z', now)).toBe('tomorrow');   // 01:00 بالرياض يوم 17
+    expect(etaAr('2026-11-17T05:17:00Z', now)).toBe('غدًا نحو 08:17');
+    expect(etaAr(null)).toBe('حين تتحرر الحصة');
+  });
+});
+
+describe('العرض في اللوحة', () => {
+  it('خانة «يُتوقع إرساله»: الممسَك، والمؤرخ الذي يُترك، والموعد', () => {
+    expect(etaCell({ state: 'waiting', held: true })).toContain('ممسَك');
+    expect(etaCell({ state: 'waiting', eta: '2026-11-17T05:17:00Z', eta_expires: true })).toMatch(/^يُترك/);
+    expect(etaCell({ state: 'waiting', eta: null })).toBe('حين تتحرر الحصة');
+    expect(etaCell({ state: 'stale' })).toBe('·');
+  });
+  it('سطر البريد قبل تأكيد الاعتماد الجماعي دائمًا، والمنتظر بموعد آخره، والاعتماد ظاهر في الرحلة', () => {
+    expect(mailLine({ now: 14, queued: 0, clear_at: null })).toMatch(/^سيصل 14 بريدًا الآن/);
+    const q = mailLine({ now: 0, queued: 14, clear_at: '2026-11-17T05:17:00Z' });
+    expect(q).toContain('سيصل 14 بريدًا: 0 الآن، والباقي 14 ينتظر في صندوق «لم يُرسل»');
+    expect(q).toContain('ويرى كل واحد اعتماده في رحلته فورًا');
+    expect(mailLine({ now: 0, queued: 3 }, false)).toMatch(/^تعذّرت قراءة حصة البريد/);
+    for (const t of [q, mailLine(null)]) expect(t).not.toMatch(/[\u2013\u2014]/);
+  });
+  it('الصندوق يقرأ كل منتظر بلا حد الأسبوع، والمتروك بآخر أسبوع، ونص المساعدة بلا قاعدة اليومين', () => {
+    const center = src('supabase/functions/leaders-api/mail-center.ts');
+    expect(center).toMatch(/\.is\('sent_at', null\)\.is\('gave_up_at', null\)\.order\('created_at', \{ ascending: false \}\)\.limit\(500\)/);
+    expect(center).toMatch(/\.not\('gave_up_at', 'is', null\)\.gte\('gave_up_at', week\)/);
+    const ui = src('admin-app/src/screens/MailCenter.jsx');
+    expect(ui).not.toContain('يومين');
+    expect(ui).toContain('يُتوقع إرساله');
   });
 });

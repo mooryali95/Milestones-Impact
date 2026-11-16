@@ -79,3 +79,53 @@ export function diagnose({ events = [], delivery = {}, known = true, budget = nu
 
 /** نص الرسالة للنسخ والإرسال اليدوي: بلا وسوم */
 export const mailtoUrl = (to, subject, text) => `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(String(text || '').slice(0, 1800))}`;
+
+// ── متى يُتوقع أن تخرج رسائل الطابور (منطق خالص بلا قاعدة) ──
+// المهمة الساعية تفرّغ الطابور في الدقيقة 17 من كل ساعة (cron.expert-offers)
+export const DRAIN_MINUTE = 17;
+/** أول تشغيلة للمهمة الساعية في الوقت ms أو بعده */
+export function nextDrainAt(ms) {
+  const d = new Date(ms);
+  d.setUTCMinutes(DRAIN_MINUTE, 0, 0);
+  if (d.getTime() < ms) d.setUTCHours(d.getUTCHours() + 1);
+  return d.getTime();
+}
+const byDrainOrder = (a, b) => (a.kind === b.kind ? String(a.created_at).localeCompare(String(b.created_at)) : a.kind === 'notify' ? -1 : 1);
+/**
+ * الموعد المتوقع لكل رسالة منتظرة، بالترتيب الذي يفرّغ به الخادم (الإشعار قبل الجماعي، ثم الأقدم).
+ * حصة غير الرموز نافذة متحركة 24 ساعة: ما بقي منها الآن (budget.nonCodeLeft) يخرج في التشغيلة التالية، وكل رسالة
+ * غير رمز أُرسلت في آخر 24 ساعة تحرر مكانها بعد 24 ساعة من إرسالها، وكل رسالة يرسلها الطابور تحرر مكانها بعد 24 ساعة كذلك.
+ * تقدير لا وعد: بريد مباشر يُرسل بين التشغيلات يأخذ ما يتحرر قبل الطابور.
+ * @param {{ id: string, kind?: string, created_at?: string, expires_at?: string | null }[]} rows المنتظرة غير الممسَكة
+ * @param {{ nonCodeSent?: string[], budget?: { nonCodeLeft?: number, nonCodeLimit?: number }, now?: number }} o
+ * @returns {Record<string, { at: string | null, expires: boolean }>}
+ */
+export function queueEta(rows = [], { nonCodeSent = [], budget = {}, now = Date.now() } = {}) {
+  const free = [];
+  for (let i = 0; i < Math.max(0, budget.nonCodeLeft ?? 0); i++) free.push(now);
+  for (const t of nonCodeSent) { const ms = Date.parse(t); if (Number.isFinite(ms)) free.push(Math.max(now, ms + 864e5)); }
+  const out = {};
+  for (const m of [...rows].sort(byDrainOrder)) {
+    if (!free.length) { out[m.id] = { at: null, expires: false }; continue; }
+    free.sort((a, b) => a - b);
+    const at = nextDrainAt(free.shift());
+    free.push(at + 864e5);
+    const exp = m.expires_at ? Date.parse(m.expires_at) : NaN;
+    out[m.id] = { at: new Date(at).toISOString(), expires: Number.isFinite(exp) && exp <= at };
+  }
+  return out;
+}
+/** يوم الموعد بتوقيت الرياض بالنسبة إلى الآن: today أو tomorrow أو تاريخه */
+export function etaDay(iso, now = Date.now()) {
+  if (!iso) return null;
+  const day = (ms) => new Date(ms + 3 * 36e5).toISOString().slice(0, 10);
+  const d = day(Date.parse(iso));
+  return d === day(now) ? 'today' : d === day(now + 864e5) ? 'tomorrow' : d;
+}
+/** الموعد المتوقع بالعربية: «اليوم نحو 14:17» أو «غدًا نحو 08:17» أو «2026-11-19 نحو 08:17» بتوقيت الرياض */
+export function etaAr(iso, now = Date.now()) {
+  if (!iso) return 'حين تتحرر الحصة';
+  const d = etaDay(iso, now);
+  const hm = new Date(Date.parse(iso) + 3 * 36e5).toISOString().slice(11, 16);
+  return `${d === 'today' ? 'اليوم' : d === 'tomorrow' ? 'غدًا' : d} نحو ${hm}`;
+}

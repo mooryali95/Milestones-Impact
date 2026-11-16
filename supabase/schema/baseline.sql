@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116100000_leaders_t360_rename
+-- as-of migration: 20261116120000_leaders_mail_queue_expiry
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1273,6 +1273,7 @@ create table if not exists leaders.mail_queue (
   gave_up_at timestamp with time zone,
   reason text,
   cancelled_by text,
+  expires_at timestamp with time zone,
   constraint mail_queue_cancelled_by_check CHECK ((char_length(cancelled_by) <= 254)),
   constraint mail_queue_kind_check CHECK ((kind = ANY (ARRAY['bulk'::text, 'notify'::text]))),
   constraint mail_queue_reason_check CHECK ((char_length(reason) <= 40)),
@@ -3224,6 +3225,8 @@ CREATE INDEX IF NOT EXISTS mail_events_window ON leaders.mail_events USING btree
 CREATE INDEX IF NOT EXISTS mail_queue_pending ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
 
 CREATE INDEX IF NOT EXISTS mail_queue_pending_idx ON leaders.mail_queue USING btree (created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
+
+CREATE INDEX IF NOT EXISTS mail_queue_waiting_kind_idx ON leaders.mail_queue USING btree (kind DESC, created_at) WHERE ((sent_at IS NULL) AND (gave_up_at IS NULL));
 
 CREATE INDEX IF NOT EXISTS model_submissions_status_idx ON leaders.model_submissions USING btree (status);
 
