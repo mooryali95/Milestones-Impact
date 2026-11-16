@@ -31,6 +31,7 @@ async function setup(page, { delay = {} } = {}) {
       'admin.orgs': { success: true, orgs: [], unassigned: {} }, 'admin.participants': { success: true, participants: [] },
       'admin.programs': { success: true, programs, cohorts, organizations: [] },
       'admin.program': { success: true, program: programs[0], stages: [], requirements: [] },
+      'admin.cohort-definition': { success: true, program_id: 'pa', version: { id: 'v1', number: 1, label: 'الإطلاق' }, stages: [], requirements: [], hidden: [] },
       'admin.experts': { success: true, experts: [] },
       'admin.program-compare': { success: true, version: { number: 1, label: 'الإطلاق' }, diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [], changed: [] } },
       'admin.cert-settings': { success: true, settings: { enabled: true, program_ar: 'برنامج القادة', hours: 48, signatory: null } },

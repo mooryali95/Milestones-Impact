@@ -104,6 +104,11 @@ describe('نموذج الدفعة: أسماء البنود كما يقرؤها �
     expect(hiddenHelp({ hidden_requirements: ['R-A'], program_version_id: 'v2' }, reqs)).toContain('يُفحص الإخفاء عند الحفظ على النسخة المثبتة.');
     expect(hiddenHelp({ hidden_requirements: ['R-A'], program_version_id: 'v2' }, reqs)).not.toContain('حسب آخر تعديل');
   });
+  it('البنود من تعريف الدفعة نفسها (P5): الحكم قاطع ما دامت نسختها هي المقروءة، وإن غيّرها المدير قبل الحفظ عاد إلى الإشارة', () => {
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: 'v2' }, reqs, 'v2')).toContain('لن يُحفظ: إخفاء هذه البنود يترك مرحلة «التأسيس»');
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: 'v3' }, reqs, 'v2')).toContain('يُفحص الإخفاء عند الحفظ على النسخة المثبتة.');
+    expect(hiddenHelp({ hidden_requirements: ['T-ATTEND'], program_version_id: '' }, reqs, '')).toContain('لن يُحفظ');
+  });
 });
 
 // P3: المقاعد من العقد مصدرًا واحدًا في العرض، والسعة التشغيلية مطوية لدفعة الجهة وظاهرة لغيرها
@@ -152,5 +157,69 @@ describe('نموذج الدفعة: مقاعد العقد والسعة التشغ
     expect(formToCohort({ organization_id: 'o1', capacity_on: false })).toMatchObject({ capacity: null });
     expect(formToCohort({ organization_id: 'o1', capacity_on: true, capacity: 20 })).toEqual({ organization_id: 'o1', capacity: 20, delivery: {} });
     expect(formToCohort({ organization_id: null, capacity: 20 })).toEqual({ organization_id: null, capacity: 20, delivery: {} });
+  });
+});
+
+// P6: محرر الدفعة والمعالج من تعريف واحد للحقول وتحقق واحد، والرحلة بمفاتيح لا تحذف شيئًا
+describe('محرر الدفعة: الأقسام والرحلة', async () => {
+  const { COHORT_SECTIONS, cohortErrors, cohortFields, cohortOut, cohortToForm, formToCohort, itemsAr, journeyView, stagesAr } = await import('./methodology.js');
+  const { wizardBlock } = await import('./cohort-hub.js');
+  const stages = [{ key: 's1', title_ar: 'التأسيس', rules: {} }, { key: 's2', title_ar: 'التطبيق', rules: { complete: 'any', mode: 'optional' } }];
+  const reqs = [
+    { code: 'T-ATTEND', title_ar: 'حضور ({days:T-ATTEND})', kind: 'workshop', required: true, stage_key: 's1', stage_title_ar: 'التأسيس', config: { sessions_required: 3 } },
+    { code: 'R-A', title_ar: 'تأمل', kind: 'check', required: false, stage_key: 's1', stage_title_ar: 'التأسيس' },
+    { code: 'E-MGR', title_ar: 'إفادة المدير', kind: 'check', required: false, stage_key: 's2', stage_title_ar: 'التطبيق' },
+  ];
+  it('لكل حقل قسم واحد من الأقسام الأربعة، والمؤرشف لا يُعرض، والدفعة الجديدة بلا «مغلقة»', () => {
+    const fields = cohortFields({ programs: [{ id: 'a', name: 'أ' }, { id: 'z', name: 'ز', archived_at: '2026-01-01' }], reqs, isNew: true });
+    const keys = COHORT_SECTIONS.map((x) => x.key);
+    expect(fields.every((f) => keys.includes(f.section))).toBe(true);
+    expect(fields.find((f) => f.name === 'program_id').options).toEqual({ a: 'أ' });
+    expect(Object.keys(fields.find((f) => f.name === 'status').options)).toEqual(['planned', 'open', 'running']);
+    expect(fields.filter((f) => f.section === 'delivery').every((f) => f.req === 'T-ATTEND')).toBe(true);
+    // حقل واحد بالاسم في كل قسم ظاهر لحالة واحدة: المقاعد في الأساسيات للأفراد، والسعة في المتقدم للجهة
+    const cap = fields.filter((f) => f.name === 'capacity');
+    expect(cap.filter((f) => f.show({ organization_id: '' })).map((f) => f.section)).toEqual(['basics']);
+    expect(cap.filter((f) => f.show({ organization_id: 'o', capacity_on: true })).map((f) => f.section)).toEqual(['advanced']);
+  });
+  it('أعداد الرحلة بتمييز عربي صحيح', () => {
+    expect([0, 1, 2, 5, 11].map(itemsAr)).toEqual(['لا بنود', 'بند واحد', 'بندان', '5 بنود', '11 بندًا']);
+    expect([1, 2, 3, 12].map(stagesAr)).toEqual(['مرحلة واحدة', 'مرحلتان', '3 مراحل', '12 مرحلة']);
+  });
+  it('رأس مجموعة التنفيذ: اسم النشاط ومرحلته بلا قوسين متتاليين', () => {
+    const f = cohortFields({ reqs }).find((x) => x.name === 'd:T-ATTEND:verify');
+    expect([f.group, f.groupStage]).toEqual(['حضور (ثلاثة أيام)', 'التأسيس']);
+  });
+  it('التحقق واحد للمعالج والمحرر', () => {
+    expect(cohortErrors({ name: ' ' })).toEqual({ name: 'اكتب اسم الدفعة' });
+    expect(cohortErrors({ name: 'د', starts_on: '2027-02-01', ends_on: '2027-01-01', level_mode: 'uniform' })).toEqual({ ends_on: 'تاريخ النهاية قبل البداية', content_level: 'اختر مستوى المحتوى للدفعة المتجانسة' });
+    expect(wizardBlock(2, { name: ' ' })).toBe(cohortErrors({ name: ' ' }).name);
+  });
+  it('الرحلة: «كذا ظاهرة من كذا»، والمفتاح الكاسر مقفل بشرحه، والمخفي يبقى بعلامته', () => {
+    const j = journeyView({ stages, requirements: reqs }, ['E-MGR'], []);
+    expect(j.stages.map((s) => [s.title, s.shown, s.total])).toEqual([['التأسيس', 2, 2], ['التطبيق', 0, 1]]);
+    expect([j.shown, j.total]).toEqual([2, 3]);
+    const [attend, opt] = j.stages[0].items;
+    expect(attend).toMatchObject({ title: 'حضور (ثلاثة أيام)', label: 'حضور (ثلاثة أيام) (التأسيس)', required: true });
+    // سبب قصير تحت المفتاح، والشرح مرة واحدة للمرحلة
+    expect(attend.lock).toBe('آخر ما يكمل هذه المرحلة');
+    expect(j.stages[0].lockNote).toBe('البند المقفل هنا لا يُخفى لأن إخفاءه يترك مرحلة «التأسيس» بلا بند ظاهر يكملها لبعض الأعضاء أو كلهم، فلا تكتمل لهم وتُقفل ما بعدها. لإخفائه غيّر قاعدة اكتمالها في رحلة البرنامج أولًا.');
+    expect(j.stages[1].lockNote).toBe('');
+    expect(opt.lock).toBe('');
+    expect(j.stages[1].items[0]).toMatchObject({ shown: false, lock: '' });
+    expect(j.stages[1].items[0].warn).toContain('يكتمل بتقدير المدير المباشر');
+    // كسر قائم قبل فتح المحرر لا يقفل غيره
+    expect(journeyView({ stages, requirements: reqs }, ['T-ATTEND'], ['T-ATTEND']).stages[0].items[1].lock).toBe('');
+  });
+  it('ما يُرسل: الحقول الظاهرة وحدها، والإخفاء بالرموز نفسها ومعه ما لا بند له، بلا حقول المقارنة', () => {
+    const fields = cohortFields({ orgs: [{ id: 'o' }], reqs });
+    const v = { ...cohortToForm({ id: 'c', name: 'د', organization_id: 'o', hidden_requirements: ['GONE'], capacity: null, level_mode: 'mixed' }), hidden_requirements: ['GONE', 'R-A'], 'd:T-ATTEND:verify': 'join' };
+    const out = formToCohort(cohortOut(fields, v));
+    expect(out.hidden_requirements).toEqual(['GONE', 'R-A']);
+    expect(out.delivery).toEqual({ 'T-ATTEND': { verify: 'join' } });
+    expect(out).not.toHaveProperty('hidden_before');
+    expect(out).not.toHaveProperty('capacity_on');
+    expect(out.capacity).toBeNull();
+    expect(out).not.toHaveProperty('content_level');
   });
 });

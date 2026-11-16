@@ -4,10 +4,13 @@
 // يحفظ بالإجراء نفسه الذي يحفظ به نموذج الدفعة الكامل (admin.cohort-save)، فلا مدخل ثانٍ ولا قاعدة ثانية.
 // ما لا يحتاجه الإنشاء (صيغ الأنشطة والبنود المخفية والإشراف) يبقى في «تحرير الدفعة» من ملفها.
 import React, { useState } from 'react';
-import { COHORT_STATUS, contractLine } from '../methodology.js';
+import { COHORT_STATUS, cohortFields, contractLine, itemsAr } from '../methodology.js';
+import { CohortField } from './CohortEditor.jsx';
 import { useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
 import { WIZARD_STEPS, wizardBlock, wizardBody, wizardNotes } from '../cohort-hub.js';
+import { orgProgram, orgProgramLine } from '../../../supabase/functions/leaders-api/logic.js';
+import '../cohort-editor.css';
 
 const defaultName = (v, orgs) => {
   const o = orgs.find((x) => x.id === v.organization_id);
@@ -21,20 +24,32 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
   const programs = (data.programs || []).filter((p) => !p.archived_at);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const fallback = programs.find((p) => p.is_default)?.id || programs[0]?.id || '';
+  // برنامج الجهة (P4): دفعة جهة جديدة تُقترح على برنامج دفعتها الحالية، وإلا آخر دفعة لها، والمؤرشف لا يُقترح.
+  // البرنامج القادم من «أنشئ له دفعة» أو ما اختاره المدير بنفسه لا يُستبدل
+  const suggest = (o) => orgProgram(data.cohorts || [], data.programs || [], o || null);
   const [v, setV] = useState(() => {
     const init = {
       kind: 'org', organization_id: preset.organization_id || '',
-      program_id: preset.program_id || programs.find((p) => p.is_default)?.id || programs[0]?.id || '',
+      program_id: preset.program_id || suggest(preset.organization_id)?.program_id || fallback,
       pin: true, status: 'open', starts_on: '', ends_on: '', capacity: '', name: '',
     };
     return { ...init, name: defaultName(init, orgs) };
   });
   const [named, setNamed] = useState(false);   // كتب المدير الاسم بنفسه: لا يُستبدل باسم الجهة
+  const [picked, setPicked] = useState(!!preset.program_id);   // اختار المدير البرنامج بنفسه: لا يُستبدل ببرنامج الجهة
   const set = (patch) => setV((cur) => {
     const next = { ...cur, ...patch };
     if (!named && ('organization_id' in patch || 'kind' in patch)) next.name = defaultName(next, orgs) || cur.name;
+    if (!picked && !('program_id' in patch) && ('organization_id' in patch || 'kind' in patch)) {
+      next.program_id = (next.kind === 'org' && suggest(next.organization_id)?.program_id) || fallback;
+    }
     return next;
   });
+  const orgProg = v.kind === 'org' ? suggest(v.organization_id) : null;
+  // حقول الخطوة الثالثة من تعريفها الواحد (cohortFields)، و«المقاعد» لدفعة الأفراد وحدها كما في المحرر
+  const view = { ...v, organization_id: v.kind === 'org' ? v.organization_id : '' };
+  const F = Object.fromEntries(cohortFields({ orgs, programs, isNew: true }).filter((f) => f.section === 'basics').map((f) => [f.name, f]));
   const close = useGuardedClose(step > 0, () => onClose());
   useEscape(close, true);
 
@@ -86,10 +101,14 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
           <fieldset className="wiz-body">
             <legend>أي برنامج يمر به المشاركون؟</legend>
             <label className="wiz-field">البرنامج
-              <select aria-label="البرنامج" value={v.program_id} onChange={(e) => set({ program_id: e.target.value })} autoFocus>
-                {programs.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.requirements} متطلب</option>)}
+              <select aria-label="البرنامج" value={v.program_id} onChange={(e) => { setPicked(true); set({ program_id: e.target.value }); }} autoFocus>
+                {programs.map((p) => <option key={p.id} value={p.id}>{p.name} · {itemsAr(p.requirements || 0)}</option>)}
               </select>
             </label>
+            {orgProg && (orgProg.program_id === v.program_id
+              ? <p className="wiz-source" role="note">{orgProgramLine(orgProg)} <small className="la-muted">يمكنك تغييره.</small></p>
+              : <p className="wiz-source warn" role="note">برنامج الجهة «{orgProg.program_name}» ({orgProg.via === 'current' ? 'من دفعتها الحالية' : 'من آخر دفعة لها'}). اخترت برنامجًا آخر: من له تقدم من أعضائها يُسأل عنه قبل الإنشاء، لأن تقدمه مربوط ببرنامجه.{' '}
+                  <button type="button" className="la-link" onClick={() => { setPicked(false); set({ program_id: orgProg.program_id }); }}>ارجع إلى برنامج الجهة</button></p>)}
             {prog && (prog.versions?.length
               ? <label className="wiz-check"><input type="checkbox" checked={v.pin} onChange={(e) => set({ pin: e.target.checked })} />
                   <span>ثبّت الدفعة على أحدث نسخة محفوظة (النسخة {prog.versions[0].number}). <small className="la-muted">تحميها من أي تعديل لاحق على البرنامج حتى ترقّيها بنفسك.</small></span></label>
@@ -100,20 +119,17 @@ export default function CohortWizard({ preset = {}, data, onClose }) {
         {step === 2 && (
           <fieldset className="wiz-body">
             <legend>الاسم والمواعيد</legend>
-            <label className="wiz-field">اسم الدفعة<input value={v.name} onChange={(e) => { setNamed(true); set({ name: e.target.value }); }} autoFocus /></label>
+            {/* الحقول نفسها التي في محرر الدفعة (cohortFields وCohortField)، فلا يختلف حقل بين الإنشاء والتحرير */}
+            <CohortField f={F.name} v={view} set={(p) => { setNamed(true); set(p); }} className="wiz-field" autoFocus />
             <div className="wiz-row">
-              <label className="wiz-field">تبدأ<input type="date" value={v.starts_on} onChange={(e) => set({ starts_on: e.target.value })} /></label>
-              <label className="wiz-field">تنتهي<input type="date" value={v.ends_on} onChange={(e) => set({ ends_on: e.target.value })} /></label>
+              <CohortField f={F.starts_on} v={view} set={set} className="wiz-field" />
+              <CohortField f={F.ends_on} v={view} set={set} className="wiz-field" />
             </div>
             <small className="la-muted">بالمدة يُوزَّع جدول المراحل تلقائيًا في ملف الدفعة. يمكن تركها الآن.</small>
             <div className="wiz-row">
-              <label className="wiz-field">الحالة
-                <select value={v.status} onChange={(e) => set({ status: e.target.value })}>
-                  {['open', 'running', 'planned'].map((k) => <option key={k} value={k}>{COHORT_STATUS[k]}</option>)}
-                </select>
-              </label>
+              <CohortField f={F.status} v={view} set={set} className="wiz-field" />
               {/* المقاعد مصدرها واحد (P3): دفعة الجهة تأخذها من عقد الجهة فلا تُسأل هنا، ودفعة الأفراد حقلها هو المصدر */}
-              {v.kind !== 'org' && <label className="wiz-field">المقاعد (اختياري)<input type="number" min="1" value={v.capacity} onChange={(e) => set({ capacity: e.target.value })} /></label>}
+              {F.capacity.show(view) && <CohortField f={F.capacity} v={view} set={set} className="wiz-field" />}
             </div>
             {v.kind === 'org' && org && <p className="la-muted wiz-contract">{contractLine(org)} يُعدَّل العقد من ملف الجهة، ولسعة تشغيلية خاصة بالدفعة افتح «تحرير الدفعة» بعد إنشائها.</p>}
           </fieldset>

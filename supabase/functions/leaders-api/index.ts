@@ -547,6 +547,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.expert-request-retry': E.adminRetryRequest,
   'admin.expert-request-complete': E.adminCompleteRequest,
   'admin.program': (_a, b) => G.program(b),
+  // تعريف الدفعة لنوافذها (P5): المحرر والجدول يقرآن المراحل والمتطلبات من نسختها المثبتة أو برنامجها الحي
+  'admin.cohort-definition': (_a, b) => G.cohortDefinitionFor(b),
   'admin.program-save': (a, b) => A.writer(a, G.programSave, b),
   'admin.program-archive': (a, b) => A.writer(a, G.programArchive, b),
   'admin.program-version': (a, b) => A.writer(a, G.programPublish, b),
