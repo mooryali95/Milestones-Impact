@@ -154,7 +154,7 @@ export function NudgeReport({ onClose, onOpen }) {
                 <span><b>{pctText(r.total.seen_pct)}</b>رآه في الموقع</span>
                 <span><b>{r.stuck.length}</b>لم يعد يكفيه التذكير</span>
               </div>
-              <p className="la-muted small">«تقدّم بعده»: انتقل من موضعه أو أنجز فيه شيئًا قبل التذكير التالي أو حتى الآن. ما أُرسل منذ أقل من أسبوع ولم يتحرك بعده يُعدّ «ينتظر» ولا يدخل النسبة.{r.capped ? ' النافذة مقصوصة على أحدث 300 مشارك.' : ''}</p>
+              <p className="la-muted small">«تقدّم بعده»: انتقل من موضعه أو أنجز فيه شيئًا قبل التذكير التالي أو حتى الآن. ما أُرسل منذ أقل من أسبوع ولم يتحرك بعده يُعدّ «ينتظر» ولا يدخل النسبة.{r.capped ? ' النافذة مقصوصة على أحدث 300 مشارك.' : ''}{r.ms != null ? ` حُسب في ${(r.ms / 1000).toFixed(1)} ث.` : ''}</p>
               <section aria-labelledby="nr-s-h">
                 <h4 id="nr-s-h">بحسب المرسل</h4>
                 <div className="table-wrap"><table className="data-table nr-table"><thead><tr><th>المرسل</th><th>أُرسل</th><th>رآه في الموقع</th><th>تقدّم بعده</th></tr></thead>

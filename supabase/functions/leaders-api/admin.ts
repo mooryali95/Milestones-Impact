@@ -6,7 +6,7 @@
 import { all, allFor, approvedMail, audit, CONFIG, mailUsage, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
-import { weeklyNudges } from './nudges.ts';
+import { recentlyNudged, weeklyNudges } from './nudges.ts';
 import { MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
@@ -1478,14 +1478,17 @@ export async function reminders(b: Record<string, any>) {
   // من غاب أسبوعًا ولم يُذكَّر خلاله: يمر بالمحرك الموحد (nudges.ts) فيصله ما بقي عليه بالاسم بدل «لديك خطوات»،
   // ويُكتب في السجل الواحد بحده المشترك، فلا يصله تذكير آلي بعد يوم من تذكير الإدارة أو المرشد
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  // من ذُكِّر خلال الأسبوع من أي مرسل يُستبعد من السجل الواحد (recentlyNudged)، لا من reminded_at (المرحلة 3)
   const { data: people } = await db.from('participants')
-    .select('id')
+    .select('id, reminded_at')
     .neq('status', 'suspended').eq('is_demo', false)
     .lt('last_login_at', weekAgo)
-    .or(`reminded_at.is.null,reminded_at.lt.${weekAgo}`)
-    .limit(200);
+    .order('last_login_at', { ascending: true })
+    .limit(600);
+  const recent = await recentlyNudged(people || [], 7);
+  const due = (people || []).filter((p: any) => !recent.has(p.id)).slice(0, 200);
   // من له مرشد لم يتابعه بنفسه يذكّره المساعد نيابة عنه، وغيره التذكير الآلي (weeklyNudges)
-  const { sent } = await weeklyNudges((people || []).map((p: any) => p.id));
+  const { sent } = await weeklyNudges(due.map((p: any) => p.id));
   // المعالم المتأخرة: تُكتب في ملف صاحبها ويُبلَّغ بها مرة لكل معلم (كانت تظهر في الموقع وحده بلا بريد ولا أثر)
   const late = await lateMilestoneNotices().catch((e) => { console.error('late milestones:', e); return 0; });
   return { success: true, sent, late };
