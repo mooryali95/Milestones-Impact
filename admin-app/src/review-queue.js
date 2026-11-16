@@ -40,6 +40,8 @@ export function navKey(e, doc = globalThis.document) {
   const tag = t?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return null;
   if (doc?.querySelector?.('[aria-modal="true"], dialog[open]')) return null;
+  // الأسهم داخل التبويبات أو قائمة الإجراءات تتنقل فيها هي (نمط ARIA)، لا بين الملفات
+  if (t?.closest?.('[role="tablist"], [role="menu"], [role="listbox"]')) return null;
   // الصفحة من اليمين لليسار: السهم الأيسر للأمام. J وK بموضع المفتاح (code) فتعملان بلوحة عربية أيضًا
   if (e.key === 'ArrowLeft' || e.code === 'KeyJ') return 'next';
   if (e.key === 'ArrowRight' || e.code === 'KeyK') return 'prev';

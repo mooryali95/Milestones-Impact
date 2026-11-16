@@ -47,5 +47,6 @@ describe('اختصارات التنقل', () => {
     expect(navKey(ev({ key: 'ArrowLeft' }), doc(true))).toBeNull();
     expect(navKey(ev({ key: 'ArrowLeft', altKey: true }), doc())).toBeNull();
     expect(navKey(ev({ key: 'ArrowLeft', defaultPrevented: true }), doc())).toBeNull();
+    expect(navKey(ev({ key: 'ArrowLeft', target: { tagName: 'BUTTON', closest: (q) => (q.includes('tablist') ? {} : null) } }), doc())).toBeNull();
   });
 });

@@ -62,18 +62,29 @@ async function setup(page, hash, { leaders = {}, admin = {}, user = {} } = {}) {
   return calls;
 }
 
+// ملف المشارك بتبويبات (P2، 2026-11-16): كل قسم في تبويبه، والإجراءات الأقل تكرارًا في «⋯»
+const tab = (page, name) => page.getByRole('tab', { name: new RegExp(`^${name}`) });
+const more = async (page, item) => { await page.getByRole('button', { name: 'إجراءات أخرى' }).click(); await page.getByRole('menuitem', { name: item }).click(); };
+
 for (const width of [1024, 1280, 1366]) {
   test(`admin-core-5: ملف المشارك لا يفيض أفقيًا على عرض ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     await setup(page, '#/leaders/participants/p1');
     await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
     // بطاقة المستوى تطوي التفاصيل (تصور 2026-11-11): يُفتح بُعد Impact وحقل ملاحظته، فيُقاس الفيض بأعرض حالاتها
+    await tab(page, 'القرار').click();
     const lc = page.locator('section.lc');
     await lc.getByRole('button', { name: /^Impact/ }).click();
     await lc.locator('#lc-det-impact').getByRole('button', { name: '+ ملاحظة' }).click();
     await expect(page.getByLabel('ملاحظة Impact')).toBeVisible();
-    const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(over).toBeLessThanOrEqual(0);
+    const over = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(await over()).toBeLessThanOrEqual(0);
+    // ولا يفيض أي تبويب آخر
+    for (const t of ['الرحلة', 'التعلم', 'المبادرة والجلسات', 'الملف', 'السجل']) {
+      await tab(page, t).click();
+      await expect(tab(page, t)).toHaveAttribute('aria-selected', 'true');
+      expect(await over(), t).toBeLessThanOrEqual(0);
+    }
   });
 }
 
@@ -111,7 +122,7 @@ test('admin-core-7: حالة التطبيق المفعّل في الإعدادا
 
 test('admin-core-8: انتهاء الجلسة يعرض سببه فوق الشاشة ويُبقي ما كُتب حتى يُعاد الدخول', async ({ page }) => {
   await setup(page, '#/leaders/participants/p1', { leaders: { 'admin.participant-save': { success: false, code: 'session', message: 'انتهت الجلسة' } } });
-  await page.getByRole('button', { name: 'تعديل البيانات' }).click();
+  await more(page, 'تعديل البيانات');
   const form = page.getByRole('dialog', { name: /تعديل بيانات/ });
   await form.getByLabel('المسمى').fill('مديرة إدارة التميز المؤسسي');
   await form.getByRole('button', { name: 'حفظ' }).click();
@@ -129,6 +140,7 @@ test('admin-core-8: انتهاء الجلسة يعرض سببه فوق الشا�
 
 test('admin-core-9: تغيير حالة المشارك إلى منسحب بتأكيد يسمي أثره', async ({ page }) => {
   const calls = await setup(page, '#/leaders/participants/p1');
+  await tab(page, 'الملف').click();
   await page.getByLabel('الحالة', { exact: true }).selectOption('withdrawn');
   await page.getByRole('button', { name: 'تغيير الحالة' }).click();
   const dlg = page.getByRole('alertdialog');
@@ -193,6 +205,9 @@ test('admin-core-12: ملف المشارك يطلب حقوقه وطلبات خب
   expect(calls.filter((c) => c.action === 'admin.erasures')).toHaveLength(1);
   await page.getByText('سارة الأحمد').first().click();
   await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
+  // كل تبويب يطلب ما يخصه حين يُفتح: الدفع في «الملف»، وطلبات الخبراء في «المبادرة والجلسات»
+  await tab(page, 'الملف').click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.payments')).toMatchObject({ participant_id: 'p1' });
+  await tab(page, 'المبادرة والجلسات').click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-requests')).toMatchObject({ participant_id: 'p1' });
 });
