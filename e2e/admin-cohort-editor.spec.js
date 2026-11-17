@@ -138,18 +138,16 @@ test('«أنشئ له دفعة» من بطاقة البرنامج يبقى عل�
   await expect(wiz.locator('.wiz-source.warn')).toContainText('برنامج الجهة «برنامج سفراء»');
 });
 
-test('جدول الدفعة المثبتة يعرض مراحل نسختها وحدها، وما أسقطه الخادم يُقال (P5)', async ({ page }) => {
+// نافذة «الجدول» أُزيلت (R2a، القرار 23): المواعيد والمدد في تبويب «الرحلة»، ورابط الجدول يفتحه
+test('لا نافذة «الجدول» بعد R2a: رابط الدفعة في الجدول يفتح تبويب «الرحلة» في ملفها', async ({ page }) => {
   const calls = await setup(page);
-  await page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' }).getByRole('button', { name: /^الجدول/ }).click();
-  const dlg = page.getByRole('dialog', { name: 'جدول الدفعة' });
-  await expect(dlg).toContainText('مراحل النسخة 1 المثبتة للدفعة (الإطلاق).');
-  await expect(dlg.locator('tbody tr')).toHaveCount(1);
-  await expect(dlg.locator('tbody tr')).toContainText('مرحلة النسخة الأولى');
-  await expect(dlg).not.toContainText('التأسيس');
-  expect(calls.find((c) => c.action === 'admin.cohort-definition')).toMatchObject({ cohort_id: 'c2' });
-  await dlg.getByLabel('بداية مرحلة النسخة الأولى').fill('2026-10-01');
-  await dlg.getByRole('button', { name: 'حفظ الجدول' }).click();
-  await expect(page.getByRole('status').getByText(/لم تُحفظ مواعيد مرحلة «التأسيس»/)).toBeVisible();
+  const row = page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' });
+  await expect(row.getByRole('button', { name: /^الجدول/ })).toHaveCount(0);
+  await row.getByRole('link', { name: 'الرحلة والمدد' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c2\?view=journey$/);
+  await expect(page.getByRole('tab', { name: 'الرحلة' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('dialog', { name: 'جدول الدفعة' })).toHaveCount(0);
+  expect(calls.some((c) => c.action === 'admin.cohort-save')).toBe(false);
 });
 
 // ── P6: محرر الدفعة بالأقسام ──
@@ -255,10 +253,11 @@ test('Esc مع تعديل يسأل قبل الإغلاق، وبلا تعديل �
   // المثبتة تقرأ رحلتها من نسختها، ودفعة الأفراد مقاعدها ظاهرة في الأساسيات
   await expect(again.locator('.ce-source').first()).toContainText('الرحلة من النسخة 1 المثبتة (الإطلاق).');
   await expect(again.getByLabel('المقاعد')).toHaveValue('20');
-  // الروابط إلى ما يُضبط في نوافذه تغلق المحرر بالسؤال نفسه
-  await again.getByRole('button', { name: 'الجدول', exact: true }).click();
+  // الروابط إلى ما يُضبط في نوافذه تغلق المحرر بالسؤال نفسه، والمواعيد والمدد في تبويب «الرحلة» (لا رابط «الجدول» بعد R2a)
+  await expect(again.getByRole('button', { name: 'الجدول', exact: true })).toHaveCount(0);
+  await again.getByRole('button', { name: 'الرحلة بالتواريخ والمدد' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'إغلاق دون حفظ' }).click();
-  await expect(page.getByRole('dialog', { name: 'جدول الدفعة' })).toBeVisible();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c2\?view=journey$/);
 });
 
 test('الدفعة المثبتة: لا خيار لإلغاء تثبيتها، وتغيير النسخة يُقال صراحة، والعودة إلى برنامجها تعيد نسختها', async ({ page }) => {

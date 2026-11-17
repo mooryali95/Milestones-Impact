@@ -107,9 +107,11 @@ describe('اعتماد المستوى لا يرجع المشارك عن مرحل
 });
 
 describe('جاهزية الدفعة', () => {
-  it('دفعة بأعضاء بلا مستشار ولا نهاية ولا جدول: أربعة بنود ناقصة بأسبابها', () => {
+  // خطة المراحل (R2a) ناجحة بتاريخ البداية: التواريخ تُحسب من المدد، فالجدول الفارغ ليس نقصًا
+  it('دفعة بأعضاء بلا مستشار ولا نهاية ولا جلسات: ثلاثة بنود ناقصة بأسبابها', () => {
     const s = cohortSetup({ cohort: { starts_on: '2026-11-10', ends_on: null, schedule: {}, advisor_expert_id: null }, members: 27 });
-    expect(setupMissing(s)).toBe(4);
+    expect(setupMissing(s)).toBe(3);
+    expect(s.find((x) => x.key === 'schedule')).toMatchObject({ ok: true, where: 'journey' });
     expect(s.find((x) => x.key === 'members')).toMatchObject({ ok: true, detail: '27 في الدفعة (من سُجّل فيها ومن انضم بجهتها)' });
     expect(s.find((x) => x.key === 'period').detail).toContain('بلا تاريخ نهاية');
     expect(s.find((x) => x.key === 'advisor').where).toBe('team');

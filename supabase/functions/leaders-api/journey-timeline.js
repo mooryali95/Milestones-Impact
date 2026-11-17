@@ -13,7 +13,7 @@ import {
 import { daysAr, durationAr, renderJourneyText, stageRules } from './journey.js';
 import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
-import { stageWindows } from './stage-windows.js';
+import { cohortPlan, planDaysOnly } from './stage-windows.js';
 
 // بداية افتراضية لسياق البرنامج: النوافذ تُحسب بالدالة نفسها ثم تُقرأ أيامًا من البداية
 const EPOCH = '2000-01-03';
@@ -71,9 +71,12 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   }
 
   // النوافذ: تواريخ الدفعة إن عُرفت كلها، وإلا نسبية من بداية افتراضية (البرنامج، أو دفعة بلا تاريخ بداية ولا جدول)
-  const real = isCohort ? stageWindows(stages, cohort) : {};
-  const dated = isCohort && stages.every((s) => real[s.key]);
-  const windows = dated ? real : stageWindows(stages, { starts_on: EPOCH });
+  // خطة الدفعة (cohortPlan) مصدر النوافذ والمدد، بقاعدة النهاية الشاملة (القرار 18). الدفعة بلا تاريخ ترسم مددها هي
+  // (days في خطتها) نسبيًا من البداية الافتراضية، لا مدد البرنامج
+  const realPlan = isCohort ? cohortPlan(stages, cohort) : null;
+  const dated = isCohort && stages.every((s) => realPlan.windows[s.key]);
+  const plan = dated ? realPlan : cohortPlan(stages, { starts_on: EPOCH, schedule: isCohort ? planDaysOnly(cohort?.schedule) : {} });
+  const windows = plan.byKey;
   const start = dated ? stages.map((s) => windows[s.key].from).sort()[0] : EPOCH;
   const day = (iso) => daysBetween(start, iso);
   if (isCohort && !dated) base.notice = TIMELINE_AR.no_dates;
@@ -93,7 +96,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   // (distributeSchedule)، فلو حُسبت لابتلعت خانتها ما بعدها ورُسم اليوم والجلسات في غير مرحلتها. خانة بلا إلزامية
   // تأخذ نافذتها محصورة بين نهاية ما قبلها وبداية ما بعدها، والخانات بعدها متتالية لا ترجع إلى الخلف
   const byKey = new Map(stages.map((s) => [s.key, s]));
-  const span = (k) => [day(windows[k].from), day(windows[k].to)];
+  // المدى على المسار بنهاية مفتوحة: من أول يوم إلى اليوم التالي لآخر يوم (next)، فمرحلة بأسبوع تأخذ سبعة أيام من المسار
+  const span = (k) => [day(windows[k].from), day(windows[k].next)];
   const required = (k) => stageRules(byKey.get(k)).mode === 'required';
   for (const slot of slots) {
     const req = slot.stages.filter(required);
@@ -145,8 +149,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   const stageOut = stages.map((s) => {
     const w = windows[s.key];
     const slot = slotOf.get(s.key);
-    const d = Number(s.duration_days) || 0;
-    const days = day(w.to) - day(w.from);
+    const d = w.days;
+    const days = span(s.key)[1] - span(s.key)[0];
     const r = stageRules(s);
     const label = d ? durationAr(d) : renderJourneyText(s.duration_label || '', { reqs, durationDays: d }) || 'آنية';
     const refKey = slot.together && slot.stages[0] !== s.key ? slot.stages[0] : null;
@@ -160,7 +164,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
       lane_at: slot.days ? round(((place(s.key)[0] - slot.from) / slot.days) * 100) : 0,
       lane_width: slot.days ? Math.max(8, round(((place(s.key)[1] - place(s.key)[0]) / slot.days) * 100)) : 100,
       bar: totalDays ? Math.max(4, round((Math.max(days, 1) / totalDays) * 100)) : 100,
-      window: dated ? { from: w.from, to: w.to } : null, window_ar: dated ? (w.from === w.to ? fmtDay(w.from) : `${fmtDay(w.from)} إلى ${fmtDay(w.to)}`) : '',
+      window: dated ? { from: w.from, to: w.to } : null, days_source: w.source, window_ar: dated ? (w.from === w.to ? fmtDay(w.from) : `${fmtDay(w.from)} إلى ${fmtDay(w.to)}`) : '',
       status, status_ar: status ? TIMELINE_STATUS_AR[status] : '', optional: r.mode !== 'required',
       today_ar: status === 'active' ? `اليوم ${fmtDay(t)}، ${left > 0 ? `بقي على نهاية المرحلة ${daysAr(left)}` : 'آخر يوم في المرحلة'}` : '',
       empty: false,
@@ -241,7 +245,9 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   } else {
     for (let k = 1; k * 7 < end; k++) raw.push({ d: k * 7, label: k === 1 ? 'الأسبوع 1' : `الأسبوع ${k}` });
   }
-  raw.push({ d: end, label: dated ? fmtDay(addDays(start, end)) : 'النهاية', edge: true });
+  // آخر يوم في الرحلة شاملًا (القرار 18): اليوم الذي قبل نهاية المسار المفتوحة
+  const endIso = addDays(start, Math.max(0, end - 1));
+  raw.push({ d: end, label: dated ? fmtDay(endIso) : 'النهاية', edge: true });
   const ticks = [];
   for (const x of raw) {
     const at = pos(x.d);
@@ -251,7 +257,6 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   }
 
   // اليوم: في الدفعة الجارية وحدها خط، وقبلها «تبدأ بعد» وبعدها «انتهت الدفعة»
-  const endIso = addDays(start, end);
   const running = dated && t >= start && t <= endIso;
   const todayOut = running ? { at: pos(day(t)), date: t, label: `اليوم ${fmtDay(t)}` } : null;
   const activeStages = stageOut.filter((s) => s.status === 'active');

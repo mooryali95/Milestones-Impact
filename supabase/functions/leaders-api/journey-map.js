@@ -7,7 +7,7 @@
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
 import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { renderJourneyText } from './journey.js';
-import { stageWindows, todayStage } from './stage-windows.js';
+import { cohortPlan, stageWindows, todayStage } from './stage-windows.js';
 import { inProgram } from './logic.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
@@ -46,7 +46,10 @@ export function needsOf(stage) {
 export function journeyMap({ stages, people: all, cohort = null, program = null, today = new Date(), list = false, activity = false }) {
   const people = all.filter((p) => inProgram(p.status));
   const keys = stages.map((s) => s.key);
-  const windows = stageWindows(stages, cohort || {});
+  // خطة الدفعة (cohortPlan): النوافذ والمدة الفعلية لكل مرحلة (مدة الدفعة الخاصة أو مدة النسخة)، فلا تُقرأ duration_days خامًا
+  const plan = cohortPlan(stages, cohort || {});
+  const windows = plan.windows;
+  const daysOf = (s) => plan.byKey[s.key]?.days ?? (Number(s.duration_days) || 0);
   const t = isoDay(today);
   const acc = Object.fromEntries(stages.map((s) => [s.key, { here: 0, done: 0, late: 0, rows: [], reasons: new Map() }]));
   const ms = new Map();
@@ -64,12 +67,12 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
       a.here += 1;
       const entry = stageEntry(j, idx, p.dates || []) || p.created_at || null;
       const days = entry ? Math.max(0, daysBetween(isoDay(entry), t)) : 0;
-      const d = Number(s.duration_days) || 0;
+      const d = daysOf(s);
       // «متأخر» من نافذة الدفعة (R0 «تاريخ واحد»): من تجاوز اليوم نهاية نافذة مرحلته بعد مهلة السماح، أيًا كان يوم دخوله.
       // نافذة بلا مدة ولا جدول مكتوب لا تُعدّ موعدًا. وبلا بداية للدفعة (الدفعة المفتوحة) يبقى الحساب من دخوله بالمدة
       const w = windows[s.key];
       // والدفعة المفتوحة (is_default) مددها نسبية من الدخول ولو كان لها starts_on (القرار 21)، فتبقى على الحساب بالمدة
-      const dated = w && !cohort?.is_default && (d > 0 || !!cohort?.schedule?.[s.key]?.start);
+      const dated = w && !cohort?.is_default && (d > 0 || plan.byKey[s.key]?.source === 'pinned');
       const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
       if (late) a.late += 1;
       const needs = needsOf(j[idx]);
@@ -86,7 +89,7 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   }
   const out = stages.map((s) => {
     const a = acc[s.key];
-    const row = { key: s.key, title: s.title_ar, phase: s.phase || 'qualification', duration_days: Number(s.duration_days) || 0,
+    const row = { key: s.key, title: s.title_ar, phase: s.phase || 'qualification', duration_days: daysOf(s),
       here: a.here, done: a.done, late: a.late, window: windows[s.key] || null };
     // الأسماء لصلاحية «القائمة» وحدها، الأطول مكوثًا أولًا. وبدونها أسباب مجمّعة بلا أسماء (أكثرها أولًا)
     if (list) row.people = a.rows.sort((x, y) => y.days - x.days || String(x.name).localeCompare(String(y.name), 'ar'));

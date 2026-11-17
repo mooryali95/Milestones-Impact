@@ -8,6 +8,10 @@ import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-ti
 import { daysAr, renderJourneyText, stageRules } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo } from '../../supabase/functions/leaders-api/milestones.js';
+import { cohortPlan } from '../../supabase/functions/leaders-api/stage-windows.js';
+import {
+  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, sameSchedule, suggestDays, unitFor,
+} from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
 
 // تبويبا ملف الدفعة، والمختار في العنوان (?view=journey) فيُفتح الرابط عليه ويبقى بعد التحديث
@@ -39,7 +43,8 @@ export function cohortTimeline(def, cohort, today = null) {
   const c = cohort || {};
   const open = !!c.is_default;
   return journeyTimeline({ stages: def?.stages || [], requirements: def?.requirements || [] }, {
-    cohort: { ...c, starts_on: open ? null : c.starts_on || null, schedule: open ? {} : c.schedule || {} },
+    // المفتوحة: مدد خطتها نسبية (cohortPlan يتجاهل تواريخها المثبتة وبدايتها)، فتُرسم المدد الخاصة بها لا مدد البرنامج
+    cohort: { ...c, starts_on: open ? null : c.starts_on || null, schedule: c.schedule || {} },
     sessions: def?.sessions || [], today, title: 'الخط الزمني للدفعة',
   });
 }
@@ -167,3 +172,71 @@ export function journeyKpis(model, lanes, map = null, { msError = false } = {}) 
   }
   return out;
 }
+
+
+// ══ وضع التحرير (R2a): المدة لكل مرحلة، بمعاينة حية من cohortPlan نفسه وأثر من الخادم قبل الحفظ ══
+// لا حساب تاريخ هنا: الخطة الجديدة من planEdit، وتواريخها من cohortPlan، والأثر من admin.cohort-plan (planImpact).
+
+// الدفعة كما تُحسب خطتها: صفها من قائمة الدفعات وفوقه خطتها الحالية كما قرأها التبويب أو حفظها (cohort_plan)
+export const planCohort = (c, cp) => ({ ...(c || {}), ...(cp || {}) });
+const liveStages = (def) => [...(def?.stages || [])].filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+
+/** الخطة في المسودة: الجديدة بعد تعديل المدير، وصف لكل مرحلة (المدة ومصدرها ومدة البرنامج والتثبيت)، وعدد التعديلات
+ * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean } | null }} o */
+export function planDraft({ def, cohort, edit = null }) {
+  const stages = liveStages(def);
+  const saved = cohort?.schedule || {};
+  const r = edit ? planEdit({ stages, schedule: saved, edit, cohort }) : { schedule: saved, errors: [] };
+  const plan = cohortPlan(stages, { ...cohort, schedule: r.schedule });
+  const was = cohortPlan(stages, { ...cohort, schedule: saved });
+  const rows = {};
+  for (const x of plan.stages) {
+    const before = was.byKey[x.key];
+    rows[x.key] = {
+      ...x, pinned: x.source === 'pinned', source_ar: x.source === 'cohort' ? `معدّلة: البرنامج ${planDurationAr(x.program_days)}` : PLAN_SOURCE_AR[x.source],
+      days_ar: planDurationAr(x.days), edited: !sameSchedule(saved[x.key] || {}, r.schedule[x.key] || {}),
+      was_ar: before && before.days !== x.days ? `كانت ${planDurationAr(before.days)}` : '',
+    };
+  }
+  const edits = stages.filter((s) => rows[s.key]?.edited).length;
+  return {
+    schedule: r.schedule, errors: r.errors, rows, edits, issues: plan.issues,
+    pinned: stages.filter((s) => rows[s.key]?.pinned).length,
+    changed: plan.stages.filter((x) => x.source === 'cohort').length,
+    cohort: { ...cohort, schedule: r.schedule },
+  };
+}
+
+// العداد: خطوة بوحدته (يوم أو أسبوع)، والأسبوع يقفز إلى الأسبوع التام التالي أو السابق، ولا ينزل عن حد المرحلة
+export function stepDays(days, unit, dir, min = 0, max = 365) {
+  const d = Math.max(0, Math.round(Number(days) || 0));
+  const step = PLAN_UNITS[unit] || 1;
+  let n = step === 1 ? d + dir : dir > 0 ? (Math.floor(d / step) + 1) * step : (Math.ceil(d / step) - 1) * step;
+  if (n < min) n = min;
+  return Math.min(max, n);
+}
+// قيمة الحقل بوحدته، والأيام من قيمته: الأسبوع 7 أيام (القرار 9)، وكسر الأسبوع بمنزلة عشرية واحدة
+export const inUnit = (days, unit) => (unit === 'weeks' ? Math.round((Number(days) / 7) * 10) / 10 : Number(days));
+export const fromUnit = (v, unit) => {
+  const n = Number(String(v).replace(/[٠-٩]/g, (x) => String(x.charCodeAt(0) - 1632)));
+  if (!Number.isFinite(n)) return null;
+  return Math.round(unit === 'weeks' ? n * 7 : n);
+};
+export { planLock, suggestDays, unitFor, impactLines };
+// جسم المعاينة والحفظ: المدد المعدّلة وحدها، و«حرّر التواريخ لتتبع المدد»، وما بُنيت عليه المسودة
+export const planBody = (cohort, edit, op) => ({
+  cohort_id: cohort.id, op, days: edit?.days || {}, ...(edit?.follow ? { follow: true } : {}),
+  ...(cohort.updated_at ? { base_updated_at: cohort.updated_at } : {}),
+});
+// سطور السجل: من حفظ ومتى وماذا غيّر، بلا أسماء مشاركين
+export function historyRows(list) {
+  return (list || []).map((r) => {
+    // ما تغيّرت مدته وحده، لا ما تحرك تاريخه لأن ما قبله طال أو قصر
+    const n = (r.summary?.changes || []).filter((x) => x.before !== x.after).length;
+    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : !n ? 'حفظ الخطة بلا تغيير في المدد' : r.summary?.changes ? (n === 2 ? 'مرحلتان تغيّرت مدتهما' : `${countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} ${n === 1 ? 'تغيّرت مدتها' : 'تغيّرت مددها'}`) : 'حفظ الخطة';
+    const sh = r.summary?.shift ? `، ${r.summary.shift > 0 ? 'تأخرت' : 'تقدمت'} النهاية ${daysAr(Math.abs(r.summary.shift))}` : '';
+    return { id: r.id, at: r.at, by: r.actor || '', text: `${what}${sh}`, undo: r.action === 'cohort.plan-undo' };
+  });
+}
+// سطور نافذة الأثر بتاريخ اللوحة
+export const impactAr = (impact) => impactLines(impact, dateOnly);

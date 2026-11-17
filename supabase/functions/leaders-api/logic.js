@@ -8,6 +8,7 @@ import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
+import { planStages } from './stage-windows.js';
 import { cleanStageModes } from './groups.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
@@ -1696,11 +1697,13 @@ export function cleanDelivery(delivery, requirements) {
 }
 
 // تعريف الرحلة لدفعة: لقطة النسخة المثبتة أو صفوف البرنامج الحالية، ثم تخصيص الدفعة.
+// والمدة الخاصة بالدفعة (days في خطتها، R2a): duration_days يُكتب بالمدة الفعلية (planStages)، فيصح نص {duration} عند
+// المشارك وتقرأ المعالم والخريطة المدة نفسها التي يحسبها cohortPlan. نص المدة الثابت (بلا {duration}) لا يُمس
 export function cohortDefinition({ live, version, cohort }) {
   const base = version?.data || live || { stages: [], requirements: [] };
   const delivery = cohort?.delivery || {};
   return {
-    stages: (base.stages || []).filter((s) => s.active !== false),
+    stages: planStages((base.stages || []).filter((s) => s.active !== false), cohort?.schedule),
     requirements: (base.requirements || []).filter((r) => r.active !== false).map((r) => applyDelivery(r, delivery[r.code])),
   };
 }

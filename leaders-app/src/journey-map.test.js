@@ -22,14 +22,15 @@ const finished = () => STAGES.map((s) => ({ key: s.key, stage_mode: 'required', 
 const TODAY = new Date('2026-11-11T10:00:00Z');
 
 describe('النوافذ وموقع الدفعة على جدولها', () => {
+  // النهاية شاملة (القرار 18، R2a): يومان من 1 نوفمبر ينتهيان 2 نوفمبر وما بعدهما يبدأ 3 نوفمبر. والمرحلة بلا مدة نقطة لا تأخذ يومًا
   it('النوافذ متتابعة بالمدد من بداية الدفعة، وجدول الدفعة يغلب', () => {
     const w = stageWindows(STAGES, { starts_on: '2026-11-01' });
     expect(w.profile).toEqual({ from: '2026-11-01', to: '2026-11-01' });
-    expect(w.approval).toEqual({ from: '2026-11-01', to: '2026-11-03' });
-    expect(w.training).toEqual({ from: '2026-11-03', to: '2026-11-07' });
+    expect(w.approval).toEqual({ from: '2026-11-01', to: '2026-11-02' });
+    expect(w.training).toEqual({ from: '2026-11-03', to: '2026-11-06' });
     const fixed = stageWindows(STAGES, { starts_on: '2026-11-01', schedule: { training: { start: '2026-11-10', end: '2026-11-14' } } });
     expect(fixed.training).toEqual({ from: '2026-11-10', to: '2026-11-14' });
-    expect(fixed.report).toEqual({ from: '2026-11-14', to: '2026-11-21' });
+    expect(fixed.report).toEqual({ from: '2026-11-15', to: '2026-11-21' });
     expect(stageWindows(STAGES, {})).toEqual({});
   });
   it('اليوم عند آخر مرحلة بدأت نافذتها، ولا موقع قبل البداية ولا بعد نهاية الرحلة', () => {

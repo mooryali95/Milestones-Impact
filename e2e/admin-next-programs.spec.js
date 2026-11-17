@@ -136,7 +136,7 @@ test('الدفعة غير المثبتة: شارتها وزر «ثبّت على�
   await expect(dlg).toContainText('مراحل تغيّرت: التمهيد');
   await expect(dlg).toContainText('حُذف: تأمل قديم');
   await expect(dlg).toContainText('3 أعضاء لهم تقدم في متطلبات تختفي من الرحلة');
-  await expect(dlg).toContainText('تُسقط مواعيد مراحل ليست في النسخة: التطبيق.');
+  await expect(dlg).toContainText('تُسقط من خطة الدفعة مراحل ليست في النسخة: التطبيق.');
   await dlg.getByRole('button', { name: 'ثبّت الدفعة' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-upgrade' && c.confirm)).toMatchObject({ id: 'c0', version_id: 'v2' });
 });
@@ -177,7 +177,7 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   const card = page.locator('.cohort-page');
   // اسم الدفعة عنوان واحد في ملفها: الخريطة داخله لا تكرره (embedded)
   await expect(card.getByRole('heading', { name: 'سفراء 2026' })).toBeVisible();
-  // المدة مضبوطة، والمستشار والجدول ناقصان ولكل منهما زر يفتح نافذته
+  // المدة مضبوطة، والمستشار ناقص وله زر يفتح نافذته. وخطة المراحل ناجحة بتاريخ البداية (R2a): تُحسب من المدد بلا جدول مكتوب
   await expect(card.locator('.cohort-setup li.ok', { hasText: 'مدة الدفعة' })).toHaveCount(1);
   const advisor = card.locator('.cohort-setup li.no', { hasText: 'المستشار والفريق' });
   await expect(advisor.getByRole('button', { name: 'الفريق والمجموعات' })).toBeVisible();
@@ -188,8 +188,11 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   // نوعها بجملة، والالتحاق تلقائي برابط الجهة، والإعدادات كلها في لوحة واحدة
   await expect(card.locator('.cohort-kind')).toContainText('يدخلها تلقائيًا كل من يسجّل برابط الجهة');
   await expect(card.locator('.cohort-setup li', { hasText: 'الالتحاق' })).toContainText('دون أي إلحاق يدوي');
-  for (const t of ['الأساسيات', 'الجدول', 'الرؤية', 'رحلة البرنامج', 'الشهادة', 'التقييم الختامي', 'الجهة']) await expect(card.locator('.cohort-tile', { hasText: t }).first()).toBeVisible();
-  await card.locator('.cohort-setup li.no', { hasText: 'جدول المراحل' }).getByRole('button', { name: 'الجدول' }).click();
+  for (const t of ['الأساسيات', 'الرحلة', 'الرؤية', 'رحلة البرنامج', 'الشهادة', 'التقييم الختامي', 'الجهة']) await expect(card.locator('.cohort-tile', { hasText: t }).first()).toBeVisible();
+  // لا بلاطة «الجدول» ولا نافذته (القرار 23): المواعيد والمدد في تبويب «الرحلة»
+  await expect(card.locator('.cohort-tile', { hasText: /^الجدول/ })).toHaveCount(0);
+  await expect(card.locator('.cohort-setup li.ok', { hasText: 'خطة المراحل' })).toContainText('تواريخ المراحل من بداية الدفعة ومدد البرنامج');
+  await advisor.getByRole('button', { name: 'الفريق والمجموعات' }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();

@@ -31,6 +31,7 @@ import * as Z from './certificates.ts';
 import * as V from './activities.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
+import * as CP from './cohort-plan.ts';
 import * as F from './final.ts';
 import * as KT from './katon.ts';
 import * as H from './hall.ts';
@@ -632,6 +633,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.program-restore': (a, b) => A.superWriter(a, G.programRestore, b),
   'admin.program-compare': (_a, b) => G.programCompare(b),
   'admin.cohort-save': (a, b) => A.writer(a, G.cohortSave, b),
+  // خطة الدفعة (R2a): المعاينة والسجل قراءة لكل مدير، والحفظ والتراجع (وكل op غيرهما) للكاتب وحده كـadmin.cohort-save
+  'admin.cohort-plan': (a, b) => (b?.op === 'preview' || b?.op === 'history' ? CP.cohortPlanAction(a, b) : A.writer(a, CP.cohortPlanAction, b)),
   'admin.milestones': (_a, b) => G.milestones(b),
   'admin.hall': (_a, b) => H.adminState(b),
   'admin.demo-open': (a, b, ctx) => A.writer(a, (x, y) => D.open(x, y, ctx), b),

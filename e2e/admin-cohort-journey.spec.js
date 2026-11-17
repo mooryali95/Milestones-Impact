@@ -2,11 +2,13 @@
 // ممرات تحت بعضها، والمعالم بمواعيدها ومصدرها، وأعداد الناس من خريطة الرحلة. للقراءة فقط. الخلفية مُحاكاة، واليوم 16 نوفمبر 2026.
 // COHORT_JOURNEY_SHOTS: مجلد تُحفظ فيه لقطتا التبويب بعرضي 1440 و390.
 import { test, expect } from '@playwright/test';
+import { cohortPlan } from '../supabase/functions/leaders-api/stage-windows.js';
+import { planEdit, planImpact, sameSchedule } from '../supabase/functions/leaders-api/cohort-plan.js';
 
 const BASE = 'http://localhost:4303/';
 const SHOTS = process.env.COHORT_JOURNEY_SHOTS || '';
 // اللقطات بكثافة الشاشات الحديثة، والفحص العادي بالكثافة الافتراضية
-test.use({ deviceScaleFactor: SHOTS ? 2 : 1 });
+test.use({ deviceScaleFactor: SHOTS || process.env.R2A_SHOTS ? 2 : 1 });
 const stages = [
   { key: 'profile', title_ar: 'الملف الشخصي', phase: 'admission', sort: 1, duration_days: 0, duration_label: 'دقائق', active: true },
   { key: 'assessment', title_ar: 'تحديد المستوى', phase: 'admission', sort: 2, duration_days: 0, duration_label: '12 دقيقة', active: true },
@@ -51,8 +53,34 @@ const journeyMap = {
   milestones: [{ id: 'm1', title: 'نهاية التدريب', due: '2026-11-19', done: 0, late: 0 }],
 };
 
+// خطة الدفعة على «الخادم» المحاكى (admin.cohort-plan): المنطق المشترك نفسه (planEdit وplanImpact)، وأعضاء في التدريب
+const PLAN_PEOPLE = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}`, at: 'training', stagesDone: ['profile', 'assessment', 'approval'], records: {} }));
+function planServer(state, b) {
+  const c = { ...cohorts.find((x) => x.id === b.cohort_id), schedule: state.schedule, updated_at: state.updated_at };
+  const live = stages.filter((s) => s.active !== false);
+  const out = (schedule) => { const p = cohortPlan(live, { ...c, schedule }); return { schedule, start: p.start, end: p.end, total_days: p.total_days, stages: p.stages, issues: p.issues }; };
+  if (b.op === 'history') return { success: true, history: state.history, can_undo: state.history[0]?.action === 'cohort.plan' };
+  if (b.op === 'undo') {
+    const last = state.history[0];
+    if (!last || last.action !== 'cohort.plan') return { success: false, message: 'لا حفظ للخطة يُتراجع عنه.' };
+    state.schedule = last.before;
+    state.updated_at = `u${state.history.length + 1}`;
+    state.history.unshift({ id: `h${state.history.length + 1}`, action: 'cohort.plan-undo', actor: 'a@x', at: '2026-11-16T09:10:00Z', summary: null });
+    return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule) };
+  }
+  const r = planEdit({ stages: live, schedule: c.schedule, edit: { days: b.days || {}, follow: b.follow }, cohort: c });
+  const impact = planImpact({ stages: live, before: c.schedule, after: r.schedule, cohort: c, milestones, people: PLAN_PEOPLE, today: '2026-11-16T09:00:00Z', cutoff: '2026-11-01' });
+  if (b.op === 'preview') return { success: true, preview: true, locked: null, changed: !sameSchedule(c.schedule, r.schedule), plan: out(r.schedule), impact };
+  const before = state.schedule;
+  state.schedule = r.schedule;
+  state.updated_at = `u${state.history.length + 1}`;
+  state.history.unshift({ id: `h${state.history.length + 1}`, action: 'cohort.plan', actor: 'a@x', at: '2026-11-16T09:05:00Z', before,
+    summary: { changes: impact.changes.map((x) => ({ key: x.key, before: x.before.days, after: x.after.days })), shift: impact.end.shift } });
+  return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule), impact };
+}
+
 // queue: ردود تُستهلك بالترتيب لإجراء بعينه قبل رده المعتاد (فشل ثم نجاح عند «أعد المحاولة»)
-async function setup(page, width = 1440, queue = {}) {
+async function setup(page, width = 1440, queue = {}, plan = { schedule: {}, updated_at: 'u0', history: [] }) {
   const calls = [];
   await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
   await page.clock.setFixedTime(new Date('2026-11-16T09:00:00Z'));
@@ -64,7 +92,8 @@ async function setup(page, width = 1440, queue = {}) {
       'admin.orgs': { success: true, orgs: [], unassigned: {} },
       'admin.participants': { success: true, participants: [] },
       'admin.programs': { success: true, programs, cohorts, organizations: [] },
-      'admin.cohort-definition': definition,
+      'admin.cohort-definition': { ...definition, cohort_plan: { schedule: plan.schedule, starts_on: cohorts.find((x) => x.id === b.cohort_id)?.starts_on || null, is_default: !!cohorts.find((x) => x.id === b.cohort_id)?.is_default, status: 'running', program_version_id: cohorts.find((x) => x.id === b.cohort_id)?.program_version_id || null, updated_at: plan.updated_at } },
+      'admin.cohort-plan': b.action === 'admin.cohort-plan' ? planServer(plan, b) : null,
       'admin.milestones': { success: true, program_id: 'pa', milestones },
       'admin.cohort-journey': { success: true, journey_map: journeyMap },
       'admin.catalog': { success: true, program_id: 'pa', journey_stages: stages, stage_requirements: requirements, instruments: [], locked_instruments: [], questions: [], grid_cells: [], level_rules: [], placement_model: [{ id: 1 }], tracks: [], track_stats: {} },
@@ -77,7 +106,7 @@ async function setup(page, width = 1440, queue = {}) {
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
-  return calls;
+  return Object.assign(calls, { plan });
 }
 const openCohort = (page, name = 'دفعة نوفمبر') => page.locator('.data-table tbody tr', { hasText: name }).getByRole('button', { name, exact: true }).click();
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
@@ -155,7 +184,8 @@ test('الحاسوب 1440: الرأس والمؤشرات والخط والبطا
   // بطاقة التدريب: النافذة ومصدرها والمدة والحال والأنشطة الظاهرة والناس والمعلم بموعده المحسوب
   const training = stagesSec.getByRole('article', { name: 'التدريب' });
   await expect(training.locator('.cj-dur')).toHaveText('أسبوعان');
-  await expect(training.locator('.cj-window')).toContainText('5 نوفمبر إلى 19 نوفمبر');
+  // النهاية شاملة (القرار 18، R2a): أسبوعان من 5 نوفمبر ينتهيان 18 نوفمبر
+  await expect(training.locator('.cj-window')).toContainText('5 نوفمبر إلى 18 نوفمبر');
   await expect(training.locator('.cj-window')).toContainText('محسوبة من بداية الدفعة ومدد المراحل');
   await expect(training.locator('.cj-state')).toHaveText('جارية');
   await expect(training).toContainText('نشاطان، الظاهر منها 1');
@@ -164,7 +194,7 @@ test('الحاسوب 1440: الرأس والمؤشرات والخط والبطا
   await expect(training).toContainText('2 تجاوز موعدها');
   const ms = training.getByRole('list', { name: 'معالم التدريب' });
   await expect(ms).toContainText('نهاية التدريب');
-  await expect(ms).toContainText('19 نوفمبر 2026');
+  await expect(ms).toContainText('18 نوفمبر 2026');
   await expect(ms).toContainText('محسوب من مدد المراحل');
   const ojt = stagesSec.getByRole('article', { name: 'التوجيه على رأس العمل' });
   await expect(ojt).toContainText('تبدأ مع «التدريب»');
@@ -238,4 +268,117 @@ test('فشل القراءة يُقال صراحة: المعالم وأعداد �
   await expect(panel.locator('.cj-kpis')).toContainText('3 معالم');
   await expect(panel.getByRole('alert')).toHaveCount(0);
   expect(calls.filter((c) => c.action === 'admin.milestones')).toHaveLength(2);
+});
+
+// ══ R2a: تعديل مدة مرحلة لهذه الدفعة، بمعاينة حية ونافذة أثر من الخادم ثم حفظ وتراجع ══
+// R2A_SHOTS: مجلد تُحفظ فيه لقطتا وضع التحرير ونافذة الأثر بعرضي 1440 و390 (حدود الشاشة وحدها)
+const R2A = process.env.R2A_SHOTS || '';
+for (const width of [1440, 390]) {
+  test(`تعديل المدة (${width}): العداد يزيح ما بعده في المعاينة، ونافذة الأثر قبل الحفظ، ثم «حُفظ. تراجع» والسجل`, async ({ page }) => {
+    const calls = await setup(page, width);
+    await openCohort(page);
+    await page.getByRole('tab', { name: 'الرحلة' }).click();
+    const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+    await expect(panel.locator('.cj-planbar')).toContainText('كل المدد من البرنامج');
+    await panel.getByRole('button', { name: 'عدّل المدد' }).click();
+    const training = panel.getByRole('article', { name: 'التدريب' });
+    const ctl = training.getByRole('group', { name: 'مدة التدريب' });
+    // الوحدة أسابيع لأن المدة أسبوعان تامان، والزيادة أسبوع تام (القرار 9)
+    await expect(ctl.getByRole('combobox', { name: 'وحدة مدة التدريب' })).toHaveValue('weeks');
+    await expect(ctl.getByRole('textbox')).toHaveValue('2');
+    await ctl.getByRole('button', { name: 'زد مدة التدريب' }).click();
+    await expect(ctl).toContainText('3 أسابيع');
+    await expect(ctl).toContainText('معدّلة: البرنامج أسبوعان');
+    // المعاينة الحية قبل الحفظ: نافذة التدريب الجديدة شاملة، والدعم بعد أطول المجموعة (التوجيه 28 يومًا) كما هو
+    await expect(training.locator('.cj-window')).toContainText('5 نوفمبر إلى 25 نوفمبر');
+    await expect(panel.locator('.cj-savebar')).toContainText('تعديل واحد غير محفوظ');
+    expect(calls.filter((c) => c.action === 'admin.cohort-plan')).toHaveLength(0);
+    // التوجيه أطول من التدريب: نزيده أسبوعًا فيُزاح الدعم وتتأخر نهاية الرحلة
+    const ojt = panel.getByRole('article', { name: 'التوجيه على رأس العمل' }).getByRole('group', { name: 'مدة التوجيه على رأس العمل' });
+    await ojt.getByRole('button', { name: 'زد مدة التوجيه على رأس العمل' }).click();
+    await expect(panel.getByRole('article', { name: 'الدعم والتمكين' }).locator('.cj-window')).toContainText('10 ديسمبر');
+    await expect(panel.locator('.cj-savebar')).toContainText('تعديلان غير محفوظين');
+    expect(await noOverflow(page)).toBe(true);
+    if (R2A) {
+      await training.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${R2A}/r2a-edit-${width}.png` });
+    }
+    await panel.getByRole('button', { name: 'راجع واحفظ' }).click();
+    const dlg = page.getByRole('dialog', { name: 'راجع أثر التعديل قبل الحفظ' });
+    await expect(dlg).toContainText('التدريب: أسبوعان إلى 3 أسابيع');
+    await expect(dlg).toContainText('التوجيه على رأس العمل: 4 أسابيع إلى 5 أسابيع');
+    await expect(dlg).toContainText('تتأخر نهاية الرحلة سبعة أيام');
+    await expect(dlg).toContainText('يقف الآن في المراحل المعدّلة: التدريب 7');
+    await expect(dlg).toContainText('البريد: لن يُرسل شيء الآن');
+    expect(calls.filter((c) => c.action === 'admin.cohort-plan').map((c) => [c.op, c.days])).toEqual([['preview', { training: 21, ojt: 35 }]]);
+    expect(await noOverflow(page)).toBe(true);
+    if (R2A) await page.screenshot({ path: `${R2A}/r2a-impact-${width}.png` });
+    await dlg.getByRole('button', { name: 'احفظ الخطة' }).click();
+    await expect(dlg).toBeHidden();
+    await expect(page.getByRole('status').getByText('حُفظت خطة الدفعة')).toBeVisible();
+    expect(calls.plan.schedule).toEqual({ training: { days: 21 }, ojt: { days: 35 } });
+    expect(calls.find((c) => c.op === 'save')).toMatchObject({ base_updated_at: 'u0' });
+    await expect(panel.locator('.cj-savebar')).toHaveCount(0);
+    await expect(panel.locator('.cj-planbar')).toContainText('مرحلتان بمدة خاصة بهذه الدفعة');
+    await expect(training.locator('.cj-tag.own')).toHaveText('معدّلة لهذه الدفعة');
+    await expect(training.locator('.cj-window')).toContainText('5 نوفمبر إلى 25 نوفمبر');
+    // السجل ثم التراجع: الخطة كما كانت قبل الحفظ
+    await panel.getByRole('button', { name: 'سجل الخطة' }).click();
+    await expect(panel.locator('.cj-history')).toContainText('مرحلتان تغيّرت مدتهما');
+    await panel.locator('.cj-saved').getByRole('button', { name: 'تراجع' }).click();
+    await expect(page.getByRole('status').getByText('تراجعت الخطة')).toBeVisible();
+    expect(calls.plan.schedule).toEqual({});
+    await expect(training.locator('.cj-window')).toContainText('5 نوفمبر إلى 18 نوفمبر');
+    await expect(panel.locator('.cj-planbar')).toContainText('كل المدد من البرنامج');
+  });
+}
+
+test('العداد بالأيام، و«ارجع لمدة البرنامج»، و«ألغِ» يعيد المعاينة بلا طلب للخادم', async ({ page }) => {
+  const calls = await setup(page, 1440);
+  await openCohort(page);
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await panel.getByRole('button', { name: 'عدّل المدد' }).click();
+  const ctl = panel.getByRole('group', { name: 'مدة اعتماد المستوى' });
+  await expect(ctl.getByRole('combobox')).toHaveValue('days');
+  await ctl.getByRole('textbox').fill('5');
+  await expect(ctl).toContainText('5 أيام');
+  await expect(panel.getByRole('article', { name: 'التدريب' }).locator('.cj-window')).toContainText('7 نوفمبر');
+  await ctl.getByRole('button', { name: 'ارجع لمدة البرنامج' }).click();
+  await expect(ctl).toContainText('من البرنامج');
+  await ctl.getByRole('button', { name: 'زد مدة اعتماد المستوى' }).click();
+  await panel.locator('.cj-savebar').getByRole('button', { name: 'ألغِ' }).click();
+  await expect(panel.getByRole('article', { name: 'التدريب' }).locator('.cj-window')).toContainText('5 نوفمبر إلى 18 نوفمبر');
+  await expect(panel.locator('.cj-plan')).toHaveCount(0);
+  expect(calls.filter((c) => c.action === 'admin.cohort-plan')).toHaveLength(0);
+});
+
+test('الدفعة المفتوحة غير المثبتة: لا تحرير، والسبب مكتوب (القرار 21)', async ({ page }) => {
+  await setup(page, 1440);
+  await openCohort(page, 'الدفعة المفتوحة');
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await expect(panel.locator('.cj-planbar')).toContainText('لا تُعدَّل قبل تثبيتها على نسخة من برنامجها');
+  await expect(panel.getByRole('button', { name: 'عدّل المدد' })).toHaveCount(0);
+});
+
+test('الدفعة الموزعة سابقًا: «حرّر التواريخ لتتبع المدد» يحول المثبت إلى مدد، والعداد مقفل قبله', async ({ page }) => {
+  const plan = { schedule: { approval: { start: '2026-11-02', end: '2026-11-04' }, training: { start: '2026-11-05', end: '2026-11-21' } }, updated_at: 'u0', history: [] };
+  const calls = await setup(page, 1440, {}, plan);
+  await openCohort(page);
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await expect(panel.locator('.cj-pinned')).toContainText('مرحلتان مثبتتان بتاريخ');
+  await panel.getByRole('button', { name: 'حرّر التواريخ لتتبع المدد' }).click();
+  // التدريب مثبت 17 يومًا فيصير مدة 17 يومًا خاصة بالدفعة، والاعتماد بطول البرنامج فيعود إليه، والتواريخ لا تتحرك
+  const training = panel.getByRole('article', { name: 'التدريب' });
+  await expect(training.getByRole('group', { name: 'مدة التدريب' })).toContainText('17 يومًا');
+  await expect(training.locator('.cj-window')).toContainText('5 نوفمبر إلى 21 نوفمبر');
+  await panel.getByRole('button', { name: 'راجع واحفظ' }).click();
+  const dlg = page.getByRole('dialog', { name: 'راجع أثر التعديل قبل الحفظ' });
+  await expect(dlg).toContainText('لا تغيير في المدد أو التواريخ');
+  await dlg.getByRole('button', { name: 'احفظ الخطة' }).click();
+  await expect(dlg).toBeHidden();
+  expect(calls.plan.schedule).toEqual({ training: { days: 17 } });
+  expect(calls.find((c) => c.op === 'save')).toMatchObject({ follow: true });
 });

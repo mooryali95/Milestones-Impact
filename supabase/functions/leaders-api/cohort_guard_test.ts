@@ -5,6 +5,7 @@ import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db, Fail } = await import('./core.ts');
 const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups, cohortDefinitionFor, cohortGroups, journeyDefinition } = await import('./programs.ts');
+const { cohortPlanAction } = await import('./cohort-plan.ts');
 
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
@@ -285,14 +286,16 @@ Deno.test('دفعة مثبتة على نسخة تختلف عن الحي: تعر�
   } finally { w.restore(); }
 });
 
-Deno.test('جدول الدفعة المثبتة يُحفظ بمراحل النسخة، وما ليس منها يُسقط برسالة لا بصمت', async () => {
+// خطة الدفعة كاتبها الوحيد admin.cohort-plan (R2a، القرار 23): cohortSave يرفض schedule، والخطة تُحفظ بمراحل النسخة
+Deno.test('خطة الدفعة المثبتة تُحفظ بمراحل النسخة من admin.cohort-plan، وcohortSave يرفض schedule', async () => {
   const w = pinned();
   try {
-    const r: any = await cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01', end: '2026-10-01' }, s1: { start: '2026-09-01' }, empty: { start: '' } } });
-    assertEquals(w.tables.cohorts[0].schedule, { s9: { start: '2026-09-01', end: '2026-10-01' } });
-    assertEquals(r.schedule_dropped, 'لم تُحفظ مواعيد مرحلة «التمهيد»، لأنها ليست من مراحل برنامج الدفعة أو نسختها المثبتة. بقية الجدول حُفظ.');
-    const ok: any = await cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01' } } });
-    assertEquals(ok.schedule_dropped, undefined);
+    const e = await failOf(() => cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01' } } }));
+    assertEquals(e.code, 'use_cohort_plan');
+    const bad = await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { s1: 5 } }));
+    assertEquals(bad.code, 'plan_invalid');
+    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { s9: 5 } });
+    assertEquals(w.tables.cohorts[0].schedule, { s9: { days: 5 } });
     // وضع المراحل والمجموعات من التعريف نفسه
     await cohortSave(admin, { id: C1, stage_modes: { s9: 'groups', s1: 'groups' } });
     assertEquals(w.tables.cohorts[0].stage_modes, { s9: 'groups' });
@@ -302,13 +305,13 @@ Deno.test('جدول الدفعة المثبتة يُحفظ بمراحل النس
   } finally { w.restore(); }
 });
 
-Deno.test('موعد مرحلة موقوفة في النسخة يبقى عند حفظ الجدول، ولا يُعد مُسقطًا', async () => {
+Deno.test('موعد مرحلة موقوفة في النسخة يبقى عند حفظ الخطة، ولا يُعد مُسقطًا', async () => {
   const w = pinned();
   try {
     (w.tables.program_versions[0].data as any).stages.push({ key: 's8', title_ar: 'مرحلة موقوفة', sort: 2, active: false, rules: {} });
-    const r: any = await cohortSave(admin, { id: C1, schedule: { s9: { start: '2026-09-01' }, s8: { start: '2026-10-01' } } });
-    assertEquals(w.tables.cohorts[0].schedule, { s9: { start: '2026-09-01' }, s8: { start: '2026-10-01' } });
-    assertEquals(r.schedule_dropped, undefined);
+    w.tables.cohorts[0].schedule = { s8: { start: '2026-10-01' } };
+    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { s9: 4 } });
+    assertEquals(w.tables.cohorts[0].schedule, { s8: { start: '2026-10-01' }, s9: { days: 4 } });
   } finally { w.restore(); }
 });
 

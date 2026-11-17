@@ -60,8 +60,8 @@ describe('الممرات والبطاقات', () => {
     const w = stageWindows(live, cohort);
     const tr = lanes.phases[1].groups[0].stages[0];
     expect(model.stages.find((s) => s.key === 'training').window).toEqual(w.training);
-    expect(w.training).toEqual({ from: '2026-11-05', to: '2026-11-19' });
-    expect(tr.window_ar).toBe('5 نوفمبر إلى 19 نوفمبر');
+    expect(w.training).toEqual({ from: '2026-11-05', to: '2026-11-18' });
+    expect(tr.window_ar).toBe('5 نوفمبر إلى 18 نوفمبر');
     expect(tr.window_source).toBe('plan');
     expect(tr.window_source_ar).toBe('محسوبة من بداية الدفعة ومدد المراحل');
     expect(tr.status).toBe('active');

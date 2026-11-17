@@ -161,7 +161,8 @@ for (const width of [1440, 390]) {
       await expect(tl.locator('.jt-desk')).toBeHidden();
       const training = tl.locator('.jt-m-stage', { hasText: 'التدريب' }).first();
       await expect(training.locator('details')).toHaveAttribute('open', '');
-      await expect(training).toContainText('اليوم 16 نوفمبر، بقي على نهاية المرحلة ثلاثة أيام');
+      // النهاية شاملة (القرار 18، R2a): التدريب ينتهي 18 نوفمبر
+      await expect(training).toContainText('اليوم 16 نوفمبر، بقي على نهاية المرحلة يومان');
       await expect(training.locator('.jt-chip.tbd')).toContainText('يُحدد لاحقًا');
       expect(await noOverflow(page)).toBe(true);
       await shot(page, 'cohort', tl);

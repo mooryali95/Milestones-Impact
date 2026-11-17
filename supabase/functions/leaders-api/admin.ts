@@ -10,6 +10,7 @@ import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
+import { PLAN_ACTIONS, planCutoff, planDays } from './cohort-plan.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
@@ -1572,10 +1573,15 @@ export async function lateMilestoneNotices(limit = 200) {
   let n = 0;
   // يوم الحارس: R0_DATED_SINCE، أو أحدث منه من البيئة إن تأخر النشر (cutoffFrom لا يقبل أقدم منه)
   const cutoff = cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF'));
+  // وحارس الخطة (R2a): يوم آخر حفظ أو تراجع لخطة كل دفعة (admin.cohort-plan في السجل). تقصير مدة يجعل مواعيد في الماضي،
+  // فما صار متأخرًا بالتعديل لا يُرسل عنه، وما يحل موعده بعد الحفظ يُرسل كالمعتاد
+  const { data: planRows } = await db.from('audit_log').select('entity_id, created_at').in('action', [...PLAN_ACTIONS]).order('created_at', { ascending: false }).limit(1000);
+  const planDay: Record<string, string> = planDays(planRows || []);
   for (const p of people || []) {
     const j: any = await journeyFor(p, { lite: true }).catch(() => null);
+    const since = planCutoff(cutoff, planDay[j?.def?.cohort?.id || '']);
     // حارس البريد (lateNoticeAllowed، القرار 19): ما صار مؤرخًا بنافذة مرحلته وتأخر قبل النشر لا يُرسل عنه، ويبقى ظاهرًا متأخرًا
-    for (const m of (j?.milestones || []).filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS, cutoff))) {
+    for (const m of (j?.milestones || []).filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS, since))) {
       const saved = await OB.record(p.id, { code: 'milestone_late', ref: String(m.id || m.key), ...RULES.milestone_late({ title: m.title_ar || m.title, late_days: m.late_days }) });
       if (saved) n += 1;
     }

@@ -10,7 +10,6 @@ import { COHORT_STATUS } from '../methodology.js';
 import CohortEditor from './CohortEditor.jsx';
 import { CertOverride } from '../cert.jsx';
 import { Empty, Spinner, useCopy, useEscape, useGuardedClose, useUI } from '../ui.jsx';
-import { CohortSchedule } from './Milestones.jsx';
 import CohortTeam from './CohortTeam.jsx';
 import CohortVisibility from './CohortVisibility.jsx';
 import CohortWizard from './CohortWizard.jsx';
@@ -45,7 +44,7 @@ function UpgradeImpact({ r }) {
   const lines = [
     r.affected ? `${membersAr(r.affected)} ${r.affected === 1 ? 'له' : r.affected === 2 ? 'لهما' : 'لهم'} تقدم في متطلبات تختفي من الرحلة. يبقى ما أُنجز محفوظًا ويعود إن عادت.` : '',
     d.delivery?.length ? `يُلغى تخصيص التنفيذ لما ليس في النسخة: ${d.delivery.join('، ')}.` : '',
-    d.schedule?.length ? `تُسقط مواعيد مراحل ليست في النسخة: ${d.schedule.join('، ')}.` : '',
+    d.schedule?.length ? `تُسقط من خطة الدفعة مراحل ليست في النسخة: ${d.schedule.join('، ')}.` : '',
     d.stage_modes?.length ? `يُسقط وضع العمل لمراحل ليست في النسخة: ${d.stage_modes.join('، ')}.` : '',
   ].filter(Boolean);
   return (
@@ -60,10 +59,10 @@ function UpgradeImpact({ r }) {
 // وجاهزيتها بندًا بندًا مع زر الضبط لكل بند (cohort-hub.js)، ثم كل إعداداتها في لوحة واحدة. النوافذ نفسها التي في
 // الجدول وفي صفحة الجهة، فلا مدخل ثانٍ لأي إعداد.
 const ACTION_LABEL = {
-  edit: 'تحرير الدفعة', schedule: 'الجدول', team: 'الفريق والمجموعات', participants: 'المشاركون', approve: 'اعتمدهم',
+  edit: 'تحرير الدفعة', plan: 'افتح الرحلة', team: 'الفريق والمجموعات', participants: 'المشاركون', approve: 'اعتمدهم',
   org: 'افتح الجهة', other: 'افتح الدفعة الأحدث', journey: 'حرّر الرحلة', upgrade: 'رقِّ النسخة', pin: 'ثبّت على نسخة', activities: 'أضف جلسة',
 };
-function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }) {
+function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: given }) {
   const copy = useCopy();
   // تبويبا الملف: «الملف» (الجاهزية والإعدادات) و«الرحلة» (R1)، والمختار في العنوان ?view=journey فيُفتح الرابط عليه
   const route = useRoute();
@@ -82,13 +81,14 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
     e.preventDefault();
     openTab(COHORT_TABS[(to + COHORT_TABS.length) % COHORT_TABS.length][0], true);
   };
+  // خطة المراحل في تبويب «الرحلة» (القرار 23): بند الجاهزية وزر المواعيد يفتحانه، لا نافذة ثانية
+  const on = { ...given, plan: () => openTab('journey', true) };
   const { items, missing, link, kind } = hub;
   const people = `#/leaders/participants?cohort=${encodeURIComponent(c.id)}`;
   // كل إعدادات الدفعة وما تتبعه في مكان واحد: ما يُضبط للدفعة نفسها، وما يُضبط في برنامجها أو جهتها ويسري عليها
   const tiles = [
     ['الأساسيات', 'الاسم والجهة والبرنامج والمدة والحالة، والرحلة بندًا بندًا (الظاهر والمخفي)، وصيغة كل نشاط، والنسخة والمستويات', on.edit, true],
-    ['الرحلة', 'المراحل بتواريخها في هذه الدفعة، والخط الزمني، ومن في كل مرحلة', () => openTab('journey', true), false],
-    ['الجدول', 'موعد كل مرحلة، ويوزَّع تلقائيًا على مدة الدفعة', on.schedule, true],
+    ['الرحلة', 'المراحل بتواريخها ومددها في هذه الدفعة، وتعديل المدة بمعاينة أثرها، والخط الزمني، ومن في كل مرحلة', () => openTab('journey', true), false],
     ['الفريق والمجموعات', 'المستشار الأساسي وفريق الخبراء ومجموعات المشاركين', on.team, true],
     ['الرؤية', 'ما يراه مستشار الدفعة والخبير المسند من مشاركيها', on.vis, true],
     ['رحلة البرنامج', `مراحل «${progName(c.program_id)}» ومتطلباته. تسري على كل دفعاته`, on.journey, false],
@@ -121,7 +121,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
 
         {tab === 'journey' ? (
           <div role="tabpanel" id="cohort-panel-journey" aria-labelledby="cohort-tab-journey">
-            <CohortJourney c={c} canWrite={canWrite} on={on} />
+            <CohortJourney c={c} canWrite={canWrite} on={on} onSaved={on.reload} />
           </div>
         ) : (
         <div role="tabpanel" id="cohort-panel-overview" aria-labelledby="cohort-tab-overview">
@@ -176,7 +176,6 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const [open, setOpen] = useState(null);
   const [compare, setCompare] = useState(null);
   const [cert, setCert] = useState(null);
-  const [schedule, setSchedule] = useState(null);
   const [groups, setGroups] = useState(null);
   const [vis, setVis] = useState(null);
   const [finalCfg, setFinalCfg] = useState(null);
@@ -267,13 +266,12 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const dialogs = (
     <>
       {editor && <CohortEditor cohort={editor} data={d} canWrite={canWrite} onClose={(saved) => { setEditor(null); if (saved) { toast('تم الحفظ'); load(); } }}
-        onOpen={(k, at = {}) => { const c = editor; if (k === 'schedule') setSchedule(c); else if (k === 'team') setGroups(c); else if (k === 'vis') setVis(c); else if (k === 'journey') onEditJourney(at.program_id || c.program_id);
+        onOpen={(k, at = {}) => { const c = editor; if (k === 'team') setGroups(c); else if (k === 'vis') setVis(c); else if (k === 'journey') onEditJourney(at.program_id || c.program_id);
           else if (k === 'timeline') window.location.hash = `#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`;
           else if (k === 'activities') window.location.hash = `#/leaders/activities${at.req ? `?req=${encodeURIComponent(at.req)}` : ''}`; }} />}
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
-      {schedule && <CohortSchedule cohort={schedule} onClose={(saved) => { setSchedule(null); if (saved) load(); }} />}
       {/* الخطوة الرابعة من المعالج: بعد الإنشاء يفتح ملف الدفعة ومعه نافذة الفريق، والرابط ظاهر في رأس الملف */}
       {wizard && <CohortWizard preset={wizard} data={d} onClose={async (created) => { setWizard(null); if (created) { await load(); onCohort(created.id); setGroups(created); } }} />}
       {compare && (
@@ -313,7 +311,9 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     const prog = programs.find((p) => p.id === shown.program_id);
     const people = `#/leaders/participants?cohort=${encodeURIComponent(shown.id)}`;
     const on = {
-      edit: () => editCohort(shown), schedule: () => setSchedule(shown), team: () => setGroups(shown), vis: () => setVis(shown),
+      // خطة المراحل في تبويب «الرحلة» (القرار 23): بند الجاهزية وكل زر للمواعيد يفتحه، لا نافذة ثانية
+      edit: () => editCohort(shown), reload: load,
+      team: () => setGroups(shown), vis: () => setVis(shown),
       journey: () => onEditJourney(shown.program_id), upgrade: () => upgrade(shown), pin: () => upgrade(shown),
       cert: prog && (() => editCert(prog)), final: prog && (() => setFinalCfg(prog)),
       org: shown.organization_id && (() => navigate({ ctx: 'leaders', tab: 'orgs', id: shown.organization_id })),
@@ -404,7 +404,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
                   <td>{COHORT_STATUS[c.status]}</td>
                   <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
                   <td>{(() => { const h = cohortHub({ cohort: c, cohorts: d.cohorts, orgs: d.organizations, programs }); return <span className={`la-chip ${h.missing ? 'warn' : 'ok'}`}>{hubSummary(h)}</span>; })()}</td>
-                  <td><button className="btn-sm ghost" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button>{canWrite && <> <button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <button className="la-link" onClick={() => setSchedule(c)}>الجدول{Object.keys(c.schedule || {}).length ? '' : ' (فارغ)'}</button> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button> <button className="la-link" onClick={() => setVis(c)}>الرؤية</button></>}</td>
+                  <td><button className="btn-sm ghost" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button>{canWrite && <> <button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <a className="la-link" href={`#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`}>الرحلة والمدد</a> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button> <button className="la-link" onClick={() => setVis(c)}>الرؤية</button></>}</td>
                 </tr>
               );
             })}

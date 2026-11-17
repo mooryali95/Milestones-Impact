@@ -1,0 +1,228 @@
+// admin.cohort-plan (R2a في تصور محرر رحلة الدفعة): المعاينة لكل مدير والحفظ والتراجع للكاتب، والحراس (المغلقة والمفتوحة غير
+// المثبتة والمثبت والحدود والحقول اللاحقة والنسخة القديمة)، والسجل في audit_log بقيمته قبل وبعد، والأثر على عضو حي من رحلته
+// كما يراها، وadmin.cohort-save يرفض schedule وdistribute (كاتب واحد، القرار 23). قاعدة في الذاكرة بنمط cohort_guard_test.ts.
+import './_test_env.ts';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+const { db, Fail } = await import('./core.ts');
+const { writer } = await import('./admin.ts');
+const { cohortPlanAction } = await import('./cohort-plan.ts');
+const { cohortSave, journeyDefinition, cohortDefinitionFor } = await import('./programs.ts');
+const { R0_DATED_SINCE } = await import('./milestones.js');
+
+type Row = Record<string, any>;
+function install(tables: Record<string, Row[]>) {
+  let seq = 0;
+  const from = (table: string) => {
+    const filters: ((r: Row) => boolean)[] = [];
+    let mode: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let payload: any = null;
+    let single = false, limit = Infinity, range: [number, number] | null = null;
+    const run = () => {
+      const rows = tables[table] ||= [];
+      if (mode === 'insert') {
+        const added = (Array.isArray(payload) ? payload : [payload]).map((x) => ({ id: `${table}-${++seq}`, created_at: new Date(Date.now() + seq).toISOString(), ...x }));
+        rows.push(...added);
+        return { data: single ? added[0] : added, error: null };
+      }
+      const out = rows.filter((r) => filters.every((f) => f(r)));
+      if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: single ? out[0] ?? null : out, error: null }; }
+      if (mode === 'delete') { tables[table] = rows.filter((r) => !out.includes(r)); return { data: out, error: null }; }
+      const cut = range ? out.slice(range[0], range[1] + 1) : out.slice(0, limit);
+      return { data: single ? cut[0] ?? null : cut, error: null };
+    };
+    const q: any = new Proxy({}, {
+      get: (_t, k: string) => {
+        if (k === 'then') return (ok: any, bad: any) => Promise.resolve(run()).then(ok, bad);
+        if (k === 'insert' || k === 'update') return (x: any) => { mode = k; payload = x; return q; };
+        if (k === 'delete') return () => { mode = 'delete'; return q; };
+        if (k === 'eq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; };
+        if (k === 'neq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) !== v); return q; };
+        if (k === 'in') return (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; };
+        if (k === 'is') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; };
+        if (k === 'range') return (f: number, t: number) => { range = [f, t]; return q; };
+        if (k === 'limit') return (n: number) => { limit = n; return q; };
+        if (k === 'maybeSingle' || k === 'single') return () => { single = true; return q; };
+        return () => q;
+      },
+    });
+    return q;
+  };
+  const prev = { from: (db as any).from };
+  Object.assign(db as any, { from });
+  return { tables, restore: () => Object.assign(db as any, prev) };
+}
+
+const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const ORG = U(1), PA = U(2), C1 = U(3), V1 = U(4), P1 = U(5), OPEN = U(6);
+const iso = (d: number) => new Date(Date.now() + d * 864e5).toISOString().slice(0, 10);
+// بداية الدفعة قبل عشرة أيام: التدريب (14 يومًا) جارٍ اليوم، وتقصيره إلى 3 أيام يجعل «نهاية التدريب» متأخرة ستة أيام
+const START = iso(-10);
+const admin = { email: 'a@x.sa', role: 'admin' as const, method: 'passkey' } as any;
+const viewer = { email: 'v@x.sa', role: 'viewer', method: 'passkey' } as any;
+const stages = [
+  { key: 'profile', title_ar: 'الملف', sort: 1, active: true, duration_days: 2, rules: {} },
+  { key: 'training', title_ar: 'التدريب', sort: 2, active: true, duration_days: 14, rules: {} },
+  { key: 'support', title_ar: 'الدعم', sort: 3, active: true, duration_days: 30, rules: {} },
+];
+const requirements = [
+  { id: U(10), stage_key: 'profile', code: 'P-INFO', kind: 'auto', title_ar: 'الملف', required: true, active: true, sort: 1 },
+  { id: U(11), stage_key: 'training', code: 'T-ONE', kind: 'check', title_ar: 'بند التدريب', required: true, active: true, sort: 1 },
+  { id: U(12), stage_key: 'support', code: 'S-ONE', kind: 'check', title_ar: 'بند الدعم', required: true, active: true, sort: 1 },
+];
+function world(cohort: Row = {}) {
+  return install({
+    programs: [{ id: PA, is_default: true, archived_at: null, name: 'البرنامج' }],
+    program_versions: [{ id: V1, program_id: PA, number: 1, label: 'الإطلاق', data: { stages, requirements } }],
+    journey_stages: stages.map((s) => ({ ...s, program_id: PA })), stage_requirements: requirements.map((r) => ({ ...r, program_id: PA })),
+    cohorts: [
+      { id: C1, name: 'دفعة يناير', organization_id: ORG, program_id: PA, program_version_id: V1, status: 'running', starts_on: START, ends_on: iso(80),
+        created_at: '2026-09-01T00:00:00Z', updated_at: '2026-11-01T00:00:00Z', hidden_requirements: [], schedule: {}, ...cohort },
+      { id: OPEN, name: 'المفتوحة', is_default: true, organization_id: null, program_id: PA, program_version_id: null, status: 'open', created_at: '2026-01-01T00:00:00Z', schedule: {} },
+    ],
+    enrollments: [],
+    participants: [{ id: P1, organization_id: ORG, is_demo: false, status: 'enrolled', full_name: 'سارة', profile_completed_at: '2026-10-01T00:00:00Z', created_at: '2026-10-01T00:00:00Z' }],
+    program_milestones: [{ id: U(20), program_id: PA, title_ar: 'نهاية التدريب', stage_key: 'training', anchor: 'stage_end', offset_days: 0, complete: 'stage', active: true, sort: 1 }],
+    audit_log: [],
+  });
+}
+const failOf = async (fn: () => Promise<unknown>) => (await assertRejects(fn, Fail)) as InstanceType<typeof Fail>;
+
+Deno.test('الصلاحيات: المعاينة والسجل لكل مدير، والحفظ والتراجع للكاتب وحده بعامله الثاني', async () => {
+  const w = world();
+  try {
+    const p: any = await cohortPlanAction(viewer, { cohort_id: C1, op: 'preview', days: { training: 3 } });
+    assertEquals(p.preview, true);
+    const asWriter = (who: any) => () => Promise.resolve().then(() => writer(who, cohortPlanAction, { cohort_id: C1, op: 'save', days: { training: 3 } }));
+    assertEquals((await failOf(asWriter(viewer))).status, 403);
+    assertEquals((await failOf(asWriter({ ...admin, method: 'email' }))).code, 'mfa_required');
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.audit_log.length, 0);
+    assertEquals((await failOf(() => cohortPlanAction(admin, { op: 'preview' }))).status, 400);
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: U(99), op: 'preview' }))).status, 404);
+  } finally { w.restore(); }
+});
+
+Deno.test('المعاينة: الخطة الجديدة بتواريخها الشاملة، وأثرها على العضو الحي من رحلته، والبريد المحجوب، بلا كتابة', async () => {
+  const w = world();
+  try {
+    const r: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', days: { training: 3 } });
+    assertEquals(r.changed, true);
+    assertEquals(r.locked, null);
+    const tr = r.plan.stages.find((s: any) => s.key === 'training');
+    assertEquals([tr.days, tr.source, tr.from, tr.to], [3, 'cohort', iso(-8), iso(-6)]);
+    assertEquals(r.impact.changes.map((x: any) => x.key), ['training', 'support']);
+    assertEquals(r.impact.end.shift, -11);
+    // العضو في التدريب الآن، و«نهاية التدريب» تنقلب متأخرة ستة أيام، وبريدها محجوب بحارس الخطة
+    assertEquals(r.impact.people, { total: 1, by_stage: [{ key: 'training', title: 'التدريب', here: 1 }] });
+    assertEquals(r.impact.late, { milestones: 1, people: 1, cleared: 0 });
+    // يُحجب بحارس الخطة، وما موعده قبل يوم R0 محجوب أصلًا بحارس R0 فلا يُعد مرتين
+    assertEquals(r.impact.mail, { send: 0, held: iso(-6) >= R0_DATED_SINCE ? 1 : 0 });
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.audit_log.length, 0);
+  } finally { w.restore(); }
+});
+
+Deno.test('الحفظ: الخطة في cohorts.schedule وصف في السجل بقيمته قبل وبعد، ورحلة المشارك تقرأ المدة الجديدة', async () => {
+  const w = world();
+  try {
+    const r: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 }, base_updated_at: '2026-11-01T00:00:00Z' });
+    assertEquals(r.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { training: { days: 3 } });
+    const [row] = w.tables.audit_log;
+    assertEquals([row.action, row.entity, row.entity_id, row.actor], ['cohort.plan', 'cohorts', C1, 'a@x.sa']);
+    assertEquals(row.before, { schedule: {} });
+    assertEquals(row.after.schedule, { training: { days: 3 } });
+    assertEquals(row.after.summary.changes, [{ key: 'training', before: 14, after: 3 }, { key: 'support', before: 30, after: 30 }]);
+    assertEquals(row.after.summary.held, iso(-6) >= R0_DATED_SINCE ? 1 : 0);
+    // رحلة المشارك (journeyDefinition) والمعاينة للوحة (cohort_plan) من الخطة نفسها
+    const def: any = await journeyDefinition({ id: P1, organization_id: ORG });
+    assertEquals(def.stages.find((s: any) => s.key === 'training').duration_days, 3);
+    const forCohort: any = await journeyDefinition({}, w.tables.cohorts[0]);
+    assertEquals(forCohort.cohort.schedule, { training: { days: 3 } });
+    const view: any = await cohortDefinitionFor({ cohort_id: C1 });
+    assertEquals(view.cohort_plan.schedule, { training: { days: 3 } });
+    assertEquals(view.stages.find((s: any) => s.key === 'training').duration_days, 14);
+    // الحفظ نفسه مرة ثانية لا يكتب شيئًا
+    const again: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } });
+    assertEquals(again.unchanged, true);
+    assertEquals(w.tables.audit_log.length, 1);
+  } finally { w.restore(); }
+});
+
+Deno.test('التراجع: يعيد ما قبل آخر حفظ بالحراس نفسها، وصالح حتى أي حفظ تالٍ، ولا يمر بعد تغيّر الخطة من غيره', async () => {
+  const w = world({ schedule: { support: { days: 20 } } });
+  try {
+    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 21 } });
+    assertEquals(w.tables.cohorts[0].schedule, { support: { days: 20 }, training: { days: 21 } });
+    const h: any = await cohortPlanAction(viewer, { cohort_id: C1, op: 'history' });
+    assertEquals([h.history.length, h.can_undo], [1, true]);
+    const u: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'undo' });
+    assertEquals(u.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { support: { days: 20 } });
+    const last = w.tables.audit_log.at(-1)!;
+    assertEquals([last.action, last.after.undoes], ['cohort.plan-undo', w.tables.audit_log[0].id]);
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'undo' }))).code, 'nothing_to_undo');
+    // حفظ ثم تغيّر الخطة من مكان آخر (ترقية مثلًا): لا تراجع تلقائي
+    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 10 } });
+    w.tables.cohorts[0].schedule = { training: { days: 11 } };
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'undo' }))).code, 'plan_changed');
+  } finally { w.restore(); }
+});
+
+Deno.test('الحراس: المغلقة، والمفتوحة غير المثبتة (القرار 21)، والمثبت، والحدود، والحقول اللاحقة، والنسخة القديمة', async () => {
+  const w = world();
+  try {
+    w.tables.cohorts[0].status = 'closed';
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'cohort_closed');
+    w.tables.cohorts[0].status = 'running';
+    // المفتوحة: المعاينة تقول السبب، والحفظ يُرفض في الخادم، ثم يمر بعد تثبيتها على نسخة
+    const op: any = await cohortPlanAction(admin, { cohort_id: OPEN, op: 'preview', days: { training: 3 } });
+    assertEquals(op.locked.code, 'open_unpinned');
+    assert(op.impact.open, 'المفتوحة تسمي من يمسه التعديل');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: OPEN, op: 'save', days: { training: 3 } }))).code, 'open_unpinned');
+    w.tables.cohorts[1].program_version_id = V1;
+    assertEquals(((await cohortPlanAction(admin, { cohort_id: OPEN, op: 'save', days: { training: 3 } })) as any).saved, true);
+    assertEquals(w.tables.cohorts[1].schedule, { training: { days: 3 } });
+    // الحدود: الإلزامية من 1، والمرحلة الغريبة
+    const e = await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 0, nope: 2 } }));
+    assertEquals(e.code, 'plan_invalid');
+    assertEquals((e.extra.errors as any[]).map((x) => x.code), ['range', 'unknown']);
+    // الإيقاف والتوازي والتثبيت للدفعة في مراحل لاحقة: لا تُقبل بصمت
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', off: { training: true } }))).code, 'plan_field');
+    // نسخة أقدم من الحالية
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 }, base_updated_at: '2020-01-01T00:00:00Z' }))).code, 'stale');
+    assertEquals(w.tables.cohorts[0].schedule, {});
+  } finally { w.restore(); }
+});
+
+Deno.test('المثبت القديم: لا تُعدَّل مدته، و«حرّر التواريخ لتتبع المدد» يحوله مدة بطوله الحالي فلا يتحرك تاريخ', async () => {
+  const pin = { profile: { start: START, end: iso(-9) }, training: { start: iso(-8), end: iso(6) } };
+  const w = world({ schedule: pin });
+  try {
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'plan_invalid');
+    const p: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', follow: true });
+    // الملف بطول البرنامج (يومان) فلا يبقى له مدخل، والتدريب 15 يومًا بدل 14 فيبقى مدة خاصة
+    assertEquals(p.plan.schedule, { training: { days: 15 } });
+    assertEquals(p.impact.changes, []);
+    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', follow: true });
+    assertEquals(w.tables.cohorts[0].schedule, { training: { days: 15 } });
+    assertEquals(w.tables.audit_log[0].after.follow, true);
+    assertEquals(w.tables.audit_log[0].before.schedule, pin);
+  } finally { w.restore(); }
+});
+
+Deno.test('كاتب واحد (القرار 23): admin.cohort-save يرفض schedule وdistribute برسالة تدل على التبويب، ولا يكتب شيئًا', async () => {
+  const w = world({ schedule: { training: { days: 21 } } });
+  try {
+    for (const body of [{ id: C1, schedule: { training: { start: '2027-01-01' } } }, { id: C1, distribute: true }, { id: C1, name: 'اسم جديد', schedule: {} }]) {
+      const e = await failOf(() => cohortSave(admin, body));
+      assertEquals(e.code, 'use_cohort_plan');
+      assert(e.message.includes('تبويب «الرحلة»'));
+    }
+    assertEquals(w.tables.cohorts[0].schedule, { training: { days: 21 } });
+    assertEquals(w.tables.cohorts[0].name, 'دفعة يناير');
+    // وحفظ أي إعداد آخر لا يمس الخطة
+    await cohortSave(admin, { id: C1, name: 'اسم جديد' });
+    assertEquals(w.tables.cohorts[0].schedule, { training: { days: 21 } });
+  } finally { w.restore(); }
+});

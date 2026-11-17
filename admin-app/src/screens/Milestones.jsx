@@ -2,17 +2,16 @@
 // المعالم وجدول الدفعة: يبنيها الأدمن، ويُحسب منها موقع كل مشارك وتأخره
 // ════════════════════════════════════════════════════════════════
 // • ProgramMilestones: معالم البرنامج تحت محرر الرحلة (مرتبطة بمرحلة أو بتاريخ)
-// • CohortSchedule: تواريخ كل مرحلة في دفعة، يدويًا أو بتوزيع آلي على مدتها
+// • خطة الدفعة (مدد مراحلها وتواريخها) في تبويب «الرحلة» بملف الدفعة (CohortJourney.jsx)، كاتبها الوحيد بعد إزالة نافذة «الجدول» (R2a)
 // • ParticipantMilestones: موقع مشارك من المعالم، مع اعتماد الإنجاز والتمديد له وحده
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly as day, L } from '../leaders.js';
 import Form from '../Form.jsx';
-import { Spinner, useEscape, useUI } from '../ui.jsx';
+import { Spinner, useUI } from '../ui.jsx';
 import { MILESTONE_RUBRIC, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
-  MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR, milestoneDueInfo,
+  MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR,
 } from '../../../supabase/functions/leaders-api/logic.js';
-import { stageWindows } from '../../../supabase/functions/leaders-api/stage-windows.js';
 
 const STATUS_CHIP = { done: 'ok', late: 'bad', due_soon: 'warn', on_time: '', unscheduled: '' };
 
@@ -80,64 +79,6 @@ export function ProgramMilestones({ pid, stages, canWrite }) {
   );
 }
 
-// جدول الدفعة: تاريخان لكل مرحلة، مع معاينة استحقاق المعالم عليها
-export function CohortSchedule({ cohort, onClose }) {
-  const { toast } = useUI();
-  const [d, setD] = useState(null);
-  const [sch, setSch] = useState(cohort.schedule || {});
-  const [busy, setBusy] = useState(false);
-  useEscape(() => onClose());   // كبقية النوافذ: Esc يغلقها
-  useEffect(() => {
-    // المراحل من تعريف الدفعة (admin.cohort-definition): نسختها المثبتة أو برنامجها الحي، وهي التي يحفظ بها الخادم الجدول
-    Promise.all([L('admin.cohort-definition', { cohort_id: cohort.id }), L('admin.milestones', { program_id: cohort.program_id })])
-      .then(([p, m]) => setD(p.success === false ? { error: p.message } : { stages: (p.stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), version: p.version || null, ms: (m.milestones || []).filter((x) => x.active) }));
-  }, [cohort.id, cohort.program_id]);
-  // ما لم يُكتب له تاريخ يُحسب من بداية الدفعة ومدد المراحل، بالدالة نفسها التي تقرؤها رحلة المشارك والخريطة (R0)
-  const windows = d?.stages && cohort.starts_on ? stageWindows(d.stages, { starts_on: cohort.starts_on, schedule: sch }) : null;
-  const put = (k, f, v) => setSch({ ...sch, [k]: { ...(sch[k] || {}), [f]: v || undefined } });
-  const save = async (extra) => {
-    setBusy(true);
-    const r = await L('admin.cohort-save', { id: cohort.id, ...extra });
-    setBusy(false);
-    if (!r.success) return toast(r.message);
-    setSch(r.cohort.schedule || {});
-    // ما لم يُحفظ لأنه ليس من مراحل الدفعة يُقال، لا يُسقط بصمت
-    toast(extra.distribute ? 'وُزِّعت المراحل على مدة الدفعة؛ عدّل ما تشاء ثم احفظ' : r.schedule_dropped || 'حُفظ الجدول');
-    if (!extra.distribute) onClose(true);
-  };
-  return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="la-form mi-form wide" role="dialog" aria-modal="true" aria-label="جدول الدفعة">
-        <h3>جدول «{cohort.name}»</h3>
-        <p className="la-muted">{cohort.starts_on && cohort.ends_on ? `من ${day(cohort.starts_on)} إلى ${day(cohort.ends_on)}. ` : 'حدد بداية الدفعة ونهايتها من «تحرير» لتوزيع آلي. '}ضع تاريخي كل مرحلة، أو وزّعها آليًا على المدة ثم عدّل.</p>
-        {d && !d.error && <p className="la-muted">{d.version ? `مراحل النسخة ${d.version.number} المثبتة للدفعة (${d.version.label}).` : 'مراحل البرنامج كما هو الآن، فالدفعة تتبع آخر تعديل عليه.'}</p>}
-        {!d ? <Spinner /> : d.error ? <div className="la-err" role="alert">{d.error}</div> : (
-          <>
-            <div className="table-wrap"><table className="data-table">
-              <thead><tr><th>المرحلة</th><th>تبدأ</th><th>تنتهي</th><th>المعالم</th></tr></thead>
-              <tbody>{d.stages.map((s) => (
-                <tr key={s.key}>
-                  <td><b>{s.title_ar}</b></td>
-                  <td><input type="date" aria-label={`بداية ${s.title_ar}`} value={sch[s.key]?.start || ''} onChange={(e) => put(s.key, 'start', e.target.value)} /></td>
-                  <td><input type="date" aria-label={`نهاية ${s.title_ar}`} value={sch[s.key]?.end || ''} onChange={(e) => put(s.key, 'end', e.target.value)} /></td>
-                  <td><small className="la-muted">{d.ms.filter((m) => m.stage_key === s.key).map((m) => {
-                    const x = milestoneDueInfo(m, { startsOn: cohort.starts_on, endsOn: cohort.ends_on, schedule: sch, windows });
-                    return `${m.title_ar}: ${day(x.due) || 'بلا موعد'}${x.source === 'window' ? ' (محسوب من مدد المراحل)' : ''}`;
-                  }).join(' · ')}</small></td>
-                </tr>
-              ))}</tbody>
-            </table></div>
-            <div className="la-row">
-              <button className="btn-sm primary" disabled={busy} onClick={() => save({ schedule: sch })}>حفظ الجدول</button>
-              <button className="btn-sm ghost" disabled={busy || !cohort.starts_on || !cohort.ends_on} onClick={() => save({ distribute: true })}>وزّع على مدة الدفعة</button>
-              <button className="btn-sm ghost" onClick={() => onClose()}>إغلاق</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // موقع المشارك من المعالم في ملفه
 // المعيار الوصفي عند اعتماد المعلم: لكل معيار وصف كل مستوى، والتقييم اختياري
