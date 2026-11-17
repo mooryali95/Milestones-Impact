@@ -2,13 +2,14 @@
 // مكتب اليوم (نظرة عامة على تطبيق القادة): ماذا أفعل اليوم؟
 // ════════════════════════════════════════════════════════════════
 // المرحلة 3أ من تصور لوحة الإدارة (4.3): التحية والتاريخ وشارة صحة واحدة، ثم «قرارات اليوم» (صندوق admin.inbox نفسه)،
-// ثم أربعة أرقام من الصندوق والنظرة العامة، ثم روابط سريعة، ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
+// ثم أربعة أرقام من الصندوق والنظرة العامة، ثم (المرحلة 3ب) «تنبيهات» و«نبض الدفعات» من admin.today، ثم روابط سريعة،
+// ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
 // بطاقات التحليل انتقلت إلى «الرؤية الشاملة» (Analytics.jsx)، والمنطق الخالص للأرقام والشارة في today.js.
 import React, { useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
 import { L, isSuperAdmin } from '../leaders.js';
 import { session } from '../api.js';
-import { dayFull } from '../dates.js';
+import { dateTime, dayFull } from '../dates.js';
 import { focusOpsCard, OpsHealthCard, OPS_REVEAL, opsRevealPending } from '../OpsHealth.jsx';
 import { useOpsHealth } from '../ops-watch.js';
 import { useInbox } from '../pending.js';
@@ -16,7 +17,7 @@ import { Spinner, useUI } from '../ui.jsx';
 import ReqQueue from './ReqQueue.jsx';
 import { readinessSummary } from '../org-hub.js';
 import { ageAr } from '../../../supabase/functions/leaders-api/inbox.js';
-import { greetingAr, healthLine, healthOpen, healthProblems, orgsReadinessRows, problemsSig, STALE_DAYS, systemNotes, todayNumbers, waitingSub } from '../today.js';
+import { alertHref, deskNote, greetingAr, healthLine, healthOpen, healthProblems, orgsReadinessRows, problemsSig, STALE_DAYS, systemNotes, todayNumbers, waitingSub } from '../today.js';
 
 // حالة النظام: ترحيلات لم تُطبَّق بوسم بوابة النشر، وأسرار ناقصة، واقتراب البريد من سقفه اليومي، وما تعذّرت قراءته منها.
 // الوسم من الخادم (pending_migrations، المصدر نفسه لبوابات المراحل): المؤجل بقرار لا يُطلب تطبيقه. خادم قبل الحقل يُقرأ كما كان
@@ -194,6 +195,77 @@ function TodayNumbers({ nums, onView, onTab }) {
   );
 }
 
+// ── التنبيهات ونبض الدفعات (المرحلة 3ب): رد admin.today، يُطلب مع المكتب ويُحدَّث فور أي حفظ («mi:pending») ──
+// كالصندوق (pending.js): الحفظ الذي يغيّر ما ينتظر القرار يطلق الحدث، فيُطلب الرد من جديد. الرد الأقدم من طلب أحدث يُهمل
+function useToday(n) {
+  const [t, setT] = useState(null);
+  useEffect(() => {
+    let seq = 0;
+    const load = () => {
+      const my = ++seq;
+      L('admin.today', {}).catch((e) => ({ success: false, message: e?.message })).then((r) => { if (my === seq) setT(r); });
+    };
+    load();
+    window.addEventListener('mi:pending', load);
+    return () => { seq = -1; window.removeEventListener('mi:pending', load); };
+  }, [n]);
+  return t;
+}
+
+// سطر خافت بما تعذّرت قراءته: غياب التنبيه أو النبض عندها «لم يُفحص» لا «لا شيء»
+function DeskNote({ t }) {
+  const note = deskNote(t);
+  return note ? <p className="la-muted today-skip" role="status">{note}</p> : null;
+}
+
+// «تنبيهات»: ما يحتاج انتباهك قبل أن يصير مشكلة، كل تنبيه رابط إلى ملفه. يختفي القسم حين لا تنبيه
+function Alerts({ t }) {
+  const list = t?.success ? t.alerts || [] : [];
+  if (!list.length) return null;
+  return (
+    <section className="today-alerts" aria-labelledby="today-alerts-h">
+      <h2 className="today-sec" id="today-alerts-h">تنبيهات <span className="la-chip">{list.length}</span></h2>
+      <ul>
+        {list.map((a) => (
+          <li key={a.id} className={`today-alert ${a.severity}`} data-kind={a.kind}>
+            <span className="today-alert-ic" aria-hidden="true">{a.severity === 'bad' ? '!' : '•'}</span>
+            <a className="la-link" href={alertHref(a)}>{a.text}</a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// «نبض الدفعات»: سطر لكل دفعة جارية بجاهزيتها (ملف الدفعة نفسه) وأقرب جلسة وما ينتظر قرارًا لأعضائها.
+// جدول يصير بطاقات على الهاتف (leaders-admin.css). يختفي حين لا دفعة جارية
+function Pulse({ t }) {
+  const rows = t?.success ? t.pulse || [] : [];
+  if (!rows.length) return null;
+  const plus = t.waiting_partial ? '+' : '';
+  return (
+    <section className="today-pulse" aria-labelledby="today-pulse-h">
+      <h2 className="today-sec" id="today-pulse-h">نبض الدفعات</h2>
+      <div className="today-pulse-wrap">
+        <table className="la-table today-pulse-t">
+          <thead><tr><th scope="col">الدفعة</th><th scope="col">الجهة</th><th scope="col">الجاهزية</th><th scope="col">أقرب جلسة</th><th scope="col">ينتظر قرارًا</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} data-id={r.id}>
+                <th scope="row" data-label="الدفعة"><a className="la-link" href={`#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a></th>
+                <td data-label="الجهة">{r.org || <span className="la-muted">أفراد أو مفتوحة</span>}</td>
+                <td data-label="الجاهزية"><span className={`la-chip ${r.readiness.missing ? 'warn' : 'ok'}`}>{r.readiness.summary}</span></td>
+                <td data-label="أقرب جلسة">{r.next_at ? dateTime(r.next_at) : r.handbook ? <span className="la-muted">صيغة الكتاب</span> : t.unchecked?.includes('cohort_no_session') ? <span className="la-muted">غير مقروءة</span> : <span className="la-muted">لا جلسة مؤرخة</span>}</td>
+                <td data-label="ينتظر قرارًا">{r.waiting == null ? <span className="la-muted">غير مقروء</span> : <bdi dir="ltr">{r.waiting}{r.waiting ? plus : ''}</bdi>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 // ── روابط سريعة إلى أماكنها القائمة: «دفعة جديدة» معالج الدفعة (‎?new=‎ في البرامج)، والباقي تبويب يحمل الفعل ──
 function QuickLinks({ onTab, canWrite }) {
   const writer = canWrite !== false;
@@ -218,6 +290,7 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
   const [view, setView] = useState('');
   // رد الصندوق من مخزن العدّادات نفسه (pending.js): طلب واحد يرسم الصندوق والأرقام والعدّادات
   const [inbox] = useInbox();
+  const today = useToday(n);
   useEffect(() => {
     let live = true;
     setD(null);
@@ -257,6 +330,9 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
       </div>
       <TodayNumbers nums={nums} onView={toDecisions} onTab={onTab} />
       {!o.success && <div className="la-err" role="alert">{o.message || 'تعذّرت قراءة أرقام النظرة العامة.'}</div>}
+      <Alerts t={today} />
+      <Pulse t={today} />
+      <DeskNote t={today} />
       <QuickLinks onTab={onTab} canWrite={canWrite} />
       <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
     </>

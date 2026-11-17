@@ -15,23 +15,34 @@ const tally = (rows: any[] | null, col: string) => {
   return m;
 };
 
+// حِمل خبراء الرحلة الآن (expertLoad): الطلبات المعروضة والمقبولة والجلسات القادمة مقابل ساعاتهم الأسبوعية (weekly_hours).
+// القراءة الواحدة لجدول «حِمل الخبراء» في الرؤية الشاملة وتنبيه «خبير فوق طاقته» في مكتب اليوم (today.ts)
+export async function expertLoadNow() {
+  const now = new Date().toISOString();
+  const [experts, reqs, upcoming, roles] = await Promise.all([
+    // طاقة خبراء الرحلة وحدهم (journeyApproved): عضو اللجنة بلا دور لا يُحسب فيها
+    db.from('experts').select('id, full_name, title, status, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => ((must(r) ?? []) as any[]).filter(journeyApproved)),
+    db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null).limit(5000),
+    db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null).limit(5000),
+    db.from('expert_requests').select('expert_id, participant_id').eq('status', 'accepted').not('expert_id', 'is', null).limit(5000),
+  ]);
+  const people_by: Record<string, Set<string>> = {};
+  for (const r of (roles.data || []) as any[]) (people_by[r.expert_id] ||= new Set()).add(r.participant_id);
+  return expertLoad(experts, { requests: tally(reqs.data as any[], 'expert_id'), upcoming: tally(upcoming.data as any[], 'expert_id'), people: Object.fromEntries(Object.entries(people_by).map(([k, v]) => [k, v.size])) });
+}
+
 // أين توقف المشاركون (بالجهة وبالدفعة) وحِمل الخبراء. بلا حسابات العرض، وحسابات الاختبار داخلة كما في قائمة المشاركين
 export async function adminInsight() {
   const people = await all((f, t) => db.from('participants')
     .select('id, full_name, phone, job_title, organization_id, organization_name, years_experience, status, last_login_at')
     .eq('is_demo', false).order('id').range(f, t)) as any[];
   const ids = people.map((p) => p.id);
-  const now = new Date().toISOString();
-  const [progress, orgs, cohorts, enr, experts, reqs, upcoming, roles] = await Promise.all([
+  const [progress, orgs, cohorts, enr, experts] = await Promise.all([
     baselineProgress(ids),
     db.from('organizations').select('id, name').then((r) => (must(r) ?? []) as any[]),
     db.from('cohorts').select('id, name, status, is_default, organization_id, starts_on, ends_on, created_at').then((r) => (must(r) ?? []) as any[]),
     all((f, t) => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id').order('cohort_id').range(f, t)) as Promise<any[]>,
-    // طاقة خبراء الرحلة وحدهم (journeyApproved): عضو اللجنة بلا دور لا يُحسب فيها
-    db.from('experts').select('id, full_name, title, status, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => ((must(r) ?? []) as any[]).filter(journeyApproved)),
-    db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null).limit(5000),
-    db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null).limit(5000),
-    db.from('expert_requests').select('expert_id, participant_id').eq('status', 'accepted').not('expert_id', 'is', null).limit(5000),
+    expertLoadNow(),
   ]);
   const rows = people.map((p) => ({ ...p, onboarding: onboardingOf(p, progress[p.id]?.id ? progress[p.id] : null) }));
   const orgName = Object.fromEntries(orgs.map((o) => [o.id, o.name]));
@@ -41,11 +52,9 @@ export async function adminInsight() {
   const by_org = pipelineBy(rows, (p: any) => (p.organization_id ? { key: p.organization_id, name: orgName[p.organization_id] || p.organization_name || 'جهة' } : { key: 'none', name: 'بدون جهة' }));
   const by_cohort = pipelineBy(rows, (p: any) => { const c = cohortOfRow(p); return c ? { key: c.id, name: c.name } : { key: 'none', name: 'بلا دفعة' }; });
   const meta = Object.fromEntries(cohorts.map((c) => [c.id, { status: c.status, starts_on: c.starts_on, ends_on: c.ends_on, is_default: !!c.is_default, org: c.organization_id ? orgName[c.organization_id] || null : null }]));
-  const people_by: Record<string, Set<string>> = {};
-  for (const r of (roles.data || []) as any[]) (people_by[r.expert_id] ||= new Set()).add(r.participant_id);
   return {
     success: true, by_org, by_cohort: { ...by_cohort, groups: by_cohort.groups.map((g: any) => ({ ...g, ...(meta[g.key] || {}) })) },
-    experts: expertLoad(experts, { requests: tally(reqs.data as any[], 'expert_id'), upcoming: tally(upcoming.data as any[], 'expert_id'), people: Object.fromEntries(Object.entries(people_by).map(([k, v]) => [k, v.size])) }),
+    experts,
   };
 }
 
