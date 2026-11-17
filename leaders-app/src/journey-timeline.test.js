@@ -123,11 +123,12 @@ describe('journeyTimeline: الدفعة بالتواريخ', () => {
     expect(m.dated).toBe(true);
     const by = Object.fromEntries(m.stages.map((s) => [s.key, s]));
     expect(by.approval.status).toBe('done');
-    expect(by.training.window).toEqual({ from: '2026-11-05', to: '2026-11-19' });
-    expect(by.training.window_ar).toBe('5 نوفمبر إلى 19 نوفمبر');
+    // النهاية شاملة (القرار 18، R2a): 14 يومًا من 5 نوفمبر تنتهي 18 نوفمبر
+    expect(by.training.window).toEqual({ from: '2026-11-05', to: '2026-11-18' });
+    expect(by.training.window_ar).toBe('5 نوفمبر إلى 18 نوفمبر');
     expect(['training', 'ojt', 'consult'].map((k) => by[k].status_ar)).toEqual(['جارية', 'جارية', 'جارية']);
     expect(by.support.status).toBe('upcoming');
-    expect(by.training.today_ar).toBe('اليوم 16 نوفمبر، بقي على نهاية المرحلة ثلاثة أيام');
+    expect(by.training.today_ar).toBe('اليوم 16 نوفمبر، بقي على نهاية المرحلة يومان');
   });
 
   it('الجلسات: جلسة الدفعة وجلسة كل الدفعات فقط، والمؤرخة نقطة، وغير المؤرخة «يُحدد لاحقًا» لا 1970', () => {
@@ -145,13 +146,13 @@ describe('journeyTimeline: الدفعة بالتواريخ', () => {
   });
 
   it('البطاقات: النافذة والموقع الآن، وخط اليوم داخل المسار، والمسطرة بالأشهر', () => {
-    expect(m.cards.find((c) => c.key === 'window').value).toBe('2 نوفمبر 2026 إلى 10 مارس 2027');
+    expect(m.cards.find((c) => c.key === 'window').value).toBe('2 نوفمبر 2026 إلى 9 مارس 2027');
     expect(m.cards.find((c) => c.key === 'now').value).toBe('الأسبوع 3، 3 مراحل تسير معًا');
     expect(m.today.label).toBe('اليوم 16 نوفمبر');
     expect(m.today.at).toBeGreaterThan(m.slots.find((x) => x.together).at);
     expect(m.ticks[0].label).toBe('2 نوفمبر');
     expect(m.ticks.map((t) => t.label)).toContain('ديسمبر');
-    expect(m.activities.find((a) => a.code === 'T-READ').when_ar).toBe('خلال المرحلة حتى 19 نوفمبر');
+    expect(m.activities.find((a) => a.code === 'T-READ').when_ar).toBe('خلال المرحلة حتى 18 نوفمبر');
   });
 
   it('قبل البداية «تبدأ بعد»، وبعد النهاية «انتهت الدفعة»، وبلا خط لليوم', () => {
@@ -225,6 +226,9 @@ describe('journeyTimeline: المرحلة عند الطلب الممتدة عل�
     expect(m.ticks.at(-1).at).toBe(100);
     expect(m.ticks.map((t) => t.at)).toEqual([...m.ticks.map((t) => t.at)].sort((a, b) => a - b));
     // المحور بطول مراحله الإلزامية لا الدفعة كلها
+    // نهاية المحور آخر أيامه شاملًا (القرار 18): اليوم السابق لبداية المحور التالي، لا يومها
+    const qi = m.phases.find((p) => p.key === 'qualification'), im = m.phases.find((p) => p.key === 'impact');
+    if (qi.to && im?.from && qi.days) expect(qi.to < im.from).toBe(true);
     expect(m.phases.find((p) => p.key === 'qualification').to < '2026-04-01').toBe(true);
   });
 

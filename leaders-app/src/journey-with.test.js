@@ -149,20 +149,21 @@ describe('«تبدأ مع»: الفحص قبل النشر', () => {
 describe('«تبدأ مع»: النوافذ وجدول الدفعة', () => {
   const sorted = [...STAGES].sort((a, b) => a.sort - b.sort);
 
+  // النهاية شاملة (القرار 18، R2a): ما بعد المجموعة يبدأ في اليوم التالي لنهاية أطولها
   it('stageWindows: المجموعة تبدأ ببداية التدريب، والأثر بعد أطولها', () => {
     const w = stageWindows(sorted, { starts_on: '2026-12-01' });
-    expect(w.intro).toEqual({ from: '2026-12-01', to: '2026-12-02' });
-    expect(w.training).toEqual({ from: '2026-12-02', to: '2026-12-16' });
-    expect(w.otj).toEqual({ from: '2026-12-02', to: '2026-12-30' });
-    expect(w.consult).toEqual({ from: '2026-12-02', to: '2026-12-23' });
-    expect(w.coaching).toEqual({ from: '2026-12-02', to: '2026-12-30' });
-    expect(w.impact).toEqual({ from: '2026-12-30', to: '2027-01-29' });
+    expect(w.intro).toEqual({ from: '2026-12-01', to: '2026-12-01' });
+    expect(w.training).toEqual({ from: '2026-12-02', to: '2026-12-15' });
+    expect(w.otj).toEqual({ from: '2026-12-02', to: '2026-12-29' });
+    expect(w.consult).toEqual({ from: '2026-12-02', to: '2026-12-22' });
+    expect(w.coaching).toEqual({ from: '2026-12-02', to: '2026-12-29' });
+    expect(w.impact).toEqual({ from: '2026-12-30', to: '2027-01-28' });
   });
 
   it('stageWindows: جدول الدفعة يبقى المرجع الأول، والمؤشر لا يرجع إلى الخلف', () => {
     const w = stageWindows(sorted, { starts_on: '2026-12-01', schedule: { consult: { start: '2026-12-05', end: '2027-01-20' } } });
     expect(w.consult).toEqual({ from: '2026-12-05', to: '2027-01-20' });
-    expect(w.impact.from).toBe('2027-01-20');
+    expect(w.impact.from).toBe('2027-01-21');
     const short = stageWindows(sorted, { starts_on: '2026-12-01', schedule: { consult: { start: '2026-12-02', end: '2026-12-03' } } });
     expect(short.impact.from).toBe('2026-12-30');
   });
@@ -234,7 +235,7 @@ describe('«تبدأ مع»: إصلاحات المراجعة', () => {
   it('todayStage: مرحلة قصيرة تسير مع أطول منها وتأتي آخر الترتيب لا تنهي الرحلة', () => {
     const stages = [S('a', 1, 30), S('b', 2, 10, W('a'))];
     const w = stageWindows(stages, { starts_on: '2026-01-01' });
-    expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-11' });
+    expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-10' });
     expect(todayStage(stages, w, '2026-01-20')).toBe('a');
     expect(todayStage(stages, w, '2026-01-05')).toBe('b');
     expect(todayStage(stages, w, '2026-02-02')).toBeNull();
@@ -252,9 +253,9 @@ describe('«تبدأ مع»: إصلاحات المراجعة', () => {
   it('stageWindows وdistributeSchedule يتفقان: ما بين المرجع وتابعه يبدأ بعد المجموعة كلها', () => {
     const stages = [S('a', 1, 10), S('c', 2, 10), S('b', 3, 30, W('a'))];
     const w = stageWindows(stages, { starts_on: '2026-01-01' });
-    expect(w.a).toEqual({ from: '2026-01-01', to: '2026-01-11' });
-    expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-31' });
-    expect(w.c).toEqual({ from: '2026-01-31', to: '2026-02-10' });
+    expect(w.a).toEqual({ from: '2026-01-01', to: '2026-01-10' });
+    expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-30' });
+    expect(w.c).toEqual({ from: '2026-01-31', to: '2026-02-09' });
     const d = distributeSchedule(stages, '2026-01-01', '2026-03-01');
     expect(d.c.start > d.b.end).toBe(true);
     expect(d.b.start).toBe(d.a.start);

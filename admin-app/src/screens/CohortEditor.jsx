@@ -67,7 +67,7 @@ const TOGGLE_HELP = 'البند المخفي يختفي فورًا من رحلا
 const sameHidden = (x) => JSON.stringify({ ...x, hidden_requirements: [...(x.hidden_requirements || [])].sort() });
 
 /** @param {{ cohort?: any, data: any, canWrite?: boolean, onClose: (saved?: boolean) => void, onOpen?: (k: string, at?: { program_id?: string }) => void }} props
- *  onOpen: يفتح نافذة ما لا يُحرَّر هنا بعد إغلاق المحرر (schedule، team، vis، journey، timeline)، والرحلة لبرنامج المحرر المختار، وtimeline تبويب «الرحلة» في ملف الدفعة */
+ *  onOpen: يفتح نافذة ما لا يُحرَّر هنا بعد إغلاق المحرر (team، vis، journey، timeline)، والرحلة لبرنامج المحرر المختار، وtimeline تبويب «الرحلة» في ملف الدفعة */
 export default function CohortEditor({ cohort = {}, data, canWrite = true, onClose, onOpen }) {
   const { confirm } = useUI();
   const programs = data.programs || [];
@@ -290,8 +290,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
         {!isNew && onOpen && (
           <nav className="ce-links" aria-label="يُضبط في نوافذه">
             <span className="la-muted">يُضبط في نافذته:</span>
-            <button type="button" className="la-link" onClick={go('timeline')}>الرحلة بالتواريخ</button>
-            <button type="button" className="la-link" onClick={go('schedule')}>الجدول</button>
+            <button type="button" className="la-link" onClick={go('timeline')}>الرحلة بالتواريخ والمدد</button>
             <button type="button" className="la-link" onClick={go('team')}>الفريق والمجموعات ووضع المراحل</button>
             <button type="button" className="la-link" onClick={go('vis')}>الرؤية</button>
           </nav>

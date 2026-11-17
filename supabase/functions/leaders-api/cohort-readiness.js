@@ -67,7 +67,8 @@ export function cohortReadiness({ cohort: c, cohorts = [], orgs = [], programs =
     members: c.members || 0, upcomingSessions: c.upcoming_sessions ?? 0, undatedSessions: c.undated_sessions ?? 0,
   }).filter((x) => x.key !== 'sessions' || c.upcoming_sessions != null);
   const byKey = Object.fromEntries(base.map((x) => [x.key, x]));
-  const ACTION = { team: 'team', cohort: 'edit', schedule: 'schedule', activities: 'activities' };
+  // بند خطة المراحل يفتح تبويب «الرحلة» في ملف الدفعة (plan)، محررها الوحيد بعد إزالة نافذة «الجدول» (القرار 23)
+  const ACTION = { team: 'team', cohort: 'edit', journey: 'plan', activities: 'activities' };
   const from = (k) => byKey[k] && { key: k, title: byKey[k].title, ok: byKey[k].ok, detail: byKey[k].detail, action: byKey[k].ok ? null : ACTION[byKey[k].where] || null };
   // مقاعد الدفعة (capacity) تنبيه لا منع: تجاوزها يُعلن ولا يُرفض به أحد، كمؤشر حمل الخبير
   const cap = Number(c.capacity) || 0;
@@ -84,7 +85,9 @@ export function cohortReadiness({ cohort: c, cohorts = [], orgs = [], programs =
     { key: 'intake', title: 'الالتحاق', ...into },
     { key: 'program', title: 'البرنامج والنسخة', ...program },
     from('period'),
-    from('schedule'),
+    // بلا تاريخ بداية لا خطة تُحسب: البند يفتح «تحرير الدفعة» لتحديده. ومراحل مثبتة بتاريخ (ومنها ما وُزّع قبل R2a) تفتح
+    // تبويب «الرحلة» حيث «حرّر التواريخ لتتبع المدد»، والبند ناجح لأن المثبت خطة صحيحة
+    byKey.schedule && { ...from('schedule'), action: !byKey.schedule.ok ? 'edit' : byKey.schedule.pinned ? 'plan' : null },
     byKey.advisor && { ...from('advisor'), title: 'المستشار والفريق' },
     from('sessions'),
     members,

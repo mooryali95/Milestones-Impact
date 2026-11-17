@@ -11,7 +11,7 @@
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
 import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
-import { stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
+import { planSchedule, stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const toMs = (d) => new Date(`${d}T00:00:00Z`).getTime();
@@ -66,24 +66,42 @@ export function distributeSchedule(stages, startsOn, endsOn) {
   return out;
 }
 
-// جدول كما يُحفظ: مراحل معروفة فقط، وتواريخ صحيحة، ونهاية لا تسبق البداية
+// خطة الدفعة كما تُحفظ: مراحل معروفة فقط، وتواريخ صحيحة، ونهاية لا تسبق البداية، ومدة وإيقاف وتوازٍ بقيم صالحة
 export function cleanSchedule(raw, stageKeys) {
   return cleanScheduleReport(raw, stageKeys).schedule;
 }
-// الجدول مع ما أُسقط منه (P5): مواعيد مكتوبة لمرحلة ليست في تعريف الدفعة (نسختها المثبتة أو برنامجها) لا تُحفظ،
-// ويُقال ذلك برسالة بدل الإسقاط الصامت. الخانة الفارغة ليست إسقاطًا. titles: اسم كل مرحلة يُعرف اسمها
+// الصيغة الموسعة (البند 4.4 في تصور محرر رحلة الدفعة، الفجوة 6أ): لكل مرحلة days وstart وend وoff وwith وoffset، وكل
+// مفتاح غيرها يُسقط. المدخل بلا أي قيمة صالحة ليس إسقاطًا (خانة فارغة). ولا يُمحى مدخل لأنه بلا تاريخ: المدة وحدها
+// خطة كاملة، فحفظ أي إعداد أو ترقية نسخة لا يمحو خطة الدفعة. «تسير مع» مرحلة ليست في التعريف تُسقط مع إزاحتها.
+// مع ما أُسقط منه (P5): مواعيد مكتوبة لمرحلة ليست في تعريف الدفعة (نسختها المثبتة أو برنامجها) لا تُحفظ،
+// ويُقال ذلك برسالة بدل الإسقاط الصامت. titles: اسم كل مرحلة يُعرف اسمها
 /** @param {any} raw @param {string[]} stageKeys @param {Record<string, string>} [titles] */
 export function cleanScheduleReport(raw, stageKeys, titles = {}) {
   const keys = new Set(stageKeys || []);
   const schedule = {}, dropped = [];
+  const int = (v, lo, hi, msg) => {
+    if (v === undefined || v === null || v === '') return undefined;
+    const n = Number(latinDigits(v));
+    if (!Number.isInteger(n) || n < lo || n > hi) throw new Error(msg);
+    return n;
+  };
   for (const [k, v] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
     if (!v || typeof v !== 'object') continue;
     const start = ISO.test(v.start || '') ? v.start : null;
     const end = ISO.test(v.end || '') ? v.end : null;
-    if (!start && !end) continue;
+    const days = int(v.days, 0, 365, 'مدة المرحلة من 0 إلى 365 يومًا');
+    const off = v.off === true ? true : undefined;
+    let wth = v.with != null && v.with !== '' ? String(v.with) : undefined;
+    let offset = int(v.offset, 0, 365, 'الإزاحة من 0 إلى 365 يومًا');
+    if (!start && !end && days === undefined && !off && wth === undefined && offset === undefined) continue;
     if (!keys.has(k)) { dropped.push(k); continue; }
     if (start && end && end < start) throw new Error('نهاية مرحلة قبل بدايتها');
-    schedule[k] = { ...(start ? { start } : {}), ...(end ? { end } : {}) };
+    if (wth !== undefined && (wth === k || !keys.has(wth))) { wth = undefined; offset = undefined; }
+    const e = {
+      ...(off ? { off } : {}), ...(days !== undefined ? { days } : {}), ...(wth !== undefined ? { with: wth } : {}),
+      ...(offset !== undefined ? { offset } : {}), ...(start ? { start } : {}), ...(end ? { end } : {}),
+    };
+    if (Object.keys(e).length) schedule[k] = e;
   }
   const names = dropped.map((k) => `«${titles[k] || k}»`).join('، ');
   const message = dropped.length
@@ -156,7 +174,7 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
   // الدفعة المفتوحة (is_default) بلا بداية واحدة (القرار 21 والبند 10 في التصور): مددها نسبية من دخول كل مشارك، فلا تؤرَّخ
   // معالمها بنافذة محسوبة من starts_on ولو ضُبط لها، وإلا صار كل من دخلها متأخرًا لحظة دخوله
   const windows = live.length && cohort?.starts_on && !cohort?.is_default ? stageWindows(live, cohort) : null;
-  const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: cohort.schedule || {}, windows };
+  const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: planSchedule(cohort), windows };
   return (milestones || []).filter((m) => m.active !== false).map((m) => {
     const rec = records[m.id] || {};
     const info = milestoneDueInfo(m, ctx);

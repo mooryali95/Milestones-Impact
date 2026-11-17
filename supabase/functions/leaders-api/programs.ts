@@ -6,7 +6,7 @@
 // 20261116110000 ثبّت القائم)، فتعديل البرنامج يمس مسودته وحدها حتى تُحفظ نسخة وتُرقّى إليها كل دفعة بنفسها.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, cleanScheduleReport, distributeSchedule, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, upgradePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, upgradePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -483,7 +483,7 @@ async function liveWorld(scope: { orgs: (string | null)[]; cohortId: string | nu
 }
 // تعريف الدفعة من مصدره الواحد: لقطة نسختها المثبتة، أو صفوف برنامجها الحية. منه يقرأ الحارس والجدول ووضع المراحل
 // وتخصيص التنفيذ والمجموعات ونافذة admin.cohort-definition، فلا تعرض نافذة مراحل غير التي يتحقق بها الخادم (P5)
-const defOf = async (vid: string | null | undefined, programId: string) => vid
+export const defOf = async (vid: string | null | undefined, programId: string) => vid
   ? ((await db.from('program_versions').select('data').eq('id', vid).single()).data?.data || { stages: [], requirements: [] })
   : await liveRows(programId);
 
@@ -509,7 +509,10 @@ export async function cohortDefinitionFor(b: Body) {
     ? (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, starts_at, ends_at, mode, active').in('requirement_id', wsIds)) || [])
       .filter((s: any) => !s.cohort_id || s.cohort_id === c.id)
     : [];
-  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view, sessions };
+  // خطة الدفعة كما هي الآن (R2a): يقرؤها تبويب «الرحلة» مع التعريف نفسه، فلا تعرض المعاينة خطة أقدم من قائمة الدفعات
+  const cohort_plan = c ? { schedule: c.schedule || {}, starts_on: c.starts_on || null, ends_on: c.ends_on || null, is_default: !!c.is_default,
+    status: c.status || null, program_version_id: c.program_version_id || null, updated_at: c.updated_at || null } : null;
+  return { success: true, program_id: programId, version: version ? { id: version.id, number: version.number, label: version.label } : null, ...view, sessions, cohort_plan };
 }
 async function guardLive(b: Body, row: Body, prev: any, programId: string) {
   const programChanged = !!(prev && row.program_id && row.program_id !== prev.program_id);
@@ -635,26 +638,10 @@ export async function cohortSave(a: Admin, b: Body) {
     try { row.delivery = cleanDelivery(b.delivery, (await def()).requirements || []); }
     catch (err) { throw new Fail((err as Error).message); }
   }
-  // جدول المراحل: يحفظه الأدمن كما وضعه، أو يوزعه النظام على مدة الدفعة ثم يعدّله
-  let scheduleNote = '';
-  if ('schedule' in b || b.distribute === true) {
-    // كل مراحل التعريف، والموقوفة منها: موعد مرحلة أُوقفت يبقى ويعود إن فُعّلت (الإيقاف لا يحذف). التوزيع يتخطاها وحده
-    const stages = (await def()).stages || [];
-    if (b.distribute === true) {
-      const s0 = row.starts_on ?? prev?.starts_on, e0 = row.ends_on ?? prev?.ends_on;
-      if (!s0 || !e0) throw new Fail('حدد تاريخي بداية الدفعة ونهايتها أولًا ليتوزع الجدول عليها');
-      row.schedule = distributeSchedule(stages, s0, e0);
-    } else {
-      try {
-        // ما أُسقط يُقال برسالة (cleanScheduleReport) بدل الإسقاط الصامت، وأسماء المراحل من البرنامج الحي إن عُرفت
-        const live = (b.schedule && Object.keys(b.schedule).some((k) => !stages.some((x: any) => x.key === k))) ? (await liveRows(programId)).stages : [];
-        const titles = Object.fromEntries([...live, ...stages].map((x: any) => [x.key, x.title_ar]));
-        const rep = cleanScheduleReport(b.schedule, stages.map((x: any) => x.key), titles);
-        row.schedule = rep.schedule;
-        scheduleNote = rep.message;
-      }
-      catch (err) { throw new Fail((err as Error).message); }
-    }
+  // خطة المراحل كاتبها الوحيد تبويب «الرحلة» (admin.cohort-plan، القرار 23): الحفظ من هنا كان يمحو ما لا يعرفه من الخطة
+  // (الفجوة 6أ)، فيُرفض برسالة تدل على التبويب بدل أن يُتجاهل بصمت
+  if ('schedule' in b || 'distribute' in b) {
+    throw new Fail('مواعيد المراحل ومددها تُضبط من تبويب «الرحلة» في ملف الدفعة، بمعاينة أثرها قبل الحفظ. لم يُحفظ شيء.', 400, 'use_cohort_plan');
   }
   // نمط المجموعة: تجانس المستوى ونمط المشروع، ونمط العمل لكل مرحلة
   try { Object.assign(row, cleanGroupSettings(b)); }
@@ -705,7 +692,7 @@ export async function cohortSave(a: Admin, b: Body) {
     if (team.length) must(await db.from('cohort_experts').insert(team.map((expert_id) => ({ cohort_id: saved.id, expert_id, added_by: a.email }))), 'تعذّر حفظ فريق الخبراء');
   }
   await audit('admin', a.email, prev ? 'cohort.save' : 'cohort.create', 'cohorts', saved.id, null, team ? { ...row, team_expert_ids: team } : row);
-  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined }, ...(scheduleNote ? { schedule_dropped: scheduleNote } : {}),
+  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined },
     ...(versionCreated ? { version_created: { id: versionCreated.id, number: versionCreated.number, label: versionCreated.label } } : {}) };
 }
 

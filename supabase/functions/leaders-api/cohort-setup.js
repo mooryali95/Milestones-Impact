@@ -2,6 +2,7 @@
 // جاهزية الدفعة: ما يلزم ضبطه قبل أن تعمل رحلة الجهة (منطق خالص بلا قاعدة)
 // ════════════════════════════════════════════════════════════════
 import { countAr } from './labels.js';
+import { planDaysOf, planPinned } from './stage-windows.js';
 
 // قائمة واحدة تقرؤها لوحة الإدارة في صفحة الجهة: لكل بند حاله بجملة تُقرأ، وأين يُضبط.
 // لا تخزّن شيئًا: كل بند مشتق من حقل الدفعة نفسه (المستشار من cohorts.advisor_expert_id، والجدول من schedule).
@@ -32,7 +33,9 @@ export function undatedFor(cohort, sessions = []) {
  *  على عضو لجنة بلا دور أو معتمد بلا خدمة لا يُحتسب مستشارًا، لأن advisorOf لا يعيده */
 export function cohortSetup({ cohort, advisorName = null, advisorServes = true, teamCount = 0, members = 0, upcomingSessions = 0, undatedSessions = 0 }) {
   if (!cohort) return [];
-  const stages = Object.keys(cohort.schedule || {}).length;
+  const plan = Object.values(asJson(cohort.schedule) || {});
+  const pinned = plan.filter(planPinned).length;
+  const days = plan.filter((e) => !planPinned(e) && planDaysOf(e) != null).length;
   return [
     {
       key: 'members', title: 'الأعضاء', ok: members > 0,
@@ -50,10 +53,15 @@ export function cohortSetup({ cohort, advisorName = null, advisorServes = true, 
       detail: cohort.starts_on && cohort.ends_on ? `من ${cohort.starts_on} إلى ${cohort.ends_on}` : cohort.starts_on ? `بدأت ${cohort.starts_on} بلا تاريخ نهاية: لا يمكن توزيع الجدول` : 'بلا تاريخ بداية ولا نهاية',
       where: 'cohort',
     },
+    // خطة المراحل (R2a): التواريخ تُحسب دائمًا من بداية الدفعة ومدد المراحل (cohortPlan)، فالبند ناجح متى كان للدفعة تاريخ
+    // بداية، لا بعدد مفاتيح schedule. والمثبت بتاريخ (ومنه ما وُزّع قبل R2a) يُسمّى لأنه لا يتبع المدد
     {
-      key: 'schedule', title: 'جدول المراحل', ok: stages > 0,
-      detail: stages > 0 ? `${stages} مرحلة مجدولة` : 'فارغ: يرى المشارك «بلا موعد بعد» عند كل مرحلة',
-      where: 'schedule',
+      key: 'schedule', title: 'خطة المراحل', ok: !!cohort.is_default || !!cohort.starts_on,
+      detail: cohort.is_default ? 'دفعة مفتوحة: المدد نسبية من دخول كل مشارك، ولا تواريخ مطلقة'
+        : !cohort.starts_on ? 'بلا تاريخ بداية: لا تواريخ للمراحل ولا مواعيد لمعالمها بعد'
+          : [days ? `${countAr(days, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} بمدة خاصة بالدفعة` : 'تواريخ المراحل من بداية الدفعة ومدد البرنامج',
+            pinned ? `${countAr(pinned, 'مرحلة واحدة مثبتة', 'مرحلتان مثبتتان', 'مراحل مثبتة', 'مرحلة مثبتة')} بتاريخ لا يتبع المدد` : ''].filter(Boolean).join('، '),
+      where: 'journey', pinned,
     },
     {
       key: 'sessions', title: 'الجلسات', ok: upcomingSessions > 0 || usesHandbook(cohort),

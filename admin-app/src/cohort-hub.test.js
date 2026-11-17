@@ -67,12 +67,20 @@ describe('ملف الدفعة', () => {
     expect(item(hub(base), 'program').detail).toContain('مثبتة على النسخة 2');
   });
 
-  it('ما ينقص يحمل زر ضبطه: المستشار والجدول والاعتماد', () => {
-    const h = hub({ ...base, advisor_expert_id: null, schedule: {}, pending_approval: 12 });
+  it('ما ينقص يحمل زر ضبطه: المستشار والخطة والاعتماد', () => {
+    // خطة المراحل (R2a): ناجحة بتاريخ البداية لا بعدد مفاتيح schedule، وبلا بداية تفتح «تحرير الدفعة» لتحديده
+    const h = hub({ ...base, advisor_expert_id: null, schedule: {}, starts_on: null, pending_approval: 12 });
     expect(item(h, 'advisor').action).toBe('team');
-    expect(item(h, 'schedule').action).toBe('schedule');
+    expect(item(h, 'schedule')).toMatchObject({ ok: false, action: 'edit', title: 'خطة المراحل' });
     expect(item(h, 'approval')).toMatchObject({ ok: false, action: 'approve' });
-    expect(h.missing).toBe(3);
+    expect(h.missing).toBe(4);
+    const empty = item(hub({ ...base, schedule: {} }), 'schedule');
+    expect(empty).toMatchObject({ ok: true, action: null, detail: 'تواريخ المراحل من بداية الدفعة ومدد البرنامج' });
+    // ما وُزّع قبل R2a يبقى مثبتًا: البند ناجح ويفتح تبويب الرحلة لـ«حرّر التواريخ لتتبع المدد»
+    const pinned = item(hub({ ...base, schedule: { s1: { start: '2026-11-10', end: '2026-11-20' }, s2: { days: 9 } } }), 'schedule');
+    expect(pinned).toMatchObject({ ok: true, action: 'plan' });
+    expect(pinned.detail).toBe('مرحلة واحدة بمدة خاصة بالدفعة، مرحلة واحدة مثبتة بتاريخ لا يتبع المدد');
+    expect(item(hub({ ...base, is_default: true, organization_id: null, starts_on: null }), 'schedule').ok).toBe(true);
   });
 
   it('الجلسات لا تظهر حين لم تُقرأ (null)، فلا يُعرض نقص غير حقيقي', () => {
