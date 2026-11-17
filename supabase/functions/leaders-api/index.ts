@@ -69,6 +69,7 @@ import * as NB from './nudge-banner.ts';
 import * as GU from './guide.ts';
 import * as GE from './guide-eval.ts';
 import * as GA from './guide-admin.ts';
+import * as TD from './today-desk.ts';
 import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
 
@@ -512,6 +513,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.insight': () => IN.adminInsight(),
   'admin.changes': (_a, b) => IN.adminChanges(b),
   'admin.inbox': (_a, b) => A.inbox(b),
+  // مكتب اليوم 3ب: التنبيهات ونبض الدفعات، قراءة فقط بصلاحية الصندوق نفسها (today-desk.ts)
+  'admin.today': (_a, b) => TD.today(b),
   // التذكير الموحد (nudges.ts): المحرك نفسه والسجل الواحد لكل مرسل. remind-stuck اسم قديم يبقى للتوافق
   'admin.remind-stuck': (a, b) => A.writer(a, NU.adminSend, b),
   'admin.nudge': (a, b) => A.writer(a, NU.adminSend, b),

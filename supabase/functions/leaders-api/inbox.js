@@ -39,7 +39,8 @@ export function inboxOf(src, now = Date.now()) {
     for (const r of src?.[kind] || []) {
       const days = daysSince(r.at, now);
       items.push({
-        kind, kind_ar: def.label, id: r.id, title: r.title || '', sub: r.sub || '', at: r.at || null, days,
+        // participant_id: صاحب البند إن كان عن مشارك، يعدّ به نبض الدفعات في «مكتب اليوم» ما ينتظر من أعضاء كل دفعة
+        kind, kind_ar: def.label, id: r.id, participant_id: r.participant_id || null, title: r.title || '', sub: r.sub || '', at: r.at || null, days,
         ...toneOf(def, r.at, days, now),
         // الوجهة: عرض نوعها المصفّى إن كان له عرض، وإلا ملف المشارك حين يكون البند عن مشارك، وإلا تبويب نوعه بمعرّفه إن كان له صفحة
         to: def.query ? { tab: def.tab, id: null, query: def.query }

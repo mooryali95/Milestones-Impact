@@ -1235,3 +1235,22 @@
 .inbox-view { margin: 8px 0 0; font-size: .84rem; color: var(--ink-soft); }
 .ins-an { margin-top: 22px; }
 .ins-an-h { font-size: 1.05rem; margin: 0; color: var(--petrol); }
+
+/* ── مكتب اليوم 3ب: التنبيهات ونبض الدفعات (Overview.jsx) ── */
+.today-alerts ul { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; }
+.today-alert { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid var(--line); border-inline-start: 4px solid var(--st-warn); border-radius: 8px; background: #fff; }
+.today-alert.bad { border-inline-start-color: var(--st-bad); background: linear-gradient(var(--st-bad-bg), #fff 48px); }
+.today-alert .la-link { text-align: start; overflow-wrap: anywhere; }
+.today-alert-ic { flex: none; inline-size: 20px; text-align: center; font-weight: 700; color: var(--st-warn-text); }
+.today-alert.bad .today-alert-ic { color: var(--st-bad); }
+.today-pulse-wrap { overflow-x: auto; margin: 0 0 14px; }
+.today-pulse-t { inline-size: 100%; }
+.today-pulse-t th[scope="row"] { text-align: start; font-weight: 600; }
+.today-skip { margin: 0 0 14px; font-size: .84rem; }
+@media (max-width: 640px) {
+  .today-pulse-t thead { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .today-pulse-t, .today-pulse-t tbody, .today-pulse-t tr, .today-pulse-t th, .today-pulse-t td { display: block; inline-size: auto; }
+  .today-pulse-t tr { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; background: #fff; }
+  .today-pulse-t th[scope="row"], .today-pulse-t td { border: 0; padding: 3px 0; }
+  .today-pulse-t td::before { content: attr(data-label) ": "; color: var(--ink-soft); font-size: .8rem; }
+}
