@@ -29,7 +29,7 @@ describe('guidanceState: من لم يبدأ لا يوجَّه بعد', () => {
 
 describe('سقوف التوجيه في الإعدادات العامة', () => {
   it('افتراضيها قرار المالك: 5 دولارات يوميًا، 30 شهريًا، 8 يوميًا، 90 يومًا', () => {
-    expect(DEFAULTS.guidance).toEqual({ enabled: false, daily_spend_usd: 5, monthly_questions: 30, daily_questions: 8, retention_days: 90 });
+    expect(DEFAULTS.guidance).toEqual({ enabled: false, daily_spend_usd: 5, monthly_questions: 30, daily_questions: 8, retention_days: 90, extra_rules: '' });
     expect(SETTINGS.guidance.super).toBe(true);
   });
   it('تعديل صالح يُقبل، وأسئلة اليوم لا تزيد على الشهر، والسالب مرفوض', () => {

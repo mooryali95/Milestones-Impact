@@ -694,6 +694,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.guide-transcript': (a, b) => GT.transcript(a, b),
   'admin.guide-transcript-grants': (a) => GT.grants(a),
   'admin.guide-transcript-grant': (a, b) => A.superWriter(a, GT.grantSet, b),
+  // H4: رد غير دقيق ← حالة تقييم، وتوجيهات المالك للمساعد
+  'admin.guide-flag': (a, b) => A.superWriter(a, GT.flagReply, b),
+  'admin.guide-rules': (a, b) => A.superWriter(a, GT.rulesSave, b),
   'admin.agent-state': (a) => AG.state(a),
   'admin.agent-usage': (a) => AG.usage(a),
   'admin.agent-conversations': (a, b) => AG.conversations(a, b),

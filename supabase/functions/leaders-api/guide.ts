@@ -16,7 +16,7 @@ import { approvedLevels, journeyFor } from './participant.ts';
 import { companionAllowed, filterHandbookMd, handbookModulesFor, pickCohort, quizFor } from './logic.js';
 import { guidanceFor } from './guidance.ts';
 import {
-  contextLine, GATE_AR, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RULES,
+  contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RULES,
   guideGate, left, parseReply, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
 } from './guide.js';
 import { costMicros, estimateTokens, worstCaseMicros } from '../agent-chat/pricing.ts';
@@ -126,12 +126,12 @@ async function save(row: Record<string, unknown>): Promise<number | null> {
 // ── التوليد: مسار واحد يجيب به المشارك ويُقيَّم به قبل الإطلاق (guide-eval.ts)، فما يُقيَّم هو ما يعمل ──
 type Chapter = { title: string; md: string; quiz: any[] } | null;
 type Turn = { role: string; body: string };
-export function worstFor(o: { chapter: Chapter; ctx: string; text: string; past: Turn[] }) {
-  const prefix = estimateTokens(GUIDE_RULES) + (o.chapter ? estimateTokens(o.chapter.md) : 0);
+export function worstFor(o: { chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string }) {
+  const prefix = estimateTokens(o.rules || GUIDE_RULES) + (o.chapter ? estimateTokens(o.chapter.md) : 0);
   const rest = estimateTokens(o.ctx) + estimateTokens(o.text) + o.past.reduce((a, m) => a + estimateTokens(m.body), 0);
   return worstCaseMicros(GUIDE_MODEL, prefix, rest, GUIDE_MAX_TOKENS);
 }
-export async function generate(o: { key: string; chapter: Chapter; ctx: string; text: string; past: Turn[] }) {
+export async function generate(o: { key: string; chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string }) {
   // الرسائل تتناوب بدءًا بالمشارك: يُسقط ما قبل أول سؤال، ويُدمج المتتالي من الدور نفسه
   const messages: { role: 'user' | 'assistant'; content: any }[] = [];
   for (const m of o.past) {
@@ -142,7 +142,7 @@ export async function generate(o: { key: string; chapter: Chapter; ctx: string; 
   }
   if (messages.length && messages[messages.length - 1].role === 'user') messages.pop();
   messages.push({ role: 'user', content: [{ type: 'text', text: o.ctx }, { type: 'text', text: o.text }] });
-  const system: any[] = [{ type: 'text', text: GUIDE_RULES, cache_control: { type: 'ephemeral' } }];
+  const system: any[] = [{ type: 'text', text: o.rules || GUIDE_RULES, cache_control: { type: 'ephemeral' } }];
   if (o.chapter) system.push({ type: 'text', text: `نص باب «${o.chapter.title}» من كتاب المشارك:\n\n${o.chapter.md}`, cache_control: { type: 'ephemeral' } });
   const res = await GD.model({
     model: GUIDE_MODEL, max_tokens: GUIDE_MAX_TOKENS, system, messages,
@@ -201,7 +201,8 @@ export async function guideAsk(p: any, b: Body) {
     .filter((m: any) => m.id !== questionId && m.verdict !== 'refused' && m.verdict !== 'error')
     .slice(-GUIDE_HISTORY);
   // السقف اليومي: حجز أسوأ تكلفة قبل الاستدعاء
-  const worst = worstFor({ chapter, ctx, text, past });
+  const rules = rulesWith(s.extra_rules);
+  const worst = worstFor({ chapter, ctx, text, past, rules });
   const cap = Math.round(Number(s.daily_spend_usd) * 1e6);
   const { data: reserved, error: re } = await db.rpc('guidance_spend_reserve', { p_day: w.dayKey, p_micros: worst, p_cap: cap });
   if (re || reserved === null || reserved === undefined) {
@@ -212,7 +213,7 @@ export async function guideAsk(p: any, b: Body) {
 
   let g: Awaited<ReturnType<typeof generate>>;
   try {
-    g = await generate({ key, chapter, ctx, text, past });
+    g = await generate({ key, chapter, ctx, text, past, rules });
   } catch (e) {
     // الحجز يبقى محسوبًا (قد يكون فوتر)، والسؤال لا يُحسب على المشارك
     console.error('guide model', (e as any)?.status || (e as Error)?.name);
