@@ -8,7 +8,7 @@ import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
-import { planOffKeys, planRules, planSchedule, planStages } from './stage-windows.js';
+import { planOffKeys, planRules, planSchedule, planStages, planWithRules } from './stage-windows.js';
 import { cleanStageModes } from './groups.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
@@ -1701,13 +1701,17 @@ export function cleanDelivery(delivery, requirements) {
 // المشارك وتقرأ المعالم والخريطة المدة نفسها التي يحسبها cohortPlan. نص المدة الثابت (بلا {duration}) لا يُمس
 // والإيقاف للدفعة (off في خطتها، R2b): المرحلة الموقوفة تسقط من رحلة المشارك كما تسقط غير النشطة، ومعها بنودها، وقواعد ما
 // ينتظرها تُعاد كتابتها (planRules، القرار 22) فلا يُقفل أحد إلى الأبد. ما أنجزه فيها محفوظ في صفوفه ويعود إن أُعيد تشغيلها.
+// والتوازي للدفعة (with وoffset في خطتها، R3a): قاعدة «تسير مع» من الخطة فوق قاعدة النسخة (planWithRules)، والإزاحة لا تقفل
 // stages_off: الموقوفة بأسمائها ومواضعها لمن يعرضها باهتة (خريطة ملف الدفعة)، وrewrites: القواعد التي أُعيدت كتابتها
 export function cohortDefinition({ live, version, cohort }) {
   const base = version?.data || live || { stages: [], requirements: [] };
   const delivery = cohort?.delivery || {};
   const active = (base.stages || []).filter((s) => s.active !== false);
-  const off = cohort ? planOffKeys(planSchedule(cohort)) : new Set();
-  const { stages, rewrites } = planRules(active.filter((s) => !off.has(s.key)), off);
+  const sched = cohort ? planSchedule(cohort) : {};
+  const off = cohort ? planOffKeys(sched) : new Set();
+  // التوازي الخاص بالدفعة (R3a): «تسير مع» من خطتها فوق قاعدة النسخة، فتُفتح مع بداية مرجعها كما تُرسم معه. والإزاحة
+  // تخطيط للتواريخ وحدها لا يقرؤها resolveStages، فلا يُقفل أحد حتى يحين موعدها (القرار 6)
+  const { stages, rewrites } = planRules(planWithRules(active.filter((s) => !off.has(s.key)), sched), off);
   return {
     stages: planStages(stages, cohort?.schedule),
     requirements: (base.requirements || []).filter((r) => r.active !== false && !off.has(r.stage_key)).map((r) => applyDelivery(r, delivery[r.code])),

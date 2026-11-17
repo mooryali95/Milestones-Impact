@@ -41,15 +41,18 @@ export function distributeSchedule(stages, startsOn, endsOn) {
   const avg = known.filter(Boolean).length ? known.filter(Boolean).reduce((a, b) => a + b, 0) / known.filter(Boolean).length : 1;
   const weight = new Map(seq.map((s, i) => [s.key, known[i] || avg]));
   // «تبدأ مع» X (rules.with): المرحلة تنضم إلى مجموعة مرجعها إن كان إلزاميًا قبلها، والسلسلة (C مع B وB مع A) تُحل إلى A.
-  // المجموعة نصيب واحد بطول أطول مراحلها، وكل مرحلة فيها تبدأ ببدايتها وتمتد بنسبة مدتها من أطولها
-  const groups = [], groupOf = new Map();
+  // المجموعة نصيب واحد بطول أطول مراحلها، وكل مرحلة فيها تبدأ ببدايتها وتمتد بنسبة مدتها من أطولها.
+  // والإزاحة (rules.offset، R3a): المرحلة تبدأ بعد إزاحتها من بداية مرجعها، فمدى المجموعة أبعد نهاية بين أعضائها
+  const groups = [], groupOf = new Map(), lead = new Map();
   for (const s of seq) {
     const ref = s.rules && s.rules.unlock === 'with' && s.rules.with != null ? String(s.rules.with) : null;
     const g = ref != null ? groupOf.get(ref) : null;
     if (g) g.push(s); else groups.push([s]);
     groupOf.set(s.key, g || groups.at(-1));
+    const off = g ? Math.max(0, Math.min(Math.round(Number(s.rules.offset) || 0), weight.get(ref) ?? 0)) : 0;
+    lead.set(s.key, g ? (lead.get(ref) || 0) + off : 0);
   }
-  const w = groups.map((g) => Math.max(...g.map((s) => weight.get(s.key))));
+  const w = groups.map((g) => Math.max(...g.map((s) => lead.get(s.key) + weight.get(s.key))));
   const total = w.reduce((a, b) => a + b, 0);
   const span = daysBetween(startsOn, endsOn) + 1;
   let cursor = 0, acc = 0;
@@ -58,8 +61,9 @@ export function distributeSchedule(stages, startsOn, endsOn) {
     const endIdx = i === groups.length - 1 ? span - 1 : Math.max(cursor, Math.round((acc / total) * span) - 1);
     const len = endIdx - cursor + 1;
     for (const s of g) {
-      const own = weight.get(s.key) >= w[i] ? endIdx : Math.min(endIdx, cursor + Math.max(1, Math.round((weight.get(s.key) / w[i]) * len)) - 1);
-      out[s.key] = { start: addDays(startsOn, cursor), end: addDays(startsOn, own) };
+      const at = Math.min(endIdx, cursor + Math.round((lead.get(s.key) / w[i]) * len));
+      const own = lead.get(s.key) + weight.get(s.key) >= w[i] ? endIdx : Math.min(endIdx, at + Math.max(1, Math.round((weight.get(s.key) / w[i]) * len)) - 1);
+      out[s.key] = { start: addDays(startsOn, at), end: addDays(startsOn, Math.max(at, own)) };
     }
     cursor = Math.min(span - 1, endIdx + 1);
   });
@@ -91,12 +95,14 @@ export function cleanScheduleReport(raw, stageKeys, titles = {}) {
     const end = ISO.test(v.end || '') ? v.end : null;
     const days = int(v.days, 0, 365, 'مدة المرحلة من 0 إلى 365 يومًا');
     const off = v.off === true ? true : undefined;
-    let wth = v.with != null && v.with !== '' ? String(v.with) : undefined;
+    // with: مفتاح مرحلة تسير معها في هذه الدفعة، أو false لـ«لا تسير مع شيء» (R3a)، ولا إزاحة مع false
+    let wth = v.with === false ? false : v.with != null && v.with !== '' ? String(v.with) : undefined;
     let offset = int(v.offset, 0, 365, 'الإزاحة من 0 إلى 365 يومًا');
+    if (wth === false) offset = undefined;
     if (!start && !end && days === undefined && !off && wth === undefined && offset === undefined) continue;
     if (!keys.has(k)) { dropped.push(k); continue; }
     if (start && end && end < start) throw new Error('نهاية مرحلة قبل بدايتها');
-    if (wth !== undefined && (wth === k || !keys.has(wth))) { wth = undefined; offset = undefined; }
+    if (wth !== undefined && wth !== false && (wth === k || !keys.has(wth))) { wth = undefined; offset = undefined; }
     const e = {
       ...(off ? { off } : {}), ...(days !== undefined ? { days } : {}), ...(wth !== undefined ? { with: wth } : {}),
       ...(offset !== undefined ? { offset } : {}), ...(start ? { start } : {}), ...(end ? { end } : {}),

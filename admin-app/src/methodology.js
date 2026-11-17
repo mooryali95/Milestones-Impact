@@ -53,13 +53,17 @@ const preview = (reqs, f) => (v) => {
 // قواعد المرحلة في النموذج: حقول rule_* تُجمع في rules عند الحفظ
 export function stageToForm(s) {
   const r = stageRules(s);
-  return { ...s, rule_mode: r.mode, rule_unlock: r.unlock, rule_after: r.after, rule_with: r.with ?? '', rule_day: r.day ?? '', rule_complete: r.complete };
+  return { ...s, rule_mode: r.mode, rule_unlock: r.unlock, rule_after: r.after, rule_with: r.with ?? '', rule_offset: r.offset || '', rule_day: r.day ?? '', rule_complete: r.complete };
 }
 export function formToStage(v) {
-  const { rule_mode, rule_unlock, rule_after, rule_with, rule_day, rule_complete, ...rest } = v;
+  const { rule_mode, rule_unlock, rule_after, rule_with, rule_offset, rule_day, rule_complete, ...rest } = v;
   const rules = { mode: rule_mode, unlock: rule_unlock, complete: rule_complete };
   if (rule_unlock === 'stages') rules.after = rule_after || [];
-  if (rule_unlock === 'with') rules.with = rule_with || null;
+  if (rule_unlock === 'with') {
+    rules.with = rule_with || null;
+    // الإزاحة (R3a): تخطيط للتواريخ وحدها، وصفر أو فراغ هو الافتراضي فلا يُرسل
+    if (rule_offset !== '' && rule_offset != null && Number(rule_offset) !== 0) rules.offset = rule_offset;
+  }
   if (rule_unlock === 'day') rules.day = rule_day;
   return { ...rest, rules };
 }
@@ -80,6 +84,8 @@ export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'rule_with', label: 'تبدأ مع', type: 'select', show: (v) => v.rule_unlock === 'with', empty: 'اختر المرحلة',
     options: withOptions(stages, selfKey),
     help: 'تُفتح مع بداية المرحلة المختارة وتسير معها في الأسابيع نفسها، والمرحلة التي بعد المجموعة تنتظر اكتمالها كلها. القائمة تعرض المراحل الظاهرة قبل هذه في محورها نفسه، بشرط ألا تفصل بينهما مرحلة لا تسير معهما.' },
+  { name: 'rule_offset', label: 'مخطط بعد كم يومًا من بدايتها', type: 'number', show: (v) => v.rule_unlock === 'with',
+    help: 'تخطيط للتواريخ وحدها: تُفتح مع بداية المرحلة المختارة كما هي، وتُرسم في الخط وتُحسب مواعيدها بعد هذا العدد من الأيام. من 0 إلى مدة المرحلة المختارة، وفراغ يعني من بدايتها.' },
   { name: 'rule_day', label: 'بعد كم يومًا من بداية الدفعة', type: 'number', show: (v) => v.rule_unlock === 'day',
     help: 'يُحسب من تاريخ بداية دفعة المشارك. إن لم يكن للدفعة تاريخ بداية تُفتح بعد ما قبلها.' },
   { name: 'rule_complete', label: 'متى تكتمل', type: 'select', options: STAGE_COMPLETE_AR },

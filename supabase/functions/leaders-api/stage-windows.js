@@ -11,11 +11,14 @@
 //   days          مدة خاصة بالدفعة بالأيام، وإلا مدة النسخة (duration_days)
 //   start [, end] تاريخ مثبت: المرحلة مرساة يُزاح ما بعدها منها. المدخل القديم {start,end} يُقرأ هكذا من اليوم الأول
 //   off           موقوفة في هذه الدفعة (R2b): لا نافذة لها ولا تأخذ من المسار يومًا، ويُزاح ما بعدها. تُرجع بعلامة off
-//   with، offset  التوازي الخاص بالدفعة: يحفظها المنظف ولا يمحوها، ويطبقها R3a. هنا لا أثر لها بعد
+//   with، offset  التوازي الخاص بالدفعة (R3a): with مفتاح مرحلة سابقة في المحور تسير معها، أو false لـ«لا تسير مع شيء»،
+//                 وoffset أيام من بداية مرجعها (0 إلى مدته). بلاهما قاعدة النسخة (rules.with وrules.offset). الإزاحة تخطيط
+//                 للتواريخ وحدها: الفتح يبقى مع بداية المرجع (القرار 6)
 // قاعدة النهاية (القرار 18): النافذة شاملة الطرفين، فمرحلة بـN يوم من يوم س تنتهي س + N - 1 وما بعدها يبدأ في اليوم التالي.
 // والمرحلة بلا مدة (0) نقطة في يوم بدايتها لا تأخذ من المسار شيئًا.
 import { addDays, daysBetween } from './milestones.js';
-import { daysAr, stageRules } from './journey.js';
+import { daysAr, stagePhase, stageRules } from './journey.js';
+import { PHASE_AR } from './labels.js';
 
 const isoDay = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -59,10 +62,59 @@ export function planDaysOnly(schedule) {
   const out = {};
   for (const [k, v] of Object.entries(schedule && typeof schedule === 'object' ? schedule : {})) {
     const d = planDaysOf(v);
-    const e = { ...(planOff(v) ? { off: true } : {}), ...(d != null ? { days: d } : {}) };
+    // التوازي (R3a) ليس تاريخًا: يبقى مع المدد، فالمفتوحة تملكه (البند 4.5 القاعدة 7) والخط بلا تاريخ يرسمه
+    const e = { ...(planOff(v) ? { off: true } : {}), ...(d != null ? { days: d } : {}), ...planWithOf(v) };
     if (Object.keys(e).length) out[k] = e;
   }
   return out;
+}
+
+// ══ التوازي الخاص بالدفعة (R3a) ══
+// القواعد التي تقبل «تسير مع» في دفعة: ما يُفتح بعد ما قبله أو مع غيره. قواعد الفتح الأخرى (يوم ثابت، بعد مراحل، دائمًا،
+// بيد الأدمن) للبرنامج وحده (القرار 2)، فلا تحولها خطة الدفعة إلى توازٍ
+export const PLAN_WITH_UNLOCKS = Object.freeze(['previous', 'with']);
+/** التوازي في مدخل الخطة إن صلح: { with?: مفتاح أو false، offset?: أيام } @param {any} entry */
+export function planWithOf(entry) {
+  if (!entry || typeof entry !== 'object') return {};
+  /** @type {{ with?: string|false, offset?: number }} */
+  const out = {};
+  if (entry.with === false) out.with = false;
+  else if (typeof entry.with === 'string' && entry.with) out.with = entry.with;
+  const n = entry.offset;
+  if (n !== undefined && n !== null && n !== '' && out.with !== false) {
+    const v = Number(n);
+    if (Number.isInteger(v) && v >= 0 && v <= PLAN_DAYS_MAX) out.offset = v;
+  }
+  return out;
+}
+const sortOf = (a, b) => (a.sort ?? 0) - (b.sort ?? 0);
+/** المراحل بقواعد التوازي الفعلية في الدفعة: with وoffset من خطتها فوق قاعدة النسخة. يقرؤها cohortPlan (المجموعات والإزاحة)
+ * والخط الزمني (الممرات) وتعريف الدفعة (cohortDefinition: «تسير مع» تُفتح مع بداية مرجعها، والإزاحة لا تقفل، القرار 6).
+ * مرجع لا يسبقها في الترتيب أو من محور آخر أو غائب عن القائمة (موقوف، أو نسخة رُقّيت) يُتجاهل فتبقى قاعدة النسخة،
+ * فلا يُقفل أحد إلى الأبد بمرجع لاحق. والحارس (planWithIssues) يرفضه قبل الحفظ. التطبيق مرتين لا يغير شيئًا
+ * @param {any[]} stages @param {any} schedule */
+export function planWithRules(stages, schedule) {
+  const sched = schedule && typeof schedule === 'object' ? schedule : {};
+  const list = stages || [];
+  if (!list.some((s) => { const p = planWithOf(sched[s.key]); return p.with !== undefined || p.offset !== undefined; })) return list;
+  const idx = new Map([...list].sort(sortOf).map((s, i) => [s.key, i]));
+  const byKey = new Map(list.map((s) => [s.key, s]));
+  return list.map((s) => {
+    const p = planWithOf(sched[s.key]);
+    if (p.with === undefined && p.offset === undefined) return s;
+    const r = stageRules(s);
+    if (!PLAN_WITH_UNLOCKS.includes(r.unlock)) return s;
+    const raw = s.rules && typeof s.rules === 'object' ? s.rules : {};
+    const { unlock: _u, with: _w, offset: _o, ...rest } = raw;
+    if (p.with === false) return { ...s, rules: rest };
+    const target = p.with !== undefined ? p.with : r.unlock === 'with' ? r.with : null;
+    if (!target) return s;
+    const ref = byKey.get(target);
+    if (!ref || target === s.key || !(idx.get(target) < idx.get(s.key)) || stagePhase(ref) !== stagePhase(s)) return s;
+    // إزاحة الدفعة، وإلا إزاحة النسخة إن بقي مرجعها نفسه، وإلا من بدايته
+    const off = p.offset !== undefined ? p.offset : target === r.with ? r.offset : 0;
+    return { ...s, rules: { ...rest, unlock: 'with', with: target, ...(off ? { offset: off } : {}) } };
+  });
 }
 
 /** قواعد الفتح بعد إسقاط الموقوف (البند 4.4 والقرار 22): «بعد مراحل» يُحذف منها مفتاح الموقوفة، وإن فرغت صارت «بعد السابقة»،
@@ -136,10 +188,21 @@ export function cohortPlan(stages, cohort = {}) {
       offRows.push(row);
     } else onStages.push(s);
   }
-  for (const group of withGroups(onStages)) {
+  // التوازي الفعلي (R3a): with وoffset من الخطة فوق قاعدة النسخة
+  const effStages = planWithRules(onStages, sched);
+  const titleOf = new Map((stages || []).map((s) => [s.key, s.title_ar || s.key]));
+  for (const group of withGroups(effStages)) {
     let next = null;
+    // البداية والنهاية النسبيتان داخل المجموعة (من أول يومها، والنهاية مفتوحة): منهما تنبيه التجاوز بتاريخ أو بلا تاريخ
+    const rel = new Map();
     group.forEach((s, i) => {
       const entry = sched[s.key];
+      const rr = stageRules(s);
+      const refRow = i > 0 ? byKey[rr.with] : null;
+      // الإزاحة من 0 إلى مدة المرجع (البند 4.6): ما زاد عليها (مدة المرجع قصرت بعد ضبطها) يُحصر في مدته ويُنبَّه
+      const cap = refRow ? Math.max(0, refRow.days) : 0;
+      const shift = refRow ? Math.min(rr.offset, cap) : 0;
+      if (refRow && rr.offset > cap) issues.push({ level: 'warn', stage: s.key, code: 'offset_range', msg: `إزاحة «${titleOf.get(s.key)}» (${daysAr(rr.offset)}) أكبر من مدة «${titleOf.get(rr.with)}» (${cap ? daysAr(cap) : 'صفر'})، فتُحسب بمدتها` });
       const programDays = Math.max(0, Math.round(Number(s.duration_days) || 0));
       const own = planDaysOf(entry);
       let days = own ?? programDays;
@@ -150,8 +213,7 @@ export function cohortPlan(stages, cohort = {}) {
         source = 'pinned';
         const start = ISO.test(entry.start || '') ? entry.start : null;
         const end = ISO.test(entry.end || '') ? entry.end : null;
-        const ref = i > 0 ? byKey[stageRules(s).with] : null;
-        from = start || (ref?.from ?? cursor);
+        from = start || (refRow?.from ? addDays(refRow.from, shift) : cursor);
         if (from) {
           if (end) {
             // نهاية مكتوبة بلا بداية تسبق بدايتها المحسوبة: تُقرأ يومًا واحدًا عند نهايتها، وتُنبَّه
@@ -163,8 +225,7 @@ export function cohortPlan(stages, cohort = {}) {
           if (start && cursor && i === 0 && start < cursor) issues.push({ level: 'warn', stage: s.key, code: 'pinned_order', msg: `تاريخ «${s.title_ar || s.key}» المثبت (${start}) يسبق نهاية ما قبلها` });
         }
       } else {
-        const ref = i > 0 ? byKey[stageRules(s).with] : null;
-        from = i === 0 ? cursor : ref ? ref.from : cursor;
+        from = i === 0 ? cursor : refRow ? (refRow.from ? addDays(refRow.from, shift) : null) : cursor;
         if (from) {
           to = days > 0 ? addDays(from, days - 1) : from;
           nxt = days > 0 ? addDays(to, 1) : from;
@@ -173,12 +234,38 @@ export function cohortPlan(stages, cohort = {}) {
       if (stageRules(s).mode === 'required' && days === 0 && source !== 'pinned' && own != null) {
         issues.push({ level: 'warn', stage: s.key, code: 'zero_required', msg: `«${s.title_ar || s.key}» إلزامية بمدة صفر` });
       }
-      const row = { key: s.key, days, program_days: programDays, source, from, to, next: nxt };
+      const par = planWithOf(entry);
+      const row = {
+        key: s.key, days, program_days: programDays, source, from, to, next: nxt,
+        // التوازي الفعلي: المرجع وإزاحته، ومصدره (خطة الدفعة أو النسخة)
+        with: refRow ? rr.with : null, offset: shift, par_source: par.with !== undefined || par.offset !== undefined ? 'cohort' : 'program',
+      };
       byKey[s.key] = row;
       order.push(row);
+      const g0from = i === 0 ? from : byKey[group[0].key].from;
+      const r0 = from && g0from ? daysBetween(g0from, from) : refRow ? (rel.get(rr.with)?.[0] ?? 0) + shift : 0;
+      rel.set(s.key, [r0, r0 + days, source === 'pinned' && !from]);
       // أول المجموعة مثبتًا يضع نهايتها كما هو ولو سبق المؤشر، والبقية تمدها إن طالت
       if (nxt) next = source === 'pinned' && i === 0 ? nxt : later(next, nxt);
     });
+    // تنبيه التجاوز (البند 4.2 د): «تسير مع» تنتهي بعد مرجعها. مسموح، والمجموعة تنتهي بأطول أعضائها فيطول محورها.
+    // بالتواريخ إن عُرفت، وإلا بالأيام النسبية. المثبت بتاريخ بلا تواريخ لا يُقاس
+    // مدى العضو في المجموعة [بداية، نهاية مفتوحة) بالأيام من أول يومها
+    const spanOf = (k) => { const [a, e, unknown] = rel.get(k); return unknown ? null : [a, e]; };
+    for (const s of group.slice(1)) {
+      const row = byKey[s.key];
+      if (!row.with) continue;
+      const mine = spanOf(s.key), theirs = spanOf(row.with);
+      if (!mine || !theirs) continue;
+      const over = mine[1] - theirs[1];
+      if (over <= 0) continue;
+      const others = group.filter((x) => x.key !== s.key).map((x) => spanOf(x.key)).filter(Boolean).map((x) => x[1]);
+      const ext = others.length ? mine[1] - Math.max(...others) : 0;
+      issues.push({
+        level: 'warn', stage: s.key, code: 'with_over', over, extends: Math.max(0, ext),
+        msg: `«${titleOf.get(s.key)}» تنتهي بعد «${titleOf.get(row.with)}» بـ${daysAr(over)}${ext > 0 ? `، فيطول محور «${PHASE_AR[stagePhase(s)] || ''}» ${daysAr(ext)}` : ''}`,
+      });
+    }
     if (next) cursor = next;
   }
   // قاعدة «تُفتح يوم N» تبقى بتاريخها ولا تتبع المدد (القرار 20): تنبيه إن وقع يومها خارج نافذتها المخططة
@@ -205,7 +292,7 @@ export function cohortPlan(stages, cohort = {}) {
     dated: dated.length > 0 && dated.length === order.length, start: first, end, over,
     total_days: first && end ? daysBetween(first, end) + 1 : null,
     stages: all, byKey, windows, issues, off: offRows.map((x) => x.key),
-    changed: all.filter((x) => x.source !== 'program').length,
+    changed: all.filter((x) => x.source !== 'program' || x.par_source === 'cohort').length,
   };
 }
 

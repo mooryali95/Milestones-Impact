@@ -11,7 +11,8 @@ import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from
 import { cohortPlan, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { PHASE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import {
-  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, planRestartBlock, sameSchedule, suggestDays, unitFor,
+  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, planRestartBlock, planWithCandidates, planWithLock, sameSchedule,
+  suggestDays, unitFor,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
 
@@ -130,6 +131,8 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
       window_source: s.window ? (s.days_source === 'pinned' ? 'schedule' : 'plan') : null,
       window_source_ar: s.window ? WINDOW_SOURCE_AR[s.days_source === 'pinned' ? 'schedule' : 'plan'] : '',
       with_ar: withAr, rule_ar: ruleAr(raw.get(s.key) || {}, titleOf),
+      // الإزاحة (R3a): «تُفتح في …» و«مخطط من …» بلغة واحدة (البند 2.4)
+      offset_ar: s.offset_ar || '',
       acts: { shown, total: rs.length, text: rs.length ? (shown === rs.length ? actsAr(rs.length) : `${actsAr(rs.length)}، الظاهر منها ${shown}`) : 'لا أنشطة بعد' },
       undated: !!s.undated,
       people: p ? { here: p.here, late: p.late, done: p.done } : null,
@@ -219,8 +222,9 @@ export const planCohort = (c, cp) => {
 const liveStages = (def) => [...(def?.stages || [])].filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
 
 /** الخطة في المسودة: الجديدة بعد تعديل المدير، وصف لكل مرحلة (المدة ومصدرها ومدة البرنامج والتثبيت والإيقاف وسبب منعه)،
- * وعدد التعديلات. edit.off: { مفتاح: true أو false } (R2b)
- * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, boolean> } | null }} o */
+ * وعدد التعديلات. edit.off: { مفتاح: true أو false } (R2b). edit.with وedit.offset (R3a): «تسير مع» وإزاحتها، ولكل صف
+ * المرجع الفعلي وإزاحته ومصدرهما، والمراجع المقبولة (planWithCandidates) وسبب المنع، وحد الإزاحة (مدة المرجع) وتنبيه التجاوز
+ * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, boolean>, with?: Record<string, any>, offset?: Record<string, any> } | null }} o */
 export function planDraft({ def, cohort, edit = null }) {
   const stages = liveStages(def);
   const requirements = def?.requirements || [];
@@ -237,8 +241,16 @@ export function planDraft({ def, cohort, edit = null }) {
     const block = x.off
       ? planRestartBlock(stageBy.get(x.key), { stages, schedule: r.schedule })
       : planOffBlock(stageBy.get(x.key), { stages, requirements, schedule: { ...r.schedule, [x.key]: { ...(r.schedule[x.key] || {}), off: true } } });
+    const st = stageBy.get(x.key);
+    const pr = stageRules(st || {});
+    const over = plan.issues.find((i) => i.code === 'with_over' && i.stage === x.key) || null;
     rows[x.key] = {
       ...x, pinned: x.source === 'pinned', off: !!x.off, block,
+      // التوازي (R3a): المرجع الفعلي وإزاحته، وقاعدة البرنامج للمقارنة، والقائمة وسبب منعها، وحد الإزاحة وتنبيه التجاوز
+      with: x.with || null, offset: x.offset || 0, with_lock: x.off ? null : planWithLock(st),
+      with_options: x.off ? [] : planWithCandidates(stages, r.schedule, x.key).map((c) => ({ key: c.key, title: c.title_ar || c.key })),
+      program_with: pr.unlock === 'with' ? pr.with : null, program_offset: pr.offset,
+      offset_max: x.with ? Math.max(0, plan.byKey[x.with]?.days ?? 0) : 0, over,
       source_ar: x.off ? 'موقوفة لهذه الدفعة' : x.source === 'cohort' ? `معدّلة: البرنامج ${planDurationAr(x.program_days)}` : PLAN_SOURCE_AR[x.source],
       days_ar: x.off ? 'موقوفة' : planDurationAr(x.days), edited: !sameSchedule(saved[x.key] || {}, r.schedule[x.key] || {}),
       was_ar: before && !before.off && !x.off && before.days !== x.days ? `كانت ${planDurationAr(before.days)}` : before && !!before.off !== !!x.off ? (x.off ? 'كانت تعمل' : 'كانت موقوفة') : '',
@@ -275,6 +287,9 @@ export { planLock, suggestDays, unitFor, impactLines };
 export const planBody = (cohort, edit, op, opts = {}) => ({
   cohort_id: cohort.id, op, days: edit?.days || {}, ...(edit?.follow ? { follow: true } : {}),
   ...(edit?.off && Object.keys(edit.off).length ? { off: edit.off } : {}),
+  // التوازي (R3a): «تسير مع» وإزاحتها لما عُدّل وحده
+  ...(edit?.with && Object.keys(edit.with).length ? { with: edit.with } : {}),
+  ...(edit?.offset && Object.keys(edit.offset).length ? { offset: edit.offset } : {}),
   ...(op === 'save' && opts.notify ? { notify: true } : {}), ...(op === 'save' && opts.reenable === 'apply' ? { reenable: 'apply' } : {}),
   ...(cohort.updated_at ? { base_updated_at: cohort.updated_at } : {}),
 });
@@ -283,10 +298,13 @@ export function historyRows(list) {
   return (list || []).map((r) => {
     // ما تغيّرت مدته وحده، لا ما تحرك تاريخه لأن ما قبله طال أو قصر
     const n = (r.summary?.changes || []).filter((x) => !x.off && x.before !== x.after).length;
+    // ما تغيّر توازيه (R3a): مرجعه أو إزاحته
+    const p = (r.summary?.changes || []).filter((x) => !x.off && Array.isArray(x.with)).length;
+    const parAr = !p ? '' : `${countAr(p, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} ${p === 1 ? 'تغيّر توازيها' : p === 2 ? 'تغيّر توازيهما' : 'تغيّر توازيها'}`;
     const stopped = (r.summary?.stopped || []).length, started = (r.summary?.started || []).length;
     const offAr = [stopped ? `${countAr(stopped, 'أُوقفت مرحلة', 'أُوقفت مرحلتان', 'مراحل أُوقفت', 'مرحلة أُوقفت')}` : '', started ? `${countAr(started, 'أُعيدت مرحلة', 'أُعيدت مرحلتان', 'مراحل أُعيدت', 'مرحلة أُعيدت')}` : ''].filter(Boolean).join('، و');
     const durAr = !n ? '' : n === 2 ? 'مرحلتان تغيّرت مدتهما' : `${countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} ${n === 1 ? 'تغيّرت مدتها' : 'تغيّرت مددها'}`;
-    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr ? [offAr, durAr].filter(Boolean).join('، و') : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
+    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr || parAr ? [offAr, durAr, parAr].filter(Boolean).join('، و') : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
     const sh = r.summary?.shift ? `، ${r.summary.shift > 0 ? 'تأخرت' : 'تقدمت'} النهاية ${daysAr(Math.abs(r.summary.shift))}` : '';
     return { id: r.id, at: r.at, by: r.actor || '', text: `${what}${sh}`, undo: r.action === 'cohort.plan-undo' };
   });

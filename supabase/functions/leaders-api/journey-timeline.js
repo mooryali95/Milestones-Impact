@@ -13,7 +13,7 @@ import {
 import { daysAr, durationAr, renderJourneyText, stageRules } from './journey.js';
 import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
-import { cohortPlan, planDaysOnly, planOffKeys } from './stage-windows.js';
+import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planWithRules } from './stage-windows.js';
 
 // بداية افتراضية لسياق البرنامج: النوافذ تُحسب بالدالة نفسها ثم تُقرأ أيامًا من البداية
 const EPOCH = '2000-01-03';
@@ -62,7 +62,9 @@ function ownerOf(r) {
 export function journeyTimeline(resolved, { cohort = null, sessions = [], today = null, title = '' } = {}) {
   // الموقوفة في هذه الدفعة (R2b) تختفي من الخط ويُزاح ما بعدها، وتبقى بطاقتها باهتة في تبويب «الرحلة»
   const offKeys = cohort ? planOffKeys(cohort.schedule) : new Set();
-  const stages = (resolved?.stages || []).filter((s) => s.active !== false && !offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  // والتوازي الخاص بالدفعة (R3a): الممرات من «تسير مع» في خطتها فوق قاعدة النسخة، كما يحسبها cohortPlan
+  const shown = (resolved?.stages || []).filter((s) => s.active !== false && !offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const stages = cohort ? planWithRules(shown, planSchedule(cohort)) : shown;
   const reqs = resolved?.requirements || [];
   const t = isoToday(today);
   const isCohort = !!cohort;
@@ -156,12 +158,18 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     const r = stageRules(s);
     const label = d ? durationAr(d) : renderJourneyText(s.duration_label || '', { reqs, durationDays: d }) || 'آنية';
     const refKey = slot.together && slot.stages[0] !== s.key ? slot.stages[0] : null;
-    const withNote = refKey && r.with ? `تبدأ مع «${titleOf.get(r.with)}»` : slot.together ? 'تبدأ البقية معها' : '';
+    // الإزاحة (R3a) تخطيط لا فتح: «تُفتح مع X» و«مخطط من …» بلغة واحدة (البند 2.4)، فلا يُظن أنها تقفل حتى موعدها
+    const ref = refKey && r.with ? windows[r.with] : null;
+    const offsetAr = refKey && r.with && w.offset ? (dated && ref?.from
+      ? `تُفتح مع «${titleOf.get(r.with)}» في ${fmtDay(ref.from)}، ومخطط من ${fmtDay(w.from)}`
+      : `تُفتح مع «${titleOf.get(r.with)}»، ومخطط بعد ${daysAr(w.offset)} من بدايتها`) : '';
+    const withNote = refKey && r.with ? (w.offset ? `تبدأ مع «${titleOf.get(r.with)}» بعد ${daysAr(w.offset)}` : `تبدأ مع «${titleOf.get(r.with)}»`) : slot.together ? 'تبدأ البقية معها' : '';
     const status = statusOf(w);
     const left = status === 'active' ? daysBetween(t, w.to) : null;
     return {
       key: s.key, title: titleOf.get(s.key), phase: PHASES.includes(s.phase) ? s.phase : 'qualification', days, label,
       weight: round(timelineWeight(days)), slot: slot.key, lane: slot.stages.indexOf(s.key), together: slot.together, with_note: withNote,
+      offset: refKey ? w.offset || 0 : 0, offset_ar: offsetAr,
       // داخل الخانة: بداية المسار وعرضه بنسبة أيامه من أيام الخانة
       lane_at: slot.days ? round(((place(s.key)[0] - slot.from) / slot.days) * 100) : 0,
       lane_width: slot.days ? Math.max(8, round(((place(s.key)[1] - place(s.key)[0]) / slot.days) * 100)) : 100,

@@ -238,3 +238,19 @@
   .cj-savebar .la-row { inline-size: 100%; justify-content: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) { .cj-step button { transition: none; } }
+
+/* التوازي لهذه الدفعة (R3a): «تسير مع» والإزاحة، وتنبيه التجاوز */
+.cj-par { gap: 8px 12px; }
+.cj-par-with { display: inline-flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--ink-soft); }
+.cj-par-with select { min-block-size: 40px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff; font: inherit; font-size: .86rem; color: var(--ink); padding: 0 10px; max-inline-size: 100%; }
+.cj-par-with select:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: 1px; }
+.cj-par-off { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .84rem; color: var(--ink-soft); }
+.cj-over { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 8px 12px; border-radius: 10px; font-size: .8rem; line-height: 1.7;
+  color: var(--ink); background: color-mix(in srgb, var(--gold) 12%, #fff); border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent); }
+.cj-over > span { display: inline-grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 50%; flex: none; margin-block-start: 3px;
+  background: var(--gold-deep); color: #fff; font-weight: 800; font-size: .72rem; }
+.cj-rules li.cj-offset { color: var(--ink); }
+@media (max-width: 560px) {
+  .cj-par-with { flex-wrap: wrap; inline-size: 100%; }
+  .cj-par-with select { flex: 1 1 100%; }
+}
