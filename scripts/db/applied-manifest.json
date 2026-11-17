@@ -151,6 +151,7 @@
     "20261116150000_leaders_mail_queue_expiry": "a3c9a9800bf27633b6e37599d5274ae86f6a73d5377a370ef4dba9b151e605ec",
     "20261116160000_leaders_erasure_decisions": "b066800aded7cba02a691b3c16754a05eb05e25e4679ae1521afc94d4b7b6961",
     "20261116170000_leaders_guidance_eval_sets": "870c2d40569842372e34372f7b6bcb423b15eb0b9cdb6d00f29944f544a8400b",
-    "20261116180000_leaders_guidance_transcripts": "3b3ecac49c229661602f1c155273bb235d0e4d28afaa5a8719ed1cbec6ec2a60"
+    "20261116180000_leaders_guidance_transcripts": "3b3ecac49c229661602f1c155273bb235d0e4d28afaa5a8719ed1cbec6ec2a60",
+    "20261116190000_leaders_slack_digest_category": "8d7b62375ac841e11b4c0f2f37d6f1aa253f36ab86941991413bc2a19ced9fb1"
   }
 }

@@ -49,8 +49,24 @@ export function inboxOf(src, now = Date.now()) {
   }
   items.sort((x, y) => String(x.at || '9').localeCompare(String(y.at || '9')));
   const counts = Object.fromEntries(Object.keys(INBOX_KINDS).map((k) => [k, items.filter((i) => i.kind === k).length]));
-  return { items, counts, total: items.length, late: items.filter((i) => i.late).length, soon: items.filter((i) => i.soon).length };
+  return { items, counts, by_tab: byTabOf(items), total: items.length, late: items.filter((i) => i.late).length, soon: items.filter((i) => i.soon).length };
 }
+
+// «العدّ الواحد»: عدّاد كل تبويب في اللوحة من بنود الصندوق نفسه، بتبويب نوعه في INBOX_KINDS (لا جدول ثانٍ)،
+// ومعه عدد المتأخر عن مهلته ليحمرّ العدّاد. التبويب بلا بند لا يظهر. الأنواع المتعذرة (skipped) تعالجها الواجهة.
+export function byTabOf(items) {
+  const out = {};
+  for (const i of items || []) {
+    const tab = INBOX_KINDS[i.kind]?.tab;
+    if (!tab) continue;
+    const t = (out[tab] ||= { n: 0, late: 0 });
+    t.n += 1;
+    if (i.late) t.late += 1;
+  }
+  return out;
+}
+// تبويبات الأنواع المتعذرة: عدّادها غير معروف، لا صفر
+export const tabsOfKinds = (kinds) => [...new Set((kinds || []).map((k) => INBOX_KINDS[k]?.tab).filter(Boolean))];
 export const ageAr = (days) => (days == null ? '' : days === 0 ? 'اليوم' : days === 1 ? 'منذ يوم' : days === 2 ? 'منذ يومين' : days <= 10 ? `منذ ${days} أيام` : `منذ ${days} يومًا`);
 
 // «اعتمد الجاهزين» من الصندوق: المنتظرون الأقدم أولًا (ترتيب الصندوق) حتى حد الطلب الواحد

@@ -38,6 +38,7 @@ const GuidanceAccess = lazyRetry(() => import('./GuidanceAdmin.jsx').then((m) =>
 const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
+import { badgeLabel, badgeText, groupBadge, tabBadge } from '../pending.js';
 import { FEATURE_TABS, OWNER_TABS, TABS } from '../leaders-tabs.js';
 import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
 
@@ -64,6 +65,12 @@ const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 
+// عدّاد ما ينتظر: «99+» فوق التسعة والتسعين، وأحمر بوصف مسموع حين تأخر فيه بند عن مهلته
+function Badge({ b }) {
+  if (!b?.n) return null;
+  return <span className={`la-badge${b.late ? ' late' : ''}`} aria-label={badgeLabel(b.n, b.late, b.partial)}>{badgeText(b.n, b.partial)}</span>;
+}
+
 export default function Leaders({ canWrite, pending, isSuper = false, isOwner = false }) {
   const route = useRoute();
   // شاشة المساعد للمدير الأعلى والمالك وحدهما
@@ -83,8 +90,8 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   // المجموعات المطوية تُحفظ لهذا المتصفح: كل مدير يبقي أمامه ما يستعمله
   const [shut, setShut] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('la.nav.shut') || '[]')); } catch { return new Set(); } });
   const toggleGroup = (g) => setShut((prev) => { const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); try { localStorage.setItem('la.nav.shut', JSON.stringify([...n])); } catch { /* اختياري */ } return n; });
-  const pendingOf = (k) => (k === 'participants' ? pending?.participants : k === 'handbook' ? pending?.models : k === 'capstones' ? pending?.capstones : 0) || 0;
-  const groupPending = (keys) => keys.reduce((n, k) => n + pendingOf(k), 0);
+  // عدّاد كل تبويب من صندوق «ينتظرني» بتبويب نوعه (pending.js، «العدّ الواحد»)، والمجموعة المطوية مجموع تبويباتها الظاهرة
+  const groupOf = (keys) => groupBadge(pending, keys.filter(allowed));
   const [catalog, setCatalog] = useState(null);
   // مفاتيح الميزات من المخزن نفسه الذي تحرره «الإعدادات العامة»، وتُحدَّث بعد كل حفظ هناك (onSettings)
   const [flags, setFlags] = useState(null);
@@ -154,18 +161,22 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
       {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
-        {TAB_GROUPS.map(([g, keys]) => (
-          <div key={g} className={`la-tab-group${shut.has(g) && !keys.includes(tab) ? ' shut' : ''}`} role="group" aria-label={g}>
-            {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية */}
-            <button type="button" className="la-tab-group-label" aria-label={`مجموعة ${g}`} aria-expanded={!(shut.has(g) && !keys.includes(tab))} onClick={() => toggleGroup(g)}>
-              {g}{shut.has(g) && !keys.includes(tab) && groupPending(keys) > 0 && <span className="la-badge">{groupPending(keys)}</span>}
+        {TAB_GROUPS.map(([g, keys]) => {
+          const folded = shut.has(g) && !keys.includes(tab);
+          const gb = folded ? groupOf(keys) : null;
+          return (
+          <div key={g} className={`la-tab-group${folded ? ' shut' : ''}`} role="group" aria-label={g}>
+            {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية،
+                ويُضم وصفه المسموع إلى اسم الزر (aria-label يحجب ما في داخله عن قارئ الشاشة) */}
+            <button type="button" className="la-tab-group-label" aria-label={gb?.n ? `مجموعة ${g}، ${badgeLabel(gb.n, gb.late, gb.partial)}` : `مجموعة ${g}`} aria-expanded={!folded} onClick={() => toggleGroup(g)}>
+              {g}{folded && <Badge b={gb} />}
             </button>
             {keys.filter(allowed).map((k) => {
-              const n = pendingOf(k);
-              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}{n > 0 && <span className="la-badge" aria-label={`${n} بانتظارك`}>{n}</span>}{hiddenOf(k) && <span className="ft-hidden-badge">مخفي عن المستخدمين</span>}</button>;
+              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-badge">مخفي عن المستخدمين</span>}</button>;
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
       <div className="la-body">
         {hiddenOf(tab) && (

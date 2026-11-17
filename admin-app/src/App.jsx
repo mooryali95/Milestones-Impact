@@ -16,7 +16,7 @@ const Leaders = lazyRetry(() => import('./screens/Leaders.jsx'));
 const Visits = lazyRetry(() => import('./screens/Visits.jsx'));
 const Matrix = lazyRetry(() => import('./screens/Matrix.jsx'));
 import { navigate, parseRoute, useRoute } from './route.js';
-import { leadersTotal, usePending } from './pending.js';
+import { badgeLabel, badgeText, leadersTotal, resetInbox, usePending } from './pending.js';
 import Palette from './Palette.jsx';
 import { OpsBanner } from './OpsHealth.jsx';
 
@@ -39,7 +39,10 @@ function Dashboard({ user, onUser, onLogout, sessionGen = 0 }) {
   // فتضيع فلاتر رابط مشترك أو صفحة أُعيد تحميلها (التُقط مع تقسيم الحزمة، البند 9.13)
   const setCtx = (c) => { if (c !== ctx) navigate({ ctx: c }); };
   const pending = usePending(ctx);
+  // عدّاد تطبيق القادة مجموع صندوق «ينتظرني» نفسه، ويحمرّ إن تأخر فيه بند عن مهلته
   const badge = { contacts: pending?.contacts || 0, leaders: leadersTotal(pending) };
+  const lateOf = { leaders: pending?.badges?.late || 0 };
+  const partialOf = { leaders: !!pending?.badges?.partial };
   // صلاحية الكتابة من حكم الخادم (me): جلسة رمز البريد للقراءة حتى «فعّل الكتابة» (write-access.js)
   const { toast } = useUI();
   const [me, setMe] = useState(null);
@@ -87,7 +90,7 @@ function Dashboard({ user, onUser, onLogout, sessionGen = 0 }) {
 
       <nav className="ctx-bar" aria-label="السياق">
         {[['contacts', 'طلبات التواصل'], ['leaders', 'تطبيق القادة'], ['matrix', 'مصفوفة التأثير'], ['visits', 'زيارات الموقع']].map(([k, l]) => (
-          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className="ctx-badge" aria-label={`${badge[k]} بانتظارك`}>{badge[k]}</span>}</button>
+          <button key={k} className={`ctx-tab${ctx === k ? ' active' : ''}`} data-ctx={k} aria-current={ctx === k ? 'page' : undefined} onClick={() => setCtx(k)}><span className="dot" />{l}{badge[k] > 0 && <span className={`ctx-badge${lateOf[k] ? ' late' : ''}`} aria-label={badgeLabel(badge[k], lateOf[k], partialOf[k])}>{badgeText(badge[k], partialOf[k])}</span>}</button>
         ))}
       </nav>
 
@@ -120,11 +123,13 @@ export default function App() {
   // من يدخل بحساب آخر تُفتح له اللوحة من جديد (المفتاح بالبريد)، فلا يرث ما فتحه غيره
   // ورقم الجلسة يتقدم مع كل دخول، فتعيد اللوحة قراءة صلاحيتها (me) لجلسة إعادة الدخول
   const [sessionGen, setSessionGen] = useState(0);
-  const signedIn = (token, u) => { session.save(token, u); setUser(u); setExpired(false); setSessionGen((g) => g + 1); };
+  // مخزن العدّادات مشترك على مستوى الوحدة: دخول جديد أو خروج لا يرث أعداد الجلسة السابقة
+  const signedIn = (token, u) => { resetInbox(); session.save(token, u); setUser(u); setExpired(false); setSessionGen((g) => g + 1); };
   const patchUser = useCallback((patch) => { session.patchUser(patch); setUser((u) => ({ ...u, ...patch })); }, []);
   const logout = async () => {
     await call('logout').catch(() => {});
     session.clear();
+    resetInbox();
     setUser(null);
     setExpired(false);
   };

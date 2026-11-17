@@ -1304,6 +1304,11 @@ button.la-cell:hover { border-color: var(--gold, var(--brand-gold)); }
 /* أعداد ما ينتظر القرار على السياقات والتبويبات */
 .ctx-badge, .la-badge { display: inline-block; min-width: 1.5em; margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; background: var(--gold-deep); color: #fff; font-size: 11px; line-height: 1.6; text-align: center; font-weight: 600; }
 .la-tabs button.on .la-badge { background: var(--brand-gold-light); color: var(--brand-graphite); }
+/* متأخر عن مهلته: أحمر بلونه وبوصفه المسموع (aria-label «منها 2 متأخر») */
+.ctx-badge.late, .la-badge.late, .la-tabs button.on .la-badge.late { background: var(--st-bad); color: #fff; }
+/* «99+» و«12+» تُقرأ كما كُتبت: العدّاد معزول باتجاه الأرقام، فلا تنتقل «+» إلى يسار الرقم في سياق عربي */
+/* ومع الاتجاه المعكوس للعدّاد وحده تبقى الفسحة بينه وبين اسم التبويب على يمينه كما كانت (اللوحة كلها من اليمين) */
+.ctx-badge, .la-badge { direction: ltr; unicode-bidi: isolate; margin-inline-start: 0; margin-right: 6px; }
 
 /* البحث الشامل */
 .dash-search-btn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid rgba(255,255,255,.18); border-radius: 8px; background: rgba(255,255,255,.06); color: #fff; font: inherit; font-size: 13px; cursor: pointer; }

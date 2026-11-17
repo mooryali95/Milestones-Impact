@@ -11,15 +11,26 @@ const API = fnUrl('leaders-api');
 let onExpired = () => {};
 export const setLeadersExpired = (fn) => { onExpired = fn; };
 
-// الأوامر التي تغيّر ما ينتظر قرار الإدارة: بعد نجاحها تُحدَّث الأعداد على التبويبات
-const CHANGES_PENDING = new Set(['admin.approve', 'admin.review', 'admin.review-submission', 'admin.status', 'admin.reset-assessment']);
+// الأوامر التي تغيّر ما ينتظر قرار الإدارة: بعد نجاحها تُحدَّث الأعداد على التبويبات وصندوق «ينتظرني» (pending.js).
+// كل نوع في INBOX_KINDS له هنا أوامر قراره: الاعتماد والمتطلبات والنماذج، وطلبات انضمام الخبراء وطلبات الإسناد بلا مطابق،
+// وطلبات الرعاية والحذف، وتأكيد الجلسات. المعاينة (dry_run) لا تكتب شيئًا فلا تُحدِّث
+export const CHANGES_PENDING = new Set([
+  'admin.approve', 'admin.approve-bulk', 'admin.review', 'admin.review-submission', 'admin.status', 'admin.reset-assessment',
+  'admin.capstone-review',
+  'admin.expert-set-status', 'admin.expert-invite', 'admin.expert-match', 'admin.expert-assign',
+  'admin.expert-request-cancel', 'admin.expert-request-retry', 'admin.expert-request-complete',
+  'admin.sponsor-decide',
+  'admin.erasure-execute', 'admin.erasure-decline', 'admin.erasure-withdrawn',
+  'admin.coaching-mark', 'admin.coaching-add',
+]);
+export const changesPending = (action, body = {}) => CHANGES_PENDING.has(action) && !body?.dry_run;
 
 // اسم الإجراء والتوكن آخر الجسم، فلا يكتب فوقهما حقل بالاسم نفسه في body (تدقيق الجاهزية، admin-core-1:
 // كان فعل المرحلة action يحل محل admin.stage-override فيرد الخادم «إجراء غير معروف»)
 export async function L(action, body = {}) {
   const d = await post(API, { ...body, action, token: session.load()?.token }, 'تعذّر الاتصال بالخادم');
   if (!d.success && d.code === 'session') { session.clear(); onExpired(); }
-  if (d.success && CHANGES_PENDING.has(action) && typeof window !== 'undefined') window.dispatchEvent(new Event('mi:pending'));
+  if (d.success && changesPending(action, body) && typeof window !== 'undefined') window.dispatchEvent(new Event('mi:pending'));
   return d;
 }
 
