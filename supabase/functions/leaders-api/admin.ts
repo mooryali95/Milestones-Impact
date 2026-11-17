@@ -9,7 +9,7 @@ import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, 
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
-import { MILESTONE_GRACE_DAYS } from './milestones.js';
+import { lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
@@ -1566,7 +1566,8 @@ export async function lateMilestoneNotices(limit = 200) {
   let n = 0;
   for (const p of people || []) {
     const j: any = await journeyFor(p, { lite: true }).catch(() => null);
-    for (const m of (j?.milestones || []).filter((x: any) => x.status === 'late' && x.late_days > MILESTONE_GRACE_DAYS)) {
+    // حارس البريد (lateNoticeAllowed، القرار 19): ما صار مؤرخًا بنافذة مرحلته وتأخر قبل النشر لا يُرسل عنه، ويبقى ظاهرًا متأخرًا
+    for (const m of (j?.milestones || []).filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS))) {
       const saved = await OB.record(p.id, { code: 'milestone_late', ref: String(m.id || m.key), ...RULES.milestone_late({ title: m.title_ar || m.title, late_days: m.late_days }) });
       if (saved) n += 1;
     }

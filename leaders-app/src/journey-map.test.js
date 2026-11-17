@@ -68,10 +68,11 @@ describe('التجميع والصلاحيات', () => {
     const by = Object.fromEntries(m.stages.map((s) => [s.key, s]));
     expect([by.profile.here, by.approval.here, by.training.here, by.report.here]).toEqual([1, 0, 2, 0]);
     expect([by.profile.done, by.approval.done, by.training.done, by.report.done]).toEqual([3, 3, 1, 1]);
-    // سارة في التدريب منذ 10 أيام (المدة 4 + سماح 3) فمتأخرة، وخالد منذ يومين فلا
+    // «متأخر» من نافذة الدفعة (R0): نافذة التدريب 3 إلى 7 نوفمبر، واليوم 11 نوفمبر بعد المهلة (3 أيام)، فسارة وخالد
+    // متأخران أيًا كان يوم دخولهما. وحساب الدخول بالمدة لدفعة بلا بداية في journey-r0.test.js
     expect(STAGE_GRACE_DAYS).toBe(3);
-    expect(by.training.late).toBe(1);
-    expect(m.totals).toEqual({ total: 4, finished: 1, late: 1, not_started: 0 });
+    expect(by.training.late).toBe(2);
+    expect(m.totals).toEqual({ total: 4, finished: 1, late: 2, not_started: 0 });
     expect(m.bottleneck).toEqual({ stage: 'training' });
     expect(m.cohort).toEqual({ name: 'دفعة سفراء', starts_on: '2026-11-01', today_stage: 'report' });
     expect(m.milestones).toEqual([{ id: 'm1', title: 'معلم', due: '2026-11-05', done: 1, late: 1 }]);
@@ -86,7 +87,7 @@ describe('التجميع والصلاحيات', () => {
   });
   it('بـ«القائمة»: الأسماء والأيام الأطول مكوثًا أولًا، وما ينقص كل شخص بـ«النشاط» وحده', () => {
     const withList = journeyMap({ ...base, list: true }).stages.find((s) => s.key === 'training');
-    expect(withList.people.map((p) => [p.name, p.days, p.late, p.needs])).toEqual([['سارة', 10, true, null], ['خالد', 2, false, null]]);
+    expect(withList.people.map((p) => [p.name, p.days, p.late, p.needs])).toEqual([['سارة', 10, true, null], ['خالد', 2, true, null]]);
     expect(withList.reasons).toBeUndefined();
     const withActivity = journeyMap({ ...base, list: true, activity: true }).stages.find((s) => s.key === 'training');
     expect(withActivity.people[0].needs).toBe('بند التدريب');
@@ -99,9 +100,9 @@ describe('التجميع والصلاحيات', () => {
     ];
     const m = journeyMap({ ...base, people: [...people, ...out], list: true, activity: true });
     const training = m.stages.find((s) => s.key === 'training');
-    expect([training.here, training.late]).toEqual([2, 1]);
+    expect([training.here, training.late]).toEqual([2, 2]);
     expect(training.people.map((p) => p.name)).toEqual(['سارة', 'خالد']);
-    expect(m.totals).toEqual({ total: 4, finished: 1, late: 1, not_started: 0 });
+    expect(m.totals).toEqual({ total: 4, finished: 1, late: 2, not_started: 0 });
     expect(m.milestones).toEqual([{ id: 'm1', title: 'معلم', due: '2026-11-05', done: 1, late: 1 }]);
     expect(JSON.stringify(m)).not.toMatch(/منسحب|موقوف/);
   });

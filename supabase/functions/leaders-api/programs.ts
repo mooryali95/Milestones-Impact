@@ -76,8 +76,9 @@ export async function releaseOf(p: { id?: string | null; organization_id?: strin
 }
 
 // تعريف رحلة المشارك: المراحل والمتطلبات كما تسري عليه بعد تخصيص دفعته
-export async function journeyDefinition(p: { id?: string | null; organization_id?: string | null }) {
-  const { cohort, via } = await cohortOf(p);
+// forCohort: تعريف دفعة بعينها بلا مشارك (خريطة رحلة الدفعة في ملفها، adminCohortJourney)، بالحساب نفسه بعد اختيار الدفعة
+export async function journeyDefinition(p: { id?: string | null; organization_id?: string | null }, forCohort: any = null) {
+  const { cohort, via } = forCohort ? { cohort: forCohort, via: 'cohort' } : await cohortOf(p);
   const programId = cohort?.program_id || await defaultProgramId();
   let version: any = null;
   if (cohort?.program_version_id) {
@@ -132,6 +133,24 @@ export async function requirementFor(p: any, id: unknown, kind?: string) {
 export async function requirementIdByCode(p: any, code: string) {
   const def = await journeyDefinition(p);
   return def.requirements.find((x: any) => x.code === code)?.id || null;
+}
+
+// الدفعة وأعضاؤها الفعليون (pickCohort بالقاعدة نفسها التي تعدّ بها memberCounts)، بلا حساب العرض ولا حساب الاختبار
+// كما تستبعدهما خريطة الجهة. للخريطة في ملف الدفعة (adminCohortJourney). null إن لم توجد الدفعة. وتختلف عن cohortMembers أدناه (القاعة والمجموعات) بأنها تعد أعضاء الدفعة المفتوحة ممن ليس لهم جهة
+export async function cohortMemberIds(cohortId: string) {
+  const [cohorts, enr, people] = await Promise.all([
+    db.from('cohorts').select(COHORT_COLS),
+    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
+    db.from('participants').select('id, organization_id, is_test').eq('is_demo', false).limit(5000),
+  ]);
+  must(cohorts); must(enr); must(people);
+  const all = cohorts.data || [];
+  const cohort = all.find((c: any) => c.id === cohortId) || null;
+  if (!cohort) return null;
+  const byP = new Map<string, any[]>();
+  for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
+  const ids = (people.data || []).filter((p: any) => !p.is_test && pickCohort({ enrollments: byP.get(p.id) || [], cohorts: all, organizationId: p.organization_id || null }).cohort?.id === cohortId).map((p: any) => p.id as string);
+  return { cohort, ids };
 }
 
 // عدد أعضاء كل دفعة فعلًا، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة

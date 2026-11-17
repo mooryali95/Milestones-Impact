@@ -1750,8 +1750,9 @@ export function restorePlan(snapshot, live) {
 // الفرق بين نسختين (أو نسخة والمسودة): ما أُضيف وما حُذف وما تغيّر من المتطلبات، والمراحل في stages بالشكل نفسه.
 // مفاتيح المتطلبات في أعلى الكائن كما كانت، فما يقرؤها قبل المراحل لا يتأثر
 const REQ_DIFF_FIELDS = ['stage_key', 'title_ar', 'kind', 'required', 'dimension', 'level', 'config', 'help_ar'];
-// المرحلة الموقوفة كالمحذوفة، فتغيّر «active» يظهر إضافةً أو حذفًا لا تغيّرًا
-const STAGE_DIFF_FIELDS = ['title_ar', 'sort', 'rules', 'phase'];
+// المرحلة الموقوفة كالمحذوفة، فتغيّر «active» يظهر إضافةً أو حذفًا لا تغيّرًا. والمدة ونص المدة في الفرق (R0)، فمعاينة
+// الترقية لا تسكت عن تغيير أيام مرحلة. و«active» في القائمة احتياط لصف يصل الفرق بلا ترشيح الموقوف
+export const STAGE_DIFF_FIELDS = ['title_ar', 'sort', 'rules', 'phase', 'duration_days', 'active', 'duration_label'];
 function diffBy(fromRows, toRows, key, fields, label) {
   const a = new Map((fromRows || []).filter((r) => r.active !== false).map((r) => [key(r), r]));
   const b = new Map((toRows || []).filter((r) => r.active !== false).map((r) => [key(r), r]));

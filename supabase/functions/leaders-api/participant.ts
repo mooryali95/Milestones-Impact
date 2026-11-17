@@ -561,11 +561,13 @@ export async function journeyFor(p: any, { lite = false }: { lite?: boolean } = 
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
   const modes = def.cohort?.stage_modes || {};
   const journey = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
-  // المعالم: استحقاقها من جدول الدفعة، واكتمالها من مراحل الرحلة نفسها أو باعتماد يدوي
+  // المعالم: استحقاقها من جدول الدفعة أو نافذة مرحلتها، واكتمالها من مراحل الرحلة نفسها أو باعتماد يدوي
   const milestones = milestoneStatuses(def.milestones || [], {
     stagesDone: new Set(journey.filter((s: any) => s.status === 'done').map((s: any) => s.key)),
     records: Object.fromEntries((msRecs.data || []).map((r: any) => [r.milestone_id, r])),
     cohort: def.cohort || {},
+    // ما لم يُكتب له جدول يُؤرَّخ بنافذة مرحلته المحسوبة من بداية الدفعة (R0): المصدر نفسه الذي تعرضه الخريطة
+    stages: def.stages,
   });
   const [group, continuous] = lite ? [null, null] : await Promise.all([
     groupOf(p.id, def.cohort?.id || null), continuousFor(p.id, milestones, def.program_id || null),

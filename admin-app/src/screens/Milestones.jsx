@@ -10,8 +10,9 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { MILESTONE_RUBRIC, RUBRIC_LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
-  MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR, milestoneDue,
+  MILESTONE_ANCHOR_AR, MILESTONE_COMPLETE_AR, MILESTONE_STATUS_AR, milestoneDueInfo,
 } from '../../../supabase/functions/leaders-api/logic.js';
+import { stageWindows } from '../../../supabase/functions/leaders-api/stage-windows.js';
 
 const STATUS_CHIP = { done: 'ok', late: 'bad', due_soon: 'warn', on_time: '', unscheduled: '' };
 
@@ -91,6 +92,8 @@ export function CohortSchedule({ cohort, onClose }) {
     Promise.all([L('admin.cohort-definition', { cohort_id: cohort.id }), L('admin.milestones', { program_id: cohort.program_id })])
       .then(([p, m]) => setD(p.success === false ? { error: p.message } : { stages: (p.stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), version: p.version || null, ms: (m.milestones || []).filter((x) => x.active) }));
   }, [cohort.id, cohort.program_id]);
+  // ما لم يُكتب له تاريخ يُحسب من بداية الدفعة ومدد المراحل، بالدالة نفسها التي تقرؤها رحلة المشارك والخريطة (R0)
+  const windows = d?.stages && cohort.starts_on ? stageWindows(d.stages, { starts_on: cohort.starts_on, schedule: sch }) : null;
   const put = (k, f, v) => setSch({ ...sch, [k]: { ...(sch[k] || {}), [f]: v || undefined } });
   const save = async (extra) => {
     setBusy(true);
@@ -117,7 +120,10 @@ export function CohortSchedule({ cohort, onClose }) {
                   <td><b>{s.title_ar}</b></td>
                   <td><input type="date" aria-label={`بداية ${s.title_ar}`} value={sch[s.key]?.start || ''} onChange={(e) => put(s.key, 'start', e.target.value)} /></td>
                   <td><input type="date" aria-label={`نهاية ${s.title_ar}`} value={sch[s.key]?.end || ''} onChange={(e) => put(s.key, 'end', e.target.value)} /></td>
-                  <td><small className="la-muted">{d.ms.filter((m) => m.stage_key === s.key).map((m) => `${m.title_ar}: ${day(milestoneDue(m, { startsOn: cohort.starts_on, endsOn: cohort.ends_on, schedule: sch })) || 'بلا موعد'}`).join(' · ')}</small></td>
+                  <td><small className="la-muted">{d.ms.filter((m) => m.stage_key === s.key).map((m) => {
+                    const x = milestoneDueInfo(m, { startsOn: cohort.starts_on, endsOn: cohort.ends_on, schedule: sch, windows });
+                    return `${m.title_ar}: ${day(x.due) || 'بلا موعد'}${x.source === 'window' ? ' (محسوب من مدد المراحل)' : ''}`;
+                  }).join(' · ')}</small></td>
                 </tr>
               ))}</tbody>
             </table></div>

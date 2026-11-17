@@ -18,6 +18,7 @@ import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
 const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
@@ -51,6 +52,20 @@ function UpgradeImpact({ r }) {
       {lines.length > 0 && <ul className="la-diff">{lines.map((l) => <li key={l}>{l}</li>)}</ul>}
       {r.blocked && <div className="la-err" role="alert">لا تُرقّى الدفعة: {r.blocked}</div>}
     </>
+  );
+}
+
+// خريطة رحلة الدفعة (R0 في تصور محرر رحلة الدفعة): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ببيانات admin.cohort-journey
+// (منطق admin.org-journey نفسه لأعضاء هذه الدفعة). المواعيد و«متأخر» من نافذة الدفعة المحسوبة من بدايتها ومدد المراحل
+function CohortJourneyMap({ cohortId }) {
+  const [d, setD] = useState(null);
+  useEffect(() => { setD(null); L('admin.cohort-journey', { cohort_id: cohortId }).then(setD); }, [cohortId]);
+  return (
+    <section className="cohort-journey" aria-labelledby="cj-h">
+      <h3 className="la-phase" id="cj-h">خريطة الرحلة</h3>
+      {!d ? <Spinner /> : !d.success ? <p className="la-err" role="alert">{d.message || 'تعذّرت قراءة خريطة الرحلة'}</p>
+        : d.journey_map ? <JourneyMap map={d.journey_map} /> : <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الدفعة بعد.</p>}
+    </section>
   );
 }
 
@@ -118,6 +133,8 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
             </li>
           ))}
         </ol>
+
+        <CohortJourneyMap cohortId={c.id} />
 
         <h3 className="la-phase">كل ما يخص الدفعة</h3>
         <div className="cohort-tiles">

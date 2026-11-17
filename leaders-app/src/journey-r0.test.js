@@ -1,0 +1,134 @@
+// R0 «تاريخ واحد» (docs/ops/2026-11-17-تصور-محرر-رحلة-الدفعة-v1.md): المعالم تُؤرَّخ بنافذة مرحلتها حين يغيب الجدول،
+// و«متأخر» في الخريطة من نافذة الدفعة، والمدة في فرق النسخ، وحارس بريد المعالم التي صارت مؤرخة بهذا التغيير.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { lateNoticeAllowed, milestoneDue, milestoneDueInfo, milestoneStatuses, programDiff, R0_DATED_SINCE, STAGE_DIFF_FIELDS } from '../../supabase/functions/leaders-api/logic.js';
+import { journeyMap, stageWindows } from '../../supabase/functions/leaders-api/journey-map.js';
+
+const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
+const STAGES = [
+  { key: 'approval', title_ar: 'اعتماد المستوى', phase: 'admission', duration_days: 2, sort: 1 },
+  { key: 'training', title_ar: 'التدريب', phase: 'qualification', duration_days: 14, sort: 2 },
+  { key: 'ojt', title_ar: 'التوجيه', phase: 'qualification', duration_days: 28, sort: 3, rules: { unlock: 'with', with: 'training' } },
+  { key: 'support', title_ar: 'الدعم', phase: 'impact', duration_days: 30, sort: 4 },
+];
+const MS = [
+  { id: 'end-training', title_ar: 'نهاية التدريب', stage_key: 'training', anchor: 'stage_end', offset_days: 0, complete: 'stage' },
+  { id: 'start-ojt', title_ar: 'بداية التوجيه', stage_key: 'ojt', anchor: 'stage_start', offset_days: 1, complete: 'stage' },
+  { id: 'end-support', title_ar: 'نهاية الدعم', stage_key: 'support', anchor: 'stage_end', offset_days: -2, complete: 'manual' },
+];
+
+describe('R0: المعلم يُؤرَّخ بنافذة مرحلته حين يغيب الجدول', () => {
+  it('بلا جدول: الموعد من stageWindows نفسها التي تعرضها الخريطة، ومصدره window', () => {
+    const cohort = { starts_on: '2026-12-01' };
+    const w = stageWindows(STAGES, cohort);
+    expect(w.training).toEqual({ from: '2026-12-03', to: '2026-12-17' });
+    const r = Object.fromEntries(milestoneStatuses(MS, { cohort, stages: STAGES, today: '2026-11-20' }).map((m) => [m.id, m]));
+    expect(r['end-training']).toMatchObject({ due: w.training.to, due_source: 'window', status: 'on_time' });
+    expect(r['start-ojt']).toMatchObject({ due: '2026-12-04', due_source: 'window' });
+    // الدعم بعد أطول المجموعة (التوجيه 28 يومًا من 3 ديسمبر)، فنهايته 30 يومًا بعدها، والإزاحة سالبة
+    expect(w.support).toEqual({ from: '2026-12-31', to: '2027-01-30' });
+    expect(r['end-support'].due).toBe('2027-01-28');
+  });
+  it('الجدول المكتوب يبقى أولًا، والمرحلة بلا جدول تأخذ نافذتها، وبلا بداية دفعة يبقى «بلا موعد بعد»', () => {
+    const cohort = { starts_on: '2026-12-01', schedule: { training: { start: '2026-12-05', end: '2026-12-20' } } };
+    const r = Object.fromEntries(milestoneStatuses(MS, { cohort, stages: STAGES, today: '2026-11-20' }).map((m) => [m.id, m]));
+    expect(r['end-training']).toMatchObject({ due: '2026-12-20', due_source: 'schedule' });
+    expect(r['start-ojt'].due_source).toBe('window');
+    const open = milestoneStatuses(MS, { cohort: {}, stages: STAGES, today: '2026-11-20' });
+    expect(open.every((m) => m.status === 'unscheduled' && m.due_source === null)).toBe(true);
+    // بلا مراحل (المستدعي القديم) يبقى الحساب من الجدول وحده كما كان
+    expect(milestoneDue(MS[0], { schedule: {} })).toBeNull();
+    expect(milestoneDueInfo(MS[0], { windows: { training: { from: '2026-12-03', to: '2026-12-17' } } })).toEqual({ due: '2026-12-17', source: 'window' });
+  });
+  it('التمديد لمشارك يبقى أعلى من النافذة، ومصدره override', () => {
+    const r = milestoneStatuses([MS[0]], { cohort: { starts_on: '2026-12-01' }, stages: STAGES, records: { 'end-training': { due_override: '2027-01-05' } }, today: '2026-11-20' });
+    expect(r[0]).toMatchObject({ due: '2027-01-05', due_source: 'override', extended: true });
+  });
+  it('رحلة المشارك تمرر مراحل تعريف الدفعة، ونافذة الجدول تعرض المحسوب بعلامته', () => {
+    expect(read('supabase/functions/leaders-api/participant.ts')).toMatch(/cohort: def\.cohort \|\| \{\},\n.*\n\s+stages: def\.stages,/);
+    const ui = read('admin-app/src/screens/Milestones.jsx');
+    expect(ui).toContain("stageWindows(d.stages, { starts_on: cohort.starts_on, schedule: sch })");
+    expect(ui).toContain('محسوب من مدد المراحل');
+  });
+});
+
+describe('R0: «متأخر» في الخريطة من نافذة الدفعة', () => {
+  const item = (status, completed_at = null) => ({ title_ar: 'بند', status, completed_at, required: true });
+  const at = (idx, doneOn) => STAGES.map((s, i) => ({ key: s.key, stage_mode: 'required', status: i < idx ? 'done' : i === idx ? 'active' : 'locked',
+    items: [item(i < idx ? 'done' : 'pending', i < idx ? `${doneOn}T09:00:00Z` : null)] }));
+  const cohort = { name: 'دفعة', starts_on: '2026-10-01' };
+  // نافذة التدريب: 3 إلى 17 أكتوبر، فمن يقف فيه بعد 20 أكتوبر متأخر أيًا كان يوم دخوله
+  it('من دخل التدريب أمس متأخر إن تجاوز اليوم نهاية نافذته بعد المهلة، ومن هو داخلها لا', () => {
+    const people = [{ id: 'a', name: 'أ', created_at: '2026-09-01T00:00:00Z', journey: at(1, '2026-10-20') }];
+    const late = journeyMap({ stages: STAGES, people, cohort, today: new Date('2026-10-21T10:00:00Z'), list: true });
+    expect(late.stages.find((s) => s.key === 'training')).toMatchObject({ here: 1, late: 1 });
+    expect(late.stages.find((s) => s.key === 'training').people[0]).toMatchObject({ days: 1, late: true });
+    const edge = journeyMap({ stages: STAGES, people, cohort, today: new Date('2026-10-20T10:00:00Z') });
+    expect(edge.stages.find((s) => s.key === 'training').late).toBe(0);
+  });
+  it('بلا بداية للدفعة يبقى الحساب من الدخول بالمدة', () => {
+    const people = [{ id: 'a', name: 'أ', created_at: '2026-09-01T00:00:00Z', journey: at(1, '2026-10-20') }];
+    const m = journeyMap({ stages: STAGES, people, cohort: { name: 'مفتوحة' }, today: new Date('2026-10-21T10:00:00Z') });
+    expect(m.stages.find((s) => s.key === 'training').late).toBe(0);
+    const old = journeyMap({ stages: STAGES, people, cohort: { name: 'مفتوحة' }, today: new Date('2026-11-10T10:00:00Z') });
+    expect(old.stages.find((s) => s.key === 'training').late).toBe(1);
+  });
+  it('نافذة بلا مدة ولا جدول لا تُعد موعدًا', () => {
+    const zero = [{ key: 'profile', title_ar: 'الملف', phase: 'admission', duration_days: 0, sort: 1 }, ...STAGES.map((s) => ({ ...s, sort: s.sort + 1 }))];
+    const people = [{ id: 'a', name: 'أ', created_at: '2026-09-01T00:00:00Z', journey: zero.map((s, i) => ({ key: s.key, stage_mode: 'required', status: i === 0 ? 'active' : 'locked', items: [item('pending')] })) }];
+    const m = journeyMap({ stages: zero, people, cohort, today: new Date('2026-10-21T10:00:00Z') });
+    expect(m.stages[0]).toMatchObject({ here: 1, late: 0 });
+  });
+});
+
+describe('R0: المدة ونص المدة في فرق النسخ', () => {
+  it('STAGE_DIFF_FIELDS يضم duration_days وactive وduration_label', () => {
+    expect(STAGE_DIFF_FIELDS).toEqual(expect.arrayContaining(['duration_days', 'active', 'duration_label']));
+    const a = { stages: [{ key: 'training', title_ar: 'التدريب', sort: 1, duration_days: 4, duration_label: '{days:T-ATTEND} أيام' }], requirements: [] };
+    expect(programDiff(a, { ...a, stages: [{ ...a.stages[0], duration_days: 14 }] }).stages.changed).toEqual([{ key: 'training', title: 'التدريب' }]);
+    expect(programDiff(a, { ...a, stages: [{ ...a.stages[0], duration_label: '{duration}' }] }).stages.changed).toHaveLength(1);
+    expect(programDiff(a, a).stages.changed).toEqual([]);
+  });
+});
+
+describe('R0: حارس بريد المعالم التي صارت مؤرخة (القرار 19)', () => {
+  const late = (due, due_source, late_days = 10) => ({ status: 'late', late_days, due, due_source });
+  it('مؤرخ بالنافذة وتأخر قبل النشر: لا بريد أبدًا، ولو بعد المهلة', () => {
+    expect(R0_DATED_SINCE).toBe('2026-11-17');
+    expect(lateNoticeAllowed(late('2026-10-01', 'window', 47))).toBe(false);
+    expect(lateNoticeAllowed(late('2026-11-16', 'window', 30))).toBe(false);
+  });
+  it('مؤرخ بالنافذة وموعده من يوم النشر فما بعد: يُرسل بعد المهلة كالمعتاد', () => {
+    expect(lateNoticeAllowed(late('2026-11-17', 'window', 4))).toBe(true);
+    expect(lateNoticeAllowed(late('2026-12-01', 'window', 3))).toBe(false);
+    expect(lateNoticeAllowed(late('2026-12-01', 'window', 5))).toBe(true);
+  });
+  it('ما كان مؤرخًا قبل R0 (جدول مكتوب، تاريخ ثابت، تمديد، بداية الدفعة) لا يمسه الحارس', () => {
+    for (const src of ['schedule', 'date', 'override', 'cohort']) expect(lateNoticeAllowed(late('2026-10-01', src)), src).toBe(true);
+    expect(lateNoticeAllowed({ status: 'due_soon', late_days: 0, due: '2026-12-01', due_source: 'window' })).toBe(false);
+  });
+  it('ويبقى المتأخر ظاهرًا في رحلة المشارك: الحارس للبريد وحده', () => {
+    const [m] = milestoneStatuses([MS[0]], { cohort: { starts_on: '2026-09-01' }, stages: STAGES, today: '2026-11-17' });
+    expect(m).toMatchObject({ status: 'late', due_source: 'window' });
+    expect(lateNoticeAllowed(m)).toBe(false);
+    const admin = read('supabase/functions/leaders-api/admin.ts');
+    expect(admin).toContain('.filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS))');
+  });
+});
+
+describe('R0: خريطة الرحلة في ملف الدفعة', () => {
+  it('الإجراء قراءة بمنطق org-journey: أعضاء الدفعة بـpickCohort، ورحلاتهم من journeyFor، وتعريف الدفعة نفسها', () => {
+    const idx = read('supabase/functions/leaders-api/index.ts');
+    expect(idx).toContain("'admin.cohort-journey': C.adminCohortJourney,");
+    const c = read('supabase/functions/leaders-api/coordinator.ts');
+    expect(c).toContain('export async function adminCohortJourney(a: Admin, b: Body)');
+    expect(c).toContain('journeyDefinition({}, m.cohort)');
+    expect(c).toContain("cohort: def.cohort, program, list: true, activity: true,");
+    expect(read('supabase/functions/leaders-api/programs.ts')).toContain('export async function cohortMemberIds(cohortId: string)');
+    const ui = read('admin-app/src/screens/Programs.jsx');
+    expect(ui).toContain("L('admin.cohort-journey', { cohort_id: cohortId })");
+    expect(ui).toContain('<CohortJourneyMap cohortId={c.id} />');
+  });
+});

@@ -1,11 +1,11 @@
 // ════════════════════════════════════════════════════════════════
-// خريطة الرحلة للجهة: كم يقف عند كل مرحلة، ومنذ متى، ومن تجاوز مدتها (قرار المالك 2026-11-11)
+// خريطة الرحلة للجهة وللدفعة: كم يقف عند كل مرحلة، ومنذ متى، ومن تجاوز موعدها (قرار المالك 2026-11-11)
 // ════════════════════════════════════════════════════════════════
 // المصدر الواحد: رحلة كل مشارك كما يراها هو (journeyFor في participant.ts)، تُجمَّع هنا بلا حساب ثانٍ.
 // دالة نقية بلا قاعدة، يختبرها journey-map.test.js، ويستدعيها coordinator.ts.
 // الخصوصية: الأعداد والأسباب المجمّعة لكل منسق، والأسماء لمن له صلاحية «القائمة» (list)، وما ينقص كل شخص لمن له
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
-import { daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
+import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { renderJourneyText } from './journey.js';
 import { stageWindows, todayStage } from './stage-windows.js';
 import { inProgram } from './logic.js';
@@ -65,7 +65,11 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
       const entry = stageEntry(j, idx, p.dates || []) || p.created_at || null;
       const days = entry ? Math.max(0, daysBetween(isoDay(entry), t)) : 0;
       const d = Number(s.duration_days) || 0;
-      const late = d > 0 && days > d + STAGE_GRACE_DAYS;
+      // «متأخر» من نافذة الدفعة (R0 «تاريخ واحد»): من تجاوز اليوم نهاية نافذة مرحلته بعد مهلة السماح، أيًا كان يوم دخوله.
+      // نافذة بلا مدة ولا جدول مكتوب لا تُعدّ موعدًا. وبلا بداية للدفعة (الدفعة المفتوحة) يبقى الحساب من دخوله بالمدة
+      const w = windows[s.key];
+      const dated = w && (d > 0 || !!cohort?.schedule?.[s.key]?.start);
+      const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
       if (late) a.late += 1;
       const needs = needsOf(j[idx]);
       if (needs) a.reasons.set(needs, (a.reasons.get(needs) || 0) + 1);
