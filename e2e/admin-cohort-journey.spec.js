@@ -8,7 +8,7 @@ import { planEdit, planImpact, sameSchedule } from '../supabase/functions/leader
 const BASE = 'http://localhost:4303/';
 const SHOTS = process.env.COHORT_JOURNEY_SHOTS || '';
 // اللقطات بكثافة الشاشات الحديثة، والفحص العادي بالكثافة الافتراضية
-test.use({ deviceScaleFactor: SHOTS || process.env.R2A_SHOTS ? 2 : 1 });
+test.use({ deviceScaleFactor: SHOTS || process.env.R2A_SHOTS || process.env.R2B_SHOTS ? 2 : 1 });
 const stages = [
   { key: 'profile', title_ar: 'الملف الشخصي', phase: 'admission', sort: 1, duration_days: 0, duration_label: 'دقائق', active: true },
   { key: 'assessment', title_ar: 'تحديد المستوى', phase: 'admission', sort: 2, duration_days: 0, duration_label: '12 دقيقة', active: true },
@@ -68,15 +68,17 @@ function planServer(state, b) {
     state.history.unshift({ id: `h${state.history.length + 1}`, action: 'cohort.plan-undo', actor: 'a@x', at: '2026-11-16T09:10:00Z', summary: null });
     return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule) };
   }
-  const r = planEdit({ stages: live, schedule: c.schedule, edit: { days: b.days || {}, follow: b.follow }, cohort: c });
+  const r = planEdit({ stages: live, schedule: c.schedule, edit: { days: b.days || {}, follow: b.follow, off: b.off || {} }, cohort: c, requirements });
+  if (r.errors.length) return { success: false, message: r.errors.map((e) => e.msg).join('، ') };
   const impact = planImpact({ stages: live, before: c.schedule, after: r.schedule, cohort: c, milestones, people: PLAN_PEOPLE, today: '2026-11-16T09:00:00Z', cutoff: '2026-11-01' });
   if (b.op === 'preview') return { success: true, preview: true, locked: null, changed: !sameSchedule(c.schedule, r.schedule), plan: out(r.schedule), impact };
   const before = state.schedule;
   state.schedule = r.schedule;
   state.updated_at = `u${state.history.length + 1}`;
   state.history.unshift({ id: `h${state.history.length + 1}`, action: 'cohort.plan', actor: 'a@x', at: '2026-11-16T09:05:00Z', before,
-    summary: { changes: impact.changes.map((x) => ({ key: x.key, before: x.before.days, after: x.after.days })), shift: impact.end.shift } });
-  return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule), impact };
+    summary: { changes: impact.changes.map((x) => ({ key: x.key, before: x.before.days, after: x.after.days, ...(x.off ? { off: x.off } : {}) })), shift: impact.end.shift, stopped: impact.stopped, started: impact.started } });
+  return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule), impact,
+    exempted: 0, notified: b.notify ? impact.notify.members : null };
 }
 
 // queue: ردود تُستهلك بالترتيب لإجراء بعينه قبل رده المعتاد (فشل ثم نجاح عند «أعد المحاولة»)
@@ -416,4 +418,91 @@ test('تاريخ البداية من التبويب نفسه: بعد حفظه ف
   await expect(ed).toBeHidden();
   await page.getByRole('tab', { name: 'الرحلة' }).click();
   await expect(page.getByRole('tabpanel', { name: 'الرحلة' }).locator('.cj-hero')).toContainText('تبدأ الدفعة');
+});
+
+// ══ R2b: إيقاف مرحلة لهذه الدفعة، بمفتاح في البطاقة ونافذة أثر ثم حفظ وتراجع ══
+// R2B_SHOTS: مجلد تُحفظ فيه لقطتا وضع التحرير بمرحلة موقوفة ونافذة الأثر بعرضي 1440 و390 (حدود الشاشة وحدها)
+const R2B = process.env.R2B_SHOTS || '';
+for (const width of [1440, 390]) {
+  test(`إيقاف مرحلة (${width}): المفتاح ومنعه بسببه، والمعاينة تزيح ما بعدها، ونافذة الأثر و«أبلغ المشاركين»، ثم الحفظ والتراجع`, async ({ page }) => {
+    const calls = await setup(page, width);
+    await openCohort(page);
+    await page.getByRole('tab', { name: 'الرحلة' }).click();
+    const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+    await panel.getByRole('button', { name: 'عدّل المدد' }).click();
+    // المحمية: بوابة القبول، ومرجع «تبدأ مع»: المفتاح مقفل وسببه مكتوب ومربوط به
+    const profile = panel.getByRole('article', { name: 'الملف الشخصي' }).getByRole('switch', { name: 'أوقف لهذه الدفعة' });
+    await expect(profile).toBeDisabled();
+    await expect(profile).toHaveAccessibleDescription(/من بوابات القبول/);
+    const training = panel.getByRole('article', { name: 'التدريب' }).getByRole('switch', { name: 'أوقف لهذه الدفعة' });
+    await expect(training).toBeDisabled();
+    await expect(training).toHaveAccessibleDescription(/أوقف أولًا ما يسير معها أو انقله/);
+    // الدعم يُوقف: البطاقة باهتة بعلامتها، ومعلمها مستبعد، والتقرير النهائي يبدأ في مكانه
+    const support = panel.getByRole('article', { name: 'الدعم والتمكين' });
+    const sw = support.getByRole('switch', { name: 'أوقف لهذه الدفعة' });
+    await expect(sw).toHaveAttribute('aria-checked', 'false');
+    await sw.click();
+    await expect(sw).toHaveAttribute('aria-checked', 'true');
+    await expect(support).toHaveClass(/\boff\b/);
+    await expect(support).toContainText('موقوفة لهذه الدفعة');
+    await expect(support.getByRole('group', { name: 'مدة الدعم والتمكين' })).toHaveCount(0);
+    await expect(support.locator('.cj-ms li.excluded')).toContainText('مستبعد لهذه الدفعة');
+    await expect(panel.getByRole('article', { name: 'التقرير النهائي' }).locator('.cj-window')).toContainText('3 ديسمبر إلى 9 ديسمبر');
+    await expect(panel.locator('section.jt')).not.toContainText('الدعم والتمكين');
+    await expect(panel.locator('.cj-savebar')).toContainText('تعديل واحد غير محفوظ');
+    expect(calls.filter((c) => c.action === 'admin.cohort-plan')).toHaveLength(0);
+    expect(await noOverflow(page)).toBe(true);
+    if (R2B) {
+      await support.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${R2B}/r2b-edit-${width}.png` });
+    }
+    await panel.getByRole('button', { name: 'راجع واحفظ' }).click();
+    const dlg = page.getByRole('dialog', { name: 'راجع أثر التعديل قبل الحفظ' });
+    await expect(dlg).toContainText('الدعم والتمكين: تُوقف لهذه الدفعة، فلا تأخذ من الرحلة وقتًا ويُزاح ما بعدها');
+    await expect(dlg).toContainText('تتقدم نهاية الرحلة 90 يومًا');
+    await expect(dlg).toContainText('لا أحد في «الدعم والتمكين» الآن');
+    await expect(dlg).toContainText('«خطة الأثر»');
+    await expect(dlg).toContainText('البريد: لن يُرسل شيء الآن');
+    const notify = dlg.getByRole('checkbox', { name: /أبلغ المشاركين المتأثرين بالمواعيد الجديدة/ });
+    await expect(notify).not.toBeChecked();
+    await notify.check();
+    await expect(dlg).toContainText('يصل 7 مشاركين في الرحلة إشعار «تغيّرت مواعيد رحلتك»');
+    expect(calls.filter((c) => c.action === 'admin.cohort-plan').map((c) => [c.op, c.off])).toEqual([['preview', { support: true }]]);
+    expect(await noOverflow(page)).toBe(true);
+    if (R2B) await page.screenshot({ path: `${R2B}/r2b-impact-${width}.png` });
+    await dlg.getByRole('button', { name: 'احفظ الخطة' }).click();
+    await expect(dlg).toBeHidden();
+    await expect(page.getByRole('status').getByText('حُفظت خطة الدفعة')).toBeVisible();
+    expect(calls.find((c) => c.op === 'save')).toMatchObject({ off: { support: true }, notify: true, base_updated_at: 'u0' });
+    expect(calls.plan.schedule).toEqual({ support: { off: true } });
+    // للقراءة بعد الحفظ: باهتة بعلامتها، والشريط يقولها
+    await expect(support.locator('.cj-state.off')).toHaveText('موقوفة لهذه الدفعة');
+    await expect(panel.locator('.cj-planbar')).toContainText('مرحلة واحدة موقوفة لهذه الدفعة');
+    await panel.getByRole('button', { name: 'سجل الخطة' }).click();
+    await expect(panel.locator('.cj-history')).toContainText('أُوقفت مرحلة');
+    await panel.locator('.cj-saved').getByRole('button', { name: 'تراجع' }).click();
+    await expect(page.getByRole('status').getByText('تراجعت الخطة')).toBeVisible();
+    expect(calls.plan.schedule).toEqual({});
+    await expect(support).not.toHaveClass(/\boff\b/);
+    await expect(panel.getByRole('article', { name: 'التقرير النهائي' }).locator('.cj-window')).not.toContainText('3 ديسمبر إلى 9 ديسمبر');
+  });
+}
+
+test('إيقاف التابع يفتح مفتاح مرجعه، وإعادة الموقوفة في المسودة نفسها لا تبقى تعديلًا', async ({ page }) => {
+  await setup(page, 1440);
+  await openCohort(page);
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await panel.getByRole('button', { name: 'عدّل المدد' }).click();
+  const sw = (name) => panel.getByRole('article', { name }).getByRole('switch', { name: 'أوقف لهذه الدفعة' });
+  await expect(sw('التدريب')).toBeDisabled();
+  await sw('التوجيه على رأس العمل').click();
+  await expect(sw('التدريب')).toBeDisabled();
+  await sw('الاستشارة').click();
+  await expect(sw('التدريب')).toBeEnabled();
+  await expect(panel.locator('.cj-savebar')).toContainText('تعديلان غير محفوظين');
+  await sw('الاستشارة').click();
+  await sw('التوجيه على رأس العمل').click();
+  await expect(panel.locator('.cj-savebar')).toContainText('لا تعديل بعد');
+  await expect(panel.getByRole('button', { name: 'راجع واحفظ' })).toBeDisabled();
 });

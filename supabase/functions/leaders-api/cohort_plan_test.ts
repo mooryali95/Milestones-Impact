@@ -34,6 +34,8 @@ function install(tables: Record<string, Row[]>) {
       get: (_t, k: string) => {
         if (k === 'then') return (ok: any, bad: any) => Promise.resolve(run()).then(ok, bad);
         if (k === 'insert' || k === 'update') return (x: any) => { mode = k; payload = x; return q; };
+        if (k === 'upsert') return (x: any) => { mode = 'insert'; payload = x; return q; };
+        if (k === 'gte') return (c: string, v: any) => { filters.push((r) => String(r[c] ?? '') >= String(v)); return q; };
         if (k === 'delete') return () => { mode = 'delete'; return q; };
         if (k === 'eq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; };
         if (k === 'neq') return (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) !== v); return q; };
@@ -82,7 +84,7 @@ function world(cohort: Row = {}) {
     enrollments: [],
     participants: [{ id: P1, organization_id: ORG, is_demo: false, status: 'enrolled', full_name: 'سارة', profile_completed_at: '2026-10-01T00:00:00Z', created_at: '2026-10-01T00:00:00Z' }],
     program_milestones: [{ id: U(20), program_id: PA, title_ar: 'نهاية التدريب', stage_key: 'training', anchor: 'stage_end', offset_days: 0, complete: 'stage', active: true, sort: 1 }],
-    audit_log: [],
+    audit_log: [], participant_stage_overrides: [], participant_observations: [], coaching_sessions: [],
   });
 }
 const failOf = async (fn: () => Promise<unknown>) => (await assertRejects(fn, Fail)) as InstanceType<typeof Fail>;
@@ -189,8 +191,8 @@ Deno.test('الحراس: المغلقة، والمفتوحة غير المثبت
     const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 0, nope: 2 } }));
     assertEquals(e.code, 'plan_invalid');
     assertEquals((e.extra.errors as any[]).map((x) => x.code), ['range', 'unknown']);
-    // الإيقاف والتوازي والتثبيت للدفعة في مراحل لاحقة: لا تُقبل بصمت
-    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: true } }))).code, 'plan_field');
+    // التوازي والتثبيت للدفعة في مراحل لاحقة: لا تُقبل بصمت (الإيقاف صار مقبولًا في R2b)
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', with: { training: 'profile' } }))).code, 'plan_field');
     // نسخة أقدم من الحالية
     assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 }, base_updated_at: '2020-01-01T00:00:00Z' }))).code, 'stale');
     assertEquals(w.tables.cohorts[0].schedule, {});
@@ -253,4 +255,136 @@ Deno.test('تعذّر السجل بعد الحفظ: تُعاد الخطة كما
     assertEquals(w.tables.cohorts[0].schedule, {});
     assertEquals(w.tables.cohorts[0].updated_at, '2026-11-01T00:00:00Z');
   } finally { (db as any).from = from; w.restore(); }
+});
+
+// ══ R2b: الإيقاف لهذه الدفعة ══
+// العضو سارة في «التدريب» الآن (بلا تقدم فيه)، و«نهاية التدريب» معلم بارتكاز نهايته
+
+Deno.test('R2b المعاينة: إيقاف التدريب يسمي من فيه ومعلمه المستبعد والنهاية، بلا كتابة', async () => {
+  const w = world();
+  try {
+    const r: any = await cohortPlanAction(viewer, { cohort_id: C1, op: 'preview', off: { training: true } });
+    assertEquals(r.changed, true);
+    assertEquals(r.plan.schedule, { training: { off: true } });
+    const tr = r.plan.stages.find((s: any) => s.key === 'training');
+    assertEquals([tr.off, tr.from, tr.to], [true, null, null]);
+    assertEquals(r.impact.stopped, ['training']);
+    assertEquals(r.impact.moving, [{ key: 'training', title: 'التدريب', here: 1 }]);
+    assertEquals(r.impact.excluded.map((m: any) => m.id), [U(20)]);
+    assertEquals(r.impact.end.shift, -14);
+    assertEquals(r.impact.notify, { members: 1 });
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.audit_log.length, 0);
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b الحراس: بوابة القبول ومرجع «تبدأ مع» لا تُوقف، وقيمة الإيقاف تُفحص، والمغلقة والمفتوحة غير المثبتة كما في R2a', async () => {
+  const w = world();
+  try {
+    const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { profile: true } }));
+    assertEquals([e.code, (e.extra.errors as any[])[0].code], ['plan_invalid', 'protected']);
+    // مرحلة تبدأ مع التدريب في النسخة: التدريب مرجعها فلا يُوقف حتى تُوقف هي أو تُنقل
+    const v = w.tables.program_versions[0].data;
+    v.stages = [...v.stages, { key: 'ojt', title_ar: 'التوجيه', sort: 2.5, active: true, duration_days: 7, rules: { unlock: 'with', with: 'training' } }];
+    const t = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: true } }));
+    assertEquals((t.extra.errors as any[])[0].code, 'with_target');
+    assert(t.message.includes('أوقف أولًا ما يسير معها أو انقله'));
+    assertEquals(((await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', off: { training: true, ojt: true } })) as any).impact.stopped, ['training', 'ojt']);
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: ['training'] }))).code, 'plan_invalid');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w, 1), cohort_id: OPEN, op: 'save', off: { support: true } }))).code, 'open_unpinned');
+    w.tables.cohorts[0].status = 'closed';
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { support: true } }))).code, 'cohort_closed');
+    assertEquals(w.tables.cohorts[0].schedule, {});
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b الحفظ: الخطة والسجل، ورحلة المشارك بلا الموقوفة ينتقل إلى ما بعدها، ومعلمها لا يظهر ولا يُعد', async () => {
+  const w = world();
+  try {
+    const r: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: true } });
+    assertEquals(r.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { training: { off: true } });
+    const [row] = w.tables.audit_log;
+    assertEquals(row.after.summary.stopped, ['training']);
+    assertEquals(row.after.summary.excluded, 1);
+    assertEquals(row.after.skips, undefined);
+    const def: any = await journeyDefinition({ id: P1, organization_id: ORG });
+    assertEquals(def.stages.map((s: any) => s.key), ['profile', 'support']);
+    assertEquals(def.requirements.map((x: any) => x.code), ['P-INFO', 'S-ONE']);
+    assertEquals(def.stages_off.map((s: any) => s.key), ['training']);
+    const { journeyFor } = await import('./participant.ts');
+    const j: any = await journeyFor(w.tables.participants[0], { lite: true });
+    assertEquals(j.journey.find((s: any) => s.status === 'active')?.key, 'support');
+    assertEquals(j.milestones, []);
+    assertEquals(j.milestone_summary.total, 0);
+    // اللوحة (cohort-definition) تبقي الموقوفة بعلامتها في الخطة
+    const view: any = await cohortDefinitionFor({ cohort_id: C1 });
+    assert(view.stages.some((s: any) => s.key === 'training'));
+    assertEquals(view.cohort_plan.schedule, { training: { off: true } });
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b التراجع عن إيقاف: تعود المرحلة، ومن تجاوزها وهي موقوفة يُعفى افتراضيًا (القرار 12)، وحارس البريد يشمل معلمها العائد', async () => {
+  const w = world();
+  try {
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: true } });
+    const pre: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', off: { training: false } });
+    assertEquals(pre.impact.started, ['training']);
+    assertEquals(pre.impact.reenabled, [{ key: 'training', title: 'التدريب', passed: 1, ids: [P1] }]);
+    assertEquals(pre.impact.restored.map((m: any) => m.id), [U(20)]);
+    const u: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' });
+    assertEquals([u.saved, u.exempted], [true, 1]);
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.participant_stage_overrides.map((o: any) => [o.participant_id, o.stage_key, o.action]), [[P1, 'training', 'skip']]);
+    const last = w.tables.audit_log.at(-1)!;
+    assertEquals(last.after.skips, [{ participant_id: P1, stage_key: 'training' }]);
+    assertEquals(last.after.moved_ids, [U(20)]);
+    // معفى: التدريب مكتمل عليه بالإعفاء، فلا يُقفل الدعم
+    const { journeyFor } = await import('./participant.ts');
+    const j: any = await journeyFor(w.tables.participants[0], { lite: true });
+    assertEquals(j.journey.find((s: any) => s.key === 'training').status, 'done');
+    assertEquals(j.journey.find((s: any) => s.key === 'support').status, 'active');
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b «أعدها عليهم» لا يكتب إعفاءً، والتراجع عن حفظ أعفى يحذف إعفاءه', async () => {
+  const w = world({ schedule: { training: { off: true } } });
+  try {
+    const r: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: false }, reenable: 'apply' });
+    assertEquals([r.saved, r.exempted], [true, 0]);
+    assertEquals(w.tables.participant_stage_overrides, []);
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' });
+    assertEquals(w.tables.cohorts[0].schedule, { training: { off: true } });
+    // حفظ يعفي ثم تراجع عنه: يُحذف الإعفاء
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: false } });
+    assertEquals(w.tables.participant_stage_overrides.length, 1);
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' });
+    assertEquals(w.tables.participant_stage_overrides, []);
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b «أبلغ المشاركين» (القرار 13): مطفأ ما لم يُختر، ومختارًا ملاحظة واحدة لكل من في الرحلة بقالب الملاحظات', async () => {
+  const w = world();
+  try {
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { support: true } });
+    assertEquals(w.tables.participant_observations, []);
+    const r: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { support: false }, notify: true });
+    assertEquals(r.notified, 1);
+    const [o] = w.tables.participant_observations;
+    assertEquals([o.participant_id, o.code, o.kind, o.source, o.visible, o.title], [P1, 'cohort_plan', 'note', 'system', true, 'تغيّرت مواعيد رحلتك']);
+    assert(o.body.includes('عادت «الدعم» إلى رحلة دفعتك.'));
+    assertEquals(w.tables.audit_log.at(-1)!.after.notify, true);
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b جلسات التوجيه المحجوزة في مرحلة تُوقف تُسمّى ولا تمنع', async () => {
+  const w = world();
+  try {
+    w.tables.program_versions[0].data.requirements[2] = { ...requirements[2], kind: 'coaching' };
+    w.tables.enrollments.push({ participant_id: P1, cohort_id: C1, status: 'active', created_at: '2026-10-01T00:00:00Z' });
+    w.tables.coaching_sessions.push({ participant_id: P1, requirement_id: U(12), status: 'booked', starts_at: new Date(Date.now() + 3 * 864e5).toISOString() });
+    w.tables.coaching_sessions.push({ participant_id: P1, requirement_id: U(12), status: 'attended', starts_at: new Date(Date.now() - 3 * 864e5).toISOString() });
+    const r: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', off: { support: true } });
+    assertEquals(r.impact.booked, [{ key: 'support', title: 'الدعم', sessions: 1 }]);
+  } finally { w.restore(); }
 });

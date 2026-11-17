@@ -8,7 +8,7 @@ import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
-import { planStages } from './stage-windows.js';
+import { planOffKeys, planRules, planSchedule, planStages } from './stage-windows.js';
 import { cleanStageModes } from './groups.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
@@ -1699,12 +1699,20 @@ export function cleanDelivery(delivery, requirements) {
 // تعريف الرحلة لدفعة: لقطة النسخة المثبتة أو صفوف البرنامج الحالية، ثم تخصيص الدفعة.
 // والمدة الخاصة بالدفعة (days في خطتها، R2a): duration_days يُكتب بالمدة الفعلية (planStages)، فيصح نص {duration} عند
 // المشارك وتقرأ المعالم والخريطة المدة نفسها التي يحسبها cohortPlan. نص المدة الثابت (بلا {duration}) لا يُمس
+// والإيقاف للدفعة (off في خطتها، R2b): المرحلة الموقوفة تسقط من رحلة المشارك كما تسقط غير النشطة، ومعها بنودها، وقواعد ما
+// ينتظرها تُعاد كتابتها (planRules، القرار 22) فلا يُقفل أحد إلى الأبد. ما أنجزه فيها محفوظ في صفوفه ويعود إن أُعيد تشغيلها.
+// stages_off: الموقوفة بأسمائها ومواضعها لمن يعرضها باهتة (خريطة ملف الدفعة)، وrewrites: القواعد التي أُعيدت كتابتها
 export function cohortDefinition({ live, version, cohort }) {
   const base = version?.data || live || { stages: [], requirements: [] };
   const delivery = cohort?.delivery || {};
+  const active = (base.stages || []).filter((s) => s.active !== false);
+  const off = cohort ? planOffKeys(planSchedule(cohort)) : new Set();
+  const { stages, rewrites } = planRules(active.filter((s) => !off.has(s.key)), off);
   return {
-    stages: planStages((base.stages || []).filter((s) => s.active !== false), cohort?.schedule),
-    requirements: (base.requirements || []).filter((r) => r.active !== false).map((r) => applyDelivery(r, delivery[r.code])),
+    stages: planStages(stages, cohort?.schedule),
+    requirements: (base.requirements || []).filter((r) => r.active !== false && !off.has(r.stage_key)).map((r) => applyDelivery(r, delivery[r.code])),
+    stages_off: active.filter((s) => off.has(s.key)).map((s) => ({ key: s.key, title_ar: s.title_ar, phase: s.phase || null, sort: s.sort ?? 0 })),
+    rule_rewrites: rewrites,
   };
 }
 

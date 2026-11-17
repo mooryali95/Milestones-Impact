@@ -11,7 +11,7 @@
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
 import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
-import { planSchedule, stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
+import { planOffKeys, planSchedule, stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const toMs = (d) => new Date(`${d}T00:00:00Z`).getTime();
@@ -165,6 +165,19 @@ export function milestoneDueInfo(m, { startsOn = null, endsOn = null, schedule =
   return base && ISO.test(base) ? { due: addDays(base, Number(m.offset_days) || 0), source } : { due: null, source: null };
 }
 
+// معلم مرحلة موقوفة في الدفعة (R2b، القرار 15): مرتبط ببدايتها أو نهايتها، أو يكتمل باكتمالها. يُستبعد من الدفعة كلها:
+// لا يظهر ولا يُعد في درجة المعالم ولا يُرسل عنه بريد، ولا يُحذف من البرنامج فيعود إن أُعيد تشغيل مرحلته
+/** @param {any} m @param {Set<string>} offKeys */
+export function milestoneOff(m, offKeys) {
+  if (!m?.stage_key || !offKeys?.has(m.stage_key)) return false;
+  return m.anchor === 'stage_end' || m.anchor === 'stage_start' || m.complete === 'stage';
+}
+/** المعالم التي تسري على الدفعة: النشطة بلا معالم مراحلها الموقوفة @param {any[]} milestones @param {any} cohort */
+export function cohortMilestones(milestones, cohort) {
+  const off = planOffKeys(planSchedule(cohort || {}));
+  return (milestones || []).filter((m) => m.active !== false && !milestoneOff(m, off));
+}
+
 // حالة كل معلم لمشارك: منجز، أو في الموعد، أو يستحق خلال 7 أيام، أو متأخر بعدد أيام.
 // ctx: { stagesDone: Set, records: { [milestone_id]: { done_at, due_override } }, cohort: { starts_on, ends_on, schedule }, stages, today }
 // stages: مراحل تعريف الدفعة، تُحسب منها النوافذ لما لم يُكتب له جدول. بلاها يبقى الحساب من الجدول المكتوب وحده
@@ -175,7 +188,8 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
   // معالمها بنافذة محسوبة من starts_on ولو ضُبط لها، وإلا صار كل من دخلها متأخرًا لحظة دخوله
   const windows = live.length && cohort?.starts_on && !cohort?.is_default ? stageWindows(live, cohort) : null;
   const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: planSchedule(cohort), windows };
-  return (milestones || []).filter((m) => m.active !== false).map((m) => {
+  // معالم المراحل الموقوفة في الدفعة لا تسري عليها (milestoneOff)، فلا تظهر ولا تنقص الدرجة ولا يُرسل عنها
+  return cohortMilestones(milestones, cohort).map((m) => {
     const rec = records[m.id] || {};
     const info = milestoneDueInfo(m, ctx);
     const due = rec.due_override || info.due;

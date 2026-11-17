@@ -51,6 +51,11 @@
 .jm-bar { display: flex; width: 72%; height: 4px; border-radius: 99px; background: rgba(234,240,240,.10); overflow: hidden; }
 .jm-bar .d, .jm-legend .d { background: rgba(234,240,240,.45); }
 .jm-bar .h, .jm-legend .h { background: var(--copper); }
+/* موقوفة لهذه الدفعة (R2b): في مكانها باهتة بإطار متقطع، بلا عداد ولا تفاعل */
+.jm-stage.off .jm-node { cursor: default; padding-top: 48px; opacity: .62; border: 1px dashed rgba(234, 230, 220, .28); }
+.jm-stage.off .jm-node:hover { background: none; }
+.jm-stage.off .jm-title { text-decoration: line-through; text-decoration-color: rgba(234, 230, 220, .4); }
+.jm-off { color: var(--mist); letter-spacing: .01em; }
 .jm-late { font-size: 11px; padding: 1px 8px; border-radius: 99px; color: var(--copper); border: 1px solid rgba(199,154,75,.5); background: rgba(199,154,75,.12); }
 .jm-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0; color: var(--brand-mist-dark); }
 .jm-legend i { display: inline-block; width: 14px; height: 4px; border-radius: 99px; vertical-align: middle; margin-inline-end: 6px; }
@@ -99,6 +104,7 @@
   .jm-late { grid-area: late; justify-self: start; margin-top: 6px; }
   .jm-today { position: static; transform: none; grid-area: title; justify-self: end; align-self: start; }
   .jm-panel-stats { grid-template-columns: repeat(2, 1fr); }
+  .jm-stage.off .jm-node { padding: 10px 8px; }
   .op-grid.two { grid-template-columns: 1fr; }
   .jm-ms ol { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(170px, 72%); overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
   .jm-m { scroll-snap-align: start; }

@@ -4,12 +4,13 @@
 // يقرؤه الإجراء admin.cohort-plan (cohort-plan.ts) قبل الحفظ وتبويب «الرحلة» في اللوحة لمعاينته الحية، فتعديل المدة
 // يُحسب في مكان واحد: planEdit يكتب الخطة الجديدة، وcohortPlan (stage-windows.js) يحسب تواريخها، وplanImpact يقول من
 // يتأثر. لا حساب تاريخ هنا: كل تاريخ من cohortPlan وmilestoneDueInfo وmilestoneStatuses.
-// في R2a تملك الدفعة المدة وحدها (days)، و«حرّر التواريخ لتتبع المدد» للمثبت قديمًا. الإيقاف (off) في R2b والتوازي
-// (with وoffset) في R3a: المنظف يحفظها ولا يمحوها، وهذا الملف لا يكتبها.
-import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planDaysOf, planDaysOnly, planPinned, planSchedule } from './stage-windows.js';
-import { addDays, daysBetween, distributeSchedule, lateNoticeAllowed, MILESTONE_GRACE_DAYS, milestoneDueInfo, milestoneStatuses } from './milestones.js';
+// تملك الدفعة المدة (days، R2a) والإيقاف (off، R2b)، و«حرّر التواريخ لتتبع المدد» للمثبت قديمًا. التوازي (with وoffset)
+// في R3a: المنظف يحفظه ولا يمحوه، وهذا الملف لا يكتبه.
+import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planDaysOf, planDaysOnly, planOff, planOffKeys, planPinned, planRules, planSchedule } from './stage-windows.js';
+import { addDays, cohortMilestones, daysBetween, distributeSchedule, lateNoticeAllowed, MILESTONE_GRACE_DAYS, milestoneDueInfo, milestoneStatuses } from './milestones.js';
 import { stageRules, daysAr, durationAr } from './journey.js';
 import { latinDigits } from './digits.js';
+import { SYSTEM_REQUIREMENT_CODES } from './content-lock.js';
 
 // الوحدات (القرار 9): أيام وأسابيع، والأسبوع 7 أيام. «أيام العمل» في R5
 export const PLAN_UNITS = Object.freeze({ days: 1, weeks: 7 });
@@ -24,11 +25,40 @@ const stable = (v) => (Array.isArray(v) ? v.map(stable) : v && typeof v === 'obj
   ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v);
 export const sameSchedule = (a, b) => JSON.stringify(stable(a || {})) === JSON.stringify(stable(b || {}));
 
-/** الخطة بعد تعديل المدير، وأسباب الرفض إن وُجدت. لا يمس ما لا يعرفه (off وwith وoffset وما للمراحل الموقوفة)
- * @param {{ stages: any[], schedule?: any, edit?: { days?: Record<string, any>, follow?: boolean }, cohort?: any }} o
+// ══ الإيقاف لهذه الدفعة (R2b، البند 4.6 والقرار 5) ══
+// بوابات القبول: الملف وتحديد المستوى (ONBOARDING_GATE وGATE_CODE) واعتماده (AP-OK يحسمه النظام من اعتماد المستوى)
+export const PLAN_GATE_STAGES = Object.freeze(['profile', 'assessment', 'approval']);
+const SYSTEM_CODES = new Set(SYSTEM_REQUIREMENT_CODES);
+/** لماذا لا تُوقف هذه المرحلة في الدفعة، أو null. المحمية: بوابات القبول، وكل مرحلة فيها بند يحسمه النظام (قياس أو 360 أو
+ * مشروع أو تقرير أو حالة أو رضا). ومرجع «تبدأ مع» لمرحلة تعمل: «أوقف أولًا ما يسير معها أو انقله» (القرار 22).
+ * أما مرحلة مذكورة في «بعد مراحل» لغيرها فلا تُمنع: تُعاد كتابة القاعدة (planRules) وتسميها نافذة الأثر
+ * @param {any} stage @param {{ stages?: any[], requirements?: any[], schedule?: any }} o
+ * schedule: الخطة كما ستُحفظ، فما يُوقف معها في التعديل نفسه لا يمنعها */
+export function planOffBlock(stage, { stages = [], requirements = [], schedule = {} } = {}) {
+  if (!stage) return null;
+  const name = stage.title_ar || stage.key;
+  if (PLAN_GATE_STAGES.includes(stage.key)) {
+    return { code: 'protected', msg: `«${name}» من بوابات القبول، فلا تُوقف في دفعة: عليها يُبنى المسار وفتح ما بعدها` };
+  }
+  const sys = (requirements || []).filter((r) => r.active !== false && r.stage_key === stage.key && SYSTEM_CODES.has(r.code));
+  if (sys.length) {
+    return { code: 'protected', msg: `«${name}» فيها ${sys.map((r) => `«${r.title_ar || r.code}»`).join(' و')} يحسمه النظام (قياس أو تقرير أو 360 أو مشروع)، فإيقافها يفتح ما بعدها بلا قفله أو يكسر التقرير` };
+  }
+  const off = planOffKeys(schedule);
+  const riders = (stages || []).filter((s) => s.key !== stage.key && s.active !== false && !off.has(s.key) && stageRules(s).unlock === 'with' && stageRules(s).with === stage.key);
+  if (riders.length) {
+    return { code: 'with_target', msg: `${riders.map((s) => `«${s.title_ar || s.key}»`).join(' و')} تبدأ مع «${name}»: أوقف أولًا ما يسير معها أو انقله` };
+  }
+  return null;
+}
+
+/** الخطة بعد تعديل المدير، وأسباب الرفض إن وُجدت. لا يمس ما لا يعرفه (with وoffset)
+ * @param {{ stages: any[], schedule?: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, any> }, cohort?: any, requirements?: any[] }} o
  *  stages: مراحل تعريف الدفعة الظاهرة بمدد النسخة. days: { مفتاح: عدد أيام، أو null لـ«ارجع لمدة البرنامج» }.
- *  follow: «حرّر التواريخ لتتبع المدد»: كل مرحلة مثبتة تصير مدة بطولها الحالي فتتبع ما قبلها */
-export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {} }) {
+ *  follow: «حرّر التواريخ لتتبع المدد»: كل مرحلة مثبتة تصير مدة بطولها الحالي فتتبع ما قبلها.
+ *  off: { مفتاح: true لـ«أوقف لهذه الدفعة» أو false لإعادتها }. الإيقاف يبقي مدتها الخاصة إن كانت، فتعود بها بنقرة.
+ *  requirements: بنود تعريف الدفعة، تُعرف منها المراحل المحمية (planOffBlock) */
+export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, requirements = [] }) {
   const next = JSON.parse(JSON.stringify(schedule && typeof schedule === 'object' ? schedule : {}));
   const errors = [];
   const anchored = [];
@@ -85,6 +115,21 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {} })
     }
     setDays(k, n);
   }
+  // الإيقاف والإعادة، ثم الحراس على الخطة كما ستُحفظ: ما يُوقف مع مرجعه في التعديل نفسه لا يمنعه
+  const offEdit = edit.off && typeof edit.off === 'object' ? edit.off : {};
+  const stopping = [];
+  for (const [k, raw] of Object.entries(offEdit)) {
+    const s = byKey.get(k);
+    if (!s) { errors.push({ stage: k, code: 'unknown', msg: `«${k}» ليست من مراحل رحلة الدفعة الظاهرة` }); continue; }
+    if (raw !== true && raw !== false) { errors.push({ stage: k, code: 'off_value', msg: `إيقاف «${title(k)}» بنعم أو لا` }); continue; }
+    const e = { ...(next[k] || {}) };
+    if (raw) { if (!planOff(e)) stopping.push(k); e.off = true; } else delete e.off;
+    if (Object.keys(e).length) next[k] = e; else delete next[k];
+  }
+  for (const k of stopping) {
+    const block = planOffBlock(byKey.get(k), { stages, requirements, schedule: next });
+    if (block) errors.push({ stage: k, code: block.code, msg: block.msg });
+  }
   return { schedule: next, errors, anchored, changed: !sameSchedule(schedule, next) };
 }
 const ISO_PAIR = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(e.end || '');
@@ -94,7 +139,9 @@ const ISO_PAIR = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') && /^\d{4}-\d{
 // يضع كل مجموعة بعد سابقتها، الاختيارية منها أيضًا، فما تأخذه غير الإلزامية من المسار يُطرح من مدة الدفعة قبل التوزيع،
 // ويُتحقق بcohortPlan نفسه أن الرحلة تنتهي يوم نهاية الدفعة. schedule: خطة الدفعة الحالية (مددها وحدها تُقرأ هنا)
 export function suggestDays(stages, startsOn, endsOn, schedule = {}) {
-  const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  // الموقوفة لهذه الدفعة لا تأخذ من مدتها شيئًا (R2b)
+  const off = planOffKeys(schedule);
+  const live = (stages || []).filter((s) => s.active !== false && !off.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   const required = live.filter((s) => stageRules(s).mode === 'required');
   const own = planDaysOnly(schedule);
   const daysFor = (end) => {
@@ -134,33 +181,54 @@ export function planLock(cohort) {
 const windowsFor = (stages, cohort) => (cohort?.starts_on && !cohort?.is_default ? cohortPlan(stages, cohort).windows : null);
 
 /** أثر تعديل الخطة قبل الحفظ (نافذة الأثر، البند 4.2 هـ): ما تغيّر سطرًا سطرًا، ومن يقف في كل مرحلة تغيّرت، والمعالم
- * التي يتغير موعدها أو تنقلب متأخرة، وبريد «معلم متأخر» الذي يمنعه الحارس. people: [{ id, at, stagesDone, records }]
- * (من رحلة كل عضو كما يراها، journeyFor) أو null إن لم تُحسب (دفعة أكبر من السقف)
- * @param {{ stages: any[], before?: any, after?: any, cohort?: any, milestones?: any[], people?: any[]|null, today?: any, cutoff?: string }} o */
-export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, milestones = [], people = null, today = null, cutoff = undefined }) {
+ * التي يتغير موعدها أو تنقلب متأخرة أو تُستبعد بالإيقاف، وبريد «معلم متأخر» الذي يمنعه الحارس.
+ * people: [{ id, at, stagesDone, records, open, after }] من رحلة كل عضو كما يراها (journeyFor)، أو null إن لم تُحسب.
+ *   open: مراحل ليست مقفلة عليه الآن، وafter: حالة كل مرحلة عليه بالخطة الجديدة (تُحسب حين يُعاد تشغيل مرحلة فقط)
+ * booked: { مفتاح مرحلة: عدد جلسات التوجيه المحجوزة القادمة فيها } لما يُوقف (تحذير لا منع، البند 4.6)
+ * @param {{ stages: any[], before?: any, after?: any, cohort?: any, milestones?: any[], people?: any[]|null, today?: any, cutoff?: string, booked?: Record<string, number> }} o */
+export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, milestones = [], people = null, today = null, cutoff = undefined, booked = {} }) {
   const c0 = { ...cohort, schedule: before || {} };
   const c1 = { ...cohort, schedule: after || {} };
   const p0 = cohortPlan(stages, c0), p1 = cohortPlan(stages, c1);
   const titleOf = new Map(stages.map((s) => [s.key, s.title_ar || s.key]));
   const changes = stages.map((s) => {
     const a = p0.byKey[s.key], b = p1.byKey[s.key];
-    if (!a || !b || (a.days === b.days && a.from === b.from && a.to === b.to)) return null;
-    return { key: s.key, title: titleOf.get(s.key), before: { days: a.days, from: a.from, to: a.to, source: a.source },
-      after: { days: b.days, from: b.from, to: b.to, source: b.source }, days_changed: a.days !== b.days };
+    if (!a || !b) return null;
+    const side = (x) => ({ days: x.days, from: x.from, to: x.to, source: x.source, off: !!x.off });
+    // الإيقاف والإعادة سطر واحد بلا مقارنة تواريخ: الموقوفة لا نافذة لها
+    if (!!a.off !== !!b.off) return { key: s.key, title: titleOf.get(s.key), before: side(a), after: side(b), days_changed: false, off: b.off ? 'stop' : 'start' };
+    if (a.off || (a.days === b.days && a.from === b.from && a.to === b.to)) return null;
+    return { key: s.key, title: titleOf.get(s.key), before: side(a), after: side(b), days_changed: a.days !== b.days };
   }).filter(Boolean);
+  const stopped = changes.filter((x) => x.off === 'stop').map((x) => x.key);
+  const started = changes.filter((x) => x.off === 'start').map((x) => x.key);
   const shift = p0.end && p1.end ? daysBetween(p0.end, p1.end) : 0;
   // «تُفتح يوم N» لا تتبع المدد (القرار 20): تُسمّى صراحة إن تحركت نافذتها
-  const dayRules = changes.filter((x) => stageRules(stages.find((s) => s.key === x.key)).unlock === 'day').map((x) => x.title);
+  const dayRules = changes.filter((x) => !x.off && stageRules(stages.find((s) => s.key === x.key)).unlock === 'day').map((x) => x.title);
+  // «بعد مراحل» تنتظر موقوفة: يُحذف شرطها في هذه الدفعة (القرار 22)، وتُسمّى هنا ما صار فتحها لا ينتظرها
+  const rewritesOf = (sched) => {
+    const off = planOffKeys(sched);
+    return planRules(stages.filter((s) => !off.has(s.key)), off).rewrites;
+  };
+  const r0 = new Map(rewritesOf(before).map((x) => [x.key, x]));
+  const rewrites = rewritesOf(after).filter((x) => {
+    const was = r0.get(x.key);
+    return !was || x.dropped.some((k) => !was.dropped.includes(k));
+  }).map((x) => ({ ...x, dropped_titles: x.dropped.map((k) => titleOf.get(k) || k) }));
   const w0 = windowsFor(stages, c0), w1 = windowsFor(stages, c1);
+  // المعالم التي تسري قبل وبعد: معالم الموقوفة تُستبعد (cohortMilestones، القرار 15)، ومعالم المعادة ترجع
   const live = (milestones || []).filter((m) => m.active !== false);
+  const in0 = new Set(cohortMilestones(live, c0).map((m) => m.id)), in1 = new Set(cohortMilestones(live, c1).map((m) => m.id));
   // الخطة كما تقرؤها المعالم (planSchedule): المفتوحة بلا تواريخ مثبتة، كما في milestoneStatuses
   const ctx = (w, cc) => ({ startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: planSchedule(cc), windows: w });
-  const moved = live.map((m) => {
+  const moved = live.filter((m) => in0.has(m.id) && in1.has(m.id)).map((m) => {
     const a = milestoneDueInfo(m, ctx(w0, c0)).due, b = milestoneDueInfo(m, ctx(w1, c1)).due;
     return a === b ? null : { id: m.id, title: m.title_ar, before: a, after: b };
   }).filter(Boolean);
+  const excluded = live.filter((m) => in0.has(m.id) && !in1.has(m.id)).map((m) => ({ id: m.id, title: m.title_ar, stage: m.stage_key }));
+  const restored = live.filter((m) => !in0.has(m.id) && in1.has(m.id)).map((m) => ({ id: m.id, title: m.title_ar, stage: m.stage_key, after: milestoneDueInfo(m, ctx(w1, c1)).due }));
 
-  let who = null, late = null, mail = null;
+  let who = null, late = null, mail = null, moving = null, reenabled = null, notify = null;
   if (Array.isArray(people)) {
     const here = {};
     let flips = 0, held = 0, cleared = 0;
@@ -180,13 +248,25 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
         if (lateNoticeAllowed(m, MILESTONE_GRACE_DAYS, cutoff) && !(was && lateNoticeAllowed(was, MILESTONE_GRACE_DAYS, cutoff))) held += 1;
       }
     }
-    who = { total: people.length, by_stage: changes.map((x) => ({ key: x.key, title: x.title, here: here[x.key] || 0 })).filter((x) => x.here > 0) };
+    who = { total: people.length, by_stage: changes.filter((x) => !x.off).map((x) => ({ key: x.key, title: x.title, here: here[x.key] || 0 })).filter((x) => x.here > 0) };
+    // من يقف الآن في مرحلة تُوقف: ينتقل إلى ما بعدها، وما أنجزه فيها محفوظ (البند 4.5، القاعدة 2)
+    moving = stopped.map((k) => ({ key: k, title: titleOf.get(k), here: here[k] || 0 }));
     late = { milestones: flips, people: flipped.size, cleared };
     mail = { send: 0, held };
+    // إعادة تشغيل مرحلة تجاوزها مشاركون وهي موقوفة (القرار 12): من فُتحت له مرحلة بعدها، وتصير هي نشطة عليه بالخطة الجديدة
+    const order = new Map([...stages].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((s, i) => [s.key, i]));
+    reenabled = started.map((k) => {
+      const ids = people.filter((p) => Array.isArray(p.open) && p.after && p.after[k] === 'active'
+        && p.open.some((x) => (order.get(x) ?? -1) > (order.get(k) ?? 1e9))).map((p) => p.id);
+      return { key: k, title: titleOf.get(k), passed: ids.length, ids };
+    });
+    // «أبلغ المشاركين» (القرار 13): من في الرحلة ولم ينهها
+    notify = { members: people.filter((p) => p.at).length };
   }
+  const bookedRows = stopped.map((k) => ({ key: k, title: titleOf.get(k), sessions: Number(booked?.[k]) || 0 })).filter((x) => x.sessions > 0);
   return {
-    changes, end: { before: p0.end, after: p1.end, shift }, total: { before: p0.total_days, after: p1.total_days },
-    day_rules: dayRules, milestones: moved, people: who, late, mail, issues: p1.issues,
+    changes, stopped, started, end: { before: p0.end, after: p1.end, shift }, total: { before: p0.total_days, after: p1.total_days },
+    day_rules: dayRules, rewrites, milestones: moved, excluded, restored, people: who, moving, reenabled, booked: bookedRows, late, mail, notify, issues: p1.issues,
     open: cohort.is_default ? { members: Array.isArray(people) ? people.length : null } : null,
   };
 }
@@ -195,10 +275,19 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
 export const peopleAr = (n) => (n === 1 ? 'مشارك واحد' : n === 2 ? 'مشاركان' : n <= 10 ? `${n} مشاركين` : `${n} مشاركًا`);
 const msAr = (n) => (n === 1 ? 'معلم واحد' : n === 2 ? 'معلمان' : n <= 10 ? `${n} معالم` : `${n} معلمًا`);
 const msgAr = (n) => (n === 1 ? 'رسالة واحدة' : n === 2 ? 'رسالتان' : n <= 10 ? `${n} رسائل` : `${n} رسالة`);
-export function impactLines(impact, fmt = (d) => d) {
+const sessionsAr = (n) => (n === 1 ? 'جلسة واحدة محجوزة' : n === 2 ? 'جلستان محجوزتان' : n <= 10 ? `${n} جلسات محجوزة` : `${n} جلسة محجوزة`);
+/** opts.notify: «أبلغ المشاركين» مختار في نافذة الحفظ (القرار 13)، فيقول سطر البريد ما سيصل ومن يصله
+ * @param {any} impact @param {(d: string) => string} [fmt] @param {{ notify?: boolean }} [opts] */
+export function impactLines(impact, fmt = (d) => d, { notify = false } = {}) {
   if (!impact) return [];
   const out = [];
   for (const x of impact.changes) {
+    if (x.off === 'stop') { out.push({ key: `c-${x.key}`, kind: 'change', off: 'stop', text: `${x.title}: تُوقف لهذه الدفعة، فلا تأخذ من الرحلة وقتًا ويُزاح ما بعدها` }); continue; }
+    if (x.off === 'start') {
+      const when = x.after.from ? `، ${x.after.from === x.after.to ? fmt(x.after.from) : `من ${fmt(x.after.from)} إلى ${fmt(x.after.to)}`}` : '';
+      out.push({ key: `c-${x.key}`, kind: 'change', off: 'start', text: `${x.title}: تعود إلى رحلة هذه الدفعة بمدة ${planDurationAr(x.after.days)}${when}` });
+      continue;
+    }
     const dur = x.days_changed ? `${planDurationAr(x.before.days)} إلى ${planDurationAr(x.after.days)}` : 'بمدتها نفسها';
     const when = x.after.from ? `${x.days_changed ? '، فتصير' : '، وتصير'} ${x.after.from === x.after.to ? fmt(x.after.from) : `من ${fmt(x.after.from)} إلى ${fmt(x.after.to)}`}` : '';
     out.push({ key: `c-${x.key}`, kind: 'change', text: `${x.title}: ${dur}${when}` });
@@ -206,28 +295,74 @@ export function impactLines(impact, fmt = (d) => d) {
   const sh = impact.end.shift;
   if (sh) out.push({ key: 'end', kind: 'end', text: `${sh > 0 ? 'تتأخر' : 'تتقدم'} نهاية الرحلة ${daysAr(Math.abs(sh))}${impact.end.after ? `، فتنتهي ${fmt(impact.end.after)}` : ''}` });
   if (impact.day_rules.length) out.push({ key: 'day', kind: 'note', text: `${impact.day_rules.map((t) => `«${t}»`).join(' و')} تُفتح بيوم ثابت من بداية الدفعة (قاعدة البرنامج)، فلا يتحرك فتحها مع المدد` });
+  // القرار 22: ما كان ينتظر الموقوفة بشرط «بعد مراحل» يُفتح في هذه الدفعة بلا انتظارها
+  for (const r of impact.rewrites || []) {
+    out.push({ key: `rw-${r.key}`, kind: 'note', text: `«${r.title}» كانت تُفتح بعد اكتمال ${r.dropped_titles.map((t) => `«${t}»`).join(' و')}، فصار فتحها في هذه الدفعة لا ينتظرها${r.to === 'previous' ? ' (تُفتح بعد ما قبلها)' : ''}` });
+  }
   if (impact.open) out.push({ key: 'open', kind: 'warn', text: `الدفعة المفتوحة: يمس التعديل ${impact.open.members == null ? 'كل من ليس في دفعة' : `${peopleAr(impact.open.members)} ليسوا في دفعة`}، والمدد نسبية من دخول كل منهم` });
+  // من يقف الآن في مرحلة تُوقف (البند 4.5، القاعدة 2)
+  for (const m of impact.moving || []) {
+    out.push({ key: `mv-${m.key}`, kind: 'people', text: m.here ? `${peopleAr(m.here)} في «${m.title}» الآن ${m.here === 1 ? 'ينتقل' : m.here === 2 ? 'ينتقلان' : 'ينتقلون'} إلى ما بعدها، ${m.here === 1 ? 'وما أنجزه' : m.here === 2 ? 'وما أنجزاه' : 'وما أنجزوه'} فيها محفوظ ويعود إن أُعيد تشغيلها` : `لا أحد في «${m.title}» الآن` });
+  }
+  for (const r of impact.reenabled || []) {
+    if (r.passed) out.push({ key: `re-${r.key}`, kind: 'reenable', stage: r.key, passed: r.passed, text: `${peopleAr(r.passed)} ${r.passed === 1 ? 'تجاوز' : r.passed === 2 ? 'تجاوزا' : 'تجاوزوا'} «${r.title}» وهي موقوفة، وإعادتها تجعلها نشطة عليهم وقد تقفل ما بعدها` });
+  }
+  for (const b of impact.booked || []) out.push({ key: `bk-${b.key}`, kind: 'warn', text: `${sessionsAr(b.sessions)} في «${b.title}» ستُحجب عن أصحابها ما دامت موقوفة` });
   if (impact.people) {
     const by = impact.people.by_stage;
     // بصيغة التصور (4.2 هـ): «12 مشاركًا في التدريب الآن، و3 في التوجيه». المراحل هنا كل ما تتغير مواعيده، لا ما تغيّرت مدته وحده
-    out.push({ key: 'people', kind: 'people', text: by.length
-      ? `في المراحل التي تتغير مواعيدها: ${by.map((x, i) => (i ? `${x.here} في ${x.title}` : `${peopleAr(x.here)} في ${x.title} الآن`)).join('، و')}`
-      : 'لا أحد الآن في المراحل التي تتغير مواعيدها' });
+    if (by.length || !(impact.moving || []).length) {
+      out.push({ key: 'people', kind: 'people', text: by.length
+        ? `في المراحل التي تتغير مواعيدها: ${by.map((x, i) => (i ? `${x.here} في ${x.title}` : `${peopleAr(x.here)} في ${x.title} الآن`)).join('، و')}`
+        : 'لا أحد الآن في المراحل التي تتغير مواعيدها' });
+    }
   } else out.push({ key: 'people', kind: 'note', text: 'لم يُحسب أثره على كل عضو (الدفعة أكبر من أن تُحسب هنا). المعالم والمواعيد تتبع الخطة الجديدة' });
   out.push({ key: 'ms', kind: impact.milestones.length ? 'ms' : 'note', text: impact.milestones.length ? `${msAr(impact.milestones.length)} ${impact.milestones.length === 1 ? 'يتغير موعده' : impact.milestones.length === 2 ? 'يتغير موعدهما' : 'تتغير مواعيدها'}` : 'لا يتغير موعد أي معلم' });
+  // القرار 15: معالم الموقوفة تُستبعد من الدفعة ومن درجة المعالم، ولا تُحذف من البرنامج
+  if ((impact.excluded || []).length) {
+    const n = impact.excluded.length;
+    out.push({ key: 'excl', kind: 'ms', text: `${msAr(n)} للمراحل الموقوفة ${n === 1 ? 'يُستبعد' : n === 2 ? 'يُستبعدان' : 'تُستبعد'} من هذه الدفعة ومن درجة المعالم: ${impact.excluded.map((m) => `«${m.title}»`).join(' و')}، ولا ${n === 1 ? 'يُحذف' : 'تُحذف'} من البرنامج` });
+  }
+  if ((impact.restored || []).length) {
+    const n = impact.restored.length;
+    out.push({ key: 'rest', kind: 'ms', text: `${n === 1 ? 'يعود' : 'تعود'} ${msAr(n)} للمراحل المعادة: ${impact.restored.map((m) => `«${m.title}»${m.after ? ` (${fmt(m.after)})` : ''}`).join(' و')}` });
+  }
   if (impact.late) {
     if (impact.late.milestones) out.push({ key: 'late', kind: 'warn', text: `${msAr(impact.late.milestones)} ${impact.late.milestones === 1 ? 'يصير متأخرًا' : impact.late.milestones === 2 ? 'يصيران متأخرين' : 'تصير متأخرة'} على أصحابها (عدد من يتأثر: ${impact.late.people})` });
     if (impact.late.cleared) out.push({ key: 'cleared', kind: 'ok', text: `ويعود في الموعد ما كان متأخرًا: ${msAr(impact.late.cleared)}` });
   }
-  out.push({ key: 'mail', kind: 'mail', text: impact.mail?.held
-    ? `البريد: لن يُرسل شيء الآن. ${msgAr(impact.mail.held)} «معلم متأخر» عن مواعيد صارت في الماضي تُحجب بحارس البريد، والتذكيرات تُحسب من المواعيد الجديدة`
-    : 'البريد: لن يُرسل شيء الآن، والتذكيرات تُحسب من المواعيد الجديدة' });
+  const held = impact.mail?.held ? ` ${msgAr(impact.mail.held)} «معلم متأخر» عن مواعيد صارت في الماضي تُحجب بحارس البريد.` : '';
+  if (notify && impact.notify?.members) {
+    out.push({ key: 'mail', kind: 'mail', text: `البريد: يصل ${peopleAr(impact.notify.members)} في الرحلة إشعار «تغيّرت مواعيد رحلتك» في ملفه وبريده.${held} والتذكيرات تُحسب من المواعيد الجديدة` });
+  } else {
+    out.push({ key: 'mail', kind: 'mail', text: impact.mail?.held
+      ? `البريد: لن يُرسل شيء الآن.${held} والتذكيرات تُحسب من المواعيد الجديدة`
+      : 'البريد: لن يُرسل شيء الآن، والتذكيرات تُحسب من المواعيد الجديدة' });
+  }
   return out;
+}
+
+// إشعار «أبلغ المشاركين» (القرار 13): نص واحد للدفعة من الأثر نفسه، يُكتب في ملف كل مشارك ويصله بريده بقالب الملاحظات القائم
+// (observations.ts record، بمفتاح cohort_plan ومرجع الحفظ فلا يُكتب مرتين). لا أسماء ولا أرقام نسخ، ويصف ما تغيّر وحده
+const dayLongAr = (iso) => { try { return new Date(`${iso}T00:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }); } catch { return iso; } };
+/** @param {any} impact @param {(d: string) => string} [fmt] @returns {{ title: string, body: string }} */
+export function planNotice(impact, fmt = dayLongAr) {
+  const name = (k) => `«${(impact.changes.find((x) => x.key === k) || {}).title || k}»`;
+  const list = (ks) => ks.map(name).join(' و');
+  const parts = [];
+  if (impact.stopped?.length) parts.push(`لم تعد ${list(impact.stopped)} ضمن رحلة دفعتك، وما أنجزته فيها محفوظ.`);
+  if (impact.started?.length) parts.push(`عادت ${list(impact.started)} إلى رحلة دفعتك.`);
+  const dur = impact.changes.filter((x) => !x.off && x.days_changed).map((x) => x.key);
+  if (dur.length) parts.push(`تغيّرت مدة ${list(dur)}.`);
+  if (impact.end?.after && impact.end.shift) parts.push(`وتنتهي رحلتك الآن ${fmt(impact.end.after)}.`);
+  parts.push('افتح رحلتك لترى المواعيد الجديدة لكل مرحلة ومعلم.');
+  return { title: 'تغيّرت مواعيد رحلتك', body: `حدّث فريق البرنامج خطة دفعتك. ${parts.join(' ')}` };
 }
 
 // ملخص الأثر الذي يُكتب في السجل مع كل حفظ (البند 4.6): أعداد لا أسماء
 export const impactSummary = (impact) => (impact ? {
-  changes: impact.changes.map((x) => ({ key: x.key, before: x.before.days, after: x.after.days })),
+  changes: impact.changes.map((x) => ({ key: x.key, before: x.before.days, after: x.after.days, ...(x.off ? { off: x.off } : {}) })),
+  stopped: impact.stopped || [], started: impact.started || [], excluded: (impact.excluded || []).length,
   shift: impact.end.shift, milestones: impact.milestones.length,
   late: impact.late ? impact.late.milestones : null, held: impact.mail ? impact.mail.held : null,
   people: impact.people ? impact.people.total : null,

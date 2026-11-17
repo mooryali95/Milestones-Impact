@@ -42,8 +42,9 @@ export function needsOf(stage) {
 
 // people: [{ id, name, status, created_at, journey, milestones, dates }]
 // المنسحب والموقوف خارج الرحلة (inProgram): لا يُعدّ فيها ولا يقف عند مرحلة ولا يتأخر عنها
-/** @param {{ stages: any[], people: any[], cohort?: any, program?: any, today?: any, list?: boolean, activity?: boolean }} o */
-export function journeyMap({ stages, people: all, cohort = null, program = null, today = new Date(), list = false, activity = false }) {
+// off: مراحل موقوفة لهذه الدفعة (R2b، stages_off من تعريفها): خارج الحساب، وتُرجع في مكانها بعلامة off وأعداد صفرية
+/** @param {{ stages: any[], people: any[], cohort?: any, program?: any, today?: any, list?: boolean, activity?: boolean, off?: any[] }} o */
+export function journeyMap({ stages, people: all, cohort = null, program = null, today = new Date(), list = false, activity = false, off = [] }) {
   const people = all.filter((p) => inProgram(p.status));
   const keys = stages.map((s) => s.key);
   // خطة الدفعة (cohortPlan): النوافذ والمدة الفعلية لكل مرحلة (مدة الدفعة الخاصة أو مدة النسخة)، فلا تُقرأ duration_days خامًا
@@ -96,6 +97,15 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
     else row.reasons = [...a.reasons].map(([text, count]) => ({ text, count })).sort((x, y) => y.count - x.count).slice(0, 5);
     return row;
   });
+  // الموقوفة في مكانها بترتيب المراحل، بلا أعداد ولا نافذة، فلا تُحسب في عنق الزجاجة ولا في «تجاوزوها»
+  const sortOf = (s) => Number(s.sort ?? 0);
+  for (const s of (off || []).filter((x) => x && !keys.includes(x.key))) {
+    const row = { key: s.key, title: s.title_ar || s.key, phase: s.phase || 'qualification', duration_days: 0, here: 0, done: 0, late: 0, window: null, off: true };
+    if (list) row.people = []; else row.reasons = [];
+    const at = stages.findIndex((x) => sortOf(x) > sortOf(s));
+    const idx = at < 0 ? out.length : out.findIndex((x) => x.key === stages[at].key);
+    out.splice(idx < 0 ? out.length : idx, 0, row);
+  }
   const peak = out.reduce((b, s) => (s.here > (b?.here || 0) || (s.here === b?.here && s.late > b.late) ? s : b), null);
   return {
     program: program ? { name: program.name } : null,

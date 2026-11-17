@@ -114,6 +114,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
   return {
     ...rendered, via, program_id: programId, feature_hidden: fh.hidden,
+    // الموقوفة في خطة الدفعة (R2b): خارج الرحلة، وتُعرض باهتة في خريطة ملف الدفعة
+    stages_off: def.stages_off || [],
     cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on, schedule: cohort.schedule || {},
       level_mode: cohort.level_mode || 'mixed', content_level: cohort.content_level || null, stage_modes: cohort.stage_modes || {}, project_mode: cohort.project_mode || 'individual' } : null,
     milestones: ((await db.from('program_milestones').select('*').eq('program_id', programId).eq('active', true).order('sort')).data || []),

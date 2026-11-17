@@ -13,7 +13,7 @@ import {
 import { daysAr, durationAr, renderJourneyText, stageRules } from './journey.js';
 import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
-import { cohortPlan, planDaysOnly } from './stage-windows.js';
+import { cohortPlan, planDaysOnly, planOffKeys } from './stage-windows.js';
 
 // بداية افتراضية لسياق البرنامج: النوافذ تُحسب بالدالة نفسها ثم تُقرأ أيامًا من البداية
 const EPOCH = '2000-01-03';
@@ -60,7 +60,9 @@ function ownerOf(r) {
  * @param {{ cohort?: any, sessions?: any[], today?: any, title?: string }} [opts]
  */
 export function journeyTimeline(resolved, { cohort = null, sessions = [], today = null, title = '' } = {}) {
-  const stages = (resolved?.stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  // الموقوفة في هذه الدفعة (R2b) تختفي من الخط ويُزاح ما بعدها، وتبقى بطاقتها باهتة في تبويب «الرحلة»
+  const offKeys = cohort ? planOffKeys(cohort.schedule) : new Set();
+  const stages = (resolved?.stages || []).filter((s) => s.active !== false && !offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   const reqs = resolved?.requirements || [];
   const t = isoToday(today);
   const isCohort = !!cohort;

@@ -6,6 +6,9 @@
 // وضع التحرير (R2a): عداد مدة في كل بطاقة (أيام أو أسابيع، القرار 9)، والخط والبطاقات معاينة حية للمسودة، ثم «راجع
 // واحفظ» تفتح نافذة الأثر من الخادم (admin.cohort-plan op=preview)، والحفظ والتراجع والسجل بالإجراء نفسه. هذا التبويب
 // كاتب خطة الدفعة الوحيد (القرار 23). لا حساب تاريخ هنا: المسودة من planEdit وتواريخها من cohortPlan (cohort-journey.js).
+// والإيقاف (R2b): مفتاح «أوقف لهذه الدفعة» في كل بطاقة، مقفل بسببه للمحمية ولمرجع «تبدأ مع»، والموقوفة باهتة في مكانها
+// وتعود بنقرة. ونافذة الأثر تسمي من ينتقل والقواعد التي سقط شرطها والمعالم المستبعدة، وفيها «أبلغ المشاركين» (القرار 13)
+// وسؤال من تجاوز مرحلة تعود (القرار 12).
 // البيانات: admin.cohort-definition وadmin.milestones وadmin.cohort-journey للقراءة، وadmin.cohort-plan للخطة.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
@@ -60,23 +63,44 @@ function PlanControl({ s, row, stage, onDays }) {
   );
 }
 
+// مفتاح «أوقف لهذه الدفعة» (R2b): مفتاح تبديل بحالته، والمحمية ومرجع «تبدأ مع» مقفلة وسببها مكتوب تحته ومربوط به
+function OffSwitch({ s, row, onOff }) {
+  const id = `cj-off-${s.key}`;
+  const why = `${id}-why`;
+  const disabled = !row.off && !!row.block;
+  return (
+    <div className={`cj-off${row.off ? ' on' : ''}${disabled ? ' locked' : ''}`}>
+      <button type="button" role="switch" id={id} className="cj-switch" aria-checked={row.off} disabled={disabled}
+        aria-describedby={disabled ? why : undefined} onClick={() => onOff(s.key, !row.off)}>
+        <span className="cj-switch-track" aria-hidden="true"><span className="cj-switch-knob" /></span>
+        <span className="cj-switch-label">أوقف لهذه الدفعة</span>
+      </button>
+      {disabled && <small id={why} className="cj-off-why"><span className="cj-lock" aria-hidden="true" />{row.block.msg}</small>}
+      {row.off && <small className="cj-off-why">موقوفة في هذه المسودة: تختفي من الخط ويُزاح ما بعدها. أعدها بالمفتاح نفسه.</small>}
+    </div>
+  );
+}
+
 // rows: صف كل مرحلة في خطة الدفعة (planDraft) دائمًا، وplan: أدوات التحرير في وضع التحرير وحده
 function StageCard({ s, rows = null, plan = null }) {
   const head = `cj-st-${s.key}`;
   const row = rows?.[s.key];
+  const off = !!(s.off || row?.off);
   return (
-    <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card${s.status ? ` st-${s.status}` : ''}${s.optional ? ' opt' : ''}${s.lead ? '' : ' lane'}${row?.edited ? ' edited' : ''}`} aria-labelledby={head}>
+    <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card${s.status ? ` st-${s.status}` : ''}${s.optional ? ' opt' : ''}${s.lead ? '' : ' lane'}${row?.edited ? ' edited' : ''}${off ? ' off' : ''}`} aria-labelledby={head}>
       <header className="cj-card-head">
         <h5 id={head}>{s.title}</h5>
         <span className="cj-dur">{s.label}</span>
-        {!plan && row?.source === 'cohort' && <span className="cj-tag own">معدّلة لهذه الدفعة</span>}
+        {!plan && !off && row?.source === 'cohort' && <span className="cj-tag own">معدّلة لهذه الدفعة</span>}
         {s.optional && <span className="cj-tag">اختيارية</span>}
         {s.status_ar && <span className={`cj-state ${s.status}`}><i aria-hidden="true" />{s.status_ar}</span>}
       </header>
-      {plan && row && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
-      {s.window_ar ? (
-        <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
-      ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
+      {plan && row && <OffSwitch s={s} row={row} onOff={plan.onOff} />}
+      {plan && row && !off && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
+      {off ? <p className="cj-window"><small>لا نافذة لها في هذه الدفعة، وما بعدها يبدأ في مكانها. من يقف فيها ينتقل إلى ما بعدها، وما أنجزه محفوظ.</small></p>
+        : s.window_ar ? (
+          <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
+        ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
       {(s.with_ar || s.rule_ar) && (
         <ul className="cj-rules">
           {s.with_ar && <li className="cj-with">{s.with_ar}</li>}
@@ -97,7 +121,7 @@ function StageCard({ s, rows = null, plan = null }) {
       {s.milestones.length > 0 && (
         <ul className="cj-ms" aria-label={`معالم ${s.title}`}>
           {s.milestones.map((m) => (
-            <li key={m.id} className={m.due ? '' : 'none'}>
+            <li key={m.id} className={m.excluded ? 'excluded' : m.due ? '' : 'none'}>
               <span className="cj-ms-flag" aria-hidden="true" />
               <span className="cj-ms-t"><b>{m.title}</b><small>{m.anchor_ar}</small></span>
               <span className="cj-ms-due"><b>{m.due_ar}</b>{m.source_ar && <small>{m.source_ar}</small>}</span>
@@ -111,11 +135,14 @@ function StageCard({ s, rows = null, plan = null }) {
 }
 
 // نافذة الأثر قبل الحفظ (البند 4.2 هـ): ما تغيّر سطرًا سطرًا، ومن يتأثر، والمعالم، والبريد، من الخادم وحده
-function ImpactDialog({ r, busy, canSave, lock, onSave, onClose }) {
+// «أبلغ المشاركين» (القرار 13) مطفأ افتراضيًا، ومن تجاوز مرحلة تعود (القرار 12) «اعفِ من تجاوزها» افتراضيًا
+function ImpactDialog({ r, busy, canSave, lock, onSave, onClose, opts, setOpts }) {
   useEscape(onClose);
-  const lines = r?.impact ? impactAr(r.impact) : [];
+  const lines = r?.impact ? impactAr(r.impact, { notify: opts.notify }) : [];
   const changes = lines.filter((x) => x.kind === 'change');
-  const rest = lines.filter((x) => x.kind !== 'change');
+  const reen = lines.filter((x) => x.kind === 'reenable');
+  const rest = lines.filter((x) => x.kind !== 'change' && x.kind !== 'reenable');
+  const members = r?.impact?.notify?.members || 0;
   return (
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="la-form mi-form cj-impact" role="dialog" aria-modal="true" aria-labelledby="cj-impact-h">
@@ -123,12 +150,29 @@ function ImpactDialog({ r, busy, canSave, lock, onSave, onClose }) {
         {!r ? <Spinner /> : !r.success ? <p className="la-err" role="alert">{r.message}</p> : (
           <>
             <section aria-labelledby="cj-imp-c"><h4 id="cj-imp-c">ما يتغير</h4>
-              {changes.length ? <ul className="cj-imp-list">{changes.map((x) => <li key={x.key} className="change">{x.text}</li>)}</ul>
+              {changes.length ? <ul className="cj-imp-list">{changes.map((x) => <li key={x.key} className={`change${x.off ? ` off-${x.off}` : ''}`}>{x.text}</li>)}</ul>
                 : <p className="la-muted">لا تغيير في المدد أو التواريخ.</p>}
             </section>
             <section aria-labelledby="cj-imp-w"><h4 id="cj-imp-w">الأثر</h4>
               <ul className="cj-imp-list">{rest.map((x) => <li key={x.key} className={x.kind}>{x.text}</li>)}</ul>
             </section>
+            {reen.length > 0 && (
+              <fieldset className="cj-imp-choice">
+                <legend>من تجاوز مرحلة تعود</legend>
+                <ul className="cj-imp-list">{reen.map((x) => <li key={x.key} className="warn">{x.text}</li>)}</ul>
+                <label><input type="radio" name="cj-reenable" checked={opts.reenable !== 'apply'} disabled={!canSave} onChange={() => setOpts((o) => ({ ...o, reenable: 'exempt' }))} />
+                  <span><b>اعفِ من تجاوزها</b><small>تُعد لهم مكتملة بإعفاء يظهر في ملفهم، فلا يُقفل عليهم ما بعدها. الموصى به</small></span></label>
+                <label><input type="radio" name="cj-reenable" checked={opts.reenable === 'apply'} disabled={!canSave} onChange={() => setOpts((o) => ({ ...o, reenable: 'apply' }))} />
+                  <span><b>أعدها عليهم</b><small>تصير نشطة عليهم، وقد تقفل ما بعدها حتى يكملوها</small></span></label>
+              </fieldset>
+            )}
+            {members > 0 && canSave && (
+              <label className="cj-imp-notify">
+                <input type="checkbox" checked={!!opts.notify} onChange={(e) => setOpts((o) => ({ ...o, notify: e.target.checked }))} />
+                <span><b>أبلغ المشاركين المتأثرين بالمواعيد الجديدة</b>
+                  <small>ملاحظة «تغيّرت مواعيد رحلتك» في ملف {members === 1 ? 'المشارك' : `${members} مشاركين`} في الرحلة، وتصلهم ببريد الملاحظات المعتاد. مطفأ ما لم تختره</small></span>
+              </label>
+            )}
             {r.impact.issues?.length > 0 && (
               <section aria-labelledby="cj-imp-i"><h4 id="cj-imp-i">تنبيهات الخطة</h4>
                 <ul className="cj-imp-list">{r.impact.issues.map((x) => <li key={`${x.code}-${x.stage}`} className="warn">{x.msg}</li>)}</ul>
@@ -164,6 +208,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const [busy, setBusy] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
   const [history, setHistory] = useState(null);
+  const [saveOpts, setSaveOpts] = useState({ notify: false, reenable: 'exempt' });
 
   useEffect(() => {
     let live = true;
@@ -200,7 +245,14 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const lock = planLock(cohort);
   const stageOf = (k) => (d?.def?.stages || []).find((x) => x.key === k);
   const onDays = (k, v) => setEdit((e) => ({ ...(e || {}), days: { ...(e?.days || {}), [k]: v } }));
-  const planCtl = edit && draft ? { rows: draft.rows, onDays, stageOf } : null;
+  // الإيقاف والإعادة: ما يطابق الخطة المحفوظة لا يبقى تعديلًا
+  const onOff = (k, v) => setEdit((e) => {
+    const off = { ...(e?.off || {}) };
+    const was = cohort.schedule?.[k]?.off === true;
+    if (v === was) delete off[k]; else off[k] = v;
+    return { ...(e || {}), off };
+  });
+  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, stageOf } : null;
   // القفز إلى البطاقة: التركيز البرمجي بعد نقرة الفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة
   const flashT = useRef(0);
   useEffect(() => () => clearTimeout(flashT.current), []);
@@ -225,6 +277,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   // راجع واحفظ: الأثر من الخادم وحده (planImpact على رحلة كل عضو)، ثم الحفظ بما بُنيت عليه المسودة
   const openReview = async () => {
     setReview({ r: null });
+    setSaveOpts({ notify: false, reenable: 'exempt' });
     const r = await L('admin.cohort-plan', planBody(cohort, edit, 'preview'));
     setReview({ r });
   };
@@ -237,12 +290,13 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   };
   const save = async () => {
     setBusy(true);
-    const r = await L('admin.cohort-plan', planBody(cohort, edit, 'save'));
+    const r = await L('admin.cohort-plan', planBody(cohort, edit, 'save', saveOpts));
     setBusy(false);
     if (!r.success) { setReview((x) => ({ ...x, r: { ...(x?.r || {}), success: false, message: r.message } })); return; }
     if (r.unchanged) { setEdit(null); setReview(null); toast('لا تغيير في الخطة'); return; }
     setSavedNote(true);
-    applySaved(r, 'حُفظت خطة الدفعة. التواريخ والمعالم تتبعها الآن');
+    const extra = [r.exempted ? `وأُعفي ${r.exempted} من مرحلة تجاوزوها` : '', r.notified ? `وأُبلغ ${r.notified} بالمواعيد الجديدة` : saveOpts.notify && r.notified === null ? 'وتعذّر إبلاغ المشاركين، فأبلغهم من ملفاتهم' : ''].filter(Boolean).join('، ');
+    applySaved(r, `حُفظت خطة الدفعة. التواريخ والمعالم تتبعها الآن${extra ? `، ${extra}` : ''}`);
   };
   const undo = async () => {
     setBusy(true);
@@ -306,11 +360,14 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         <div className="cj-planbar-txt">
           <b>خطة الدفعة</b>
           <span>{lock ? lock.msg
-            : draft.changed ? `${countAr(draft.changed, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} بمدة خاصة بهذه الدفعة، والباقي من البرنامج.`
-              : 'كل المدد من البرنامج. عدّل مدة أي مرحلة لهذه الدفعة وحدها، ويُزاح ما بعدها.'}</span>
+            : draft.changed || draft.off ? [
+              draft.changed ? `${countAr(draft.changed, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} بمدة خاصة بهذه الدفعة` : '',
+              draft.off ? `${countAr(draft.off, 'مرحلة واحدة موقوفة', 'مرحلتان موقوفتان', 'مراحل موقوفة', 'مرحلة موقوفة')} لهذه الدفعة` : '',
+            ].filter(Boolean).join('، و') + '، والباقي من البرنامج.'
+              : 'كل المدد من البرنامج. عدّل مدة أي مرحلة لهذه الدفعة وحدها أو أوقفها، ويُزاح ما بعدها.'}</span>
         </div>
         <div className="la-row">
-          {!editing && !lock && <button type="button" className="btn-sm primary" onClick={() => setEdit({ days: {} })}>عدّل المدد</button>}
+          {!editing && !lock && <button type="button" className="btn-sm primary" onClick={() => setEdit({ days: {}, off: {} })}>عدّل المدد</button>}
           {savedNote && canWrite && !editing && <span className="cj-saved" role="status">حُفظ. <button type="button" className="la-link" disabled={busy} onClick={undo}>تراجع</button></span>}
           <button type="button" className="la-link" aria-expanded={!!history} onClick={() => (history ? setHistory(null) : loadHistory())}>سجل الخطة</button>
         </div>
@@ -333,7 +390,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
 
       {editing && (
         <p className="cj-ro" role="note">
-          تعديل المدد لهذه الدفعة وحدها، والبرنامج لا يتغير. الخط والبطاقات تعرض التواريخ الجديدة قبل الحفظ، ونافذة الأثر تسمي من يتأثر قبل أن يُحفظ شيء.
+          تعديل المدد والإيقاف لهذه الدفعة وحدها، والبرنامج لا يتغير. الخط والبطاقات تعرض التواريخ الجديدة قبل الحفظ، ونافذة الأثر تسمي من يتأثر قبل أن يُحفظ شيء.
           {cohort.starts_on && cohort.ends_on && <> <button type="button" className="la-link" onClick={suggest}>اقترح مددًا تملأ مدة الدفعة</button></>}
         </p>
       )}
@@ -352,7 +409,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
                     <p className="cj-group-note"><span>تسير معًا</span>{g.note_ar}</p>
                     <div className="cj-lanes">{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} />)}</div>
                   </div>
-                ) : <div key={g.key} className="cj-group">{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} />)}</div>))}
+                ) : <div key={g.key} className={`cj-group${g.off ? ' off' : ''}`}>{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} />)}</div>))}
               </div>
             </section>
           ))}
@@ -385,7 +442,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
           </div>
         </div>
       )}
-      {review && <ImpactDialog r={review.r} busy={busy} canSave={canWrite && !lock} lock={lock} onSave={save} onClose={() => setReview(null)} />}
+      {review && <ImpactDialog r={review.r} busy={busy} canSave={canWrite && !lock} lock={lock} onSave={save} onClose={() => setReview(null)} opts={saveOpts} setOpts={setSaveOpts} />}
 
       {/* خريطة الرحلة (R0): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ومنها أعداد الناس في البطاقات أعلاه */}
       <section className="cohort-journey" aria-labelledby="cj-h">

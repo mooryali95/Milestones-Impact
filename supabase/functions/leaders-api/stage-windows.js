@@ -10,7 +10,8 @@
 //   { [stage_key]: { days?, start?, end?, off?, with?, offset? } }
 //   days          مدة خاصة بالدفعة بالأيام، وإلا مدة النسخة (duration_days)
 //   start [, end] تاريخ مثبت: المرحلة مرساة يُزاح ما بعدها منها. المدخل القديم {start,end} يُقرأ هكذا من اليوم الأول
-//   off، with، offset  الإيقاف والتوازي الخاص بالدفعة: يحفظها المنظف ولا يمحوها، ويطبقها R2b وR3a. هنا لا أثر لها بعد
+//   off           موقوفة في هذه الدفعة (R2b): لا نافذة لها ولا تأخذ من المسار يومًا، ويُزاح ما بعدها. تُرجع بعلامة off
+//   with، offset  التوازي الخاص بالدفعة: يحفظها المنظف ولا يمحوها، ويطبقها R3a. هنا لا أثر لها بعد
 // قاعدة النهاية (القرار 18): النافذة شاملة الطرفين، فمرحلة بـN يوم من يوم س تنتهي س + N - 1 وما بعدها يبدأ في اليوم التالي.
 // والمرحلة بلا مدة (0) نقطة في يوم بدايتها لا تأخذ من المسار شيئًا.
 import { addDays, daysBetween } from './milestones.js';
@@ -43,14 +44,52 @@ export function planStages(stages, schedule) {
     return d == null ? s : { ...s, duration_days: d };
   });
 }
-// الخطة بالمدد وحدها، بلا تواريخ مثبتة: لما يُرسم نسبيًا من بداية افتراضية (الخط الزمني لدفعة بلا تاريخ بداية)
+// موقوفة في هذه الدفعة (R2b): off صريح وحده، فلا يوقف مرحلةً مدخلٌ تالف
+export const planOff = (entry) => !!(entry && typeof entry === 'object' && entry.off === true);
+/** مفاتيح المراحل الموقوفة في خطة @param {any} schedule @returns {Set<string>} */
+export function planOffKeys(schedule) {
+  const out = new Set();
+  for (const [k, v] of Object.entries(schedule && typeof schedule === 'object' ? schedule : {})) if (planOff(v)) out.add(k);
+  return out;
+}
+
+// الخطة بالمدد والإيقاف وحدهما، بلا تواريخ مثبتة: لما يُرسم نسبيًا من بداية افتراضية (الخط الزمني لدفعة بلا تاريخ بداية)،
+// وللدفعة المفتوحة التي تملك الإيقاف والمدة بلا تواريخ (القرار 21)
 export function planDaysOnly(schedule) {
   const out = {};
   for (const [k, v] of Object.entries(schedule && typeof schedule === 'object' ? schedule : {})) {
     const d = planDaysOf(v);
-    if (d != null) out[k] = { days: d };
+    const e = { ...(planOff(v) ? { off: true } : {}), ...(d != null ? { days: d } : {}) };
+    if (Object.keys(e).length) out[k] = e;
   }
   return out;
+}
+
+/** قواعد الفتح بعد إسقاط الموقوف (البند 4.4 والقرار 22): «بعد مراحل» يُحذف منها مفتاح الموقوفة، وإن فرغت صارت «بعد السابقة»،
+ * فلا يُقفل أحد إلى الأبد. و«تبدأ مع» موقوفة يمنعها الحارس، فإن وُجدت (نسخة رُقّيت بعد الإيقاف) صارت «بعد السابقة» لا قفلًا دائمًا.
+ * @param {any[]} stages المراحل الظاهرة بلا الموقوفة @param {Set<string>|string[]} offKeys
+ * @returns {{ stages: any[], rewrites: { key: string, title: string, dropped: string[], to: string }[] }} */
+export function planRules(stages, offKeys) {
+  const off = offKeys instanceof Set ? offKeys : new Set(offKeys || []);
+  const rewrites = [];
+  if (!off.size) return { stages: stages || [], rewrites };
+  const out = (stages || []).map((s) => {
+    const r = stageRules(s);
+    const raw = s.rules && typeof s.rules === 'object' ? s.rules : {};
+    if (r.unlock === 'stages' && r.after.some((k) => off.has(k))) {
+      const after = r.after.filter((k) => !off.has(k));
+      const { unlock: _u, after: _a, ...rest } = raw;
+      rewrites.push({ key: s.key, title: s.title_ar || s.key, dropped: r.after.filter((k) => off.has(k)), to: after.length ? 'stages' : 'previous' });
+      return { ...s, rules: after.length ? { ...rest, unlock: 'stages', after } : rest };
+    }
+    if (r.unlock === 'with' && r.with && off.has(r.with)) {
+      const { unlock: _u, with: _w, ...rest } = raw;
+      rewrites.push({ key: s.key, title: s.title_ar || s.key, dropped: [r.with], to: 'previous' });
+      return { ...s, rules: rest };
+    }
+    return s;
+  });
+  return { stages: out, rewrites };
 }
 // الخطة كما تُقرأ فعلًا لدفعة: المفتوحة (is_default) بمددها وحدها بلا تواريخ مثبتة (القرار 21)، وغيرها كما هي.
 // يقرؤها cohortPlan ومواعيد المعالم (milestoneStatuses وplanImpact وتبويب «الرحلة») فلا يؤرَّخ معلم بتثبيت تتجاهله الخطة
@@ -85,7 +124,18 @@ export function cohortPlan(stages, cohort = {}) {
   const byKey = {};
   const order = [];
   const issues = [];
-  for (const group of withGroups(stages || [])) {
+  // الموقوفة في هذه الدفعة (R2b) لا نافذة لها ولا تأخذ من المسار يومًا، فما بعدها يُزاح إلى مكانها
+  const offRows = [];
+  const onStages = [];
+  for (const s of stages || []) {
+    if (planOff(sched[s.key])) {
+      const programDays = Math.max(0, Math.round(Number(s.duration_days) || 0));
+      const row = { key: s.key, days: 0, program_days: programDays, own_days: planDaysOf(sched[s.key]), source: 'off', off: true, from: null, to: null, next: null };
+      byKey[s.key] = row;
+      offRows.push(row);
+    } else onStages.push(s);
+  }
+  for (const group of withGroups(onStages)) {
     let next = null;
     group.forEach((s, i) => {
       const entry = sched[s.key];
@@ -132,7 +182,7 @@ export function cohortPlan(stages, cohort = {}) {
   }
   // قاعدة «تُفتح يوم N» تبقى بتاريخها ولا تتبع المدد (القرار 20): تنبيه إن وقع يومها خارج نافذتها المخططة
   const start0 = c.is_default ? null : (ISO.test(String(c.starts_on || '').slice(0, 10)) ? String(c.starts_on).slice(0, 10) : null);
-  for (const s of stages || []) {
+  for (const s of onStages) {
     const r = stageRules(s);
     const w = byKey[s.key];
     if (r.unlock !== 'day' || r.day == null || !start0 || !w?.from) continue;
@@ -147,11 +197,14 @@ export function cohortPlan(stages, cohort = {}) {
   if (over) issues.push({ level: 'warn', stage: null, code: 'over_end', msg: `تنتهي الرحلة بعد نهاية الدفعة بـ${daysAr(over)}` });
   const windows = {};
   for (const x of dated) windows[x.key] = { from: x.from, to: x.to };
+  // الصفوف بترتيب المراحل، والموقوفة في مكانها بعلامتها (تُعرض باهتة وتعود بنقرة)
+  const at = new Map((stages || []).map((s, i) => [s.key, i]));
+  const all = [...order, ...offRows].sort((a, b) => at.get(a.key) - at.get(b.key));
   return {
     dated: dated.length > 0 && dated.length === order.length, start: first, end, over,
     total_days: first && end ? daysBetween(first, end) + 1 : null,
-    stages: order, byKey, windows, issues,
-    changed: order.filter((x) => x.source !== 'program').length,
+    stages: all, byKey, windows, issues, off: offRows.map((x) => x.key),
+    changed: all.filter((x) => x.source !== 'program').length,
   };
 }
 

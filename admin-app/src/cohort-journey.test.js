@@ -52,7 +52,7 @@ describe('الممرات والبطاقات', () => {
     expect(q.groups[0].stages.map((s) => s.key)).toEqual(['training', 'ojt', 'consult']);
     expect(q.groups[0].stages.map((s) => s.lead)).toEqual([true, false, false]);
     expect(q.groups[0].note_ar).toBe('«التدريب»، ومعها «التوجيه على رأس العمل» و«الاستشارة»، في الأسابيع نفسها');
-    expect(lanes.counts).toEqual({ stages: 6, together: 1, milestones: 3 });
+    expect(lanes.counts).toEqual({ stages: 6, off: 0, together: 1, milestones: 3 });
     expect(JSON.stringify(lanes)).not.toContain('gone');
   });
   it('النافذة في البطاقة هي نافذة stageWindows نفسها، ومصدرها مسمى', () => {

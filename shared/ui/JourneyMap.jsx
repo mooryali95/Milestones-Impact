@@ -114,10 +114,21 @@ export default function JourneyMap({ map, embedded = false }) {
             <div key={ph.key} className={`jm-phase jm-${ph.key}`} style={{ '--k': ph.stages.length }}>
               <div className="jm-phase-head">
                 <b>{ph.title}</b>
-                <small>{ph.stages.length === 1 ? 'مرحلة' : `${ph.stages.length} مراحل`} · {peopleAr(here)} الآن</small>
+                <small>{ph.stages.length === 1 ? 'مرحلة' : `${ph.stages.length} مراحل`}{ph.stages.some((s) => s.off) ? ` (${ph.stages.filter((s) => s.off).length} موقوفة)` : ''} · {peopleAr(here)} الآن</small>
               </div>
               <ol>
                 {ph.stages.map((s) => {
+                  // موقوفة لهذه الدفعة (R2b): في مكانها باهتة بلا أعداد ولا تفاصيل، فلا يُظن أن أحدًا تجاوزها أو ينتظرها
+                  if (s.off) {
+                    return (
+                      <li key={s.key} className="jm-stage off">
+                        <div className="jm-node" role="note" aria-label={`${s.title}: موقوفة لهذه الدفعة`}>
+                          <span className="jm-title">{s.title}</span>
+                          <small className="jm-dur jm-off">موقوفة لهذه الدفعة</small>
+                        </div>
+                      </li>
+                    );
+                  }
                   const isToday = s.key === map.cohort?.today_stage;
                   const ahead = Math.max(0, total - s.done - s.here);
                   return (
@@ -169,7 +180,7 @@ export default function JourneyMap({ map, embedded = false }) {
       <table className="sr-only">
         <caption>خريطة الرحلة: عدد المشاركين عند كل مرحلة</caption>
         <thead><tr><th scope="col">الطور</th><th scope="col">المرحلة</th><th scope="col">هنا الآن</th><th scope="col">تجاوزوها</th><th scope="col">{late.one}</th></tr></thead>
-        <tbody>{stages.map((s) => <tr key={s.key}><td>{PHASES.find((p) => p.key === s.phase)?.title}</td><td>{s.title}</td><td>{s.here}</td><td>{s.done}</td><td>{s.late}</td></tr>)}</tbody>
+        <tbody>{stages.map((s) => <tr key={s.key}><td>{PHASES.find((p) => p.key === s.phase)?.title}</td><td>{s.title}{s.off ? ' (موقوفة لهذه الدفعة)' : ''}</td><td>{s.here}</td><td>{s.done}</td><td>{s.late}</td></tr>)}</tbody>
       </table>
     </section>
   );

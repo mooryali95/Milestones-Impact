@@ -193,6 +193,42 @@
 .cj-imp-list li.mail { background: color-mix(in srgb, var(--st-info) 9%, #fff); }
 .cj-imp-list li.mail::before { background: var(--st-info); }
 
+/* الإيقاف لهذه الدفعة (R2b): البطاقة الموقوفة باهتة بإطار متقطع وعلامة، ومفتاح التبديل بحالته وسبب قفله */
+.cj-card.off { background: repeating-linear-gradient(135deg, var(--sand-light) 0 10px, #fff 10px 20px); border-style: dashed; border-color: var(--line-strong); box-shadow: none; }
+.cj-card.off .cj-card-head h5 { color: var(--ink-mid); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ink-light) 55%, transparent); }
+.cj-card.off .cj-window small, .cj-card.off .cj-facts { color: var(--ink-mid); }
+.cj-card.off.edited { border-color: color-mix(in srgb, var(--gold) 60%, var(--line-strong)); }
+.cj-state.off { color: var(--ink-mid); }
+.cj-state.off i { background: transparent; border: 2px solid var(--ink-light); inline-size: 6px; block-size: 6px; }
+.cj-ms li.excluded { opacity: .78; }
+.cj-ms li.excluded .cj-ms-due b { color: var(--ink-mid); font-weight: 600; }
+.cj-off { display: grid; gap: 4px; }
+.cj-switch { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; min-block-size: 40px; padding-inline-end: 4px; border-radius: 99px; }
+.cj-switch:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: 2px; }
+.cj-switch:disabled { cursor: not-allowed; }
+.cj-switch-track { position: relative; flex: none; inline-size: 42px; block-size: 24px; border-radius: 99px; background: var(--line-strong); transition: background .18s var(--ease); }
+.cj-switch-knob { position: absolute; inset-block-start: 3px; inset-inline-start: 3px; inline-size: 18px; block-size: 18px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(10, 42, 61, .25); transition: inset-inline-start .18s var(--ease); }
+.cj-switch[aria-checked="true"] .cj-switch-track { background: var(--brand-graphite); }
+.cj-switch[aria-checked="true"] .cj-switch-knob { inset-inline-start: 21px; }
+.cj-switch:disabled .cj-switch-track { background: var(--line); }
+.cj-switch-label { font-size: .86rem; font-weight: 600; color: var(--ink); }
+.cj-switch:disabled .cj-switch-label { color: var(--ink-light); }
+.cj-off-why { display: flex; gap: 8px; align-items: flex-start; font-size: .78rem; color: var(--ink-soft); line-height: 1.7; }
+.cj-off-why .cj-lock { margin-block-start: 7px; }
+.cj-imp-list li.change.off-stop::before { background: var(--brand-graphite); border-radius: 2px; }
+.cj-imp-list li.people::before { background: var(--petrol-mid, var(--brand-slate)); }
+.cj-imp-choice { margin: 10px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line-strong); border-radius: 12px; display: grid; gap: 8px; }
+.cj-imp-choice legend { padding: 0 6px; font-size: .9rem; font-weight: 700; color: var(--petrol-mid); }
+.cj-imp-choice label, .cj-imp-notify { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.cj-imp-choice label:hover, .cj-imp-notify:hover { background: var(--sand-light); }
+.cj-imp-choice input, .cj-imp-notify input { margin-block-start: 5px; inline-size: 18px; block-size: 18px; accent-color: var(--brand-graphite); flex: none; }
+.cj-imp-choice span, .cj-imp-notify span { display: grid; gap: 2px; }
+.cj-imp-choice b, .cj-imp-notify b { font-size: .88rem; color: var(--ink); }
+.cj-imp-choice small, .cj-imp-notify small { font-size: .78rem; color: var(--ink-mid); line-height: 1.7; }
+.cj-imp-notify { margin-block-start: 10px; border: 1px dashed var(--line-strong); }
+@media (prefers-reduced-motion: reduce) { .cj-switch-track, .cj-switch-knob { transition: none; } }
+
 @media (max-width: 640px) {
   .cj-planbar { grid-template-columns: minmax(0, 1fr); padding: 12px; }
   .cj-planbar > .la-row { justify-content: flex-start; }
