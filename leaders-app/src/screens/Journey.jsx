@@ -21,6 +21,8 @@ import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
 import { GuidancePanel } from './Guidance.jsx';
+import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
+import { withGroups } from '../../../supabase/functions/leaders-api/stage-windows.js';
 const CONTACT_EMAIL = CONTACT.email;
 
 export function deviceLabel() {
@@ -567,6 +569,47 @@ function Fold({ title, meta, children }) {
 
 const PhaseOpen = ({ children }) => children;
 
+// «أ» و«ب» و«ج»: أسماء مراحل تسير معًا في جملة
+export const togetherAr = (titles) => (titles.length < 2 ? titles[0] || '' : `${titles.slice(0, -1).join('» و«')}» و«${titles.at(-1)}`);
+// تقدم المرحلة لشريطها: المطلوب وحده كعدّادها (stageCount)، وبلا مطلوب كل بنودها
+const stagePct = (s) => {
+  if (s.status === 'done') return 100;
+  const items = s.items || [];
+  const req = items.filter((i) => i.required);
+  const list = req.length ? req : items;
+  return list.length ? Math.round((list.filter((i) => i.status === 'done').length / list.length) * 100) : 0;
+};
+const STATUS_SHORT = { done: 'مكتملة', active: 'جارية', available: 'متاحة', locked: 'مقفلة' };
+
+// مراحل تسير معًا (R3b، التوازي 2): كتلة واحدة باسمها، وفي رأسها تقدم كل مرحلة منها، ثم بطاقاتها كما هي.
+// الحالية منها تُعلَّم، والمرحلة الحالية للمشارك من currentStages نفسها التي تعدّه بها الخريطة ويذكّره بها التذكير
+function Together({ stages, now, children }) {
+  const id = `together-${stages[0].key}`;
+  const n = stages.length;
+  return (
+    <section className={`together${now ? ' now' : ''}`} aria-labelledby={id} data-testid="together">
+      <div className="together-head">
+        <span className="together-badge">تسير معًا</span>
+        <h4 id={id}>«{togetherAr(stages.map((s) => s.title_ar))}»</h4>
+        <p className="small muted">{n === 2 ? 'مرحلتان تبدآن معًا وتسيران في الأسابيع نفسها، فأنجز بنودهما بالتوازي.' : `${n} مراحل تبدأ معًا وتسير في الأسابيع نفسها، فأنجز بنودها بالتوازي.`}</p>
+        <ul className="together-progress">
+          {stages.map((s) => {
+            const pct = stagePct(s);
+            return (
+              <li key={s.key} className={s.status}>
+                <span className="t">{s.title_ar}</span>
+                <span className="bar" role="progressbar" aria-label={`تقدمك في «${s.title_ar}»`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={s.status === 'locked' ? 'مقفلة' : `${pct}٪، ${stageCount(s)}`}><i style={{ inlineSize: `${pct}%` }} /></span>
+                <small>{s.status === 'locked' || !s.total ? STATUS_SHORT[s.status] || '' : stageCount(s).split(' · ')[0]}</small>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <div className="together-cards">{children}</div>
+    </section>
+  );
+}
+
 // مراحل قادمة مقفلة: على الحاسب تُعرض كما هي، وعلى الشاشات الضيقة سطر واحد يُفتح
 function Later({ n, after, children }) {
   const [narrow] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(NARROW).matches);
@@ -679,8 +722,11 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   const { journey, profile, participant } = me;
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
   const [susFirst] = useState(() => bootPreload.take('sus'));
-  const current = journey.find((s) => s.status === 'active');
-  const [expanded, setExpanded] = useState(() => new Set(current ? [current.key] : []));
+  // المرحلة الحالية (R3b): الموضع ومعه ما يسير معه نشطًا، من currentStages التي تعدّه بها الخريطة ويذكّره بها التذكير
+  const now = currentStages(journey).stages.filter((s) => s.status === 'active');
+  const current = now[0] || null;
+  const nowKeys = new Set(now.map((s) => s.key));
+  const [expanded, setExpanded] = useState(() => new Set(now.map((s) => s.key)));
   const [toast, setToast] = useState('');
   const [passkey, setPasskey] = useState(me.prompt_passkey);
   const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
@@ -726,7 +772,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <p className="eyebrow">رحلتك القيادية</p>
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
           <p className="muted">
-            {current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
+            {now.length > 1 ? <>{now.length === 2 ? 'مرحلتاك الحاليتان تسيران معًا' : 'مراحلك الحالية تسير معًا'}: {now.map((s, i) => <React.Fragment key={s.key}>{i ? (i === now.length - 1 ? ' و' : '، ') : ''}<b style={{ color: '#fff' }}>{s.title_ar}</b></React.Fragment>)} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
+              : current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
               : doneCount === counted.length && counted.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
                 : !approved ? `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
                   : `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
@@ -871,15 +918,23 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                         onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
                     );
                   };
-                  // المراحل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير
-                  let cut = stages.length;
-                  while (here && cut > 0 && stages[cut - 1].status === 'locked' && !expanded.has(stages[cut - 1].key) && stages[cut - 1].key !== next?.stage.key) cut -= 1;
-                  const later = cut > 0 && stages.length - cut >= 2 ? stages.slice(cut) : [];
-                  const shown = later.length ? stages.slice(0, cut) : stages;
+                  // المراحل التي تسير معًا كتلة واحدة (withGroups على قواعد رحلته نفسها)، ومرحلة وحدها كتلة بمرحلة
+                  const unit = (g) => (g.length > 1
+                    ? <Together key={`g-${g[0].key}`} stages={g} now={g.some((s) => nowKeys.has(s.key))}>{g.map(card)}</Together>
+                    : card(g[0]));
+                  const units = withGroups(stages);
+                  // الكتل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير
+                  const shut = (g) => g.every((s) => s.status === 'locked' && !expanded.has(s.key) && s.key !== next?.stage.key);
+                  let cut = units.length;
+                  while (here && cut > 0 && shut(units[cut - 1])) cut -= 1;
+                  const laterN = units.slice(cut).reduce((n, g) => n + g.length, 0);
+                  const laterUnits = cut > 0 && laterN >= 2 ? units.slice(cut) : [];
+                  const shown = laterUnits.length ? units.slice(0, cut) : units;
+                  const lastShown = shown[shown.length - 1];
                   return (
                     <>
-                      {shown.map(card)}
-                      {later.length > 0 && <Later n={later.length} after={shown[shown.length - 1].title_ar}>{later.map(card)}</Later>}
+                      {shown.map(unit)}
+                      {laterUnits.length > 0 && <Later n={laterN} after={lastShown[lastShown.length - 1].title_ar}>{laterUnits.map(unit)}</Later>}
                     </>
                   );
                 })()}

@@ -74,7 +74,9 @@ export default function JourneyMap({ map, embedded = false }) {
   const byPhase = useMemo(() => PHASES.map((ph) => ({ ...ph, stages: stages.filter((s) => (s.phase || 'qualification') === ph.key) })).filter((ph) => ph.stages.length), [stages]);
   if (!stages.length) return null;
   const late = lateWords(map);
-  const today = stages.find((s) => s.key === map.cohort?.today_stage);
+  // موقع الدفعة اليوم: كل ما يسير اليوم معًا (today_stages، R3b)، وما قبله قيمة واحدة
+  const todayKeys = map.cohort?.today_stages || (map.cohort?.today_stage ? [map.cohort.today_stage] : []);
+  const todays = todayKeys.map((k) => stages.find((s) => s.key === k)).filter(Boolean);
   const peak = map.bottleneck && stages.find((s) => s.key === map.bottleneck.stage);
   const max = Math.max(1, ...stages.map((s) => s.here));
   const openStage = stages.find((s) => s.key === open);
@@ -89,7 +91,7 @@ export default function JourneyMap({ map, embedded = false }) {
           <p className="jm-sub">
             {map.program?.name}
             {map.cohort?.starts_on && <> · بدأت {fmtDate(map.cohort.starts_on)}</>}
-            {today && <> · الجدول اليوم عند <b>{today.title}</b></>}
+            {todays.length > 0 && <> · الجدول اليوم عند {todays.map((t, i) => <React.Fragment key={t.key}>{i ? ' و' : ''}<b>{t.title}</b></React.Fragment>)}{todays.length > 1 ? ' معًا' : ''}</>}
           </p>
         </div>
         <dl className="jm-totals">
@@ -109,7 +111,8 @@ export default function JourneyMap({ map, embedded = false }) {
 
       <div className="jm-path" style={{ '--n': stages.length }}>
         {byPhase.map((ph) => {
-          const here = ph.stages.reduce((a, s) => a + s.here, 0);
+          // من يقف في مرحلتين تسيران معًا يُعدّ في محوره مرة واحدة (here_by_phase)، وإلا مجموع المراحل كما كان
+          const here = map.here_by_phase?.[ph.key] ?? ph.stages.reduce((a, s) => a + s.here, 0);
           return (
             <div key={ph.key} className={`jm-phase jm-${ph.key}`} style={{ '--k': ph.stages.length }}>
               <div className="jm-phase-head">
@@ -129,7 +132,7 @@ export default function JourneyMap({ map, embedded = false }) {
                       </li>
                     );
                   }
-                  const isToday = s.key === map.cohort?.today_stage;
+                  const isToday = todayKeys.includes(s.key);
                   const ahead = Math.max(0, total - s.done - s.here);
                   return (
                     <li key={s.key} className={`jm-stage${s.here ? ' has' : ''}${isToday ? ' today' : ''}${open === s.key ? ' on' : ''}`}>

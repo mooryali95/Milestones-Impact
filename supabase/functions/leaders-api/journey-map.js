@@ -7,14 +7,14 @@
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
 import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { renderJourneyText } from './journey.js';
-import { cohortPlan, stageWindows, todayStage } from './stage-windows.js';
+import { cohortPlan, stageWindows, todayStage, todayStages, withGroups } from './stage-windows.js';
 import { inProgram } from './logic.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
 export const STAGE_GRACE_DAYS = MILESTONE_GRACE_DAYS;
 const isoDay = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 // النوافذ من الملف المشترك (stage-windows.js) يقرؤه الخط الزمني أيضًا، فلا تُحسب مرتين. تُصدَّر من هنا كما كانت
-export { stageWindows, todayStage };
+export { stageWindows, todayStage, todayStages };
 
 // موضع المشارك: المرحلة النشطة، وإلا أول مرحلة إلزامية لم تكتمل (مقفلة بانتظار اعتماد مثلًا). -1: أنهى الرحلة
 export function positionOf(journey) {
@@ -23,12 +23,41 @@ export function positionOf(journey) {
   return journey.findIndex((s) => s.status !== 'done' && (s.stage_mode || 'required') === 'required');
 }
 
-// متى دخل مرحلته: أحدث تاريخ إتمام معروف لما قبلها (بنود الرحلة، وإتمام الملف والقياس والاعتماد)، وإلا تسجيله
+// مجموعة «تسير معًا» التي فيها المرحلة idx من رحلة المشارك (withGroups على قواعد رحلته نفسها، بعد خطة دفعته)،
+// ومرحلة لا تسير مع غيرها مجموعة وحدها
+export function groupAt(journey, idx) {
+  const list = journey || [];
+  const s = list[idx];
+  if (!s) return [];
+  return withGroups(list).find((g) => g.includes(s)) || [s];
+}
+
+/**
+ * المرحلة الحالية للمشارك (R3b، التوازي 2): قيمة واحدة تقرؤها الخريطة والتذكير وشاشة الرحلة، فلا يختلف ما يراه المشارك
+ * عما يُعدّ عليه في الخريطة. الموضع (stage) من positionOf كما كان، والجارية معه (stages) مراحل مجموعته «تسير معًا»
+ * النشطة الآن بترتيب الرحلة، أولها الموضع أو ما يسبقه في المجموعة. start: فهرس أول المجموعة، ومنه يوم الدخول.
+ * بلا توازٍ: stages مرحلة واحدة هي الموضع، فلا يتغير شيء لبرنامج بلا «تسير مع»
+ * @param {any[]} journey @returns {{ idx: number, start: number, stage: any, stages: any[], group: any[], together: boolean }}
+ */
+export function currentStages(journey) {
+  const list = journey || [];
+  const idx = positionOf(list);
+  if (idx < 0) return { idx: -1, start: -1, stage: null, stages: [], group: [], together: false };
+  const stage = list[idx];
+  const group = groupAt(list, idx);
+  const stages = group.filter((s) => s === stage || s.status === 'active');
+  return { idx, start: list.indexOf(group[0]), stage, stages, group, together: stages.length > 1 };
+}
+
+// متى دخل مرحلته: أحدث تاريخ إتمام معروف لما قبلها (بنود الرحلة، وإتمام الملف والقياس والاعتماد)، وإلا تسجيله.
+// المراحل التي «تسير معًا» دخلها معًا: ما قبل أول مجموعتها وحده يُحسب، فإتمام مرحلة تسير معها لا يجعله «دخل للتو» (R3b)
 export function stageEntry(journey, idx, dates = []) {
   let best = null;
   const take = (d) => { if (d && (!best || String(d) > String(best))) best = d; };
-  for (const s of journey.slice(0, Math.max(0, idx))) for (const it of s.items || []) take(it.completed_at);
-  if (idx > 0) dates.forEach(take);
+  const group = groupAt(journey, idx);
+  const start = group.length ? journey.indexOf(group[0]) : idx;
+  for (const s of journey.slice(0, Math.max(0, start))) for (const it of s.items || []) take(it.completed_at);
+  if (start > 0) dates.forEach(take);
   return best;
 }
 
@@ -55,30 +84,42 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   const acc = Object.fromEntries(stages.map((s) => [s.key, { here: 0, done: 0, late: 0, rows: [], reasons: new Map() }]));
   const ms = new Map();
   let finished = 0;
+  // من تأخر في أي مرحلة جارية له يُعدّ مرة واحدة في الإجمالي، ومن يقف في مراحل تسير معًا يُعدّ مرة واحدة في محوره
+  const latePeople = new Set();
+  const herePhase = new Map();
   for (const p of people) {
     const j = (p.journey || []).filter((s) => keys.includes(s.key));
-    const idx = positionOf(j);
-    const key = idx >= 0 ? j[idx].key : null;
-    const pos = key ? keys.indexOf(key) : keys.length;
+    // المرحلة الحالية (currentStages): الموضع ومعه ما يسير معه نشطًا، فيُعدّ «هنا» في كل منها كما يراها في رحلته
+    const cur = currentStages(j);
+    const key = cur.stage ? cur.stage.key : null;
     if (!key) finished += 1;
-    for (let i = 0; i < pos; i++) acc[keys[i]].done += 1;
+    const startPos = key ? keys.indexOf(j[cur.start].key) : keys.length;
+    for (let i = 0; i < startPos; i++) acc[keys[i]].done += 1;
     if (key) {
-      const s = stages[pos];
-      const a = acc[key];
-      a.here += 1;
-      const entry = stageEntry(j, idx, p.dates || []) || p.created_at || null;
+      const hereKeys = new Set(cur.stages.map((s) => s.key));
+      // باقي مجموعته: ما سبق موضعه منها تجاوزه (كما كان كل ما قبل الموضع)، وما بعده يُعدّ متجاوزًا إن اكتمل
+      for (const g of cur.group) if (!hereKeys.has(g.key) && (j.indexOf(g) < cur.idx || g.status === 'done')) acc[g.key].done += 1;
+      const entry = stageEntry(j, cur.idx, p.dates || []) || p.created_at || null;
       const days = entry ? Math.max(0, daysBetween(isoDay(entry), t)) : 0;
-      const d = daysOf(s);
-      // «متأخر» من نافذة الدفعة (R0 «تاريخ واحد»): من تجاوز اليوم نهاية نافذة مرحلته بعد مهلة السماح، أيًا كان يوم دخوله.
-      // نافذة بلا مدة ولا جدول مكتوب لا تُعدّ موعدًا. وبلا بداية للدفعة (الدفعة المفتوحة) يبقى الحساب من دخوله بالمدة
-      const w = windows[s.key];
-      // والدفعة المفتوحة (is_default) مددها نسبية من الدخول ولو كان لها starts_on (القرار 21)، فتبقى على الحساب بالمدة
-      const dated = w && !cohort?.is_default && (d > 0 || plan.byKey[s.key]?.source === 'pinned');
-      const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
-      if (late) a.late += 1;
-      const needs = needsOf(j[idx]);
-      if (needs) a.reasons.set(needs, (a.reasons.get(needs) || 0) + 1);
-      a.rows.push({ id: p.id, name: p.name, days, late, needs: activity ? needs : null });
+      const phases = new Set();
+      for (const st of cur.stages) {
+        const s = stages[keys.indexOf(st.key)];
+        const a = acc[st.key];
+        a.here += 1;
+        phases.add(s.phase || 'qualification');
+        const d = daysOf(s);
+        // «متأخر» من نافذة الدفعة (R0 «تاريخ واحد»): من تجاوز اليوم نهاية نافذة مرحلته بعد مهلة السماح، أيًا كان يوم دخوله.
+        // نافذة بلا مدة ولا جدول مكتوب لا تُعدّ موعدًا. وبلا بداية للدفعة (الدفعة المفتوحة) يبقى الحساب من دخوله بالمدة
+        const w = windows[s.key];
+        // والدفعة المفتوحة (is_default) مددها نسبية من الدخول ولو كان لها starts_on (القرار 21)، فتبقى على الحساب بالمدة
+        const dated = w && !cohort?.is_default && (d > 0 || plan.byKey[s.key]?.source === 'pinned');
+        const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
+        if (late) { a.late += 1; latePeople.add(p.id); }
+        const needs = needsOf(st);
+        if (needs) a.reasons.set(needs, (a.reasons.get(needs) || 0) + 1);
+        a.rows.push({ id: p.id, name: p.name, days, late, needs: activity ? needs : null });
+      }
+      for (const ph of phases) herePhase.set(ph, (herePhase.get(ph) || 0) + 1);
     }
     for (const m of p.milestones || []) {
       const x = ms.get(m.id) || { id: m.id, title: m.title_ar, due: m.due || null, done: 0, late: 0, sort: m.sort ?? 0 };
@@ -109,8 +150,11 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   const peak = out.reduce((b, s) => (s.here > (b?.here || 0) || (s.here === b?.here && s.late > b.late) ? s : b), null);
   return {
     program: program ? { name: program.name } : null,
-    cohort: cohort ? { name: cohort.name, starts_on: cohort.starts_on || null, is_default: !!cohort.is_default, today_stage: todayStage(stages, windows, today) } : null,
-    totals: { total: people.length, finished, late: out.reduce((n, s) => n + s.late, 0), not_started: 0 },
+    // موقع الدفعة على جدولها اليوم: today_stage قيمة واحدة (أول الجارية)، وtoday_stages كل ما يسير اليوم معًا (R3b)
+    cohort: cohort ? { name: cohort.name, starts_on: cohort.starts_on || null, is_default: !!cohort.is_default, today_stage: todayStage(stages, windows, today), today_stages: todayStages(stages, windows, today) } : null,
+    totals: { total: people.length, finished, late: latePeople.size, not_started: 0 },
+    // من يقف الآن في كل محور، كل شخص مرة واحدة ولو وقف في مرحلتين تسيران معًا
+    here_by_phase: Object.fromEntries(herePhase),
     bottleneck: peak && peak.here > 0 ? { stage: peak.key } : null,
     stages: out,
     milestones: [...ms.values()].sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || a.sort - b.sort)

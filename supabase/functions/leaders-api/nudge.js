@@ -4,9 +4,10 @@
 // محرك واحد يبني التذكير من رحلة المشارك نفسها: أين هو، وما بقي عليه بالاسم، وكم قطع، ومنذ متى توقف.
 // كل مرسل (الإدارة، والمرشد وهو مشرف الرحلة، والمساعد نيابة عنه، ومنسق الجهة، والتذكير الآلي) يمر به،
 // وكل تذكير يُكتب في سجل واحد (leaders.nudges) بحد مشترك، فلا تتكرر التذكيرات بلا داعٍ.
-// دالة نقية بلا قاعدة: مصادرها onboardingOf وstuckMailText (onboarding.js)، وpositionOf وstageEntry وneedsOf (journey-map.js).
+// دالة نقية بلا قاعدة: مصادرها onboardingOf وstuckMailText (onboarding.js)، وcurrentStages وstageEntry وneedsOf (journey-map.js).
+// المراحل التي تسير معًا (R3b): «أين هو» مرحلته الحالية ومعها ما يسير معها، كما يراها في رحلته وكما تعدّه الخريطة.
 import { ONBOARDING_AR, REMIND_GAP_DAYS, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
-import { needsOf, positionOf, stageEntry } from './journey-map.js';
+import { currentStages, needsOf, stageEntry } from './journey-map.js';
 
 // الحد المشترك بين كل المرسلين: لا يُذكَّر الشخص نفسه مرتين في أقل منه، أيًا كان المرسل
 export const NUDGE_GAP_DAYS = REMIND_GAP_DAYS;
@@ -59,32 +60,43 @@ export function nudgeFor({ p, onboarding = null, journey = [], progress = 0, dat
   }
   if (!['placed', 'enrolled'].includes(p.status)) return { ok: false, why: 'nothing' };
 
-  // في البرنامج: المرحلة التي يقف عندها وأول ما بقي عليه فيها
-  const idx = positionOf(journey);
-  if (idx < 0) return { ok: false, why: 'finished' };
-  const s = journey[idx];
+  // في البرنامج: المرحلة التي يقف عندها (ومعها ما يسير معها نشطًا) وأول ما بقي عليه فيها
+  const cur = currentStages(journey);
+  if (cur.idx < 0) return { ok: false, why: 'finished' };
+  const s = cur.stage;
   if (s.status === 'locked') return { ok: false, why: 'locked' };
-  const returned = (s.items || []).find((it) => it.status === 'returned');
-  const need = returned ? returned.title_ar : needsOf(s);
+  // ما أُعيد بملاحظة في أي جارية يتقدم، ثم ما ينقص الموضع، ثم ما ينقص ما يسير معه
+  let returned = null, at = s;
+  for (const st of cur.stages) { returned = (st.items || []).find((it) => it.status === 'returned'); if (returned) { at = st; break; } }
+  let need = returned ? returned.title_ar : null;
+  if (!need) for (const st of cur.stages) { need = needsOf(st); if (need) { at = st; break; } }
   if (!need) return { ok: false, why: 'nothing' };
-  const entered = stageEntry(journey, idx, dates) || p.created_at;
+  const entered = stageEntry(journey, cur.idx, dates) || p.created_at;
   const days = daysSince(entered, t);
-  const done = (s.items || []).filter((it) => it.status === 'done').length;
-  const total = (s.items || []).length;
+  const items = cur.stages.flatMap((st) => st.items || []);
+  const done = items.filter((it) => it.status === 'done').length;
+  const total = items.length;
+  const names = stagesAr(cur.stages.map((st) => st.title_ar));
   return {
     ok: true, kind: returned ? 'returned' : 'stage', key: `stage:${s.key}`, stage: s.title_ar, step: need,
-    remaining: total ? `أنجز ${done} من ${total} في هذه المرحلة` : '', progress: Number(progress) || 0, days,
-    subject: returned ? `ملاحظة على «${need}» بانتظارك` : `خطوتك التالية في «${s.title_ar}»`,
-    text: stageText({ stage: s.title_ar, need, progress: Number(progress) || 0, days, returned: !!returned, note: returned?.note }),
+    remaining: total ? `أنجز ${done} من ${total} في ${cur.together ? `«${names}» معًا` : 'هذه المرحلة'}` : '', progress: Number(progress) || 0, days,
+    subject: returned ? `ملاحظة على «${need}» بانتظارك` : `خطوتك التالية في «${at.title_ar}»`,
+    text: stageText({ stage: s.title_ar, stages: cur.together ? cur.stages.map((st) => st.title_ar) : null, need, progress: Number(progress) || 0, days, returned: !!returned, note: returned?.note, at: at.title_ar }),
     snapshot: { key: `stage:${s.key}`, done, progress: Number(progress) || 0 },
   };
 }
 
+// «أ» و«ب» و«ج»: أسماء المراحل الجارية معًا في جملة واحدة
+const stagesAr = (titles) => titles.length < 2 ? titles[0] || '' : `${titles.slice(0, -1).join('» و«')}» و«${titles.at(-1)}`;
+
 // نص تحفيزي يسمّي المرحلة والخطوة والتقدم، ويتدرج بطول التوقف: لا لوم، بل ما يقرّبه من التالية
-export function stageText({ stage, need, progress, days, returned = false, note = '' }) {
-  if (returned) return `رُوجع «${need}» وأُعيد إليك بملاحظة${note ? `: «${String(note).slice(0, 200)}»` : ''}. تعديل بسيط يكفي لتُعتمد وتنتقل خطوة في «${stage}».`;
-  const where = `أنت في مرحلة «${stage}»، وقطعت ${progress}% من رحلتك.`;
-  const next = `خطوتك التالية: ${need}.`;
+// stages: أسماء المراحل الجارية معًا إن كانت أكثر من واحدة (R3b)، وat: المرحلة التي فيها الخطوة
+export function stageText({ stage, stages = null, need, progress, days, returned = false, note = '', at = '' }) {
+  if (returned) return `رُوجع «${need}» وأُعيد إليك بملاحظة${note ? `: «${String(note).slice(0, 200)}»` : ''}. تعديل بسيط يكفي لتُعتمد وتنتقل خطوة في «${at || stage}».`;
+  const where = stages && stages.length > 1
+    ? `أنت في ${stages.length > 2 ? `${stages.length} مراحل تسير` : 'مرحلتين تسيران'} معًا: «${stagesAr(stages)}»، وقطعت ${progress}% من رحلتك.`
+    : `أنت في مرحلة «${stage}»، وقطعت ${progress}% من رحلتك.`;
+  const next = stages && stages.length > 1 && at ? `خطوتك التالية في «${at}»: ${need}.` : `خطوتك التالية: ${need}.`;
   if (days != null && days >= 21) return `${where} ${next} مضى على توقفك ${days} يومًا، والعودة الآن تُبقيك مع دفعتك، ونحن هنا إن احتجت عونًا.`;
   if (days != null && days >= 7) return `${where} ${next} بضع دقائق اليوم تحافظ على إيقاعك وتقرّبك من المرحلة التالية.`;
   return `${where} ${next} أنت على الطريق الصحيح، فواصل.`;

@@ -280,6 +280,35 @@ textarea.input { min-height: 96px; resize: vertical; }
 .stage-card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .stage.locked .stage-card { box-shadow: none; background: rgba(255, 255, 255, .55); }
 .stage.active .stage-card { box-shadow: 0 0 0 2px var(--gold), var(--shadow); }
+/* مراحل تسير معًا (R3b): كتلة واحدة على خط الرحلة، رأسها اسمها وتقدم كل مرحلة منها، وبطاقاتها تحتها.
+   النقاط تبقى على خط الرحلة نفسه: تُزاح بقدر حشوة الكتلة وإطارها (12 + 1) فوق إزاحتها المعتادة (34) */
+.together {
+  position: relative; margin: 0 0 12px; padding: 12px;
+  border: 1px solid rgba(148, 112, 46, .28); border-radius: calc(var(--radius) + 4px);
+  background: linear-gradient(180deg, rgba(199, 154, 75, .08), rgba(199, 154, 75, .02));
+}
+.together.now { border-color: var(--gold); }
+.together .stage:last-child { margin-bottom: 0; }
+.together-head { padding: 4px 6px 12px; display: grid; gap: 6px; }
+.together-badge {
+  justify-self: start; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700;
+  color: var(--gold-text); background: rgba(199, 154, 75, .16); border-radius: 999px; padding: 2px 12px; line-height: 1.9;
+}
+.together-badge::before { content: ""; width: 14px; height: 10px; border-block: 2px solid currentColor; border-radius: 2px; }
+.together-head h4 { font-size: 15px; line-height: 1.6; }
+.together-head p { margin: 0; }
+.together-progress { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; grid-template-columns: 1fr; }
+@media (min-width: 700px) { .together-progress { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px 16px; } }
+.together-progress li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font-size: 14px; }
+.together-progress .t { grid-row: 1; grid-column: 1; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.together-progress small { grid-row: 1; grid-column: 2; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.together-progress .bar { grid-row: 2; grid-column: 1 / -1; display: block; height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.together-progress .bar i { display: block; height: 100%; border-radius: inherit; background: var(--gold); transition: inline-size .3s ease; }
+.together-progress li.done .bar i { background: var(--ok); }
+.together-progress li.locked .t { color: var(--muted); }
+.together-cards { display: grid; gap: 12px; }
+.together-cards > .stage { margin-bottom: 0; }
+.together .stage .dot { inset-inline-start: -47px; }
 .stage-top {
   width: 100%; background: none; border: 0; cursor: pointer; text-align: start;
   padding: 16px 18px; display: flex; gap: 12px; align-items: center;

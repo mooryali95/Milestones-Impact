@@ -301,18 +301,40 @@ export function stageWindows(stages, cohort = {}) {
   return cohortPlan(stages, cohort).windows;
 }
 
-// أين يقول الجدول إن الدفعة اليوم: آخر مرحلة في الترتيب تحوي نافذتها اليوم، وإلا آخر مرحلة بدأت (بين مرحلتين).
-// الرحلة تنتهي بأبعد نهاية بين كل المراحل لا بنافذة آخرها في الترتيب، فمرحلة قصيرة تسير مع أطول منها لا تنهيها
-export function todayStage(stages, windows, today) {
+// أين يقول الجدول إن الدفعة اليوم: المراحل التي تحوي نافذتها اليوم بترتيبها (أكثر من واحدة حين تسير معًا)، وإلا آخر مرحلة
+// بدأت (بين مرحلتين). الرحلة تنتهي بأبعد نهاية بين كل المراحل لا بنافذة آخرها في الترتيب، فمرحلة قصيرة تسير مع أطول منها
+// لا تنهيها
+export function todayStages(stages, windows, today) {
   const t = isoDay(today);
-  let inside = null, started = null, end = null;
+  const inside = [];
+  let started = null, end = null;
   for (const s of stages) {
     const w = windows[s.key];
     if (!w) continue;
     if (!end || w.to > end) end = w.to;
     if (w.from <= t) started = s.key;
-    if (w.from <= t && t <= w.to) inside = s.key;
+    if (w.from <= t && t <= w.to) inside.push(s.key);
   }
-  if (!started || (end && t > end)) return null;
-  return inside || started;
+  if (!started || (end && t > end)) return [];
+  return inside.length ? inside : [started];
+}
+// قيمة واحدة لموقع الدفعة (R3b، التوازي 2): أول الجارية اليوم في الترتيب، أي أول مجموعتها «تسير معًا»، كما يرى المشارك
+// مرحلته الحالية أول مجموعته (currentStages في journey-map.js)
+export function todayStage(stages, windows, today) {
+  return todayStages(stages, windows, today)[0] || null;
+}
+
+// ══ مدة الرحلة المخططة (R3b) ══
+const SPAN_EPOCH = '2000-01-02';
+/** مدة الرحلة بالأيام من خطتها، لا مجموع مدد مراحلها: المجموعة «تسير معًا» تأخذ أبعد نهاية بين أعضائها بإزاحاتهم (cohortPlan)،
+ * والمرحلة بلا مدة لا تأخذ يومًا. نسبية من بداية افتراضية، فلا يدخلها تاريخ مثبت. المصدر الواحد لكل نص مدة كلية يراه المشارك
+ * (Paywall: «نحو N أسابيع من بداية دفعتك»). stages: مراحل الرحلة بمددها وقواعدها الفعلية (رحلة المشارك بعد خطة دفعته)،
+ * وschedule اختياري لمراحل نسخة لم تُطبق عليها خطة الدفعة بعد (مددها وتوازيها وإيقافها وحدها)
+ * @param {any[]} stages @param {any} [schedule] @returns {number} */
+export function planSpanDays(stages, schedule = {}) {
+  const list = [...(stages || [])].filter((s) => s && s.active !== false);
+  if (!list.length) return 0;
+  const p = cohortPlan(list, { starts_on: SPAN_EPOCH, schedule: planDaysOnly(schedule) });
+  const last = p.stages.reduce((m, x) => later(m, x.next), null);
+  return last ? Math.max(0, daysBetween(SPAN_EPOCH, last)) : 0;
 }

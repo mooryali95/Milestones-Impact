@@ -2,7 +2,7 @@
 // غياب المفتاح يعني «بعد السابقة» كما اليوم، فالبرامج المتتابعة لا يتغير سلوكها.
 import { describe, expect, it } from 'vitest';
 import { buildJourney, cleanStageRules, distributeSchedule, journeyCoherence, resolveStages, stageRuleSummary, stageRules, stageRulesIssues } from '../../supabase/functions/leaders-api/logic.js';
-import { stageWindows, todayStage } from '../../supabase/functions/leaders-api/journey-map.js';
+import { stageWindows, todayStage, todayStages } from '../../supabase/functions/leaders-api/journey-map.js';
 import { STAGE_UNLOCK_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { formToStage, stageFields, stageToForm, withOptions } from '../../admin-app/src/methodology.js';
 
@@ -237,7 +237,9 @@ describe('«تبدأ مع»: إصلاحات المراجعة', () => {
     const w = stageWindows(stages, { starts_on: '2026-01-01' });
     expect(w.b).toEqual({ from: '2026-01-01', to: '2026-01-10' });
     expect(todayStage(stages, w, '2026-01-20')).toBe('a');
-    expect(todayStage(stages, w, '2026-01-05')).toBe('b');
+    // وهما تسيران معًا (R3b): قيمة واحدة هي أول المجموعة، وtodayStages يسمّي الجاريتين معًا
+    expect(todayStage(stages, w, '2026-01-05')).toBe('a');
+    expect(todayStages(stages, w, '2026-01-05')).toEqual(['a', 'b']);
     expect(todayStage(stages, w, '2026-02-02')).toBeNull();
     expect(todayStage(stages, w, '2025-12-30')).toBeNull();
   });
