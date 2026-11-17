@@ -160,11 +160,13 @@ describe('R0: خريطة الرحلة في ملف الدفعة', () => {
     expect(c).toContain('journeyDefinition({}, m.cohort)');
     expect(c).toContain("cohort: def.cohort, program, list: true, activity: true,");
     expect(read('supabase/functions/leaders-api/programs.ts')).toContain('export async function cohortMemberIds(cohortId: string)');
-    const ui = read('admin-app/src/screens/Programs.jsx');
-    expect(ui).toContain("L('admin.cohort-journey', { cohort_id: cohortId }).then((r) => { if (on) setD(r); })");
-    expect(ui).toContain('<CohortJourneyMap cohortId={c.id} members={c.members} isDefault={!!c.is_default} />');
+    // منذ R1 الخريطة في تبويب «الرحلة» بملف الدفعة (CohortJourney.jsx)، والتبويب في CohortPage
+    expect(read('admin-app/src/screens/Programs.jsx')).toContain('<CohortJourney c={c} canWrite={canWrite} on={on} />');
+    const ui = read('admin-app/src/screens/CohortJourney.jsx');
+    expect(ui).toContain("L('admin.cohort-journey', { cohort_id: c.id }).then((r) => { if (live) setMap(r); })");
+    expect(ui).toContain('const auto = !c.is_default && (Number(c.members) || 0) <= JOURNEY_AUTO_MAX;');
     // الخريطة بلا مراحل تظهر رسالتها (الخادم لا يرجع null بل stages فارغة)، والدفعة المفتوحة أو الكبيرة تُقرأ بطلب
-    expect(ui).toContain('!map?.stages?.length ?');
+    expect(ui).toContain('!jm?.stages?.length ?');
     expect(ui).toContain('اعرض خريطة الرحلة');
     expect(c).toContain('if (m.ids.length > COHORT_JOURNEY_MAX)');
   });

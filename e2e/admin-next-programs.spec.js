@@ -197,9 +197,12 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   await expect(page.getByRole('heading', { name: 'الدفعات' })).toBeVisible();
 });
 
-test('ملف الدفعة: خريطة الرحلة نفسها التي في صفحة الجهة، بنوافذ الدفعة ومن تجاوز موعده (R0)', async ({ page }) => {
+test('ملف الدفعة: خريطة الرحلة نفسها التي في صفحة الجهة، بنوافذ الدفعة ومن تجاوز موعده (R0، وفي تبويب «الرحلة» منذ R1)', async ({ page }) => {
   const calls = await setup(page);
   await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  // الخريطة في تبويب «الرحلة» لا في «الملف»، فلا تُحسب قبل فتحه
+  expect(calls.filter((c) => c.action === 'admin.cohort-journey')).toHaveLength(0);
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
   const card = page.locator('.cohort-page');
   const map = card.getByRole('region', { name: 'خريطة الرحلة', exact: true });
   await expect(map).toBeVisible();
@@ -223,6 +226,7 @@ test('ملف الدفعة: خريطة الرحلة نفسها التي في صف
   await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
   const before = calls.filter((c) => c.action === 'admin.cohort-journey').length;
   await page.getByRole('button', { name: 'الدفعة المفتوحة' }).first().click();
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
   const open = page.locator('.cohort-page').getByRole('region', { name: 'خريطة الرحلة', exact: true });
   await expect(open).toContainText('الدفعة المفتوحة تضم كل من ليس في دفعة');
   expect(calls.filter((c) => c.action === 'admin.cohort-journey').length).toBe(before);

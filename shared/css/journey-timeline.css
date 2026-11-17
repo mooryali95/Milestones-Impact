@@ -53,6 +53,10 @@
 .jt-stage-head b { font-size: 13px; line-height: 1.4; }
 .jt-stage-head b .jt-glyph { color: var(--jt-ok); margin-inline-end: 2px; }
 .jt-stage-head small { font-size: 11px; color: var(--jt-muted); }
+/* اسم المرحلة زرًا ينقل إلى بطاقتها (تبويب «الرحلة» في ملف الدفعة): نص كما هو، وخط تحته عند المرور والتركيز */
+.jt-stage-link { all: unset; cursor: pointer; border-radius: 4px; }
+.jt-stage-link:hover b, .jt-stage-link:focus-visible b { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--jt-ph); }
+.jt-stage-link:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 2px; }
 .jt-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 99px; border: 1px solid currentColor; }
 .jt-status.active { color: var(--jt-warn-text); background: var(--st-warn-bg, #efe7d8); }
 .jt-status.done { color: var(--st-ok-text, #256b4d); }

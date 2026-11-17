@@ -65,8 +65,9 @@ function Panel({ a, model, onOpen, openLabel }) {
   );
 }
 
-/** @param {{ model: any, onOpen?: (a: any) => void, openLabel?: (a: any) => string, onEmpty?: () => void, id?: string }} props */
-export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, id = 'jt' }) {
+/** onStage: إن مُرر صار اسم المرحلة على المسار زرًا ينقل إلى بطاقتها خارج الخط (تبويب «الرحلة» في ملف الدفعة)
+ * @param {{ model: any, onOpen?: (a: any) => void, openLabel?: (a: any) => string, onEmpty?: () => void, onStage?: (key: string) => void, id?: string }} props */
+export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt' }) {
   const [sel, setSel] = useState(model?.selected || null);
   if (!model) return null;
   const head = `${id}-h`;
@@ -88,7 +89,11 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
     <div key={s.key} className={`jt-stage ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}`}
       style={s.together ? { marginInlineStart: `${s.lane_at}%`, width: `${Math.min(s.lane_width, 100 - s.lane_at)}%` } : undefined}>
       <div className="jt-stage-head">
-        <b>{s.status === 'done' && <Glyph name="check" size={12} />}{s.title}</b>
+        {onStage ? (
+          <button type="button" className="jt-stage-link" onClick={() => onStage(s.key)} aria-label={`${s.title}: انتقل إلى بطاقتها`}>
+            <b>{s.status === 'done' && <Glyph name="check" size={12} />}{s.title}</b>
+          </button>
+        ) : <b>{s.status === 'done' && <Glyph name="check" size={12} />}{s.title}</b>}
         <small>{cohort && s.window_ar ? s.window_ar : s.label}{s.with_note ? `، ${s.with_note}` : ''}</small>
         {s.status_ar && s.status !== 'upcoming' && <span className={`jt-status ${s.status}`}>{s.status_ar}</span>}
       </div>
