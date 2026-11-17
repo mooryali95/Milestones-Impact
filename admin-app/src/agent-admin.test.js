@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { convSummary, count, orgsSummary, pct, peakDay, systemLine, enableBlock, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, ringLevel, runEvalLoop, runSummary, spendSummary, stateSummary, usd, usd2 } from './agent-admin.js';
 import { companionKnown } from './screens/OrgForm.jsx';
-import { OWNER_TABS, TABS } from './leaders-tabs.js';
+import { AI_TABS, OWNER_TABS, TAB_ALIASES, TABS } from './leaders-tabs.js';
 
 describe('المال والنسب', () => {
   it('الميكرو إلى دولار: أربعة أرقام دون الدولار، واثنان فوقه، وغير المقروء لا يصير صفرًا', () => {
@@ -109,16 +109,17 @@ describe('مفتاح المرافق في نموذج الجهة وتبويب ال
     expect(companionKnown(null, false)).toBe(false);
     expect(companionKnown(null, true)).toBe(true);
   });
-  it('تبويب المساعد في الأقسام، ومقصور على المدير الأعلى والمالك', () => {
-    expect(TABS.find(([k]) => k === 'agent')?.[1]).toBe('المساعد الآلي');
-    expect(OWNER_TABS.has('agent')).toBe(true);
+  it('«المساعد الذكي» قسم واحد بثلاثة تبويبات داخلية، مقصور على المدير الأعلى والمالك، والروابط القديمة تصل إلى تبويبها', () => {
+    expect(TABS.find(([k]) => k === 'ai')?.[1]).toBe('المساعد الذكي');
+    for (const k of ['agent', 'guidance', 'guidance-access']) expect(TABS.some(([x]) => x === k), k).toBe(false);
+    expect([...OWNER_TABS]).toEqual(['ai']);
+    expect(AI_TABS.map(([k, l]) => [k, l])).toEqual([['site', 'مساعد الموقع'], ['guidance', 'التوجيه والإرشاد'], ['access', 'الإتاحة']]);
+    expect(TAB_ALIASES).toEqual({ agent: ['ai', 'site'], guidance: ['ai', 'guidance'], 'guidance-access': ['ai', 'access'] });
     const src = readFileSync(join(__dirname, 'screens/Leaders.jsx'), 'utf8');
-    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent', 'guidance', 'guidance-access'\]\]/);
-    // «التوجيه والإرشاد» و«إتاحة التوجيه» (H1) مقصوران مثله
-    expect(OWNER_TABS.has('guidance') && OWNER_TABS.has('guidance-access')).toBe(true);
+    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'ai'\]\]/);
   });
   it('لا شرطة طويلة ولا متوسطة في الملفات الجديدة', () => {
-    const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',
+    const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', 'screens/AiHub.jsx', 'leaders-tabs.js', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',
       '../../supabase/functions/agent-chat/version.ts', '../../supabase/functions/agent-chat/evals/runner.ts', '../../supabase/functions/admin-api/step_up.ts', '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'];
     for (const f of files) expect(/[\u2013\u2014]/.test(readFileSync(join(__dirname, f), 'utf8')), f).toBe(false);
   });

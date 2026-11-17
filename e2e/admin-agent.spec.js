@@ -81,7 +81,7 @@ function backend(over = {}) {
   return { st, replies };
 }
 
-async function setup(page, { role = 'super_admin', owner = true, hash = '#/leaders/agent', viewport, ...over } = {}) {
+async function setup(page, { role = 'super_admin', owner = true, hash = '#/leaders/ai/site', viewport, ...over } = {}) {
   if (viewport) await page.setViewportSize(viewport);
   const b = backend(over);
   const calls = [];
@@ -108,13 +108,16 @@ async function setup(page, { role = 'super_admin', owner = true, hash = '#/leade
   await page.reload();
   return { calls, adminCalls, st: b.st };
 }
+// وصف شاشة «مساعد الموقع»: يظهر حين تُرسم الشاشة نفسها لا تبويبها وحده
+const AGENT_DESC = 'مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم.';
 const sec = (page, name) => page.getByRole('region', { name });
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }); };
 
 test('التبويب في مجموعة «البرامج»، والأقسام بخلاصاتها، والحلقة بنصها', async ({ page }) => {
   await setup(page);
   const group = page.getByRole('group', { name: 'البرامج' });
-  await expect(group.getByRole('button', { name: 'المساعد الآلي' })).toHaveAttribute('aria-current', 'page');
+  await expect(group.getByRole('button', { name: 'المساعد الذكي' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('tab', { name: 'مساعد الموقع' })).toHaveAttribute('aria-selected', 'true');
   await expect(sec(page, 'الحالة والتحكم').locator('.ag-sum')).toHaveText(/مطفأ من اللوحة/);
   await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText(/اليوم 0.42 من 2.00 دولار \(21%\)/);
   await expect(sec(page, 'الإنفاق').getByRole('img', { name: /اليوم 0.42 من 2.00 دولار، 21%، ضمن السقف/ })).toBeVisible();
@@ -183,12 +186,15 @@ test('المفتاح: لصق ثم تأكيد برمز تطبيق المصادق�
 
 test('المراقب لا يرى التبويب، والمالك بدور مدير يرى بلا أزرار كتابة', async ({ page }) => {
   await setup(page, { role: 'viewer', owner: false, hash: '#/leaders/overview' });
-  await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'المساعد الآلي' })).toHaveCount(0);
-  await page.goto(`${BASE}#/leaders/agent`);
-  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'المساعد الذكي' })).toHaveCount(0);
+  for (const h of ['#/leaders/ai/site', '#/leaders/ai/access', '#/leaders/agent']) {
+    await page.goto(`${BASE}${h}`);
+    await expect(page.getByRole('heading', { name: 'المساعد الذكي' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'مساعد الموقع' })).toHaveCount(0);
+  }
   const p2 = await page.context().newPage();
   await setup(p2, { role: 'admin', owner: true, canWrite: false });
-  await expect(p2.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+  await expect(p2.getByText(AGENT_DESC)).toBeVisible();
   await expect(p2.locator('.ag-head .la-chip')).toHaveText('عرض فقط');
   await expect(p2.getByRole('button', { name: 'شغّل التقييم الآن' })).toHaveCount(0);
   await expect(p2.getByLabel('مفتاح جديد')).toHaveCount(0);
@@ -270,7 +276,7 @@ test('أشكال الإنتاج غير المتوقعة: الشاشة تُرسم
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await setup(page, { replies: prodShapes });
-  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+  await expect(page.getByText(AGENT_DESC)).toBeVisible();
   await expect(page.getByText(BOUNDARY)).toHaveCount(0);
   await expect(sec(page, 'التقييم').locator('.ag-sum')).toContainText('جارٍ');
   await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText(/اليوم 0.00 من 2.00 دولار/);
@@ -290,7 +296,7 @@ test('أشكال الإنتاج غير المتوقعة: الشاشة تُرسم
 
 test('ردود ليست JSON أو فاشلة: رسالة تعذر القراءة في كل قسم، لا شاشة معطلة', async ({ page }) => {
   await setup(page, { replies: { 'admin.agent-usage': () => 'not json', 'admin.agent-eval-runs': () => ({ success: false }), 'admin.agent-conversations': () => null } });
-  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+  await expect(page.getByText(AGENT_DESC)).toBeVisible();
   await expect(page.getByText(BOUNDARY)).toHaveCount(0);
   await expect(sec(page, 'الإنفاق')).toContainText('تعذّرت القراءة');
   await expect(sec(page, 'التقييم')).toContainText('تعذّرت القراءة');
@@ -311,13 +317,14 @@ test('ملف القسم حذفه نشر أحدث: إعادة تحميل واحد
   expect(hits).toBeGreaterThan(0);
   block = false;
   await page.getByRole('button', { name: 'أعد تحميل الصفحة' }).click();
-  await expect(page.getByRole('heading', { name: 'المساعد الآلي' })).toBeVisible();
+  await expect(page.getByText(AGENT_DESC)).toBeVisible();
 });
 
-test('سقف «التوجيه والإرشاد» يظهر في الحالة برابط إلى تبويبه المستقل', async ({ page }) => {
+test('سقف «التوجيه والإرشاد» يظهر في الحالة برابط إلى تبويبه الداخلي', async ({ page }) => {
   await setup(page);
   const state = sec(page, 'الحالة والتحكم');
   await expect(state).toContainText('سقف «التوجيه والإرشاد» داخل الرحلة منفصل: 5.00 دولار يوميًا');
   await state.getByRole('button', { name: 'افتح «التوجيه والإرشاد»' }).click();
-  await expect(page).toHaveURL(/#\/leaders\/guidance$/);
+  await expect(page).toHaveURL(/#\/leaders\/ai\/guidance$/);
+  await expect(page.getByRole('tab', { name: 'التوجيه والإرشاد' })).toHaveAttribute('aria-selected', 'true');
 });

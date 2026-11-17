@@ -441,7 +441,7 @@ export default function Agent({ isSuper = false }) {
   return (
     <div className="ag">
       <div className="la-row between ag-head">
-        <div><h2>المساعد الآلي</h2><p className="la-muted">مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم.</p></div>
+        <div><p className="la-muted">مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم.</p></div>
         {!writable && <span className="la-chip">عرض فقط</span>}
       </div>
       {!writable && <p className="la-muted small ag-ro">{isSuper ? 'الكتابة تتطلب الدخول بمفتاح المرور أو تطبيق المصادقة.' : 'الكتابة للمدير الأعلى وحده، وأنت ترى كل شيء للاطلاع.'}</p>}

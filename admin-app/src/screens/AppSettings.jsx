@@ -109,7 +109,7 @@ export function GuidanceCap() {
   return (
     <p className="la-muted small ag-guidance">
       سقف «التوجيه والإرشاد» داخل الرحلة منفصل: {Number(g.daily_spend_usd).toFixed(2)} دولار يوميًا، و{g.monthly_questions} سؤالًا شهريًا و{g.daily_questions} يوميًا لكل مشارك.{' '}
-      <button type="button" className="link" onClick={() => navigate({ ctx: 'leaders', tab: 'guidance' })}>افتح «التوجيه والإرشاد»</button>
+      <button type="button" className="link" onClick={() => navigate({ ctx: 'leaders', tab: 'ai', id: 'guidance' })}>افتح «التوجيه والإرشاد»</button>
     </p>
   );
 }

@@ -196,7 +196,7 @@ function StatusPart({ d, reload, setD }) {
         <div><dt>النموذج</dt><dd><code dir="ltr">{d.model}</code></dd></div>
         <div><dt>نسخة السياسة</dt><dd>{d.policy_version || 'لم تُنشر بعد (G4b)'}</dd></div>
         <div><dt>تقييم الدقة</dt><dd>{d.gate.eval_ok ? '✓ ناجح' : '✕ لم ينجح بعد'}</dd></div>
-        <div><dt>الدفعات التجريبية</dt><dd>{d.gate.pilots} <button type="button" className="la-link" onClick={() => navigate({ ctx: 'leaders', tab: 'guidance-access' })}>إتاحة التوجيه</button></dd></div>
+        <div><dt>الدفعات التجريبية</dt><dd>{d.gate.pilots} <button type="button" className="la-link" onClick={() => navigate({ ctx: 'leaders', tab: 'ai', id: 'access' })}>الإتاحة</button></dd></div>
         <div><dt>السقوف</dt><dd>{usd(d.settings.cap_usd)} يوميًا، و{d.settings.monthly} سؤالًا شهريًا و{d.settings.daily} يوميًا لكل مشارك، والحفظ {d.settings.retention_days} يومًا{' '}
           <button type="button" className="la-link" onClick={() => navigate({ ctx: 'leaders', tab: 'settings', id: 'guidance' })}>عدّلها</button></dd></div>
       </dl>
@@ -258,7 +258,7 @@ export default function GuidanceAdmin() {
   return (
     <div className="ag">
       <div className="la-row between ag-head">
-        <div><h2>التوجيه والإرشاد</h2><p className="la-muted">المساعد الذكي داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.</p></div>
+        <div><p className="la-muted">المساعد الذكي داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.</p></div>
         {!d.can_write && <span className="la-chip">عرض فقط</span>}
       </div>
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'} summary={open ? 'مفتوح للدفعات التجريبية' : `مغلق: ${d.blockers.length} ${d.blockers.length === 1 ? 'شرط' : 'شروط'} قبل الفتح`}><StatusPart d={d} reload={load} setD={setD} /></Section>
@@ -299,7 +299,7 @@ export function GuidanceAccess() {
   return (
     <div className="ag">
       <div className="la-row between ag-head">
-        <div><h2>إتاحة التوجيه</h2><p className="la-muted">لمن يعمل المساعد الذكي: الجهة تسمح به، والدفعة مفعّلة تجريبيًا. يلزم الشرطان معًا، وكل تغيير يُسجَّل.</p></div>
+        <div><p className="la-muted">لمن يعمل المساعد الذكي: الجهة تسمح به، والدفعة مفعّلة تجريبيًا. يلزم الشرطان معًا، وكل تغيير يُسجَّل.</p></div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
       <Section id="gd-orgs" title="الجهات" summary="الجهة المغلقة لا يعمل المساعد لأي من مشاركيها، أيًا كانت دفعته. الأفراد بلا جهة تحكمهم الدفعة وحدها.">
