@@ -195,20 +195,26 @@ function TodayNumbers({ nums, onView, onTab }) {
   );
 }
 
-// ── التنبيهات ونبض الدفعات (المرحلة 3ب): رد admin.today، يُطلب مع المكتب ويُحدَّث فور أي حفظ («mi:pending») ──
-// كالصندوق (pending.js): الحفظ الذي يغيّر ما ينتظر القرار يطلق الحدث، فيُطلب الرد من جديد. الرد الأقدم من طلب أحدث يُهمل
-function useToday(n) {
+// ── التنبيهات ونبض الدفعات (المرحلة 3ب): رد admin.today، يُطلب مرة مع فتح المكتب، ثم بعد كل قرار وحين تعود الصفحة ظاهرة ──
+// «mi:pending» يطلقه كل فعل قرار (CHANGES_PENDING في pending.js)، ومنها قرار طابور المتطلبات، فلا يُعاد الطلب بغيره.
+// الطلب ثقيل (الجهات والدفعات والصندوق والخبراء معًا)، فتُجمع الأحداث المتتابعة في طلب واحد (TODAY_DEBOUNCE_MS).
+// والحفظ الذي لا يطلق الحدث (المقاعد والعقد والجلسة والدفعة) يظهر أثره عند فتح المكتب أو عودة الصفحة ظاهرة. الرد الأقدم يُهمل
+const TODAY_DEBOUNCE_MS = 400;
+function useToday() {
   const [t, setT] = useState(null);
   useEffect(() => {
-    let seq = 0;
+    let seq = 0, timer = null;
     const load = () => {
       const my = ++seq;
       L('admin.today', {}).catch((e) => ({ success: false, message: e?.message })).then((r) => { if (my === seq) setT(r); });
     };
+    const later = () => { clearTimeout(timer); timer = setTimeout(load, TODAY_DEBOUNCE_MS); };
+    const onVis = () => { if (document.visibilityState === 'visible') later(); };
     load();
-    window.addEventListener('mi:pending', load);
-    return () => { seq = -1; window.removeEventListener('mi:pending', load); };
-  }, [n]);
+    window.addEventListener('mi:pending', later);
+    document.addEventListener('visibilitychange', onVis);
+    return () => { seq = -1; clearTimeout(timer); window.removeEventListener('mi:pending', later); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
   return t;
 }
 
@@ -225,11 +231,13 @@ function Alerts({ t }) {
   return (
     <section className="today-alerts" aria-labelledby="today-alerts-h">
       <h2 className="today-sec" id="today-alerts-h">تنبيهات <span className="la-chip">{list.length}</span></h2>
-      <ul>
+      {/* role="list": إزالة علامات القائمة بالتنسيق تُسقط دورها في Safari وVoiceOver */}
+      <ul role="list">
         {list.map((a) => (
           <li key={a.id} className={`today-alert ${a.severity}`} data-kind={a.kind}>
             <span className="today-alert-ic" aria-hidden="true">{a.severity === 'bad' ? '!' : '•'}</span>
-            <a className="la-link" href={alertHref(a)}>{a.text}</a>
+            {/* العاجل لا يُميَّز باللون والأيقونة وحدهما: قارئ الشاشة يسمعه «عاجل» */}
+            <a className="la-link" href={alertHref(a)}>{a.severity === 'bad' && <span className="sr-only">عاجل: </span>}{a.text}</a>
           </li>
         ))}
       </ul>
@@ -237,6 +245,8 @@ function Alerts({ t }) {
   );
 }
 
+// عمود الجهة للدفعة بلا اسم جهة: دفعة الجهة التي لم يُقرأ اسمها «جهة»، لا «أفراد»
+const KIND_AR = { open: 'مفتوحة', individuals: 'أفراد', org: 'جهة' };
 // «نبض الدفعات»: سطر لكل دفعة جارية بجاهزيتها (ملف الدفعة نفسه) وأقرب جلسة وما ينتظر قرارًا لأعضائها.
 // جدول يصير بطاقات على الهاتف (leaders-admin.css). يختفي حين لا دفعة جارية
 function Pulse({ t }) {
@@ -247,16 +257,17 @@ function Pulse({ t }) {
     <section className="today-pulse" aria-labelledby="today-pulse-h">
       <h2 className="today-sec" id="today-pulse-h">نبض الدفعات</h2>
       <div className="today-pulse-wrap">
-        <table className="la-table today-pulse-t">
-          <thead><tr><th scope="col">الدفعة</th><th scope="col">الجهة</th><th scope="col">الجاهزية</th><th scope="col">أقرب جلسة</th><th scope="col">ينتظر قرارًا</th></tr></thead>
-          <tbody>
+        {/* الأدوار صريحة: البطاقات على الهاتف (display: block) تُسقط دلالة الجدول في Safari وVoiceOver */}
+        <table className="la-table today-pulse-t" role="table">
+          <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">الدفعة</th><th scope="col" role="columnheader">الجهة</th><th scope="col" role="columnheader">الجاهزية</th><th scope="col" role="columnheader">أقرب جلسة</th><th scope="col" role="columnheader">ينتظر قرارًا</th></tr></thead>
+          <tbody role="rowgroup">
             {rows.map((r) => (
-              <tr key={r.id} data-id={r.id}>
-                <th scope="row" data-label="الدفعة"><a className="la-link" href={`#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a></th>
-                <td data-label="الجهة">{r.org || <span className="la-muted">أفراد أو مفتوحة</span>}</td>
-                <td data-label="الجاهزية"><span className={`la-chip ${r.readiness.missing ? 'warn' : 'ok'}`}>{r.readiness.summary}</span></td>
-                <td data-label="أقرب جلسة">{r.next_at ? dateTime(r.next_at) : r.handbook ? <span className="la-muted">صيغة الكتاب</span> : t.unchecked?.includes('cohort_no_session') ? <span className="la-muted">غير مقروءة</span> : <span className="la-muted">لا جلسة مؤرخة</span>}</td>
-                <td data-label="ينتظر قرارًا">{r.waiting == null ? <span className="la-muted">غير مقروء</span> : <bdi dir="ltr">{r.waiting}{r.waiting ? plus : ''}</bdi>}</td>
+              <tr key={r.id} data-id={r.id} role="row">
+                <th scope="row" role="rowheader" data-label="الدفعة"><a className="la-link" href={`#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a></th>
+                <td role="cell" data-label="الجهة">{r.org || <span className="la-muted">{KIND_AR[r.kind] || 'جهة'}</span>}</td>
+                <td role="cell" data-label="الجاهزية"><span className={`la-chip ${r.readiness.missing ? 'warn' : 'ok'}`}>{r.readiness.summary}</span></td>
+                <td role="cell" data-label="أقرب جلسة">{r.next_at ? dateTime(r.next_at) : r.handbook ? <span className="la-muted">صيغة الكتاب</span> : t.unchecked?.includes('cohort_no_session') ? <span className="la-muted">غير مقروءة</span> : <span className="la-muted">لا جلسة مؤرخة</span>}</td>
+                <td role="cell" data-label="ينتظر قرارًا">{r.waiting == null ? <span className="la-muted">غير مقروء</span> : <bdi dir="ltr">{r.waiting}{r.waiting ? plus : ''}</bdi>}</td>
               </tr>
             ))}
           </tbody>
@@ -290,7 +301,7 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
   const [view, setView] = useState('');
   // رد الصندوق من مخزن العدّادات نفسه (pending.js): طلب واحد يرسم الصندوق والأرقام والعدّادات
   const [inbox] = useInbox();
-  const today = useToday(n);
+  const today = useToday();
   useEffect(() => {
     let live = true;
     setD(null);

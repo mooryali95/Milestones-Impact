@@ -9,7 +9,8 @@ import { audit, db, Fail } from './core.ts';
 import type { Admin } from './admin.ts';
 import { requireAgentRead } from './agent-admin.ts';
 import { filterHandbookMd, quizFor } from './logic.js';
-import { contextLine, GUIDE_CHAPTER_CHARS, GUIDE_MODEL, REFUSAL_AR, routeQuestion } from './guide.js';
+import { contextLine, GUIDE_CHAPTER_CHARS, GUIDE_MODEL, REFUSAL_AR, routeQuestion, rulesWith } from './guide.js';
+import { appSettings } from './settings.ts';
 import { applyCaseEdit, EVAL_GATE_AR, EVAL_THRESHOLD, evalFingerprint, evalGate, gradeCase, nextVersion, validateCases } from './guide-eval.js';
 import { GD, generate, worstFor } from './guide.ts';
 import SEED from './guide-eval/cases.json' with { type: 'json' };
@@ -17,6 +18,9 @@ import SEED from './guide-eval/cases.json' with { type: 'json' };
 type Body = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const missing = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_eval/.test(String(e.message || '')));
+// القواعد الفعلية كما يجيب بها المشارك (H4: الثابتة وتوجيهات المالك)، فالبصمة والتشغيل بالقواعد نفسها
+export const rulesNow = async () => rulesWith(((await appSettings()).guidance as any)?.extra_rules);
+export const fingerprintNow = async (set: any) => evalFingerprint(set, GUIDE_MODEL, await rulesNow());
 export const EVAL = { batch: 3, leaseSeconds: 140, maxMicros: 12_000_000 };
 // المجموعة الحالية: أحدث نسخة في القاعدة (H2). القاعدة الفارغة تُبذر مرة من الملف مسودةً، وغياب الجدول (قبل ترحيله)
 // يعمل من الملف كما كان. تُخزَّن دقيقة في النسخة، وكل تعديل أو اعتماد يمسحها
@@ -48,7 +52,7 @@ export async function evalGateNow() {
   let value: { ok: boolean; reason: string | null } = { ok: false, reason: 'none' };
   try {
     const set = await evalSet();
-    const fp = await evalFingerprint(set);
+    const fp = await fingerprintNow(set);
     const { data, error } = await db.from('guidance_eval_runs').select('fingerprint, status, done_cases, passed_cases, started_at')
       .eq('fingerprint', fp).order('started_at', { ascending: false }).limit(5);
     if (error) throw error;
@@ -72,7 +76,7 @@ async function chapterOf(c: any) {
 }
 
 // حالة واحدة بالمسار الحقيقي: الموجّه أولًا ثم النموذج
-export async function runCase(c: any, key: string) {
+export async function runCase(c: any, key: string, rules?: string) {
   const route = routeQuestion(c.question);
   if (route.kind === 'refuse') {
     const text = (REFUSAL_AR as Record<string, string>)[route.reason];
@@ -82,7 +86,7 @@ export async function runCase(c: any, key: string) {
   if (chapter?.missing) return { pass: false, reasons: [`الباب ${c.dimension}/${c.chapter_key} غير موجود في الكتاب`], verdict: 'error', text: '', cost: 0 };
   const ctx = contextLine({ stage: null, progress: NaN, initiative: false, where: c.context, chapter: chapter?.title || null, chapters: [] });
   try {
-    const g = await generate({ key, chapter, ctx, text: c.question, past: [] });
+    const g = await generate({ key, chapter, ctx, text: c.question, past: [], rules: rules ?? await rulesNow() });
     const r = gradeCase(c, { source: g.verdict === 'error' ? 'error' : 'model', verdict: g.verdict, text: g.text, quiz: chapter?.quiz || [] });
     return { ...r, verdict: g.verdict, text: g.text, cost: g.cost };
   } catch (e) {
@@ -94,7 +98,7 @@ export async function runCase(c: any, key: string) {
 export async function evalState(a: Admin) {
   requireAgentRead(a);
   const set = await evalSet();
-  const fp = await evalFingerprint(set);
+  const fp = await fingerprintNow(set);
   const { data: runs, error } = await db.from('guidance_eval_runs').select('*').order('started_at', { ascending: false }).limit(10);
   if (error) { if (missing(error)) return { success: true, ready: false }; throw error; }
   const kinds: Record<string, number> = {};
@@ -114,7 +118,7 @@ export async function evalStart(a: Admin) {
   const errors = validateCases(set);
   if (errors.length) throw new Fail(`مجموعة التقييم فيها أخطاء: ${errors.slice(0, 3).join('؛ ')}`, 409, 'bad_cases');
   if (!(await GD.key().catch(() => ''))) throw new Fail('لا مفتاح للنموذج: اضبطه من قسم «المفتاح»', 409, 'no_key');
-  const fp = await evalFingerprint(set);
+  const fp = await fingerprintNow(set);
   const { data, error } = await db.from('guidance_eval_runs').insert({
     fingerprint: fp, cases_version: set.version, total_cases: set.cases.length, max_micros: EVAL.maxMicros, started_by: a.email,
   }).select('id').single();
@@ -141,7 +145,7 @@ export async function evalStep(a: Admin, b: Body) {
   };
   if (!run) return progress();
   const set = await evalSet();
-  const fp = await evalFingerprint(set);
+  const fp = await fingerprintNow(set);
   const finish = async (status: string, stop: string | null, extra: Record<string, unknown> = {}) => {
     await db.from('guidance_eval_runs').update({ status, stop_reason: stop, finished_at: new Date().toISOString(), lease_until: null, ...extra }).eq('id', id).eq('status', 'running');
     resetEvalGate();
@@ -154,10 +158,11 @@ export async function evalStep(a: Admin, b: Body) {
   const done = new Set((doneRows || []).map((r: any) => r.case_id));
   const pending = set.cases.filter((c: any) => !done.has(c.id)).slice(0, EVAL.batch);
   let cost = Number(run.cost_micros || 0);
+  const rules = await rulesNow();
   // حارس التشغيل: لا تبدأ دفعة قد تتجاوز حده
-  const worst = pending.reduce((s: number, c: any) => s + worstFor({ chapter: c.context === 'handbook' ? { title: '', md: 'x'.repeat(GUIDE_CHAPTER_CHARS), quiz: [] } : null, ctx: '', text: c.question, past: [] }), 0);
+  const worst = pending.reduce((s: number, c: any) => s + worstFor({ chapter: c.context === 'handbook' ? { title: '', md: 'x'.repeat(GUIDE_CHAPTER_CHARS), quiz: [] } : null, ctx: '', text: c.question, past: [], rules }), 0);
   if (cost + worst > Number(run.max_micros)) return finish('stopped', 'max_cost');
-  const outcomes = await Promise.all(pending.map(async (c: any) => ({ c, o: await runCase(c, key) })));
+  const outcomes = await Promise.all(pending.map(async (c: any) => ({ c, o: await runCase(c, key, rules) })));
   for (const { c, o } of outcomes) {
     // خطأ عابر لا يُحسب راسبًا: تُعاد الحالة في الدفعة التالية
     if ((o as any).transient) continue;
@@ -214,26 +219,32 @@ export async function setGet(a: Admin) {
   return { success: true, set: { ...set, errors: validateCases(set) }, can_edit: set.source === 'db', can_approve: !!a.owner && set.source === 'db' };
 }
 
-// تعديل حالة: في المسودة الحالية، أو في مسودة جديدة منسوخة من المعتمدة (المعتمدة لا تتغير، حارس في القاعدة)
+// حفظ حالات المجموعة: في المسودة الحالية، أو في مسودة جديدة منسوخة من المعتمدة (المعتمدة لا تتغير، حارس في القاعدة)
+export async function writeCases(a: Admin, set: EvalSet, cases: any[]) {
+  const now = new Date().toISOString();
+  let version = set.version;
+  if (set.status === 'approved') {
+    version = nextVersion(set.version, now.slice(0, 10));
+    const { error } = await db.from('guidance_eval_sets').insert({ version, cases, status: 'draft', updated_by: a.email, updated_at: now });
+    if (error) throw error;
+  } else {
+    const { error } = await db.from('guidance_eval_sets').update({ cases, updated_by: a.email, updated_at: now }).eq('id', set.id).eq('status', 'draft');
+    if (error) throw error;
+  }
+  resetSet(); resetEvalGate();
+  return version;
+}
+
+// تعديل حالة: في المسودة الحالية، أو في مسودة جديدة منسوخة من المعتمدة
 export async function caseSave(a: Admin, b: Body) {
   requireAgentRead(a);
   const set = await evalSet();
   if (set.source !== 'db') throw new Fail('جدول المجموعة لم يُرحَّل بعد (20261116170000)', 409, 'not_migrated');
   const r: any = applyCaseEdit(set.cases, String(b.case_id || ''), b.patch || {});
   if (!r.ok) throw new Fail(String(r.error), 400, 'invalid');
-  const now = new Date().toISOString();
-  let version = set.version;
-  if (set.status === 'approved') {
-    version = nextVersion(set.version, now.slice(0, 10));
-    const { error } = await db.from('guidance_eval_sets').insert({ version, cases: r.cases, status: 'draft', updated_by: a.email, updated_at: now });
-    if (error) throw error;
-  } else {
-    const { error } = await db.from('guidance_eval_sets').update({ cases: r.cases, updated_by: a.email, updated_at: now }).eq('id', set.id).eq('status', 'draft');
-    if (error) throw error;
-  }
+  const version = await writeCases(a, set, r.cases);
   const before = set.cases.find((c: any) => c.id === b.case_id);
   await audit('admin', a.email, 'guide.eval-case', 'guidance_eval_sets', version, { case: before }, { case: r.cases.find((c: any) => c.id === b.case_id) });
-  resetSet(); resetEvalGate();
   return { success: true, version, new_draft: version !== set.version };
 }
 

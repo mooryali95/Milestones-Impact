@@ -16,19 +16,21 @@ const tally = (rows: any[] | null, col: string) => {
 };
 
 // حِمل خبراء الرحلة الآن (expertLoad): الطلبات المعروضة والمقبولة والجلسات القادمة مقابل ساعاتهم الأسبوعية (weekly_hours).
-// القراءة الواحدة لجدول «حِمل الخبراء» في الرؤية الشاملة وتنبيه «خبير فوق طاقته» في مكتب اليوم (today.ts)
+// القراءة الواحدة لجدول «حِمل الخبراء» في الرؤية الشاملة وتنبيه «خبير فوق طاقته» في مكتب اليوم (today-desk.ts).
+// طلبات حسابات العرض وجلساتها لا تُحسب (كالصندوق)، وتعذّر أي قراءة يُفشلها كلها: لا حِمل صفريًا يُخفي خبيرًا فوق طاقته
 export async function expertLoadNow() {
   const now = new Date().toISOString();
+  const P = 'participants!inner(is_demo)';
   const [experts, reqs, upcoming, roles] = await Promise.all([
     // طاقة خبراء الرحلة وحدهم (journeyApproved): عضو اللجنة بلا دور لا يُحسب فيها
     db.from('experts').select('id, full_name, title, status, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => ((must(r) ?? []) as any[]).filter(journeyApproved)),
-    db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null).limit(5000),
-    db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null).limit(5000),
-    db.from('expert_requests').select('expert_id, participant_id').eq('status', 'accepted').not('expert_id', 'is', null).limit(5000),
+    db.from('expert_requests').select(`expert_id, ${P}`).in('status', ['offered', 'accepted']).not('expert_id', 'is', null).eq('participants.is_demo', false).limit(5000).then((r) => (must(r) ?? []) as any[]),
+    db.from('coaching_sessions').select(`expert_id, ${P}`).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null).eq('participants.is_demo', false).limit(5000).then((r) => (must(r) ?? []) as any[]),
+    db.from('expert_requests').select(`expert_id, participant_id, ${P}`).eq('status', 'accepted').not('expert_id', 'is', null).eq('participants.is_demo', false).limit(5000).then((r) => (must(r) ?? []) as any[]),
   ]);
   const people_by: Record<string, Set<string>> = {};
-  for (const r of (roles.data || []) as any[]) (people_by[r.expert_id] ||= new Set()).add(r.participant_id);
-  return expertLoad(experts, { requests: tally(reqs.data as any[], 'expert_id'), upcoming: tally(upcoming.data as any[], 'expert_id'), people: Object.fromEntries(Object.entries(people_by).map(([k, v]) => [k, v.size])) });
+  for (const r of roles) (people_by[r.expert_id] ||= new Set()).add(r.participant_id);
+  return expertLoad(experts, { requests: tally(reqs, 'expert_id'), upcoming: tally(upcoming, 'expert_id'), people: Object.fromEntries(Object.entries(people_by).map(([k, v]) => [k, v.size])) });
 }
 
 // أين توقف المشاركون (بالجهة وبالدفعة) وحِمل الخبراء. بلا حسابات العرض، وحسابات الاختبار داخلة كما في قائمة المشاركين

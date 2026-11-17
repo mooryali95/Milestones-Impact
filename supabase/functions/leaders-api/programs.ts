@@ -137,13 +137,18 @@ export async function requirementIdByCode(p: any, code: string) {
 // عدد أعضاء كل دفعة فعلًا، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة
 // keep: يُعدّ من الأعضاء من يحقق الشرط فقط (مثل بانتظار الاعتماد)، بالقاعدة نفسها فلا عدّ ثانٍ
 export function memberCounts(participants: any[], enrollments: any[], cohorts: any[], keep: (p: any) => boolean = () => true) {
+  const out: Record<string, number> = {};
+  for (const id of Object.values(memberOf(participants, enrollments, cohorts, keep))) if (id) out[id] = (out[id] || 0) + 1;
+  return out;
+}
+// دفعة كل مشارك بالقاعدة نفسها (pickCohort)، وهي ما تعدّه memberCounts: مكتب اليوم (today-desk.ts) يقرؤها من هنا
+export function memberOf(participants: any[], enrollments: any[], cohorts: any[], keep: (p: any) => boolean = () => true) {
   const byP = new Map<string, any[]>();
   for (const e of enrollments) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
-  const out: Record<string, number> = {};
+  const out: Record<string, string | null> = {};
   for (const p of participants || []) {
     if (!keep(p)) continue;
-    const id = pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id;
-    if (id) out[id] = (out[id] || 0) + 1;
+    out[p.id] = pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort?.id || null;
   }
   return out;
 }
@@ -214,7 +219,9 @@ async function draftChanges(programIds: string[], versions: any[]): Promise<Reco
   } catch (e) { console.error('draftChanges:', (e as Error).message); return {}; }
 }
 
-export async function list() {
+// opt.desk لمكتب اليوم وحده (today-desk.ts): يضيف إلى الرد عضوية كل مشارك وصفوف الورش من القراءة نفسها، فلا يُعاد
+// قراءة المشاركين والتسجيلات والدفعات والورش مرة ثانية. لا يصل إلى ردّ admin.programs
+export async function list(_b: Body = {}, opt: { desk?: boolean } = {}) {
   const [programs, versions, cohorts, enr, orgs, reqs] = await Promise.all([
     db.from('programs').select('*').order('created_at'),
     db.from('program_versions').select('id, program_id, number, label, created_by, created_at').order('number', { ascending: false }),
@@ -279,6 +286,10 @@ export async function list() {
     // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
     // team_ready باقٍ للوحة المنشورة التي تُظهر حقل الفريق به؛ الجدول مطبّق فهو صحيح دائمًا
     team_ready: true,
+    ...(opt.desk ? { desk: {
+      member_of: enr.error || cohorts.error ? null : memberOf(people, enr.data || [], cohorts.data || []),
+      workshops: sess.error ? null : sess.data || [],
+    } } : {}),
   };
 }
 

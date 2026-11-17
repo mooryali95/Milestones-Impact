@@ -128,8 +128,10 @@ export async function orgs() {
   // حال دفعة كل جهة فعّالة بجاهزيتها (orgCohortSetups، المصدر نفسه لصفحة الجهة)، لسطرها في النظرة العامة.
   // تعذّر قراءتها لا يُفشل القائمة: يُترك الحقل فلا يظهر بند الدفعة ناقصًا بلا سبب
   const setups = await orgCohortSetups((list || []).filter((o: any) => o.status === 'active').map((o: any) => o.id)).catch(() => null);
+  // setups_failed: تعذّر قراءتها يُقال لمن يبني عليها حكمًا (تنبيه الجاهزية في مكتب اليوم) فلا يقرأ غيابها «مكتملة»
+  const active = (list || []).some((o: any) => o.status === 'active');
   return {
-    success: true,
+    success: true, setups_failed: active && !setups,
     orgs: (list || []).map((o: any) => ({ ...o, stats: stats((ps || []).filter((p: any) => p.organization_id === o.id)),
       access: orgAccessState(o, (coords || []).filter((c: any) => c.organization_id === o.id)),
       seats_used: ents ? (seated[o.id]?.size || 0) : null,
@@ -628,22 +630,26 @@ export async function reviews(b: Body = {}) {
 // قراءات متوازية، وتعذّر مصدر واحد لا يُسقط الصندوق: يظهر الباقي ويُسمّى المتعذّر في skipped.
 export async function inbox(_b: Body = {}) {
   const P = 'participants!inner(full_name, is_demo)';
+  // حد القراءة لكل نوع: النوع الذي يبلغه عدده «على الأقل» (capped)
+  const LIMIT = { approval: 200, requirement: 200, model: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100 };
   const q = {
-    approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(200),
-    requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
-    model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
-    capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(200),
+    approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(LIMIT.approval),
+    requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.requirement),
+    model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.model),
+    capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.capstone),
     // journey-guard: صندوق الإدارة يعدّ طلبات الانضمام بانتظار المراجعة، لا ترشيح فيه
-    expert_application: db.from('experts').select('id, full_name, title, created_at').eq('status', 'applied').limit(100),
-    expert_unmatched: db.from('expert_requests').select(`id, participant_id, role, created_at, ${P}`).eq('status', 'unmatched').limit(100),
-    sponsor: db.from('sponsor_requests').select(`id, participant_id, kind, created_at, ${P}`).eq('status', 'pending').limit(100),
-    erasure: db.from('erasure_requests').select(`id, participant_id, created_at, ${P}`).eq('status', 'pending').limit(100),
-    coaching_confirm: db.from('coaching_sessions').select(`id, participant_id, starts_at, ends_at, ${P}`).eq('status', 'booked').lt('ends_at', new Date().toISOString()).limit(100),
+    expert_application: db.from('experts').select('id, full_name, title, created_at').eq('status', 'applied').limit(LIMIT.expert_application),
+    expert_unmatched: db.from('expert_requests').select(`id, participant_id, role, created_at, ${P}`).eq('status', 'unmatched').limit(LIMIT.expert_unmatched),
+    sponsor: db.from('sponsor_requests').select(`id, participant_id, kind, created_at, ${P}`).eq('status', 'pending').limit(LIMIT.sponsor),
+    erasure: db.from('erasure_requests').select(`id, participant_id, created_at, ${P}`).eq('status', 'pending').limit(LIMIT.erasure),
+    coaching_confirm: db.from('coaching_sessions').select(`id, participant_id, starts_at, ends_at, ${P}`).eq('status', 'booked').lt('ends_at', new Date().toISOString()).limit(LIMIT.coaching_confirm),
   };
   const keys = Object.keys(q) as (keyof typeof q)[];
   const res = await Promise.all(keys.map((k) => q[k]));
   const rows: Record<string, any[]> = {}, skipped: string[] = [];
   keys.forEach((k, i) => { if (res[i].error) skipped.push(k); rows[k] = (res[i].data || []) as any[]; });
+  // capped: نوع بلغ حد قراءته فعدده أقل من الحقيقة؛ يعلّم به مكتب اليوم «ينتظر قرارًا» بأنه «على الأقل»
+  const capped = keys.filter((k) => rows[k].length >= LIMIT[k]);
   const name = (r: any) => r.participants?.full_name || '';
   const src = {
     approval: rows.approval.map((r) => ({ id: r.id, participant_id: r.id, title: r.full_name, sub: r.organization_name || '', at: r.updated_at })),
@@ -658,7 +664,7 @@ export async function inbox(_b: Body = {}) {
     erasure: rows.erasure.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: leftAr(daysLeft(r.created_at)), at: r.created_at })),
     coaching_confirm: rows.coaching_confirm.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'حضر أم لم يحضر؟', at: r.ends_at || r.starts_at })),
   };
-  return { success: true, ...inboxOf(src), skipped };
+  return { success: true, ...inboxOf(src), skipped, capped };
 }
 
 // الملفات الخاصة (السيرة والأدلة): للمدير وحده لا للمراقب، بمسار على شكل مسارات الرفع يبدأ بمعرّف

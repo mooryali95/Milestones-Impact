@@ -9,8 +9,12 @@
 import { audit, db, Fail, publicDb } from './core.ts';
 import type { Admin } from './admin.ts';
 import { needsSecondFactor } from './admin.ts';
-import { appSettings } from './settings.ts';
+import { adminSave, appSettings } from './settings.ts';
 import { GD } from './guide.ts';
+import { requireAgentRead } from './agent-admin.ts';
+import { evalSet, resetEvalGate, writeCases } from './guide-eval.ts';
+import { applyCaseAdd } from './guide-eval.js';
+import { redactInput } from '../agent-chat/redact.ts';
 
 type Body = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -157,4 +161,41 @@ export async function grantSet(a: Admin, b: Body) {
   }
   await audit('admin', a.email, on ? 'guide.transcript-grant' : 'guide.transcript-revoke', 'admin_users', id, null, { email: target.email, on });
   return { success: true, admin_id: id, granted: on };
+}
+
+// ── H4: «رد غير دقيق» يصير حالة في مجموعة التقييم ──
+// لمن يقرأ النص (المالك، والمدير الأعلى بمنحه) وبغلاف superWriter. السؤال يكتبه القارئ أو يعدّله قبل الحفظ، ويُزال منه
+// ما يدل على صاحبه (scrubQuestion وredactInput)، ولا يُحفظ في المجموعة معرّف المشارك ولا اسمه، بل رقم الرسالة في السجل.
+// الحالة تدخل مسودة المجموعة (أو مسودة جديدة من المعتمدة)، فتُسقط نجاح التقييم حتى يُعتمد ويُشغَّل من جديد.
+export async function flagReply(a: Admin, b: Body) {
+  await requireRead(a);
+  const id = Number(b.message_id);
+  if (!Number.isInteger(id) || id <= 0) throw new Fail('معرّف غير صحيح', 400, 'bad_id');
+  const { data: m, error } = await db.from('guidance_messages').select('id, participant_id, role, context, chapter_id').eq('id', id).maybeSingle();
+  if (error) { if (missing(error)) throw notMigrated(); throw error; }
+  if (!m || (m as any).role !== 'assistant') throw new Fail('الرسالة غير موجودة أو ليست ردًا للمساعد', 404, 'not_found');
+  let where: any = { context: 'program' };
+  if ((m as any).context === 'handbook' && (m as any).chapter_id) {
+    const { data: mod } = await db.from('handbook_modules').select('dimension, chapter_key').eq('id', (m as any).chapter_id).maybeSingle();
+    if (mod) where = { context: 'handbook', dimension: (mod as any).dimension, chapter_key: (mod as any).chapter_key };
+  }
+  const set = await evalSet();
+  if (set.source !== 'db') throw new Fail('جدول المجموعة لم يُرحَّل بعد (20261116170000)', 409, 'not_migrated');
+  const question = redactInput(String(b.question || '')).text;
+  const r: any = applyCaseAdd(set.cases, {
+    ...where, kind: b.kind, question, level: b.level, reference_ar: b.reference_ar,
+    must_include: b.must_include, must_not_include: b.must_not_include, source: `رد غير دقيق في المحادثات (رقم ${id})`,
+  });
+  if (!r.ok) throw new Fail(String(r.error), 400, 'invalid');
+  const version = await writeCases(a, set, r.cases);
+  await audit('admin', a.email, 'guide.reply-flag', 'guidance_messages', String(id), null, { case_id: r.id, version, kind: r.cases.at(-1).kind });
+  return { success: true, case_id: r.id, version, new_draft: version !== set.version };
+}
+
+// ── H4: توجيهات المالك للمساعد (guidance.extra_rules)، تُحفظ بمسار الإعدادات نفسه فتُسجَّل قبل وبعد ──
+export async function rulesSave(a: Admin, b: Body) {
+  requireAgentRead(a);
+  const r = await adminSave(a, { group: 'guidance', values: { extra_rules: String(b.extra_rules ?? '') } });
+  resetEvalGate();
+  return { success: true, saved: !!(r as any)?.success };
 }

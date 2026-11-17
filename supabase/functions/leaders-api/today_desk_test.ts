@@ -13,12 +13,11 @@ const cohort = { id: 'c1', name: 'دفعة الخريف', status: 'running', org
 
 Deno.test('admin.today: مصدر متعذر يُسمّى في skipped، والباقي يُبنى، ولا يسقط الرد', async () => {
   const r: any = await TD.today({}, {
-    orgs: async () => [{ id: 'o1', name: 'جهة', status: 'active', seats: 5, seats_used: 5, invite_code: 'X', contract_ends: '2099-01-01', logo: 'l', access: { state: 'active', n: 1 }, stats: { total: 5 } }],
-    programs: async () => ({ cohorts: [cohort], organizations: [], programs: [{ id: 'p1', name: 'ب', requirements: 2, versions: [] }] }),
+    orgs: async () => ({ rows: [{ id: 'o1', name: 'جهة', status: 'active', seats: 5, seats_used: 5, invite_code: 'X', contract_ends: '2099-01-01', logo: 'l', access: { state: 'active', n: 1 }, stats: { total: 5 } }], setups_failed: false }),
+    programs: async () => ({ cohorts: [cohort], organizations: [], programs: [{ id: 'p1', name: 'ب', requirements: 2, versions: [] }], desk: { member_of: { a: 'c1' }, workshops: [] } }),
     inbox: async () => ({ items: [{ kind: 'approval', id: 'a', participant_id: 'a' }], skipped: [] }),
     experts: async () => { throw new Error('experts down'); },
-    sessions: async () => ({ workshops: [], coaching: [] }),
-    members: async () => ({ a: 'c1' }),
+    sessions: async () => [],
   });
   assertEquals(r.success, true);
   assertEquals(r.skipped, ['experts']);
@@ -28,24 +27,74 @@ Deno.test('admin.today: مصدر متعذر يُسمّى في skipped، والب
   assertEquals(r.pulse[0].waiting, 1);
 });
 
-Deno.test('admin.today: العضوية بقاعدة pickCohort بلا حسابات العرض، والجلسات المؤرخة القادمة، ولا كتابة', async () => {
+Deno.test('admin.today: العضوية والورش من رد الدفعات نفسه، وتعذّر جزء منه أو من جاهزية الجهات يُسمّى', async () => {
+  const base = {
+    orgs: async () => ({ rows: [], setups_failed: true }),
+    programs: async () => ({ cohorts: [cohort], organizations: [], programs: [], desk: { member_of: null, workshops: null } }),
+    inbox: async () => ({ items: [], skipped: [] }),
+    experts: async () => [],
+    sessions: async () => [],
+  };
+  const r: any = await TD.today({}, base);
+  assertEquals(r.skipped, ['org_setups', 'members', 'sessions']);
+  assertEquals(r.unchecked, ['cohort_no_session', 'org_readiness']);
+  assertEquals(r.pulse[0].waiting, null);
+  assertEquals(r.pulse[0].next_at, null);
+  // تعذّر الدفعات كلها يكفي اسمه: لا يُضاف إليه الأعضاء والجلسات
+  const r2: any = await TD.today({}, { ...base, orgs: async () => ({ rows: [], setups_failed: false }), programs: async () => { throw new Error('down'); } });
+  assertEquals(r2.skipped, ['programs']);
+  assertEquals(r2.pulse_known, false);
+});
+
+Deno.test('admin.today: جلسة التوجيه المحجوزة التي لم ينتهِ (والجاري منذ أيام)، لا المنتهي ولا الملغى، ولا كتابة', async () => {
   const fake = installFake({
-    participants: [{ id: 'p1', organization_id: null, is_demo: false }, { id: 'demo', organization_id: null, is_demo: true }],
-    enrollments: [{ participant_id: 'p1', cohort_id: 'c1', status: 'active', created_at: day(-5) }, { participant_id: 'demo', cohort_id: 'c1', status: 'active', created_at: day(-5) }],
-    cohorts: [cohort],
-    workshop_sessions: [{ cohort_id: 'c1', active: true, starts_at: inDays(4), ends_at: null }, { cohort_id: 'c1', active: true, starts_at: inDays(-20), ends_at: null }],
-    coaching_sessions: [{ participant_id: 'p1', status: 'booked', starts_at: inDays(2), ends_at: null }, { participant_id: 'p1', status: 'cancelled', starts_at: inDays(1), ends_at: null }],
+    coaching_sessions: [
+      { participant_id: 'p1', status: 'booked', starts_at: inDays(2), ends_at: null },
+      { participant_id: 'p1', status: 'booked', starts_at: inDays(-3), ends_at: inDays(1) },
+      { participant_id: 'p1', status: 'booked', starts_at: inDays(-3), ends_at: inDays(-2) },
+      { participant_id: 'p1', status: 'cancelled', starts_at: inDays(1), ends_at: null },
+      { participant_id: 'p1', status: 'booked', starts_at: inDays(400), ends_at: null },
+    ],
   });
   try {
-    const m = await TD.LOADERS.members();
-    assertEquals(m, { p1: 'c1' });
-    const s = await TD.LOADERS.sessions();
-    assertEquals(s.workshops.length, 1);
-    assertEquals(s.coaching.length, 1);
-    const d: any = deskOf({ programs: { cohorts: [cohort], organizations: [], programs: [] }, sessions: s, members: m, orgs: [], experts: [], inbox: { items: [] } });
-    assertEquals(d.pulse[0].next_at, inDays(2));
+    const c = await TD.LOADERS.sessions();
+    assertEquals(c.length, 2);
+    const d: any = deskOf({ programs: { cohorts: [cohort], organizations: [], programs: [] }, sessions: { workshops: [], coaching: c }, members: { p1: 'c1' }, orgs: [], experts: [], inbox: { items: [] } });
+    assertEquals(d.pulse[0].next_at, inDays(-3));
     assertEquals(d.alerts, []);
     assertEquals(fake.writes, []);
+  } finally { fake.restore(); }
+});
+
+Deno.test('memberOf: دفعة كل مشارك بقاعدة pickCohort، وmemberCounts يعدّها هي نفسها', async () => {
+  const G = await import('./programs.ts');
+  const enr = [{ participant_id: 'p1', cohort_id: 'c1', status: 'active', created_at: day(-5) }];
+  const m = G.memberOf([{ id: 'p1', organization_id: null }, { id: 'p2', organization_id: null }], enr, [cohort]);
+  assertEquals(m.p1, 'c1');
+  assertEquals(G.memberCounts([{ id: 'p1', organization_id: null }, { id: 'p2', organization_id: null }], enr, [cohort]), Object.values(m).reduce((o: any, id) => (id ? { ...o, [id]: (o[id] || 0) + 1 } : o), {}));
+});
+
+Deno.test('حِمل الخبراء: طلبات حسابات العرض وجلساتها لا تُحسب، وتعذّر قراءة يُفشله فيُسمّى في skipped', async () => {
+  const live = { is_demo: false }, demo = { is_demo: true };
+  const tables = {
+    experts: [{ id: 'e1', full_name: 'خبير', status: 'active', roles: ['coach'], weekly_hours: 1 }],
+    expert_requests: [{ expert_id: 'e1', participant_id: 'd', status: 'accepted', participants: demo }, { expert_id: 'e1', participant_id: 'd2', status: 'offered', participants: demo }],
+    coaching_sessions: [{ expert_id: 'e1', participant_id: 'd', status: 'booked', starts_at: inDays(2), participants: demo }],
+  };
+  const { expertLoadNow } = await import('./insight.ts');
+  let fake = installFake(structuredClone(tables));
+  try {
+    const rows: any[] = await expertLoadNow();
+    assertEquals(rows.length, 1);
+    assert(rows[0].state !== 'over', 'حساب العرض لا يرفع الخبير فوق طاقته');
+  } finally { fake.restore(); }
+  fake = installFake(structuredClone({ ...tables, expert_requests: [...tables.expert_requests, { expert_id: 'e1', participant_id: 'p', status: 'accepted', participants: live }, { expert_id: 'e1', participant_id: 'q', status: 'offered', participants: live }] }));
+  try { const rows: any[] = await expertLoadNow(); assertEquals(rows[0].state, 'over'); } finally { fake.restore(); }
+  fake = installFake(structuredClone(tables), { fail: (t) => (t === 'coaching_sessions' ? { message: 'down' } : null) });
+  try {
+    const r: any = await TD.today({}, { ...TD.LOADERS, orgs: async () => [], programs: async () => null, inbox: async () => ({ items: [] }), sessions: async () => [] });
+    assert(r.skipped.includes('experts'));
+    assert(r.unchecked.includes('expert_over'));
   } finally { fake.restore(); }
 });
 

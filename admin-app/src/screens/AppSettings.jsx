@@ -47,6 +47,15 @@ function Field({ id, f, value, error, onChange, disabled }) {
       </fieldset>
     );
   }
+  if (f.type === 'text') {
+    return (
+      <label className="of-field"><span className="of-label">{f.label_ar}</span>
+        <textarea rows={5} maxLength={f.max} value={value ?? ''} disabled={disabled}
+          aria-describedby={hint ? `${id}-h` : undefined} aria-invalid={error ? 'true' : undefined} onChange={(e) => onChange(e.target.value)} />
+        {hint}{err}
+      </label>
+    );
+  }
   return (
     <label className="of-field"><span className="of-label">{f.label_ar}</span>
       <input dir="ltr" inputMode={f.type === 'int' ? 'numeric' : 'decimal'} value={asText(value)} disabled={disabled}

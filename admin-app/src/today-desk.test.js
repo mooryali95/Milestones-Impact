@@ -32,7 +32,7 @@ describe('الدفعة الجارية وأقرب جلسة', () => {
     expect(isRunning({ ...running, starts_on: null }, NOW)).toBe(false);
     expect(isRunning({ ...running, ends_on: null }, NOW)).toBe(true);
   });
-  it('أقرب جلسة: ورشة الدفعة أو العامة أو كوتشينغ أحد أعضائها، وغير المؤرخة لا تُحسب', () => {
+  it('أقرب جلسة: ورشة الدفعة أو العامة أو جلسة توجيه لأحد أعضائها، وغير المؤرخة لا تُحسب', () => {
     const at = nextSessionAt(running, { workshops: [{ cohort_id: null, starts_at: inDays(9) }, { cohort_id: 'c9', starts_at: inDays(1) }, { cohort_id: 'c1', starts_at: null }], coaching: [{ participant_id: 'p1', starts_at: inDays(5) }, { participant_id: 'zz', starts_at: inDays(2) }], members: new Set(['p1']), now: NOW });
     expect(at).toBe(inDays(5));
     expect(nextSessionAt(running, { workshops: [{ cohort_id: 'c1', active: false, starts_at: inDays(1) }], now: NOW })).toBe(null);
@@ -96,5 +96,36 @@ describe('نبض الدفعات', () => {
     const noProg = deskOf(src({ programs: null, skipped: ['programs'] }));
     expect(noProg.pulse).toEqual([]);
     expect(noProg.pulse_known).toBe(false);
+  });
+});
+
+describe('إصلاحات المراجعة', () => {
+  it('«مخططة» ليست جارية ولو مضى تاريخ بدايتها، و«التسجيل مفتوح» جارية', () => {
+    expect(isRunning({ ...running, status: 'planned' }, NOW)).toBe(false);
+    expect(isRunning({ ...running, status: 'open' }, NOW)).toBe(true);
+    const d = deskOf(src({ programs: { cohorts: [{ ...quiet, status: 'planned' }], organizations: [], programs: [program] } }));
+    expect(d.pulse).toEqual([]);
+    expect(d.alerts.some((a) => a.kind === 'cohort_no_session')).toBe(false);
+  });
+  it('نافذة «قريبة» مشتقة من SESSION_WINDOW_MS، والورشة بقاعدة workshopOf نفسها', async () => {
+    const { SESSION_WINDOW_MS, workshopOf } = await import('../../supabase/functions/leaders-api/cohort-setup.js');
+    expect(UPCOMING_DAYS * 864e5).toBe(SESSION_WINDOW_MS);
+    expect(workshopOf(running, { cohort_id: null })).toBe(true);
+    expect(workshopOf(running, { cohort_id: 'c9' })).toBe(false);
+    expect(workshopOf(running, { cohort_id: 'c1', active: false })).toBe(false);
+  });
+  it('تعذّر جاهزية دفعات الجهات: التنبيه بما قُرئ، ونوعه «لم يُفحص» كاملًا', () => {
+    const d = deskOf(src({ skipped: ['org_setups'] }));
+    expect(d.unchecked).toEqual(['org_readiness']);
+    expect(d.alerts.some((a) => a.kind === 'seats_full')).toBe(true);
+  });
+  it('نوع في الصندوق بلغ حد قراءته: «ينتظر قرارًا» على الأقل', () => {
+    expect(deskOf(src({ inbox: { items: [], skipped: [], capped: ['approval'] } })).waiting_partial).toBe(true);
+    expect(deskOf(src()).waiting_partial).toBe(false);
+  });
+  it('نوع الدفعة مع السطر: دفعة الجهة بلا اسم مقروء لا تُوصف «أفراد»', () => {
+    const d = deskOf(src({ programs: { cohorts: [running, quiet], organizations: [], programs: [program] } }));
+    expect(d.pulse.find((p) => p.id === 'c1')).toMatchObject({ org: null, kind: 'org' });
+    expect(d.pulse.find((p) => p.id === 'c2')).toMatchObject({ kind: 'individuals' });
   });
 });

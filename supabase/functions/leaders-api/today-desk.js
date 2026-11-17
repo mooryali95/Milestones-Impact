@@ -10,36 +10,40 @@
 //   ما ينتظر القرار ← بنود admin.inbox نفسها (inbox.js)، وعضوية الدفعة بقاعدة pickCohort (في today-desk.ts)
 // المصدر المتعذر (skipped) لا يُسقط الرد: لا يُبنى منه تنبيه، وما يعتمد عليه في النبض يبقى مجهولًا (null) لا صفرًا.
 import { orgReadinessOf, readinessSummary, seatsFull } from './org-readiness.js';
-import { cohortReadiness, hubSummary } from './cohort-readiness.js';
-import { usesHandbook } from './cohort-setup.js';
+import { cohortKind, cohortReadiness, hubSummary } from './cohort-readiness.js';
+import { SESSION_WINDOW_MS, usesHandbook, workshopOf } from './cohort-setup.js';
 
-// نافذة «جلسة قادمة» للدفعة الجارية: أربعة عشر يومًا، نافذة الجلسات نفسها في cohort-setup.js (SESSION_WINDOW_MS)
-export const UPCOMING_DAYS = 14;
+// نافذة «جلسة قادمة» للدفعة الجارية: نافذة الجلسات نفسها في cohort-setup.js (SESSION_WINDOW_MS، أربعة عشر يومًا)
 const DAY = 864e5;
+export const UPCOMING_DAYS = Math.round(SESSION_WINDOW_MS / DAY);
 const isoDay = (now) => new Date(now).toISOString().slice(0, 10);
 
 // المصادر بأسمائها كما تُعرض في سطر «تعذّرت قراءة»
 export const SOURCE_AR = {
-  orgs: 'الجهات', programs: 'الدفعات والبرامج', inbox: 'صندوق القرارات', experts: 'حِمل الخبراء', sessions: 'الجلسات', members: 'أعضاء الدفعات',
+  orgs: 'الجهات', org_setups: 'جاهزية دفعات الجهات', programs: 'الدفعات والبرامج', inbox: 'صندوق القرارات', experts: 'حِمل الخبراء', sessions: 'الجلسات', members: 'أعضاء الدفعات',
 };
 // ما يقوم عليه كل نوع تنبيه: تعذّر أحدها لا يُقال معه «لا تنبيه» عن هذا النوع
 export const ALERT_KINDS = {
   seats_full: { label: 'المقاعد ممتلئة', needs: ['orgs'] },
   cohort_no_session: { label: 'دفعة جارية بلا جلسة قريبة', needs: ['programs', 'sessions', 'members'] },
   expert_over: { label: 'خبير فوق طاقته', needs: ['experts'] },
-  org_readiness: { label: 'جهة لم تكتمل جاهزيتها', needs: ['orgs'] },
+  // جاهزية دفعات الجهات مصدر فرعي من الجهات (orgCohortSetups): تعذّرها يُبقي التنبيه بما قُرئ ويقول إن بند الدفعة لم يُفحص
+  org_readiness: { label: 'جهة لم تكتمل جاهزيتها', needs: ['orgs', 'org_setups'] },
 };
 const SEVERITY_RANK = { bad: 0, warn: 1 };
 
-// الدفعة الجارية: بدأت ولم تنتهِ (قاعدة runningCohort في programs.ts، بتاريخ UTC نفسه)، وليست مغلقة
+// الدفعة الجارية: حالها «التسجيل مفتوح» أو «جارية» (الدفعة الحية كما في live_cohorts في programs.ts؛ «مخططة» لم تبدأ
+// ولا يدخلها أحد تلقائيًا)، وبدأت ولم تنتهِ بتاريخ UTC كما في runningCohort
+const LIVE = new Set(['open', 'running']);
 export function isRunning(c, now = Date.now()) {
   const today = isoDay(now);
-  return !!c && c.status !== 'closed' && !!c.starts_on && c.starts_on <= today && (!c.ends_on || c.ends_on >= today);
+  return !!c && LIVE.has(c.status) && !!c.starts_on && c.starts_on <= today && (!c.ends_on || c.ends_on >= today);
 }
 
 /**
- * أقرب جلسة مؤرخة قادمة للدفعة: ورشة فعّالة لها أو بلا دفعة (تعمّ الدفعات، كما في sessionsFor)، أو جلسة كوتشينغ محجوزة
- * لأحد أعضائها. الجلسة الجارية الآن (بدأت ولم تنتهِ) قادمة كذلك. غير المؤرخة («يُحدد لاحقًا») لا تُحسب: لا موعد لها.
+ * أقرب جلسة مؤرخة قادمة للدفعة: ورشة تخصها (workshopOf، قاعدة sessionsFor نفسها)، أو جلسة توجيه محجوزة لأحد أعضائها.
+ * وهذا أوسع عمدًا من بند «الجلسات» في جاهزية الدفعة (ورش فقط، وتُحسب فيه غير المؤرخة والحديثة): التنبيه يسأل «هل يلتقي
+ * أحد من الدفعة بأحد قريبًا؟»، والبند يسأل «هل ضُبط جدول الورش؟»، فقد يظهر أحدهما دون الآخر. الجلسة الجارية الآن (بدأت ولم تنتهِ) قادمة كذلك. غير المؤرخة («يُحدد لاحقًا») لا تُحسب: لا موعد لها.
  * @param {{ id: string }} cohort
  * @param {{ workshops?: any[], coaching?: any[], members?: Set<string>|null, now?: number }} d
  * @returns {string|null} وقت البداية ISO
@@ -47,7 +51,7 @@ export function isRunning(c, now = Date.now()) {
 export function nextSessionAt(cohort, { workshops = [], coaching = [], members = null, now = Date.now() } = {}) {
   const live = (s) => s.starts_at && Date.parse(s.ends_at || s.starts_at) >= now;
   const dates = [
-    ...(workshops || []).filter((w) => w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id) && live(w)).map((w) => w.starts_at),
+    ...(workshops || []).filter((w) => workshopOf(cohort, w) && live(w)).map((w) => w.starts_at),
     ...(members ? (coaching || []).filter((s) => s.status !== 'cancelled' && members.has(s.participant_id) && live(s)).map((s) => s.starts_at) : []),
   ];
   return dates.length ? dates.reduce((a, b) => (Date.parse(b) < Date.parse(a) ? b : a)) : null;
@@ -70,7 +74,9 @@ const countAr = (n, one, two, many, single) => (n === 1 ? one : n === 2 ? two : 
 export function deskOf(src = {}) {
   const now = src.now ?? Date.now();
   const skipped = [...new Set(src.skipped || [])];
-  const has = (k) => src[k] != null && !skipped.includes(k);
+  // المصدر الفرعي (org_setups) يُعرف بمصدره الأب ما لم يُسمَّ متعذرًا
+  const SUB = { org_setups: 'orgs' };
+  const has = (k) => !skipped.includes(k) && (SUB[k] ? has(SUB[k]) : src[k] != null);
   const alerts = [];
 
   // ── الجهات: المقاعد الممتلئة، ثم الجاهزية الناقصة بأسماء ما بقي ──
@@ -135,7 +141,7 @@ export function deskOf(src = {}) {
   const pulse = running.map((c) => {
     const hub = cohortReadiness({ cohort: c, cohorts, orgs: src.programs.organizations || [], programs: src.programs.programs || [] });
     return {
-      id: c.id, name: c.name, org: c.organization_id ? orgName[c.organization_id] || null : null,
+      id: c.id, name: c.name, org: c.organization_id ? orgName[c.organization_id] || null : null, kind: cohortKind(c),
       starts_on: c.starts_on, ends_on: c.ends_on || null,
       readiness: { missing: hub.missing, total: hub.items.length, summary: hubSummary(hub) },
       next_at: nextOf(c), handbook: usesHandbook(c),
@@ -145,7 +151,7 @@ export function deskOf(src = {}) {
 
   // أنواع التنبيه التي لم تُفحص لتعذّر مصدرها: تقولها الواجهة «لم تُفحص» لا «لا تنبيه»
   const unchecked = Object.entries(ALERT_KINDS).filter(([, d]) => d.needs.some((k) => !has(k))).map(([k]) => k);
-  // صندوق قُرئ ناقصًا (نوع منه متعذر): أعداد «ينتظر قرارًا» أقل من الحقيقة، فتُعلَّم «على الأقل»
-  const waiting_partial = waitingKnown && (src.inbox.skipped || []).length > 0;
+  // صندوق قُرئ ناقصًا (نوع منه متعذر، أو بلغ حد قراءته: capped): أعداد «ينتظر قرارًا» أقل من الحقيقة، فتُعلَّم «على الأقل»
+  const waiting_partial = waitingKnown && ((src.inbox.skipped || []).length > 0 || (src.inbox.capped || []).length > 0);
   return { success: true, alerts, pulse, pulse_known: has('programs'), skipped, unchecked, waiting_partial };
 }
