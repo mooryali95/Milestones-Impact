@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PGlite } from '@electric-sql/pglite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   bySessionTime, checkinOpen, isUndated, linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, workshopSchedule, workshopStatus,
 } from '../../supabase/functions/leaders-api/logic.js';
@@ -166,7 +166,13 @@ describe('ما يراه المشارك: لا 1970 ولا تقويم ولا «ق�
     expect(html).not.toContain('قادمة');
     expect(html).not.toContain('أضف إلى تقويمي');
     expect(html).not.toContain('امسح رمز الحضور');
-    const inPerson = renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({ verify: 'qr' }, [dated], new Set(), NOW) }, open: true, setToast: () => {} }));
+    // البند يحسب «القادمة» بساعة الجهاز (Date.now)، فتُثبَّت على NOW وإلا صارت جلسة «الغد» ماضية بعد يومها (سقط في 2026-11-17)
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    let inPerson;
+    try {
+      inPerson = renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({ verify: 'qr' }, [dated], new Set(), NOW) }, open: true, setToast: () => {} }));
+    } finally { vi.useRealTimers(); }
     expect(inPerson).toContain('امسح رمز الحضور');
   });
   it('«يصلك الرابط» لما قبل الجلسة وحدها: لا للجارية ولا المنتهية (linkPending)', () => {

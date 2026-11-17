@@ -5,7 +5,8 @@
 # يفرّغ مخططات leaders وpublic وauth (ومعها دلو leaders-private إن وُجد SUPABASE_SERVICE_ROLE_KEY)،
 # ويشفّر عند المصدر بالمفتاح العام (لمستلم أو أكثر) فلا يحمل المشغّل ما يفك التشفير، ويرفع إلى R2 مع بيان بالبصمات
 # وعدد الصفوف يقارنه تمرين الاستعادة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare.
-# خيارات البيئة: BACKUP_SCHEMAS (افتراضيًا leaders,public,auth)، وBACKUP_PREFIX (daily، أو archive لتفريغ مرة واحدة
+# خيارات البيئة: BACKUP_SCHEMAS (افتراضيًا leaders,public,auth)، وBACKUP_EXCLUDE_DATA (جداول بلا صفوف، افتراضيًا
+# leaders.guidance_messages)، وBACKUP_PREFIX (daily، أو archive لتفريغ مرة واحدة
 # مثل مخطط sspdf في D13)، وBACKUP_OUT (مجلد تبقى فيه النسخ المشفرة، افتراضيًا مجلد مؤقت يُحذف).
 # بلا مفتاح عام وبـ BACKUP_PASSPHRASE وحده يعمل بالتشفير المتماثل القديم مع تحذير، حتى يضبط المالك المفتاح.
 # المتطلبات: bash وage (أو gpg) وnode 20، وpg_dump من إصدار الخادم (BACKUP_PG_MAJOR، افتراضيًا 17) أو docker.
@@ -113,6 +114,10 @@ bytes() { wc -c < "$1" | tr -d ' '; }
 dump="$OUT/db-$TAG-$STAMP.dump"
 args=(--no-owner --no-privileges -Fc)
 for s in ${SCHEMAS//,/ }; do args+=("--schema=$s"); done
+# جداول تُنسخ بنيتها بلا صفوفها (قرار المالك 2026-11-17): محادثات «التوجيه والإرشاد» مدة حفظها 90 يومًا، والنسخة الشهرية
+# مقفلة 365 يومًا، فنسخ صفوفها يطيل بقاءها خلافًا لما يُقال للمشارك. ليست بيانًا يلزم استرجاعه، والاستعادة تعيد الجدول فارغًا.
+EXCLUDE_DATA="${BACKUP_EXCLUDE_DATA:-leaders.guidance_messages}"
+for t in ${EXCLUDE_DATA//,/ }; do args+=("--exclude-table-data=$t"); done
 pgtool pg_dump "$SUPABASE_DB_URL" "${args[@]}" > "$dump"
 test -s "$dump"
 
