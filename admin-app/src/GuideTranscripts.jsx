@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { dateTime as date, L } from './leaders.js';
 import { Spinner, useUI } from './ui.jsx';
+import { Switch } from './ai-ui.jsx';
 import './agent-admin.css';
 
 const VERDICT_AR = { answered: 'أجاب', unsure: 'لم يتأكد', refused: 'رفض', error: 'تعذّر' };
@@ -127,8 +128,8 @@ export function TranscriptGrants() {
     <div data-transcript-grants>
       {!g.admins.length ? <p className="la-muted small">لا مدير أعلى غيرك.</p> : (
         <ul className="gd-toggles">{g.admins.map((x) => (
-          <li key={x.id}><label className="row"><input type="checkbox" checked={x.granted} onChange={(e) => flip(x, e.target.checked)} /> <span>{x.email}</span>
-            {x.granted && x.granted_at ? <span className="la-muted small"> منذ {date(x.granted_at)}</span> : null}</label></li>
+          <li key={x.id}><Switch id={`gd-grant-${x.id}`} label={x.email} checked={!!x.granted} on="يطّلع" off="لا يطّلع" onChange={(on) => flip(x, on)}
+            hint={x.granted && x.granted_at ? <small className="la-muted">منذ {date(x.granted_at)}</small> : null} /></li>
         ))}</ul>
       )}
       <h4 className="gd-sub">آخر من اطّلع</h4>

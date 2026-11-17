@@ -130,17 +130,25 @@ test('التبويب في مجموعة «البرامج»، والأقسام ب�
 test('التفعيل معطل حتى ينجح التقييم: ثلاث دفعات ثم «ناجح»، ثم التفعيل يعمل', async ({ page }) => {
   const { calls } = await setup(page);
   const status = sec(page, 'الحالة والتحكم');
-  await expect(status.getByRole('checkbox')).toBeDisabled();
-  await expect(status).toContainText('شغّل التقييم أولًا');
+  // مفتاح تبديل بدور switch واسم من نصه المرئي، وسبب التعطيل مربوط به وصفًا
+  const sw = status.getByRole('switch', { name: 'مساعد الموقع للزوار' });
+  await expect(sw).toBeDisabled();
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  await expect(sw).toHaveAccessibleDescription('شغّل التقييم أولًا');
+  await expect(status.locator('.ai-chip')).toHaveText('مطفأ من اللوحة');
   await sec(page, 'التقييم').getByRole('button', { name: 'شغّل التقييم الآن' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'شغّل' }).click();
   await expect(sec(page, 'التقييم').getByRole('button', { name: /ناجح/ })).toBeVisible();
   expect(calls.filter((c) => c.action === 'admin.agent-eval-step').length).toBe(3);
-  await expect(status.getByRole('checkbox')).toBeEnabled();
+  await expect(sw).toBeEnabled();
   await expect(status).toContainText('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 90% واختبار الحماية 100%');
-  await status.getByRole('checkbox').click();
+  await sw.click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'فعّل' }).click();
   await expect(status.locator('.ag-sum')).toHaveText(/مفعّل ويرد الآن/);
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await expect(status.locator('.ai-chip')).toHaveText('مفعّل من اللوحة');
+  // سطر الحال في رأس القسم يتبع إعادة التحميل بعد التفعيل، بلا طلب إضافي
+  await expect(page.getByRole('list', { name: 'حال المساعدَين الآن' })).toContainText('مساعد الموقع مفعّل ويرد الآن');
   expect(calls.find((c) => c.action === 'admin.agent-enable').body.enabled).toBe(true);
 });
 
@@ -198,7 +206,7 @@ test('المراقب لا يرى التبويب، والمالك بدور مدي
   await expect(p2.locator('.ag-head .la-chip')).toHaveText('عرض فقط');
   await expect(p2.getByRole('button', { name: 'شغّل التقييم الآن' })).toHaveCount(0);
   await expect(p2.getByLabel('مفتاح جديد')).toHaveCount(0);
-  await expect(sec(p2, 'الحالة والتحكم').getByRole('checkbox')).toBeDisabled();
+  await expect(sec(p2, 'الحالة والتحكم').getByRole('switch')).toBeDisabled();
 });
 
 test('نموذج الجهة: مفتاح المرافق بنصه المساعد، والحفظ يرسل companion_allowed: false', async ({ page }) => {
@@ -234,6 +242,32 @@ test('قبل الترحيل: رسالة الترحيل وحدها', async ({ pag
   await setup(page, { ready: false });
   await expect(page.getByText('لم يُطبَّق ترحيل 20261115230000 بعد')).toBeVisible();
   await expect(sec(page, 'الحالة والتحكم')).toHaveCount(0);
+});
+
+test('رأس القسم: سطر حال المساعدَين من طلبات الشاشة نفسها، وصف المؤشرات، وإلغاء الإطفاء يبقي المفتاح كما هو', async ({ page }) => {
+  const { calls } = await setup(page, { enabled: true, runs: [passed] });
+  const line = page.getByRole('list', { name: 'حال المساعدَين الآن' });
+  await expect(line).toContainText('اليوم 0.42 من 2.00 دولار، 128 محادثة في 30 يومًا');
+  // لوحة التوجيه غير محاكاة في هذا الملف: لا يُكتب سطرها، ولا عنصر نائب مكانه
+  await expect(line.getByRole('listitem')).toHaveCount(1);
+  const kpis = page.getByRole('tabpanel', { name: 'مساعد الموقع' }).locator('dl.ai-kpis');
+  await expect(kpis).toHaveAttribute('aria-label', 'مؤشرات مساعد الموقع');
+  await expect(kpis).toContainText('إنفاق اليوم');
+  await expect(kpis).toContainText('128');
+  await expect(kpis).toContainText('ناجح لهذا الإعداد');
+  // الرأس والشاشة يتشاركان القراءة الأولى: طلب واحد لكل منهما في تحميل الصفحة
+  const mark = calls.length;
+  await page.reload();
+  await expect(kpis).toContainText('128');
+  await expect(line).toContainText('128 محادثة');
+  expect(calls.slice(mark).filter((c) => c.action === 'admin.agent-state').length).toBe(1);
+  expect(calls.slice(mark).filter((c) => c.action === 'admin.agent-usage').length).toBe(1);
+  const sw = sec(page, 'الحالة والتحكم').getByRole('switch', { name: 'مساعد الموقع للزوار' });
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await sw.press('Space');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'إلغاء' }).click();
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  expect(calls.some((c) => c.action === 'admin.agent-enable')).toBe(false);
 });
 
 test('الضيق 375 بكسل: لا تمرير أفقي للصفحة', async ({ page }) => {

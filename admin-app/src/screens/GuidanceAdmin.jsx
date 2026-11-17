@@ -6,8 +6,10 @@
 // أعداد وكلفة بلا نص محادثة، وسجل المحادثات (H3) للمالك وللمدير الأعلى بمنحه، وكل فتح يُسجَّل.
 import React, { useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
-import { Spinner, useUI } from '../ui.jsx';
+import { Empty, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
+import { aiLoad } from '../ai-hub-data.js';
+import { AiSkeleton, Kpis, Switch, TabIntro } from '../ai-ui.jsx';
 import '../agent-admin.css';
 import { GuideConversations, TranscriptGrants, transcriptAccess } from '../GuideTranscripts.jsx';
 
@@ -188,10 +190,8 @@ function StatusPart({ d, reload, setD }) {
     <>
       <p className={open ? 'ops-flag on' : 'ops-flag off'} role="status">{open ? '✓ مفتوح لأعضاء الدفعات التجريبية' : '✕ مغلق لكل المشاركين'}</p>
       {!open && <ul className="la-muted small" aria-label="ما يمنع الفتح">{d.blockers.map((b) => <li key={b}>{b}</li>)}</ul>}
-      <label className="of-switch">
-        <input type="checkbox" role="switch" checked={d.settings.enabled} disabled={busy || !d.can_write} onChange={(e) => flip(e.target.checked)} />
-        <span>{d.settings.enabled ? 'مشغّل من اللوحة' : 'متوقف من اللوحة'}</span>
-      </label>
+      <Switch id="gd-enable" label="التوجيه والإرشاد للمشاركين" checked={!!d.settings.enabled} on="مشغّل من اللوحة" off="متوقف من اللوحة"
+        disabled={busy || !d.can_write} onChange={flip} />
       <dl className="ag-grid">
         <div><dt>النموذج</dt><dd><code dir="ltr">{d.model}</code></dd></div>
         <div><dt>نسخة السياسة</dt><dd>{d.policy_version || 'لم تُنشر بعد (G4b)'}</dd></div>
@@ -250,17 +250,24 @@ function UsagePart({ d }) {
 export default function GuidanceAdmin() {
   const [d, setD] = useState(null);
   const [evalKey, setEvalKey] = useState(0);
-  const load = () => L('admin.guide-dashboard').then(setD);
-  useEffect(() => { load(); }, []);
-  if (!d) return <Spinner />;
+  // القراءة الأولى تنضم إلى طلب رأس القسم (ai-hub-data.js)، وإعادة التحميل بعد التشغيل أو الإيقاف طلب جديد
+  const load = (first) => aiLoad('admin.guide-dashboard', { reuse: first === true }).then(setD);
+  useEffect(() => { load(true); }, []);
+  if (!d) return <AiSkeleton cards={3} />;
   if (!d.success) return <div className="la-err">{d.message}</div>;
   const open = d.blockers.length === 0;
+  const m30 = (d.report?.windows || []).find((w) => w.days === 30);
+  const cap = Math.max(Number(d.settings.cap_usd) || 0, 0.01);
+  const ratio = Number(d.today?.usd || 0) / cap;
   return (
     <div className="ag">
-      <div className="la-row between ag-head">
-        <div><p className="la-muted">مساعد التوجيه داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.</p></div>
-        {!d.can_write && <span className="la-chip">عرض فقط</span>}
-      </div>
+      <TabIntro text="مساعد التوجيه داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة." readOnly={!d.can_write} />
+      <Kpis label="مؤشرات التوجيه والإرشاد" items={[
+        { label: 'الحال', value: open ? 'مفتوح للتجربة' : 'مغلق', sub: open ? null : `${d.blockers.length} ${d.blockers.length === 1 ? 'شرط' : 'شروط'} قبل الفتح`, tone: open ? 'green' : 'amber' },
+        d.today && { label: 'إنفاق اليوم', value: usd(d.today.usd), sub: `من ${usd(d.settings.cap_usd)} (${Math.round(ratio * 100)}٪)`, tone: ratio >= 1 ? 'red' : ratio >= 0.8 ? 'amber' : 'green' },
+        m30 && { label: 'الأسئلة', value: m30.asked, sub: `في 30 يومًا من ${m30.participants} مشاركًا` },
+        m30 && m30.confirm_rate != null && { label: '«أريد التأكد»', value: `${m30.confirm_rate}٪`, sub: 'مؤشر الدقة، والحد 10٪', tone: m30.confirm_rate > 10 ? 'amber' : 'green' },
+      ]} />
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'} summary={open ? 'مفتوح للدفعات التجريبية' : `مغلق: ${d.blockers.length} ${d.blockers.length === 1 ? 'شرط' : 'شروط'} قبل الفتح`}><StatusPart d={d} reload={load} setD={setD} /></Section>
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${usd(d.today.usd)} من ${usd(d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
@@ -277,13 +284,14 @@ export function GuidanceAccess() {
   const [pilots, setPilots] = useState(null);
   const [canWrite, setCanWrite] = useState(false);
   const [owner, setOwner] = useState(false);
+  const [dash, setDash] = useState(null);
   useEffect(() => {
     transcriptAccess().then((r) => setOwner(!!r?.owner));
     L('admin.guide-orgs').then(setOrgs);
     L('admin.guide-pilots').then(setPilots);
-    L('admin.guide-dashboard').then((r) => setCanWrite(!!r?.can_write));
+    aiLoad('admin.guide-dashboard', { reuse: true }).then((r) => { setCanWrite(!!r?.can_write); setDash(r); });
   }, []);
-  if (!orgs || !pilots) return <Spinner />;
+  if (!orgs || !pilots) return <AiSkeleton cards={2} />;
   const flipOrg = async (o, on) => {
     setOrgs((x) => ({ ...x, orgs: x.orgs.map((y) => (y.id === o.id ? { ...y, allowed: on } : y)) }));
     const r = await L('admin.guide-org-set', { org_id: o.id, on });
@@ -296,23 +304,28 @@ export function GuidanceAccess() {
     if (!r.success) { toast(r.message); L('admin.guide-pilots').then(setPilots); return; }
     toast(on ? `«${c.name}» دفعة تجريبية للمساعد` : `أُوقف المساعد لـ«${c.name}»`);
   };
+  const orgList = orgs.ready ? orgs.orgs || [] : null;
+  const cohList = pilots.ready ? pilots.cohorts || [] : null;
+  const gOpen = dash?.success && Array.isArray(dash.blockers) ? dash.blockers.length === 0 : null;
   return (
     <div className="ag">
-      <div className="la-row between ag-head">
-        <div><p className="la-muted">لمن يعمل التوجيه والإرشاد: الجهة تسمح به، والدفعة مفعّلة تجريبيًا. يلزم الشرطان معًا، وكل تغيير يُسجَّل.</p></div>
-        {!canWrite && <span className="la-chip">عرض فقط</span>}
-      </div>
+      <TabIntro text="لمن يعمل التوجيه والإرشاد: الجهة تسمح به، والدفعة مفعّلة تجريبيًا. يلزم الشرطان معًا، وكل تغيير يُسجَّل." readOnly={!canWrite} />
+      <Kpis label="مؤشرات الإتاحة" items={[
+        orgList && { label: 'الجهات المسموح لها', value: `${orgList.filter((o) => o.allowed).length} من ${orgList.length}`, tone: orgList.some((o) => o.allowed) ? 'green' : 'amber' },
+        cohList && { label: 'الدفعات التجريبية', value: cohList.filter((c) => c.pilot).length, sub: `من ${cohList.length} دفعة`, tone: cohList.some((c) => c.pilot) ? 'green' : 'amber' },
+        gOpen != null && { label: 'حال التوجيه', value: gOpen ? 'مفتوح للتجربة' : 'مغلق', sub: gOpen ? null : 'شروط الفتح في «التوجيه والإرشاد»', tone: gOpen ? 'green' : 'amber' },
+      ]} />
       <Section id="gd-orgs" title="الجهات" summary="الجهة المغلقة لا يعمل المساعد لأي من مشاركيها، أيًا كانت دفعته. الأفراد بلا جهة تحكمهم الدفعة وحدها.">
-        {!orgs.ready ? <p className="la-muted small">مفتاح الجهات لم يُرحَّل بعد.</p> : (
-          <ul className="gd-toggles">{orgs.orgs.map((o) => (
-            <li key={o.id}><label className="row"><input type="checkbox" checked={o.allowed} disabled={!canWrite} onChange={(e) => flipOrg(o, e.target.checked)} /> <span>{o.name}</span></label></li>
+        {!orgs.ready ? <p className="la-muted small">مفتاح الجهات لم يُرحَّل بعد.</p> : !orgList.length ? <Empty compact title="لا جهات بعد" hint="تظهر هنا كل جهة تُضاف من «الجهات»." /> : (
+          <ul className="gd-toggles">{orgList.map((o) => (
+            <li key={o.id}><Switch id={`gd-org-${o.id}`} label={o.name} checked={!!o.allowed} on="مسموح" off="مغلق" disabled={!canWrite} onChange={(on) => flipOrg(o, on)} /></li>
           ))}</ul>
         )}
       </Section>
       <Section id="gd-pilots" title="الدفعات التجريبية" summary="المساعد لا يعمل إلا لأعضاء دفعة مفعّلة هنا، وبعد اجتياز التقييم ونسخة السياسة.">
-        {!pilots.ready ? <p className="la-muted small">عمود الدفعة التجريبية لم يُرحَّل بعد.</p> : (
-          <ul className="gd-toggles">{pilots.cohorts.map((c) => (
-            <li key={c.id}><label className="row"><input type="checkbox" checked={c.pilot} disabled={!canWrite} onChange={(e) => flipPilot(c, e.target.checked)} /> <span>{c.name}{c.is_default ? ' (المفتوحة)' : ''}</span></label></li>
+        {!pilots.ready ? <p className="la-muted small">عمود الدفعة التجريبية لم يُرحَّل بعد.</p> : !cohList.length ? <Empty compact title="لا دفعات بعد" hint="تظهر هنا كل دفعة تُنشأ من «البرامج والدفعات»." /> : (
+          <ul className="gd-toggles">{cohList.map((c) => (
+            <li key={c.id}><Switch id={`gd-coh-${c.id}`} label={`${c.name}${c.is_default ? ' (المفتوحة)' : ''}`} checked={!!c.pilot} on="مفعّل" off="متوقف" disabled={!canWrite} onChange={(on) => flipPilot(c, on)} /></li>
           ))}</ul>
         )}
       </Section>

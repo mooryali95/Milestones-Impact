@@ -14,6 +14,8 @@ import { convSummary, count, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ER
 import { navigate } from '../route.js';
 import { GuidanceCap } from './AppSettings.jsx';
 import { normAction, normConversations, normKeySet, normRunDetail, normRuns, normState, normStep, normTranscript, normUsage } from '../agent-data.js';
+import { aiLoad } from '../ai-hub-data.js';
+import { AiSkeleton, Kpis, Switch, TabIntro } from '../ai-ui.jsx';
 import '../agent-admin.css';
 
 // كل رد يمر بموحّده (agent-data.js) قبل أن يُرسم: شكل واحد مضمون، فلا يكسر الشاشة صف ناقص أو قديم من الإنتاج
@@ -62,11 +64,9 @@ function StatusSection({ s, reload, writable }) {
   return (
     <>
       <div className="ag-switch-row">
-        <label className="of-switch">
-          <input type="checkbox" checked={!!s.enabled} disabled={busy || !writable || (!s.enabled && !!block)} onChange={(e) => toggle(e.target.checked)} aria-describedby={!s.enabled && block ? 'ag-block' : undefined} />
-          <span>{s.enabled ? 'مفعّل من اللوحة' : 'مطفأ من اللوحة'}</span>
-        </label>
-        {!s.enabled && block && <small id="ag-block" className="ag-why">{block}</small>}
+        <Switch id="ag-enable" label="مساعد الموقع للزوار" checked={!!s.enabled} on="مفعّل من اللوحة" off="مطفأ من اللوحة"
+          disabled={busy || !writable || (!s.enabled && !!block)} onChange={toggle} describedBy={!s.enabled && block ? 'ag-block' : undefined}
+          hint={!s.enabled && block ? <small id="ag-block" className="ag-why">{block}</small> : null} />
       </div>
       <dl className="ag-grid">
         <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on">✓ في جدول الأسعار</span> : <span className="ops-flag off">✕ ليس في جدول الأسعار</span>}</Row>
@@ -415,11 +415,14 @@ export default function Agent({ isSuper = false }) {
   const [conv, setConv] = useState(null);
   const [runs, setRuns] = useState(null);
   const [shut, setShut] = useState(readShut);
-  const load = useCallback(async () => {
-    const [a, b] = await Promise.all([A('admin.agent-state', {}, normState), A('admin.agent-usage', {}, normUsage)]);
+  // القراءة الأولى تنضم إلى طلب رأس القسم (ai-hub-data.js)، وإعادة التحميل بعد أي تغيير طلب جديد دائمًا
+  const load = useCallback(async (first) => {
+    const o = { reuse: first === true };
+    const read = (action, norm) => aiLoad(action, o).then(norm, () => norm(null));
+    const [a, b] = await Promise.all([read('admin.agent-state', normState), read('admin.agent-usage', normUsage)]);
     setS(a); setU(b);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(true); }, [load]);
   const toggle = (id) => setShut((prev) => {
     const n = new Set(prev);
     if (n.has(id)) n.delete(id); else n.add(id);
@@ -429,7 +432,7 @@ export default function Agent({ isSuper = false }) {
   const onCount = useCallback((c) => setConv(c), []);
   const onRuns = useCallback((r) => setRuns(r), []);
 
-  if (!s) return <Spinner />;
+  if (!s) return <AiSkeleton cards={3} />;
   if (!s.success) {
     if (s.code === 'not_migrated') return <Empty title="لم يُطبَّق ترحيل 20261115230000 بعد" hint="طبّقه من RUNBOOK §7، ثم أعد فتح الشاشة." />;
     return <div className="la-err" role="alert">{s.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={load}>أعد المحاولة</button></div>;
@@ -438,13 +441,18 @@ export default function Agent({ isSuper = false }) {
   const writable = isSuper && s.can_write;
   const sec = (id) => ({ open: !shut.has(id), onToggle: () => toggle(id) });
   const lastRun = runs?.[0] || s.latest_run;
+  const st = stateSummary(s);
+  const sp = u?.success ? ringLevel(u.today.spent_micros, u.today.cap_micros) : null;
   return (
     <div className="ag">
-      <div className="la-row between ag-head">
-        <div><p className="la-muted">مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم.</p></div>
-        {!writable && <span className="la-chip">عرض فقط</span>}
-      </div>
+      <TabIntro text="مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم." readOnly={!writable} />
       {!writable && <p className="la-muted small ag-ro">{isSuper ? 'الكتابة تتطلب الدخول بمفتاح المرور أو تطبيق المصادقة.' : 'الكتابة للمدير الأعلى وحده، وأنت ترى كل شيء للاطلاع.'}</p>}
+      <Kpis label="مؤشرات مساعد الموقع" items={[
+        { label: 'الحال', value: st.text, tone: st.level },
+        sp && { label: 'إنفاق اليوم', value: `${usd2(u.today.spent_micros)} دولار`, sub: `من ${usd2(u.today.cap_micros)} (${Math.round(sp.ratio * 100)}%)`, tone: sp.level },
+        u?.success && { label: 'المحادثات', value: u.conversations, sub: 'في 30 يومًا' },
+        { label: 'بوابة التقييم', value: s.gate.ok ? 'ناجح لهذا الإعداد' : 'لم ينجح بعد', tone: s.gate.ok ? 'green' : 'amber' },
+      ]} />
       <AgentSection id="ag-state" title="الحالة والتحكم" summary={stateSummary(s)} open fixed><StatusSection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-key" title="المفتاح" summary={keySummary(s.key)} {...sec('ag-key')}><KeySection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-spend" title="الإنفاق" summary={spendSummary(u)} {...sec('ag-spend')}><SpendSection u={u} reload={load} /></AgentSection>

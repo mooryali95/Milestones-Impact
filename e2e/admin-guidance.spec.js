@@ -146,7 +146,11 @@ test('البحث (Ctrl K) يجد الأسماء الثلاثة والاسمين 
   await setup(page, '#/leaders/overview');
   const pal = page.getByRole('dialog', { name: 'البحث الشامل' });
   for (const [q, tab] of [['الإتاحة', 'الإتاحة'], ['إتاحة التوجيه', 'الإتاحة'], ['التوجيه والإرشاد', 'التوجيه والإرشاد'], ['مساعد الموقع', 'مساعد الموقع'], ['المساعد الآلي', 'مساعد الموقع']]) {
-    await page.keyboard.press('Control+k');
+    // الاختصار قد يسبق ربط مستمعه في أول تحميل للوحة: يُعاد حتى تفتح النافذة
+    await expect(async () => {
+      await page.keyboard.press('Control+k');
+      await expect(pal).toBeVisible({ timeout: 1000 });
+    }).toPass();
     await pal.getByRole('combobox').fill(q);
     await pal.getByRole('option').filter({ hasText: tab }).first().click();
     await expect(pal).toHaveCount(0);
@@ -184,6 +188,46 @@ test('الحالة: ما يمنع الفتح بنصه، والتشغيل من ا
   await expect(state.getByRole('list', { name: 'ما يمنع الفتح' })).not.toContainText('المساعد متوقف من هذه اللوحة');
 });
 
+test('رأس القسم وصف المؤشرات: حال المساعدَين من لوحة التوجيه نفسها، بلا طلب مكرر، ويتبع التشغيل', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
+  await expect(page.getByRole('heading', { name: 'المساعد الذكي', level: 2 })).toBeVisible();
+  const line = page.getByRole('list', { name: 'حال المساعدَين الآن' });
+  await expect(line.getByRole('listitem')).toHaveCount(1);
+  await expect(line).toContainText('التوجيه والإرشاد متوقف');
+  await expect(line).toContainText('اليوم $1.20 من $5.00، 120 سؤالًا في 30 يومًا');
+  const kpis = page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' }).locator('dl.ai-kpis');
+  await expect(kpis).toHaveAttribute('aria-label', 'مؤشرات التوجيه والإرشاد');
+  await expect(kpis.locator('.ai-kpi')).toHaveCount(4);
+  await expect(kpis).toContainText('مغلق');
+  await expect(kpis).toContainText('$1.20');
+  await expect(kpis).toContainText('6.7٪');
+  // تحميل واحد للصفحة: الرأس والشاشة يتشاركان طلبًا واحدًا
+  const mark = calls.length;
+  await page.reload();
+  await expect(kpis).toContainText('6.7٪');
+  await expect(line).toContainText('120 سؤالًا');
+  expect(calls.slice(mark).filter((c) => c.action === 'admin.guide-dashboard').length).toBe(1);
+  await sec(page, 'الحالة والتحكم').getByRole('switch', { name: 'التوجيه والإرشاد للمشاركين' }).check();
+  await expect(line).toContainText('التوجيه والإرشاد مشغّل وينتظر الشروط');
+  // الإتاحة تقرأ الصلاحية من الرد نفسه ولا تطلبه من جديد
+  await page.getByRole('tab', { name: 'الإتاحة' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'الإتاحة' }).locator('dl.ai-kpis')).toContainText('حال التوجيه');
+});
+
+test('الضيق 390 بكسل: لا تمرير أفقي في التبويبات الثلاثة، والتبويبات بعرض الشاشة', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page, '#/leaders/ai/guidance');
+  for (const [tab, region] of [['التوجيه والإرشاد', 'الاستعمال'], ['الإتاحة', 'الدفعات التجريبية'], ['مساعد الموقع', null]]) {
+    await page.getByRole('tab', { name: tab }).click();
+    if (region) await expect(sec(page, region)).toBeVisible();
+    else await expect(page.getByText(SITE_DESC)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    const box = await page.getByRole('tablist', { name: 'أقسام المساعد الذكي' }).boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  }
+});
+
 test('الإنفاق والاستعمال: اليوم مقابل السقف، وأعداد 7 و30 يومًا، والتوزيع على الجهات والدفعات', async ({ page }) => {
   await setup(page, '#/leaders/ai/guidance');
   await expect(sec(page, 'الإنفاق')).toContainText('اليوم $1.20 من سقف $5.00 (24٪)');
@@ -208,10 +252,25 @@ test('الدقة: المسودة تُغلق البوابة، والتشغيل ب
 test('إتاحة التوجيه: إغلاق جهة وتفعيل دفعة تجريبية، كل منهما بطلبه', async ({ page }) => {
   const { calls } = await setup(page, '#/leaders/ai/access');
   const orgs = sec(page, 'الجهات');
-  await orgs.getByRole('checkbox', { name: 'جهة سفراء' }).uncheck();
+  const org = orgs.getByRole('switch', { name: 'جهة سفراء' });
+  await expect(org).toHaveAttribute('aria-checked', 'true');
+  await expect(orgs.getByRole('listitem').filter({ hasText: 'جهة سفراء' }).locator('.ai-chip')).toHaveText('مسموح');
+  await org.uncheck();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-org-set')).toMatchObject({ org_id: ORG, on: false });
-  await sec(page, 'الدفعات التجريبية').getByRole('checkbox', { name: 'دفعة سفراء' }).check();
+  await expect(orgs.getByRole('listitem').filter({ hasText: 'جهة سفراء' }).locator('.ai-chip')).toHaveText('مغلق');
+  const pilots = sec(page, 'الدفعات التجريبية');
+  // لوحة المفاتيح: المسافة تبدل المفتاح كالنقر، والطلب نفسه
+  await pilots.getByRole('switch', { name: 'دفعة سفراء' }).press('Space');
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')).toMatchObject({ cohort_id: COH, on: true });
+  await expect(pilots.getByRole('switch', { name: 'دفعة سفراء' })).toHaveAttribute('aria-checked', 'true');
+  await expect(pilots.locator('.ai-chip')).toHaveText('مفعّل');
+  // النقر على اسم الدفعة يبدل كالنقر على المفتاح
+  await pilots.getByText('دفعة سفراء', { exact: true }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.guide-pilot-set').map((c) => c.on)).toEqual([true, false]);
+  // صف المؤشرات يتبع التبديل
+  const kpis = page.getByRole('tabpanel', { name: 'الإتاحة' }).locator('dl.ai-kpis');
+  await expect(kpis).toContainText('الجهات المسموح لها0 من 1');
+  await expect(kpis).toContainText('الدفعات التجريبية0');
 });
 
 test('مراجعة المجموعة: التصفية بالنوع، وتعديل الإجابة المرجعية، واعتمادها باسم المالك بعد التأكيد', async ({ page }) => {
@@ -258,6 +317,7 @@ test('منح المالك: مدير أعلى يُمنح الاطلاع بطلب�
   const { calls } = await setup(page, '#/leaders/ai/access');
   const g = sec(page, 'الاطلاع على المحادثات');
   await expect(g).toContainText('boss@x.sa فتح محادثة سارة القحطاني (2 رسالة)');
-  await g.getByRole('checkbox', { name: 'super@x.sa' }).check();
+  await g.getByRole('switch', { name: 'super@x.sa' }).check();
+  await expect(g.getByRole('switch', { name: 'super@x.sa' })).toHaveAttribute('aria-checked', 'true');
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript-grant')).toMatchObject({ admin_id: ADM, on: true });
 });
