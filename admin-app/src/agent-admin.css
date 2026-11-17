@@ -132,13 +132,15 @@
   position: relative; overflow: hidden; border-radius: 16px; padding: 24px 28px; color: #fff;
   background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--gold) 22%, transparent) 0%, transparent 46%), linear-gradient(135deg, var(--brand-graphite) 0%, var(--brand-slate) 100%);
   border: 1px solid color-mix(in srgb, var(--gold) 38%, transparent); box-shadow: 0 14px 34px rgba(6, 19, 24, .14);
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 18px 32px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px 32px; align-items: center;
 }
 .ai-hub-head::before { content: ''; position: absolute; inset-inline: 0; inset-block-start: 0; block-size: 3px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
 .ai-hub-head-txt { min-width: 0; }
 .ai-hub .ai-hub-title { margin: 0 0 8px; color: #fff; font-size: 1.5rem; font-weight: 700; line-height: 1.4; }
-.ai-hub-lead { margin: 0; color: rgba(255, 255, 255, .84); font-size: .88rem; line-height: 1.9; max-inline-size: 46ch; }
-.ai-hub-status { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
+.ai-hub-lead { margin: 0; color: rgba(255, 255, 255, .84); font-size: .88rem; line-height: 1.9; max-inline-size: 62ch; }
+.ai-hub-status { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; inline-size: 100%; max-inline-size: 460px; justify-self: end; }
+/* 17) هيكل سطر الحال أثناء التحميل بارتفاع السطر نفسه، فلا يقفز الرأس */
+.ai-st-skel .ai-st { block-size: 62px; background: linear-gradient(90deg, rgba(255, 255, 255, .06) 25%, rgba(255, 255, 255, .13) 50%, rgba(255, 255, 255, .06) 75%); background-size: 200% 100%; animation: ai-shim 1.4s ease-in-out infinite; }
 .ai-st { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 3px; align-items: center; padding: 11px 16px; border-radius: 12px;
   background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .14); min-width: 0; }
 .ai-st-dot { grid-row: span 2; inline-size: 10px; block-size: 10px; border-radius: 50%; background: var(--st-ok-dark); box-shadow: 0 0 0 4px color-mix(in srgb, var(--st-ok-dark) 22%, transparent); }
@@ -164,8 +166,9 @@
 .ai-intro-text { margin: 0; color: var(--ink-mid); font-size: .9rem; line-height: 1.8; }
 
 /* صف المؤشرات: مكون واحد في التبويبات الثلاثة، وخط علوي بلون الحال */
+.ai-kpis-g { min-width: 0; }
 .ai-kpis { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.ai-kpi { background: #fff; border: 1px solid var(--line-strong); border-block-start: 3px solid var(--brand-mist-dark); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0;
+.ai-kpi { background: #fff; border: 1px solid var(--line-strong); border-block-start: 3px solid var(--brand-slate); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0;
   box-shadow: 0 1px 2px rgba(10, 42, 61, .04); }
 .ai-kpi.green { border-block-start-color: var(--st-ok); }
 .ai-kpi.amber { border-block-start-color: var(--gold); }
@@ -176,19 +179,42 @@
 .ai-kpi dd small { font-size: .76rem; color: var(--ink-mid); }
 
 /* البطاقات داخل القسم: زوايا أنعم وظل خفيف ومسافات متسقة */
-.ai-hub .ag-sec { border-radius: 12px; padding: 20px 22px; margin: 0; box-shadow: 0 1px 2px rgba(10, 42, 61, .04), 0 8px 22px rgba(10, 42, 61, .04); }
+.ai-hub .ag-sec { position: relative; border-inline-start: 1px solid var(--line-strong); border-radius: 12px; padding: 20px 22px; margin: 0; box-shadow: 0 1px 2px rgba(10, 42, 61, .04), 0 8px 22px rgba(10, 42, 61, .04); }
+.ai-hub .ag-sec::before { content: ''; position: absolute; inset-block: 18px; inset-inline-start: -1px; inline-size: 4px; border-start-end-radius: 4px; border-end-end-radius: 4px; background: var(--st-ok); }
+.ai-hub .ag-sec.ag-amber::before { background: var(--st-warn); }
+.ai-hub .ag-sec.ag-red::before { background: var(--st-bad); }
 .ai-hub .ag-sec-h { font-size: 1.02rem; color: var(--petrol-mid); }
-.ai-hub .ag-sec-b { gap: 14px; }
+.ai-hub .ag-sec-b { gap: 16px; }
+/* 8) شبكة التفاصيل بشكل واحد في البطاقتين: عنوان صغير خافت وقيمة بلون النص، والسقوف بعرض الصف */
+.ai-hub .ag-grid { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.ai-hub .ag-grid > div > dt { font-size: .76rem; font-weight: 600; color: var(--ink-light); }
+.ai-hub .ag-grid > div > dd { margin: 0; font-size: .86rem; color: var(--ink); overflow-wrap: anywhere; }
+.ai-hub .ag-grid > div { display: grid; gap: 2px; align-content: start; }
+.ai-hub .ag-grid .ag-wide { grid-column: 1 / -1; }
+.ai-hub .ag-nw { white-space: nowrap; }
+/* 16) شروط الفتح داخل حافة البطاقة */
+.ai-hub .gd-blockers { margin: 0; padding-inline-start: 1.25em; display: grid; gap: 4px; }
+/* 9) قسم «الدقة»: مسافة 16 بين الكتل و8 داخلها، والشارة بجانب عنوانها */
+.ai-hub .ag-guide-eval, .ai-hub .gd-set { display: grid; gap: 8px; margin: 0; }
+.ai-hub .ag-guide-eval > *, .ai-hub .gd-set > * { margin: 0; }
+.ai-hub .gd-set { margin-block-start: 8px; padding-block-start: 16px; border-block-start: 1px solid var(--line); }
+.ai-hub .ag-guide-eval h4, .ai-hub .gd-set h4 { margin: 0; font-size: .95rem; color: var(--petrol-mid); }
+.ai-hub .ag-guide-eval .la-row, .ai-hub .gd-set > .la-row { margin-block: 8px; }
+.gd-set-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.ai-hub .gd-filter { flex-wrap: wrap; gap: 6px; }
+/* 15) رسم الإنفاق اليومي بارتفاع يناسب يومين أو ثلاثين */
+.ai-hub .gd-bars { height: 72px; }
 
 /* مفتاح التبديل: زر بدور switch، والمقبض يتحرك نحو نهاية السطر حين يُفعَّل (يسارًا في العربية) */
 .ai-sw-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.ai-sw { all: unset; box-sizing: border-box; flex: none; position: relative; inline-size: 46px; block-size: 26px; border-radius: 99px; background: var(--ink-light); cursor: pointer; transition: background .2s var(--ease); }
-.ai-sw-knob { position: absolute; inset-block-start: 3px; inset-inline-start: 3px; inline-size: 20px; block-size: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(6, 19, 24, .3); transition: inset-inline-start .2s var(--ease); }
-.ai-sw[aria-checked="true"] { background: var(--brand-slate); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 55%, transparent); }
-.ai-sw[aria-checked="true"] .ai-sw-knob { inset-inline-start: 23px; }
+.ai-sw { all: unset; box-sizing: border-box; flex: none; position: relative; inline-size: 46px; block-size: 26px; border-radius: 99px; background: var(--sand-light); box-shadow: inset 0 0 0 2px var(--ink-light); cursor: pointer; transition: background .2s var(--ease), box-shadow .2s var(--ease); }
+.ai-sw-knob { position: absolute; inset-block-start: 5px; inset-inline-start: 5px; inline-size: 16px; block-size: 16px; border-radius: 50%; background: var(--ink-light); transition: inset-inline-start .2s var(--ease), background .2s var(--ease); }
+.ai-sw[aria-checked="true"] { background: var(--st-ok); box-shadow: inset 0 0 0 2px var(--st-ok); }
+.ai-sw[aria-checked="true"] .ai-sw-knob { inset-inline-start: 24px; inset-block-start: 4px; inline-size: 18px; block-size: 18px; background: #fff; box-shadow: 0 1px 3px rgba(6, 19, 24, .3); }
 .ai-sw:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: 3px; }
 .ai-sw:disabled { cursor: not-allowed; opacity: .45; }
 .ai-sw-text { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.ai-sw-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
 .ai-sw-label { cursor: pointer; font-weight: 600; font-size: .9rem; color: var(--ink); overflow-wrap: anywhere; }
 .ai-sw-row.is-off .ai-sw-label { cursor: default; }
 .ai-sw-text small { font-size: .78rem; }
@@ -202,8 +228,12 @@
 /* هيكل التحميل بشكل المحتوى، والحركة تتوقف لمن طلب تقليلها */
 .ai-skel { display: grid; gap: 14px; }
 .ai-skel-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.ai-skel i { display: block; border-radius: 8px; background: linear-gradient(90deg, var(--sand-light) 25%, var(--sand-paper) 50%, var(--sand-light) 75%); background-size: 200% 100%; animation: ai-shim 1.4s ease-in-out infinite; }
-.ai-skel-kpis i { block-size: 86px; border-radius: 12px; }
+.ai-skel i { display: block; border-radius: 8px; background: linear-gradient(90deg, var(--sand-cream) 25%, var(--sand-light) 50%, var(--sand-cream) 75%); background-size: 200% 100%; animation: ai-shim 1.4s ease-in-out infinite; }
+.ai-skel-kpi { background: #fff; border: 1px solid var(--line-strong); border-block-start: 3px solid var(--sand-cream); border-radius: 12px; padding: 16px; display: grid; gap: 10px; min-block-size: 86px; align-content: start; }
+.ai-skel-kpi i { block-size: 10px; }
+.ai-skel-kpi i.w50 { inline-size: 50%; }
+.ai-skel-kpi i.big { block-size: 18px; }
+.ai-skel-kpi i.w70 { inline-size: 70%; }
 .ai-skel-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 12px; padding: 20px 22px; display: grid; gap: 12px; }
 .ai-skel-card i { block-size: 12px; }
 .ai-skel-card i.w40 { inline-size: 40%; block-size: 16px; }
@@ -211,12 +241,21 @@
 .ai-skel-card i.w70 { inline-size: 70%; }
 @keyframes ai-shim { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .ai-skel i { animation: none; }
+  .ai-skel i, .ai-st-skel .ai-st { animation: none; }
   .ai-sw, .ai-sw-knob, .ai-seg button { transition: none; }
 }
 
+@media (forced-colors: active) {
+  .ai-sw { border: 2px solid ButtonText; }
+  .ai-sw-knob { background: ButtonText; forced-color-adjust: none; }
+  .ai-sw[aria-checked="true"] { background: Highlight; forced-color-adjust: none; }
+  .ai-sw[aria-checked="true"] .ai-sw-knob { background: HighlightText; }
+  .ai-seg button.on { outline: 2px solid Highlight; outline-offset: -2px; }
+  .ai-hub .ag-sec::before { background: CanvasText; }
+}
 @media (max-width: 900px) {
   .ai-hub-head { grid-template-columns: minmax(0, 1fr); }
+  .ai-hub-status { max-inline-size: none; justify-self: stretch; }
 }
 @media (max-width: 640px) {
   .ai-hub { gap: 14px; }
@@ -226,6 +265,7 @@
   .ai-seg button { flex: 1 1 0; padding: 8px 6px; font-size: .84rem; }
   .ai-kpis, .ai-skel-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .ai-kpi { padding: 12px; }
+  .ai-kpi:last-child:nth-child(odd), .ai-skel-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .ai-kpi dd b { font-size: 1rem; }
   .ai-hub .ag-sec { padding: 16px 14px; }
 }

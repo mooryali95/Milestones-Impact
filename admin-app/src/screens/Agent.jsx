@@ -28,8 +28,8 @@ function Row({ label, children }) {
   return <div className="ops-row"><dt>{label}</dt><dd>{children}</dd></div>;
 }
 
-// قسم قابل للطي بسطر خلاصة: الرمز والكلمة مع اللون
-function AgentSection({ id, title, summary, open, onToggle, fixed = false, children }) {
+// قسم قابل للطي بسطر خلاصة: الرمز والكلمة مع اللون. quiet: بلا سطر خلاصة لأن صف المؤشرات فوقه يحمله
+function AgentSection({ id, title, summary, open, onToggle, fixed = false, quiet = false, children }) {
   const lv = summary?.level || 'green';
   return (
     <section className={`la-card ag-sec ag-${lv}`} aria-labelledby={`${id}-h`} id={id}>
@@ -40,7 +40,7 @@ function AgentSection({ id, title, summary, open, onToggle, fixed = false, child
           </button>
         )}
       </h3>
-      <p className="ag-sum"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>
+      {!quiet && <p className="ag-sum"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>}
       {open && <div id={`${id}-b`} className="ag-sec-b">{children}</div>}
     </section>
   );
@@ -69,7 +69,7 @@ function StatusSection({ s, reload, writable }) {
           hint={!s.enabled && block ? <small id="ag-block" className="ag-why">{block}</small> : null} />
       </div>
       <dl className="ag-grid">
-        <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on">✓ في جدول الأسعار</span> : <span className="ops-flag off">✕ ليس في جدول الأسعار</span>}</Row>
+        <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on ag-nw">✓ في جدول الأسعار</span> : <span className="ops-flag off ag-nw">✕ ليس في جدول الأسعار</span>}</Row>
         <Row label="المعرفة"><code dir="ltr">{s.versions.knowledge_version}</code></Row>
         <Row label="السقف اليومي">{(s.cap_cents / 100).toFixed(2)} دولار</Row>
         <Row label="مفتاح الطوارئ في الخادم">{s.env_mode === 'off' ? <span className="ops-flag off">✕ مفعّل: يطفئ المساعد مهما كان في هذه اللوحة</span> : <span className="ops-flag on">✓ غير مفعّل، فالتشغيل والإطفاء من هذه اللوحة</span>}</Row>
@@ -145,13 +145,13 @@ function KeySection({ s, reload, writable }) {
 function Ring({ spent, cap }) {
   const r = ringLevel(spent, cap);
   const C = 2 * Math.PI * 34;
-  const label = `اليوم ${usd2(spent)} من ${usd2(cap)} دولار، ${Math.round(r.ratio * 100)}%، ${r.word}`;
+  const label = `اليوم ${usd2(spent)} من ${usd2(cap)} دولار، ${Math.round(r.ratio * 100)}٪، ${r.word}`;
   return (
     <div className={`ag-ring ag-${r.level}`}>
       <svg viewBox="0 0 80 80" role="img" aria-label={label}>
         <circle cx="40" cy="40" r="34" className="ag-ring-bg" />
         <circle cx="40" cy="40" r="34" className="ag-ring-fg" strokeDasharray={`${C * r.ratio} ${C}`} transform="rotate(-90 40 40)" />
-        <text x="40" y="45" textAnchor="middle">{Math.round(r.ratio * 100)}%</text>
+        <text x="40" y="45" textAnchor="middle">{Math.round(r.ratio * 100)}٪</text>
       </svg>
       <div><b>{usd2(spent)} من {usd2(cap)} دولار</b><span className="ag-ring-word"><span aria-hidden="true">{r.icon}</span> {r.word}</span></div>
     </div>
@@ -448,12 +448,12 @@ export default function Agent({ isSuper = false }) {
       <TabIntro text="مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم." readOnly={!writable} />
       {!writable && <p className="la-muted small ag-ro">{isSuper ? 'الكتابة تتطلب الدخول بمفتاح المرور أو تطبيق المصادقة.' : 'الكتابة للمدير الأعلى وحده، وأنت ترى كل شيء للاطلاع.'}</p>}
       <Kpis label="مؤشرات مساعد الموقع" items={[
-        { label: 'الحال', value: st.text, tone: st.level },
-        sp && { label: 'إنفاق اليوم', value: `${usd2(u.today.spent_micros)} دولار`, sub: `من ${usd2(u.today.cap_micros)} (${Math.round(sp.ratio * 100)}%)`, tone: sp.level },
+        { label: 'الحال', value: st.text, sub: !s.enabled ? enableBlock(s) : null, tone: st.level },
+        sp && { label: 'إنفاق اليوم', value: `${usd2(u.today.spent_micros)} دولار`, sub: `من ${usd2(u.today.cap_micros)} دولار (${Math.round(sp.ratio * 100)}٪)`, tone: sp.level },
         u?.success && { label: 'المحادثات', value: u.conversations, sub: 'في 30 يومًا' },
         { label: 'بوابة التقييم', value: s.gate.ok ? 'ناجح لهذا الإعداد' : 'لم ينجح بعد', tone: s.gate.ok ? 'green' : 'amber' },
       ]} />
-      <AgentSection id="ag-state" title="الحالة والتحكم" summary={stateSummary(s)} open fixed><StatusSection s={s} reload={load} writable={writable} /></AgentSection>
+      <AgentSection id="ag-state" title="الحالة والتحكم" summary={st} open fixed quiet><StatusSection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-key" title="المفتاح" summary={keySummary(s.key)} {...sec('ag-key')}><KeySection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-spend" title="الإنفاق" summary={spendSummary(u)} {...sec('ag-spend')}><SpendSection u={u} reload={load} /></AgentSection>
       <AgentSection id="ag-conv" title="المحادثات" summary={convSummary(conv)} {...sec('ag-conv')}><ConversationsSection onCount={onCount} /></AgentSection>

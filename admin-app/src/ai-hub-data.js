@@ -1,9 +1,11 @@
 // ════════════════════════════════════════════════════════════════
-// «المساعد الذكي»: طلبات حال المساعدَين مشتركة بين رأس القسم وشاشاته، بلا طلب جديد في الخادم
+// «المساعد الذكي»: طلبات حال المساعدَين مشتركة بين رأس القسم وشاشاته، بلا نقطة خادم جديدة
 // ════════════════════════════════════════════════════════════════
 // الرأس يعرض سطر الحال من الطلبات نفسها التي تقرؤها الشاشات (admin.agent-state وadmin.agent-usage وadmin.guide-dashboard).
 // القراءة الأولى للشاشة تنضم إلى طلب الرأس الجاري أو تأخذ رده القريب (reuse)، فلا يتضاعف الطلب. وإعادة التحميل بعد
-// أي تغيير (التشغيل، المفتاح، التقييم) طلب جديد دائمًا، ورده يصل الرأس أيضًا فيبقى الرأس والشاشة على حال واحدة.
+// أي تغيير (التشغيل، المفتاح، التقييم، الإتاحة) طلب جديد دائمًا، ورده يصل الرأس أيضًا فيبقى الرأس والشاشة على حال واحدة.
+// ولأن الرأس يعرض المساعدَين معًا فكل تبويب يقرأ حال الآخر أيضًا: طلبان أو ثلاثة لكل فتح للقسم من نقاط قائمة.
+// المخزن على مستوى الوحدة، فيُمسح عند الخروج والدخول وانتهاء الجلسة (App.jsx) فلا يرث مدير رد غيره.
 import { useEffect, useState } from 'react';
 import { L } from './leaders.js';
 
@@ -20,18 +22,18 @@ export function aiLoad(action, { reuse = false } = {}) {
   }
   const p = L(action, {}).then((r) => {
     last.set(action, { value: r, at: Date.now() });
-    subs.forEach((f) => f());
     return r;
   });
   inflight.set(action, p);
-  const clear = () => { if (inflight.get(action) === p) inflight.delete(action); };
+  // يُبلَّغ المشتركون بعد انتهاء الطلب نجح أو تعذّر، فلا يبقى الرأس في هيكل التحميل
+  const clear = () => { if (inflight.get(action) === p) inflight.delete(action); subs.forEach((f) => f()); };
   p.then(clear, clear);
   return p;
 }
 
-// آخر رد لكل طلب، ويتحدث كلما وصل رد جديد من الرأس أو من الشاشة
+// آخر رد لكل طلب، ويتحدث كلما وصل رد جديد من الرأس أو من الشاشة. pending: طلب أول لم يرجع بعد
 export function useAiData(actions) {
-  const read = () => Object.fromEntries(actions.map((a) => [a, last.get(a)?.value ?? null]));
+  const read = () => ({ ...Object.fromEntries(actions.map((a) => [a, last.get(a)?.value ?? null])), pending: actions.some((a) => !last.has(a) && inflight.has(a)) });
   const [v, setV] = useState(read);
   const key = actions.join('|');
   useEffect(() => {
@@ -44,5 +46,5 @@ export function useAiData(actions) {
   return v;
 }
 
-// للاختبارات: يمسح ما حُفظ بين حالة وأخرى
+// يمسح ما حُفظ: عند الخروج والدخول وانتهاء الجلسة، وبين حالات الاختبار
 export function resetAiData() { inflight.clear(); last.clear(); }

@@ -18,7 +18,7 @@ describe('المال والنسب', () => {
     expect(ringLevel(1_598_000, 2_000_000)).toMatchObject({ level: 'green', icon: '✓' });
     expect(ringLevel(1_600_000, 2_000_000)).toMatchObject({ level: 'amber', icon: '!', word: 'قريب من السقف' });
     expect(ringLevel(2_000_000, 2_000_000)).toMatchObject({ level: 'red', icon: '✕', ratio: 1 });
-    expect(spendSummary({ today: { spent_micros: 420_000, cap_micros: 2_000_000 } }).text).toBe('اليوم 0.42 من 2.00 دولار (21%)');
+    expect(spendSummary({ today: { spent_micros: 420_000, cap_micros: 2_000_000 } }).text).toBe('اليوم 0.42 من 2.00 دولار (21٪)');
   });
 });
 
@@ -38,7 +38,7 @@ describe('خلاصة الأقسام', () => {
     expect(enableBlock({ ...base, gate: { ok: true } })).toBe(null);
     expect(gateText(base).text).toBe('لا تقييم ناجح لهذا الإعداد: شغّل التقييم أولًا');
     expect(gateText({ gate: { ok: true, run: { eval_pass: 40, eval_total: 42, redteam_pass: 21, redteam_total: 21, finished_at: 'x' } } }, () => 'قبل ساعتين').text)
-      .toBe('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 95.2% واختبار الحماية 100%، قبل ساعتين');
+      .toBe('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 95.2٪ واختبار الحماية 100٪، قبل ساعتين');
   });
   it('المفتاح والمحادثات والتقييم', () => {
     expect(keySummary({ source: 'db', last4: 'abcd' }).text).toBe('من اللوحة (••••abcd)');
@@ -64,7 +64,7 @@ describe('خلاصة الأقسام', () => {
     expect(peakDay([{ day: 'a', micros: 0 }])).toBe(null);
     expect(runSummary(null).text).toBe('لم يُشغَّل التقييم بعد');
     expect(runSummary({ status: 'passed', eval_pass: 39, eval_total: 42, redteam_pass: 21, redteam_total: 21, cost_micros: 70_000 }).text)
-      .toBe('آخر تشغيل: ناجح، أسئلة الجودة 92.9% (39/42) واختبار الحماية 100% (21/21)، 0.07 دولار');
+      .toBe('آخر تشغيل: ناجح، أسئلة الجودة 92.9٪ (39/42) واختبار الحماية 100٪ (21/21)، 0.07 دولار');
   });
   it('خريطة أخطاء المفتاح تغطي كل رمز يقبله القيد في القاعدة', () => {
     const sql = readFileSync(join(__dirname, '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'), 'utf8');

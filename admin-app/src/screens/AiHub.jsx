@@ -3,14 +3,14 @@
 // ════════════════════════════════════════════════════════════════
 // مساعد الموقع العام، والتوجيه والإرشاد داخل الرحلة، وإتاحته للجهات والدفعات. محتوى كل شاشة كما هو،
 // والتبويب الداخلي في العنوان (#/leaders/ai/<site|guidance|access>) فيعمل التحديث وزر الرجوع والروابط.
-// الرأس: العنوان والوصف وسطر حال المساعدَين من ردود الشاشات نفسها (ai-hub-data.js)، بلا طلب جديد في الخادم.
+// الرأس: العنوان والوصف وسطر حال المساعدَين من ردود الشاشات نفسها (ai-hub-data.js)، بلا نقطة خادم جديدة.
 import React, { Suspense, useRef } from 'react';
 import { lazyRetry } from '../lazy-retry.js';
 import { AI_TABS } from '../leaders-tabs.js';
 import { navigate } from '../route.js';
 import { ScreenBoundary } from '../ui.jsx';
 import { useAiData } from '../ai-hub-data.js';
-import { AiSkeleton } from '../ai-ui.jsx';
+import { AiSkeleton, dollarsOf, guideWord } from '../ai-ui.jsx';
 import { normState, normUsage } from '../agent-data.js';
 import { stateSummary, usd2 } from '../agent-admin.js';
 import '../agent-admin.css';
@@ -24,8 +24,6 @@ const KEYS = AI_TABS.map(([k]) => k);
 // تبويب داخلي غير معروف أو غائب: «مساعد الموقع»
 export const aiSub = (id) => (KEYS.includes(id) ? id : 'site');
 
-const usd = (n) => `$${Number(n || 0).toFixed(2)}`;
-
 // سطر حال مساعد الموقع: ما لم يُقرأ لا يُكتب، فلا عنصر نائب ولا «غير مقروء»
 export function siteFacts(stRaw, usRaw) {
   const s = normState(stRaw);
@@ -37,15 +35,17 @@ export function siteFacts(stRaw, usRaw) {
   if (u.success && u.conversations != null) facts.push(`${u.conversations} محادثة في 30 يومًا`);
   return { level: sum.level, word: sum.text, facts };
 }
-// سطر حال التوجيه والإرشاد من لوحته (admin.guide-dashboard)
+// سطر حال التوجيه والإرشاد من لوحته (admin.guide-dashboard). الكلمة نتيجة البوابة كما في صف المؤشرات (guideWord)،
+// وحال المفتاح في اللوحة سبب يتبعها، فلا تتعدد أسماء الحال الواحدة
 export function guideFacts(d) {
   if (!d?.success || !d.settings || !Array.isArray(d.blockers)) return null;
   const open = d.blockers.length === 0;
   const facts = [];
-  if (d.today && d.settings.cap_usd != null) facts.push(`اليوم ${usd(d.today.usd)} من ${usd(d.settings.cap_usd)}`);
+  if (!open) facts.push(d.settings.enabled ? 'مشغّل وينتظر الشروط' : 'متوقف من اللوحة');
+  if (d.today && d.settings.cap_usd != null) facts.push(`اليوم ${dollarsOf(d.today.usd, d.settings.cap_usd)}`);
   const m = (d.report?.windows || []).find((w) => w.days === 30);
   if (m) facts.push(`${m.asked} سؤالًا في 30 يومًا`);
-  return { level: open ? 'green' : 'amber', word: open ? 'مفتوح للدفعات التجريبية' : d.settings.enabled ? 'مشغّل وينتظر الشروط' : 'متوقف', facts };
+  return { level: open ? 'green' : 'amber', word: guideWord(open), facts };
 }
 
 function StatusItem({ name, f }) {
@@ -63,6 +63,8 @@ function HubStatus() {
   const d = useAiData(['admin.agent-state', 'admin.agent-usage', 'admin.guide-dashboard']);
   const site = siteFacts(d['admin.agent-state'], d['admin.agent-usage']);
   const guide = guideFacts(d['admin.guide-dashboard']);
+  // أول تحميل: صفّان بشكل السطر فلا يقفز الرأس حين يصل الرد
+  if (!site && !guide && d.pending) return <ul className="ai-hub-status ai-st-skel" aria-hidden="true"><li className="ai-st" /><li className="ai-st" /></ul>;
   if (!site && !guide) return null;
   return (
     <ul className="ai-hub-status" aria-label="حال المساعدَين الآن">

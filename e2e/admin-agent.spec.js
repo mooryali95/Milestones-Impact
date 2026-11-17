@@ -118,9 +118,12 @@ test('التبويب في مجموعة «البرامج»، والأقسام ب�
   const group = page.getByRole('group', { name: 'البرامج' });
   await expect(group.getByRole('button', { name: 'المساعد الذكي' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('tab', { name: 'مساعد الموقع' })).toHaveAttribute('aria-selected', 'true');
-  await expect(sec(page, 'الحالة والتحكم').locator('.ag-sum')).toHaveText(/مطفأ من اللوحة/);
-  await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText(/اليوم 0.42 من 2.00 دولار \(21%\)/);
-  await expect(sec(page, 'الإنفاق').getByRole('img', { name: /اليوم 0.42 من 2.00 دولار، 21%، ضمن السقف/ })).toBeVisible();
+  // حال المساعد في أول صف المؤشرات وسبب التعطيل تحتها، ولا تتكرر سطرًا في بطاقة «الحالة والتحكم»
+  const kpiState = page.getByRole('group', { name: 'مؤشرات مساعد الموقع' }).locator('.ai-kpi').first();
+  await expect(kpiState).toContainText('الحالمطفأ من اللوحةشغّل التقييم أولًا');
+  await expect(sec(page, 'الحالة والتحكم').locator('.ag-sum')).toHaveCount(0);
+  await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText(/اليوم 0.42 من 2.00 دولار \(21٪\)/);
+  await expect(sec(page, 'الإنفاق').getByRole('img', { name: /اليوم 0.42 من 2.00 دولار، 21٪، ضمن السقف/ })).toBeVisible();
   await expect(sec(page, 'المفتاح').locator('.ag-sum')).toHaveText(/سر الخادم ANTHROPIC_API_KEY \(••••wxyz\)/);
   await expect(sec(page, 'مرافق الجهات')).toContainText('جهة واحدة أوقفت المرافق');
   await expect(sec(page, 'التقييم').locator('.ag-sum')).toContainText('لم يُشغَّل التقييم بعد');
@@ -141,10 +144,10 @@ test('التفعيل معطل حتى ينجح التقييم: ثلاث دفعا�
   await expect(sec(page, 'التقييم').getByRole('button', { name: /ناجح/ })).toBeVisible();
   expect(calls.filter((c) => c.action === 'admin.agent-eval-step').length).toBe(3);
   await expect(sw).toBeEnabled();
-  await expect(status).toContainText('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 90% واختبار الحماية 100%');
+  await expect(status).toContainText('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 90٪ واختبار الحماية 100٪');
   await sw.click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'فعّل' }).click();
-  await expect(status.locator('.ag-sum')).toHaveText(/مفعّل ويرد الآن/);
+  await expect(page.getByRole('group', { name: 'مؤشرات مساعد الموقع' }).locator('.ai-kpi').first()).toHaveText('الحالمفعّل ويرد الآن');
   await expect(sw).toHaveAttribute('aria-checked', 'true');
   await expect(status.locator('.ai-chip')).toHaveText('مفعّل من اللوحة');
   // سطر الحال في رأس القسم يتبع إعادة التحميل بعد التفعيل، بلا طلب إضافي
@@ -250,9 +253,8 @@ test('رأس القسم: سطر حال المساعدَين من طلبات ال
   await expect(line).toContainText('اليوم 0.42 من 2.00 دولار، 128 محادثة في 30 يومًا');
   // لوحة التوجيه غير محاكاة في هذا الملف: لا يُكتب سطرها، ولا عنصر نائب مكانه
   await expect(line.getByRole('listitem')).toHaveCount(1);
-  const kpis = page.getByRole('tabpanel', { name: 'مساعد الموقع' }).locator('dl.ai-kpis');
-  await expect(kpis).toHaveAttribute('aria-label', 'مؤشرات مساعد الموقع');
-  await expect(kpis).toContainText('إنفاق اليوم');
+  const kpis = page.getByRole('tabpanel', { name: 'مساعد الموقع' }).getByRole('group', { name: 'مؤشرات مساعد الموقع' });
+  await expect(kpis).toContainText('إنفاق اليوم0.42 دولارمن 2.00 دولار (21٪)');
   await expect(kpis).toContainText('128');
   await expect(kpis).toContainText('ناجح لهذا الإعداد');
   // الرأس والشاشة يتشاركان القراءة الأولى: طلب واحد لكل منهما في تحميل الصفحة

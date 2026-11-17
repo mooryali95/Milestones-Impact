@@ -145,12 +145,16 @@ test('الروابط القديمة تصل إلى تبويبها الداخلي�
 test('البحث (Ctrl K) يجد الأسماء الثلاثة والاسمين القديمين ويفتح التبويب الداخلي الصحيح', async ({ page }) => {
   await setup(page, '#/leaders/overview');
   const pal = page.getByRole('dialog', { name: 'البحث الشامل' });
+  // الاختصار قد يسبق ربط مستمعه في أول تحميل للوحة: الضغطة الأولى وحدها تُعاد حتى تفتح النافذة، وما بعدها ضغطة واحدة
+  await expect(async () => {
+    await page.keyboard.press('Control+k');
+    await expect(pal).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  let first = true;
   for (const [q, tab] of [['الإتاحة', 'الإتاحة'], ['إتاحة التوجيه', 'الإتاحة'], ['التوجيه والإرشاد', 'التوجيه والإرشاد'], ['مساعد الموقع', 'مساعد الموقع'], ['المساعد الآلي', 'مساعد الموقع']]) {
-    // الاختصار قد يسبق ربط مستمعه في أول تحميل للوحة: يُعاد حتى تفتح النافذة
-    await expect(async () => {
-      await page.keyboard.press('Control+k');
-      await expect(pal).toBeVisible({ timeout: 1000 });
-    }).toPass();
+    if (!first) await page.keyboard.press('Control+k');
+    first = false;
+    await expect(pal).toBeVisible();
     await pal.getByRole('combobox').fill(q);
     await pal.getByRole('option').filter({ hasText: tab }).first().click();
     await expect(pal).toHaveCount(0);
@@ -193,13 +197,16 @@ test('رأس القسم وصف المؤشرات: حال المساعدَين م�
   await expect(page.getByRole('heading', { name: 'المساعد الذكي', level: 2 })).toBeVisible();
   const line = page.getByRole('list', { name: 'حال المساعدَين الآن' });
   await expect(line.getByRole('listitem')).toHaveCount(1);
-  await expect(line).toContainText('التوجيه والإرشاد متوقف');
-  await expect(line).toContainText('اليوم $1.20 من $5.00، 120 سؤالًا في 30 يومًا');
-  const kpis = page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' }).locator('dl.ai-kpis');
-  await expect(kpis).toHaveAttribute('aria-label', 'مؤشرات التوجيه والإرشاد');
+  // اسم واحد للحال في الرأس والمؤشرات («مغلق»)، وحال المفتاح سبب يتبعه، والمال بصيغة واحدة
+  await expect(line).toContainText('التوجيه والإرشاد مغلق');
+  await expect(line).toContainText('متوقف من اللوحة، اليوم 1.20 من 5.00 دولار، 120 سؤالًا في 30 يومًا');
+  const kpis = page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' }).getByRole('group', { name: 'مؤشرات التوجيه والإرشاد' });
   await expect(kpis.locator('.ai-kpi')).toHaveCount(4);
-  await expect(kpis).toContainText('مغلق');
-  await expect(kpis).toContainText('$1.20');
+  await expect(kpis.locator('.ai-kpi').first()).toContainText('الحالمغلق4 شروط قبل الفتح');
+  await expect(kpis).toContainText('1.20 دولار');
+  await expect(kpis).toContainText('من 5.00 دولار (24٪)');
+  // الحال لا تتكرر في بطاقة «الحالة والتحكم»: صف المؤشرات فوقها يحملها
+  await expect(sec(page, 'الحالة والتحكم').locator('.ag-sum')).toHaveCount(0);
   await expect(kpis).toContainText('6.7٪');
   // تحميل واحد للصفحة: الرأس والشاشة يتشاركان طلبًا واحدًا
   const mark = calls.length;
@@ -208,10 +215,32 @@ test('رأس القسم وصف المؤشرات: حال المساعدَين م�
   await expect(line).toContainText('120 سؤالًا');
   expect(calls.slice(mark).filter((c) => c.action === 'admin.guide-dashboard').length).toBe(1);
   await sec(page, 'الحالة والتحكم').getByRole('switch', { name: 'التوجيه والإرشاد للمشاركين' }).check();
-  await expect(line).toContainText('التوجيه والإرشاد مشغّل وينتظر الشروط');
+  await expect(line).toContainText('التوجيه والإرشاد مغلق');
+  await expect(line).toContainText('مشغّل وينتظر الشروط');
   // الإتاحة تقرأ الصلاحية من الرد نفسه ولا تطلبه من جديد
+  const before = calls.filter((c) => c.action === 'admin.guide-dashboard').length;
   await page.getByRole('tab', { name: 'الإتاحة' }).click();
-  await expect(page.getByRole('tabpanel', { name: 'الإتاحة' }).locator('dl.ai-kpis')).toContainText('حال التوجيه');
+  const access = page.getByRole('tabpanel', { name: 'الإتاحة' }).getByRole('group', { name: 'مؤشرات الإتاحة' });
+  await expect(access).toContainText('حال التوجيهمغلق');
+  await expect(sec(page, 'الدفعات التجريبية').getByRole('switch', { name: 'دفعة سفراء' })).toBeEnabled();
+  expect(calls.filter((c) => c.action === 'admin.guide-dashboard').length).toBe(before);
+});
+
+test('تفعيل دفعة تجريبية في «الإتاحة» يقرأ لوحة التوجيه من جديد: الرأس والمؤشرات وما يمنع الفتح على الحال الجديدة', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
+  const kpis = page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' }).getByRole('group', { name: 'مؤشرات التوجيه والإرشاد' });
+  await expect(kpis).toContainText('4 شروط قبل الفتح');
+  await expect(sec(page, 'الحالة والتحكم').getByRole('list', { name: 'ما يمنع الفتح' })).toContainText('لا دفعة تجريبية مفعّلة');
+  await page.getByRole('tab', { name: 'الإتاحة' }).click();
+  const before = calls.filter((c) => c.action === 'admin.guide-dashboard').length;
+  await sec(page, 'الدفعات التجريبية').getByRole('switch', { name: 'دفعة سفراء' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')).toMatchObject({ cohort_id: COH, on: true });
+  // طلب جديد للوحة بعد التغيير الناجح، لا الرد المحفوظ
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.guide-dashboard').length).toBe(before + 1);
+  await page.getByRole('tab', { name: 'التوجيه والإرشاد' }).click();
+  await expect(kpis).toContainText('3 شروط قبل الفتح');
+  await expect(sec(page, 'الحالة والتحكم').getByRole('list', { name: 'ما يمنع الفتح' })).not.toContainText('لا دفعة تجريبية مفعّلة');
+  await expect(page.getByRole('list', { name: 'حال المساعدَين الآن' })).toContainText('التوجيه والإرشاد مغلق');
 });
 
 test('الضيق 390 بكسل: لا تمرير أفقي في التبويبات الثلاثة، والتبويبات بعرض الشاشة', async ({ page }) => {
@@ -230,7 +259,8 @@ test('الضيق 390 بكسل: لا تمرير أفقي في التبويبات 
 
 test('الإنفاق والاستعمال: اليوم مقابل السقف، وأعداد 7 و30 يومًا، والتوزيع على الجهات والدفعات', async ({ page }) => {
   await setup(page, '#/leaders/ai/guidance');
-  await expect(sec(page, 'الإنفاق')).toContainText('اليوم $1.20 من سقف $5.00 (24٪)');
+  await expect(sec(page, 'الإنفاق')).toContainText('اليوم 1.20 دولار من سقف 5.00 دولار (24٪)');
+  await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText('اليوم 1.20 من 5.00 دولار');
   await expect(sec(page, 'الإنفاق').getByRole('list', { name: 'الإنفاق اليومي آخر 30 يومًا' }).getByRole('listitem')).toHaveCount(2);
   const usage = sec(page, 'الاستعمال');
   await expect(usage.getByRole('row', { name: /آخر 7 يومًا/ })).toContainText('3 (7.5٪)');
@@ -268,7 +298,7 @@ test('إتاحة التوجيه: إغلاق جهة وتفعيل دفعة تجر�
   await pilots.getByText('دفعة سفراء', { exact: true }).click();
   await expect.poll(() => calls.filter((c) => c.action === 'admin.guide-pilot-set').map((c) => c.on)).toEqual([true, false]);
   // صف المؤشرات يتبع التبديل
-  const kpis = page.getByRole('tabpanel', { name: 'الإتاحة' }).locator('dl.ai-kpis');
+  const kpis = page.getByRole('tabpanel', { name: 'الإتاحة' }).getByRole('group', { name: 'مؤشرات الإتاحة' });
   await expect(kpis).toContainText('الجهات المسموح لها0 من 1');
   await expect(kpis).toContainText('الدفعات التجريبية0');
 });
@@ -295,7 +325,7 @@ test('سجل المحادثات (H3): القائمة ثم المحادثة كا�
   const log = sec(page, 'سجل المحادثات');
   const row = log.getByRole('row', { name: /سارة القحطاني/ });
   await expect(row).toContainText('أخفاها');
-  await expect(row).toContainText('$0.03');
+  await expect(row).toContainText('0.03 دولار');
   expect(calls.some((c) => c.action === 'admin.guide-transcript')).toBe(false);
   await row.getByRole('button', { name: 'افتح' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript')).toMatchObject({ participant_id: PID });
@@ -319,5 +349,7 @@ test('منح المالك: مدير أعلى يُمنح الاطلاع بطلب�
   await expect(g).toContainText('boss@x.sa فتح محادثة سارة القحطاني (2 رسالة)');
   await g.getByRole('switch', { name: 'super@x.sa' }).check();
   await expect(g.getByRole('switch', { name: 'super@x.sa' })).toHaveAttribute('aria-checked', 'true');
+  // تاريخ المنح وصف مربوط بالمفتاح، فيُقرأ معه
+  await expect(g.getByRole('switch', { name: 'super@x.sa' })).toHaveAccessibleDescription(/^منذ /);
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript-grant')).toMatchObject({ admin_id: ADM, on: true });
 });
