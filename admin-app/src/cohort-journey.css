@@ -29,6 +29,7 @@
 .cj-now.live .cj-now-dot { background: var(--brand-gold-light); box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-gold-light) 26%, transparent); animation: cj-pulse 2.4s var(--ease) infinite; }
 @keyframes cj-pulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--brand-gold-light) 8%, transparent); } }
 @media (prefers-reduced-motion: reduce) { .cj-now.live .cj-now-dot { animation: none; } .cj-card { transition: none; } }
+.cj-alert .la-link { font-size: inherit; }
 
 /* المؤشرات */
 .cj-kpis { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 10px; }
@@ -37,7 +38,7 @@
 .cj-kpis dt { font-size: .76rem; font-weight: 600; color: var(--ink-light); }
 .cj-kpis dd { margin: 0; font-size: 1rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.5; }
 .cj-alert { margin: 0; display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 10px; background: var(--st-warn-bg, #efe7d8); border: 1px solid color-mix(in srgb, var(--st-warn) 45%, transparent); color: var(--st-warn-text); font-size: .88rem; }
-.cj-alert > span { flex: none; display: inline-grid; place-items: center; inline-size: 20px; block-size: 20px; border-radius: 50%; background: var(--st-warn); color: #fff; font-weight: 700; font-size: .8rem; }
+.cj-alert > span[aria-hidden] { flex: none; display: inline-grid; place-items: center; inline-size: 20px; block-size: 20px; border-radius: 50%; background: var(--st-warn); color: #fff; font-weight: 700; font-size: .8rem; }
 .cj-ro { margin: 0; font-size: .84rem; color: var(--ink-mid); line-height: 1.8; }
 .cj .jt { margin: 0; }
 .cj-h { margin: 0; font-size: 1.02rem; color: var(--petrol-mid); }
@@ -48,7 +49,7 @@
   box-shadow: 0 1px 2px rgba(10, 42, 61, .04), 0 8px 22px rgba(10, 42, 61, .04); }
 .cj-phase::before { content: ''; position: absolute; inset-block: 16px; inset-inline-start: -1px; inline-size: 4px; border-start-end-radius: 4px; border-end-end-radius: 4px; background: var(--cj-ph); }
 .cj-phase-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
-.cj-phase-head h5 { margin: 0; font-size: .98rem; color: var(--ink); }
+.cj-phase-head h4 { margin: 0; font-size: .98rem; color: var(--ink); }
 .cj-phase-head small { color: var(--ink-mid); font-size: .8rem; }
 .cj-groups { display: grid; gap: 10px; min-width: 0; }
 .cj-group { display: grid; gap: 10px; min-width: 0; }
@@ -64,12 +65,12 @@
 .cj-card { position: relative; display: grid; gap: 8px; min-width: 0; padding: 14px 16px; border-radius: 12px; background: #fff; border: 1px solid var(--line-strong);
   transition: border-color .2s var(--ease), box-shadow .2s var(--ease); }
 .cj-card:focus { outline: none; }
-.cj-card:focus-visible, .cj-card:target { border-color: var(--cj-ph); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cj-ph) 22%, transparent); }
+.cj-card:focus-visible, .cj-card:target, .cj-card.flash { border-color: var(--cj-ph); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cj-ph) 22%, transparent); }
 .cj-card.st-active { border-color: color-mix(in srgb, var(--cj-ph) 55%, var(--line-strong)); box-shadow: 0 6px 18px rgba(10, 42, 61, .07); }
 .cj-card.st-done { background: color-mix(in srgb, var(--st-ok) 4%, #fff); }
 .cj-card.opt { border-style: dashed; }
 .cj-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.cj-card-head h6 { margin: 0; font-size: .96rem; font-weight: 700; color: var(--ink); margin-inline-end: auto; }
+.cj-card-head h5 { margin: 0; font-size: .96rem; font-weight: 700; color: var(--ink); margin-inline-end: auto; }
 .cj-dur { padding: 2px 10px; border-radius: 99px; background: color-mix(in srgb, var(--cj-ph) 12%, #fff); border: 1px solid color-mix(in srgb, var(--cj-ph) 35%, transparent); font-size: .78rem; font-weight: 600; color: var(--ink); }
 .cj-tag { padding: 2px 8px; border-radius: 99px; border: 1px dashed var(--line-strong); font-size: .74rem; color: var(--ink-mid); }
 .cj-state { display: inline-flex; gap: 6px; align-items: center; font-size: .76rem; font-weight: 600; color: var(--ink-mid); }

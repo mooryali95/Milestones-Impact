@@ -66,8 +66,9 @@ function Panel({ a, model, onOpen, openLabel }) {
 }
 
 /** onStage: إن مُرر صار اسم المرحلة على المسار زرًا ينقل إلى بطاقتها خارج الخط (تبويب «الرحلة» في ملف الدفعة)
- * @param {{ model: any, onOpen?: (a: any) => void, openLabel?: (a: any) => string, onEmpty?: () => void, onStage?: (key: string) => void, id?: string }} props */
-export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt' }) {
+ * omitCards: مفاتيح بطاقات الملخص التي يعرضها المضيف فوق الخط، فلا تتكرر (تبويب «الرحلة» يحمل المدة والنافذة والآن في رأسه)
+ * @param {{ model: any, onOpen?: (a: any) => void, openLabel?: (a: any) => string, onEmpty?: () => void, onStage?: (key: string) => void, id?: string, omitCards?: readonly string[] }} props */
+export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [] }) {
   const [sel, setSel] = useState(model?.selected || null);
   if (!model) return null;
   const head = `${id}-h`;
@@ -107,6 +108,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const dots = model.activities.flatMap((a) => a.dates.map((d, i) => ({ ...d, a, key: `${a.id}-${i}` })));
   const tbd = model.stages.filter((s) => s.undated);
   const slotAt = new Map(model.slots.map((x) => [x.key, x]));
+  const cards = model.cards.filter((c) => !omitCards.includes(c.key));
   const openFirst = (s) => (cohort ? s.status === 'active' : s.key === model.stages.find((x) => x.phase === 'qualification')?.key);
 
   return (
@@ -116,9 +118,11 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
           <p className="jt-eyebrow">الرحلة في لمحة{cohort ? '، بالتواريخ' : '، بالأسابيع'}</p>
           <h3 id={head}>{model.title}</h3>
         </div>
-        <dl className="jt-cards">
-          {model.cards.map((c) => <div key={c.key} className={c.tone ? `tone-${c.tone}` : ''}><dt>{c.label}</dt><dd>{c.value}</dd></div>)}
-        </dl>
+        {cards.length > 0 && (
+          <dl className="jt-cards">
+            {cards.map((c) => <div key={c.key} className={c.tone ? `tone-${c.tone}` : ''}><dt>{c.label}</dt><dd>{c.value}</dd></div>)}
+          </dl>
+        )}
       </header>
       {model.notice && <p className="jt-notice" role="note">{model.notice}</p>}
 

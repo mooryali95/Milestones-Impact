@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cohortDated, cohortTab, cohortTimeline, journeyHeader, journeyKpis, journeyLanes } from './cohort-journey.js';
+import { cohortDated, cohortTab, cohortTimeline, journeyHeader, journeyKpis, journeyLanes, TAB_TIMELINE_OMIT } from './cohort-journey.js';
 import { stageWindows } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { milestoneStatuses } from '../../supabase/functions/leaders-api/milestones.js';
 
@@ -51,7 +51,7 @@ describe('الممرات والبطاقات', () => {
     expect(q.groups[0].together).toBe(true);
     expect(q.groups[0].stages.map((s) => s.key)).toEqual(['training', 'ojt', 'consult']);
     expect(q.groups[0].stages.map((s) => s.lead)).toEqual([true, false, false]);
-    expect(q.groups[0].note_ar).toBe('التدريب، ومعها «التوجيه على رأس العمل» و«الاستشارة»، في الأسابيع نفسها');
+    expect(q.groups[0].note_ar).toBe('«التدريب»، ومعها «التوجيه على رأس العمل» و«الاستشارة»، في الأسابيع نفسها');
     expect(lanes.counts).toEqual({ stages: 6, together: 1, milestones: 3 });
     expect(JSON.stringify(lanes)).not.toContain('gone');
   });
@@ -88,6 +88,47 @@ describe('الممرات والبطاقات', () => {
     expect(tr.window_source).toBe('schedule');
     expect(tr.milestones[0]).toMatchObject({ due: '2026-11-20', source: 'schedule', source_ar: 'من جدول الدفعة' });
   });
+  it('بلا تاريخ بداية وجدول مكتوب كامل: الخط مؤرخ من الجدول، ومصدر كل نافذة «الجدول» لا «بداية الدفعة»', () => {
+    const live = stages.filter((s) => s.active !== false);
+    const full = stageWindows(live, cohort);
+    const schedule = Object.fromEntries(Object.entries(full).map(([k, w]) => [k, { start: w.from, end: w.to }]));
+    const c = { ...cohort, starts_on: null, schedule };
+    const m = cohortTimeline(def, c, today);
+    expect(m.dated).toBe(true);
+    expect(journeyHeader(m, c).kind).toBe('dated');
+    const cards = journeyLanes(m, { def, cohort: c, milestones }).phases.flatMap((p) => p.groups.flatMap((g) => g.stages));
+    expect(cards.length).toBe(6);
+    expect(new Set(cards.map((x) => x.window_source))).toEqual(new Set(['schedule']));
+    expect(cards[0].window_source_ar).toBe('من جدول الدفعة المكتوب');
+  });
+  it('«تبدأ مع» عبر محورين: القائد قائد الخانة كلها، والجمل لا تناقض البطاقات', () => {
+    const st = [
+      { key: 'a', title_ar: 'أ', phase: 'qualification', sort: 1, duration_days: 14, active: true },
+      { key: 'b', title_ar: 'ب', phase: 'impact', sort: 2, duration_days: 14, active: true, rules: { unlock: 'with', with: 'a' } },
+      { key: 'c', title_ar: 'ج', phase: 'impact', sort: 3, duration_days: 7, active: true, rules: { unlock: 'with', with: 'a' } },
+    ];
+    const d = { stages: st, requirements: [], sessions: [] };
+    const m = cohortTimeline(d, cohort, today);
+    const l = journeyLanes(m, { def: d, cohort });
+    const [q, im] = l.phases;
+    expect(q.groups[0]).toMatchObject({ together: false, note_ar: '' });
+    expect(q.groups[0].stages[0]).toMatchObject({ key: 'a', lead: true, with_ar: 'تبدأ معها «ب» و«ج» في محور «الأثر»' });
+    expect(im.groups[0].together).toBe(true);
+    expect(im.groups[0].stages.map((s) => s.lead)).toEqual([false, false]);
+    expect(im.groups[0].stages.map((s) => s.with_ar)).toEqual(['تبدأ مع «أ»', 'تبدأ مع «أ»']);
+    expect(im.groups[0].note_ar).toBe('«ب» و«ج» تبدأ مع «أ» في محور «التأهيل»، في الأسابيع نفسها');
+    expect(new Set(l.phases.flatMap((p) => p.groups.map((g) => g.key))).size).toBe(2);
+  });
+  it('فشل قراءة المعالم لا يقال عنه «لا معالم»، وبطاقات الخط في التبويب بلا ما يحمله رأسه', () => {
+    const l = journeyLanes(model, { def, cohort, milestones: [] });
+    expect(journeyKpis(model, l).find((k) => k.key === 'milestones').value).toBe('لا معالم');
+    expect(journeyKpis(model, l, null, { msError: true }).find((k) => k.key === 'milestones')).toMatchObject({ value: 'تعذّرت القراءة', tone: 'warn' });
+    // المؤرخة: النافذة والآن في الرأس، ويبقى «ينقص». بلا بداية: المدة والمراحل في المؤشرات، وتبقى الأنشطة و«ينقص»
+    const keep = (m) => m.cards.map((c) => c.key).filter((k) => !TAB_TIMELINE_OMIT.includes(k));
+    expect(model.cards.map((c) => c.key)).toEqual(['window', 'now', 'undated']);
+    expect(keep(model)).toEqual(['undated']);
+    expect(keep(cohortTimeline(def, { ...cohort, starts_on: null }, today))).toEqual(expect.arrayContaining(['activities', 'undated']));
+  });
   it('أعداد الناس من خريطة الرحلة: في المرحلة ومن تجاوز موعده وأنهاها، وعدادات المعالم', () => {
     const map = { totals: { total: 5, late: 1 }, stages: [{ key: 'training', here: 3, late: 1, done: 2 }], milestones: [{ id: 'm1', done: 2, late: 1 }] };
     const l = journeyLanes(model, { def, cohort, milestones, map });
@@ -98,7 +139,8 @@ describe('الممرات والبطاقات', () => {
     expect(l.phases[1].groups[0].stages[1].people).toBeNull();
     const k = journeyKpis(model, l, map);
     expect(k.map((x) => x.key)).toEqual(['total', 'stages', 'together', 'milestones', 'people']);
-    expect(k.at(-1)).toMatchObject({ value: '5، منهم 1 تجاوز موعده', tone: 'warn' });
+    expect(k.at(-1)).toMatchObject({ value: '5 أعضاء، منهم 1 تجاوز موعده', tone: 'warn' });
+    expect(journeyKpis(model, l, { totals: { total: 12, late: 0 } }).at(-1).value).toBe('12 عضوًا');
     expect(k[1].value).toBe('6 مراحل في 3 محاور');
   });
 });

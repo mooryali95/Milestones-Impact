@@ -51,7 +51,8 @@ const journeyMap = {
   milestones: [{ id: 'm1', title: 'نهاية التدريب', due: '2026-11-19', done: 0, late: 0 }],
 };
 
-async function setup(page, width = 1440) {
+// queue: ردود تُستهلك بالترتيب لإجراء بعينه قبل رده المعتاد (فشل ثم نجاح عند «أعد المحاولة»)
+async function setup(page, width = 1440, queue = {}) {
   const calls = [];
   await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
   await page.clock.setFixedTime(new Date('2026-11-16T09:00:00Z'));
@@ -68,7 +69,8 @@ async function setup(page, width = 1440) {
       'admin.cohort-journey': { success: true, journey_map: journeyMap },
       'admin.catalog': { success: true, program_id: 'pa', journey_stages: stages, stage_requirements: requirements, instruments: [], locked_instruments: [], questions: [], grid_cells: [], level_rules: [], placement_model: [{ id: 1 }], tracks: [], track_stats: {} },
     };
-    await route.fulfill({ json: replies[b.action] ?? { success: true } });
+    const q = queue[b.action];
+    await route.fulfill({ json: (q && q.length ? q.shift() : replies[b.action]) ?? { success: true } });
   });
   await page.goto(BASE);
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
@@ -126,19 +128,30 @@ test('الحاسوب 1440: الرأس والمؤشرات والخط والبطا
   await expect(panel.locator('.cj-kpis')).toContainText('8 مراحل في 3 محاور');
   await expect(panel.locator('.cj-kpis')).toContainText('مجموعة واحدة');
   await expect(panel.locator('.cj-kpis')).toContainText('3 معالم');
-  await expect(panel.locator('.cj-kpis .tone-warn')).toContainText('12، منهم 2 تجاوز موعده');
+  await expect(panel.locator('.cj-kpis .tone-warn')).toContainText('12 عضوًا، منهم 2 تجاوز موعده');
   // الخط الزمني نفسه، والنقر على اسم مرحلة ينقل إلى بطاقتها
   const tl = panel.getByRole('region', { name: 'الخط الزمني للدفعة' });
   await expect(tl.locator('.jt-today')).toContainText('اليوم 16 نوفمبر');
   await tl.getByRole('button', { name: 'الاستشارة: انتقل إلى بطاقتها' }).click();
   await expect(panel.locator('#cj-stage-consult')).toBeFocused();
+  // النقر بالفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة ثم يزول
+  await expect(panel.locator('#cj-stage-consult')).toHaveClass(/\bflash\b/);
+  await expect(panel.locator('#cj-stage-consult')).not.toHaveClass(/\bflash\b/, { timeout: 4000 });
+  // لا تكرار: المدة والنافذة والآن في الرأس والمؤشرات وحدها، ويبقى في الخط ما لا يقوله غيره
+  await expect(tl.locator('.jt-cards')).not.toContainText('النافذة');
+  await expect(tl.locator('.jt-cards')).not.toContainText('الأسبوع 3');
+  await expect(tl.locator('.jt-cards')).toContainText('ينقص');
+  // المخطط: أقسام التبويب بجوار الخط (h3)، والمحاور تحتها (h4)، والبطاقات (h5)
+  await expect(panel.getByRole('heading', { level: 3, name: 'المراحل', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { level: 3, name: 'خريطة الرحلة', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { level: 5, name: 'التدريب', exact: true })).toBeVisible();
   // المحاور الثلاثة، والتأهيل مجموعة واحدة بثلاثة ممرات
   const stagesSec = panel.getByRole('region', { name: 'المراحل' });
-  await expect(stagesSec.getByRole('heading', { level: 5 })).toHaveText(['القبول', 'التأهيل', 'الأثر', 'معالم الدفعة']);
+  await expect(stagesSec.getByRole('heading', { level: 4 })).toHaveText(['القبول', 'التأهيل', 'الأثر', 'معالم الدفعة']);
   const group = stagesSec.getByRole('group', { name: /^مراحل تسير معًا/ });
   await expect(group).toHaveCount(1);
   await expect(group.locator('.cj-card')).toHaveCount(3);
-  await expect(group).toContainText('التدريب، ومعها «التوجيه على رأس العمل» و«الاستشارة»، في الأسابيع نفسها');
+  await expect(group).toContainText('«التدريب»، ومعها «التوجيه على رأس العمل» و«الاستشارة»، في الأسابيع نفسها');
   // بطاقة التدريب: النافذة ومصدرها والمدة والحال والأنشطة الظاهرة والناس والمعلم بموعده المحسوب
   const training = stagesSec.getByRole('article', { name: 'التدريب' });
   await expect(training.locator('.cj-dur')).toHaveText('أسبوعان');
@@ -196,4 +209,33 @@ test('الدفعة المفتوحة: بلا تواريخ مطلقة، والخر
   expect(calls.filter((c) => c.action === 'admin.cohort-journey')).toHaveLength(0);
   await panel.getByRole('button', { name: 'اعرض خريطة الرحلة' }).click();
   await expect.poll(() => calls.filter((c) => c.action === 'admin.cohort-journey').length).toBe(1);
+});
+
+test('فشل القراءة يُقال صراحة: المعالم وأعداد الناس، و«أعد المحاولة» يستعيدهما', async ({ page }) => {
+  const calls = await setup(page, 1440, {
+    'admin.milestones': [{ success: false, message: 'تعذّرت قراءة معالم البرنامج' }],
+    'admin.cohort-journey': [{ success: false, message: 'تعذّرت قراءة خريطة الرحلة' }],
+  });
+  await openCohort(page);
+  // التبويب غير المختار لا يشير إلى لوحة غير موجودة
+  await expect(page.getByRole('tab', { name: 'الرحلة' })).not.toHaveAttribute('aria-controls', /.+/);
+  await expect(page.getByRole('tab', { name: 'الملف' })).toHaveAttribute('aria-controls', 'cohort-panel-overview');
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await expect(page.getByRole('tab', { name: 'الملف' })).not.toHaveAttribute('aria-controls', /.+/);
+  await expect(panel.locator('.cj-kpis div', { hasText: 'المعالم' }).locator('dd')).toHaveText('تعذّرت القراءة');
+  const msAlert = panel.getByRole('alert').filter({ hasText: 'تعذّرت قراءة معالم البرنامج' });
+  await expect(msAlert).toBeVisible();
+  await expect(panel.getByText('تعذّرت قراءة أعداد الناس، فلا تظهر في البطاقات.')).toBeVisible();
+  await expect(panel.getByRole('article', { name: 'التدريب' })).not.toContainText('الناس');
+  const mapSec = panel.getByRole('region', { name: 'خريطة الرحلة', exact: true });
+  await expect(mapSec.getByRole('alert')).toContainText('تعذّرت قراءة خريطة الرحلة');
+  // إعادة الخريطة وحدها، ثم المعالم
+  await mapSec.getByRole('button', { name: 'أعد المحاولة' }).click();
+  await expect(mapSec.locator('.jm')).toBeVisible();
+  await expect(panel.getByRole('article', { name: 'التدريب' })).toContainText('7 الآن');
+  await msAlert.getByRole('button', { name: 'أعد المحاولة' }).click();
+  await expect(panel.locator('.cj-kpis')).toContainText('3 معالم');
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  expect(calls.filter((c) => c.action === 'admin.milestones')).toHaveLength(2);
 });

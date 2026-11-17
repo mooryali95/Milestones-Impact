@@ -140,7 +140,9 @@ for (const width of [1440, 390]) {
   test(`الدفعة (${width}): التواريخ وخط اليوم وعداد «يُحدد لاحقًا»، والنقر يقفز إلى «+ موعد»`, async ({ page }) => {
     await setup(page, width);
     const tl = await openJourney(page);
-    await expect(tl.locator('.jt-cards')).toContainText('الأسبوع 3، 3 مراحل تسير معًا');
+    // «الآن» في رأس التبويب لا في بطاقات الخط، فلا يتكرر
+    await expect(page.locator('.cj-hero').getByRole('status')).toContainText('الأسبوع 3، 3 مراحل تسير معًا');
+    await expect(tl.locator('.jt-cards')).not.toContainText('الأسبوع 3');
     await expect(tl.locator('.jt-cards .tone-warn')).toContainText('موعد واحد يُحدد لاحقًا');
     await expect(tl).not.toContainText('1970');
     if (width > 500) {

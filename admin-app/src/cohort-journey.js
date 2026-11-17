@@ -24,6 +24,11 @@ export const WINDOW_SOURCE_AR = Object.freeze({ schedule: 'من جدول الد�
 const stagesAr = (n) => countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة');
 const milestonesAr = (n) => countAr(n, 'معلم واحد', 'معلمان', 'معالم', 'معلمًا');
 const actsAr = (n) => countAr(n, 'نشاط واحد', 'نشاطان', 'أنشطة', 'نشاطًا');
+export const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
+const quoteList = (xs) => xs.map((x) => `«${x}»`).join(' و');
+
+// بطاقات الخط الزمني التي يحملها رأس التبويب ومؤشراته (المدة والمراحل والنافذة والآن)، فلا تتكرر تحته. يبقى منها ما لا يقوله غيرها
+export const TAB_TIMELINE_OMIT = Object.freeze(['duration', 'stages', 'window', 'now']);
 
 // الدفعة المؤرخة: لها بداية واحدة وليست المفتوحة. المفتوحة مددها نسبية من دخول كل مشارك (القرار 21)، كما في milestoneStatuses
 export const cohortDated = (cohort) => !!cohort?.starts_on && !cohort?.is_default;
@@ -72,7 +77,8 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
   const raw = new Map((def?.stages || []).map((s) => [s.key, s]));
   const reqs = def?.requirements || [];
   const titleOf = (k) => model.stages.find((s) => s.key === k)?.title || renderJourneyText(raw.get(k)?.title_ar || k, { reqs });
-  const sched = cohortDated(cohort) ? cohort?.schedule || {} : {};
+  // مصدر النافذة من الجدول نفسه الذي قرأه الخط (cohortTimeline): الجدول المكتوب كاملًا يؤرخ الدفعة ولو بلا تاريخ بداية
+  const sched = cohort?.is_default ? {} : cohort?.schedule || {};
   // النوافذ التي رسمها الخط بعينها، فلا تُحسب مرة ثانية. المفتوحة لا نوافذ لها (milestoneStatuses)
   const windows = model.dated && cohortDated(cohort) ? Object.fromEntries(model.stages.filter((s) => s.window).map((s) => [s.key, s.window])) : null;
   const ctx = { startsOn: cohort?.starts_on || null, endsOn: cohort?.ends_on || null, schedule: cohort?.schedule || {}, windows };
@@ -92,7 +98,7 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
   };
   const stageMs = (k) => live.filter((m) => (m.anchor === 'stage_end' || m.anchor === 'stage_start') && m.stage_key === k).map(msOut);
 
-  const card = (s, lead) => {
+  const card = (s, lead, withAr = s.with_note || '') => {
     const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
     const shown = rs.filter((r) => !r.hidden).length;
     const p = mapStage.get(s.key);
@@ -102,7 +108,7 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
       label: s.label, window_ar: s.window_ar, today_ar: s.today_ar, lead,
       window_source: s.window ? (sched[s.key]?.start ? 'schedule' : 'plan') : null,
       window_source_ar: s.window ? WINDOW_SOURCE_AR[sched[s.key]?.start ? 'schedule' : 'plan'] : '',
-      with_ar: s.with_note || '', rule_ar: ruleAr(raw.get(s.key) || {}, titleOf),
+      with_ar: withAr, rule_ar: ruleAr(raw.get(s.key) || {}, titleOf),
       acts: { shown, total: rs.length, text: rs.length ? (shown === rs.length ? actsAr(rs.length) : `${actsAr(rs.length)}، الظاهر منها ${shown}`) : 'لا أنشطة بعد' },
       undated: !!s.undated,
       people: p ? { here: p.here, late: p.late, done: p.done } : null,
@@ -111,16 +117,30 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
   };
 
   const stageBy = new Map(model.stages.map((s) => [s.key, s]));
+  const phaseTitle = new Map(model.phases.map((p) => [p.key, p.title]));
+  // الخانة (slot) هي مجموعة «تبدأ مع» كما في stageWindows، وقد تمتد على محورين: تُقطع بالمحور للعرض، والقائد قائد الخانة كلها
+  // لا أول ما وقع منها في المحور، والجمل تُبنى من الخانة كلها فلا تناقض بطاقاتها
   const phases = model.phases.map((ph) => {
     const groups = model.slots.map((slot) => {
       const ks = slot.stages.filter((k) => stageBy.get(k)?.phase === ph.key);
       if (!ks.length) return null;
-      const stages = ks.map((k, i) => card(stageBy.get(k), i === 0));
+      const leadKey = slot.stages[0];
+      const lead = stageBy.get(leadKey);
+      const here = ks.includes(leadKey);
+      const away = slot.stages.filter((k) => !ks.includes(k)).map((k) => stageBy.get(k)).filter(Boolean);
+      const stages = ks.map((k) => {
+        const s = stageBy.get(k);
+        // القائد وحده في محوره وبقية خانته في محور آخر: تُسمى البقية بمحورها بدل «تبدأ البقية معها»
+        const awayAr = k === leadKey && ks.length === 1 && away.length
+          ? `تبدأ معها ${quoteList(away.map((x) => x.title))} في ${[...new Set(away.map((x) => `محور «${phaseTitle.get(x.phase) || ''}»`))].join(' و')}`
+          : undefined;
+        return card(s, k === leadKey, awayAr);
+      });
       const together = stages.length > 1;
-      return {
-        key: slot.key, together, stages,
-        note_ar: together ? `${stages[0].title}، ومعها ${stages.slice(1).map((x) => `«${x.title}»`).join(' و')}، في الأسابيع نفسها` : '',
-      };
+      let note = '';
+      if (together && here) note = `«${lead.title}»، ومعها ${quoteList(stages.slice(1).map((x) => x.title))}، في الأسابيع نفسها`;
+      else if (together) note = `${quoteList(stages.map((x) => x.title))} تبدأ مع «${lead?.title || ''}» في محور «${phaseTitle.get(lead?.phase) || ''}»، في الأسابيع نفسها`;
+      return { key: `${slot.key}-${ph.key}`, together, stages, note_ar: note };
     }).filter(Boolean);
     return { key: ph.key, title: ph.title, label: ph.label, groups, count: groups.reduce((n, g) => n + g.stages.length, 0) };
   }).filter((p) => p.groups.length);
@@ -131,18 +151,19 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
 }
 
 /** صف المؤشرات تحت الرأس: المدة والمراحل وما يسير معًا والمعالم، والناس من الخريطة إن قُرئت
- * @param {any} model @param {any} lanes @param {any} [map] */
-export function journeyKpis(model, lanes, map = null) {
+ * msError: قراءة المعالم فشلت، فلا يُقال «لا معالم» عن برنامج قد تكون له معالم
+ * @param {any} model @param {any} lanes @param {any} [map] @param {{ msError?: boolean }} [o] */
+export function journeyKpis(model, lanes, map = null, { msError = false } = {}) {
   if (!model || model.empty) return [];
   const out = [
     { key: 'total', label: 'المدة', value: model.total_label },
     { key: 'stages', label: 'المراحل', value: `${stagesAr(lanes.counts.stages)} في ${countAr(lanes.phases.length, 'محور واحد', 'محورين', 'محاور', 'محورًا')}` },
     { key: 'together', label: 'تسير معًا', value: lanes.counts.together ? countAr(lanes.counts.together, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة') : 'لا توازي' },
-    { key: 'milestones', label: 'المعالم', value: lanes.counts.milestones ? milestonesAr(lanes.counts.milestones) : 'لا معالم' },
+    { key: 'milestones', label: 'المعالم', value: msError ? 'تعذّرت القراءة' : lanes.counts.milestones ? milestonesAr(lanes.counts.milestones) : 'لا معالم', tone: msError ? 'warn' : '' },
   ];
   if (map?.totals) {
     const t = map.totals;
-    out.push({ key: 'people', label: 'في الرحلة', value: `${t.total}${t.late ? `، منهم ${t.late} تجاوز موعده` : ''}`, tone: t.late ? 'warn' : '' });
+    out.push({ key: 'people', label: 'في الرحلة', value: `${membersAr(t.total)}${t.late ? `، منهم ${t.late} تجاوز موعده` : ''}`, tone: t.late ? 'warn' : '' });
   }
   return out;
 }

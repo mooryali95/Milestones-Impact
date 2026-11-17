@@ -6,16 +6,14 @@
 // النموذج كله من cohort-journey.js، والتواريخ من stageWindows وmilestoneDueInfo وحدهما. لا كتابة هنا: المدة والإيقاف
 // والتوازي للدفعة في R2، وحتى ذلك تُضبط المدد في رحلة البرنامج والمواعيد في نافذة «الجدول».
 // البيانات بإجراءات قراءة قائمة: admin.cohort-definition وadmin.milestones وadmin.cohort-journey.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner } from '../ui.jsx';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
-import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
-import { cohortTimeline, journeyHeader, journeyKpis, journeyLanes } from '../cohort-journey.js';
+import { cohortTimeline, journeyHeader, journeyKpis, journeyLanes, membersAr, TAB_TIMELINE_OMIT } from '../cohort-journey.js';
 import '../cohort-journey.css';
 
-const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
 // الخريطة تُحسب من رحلة كل عضو على الخادم: تلقائيًا للدفعة الصغيرة، وللمفتوحة أو الكبيرة بطلب صريح (R0)
 export const JOURNEY_AUTO_MAX = 300;
 
@@ -24,7 +22,7 @@ function StageCard({ s }) {
   return (
     <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card${s.status ? ` st-${s.status}` : ''}${s.optional ? ' opt' : ''}${s.lead ? '' : ' lane'}`} aria-labelledby={head}>
       <header className="cj-card-head">
-        <h6 id={head}>{s.title}</h6>
+        <h5 id={head}>{s.title}</h5>
         <span className="cj-dur">{s.label}</span>
         {s.optional && <span className="cj-tag">اختيارية</span>}
         {s.status_ar && <span className={`cj-state ${s.status}`}><i aria-hidden="true" />{s.status_ar}</span>}
@@ -73,13 +71,17 @@ export default function CohortJourney({ c, canWrite = false, on = {} }) {
   const auto = !c.is_default && (Number(c.members) || 0) <= JOURNEY_AUTO_MAX;
   const [want, setWant] = useState(auto);
   const [map, setMap] = useState(null);
+  const [mapRetry, setMapRetry] = useState(0);
 
   useEffect(() => {
     let live = true;
     setD(null);
     Promise.all([L('admin.cohort-definition', { cohort_id: c.id }), L('admin.milestones', { program_id: c.program_id })]).then(([def, ms]) => {
       if (!live) return;
-      setD(def?.success === false ? { error: def.message || 'تعذّرت قراءة رحلة الدفعة' } : { def, milestones: ms?.success === false ? [] : ms?.milestones || [] });
+      // فشل قراءة المعالم يُقال صراحة، فلا يُخلط بـ«برنامج بلا معالم»
+      const msBad = !ms || ms.success === false;
+      setD(def?.success === false ? { error: def.message || 'تعذّرت قراءة رحلة الدفعة' }
+        : { def, milestones: msBad ? [] : ms.milestones || [], msError: msBad ? ms?.message || 'تعذّرت قراءة معالم البرنامج' : '' });
     });
     return () => { live = false; };
   }, [c.id, c.program_id, retry]);
@@ -90,18 +92,27 @@ export default function CohortJourney({ c, canWrite = false, on = {} }) {
     // ردّ دفعة سابقة يصل بعد الانتقال إلى غيرها لا يكتب فوقها
     if (want) L('admin.cohort-journey', { cohort_id: c.id }).then((r) => { if (live) setMap(r); });
     return () => { live = false; };
-  }, [c.id, want]);
+  }, [c.id, want, mapRetry]);
 
   const jm = map?.success ? map.journey_map : null;
   const model = useMemo(() => (d?.def ? cohortTimeline(d.def, c, new Date()) : null), [d, c]);
   const lanes = useMemo(() => (model ? journeyLanes(model, { def: d.def, cohort: c, milestones: d.milestones, map: jm }) : null), [model, d, c, jm]);
   const head = model ? journeyHeader(model, c) : null;
-  const kpis = model ? journeyKpis(model, lanes, jm) : [];
+  const kpis = model ? journeyKpis(model, lanes, jm, { msError: !!d?.msError }) : [];
+  const mapFailed = want && map && !map.success;
+  // القفز إلى البطاقة: التركيز البرمجي بعد نقرة الفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة
+  const flashT = useRef(0);
+  useEffect(() => () => clearTimeout(flashT.current), []);
   const toCard = (k) => {
     const el = document.getElementById(`cj-stage-${k}`);
     if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
     el.focus({ preventScroll: true });
+    document.querySelectorAll('.cj-card.flash').forEach((x) => x.classList.remove('flash'));
+    el.classList.add('flash');
+    clearTimeout(flashT.current);
+    flashT.current = window.setTimeout(() => el.classList.remove('flash'), 1600);
   };
   // النقر على نشاط: الورشة إلى «+ موعد» عندها في «الحضور والجلسات»، وغيرها إلى رحلة البرنامج (كما كان في محرر الدفعة)
   const openAct = (a) => {
@@ -119,9 +130,10 @@ export default function CohortJourney({ c, canWrite = false, on = {} }) {
       <header className="cj-hero" aria-labelledby="cj-title">
         <div className="cj-hero-txt">
           <p className="cj-eyebrow">رحلة الدفعة · {version ? `النسخة ${version.number} المثبتة (${version.label})` : 'البرنامج كما هو الآن'}</p>
+          <h3 id="cj-title" className="sr-only">رحلة الدفعة</h3>
           {head.kind === 'dated' ? (
-            <h3 id="cj-title" className="cj-title">تبدأ الدفعة <b>{head.start_ar}</b>، وتنتهي الرحلة <b>{head.end_ar}</b> <span className="cj-total">({head.total})</span></h3>
-          ) : <h3 id="cj-title" className="cj-title">{head.text}</h3>}
+            <p className="cj-title">تبدأ الدفعة <b>{head.start_ar}</b>، وتنتهي الرحلة <b>{head.end_ar}</b> <span className="cj-total">({head.total})</span></p>
+          ) : <p className="cj-title">{head.text}</p>}
           {head.kind === 'undated' && canWrite && on.edit && <button type="button" className="cj-hero-btn" onClick={on.edit}>حدد تاريخ البداية</button>}
         </div>
         {head.kind === 'dated' && (
@@ -138,20 +150,28 @@ export default function CohortJourney({ c, canWrite = false, on = {} }) {
         </dl>
       )}
       {head.over_ar && <p className="cj-alert" role="note"><span aria-hidden="true">!</span>{head.over_ar}</p>}
+      {d.msError && (
+        <p className="cj-alert" role="alert"><span aria-hidden="true">!</span>
+          <span>{d.msError}، فلا تظهر المعالم في البطاقات. <button type="button" className="la-link" onClick={() => setRetry((n) => n + 1)}>أعد المحاولة</button></span></p>
+      )}
+      {mapFailed && (
+        <p className="cj-alert" role="note"><span aria-hidden="true">!</span>
+          <span>تعذّرت قراءة أعداد الناس، فلا تظهر في البطاقات. <button type="button" className="la-link" onClick={() => setMapRetry((n) => n + 1)}>أعد المحاولة</button></span></p>
+      )}
       <p className="cj-ro" role="note">
         للقراءة: تعديل المدة وإيقاف مرحلة والتوازي لهذه الدفعة يأتي في هذا التبويب لاحقًا. حتى ذلك تُضبط المدد في رحلة البرنامج، والمواعيد في الجدول.
         {' '}{on.journey && <button type="button" className="la-link" onClick={on.journey}>رحلة البرنامج</button>}
         {canWrite && on.schedule && <> · <button type="button" className="la-link" onClick={on.schedule}>الجدول</button></>}
       </p>
 
-      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} />}
+      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} />}
 
       {lanes.phases.length > 0 && (
         <section className="cj-stages" aria-labelledby="cj-stages-h">
-          <h4 id="cj-stages-h" className="cj-h">المراحل</h4>
+          <h3 id="cj-stages-h" className="cj-h">المراحل</h3>
           {lanes.phases.map((p) => (
             <section key={p.key} className={`cj-phase ph-${p.key}`} aria-labelledby={`cj-ph-${p.key}`}>
-              <header className="cj-phase-head"><h5 id={`cj-ph-${p.key}`}>{p.title}</h5><small>{p.label}</small></header>
+              <header className="cj-phase-head"><h4 id={`cj-ph-${p.key}`}>{p.title}</h4><small>{p.label}</small></header>
               <div className="cj-groups">
                 {p.groups.map((g) => (g.together ? (
                   <div key={g.key} className="cj-group together" role="group" aria-label={`مراحل تسير معًا: ${g.note_ar}`}>
@@ -164,7 +184,7 @@ export default function CohortJourney({ c, canWrite = false, on = {} }) {
           ))}
           {lanes.cohort_milestones.length > 0 && (
             <section className="cj-phase cj-cohort-ms" aria-labelledby="cj-cms-h">
-              <header className="cj-phase-head"><h5 id="cj-cms-h">معالم الدفعة</h5><small>مرتبطة بتاريخ الدفعة لا بمرحلة</small></header>
+              <header className="cj-phase-head"><h4 id="cj-cms-h">معالم الدفعة</h4><small>مرتبطة بتاريخ الدفعة لا بمرحلة</small></header>
               <ul className="cj-ms">
                 {lanes.cohort_milestones.map((m) => (
                   <li key={m.id} className={m.due ? '' : 'none'}>
@@ -182,11 +202,13 @@ export default function CohortJourney({ c, canWrite = false, on = {} }) {
 
       {/* خريطة الرحلة (R0): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ومنها أعداد الناس في البطاقات أعلاه */}
       <section className="cohort-journey" aria-labelledby="cj-h">
-        <h4 className="cj-h" id="cj-h">خريطة الرحلة</h4>
+        <h3 className="cj-h" id="cj-h">خريطة الرحلة</h3>
         {!want ? (
           <p className="la-muted">{c.is_default ? 'الدفعة المفتوحة تضم كل من ليس في دفعة، ' : `في الدفعة ${membersAr(Number(c.members) || 0)}، `}
             وتُحسب الخريطة من رحلة كل عضو. <button type="button" className="btn-sm ghost" onClick={() => setWant(true)}>اعرض خريطة الرحلة</button></p>
-        ) : !map ? <Spinner /> : !map.success ? <p className="la-err" role="alert">{map.message || 'تعذّرت قراءة خريطة الرحلة'}</p>
+        ) : !map ? <Spinner /> : !map.success ? (
+          <p className="la-err" role="alert">{map.message || 'تعذّرت قراءة خريطة الرحلة'} <button type="button" className="la-link" onClick={() => setMapRetry((n) => n + 1)}>أعد المحاولة</button></p>
+        )
           : !jm?.stages?.length ? <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الدفعة بعد.</p>
           : <>
             {!jm.totals?.total && <p className="la-muted">لا أعضاء في الرحلة بعد، فالأعداد كلها صفر.</p>}

@@ -114,7 +114,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
 
         <div ref={tabsRef} className="cohort-tabs" role="tablist" aria-label="أقسام ملف الدفعة" onKeyDown={tabKey}>
           {COHORT_TABS.map(([k, l]) => (
-            <button key={k} id={`cohort-tab-${k}`} type="button" role="tab" aria-selected={tab === k} aria-controls={`cohort-panel-${k}`} tabIndex={tab === k ? 0 : -1}
+            <button key={k} id={`cohort-tab-${k}`} type="button" role="tab" aria-selected={tab === k} aria-controls={tab === k ? `cohort-panel-${k}` : undefined} tabIndex={tab === k ? 0 : -1}
               onClick={() => openTab(k)}>{l}</button>
           ))}
         </div>
