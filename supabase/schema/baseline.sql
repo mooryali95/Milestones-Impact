@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261116190000_leaders_slack_digest_category
+-- as-of migration: 20261117100000_leaders_book_proposals_save
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -4037,6 +4037,48 @@ AS $function$
 begin
   raise exception 'سجل التدقيق لا يُعدَّل ولا يُحذف' using errcode = '42501';
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.book_proposals_save(p_module uuid, p_author_ref text, p_author_name text, p_rows jsonb, p_now timestamp with time zone DEFAULT now())
+ RETURNS uuid[]
+ LANGUAGE plpgsql
+AS $function$
+declare
+  r jsonb;
+  out_ids uuid[] := '{}';
+  new_id uuid;
+  is_edit boolean;
+begin
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then
+    raise exception 'book_proposals_save: لا صفوف' using errcode = '22023';
+  end if;
+  for r in select * from jsonb_array_elements(p_rows) loop
+    is_edit := nullif(r->>'prev_id', '') is not null;
+    if is_edit then
+      update leaders.book_proposals
+         set section = coalesce(r->>'section', ''), section_id = nullif(r->>'section_id', ''),
+             base_md = coalesce(r->>'base_md', ''), proposed_md = r->>'proposed_md', reason = r->>'reason',
+             status = r->>'status', updated_at = p_now
+       where id = (r->>'prev_id')::uuid and module_id = p_module and author_ref = p_author_ref and status = r->>'prev_status'
+      returning id into new_id;
+      if new_id is null then
+        raise exception '%', coalesce(r->>'label', r->>'section', '') using errcode = 'P0409';
+      end if;
+    else
+      insert into leaders.book_proposals (module_id, section, section_id, base_md, proposed_md, reason, status, author_ref, author_name, updated_at)
+      values (p_module, coalesce(r->>'section', ''), nullif(r->>'section_id', ''), coalesce(r->>'base_md', ''), r->>'proposed_md',
+              r->>'reason', r->>'status', p_author_ref, coalesce(p_author_name, ''), p_now)
+      returning id into new_id;
+    end if;
+    insert into leaders.audit_log (actor_type, actor, action, entity, entity_id, before, after)
+    values ('admin', p_author_ref, case when is_edit then 'book.proposal-edit' else 'book.proposal' end, 'book_proposals', new_id::text, null,
+            jsonb_build_object('module_id', p_module, 'section', coalesce(r->>'section', ''), 'status', r->>'status', 'from', 'studio'));
+    out_ids := out_ids || new_id;
+    new_id := null;
+  end loop;
+  return out_ids;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.cohort_release_pinned()

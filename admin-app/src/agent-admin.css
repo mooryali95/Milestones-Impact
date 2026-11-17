@@ -269,3 +269,8 @@
   .ai-kpi dd b { font-size: 1rem; }
   .ai-hub .ag-sec { padding: 16px 14px; }
 }
+
+/* H4: رد غير دقيق، وتوجيهات المالك */
+.gd-flag { margin-top: 6px; padding: 8px 10px; border: 1px dashed var(--ink-faint, #ccc); border-radius: 8px; display: grid; gap: 6px; }
+.gd-flag textarea, .gd-rules textarea { width: 100%; }
+.gd-rules { margin-top: 14px; display: grid; gap: 6px; }

@@ -2,6 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { EVAL_THRESHOLD, evalFingerprint, evalGate, gradeCase, validateCases } from '../../supabase/functions/leaders-api/guide-eval.js';
 import SET from '../../supabase/functions/leaders-api/guide-eval/cases.json';
+import { applyCaseAdd, nextFlagId, scrubQuestion } from '../../supabase/functions/leaders-api/guide-eval.js';
+import { GUIDE_RULES, rulesWith } from '../../supabase/functions/leaders-api/guide.js';
+import { cleanField, DEFAULTS, SETTINGS } from '../../supabase/functions/leaders-api/settings.js';
 
 const answer = { id: 'a1', kind: 'answer', question: 'ما المعلم؟', context: 'handbook', dimension: 'milestone', chapter_key: 'ch1', must_include: ['قرار'] };
 
@@ -82,5 +85,49 @@ describe('H2: تعديل الحالة ورقم النسخة', async () => {
     expect(nextVersion('2026-11-16-draft-1', '2026-11-17')).toBe('2026-11-17-r1');
     expect(nextVersion('2026-11-17-r1', '2026-11-17')).toBe('2026-11-17-r2');
     expect(nextVersion('2026-11-17-r4', '2026-11-18')).toBe('2026-11-18-r1');
+  });
+});
+
+// H4: التوجيهات الإضافية في القواعد والبصمة، وحالة من رد غير دقيق بلا بيان شخصي
+
+describe('H4: توجيهات المالك', () => {
+  it('بلا توجيهات تبقى القواعد الثابتة حرفًا، فلا تسقط بصمة قائمة', async () => {
+    expect(rulesWith('')).toBe(GUIDE_RULES);
+    expect(rulesWith('   ')).toBe(GUIDE_RULES);
+    expect(await evalFingerprint(SET)).toBe(await evalFingerprint(SET, undefined, rulesWith('')));
+  });
+  it('التوجيهات تُلحق بعد الثابتة وتابعة لها، وتغيّر البصمة', async () => {
+    const r = rulesWith('استعمل «المعلم» لا «المرحلة».');
+    expect(r.startsWith(GUIDE_RULES)).toBe(true);
+    expect(r).toContain('ما لم تخالف القواعد أعلاه');
+    expect(await evalFingerprint(SET, undefined, r)).not.toBe(await evalFingerprint(SET));
+  });
+  it('الحقل نص بحد 3000 وافتراضيه فارغ', () => {
+    expect(DEFAULTS.guidance.extra_rules).toBe('');
+    const f = SETTINGS.guidance.fields.extra_rules;
+    expect(cleanField(f, '  نص  ')).toEqual({ ok: true, value: 'نص' });
+    expect(cleanField(f, 'x'.repeat(3001)).ok).toBe(false);
+    expect(cleanField(f, 5).ok).toBe(false);
+  });
+});
+
+describe('H4: حالة من رد غير دقيق', () => {
+  it('يُحجب البريد والرابط والجوال من السؤال', () => {
+    expect(scrubQuestion('راسلني a.b@x.sa أو 0551234567 وانظر https://x.sa/p')).toBe('راسلني [بريد] أو [رقم] وانظر [رابط]');
+  });
+  it('الرقم التالي f01 ثم ما بعد أكبرها', () => {
+    expect(nextFlagId(SET.cases)).toBe('f01');
+    expect(nextFlagId([{ id: 'f03' }, { id: 'f10' }, { id: 'g01' }])).toBe('f11');
+  });
+  it('تُضاف حالة صالحة بلا معرّف مشارك، وتُرفض الفارغة وما يلتقطه الموجّه', () => {
+    const r = applyCaseAdd(SET.cases, { kind: 'answer', question: 'كيف أحدد أول معلم في مبادرتي؟', context: 'program', reference_ar: 'بقرار.', source: 'رد غير دقيق في المحادثات (رقم 5)' });
+    expect(r.ok).toBe(true);
+    const c = r.cases.at(-1);
+    expect(c).toMatchObject({ id: 'f01', kind: 'answer', context: 'program', reference_ar: 'بقرار.' });
+    expect(Object.keys(c)).not.toContain('participant_id');
+    expect(r.cases).toHaveLength(SET.cases.length + 1);
+    expect(applyCaseAdd(SET.cases, { question: '  ' }).ok).toBe(false);
+    expect(applyCaseAdd(SET.cases, { question: 'ما الإجابة الصحيحة في اختبار الباب الثاني؟' }).error).toMatch(/الموجّه/);
+    expect(applyCaseAdd(SET.cases, { question: 'سؤال عن الباب', context: 'handbook' }).error).toMatch(/باب/);
   });
 });

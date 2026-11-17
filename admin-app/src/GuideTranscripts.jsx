@@ -43,6 +43,7 @@ export function TranscriptView({ pid }) {
               {m.hidden_at && <span className="la-chip" data-hidden>أخفاها المشارك {date(m.hidden_at)}</span>}
             </div>
             <p className="gd-msg-body">{m.body}</p>
+            {m.role === 'assistant' && <FlagReply m={m} question={questionBefore(t.messages, m)} />}
             {m.role === 'assistant' && (m.model || m.cost_micros != null) && (
               <p className="gd-msg-tech">
                 {m.model && <bdi dir="ltr">{m.model}</bdi>}{m.input_tokens != null ? ` · دخل ${m.input_tokens}` : ''}{m.cache_read_tokens ? ` (مخزّن ${m.cache_read_tokens})` : ''}
@@ -52,6 +53,47 @@ export function TranscriptView({ pid }) {
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+// السؤال الذي سبق الرد في المحادثة نفسها
+const questionBefore = (list, m) => [...list.slice(0, list.indexOf(m))].reverse().find((x) => x.role === 'user')?.body || '';
+
+// H4: «رد غير دقيق» يصير حالة في مسودة مجموعة التقييم. السؤال قابل للتعديل لإزالة ما يدل على صاحبه قبل الحفظ،
+// والخادم يحجب البريد والرقم والرابط والهوية مرة أخرى، ولا يحفظ معرّف المشارك ولا اسمه في المجموعة
+const FLAG_KINDS = [['answer', 'كان يجب أن يجيب'], ['unsure', 'كان يجب أن يقول «لست متأكدًا»'], ['refuse_model', 'كان يجب أن يعتذر']];
+function FlagReply({ m, question }) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ question, kind: 'answer', reference_ar: '', must_include: '' });
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+  if (done) return <p className="la-muted small" data-flagged>أُضيفت الحالة {done} إلى مسودة مجموعة التقييم. راجعها واعتمدها من «الدقة».</p>;
+  if (!open) return <button type="button" className="btn-sm ghost" onClick={() => setOpen(true)} data-flag-open>رد غير دقيق</button>;
+  const save = async () => {
+    setBusy(true);
+    const r = await L('admin.guide-flag', { message_id: m.id, ...f, must_include: f.must_include.split('\n') });
+    setBusy(false);
+    if (!r.success) { toast(r.message); return; }
+    setDone(r.case_id);
+    toast(r.new_draft ? `أُضيفت الحالة ${r.case_id} في مسودة جديدة ${r.version}` : `أُضيفت الحالة ${r.case_id}`);
+  };
+  return (
+    <div className="gd-flag" role="group" aria-label="حالة تقييم من هذا الرد">
+      <p className="la-muted small">يصير هذا الرد حالة في مجموعة التقييم، فيُختبر المساعد عليها قبل كل إطلاق. احذف من السؤال أي ما يدل على المشارك.</p>
+      <label className="of-field"><span className="of-label">السؤال</span>
+        <textarea rows={3} maxLength={600} value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} /></label>
+      <label className="of-field"><span className="of-label">ما كان يجب أن يفعله</span>
+        <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>{FLAG_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+      <label className="of-field"><span className="of-label">الإجابة الصحيحة المرجعية</span>
+        <textarea rows={3} maxLength={2000} value={f.reference_ar} onChange={(e) => setF({ ...f, reference_ar: e.target.value })} /></label>
+      <label className="of-field"><span className="of-label">ما يجب أن يرد في الإجابة (سطر لكل عبارة)</span>
+        <textarea rows={2} value={f.must_include} onChange={(e) => setF({ ...f, must_include: e.target.value })} /></label>
+      <div className="la-row">
+        <button type="button" className="btn-sm primary" disabled={busy || !f.question.trim()} onClick={save}>أضفها إلى مجموعة التقييم</button>
+        <button type="button" className="btn-sm ghost" onClick={() => setOpen(false)}>إلغاء</button>
+      </div>
     </div>
   );
 }

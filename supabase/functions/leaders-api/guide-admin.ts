@@ -39,7 +39,7 @@ export async function dashboard(a: Admin) {
   const pilotCount = (pilots.cohorts || []).filter((c: any) => c.pilot).length;
   return {
     success: true, model: GUIDE_MODEL, policy_version: GUIDE_POLICY_VERSION,
-    settings: { enabled: !!s.enabled, cap_usd: Number(s.daily_spend_usd), daily: s.daily_questions, monthly: s.monthly_questions, retention_days: s.retention_days },
+    settings: { enabled: !!s.enabled, cap_usd: Number(s.daily_spend_usd), daily: s.daily_questions, monthly: s.monthly_questions, retention_days: s.retention_days, extra_rules: String(s.extra_rules || '') },
     gate: { eval_ok: gate.ok, eval_reason: gate.reason, pilots: pilotCount, has_key: !!key },
     can_write: a.role === 'super_admin' && a.method !== 'email',
     blockers: blockers({ policy: GUIDE_POLICY_VERSION, enabled: !!s.enabled, evalOk: gate.ok, evalReason: gate.reason, hasKey: !!key, pilots: pilotCount }),

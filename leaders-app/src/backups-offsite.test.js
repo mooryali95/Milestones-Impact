@@ -177,6 +177,35 @@ describe('سكربتا النسخ والتمرين وسيرا العمل', () =>
       rmSync(out, { recursive: true, force: true });
     }
   });
+  // قرار المالك 2026-11-17: محادثات «التوجيه والإرشاد» تُنسخ بنيتها بلا صفوفها، فلا تبقى في النسخة الشهرية المقفلة سنة
+  // بعد حذفها من القاعدة بعد 90 يومًا. pg_dump المزيف يسجّل وسائطه، والسكربت الحقيقي يشغّله
+  it.skipIf(process.platform !== 'linux')('صفوف المحادثات خارج النسخة، وبنية الجدول فيها، والإعداد يقبل جداول أخرى', () => {
+    const bin = mkdtempSync(join(tmpdir(), 'mi-backup-bin-'));
+    const out = mkdtempSync(join(tmpdir(), 'mi-backup-out-'));
+    const log = join(bin, 'args.log');
+    const tool = (name, body) => { writeFileSync(join(bin, name), `#!/usr/bin/env bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
+    try {
+      tool('pg_dump', `[ "$1" = --version ] && { echo "pg_dump (PostgreSQL) 17.2"; exit 0; }; printf '%s\\n' "$@" >> ${log}; echo dump`);
+      tool('psql', '[ "$1" = --version ] && { echo "psql (PostgreSQL) 17.2"; exit 0; }; echo \'{"leaders.participants":1}\'');
+      tool('gpg', 'while [ $# -gt 1 ]; do [ "$1" = -o ] && { o="$2"; shift; }; shift; done; cp "$1" "$o"');
+      const run = (extra = {}) => spawnSync('bash', [join(root, 'scripts/ops/backup.sh')], {
+        encoding: 'utf8',
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME || tmpdir(), SUPABASE_DB_URL: 'postgres://fake', BACKUP_PASSPHRASE: 'x', BACKUP_OUT: out, ...extra },
+      });
+      expect(run().status).toBe(0);
+      let args = readFileSync(log, 'utf8').split('\n');
+      expect(args).toContain('--exclude-table-data=leaders.guidance_messages');
+      expect(args).not.toContain('--exclude-table=leaders.guidance_messages');
+      expect(args).toContain('--schema=leaders');
+      writeFileSync(log, '');
+      expect(run({ BACKUP_EXCLUDE_DATA: 'leaders.guidance_messages,leaders.x' }).status).toBe(0);
+      args = readFileSync(log, 'utf8').split('\n');
+      expect(args).toEqual(expect.arrayContaining(['--exclude-table-data=leaders.guidance_messages', '--exclude-table-data=leaders.x']));
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+      rmSync(out, { recursive: true, force: true });
+    }
+  });
   // نقل التشفير إلى المفتاح العام (2026-11-14): gpg بملف فيه كتلتان يشفّر للأولى وحدها بصمت، فمفتاح احتياطي يُلصق
   // مع مفتاح المالك في السر كان سيُهمل. السكربت الحقيقي وgpg الحقيقي بمفتاحين مولّدين للاختبار، بلا قاعدة ولا R2
   const hasGpg = spawnSync('gpg', ['--version']).status === 0;

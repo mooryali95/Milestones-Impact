@@ -247,6 +247,30 @@ function UsagePart({ d }) {
   );
 }
 
+// H4: توجيهات المالك للمساعد، تُضاف إلى قواعده الثابتة ولا تلغيها. كل حفظ يغيّر بصمة التقييم فيُسقط نجاحه
+function RulesEditor({ d, canWrite, onSaved }) {
+  const { toast } = useUI();
+  const [text, setText] = useState(d.settings.extra_rules || '');
+  const [busy, setBusy] = useState(false);
+  const dirty = text.trim() !== (d.settings.extra_rules || '').trim();
+  const save = async () => {
+    setBusy(true);
+    const r = await L('admin.guide-rules', { extra_rules: text });
+    setBusy(false);
+    if (!r.success) { toast(r.message); return; }
+    toast('حُفظت التوجيهات. شغّل تقييم الدقة من جديد قبل الإطلاق');
+    onSaved();
+  };
+  return (
+    <section className="gd-rules" aria-labelledby="gd-rules-h">
+      <h4 id="gd-rules-h">توجيهات إضافية للمساعد</h4>
+      <p className="la-muted small">تُضاف إلى قواعده الثابتة ولا تلغيها: مصطلح يلتزمه، أو خطأ تكرر في «سجل المحادثات». كل تعديل يُسقط نجاح تقييم الدقة حتى يُشغَّل من جديد.</p>
+      <textarea rows={5} maxLength={3000} value={text} disabled={!canWrite} aria-labelledby="gd-rules-h" onChange={(e) => setText(e.target.value)} />
+      {canWrite && <div className="la-row"><button type="button" className="btn-sm primary" disabled={busy || !dirty} onClick={save}>احفظ التوجيهات</button><span className="la-muted small">{text.length} / 3000</span></div>}
+    </section>
+  );
+}
+
 export default function GuidanceAdmin() {
   const [d, setD] = useState(null);
   const [evalKey, setEvalKey] = useState(0);
@@ -271,7 +295,7 @@ export default function GuidanceAdmin() {
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'}><StatusPart d={d} reload={load} setD={setD} /></Section>
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${dollarsOf(d.today.usd, d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
-      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} /><SetReview canWrite={d.can_write} onChanged={() => setEvalKey((k) => k + 1)} /></Section>
+      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} /><SetReview canWrite={d.can_write} onChanged={() => setEvalKey((k) => k + 1)} /><RulesEditor d={d} canWrite={d.can_write} onSaved={() => { load(); setEvalKey((k) => k + 1); }} /></Section>
       <Section id="gd-transcripts" title="سجل المحادثات" summary="محادثة كل مشارك كاملة لتتبع أي مشكلة، بحكم كل رد ونموذجه وكلفته. للمالك، وللمدير الأعلى بصلاحية يمنحها المالك، وكل فتح يُسجَّل."><GuideConversations /></Section>
     </div>
   );

@@ -13,7 +13,7 @@ function backend() {
   const st = { enabled: false, org: true, pilot: false, steps: 0, runs: [] };
   const dash = () => ({
     success: true, model: 'claude-opus-5-5', policy_version: null, can_write: true,
-    settings: { enabled: st.enabled, cap_usd: 5, daily: 8, monthly: 30, retention_days: 90 },
+    settings: { enabled: st.enabled, cap_usd: 5, daily: 8, monthly: 30, retention_days: 90, extra_rules: st.rules || '' },
     gate: { eval_ok: false, eval_reason: 'unapproved', pilots: st.pilot ? 1 : 0, has_key: true },
     blockers: ['نسخة السياسة الجوهرية لم تُنشر بعد (المرحلة G4b).', ...(st.enabled ? [] : ['المساعد متوقف من هذه اللوحة.']), 'مجموعة التقييم لم تُعتمد بعد.', ...(st.pilot ? [] : ['لا دفعة تجريبية مفعّلة في «إتاحة التوجيه».'])],
     today: { day: '2026-11-16', usd: 1.2 },
@@ -64,6 +64,9 @@ function backend() {
     'admin.guide-transcript-grants': () => ({ success: true, ready: true, admins: [{ id: ADM, email: 'super@x.sa', granted: !!st.granted, granted_at: st.granted ? ago(0) : null }],
       reads: [{ by: 'boss@x.sa', participant_id: PID, name: 'سارة القحطاني', messages: 2, at: ago(1) }] }),
     'admin.guide-transcript-grant': (b) => { st.granted = b.on; return { success: true, admin_id: b.admin_id, granted: b.on }; },
+    // H4: رد غير دقيق وتوجيهات المالك
+    'admin.guide-flag': (b) => { st.flag = b; return { success: true, case_id: 'f01', version: '2026-11-17-r1', new_draft: true }; },
+    'admin.guide-rules': (b) => { st.rules = b.extra_rules; return { success: true, saved: true }; },
   };
   return { st, replies };
 }
@@ -352,4 +355,28 @@ test('منح المالك: مدير أعلى يُمنح الاطلاع بطلب�
   // تاريخ المنح وصف مربوط بالمفتاح، فيُقرأ معه
   await expect(g.getByRole('switch', { name: 'super@x.sa' })).toHaveAccessibleDescription(/^منذ /);
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript-grant')).toMatchObject({ admin_id: ADM, on: true });
+});
+
+test('رد غير دقيق (H4): السؤال السابق معبأ ويُعدَّل، ويُرسل برقم الرد وما كان يجب', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/guidance');
+  const log = sec(page, 'سجل المحادثات');
+  await log.getByRole('row', { name: /سارة القحطاني/ }).getByRole('button', { name: 'افتح' }).click();
+  const reply = log.locator('[data-msg-role="assistant"]');
+  await reply.getByRole('button', { name: 'رد غير دقيق' }).click();
+  const form = reply.getByRole('group', { name: 'حالة تقييم من هذا الرد' });
+  await expect(form.getByLabel('السؤال')).toHaveValue('كيف أحدد أول معلم؟');
+  await form.getByLabel('ما كان يجب أن يفعله').selectOption('answer');
+  await form.getByLabel('الإجابة الصحيحة المرجعية').fill('المعلم نقطة قرار تحدد ما بعدها.');
+  await form.getByRole('button', { name: 'أضفها إلى مجموعة التقييم' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-flag')).toMatchObject({ message_id: 2, kind: 'answer', question: 'كيف أحدد أول معلم؟', reference_ar: 'المعلم نقطة قرار تحدد ما بعدها.' });
+  await expect(reply.locator('[data-flagged]')).toContainText('أُضيفت الحالة f01');
+});
+
+test('توجيهات المالك (H4): تُحفظ من «الدقة» ويُعاد تحميل اللوحة', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/guidance');
+  const box = page.getByRole('region', { name: 'توجيهات إضافية للمساعد' });
+  await box.getByRole('textbox').fill('استعمل «المعلم» لا «المرحلة».');
+  await box.getByRole('button', { name: 'احفظ التوجيهات' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-rules')).toMatchObject({ extra_rules: 'استعمل «المعلم» لا «المرحلة».' });
+  await expect(box.getByRole('button', { name: 'احفظ التوجيهات' })).toBeDisabled();
 });

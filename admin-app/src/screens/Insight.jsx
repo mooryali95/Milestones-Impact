@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // قراءة فقط. الحساب كله في الخادم (insight.js): لا تعريف هنا لمرحلة ولا لحِمل ولا لنص حدث.
 // كل رقم في الجدول رابط إلى قائمة المشاركين بالفلتر نفسه، فالرقم وما وراءه مصدر واحد.
+// وتحته «التحليل العام» (Analytics.jsx): بطاقات التحليل التي خرجت من النظرة العامة في المرحلة 3أ، بمحدد الجهة نفسه.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { dateTime, L } from '../leaders.js';
 import ExportButton from '../ExportButton.jsx';
@@ -13,6 +14,7 @@ import { ACTOR_AR, CHANGE_AREAS, LOAD_AR, LOAD_TONE, PIPELINE, PIPELINE_AR, stag
 import { EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { COHORT_STATUS as COHORT_STATUS_AR } from '../methodology.js';
 import { readQuery, writeQuery } from '../route.js';
+import OverviewAnalytics from './Analytics.jsx';
 
 const VIEWS = [['org', 'بالجهة'], ['cohort', 'بالدفعة'], ['experts', 'حِمل الخبراء'], ['changes', 'ماذا تغيّر']];
 const tone = (stage) => (STUCK_STAGES.includes(stage) ? 'stuck' : WAITING_STAGES.includes(stage) ? 'wait' : stage === 'out' ? 'out' : 'ok');
@@ -146,7 +148,7 @@ function Changes({ onPerson }) {
   );
 }
 
-export default function Insight({ onPerson, onExpert }) {
+export default function Insight({ onPerson, onExpert, orgs, onTrack, onStatus, onOrg, onTab }) {
   // دفعة من الرابط تفتح «بالدفعة» عليها، ولا تغيّر القسم المحفوظ للزيارة التالية
   const [focus, setFocus] = useState(() => cohortFromQuery());
   const [view, setView] = useState(() => { if (focus) return 'cohort'; try { return sessionStorage.getItem('mi_admin_insight_view') || 'org'; } catch { return 'org'; } });
@@ -194,6 +196,7 @@ export default function Insight({ onPerson, onExpert }) {
                 )
                   : <Load experts={d.experts} onExpert={onExpert} />}
       </section>
+      <OverviewAnalytics orgs={orgs} onTrack={onTrack} onStatus={onStatus} onOrg={onOrg} onTab={onTab} />
     </div>
   );
 }
