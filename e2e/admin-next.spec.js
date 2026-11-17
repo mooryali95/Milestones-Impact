@@ -115,7 +115,7 @@ test('الإعدادات: الملف والجلسات والمستخدمون، �
   expect(calls.some((c) => c.action === 'sessions-revoke-others')).toBe(false);
   await dlg.getByRole('button', { name: 'إنهاء الجلسات الأخرى' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
-  await expect(page.getByRole('status')).toContainText('أُنهيت الجلسات');
+  await expect(page.locator('.toast[role=status]')).toContainText('أُنهيت الجلسات');   // رسالة الإشعار نفسها: مكتب اليوم خلف النافذة فيه سطور حال أخرى
   await page.keyboard.press('Escape');
   await expect(dlg).toBeHidden();
 });
