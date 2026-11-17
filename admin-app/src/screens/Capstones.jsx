@@ -15,7 +15,6 @@ import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN }
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
 export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
 import { Empty, Spinner, useUI } from '../ui.jsx';
-import { refreshPending } from '../pending.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, isFiltered, presetCounts, sortRows } from '../filters.js';
@@ -63,8 +62,7 @@ function Review({ d, canWrite, onSaved, onFailed }) {
     // أي خطأ يعيد تحميل الوثيقة، فلا تبقى الشاشة على حالة تغيّرت على الخادم
     if (!r.success) { toast(r.message); onFailed(); return; }
     toast(r.warning || (decision === 'return' ? 'أُعيدت للمشارك' : why || noSponsor ? 'اعتُمدت الوثيقة' : 'قُبلت وأُرسل طلب التأييد'));
-    refreshPending();
-    onSaved(r);
+    onSaved(r);   // تحديث العدّادات من L نفسه (CHANGES_PENDING)
   };
   return (
     <section className="la-card cps-review">

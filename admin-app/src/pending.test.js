@@ -36,7 +36,7 @@ describe('ما ينتظر القرار: العدّ الواحد من صندوق 
     expect(leadersTotal(p)).toBe(10);
     expect(tabBadge(p, 'participants')).toEqual({ n: 4, late: 1 });
     expect(tabBadge(p, 'orgs')).toBeNull();
-    expect(groupBadge(p, ['overview', 'participants', 'experts'])).toEqual({ n: 6, late: 2 });
+    expect(groupBadge(p, ['overview', 'participants', 'experts'])).toEqual({ n: 6, late: 2, partial: false });
     expect(groupBadge(p, ['orgs', 'tracks'])).toBeNull();
   });
 
@@ -48,6 +48,16 @@ describe('ما ينتظر القرار: العدّ الواحد من صندوق 
     expect(b.total).toBe(1);
     expect(b.partial).toBe(true);
     expect(badgeText(b.total, b.partial)).toBe('1+');
+    expect(b.off).toEqual(['participants']);
+    // المجموعة المطوية التي تضم التبويب المتعذر ناقصة مثل المجموع، لا رقم أقل بلا علامة
+    const p = { badges: b };
+    const g = groupBadge(p, ['participants', 'handbook']);
+    expect(g).toEqual({ n: 1, late: 0, partial: true });
+    expect(badgeText(g.n, g.partial)).toBe('1+');
+    expect(badgeLabel(g.n, g.late, g.partial)).toBe('1 أو أكثر بانتظارك');
+    // مجموعة لا تضمه: عددها كامل. ومجموعة ليس فيها إلا المتعذر: لا عدّاد، لا «0+»
+    expect(groupBadge(p, ['handbook', 'orgs'])).toEqual({ n: 1, late: 0, partial: false });
+    expect(groupBadge(p, ['participants'])).toBeNull();
   });
 
   it('خادم أقدم: counts بلا by_tab تُجمع بالتبويب، وبلا أعداد أصلًا لا عدّادات ولا عطل', () => {

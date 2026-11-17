@@ -18,7 +18,8 @@ export const newContacts = (rows) => (rows || []).filter((c) => (c.status || 'ne
 
 /**
  * عدّادات التبويبات من رد admin.inbox.
- * @returns {{ tabs: Record<string, {n:number, late:number}>, total: number, late: number, partial: boolean } | null}
+ * @returns {{ tabs: Record<string, {n:number, late:number}>, off: string[], total: number, late: number, partial: boolean } | null}
+ * off: تبويبات أسقط عدّادها نوع متعذر، فكل مجموع يضمها يُعلَّم ناقصًا
  * null: رد لا يُبنى عليه (فشل، أو خادم أقدم بلا أعداد)
  */
 export function badgesOf(d) {
@@ -39,7 +40,7 @@ export function badgesOf(d) {
   const out = {};
   for (const [tab, t] of Object.entries(tabs)) if (!off.has(tab) && t?.n > 0) out[tab] = { n: t.n, late: t.late || 0 };
   const sum = (f) => Object.values(out).reduce((s, t) => s + f(t), 0);
-  return { tabs: out, total: sum((t) => t.n), late: sum((t) => t.late), partial: off.size > 0 };
+  return { tabs: out, off: [...off], total: sum((t) => t.n), late: sum((t) => t.late), partial: off.size > 0 };
 }
 
 // نص العدّاد: «99+» فوق التسعة والتسعين، و«+» على مجموع ناقص
@@ -51,9 +52,13 @@ export const badgeLabel = (n, late = 0, partial = false) =>
 // مجموع ما ينتظر في تطبيق القادة (عدّاد السياق ومجموعات التبويبات المطوية)
 export const leadersTotal = (p) => p?.badges?.total || 0;
 export const tabBadge = (p, tab) => p?.badges?.tabs?.[tab] || null;
+// المجموعة المطوية مجموع تبويباتها، وناقصة («12+») إن كان فيها تبويب أسقط نوعٌ متعذر عدّاده، فلا يظهر رقم أقل بلا علامة.
+// لا تبويب بعدد معروف فيها: لا عدّاد، لا «0+»
 export function groupBadge(p, keys) {
   const ts = keys.map((k) => tabBadge(p, k)).filter(Boolean);
-  return ts.length ? { n: ts.reduce((s, t) => s + t.n, 0), late: ts.reduce((s, t) => s + t.late, 0) } : null;
+  if (!ts.length) return null;
+  const off = p?.badges?.off || [];
+  return { n: ts.reduce((s, t) => s + t.n, 0), late: ts.reduce((s, t) => s + t.late, 0), partial: keys.some((k) => off.includes(k)) };
 }
 
 // يطلبها أي مكوّن بعد حفظ يغيّر ما ينتظر القرار
@@ -64,36 +69,63 @@ export const announceContacts = (rows) => window.dispatchEvent(new CustomEvent('
 
 // ── مخزن الصندوق: طلب واحد لـ admin.inbox يتشاركه العدّاد وشاشة «ينتظرني» ──
 // last: آخر رد كما هو (تعرضه الشاشة، نجاحًا أو خطأ). badges: آخر عدّادات صالحة، لا تُمحى برد فاشل.
-// الطلب الجاري يُتشارك، فطالبان في اللحظة نفسها طلب واحد.
-const store = { last: null, badges: null, inflight: null, subs: new Set() };
+// الطلب الجاري يُتشارك، فطالبان في اللحظة نفسها طلب واحد. لكن التحديث بعد حفظ (force) لا يكتفي بطلب بدأ قبل الحفظ:
+// يُطلب مرة أخرى حين ينتهي الجاري (again)، وتتشارك التحديثات المتزامنة هذه المرة الواحدة.
+// gen: جيل الجلسة. resetInbox يرفعه، فرد طلب بدأ قبل الخروج أو تبديل الحساب يُهمل ولا يكتب في مخزن الجلسة الجديدة.
+// at: وقت آخر رد، لتعرف شاشة الصندوق أهو حديث أم تطلب غيره حين تُفتح.
+const store = { last: null, badges: null, inflight: null, again: null, at: 0, gen: 0, subs: new Set() };
 const emit = () => store.subs.forEach((f) => f(store));
-export function loadInbox() {
-  if (store.inflight) return store.inflight;
-  store.inflight = L('admin.inbox').catch((e) => ({ success: false, message: e?.message || 'تعذّر الاتصال بالخادم' })).then((d) => {
-    store.inflight = null;
+export function loadInbox(force = false) {
+  if (store.inflight) {
+    if (!force) return store.inflight;
+    if (!store.again) {
+      const gen = store.gen;
+      const again = store.inflight.then(() => {
+        if (store.again === again) store.again = null;
+        return gen === store.gen ? loadInbox() : store.last;
+      });
+      store.again = again;
+    }
+    return store.again;
+  }
+  const gen = store.gen;
+  const p = L('admin.inbox').catch((e) => ({ success: false, message: e?.message || 'تعذّر الاتصال بالخادم' })).then((d) => {
+    if (gen !== store.gen) return d;   // جلسة سابقة: لا يمس المخزن
+    if (store.inflight === p) store.inflight = null;
     store.last = d;
+    store.at = Date.now();
     const b = badgesOf(d);
     if (b) store.badges = b;
     else if (d?.success) store.badges = null;   // خادم أقدم بلا أعداد: لا عدّادات
     emit();
     return d;
   });
-  return store.inflight;
+  store.inflight = p;
+  return p;
 }
 export const inboxState = () => store;
 export function subscribeInbox(f) { store.subs.add(f); return () => store.subs.delete(f); }
-// للاختبارات وتبديل الجلسة: مخزن فارغ
-export function resetInbox() { store.last = null; store.badges = null; store.inflight = null; }
+// للاختبارات وتبديل الجلسة: مخزن فارغ بجيل جديد، ويُبلَّغ المشتركون فلا يبقى على الشاشة عدّاد الجلسة السابقة
+export function resetInbox() {
+  store.gen += 1;
+  store.last = null; store.badges = null; store.inflight = null; store.again = null; store.at = 0;
+  emit();
+}
 
-// شاشة «ينتظرني»: آخر رد في المخزن، وتطلبه إن لم يُطلب بعد
+// رد أحدث من هذا يكفي شاشة الصندوق حين تُفتح: هو رد العدّادات نفسه في تحميل النظرة العامة، فلا يُطلب مرتين
+export const FRESH_MS = 10000;
+// شاشة «ينتظرني»: تعرض آخر رد في المخزن فورًا بلا انتظار، وتطلب أحدث منه حين تُفتح كما كانت تفعل،
+// إلا أن يكون حديثًا (أو طلب جار تتشاركه). رد خطأ يُعاد طلبه دائمًا
 export function useInbox() {
   const [d, setD] = useState(store.last);
   useEffect(() => {
     const off = subscribeInbox((s) => setD(s.last));
-    if (!store.last && !store.inflight) loadInbox(); else if (store.last) setD(store.last);
+    setD(store.last);
+    const fresh = store.last?.success && Date.now() - store.at < FRESH_MS;
+    if (!fresh) loadInbox();
     return off;
   }, []);
-  return [d, loadInbox];
+  return [d, () => loadInbox(true)];
 }
 
 /**
@@ -113,18 +145,20 @@ export function visiblePoll(fn, ms = POLL_MS, doc = typeof document !== 'undefin
 // في سياق طلبات التواصل يأتي عددها من الشاشة نفسها، وفي غيره يُطلب هنا
 export function usePending(ctx) {
   const [p, setP] = useState(() => (store.badges ? { contacts: 0, badges: store.badges } : null));
-  const load = useCallback(async () => {
-    const [contacts] = await Promise.all([ctx === 'contacts' ? null : call('list-contacts').catch(() => null), loadInbox()]);
+  // force: بعد حفظ («mi:pending») لا يكفي طلب بدأ قبله
+  const load = useCallback(async (force = false) => {
+    const [contacts] = await Promise.all([ctx === 'contacts' ? null : call('list-contacts').catch(() => null), loadInbox(force)]);
     setP((old) => ({ contacts: contacts?.contacts ? newContacts(contacts.contacts) : old?.contacts ?? 0, badges: store.badges }));
   }, [ctx]);
   useEffect(() => {
     load();
+    const onPending = () => load(true);
     const off = subscribeInbox((s) => setP((old) => ({ contacts: old?.contacts ?? 0, badges: s.badges })));
-    const stop = visiblePoll(load);
+    const stop = visiblePoll(() => load());
     const onContacts = (e) => setP((old) => ({ badges: store.badges, ...old, contacts: e.detail }));
-    window.addEventListener('mi:pending', load);
+    window.addEventListener('mi:pending', onPending);
     window.addEventListener('mi:contacts', onContacts);
-    return () => { off(); stop(); window.removeEventListener('mi:pending', load); window.removeEventListener('mi:contacts', onContacts); };
+    return () => { off(); stop(); window.removeEventListener('mi:pending', onPending); window.removeEventListener('mi:contacts', onContacts); };
   }, [load]);
   return p;
 }

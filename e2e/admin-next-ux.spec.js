@@ -8,7 +8,7 @@ const ch = { id: 'h1', dimension: 'milestone', sort: 1, title_ar: 'المعلم'
 const catalog = { success: true, journey_stages: [], stage_requirements: [], instruments: [], locked_instruments: [], questions: [], grid_cells: [], level_rules: [], tracks: [], track_stats: {}, handbook_modules: [ch], learning_models: [], book_stats: {} };
 
 const INBOX = { success: true, total: 3, late: 0, skipped: [], counts: { approval: 1, model: 2 }, by_tab: { participants: { n: 1, late: 0 }, handbook: { n: 2, late: 0 } }, items: [] };
-async function setup(page, hash = '', inbox = INBOX) {
+async function setup(page, hash = '', inbox = INBOX, extra = {}) {
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [{ id: 'c1', status: 'new' }, { id: 'c2', status: 'read' }] } }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -21,7 +21,8 @@ async function setup(page, hash = '', inbox = INBOX) {
       'admin.inbox': inbox,
       'admin.submissions': { success: true, submissions: [{ id: 's1' }, { id: 's2' }] },
     };
-    await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
+    const x = extra[b.action];
+    await route.fulfill({ json: (typeof x === 'function' ? x(b) : x) ?? (typeof inbox === 'function' && b.action === 'admin.inbox' ? inbox() : replies[b.action]) ?? { success: false, message: 'غير متوقع' } });
   });
   await page.goto(BASE);
   await page.evaluate(() => { sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })); localStorage.clear(); });
@@ -91,6 +92,43 @@ test('عدّاد أحمر بوصف مسموع لما تأخر عن مهلته', 
   await expect(b).toHaveClass(/late/);
   await expect(b).toHaveAttribute('aria-label', '5 بانتظارك، منها 2 متأخر');
   await expect(page.getByRole('button', { name: /تطبيق القادة/ }).locator('.ctx-badge')).toHaveClass(/late/);
+});
+
+test('قرار في نوع من الصندوق يحدّث عدّاده فورًا، والمجموعة المطوية تُعلَّم ناقصة وتُسمع عددها', async ({ page }) => {
+  // طلب رعاية ينتظر: عدّاد المدفوعات 1. بعد القرار يرد الصندوق بلا شيء، فيختفي العدّاد بلا انتظار الدقيقتين
+  let decided = false;
+  const inboxCalls = [];
+  const req = { id: 'r1', participant_id: 'p1', kind: 'name', status: 'pending', typed_name: 'جهة', suggestions: [{ id: 'o1', name: 'جهة', score: 0.9 }], participants: { full_name: 'سارة الأحمد', email: 's@x.com' }, created_at: '2026-11-10T10:00:00Z' };
+  await setup(page, '#/leaders/payments', () => {
+    inboxCalls.push(decided);
+    return decided ? { success: true, total: 0, late: 0, skipped: [], counts: {}, by_tab: {}, items: [] }
+      : { success: true, total: 1, late: 0, skipped: [], counts: { sponsor: 1 }, by_tab: { payments: { n: 1, late: 0 } }, items: [] };
+  }, {
+    'admin.payments': { success: true, settings: {}, configured: true, payments: [], entitlements: [], daily: [], sponsors: [], health: {}, kpis: {} },
+    'admin.sponsor-requests': () => ({ success: true, requests: [{ ...req, status: decided ? 'approved' : 'pending' }], orgs: [{ id: 'o1', name: 'جهة' }] }),
+    'admin.sponsor-decide': () => { decided = true; return { success: true }; },
+  });
+  const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
+  const pay = tabs.getByRole('button', { name: /^المدفوعات/ }).locator('.la-badge');
+  await expect(pay).toHaveText('1');
+  await page.getByRole('button', { name: 'طلبات الرعاية' }).click();
+  await page.getByRole('button', { name: 'اربط وأعفِ' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => inboxCalls.includes(true)).toBe(true);
+  await expect(pay).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /تطبيق القادة/ }).locator('.ctx-badge')).toHaveCount(0);
+});
+
+test('المجموعة المطوية: نوع متعذر فيها يجعل عددها ناقصًا («+»)، واسم زرها يحمل الوصف المسموع', async ({ page }) => {
+  await setup(page, '#/leaders/handbook', {
+    success: true, total: 4, late: 1, skipped: ['erasure'], counts: { capstone: 3, coaching_confirm: 1 },
+    by_tab: { capstones: { n: 3, late: 1 }, activities: { n: 1, late: 0 } }, items: [],
+  });
+  const nav = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
+  const daily = nav.getByRole('button', { name: /^مجموعة اليومي/ });
+  await daily.click();
+  await expect(daily.locator('.la-badge')).toHaveText('4+');
+  await expect(daily).toHaveAttribute('aria-label', 'مجموعة اليومي، 4 أو أكثر بانتظارك، منها 1 متأخر');
 });
 
 test('المحرر يحمي التعديل: تأكيد قبل الإغلاق، ومسودة تُستعاد', async ({ page }) => {

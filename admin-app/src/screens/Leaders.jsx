@@ -68,7 +68,7 @@ const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
 // عدّاد ما ينتظر: «99+» فوق التسعة والتسعين، وأحمر بوصف مسموع حين تأخر فيه بند عن مهلته
 function Badge({ b }) {
   if (!b?.n) return null;
-  return <span className={`la-badge${b.late ? ' late' : ''}`} aria-label={badgeLabel(b.n, b.late)}>{badgeText(b.n)}</span>;
+  return <span className={`la-badge${b.late ? ' late' : ''}`} aria-label={badgeLabel(b.n, b.late, b.partial)}>{badgeText(b.n, b.partial)}</span>;
 }
 
 export default function Leaders({ canWrite, pending, isSuper = false, isOwner = false }) {
@@ -161,17 +161,22 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
       {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
-        {TAB_GROUPS.map(([g, keys]) => (
-          <div key={g} className={`la-tab-group${shut.has(g) && !keys.includes(tab) ? ' shut' : ''}`} role="group" aria-label={g}>
-            {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية */}
-            <button type="button" className="la-tab-group-label" aria-label={`مجموعة ${g}`} aria-expanded={!(shut.has(g) && !keys.includes(tab))} onClick={() => toggleGroup(g)}>
-              {g}{shut.has(g) && !keys.includes(tab) && <Badge b={groupOf(keys)} />}
+        {TAB_GROUPS.map(([g, keys]) => {
+          const folded = shut.has(g) && !keys.includes(tab);
+          const gb = folded ? groupOf(keys) : null;
+          return (
+          <div key={g} className={`la-tab-group${folded ? ' shut' : ''}`} role="group" aria-label={g}>
+            {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية،
+                ويُضم وصفه المسموع إلى اسم الزر (aria-label يحجب ما في داخله عن قارئ الشاشة) */}
+            <button type="button" className="la-tab-group-label" aria-label={gb?.n ? `مجموعة ${g}، ${badgeLabel(gb.n, gb.late, gb.partial)}` : `مجموعة ${g}`} aria-expanded={!folded} onClick={() => toggleGroup(g)}>
+              {g}{folded && <Badge b={gb} />}
             </button>
             {keys.filter(allowed).map((k) => {
               return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-badge">مخفي عن المستخدمين</span>}</button>;
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
       <div className="la-body">
         {hiddenOf(tab) && (
