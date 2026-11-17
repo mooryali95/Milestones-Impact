@@ -97,13 +97,14 @@ export default function OverviewAnalytics({ orgs = [], onTrack, onStatus, onOrg,
   const placed = Object.values(o.overall || {}).reduce((a, n) => a + n, 0);
   const baseline = (o.instruments || []).filter((x) => x.kind === 'baseline').sort((a, c) => Number(c.active) - Number(a.active));
   // عدد المتطلبات المنتظرة من قائمة المراجعة نفسها بالجهة نفسها، فلا تختلف البطاقة عن طابور المكتب
+  // (مثبت في admin-next-methodology: القائمة لا pending_reviews)، وpending_reviews لخادم بلا القائمة وحده
   const reqN = r?.submitted ? r.submitted.length : (o.pending_reviews || 0);
   const goOrg = (id) => (onOrg ? onOrg(id) : setOrg(id));
   return (
     <section className="ins-an" aria-label="التحليل العام">
       {bar}
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
+        <div className="stat-card"><div className="stat-label">المسجلون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
         <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
         <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{reqN + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${reqN} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
         <div className="stat-card"><div className="stat-label">في البرنامج</div><div className="stat-value">{st('placed') + st('enrolled')}</div><div className="stat-sub">{o.active_week != null ? `${o.active_week} نشطون هذا الأسبوع` : 'معتمدون'}</div></div>

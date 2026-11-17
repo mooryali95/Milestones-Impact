@@ -15,6 +15,10 @@ import './ops-health.css';
 const ICON = { green: '✓', amber: '!', red: '✕' };
 const CARD_ID = 'ops-health';
 let focusPending = false;
+// الشريط يطلب كشف البطاقة قبل التركيز عليها: هي داخل شارة صحة المكتب (Overview.jsx) وقد تكون مطوية
+export const OPS_REVEAL = 'mi:ops-reveal';
+export const opsRevealPending = () => focusPending;
+export const focusOpsCard = () => (focusPending ? focusCard() : false);
 
 const when = (iso) => (iso ? agoAr(iso) || dateTime(iso) : null);
 const n = (v) => (v == null ? 'غير مقروء' : String(v));
@@ -27,6 +31,7 @@ export function OpsBanner({ enabled }) {
   const open = (e) => {
     e.preventDefault();
     focusPending = true;
+    window.dispatchEvent(new Event(OPS_REVEAL));
     const r = parseRoute(window.location.hash);
     if (r.ctx === 'leaders' && (r.tab || 'overview') === 'overview') focusCard();
     else navigate({ ctx: 'leaders', tab: 'overview' });
@@ -45,7 +50,8 @@ export function OpsBanner({ enabled }) {
 
 function focusCard() {
   const el = document.getElementById(CARD_ID);
-  if (!el) return false;
+  // في وعاء مطوي لا يقع التركيز: يبقى الطلب قائمًا حتى يُكشف (focusOpsCard)
+  if (!el || el.closest('[hidden]')) return false;
   focusPending = false;
   el.scrollIntoView({ block: 'start' });
   el.focus({ preventScroll: true });

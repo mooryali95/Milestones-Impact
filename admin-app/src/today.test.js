@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { greetingAr, healthLine, healthOpen, healthProblems, inboxView, problemsSig, riyadhHour, systemIssues, todayNumbers } from './today.js';
+import { greetingAr, healthLine, healthOpen, healthProblems, inboxView, problemsSig, riyadhHour, systemIssues, systemNotes, todayNumbers, waitingSub } from './today.js';
 import { dayFull } from './dates.js';
 
 const inbox = (items, extra = {}) => ({ success: true, items, total: items.length, late: items.filter((i) => i.late).length, ...extra });
@@ -18,6 +18,23 @@ describe('مكتب اليوم: الأرقام الأربعة', () => {
     expect(todayNumbers(inbox([], { skipped: ['sponsor'] }), overview).partial).toBe(true);
     expect(todayNumbers(inbox([]), overview).waiting).toEqual({ n: 0, oldest: null });
   });
+  it('لا صفر كاذب ولا «لا شيء ينتظر» كاذب: بنود بلا عمر، ورد بلا قائمة، وصندوق متعذر أو ناقص', () => {
+    const age = (d) => `${d} يوم`;
+    // خادم أقدم: بنود بلا days، فالأقدم من سبعة أيام مجهول لا صفر
+    const old = todayNumbers(inbox([{ late: false }, { late: true }, {}]), overview);
+    expect(old.stale).toBeNull();
+    expect(old.waiting).toEqual({ n: 3, oldest: null });
+    expect(waitingSub(old, age)).toBe('');
+    // رد ناجح بلا قائمة: العدد من total كما يقرؤه الصندوق
+    const bare = todayNumbers({ success: true, total: 2 }, overview);
+    expect([bare.waiting, bare.late, bare.stale]).toEqual([{ n: 2, oldest: null }, null, null]);
+    expect(todayNumbers({ success: true }, overview).waiting).toEqual({ n: 0, oldest: null });
+    expect(waitingSub(todayNumbers({ success: false }, overview), age)).toBe('تعذّرت قراءة الصندوق');
+    expect(waitingSub(todayNumbers(inbox([]), overview), age)).toBe('لا شيء ينتظر');
+    // نوع متعذر والباقي فارغ: «0+» لا يقال معه «لا شيء ينتظر»
+    expect(waitingSub(todayNumbers(inbox([], { skipped: ['sponsor'] }), overview), age)).toBe('');
+    expect(waitingSub(todayNumbers(inbox([{ days: 4 }]), overview), age)).toBe('أقدمها 4 يوم');
+  });
   it('عروض الصندوق: المتأخر وحده، والأقدم من سبعة أيام وحده، وبلا عرض كل شيء', () => {
     const items = [{ id: 1, days: 8, late: false }, { id: 2, days: 2, late: true }, { id: 3, days: 0 }];
     expect(inboxView(items, 'late').map((i) => i.id)).toEqual([2]);
@@ -34,7 +51,11 @@ describe('مكتب اليوم: شارة الصحة', () => {
     expect(systemIssues({ ...okHealth, missing_secrets: ['X'] })).toBe(true);
     expect(systemIssues({ ...okHealth, mail: { today: 64, cap: 80 } })).toBe(true);
     expect(systemIssues({ ...okHealth, migrations_ledger: false })).toBe(true);
-    expect(systemIssues({ ...okHealth, pending_migrations: [{ name: '090_x', gate: 'deferred' }] })).toBe(true);
+    // المؤجل بقرار سطر للعلم في البطاقة، لا خلل يفتح الشارة
+    expect(systemIssues({ ...okHealth, pending_migrations: [{ name: '090_x', gate: 'deferred' }] })).toBe(false);
+    expect(systemNotes({ ...okHealth, pending_migrations: [{ name: '090_x', gate: 'deferred' }] })).toBe(true);
+    expect(systemNotes(okHealth)).toBe(false);
+    expect(systemIssues({ ...okHealth, pending_migrations: [{ name: '090_x', gate: 'deferred' }, { name: '091_y', gate: 'tolerant' }] })).toBe(true);
     // خادم قبل pending_migrations
     expect(systemIssues({ ...okHealth, pending_migrations: undefined, missing_migrations: ['089_y'] })).toBe(true);
   });
@@ -47,13 +68,18 @@ describe('مكتب اليوم: شارة الصحة', () => {
     const h = { ...okHealth, missing_secrets: ['X'], readiness: [{ key: 'a', ok: false }] };
     const orgs = [{ id: 'o1', status: 'active', name: 'جهة' }];
     const p = healthProblems({ ops: { verdict: { level: 'amber' } }, h, orgs });
-    expect(p.map((x) => x.key)).toEqual(['ops', 'system', 'launch', 'orgs']);
+    expect(p.map((x) => x.key)).toEqual(['ops-amber', 'system', 'launch', 'orgs']);
     expect(healthLine(p)).toBe('4 تحتاج انتباهك: البريد والتنبيه، حالة النظام، جاهزية الإطلاق، جاهزية الجهات');
     // المراقب: حالة النظام وحدها (البقية لا تُعرض له)
     expect(healthProblems({ ops: { verdict: { level: 'red' } }, h, orgs, canWrite: false }).map((x) => x.key)).toEqual(['system']);
     expect(healthLine([{ key: 'system', label: 'حالة النظام' }])).toBe('أمر واحد يحتاج انتباهك: حالة النظام');
     expect(healthProblems({ ops: { failed: true }, h: okHealth })[0].label).toBe('صحة البريد غير مقروءة');
     expect(healthProblems({ ops: { verdict: { level: 'red' } }, h: okHealth })[0].label).toBe('عطل في البريد');
+    // حالة النظام المتعذرة لا تُقرأ «سليمة»، للمراقب أيضًا
+    expect(healthProblems({ ops: green, h: null }).map((x) => x.key)).toEqual(['system-unread']);
+    expect(healthProblems({ h: { success: false }, canWrite: false })[0].label).toBe('حالة النظام غير مقروءة');
+    // ما لم يصل بعد: «جارٍ الفحص» لا «سليم»
+    expect(healthLine([], true)).toBe('جارٍ الفحص…');
   });
   it('مطوية حين يسلم كل شيء، ومفتوحة عند الخلل، واختيار المدير يسري على الحال نفسها وحدها', () => {
     expect(healthOpen('')).toBe(false);
@@ -63,6 +89,11 @@ describe('مكتب اليوم: شارة الصحة', () => {
     // خلل جديد بعد الطي يفتحها
     expect(healthOpen('ops,system', { sig: 'ops', open: false })).toBe(true);
     expect(problemsSig([{ key: 'ops' }, { key: 'orgs' }])).toBe('ops,orgs');
+    // البريد من الكهرماني إلى الأحمر بعد الطي: البصمة تتغير فتنفتح الشارة
+    const amber = problemsSig(healthProblems({ ops: { verdict: { level: 'amber' } }, h: okHealth }));
+    const red = problemsSig(healthProblems({ ops: { verdict: { level: 'red' } }, h: okHealth }));
+    expect(amber).not.toBe(red);
+    expect(healthOpen(red, { sig: amber, open: false })).toBe(true);
   });
 });
 

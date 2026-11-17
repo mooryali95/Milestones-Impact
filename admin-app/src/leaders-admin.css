@@ -1215,6 +1215,9 @@
 .th-line { flex: 1; overflow-wrap: anywhere; }
 .th-ic { display: inline-flex; align-items: center; justify-content: center; inline-size: 24px; block-size: 24px; border-radius: 50%; font-weight: 700; font-size: .8rem; color: #fff; background: var(--st-ok); flex: none; }
 .today-health.bad .th-ic { background: var(--st-warn-text); }
+/* قبل وصول مصادر الشارة: محايدة بلا علامة السلامة */
+.today-health[data-state="checking"] { border-inline-start-color: var(--line-strong); }
+.today-health[data-state="checking"] .th-ic { background: var(--ink-soft); }
 .th-toggle[aria-expanded="false"] .ops-chev { transform: rotate(-45deg); margin-block-start: 0; }
 [dir="rtl"] .th-toggle[aria-expanded="false"] .ops-chev { transform: rotate(135deg); }
 .th-body { padding: 0 14px 4px; }
