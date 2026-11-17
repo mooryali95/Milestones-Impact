@@ -219,9 +219,10 @@ Deno.test('الحارس: رد يكشف إجابة سؤال الباب يُستب
   } finally { y.restore(); }
 });
 
-Deno.test('البوابة مغلقة افتراضيًا: لا يعمل لأحد قبل نسخة السياسة الجوهرية (G4)', async () => {
-  const { guideGate } = await import('./guide.js');
-  assertEquals(guideGate({ consentVersion: '2026-11-19', enabled: true, companion: true, ready: true, hasKey: true }), { ok: false, reason: 'policy' });
+Deno.test('البوابة: لا يعمل بلا نسخة سياسة، ولا لمن لم يوافق على نسختها الجوهرية (G4b)', async () => {
+  const { guideGate, GUIDE_POLICY_VERSION } = await import('./guide.js');
+  assertEquals(guideGate({ policyVersion: null, consentVersion: '2026-11-19', enabled: true, companion: true, ready: true, hasKey: true }), { ok: false, reason: 'policy' });
+  assertEquals(guideGate({ consentVersion: '2026-11-21', enabled: true, evalOk: true, pilot: true, companion: true, ready: true, hasKey: true }).reason, 'consent', `قبل ${GUIDE_POLICY_VERSION}`);
   const x = setup({});
   try {
     G.GD.gate = async () => ({ ...ready, gate: { ok: false, reason: 'policy' } });

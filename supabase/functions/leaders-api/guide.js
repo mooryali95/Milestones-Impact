@@ -6,7 +6,7 @@
 
 // نسخة السياسة التي تذكر الغرض الجديد (إرشاد ذكي داخل الرحلة يعالجه Anthropic بملخص الموضع). تُضبط في G4 مع النسخة
 // الجوهرية، وقبلها لا يعمل المساعد لأحد مهما كانت الإعدادات: السياسة الحالية تقول إن Anthropic للموقع العام وحده.
-export const GUIDE_POLICY_VERSION = null;
+export const GUIDE_POLICY_VERSION = '2026-11-22';
 
 export const GUIDE_MODEL = 'claude-opus-5-5';
 export const GUIDE_MAX_TOKENS = 4000;
