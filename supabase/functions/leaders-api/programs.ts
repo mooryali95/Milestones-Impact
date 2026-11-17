@@ -138,18 +138,18 @@ export async function requirementIdByCode(p: any, code: string) {
 // الدفعة وأعضاؤها الفعليون (pickCohort بالقاعدة نفسها التي تعدّ بها memberCounts)، بلا حساب العرض ولا حساب الاختبار
 // كما تستبعدهما خريطة الجهة. للخريطة في ملف الدفعة (adminCohortJourney). null إن لم توجد الدفعة. وتختلف عن cohortMembers أدناه (القاعة والمجموعات) بأنها تعد أعضاء الدفعة المفتوحة ممن ليس لهم جهة
 export async function cohortMemberIds(cohortId: string) {
+  // المشاركون والإلحاقات بصفحات (all): القراءة الواحدة تقف عند max_rows (1000) بلا خطأ، فلا يسقط عضو بصمت كما في خريطة الجهة
   const [cohorts, enr, people] = await Promise.all([
-    db.from('cohorts').select(COHORT_COLS),
-    db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
-    db.from('participants').select('id, organization_id, is_test').eq('is_demo', false).limit(5000),
+    db.from('cohorts').select(COHORT_COLS).then((r: any) => must(r) as any[]),
+    all((f, t) => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id').order('cohort_id').range(f, t)),
+    all((f, t) => db.from('participants').select('id, organization_id, is_test').eq('is_demo', false).order('id').range(f, t)),
   ]);
-  must(cohorts); must(enr); must(people);
-  const all = cohorts.data || [];
-  const cohort = all.find((c: any) => c.id === cohortId) || null;
+  const list = cohorts || [];
+  const cohort = list.find((c: any) => c.id === cohortId) || null;
   if (!cohort) return null;
   const byP = new Map<string, any[]>();
-  for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
-  const ids = (people.data || []).filter((p: any) => !p.is_test && pickCohort({ enrollments: byP.get(p.id) || [], cohorts: all, organizationId: p.organization_id || null }).cohort?.id === cohortId).map((p: any) => p.id as string);
+  for (const e of enr) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
+  const ids = people.filter((p: any) => !p.is_test && pickCohort({ enrollments: byP.get(p.id) || [], cohorts: list, organizationId: p.organization_id || null }).cohort?.id === cohortId).map((p: any) => p.id as string);
   return { cohort, ids };
 }
 

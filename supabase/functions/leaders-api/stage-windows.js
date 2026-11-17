@@ -34,7 +34,8 @@ export function stageWindows(stages, cohort = {}) {
     group.forEach((s, i) => {
       const fixed = sched[s.key];
       if (fixed?.start) {
-        out[s.key] = { from: fixed.start, to: fixed.end || fixed.start };
+        // بداية مكتوبة بلا نهاية: النهاية من البداية بمدة المرحلة، لا يوم البداية، فلا تُستحق «نهاية X» يوم بدئها
+        out[s.key] = { from: fixed.start, to: fixed.end || addDays(fixed.start, Number(s.duration_days) || 0) };
         // أول المجموعة بجدول ثابت يضع نهايتها كما هو، ولو سبق المؤشر
         end = i === 0 ? out[s.key].to : later(end, out[s.key].to);
         return;

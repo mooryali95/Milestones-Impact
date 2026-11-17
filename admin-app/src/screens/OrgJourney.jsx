@@ -42,7 +42,7 @@ export default function OrgJourney({ orgId, canWrite = false, data = undefined }
           </ul>
         </>
       )}
-      {d.journey_map ? <JourneyMap map={d.journey_map} /> : <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الجهة بعد.</p>}
+      {d.journey_map?.stages?.length ? <JourneyMap map={d.journey_map} /> : <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الجهة بعد.</p>}
     </section>
   );
 }

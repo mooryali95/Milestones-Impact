@@ -58,7 +58,8 @@ async function setup(page) {
       ] },
       'admin.cohort-visibility-save': { success: true, widened: [] },
       // خريطة رحلة الدفعة في ملفها (R0): شكل journeyMap نفسه، والنهايات من نافذة الدفعة
-      'admin.cohort-journey': b.cohort_id === 'c1' ? { success: true, journey_map: cohortMap } : { success: true, journey_map: null },
+      // والخادم لا يرجع null: برنامج بلا مراحل يرجع stages فارغة
+      'admin.cohort-journey': b.cohort_id === 'c1' ? { success: true, journey_map: cohortMap } : { success: true, journey_map: { ...cohortMap, cohort: { name: 'الدفعة المفتوحة', starts_on: null, is_default: true, today_stage: null }, totals: { total: 0, finished: 0, late: 0, not_started: 0 }, bottleneck: null, stages: [], milestones: [] } },
       'admin.cohort-upgrade': b.confirm ? { success: true, to: { id: 'v2', number: 2 }, diff: { added: [], removed: [], changed: [] } }
         : { success: true, preview: true, to: { id: 'v2', number: 2, label: 'بعد مراجعة أكتوبر' },
           diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [{ code: 'R-OLD', title: 'تأمل قديم' }], changed: [], stages: { added: [{ key: 's9', title: 'الختام' }], removed: [], changed: [{ key: 's1', title: 'التمهيد' }] } },
@@ -174,8 +175,8 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
   await page.reload();
   const card = page.locator('.cohort-page');
-  // اسم الدفعة أول عنوان في ملفها، ويتكرر في رأس خريطة الرحلة داخله (R0)
-  await expect(card.getByRole('heading', { name: 'سفراء 2026' }).first()).toBeVisible();
+  // اسم الدفعة عنوان واحد في ملفها: الخريطة داخله لا تكرره (embedded)
+  await expect(card.getByRole('heading', { name: 'سفراء 2026' })).toBeVisible();
   // المدة مضبوطة، والمستشار والجدول ناقصان ولكل منهما زر يفتح نافذته
   await expect(card.locator('.cohort-setup li.ok', { hasText: 'مدة الدفعة' })).toHaveCount(1);
   const advisor = card.locator('.cohort-setup li.no', { hasText: 'المستشار والفريق' });
@@ -200,11 +201,17 @@ test('ملف الدفعة: خريطة الرحلة نفسها التي في صف
   const calls = await setup(page);
   await page.getByRole('button', { name: 'سفراء 2026' }).click();
   const card = page.locator('.cohort-page');
-  const map = card.getByRole('region', { name: 'خريطة الرحلة' });
+  const map = card.getByRole('region', { name: 'خريطة الرحلة', exact: true });
   await expect(map).toBeVisible();
   expect(calls.find((c) => c.action === 'admin.cohort-journey')).toMatchObject({ cohort_id: 'c1' });
   const jm = map.locator('.jm');
-  await expect(jm.locator('.jm-totals')).toContainText('في الرحلة3');
+  // عنوان القسم وحده «خريطة الرحلة»، والخريطة داخله بلا عنوان ثانٍ ولا اسم الدفعة مكررًا
+  await expect(map.getByRole('heading', { name: 'خريطة الرحلة' })).toHaveCount(1);
+  await expect(map.getByRole('heading', { name: 'سفراء 2026' })).toHaveCount(0);
+  await expect(jm.locator('.jm-totals div', { hasText: 'في الرحلة' }).locator('dd')).toHaveText('3');
+  // «متأخر» في دفعة مؤرخة: تجاوز موعد المرحلة على جدول الدفعة، لا مدة المكوث فيها
+  await expect(jm.locator('.jm-totals div.is-late dt')).toHaveText('تجاوزوا موعد مرحلتهم');
+  await expect(map).toContainText('أيًا كان يوم دخوله إليها');
   await expect(jm.locator('.jm-stage.today')).toContainText('التدريب');
   await expect(jm.locator('.jm-late')).toHaveText('1 متأخر');
   // تفاصيل المرحلة: نافذتها في الدفعة والأسماء ومن تجاوز موعده
@@ -212,10 +219,16 @@ test('ملف الدفعة: خريطة الرحلة نفسها التي في صف
   const panel = jm.getByRole('region', { name: 'تفاصيل مرحلة التدريب' });
   await expect(panel).toContainText('من 3 نوفمبر إلى 17 نوفمبر');
   await expect(panel.locator('tr.is-late')).toContainText('سارة');
-  // الدفعة المفتوحة بلا خريطة: سطر واضح لا خطأ
+  // الدفعة المفتوحة تضم كل من ليس في دفعة: لا تُحسب خريطتها عند فتح الملف بل بطلب صريح، وبرنامج بلا مراحل سطر واضح لا عنوان فارغ
   await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
+  const before = calls.filter((c) => c.action === 'admin.cohort-journey').length;
   await page.getByRole('button', { name: 'الدفعة المفتوحة' }).first().click();
-  await expect(page.locator('.cohort-page').getByRole('region', { name: 'خريطة الرحلة' })).toContainText('لا مراحل معرّفة لبرنامج هذه الدفعة بعد');
+  const open = page.locator('.cohort-page').getByRole('region', { name: 'خريطة الرحلة', exact: true });
+  await expect(open).toContainText('الدفعة المفتوحة تضم كل من ليس في دفعة');
+  expect(calls.filter((c) => c.action === 'admin.cohort-journey').length).toBe(before);
+  await open.getByRole('button', { name: 'اعرض خريطة الرحلة' }).click();
+  await expect(open).toContainText('لا مراحل معرّفة لبرنامج هذه الدفعة بعد');
+  expect(calls.filter((c) => c.action === 'admin.cohort-journey').at(-1)).toMatchObject({ cohort_id: 'c0' });
 });
 
 test('ملف الدفعة: رابط التسجيل ظاهر، والدفعة «مخطط لها» تُنبَّه بأنها لا تستقبل منضمي الجهة', async ({ page }) => {

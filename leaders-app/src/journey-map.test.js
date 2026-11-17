@@ -74,7 +74,7 @@ describe('التجميع والصلاحيات', () => {
     expect(by.training.late).toBe(2);
     expect(m.totals).toEqual({ total: 4, finished: 1, late: 2, not_started: 0 });
     expect(m.bottleneck).toEqual({ stage: 'training' });
-    expect(m.cohort).toEqual({ name: 'دفعة سفراء', starts_on: '2026-11-01', today_stage: 'report' });
+    expect(m.cohort).toEqual({ name: 'دفعة سفراء', starts_on: '2026-11-01', is_default: false, today_stage: 'report' });
     expect(m.milestones).toEqual([{ id: 'm1', title: 'معلم', due: '2026-11-05', done: 1, late: 1 }]);
   });
   it('بلا «القائمة»: أسباب مجمّعة بلا أسماء ولا معرّفات', () => {

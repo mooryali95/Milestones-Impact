@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { lateNoticeAllowed, milestoneDue, milestoneDueInfo, milestoneStatuses, programDiff, R0_DATED_SINCE, STAGE_DIFF_FIELDS } from '../../supabase/functions/leaders-api/logic.js';
+import { cutoffFrom, lateNoticeAllowed, milestoneDue, milestoneDueInfo, milestoneStatuses, programDiff, R0_DATED_SINCE, STAGE_DIFF_FIELDS } from '../../supabase/functions/leaders-api/logic.js';
 import { journeyMap, stageWindows } from '../../supabase/functions/leaders-api/journey-map.js';
 
 const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
@@ -41,6 +41,28 @@ describe('R0: المعلم يُؤرَّخ بنافذة مرحلته حين يغ�
     // بلا مراحل (المستدعي القديم) يبقى الحساب من الجدول وحده كما كان
     expect(milestoneDue(MS[0], { schedule: {} })).toBeNull();
     expect(milestoneDueInfo(MS[0], { windows: { training: { from: '2026-12-03', to: '2026-12-17' } } })).toEqual({ due: '2026-12-17', source: 'window' });
+  });
+  it('بداية مكتوبة بلا نهاية: «نهاية X» من البداية بمدة المرحلة، لا يوم البداية', () => {
+    const st = [{ key: 'a', title_ar: 'أ', duration_days: 7, sort: 1 }, { key: 'b', title_ar: 'ب', duration_days: 14, sort: 2 }];
+    const cohort = { starts_on: '2026-11-01', schedule: { b: { start: '2026-11-10' } } };
+    expect(stageWindows(st, cohort).b).toEqual({ from: '2026-11-10', to: '2026-11-24' });
+    const [m] = milestoneStatuses([{ id: 'end-b', stage_key: 'b', anchor: 'stage_end', offset_days: 0, complete: 'manual' }], { cohort, stages: st, today: '2026-11-20' });
+    expect(m).toMatchObject({ due: '2026-11-24', due_source: 'window', status: 'due_soon' });
+    // والخريطة لا تعد من في «ب» متأخرًا بعد ثلاثة أيام من بدايتها
+    const people = [{ id: 'p', name: 'م', created_at: '2026-11-01T00:00:00Z', journey: [
+      { key: 'a', stage_mode: 'required', status: 'done', items: [{ title_ar: 'بند', status: 'done', completed_at: '2026-11-08T09:00:00Z', required: true }] },
+      { key: 'b', stage_mode: 'required', status: 'active', items: [{ title_ar: 'بند', status: 'pending', required: true }] }] }];
+    expect(journeyMap({ stages: st, people, cohort, today: new Date('2026-11-20T10:00:00Z') }).stages[1]).toMatchObject({ here: 1, late: 0 });
+  });
+  it('الدفعة المفتوحة (is_default) لا تُؤرَّخ معالمها بنافذة ولو كان لها starts_on، و«متأخر» فيها من الدخول بالمدة', () => {
+    const cohort = { name: 'المفتوحة', is_default: true, starts_on: '2026-01-01' };
+    const r = milestoneStatuses(MS, { cohort, stages: STAGES, today: '2026-11-20' });
+    expect(r.every((m) => m.status === 'unscheduled' && m.due_source === null)).toBe(true);
+    const item = { title_ar: 'بند', status: 'pending', required: true };
+    const people = [{ id: 'a', name: 'أ', created_at: '2026-11-18T00:00:00Z', journey: STAGES.map((s, i) => ({ key: s.key, stage_mode: 'required', status: i === 0 ? 'active' : 'locked', items: [item] })) }];
+    const m = journeyMap({ stages: STAGES, people, cohort, today: new Date('2026-11-20T10:00:00Z') });
+    expect(m.stages[0]).toMatchObject({ here: 1, late: 0 });
+    expect(m.cohort.is_default).toBe(true);
   });
   it('التمديد لمشارك يبقى أعلى من النافذة، ومصدره override', () => {
     const r = milestoneStatuses([MS[0]], { cohort: { starts_on: '2026-12-01' }, stages: STAGES, records: { 'end-training': { due_override: '2027-01-05' } }, today: '2026-11-20' });
@@ -114,7 +136,18 @@ describe('R0: حارس بريد المعالم التي صارت مؤرخة (ا�
     expect(m).toMatchObject({ status: 'late', due_source: 'window' });
     expect(lateNoticeAllowed(m)).toBe(false);
     const admin = read('supabase/functions/leaders-api/admin.ts');
-    expect(admin).toContain('.filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS))');
+    expect(admin).toContain('.filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS, cutoff))');
+    expect(admin).toContain("const cutoff = cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF'));");
+  });
+  it('يوم الحارس يتأخر بالبيئة إن تأخر النشر، ولا يتقدم عن R0_DATED_SINCE بخطأ إعداد', () => {
+    expect(cutoffFrom(undefined)).toBe(R0_DATED_SINCE);
+    expect(cutoffFrom('2026-11-01')).toBe(R0_DATED_SINCE);
+    expect(cutoffFrom('غير تاريخ')).toBe(R0_DATED_SINCE);
+    expect(cutoffFrom(' 2026-11-24 ')).toBe('2026-11-24');
+    // نُشر يوم 24: ما استحق بين 17 و24 وتأخر قبل النشر لا يُرسل عنه، وما استحق من 24 يُرسل
+    expect(lateNoticeAllowed(late('2026-11-18', 'window', 9), 3, '2026-11-24')).toBe(false);
+    expect(lateNoticeAllowed(late('2026-11-24', 'window', 4), 3, '2026-11-24')).toBe(true);
+    expect(lateNoticeAllowed(late('2026-11-18', 'schedule', 9), 3, '2026-11-24')).toBe(true);
   });
 });
 
@@ -128,7 +161,11 @@ describe('R0: خريطة الرحلة في ملف الدفعة', () => {
     expect(c).toContain("cohort: def.cohort, program, list: true, activity: true,");
     expect(read('supabase/functions/leaders-api/programs.ts')).toContain('export async function cohortMemberIds(cohortId: string)');
     const ui = read('admin-app/src/screens/Programs.jsx');
-    expect(ui).toContain("L('admin.cohort-journey', { cohort_id: cohortId })");
-    expect(ui).toContain('<CohortJourneyMap cohortId={c.id} />');
+    expect(ui).toContain("L('admin.cohort-journey', { cohort_id: cohortId }).then((r) => { if (on) setD(r); })");
+    expect(ui).toContain('<CohortJourneyMap cohortId={c.id} members={c.members} isDefault={!!c.is_default} />');
+    // الخريطة بلا مراحل تظهر رسالتها (الخادم لا يرجع null بل stages فارغة)، والدفعة المفتوحة أو الكبيرة تُقرأ بطلب
+    expect(ui).toContain('!map?.stages?.length ?');
+    expect(ui).toContain('اعرض خريطة الرحلة');
+    expect(c).toContain('if (m.ids.length > COHORT_JOURNEY_MAX)');
   });
 });

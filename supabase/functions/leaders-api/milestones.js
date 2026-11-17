@@ -153,7 +153,9 @@ export function milestoneDueInfo(m, { startsOn = null, endsOn = null, schedule =
 export function milestoneStatuses(milestones, { stagesDone = new Set(), records = {}, cohort = {}, stages = null, today = null } = {}) {
   const t = todayIso(today);
   const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
-  const windows = live.length && cohort?.starts_on ? stageWindows(live, cohort) : null;
+  // الدفعة المفتوحة (is_default) بلا بداية واحدة (القرار 21 والبند 10 في التصور): مددها نسبية من دخول كل مشارك، فلا تؤرَّخ
+  // معالمها بنافذة محسوبة من starts_on ولو ضُبط لها، وإلا صار كل من دخلها متأخرًا لحظة دخوله
+  const windows = live.length && cohort?.starts_on && !cohort?.is_default ? stageWindows(live, cohort) : null;
   const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: cohort.schedule || {}, windows };
   return (milestones || []).filter((m) => m.active !== false).map((m) => {
     const rec = records[m.id] || {};
@@ -175,10 +177,16 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
 // عنها ما تأخر قبل تاريخ النشر، فلا تنطلق موجة بريد عن الماضي. يُرسل فقط ما يقع موعده في هذا التاريخ أو بعده، أي ما
 // صار متأخرًا بعد النشر. ويبقى المتأخر ظاهرًا في رحلة المشارك ولوحة الإدارة وخريطة الجهة كما هو، فالحارس للبريد وحده.
 // والمعالم المؤرخة بالجدول المكتوب أو بتاريخ ثابت أو بتمديد كانت مؤرخة قبل R0 فلا يمسها
+// R0_DATED_SINCE يوم البناء، ويُحدَّث إلى يوم الدمج الفعلي ضمن قائمة الدمج. ولمن نشر بعده بأيام فـcutoffFrom يقبل يومًا
+// أحدث من البيئة (MILESTONE_R0_CUTOFF في admin.ts) ولا يقبل أقدم منه، فلا يُفتح البريد عن الماضي بخطأ في الإعداد
 export const R0_DATED_SINCE = '2026-11-17';
-export function lateNoticeAllowed(m, grace = MILESTONE_GRACE_DAYS) {
+export function cutoffFrom(value) {
+  const v = String(value || '').trim();
+  return ISO.test(v) && v > R0_DATED_SINCE ? v : R0_DATED_SINCE;
+}
+export function lateNoticeAllowed(m, grace = MILESTONE_GRACE_DAYS, since = R0_DATED_SINCE) {
   if (!m || m.status !== 'late' || !(m.late_days > grace)) return false;
-  if (m.due_source === 'window' && String(m.due || '') < R0_DATED_SINCE) return false;
+  if (m.due_source === 'window' && String(m.due || '') < cutoffFrom(since)) return false;
   return true;
 }
 

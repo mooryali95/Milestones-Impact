@@ -68,7 +68,8 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
       // «متأخر» من نافذة الدفعة (R0 «تاريخ واحد»): من تجاوز اليوم نهاية نافذة مرحلته بعد مهلة السماح، أيًا كان يوم دخوله.
       // نافذة بلا مدة ولا جدول مكتوب لا تُعدّ موعدًا. وبلا بداية للدفعة (الدفعة المفتوحة) يبقى الحساب من دخوله بالمدة
       const w = windows[s.key];
-      const dated = w && (d > 0 || !!cohort?.schedule?.[s.key]?.start);
+      // والدفعة المفتوحة (is_default) مددها نسبية من الدخول ولو كان لها starts_on (القرار 21)، فتبقى على الحساب بالمدة
+      const dated = w && !cohort?.is_default && (d > 0 || !!cohort?.schedule?.[s.key]?.start);
       const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
       if (late) a.late += 1;
       const needs = needsOf(j[idx]);
@@ -95,7 +96,7 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   const peak = out.reduce((b, s) => (s.here > (b?.here || 0) || (s.here === b?.here && s.late > b.late) ? s : b), null);
   return {
     program: program ? { name: program.name } : null,
-    cohort: cohort ? { name: cohort.name, starts_on: cohort.starts_on || null, today_stage: todayStage(stages, windows, today) } : null,
+    cohort: cohort ? { name: cohort.name, starts_on: cohort.starts_on || null, is_default: !!cohort.is_default, today_stage: todayStage(stages, windows, today) } : null,
     totals: { total: people.length, finished, late: out.reduce((n, s) => n + s.late, 0), not_started: 0 },
     bottleneck: peak && peak.here > 0 ? { stage: peak.key } : null,
     stages: out,

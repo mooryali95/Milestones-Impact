@@ -456,11 +456,14 @@ function mapPeople(rows: any[], journeys: Record<string, any>) {
 // ── خريطة رحلة الدفعة في ملفها (تصور محرر رحلة الدفعة، R0) ──
 // بمنطق admin.org-journey نفسه وصلاحيته (قراءة لكل مدير): أعضاء الدفعة الفعليون (cohortMemberIds بقاعدة pickCohort)، ورحلة
 // كل منهم من journeyFor، وتعريف الدفعة نفسها (journeyDefinition بدفعتها)، ثم journeyMap بالأسماء وما ينقص كل شخص
+export const COHORT_JOURNEY_MAX = 1500;
 export async function adminCohortJourney(a: Admin, b: Body) {
   const cohortId = String(b.cohort_id || '');
   if (!cohortId) throw new Fail('حدد الدفعة', 400);
   const m = await cohortMemberIds(cohortId);
   if (!m) throw new Fail('الدفعة غير موجودة', 404);
+  // رحلة كل عضو تُحسب هنا، فلدفعة أكبر من السقف (الدفعة المفتوحة غالبًا) رسالة صريحة بدل مهلة الدالة
+  if (m.ids.length > COHORT_JOURNEY_MAX) throw new Fail(`الدفعة أكبر من أن تُرسم خريطتها هنا (${m.ids.length} عضوًا، والحد ${COHORT_JOURNEY_MAX}). اعرضها من «أين توقفوا» أو من صفحة كل جهة`, 413);
   const [rows, def]: any[] = await Promise.all([
     m.ids.length ? allFor(m.ids, () => db.from('participants').select('*').order('id'), 'id') : Promise.resolve([]),
     journeyDefinition({}, m.cohort),

@@ -56,15 +56,35 @@ function UpgradeImpact({ r }) {
 }
 
 // خريطة رحلة الدفعة (R0 في تصور محرر رحلة الدفعة): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ببيانات admin.cohort-journey
-// (منطق admin.org-journey نفسه لأعضاء هذه الدفعة). المواعيد و«متأخر» من نافذة الدفعة المحسوبة من بدايتها ومدد المراحل
-function CohortJourneyMap({ cohortId }) {
+// (منطق admin.org-journey نفسه لأعضاء هذه الدفعة). المواعيد و«متأخر» من نافذة الدفعة المحسوبة من بدايتها ومدد المراحل.
+// تُحسب رحلة كل عضو على الخادم، فتُقرأ تلقائيًا للدفعة الصغيرة وحدها، وللمفتوحة أو الكبيرة بطلب صريح كي لا يثقل فتح الملف
+const JOURNEY_AUTO_MAX = 300;
+function CohortJourneyMap({ cohortId, members, isDefault }) {
+  const auto = !isDefault && (Number(members) || 0) <= JOURNEY_AUTO_MAX;
+  const [want, setWant] = useState(auto);
   const [d, setD] = useState(null);
-  useEffect(() => { setD(null); L('admin.cohort-journey', { cohort_id: cohortId }).then(setD); }, [cohortId]);
+  useEffect(() => { setWant(auto); }, [cohortId, auto]);
+  useEffect(() => {
+    let on = true;
+    setD(null);
+    // ردّ دفعة سابقة يصل بعد الانتقال إلى غيرها لا يكتب فوقها
+    if (want) L('admin.cohort-journey', { cohort_id: cohortId }).then((r) => { if (on) setD(r); });
+    return () => { on = false; };
+  }, [cohortId, want]);
+  const map = d?.journey_map;
   return (
     <section className="cohort-journey" aria-labelledby="cj-h">
       <h3 className="la-phase" id="cj-h">خريطة الرحلة</h3>
-      {!d ? <Spinner /> : !d.success ? <p className="la-err" role="alert">{d.message || 'تعذّرت قراءة خريطة الرحلة'}</p>
-        : d.journey_map ? <JourneyMap map={d.journey_map} /> : <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الدفعة بعد.</p>}
+      {!want ? (
+        <p className="la-muted">{isDefault ? 'الدفعة المفتوحة تضم كل من ليس في دفعة، ' : `في الدفعة ${membersAr(Number(members) || 0)}، `}
+          وتُحسب الخريطة من رحلة كل عضو. <button type="button" className="btn-sm ghost" onClick={() => setWant(true)}>اعرض خريطة الرحلة</button></p>
+      ) : !d ? <Spinner /> : !d.success ? <p className="la-err" role="alert">{d.message || 'تعذّرت قراءة خريطة الرحلة'}</p>
+        : !map?.stages?.length ? <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الدفعة بعد.</p>
+        : <>
+          {!map.totals?.total && <p className="la-muted">لا أعضاء في الرحلة بعد، فالأعداد كلها صفر.</p>}
+          {map.cohort?.starts_on && !map.cohort?.is_default && <p className="la-muted small">«متأخر» هنا من تجاوز اليوم موعد نهاية مرحلته على جدول الدفعة بعد مهلة ثلاثة أيام، أيًا كان يوم دخوله إليها.</p>}
+          <JourneyMap map={map} embedded />
+        </>}
     </section>
   );
 }
@@ -134,7 +154,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
           ))}
         </ol>
 
-        <CohortJourneyMap cohortId={c.id} />
+        <CohortJourneyMap cohortId={c.id} members={c.members} isDefault={!!c.is_default} />
 
         <h3 className="la-phase">كل ما يخص الدفعة</h3>
         <div className="cohort-tiles">

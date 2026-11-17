@@ -59,11 +59,11 @@ test('الخريطة: الأطوار الثلاثة والمراحل العشر 
   await expect(page.locator('.jm-node')).toHaveCount(10);
   await expect(page.locator('.jm-here')).toHaveText(['1', '2', '1', '3', '7', '4', '3', '2', '0', '1']);
   await expect(page.locator('.jm-stage.today .jm-title')).toHaveText('التوجيه على رأس العمل');
-  await expect(page.locator('.jm-alert')).toContainText('أكبر تجمع الآن 7 أشخاص عند «التوجيه على رأس العمل»، منهم 3 تجاوزوا مدتها');
+  await expect(page.locator('.jm-alert')).toContainText('أكبر تجمع الآن 7 أشخاص عند «التوجيه على رأس العمل»، منهم 3 تجاوزوا موعدها');
   // أعمدة القمع الأربعة لا تتكرر مع الخريطة
   await expect(page.getByRole('heading', { name: 'مراحل الرحلة' })).toHaveCount(0);
   const node = page.locator('.jm-node').nth(4);
-  await expect(node).toHaveAttribute('aria-label', /التوجيه على رأس العمل \(موقع الدفعة على جدولها اليوم\): 7 أشخاص هنا، 10 تجاوزوها، 7 لم يصلوها، 3 تجاوزوا مدتها/);
+  await expect(node).toHaveAttribute('aria-label', /التوجيه على رأس العمل \(موقع الدفعة على جدولها اليوم\): 7 أشخاص هنا، 10 تجاوزوها، 7 لم يصلوها، 3 تجاوزوا موعدها/);
   await node.click();
   await expect(node).toHaveAttribute('aria-expanded', 'true');
   const panel = page.getByRole('region', { name: 'تفاصيل مرحلة التوجيه على رأس العمل' });
