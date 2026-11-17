@@ -1,5 +1,5 @@
-// الرحلة في لمحة (J1b): خط زمني للقراءة فقط أعلى «الرحلة والمتطلبات» (البرنامج بالأسابيع) وأعلى قسم «التنفيذ»
-// في محرر الدفعة (التواريخ وخط اليوم وعداد «يُحدد لاحقًا»). الخلفية مُحاكاة، واليوم مثبت على 16 نوفمبر 2026.
+// الرحلة في لمحة (J1b): خط زمني للقراءة فقط أعلى «الرحلة والمتطلبات» (البرنامج بالأسابيع) وفي تبويب «الرحلة»
+// بملف الدفعة (التواريخ وخط اليوم وعداد «يُحدد لاحقًا»، R1). الخلفية مُحاكاة، واليوم مثبت على 16 نوفمبر 2026.
 // TIMELINE_SHOTS: مجلد تُحفظ فيه اللقطات بعرضي 1440 و390.
 import { test, expect } from '@playwright/test';
 
@@ -128,19 +128,21 @@ test('البرنامج على الهاتف 390: خط رأسي بلا تمرير 
   await shot(page, 'program', tl);
 });
 
+// الدفعة: الخط نُقل من محرر الدفعة إلى تبويب «الرحلة» في ملفها (R1 في تصور محرر رحلة الدفعة)
+const openJourney = async (page) => {
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'دفعة نوفمبر' }).click();
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  return page.getByRole('region', { name: 'الخط الزمني للدفعة' });
+};
+
 for (const width of [1440, 390]) {
   test(`الدفعة (${width}): التواريخ وخط اليوم وعداد «يُحدد لاحقًا»، والنقر يقفز إلى «+ موعد»`, async ({ page }) => {
     await setup(page, width);
-    await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
-    await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'تحرير', exact: true }).click();
-    const ed = page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' });
-    // قسم التنفيذ مطوي بشارة العداد، ويفتح على الخط الزمني أعلاه
-    const toggle = ed.getByRole('button', { name: 'التنفيذ' });
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(ed.locator('section[aria-labelledby="ce-delivery-h"]')).toContainText('موعد واحد يُحدد لاحقًا');
-    await toggle.click();
-    const tl = ed.getByRole('region', { name: 'دفعة نوفمبر' });
-    await expect(tl.locator('.jt-cards')).toContainText('الأسبوع 3، 3 مراحل تسير معًا');
+    const tl = await openJourney(page);
+    // «الآن» في رأس التبويب لا في بطاقات الخط، فلا يتكرر
+    await expect(page.locator('.cj-hero').getByRole('status')).toContainText('الأسبوع 3، 3 مراحل تسير معًا');
+    await expect(tl.locator('.jt-cards')).not.toContainText('الأسبوع 3');
     await expect(tl.locator('.jt-cards .tone-warn')).toContainText('موعد واحد يُحدد لاحقًا');
     await expect(tl).not.toContainText('1970');
     if (width > 500) {
@@ -165,29 +167,36 @@ for (const width of [1440, 390]) {
       await shot(page, 'cohort', tl);
       await training.getByRole('button', { name: 'أضف موعده: يوم ورشة عن بعد' }).click();
     }
-    // يُغلق المحرر وينتقل إلى «الحضور والجلسات» عند زر «+ موعد» للنشاط نفسه
-    await expect(ed).toBeHidden();
+    // ينتقل إلى «الحضور والجلسات» عند زر «+ موعد» للنشاط نفسه
     await expect(page).toHaveURL(/activities\?req=r2/);
     await expect(page.locator('#ws-r2 .ws-add')).toBeFocused();
   });
 }
 
-test('دفعة بلا تاريخ بداية: أسابيع نسبية وتنبيه، لا تاريخ مخترع', async ({ page }) => {
+test('محرر الدفعة لم يعد يرسم الخط، ورابطه إلى تبويب «الرحلة» في ملفها', async ({ page }) => {
+  await setup(page, 1440);
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'تحرير', exact: true }).click();
+  const ed = page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' });
+  await expect(ed.locator('.jt')).toHaveCount(0);
+  await ed.getByRole('button', { name: 'الرحلة بالتواريخ' }).click();
+  await expect(ed).toBeHidden();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c1\?view=journey$/);
+  await expect(page.getByRole('tab', { name: 'الرحلة' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: 'الخط الزمني للدفعة' })).toBeVisible();
+});
+
+test('دفعة بلا تاريخ بداية: أسابيع نسبية وتنبيه، لا تاريخ مخترع، وزر يفتح المحرر لتحديده', async ({ page }) => {
   cohorts[0] = { ...cohorts[0], starts_on: null };
   try {
     await setup(page, 1440);
-    await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
-    await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'تحرير', exact: true }).click();
-    const ed = page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' });
-    await ed.getByRole('button', { name: 'التنفيذ' }).click();
-    const tl = ed.getByRole('region', { name: 'دفعة نوفمبر' });
+    const tl = await openJourney(page);
     await expect(tl.getByRole('note')).toHaveText('حدد تاريخ البداية لترى التواريخ');
     await expect(tl.locator('.jt-today')).toHaveCount(0);
     await expect(tl.locator('.jt-ruler')).toContainText('البداية');
-    // تاريخ البداية من النموذج نفسه يرسم التواريخ فورًا
-    await ed.locator('#f-starts_on').fill('2026-11-02');
-    await expect(tl.getByRole('note')).toHaveCount(0);
-    await expect(tl.locator('.jt-today')).toContainText('اليوم 16 نوفمبر');
+    await expect(page.locator('.cj-hero')).toContainText('لم يُحدد تاريخ بداية الدفعة بعد');
+    await page.getByRole('button', { name: 'حدد تاريخ البداية' }).click();
+    await expect(page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' }).locator('#f-starts_on')).toBeVisible();
   } finally {
     cohorts[0] = { ...cohorts[0], starts_on: '2026-11-02' };
   }

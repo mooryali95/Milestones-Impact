@@ -18,3 +18,5 @@ export const weekTime = (d) => (valid(d) ? new Date(d).toLocaleString(DLOC, { we
 export const timeOnly = (d) => (valid(d) ? new Date(d).toLocaleTimeString(DLOC, { hour: 'numeric', minute: '2-digit' }) : '');
 /** الثلاثاء، 17 نوفمبر 2026 بتقويم الرياض (رأس مكتب اليوم) */
 export const dayFull = (d = new Date()) => (valid(d) ? new Date(d).toLocaleDateString(DLOC, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Riyadh' }) : '');
+/** الاثنين، 4 يناير 2027: يوم بلا وقت مخزّن نصًّا (رأس رحلة الدفعة)، يُقرأ بتوقيت UTC فلا ينزاح يومًا */
+export const dayLong = (d) => (d ? new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString(DLOC, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '');

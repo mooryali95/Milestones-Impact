@@ -14,8 +14,6 @@ import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
 import { KIND_AR, cohortKind } from '../cohort-hub.js';
 import '../cohort-editor.css';
-import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
-import { journeyTimeline, undatedAr } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 
 // حقل واحد بنوعه، كما يعرضه Form.jsx: العنوان ثم الإرشاد ثم المدخل. يستعمله المحرر والمعالج فلا يختلف حقل بينهما.
 // short: ما يظهر من العنوان حين يكرر رأسُ المجموعة أوله (حقول التنفيذ)، ويبقى العنوان كاملًا لقارئ الشاشة
@@ -69,7 +67,7 @@ const TOGGLE_HELP = 'البند المخفي يختفي فورًا من رحلا
 const sameHidden = (x) => JSON.stringify({ ...x, hidden_requirements: [...(x.hidden_requirements || [])].sort() });
 
 /** @param {{ cohort?: any, data: any, canWrite?: boolean, onClose: (saved?: boolean) => void, onOpen?: (k: string, at?: { program_id?: string }) => void }} props
- *  onOpen: يفتح نافذة ما لا يُحرَّر هنا بعد إغلاق المحرر (schedule، team، vis، journey)، والرحلة لبرنامج المحرر المختار */
+ *  onOpen: يفتح نافذة ما لا يُحرَّر هنا بعد إغلاق المحرر (schedule، team، vis، journey، timeline)، والرحلة لبرنامج المحرر المختار، وtimeline تبويب «الرحلة» في ملف الدفعة */
 export default function CohortEditor({ cohort = {}, data, canWrite = true, onClose, onOpen }) {
   const { confirm } = useUI();
   const programs = data.programs || [];
@@ -184,17 +182,8 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
   const was = start.program_version_id && v.program_version_id !== start.program_version_id
     ? (programs.find((p) => p.id === start.program_id)?.versions || []).find((x) => x.id === start.program_version_id) || { number: '' } : null;
   const groups = [...new Set(bySection('delivery').map((f) => f.req))];
-  // الرحلة في لمحة بتواريخ الدفعة (J1b): تعريفها كما في قسم الرحلة بإخفائها الحالي، وجلساتها، وتاريخ بدايتها في النموذج.
-  // النقر على جلسة جماعية يقفز إلى «+ موعد» عندها في «الحضور والجلسات»، وغيرها إلى رحلة البرنامج
-  const timeline = useMemo(() => {
-    if (!defReady || isNew) return null;
-    const h = new Set(v.hidden_requirements || []);
-    return journeyTimeline({ stages: def.stages || [], requirements: (def.requirements || []).map((r) => ({ ...r, hidden: h.has(r.code) })) },
-      { cohort: { ...cohort, starts_on: v.starts_on || null }, sessions: def.sessions || [], today: new Date(), title: v.name || cohort.name || '' });
-  }, [defReady, isNew, def, v.hidden_requirements, v.starts_on, v.name, cohort]);
-  const openAct = onOpen ? (a) => (a.kind === 'workshop' ? go('activities', { req: a.requirement_id })() : go('journey')()) : undefined;
-  const actLabel = (a) => (a.kind !== 'workshop' ? 'حرّره في رحلة البرنامج' : a.undated ? 'أضف موعده' : 'افتح مواعيده');
-  const showDelivery = deliveryN > 0 || !!timeline;
+  // الرحلة في لمحة بتواريخ الدفعة انتقلت إلى تبويب «الرحلة» في ملف الدفعة (R1)، فلا يُرسم الخط هنا، ورابطه في أسفل المحرر
+  const showDelivery = deliveryN > 0;
   const title = isNew ? 'دفعة جديدة' : `دفعة: ${cohort.name}`;
 
   return (
@@ -269,9 +258,8 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
 
         {showDelivery && (
           <Section k="delivery" title={COHORT_SECTIONS[2].title} open={open.delivery} onToggle={() => setOpen((o) => ({ ...o, delivery: !o.delivery }))}
-            pills={[...(timeline?.counts.undated ? [{ text: undatedAr(timeline.counts.undated), tone: 'info', icon: '' }] : []), ...deliveryPills]}
-            summary={`الرحلة في لمحة بتواريخ الدفعة${deliveryN ? '، وطريقة تنفيذ الأيام التدريبية وجلسات التوجيه في هذه الدفعة. الفارغ يبقى كما في البرنامج.' : '.'}`}>
-            {timeline && <JourneyTimeline key={cohort.id} id="jt-cohort" model={timeline} onOpen={openAct} openLabel={actLabel} />}
+            pills={deliveryPills}
+            summary="طريقة تنفيذ الأيام التدريبية وجلسات التوجيه في هذه الدفعة. الفارغ يبقى كما في البرنامج.">
             {org?.delivery_default && coaching.length > 0 && (
               <p className="ce-source">افتراضي الجهة لجلسات التوجيه: {COACH_MODE[org.delivery_default] || org.delivery_default}. يُعدَّل من ملف الجهة.{' '}
                 {canWrite && <button type="button" className="la-link" onClick={applyOrgDefault}>طبّقه على هذه الدفعة</button>}</p>
@@ -302,6 +290,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
         {!isNew && onOpen && (
           <nav className="ce-links" aria-label="يُضبط في نوافذه">
             <span className="la-muted">يُضبط في نافذته:</span>
+            <button type="button" className="la-link" onClick={go('timeline')}>الرحلة بالتواريخ</button>
             <button type="button" className="la-link" onClick={go('schedule')}>الجدول</button>
             <button type="button" className="la-link" onClick={go('team')}>الفريق والمجموعات ووضع المراحل</button>
             <button type="button" className="la-link" onClick={go('vis')}>الرؤية</button>

@@ -168,7 +168,7 @@ for (const width of [1440, 390]) {
     const ed = await openEditor(page, 'سفراء 2026');
     // الأساسيات ظاهرة، والرحلة مفتوحة، والتنفيذ والمتقدم مطويان بسطر خلاصة
     await expect(ed.getByLabel('اسم الدفعة')).toHaveValue('سفراء 2026');
-    await expect(ed.getByRole('button', { name: 'الرحلة' })).toHaveAttribute('aria-expanded', 'true');
+    await expect(ed.getByRole('button', { name: 'الرحلة', exact: true })).toHaveAttribute('aria-expanded', 'true');
     await expect(ed.getByRole('button', { name: 'التنفيذ' })).toHaveAttribute('aria-expanded', 'false');
     await expect(ed.getByRole('button', { name: 'متقدم' })).toHaveAttribute('aria-expanded', 'false');
     await expect(ed.locator('.ce-summary')).toContainText(['كما في البرنامج', 'تُثبَّت على أحدث نسخة عند الحفظ']);

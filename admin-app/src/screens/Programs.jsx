@@ -4,7 +4,7 @@
 // البرنامج: ماذا يمر به القائد (المراحل والمتطلبات)، يُبنى مرة ويُحفظ بنسخ.
 // الدفعة: الجهة والبرنامج ونسخته والتواريخ وطريقة تنفيذ كل نشاط.
 // المشارك يتبع دفعة جهته الجارية تلقائيًا، ومن ليس له جهة يتبع الدفعة المفتوحة.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { date, dateOnly, L, LVL, STATUS } from '../leaders.js';
 import { COHORT_STATUS } from '../methodology.js';
 import CohortEditor from './CohortEditor.jsx';
@@ -18,7 +18,8 @@ import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
-import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
+import CohortJourney from './CohortJourney.jsx';
+import { COHORT_TABS, cohortTab } from '../cohort-journey.js';
 
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
 const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
@@ -55,40 +56,6 @@ function UpgradeImpact({ r }) {
   );
 }
 
-// خريطة رحلة الدفعة (R0 في تصور محرر رحلة الدفعة): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ببيانات admin.cohort-journey
-// (منطق admin.org-journey نفسه لأعضاء هذه الدفعة). المواعيد و«متأخر» من نافذة الدفعة المحسوبة من بدايتها ومدد المراحل.
-// تُحسب رحلة كل عضو على الخادم، فتُقرأ تلقائيًا للدفعة الصغيرة وحدها، وللمفتوحة أو الكبيرة بطلب صريح كي لا يثقل فتح الملف
-const JOURNEY_AUTO_MAX = 300;
-function CohortJourneyMap({ cohortId, members, isDefault }) {
-  const auto = !isDefault && (Number(members) || 0) <= JOURNEY_AUTO_MAX;
-  const [want, setWant] = useState(auto);
-  const [d, setD] = useState(null);
-  useEffect(() => { setWant(auto); }, [cohortId, auto]);
-  useEffect(() => {
-    let on = true;
-    setD(null);
-    // ردّ دفعة سابقة يصل بعد الانتقال إلى غيرها لا يكتب فوقها
-    if (want) L('admin.cohort-journey', { cohort_id: cohortId }).then((r) => { if (on) setD(r); });
-    return () => { on = false; };
-  }, [cohortId, want]);
-  const map = d?.journey_map;
-  return (
-    <section className="cohort-journey" aria-labelledby="cj-h">
-      <h3 className="la-phase" id="cj-h">خريطة الرحلة</h3>
-      {!want ? (
-        <p className="la-muted">{isDefault ? 'الدفعة المفتوحة تضم كل من ليس في دفعة، ' : `في الدفعة ${membersAr(Number(members) || 0)}، `}
-          وتُحسب الخريطة من رحلة كل عضو. <button type="button" className="btn-sm ghost" onClick={() => setWant(true)}>اعرض خريطة الرحلة</button></p>
-      ) : !d ? <Spinner /> : !d.success ? <p className="la-err" role="alert">{d.message || 'تعذّرت قراءة خريطة الرحلة'}</p>
-        : !map?.stages?.length ? <p className="la-muted">لا مراحل معرّفة لبرنامج هذه الدفعة بعد.</p>
-        : <>
-          {!map.totals?.total && <p className="la-muted">لا أعضاء في الرحلة بعد، فالأعداد كلها صفر.</p>}
-          {map.cohort?.starts_on && !map.cohort?.is_default && <p className="la-muted small">«متأخر» هنا من تجاوز اليوم موعد نهاية مرحلته على جدول الدفعة بعد مهلة ثلاثة أيام، أيًا كان يوم دخوله إليها.</p>}
-          <JourneyMap map={map} embedded />
-        </>}
-    </section>
-  );
-}
-
 // ملف الدفعة برابطه (#/leaders/programs/<id>): المكان الواحد لكل ما يخص الدفعة. نوعها وكيف يدخلها المشاركون،
 // وجاهزيتها بندًا بندًا مع زر الضبط لكل بند (cohort-hub.js)، ثم كل إعداداتها في لوحة واحدة. النوافذ نفسها التي في
 // الجدول وفي صفحة الجهة، فلا مدخل ثانٍ لأي إعداد.
@@ -98,11 +65,29 @@ const ACTION_LABEL = {
 };
 function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }) {
   const copy = useCopy();
+  // تبويبا الملف: «الملف» (الجاهزية والإعدادات) و«الرحلة» (R1)، والمختار في العنوان ?view=journey فيُفتح الرابط عليه
+  const route = useRoute();
+  const [tab, setTab] = useState(() => cohortTab(readQuery()));
+  useEffect(() => { setTab(cohortTab(readQuery())); }, [route, c.id]);
+  const tabsRef = useRef(null);
+  const openTab = (k, focus = false) => {
+    setTab(k);
+    writeQuery(k === 'journey' ? 'view=journey' : '');
+    if (focus) tabsRef.current?.querySelector(`#cohort-tab-${k}`)?.focus();
+  };
+  const tabKey = (e) => {
+    const i = COHORT_TABS.findIndex(([k]) => k === tab);
+    const to = { ArrowLeft: i + 1, ArrowRight: i - 1, Home: 0, End: COHORT_TABS.length - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    openTab(COHORT_TABS[(to + COHORT_TABS.length) % COHORT_TABS.length][0], true);
+  };
   const { items, missing, link, kind } = hub;
   const people = `#/leaders/participants?cohort=${encodeURIComponent(c.id)}`;
   // كل إعدادات الدفعة وما تتبعه في مكان واحد: ما يُضبط للدفعة نفسها، وما يُضبط في برنامجها أو جهتها ويسري عليها
   const tiles = [
     ['الأساسيات', 'الاسم والجهة والبرنامج والمدة والحالة، والرحلة بندًا بندًا (الظاهر والمخفي)، وصيغة كل نشاط، والنسخة والمستويات', on.edit, true],
+    ['الرحلة', 'المراحل بتواريخها في هذه الدفعة، والخط الزمني، ومن في كل مرحلة', () => openTab('journey', true), false],
     ['الجدول', 'موعد كل مرحلة، ويوزَّع تلقائيًا على مدة الدفعة', on.schedule, true],
     ['الفريق والمجموعات', 'المستشار الأساسي وفريق الخبراء ومجموعات المشاركين', on.team, true],
     ['الرؤية', 'ما يراه مستشار الدفعة والخبير المسند من مشاركيها', on.vis, true],
@@ -127,6 +112,19 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
           {canWrite && <button className="btn-sm primary" onClick={on.edit}>تحرير الدفعة</button>}
         </div>
 
+        <div ref={tabsRef} className="cohort-tabs" role="tablist" aria-label="أقسام ملف الدفعة" onKeyDown={tabKey}>
+          {COHORT_TABS.map(([k, l]) => (
+            <button key={k} id={`cohort-tab-${k}`} type="button" role="tab" aria-selected={tab === k} aria-controls={tab === k ? `cohort-panel-${k}` : undefined} tabIndex={tab === k ? 0 : -1}
+              onClick={() => openTab(k)}>{l}</button>
+          ))}
+        </div>
+
+        {tab === 'journey' ? (
+          <div role="tabpanel" id="cohort-panel-journey" aria-labelledby="cohort-tab-journey">
+            <CohortJourney c={c} canWrite={canWrite} on={on} />
+          </div>
+        ) : (
+        <div role="tabpanel" id="cohort-panel-overview" aria-labelledby="cohort-tab-overview">
         {link && (
           <div className="cohort-link">
             <div><b>رابط التسجيل</b><span>من يسجّل به يدخل هذه الدفعة تلقائيًا. لا حاجة لإلحاقه يدويًا.</span></div>
@@ -154,8 +152,6 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
           ))}
         </ol>
 
-        <CohortJourneyMap cohortId={c.id} members={c.members} isDefault={!!c.is_default} />
-
         <h3 className="la-phase">كل ما يخص الدفعة</h3>
         <div className="cohort-tiles">
           {tiles.filter(([, , fn, write]) => fn && (canWrite || !write)).map(([t, d, fn]) => (
@@ -164,6 +160,8 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on }
           <a className="cohort-tile" href={people}><b>المشاركون ({c.members ?? 0})</b><span>قائمة أعضاء الدفعة وحالاتهم، ومنها الاعتماد والنقل</span></a>
           <a className="cohort-tile" href={`#/leaders/insight?cohort=${encodeURIComponent(c.id)}`}><b>أين توقفوا</b><span>الرؤية الشاملة لتقدم المشاركين</span></a>
         </div>
+        </div>
+        )}
       </section>
     </>
   );
@@ -270,6 +268,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     <>
       {editor && <CohortEditor cohort={editor} data={d} canWrite={canWrite} onClose={(saved) => { setEditor(null); if (saved) { toast('تم الحفظ'); load(); } }}
         onOpen={(k, at = {}) => { const c = editor; if (k === 'schedule') setSchedule(c); else if (k === 'team') setGroups(c); else if (k === 'vis') setVis(c); else if (k === 'journey') onEditJourney(at.program_id || c.program_id);
+          else if (k === 'timeline') window.location.hash = `#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`;
           else if (k === 'activities') window.location.hash = `#/leaders/activities${at.req ? `?req=${encodeURIComponent(at.req)}` : ''}`; }} />}
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
