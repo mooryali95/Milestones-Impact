@@ -163,7 +163,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     const offsetAr = refKey && r.with && w.offset ? (dated && ref?.from
       ? `تُفتح مع «${titleOf.get(r.with)}» في ${fmtDay(ref.from)}، ومخطط من ${fmtDay(w.from)}`
       : `تُفتح مع «${titleOf.get(r.with)}»، ومخطط بعد ${daysAr(w.offset)} من بدايتها`) : '';
-    const withNote = refKey && r.with ? (w.offset ? `تبدأ مع «${titleOf.get(r.with)}» بعد ${daysAr(w.offset)}` : `تبدأ مع «${titleOf.get(r.with)}»`) : slot.together ? 'تبدأ البقية معها' : '';
+    // والملاحظة في الممر بالمعنى نفسه: مع الإزاحة «تُفتح مع … ومخطط بعد N»، لا «تبدأ … بعد N» التي تُقرأ فتحًا متأخرًا
+    const withNote = refKey && r.with ? (w.offset ? `تُفتح مع «${titleOf.get(r.with)}»، ومخطط بعد ${daysAr(w.offset)} من بدايتها` : `تبدأ مع «${titleOf.get(r.with)}»`) : slot.together ? 'تبدأ البقية معها' : '';
     const status = statusOf(w);
     const left = status === 'active' ? daysBetween(t, w.to) : null;
     return {

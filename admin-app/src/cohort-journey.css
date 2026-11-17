@@ -250,6 +250,7 @@
 .cj-over > span { display: inline-grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 50%; flex: none; margin-block-start: 3px;
   background: var(--gold-deep); color: #fff; font-weight: 800; font-size: .72rem; }
 .cj-rules li.cj-offset { color: var(--ink); }
+.cj-par-max { flex: 1 1 100%; font-size: .76rem; color: var(--ink-soft); }
 @media (max-width: 560px) {
   .cj-par-with { flex-wrap: wrap; inline-size: 100%; }
   .cj-par-with select { flex: 1 1 100%; }

@@ -532,6 +532,8 @@ for (const width of [1440, 390]) {
     await off.blur();
     await expect(par).toContainText('معدّل لهذه الدفعة');
     await expect(card.locator('.cj-offset')).toHaveText('تُفتح مع «التدريب» في 5 نوفمبر، ومخطط من 12 نوفمبر');
+    // سطر واحد يقول الموعدين، فلا «تبدأ مع … بعد» معه تقول فتحًا متأخرًا
+    await expect(card.locator('.cj-with')).toHaveCount(0);
     await expect(card.locator('.cj-window')).toContainText('12 نوفمبر إلى 9 ديسمبر');
     // تنبيه التجاوز: مسموح، ويطول المحور بالأسبوع نفسه، فيُزاح الدعم
     await expect(card.locator('.cj-over')).toContainText('«التوجيه على رأس العمل» تنتهي بعد «التدريب» بـ21 يومًا، فيطول محور «التأهيل» 21 يومًا');
@@ -539,6 +541,8 @@ for (const width of [1440, 390]) {
     // الممر في الخط يبدأ بعد إزاحته داخل خانته
     const lane = panel.locator('section.jt .jt-stage.lane', { hasText: 'التوجيه على رأس العمل' }).first();
     if (width > 500) expect(await lane.evaluate((el) => parseFloat(el.style.marginInlineStart))).toBeGreaterThan(0);
+    await expect(lane).toContainText('تُفتح مع «التدريب»، ومخطط بعد سبعة أيام من بدايتها');
+    await expect(lane).not.toContainText('تبدأ مع «التدريب» بعد');
     await expect(panel.locator('.cj-savebar')).toContainText('تعديل واحد غير محفوظ');
     expect(calls.filter((c) => c.action === 'admin.cohort-plan')).toHaveLength(0);
     expect(await noOverflow(page)).toBe(true);
@@ -589,7 +593,10 @@ test('«لا شيء» يخرج المرحلة من مجموعتها، و«ارج
   await expect(panel.locator('.cj-savebar')).toContainText('لا تعديل بعد');
   // الإزاحة لا تتجاوز مدة المرجع (التدريب 14 يومًا)
   const off = par.getByRole('textbox', { name: /إزاحة الاستشارة/ });
+  // الحد مكتوب بجانب الحقل ومربوط به، وما فوقه يُحصر ويظهر في الحقل فورًا لا بعد مغادرته
+  await expect(off).toHaveAccessibleDescription('أقصاها مدة «التدريب»: أسبوعان');
   await off.fill('40');
+  await expect(off).toHaveValue('14');
   await off.blur();
   await expect(off).toHaveValue('14');
   await expect(par.getByRole('button', { name: 'زد إزاحة الاستشارة' })).toBeDisabled();

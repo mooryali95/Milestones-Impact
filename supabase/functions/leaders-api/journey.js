@@ -4,6 +4,7 @@
 // منفصلة عن logic.js لحجمها؛ تُصدَّر منه أيضًا فلا يتغير أي استيراد قائم.
 import { requirementApplies, SESSION_DEFAULTS } from './logic.js';
 import { PHASE_AR } from './labels.js';
+import { plainInt } from './digits.js';
 
 // ════════════════════════════════════════════════════════════════
 // نصوص الرحلة من الإعدادات: لا رقم جلسات أو مدة يُكتب في وصف
@@ -251,7 +252,7 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     out.with = k;
     // الإزاحة (R3a): تُخطَّط بعد N يومًا من بداية مرجعها، من 0 إلى مدته (البند 4.6). صفر هو الافتراضي فلا يُحفظ
     if (r.offset != null && r.offset !== '') {
-      const n = Number(r.offset);
+      const n = plainInt(r.offset);
       if (!Number.isInteger(n) || n < 0 || n > 365) throw new Error('الإزاحة عدد أيام صحيح من 0 إلى 365');
       const cap = target.duration_days != null && target.duration_days !== '' ? Math.max(0, Math.round(Number(target.duration_days) || 0)) : null;
       if (cap != null && n > cap) throw new Error(`الإزاحة من 0 إلى مدة «${name}» (${daysAr(cap)})`);

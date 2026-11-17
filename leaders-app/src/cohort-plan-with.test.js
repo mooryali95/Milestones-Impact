@@ -97,6 +97,11 @@ describe('البرنامج: rules.offset في المنظف والفحص والم
     expect(() => cleanStageRules({ unlock: 'with', with: 'training', offset: 1.5 }, list, 'ojt')).toThrow('الإزاحة عدد أيام صحيح');
     // الإزاحة بلا «تبدأ مع» لا تُحفظ
     expect(cleanStageRules({ unlock: 'previous', offset: 3 }, list, 'ojt')).toEqual({});
+    // رقم أو نص أرقام وحده (والأرقام العربية كما في خطة الدفعة)، وما سواه يُرفض لا يُحوَّل
+    expect(cleanStageRules({ unlock: 'with', with: 'training', offset: '٧' }, list, 'ojt')).toEqual({ unlock: 'with', with: 'training', offset: 7 });
+    for (const offset of [true, [4], '0x3', '1e0', {}]) {
+      expect(() => cleanStageRules({ unlock: 'with', with: 'training', offset }, list, 'ojt')).toThrow('الإزاحة عدد أيام صحيح من 0 إلى 365');
+    }
   });
   it('stageRules يقرأ الإزاحة لـ«تبدأ مع» وحدها، وstageRulesIssues ينبّه إن زادت على مدة المرجع، والجملة تقولها', () => {
     expect(stageRules({ rules: { unlock: 'with', with: 'a', offset: 4 } }).offset).toBe(4);
@@ -158,6 +163,24 @@ describe('خطة الدفعة: المنظف والتحرير والحراس', ()
     const bad = { training: { with: 'consulting' } };
     expect(planWithIssues({ stages: STAGES, schedule: { ...bad, consulting: { days: 9 } }, before: bad })).toEqual([]);
     expect(planWithIssues({ stages: STAGES, schedule: bad }).map((x) => x.code)).toEqual(['with_order']);
+  });
+  it('الإزاحة في خطة الدفعة رقم أو نص أرقام وحده: [5] و\'0x3\' و\'1e0\' و[] وtrue تُرفض', () => {
+    for (const v of [[5], '0x3', '1e0', [], true]) {
+      expect(planEdit({ stages: STAGES, edit: { offset: { ojt: v } } }).errors.map((x) => x.code)).toEqual(['offset_range']);
+    }
+    expect(planEdit({ stages: STAGES, edit: { offset: { ojt: '٥' } } }).schedule).toEqual({ ojt: { offset: 5 } });
+  });
+  it('خلل قائم لا يمرر تعديلًا يلمس المرحلة نفسها: مرجع آخر خاطئ بالرمز نفسه يُرفض', () => {
+    const st = [...STAGES, S('late1', 7, 3, { title_ar: 'لاحقة1' }), S('late2', 8, 3, { title_ar: 'لاحقة2' })];
+    const bad = { training: { with: 'late1' } };
+    // قائم قبل التعديل: تعديل مدة غيرها يمر
+    expect(planEdit({ stages: st, schedule: bad, edit: { days: { consulting: 9 } } }).errors).toEqual([]);
+    // يغيّر مرجعها إلى لاحقة أخرى: with_order جديد ولو تشابه الرمز
+    expect(planEdit({ stages: st, schedule: bad, edit: { with: { training: 'late2' } } }).errors.map((x) => x.code)).toContain('with_order');
+  });
+  it('إزاحة الدفعة على مرجع النسخة إن كان بوابة قبول تُرفض with_gate', () => {
+    const st = STAGES.map((s) => (s.key === 'ojt' ? { ...s, rules: { unlock: 'with', with: 'profile' } } : s));
+    expect(planEdit({ stages: st, edit: { offset: { ojt: 1 } } }).errors.map((x) => x.code)).toContain('with_gate');
   });
   it('إخراج مرحلة من مجموعة تفصل مرجعًا عن تابعه يُرفض', () => {
     const st = [...STAGES.slice(0, 3), S('x', 3.5, 5, { title_ar: 'الثالثة', rules: { unlock: 'with', with: 'training' } }), ...STAGES.slice(3)];
@@ -248,7 +271,7 @@ describe('الخط الزمني والتوزيع', () => {
     expect(ojt.together).toBe(true);
     expect(ojt.lane_at).toBe(50);
     expect(ojt.offset).toBe(7);
-    expect(ojt.with_note).toBe('تبدأ مع «التدريب» بعد سبعة أيام');
+    expect(ojt.with_note).toBe('تُفتح مع «التدريب»، ومخطط بعد سبعة أيام من بدايتها');
     expect(ojt.offset_ar).toBe('تُفتح مع «التدريب» في 4 يناير، ومخطط من 11 يناير');
     // «تسير مع» من خطة الدفعة تصنع الممر، و«لا شيء» تخرجها من خانتها
     const n = journeyTimeline({ stages: STAGES, requirements: [] }, { cohort: { id: 'c', starts_on: START, schedule: { consulting: { with: 'training' }, ojt: { with: false } } } });
@@ -276,5 +299,14 @@ describe('الخط الزمني والتوزيع', () => {
     const p = cohortPlan(st, { starts_on: '2027-01-01', schedule: { ...schedule, ...Object.fromEntries(Object.entries(sug).map(([k, n]) => [k, { ...(schedule[k] || {}), days: n }])) } });
     expect(p.end).toBe('2027-02-11');
     expect(p.byKey.b.with).toBe('a');
+  });
+  it('suggestDays مع تابع تتجاوز إزاحته مرجعه: لا تقصر الرحلة عن نهاية الدفعة (الإزاحة أيام ثابتة لا تتسع بالتوزيع)', () => {
+    const st = [S('a', 1, 10), S('b', 2, 5), S('c', 3, 4)];
+    for (const offset of [8, 3, 0]) {
+      const schedule = { b: { with: 'a', offset } };
+      const sug = suggestDays(st, '2026-01-01', '2026-03-01', schedule);
+      const p = cohortPlan(st, { starts_on: '2026-01-01', ends_on: '2026-03-01', schedule: { ...schedule, ...Object.fromEntries(Object.entries(sug).map(([k, n]) => [k, { ...(schedule[k] || {}), days: n }])) } });
+      expect(p.end).toBe('2026-03-01');
+    }
   });
 });

@@ -23,6 +23,7 @@ import {
 } from '../cohort-journey.js';
 import { PLAN_DAYS_MAX, planDaysMin } from '../../../supabase/functions/leaders-api/stage-windows.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
 
 const editsAr = (n) => countAr(n, 'تعديل واحد', 'تعديلان', 'تعديلات', 'تعديلًا');
@@ -94,7 +95,14 @@ function WithControl({ s, row, onWith, onOffset }) {
           <div className="cj-step">
             <button type="button" aria-label={`أنقص إزاحة ${s.title}`} disabled={row.offset <= 0} onClick={() => setOff(stepDays(row.offset, unit, -1, 0, max))}>−</button>
             <input id={id} type="text" inputMode="numeric" dir="ltr" aria-label={`إزاحة ${s.title} عن بداية «${refTitle}» ب${unit === 'weeks' ? 'الأسابيع' : 'الأيام'}`} value={value}
-              onChange={(e) => { setText(e.target.value); const d = fromUnit(e.target.value, unit); if (d != null && e.target.value.trim() !== '') onOffset(s.key, Math.max(0, Math.min(max, d))); }}
+              aria-describedby={`${id}-max`}
+              onChange={(e) => {
+                const d = fromUnit(e.target.value, unit);
+                if (d == null || e.target.value.trim() === '') { setText(e.target.value); return; }
+                onOffset(s.key, Math.max(0, Math.min(max, d)));
+                // خارج المدى: يُحصر في المسودة، فيعرض الحقل ما حُفظ فعلًا لا ما كُتب
+                setText(d > max || d < 0 ? null : e.target.value);
+              }}
               onBlur={() => setText(null)} />
             <select aria-label={`وحدة إزاحة ${s.title}`} value={unit} onChange={(e) => { setUnit(e.target.value); setText(null); }}>
               <option value="days">أيام</option><option value="weeks">أسابيع</option>
@@ -102,6 +110,7 @@ function WithControl({ s, row, onWith, onOffset }) {
             <button type="button" aria-label={`زد إزاحة ${s.title}`} disabled={row.offset >= max} onClick={() => setOff(stepDays(row.offset, unit, 1, 0, max))}>+</button>
           </div>
           <span>من بدايتها</span>
+          <small id={`${id}-max`} className="cj-par-max">أقصاها مدة «{refTitle}»: {max ? durationAr(max) : 'صفر'}</small>
         </div>
       )}
       <span className="cj-plan-meta">
@@ -154,7 +163,7 @@ function StageCard({ s, rows = null, plan = null }) {
         : s.window_ar ? (
           <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
         ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
-      {(s.with_ar || s.rule_ar) && (
+      {(s.with_ar || s.offset_ar || s.rule_ar) && (
         <ul className="cj-rules">
           {s.with_ar && <li className="cj-with">{s.with_ar}</li>}
           {s.offset_ar && <li className="cj-offset">{s.offset_ar}</li>}

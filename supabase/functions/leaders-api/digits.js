@@ -6,5 +6,8 @@
 // p-entry-1 وadmin-program-6). يستعمله الخادم والواجهات الثلاث عبر logic.js، والمعالم مباشرة.
 // U+0660 وU+06F0 ينتهيان بصفر، فآخر أربع بتات في كل منهما هي قيمة الرقم.
 export const latinDigits = (v) => String(v ?? '').replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 15));
+// عدد أيام كما يرسله نموذج: رقم، أو نص أرقام وحدها (بأي من الأرقام الثلاثة). وما سواه (true، [5]، '0x3'، '1e0') NaN،
+// فلا يمر Number() بقيمة لا يرسلها عميل سليم
+export const plainInt = (v) => (typeof v === 'number' ? v : typeof v === 'string' && /^\s*[0-9]+\s*$/.test(latinDigits(v)) ? Number(latinDigits(v)) : NaN);
 // رمز الدخول كما يُكتب أو يُلصق في حقله: ستة أرقام لاتينية (randomCode في core.ts)، في دخول المشارك والجهة والخبير واللوحة
 export const codeDigits = (v) => latinDigits(v).replace(/\D/g, '').slice(0, 6);

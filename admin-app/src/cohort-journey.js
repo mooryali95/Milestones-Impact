@@ -119,7 +119,8 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
     };
   };
 
-  const card = (s, lead, withAr = s.with_note || '') => {
+  // مع الإزاحة سطر «تُفتح مع … في … ومخطط من …» (offset_ar) يقول الموعدين، فلا يتكرر معه سطر «تسير مع»
+  const card = (s, lead, withAr = s.offset_ar ? '' : s.with_note || '') => {
     const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
     const shown = rs.filter((r) => !r.hidden).length;
     const p = mapStage.get(s.key);

@@ -12,7 +12,7 @@ import {
 } from './stage-windows.js';
 import { addDays, cohortMilestones, daysBetween, distributeSchedule, lateNoticeAllowed, MILESTONE_GRACE_DAYS, milestoneDueInfo, milestoneStatuses } from './milestones.js';
 import { stageRules, daysAr, durationAr, withPlacementIssue } from './journey.js';
-import { latinDigits } from './digits.js';
+import { latinDigits, plainInt } from './digits.js';
 import { SYSTEM_REQUIREMENT_CODES } from './content-lock.js';
 
 // الوحدات (القرار 9): أيام وأسابيع، والأسبوع 7 أيام. «أيام العمل» في R5
@@ -111,10 +111,10 @@ export function planWithCandidates(stages, schedule, key) {
   const idx = live.indexOf(self);
   return live.slice(0, idx).filter((s) => !PLAN_GATE_STAGES.includes(s.key) && !withPlacementIssue(live, self, s.key));
 }
-// أخطاء التوازي في خطة واحدة، بمفتاح المرحلة ورمز الخطأ
+// أخطاء التوازي في خطة واحدة، بمفتاح المرحلة ورمز الخطأ والمرجع الذي يخصه، فمرجع آخر خاطئ بالرمز نفسه خطأ جديد
 function withErrors(stages, schedule, cohort) {
   const out = new Map();
-  const add = (stage, code, msg) => { if (!out.has(`${stage}:${code}`)) out.set(`${stage}:${code}`, { stage, code, msg }); };
+  const add = (stage, code, msg, ref = '') => { const id = `${stage}:${code}:${ref}`; if (!out.has(id)) out.set(id, { stage, code, msg }); };
   const sorted = [...(stages || [])].filter((s) => s.active !== false).sort(sortOf);
   const byKey = new Map(sorted.map((s) => [s.key, s]));
   const title = (k) => byKey.get(k)?.title_ar || k;
@@ -132,21 +132,23 @@ function withErrors(stages, schedule, cohort) {
     if (typeof p.with === 'string') {
       const t = byKey.get(p.with);
       const name = title(p.with);
-      if (!t) { add(k, 'with_unknown', `«${title(k)}» تسير مع مرحلة ليست في رحلة الدفعة (${p.with})`); continue; }
-      if (p.with === k) { add(k, 'with_self', `«${title(k)}» لا تسير مع نفسها`); continue; }
-      if (off.has(p.with)) { add(k, 'with_off', `«${title(k)}» تسير مع «${name}» وهي موقوفة لهذه الدفعة: أعدها أو اختر غيرها`); continue; }
-      if (PLAN_GATE_STAGES.includes(p.with)) { add(k, 'with_gate', `«${name}» من بوابات القبول، فلا تسير معها مرحلة في دفعة`); continue; }
+      if (!t) { add(k, 'with_unknown', `«${title(k)}» تسير مع مرحلة ليست في رحلة الدفعة (${p.with})`, p.with); continue; }
+      if (p.with === k) { add(k, 'with_self', `«${title(k)}» لا تسير مع نفسها`, p.with); continue; }
+      if (off.has(p.with)) { add(k, 'with_off', `«${title(k)}» تسير مع «${name}» وهي موقوفة لهذه الدفعة: أعدها أو اختر غيرها`, p.with); continue; }
+      if (PLAN_GATE_STAGES.includes(p.with)) { add(k, 'with_gate', `«${name}» من بوابات القبول، فلا تسير معها مرحلة في دفعة`, p.with); continue; }
       // مرجع قبلها في الترتيب وحده، فلا حلقة: كل تابع يشير إلى ما سبقه
-      if (!(at.get(p.with) < at.get(k))) { add(k, 'with_order', `«${name}» بعد «${title(k)}» في الترتيب، فلا تسير معها. اختر مرحلة قبلها`); continue; }
+      if (!(at.get(p.with) < at.get(k))) { add(k, 'with_order', `«${name}» بعد «${title(k)}» في الترتيب، فلا تسير معها. اختر مرحلة قبلها`, p.with); continue; }
       const why = withPlacementIssue(live, live.find((s) => s.key === k) || self, p.with);
-      if (why) { add(k, 'with_place', `«${title(k)}»: ${why}`); continue; }
+      if (why) { add(k, 'with_place', `«${title(k)}»: ${why}`, p.with); continue; }
     }
     if ('offset' in e && e.offset !== undefined && e.offset !== null && e.offset !== '') {
       if (p.offset === undefined) { add(k, 'offset_range', `إزاحة «${title(k)}» عدد أيام صحيح من 0 إلى ${PLAN_DAYS_MAX}`); continue; }
       const r = stageRules(live.find((s) => s.key === k) || self);
       if (r.unlock !== 'with' || !r.with) { add(k, 'offset_alone', `«${title(k)}» لا تسير مع مرحلة، فلا إزاحة لها`); continue; }
+      // إزاحة الدفعة على مرجع النسخة: بوابة القبول لا يسير معها شيء في دفعة، بمرجع الدفعة أو بمرجع النسخة
+      if (PLAN_GATE_STAGES.includes(r.with)) { add(k, 'with_gate', `«${title(r.with)}» من بوابات القبول، فلا تسير معها مرحلة في دفعة ولا إزاحة عليها`, r.with); continue; }
       const cap = Math.max(0, plan.byKey[r.with]?.days ?? 0);
-      if (p.offset > cap) add(k, 'offset_range', `إزاحة «${title(k)}» من 0 إلى مدة «${title(r.with)}» (${cap ? daysAr(cap) : 'صفر'})`);
+      if (p.offset > cap) add(k, 'offset_range', `إزاحة «${title(k)}» من 0 إلى مدة «${title(r.with)}» (${cap ? daysAr(cap) : 'صفر'})`, r.with);
     }
   }
   // كل «تسير مع» فعلية صارت بلا موضع صالح بالخطة (مرحلة أُخرجت من مجموعة فصارت تفصل مرجعًا عن تابعه)
@@ -154,17 +156,19 @@ function withErrors(stages, schedule, cohort) {
     const r = stageRules(s);
     if (r.unlock !== 'with' || !r.with || !live.some((x) => x.key === r.with)) continue;
     const why = withPlacementIssue(live, s, r.with);
-    if (why) add(s.key, 'with_place', `«${title(s.key)}»: ${why}`);
+    if (why) add(s.key, 'with_place', `«${title(s.key)}»: ${why}`, r.with);
   }
   return out;
 }
 /** أخطاء التوازي التي تحدثها الخطة الجديدة (schedule) ولم تكن في السابقة (before): ما كان قبلها (نسخة رُقّيت) لا يمنع تعديلًا
- * آخر، وما يحدثه التعديل يُرفض باسمه. يستعملها planEdit والتراجع على الخادم
- * @param {{ stages: any[], schedule: any, before?: any, cohort?: any }} o @returns {{ stage: string, code: string, msg: string }[]} */
-export function planWithIssues({ stages = [], schedule = {}, before = null, cohort = {} }) {
+ * آخر، وما يحدثه التعديل يُرفض باسمه. يستعملها planEdit والتراجع على الخادم. touched: مراحل مس التعديل «تسير مع» أو
+ * إزاحتها، فخطؤها يُرفض ولو كان قبله (التعديل لمسه فلم يصلحه)
+ * @param {{ stages: any[], schedule: any, before?: any, cohort?: any, touched?: string[] }} o @returns {{ stage: string, code: string, msg: string }[]} */
+export function planWithIssues({ stages = [], schedule = {}, before = null, cohort = {}, touched = [] }) {
   const now = withErrors(stages, schedule, cohort);
   const was = before ? withErrors(stages, before, cohort) : new Map();
-  return [...now.entries()].filter(([k]) => !was.has(k)).map(([, v]) => v);
+  const mine = new Set(touched);
+  return [...now.entries()].filter(([k, v]) => !was.has(k) || mine.has(v.stage)).map(([, v]) => v);
 }
 
 /** الخطة بعد تعديل المدير، وأسباب الرفض إن وُجدت.
@@ -257,7 +261,7 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
     const e = { ...(next[k] || {}) };
     delete e.offset;
     if (raw !== null && raw !== '') {
-      const n = Number(latinDigits(raw));
+      const n = plainInt(raw);
       if (!Number.isInteger(n) || n < 0 || n > PLAN_DAYS_MAX) { errors.push({ stage: k, code: 'offset_range', msg: `إزاحة «${title(k)}» عدد أيام صحيح من 0 إلى ${PLAN_DAYS_MAX}` }); continue; }
       if (e.with === false) { errors.push({ stage: k, code: 'offset_alone', msg: `«${title(k)}» لا تسير مع مرحلة، فلا إزاحة لها` }); continue; }
       // مرجع النسخة نفسه: إزاحة النسخة لا تُكتب. ومرجع الدفعة: الصفر هو الافتراضي فلا يُكتب
@@ -290,7 +294,9 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
   // حارس التوازي على الخطة كما ستُحفظ (البند 4.6): المرجع سابق في المحور يعمل، والإزاحة من 0 إلى مدته. يُفحص بعد المدد
   // والإيقاف، فتقصير المرجع تحت الإزاحة أو إيقاف ما بين المرجع وتابعه يُرفض أيضًا
   const seen = new Set(errors.map((x) => `${x.stage}:${x.code}`));
-  for (const x of planWithIssues({ stages, schedule: next, before: schedule, cohort })) if (!seen.has(`${x.stage}:${x.code}`)) errors.push(x);
+  // ما أعاده التعديل إلى قاعدة البرنامج (null) لا يُحسب لمسًا: خطأ قاعدة النسخة ليس من الدفعة
+  const touched = [...Object.entries(withEdit), ...Object.entries(offsetEdit)].filter(([, v]) => v !== null && v !== undefined).map(([k]) => k);
+  for (const x of planWithIssues({ stages, schedule: next, before: schedule, cohort, touched })) if (!seen.has(`${x.stage}:${x.code}`)) errors.push(x);
   return { schedule: next, errors, anchored, changed: !sameSchedule(schedule, next) };
 }
 const ISO_PAIR = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(e.end || '');
@@ -314,20 +320,24 @@ export function suggestDays(stages, startsOn, endsOn, schedule = {}) {
   };
   let out = daysFor(endsOn);
   if (!required.length || !Object.keys(out).length) return out;
-  let reserve = 0;
+  // التصحيح في الاتجاهين: الزيادة تقصّر الهدف، والنقص يمده. النقص يأتي من الإزاحة: distributeSchedule يحسبها من نصيب
+  // المجموعة فتتسع معه، وcohortPlan يبقيها أيامًا ثابتة، فتابع يتجاوز مرجعه بإزاحته تقصر مجموعته عما افتُرض (R3a)
+  let reserve = 0, best = null;
   for (let i = 0; i < 6; i += 1) {
     const sched = { ...own };
     for (const [k, n] of Object.entries(out)) sched[k] = { days: n };
     const p = cohortPlan(live, { starts_on: startsOn, ends_on: endsOn, schedule: sched });
     const diff = p.end ? daysBetween(endsOn, p.end) : 0;
+    // أقرب اقتراح، والتساوي للأقصر فلا تتجاوز الرحلة نهاية الدفعة إلا مضطرة
+    if (!best || Math.abs(diff) < Math.abs(best.diff) || (Math.abs(diff) === Math.abs(best.diff) && diff < best.diff)) best = { out, diff };
     if (!diff) break;
     const next = reserve + diff;
     // لا يتسع ما بقي للإلزامية بيوم لكل منها: يبقى أقرب اقتراح، وتنبيه «تنتهي الرحلة بعد نهاية الدفعة» يقول الفرق
-    if (next < 0 || daysBetween(startsOn, endsOn) + 1 - next < required.length) break;
+    if (daysBetween(startsOn, endsOn) + 1 - next < required.length) break;
     reserve = next;
     out = daysFor(addDays(endsOn, -reserve));
   }
-  return out;
+  return best ? best.out : out;
 }
 
 // لماذا لا تُحفظ خطة هذه الدفعة، أو '' (البند 4.5 والقرار 21)
