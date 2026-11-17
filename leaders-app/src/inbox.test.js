@@ -20,6 +20,8 @@ describe('صندوق «ينتظرني»', () => {
     expect(r.items.find((i) => i.title === 'خالد')).toMatchObject({ days: 5, late: true });
     expect(r.items.find((i) => i.title === 'ماجد').late).toBe(false);
     expect(r.late).toBe(1);
+    // «العدّ الواحد»: عدّاد كل تبويب في اللوحة من البنود نفسها بتبويب نوعها، ومعه المتأخر
+    expect(r.by_tab).toEqual({ participants: { n: 3, late: 1 }, capstones: { n: 1, late: 0 } });
   });
   it('الوجهة: ملف المشارك حين يكون البند عنه، وإلا صفحة نوعه', () => {
     const r = inboxOf({ approval: [{ id: 'p1', participant_id: 'p1', at: null }], capstone: [{ id: 'p3', at: null }], expert_application: [{ id: 'x1', at: null }], sponsor: [{ id: 's1', at: null }] }, NOW);

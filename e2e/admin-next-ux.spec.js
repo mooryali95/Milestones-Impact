@@ -7,7 +7,8 @@ const person = { success: true, participant: { ...people[0] }, progress: 0, hist
 const ch = { id: 'h1', dimension: 'milestone', sort: 1, title_ar: 'المعلم', min_level: 'beginner', body_md: 'نص', quiz_md: '' };
 const catalog = { success: true, journey_stages: [], stage_requirements: [], instruments: [], locked_instruments: [], questions: [], grid_cells: [], level_rules: [], tracks: [], track_stats: {}, handbook_modules: [ch], learning_models: [], book_stats: {} };
 
-async function setup(page, hash = '') {
+const INBOX = { success: true, total: 3, late: 0, skipped: [], counts: { approval: 1, model: 2 }, by_tab: { participants: { n: 1, late: 0 }, handbook: { n: 2, late: 0 } }, items: [] };
+async function setup(page, hash = '', inbox = INBOX) {
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [{ id: 'c1', status: 'new' }, { id: 'c2', status: 'read' }] } }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -16,7 +17,8 @@ async function setup(page, hash = '') {
       'admin.participant': person, 'admin.catalog': catalog,
       'admin.overview': { success: true, total: 1, by_status: {}, pending_reviews: 0, matrix: { milestone: { beginner: 0, intermediate: 0, advanced: 0 }, impact: { beginner: 0, intermediate: 0, advanced: 0 }, leadership: { beginner: 0, intermediate: 0, advanced: 0 } } },
       'admin.reviews': { success: true, pending_approval: [{ id: 'p1', full_name: 'سارة الأحمد' }], submitted: [] },
-      'admin.inbox': { success: true, total: 0, late: 0, skipped: [], counts: {}, items: [] },
+      // «العدّ الواحد»: عدّادات التبويبات من الصندوق نفسه (by_tab)، لا من admin.reviews وadmin.submissions
+      'admin.inbox': inbox,
       'admin.submissions': { success: true, submissions: [{ id: 's1' }, { id: 's2' }] },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
@@ -57,6 +59,38 @@ test('أعداد ما ينتظر القرار على السياقات والتب
   await expect(tabs.getByRole('button', { name: /كتاب القائد/ }).locator('.la-badge')).toHaveText('2');
   await tabs.getByRole('button', { name: 'نظرة عامة' }).click();
   await expect(page.getByRole('link', { name: 'طلبات تواصل جديدة' })).toBeVisible();
+});
+
+test('العدّاد يحمرّ حين يتأخر بند عن مهلته، و«99+» فوق التسعة والتسعين، والمتعذر لا يُظهر صفرًا', async ({ page }) => {
+  const calls = [];
+  page.on('request', (r) => { if (/leaders-api/.test(r.url())) calls.push(JSON.parse(r.postData() || '{}').action); });
+  await setup(page, '#/leaders/overview', {
+    success: true, total: 132, late: 2, skipped: ['erasure'], counts: { approval: 5, model: 120, sponsor: 7 },
+    by_tab: { participants: { n: 5, late: 2 }, handbook: { n: 120, late: 0 }, payments: { n: 7, late: 0 } }, items: [],
+  });
+  const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
+  // طلب الحذف متعذر: تبويب المشاركين بلا عدّاد بدل رقم ناقص، والمجموع معلَّم بأنه قد يزيد
+  await expect(tabs.getByRole('button', { name: /كتاب القائد/ }).locator('.la-badge')).toHaveText('99+');
+  await expect(tabs.getByRole('button', { name: /^المدفوعات/ }).locator('.la-badge')).toHaveText('7');
+  await expect(tabs.getByRole('button', { name: /^المشاركون/ }).locator('.la-badge')).toHaveCount(0);
+  const ctx = page.getByRole('button', { name: /تطبيق القادة/ }).locator('.ctx-badge');
+  await expect(ctx).toHaveText('99+');
+  await expect(ctx).toHaveAttribute('aria-label', '127 أو أكثر بانتظارك');
+  // طلب واحد لـ admin.inbox يرسم الصندوق والعدّادات معًا، ولا طلب لمصادر العدّ القديمة
+  await expect(page.locator('#inbox-h')).toBeVisible();
+  expect(calls.filter((a) => a === 'admin.inbox')).toHaveLength(1);
+  expect(calls.filter((a) => a === 'admin.submissions' || a === 'admin.capstones')).toHaveLength(0);
+});
+
+test('عدّاد أحمر بوصف مسموع لما تأخر عن مهلته', async ({ page }) => {
+  await setup(page, '#/leaders/overview', {
+    success: true, total: 5, late: 2, skipped: [], counts: { approval: 5 }, by_tab: { participants: { n: 5, late: 2 } }, items: [],
+  });
+  const b = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: /^المشاركون/ }).locator('.la-badge');
+  await expect(b).toHaveText('5');
+  await expect(b).toHaveClass(/late/);
+  await expect(b).toHaveAttribute('aria-label', '5 بانتظارك، منها 2 متأخر');
+  await expect(page.getByRole('button', { name: /تطبيق القادة/ }).locator('.ctx-badge')).toHaveClass(/late/);
 });
 
 test('المحرر يحمي التعديل: تأكيد قبل الإغلاق، ومسودة تُستعاد', async ({ page }) => {

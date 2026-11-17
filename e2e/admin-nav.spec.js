@@ -9,7 +9,8 @@ async function open(page, hash, cohorts) {
     const b = JSON.parse(route.request().postData() || '{}');
     const replies = {
       'admin.orgs': { success: true, orgs: [], unassigned: {} }, 'admin.participants': { success: true, participants: [] },
-      'admin.reviews': { success: true, pending_approval: [], submitted: [] }, 'admin.submissions': { success: true, submissions: [{ id: 's1' }, { id: 's2' }] },
+      'admin.reviews': { success: true, pending_approval: [], submitted: [] }, 'admin.submissions': { success: true, submissions: [] },
+      'admin.inbox': { success: true, total: 2, late: 0, skipped: [], counts: { model: 2 }, by_tab: { handbook: { n: 2, late: 0 } }, items: [] },
       'admin.programs': { success: true, programs: [], cohorts },
     };
     return route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });

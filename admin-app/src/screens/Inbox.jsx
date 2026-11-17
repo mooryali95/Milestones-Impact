@@ -2,12 +2,12 @@
 // صندوق «ينتظرني»: كل ما ينتظر قرار الإدارة في قائمة واحدة، الأقدم أولًا
 // ════════════════════════════════════════════════════════════════
 // من admin.inbox (inbox.js على الخادم): تسعة أنواع بعمرها ووجهتها. الرقاقات تفلتر بالنوع، والمتأخر عن مهلة نوعه
-// معلَّم. يُحدَّث مع كل حفظ يطلق «mi:pending» كعدّادات التبويبات.
+// معلَّم. رده هو رد عدّادات التبويبات نفسه (pending.js، «العدّ الواحد»)، فلا يختلف عدّاد عن الصندوق.
 // «اعتمد الجاهزين»: نافذة BulkApprove نفسها على المنتظرين الأقدم أولًا، ومعاينتها على الخادم تعطي «7 جاهزون، 5 تحتاج نظرك».
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { formatRoute, navigate } from '../route.js';
-import { refreshPending } from '../pending.js';
+import { refreshPending, useInbox } from '../pending.js';
 import { Spinner } from '../ui.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { askOpen } from './Erasure.jsx';
@@ -15,16 +15,12 @@ import { ageAr, approvalIdsOf, INBOX_KINDS, readyLineAr } from '../../../supabas
 import { BULK_APPROVE_MAX } from '../../../supabase/functions/leaders-api/approval.js';
 
 export default function Inbox({ contacts = 0, canWrite, onPerson }) {
-  const [d, setD] = useState(null);
+  // الرد من مخزن العدّادات نفسه (pending.js): طلب واحد لـ admin.inbox يرسم الصندوق وعدّادات التبويبات معًا،
+  // ويُحدَّث معها (كل دقيقتين والصفحة ظاهرة، وفور «mi:pending»)
+  const [d, load] = useInbox();
   const [kind, setKind] = useState('');
   const [bulk, setBulk] = useState(null);
   const [ready, setReady] = useState(null);
-  const load = useCallback(() => L('admin.inbox').then(setD), []);
-  useEffect(() => {
-    load();
-    window.addEventListener('mi:pending', load);
-    return () => window.removeEventListener('mi:pending', load);
-  }, [load]);
   // معاينة الاعتماد الجماعي للعدّ وحده (dry_run لا يكتب شيئًا): للمدير الذي يكتب، وتعذّرها يُبقي الزر بلا عدد
   const ids = canWrite !== false && d?.success ? approvalIdsOf(d.items, BULK_APPROVE_MAX) : [];
   const idsKey = ids.join(',');
