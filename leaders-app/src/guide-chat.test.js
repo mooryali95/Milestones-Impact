@@ -3,13 +3,18 @@ import { describe, expect, it } from 'vitest';
 import {
   contextLine, GUIDE_MAX_INPUT, GUIDE_MODEL, GUIDE_POLICY_VERSION, GUIDE_RULES, guideGate, left, parseReply, quizLeak, riyadhWindow, routeQuestion,
 } from '../../supabase/functions/leaders-api/guide.js';
+import { POLICY_CHANGES, POLICY_MATERIAL_VERSION } from '../../supabase/functions/leaders-api/labels.js';
 
 const open = { policyVersion: '2026-12-01', consentVersion: '2026-12-01', enabled: true, evalOk: true, pilot: true, companion: true, ready: true, hasKey: true };
 
 describe('البوابة', () => {
-  it('مغلقة لكل أحد حتى تُضبط نسخة السياسة الجوهرية في G4', () => {
-    expect(GUIDE_POLICY_VERSION).toBe(null);
-    expect(guideGate({ ...open, policyVersion: undefined })).toEqual({ ok: false, reason: 'policy' });
+  // G4b: نسخة المساعد هي النسخة الجوهرية النافذة نفسها في سجل السياسة، فلا تسبق النشر ولا تتخلف عنه،
+  // ومن وافق قبلها يُسأل الموافقة أولًا (consent)
+  it('نسخة المساعد هي آخر نسخة جوهرية منشورة، ومن لم يوافق عليها لا يصل إليه', () => {
+    expect(GUIDE_POLICY_VERSION).toBe(POLICY_MATERIAL_VERSION);
+    expect(POLICY_CHANGES.find((c) => c.version === GUIDE_POLICY_VERSION)?.material).toBe(true);
+    expect(guideGate({ ...open, policyVersion: GUIDE_POLICY_VERSION, consentVersion: '2026-11-21' }).reason).toBe('consent');
+    expect(guideGate({ ...open, policyVersion: null })).toEqual({ ok: false, reason: 'policy' });
   });
   it('كل شرط بسببه، والأول الساقط هو ما يُقال', () => {
     expect(guideGate(open)).toEqual({ ok: true, reason: null });
