@@ -13,8 +13,11 @@ import BulkApprove from './BulkApprove.jsx';
 import { askOpen } from './Erasure.jsx';
 import { ageAr, approvalIdsOf, INBOX_KINDS, readyLineAr } from '../../../supabase/functions/leaders-api/inbox.js';
 import { BULK_APPROVE_MAX } from '../../../supabase/functions/leaders-api/approval.js';
+import { INBOX_VIEWS, inboxView } from '../today.js';
 
-export default function Inbox({ contacts = 0, canWrite, onPerson }) {
+// view: عرض تقود إليه أرقام مكتب اليوم («المتجاوز للمهلة» أو «المنتظر منذ أكثر من 7 أيام»)، فلتر فوق فلتر النوع.
+// بلا view يبقى الصندوق كما كان؛ onView يمسحه («اعرض الكل»)
+export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onView }) {
   // الرد من مخزن العدّادات نفسه (pending.js): طلب واحد لـ admin.inbox يرسم الصندوق وعدّادات التبويبات معًا،
   // ويُحدَّث معها (كل دقيقتين والصفحة ظاهرة، وفور «mi:pending»)
   const [d, load] = useInbox();
@@ -35,7 +38,7 @@ export default function Inbox({ contacts = 0, canWrite, onPerson }) {
   if (!d.success) return <section className="la-card"><h3>ينتظرني</h3><div className="la-err">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></section>;
   // رد بلا قائمة (خادم أقدم من الواجهة) يُعامل كصندوق فارغ، لا كعطل في الصفحة
   const items = d.items || [], counts = d.counts || {}, total = d.total || 0;
-  const shown = kind ? items.filter((i) => i.kind === kind) : items;
+  const shown = inboxView(kind ? items.filter((i) => i.kind === kind) : items, view);
   const kinds = Object.keys(INBOX_KINDS).filter((k) => counts[k] > 0);
   const open = (i) => {
     const to = { ctx: 'leaders', tab: i.to.tab, id: i.to.id || undefined };
@@ -67,6 +70,9 @@ export default function Inbox({ contacts = 0, canWrite, onPerson }) {
             <button type="button" className={`la-pill${!kind ? ' on' : ''}`} aria-pressed={!kind} onClick={() => setKind('')}>الكل <b>{total}</b></button>
             {kinds.map((k) => <button key={k} type="button" className={`la-pill${kind === k ? ' on' : ''}`} aria-pressed={kind === k} onClick={() => setKind(kind === k ? '' : k)}>{INBOX_KINDS[k].label} <b>{counts[k]}</b></button>)}
           </div>
+          {INBOX_VIEWS[view] && (
+            <p className="inbox-view" role="status">يُعرض {INBOX_VIEWS[view].label} وحده ({shown.length}). {onView && <button type="button" className="la-link" onClick={() => onView('')}>اعرض الكل</button>}</p>
+          )}
           <ul className="inbox-list">
             {shown.slice(0, 60).map((i) => (
               <li key={`${i.kind}-${i.id}`} className={i.late ? 'late' : i.soon ? 'soon' : ''}>

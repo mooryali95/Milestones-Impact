@@ -20,8 +20,10 @@ const STATES = {
   red: () => facts({ mail: { codes: { sent: 9, failed: 3, blocked: 1 }, code_streak: { count: 4, since: ago(20), last_at: ago(1), last_ok_at: ago(25), open: false }, failed_24h: 3 } }),
 };
 
-// pref: اختيار الطي المحفوظ في المتصفح ('open' افتراضًا لاختبارات المحتوى، وnull كأول زيارة). health: رد ops-health من سجل الطلبات حتى الآن
-async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest, pref = 'open', health } = {}) {
+// pref: اختيار الطي المحفوظ في المتصفح ('open' افتراضًا لاختبارات المحتوى، وnull كأول زيارة). health: رد ops-health من سجل الطلبات حتى الآن.
+// badge: البطاقة داخل شارة الصحة في مكتب اليوم، والشارة مطوية حين يسلم كل شيء؛ اختبارات المحتوى تفتحها (اختيار الجلسة نفسه).
+// true يفتحها، وfalse كأول زيارة بلا اختيار، وكائن {sig, open} اختيار محفوظ بعينه
+async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest, pref = 'open', health, badge = true } = {}) {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -41,11 +43,12 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
   });
   await page.goto(BASE);
-  await page.evaluate(([r, p]) => {
+  await page.evaluate(([r, p, b]) => {
     sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x.com', role_id: r }, ts: Date.now() }));
+    if (b) sessionStorage.setItem('mi_admin_today_health', JSON.stringify(b === true ? { sig: '', open: true } : b)); else sessionStorage.removeItem('mi_admin_today_health');
     localStorage.clear();
     if (p) localStorage.setItem('mi_admin_ops_card', p);
-  }, [role, pref]);
+  }, [role, pref, badge]);
   await page.goto(`${BASE}${hash}`);
   await page.reload();
   return calls;
@@ -113,6 +116,28 @@ test('أحمر: الشريط أعلى كل صفحة بالمدة، ويفتح ا
   await expect(card(page)).toBeFocused();
 });
 
+test('أحمر بعد طيّ الشارة على الكهرماني: الشارة تنفتح وحدها، والشريط يكشف البطاقة ولو طُويت على الأحمر نفسه', async ({ page }) => {
+  // طُويت على الكهرماني: الأحمر حال أخرى فتنفتح
+  await setup(page, { state: 'red', badge: { sig: 'ops-amber', open: false } });
+  const toggle = page.locator('#th-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveText(/عطل في البريد/);
+  // طواها المدير على الأحمر نفسه، ثم ضغط رابط الشريط: تنكشف البطاقة ويقع عليها التركيز
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(card(page)).toBeHidden();
+  await page.locator('.ops-banner').getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(card(page)).toBeVisible();
+  await expect(card(page)).toBeFocused();
+  // ومن صفحة أخرى بعد إعادة التحميل والطي محفوظ: الانتقال يكشفها كذلك
+  await page.goto(`${BASE}#/contacts`);
+  await page.reload();
+  await page.locator('.ops-banner').getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/overview$/);
+  await expect(card(page)).toBeFocused();
+});
+
 test('التنبيه التجريبي للمدير الأعلى: يستدعي admin.alert-test ويقول أين وصل', async ({ page }) => {
   const calls = await setup(page, { state: 'green' });
   await card(page).getByRole('button', { name: 'أرسل تنبيهًا تجريبيًا' }).click();
@@ -139,8 +164,13 @@ test('بعد التنبيه التجريبي تتحدث الأرقام وحده�
   await expect.poll(n, { timeout: 12000 }).toBe(3);
 });
 
-test('الطي: السليم مفتوح أول مرة، والزر يطويه بالفأرة ولوحة المفاتيح إلى سطر ملخص هادئ، والاختيار يُحفظ', async ({ page }) => {
-  await setup(page, { state: 'green', pref: null });
+test('الطي: السليم في أول زيارة داخل شارة مطوية، وفتحها يُظهر البطاقة مفتوحة، وزرها يطويها بالفأرة ولوحة المفاتيح إلى سطر ملخص هادئ، والاختيار يُحفظ', async ({ page }) => {
+  await setup(page, { state: 'green', pref: null, badge: false });
+  // أول زيارة: الشارة مطوية لأن كل شيء سليم، والبطاقة داخلها
+  const th = page.locator('#th-toggle');
+  await expect(th).toHaveAttribute('aria-expanded', 'false');
+  await expect(card(page)).toBeHidden();
+  await th.click();
   const toggle = card(page).getByRole('button', { name: 'صحة البريد والتنبيه' });
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(toggle).toHaveAttribute('aria-controls', 'ops-body');

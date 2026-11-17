@@ -88,17 +88,27 @@ for (const width of [1024, 1280, 1366]) {
   });
 }
 
-test('admin-core-6: فلتر الجهة يسري على قائمة المراجعة، و«بدون جهة» يُظهر فشل الأثر خطأً', async ({ page }) => {
-  const calls = await setup(page, '#/leaders/overview', {
+// بطاقات التحليل ومحدد الجهة في «الرؤية الشاملة» منذ المرحلة 3أ (مكتب اليوم)
+// وطابور المتطلبات في المكتب لكل الجهات بلا محدد (سؤال التصور المفتوح 10 يقرر هل يحكم المحدد المكتب كله)
+test('admin-core-6: فلتر الجهة يسري على أرقام التحليل والمراجعة وقياس الأثر، و«بدون جهة» يُظهر فشل الأثر خطأً، وطابور المكتب لكل الجهات', async ({ page }) => {
+  const calls = await setup(page, '#/leaders/insight', {
     leaders: (b) => (b.action === 'admin.impact' && b.organization_id === 'none' ? { 'admin.impact': { success: false, message: 'تعذّر تنفيذ العملية' } } : {}),
   });
   await expect(page.getByText('كل الجهات', { exact: true }).first()).toBeVisible();
   await page.getByLabel('الجهة', { exact: true }).selectOption('o1');
+  await expect.poll(() => calls.find((c) => c.action === 'admin.overview' && c.org === 'o1')).toBeTruthy();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.impact' && c.organization_id === 'o1')).toBeTruthy();
   await expect.poll(() => calls.find((c) => c.action === 'admin.reviews' && c.org === 'o1')).toBeTruthy();
   await page.getByLabel('الجهة', { exact: true }).selectOption('none');
-  await expect.poll(() => calls.find((c) => c.action === 'admin.reviews' && c.org === 'none')).toBeTruthy();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.overview' && c.org === 'none')).toBeTruthy();
   await expect(page.getByText(/تعذّر حساب قياس الأثر/)).toBeVisible();
   await expect(page.getByText('لم تُفعَّل أداة القياس البعدي بعد.')).toHaveCount(0);
+  // المكتب: قائمة المراجعة لكل الجهات عمدًا، بلا محدد
+  const before = calls.length;
+  await page.goto(`${BASE}#/leaders/overview`);
+  await expect.poll(() => calls.slice(before).find((c) => c.action === 'admin.reviews')).toBeTruthy();
+  const rq = calls.slice(before).filter((c) => c.action === 'admin.reviews');
+  expect(rq.every((c) => !c.org)).toBe(true);
 });
 
 test('admin-core-7: إعادة الإرسال تعرض رد الخادم المحايد وتنتظر مهلته، والإعدادات لا تَعِد برمز البريد لمن فعّل التطبيق', async ({ page }) => {
