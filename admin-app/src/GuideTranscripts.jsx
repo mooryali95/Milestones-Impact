@@ -2,15 +2,16 @@
 // «التوجيه والإرشاد» H3: سجل المحادثات لتتبع أي مشكلة (قرار المالك v8)
 // ════════════════════════════════════════════════════════════════
 // القراءة للمالك دائمًا وللمدير الأعلى بمنح المالك، والخادم يفحص ذلك حيًا في كل طلب ويسجّل كل فتح (guide-transcripts.ts).
-// هنا: القائمة في تبويب «التوجيه والإرشاد»، وزر المحادثة في ملف المشارك، ومنح المالك في «إتاحة التوجيه».
+// هنا: القائمة في تبويب «التوجيه والإرشاد»، وزر المحادثة في ملف المشارك، ومنح المالك في «الإتاحة» تحت «المساعد الذكي».
 import React, { useEffect, useState } from 'react';
 import { dateTime as date, L } from './leaders.js';
 import { Spinner, useUI } from './ui.jsx';
+import { dollars, Switch } from './ai-ui.jsx';
 import './agent-admin.css';
 
 const VERDICT_AR = { answered: 'أجاب', unsure: 'لم يتأكد', refused: 'رفض', error: 'تعذّر' };
 const CONTEXT_AR = { program: 'الرحلة', handbook: 'الكتاب', capstone: 'المبادرة' };
-const usd = (n) => (n == null ? '' : `$${Number(n).toFixed(2)}`);
+const usd = (n) => (n == null ? '' : dollars(n));
 
 // حالة الصلاحية مرة لكل تحميل للوحة: الخادم يفحصها حية على كل حال، وهذا لإظهار الزر أو إخفائه فقط
 let accessOnce = null;
@@ -149,7 +150,7 @@ export function GuideConversations() {
   );
 }
 
-// منح المالك في «إتاحة التوجيه»: المديرون الأعلون، وآخر من قرأ محادثة من
+// منح المالك في «الإتاحة» تحت «المساعد الذكي»: المديرون الأعلون، وآخر من قرأ محادثة من
 export function TranscriptGrants() {
   const { toast } = useUI();
   const [g, setG] = useState(null);
@@ -169,8 +170,9 @@ export function TranscriptGrants() {
     <div data-transcript-grants>
       {!g.admins.length ? <p className="la-muted small">لا مدير أعلى غيرك.</p> : (
         <ul className="gd-toggles">{g.admins.map((x) => (
-          <li key={x.id}><label className="row"><input type="checkbox" checked={x.granted} onChange={(e) => flip(x, e.target.checked)} /> <span>{x.email}</span>
-            {x.granted && x.granted_at ? <span className="la-muted small"> منذ {date(x.granted_at)}</span> : null}</label></li>
+          <li key={x.id}><Switch id={`gd-grant-${x.id}`} label={x.email} checked={!!x.granted} on="يطّلع" off="لا يطّلع" onChange={(on) => flip(x, on)}
+            describedBy={x.granted && x.granted_at ? `gd-grant-${x.id}-d` : undefined}
+            hint={x.granted && x.granted_at ? <small id={`gd-grant-${x.id}-d`} className="la-muted">منذ {date(x.granted_at)}</small> : null} /></li>
         ))}</ul>
       )}
       <h4 className="gd-sub">آخر من اطّلع</h4>

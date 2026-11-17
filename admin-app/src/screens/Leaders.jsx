@@ -32,14 +32,13 @@ const MailCenter = lazyRetry(() => import('./MailCenter.jsx'));
 const AppSettings = lazyRetry(() => import('./AppSettings.jsx'));
 const Feedback360 = lazyRetry(() => import('./Feedback360.jsx'));
 const Insight = lazyRetry(() => import('./Insight.jsx'));
-const Agent = lazyRetry(() => import('./Agent.jsx'));
-const GuidanceAdmin = lazyRetry(() => import('./GuidanceAdmin.jsx'));
-const GuidanceAccess = lazyRetry(() => import('./GuidanceAdmin.jsx').then((m) => ({ default: m.GuidanceAccess })));
+// «المساعد الذكي» بتبويباته الداخلية الثلاثة، وكل شاشة فيه تُحمَّل عند أول فتح لتبويبها (AiHub.jsx)
+const AiHub = lazyRetry(() => import('./AiHub.jsx'));
 const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { badgeLabel, badgeText, groupBadge, tabBadge } from '../pending.js';
-import { FEATURE_TABS, OWNER_TABS, TABS } from '../leaders-tabs.js';
+import { FEATURE_TABS, OWNER_TABS, TAB_ALIASES, TABS } from '../leaders-tabs.js';
 import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
 
 // قسم ميزة مخفية عن المستخدمين: ما يعنيه إخفاؤها هنا، والمدير يبني فيها كما يشاء (مفاتيح الميزات P2)
@@ -58,7 +57,7 @@ const TAB_KEYS = new Set(TABS.map(([k]) => k));
 const TAB_GROUPS = [
   ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
   ['المحتوى', ['journey', 'book', 'handbook', 'katon', 'lab', 'assessment', 'content']],
-  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent', 'guidance', 'guidance-access']],
+  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings', 'ai']],
   ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mailcenter', 'mail']],
 ];
 const TAB_LABEL = Object.fromEntries(TABS);
@@ -73,9 +72,13 @@ function Badge({ b }) {
 
 export default function Leaders({ canWrite, pending, isSuper = false, isOwner = false }) {
   const route = useRoute();
+  // رابط قديم (#/leaders/agent و/guidance و/guidance-access): يُستبدل بعنوان «المساعد الذكي» وتبويبه الداخلي دون إضافة إلى سجل المتصفح
+  const alias = TAB_ALIASES[route.tab];
+  useEffect(() => { if (alias) navigate({ ctx: 'leaders', tab: alias[0], id: alias[1] }, { replace: true }); }, [alias]);
   // شاشة المساعد للمدير الأعلى والمالك وحدهما
   const allowed = (k) => !OWNER_TABS.has(k) || isSuper || isOwner;
-  const tab = TAB_KEYS.has(route.tab) && allowed(route.tab) ? route.tab : 'overview';
+  const [rTab, rId] = alias || [route.tab, route.id];
+  const tab = TAB_KEYS.has(rTab) && allowed(rTab) ? rTab : 'overview';
   const person = tab === 'participants' ? route.id : null;
   const orgId = tab === 'orgs' ? route.id : null;
   const track = tab === 'tracks' ? route.id : null;
@@ -126,9 +129,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
   else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} isSuper={isSuper || isOwner} focus={route.id} onSettings={(r) => setFlags(featureFlags(r.values))} />;
-  else if (tab === 'agent') body = <Agent isSuper={isSuper} />;
-  else if (tab === 'guidance') body = <GuidanceAdmin />;
-  else if (tab === 'guidance-access') body = <GuidanceAccess />;
+  else if (tab === 'ai') body = <AiHub sub={rId} isSuper={isSuper} />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;
   else if (tab === 'experts') body = <Experts canWrite={canWrite} expertId={expertId} onPerson={openPerson} onOpen={(id) => (id ? navigate({ ctx: 'leaders', tab: 'experts', id }) : at('experts'))} />;
   else if (tab === 'payments') body = <Payments canWrite={canWrite} onPerson={openPerson} payId={payId} onOpen={(id) => { at('payments', id); window.scrollTo({ top: 0 }); }} />;

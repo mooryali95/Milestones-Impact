@@ -10,7 +10,7 @@ export function usd(micros) {
   return `${v.toFixed(Math.abs(v) < 1 && v !== 0 ? 4 : 2)} دولار`;
 }
 export const usd2 = (micros) => `${(Number(micros || 0) / 1e6).toFixed(2)}`;
-export const pct = (x) => (x == null || !Number.isFinite(Number(x)) ? 'غير مقروء' : `${Math.round(Number(x) * 1000) / 10}%`);
+export const pct = (x) => (x == null || !Number.isFinite(Number(x)) ? 'غير مقروء' : `${Math.round(Number(x) * 1000) / 10}٪`);
 // عدد مقروء أو «غير مقروء»، لا فراغ ولا صفر
 export const count = (n) => (n == null || !Number.isFinite(Number(n)) ? 'غير مقروء' : String(n));
 // العدد مع المعدود بالمطابقة العربية: واحد، ومثنى، وجمع من 3 إلى 10، ومفرد منصوب فوقها
@@ -99,7 +99,7 @@ export function keySummary(k) {
 export function spendSummary(u) {
   if (!u?.today) return { level: 'amber', text: 'غير مقروء' };
   const r = ringLevel(u.today.spent_micros, u.today.cap_micros);
-  return { level: r.level, text: `اليوم ${usd2(u.today.spent_micros)} من ${usd2(u.today.cap_micros)} دولار (${Math.round(r.ratio * 100)}%)` };
+  return { level: r.level, text: `اليوم ${usd2(u.today.spent_micros)} من ${usd2(u.today.cap_micros)} دولار (${Math.round(r.ratio * 100)}٪)` };
 }
 export function convSummary(c) {
   if (!c) return { level: 'green', text: 'افتح القسم لعرض المحادثات' };
