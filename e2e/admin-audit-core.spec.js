@@ -88,8 +88,9 @@ for (const width of [1024, 1280, 1366]) {
   });
 }
 
-test('admin-core-6: فلتر الجهة يسري على قائمة المراجعة، و«بدون جهة» يُظهر فشل الأثر خطأً', async ({ page }) => {
-  const calls = await setup(page, '#/leaders/overview', {
+// بطاقات التحليل ومحدد الجهة في «الرؤية الشاملة» منذ المرحلة 3أ (مكتب اليوم)
+test('admin-core-6: فلتر الجهة يسري على أرقام المراجعة، و«بدون جهة» يُظهر فشل الأثر خطأً', async ({ page }) => {
+  const calls = await setup(page, '#/leaders/insight', {
     leaders: (b) => (b.action === 'admin.impact' && b.organization_id === 'none' ? { 'admin.impact': { success: false, message: 'تعذّر تنفيذ العملية' } } : {}),
   });
   await expect(page.getByText('كل الجهات', { exact: true }).first()).toBeVisible();

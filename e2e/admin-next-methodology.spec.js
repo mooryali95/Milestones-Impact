@@ -51,17 +51,21 @@ async function setup(page) {
 }
 const tab = (page, name) => page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name }).click();
 
-test('نظرة عامة: الأرقام وما ينتظر القرار، والانتقال إلى المسار', async ({ page }) => {
+test('نظرة عامة: الأرقام وما ينتظر القرار، والانتقال إلى المسار من التحليل', async ({ page }) => {
   await setup(page);
   await tab(page, 'نظرة عامة');
-  await expect(page.locator('.stat-value').first()).toHaveText('5');
+  // مكتب اليوم: في البرنامج من أصل المسجلين، وما ينتظر القرار في الصندوق
+  await expect(page.locator('.today-n[data-k="program"] .stat-value')).toHaveText('1 من 5');
   await expect(page.getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
+  // أكثر المسارات مشاركين انتقلت إلى «الرؤية الشاملة» (المرحلة 3أ)
+  await tab(page, 'الرؤية الشاملة');
+  await expect(page.locator('.ins-an .stat-value').first()).toHaveText('5');
   await page.getByRole('button', { name: /M1I1L2/ }).click();
   await expect(page.getByRole('heading', { name: 'مسار البداية' })).toBeVisible();
   await expect(page.locator('.la-md b')).toHaveText('مهم');
 });
 
-test('نظرة عامة: المستوى العام والجهات والقياس والكتاب وقياس الأثر', async ({ page }) => {
+test('التحليل في «الرؤية الشاملة»: المستوى العام والجهات والقياس والكتاب وقياس الأثر، والصندوق في المكتب', async ({ page }) => {
   await setup(page);
   const base = { success: true, total: 5, by_status: { pending_approval: 2 }, pending_reviews: 1, matrix: { milestone: { beginner: 3, intermediate: 1, advanced: 1 }, impact: { beginner: 5, intermediate: 0, advanced: 0 }, leadership: { beginner: 2, intermediate: 2, advanced: 1 } }, funnel: { registered: 5 }, tracks_used: 0, top_tracks: [] };
   const more = {
@@ -77,12 +81,15 @@ test('نظرة عامة: المستوى العام والجهات والقياس
     return route.fulfill({ json: { ...base, ...more } });
   });
   await page.reload();   // الدخول يفتح النظرة العامة أصلًا، فيُعاد تحميلها بالرد الجديد
-  await tab(page, 'نظرة عامة');
+  await tab(page, 'الرؤية الشاملة');
+  const an = page.getByRole('region', { name: 'التحليل العام' });
   // البطاقة تعدّ من قائمة «ينتظر قرارك» نفسها (لا متطلبات مرسلة في البيانات) مع النماذج المنتظرة: 0 + 1
-  await expect(page.locator('.stat-card').nth(2).locator('.stat-value')).toHaveText('1');
-  await expect(page.getByRole('heading', { name: 'المستوى العام' })).toBeVisible();
-  await expect(page.getByText('baseline-v2')).toBeVisible();
-  await expect(page.locator('.la-impact td.up')).toHaveText('+15');
+  await expect(an.locator('.stat-card').nth(2).locator('.stat-value')).toHaveText('1');
+  await expect(an.getByRole('heading', { name: 'المستوى العام' })).toBeVisible();
+  await expect(an.getByText('baseline-v2')).toBeVisible();
+  await expect(an.locator('.la-impact td.up')).toHaveText('+15');
+  await expect(an.getByRole('button', { name: 'سفراء' })).toBeVisible();
+  await tab(page, 'نظرة عامة');
   // الصندوق الواحد: النموذج المنتظر بنوعه وعمره، والمتأخر عن مهلته معلَّم، والرقاقة تفلتر بالنوع
   const inbox = page.locator('.inbox');
   await expect(inbox.getByRole('heading')).toContainText('2، منها 1 تجاوزت مهلتها');
@@ -90,7 +97,8 @@ test('نظرة عامة: المستوى العام والجهات والقياس
   await inbox.getByRole('button', { name: /نموذج للتقييم/ }).click();
   await expect(inbox.locator('.inbox-list li')).toHaveCount(1);
   await expect(inbox.locator('.inbox-list li')).toContainText('سجل المخاطر');
-  await expect(page.getByRole('button', { name: 'سفراء' })).toBeVisible();
+  // لا بطاقة تحليل في المكتب
+  await expect(page.getByRole('heading', { name: 'المستوى العام' })).toHaveCount(0);
 });
 
 test('المسارات: اللوحة وتحرير هوية المسار', async ({ page }) => {

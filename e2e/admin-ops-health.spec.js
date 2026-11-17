@@ -20,8 +20,9 @@ const STATES = {
   red: () => facts({ mail: { codes: { sent: 9, failed: 3, blocked: 1 }, code_streak: { count: 4, since: ago(20), last_at: ago(1), last_ok_at: ago(25), open: false }, failed_24h: 3 } }),
 };
 
-// pref: اختيار الطي المحفوظ في المتصفح ('open' افتراضًا لاختبارات المحتوى، وnull كأول زيارة). health: رد ops-health من سجل الطلبات حتى الآن
-async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest, pref = 'open', health } = {}) {
+// pref: اختيار الطي المحفوظ في المتصفح ('open' افتراضًا لاختبارات المحتوى، وnull كأول زيارة). health: رد ops-health من سجل الطلبات حتى الآن.
+// badge: البطاقة داخل شارة الصحة في مكتب اليوم، والشارة مطوية حين يسلم كل شيء؛ اختبارات المحتوى تفتحها (اختيار الجلسة نفسه)
+async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest, pref = 'open', health, badge = true } = {}) {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -41,11 +42,12 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
   });
   await page.goto(BASE);
-  await page.evaluate(([r, p]) => {
+  await page.evaluate(([r, p, b]) => {
     sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x.com', role_id: r }, ts: Date.now() }));
+    if (b) sessionStorage.setItem('mi_admin_today_health', JSON.stringify({ sig: '', open: true })); else sessionStorage.removeItem('mi_admin_today_health');
     localStorage.clear();
     if (p) localStorage.setItem('mi_admin_ops_card', p);
-  }, [role, pref]);
+  }, [role, pref, badge]);
   await page.goto(`${BASE}${hash}`);
   await page.reload();
   return calls;

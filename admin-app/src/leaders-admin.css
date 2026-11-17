@@ -1202,3 +1202,33 @@
 .nr-lock { margin-inline-start: 6px; }
 .nr-impact p { margin: 0 0 4px; }
 .nr-health { margin-block: 8px; }
+
+/* ── مكتب اليوم (Overview.jsx، المرحلة 3أ): التحية، وشارة الصحة، والأرقام الأربعة، والروابط ── */
+.today-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.today-hi { font-size: 1.2rem; margin: 0; color: var(--petrol); }
+.today-date { margin: 2px 0 0; }
+.today-sec { font-size: 1rem; color: var(--petrol-mid); margin: 18px 0 10px; }
+.today-health { border: 1px solid var(--line-strong); border-inline-start: 4px solid var(--st-ok); border-radius: 8px; background: #fff; margin-bottom: 14px; }
+.today-health.bad { border-inline-start-color: var(--st-warn); background: linear-gradient(var(--st-warn-bg), #fff 56px); }
+.th-toggle { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; inline-size: 100%; padding: 10px 14px; cursor: pointer; font: inherit; font-size: .9rem; font-weight: 600; color: var(--ink); border-radius: 8px; }
+.th-toggle:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 2px; }
+.th-line { flex: 1; overflow-wrap: anywhere; }
+.th-ic { display: inline-flex; align-items: center; justify-content: center; inline-size: 24px; block-size: 24px; border-radius: 50%; font-weight: 700; font-size: .8rem; color: #fff; background: var(--st-ok); flex: none; }
+.today-health.bad .th-ic { background: var(--st-warn-text); }
+.th-toggle[aria-expanded="false"] .ops-chev { transform: rotate(-45deg); margin-block-start: 0; }
+[dir="rtl"] .th-toggle[aria-expanded="false"] .ops-chev { transform: rotate(135deg); }
+.th-body { padding: 0 14px 4px; }
+.th-body[hidden] { display: none; }
+.today-decisions:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 4px; border-radius: 8px; }
+.today-decisions { scroll-margin-top: 16px; }
+.today-nums { margin: 0 0 14px; }
+.today-n { all: unset; box-sizing: border-box; display: block; cursor: pointer; background: var(--off-white); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; text-align: start; }
+.today-n .stat-label, .today-n .stat-value, .today-n .stat-sub { display: block; }
+.today-n:hover { border-color: var(--line-strong); }
+.today-n:focus-visible { outline: 3px solid var(--petrol-soft); outline-offset: 2px; }
+.today-n.bad .stat-value { color: var(--st-bad); }
+.today-n.warn .stat-value { color: var(--st-warn-text); }
+.today-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.inbox-view { margin: 8px 0 0; font-size: .84rem; color: var(--ink-soft); }
+.ins-an { margin-top: 22px; }
+.ins-an-h { font-size: 1.05rem; margin: 0; color: var(--petrol); }
