@@ -1,4 +1,4 @@
-// قاعدة في الذاكرة لاختبارات Deno (طابور البريد وتنفيذ الحذف): تصفية eq وneq وis وnot وin وlt وgte وlte، وترتيب بأكثر من عمود،
+// قاعدة في الذاكرة لاختبارات Deno (طابور البريد وتنفيذ الحذف): تصفية eq وneq وis وnot وin وlt وgte وlte وor، وترتيب بأكثر من عمود،
 // وlimit والعدّ، والإدراج والتحديث والحذف، وكل كتابة تُسجَّل. fail: جدول وأعمدة يُرفض بها الطلب (ترحيل لم يُطبَّق)
 import { db } from './core.ts';
 
@@ -46,6 +46,21 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       return { data: single ? out[0] ?? null : out, error: null, count: hit.length };
     };
     const inList = (v: unknown) => String(v).replace(/^\(|\)$/g, '').split(',');
+    // عمود مضمَّن (participants.is_demo) يُقرأ من الصف المضمَّن نفسه، والعمود المسطح كما كان
+    const get = (r: Row, c: string) => (c in r ? r[c] : c.split('.').reduce((x: any, k) => x?.[k], r));
+    // or بصيغة PostgREST: شروط بفاصلة على المستوى الأعلى، وand(...) متداخلة، وعواملها eq وis وgte وlte وlt
+    const split = (t: string) => { const out: string[] = []; let d = 0, cur = ''; for (const ch of t) { if (ch === '(') d++; if (ch === ')') d--; if (ch === ',' && !d) { out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out; };
+    const cond = (t: string): ((r: Row) => boolean) => {
+      const m = /^(and|or)\((.*)\)$/.exec(t);
+      if (m) { const parts = split(m[2]).map(cond); return m[1] === 'and' ? (r) => parts.every((f) => f(r)) : (r) => parts.some((f) => f(r)); }
+      const [c, o, ...rest] = t.split('.'); const v = rest.join('.');
+      if (o === 'is') return (r) => (r[c] ?? null) === (v === 'null' ? null : v === 'true' ? true : v === 'false' ? false : v);
+      if (o === 'eq') return (r) => String(r[c]) === v;
+      if (o === 'gte') return (r) => r[c] != null && String(r[c]) >= v;
+      if (o === 'lte') return (r) => r[c] != null && String(r[c]) <= v;
+      if (o === 'lt') return (r) => r[c] != null && String(r[c]) < v;
+      throw new Error(`fake or: ${t}`);
+    };
     const q: any = {
       select: (c?: string, o?: any) => { if (op.kind !== 'select') returning = true; else cols = c || '*'; if (o?.head) head = true; return q; },
       order: (c: string, o?: { ascending?: boolean }) => { orders.push([c, o?.ascending !== false]); return q; },
@@ -54,7 +69,8 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       upsert: (v: any) => { op = { kind: 'upsert', value: v }; return q; },
       update: (v: any) => { op = { kind: 'update', value: v }; return q; },
       delete: () => { op = { kind: 'delete' }; return q; },
-      eq: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; },
+      eq: (c: string, v: unknown) => { filters.push((r) => (get(r, c) ?? null) === v); return q; },
+      or: (t: string) => { filters.push(cond(`or(${t})`)); return q; },
       neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return q; },
       in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       is: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; },

@@ -2,13 +2,14 @@
 // مكتب اليوم (نظرة عامة على تطبيق القادة): ماذا أفعل اليوم؟
 // ════════════════════════════════════════════════════════════════
 // المرحلة 3أ من تصور لوحة الإدارة (4.3): التحية والتاريخ وشارة صحة واحدة، ثم «قرارات اليوم» (صندوق admin.inbox نفسه)،
-// ثم أربعة أرقام من الصندوق والنظرة العامة، ثم روابط سريعة، ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
+// ثم أربعة أرقام من الصندوق والنظرة العامة، ثم (المرحلة 3ب) «تنبيهات» و«نبض الدفعات» من admin.today، ثم روابط سريعة،
+// ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
 // بطاقات التحليل انتقلت إلى «الرؤية الشاملة» (Analytics.jsx)، والمنطق الخالص للأرقام والشارة في today.js.
 import React, { useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
 import { L, isSuperAdmin } from '../leaders.js';
 import { session } from '../api.js';
-import { dayFull } from '../dates.js';
+import { dateTime, dayFull } from '../dates.js';
 import { focusOpsCard, OpsHealthCard, OPS_REVEAL, opsRevealPending } from '../OpsHealth.jsx';
 import { useOpsHealth } from '../ops-watch.js';
 import { useInbox } from '../pending.js';
@@ -16,7 +17,7 @@ import { Spinner, useUI } from '../ui.jsx';
 import ReqQueue from './ReqQueue.jsx';
 import { readinessSummary } from '../org-hub.js';
 import { ageAr } from '../../../supabase/functions/leaders-api/inbox.js';
-import { greetingAr, healthLine, healthOpen, healthProblems, orgsReadinessRows, problemsSig, STALE_DAYS, systemNotes, todayNumbers, waitingSub } from '../today.js';
+import { alertHref, deskNote, greetingAr, healthLine, healthOpen, healthProblems, orgsReadinessRows, problemsSig, STALE_DAYS, systemNotes, todayNumbers, waitingSub } from '../today.js';
 
 // حالة النظام: ترحيلات لم تُطبَّق بوسم بوابة النشر، وأسرار ناقصة، واقتراب البريد من سقفه اليومي، وما تعذّرت قراءته منها.
 // الوسم من الخادم (pending_migrations، المصدر نفسه لبوابات المراحل): المؤجل بقرار لا يُطلب تطبيقه. خادم قبل الحقل يُقرأ كما كان
@@ -194,6 +195,88 @@ function TodayNumbers({ nums, onView, onTab }) {
   );
 }
 
+// ── التنبيهات ونبض الدفعات (المرحلة 3ب): رد admin.today، يُطلب مرة مع فتح المكتب، ثم بعد كل قرار وحين تعود الصفحة ظاهرة ──
+// «mi:pending» يطلقه كل فعل قرار (CHANGES_PENDING في pending.js)، ومنها قرار طابور المتطلبات، فلا يُعاد الطلب بغيره.
+// الطلب ثقيل (الجهات والدفعات والصندوق والخبراء معًا)، فتُجمع الأحداث المتتابعة في طلب واحد (TODAY_DEBOUNCE_MS).
+// والحفظ الذي لا يطلق الحدث (المقاعد والعقد والجلسة والدفعة) يظهر أثره عند فتح المكتب أو عودة الصفحة ظاهرة. الرد الأقدم يُهمل
+const TODAY_DEBOUNCE_MS = 400;
+function useToday() {
+  const [t, setT] = useState(null);
+  useEffect(() => {
+    let seq = 0, timer = null;
+    const load = () => {
+      const my = ++seq;
+      L('admin.today', {}).catch((e) => ({ success: false, message: e?.message })).then((r) => { if (my === seq) setT(r); });
+    };
+    const later = () => { clearTimeout(timer); timer = setTimeout(load, TODAY_DEBOUNCE_MS); };
+    const onVis = () => { if (document.visibilityState === 'visible') later(); };
+    load();
+    window.addEventListener('mi:pending', later);
+    document.addEventListener('visibilitychange', onVis);
+    return () => { seq = -1; clearTimeout(timer); window.removeEventListener('mi:pending', later); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+  return t;
+}
+
+// سطر خافت بما تعذّرت قراءته: غياب التنبيه أو النبض عندها «لم يُفحص» لا «لا شيء»
+function DeskNote({ t }) {
+  const note = deskNote(t);
+  return note ? <p className="la-muted today-skip" role="status">{note}</p> : null;
+}
+
+// «تنبيهات»: ما يحتاج انتباهك قبل أن يصير مشكلة، كل تنبيه رابط إلى ملفه. يختفي القسم حين لا تنبيه
+function Alerts({ t }) {
+  const list = t?.success ? t.alerts || [] : [];
+  if (!list.length) return null;
+  return (
+    <section className="today-alerts" aria-labelledby="today-alerts-h">
+      <h2 className="today-sec" id="today-alerts-h">تنبيهات <span className="la-chip">{list.length}</span></h2>
+      {/* role="list": إزالة علامات القائمة بالتنسيق تُسقط دورها في Safari وVoiceOver */}
+      <ul role="list">
+        {list.map((a) => (
+          <li key={a.id} className={`today-alert ${a.severity}`} data-kind={a.kind}>
+            <span className="today-alert-ic" aria-hidden="true">{a.severity === 'bad' ? '!' : '•'}</span>
+            {/* العاجل لا يُميَّز باللون والأيقونة وحدهما: قارئ الشاشة يسمعه «عاجل» */}
+            <a className="la-link" href={alertHref(a)}>{a.severity === 'bad' && <span className="sr-only">عاجل: </span>}{a.text}</a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// عمود الجهة للدفعة بلا اسم جهة: دفعة الجهة التي لم يُقرأ اسمها «جهة»، لا «أفراد»
+const KIND_AR = { open: 'مفتوحة', individuals: 'أفراد', org: 'جهة' };
+// «نبض الدفعات»: سطر لكل دفعة جارية بجاهزيتها (ملف الدفعة نفسه) وأقرب جلسة وما ينتظر قرارًا لأعضائها.
+// جدول يصير بطاقات على الهاتف (leaders-admin.css). يختفي حين لا دفعة جارية
+function Pulse({ t }) {
+  const rows = t?.success ? t.pulse || [] : [];
+  if (!rows.length) return null;
+  const plus = t.waiting_partial ? '+' : '';
+  return (
+    <section className="today-pulse" aria-labelledby="today-pulse-h">
+      <h2 className="today-sec" id="today-pulse-h">نبض الدفعات</h2>
+      <div className="today-pulse-wrap">
+        {/* الأدوار صريحة: البطاقات على الهاتف (display: block) تُسقط دلالة الجدول في Safari وVoiceOver */}
+        <table className="la-table today-pulse-t" role="table">
+          <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">الدفعة</th><th scope="col" role="columnheader">الجهة</th><th scope="col" role="columnheader">الجاهزية</th><th scope="col" role="columnheader">أقرب جلسة</th><th scope="col" role="columnheader">ينتظر قرارًا</th></tr></thead>
+          <tbody role="rowgroup">
+            {rows.map((r) => (
+              <tr key={r.id} data-id={r.id} role="row">
+                <th scope="row" role="rowheader" data-label="الدفعة"><a className="la-link" href={`#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a></th>
+                <td role="cell" data-label="الجهة">{r.org || <span className="la-muted">{KIND_AR[r.kind] || 'جهة'}</span>}</td>
+                <td role="cell" data-label="الجاهزية"><span className={`la-chip ${r.readiness.missing ? 'warn' : 'ok'}`}>{r.readiness.summary}</span></td>
+                <td role="cell" data-label="أقرب جلسة">{r.next_at ? dateTime(r.next_at) : r.handbook ? <span className="la-muted">صيغة الكتاب</span> : t.unchecked?.includes('cohort_no_session') ? <span className="la-muted">غير مقروءة</span> : <span className="la-muted">لا جلسة مؤرخة</span>}</td>
+                <td role="cell" data-label="ينتظر قرارًا">{r.waiting == null ? <span className="la-muted">غير مقروء</span> : <bdi dir="ltr">{r.waiting}{r.waiting ? plus : ''}</bdi>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 // ── روابط سريعة إلى أماكنها القائمة: «دفعة جديدة» معالج الدفعة (‎?new=‎ في البرامج)، والباقي تبويب يحمل الفعل ──
 function QuickLinks({ onTab, canWrite }) {
   const writer = canWrite !== false;
@@ -218,6 +301,7 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
   const [view, setView] = useState('');
   // رد الصندوق من مخزن العدّادات نفسه (pending.js): طلب واحد يرسم الصندوق والأرقام والعدّادات
   const [inbox] = useInbox();
+  const today = useToday();
   useEffect(() => {
     let live = true;
     setD(null);
@@ -257,6 +341,9 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
       </div>
       <TodayNumbers nums={nums} onView={toDecisions} onTab={onTab} />
       {!o.success && <div className="la-err" role="alert">{o.message || 'تعذّرت قراءة أرقام النظرة العامة.'}</div>}
+      <Alerts t={today} />
+      <Pulse t={today} />
+      <DeskNote t={today} />
       <QuickLinks onTab={onTab} canWrite={canWrite} />
       <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
     </>
