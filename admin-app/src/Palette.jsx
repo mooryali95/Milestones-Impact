@@ -7,11 +7,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from './leaders.js';
 import { navigate } from './route.js';
 import { KIND_LABEL, rank } from './search.js';
-import { OWNER_TABS, TABS } from './leaders-tabs.js';
+import { AI_TABS, OWNER_TABS, TABS } from './leaders-tabs.js';
 import { useEscape } from './ui.jsx';
 
 const SECTIONS = [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
-  ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, to: { ctx: 'leaders', tab: k } }))];
+  ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, to: { ctx: 'leaders', tab: k } })),
+  // تبويبات «المساعد الذكي» الداخلية: كل اسم يفتح تبويبه، ومعرّفها يبدأ بمفتاح القسم فتحجبها OWNER_TABS مثله
+  ...AI_TABS.map(([k, l, keys]) => ({ kind: 'tab', id: `ai/${k}`, title: l, sub: 'المساعد الذكي', keys, to: { ctx: 'leaders', tab: 'ai', id: k } }))];
+const ownerOnly = (x) => x.kind === 'tab' && OWNER_TABS.has(String(x.id).split('/')[0]);
 
 async function loadIndex() {
   // الخبراء والدفعات والمبادرات كانت خارج البحث (تحليل لوحة الإدارة 2026-11-13). تعذّر مصدر لا يُسقط الفهرس
@@ -32,7 +35,7 @@ async function loadIndex() {
   ];
 }
 
-// owner: المدير الأعلى أو المالك. غيرهما لا يرى تبويبات المالك (agent) فلا يختارها ليصل بصمت إلى «نظرة عامة»
+// owner: المدير الأعلى أو المالك. غيرهما لا يرى تبويبات المالك (ai) فلا يختارها ليصل بصمت إلى «نظرة عامة»
 export default function Palette({ owner = false }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -57,7 +60,7 @@ export default function Palette({ owner = false }) {
   }, [open]); // eslint-disable-line
 
   const hits = useMemo(() => {
-    const seen = (xs) => xs.filter((x) => owner || !(x.kind === 'tab' && OWNER_TABS.has(x.id)));
+    const seen = (xs) => xs.filter((x) => owner || !ownerOnly(x));
     return q.trim() ? rank(q, seen(items || SECTIONS)) : seen(SECTIONS).slice(0, 8);
   }, [q, items, owner]);
   // Esc من المستند لا من عنصر النافذة: كان لا يغلقها إن خرج التركيز منها (والتركيز وعودته إلى ما فتحها من ui.jsx)

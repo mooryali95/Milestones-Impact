@@ -3,7 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // لا يطلب شيئًا ولا يحسب ما يحسبه الخادم: الأرقام الأربعة من رد admin.inbox (مخزن pending.js نفسه) ورد admin.overview
 // الذي تحمّله الشاشة أصلًا، وأحكام شارة الصحة من الحقائق نفسها التي ترسم بطاقاتها (ops-health.js وadmin.health وorg-hub.js).
-import { orgReadiness } from './org-hub.js';
+import { orgReadinessOf } from './org-hub.js';
+import { SOURCE_AR, ALERT_KINDS } from '../../supabase/functions/leaders-api/today-desk.js';
+import { formatRoute } from './route.js';
 
 // ── الأرقام الأربعة ──
 // المنتظر طويلًا: أكثر من سبعة أيام بعمر البند نفسه في الصندوق (days من inbox.js)
@@ -69,7 +71,7 @@ export const systemNotes = (h) => !!h?.success && (systemIssues(h) || pendingOf(
 
 // جاهزية الجهات: سطر لكل جهة فعّالة بما بقي فيها (org-hub.js نفسه الذي في رأس صفحتها)، الأكثر نقصًا أولًا
 export const orgsReadinessRows = (orgs) => (orgs || []).filter((o) => o.status === 'active')
-  .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, journey: o.cohort_setup || null, members: o.stats?.total || 0, seatsUsed: o.seats_used ?? null, pending: o.stats?.pending_approval || 0 }) }))
+  .map((o) => ({ o, r: orgReadinessOf(o) }))
   .sort((a, b) => b.r.missing - a.r.missing);
 
 /**
@@ -110,3 +112,22 @@ export const healthOpen = (sig, chosen = null) => (chosen && chosen.sig === sig 
 // التحية بساعة الرياض (UTC+3 طوال العام، بلا توقيت صيفي)
 export const riyadhHour = (now = new Date()) => (new Date(now).getUTCHours() + 3) % 24;
 export const greetingAr = (now = new Date()) => (riyadhHour(now) < 12 ? 'صباح الخير' : 'مساء الخير');
+
+// ── التنبيهات ونبض الدفعات (المرحلة 3ب): الحساب كله في الخادم (admin.today ← today-desk.js)، وهنا العرض وحده ──
+
+// وجهة التنبيه: ملف الجهة أو الدفعة أو الخبير بمعرّفه، في تبويبه القائم
+export const alertHref = (a) => formatRoute({ ctx: 'leaders', tab: a.target?.tab, id: a.target?.id || undefined });
+
+/**
+ * سطر خافت بما لم يُقرأ: لا يُفهم غياب التنبيه أو النبض «لا شيء» وهو «لم يُفحص».
+ * @param {any} t رد admin.today (أو null قبل وصوله)
+ * @returns {string|null}
+ */
+export function deskNote(t) {
+  if (!t) return null;
+  if (!t.success) return 'تعذّرت قراءة التنبيهات ونبض الدفعات الآن، فلا يُعرف إن كان فيها ما يحتاج انتباهك.';
+  const src = (t.skipped || []).map((k) => SOURCE_AR[k] || k);
+  if (!src.length) return null;
+  const kinds = (t.unchecked || []).map((k) => ALERT_KINDS[k]?.label).filter(Boolean);
+  return `تعذّرت قراءة: ${src.join('، ')}.${kinds.length ? ` لم يُفحص: ${kinds.join('، ')}.` : ''} ما يظهر هنا ناقص.`;
+}

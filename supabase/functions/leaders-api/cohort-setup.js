@@ -17,12 +17,14 @@ export const usesHandbook = (cohort) => Object.values(asJson(cohort?.delivery) |
  * @param {{ id?: string }} cohort @param {{ cohort_id?: string|null, active?: boolean, starts_at?: string, ends_at?: string|null }[]} sessions */
 // والجلسة غير المؤرخة (J1، قرار المالك): «يُحدد لاحقًا» لا يمنع الإطلاق، فتُعد في الجلسات ويظهر عددها منفصلًا (undatedFor)
 export function sessionsFor(cohort, sessions = [], now = Date.now()) {
-  return (sessions || []).filter((w) => w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id)
+  return (sessions || []).filter((w) => workshopOf(cohort, w)
     && (!w.starts_at || Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS)).length;
 }
+/** ورشة فعّالة تخص الدفعة: لها أو بلا دفعة (تعمّ الدفعات). القاعدة الواحدة لـsessionsFor وundatedFor وأقرب جلسة في مكتب اليوم */
+export const workshopOf = (cohort, w) => !!w && w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id);
 /** ما يُحدد موعده لاحقًا من جلسات الدفعة الفعّالة (جزء من sessionsFor) */
 export function undatedFor(cohort, sessions = []) {
-  return (sessions || []).filter((w) => w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id) && !w.starts_at).length;
+  return (sessions || []).filter((w) => workshopOf(cohort, w) && !w.starts_at).length;
 }
 
 /** @param {{ cohort: any, advisorName?: string|null, advisorServes?: boolean, teamCount?: number, members?: number, upcomingSessions?: number, undatedSessions?: number }} d

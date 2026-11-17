@@ -1,5 +1,6 @@
 // مكتب اليوم (المرحلة 3أ من تصور لوحة الإدارة 4.3): التحية والتاريخ، وشارة صحة واحدة مطوية حين يسلم كل شيء وتتمدد عند
 // الخلل، و«قرارات اليوم»، والأرقام الأربعة بعروضها في الصندوق، والروابط السريعة، وبطاقات التحليل في «الرؤية الشاملة».
+// والمرحلة 3ب: «تنبيهات» و«نبض الدفعات» من admin.today، يختفيان فارغين، والمصدر المتعذر سطر خافت لا فراغ كاذب.
 // الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
@@ -87,8 +88,11 @@ test('الأرقام الأربعة من الصندوق والنظرة العا�
   await expect(n('late').locator('.stat-value')).toHaveText('1');
   await expect(n('stale').locator('.stat-value')).toHaveText('2');
   await expect(n('program').locator('.stat-value')).toHaveText('4 من 10');
-  // لا نقطة جديدة على الخادم: الأرقام من الطلبات القائمة وحدها
-  expect(calls.some((c) => c.action === 'admin.today')).toBe(false);
+  // الأرقام من الطلبات القائمة وحدها: admin.today (المرحلة 3ب) للتنبيهات والنبض لا للأرقام، يُطلب مرة مع المكتب
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.today').length).toBe(1);
+  // ولا يتبعه طلب ثانٍ: المكتب يطلبه مرة واحدة حين يُفتح
+  await page.waitForTimeout(800);
+  expect(calls.filter((c) => c.action === 'admin.today').length).toBe(1);
   const list = page.locator('.inbox .inbox-list li');
   await expect(list).toHaveCount(3);
   await n('late').click();
@@ -170,4 +174,132 @@ test('المراقب: لا «دفعة جديدة» ولا «أضف مشاركي�
   await expect(links.getByRole('link', { name: 'أضف مشاركين' })).toHaveCount(0);
   await expect(toggle(page)).toHaveText(/كل شيء سليم/);
   await expect(page.locator('#ops-health')).toHaveCount(0);
+});
+
+// ── المرحلة 3ب: التنبيهات ونبض الدفعات ──
+const desk = {
+  success: true, skipped: [], unchecked: [], pulse_known: true, waiting_partial: false,
+  alerts: [
+    { kind: 'seats_full', severity: 'bad', id: 'seats:o1', target: { tab: 'orgs', id: 'o1' }, text: 'مقاعد «جهة الشمال» ممتلئة (10 من 10): التسجيلات التالية تنتظر قرار الرعاية' },
+    { kind: 'cohort_no_session', severity: 'warn', id: 'cohort:c2', target: { tab: 'programs', id: 'c2' }, text: 'دفعة «دفعة الربيع» جارية ولا جلسة لها في الأيام الـ14 القادمة' },
+    { kind: 'expert_over', severity: 'warn', id: 'expert:e1', target: { tab: 'experts', id: 'e1' }, text: '«سارة» فوق طاقته: 5 إسنادات و3 ساعات أسبوعيًا' },
+  ],
+  pulse: [
+    { id: 'c1', name: 'دفعة الخريف', org: 'جهة الشمال', readiness: { missing: 2, total: 8, summary: 'بقي بندان' }, next_at: ago(-3 * 1440), handbook: false, waiting: 4 },
+    { id: 'c2', name: 'دفعة الربيع', org: null, readiness: { missing: 0, total: 8, summary: 'مكتملة الإعداد' }, next_at: null, handbook: false, waiting: 0 },
+  ],
+};
+
+test('3ب: التنبيهات بعد الأرقام وقبل نبض الدفعات والروابط، وكل تنبيه رابط إلى ملفه', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': desk } });
+  const alerts = page.getByRole('region', { name: /تنبيهات/ });
+  await expect(alerts.locator('li')).toHaveCount(3);
+  await expect(alerts.locator('li').first()).toHaveClass(/bad/);
+  // الترتيب في الصفحة: الأرقام، ثم التنبيهات، ثم النبض، ثم الروابط
+  const order = await page.evaluate(() => ['.today-nums', '.today-alerts', '.today-pulse', '.today-links', '#rq'].map((q) => document.querySelector(q)?.getBoundingClientRect().top ?? -1));
+  expect(order.every((y, i) => y >= 0 && (i === 0 || y > order[i - 1]))).toBe(true);
+  await alerts.getByRole('link', { name: /مقاعد «جهة الشمال» ممتلئة/ }).click();
+  await expect(page).toHaveURL(/#\/leaders\/orgs\/o1$/);
+  await page.goto(`${BASE}#/leaders/overview`);
+  await page.getByRole('region', { name: /تنبيهات/ }).getByRole('link', { name: /سارة/ }).click();
+  await expect(page).toHaveURL(/#\/leaders\/experts\/e1$/);
+  await page.goto(`${BASE}#/leaders/overview`);
+  await page.getByRole('region', { name: /تنبيهات/ }).getByRole('link', { name: /دفعة الربيع/ }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c2$/);
+});
+
+test('3ب: نبض الدفعات سطر لكل دفعة جارية بجاهزيتها وأقرب جلسة وما ينتظر، ويصير بطاقات على الهاتف', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': desk } });
+  const pulse = page.getByRole('region', { name: 'نبض الدفعات' });
+  const rows = pulse.locator('tbody tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('دفعة الخريف');
+  await expect(rows.nth(0)).toContainText('جهة الشمال');
+  await expect(rows.nth(0)).toContainText('بقي بندان');
+  await expect(rows.nth(0).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('4');
+  await expect(rows.nth(1)).toContainText('لا جلسة مؤرخة');
+  await expect(rows.nth(1)).toContainText('مكتملة الإعداد');
+  await rows.nth(0).getByRole('link', { name: 'دفعة الخريف' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(`${BASE}#/leaders/overview`);
+  await expect(page.locator('.today-pulse-t thead')).toHaveCSS('position', 'absolute');
+  const noScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  expect(noScroll).toBe(true);
+});
+
+test('3ب: بلا تنبيه ولا دفعة جارية يختفي القسمان، ولا سطر تعذّر', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': { ...desk, alerts: [], pulse: [] } } });
+  await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
+  await expect(page.locator('.today-nums')).toBeVisible();
+  await expect(page.locator('.today-alerts')).toHaveCount(0);
+  await expect(page.locator('.today-pulse')).toHaveCount(0);
+  await expect(page.locator('.today-skip')).toHaveCount(0);
+});
+
+test('3ب: المصدر المتعذر سطر خافت بأسمائه وما لم يُفحص، والنبض «غير مقروء» لا صفر، والحفظ يعيد الطلب', async ({ page }) => {
+  const calls = await setup(page, { replies: { 'admin.today': {
+    ...desk, alerts: [desk.alerts[0]], skipped: ['experts', 'inbox'], unchecked: ['expert_over'],
+    pulse: [{ ...desk.pulse[0], waiting: null }],
+  } } });
+  const note = page.locator('.today-skip');
+  await expect(note).toHaveAttribute('role', 'status');
+  await expect(note).toContainText('تعذّرت قراءة: حِمل الخبراء، صندوق القرارات');
+  await expect(note).toContainText('لم يُفحص: خبير فوق طاقته');
+  await expect(page.getByRole('region', { name: 'نبض الدفعات' }).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('غير مقروء');
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.today').length).toBe(1);
+  await page.evaluate(() => window.dispatchEvent(new Event('mi:pending')));
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.today').length).toBe(2);
+});
+
+test('3ب: admin.today متعذر كله: سطر خافت يقول إنه لم يُقرأ، والمكتب قائم', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': { success: false, message: 'x' } } });
+  await expect(page.locator('.today-skip')).toContainText('تعذّرت قراءة التنبيهات ونبض الدفعات');
+  await expect(page.locator('.today-alerts')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
+});
+
+test('3ب: العاجل يُقرأ «عاجل»، والقائمة والجدول بأدوارهما الصريحة، ودفعة الجهة بلا اسم مقروء «جهة» لا «أفراد»', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': { ...desk, pulse: [{ ...desk.pulse[0], org: null, kind: 'org' }, { ...desk.pulse[1], kind: 'individuals' }] } } });
+  const alerts = page.getByRole('region', { name: /تنبيهات/ });
+  await expect(alerts.getByRole('list')).toHaveAttribute('role', 'list');
+  await expect(alerts.getByRole('link', { name: /^عاجل: مقاعد «جهة الشمال»/ })).toBeVisible();
+  await expect(alerts.getByRole('link', { name: /سارة/ })).not.toContainText('عاجل');
+  const t = page.getByRole('table');
+  await expect(t.getByRole('rowheader', { name: 'دفعة الخريف' })).toBeVisible();
+  const cells = t.locator('td[data-label="الجهة"]');
+  await expect(cells.nth(0)).toHaveText('جهة');
+  await expect(cells.nth(1)).toHaveText('أفراد');
+});
+
+test('3ب: صيغة الكتاب، والجلسة غير المقروءة، وعلامة «+» حين يبلغ الصندوق حده', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': {
+    ...desk, waiting_partial: true, unchecked: ['cohort_no_session'], skipped: ['sessions'],
+    pulse: [{ ...desk.pulse[0], next_at: null, handbook: true }, { ...desk.pulse[1], next_at: null, waiting: 0 }],
+  } } });
+  const rows = page.getByRole('region', { name: 'نبض الدفعات' }).locator('tbody tr');
+  await expect(rows.nth(0).locator('td[data-label="أقرب جلسة"]')).toHaveText('صيغة الكتاب');
+  await expect(rows.nth(1).locator('td[data-label="أقرب جلسة"]')).toHaveText('غير مقروءة');
+  await expect(rows.nth(0).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('4+');
+  // الصفر يبقى صفرًا بلا علامة
+  await expect(rows.nth(1).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('0');
+  await expect(page.locator('.today-skip')).toContainText('لم يُفحص: دفعة جارية بلا جلسة قريبة');
+});
+
+test('3ب: قرار في طابور المتطلبات يعيد طلب admin.today مرة واحدة لا مرتين', async ({ page }) => {
+  const calls = await setup(page, { replies: {
+    'admin.today': desk, 'admin.review': { success: true },
+    'admin.reviews': { success: true, pending_approval: [], submitted: [
+      { participant_id: 'p1', requirement_id: 'r1', completed_at: '2026-10-20', participants: { full_name: 'سارة الأحمد' }, stage_requirements: { title_ar: 'خطة التطوير' } },
+    ] },
+  } });
+  const n = () => calls.filter((c) => c.action === 'admin.today').length;
+  await expect.poll(n).toBe(1);
+  await page.getByLabel('تحديد الكل').check();
+  await page.getByRole('button', { name: 'اعتماد المحدد (1)' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.review').length).toBe(1);
+  await expect.poll(n).toBe(2);
+  await page.waitForTimeout(1000);
+  expect(n()).toBe(2);
 });

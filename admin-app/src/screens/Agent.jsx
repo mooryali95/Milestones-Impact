@@ -14,6 +14,8 @@ import { convSummary, count, enableBlock, EVAL_ESTIMATE_MICROS, gateText, KEY_ER
 import { navigate } from '../route.js';
 import { GuidanceCap } from './AppSettings.jsx';
 import { normAction, normConversations, normKeySet, normRunDetail, normRuns, normState, normStep, normTranscript, normUsage } from '../agent-data.js';
+import { aiLoad } from '../ai-hub-data.js';
+import { AiSkeleton, Kpis, Switch, TabIntro } from '../ai-ui.jsx';
 import '../agent-admin.css';
 
 // كل رد يمر بموحّده (agent-data.js) قبل أن يُرسم: شكل واحد مضمون، فلا يكسر الشاشة صف ناقص أو قديم من الإنتاج
@@ -26,8 +28,8 @@ function Row({ label, children }) {
   return <div className="ops-row"><dt>{label}</dt><dd>{children}</dd></div>;
 }
 
-// قسم قابل للطي بسطر خلاصة: الرمز والكلمة مع اللون
-function AgentSection({ id, title, summary, open, onToggle, fixed = false, children }) {
+// قسم قابل للطي بسطر خلاصة: الرمز والكلمة مع اللون. quiet: بلا سطر خلاصة لأن صف المؤشرات فوقه يحمله
+function AgentSection({ id, title, summary, open, onToggle, fixed = false, quiet = false, children }) {
   const lv = summary?.level || 'green';
   return (
     <section className={`la-card ag-sec ag-${lv}`} aria-labelledby={`${id}-h`} id={id}>
@@ -38,7 +40,7 @@ function AgentSection({ id, title, summary, open, onToggle, fixed = false, child
           </button>
         )}
       </h3>
-      <p className="ag-sum"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>
+      {!quiet && <p className="ag-sum"><span className="ops-ic sm" aria-hidden="true">{LEVEL_ICON[lv]}</span>{summary?.text || ''}</p>}
       {open && <div id={`${id}-b`} className="ag-sec-b">{children}</div>}
     </section>
   );
@@ -62,14 +64,12 @@ function StatusSection({ s, reload, writable }) {
   return (
     <>
       <div className="ag-switch-row">
-        <label className="of-switch">
-          <input type="checkbox" checked={!!s.enabled} disabled={busy || !writable || (!s.enabled && !!block)} onChange={(e) => toggle(e.target.checked)} aria-describedby={!s.enabled && block ? 'ag-block' : undefined} />
-          <span>{s.enabled ? 'مفعّل من اللوحة' : 'مطفأ من اللوحة'}</span>
-        </label>
-        {!s.enabled && block && <small id="ag-block" className="ag-why">{block}</small>}
+        <Switch id="ag-enable" label="مساعد الموقع للزوار" checked={!!s.enabled} on="مفعّل من اللوحة" off="مطفأ من اللوحة"
+          disabled={busy || !writable || (!s.enabled && !!block)} onChange={toggle} describedBy={!s.enabled && block ? 'ag-block' : undefined}
+          hint={!s.enabled && block ? <small id="ag-block" className="ag-why">{block}</small> : null} />
       </div>
       <dl className="ag-grid">
-        <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on">✓ في جدول الأسعار</span> : <span className="ops-flag off">✕ ليس في جدول الأسعار</span>}</Row>
+        <Row label="النموذج"><code dir="ltr">{s.model}</code> {s.known_model ? <span className="ops-flag on ag-nw">✓ في جدول الأسعار</span> : <span className="ops-flag off ag-nw">✕ ليس في جدول الأسعار</span>}</Row>
         <Row label="المعرفة"><code dir="ltr">{s.versions.knowledge_version}</code></Row>
         <Row label="السقف اليومي">{(s.cap_cents / 100).toFixed(2)} دولار</Row>
         <Row label="مفتاح الطوارئ في الخادم">{s.env_mode === 'off' ? <span className="ops-flag off">✕ مفعّل: يطفئ المساعد مهما كان في هذه اللوحة</span> : <span className="ops-flag on">✓ غير مفعّل، فالتشغيل والإطفاء من هذه اللوحة</span>}</Row>
@@ -145,13 +145,13 @@ function KeySection({ s, reload, writable }) {
 function Ring({ spent, cap }) {
   const r = ringLevel(spent, cap);
   const C = 2 * Math.PI * 34;
-  const label = `اليوم ${usd2(spent)} من ${usd2(cap)} دولار، ${Math.round(r.ratio * 100)}%، ${r.word}`;
+  const label = `اليوم ${usd2(spent)} من ${usd2(cap)} دولار، ${Math.round(r.ratio * 100)}٪، ${r.word}`;
   return (
     <div className={`ag-ring ag-${r.level}`}>
       <svg viewBox="0 0 80 80" role="img" aria-label={label}>
         <circle cx="40" cy="40" r="34" className="ag-ring-bg" />
         <circle cx="40" cy="40" r="34" className="ag-ring-fg" strokeDasharray={`${C * r.ratio} ${C}`} transform="rotate(-90 40 40)" />
-        <text x="40" y="45" textAnchor="middle">{Math.round(r.ratio * 100)}%</text>
+        <text x="40" y="45" textAnchor="middle">{Math.round(r.ratio * 100)}٪</text>
       </svg>
       <div><b>{usd2(spent)} من {usd2(cap)} دولار</b><span className="ag-ring-word"><span aria-hidden="true">{r.icon}</span> {r.word}</span></div>
     </div>
@@ -415,11 +415,14 @@ export default function Agent({ isSuper = false }) {
   const [conv, setConv] = useState(null);
   const [runs, setRuns] = useState(null);
   const [shut, setShut] = useState(readShut);
-  const load = useCallback(async () => {
-    const [a, b] = await Promise.all([A('admin.agent-state', {}, normState), A('admin.agent-usage', {}, normUsage)]);
+  // القراءة الأولى تنضم إلى طلب رأس القسم (ai-hub-data.js)، وإعادة التحميل بعد أي تغيير طلب جديد دائمًا
+  const load = useCallback(async (first) => {
+    const o = { reuse: first === true };
+    const read = (action, norm) => aiLoad(action, o).then(norm, () => norm(null));
+    const [a, b] = await Promise.all([read('admin.agent-state', normState), read('admin.agent-usage', normUsage)]);
     setS(a); setU(b);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(true); }, [load]);
   const toggle = (id) => setShut((prev) => {
     const n = new Set(prev);
     if (n.has(id)) n.delete(id); else n.add(id);
@@ -429,7 +432,7 @@ export default function Agent({ isSuper = false }) {
   const onCount = useCallback((c) => setConv(c), []);
   const onRuns = useCallback((r) => setRuns(r), []);
 
-  if (!s) return <Spinner />;
+  if (!s) return <AiSkeleton cards={3} />;
   if (!s.success) {
     if (s.code === 'not_migrated') return <Empty title="لم يُطبَّق ترحيل 20261115230000 بعد" hint="طبّقه من RUNBOOK §7، ثم أعد فتح الشاشة." />;
     return <div className="la-err" role="alert">{s.message || 'تعذّرت القراءة'} <button type="button" className="btn-sm ghost" onClick={load}>أعد المحاولة</button></div>;
@@ -438,14 +441,19 @@ export default function Agent({ isSuper = false }) {
   const writable = isSuper && s.can_write;
   const sec = (id) => ({ open: !shut.has(id), onToggle: () => toggle(id) });
   const lastRun = runs?.[0] || s.latest_run;
+  const st = stateSummary(s);
+  const sp = u?.success ? ringLevel(u.today.spent_micros, u.today.cap_micros) : null;
   return (
     <div className="ag">
-      <div className="la-row between ag-head">
-        <div><h2>المساعد الآلي</h2><p className="la-muted">مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم.</p></div>
-        {!writable && <span className="la-chip">عرض فقط</span>}
-      </div>
+      <TabIntro text="مساعد الموقع العام: التفعيل والمفتاح والتكلفة والمحادثات والتقييم." readOnly={!writable} />
       {!writable && <p className="la-muted small ag-ro">{isSuper ? 'الكتابة تتطلب الدخول بمفتاح المرور أو تطبيق المصادقة.' : 'الكتابة للمدير الأعلى وحده، وأنت ترى كل شيء للاطلاع.'}</p>}
-      <AgentSection id="ag-state" title="الحالة والتحكم" summary={stateSummary(s)} open fixed><StatusSection s={s} reload={load} writable={writable} /></AgentSection>
+      <Kpis label="مؤشرات مساعد الموقع" items={[
+        { label: 'الحال', value: st.text, sub: !s.enabled ? enableBlock(s) : null, tone: st.level },
+        sp && { label: 'إنفاق اليوم', value: `${usd2(u.today.spent_micros)} دولار`, sub: `من ${usd2(u.today.cap_micros)} دولار (${Math.round(sp.ratio * 100)}٪)`, tone: sp.level },
+        u?.success && { label: 'المحادثات', value: u.conversations, sub: 'في 30 يومًا' },
+        { label: 'بوابة التقييم', value: s.gate.ok ? 'ناجح لهذا الإعداد' : 'لم ينجح بعد', tone: s.gate.ok ? 'green' : 'amber' },
+      ]} />
+      <AgentSection id="ag-state" title="الحالة والتحكم" summary={st} open fixed quiet><StatusSection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-key" title="المفتاح" summary={keySummary(s.key)} {...sec('ag-key')}><KeySection s={s} reload={load} writable={writable} /></AgentSection>
       <AgentSection id="ag-spend" title="الإنفاق" summary={spendSummary(u)} {...sec('ag-spend')}><SpendSection u={u} reload={load} /></AgentSection>
       <AgentSection id="ag-conv" title="المحادثات" summary={convSummary(conv)} {...sec('ag-conv')}><ConversationsSection onCount={onCount} /></AgentSection>

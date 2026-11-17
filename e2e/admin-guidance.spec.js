@@ -1,4 +1,4 @@
-// تبويبا «التوجيه والإرشاد» و«إتاحة التوجيه» في اللوحة (H1، قرار المالك 2026-11-16): الحالة وما يمنع الفتح والتشغيل،
+// تبويبا «التوجيه والإرشاد» و«الإتاحة» داخل «المساعد الذكي» في اللوحة (H1، قرار المالك 2026-11-16): الحالة وما يمنع الفتح والتشغيل،
 // والإنفاق، والاستعمال موزعًا على الجهات والدفعات، والدقة بتشغيل التقييم، والجهات والدفعات التجريبية. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
@@ -71,7 +71,7 @@ function backend() {
   return { st, replies };
 }
 
-async function setup(page, hash, o = {}) {
+async function setup(page, hash, o = {}, user = { role_id: 'super_admin', is_owner: true }) {
   const b = backend();
   Object.assign(b.st, o);
   const calls = [];
@@ -83,25 +83,109 @@ async function setup(page, hash, o = {}) {
     await route.fulfill({ json: fn ? fn(body) : { success: true } });
   });
   await page.goto(BASE);
-  await page.evaluate(() => {
-    sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't'.repeat(40), user: { name: 'المالك', email: 'boss@x.sa', role_id: 'super_admin', is_owner: true, totp_enabled: true }, ts: Date.now() }));
+  await page.evaluate((u) => {
+    sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't'.repeat(40), user: { name: 'المالك', email: 'boss@x.sa', totp_enabled: true, ...u }, ts: Date.now() }));
     localStorage.clear();
-  });
+  }, user);
   await page.goto(`${BASE}${hash}`);
   await page.reload();
   return { calls, st: b.st };
 }
 const sec = (page, name) => page.getByRole('region', { name });
 
-test('التبويبان في «البرامج» بجانب المساعد الآلي', async ({ page }) => {
-  await setup(page, '#/leaders/guidance');
+// «المساعد الذكي» (قرار المالك 2026-11-17): قسم واحد في الشريط بثلاثة تبويبات داخلية بدل ثلاثة أقسام
+const GUIDE_DESC = 'مساعد التوجيه داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.';
+const ACCESS_DESC = /لمن يعمل التوجيه والإرشاد: الجهة تسمح به/;
+// خلفية هذا الملف لا تحاكي شاشة مساعد الموقع، فترسم حالتها قبل ترحيلها: هي الشاشة نفسها لا تبويبها وحده
+const SITE_DESC = 'لم يُطبَّق ترحيل 20261115230000 بعد';
+
+test('قسم واحد في «البرامج» بثلاثة تبويبات داخلية، والتنقل بينها يبدل المحتوى والعنوان', async ({ page }) => {
+  await setup(page, '#/leaders/ai/guidance');
   const group = page.getByRole('group', { name: 'البرامج' });
-  await expect(group.getByRole('button', { name: 'التوجيه والإرشاد' })).toHaveAttribute('aria-current', 'page');
-  await expect(group.getByRole('button', { name: 'إتاحة التوجيه' })).toBeVisible();
+  await expect(group.getByRole('button', { name: 'المساعد الذكي' })).toHaveAttribute('aria-current', 'page');
+  for (const old of ['المساعد الآلي', 'التوجيه والإرشاد', 'إتاحة التوجيه']) await expect(group.getByRole('button', { name: old, exact: true })).toHaveCount(0);
+  const tabs = page.getByRole('tablist', { name: 'أقسام المساعد الذكي' }).getByRole('tab');
+  await expect(tabs).toHaveText(['مساعد الموقع', 'التوجيه والإرشاد', 'الإتاحة']);
+  await expect(page.getByRole('tab', { name: 'التوجيه والإرشاد' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' })).toContainText(GUIDE_DESC);
+  await page.getByRole('tab', { name: 'الإتاحة' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/ai\/access$/);
+  await expect(page.getByRole('tabpanel', { name: 'الإتاحة' })).toContainText(ACCESS_DESC);
+  await expect(page.getByText(GUIDE_DESC)).toHaveCount(0);
+  await page.getByRole('tab', { name: 'مساعد الموقع' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/ai\/site$/);
+  await expect(page.getByText(SITE_DESC)).toBeVisible();
+  // الأسهم تتنقل (اليسار إلى التالي في الواجهة العربية)، والتركيز يتبع التبويب
+  await page.getByRole('tab', { name: 'مساعد الموقع' }).press('ArrowLeft');
+  await expect(page.getByRole('tab', { name: 'التوجيه والإرشاد' })).toBeFocused();
+  await expect(page).toHaveURL(/#\/leaders\/ai\/guidance$/);
+  await page.keyboard.press('End');
+  await expect(page.getByRole('tab', { name: 'الإتاحة' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#\/leaders\/ai\/access$/);
+  // الأسهم تستبدل العنوان ولا تملأ سجل الرجوع، والنقر يضيف مدخلًا: الرجوع يعيد التبويب قبل النقر
+  await page.getByRole('tab', { name: 'التوجيه والإرشاد' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/ai\/guidance$/);
+  await page.goBack();
+  await expect(page.getByRole('tab', { name: 'الإتاحة' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#\/leaders\/ai\/access$/);
+});
+
+test('الروابط القديمة تصل إلى تبويبها الداخلي، والعنوان يُستبدل بالجديد', async ({ page }) => {
+  await setup(page, '#/leaders/agent');
+  await expect(page).toHaveURL(/#\/leaders\/ai\/site$/);
+  await expect(page.getByText(SITE_DESC)).toBeVisible();
+  for (const [old, tab, desc] of [['guidance', 'التوجيه والإرشاد', GUIDE_DESC], ['guidance-access', 'الإتاحة', ACCESS_DESC]]) {
+    await page.goto(`${BASE}#/leaders/${old}`);
+    await expect(page).toHaveURL(new RegExp(`#/leaders/ai/${old === 'guidance' ? 'guidance' : 'access'}$`));
+    await expect(page.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tabpanel', { name: tab })).toContainText(desc);
+  }
+  // تبويب داخلي غير معروف: «مساعد الموقع»
+  await page.goto(`${BASE}#/leaders/ai/zzz`);
+  await expect(page.getByRole('tab', { name: 'مساعد الموقع' })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('البحث (Ctrl K) يجد الأسماء الثلاثة والاسمين القديمين ويفتح التبويب الداخلي الصحيح', async ({ page }) => {
+  await setup(page, '#/leaders/overview');
+  const pal = page.getByRole('dialog', { name: 'البحث الشامل' });
+  // الاختصار قد يسبق ربط مستمعه في أول تحميل للوحة: الضغطة الأولى وحدها تُعاد حتى تفتح النافذة، وما بعدها ضغطة واحدة
+  await expect(async () => {
+    await page.keyboard.press('Control+k');
+    await expect(pal).toBeVisible({ timeout: 1000 });
+  }).toPass();
+  let first = true;
+  for (const [q, tab] of [['الإتاحة', 'الإتاحة'], ['إتاحة التوجيه', 'الإتاحة'], ['التوجيه والإرشاد', 'التوجيه والإرشاد'], ['مساعد الموقع', 'مساعد الموقع'], ['المساعد الآلي', 'مساعد الموقع']]) {
+    if (!first) await page.keyboard.press('Control+k');
+    first = false;
+    await expect(pal).toBeVisible();
+    await pal.getByRole('combobox').fill(q);
+    await pal.getByRole('option').filter({ hasText: tab }).first().click();
+    await expect(pal).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: tab })).toHaveAttribute('aria-selected', 'true');
+  }
+});
+
+test('مدير ليس مديرًا أعلى ولا مالكًا: لا قسم ولا تبويبات ولا نتيجة في البحث، والروابط القديمة والجديدة إلى «نظرة عامة»', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance', {}, { role_id: 'admin', is_owner: false });
+  await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'الإعدادات العامة' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'المساعد الذكي' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'نظرة عامة' })).toHaveAttribute('aria-current', 'page');
+  for (const h of ['#/leaders/ai/access', '#/leaders/agent', '#/leaders/guidance', '#/leaders/guidance-access']) {
+    await page.goto(`${BASE}${h}`);
+    await expect(page.getByRole('button', { name: 'نظرة عامة' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('tablist', { name: 'أقسام المساعد الذكي' })).toHaveCount(0);
+  }
+  await page.keyboard.press('Control+k');
+  const pal = page.getByRole('dialog', { name: 'البحث الشامل' });
+  await pal.getByRole('combobox').fill('الإتاحة');
+  await expect(pal.getByRole('option').filter({ hasText: 'الإتاحة' })).toHaveCount(0);
+  await pal.getByRole('combobox').fill('مساعد');
+  await expect(pal.getByRole('option').filter({ hasText: /مساعد الموقع|المساعد الذكي/ })).toHaveCount(0);
+  expect(calls.some((c) => /^admin\.(guide|agent)-/.test(c.action))).toBe(false);
 });
 
 test('الحالة: ما يمنع الفتح بنصه، والتشغيل من اللوحة يُرسل ويُحدّث الشروط', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance');
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
   const state = sec(page, 'الحالة والتحكم');
   await expect(state.getByRole('status')).toHaveText('✕ مغلق لكل المشاركين');
   await expect(state.getByRole('list', { name: 'ما يمنع الفتح' })).toContainText('نسخة السياسة الجوهرية لم تُنشر بعد');
@@ -111,9 +195,75 @@ test('الحالة: ما يمنع الفتح بنصه، والتشغيل من ا
   await expect(state.getByRole('list', { name: 'ما يمنع الفتح' })).not.toContainText('المساعد متوقف من هذه اللوحة');
 });
 
+test('رأس القسم وصف المؤشرات: حال المساعدَين من لوحة التوجيه نفسها، بلا طلب مكرر، ويتبع التشغيل', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
+  await expect(page.getByRole('heading', { name: 'المساعد الذكي', level: 2 })).toBeVisible();
+  const line = page.getByRole('list', { name: 'حال المساعدَين الآن' });
+  await expect(line.getByRole('listitem')).toHaveCount(1);
+  // اسم واحد للحال في الرأس والمؤشرات («مغلق»)، وحال المفتاح سبب يتبعه، والمال بصيغة واحدة
+  await expect(line).toContainText('التوجيه والإرشاد مغلق');
+  await expect(line).toContainText('متوقف من اللوحة، اليوم 1.20 من 5.00 دولار، 120 سؤالًا في 30 يومًا');
+  const kpis = page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' }).getByRole('group', { name: 'مؤشرات التوجيه والإرشاد' });
+  await expect(kpis.locator('.ai-kpi')).toHaveCount(4);
+  await expect(kpis.locator('.ai-kpi').first()).toContainText('الحالمغلق4 شروط قبل الفتح');
+  await expect(kpis).toContainText('1.20 دولار');
+  await expect(kpis).toContainText('من 5.00 دولار (24٪)');
+  // الحال لا تتكرر في بطاقة «الحالة والتحكم»: صف المؤشرات فوقها يحملها
+  await expect(sec(page, 'الحالة والتحكم').locator('.ag-sum')).toHaveCount(0);
+  await expect(kpis).toContainText('6.7٪');
+  // تحميل واحد للصفحة: الرأس والشاشة يتشاركان طلبًا واحدًا
+  const mark = calls.length;
+  await page.reload();
+  await expect(kpis).toContainText('6.7٪');
+  await expect(line).toContainText('120 سؤالًا');
+  expect(calls.slice(mark).filter((c) => c.action === 'admin.guide-dashboard').length).toBe(1);
+  await sec(page, 'الحالة والتحكم').getByRole('switch', { name: 'التوجيه والإرشاد للمشاركين' }).check();
+  await expect(line).toContainText('التوجيه والإرشاد مغلق');
+  await expect(line).toContainText('مشغّل وينتظر الشروط');
+  // الإتاحة تقرأ الصلاحية من الرد نفسه ولا تطلبه من جديد
+  const before = calls.filter((c) => c.action === 'admin.guide-dashboard').length;
+  await page.getByRole('tab', { name: 'الإتاحة' }).click();
+  const access = page.getByRole('tabpanel', { name: 'الإتاحة' }).getByRole('group', { name: 'مؤشرات الإتاحة' });
+  await expect(access).toContainText('حال التوجيهمغلق');
+  await expect(sec(page, 'الدفعات التجريبية').getByRole('switch', { name: 'دفعة سفراء' })).toBeEnabled();
+  expect(calls.filter((c) => c.action === 'admin.guide-dashboard').length).toBe(before);
+});
+
+test('تفعيل دفعة تجريبية في «الإتاحة» يقرأ لوحة التوجيه من جديد: الرأس والمؤشرات وما يمنع الفتح على الحال الجديدة', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
+  const kpis = page.getByRole('tabpanel', { name: 'التوجيه والإرشاد' }).getByRole('group', { name: 'مؤشرات التوجيه والإرشاد' });
+  await expect(kpis).toContainText('4 شروط قبل الفتح');
+  await expect(sec(page, 'الحالة والتحكم').getByRole('list', { name: 'ما يمنع الفتح' })).toContainText('لا دفعة تجريبية مفعّلة');
+  await page.getByRole('tab', { name: 'الإتاحة' }).click();
+  const before = calls.filter((c) => c.action === 'admin.guide-dashboard').length;
+  await sec(page, 'الدفعات التجريبية').getByRole('switch', { name: 'دفعة سفراء' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')).toMatchObject({ cohort_id: COH, on: true });
+  // طلب جديد للوحة بعد التغيير الناجح، لا الرد المحفوظ
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.guide-dashboard').length).toBe(before + 1);
+  await page.getByRole('tab', { name: 'التوجيه والإرشاد' }).click();
+  await expect(kpis).toContainText('3 شروط قبل الفتح');
+  await expect(sec(page, 'الحالة والتحكم').getByRole('list', { name: 'ما يمنع الفتح' })).not.toContainText('لا دفعة تجريبية مفعّلة');
+  await expect(page.getByRole('list', { name: 'حال المساعدَين الآن' })).toContainText('التوجيه والإرشاد مغلق');
+});
+
+test('الضيق 390 بكسل: لا تمرير أفقي في التبويبات الثلاثة، والتبويبات بعرض الشاشة', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page, '#/leaders/ai/guidance');
+  for (const [tab, region] of [['التوجيه والإرشاد', 'الاستعمال'], ['الإتاحة', 'الدفعات التجريبية'], ['مساعد الموقع', null]]) {
+    await page.getByRole('tab', { name: tab }).click();
+    if (region) await expect(sec(page, region)).toBeVisible();
+    else await expect(page.getByText(SITE_DESC)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    const box = await page.getByRole('tablist', { name: 'أقسام المساعد الذكي' }).boundingBox();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  }
+});
+
 test('الإنفاق والاستعمال: اليوم مقابل السقف، وأعداد 7 و30 يومًا، والتوزيع على الجهات والدفعات', async ({ page }) => {
-  await setup(page, '#/leaders/guidance');
-  await expect(sec(page, 'الإنفاق')).toContainText('اليوم $1.20 من سقف $5.00 (24٪)');
+  await setup(page, '#/leaders/ai/guidance');
+  await expect(sec(page, 'الإنفاق')).toContainText('اليوم 1.20 دولار من سقف 5.00 دولار (24٪)');
+  await expect(sec(page, 'الإنفاق').locator('.ag-sum')).toHaveText('اليوم 1.20 من 5.00 دولار');
   await expect(sec(page, 'الإنفاق').getByRole('list', { name: 'الإنفاق اليومي آخر 30 يومًا' }).getByRole('listitem')).toHaveCount(2);
   const usage = sec(page, 'الاستعمال');
   await expect(usage.getByRole('row', { name: /آخر 7 يومًا/ })).toContainText('3 (7.5٪)');
@@ -122,7 +272,7 @@ test('الإنفاق والاستعمال: اليوم مقابل السقف، و
 });
 
 test('الدقة: المسودة تُغلق البوابة، والتشغيل بدفعات حتى ينتهي، والنتائج بردودها', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance');
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
   const ev = sec(page, 'الدقة');
   await expect(ev).toContainText('مسودة بانتظار اعتماد المالك');
   await ev.getByRole('button', { name: 'شغّل التقييم' }).click();
@@ -133,16 +283,31 @@ test('الدقة: المسودة تُغلق البوابة، والتشغيل ب
 });
 
 test('إتاحة التوجيه: إغلاق جهة وتفعيل دفعة تجريبية، كل منهما بطلبه', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance-access');
+  const { calls } = await setup(page, '#/leaders/ai/access');
   const orgs = sec(page, 'الجهات');
-  await orgs.getByRole('checkbox', { name: 'جهة سفراء' }).uncheck();
+  const org = orgs.getByRole('switch', { name: 'جهة سفراء' });
+  await expect(org).toHaveAttribute('aria-checked', 'true');
+  await expect(orgs.getByRole('listitem').filter({ hasText: 'جهة سفراء' }).locator('.ai-chip')).toHaveText('مسموح');
+  await org.uncheck();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-org-set')).toMatchObject({ org_id: ORG, on: false });
-  await sec(page, 'الدفعات التجريبية').getByRole('checkbox', { name: 'دفعة سفراء' }).check();
+  await expect(orgs.getByRole('listitem').filter({ hasText: 'جهة سفراء' }).locator('.ai-chip')).toHaveText('مغلق');
+  const pilots = sec(page, 'الدفعات التجريبية');
+  // لوحة المفاتيح: المسافة تبدل المفتاح كالنقر، والطلب نفسه
+  await pilots.getByRole('switch', { name: 'دفعة سفراء' }).press('Space');
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-pilot-set')).toMatchObject({ cohort_id: COH, on: true });
+  await expect(pilots.getByRole('switch', { name: 'دفعة سفراء' })).toHaveAttribute('aria-checked', 'true');
+  await expect(pilots.locator('.ai-chip')).toHaveText('مفعّل');
+  // النقر على اسم الدفعة يبدل كالنقر على المفتاح
+  await pilots.getByText('دفعة سفراء', { exact: true }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.guide-pilot-set').map((c) => c.on)).toEqual([true, false]);
+  // صف المؤشرات يتبع التبديل
+  const kpis = page.getByRole('tabpanel', { name: 'الإتاحة' }).getByRole('group', { name: 'مؤشرات الإتاحة' });
+  await expect(kpis).toContainText('الجهات المسموح لها0 من 1');
+  await expect(kpis).toContainText('الدفعات التجريبية0');
 });
 
 test('مراجعة المجموعة: التصفية بالنوع، وتعديل الإجابة المرجعية، واعتمادها باسم المالك بعد التأكيد', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance');
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
   const set = page.getByRole('region', { name: 'مراجعة المجموعة واعتمادها' });
   await expect(set).toContainText('مسودة');
   await set.getByRole('button', { name: /^يرفض 1/ }).click();
@@ -159,11 +324,11 @@ test('مراجعة المجموعة: التصفية بالنوع، وتعديل 
 });
 
 test('سجل المحادثات (H3): القائمة ثم المحادثة كاملة بحكم كل رد وكلفته، والمخفي موسوم', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance');
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
   const log = sec(page, 'سجل المحادثات');
   const row = log.getByRole('row', { name: /سارة القحطاني/ });
   await expect(row).toContainText('أخفاها');
-  await expect(row).toContainText('$0.03');
+  await expect(row).toContainText('0.03 دولار');
   expect(calls.some((c) => c.action === 'admin.guide-transcript')).toBe(false);
   await row.getByRole('button', { name: 'افتح' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript')).toMatchObject({ participant_id: PID });
@@ -176,16 +341,19 @@ test('سجل المحادثات (H3): القائمة ثم المحادثة كا�
 });
 
 test('سجل المحادثات مقفل لمن لم يمنحه المالك، ولا يُطلب نص', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance', { locked: true });
+  const { calls } = await setup(page, '#/leaders/ai/guidance', { locked: true });
   await expect(sec(page, 'سجل المحادثات')).toContainText('لم يمنحك المالك صلاحية');
   expect(calls.some((c) => c.action === 'admin.guide-transcripts' || c.action === 'admin.guide-transcript')).toBe(false);
 });
 
 test('منح المالك: مدير أعلى يُمنح الاطلاع بطلبه، ويظهر من اطّلع على محادثة من', async ({ page }) => {
-  const { calls } = await setup(page, '#/leaders/guidance-access');
+  const { calls } = await setup(page, '#/leaders/ai/access');
   const g = sec(page, 'الاطلاع على المحادثات');
   await expect(g).toContainText('boss@x.sa فتح محادثة سارة القحطاني (2 رسالة)');
-  await g.getByRole('checkbox', { name: 'super@x.sa' }).check();
+  await g.getByRole('switch', { name: 'super@x.sa' }).check();
+  await expect(g.getByRole('switch', { name: 'super@x.sa' })).toHaveAttribute('aria-checked', 'true');
+  // تاريخ المنح وصف مربوط بالمفتاح، فيُقرأ معه
+  await expect(g.getByRole('switch', { name: 'super@x.sa' })).toHaveAccessibleDescription(/^منذ /);
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-transcript-grant')).toMatchObject({ admin_id: ADM, on: true });
 });
 
