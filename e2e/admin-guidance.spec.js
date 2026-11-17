@@ -91,8 +91,8 @@ async function setup(page, hash, o = {}, user = { role_id: 'super_admin', is_own
 const sec = (page, name) => page.getByRole('region', { name });
 
 // «المساعد الذكي» (قرار المالك 2026-11-17): قسم واحد في الشريط بثلاثة تبويبات داخلية بدل ثلاثة أقسام
-const GUIDE_DESC = 'المساعد الذكي داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.';
-const ACCESS_DESC = /لمن يعمل المساعد الذكي: الجهة تسمح به/;
+const GUIDE_DESC = 'مساعد التوجيه داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.';
+const ACCESS_DESC = /لمن يعمل التوجيه والإرشاد: الجهة تسمح به/;
 // خلفية هذا الملف لا تحاكي شاشة مساعد الموقع، فترسم حالتها قبل ترحيلها: هي الشاشة نفسها لا تبويبها وحده
 const SITE_DESC = 'لم يُطبَّق ترحيل 20261115230000 بعد';
 
@@ -118,9 +118,13 @@ test('قسم واحد في «البرامج» بثلاثة تبويبات داخ
   await expect(page).toHaveURL(/#\/leaders\/ai\/guidance$/);
   await page.keyboard.press('End');
   await expect(page.getByRole('tab', { name: 'الإتاحة' })).toHaveAttribute('aria-selected', 'true');
-  // زر الرجوع يعيد التبويب الداخلي السابق
+  await expect(page).toHaveURL(/#\/leaders\/ai\/access$/);
+  // الأسهم تستبدل العنوان ولا تملأ سجل الرجوع، والنقر يضيف مدخلًا: الرجوع يعيد التبويب قبل النقر
+  await page.getByRole('tab', { name: 'التوجيه والإرشاد' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/ai\/guidance$/);
   await page.goBack();
-  await expect(page.getByRole('tab', { name: 'التوجيه والإرشاد' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'الإتاحة' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/#\/leaders\/ai\/access$/);
 });
 
 test('الروابط القديمة تصل إلى تبويبها الداخلي، والعنوان يُستبدل بالجديد', async ({ page }) => {
@@ -155,7 +159,7 @@ test('مدير ليس مديرًا أعلى ولا مالكًا: لا قسم و�
   await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'الإعدادات العامة' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'المساعد الذكي' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'نظرة عامة' })).toHaveAttribute('aria-current', 'page');
-  for (const h of ['#/leaders/ai/access', '#/leaders/agent', '#/leaders/ai/access']) {
+  for (const h of ['#/leaders/ai/access', '#/leaders/agent', '#/leaders/guidance', '#/leaders/guidance-access']) {
     await page.goto(`${BASE}${h}`);
     await expect(page.getByRole('button', { name: 'نظرة عامة' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('tablist', { name: 'أقسام المساعد الذكي' })).toHaveCount(0);

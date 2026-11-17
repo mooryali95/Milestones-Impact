@@ -21,14 +21,15 @@ export const aiSub = (id) => (KEYS.includes(id) ? id : 'site');
 export default function AiHub({ sub, isSuper = false }) {
   const cur = aiSub(sub);
   const tabs = useRef([]);
-  const open = (k) => navigate({ ctx: 'leaders', tab: 'ai', id: k });
+  // النقر يضيف مدخلًا في سجل الرجوع، والأسهم تستبدله فلا يمتلئ السجل بكل ضغطة
+  const open = (k, replace = false) => navigate({ ctx: 'leaders', tab: 'ai', id: k }, replace ? { replace: true } : undefined);
   // الأسهم تتنقل بين التبويبات (من اليمين إلى اليسار)، وHome وEnd إلى الطرفين، كما في «أقسام الدفعة»
   const keyNav = (e, i) => {
     const to = { ArrowLeft: i + 1, ArrowRight: i - 1, Home: 0, End: KEYS.length - 1 }[e.key];
     if (to == null) return;
     e.preventDefault();
     const n = (to + KEYS.length) % KEYS.length;
-    open(KEYS[n]); tabs.current[n]?.focus();
+    open(KEYS[n], true); tabs.current[n]?.focus();
   };
   return (
     <div className="ai-hub">

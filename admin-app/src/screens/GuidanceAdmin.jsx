@@ -2,7 +2,7 @@
 // «التوجيه والإرشاد» في لوحة الإدارة (H1، قرار المالك 2026-11-16): تبويبان للمدير الأعلى والمالك
 // ════════════════════════════════════════════════════════════════
 // «التوجيه والإرشاد»: الحالة والتحكم (التشغيل والإيقاف وما يمنع الفتح)، والإنفاق، والاستعمال موزعًا على الجهات والدفعات،
-// والدقة (التقييم قبل الإطلاق). «إتاحة التوجيه»: الجهات بمفتاحها القائم والدفعات التجريبية.
+// والدقة (التقييم قبل الإطلاق). «الإتاحة» تحت «المساعد الذكي»: الجهات بمفتاحها القائم والدفعات التجريبية.
 // أعداد وكلفة بلا نص محادثة، وسجل المحادثات (H3) للمالك وللمدير الأعلى بمنحه، وكل فتح يُسجَّل.
 import React, { useEffect, useState } from 'react';
 import { date, L } from '../leaders.js';
@@ -258,7 +258,7 @@ export default function GuidanceAdmin() {
   return (
     <div className="ag">
       <div className="la-row between ag-head">
-        <div><p className="la-muted">المساعد الذكي داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.</p></div>
+        <div><p className="la-muted">مساعد التوجيه داخل رحلة المشارك: الحالة والإنفاق والاستعمال والدقة.</p></div>
         {!d.can_write && <span className="la-chip">عرض فقط</span>}
       </div>
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'} summary={open ? 'مفتوح للدفعات التجريبية' : `مغلق: ${d.blockers.length} ${d.blockers.length === 1 ? 'شرط' : 'شروط'} قبل الفتح`}><StatusPart d={d} reload={load} setD={setD} /></Section>
@@ -270,7 +270,7 @@ export default function GuidanceAdmin() {
   );
 }
 
-// ── «إتاحة التوجيه»: الجهات (مفتاحها القائم) والدفعات التجريبية ──
+// ── «الإتاحة» تحت «المساعد الذكي»: الجهات (مفتاحها القائم) والدفعات التجريبية ──
 export function GuidanceAccess() {
   const { toast } = useUI();
   const [orgs, setOrgs] = useState(null);
@@ -299,7 +299,7 @@ export function GuidanceAccess() {
   return (
     <div className="ag">
       <div className="la-row between ag-head">
-        <div><p className="la-muted">لمن يعمل المساعد الذكي: الجهة تسمح به، والدفعة مفعّلة تجريبيًا. يلزم الشرطان معًا، وكل تغيير يُسجَّل.</p></div>
+        <div><p className="la-muted">لمن يعمل التوجيه والإرشاد: الجهة تسمح به، والدفعة مفعّلة تجريبيًا. يلزم الشرطان معًا، وكل تغيير يُسجَّل.</p></div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
       <Section id="gd-orgs" title="الجهات" summary="الجهة المغلقة لا يعمل المساعد لأي من مشاركيها، أيًا كانت دفعته. الأفراد بلا جهة تحكمهم الدفعة وحدها.">
