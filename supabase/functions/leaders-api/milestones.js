@@ -11,7 +11,7 @@
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
 import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
-import { stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
+import { planSchedule, stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const toMs = (d) => new Date(`${d}T00:00:00Z`).getTime();
@@ -174,7 +174,7 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
   // الدفعة المفتوحة (is_default) بلا بداية واحدة (القرار 21 والبند 10 في التصور): مددها نسبية من دخول كل مشارك، فلا تؤرَّخ
   // معالمها بنافذة محسوبة من starts_on ولو ضُبط لها، وإلا صار كل من دخلها متأخرًا لحظة دخوله
   const windows = live.length && cohort?.starts_on && !cohort?.is_default ? stageWindows(live, cohort) : null;
-  const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: cohort.schedule || {}, windows };
+  const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: planSchedule(cohort), windows };
   return (milestones || []).filter((m) => m.active !== false).map((m) => {
     const rec = records[m.id] || {};
     const info = milestoneDueInfo(m, ctx);

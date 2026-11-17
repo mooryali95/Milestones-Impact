@@ -12,7 +12,7 @@ import { journeyMap } from '../../supabase/functions/leaders-api/journey-map.js'
 import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import { cohortSetup } from '../../supabase/functions/leaders-api/cohort-setup.js';
 import {
-  impactLines, planCutoff, planDays, planEdit, planImpact, planLock, sameSchedule, suggestDays,
+  impactLines, planCutoff, planCutoffFor, planEdit, planGuard, planImpact, planLock, sameSchedule, suggestDays,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { fromUnit, inUnit, planDraft, stepDays } from '../../admin-app/src/cohort-journey.js';
 
@@ -235,6 +235,40 @@ describe('planEdit: تحرير الخطة', () => {
     expect(Object.keys(d)).toEqual(['approval', 'training', 'ojt', 'support']);
     expect(Object.values(d).every((n) => Number.isInteger(n) && n > 0)).toBe(true);
   });
+  it('الاقتراح يملأ مدة الدفعة بالضبط ولو بينها اختيارية بمدة: cohortPlan ينتهي يوم نهايتها بلا تجاوز', () => {
+    const st = [S('a', 1, 14), S('o', 2, 10, { rules: { mode: 'optional' } }), S('b', 3, 14)];
+    const cohort = { starts_on: '2027-01-01', ends_on: '2027-01-28' };
+    const d = suggestDays(st, cohort.starts_on, cohort.ends_on);
+    expect(Object.keys(d)).toEqual(['a', 'b']);
+    const p = cohortPlan(st, { ...cohort, schedule: Object.fromEntries(Object.entries(d).map(([k, n]) => [k, { days: n }])) });
+    expect([p.end, p.over]).toEqual([cohort.ends_on, 0]);
+    // وبالمراحل الأربع (التوجيه يسير مع التدريب)
+    const d2 = suggestDays(STAGES, '2027-01-01', '2027-03-31');
+    const p2 = cohortPlan(STAGES, { starts_on: '2027-01-01', ends_on: '2027-03-31', schedule: Object.fromEntries(Object.entries(d2).map(([k, n]) => [k, { days: n }])) });
+    expect([p2.end, p2.over]).toEqual(['2027-03-31', 0]);
+  });
+  it('«حرّر التواريخ لتتبع المدد» لا يحرك تاريخًا ولو بين المثبتة وما قبلها فجوة أو تداخل: تبقى بدايتها مرساة', () => {
+    const st = [S('a', 1, 14), S('b', 2, 10), S('c', 3, 7)];
+    const cohort = { starts_on: '2027-01-04' };
+    for (const schedule of [{ b: { start: '2027-01-25', end: '2027-02-05' } }, { b: { start: '2027-01-12', end: '2027-01-20' } }]) {
+      const f = planEdit({ stages: st, schedule, cohort, edit: { follow: true } });
+      expect(f.anchored).toEqual(['b']);
+      expect(f.schedule.b.end).toBeUndefined();
+      expect(cohortPlan(st, { ...cohort, schedule: f.schedule }).windows).toEqual(cohortPlan(st, { ...cohort, schedule }).windows);
+    }
+    // المتصل بلا فجوة يصير مدة بلا مرساة
+    const f = planEdit({ stages: st, schedule: { b: { start: '2027-01-18', end: '2027-01-25' } }, cohort, edit: { follow: true } });
+    expect([f.schedule, f.anchored]).toEqual([{ b: { days: 8 } }, []]);
+  });
+  it('الدفعة المفتوحة: تثبيت قديم في خطتها لا يؤرخ معالمها، كما لا يؤرخ خطتها (planSchedule)', () => {
+    const open = { is_default: true, starts_on: '2026-09-01', schedule: { training: { start: '2026-09-01', end: '2026-09-14' } } };
+    expect(cohortPlan(STAGES, open).windows).toEqual({});
+    const ms = [{ id: 'm1', title_ar: 'نهاية التدريب', stage_key: 'training', anchor: 'stage_end', offset_days: 0, complete: 'manual', active: true }];
+    const [m] = milestoneStatuses(ms, { cohort: open, stages: STAGES, today: '2026-11-17' });
+    expect([m.due, m.due_source, m.status]).toEqual([null, null, 'unscheduled']);
+    const imp = planImpact({ stages: STAGES, before: open.schedule, after: { ...open.schedule, training: { ...open.schedule.training, days: 7 } }, cohort: open, milestones: ms, people: null });
+    expect(imp.milestones).toEqual([]);
+  });
   it('planLock: المغلقة للقراءة، والمفتوحة غير المثبتة لا تُعدَّل (القرار 21)، والمثبتة تُعدَّل', () => {
     expect(planLock({ status: 'closed' }).code).toBe('cohort_closed');
     expect(planLock({ is_default: true, program_version_id: null }).code).toBe('open_unpinned');
@@ -281,16 +315,30 @@ describe('planImpact: الأثر قبل الحفظ وحارس البريد', () 
     expect(lines).toContain('تتأخر نهاية الرحلة سبعة أيام، فتنتهي 2027-02-25');
     expect(lines.some((t) => t.includes('لم يُحسب أثره على كل عضو'))).toBe(true);
   });
-  it('حارس البريد: يوم آخر حفظ للخطة يمنع ما صار متأخرًا بالتعديل، وما يحل بعده يُرسل', () => {
-    const days = planDays([{ entity_id: 'c1', created_at: '2027-01-20T08:00:00Z' }, { entity_id: 'c1', created_at: '2027-01-02T08:00:00Z' }]);
-    expect(days).toEqual({ c1: '2027-01-20' });
-    const since = planCutoff('2026-11-17', days.c1);
+  it('حارس البريد: يوم آخر حفظ حرّك موعد المعلم يمنع ما صار متأخرًا بالتعديل، وما يحل بعده يُرسل', () => {
+    const g = planGuard([
+      { entity_id: 'c1', created_at: '2027-01-20T08:00:00Z', after: { moved_ids: ['m1'] } },
+      { entity_id: 'c1', created_at: '2027-01-02T08:00:00Z', after: { moved_ids: ['m1', 'm2'] } },
+    ]);
+    expect(g).toEqual({ moved: { m1: '2027-01-20', m2: '2027-01-02' }, all: null });
+    const since = planCutoffFor('2026-11-17', g, 'm1');
     expect(since).toBe('2027-01-20');
     expect(planCutoff('2027-02-01', '2027-01-20')).toBe('2027-02-01');
     const late = (due, late_days) => ({ status: 'late', due, due_source: 'window', late_days });
     expect(lateNoticeAllowed(late('2027-01-12', 8), 3, since)).toBe(false);
     expect(lateNoticeAllowed(late('2027-01-21', 5), 3, since)).toBe(true);
     expect(lateNoticeAllowed(late('2027-01-12', 8), 3, '2026-11-17')).toBe(true);
+  });
+  it('حارس البريد لا يتسع لما لم يحركه الحفظ: معلم في المهلة بمرحلة لم تُمس يُرسل عنه بعد المهلة', () => {
+    // حفظ يوم 20 أطال مرحلة لاحقة فحرّك m2 وحده. m1 استحق يوم 18 (في المهلة يوم الحفظ) ولم يتحرك موعده
+    const g = planGuard([{ entity_id: 'c1', created_at: '2027-01-20T08:00:00Z', after: { moved_ids: ['m2'] } }]);
+    expect(planCutoffFor('2026-11-17', g, 'm1')).toBe('2026-11-17');
+    const m1 = { status: 'late', due: '2027-01-18', due_source: 'window', late_days: 5 };
+    expect(lateNoticeAllowed(m1, 3, planCutoffFor('2026-11-17', g, 'm1'))).toBe(true);
+    expect(lateNoticeAllowed({ ...m1, id: 'm2' }, 3, planCutoffFor('2026-11-17', g, 'm2'))).toBe(false);
+    // سطر قديم بلا moved_ids يُعامل كأنه حرّك كل المعالم يومه
+    const old = planGuard([{ created_at: '2027-01-20T08:00:00Z', after: { schedule: {} } }]);
+    expect(planCutoffFor('2026-11-17', old, 'm1')).toBe('2027-01-20');
   });
 });
 

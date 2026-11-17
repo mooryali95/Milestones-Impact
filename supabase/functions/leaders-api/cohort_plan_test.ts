@@ -86,6 +86,8 @@ function world(cohort: Row = {}) {
   });
 }
 const failOf = async (fn: () => Promise<unknown>) => (await assertRejects(fn, Fail)) as InstanceType<typeof Fail>;
+// ما بُنيت عليه المسودة كما ترسله اللوحة: مطلوب في الحفظ والتراجع
+const B = (w: any, i = 0) => (w.tables.cohorts[i].updated_at ? { base_updated_at: w.tables.cohorts[i].updated_at } : {});
 
 Deno.test('الصلاحيات: المعاينة والسجل لكل مدير، والحفظ والتراجع للكاتب وحده بعامله الثاني', async () => {
   const w = world();
@@ -143,7 +145,7 @@ Deno.test('الحفظ: الخطة في cohorts.schedule وصف في السجل �
     assertEquals(view.cohort_plan.schedule, { training: { days: 3 } });
     assertEquals(view.stages.find((s: any) => s.key === 'training').duration_days, 14);
     // الحفظ نفسه مرة ثانية لا يكتب شيئًا
-    const again: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } });
+    const again: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 } });
     assertEquals(again.unchanged, true);
     assertEquals(w.tables.audit_log.length, 1);
   } finally { w.restore(); }
@@ -152,20 +154,20 @@ Deno.test('الحفظ: الخطة في cohorts.schedule وصف في السجل �
 Deno.test('التراجع: يعيد ما قبل آخر حفظ بالحراس نفسها، وصالح حتى أي حفظ تالٍ، ولا يمر بعد تغيّر الخطة من غيره', async () => {
   const w = world({ schedule: { support: { days: 20 } } });
   try {
-    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 21 } });
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 21 } });
     assertEquals(w.tables.cohorts[0].schedule, { support: { days: 20 }, training: { days: 21 } });
     const h: any = await cohortPlanAction(viewer, { cohort_id: C1, op: 'history' });
     assertEquals([h.history.length, h.can_undo], [1, true]);
-    const u: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'undo' });
+    const u: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' });
     assertEquals(u.saved, true);
     assertEquals(w.tables.cohorts[0].schedule, { support: { days: 20 } });
     const last = w.tables.audit_log.at(-1)!;
     assertEquals([last.action, last.after.undoes], ['cohort.plan-undo', w.tables.audit_log[0].id]);
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'undo' }))).code, 'nothing_to_undo');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' }))).code, 'nothing_to_undo');
     // حفظ ثم تغيّر الخطة من مكان آخر (ترقية مثلًا): لا تراجع تلقائي
-    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 10 } });
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 10 } });
     w.tables.cohorts[0].schedule = { training: { days: 11 } };
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'undo' }))).code, 'plan_changed');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' }))).code, 'plan_changed');
   } finally { w.restore(); }
 });
 
@@ -173,24 +175,24 @@ Deno.test('الحراس: المغلقة، والمفتوحة غير المثبت
   const w = world();
   try {
     w.tables.cohorts[0].status = 'closed';
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'cohort_closed');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'cohort_closed');
     w.tables.cohorts[0].status = 'running';
     // المفتوحة: المعاينة تقول السبب، والحفظ يُرفض في الخادم، ثم يمر بعد تثبيتها على نسخة
     const op: any = await cohortPlanAction(admin, { cohort_id: OPEN, op: 'preview', days: { training: 3 } });
     assertEquals(op.locked.code, 'open_unpinned');
     assert(op.impact.open, 'المفتوحة تسمي من يمسه التعديل');
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: OPEN, op: 'save', days: { training: 3 } }))).code, 'open_unpinned');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w, 1), cohort_id: OPEN, op: 'save', days: { training: 3 } }))).code, 'open_unpinned');
     w.tables.cohorts[1].program_version_id = V1;
-    assertEquals(((await cohortPlanAction(admin, { cohort_id: OPEN, op: 'save', days: { training: 3 } })) as any).saved, true);
+    assertEquals(((await cohortPlanAction(admin, { ...B(w, 1), cohort_id: OPEN, op: 'save', days: { training: 3 } })) as any).saved, true);
     assertEquals(w.tables.cohorts[1].schedule, { training: { days: 3 } });
     // الحدود: الإلزامية من 1، والمرحلة الغريبة
-    const e = await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 0, nope: 2 } }));
+    const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 0, nope: 2 } }));
     assertEquals(e.code, 'plan_invalid');
     assertEquals((e.extra.errors as any[]).map((x) => x.code), ['range', 'unknown']);
     // الإيقاف والتوازي والتثبيت للدفعة في مراحل لاحقة: لا تُقبل بصمت
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', off: { training: true } }))).code, 'plan_field');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: true } }))).code, 'plan_field');
     // نسخة أقدم من الحالية
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 }, base_updated_at: '2020-01-01T00:00:00Z' }))).code, 'stale');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 }, base_updated_at: '2020-01-01T00:00:00Z' }))).code, 'stale');
     assertEquals(w.tables.cohorts[0].schedule, {});
   } finally { w.restore(); }
 });
@@ -199,12 +201,12 @@ Deno.test('المثبت القديم: لا تُعدَّل مدته، و«حرّ�
   const pin = { profile: { start: START, end: iso(-9) }, training: { start: iso(-8), end: iso(6) } };
   const w = world({ schedule: pin });
   try {
-    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'plan_invalid');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'plan_invalid');
     const p: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', follow: true });
     // الملف بطول البرنامج (يومان) فلا يبقى له مدخل، والتدريب 15 يومًا بدل 14 فيبقى مدة خاصة
     assertEquals(p.plan.schedule, { training: { days: 15 } });
     assertEquals(p.impact.changes, []);
-    await cohortPlanAction(admin, { cohort_id: C1, op: 'save', follow: true });
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', follow: true });
     assertEquals(w.tables.cohorts[0].schedule, { training: { days: 15 } });
     assertEquals(w.tables.audit_log[0].after.follow, true);
     assertEquals(w.tables.audit_log[0].before.schedule, pin);
@@ -225,4 +227,30 @@ Deno.test('كاتب واحد (القرار 23): admin.cohort-save يرفض sched
     await cohortSave(admin, { id: C1, name: 'اسم جديد' });
     assertEquals(w.tables.cohorts[0].schedule, { training: { days: 21 } });
   } finally { w.restore(); }
+});
+
+Deno.test('الحفظ مشروط بالنسخة: بلا base_updated_at يُرفض، وكاتب ثانٍ بنسخة صارت قديمة يُرفض ولا يكتب فوق الأول', async () => {
+  const w = world();
+  try {
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'base_required');
+    assertEquals((await failOf(() => cohortPlanAction(admin, { cohort_id: C1, op: 'undo' }))).code, 'base_required');
+    const base = B(w);
+    await cohortPlanAction(admin, { ...base, cohort_id: C1, op: 'save', days: { training: 3 } });
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...base, cohort_id: C1, op: 'save', days: { training: 20 } }))).code, 'stale');
+    assertEquals(w.tables.cohorts[0].schedule, { training: { days: 3 } });
+    assertEquals(w.tables.audit_log.length, 1);
+    // ويسجل الحفظ المعالم التي حرّك موعدها، فيحجب حارس البريد ما صار متأخرًا منها وحدها
+    assertEquals(w.tables.audit_log[0].after.moved_ids, [U(20)]);
+  } finally { w.restore(); }
+});
+
+Deno.test('تعذّر السجل بعد الحفظ: تُعاد الخطة كما كانت، فلا خطة حية بلا سطرها (لا تراجع ولا حارس بريد)', async () => {
+  const w = world();
+  const from = (db as any).from;
+  (db as any).from = (t: string) => (t === 'audit_log' ? { insert: () => Promise.resolve({ data: null, error: { message: 'down' } }) } : from(t));
+  try {
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 } }))).code, 'audit_failed');
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.cohorts[0].updated_at, '2026-11-01T00:00:00Z');
+  } finally { (db as any).from = from; w.restore(); }
 });

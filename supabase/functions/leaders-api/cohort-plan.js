@@ -6,8 +6,8 @@
 // يتأثر. لا حساب تاريخ هنا: كل تاريخ من cohortPlan وmilestoneDueInfo وmilestoneStatuses.
 // في R2a تملك الدفعة المدة وحدها (days)، و«حرّر التواريخ لتتبع المدد» للمثبت قديمًا. الإيقاف (off) في R2b والتوازي
 // (with وoffset) في R3a: المنظف يحفظها ولا يمحوها، وهذا الملف لا يكتبها.
-import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planDaysOf, planPinned } from './stage-windows.js';
-import { daysBetween, distributeSchedule, lateNoticeAllowed, MILESTONE_GRACE_DAYS, milestoneDueInfo, milestoneStatuses } from './milestones.js';
+import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planDaysOf, planDaysOnly, planPinned, planSchedule } from './stage-windows.js';
+import { addDays, daysBetween, distributeSchedule, lateNoticeAllowed, MILESTONE_GRACE_DAYS, milestoneDueInfo, milestoneStatuses } from './milestones.js';
 import { stageRules, daysAr, durationAr } from './journey.js';
 import { latinDigits } from './digits.js';
 
@@ -31,6 +31,7 @@ export const sameSchedule = (a, b) => JSON.stringify(stable(a || {})) === JSON.s
 export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {} }) {
   const next = JSON.parse(JSON.stringify(schedule && typeof schedule === 'object' ? schedule : {}));
   const errors = [];
+  const anchored = [];
   const byKey = new Map((stages || []).map((s) => [s.key, s]));
   const title = (k) => byKey.get(k)?.title_ar || k;
   const setDays = (k, d) => {
@@ -41,14 +42,30 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {} })
     if (Object.keys(e).length) next[k] = e; else delete next[k];
   };
   if (edit.follow) {
+    // كل مرحلة مثبتة تصير مدة بطولها الحالي فتتبع ما قبلها. ذلك لا يحرك تاريخًا إلا إن كانت تبدأ في اليوم التالي لنهاية
+    // ما قبلها: بين المثبتة وما قبلها فجوة أو تداخل (جدول «وزّع» القديم أو يدوي) تبقى بدايتها مرساة وتُحرر نهايتها وحدها
+    // (مدة بطولها)، فلا يتحرك تاريخ أي مرحلة بالتحرير. ما بقي مرساة يُسمّى في anchored
     const plan = cohortPlan(stages, { ...cohort, schedule: next });
+    const same = (a, b) => (a?.from || null) === (b?.from || null) && (a?.to || null) === (b?.to || null);
     for (const s of stages) {
       const e = next[s.key];
       if (!planPinned(e)) continue;
       const row = plan.byKey[s.key];
       const { start, end, ...rest } = e;
+      const keep = JSON.parse(JSON.stringify(next));
       next[s.key] = rest;
       setDays(s.key, row?.from ? row.days : planDaysOf(e) ?? null);
+      if (!row?.from) continue;
+      const now = cohortPlan(stages, { ...cohort, schedule: next });
+      const moved = stages.some((x) => !same(now.byKey[x.key], plan.byKey[x.key]));
+      if (!moved) continue;
+      // البداية تبقى مرساة (من الخطة الحالية)، والمدة بطولها، فلا تثبت النهاية ولا يتحرك شيء
+      Object.keys(next).forEach((k) => delete next[k]);
+      Object.assign(next, keep);
+      const { end: _e, days: _d, ...anchor } = keep[s.key];
+      next[s.key] = { ...anchor, start: row.from, days: row.days };
+      if (row.days === Math.round(Number(byKey.get(s.key)?.duration_days) || 0)) delete next[s.key].days;
+      anchored.push(s.key);
     }
   }
   for (const [k, raw] of Object.entries(edit.days && typeof edit.days === 'object' ? edit.days : {})) {
@@ -68,18 +85,38 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {} })
     }
     setDays(k, n);
   }
-  return { schedule: next, errors, changed: !sameSchedule(schedule, next) };
+  return { schedule: next, errors, anchored, changed: !sameSchedule(schedule, next) };
 }
 const ISO_PAIR = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(e.end || '');
 
 // «اقترح مددًا تملأ مدة الدفعة» (كان «وزّع على مدة الدفعة»): التوزيع النسبي نفسه (distributeSchedule) لكن مددًا لا تواريخ،
-// فتبقى الخطة نسبية ويتبع ما بعد كل مرحلة مدتها. للإلزامية وحدها: الاختيارية وعند الطلب تبقى بمدتها
-export function suggestDays(stages, startsOn, endsOn) {
-  const d = distributeSchedule(stages, startsOn, endsOn);
-  const out = {};
-  for (const s of stages || []) {
-    if (stageRules(s).mode !== 'required' || !d[s.key]) continue;
-    out[s.key] = daysBetween(d[s.key].start, d[s.key].end) + 1;
+// فتبقى الخطة نسبية ويتبع ما بعد كل مرحلة مدتها. يقترح للإلزامية وحدها، والاختيارية وعند الطلب تبقى بمدتها. وcohortPlan
+// يضع كل مجموعة بعد سابقتها، الاختيارية منها أيضًا، فما تأخذه غير الإلزامية من المسار يُطرح من مدة الدفعة قبل التوزيع،
+// ويُتحقق بcohortPlan نفسه أن الرحلة تنتهي يوم نهاية الدفعة. schedule: خطة الدفعة الحالية (مددها وحدها تُقرأ هنا)
+export function suggestDays(stages, startsOn, endsOn, schedule = {}) {
+  const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const required = live.filter((s) => stageRules(s).mode === 'required');
+  const own = planDaysOnly(schedule);
+  const daysFor = (end) => {
+    const d = distributeSchedule(live, startsOn, end);
+    const out = {};
+    for (const s of required) if (d[s.key]) out[s.key] = daysBetween(d[s.key].start, d[s.key].end) + 1;
+    return out;
+  };
+  let out = daysFor(endsOn);
+  if (!required.length || !Object.keys(out).length) return out;
+  let reserve = 0;
+  for (let i = 0; i < 6; i += 1) {
+    const sched = { ...own };
+    for (const [k, n] of Object.entries(out)) sched[k] = { days: n };
+    const p = cohortPlan(live, { starts_on: startsOn, ends_on: endsOn, schedule: sched });
+    const diff = p.end ? daysBetween(endsOn, p.end) : 0;
+    if (!diff) break;
+    const next = reserve + diff;
+    // لا يتسع ما بقي للإلزامية بيوم لكل منها: يبقى أقرب اقتراح، وتنبيه «تنتهي الرحلة بعد نهاية الدفعة» يقول الفرق
+    if (next < 0 || daysBetween(startsOn, endsOn) + 1 - next < required.length) break;
+    reserve = next;
+    out = daysFor(addDays(endsOn, -reserve));
   }
   return out;
 }
@@ -116,9 +153,10 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
   const dayRules = changes.filter((x) => stageRules(stages.find((s) => s.key === x.key)).unlock === 'day').map((x) => x.title);
   const w0 = windowsFor(stages, c0), w1 = windowsFor(stages, c1);
   const live = (milestones || []).filter((m) => m.active !== false);
-  const ctx = (w, sched) => ({ startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: sched || {}, windows: w });
+  // الخطة كما تقرؤها المعالم (planSchedule): المفتوحة بلا تواريخ مثبتة، كما في milestoneStatuses
+  const ctx = (w, cc) => ({ startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: planSchedule(cc), windows: w });
   const moved = live.map((m) => {
-    const a = milestoneDueInfo(m, ctx(w0, before)).due, b = milestoneDueInfo(m, ctx(w1, after)).due;
+    const a = milestoneDueInfo(m, ctx(w0, c0)).due, b = milestoneDueInfo(m, ctx(w1, c1)).due;
     return a === b ? null : { id: m.id, title: m.title_ar, before: a, after: b };
   }).filter(Boolean);
 
@@ -171,7 +209,10 @@ export function impactLines(impact, fmt = (d) => d) {
   if (impact.open) out.push({ key: 'open', kind: 'warn', text: `الدفعة المفتوحة: يمس التعديل ${impact.open.members == null ? 'كل من ليس في دفعة' : `${peopleAr(impact.open.members)} ليسوا في دفعة`}، والمدد نسبية من دخول كل منهم` });
   if (impact.people) {
     const by = impact.people.by_stage;
-    out.push({ key: 'people', kind: 'people', text: by.length ? `يقف الآن في المراحل المعدّلة: ${by.map((x) => `${x.title} ${x.here}`).join('، ')}` : 'لا أحد يقف الآن في المراحل المعدّلة' });
+    // بصيغة التصور (4.2 هـ): «12 مشاركًا في التدريب الآن، و3 في التوجيه». المراحل هنا كل ما تتغير مواعيده، لا ما تغيّرت مدته وحده
+    out.push({ key: 'people', kind: 'people', text: by.length
+      ? `في المراحل التي تتغير مواعيدها: ${by.map((x, i) => (i ? `${x.here} في ${x.title}` : `${peopleAr(x.here)} في ${x.title} الآن`)).join('، و')}`
+      : 'لا أحد الآن في المراحل التي تتغير مواعيدها' });
   } else out.push({ key: 'people', kind: 'note', text: 'لم يُحسب أثره على كل عضو (الدفعة أكبر من أن تُحسب هنا). المعالم والمواعيد تتبع الخطة الجديدة' });
   out.push({ key: 'ms', kind: impact.milestones.length ? 'ms' : 'note', text: impact.milestones.length ? `${msAr(impact.milestones.length)} ${impact.milestones.length === 1 ? 'يتغير موعده' : impact.milestones.length === 2 ? 'يتغير موعدهما' : 'تتغير مواعيدها'}` : 'لا يتغير موعد أي معلم' });
   if (impact.late) {
@@ -192,17 +233,29 @@ export const impactSummary = (impact) => (impact ? {
   people: impact.people ? impact.people.total : null,
 } : null);
 
-// يوم آخر حفظ لخطة كل دفعة من صفوف السجل (الأحدث أولًا): حارس بريد «معلم متأخر» يقرؤه (lateMilestoneNotices)
+// أفعال حفظ خطة الدفعة في السجل: حارس بريد «معلم متأخر» يقرؤها (lateMilestoneNotices)
 export const PLAN_ACTIONS = Object.freeze(['cohort.plan', 'cohort.plan-undo']);
-/** @param {any[]} rows @returns {Record<string, string>} */
-export function planDays(rows) {
-  /** @type {Record<string, string>} */
-  const out = {};
-  for (const r of rows || []) {
-    const d = String(r.created_at || '').slice(0, 10);
-    if (r.entity_id && d && (!out[r.entity_id] || d > out[r.entity_id])) out[r.entity_id] = d;
-  }
-  return out;
-}
 // الحارس لدفعة: الأحدث بين يوم البيئة (cutoffFrom) ويوم آخر حفظ لخطتها، فما صار متأخرًا بتعديل الخطة لا يُرسل عنه
 export const planCutoff = (cutoff, planDay) => (planDay && (!cutoff || planDay > cutoff) ? planDay : cutoff);
+/** حارس الخطة لدفعة من صفوف سجلها (cohort.plan وcohort.plan-undo، بعمود after): لكل معلم يوم آخر حفظ حرّك موعده
+ * (after.moved_ids)، وما حفظه سطر بلا moved_ids (قبل تسجيلها) يُعامل كأنه حرّك كل المعالم يومها
+ * @param {any[]} rows @returns {{ moved: Record<string, string>, all: string | null }} */
+export function planGuard(rows) {
+  /** @type {Record<string, string>} */
+  const moved = {};
+  let all = null;
+  for (const r of rows || []) {
+    const d = String(r.created_at || '').slice(0, 10);
+    if (!d) continue;
+    const ids = r.after && Array.isArray(r.after.moved_ids) ? r.after.moved_ids : null;
+    if (!ids) { if (!all || d > all) all = d; continue; }
+    for (const id of ids) { const k = String(id); if (!moved[k] || d > moved[k]) moved[k] = d; }
+  }
+  return { moved, all };
+}
+// يوم الحارس لمعلم واحد: الأحدث بين يوم البيئة ويوم آخر حفظ حرّك موعده. ما لم يحركه حفظ يبقى على يوم البيئة،
+// فمعلم متأخر داخل المهلة في مرحلة لم يمسها التعديل يُرسل عنه كالمعتاد
+export const planCutoffFor = (cutoff, guard, id) => {
+  const a = guard?.moved?.[String(id)] || null, b = guard?.all || null;
+  return planCutoff(cutoff, a && b ? (a > b ? a : b) : a || b);
+};

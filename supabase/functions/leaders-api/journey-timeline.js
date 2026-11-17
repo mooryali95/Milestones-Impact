@@ -184,7 +184,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     const together = ss.some((x) => x.together);
     const days = to - from;
     return { key, title: PHASE_AR[key], days, label: `${days ? approxAr(days) : 'آنية'}${together ? `، مراحل ${TIMELINE_AR.together}` : ''}`,
-      from: dated ? addDays(start, from) : null, to: dated ? addDays(start, to) : null, at, width, together };
+      // to على المسار نهاية مفتوحة (اليوم التالي لآخر يوم)، فتاريخ نهاية المحور آخر أيامه شاملًا (القرار 18)، والمحور الآني نقطة
+      from: dated ? addDays(start, from) : null, to: dated ? addDays(start, Math.max(from, to - 1)) : null, at, width, together };
   }).filter(Boolean);
 
   // الأنشطة: المتطلبات الظاهرة في مراحل الرحلة، بترتيب المرحلة ثم ترتيبها

@@ -6,7 +6,7 @@
 //   save:    يكتب cohorts.schedule بعد الحراس، وصفًا في leaders.audit_log (cohort.plan) بقيمته قبل وبعد وملخص الأثر
 //   undo:    يعيد قيمة before من آخر حفظ لهذه الدفعة إن لم تتغير الخطة بعده، بالحراس نفسها (cohort.plan-undo)
 //   history: آخر الحفظات والتراجعات لهذه الدفعة
-// الجسم: { cohort_id, op, days: { مفتاح: عدد أو null }, follow: true، base_updated_at }. الحفظ والتراجع للكاتب وحده
+// الجسم: { cohort_id, op, days: { مفتاح: عدد أو null }, follow: true، base_updated_at (مطلوب للحفظ والتراجع) }. الحفظ والتراجع للكاتب وحده
 // (index.ts يلفهما بـA.writer كما admin.cohort-save)، والمعاينة والسجل لكل مدير. لا ترحيل: الخطة في cohorts.schedule،
 // والسجل في leaders.audit_log القائم.
 import { audit, db, Fail, must } from './core.ts';
@@ -108,8 +108,21 @@ async function write(a: Admin, c: any, base: any, after: any, action: 'cohort.pl
   const impact = await impactOf(c, base, after);
   const before = JSON.parse(JSON.stringify(c.schedule || {}));
   const updated_at = new Date().toISOString();
-  const saved = must(await db.from('cohorts').update({ schedule: after, updated_at }).eq('id', c.id).select('*').single()) as any;
-  await audit('admin', a.email, action, 'cohorts', c.id, { schedule: before }, { schedule: after, summary: impactSummary(impact), ...extra });
+  const prevAt = c.updated_at ?? null;
+  // الكتابة مشروطة بأن الصف لم يتغير منذ قُرئ (والأثر قد يأخذ ثواني): كاتبان معًا لا يكتب أحدهما فوق الآخر بصمت
+  const q = db.from('cohorts').update({ schedule: after, updated_at }).eq('id', c.id);
+  const saved = must(await (prevAt ? q.eq('updated_at', prevAt) : q.is('updated_at', null)).select('*').maybeSingle()) as any;
+  if (!saved) throw new Fail('تغيّرت الدفعة أثناء الحفظ. أعد فتح التبويب لترى الخطة الحالية ثم عدّل.', 409, 'stale');
+  // المعالم التي حرّك الحفظ موعدها: حارس البريد يحجب ما صار متأخرًا منها وحدها (lateMilestoneNotices)، لا كل معالم الدفعة
+  const moved_ids = impact.milestones.map((m: any) => String(m.id));
+  try {
+    await audit('admin', a.email, action, 'cohorts', c.id, { schedule: before }, { schedule: after, summary: impactSummary(impact), moved_ids, ...extra });
+  } catch (err) {
+    // بلا سطر في السجل لا تراجع ولا حارس بريد للحفظ: تُعاد الخطة كما كانت، ويفشل الطلب
+    const { error } = await db.from('cohorts').update({ schedule: before, updated_at: prevAt }).eq('id', c.id).eq('updated_at', saved.updated_at || updated_at);
+    if (error) console.error('cohort-plan: restore after audit failure', error.message);
+    throw err;
+  }
   return { success: true, saved: true, cohort: { id: saved.id, schedule: saved.schedule || after, updated_at: saved.updated_at || updated_at },
     plan: planOut(base, c, after), impact };
 }
@@ -131,6 +144,10 @@ export async function cohortPlanAction(a: Admin, b: Body) {
   }
   // الحفظ والتراجع: الدفعة المغلقة والمفتوحة غير المثبتة للقراءة (planLock)، وحفظ من خطة أقدم من الحالية يُرفض
   if (lock) throw new Fail(lock.msg, 409, lock.code);
+  // ما بُنيت عليه المسودة مطلوب في الحفظ والتراجع (اللوحة ترسله دائمًا)، فلا يمر حفظ بلا فحص النسخة
+  if (c.updated_at && (b.base_updated_at === undefined || b.base_updated_at === null || b.base_updated_at === '')) {
+    throw new Fail('أعد فتح التبويب ثم احفظ: لم يُعرف على أي نسخة من الخطة بُني التعديل.', 400, 'base_required');
+  }
   if (b.base_updated_at && c.updated_at && String(b.base_updated_at) !== String(c.updated_at)) {
     throw new Fail('تغيّرت الدفعة بعد أن فتحت التبويب. أعد فتحه لترى الخطة الحالية ثم عدّل.', 409, 'stale');
   }

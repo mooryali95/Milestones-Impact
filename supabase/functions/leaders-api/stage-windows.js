@@ -52,6 +52,12 @@ export function planDaysOnly(schedule) {
   }
   return out;
 }
+// الخطة كما تُقرأ فعلًا لدفعة: المفتوحة (is_default) بمددها وحدها بلا تواريخ مثبتة (القرار 21)، وغيرها كما هي.
+// يقرؤها cohortPlan ومواعيد المعالم (milestoneStatuses وplanImpact وتبويب «الرحلة») فلا يؤرَّخ معلم بتثبيت تتجاهله الخطة
+export function planSchedule(cohort) {
+  const c = cohort || {};
+  return c.is_default ? planDaysOnly(c.schedule) : (c.schedule && typeof c.schedule === 'object' ? c.schedule : {});
+}
 
 // مجموعات «تبدأ مع» بترتيب أول ظهورها، كما يجمعها distributeSchedule: المرحلة تنضم إلى مجموعة مرجعها إن كان قبلها،
 // والسلسلة (C مع B وB مع A) تُحل إلى A. المرجع اللاحق أو الغائب يجعلها مجموعة وحدها («بعد السابقة»)
@@ -74,7 +80,7 @@ export function withGroups(stages) {
  * @param {any} [cohort] { starts_on, ends_on, schedule, is_default } */
 export function cohortPlan(stages, cohort = {}) {
   const c = cohort || {};
-  const sched = c.is_default ? planDaysOnly(c.schedule) : (c.schedule && typeof c.schedule === 'object' ? c.schedule : {});
+  const sched = planSchedule(c);
   let cursor = c.is_default ? null : (ISO.test(String(c.starts_on || '').slice(0, 10)) ? String(c.starts_on).slice(0, 10) : null);
   const byKey = {};
   const order = [];

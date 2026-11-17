@@ -99,7 +99,7 @@ describe('الممرات والبطاقات', () => {
     const cards = journeyLanes(m, { def, cohort: c, milestones }).phases.flatMap((p) => p.groups.flatMap((g) => g.stages));
     expect(cards.length).toBe(6);
     expect(new Set(cards.map((x) => x.window_source))).toEqual(new Set(['schedule']));
-    expect(cards[0].window_source_ar).toBe('من جدول الدفعة المكتوب');
+    expect(cards[0].window_source_ar).toBe('مثبتة بتاريخ (لا تتبع المدد)');
   });
   it('«تبدأ مع» عبر محورين: القائد قائد الخانة كلها، والجمل لا تناقض البطاقات', () => {
     const st = [

@@ -75,7 +75,7 @@ function StageCard({ s, rows = null, plan = null }) {
       </header>
       {plan && row && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
       {s.window_ar ? (
-        <p className="cj-window" aria-live={plan ? 'polite' : undefined}><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
+        <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
       ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
       {(s.with_ar || s.rule_ar) && (
         <ul className="cj-rules">
@@ -258,7 +258,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     setHistory(r.success ? { rows: historyRows(r.history), can_undo: !!r.can_undo } : { error: r.message || 'تعذّرت قراءة سجل الخطة' });
   };
   const suggest = () => {
-    const sug = suggestDays((d.def.stages || []).filter((x) => x.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), cohort.starts_on, cohort.ends_on);
+    const sug = suggestDays((d.def.stages || []).filter((x) => x.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)), cohort.starts_on, cohort.ends_on, draft?.schedule || cohort.schedule);
     setEdit((e) => ({ ...(e || {}), days: { ...(e?.days || {}), ...sug } }));
   };
 
@@ -274,7 +274,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
           <p className="cj-eyebrow">رحلة الدفعة · {version ? `النسخة ${version.number} المثبتة (${version.label})` : 'البرنامج كما هو الآن'}{editing ? ' · معاينة قبل الحفظ' : ''}</p>
           <h3 id="cj-title" className="sr-only">رحلة الدفعة</h3>
           {head.kind === 'dated' ? (
-            <p className="cj-title" aria-live={editing ? 'polite' : undefined}>تبدأ الدفعة <b>{head.start_ar}</b>، وتنتهي الرحلة <b>{head.end_ar}</b> <span className="cj-total">({head.total})</span></p>
+            <p className="cj-title">تبدأ الدفعة <b>{head.start_ar}</b>، وتنتهي الرحلة <b>{head.end_ar}</b> <span className="cj-total">({head.total})</span></p>
           ) : <p className="cj-title">{head.text}</p>}
           {head.kind === 'undated' && canWrite && on.edit && <button type="button" className="cj-hero-btn" onClick={on.edit}>حدد تاريخ البداية</button>}
         </div>
@@ -318,6 +318,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
           <p className="cj-pinned" role="note">
             {countAr(draft.pinned, 'مرحلة واحدة مثبتة', 'مرحلتان مثبتتان', 'مراحل مثبتة', 'مرحلة مثبتة')} بتاريخ من الجدول السابق، فلا تتبع المدد ولا تتحرك بتغيير ما قبلها.
             {' '}<button type="button" className="btn-sm ghost" disabled={!!edit?.follow} onClick={() => setEdit((e) => ({ ...(e || { days: {} }), follow: true }))}>حرّر التواريخ لتتبع المدد</button>
+            {edit?.follow && draft.anchored.length > 0 && <small className="cj-anchored"> بقيت بداية {draft.anchored.map((k) => `«${stageOf(k)?.title_ar || k}»`).join(' و')} مثبتة، لأن بينها وبين ما قبلها فجوة أو تداخلًا، فلا يتحرك تاريخ بالتحرير.</small>}
           </p>
         )}
         {history && (
@@ -376,7 +377,8 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       {/* شريط الحفظ: يظهر عند وجود تعديل، ويبقى في أسفل الشاشة فلا يضيع بين البطاقات */}
       {editing && (
         <div className="cj-savebar" role="region" aria-label="حفظ الخطة">
-          <span aria-live="polite">{draft.errors.length ? draft.errors[0].msg : draft.edits ? `${editsAr(draft.edits)} غير ${draft.edits === 1 ? 'محفوظ' : draft.edits === 2 ? 'محفوظين' : 'محفوظة'}` : 'لا تعديل بعد'}</span>
+          {/* منطقة الإعلان الوحيدة في وضع التحرير: سطر واحد لكل تغيير بدل إعلان لكل بطاقة تزاح تواريخها */}
+          <span aria-live="polite">{draft.errors.length ? draft.errors[0].msg : draft.edits ? `${editsAr(draft.edits)} غير ${draft.edits === 1 ? 'محفوظ' : draft.edits === 2 ? 'محفوظين' : 'محفوظة'}${head.kind === 'dated' ? `، وتنتهي الرحلة ${head.end_ar}` : ''}` : 'لا تعديل بعد'}</span>
           <div className="la-row">
             <button type="button" className="btn-sm ghost" onClick={() => setEdit(null)}>ألغِ</button>
             <button type="button" className="btn-sm primary" disabled={!draft.edits || draft.errors.length > 0} onClick={openReview}>راجع واحفظ</button>

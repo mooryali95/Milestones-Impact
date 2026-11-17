@@ -308,7 +308,7 @@ for (const width of [1440, 390]) {
     await expect(dlg).toContainText('التدريب: أسبوعان إلى 3 أسابيع');
     await expect(dlg).toContainText('التوجيه على رأس العمل: 4 أسابيع إلى 5 أسابيع');
     await expect(dlg).toContainText('تتأخر نهاية الرحلة سبعة أيام');
-    await expect(dlg).toContainText('يقف الآن في المراحل المعدّلة: التدريب 7');
+    await expect(dlg).toContainText('في المراحل التي تتغير مواعيدها: 7 مشاركين في التدريب الآن');
     await expect(dlg).toContainText('البريد: لن يُرسل شيء الآن');
     expect(calls.filter((c) => c.action === 'admin.cohort-plan').map((c) => [c.op, c.days])).toEqual([['preview', { training: 21, ojt: 35 }]]);
     expect(await noOverflow(page)).toBe(true);
@@ -381,4 +381,39 @@ test('الدفعة الموزعة سابقًا: «حرّر التواريخ لت
   await expect(dlg).toBeHidden();
   expect(calls.plan.schedule).toEqual({ training: { days: 17 } });
   expect(calls.find((c) => c.op === 'save')).toMatchObject({ follow: true });
+});
+
+test('تاريخ البداية من التبويب نفسه: بعد حفظه في ملف الدفعة يُقرأ الصف الأحدث، فيصير الرأس مؤرخًا بلا إعادة فتح', async ({ page }) => {
+  const c2 = { id: 'c2', name: 'دفعة بلا تاريخ', program_id: 'pa', program_version_id: 'v1', status: 'running', starts_on: null, ends_on: '2027-02-15', delivery: {}, members: 5, schedule: {}, updated_at: '2026-11-01T00:00:00Z' };
+  const calls = await setup(page, 1440);
+  // الصف على «الخادم»: الحفظ من محرر الدفعة يغيره، وقائمة الدفعات وتعريف الدفعة يقرآنه
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'admin.programs') return route.fulfill({ json: { success: true, programs, cohorts: [...cohorts, c2], organizations: [] } });
+    if (b.action === 'admin.cohort-save' && b.id === 'c2') {
+      calls.push(b);
+      Object.assign(c2, { starts_on: b.starts_on || c2.starts_on, updated_at: '2026-11-16T09:01:00Z' });
+      return route.fulfill({ json: { success: true, cohort: { ...c2 } } });
+    }
+    if (b.action === 'admin.cohort-definition' && b.cohort_id === 'c2') {
+      calls.push(b);
+      return route.fulfill({ json: { ...definition, cohort_plan: { schedule: {}, starts_on: c2.starts_on, ends_on: c2.ends_on, is_default: false, status: 'running', program_version_id: 'v1', updated_at: c2.updated_at } } });
+    }
+    return route.fallback();
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
+  await openCohort(page, 'دفعة بلا تاريخ');
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await expect(panel.locator('.cj-hero')).toContainText('لم يُحدد تاريخ بداية الدفعة بعد');
+  await panel.getByRole('button', { name: 'حدد تاريخ البداية' }).click();
+  const ed = page.getByRole('dialog').filter({ has: page.getByLabel('تبدأ') });
+  await ed.getByLabel('تبدأ').fill('2026-11-02');
+  await ed.getByRole('button', { name: 'حفظ', exact: true }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c2', starts_on: '2026-11-02' });
+  await expect(ed).toBeHidden();
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  await expect(page.getByRole('tabpanel', { name: 'الرحلة' }).locator('.cj-hero')).toContainText('تبدأ الدفعة');
 });

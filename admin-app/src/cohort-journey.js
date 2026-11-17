@@ -8,7 +8,7 @@ import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-ti
 import { daysAr, renderJourneyText, stageRules } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo } from '../../supabase/functions/leaders-api/milestones.js';
-import { cohortPlan } from '../../supabase/functions/leaders-api/stage-windows.js';
+import { cohortPlan, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
 import {
   impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, sameSchedule, suggestDays, unitFor,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
@@ -23,7 +23,7 @@ export const DUE_SOURCE_AR = Object.freeze({
   schedule: 'من جدول الدفعة', window: 'محسوب من مدد المراحل', cohort: 'من تاريخ الدفعة', date: 'تاريخ محدد في البرنامج',
 });
 // من أين جاءت نافذة المرحلة
-export const WINDOW_SOURCE_AR = Object.freeze({ schedule: 'من جدول الدفعة المكتوب', plan: 'محسوبة من بداية الدفعة ومدد المراحل' });
+export const WINDOW_SOURCE_AR = Object.freeze({ schedule: 'مثبتة بتاريخ (لا تتبع المدد)', plan: 'محسوبة من بداية الدفعة ومدد المراحل' });
 
 const stagesAr = (n) => countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة');
 const milestonesAr = (n) => countAr(n, 'معلم واحد', 'معلمان', 'معالم', 'معلمًا');
@@ -82,11 +82,9 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
   const raw = new Map((def?.stages || []).map((s) => [s.key, s]));
   const reqs = def?.requirements || [];
   const titleOf = (k) => model.stages.find((s) => s.key === k)?.title || renderJourneyText(raw.get(k)?.title_ar || k, { reqs });
-  // مصدر النافذة من الجدول نفسه الذي قرأه الخط (cohortTimeline): الجدول المكتوب كاملًا يؤرخ الدفعة ولو بلا تاريخ بداية
-  const sched = cohort?.is_default ? {} : cohort?.schedule || {};
   // النوافذ التي رسمها الخط بعينها، فلا تُحسب مرة ثانية. المفتوحة لا نوافذ لها (milestoneStatuses)
   const windows = model.dated && cohortDated(cohort) ? Object.fromEntries(model.stages.filter((s) => s.window).map((s) => [s.key, s.window])) : null;
-  const ctx = { startsOn: cohort?.starts_on || null, endsOn: cohort?.ends_on || null, schedule: cohort?.schedule || {}, windows };
+  const ctx = { startsOn: cohort?.starts_on || null, endsOn: cohort?.ends_on || null, schedule: planSchedule(cohort), windows };
   const mapStage = new Map((map?.stages || []).map((s) => [s.key, s]));
   const mapMs = new Map((map?.milestones || []).map((m) => [m.id, m]));
   const live = (milestones || []).filter((m) => m.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
@@ -111,8 +109,9 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
     return {
       key: s.key, title: s.title, phase: s.phase, status: s.status, status_ar: s.status_ar, optional: s.optional,
       label: s.label, window_ar: s.window_ar, today_ar: s.today_ar, lead,
-      window_source: s.window ? (sched[s.key]?.start ? 'schedule' : 'plan') : null,
-      window_source_ar: s.window ? WINDOW_SOURCE_AR[sched[s.key]?.start ? 'schedule' : 'plan'] : '',
+      // مصدر النافذة من الخطة نفسها (cohortPlan عبر الخط): المثبت بتاريخ، ومنه النهاية وحدها، وإلا المحسوبة
+      window_source: s.window ? (s.days_source === 'pinned' ? 'schedule' : 'plan') : null,
+      window_source_ar: s.window ? WINDOW_SOURCE_AR[s.days_source === 'pinned' ? 'schedule' : 'plan'] : '',
       with_ar: withAr, rule_ar: ruleAr(raw.get(s.key) || {}, titleOf),
       acts: { shown, total: rs.length, text: rs.length ? (shown === rs.length ? actsAr(rs.length) : `${actsAr(rs.length)}، الظاهر منها ${shown}`) : 'لا أنشطة بعد' },
       undated: !!s.undated,
@@ -178,7 +177,13 @@ export function journeyKpis(model, lanes, map = null, { msError = false } = {}) 
 // لا حساب تاريخ هنا: الخطة الجديدة من planEdit، وتواريخها من cohortPlan، والأثر من admin.cohort-plan (planImpact).
 
 // الدفعة كما تُحسب خطتها: صفها من قائمة الدفعات وفوقه خطتها الحالية كما قرأها التبويب أو حفظها (cohort_plan)
-export const planCohort = (c, cp) => ({ ...(c || {}), ...(cp || {}) });
+// الخطة المقروءة لا تغلب صفًا أحدث منها: تعديل الدفعة من ملفها (تاريخ البداية أو الحالة) يحدّث الصف، فيُقرأ هو
+export const planCohort = (c, cp) => {
+  const row = c || {};
+  if (!cp) return { ...row };
+  if (row.updated_at && cp.updated_at && String(row.updated_at) > String(cp.updated_at)) return { ...row };
+  return { ...row, ...cp };
+};
 const liveStages = (def) => [...(def?.stages || [])].filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
 
 /** الخطة في المسودة: الجديدة بعد تعديل المدير، وصف لكل مرحلة (المدة ومصدرها ومدة البرنامج والتثبيت)، وعدد التعديلات
@@ -200,7 +205,7 @@ export function planDraft({ def, cohort, edit = null }) {
   }
   const edits = stages.filter((s) => rows[s.key]?.edited).length;
   return {
-    schedule: r.schedule, errors: r.errors, rows, edits, issues: plan.issues,
+    schedule: r.schedule, errors: r.errors, anchored: r.anchored || [], rows, edits, issues: plan.issues,
     pinned: stages.filter((s) => rows[s.key]?.pinned).length,
     changed: plan.stages.filter((x) => x.source === 'cohort').length,
     cohort: { ...cohort, schedule: r.schedule },

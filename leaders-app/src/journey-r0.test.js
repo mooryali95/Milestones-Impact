@@ -136,9 +136,8 @@ describe('R0: حارس بريد المعالم التي صارت مؤرخة (ا�
     expect(m).toMatchObject({ status: 'late', due_source: 'window' });
     expect(lateNoticeAllowed(m)).toBe(false);
     const admin = read('supabase/functions/leaders-api/admin.ts');
-    // ومعه يوم آخر حفظ لخطة الدفعة (R2a، planCutoff): ما صار متأخرًا بتقصير مدة لا يُرسل عنه
-    expect(admin).toContain('.filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS, since))');
-    expect(admin).toContain("const since = planCutoff(cutoff, planDay[j?.def?.cohort?.id || '']);");
+    // ومعه يوم آخر حفظ حرّك موعد المعلم (R2a، planCutoffFor): ما صار متأخرًا بتقصير مدة لا يُرسل عنه
+    expect(admin).toContain('.filter((x: any) => lateNoticeAllowed(x, MILESTONE_GRACE_DAYS, planCutoffFor(cutoff, guard, x.id)))');
     expect(admin).toContain("const cutoff = cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF'));");
   });
   it('يوم الحارس يتأخر بالبيئة إن تأخر النشر، ولا يتقدم عن R0_DATED_SINCE بخطأ إعداد', () => {

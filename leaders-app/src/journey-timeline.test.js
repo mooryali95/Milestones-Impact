@@ -226,6 +226,9 @@ describe('journeyTimeline: المرحلة عند الطلب الممتدة عل�
     expect(m.ticks.at(-1).at).toBe(100);
     expect(m.ticks.map((t) => t.at)).toEqual([...m.ticks.map((t) => t.at)].sort((a, b) => a - b));
     // المحور بطول مراحله الإلزامية لا الدفعة كلها
+    // نهاية المحور آخر أيامه شاملًا (القرار 18): اليوم السابق لبداية المحور التالي، لا يومها
+    const qi = m.phases.find((p) => p.key === 'qualification'), im = m.phases.find((p) => p.key === 'impact');
+    if (qi.to && im?.from && qi.days) expect(qi.to < im.from).toBe(true);
     expect(m.phases.find((p) => p.key === 'qualification').to < '2026-04-01').toBe(true);
   });
 
