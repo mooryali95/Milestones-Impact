@@ -52,6 +52,28 @@ export function planOffBlock(stage, { stages = [], requirements = [], schedule =
   return null;
 }
 
+/** لماذا لا تعود هذه المرحلة الموقوفة في الخطة schedule (كما ستُحفظ)، أو null: «تبدأ مع» مرجعًا موقوفًا (القرار 22). بلا هذا
+ * الحارس تعود وقاعدتها تُعاد كتابتها «بعد السابقة» بصمت (planRules)، وهي الحال التي يمنعها الحارس عند الإيقاف
+ * @param {any} stage @param {{ stages?: any[], schedule?: any }} o */
+export function planRestartBlock(stage, { stages = [], schedule = {} } = {}) {
+  if (!stage) return null;
+  const r = stageRules(stage);
+  if (r.unlock !== 'with' || !r.with || !planOffKeys(schedule).has(r.with)) return null;
+  const target = (stages || []).find((s) => s.key === r.with);
+  const name = stage.title_ar || stage.key, tname = target?.title_ar || r.with;
+  return { code: 'with_target_off', msg: `«${name}» تبدأ مع «${tname}» وهي موقوفة: أعد «${tname}» معها أو انقلها` };
+}
+
+/** المراحل الموقوفة لهذه الدفعة التي تصير محمية في نسخة أخرى (ترقية النسخة): بند يحسمه النظام أو بوابة قبول. الترقية تُمنع
+ * بها، فلا يسقط من رحلة الأعضاء بند يحسمه النظام بصمت، ويعيدها المدير من تبويب «الرحلة» بأثرها ثم يرقّي
+ * @param {{ stages?: any[], requirements?: any[], schedule?: any }} o @returns {string} نص المنع أو '' */
+export function planUpgradeBlock({ stages = [], requirements = [], schedule = {} } = {}) {
+  const off = planOffKeys(schedule);
+  const msgs = (stages || []).filter((s) => s.active !== false && off.has(s.key)).map((s) => planOffBlock(s, { stages, requirements, schedule }))
+    .filter((b) => b && b.code === 'protected').map((b) => b.msg);
+  return msgs.length ? `${msgs.join('، و')}. وهي موقوفة لهذه الدفعة: أعدها من تبويب «الرحلة» ثم رقِّ النسخة` : '';
+}
+
 /** الخطة بعد تعديل المدير، وأسباب الرفض إن وُجدت. لا يمس ما لا يعرفه (with وoffset)
  * @param {{ stages: any[], schedule?: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, any> }, cohort?: any, requirements?: any[] }} o
  *  stages: مراحل تعريف الدفعة الظاهرة بمدد النسخة. days: { مفتاح: عدد أيام، أو null لـ«ارجع لمدة البرنامج» }.
@@ -130,6 +152,12 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
     const block = planOffBlock(byKey.get(k), { stages, requirements, schedule: next });
     if (block) errors.push({ stage: k, code: block.code, msg: block.msg });
   }
+  // الإعادة: مرحلة «تبدأ مع» مرجعًا يبقى موقوفًا لا تعود وحدها (القرار 22)، كما لا يُوقف مرجع يسير معه غيره
+  for (const [k, raw] of Object.entries(offEdit)) {
+    if (raw !== false || !byKey.has(k) || !planOff(schedule?.[k])) continue;
+    const block = planRestartBlock(byKey.get(k), { stages, schedule: next });
+    if (block) errors.push({ stage: k, code: block.code, msg: block.msg });
+  }
   return { schedule: next, errors, anchored, changed: !sameSchedule(schedule, next) };
 }
 const ISO_PAIR = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(e.end || '');
@@ -183,7 +211,7 @@ const windowsFor = (stages, cohort) => (cohort?.starts_on && !cohort?.is_default
 /** أثر تعديل الخطة قبل الحفظ (نافذة الأثر، البند 4.2 هـ): ما تغيّر سطرًا سطرًا، ومن يقف في كل مرحلة تغيّرت، والمعالم
  * التي يتغير موعدها أو تنقلب متأخرة أو تُستبعد بالإيقاف، وبريد «معلم متأخر» الذي يمنعه الحارس.
  * people: [{ id, at, stagesDone, records, open, after }] من رحلة كل عضو كما يراها (journeyFor)، أو null إن لم تُحسب.
- *   open: مراحل ليست مقفلة عليه الآن، وafter: حالة كل مرحلة عليه بالخطة الجديدة (تُحسب حين يُعاد تشغيل مرحلة فقط)
+ *   at: موضعه الآن، وstagesDone: ما أكمل (منهما يُعرف من تجاوز مرحلة تعود)، وopen: مراحل ليست مقفلة عليه الآن، وafter: حالة كل مرحلة عليه بالخطة الجديدة (تُحسب حين يُعاد تشغيل مرحلة فقط)
  * booked: { مفتاح مرحلة: عدد جلسات التوجيه المحجوزة القادمة فيها } لما يُوقف (تحذير لا منع، البند 4.6)
  * @param {{ stages: any[], before?: any, after?: any, cohort?: any, milestones?: any[], people?: any[]|null, today?: any, cutoff?: string, booked?: Record<string, number> }} o */
 export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, milestones = [], people = null, today = null, cutoff = undefined, booked = {} }) {
@@ -256,8 +284,12 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
     // إعادة تشغيل مرحلة تجاوزها مشاركون وهي موقوفة (القرار 12): من فُتحت له مرحلة بعدها، وتصير هي نشطة عليه بالخطة الجديدة
     const order = new Map([...stages].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((s, i) => [s.key, i]));
     reenabled = started.map((k) => {
-      const ids = people.filter((p) => Array.isArray(p.open) && p.after && p.after[k] === 'active'
-        && p.open.some((x) => (order.get(x) ?? -1) > (order.get(k) ?? 1e9))).map((p) => p.id);
+      // «تجاوزها» بالتقدم لا بما ليس مقفلًا: موضعه الآن بعدها، أو أكمل مرحلة بعدها. فالقادم الجديد في الملف لا يُعد وإن
+      // فُتحت مرحلة لاحقة بلا شرط تقدم (دائمًا أو يوم ثابت)، فلا يُعفى من مرحلة لم يصلها
+      const ko = order.get(k) ?? 1e9;
+      const later = (x) => (order.get(x) ?? -1) > ko;
+      const ids = people.filter((p) => p.after && p.after[k] === 'active'
+        && ((p.at && later(p.at)) || [...(p.stagesDone || [])].some(later))).map((p) => p.id);
       return { key: k, title: titleOf.get(k), passed: ids.length, ids };
     });
     // «أبلغ المشاركين» (القرار 13): من في الرحلة ولم ينهها
@@ -297,7 +329,10 @@ export function impactLines(impact, fmt = (d) => d, { notify = false } = {}) {
   if (impact.day_rules.length) out.push({ key: 'day', kind: 'note', text: `${impact.day_rules.map((t) => `«${t}»`).join(' و')} تُفتح بيوم ثابت من بداية الدفعة (قاعدة البرنامج)، فلا يتحرك فتحها مع المدد` });
   // القرار 22: ما كان ينتظر الموقوفة بشرط «بعد مراحل» يُفتح في هذه الدفعة بلا انتظارها
   for (const r of impact.rewrites || []) {
-    out.push({ key: `rw-${r.key}`, kind: 'note', text: `«${r.title}» كانت تُفتح بعد اكتمال ${r.dropped_titles.map((t) => `«${t}»`).join(' و')}، فصار فتحها في هذه الدفعة لا ينتظرها${r.to === 'previous' ? ' (تُفتح بعد ما قبلها)' : ''}` });
+    const names = r.dropped_titles.map((t) => `«${t}»`).join(' و');
+    out.push({ key: `rw-${r.key}`, kind: 'note', text: r.rule === 'with'
+      ? `«${r.title}» كانت تبدأ مع ${names}، فصارت في هذه الدفعة تُفتح بعد ما قبلها`
+      : `«${r.title}» كانت تُفتح بعد اكتمال ${names}، فصار فتحها في هذه الدفعة لا ينتظرها${r.to === 'previous' ? ' (تُفتح بعد ما قبلها)' : ''}` });
   }
   if (impact.open) out.push({ key: 'open', kind: 'warn', text: `الدفعة المفتوحة: يمس التعديل ${impact.open.members == null ? 'كل من ليس في دفعة' : `${peopleAr(impact.open.members)} ليسوا في دفعة`}، والمدد نسبية من دخول كل منهم` });
   // من يقف الآن في مرحلة تُوقف (البند 4.5، القاعدة 2)

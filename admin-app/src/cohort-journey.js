@@ -11,7 +11,7 @@ import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from
 import { cohortPlan, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { PHASE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import {
-  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, sameSchedule, suggestDays, unitFor,
+  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, planRestartBlock, sameSchedule, suggestDays, unitFor,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
 
@@ -232,8 +232,11 @@ export function planDraft({ def, cohort, edit = null }) {
   const stageBy = new Map(stages.map((s) => [s.key, s]));
   for (const x of plan.stages) {
     const before = was.byKey[x.key];
-    // سبب منع الإيقاف للمرحلة العاملة على الخطة كما هي في المسودة، فما يُوقف معها مرجعه يُفتح زره
-    const block = x.off ? null : planOffBlock(stageBy.get(x.key), { stages, requirements, schedule: { ...r.schedule, [x.key]: { ...(r.schedule[x.key] || {}), off: true } } });
+    // سبب منع الإيقاف للمرحلة العاملة على الخطة كما هي في المسودة، فما يُوقف معها مرجعه يُفتح زره. وللموقوفة سبب منع
+    // إعادتها: «تبدأ مع» مرجعًا يبقى موقوفًا (القرار 22)، فيُفتح زرها حين يُعاد مرجعها في المسودة
+    const block = x.off
+      ? planRestartBlock(stageBy.get(x.key), { stages, schedule: r.schedule })
+      : planOffBlock(stageBy.get(x.key), { stages, requirements, schedule: { ...r.schedule, [x.key]: { ...(r.schedule[x.key] || {}), off: true } } });
     rows[x.key] = {
       ...x, pinned: x.source === 'pinned', off: !!x.off, block,
       source_ar: x.off ? 'موقوفة لهذه الدفعة' : x.source === 'cohort' ? `معدّلة: البرنامج ${planDurationAr(x.program_days)}` : PLAN_SOURCE_AR[x.source],

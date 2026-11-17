@@ -19,8 +19,8 @@ import { cleanScheduleReport, cutoffFrom } from './milestones.js';
 import { cohortMemberIds, defOf } from './programs.ts';
 import { journeyFor } from './participant.ts';
 import { positionOf } from './journey-map.js';
-import { cohortPlan } from './stage-windows.js';
-import { impactSummary, PLAN_ACTIONS, planEdit, planImpact, planLock, planNotice, sameSchedule } from './cohort-plan.js';
+import { cohortPlan, planOffKeys } from './stage-windows.js';
+import { impactSummary, PLAN_ACTIONS, planEdit, planImpact, planLock, planNotice, planRestartBlock, sameSchedule } from './cohort-plan.js';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -85,8 +85,15 @@ async function peopleOf(c: any, afterSchedule: any = null) {
 // الخطة الجديدة نظيفة بمفاتيح التعريف (cleanScheduleReport بالصيغة الموسعة)، أو رفض بالسبب
 function nextSchedule(c: any, base: any, b: Body, target?: any) {
   if (target !== undefined) {
-    try { return cleanScheduleReport(target, base.keys, base.titles).schedule; }
+    let out: any;
+    try { out = cleanScheduleReport(target, base.keys, base.titles).schedule; }
     catch (err) { throw new Fail(`لا يُعاد الحفظ السابق: ${(err as Error).message}`, 409, 'undo_invalid'); }
+    // التراجع لا يمر بplanEdit، فيُفحص فيه حارس الإعادة نفسه: مرحلة تعود وهي «تبدأ مع» مرجع يبقى موقوفًا (القرار 22)
+    const was = planOffKeys(c.schedule || {}), now = planOffKeys(out);
+    const blocks = base.stages.filter((s: any) => was.has(s.key) && !now.has(s.key))
+      .map((s: any) => planRestartBlock(s, { stages: base.stages, schedule: out })).filter(Boolean);
+    if (blocks.length) throw new Fail(`لا يُعاد الحفظ السابق: ${blocks.map((x: any) => x.msg).join('، ')}`, 409, 'undo_invalid');
+    return out;
   }
   // المدة (R2a) والإيقاف (R2b) و«حرّر التواريخ لتتبع المدد». التوازي والتاريخ المثبت للدفعة في مراحل لاحقة، فلا يُقبلان بصمت
   for (const k of ['with', 'offset', 'start', 'end', 'schedule']) {
@@ -132,18 +139,24 @@ async function impactOf(c: any, base: any, after: any) {
 }
 
 // إعادة التشغيل بعد التجاوز (القرار 12): الافتراضي «اعفِ من تجاوزها»، فيُكتب skip في participant_stage_overrides لمن تجاوزها
-// وهي موقوفة ولا تدخل له فيها، ويُحفظ في السجل ليحذفه التراجع. و«أعدها عليهم» لا يكتب شيئًا
-async function exemptPassed(a: Admin, c: any, impact: any, mode: string) {
-  if (mode === 'apply') return [];
-  const out: { participant_id: string; stage_key: string }[] = [];
+// وهي موقوفة ولا تدخل له فيها، ويُحفظ في السجل ليحذفه التراجع. و«أعدها عليهم» لا يكتب شيئًا.
+// out: ما كُتب يُضاف إليه دفعة دفعة، فإن تعذّر شيء في منتصفه عرف المستدعي ما كُتب فيحذفه. والقراءة والكتابة على دفعات
+// من 150 كما في peopleOf: قائمة معرفات كاملة في .in تتجاوز طول الرابط
+const SKIP_CHUNK = 150;
+async function exemptPassed(a: Admin, c: any, impact: any, mode: string, out: { participant_id: string; stage_key: string }[]) {
+  if (mode === 'apply') return out;
   for (const r of impact.reenabled || []) {
-    if (!r.ids?.length) continue;
-    const have = must(await db.from('participant_stage_overrides').select('participant_id').eq('program_id', c.program_id).eq('stage_key', r.key).in('participant_id', r.ids)) || [];
-    const taken = new Set((have as any[]).map((x) => x.participant_id));
-    for (const id of r.ids.filter((x: string) => !taken.has(x))) {
-      must(await db.from('participant_stage_overrides').upsert({ participant_id: id, program_id: c.program_id, stage_key: r.key, action: 'skip',
-        note: 'أُعفي من مرحلة تجاوزها وهي موقوفة لدفعته (خطة الدفعة)', by_email: a.email, created_at: new Date().toISOString() }));
-      out.push({ participant_id: id, stage_key: r.key });
+    const all: string[] = r.ids || [];
+    for (let i = 0; i < all.length; i += SKIP_CHUNK) {
+      const ids = all.slice(i, i + SKIP_CHUNK);
+      const have = must(await db.from('participant_stage_overrides').select('participant_id').eq('program_id', c.program_id).eq('stage_key', r.key).in('participant_id', ids)) || [];
+      const taken = new Set((have as any[]).map((x) => x.participant_id));
+      const fresh = ids.filter((x) => !taken.has(x));
+      if (!fresh.length) continue;
+      const at = new Date().toISOString();
+      must(await db.from('participant_stage_overrides').upsert(fresh.map((id) => ({ participant_id: id, program_id: c.program_id, stage_key: r.key, action: 'skip',
+        note: 'أُعفي من مرحلة تجاوزها وهي موقوفة لدفعته (خطة الدفعة)', by_email: a.email, created_at: at }))));
+      out.push(...fresh.map((id) => ({ participant_id: id, stage_key: r.key })));
     }
   }
   return out;
@@ -196,15 +209,17 @@ async function write(a: Admin, c: any, base: any, after: any, action: 'cohort.pl
   // المعالم التي حرّك الحفظ موعدها: حارس البريد يحجب ما صار متأخرًا منها وحدها (lateMilestoneNotices)، لا كل معالم الدفعة.
   // ومعها معالم المراحل المعادة (R2b): تعود بمواعيد قد تكون في الماضي، فلا يُرسل عما صار متأخرًا بالإعادة
   const moved_ids = [...impact.milestones, ...(impact.restored || [])].map((m: any) => String(m.id));
-  const skips = await exemptPassed(a, c, impact, opts.reenable || 'exempt');
+  // الإعفاءات والسجل معًا تحت الحارس نفسه: إن تعذّر أحدهما تُعاد الخطة كما كانت ويُحذف ما كُتب من الإعفاءات
+  const skips: { participant_id: string; stage_key: string }[] = [];
   try {
+    await exemptPassed(a, c, impact, opts.reenable || 'exempt', skips);
     await audit('admin', a.email, action, 'cohorts', c.id, { schedule: before }, { schedule: after, summary: impactSummary(impact), moved_ids,
       ...(skips.length ? { skips } : {}), ...(opts.notify ? { notify: true } : {}), ...extra });
   } catch (err) {
-    // بلا سطر في السجل لا تراجع ولا حارس بريد للحفظ: تُعاد الخطة كما كانت والإعفاءات، ويفشل الطلب
+    // بلا سطر في السجل لا تراجع ولا حارس بريد للحفظ: تُعاد الخطة كما كانت ويُحذف ما كُتب من الإعفاءات، ويفشل الطلب
     const { error } = await db.from('cohorts').update({ schedule: before, updated_at: prevAt }).eq('id', c.id).eq('updated_at', saved.updated_at || updated_at);
-    if (error) console.error('cohort-plan: restore after audit failure', error.message);
-    await unexempt(c, skips).catch((e) => console.error('cohort-plan: unexempt after audit failure', e));
+    if (error) console.error('cohort-plan: restore after write failure', error.message);
+    await unexempt(c, skips).catch((e) => console.error('cohort-plan: unexempt after write failure', e));
     throw err;
   }
   // التراجع يحذف إعفاءات الحفظ الذي يتراجع عنه بعد أن سُجّل

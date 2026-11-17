@@ -363,6 +363,47 @@ Deno.test('R2b «أعدها عليهم» لا يكتب إعفاءً، والتر
   } finally { w.restore(); }
 });
 
+// الدعم «تبدأ مع» التدريب في هذا العالم (نسخة منفصلة فلا يُمس الثابت المشترك)
+const riding = (w: any) => { const d = w.tables.program_versions[0].data; d.stages = d.stages.map((s: any) => (s.key === 'support' ? { ...s, rules: { unlock: 'with', with: 'training' } } : s)); };
+
+Deno.test('R2b إعادة تابع «تبدأ مع» ومرجعه يبقى موقوفًا تُرفض في الحفظ والتراجع (القرار 22)', async () => {
+  const w = world({ schedule: { training: { off: true }, support: { off: true } } });
+  try {
+    riding(w);
+    const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { support: false } }));
+    assertEquals(e.code, 'plan_invalid');
+    assertEquals((e.extra.errors as any[])[0].code, 'with_target_off');
+    assert(e.message.includes('«الدعم» تبدأ مع «التدريب» وهي موقوفة'));
+    assertEquals(w.tables.cohorts[0].schedule, { training: { off: true }, support: { off: true } });
+    // التراجع لا يمر بplanEdit: حفظ سابق قبله الدعم يعمل والتدريب موقوف لا يُعاد
+    w.tables.audit_log.push({ id: 'a-1', action: 'cohort.plan', entity_id: C1, actor: admin.email, created_at: new Date().toISOString(),
+      before: { schedule: { training: { off: true } } }, after: { schedule: { training: { off: true }, support: { off: true } } } });
+    const u = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' }));
+    assertEquals(u.code, 'undo_invalid');
+    assertEquals(w.tables.cohorts[0].schedule, { training: { off: true }, support: { off: true } });
+    // إعادة الاثنين معًا تمر
+    const r: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { support: false, training: false }, reenable: 'apply' });
+    assertEquals([r.saved, w.tables.cohorts[0].schedule], [true, {}]);
+  } finally { w.restore(); }
+});
+
+Deno.test('R2b تعذّر كتابة الإعفاء بعد حفظ الخطة يعيدها كما كانت ويحذف ما كُتب، بلا سطر في السجل', async () => {
+  const w = world({ schedule: { training: { off: true } } });
+  const inner = (db as any).from;
+  try {
+    (db as any).from = (t: string) => {
+      const q = inner(t);
+      if (t !== 'participant_stage_overrides') return q;
+      return new Proxy(q, { get: (o, k: string) => (k === 'upsert' ? () => ({ then: (ok: any) => Promise.resolve({ data: null, error: { message: 'boom' } }).then(ok) }) : o[k]) });
+    };
+    await assertRejects(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', off: { training: false } }));
+    assertEquals(w.tables.cohorts[0].schedule, { training: { off: true } });
+    assertEquals(w.tables.cohorts[0].updated_at, '2026-11-01T00:00:00Z');
+    assertEquals(w.tables.audit_log, []);
+    assertEquals(w.tables.participant_stage_overrides, []);
+  } finally { (db as any).from = inner; w.restore(); }
+});
+
 Deno.test('R2b «أبلغ المشاركين» (القرار 13): مطفأ ما لم يُختر، ومختارًا ملاحظة واحدة لكل من في الرحلة بقالب الملاحظات', async () => {
   const w = world();
   try {

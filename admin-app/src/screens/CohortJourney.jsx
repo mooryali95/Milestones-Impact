@@ -63,11 +63,12 @@ function PlanControl({ s, row, stage, onDays }) {
   );
 }
 
-// مفتاح «أوقف لهذه الدفعة» (R2b): مفتاح تبديل بحالته، والمحمية ومرجع «تبدأ مع» مقفلة وسببها مكتوب تحته ومربوط به
+// مفتاح «أوقف لهذه الدفعة» (R2b): مفتاح تبديل بحالته، والمحمية ومرجع «تبدأ مع» مقفلة وسببها مكتوب تحته ومربوط به،
+// والموقوفة التي تبدأ مع مرجع موقوف لا تُعاد قبله (القرار 22)
 function OffSwitch({ s, row, onOff }) {
   const id = `cj-off-${s.key}`;
   const why = `${id}-why`;
-  const disabled = !row.off && !!row.block;
+  const disabled = !!row.block;
   return (
     <div className={`cj-off${row.off ? ' on' : ''}${disabled ? ' locked' : ''}`}>
       <button type="button" role="switch" id={id} className="cj-switch" aria-checked={row.off} disabled={disabled}
@@ -76,7 +77,7 @@ function OffSwitch({ s, row, onOff }) {
         <span className="cj-switch-label">أوقف لهذه الدفعة</span>
       </button>
       {disabled && <small id={why} className="cj-off-why"><span className="cj-lock" aria-hidden="true" />{row.block.msg}</small>}
-      {row.off && <small className="cj-off-why">موقوفة في هذه المسودة: تختفي من الخط ويُزاح ما بعدها. أعدها بالمفتاح نفسه.</small>}
+      {row.off && !disabled && <small className="cj-off-why">موقوفة في هذه المسودة: تختفي من الخط ويُزاح ما بعدها. أعدها بالمفتاح نفسه.</small>}
     </div>
   );
 }

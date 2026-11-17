@@ -8,7 +8,7 @@ import { cohortMilestones, milestoneOff } from '../../supabase/functions/leaders
 import { journeyMap } from '../../supabase/functions/leaders-api/journey-map.js';
 import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import {
-  impactLines, impactSummary, planEdit, planImpact, planNotice, planOffBlock, suggestDays,
+  impactLines, impactSummary, planEdit, planImpact, planNotice, planOffBlock, planRestartBlock, planUpgradeBlock, suggestDays,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { cohortTimeline, historyRows, journeyKpis, journeyLanes, planBody, planDraft } from '../../admin-app/src/cohort-journey.js';
 
@@ -69,13 +69,13 @@ describe('تعريف الدفعة: الموقوفة تسقط ومعها بنود
     expect(def.requirements.map((r) => r.code)).not.toContain('C-1');
     expect(def.stages.find((s) => s.key === 'project').rules).toEqual({ unlock: 'stages', after: ['training'] });
     expect(def.stages_off).toEqual([{ key: 'consulting', title_ar: 'الاستشارة', phase: 'qualification', sort: 4 }]);
-    expect(def.rule_rewrites).toEqual([{ key: 'project', title: 'المشروع', dropped: ['consulting'], to: 'stages' }]);
+    expect(def.rule_rewrites).toEqual([{ key: 'project', title: 'المشروع', dropped: ['consulting'], to: 'stages', rule: 'stages' }]);
   });
   it('إن فرغ شرط «بعد مراحل» صار «بعد السابقة»، و«تبدأ مع» موقوفة (نسخة رُقّيت بعدها) لا تقفل للأبد', () => {
     const r = planRules([S('a', 1, 1, { rules: { unlock: 'stages', after: ['x'], mode: 'optional' } }), S('b', 2, 1, { rules: { unlock: 'with', with: 'x' } })], new Set(['x']));
     expect(r.stages[0].rules).toEqual({ mode: 'optional' });
     expect(r.stages[1].rules).toEqual({});
-    expect(r.rewrites.map((x) => x.to)).toEqual(['previous', 'previous']);
+    expect(r.rewrites.map((x) => [x.to, x.rule])).toEqual([['previous', 'stages'], ['previous', 'with']]);
     expect(planRules(STAGES, new Set()).stages).toBe(STAGES);
   });
   it('تعريف اللوحة (بلا دفعة) يبقي الموقوفة، فتُعرض باهتة وتعود بنقرة', () => {
@@ -127,6 +127,20 @@ describe('الحراس (البند 4.6): المحمية ومرجع «تبدأ م
     expect(r.errors).toEqual([{ stage: 'training', code: 'with_target', msg: '«التوجيه» تبدأ مع «التدريب»: أوقف أولًا ما يسير معها أو انقله' }]);
     expect(edit({ training: true, ojt: true }).errors).toEqual([]);
     expect(edit({ training: true }, { ojt: { off: true } }).errors).toEqual([]);
+  });
+  it('وإعادة تابع «تبدأ مع» ومرجعه يبقى موقوفًا تُرفض، وتمر إن أُعيد مرجعه معه (القرار 22)', () => {
+    const both = { training: { off: true }, ojt: { off: true } };
+    const r = edit({ ojt: false }, both);
+    expect(r.errors).toEqual([{ stage: 'ojt', code: 'with_target_off', msg: '«التوجيه» تبدأ مع «التدريب» وهي موقوفة: أعد «التدريب» معها أو انقلها' }]);
+    expect(edit({ ojt: false, training: false }, both)).toMatchObject({ errors: [], schedule: {} });
+    expect(edit({ training: false }, both).errors).toEqual([]);
+    expect(planRestartBlock(STAGES[2], { stages: STAGES, schedule: { training: { off: true } } })?.code).toBe('with_target_off');
+    expect(planRestartBlock(STAGES[2], { stages: STAGES, schedule: {} })).toBeNull();
+  });
+  it('ترقية النسخة: موقوفة تصير محمية في النسخة الهدف تمنع الترقية بسببها', () => {
+    const to = [...REQS, { id: 'r9', stage_key: 'consulting', code: 'E-POST', kind: 'auto', title_ar: 'القياس البعدي', required: true, sort: 2, active: true }];
+    expect(planUpgradeBlock({ stages: STAGES, requirements: to, schedule: { consulting: { off: true } } })).toContain('أعدها من تبويب «الرحلة» ثم رقِّ النسخة');
+    expect(planUpgradeBlock({ stages: STAGES, requirements: REQS, schedule: { consulting: { off: true } } })).toBe('');
   });
   it('المنتظَرة بـ«بعد مراحل» تُوقف، والإعادة تحذف off وحده وتبقي المدة', () => {
     const r = edit({ consulting: true }, { consulting: { days: 10 } });
@@ -192,6 +206,9 @@ describe('الأثر قبل الحفظ: الموقوفة ومن ينتقل وا�
     expect(text).toContain('الاستشارة: تُوقف لهذه الدفعة');
     expect(text).toContain('مشارك واحد في «الاستشارة» الآن ينتقل إلى ما بعدها، وما أنجزه فيها محفوظ');
     expect(text).toContain('«المشروع» كانت تُفتح بعد اكتمال «الاستشارة»، فصار فتحها في هذه الدفعة لا ينتظرها');
+    // «تبدأ مع» مرجعًا موقوفًا (نسخة رُقّيت بعده) بكلماتها: لم تكن تنتظر اكتماله
+    const rw = impactLines(planImpact({ stages: STAGES, before: {}, after: { training: { off: true } }, cohort, milestones: [], people: null })).find((x) => x.key === 'rw-ojt');
+    expect(rw.text).toBe('«التوجيه» كانت تبدأ مع «التدريب»، فصارت في هذه الدفعة تُفتح بعد ما قبلها');
     expect(text).toContain('«نهاية الاستشارة»');
     expect(text).toContain('جلستان محجوزتان في «الاستشارة» ستُحجب عن أصحابها');
     expect(text).toContain('البريد: لن يُرسل شيء الآن');
@@ -200,7 +217,9 @@ describe('الأثر قبل الحفظ: الموقوفة ومن ينتقل وا�
     expect(text).not.toMatch(/[\u2013\u2014]/);
   });
   it('الإعادة: معلمها يعود بموعده، ومن تجاوزها وهي موقوفة ويصير فيها نشطًا يُعد (القرار 12)', () => {
-    const back = people.map((p) => ({ ...p, after: { consulting: p.id === 'p1' ? 'active' : p.id === 'p2' ? 'locked' : 'done' }, open: p.id === 'p1' ? ['training', 'project'] : p.open }));
+    // p1 تجاوزها إلى المشروع وهي موقوفة، وp4 جديد في الملف والمشروع مفتوح عليه بلا شرط تقدم: لا يُعد متجاوزًا
+    const back = [...people, { id: 'p4', at: 'profile', stagesDone: [], open: ['profile', 'project'], records: {} }]
+      .map((p) => ({ ...p, at: p.id === 'p1' ? 'project' : p.at, after: { consulting: p.id === 'p1' || p.id === 'p4' ? 'active' : p.id === 'p2' ? 'locked' : 'done' }, open: p.id === 'p1' ? ['training', 'project'] : p.open }));
     const imp = planImpact({ stages: STAGES, before: { consulting: { off: true } }, after: {}, cohort, milestones: ms, people: back, today: '2027-01-20' });
     expect(imp.started).toEqual(['consulting']);
     expect(imp.restored.map((m) => m.id)).toEqual(['m1']);
@@ -254,6 +273,11 @@ describe('العرض: الخريطة والخط وتبويب الرحلة يظه
     expect([d.edits, d.off]).toEqual([1, 1]);
     // إيقاف التابع يفتح مفتاح مرجعه في المسودة نفسها
     expect(planDraft({ def, cohort: { ...cohort, schedule: {} }, edit: { off: { ojt: true } } }).rows.training.block).toBeNull();
+    // الموقوف التابع لا يُعاد ومرجعه موقوف: مفتاحه مقفل بسببه، ويُفتح حين يُعاد مرجعه في المسودة
+    const both = { training: { off: true }, ojt: { off: true } };
+    expect(planDraft({ def, cohort: { ...cohort, schedule: both } }).rows.ojt.block?.code).toBe('with_target_off');
+    expect(planDraft({ def, cohort: { ...cohort, schedule: both } }).rows.training.block).toBeNull();
+    expect(planDraft({ def, cohort: { ...cohort, schedule: both }, edit: { off: { training: false } } }).rows.ojt.block).toBeNull();
     expect(planBody({ id: 'c', updated_at: 'u' }, { days: {}, off: { consulting: true } }, 'save', { notify: true, reenable: 'apply' }))
       .toEqual({ cohort_id: 'c', op: 'save', days: {}, off: { consulting: true }, notify: true, reenable: 'apply', base_updated_at: 'u' });
     expect(planBody({ id: 'c' }, { days: {}, off: {} }, 'preview', { notify: true })).toEqual({ cohort_id: 'c', op: 'preview', days: {} });

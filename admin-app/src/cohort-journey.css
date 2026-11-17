@@ -220,9 +220,10 @@
 .cj-imp-list li.people::before { background: var(--petrol-mid, var(--brand-slate)); }
 .cj-imp-choice { margin: 10px 0 0; padding: 10px 12px 12px; border: 1px solid var(--line-strong); border-radius: 12px; display: grid; gap: 8px; }
 .cj-imp-choice legend { padding: 0 6px; font-size: .9rem; font-weight: 700; color: var(--petrol-mid); }
-.cj-imp-choice label, .cj-imp-notify { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+/* الاختيار بجانب نصه لا فوقه: النافذة داخل .la-form وقاعدتها label (grid، 0,1,1) تغلب صنفًا وحده، كما في .wiz-check */
+.cj-imp-choice label, .cj-imp-notify, .la-form .cj-imp-choice label, .la-form label.cj-imp-notify { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; cursor: pointer; font-weight: 400; }
 .cj-imp-choice label:hover, .cj-imp-notify:hover { background: var(--sand-light); }
-.cj-imp-choice input, .cj-imp-notify input { margin-block-start: 5px; inline-size: 18px; block-size: 18px; accent-color: var(--brand-graphite); flex: none; }
+.cj-imp-choice input, .cj-imp-notify input, .la-form .cj-imp-choice input, .la-form label.cj-imp-notify input { margin-block-start: 5px; inline-size: 18px; block-size: 18px; width: 18px; padding: 0; accent-color: var(--brand-graphite); flex: none; }
 .cj-imp-choice span, .cj-imp-notify span { display: grid; gap: 2px; }
 .cj-imp-choice b, .cj-imp-notify b { font-size: .88rem; color: var(--ink); }
 .cj-imp-choice small, .cj-imp-notify small { font-size: .78rem; color: var(--ink-mid); line-height: 1.7; }

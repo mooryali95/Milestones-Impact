@@ -68,7 +68,8 @@ export function planDaysOnly(schedule) {
 /** قواعد الفتح بعد إسقاط الموقوف (البند 4.4 والقرار 22): «بعد مراحل» يُحذف منها مفتاح الموقوفة، وإن فرغت صارت «بعد السابقة»،
  * فلا يُقفل أحد إلى الأبد. و«تبدأ مع» موقوفة يمنعها الحارس، فإن وُجدت (نسخة رُقّيت بعد الإيقاف) صارت «بعد السابقة» لا قفلًا دائمًا.
  * @param {any[]} stages المراحل الظاهرة بلا الموقوفة @param {Set<string>|string[]} offKeys
- * @returns {{ stages: any[], rewrites: { key: string, title: string, dropped: string[], to: string }[] }} */
+ * rule: القاعدة التي أُعيدت كتابتها («stages» بعد مراحل أو «with» تبدأ مع)، فتسمي نافذة الأثر كلًّا بكلماته
+ * @returns {{ stages: any[], rewrites: { key: string, title: string, dropped: string[], to: string, rule: string }[] }} */
 export function planRules(stages, offKeys) {
   const off = offKeys instanceof Set ? offKeys : new Set(offKeys || []);
   const rewrites = [];
@@ -79,12 +80,12 @@ export function planRules(stages, offKeys) {
     if (r.unlock === 'stages' && r.after.some((k) => off.has(k))) {
       const after = r.after.filter((k) => !off.has(k));
       const { unlock: _u, after: _a, ...rest } = raw;
-      rewrites.push({ key: s.key, title: s.title_ar || s.key, dropped: r.after.filter((k) => off.has(k)), to: after.length ? 'stages' : 'previous' });
+      rewrites.push({ key: s.key, title: s.title_ar || s.key, dropped: r.after.filter((k) => off.has(k)), to: after.length ? 'stages' : 'previous', rule: 'stages' });
       return { ...s, rules: after.length ? { ...rest, unlock: 'stages', after } : rest };
     }
     if (r.unlock === 'with' && r.with && off.has(r.with)) {
       const { unlock: _u, with: _w, ...rest } = raw;
-      rewrites.push({ key: s.key, title: s.title_ar || s.key, dropped: [r.with], to: 'previous' });
+      rewrites.push({ key: s.key, title: s.title_ar || s.key, dropped: [r.with], to: 'previous', rule: 'with' });
       return { ...s, rules: rest };
     }
     return s;
