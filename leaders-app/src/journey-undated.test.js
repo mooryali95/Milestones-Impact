@@ -166,13 +166,14 @@ describe('ما يراه المشارك: لا 1970 ولا تقويم ولا «ق�
     expect(html).not.toContain('قادمة');
     expect(html).not.toContain('أضف إلى تقويمي');
     expect(html).not.toContain('امسح رمز الحضور');
-    // Activity يقرأ الساعة الحقيقية: تُثبَّت على NOW، وإلا صارت الجلسة «المقبلة» ماضية بمرور يوم التثبيت فسقط الاختبار
+    // البند يحسب «القادمة» بساعة الجهاز (Date.now)، فتُثبَّت على NOW وإلا صارت جلسة «الغد» ماضية بعد يومها (سقط في 2026-11-17)
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
+    let inPerson;
     try {
-      const inPerson = renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({ verify: 'qr' }, [dated], new Set(), NOW) }, open: true, setToast: () => {} }));
-      expect(inPerson).toContain('امسح رمز الحضور');
+      inPerson = renderToStaticMarkup(React.createElement(Activity, { item: { id: 'r1', activity: workshopStatus({ verify: 'qr' }, [dated], new Set(), NOW) }, open: true, setToast: () => {} }));
     } finally { vi.useRealTimers(); }
+    expect(inPerson).toContain('امسح رمز الحضور');
   });
   it('«يصلك الرابط» لما قبل الجلسة وحدها: لا للجارية ولا المنتهية (linkPending)', () => {
     const later = { ...dated, mode: 'online', join_url: null, location_ar: null };
