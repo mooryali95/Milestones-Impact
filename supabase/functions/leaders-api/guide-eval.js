@@ -59,8 +59,8 @@ export function validateCases(set) {
 }
 
 // بصمة ما يُقيَّم: النموذج والقواعد ونسخة المجموعة ومحتواها. أي تغيير فيها يُسقط نجاحًا سابقًا
-export async function evalFingerprint(set, model = GUIDE_MODEL) {
-  const data = new TextEncoder().encode(JSON.stringify({ model, rules: GUIDE_RULES, cases: set?.cases || [] }));
+export async function evalFingerprint(set, model = GUIDE_MODEL, rules = GUIDE_RULES) {
+  const data = new TextEncoder().encode(JSON.stringify({ model, rules, cases: set?.cases || [] }));
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data))).map((b) => b.toString(16).padStart(2, '0')).join('');
   return `${model}|${set?.version || '?'}|${hash.slice(0, 16)}`;
 }
@@ -115,4 +115,37 @@ export function nextVersion(version, day) {
   const m = String(version || '').match(/^(\d{4}-\d{2}-\d{2})-r(\d+)$/);
   if (m && m[1] === day) return `${day}-r${Number(m[2]) + 1}`;
   return `${day}-r1`;
+}
+
+// ── H4: حالة جديدة من رد في سجل المحادثات وُسم «غير دقيق» ──
+// السؤال يُنقل بعد إزالة ما يدل على صاحبه (بريد ورقم اتصال ورابط، والهوية والبطاقة في الخادم)، ولا يُحفظ معرّف المشارك
+// ولا اسمه: المصدر «رد غير دقيق» برقم الرسالة وحده. المجموعة تبقى دائمًا، فلا تحمل بيانًا شخصيًا.
+const PERSONAL = [[/[\w.+-]+@[\w-]+\.[\w.]+/g, '[بريد]'], [/https?:\/\/\S+/gi, '[رابط]'], [/(?:\+?966|0)5\d{8}/g, '[رقم]']];
+export function scrubQuestion(text) {
+  let t = String(text || '').replace(/\r/g, '').trim();
+  for (const [re, mask] of PERSONAL) t = t.replace(re, mask);
+  return t.slice(0, 600);
+}
+export function nextFlagId(cases) {
+  const n = (cases || []).map((c) => /^f(\d+)$/.exec(String(c.id || ''))).filter(Boolean).map((m) => Number(m[1]));
+  return `f${String((n.length ? Math.max(...n) : 0) + 1).padStart(2, '0')}`;
+}
+/**
+ * يضيف حالة إلى المجموعة بعد التحقق منها بقواعد المجموعة نفسها. يعيد { ok, cases, id } أو { ok: false, error }
+ */
+export function applyCaseAdd(cases, c) {
+  const id = nextFlagId(cases);
+  const kind = ['answer', 'unsure', 'refuse_model'].includes(c?.kind) ? c.kind : 'answer';
+  const item = {
+    id, kind, question: scrubQuestion(c?.question), context: c?.context === 'handbook' ? 'handbook' : 'program',
+    ...(c?.context === 'handbook' ? { dimension: String(c.dimension || ''), chapter_key: String(c.chapter_key || '') } : {}),
+    level: ['beginner', 'intermediate', 'advanced'].includes(c?.level) ? c.level : undefined,
+    must_include: lines(c?.must_include), must_not_include: lines(c?.must_not_include),
+    reference_ar: String(c?.reference_ar || '').trim().slice(0, 2000), source: String(c?.source || '').slice(0, 200),
+  };
+  if (!item.question) return { ok: false, error: 'السؤال فارغ' };
+  const next = [...(cases || []), item];
+  const errs = validateCases({ version: 'x', cases: next }).filter((e) => e.startsWith(`${id}:`));
+  if (errs.length) return { ok: false, error: errs[0].replace(`${id}: `, '') };
+  return { ok: true, cases: next, id };
 }

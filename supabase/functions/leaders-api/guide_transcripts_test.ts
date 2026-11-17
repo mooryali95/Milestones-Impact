@@ -135,3 +135,44 @@ Deno.test('حراسة نصية: المنح بغلاف superWriter، والقرا
     assert(!/from\('guidance_messages'\)\.select\('[^']*body/.test(s), f);
   }
 });
+
+// ── H4: رد غير دقيق ← حالة في مسودة المجموعة ──
+const E = await import('./guide-eval.ts');
+const flagSeed = (status: 'draft' | 'approved') => ({
+  ...seed([{ admin_id: SUPER, admin_email: 'super@x.sa', granted_by: 'owner@x.sa' }]),
+  handbook_modules: [{ id: 'mod-1', dimension: 'milestone', chapter_key: 'ch1' }],
+  guidance_eval_sets: [{ id: 'set-1', version: '2026-11-17-r1', status, approved_by: status === 'approved' ? 'owner@x.sa' : null, approved_at: status === 'approved' ? now : null,
+    cases: [{ id: 'g01', kind: 'answer', question: 'ما المعلم؟', context: 'program' }], created_at: now }],
+});
+
+Deno.test('رد غير دقيق: حالة بلا بيان شخصي في مسودة جديدة من المعتمدة، وسجل برقم الرسالة', async () => {
+  resetSettingsCache(); E.resetSet();
+  const w = installFake(flagSeed('approved'));
+  w.tables.guidance_messages.push({ id: 9, participant_id: P1, role: 'assistant', body: 'رد', context: 'handbook', chapter_id: 'mod-1', created_at: now });
+  try {
+    const r = await T.flagReply(owner, { message_id: 9, kind: 'answer', question: 'سؤالي من sara@x.sa رقم هويتي 1012345678', reference_ar: 'المعلم نقطة قرار.', must_include: ['قرار'] });
+    assertEquals(r.case_id, 'f01');
+    assertEquals(r.new_draft, true);
+    const drafts = w.tables.guidance_eval_sets.filter((x: any) => x.status === 'draft');
+    assertEquals(drafts.length, 1, 'المعتمدة لا تُمس، والإضافة في مسودة جديدة');
+    const c = drafts[0].cases.at(-1);
+    assertEquals([c.context, c.dimension, c.chapter_key, c.kind], ['handbook', 'milestone', 'ch1', 'answer']);
+    assert(!c.question.includes('sara@x.sa') && !c.question.includes('1012345678'), c.question);
+    assert(!JSON.stringify(c).includes(P1), 'لا معرّف مشارك في المجموعة');
+    const log: any = w.tables.audit_log.at(-1);
+    assertEquals([log.action, log.entity_id, log.after.case_id], ['guide.reply-flag', '9', 'f01']);
+  } finally { w.restore(); E.resetSet(); }
+});
+
+Deno.test('رد غير دقيق: لمن يقرأ النص وحده، وعلى رد المساعد وحده', async () => {
+  resetSettingsCache(); E.resetSet();
+  const w = installFake(flagSeed('draft'));
+  w.tables.guidance_messages.push({ id: 9, participant_id: P1, role: 'assistant', body: 'رد', context: 'program', created_at: now });
+  try {
+    await assertRejects(() => T.flagReply(admin, { message_id: 9, question: 'س' }));
+    await assertRejects(() => T.flagReply(owner, { message_id: 1, question: 'سؤال سارة' }), Error, 'ليست ردًا');
+    const r = await T.flagReply(sup, { message_id: 9, kind: 'unsure', question: 'كيف أحدد أول معلم؟' });
+    assertEquals(r.new_draft, false, 'المسودة نفسها تُعدَّل');
+    assertEquals(w.tables.guidance_eval_sets[0].cases.at(-1).kind, 'unsure');
+  } finally { w.restore(); E.resetSet(); }
+});

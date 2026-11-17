@@ -6,6 +6,7 @@ import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
 const { db } = await import('./core.ts');
 const G = await import('./guide.ts');
 const E = await import('./guide-eval.ts');
+const { rulesWith } = await import('./guide.js');
 
 const reply = (text: string) => ({ model: 'claude-opus-5-5', content: [{ type: 'text', text }], usage: { input_tokens: 500, output_tokens: 200 } });
 
@@ -31,10 +32,11 @@ Deno.test('حالة الكتاب: نص الباب الحقيقي بمستواه�
   };
   G.GD.model = async (p: any) => { sent.push(p); return reply('[[answered]]\nالمعلم نقطة قرار كما في «إعادة تعريف المعلم». خطوتك: سمِّ أول معلم.'); };
   try {
-    const r = await E.runCase({ id: 'a', kind: 'answer', question: 'ما المعلم؟', context: 'handbook', dimension: 'milestone', chapter_key: 'ch1', must_include: ['نقطة قرار'] }, 'sk');
+    const r = await E.runCase({ id: 'a', kind: 'answer', question: 'ما المعلم؟', context: 'handbook', dimension: 'milestone', chapter_key: 'ch1', must_include: ['نقطة قرار'] }, 'sk', rulesWith('استعمل «المعلم».'));
     assertEquals(r.pass, true, r.reasons.join('؛ '));
     assert(JSON.stringify(sent[0].system).includes('المعلم نقطة قرار لا تاريخ'));
     assertEquals(sent[0].model, 'claude-opus-5-5');
+    assert(sent[0].system[0].text.endsWith('استعمل «المعلم».'), 'توجيهات المالك بعد القواعد الثابتة');
   } finally { (db as any).from = prev.from; Object.assign(G.GD, prev); }
 });
 
@@ -58,7 +60,9 @@ Deno.test('المجموعة المحفوظة مسودة غير معتمدة، ف
 
 Deno.test('حراسة نصية: التقييم يجيب بـgenerate نفسه، والبوابة تحمل التقييم والدفعة التجريبية، والأفعال للمدير الأعلى', async () => {
   const src = await Deno.readTextFile(new URL('./guide-eval.ts', import.meta.url));
-  assert(/await generate\(\{ key, chapter, ctx, text: c\.question, past: \[\] \}\)/.test(src));
+  // H4: بالقواعد الفعلية نفسها التي يجيب بها المشارك (الثابتة وتوجيهات المالك)
+  assert(/await generate\(\{ key, chapter, ctx, text: c\.question, past: \[\], rules: rules \?\? await rulesNow\(\) \}\)/.test(src));
+  assert(/g = await generate\(\{ key, chapter, ctx, text, past, rules \}\)/.test(await Deno.readTextFile(new URL('./guide.ts', import.meta.url))));
   const g = await Deno.readTextFile(new URL('./guide.ts', import.meta.url));
   assert(/evalOk, pilot: !!j\.def\?\.cohort\?\.guidance_pilot/.test(g));
   const idx = await Deno.readTextFile(new URL('./index.ts', import.meta.url));

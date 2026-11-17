@@ -73,6 +73,7 @@ export const SETTINGS = {
       monthly_questions: int(30, 1, 300, 'أسئلة الشهر لكل مشارك', 'يرى المشارك ما بقي له. عند بلوغه يُعرض «اطلب استشارة».'),
       daily_questions: int(8, 1, 50, 'أسئلة اليوم لكل مشارك'),
       retention_days: int(90, 7, 365, 'مدة حفظ المحادثة بالأيام', 'ثم تُحذف آليًا. وللمشارك أن يحذفها متى شاء.'),
+      extra_rules: { type: 'text', default: '', max: 3000, label_ar: 'توجيهات إضافية للمساعد', hint_ar: 'تُضاف إلى قواعده الثابتة ولا تلغيها، مثل مصطلح يُستعمل أو خطأ تكرر. كل تعديل يُسقط نجاح تقييم الدقة حتى يُشغَّل من جديد.' },
     },
   },
   // مركز الإشعارات (تصور 2026-11-16، المرحلة 4): أين يصل كل إشعار للإدارة. الفهرس والقرار في _shared/notify-routing.js،
@@ -123,6 +124,12 @@ export function cleanField(f, v) {
     const out = v.map((x) => String(x ?? '').trim().slice(0, 60));
     if (out.some((x) => !x)) return bad('لا مرساة فارغة');
     return { ok: true, value: out };
+  }
+  // نص حر بحد أقصى (H4: توجيهات المالك للمساعد): يُقص طرفاه، والفراغ مسموح (لا توجيهات)
+  if (f.type === 'text') {
+    if (typeof v !== 'string') return bad('نص مطلوب');
+    const t = v.replace(/\r/g, '').trim();
+    return t.length > f.max ? bad(`لا يزيد على ${f.max} حرفًا`) : { ok: true, value: t };
   }
   if (f.type === 'choice') return f.options.includes(v) ? { ok: true, value: v } : bad('اختيار غير معروف');
   // صفوف التوجيه: لكل حدث معروف قنواته الثلاث، والصف المقفل لا يُطفأ بريده (rowError في notify-routing.js)
