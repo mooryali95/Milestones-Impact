@@ -125,23 +125,38 @@ export async function proposeFromEdit(v: Viewer, b: any) {
   const { data: open, error: oe } = await db.from('book_proposals').select('id, section, section_id, status').eq('module_id', mod.id).eq('author_ref', v.ref).in('status', ['draft', 'review']);
   if (oe) throw dbFail(oe);
   const now = new Date().toISOString();
-  const ids: string[] = [];
-  for (const val of vals) {
-    const row = {
-      module_id: mod.id, section: val.section, section_id: val.section !== REFLECTION && val.section ? sectionIdOf(mod.dimension, mod.chapter_key, val.section) : null,
-      base_md: val.base_md, proposed_md: val.proposed_md, reason: val.reason, updated_at: now,
-    };
+  const rows = vals.map((val) => {
     // المقترح المفتوح على القسم نفسه بهويته (يبقى صحيحًا إن تغيّر العنوان بإصدار)، وإلا بعنوانه
-    const prev = (open || []).find((p: any) => (row.section_id && p.section_id ? p.section_id === row.section_id : p.section === val.section));
+    const sectionId = val.section !== REFLECTION && val.section ? sectionIdOf(mod.dimension, mod.chapter_key, val.section) : null;
+    const prev = (open || []).find((p: any) => (sectionId && p.section_id ? p.section_id === sectionId : p.section === val.section));
     // «احفظه مسودة» لا يسحب مقترحًا معروضًا على اللجنة: يبقى قيد المراجعة بنصه الجديد
     const status = b?.submit === false && prev?.status !== 'review' ? 'draft' : 'review';
+    return { val, prev, row: { module_id: mod.id, section: val.section, section_id: sectionId, base_md: val.base_md, proposed_md: val.proposed_md, reason: val.reason, updated_at: now, status } };
+  });
+  // الأقسام كلها في معاملة واحدة (20261117100000): تُحفظ جميعًا أو لا شيء، وسجل التدقيق معها
+  const { data: saved, error: se } = await db.rpc('book_proposals_save', {
+    p_module: mod.id, p_author_ref: v.ref, p_author_name: v.name, p_now: now,
+    p_rows: rows.map(({ val, prev, row }) => ({ ...row, label: targetLabel(val.section), prev_id: prev?.id || null, prev_status: prev?.status || null })),
+  });
+  let ids: string[];
+  if (!se) ids = (saved || []).map(String);
+  else if (se.code === 'P0409') throw new Fail(`${se.message}: تغيّرت حالة مقترحك عليه أثناء الحفظ (اعتُمد أو رُد). لم يُحفظ شيء من تعديلك. أعد فتح المحرر`, 409, 'changed');
+  else if (se.code === 'PGRST202' || se.code === '42883') ids = await saveOneByOne(v, mod, rows);
+  else throw dbFail(se);
+  return { success: true, count: ids.length, ids, sections: vals.map((x) => targetLabel(x.section)) };
+}
+
+// قبل الترحيل 20261117100000: كل قسم وحده كما كان، فالدالة الذرية غير موجودة بعد
+async function saveOneByOne(v: Viewer, mod: any, rows: { val: any; prev: any; row: any }[]) {
+  const ids: string[] = [];
+  for (const { val, prev, row } of rows) {
     const { data, error } = prev
-      ? await db.from('book_proposals').update({ ...row, status }).eq('id', prev.id).eq('status', prev.status).select('id').maybeSingle()
-      : await db.from('book_proposals').insert({ ...row, status, author_ref: v.ref, author_name: v.name }).select('id').single();
+      ? await db.from('book_proposals').update(row).eq('id', prev.id).eq('status', prev.status).select('id').maybeSingle()
+      : await db.from('book_proposals').insert({ ...row, author_ref: v.ref, author_name: v.name }).select('id').single();
     if (error) throw dbFail(error);
     if (!data) throw new Fail(`${targetLabel(val.section)}: تغيّرت حالة مقترحك عليه أثناء الحفظ (اعتُمد أو رُد). أعد فتح المحرر`, 409, 'changed');
     ids.push((data as any).id);
-    await audit('admin', v.ref, prev ? 'book.proposal-edit' : 'book.proposal', 'book_proposals', (data as any).id, null, { module_id: mod.id, section: val.section, status, from: 'studio' });
+    await audit('admin', v.ref, prev ? 'book.proposal-edit' : 'book.proposal', 'book_proposals', (data as any).id, null, { module_id: mod.id, section: val.section, status: row.status, from: 'studio' });
   }
-  return { success: true, count: ids.length, ids, sections: vals.map((x) => targetLabel(x.section)) };
+  return ids;
 }
