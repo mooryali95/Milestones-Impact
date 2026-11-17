@@ -1,82 +1,31 @@
 // ════════════════════════════════════════════════════════════════
-// نظرة عامة على تطبيق القادة: الأرقام، وما ينتظر القرار، والقمع،
-// والمستوى العام، والجهات، والقياس القبلي والبعدي، والكتاب والنماذج
+// مكتب اليوم (نظرة عامة على تطبيق القادة): ماذا أفعل اليوم؟
 // ════════════════════════════════════════════════════════════════
+// المرحلة 3أ من تصور لوحة الإدارة (4.3): التحية والتاريخ وشارة صحة واحدة، ثم «قرارات اليوم» (صندوق admin.inbox نفسه)،
+// ثم أربعة أرقام من الصندوق والنظرة العامة، ثم روابط سريعة، ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
+// بطاقات التحليل انتقلت إلى «الرؤية الشاملة» (Analytics.jsx)، والمنطق الخالص للأرقام والشارة في today.js.
 import React, { useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
-import { DIM, DIMS, L, LVL, STATUS, VIA, date, isSuperAdmin } from '../leaders.js';
-import { OpsHealthCard } from '../OpsHealth.jsx';
-import { LVLS } from '../methodology.js';
+import { L, isSuperAdmin } from '../leaders.js';
+import { session } from '../api.js';
+import { dayFull } from '../dates.js';
+import { focusOpsCard, OpsHealthCard, OPS_REVEAL, opsRevealPending } from '../OpsHealth.jsx';
+import { useOpsHealth } from '../ops-watch.js';
+import { useInbox } from '../pending.js';
 import { Spinner, useUI } from '../ui.jsx';
-import { Funnel } from './Orgs.jsx';
 import ReqQueue from './ReqQueue.jsx';
-import SusPanel from './SusPanel.jsx';
-import { OrgSelect } from './Participants.jsx';
-import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
-import { orgReadiness, readinessSummary } from '../org-hub.js';
-
-const VIA_ALL = { ...VIA, unassigned: 'بلا جهة' };
-const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
-
-// صفوف أشرطة أفقية بتنسيق القمع نفسه
-function Bars({ rows }) {
-  const top = Math.max(1, ...rows.map((r) => r[1]));
-  return (
-    <div className="la-funnel big">{rows.map(([l, n, sub]) => (
-      <div key={l} className="la-fn"><span className="la-fn-l">{l}</span><span className="la-fn-bar"><i style={{ width: `${((n / top) * 100).toFixed(1)}%` }} /></span><b>{sub ?? n}</b></div>
-    ))}</div>
-  );
-}
-
-// القياس البعدي: يعرض ما يحسبه admin.impact كما هو، ولا يحسب الأثر هنا
-function Impact({ im, instruments }) {
-  const post = (instruments || []).find((x) => x.kind === 'post');
-  // فشل الحساب خطأ يُعرض، لا حالة فارغة توحي بأن الأداة لم تُفعَّل
-  if (im && !im.success) return <p className="la-err" role="alert">تعذّر حساب قياس الأثر{im.message ? `: ${im.message}` : ''}</p>;
-  if (!im?.success) {
-    return (
-      <>
-        <p className="la-muted">{post ? `أداة القياس البعدي «${post.title || post.key}» جاهزة، وأنهاها ${post.n}.` : 'لم تُفعَّل أداة القياس البعدي بعد.'}</p>
-        <p className="la-muted">تظهر هنا مقارنة القبلي بالبعدي لكل إطار متى اكتمل قياس الأثر.</p>
-      </>
-    );
-  }
-  const c = im.counts || {};
-  return (
-    <>
-      <div className="la-book-kpis">
-        <span><b>{c.baseline ?? 0}</b>أنهوا القبلي</span>
-        <span><b>{c.post ?? 0}</b>أنهوا البعدي</span>
-        <span><b>{c.paired ?? 0}</b>لديهم القياسان</span>
-      </div>
-      {c.paired ? (
-        <table className="la-table la-impact">
-          <thead><tr><th /><th>قبل</th><th>بعد</th><th>الفرق</th><th>تحسّن فعلي</th></tr></thead>
-          <tbody>{DIMS.map((d) => {
-            const x = im.cohort?.[d];
-            if (!x) return null;
-            return (
-              <tr key={d}><th>{DIM[d]}</th><td>{x.pre ?? '·'}</td><td>{x.post ?? '·'}</td>
-                <td className={x.diff > 0 ? 'up' : x.diff < 0 ? 'down' : ''}>{x.diff > 0 ? '+' : ''}{x.diff ?? '·'}</td>
-                <td>{x.reliable_up ?? 0} من {x.n ?? 0}</td></tr>
-            );
-          })}</tbody>
-        </table>
-      ) : <p className="la-muted">لا أحد لديه القياسان معًا بعد.</p>}
-    </>
-  );
-}
+import { readinessSummary } from '../org-hub.js';
+import { ageAr } from '../../../supabase/functions/leaders-api/inbox.js';
+import { greetingAr, healthLine, healthOpen, healthProblems, orgsReadinessRows, problemsSig, STALE_DAYS, systemNotes, todayNumbers, waitingSub } from '../today.js';
 
 // حالة النظام: ترحيلات لم تُطبَّق بوسم بوابة النشر، وأسرار ناقصة، واقتراب البريد من سقفه اليومي، وما تعذّرت قراءته منها.
 // الوسم من الخادم (pending_migrations، المصدر نفسه لبوابات المراحل): المؤجل بقرار لا يُطلب تطبيقه. خادم قبل الحقل يُقرأ كما كان
 function Health({ h }) {
-  if (!h?.success) return null;
+  if (!systemNotes(h)) return null;
   const near = h.mail.today >= h.mail.cap * 0.8;
-  const unread = h.migrations_ledger === false || h.mail.today == null;
   const pending = h.pending_migrations || (h.missing_migrations || []).map((name) => ({ name, gate: 'blocking' }));
   const gate = (g) => pending.filter((m) => m.gate === g);
   const files = (list) => list.map((m) => <code key={m.name}>{m.name}.sql</code>);
-  if (!pending.length && !h.missing_secrets.length && !near && !unread) return null;
   return (
     <div className="la-note la-health" role="status">
       <b>حالة النظام</b>
@@ -120,9 +69,7 @@ function Readiness({ items, onTab }) {
 // المستوى الأوسط بين جاهزية الإطلاق (المنظومة) وملف الدفعة. حال الدفعة من admin.orgs (orgCohortSetups)، المصدر
 // نفسه لصفحة الجهة، فلا يقول السطر «جاهزة» وصفحتها تقول غير ذلك
 function OrgsReadiness({ orgs, onOrg }) {
-  const rows = (orgs || []).filter((o) => o.status === 'active')
-    .map((o) => ({ o, r: orgReadiness({ org: o, access: o.access || null, journey: o.cohort_setup || null, members: o.stats?.total || 0, seatsUsed: o.seats_used ?? null, pending: o.stats?.pending_approval || 0 }) }))
-    .sort((a, b) => b.r.missing - a.r.missing);
+  const rows = orgsReadinessRows(orgs);
   if (!rows.length) return null;
   const ready = rows.filter((x) => !x.r.missing).length;
   return (
@@ -175,150 +122,143 @@ function DemoCard() {
   );
 }
 
-export default function Overview({ orgs, onPerson, onTrack, onStatus, onOrg, onTab, pending, canWrite }) {
-  const [org, setOrg] = useState('');
+
+// ── شارة الصحة: سطر واحد مطوي حين يسلم كل شيء، ويتمدد وحده عند الخلل ──
+// تجمع ما كان خمس بطاقات (صحة البريد، وحالة النظام، وحساب العرض، وجاهزية الإطلاق، وجاهزية الجهات) بفحوصها وأزرارها
+// وبواباتها كما هي، والذي تغيّر هو الوعاء وحده. اختيار المدير (طي أو فتح) لهذه الجلسة وحدها، مقرون ببصمة الحال
+// (healthOpen)، فخلل جديد يفتح الشارة ولو طواها قبله
+const HEALTH_KEY = 'mi_admin_today_health';
+const readChosen = () => { try { return JSON.parse(sessionStorage.getItem(HEALTH_KEY) || 'null'); } catch { return null; } };
+const writeChosen = (v) => { try { sessionStorage.setItem(HEALTH_KEY, JSON.stringify(v)); } catch { /* التخزين محجوب: الاختيار لهذا الرسم */ } };
+
+function HealthBadge({ h, orgs, orgsLoaded = true, onOrg, onTab, canWrite }) {
+  const writer = canWrite !== false;
+  const ops = useOpsHealth(writer);
+  const [chosen, setChosen] = useState(readChosen);
+  // شريط العطل الأحمر (OpsBanner) يكشف البطاقة ولو طواها المدير، ثم يقع التركيز عليها
+  const [reveal, setReveal] = useState(opsRevealPending);
+  useEffect(() => {
+    const on = () => setReveal(true);
+    window.addEventListener(OPS_REVEAL, on);
+    return () => window.removeEventListener(OPS_REVEAL, on);
+  }, []);
+  const problems = healthProblems({ ops: writer ? ops : null, h, orgs, canWrite: writer, withOrgs: !!onOrg });
+  // ما لم يصل بعد من مصادر الشارة (صحة البريد، والجهات) لا يُحكم عليه بالسلامة
+  const checking = (writer && !ops.verdict && !ops.failed) || (writer && !!onOrg && !orgsLoaded);
+  const sig = problemsSig(problems);
+  const open = reveal || healthOpen(sig, chosen);
+  useEffect(() => { if (open) focusOpsCard(); }, [open]);
+  const toggle = () => { const v = { sig, open: !open }; setReveal(false); setChosen(v); writeChosen(v); };
+  const bad = problems.length > 0;
+  const state = bad ? 'attention' : checking ? 'checking' : 'ok';
+  return (
+    <section className={`today-health${bad ? ' bad' : ''}`} aria-label="صحة المنظومة" data-state={state}>
+      <button type="button" id="th-toggle" className="th-toggle" aria-expanded={open} aria-controls="th-body" onClick={toggle}>
+        <span className="th-ic" aria-hidden="true">{bad ? '!' : checking ? '…' : '✓'}</span>
+        <span className="th-line">{healthLine(problems, checking)}</span>
+        <span className="ops-chev" aria-hidden="true" />
+      </button>
+      <div id="th-body" className="th-body" role="region" aria-label="تفاصيل صحة المنظومة" hidden={!open}>
+        {/* صحة البريد والتنبيه (للمدير ذي الكتابة): أخضر أو كهرماني أو أحمر، وشريطها الأحمر في App.jsx */}
+        <OpsHealthCard enabled={writer} isSuper={isSuperAdmin()} />
+        {!h?.success && <p className="la-note" role="status">تعذّرت قراءة حالة النظام{writer ? ' وجاهزية الإطلاق' : ''} الآن، فلا يُعرف إن كانت سليمة. أعد فتح الصفحة بعد قليل.</p>}
+        <Health h={h} />
+        {writer && <DemoCard />}
+        {writer && <Readiness items={h?.readiness} onTab={onTab} />}
+        {writer && onOrg && <OrgsReadiness orgs={orgs} onOrg={onOrg} />}
+        {!bad && !checking && !writer && <p className="la-muted">حالة النظام سليمة.</p>}
+      </div>
+    </section>
+  );
+}
+
+// ── الأرقام الأربعة: من الصندوق والنظرة العامة المحمّلين أصلًا، وكل رقم يفتح عرضه في الصندوق حيث وُجد ──
+function TodayNumbers({ nums, onView, onTab }) {
+  // «+» بعد الرقم يعني «على الأقل»: يُعزل الرقم باتجاه يسار إلى يمين فلا يُقرأ «+3» إشارة
+  const v = (x) => (x == null ? null : nums.partial ? `${x}+` : String(x));
+  const w = nums.waiting;
+  const cells = [
+    { key: 'waiting', label: 'القرارات المنتظرة', value: v(w?.n), sub: waitingSub(nums, ageAr), go: () => onView('') },
+    { key: 'late', label: 'المتجاوز للمهلة الآن', value: v(nums.late), sub: 'تجاوز مهلة نوعه', go: () => onView('late'), tone: nums.late ? 'bad' : '' },
+    { key: 'stale', label: `المنتظر منذ أكثر من ${STALE_DAYS} أيام`, value: v(nums.stale), sub: 'بعمر البند في الصندوق', go: () => onView('stale'), tone: nums.stale ? 'warn' : '' },
+    { key: 'program', label: 'المشاركون في البرنامج', value: nums.program ? `${nums.program.n} من ${nums.program.of}` : null, sub: nums.program ? 'من أصل المسجلين' : 'تعذّرت قراءة الأرقام', go: () => onTab?.('participants') },
+  ];
+  return (
+    <div className="stats-grid today-nums" role="group" aria-label="أرقام اليوم">
+      {cells.map((c) => (
+        <button key={c.key} type="button" className={`stat-card today-n${c.tone ? ` ${c.tone}` : ''}`} data-k={c.key} onClick={c.go}>
+          <span className="stat-label">{c.label}</span><span className="stat-value">{c.value == null ? <><span aria-hidden="true">·</span><span className="sr-only">غير مقروء</span></> : <bdi dir="ltr">{c.value}</bdi>}</span><span className="stat-sub">{c.sub}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── روابط سريعة إلى أماكنها القائمة: «دفعة جديدة» معالج الدفعة (‎?new=‎ في البرامج)، والباقي تبويب يحمل الفعل ──
+function QuickLinks({ onTab, canWrite }) {
+  const writer = canWrite !== false;
+  const links = [
+    writer && { key: 'cohort', label: 'دفعة جديدة', href: '#/leaders/programs?new=' },
+    writer && { key: 'people', label: 'أضف مشاركين', href: '#/leaders/participants', tab: 'participants' },
+    { key: 'sessions', label: 'الجلسات اليوم', href: '#/leaders/activities', tab: 'activities' },
+    { key: 'insight', label: 'التحليل الكامل', href: '#/leaders/insight', tab: 'insight' },
+  ].filter(Boolean);
+  return (
+    <nav className="today-links" aria-label="روابط سريعة">
+      {links.map((l) => (
+        <a key={l.key} className="btn-sm ghost" href={l.href} onClick={l.tab && onTab ? (e) => { e.preventDefault(); onTab(l.tab); } : undefined}>{l.label}</a>
+      ))}
+    </nav>
+  );
+}
+
+export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pending, canWrite }) {
   const [d, setD] = useState(null);
   const [n, setN] = useState(0);
+  const [view, setView] = useState('');
+  // رد الصندوق من مخزن العدّادات نفسه (pending.js): طلب واحد يرسم الصندوق والأرقام والعدّادات
+  const [inbox] = useInbox();
   useEffect(() => {
     let live = true;
     setD(null);
     Promise.all([
-      // الجهة نفسها لكل البطاقات: الأرقام وقائمة «ينتظر قرارك» والمتطلبات وقياس الأثر
-      L('admin.overview', { org }), L('admin.reviews', { org }),
-      L('admin.impact', org ? { organization_id: org } : {}).catch((e) => ({ success: false, message: e?.message })),
+      L('admin.overview', {}), L('admin.reviews', {}),
       L('admin.health').catch(() => null),
-    ]).then(([o, r, im, h]) => live && setD({ o, r, im, h }));
+    ]).then(([o, r, h]) => live && setD({ o, r, h }));
     return () => { live = false; };
-  }, [org, n]);
+  }, [n]);
 
   if (!d) return <Spinner />;
-  const { o, r, im, h } = d;
-  if (!o.success) return <div className="la-err" role="alert">{o.message}</div>;
-  const st = (k) => o.by_status?.[k] || 0;
-  // رد ناقص لا يُسقط صفحة الدخول: الخانة الغائبة صفر
-  const cellOf = (x, l) => o.matrix?.[x]?.[l] || 0;
-  const max = Math.max(1, ...DIMS.flatMap((x) => LVLS.map((l) => cellOf(x, l))));
-  const bk = o.book;
-  const waiting = [...(r.pending_approval || []), ...(r.submitted || [])];
-  const placed = Object.values(o.overall || {}).reduce((a, n) => a + n, 0);
-  const baseline = (o.instruments || []).filter((x) => x.kind === 'baseline').sort((a, c) => Number(c.active) - Number(a.active));
-
-  // عدد المتطلبات المنتظرة من قائمة «ينتظر قرارك» نفسها، فلا تختلف البطاقة عن القائمة تحتها
-  const reqN = r?.submitted ? r.submitted.length : (o.pending_reviews || 0);
+  const { o, r, h } = d;
+  // admin.overview لا يغذي في المكتب إلا الرقم الرابع: تعذّره لا يحجب الصحة والقرارات والطابور
+  const nums = todayNumbers(inbox, o);
+  const name = session.load()?.user?.name;
+  const toDecisions = (v) => {
+    setView(v);
+    const el = document.getElementById('today-decisions');
+    el?.scrollIntoView?.({ block: 'start' });
+    el?.focus({ preventScroll: true });
+  };
   return (
     <>
-      {/* صحة البريد والتنبيه أعلى الصفحة (للمدير ذي الكتابة): أخضر أو كهرماني أو أحمر، وشريطها الأحمر في App.jsx */}
-      <OpsHealthCard enabled={canWrite !== false} isSuper={isSuperAdmin()} />
-      <Health h={h} />
-      {canWrite !== false && <DemoCard />}
-      {canWrite !== false && <Readiness items={h?.readiness} onTab={onTab} />}
-      {canWrite !== false && onOrg && <OrgsReadiness orgs={orgs} onOrg={onOrg} />}
+      <header className="today-head">
+        <div>
+          <h2 className="today-hi">{greetingAr()}{name ? `، ${name}` : ''}</h2>
+          <p className="la-muted today-date">{dayFull()}</p>
+        </div>
+      </header>
+      <HealthBadge h={h} orgs={orgs} orgsLoaded={orgsLoaded} onOrg={onOrg} onTab={onTab} canWrite={canWrite} />
       {/* جلسة رمز البريد: شريط «للقراءة فقط» بزر «فعّل الكتابة» في إطار اللوحة (App.jsx) لا هنا، فيظهر في كل صفحة */}
-      <div className="la-row between la-ov-bar">
-        <span className="la-muted">{org ? 'تعرض الأرقام لجهة واحدة' : 'كل الجهات'}</span>
-        <OrgSelect orgs={orgs} value={org} onChange={setOrg} />
-      </div>
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
-        <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
-        <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{reqN + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${reqN} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
-        <div className="stat-card"><div className="stat-label">في البرنامج</div><div className="stat-value">{st('placed') + st('enrolled')}</div><div className="stat-sub">{o.active_week != null ? `${o.active_week} نشطون هذا الأسبوع` : 'معتمدون'}</div></div>
-      </div>
 
-      <div className="la-grid2">
-        {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox): كان هنا أربعة أنواع والباقي موزع على شاشاته */}
-        <Inbox contacts={pending?.contacts || 0} canWrite={canWrite} onPerson={onPerson} />
-        <section className="la-card">
-          <div className="la-row between"><h3>المستوى العام</h3><span className="la-muted">{placed} مُسكَّن</span></div>
-          {o.overall ? (
-            <Bars rows={[...LVLS].reverse().map((l) => [LVL[l], o.overall[l] || 0, `${o.overall[l] || 0} · ${pct(o.overall[l] || 0, placed)}٪`])} />
-          ) : <p className="la-muted">يظهر بعد تحديث الخادم.</p>}
-          <p className="la-muted">ما يراه المشارك: مستوى واحد هو وسيط مستوياته في الأطر الثلاثة. التفصيل لكل إطار أدناه للإدارة فقط.</p>
-        </section>
+      <h2 className="today-sec">قرارات اليوم</h2>
+      {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox) */}
+      <div id="today-decisions" tabIndex={-1} className="today-decisions">
+        <Inbox contacts={pending?.contacts || 0} canWrite={canWrite} onPerson={onPerson} view={view} onView={setView} />
       </div>
-
+      <TodayNumbers nums={nums} onView={toDecisions} onTab={onTab} />
+      {!o.success && <div className="la-err" role="alert">{o.message || 'تعذّرت قراءة أرقام النظرة العامة.'}</div>}
+      <QuickLinks onTab={onTab} canWrite={canWrite} />
       <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
-      <div className="la-grid2">
-        <section className="la-card">
-          <h3>توزيع المستويات حسب الإطار (3×3)</h3>
-          <table className="la-matrix">
-            <thead><tr><th />{DIMS.map((x) => <th key={x}>{DIM[x]}</th>)}</tr></thead>
-            <tbody>{[...LVLS].reverse().map((l) => (
-              <tr key={l}><th>{LVL[l]}</th>{DIMS.map((x) => <td key={x} style={{ '--a': (cellOf(x, l) / max).toFixed(2) }}><b>{cellOf(x, l)}</b></td>)}</tr>
-            ))}</tbody>
-          </table>
-          <p className="la-muted">كل خلية = عدد المشاركين في هذا المستوى من هذا الإطار. تركيب المستويات الثلاثة يحدد المسار من {TRACK_COUNT} مسارًا.</p>
-        </section>
-        <section className="la-card">
-          <div className="la-row between"><h3>أكثر المسارات مشاركين</h3><span className="la-muted">{o.tracks_used} من {TRACK_COUNT} مسارًا مشغولة</span></div>
-          {(o.top_tracks || []).length ? (
-            <ul className="la-queue">{(o.top_tracks || []).map((t) => (
-              <li key={t.key}><button className="la-link" onClick={() => onTrack(t.key)}><code className="la-code">{t.key}</code> {t.title || ''}</button><b>{t.n}</b></li>
-            ))}</ul>
-          ) : <p className="la-muted">لا مسارات بعد.</p>}
-        </section>
-      </div>
-
-      <div className="la-grid2">
-        {o.funnel && <section className="la-card"><h3>قمع الرحلة</h3><Funnel f={o.funnel} big /></section>}
-        <section className="la-card">
-          <h3>القياس القبلي</h3>
-          {baseline.length ? baseline.map((x) => (
-            <div key={x.key} className="la-inst">
-              <div className="la-row between"><span><code className="la-code">{x.key}</code> {x.active ? <span className="la-chip ok">مفعّلة</span> : null}</span><span className="la-muted">أنهاه {x.n}</span></div>
-              <Bars rows={DIMS.map((dm) => [DIM[dm], x.avg?.[dm] || 0, x.avg?.[dm] != null ? `${x.avg[dm]}٪` : '·'])} />
-            </div>
-          )) : <p className="la-muted">{o.instruments ? 'لم يُنهِ أحد القياس بعد.' : 'يظهر بعد تحديث الخادم.'}</p>}
-          <p className="la-muted">متوسط النسبة المركبة (معرفة ومهارة وسلوك) لكل إطار.</p>
-        </section>
-      </div>
-
-      <div className="la-grid2">
-        <section className="la-card">
-          <h3>قياس الأثر (قبلي وبعدي)</h3>
-          <Impact im={im} instruments={o.instruments} />
-        </section>
-        <section className="la-card">
-          <div className="la-row between"><h3>الكتاب والنماذج</h3>{onTab && <button className="la-link" onClick={() => onTab('handbook')}>فتح كتاب القائد</button>}</div>
-          {bk ? (
-            <>
-              <div className="la-book-kpis">
-                <span><b>{bk.readers}</b>قرّاء</span>
-                <span><b>{bk.chapters}</b>أبواب مكتملة</span>
-                <span><b>{bk.accuracy != null ? `${bk.accuracy}٪` : '·'}</b>دقة الأسئلة</span>
-                <span><b>{bk.submitted}</b>نماذج مُرسلة</span>
-                <span><b>{bk.rating ?? '·'}</b>متوسط التقييم</span>
-                <span><b>{bk.points_avg}</b>متوسط النقاط</span>
-              </div>
-              <Bars rows={Object.entries(bk.ranks || {}).map(([t, n]) => [t, n])} />
-            </>
-          ) : <p className="la-muted">يظهر بعد تحديث الخادم.</p>}
-        </section>
-      </div>
-
-      <div className="la-grid2">
-        <section className="la-card">
-          <div className="la-row between"><h3>الجهات</h3>{o.orgs_count != null && <span className="la-muted">{o.orgs_count} جهة لديها مشاركون</span>}</div>
-          {(o.top_orgs || []).length ? (
-            <ul className="la-queue">{(o.top_orgs || []).map((g) => (
-              <li key={g.id}><button className="la-link" onClick={() => (onOrg ? onOrg(g.id) : setOrg(g.id))}>{g.name || orgs.find((x) => x.id === g.id)?.name || 'جهة'}</button><b>{g.n}</b></li>
-            ))}</ul>
-          ) : <p className="la-muted">{o.top_orgs ? 'لا مشاركين مرتبطين بجهة بعد.' : 'يظهر بعد تحديث الخادم.'}</p>}
-        </section>
-        <section className="la-card">
-          <h3>مصدر الانتساب</h3>
-          {o.via ? <Bars rows={Object.entries(VIA_ALL).filter(([k]) => o.via[k]).map(([k, l]) => [l, o.via[k]])} /> : <p className="la-muted">يظهر بعد تحديث الخادم.</p>}
-          <p className="la-muted">كيف وصل المشارك إلى جهته: رابط الجهة، أو موقعها، أو نقل يدوي من الإدارة.</p>
-        </section>
-      </div>
-
-      <section className="la-card">
-        <h3>الحالات</h3>
-        <div className="la-pills">{Object.entries(STATUS).map(([k, l]) => (
-          <button key={k} className="la-pill" onClick={() => onStatus(k)}>{l} <b>{st(k)}</b></button>
-        ))}</div>
-      </section>
-      <SusPanel />
     </>
   );
 }
