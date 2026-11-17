@@ -4,9 +4,14 @@ import { TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['insight', 'الرؤية الشاملة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
-  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['book', 'الكتاب الأم'], ['handbook', 'كتاب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mailcenter', 'مركز البريد'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['f360', 'تقييم 360'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'], ['settings', 'الإعدادات العامة'], ['agent', 'المساعد الآلي'], ['guidance', 'التوجيه والإرشاد'], ['guidance-access', 'إتاحة التوجيه'],
+  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['book', 'الكتاب الأم'], ['handbook', 'كتاب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mailcenter', 'مركز البريد'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['f360', 'تقييم 360'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'], ['settings', 'الإعدادات العامة'], ['ai', 'المساعد الذكي'],
 ];
 // أقسام ميزات قيد البناء ومفتاح كل منها (features.js على الخادم): عليها شارة «مخفي عن المستخدمين» حين تُطفأ
 export const FEATURE_TABS = { hall: 'hall', katon: 'katon', f360: 'f360' };
 // أقسام لا تظهر إلا للمدير الأعلى أو المالك (والخادم يرفض غيرهما على كل حال)
-export const OWNER_TABS = new Set(['agent', 'guidance', 'guidance-access']);
+export const OWNER_TABS = new Set(['ai']);
+// «المساعد الذكي» قسم واحد في الشريط بثلاثة تبويبات داخلية (قرار المالك 2026-11-17)، والتبويب الداخلي في العنوان:
+// #/leaders/ai/<site|guidance|access>. الاسم القديم في keys ليجده البحث (Ctrl K) بأي من الاسمين
+export const AI_TABS = [['site', 'مساعد الموقع', ['المساعد الآلي']], ['guidance', 'التوجيه والإرشاد', []], ['access', 'الإتاحة', ['إتاحة التوجيه']]];
+// الروابط القديمة (بريد التنبيه والإشارات المحفوظة) تصل إلى تبويبها الداخلي: القسم القديم ← [القسم، التبويب الداخلي]
+export const TAB_ALIASES = { agent: ['ai', 'site'], guidance: ['ai', 'guidance'], 'guidance-access': ['ai', 'access'] };

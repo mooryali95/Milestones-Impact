@@ -6,6 +6,7 @@ import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react
 import { lazyRetry } from './lazy-retry.js';
 import { call, ROLE_LABELS, session, setExpiredHandler } from './api.js';
 import { setLeadersExpired } from './leaders.js';
+import { resetAiData } from './ai-hub-data.js';
 import { UIProvider, useUI } from './ui.jsx';
 import { writeState } from './write-access.js';
 import StepUp from './StepUp.jsx';
@@ -116,20 +117,22 @@ export default function App() {
   const [expired, setExpired] = useState(false);
 
   useEffect(() => {
-    setExpiredHandler(() => setExpired(true));
-    setLeadersExpired(() => setExpired(true));
+    setExpiredHandler(() => { resetAiData(); setExpired(true); });
+    // انتهاء الجلسة يمسح ردود «المساعد الذكي» المحفوظة، فلا تُعرض صلاحية الجلسة السابقة بعد إعادة الدخول
+    setLeadersExpired(() => { resetAiData(); setExpired(true); });
   }, []);
 
   // من يدخل بحساب آخر تُفتح له اللوحة من جديد (المفتاح بالبريد)، فلا يرث ما فتحه غيره
   // ورقم الجلسة يتقدم مع كل دخول، فتعيد اللوحة قراءة صلاحيتها (me) لجلسة إعادة الدخول
   const [sessionGen, setSessionGen] = useState(0);
   // مخزن العدّادات مشترك على مستوى الوحدة: دخول جديد أو خروج لا يرث أعداد الجلسة السابقة
-  const signedIn = (token, u) => { resetInbox(); session.save(token, u); setUser(u); setExpired(false); setSessionGen((g) => g + 1); };
+  const signedIn = (token, u) => { resetInbox(); resetAiData(); session.save(token, u); setUser(u); setExpired(false); setSessionGen((g) => g + 1); };
   const patchUser = useCallback((patch) => { session.patchUser(patch); setUser((u) => ({ ...u, ...patch })); }, []);
   const logout = async () => {
     await call('logout').catch(() => {});
     session.clear();
     resetInbox();
+    resetAiData();
     setUser(null);
     setExpired(false);
   };

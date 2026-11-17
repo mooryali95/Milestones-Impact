@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { convSummary, count, orgsSummary, pct, peakDay, systemLine, enableBlock, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, ringLevel, runEvalLoop, runSummary, spendSummary, stateSummary, usd, usd2 } from './agent-admin.js';
 import { companionKnown } from './screens/OrgForm.jsx';
-import { OWNER_TABS, TABS } from './leaders-tabs.js';
+import { AI_TABS, OWNER_TABS, TAB_ALIASES, TABS } from './leaders-tabs.js';
 
 describe('المال والنسب', () => {
   it('الميكرو إلى دولار: أربعة أرقام دون الدولار، واثنان فوقه، وغير المقروء لا يصير صفرًا', () => {
@@ -18,7 +18,7 @@ describe('المال والنسب', () => {
     expect(ringLevel(1_598_000, 2_000_000)).toMatchObject({ level: 'green', icon: '✓' });
     expect(ringLevel(1_600_000, 2_000_000)).toMatchObject({ level: 'amber', icon: '!', word: 'قريب من السقف' });
     expect(ringLevel(2_000_000, 2_000_000)).toMatchObject({ level: 'red', icon: '✕', ratio: 1 });
-    expect(spendSummary({ today: { spent_micros: 420_000, cap_micros: 2_000_000 } }).text).toBe('اليوم 0.42 من 2.00 دولار (21%)');
+    expect(spendSummary({ today: { spent_micros: 420_000, cap_micros: 2_000_000 } }).text).toBe('اليوم 0.42 من 2.00 دولار (21٪)');
   });
 });
 
@@ -38,7 +38,7 @@ describe('خلاصة الأقسام', () => {
     expect(enableBlock({ ...base, gate: { ok: true } })).toBe(null);
     expect(gateText(base).text).toBe('لا تقييم ناجح لهذا الإعداد: شغّل التقييم أولًا');
     expect(gateText({ gate: { ok: true, run: { eval_pass: 40, eval_total: 42, redteam_pass: 21, redteam_total: 21, finished_at: 'x' } } }, () => 'قبل ساعتين').text)
-      .toBe('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 95.2% واختبار الحماية 100%، قبل ساعتين');
+      .toBe('آخر تقييم ناجح لهذا الإعداد: أسئلة الجودة 95.2٪ واختبار الحماية 100٪، قبل ساعتين');
   });
   it('المفتاح والمحادثات والتقييم', () => {
     expect(keySummary({ source: 'db', last4: 'abcd' }).text).toBe('من اللوحة (••••abcd)');
@@ -64,7 +64,7 @@ describe('خلاصة الأقسام', () => {
     expect(peakDay([{ day: 'a', micros: 0 }])).toBe(null);
     expect(runSummary(null).text).toBe('لم يُشغَّل التقييم بعد');
     expect(runSummary({ status: 'passed', eval_pass: 39, eval_total: 42, redteam_pass: 21, redteam_total: 21, cost_micros: 70_000 }).text)
-      .toBe('آخر تشغيل: ناجح، أسئلة الجودة 92.9% (39/42) واختبار الحماية 100% (21/21)، 0.07 دولار');
+      .toBe('آخر تشغيل: ناجح، أسئلة الجودة 92.9٪ (39/42) واختبار الحماية 100٪ (21/21)، 0.07 دولار');
   });
   it('خريطة أخطاء المفتاح تغطي كل رمز يقبله القيد في القاعدة', () => {
     const sql = readFileSync(join(__dirname, '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'), 'utf8');
@@ -109,16 +109,17 @@ describe('مفتاح المرافق في نموذج الجهة وتبويب ال
     expect(companionKnown(null, false)).toBe(false);
     expect(companionKnown(null, true)).toBe(true);
   });
-  it('تبويب المساعد في الأقسام، ومقصور على المدير الأعلى والمالك', () => {
-    expect(TABS.find(([k]) => k === 'agent')?.[1]).toBe('المساعد الآلي');
-    expect(OWNER_TABS.has('agent')).toBe(true);
+  it('«المساعد الذكي» قسم واحد بثلاثة تبويبات داخلية، مقصور على المدير الأعلى والمالك، والروابط القديمة تصل إلى تبويبها', () => {
+    expect(TABS.find(([k]) => k === 'ai')?.[1]).toBe('المساعد الذكي');
+    for (const k of ['agent', 'guidance', 'guidance-access']) expect(TABS.some(([x]) => x === k), k).toBe(false);
+    expect([...OWNER_TABS]).toEqual(['ai']);
+    expect(AI_TABS.map(([k, l]) => [k, l])).toEqual([['site', 'مساعد الموقع'], ['guidance', 'التوجيه والإرشاد'], ['access', 'الإتاحة']]);
+    expect(TAB_ALIASES).toEqual({ agent: ['ai', 'site'], guidance: ['ai', 'guidance'], 'guidance-access': ['ai', 'access'] });
     const src = readFileSync(join(__dirname, 'screens/Leaders.jsx'), 'utf8');
-    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'agent', 'guidance', 'guidance-access'\]\]/);
-    // «التوجيه والإرشاد» و«إتاحة التوجيه» (H1) مقصوران مثله
-    expect(OWNER_TABS.has('guidance') && OWNER_TABS.has('guidance-access')).toBe(true);
+    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'ai'\]\]/);
   });
   it('لا شرطة طويلة ولا متوسطة في الملفات الجديدة', () => {
-    const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',
+    const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', 'screens/AiHub.jsx', 'leaders-tabs.js', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',
       '../../supabase/functions/agent-chat/version.ts', '../../supabase/functions/agent-chat/evals/runner.ts', '../../supabase/functions/admin-api/step_up.ts', '../../supabase/migrations/20261115230000_leaders_agent_admin.sql'];
     for (const f of files) expect(/[\u2013\u2014]/.test(readFileSync(join(__dirname, f), 'utf8')), f).toBe(false);
   });
