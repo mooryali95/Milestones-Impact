@@ -8,6 +8,7 @@
 import { all, allFor, audit, db, Fail, must } from './core.ts';
 import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, upgradePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
+import { planUpgradeBlock } from './cohort-plan.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
 import { cleanProfile } from './certificates.ts';
@@ -114,6 +115,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
   return {
     ...rendered, via, program_id: programId, feature_hidden: fh.hidden,
+    // الموقوفة في خطة الدفعة (R2b): خارج الرحلة، وتُعرض باهتة في خريطة ملف الدفعة
+    stages_off: def.stages_off || [],
     cohort: cohort ? { id: cohort.id, name: cohort.name, is_default: !!cohort.is_default, starts_on: cohort.starts_on, ends_on: cohort.ends_on, schedule: cohort.schedule || {},
       level_mode: cohort.level_mode || 'mixed', content_level: cohort.content_level || null, stage_modes: cohort.stage_modes || {}, project_mode: cohort.project_mode || 'individual' } : null,
     milestones: ((await db.from('program_milestones').select('*').eq('program_id', programId).eq('active', true).order('sort')).data || []),
@@ -716,6 +719,10 @@ export async function cohortUpgrade(a: Admin, b: Body) {
   if (c.program_version_id) from = (await db.from('program_versions').select('data').eq('id', c.program_version_id).single()).data?.data;
   else { const live = await liveRows(c.program_id); from = programSnapshot(live.stages, live.requirements); }
   const plan = upgradePlan({ cohort: c, from, to: to.data });
+  // مرحلة موقوفة لهذه الدفعة تصير محمية في النسخة الهدف (بند يحسمه النظام أو بوابة): الإيقاف يُسقط بندها من رحلة كل عضو،
+  // فلا تُرقّى قبل أن يعيدها المدير من تبويب «الرحلة» بأثرها (الإعفاء أو الإعادة، القرار 12)
+  const offBlocked = planUpgradeBlock({ stages: to.data?.stages || [], requirements: to.data?.requirements || [], schedule: plan.patch.schedule });
+  if (offBlocked && !plan.blocked) plan.blocked = offBlocked;
   const affected = await progressOn(c, removedRequirementIds(from, to.data));
   const out = { success: true, to: { id: to.id, number: to.number, label: to.label }, diff: plan.diff, dropped: plan.dropped, affected, blocked: plan.blocked || null };
   if (b.confirm !== true) return { ...out, preview: true };

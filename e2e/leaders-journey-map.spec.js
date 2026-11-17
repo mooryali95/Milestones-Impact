@@ -104,3 +104,21 @@ test('بلا خريطة من الخادم: أعمدة القمع كما كانت
   await expect(page.getByRole('heading', { name: 'مراحل الرحلة' })).toBeVisible();
   await expect(page.locator('section.jm')).toHaveCount(0);
 });
+
+// R2b: مرحلة موقوفة لدفعة (stages_off في خريطة ملف الدفعة) تظهر في مكانها باهتة «موقوفة لهذه الدفعة» بلا أعداد ولا لوح
+for (const width of [1280, 390]) {
+  test(`مرحلة موقوفة لهذه الدفعة (${width}): في مكانها بلا أعداد ولا تفاعل، والجدول البديل يسميها`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const stages = map.stages.map((s) => (s.key === 'consulting' ? { key: s.key, phase: s.phase, title: s.title, duration_days: 0, here: 0, done: 0, late: 0, window: null, off: true, people: [] } : s));
+    await mount(page, { ...dashboard, journey_map: { ...map, stages } });
+    const off = page.locator('.jm-stage.off');
+    await expect(off).toHaveCount(1);
+    await expect(off).toContainText('الاستشارة');
+    await expect(off).toContainText('موقوفة لهذه الدفعة');
+    await expect(off.getByRole('button')).toHaveCount(0);
+    await expect(off.getByRole('note', { name: 'الاستشارة: موقوفة لهذه الدفعة' })).toBeVisible();
+    await expect(page.locator('.jm-phase.jm-qualification .jm-phase-head small')).toContainText('(1 موقوفة)');
+    await expect(page.locator('.jm table.sr-only')).toContainText('الاستشارة (موقوفة لهذه الدفعة)');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}

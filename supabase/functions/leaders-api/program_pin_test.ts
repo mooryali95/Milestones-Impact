@@ -365,6 +365,23 @@ Deno.test('تأكيد الترقية يثبّت الهدف ويعيد ضبط ا�
   } finally { w.restore(); }
 });
 
+Deno.test('R2b الترقية: مرحلة موقوفة لهذه الدفعة تصير محمية في النسخة الهدف تمنع التأكيد بسببها، فلا يسقط بند يحسمه النظام بصمت', async () => {
+  const w = upgradeWorld();
+  try {
+    // الختام موقوفة لهذه الدفعة، وفي النسخة 2 فيها القياس البعدي (يحسمه النظام)
+    (w.tables.program_versions[1].data as any).requirements[1] = { ...(w.tables.program_versions[1].data as any).requirements[1], code: 'E-POST', kind: 'auto', title_ar: 'القياس البعدي' };
+    w.tables.cohorts[0].schedule = { s1: { start: '2026-09-01' }, s3: { off: true } };
+    const p: any = await cohortUpgrade(admin, { id: C1 });
+    assertEquals(p.blocked?.includes('«القياس البعدي»'), true);
+    assertEquals(p.blocked?.includes('أعدها من تبويب «الرحلة» ثم رقِّ النسخة'), true);
+    assertEquals((await failOf(() => cohortUpgrade(admin, { id: C1, confirm: true }))).code, 'upgrade_blocked');
+    assertEquals(w.tables.cohorts[0].program_version_id, V1);
+    // بلا إيقاف تمر
+    w.tables.cohorts[0].schedule = { s1: { start: '2026-09-01' } };
+    assertEquals(((await cohortUpgrade(admin, { id: C1 })) as any).blocked, null);
+  } finally { w.restore(); }
+});
+
 Deno.test('الترقية إلى نسخة مسماة من البرنامج نفسه، ونسخة برنامج آخر تُرفض، والإخفاء الكاسر في الهدف يمنع التأكيد', async () => {
   const w = upgradeWorld();
   try {

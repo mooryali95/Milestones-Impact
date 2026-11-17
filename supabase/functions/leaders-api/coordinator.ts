@@ -478,6 +478,8 @@ export async function adminCohortJourney(a: Admin, b: Body) {
     stages: (def.stages || []).filter((s: any) => s.active !== false).sort((x: any, y: any) => x.sort - y.sort),
     people: mapPeople(rows as any[], journeys),
     cohort: def.cohort, program, list: true, activity: true,
+    // الموقوفة لهذه الدفعة (R2b) تظهر في مكانها باهتة بلا أعداد
+    off: def.stages_off || [],
   });
   await audit('admin', a.email, 'admin.cohort-journey', 'cohorts', cohortId);
   return { success: true, journey_map };

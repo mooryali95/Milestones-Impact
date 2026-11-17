@@ -7,10 +7,11 @@
 import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import { daysAr, renderJourneyText, stageRules } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
-import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo } from '../../supabase/functions/leaders-api/milestones.js';
-import { cohortPlan, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
+import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from '../../supabase/functions/leaders-api/milestones.js';
+import { cohortPlan, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
+import { PHASE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import {
-  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, sameSchedule, suggestDays, unitFor,
+  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, planRestartBlock, sameSchedule, suggestDays, unitFor,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
 
@@ -100,6 +101,22 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
     };
   };
   const stageMs = (k) => live.filter((m) => (m.anchor === 'stage_end' || m.anchor === 'stage_start') && m.stage_key === k).map(msOut);
+  // الموقوفة لهذه الدفعة (R2b): خارج الخط، وبطاقتها باهتة في مكانها، ومعالمها مستبعدة من الدفعة (milestoneOff، القرار 15)
+  const offKeys = planOffKeys(planSchedule(cohort));
+  const offMs = (k) => live.filter((m) => milestoneOff(m, new Set([k]))).map((m) => ({
+    id: m.id, title: m.title_ar, due: null, due_ar: 'مستبعد لهذه الدفعة', source: 'off', source_ar: 'لا يُعد في درجة المعالم',
+    anchor_ar: `${MILESTONE_ANCHOR_AR[m.anchor] || ''}`, done: null, late: null, excluded: true,
+  }));
+  const offCard = (s) => {
+    const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
+    return {
+      key: s.key, title: titleOf(s.key), phase: s.phase && PHASE_AR[s.phase] ? s.phase : 'qualification', status: 'off', status_ar: 'موقوفة لهذه الدفعة',
+      optional: stageRules(s).mode !== 'required', label: 'لا تأخذ من الرحلة وقتًا', window_ar: '', today_ar: '', lead: true, off: true,
+      window_source: null, window_source_ar: '', with_ar: '', rule_ar: '', undated: false, people: null,
+      acts: { shown: 0, total: rs.length, text: rs.length ? `${actsAr(rs.length)} لا تظهر لأعضاء الدفعة ما دامت موقوفة، وما أُنجز منها محفوظ` : 'لا أنشطة' },
+      milestones: offMs(s.key), late_milestones: 0, sort: s.sort ?? 0,
+    };
+  };
 
   const card = (s, lead, withAr = s.with_note || '') => {
     const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
@@ -149,9 +166,24 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
     return { key: ph.key, title: ph.title, label: ph.label, groups, count: groups.reduce((n, g) => n + g.stages.length, 0) };
   }).filter((p) => p.groups.length);
 
-  const cohortMs = live.filter((m) => !['stage_end', 'stage_start'].includes(m.anchor) || !stageBy.has(m.stage_key)).map(msOut);
+  // البطاقات الموقوفة في محاورها بترتيب المراحل، والمحور الذي كل مراحله موقوفة يظهر بها وحدها
+  const sortOf = (k) => raw.get(k)?.sort ?? 0;
+  const offStages = [...raw.values()].filter((s) => s.active !== false && offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  for (const s of offStages) {
+    const c = offCard(s);
+    let ph = phases.find((p) => p.key === c.phase);
+    if (!ph) {
+      ph = { key: c.phase, title: PHASE_AR[c.phase] || c.phase, label: 'كل مراحله موقوفة لهذه الدفعة', groups: [], count: 0 };
+      const order = ['admission', 'qualification', 'impact'];
+      const at = phases.findIndex((p) => order.indexOf(p.key) > order.indexOf(c.phase));
+      phases.splice(at < 0 ? phases.length : at, 0, ph);
+    }
+    const at = ph.groups.findIndex((g) => Math.min(...g.stages.map((x) => sortOf(x.key))) > c.sort);
+    ph.groups.splice(at < 0 ? ph.groups.length : at, 0, { key: `off-${s.key}`, together: false, off: true, stages: [c], note_ar: '' });
+  }
+  const cohortMs = live.filter((m) => (!['stage_end', 'stage_start'].includes(m.anchor) || !stageBy.has(m.stage_key)) && !milestoneOff(m, offKeys)).map(msOut);
   const together = phases.reduce((n, p) => n + p.groups.filter((g) => g.together).length, 0);
-  return { phases, cohort_milestones: cohortMs, counts: { stages: model.stages.length, together, milestones: live.length } };
+  return { phases, cohort_milestones: cohortMs, counts: { stages: model.stages.length, off: offStages.length, together, milestones: live.filter((m) => !milestoneOff(m, offKeys)).length } };
 }
 
 /** صف المؤشرات تحت الرأس: المدة والمراحل وما يسير معًا والمعالم، والناس من الخريطة إن قُرئت
@@ -161,7 +193,7 @@ export function journeyKpis(model, lanes, map = null, { msError = false } = {}) 
   if (!model || model.empty) return [];
   const out = [
     { key: 'total', label: 'المدة', value: model.total_label },
-    { key: 'stages', label: 'المراحل', value: `${stagesAr(lanes.counts.stages)} في ${countAr(lanes.phases.length, 'محور واحد', 'محورين', 'محاور', 'محورًا')}` },
+    { key: 'stages', label: 'المراحل', value: `${stagesAr(lanes.counts.stages)} في ${countAr(lanes.phases.length, 'محور واحد', 'محورين', 'محاور', 'محورًا')}${lanes.counts.off ? `، و${countAr(lanes.counts.off, 'واحدة موقوفة', 'اثنتان موقوفتان', 'موقوفة', 'موقوفة')}` : ''}` },
     { key: 'together', label: 'تسير معًا', value: lanes.counts.together ? countAr(lanes.counts.together, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة') : 'لا توازي' },
     { key: 'milestones', label: 'المعالم', value: msError ? 'تعذّرت القراءة' : lanes.counts.milestones ? milestonesAr(lanes.counts.milestones) : 'لا معالم', tone: msError ? 'warn' : '' },
   ];
@@ -186,21 +218,30 @@ export const planCohort = (c, cp) => {
 };
 const liveStages = (def) => [...(def?.stages || [])].filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
 
-/** الخطة في المسودة: الجديدة بعد تعديل المدير، وصف لكل مرحلة (المدة ومصدرها ومدة البرنامج والتثبيت)، وعدد التعديلات
- * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean } | null }} o */
+/** الخطة في المسودة: الجديدة بعد تعديل المدير، وصف لكل مرحلة (المدة ومصدرها ومدة البرنامج والتثبيت والإيقاف وسبب منعه)،
+ * وعدد التعديلات. edit.off: { مفتاح: true أو false } (R2b)
+ * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, boolean> } | null }} o */
 export function planDraft({ def, cohort, edit = null }) {
   const stages = liveStages(def);
+  const requirements = def?.requirements || [];
   const saved = cohort?.schedule || {};
-  const r = edit ? planEdit({ stages, schedule: saved, edit, cohort }) : { schedule: saved, errors: [] };
+  const r = edit ? planEdit({ stages, schedule: saved, edit, cohort, requirements }) : { schedule: saved, errors: [] };
   const plan = cohortPlan(stages, { ...cohort, schedule: r.schedule });
   const was = cohortPlan(stages, { ...cohort, schedule: saved });
   const rows = {};
+  const stageBy = new Map(stages.map((s) => [s.key, s]));
   for (const x of plan.stages) {
     const before = was.byKey[x.key];
+    // سبب منع الإيقاف للمرحلة العاملة على الخطة كما هي في المسودة، فما يُوقف معها مرجعه يُفتح زره. وللموقوفة سبب منع
+    // إعادتها: «تبدأ مع» مرجعًا يبقى موقوفًا (القرار 22)، فيُفتح زرها حين يُعاد مرجعها في المسودة
+    const block = x.off
+      ? planRestartBlock(stageBy.get(x.key), { stages, schedule: r.schedule })
+      : planOffBlock(stageBy.get(x.key), { stages, requirements, schedule: { ...r.schedule, [x.key]: { ...(r.schedule[x.key] || {}), off: true } } });
     rows[x.key] = {
-      ...x, pinned: x.source === 'pinned', source_ar: x.source === 'cohort' ? `معدّلة: البرنامج ${planDurationAr(x.program_days)}` : PLAN_SOURCE_AR[x.source],
-      days_ar: planDurationAr(x.days), edited: !sameSchedule(saved[x.key] || {}, r.schedule[x.key] || {}),
-      was_ar: before && before.days !== x.days ? `كانت ${planDurationAr(before.days)}` : '',
+      ...x, pinned: x.source === 'pinned', off: !!x.off, block,
+      source_ar: x.off ? 'موقوفة لهذه الدفعة' : x.source === 'cohort' ? `معدّلة: البرنامج ${planDurationAr(x.program_days)}` : PLAN_SOURCE_AR[x.source],
+      days_ar: x.off ? 'موقوفة' : planDurationAr(x.days), edited: !sameSchedule(saved[x.key] || {}, r.schedule[x.key] || {}),
+      was_ar: before && !before.off && !x.off && before.days !== x.days ? `كانت ${planDurationAr(before.days)}` : before && !!before.off !== !!x.off ? (x.off ? 'كانت تعمل' : 'كانت موقوفة') : '',
     };
   }
   const edits = stages.filter((s) => rows[s.key]?.edited).length;
@@ -208,6 +249,7 @@ export function planDraft({ def, cohort, edit = null }) {
     schedule: r.schedule, errors: r.errors, anchored: r.anchored || [], rows, edits, issues: plan.issues,
     pinned: stages.filter((s) => rows[s.key]?.pinned).length,
     changed: plan.stages.filter((x) => x.source === 'cohort').length,
+    off: plan.stages.filter((x) => x.off).length,
     cohort: { ...cohort, schedule: r.schedule },
   };
 }
@@ -229,19 +271,25 @@ export const fromUnit = (v, unit) => {
 };
 export { planLock, suggestDays, unitFor, impactLines };
 // جسم المعاينة والحفظ: المدد المعدّلة وحدها، و«حرّر التواريخ لتتبع المدد»، وما بُنيت عليه المسودة
-export const planBody = (cohort, edit, op) => ({
+// opts: «أبلغ المشاركين» (القرار 13، مطفأ افتراضيًا) وإعادة التشغيل بعد التجاوز (القرار 12، «اعفِ» افتراضيًا) في الحفظ وحده
+export const planBody = (cohort, edit, op, opts = {}) => ({
   cohort_id: cohort.id, op, days: edit?.days || {}, ...(edit?.follow ? { follow: true } : {}),
+  ...(edit?.off && Object.keys(edit.off).length ? { off: edit.off } : {}),
+  ...(op === 'save' && opts.notify ? { notify: true } : {}), ...(op === 'save' && opts.reenable === 'apply' ? { reenable: 'apply' } : {}),
   ...(cohort.updated_at ? { base_updated_at: cohort.updated_at } : {}),
 });
 // سطور السجل: من حفظ ومتى وماذا غيّر، بلا أسماء مشاركين
 export function historyRows(list) {
   return (list || []).map((r) => {
     // ما تغيّرت مدته وحده، لا ما تحرك تاريخه لأن ما قبله طال أو قصر
-    const n = (r.summary?.changes || []).filter((x) => x.before !== x.after).length;
-    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : !n ? 'حفظ الخطة بلا تغيير في المدد' : r.summary?.changes ? (n === 2 ? 'مرحلتان تغيّرت مدتهما' : `${countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} ${n === 1 ? 'تغيّرت مدتها' : 'تغيّرت مددها'}`) : 'حفظ الخطة';
+    const n = (r.summary?.changes || []).filter((x) => !x.off && x.before !== x.after).length;
+    const stopped = (r.summary?.stopped || []).length, started = (r.summary?.started || []).length;
+    const offAr = [stopped ? `${countAr(stopped, 'أُوقفت مرحلة', 'أُوقفت مرحلتان', 'مراحل أُوقفت', 'مرحلة أُوقفت')}` : '', started ? `${countAr(started, 'أُعيدت مرحلة', 'أُعيدت مرحلتان', 'مراحل أُعيدت', 'مرحلة أُعيدت')}` : ''].filter(Boolean).join('، و');
+    const durAr = !n ? '' : n === 2 ? 'مرحلتان تغيّرت مدتهما' : `${countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} ${n === 1 ? 'تغيّرت مدتها' : 'تغيّرت مددها'}`;
+    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr ? [offAr, durAr].filter(Boolean).join('، و') : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
     const sh = r.summary?.shift ? `، ${r.summary.shift > 0 ? 'تأخرت' : 'تقدمت'} النهاية ${daysAr(Math.abs(r.summary.shift))}` : '';
     return { id: r.id, at: r.at, by: r.actor || '', text: `${what}${sh}`, undo: r.action === 'cohort.plan-undo' };
   });
 }
 // سطور نافذة الأثر بتاريخ اللوحة
-export const impactAr = (impact) => impactLines(impact, dateOnly);
+export const impactAr = (impact, opts = {}) => impactLines(impact, dateOnly, opts);

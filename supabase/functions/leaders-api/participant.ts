@@ -523,10 +523,11 @@ async function continuousFor(participantId: string, milestones: any[], programId
 
 // lite: لوحة الجهة تحسب رحلة كل مشارك عند كل فتح (org-15)، ولا تأخذ منها المجموعة ولا التقييم المستمر،
 // فيُتركان (نحو عشرة استعلامات لكل مشارك) والرحلة والتقدم والمعالم كما هي بلا فرق
-export async function journeyFor(p: any, { lite = false }: { lite?: boolean } = {}) {
+// cohort: رحلته على دفعته بخطة لم تُحفظ بعد (معاينة admin.cohort-plan حين تعود مرحلة موقوفة)، لا يُقرأ بها غير ذلك
+export async function journeyFor(p: any, { lite = false, cohort = null }: { lite?: boolean; cohort?: any } = {}) {
   const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
-    journeyDefinition(p),
+    journeyDefinition(p, cohort),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
     db.from('assessments').select('id, status, submitted_at, instruments(kind)').eq('participant_id', p.id),
     db.from('reports').select('id, issued_at').eq('participant_id', p.id).not('issued_at', 'is', null),
