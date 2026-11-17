@@ -299,7 +299,9 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
 
 const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
-function Stage({ stage, n, expanded, onToggle, ...rest }) {
+// level: مستوى عنوان المرحلة في المخطط، h5 داخل كتلة «تسير معًا» فتكون مراحلها تحت عنوانها لا أخواته (R3b)
+function Stage({ stage, n, expanded, onToggle, level = 4, ...rest }) {
+  const H = level === 5 ? 'h5' : 'h4';
   const locked = stage.status === 'locked';
   const mode = MODES[stage.mode];
   const chip = stage.skipped ? <span className="chip ok">أُعفيت منها</span>
@@ -314,7 +316,7 @@ function Stage({ stage, n, expanded, onToggle, ...rest }) {
       <div className="stage-card">
         <button className="stage-top" onClick={onToggle} aria-expanded={expanded}>
           <div className="grow">
-            <h4>{stage.title_ar}</h4>
+            <H>{stage.title_ar}</H>
             <div className="meta">
               {mode && <span className="tag"><i aria-hidden="true">{mode.icon}</i>{mode.title}</span>}
               {stage.duration_label && <span className="tag">{stage.duration_label}</span>}
@@ -911,16 +913,16 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
               </div>
               <div className="timeline">
                 {(() => {
-                  const card = (s) => {
+                  const card = (s, inGroup = false) => {
                     order += 1;
                     return (
-                      <Stage key={s.key} stage={s} n={order} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
+                      <Stage key={s.key} stage={s} n={order} level={inGroup ? 5 : 4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
                         onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
                     );
                   };
                   // المراحل التي تسير معًا كتلة واحدة (withGroups على قواعد رحلته نفسها)، ومرحلة وحدها كتلة بمرحلة
                   const unit = (g) => (g.length > 1
-                    ? <Together key={`g-${g[0].key}`} stages={g} now={g.some((s) => nowKeys.has(s.key))}>{g.map(card)}</Together>
+                    ? <Together key={`g-${g[0].key}`} stages={g} now={g.some((s) => nowKeys.has(s.key))}>{g.map((s) => card(s, true))}</Together>
                     : card(g[0]));
                   const units = withGroups(stages);
                   // الكتل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير

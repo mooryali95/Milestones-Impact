@@ -19,7 +19,7 @@ import { cohortDefinition, inProgram } from './logic.js';
 import { cleanScheduleReport, cutoffFrom } from './milestones.js';
 import { cohortMemberIds, defOf } from './programs.ts';
 import { journeyFor } from './participant.ts';
-import { positionOf } from './journey-map.js';
+import { currentStages } from './journey-map.js';
 import { cohortPlan, planOffKeys } from './stage-windows.js';
 import { impactSummary, PLAN_ACTIONS, planEdit, planImpact, planLock, planNotice, planRestartBlock, planWithIssues, sameSchedule } from './cohort-plan.js';
 
@@ -66,9 +66,10 @@ async function peopleOf(c: any, afterSchedule: any = null) {
     for (let p = queue.shift(); p; p = queue.shift()) {
       const j: any = await journeyFor(p, { lite: true }).catch(() => null);
       if (!j) continue;
-      const idx = positionOf(j.journey || []);
+      // المرحلة الحالية (currentStages، R3b): at الموضع، وats هو وما يسير معه نشطًا، فيُعدّ «هنا» في كل منها كما في الخريطة
+      const cur = currentStages(j.journey || []);
       const row: any = {
-        id: p.id, at: idx >= 0 ? j.journey[idx].key : null,
+        id: p.id, at: cur.stage ? cur.stage.key : null, ats: cur.stages.map((s: any) => s.key),
         stagesDone: (j.journey || []).filter((s: any) => s.status === 'done').map((s: any) => s.key),
         open: (j.journey || []).filter((s: any) => s.status !== 'locked').map((s: any) => s.key),
         records: Object.fromEntries((j.milestones || []).map((x: any) => [x.id, { done_at: x.done_at || null, due_override: x.extended ? x.due : null, note: x.note || null }])),

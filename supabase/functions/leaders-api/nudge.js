@@ -77,12 +77,15 @@ export function nudgeFor({ p, onboarding = null, journey = [], progress = 0, dat
   const done = items.filter((it) => it.status === 'done').length;
   const total = items.length;
   const names = stagesAr(cur.stages.map((st) => st.title_ar));
+  // اللقطة على المجموعة كلها لا على الجارية وحدها: الجارية التي تكتمل تخرج من stages، فيُعدّ ما أنجز فيها ويبقى العدد لا ينقص
+  // ما دام المفتاح نفسه، فيُعرف أنه تقدّم بين تذكيرين (ledgerSummary)
+  const groupDone = cur.group.flatMap((st) => st.items || []).filter((it) => it.status === 'done').length;
   return {
     ok: true, kind: returned ? 'returned' : 'stage', key: `stage:${s.key}`, stage: s.title_ar, step: need,
     remaining: total ? `أنجز ${done} من ${total} في ${cur.together ? `«${names}» معًا` : 'هذه المرحلة'}` : '', progress: Number(progress) || 0, days,
     subject: returned ? `ملاحظة على «${need}» بانتظارك` : `خطوتك التالية في «${at.title_ar}»`,
     text: stageText({ stage: s.title_ar, stages: cur.together ? cur.stages.map((st) => st.title_ar) : null, need, progress: Number(progress) || 0, days, returned: !!returned, note: returned?.note, at: at.title_ar }),
-    snapshot: { key: `stage:${s.key}`, done, progress: Number(progress) || 0 },
+    snapshot: { key: `stage:${s.key}`, done: groupDone, progress: Number(progress) || 0 },
   };
 }
 

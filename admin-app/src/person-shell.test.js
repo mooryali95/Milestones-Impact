@@ -44,6 +44,14 @@ describe('اللمحة', () => {
     expect(g['الجلسات']).toEqual(['1 حضرها', 'من 2']);
     expect(g['آخر دخول'][0]).toBe('لم يدخل');
   });
+  it('مرحلتان تسيران معًا نشطتان تُسميان معًا (currentStages، R3b)', () => {
+    const g = Object.fromEntries(glance(file({ journey: [
+      { key: 'p', sort: 1, status: 'done', title_ar: 'التهيئة' },
+      { key: 'a', sort: 2, status: 'active', title_ar: 'التدريب' },
+      { key: 'b', sort: 3, status: 'active', title_ar: 'التوجيه', rules: { unlock: 'with', with: 'a' } },
+    ] })).map(([k, v]) => [k, v]));
+    expect(g['المرحلة الحالية']).toBe('التدريب والتوجيه');
+  });
   it('من أتم الرحلة كلها', () => {
     const g = Object.fromEntries(glance(file({ journey: [{ status: 'done' }] })).map(([k, v]) => [k, v]));
     expect(g['المرحلة الحالية']).toBe('أتم الرحلة');

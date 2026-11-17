@@ -6,8 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { currentStages, groupAt, journeyMap, stageEntry, todayStage, todayStages } from '../../supabase/functions/leaders-api/journey-map.js';
 import { cohortPlan, planSpanDays, stageWindows } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { cohortDefinition } from '../../supabase/functions/leaders-api/logic.js';
-import { nudgeFor, stageText } from '../../supabase/functions/leaders-api/nudge.js';
+import { ledgerSummary, nudgeFor, stageText } from '../../supabase/functions/leaders-api/nudge.js';
 import { pathOf } from './screens/Paywall.jsx';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import JourneyMap from '../../shared/ui/JourneyMap.jsx';
 
 const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
 const S = (key, sort, days, rules = null, phase = 'qualification') => ({ key, sort, title_ar: key, duration_days: days, phase, ...(rules ? { rules } : {}) });
@@ -102,6 +105,22 @@ describe('الخريطة تعدّ ما يراه المشارك', () => {
   });
 });
 
+describe('«تجاوزوا القبول» يطرح من في القبول مرة واحدة (here_by_phase)', () => {
+  it('من يقف في مرحلتي قبول تسيران معًا لا يُطرح مرتين', () => {
+    const AS = [S('p1', 1, 7, null, 'admission'), S('p2', 2, 7, W('p1'), 'admission'), S('q', 3, 14)];
+    const JA = (st) => AS.map((s) => ({ ...s, stage_mode: 'required', status: st[s.key] || 'locked', items: [item(st[s.key] === 'done' ? 'done' : 'pending')] }));
+    const people = [
+      { id: 'x', name: 'سارة', created_at: '2026-10-01T00:00:00Z', journey: JA({ p1: 'active', p2: 'active' }) },
+      { id: 'y', name: 'خالد', created_at: '2026-10-01T00:00:00Z', journey: JA({ p1: 'done', p2: 'done', q: 'active' }) },
+      { id: 'z', name: 'نورة', created_at: '2026-10-01T00:00:00Z', journey: JA({ p1: 'done', p2: 'done', q: 'active' }) },
+    ];
+    const m = journeyMap({ stages: AS, people, cohort: { name: 'دفعة', starts_on: '2026-11-01' }, today: new Date('2026-11-03T10:00:00Z') });
+    expect(m.here_by_phase.admission).toBe(1);
+    const html = renderToStaticMarkup(React.createElement(JourneyMap, { map: m }));
+    expect(html).toMatch(/<dt>تجاوزوا القبول<\/dt><dd>2<\/dd>/);
+  });
+});
+
 describe('التذكير من المرحلة الحالية نفسها', () => {
   const p = { id: 'p', email: 'p@x.sa', status: 'enrolled', created_at: '2026-10-01T00:00:00Z' };
   it('يسمّي الجاريتين معًا وخطوته فيهما، والعدّ عبرهما', () => {
@@ -124,6 +143,30 @@ describe('التذكير من المرحلة الحالية نفسها', () => {
     expect(n.kind).toBe('returned');
     expect(n.text).toContain('خطوة في «b»');
     expect(stageText({ stage: 'التدريب', need: 'قراءة', progress: 10, days: 0 })).toBe('أنت في مرحلة «التدريب»، وقطعت 10% من رحلتك. خطوتك التالية: قراءة. أنت على الطريق الصحيح، فواصل.');
+  });
+});
+
+describe('لقطة التذكير لا تنقص حين تكتمل جارية معه', () => {
+  const p = { id: 'p', email: 'p@x.sa', status: 'enrolled', created_at: '2026-10-01T00:00:00Z' };
+  it('أكمل «b» كلها بين تذكيرين: المفتاح نفسه، والعدد يزيد، فيُعدّ الأقدم «تقدّم»', () => {
+    const its = (n, k) => Array.from({ length: n }, (_, i) => ({ title_ar: `بند ${i}`, status: i < k ? 'done' : 'pending', required: true }));
+    const j1 = J({ profile: 'done', a: 'active', b: 'active' });
+    j1[1] = { ...j1[1], items: its(2, 1) };
+    j1[2] = { ...j1[2], items: its(3, 1) };
+    const j2 = J({ profile: 'done', a: 'active', b: 'done' });
+    j2[1] = { ...j2[1], items: its(2, 1) };
+    j2[2] = { ...j2[2], items: its(3, 3) };
+    const n1 = nudgeFor({ p, journey: j1, progress: 40 });
+    const n2 = nudgeFor({ p, journey: j2, progress: 40 });
+    expect([n1.snapshot.key, n2.snapshot.key]).toEqual(['stage:a', 'stage:a']);
+    expect(n2.snapshot.done).toBeGreaterThan(n1.snapshot.done);
+    // ما يُعرض للمشارك يبقى على الجارية وحدها
+    expect(n2.remaining).toBe('أنجز 1 من 2 في هذه المرحلة');
+    const rows = [
+      { id: 2, sender: 'system', created_at: '2026-11-10T00:00:00Z', snapshot: n2.snapshot },
+      { id: 1, sender: 'system', created_at: '2026-11-03T00:00:00Z', snapshot: n1.snapshot },
+    ];
+    expect(ledgerSummary(rows, n2, '2026-11-11T00:00:00Z').rows[1].outcome).toBe('progressed');
   });
 });
 
@@ -152,5 +195,12 @@ describe('مدة الرحلة من خطتها (planSpanDays)', () => {
     expect(read('leaders-app/src/screens/Journey.jsx')).toContain('currentStages(journey)');
     expect(read('supabase/functions/leaders-api/nudge.js')).toContain('currentStages(journey)');
     expect(read('supabase/functions/leaders-api/journey-map.js')).toContain('const cur = currentStages(j);');
+    expect(read('supabase/functions/leaders-api/cohort-plan.ts')).toContain('currentStages(j.journey || [])');
+    expect(read('supabase/functions/leaders-api/guide.ts')).toContain('currentStages(j.journey || [])');
+  });
+  it('مخطط العناوين: عنوان «تسير معًا» h4 ومراحلها تحته h5', () => {
+    const src = read('leaders-app/src/screens/Journey.jsx');
+    expect(src).toContain("const H = level === 5 ? 'h5' : 'h4';");
+    expect(src).toContain('{g.map((s) => card(s, true))}</Together>');
   });
 });

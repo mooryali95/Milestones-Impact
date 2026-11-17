@@ -408,7 +408,8 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
     const flipped = new Set();
     const t = today ? String(new Date(today).toISOString()).slice(0, 10) : undefined;
     for (const p of people) {
-      if (p.at) here[p.at] = (here[p.at] || 0) + 1;
+      // كل مرحلة جارية عليه (ats من currentStages)، فمن يسير في مرحلتين معًا يُعدّ في كل منهما كما في الخريطة (R3b)
+      for (const k of p.ats || (p.at ? [p.at] : [])) here[k] = (here[k] || 0) + 1;
       if (!live.length) continue;
       const o = { stagesDone: p.stagesDone instanceof Set ? p.stagesDone : new Set(p.stagesDone || []), records: p.records || {}, stages, today: t };
       const s0 = new Map(milestoneStatuses(live, { ...o, cohort: c0 }).map((m) => [m.id, m]));

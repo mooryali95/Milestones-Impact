@@ -252,6 +252,17 @@ describe('الأثر والسجل والإشعار', () => {
     expect(impactLines(im).find((x) => x.key === 'c-consulting').text).toContain('تسير مع «التدريب» من بدايتها');
     expect(planNotice(im, (d) => d).body).toContain('تغيّر توقيت «الاستشارة».');
   });
+  it('من يسير في مرحلتين معًا يُعدّ في كل منهما (ats من currentStages، R3b): إيقاف التابعة أو تغيير مدتها يسميه', () => {
+    const people = [
+      { id: 'p1', at: 'training', ats: ['training', 'ojt'], stagesDone: ['profile'], open: ['profile', 'training', 'ojt'], records: {} },
+      { id: 'p2', at: 'consulting', stagesDone: ['profile', 'training', 'ojt'], open: ['profile', 'training', 'ojt', 'consulting'], records: {} },
+    ];
+    const stop = planImpact({ stages: STAGES, before: {}, after: { ojt: { off: true } }, cohort, milestones: [], people, today: '2027-01-10' });
+    expect(stop.moving).toEqual([{ key: 'ojt', title: 'التوجيه', here: 1 }]);
+    const days = planImpact({ stages: STAGES, before: {}, after: { ojt: { days: 14 } }, cohort, milestones: [], people, today: '2027-01-10' });
+    expect(days.people.by_stage).toEqual([{ key: 'ojt', title: 'التوجيه', here: 1 }]);
+    expect(days.notify).toEqual({ members: 2 });
+  });
   it('جسم المعاينة يحمل with وoffset، والمسودة تعطي البطاقة القائمة وحد الإزاحة وتنبيه التجاوز', () => {
     expect(planBody({ id: 'c' }, { days: {}, with: { ojt: 'training' }, offset: { ojt: 7 } }, 'preview')).toMatchObject({ with: { ojt: 'training' }, offset: { ojt: 7 } });
     expect(planBody({ id: 'c' }, { days: {}, with: {}, offset: {} }, 'preview')).not.toHaveProperty('with');

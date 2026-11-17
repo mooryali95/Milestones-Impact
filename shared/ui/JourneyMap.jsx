@@ -80,7 +80,9 @@ export default function JourneyMap({ map, embedded = false }) {
   const peak = map.bottleneck && stages.find((s) => s.key === map.bottleneck.stage);
   const max = Math.max(1, ...stages.map((s) => s.here));
   const openStage = stages.find((s) => s.key === open);
-  const passedAdmission = total - stages.filter((s) => s.phase === 'admission').reduce((a, s) => a + s.here, 0) - (map.totals.not_started || 0);
+  // من في مرحلتي قبول تسيران معًا يُطرح مرة واحدة (here_by_phase، R3b)، وإلا مجموع مراحل القبول كما كان
+  const admHere = map.here_by_phase?.admission ?? stages.filter((s) => s.phase === 'admission').reduce((a, s) => a + s.here, 0);
+  const passedAdmission = total - admHere - (map.totals.not_started || 0);
 
   return (
     <section className="jm" {...(embedded ? { 'aria-label': 'مراحل الدفعة ومن عند كل منها' } : { 'aria-labelledby': 'jm-h' })}>

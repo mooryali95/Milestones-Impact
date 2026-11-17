@@ -15,6 +15,7 @@ import { missingColumn } from './missing-column.ts';
 import { approvedLevels, journeyFor } from './participant.ts';
 import { companionAllowed, filterHandbookMd, handbookModulesFor, pickCohort, quizFor } from './logic.js';
 import { guidanceFor } from './guidance.ts';
+import { currentStages } from './journey-map.js';
 import {
   contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RULES,
   guideGate, left, parseReply, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
@@ -194,8 +195,10 @@ export async function guideAsk(p: any, b: Body) {
   // التأسيس: نص الباب من كتابه إن سأل من الكتاب، وإلا عناوين أبواب كتابه
   const chapter = chapterId ? await GD.chapter(p, chapterId).catch(async (e) => { await unclaim(); throw e; }) : null;
   const titles = chapter ? [] : await GD.titles(p).catch(() => []);
-  const stage = (j.journey || []).find((x: any) => x.status === 'active');
-  const ctx = contextLine({ stage: stage?.title_ar || null, progress: j.progress, initiative: !!j.initiative, where, chapter: chapter?.title || null, chapters: titles });
+  // المرحلة الحالية كما يراها في رحلته (currentStages، R3b): ما يسير معًا يُسمى كله، وبلا نشطة لا مرحلة
+  const cur = currentStages(j.journey || []);
+  const stage = cur.stage?.status === 'active' ? cur.stages.map((x: any) => x.title_ar).join(' و') : null;
+  const ctx = contextLine({ stage: stage || null, progress: j.progress, initiative: !!j.initiative, where, chapter: chapter?.title || null, chapters: titles });
 
   const past = (await history(p.id, s.retention_days, GUIDE_HISTORY * 2 + 1))
     .filter((m: any) => m.id !== questionId && m.verdict !== 'refused' && m.verdict !== 'error')
