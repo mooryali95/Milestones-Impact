@@ -108,7 +108,8 @@ describe('cohortPlan: الدفعة المفتوحة والدفعة بلا تار
   it('تنبيهات الخطة: تجاوز نهاية الدفعة، و«تُفتح يوم N» خارج نافذتها (القرار 20)، والإلزامية بمدة صفر', () => {
     const st = [...STAGES.slice(0, 3), S('support', 4, 30, { rules: { unlock: 'day', day: 5 } })];
     const p = cohortPlan(st, { starts_on: '2027-01-04', ends_on: '2027-02-01', schedule: { training: { days: 0 } } });
-    expect(p.issues.map((x) => x.code).sort()).toEqual(['day_rule', 'over_end', 'zero_required']);
+    // والتوجيه (أسبوع) يسير مع تدريب بمدة صفر فيتجاوزه: تنبيه التجاوز (R3a)
+    expect(p.issues.map((x) => x.code).sort()).toEqual(['day_rule', 'over_end', 'with_over', 'zero_required']);
     expect(p.over).toBe(daysOver(p.end, '2027-02-01'));
   });
 });

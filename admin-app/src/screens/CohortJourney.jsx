@@ -9,6 +9,7 @@
 // والإيقاف (R2b): مفتاح «أوقف لهذه الدفعة» في كل بطاقة، مقفل بسببه للمحمية ولمرجع «تبدأ مع»، والموقوفة باهتة في مكانها
 // وتعود بنقرة. ونافذة الأثر تسمي من ينتقل والقواعد التي سقط شرطها والمعالم المستبعدة، وفيها «أبلغ المشاركين» (القرار 13)
 // وسؤال من تجاوز مرحلة تعود (القرار 12).
+// والتوازي (R3a): «تسير مع» وإزاحة من بداية المرجع في كل بطاقة، وتنبيه التجاوز، والممر في الخط يبدأ بإزاحته.
 // البيانات: admin.cohort-definition وadmin.milestones وadmin.cohort-journey للقراءة، وadmin.cohort-plan للخطة.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
@@ -22,6 +23,7 @@ import {
 } from '../cohort-journey.js';
 import { PLAN_DAYS_MAX, planDaysMin } from '../../../supabase/functions/leaders-api/stage-windows.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
 
 const editsAr = (n) => countAr(n, 'تعديل واحد', 'تعديلان', 'تعديلات', 'تعديلًا');
@@ -63,6 +65,63 @@ function PlanControl({ s, row, stage, onDays }) {
   );
 }
 
+// «تسير مع» لهذه الدفعة (R3a): قائمة بالمراحل السابقة في المحور (planWithCandidates) أو «لا شيء»، ومعها عداد الإزاحة
+// «تبدأ بعد N من بدايتها» بأيام أو أسابيع، من 0 إلى مدة المرجع (البند 4.6). الإزاحة تخطيط للتواريخ وحدها: الفتح يبقى مع
+// بداية المرجع (القرار 6). وتنبيه التجاوز إن انتهت بعد مرجعها: مسموح، والمجموعة تطول به
+function WithControl({ s, row, onWith, onOffset }) {
+  const [unit, setUnit] = useState(() => unitFor(row.offset));
+  const [text, setText] = useState(null);
+  if (row.with_lock || (!row.with_options.length && !row.with)) return null;
+  const sel = `cj-with-${s.key}`;
+  const id = `cj-offset-${s.key}`;
+  const max = row.offset_max;
+  const setOff = (d) => { setText(null); onOffset(s.key, Math.max(0, Math.min(max, d))); };
+  const value = text ?? String(inUnit(row.offset, unit));
+  const own = row.par_source === 'cohort';
+  const refTitle = row.with ? (row.with_options.find((o) => o.key === row.with)?.title || row.with) : '';
+  return (
+    <div className={`cj-plan cj-par${row.edited ? ' edited' : ''}`} role="group" aria-label={`توازي ${s.title}`}>
+      <label className="cj-par-with" htmlFor={sel}>
+        <span>تسير مع</span>
+        <select id={sel} value={row.with || ''} onChange={(e) => onWith(s.key, e.target.value || false)}>
+          <option value="">لا شيء (تبدأ بعد ما قبلها)</option>
+          {row.with_options.map((o) => <option key={o.key} value={o.key}>{o.title}</option>)}
+          {row.with && !row.with_options.some((o) => o.key === row.with) && <option value={row.with}>{refTitle}</option>}
+        </select>
+      </label>
+      {row.with && (
+        <div className="cj-par-off">
+          <span id={`${id}-l`}>تبدأ بعد</span>
+          <div className="cj-step">
+            <button type="button" aria-label={`أنقص إزاحة ${s.title}`} disabled={row.offset <= 0} onClick={() => setOff(stepDays(row.offset, unit, -1, 0, max))}>−</button>
+            <input id={id} type="text" inputMode="numeric" dir="ltr" aria-label={`إزاحة ${s.title} عن بداية «${refTitle}» ب${unit === 'weeks' ? 'الأسابيع' : 'الأيام'}`} value={value}
+              aria-describedby={`${id}-max`}
+              onChange={(e) => {
+                const d = fromUnit(e.target.value, unit);
+                if (d == null || e.target.value.trim() === '') { setText(e.target.value); return; }
+                onOffset(s.key, Math.max(0, Math.min(max, d)));
+                // خارج المدى: يُحصر في المسودة، فيعرض الحقل ما حُفظ فعلًا لا ما كُتب
+                setText(d > max || d < 0 ? null : e.target.value);
+              }}
+              onBlur={() => setText(null)} />
+            <select aria-label={`وحدة إزاحة ${s.title}`} value={unit} onChange={(e) => { setUnit(e.target.value); setText(null); }}>
+              <option value="days">أيام</option><option value="weeks">أسابيع</option>
+            </select>
+            <button type="button" aria-label={`زد إزاحة ${s.title}`} disabled={row.offset >= max} onClick={() => setOff(stepDays(row.offset, unit, 1, 0, max))}>+</button>
+          </div>
+          <span>من بدايتها</span>
+          <small id={`${id}-max`} className="cj-par-max">أقصاها مدة «{refTitle}»: {max ? durationAr(max) : 'صفر'}</small>
+        </div>
+      )}
+      <span className="cj-plan-meta">
+        <small className={own ? 'own' : ''}>{own ? 'معدّل لهذه الدفعة' : 'من البرنامج'}</small>
+        {row.with && <small>الإزاحة تخطيط للتواريخ: تُفتح مع بداية «{refTitle}»</small>}
+        {own && <button type="button" className="la-link" onClick={() => onWith(s.key, null)}>ارجع لقاعدة البرنامج</button>}
+      </span>
+    </div>
+  );
+}
+
 // مفتاح «أوقف لهذه الدفعة» (R2b): مفتاح تبديل بحالته، والمحمية ومرجع «تبدأ مع» مقفلة وسببها مكتوب تحته ومربوط به،
 // والموقوفة التي تبدأ مع مرجع موقوف لا تُعاد قبله (القرار 22)
 function OffSwitch({ s, row, onOff }) {
@@ -98,13 +157,16 @@ function StageCard({ s, rows = null, plan = null }) {
       </header>
       {plan && row && <OffSwitch s={s} row={row} onOff={plan.onOff} />}
       {plan && row && !off && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
+      {plan && row && !off && <WithControl s={s} row={row} onWith={plan.onWith} onOffset={plan.onOffset} />}
+      {plan && row?.over && !off && <p className="cj-over" role="note"><span aria-hidden="true">!</span>{row.over.msg}. التجاوز مسموح، والمجموعة تنتهي بأطول أعضائها.</p>}
       {off ? <p className="cj-window"><small>لا نافذة لها في هذه الدفعة، وما بعدها يبدأ في مكانها. من يقف فيها ينتقل إلى ما بعدها، وما أنجزه محفوظ.</small></p>
         : s.window_ar ? (
           <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
         ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
-      {(s.with_ar || s.rule_ar) && (
+      {(s.with_ar || s.offset_ar || s.rule_ar) && (
         <ul className="cj-rules">
           {s.with_ar && <li className="cj-with">{s.with_ar}</li>}
+          {s.offset_ar && <li className="cj-offset">{s.offset_ar}</li>}
           {s.rule_ar && <li>{s.rule_ar}</li>}
         </ul>
       )}
@@ -253,7 +315,14 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     if (v === was) delete off[k]; else off[k] = v;
     return { ...(e || {}), off };
   });
-  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, stageOf } : null;
+  // التوازي (R3a): تغيير المرجع يعيد إزاحته إلى قاعدته (planEdit)، والإزاحة لما له مرجع وحده
+  const onWith = (k, v) => setEdit((e) => {
+    const offset = { ...(e?.offset || {}) };
+    delete offset[k];
+    return { ...(e || {}), with: { ...(e?.with || {}), [k]: v }, offset };
+  });
+  const onOffset = (k, v) => setEdit((e) => ({ ...(e || {}), offset: { ...(e?.offset || {}), [k]: v } }));
+  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, onWith, onOffset, stageOf } : null;
   // القفز إلى البطاقة: التركيز البرمجي بعد نقرة الفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة
   const flashT = useRef(0);
   useEffect(() => () => clearTimeout(flashT.current), []);
@@ -365,10 +434,10 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
               draft.changed ? `${countAr(draft.changed, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} بمدة خاصة بهذه الدفعة` : '',
               draft.off ? `${countAr(draft.off, 'مرحلة واحدة موقوفة', 'مرحلتان موقوفتان', 'مراحل موقوفة', 'مرحلة موقوفة')} لهذه الدفعة` : '',
             ].filter(Boolean).join('، و') + '، والباقي من البرنامج.'
-              : 'كل المدد من البرنامج. عدّل مدة أي مرحلة لهذه الدفعة وحدها أو أوقفها، ويُزاح ما بعدها.'}</span>
+              : 'كل المدد من البرنامج. عدّل مدة أي مرحلة لهذه الدفعة وحدها أو أوقفها أو اجعلها تسير مع غيرها، ويُزاح ما بعدها.'}</span>
         </div>
         <div className="la-row">
-          {!editing && !lock && <button type="button" className="btn-sm primary" onClick={() => setEdit({ days: {}, off: {} })}>عدّل المدد</button>}
+          {!editing && !lock && <button type="button" className="btn-sm primary" onClick={() => setEdit({ days: {}, off: {}, with: {}, offset: {} })}>عدّل المدد</button>}
           {savedNote && canWrite && !editing && <span className="cj-saved" role="status">حُفظ. <button type="button" className="la-link" disabled={busy} onClick={undo}>تراجع</button></span>}
           <button type="button" className="la-link" aria-expanded={!!history} onClick={() => (history ? setHistory(null) : loadHistory())}>سجل الخطة</button>
         </div>
@@ -391,7 +460,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
 
       {editing && (
         <p className="cj-ro" role="note">
-          تعديل المدد والإيقاف لهذه الدفعة وحدها، والبرنامج لا يتغير. الخط والبطاقات تعرض التواريخ الجديدة قبل الحفظ، ونافذة الأثر تسمي من يتأثر قبل أن يُحفظ شيء.
+          تعديل المدد والإيقاف والتوازي لهذه الدفعة وحدها، والبرنامج لا يتغير. الخط والبطاقات تعرض التواريخ الجديدة قبل الحفظ، ونافذة الأثر تسمي من يتأثر قبل أن يُحفظ شيء.
           {cohort.starts_on && cohort.ends_on && <> <button type="button" className="la-link" onClick={suggest}>اقترح مددًا تملأ مدة الدفعة</button></>}
         </p>
       )}

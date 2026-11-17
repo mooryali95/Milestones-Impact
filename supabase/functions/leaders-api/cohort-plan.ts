@@ -6,7 +6,8 @@
 //   save:    يكتب cohorts.schedule بعد الحراس، وصفًا في leaders.audit_log (cohort.plan) بقيمته قبل وبعد وملخص الأثر
 //   undo:    يعيد قيمة before من آخر حفظ لهذه الدفعة إن لم تتغير الخطة بعده، بالحراس نفسها (cohort.plan-undo)
 //   history: آخر الحفظات والتراجعات لهذه الدفعة
-// الجسم: { cohort_id, op, days: { مفتاح: عدد أو null }, off: { مفتاح: true أو false } (R2b)، follow: true، base_updated_at (مطلوب للحفظ
+// الجسم: { cohort_id, op, days: { مفتاح: عدد أو null }, off: { مفتاح: true أو false } (R2b)،
+// with: { مفتاح: مفتاح مرجع أو false لـ«لا شيء» أو null لقاعدة البرنامج } وoffset: { مفتاح: أيام أو null } (R3a)، follow: true، base_updated_at (مطلوب للحفظ
 // والتراجع)، reenable: 'exempt' (الافتراضي) أو 'apply' لمن تجاوز مرحلة تعود (القرار 12)، notify: true لـ«أبلغ المشاركين» (القرار 13) }.
 // الحفظ والتراجع للكاتب وحده
 // (index.ts يلفهما بـA.writer كما admin.cohort-save)، والمعاينة والسجل لكل مدير. لا ترحيل: الخطة في cohorts.schedule،
@@ -20,7 +21,7 @@ import { cohortMemberIds, defOf } from './programs.ts';
 import { journeyFor } from './participant.ts';
 import { positionOf } from './journey-map.js';
 import { cohortPlan, planOffKeys } from './stage-windows.js';
-import { impactSummary, PLAN_ACTIONS, planEdit, planImpact, planLock, planNotice, planRestartBlock, sameSchedule } from './cohort-plan.js';
+import { impactSummary, PLAN_ACTIONS, planEdit, planImpact, planLock, planNotice, planRestartBlock, planWithIssues, sameSchedule } from './cohort-plan.js';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -93,14 +94,23 @@ function nextSchedule(c: any, base: any, b: Body, target?: any) {
     const blocks = base.stages.filter((s: any) => was.has(s.key) && !now.has(s.key))
       .map((s: any) => planRestartBlock(s, { stages: base.stages, schedule: out })).filter(Boolean);
     if (blocks.length) throw new Fail(`لا يُعاد الحفظ السابق: ${blocks.map((x: any) => x.msg).join('، ')}`, 409, 'undo_invalid');
+    // وحارس التوازي (R3a): مرجع صار بعدها أو موقوفًا أو إزاحة تجاوزت مدته منذ ذلك الحفظ
+    const par = planWithIssues({ stages: base.stages, schedule: out, before: c.schedule || {}, cohort: c });
+    if (par.length) throw new Fail(`لا يُعاد الحفظ السابق: ${par.map((x: any) => x.msg).join('، ')}`, 409, 'undo_invalid');
     return out;
   }
-  // المدة (R2a) والإيقاف (R2b) و«حرّر التواريخ لتتبع المدد». التوازي والتاريخ المثبت للدفعة في مراحل لاحقة، فلا يُقبلان بصمت
-  for (const k of ['with', 'offset', 'start', 'end', 'schedule']) {
-    if (k in b) throw new Fail('تُعدَّل من تبويب «الرحلة» مدة كل مرحلة وإيقافها لهذه الدفعة. التوازي والتاريخ المثبت للدفعة في مراحل لاحقة.', 400, 'plan_field');
+  // المدة (R2a) والإيقاف (R2b) والتوازي (R3a) و«حرّر التواريخ لتتبع المدد». التاريخ المثبت للدفعة في مرحلة لاحقة، فلا يُقبل بصمت
+  for (const k of ['start', 'end', 'schedule']) {
+    if (k in b) throw new Fail('تُعدَّل من تبويب «الرحلة» مدة كل مرحلة وإيقافها وتوازيها لهذه الدفعة. التاريخ المثبت للدفعة في مرحلة لاحقة.', 400, 'plan_field');
   }
-  if ('off' in b && (!b.off || typeof b.off !== 'object' || Array.isArray(b.off))) throw new Fail('الإيقاف: { مفتاح المرحلة: نعم أو لا }', 400, 'plan_invalid');
-  const r = planEdit({ stages: base.stages, schedule: c.schedule || {}, edit: { days: b.days || {}, follow: b.follow === true, off: b.off || {} }, cohort: c, requirements: base.requirements });
+  const isMap = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
+  if ('off' in b && !isMap(b.off)) throw new Fail('الإيقاف: { مفتاح المرحلة: نعم أو لا }', 400, 'plan_invalid');
+  if ('with' in b && !isMap(b.with)) throw new Fail('«تسير مع»: { مفتاح المرحلة: مفتاح مرجعها أو لا شيء }', 400, 'plan_invalid');
+  if ('offset' in b && !isMap(b.offset)) throw new Fail('الإزاحة: { مفتاح المرحلة: عدد أيام }', 400, 'plan_invalid');
+  const r = planEdit({
+    stages: base.stages, schedule: c.schedule || {}, cohort: c, requirements: base.requirements,
+    edit: { days: b.days || {}, follow: b.follow === true, off: b.off || {}, with: b.with || {}, offset: b.offset || {} },
+  });
   if (r.errors.length) throw new Fail(r.errors.map((e: any) => e.msg).join('، '), 400, 'plan_invalid', { errors: r.errors });
   try { return cleanScheduleReport(r.schedule, base.keys, base.titles).schedule; }
   catch (err) { throw new Fail((err as Error).message, 400, 'plan_invalid'); }

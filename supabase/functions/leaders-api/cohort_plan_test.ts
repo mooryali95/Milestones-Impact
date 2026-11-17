@@ -191,8 +191,8 @@ Deno.test('الحراس: المغلقة، والمفتوحة غير المثبت
     const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 0, nope: 2 } }));
     assertEquals(e.code, 'plan_invalid');
     assertEquals((e.extra.errors as any[]).map((x) => x.code), ['range', 'unknown']);
-    // التوازي والتثبيت للدفعة في مراحل لاحقة: لا تُقبل بصمت (الإيقاف صار مقبولًا في R2b)
-    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', with: { training: 'profile' } }))).code, 'plan_field');
+    // التثبيت للدفعة في مرحلة لاحقة: لا يُقبل بصمت (الإيقاف صار مقبولًا في R2b والتوازي في R3a)
+    assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', start: { training: '2027-01-01' } }))).code, 'plan_field');
     // نسخة أقدم من الحالية
     assertEquals((await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 3 }, base_updated_at: '2020-01-01T00:00:00Z' }))).code, 'stale');
     assertEquals(w.tables.cohorts[0].schedule, {});
@@ -427,5 +427,81 @@ Deno.test('R2b جلسات التوجيه المحجوزة في مرحلة تُو
     w.tables.coaching_sessions.push({ participant_id: P1, requirement_id: U(12), status: 'attended', starts_at: new Date(Date.now() - 3 * 864e5).toISOString() });
     const r: any = await cohortPlanAction(admin, { cohort_id: C1, op: 'preview', off: { support: true } });
     assertEquals(r.impact.booked, [{ key: 'support', title: 'الدعم', sessions: 1 }]);
+  } finally { w.restore(); }
+});
+
+// ══ R3a «التوازي بإزاحة ومدة (تخطيطًا)» ══
+// نسخة فيها التوجيه يسير مع التدريب، والمعالم على نهاية التوجيه
+function withWorld(cohort: Row = {}) {
+  const w = world(cohort);
+  const v = w.tables.program_versions[0].data;
+  v.stages = [...v.stages, { key: 'ojt', title_ar: 'التوجيه', sort: 2.5, active: true, duration_days: 7, rules: { unlock: 'with', with: 'training' } }];
+  v.requirements = [...v.requirements, { id: U(13), stage_key: 'ojt', code: 'O-ONE', kind: 'check', title_ar: 'بند التوجيه', required: true, active: true, sort: 1 }];
+  return w;
+}
+
+Deno.test('R3a المعاينة: إزاحة التوجيه أسبوعًا ومدته أسبوعان تزيح ما بعدهما، وتنبيه التجاوز، بلا كتابة', async () => {
+  const w = withWorld();
+  try {
+    const r: any = await cohortPlanAction(viewer, { cohort_id: C1, op: 'preview', offset: { ojt: 7 }, days: { ojt: 14 } });
+    assertEquals(r.plan.schedule, { ojt: { offset: 7, days: 14 } });
+    const ojt = r.plan.stages.find((s: any) => s.key === 'ojt');
+    // الملف يومان، فالتدريب من اليوم الثالث، والتوجيه بعد أسبوع منه لأسبوعين
+    assertEquals([ojt.from, ojt.to, ojt.with, ojt.offset], [iso(-1), iso(12), 'training', 7]);
+    const support = r.plan.stages.find((s: any) => s.key === 'support');
+    assertEquals(support.from, iso(13));
+    const c = r.impact.changes.find((x: any) => x.key === 'ojt');
+    assertEquals([c.with_changed, c.before.offset, c.after.offset], [true, 0, 7]);
+    assert(r.impact.issues.some((x: any) => x.code === 'with_over' && x.stage === 'ojt'));
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.audit_log.length, 0);
+  } finally { w.restore(); }
+});
+
+Deno.test('R3a الحفظ والتراجع: الخطة والسجل، ورحلة المشارك تفتح التوجيه مع التدريب ولا تقفله حتى موعده (القرار 6)', async () => {
+  const w = withWorld();
+  try {
+    const r: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', offset: { ojt: 7 } });
+    assertEquals(r.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { ojt: { offset: 7 } });
+    const [row] = w.tables.audit_log;
+    assertEquals(row.after.summary.changes.find((x: any) => x.key === 'ojt'), { key: 'ojt', before: 7, after: 7, with: ['training', 'training'], offset: [0, 7] });
+    // التعريف للمشارك: قاعدة «تبدأ مع» بإزاحتها، والفتح مع التدريب
+    const def: any = await journeyDefinition({ id: P1, organization_id: ORG });
+    assertEquals(def.stages.find((s: any) => s.key === 'ojt').rules, { unlock: 'with', with: 'training', offset: 7 });
+    // «تسير مع» مرحلة أخرى للدفعة: الدعم مع التدريب بعد 3 أيام
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', with: { support: 'training' }, offset: { support: 3 } });
+    assertEquals(w.tables.cohorts[0].schedule, { ojt: { offset: 7 }, support: { with: 'training', offset: 3 } });
+    const u: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' });
+    assertEquals(u.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { ojt: { offset: 7 } });
+    // «لا شيء»: التوجيه بعد ما قبله
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', with: { ojt: false } });
+    assertEquals(w.tables.cohorts[0].schedule, { ojt: { with: false } });
+  } finally { w.restore(); }
+});
+
+Deno.test('R3a الحراس: مرجع لاحق أو بوابة أو موقوف، وإزاحة فوق مدة المرجع أو بلا مرجع، وشكل الجسم، ولا كتابة', async () => {
+  const w = withWorld();
+  try {
+    const codes = async (body: Row) => {
+      const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', ...body }));
+      return [e.code, ((e.extra?.errors as any[]) || []).map((x) => x.code)];
+    };
+    assertEquals(await codes({ with: { training: 'support' } }), ['plan_invalid', ['with_order']]);
+    assertEquals(await codes({ with: { training: 'profile' } }), ['plan_invalid', ['with_gate']]);
+    assertEquals(await codes({ with: { support: 'training' }, off: { training: true } }), ['plan_invalid', ['with_target', 'with_off']]);
+    assertEquals(await codes({ offset: { ojt: 15 } }), ['plan_invalid', ['offset_range']]);
+    assertEquals(await codes({ offset: { support: 2 } }), ['plan_invalid', ['offset_alone']]);
+    assertEquals(await codes({ with: { ojt: 3 } }), ['plan_invalid', ['with_value']]);
+    assertEquals(await codes({ with: ['ojt'] }), ['plan_invalid', []]);
+    assertEquals(await codes({ offset: 3 }), ['plan_invalid', []]);
+    assertEquals(await codes({ end: { ojt: '2027-01-01' } }), ['plan_field', []]);
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.audit_log.length, 0);
+    // تقصير المرجع تحت إزاحة محفوظة يُرفض باسمه
+    await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', offset: { ojt: 10 } });
+    const e = await failOf(() => cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', days: { training: 7 } }));
+    assert(e.message.includes('إزاحة «التوجيه» من 0 إلى مدة «التدريب»'));
   } finally { w.restore(); }
 });

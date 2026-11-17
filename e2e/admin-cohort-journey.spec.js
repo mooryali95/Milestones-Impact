@@ -3,12 +3,12 @@
 // COHORT_JOURNEY_SHOTS: مجلد تُحفظ فيه لقطتا التبويب بعرضي 1440 و390.
 import { test, expect } from '@playwright/test';
 import { cohortPlan } from '../supabase/functions/leaders-api/stage-windows.js';
-import { planEdit, planImpact, sameSchedule } from '../supabase/functions/leaders-api/cohort-plan.js';
+import { impactSummary, planEdit, planImpact, sameSchedule } from '../supabase/functions/leaders-api/cohort-plan.js';
 
 const BASE = 'http://localhost:4303/';
 const SHOTS = process.env.COHORT_JOURNEY_SHOTS || '';
 // اللقطات بكثافة الشاشات الحديثة، والفحص العادي بالكثافة الافتراضية
-test.use({ deviceScaleFactor: SHOTS || process.env.R2A_SHOTS || process.env.R2B_SHOTS ? 2 : 1 });
+test.use({ deviceScaleFactor: SHOTS || process.env.R2A_SHOTS || process.env.R2B_SHOTS || process.env.R3A_SHOTS ? 2 : 1 });
 const stages = [
   { key: 'profile', title_ar: 'الملف الشخصي', phase: 'admission', sort: 1, duration_days: 0, duration_label: 'دقائق', active: true },
   { key: 'assessment', title_ar: 'تحديد المستوى', phase: 'admission', sort: 2, duration_days: 0, duration_label: '12 دقيقة', active: true },
@@ -68,7 +68,7 @@ function planServer(state, b) {
     state.history.unshift({ id: `h${state.history.length + 1}`, action: 'cohort.plan-undo', actor: 'a@x', at: '2026-11-16T09:10:00Z', summary: null });
     return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule) };
   }
-  const r = planEdit({ stages: live, schedule: c.schedule, edit: { days: b.days || {}, follow: b.follow, off: b.off || {} }, cohort: c, requirements });
+  const r = planEdit({ stages: live, schedule: c.schedule, edit: { days: b.days || {}, follow: b.follow, off: b.off || {}, with: b.with || {}, offset: b.offset || {} }, cohort: c, requirements });
   if (r.errors.length) return { success: false, message: r.errors.map((e) => e.msg).join('، ') };
   const impact = planImpact({ stages: live, before: c.schedule, after: r.schedule, cohort: c, milestones, people: PLAN_PEOPLE, today: '2026-11-16T09:00:00Z', cutoff: '2026-11-01' });
   if (b.op === 'preview') return { success: true, preview: true, locked: null, changed: !sameSchedule(c.schedule, r.schedule), plan: out(r.schedule), impact };
@@ -76,7 +76,7 @@ function planServer(state, b) {
   state.schedule = r.schedule;
   state.updated_at = `u${state.history.length + 1}`;
   state.history.unshift({ id: `h${state.history.length + 1}`, action: 'cohort.plan', actor: 'a@x', at: '2026-11-16T09:05:00Z', before,
-    summary: { changes: impact.changes.map((x) => ({ key: x.key, before: x.before.days, after: x.after.days, ...(x.off ? { off: x.off } : {}) })), shift: impact.end.shift, stopped: impact.stopped, started: impact.started } });
+    summary: impactSummary(impact) });
   return { success: true, saved: true, cohort: { id: c.id, schedule: state.schedule, updated_at: state.updated_at }, plan: out(state.schedule), impact,
     exempted: 0, notified: b.notify ? impact.notify.members : null };
 }
@@ -505,4 +505,100 @@ test('إيقاف التابع يفتح مفتاح مرجعه، وإعادة ال
   await sw('التوجيه على رأس العمل').click();
   await expect(panel.locator('.cj-savebar')).toContainText('لا تعديل بعد');
   await expect(panel.getByRole('button', { name: 'راجع واحفظ' })).toBeDisabled();
+});
+
+// ══ R3a: «تسير مع» بإزاحة ومدة لهذه الدفعة، بمعاينة حية وممر في الخط ونافذة أثر ثم حفظ وتراجع ══
+// R3A_SHOTS: مجلد تُحفظ فيه لقطتا وضع التحرير بإزاحة والخط بممراته بعرضي 1440 و390 (حدود الشاشة وحدها)
+const R3A = process.env.R3A_SHOTS || '';
+for (const width of [1440, 390]) {
+  test(`التوازي بإزاحة (${width}): «تسير مع» والإزاحة في البطاقة، والممر يبدأ بإزاحته، وتنبيه التجاوز، ونافذة الأثر ثم الحفظ والتراجع`, async ({ page }) => {
+    const calls = await setup(page, width);
+    await openCohort(page);
+    await page.getByRole('tab', { name: 'الرحلة' }).click();
+    const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+    await panel.getByRole('button', { name: 'عدّل المدد' }).click();
+    const card = panel.getByRole('article', { name: 'التوجيه على رأس العمل' });
+    const par = card.getByRole('group', { name: 'توازي التوجيه على رأس العمل' });
+    // من البرنامج: يسير مع التدريب من بدايته
+    await expect(par.getByLabel('تسير مع')).toHaveValue('training');
+    await expect(par).toContainText('من البرنامج');
+    // بوابات القبول وما قبله لا شيء في محوره: لا قائمة
+    await expect(panel.getByRole('article', { name: 'التدريب' }).getByRole('group', { name: 'توازي التدريب' })).toHaveCount(0);
+    await expect(panel.getByRole('article', { name: 'اعتماد المستوى' }).getByRole('group', { name: /توازي/ })).toHaveCount(0);
+    // الإزاحة أسبوع: تُفتح مع التدريب ومخطط من بعده بأسبوع
+    const off = par.getByRole('textbox', { name: /إزاحة التوجيه على رأس العمل/ });
+    await expect(off).toHaveValue('0');
+    await off.fill('7');
+    await off.blur();
+    await expect(par).toContainText('معدّل لهذه الدفعة');
+    await expect(card.locator('.cj-offset')).toHaveText('تُفتح مع «التدريب» في 5 نوفمبر، ومخطط من 12 نوفمبر');
+    // سطر واحد يقول الموعدين، فلا «تبدأ مع … بعد» معه تقول فتحًا متأخرًا
+    await expect(card.locator('.cj-with')).toHaveCount(0);
+    await expect(card.locator('.cj-window')).toContainText('12 نوفمبر إلى 9 ديسمبر');
+    // تنبيه التجاوز: مسموح، ويطول المحور بالأسبوع نفسه، فيُزاح الدعم
+    await expect(card.locator('.cj-over')).toContainText('«التوجيه على رأس العمل» تنتهي بعد «التدريب» بـ21 يومًا، فيطول محور «التأهيل» 21 يومًا');
+    await expect(panel.getByRole('article', { name: 'الدعم والتمكين' }).locator('.cj-window')).toContainText('10 ديسمبر');
+    // الممر في الخط يبدأ بعد إزاحته داخل خانته
+    const lane = panel.locator('section.jt .jt-stage.lane', { hasText: 'التوجيه على رأس العمل' }).first();
+    if (width > 500) expect(await lane.evaluate((el) => parseFloat(el.style.marginInlineStart))).toBeGreaterThan(0);
+    await expect(lane).toContainText('تُفتح مع «التدريب»، ومخطط بعد سبعة أيام من بدايتها');
+    await expect(lane).not.toContainText('تبدأ مع «التدريب» بعد');
+    await expect(panel.locator('.cj-savebar')).toContainText('تعديل واحد غير محفوظ');
+    expect(calls.filter((c) => c.action === 'admin.cohort-plan')).toHaveLength(0);
+    expect(await noOverflow(page)).toBe(true);
+    if (R3A) {
+      await card.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${R3A}/r3a-edit-${width}.png` });
+      await panel.locator('section.jt').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `${R3A}/r3a-timeline-${width}.png` });
+    }
+    await panel.getByRole('button', { name: 'راجع واحفظ' }).click();
+    const dlg = page.getByRole('dialog', { name: 'راجع أثر التعديل قبل الحفظ' });
+    await expect(dlg).toContainText('التوجيه على رأس العمل: تسير مع «التدريب» بعد سبعة أيام من بدايتها بدل بدايتها');
+    await expect(dlg).toContainText('«التوجيه على رأس العمل» تُفتح لأصحابها مع بداية «التدريب»، والإزاحة تخطيط للتواريخ وحدها');
+    await expect(dlg).toContainText('تتأخر نهاية الرحلة سبعة أيام');
+    expect(calls.filter((c) => c.action === 'admin.cohort-plan').map((c) => [c.op, c.offset, c.with])).toEqual([['preview', { ojt: 7 }, undefined]]);
+    expect(await noOverflow(page)).toBe(true);
+    await dlg.getByRole('button', { name: 'احفظ الخطة' }).click();
+    await expect(dlg).toBeHidden();
+    await expect(page.getByRole('status').getByText('حُفظت خطة الدفعة')).toBeVisible();
+    expect(calls.plan.schedule).toEqual({ ojt: { offset: 7 } });
+    await expect(card.locator('.cj-offset')).toHaveText('تُفتح مع «التدريب» في 5 نوفمبر، ومخطط من 12 نوفمبر');
+    await panel.getByRole('button', { name: 'سجل الخطة' }).click();
+    await expect(panel.locator('.cj-history')).toContainText('مرحلة واحدة تغيّر توازيها');
+    await panel.locator('.cj-saved').getByRole('button', { name: 'تراجع' }).click();
+    await expect(page.getByRole('status').getByText('تراجعت الخطة')).toBeVisible();
+    expect(calls.plan.schedule).toEqual({});
+    await expect(card.locator('.cj-offset')).toHaveCount(0);
+    await expect(card.locator('.cj-window')).toContainText('5 نوفمبر إلى 2 ديسمبر');
+  });
+}
+
+test('«لا شيء» يخرج المرحلة من مجموعتها، و«ارجع لقاعدة البرنامج» يعيدها، والإزاحة لا تتجاوز مدة المرجع', async ({ page }) => {
+  const calls = await setup(page, 1440);
+  await openCohort(page);
+  await page.getByRole('tab', { name: 'الرحلة' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'الرحلة' });
+  await panel.getByRole('button', { name: 'عدّل المدد' }).click();
+  const card = panel.getByRole('article', { name: 'الاستشارة' });
+  const par = card.getByRole('group', { name: 'توازي الاستشارة' });
+  // القائمة: التدريب والتوجيه قبلها في محورها (التوجيه يسير مع التدريب فلا يفصل)
+  await expect(par.getByLabel('تسير مع').locator('option')).toHaveText(['لا شيء (تبدأ بعد ما قبلها)', 'التدريب', 'التوجيه على رأس العمل']);
+  await par.getByLabel('تسير مع').selectOption('');
+  await expect(par.getByRole('textbox')).toHaveCount(0);
+  await expect(card.locator('.cj-window')).toContainText('3 ديسمبر إلى 16 ديسمبر');
+  await expect(panel.locator('.cj-savebar')).toContainText('تعديل واحد غير محفوظ');
+  await par.getByRole('button', { name: 'ارجع لقاعدة البرنامج' }).click();
+  await expect(par.getByLabel('تسير مع')).toHaveValue('training');
+  await expect(panel.locator('.cj-savebar')).toContainText('لا تعديل بعد');
+  // الإزاحة لا تتجاوز مدة المرجع (التدريب 14 يومًا)
+  const off = par.getByRole('textbox', { name: /إزاحة الاستشارة/ });
+  // الحد مكتوب بجانب الحقل ومربوط به، وما فوقه يُحصر ويظهر في الحقل فورًا لا بعد مغادرته
+  await expect(off).toHaveAccessibleDescription('أقصاها مدة «التدريب»: أسبوعان');
+  await off.fill('40');
+  await expect(off).toHaveValue('14');
+  await off.blur();
+  await expect(off).toHaveValue('14');
+  await expect(par.getByRole('button', { name: 'زد إزاحة الاستشارة' })).toBeDisabled();
+  expect(calls.filter((c) => c.action === 'admin.cohort-plan')).toHaveLength(0);
 });

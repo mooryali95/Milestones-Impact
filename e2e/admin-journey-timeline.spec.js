@@ -202,3 +202,30 @@ test('دفعة بلا تاريخ بداية: أسابيع نسبية وتنبي�
     cohorts[0] = { ...cohorts[0], starts_on: '2026-11-02' };
   }
 });
+
+// R3a: الإزاحة على البرنامج حقل بجانب «تبدأ مع» في محرر المرحلة، تخطيط للتواريخ وحدها، ويُرسل في القواعد
+test('محرر المرحلة: «مخطط بعد كم يومًا من بدايتها» بجانب «تبدأ مع»، ويُحفظ في rules.offset', async ({ page }) => {
+  const saves = [];
+  page.on('request', (r) => {
+    if (!/functions\/v1\/leaders-api/.test(r.url())) return;
+    const b = JSON.parse(r.postData() || '{}');
+    if (b.action === 'admin.save') saves.push(b);
+  });
+  await setup(page, 1440);
+  await tab(page, 'الرحلة والمتطلبات');
+  const card = page.locator('.la-stage-ed', { hasText: 'التوجيه على رأس العمل' }).first();
+  await expect(card.locator('.la-rule')).toContainText('تُفتح مع بداية «التدريب»');
+  await card.locator('.la-row.between').getByRole('button', { name: 'تحرير' }).click();
+  const form = page.getByRole('dialog', { name: 'مرحلة: التوجيه على رأس العمل' });
+  const off = form.getByLabel('مخطط بعد كم يومًا من بدايتها');
+  await expect(off).toBeVisible();
+  await expect(form).toContainText('تخطيط للتواريخ وحدها');
+  await off.fill('7');
+  await form.getByRole('button', { name: 'حفظ' }).click();
+  await expect(form).toBeHidden();
+  expect(saves).toHaveLength(1);
+  expect(saves[0]).toMatchObject({ entity: 'journey_stages', row: { key: 'ojt', rules: { unlock: 'with', with: 'training', offset: 7 } } });
+  // «متى تُفتح» غير «تبدأ مع»: لا حقل إزاحة
+  await page.locator('.la-stage-ed', { hasText: 'الدعم والتمكين' }).first().locator('.la-row.between').getByRole('button', { name: 'تحرير' }).click();
+  await expect(page.getByRole('dialog', { name: 'مرحلة: الدعم والتمكين' }).getByLabel('مخطط بعد كم يومًا من بدايتها')).toHaveCount(0);
+});

@@ -4,6 +4,7 @@
 // منفصلة عن logic.js لحجمها؛ تُصدَّر منه أيضًا فلا يتغير أي استيراد قائم.
 import { requirementApplies, SESSION_DEFAULTS } from './logic.js';
 import { PHASE_AR } from './labels.js';
+import { plainInt } from './digits.js';
 
 // ════════════════════════════════════════════════════════════════
 // نصوص الرحلة من الإعدادات: لا رقم جلسات أو مدة يُكتب في وصف
@@ -161,6 +162,9 @@ export function stageRules(stage) {
     after: Array.isArray(r.after) ? r.after.map(String) : [],
     with: r.with != null && r.with !== '' ? String(r.with) : null,
     day: Number.isFinite(Number(r.day)) && r.day !== null && r.day !== '' ? Math.max(0, Math.round(Number(r.day))) : null,
+    // الإزاحة (R3a في تصور محرر رحلة الدفعة): «تسير مع» مرجعها وتُخطَّط بعد N يومًا من بدايته. تخطيط للتواريخ وحدها،
+    // والفتح يبقى مع بداية المرجع (القرار 6)، فلا يقرؤها resolveStages
+    offset: r.unlock === 'with' && Number.isInteger(Number(r.offset)) && Number(r.offset) > 0 && r.offset !== true ? Number(r.offset) : 0,
     complete: COMPLETES.includes(r.complete) ? r.complete : 'required',
   };
 }
@@ -169,6 +173,7 @@ export function stageRules(stage) {
 // بذلك يتفق الفتح (resolveStages) والنوافذ (stageWindows) والتوزيع (distributeSchedule) والخط الزمني على شكل واحد:
 // المجموعة تبدأ معًا، وما بعدها يبدأ بعد أطولها. مرحلة غريبة بين المرجع وتابعه تُرسم بعد المجموعة وتسري قبل نهايتها.
 const phaseOf = (s) => (s?.phase && PHASE_AR[s.phase] ? s.phase : 'qualification');
+export const stagePhase = phaseOf;
 // أول المجموعة: يتبع سلسلة «تبدأ مع» إلى مرحلة لا تبدأ مع غيرها (live مرتبة وظاهرة)
 function withRoot(live, key) {
   const byKey = new Map(live.map((s) => [s.key, s]));
@@ -211,7 +216,7 @@ export function withCandidates(stages, selfKey) {
 // القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا.
 // stageKeys: مفاتيح مراحل البرنامج، أو المراحل نفسها ({ key, title_ar, sort, active }) ليُفحص مرجع «تبدأ مع»
 // بترتيبه وظهوره. بالمفاتيح وحدها يُفحص الوجود فقط، ويكمل stageRulesIssues الباقي.
-/** @param {any} raw @param {Array<string | { key: string, title_ar?: string, sort?: number, active?: boolean }>} stageKeys @param {string} [selfKey] */
+/** @param {any} raw @param {Array<string | { key: string, title_ar?: string, sort?: number, active?: boolean, duration_days?: number|null }>} stageKeys @param {string} [selfKey] */
 export function cleanStageRules(raw, stageKeys, selfKey) {
   const r = raw && typeof raw === 'object' ? raw : {};
   const list = (stageKeys || []).map((x) => (x && typeof x === 'object' ? x : { key: String(x) }));
@@ -245,6 +250,14 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
       throw new Error(`«${name}» بعد هذه المرحلة في الترتيب؛ اختر مرحلة قبلها، أو رتّب المراحل أولًا`);
     }
     out.with = k;
+    // الإزاحة (R3a): تُخطَّط بعد N يومًا من بداية مرجعها، من 0 إلى مدته (البند 4.6). صفر هو الافتراضي فلا يُحفظ
+    if (r.offset != null && r.offset !== '') {
+      const n = plainInt(r.offset);
+      if (!Number.isInteger(n) || n < 0 || n > 365) throw new Error('الإزاحة عدد أيام صحيح من 0 إلى 365');
+      const cap = target.duration_days != null && target.duration_days !== '' ? Math.max(0, Math.round(Number(target.duration_days) || 0)) : null;
+      if (cap != null && n > cap) throw new Error(`الإزاحة من 0 إلى مدة «${name}» (${daysAr(cap)})`);
+      if (n > 0) out.offset = n;
+    }
   }
   if (out.unlock === 'day') {
     const d = Number(r.day);
@@ -294,6 +307,9 @@ export function stageRulesIssues(stages) {
       else {
         const why = withPlacementIssue(live, s, k);
         if (why) issue(why);
+        // الإزاحة أكبر من مدة المرجع (مدته قصرت بعد ضبطها): تنبيه لا منع، وخطة الدفعة تحصرها في مدته (cohortPlan)
+        const cap = Math.max(0, Math.round(Number(byKey.get(k).duration_days) || 0));
+        if (r.offset > cap) out.push({ level: 'warn', stage: s.key, rule: 'offset', msg: `«${s.title_ar}»: تُخطَّط بعد ${daysAr(r.offset)} من بداية «${title(k)}» ومدتها ${cap ? daysAr(cap) : 'صفر'}، فتُحصر الإزاحة في مدتها` });
       }
     }
     if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
@@ -324,7 +340,7 @@ export function stageRuleSummary(stage, stages = []) {
     previous: 'تُفتح بعد اكتمال الإلزامية قبلها',
     always: 'متاحة من البداية',
     stages: `تُفتح بعد اكتمال: ${r.after.map(title).join('، ')}`,
-    with: `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»`,
+    with: `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»${r.offset ? `، ومخطط بعد ${daysAr(r.offset)} من بدايتها` : ''}`,
     day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${r.day ?? '؟'} يومًا من بداية الدفعة`,
     approval: 'يفتحها الأدمن أو الخبير',
   }[r.unlock];

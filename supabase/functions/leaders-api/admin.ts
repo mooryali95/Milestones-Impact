@@ -1331,7 +1331,7 @@ export async function save(a: Admin, b: Body) {
   // قواعد المرحلة: قيم معروفة فقط، ولا حلقة ولا مرجع لمرحلة مخفية في الرحلة بعد الحفظ
   if (b.entity === 'journey_stages' && 'rules' in row) {
     const pid = String(b.row.program_id);
-    const { data: siblings } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules').eq('program_id', pid);
+    const { data: siblings } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules, duration_days').eq('program_id', pid);
     const list = siblings || [];
     // المراحل نفسها لا مفاتيحها: مرجع «تبدأ مع» يُفحص بترتيبه وظهوره كما ستكون بعد الحفظ
     const shaped = list.map((s: any) => (s.key === b.row.key ? { ...s, ...('sort' in row ? { sort: row.sort } : {}), ...('active' in row ? { active: row.active } : {}) } : s));
@@ -1470,7 +1470,7 @@ export async function remove(a: Admin, b: Body) {
 // فخطأ «تبدأ مع» جديد في الرحلة بعد التغيير (مرجع صار بعدها، أو مخفيًا، أو مفصولًا عنها، أو في محور آخر) يُرفض.
 // الأخطاء القائمة قبل التغيير لا تمنع تعديلًا لا يمسها، وتبقى ظاهرة في لوحة اتساق الرحلة
 async function withGuard(pid: string, change: (list: any[]) => any[]) {
-  const { data } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules').eq('program_id', pid);
+  const { data } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules, duration_days').eq('program_id', pid);
   const list = data || [];
   const known = new Set(stageRulesIssues(list).filter((x: any) => x.rule === 'with').map((x: any) => x.stage));
   const bad = stageRulesIssues(change(list)).find((x: any) => x.level === 'error' && x.rule === 'with' && !known.has(x.stage));
