@@ -11,6 +11,7 @@
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
 import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
+import { stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const toMs = (d) => new Date(`${d}T00:00:00Z`).getTime();
@@ -125,24 +126,42 @@ export function cleanDueOverride(raw) {
 }
 
 // تاريخ استحقاق المعلم لدفعة: من نقطة ارتكازه في جدولها، أو null إن لم يتحدد بعد
-export function milestoneDue(m, { startsOn = null, endsOn = null, schedule = {} } = {}) {
-  let base = null;
-  if (m.anchor === 'date') return m.fixed_date || null;
-  if (m.anchor === 'cohort_start') base = startsOn;
-  else if (m.anchor === 'cohort_end') base = endsOn;
-  else if (m.anchor === 'stage_start') base = schedule?.[m.stage_key]?.start || null;
-  else base = schedule?.[m.stage_key]?.end || null;
-  return base && ISO.test(base) ? addDays(base, Number(m.offset_days) || 0) : null;
+export function milestoneDue(m, ctx = {}) {
+  return milestoneDueInfo(m, ctx).due;
+}
+// الاستحقاق ومصدره (تصور محرر رحلة الدفعة، R0 «تاريخ واحد»): الجدول المكتوب للمرحلة أولًا، وإلا نافذتها المحسوبة
+// من بداية الدفعة ومدد المراحل (stageWindows، المصدر نفسه الذي تعرضه الخريطة والخط الزمني)، فلا تبقى «نهاية X» بلا موعد
+// وللدفعة تاريخ بداية. source: date | cohort | schedule | window | null، ويقرؤه حارس البريد (lateNoticeAllowed)
+export function milestoneDueInfo(m, { startsOn = null, endsOn = null, schedule = {}, windows = null } = {}) {
+  if (m.anchor === 'date') return { due: m.fixed_date || null, source: m.fixed_date ? 'date' : null };
+  let base = null, source = null;
+  if (m.anchor === 'cohort_start') { base = startsOn; source = 'cohort'; }
+  else if (m.anchor === 'cohort_end') { base = endsOn; source = 'cohort'; }
+  else {
+    const start = m.anchor === 'stage_start';
+    const own = schedule?.[m.stage_key]?.[start ? 'start' : 'end'] || null;
+    const win = windows?.[m.stage_key]?.[start ? 'from' : 'to'] || null;
+    base = own || win;
+    source = own ? 'schedule' : win ? 'window' : null;
+  }
+  return base && ISO.test(base) ? { due: addDays(base, Number(m.offset_days) || 0), source } : { due: null, source: null };
 }
 
 // حالة كل معلم لمشارك: منجز، أو في الموعد، أو يستحق خلال 7 أيام، أو متأخر بعدد أيام.
-// ctx: { stagesDone: Set, records: { [milestone_id]: { done_at, due_override } }, cohort: { starts_on, ends_on, schedule }, today }
-export function milestoneStatuses(milestones, { stagesDone = new Set(), records = {}, cohort = {}, today = null } = {}) {
+// ctx: { stagesDone: Set, records: { [milestone_id]: { done_at, due_override } }, cohort: { starts_on, ends_on, schedule }, stages, today }
+// stages: مراحل تعريف الدفعة، تُحسب منها النوافذ لما لم يُكتب له جدول. بلاها يبقى الحساب من الجدول المكتوب وحده
+export function milestoneStatuses(milestones, { stagesDone = new Set(), records = {}, cohort = {}, stages = null, today = null } = {}) {
   const t = todayIso(today);
-  const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: cohort.schedule || {} };
+  const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  // الدفعة المفتوحة (is_default) بلا بداية واحدة (القرار 21 والبند 10 في التصور): مددها نسبية من دخول كل مشارك، فلا تؤرَّخ
+  // معالمها بنافذة محسوبة من starts_on ولو ضُبط لها، وإلا صار كل من دخلها متأخرًا لحظة دخوله
+  const windows = live.length && cohort?.starts_on && !cohort?.is_default ? stageWindows(live, cohort) : null;
+  const ctx = { startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: cohort.schedule || {}, windows };
   return (milestones || []).filter((m) => m.active !== false).map((m) => {
     const rec = records[m.id] || {};
-    const due = rec.due_override || milestoneDue(m, ctx);
+    const info = milestoneDueInfo(m, ctx);
+    const due = rec.due_override || info.due;
+    const due_source = rec.due_override ? 'override' : info.source;
     const done = !!rec.done_at || (m.complete === 'stage' && m.stage_key && stagesDone.has(m.stage_key));
     let status, late_days = 0;
     // المنجز بعد موعده يبقى «منجزًا» ويحمل تأخره (done_at − due) فلا يختفي الخصم بالإنجاز
@@ -150,8 +169,25 @@ export function milestoneStatuses(milestones, { stagesDone = new Set(), records 
     else if (!due) status = 'unscheduled';
     else if (t > due) { status = 'late'; late_days = daysBetween(due, t); }
     else status = daysBetween(t, due) <= 7 ? 'due_soon' : 'on_time';
-    return { ...m, due, done, done_at: rec.done_at || null, extended: !!rec.due_override, status, late_days, note: rec.note || null, scores: rec.scores || {} };
+    return { ...m, due, due_source, done, done_at: rec.done_at || null, extended: !!rec.due_override, status, late_days, note: rec.note || null, scores: rec.scores || {} };
   }).sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || (a.sort ?? 0) - (b.sort ?? 0));
+}
+
+// حارس بريد «معلم متأخر» (القرار 19 في تصور محرر رحلة الدفعة): المعالم التي صارت مؤرخة بنافذة المرحلة (R0) لا يُرسل
+// عنها ما تأخر قبل تاريخ النشر، فلا تنطلق موجة بريد عن الماضي. يُرسل فقط ما يقع موعده في هذا التاريخ أو بعده، أي ما
+// صار متأخرًا بعد النشر. ويبقى المتأخر ظاهرًا في رحلة المشارك ولوحة الإدارة وخريطة الجهة كما هو، فالحارس للبريد وحده.
+// والمعالم المؤرخة بالجدول المكتوب أو بتاريخ ثابت أو بتمديد كانت مؤرخة قبل R0 فلا يمسها
+// R0_DATED_SINCE يوم البناء، ويُحدَّث إلى يوم الدمج الفعلي ضمن قائمة الدمج. ولمن نشر بعده بأيام فـcutoffFrom يقبل يومًا
+// أحدث من البيئة (MILESTONE_R0_CUTOFF في admin.ts) ولا يقبل أقدم منه، فلا يُفتح البريد عن الماضي بخطأ في الإعداد
+export const R0_DATED_SINCE = '2026-11-17';
+export function cutoffFrom(value) {
+  const v = String(value || '').trim();
+  return ISO.test(v) && v > R0_DATED_SINCE ? v : R0_DATED_SINCE;
+}
+export function lateNoticeAllowed(m, grace = MILESTONE_GRACE_DAYS, since = R0_DATED_SINCE) {
+  if (!m || m.status !== 'late' || !(m.late_days > grace)) return false;
+  if (m.due_source === 'window' && String(m.due || '') < cutoffFrom(since)) return false;
+  return true;
 }
 
 // ملخص المعالم في سطر: كم أُنجز، وكم تأخر، وأقرب استحقاق

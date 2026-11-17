@@ -20,6 +20,20 @@ const reqs = [
   { id: 'r3', code: 'T-HB', title_ar: 'قراءة الكتاب', kind: 'reading', active: true, config: {} },
 ];
 
+const cohortMap = {
+  program: { name: 'برنامج القادة' },
+  cohort: { name: 'سفراء 2026', starts_on: '2026-11-01', today_stage: 'training' },
+  totals: { total: 3, finished: 0, late: 1, not_started: 0 },
+  bottleneck: { stage: 'training' },
+  stages: [
+    { key: 'approval', title: 'اعتماد المستوى', phase: 'admission', duration_days: 2, here: 0, done: 3, late: 0, window: { from: '2026-11-01', to: '2026-11-03' }, people: [] },
+    { key: 'training', title: 'التدريب', phase: 'qualification', duration_days: 14, here: 2, done: 1, late: 1, window: { from: '2026-11-03', to: '2026-11-17' },
+      people: [{ id: 'p1', name: 'سارة', days: 12, late: true, needs: 'حضور الأيام التدريبية' }, { id: 'p2', name: 'خالد', days: 3, late: false, needs: null }] },
+    { key: 'support', title: 'الدعم', phase: 'impact', duration_days: 30, here: 1, done: 0, late: 0, window: { from: '2026-11-17', to: '2026-12-17' }, people: [{ id: 'p3', name: 'نورة', days: 1, late: false, needs: null }] },
+  ],
+  milestones: [{ id: 'm1', title: 'نهاية التدريب', due: '2026-11-17', done: 1, late: 0 }],
+};
+
 async function setup(page) {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
@@ -43,6 +57,9 @@ async function setup(page) {
         { key: 'asg_levels', audience: 'assigned', audience_ar: 'الخبير المسند بطلب خدمة', label: 'المستويات ونتيجة القياس', hint: 'مستوى المشارك.', general: true, override: null, effective: true },
       ] },
       'admin.cohort-visibility-save': { success: true, widened: [] },
+      // خريطة رحلة الدفعة في ملفها (R0): شكل journeyMap نفسه، والنهايات من نافذة الدفعة
+      // والخادم لا يرجع null: برنامج بلا مراحل يرجع stages فارغة
+      'admin.cohort-journey': b.cohort_id === 'c1' ? { success: true, journey_map: cohortMap } : { success: true, journey_map: { ...cohortMap, cohort: { name: 'الدفعة المفتوحة', starts_on: null, is_default: true, today_stage: null }, totals: { total: 0, finished: 0, late: 0, not_started: 0 }, bottleneck: null, stages: [], milestones: [] } },
       'admin.cohort-upgrade': b.confirm ? { success: true, to: { id: 'v2', number: 2 }, diff: { added: [], removed: [], changed: [] } }
         : { success: true, preview: true, to: { id: 'v2', number: 2, label: 'بعد مراجعة أكتوبر' },
           diff: { added: [{ code: 'T-VID', title: 'فيديو التمهيد' }], removed: [{ code: 'R-OLD', title: 'تأمل قديم' }], changed: [], stages: { added: [{ key: 's9', title: 'الختام' }], removed: [], changed: [{ key: 's1', title: 'التمهيد' }] } },
@@ -158,6 +175,7 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
   await page.reload();
   const card = page.locator('.cohort-page');
+  // اسم الدفعة عنوان واحد في ملفها: الخريطة داخله لا تكرره (embedded)
   await expect(card.getByRole('heading', { name: 'سفراء 2026' })).toBeVisible();
   // المدة مضبوطة، والمستشار والجدول ناقصان ولكل منهما زر يفتح نافذته
   await expect(card.locator('.cohort-setup li.ok', { hasText: 'مدة الدفعة' })).toHaveCount(1);
@@ -177,6 +195,40 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
   await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs$/);
   await expect(page.getByRole('heading', { name: 'الدفعات' })).toBeVisible();
+});
+
+test('ملف الدفعة: خريطة الرحلة نفسها التي في صفحة الجهة، بنوافذ الدفعة ومن تجاوز موعده (R0)', async ({ page }) => {
+  const calls = await setup(page);
+  await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  const card = page.locator('.cohort-page');
+  const map = card.getByRole('region', { name: 'خريطة الرحلة', exact: true });
+  await expect(map).toBeVisible();
+  expect(calls.find((c) => c.action === 'admin.cohort-journey')).toMatchObject({ cohort_id: 'c1' });
+  const jm = map.locator('.jm');
+  // عنوان القسم وحده «خريطة الرحلة»، والخريطة داخله بلا عنوان ثانٍ ولا اسم الدفعة مكررًا
+  await expect(map.getByRole('heading', { name: 'خريطة الرحلة' })).toHaveCount(1);
+  await expect(map.getByRole('heading', { name: 'سفراء 2026' })).toHaveCount(0);
+  await expect(jm.locator('.jm-totals div', { hasText: 'في الرحلة' }).locator('dd')).toHaveText('3');
+  // «متأخر» في دفعة مؤرخة: تجاوز موعد المرحلة على جدول الدفعة، لا مدة المكوث فيها
+  await expect(jm.locator('.jm-totals div.is-late dt')).toHaveText('تجاوزوا موعد مرحلتهم');
+  await expect(map).toContainText('أيًا كان يوم دخوله إليها');
+  await expect(jm.locator('.jm-stage.today')).toContainText('التدريب');
+  await expect(jm.locator('.jm-late')).toHaveText('1 متأخر');
+  // تفاصيل المرحلة: نافذتها في الدفعة والأسماء ومن تجاوز موعده
+  await jm.getByRole('button', { name: /^التدريب/ }).click();
+  const panel = jm.getByRole('region', { name: 'تفاصيل مرحلة التدريب' });
+  await expect(panel).toContainText('من 3 نوفمبر إلى 17 نوفمبر');
+  await expect(panel.locator('tr.is-late')).toContainText('سارة');
+  // الدفعة المفتوحة تضم كل من ليس في دفعة: لا تُحسب خريطتها عند فتح الملف بل بطلب صريح، وبرنامج بلا مراحل سطر واضح لا عنوان فارغ
+  await page.getByRole('button', { name: /كل البرامج والدفعات/ }).click();
+  const before = calls.filter((c) => c.action === 'admin.cohort-journey').length;
+  await page.getByRole('button', { name: 'الدفعة المفتوحة' }).first().click();
+  const open = page.locator('.cohort-page').getByRole('region', { name: 'خريطة الرحلة', exact: true });
+  await expect(open).toContainText('الدفعة المفتوحة تضم كل من ليس في دفعة');
+  expect(calls.filter((c) => c.action === 'admin.cohort-journey').length).toBe(before);
+  await open.getByRole('button', { name: 'اعرض خريطة الرحلة' }).click();
+  await expect(open).toContainText('لا مراحل معرّفة لبرنامج هذه الدفعة بعد');
+  expect(calls.filter((c) => c.action === 'admin.cohort-journey').at(-1)).toMatchObject({ cohort_id: 'c0' });
 });
 
 test('ملف الدفعة: رابط التسجيل ظاهر، والدفعة «مخطط لها» تُنبَّه بأنها لا تستقبل منضمي الجهة', async ({ page }) => {

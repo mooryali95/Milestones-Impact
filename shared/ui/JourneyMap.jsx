@@ -14,9 +14,13 @@ const PHASES = [
 const fmtDate = (d) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' }) : '');
 const daysAr = (n) => (n === 1 ? 'يوم' : n === 2 ? 'يومان' : n <= 10 ? `${n} أيام` : `${n} يومًا`);
 const durationAr = (d) => (!d ? 'بلا مدة' : d % 7 === 0 && d >= 14 ? `${d / 7} أسابيع` : daysAr(d));
+// «متأخر» في دفعة مؤرخة (لها بداية وليست المفتوحة) معناه تجاوز موعد نافذتها على جدول الدفعة (R0)، لا مدة المكوث فيها،
+// فقد يتأخر من دخلها أمس إن انقضت نافذتها. وبلا تاريخ يبقى المعنى مدة المرحلة من دخول المشارك
+export const lateWords = (map) => (map?.cohort?.starts_on && !map?.cohort?.is_default
+  ? { one: 'تجاوزوا موعدها', all: 'تجاوزوا موعد مرحلتهم' } : { one: 'تجاوزوا مدتها', all: 'تجاوزوا مدة مرحلتهم' });
 const peopleAr = (n) => (n === 0 ? 'لا أحد' : n === 1 ? 'شخص واحد' : n === 2 ? 'شخصان' : n <= 10 ? `${n} أشخاص` : `${n} شخصًا`);
 
-function StagePanel({ stage, total, onClose }) {
+function StagePanel({ stage, total, onClose, late }) {
   const ahead = Math.max(0, total - stage.done - stage.here);
   return (
     <div className="jm-panel" id={`jm-panel-${stage.key}`} role="region" aria-label={`تفاصيل مرحلة ${stage.title}`}>
@@ -35,7 +39,7 @@ function StagePanel({ stage, total, onClose }) {
         <div><dt>هنا الآن</dt><dd>{stage.here}</dd></div>
         <div><dt>تجاوزوها</dt><dd>{stage.done}</dd></div>
         <div><dt>لم يصلوها</dt><dd>{ahead}</dd></div>
-        <div className={stage.late ? 'is-late' : ''}><dt>تجاوزوا مدتها</dt><dd>{stage.late}</dd></div>
+        <div className={stage.late ? 'is-late' : ''}><dt>{late.one}</dt><dd>{stage.late}</dd></div>
       </dl>
       {stage.people ? (
         stage.people.length ? (
@@ -62,12 +66,14 @@ function StagePanel({ stage, total, onClose }) {
   );
 }
 
-export default function JourneyMap({ map }) {
+// embedded: داخل صفحة لها عنوانها (ملف الدفعة)، فلا يكرر الرأس اسم الدفعة ولا «خريطة الرحلة» عنوانًا ثانيًا
+export default function JourneyMap({ map, embedded = false }) {
   const [open, setOpen] = useState(null);
   const stages = map?.stages || [];
   const total = map?.totals?.total || 0;
   const byPhase = useMemo(() => PHASES.map((ph) => ({ ...ph, stages: stages.filter((s) => (s.phase || 'qualification') === ph.key) })).filter((ph) => ph.stages.length), [stages]);
   if (!stages.length) return null;
+  const late = lateWords(map);
   const today = stages.find((s) => s.key === map.cohort?.today_stage);
   const peak = map.bottleneck && stages.find((s) => s.key === map.bottleneck.stage);
   const max = Math.max(1, ...stages.map((s) => s.here));
@@ -75,11 +81,11 @@ export default function JourneyMap({ map }) {
   const passedAdmission = total - stages.filter((s) => s.phase === 'admission').reduce((a, s) => a + s.here, 0) - (map.totals.not_started || 0);
 
   return (
-    <section className="jm" aria-labelledby="jm-h">
+    <section className="jm" {...(embedded ? { 'aria-label': 'مراحل الدفعة ومن عند كل منها' } : { 'aria-labelledby': 'jm-h' })}>
       <header className="jm-head">
         <div>
-          <p className="eyebrow">خريطة الرحلة</p>
-          <h2 id="jm-h">{map.cohort?.name || map.program?.name}</h2>
+          {!embedded && <p className="eyebrow">خريطة الرحلة</p>}
+          {!embedded && <h2 id="jm-h">{map.cohort?.name || map.program?.name}</h2>}
           <p className="jm-sub">
             {map.program?.name}
             {map.cohort?.starts_on && <> · بدأت {fmtDate(map.cohort.starts_on)}</>}
@@ -90,14 +96,14 @@ export default function JourneyMap({ map }) {
           <div><dt>في الرحلة</dt><dd>{total}</dd></div>
           <div><dt>تجاوزوا القبول</dt><dd>{Math.max(0, passedAdmission)}</dd></div>
           <div><dt>أنهوا الرحلة</dt><dd>{map.totals.finished || 0}</dd></div>
-          <div className={map.totals.late ? 'is-late' : ''}><dt>تجاوزوا مدة مرحلتهم</dt><dd>{map.totals.late || 0}</dd></div>
+          <div className={map.totals.late ? 'is-late' : ''}><dt>{late.all}</dt><dd>{map.totals.late || 0}</dd></div>
         </dl>
       </header>
 
       {peak && peak.here > 0 && (
         <p className="jm-alert" role="note">
           <span className="jm-alert-mark" aria-hidden="true" />
-          <span>أكبر تجمع الآن {peopleAr(peak.here)} عند «<b>{peak.title}</b>»{peak.late ? <>، منهم <b>{peak.late}</b> تجاوزوا مدتها</> : null}</span>
+          <span>أكبر تجمع الآن {peopleAr(peak.here)} عند «<b>{peak.title}</b>»{peak.late ? <>، منهم <b>{peak.late}</b> {late.one}</> : null}</span>
         </p>
       )}
 
@@ -117,7 +123,7 @@ export default function JourneyMap({ map }) {
                   return (
                     <li key={s.key} className={`jm-stage${s.here ? ' has' : ''}${isToday ? ' today' : ''}${open === s.key ? ' on' : ''}`}>
                       <button type="button" className="jm-node" aria-expanded={open === s.key} aria-controls={`jm-panel-${s.key}`}
-                        aria-label={`${s.title}${isToday ? ' (موقع الدفعة على جدولها اليوم)' : ''}: ${peopleAr(s.here)} هنا، ${s.done} تجاوزوها، ${ahead} لم يصلوها${s.late ? `، ${s.late} تجاوزوا مدتها` : ''}`}
+                        aria-label={`${s.title}${isToday ? ' (موقع الدفعة على جدولها اليوم)' : ''}: ${peopleAr(s.here)} هنا، ${s.done} تجاوزوها، ${ahead} لم يصلوها${s.late ? `، ${s.late} ${late.one}` : ''}`}
                         onClick={() => setOpen(open === s.key ? null : s.key)}>
                         {isToday && <span className="jm-today">اليوم</span>}
                         <span className="jm-mark" aria-hidden="true" style={{ '--w': s.here / max }} />
@@ -142,7 +148,7 @@ export default function JourneyMap({ map }) {
         <span><i className="d" /> تجاوزوا المرحلة</span><span><i className="h" /> هنا الآن</span><span><i className="a" /> لم يصلوها</span>
       </p>
 
-      {openStage && <StagePanel stage={openStage} total={total} onClose={() => setOpen(null)} />}
+      {openStage && <StagePanel stage={openStage} total={total} late={late} onClose={() => setOpen(null)} />}
 
       {map.milestones?.length > 0 && (
         <div className="jm-ms" aria-labelledby="jm-ms-h">
@@ -162,7 +168,7 @@ export default function JourneyMap({ map }) {
 
       <table className="sr-only">
         <caption>خريطة الرحلة: عدد المشاركين عند كل مرحلة</caption>
-        <thead><tr><th scope="col">الطور</th><th scope="col">المرحلة</th><th scope="col">هنا الآن</th><th scope="col">تجاوزوها</th><th scope="col">تجاوزوا مدتها</th></tr></thead>
+        <thead><tr><th scope="col">الطور</th><th scope="col">المرحلة</th><th scope="col">هنا الآن</th><th scope="col">تجاوزوها</th><th scope="col">{late.one}</th></tr></thead>
         <tbody>{stages.map((s) => <tr key={s.key}><td>{PHASES.find((p) => p.key === s.phase)?.title}</td><td>{s.title}</td><td>{s.here}</td><td>{s.done}</td><td>{s.late}</td></tr>)}</tbody>
       </table>
     </section>

@@ -4,7 +4,7 @@
 // المنسق يرى جهته فقط: الجهة تُشتق من جلسته على الخادم ولا تُقبل من
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
-import { journeyDefinition, orgCohortSetups } from './programs.ts';
+import { cohortMemberIds, journeyDefinition, orgCohortSetups } from './programs.ts';
 import { journeyMap } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
@@ -194,10 +194,7 @@ export async function dashboardFor(c: any) {
   const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
   const journey_map = journeyMap({
     stages: (def.stages || []).filter((s: any) => s.active !== false).sort((a: any, b: any) => a.sort - b.sort),
-    people: (rows as any[]).map((r: any) => ({
-      id: r.id, name: r.full_name, status: r.status, created_at: r.created_at, journey: journeys[r.id]?.journey || [], milestones: journeys[r.id]?.milestones || [],
-      dates: [r.profile_completed_at, journeys[r.id]?.baselineAt, ...((journeys[r.id]?.pl || []) as any[]).map((x: any) => x.approved_at)],
-    })),
+    people: mapPeople(rows as any[], journeys),
     cohort: def.cohort, program, list: perms.list !== false, activity: perms.activity === true,
   });
   return {
@@ -446,6 +443,44 @@ export async function adminJourney(a: Admin, b: Body) {
     success: true, journey_map: d.journey_map || null,
     cohort: own?.cohort || null, setup: own?.setup || [], setup_missing: own?.setup_missing || 0, program: own?.program || null,
   };
+}
+
+// صف كل مشارك في خريطة الرحلة من رحلته المحسوبة (journeyFor): واحد للوحة الجهة وملف الدفعة، فلا تختلفان في عدّ
+function mapPeople(rows: any[], journeys: Record<string, any>) {
+  return rows.map((r: any) => ({
+    id: r.id, name: r.full_name, status: r.status, created_at: r.created_at, journey: journeys[r.id]?.journey || [], milestones: journeys[r.id]?.milestones || [],
+    dates: [r.profile_completed_at, journeys[r.id]?.baselineAt, ...((journeys[r.id]?.pl || []) as any[]).map((x: any) => x.approved_at)],
+  }));
+}
+
+// ── خريطة رحلة الدفعة في ملفها (تصور محرر رحلة الدفعة، R0) ──
+// بمنطق admin.org-journey نفسه وصلاحيته (قراءة لكل مدير): أعضاء الدفعة الفعليون (cohortMemberIds بقاعدة pickCohort)، ورحلة
+// كل منهم من journeyFor، وتعريف الدفعة نفسها (journeyDefinition بدفعتها)، ثم journeyMap بالأسماء وما ينقص كل شخص
+export const COHORT_JOURNEY_MAX = 1500;
+export async function adminCohortJourney(a: Admin, b: Body) {
+  const cohortId = String(b.cohort_id || '');
+  if (!cohortId) throw new Fail('حدد الدفعة', 400);
+  const m = await cohortMemberIds(cohortId);
+  if (!m) throw new Fail('الدفعة غير موجودة', 404);
+  // رحلة كل عضو تُحسب هنا، فلدفعة أكبر من السقف (الدفعة المفتوحة غالبًا) رسالة صريحة بدل مهلة الدالة
+  if (m.ids.length > COHORT_JOURNEY_MAX) throw new Fail(`الدفعة أكبر من أن تُرسم خريطتها هنا (${m.ids.length} عضوًا، والحد ${COHORT_JOURNEY_MAX}). اعرضها من «أين توقفوا» أو من صفحة كل جهة`, 413);
+  const [rows, def]: any[] = await Promise.all([
+    m.ids.length ? allFor(m.ids, () => db.from('participants').select('*').order('id'), 'id') : Promise.resolve([]),
+    journeyDefinition({}, m.cohort),
+  ]);
+  const journeys: Record<string, any> = {};
+  const queue = [...(rows as any[])];
+  await Promise.all(Array.from({ length: 8 }, async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) journeys[r.id] = await journeyFor(r, { lite: true });
+  }));
+  const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
+  const journey_map = journeyMap({
+    stages: (def.stages || []).filter((s: any) => s.active !== false).sort((x: any, y: any) => x.sort - y.sort),
+    people: mapPeople(rows as any[], journeys),
+    cohort: def.cohort, program, list: true, activity: true,
+  });
+  await audit('admin', a.email, 'admin.cohort-journey', 'cohorts', cohortId);
+  return { success: true, journey_map };
 }
 
 // ── 5. الملخص الأسبوعي (من cron.reminders) ──
