@@ -8,17 +8,21 @@ name: Apply migrations (production)
 # الوضع verify قراءة فقط: يشغّل فحوص ملف scripts/db/verify-*.sql (يُسمّى في migrations)، كل فحص في معاملة للقراءة فقط.
 #
 # التطبيق (تصور تحديث المنصة بلا أثر، المرحلة 6):
-# - الوظيفة apply في بيئة production، ومن main وحده بوضعيها (الخطوة الأولى ترفض غيره). موافقة المالك على البيئة تصير
-#   بوابته الصريحة التي تسمّي الترحيل بشرطين يضبطهما هو مرة واحدة (RUNBOOK.md §5): البيئة بمراجع واحد هو نفسه وفرع main
-#   وحده، وكل سر يكتب في القاعدة سرّ بيئة لا سرّ مستودع: SUPABASE_ACCESS_TOKEN في production وsupabase، وSUPABASE_DB_URL
-#   في production وbackup (ومعهما أسرار النسخ). كل وظيفة تقرأ أيًا منها تعلن بيئتها، وكل بيئة مقصورة على main، فلا يقرؤها
-#   سير من فرع غير مدموج ولو حذف سطر environment: من نسخته. قبل الضبط ليست بوابة: البيئة تُنشأ آليًا بلا موافقة،
-#   وأسرار المستودع يقرؤها من يدفع فرعًا.
+# - البوابة وظيفة approve صغيرة في بيئة migration-approval (مراجعها المالك وحده، بلا أسرار ولا مجموعة تزامن): موافقته عليها
+#   هي قراره الذي يسمّي الترحيل. انتظار الموافقة لا يمسك مجموعة deploy-production، فلا يوقف نشر ci.yml ولا يلغي نشرًا
+#   منتظرًا وهو ينتظر المالك ساعات. بعد الموافقة تدخل وظيفة apply المجموعة.
+# - apply في بيئة production (بلا مراجعين، فلا موافقة ثانية) ومن main وحده بوضعيها (الخطوة الأولى ترفض غيره)، ولا تبدأ إلا
+#   بعد approve. كل سر يكتب في القاعدة سرّ بيئة لا سرّ مستودع: SUPABASE_ACCESS_TOKEN في production وsupabase،
+#   وSUPABASE_DB_URL في production وbackup (ومعهما أسرار النسخ). كل وظيفة تقرأ أيًا منها تعلن بيئتها، وكل بيئة مقصورة على
+#   main (RUNBOOK.md §5)، فلا يقرؤها سير من فرع غير مدموج ولو حذف سطر environment: من نسخته. قبل الضبط ليست بوابة: البيئة
+#   تُنشأ آليًا بلا موافقة، وأسرار المستودع يقرؤها من يدفع فرعًا.
 # - في مجموعة deploy-production مع نشر ci.yml وسير التراجع الموحد: لا يتداخل ترحيل ونشر ولا ترحيلان.
 # - قبل التطبيق نسخة إلزامية بـ pg_dump للجداول التي يمسها الترحيل إلى R2 (البادئة premigration/)، وبلا أسرار النسخ لا تطبيق.
 # - كل ترحيل في معاملة صريحة بمهلة أقفال 3 ثوانٍ ومهلة تنفيذ 60 ثانية، ويُعاد بتراجع عند فشل القفل وحده (migration-tx.mjs).
-# - apply-and-deploy للترحيل الحاجب: يطبّق ثم ينشر الدوال وrelease من main بسير التراجع الموحد (deploy-leaders-api.yml)
-#   في التشغيل نفسه، فلا نافذة بشرية يعمل فيها الكود القديم على البنية الجديدة (ق5). يرفض قبل أي تطبيق إن بقي حاجب لم يُسمَّ.
+# - apply-and-deploy للترحيل الحاجب: يطبّق ثم ينشر الدوال وrelease بسير التراجع الموحد (deploy-leaders-api.yml) بـ ref = main،
+#   فيُنشر رأس main ساعة النشر لا الإيداع الذي شُغّل منه السير، ولا يرجع release إلى الخلف إن دُمج إيداع ونُشر أثناء الانتظار
+#   (والسير الموحد يرفض الهدف الأقدم من release). في التشغيل نفسه، فلا نافذة بشرية يعمل فيها الكود القديم على البنية الجديدة
+#   (ق5). يرفض قبل أي تطبيق إن بقي حاجب لم يُسمَّ، والنشر يقف على أي حاجب جديد دُمج أثناء الانتظار.
 # الأسرار بأسمائها: SUPABASE_ACCESS_TOKEN، وللنسخ SUPABASE_DB_URL وBACKUP_PUBLIC_KEY (أو BACKUP_PASSPHRASE) وR2_ACCOUNT_ID
 # وR2_ACCESS_KEY_ID وR2_SECRET_ACCESS_KEY وR2_BUCKET (كما في backup.yml).
 
@@ -44,7 +48,7 @@ permissions:
   contents: read
 
 jobs:
-  # قراءة فقط: بلا مجموعة تزامن ولا مراجع، فلا تنتظر موافقة ولا نشرًا، ومن main وحده (بيئة supabase)
+  # قراءة فقط: بلا مجموعة تزامن ولا مراجع، فلا تنتظر موافقة ولا نشرًا. بيئة supabase بلا مراجعين تقصرها على main
   read:
     if: inputs.mode == 'check' || inputs.mode == 'verify'
     runs-on: ubuntu-latest
@@ -74,10 +78,31 @@ jobs:
         if: env.MODE == 'verify'
         run: node scripts/db/apply-migration.mjs --verify "$MIGRATIONS"
 
-  apply:
+  # بوابة المالك وحدها: بيئة migration-approval بمراجع هو المالك، بلا أسرار ولا مجموعة تزامن، فانتظار الموافقة لا يحجز
+  # deploy-production (GitHub قد يُدخل الوظيفة مجموعتها قبل أن تنتظر مراجعة البيئة، فتحجب نشر ci.yml أو تلغي المنتظر)
+  approve:
     if: inputs.mode == 'apply' || inputs.mode == 'apply-and-deploy'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: migration-approval
+    steps:
+      - name: Approved for main, with migrations named
+        env:
+          MIGRATIONS: ${{ inputs.migrations }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::التطبيق من main وحده («Use workflow from» = main). الآن: $GITHUB_REF"
+            exit 1
+          fi
+          if [ -z "$MIGRATIONS" ]; then echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations"; exit 1; fi
+          printf '### موافقة المالك\n\n- الوضع: `%s`\n- الترحيلات: `%s`\n' "${{ inputs.mode }}" "$MIGRATIONS" >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    needs: approve
+    if: (inputs.mode == 'apply' || inputs.mode == 'apply-and-deploy') && needs.approve.result == 'success'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    # بيئة production: أسرار الكتابة في القاعدة، مقصورة على main، بلا مراجعين (الموافقة في approve)
     environment: production
     concurrency:
       group: deploy-production
@@ -153,7 +178,8 @@ jobs:
       - name: Apply in order
         run: node scripts/db/apply-migration.mjs $MIGRATIONS
 
-  # الترحيل الحاجب: النشر فور التطبيق بسير التراجع الموحد نفسه (الدوال السبع ثم release ثم الدخان)، إلى رأس main
+  # الترحيل الحاجب: النشر فور التطبيق بسير التراجع الموحد نفسه (الدوال السبع ثم release ثم الدخان)، إلى رأس main ساعة النشر.
+  # ref = main لا github.sha: إيداع دُمج ونُشر أثناء انتظار الموافقة لا يُرجَع عنه إلى الإيداع الذي شُغّل منه السير
   deploy:
     needs: apply
     if: inputs.mode == 'apply-and-deploy' && needs.apply.result == 'success'
@@ -162,5 +188,5 @@ jobs:
       actions: write
     uses: ./.github/workflows/deploy-leaders-api.yml
     with:
-      ref: ${{ github.sha }}
+      ref: main
     secrets: inherit

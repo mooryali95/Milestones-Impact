@@ -367,6 +367,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"
+      # تشغيل قديم (إعادة تشغيل، أو دفع سبقه نشر أحدث منه) لا يرجع release والدوال إلى الخلف: هدف أقدم من release يُرفض
+      # قبل أي نشر (scripts/ops/release-direction.mjs). التراجع المقصود بسير التراجع الموحد وحده (rollback = true)
+      - name: Release does not move backwards
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ops/release-direction.mjs "$GITHUB_SHA"
       # ش2 قبل أي نشر: إصدار رُقّي بعد أن فُحص طلب الدمج (طلبان متوازيان) قد لا تكون ملفاته في هذا الناتج، فلا نشر ولا ترقية
       # حتى يُعاد تحديث releases/ (RUNBOOK §2). قبل الدوال، فلا يبقى نشر دوال بلا ترقية واجهة
       - name: Previous release files are kept

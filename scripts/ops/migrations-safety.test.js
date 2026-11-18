@@ -13,6 +13,7 @@ import { backupPlan } from '../db/premigration-backup.mjs';
 import { contractGaps, dispatchTables, INDEX } from './action-contract.mjs';
 import { pickBaseline, productionNames } from '../integration/production-baseline.mjs';
 import { unnamedBlocking } from './pending-migrations.mjs';
+import { compareStatus, decide, direction } from './release-direction.mjs';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -257,6 +258,20 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
   it('التطبيق في بيئة production وفي deploy-production مع نشر ci.yml والتراجع الموحد، والقراءة بلا الاثنين', () => {
     expect(migrate.jobs.apply.environment).toBe('production');
     expect(migrate.jobs.apply.concurrency).toEqual({ group: 'deploy-production', 'cancel-in-progress': false });
+    // الموافقة في وظيفة صغيرة قبلها بلا مجموعة تزامن ولا أسرار: انتظار المالك لا يحجز deploy-production
+    const approve = migrate.jobs.approve;
+    expect(approve.environment).toBe('migration-approval');
+    expect(approve.concurrency).toBeUndefined();
+    expect(JSON.stringify(approve)).not.toMatch(/secrets\./);
+    expect(approve.if).toBe("inputs.mode == 'apply' || inputs.mode == 'apply-and-deploy'");
+    expect(approve.steps[0].run).toMatch(/if \[ "\$GITHUB_REF" != "refs\/heads\/main" \]; then/);
+    expect(migrate.jobs.apply.needs).toBe('approve');
+    expect(migrate.jobs.apply.if).toMatch(/needs\.approve\.result == 'success'/);
+    // بيئة production لا مراجع فيها، فلا يعلنها إلا apply التي لا تبدأ قبل الموافقة
+    const dir = join(root, '.github/workflows');
+    const declaring = readdirSync(dir).filter((f) => f.endsWith('.yml')).flatMap((f) =>
+      Object.entries(yaml.load(readFileSync(join(dir, f), 'utf8')).jobs || {}).filter(([, j]) => ['production', 'migration-approval'].includes(j.environment)).map(([id, j]) => `${f}:${id}:${j.environment}`));
+    expect(declaring).toEqual(['migrate.yml:approve:migration-approval', 'migrate.yml:apply:production']);
     expect(ci.jobs.deploy.concurrency.group).toBe('deploy-production');
     expect(manual.jobs.deploy.concurrency.group).toBe('deploy-production');
     // لا مجموعة على مستوى السير في أي منهما، فلا قفل متبادل حين يستدعي migrate.yml سير التراجع
@@ -278,10 +293,49 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
     expect(d.needs).toBe('apply');
     expect(d.if).toMatch(/inputs\.mode == 'apply-and-deploy' && needs\.apply\.result == 'success'/);
     expect(d.uses).toBe('./.github/workflows/deploy-leaders-api.yml');
-    expect(d.with.ref).toBe('${{ github.sha }}');
+    // main لا github.sha: إيداع دُمج ونُشر أثناء انتظار الموافقة لا يُرجَع عنه (ref يُحل ساعة النشر)
+    expect(d.with.ref).toBe('main');
     expect(d.secrets).toBe('inherit');
     expect(manual.on.workflow_call.inputs.ref.required).toBe(true);
     expect(manual.on.workflow_dispatch.inputs.ref.required).toBe(true);
+  });
+  it('لا يرجع release إلى الخلف إلا بتراجع مقصود من التشغيل اليدوي', () => {
+    const steps = manual.jobs.deploy.steps;
+    const guard = steps.findIndex((s) => s.name === 'Release does not move backwards unless this is a rollback');
+    expect(guard).toBeGreaterThan(steps.findIndex((s) => s.id === 'target'));
+    expect(guard).toBeLessThan(steps.findIndex((s) => s.name === 'Deploy the functions from the target'));
+    expect(steps[guard].run).toBe('node scripts/ops/release-direction.mjs "${{ steps.target.outputs.sha }}"');
+    expect(steps[guard].env.ROLLBACK).toBe('${{ inputs.rollback == true }}');
+    expect(manual.on.workflow_dispatch.inputs.rollback).toMatchObject({ type: 'boolean', default: false });
+    // المستدعي (migrate.yml) لا يملك المدخل أصلًا
+    expect(manual.on.workflow_call.inputs.rollback).toBeUndefined();
+    expect(migrate.jobs.deploy.with.rollback).toBeUndefined();
+    // ونشر ci.yml كذلك قبل أي خطوة تنشر
+    const dep = ci.jobs.deploy.steps;
+    const ciGuard = dep.findIndex((s) => s.name === 'Release does not move backwards');
+    expect(dep[ciGuard].run).toBe('node scripts/ops/release-direction.mjs "$GITHUB_SHA"');
+    expect(dep[ciGuard].env.ROLLBACK).toBeUndefined();
+    expect(ciGuard).toBe(dep.findIndex((s) => s.name === 'Consume the deferred-deploy markers') + 1);
+    expect(ciGuard).toBeLessThan(dep.findIndex((s) => s.name === 'Functions changed since the last release?'));
+  });
+  it('اتجاه النشر: الأقدم من release يُرفض، والمقصود يمر، والمجهول يُرفض', () => {
+    expect(['identical', 'behind', 'ahead', 'diverged', null, 'x'].map(direction)).toEqual(['same', 'forward', 'backward', 'diverged', 'none', 'unknown']);
+    expect(decide('identical', false).ok).toBe(true);
+    expect(decide('behind', false).ok).toBe(true);
+    expect(decide(null, false).ok).toBe(true);
+    // السيناريو: A ينتظر الموافقة، B يُدمج ويُنشر، ثم يحاول A النشر: release (B) بعد الهدف (A)
+    expect(decide('ahead', false)).toMatchObject({ ok: false, dir: 'backward' });
+    expect(decide('diverged', false).ok).toBe(false);
+    expect(decide('weird', true).ok).toBe(false);
+    expect(decide('ahead', true)).toMatchObject({ ok: true, dir: 'backward' });
+  });
+  it('اتجاه النشر: المقارنة <الهدف>...release، و404 لا release، وغيره خطأ', async () => {
+    const calls = [];
+    const fake = (status, body) => async (url, opts) => { calls.push([url, opts.headers.Authorization]); return { status, ok: status === 200, json: async () => body }; };
+    expect(await compareStatus({ repo: 'o/r', token: 't', sha: 'abc', fetchImpl: fake(200, { status: 'ahead' }) })).toBe('ahead');
+    expect(calls[0]).toEqual(['https://api.github.com/repos/o/r/compare/abc...release', 'Bearer t']);
+    expect(await compareStatus({ repo: 'o/r', token: 't', sha: 'abc', fetchImpl: fake(404) })).toBeNull();
+    await expect(compareStatus({ repo: 'o/r', token: 't', sha: 'abc', fetchImpl: fake(502) })).rejects.toThrow(/502/);
   });
   it('الحاجب غير المسمّى', () => {
     const pending = [{ name: 'a', gate: 'blocking' }, { name: 'b', gate: 'tolerant' }, { name: 'c', gate: 'blocking' }];
@@ -306,7 +360,7 @@ describe('أسرار الكتابة في القاعدة أسرار بيئة (ا�
   };
   const jobs = readdirSync(dir).filter((f) => f.endsWith('.yml')).flatMap((f) =>
     Object.entries(yaml.load(readFileSync(join(dir, f), 'utf8')).jobs || {}).map(([id, job]) => ({ where: `${f}:${id}`, job, text: JSON.stringify(job) })));
-  it('كل وظيفة تقرأ سرًا منها تعلن بيئة يحمله، ولا سير يمرره بـ secrets: inherit إلا إلى وظيفة تعلن بيئتها', () => {
+  it('كل وظيفة تقرأ سرًا منها تعلن بيئة يحمله', () => {
     const seen = new Set();
     for (const { where, job, text } of jobs) {
       for (const [secret, envs] of Object.entries(ENVS)) {
@@ -316,8 +370,29 @@ describe('أسرار الكتابة في القاعدة أسرار بيئة (ا�
       }
     }
     expect([...seen].sort()).toEqual(Object.keys(ENVS).sort());
-    const manual = yaml.load(read('.github/workflows/deploy-leaders-api.yml'));
-    expect(manual.jobs.deploy.environment).toBe('supabase');
+  });
+  // وظيفة uses: لا تعلن بيئة (GitHub لا يسمح)، وsecrets: inherit لا يمرر أسرار البيئات. فكل وظيفة في السير المستدعى تقرأ سرًا
+  // مقيدًا تعلن بيئتها بنفسها، وإلا قرأته من أسرار المستودع. وسير مستدعى من مستودع آخر لا يُقرأ هنا، فلا يرث أسرارًا
+  it('كل سير مستدعى (uses:) يقرأ سرًا مقيدًا يعلن بيئته في وظيفته، أيًا كان المستدعي', () => {
+    const callers = jobs.filter(({ job }) => typeof job.uses === 'string');
+    let checked = 0;
+    for (const { where, job } of callers) {
+      const passes = job.secrets === 'inherit' || Object.keys(ENVS).some((k) => JSON.stringify(job.secrets || {}).includes(k));
+      if (!passes) continue;
+      expect({ where, local: job.uses.startsWith('./.github/workflows/') }).toEqual({ where, local: true });
+      const callee = yaml.load(read(job.uses.slice(2)));
+      for (const [id, cj] of Object.entries(callee.jobs || {})) {
+        const text = JSON.stringify(cj);
+        for (const [secret, envs] of Object.entries(ENVS)) {
+          if (!text.includes(`secrets.${secret}`)) continue;
+          checked++;
+          expect({ where, callee: `${job.uses}:${id}`, secret, env: cj.environment }).toEqual({ where, callee: `${job.uses}:${id}`, secret, env: expect.toBeOneOf(envs) });
+        }
+      }
+    }
+    // migrate.yml يستدعي سير التراجع الموحد بـ secrets: inherit، فالحارس ليس فارغًا
+    expect(callers.map((c) => c.where)).toContain('migrate.yml:deploy');
+    expect(checked).toBeGreaterThan(0);
   });
 });
 
