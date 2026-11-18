@@ -54,7 +54,8 @@ describe('حراس المصدر', () => {
   it('حاجز الأخطاء يلف التطبيق ويُعاد التحميل عند فشل استيراد قطعة بعد النشر', () => {
     const main = read('main.jsx');
     expect(main).toMatch(/<ErrorBoundary><Suspense fallback=\{<Loading \/>\}><App \/><\/Suspense><\/ErrorBoundary>/);
-    expect(main).toMatch(/vite:preloadError/);
+    // vite:preloadError بالحارس المشترك (shared/ui/lazy-retry.js): إعادة واحدة في الدقيقة إلى القسم المطلوب، لا حلقة
+    expect(main).toMatch(/installPreloadRecovery\(window, \{ to: viewHref \}\)/);
   });
   it('القاعة لا تدور بلا نهاية عند فشل أول تحميل', () => {
     const hall = read('screens/Hall.jsx');

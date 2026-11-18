@@ -3,6 +3,10 @@
 // ════════════════════════════════════════════════════════════════
 import React from 'react';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
+import { isChunkError } from '../../shared/ui/lazy-retry.js';
+import { viewHref } from './reload-view.js';
+// زر التحديث بعد خطأ ملف قسم يفتح القسم نفسه لا «رحلتي» (reload-view.js)
+const reloadToSection = () => { location.assign(viewHref() || location.href); };
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -32,7 +36,6 @@ export default class ErrorBoundary extends React.Component {
 // خطأ تحميل ملف القسم بعد نشر أحدث لا يصلحه «حاول مرة أخرى» (React.lazy يحفظ الوعد المرفوض): يُطلب تحديث الصفحة.
 // الحاجز الأخير حول التطبيق كله باقٍ في main.jsx لما يفوت هذا (الترويسة أو الإطار نفسه).
 // ════════════════════════════════════════════════════════════════
-const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to fetch/i;
 export class SectionBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -43,7 +46,7 @@ export class SectionBoundary extends React.Component {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
-    const chunk = CHUNK_ERROR.test(String(error?.message || error));
+    const chunk = isChunkError(error);
     return (
       <div className="page narrow stack">
         <div className="alert err stack" role="alert">
@@ -51,7 +54,7 @@ export class SectionBoundary extends React.Component {
           <span>بقية المنصة تعمل، وبياناتك لم تتأثر.</span>
           <div className="row">
             {chunk
-              ? <button type="button" className="btn sm" onClick={() => location.reload()}>حدّث الصفحة</button>
+              ? <button type="button" className="btn sm" onClick={reloadToSection}>حدّث الصفحة</button>
               : <button type="button" className="btn sm" onClick={() => this.setState({ error: null })}>حاول مرة أخرى</button>}
             {this.props.onHome && <button type="button" className="btn sm ghost" onClick={this.props.onHome}>{this.props.homeLabel || 'رحلتي'}</button>}
           </div>

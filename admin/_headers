@@ -19,5 +19,7 @@
   Cache-Control: public, max-age=31536000, immutable
 /assets/*.css
   Cache-Control: public, max-age=31536000, immutable
+# رد الملف الغائب (assets/404.html برمز 404) يأخذ ترويسة مسار الطلب أعلاه، لا ترويسة لملف 404.html نفسه: _headers تطابق
+# مسار الطلب. المعالجة في المتصفح (reloadOnce يطلب الملف الفاشل بـcache: 'reload'، shared/ui/lazy-retry.js)
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
