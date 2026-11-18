@@ -5,6 +5,7 @@ import ErrorBoundary from './ErrorBoundary.jsx';
 import { captureAttribution } from './attribution.js';
 import { installPreloadRecovery } from '../../shared/ui/lazy-retry.js';
 import { viewHref } from './reload-view.js';
+import { installTelemetry } from './telemetry.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
@@ -13,6 +14,8 @@ import '../../shared/css/presenter-qr.css';
 import './styles.css';
 
 captureAttribution();
+// الرصد من جهة العميل (المرحلة 4): أخطاء الصفحة وفشل القطع، وإرسال ما بقي في الطابور بعد عودة الاتصال
+installTelemetry(window);
 // الشاشات الثقيلة تُحمَّل كسولًا (lazy في App.jsx)؛ هذا ما يظهر أثناء جلب قطعتها
 const Loading = () => <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
 createRoot(document.getElementById('root')).render(<ErrorBoundary><Suspense fallback={<Loading />}><App /></Suspense></ErrorBoundary>);

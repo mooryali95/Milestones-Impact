@@ -5,6 +5,7 @@ import React from 'react';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
 import { isChunkError } from '../../shared/ui/lazy-retry.js';
 import { viewHref } from './reload-view.js';
+import { reportRender } from './telemetry.js';
 // زر التحديث بعد خطأ ملف قسم يفتح القسم نفسه لا «رحلتي» (reload-view.js)
 const reloadToSection = () => { location.assign(viewHref() || location.href); };
 
@@ -14,7 +15,7 @@ export default class ErrorBoundary extends React.Component {
     this.state = { failed: false };
   }
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(error, info) { console.error('leaders-app:', error, info?.componentStack); }
+  componentDidCatch(error, info) { console.error('leaders-app:', error, info?.componentStack); reportRender(error); }
   render() {
     if (!this.state.failed) return this.props.children;
     return (
@@ -42,7 +43,7 @@ export class SectionBoundary extends React.Component {
     this.state = { error: null };
   }
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) { console.error('leaders-app section:', error, info?.componentStack); }
+  componentDidCatch(error, info) { console.error('leaders-app section:', error, info?.componentStack); reportRender(error); }
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;

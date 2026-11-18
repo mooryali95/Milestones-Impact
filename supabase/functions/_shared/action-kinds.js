@@ -85,6 +85,8 @@ export const NO_REPLAY = new Set([
   'auth.start', 'auth.verify', 'auth.google', 'coord.auth-start', 'coord.auth-verify', 'passkey.auth-options', 'passkey.auth-verify',
   'xp.auth-start', 'xp.auth-verify', 'xp.auth-google', 'workshop.scan', 'cert.verify', 'rater.submit', 'sponsor.submit', 'share.get', 'share.note',
   'outcome.submit', 'expert.apply', 'offer.respond', 'cron.reminders', 'cron.expert-offers',
+  // أحداث الإخفاق من جهة العميل (المرحلة 4): مفتوحة، ويرسلها telemetry.js بـfetch مباشرة لا postAction، فلا إعادة ولا مفتاح
+  'client.event',
   'me.switch', 'xp.switch', 'coord.switch', 'upload.url', 'pay.checkout', 'capstone.share-create', 'admin.demo-open', 'admin.mail-login-link', 'xp.workshop-qr',
 ]);
 // أفعال الدخول: لا يُعاد طلبها تلقائيًا، لكن تعذّر الاتصال فيها يُعرض برسالة الشبكة لا «تعذّر التأكد» (لا شيء يُتحقق منه في

@@ -112,7 +112,7 @@ describe('الفهرس', () => {
       critical: ['mail_cap', 'mail_failed', 'mail_unconfigured', 'captcha_unconfigured', 'audit_failed', 'cert_key_missing', 'certificate_issue',
         'payment_mismatch', 'payment_unmatched', 'erase_request', 'erase_reminder', 'erase_files_failed', 'erase_close_failed', 'erase_audit_failed',
         'creem-webhook', 'agent_spend_cap', 'agent_ledger_error', 'agent_model_unknown', 'agent_model_config'],
-      important: ['internal', 'mail_rejected', 'mail_counter_unavailable', 'mail_quota_70', 'mail_queue_stuck', 'mail_queue_carryover',
+      important: ['internal', 'client_boot_failures', 'mail_rejected', 'mail_counter_unavailable', 'mail_quota_70', 'mail_queue_stuck', 'mail_queue_carryover',
         'booking_not_eligible', 'seat_check_unavailable', 'leaders-hooks', 'agent_key_changed', 'agent_key_reverted', 'agent_enabled', 'agent_disabled',
         'agent_spend_80', 'agent_eval_stale', 'alert_test'],
     };

@@ -49,10 +49,11 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
 describe('كل رفض 4xx مسجّل باسم فعله (6.1)', () => {
   const index = read('supabase/functions/leaders-api/index.ts');
   it('في معالج الأخطاء العام وفي الأقسام المجمّعة، بلا بريد ولا متن', () => {
-    expect(index).toContain('logRefusal(action, e.status, e.code);\n      return reply(req,');
+    // ومعه معرّف بناء الواجهة من ترويسة x-client-build (تصور التحديث بلا أثر، المرحلة 4)
+    expect(index).toContain('logRefusal(action, e.status, e.code, build);\n      return reply(req,');
     expect(index).toContain('logRefusal(action, e.status, e.code); return { success: false');
-    const log = index.slice(index.indexOf('function logRefusal'), index.indexOf('function logRefusal') + 260);
-    expect(log).toContain('console.warn(`leaders-api refused ${action} ${status} ${code || \'-\'}`)');
+    const log = index.slice(index.indexOf('function logRefusal'), index.indexOf('function logRefusal') + 330);
+    expect(log).toContain('console.warn(`leaders-api refused ${action} ${status} ${code || \'-\'} build=${build || \'-\'}`)');
     expect(log).not.toMatch(/email|message|body/);
   });
 });

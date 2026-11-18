@@ -54,6 +54,8 @@ import Consent, { PolicyBanner } from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
 import { autoReboot, isTransient, reconnectCopy } from './reconnect.js';
+import { lastJourney, savedAtAr, STAGE_STATE_AR } from './last-journey.js';
+import { PHASES } from './labels.js';
 import { SectionBoundary } from './ErrorBoundary.jsx';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
 // الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
@@ -208,7 +210,36 @@ function Shell({ tag, back = true, home = null, children }) {
 
 // «جارٍ إعادة الاتصال…» أو «لا اتصال بالإنترنت»: حالة لا خطأ، والإعادة تلقائية، والزر يعجّلها
 // working: إعادة تلقائية جارية الآن، فالزر معطل بـ«جارٍ المحاولة…» بدل ضغطة لا أثر لها. code رمز آخر إخفاق (الشبكة أو الخادم)
-function Reconnecting({ online, code, working, onRetry, onOther }) {
+// آخر ملخص رحلة معروف (last-journey.js، المرحلة 3 البند 5): المراحل وحالها ونسبة الإنجاز كما حُفظت في آخر فتح ناجح، بسطر
+// «آخر ما عُرف، للقراءة فقط» ووقته. لا زر فيه ولا رابط: الأفعال كلها تنتظر عودة الاتصال
+function LastKnown({ summary }) {
+  if (!summary?.stages?.length) return null;
+  return (
+    <section className="card stack last-known" aria-label="آخر ما عُرف من رحلتك" data-testid="last-known">
+      <div className="row last-known-head">
+        <b>رحلتك</b>
+        <span className="spacer" />
+        <span className="small muted">{summary.progress}% من الرحلة</span>
+      </div>
+      <p className="small muted last-known-note">آخر ما عُرف، للقراءة فقط · {savedAtAr(summary.at)}</p>
+      {PHASES.map((ph) => {
+        const list = summary.stages.filter((st) => st.p === ph.key);
+        if (!list.length) return null;
+        return (
+          <div key={ph.key} className="last-known-phase">
+            <span className="small muted">{ph.title}</span>
+            <ul>
+              {list.map((st) => <li key={st.k} className={`lk-${st.s}`}><span>{st.t}</span><span className="small muted">{STAGE_STATE_AR[st.s]}</span></li>)}
+            </ul>
+          </div>
+        );
+      })}
+      <p className="small muted">الإجراءات تعود حين يعود الاتصال.</p>
+    </section>
+  );
+}
+
+function Reconnecting({ online, code, working, onRetry, onOther, last }) {
   const t = reconnectCopy(online, code);
   const [tapped, setTapped] = useState(false);
   const busy = tapped || working;
@@ -223,6 +254,7 @@ function Reconnecting({ online, code, working, onRetry, onOther }) {
           <button className="btn sm ghost" onClick={now} disabled={busy}>{busy ? 'جارٍ المحاولة…' : 'حاول الآن'}</button>
         </div>
       </div>
+      <LastKnown summary={last} />
       <button className="link small" onClick={onOther}>ادخل بحساب آخر</button>
     </div>
   );
@@ -364,7 +396,7 @@ function Participant() {
       // الفتح الأول يجمع الرئيسية في رحلة واحدة (البند 7.5)، وتأخذ الأقسام ما يخصها منه مرة واحدة
       const res = await call('me', { with_home: true });
       if (stale()) return;
-      if (res.success) { setReconnect(false); setRebootTries(0); bootPreload.set(res.preload); accept(res); }
+      if (res.success) { setReconnect(false); setRebootTries(0); bootPreload.set(res.preload); accept(res); lastJourney.save(res, session.get()); }
       else if (res.code === 'suspended') { setReconnect(false); session.clear(); setVerifyError(res.message); }
       // عابر: «جارٍ إعادة الاتصال…» ويعيد الإقلاع وحده (autoReboot)، والجلسة باقية
       else if (isTransient(res)) { setReconnectCode(res.code); setReconnect(true); setRebootTries((n) => n + 1); }
@@ -453,7 +485,7 @@ function Participant() {
     </>
   );
   else if (!me && linkChoice) screen = <SignIn pendingLink={linkChoice} onSignedIn={(r) => { setLinkChoice(null); accept(r); }} />;
-  else if (reconnectShown) screen = <Reconnecting online={online} code={reconnectCode} working={rebooting} onRetry={boot} onOther={startSwitch} />;
+  else if (reconnectShown) screen = <Reconnecting online={online} code={reconnectCode} working={rebooting} onRetry={boot} onOther={startSwitch} last={lastJourney.read(session.get())} />;
   else if (!me && bootError) screen = (
     <div className="page narrow stack">
       <ErrorBox message={bootError} onRetry={() => { setBooting(true); boot(); }} />

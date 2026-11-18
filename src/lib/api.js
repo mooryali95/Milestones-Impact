@@ -113,7 +113,11 @@ async function transient(r, policy) {
   return !(body && typeof body === 'object' && 'success' in body);
 }
 
-export async function fetchRetry(url, init, opts = {}) {
+// init قد يكون دالة تُستدعى لكل محاولة (ترويسة x-client-build تسقط بعد خطأ شبكة فلا تحملها الإعادة، المرحلة 4).
+// الرد والخطأ يحملان attempts: عدد المحاولات حتى انتهى الطلب، للرصد من جهة العميل (leaders-app/src/telemetry.js)
+export async function fetchRetry(url, initArg, opts = {}) {
+  const initOf = typeof initArg === 'function' ? initArg : () => initArg;
+  const init = initOf();
   const p = { ...READ_POLICY, ...opts };
   const now = p.now || (() => Date.now());
   const sleep = p.sleep || ((ms) => new Promise((res) => setTimeout(res, ms)));
@@ -123,17 +127,18 @@ export async function fetchRetry(url, init, opts = {}) {
     // المحاولة الأولى بمهلتها كاملة، وما بعدها لا يتجاوز الميزانية كثيرًا (4 ثوانٍ على الأقل حتى لا تُقطع محاولة سليمة)
     const ms = i === 1 ? p.timeout : Math.min(p.timeout, Math.max(left, 4_000));
     let res = null, err = null;
+    const tag = (x) => { try { if (x && typeof x === 'object') x.attempts = i; } catch { /* كائن مجمّد */ } return x; };
     try {
-      res = await attempt(url, init, ms);
-      if (!(await transient(res, p))) return res;
+      res = await attempt(url, i === 1 ? init : initOf(), ms);
+      if (!(await transient(res, p))) return tag(res);
     } catch (e) {
       if (init?.signal?.aborted) throw e;
-      err = e;
+      err = tag(e);
       // بلا اتصال لا فائدة من الانتظار هنا: المستدعي يعيد عند حدث online (App.jsx). وخطأ الشبكة في كتابة بلا مفتاح لا يُعاد
       if (!p.network || offlineNow()) throw e;
     }
     const wait = backoffDelay(i, { base: p.base, cap: p.cap, random: p.random });
-    if (now() - t0 + wait >= p.budget) { if (err) throw err; return res; }
+    if (now() - t0 + wait >= p.budget) { if (err) throw err; return tag(res); }
     p.onRetry?.(i, err || res);
     await sleep(wait);
   }
@@ -163,6 +168,22 @@ export const learnIdem = (r) => {
   idemState.active = !!h && h !== 'off';
 };
 
+// ── معرّف البناء في كل طلب (المرحلة 4، البند 4) ──
+// x-client-build: بصمة قطعة الدخول المهشّرة (اسم index-<hash>.js، كما يقرؤها main.jsx لعامل الخدمة)، فيُعرف من سجل الخادم
+// أي بناء أرسل الطلب. ترويسة غير مألوفة تحتاج إذن الخادم في CORS (Access-Control-Allow-Headers)، والواجهة تُنشر قبل الدوال
+// (Pages فور الدمج، والدوال في نافذة النشر): لو أُرسلت قبل أن يأذن الخادم لسقط كل طلب. فلا تُرسل إلا بعد أن يعلن الخادم
+// قبولها في رد (x-client-build: on)، وفي الصفحة نفسها وحدها، وتسقط بعد أي خطأ شبكة (تراجع الدوال إلى نسخة أقدم مثلًا)
+export const buildState = { accepted: false };
+let buildId = null;
+export function clientBuild() {
+  if (buildId) return buildId;
+  const doc = typeof document !== 'undefined' ? document : null;
+  const src = doc ? [...(doc.scripts || [])].map((s) => String(s.src || '').match(/\/assets\/index-([\w-]+)\.js/)?.[1]).find(Boolean) : null;
+  buildId = (src || 'dev').slice(0, 40);
+  return buildId;
+}
+export const learnBuild = (r) => { if (r?.headers?.get?.('x-client-build') === 'on') buildState.accepted = true; };
+
 // طلب فعل لدالة: يختار سياسة الإعادة من نوع الفعل (_shared/action-kinds.js)، ويضيف مفتاح منع التكرار لكتابات leaders-api.
 // يعيد { r } بالرد، أو يرمي خطأ يحمل offline (الجهاز بلا اتصال) وuncertain (كتابة لا يُعرف أنفذت أم لا وإعادتها غير مأمونة)
 export async function postAction(fn, payload, extra = {}) {
@@ -174,19 +195,27 @@ export async function postAction(fn, payload, extra = {}) {
   const key = keyed ? keyFor(fp) : null;
   const safe = read || (keyed && idemState.active);
   const policy = read ? READ_POLICY : safe ? WRITE_POLICY : WRITE_UNSURE_POLICY;
+  const body = key ? JSON.stringify({ ...payload, idem: key }) : plain;
+  const leaders = fn === 'leaders-api';
+  let sentBuild = false;
+  const init = () => {
+    const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+    if (leaders && buildState.accepted) { headers['x-client-build'] = clientBuild(); sentBuild = true; }
+    return { method: 'POST', headers, body };
+  };
   try {
-    const r = await fetchRetry(fnUrl(fn), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      body: key ? JSON.stringify({ ...payload, idem: key }) : plain,
-    }, { ...policy, ...extra });
-    if (fn === 'leaders-api') learnIdem(r);
+    // خطأ شبكة في محاولة حملت الترويسة: الإعادة التالية بلا ترويسة
+    const onRetry = (n, why) => { if (sentBuild && why instanceof Error && !why.timeout) buildState.accepted = false; extra.onRetry?.(n, why); };
+    const r = await fetchRetry(fnUrl(fn), init, { ...policy, ...extra, onRetry });
+    if (leaders) { learnIdem(r); learnBuild(r); }
     // كتابة بمفتاح انتهت بعطل خادم أو ما زالت تعمل (409 pending): قد تكون نُفذت، فيبقى مفتاحها لإعادة يدوية. وما سوى ذلك
     // نتيجة معروفة، ومنها رفض 409 من الفعل نفسه (المقاعد تغيرت…): يُصحَّح ثم يُعاد بمفتاح جديد لا يعيد الرفض القديم
     if (key) { if (r.status >= 500 || (r.status === 409 && r.headers?.get?.('x-idem') === 'pending')) unsure.set(fp, { key, at: Date.now() }); else unsure.delete(fp); }
     return { r };
   } catch (e) {
     if (key) unsure.set(fp, { key, at: Date.now() });
+    // الترويسة قد تكون سبب الرفض (خادم أقدم لا يأذن بها): لا تُرسل بعدها حتى يعلنها رد جديد
+    if (sentBuild && !e?.timeout) buildState.accepted = false;
     const err = e instanceof Error ? e : new Error(String(e));
     err.offline = offlineNow();
     // الدخول لا «تعذّر التأكد»: لا شيء يُتحقق منه في شاشة الدخول، فرسالة الشبكة

@@ -4,13 +4,17 @@
 // نفس منهجية تطبيق المصفوفة: المفتاح العام في الترويسة لبوابة Supabase،
 // وتوكن الجلسة داخل الجسم يُتحقق منه على الخادم.
 import { netMessage, postAction } from '../../src/lib/api.js';
+import { lastJourney } from './last-journey.js';
+import { afterSuccess, failureOf, report } from './telemetry.js';
 
 const TOKEN_KEY = 'mi_leaders_session';
 
+// آخر ملخص رحلة معروف (last-journey.js) يعيش ما عاش رمز الجلسة نفسه: تغيّر الرمز (دخول بحساب آخر أو دخول جديد) ومسحه
+// (الخروج وانتهاء الجلسة والإيقاف) يمسحانه، فلا يرى أحد على جهاز مشترك ملخص غيره
 export const session = {
   get() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
-  set(t) { try { localStorage.setItem(TOKEN_KEY, t); } catch { /* وضع خاص */ } },
-  clear() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* وضع خاص */ } },
+  set(t) { try { if (localStorage.getItem(TOKEN_KEY) !== t) lastJourney.clear(); localStorage.setItem(TOKEN_KEY, t); } catch { /* وضع خاص */ } },
+  clear() { lastJourney.clear(); try { localStorage.removeItem(TOKEN_KEY); } catch { /* وضع خاص */ } },
 };
 
 // تفضيلات محلية صغيرة: آخر باب قُرئ، وإخفاء بطاقة الترحيب. ضياعها لا يضر.
@@ -44,10 +48,15 @@ export async function parse(r) {
 // تعذّر الاتصال تميز الجهاز بلا اتصال، والكتابة التي لا يُعرف مصيرها («تعذّر التأكد، تحقّق قبل الإعادة»). الرمز يبقى
 // network في الحالات كلها، فما يعيد المحاولة به (القاعة والحضور) يعمل كما كان، وoffline وuncertain علامتان إضافيتان
 export async function send(action, token, body = {}) {
+  // كل إخفاق شبكة أو خادم يُسجَّل حدثًا صغيرًا بنوعه واسم الفعل وعدد المحاولات (telemetry.js، المرحلة 4)، بلا رمز ولا جسم
   try {
     const { r } = await postAction('leaders-api', { action, token, ...body });
-    return await parse(r);
+    const res = await parse(r);
+    const kind = failureOf(r.status, res);
+    if (kind) report(kind, { act: action, tries: r.attempts }); else afterSuccess();
+    return res;
   } catch (e) {
+    report(e?.offline ? 'offline' : e?.timeout ? 'timeout' : 'TypeError', { act: action, tries: e?.attempts });
     return { success: false, message: netMessage(e), code: 'network', ...(e?.offline && { offline: true }), ...(e?.uncertain && { uncertain: true }) };
   }
 }
