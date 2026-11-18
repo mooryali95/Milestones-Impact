@@ -4,5 +4,6 @@
 # أسماء شائعة تطلبها المتصفحات والأدوات: تُخدم بملفها الحقيقي لا بصفحة التطبيق
 /favicon.ico    /favicon.svg           200
 /manifest.json  /manifest.webmanifest  200
-# تطبيق صفحة واحدة: كل المسارات (ومنها /verify) تفتح index.html
-/*  /index.html  200
+# تطبيق صفحة واحدة: لا قاعدة /* هنا. بلا 404.html في الجذر يقدّم Pages الصفحة index.html لكل مسار ليس ملفًا (ومنه /verify
+# و/org و/legal/*)، وملف /assets/ الغائب يأخذ أقرب 404.html (assets/404.html) برمز 404. القاعدة /* /index.html 200 قد
+# تتقدم على ذلك («Redirects are always followed» في وثائق Cloudflare) فتعطي الملف الغائب صفحة التطبيق برمز 200، فحُذفت

@@ -5,6 +5,7 @@
 // وساعاته وتقييمه (بعد خمسة تقييمات)، ويقيّم المشارك، ويصدر شهادة ساعات خبرته.
 // لا يرى سعر ساعته ولا تكلفته ولا ملاحظات الإدارة: الخادم لا يرسلها أصلًا.
 import React, { useCallback, useEffect, useState } from 'react';
+import { lazyRetry } from '../../../shared/ui/lazy-retry.js';
 import SusCard from '../SusCard.jsx';
 import AccountSwitch from '../AccountSwitch.jsx';
 import { xpCall, xpSession } from '../api.js';
@@ -26,7 +27,8 @@ import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
-const MasterBook = React.lazy(() => import('../../../shared/master-book/MasterBook.jsx'));
+// ملف الكتاب الأم بعد نشر أحدث: محاولة ثانية ثم إعادة تحميل واحدة (shared/ui/lazy-retry.js)
+const MasterBook = lazyRetry(() => import('../../../shared/master-book/MasterBook.jsx'));
 const BOOK_API = {
   get: () => xpCall('xp.book'),
   add: (b) => xpCall('xp.book-comment', b),

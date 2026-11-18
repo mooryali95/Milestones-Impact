@@ -8,7 +8,7 @@
 //   غير ذلك           ← الرحلة
 // المسارات في الرابط: /verify من بريد الدخول، و/org لمنسق الجهة، و/v/<الرقم> للتحقق من شهادة،
 // و/rate?t= لتقدير المدير أو الزميل في القياس البعدي، و/expert لطلب الانضمام إلى شبكة الخبراء، و/offer?t= لرد الخبير على طلب خدمة، و/x للوحة الخبير.
-import React, { lazy, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Ico from './Ico.jsx';
 import { flagsOf, shownView } from './features.js';
 import { bootPreload, call, session, setExpiredHandler } from './api.js';
@@ -17,45 +17,49 @@ import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
 import { tabFromSearch } from './deeplink.js';
+import { lazyView, noteView } from './reload-view.js';
 import { welcomeSeen } from './api.js';
 import Profile from './screens/Profile.jsx';
 import MyData from './screens/MyData.jsx';
 import Assessment from './screens/Assessment.jsx';
 import Journey from './screens/Journey.jsx';
-const Handbook = lazy(() => import('./screens/Handbook.jsx'));
-const LabScreen = lazy(() => import('./screens/Lab.jsx'));
-const OrgPortal = lazy(() => import('./screens/OrgPortal.jsx'));
-const Verify = lazy(() => import('./screens/Verify.jsx'));
+const Handbook = lazyView(() => import('./screens/Handbook.jsx'));
+const LabScreen = lazyView(() => import('./screens/Lab.jsx'));
+const OrgPortal = lazyView(() => import('./screens/OrgPortal.jsx'));
+const Verify = lazyView(() => import('./screens/Verify.jsx'));
 import { CheckIn } from './screens/Activities.jsx';
 import { checkinKeep, receiptFor, signInNote } from './checkin.js';
-const Impact = lazy(() => import('./screens/Impact.jsx'));
-const Feedback360 = lazy(() => import('./screens/Feedback360.jsx'));
-const Feedback360Entry = lazy(() => import('./screens/Feedback360.jsx').then((m) => ({ default: m.Feedback360Entry })));
-const Rater = lazy(() => import('./screens/Rater.jsx'));
-const Sponsor = lazy(() => import('./screens/Sponsor.jsx'));
-const SharedInitiative = lazy(() => import('./screens/SharedInitiative.jsx'));
-const Outcome = lazy(() => import('./screens/Outcome.jsx'));
-const ExpertApply = lazy(() => import('./screens/ExpertApply.jsx'));
-const ExpertOffer = lazy(() => import('./screens/ExpertOffer.jsx'));
-const ExpertPortal = lazy(() => import('./screens/ExpertPortal.jsx'));
+const Impact = lazyView(() => import('./screens/Impact.jsx'));
+const Feedback360 = lazyView(() => import('./screens/Feedback360.jsx'));
+const Feedback360Entry = lazyView(() => import('./screens/Feedback360.jsx').then((m) => ({ default: m.Feedback360Entry })));
+const Rater = lazyView(() => import('./screens/Rater.jsx'));
+const Sponsor = lazyView(() => import('./screens/Sponsor.jsx'));
+const SharedInitiative = lazyView(() => import('./screens/SharedInitiative.jsx'));
+const Outcome = lazyView(() => import('./screens/Outcome.jsx'));
+const ExpertApply = lazyView(() => import('./screens/ExpertApply.jsx'));
+const ExpertOffer = lazyView(() => import('./screens/ExpertOffer.jsx'));
+const ExpertPortal = lazyView(() => import('./screens/ExpertPortal.jsx'));
 import AccountSwitch from './AccountSwitch.jsx';
 import Paywall, { AwaitingApproval, seatHold, SponsorshipPending } from './screens/Paywall.jsx';
 import { gateDone, hasAccess, impactOpen } from './gates.js';
 import { clearAttribution } from './attribution.js';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
 import SponsorNote from './SponsorNote.jsx';
-const Capstone = lazy(() => import('./screens/Capstone.jsx'));
-const Katon = lazy(() => import('./screens/Katon.jsx'));
-const HallScreen = lazy(() => import('./screens/Hall.jsx'));
+const Capstone = lazyView(() => import('./screens/Capstone.jsx'));
+const Katon = lazyView(() => import('./screens/Katon.jsx'));
+const HallScreen = lazyView(() => import('./screens/Hall.jsx'));
 import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
-const Legal = lazy(() => import('./screens/Legal.jsx'));
+const Legal = lazyView(() => import('./screens/Legal.jsx'));
 import Consent, { PolicyBanner } from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 import { ErrorBox, JourneySkeleton } from './ui.jsx';
 import { SectionBoundary } from './ErrorBoundary.jsx';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
 // الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
+// lazyView (reload-view.js): ملف قسم حذفه نشر أحدث يُعاد بمحاولة ثانية ثم إعادة تحميل واحدة إلى القسم المطلوب
 
+
+const SectionLoading = () => <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
 
 // هوية الجهة بجانب شعار Milestone: الشعار يُجلب مرة ويُحفظ على الجهاز بنسخته
 const LOGO_KEY = 'mi_leaders_org_logo';
@@ -213,6 +217,8 @@ function Participant() {
   });
   const viewRef = useRef(view);
   viewRef.current = view;
+  // القسم المطلوب لإعادة التحميل بعد فشل ملفه (reload-view.js): يعود المشارك إليه لا إلى «رحلتي»
+  noteView(view);
   useEffect(() => {
     const back = (e) => { const v = e.state?.view || 'home'; setView(v); window.scrollTo({ top: 0 }); };
     window.addEventListener('popstate', back);
@@ -429,7 +435,8 @@ function Participant() {
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
         {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}
         {/* حاجز لكل قسم يُصفَّر بمفتاحه: خطأ في رسم «كتابي» مثلًا لا يُسقط الترويسة والتنقل، والانتقال إلى قسم آخر يعيده سليمًا */}
-        <SectionBoundary key={navView} onHome={navView === 'home' ? null : () => go('home')}>{screen}</SectionBoundary>
+        {/* وانتظار ملف القسم الكسول داخله (Suspense): الترويسة والتنقل باقيان أثناء التحميل، وفشل الملف يقع على حاجز القسم لا على التطبيق كله */}
+        <SectionBoundary key={navView} onHome={navView === 'home' ? null : () => go('home')}><Suspense fallback={<SectionLoading />}>{screen}</Suspense></SectionBoundary>
       </main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
       {!booting && (demo || me?.participant?.is_demo) && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
