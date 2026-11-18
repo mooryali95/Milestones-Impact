@@ -8,6 +8,7 @@ import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
 import '../../shared/css/journey-map.css';
 import '../../shared/css/journey-timeline.css';
+import '../../shared/css/presenter-qr.css';
 import './admin.css';
 import './leaders-admin.css';
 

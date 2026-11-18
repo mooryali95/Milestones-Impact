@@ -163,7 +163,7 @@ test('تجديد الموافقة لا يسبق الحضور: يُسجَّل ا�
   await expect(page.getByText('حدّثنا سياسة الخصوصية والشروط', { exact: false })).toBeVisible();
 });
 
-for (const width of [390, 1440]) test(`الرحلة: «سجّل حضوري» لجلسة حضورية جارية تُوثَّق بالرمز، بخطوات واضحة (${width})`, async ({ page }) => {
+for (const width of [390, 1440]) test(`الرحلة: «سجّل حضوري» لجلسة حضورية جارية تُوثَّق بالرمز يفتح الماسح والأرقام الستة (${width})`, async ({ page }) => {
   await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
   const items = [{ id: 'r3', code: 'T-ATTEND', kind: 'workshop', title_ar: 'حضور الأيام التدريبية', required: true, status: 'pending',
     activity: { type: 'workshop', done: false, count: 2, total: 4, verify: 'qr', sessions: [
@@ -176,8 +176,10 @@ for (const width of [390, 1440]) test(`الرحلة: «سجّل حضوري» ل�
   const card = page.locator('.j-session');
   await expect(card.getByText('جلستك الآن')).toBeVisible();
   await card.getByRole('button', { name: 'سجّل حضوري' }).click();
-  await expect(card.getByText('افتح كاميرا جوالك ووجّهها إلى الرمز على شاشة القاعة.')).toBeVisible();
-  await expect(card.getByText('ادخل خلال ربع ساعة', { exact: false })).toBeVisible();
+  // W2: اللوح بالماسح داخل التطبيق والأرقام الستة والبديل اليدوي (leaders-checkin-code.spec.js يختبر التسجيل بهما)
+  const sheet = page.getByRole('dialog', { name: 'سجّل حضورك في «اليوم الثالث»' });
+  await expect(sheet.getByLabel('أو اكتب الأرقام الستة الظاهرة تحت الرمز')).toBeVisible();
+  await expect(sheet.getByText('اطلب من المدرب تسجيل حضورك', { exact: false })).toBeVisible();
   const scroll = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(scroll).toBe(0);
   await card.scrollIntoViewIfNeeded();

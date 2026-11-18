@@ -64,7 +64,7 @@ export const MODE_AR = { in_person: 'حضوري', online: 'عن بعد', hybrid:
 export const SESSION_MODE_AR = { in_person: 'حضوري', online: 'عن بعد', any: 'حضوري أو عن بعد' };
 export const VERIFY_AR = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا', auto: 'آلي: يُحتسب لكل أعضاء الدفعة بانتهاء الجلسة' };
 // كيف سُجل حضور المشارك في جلسة جماعية (قيد workshop_attendance.method)
-export const ATTEND_METHOD_AR = Object.freeze({ qr: 'رمز QR', join: 'انضمام من التطبيق', manual: 'يدوي', hall: 'القاعة', remote: 'القاعة عن بعد' });
+export const ATTEND_METHOD_AR = Object.freeze({ qr: 'رمز QR', join: 'انضمام من التطبيق', manual: 'يدوي', hall: 'القاعة', remote: 'القاعة عن بعد', code: 'الأرقام الستة' });
 // عدد المسارات مشتق: كل تركيبة من مستوى لكل بُعد
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 

@@ -1190,6 +1190,27 @@ export async function verifyQrToken(t, secret, now = Date.now()) {
   return (await qrToken(p.sessionId, secret, p.window)) === t;
 }
 
+// ── الرمز الرقمي (W2، تصور الحضور 2026-11-18 ب5.5 البند 4) ──
+// ستة أرقام تحت الرمز المتغير لمن لا تعمل كاميرته، من التوقيع نفسه والنافذة نفسها: HMAC بسر الجلسة على «الجلسة.النافذة»
+// مقصوصًا بالقص الديناميكي في RFC 4226 (HOTP)، فيتغير مع الرمز كل 30 ثانية ويُقبل ما يُقبل به: النافذة الحالية والسابقة.
+// لا يحمل معرّف الجلسة، فيُطابَق على الخادم بالجلسات المفتوحة للمشارك وحدها، وحد المحاولات الخاطئة يجعل التخمين بلا جدوى
+export const QR_CODE_DIGITS = 6;
+export async function qrCode(sessionId, secret, w = qrWindow()) {
+  const hex = await hmacHex(secret, `${sessionId}.${w}`);
+  const off = parseInt(hex.slice(-1), 16);
+  const bin = parseInt(hex.slice(off * 2, off * 2 + 8), 16) & 0x7fffffff;
+  return String(bin % 10 ** QR_CODE_DIGITS).padStart(QR_CODE_DIGITS, '0');
+}
+// النافذة التي يطابقها الرمز الرقمي لجلسة بعينها، أو null. تُقارن النافذتان كلتاهما بلا توقف عند الأولى (sameText)
+export async function matchQrCode(code, sessionId, secret, now = Date.now()) {
+  const c = String(code || '');
+  if (!secret || !/^\d{6}$/.test(c)) return null;
+  const w = qrWindow(now);
+  let hit = null;
+  for (const x of [w, w - 1]) if (sameText(await qrCode(sessionId, secret, x), c) && hit == null) hit = x;
+  return hit;
+}
+
 // ── إيصال المسح (W1، تصور الحضور 2026-11-18 ب5.5) ──
 // من مسح الرمز قبل دخوله يأخذ إيصالًا يتحقق منه الخادم بعد الدخول، فلا يضيع الحضور حين يتجاوز الدخول عمر الرمز.
 // الشكل: r1.<الجلسة>.<معرّف الإيصال>.<الانتهاء بالثواني>.<توقيع>، والتوقيع HMAC بسر الجلسة نفسه (لا يخرج من الخادم)

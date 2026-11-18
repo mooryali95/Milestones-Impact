@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261118110000_leaders_workshop_scan_receipts
+-- as-of migration: 20261118120000_leaders_workshop_code_method
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -2114,7 +2114,7 @@ create table if not exists leaders.workshop_attendance (
   recorded_by text,
   ip inet,
   user_agent text,
-  constraint workshop_attendance_method_check CHECK ((method = ANY (ARRAY['qr'::text, 'manual'::text, 'join'::text, 'hall'::text, 'remote'::text]))),
+  constraint workshop_attendance_method_check CHECK ((method = ANY (ARRAY['qr'::text, 'manual'::text, 'join'::text, 'hall'::text, 'remote'::text, 'code'::text]))),
   constraint workshop_attendance_pkey PRIMARY KEY (session_id, participant_id)
 );
 

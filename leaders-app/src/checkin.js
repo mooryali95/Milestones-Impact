@@ -31,6 +31,11 @@ const FINAL = new Set(['qr_invalid', 'qr_expired', 'undated', 'closed', 'method'
 // وما سواه رفض نهائي (إيصال غير صالح أو منتهٍ أو مستعمل، دفعة أخرى، نافذة مغلقة، طريقة أخرى) يُزال معه
 export const RETRYABLE = new Set(['network', 'busy', 'internal', 'db_error']);
 
+// رد الخادم على رمز قرأه الماسح داخل التطبيق (CheckinSheet): done نجاح، وretry رمز انتهى أو إخفاق مؤقت فيُنتظر رمز آخر
+// غير الذي رُفض، وfinal ما لا يصلحه رمز جديد (نافذة مغلقة، موعد لم يُحدد، طريقة أخرى، جلسة ليست له، رمز غير صالح)
+// فيتوقف المسح وتُطفأ الكاميرا. فالرمز نفسه أمام الكاميرا لا يُرسل مرتين، ولا تتكرر الطلبات بلا حد
+export const scanVerdict = (r) => (r?.success ? 'done' : r?.code === 'qr_expired' || RETRYABLE.has(r?.code) ? 'retry' : 'final');
+
 // رسائل الخادم بلا نقطة ختام، فتُختم قبل أن يليها نص
 export const sentence = (m) => { const t = String(m || '').trim(); return !t || /[.!؟?]$/.test(t) ? t : `${t}.`; };
 

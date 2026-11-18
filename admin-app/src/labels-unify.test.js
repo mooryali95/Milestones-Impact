@@ -19,7 +19,7 @@ describe('مصدر واحد لأسماء الإطار والحضور', () => {
   });
 
   it('طرق تسجيل الحضور تغطي قيد قاعدة البيانات كله بالعربية', () => {
-    const sql = read('supabase/migrations/20261110140000_leaders_hall_attendance.sql');
+    const sql = read('supabase/migrations/20261118120000_leaders_workshop_code_method.sql');
     const allowed = [...sql.match(/workshop_attendance_method_check check \(method = any \(array\[(.+?)\]\)\)/)[1].matchAll(/'(\w+)'/g)].map((m) => m[1]);
     expect(Object.keys(ATTEND_METHOD_AR).sort()).toEqual(allowed.sort());
     for (const v of Object.values(ATTEND_METHOD_AR)) expect(v).toMatch(/[؀-ۿ]/);

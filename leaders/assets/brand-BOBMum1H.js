@@ -1,0 +1,1 @@
+const F={ink:"#061318","ink-text":"#14282E",graphite:"#0B272F",slate:"#12414E",gold:"#A97A2E","gold-warm":"#B8873A","gold-deep":"#8A6424","gold-pale":"#EBD9B4","cream-light":"#FBF6EC","cream-warm":"#FBF4E6","cream-faint":"#FBFAF7",paper:"#FFFDF8",white:"#FFFFFF","muted-mid":"#5B7178","line-soft":"#EEE8DC","line-cool":"#DCE2E1",clay:"#9A7060"};export{F as B};

@@ -11,7 +11,7 @@
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
 //             handbook.toc · handbook.chapter · handbook.complete · handbook.export · models.list · models.get · models.save · lab.list · lab.start · lab.answer · lab.draft · lab.hint · lab.check · achievements · certificate
-//             handbook.ping · video.ping · content.ping · content.open · workshop.checkin · workshop.join · coaching.instant (الأنشطة الموثقة)
+//             handbook.ping · video.ping · content.ping · content.open · workshop.checkin (بالرمز أو الإيصال أو الأرقام الستة) · workshop.join · coaching.instant (الأنشطة الموثقة)
 //             impact.mine · rater.invite · rater.revoke (القياس البعدي ومقيّموه؛ الدعوة والإلغاء مع مفتاح 360)
 //             f360.mine · f360.start · f360.self · f360.nominate · f360.remove · f360.submit · f360.report · f360.plan (تقييم 360 للتطوير)
 //             capstone.get · capstone.summary · capstone.submit · capstone.doc (مشروع التخرج)
@@ -388,11 +388,13 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     d.book_access = bookAccess(e);
     if (b.lite === true) return d;
     // تقييم 360 (feedback360.ts): قوائم بانتظار اعتماد المستشار ودوراته، في الرحلة نفسها
-    const [reviews, participants, peers, sus, f360] = await Promise.all([
+    // وجلسات دفعاته التي يعرض رمز حضورها (W2)
+    const [reviews, participants, peers, sus, f360, workshops] = await Promise.all([
       settle('xp.reviews', V2.reviews(e)), settle('xp.participants', FL.participants(e)),
       settle('xp.peer-list', PR.expertList(e)), settle('xp.sus-state', SU.state('expert', e)), settle('xp.f360', FT.gate('xp.f360').then((soft) => soft || FB.advisorList(e))),
+      settle('xp.workshops', V.expertWorkshops(e)),
     ]);
-    return { ...d, preload: { reviews, participants, peers, sus, f360 } };
+    return { ...d, preload: { reviews, participants, peers, sus, f360, workshops } };
   },
   'xp.consent': (e) => E.portalConsent(e),
   // تعهد السرية لمراجعي الكتاب الأم في أول دخول (experts.ts)
@@ -437,6 +439,10 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.hall-split': (e, b) => FL.hallSplit(e, b),
   'xp.hall-assign': (e, b) => FL.hallAssign(e, b),
   'xp.hall-close': (e, b) => FL.hallClose(e, b),
+  // رمز الحضور من البوابة (W2): للخبير المكلف بدفعة الجلسة وحده، والتحقق على الخادم (activities.ts)
+  'xp.workshops': (e) => V.expertWorkshops(e),
+  'xp.workshop-qr': (e, b) => V.expertWorkshopQr(e, b),
+  'xp.workshop-attendance': (e, b) => V.expertWorkshopAttendance(e, b),
   // المرحلة 8: طلبات الأقران في دفعاته
   'xp.peer-list': (e) => PR.expertList(e),
   'xp.peer-answer': (e, b) => PR.expertAnswer(e, b),

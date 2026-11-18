@@ -7,15 +7,14 @@
 // الاتصال الفوري، وتأكيد الموجّه لكل جلسة (حضر أو لم يحضر).
 // إعداد كل نشاط (الرابط، العدد المطلوب) في «الرحلة والمتطلبات».
 import React, { useCallback, useEffect, useState } from 'react';
-import { BRAND } from '../../../shared/js/brand.js';
-import QRCode from 'qrcode';
+import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 
 import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { isUndated, minutesAr, QR_WINDOW, SCAN_RECEIPT_MINUTES, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
+import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 // موعد الجلسة أو «يُحدد لاحقًا» (J1): لا خانة فارغة ولا تاريخ 1970
 const sessionWhen = (s) => (isUndated(s) ? SESSION_TBD_AR : when(s.starts_at));
@@ -53,51 +52,12 @@ const MODE_AR = SESSION_MODE_AR;
 const COACH_ST = Object.fromEntries(Object.entries({ booked: '', requested: 'warn', attended: 'ok', no_show: 'bad', cancelled: '' }).map(([k, tone]) => [k, [COACH_STATUS_ADMIN[k], tone]]));
 
 // ── شاشة رمز الحضور للقاعة ──
+// المكوّن المشترك مع بوابة الخبير (shared/ui/PresenterQr.jsx): الرمز والأرقام الستة من admin.workshop-qr، والمتوقع وأسماء
+// من لم يحضر من قائمة الحضور نفسها (admin.workshop-attendance)
 function QrScreen({ id, onClose }) {
-  const [d, setD] = useState(null);
-  const [img, setImg] = useState('');
-  // المتوقع وأسماء من لم يحضر من قائمة الحضور نفسها (admin.workshop-attendance)، تُقرأ أول مرة وكلما تغيّر عدد الحاضرين
-  const [people, setPeople] = useState(null);
-  const [absentShown, setAbsentShown] = useState(false);
-  useEscape(onClose);
-  const attended = d?.success ? d.attended : null;
-  useEffect(() => {
-    if (attended == null) return;
-    let alive = true;
-    L('admin.workshop-attendance', { id }).then((r) => { if (alive) setPeople(r.success ? r.people : null); });
-    return () => { alive = false; };
-  }, [id, attended]);
-  const expected = people ? people.length : null;
-  const absent = people ? people.filter((p) => !p.attendance) : [];
-  useEffect(() => {
-    let t = 0, alive = true;
-    const load = async () => {
-      const r = await L('admin.workshop-qr', { id });
-      if (!alive) return;
-      setD(r);
-      if (r.success) setImg(await QRCode.toDataURL(r.url, { width: 640, margin: 1, color: { dark: BRAND.ink, light: BRAND.white } }));
-      t = setTimeout(load, ((r.refresh_in || 10) + 0.5) * 1000);
-    };
-    load();
-    return () => { alive = false; clearTimeout(t); };
-  }, [id]);
-  return (
-    <div className="la-qr" role="dialog" aria-modal="true" aria-label="رمز الحضور">
-      <button className="la-qr-x" onClick={onClose} aria-label="إغلاق">✕</button>
-      {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
-        <h2>{d.session.title}</h2>
-        <p>{[d.session.location, sessionWhen(d.session)].filter(Boolean).join(' · ')}</p>
-        {d.open ? <img src={img} alt="رمز الحضور" /> : <div className="la-err">{isUndated(d.session) ? 'حدد موعد الجلسة أولًا: تسجيل الحضور يُفتح قبل البدء بساعة.' : 'تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة).'}</div>}
-        <p className="la-qr-hint">امسح الرمز بكاميرا جوالك لتسجيل حضورك، وإن طُلب منك الدخول فادخل خلال {SCAN_RECEIPT_MINUTES} دقيقة دون مسح ثانٍ. يتجدد الرمز كل {QR_WINDOW} ثانية.</p>
-        <b className="la-qr-count">{expected ? `${expected - absent.length} من ${expected} حضروا` : `${d.attended} حاضر`}</b>
-        {absent.length > 0 && <>
-          {/* الأسماء مطوية افتراضيًا: الشاشة تُعرض في القاعة، فيفتحها المدرب حين يريد */}
-          <button className="la-link la-qr-absent-t" aria-expanded={absentShown} onClick={() => setAbsentShown((v) => !v)}>{absentShown ? 'أخفِ الأسماء' : `من لم يحضر بعد (${absent.length})`}</button>
-          {absentShown && <ul className="la-qr-absent">{absent.map((p) => <li key={p.id}>{p.full_name}</li>)}</ul>}
-        </>}
-      </>}
-    </div>
-  );
+  const loadQr = useCallback(() => L('admin.workshop-qr', { id }), [id]);
+  const loadPeople = useCallback(() => L('admin.workshop-attendance', { id }), [id]);
+  return <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={onClose} whenText={sessionWhen} />;
 }
 
 // ── قائمة الحضور للتسجيل اليدوي ──
