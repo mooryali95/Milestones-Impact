@@ -37,7 +37,10 @@ describe('L: اسم الإجراء والتوكن لا يكتب فوقهما ج�
     const fetch = vi.fn(async () => ({ status: 200, json: async () => ({ success: true }) }));
     vi.stubGlobal('fetch', fetch);
     await L('admin.stage-override', { participant_id: 'p1', action: 'complete', token: 'غيره' });
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ participant_id: 'p1', action: 'admin.stage-override', token: 'admin-token' });
+    // idem: مفتاح منع التكرار لكتابة leaders-api (ش9)، يُضاف في postAction ولا يمس الإجراء ولا الجلسة
+    const { idem, ...sent } = JSON.parse(fetch.mock.calls[0][1].body);
+    expect(sent).toEqual({ participant_id: 'p1', action: 'admin.stage-override', token: 'admin-token' });
+    expect(idem).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
   });
   it('العقد بين الطرفين: الواجهة ترسل الفعل في stage_action والخادم يقرؤه منه، لا من action', () => {
     expect(read('admin-app/src/screens/Participants.jsx')).toContain("act('admin.stage-override', { participant_id: p.id, stage_key: s.key, stage_action: action, note }, 'تم');");

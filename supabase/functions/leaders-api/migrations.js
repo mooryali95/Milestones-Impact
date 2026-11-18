@@ -157,6 +157,7 @@ export const MIGRATIONS = [
   '20261118110000_leaders_workshop_scan_receipts',
   '20261118120000_leaders_workshop_code_method',
   '20261118130000_leaders_workshop_capacity',
+  '20261118140000_leaders_idempotency_keys',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -230,4 +231,5 @@ export const MIGRATION_GATES = {
   '20261118110000_leaders_workshop_scan_receipts': ["tolerant", "قبله يرد workshop.scan بـnot_migrated فيحفظ التطبيق الرمز نفسه كما كان، ويبقى المسح بعد الدخول كما هو (activities.ts: workshopScan وworkshopCheckin)"],
   '20261118120000_leaders_workshop_code_method': ["tolerant", "قبله يرفض القيد الطريقة code، فيُسجَّل الحضور بالأرقام الستة بطريقة qr ويحمل السجل {via:'code'} (activities.ts: workshopCheckin)"],
   '20261118130000_leaders_workshop_capacity': ["tolerant", "قبله تُخفى السعة في اللوحة ويُحفظ اليوم بلاها، والحفظ بالسعة يعيد المحاولة بدونها (activities.ts: capacityReady وworkshopSave)"],
+  '20261118140000_leaders_idempotency_keys': ["tolerant", "قبله يتجاهل الخادم المفتاح ولا يعلن x-idem، فلا يعيد العميل الكتابة تلقائيًا بعد خطأ شبكة ويعرض «تعذّر التأكد، تحقّق قبل الإعادة» (idempotency.ts)"],
 };
