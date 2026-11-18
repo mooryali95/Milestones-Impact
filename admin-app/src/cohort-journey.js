@@ -4,7 +4,7 @@
 // لا حساب تاريخ هنا: النوافذ والحالات والمدد والخط الزمني كلها من journeyTimeline (وهو يقرأ stageWindows)، ومواعيد
 // المعالم من milestoneDueInfo بالنوافذ نفسها كما يقرؤها milestoneStatuses، وأعداد الناس من خريطة الرحلة (admin.cohort-journey).
 // هذا الملف يجمع الثلاثة في رأس وممرات وبطاقات، فلا يختلف تاريخ بين الخط والبطاقة والمعلم.
-import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-timeline.js';
+import { journeyTimeline, STAGE_TAG_AR } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import { daysAr, renderJourneyText, stageRules } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from '../../supabase/functions/leaders-api/milestones.js';
@@ -112,7 +112,7 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
     const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
     return {
       key: s.key, title: titleOf(s.key), phase: s.phase && PHASE_AR[s.phase] ? s.phase : 'qualification', status: 'off', status_ar: 'موقوفة لهذه الدفعة',
-      optional: stageRules(s).mode !== 'required', label: 'لا تأخذ من الرحلة وقتًا', window_ar: '', today_ar: '', lead: true, off: true,
+      optional: stageRules(s).mode !== 'required', mode: stageRules(s).mode, mode_ar: STAGE_TAG_AR[stageRules(s).mode] || '', label: 'لا تأخذ من الرحلة وقتًا', window_ar: '', today_ar: '', lead: true, off: true,
       window_source: null, window_source_ar: '', with_ar: '', rule_ar: '', undated: false, people: null,
       acts: { shown: 0, total: rs.length, text: rs.length ? `${actsAr(rs.length)} لا تظهر لأعضاء الدفعة ما دامت موقوفة، وما أُنجز منها محفوظ` : 'لا أنشطة' },
       milestones: offMs(s.key), late_milestones: 0, sort: s.sort ?? 0,
@@ -127,6 +127,8 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
     const ms = stageMs(s.key);
     return {
       key: s.key, title: s.title, phase: s.phase, status: s.status, status_ar: s.status_ar, optional: s.optional,
+      // غير الإلزامية (T0): «عند الحاجة» أو «اختيارية» بنمطها من الخط نفسه، لا «اختيارية» لكل ما ليس إلزاميًا
+      mode: s.mode, mode_ar: s.mode_ar || '',
       label: s.label, window_ar: s.window_ar, today_ar: s.today_ar, lead,
       // مصدر النافذة من الخطة نفسها (cohortPlan عبر الخط): المثبت بتاريخ، ومنه النهاية وحدها، وإلا المحسوبة
       window_source: s.window ? (s.days_source === 'pinned' ? 'schedule' : 'plan') : null,

@@ -15,6 +15,9 @@ import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
 import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planWithRules } from './stage-windows.js';
 
+// غير الإلزامية (T0، تصور 2026-11-18 ب5.2): نمطها بكلمة واحدة على الخط والبطاقة، بإطار متقطع. الإلزامية بلا وسم
+export const STAGE_TAG_AR = Object.freeze({ on_demand: 'عند الحاجة', optional: 'اختيارية' });
+
 // بداية افتراضية لسياق البرنامج: النوافذ تُحسب بالدالة نفسها ثم تُقرأ أيامًا من البداية
 const EPOCH = '2000-01-03';
 const PHASES = ['admission', 'qualification', 'impact'];
@@ -176,7 +179,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
       lane_width: slot.days ? Math.max(8, round(((place(s.key)[1] - place(s.key)[0]) / slot.days) * 100)) : 100,
       bar: totalDays ? Math.max(4, round((Math.max(days, 1) / totalDays) * 100)) : 100,
       window: dated ? { from: w.from, to: w.to } : null, days_source: w.source, window_ar: dated ? (w.from === w.to ? fmtDay(w.from) : `${fmtDay(w.from)} إلى ${fmtDay(w.to)}`) : '',
-      status, status_ar: status ? TIMELINE_STATUS_AR[status] : '', optional: r.mode !== 'required',
+      status, status_ar: status ? TIMELINE_STATUS_AR[status] : '', optional: r.mode !== 'required', mode: r.mode, mode_ar: STAGE_TAG_AR[r.mode] || '',
       today_ar: status === 'active' ? `اليوم ${fmtDay(t)}، ${left > 0 ? `بقي على نهاية المرحلة ${daysAr(left)}` : 'آخر يوم في المرحلة'}` : '',
       empty: false,
     };

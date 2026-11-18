@@ -10,10 +10,16 @@
 // وتعود بنقرة. ونافذة الأثر تسمي من ينتقل والقواعد التي سقط شرطها والمعالم المستبعدة، وفيها «أبلغ المشاركين» (القرار 13)
 // وسؤال من تجاوز مرحلة تعود (القرار 12).
 // والتوازي (R3a): «تسير مع» وإزاحة من بداية المرجع في كل بطاقة، وتنبيه التجاوز، والممر في الخط يبدأ بإزاحته.
-// البيانات: admin.cohort-definition وadmin.milestones وadmin.cohort-journey للقراءة، وadmin.cohort-plan للخطة.
+// وأيام الورشة (W3، تصور 2026-11-18 ب5.4): في بطاقة كل مرحلة فيها حضور جلسات أيامها لهذه الدفعة بموعدها ومكانها وطريقتها
+// وحضورها وسعتها، و«+ يوم أو ورشة» والتحرير والإلغاء بنموذج «الحضور والجلسات» وadmin.workshop-save نفسيهما (مسار كتابة واحد).
+// وغير الإلزامية (T0): «عند الحاجة» أو «اختيارية» بإطار متقطع في الخط والبطاقة.
+// البيانات: admin.cohort-definition وadmin.milestones وadmin.cohort-journey وadmin.cohort-workshops للقراءة، وadmin.cohort-plan للخطة.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
+import Form from '../Form.jsx';
+import { Attendance, inviteSession, QrScreen, sessionFields } from './Activities.jsx';
+import { workshopDays } from '../workshop-days.js';
 import { dateTime } from '../dates.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
@@ -141,18 +147,70 @@ function OffSwitch({ s, row, onOff }) {
   );
 }
 
+// أيام الورشة في البطاقة (W3): العداد «X من Y محددة»، وصف لكل يوم، وأدوات الكتابة لمن يكتب وحده (canWrite)
+function StageDays({ s, days, act }) {
+  const id = `cj-days-${s.key}`;
+  return (
+    <section className="cj-days" id={id} tabIndex={-1} aria-labelledby={`${id}-h`}>
+      <header className="cj-days-head">
+        <h6 id={`${id}-h`}>{days.head_ar}</h6>
+        <span className={`cj-days-count tone-${days.tone}`}>{days.count_ar}</span>
+        {act.canWrite && <button type="button" className="btn-sm primary cj-day-add" aria-label={`أضف يومًا أو ورشة إلى ${s.title}`} onClick={() => act.add(days, s)}>+ يوم أو ورشة</button>}
+      </header>
+      {act.error && <p className="cj-alert" role="alert"><span aria-hidden="true">!</span><span>{act.error} <button type="button" className="la-link" onClick={act.retry}>أعد المحاولة</button></span></p>}
+      {!days.rows.length ? <p className="la-muted cj-days-none">{days.empty_ar}</p> : (
+        <ul className="cj-day-list">
+          {days.rows.map((r) => (
+            <li key={r.id} className={`cj-day${r.active ? '' : ' off'}${r.held ? ' held' : ''}${r.undated ? ' tbd' : ''}`} data-day={r.id}>
+              <div className="cj-day-main">
+                <b className="cj-day-t">{r.title}</b>
+                {!r.active && <span className="cj-tag">ملغى لهذه الدفعة</span>}
+                {r.general && <span className="cj-tag" title="جلسة عامة تظهر لكل دفعات البرنامج">لكل الدفعات</span>}
+                {days.reqs.length > 1 && <small className="cj-day-req">{r.req_title}</small>}
+              </div>
+              <p className="cj-day-meta">
+                <span className={r.undated ? 'cj-warn' : ''}>{r.when_ar}</span>
+                <span>{r.place_ar}</span>
+                <span>{r.verify_ar}</span>
+              </p>
+              {(r.counts_ar || r.capacity_ar) && (
+                <p className="cj-day-nums">
+                  {r.counts_ar && <span>{r.counts_ar}</span>}
+                  {r.capacity_ar && <span className={r.over ? 'over' : ''}>{r.capacity_ar}</span>}
+                </p>
+              )}
+              {r.over && <p className="cj-day-warn" role="note"><span aria-hidden="true">!</span>{r.over_ar}</p>}
+              {r.outside && <p className="cj-day-warn" role="note"><span aria-hidden="true">!</span>خارج نافذة المرحلة لهذه الدفعة. الحضور يُحسب، وراجع الموعد أو مدة المرحلة.</p>}
+              <div className="la-row cj-day-acts">
+                {r.qr && r.active && <button type="button" className="btn-sm ghost" onClick={() => act.qr(r)}>اعرض رمز الحضور</button>}
+                {r.expected != null && <button type="button" className="la-link" onClick={() => act.attendance(r)}>قائمة الحضور</button>}
+                {act.canWrite && r.can_invite && <button type="button" className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => act.invite(r)}>{r.invited ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>}
+                {act.canWrite && <button type="button" className="la-link" aria-label={`حرّر ${r.title}`} onClick={() => act.edit(r)}>حرّر</button>}
+                {act.canWrite && (r.active
+                  ? <button type="button" className="la-link danger" aria-label={`ألغِ ${r.title}`} onClick={() => act.cancel(r)}>ألغِ اليوم</button>
+                  : <button type="button" className="la-link" aria-label={`أعد ${r.title}`} onClick={() => act.restore(r)}>أعده</button>)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 // rows: صف كل مرحلة في خطة الدفعة (planDraft) دائمًا، وplan: أدوات التحرير في وضع التحرير وحده
-function StageCard({ s, rows = null, plan = null }) {
+// days: أيام الورشة لهذه المرحلة (workshopDays) إن كان فيها حضور جلسات، وact: أدواتها
+function StageCard({ s, rows = null, plan = null, days = null, act = null }) {
   const head = `cj-st-${s.key}`;
   const row = rows?.[s.key];
   const off = !!(s.off || row?.off);
   return (
-    <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card${s.status ? ` st-${s.status}` : ''}${s.optional ? ' opt' : ''}${s.lead ? '' : ' lane'}${row?.edited ? ' edited' : ''}${off ? ' off' : ''}`} aria-labelledby={head}>
+    <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card${s.status ? ` st-${s.status}` : ''}${s.optional ? ` opt md-${s.mode}` : ''}${s.lead ? '' : ' lane'}${row?.edited ? ' edited' : ''}${off ? ' off' : ''}`} aria-labelledby={head}>
       <header className="cj-card-head">
         <h5 id={head}>{s.title}</h5>
         <span className="cj-dur">{s.label}</span>
         {!plan && !off && row?.source === 'cohort' && <span className="cj-tag own">معدّلة لهذه الدفعة</span>}
-        {s.optional && <span className="cj-tag">اختيارية</span>}
+        {s.mode_ar && <span className="cj-tag cj-mode">{s.mode_ar}</span>}
         {s.status_ar && <span className={`cj-state ${s.status}`}><i aria-hidden="true" />{s.status_ar}</span>}
       </header>
       {plan && row && <OffSwitch s={s} row={row} onOff={plan.onOff} />}
@@ -193,6 +251,7 @@ function StageCard({ s, rows = null, plan = null }) {
           ))}
         </ul>
       )}
+      {days && act && !off && <StageDays s={s} days={days} act={act} />}
     </article>
   );
 }
@@ -257,7 +316,7 @@ function ImpactDialog({ r, busy, canSave, lock, onSave, onClose, opts, setOpts }
 /** @param {{ c: any, canWrite?: boolean, on?: Record<string, any>, onSaved?: () => void }} props
  *  on: أزرار ملف الدفعة نفسها (edit وjourney)، فلا مدخل ثانٍ لأي إعداد. onSaved: بعد حفظ الخطة أو التراجع (تحديث قائمة الدفعات) */
 export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = () => {} }) {
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
   const [retry, setRetry] = useState(0);
   const auto = !c.is_default && (Number(c.members) || 0) <= JOURNEY_AUTO_MAX;
@@ -272,6 +331,12 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const [savedNote, setSavedNote] = useState(false);
   const [history, setHistory] = useState(null);
   const [saveOpts, setSaveOpts] = useState({ notify: false, reenable: 'exempt' });
+  // أيام الورشة (W3): جلسات متطلبات الحضور لهذه الدفعة من admin.cohort-workshops، ونموذج اليوم وشاشتا الرمز والحضور
+  const [ws, setWs] = useState(null);
+  const [wsRetry, setWsRetry] = useState(0);
+  const [dayForm, setDayForm] = useState(null);
+  const [qr, setQr] = useState(null);
+  const [att, setAtt] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -295,12 +360,24 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     return () => { live = false; };
   }, [c.id, want, mapRetry]);
 
+  // متطلبات الحضور بجلسات في تعريف الدفعة: تُقرأ أيامها مرة، ثم بعد كل حفظ يوم دون إعادة رسم التبويب
+  const wsReqs = useMemo(() => (d?.def?.requirements || []).filter((r) => r.kind === 'workshop' && r.id && r.active !== false && !r.hidden).map((r) => r.id).join(','), [d]);
+  useEffect(() => { setWs(null); }, [c.id]);
+  useEffect(() => {
+    let live = true;
+    if (!wsReqs) return undefined;
+    L('admin.cohort-workshops', { cohort_id: c.id, requirement_ids: wsReqs.split(',') }).then((r) => { if (live) setWs(r || { success: false }); });
+    return () => { live = false; };
+  }, [c.id, wsReqs, wsRetry]);
+  // الخط يرسم الأيام من القراءة نفسها، فيظهر اليوم الجديد نقطة على شريط مرحلته فور حفظه
+  const wsList = ws?.success && Array.isArray(ws.sessions) ? ws.sessions : null;
+  const defShown = useMemo(() => (d?.def && wsList ? { ...d.def, sessions: wsList } : d?.def), [d, wsList]);
   const cohort = useMemo(() => planCohort(c, cp), [c, cp]);
   const draft = useMemo(() => (d?.def ? planDraft({ def: d.def, cohort, edit }) : null), [d, cohort, edit]);
   // المعاينة الحية: الخط والبطاقات من المسودة نفسها، فيُرى أثر كل نقرة قبل الحفظ
   const shown = draft ? draft.cohort : cohort;
   const jm = map?.success ? map.journey_map : null;
-  const model = useMemo(() => (d?.def ? cohortTimeline(d.def, shown, new Date()) : null), [d, shown]);
+  const model = useMemo(() => (defShown ? cohortTimeline(defShown, shown, new Date()) : null), [defShown, shown]);
   const lanes = useMemo(() => (model ? journeyLanes(model, { def: d.def, cohort: shown, milestones: d.milestones, map: jm }) : null), [model, d, shown, jm]);
   const head = model ? journeyHeader(model, shown) : null;
   const kpis = model ? journeyKpis(model, lanes, jm, { msError: !!d?.msError }) : [];
@@ -337,12 +414,51 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     clearTimeout(flashT.current);
     flashT.current = window.setTimeout(() => el.classList.remove('flash'), 1600);
   };
-  // النقر على نشاط: الورشة إلى «+ موعد» عندها في «الحضور والجلسات»، وغيرها إلى رحلة البرنامج (كما كان في محرر الدفعة)
+  // النقر على نشاط: الورشة إلى أيامها في بطاقة مرحلتها (W3، «من بطاقة المرحلة لا من تبويب منفصل»)، وغيرها إلى رحلة البرنامج
   const openAct = (a) => {
-    if (a.kind === 'workshop') window.location.hash = `#/leaders/activities?req=${encodeURIComponent(a.requirement_id || '')}`;
-    else on.journey?.();
+    if (a.kind !== 'workshop') { on.journey?.(); return; }
+    toCard(a.stage);
+    const box = document.getElementById(`cj-days-${a.stage}`);
+    (box?.querySelector('.cj-day-add') || box)?.focus?.({ preventScroll: true });
   };
   const actLabel = (a) => (a.kind !== 'workshop' ? 'افتحه في رحلة البرنامج' : a.undated ? 'أضف موعده' : 'افتح مواعيده');
+
+  // ── أيام الورشة: النموذج والتحقق من «الحضور والجلسات» نفسه (sessionFields)، والحفظ بـadmin.workshop-save وحده ──
+  const capacity = !!ws?.capacity_ready;
+  const wsError = ws && !ws.success ? `${ws.message || 'تعذّرت قراءة الأيام'}، فلا تظهر الأعداد والسعة` : '';
+  const daysOf = (st) => (d?.def ? workshopDays({ def: d.def, stage: st, sessions: wsList, model, cohortId: c.id }) : null);
+  const savedDay = (msg) => (r) => { if (r?.success) { toast(r.capacity_skipped ? `${msg}، والسعة لم تُحفظ لأن قاعدة البيانات لم تُحدَّث بعد` : msg); setWsRetry((n) => n + 1); } return r; };
+  const dayRow = (r) => ({ title_ar: r.raw.title_ar, mode: r.raw.mode || 'in_person', location_ar: r.raw.location_ar || null, join_url: r.raw.join_url || null, starts_at: r.raw.starts_at || null, ends_at: r.raw.ends_at || null });
+  const dayAct = {
+    canWrite, error: wsError, retry: () => setWsRetry((n) => n + 1),
+    add: (days, st) => {
+      // بند حضور واحد في المرحلة يكفي، وأكثر من واحد يُسأل «لأي نشاط؟» (ب5.4)
+      const pick = days.reqs.length > 1 ? [{ name: 'requirement_id', label: 'لأي نشاط؟', type: 'select', options: Object.fromEntries(days.reqs.map((r) => [r.id, r.title])) }] : [];
+      setDayForm({
+        title: `يوم أو ورشة في «${st.title}»`, fields: [...pick, ...sessionFields([], null, { capacity })],
+        values: { active: true, mode: 'in_person', requirement_id: days.reqs[0].id, title_ar: `اليوم ${days.rows.length + 1}` },
+        onSave: (v) => L('admin.workshop-save', { row: { ...v, requirement_id: v.requirement_id || days.reqs[0].id, cohort_id: c.id } }).then(savedDay('أُضيف اليوم ويظهر للمشاركين في رحلتهم')),
+      });
+    },
+    edit: (r) => setDayForm({
+      title: `تحرير «${r.title}»`, fields: sessionFields([], null, { capacity }), values: r.raw,
+      onSave: (v) => L('admin.workshop-save', { row: { ...v, id: r.id } }).then(savedDay('حُفظ اليوم')),
+      onDelete: r.attended ? undefined : () => L('admin.workshop-delete', { id: r.id }).then(savedDay('حُذف اليوم')),
+    }),
+    cancel: async (r) => {
+      const all = r.general ? ' وهو جلسة عامة، فيُلغى لكل دفعات البرنامج.' : '';
+      if (!(await confirm(`يُلغى «${r.title}»: يختفي من رحلة المشاركين ولا تُرسل له دعوة ولا تذكير، وما سُجّل من حضور محفوظ.${all} يُعاد بنقرة.`, { danger: true, ok: 'ألغِ اليوم' }))) return;
+      const res = await L('admin.workshop-save', { row: { ...dayRow(r), active: false, id: r.id } });
+      if (!res.success) toast(res.message); else savedDay('أُلغي اليوم')(res);
+    },
+    restore: async (r) => {
+      const res = await L('admin.workshop-save', { row: { ...dayRow(r), active: true, id: r.id } });
+      if (!res.success) toast(res.message); else savedDay('أُعيد اليوم ويظهر للمشاركين')(res);
+    },
+    invite: async (r) => { if (await inviteSession(r.raw, { confirm, toast })) setWsRetry((n) => n + 1); },
+    qr: (r) => setQr(r.id),
+    attendance: (r) => setAtt(r.id),
+  };
 
   // راجع واحفظ: الأثر من الخادم وحده (planImpact على رحلة كل عضو)، ثم الحفظ بما بُنيت عليه المسودة
   const openReview = async () => {
@@ -477,9 +593,9 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
                 {p.groups.map((g) => (g.together ? (
                   <div key={g.key} className="cj-group together" role="group" aria-label={`مراحل تسير معًا: ${g.note_ar}`}>
                     <p className="cj-group-note"><span>تسير معًا</span>{g.note_ar}</p>
-                    <div className="cj-lanes">{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} />)}</div>
+                    <div className="cj-lanes">{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} />)}</div>
                   </div>
-                ) : <div key={g.key} className={`cj-group${g.off ? ' off' : ''}`}>{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} />)}</div>))}
+                ) : <div key={g.key} className={`cj-group${g.off ? ' off' : ''}`}>{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} />)}</div>))}
               </div>
             </section>
           ))}
@@ -512,6 +628,9 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
           </div>
         </div>
       )}
+      {dayForm && <Form {...dayForm} onClose={() => setDayForm(null)} />}
+      {qr && <QrScreen id={qr} onClose={() => { setQr(null); setWsRetry((n) => n + 1); }} />}
+      {att && <Attendance id={att} canWrite={canWrite} onClose={() => { setAtt(null); setWsRetry((n) => n + 1); }} />}
       {review && <ImpactDialog r={review.r} busy={busy} canSave={canWrite && !lock} lock={lock} onSave={save} onClose={() => setReview(null)} opts={saveOpts} setOpts={setSaveOpts} />}
 
       {/* خريطة الرحلة (R0): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ومنها أعداد الناس في البطاقات أعلاه */}

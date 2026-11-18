@@ -605,6 +605,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.workshop-invite': (a, b) => A.writer(a, V.workshopInvite, b),
   'admin.workshop-qr': (_a, b) => V.workshopQr(b),
   'admin.workshop-attendance': (_a, b) => V.workshopAttendance(b),
+  // أيام الورشة في بطاقة المرحلة (W3): قراءة، والكتابة بـadmin.workshop-save نفسه
+  'admin.cohort-workshops': (_a, b) => V.cohortWorkshops(b),
   'admin.workshop-mark': (a, b) => A.writer(a, V.workshopMark, b),
   'admin.coaching-mark': (a, b) => A.writer(a, V.coachingMark, b),
   'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
