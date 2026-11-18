@@ -150,6 +150,7 @@ import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
 import { RETRYABLE, sentence } from '../checkin.js';
+import CheckinSheet from './CheckinSheet.jsx';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'امسح رمز الحضور الذي يعرضه المدرب في الجلسة بكاميرا جوالك.',
@@ -169,27 +170,20 @@ function SessionChip({ s }) {
   return <span className="chip">قادمة</span>;
 }
 
-// «سجّل حضوري» (W1): جلسة حضورية جارية تُوثَّق بالرمز ولم يُسجَّل حضورها. الزر يقول ما يفعله المشارك الآن بخطوات قصيرة،
-// والماسح داخل التطبيق والأرقام الستة في المرحلة التالية (W2)
-export function CheckinHelp({ session }) {
+// «سجّل حضوري»: جلسة حضورية جارية تُوثَّق بالرمز ولم يُسجَّل حضورها. الزر يفتح الماسح داخل التطبيق ومعه الأرقام الستة
+// والبديل اليدوي (CheckinSheet، W2). وبعد التسجيل تُحدَّث الرحلة (onDone) فيختفي الزر ويظهر «حضرت»
+export function CheckinHelp({ session, onDone }) {
   const [shown, setShown] = useState(false);
   if (!session?.open || session.attended || session.mode === 'online' || session.verify !== 'qr') return null;
   return (
     <div className="checkin-help">
-      <button type="button" className="btn sm" aria-expanded={shown} onClick={() => setShown((v) => !v)}>سجّل حضوري</button>
-      {shown && (
-        <ol className="small">
-          <li>افتح كاميرا جوالك ووجّهها إلى الرمز على شاشة القاعة.</li>
-          <li>اضغط الرابط الذي يظهر فوق الرمز.</li>
-          <li>يُسجَّل حضورك فورًا. وإن طُلب منك الدخول فادخل خلال ربع ساعة، ويُسجَّل حضورك بعده دون مسح ثانٍ.</li>
-        </ol>
-      )}
-      {shown && <p className="small muted">تعذّر المسح؟ اطلب من المدرب تسجيل حضورك من قائمته.</p>}
+      <button type="button" className="btn sm" aria-haspopup="dialog" onClick={() => setShown(true)}>سجّل حضوري</button>
+      {shown && <CheckinSheet session={session} onClose={(done) => { setShown(false); if (done) onDone?.(); }} />}
     </div>
   );
 }
 
-function Workshop({ item, open, setToast }) {
+function Workshop({ item, open, setToast, onRefresh }) {
   const a = item.activity;
   const [busy, setBusy] = useState('');
   // القادمة: لم تنتهِ بعد، أو لم يُحدد موعدها
@@ -221,7 +215,7 @@ function Workshop({ item, open, setToast }) {
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
               <SessionChip s={s} />
-              {open && <CheckinHelp session={{ ...s, verify: a.verify }} />}
+              {open && <CheckinHelp session={{ ...s, verify: a.verify }} onDone={onRefresh} />}
             </li>
           ))}
         </ul>
@@ -401,7 +395,7 @@ export default function Activity({ item, open, onUpdate, onHandbook, onCapstone,
   if (!a) return null;
   if (a.type === 'reading') return <Reading a={a} onHandbook={open ? onHandbook : null} />;
   if (a.type === 'video') return <Video item={item} open={open} onRefresh={refresh} />;
-  if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} />;
+  if (a.type === 'workshop') return <Workshop item={item} open={open} setToast={setToast} onRefresh={refresh} />;
   if (a.type === 'curriculum') return <Curriculum item={item} open={open} onRefresh={refresh} />;
   if (a.type === 'coaching') return <Coaching item={item} open={open} onRefresh={refresh} setToast={setToast} />;
   if (a.type === 'model' || a.type === 'capstone') return <ModelLink a={a} onCapstone={open ? onCapstone : null} />;

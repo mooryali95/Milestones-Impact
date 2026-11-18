@@ -14,10 +14,10 @@ import { journeyFor } from './participant.ts';
 import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
-  contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
+  contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, qrWindow, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
   bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery,
-  parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt,
+  parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -242,6 +242,8 @@ export async function videoPing(p: any, b: Body) {
 // بعد كل الفحوص، فمن ليس من دفعة الجلسة لا يحرق إيصالًا، ومن استهلكه لا يعطيه لغيره
 const RECEIPT_INVALID = 'إيصال المسح غير صالح، امسح الرمز المعروض الآن';
 export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
+  // الأرقام الستة (W2) بديل الكاميرا: مسارها في codeCheckin، ثم الكتابة نفسها (recordAttendance)
+  if (b.code != null && b.code !== '') return codeCheckin(p, b, ctx);
   const viaReceipt = b.r != null && b.r !== '';
   const receipt = viaReceipt ? parseScanReceipt(b.r) : null;
   const parsed = viaReceipt ? null : parseQrToken(String(b.t || ''));
@@ -261,12 +263,88 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
   if (viaReceipt) await consumeReceipt(receipt!.id, s.id, p.id);
+  return recordAttendance(p, s, r, ctx, 'qr', viaReceipt ? { via: 'receipt' } : null);
+}
+// كتابة الحضور الواحدة للرمز والإيصال والأرقام: مرة لكل مشارك وجلسة، ومن سُجّل يُرد «مسجل مسبقًا» بلا أثر.
+// الطريقة code قبل الترحيل 20261118120000 يرفضها القيد (23514)، فيُكتب الحضور qr ويبقى السجل يقول {via:'code'}.
+// وتسجيلان متزامنان (المسح والأرقام معًا، أو نقرتان) يقرآن «لا صف» كلاهما، فيرد المفتاح (session_id, participant_id)
+// الثاني بـ23505: يُعامل «مسجل مسبقًا» لا خطأ قاعدة، ويُكتب السجل مرة واحدة للذي أدرج
+const DUP = (e: any) => String(e?.code) === '23505';
+async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' | 'code', after: Body | null) {
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
+  let already = !!prev;
   if (!prev) {
-    must(await db.from('workshop_attendance').insert({ session_id: s.id, participant_id: p.id, method: 'qr', ip: ctx.ip, user_agent: ctx.ua }));
-    await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, viaReceipt ? { via: 'receipt' } : null);
+    const row = { session_id: s.id, participant_id: p.id, method, ip: ctx.ip, user_agent: ctx.ua };
+    let res = await db.from('workshop_attendance').insert(row);
+    if (res.error && method === 'code' && String(res.error.code) === '23514') res = await db.from('workshop_attendance').insert({ ...row, method: 'qr' });
+    if (DUP(res.error)) already = true;
+    else {
+      must(res);
+      await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, after);
+    }
   }
-  return { success: true, already: !!prev, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+  return { success: true, already, method, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+}
+
+// ── تسجيل الحضور بالأرقام الستة (W2، تصور الحضور 2026-11-18 ب5.5 البند 4) ──
+// الأرقام لا تحمل معرّف الجلسة، فتُطابَق بالجلسات المفتوحة لهذا المشارك وحدها: حضورية، في نافذة الحضور، تُوثَّق بالرمز
+// بطريقتها الفعلية (بتخصيص الدفعة)، ومن دفعته أو عامة، وبندها يخص مساره (myRequirement كما في المسح). فأرقام جلسة دفعة
+// أخرى أو نافذة مغلقة لا تطابق شيئًا. المطابقة بالنافذتين كما الرمز وبمقارنة ثابتة الزمن (matchQrCode).
+// حد المحاولات الخاطئة لكل مشارك (والأرقام بلا جلسة، فالحد يشمل جلساته كلها، وهو أضيق من حد لكل جلسة): كل محاولة تُكتب
+// في السجل قبل التحقق ثم تُعدّ، فالمحاولات المتزامنة لا تتجاوز الحد. الخاطئة = المحاولات ناقص الناجحة في 10 دقائق.
+// و«الناجحة» (code-hit) تُكتب فقط حين يُدرج حضور جديد فعلًا، فلا تُسترد محاولة بإعادة أرقام جلسة سُجّل حضورها (وهو
+// ما كان يفتح تخمينًا بلا حد لجلسة ثانية مفتوحة معها)، ولكل جلسة استرداد واحد على الأكثر. ومن بلغ الحد يُرد قبل الكتابة
+// بعدّ مسبق، فحلقة طلبات لا تضيف صفوفًا إلى السجل بلا حد.
+// ستة أرقام مليون احتمال، ويُقبل منها رقمان في كل نافذة، فخمس محاولات في عشر دقائق تجعل التخمين بلا جدوى
+export const CODE_LIMITS = Object.freeze({ wrongPer10Min: 5 });
+const CODE_TRY = 'workshop.code-try', CODE_HIT = 'workshop.code-hit';
+async function codeCandidates(p: any) {
+  const rows = (must(await db.from('workshop_sessions').select('*').eq('active', true).eq('mode', 'in_person')
+    .lte('starts_at', new Date(Date.now() + 3600e3).toISOString()).gte('ends_at', new Date(Date.now() - 1800e3).toISOString())) ?? []) as any[];
+  const out: { s: any; r: any }[] = [];
+  for (const s of rows) {
+    if (s.mode !== 'in_person' || isUndated(s) || !checkinOpen(s)) continue;
+    try {
+      const r = await myRequirement(p, s.requirement_id, 'workshop', s);
+      if ((r.config?.verify || 'qr') === 'qr') out.push({ s, r });
+    } catch (e) {
+      // ليست له: بند لا يخص مساره، أو جلسة دفعة أخرى، أو بند خارج برنامجه. وما سواه خطأ حقيقي يُرفع
+      if (!(e instanceof Fail)) throw e;
+    }
+  }
+  return out;
+}
+async function codeCount(p: any, action: string, since: string) {
+  const { count, error } = await db.from('audit_log').select('id', { count: 'exact', head: true })
+    .eq('entity', 'participants').eq('entity_id', p.id).eq('action', action).gte('created_at', since);
+  if (error) must({ data: null, error });
+  return count ?? 0;
+}
+async function codeCheckin(p: any, b: Body, ctx: Ctx) {
+  // الأرقام كما يكتبها الإنسان: عربية أو لاتينية، بمسافة أو شرطة بينها. وأكثر أو أقل من ستة مرفوض بلا عدّ
+  const code = latinDigits(b.code).replace(/\D/g, '');
+  if (code.length !== QR_CODE_DIGITS) throw new Fail('اكتب الأرقام الستة كما تظهر تحت الرمز', 400, 'code_invalid');
+  const open = await codeCandidates(p);
+  // لا جلسة مفتوحة له تُوثَّق بالرمز: لا معنى للمطابقة ولا تُحسب محاولة
+  if (!open.length) throw new Fail('لا جلسة حضورية مفتوحة لك الآن تُسجَّل بالرمز', 400, 'no_session');
+  const since = new Date(Date.now() - 6e5).toISOString();
+  const tooMany = () => new Fail('محاولات خاطئة كثيرة. امسح الرمز بالكاميرا، أو اطلب من المدرب تسجيل حضورك، أو أعد المحاولة بعد عشر دقائق', 429, 'code_rate');
+  // عدّ مسبق بلا كتابة: من بلغ الحد لا يُكتب له صف. والناجحة لا تنقص، فعدّها المسبق يكفي للعدّ الثاني (أشد لا أرخى)
+  const [triesBefore, hits] = await Promise.all([codeCount(p, CODE_TRY, since), codeCount(p, CODE_HIT, since)]);
+  if (triesBefore - hits >= CODE_LIMITS.wrongPer10Min) throw tooMany();
+  await audit('participant', p.email, CODE_TRY, 'participants', p.id);
+  const wrongBefore = (await codeCount(p, CODE_TRY, since)) - 1 - hits;
+  if (wrongBefore >= CODE_LIMITS.wrongPer10Min) throw tooMany();
+  let hit: { s: any; r: any } | null = null;
+  for (const c of open) if ((await matchQrCode(code, c.s.id, c.s.secret)) != null && !hit) hit = c;
+  if (!hit) {
+    const left = CODE_LIMITS.wrongPer10Min - wrongBefore - 1;
+    throw new Fail(left > 0 ? `الأرقام غير صحيحة أو تغيّرت. اكتب الأرقام الظاهرة الآن (${left === 1 ? 'بقيت محاولة واحدة' : left === 2 ? 'بقيت محاولتان' : `بقيت ${left} محاولات`})` : 'الأرقام غير صحيحة، وانتهت محاولاتك لعشر دقائق. امسح الرمز بالكاميرا أو اطلب من المدرب تسجيل حضورك',
+      400, 'code_wrong', { left });
+  }
+  const done = await recordAttendance(p, hit.s, hit.r, ctx, 'code', { via: 'code' });
+  if (!done.already) await audit('participant', p.email, CODE_HIT, 'participants', p.id, null, { session_id: hit.s.id });
+  return done;
 }
 // الاستهلاك ذري: يكتب المشارك على الصف غير المستهلك وحده. وصاحبه يعيده بلا أثر (إعادة المحاولة بعد انقطاع)
 async function consumeReceipt(id: string, sessionId: string, participantId: string) {
@@ -503,11 +581,13 @@ export async function workshopDelete(a: any, b: Body) {
 export async function workshopQr(b: Body) {
   const s = must(await db.from('workshop_sessions').select('id, secret, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
-  const t = await qrToken(s.id, s.secret);
+  // الرمز والأرقام الستة من التوقيع نفسه والنافذة نفسها (W2): يتغيران معًا كل 30 ثانية
+  const w = qrWindow();
+  const [t, code] = await Promise.all([qrToken(s.id, s.secret, w), qrCode(s.id, s.secret, w)]);
   const { count } = await db.from('workshop_attendance').select('session_id', { count: 'exact', head: true }).eq('session_id', s.id);
   const left = QR_WINDOW - (Math.floor(Date.now() / 1000) % QR_WINDOW);
   return {
-    success: true, url: `${CONFIG.appUrl}/?checkin=${encodeURIComponent(t)}`, refresh_in: left, open: checkinOpen(s), attended: count || 0,
+    success: true, url: `${CONFIG.appUrl}/?checkin=${encodeURIComponent(t)}`, code, refresh_in: left, open: checkinOpen(s), attended: count || 0,
     session: { id: s.id, title: s.title_ar, mode: s.mode, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at },
   };
 }
@@ -715,4 +795,52 @@ export async function workshopReminders() {
     }
   }
   return out;
+}
+
+// ── شاشة رمز الحضور من بوابة الخبير (W2، تصور الحضور 2026-11-18 ب5.5 البند 5، والافتراض «يعرض الرمز الخبير المكلف بدفعة الجلسة») ──
+// المكلف بلا ترحيل: مستشار الدفعة (cohorts.advisor_expert_id) أو عضو فريقها (cohort_experts). والجلسة العامة (بلا دفعة)
+// لا مكلف بها، فتبقى للإدارة. الرمز والأرقام من workshopQr نفسها، والمتوقع ومن لم يحضر من workshopAttendance نفسها،
+// والخبير يأخذ منها الاسم والحضور وحدهما: لا بريد ولا جهة على شاشة تُعرض في القاعة
+const NOT_ASSIGNED = 'هذه الجلسة ليست من دفعاتك';
+async function expertCohortIds(expertId: string) {
+  const [adv, team] = await Promise.all([
+    db.from('cohorts').select('id').eq('advisor_expert_id', expertId).neq('status', 'closed'),
+    db.from('cohort_experts').select('cohort_id').eq('expert_id', expertId),
+  ]);
+  must(adv); must(team);
+  return new Set<string>([...(adv.data || []).map((c: any) => c.id), ...(team.data || []).map((x: any) => x.cohort_id)].filter(Boolean));
+}
+async function assignedSession(e: any, id: unknown) {
+  const s = must(await db.from('workshop_sessions').select('id, cohort_id').eq('id', String(id || '')).maybeSingle()) as any;
+  if (!s) throw new Fail('الجلسة غير موجودة', 404);
+  if (!s.cohort_id || !(await expertCohortIds(e.id)).has(s.cohort_id)) throw new Fail(NOT_ASSIGNED, 403, 'not_assigned');
+  return s;
+}
+// جلسات دفعاته الحضورية التي تُوثَّق بالرمز بطريقتها الفعلية، من الجارية إلى أسبوعين قادمين
+export async function expertWorkshops(e: any) {
+  const ids = [...(await expertCohortIds(e.id))];
+  if (!ids.length) return { success: true, sessions: [] };
+  const now = Date.now();
+  const rows = (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').in('cohort_id', ids)
+    .eq('active', true).eq('mode', 'in_person')) ?? []) as any[];
+  const live = rows.filter((s) => !isUndated(s) && Date.parse(s.ends_at) + 1800e3 >= now && Date.parse(s.starts_at) <= now + 14 * 864e5);
+  if (!live.length) return { success: true, sessions: [] };
+  const [reqs, cohorts] = await Promise.all([
+    db.from('stage_requirements').select('id, code, kind, config').in('id', [...new Set(live.map((s) => s.requirement_id))]),
+    db.from('cohorts').select('id, name, delivery').in('id', [...new Set(live.map((s) => s.cohort_id))]),
+  ]);
+  const reqOf = Object.fromEntries(((must(reqs) ?? []) as any[]).map((r: any) => [r.id, r]));
+  const cohortOf = Object.fromEntries(((must(cohorts) ?? []) as any[]).map((c: any) => [c.id, c]));
+  const sessions = live.filter((s) => sessionVerify(reqOf[s.requirement_id], cohortOf[s.cohort_id]?.delivery) === 'qr').sort(bySessionTime).slice(0, 20)
+    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now) }));
+  return { success: true, sessions };
+}
+export async function expertWorkshopQr(e: any, b: Body) {
+  await assignedSession(e, b.id);
+  return workshopQr({ id: b.id });
+}
+export async function expertWorkshopAttendance(e: any, b: Body) {
+  await assignedSession(e, b.id);
+  const r = await workshopAttendance({ id: b.id });
+  return { success: true, people: r.people.map((x: any) => ({ id: x.id, full_name: x.full_name, attendance: x.attendance ? { method: x.attendance.method } : null })) };
 }

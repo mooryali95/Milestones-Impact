@@ -19,7 +19,10 @@ describe('لوحة الخبير في رحلة واحدة (6.2)', () => {
     // 360 المخفي يُجاب بالحارس نفسه الذي يجيب xp.f360 وحده (features.js)
     expect(dash).toContain("settle('xp.f360', FT.gate('xp.f360').then((soft) => soft || FB.advisorList(e)))");
     expect(index).toContain("'xp.f360': (e) => FB.advisorList(e),");
-    expect(dash).toContain('return { ...d, preload: { reviews, participants, peers, sus, f360 } };');
+    // وجلسات دفعاته التي يعرض رمز حضورها (W2) بالفعل نفسه الذي يُطلب وحده
+    expect(dash).toContain("settle('xp.workshops', V.expertWorkshops(e))");
+    expect(index).toContain("'xp.workshops': (e) => V.expertWorkshops(e),");
+    expect(dash).toContain('return { ...d, preload: { reviews, participants, peers, sus, f360, workshops } };');
   });
   it('لا تجميع قبل الموافقة أو الاعتماد، ولا في إعادة التحميل الخفيفة', () => {
     // «تكليفاتي» (فريق الجهة والدفعة، المرحلة 2) تُضاف بعد الموافقة والاعتماد وقبل عودة الخفيفة، والتجميع بعدها كما كان

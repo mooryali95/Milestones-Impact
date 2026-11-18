@@ -22,6 +22,7 @@ import ExpertFile from './ExpertFile.jsx';
 import Advisor360 from './Advisor360.jsx';
 import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
+import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
@@ -344,6 +345,36 @@ function ExpertHall({ cohorts }) {
   );
 }
 
+// «رمز الحضور» من البوابة (W2، تصور الحضور 2026-11-18 ب5.5 البند 5): جلسات دفعاته الحضورية التي تُوثَّق بالرمز، وشاشة الرمز
+// نفسها التي في لوحة الإدارة (shared/ui/PresenterQr.jsx). الخادم يتحقق أنه المكلف بدفعة الجلسة، والقائمة لا تُظهر إلا ما له
+// initial: من طلب اللوحة المجمّع (preload.workshops)، فلا طلب ثانٍ. ويُطلب وحده إن غاب (اللوحة الخفيفة)
+function ExpertAttendance({ initial }) {
+  const [d, setD] = useState(initial ?? null);
+  const [qr, setQr] = useState(null);
+  useEffect(() => { if (initial === undefined) xpCall('xp.workshops').then(setD); else setD(initial); }, [initial]);
+  const loadQr = useCallback(() => xpCall('xp.workshop-qr', { id: qr }), [qr]);
+  const loadPeople = useCallback(() => xpCall('xp.workshop-attendance', { id: qr }), [qr]);
+  if (!d?.success || !Array.isArray(d.sessions) || !d.sessions.length) return null;
+  return (
+    <section className="card stack" aria-labelledby="xp-attend">
+      <h2 className="as-h3" id="xp-attend">رمز الحضور</h2>
+      <p className="small muted">اعرض الرمز على شاشة القاعة: يمسحه المشاركون أو يكتبون الأرقام الستة تحته، وترى من حضر ومن لم يحضر.</p>
+      <div className="xpp-attend-list">{d.sessions.map((s) => (
+        <article key={s.id} className="xpp-attend">
+          <div className="grow"><b>{s.title}</b>
+            <small className="muted">{[s.cohort, when(s.starts_at), s.location].filter(Boolean).join(' · ')}</small></div>
+          {/* الزر دائمًا: open من تحميل البوابة وحده لا يتجدد، وشاشة الرمز تسأل الخادم كل نافذة فتنتقل إلى الرمز وحدها حين يُفتح */}
+          <div className="xpp-attend-go">
+            <button type="button" className="btn sm" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>
+            {!s.open && <small className="muted">يظهر الرمز قبل البدء بساعة، ويمكنك فتح الشاشة الآن</small>}
+          </div>
+        </article>
+      ))}</div>
+      {qr && <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={() => setQr(null)} whenText={(x) => (x.starts_at ? when(x.starts_at) : '')} />}
+    </section>
+  );
+}
+
 // ── مراجعو الكتاب الأم (تصور فصل خدمة الرحلة عن لجان الكتاب، المرحلة 1، اعتمده المالك 2026-11-15) ──
 // اللجنة التي يحملها: «لجنة المحتوى» أو «لجنتا المحتوى والقياس»
 const committeesText = (cs) => {
@@ -545,6 +576,8 @@ function Dashboard({ onOut }) {
       {/* القاعة قبل قائمة المشاركين: يوم الجلسة يديرها الخبير من جواله دون تمرير خمسين بطاقة */}
       {/* مفتاح القاعة من لوحة الخبير (features): مخفية فلا بطاقة لها */}
       {flagsOf(d).hall && <ExpertHall cohorts={d.advisor_cohorts || []} />}
+      {/* يوم الجلسة: رمز الحضور للقاعة قبل بقية العمل، لمن كُلّف بدفعتها (W2) */}
+      <ExpertAttendance initial={d.preload ? pre.workshops ?? null : undefined} />
 
       {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
       <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" initial={pre.sus} />

@@ -7,6 +7,7 @@ import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
 import '../../shared/css/journey-map.css';
+import '../../shared/css/presenter-qr.css';
 import './styles.css';
 
 captureAttribution();
