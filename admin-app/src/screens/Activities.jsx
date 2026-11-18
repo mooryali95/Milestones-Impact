@@ -63,10 +63,11 @@ export function QrScreen({ id, onClose }) {
 }
 
 // ── قائمة الحضور للتسجيل اليدوي ──
-export function Attendance({ id, canWrite, onClose }) {
+// cohortId (من بطاقة مرحلة الدفعة): الجلسة العامة تُقرأ بأعضاء تلك الدفعة وحدهم، فتطابق أعداد البطاقة
+export function Attendance({ id, cohortId = null, canWrite, onClose }) {
   const { toast } = useUI();
   const [d, setD] = useState(null);
-  const load = useCallback(async () => setD(await L('admin.workshop-attendance', { id })), [id]);
+  const load = useCallback(async () => setD(await L('admin.workshop-attendance', cohortId ? { id, cohort_id: cohortId } : { id })), [id, cohortId]);
   useEffect(() => { load(); }, [load]);
   useEscape(onClose);
   const mark = async (pid, present) => {
@@ -80,6 +81,7 @@ export function Attendance({ id, canWrite, onClose }) {
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <h3>{d.session.title_ar} · {d.people.filter((p) => p.attendance).length} من {d.people.length}</h3>
           <p className="la-muted">{reqTitle(d.requirement)} · {sessionWhen(d.session)}</p>
+          {cohortId && !d.session.cohort_id && <p className="la-muted">جلسة عامة لكل الدفعات، والقائمة هنا لأعضاء هذه الدفعة وحدهم.</p>}
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>الجهة</th><th>الحضور</th><th /></tr></thead>
             <tbody>{d.people.map((p) => (

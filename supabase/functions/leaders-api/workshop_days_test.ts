@@ -131,10 +131,16 @@ Deno.test('admin.cohort-workshops: أيام الدفعة والعامة لا غ�
     // الجلسة العامة: أعضاء هذه الدفعة وحاضروها وحدهم، فحاضر الدفعة الأخرى لا يُعد هنا
     const gen = c.sessions.find((s: any) => s.id === GEN);
     assertEquals([gen.expected, gen.attended], [3, 0]);
-    // تخصيص الدفعة يغلب طريقة البرنامج (sessionVerify)
+    // وقائمة حضورها من البطاقة (cohort_id) بالأعداد نفسها، لا كل دفعات البرنامج
+    const genList: any = await V.workshopAttendance({ id: GEN, cohort_id: COHORT });
+    assertEquals([genList.people.length, genList.people.filter((p: any) => p.attendance).length], [gen.expected, gen.attended]);
+    // وبلا دفعة (شاشة «الحضور والجلسات») تبقى لكل الدفعات: حاضر الدفعة الأخرى فيها
+    const genAll: any = await V.workshopAttendance({ id: GEN });
+    assert(genAll.people.some((p: any) => p.attendance) && genAll.people.length > genList.people.length);
+    // تخصيص الدفعة يغلب طريقة البرنامج (sessionVerify) لجلساتها وحدها، والعامة بطريقة البرنامج كما يفرضها التسجيل (workshopVerify)
     w.tables.cohorts[0].delivery = { 'T-ATTEND': { verify: 'manual' } };
     const c2: any = await V.cohortWorkshops({ cohort_id: COHORT, requirement_ids: [REQ_W] });
-    assert(c2.sessions.every((s: any) => s.verify === 'manual'));
+    assertEquals(Object.fromEntries(c2.sessions.map((s: any) => [s.id, s.verify])), { [OLD]: 'manual', [GEN]: 'qr' });
     // بند من برنامج آخر وحده: لا جلسات
     const c3: any = await V.cohortWorkshops({ cohort_id: COHORT, requirement_ids: [REQ_X] });
     assertEquals(c3.sessions, []);

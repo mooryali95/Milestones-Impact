@@ -79,7 +79,7 @@ async function admin(page, width, state, { readOnly = false } = {}) {
       'admin.cohort-definition': { ...definition(state), cohort_plan: { schedule: {}, starts_on: '2026-11-02', ends_on: '2027-01-31', is_default: false, status: 'running', program_version_id: null, updated_at: 'u0' } },
       'admin.milestones': { success: true, program_id: 'pa', milestones: [] },
       'admin.cohort-journey': { success: true, journey_map: { stages: [], totals: { total: 0 } } },
-      'admin.workshop-attendance': { success: true, session: { title_ar: 'اليوم 1' }, requirement: { id: R, title_ar: 'حضور الأيام التدريبية' }, people: [] },
+      'admin.workshop-attendance': { success: true, session: state.sessions.find((s) => s.id === b.id) || { title_ar: 'اليوم 1' }, requirement: { id: R, title_ar: 'حضور الأيام التدريبية' }, people: [] },
     };
     await route.fulfill({ json: own(b) ?? replies[b.action] ?? { success: true } });
   });
@@ -114,7 +114,7 @@ for (const width of [1440, 390]) {
     await expect(first).toContainText('حضر 19 من 22');
     await expect(first.getByRole('button', { name: 'اعرض رمز الحضور' })).toBeVisible();
 
-    await days.getByRole('button', { name: 'أضف يومًا أو ورشة إلى التدريب' }).click();
+    await days.getByRole('button', { name: 'يوم أو ورشة في التدريب' }).click();
     const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
     await expect(form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)')).toHaveValue('اليوم 2');
     // لا حقل للدفعة: اليوم لهذه الدفعة وحدها
@@ -147,19 +147,19 @@ for (const width of [1440, 390]) {
     await shot(page, 'stage-days', page.locator('#cj-stage-training .cj-window'));
 
     // التحرير بالنموذج نفسه، والإلغاء صف موقوف لا حذف، والإعادة بنقرة
-    await added.getByRole('button', { name: 'حرّر اليوم 2' }).click();
+    await added.getByRole('button', { name: 'حرّر: اليوم 2' }).click();
     const edit = page.getByRole('dialog', { name: 'تحرير «اليوم 2»' });
     await expect(edit.getByLabel('السعة (اختياري)')).toHaveValue('20');
     await edit.getByLabel('السعة (اختياري)').fill('30');
     await edit.getByRole('button', { name: 'حفظ' }).click();
     await expect(added).toContainText('22 من السعة 30');
     await expect(added.getByRole('note')).toHaveCount(0);
-    await added.getByRole('button', { name: 'ألغِ اليوم 2' }).click();
+    await added.getByRole('button', { name: 'ألغِ اليوم: اليوم 2' }).click();
     await page.getByRole('button', { name: 'ألغِ اليوم', exact: true }).click();
     await expect(added).toContainText('ملغى لهذه الدفعة');
     expect(calls.filter((c) => c.action === 'admin.workshop-save').at(-1).row).toMatchObject({ id: 'w2', active: false, title_ar: 'اليوم 2' });
     await expect(days.locator('.cj-days-count')).toHaveText('1 من 4 محددة');
-    await added.getByRole('button', { name: 'أعد اليوم 2' }).click();
+    await added.getByRole('button', { name: 'أعده: اليوم 2' }).click();
     await expect(added).not.toContainText('ملغى لهذه الدفعة');
 
     // «الحضور والجلسات»: اليوم نفسه بسعته، من القراءة نفسها
@@ -176,7 +176,7 @@ test('قبل ترحيل السعة: الحقل مخفي في البطاقة و«
   const state = { capacity: false, sessions: [{ ...firstDay }] };
   const calls = await admin(page, 1440, state);
   const days = page.locator('#cj-days-training');
-  await days.getByRole('button', { name: 'أضف يومًا أو ورشة إلى التدريب' }).click();
+  await days.getByRole('button', { name: 'يوم أو ورشة في التدريب' }).click();
   const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
   await expect(form.getByLabel('السعة (اختياري)')).toHaveCount(0);
   await form.getByLabel('المكان (القاعة والمدينة)').fill('جدة');
@@ -200,7 +200,28 @@ test('القراءة فقط: الأيام وأعدادها ورمز الحضور
   await expect(days.locator('.cj-day')).toHaveCount(2);
   await expect(days.locator('.cj-day', { hasText: 'اليوم 2' })).toContainText('22 من السعة 25');
   await expect(days.getByRole('button', { name: 'اعرض رمز الحضور' })).toHaveCount(2);
-  for (const name of [/أضف يومًا/, /^حرّر/, /^ألغِ/, 'أرسل الدعوة']) await expect(days.getByRole('button', { name })).toHaveCount(0);
+  for (const name of [/^يوم أو ورشة/, /^حرّر/, /^ألغِ/, 'أرسل الدعوة']) await expect(days.getByRole('button', { name })).toHaveCount(0);
+});
+
+test('الجلسة العامة من بطاقة الدفعة: قائمة حضورها لأعضاء هذه الدفعة، وتحريرها يقول إنه لكل الدفعات', async ({ page }) => {
+  const general = { ...firstDay, id: 'g1', cohort_id: null, title_ar: 'لقاء عام', starts_at: '2026-11-20T07:00:00Z', ends_at: '2026-11-20T09:00:00Z', invited_at: null };
+  const state = { capacity: true, sessions: [{ ...firstDay }, general] };
+  const calls = await admin(page, 1440, state);
+  const row = page.locator('#cj-days-training .cj-day', { hasText: 'لقاء عام' });
+  await expect(row.locator('.cj-tag', { hasText: 'لكل الدفعات' })).toBeVisible();
+  await row.getByRole('button', { name: 'قائمة الحضور' }).click();
+  const list = page.getByRole('dialog', { name: 'الحضور' });
+  await expect(list).toContainText('القائمة هنا لأعضاء هذه الدفعة وحدهم');
+  expect(calls.filter((c) => c.action === 'admin.workshop-attendance').at(-1)).toMatchObject({ id: 'g1', cohort_id: 'c1' });
+  await list.getByRole('button', { name: 'إغلاق' }).click();
+  await row.getByRole('button', { name: 'حرّر: لقاء عام' }).click();
+  const edit = page.getByRole('dialog', { name: 'تحرير «لقاء عام» (جلسة عامة لكل الدفعات)' });
+  await expect(edit).toContainText('يسري على كل الدفعات');
+  await shot(page, 'w3-general-edit', edit);
+  await edit.getByRole('button', { name: 'إلغاء' }).click();
+  // يوم الدفعة نفسها: لا وسم عام ولا تنبيه
+  await page.locator('#cj-days-training .cj-day', { hasText: 'اليوم 1' }).getByRole('button', { name: 'حرّر: اليوم 1' }).click();
+  await expect(page.getByRole('dialog', { name: 'تحرير «اليوم 1»' })).not.toContainText('يسري على كل الدفعات');
 });
 
 test('غير الإلزامية (T0): «عند الحاجة» و«اختيارية» بإطار متقطع في الخط والبطاقة، والإلزامية بلا وسم', async ({ page }) => {
@@ -229,7 +250,7 @@ test('غير الإلزامية (T0): «عند الحاجة» و«اختياري
 test('المشارك يرى اليوم المضاف من البطاقة في رحلته بزر «سجّل حضوري»، والملغى يختفي', async ({ page, browser }) => {
   const state = { capacity: true, sessions: [{ ...firstDay }] };
   await admin(page, 1440, state);
-  await page.locator('#cj-days-training').getByRole('button', { name: 'أضف يومًا أو ورشة إلى التدريب' }).click();
+  await page.locator('#cj-days-training').getByRole('button', { name: 'يوم أو ورشة في التدريب' }).click();
   const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
   await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('اليوم الثالث');
   await form.getByLabel('المكان (القاعة والمدينة)').fill('الرياض، قاعة الأثر');
@@ -268,7 +289,7 @@ test('المشارك يرى اليوم المضاف من البطاقة في ر�
 
   // الإلغاء من البطاقة يخفيه من رحلة المشارك
   const added = page.locator('#cj-days-training .cj-day', { hasText: 'اليوم الثالث' });
-  await added.getByRole('button', { name: 'ألغِ اليوم الثالث' }).click();
+  await added.getByRole('button', { name: 'ألغِ اليوم: اليوم الثالث' }).click();
   await page.getByRole('button', { name: 'ألغِ اليوم', exact: true }).click();
   await expect(added).toContainText('ملغى لهذه الدفعة');
   const before = reads;

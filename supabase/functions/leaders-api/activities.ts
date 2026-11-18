@@ -658,17 +658,20 @@ function attendancePeople(r: any, w: Awaited<ReturnType<typeof attendanceWorld>>
 export async function workshopAttendance(b: Body) {
   const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
+  // cohort_id: الجلسة العامة من بطاقة دفعة تُقرأ بأعضاء تلك الدفعة وحاضريها وحدهم، كما تعدّها البطاقة (cohortWorkshops).
+  // جلسة الدفعة لا يغيّرها هذا: متوقعها دفعتها هي دائمًا
+  const view = b.cohort_id ? String(b.cohort_id) : null;
   const [{ data: r }, { data: att }, w] = await Promise.all([
     db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),
     db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', s.id),
-    attendanceWorld(!!s.cohort_id),
+    attendanceWorld(!!(s.cohort_id || view)),
   ]);
-  const people = attendancePeople(r, w, s.cohort_id || null, att || []);
+  const people = attendancePeople(r, w, s.cohort_id || view, att || [], !s.cohort_id && !!view);
   return { success: true, session: s, requirement: { id: r.id, title_ar: r.title_ar }, people };
 }
 
 // أيام الورشة في بطاقة المرحلة (W3، تصور 2026-11-18 ب5.4): جلسات متطلبات الحضور لهذه الدفعة والجلسات العامة، ولكل جلسة
-// طريقتها الفعلية (sessionVerify) والمتوقع والحاضر من attendancePeople نفسها التي تعدّ بها شاشة الرمز، والسعة إن رُحّلت.
+// طريقتها الفعلية (sessionVerify: تخصيص الدفعة لجلساتها وحدها، والعامة بطريقة البرنامج كما يفرضها التسجيل في workshopVerify) والمتوقع والحاضر من attendancePeople نفسها التي تعدّ بها شاشة الرمز، والسعة إن رُحّلت.
 // قراءة فقط: الإضافة والتحرير والإلغاء بـadmin.workshop-save نفسه، فلا مسار كتابة ثانٍ
 export async function cohortWorkshops(b: Body) {
   const c = must(await db.from('cohorts').select('id, program_id, delivery').eq('id', String(b.cohort_id || '')).maybeSingle()) as any;
@@ -691,7 +694,7 @@ export async function cohortWorkshops(b: Body) {
   // المتوقع لهذه الدفعة: جلستها كما تعدّها شاشة الرمز، والعامة بأعضاء هذه الدفعة وحاضريها وحدهم
   const sessions = rows.map((s: any) => {
     const people = attendancePeople(reqOf[s.requirement_id], w, c.id, attOf[s.id] || [], !s.cohort_id);
-    const row: Body = { ...s, verify: sessionVerify(reqOf[s.requirement_id], c.delivery), expected: people.length, attended: people.filter((p: any) => p.attendance).length };
+    const row: Body = { ...s, verify: sessionVerify(reqOf[s.requirement_id], s.cohort_id ? c.delivery : null), expected: people.length, attended: people.filter((p: any) => p.attendance).length };
     delete row.secret;
     if (!capacity_ready) delete row.capacity;
     return row;

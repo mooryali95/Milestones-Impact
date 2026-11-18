@@ -32,6 +32,7 @@ import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
 
+const GENERAL_EDIT_AR = 'جلسة عامة لكل دفعات البرنامج: ما تغيّره هنا أو تحذفه يسري على كل الدفعات.';
 const editsAr = (n) => countAr(n, 'تعديل واحد', 'تعديلان', 'تعديلات', 'تعديلًا');
 
 // الخريطة تُحسب من رحلة كل عضو على الخادم: تلقائيًا للدفعة الصغيرة، وللمفتوحة أو الكبيرة بطلب صريح (R0)
@@ -155,7 +156,7 @@ function StageDays({ s, days, act }) {
       <header className="cj-days-head">
         <h6 id={`${id}-h`}>{days.head_ar}</h6>
         <span className={`cj-days-count tone-${days.tone}`}>{days.count_ar}</span>
-        {act.canWrite && <button type="button" className="btn-sm primary cj-day-add" aria-label={`أضف يومًا أو ورشة إلى ${s.title}`} onClick={() => act.add(days, s)}>+ يوم أو ورشة</button>}
+        {act.canWrite && <button type="button" className="btn-sm primary cj-day-add" aria-label={`يوم أو ورشة في ${s.title}`} onClick={() => act.add(days, s)}>+ يوم أو ورشة</button>}
       </header>
       {act.error && <p className="cj-alert" role="alert"><span aria-hidden="true">!</span><span>{act.error} <button type="button" className="la-link" onClick={act.retry}>أعد المحاولة</button></span></p>}
       {!days.rows.length ? <p className="la-muted cj-days-none">{days.empty_ar}</p> : (
@@ -185,10 +186,10 @@ function StageDays({ s, days, act }) {
                 {r.qr && r.active && <button type="button" className="btn-sm ghost" onClick={() => act.qr(r)}>اعرض رمز الحضور</button>}
                 {r.expected != null && <button type="button" className="la-link" onClick={() => act.attendance(r)}>قائمة الحضور</button>}
                 {act.canWrite && r.can_invite && <button type="button" className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => act.invite(r)}>{r.invited ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>}
-                {act.canWrite && <button type="button" className="la-link" aria-label={`حرّر ${r.title}`} onClick={() => act.edit(r)}>حرّر</button>}
+                {act.canWrite && <button type="button" className="la-link" aria-label={`حرّر: ${r.title}`} onClick={() => act.edit(r)}>حرّر</button>}
                 {act.canWrite && (r.active
-                  ? <button type="button" className="la-link danger" aria-label={`ألغِ ${r.title}`} onClick={() => act.cancel(r)}>ألغِ اليوم</button>
-                  : <button type="button" className="la-link" aria-label={`أعد ${r.title}`} onClick={() => act.restore(r)}>أعده</button>)}
+                  ? <button type="button" className="la-link danger" aria-label={`ألغِ اليوم: ${r.title}`} onClick={() => act.cancel(r)}>ألغِ اليوم</button>
+                  : <button type="button" className="la-link" aria-label={`أعده: ${r.title}`} onClick={() => act.restore(r)}>أعده</button>)}
               </div>
             </li>
           ))}
@@ -440,8 +441,11 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         onSave: (v) => L('admin.workshop-save', { row: { ...v, requirement_id: v.requirement_id || days.reqs[0].id, cohort_id: c.id } }).then(savedDay('أُضيف اليوم ويظهر للمشاركين في رحلتهم')),
       });
     },
+    // الجلسة العامة يسري تحريرها وحذفها على كل دفعات البرنامج، فيُقال ذلك في العنوان وتحت أول حقل كما يقوله الإلغاء
     edit: (r) => setDayForm({
-      title: `تحرير «${r.title}»`, fields: sessionFields([], null, { capacity }), values: r.raw,
+      title: r.general ? `تحرير «${r.title}» (جلسة عامة لكل الدفعات)` : `تحرير «${r.title}»`,
+      fields: r.general ? sessionFields([], null, { capacity }).map((f, i) => (i ? f : { ...f, help: GENERAL_EDIT_AR })) : sessionFields([], null, { capacity }),
+      values: r.raw,
       onSave: (v) => L('admin.workshop-save', { row: { ...v, id: r.id } }).then(savedDay('حُفظ اليوم')),
       onDelete: r.attended ? undefined : () => L('admin.workshop-delete', { id: r.id }).then(savedDay('حُذف اليوم')),
     }),
@@ -630,7 +634,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       )}
       {dayForm && <Form {...dayForm} onClose={() => setDayForm(null)} />}
       {qr && <QrScreen id={qr} onClose={() => { setQr(null); setWsRetry((n) => n + 1); }} />}
-      {att && <Attendance id={att} canWrite={canWrite} onClose={() => { setAtt(null); setWsRetry((n) => n + 1); }} />}
+      {att && <Attendance id={att} cohortId={c.id} canWrite={canWrite} onClose={() => { setAtt(null); setWsRetry((n) => n + 1); }} />}
       {review && <ImpactDialog r={review.r} busy={busy} canSave={canWrite && !lock} lock={lock} onSave={save} onClose={() => setReview(null)} opts={saveOpts} setOpts={setSaveOpts} />}
 
       {/* خريطة الرحلة (R0): المكوّن نفسه الذي في صفحة الجهة وبوابتها، ومنها أعداد الناس في البطاقات أعلاه */}

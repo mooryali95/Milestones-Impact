@@ -10,13 +10,13 @@
 import {
   ACTIVITY_KIND_AR, ACTIVITY_OWNER_AR, countAr, DIM_AR, LEVEL_AR, MODE_AR, PHASE_AR, TIMELINE_AR, TIMELINE_STATUS_AR,
 } from './labels.js';
-import { daysAr, durationAr, renderJourneyText, stageRules } from './journey.js';
+import { daysAr, durationAr, renderJourneyText, STAGE_TAG_AR, stageRules } from './journey.js';
 import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
 import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planWithRules } from './stage-windows.js';
 
 // غير الإلزامية (T0، تصور 2026-11-18 ب5.2): نمطها بكلمة واحدة على الخط والبطاقة، بإطار متقطع. الإلزامية بلا وسم
-export const STAGE_TAG_AR = Object.freeze({ on_demand: 'عند الحاجة', optional: 'اختيارية' });
+export { STAGE_TAG_AR };
 
 // بداية افتراضية لسياق البرنامج: النوافذ تُحسب بالدالة نفسها ثم تُقرأ أيامًا من البداية
 const EPOCH = '2000-01-03';
