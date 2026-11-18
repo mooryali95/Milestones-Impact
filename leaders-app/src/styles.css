@@ -826,6 +826,22 @@ details.mf-guide:not([open]) { background: transparent; border-inline-start-colo
 .checkin-help { flex-basis: 100%; display: grid; gap: 6px; justify-items: start; min-width: 0; }
 .checkin-help ol { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
 .checkin-help p { margin: 0; }
+.checkin-help .btn { min-height: 44px; }
+/* «سجّل حضوري» (CheckinSheet.jsx، W2): الماسح داخل التطبيق والأرقام الستة، لوح من أسفل الجوال وبعرض محدود على الشاشات الواسعة */
+.ck-sheet { max-width: 480px; margin-inline: auto; }
+.ck-cam { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; border-radius: 14px; overflow: hidden; background: var(--graphite); display: grid; place-items: center; }
+.ck-cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ck-frame { position: absolute; inset: 14% 22%; border: 3px solid rgba(255, 255, 255, .9); border-radius: 14px; box-shadow: 0 0 0 999px rgba(11, 39, 47, .35); }
+.ck-cam-note { position: relative; margin: 0; padding: 16px; color: #fff; text-align: center; font-size: 14px; }
+.ck-code { display: grid; gap: 6px; }
+.ck-code label { font-weight: 600; font-size: 15px; }
+.ck-code-row { display: flex; gap: 8px; align-items: stretch; }
+.ck-code-row .btn { min-height: 48px; flex: none; }
+.ck-digits { direction: ltr; flex: 1; min-width: 0; min-height: 48px; font-size: 22px; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.ck-code p, .ck-sheet > p { margin: 0; }
+.ck-err { color: var(--bad); }
+.ck-done { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 12px 0 6px; }
+.ck-done h2 { margin: 0; }
 
 /* القياس البعدي: تقدير الآن وقبل البرنامج، ومقارنة البداية بالنهاية */
 .retro-label { font-size: 14px; font-weight: 700; color: var(--slate); margin: 14px 0 8px; }
@@ -1266,6 +1282,10 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .xpp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 16px 0; }
 .xpp-assign-list { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
 .xpp-assign { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
+.xpp-attend-list { display: grid; gap: 8px; }
+.xpp-attend { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
+.xpp-attend .grow { flex: 1 1 220px; display: grid; gap: 2px; min-width: 0; }
+.xpp-attend .btn { min-height: 44px; }
 .xpp-person { display: grid; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .xpp-person:last-child { border-bottom: 0; }
 .xpp-torate { padding: 10px 0; border-bottom: 1px solid var(--line); }

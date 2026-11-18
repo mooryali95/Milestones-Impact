@@ -383,7 +383,7 @@ export function sessionIcs(x) {
     `DTSTART:${icsStamp(x.starts_at)}`, `DTEND:${icsStamp(x.ends_at)}`, `SUMMARY:${esc(x.title)}`, ...(x.location ? [`LOCATION:${esc(x.location)}`] : []),
     'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${esc(x.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
 }
-export function NextSession({ session, onHall }) {
+export function NextSession({ session, onHall, onCheckedIn }) {
   const undated = !session.starts_at || !session.ends_at;
   // العنوان «لك جلسة سيُعلن موعدها» يقول ذلك، فلا يُكرر في السطر
   const when = undated ? '' : new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -398,7 +398,7 @@ export function NextSession({ session, onHall }) {
       <b>{session.title}</b>
       <span className="small muted">{[when, session.mode === 'online' ? 'عن بعد' : session.location, !session.open && linkPending(session) ? SESSION_LINK_LATER_AR : ''].filter(Boolean).join(' · ')}</span>
       {session.attended && <span className="chip ok">سُجّل حضورك</span>}
-      <CheckinHelp session={session} />
+      <CheckinHelp session={session} onDone={onCheckedIn} />
       <div className="row">
         {session.open && onHall && <button className="btn sm" onClick={onHall}>ادخل القاعة</button>}
         {!undated && <button className="btn ghost sm" onClick={download}>أضفها إلى تقويمك</button>}
@@ -723,6 +723,8 @@ function NudgeBanner({ nudge, onGo }) {
 }
 
 export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImpact, onCapstone, onHall, lab, onLab, onLabItem }) {
+  // بعد «سجّل حضوري» من بطاقة الجلسة تُقرأ الرحلة من جديد، فيظهر «سُجّل حضورك» مكان الزر
+  const refreshMe = async () => { const r = await call('me'); if (r.success) onUpdate(r); };
   const { journey, profile, participant } = me;
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
   const [susFirst] = useState(() => bootPreload.take('sus'));
@@ -829,7 +831,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         <aside className="j-side" aria-label="ما تفعله الآن">
           {(next || reading || upcoming) && (
             <div className="next-grid j-next" data-tour="next-step">
-              {upcoming && upcoming.open && <NextSession session={upcoming} onHall={onHall} />}
+              {upcoming && upcoming.open && <NextSession session={upcoming} onHall={onHall} onCheckedIn={refreshMe} />}
               {next && (
                 <div className="next-card">
                   <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
@@ -838,7 +840,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                   <div className="row"><button className="btn" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
                 </div>
               )}
-              {upcoming && !upcoming.open && <NextSession session={upcoming} onHall={onHall} />}
+              {upcoming && !upcoming.open && <NextSession session={upcoming} onHall={onHall} onCheckedIn={refreshMe} />}
               {reading && (
                 <div className="next-card">
                   <span className="k">تابع القراءة</span>

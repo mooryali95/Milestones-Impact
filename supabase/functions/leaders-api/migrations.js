@@ -155,6 +155,7 @@ export const MIGRATIONS = [
   '20261117100000_leaders_book_proposals_save',
   '20261118100000_leaders_guidance_eval_case_snapshot',
   '20261118110000_leaders_workshop_scan_receipts',
+  '20261118120000_leaders_workshop_code_method',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -226,4 +227,5 @@ export const MIGRATION_GATES = {
   '20261117100000_leaders_book_proposals_save': ["tolerant", "قبل الدالة يحفظ الخادم كل قسم وحده كما كان (book-proposals.ts proposeFromEdit)"],
   '20261118100000_leaders_guidance_eval_case_snapshot': ["tolerant", "قبل العمود تُحفظ النتيجة بلاه كما كانت، وتُقرأ النتائج بحالات المجموعة الحالية (guide-eval.ts)"],
   '20261118110000_leaders_workshop_scan_receipts': ["tolerant", "قبله يرد workshop.scan بـnot_migrated فيحفظ التطبيق الرمز نفسه كما كان، ويبقى المسح بعد الدخول كما هو (activities.ts: workshopScan وworkshopCheckin)"],
+  '20261118120000_leaders_workshop_code_method': ["tolerant", "قبله يرفض القيد الطريقة code، فيُسجَّل الحضور بالأرقام الستة بطريقة qr ويحمل السجل {via:'code'} (activities.ts: workshopCheckin)"],
 };

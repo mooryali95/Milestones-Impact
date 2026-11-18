@@ -1,0 +1,17 @@
+/* شاشة رمز الحضور للقاعة (shared/ui/PresenterQr.jsx): لوحة الإدارة وبوابة الخبير. ملء الشاشة، والأرقام الستة كبيرة تُقرأ من آخر القاعة */
+.pq { position: fixed; inset: 0; z-index: 1100; overflow-y: auto; background: var(--brand-off-white); display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px 16px; text-align: center; color: var(--brand-graphite); }
+.pq h2 { font-size: clamp(1.4rem, 3vw, 2.2rem); color: var(--brand-slate); margin: 0; }
+.pq p { margin: 0; }
+.pq-sub, .pq-hint { color: var(--brand-ink-mid); }
+.pq img { width: min(56vh, 86vw); max-width: 560px; height: auto; image-rendering: pixelated; border: 10px solid var(--brand-white); box-shadow: 0 10px 40px rgba(6, 19, 24, .12); }
+.pq-code { display: grid; gap: 2px; justify-items: center; }
+.pq-code-k { font-size: 1rem; color: var(--brand-ink-mid); }
+.pq-digits { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; font-weight: 700; font-size: clamp(2.4rem, 7vw, 4.6rem); letter-spacing: .12em; line-height: 1.1; color: var(--brand-graphite); unicode-bidi: isolate; direction: ltr; }
+.pq-hint { font-size: 1.05rem; max-width: 46rem; }
+.pq-count { font-size: 1.4rem; color: var(--st-ok-text); }
+.pq-absent-t { font: inherit; font-size: 1rem; background: none; border: 0; color: var(--brand-slate); text-decoration: underline; cursor: pointer; padding: 4px 8px; }
+.pq-absent { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; max-width: min(900px, 90vw); color: var(--brand-ink-mid); }
+.pq-x { position: fixed; top: 12px; inset-inline-end: 12px; font-size: 1.4rem; padding: 6px 12px; background: var(--brand-white); border: 1px solid rgba(6, 19, 24, .12); border-radius: 10px; cursor: pointer; }
+.pq-err { color: var(--st-bad); max-width: 40rem; }
+.pq-wait { color: var(--brand-ink-mid); }
+@media (max-width: 640px) { .pq { place-content: start center; padding-top: 56px; } .pq img { width: min(80vw, 360px); } }
