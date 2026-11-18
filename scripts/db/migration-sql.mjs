@@ -190,7 +190,10 @@ function doOps(bodies) {
       for (const m of flat.matchAll(new RegExp(rx.source, 'g'))) {
         // «on conflict ... do update set» ليست أمر update، و«before update on» في المشغّل كذلك
         if (kind === 'update' && /\b(do|before|after|or|of|for)$/.test(flat.slice(0, m.index + 1).trim())) continue;
-        ops.push({ op: kind, table: normName(m[1]), inDo: true });
+        // insert داخل do: «on conflict ... do update» في ذيله حتى الفاصلة المنقوطة التالية، كمسار الأمر المفرد
+        const end = flat.indexOf(';', m.index);
+        const upsert = kind === 'insert' && /\bon conflict\b.*\bdo update\b/.test(flat.slice(m.index, end < 0 ? undefined : end));
+        ops.push({ op: kind, table: normName(m[1]), inDo: true, ...(kind === 'insert' ? { upsert } : {}) });
       }
     }
     for (const m of flat.matchAll(new RegExp(`alter table (?:if exists )?(?:only )?(${NAME}) ([^;]*)`, 'g'))) {

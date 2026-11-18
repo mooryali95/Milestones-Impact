@@ -31,7 +31,11 @@ TAG="$(echo "$SCHEMAS" | tr ',' '-')"
 TABLES="${BACKUP_TABLES:-}"
 if [ -n "$TABLES" ]; then
   printf '%s' "$TABLES" | grep -Eq '^[a-z0-9_]+\.[a-z0-9_]+(,[a-z0-9_]+\.[a-z0-9_]+)*$' || { echo "BACKUP_TABLES ليست أسماء جداول مؤهلة (مخطط.جدول مفصولة بفاصلة): $TABLES" >&2; exit 1; }
-  TAG="${BACKUP_LABEL:-tables}"
+  TAG=tables
+fi
+# الوسم يُطبَّق كلما ضُبط، ولو فُرّغ المخططان كاملين (هدف غير معروف في migrate.yml): نسخة ما قبل الترحيل اسمها db-premig-* دائمًا
+if [ -n "${BACKUP_LABEL:-}" ]; then
+  TAG="$BACKUP_LABEL"
   printf '%s' "$TAG" | grep -Eq '^[a-z0-9_-]+$' || { echo "BACKUP_LABEL غير صالح: $TAG" >&2; exit 1; }
 fi
 

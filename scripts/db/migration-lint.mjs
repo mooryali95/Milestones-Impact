@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // فاحص الترحيلات الثابت (تصور تحديث المنصة بلا أثر، المرحلة 6، البند 5، وش4 وش5): يرفض في CI ما يحجب القراءة أو يكسر
 // الإصدار السابق قبل أن يصل الإنتاج. لا قاعدة ولا شبكة: يقرأ النص بـ migration-sql.mjs.
-//   node scripts/db/migration-lint.mjs          الترحيلات الجديدة وحدها (بعد LINT_AFTER)، ورمز 1 عند أي مخالفة غير مستثناة
+//   node scripts/db/migration-lint.mjs          الترحيلات الجديدة وحدها (بعد LINT_AFTER، أو غير المطبّقة على الإنتاج)، ورمز 1 عند أي مخالفة غير مستثناة
 //   node scripts/db/migration-lint.mjs --all    تقرير بكل الترحيلات، ورمز 0 دائمًا (القديمة طُبّقت ولا تُعدَّل بايتاتها)
 //
 // القواعد (الست الأولى نص البند 5، والأخيرتان من البندين 1 و3):
@@ -12,8 +12,9 @@
 //   drop-or-rename        إعادة تسمية جدول أو عمود (تكسر الإصدار السابق دائمًا: أضف الجديد ثم احذف القديم لاحقًا)، أو حذف جدول أو
 //                         عمود أو عرض في ترحيل يُدخل استعمالًا جديدًا. الحذف في ترحيل انكماش وحده، بسطر
 //                         «-- contract: <ترحيل التوسيع>» يسمي ترحيلًا مطبّقًا على الإنتاج قبل 14 يومًا على الأقل (ش4)
-//   tolerant-note         «deploy-gate: tolerant» بلا ملاحظة تقول كيف تتسامح الدوال معه
-//   data-backup           ترحيل بيانات يغيّر صفوفًا قائمة أو يحذفها (update، delete، truncate، حذف جدول أو عمود) بلا جدول backup_*
+//   tolerant-note         «deploy-gate: tolerant» بلا ملاحظة تقول كيف تتسامح الدوال معه (على سطر الوسم أو أسطر التعليق التالية)
+//   data-backup           ترحيل بيانات يغيّر صفوفًا قائمة أو يحذفها (update، delete، truncate، insert ... on conflict do update،
+//                         حذف جدول أو عمود) بلا جدول backup_*
 //                         يحفظها قبله، وبلا سطر «-- restore: <أمر الإرجاع>»
 //   transaction           begin أو commit باليد (التطبيق يلف كل ترحيل في معاملته)، أو concurrently بلا الوسم
 //                         «-- migrate: no-transaction»، أو ترحيل بهذا الوسم فيه غير الفهارس المتزامنة وسطر السجل
@@ -52,8 +53,27 @@ const stamp = (name) => {
   return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
 };
 
-// مخالفات ترحيل واحد: [{ rule, line, message }]. applied: أسماء الترحيلات المطبّقة على الإنتاج (البيان)
-export function lint(name, sql, { applied = new Set() } = {}) {
+// الدوال التي عرّفتها ترحيلات قبل name (بأسمائها المؤهلة): إعادة تعريف إحداها ليست توسيعًا، فترحيل الانكماش يعيد كتابة
+// الدالة لتكف عن قراءة العمود ثم يحذفه في الترحيل نفسه
+export function priorFunctionsOf(name, readSql, names) {
+  const out = new Set();
+  for (const n of names) if (n < name) for (const o of analyze(readSql(n))) if (o.op === 'function' && o.name) out.add(o.name);
+  return out;
+}
+
+// ملاحظة التسامح: على سطر الوسم نفسه، أو أسطر التعليق التي تليه مباشرة (أسلوب 20261114110000 و20261114120000)
+export function tolerantNote(sql) {
+  const lines = sql.split('\n').slice(0, 15);
+  const i = lines.findIndex((l) => /^--\s*deploy-gate:\s*tolerant\b/.test(l));
+  if (i < 0) return '';
+  const parts = [lines[i].replace(/^--\s*deploy-gate:\s*tolerant\b/, '')];
+  for (let j = i + 1; j < lines.length && /^--/.test(lines[j]) && !/^--\s*[a-z-]+:/.test(lines[j]); j++) parts.push(lines[j].replace(/^--/, ''));
+  return parts.join(' ').trim();
+}
+
+// مخالفات ترحيل واحد: [{ rule, line, message }]. applied: أسماء الترحيلات المطبّقة على الإنتاج (البيان).
+// priorFunctions: الدوال المعرّفة قبله (priorFunctionsOf)، وبلاها كل دالة تُعدّ جديدة
+export function lint(name, sql, { applied = new Set(), priorFunctions = new Set() } = {}) {
   const ops = analyze(sql);
   const out = [];
   const add = (rule, line, message) => out.push({ rule, line, message });
@@ -62,8 +82,10 @@ export function lint(name, sql, { applied = new Set() } = {}) {
   const fresh = (t) => created.has(t);
   const head = sql.split('\n').slice(0, 15).join('\n');
 
-  // يُدخل استعمالًا جديدًا: جدول أو عمود أو عرض أو دالة جديدة (لا جداول backup_ ولا ما يُحذف ويُعاد في الترحيل نفسه)
-  const expands = ops.some((o) => (o.op === 'create-table' && !isBackupTable(o.table)) || o.op === 'add-column' || o.op === 'function'
+  // يُدخل استعمالًا جديدًا: جدول أو عمود أو عرض أو دالة جديدة (لا جداول backup_ ولا ما يُحذف ويُعاد في الترحيل نفسه،
+  // ولا دالة قائمة يُعاد تعريفها)
+  const expands = ops.some((o) => (o.op === 'create-table' && !isBackupTable(o.table)) || o.op === 'add-column'
+    || (o.op === 'function' && !(o.name && priorFunctions.has(o.name)))
     || (o.op === 'create-view' && !ops.some((d) => d.op === 'drop-view' && d.table === o.table)));
 
   for (const o of ops) {
@@ -88,10 +110,13 @@ export function lint(name, sql, { applied = new Set() } = {}) {
     }
   }
 
-  const g = gateOf(sql);
-  if (g.gate === 'tolerant' && g.note.replace(/\s/g, '').length < 10) add('tolerant-note', 1, 'deploy-gate: tolerant بلا ملاحظة تقول كيف تعمل الدوال قبل الترحيل');
+  if (gateOf(sql).gate === 'tolerant' && tolerantNote(sql).replace(/\s/g, '').length < 10) {
+    add('tolerant-note', 1, 'deploy-gate: tolerant بلا ملاحظة تقول كيف تعمل الدوال قبل الترحيل (على سطر الوسم أو أسطر التعليق التي تليه)');
+  }
 
-  const destructive = ops.filter((o) => ['update', 'delete', 'truncate'].includes(o.op) ? (o.table !== LEDGER && !isBackupTable(o.table) && !fresh(o.table))
+  // insert ... on conflict ... do update يعيد كتابة صفوف قائمة كالـ update
+  const rewrites = (o) => ['update', 'delete', 'truncate'].includes(o.op) || (o.op === 'insert' && o.upsert);
+  const destructive = ops.filter((o) => rewrites(o) ? (o.table !== LEDGER && !isBackupTable(o.table) && !fresh(o.table))
     : (o.op === 'drop-table' || o.op === 'drop-column') && !isBackupTable(o.table) && !fresh(o.table));
   if (destructive.length) {
     const backup = ops.some((o) => o.op === 'create-table' && isBackupTable(o.table) && o.asSelect);
@@ -132,13 +157,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const ALL = process.argv.includes('--all');
   const applied = new Set(Object.keys(JSON.parse(readFileSync(join(ROOT, 'scripts/db/applied-manifest.json'), 'utf8')).migrations));
   const names = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).map((f) => f.replace(/\.sql$/, '')).sort();
-  const picked = ALL ? names : names.filter((n) => n > LINT_AFTER);
-  const results = new Map(picked.map((n) => [n, lint(n, readFileSync(join(MIGRATIONS, `${n}.sql`), 'utf8'), { applied })]));
+  // بعد LINT_AFTER، وكل ترحيل لم يُطبَّق على الإنتاج ولو سبقه اسمه (فرع موازٍ أو تاريخ مقدَّم)
+  const picked = ALL ? names : names.filter((n) => n > LINT_AFTER || !applied.has(n));
+  const read = (n) => readFileSync(join(MIGRATIONS, `${n}.sql`), 'utf8');
+  const results = new Map(picked.map((n) => [n, lint(n, read(n), { applied, priorFunctions: priorFunctionsOf(n, read, names) })]));
   const { failures, allowed, stale } = judge(results, ALL ? { migrations: {} } : readAllow());
   for (const f of failures) console.log(`${ALL ? '•' : '✗'} ${f.name}:${f.line} [${f.rule}] ${f.message}`);
   for (const f of allowed) console.log(`• ${f.name}:${f.line} [${f.rule}] مستثنى: ${readAllow().migrations[f.name].reason}`);
   for (const s of stale) console.log(`✗ استثناء: ${s}`);
   console.log(ALL ? `تقرير: ${failures.length} ملاحظة في ${picked.length} ترحيلًا (القديمة لا تُفشل)`
-    : `فاحص الترحيلات: ${picked.length} ترحيلًا جديدًا بعد ${LINT_AFTER}، ${failures.length} مخالفة، ${allowed.length} مستثناة`);
+    : `فاحص الترحيلات: ${picked.length} ترحيلًا (بعد ${LINT_AFTER} أو غير مطبّق)، ${failures.length} مخالفة، ${allowed.length} مستثناة`);
   if (!ALL && (failures.length || stale.length)) process.exit(1);
 }

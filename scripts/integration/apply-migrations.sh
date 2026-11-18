@@ -28,6 +28,18 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$BASELINE" > /dev/null
 # الصفوف المرجعية التي سبقت مجلد الترحيلات في الإنتاج (الأدوار، المراحل، نموذج التسكين، الخلايا، المتطلبات الأولى)
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f scripts/integration/seed-reference.sql > /dev/null
 echo "baseline + reference seed applied"
+# كل ترحيل بطلبات الإنتاج نفسها (migration-tx.mjs applyPlan عبر apply-plan.mjs): معاملة صريحة بمهلة أقفال 3 ثوانٍ ومهلة
+# تنفيذ 60 ثانية، أو أمرًا أمرًا بلا معاملة تحت وسمها. فما يمر أمرًا أمرًا ويفشل معاملةً واحدة يفشل هنا قبل الإنتاج
+PLAN_DIR="$(mktemp -d)"
+trap 'rm -rf "$PLAN_DIR"' EXIT
+apply_file() {
+  local f="$1" dir="$PLAN_DIR/$(basename "$1" .sql)" mode r
+  mode=$(node scripts/integration/apply-plan.mjs "$f" "$dir")
+  for r in "$dir"/*.sql; do
+    psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$r" > /dev/null || { echo "فشل $(basename "$f" .sql) (الوضع $mode، الطلب $(basename "$r"))" >&2; return 1; }
+  done
+  rm -rf "$dir"
+}
 order=$(node -e "import('./scripts/db/data-only.mjs').then((m) => console.log(m.DATA_ONLY_ORDER.join(' ')))")
 skip=" $order "
 n=0
@@ -35,7 +47,7 @@ for f in $(ls supabase/migrations/*.sql | sort); do
   name=$(basename "$f" .sql)
   case "$skip" in *" $name "*) echo "skip  $name"; continue;; esac
   if [ -n "$ONLY" ]; then case "$ONLY" in *" $name "*) ;; *) echo "skip  $name (غير مطبّق على الإنتاج)"; continue;; esac; fi
-  psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$f" > /dev/null
+  apply_file "$f"
   n=$((n + 1))
 done
 # ترحيلات القرار بعد الحلقة بترتيبها في data-only.mjs، كما طُبّقت على الإنتاج: حراس التفعيل تمر بعد أن سجّل
@@ -43,7 +55,7 @@ done
 # السجل فلا يسجّل نفسه، فيُسجَّل هنا كما أُضيف سطره يدويًا على الإنتاج (HANDOFF.md)
 for name in $order; do
   if [ -n "$ONLY" ]; then case "$ONLY" in *" $name "*) ;; *) continue;; esac; fi
-  psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "supabase/migrations/$name.sql" > /dev/null
+  apply_file "supabase/migrations/$name.sql"
   psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "insert into leaders.schema_migrations (name) values ('$name') on conflict do nothing;" > /dev/null
   echo "apply $name (data only, after the loop)"
   n=$((n + 1))

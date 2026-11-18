@@ -8,8 +8,10 @@ name: Apply migrations (production)
 # الوضع verify قراءة فقط: يشغّل فحوص ملف scripts/db/verify-*.sql (يُسمّى في migrations)، كل فحص في معاملة للقراءة فقط.
 #
 # التطبيق (تصور تحديث المنصة بلا أثر، المرحلة 6):
-# - الوظيفة apply في بيئة production: موافقة المالك على البيئة قبل أن تبدأ هي موافقته الصريحة التي تسمّي الترحيل
-#   (RUNBOOK.md §1). البيئة يضبطها المالك (مراجع واحد هو نفسه، وفرع main وحده)، وبلا ضبطها تُنشأ آليًا بلا موافقة.
+# - الوظيفة apply في بيئة production، ومن main وحده بوضعيها (الخطوة الأولى ترفض غيره). موافقة المالك على البيئة تصير
+#   بوابته الصريحة التي تسمّي الترحيل بثلاثة شروط يضبطها هو (RUNBOOK.md §5): البيئة بمراجع واحد هو نفسه وفرع main وحده،
+#   وSUPABASE_DB_URL سرّ في البيئتين production وbackup لا في المستودع، والرمز الكاتب SUPABASE_ACCESS_TOKEN كذلك (قرار مفتوح).
+#   قبل ذلك ليست بوابة: البيئة تُنشأ آليًا بلا موافقة، ومن يدفع فرعًا يقرأ أسرار المستودع من نسخة فرعه لهذا السير أو غيره.
 # - في مجموعة deploy-production مع نشر ci.yml وسير التراجع الموحد: لا يتداخل ترحيل ونشر ولا ترحيلان.
 # - قبل التطبيق نسخة إلزامية بـ pg_dump للجداول التي يمسها الترحيل إلى R2 (البادئة premigration/)، وبلا أسرار النسخ لا تطبيق.
 # - كل ترحيل في معاملة صريحة بمهلة أقفال 3 ثوانٍ ومهلة تنفيذ 60 ثانية، ويُعاد بتراجع عند فشل القفل وحده (migration-tx.mjs).
@@ -76,21 +78,28 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
+    # أسرار النسخ في خطوتي الفحص والنسخ وحدهما، لا في بيئة الوظيفة كلها
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
-      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
       MODE: ${{ inputs.mode }}
       MIGRATIONS: ${{ inputs.migrations }}
     steps:
-      # لا تطبيق بلا رمز، ولا بلا أسماء، ولا بلا مكان للنسخة: النسخة قبل الترحيل إلزامية (ش5)
+      # لا تطبيق إلا من main، ولا بلا رمز، ولا بلا أسماء، ولا بلا مكان للنسخة: النسخة قبل الترحيل إلزامية (ش5)
       - name: Token, names, and backup secrets are set
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: |
+          # من main وحده بالوضعين، ولو غاب قيد الفرع عن البيئة: فرع غير مدموج لا يطبّق ترحيلاته على الإنتاج
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::التطبيق من main وحده («Use workflow from» = main). الآن: $GITHUB_REF"
+            exit 1
+          fi
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::SUPABASE_ACCESS_TOKEN is not set (see RUNBOOK.md §1)"; exit 1; fi
           if [ -z "$MIGRATIONS" ]; then echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations"; exit 1; fi
           if [ -z "$SUPABASE_DB_URL" ] || { [ -z "$BACKUP_PUBLIC_KEY" ] && [ -z "$BACKUP_PASSPHRASE" ]; }; then
@@ -99,10 +108,6 @@ jobs:
           fi
           if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
             echo "::error::An R2 secret is not set: the pre-migration backup would be stored nowhere, so no apply."
-            exit 1
-          fi
-          if [ "$MODE" = "apply-and-deploy" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
-            echo "::error::apply-and-deploy ينشر main: شغّله من main («Use workflow from» = main). الآن: $GITHUB_REF"
             exit 1
           fi
       - uses: actions/checkout@v7
@@ -123,6 +128,13 @@ jobs:
       - name: Back up the touched tables to R2 (mandatory)
         if: steps.plan.outputs.skip != 'true'
         env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
           BACKUP_PREFIX: premigration
           BACKUP_TABLES: ${{ steps.plan.outputs.full != 'true' && steps.plan.outputs.tables || '' }}
           BACKUP_SCHEMAS: leaders,public

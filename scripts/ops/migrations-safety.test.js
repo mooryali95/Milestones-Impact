@@ -1,12 +1,14 @@
 // حراس المرحلة 6 من تصور تحديث المنصة بلا أثر (الترحيلات والتوافق، ش4 وش5): قراءة الترحيل، والمعاملة ومهلتاها وإعادة المحاولة،
 // والسجل، والفاحص الثابت، وخطة النسخة قبل التطبيق، وعقد الإجراءات مع release، وبنية الإنتاج في التكامل، وملفات السير.
-import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { analyze, isBackupTable, noTransaction, normName, statements } from '../db/migration-sql.mjs';
 import { applyPlan, applyWithRetry, inLedger, isLockTimeout, isMissingRelation, RETRY_DELAYS_MS } from '../db/migration-tx.mjs';
-import { judge, LARGE_TABLES, lint, LINT_AFTER, readAllow, RULES } from '../db/migration-lint.mjs';
+import { judge, LARGE_TABLES, lint, LINT_AFTER, priorFunctionsOf, readAllow, RULES, tolerantNote } from '../db/migration-lint.mjs';
 import { backupPlan } from '../db/premigration-backup.mjs';
 import { contractGaps, dispatchTables, INDEX } from './action-contract.mjs';
 import { pickBaseline, productionNames } from '../integration/production-baseline.mjs';
@@ -146,6 +148,10 @@ describe('فاحص الترحيلات (البند 5)', () => {
     expect(rules(N, 'alter table leaders.p rename to q;')).toEqual(['drop-or-rename']);
     expect(rules(N, '-- deploy-gate: tolerant\ncreate table leaders.n ();')).toEqual(['tolerant-note']);
     expect(rules(N, '-- deploy-gate: tolerant قبله تعيد الدالة قائمة فارغة\ncreate table leaders.n ();')).toEqual([]);
+    // الملاحظة في أسطر التعليق التالية للوسم تكفي، وسطر وسم آخر لا يُعدّ ملاحظة
+    expect(rules(N, '-- deploy-gate: tolerant\n-- قبله تعيد الدالة قائمة فارغة\ncreate table leaders.n ();')).toEqual([]);
+    expect(rules(N, '-- deploy-gate: tolerant\n-- restore: select 1 from leaders.n\ncreate table leaders.n ();')).toEqual(['tolerant-note']);
+    expect(tolerantNote(read('supabase/migrations/20261114110000_leaders_mail_center.sql')).length).toBeGreaterThan(10);
     expect(rules(N, 'begin;\ncreate table leaders.n ();\ncommit;')).toEqual(['transaction', 'transaction']);
     expect(rules(N, 'create index concurrently i on leaders.audit_log (at);')).toEqual(['transaction']);
     expect(rules(N, '-- migrate: no-transaction\ncreate index concurrently if not exists i on leaders.audit_log (at);\ninsert into leaders.schema_migrations (name) values (\'x\');')).toEqual([]);
@@ -158,6 +164,12 @@ describe('فاحص الترحيلات (البند 5)', () => {
     expect(lint(N, `-- contract: 20261101100000_expand\n${drop}`, { applied }).map((f) => f.rule)).toEqual([]);
     expect(lint('20261110100000_x', `-- contract: 20261101100000_expand\n${drop}`, { applied })[0].message).toMatch(/أقل من 14/);
     expect(lint(N, `-- contract: 20261120100000_other\n${drop}`, { applied })[0].message).toMatch(/لم يُطبَّق/);
+    // الانكماش يعيد تعريف دالة قائمة لتكف عن قراءة العمود ثم يحذفه: ليس توسيعًا. الدالة الجديدة توسيع
+    const fn = 'create or replace function leaders.f() returns int language sql as $$ select 1 $$;';
+    expect(lint(N, `-- contract: 20261101100000_expand\n${fn}\n${drop}`, { applied, priorFunctions: new Set(['leaders.f']) }).map((f) => f.rule)).toEqual([]);
+    expect(lint(N, `-- contract: 20261101100000_expand\n${fn}\n${drop}`, { applied }).map((f) => f.rule)).toEqual(['drop-or-rename']);
+    const src = { a: 'create function leaders.f() returns int language sql as $$ select 1 $$;', b: 'create function leaders.g() returns int language sql as $$ select 1 $$;' };
+    expect([...priorFunctionsOf('b', (n) => src[n], ['a', 'b'])]).toEqual(['leaders.f']);
     // إعادة إنشاء عرض بالاسم نفسه، وحذف جدول نسخ، لا يعدّان حذفًا
     expect(rules(N, 'drop view if exists leaders.v;\ncreate view leaders.v as select 1;')).toEqual([]);
     expect(rules(N, 'drop table if exists leaders.backup_20261101_x;')).toEqual([]);
@@ -166,16 +178,23 @@ describe('فاحص الترحيلات (البند 5)', () => {
     expect(rules(N, "update leaders.q set body = 'x' where id = 1;")).toEqual(['data-backup']);
     expect(lint(N, "create table leaders.backup_q as select * from leaders.q;\nupdate leaders.q set body = 'x';")[0].message).toMatch(/restore/);
     expect(rules(N, "-- restore: update leaders.q q set body = b.body from leaders.backup_q b where b.id = q.id\ncreate table if not exists leaders.backup_q as select * from leaders.q;\nupdate leaders.q set body = 'x';")).toEqual([]);
-    // الإدراج والإدراج المتسامح ليسا تغييرًا لصفوف قائمة، وسطر السجل وما أنشأه الترحيل نفسه كذلك
-    expect(rules(N, "insert into leaders.q (k) values (1) on conflict (k) do update set k = excluded.k;\ninsert into leaders.schema_migrations (name) values ('x');")).toEqual([]);
+    // الإدراج و«on conflict do nothing» ليسا تغييرًا لصفوف قائمة، وسطر السجل وما أنشأه الترحيل نفسه كذلك
+    expect(rules(N, "insert into leaders.q (k) values (1) on conflict (k) do nothing;\ninsert into leaders.schema_migrations (name) values ('x') on conflict (name) do update set name = excluded.name;")).toEqual([]);
+    // «on conflict ... do update» يعيد كتابة صفوف قائمة، أمرًا مفردًا وداخل do
+    expect(rules(N, "insert into leaders.q (k, t) values (1, 'a') on conflict (k) do update set t = excluded.t;")).toEqual(['data-backup']);
+    expect(rules(N, "do $$ begin insert into leaders.q (k, t) values (1, 'a') on conflict (k) do update set t = excluded.t; end $$;")).toEqual(['data-backup']);
+    expect(rules(N, "do $$ begin insert into leaders.q (k) values (1) on conflict do nothing; perform 1; end $$;")).toEqual([]);
     expect(rules(N, 'create table leaders.n (x int); update leaders.n set x = 1;')).toEqual([]);
     expect(rules(N, 'create function leaders.f() returns void language sql as $$ delete from leaders.q $$;')).toEqual([]);
     expect(rules(N, 'do $$ begin delete from leaders.q where x; end $$;')).toEqual(['data-backup']);
   });
-  it('الجديد وحده يُفحص: لا ترحيل بعد LINT_AFTER يخالف اليوم، والاستثناءات صالحة', () => {
-    const names = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql')).map((f) => f.replace(/\.sql$/, ''));
+  it('الجديد وحده يُفحص (بعد LINT_AFTER أو غير المطبّق): لا ترحيل منه يخالف اليوم، والاستثناءات صالحة', () => {
+    const names = readdirSync(join(root, 'supabase/migrations')).filter((f) => f.endsWith('.sql')).map((f) => f.replace(/\.sql$/, '')).sort();
     expect(names).toContain(LINT_AFTER);
-    const fresh = new Map(names.filter((n) => n > LINT_AFTER).map((n) => [n, lint(n, read(`supabase/migrations/${n}.sql`))]));
+    const appliedNow = new Set(Object.keys(JSON.parse(read('scripts/db/applied-manifest.json')).migrations));
+    const sqlOf = (n) => read(`supabase/migrations/${n}.sql`);
+    const fresh = new Map(names.filter((n) => n > LINT_AFTER || !appliedNow.has(n))
+      .map((n) => [n, lint(n, sqlOf(n), { applied: appliedNow, priorFunctions: priorFunctionsOf(n, sqlOf, names) })]));
     const { failures, stale } = judge(fresh, readAllow());
     expect(failures).toEqual([]);
     expect(stale).toEqual([]);
@@ -208,6 +227,9 @@ describe('النسخة قبل التطبيق (البند 3)', () => {
     expect(sh).toMatch(/to_regclass\(t\) is not null/);
     expect(sh).toMatch(/args\+=\("--table=\$t"\)/);
     expect(sh).toMatch(/لا جدول قائم من .*: لا نسخة قبل الترحيل\."; exit 0/);
+    // الوسم كلما ضُبط، ولو فُرّغ المخططان كاملين، فاسم نسخة ما قبل الترحيل db-premig-* دائمًا (RUNBOOK.md §4)
+    expect(sh).toMatch(/^if \[ -n "\$\{BACKUP_LABEL:-\}" \]; then\n  TAG="\$BACKUP_LABEL"/m);
+    expect(sh).not.toMatch(/TAG="\$\{BACKUP_LABEL:-tables\}"/);
     const wf = yaml.load(read('.github/workflows/migrate.yml'));
     const steps = wf.jobs.apply.steps.map((s) => s.name || s.uses);
     const at = (n) => steps.findIndex((s) => s && s.startsWith(n));
@@ -217,8 +239,14 @@ describe('النسخة قبل التطبيق (البند 3)', () => {
     const backup = wf.jobs.apply.steps.find((s) => s.name?.startsWith('Back up'));
     expect(backup.env.BACKUP_PREFIX).toBe('premigration');
     expect(backup.run).toMatch(/^bash scripts\/ops\/backup\.sh$/m);
-    // الأسرار بأسمائها كما في backup.yml، ولا قيمة في الملف
-    for (const k of ['SUPABASE_DB_URL', 'BACKUP_PUBLIC_KEY', 'R2_BUCKET']) expect(wf.jobs.apply.env[k]).toBe(`\${{ secrets.${k} }}`);
+    // الأسرار بأسمائها كما في backup.yml، ولا قيمة في الملف، وفي خطوتي الفحص والنسخ وحدهما لا في بيئة الوظيفة
+    const check = wf.jobs.apply.steps[0];
+    for (const k of ['SUPABASE_DB_URL', 'BACKUP_PUBLIC_KEY', 'BACKUP_PASSPHRASE', 'R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) {
+      expect(backup.env[k]).toBe(`\${{ secrets.${k} }}`);
+      expect(check.env[k]).toBe(`\${{ secrets.${k} }}`);
+      expect(wf.jobs.apply.env[k]).toBeUndefined();
+    }
+    expect(Object.keys(wf.jobs.apply.env).sort()).toEqual(['MIGRATIONS', 'MODE', 'SUPABASE_ACCESS_TOKEN']);
   });
 });
 
@@ -243,7 +271,9 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
     const expectStep = steps.findIndex((s) => s.run === 'node scripts/ops/pending-migrations.mjs --expect="$MIGRATIONS"');
     expect(expectStep).toBeGreaterThan(0);
     expect(expectStep).toBeLessThan(steps.findIndex((s) => s.name === 'Apply in order'));
-    expect(steps[0].run).toMatch(/apply-and-deploy" \] && \[ "\$GITHUB_REF" != "refs\/heads\/main"/);
+    // التطبيق بوضعيه من main وحده، ولو غاب قيد الفرع عن البيئة
+    expect(steps[0].run).toMatch(/if \[ "\$GITHUB_REF" != "refs\/heads\/main" \]; then/);
+    expect(steps[0].run).not.toMatch(/MODE" = "apply-and-deploy" \] && \[ "\$GITHUB_REF"/);
     const d = migrate.jobs.deploy;
     expect(d.needs).toBe('apply');
     expect(d.if).toMatch(/inputs\.mode == 'apply-and-deploy' && needs\.apply\.result == 'success'/);
@@ -322,5 +352,21 @@ describe('بنية الإنتاج في التكامل (البند 6)', () => {
     const sh = read('scripts/integration/apply-migrations.sh');
     expect(sh).toMatch(/production-baseline\.mjs --baseline "\$BASELINE"/);
     expect(sh).toMatch(/psql "\$DB_URL" -v ON_ERROR_STOP=1 -q -f "\$BASELINE"/);
+    // كل ترحيل بطلبات الإنتاج نفسها (applyPlan)، لا بـ psql -f للملف كما هو
+    expect(sh).toMatch(/node scripts\/integration\/apply-plan\.mjs "\$f" "\$dir"/);
+    expect(sh).not.toMatch(/-q -f "\$f"|-q -f "supabase\/migrations\/\$name\.sql"/);
+    expect(sh.match(/^\s*apply_file "/gm)).toHaveLength(2);
+  });
+  it('apply-plan.mjs يكتب طلبات applyPlan ملفًا لكل طلب', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+    const f = join(dir, 'm.sql');
+    writeFileSync(f, '-- migrate: no-transaction\ncreate index concurrently if not exists i on leaders.audit_log (at);\ninsert into leaders.schema_migrations (name) values (\'m\');\n');
+    const mode = execFileSync('node', [join(root, 'scripts/integration/apply-plan.mjs'), f, join(dir, 'out')], { encoding: 'utf8' }).trim();
+    expect(mode).toBe('no-transaction');
+    expect(readdirSync(join(dir, 'out'))).toEqual(['000.sql', '001.sql']);
+    writeFileSync(f, 'create table leaders.n ();');
+    execFileSync('node', [join(root, 'scripts/integration/apply-plan.mjs'), f, join(dir, 'tx')]);
+    expect(readFileSync(join(dir, 'tx/000.sql'), 'utf8')).toMatch(/^begin;\nset local lock_timeout = '3s';[\s\S]*create table leaders\.n \(\);[\s\S]*commit;\n$/);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
