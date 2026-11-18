@@ -13,7 +13,7 @@ import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.
 import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
-import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity, { CheckinHelp } from './Activities.jsx';
 import HowEvaluated from './HowEvaluated.jsx';
@@ -649,6 +649,31 @@ function Alongside({ stage, journey, children }) {
   );
 }
 
+// «خدمات متاحة لك» (T2، ب5.2): ما يطلبه من يريد حتى نهاية الرحلة (الاستشارة مثلًا)، منفصلًا عن تسلسل المراحل وعدها.
+// كل خدمة بطاقتها نفسها، وفيها الحجز وحده: يُخفى زره عند بلوغ حد الجلسات
+export function serviceLineAr(stage) {
+  if (stage.status === 'locked') return stage.lock_reason || 'تُتاح لاحقًا';
+  const act = (stage.items || []).map((it) => it.activity).find((a) => a && a.type === 'coaching' && a.max != null);
+  if (act) return act.at_max ? sessionsBookedAr(act.max, act.max) : `متاحة لك حتى نهاية رحلتك، ${sessionsBookedAr(act.used, act.max)}`;
+  return 'متاحة لك حتى نهاية رحلتك';
+}
+function Services({ list, children }) {
+  return (
+    <section className="card stack svc-shelf" aria-labelledby="svc-h" data-testid="services">
+      <div className="row between fold-h">
+        <h2 id="svc-h" className="as-h3">خدمات متاحة لك</h2>
+        <span className="small muted">لمن يريد، ولا تُحسب في تقدمك</span>
+      </div>
+      {list.map((s) => (
+        <div key={s.key} className="svc-item" data-service={s.key}>
+          <p className="small muted svc-line">{serviceLineAr(s)}</p>
+          <div className="timeline">{children(s)}</div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 // رأس الرحلة (T1): المرحلة الحالية من currentStages، وإن لم يبق نشطًا إلا المسار المستمر (المتتابعة أُنجزت والتالية تنتظره)
 // فهو ما يُشار إليه، فلا يبقى الرأس بلا «ماذا الآن». tracksNow للرأس وحده، فالموضع والعد بلاه كما هما
 export function heroNow(journey) {
@@ -660,7 +685,7 @@ export function heroNow(journey) {
 // «X من Y»، فلا يبقى طوره جاريًا والمشارك في طور بعده، ولا يضيء طوران معًا بسببه
 export function phaseRail(journey) {
   return PHASES.map((ph) => {
-    const st = journey.filter((s) => s.lane !== 'track' && (s.phase || 'qualification') === ph.key);
+    const st = journey.filter((s) => s.lane !== 'track' && s.lane !== 'service' && (s.phase || 'qualification') === ph.key);
     return { key: ph.key, title: ph.title, state: st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '' };
   });
 }
@@ -813,8 +838,10 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   const firstName = participant.full_name.split(' ')[0];
   // المرحلة عند الطلب أو الاختيارية لا تُحسب على المشارك إن لم يحتجها
   // والمسار المستمر (T1) يسير بجانب المراحل فلا يُعد فيها
-  const counted = journey.filter((s) => s.lane !== 'track' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
+  // والخدمة (T2) لمن يريد: خارج العد والتسلسل، في «خدمات متاحة لك»
+  const counted = journey.filter((s) => s.lane !== 'track' && s.lane !== 'service' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
   const doneCount = counted.filter((s) => s.status === 'done').length;
+  const services = journey.filter((s) => s.lane === 'service');
   // موعد المراجعة المعلن (D04) بصيغة الجملة؛ وسم المرحلة المرفوع «يوما عمل» يظهر وحده في خط الرحلة
   const reviewWait = APPROVAL_SLA_AR;
   let order = 0;
@@ -944,12 +971,21 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
             </Fold>
           )}
 
+          {services.length > 0 && (
+            <Services list={services}>
+              {(s) => (
+                <Stage key={s.key} stage={s} n="+" level={4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)}
+                  onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
+              )}
+            </Services>
+          )}
+
           <div className="section-title">
             <h2>مراحل الرحلة</h2>
             <span className="small muted">{me.progress}% من الرحلة</span>
         </div>
         {PHASES.map((ph, pi) => {
-          const inPhase = journey.filter((s) => (s.phase || 'qualification') === ph.key);
+          const inPhase = journey.filter((s) => s.lane !== 'service' && (s.phase || 'qualification') === ph.key);
           if (!inPhase.length) return null;
           // المسار المستمر (T1) كتلة بجانب المراحل بعد مرجعه، وخارج عد الطور
           const stages = inPhase.filter((s) => s.lane !== 'track');

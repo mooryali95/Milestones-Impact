@@ -145,7 +145,7 @@ function Video({ item, open, onRefresh }) {
   );
 }
 
-import { COACH_STATUS, countAr, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS, countAr, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, sessionsBookedAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
@@ -285,6 +285,10 @@ function Coaching({ item, open, onRefresh, setToast }) {
         </div>
       )}
       {open && a.can_book && !a.book_url && !a.instant && <p className="h">يحدد الموجّه موعد الجلسة ويصلك رابطها.</p>}
+      {/* حد الجلسات (T2): عند بلوغه يُخفى زر الحجز ويُقال لماذا */}
+      {a.max != null && (
+        <p className="h" data-testid="sessions-max">{a.at_max ? `${sessionsBookedAr(a.max, a.max)}، فلا حجز جديد.` : `${sessionsBookedAr(a.used, a.max, { avail: true })}.`}</p>
+      )}
       {book && (
         <div className="act-book">
           <p className="small muted">لا يظهر التقويم؟ <a href={a.book_url} target="_blank" rel="noopener noreferrer">افتحه في نافذة جديدة</a>، ثم عد واضغط «أنهيت الحجز».</p>

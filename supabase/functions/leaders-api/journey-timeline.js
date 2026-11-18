@@ -10,10 +10,10 @@
 import {
   ACTIVITY_KIND_AR, ACTIVITY_OWNER_AR, countAr, DIM_AR, LEVEL_AR, MODE_AR, PHASE_AR, TIMELINE_AR, TIMELINE_STATUS_AR,
 } from './labels.js';
-import { daysAr, dueBeforeAr, durationAr, LANE_AR, renderJourneyText, STAGE_TAG_AR, stageRules, untilAr } from './journey.js';
-import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
+import { daysAr, dueBeforeAr, durationAr, LANE_AR, renderJourneyText, SERVICE_NOTE_AR, serviceAvailAr, sessionsMaxAr, STAGE_TAG_AR, stageRules, untilAr } from './journey.js';
+import { completionSource, isUndated, SESSION_TBD_AR, sessionsMax } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
-import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planTrack, planWithRules } from './stage-windows.js';
+import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planService, planTrack, planWithRules } from './stage-windows.js';
 
 // غير الإلزامية (T0، تصور 2026-11-18 ب5.2): نمطها بكلمة واحدة على الخط والبطاقة، بإطار متقطع. الإلزامية بلا وسم
 export { STAGE_TAG_AR };
@@ -70,7 +70,9 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   const all = cohort ? planWithRules(shown, planSchedule(cohort)) : shown;
   // المسار المستمر (T1): صف مستقل بجانب السلسلة («مسارات مستمرة»)، فلا يأخذ خانة ولا يمد المحور ولا يدخل في عد المراحل
   const laneStages = all.filter(planTrack);
-  const stages = laneStages.length ? all.filter((s) => !planTrack(s)) : all;
+  // والخدمة (T2، ب5.2): صف «الخدمات» بلا شريط ولا أيام، فلا خانة لها ولا محور ولا موضع على المقياس
+  const serviceStages = all.filter(planService);
+  const stages = laneStages.length || serviceStages.length ? all.filter((s) => !planTrack(s) && !planService(s)) : all;
   const reqs = resolved?.requirements || [];
   const t = isoToday(today);
   const isCohort = !!cohort;
@@ -84,7 +86,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   // خطة الدفعة (cohortPlan) مصدر النوافذ والمدد، بقاعدة النهاية الشاملة (القرار 18). الدفعة بلا تاريخ ترسم مددها هي
   // (days في خطتها) نسبيًا من البداية الافتراضية، لا مدد البرنامج
   const realPlan = isCohort ? cohortPlan(all, cohort) : null;
-  const dated = isCohort && all.every((s) => realPlan.windows[s.key]);
+  const dated = isCohort && (serviceStages.length ? all.filter((s) => !planService(s)) : all).every((s) => realPlan.windows[s.key]);
   const plan = dated ? realPlan : cohortPlan(all, { starts_on: EPOCH, schedule: isCohort ? planDaysOnly(cohort?.schedule) : {} });
   const windows = plan.byKey;
   const start = dated ? stages.map((s) => windows[s.key].from).sort()[0] : EPOCH;
@@ -205,6 +207,17 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     };
   });
   for (const x of trackOut) stageByKey.set(x.key, x);
+  // صف الخدمات (T2): إتاحتها وحدها وحد جلساتها، بلا شريط ولا تاريخ ولا حالة. مؤشر الاستخدام من الخريطة في تبويب الدفعة
+  const serviceOut = serviceStages.map((s) => {
+    const r = stageRules(s);
+    const max = reqs.filter((q) => q.stage_key === s.key && q.active !== false && q.kind === 'coaching').map((q) => sessionsMax(q.config)).find((n) => n != null) ?? null;
+    return {
+      key: s.key, title: allTitle(s.key), phase: PHASES.includes(s.phase) ? s.phase : 'qualification', lane_kind: 'service', lane_ar: LANE_AR.service,
+      mode: r.mode, mode_ar: STAGE_TAG_AR[r.mode] || '', optional: true, avail_ar: serviceAvailAr(s, allTitle), max_sessions: max, max_ar: sessionsMaxAr(max),
+      note_ar: SERVICE_NOTE_AR, status: null, status_ar: '', window: null, window_ar: '', label: '', days: 0, empty: false, activities: [],
+    };
+  });
+  for (const x of serviceOut) stageByKey.set(x.key, x);
 
   // المحاور: من أول مراحلها إلى آخرها على المقياس نفسه
   const phases = PHASES.map((key) => {
@@ -238,12 +251,14 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     const owner = ownerOf(r);
     const dates = datedS.map((x) => {
       const d = sessionDay(x.starts_at);
-      const out = dated && (d < w.from || d > w.to);
+      const out = dated && !!w.from && (d < w.from || d > w.to);
       return { date: d, at: pos(day(d)), label: fmtDay(d), required: !!r.required, outside: out, session: x.id || null };
     }).sort((a, b) => a.date.localeCompare(b.date));
     const timing = owner === 'system' ? 'auto' : r.kind === 'workshop' ? (undatedN || !dates.length ? 'undated' : 'dated') : r.kind === 'coaching' ? 'booked' : 'self';
-    const until = dated ? ` حتى ${fmtDay(w.to)}` : '';
-    const when = timing === 'auto' ? `من حالة المشارك${dated ? ` خلال المرحلة حتى ${fmtDay(w.to)}` : ''}`
+    const until = dated && w.to ? ` حتى ${fmtDay(w.to)}` : '';
+    // الخدمة (T2) بلا نافذة: يحجزها من يريد حتى نهاية الرحلة
+    const when = st.lane_kind === 'service' ? `${timing === 'booked' ? 'يحجزه المشارك عند الحاجة' : 'عند الحاجة'} حتى نهاية الرحلة`
+      : timing === 'auto' ? `من حالة المشارك${dated ? ` خلال المرحلة حتى ${fmtDay(w.to)}` : ''}`
       : timing === 'booked' ? `يحجزه المشارك خلال المرحلة${until}`
         : timing === 'self' ? `خلال المرحلة${until}`
           : !isCohort ? TIMELINE_AR.program_undated
@@ -261,7 +276,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
       aria_ar: [title, `مرحلة ${st.title}`, kindAr, reqAr, mode ? MODE_AR[mode] : '', when, ACTIVITY_OWNER_AR[owner], level].filter(Boolean).join('، '),
     };
   });
-  for (const s of [...stageOut, ...trackOut]) {
+  for (const s of [...stageOut, ...trackOut, ...serviceOut]) {
     s.activities = activities.filter((a) => a.stage === s.key).map((a) => a.id);
     s.empty = !s.activities.length;
     s.undated = activities.some((a) => a.stage === s.key && a.undated);
@@ -332,6 +347,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
       note_ar: together ? `${titleOf.get(ks[0])} و${countAr(ks.length - 1, 'مرحلة تبدأ', 'مرحلتان تبدآن', 'مراحل تبدأ', 'مرحلة تبدأ')} معها في الأسابيع نفسها` : '' })),
     stages: stageOut, activities, ticks, today: todayOut, counts, cards, selected,
     ...(trackOut.length ? { tracks: trackOut, tracks_ar: 'مسارات مستمرة' } : {}),
+    ...(serviceOut.length ? { services: serviceOut, services_ar: 'الخدمات' } : {}),
   };
   // المقياس للسحب (D1، ب5.3): الخانات بأيامها ومواضعها، ومدى كل شريط بالأيام، ونهايات المحاور والرحلة. خاصية غير معدودة،
   // فلا تدخل في نسخ النموذج ولا لقطته (journey-legacy)، ويقرؤها وضع التحرير وحده عبر scalePos وscaleDay
