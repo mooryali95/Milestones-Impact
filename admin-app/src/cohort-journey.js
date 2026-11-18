@@ -377,15 +377,40 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
  * @param {{ scale: any, draft: any, key: string, kind: 'move' | 'end', shift?: number, pct?: number | null, over?: { zone?: string | null, key?: string | null } | null,
  *   snap?: 'near' | 'exact', stage?: any, title?: (k: string) => string }} o
  *  shift: الأيام (من لوحة المفاتيح)، أو pct: النقاط المئوية التي تحرّكها المؤشر من موضع الالتقاط (يُحوَّل بعكس المقياس)
- * @returns {{ none?: true, patch?: any, ghost?: [number, number], reject?: { code: string, msg: string, program?: boolean } }} */
+ * @returns {{ none?: true, patch?: any, ghost?: [number, number], applied?: number, reject?: { code: string, msg: string, program?: boolean } }}
+ *  applied: الأيام التي تحركها الطرف أو البداية فعلًا بعد الحدود، فلا يتراكم ضغط لوحة المفاتيح وراء الحد */
 export function dropToEdit({ scale, draft, key, kind, shift = 0, pct = null, over = null, snap = 'near', stage = null, title = (k) => k }) {
   const row = draft?.rows?.[key];
   const sp = scale?.spans?.[key];
   if (!row || !sp || row.off) return { reject: { code: 'off', msg: `«${title(key)}» موقوفة لهذه الدفعة، فلا تُسحب. أعدها بمفتاحها أولًا` } };
   const [f, e] = sp;
   const pos = (d) => scalePos(scale.slots, d);
-  // النقطة الجديدة بالأيام: من لوحة المفاتيح مباشرة، ومن المؤشر بعكس المقياس من موضع الطرف أو البداية
-  const moved = (d0) => (pct == null ? d0 + shift : scaleDay(scale.slots, pos(d0) + pct));
+  // النقطة الجديدة بالأيام: من لوحة المفاتيح مباشرة، ومن المؤشر بفرق عكس المقياس حول موضع الطرف أو البداية، لا بموضعه المطلق:
+  // داخل الخانات النتيجة نفسها، وما بعد آخر الخط (حيث يلتصق كل يوم بـ100%) يبقى اليوم الحقيقي ويمتد منه، والصفر لا يحرك شيئًا
+  // والطرف الذي بعد آخر الخط (مسار ينتهي مع نهاية الدفعة بعد نهاية السلسلة) يُرسم عند 100%: أيامه الزائدة تُقرأ في آخر نطاق من المسار
+  // بضعف مقياس آخر خانة، فالحركة الصغيرة تغيّر أيامًا قليلة، وما يسار هذا النطاق موضعه الظاهر نفسه (يلتصق بنهاية طور كما يُرى)
+  const lastS = scale.slots[scale.slots.length - 1];
+  const perPct = lastS?.width ? (lastS.days || 14) / lastS.width : 0;
+  const beyond = (d0) => !!lastS && d0 > lastS.to && perPct > 0;
+  const zoneOf = (d0) => Math.min(lastS.width, (d0 - lastS.to) / perPct);
+  const vpos = (d, d0 = e) => {
+    if (!beyond(d0)) return pos(d);
+    const z = zoneOf(d0), zd = scaleDay(scale.slots, 100 - z);
+    if (d <= zd) return pos(d);
+    if (d <= d0) return 100 - z + ((d - zd) / (d0 - zd)) * z;
+    return 100 + (d - d0) / perPct;
+  };
+  // الفرق بالأيام على خانات بلا فجوات: خانتان بينهما أيام تلتقيان في نقطة واحدة على المسار، فلا يقفز الطرف عبر الفجوة
+  const tight = [];
+  for (const x of scale.slots) { const from = tight.length ? tight[tight.length - 1].to : x.from; tight.push({ ...x, from, to: from + x.days }); }
+  const moved = (d0) => {
+    if (pct == null) return d0 + shift;
+    if (!beyond(d0)) return d0 + scaleDay(tight, pos(d0) + pct) - scaleDay(tight, pos(d0));
+    const p = 100 + pct, z = zoneOf(d0), zd = scaleDay(scale.slots, 100 - z);
+    if (p >= 100) return d0 + (p - 100) * perPct;
+    if (p <= 100 - z) return scaleDay(scale.slots, p);
+    return zd + ((p - (100 - z)) / z) * (d0 - zd);
+  };
   const lane = row.track ? 'track' : 'stage';
   const programMsg = row.track
     ? `«${title(key)}» مسار مستمر في البرنامج، وطبيعته يقررها البرنامج لكل دفعاته`
@@ -399,49 +424,64 @@ export function dropToEdit({ scale, draft, key, kind, shift = 0, pct = null, ove
     if (over?.key && over.key !== key && over.key !== row.with) {
       if (row.with_lock) return { reject: { code: 'with_lock', msg: row.with_lock.msg } };
       if (!row.with_options.some((o) => o.key === over.key)) {
-        return { reject: { code: 'with_target', msg: `لا ${lane === 'track' ? 'يبدأ' : 'تسير'} «${title(key)}» مع «${title(over.key)}»: المرجع مرحلة متتابعة تعمل قبلها في الترتيب${lane === 'track' ? '' : ' من محورها، وليست بوابة قبول'}` } };
+        return { reject: { code: 'with_target', msg: `لا ${lane === 'track' ? 'يبدأ' : 'تسير'} «${title(key)}» مع «${title(over.key)}»: المرجع يكون مرحلة متتابعة تعمل قبلها في الترتيب${lane === 'track' ? '' : ' من محورها، لا بوابة قبول'}` } };
       }
       const ts = scale.spans[over.key]?.[0] ?? f;
       return { patch: { with: { [key]: over.key } }, ghost: [ts, ts + (e - f)] };
     }
     if (!row.with) {
       if (Math.round(moved(f) - f) === 0) return { none: true, ghost: [f, e] };
+      // المسار بلا مرجع يبدأ مع بداية الرحلة: لا ما قبله ولا مدة تُغيَّر، وبدايته تتغير بإفلاته على مرحلة
+      if (row.track) return { reject: { code: 'sequential', msg: `«${title(key)}» يبدأ مع بداية الرحلة، فلا تُسحب بدايته وحدها. أفلته على مرحلة ليبدأ معها` } };
       return { reject: { code: 'sequential', msg: `«${title(key)}» تبدأ بعد ما قبلها، فلا تُسحب بدايتها. غيّر مدة ما قبلها، أو اسحب طرفها لتغيير مدتها` } };
     }
     const d = Math.round(moved(f) - f);
     const offset = clamp(row.offset + d, 0, row.offset_max);
-    if (offset === row.offset) return { none: true, ghost: [f, e] };
+    if (offset === row.offset) return { none: true, ghost: [f, e], applied: 0 };
     const dd = offset - row.offset;
-    return { patch: { offset: { [key]: offset } }, ghost: [f + dd, e + dd] };
+    return { patch: { offset: { [key]: offset } }, ghost: [f + dd, e + dd], applied: dd };
   }
   // سحب الطرف: المدة، أو نهاية المسار
   if (row.pinned) return { reject: { code: 'pinned', msg: `«${title(key)}» مثبتة بتاريخ (${row.days_ar})، فلا تتبع المدد. حرّرها بـ«حرّر التواريخ لتتبع المدد»` } };
-  const raw = moved(e);
-  const near = (target) => (snap === 'near' ? Math.abs(pos(target) - pos(raw)) <= DRAG_SNAP_PCT || Math.abs(target - raw) < 0.5 : Math.round(raw) === target);
+  const delta = moved(e) - e;
+  const raw = e + delta;
+  // القرب بالنقاط على المسار كما يقرؤها moved، فنهاية الطور الأخير ونهاية الرحلة بعده (كلتاهما عند 100% في الرسم) تُبلغان معًا
+  const gap = (t) => Math.abs(vpos(t) - vpos(raw));
+  const nearest = (list, tol) => list.filter((x) => gap(x[1]) <= tol || Math.abs(x[1] - raw) < 0.5)
+    .sort((a, b) => Math.abs(a[1] - raw) - Math.abs(b[1] - raw))[0] || null;
+  // ما لم يُطلب تغييره لا يتغير: الصفر لا شيء، والحد الأدنى لا يقلب اتجاه الحركة (الآنية لا تصير يومًا بالضغط إلى الأقدم)
+  const same = (n, cur) => n === cur || (n - cur) * (Math.round(raw) - e) < 0;
   if (row.track) {
-    // يلتصق بنهاية الرحلة ثم بنهاية طور (بنهاية مفتوحة: اليوم التالي لآخر يوم)
-    const targets = [['journey_end', scale.journey_end], ...Object.entries(scale.phase_ends || {}).map(([k, v]) => [`phase:${k}`, v])];
-    for (const [u, t] of targets) {
-      if (t > f && near(t)) {
-        if (row.until === u) return { none: true, ghost: [f, t] };
-        return { patch: { until: { [key]: u } }, ghost: [f, t] };
-      }
+    // يلتصق بأقرب نهاية: نهاية الرحلة أو نهاية طور (بنهاية مفتوحة: اليوم التالي لآخر يوم)، وبلوحة المفاتيح باليوم المطابق وحده
+    const targets = [['journey_end', scale.journey_end], ...Object.entries(scale.phase_ends || {}).map(([k, v]) => [`phase:${k}`, v])].filter(([, t]) => t > f);
+    const hit = snap === 'near' ? nearest(targets, DRAG_SNAP_PCT) : targets.find(([, t]) => Math.round(raw) === t) || null;
+    if (hit) {
+      const [u, t] = hit;
+      if (row.until === u) return { none: true, ghost: [f, e], applied: 0 };
+      return { patch: { until: { [key]: u } }, ghost: [f, t], applied: t - e };
     }
+    if (Math.round(delta) === 0) return { none: true, ghost: [f, e], applied: 0 };
     const n = clamp(Math.round(raw) - f, 1, PLAN_DAYS_MAX);
-    if (row.until === 'days' && n === row.days) return { none: true, ghost: [f, f + n] };
-    return { patch: { ...(row.until === 'days' ? {} : { until: { [key]: 'days' } }), days: { [key]: n } }, ghost: [f, f + n] };
+    if (same(n, e - f) || (row.until === 'days' && n === row.days)) return { none: true, ghost: [f, e], applied: 0 };
+    return { patch: { ...(row.until === 'days' ? {} : { until: { [key]: 'days' } }), days: { [key]: n } }, ghost: [f, f + n], applied: f + n - e };
   }
-  // المرحلة: يلتصق بحدود الخانات (بداية خانة أو نهايتها)، ثم باليوم الصحيح، ولا ينزل عن حدها
-  let end = Math.round(raw);
-  if (snap === 'near') {
-    const bounds = [...new Set(scale.slots.flatMap((x) => [x.from, x.to]))].filter((b) => b > f && b !== e);
-    const hit = bounds.find((b) => Math.abs(pos(b) - pos(raw)) <= DRAG_SNAP_PCT / 2);
-    if (hit != null) end = hit;
+  // المرحلة: المدة من مدتها في المسودة (ما يكتبه العداد) زائد الحركة، لا من الشريط المرسوم: الاختيارية وعند الطلب
+  // وعضو «تسير مع» الأطول من خانته يُرسم محصورًا فيها، ونافذتها الحقيقية أوسع
+  const clipped = e - f !== row.days;
+  let n = row.days + Math.round(delta);
+  if (snap === 'near' && !clipped) {
+    // يلتصق بأقرب حد خانة (بداية خانة أو نهايتها) في مداه، ولا يُعد حدًّا ما كان في موضع طرفه نفسه
+    // (خانتان بينهما أيام تلتقيان في نقطة واحدة على المسار، فلا يقفز الطرف عبر الفجوة)
+    const bounds = [...new Set(scale.slots.flatMap((x) => [x.from, x.to]))].filter((b) => b > f && b !== e && pos(b) !== pos(e) && (b - e) * delta > 0).map((b) => [b, b]);
+    const hit = nearest(bounds, DRAG_SNAP_PCT / 2);
+    if (hit) n = hit[1] - f;
   }
   const min = stage ? planDaysMin(stage) : 0;
-  const n = clamp(end - f, min, PLAN_DAYS_MAX);
-  if (n === row.days) return { none: true, ghost: [f, f + n] };
-  return { patch: { days: { [key]: n } }, ghost: [f, f + n] };
+  const want = n;
+  n = clamp(n, min, PLAN_DAYS_MAX);
+  if (n === row.days || (n - row.days) * (want - row.days) <= 0) return { none: true, ghost: [f, e], applied: 0 };
+  const end = Math.max(f, e + n - row.days);
+  return { patch: { days: { [key]: n } }, ghost: [f, end], applied: end - e };
 }
 
 /** تطبيق الحركة على المسودة بالفحص نفسه: المسودة الجديدة من planDraft، وما يظهر فيها من خطأ جديد (حارس الإيقاف أو التوازي

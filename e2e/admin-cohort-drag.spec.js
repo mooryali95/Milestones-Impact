@@ -248,6 +248,59 @@ test('لوحة المفاتيح بديل كامل: Enter يلتقط، وAlt مع
   await expect(panel.locator('.cj-savebar')).toContainText('تعديلان غير محفوظين');
 });
 
+test('لوحة المفاتيح: الإزاحة والمدة تجتمعان في التقاط واحد، وترك المقبض يلغي، و«حسنًا» يعيد التركيز إلى الشريط', async ({ page }) => {
+  await setup(page, 1440);
+  const panel = await startEdit(page);
+  const tl = panel.getByRole('region', { name: 'الخط الزمني للدفعة' });
+  const grip = tl.locator('[data-grip="reading"]');
+  await grip.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(tl.locator('.jt-drag-live')).toContainText('الحركة السابقة في المسودة');
+  await page.keyboard.press('Enter');
+  // مدة الأسبوع تُعرض بالأسابيع في العداد: ثمانية أيام 1.1
+  const rdays = panel.getByRole('article', { name: 'القراءة الموجهة' }).getByRole('textbox', { name: /^مدة القراءة الموجهة/ });
+  await expect(offset(panel, 'القراءة الموجهة')).toHaveValue('7');
+  await expect(rdays).toHaveValue('1.1');
+  await expect(tl.locator('.jt-drag-live')).toContainText('8 أيام، تبدأ بعد سبعة أيام');
+  // Esc بعد الجمع يعيد المسودة كما كانت عند الالتقاط
+  await grip.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Alt+ArrowLeft');
+  await expect(tl.locator('.jt-drag-live')).toContainText('الحركة السابقة في المسودة');
+  await page.keyboard.press('Escape');
+  await expect(tl.locator('.jt-drag-live')).toContainText('عادت المسودة كما كانت');
+  await expect(offset(panel, 'القراءة الموجهة')).toHaveValue('7');
+  await expect(rdays).toHaveValue('1.1');
+  // الضغط وراء الحد لا يتراكم: السهم المعاكس يعيد من أول ضغطة
+  await grip.focus();
+  await page.keyboard.press('Enter');
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowLeft');
+  await expect(tl.getByTestId('jt-ghost')).toContainText('بعد 14 يومًا');
+  await page.keyboard.press('ArrowRight');
+  await expect(tl.getByTestId('jt-ghost')).toContainText('بعد 13 يومًا');
+  // ترك المقبض يلغي الالتقاط: لا شبح ولا زر مضغوط
+  await page.keyboard.press('Tab');
+  await expect(tl.getByTestId('jt-ghost')).toBeHidden();
+  await expect(grip).toHaveAttribute('aria-pressed', 'false');
+  await expect(offset(panel, 'القراءة الموجهة')).toHaveValue('7');
+  // رفض بلوحة المفاتيح: سببه في التنبيه وحده، و«حسنًا» يعيد التركيز إلى مقبض الشريط
+  const sup = tl.locator('[data-grip="support"]');
+  await sup.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('Enter');
+  const note = panel.getByTestId('cj-drag-note');
+  await expect(note).toContainText('غيّر مدة ما قبلها');
+  await expect(tl.locator('.jt-drag-live')).toHaveText('لم يتغير شيء.');
+  if (SHOTS) { await note.scrollIntoViewIfNeeded(); await page.screenshot({ path: `${SHOTS}/admin-cohort-drag-kbd-reject-1440.png` }); }
+  await note.getByRole('button', { name: 'حسنًا' }).click();
+  await expect(note).toBeHidden();
+  await expect(sup).toBeFocused();
+});
+
 test('390: لا مقابض سحب، والعدادات وحدها', async ({ page }) => {
   await setup(page, 390);
   const panel = await startEdit(page);

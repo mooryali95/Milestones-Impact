@@ -91,7 +91,7 @@ const DRAG_THRESHOLD = 4;
 const DRAG_MIN_WIDTH = 640;
 
 /** مقابض السحب لشريط واحد: المقبض (لوحة المفاتيح، ويُسحب بالمؤشر أيضًا) وطرف المدة. pointer: بدء الحركة من المضيف */
-function Grips({ k, title, editable, pointer }) {
+function Grips({ k, title, editable, pointer, clicked }) {
   const bar = editable.bars?.[k];
   if (!bar) return null;
   const picked = editable.drag?.key === k && editable.drag?.kbd;
@@ -99,7 +99,8 @@ function Grips({ k, title, editable, pointer }) {
     <>
       <button type="button" className={`jt-grip${picked ? ' on' : ''}`} data-grip={k} aria-pressed={!!picked}
         aria-label={`حرّك «${title}»: Enter يلتقط، والأسهم يومًا وShift أسبوعًا، وAlt مع الأسهم للمدة، وEsc يلغي`}
-        aria-describedby={editable.hintId} onKeyDown={(e) => editable.onKey?.(k, e)} onPointerDown={(e) => pointer(e, k, 'move')}>
+        aria-describedby={editable.hintId} onKeyDown={(e) => editable.onKey?.(k, e)} onPointerDown={(e) => pointer(e, k, 'move')}
+        onClick={() => { if (clicked()) editable.onToggle?.(k); }} onBlur={() => editable.onBlur?.(k)}>
         <svg viewBox="0 0 12 16" width="10" height="14" aria-hidden="true" focusable="false"><g fill="currentColor"><circle cx="3" cy="3" r="1.4" /><circle cx="9" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="9" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="9" cy="13" r="1.4" /></g></svg>
       </button>
       <span className="jt-edge" data-edge={k} aria-hidden="true" title={bar.edge_ar || 'اسحب الطرف لتغيير المدة'} onPointerDown={(e) => pointer(e, k, 'end')} />
@@ -117,6 +118,8 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const [sel, setSel] = useState(model?.selected || null);
   const trackRef = useRef(null);
   const press = useRef(null);
+  // نقرة تأتي بعد سحب بالمؤشر على المقبض ليست التقاطًا بلوحة المفاتيح
+  const dragged = useRef(false);
   // موضع الشريط المسحوب على المسار (أعلاه وارتفاعه)، فيُرسم الشبح في صفه
   const [band, setBand] = useState(null);
   const dragging = !!editable?.drag;
@@ -172,8 +175,9 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
     if (box && box.getBoundingClientRect().width < DRAG_MIN_WIDTH) return;
     e.preventDefault();
     e.stopPropagation();
+    dragged.current = false;
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* المتصفح بلا التقاط: يكفي التتبع */ }
-    press.current = { k, kind, x: e.clientX, y: e.clientY, p0: pctOf(e.clientX), on: false, id: e.pointerId };
+    press.current = { k, kind, x: e.clientX, y: e.clientY, p0: pctOf(e.clientX), on: false, id: e.pointerId, grip: !!e.currentTarget.closest?.('.jt-grip') };
   };
   const onPointerMove = (e) => {
     const p = press.current;
@@ -190,7 +194,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
     const p = press.current;
     if (!p || p.id !== e.pointerId) return;
     press.current = null;
-    if (p.on) editable.onEnd?.({ pct: pctOf(e.clientX) - p.p0, over: overAt(e.clientX, e.clientY, p.k) });
+    if (p.on) { dragged.current = p.grip; editable.onEnd?.({ pct: pctOf(e.clientX) - p.p0, over: overAt(e.clientX, e.clientY, p.k) }); }
     else if (p.kind === 'move') e.target?.closest?.('.jt-grip')?.focus?.();
   };
   const onPointerCancel = () => { if (press.current?.on) editable.onCancel?.(); press.current = null; };
@@ -198,8 +202,10 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const kbdBand = editable?.drag?.kbd ? editable.drag.key : null;
   const ghost = editable?.drag?.ghost || null;
   const bandNow = band && editable?.drag && !editable.drag.kbd ? band : null;
-  const grips = (k, title) => (editable ? <Grips k={k} title={title} editable={editable} pointer={pointer} /> : null);
-  const barDrag = (k) => (editable?.bars?.[k] ? { onPointerDown: (e) => { if (!e.target.closest('button,a,input,select,.jt-edge')) pointer(e, k, 'move'); } } : {});
+  const clicked = () => { const was = dragged.current; dragged.current = false; return !was; };
+  const grips = (k, title) => (editable ? <Grips k={k} title={title} editable={editable} pointer={pointer} clicked={clicked} /> : null);
+  // جسم الشريط بالفأرة والقلم وحدهما: اللمس عليه يمرر الخط، ويُسحب باللمس من المقبض والطرف
+  const barDrag = (k) => (editable?.bars?.[k] ? { onPointerDown: (e) => { if (e.pointerType !== 'touch' && !e.target.closest('button,a,input,select,.jt-edge')) pointer(e, k, 'move'); } } : {});
   const lane = (s) => (
     <div key={s.key} data-stage={s.key} {...barDrag(s.key)} className={`jt-stage${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''} ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}
       style={s.together ? { marginInlineStart: `${s.lane_at}%`, width: `${Math.min(s.lane_width, 100 - s.lane_at)}%` } : undefined}>

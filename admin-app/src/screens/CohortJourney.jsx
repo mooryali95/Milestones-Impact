@@ -431,7 +431,8 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const [dragLive, setDragLive] = useState('');
   const canDrag = !!(edit && draft && canWrite && !lock && model && !model.empty && model.scale);
   useEffect(() => { if (!canDrag) setDrag(null); }, [canDrag]);
-  useEffect(() => { if (!edit) setDragNote(null); }, [edit]);
+  // خارج وضع التحرير لا يبقى سبب رفض ولا سطر قديم: الدخول التالي يبدأ بالتلميح الافتراضي (وهو وصف كل مقبض)
+  useEffect(() => { if (!edit) { setDragNote(null); setDragLive(''); } }, [edit]);
   const titleAt = (k) => [...(model?.stages || []), ...(model?.tracks || [])].find((x) => x.key === k)?.title || stageOf(k)?.title_ar || k;
   // الحركة إلى تعديل، ثم فحصه بالمسودة نفسها، ثم الشبح بتواريخه: ما يُرفض يُرسم أحمر بسببه
   const evalDrag = (g) => {
@@ -445,40 +446,61 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     const label = reject ? reject.msg : dragGhostAr((check?.draft || draft).rows[g.key], titleAt(g.key));
     return { ...g, res, check, reject, ghost: { at, width: Math.max(1, scalePos(model.scale.slots, Math.max(a, b)) - at), label, bad: !!reject } };
   };
+  // committed: لوحة المفاتيح كتبت جزءًا من الحركة في المسودة قبل أن تنتقل من البداية إلى المدة أو العكس، وorig ما كانت عليه عند الالتقاط
   const finishDrag = (g) => {
     setDrag(null);
     if (!g) return;
-    if (g.reject) { setDragNote({ ...g.reject, key: g.key }); setDragLive(`لم يتغير شيء: ${g.reject.msg}`); return; }
+    if (g.reject) {
+      if (g.committed) setEdit(g.orig);
+      setDragNote({ ...g.reject, key: g.key });
+      // السبب في التنبيه (role=alert) وحده، فلا يُقرأ مرتين
+      setDragLive('لم يتغير شيء.');
+      return;
+    }
     setDragNote(null);
-    if (g.check?.edit) {
-      setEdit(g.check.edit);
-      setDragLive(`${g.ghost.label}. التعديل في المسودة، واحفظه بـ«راجع واحفظ».`);
-    } else setDragLive('لم يتغير شيء.');
+    if (g.check?.edit) setEdit(g.check.edit);
+    if (g.check?.edit || g.committed) setDragLive(`${g.ghost.label}. التعديل في المسودة، واحفظه بـ«راجع واحفظ».`);
+    else setDragLive('لم يتغير شيء.');
   };
-  const cancelDrag = () => { setDrag(null); setDragLive('أُلغي السحب، ولم يتغير شيء.'); };
+  const cancelDrag = () => {
+    const g = dragRef.current;
+    setDrag(null);
+    if (g?.committed) { setEdit(g.orig); setDragLive('أُلغي السحب، وعادت المسودة كما كانت قبل الالتقاط.'); } else setDragLive('أُلغي السحب، ولم يتغير شيء.');
+  };
+  // لوحة المفاتيح: الحركة بما تحرك فعلًا بعد الحدود (applied)، فالسهم المعاكس يعيدها من أول ضغطة
+  const kbdEval = (g) => { const n = evalDrag(g); const a = n.res?.applied; return a == null ? n : { ...n, shift: a }; };
   const bars = canDrag ? Object.fromEntries([...model.stages, ...(model.tracks || [])].filter((x) => draft.rows[x.key] && !draft.rows[x.key].off)
     .map((x) => [x.key, { edge_ar: draft.rows[x.key].track ? 'اسحب الطرف لتغيير نهايته (يلتصق بنهاية الطور والرحلة)' : 'اسحب الطرف لتغيير المدة' }])) : null;
   const dragRef = useRef(null);
   dragRef.current = drag;
+  // بعد أن تُكتب الحركة السابقة في المسودة تتجدد المسودة والمقياس، فتُحسب الحركة الجديدة عليهما
+  useEffect(() => {
+    const g = dragRef.current;
+    if (!g?.kbd || !g.rebase || !canDrag) return;
+    const n = kbdEval({ ...g, rebase: false });
+    setDrag(n);
+    setDragLive(`الحركة السابقة في المسودة. ${n.ghost.label}`);
+  }, [draft]); // eslint-disable-line
   const editable = canDrag ? {
     bars, drag, hintId: 'cj-drag-hint', live: dragLive,
     onStart: ({ key, kind }) => { setDragNote(null); setDrag(evalDrag({ key, kind, pct: 0 })); },
     onMove: ({ pct, over }) => { const g = dragRef.current; if (g && !g.kbd) setDrag(evalDrag({ ...g, pct, over })); },
     onEnd: ({ pct, over }) => { const g = dragRef.current; if (g && !g.kbd) finishDrag(evalDrag({ ...g, pct, over })); },
     onCancel: cancelDrag,
-    // لوحة المفاتيح (WCAG 2.5.7): Enter أو مسافة يلتقط ويُفلت، والأسهم يومًا وShift أسبوعًا، وAlt للمدة، وEsc يلغي. RTL: اليسار لاحق
+    // لوحة المفاتيح (WCAG 2.5.7): نقرة المقبض تلتقط وتُفلت (Enter ومسافة، ونقرة قارئ الشاشة في وضع التصفح، وهي click لا keydown)،
+    // والأسهم يومًا وShift أسبوعًا، وAlt للمدة، وEsc يلغي. RTL: اليسار لاحق
+    onToggle: (key) => {
+      const g = dragRef.current;
+      if (g?.kbd && g.key === key) { finishDrag(g); return; }
+      setDragNote(null);
+      setDrag(evalDrag({ key, kind: 'move', shift: 0, kbd: true, orig: edit }));
+      setDragLive(`التقطت «${titleAt(key)}». الأسهم تحرك بدايتها يومًا وShift أسبوعًا، وAlt مع الأسهم يغير المدة، والحركتان تجتمعان، وEnter يُفلت، وEsc يلغي.`);
+    },
+    // التركيز يغادر المقبض الملتقط (Tab أو نقرة في غيره أو «راجع واحفظ»): يُلغى الالتقاط، فلا يبقى شبح لا يطابق المسودة
+    onBlur: (key) => { const g = dragRef.current; if (g?.kbd && g.key === key) cancelDrag(); },
     onKey: (key, e) => {
       const g = dragRef.current;
       const picked = g?.kbd && g.key === key;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        if (picked) { finishDrag(g); return; }
-        setDragNote(null);
-        const n = evalDrag({ key, kind: 'move', shift: 0, kbd: true });
-        setDrag(n);
-        setDragLive(`التقطت «${titleAt(key)}». الأسهم تحرك بدايتها يومًا وShift أسبوعًا، وAlt مع الأسهم يغير المدة، وEnter يُفلت، وEsc يلغي.`);
-        return;
-      }
       if (!picked) return;
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDrag(); return; }
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -487,9 +509,16 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       const later = rtl ? e.key === 'ArrowLeft' : e.key === 'ArrowRight';
       const step = (later ? 1 : -1) * (e.shiftKey ? 7 : 1);
       const kind = e.altKey ? 'end' : 'move';
-      const n = evalDrag({ ...g, kind, shift: (g.kind === kind ? g.shift || 0 : 0) + step });
+      if (g.kind !== kind && g.shift && g.check?.edit) {
+        // من البداية إلى المدة أو العكس: الحركة السابقة تُكتب في المسودة أولًا، والجديدة تُحسب عليها بعد أن تتجدد (أثر rebase)
+        setEdit(g.check.edit);
+        setDrag({ ...g, kind, shift: step, rebase: true, committed: true, check: null, res: null, reject: null });
+        return;
+      }
+      const dropped = g.kind !== kind && g.shift && g.reject ? g.reject.msg : '';
+      const n = kbdEval({ ...g, kind, shift: (g.kind === kind ? g.shift || 0 : 0) + step });
       setDrag(n);
-      setDragLive(n.ghost.label);
+      setDragLive(dropped ? `لم تُحسب الحركة السابقة: ${String(dropped).replace(/[.،\s]+$/, '')}. ${n.ghost.label}` : n.ghost.label);
     },
   } : null;
   // القفز إلى البطاقة: التركيز البرمجي بعد نقرة الفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة
@@ -681,7 +710,13 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       {dragNote && (
         <p className="cj-alert cj-drag-note" role="alert" data-testid="cj-drag-note"><span aria-hidden="true">!</span>
           <span>{String(dragNote.msg).replace(/[.،\s]+$/, '')}. لم تتغير المسودة.{dragNote.program && on.journey && <> <button type="button" className="la-link" onClick={() => on.journey()}>غيّرها في البرنامج</button></>}
-            {' '}<button type="button" className="la-link" onClick={() => setDragNote(null)}>حسنًا</button></span></p>
+            {' '}<button type="button" className="la-link" onClick={() => {
+              // التركيز إلى الشريط المرفوض قبل أن يختفي الزر، وإلا إلى الخط نفسه، فلا يسقط إلى أول الصفحة
+              const k = dragNote.key;
+              const el = (k && document.querySelector(`[data-grip="${CSS.escape(k)}"]`)) || document.querySelector('.jt-scroll');
+              el?.focus?.();
+              setDragNote(null);
+            }}>حسنًا</button></span></p>
       )}
 
       {lanes.phases.length > 0 && (

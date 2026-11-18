@@ -151,6 +151,84 @@ describe('dropToEdit: كل حركة إلى تعديل في المسودة', () =
   });
 });
 
+describe('مراجعة D1: حدود السحب', () => {
+  // ممر عند الطلب أطول من خانته (30 يومًا مع تدريب 14): بين خانة التدريب والتي بعدها أيام، والممر يُرسم محصورًا في خانته
+  const gapStages = stages.map((s) => (s.key === 'reading' ? { ...s, duration_days: 30, rules: { mode: 'on_demand', unlock: 'with', with: 'training' } } : s));
+  const gdef = { stages: gapStages, requirements: [], sessions: [] };
+  const gsetup = () => {
+    const draft = planDraft({ def: gdef, cohort, edit: EMPTY });
+    const model = cohortTimeline(gdef, draft.cohort, '2026-11-16');
+    return { draft, scale: model.scale };
+  };
+  const gdrop = (ctx, o) => dropToEdit({ scale: ctx.scale, draft: ctx.draft, title, snap: 'near', pct: null, shift: 0, ...o, stage: gapStages.find((s) => s.key === o.key) });
+  it('حدان في موضع واحد على المسار لا يقفز إليه الطرف عبر الفجوة: الصفر لا شيء', () => {
+    const ctx = gsetup();
+    expect(gdrop(ctx, { key: 'training', kind: 'end', pct: 0 }).none).toBe(true);
+    expect(gdrop(ctx, { key: 'training', kind: 'end', pct: 0.1 }).none).toBe(true);
+  });
+  it('الممر الأوسع من خانته: المدة من مدته في المسودة زائد الحركة، لا من الشريط المحصور', () => {
+    const ctx = gsetup();
+    const [f, e] = ctx.scale.spans.reading;
+    expect(ctx.draft.rows.reading.days).toBe(30);
+    expect(e - f).toBeLessThan(30);
+    expect(gdrop(ctx, { key: 'reading', kind: 'end', shift: 0, snap: 'exact' }).none).toBe(true);
+    expect(gdrop(ctx, { key: 'reading', kind: 'end', shift: 1, snap: 'exact' }).patch).toEqual({ days: { reading: 31 } });
+    expect(gdrop(ctx, { key: 'reading', kind: 'end', shift: -1, snap: 'exact' }).patch).toEqual({ days: { reading: 29 } });
+    expect(gdrop(ctx, { key: 'reading', kind: 'end', pct: 0 }).none).toBe(true);
+  });
+  it('المرحلة الآنية: لا حركة لا تعديل، والضغط إلى الأقدم لا يجعلها يومًا', () => {
+    const ctx = setup();
+    expect(ctx.draft.rows.profile.days).toBe(0);
+    for (const o of [{ shift: 0, snap: 'exact' }, { shift: -1, snap: 'exact' }, { pct: 0 }]) {
+      expect(drop({ ctx, key: 'profile', kind: 'end', ...o }).none).toBe(true);
+    }
+    expect(drop({ ctx, key: 'profile', kind: 'end', shift: 1, snap: 'exact' }).patch).toEqual({ days: { profile: 1 } });
+  });
+  it('طرف المسار بعد آخر الخط: الحركة الصغيرة تغير أيامًا قليلة من نهايته الحقيقية، ونهاية الطور الأخير تُبلغ', () => {
+    const ctx = setup();
+    const s = ctx.scale;
+    const [f, e] = s.spans.ojt;
+    expect(e).toBe(s.journey_end);
+    expect(e).toBeGreaterThan(s.end);
+    for (const p of [-1, -1.3, -2]) {
+      const r = drop({ ctx, key: 'ojt', kind: 'end', pct: p });
+      const end = r.patch?.days ? f + r.patch.days.ojt : r.ghost[1];
+      expect(end).toBeGreaterThan(e - 15);
+      expect(end).toBeLessThanOrEqual(e);
+    }
+    // نهاية طور الأثر (نهاية السلسلة) قبل نهاية الرحلة، وكلتاهما عند 100% في الرسم: يُبلغ بالسحب نحوها
+    let hit = null;
+    for (let p = -0.1; p > -16 && !hit; p -= 0.1) {
+      const r = drop({ ctx, key: 'ojt', kind: 'end', pct: p });
+      if (r.patch?.until?.ojt === 'phase:impact') hit = r;
+    }
+    expect(hit?.ghost).toEqual([f, s.phase_ends.impact]);
+  });
+  it('لوحة المفاتيح: الحركة الفعلية بعد الحدود (applied)، فلا يتراكم الضغط وراء الحد', () => {
+    const ctx = setup();
+    const r = drop({ ctx, key: 'reading', kind: 'move', shift: 20, snap: 'exact' });
+    expect(r.patch).toEqual({ offset: { reading: 14 } });
+    expect(r.applied).toBe(14);
+    expect(drop({ ctx, key: 'training', kind: 'end', shift: 3, snap: 'exact' }).applied).toBe(3);
+  });
+  it('المسار بلا مرجع يبدأ مع بداية الرحلة: رسالته عن المسار لا عن «ما قبلها»', () => {
+    const noRef = stages.map((s) => (s.key === 'ojt' ? { ...s, rules: { lane: 'track', until: 'journey_end' } } : s));
+    const d2 = { stages: noRef, requirements: [], sessions: [] };
+    const draft = planDraft({ def: d2, cohort, edit: EMPTY });
+    const model = cohortTimeline(d2, draft.cohort, '2026-11-16');
+    const r = dropToEdit({ scale: model.scale, draft, key: 'ojt', kind: 'move', pct: 25, title });
+    expect(r.reject.code).toBe('sequential');
+    expect(r.reject.msg).toContain('يبدأ مع بداية الرحلة');
+    expect(r.reject.msg).not.toContain('ما قبلها');
+  });
+  it('رفض المرجع بصيغة الشرط لا الخبر', () => {
+    const ctx = setup();
+    const bad = drop({ ctx, key: 'final', kind: 'move', pct: 0, over: { zone: 'stages', key: 'approval' } });
+    expect(bad.reject.msg).toContain('المرجع يكون مرحلة متتابعة');
+    expect(bad.reject.msg).not.toContain('وليست بوابة');
+  });
+});
+
 describe('الرفض: بسببه، ولا تتغير المسودة', () => {
   it('مرحلة في «مسارات مستمرة» أو «الخدمات»: طبيعتها للبرنامج، برابط «غيّرها في البرنامج»', () => {
     const ctx = setup();
