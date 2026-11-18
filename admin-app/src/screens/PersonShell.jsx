@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { date, STATUS, trackOfPlacements } from '../leaders.js';
 import { FileFlags } from './PersonFile.jsx';
+import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
 
 export const TABS = [
   ['decision', 'القرار'],
@@ -54,12 +55,14 @@ export function primaryAction(r, canWrite) {
 export function glance(r) {
   const p = r.participant;
   const journey = r.journey || [];
-  const active = journey.find((s) => s.status === 'active');
+  // المرحلة الحالية كما يراها المشارك (currentStages، R3b): ما يسير معًا نشطًا يُسمى كله
+  const cur = currentStages(journey);
+  const active = cur.stage?.status === 'active' ? cur.stages.map((s) => s.title_ar).join(' و') : null;
   const done = journey.filter((s) => s.status === 'done').length;
   const sessions = r.sessions || [];
   return [
     ['التقدم', `${r.progress || 0}%`, journey.length ? `${done} من ${journey.length} مراحل` : ''],
-    ['المرحلة الحالية', active?.title_ar || (journey.length && done === journey.length ? 'أتم الرحلة' : '·'), ''],
+    ['المرحلة الحالية', active || (journey.length && done === journey.length ? 'أتم الرحلة' : '·'), ''],
     ['آخر دخول', p.last_login_at ? date(p.last_login_at) : 'لم يدخل', ''],
     ['سجّل', date(p.created_at), ''],
     ['كتاب القائد', `${(r.book || []).length} باب`, r.points ? `${r.points.rank?.title || ''} · ${r.points.total || 0} نقطة` : ''],

@@ -9,6 +9,7 @@ import { levelOf } from '../labels.js';
 import { stepTitle } from '../Onboarding.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { flagsOf, programPackageAr } from '../features.js';
+import { planSpanDays } from '../../../supabase/functions/leaders-api/stage-windows.js';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -139,10 +140,11 @@ export default function Paywall({ item, me, onUpdate }) {
   );
 }
 
-// المسار المعتمد من مصدره (D04): مراحل الرحلة وأبوابها ونماذجها ومدتها كما يبنيها الخادم لمستوى المشارك
+// المسار المعتمد من مصدره (D04): مراحل الرحلة وأبوابها ونماذجها ومدتها كما يبنيها الخادم لمستوى المشارك.
+// المدة من خطة الرحلة (planSpanDays، R3b): المراحل التي تسير معًا تأخذ أطولها بإزاحتها لا مجموعها
 export function pathOf(journey = []) {
   const items = journey.flatMap((s) => s.items || []);
-  const days = journey.reduce((t, s) => t + (Number(s.duration_days) || 0), 0);
+  const days = planSpanDays(journey);
   return {
     stages: journey.length,
     readings: items.filter((i) => i.kind === 'reading').length,
