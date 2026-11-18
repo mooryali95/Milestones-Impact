@@ -142,13 +142,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   const totalWeight = acc || 1;
   for (const slot of slots) { slot.at = round((slot.start / totalWeight) * 100); slot.width = round((slot.weight / totalWeight) * 100); }
   // موضع يوم على المسار بالدالة نفسها: داخل خانته بنسبة أيامها، وما بين الخانات يلتصق بحدها
-  const pos = (d) => {
-    for (const s of slots) {
-      if (d < s.from) return s.at;
-      if (d <= s.to) return round(s.at + (s.days ? ((d - s.from) / s.days) * s.width : 0));
-    }
-    return 100;
-  };
+  const pos = (d) => scalePos(slots, d);
   // النهاية والمدة من النوافذ نفسها لا من الخانات: أبعد نهاية بين كل المراحل
   const end = Math.max(...stages.map((s) => span(s.key)[1]));
   const totalDays = end - Math.min(...stages.map((s) => span(s.key)[0]));
@@ -330,7 +324,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   // اللوحة تبدأ بأول نشاط ينقصه موعد في الدفعة، وإلا أول نشاط في المرحلة الجارية، وإلا أول نشاط
   const selected = (activities.find((a) => a.undated) || activities.find((a) => stageByKey.get(a.stage).status === 'active') || activities[0])?.id || null;
 
-  return {
+  const out = {
     ...base, dated, empty: false, total_days: totalDays, total_label: totalLabel,
     start: dated ? start : null, end: dated ? endIso : null,
     together_ar: TIMELINE_AR.together, outside_ar: TIMELINE_AR.outside,
@@ -339,4 +333,50 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     stages: stageOut, activities, ticks, today: todayOut, counts, cards, selected,
     ...(trackOut.length ? { tracks: trackOut, tracks_ar: 'مسارات مستمرة' } : {}),
   };
+  // المقياس للسحب (D1، ب5.3): الخانات بأيامها ومواضعها، ومدى كل شريط بالأيام، ونهايات المحاور والرحلة. خاصية غير معدودة،
+  // فلا تدخل في نسخ النموذج ولا لقطته (journey-legacy)، ويقرؤها وضع التحرير وحده عبر scalePos وscaleDay
+  const spans = {};
+  for (const s of stages) spans[s.key] = place(s.key);
+  for (const s of laneStages) spans[s.key] = span(s.key);
+  const phaseEnds = {};
+  for (const ph of PHASES) {
+    const list = stages.filter((s) => (PHASES.includes(s.phase) ? s.phase : 'qualification') === ph);
+    if (list.length) phaseEnds[ph] = Math.max(...list.map((s) => place(s.key)[1]));
+  }
+  const endsOn = isCohort && dated && !cohort.is_default && cohort.ends_on ? String(cohort.ends_on).slice(0, 10) : null;
+  Object.defineProperty(out, 'scale', {
+    enumerable: false,
+    value: Object.freeze({
+      start, dated, end, journey_end: endsOn ? day(endsOn) + 1 : end, phase_ends: phaseEnds, spans,
+      slots: slots.map(({ key, from, to, days, at, width }) => ({ key, from, to, days, at, width })),
+    }),
+  });
+  return out;
+}
+
+/** موضع يوم (من بداية الخط، نهاية مفتوحة) بالنسبة المئوية على المسار: داخل خانته بنسبة أيامها، وما بين الخانات يلتصق بحدها.
+ * رتيبة غير متناقصة، والخانة أقلها 14 يومًا عرضًا (timelineWeight) فالبكسل لا يساوي اليوم
+ * @param {{ from: number, to: number, days: number, at: number, width: number }[]} slots @param {number} d */
+export function scalePos(slots, d) {
+  for (const s of slots) {
+    if (d < s.from) return s.at;
+    if (d <= s.to) return round(s.at + (s.days ? ((d - s.from) / s.days) * s.width : 0));
+  }
+  return 100;
+}
+
+/** عكس scalePos قطعة قطعة (D1): اليوم (عددًا حقيقيًا) عند نسبة على المسار. داخل الخانة خطي بأيامها، والخانة الآنية (0 يوم)
+ * يومها وحده، وقبل البداية وبعد النهاية امتداد بنسبة أيام أقرب خانة لعرضها، فيُسحب الطرف إلى ما بعد آخر الخط.
+ * scaleDay(scalePos(d)) يقرَّب إلى d لكل يوم داخل الخانات، ويلتصق المستدعي باليوم الصحيح (dropToEdit)
+ * @param {{ from: number, to: number, days: number, at: number, width: number }[]} slots @param {number} pct */
+export function scaleDay(slots, pct) {
+  if (!slots?.length) return 0;
+  // أيام كل نقطة مئوية: بأيام الخانة إن كان لها أيام، وإلا بأقل عرض (14 يومًا) على عرضها
+  const per = (s) => (s.width ? (s.days || 14) / s.width : 0);
+  const first = slots[0], last = slots[slots.length - 1];
+  if (pct < first.at) return first.from - (first.at - pct) * per(first);
+  for (const s of slots) {
+    if (pct <= s.at + s.width) return s.days ? s.from + ((pct - s.at) / s.width) * s.days : s.from;
+  }
+  return last.to + (pct - (last.at + last.width)) * per(last);
 }

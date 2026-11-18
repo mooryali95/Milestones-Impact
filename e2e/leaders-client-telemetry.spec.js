@@ -74,7 +74,11 @@ test('فتح بلا اتصال يعرض آخر ملخص للرحلة للقرا�
   // الإخفاق محفوظ في طابور الجهاز ولم يُرسل بعد
   await expect.poll(async () => JSON.parse((await stored(page, 'mi_leaders_client_events')) || '[]').map((e) => `${e.kind}:${e.act}`)).toContain('offline:me');
   expect(state.events).toEqual([]);
-  if (SHOTS) { await page.waitForTimeout(300); await page.screenshot({ path: `${SHOTS}/last-known-reconnecting-390.png`, fullPage: true }); }
+  if (SHOTS) { await page.waitForTimeout(300); await page.screenshot({ path: `${SHOTS}/last-known-reconnecting-390.png`, fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 }); await page.waitForTimeout(300);
+    await page.screenshot({ path: `${SHOTS}/last-known-reconnecting-1440.png`, fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+  }
 
   await context.setOffline(false);
   await journeyShown(page);

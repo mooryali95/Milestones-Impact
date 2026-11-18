@@ -157,8 +157,9 @@ describe('طابور الأحداث وإرساله (telemetry.js)', () => {
     expect(queued()).toHaveLength(5);
   });
   it('الدفعة تُقص تحت سقف الجسم: نص بعلامات تنصيص يتضاعف في JSON، وما زاد يبقى في الطابور لا يُسقط', async () => {
-    const msg = `Unexpected token '<', "<!DOCTYPE "... is not valid JSON \\ "\\" `.repeat(6);
-    for (let i = 0; i < BATCH_MAX; i += 1) report('error', { act: `page${i}`, message: `${i} ${msg}` }, 3_000_000 + i);
+    // أسوأ حال واقعي: 160 حرفًا كلها علامات تنصيص وشرطات مائلة (تتضاعف في JSON) واسم فعل بطوله الأقصى
+    const msg = `Unexpected token '<', "<!DOCTYPE "...${'"\\'.repeat(80)}`;
+    for (let i = 0; i < BATCH_MAX; i += 1) report('error', { act: `page-${String.fromCharCode(97 + i)}${'x'.repeat(54)}`, message: msg }, 3_000_000 + i);
     expect(queued()).toHaveLength(BATCH_MAX);
     const all = JSON.stringify({ action: 'client.event', events: queued() });
     expect(all.length).toBeGreaterThan(CLIENT_EVENT_BODY_CHARS);
