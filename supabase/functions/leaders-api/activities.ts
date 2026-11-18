@@ -248,13 +248,16 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   if (viaReceipt ? !receipt : !parsed) throw new Fail(viaReceipt ? RECEIPT_INVALID : 'رمز الحضور غير صالح', 400, viaReceipt ? 'receipt_invalid' : 'qr_invalid');
   const s = must(await db.from('workshop_sessions').select('*').eq('id', viaReceipt ? receipt!.sessionId : parsed!.sessionId).maybeSingle());
   if (!s) throw new Fail(viaReceipt ? RECEIPT_INVALID : 'رمز الحضور غير صالح', 400, viaReceipt ? 'receipt_invalid' : 'qr_invalid');
+  let expired = false;
   if (viaReceipt) {
     const v = await verifyScanReceipt(String(b.r), s.secret);
+    expired = v.expired;
     if (!v.valid) throw new Fail(RECEIPT_INVALID, 400, 'receipt_invalid');
-    if (v.expired) throw new Fail('مضت أكثر من ربع ساعة على المسح، امسح الرمز المعروض الآن', 400, 'receipt_expired');
   } else if (!(await verifyQrToken(String(b.t), s.secret))) throw new Fail('انتهت صلاحية الرمز، امسح الرمز المعروض الآن', 400, 'qr_expired');
   if (isUndated(s)) throw new Fail('موعد هذه الجلسة لم يُحدد بعد، فلا يُسجل حضورها الآن', 400, 'undated');
   if (!checkinOpen(s)) throw new Fail('تسجيل الحضور لهذه الجلسة غير متاح الآن', 400, 'closed');
+  // انتهاء الإيصال بعد فحص النافذة: من مسح قبل الإغلاق بدقائق ودخل بعده يُقال له إن النافذة أُغلقت، لا إن ربع ساعة مضت
+  if (expired) throw new Fail('مضت أكثر من ربع ساعة على المسح، امسح الرمز المعروض الآن', 400, 'receipt_expired');
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
   if (viaReceipt) await consumeReceipt(receipt!.id, s.id, p.id);
@@ -269,7 +272,8 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
 async function consumeReceipt(id: string, sessionId: string, participantId: string) {
   const { data, error } = await db.from('workshop_scan_receipts').update({ participant_id: participantId, consumed_at: new Date().toISOString() })
     .eq('id', id).eq('session_id', sessionId).is('consumed_at', null).select('id');
-  if (error) throw new Fail(RECEIPT_INVALID, 400, 'receipt_invalid');
+  // خطأ القاعدة (مهلة، انقطاع) خطأ خادم يُعاد معه، لا رفض نهائي يضيّع إيصالًا صالحًا
+  if (error) must({ data, error });
   if (data?.length) return;
   const row = must(await db.from('workshop_scan_receipts').select('participant_id').eq('id', id).eq('session_id', sessionId).maybeSingle()) as any;
   if (!row) throw new Fail(RECEIPT_INVALID, 400, 'receipt_invalid');

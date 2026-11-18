@@ -385,7 +385,7 @@ function Participant() {
   // D18: من لم يوافق قط يوافق مرة، ومن وافق قبل آخر نسخة جوهرية يرى ما تغيّر ويوافق أو يؤجل (الحالة من الخادم)
   else if (consentNeed === 'first' && !me.participant.is_demo) screen = <Consent consent={me.participant.consent} onAccepted={accept} />;
   // الحضور قبل تجديد الموافقة القابل للتأجيل (W1): من في القاعة يُسجَّل أولًا، ويرى التجديد بعده
-  else if (pendingCheckin) screen = <CheckIn token={pendingCheckin.t} receipt={pendingCheckin.r} onDone={async () => { checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
+  else if (pendingCheckin) screen = <CheckIn token={pendingCheckin.t} receipt={pendingCheckin.r} onDone={async ({ keep } = {}) => { if (!keep) checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (consentNeed === 'renew' && !me.participant.is_demo && !consentLater) screen = <Consent consent={me.participant.consent} onAccepted={accept} onLater={() => setConsentLater(true)} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {

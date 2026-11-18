@@ -149,6 +149,7 @@ import { COACH_STATUS, countAr, DIMENSIONS, READ_STATUS, SESSION_MODE_AR, SUBMIS
 import { STATUS_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
+import { RETRYABLE, sentence } from '../checkin.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'امسح رمز الحضور الذي يعرضه المدرب في الجلسة بكاميرا جوالك.',
@@ -412,9 +413,11 @@ export default function Activity({ item, open, onUpdate, onHandbook, onCapstone,
 // بالرمز نفسه لمن مسح وهو داخل، أو بإيصال المسح لمن مسح قبل دخوله (checkin.js)
 export function CheckIn({ token, receipt, onDone }) {
   const [state, setState] = useState({ busy: true });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    call('workshop.checkin', receipt ? { r: receipt } : { t: token }).then((r) => setState(r.success ? { ok: r } : { error: r.message }));
-  }, [token, receipt]);
+    setState({ busy: true });
+    call('workshop.checkin', receipt ? { r: receipt } : { t: token }).then((r) => setState(r.success ? { ok: r } : { error: r.message, retry: RETRYABLE.has(r.code) }));
+  }, [token, receipt, attempt]);
   return (
     <div className="page narrow">
       <section className="card checkin">
@@ -428,9 +431,12 @@ export function CheckIn({ token, receipt, onDone }) {
         {state.error && <>
           <span className="checkin-mark bad" aria-hidden="true">!</span>
           <h1>لم يُسجل الحضور</h1>
-          <p className="muted">{state.error} أعد المسح، أو اطلب من المدرب تسجيل حضورك.</p>
+          {state.retry
+            ? <p className="muted">{sentence(state.error)}{receipt ? ' مسحك محفوظ في جهازك، فأعد المحاولة دون مسح جديد.' : ''}</p>
+            : <p className="muted">{sentence(state.error)} ويمكنك أن تطلب من المدرب تسجيل حضورك.</p>}
+          {state.retry && <button className="btn" onClick={() => setAttempt((n) => n + 1)}>أعد المحاولة</button>}
         </>}
-        {!state.busy && <button className="btn" onClick={onDone}>→ رحلتي</button>}
+        {!state.busy && <button className={state.retry ? 'btn ghost' : 'btn'} onClick={() => onDone({ keep: !!(state.retry && receipt) })}>→ رحلتي</button>}
       </section>
     </div>
   );

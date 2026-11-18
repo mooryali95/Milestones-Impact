@@ -72,7 +72,7 @@ test('رفض لحظة المسح: الرمز المنتهي يُقال سببه 
   await page.setViewportSize({ width: 390, height: 844 });
   await signedOut(page, { 'workshop.scan': { success: false, code: 'qr_expired', message: 'انتهت صلاحية الرمز، امسح الرمز المعروض الآن' } });
   await page.goto(`${APP}?checkin=0b7b6c9e-2f3a-4d0e-9a51-1d2b3c4d5e6f.1.abcdefabcdefabcdefab`);
-  await expect(page.getByText('انتهت صلاحية الرمز، امسح الرمز المعروض الآن ادخل لمتابعة رحلتك', { exact: false })).toBeVisible();
+  await expect(page.getByText('انتهت صلاحية الرمز، امسح الرمز المعروض الآن. ادخل لمتابعة رحلتك.', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('mi_checkin'))).toBeNull();
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/w1-scan-expired-390.png` });
 });
@@ -108,6 +108,34 @@ test('بعد الدخول: إيصال لجلسة دفعة أخرى أو منته
   await page.evaluate((r) => localStorage.setItem('mi_checkin', JSON.stringify({ r, exp: new Date(Date.now() + 6e4).toISOString(), title: 'اليوم الثالث', at: Date.now() })), RECEIPT);
   await page.reload();
   await expect(page.getByText('مضت أكثر من ربع ساعة على المسح', { exact: false })).toBeVisible();
+});
+
+test('بعد الدخول: إخفاق مؤقت يبقي الإيصال في الجهاز ويعرض «أعد المحاولة»، فلا يضيع مسح صالح', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let n = 0;
+  const calls = await signedOut(page, {
+    'workshop.scan': { success: true, receipt: RECEIPT, expires_at: later(0.25), session: { title: 'اليوم الثالث' } },
+    'workshop.checkin': () => (n++ < 2
+      ? { success: false, code: 'internal', message: 'خطأ داخلي، حاول بعد قليل (المرجع AB12CD)' }
+      : { success: true, already: false, session: { title: 'اليوم الثالث', location: 'الرياض، قاعة الأثر' }, at: new Date().toISOString() }),
+  });
+  await page.goto(`${APP}?checkin=0b7b6c9e-2f3a-4d0e-9a51-1d2b3c4d5e6f.123.abcdefabcdefabcdefab`);
+  await signIn(page);
+  await expect(page.getByRole('heading', { name: 'لم يُسجل الحضور' })).toBeVisible();
+  await expect(page.getByText('خطأ داخلي، حاول بعد قليل (المرجع AB12CD). مسحك محفوظ في جهازك، فأعد المحاولة دون مسح جديد.', { exact: true })).toBeVisible();
+  if (SHOTS) { await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished))); await page.screenshot({ path: `${SHOTS}/w1-checkin-retry-390.png` }); }
+  await page.getByRole('button', { name: 'أعد المحاولة' }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'workshop.checkin').length).toBe(2);
+  await expect(page.getByRole('button', { name: 'أعد المحاولة' })).toBeVisible();
+  // يخرج إلى رحلته والإيصال باقٍ، ففتح التطبيق ثانية يسجّل به
+  await page.getByRole('button', { name: '→ رحلتي' }).click();
+  await expect(page.getByText('مراحل الرحلة')).toBeVisible();
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('mi_checkin'))).r).toBe(RECEIPT);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'سُجل حضورك' })).toBeVisible();
+  expect(calls.filter((c) => c.action === 'workshop.checkin').map((c) => c.r)).toEqual([RECEIPT, RECEIPT, RECEIPT]);
+  await page.getByRole('button', { name: '→ رحلتي' }).click();
+  expect(await page.evaluate(() => localStorage.getItem('mi_checkin'))).toBeNull();
 });
 
 test('المسح وهو داخل يسجّل بالرمز نفسه، ولا يطلب إيصالًا', async ({ page }) => {

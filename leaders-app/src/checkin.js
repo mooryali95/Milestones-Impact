@@ -27,19 +27,26 @@ export const checkinKeep = {
 
 // رفض نهائي من الخادم لحظة المسح: يُعرض سببه ولا يُحفظ شيء. وما سواه (الترحيل لم يُطبَّق، أو الشبكة) يحفظ الرمز كما كان
 const FINAL = new Set(['qr_invalid', 'qr_expired', 'undated', 'closed', 'method', 'rate']);
+// إخفاق مؤقت عند تسجيل الحضور (الشبكة، أو خطأ خادم أو قاعدة): الإيصال يبقى في الجهاز حتى انتهائه وتُعاد المحاولة به.
+// وما سواه رفض نهائي (إيصال غير صالح أو منتهٍ أو مستعمل، دفعة أخرى، نافذة مغلقة، طريقة أخرى) يُزال معه
+export const RETRYABLE = new Set(['network', 'busy', 'internal', 'db_error']);
+
+// رسائل الخادم بلا نقطة ختام، فتُختم قبل أن يليها نص
+export const sentence = (m) => { const t = String(m || '').trim(); return !t || /[.!؟?]$/.test(t) ? t : `${t}.`; };
 
 // الرمز الممسوح بلا دخول ← إيصال، أو الرمز نفسه احتياطًا، أو خطأ يُعرض في شاشة الدخول
 export async function receiptFor(t, call) {
   const r = await call('workshop.scan', { t });
   if (r.success && r.receipt) return { r: r.receipt, exp: r.expires_at, title: r.session?.title || '' };
-  if (FINAL.has(r.code)) return { error: r.message };
+  if (FINAL.has(r.code)) return { error: r.message, code: r.code };
   return { t };
 }
 
-// سطر شاشة الدخول لمن مسح قبل دخوله: ما حُفظ، وكم يبقى، وأنه لا مسح ثانيًا
+// سطر شاشة الدخول لمن مسح قبل دخوله: ما حُفظ، وكم يبقى، وأنه لا مسح ثانيًا. والرفض يُقال سببه كما هو، فرسالة الخادم
+// تقول وحدها متى يفيد مسح جديد (الرمز المنتهي)، ولا تقوله حين لا يفيد (نافذة مغلقة، طريقة أخرى، موعد لم يُحدد)
 export function signInNote(c, now = Date.now()) {
   if (!c) return '';
-  if (c.error) return `${c.error} ادخل لمتابعة رحلتك، أو امسح الرمز المعروض الآن.`;
+  if (c.error) return `${sentence(c.error)} ادخل لمتابعة رحلتك.`;
   if (c.r) {
     const left = Math.max(1, Math.ceil((Date.parse(c.exp) - now) / 6e4));
     return `حفظنا مسحك${c.title ? ` لـ«${c.title}»` : ''}. سجّل دخولك خلال ${countAr(left, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة')}، ونسجّل حضورك بعده مباشرة دون مسح الرمز مرة أخرى.`;

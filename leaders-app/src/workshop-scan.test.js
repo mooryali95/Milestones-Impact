@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkinOpen, parseScanReceipt, qrToken, SCAN_RECEIPT_MINUTES, scanReceipt, scanReceiptExpiry, verifyScanReceipt } from '../../supabase/functions/leaders-api/logic.js';
-import { checkinKeep, receiptFor, signInNote } from './checkin.js';
+import { checkinKeep, receiptFor, RETRYABLE, sentence, signInNote } from './checkin.js';
 
 const SID = '00000000-0000-4000-8000-000000000001', RID = '00000000-0000-4000-8000-0000000000aa';
 const SECRET = 's'.repeat(32);
@@ -88,7 +88,7 @@ describe('حفظ المسح في الجهاز (checkin.js)', () => {
   it('receiptFor: إيصال، أو رفض نهائي يُعرض، أو الرمز نفسه احتياطًا قبل الترحيل وعند انقطاع الشبكة', async () => {
     const reply = (r) => async (action, body) => { expect([action, body]).toEqual(['workshop.scan', { t: 'tok' }]); return r; };
     expect(await receiptFor('tok', reply({ success: true, receipt: 'r1.y', expires_at: 'E', session: { title: 'اليوم 3' } }))).toEqual({ r: 'r1.y', exp: 'E', title: 'اليوم 3' });
-    for (const code of ['qr_expired', 'closed', 'method', 'rate']) expect(await receiptFor('tok', reply({ success: false, code, message: 'سبب.' }))).toEqual({ error: 'سبب.' });
+    for (const code of ['qr_expired', 'closed', 'method', 'rate']) expect(await receiptFor('tok', reply({ success: false, code, message: 'سبب.' }))).toEqual({ error: 'سبب.', code });
     for (const code of ['not_migrated', 'network', 'internal']) expect(await receiptFor('tok', reply({ success: false, code, message: 'x' }))).toEqual({ t: 'tok' });
   });
   it('سطر شاشة الدخول يسمي الجلسة والمهلة، ولا مسح ثانيًا', () => {
@@ -96,6 +96,22 @@ describe('حفظ المسح في الجهاز (checkin.js)', () => {
     expect(note).toBe('حفظنا مسحك لـ«اليوم الثالث». سجّل دخولك خلال 15 دقيقة، ونسجّل حضورك بعده مباشرة دون مسح الرمز مرة أخرى.');
     expect(signInNote({ r: 'r1', exp: new Date(NOW + 30e3).toISOString() }, NOW)).toContain('خلال دقيقة،');
     expect(signInNote({ error: 'انتهت صلاحية الرمز.' })).toContain('انتهت صلاحية الرمز.');
+  });
+  it('الرفض لحظة المسح جملة مختومة يليها «ادخل لمتابعة رحلتك.» وحده، بلا نصيحة مسح لا تفيد ولا تكرار', () => {
+    expect(signInNote({ error: 'انتهت صلاحية الرمز، امسح الرمز المعروض الآن', code: 'qr_expired' })).toBe('انتهت صلاحية الرمز، امسح الرمز المعروض الآن. ادخل لمتابعة رحلتك.');
+    for (const [code, m] of [['closed', 'تسجيل الحضور لهذه الجلسة غير متاح الآن'], ['method', 'حضور هذه الجلسة يُوثَّق بطريقة أخرى'], ['undated', 'موعد هذه الجلسة لم يُحدد بعد، فلا يُسجل حضورها الآن']]) {
+      const note = signInNote({ error: m, code });
+      expect(note).toBe(`${m}. ادخل لمتابعة رحلتك.`);
+      expect(note).not.toContain('امسح');
+    }
+    expect(sentence('سبب')).toBe('سبب.');
+    expect(sentence('سبب.')).toBe('سبب.');
+    expect(sentence('لماذا؟')).toBe('لماذا؟');
+    expect(sentence('')).toBe('');
+  });
+  it('الإيصال يبقى في الجهاز بعد إخفاق مؤقت فقط، ويُزال بعد الرفض النهائي', () => {
+    for (const code of ['network', 'busy', 'internal', 'db_error']) expect(RETRYABLE.has(code)).toBe(true);
+    for (const code of ['receipt_invalid', 'receipt_expired', 'receipt_used', 'cohort', 'closed', 'method', 'undated', 'qr_expired']) expect(RETRYABLE.has(code)).toBe(false);
     expect(signInNote(null)).toBe('');
   });
 });

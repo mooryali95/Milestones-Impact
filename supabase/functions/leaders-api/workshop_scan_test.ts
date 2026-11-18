@@ -197,6 +197,42 @@ Deno.test('بعد 5 دقائق يُقبل، وبعد انتهائه يُرد، �
   } finally { w.restore(); }
 });
 
+Deno.test('خطأ القاعدة عند الاستهلاك خطأ خادم يُعاد معه، لا رفض نهائي، ويبقى الإيصال غير مستهلك', async () => {
+  const w = await world();
+  try {
+    const s = await w.call(null, 'workshop.scan', { t: await qr() });
+    // تحديث جدول الإيصالات ينقطع (مهلة) مرة واحدة
+    const base = (db as any).from;
+    const failing: any = new Proxy({}, { get: (_t, k) => (k === 'then' ? (ok: any, bad: any) => Promise.resolve({ data: null, error: { code: '57014', message: 'timeout' } }).then(ok, bad) : () => failing) });
+    (db as any).from = (t: string) => {
+      const q = base(t);
+      return t === 'workshop_scan_receipts' ? new Proxy(q, { get: (o, k: string) => (k === 'update' ? () => failing : o[k]) }) : q;
+    };
+    const x = await w.call('a', 'workshop.checkin', { r: s.receipt });
+    (db as any).from = base;
+    assert(x.status >= 500, String(x.status));
+    assert(x.code !== 'receipt_invalid', x.code);
+    assertEquals([w.tables.workshop_scan_receipts[0].consumed_at ?? null, w.tables.workshop_attendance.length], [null, 0]);
+    // وإعادة المحاولة بعد عودة القاعدة تسجّل الحضور بالإيصال نفسه
+    assertEquals((await w.call('a', 'workshop.checkin', { r: s.receipt })).success, true);
+  } finally { w.restore(); }
+});
+
+Deno.test('مسح قبل إغلاق النافذة بدقائق ودخول بعد إغلاقها: يُقال إن النافذة أُغلقت، لا إن ربع ساعة مضت', async () => {
+  const w = await world();
+  try {
+    // انتهت الجلسة قبل 33 دقيقة فأُغلقت النافذة قبل 3، والإيصال (مقصوص على الإغلاق) انتهى معها بعد مسح قبل 5 دقائق
+    const sess = w.tables.workshop_sessions.find((x) => x.id === WS)!;
+    sess.starts_at = iso(-3 * 36e5);
+    sess.ends_at = iso(-33 * 6e4);
+    const exp = Math.floor((Date.now() - 3 * 6e4) / 1000);
+    w.tables.workshop_scan_receipts.push({ id: U(880301), session_id: WS, ip_hash: null, expires_at: new Date(exp * 1000).toISOString() });
+    const x = await w.call('a', 'workshop.checkin', { r: await scanReceipt(WS, U(880301), exp, SECRET) });
+    assertEquals([x.status, x.code], [400, 'closed']);
+    assertEquals(w.tables.workshop_scan_receipts[0].consumed_at ?? null, null);
+  } finally { w.restore(); }
+});
+
 Deno.test('جلسة دفعة أخرى ونافذة مغلقة وطريقة توثيق أخرى: يُرد بلا حضور ولا استهلاك', async () => {
   const w = await world();
   try {
