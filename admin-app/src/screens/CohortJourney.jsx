@@ -89,9 +89,9 @@ function WithControl({ s, row, onWith, onOffset }) {
   return (
     <div className={`cj-plan cj-par${row.edited ? ' edited' : ''}`} role="group" aria-label={`توازي ${s.title}`}>
       <label className="cj-par-with" htmlFor={sel}>
-        <span>تسير مع</span>
+        <span>{row.track ? 'يبدأ مع' : 'تسير مع'}</span>
         <select id={sel} value={row.with || ''} onChange={(e) => onWith(s.key, e.target.value || false)}>
-          <option value="">لا شيء (تبدأ بعد ما قبلها)</option>
+          {!row.track && <option value="">لا شيء (تبدأ بعد ما قبلها)</option>}
           {row.with_options.map((o) => <option key={o.key} value={o.key}>{o.title}</option>)}
           {row.with && !row.with_options.some((o) => o.key === row.with) && <option value={row.with}>{refTitle}</option>}
         </select>
@@ -117,13 +117,35 @@ function WithControl({ s, row, onWith, onOffset }) {
             <button type="button" aria-label={`زد إزاحة ${s.title}`} disabled={row.offset >= max} onClick={() => setOff(stepDays(row.offset, unit, 1, 0, max))}>+</button>
           </div>
           <span>من بدايتها</span>
-          <small id={`${id}-max`} className="cj-par-max">أقصاها مدة «{refTitle}»: {max ? durationAr(max) : 'صفر'}</small>
+          <small id={`${id}-max`} className="cj-par-max">{row.track ? `مسار مستمر: يبدأ بعد أي عدد أيام من بداية «${refTitle}»، حتى ${max} يومًا` : <>أقصاها مدة «{refTitle}»: {max ? durationAr(max) : 'صفر'}</>}</small>
         </div>
       )}
       <span className="cj-plan-meta">
         <small className={own ? 'own' : ''}>{own ? 'معدّل لهذه الدفعة' : 'من البرنامج'}</small>
-        {row.with && <small>الإزاحة تخطيط للتواريخ: تُفتح مع بداية «{refTitle}»</small>}
+        {row.with && <small>{row.track ? `يُفتح مع بداية «${refTitle}»، والإزاحة تخطيط للتواريخ` : `الإزاحة تخطيط للتواريخ: تُفتح مع بداية «${refTitle}»`}</small>}
         {own && <button type="button" className="la-link" onClick={() => onWith(s.key, null)}>ارجع لقاعدة البرنامج</button>}
+      </span>
+    </div>
+  );
+}
+
+// نهاية المسار المستمر لهذه الدفعة (T1): نهاية الرحلة (نهاية الدفعة في ملفها)، أو مدته، أو نهاية طور، أو نهاية مرحلة.
+// يكتب until في المسودة نفسها، ونافذة الأثر تسمي تغير امتداده قبل الحفظ
+function UntilControl({ s, row, onUntil }) {
+  const id = `cj-until-${s.key}`;
+  const own = row.until_source === 'cohort';
+  return (
+    <div className={`cj-plan cj-until${row.edited ? ' edited' : ''}`} role="group" aria-label={`نهاية ${s.title}`}>
+      <label className="cj-par-with" htmlFor={id}>
+        <span>يمتد حتى</span>
+        <select id={id} value={row.until} onChange={(e) => onUntil(s.key, e.target.value)}>
+          {Object.entries(row.until_options).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+        </select>
+      </label>
+      <span className="cj-plan-meta">
+        <small className={own ? 'own' : ''}>{own ? 'معدّلة لهذه الدفعة' : 'من البرنامج'}</small>
+        <small>يسير بجانب المراحل، فلا يؤخر ما بعده ولا يطيل الرحلة</small>
+        {own && <button type="button" className="la-link" onClick={() => onUntil(s.key, null)}>ارجع لقاعدة البرنامج</button>}
       </span>
     </div>
   );
@@ -209,22 +231,26 @@ function StageCard({ s, rows = null, plan = null, days = null, act = null }) {
     <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card${s.status ? ` st-${s.status}` : ''}${s.optional ? ` opt md-${s.mode}` : ''}${s.lead ? '' : ' lane'}${row?.edited ? ' edited' : ''}${off ? ' off' : ''}`} aria-labelledby={head}>
       <header className="cj-card-head">
         <h5 id={head}>{s.title}</h5>
+        {s.lane === 'track' && <span className="cj-tag cj-lane">{s.lane_ar}</span>}
         <span className="cj-dur">{s.label}</span>
         {!plan && !off && row?.source === 'cohort' && <span className="cj-tag own">معدّلة لهذه الدفعة</span>}
         {s.mode_ar && <span className="cj-tag cj-mode">{s.mode_ar}</span>}
         {s.status_ar && <span className={`cj-state ${s.status}`}><i aria-hidden="true" />{s.status_ar}</span>}
       </header>
       {plan && row && <OffSwitch s={s} row={row} onOff={plan.onOff} />}
-      {plan && row && !off && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
+      {plan && row && !off && (!row.track || row.until === 'days') && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
       {plan && row && !off && <WithControl s={s} row={row} onWith={plan.onWith} onOffset={plan.onOffset} />}
+      {plan && row?.track && !off && <UntilControl s={s} row={row} onUntil={plan.onUntil} />}
       {plan && row?.over && !off && <p className="cj-over" role="note"><span aria-hidden="true">!</span>{row.over.msg}. التجاوز مسموح، والمجموعة تنتهي بأطول أعضائها.</p>}
       {off ? <p className="cj-window"><small>لا نافذة لها في هذه الدفعة، وما بعدها يبدأ في مكانها. من يقف فيها ينتقل إلى ما بعدها، وما أنجزه محفوظ.</small></p>
         : s.window_ar ? (
           <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
         ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
-      {(s.with_ar || s.offset_ar || s.rule_ar) && (
+      {(s.with_ar || s.offset_ar || s.rule_ar || s.until_ar) && (
         <ul className="cj-rules">
           {s.with_ar && <li className="cj-with">{s.with_ar}</li>}
+          {s.until_ar && <li className="cj-until-ar">{s.until_ar}، ولا يؤخر ما بعده</li>}
+          {s.due_ar && <li className="cj-due">{s.due_ar}</li>}
           {s.offset_ar && <li className="cj-offset">{s.offset_ar}</li>}
           {s.rule_ar && <li>{s.rule_ar}</li>}
         </ul>
@@ -400,7 +426,14 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     return { ...(e || {}), with: { ...(e?.with || {}), [k]: v }, offset };
   });
   const onOffset = (k, v) => setEdit((e) => ({ ...(e || {}), offset: { ...(e?.offset || {}), [k]: v } }));
-  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, onWith, onOffset, stageOf } : null;
+  // نهاية المسار المستمر (T1): ما يطابق المحفوظ لا يبقى تعديلًا، وnull يعيد قاعدة البرنامج
+  const onUntil = (k, v) => setEdit((e) => {
+    const until = { ...(e?.until || {}) };
+    const was = cohort.schedule?.[k]?.until ?? null;
+    if ((v ?? null) === was) delete until[k]; else until[k] = v;
+    return { ...(e || {}), until };
+  });
+  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, onWith, onOffset, onUntil, stageOf } : null;
   // القفز إلى البطاقة: التركيز البرمجي بعد نقرة الفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة
   const flashT = useRef(0);
   useEffect(() => () => clearTimeout(flashT.current), []);
@@ -536,6 +569,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         </dl>
       )}
       {head.over_ar && <p className="cj-alert" role="note"><span aria-hidden="true">!</span>{head.over_ar}</p>}
+      {head.gap_ar && <p className="cj-alert" role="note" data-testid="chain-gap"><span aria-hidden="true">!</span>{head.gap_ar}</p>}
       {d.msError && (
         <p className="cj-alert" role="alert"><span aria-hidden="true">!</span>
           <span>{d.msError}، فلا تظهر المعالم في البطاقات. <button type="button" className="la-link" onClick={() => setRetry((n) => n + 1)}>أعد المحاولة</button></span></p>
@@ -557,7 +591,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
               : 'كل المدد من البرنامج. عدّل مدة أي مرحلة لهذه الدفعة وحدها أو أوقفها أو اجعلها تسير مع غيرها، ويُزاح ما بعدها.'}</span>
         </div>
         <div className="la-row">
-          {!editing && !lock && <button type="button" className="btn-sm primary" onClick={() => setEdit({ days: {}, off: {}, with: {}, offset: {} })}>عدّل المدد</button>}
+          {!editing && !lock && <button type="button" className="btn-sm primary" onClick={() => setEdit({ days: {}, off: {}, with: {}, offset: {}, until: {} })}>عدّل المدد</button>}
           {savedNote && canWrite && !editing && <span className="cj-saved" role="status">حُفظ. <button type="button" className="la-link" disabled={busy} onClick={undo}>تراجع</button></span>}
           <button type="button" className="la-link" aria-expanded={!!history} onClick={() => (history ? setHistory(null) : loadHistory())}>سجل الخطة</button>
         </div>
@@ -603,6 +637,14 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
               </div>
             </section>
           ))}
+          {lanes.tracks?.length > 0 && (
+            <section className="cj-phase cj-tracks" aria-labelledby="cj-tracks-h" data-testid="cj-tracks">
+              <header className="cj-phase-head"><h4 id="cj-tracks-h">مسارات مستمرة</h4><small>تسير بجانب المراحل، فلا تؤخر ما بعدها ولا تُعد في مراحل الرحلة</small></header>
+              <div className="cj-groups">
+                {lanes.tracks.map((s) => <div key={s.key} className="cj-group track"><StageCard s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} /></div>)}
+              </div>
+            </section>
+          )}
           {lanes.cohort_milestones.length > 0 && (
             <section className="cj-phase cj-cohort-ms" aria-labelledby="cj-cms-h">
               <header className="cj-phase-head"><h4 id="cj-cms-h">معالم الدفعة</h4><small>مرتبطة بتاريخ الدفعة لا بمرحلة</small></header>

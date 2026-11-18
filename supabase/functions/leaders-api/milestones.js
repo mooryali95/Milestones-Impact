@@ -11,6 +11,7 @@
 //   offset_days: إزاحة بالأيام (موجبة أو سالبة) عن نقطة الارتكاز
 //   complete: stage (يكتمل آليًا باكتمال مرحلته) | manual (يعتمده الأدمن أو الخبير)
 import { latinDigits } from './digits.js';   // الأرقام كما يكتبها الإنسان: مصدر واحد
+import { untilOf } from './journey.js';
 import { planOffKeys, planSchedule, stageWindows } from './stage-windows.js';   // النوافذ المحسوبة: مصدر واحد مع الخريطة والخط الزمني
 const DAY = 86400000;
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -32,7 +33,8 @@ export const MILESTONE_STATUS_AR = { done: 'منجز', on_time: 'في الموع
 export function distributeSchedule(stages, startsOn, endsOn) {
   if (!ISO.test(startsOn || '') || !ISO.test(endsOn || '') || endsOn < startsOn) return {};
   const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
-  const mode = (s) => (s.rules && s.rules.mode) || 'required';
+  // والمسار المستمر (T1، lane: track) خارج السلسلة: يمتد على الدفعة كغير الإلزامية ولا يأخذ من نصيب غيرها
+  const mode = (s) => (s.rules && s.rules.lane === 'track' ? 'track' : (s.rules && s.rules.mode) || 'required');
   const seq = live.filter((s) => mode(s) === 'required');
   const out = {};
   for (const s of live.filter((x) => mode(x) !== 'required')) out[s.key] = { start: startsOn, end: endsOn };
@@ -99,13 +101,20 @@ export function cleanScheduleReport(raw, stageKeys, titles = {}) {
     let wth = v.with === false ? false : v.with != null && v.with !== '' ? String(v.with) : undefined;
     let offset = int(v.offset, 0, 365, 'الإزاحة من 0 إلى 365 يومًا');
     if (wth === false) offset = undefined;
-    if (!start && !end && days === undefined && !off && wth === undefined && offset === undefined) continue;
+    // until: نهاية المسار المستمر لهذه الدفعة (T1): نهاية الرحلة، أو مدته، أو نهاية طور، أو نهاية مرحلة في التعريف
+    let until;
+    if (v.until !== undefined && v.until !== null && v.until !== '') {
+      until = untilOf(v.until);
+      if (!until) throw new Error('نهاية المسار: نهاية الرحلة، أو مدته بالأيام، أو نهاية طور، أو نهاية مرحلة');
+    }
+    if (!start && !end && days === undefined && !off && wth === undefined && offset === undefined && until === undefined) continue;
     if (!keys.has(k)) { dropped.push(k); continue; }
     if (start && end && end < start) throw new Error('نهاية مرحلة قبل بدايتها');
     if (wth !== undefined && wth !== false && (wth === k || !keys.has(wth))) { wth = undefined; offset = undefined; }
+    if (until && until.startsWith('stage:') && (until.slice(6) === k || !keys.has(until.slice(6)))) until = undefined;
     const e = {
       ...(off ? { off } : {}), ...(days !== undefined ? { days } : {}), ...(wth !== undefined ? { with: wth } : {}),
-      ...(offset !== undefined ? { offset } : {}), ...(start ? { start } : {}), ...(end ? { end } : {}),
+      ...(offset !== undefined ? { offset } : {}), ...(until !== undefined ? { until } : {}), ...(start ? { start } : {}), ...(end ? { end } : {}),
     };
     if (Object.keys(e).length) schedule[k] = e;
   }

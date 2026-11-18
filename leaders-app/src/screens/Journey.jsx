@@ -614,6 +614,57 @@ function Together({ stages, now, children }) {
   );
 }
 
+// المسار المستمر (T1، تصور 2026-11-18 ب5.1): يسير معك بجانب المراحل من بدايته إلى نهايته، فلا يؤخر ما بعده ولا يُعد في
+// «أنجزت X من Y» ولا في نسبة التقدم. كتلة بنمط «تسير معًا» نفسه: اسمه وامتداده وما تنتظره بنوده وتقدمه، ثم بطاقته كما هي
+const trackDay = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+export function trackSpanAr(stage, journey = []) {
+  const t = stage.track || {};
+  const due = journey.find((x) => x.key === t.due_before);
+  const span = t.from && t.to ? `من ${trackDay(t.from)} إلى ${trackDay(t.to)}` : t.until === 'journey_end' || !t.until ? 'حتى نهاية رحلتك' : '';
+  return {
+    span: span ? `يسير معك ${span}، بجانب مراحلك، فلا يؤخر ما بعده.` : 'يسير معك بجانب مراحلك، فلا يؤخر ما بعده.',
+    due: due ? `بنوده الإلزامية مطلوبة قبل «${due.title_ar}» وحدها، وما سواها لا ينتظره.` : '',
+  };
+}
+function Alongside({ stage, journey, children }) {
+  const id = `track-${stage.key}`;
+  const pct = stagePct(stage);
+  const t = trackSpanAr(stage, journey);
+  return (
+    <section className={`together track${stage.status === 'active' ? ' now' : ''}`} aria-labelledby={id} data-testid="track">
+      <div className="together-head">
+        <span className="together-badge track-badge">مسار مستمر</span>
+        <h4 id={id}>{stage.title_ar}</h4>
+        <p className="small muted">{t.span}{t.due ? ` ${t.due}` : ''}</p>
+        <ul className="together-progress">
+          <li className={stage.status}>
+            <span className="t">{stage.status === 'locked' ? stage.lock_reason || 'يُفتح مع بداية مرجعه' : 'تقدمك فيه'}</span>
+            <span className="bar" role="progressbar" aria-label={`تقدمك في «${stage.title_ar}»`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-valuetext={stage.status === 'locked' ? 'مقفل' : `${pct}٪، ${stageCount(stage)}`}><i style={{ inlineSize: `${pct}%` }} /></span>
+            <small>{stage.status === 'locked' || !stage.total ? STATUS_SHORT[stage.status] || '' : stageCount(stage).split(' · ')[0]}</small>
+          </li>
+        </ul>
+      </div>
+      <div className="together-cards">{children}</div>
+    </section>
+  );
+}
+
+// رأس الرحلة (T1): المرحلة الحالية من currentStages، وإن لم يبق نشطًا إلا المسار المستمر (المتتابعة أُنجزت والتالية تنتظره)
+// فهو ما يُشار إليه، فلا يبقى الرأس بلا «ماذا الآن». tracksNow للرأس وحده، فالموضع والعد بلاه كما هما
+export function heroNow(journey) {
+  const now = currentStages(journey).stages.filter((s) => s.status === 'active');
+  const tracksNow = now.length ? [] : journey.filter((s) => s.lane === 'track' && s.status === 'active');
+  return { now, tracksNow, current: now[0] || tracksNow[0] || null };
+}
+// شريط الأطوار: الطور منجز إن أُنجزت مراحله المتتابعة، وجارٍ إن فيها نشطة. المسار المستمر لا يُعد فيه كما لا يُعد في
+// «X من Y»، فلا يبقى طوره جاريًا والمشارك في طور بعده، ولا يضيء طوران معًا بسببه
+export function phaseRail(journey) {
+  return PHASES.map((ph) => {
+    const st = journey.filter((s) => s.lane !== 'track' && (s.phase || 'qualification') === ph.key);
+    return { key: ph.key, title: ph.title, state: st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '' };
+  });
+}
+
 // مراحل قادمة مقفلة: على الحاسب تُعرض كما هي، وعلى الشاشات الضيقة سطر واحد يُفتح
 function Later({ n, after, children }) {
   const [narrow] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(NARROW).matches);
@@ -729,10 +780,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
   const [susFirst] = useState(() => bootPreload.take('sus'));
   // المرحلة الحالية (R3b): الموضع ومعه ما يسير معه نشطًا، من currentStages التي تعدّه بها الخريطة ويذكّره بها التذكير
-  const now = currentStages(journey).stages.filter((s) => s.status === 'active');
-  const current = now[0] || null;
+  const { now, tracksNow, current } = heroNow(journey);
   const nowKeys = new Set(now.map((s) => s.key));
-  const [expanded, setExpanded] = useState(() => new Set(now.map((s) => s.key)));
+  const [expanded, setExpanded] = useState(() => new Set((now.length ? now : tracksNow).map((s) => s.key)));
   const [toast, setToast] = useState('');
   const [passkey, setPasskey] = useState(me.prompt_passkey);
   const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
@@ -762,7 +812,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
   const firstName = participant.full_name.split(' ')[0];
   // المرحلة عند الطلب أو الاختيارية لا تُحسب على المشارك إن لم يحتجها
-  const counted = journey.filter((s) => (s.stage_mode || 'required') === 'required' || s.status === 'done');
+  // والمسار المستمر (T1) يسير بجانب المراحل فلا يُعد فيها
+  const counted = journey.filter((s) => s.lane !== 'track' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
   const doneCount = counted.filter((s) => s.status === 'done').length;
   // موعد المراجعة المعلن (D04) بصيغة الجملة؛ وسم المرحلة المرفوع «يوما عمل» يظهر وحده في خط الرحلة
   const reviewWait = APPROVAL_SLA_AR;
@@ -779,17 +830,14 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
           <p className="muted">
             {now.length > 1 ? <>{now.length === 2 ? 'مرحلتاك الحاليتان تسيران معًا' : 'مراحلك الحالية تسير معًا'}: {now.map((s, i) => <React.Fragment key={s.key}>{i ? (i === now.length - 1 ? ' و' : '، ') : ''}<b style={{ color: '#fff' }}>{s.title_ar}</b></React.Fragment>)} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
+              : tracksNow.length ? <>بقي لك المسار المستمر: <b style={{ color: '#fff' }}>«{current.title_ar}»</b>{(() => { const due = journey.find((x) => x.key === current.track?.due_before); return due ? `، وبنوده مطلوبة قبل «${due.title_ar}»` : ''; })()} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
               : current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
               : doneCount === counted.length && counted.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
                 : !approved ? `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
                   : `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
           </p>
           <div className="phase-rail" aria-label="أطوار الرحلة">
-            {PHASES.map((ph) => {
-              const st = journey.filter((s) => (s.phase || 'qualification') === ph.key);
-              const state = st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '';
-              return <div key={ph.key} className={state}><i />{ph.title}</div>;
-            })}
+            {phaseRail(journey).map((ph) => <div key={ph.key} className={ph.state}><i />{ph.title}</div>)}
           </div>
         </div>
         <Ring value={me.progress} />
@@ -901,11 +949,14 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
             <span className="small muted">{me.progress}% من الرحلة</span>
         </div>
         {PHASES.map((ph, pi) => {
-          const stages = journey.filter((s) => (s.phase || 'qualification') === ph.key);
-          if (!stages.length) return null;
+          const inPhase = journey.filter((s) => (s.phase || 'qualification') === ph.key);
+          if (!inPhase.length) return null;
+          // المسار المستمر (T1) كتلة بجانب المراحل بعد مرجعه، وخارج عد الطور
+          const stages = inPhase.filter((s) => s.lane !== 'track');
+          const laneHere = inPhase.filter((s) => s.lane === 'track');
           const doneHere = stages.filter((s) => s.status === 'done').length;
           // على الشاشات الضيقة يبقى الطور الذي فيه عملك مفتوحًا، والبقية عناوين تُفتح: الرئيسية شاشتان لا خمس
-          const here = stages.some((s) => s.status === 'active' || s.key === next?.stage.key || expanded.has(s.key));
+          const here = inPhase.some((s) => s.status === 'active' || s.key === next?.stage.key || expanded.has(s.key));
           const Wrap = here ? PhaseOpen : Fold;
           return (
             <Wrap key={ph.key} title={`${pi + 1}. ${ph.title}`} meta={`${doneHere} من ${stages.length}`}>
@@ -925,10 +976,17 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                     );
                   };
                   // المراحل التي تسير معًا كتلة واحدة (withGroups على قواعد رحلته نفسها)، ومرحلة وحدها كتلة بمرحلة
-                  const unit = (g) => (g.length > 1
-                    ? <Together key={`g-${g[0].key}`} stages={g} now={g.some((s) => nowKeys.has(s.key))}>{g.map((s) => card(s, true))}</Together>
-                    : card(g[0]));
+                  const unit = (g) => (g[0].lane === 'track'
+                    ? <Alongside key={`t-${g[0].key}`} stage={g[0]} journey={journey}>{card(g[0], true)}</Alongside>
+                    : g.length > 1
+                      ? <Together key={`g-${g[0].key}`} stages={g} now={g.some((s) => nowKeys.has(s.key))}>{g.map((s) => card(s, true))}</Together>
+                      : card(g[0]));
                   const units = withGroups(stages);
+                  // كل مسار بعد كتلة مرجعه إن كان في هذا الطور، وإلا أول الطور
+                  for (const t of laneHere) {
+                    const at = units.findIndex((g) => g.some((s) => s.key === t.track?.with || s.key === t.rules?.with));
+                    units.splice(at < 0 ? 0 : at + 1, 0, [t]);
+                  }
                   // الكتل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير
                   const shut = (g) => g.every((s) => s.status === 'locked' && !expanded.has(s.key) && s.key !== next?.stage.key);
                   let cut = units.length;
