@@ -76,10 +76,11 @@ export const BUCKET = 'leaders-private';
 // ── الردود ──
 const cors = (origin: string | null) => ({
   'Access-Control-Allow-Origin': origin && CONFIG.origins.concat(CONFIG.adminOrigins).includes(origin) ? origin : CONFIG.origins[0],
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  // x-client-build: معرّف بناء الواجهة (المرحلة 4، البند 4). العميل لا يرسله إلا بعد أن يقرأ x-client-build: on في رد
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-client-build',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   // إعلان مفتاح منع التكرار (idempotency.ts، ش9): بلا هذا لا يقرأ المتصفح الترويسة فلا يعيد العميل أي كتابة
-  'Access-Control-Expose-Headers': 'x-idem',
+  'Access-Control-Expose-Headers': 'x-idem, x-client-build',
   // الطلب التمهيدي (OPTIONS) يُخزَّن في المتصفح يومًا بدل أن يسبق كل طلب إلى الخادم (التدقيق 2026-11-10، البند 8.1).
   // المتصفحات تقصره على حدها (Chrome ساعتان)، وهو مكسب لكل البوابات
   'Access-Control-Max-Age': '86400',
@@ -793,6 +794,8 @@ export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
   // سطر الترحيل اليومي (carryoverAlert): مرة في اليوم، فمهلته أقل من يوم بقليل
   mail_queue_carryover: 20 * 36e5,
+  // إخفاق الفتح عند أجهزة كثيرة (client-events.ts bootAlert): الفعل مفتوح بلا جلسة، فساعة تحد ما قد يصل من تنبيه مصطنع
+  client_boot_failures: 36e5,
   // تذكير طلب الحذف بلا تهدئة: المرحلة تُحجز في الصف قبل التنبيه (erasure.ts remindSweep) فلا يتكرر، والتهدئة كانت
   // تحجب إعادة تذكير لم يصل من أي قناة (تُكتب قبل أي قناة) ثم يُعدّ واصلًا
   erase_reminder: 0,
