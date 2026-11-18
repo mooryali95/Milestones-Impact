@@ -57,6 +57,9 @@
 .jt-stage-link { all: unset; cursor: pointer; border-radius: 4px; }
 .jt-stage-link:hover b, .jt-stage-link:focus-visible b { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--jt-ph); }
 .jt-stage-link:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 2px; }
+/* غير الإلزامية (T0): إطار متقطع ووسم نمطها «عند الحاجة» أو «اختيارية» */
+.jt-stage.nonreq { border-style: dashed; border-top-style: dashed; background: color-mix(in srgb, var(--jt-surface) 88%, transparent); }
+.jt-mode { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 99px; border: 1px dashed var(--jt-muted); color: var(--jt-muted); }
 .jt-status { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 99px; border: 1px solid currentColor; }
 .jt-status.active { color: var(--jt-warn-text); background: var(--st-warn-bg, #efe7d8); }
 .jt-status.done { color: var(--st-ok-text, #256b4d); }
@@ -100,6 +103,7 @@
 .jt-legend .sq { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid var(--jt-primary); }
 .jt-legend .sq.req { background: var(--jt-primary); }
 .jt-legend .sq.opt { border-style: dashed; }
+.jt-legend .sq.nonreq { border-style: dashed; border-color: var(--jt-muted); }
 .jt-legend .sq.tog { border-color: var(--jt-gold); background: color-mix(in srgb, var(--jt-gold) 15%, transparent); }
 .jt-legend .ln { display: inline-block; width: 2px; height: 14px; background: var(--jt-warn); }
 .jt-panel { min-height: 150px; padding: 12px 14px; border: 1px solid var(--jt-line); border-top: 3px solid var(--jt-gold); border-radius: 10px; background: var(--jt-soft); }
@@ -137,6 +141,8 @@
   .jt-m-phase-head small { color: var(--jt-muted); font-size: 12px; }
   .jt-m-stage { position: relative; padding-inline-end: 22px; border-inline-end: 2px solid var(--jt-line); margin-inline-end: 8px; }
   .jt-m-stage.together { border-inline-end-color: var(--jt-gold); }
+  .jt-m-stage.nonreq { border-inline-end-style: dashed; }
+  .jt-m-title .jt-mode { margin-inline-end: auto; }
   .jt-m-stage details { padding: 6px 0 10px; }
   .jt-m-stage summary { display: grid; gap: 3px; cursor: pointer; list-style: none; }
   .jt-m-stage summary::-webkit-details-marker { display: none; }

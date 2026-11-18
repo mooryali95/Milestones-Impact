@@ -48,7 +48,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     const inList = (v: unknown) => String(v).replace(/^\(|\)$/g, '').split(',');
     // عمود مضمَّن (participants.is_demo) يُقرأ من الصف المضمَّن نفسه، والعمود المسطح كما كان
     const get = (r: Row, c: string) => (c in r ? r[c] : c.split('.').reduce((x: any, k) => x?.[k], r));
-    // or بصيغة PostgREST: شروط بفاصلة على المستوى الأعلى، وand(...) متداخلة، وعواملها eq وis وgte وlte وlt
+    // or بصيغة PostgREST: شروط بفاصلة على المستوى الأعلى، وand(...) متداخلة، وعواملها eq وis وgte وlte وlt وin
     const split = (t: string) => { const out: string[] = []; let d = 0, cur = ''; for (const ch of t) { if (ch === '(') d++; if (ch === ')') d--; if (ch === ',' && !d) { out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out; };
     const cond = (t: string): ((r: Row) => boolean) => {
       const m = /^(and|or)\((.*)\)$/.exec(t);
@@ -59,6 +59,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       if (o === 'gte') return (r) => r[c] != null && String(r[c]) >= v;
       if (o === 'lte') return (r) => r[c] != null && String(r[c]) <= v;
       if (o === 'lt') return (r) => r[c] != null && String(r[c]) < v;
+      if (o === 'in') return (r) => inList(v).includes(String(r[c]));
       throw new Error(`fake or: ${t}`);
     };
     const q: any = {

@@ -137,7 +137,7 @@ const openJourney = async (page) => {
 };
 
 for (const width of [1440, 390]) {
-  test(`الدفعة (${width}): التواريخ وخط اليوم وعداد «يُحدد لاحقًا»، والنقر يقفز إلى «+ موعد»`, async ({ page }) => {
+  test(`الدفعة (${width}): التواريخ وخط اليوم وعداد «يُحدد لاحقًا»، والنقر يقفز إلى «+ يوم أو ورشة» في بطاقة المرحلة`, async ({ page }) => {
     await setup(page, width);
     const tl = await openJourney(page);
     // «الآن» في رأس التبويب لا في بطاقات الخط، فلا يتكرر
@@ -168,9 +168,9 @@ for (const width of [1440, 390]) {
       await shot(page, 'cohort', tl);
       await training.getByRole('button', { name: 'أضف موعده: يوم ورشة عن بعد' }).click();
     }
-    // ينتقل إلى «الحضور والجلسات» عند زر «+ موعد» للنشاط نفسه
-    await expect(page).toHaveURL(/activities\?req=r2/);
-    await expect(page.locator('#ws-r2 .ws-add')).toBeFocused();
+    // W3: إلى أيام النشاط في بطاقة مرحلته وزر «+ يوم أو ورشة» فيها، لا إلى تبويب منفصل
+    await expect(page).toHaveURL(/#\/leaders\/programs\/c1\?view=journey$/);
+    await expect(page.locator('#cj-days-training .cj-day-add')).toBeFocused();
   });
 }
 
