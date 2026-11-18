@@ -145,12 +145,14 @@ export default function Paywall({ item, me, onUpdate }) {
 export function pathOf(journey = []) {
   const items = journey.flatMap((s) => s.items || []);
   const days = planSpanDays(journey);
+  // المسار المستمر (T1) يسير بجانب المراحل: لا يُعد في عددها، ولا يطيل المدة (planSpanDays يستبعده)
+  const seq = journey.filter((s) => s.lane !== 'track');
   return {
-    stages: journey.length,
+    stages: seq.length,
     readings: items.filter((i) => i.kind === 'reading').length,
     models: items.filter((i) => i.kind === 'model').length,
     weeks: days ? Math.max(1, Math.round(days / 7)) : null,
-    titles: journey.map((s) => s.title_ar).filter(Boolean),
+    titles: seq.map((s) => s.title_ar).filter(Boolean),
   };
 }
 

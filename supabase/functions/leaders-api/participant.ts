@@ -33,6 +33,7 @@ import { advisorOf, notifyAdvisor } from './advisor.ts';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
 import { features } from './features.ts';
+import { trackWindows } from './stage-windows.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -561,7 +562,10 @@ export async function journeyFor(p: any, { lite = false, cohort = null }: { lite
   // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
   const modes = def.cohort?.stage_modes || {};
-  const journey = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
+  const built = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
+  // المسار المستمر (T1): نافذته من خطة الدفعة نفسها (trackWindows)، لشريط «يسير معك طوال الرحلة». برنامج بلا مسار لا يتغير
+  const tw = trackWindows(def.stages, def.cohort || {});
+  const journey = Object.keys(tw).length ? built.map((s: any) => (tw[s.key] ? { ...s, track: tw[s.key] } : s)) : built;
   // المعالم: استحقاقها من جدول الدفعة أو نافذة مرحلتها، واكتمالها من مراحل الرحلة نفسها أو باعتماد يدوي
   const milestones = milestoneStatuses(def.milestones || [], {
     stagesDone: new Set(journey.filter((s: any) => s.status === 'done').map((s: any) => s.key)),

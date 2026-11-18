@@ -7,7 +7,7 @@
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
 import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { renderJourneyText } from './journey.js';
-import { cohortPlan, stageWindows, todayStage, todayStages, withGroups } from './stage-windows.js';
+import { cohortPlan, planTrack, stageWindows, todayStage, todayStages, withGroups } from './stage-windows.js';
 import { inProgram } from './logic.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
@@ -17,11 +17,15 @@ const isoDay = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 export { stageWindows, todayStage, todayStages };
 
 // موضع المشارك: المرحلة النشطة، وإلا أول مرحلة إلزامية لم تكتمل (مقفلة بانتظار اعتماد مثلًا). -1: أنهى الرحلة
+// المسار المستمر (T1) يسير بجانب الرحلة فليس موضعًا: لا يُعد «مرحلة حالية» ولا «المرحلة X من Y»
 export function positionOf(journey) {
-  const active = journey.findIndex((s) => s.status === 'active');
+  const seq = (s) => s.lane !== 'track' && !planTrack(s);
+  const active = journey.findIndex((s) => s.status === 'active' && seq(s));
   if (active >= 0) return active;
-  return journey.findIndex((s) => s.status !== 'done' && (s.stage_mode || 'required') === 'required');
+  return journey.findIndex((s) => s.status !== 'done' && (s.stage_mode || 'required') === 'required' && seq(s));
 }
+/** مسارات الرحلة المستمرة (T1) بترتيبها @param {any[]} journey */
+export const journeyTracks = (journey) => (journey || []).filter((s) => s.lane === 'track' || planTrack(s));
 
 // مجموعة «تسير معًا» التي فيها المرحلة idx من رحلة المشارك (withGroups على قواعد رحلته نفسها، بعد خطة دفعته)،
 // ومرحلة لا تسير مع غيرها مجموعة وحدها
@@ -94,7 +98,13 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
     const key = cur.stage ? cur.stage.key : null;
     if (!key) finished += 1;
     const startPos = key ? keys.indexOf(j[cur.start].key) : keys.length;
-    for (let i = 0; i < startPos; i++) acc[keys[i]].done += 1;
+    // المسار المستمر (T1) يُعد بحالته عليه لا بموضعه: «هنا» ما دام جاريًا، و«تجاوزه» إن اكتمل
+    const trackKeys = new Set(journeyTracks(j).map((s) => s.key));
+    for (let i = 0; i < startPos; i++) if (!trackKeys.has(keys[i])) acc[keys[i]].done += 1;
+    for (const st of j.filter((x) => trackKeys.has(x.key))) {
+      if (st.status === 'done') acc[st.key].done += 1;
+      else if (st.status === 'active') acc[st.key].here += 1;
+    }
     if (key) {
       const hereKeys = new Set(cur.stages.map((s) => s.key));
       // باقي مجموعته: ما سبق موضعه منها تجاوزه (كما كان كل ما قبل الموضع)، وما بعده يُعدّ متجاوزًا إن اكتمل

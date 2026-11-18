@@ -10,10 +10,10 @@
 import {
   ACTIVITY_KIND_AR, ACTIVITY_OWNER_AR, countAr, DIM_AR, LEVEL_AR, MODE_AR, PHASE_AR, TIMELINE_AR, TIMELINE_STATUS_AR,
 } from './labels.js';
-import { daysAr, durationAr, renderJourneyText, STAGE_TAG_AR, stageRules } from './journey.js';
+import { daysAr, dueBeforeAr, durationAr, LANE_AR, renderJourneyText, STAGE_TAG_AR, stageRules, untilAr } from './journey.js';
 import { completionSource, isUndated, SESSION_TBD_AR } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
-import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planWithRules } from './stage-windows.js';
+import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planTrack, planWithRules } from './stage-windows.js';
 
 // غير الإلزامية (T0، تصور 2026-11-18 ب5.2): نمطها بكلمة واحدة على الخط والبطاقة، بإطار متقطع. الإلزامية بلا وسم
 export { STAGE_TAG_AR };
@@ -67,7 +67,10 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   const offKeys = cohort ? planOffKeys(cohort.schedule) : new Set();
   // والتوازي الخاص بالدفعة (R3a): الممرات من «تسير مع» في خطتها فوق قاعدة النسخة، كما يحسبها cohortPlan
   const shown = (resolved?.stages || []).filter((s) => s.active !== false && !offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
-  const stages = cohort ? planWithRules(shown, planSchedule(cohort)) : shown;
+  const all = cohort ? planWithRules(shown, planSchedule(cohort)) : shown;
+  // المسار المستمر (T1): صف مستقل بجانب السلسلة («مسارات مستمرة»)، فلا يأخذ خانة ولا يمد المحور ولا يدخل في عد المراحل
+  const laneStages = all.filter(planTrack);
+  const stages = laneStages.length ? all.filter((s) => !planTrack(s)) : all;
   const reqs = resolved?.requirements || [];
   const t = isoToday(today);
   const isCohort = !!cohort;
@@ -80,9 +83,9 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   // النوافذ: تواريخ الدفعة إن عُرفت كلها، وإلا نسبية من بداية افتراضية (البرنامج، أو دفعة بلا تاريخ بداية ولا جدول)
   // خطة الدفعة (cohortPlan) مصدر النوافذ والمدد، بقاعدة النهاية الشاملة (القرار 18). الدفعة بلا تاريخ ترسم مددها هي
   // (days في خطتها) نسبيًا من البداية الافتراضية، لا مدد البرنامج
-  const realPlan = isCohort ? cohortPlan(stages, cohort) : null;
-  const dated = isCohort && stages.every((s) => realPlan.windows[s.key]);
-  const plan = dated ? realPlan : cohortPlan(stages, { starts_on: EPOCH, schedule: isCohort ? planDaysOnly(cohort?.schedule) : {} });
+  const realPlan = isCohort ? cohortPlan(all, cohort) : null;
+  const dated = isCohort && all.every((s) => realPlan.windows[s.key]);
+  const plan = dated ? realPlan : cohortPlan(all, { starts_on: EPOCH, schedule: isCohort ? planDaysOnly(cohort?.schedule) : {} });
   const windows = plan.byKey;
   const start = dated ? stages.map((s) => windows[s.key].from).sort()[0] : EPOCH;
   const day = (iso) => daysBetween(start, iso);
@@ -185,6 +188,29 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     };
   });
   const stageByKey = new Map(stageOut.map((s) => [s.key, s]));
+  // صفوف المسار المستمر على المقياس نفسه (pos): من بدايته إلى اليوم التالي لنهايته، وما بعد نهاية السلسلة يلتصق بآخرها
+  const allTitle = (k) => titleOf.get(k) || renderJourneyText((all.find((x) => x.key === k) || {}).title_ar || k, { reqs });
+  const trackOut = laneStages.map((s) => {
+    const w = windows[s.key];
+    const r = stageRules(s);
+    const [f, e] = span(s.key);
+    const at = pos(f);
+    const status = statusOf(w);
+    const refTitle = r.with ? allTitle(r.with) : '';
+    const startAr = refTitle ? (w.offset ? `يبدأ بعد ${daysAr(w.offset)} من بداية «${refTitle}»` : `يبدأ مع «${refTitle}»`) : 'يبدأ مع بداية الرحلة';
+    const left = status === 'active' ? daysBetween(t, w.to) : null;
+    return {
+      key: s.key, title: allTitle(s.key), phase: PHASES.includes(s.phase) ? s.phase : 'qualification', lane_kind: 'track', lane_ar: LANE_AR.track,
+      days: e - f, label: durationAr(w.days) || daysAr(w.days), at, width: Math.max(2, round(pos(e) - at)),
+      window: dated ? { from: w.from, to: w.to } : null, window_ar: dated ? `${fmtDay(w.from)} إلى ${fmtDay(w.to)}` : '',
+      start_ar: startAr, until: r.until, until_ar: untilAr(r.until, allTitle), due_before: r.due_before, due_ar: dueBeforeAr(r.due_before, all.map((x) => ({ ...x, title_ar: allTitle(x.key) }))),
+      note_ar: `${startAr}، ${untilAr(r.until, allTitle)}، ولا يؤخر ما بعده`,
+      status, status_ar: status ? TIMELINE_STATUS_AR[status] : '', optional: r.mode !== 'required', mode: r.mode, mode_ar: '',
+      today_ar: status === 'active' ? `اليوم ${fmtDay(t)}، ${left > 0 ? `بقي على نهاية المسار ${daysAr(left)}` : 'آخر يوم في المسار'}` : '',
+      offset: w.offset || 0, days_source: w.source, empty: false, activities: [],
+    };
+  });
+  for (const x of trackOut) stageByKey.set(x.key, x);
 
   // المحاور: من أول مراحلها إلى آخرها على المقياس نفسه
   const phases = PHASES.map((key) => {
@@ -203,7 +229,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   }).filter(Boolean);
 
   // الأنشطة: المتطلبات الظاهرة في مراحل الرحلة، بترتيب المرحلة ثم ترتيبها
-  const order = new Map(stages.map((s, i) => [s.key, i]));
+  const order = new Map(all.map((s, i) => [s.key, i]));
   const list = reqs.filter((r) => r.active !== false && !r.hidden && order.has(r.stage_key))
     .sort((a, b) => order.get(a.stage_key) - order.get(b.stage_key) || (a.sort ?? 0) - (b.sort ?? 0));
   const mine = (sessions || []).filter((x) => x.active !== false && (!x.cohort_id || x.cohort_id === cohort?.id));
@@ -241,7 +267,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
       aria_ar: [title, `مرحلة ${st.title}`, kindAr, reqAr, mode ? MODE_AR[mode] : '', when, ACTIVITY_OWNER_AR[owner], level].filter(Boolean).join('، '),
     };
   });
-  for (const s of stageOut) {
+  for (const s of [...stageOut, ...trackOut]) {
     s.activities = activities.filter((a) => a.stage === s.key).map((a) => a.id);
     s.empty = !s.activities.length;
     s.undated = activities.some((a) => a.stage === s.key && a.undated);
@@ -311,5 +337,6 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     phases, slots: slots.map(({ key, stages: ks, at, width, together, days }) => ({ key, stages: ks, at, width, together, days,
       note_ar: together ? `${titleOf.get(ks[0])} و${countAr(ks.length - 1, 'مرحلة تبدأ', 'مرحلتان تبدآن', 'مراحل تبدأ', 'مرحلة تبدأ')} معها في الأسابيع نفسها` : '' })),
     stages: stageOut, activities, ticks, today: todayOut, counts, cards, selected,
+    ...(trackOut.length ? { tracks: trackOut, tracks_ar: 'مسارات مستمرة' } : {}),
   };
 }

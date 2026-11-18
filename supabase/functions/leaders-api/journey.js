@@ -152,6 +152,36 @@ const MODES = ['required', 'on_demand', 'optional'];
 // with: تبدأ مع مرحلة قبلها في الترتيب (rules.with)، فتُفتح حين تُفتح مرجعها وتسير معها (المراحل المتوازية P1)
 const UNLOCKS = ['previous', 'with', 'always', 'stages', 'day', 'approval'];
 const COMPLETES = ['required', 'any', 'approval'];
+// طبيعة عنصر الرحلة (T1، تصور 2026-11-18 ب5): «مرحلة» متتابعة (الافتراضي)، و«مسار مستمر» يسير بجانب السلسلة فلا يأخذ منها
+// أيامًا ولا يقفل ما بعدها إلا المرحلة المسماة في due_before، و«خدمة» تُبنى في T2 (تُقرأ هنا فلا تسقط، وتُعامل مرحلة حتى تُبنى)
+export const LANES = Object.freeze(['stage', 'track', 'service']);
+export const LANE_AR = Object.freeze({ stage: 'مرحلة متتابعة', track: 'مسار مستمر', service: 'خدمة' });
+// نهاية المسار (until): نهاية الرحلة (الافتراضي: نهاية الدفعة في ملفها، وإلا نهاية السلسلة)، أو مدته بالأيام، أو نهاية طور، أو نهاية مرحلة
+export const TRACK_UNTIL_DEFAULT = 'journey_end';
+export const TRACK_DUE_DEFAULT = 'report';
+// بوابات القبول (عليها يُبنى فتح ما بعدها) لا تصير مسارًا، والمصدر الواحد لـPLAN_GATE_STAGES في cohort-plan.js
+export const GATE_STAGE_KEYS = Object.freeze(['profile', 'assessment', 'approval']);
+/** قيمة until إن صلحت بصيغتها، وإلا null: 'journey_end' | 'days' | 'phase:<المحور>' | 'stage:<المفتاح>' @param {any} v */
+export function untilOf(v) {
+  const t = v == null ? '' : String(v).trim();
+  if (t === 'journey_end' || t === 'days') return t;
+  const m = /^(phase|stage):([A-Za-z0-9_-]+)$/.exec(t);
+  if (!m) return null;
+  if (m[1] === 'phase' && !PHASE_AR[m[2]]) return null;
+  return t;
+}
+// أخطاء القواعد التي تمنع الحفظ والنشر والترتيب (withGuard وversionBlock): «تبدأ مع»، وطبيعة المسار، وما يشترطه المسار
+export const BLOCKING_RULES = Object.freeze(['with', 'lane', 'due_before']);
+export const isTrack = (s) => stageRules(s).lane === 'track';
+// القياس البعدي (E-POST) لا يوضع في مسار مستمر (ب5.1 الحراس): عليه يُبنى التقييم والتقرير، فلا يسير بجانب الرحلة.
+// يقرؤه حفظ قاعدة المرحلة وحفظ المتطلب وحفظ النسخة، فلا يصل إليه أي ترتيب للخطوات
+export const POST_IN_TRACK_AR = 'لا يوضع القياس البعدي في مسار مستمر: عليه يُبنى التقييم والتقرير';
+/** أول مسار مستمر فيه متطلب E-POST فعّال، أو null @param {any[]} stages @param {any[]} requirements */
+export function postInTrack(stages, requirements) {
+  const tracks = new Set((stages || []).filter((s) => s && s.active !== false && isTrack(s)).map((s) => s.key));
+  const r = (requirements || []).find((x) => x && x.code === 'E-POST' && x.active !== false && tracks.has(x.stage_key));
+  return r ? r.stage_key : null;
+}
 
 // القواعد كما تُقرأ: كل مفتاح بقيمته الافتراضية إن غاب
 export function stageRules(stage) {
@@ -166,8 +196,19 @@ export function stageRules(stage) {
     // والفتح يبقى مع بداية المرجع (القرار 6)، فلا يقرؤها resolveStages
     offset: r.unlock === 'with' && Number.isInteger(Number(r.offset)) && Number(r.offset) > 0 && r.offset !== true ? Number(r.offset) : 0,
     complete: COMPLETES.includes(r.complete) ? r.complete : 'required',
+    ...laneOf(r),
   };
 }
+// الطبيعة وحقولها: المرحلة المتتابعة بلا حقول جديدة، فشكل القواعد لبرنامج بلا مسار لا يتغير حرفًا
+function laneOf(r) {
+  const lane = LANES.includes(r.lane) ? r.lane : 'stage';
+  if (lane !== 'track') return lane === 'stage' ? {} : { lane };
+  return {
+    lane, until: untilOf(r.until) || TRACK_UNTIL_DEFAULT,
+    due_before: r.due_before != null && r.due_before !== '' ? String(r.due_before) : TRACK_DUE_DEFAULT,
+  };
+}
+const laneKey = (s) => stageRules(s).lane || 'stage';
 
 // «تبدأ مع» تصنع مجموعة متجاورة: المرجع ومن يسير معه متتاليان في الترتيب ومن محور واحد.
 // بذلك يتفق الفتح (resolveStages) والنوافذ (stageWindows) والتوزيع (distributeSchedule) والخط الزمني على شكل واحد:
@@ -194,11 +235,15 @@ export function withPlacementIssue(live, self, refKey) {
   const at = live.findIndex((x) => x.key === refKey);
   if (idx < 0 || at < 0 || at >= idx) return null;
   const ref = live[at];
+  // المسار المستمر (T1) يبدأ مع أي مرحلة سابقة من أي طور، ولا يدخل مجموعة «تسير معًا»، فلا قيد محور ولا مجاورة عليه
+  if (laneKey(self) === 'track') return null;
+  if (laneKey(ref) === 'track') return `«${ref.title_ar || ref.key}» مسار مستمر، فلا تبدأ معه مرحلة متتابعة`;
   if (phaseOf(ref) !== phaseOf(self)) {
     return `تبدأ مع «${ref.title_ar || ref.key}» وهي في محور «${PHASE_AR[phaseOf(ref)]}» وهذه في «${PHASE_AR[phaseOf(self)]}»، والمراحل التي تسير معًا من محور واحد`;
   }
   const root = withRoot(live, refKey);
-  const odd = live.slice(at + 1, idx).find((x) => !(stageRules(x).unlock === 'with' && withRoot(live, x.key) === root));
+  // المسار المستمر بين المرجع وتابعه لا يفصلهما: يسير بجانب السلسلة لا فيها
+  const odd = live.slice(at + 1, idx).find((x) => laneKey(x) !== 'track' && !(stageRules(x).unlock === 'with' && withRoot(live, x.key) === root));
   if (odd) return `تبدأ مع «${ref.title_ar || ref.key}» وبينهما «${odd.title_ar || odd.key}» لا تسير معهما؛ رتّب «${odd.title_ar || odd.key}» بعد المجموعة أو اختر مرجعًا يليها مباشرة`;
   return null;
 }
@@ -210,7 +255,7 @@ export function withCandidates(stages, selfKey) {
   const live = all.filter((s) => s.active !== false || s.key === selfKey).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   if (!self) return live.filter((s) => s.active !== false);
   const idx = live.indexOf(self);
-  return live.slice(0, idx).filter((s) => s.active !== false && !withPlacementIssue(live, self, s.key));
+  return live.slice(0, idx).filter((s) => s.active !== false && laneKey(s) !== 'track' && !withPlacementIssue(live, self, s.key));
 }
 
 // القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا.
@@ -237,6 +282,16 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     if (bad) throw new Error(bad === selfKey ? 'المرحلة لا تشترط نفسها' : `مرحلة غير موجودة في البرنامج: ${bad}`);
     out.after = after;
   }
+  // الطبيعة (T1): المسار المستمر يبدأ مع مرحلة سابقة من أي طور بإزاحة بلا سقف، وينتهي بـuntil، وتُشترط بنوده الإلزامية
+  // قبل المرحلة المسماة في due_before وحدها. «مرحلة» هي الافتراضي فلا تُحفظ، و«الخدمة» في الخطوة التالية (T2)
+  const lane = r.lane != null && r.lane !== '' ? String(r.lane) : 'stage';
+  if (!LANES.includes(lane)) throw new Error('طبيعة المرحلة غير معروفة');
+  if (lane === 'service') throw new Error('«خدمة» تُبنى في خطوة لاحقة؛ اجعلها اليوم مرحلة «عند الحاجة»');
+  const track = lane === 'track';
+  if (track) {
+    if (selfKey && GATE_STAGE_KEYS.includes(selfKey)) throw new Error('بوابات القبول (الملف وتحديد المستوى واعتماده) لا تصير مسارًا مستمرًا: عليها يُبنى فتح ما بعدها');
+    if (out.unlock !== 'with') throw new Error('المسار المستمر يبدأ مع مرحلة قبله: اختر «تبدأ مع» ثم المرحلة');
+  }
   if (out.unlock === 'with') {
     const k = r.with != null && r.with !== '' ? String(r.with) : '';
     if (!k) throw new Error('اختر المرحلة التي تبدأ هذه معها');
@@ -249,12 +304,14 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     if (self && Number.isFinite(Number(self.sort)) && Number.isFinite(Number(target.sort)) && Number(target.sort) >= Number(self.sort)) {
       throw new Error(`«${name}» بعد هذه المرحلة في الترتيب؛ اختر مرحلة قبلها، أو رتّب المراحل أولًا`);
     }
+    if (target.rules && laneKey(target) === 'track') throw new Error(`«${name}» مسار مستمر، فلا تبدأ معه مرحلة. اختر مرحلة متتابعة`);
     out.with = k;
     // الإزاحة (R3a): تُخطَّط بعد N يومًا من بداية مرجعها، من 0 إلى مدته (البند 4.6). صفر هو الافتراضي فلا يُحفظ
     if (r.offset != null && r.offset !== '') {
       const n = plainInt(r.offset);
       if (!Number.isInteger(n) || n < 0 || n > 365) throw new Error('الإزاحة عدد أيام صحيح من 0 إلى 365');
-      const cap = target.duration_days != null && target.duration_days !== '' ? Math.max(0, Math.round(Number(target.duration_days) || 0)) : null;
+      // المسار المستمر يبدأ بعد مرجعه بأي عدد أيام (يوم بعد التدريب مثلًا)، فلا سقف بمدة المرجع
+      const cap = !track && target.duration_days != null && target.duration_days !== '' ? Math.max(0, Math.round(Number(target.duration_days) || 0)) : null;
       if (cap != null && n > cap) throw new Error(`الإزاحة من 0 إلى مدة «${name}» (${daysAr(cap)})`);
       if (n > 0) out.offset = n;
     }
@@ -268,6 +325,30 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     if (!COMPLETES.includes(r.complete)) throw new Error('شرط الاكتمال غير معروف');
     if (r.complete !== 'required') out.complete = r.complete;
   }
+  if (track) {
+    out.lane = 'track';
+    const raw = r.until != null && r.until !== '' ? String(r.until) : TRACK_UNTIL_DEFAULT;
+    const until = untilOf(raw);
+    if (!until) throw new Error('نهاية المسار: نهاية الرحلة، أو مدته بالأيام، أو نهاية طور، أو نهاية مرحلة');
+    if (until.startsWith('stage:')) {
+      const k = until.slice(6);
+      const t = list.find((x) => x.key === k);
+      if (!t || k === selfKey) throw new Error(k === selfKey ? 'المسار لا ينتهي بنهايته هو؛ اختر «مدته بالأيام»' : `مرحلة غير موجودة في البرنامج: ${k}`);
+      if (t.rules && laneKey(t) === 'track') throw new Error(`«${t.title_ar || k}» مسار مستمر آخر؛ ينتهي المسار بنهاية مرحلة متتابعة`);
+    }
+    out.until = until;
+    // ما يشترط بنوده الإلزامية: «التقرير النهائي» افتراضيًا إن كان في البرنامج، أو مرحلة متتابعة تسميها
+    const keys = new Set(list.map((x) => x.key));
+    const due = r.due_before != null && r.due_before !== '' ? String(r.due_before) : (keys.has(TRACK_DUE_DEFAULT) ? TRACK_DUE_DEFAULT : '');
+    if (due) {
+      if (due === selfKey) throw new Error('المسار لا يشترط نفسه؛ اختر المرحلة التي تنتظر بنوده الإلزامية');
+      const t = list.find((x) => x.key === due);
+      if (!t) throw new Error(`مرحلة غير موجودة في البرنامج: ${due}`);
+      if (t.rules && laneKey(t) === 'track') throw new Error(`«${t.title_ar || due}» مسار مستمر؛ تُشترط بنود المسار قبل مرحلة متتابعة`);
+      if (GATE_STAGE_KEYS.includes(due)) throw new Error(`«${t.title_ar || due}» من بوابات القبول، فلا تنتظر مسارًا يبدأ بعدها`);
+      out.due_before = due;
+    }
+  }
   return out;
 }
 
@@ -279,12 +360,16 @@ export function stageRulesIssues(stages) {
   const live = all.filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   const byKey = new Map(all.map((s) => [s.key, s]));
   const title = (k) => byKey.get(k)?.title_ar || k;
+  // المسار المستمر (T1) لا يدخل في «بعد الإلزامية قبلها»، والمرحلة المسماة في due_before تنتظر بنوده الإلزامية
+  const tracks = live.filter((s) => laneKey(s) === 'track');
+  const dueOf = (k) => tracks.filter((t) => stageRules(t).due_before === k).map((t) => t.key);
   const deps = new Map(live.map((s, i) => {
     const r = stageRules(s);
-    if (r.unlock === 'stages') return [s.key, r.after];
-    if (r.unlock === 'with') return [s.key, r.with ? [r.with] : []];
-    if (r.unlock === 'previous') return [s.key, live.slice(0, i).filter((x) => stageRules(x).mode === 'required').map((x) => x.key)];
-    return [s.key, []];
+    const due = tracks.length ? dueOf(s.key) : [];
+    if (r.unlock === 'stages') return [s.key, [...r.after, ...due]];
+    if (r.unlock === 'with') return [s.key, [...(r.with ? [r.with] : []), ...due]];
+    if (r.unlock === 'previous') return [s.key, [...live.slice(0, i).filter((x) => stageRules(x).mode === 'required' && laneKey(x) !== 'track').map((x) => x.key), ...due]];
+    return [s.key, due];
   }));
   for (const s of live) {
     const r = stageRules(s);
@@ -309,8 +394,19 @@ export function stageRulesIssues(stages) {
         if (why) issue(why);
         // الإزاحة أكبر من مدة المرجع (مدته قصرت بعد ضبطها): تنبيه لا منع، وخطة الدفعة تحصرها في مدته (cohortPlan)
         const cap = Math.max(0, Math.round(Number(byKey.get(k).duration_days) || 0));
-        if (r.offset > cap) out.push({ level: 'warn', stage: s.key, rule: 'offset', msg: `«${s.title_ar}»: تُخطَّط بعد ${daysAr(r.offset)} من بداية «${title(k)}» ومدتها ${cap ? daysAr(cap) : 'صفر'}، فتُحصر الإزاحة في مدتها` });
+        if (r.offset > cap && r.lane !== 'track') out.push({ level: 'warn', stage: s.key, rule: 'offset', msg: `«${s.title_ar}»: تُخطَّط بعد ${daysAr(r.offset)} من بداية «${title(k)}» ومدتها ${cap ? daysAr(cap) : 'صفر'}، فتُحصر الإزاحة في مدتها` });
       }
+    }
+    if (r.lane === 'track') {
+      const lane = (msg, level = 'error', rule = 'lane') => out.push({ level, stage: s.key, rule, msg: `«${s.title_ar}»: ${msg}` });
+      if (GATE_STAGE_KEYS.includes(s.key)) lane('من بوابات القبول، فلا تكون مسارًا مستمرًا');
+      if (r.unlock !== 'with') lane('مسار مستمر بلا مرحلة يبدأ معها؛ اختر «تبدأ مع»');
+      const due = r.due_before;
+      if (due === s.key) lane('مسار يشترط نفسه', 'error', 'due_before');
+      else if (byKey.has(due) && byKey.get(due).active === false) lane(`تُشترط بنوده قبل «${title(due)}» وهي مخفية، فلا ينتظره أحد`, 'warn', 'due_before');
+      else if (byKey.has(due) && laneKey(byKey.get(due)) === 'track') lane(`تُشترط بنوده قبل «${title(due)}» وهي مسار مستمر`, 'error', 'due_before');
+      else if (!byKey.has(due) && due !== TRACK_DUE_DEFAULT) lane(`تُشترط بنوده قبل مرحلة غير موجودة (${due})`, 'error', 'due_before');
+      if (r.until.startsWith('stage:') && !live.some((x) => x.key === r.until.slice(6))) lane(`ينتهي بنهاية مرحلة غير موجودة أو مخفية (${r.until.slice(6)})، فينتهي بنهاية الرحلة`, 'warn', 'until');
     }
     if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
     if (r.unlock === 'day' && r.day == null) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح بالأيام بلا عدد أيام` });
@@ -320,7 +416,12 @@ export function stageRulesIssues(stages) {
   // حلقة: مرحلة تنتظر (مباشرة أو عبر غيرها) مرحلة تنتظرها
   const seen = new Set(), stack = new Set();
   const visit = (k, path) => {
-    if (stack.has(k)) { out.push({ level: 'error', stage: k, msg: `حلقة في شروط الفتح: ${[...path, k].map(title).join(' ← ')}` }); return true; }
+    if (stack.has(k)) {
+      // حلقة يصنعها شرط مسار مستمر (due_before) تمنع النشر والحفظ كخطأ «تبدأ مع»، فلا يُقفل أحد إلى الأبد
+      const viaTrack = tracks.length && [...path, k].some((x) => tracks.some((t) => t.key === x));
+      out.push({ level: 'error', stage: k, ...(viaTrack ? { rule: 'due_before' } : {}), msg: `حلقة في شروط الفتح: ${[...path, k].map(title).join(' ← ')}` });
+      return true;
+    }
     if (seen.has(k)) return false;
     seen.add(k); stack.add(k);
     for (const d of deps.get(k) || []) if (deps.has(d) && visit(d, [...path, k])) { stack.delete(k); return true; }
@@ -349,7 +450,32 @@ export function stageRuleSummary(stage, stages = []) {
     approval: 'يفتحها الأدمن أو الخبير',
   }[r.unlock];
   const complete = { required: 'تكتمل بمتطلباتها الإلزامية', any: 'تكتمل بأي متطلب فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];
+  if (r.lane === 'track') return `${LANE_AR.track} · ${unlock} · ${untilAr(r.until, title)} · ${dueBeforeAr(r.due_before, stages)}`;
   return `${mode} · ${unlock} · ${complete}`;
+}
+/** نهاية المسار بجملة @param {string} until @param {(k: string) => string} [title] */
+export function untilAr(until, title = (k) => k) {
+  const u = untilOf(until) || TRACK_UNTIL_DEFAULT;
+  if (u === 'journey_end') return 'يمتد حتى نهاية الرحلة';
+  if (u === 'days') return 'يمتد بمدته بالأيام';
+  if (u.startsWith('phase:')) return `يمتد حتى نهاية محور «${PHASE_AR[u.slice(6)] || u.slice(6)}»`;
+  return `يمتد حتى نهاية «${title(u.slice(6))}»`;
+}
+/** ما تنتظره بنود المسار، بجملة @param {string} due @param {any[]} stages */
+export function dueBeforeAr(due, stages = []) {
+  const t = (stages || []).find((s) => s.key === due);
+  if (!t) return 'لا يقفل مرحلة بعده';
+  return `بنوده الإلزامية مطلوبة قبل «${t.title_ar || due}» وحدها`;
+}
+// خيارات نهاية المسار للمحرر: نهاية الرحلة والمدة، ونهاية كل محور فيه مراحل، ونهاية كل مرحلة متتابعة ظاهرة غيره
+export function untilOptions(stages = [], selfKey = null) {
+  const live = (stages || []).filter((s) => s.active !== false && s.key !== selfKey && laneKey(s) !== 'track').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const phases = [...new Set(live.map(phaseOf))];
+  return {
+    journey_end: 'نهاية الرحلة (نهاية الدفعة في ملفها)', days: 'مدته بالأيام',
+    ...Object.fromEntries(phases.map((p) => [`phase:${p}`, `نهاية محور «${PHASE_AR[p]}»`])),
+    ...Object.fromEntries(live.map((s) => [`stage:${s.key}`, `نهاية «${s.title_ar || s.key}»`])),
+  };
 }
 
 const DAY_MS = 86400000;
@@ -362,6 +488,10 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
   const state = new Map();   // حالة كل مرحلة مرّ بها الحل، لقاعدة «تبدأ مع»
   const out = [];
   const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
+  // المسار المستمر (T1): لا يدخل في «بعد الإلزامية قبلها» لأحد، وبنوده الإلزامية تُشترط قبل المرحلة المسماة في due_before
+  // وحدها، أيًا كان موضعه في الترتيب (البنود معروفة قبل الحل). المسار المتجاوَز أو المعتمد اكتماله يُعد مستوفى
+  const tracks = stages.filter((x) => laneKey(x) === 'track');
+  const trackReady = (t) => ['complete', 'skip'].includes(overrides[t.key]) || (t.items || []).filter((x) => x.required).every((x) => x.status === 'done');
   for (let i = 0; i < stages.length; i++) {
     const s = stages[i];
     const r = stageRules(s);
@@ -370,7 +500,8 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     const byItems = r.complete === 'any' ? s.items.some((x) => x.status === 'done')
       : r.complete === 'approval' ? false
         : required.length > 0 && required.every((x) => x.status === 'done');
-    const before = stages.slice(0, i).filter((x) => stageRules(x).mode === 'required');
+    const before = stages.slice(0, i).filter((x) => stageRules(x).mode === 'required' && (!tracks.length || laneKey(x) !== 'track'));
+    const dueWaits = tracks.length ? tracks.filter((t) => t.key !== s.key && stageRules(t).due_before === s.key && !trackReady(t)).map((t) => t.key) : [];
     let unlocked, waits = [];
     if (ov === 'open') unlocked = true;
     else if (r.unlock === 'always') unlocked = true;
@@ -381,6 +512,8 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     else if (r.unlock === 'stages') { waits = r.after.filter((k) => !done.get(k)); unlocked = !waits.length; }
     else if (r.unlock === 'day' && start != null && r.day != null) unlocked = now >= start + r.day * DAY_MS;
     else { waits = before.filter((x) => !done.get(x.key)).map((x) => x.key); unlocked = !waits.length; }
+    // due_before: مع شرط فتحها، تنتظر المرحلة المسماة بنود المسار الإلزامية (إلا بفتح الأدمن)
+    if (dueWaits.length && ov !== 'open' && r.unlock !== 'approval') { waits = [...new Set([...waits, ...dueWaits])]; unlocked = false; }
     let status;
     // المقفلة تبقى مقفلة ولو اكتملت متطلباتها (كالسلوك الأصلي)، إلا بتدخل الأدمن
     if (ov === 'complete' || ov === 'skip') status = 'done';
@@ -395,8 +528,10 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
       else if (r.unlock === 'approval') lock_reason = 'تُفتح حين يفتحها لك فريق البرنامج';
       else if (r.unlock === 'day' && start != null && r.day != null) lock_reason = `تُفتح في ${new Date(start + r.day * DAY_MS).toISOString().slice(0, 10)}`;
       else if (waits.length) lock_reason = `تُفتح بعد اكتمال: ${waits.map(title).join('، ')}`;
+      if (dueWaits.length && r.unlock !== 'stages' && r.unlock !== 'previous' && r.unlock !== 'approval') lock_reason = `تُفتح بعد اكتمال بنود: ${dueWaits.map(title).join('، ')}`;
     }
-    out.push({ ...s, status, mode: s.mode, stage_mode: r.mode, lock_reason, override: ov, skipped: ov === 'skip' });
+    // الطبيعة في المخرج لغير المتتابعة وحدها: الحجز وفتح الجلسات يجدان بند المسار في الرحلة، والعرض والعداد يفلترانه
+    out.push({ ...s, status, mode: s.mode, stage_mode: r.mode, lock_reason, override: ov, skipped: ov === 'skip', ...(r.lane ? { lane: r.lane } : {}) });
   }
   return out;
 }
