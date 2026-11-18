@@ -111,6 +111,21 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const slotAt = new Map(model.slots.map((x) => [x.key, x]));
   const cards = model.cards.filter((c) => !omitCards.includes(c.key));
   const openFirst = (s) => (cohort ? s.status === 'active' : s.key === model.stages.find((x) => x.phase === 'qualification')?.key);
+  // المسار المستمر (T1): صف «مسارات مستمرة» بجانب السلسلة على المقياس نفسه، بشريط من بدايته إلى نهايته
+  const tracks = model.tracks || [];
+  for (const x of tracks) stageBy.set(x.key, x);
+  const trackHead = (s) => (
+    <div className="jt-stage-head">
+      {onStage ? (
+        <button type="button" className="jt-stage-link" onClick={() => onStage(s.key)} aria-label={`${s.title}: انتقل إلى بطاقته`}>
+          <b>{s.status === 'done' && <Glyph name="check" size={12} />}{s.title}</b>
+        </button>
+      ) : <b>{s.status === 'done' && <Glyph name="check" size={12} />}{s.title}</b>}
+      <span className="jt-mode jt-lane-tag">{s.lane_ar}</span>
+      {s.status_ar && s.status !== 'upcoming' && <span className={`jt-status ${s.status}`}>{s.status_ar}</span>}
+      <small>{cohort && s.window_ar ? s.window_ar : s.label}، {s.note_ar}</small>
+    </div>
+  );
 
   return (
     <section className={`jt ctx-${model.context}`} aria-labelledby={head}>
@@ -147,6 +162,21 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                 </div>
               ))}
             </div>
+            {tracks.length > 0 && (
+              <div className="jt-row jt-tracks" role="group" aria-label={model.tracks_ar} style={{ minHeight: `${24 + tracks.length * 106}px` }}>
+                <span className="jt-row-label">{model.tracks_ar}</span>
+                {tracks.map((s, i) => (
+                  <div key={s.key} className={`jt-trackbar ph-${s.phase}${s.status ? ` st-${s.status}` : ''}`} data-track={s.key}
+                    style={{ insetInlineStart: `${s.at}%`, width: `${s.width}%`, top: `${20 + i * 106}px` }}>
+                    {trackHead(s)}
+                    <div className="jt-acts">
+                      {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
+                        : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} />)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {cohort && model.dated && (
               <div className="jt-row jt-dates" aria-label="المواعيد">
                 <span className="jt-row-label">المواعيد</span>
@@ -171,13 +201,26 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             <li><Glyph name="online" size={13} />عن بعد</li><li><Glyph name="in_person" size={13} />حضوري</li>
             <li><Glyph name="clock" size={13} />يُحدد لاحقًا</li><li><i className="sq tog" />تسير معًا</li>
             {model.stages.some((s) => s.mode_ar) && <li><i className="sq nonreq" />مرحلة غير إلزامية</li>}
+            {tracks.length > 0 && <li><i className="sq lane" />مسار مستمر يسير بجانب المراحل</li>}
             {model.today && <li><i className="ln" />اليوم</li>}
           </ul>
           <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} />
         </div>
       </div>
 
-      {/* الهاتف: خط رأسي، كل مرحلة details تفتح بطاقات أنشطتها */}
+      {/* الهاتف: خط رأسي، كل مرحلة details تفتح بطاقات أنشطتها، والمسار المستمر قبلها بشريط «يسير بجانب المراحل» */}
+      {tracks.length > 0 && (
+        <ul className="jt-phone jt-m-tracks" aria-label={model.tracks_ar}>
+          {tracks.map((s) => (
+            <li key={s.key} className={`jt-m-track ph-${s.phase}${s.status ? ` st-${s.status}` : ''}`} data-track={s.key}>
+              <p className="jt-m-title"><b>{s.title}</b><span className="jt-mode jt-lane-tag">{s.lane_ar}</span>{s.status_ar && <span className={`jt-status ${s.status}`}>{s.status_ar}</span>}</p>
+              <small>{cohort && s.window_ar ? s.window_ar : s.label}</small>
+              <small>{s.note_ar}. {s.due_ar}.</small>
+              {s.today_ar && <p className="jt-m-today">{s.today_ar}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
       <ol className="jt-phone" aria-label="مراحل الرحلة">
         {model.phases.map((p) => (
           <li key={p.key} className={`jt-m-phase ph-${p.key}`}>

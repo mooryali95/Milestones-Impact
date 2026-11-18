@@ -309,6 +309,11 @@ textarea.input { min-height: 96px; resize: vertical; }
 .together-cards { display: grid; gap: 12px; }
 .together-cards > .stage { margin-bottom: 0; }
 .together .stage .dot { inset-inline-start: -47px; }
+/* المسار المستمر (T1): الكتلة نفسها بإطار مزدوج وخلفية مخططة، فيُرى أنه يسير بجانب المراحل لا بينها */
+.together.track { border: 3px double rgba(148, 112, 46, .45); background: repeating-linear-gradient(135deg, rgba(199, 154, 75, .07) 0 12px, rgba(199, 154, 75, .015) 12px 24px); }
+.together.track.now { border-color: var(--gold); }
+.together.track .stage .dot { inset-inline-start: -49px; }
+.track-badge::before { border-block-style: double; border-block-width: 3px; }
 .stage-top {
   width: 100%; background: none; border: 0; cursor: pointer; text-align: start;
   padding: 16px 18px; display: flex; gap: 12px; align-items: center;

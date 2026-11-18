@@ -454,8 +454,9 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
 
 // نسبة التقدم الكلية: المراحل المكتملة مع جزء الحالية. المرحلة عند الطلب أو
 // الاختيارية لا تُنقص التقدم إن لم يحتجها المشارك، وتُحسب له إن أتمّها.
+// والمسار المستمر (T1) يسير بجانب الرحلة فلا يُحسب في نسبتها، وتُشترط بنوده قبل مرحلته المسماة (due_before)
 export function journeyProgress(journey) {
-  const counted = journey.filter((s) => (s.stage_mode || 'required') === 'required' || s.status === 'done');
+  const counted = journey.filter((s) => s.lane !== 'track' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
   if (!counted.length) return 0;
   let score = 0;
   for (const s of counted) {

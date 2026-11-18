@@ -288,3 +288,8 @@
   .cj-days-head .cj-day-add { margin-inline-start: 0; inline-size: 100%; }
   .cj-day { padding: 9px 10px; }
 }
+
+/* المسار المستمر (T1): بطاقة بإطار مزدوج الخط في «مسارات مستمرة» بجانب المحاور، ووسم طبيعته */
+.cj-tracks .cj-card { border-inline-start: 4px double var(--gold); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--gold) 6%, #fff) 0 12px, #fff 12px 24px); }
+.cj-tag.cj-lane { border-style: double; border-width: 3px; border-color: color-mix(in srgb, var(--gold) 70%, transparent); color: var(--gold-text); font-weight: 700; }
+.cj-until select { max-width: 100%; }

@@ -17,7 +17,7 @@
 // قاعدة النهاية (القرار 18): النافذة شاملة الطرفين، فمرحلة بـN يوم من يوم س تنتهي س + N - 1 وما بعدها يبدأ في اليوم التالي.
 // والمرحلة بلا مدة (0) نقطة في يوم بدايتها لا تأخذ من المسار شيئًا.
 import { addDays, daysBetween } from './milestones.js';
-import { daysAr, stagePhase, stageRules } from './journey.js';
+import { daysAr, stagePhase, stageRules, untilOf } from './journey.js';
 import { PHASE_AR } from './labels.js';
 
 const isoDay = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
@@ -85,8 +85,14 @@ export function planWithOf(entry) {
     const v = Number(n);
     if (Number.isInteger(v) && v >= 0 && v <= PLAN_DAYS_MAX) out.offset = v;
   }
+  // نهاية المسار المستمر لهذه الدفعة (T1): تخطيط للتواريخ مع with وoffset، فيمر معهما في كل ما يقرأ التوازي
+  const u = untilOf(entry.until);
+  if (u) out.until = u;
   return out;
 }
+const laneOfStage = (s) => stageRules(s).lane || 'stage';
+/** هل المرحلة مسار مستمر (T1) @param {any} s */
+export const planTrack = (s) => laneOfStage(s) === 'track';
 const sortOf = (a, b) => (a.sort ?? 0) - (b.sort ?? 0);
 /** المراحل بقواعد التوازي الفعلية في الدفعة: with وoffset من خطتها فوق قاعدة النسخة. يقرؤها cohortPlan (المجموعات والإزاحة)
  * والخط الزمني (الممرات) وتعريف الدفعة (cohortDefinition: «تسير مع» تُفتح مع بداية مرجعها، والإزاحة لا تقفل، القرار 6).
@@ -96,11 +102,14 @@ const sortOf = (a, b) => (a.sort ?? 0) - (b.sort ?? 0);
 export function planWithRules(stages, schedule) {
   const sched = schedule && typeof schedule === 'object' ? schedule : {};
   const list = stages || [];
-  if (!list.some((s) => { const p = planWithOf(sched[s.key]); return p.with !== undefined || p.offset !== undefined; })) return list;
+  if (!list.some((s) => { const p = planWithOf(sched[s.key]); return p.with !== undefined || p.offset !== undefined || (p.until !== undefined && planTrack(s)); })) return list;
   const idx = new Map([...list].sort(sortOf).map((s, i) => [s.key, i]));
   const byKey = new Map(list.map((s) => [s.key, s]));
   return list.map((s) => {
     const p = planWithOf(sched[s.key]);
+    // المسار المستمر (T1): مرجعه مرحلة متتابعة سابقة من أي طور، وإزاحته بلا سقف، ونهايته من خطة الدفعة فوق قاعدة النسخة.
+    // و«لا شيء» لا يُقبل له (يبدأ مع مرجع دائمًا)، فتبقى قاعدة النسخة
+    if (planTrack(s)) return trackRules(s, p, byKey, idx);
     if (p.with === undefined && p.offset === undefined) return s;
     const r = stageRules(s);
     if (!PLAN_WITH_UNLOCKS.includes(r.unlock)) return s;
@@ -110,11 +119,28 @@ export function planWithRules(stages, schedule) {
     const target = p.with !== undefined ? p.with : r.unlock === 'with' ? r.with : null;
     if (!target) return s;
     const ref = byKey.get(target);
-    if (!ref || target === s.key || !(idx.get(target) < idx.get(s.key)) || stagePhase(ref) !== stagePhase(s)) return s;
+    if (!ref || target === s.key || !(idx.get(target) < idx.get(s.key)) || stagePhase(ref) !== stagePhase(s) || planTrack(ref)) return s;
     // إزاحة الدفعة، وإلا إزاحة النسخة إن بقي مرجعها نفسه، وإلا من بدايته
     const off = p.offset !== undefined ? p.offset : target === r.with ? r.offset : 0;
     return { ...s, rules: { ...rest, unlock: 'with', with: target, ...(off ? { offset: off } : {}) } };
   });
+}
+
+function trackRules(s, p, byKey, idx) {
+  if (p.with === undefined && p.offset === undefined && p.until === undefined) return s;
+  const r = stageRules(s);
+  const raw = s.rules && typeof s.rules === 'object' ? s.rules : {};
+  let target = r.unlock === 'with' ? r.with : null;
+  let off = r.offset;
+  if (typeof p.with === 'string') {
+    const ref = byKey.get(p.with);
+    if (ref && p.with !== s.key && idx.get(p.with) < idx.get(s.key) && !planTrack(ref)) { target = p.with; off = p.with === r.with ? r.offset : 0; }
+  }
+  if (p.offset !== undefined && target) off = p.offset;
+  const { unlock: _u, with: _w, offset: _o, until: _t, ...rest } = raw;
+  const until = p.until !== undefined ? p.until : r.until;
+  if (!target) return { ...s, rules: { ...rest, until } };
+  return { ...s, rules: { ...rest, unlock: 'with', with: target, ...(off ? { offset: off } : {}), until } };
 }
 
 /** قواعد الفتح بعد إسقاط الموقوف (البند 4.4 والقرار 22): «بعد مراحل» يُحذف منها مفتاح الموقوفة، وإن فرغت صارت «بعد السابقة»،
@@ -156,6 +182,8 @@ export function planSchedule(cohort) {
 export function withGroups(stages) {
   const groups = [], groupOf = new Map();
   for (const s of stages) {
+    // المسار المستمر (T1) يسير بجانب السلسلة لا في مجموعة منها، فلا يصنع مجموعة ولا ينضم إليها
+    if (planTrack(s)) continue;
     const r = stageRules(s);
     const g = r.unlock === 'with' && r.with ? groupOf.get(r.with) : null;
     if (g) g.push(s); else groups.push([s]);
@@ -189,7 +217,10 @@ export function cohortPlan(stages, cohort = {}) {
     } else onStages.push(s);
   }
   // التوازي الفعلي (R3a): with وoffset من الخطة فوق قاعدة النسخة
-  const effStages = planWithRules(onStages, sched);
+  const effAll = planWithRules(onStages, sched);
+  // المسار المستمر (T1): تُحسب السلسلة أولًا وحدها، ثم صفوفه، فلا يدخل في المجموعات ولا المؤشر ولا النهاية ولا المدة
+  const effTracks = effAll.filter(planTrack);
+  const effStages = effTracks.length ? effAll.filter((x) => !planTrack(x)) : effAll;
   const titleOf = new Map((stages || []).map((s) => [s.key, s.title_ar || s.key]));
   for (const group of withGroups(effStages)) {
     let next = null;
@@ -285,15 +316,62 @@ export function cohortPlan(stages, cohort = {}) {
   if (over) issues.push({ level: 'warn', stage: null, code: 'over_end', msg: `تنتهي الرحلة بعد نهاية الدفعة بـ${daysAr(over)}` });
   const windows = {};
   for (const x of dated) windows[x.key] = { from: x.from, to: x.to };
+  const trackRows = effTracks.length ? trackPlan(effTracks, { sched, byKey, order, first, end, endsOn: c.is_default ? null : endsOn, titleOf, issues, phaseOf: new Map((stages || []).map((x) => [x.key, stagePhase(x)])) }) : [];
+  for (const x of trackRows) { byKey[x.key] = x; if (x.from) windows[x.key] = { from: x.from, to: x.to }; }
   // الصفوف بترتيب المراحل، والموقوفة في مكانها بعلامتها (تُعرض باهتة وتعود بنقرة)
   const at = new Map((stages || []).map((s, i) => [s.key, i]));
-  const all = [...order, ...offRows].sort((a, b) => at.get(a.key) - at.get(b.key));
+  const all = [...order, ...trackRows, ...offRows].sort((a, b) => at.get(a.key) - at.get(b.key));
   return {
     dated: dated.length > 0 && dated.length === order.length, start: first, end, over,
     total_days: first && end ? daysBetween(first, end) + 1 : null,
     stages: all, byKey, windows, issues, off: offRows.map((x) => x.key),
-    changed: all.filter((x) => x.source !== 'program' || x.par_source === 'cohort').length,
+    changed: all.filter((x) => x.source !== 'program' || x.par_source === 'cohort' || x.until_source === 'cohort').length,
+    ...(trackRows.length ? { tracks: trackRows.map((x) => x.key) } : {}),
   };
+}
+
+// صفوف المسار المستمر (T1، ب5.1): يبدأ مع مرجعه بعد إزاحته (بلا سقف بمدته)، وينتهي بـuntil: نهاية الرحلة (نهاية الدفعة في
+// ملفها، وإلا نهاية السلسلة بالأيام النسبية)، أو مدته، أو نهاية طور، أو نهاية مرحلة. لا يطيل الرحلة ولا يحرك ما بعده.
+// تنبيه واحد chain_end_mismatch إن انتهت السلسلة قبل نهاية الدفعة والمسار ممتد إليها (وبعدها يقوله over_end القائم)
+function trackPlan(tracks, { sched, byKey, order, first, end, endsOn, titleOf, issues, phaseOf }) {
+  const out = [];
+  let warned = false;
+  const phaseEnd = (ph) => order.filter((x) => x.to && phaseOf.get(x.key) === ph).reduce((m, x) => later(m, x.to), null);
+  for (const s of tracks) {
+    const r = stageRules(s);
+    const entry = sched[s.key];
+    const par = planWithOf(entry);
+    const programDays = Math.max(0, Math.round(Number(s.duration_days) || 0));
+    const own = planDaysOf(entry);
+    const ref = r.unlock === 'with' && r.with ? byKey[r.with] : null;
+    const shift = ref ? r.offset : 0;
+    const from = ref ? (ref.from ? addDays(ref.from, shift) : null) : first;
+    const until = r.until;
+    let to = null;
+    if (from) {
+      if (until === 'days') { const d = own ?? programDays; to = d > 0 ? addDays(from, d - 1) : from; }
+      else if (until.startsWith('stage:')) to = byKey[until.slice(6)]?.to || end;
+      else if (until.startsWith('phase:')) to = phaseEnd(until.slice(6)) || end;
+      else to = endsOn || end;
+      if (!to) to = from;
+      if (to < from) {
+        issues.push({ level: 'warn', stage: s.key, code: 'until_before', msg: `نهاية «${titleOf.get(s.key)}» (${to}) قبل بدايته (${from})، فيُرسم يومًا واحدًا` });
+        to = from;
+      }
+      if (until === 'journey_end' && endsOn && end && end < endsOn && !warned) {
+        warned = true;
+        issues.push({ level: 'warn', stage: null, code: 'chain_end_mismatch', msg: `تنتهي المراحل المتتابعة قبل نهاية الدفعة بـ${daysAr(daysBetween(end, endsOn))}، و«${titleOf.get(s.key)}» يمتد إلى نهاية الدفعة (${endsOn})` });
+      }
+    }
+    const days = from && to ? daysBetween(from, to) + 1 : (until === 'days' ? own ?? programDays : programDays);
+    out.push({
+      key: s.key, lane: 'track', days, program_days: programDays, source: own != null && own !== programDays ? 'cohort' : 'program',
+      from, to, next: to ? addDays(to, 1) : null,
+      with: ref ? r.with : null, offset: shift, par_source: par.with !== undefined || par.offset !== undefined ? 'cohort' : 'program',
+      until, until_source: par.until !== undefined ? 'cohort' : 'program',
+    });
+  }
+  return out;
 }
 
 // نافذة كل مرحلة { from, to } من خطة الدفعة (cohortPlan)، بالاسم القديم والشكل القديم لكل من يستورده
@@ -310,7 +388,8 @@ export function todayStages(stages, windows, today) {
   let started = null, end = null;
   for (const s of stages) {
     const w = windows[s.key];
-    if (!w) continue;
+    // المسار المستمر (T1) ليس «مرحلة اليوم» في الخريطة والتذكير، ولا يمد نهاية الرحلة
+    if (!w || planTrack(s)) continue;
     if (!end || w.to > end) end = w.to;
     if (w.from <= t) started = s.key;
     if (w.from <= t && t <= w.to) inside.push(s.key);
@@ -335,6 +414,25 @@ export function planSpanDays(stages, schedule = {}) {
   const list = [...(stages || [])].filter((s) => s && s.active !== false);
   if (!list.length) return 0;
   const p = cohortPlan(list, { starts_on: SPAN_EPOCH, schedule: planDaysOnly(schedule) });
-  const last = p.stages.reduce((m, x) => later(m, x.next), null);
+  // المسار المستمر (T1) لا يدخل في مدة الرحلة: ينتهي بنهايتها أو قبلها
+  const last = p.stages.filter((x) => x.lane !== 'track').reduce((m, x) => later(m, x.next), null);
   return last ? Math.max(0, daysBetween(SPAN_EPOCH, last)) : 0;
+}
+
+// ══ المسار المستمر عند المشارك (T1) ══
+/** نافذة كل مسار مستمر في رحلة الدفعة، لشريط «يسير معك» في رحلة المشارك: من cohortPlan نفسه، فلا تاريخ ثانٍ.
+ * الدفعة المفتوحة (is_default) بلا تواريخ: المدة النسبية وحدها. {} لبرنامج بلا مسار، فلا يتغير شيء في رحلته
+ * @param {any[]} stages مراحل تعريف الدفعة @param {any} [cohort] @returns {Record<string, { from: string|null, to: string|null, days: number, until: string, due_before: string, with: string|null, offset: number }>} */
+export function trackWindows(stages, cohort = {}) {
+  const list = (stages || []).filter((s) => s && s.active !== false);
+  if (!list.some(planTrack)) return {};
+  const p = cohortPlan(list, cohort || {});
+  const out = {};
+  for (const s of list.filter(planTrack)) {
+    const x = p.byKey[s.key];
+    if (!x || x.off) continue;
+    const r = stageRules(planWithRules(list, planSchedule(cohort || {})).find((y) => y.key === s.key) || s);
+    out[s.key] = { from: x.from, to: x.to, days: x.days, until: x.until, due_before: r.due_before, with: x.with, offset: x.offset || 0 };
+  }
+  return out;
 }

@@ -5,7 +5,7 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
-import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
+import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
@@ -1337,6 +1337,11 @@ export async function save(a: Admin, b: Body) {
     const shaped = list.map((s: any) => (s.key === b.row.key ? { ...s, ...('sort' in row ? { sort: row.sort } : {}), ...('active' in row ? { active: row.active } : {}) } : s));
     try { row.rules = cleanStageRules(row.rules, shaped, String(b.row.key)); }
     catch (err) { throw new Fail((err as Error).message, 400, 'rules'); }
+    // المسار المستمر (T1، ب5.1 الحراس): مرحلة فيها القياس البعدي (E-POST) لا تصير مسارًا، فعليه يُبنى التقييم والتقرير
+    if (row.rules?.lane === 'track') {
+      const { data: post } = await db.from('stage_requirements').select('code').eq('program_id', pid).eq('stage_key', String(b.row.key)).eq('code', 'E-POST').eq('active', true);
+      if ((post || []).length) throw new Fail('مرحلة فيها القياس البعدي لا تصير مسارًا مستمرًا: عليها يُبنى التقييم والتقرير', 400, 'rules');
+    }
     const after = list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s));
     const bad = stageRulesIssues(after).find((x: any) => x.level === 'error' && (x.stage === b.row.key || /حلقة/.test(x.msg)));
     if (bad) throw new Fail(bad.msg, 400, 'rules');
@@ -1472,8 +1477,9 @@ export async function remove(a: Admin, b: Body) {
 async function withGuard(pid: string, change: (list: any[]) => any[]) {
   const { data } = await db.from('journey_stages').select('key, title_ar, sort, active, phase, rules, duration_days').eq('program_id', pid);
   const list = data || [];
-  const known = new Set(stageRulesIssues(list).filter((x: any) => x.rule === 'with').map((x: any) => x.stage));
-  const bad = stageRulesIssues(change(list)).find((x: any) => x.level === 'error' && x.rule === 'with' && !known.has(x.stage));
+  // «تبدأ مع» وطبيعة المسار المستمر وما يشترطه (BLOCKING_RULES، T1): كل خطأ منها جديد بالتغيير يُرفض
+  const known = new Set(stageRulesIssues(list).filter((x: any) => BLOCKING_RULES.includes(x.rule)).map((x: any) => `${x.rule}:${x.stage}`));
+  const bad = stageRulesIssues(change(list)).find((x: any) => x.level === 'error' && BLOCKING_RULES.includes(x.rule) && !known.has(`${x.rule}:${x.stage}`));
   if (bad) throw new Fail(bad.msg, 409, 'rules');
 }
 
