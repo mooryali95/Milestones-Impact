@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261118140000_leaders_idempotency_keys
+-- as-of migration: 20261118150000_leaders_client_events
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -418,6 +418,25 @@ create table if not exists leaders.certificates (
   constraint certificates_status_check CHECK ((status = ANY (ARRAY['valid'::text, 'suspended'::text, 'revoked'::text, 'replaced'::text]))),
   constraint certificates_pkey PRIMARY KEY (id),
   constraint certificates_serial_key UNIQUE (serial)
+);
+
+create table if not exists leaders.client_events (
+  id bigint generated always as identity not null,
+  kind text not null,
+  act text default ''::text not null,
+  tries smallint default 1 not null,
+  build text,
+  message text,
+  at timestamp with time zone not null,
+  ip_hash text,
+  created_at timestamp with time zone default now() not null,
+  constraint client_events_act_check CHECK ((act ~ '^[a-z0-9._-]{0,60}$'::text)),
+  constraint client_events_build_check CHECK (((build IS NULL) OR (build ~ '^[A-Za-z0-9_-]{1,40}$'::text))),
+  constraint client_events_ip_hash_check CHECK (((ip_hash IS NULL) OR (char_length(ip_hash) = 64))),
+  constraint client_events_kind_check CHECK ((kind = ANY (ARRAY['offline'::text, 'TypeError'::text, 'timeout'::text, 'busy'::text, '5xx'::text, 'chunk'::text, 'error'::text, 'rejection'::text, 'render'::text]))),
+  constraint client_events_message_check CHECK (((message IS NULL) OR (char_length(message) <= 160))),
+  constraint client_events_tries_check CHECK (((tries >= 1) AND (tries <= 50))),
+  constraint client_events_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.coaching_sessions (
@@ -3278,6 +3297,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS certificates_one_valid ON leaders.certificates
 
 CREATE INDEX IF NOT EXISTS certificates_participant_idx ON leaders.certificates USING btree (participant_id);
 
+CREATE INDEX IF NOT EXISTS client_events_act_idx ON leaders.client_events USING btree (act, created_at);
+
+CREATE INDEX IF NOT EXISTS client_events_created_idx ON leaders.client_events USING btree (created_at);
+
+CREATE INDEX IF NOT EXISTS client_events_ip_idx ON leaders.client_events USING btree (ip_hash, created_at);
+
 CREATE INDEX IF NOT EXISTS coaching_sessions_expert_idx ON leaders.coaching_sessions USING btree (expert_id);
 
 CREATE INDEX IF NOT EXISTS coaching_sessions_participant_idx ON leaders.coaching_sessions USING btree (participant_id, requirement_id);
@@ -3613,6 +3638,8 @@ alter table leaders.certificate_checks enable row level security;
 alter table leaders.certificate_settings enable row level security;
 
 alter table leaders.certificates enable row level security;
+
+alter table leaders.client_events enable row level security;
 
 alter table leaders.coaching_sessions enable row level security;
 

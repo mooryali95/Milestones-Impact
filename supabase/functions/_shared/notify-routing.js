@@ -94,6 +94,8 @@ export const EVENTS = [
   ev('agent_model_config', 'ops', 'critical', 'إعداد نموذج المساعد غير صالح'),
   ev('weekly_health_action', 'ops', 'critical', 'تقرير الأسبوع وفيه ما يحتاج تدخلًا'),
   ev('internal', 'ops', 'important', 'خطأ داخلي غير معالج'),
+  // الرصد من جهة العميل (تصور التحديث بلا أثر، المرحلة 4): أجهزة كثيرة أخفق فتحها المنصة في 5 دقائق (client-events.ts)
+  ev('client_boot_failures', 'ops', 'important', 'إخفاق فتح المنصة عند أجهزة كثيرة'),
   ev('mail_rejected', 'ops', 'important', 'رفض مزود البريد رسالة'),
   ev('mail_counter_unavailable', 'ops', 'important', 'تعذرت قراءة عداد البريد'),
   ev('mail_quota_70', 'ops', 'important', 'تجاوز البريد 70% من حصة اليوم'),

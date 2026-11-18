@@ -378,6 +378,15 @@ textarea.input { min-height: 96px; resize: vertical; }
 .reconnect-card h2 { margin: 0; font-size: 1.15rem; }
 .reconnect-card p { margin: 0; }
 .reconnect > .link { align-self: center; }
+/* آخر ملخص رحلة معروف أثناء إعادة الاتصال (last-journey.js): للقراءة فقط، بلا زر */
+.last-known { text-align: start; gap: 8px; }
+.last-known-head { align-items: baseline; }
+.last-known-note { margin: 0; }
+.last-known-phase ul { list-style: none; margin: 4px 0 0; padding: 0; }
+.last-known-phase li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); }
+.last-known-phase li:last-child { border-bottom: 0; }
+.last-known-phase li.lk-done > span:first-child { color: var(--muted, #667); }
+.last-known-phase li.lk-active > span:first-child { font-weight: 600; }
 .switch-note { padding-bottom: 0; text-align: center; }
 .spinner {
   width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--gold);

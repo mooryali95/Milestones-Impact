@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
+//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
@@ -74,6 +74,8 @@ import * as TD from './today-desk.ts';
 import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
+import * as CE from './client-events.ts';
+import { cleanBuild } from '../_shared/client-events.js';
 
 type Body = Record<string, any>;
 
@@ -84,6 +86,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'org.info': (b, ctx) => P.orgInfo(b, ctx),
   // مسبار المراقبة وفحص ما بعد النشر: طلب حقيقي يمر بالقاعدة
   'system.ping': () => S.ping(),
+  // أحداث الإخفاق من جهة العميل (المرحلة 4): بلا جلسة، بسقف حجم وحد معدل لكل شبكة ببصمتها (client-events.ts)
+  'client.event': (b, ctx) => CE.record(b, ctx),
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
@@ -367,8 +371,10 @@ async function settle(action: string, p: Promise<unknown>) {
 // كل رد 4xx يُسجَّل باسم الفعل ورمزه، بلا بريد ولا متن ولا رمز (البند 6.1): كان طلب يفشل بـ400 مع كل تحميل للوحة
 // الخبير ولا يُعرف أي فعل هو. الرفض المتوقع بكثرة (الجلسة المنتهية والتحقق البشري) لا يُسجَّل فلا يغرق السجل
 const QUIET = new Set(['session', 'captcha']);
-function logRefusal(action: string, status: number, code?: string) {
-  if (status >= 400 && status < 500 && !QUIET.has(String(code))) console.warn(`leaders-api refused ${action} ${status} ${code || '-'}`);
+// والحدث المرفوض من الرصد نفسه (client.event: الحد أو الشكل) لا يُسجَّل، فلا يتحول فيضانه إلى فيضان سجل
+function logRefusal(action: string, status: number, code?: string, build: string | null = null) {
+  if (action === 'client.event') return;
+  if (status >= 400 && status < 500 && !QUIET.has(String(code))) console.warn(`leaders-api refused ${action} ${status} ${code || '-'} build=${build || '-'}`);
 }
 
 // منسق الجهة: جلسة مستقلة عن المشاركين، والجهة تُشتق منها لا من الطلب
@@ -733,16 +739,23 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
 };
 
 // كل رد يعلن (x-idem) إن كان مفتاح منع التكرار محفوظًا، فيعرف العميل أن إعادة الكتابة مأمونة (idempotency.ts، ش9)
-Deno.serve(async (req) => IK.advertise(await handle(req)));
+// وكل رد يعلن قبول ترويسة x-client-build (المرحلة 4): العميل لا يرسلها قبل أن يقرأ هذا، فلا يسقط طلب لخادم أقدم لا يأذن بها
+Deno.serve(async (req) => advertiseBuild(IK.advertise(await handle(req))));
+export function advertiseBuild(res: Response) {
+  if (!res.headers.has('x-client-build')) res.headers.set('x-client-build', 'on');
+  return res;
+}
 
 async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return preflight(req);
   if (req.method !== 'POST') return reply(req, { success: false, message: 'Method not allowed' }, 405);
   let action = '';
+  // معرّف بناء الواجهة من الترويسة (المرحلة 4، البند 4): يُسجَّل مع الرفض والخطأ الداخلي وفي التنبيه، فيُعرف أي بناء أصابه
+  const build = cleanBuild(req.headers.get('x-client-build')) || null;
   try {
     const b: Body = await req.json().catch(() => ({}));
     action = String(b.action || '');
-    const ctx = { ip: clientIp(req), ua: req.headers.get('user-agent')?.slice(0, 300) || null };
+    const ctx = { ip: clientIp(req), ua: req.headers.get('user-agent')?.slice(0, 300) || null, build };
     // مفتاح منع التكرار يُؤخذ ويُحذف من الجسم قبل أي فعل، ويُستعمل لكتابات الأدوار ذات الجلسة وحدها (فاعل معروف)
     const key = IK.takeKey(action, b);
     const once = async (role: string, id: string, run: () => Promise<unknown>) => IK.withIdempotency(req, action, b, key, key ? await IK.actorHash(role, id) : null, run);
@@ -782,15 +795,15 @@ async function handle(req: Request): Promise<Response> {
       // تعطل البريد أو غياب مفتاحَي التحقق البشري يوقف الدخول بالرمز، وتعذّر السجل يُفشل العمليات؛
       // فيُبلَّغ المالك فورًا (مرة كل عشر دقائق لكل نوع)
       if (['mail_failed', 'mail_unconfigured', 'mail_cap', 'captcha_unconfigured', 'audit_failed'].includes(e.code)) {
-        await alertOps(e.code, { action, message: e.message, ...e.extra });
+        await alertOps(e.code, { action, message: e.message, ...e.extra, ...(build && { build }) });
       }
-      logRefusal(action, e.status, e.code);
+      logRefusal(action, e.status, e.code, build);
       return reply(req, { success: false, message: e.message, code: e.code, ...e.extra }, e.status);
     }
     // رقم مرجع يراه المستخدم ويُسجَّل مع الخطأ ويصل في التنبيه، فيُربط البلاغ بسجله
     const ref = crypto.randomUUID().slice(0, 8);
-    console.error(`leaders-api [${ref}] ${action}:`, e);
-    await alertOps('internal', { ref, action, message: String((e as Error)?.message || e).slice(0, 300) });
+    console.error(`leaders-api [${ref}] ${action} build=${build || '-'}:`, e);
+    await alertOps('internal', { ref, action, message: String((e as Error)?.message || e).slice(0, 300), ...(build && { build }) });
     return reply(req, { success: false, message: `خطأ داخلي، حاول بعد قليل (المرجع ${ref})`, code: 'internal', ref }, 500);
   }
 }
