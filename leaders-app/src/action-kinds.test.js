@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ADMIN_API_READS, isReadAction, LEADERS_ADMIN_READS, LEADERS_READS, NO_REPLAY, replayable, USER_API_READS } from '../../supabase/functions/_shared/action-kinds.js';
+import { ADMIN_API_READS, isAuthAction, isReadAction, LEADERS_ADMIN_LOGGED_READS, LEADERS_ADMIN_READS, LEADERS_READS, NO_REPLAY, replayable, USER_API_READS } from '../../supabase/functions/_shared/action-kinds.js';
 
 const root = join(__dirname, '../..');
 const fn = (p) => readFileSync(join(root, 'supabase/functions/leaders-api', p), 'utf8');
@@ -35,6 +35,12 @@ const IDEMPOTENT_WRITES = {
   // نبضة الحضور في القاعة: last_seen وقت آخر سؤال، فالإعادة تكتب الوقت نفسه تقريبًا
   'hall.state': 'hall.ts state: نبضة last_seen',
 };
+// قراءات إدارة تكتب كتابة لا يضر تكرارها ولا تسجّل اطلاعًا، بسببها مكتوبًا
+const ADMIN_IDEMPOTENT_WRITES = {
+  // دوال القاعدة هنا للقراءة وحدها (stable)، ولا سجل اطلاع
+  'admin.visits': 'system.ts visits: publicDb.rpc لدوال التحليلات (قراءة)',
+  'admin.guide-transcripts': 'guide-transcripts.ts list: rpc guidance_conversations (language sql stable، أعداد بلا نص)',
+};
 
 describe('تصنيف الأفعال (ش9)', () => {
   it('كل قراءة فعل موجود في خريطة الخادم، وليست في NO_REPLAY', () => {
@@ -60,6 +66,48 @@ describe('تصنيف الأفعال (ش9)', () => {
     expect(gaps).toEqual([]);
     // المحلل وجد أجسام الدوال فعلًا، لا أن الفحص مر لأنه لم يقرأ شيئًا
     expect(found).toBeGreaterThan(LEADERS_READS.size * 0.7);
+  });
+  it('قراءات الإدارة لا تكتب في جسم دالتها المباشر (ومنه سطر السجل)، إلا كتابة موثقة لا يضر تكرارها', () => {
+    const gaps = [];
+    let found = 0;
+    for (const k of LEADERS_ADMIN_READS) {
+      const { impl } = all.get(k);
+      const body = bodyOf(impl);
+      if (!body) { if (WRITES.test(impl)) gaps.push(k); continue; }
+      if ((WRITES.test(body) || /\baudit\(/.test(body)) && !ADMIN_IDEMPOTENT_WRITES[k]) gaps.push(k);
+      found += 1;
+    }
+    // اطلاع يُسجَّل في كل مرة مكانه LEADERS_ADMIN_LOGGED_READS لا القراءة
+    expect(gaps).toEqual([]);
+    expect(found).toBeGreaterThan(LEADERS_ADMIN_READS.size * 0.7);
+  });
+  it('الاطلاع المسجَّل: موجود، يسجّل فعلًا، لا يُعاد ولا يُحفظ رده', () => {
+    for (const k of LEADERS_ADMIN_LOGGED_READS) {
+      expect(all.has(k), k).toBe(true);
+      expect(isReadAction('leaders-api', k), k).toBe(false);
+      expect(replayable('leaders-api', k), k).toBe(false);
+      expect(LEADERS_ADMIN_READS.has(k), k).toBe(false);
+    }
+  });
+  it('ما رده بيانات شخصية كاملة لا يُحفظ رده (me.export، handbook.export)', () => {
+    expect(replayable('leaders-api', 'me.export')).toBe(false);
+    expect(replayable('leaders-api', 'handbook.export')).toBe(false);
+    expect(isReadAction('leaders-api', 'capstone.doc')).toBe(true);
+  });
+  it('أفعال الدخول معروفة (رسالة الشبكة لا «تعذّر التأكد»)', () => {
+    for (const a of ['auth.start', 'auth.verify', 'auth.google', 'passkey.auth-options', 'passkey.auth-verify', 'xp.auth-start', 'coord.auth-verify']) {
+      expect(isAuthAction('leaders-api', a), a).toBe(true);
+      expect(all.has(a), a).toBe(true);
+    }
+    expect(isAuthAction('leaders-api', 'profile.save')).toBe(false);
+    expect(isAuthAction('admin-api', 'login-send')).toBe(true);
+    expect(isAuthAction('admin-api', 'login-verify')).toBe(true);
+    expect(isAuthAction('admin-api', 'update-reg')).toBe(false);
+    const src = readFileSync(join(root, 'supabase/functions/admin-api/index.ts'), 'utf8');
+    for (const a of ['login-send', 'login-verify', 'passkey-login-options', 'passkey-login-verify', 'recovery-request']) {
+      expect(src, a).toContain(`action === "${a}"`);
+      expect(isAuthAction('admin-api', a), a).toBe(true);
+    }
   });
   it('قراءات الإدارة تطابق الخريطة: لا غلاف writer على قراءة', () => {
     const wrapped = [...LEADERS_ADMIN_READS].filter((k) => /[Ww]riter/.test(all.get(k).impl));

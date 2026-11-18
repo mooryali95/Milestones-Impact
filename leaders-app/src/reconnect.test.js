@@ -32,6 +32,10 @@ describe('صمود الإقلاع', () => {
   it('النص: «لا اتصال بالإنترنت» بلا اتصال، و«الخدمة غير متاحة لحظيًا» غير ذلك', () => {
     expect(reconnectCopy(false).title).toBe('لا اتصال بالإنترنت');
     expect(reconnectCopy(true)).toEqual({ title: 'جارٍ إعادة الاتصال…', line: 'الخدمة غير متاحة لحظيًا، نعيد المحاولة تلقائيًا.' });
+    // خطأ شبكة والجهاز يقول إنه متصل (واي فاي بلا إنترنت): لا يُلام الخادم
+    expect(reconnectCopy(true, 'network')).toEqual({ title: 'جارٍ إعادة الاتصال…', line: 'تعذّر الوصول إلى الخدمة، تحقّق من الشبكة. نعيد المحاولة تلقائيًا.' });
+    for (const code of ['busy', 'internal', 'db_error']) expect(reconnectCopy(true, code).line).toBe('الخدمة غير متاحة لحظيًا، نعيد المحاولة تلقائيًا.');
+    expect(reconnectCopy(false, 'network').title).toBe('لا اتصال بالإنترنت');
   });
   it('يعيد الإقلاع بعد التراجع، وفورًا عند online وعند الرجوع إلى التبويب، ومرة واحدة في وقت واحد', async () => {
     vi.useFakeTimers();
@@ -82,7 +86,10 @@ describe('صمود الإقلاع', () => {
   it('App.jsx: «ادخل بحساب آخر» لا يمسح الجلسة، والإخفاق العابر يذهب إلى إعادة الاتصال لا إلى شاشة الخطأ', () => {
     const app = readFileSync(join(__dirname, 'App.jsx'), 'utf8');
     expect(app).not.toMatch(/session\.clear\(\); setBootError/);
-    expect(app).toContain("else if (isTransient(res)) { setReconnect(true);");
-    expect(app).toContain('onOther={() => setSwitching(true)}');
+    expect(app).toContain("else if (isTransient(res)) { setReconnectCode(res.code); setReconnect(true);");
+    expect(app).toContain('onOther={startSwitch}');
+    // جيل الإقلاع: ما بدأ قبل الدخول بحساب آخر لا يطبّق نتيجته (e2e leaders-boot-resilience يثبت السباق نفسه)
+    expect(app).toContain('const startSwitch = () => { bootGen.current += 1; setSwitching(true); };');
+    expect(app.match(/if \(stale\(\)\) return;/g)?.length).toBe(3);
   });
 });

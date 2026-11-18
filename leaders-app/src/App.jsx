@@ -207,10 +207,12 @@ function Shell({ tag, back = true, home = null, children }) {
 }
 
 // «جارٍ إعادة الاتصال…» أو «لا اتصال بالإنترنت»: حالة لا خطأ، والإعادة تلقائية، والزر يعجّلها
-function Reconnecting({ online, onRetry, onOther }) {
-  const t = reconnectCopy(online);
-  const [busy, setBusy] = useState(false);
-  const now = async () => { setBusy(true); try { await onRetry(); } finally { setBusy(false); } };
+// working: إعادة تلقائية جارية الآن، فالزر معطل بـ«جارٍ المحاولة…» بدل ضغطة لا أثر لها. code رمز آخر إخفاق (الشبكة أو الخادم)
+function Reconnecting({ online, code, working, onRetry, onOther }) {
+  const t = reconnectCopy(online, code);
+  const [tapped, setTapped] = useState(false);
+  const busy = tapped || working;
+  const now = async () => { setTapped(true); try { await onRetry(); } finally { setTapped(false); } };
   return (
     <div className="page narrow stack reconnect" role="status" aria-live="polite">
       <div className="card stack reconnect-card">
@@ -254,7 +256,13 @@ function Participant() {
   const [rebootTries, setRebootTries] = useState(0);
   // «ادخل بحساب آخر» من شاشة الإخفاق: شاشة الدخول والجلسة القائمة باقية حتى ينجح الدخول الجديد (لا مسح بخطأ شبكة)
   const [switching, setSwitching] = useState(false);
+  const [reconnectCode, setReconnectCode] = useState(null);   // رمز آخر إخفاق عابر: نص الحالة يتبعه (reconnectCopy)
+  const [rebooting, setRebooting] = useState(false);          // إقلاع جارٍ الآن (للزر «حاول الآن»)
   const booting1 = useRef(false);
+  // جيل الإقلاع: يزيد حين يبدأ الدخول بحساب آخر وحين ينجح. إقلاع بدأ في جيل سابق لا يطبّق نتيجته (جلسة قديمة قد تصل بعد
+  // دخول سريع بمفتاح المرور أو Google، فتُعرض رحلة الحساب السابق بتوكن الحساب الجديد)
+  const bootGen = useRef(0);
+  const startSwitch = () => { bootGen.current += 1; setSwitching(true); };
   const [linkChoice, setLinkChoice] = useState(null);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [install, setInstall] = useState(null);   // حدث التثبيت المؤجل من المتصفح
@@ -314,10 +322,14 @@ function Participant() {
     // إقلاع واحد في وقت واحد: المؤقت وحدث online والزر قد يتلاقون
     if (booting1.current) return;
     booting1.current = true;
-    try { await bootOnceRef.current(); } finally { booting1.current = false; }
+    setRebooting(true);
+    try { await bootOnceRef.current(); } finally { booting1.current = false; setRebooting(false); }
   }, []);
   const bootOnceRef = useRef(null);
   bootOnceRef.current = async () => {
+    const gen = bootGen.current;
+    // بدأ دخول بحساب آخر أو نجح أثناء هذا الإقلاع: لا يُطبَّق شيء من نتيجة الجلسة القديمة
+    const stale = () => { if (gen === bootGen.current) return false; setBooting(false); return true; };
     setBootError('');
     // رابط البريد: /verify?e=...&t=... . بلا رابط كامل (فُتح يدويًا أو قُصّ) لا شيء يُتحقق منه، فيكمل كأي زيارة بلا خطأ
     const q = location.pathname === '/verify' ? new URLSearchParams(location.search) : null;
@@ -325,6 +337,15 @@ function Participant() {
     if (q?.get('e') && q.get('t')) {
       const email = q.get('e'); const link = q.get('t');
       const res = await call('auth.verify', { email, link });
+      if (stale()) return;
+      // تعذّر الاتصال: الرابط لم يُستعمل على الأرجح لكنه زال من العنوان. بجلسة قائمة يكمل منها بإعادة الاتصال التلقائية،
+      // وبلا جلسة رسالة تدل على الخطوة التالية لا «تعذّر التأكد»
+      if (res.code === 'network') {
+        if (session.get()) { setReconnectCode('network'); setReconnect(true); setRebootTries((n) => n + 1); }
+        else setVerifyError('تعذّر إكمال الدخول من الرابط، اطلب رمزًا جديدًا من شاشة الدخول');
+        setBooting(false);
+        return;
+      }
       // بريد جديد: اختيار الوجهة (لبريد خبير أو منسق جهة) أو الاسم يكمل في شاشة الدخول، والرابط يبقى صالحًا حتى يُنشأ الحساب
       if (res.success && res.choose_role) { setLinkChoice({ email, link, roles: res.roles }); setBooting(false); return; }
       if (res.code === 'needs_name') { setLinkChoice({ email, link, needsName: true }); setBooting(false); return; }
@@ -332,6 +353,7 @@ function Participant() {
       // رابط مستعمل أو منتهٍ وفي الجهاز جلسة سارية: صاحبه داخل أصلًا، فيكمل منها بدل رسالة خطأ
       if (session.get()) {
         const again = await call('me');
+        if (stale()) return;
         if (again.success) { accept(again); setBooting(false); return; }
       }
       setVerifyError(res.message);
@@ -341,19 +363,16 @@ function Participant() {
     if (session.get()) {
       // الفتح الأول يجمع الرئيسية في رحلة واحدة (البند 7.5)، وتأخذ الأقسام ما يخصها منه مرة واحدة
       const res = await call('me', { with_home: true });
-      // الدخول بحساب آخر نجح أثناء هذا الإقلاع: نتيجة الجلسة القديمة لا تُطبَّق
-      if (res.success && switchingRef.current) { setBooting(false); return; }
+      if (stale()) return;
       if (res.success) { setReconnect(false); setRebootTries(0); bootPreload.set(res.preload); accept(res); }
       else if (res.code === 'suspended') { setReconnect(false); session.clear(); setVerifyError(res.message); }
       // عابر: «جارٍ إعادة الاتصال…» ويعيد الإقلاع وحده (autoReboot)، والجلسة باقية
-      else if (isTransient(res)) { setReconnect(true); setRebootTries((n) => n + 1); }
+      else if (isTransient(res)) { setReconnectCode(res.code); setReconnect(true); setRebootTries((n) => n + 1); }
       else if (res.code !== 'session') { setReconnect(false); setBootError(res.message || UNEXPECTED_ERROR); }   // session: أزالها الحارس في call وأظهر الدخول برسالته
       else setReconnect(false);
     }
     setBooting(false);
   };
-  const switchingRef = useRef(false);
-  switchingRef.current = switching;
   // إعادة الإقلاع تلقائيًا ما دام الإخفاق عابرًا، وتتوقف أثناء الدخول بحساب آخر
   useEffect(() => autoReboot({ active: reconnect && !me && !switching, tries: Math.max(0, rebootTries - 1), reboot: boot }), [reconnect, me, switching, rebootTries, boot]);
   useEffect(() => {
@@ -420,6 +439,8 @@ function Participant() {
   const onNav = (k) => (k === 'lab' ? openLab() : go(k));
 
   const consentNeed = me?.participant?.consent?.needed ?? null;
+  // بطاقة «جارٍ إعادة الاتصال…» معروضة فعلًا: هي تقول «لا اتصال» فلا يتكرر الشريط. وفي شاشة الدخول يبقى الشريط
+  const reconnectShown = !booting && !me && reconnect && !switching && !linkChoice;
   let screen;
   if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   else if (!me && switching) screen = (
@@ -428,15 +449,15 @@ function Participant() {
         <p className="small muted">جلستك الحالية محفوظة على هذا الجهاز حتى تدخل بالحساب الآخر.</p>
         <button className="link small" onClick={() => setSwitching(false)}>رجوع</button>
       </div>
-      <SignIn onSignedIn={(r) => { setSwitching(false); setReconnect(false); setBootError(''); accept(r); }} />
+      <SignIn onSignedIn={(r) => { bootGen.current += 1; setSwitching(false); setReconnect(false); setBootError(''); accept(r); }} />
     </>
   );
   else if (!me && linkChoice) screen = <SignIn pendingLink={linkChoice} onSignedIn={(r) => { setLinkChoice(null); accept(r); }} />;
-  else if (!me && reconnect) screen = <Reconnecting online={online} onRetry={boot} onOther={() => setSwitching(true)} />;
+  else if (reconnectShown) screen = <Reconnecting online={online} code={reconnectCode} working={rebooting} onRetry={boot} onOther={startSwitch} />;
   else if (!me && bootError) screen = (
     <div className="page narrow stack">
       <ErrorBox message={bootError} onRetry={() => { setBooting(true); boot(); }} />
-      <button className="link small" onClick={() => setSwitching(true)}>ادخل بحساب آخر</button>
+      <button className="link small" onClick={startSwitch}>ادخل بحساب آخر</button>
     </div>
   );
   else if (!me && scanning) screen = <div className="center-load"><div className="spinner" aria-label="جارٍ حفظ المسح" /></div>;
@@ -484,7 +505,7 @@ function Participant() {
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
       </header>
-      {!online && !(reconnect && !me) && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
+      {!online && !reconnectShown && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
         {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}
         {/* حاجز لكل قسم يُصفَّر بمفتاحه: خطأ في رسم «كتابي» مثلًا لا يُسقط الترويسة والتنقل، والانتقال إلى قسم آخر يعيده سليمًا */}

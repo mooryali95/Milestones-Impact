@@ -150,3 +150,77 @@ Deno.test('التنظيف يحذف المفاتيح بعد 24 ساعة', async (
     assertEquals(tables.idempotency_keys.map((r) => r.id), ['b']);
   } finally { f.restore(); }
 });
+
+Deno.test('رفض 409 و429 يُقصد أن يُعاد بعد تصحيح: لا يُحفظ، والإعادة بالمفتاح نفسه تنفذ الفعل', async () => {
+  const tables = { idempotency_keys: [] as Row[] };
+  const f = fake(tables);
+  try {
+    const a = await actor();
+    for (const [status, code] of [[409, 'seats_over'], [429, 'rate']] as const) {
+      const K = `k-${code}-1234567890abcdef`;
+      await assertRejects(() => IK.withIdempotency(req(), 'admin.sponsor-decide', { id: 'r1' }, K, a, () => Promise.reject(new Fail('المقاعد لا تكفي', status, code))), Fail);
+      assertEquals(tables.idempotency_keys.filter((r) => r.key === K).length, 0);
+      const ok = await IK.withIdempotency(req(), 'admin.sponsor-decide', { id: 'r1' }, K, a, () => Promise.resolve({ success: true, approved: 1 }));
+      assertEquals(ok.headers.get('x-idem'), 'stored');
+      assertEquals((await ok.json()).approved, 1);
+    }
+  } finally { f.restore(); }
+});
+
+Deno.test('الحماية لا تُؤكد (فحص الجدول أو حجز المفتاح يتعذّر لسبب غير غيابه): لا تنفيذ، 503 busy وx-idem: off', async () => {
+  const tables = { idempotency_keys: [] as Row[] };
+  // الفحص يتعذّر بعطل عابر
+  IK.resetIdemState();
+  let f = installFake(tables, { fail: (t) => (t === 'idempotency_keys' ? { code: '57014', message: 'canceling statement due to statement timeout' } : null) });
+  try {
+    let runs = 0;
+    const run = () => { runs += 1; return Promise.resolve({ success: true }); };
+    const r = await IK.withIdempotency(req(), 'models.save', {}, KEY, await actor(), run);
+    assertEquals(r.status, 503);
+    assertEquals(r.headers.get('x-idem'), 'off');
+    const body = await r.json();
+    assertEquals(body.success, false);
+    assertEquals(body.code, 'busy');
+    assertEquals(runs, 0);
+  } finally { f.restore(); }
+  // الفحص سليم والحجز يتعذّر
+  IK.resetIdemState();
+  f = installFake(tables, { fail: (t, op) => (t === 'idempotency_keys' && op.kind === 'insert' ? { code: '53300', message: 'too many connections' } : null) });
+  try {
+    let runs = 0;
+    const r = await IK.withIdempotency(req(), 'models.save', {}, KEY, await actor(), () => { runs += 1; return Promise.resolve({ success: true }); });
+    assertEquals(r.status, 503);
+    assertEquals(r.headers.get('x-idem'), 'off');
+    assertEquals(runs, 0);
+  } finally { f.restore(); }
+});
+
+Deno.test('صف أقدم من 24 ساعة لم يحذفه التنظيف بعد: يُعامل غائبًا، فلا يُعاد رده القديم ولا يُرفض بجسم آخر', async () => {
+  const tables = { idempotency_keys: [] as Row[] };
+  const f = fake(tables);
+  try {
+    const a = await actor();
+    const old = new Date(Date.now() - (IK.IDEM_TTL_HOURS * 36e5 + 60_000)).toISOString();
+    tables.idempotency_keys.push({ actor: a, key: KEY, action: 'models.save', req_hash: await IK.requestHash('models.save', { x: 1 }), status: 200, response: { success: true, saved: 'old' }, created_at: old });
+    let runs = 0;
+    const r = await IK.withIdempotency(req(), 'models.save', { x: 2 }, KEY, a, () => { runs += 1; return Promise.resolve({ success: true, saved: 'new' }); });
+    assertEquals(r.headers.get('x-idem'), 'stored');
+    assertEquals((await r.json()).saved, 'new');
+    assertEquals(runs, 1);
+    assertEquals(tables.idempotency_keys.length, 1);
+    assertEquals(tables.idempotency_keys[0].response.saved, 'new');
+    assert(Date.parse(tables.idempotency_keys[0].created_at) > Date.parse(old));
+  } finally { f.restore(); }
+});
+
+Deno.test('تنفيذ قرار الحذف يمحو صفوف المشارك: forgetActor يحذف صفوف فاعله وحده', async () => {
+  const tables = { idempotency_keys: [] as Row[] };
+  const f = fake(tables);
+  try {
+    const mine = await IK.actorHash('participant', 'p1');
+    const other = await IK.actorHash('participant', 'p2');
+    tables.idempotency_keys.push({ actor: mine, key: KEY, status: 200, response: { success: true } }, { actor: other, key: KEY, status: 200, response: { success: true } });
+    await IK.forgetActor('participant', 'p1');
+    assertEquals(tables.idempotency_keys.map((r) => r.actor), [other]);
+  } finally { f.restore(); }
+});

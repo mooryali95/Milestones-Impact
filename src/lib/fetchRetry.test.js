@@ -165,6 +165,35 @@ describe('postAction: نوع الفعل ومفتاح منع التكرار', () 
     await postAction('user-api', { action: 'save', token: 't' });
     expect(bodies(f).every((b) => !('idem' in b))).toBe(true);
   });
+  it('رفض 409 من الفعل نفسه نتيجة معروفة: الإعادة بعد التصحيح بمفتاح جديد لا يعيد الرفض القديم، و409 pending يُبقي المفتاح', async () => {
+    const body = { action: 'admin.sponsor-decide', token: 't', id: 'r1', decision: 'approve' };
+    const f = vi.fn().mockResolvedValue(res(409, { success: false, code: 'seats_over' }, { 'x-idem': 'stored' }));
+    vi.stubGlobal('fetch', f);
+    await postAction('leaders-api', body, { sleep: async () => {} });
+    const g = vi.fn().mockResolvedValue(res(200, { success: true }, { 'x-idem': 'stored' }));
+    vi.stubGlobal('fetch', g);
+    await postAction('leaders-api', body, { sleep: async () => {} });
+    expect(bodies(g)[0].idem).not.toBe(bodies(f)[0].idem);
+    // ما زال يعمل على الخادم: المفتاح يبقى للإعادة اليدوية (WRITE_UNSURE_POLICY لا ينتظر pending)
+    const h = vi.fn().mockResolvedValue(res(409, { success: false, code: 'busy' }, { 'x-idem': 'pending' }));
+    vi.stubGlobal('fetch', h);
+    await postAction('leaders-api', { ...body, id: 'r2' }, { sleep: async () => {}, budget: 0 });
+    const k = vi.fn().mockResolvedValue(res(200, { success: true }, { 'x-idem': 'replayed' }));
+    vi.stubGlobal('fetch', k);
+    await postAction('leaders-api', { ...body, id: 'r2' }, { sleep: async () => {} });
+    expect(bodies(k)[0].idem).toBe(bodies(h)[0].idem);
+  });
+  it('الدخول بلا «تعذّر التأكد»: خطأ الشبكة فيه برسالة الشبكة، وكتابة البيانات تبقى «تعذّر التأكد»', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('net')));
+    for (const [fn, action] of [['leaders-api', 'auth.start'], ['leaders-api', 'auth.verify'], ['leaders-api', 'passkey.auth-options'], ['leaders-api', 'xp.auth-verify'], ['admin-api', 'login-send'], ['admin-api', 'login-verify']]) {
+      const e = await postAction(fn, { action }, { sleep: async () => {} }).catch((x) => x);
+      expect(e.uncertain, action).toBe(false);
+      expect(netMessage(e), action).toBe('تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى');
+      expect(netMessage(e, 'خطأ في الاتصال بالخادم'), action).toBe('خطأ في الاتصال بالخادم');
+    }
+    const e = await postAction('admin-api', { action: 'update-reg', token: 't' }, { sleep: async () => {} }).catch((x) => x);
+    expect(e.uncertain).toBe(true);
+  });
   it('بلا اتصال: رسالة «لا اتصال بالإنترنت»', async () => {
     vi.stubGlobal('navigator', { onLine: false });
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('net')));

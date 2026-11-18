@@ -7,7 +7,7 @@
 // process_details / app_content, and (b) invoking the Edge Functions —
 // it grants no access to registrations, OTP codes, or admin data.
 
-import { isReadAction, replayable } from '../../supabase/functions/_shared/action-kinds.js';
+import { isAuthAction, isReadAction, replayable } from '../../supabase/functions/_shared/action-kinds.js';
 
 export const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
 // منطقة تنفيذ الدوال هي منطقة القاعدة نفسها (مومباي)، مصدر واحد لعملاء الدوال كلهم. بلا تثبيت تعمل الدالة في أقرب
@@ -181,14 +181,16 @@ export async function postAction(fn, payload, extra = {}) {
       body: key ? JSON.stringify({ ...payload, idem: key }) : plain,
     }, { ...policy, ...extra });
     if (fn === 'leaders-api') learnIdem(r);
-    // كتابة بمفتاح انتهت بعطل خادم: قد تكون نُفذت، فيبقى مفتاحها لإعادة يدوية. وما سوى ذلك نتيجة معروفة
-    if (key) { if (r.status >= 500 || r.status === 409) unsure.set(fp, { key, at: Date.now() }); else unsure.delete(fp); }
+    // كتابة بمفتاح انتهت بعطل خادم أو ما زالت تعمل (409 pending): قد تكون نُفذت، فيبقى مفتاحها لإعادة يدوية. وما سوى ذلك
+    // نتيجة معروفة، ومنها رفض 409 من الفعل نفسه (المقاعد تغيرت…): يُصحَّح ثم يُعاد بمفتاح جديد لا يعيد الرفض القديم
+    if (key) { if (r.status >= 500 || (r.status === 409 && r.headers?.get?.('x-idem') === 'pending')) unsure.set(fp, { key, at: Date.now() }); else unsure.delete(fp); }
     return { r };
   } catch (e) {
     if (key) unsure.set(fp, { key, at: Date.now() });
     const err = e instanceof Error ? e : new Error(String(e));
     err.offline = offlineNow();
-    err.uncertain = !read && !safe;
+    // الدخول لا «تعذّر التأكد»: لا شيء يُتحقق منه في شاشة الدخول، فرسالة الشبكة
+    err.uncertain = !read && !safe && !isAuthAction(fn, action);
     throw err;
   }
 }

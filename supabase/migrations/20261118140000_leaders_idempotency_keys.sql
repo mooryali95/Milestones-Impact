@@ -5,7 +5,8 @@
 -- تصور «تحديث المنصة بلا أثر على المستخدمين» (2026-11-18)، المرحلة 3 البند 6: العميل يرسل مع كل كتابة مفتاحًا ثابتًا عبر
 -- إعاداتها، والخادم يعيد النتيجة الأولى بدل التنفيذ ثانية، فلا يتكرر حفظ ولا تسليم ولا رسالة بعد خطأ شبكة أو 504.
 -- لا بيانات شخصية ولا أسرار: الفاعل بصمة sha256 للدور ومعرّفه، والطلب بصمته وحدها، والرد بلا رمز ولا سر ولا يتجاوز
--- 32 ألف حرف (وإلا حُفظ مختصره). status فارغ = التنفيذ جارٍ. يُحذف الصف بعد 24 ساعة (purge في system.ts).
+-- 32 ألف حرف (وإلا حُفظ مختصره). status فارغ = التنفيذ جارٍ. يُحذف الصف بعد 24 ساعة: pg_cron كل ساعة أدناه، وpurge
+-- الأسبوعي في system.ts احتياطًا، والخادم يعامل الأقدم غائبًا فلا يعيد رده.
 -- لا يقرؤه إلا دور الخدمة. آمن لإعادة التشغيل.
 
 create table if not exists leaders.idempotency_keys (
@@ -23,5 +24,17 @@ create index if not exists idempotency_keys_created_idx on leaders.idempotency_k
 
 alter table leaders.idempotency_keys enable row level security;
 revoke all on leaders.idempotency_keys from anon, authenticated;
+
+-- كل ساعة عند الدقيقة 17: حذف ما مضى عليه 24 ساعة، فلا تبقى الصفوف إلى التنظيف الأسبوعي. cron.schedule بالاسم نفسه يحدّث
+-- المهمة، فإعادة التشغيل آمنة. وبلا pg_cron يبقى purge الأسبوعي والخادم لا يعيد رد صف أقدم من 24 ساعة.
+do $$
+begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.schedule('leaders-idempotency-purge', '17 * * * *', $q$delete from leaders.idempotency_keys where created_at < now() - interval '24 hours'$q$);
+  else
+    raise notice 'pg_cron غير مفعل: leaders-idempotency-purge لم تُجدول';
+  end if;
+end;
+$$;
 
 insert into leaders.schema_migrations (name) values ('20261118140000_leaders_idempotency_keys') on conflict do nothing;

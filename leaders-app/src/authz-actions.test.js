@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { LEADERS_ADMIN_READS } from '../../supabase/functions/_shared/action-kinds.js';
+import { LEADERS_ADMIN_LOGGED_READS, LEADERS_ADMIN_READS } from '../../supabase/functions/_shared/action-kinds.js';
 
 const root = join(__dirname, '../..');
 const fn = (p) => readFileSync(join(root, 'supabase/functions/leaders-api', p), 'utf8');
@@ -25,7 +25,8 @@ function bodyOf(impl) {
 }
 // أفعال الإدارة للقراءة وحدها: تُفتح لكل أدوار اللوحة بما فيها «عرض فقط». مصدرها الواحد _shared/action-kinds.js (تستعمله
 // إعادة المحاولة في العميل أيضًا، ش9)
-const ADMIN_READS = new Set([...LEADERS_ADMIN_READS].map((k) => k.replace('admin.', '')));
+// والاطلاع المسجَّل قراءة هنا أيضًا (لا يُعاد تلقائيًا فقط)
+const ADMIN_READS = new Set([...LEADERS_ADMIN_READS, ...LEADERS_ADMIN_LOGGED_READS].map((k) => k.replace('admin.', '')));
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {
