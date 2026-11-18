@@ -4,6 +4,9 @@
 // الخلفية مُحاكاة. REL5_SHOTS: مجلد لقطات المراجعة (390 و1440 بدقة مضاعفة)، لا في CI.
 import { writeFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
+import { createMockServer } from '../shared/video/mock-server.js';
+import { publicSpec, validateLab } from '../supabase/functions/leaders-api/lab.js';
+import { ITEMS } from '../scripts/lab/pm-map.mjs';
 
 const APP = 'http://localhost:4304/';
 const ADMIN = 'http://localhost:4303/';
@@ -37,11 +40,13 @@ async function shot(page, name, width, height) {
   await cdp.send('Emulation.clearDeviceMetricsOverride');
 }
 
-async function participant(page, { replies = {} } = {}) {
+async function participant(page, { replies = {}, publishOn = null } = {}) {
   const state = { docs: 0, version: 'same', versionHits: 0 };
   page.on('request', (r) => { if (r.isNavigationRequest() && r.frame() === page.mainFrame()) state.docs += 1; });
   await page.route(/functions\/v1\/leaders-api/, (r) => {
     const b = JSON.parse(r.request().postData() || '{}');
+    // publishOn: النشر يقع لحظة هذا الطلب، فلا يراه فحص التنقل الذي سبقه (فاصل الدقيقة يمنع فحصًا ثانيًا)
+    if (publishOn && b.action === publishOn) state.version = 'new';
     const reply = { me, 'capstone.get': capstone, certificate: { success: true, certificate: null }, ...replies }[b.action] || { success: true };
     return r.fulfill({ status: reply.code === 'update_required' ? 426 : 200, json: reply });
   });
@@ -100,12 +105,29 @@ test('القادة: «حدّث» يعيد التحميل إلى القسم ال�
   await expect(page.locator('nav.nav-tabs').getByRole('button', { name: 'مبادرتي' })).toHaveAttribute('aria-current', 'page');
 });
 
-test('القادة: رد الخادم update_required يُظهر الشريط نفسه برسالة التحديث', async ({ page }) => {
-  const state = await participant(page, { replies: { 'capstone.get': { success: false, code: 'update_required', message: 'صدر تحديث للمنصة، فحدّث الصفحة.' } } });
+const tooOld = { 'capstone.get': { success: false, code: 'update_required', message: 'صدر تحديث للمنصة، فحدّث الصفحة.' } };
+
+test('القادة: رد الخادم update_required يُظهر الشريط نفسه إن كان على الموقع إصدار أحدث', async ({ page }) => {
+  const state = await participant(page, { replies: tooOld, publishOn: 'capstone.get' });
   await page.goto(APP);
   await page.locator('nav.nav-tabs').getByRole('button', { name: 'مبادرتي' }).click();
   await expect(page.getByTestId('update-bar')).toBeVisible();
   await expect(page.getByTestId('update-bar')).toHaveText('تحديث جديد متاححدّث');
+  expect(state.docs).toBe(1);
+});
+
+test('القادة: update_required والموقع ما زال يقدّم البناء نفسه (الدوال سبقت Pages): لا شريط ولا إعادة تحميل عند التنقل', async ({ page }) => {
+  const state = await participant(page, { replies: tooOld });
+  await page.goto(APP);
+  const nav = page.locator('nav.nav-tabs');
+  await nav.getByRole('button', { name: 'مبادرتي' }).click();
+  await expect.poll(() => state.versionHits).toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId('update-bar')).toHaveCount(0);
+  await nav.getByRole('button', { name: 'رحلتي' }).click();
+  await expect(nav.getByRole('button', { name: 'رحلتي' })).toHaveAttribute('aria-current', 'page');
+  await nav.getByRole('button', { name: 'مبادرتي' }).click();
+  await expect(nav.getByRole('button', { name: 'مبادرتي' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('update-bar')).toHaveCount(0);
   expect(state.docs).toBe(1);
 });
 
@@ -143,4 +165,37 @@ test('اللوحة: الشريط بعد النشر، وأول تنقل بين ا
   await expect.poll(() => state.docs).toBe(opened + 1);
   expect(new URL(page.url()).hash).toBe('#/leaders/orgs');
   await expect(page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: /الجهات/ })).toHaveAttribute('aria-current', 'page');
+});
+
+test('القادة: «افتح في المختبر» من متطلب في الرحلة والتحديث متاح يفتح الأداة نفسها بلا إعادة تحميل', async ({ page }) => {
+  const spec = validateLab(ITEMS[0].spec);
+  const item = { id: 'L-pm', kind: 'tool', dimension: 'milestone', title: ITEMS[0].title_ar, summary: ITEMS[0].summary_ar, minutes: 25, points: 60, min_level: 'beginner', chapter_key: 'ch1', progress: { best: 62, open: null, attempts: 1, first: 62, last_at: null } };
+  const req = { id: 'r9', code: 'T-PMMAP', kind: 'lab', title_ar: 'خريطة عمليات إدارة المشاريع في المختبر', required: true, status: 'pending',
+    activity: { type: 'lab', done: false, lab_key: 'pm-process-map', item_id: 'L-pm', title: item.title, attempts: 1, best: 62, accept: 'mastery', mastery: 70 } };
+  const srv = createMockServer();
+  Object.assign(srv.s, { named: true, profileDone: true, assessed: true, approved: true });
+  const state = { docs: 0, started: null };
+  page.on('request', (r) => { if (r.isNavigationRequest() && r.frame() === page.mainFrame()) state.docs += 1; });
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'lab.list') return route.fulfill({ json: { success: true, items: [item], points: { total: 0, rank: { title: 'مستكشف', next: null } } } });
+    if (b.action === 'lab.start') {
+      state.started = b.id;
+      return route.fulfill({ json: { success: true, item: { ...item, level: 'beginner' }, spec: publicSpec(spec, (x) => x, 'beginner'), attempt: { id: 'a1', meters: {}, path: [], results: {}, answers: {}, current: 0, done: false, draft: null, hints: {}, checks_used: 0 } } });
+    }
+    const r = srv.reply(b);
+    if (b.action === 'me' && r?.journey) { const t = r.journey.find((s) => s.key === 'training'); t.items = [...t.items, req]; t.total += 1; }
+    return route.fulfill({ json: r });
+  });
+  await page.route(/\/version\.json(?:\?|$)/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"build":"NEWbuild1"}' }));
+  await page.addInitScript(() => { localStorage.setItem('mi_leaders_session', 't'.repeat(40)); localStorage.setItem('mi_leaders_welcome_seen', 'true'); });
+  await page.goto(APP);
+  // التحديث معروف قبل النقر: الرجوع إلى التبويب يفحص version.json
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect(page.getByTestId('update-bar')).toBeVisible();
+  const li = page.locator('li.item', { hasText: 'خريطة عمليات إدارة المشاريع في المختبر' });
+  await li.getByRole('button', { name: 'افتح في المختبر' }).click();
+  await expect.poll(() => state.started).toBe('L-pm');
+  await expect(page.getByRole('heading', { name: item.title })).toBeVisible();
+  expect(state.docs).toBe(1);
 });

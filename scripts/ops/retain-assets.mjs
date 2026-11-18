@@ -19,6 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { builtListFile } from '../../shared/build/release-files.mjs';
 
 export const KEEP_DAYS = 14;
 export const APPS = [{ app: 'leaders-app', out: 'leaders' }, { app: 'admin-app', out: 'admin' }];
@@ -54,7 +55,9 @@ export function planRetention({ live = [], liveRetained = {}, own = [], retained
     if (fromLive && !(name in retained)) add.push(name);
     return true;
   };
-  for (const name of live) consider(name, dated(retained[name]) || dated(liveRetained[name]) || today, true);
+  // ما يبنيه الإصدار المرقّى نفسه يبدأ عدّه من آخر تحديث رآه حيًا (اليوم)، لا من أول تحديث في الطلب: الطلب قد يبقى مفتوحًا
+  // أيامًا والملف ما زال يُقدَّم، فيبقى بعد ترقية الطلب 14 يومًا كاملة. وما نُسخ من مجلد سابق يبقى بتاريخ دخوله الأول
+  for (const name of live) consider(name, liveOwn.has(name) ? today : (dated(retained[name]) || dated(liveRetained[name]) || today), true);
   for (const [name, since] of Object.entries(retained)) {
     if (name in next) continue;
     if (!consider(name, dated(since) || today, false)) drop.push(name);
@@ -121,6 +124,23 @@ function args(argv) {
 
 function fixedOf(app) { return listDir(join(ROOT, app, 'public', 'assets')); }
 
+/** ما بناه المصدر في آخر بناء، ويتحقق أن الناتج على القرص هو ذلك البناء. يرمي إن لم يُبنَ أو تغيّر الناتج بعده */
+export function ownFromBuilt(list, present, retained = {}, fixed = []) {
+  if (!list || !Array.isArray(list.own)) throw new Error('لا قائمة لآخر بناء: شغّل npm run leaders:build && npm run admin:build أولًا');
+  const own = new Set(list.own);
+  const have = new Set(present);
+  const fixedSet = new Set(fixed);
+  const gone = [...own].filter((n) => !have.has(n));
+  const stray = present.filter((n) => !own.has(n) && !(n in retained) && !fixedSet.has(n));
+  if (gone.length || stray.length) throw new Error(`الناتج لا يطابق آخر بناء (${[...gone, ...stray].slice(0, 3).join('، ')}): أعد البناء ثم أعد الأمر`);
+  return [...own].sort();
+}
+function builtOwn(sd, outAssets, retained, fixed) {
+  const f = builtListFile(sd);
+  const list = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : null;
+  return ownFromBuilt(list, listDir(outAssets), retained, fixed);
+}
+
 export function update({ ref, today }) {
   fetchRelease(ref);
   if (!refExists(ref)) throw new Error(`${ref} غير موجود: لا يُعرف الإصدار المرقّى، فلا تحديث للمجلد`);
@@ -130,8 +150,9 @@ export function update({ ref, today }) {
     const listFile = join(sd, 'retained.json');
     const retained = readList(listFile);
     const outAssets = join(ROOT, out, 'assets');
-    // ما يبنيه المصدر: الناتج الحالي بلا ما نسخه البناء من المجلد (القائمة الحالية)
-    const own = listDir(outAssets).filter((n) => !(n in retained));
+    // ما يبنيه المصدر: قائمة البناء الأخير نفسه (retainedAssets)، لا «الناتج بلا القائمة»: ملف في القائمة قد يبنيه المصدر
+    // أيضًا (تراجع يعيد بصمة قديمة)، فيُحذف من الناتج وقطعة الدخول تستورده
+    const own = builtOwn(sd, outAssets, retained, fixedOf(app));
     const live = refFiles(ref, `${out}/assets`);
     const liveRetained = refJson(ref, `releases/${out}/retained.json`);
     const plan = planRetention({ live, liveRetained, own, retained, fixed: fixedOf(app), today });

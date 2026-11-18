@@ -192,7 +192,7 @@ describe('إعادة التحميل تفتح القسم المطلوب لا «ر
 function swPolicy() {
   const ctx = { URL };
   vm.createContext(ctx);
-  vm.runInContext(`${read('leaders-app/public/sw.js')}\n;globalThis.__p = { cacheableAsset, cacheableNavigation, inCachedDir, isRange, SHELL, cachesToDelete, skipWaitingFor };`, ctx);
+  vm.runInContext(`${read('leaders-app/public/sw.js')}\n;globalThis.__p = { cacheableAsset, cacheableNavigation, inCachedDir, isRange, SHELL, cachesToDelete, skipWaitingFor, matchCurrentFirst };`, ctx);
   return ctx.__p;
 }
 const H = (o = {}) => ({ get: (k) => o[k.toLowerCase()] ?? null });
@@ -252,6 +252,26 @@ describe('عامل الخدمة: ما يُخزَّن وما لا يُخزَّن'
 
 describe('عامل الخدمة: التفعيل بالدعوة ومخزن الإصدار السابق (المرحلة 5)', () => {
   const p = swPolicy();
+  // مخازن بترتيب إنشائها كما في Cache API: match العام يعيد أول إصابة، فالأقدم يجيب أولًا
+  const fakeCaches = (byName) => {
+    const order = Object.keys(byName);
+    const cache = (n) => ({ match: async (k) => byName[n][k] ?? undefined });
+    return {
+      open: async (n) => (byName[n] ? cache(n) : { match: async () => undefined }),
+      match: async (k) => { for (const n of order) { if (byName[n][k] !== undefined) return byName[n][k]; } return undefined; },
+    };
+  };
+  it('الانقطاع: الصفحة من مخزن الإصدار الحالي لا من مخزن N-1 الأقدم، وما غاب عنه من أي مخزن', async () => {
+    const store = fakeCaches({ 'mi-leaders-old': { '/': 'old-page', '/favicon.svg': 'old-icon' }, 'mi-leaders-new': { '/': 'new-page' } });
+    expect(await store.match('/')).toBe('old-page');
+    expect(await p.matchCurrentFirst(store, 'mi-leaders-new', '/')).toBe('new-page');
+    expect(await p.matchCurrentFirst(store, 'mi-leaders-new', '/favicon.svg')).toBe('old-icon');
+    expect(await p.matchCurrentFirst(store, 'mi-leaders-new', '/none')).toBeUndefined();
+    const sw = read('leaders-app/public/sw.js');
+    expect(sw).toContain(".catch(() => matchCurrentFirst(caches, CACHE, '/'))");
+    expect(sw).toContain('fetch(req).catch(() => matchCurrentFirst(caches, CACHE, req))');
+    expect(sw).not.toMatch(/catch\(\(\) => caches\.match/);
+  });
   it('يُبقي الحالي وآخر مخزن قبله (N-1) ويحذف ما سواهما، ولا يمس مخزنًا ليس له', () => {
     expect([...p.cachesToDelete(['mi-leaders-a', 'mi-leaders-b', 'mi-leaders-c', 'other'], 'mi-leaders-c')]).toEqual(['mi-leaders-a']);
     expect([...p.cachesToDelete(['mi-leaders-a', 'mi-leaders-b'], 'mi-leaders-b')]).toEqual([]);

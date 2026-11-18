@@ -114,7 +114,8 @@ function Grips({ k, title, editable, pointer, clicked }) {
 /* editable (D1): { bars: { مفتاح: { edge_ar } }, drag: { key, kind, kbd, ghost: { at, width, label, bad } } | null,
  *   onStart({ key, kind }), onMove({ pct, over }), onEnd({ pct, over }), onCancel(), onKey(key, event), live, hintId }
  *   pct: النقاط المئوية التي تحرّكها المؤشر على المسار من موضع الالتقاط باتجاه الزمن (مع مراعاة RTL)، وover: الصف والشريط تحت المؤشر */
-export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null }) {
+// usage: مؤشر استخدام كل خدمة بمفتاحها («استفاد 7 من 20») من خريطة الدفعة، إن قُرئت (T2)
+export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null, usage = null }) {
   const [sel, setSel] = useState(model?.selected || null);
   const trackRef = useRef(null);
   const press = useRef(null);
@@ -235,6 +236,9 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   // المسار المستمر (T1): صف «مسارات مستمرة» بجانب السلسلة على المقياس نفسه، بشريط من بدايته إلى نهايته
   const tracks = model.tracks || [];
   for (const x of tracks) stageBy.set(x.key, x);
+  // الخدمة (T2، ب5.2): صف «الخدمات» بلا مقياس، لكل خدمة بطاقة بإتاحتها وحد جلساتها ومؤشر استخدامها، لا شريط ولا تاريخ
+  const services = model.services || [];
+  const serviceSub = (s) => [s.avail_ar, s.max_ar, usage?.[s.key]].filter(Boolean).join('، ');
   const trackHead = (s) => (
     <div className="jt-stage-head">
       {onStage ? (
@@ -300,6 +304,28 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                 ))}
               </div>
             )}
+            {services.length > 0 && (
+              <div className="jt-row jt-services" role="group" aria-label={model.services_ar} data-testid="jt-services">
+                <span className="jt-row-label">{model.services_ar}</span>
+                <ul className="jt-svc-list">
+                  {services.map((s) => (
+                    <li key={s.key} className={`jt-svc ph-${s.phase}`} data-service={s.key}>
+                      <div className="jt-stage-head">
+                        {onStage ? (
+                          <button type="button" className="jt-stage-link" onClick={() => onStage(s.key)} aria-label={`${s.title}: انتقل إلى بطاقته`}><b>{s.title}</b></button>
+                        ) : <b>{s.title}</b>}
+                        <span className="jt-mode jt-svc-tag">{s.lane_ar}</span>
+                        <small>{serviceSub(s)}</small>
+                      </div>
+                      <div className="jt-acts">
+                        {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
+                          : s.activities.map((k) => <Act key={k} a={acts.get(k)} sel={current?.id === k} onPick={pick} onOpen={onOpen} />)}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {cohort && model.dated && (
               <div className="jt-row jt-dates" aria-label="المواعيد">
                 <span className="jt-row-label">المواعيد</span>
@@ -331,6 +357,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             <li><Glyph name="clock" size={13} />يُحدد لاحقًا</li><li><i className="sq tog" />تسير معًا</li>
             {model.stages.some((s) => s.mode_ar) && <li><i className="sq nonreq" />مرحلة غير إلزامية</li>}
             {tracks.length > 0 && <li><i className="sq lane" />مسار مستمر يسير بجانب المراحل</li>}
+            {services.length > 0 && <li><i className="sq svc" />خدمة لمن يريد، لا تأخذ من الرحلة أيامًا</li>}
             {model.today && <li><i className="ln" />اليوم</li>}
           </ul>
           <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} />
@@ -346,6 +373,17 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
               <small>{cohort && s.window_ar ? s.window_ar : s.label}</small>
               <small>{s.note_ar}. {s.due_ar}.</small>
               {s.today_ar && <p className="jt-m-today">{s.today_ar}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {services.length > 0 && (
+        <ul className="jt-phone jt-m-services" aria-label={model.services_ar}>
+          {services.map((s) => (
+            <li key={s.key} className={`jt-m-svc ph-${s.phase}`} data-service={s.key}>
+              <p className="jt-m-title"><b>{s.title}</b><span className="jt-mode jt-svc-tag">{s.lane_ar}</span></p>
+              <small>{serviceSub(s)}</small>
+              <small>{s.note_ar}.</small>
             </li>
           ))}
         </ul>

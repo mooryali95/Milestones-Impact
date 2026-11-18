@@ -4,9 +4,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { describe, expect, it, vi } from 'vitest';
-import { daysBetween, expired, KEEP_DAYS, missingFromNext, planRetention, storeProblems } from './retain-assets.mjs';
+import { daysBetween, expired, KEEP_DAYS, missingFromNext, ownFromBuilt, planRetention, storeProblems } from './retain-assets.mjs';
 import { blocked, checkFiles, fetchSite, missingIs404, SITES, typeOk, waitForBuild } from './verify-live.mjs';
 import { decide } from './ci-changes.mjs';
+import { builtListFile, ownAssetsOf } from '../../shared/build/release-files.mjs';
 
 const root = join(__dirname, '../..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
@@ -30,10 +31,27 @@ describe('خطة الاحتفاظ', () => {
     expect(later.drop).toEqual(['mid-1.js']);
     expect(Object.keys(later.retained)).toEqual(['index-B.js', 'new-1.js']);
   });
-  it('ما بناه مصدر الإصدار المرقّى نفسه يبقى ما دام مرقّى، ولو مضت أيام كثيرة', () => {
+  it('ما بناه مصدر الإصدار المرقّى نفسه يبقى ما دام مرقّى، وعدّه يبدأ من آخر تحديث رآه حيًا لا من أول تحديث في الطلب', () => {
     const p = planRetention({ live: ['index-A.js'], own: ['index-B.js'], retained: { 'index-A.js': '2026-10-01' }, today });
-    expect(p.retained).toEqual({ 'index-A.js': '2026-10-01' });
+    expect(p.retained).toEqual({ 'index-A.js': today });
     expect(p.drop).toEqual([]);
+    expect(p.add).toEqual([]);
+    // طلب بقي مفتوحًا 10 أيام: تحديثه الأخير يجدد التاريخ، فبعد ترقيته يبقى الملف 14 يومًا كاملة
+    const first = planRetention({ live: ['index-A.js'], own: ['index-B.js'], today: '2026-11-01' });
+    const last = planRetention({ live: ['index-A.js'], own: ['index-B.js'], retained: first.retained, today: '2026-11-11' });
+    expect(last.retained).toEqual({ 'index-A.js': '2026-11-11' });
+    const after = planRetention({ live: ['index-B.js', 'index-A.js'], liveRetained: last.retained, own: ['index-C.js'], retained: last.retained, today: '2026-11-25' });
+    expect(after.retained['index-A.js']).toBe('2026-11-11');
+    expect(after.drop).toEqual([]);
+  });
+  it('ما يبنيه المصدر من قائمة آخر بناء، ولو كان اسمه في retained.json (تراجع)، فلا يُحذف من الناتج', () => {
+    const own = ownFromBuilt({ own: ['index-B.js', 'Lab-A.js'] }, ['index-B.js', 'Lab-A.js', 'Old-1.js', '404.html'], { 'Lab-A.js': '2026-11-01', 'Old-1.js': '2026-11-01' }, ['404.html']);
+    expect(own).toEqual(['Lab-A.js', 'index-B.js']);
+    const p = planRetention({ live: ['index-A.js'], own, retained: { 'Lab-A.js': '2026-11-01', 'Old-1.js': '2026-11-01' }, today: '2026-11-20' });
+    expect(p.drop).toEqual(['Lab-A.js', 'Old-1.js']);
+    expect(own.includes('Lab-A.js')).toBe(true);
+    expect(() => ownFromBuilt(null, [])).toThrow(/شغّل npm run leaders:build/);
+    expect(() => ownFromBuilt({ own: ['index-B.js'] }, ['index-C.js'])).toThrow(/لا يطابق آخر بناء/);
   });
   it('ملف عاد يبنيه المصدر (تراجع) يخرج من القائمة، وملفات public/assets لا تُحتفظ', () => {
     const p = planRetention({ live: ['Lab-A.js'], own: ['Lab-A.js', '404.html'], retained: { 'Lab-A.js': today, '404.html': today }, fixed: ['404.html'], today });
@@ -151,5 +169,9 @@ describe('ملفات السير', () => {
       expect(read(`${app}/vite.config.js`)).toContain(`plugins: [react(), versionFile(), retainedAssets(fileURLToPath(new URL('../releases/${out}', import.meta.url)))]`);
     }
     expect(existsSync(join(root, 'releases/README.md'))).toBe(true);
+  });
+  it('البناء يكتب قائمة ما بناه خارج الناتج، بأسماء assets/ وحدها', () => {
+    expect(builtListFile(join(root, 'releases', 'leaders'))).toBe(join(root, 'node_modules', '.cache', 'mi-release-files', 'leaders.json'));
+    expect(ownAssetsOf({ 'index.html': {}, 'version.json': {}, 'assets/index-B.js': {}, 'assets/Lab-A.js': {}, 'assets/x/y.js': {} })).toEqual(['Lab-A.js', 'index-B.js']);
   });
 });

@@ -112,11 +112,23 @@ describe('فحص version.json', () => {
 });
 
 describe('رد الخادم: update_required وunknown_action', () => {
-  it('update_required يُظهر الشريط مباشرة', () => {
-    const u = createAppUpdate({ current: 'CURbuild', fetchImpl: vi.fn() });
-    u.serverSaid('update_required');
+  it('update_required يُظهر الشريط إن كان على الموقع إصدار أحدث، متجاوزًا فاصل الدقيقة', async () => {
+    const fetchImpl = vi.fn(() => json({ build: 'NEWbuild' }));
+    const u = createAppUpdate({ current: 'CURbuild', fetchImpl });
+    expect(await u.check()).toBe(true);
+    u._reset();
+    expect(await u.serverSaid('update_required')).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(u.available).toBe(true);
     expect(u.reason).toBe('server');
+  });
+  it('update_required والموقع ما زال يقدّم بناء الصفحة نفسه (الدوال سبقت Pages): لا شريط، فلا إعادة تحميل إلى البناء نفسه', async () => {
+    for (const f of [() => json({ build: 'CURbuild' }), () => Promise.reject(new TypeError('offline')), () => json({}, false)]) {
+      const u = createAppUpdate({ current: 'CURbuild', fetchImpl: vi.fn(f) });
+      expect(await u.serverSaid('update_required')).toBe(false);
+      expect(u.available).toBe(false);
+      expect(reloadOnNavigate(u, { unsaved: () => false, reload: vi.fn(() => true) })).toBe(false);
+    }
   });
   it('unknown_action يُظهره إن كان على الخادم إصدار أحدث فعلًا، ولا يُظهره إن تطابقا', async () => {
     const same = createAppUpdate({ current: 'CURbuild', fetchImpl: vi.fn(() => json({ build: 'CURbuild' })) });
@@ -186,7 +198,12 @@ describe('إعادة التحميل عند التنقل الداخلي', () => {
     expect(read('leaders-app/src/screens/Lab.jsx')).toContain('useUnsavedFlag(() => dirty.current)');
     expect(read('leaders-app/src/screens/Assessment.jsx')).toContain('useUnsavedFlag(Object.keys(pending).length > 0 || saving > 0)');
     expect(read('admin-app/src/ui.jsx')).toMatch(/export function useGuardedClose\(dirty, onClose\) \{\n {2}const \{ confirm \} = useUI\(\);\n {2}useUnsavedFlag\(dirty\);/);
-    expect(read('leaders-app/src/App.jsx')).toMatch(/const go = useCallback\(\(v, fromHistory = false\) => \{[\s\S]{0,400}if \(reloadOnNavigate\(appUpdate\(\), \{ to: \(\) => urlForView\(location\.href, v\) \}\)\) return;/);
+    const app = read('leaders-app/src/App.jsx');
+    expect(app).toMatch(/const go = useCallback\(\(v, fromHistory = false, \{ reloadable = true \} = \{\}\) => \{[\s\S]{0,600}if \(reloadable && viewRef\.current !== v\) \{ if \(reloadOnNavigate\(appUpdate\(\), \{ to: \(\) => urlForView\(location\.href, v\) \}\)\) return; \}\n\s*else appUpdate\(\)\?\.check\(\);/);
+    // تنقل يحمل حالة لا يحملها الرابط لا يعيد التحميل: أداة بعينها، وباب في الكتاب، والعودة إلى فصل المبادرة
+    expect(app).toContain("const openLab = (id = null) => { setLabOpen(id); go('lab', false, { reloadable: id == null }); };");
+    expect(app).toContain("setCapReturn(t?.chapter_id || null); go('handbook', false, { reloadable: t == null }); };");
+    expect(app).toContain("setBookTarget(null); go('capstone', false, { reloadable: false }); }");
     expect(read('admin-app/src/main.jsx')).toContain("window.addEventListener('hashchange', () => { reloadOnNavigate(appUpdate()); });");
   });
 });
@@ -262,6 +279,37 @@ describe('الشريط: سطر واحد وزر «حدّث»، بلا رقم نس
     expect(apply).toHaveBeenCalledWith({ to: expect.any(Function) });
     expect(bar.querySelector('button').disabled).toBe(true);
     await act(async () => { r.unmount(); });
+  });
+  it('«حدّث» وفي الصفحة ما لم يُحفظ: لا إعادة تحميل من أول نقرة، بل سطر ينبّه وزر «حدّث دون حفظ»، وبعد الحفظ يعود كما كان', async () => {
+    _resetUnsaved();
+    let dirty = true;
+    const off = registerUnsaved(() => dirty);
+    const u = createAppUpdate({ current: 'CURbuild', fetchImpl: vi.fn() });
+    const apply = vi.fn(() => Promise.resolve());
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const r = createRoot(host);
+    await act(async () => { r.render(<UpdateBar update={u} apply={apply} />); });
+    await act(async () => { u.mark('version'); });
+    const bar = host.querySelector('[data-testid="update-bar"]');
+    await act(async () => { bar.querySelector('button').click(); });
+    expect(apply).not.toHaveBeenCalled();
+    expect(bar.textContent).toBe('لديك ما لم يُحفظ، احفظه ثم حدّثحدّث دون حفظ');
+    await act(async () => { bar.querySelector('button').click(); });
+    expect(apply).toHaveBeenCalledTimes(1);
+    await act(async () => { r.unmount(); });
+    // حُفظ بين النقرتين: النقرة الثانية على «حدّث» تطبّق التحديث مباشرة
+    const apply2 = vi.fn(() => Promise.resolve());
+    const r2 = createRoot(host);
+    dirty = true;
+    await act(async () => { r2.render(<UpdateBar update={u} apply={apply2} />); });
+    await act(async () => { host.querySelector('button').click(); });
+    expect(apply2).not.toHaveBeenCalled();
+    dirty = false;
+    await act(async () => { host.querySelector('button').click(); });
+    expect(apply2).toHaveBeenCalledTimes(1);
+    await act(async () => { r2.unmount(); });
+    off();
   });
   it('التطبيقان يعرضانه فوق المحتوى، وتطبيق القادة يعود إلى القسم نفسه', () => {
     expect(read('leaders-app/src/main.jsx')).toContain('<UpdateBar to={viewHref} />');

@@ -7,8 +7,10 @@
 // - retainedAssets: ينسخ ملفات الإصدارات السابقة من مجلدها المودع (releases/<التطبيق>/assets/) إلى assets/ في الناتج، كما
 //   يُنسخ public/. المجلد لا يكتبه البناء: يحدّثه scripts/ops/retain-assets.mjs وحده (الخيار أ في البند 6)، بقائمته الصريحة
 //   retained.json، فالناتج يبقى دالة في المودع وحده لا في حالة فرع. ملف بالاسم نفسه في البناء الحالي لا يُستبدل.
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+//   ويكتب خارج الناتج (node_modules/.cache، غير مودع) قائمة ما بناه المصدر نفسه، فيعرف retain-assets.mjs update ما يبنيه
+//   المصدر ولو كان اسمه في retained.json أيضًا (تراجع يعيد بصمة قديمة)، فلا يحذفه من الناتج.
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 export const ENTRY_FILE = /^assets\/index-([\w-]+)\.js$/;
 
@@ -43,6 +45,16 @@ export function readRetained(storeDir) {
   return j && typeof j === 'object' && !Array.isArray(j) ? j : {};
 }
 
+/** ملف قائمة ما بناه المصدر لمجلد releases/<التطبيق>: <الجذر>/node_modules/.cache/mi-release-files/<التطبيق>.json */
+export function builtListFile(storeDir) {
+  return join(dirname(dirname(storeDir)), 'node_modules', '.cache', 'mi-release-files', `${basename(storeDir)}.json`);
+}
+
+/** أسماء ملفات assets/ التي بناها المصدر نفسه (لا المنسوخة من المجلد)، من حزمة Rollup */
+export function ownAssetsOf(bundle) {
+  return Object.keys(bundle || {}).filter((k) => k.startsWith('assets/') && !k.slice(7).includes('/')).map((k) => k.slice(7)).sort();
+}
+
 export function retainedAssets(storeDir) {
   return {
     name: 'mi-retained-assets',
@@ -50,6 +62,9 @@ export function retainedAssets(storeDir) {
     writeBundle(opts, bundle) {
       const out = opts.dir;
       const current = new Set(Object.keys(bundle || {}));
+      const listFile = builtListFile(storeDir);
+      mkdirSync(dirname(listFile), { recursive: true });
+      writeFileSync(listFile, `${JSON.stringify({ own: ownAssetsOf(bundle) })}\n`);
       const list = readRetained(storeDir);
       mkdirSync(join(out, 'assets'), { recursive: true });
       for (const name of Object.keys(list).sort()) {

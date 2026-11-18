@@ -32,7 +32,8 @@ export const MILESTONE_STATUS_AR = { done: 'منجز', on_time: 'في الموع
 // المراحل التي تسير معًا («تبدأ مع») تأخذ نصيبًا واحدًا بطول أطولها، كما في stageWindows.
 export function distributeSchedule(stages, startsOn, endsOn) {
   if (!ISO.test(startsOn || '') || !ISO.test(endsOn || '') || endsOn < startsOn) return {};
-  const live = (stages || []).filter((s) => s.active !== false).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  // والخدمة (T2، lane: service) لا تُوزَّع أصلًا: لا نافذة لها ولا أيام
+  const live = (stages || []).filter((s) => s.active !== false && !(s.rules && s.rules.lane === 'service')).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   // والمسار المستمر (T1، lane: track) خارج السلسلة: يمتد على الدفعة كغير الإلزامية ولا يأخذ من نصيب غيرها
   const mode = (s) => (s.rules && s.rules.lane === 'track' ? 'track' : (s.rules && s.rules.mode) || 'required');
   const seq = live.filter((s) => mode(s) === 'required');

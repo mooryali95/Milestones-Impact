@@ -7,8 +7,9 @@
 // - عند الاختلاف: شريط سطر واحد «تحديث جديد متاح» وزر «حدّث» (UpdateBar.jsx)، بلا رقم نسخة ولا تفاصيل.
 // - وعند أول تنقل داخلي بعدها: إعادة تحميل تلقائية إلى الوجهة نفسها، ما لم يكن في الصفحة ما لم يُحفظ
 //   (unsaved-registry.js)، وبحارس reloadOnce (مرة في الدقيقة على الأكثر، ش3).
-// - رد الخادم update_required (عميل أقدم من الحد الأدنى، _shared/client-compat.js) يُظهر الشريط نفسه مباشرة، وunknown_action
-//   يُظهره إن كان على الخادم إصدار أحدث فعلًا (فحص version.json)، فلا يُدعى أحد إلى تحديث لا يغيّر شيئًا.
+// - رد الخادم update_required (عميل أقدم من الحد الأدنى، _shared/client-compat.js) وunknown_action يُظهران الشريط نفسه إن
+//   كان على الموقع إصدار أحدث فعلًا (فحص version.json فورًا)، فلا يُدعى أحد إلى تحديث لا يغيّر شيئًا، ولا تتكرر إعادة
+//   التحميل إلى البناء نفسه إن سبقت الدوال ترقية الواجهة (النشر يرقّي الدوال قبل Pages).
 // - عامل الخدمة الجديد لا يستولي على التبويبات وحده (sw.js): «حدّث» يرسل إليه SKIP_WAITING وتُعاد الصفحة بعد controllerchange.
 import { reloadOnce } from './lazy-retry.js';
 import { hasUnsaved } from './unsaved-registry.js';
@@ -47,6 +48,15 @@ export function createAppUpdate({ current = null, fetchImpl = defaultFetch, now 
     emit();
   }
 
+  /** بصمة version.json على الموقع الآن، أو null. لا يرمي أبدًا */
+  async function fetchLatest() {
+    try {
+      const r = await fetchImpl(url, { cache: 'no-store', credentials: 'same-origin' });
+      if (!r || !r.ok) return null;
+      return buildOfVersion(await r.json());
+    } catch { return null; }
+  }
+
   /** يقرأ version.json ويعيد true إن اختلفت البصمة. force يتجاوز فاصل الدقيقة. لا يرمي أبدًا */
   function check({ force = false } = {}) {
     if (!live()) return Promise.resolve(false);
@@ -56,20 +66,25 @@ export function createAppUpdate({ current = null, fetchImpl = defaultFetch, now 
     state.lastCheck = now();
     state.checking = (async () => {
       try {
-        const r = await fetchImpl(url, { cache: 'no-store', credentials: 'same-origin' });
-        if (!r || !r.ok) return false;
-        const b = buildOfVersion(await r.json());
+        const b = await fetchLatest();
         if (b && b !== state.current) { mark('version'); return true; }
         return false;
-      } catch { return false; } finally { state.checking = null; }
+      } finally { state.checking = null; }
     })();
     return state.checking;
   }
 
-  /** رد خادم يدل على عميل قديم: update_required يُظهر الشريط، وunknown_action بعد تأكيد إصدار أحدث */
+  /** رد خادم يدل على عميل قديم: الرمزان يُظهران الشريط بعد تأكيد إصدار أحدث في version.json. السبب 'server' لـupdate_required */
   function serverSaid(code) {
-    if (code === 'update_required') { if (live()) mark('server'); return; }
-    if (code === 'unknown_action') check({ force: true });
+    if (code !== 'update_required' && code !== 'unknown_action') return Promise.resolve(false);
+    if (!live()) return Promise.resolve(false);
+    const reason = code === 'update_required' ? 'server' : 'version';
+    if (state.available) return Promise.resolve(true);
+    return (async () => {
+      const r = await fetchLatest();
+      if (r && r !== state.current) { mark(reason); return true; }
+      return false;
+    })();
   }
 
   return {

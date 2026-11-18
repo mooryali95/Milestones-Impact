@@ -8,7 +8,7 @@
 // R3a): «تسير مع» مرحلة سابقة في المحور بإزاحة من بدايتها، تخطيطًا للتواريخ وحدها (القرار 6).
 import {
   cohortPlan, PLAN_DAYS_MAX, PLAN_WITH_UNLOCKS, planDaysMin, planDaysOf, planDaysOnly, planOff, planOffKeys, planPinned, planRules, planSchedule,
-  planTrack, planWithOf, planWithRules,
+  planService, planTrack, planWithOf, planWithRules,
 } from './stage-windows.js';
 import { addDays, cohortMilestones, daysBetween, distributeSchedule, lateNoticeAllowed, MILESTONE_GRACE_DAYS, milestoneDueInfo, milestoneStatuses } from './milestones.js';
 import { stageRules, daysAr, durationAr, GATE_STAGE_KEYS, untilAr, untilOf, withPlacementIssue } from './journey.js';
@@ -90,6 +90,8 @@ export function planWithLock(stage) {
   if (!stage) return null;
   const name = stage.title_ar || stage.key;
   if (PLAN_GATE_STAGES.includes(stage.key)) return { code: 'with_gate', msg: `«${name}» من بوابات القبول، فلا تسير مع غيرها في دفعة` };
+  // الخدمة (T2) لا نافذة لها في الدفعة، وإتاحتها من البرنامج
+  if (planService(stage)) return { code: 'with_service', msg: `«${name}» خدمة لمن يريد بلا أيام في الرحلة، فلا تسير مع غيرها. إتاحتها من البرنامج` };
   const r = stageRules(stage);
   if (!PLAN_WITH_UNLOCKS.includes(r.unlock)) {
     return { code: 'with_rule', msg: `«${name}» تُفتح ${UNLOCK_LOCK_AR[r.unlock] || 'بقاعدة خاصة'} (قاعدة البرنامج)، فلا تسير مع غيرها في دفعة` };
@@ -109,7 +111,7 @@ export function planWithCandidates(stages, schedule, key) {
   const self = live.find((s) => s.key === key);
   if (!self || planWithLock(self)) return [];
   const idx = live.indexOf(self);
-  return live.slice(0, idx).filter((s) => !PLAN_GATE_STAGES.includes(s.key) && !planTrack(s) && !withPlacementIssue(live, self, s.key));
+  return live.slice(0, idx).filter((s) => !PLAN_GATE_STAGES.includes(s.key) && !planTrack(s) && !planService(s) && !withPlacementIssue(live, self, s.key));
 }
 // أخطاء التوازي في خطة واحدة، بمفتاح المرحلة ورمز الخطأ والمرجع الذي يخصه، فمرجع آخر خاطئ بالرمز نفسه خطأ جديد
 function withErrors(stages, schedule, cohort) {
@@ -134,7 +136,7 @@ function withErrors(stages, schedule, cohort) {
       if (!u) { add(k, 'until_value', `نهاية «${title(k)}»: نهاية الرحلة، أو مدته بالأيام، أو نهاية طور، أو نهاية مرحلة`); continue; }
       if (u.startsWith('stage:')) {
         const t = u.slice(6);
-        if (!byKey.has(t) || off.has(t) || t === k || planTrack(byKey.get(t))) { add(k, 'until_value', `«${title(k)}» ينتهي بنهاية «${title(t)}» وهي ليست مرحلة متتابعة تعمل في هذه الدفعة`, t); continue; }
+        if (!byKey.has(t) || off.has(t) || t === k || planTrack(byKey.get(t)) || planService(byKey.get(t))) { add(k, 'until_value', `«${title(k)}» ينتهي بنهاية «${title(t)}» وهي ليست مرحلة متتابعة تعمل في هذه الدفعة`, t); continue; }
       }
     }
     if (track && e.with === false) { add(k, 'track_with', `«${title(k)}» مسار مستمر يبدأ مع مرحلة قبله دائمًا؛ اختر مرجعه أو ارجع لقاعدة البرنامج`); continue; }
@@ -149,6 +151,7 @@ function withErrors(stages, schedule, cohort) {
       if (off.has(p.with)) { add(k, 'with_off', `«${title(k)}» تسير مع «${name}» وهي موقوفة لهذه الدفعة: أعدها أو اختر غيرها`, p.with); continue; }
       if (PLAN_GATE_STAGES.includes(p.with)) { add(k, 'with_gate', `«${name}» من بوابات القبول، فلا تسير معها مرحلة في دفعة`, p.with); continue; }
       if (planTrack(t)) { add(k, 'with_track', `«${name}» مسار مستمر، فلا تسير معه مرحلة`, p.with); continue; }
+      if (planService(t)) { add(k, 'with_service', `«${name}» خدمة بلا أيام في الرحلة، فلا تسير معها مرحلة`, p.with); continue; }
       // مرجع قبلها في الترتيب وحده، فلا حلقة: كل تابع يشير إلى ما سبقه
       if (!(at.get(p.with) < at.get(k))) { add(k, 'with_order', `«${name}» بعد «${title(k)}» في الترتيب، فلا تسير معها. اختر مرحلة قبلها`, p.with); continue; }
       const why = withPlacementIssue(live, live.find((s) => s.key === k) || self, p.with);
@@ -237,6 +240,8 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
     const s = byKey.get(k);
     if (!s) { errors.push({ stage: k, code: 'unknown', msg: `«${k}» ليست من مراحل رحلة الدفعة الظاهرة` }); continue; }
     if (raw === null || raw === '') { setDays(k, null); continue; }
+    // الخدمة (T2) لا أيام لها في الرحلة: تُتاح حتى نهايتها، فلا مدة تُكتب لها
+    if (planService(s)) { errors.push({ stage: k, code: 'service_days', msg: `«${title(k)}» خدمة لمن يريد بلا أيام في الرحلة، فلا مدة لها` }); continue; }
     const n = Number(latinDigits(raw));
     const min = planDaysMin(s);
     if (!Number.isInteger(n) || n < min || n > PLAN_DAYS_MAX) {

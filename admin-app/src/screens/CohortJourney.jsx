@@ -287,6 +287,30 @@ function StageCard({ s, rows = null, plan = null, days = null, act = null }) {
   );
 }
 
+// بطاقة الخدمة (T2، ب5.2): إتاحتها وحد جلساتها، ومؤشر الاستخدام بدل الحالة («استفاد 7 من 20»). لا نافذة ولا مدة ولا عدادات:
+// طبيعتها وإتاحتها من البرنامج، وإيقافها لهذه الدفعة بمفتاحها
+function ServiceCard({ s, rows = null, plan = null }) {
+  const head = `cj-st-${s.key}`;
+  const row = rows?.[s.key];
+  // المسودة تحكم إن وُجدت (إيقاف أو إعادة قبل الحفظ)، وإلا المحفوظ (s.off: خدمة موقوفة لهذه الدفعة)
+  const off = row ? !!row.off : !!s.off;
+  return (
+    <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card svc${off ? ' off' : ''}`} aria-labelledby={head} data-testid={`cj-service-${s.key}`}>
+      <header className="cj-card-head">
+        <h5 id={head}>{s.title}</h5>
+        <span className="cj-tag cj-svc">{s.lane_ar}</span>
+        {s.mode_ar && <span className="cj-tag cj-mode">{s.mode_ar}</span>}
+      </header>
+      {plan && row && <OffSwitch s={s} row={row} onOff={plan.onOff} />}
+      <p className="cj-window"><b>{off ? 'موقوفة لهذه الدفعة' : s.avail_ar}</b><small>{s.note_ar}</small></p>
+      <dl className="cj-facts">
+        <div><dt>الأنشطة</dt><dd>{s.acts.text}{s.max_ar && <small> · {s.max_ar}</small>}</dd></div>
+        <div><dt>الاستخدام</dt><dd className="cj-usage">{off ? 'لا حجز ما دامت موقوفة' : s.usage ? s.usage.text : 'يظهر بعد قراءة الخريطة'}</dd></div>
+      </dl>
+    </article>
+  );
+}
+
 // نافذة الأثر قبل الحفظ (البند 4.2 هـ): ما تغيّر سطرًا سطرًا، ومن يتأثر، والمعالم، والبريد، من الخادم وحده
 // «أبلغ المشاركين» (القرار 13) مطفأ افتراضيًا، ومن تجاوز مرحلة تعود (القرار 12) «اعفِ من تجاوزها» افتراضيًا
 function ImpactDialog({ r, busy, canSave, lock, onSave, onClose, opts, setOpts }) {
@@ -706,7 +730,8 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         </p>
       )}
 
-      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} editable={editable} />}
+      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} editable={editable}
+        usage={lanes.services ? Object.fromEntries(lanes.services.filter((x) => x.usage).map((x) => [x.key, x.usage.text])) : null} />}
       {dragNote && (
         <p className="cj-alert cj-drag-note" role="alert" data-testid="cj-drag-note"><span aria-hidden="true">!</span>
           <span>{String(dragNote.msg).replace(/[.،\s]+$/, '')}. لم تتغير المسودة.{dragNote.program && on.journey && <> <button type="button" className="la-link" onClick={() => on.journey()}>غيّرها في البرنامج</button></>}
@@ -740,6 +765,14 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
               <header className="cj-phase-head"><h4 id="cj-tracks-h">مسارات مستمرة</h4><small>تسير بجانب المراحل، فلا تؤخر ما بعدها ولا تُعد في مراحل الرحلة</small></header>
               <div className="cj-groups">
                 {lanes.tracks.map((s) => <div key={s.key} className="cj-group track"><StageCard s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} /></div>)}
+              </div>
+            </section>
+          )}
+          {lanes.services?.length > 0 && (
+            <section className="cj-phase cj-services" aria-labelledby="cj-services-h" data-testid="cj-services">
+              <header className="cj-phase-head"><h4 id="cj-services-h">الخدمات</h4><small>يطلبها من يريد حتى نهاية الرحلة، فلا تأخذ منها أيامًا ولا تُعد في مراحلها</small></header>
+              <div className="cj-groups">
+                {lanes.services.map((s) => <div key={s.key} className="cj-group svc"><ServiceCard s={s} rows={draft.rows} plan={planCtl} /></div>)}
               </div>
             </section>
           )}

@@ -6,7 +6,8 @@
 // وصور الكتيب في /assets/ تبقى دون اتصال)، فلا تُخزَّن صفحة HTML (رد Pages لملف غائب، أو تحدي جدار الحماية) تحت اسم ملف JS. لا رد جزئي (206) ولا طلب Range (الفيديو في /media
 // يمر إلى الشبكة كما هو). والتنقل لا يُخزَّن إلا ردًا سليمًا من النطاق نفسه (res.ok و type === 'basic').
 // قرارات التخزين دوال خالصة أدناه يختبرها leaders-app/src/update-safety.test.js في Node، والمستمعات لا تُركَّب إلا داخل عامل الخدمة.
-// ذلك الاختبار يقرأ بأسمائها: cacheableAsset وcacheableNavigation وinCachedDir وisRange وSHELL وcachesToDelete وskipWaitingFor، فتغيير اسم منها يغيّره هناك.
+// ذلك الاختبار يقرأ بأسمائها: cacheableAsset وcacheableNavigation وinCachedDir وisRange وSHELL وcachesToDelete وskipWaitingFor
+// وmatchCurrentFirst، فتغيير اسم منها يغيّره هناك.
 // التحديث بالدعوة (المرحلة 5 البند 5): العامل الجديد لا يستولي على التبويبات المفتوحة وحده (لا skipWaiting عند التثبيت).
 // ينتظر حتى يضغط المستخدم «حدّث» فتصله SKIP_WAITING (shared/ui/app-update.js، activateWaiting)، أو حتى تكون صفحة الإصدار
 // الجديد وحدها مفتوحة (onlyIfAlone)، أو تُغلق التبويبات كلها. وعند تفعيله يُبقي مخزن الإصدار السابق (N-1) لتبويب قديم ما زال مفتوحًا.
@@ -48,6 +49,12 @@ function skipWaitingFor(data, windowCount) {
   return data.onlyIfAlone ? windowCount <= 1 : true;
 }
 
+// رد الانقطاع لما ليس ببصمة (الصفحة '/' وملفات الهيكل): من مخزن هذا الإصدار أولًا، ثم أي مخزن. caches.match وحده يبحث
+// بترتيب إنشاء المخازن، فيجيب مخزن الإصدار السابق (N-1، باقٍ بعد التفعيل) أولًا بصفحة قديمة تطلب قطعة دخول قديمة
+function matchCurrentFirst(store, current, req) {
+  return store.open(current).then((c) => c.match(req)).then((hit) => hit || store.match(req));
+}
+
 // هل يُحفظ رد التنقل نسخةً للعمل دون اتصال؟ رد سليم من النطاق نفسه فقط، لا صفحة خطأ ولا رد معتم
 function cacheableNavigation(res) {
   return !!res && res.ok === true && res.type === 'basic';
@@ -87,7 +94,7 @@ if (typeof self !== 'undefined' && typeof caches !== 'undefined' && typeof self.
       e.respondWith(
         fetch(req)
           .then((res) => { if (cacheableNavigation(res)) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('/', copy)); } return res; })
-          .catch(() => caches.match('/')),
+          .catch(() => matchCurrentFirst(caches, CACHE, '/')),
       );
       return;
     }
@@ -104,6 +111,6 @@ if (typeof self !== 'undefined' && typeof caches !== 'undefined' && typeof self.
     }
 
     // ملفات الهيكل المحفوظة عند التثبيت (الملف التعريفي والأيقونة): الشبكة أولًا، والمحفوظ عند الانقطاع. وما سواها يمر
-    if (SHELL.includes(url.pathname)) e.respondWith(fetch(req).catch(() => caches.match(req)));
+    if (SHELL.includes(url.pathname)) e.respondWith(fetch(req).catch(() => matchCurrentFirst(caches, CACHE, req)));
   });
 }
