@@ -17,7 +17,7 @@ const Boom = ({ error }) => { throw error; };
 describe('الحاجز الأخير حول اللوحة', () => {
   it('main.jsx يلف التطبيق كله بالحاجز', () => {
     const src = readFileSync(join(__dirname, 'main.jsx'), 'utf8');
-    expect(src).toMatch(/<ScreenBoundary scope="app"><Suspense[^>]*>.*<App \/><\/Suspense><\/ScreenBoundary>/s);
+    expect(src).toMatch(/<ScreenBoundary scope="app"><UpdateBar \/><Suspense[^>]*>.*<App \/><\/Suspense><\/ScreenBoundary>/s);
   });
 
   it('خطأ رسم في أي شاشة: رسالة بزرين ونوع الخطأ، لا صفحة بيضاء', () => {

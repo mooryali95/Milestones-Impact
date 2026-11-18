@@ -32,6 +32,7 @@ export const STEPS = [
     'git add -N leaders && git diff --exit-code --stat -- leaders',
     'npm run admin:build',
     'git add -N admin && git diff --exit-code --stat -- admin',
+    'node scripts/ops/retain-assets.mjs check',
   ] },
   // في CI تُشغَّل بمجموعاتها (scripts/ops/e2e-groups.mjs run <group>) بحسب ما تغيّر، والمجموعات الأربع تغطي كل ملف
   { id: 'e2e', title: 'رحلات المتصفح', ci: true, ciVia: 'node scripts/ops/e2e-groups.mjs run', cmds: ['npm run e2e'] },

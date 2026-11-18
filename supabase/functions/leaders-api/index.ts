@@ -76,6 +76,7 @@ import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
 import * as CE from './client-events.ts';
 import { cleanBuild } from '../_shared/client-events.js';
+import { clientLevelOf, needsUpdate } from '../_shared/client-compat.js';
 
 type Body = Record<string, any>;
 
@@ -755,6 +756,9 @@ async function handle(req: Request): Promise<Response> {
   try {
     const b: Body = await req.json().catch(() => ({}));
     action = String(b.action || '');
+    // عميل أقدم من الحد الأدنى (المرحلة 5 البند 7، _shared/client-compat.js): رد واحد يفهمه العميل فيدعو إلى التحديث،
+    // بدل خطأ في منتصف الشاشة. العميل بلا مستوى (أقدم من هذه المرحلة) يُخدم كما كان، والرصد من جهة العميل معفى
+    if (needsUpdate(clientLevelOf(req.url), action)) throw new Fail('صدر تحديث للمنصة، فحدّث الصفحة.', 426, 'update_required');
     const ctx = { ip: clientIp(req), ua: req.headers.get('user-agent')?.slice(0, 300) || null, build };
     // مفتاح منع التكرار يُؤخذ ويُحذف من الجسم قبل أي فعل، ويُستعمل لكتابات الأدوار ذات الجلسة وحدها (فاعل معروف)
     const key = IK.takeKey(action, b);

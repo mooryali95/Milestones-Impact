@@ -192,7 +192,7 @@ describe('إعادة التحميل تفتح القسم المطلوب لا «ر
 function swPolicy() {
   const ctx = { URL };
   vm.createContext(ctx);
-  vm.runInContext(`${read('leaders-app/public/sw.js')}\n;globalThis.__p = { cacheableAsset, cacheableNavigation, inCachedDir, isRange, SHELL };`, ctx);
+  vm.runInContext(`${read('leaders-app/public/sw.js')}\n;globalThis.__p = { cacheableAsset, cacheableNavigation, inCachedDir, isRange, SHELL, cachesToDelete, skipWaitingFor, matchCurrentFirst };`, ctx);
   return ctx.__p;
 }
 const H = (o = {}) => ({ get: (k) => o[k.toLowerCase()] ?? null });
@@ -238,13 +238,53 @@ describe('عامل الخدمة: ما يُخزَّن وما لا يُخزَّن'
     expect(p.cacheableNavigation(res(200, 0, 'text/html'))).toBe(true);
     for (const r of [res(500, 0, 'text/html'), res(503, 0, 'text/html'), res(403, 0, 'text/html'), res(200, 0, 'text/html', 'opaque'), res(200, 0, 'text/html', 'opaqueredirect'), null]) expect(p.cacheableNavigation(r)).toBe(false);
   });
-  it('النسخة من ?v= وحذف المخازن القديمة باقيان، وskipWaiting وclients.claim كما هما حتى شريط التحديث (المرحلة 5)', () => {
+  it('النسخة من ?v=، ولا skipWaiting عند التثبيت (المرحلة 5): يُفعَّل بـSKIP_WAITING وحده، ويُبقي مخزن الإصدار السابق', () => {
     const sw = read('leaders-app/public/sw.js');
     expect(sw).toMatch(/searchParams\.get\('v'\)/);
-    expect(sw).toContain('keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))');
-    expect(sw).toContain('self.skipWaiting()');
+    expect(sw).toContain('cachesToDelete(keys, CACHE).map((k) => caches.delete(k))');
+    const install = sw.slice(sw.indexOf("addEventListener('install'"), sw.indexOf("addEventListener('message'"));
+    expect(install).not.toContain('skipWaiting');
+    expect(sw).toMatch(/skipWaitingFor\(data, list\.length\)\) return self\.skipWaiting\(\)/);
     expect(sw).toContain('self.clients.claim()');
     expect(sw).toContain("caches.open(CACHE).then((c) => c.put('/', copy))");
+  });
+});
+
+describe('عامل الخدمة: التفعيل بالدعوة ومخزن الإصدار السابق (المرحلة 5)', () => {
+  const p = swPolicy();
+  // مخازن بترتيب إنشائها كما في Cache API: match العام يعيد أول إصابة، فالأقدم يجيب أولًا
+  const fakeCaches = (byName) => {
+    const order = Object.keys(byName);
+    const cache = (n) => ({ match: async (k) => byName[n][k] ?? undefined });
+    return {
+      open: async (n) => (byName[n] ? cache(n) : { match: async () => undefined }),
+      match: async (k) => { for (const n of order) { if (byName[n][k] !== undefined) return byName[n][k]; } return undefined; },
+    };
+  };
+  it('الانقطاع: الصفحة من مخزن الإصدار الحالي لا من مخزن N-1 الأقدم، وما غاب عنه من أي مخزن', async () => {
+    const store = fakeCaches({ 'mi-leaders-old': { '/': 'old-page', '/favicon.svg': 'old-icon' }, 'mi-leaders-new': { '/': 'new-page' } });
+    expect(await store.match('/')).toBe('old-page');
+    expect(await p.matchCurrentFirst(store, 'mi-leaders-new', '/')).toBe('new-page');
+    expect(await p.matchCurrentFirst(store, 'mi-leaders-new', '/favicon.svg')).toBe('old-icon');
+    expect(await p.matchCurrentFirst(store, 'mi-leaders-new', '/none')).toBeUndefined();
+    const sw = read('leaders-app/public/sw.js');
+    expect(sw).toContain(".catch(() => matchCurrentFirst(caches, CACHE, '/'))");
+    expect(sw).toContain('fetch(req).catch(() => matchCurrentFirst(caches, CACHE, req))');
+    expect(sw).not.toMatch(/catch\(\(\) => caches\.match/);
+  });
+  it('يُبقي الحالي وآخر مخزن قبله (N-1) ويحذف ما سواهما، ولا يمس مخزنًا ليس له', () => {
+    expect([...p.cachesToDelete(['mi-leaders-a', 'mi-leaders-b', 'mi-leaders-c', 'other'], 'mi-leaders-c')]).toEqual(['mi-leaders-a']);
+    expect([...p.cachesToDelete(['mi-leaders-a', 'mi-leaders-b'], 'mi-leaders-b')]).toEqual([]);
+    expect([...p.cachesToDelete(['mi-leaders-x'], 'mi-leaders-x')]).toEqual([]);
+    expect([...p.cachesToDelete([], 'mi-leaders-x')]).toEqual([]);
+    expect([...p.cachesToDelete(['mi-leaders-a', 'mi-leaders-b', 'mi-leaders-c'], 'mi-leaders-a')]).toEqual(['mi-leaders-b']);
+  });
+  it('SKIP_WAITING من «حدّث» يُفعَّل دائمًا، ومع onlyIfAlone حين تكون نافذة واحدة فقط', () => {
+    expect(p.skipWaitingFor({ type: 'SKIP_WAITING' }, 3)).toBe(true);
+    expect(p.skipWaitingFor({ type: 'SKIP_WAITING', onlyIfAlone: true }, 1)).toBe(true);
+    expect(p.skipWaitingFor({ type: 'SKIP_WAITING', onlyIfAlone: true }, 2)).toBe(false);
+    expect(p.skipWaitingFor({ type: 'OTHER' }, 1)).toBe(false);
+    expect(p.skipWaitingFor(null, 1)).toBe(false);
   });
 });
 

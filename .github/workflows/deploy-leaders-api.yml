@@ -32,7 +32,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg
@@ -110,6 +110,11 @@ jobs:
       - name: Verify the live functions answer real requests
         if: ${{ !cancelled() && steps.move.outcome == 'success' }}
         run: node scripts/ops/smoke.mjs deploy --tree="${{ steps.target.outputs.dir }}"
+      # ش8 بعد نقل release (تصور تحديث المنصة، المرحلة 5 البند 8): الإنتاج يقدّم version.json بصمة الهدف وملفاته بنوعها،
+      # و pages.dev بديلًا حين يحجب جدار الحماية المشغّل. السكربت من main، والناتج من شجرة الهدف (--tree)
+      - name: Production serves the target release
+        if: ${{ !cancelled() && steps.move.outcome == 'success' }}
+        run: node scripts/ops/verify-live.mjs --wait=900 --tree="${{ steps.target.outputs.dir }}"
       # تسخين بعد الدخان، كما في ci.yml، وحالة كل دالة في السجل
       - name: Warm up the functions
         if: always()

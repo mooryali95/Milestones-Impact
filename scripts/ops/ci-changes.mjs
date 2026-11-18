@@ -25,8 +25,9 @@ const SHARED = [/^shared\//, /^src\/lib\//, /^supabase\/functions\/(leaders-api|
 const AREAS = {
   home: [/^home\//, /^shared\//],
   matrix: [/^src\//, /^public\//, /^index\.html$/, /^vite\.config\.js$/, ...SHARED],
-  leaders: [/^leaders-app\//, /^leaders\//, ...SHARED],
-  admin: [/^admin-app\//, /^admin\//, ...SHARED],
+  // releases/<التطبيق>/: ملفات الإصدارات السابقة التي ينسخها البناء إلى الناتج (scripts/ops/retain-assets.mjs)
+  leaders: [/^leaders-app\//, /^leaders\//, /^releases\/leaders\//, ...SHARED],
+  admin: [/^admin-app\//, /^admin\//, /^releases\/admin\//, ...SHARED],
   functions: [/^supabase\/functions\//, /^deno\.json$/],
   // الخادم على قاعدة حقيقية (integration.yml): الدوال والترحيلات والمحتوى المرحَّل وسكربتات التكامل
   backend: [/^supabase\//, /^scripts\/(integration|db)\//],

@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { PACE_TEXT, PACE_TITLE, paceTracker } from '../../../supabase/functions/leaders-api/pace.js';
 import Ico from '../Ico.jsx';
 import { call } from '../api.js';
+import { useUnsavedFlag } from '../../../shared/ui/unsaved-registry.js';
 import { ErrorBox } from '../ui.jsx';
 import { DIMENSIONS, dimOf, TIERS } from '../labels.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
@@ -45,6 +46,8 @@ export default function Assessment({ kind = 'baseline', invite = false, onSubmit
   // إجابات لم يحفظها الخادم (فحص الجاهزية p-entry-4): تبقى حتى تُحفظ ولا تمحوها إجابة سؤال آخر، ولا تُعد في «أجبت»
   // ولا في المراجعة، فلا يُرسل القياس قبلها. تُعاد وحدها حين يعود الاتصال، وبعد كل حفظ ناجح، وعند بلوغ المراجعة
   const [pending, setPending] = useState({});
+  // إجابات لم تُحفظ بعد تمنع إعادة التحميل التلقائية للتحديث (shared/ui/unsaved-registry.js، المرحلة 5)
+  useUnsavedFlag(Object.keys(pending).length > 0 || saving > 0);
   const pendingRef = useRef({});
   pendingRef.current = pending;
   const seq = useRef({});

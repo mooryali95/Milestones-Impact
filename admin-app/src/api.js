@@ -5,6 +5,7 @@
 // توكن جلسة المدير داخل الجسم، ويُتحقق منه على الخادم.
 import { netMessage, postAction } from '../../src/lib/api.js';
 import { dateTime } from './dates.js';
+import { appUpdate } from '../../shared/ui/app-update.js';
 
 export const ROLE_LABELS = { super_admin: 'مدير عام', admin: 'مدير نظام', viewer: 'مراقب' };
 
@@ -41,7 +42,10 @@ export async function post(fn, payload, fail) {
   try {
     const { r } = await postAction(fn, payload);
     if (BUSY.includes(r.status)) return { success: false, message: 'الخادم مشغول لحظيًا، حدّث الصفحة بعد ثوانٍ' };
-    return await r.json();
+    const res = await r.json();
+    // لوحة أقدم من الخادم (المرحلة 5 البند 7): الشريط نفسه، وunknown_action بعد تأكيد إصدار أحدث (shared/ui/app-update.js)
+    if (res?.code === 'update_required' || res?.code === 'unknown_action') appUpdate()?.serverSaid(res.code);
+    return res;
   } catch (e) {
     return { success: false, message: netMessage(e, fail) };
   }

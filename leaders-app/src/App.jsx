@@ -17,7 +17,8 @@ import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
 import { tabFromSearch } from './deeplink.js';
-import { lazyView, noteView } from './reload-view.js';
+import { lazyView, noteView, urlForView } from './reload-view.js';
+import { appUpdate, reloadOnNavigate } from '../../shared/ui/app-update.js';
 import { welcomeSeen } from './api.js';
 import Profile from './screens/Profile.jsx';
 import MyData from './screens/MyData.jsx';
@@ -421,18 +422,23 @@ function Participant() {
   useEffect(() => { if (meId) loadLab(); else setLab(null); }, [meId, loadLab]);
   const hasLab = !!lab?.items?.length;
   // تغيير القسم يبدأ من أعلى الصفحة وينقل التركيز إلى المحتوى لقارئ الشاشة
-  const go = useCallback((v, fromHistory = false) => {
+  const go = useCallback((v, fromHistory = false, { reloadable = true } = {}) => {
+    // تحديث متاح (المرحلة 5 البند 4): أول تنقل داخلي يعيد التحميل إلى القسم المطلوب نفسه، ما لم يكن هنا نموذج غير محفوظ.
+    // وبلا تحديث معروف يُفحص version.json (بفاصل دقيقة على الأقل). لا إعادة تحميل إلى القسم نفسه، ولا لتنقل يحمل حالة لا
+    // يحملها الرابط (أداة بعينها في المختبر، باب في الكتاب، العودة إلى فصل المبادرة): reloadable: false، ويُفحص فقط
+    if (reloadable && viewRef.current !== v) { if (reloadOnNavigate(appUpdate(), { to: () => urlForView(location.href, v) })) return; }
+    else appUpdate()?.check();
     // كل قسم خطوة في سجل المتصفح، فزر الرجوع يعيد إلى القسم السابق ولا يخرج من المنصة
     if (!fromHistory && viewRef.current !== v) history.pushState({ view: v }, '');
     setView(v);
     window.scrollTo({ top: 0 });
     requestAnimationFrame(() => document.getElementById('main')?.focus({ preventScroll: true }));
   }, []);
-  const openLab = (id = null) => { setLabOpen(id); go('lab'); };
+  const openLab = (id = null) => { setLabOpen(id); go('lab', false, { reloadable: id == null }); };
   // إحالة من فصل في وثيقة المبادرة إلى بابه في الكتاب، والعودة إلى الفصل نفسه (anatomy.json)
   const [bookTarget, setBookTarget] = useState(null);
   const [capReturn, setCapReturn] = useState(null);
-  const openBook = (t) => { setBookTarget(t); setCapReturn(t?.chapter_id || null); go('handbook'); };
+  const openBook = (t) => { setBookTarget(t); setCapReturn(t?.chapter_id || null); go('handbook', false, { reloadable: t == null }); };
   useEffect(() => { if (view !== 'handbook') setBookTarget(null); }, [view]);   // «كتابي» من القائمة يفتح الكتاب عاديًا لا على إحالة قديمة
 
   const logout = async () => {
@@ -508,7 +514,7 @@ function Participant() {
   // D04: رسم البرنامج بعد اعتماد المسار؛ قبله حالة انتظار مؤرخة بلا بوابة دفع
   else if (!paidFor('program')) screen = me.profile?.approved ? <Paywall item="program" me={me} onUpdate={accept} /> : <AwaitingApproval me={me} />;
   else if (view === 'lab' && hasLab) screen = <LabScreen items={lab.items} points={lab.points} open={labOpen} onOpen={setLabOpen} reload={loadLab} onBack={() => { setLabOpen(null); go('home'); }} />;
-  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => { setBookTarget(null); go('home'); }} target={bookTarget} onReturn={bookTarget ? () => { setBookTarget(null); go('capstone'); } : null} />;
+  else if (view === 'handbook' && me.profile?.approved) screen = <Handbook me={me} lab={lab?.items} onLab={openLab} onBack={() => { setBookTarget(null); go('home'); }} target={bookTarget} onReturn={bookTarget ? () => { setBookTarget(null); go('capstone', false, { reloadable: false }); } : null} />;
   else if (ft.katon && view === 'katon' && me.profile?.approved) screen = <Katon onBack={() => go('home')} />;
   else if (ft.hall && view === 'hall' && me.profile?.approved) screen = <HallScreen onBack={() => go('home')} onHidden={featureGone} />;
   else if (view === 'capstone' && me.profile?.approved) screen = <Capstone me={me} onEditProfile={() => go('profile')} onBack={() => go('home')} onHandbook={openBook} reopen={capReturn} onReopened={() => setCapReturn(null)} />;

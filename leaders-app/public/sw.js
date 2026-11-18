@@ -6,7 +6,11 @@
 // وصور الكتيب في /assets/ تبقى دون اتصال)، فلا تُخزَّن صفحة HTML (رد Pages لملف غائب، أو تحدي جدار الحماية) تحت اسم ملف JS. لا رد جزئي (206) ولا طلب Range (الفيديو في /media
 // يمر إلى الشبكة كما هو). والتنقل لا يُخزَّن إلا ردًا سليمًا من النطاق نفسه (res.ok و type === 'basic').
 // قرارات التخزين دوال خالصة أدناه يختبرها leaders-app/src/update-safety.test.js في Node، والمستمعات لا تُركَّب إلا داخل عامل الخدمة.
-// ذلك الاختبار يقرأ بأسمائها: cacheableAsset وcacheableNavigation وinCachedDir وisRange وSHELL، فتغيير اسم منها يغيّره هناك.
+// ذلك الاختبار يقرأ بأسمائها: cacheableAsset وcacheableNavigation وinCachedDir وisRange وSHELL وcachesToDelete وskipWaitingFor
+// وmatchCurrentFirst، فتغيير اسم منها يغيّره هناك.
+// التحديث بالدعوة (المرحلة 5 البند 5): العامل الجديد لا يستولي على التبويبات المفتوحة وحده (لا skipWaiting عند التثبيت).
+// ينتظر حتى يضغط المستخدم «حدّث» فتصله SKIP_WAITING (shared/ui/app-update.js، activateWaiting)، أو حتى تكون صفحة الإصدار
+// الجديد وحدها مفتوحة (onlyIfAlone)، أو تُغلق التبويبات كلها. وعند تفعيله يُبقي مخزن الإصدار السابق (N-1) لتبويب قديم ما زال مفتوحًا.
 
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/favicon.svg'];
 const CACHED_DIRS = ['/assets/', '/fonts/'];
@@ -30,6 +34,27 @@ function cacheableAsset(req, res, pathname) {
   return CACHED_TYPES.test(type.trim());
 }
 
+// المخازن التي تُحذف عند التفعيل: كل مخزن سوى الحالي وآخر مخزن سابق قبله (N-1). keys بترتيب الإنشاء (Cache API)، فآخر
+// مخزن غير الحالي هو الإصدار السابق. ومخزن ليس من هذا التطبيق (اسم بلا mi-leaders-) لا يُمس
+function cachesToDelete(keys, current) {
+  const ours = (keys || []).filter((k) => typeof k === 'string' && k.startsWith('mi-leaders-'));
+  const others = ours.filter((k) => k !== current);
+  const keep = others[others.length - 1];
+  return others.filter((k) => k !== keep);
+}
+
+// هل تُفعَّل النسخة المنتظرة لهذه الرسالة؟ SKIP_WAITING من «حدّث» دائمًا، ومع onlyIfAlone حين تكون نافذة واحدة مفتوحة فقط
+function skipWaitingFor(data, windowCount) {
+  if (!data || data.type !== 'SKIP_WAITING') return false;
+  return data.onlyIfAlone ? windowCount <= 1 : true;
+}
+
+// رد الانقطاع لما ليس ببصمة (الصفحة '/' وملفات الهيكل): من مخزن هذا الإصدار أولًا، ثم أي مخزن. caches.match وحده يبحث
+// بترتيب إنشاء المخازن، فيجيب مخزن الإصدار السابق (N-1، باقٍ بعد التفعيل) أولًا بصفحة قديمة تطلب قطعة دخول قديمة
+function matchCurrentFirst(store, current, req) {
+  return store.open(current).then((c) => c.match(req)).then((hit) => hit || store.match(req));
+}
+
 // هل يُحفظ رد التنقل نسخةً للعمل دون اتصال؟ رد سليم من النطاق نفسه فقط، لا صفحة خطأ ولا رد معتم
 function cacheableNavigation(res) {
   return !!res && res.ok === true && res.type === 'basic';
@@ -40,13 +65,21 @@ if (typeof self !== 'undefined' && typeof caches !== 'undefined' && typeof self.
   const CACHE = `mi-leaders-${VERSION}`;
 
   self.addEventListener('install', (e) => {
-    e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+    // لا تخطي للانتظار هنا: أول تثبيت يُفعَّل وحده (لا عامل قبله)، والتحديث ينتظر رسالة «حدّث»
+    e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)));
+  });
+
+  self.addEventListener('message', (e) => {
+    const data = e.data;
+    if (!data || data.type !== 'SKIP_WAITING') return;
+    e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((list) => { if (skipWaitingFor(data, list.length)) return self.skipWaiting(); return undefined; }));
   });
 
   self.addEventListener('activate', (e) => {
     e.waitUntil(
       caches.keys()
-        .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+        .then((keys) => Promise.all(cachesToDelete(keys, CACHE).map((k) => caches.delete(k))))
         .then(() => self.clients.claim()),
     );
   });
@@ -61,7 +94,7 @@ if (typeof self !== 'undefined' && typeof caches !== 'undefined' && typeof self.
       e.respondWith(
         fetch(req)
           .then((res) => { if (cacheableNavigation(res)) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put('/', copy)); } return res; })
-          .catch(() => caches.match('/')),
+          .catch(() => matchCurrentFirst(caches, CACHE, '/')),
       );
       return;
     }
@@ -78,6 +111,6 @@ if (typeof self !== 'undefined' && typeof caches !== 'undefined' && typeof self.
     }
 
     // ملفات الهيكل المحفوظة عند التثبيت (الملف التعريفي والأيقونة): الشبكة أولًا، والمحفوظ عند الانقطاع. وما سواها يمر
-    if (SHELL.includes(url.pathname)) e.respondWith(fetch(req).catch(() => caches.match(req)));
+    if (SHELL.includes(url.pathname)) e.respondWith(fetch(req).catch(() => matchCurrentFirst(caches, CACHE, req)));
   });
 }

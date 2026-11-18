@@ -3,6 +3,7 @@
 // ودفع الحفظ حين تُغادَر الشاشة داخل التطبيق قبل أن يلحقها الحفظ التلقائي
 // ════════════════════════════════════════════════════════════════
 import { useEffect, useRef } from 'react';
+import { registerUnsaved } from '../../shared/ui/unsaved-registry.js';
 
 export function useUnsavedGuard(dirty, flush) {
   const latest = useRef({ dirty, flush });
@@ -10,7 +11,10 @@ export function useUnsavedGuard(dirty, flush) {
   useEffect(() => {
     const warn = (e) => { if (latest.current.dirty) { e.preventDefault(); e.returnValue = ''; } };
     window.addEventListener('beforeunload', warn);
+    // والسجل المشترك: لا إعادة تحميل تلقائية للتحديث ما دام هنا تعديل لم يُحفظ (shared/ui/unsaved-registry.js، المرحلة 5)
+    const off = registerUnsaved(() => latest.current.dirty);
     return () => {
+      off();
       window.removeEventListener('beforeunload', warn);
       if (latest.current.dirty && latest.current.flush) latest.current.flush();
     };

@@ -1,0 +1,36 @@
+/* ══════════════════════════════════════════════════════════════
+   شريط «تحديث جديد متاح» (shared/ui/UpdateBar.jsx): سطر واحد وزر، تحت الترويسة، لا يحجب شيئًا
+   يستورده تطبيق القادة ولوحة الإدارة. ألوانه من رموز الهوية (brand.css) لا قيم مكتوبة هنا
+   ══════════════════════════════════════════════════════════════ */
+.update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--brand-slate);
+  color: var(--brand-cream-light);
+  font-size: .9rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.update-bar-text { font-weight: 600; }
+.update-bar-btn {
+  font: inherit;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 4px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand-gold-light);
+  color: var(--brand-ink);
+  cursor: pointer;
+}
+.update-bar-btn:hover { background: var(--brand-copper); }
+.update-bar-btn:focus-visible { outline: 2px solid var(--brand-cream-light); outline-offset: 2px; }
+.update-bar-btn:disabled { opacity: .7; cursor: progress; }
+@media (prefers-reduced-motion: no-preference) {
+  .update-bar { animation: update-bar-in .25s ease-out; }
+  @keyframes update-bar-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+}
