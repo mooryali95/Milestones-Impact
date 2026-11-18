@@ -1799,7 +1799,8 @@ export function cohortDefinition({ live, version, cohort }) {
   return {
     stages: planStages(stages, cohort?.schedule),
     requirements: (base.requirements || []).filter((r) => r.active !== false && !off.has(r.stage_key)).map((r) => applyDelivery(r, delivery[r.code])),
-    stages_off: active.filter((s) => off.has(s.key)).map((s) => ({ key: s.key, title_ar: s.title_ar, phase: s.phase || null, sort: s.sort ?? 0 })),
+    // والقواعد معها لتعرف الخريطة الخدمة الموقوفة (T2) فتضعها في «الخدمات» لا محطة على المسار
+    stages_off: active.filter((s) => off.has(s.key)).map((s) => ({ key: s.key, title_ar: s.title_ar, phase: s.phase || null, sort: s.sort ?? 0, ...(s.rules ? { rules: s.rules } : {}) })),
     rule_rewrites: rewrites,
   };
 }

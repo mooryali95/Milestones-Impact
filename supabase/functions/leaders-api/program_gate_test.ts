@@ -361,6 +361,10 @@ Deno.test('حد الجلسات: الحجز يُخفى عند الحد، والز
     it = coachItem(await w.call('approved', 'me'));
     assertEquals([it.activity.can_book, it.activity.book_url, it.activity.instant, it.activity.used, it.activity.at_max], [false, null, false, 2, true]);
     assertEquals(alerts().length, 0);
+    // الاتصال الفوري على خادمنا: يُرفض عند الحد ولو طُلب مباشرة، فلا جلسة ولا بريد
+    const inst = await w.call('approved', 'coaching.instant', { requirement_id: REQ_C });
+    assertEquals([inst.status, inst.code], [400, 'at_max']);
+    assertEquals(w.tables.coaching_sessions.filter((x) => x.kind === 'instant').length, 0);
     // الثالث يصل من منصة الحجز بعد وقوعه: يُسجَّل كما هو، ويُعلَّم ويُنبَّه عليه
     assertEquals(await book('m3', 3), { success: true, over_max: true });
     assertEquals(w.tables.coaching_sessions.filter((x) => x.status === 'booked').map((x) => x.external_id), ['calcom:m1', 'calcom:m2', 'calcom:m3']);
@@ -369,6 +373,13 @@ Deno.test('حد الجلسات: الحجز يُخفى عند الحد، والز
     assert(!JSON.stringify(alerts()[0].after).includes('@'));
     assert(!JSON.stringify(alerts()[0].after).includes(p.full_name));
     assertEquals(w.tables.audit_log.filter((x) => x.action === 'coaching.over_max').map((x) => [x.entity_id, x.after.count, x.after.max]), [['calcom:m3', 3, 2]]);
+    // إعادة جدولة الحجز الزائد: العدد نفسه فوق الحد، فيُسجَّل أثره ولا يُنبَّه ثانية على القرار نفسه
+    const raw = JSON.stringify({ triggerEvent: 'BOOKING_RESCHEDULED', payload: { uid: 'm4', rescheduleUid: 'm3', metadata: { ref: `${p.id}.${REQ_C}` }, startTime: new Date(NOW + 4 * 864e5).toISOString(),
+      endTime: new Date(NOW + 4 * 864e5 + 18e5).toISOString(), videoCallData: { url: 'https://meet.example.sa/m4' }, organizer: { email: 'coach@example.sa' }, attendees: [{ email: p.email }] } });
+    assertEquals(await V.bookingWebhook('calcom', raw, new Headers({ 'x-cal-signature-256': await sign(raw) })), { success: true, over_max: true });
+    assertEquals(w.tables.coaching_sessions.filter((x) => x.status === 'booked').map((x) => x.external_id), ['calcom:m1', 'calcom:m2', 'calcom:m4']);
+    assertEquals(alerts().length, 1);
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'coaching.over_max').map((x) => x.entity_id), ['calcom:m3', 'calcom:m4']);
   } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
 });
 

@@ -36,21 +36,23 @@ const catalog = {
   instruments: [], locked_instruments: [], questions: [], grid_cells: [], level_rules: [], placement_model: [{ id: 1 }], tracks: [], track_stats: {},
 };
 
-async function setup(page, width = 1440) {
+async function setup(page, width = 1440, { schedule = {} } = {}) {
   const calls = [];
+  const cohort = { ...cohorts[0], schedule };
+  const off = !!schedule.consulting?.off;
   await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
   await page.clock.setFixedTime(new Date('2026-11-16T09:00:00Z'));
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b);
-    const plan = cohortPlan(stages, cohorts[0]);
+    const plan = cohortPlan(stages, cohort);
     const replies = {
       'admin.orgs': { success: true, orgs: [], unassigned: {} },
       'admin.participants': { success: true, participants: [] },
-      'admin.programs': { success: true, programs, cohorts, organizations: [] },
+      'admin.programs': { success: true, programs, cohorts: [cohort], organizations: [] },
       'admin.catalog': catalog,
-      'admin.cohort-definition': { ...definition, cohort_plan: { schedule: {}, starts_on: cohorts[0].starts_on, is_default: false, status: 'running', program_version_id: 'v1', updated_at: 'u0' } },
+      'admin.cohort-definition': { ...definition, cohort_plan: { schedule, starts_on: cohorts[0].starts_on, is_default: false, status: 'running', program_version_id: 'v1', updated_at: 'u0' } },
       'admin.cohort-plan': { success: true, history: [], can_undo: false },
       'admin.milestones': { success: true, program_id: 'pa', milestones: [] },
       'admin.program-milestones': { success: true, milestones: [] },
@@ -58,7 +60,7 @@ async function setup(page, width = 1440) {
         totals: { total: 20, finished: 0, late: 0, not_started: 0 }, bottleneck: { stage: 'training' }, milestones: [],
         stages: stages.map((s) => ({ key: s.key, title: s.title_ar, phase: s.phase, duration_days: plan.byKey[s.key].days, here: { training: 17, approval: 3 }[s.key] || 0,
           done: { profile: 20, assessment: 20, approval: 17 }[s.key] || 0, late: 0, window: plan.windows[s.key] || null, people: [],
-          ...(s.key === 'consulting' ? { service: true, used: 7, of: 20, usage_ar: 'استفاد 7 من 20' } : {}) })) } },
+          ...(s.key === 'consulting' ? (off ? { service: true, off: true, used: 0, of: 0, usage_ar: '' } : { service: true, used: 7, of: 20, usage_ar: 'استفاد 7 من 20' }) : {}) })) } },
       'admin.save': { success: true },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
@@ -112,6 +114,23 @@ for (const width of [1440, 390]) {
     expect(await noOverflow(page)).toBe(true);
   });
 }
+
+// الخدمة الموقوفة لهذه الدفعة: بطاقتها في «الخدمات» موقوفة بمفتاح إعادتها، لا بطاقة مرحلة في المحور ولا «واحدة موقوفة» في المراحل
+test('الدفعة: الخدمة الموقوفة تبقى في «الخدمات» بعلامتها، لا في المحاور ولا في عدد الموقوفة', async ({ page }) => {
+  await setup(page, 1440, { schedule: { consulting: { off: true } } });
+  const panel = await openJourney(page);
+  const card = panel.getByTestId('cj-services').getByRole('article', { name: 'الاستشارة' });
+  await expect(card).toHaveClass(/\boff\b/);
+  await expect(card.locator('.cj-window')).toContainText('موقوفة لهذه الدفعة');
+  await expect(card.locator('.cj-usage')).toHaveText('لا حجز ما دامت موقوفة');
+  await expect(panel.locator('.cj-kpis')).toContainText('6 مراحل');
+  await expect(panel.locator('.cj-kpis')).not.toContainText('موقوفة');
+  await expect(panel.locator('.cj-group.off')).toHaveCount(0);
+  if (SHOTS) {
+    await card.scrollIntoViewIfNeeded();
+    await card.screenshot({ path: `${SHOTS}/admin-service-off-1440.png` });
+  }
+});
 
 test('البرنامج: نموذج المرحلة يختار «خدمة لمن يريد» بإتاحتها، ونموذج النشاط يضبط حد الجلسات', async ({ page }) => {
   const calls = await setup(page, 1440);

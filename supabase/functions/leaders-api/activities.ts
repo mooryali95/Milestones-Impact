@@ -16,7 +16,7 @@ import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, qrWindow, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
-  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery, bookingOverMax, sessionsMax,
+  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery, bookingOverMax, sessionsMax, coachingStatus,
   parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS,
 } from './logic.js';
 
@@ -420,6 +420,11 @@ export async function coachingInstant(p: any, b: Body) {
   const { data: recent } = await db.from('coaching_sessions').select('*').eq('participant_id', p.id).eq('requirement_id', r.id)
     .eq('kind', 'instant').eq('status', 'requested').gte('created_at', since).limit(1);
   if (recent?.length) return { success: true, join_url: recent[0].join_url };
+  // حد الجلسات (T2): الاتصال الفوري على خادمنا نفسه، فيُرفض عند الحد بقاعدة زر الحجز (coachingStatus) لا يُنبَّه عليه بعده
+  if (sessionsMax(c) != null) {
+    const mine = must(await db.from('coaching_sessions').select('*').eq('participant_id', p.id).eq('requirement_id', r.id)) || [];
+    if ((coachingStatus(c, mine) as any).at_max) throw new Fail('حجزت كل جلساتك المتاحة في هذا البند، فلا اتصال جديد', 400, 'at_max');
+  }
   const now = new Date();
   must(await db.from('coaching_sessions').insert({
     participant_id: p.id, requirement_id: r.id, kind: 'instant', provider: 'instant', status: 'requested',
@@ -494,7 +499,11 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
   if (over) {
     await audit('system', provider, 'coaching.over_max', 'coaching_sessions', String(e.external_id), null, { requirement: r.id, participant: p.id, count: over.count, max: over.max })
       .catch((x) => console.error('over max audit:', x));
-    await alertOps(`booking_over_max:${e.external_id}`, {
+    // إعادة جدولة حجز نُبّه عن زيادته لا تنبّه ثانية: العدد نفسه والقرار نفسه، كما في bookingIgnored
+    const seen = e.previous_id
+      ? (await db.from('audit_log').select('id', { count: 'exact', head: true }).eq('action', 'coaching.over_max').eq('entity_id', String(e.previous_id))).count
+      : 0;
+    if (!seen) await alertOps(`booking_over_max:${e.external_id}`, {
       provider, booking: e.external_id, starts_at: e.starts_at || null, requirement: r.id, participant: p.id, count: over.count, max: over.max,
       action: 'حجز زاد على حد الجلسات للمشارك: سُجّل كما هو، فقرر إبقاءه أو إلغاءه من منصة الحجز',
     });

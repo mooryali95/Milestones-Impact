@@ -168,6 +168,8 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   for (const s of (off || []).filter((x) => x && !keys.includes(x.key))) {
     const row = { key: s.key, title: s.title_ar || s.key, phase: s.phase || 'qualification', duration_days: 0, here: 0, done: 0, late: 0, window: null, off: true };
     if (list) row.people = []; else row.reasons = [];
+    // الخدمة الموقوفة (T2) تبقى في «الخدمات» بعلامة off، لا محطة موقوفة على المسار
+    if (planService(s)) Object.assign(row, { service: true, used: 0, of: 0, usage_ar: '' });
     const at = stages.findIndex((x) => sortOf(x) > sortOf(s));
     const idx = at < 0 ? out.length : out.findIndex((x) => x.key === stages[at].key);
     out.splice(idx < 0 ? out.length : idx, 0, row);

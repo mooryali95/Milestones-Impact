@@ -292,7 +292,8 @@ function StageCard({ s, rows = null, plan = null, days = null, act = null }) {
 function ServiceCard({ s, rows = null, plan = null }) {
   const head = `cj-st-${s.key}`;
   const row = rows?.[s.key];
-  const off = !!row?.off;
+  // المسودة تحكم إن وُجدت (إيقاف أو إعادة قبل الحفظ)، وإلا المحفوظ (s.off: خدمة موقوفة لهذه الدفعة)
+  const off = row ? !!row.off : !!s.off;
   return (
     <article id={`cj-stage-${s.key}`} tabIndex={-1} className={`cj-card svc${off ? ' off' : ''}`} aria-labelledby={head} data-testid={`cj-service-${s.key}`}>
       <header className="cj-card-head">
@@ -304,7 +305,7 @@ function ServiceCard({ s, rows = null, plan = null }) {
       <p className="cj-window"><b>{off ? 'موقوفة لهذه الدفعة' : s.avail_ar}</b><small>{s.note_ar}</small></p>
       <dl className="cj-facts">
         <div><dt>الأنشطة</dt><dd>{s.acts.text}{s.max_ar && <small> · {s.max_ar}</small>}</dd></div>
-        <div><dt>الاستخدام</dt><dd className="cj-usage">{s.usage ? s.usage.text : 'يظهر بعد قراءة الخريطة'}</dd></div>
+        <div><dt>الاستخدام</dt><dd className="cj-usage">{off ? 'لا حجز ما دامت موقوفة' : s.usage ? s.usage.text : 'يظهر بعد قراءة الخريطة'}</dd></div>
       </dl>
     </article>
   );

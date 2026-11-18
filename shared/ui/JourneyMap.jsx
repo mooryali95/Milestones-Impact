@@ -170,7 +170,7 @@ export default function JourneyMap({ map, embedded = false }) {
       {openStage && <StagePanel stage={openStage} total={total} late={late} onClose={() => setOpen(null)} />}
 
       {services.length > 0 && (
-        <div className="jm-svc" aria-labelledby="jm-svc-h" data-testid="jm-services">
+        <section className="jm-svc" aria-labelledby="jm-svc-h" data-testid="jm-services">
           <h3 id="jm-svc-h">الخدمات</h3>
           <p className="small muted">لمن يريد حتى نهاية الرحلة، فلا تُعد في المراحل ولا في التقدم.</p>
           <ul>
@@ -186,7 +186,7 @@ export default function JourneyMap({ map, embedded = false }) {
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
       {map.milestones?.length > 0 && (

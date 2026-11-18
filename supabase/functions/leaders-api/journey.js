@@ -18,6 +18,8 @@ const MASC = { 3: 'ثلاثة', 4: 'أربعة', 5: 'خمسة', 6: 'ستة', 7: 
 const counted = (n, one, two, few, many, words) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${words ? words[n] : n} ${few}` : `${n} ${many}`);
 export const sessionsAr = (n) => counted(n, 'جلسة واحدة', 'جلستان', 'جلسات', 'جلسة', FEM);
 export const daysAr = (n) => counted(n, 'يوم واحد', 'يومان', 'أيام', 'يومًا', MASC);
+// بعد حرف جر («بعد يومين»): المثنى مجرور، والمجهول «؟ يومًا»
+const afterDaysAr = (n) => (n == null ? '؟ يومًا' : n === 2 ? 'يومين' : daysAr(n));
 export const minutesAr = (n) => `${n} دقيقة`;
 export function durationAr(days) {
   const d = Number(days) || 0;
@@ -484,7 +486,7 @@ export function serviceAvailAr(stage, title = (k) => k) {
   const from = {
     previous: 'تُتاح بعد اكتمال الإلزامية قبلها', always: 'متاحة من بداية الرحلة',
     stages: `تُتاح بعد اكتمال ${r.after.map((k) => `«${title(k)}»`).join(' و')}`,
-    with: 'تُتاح مع مرجعها', day: r.day === 0 ? 'تُتاح مع بداية الدفعة' : `تُتاح بعد ${r.day ?? '؟'} يومًا من بداية الدفعة`,
+    with: 'تُتاح مع مرجعها', day: r.day === 0 ? 'تُتاح مع بداية الدفعة' : `تُتاح بعد ${afterDaysAr(r.day)} من بداية الدفعة`,
     approval: 'يتيحها الأدمن أو الخبير لكل مشارك',
   }[r.unlock];
   return `${from} حتى نهاية الرحلة`;
@@ -505,7 +507,7 @@ export function stageRuleSummary(stage, stages = []) {
     always: 'متاحة من البداية',
     stages: `تُفتح بعد اكتمال: ${r.after.map(title).join('، ')}`,
     with: `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»${r.offset ? `، ومخطط بعد ${daysAr(r.offset)} من بدايتها` : ''}`,
-    day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${r.day ?? '؟'} يومًا من بداية الدفعة`,
+    day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${afterDaysAr(r.day)} من بداية الدفعة`,
     approval: 'يفتحها الأدمن أو الخبير',
   }[r.unlock];
   const complete = { required: 'تكتمل بمتطلباتها الإلزامية', any: 'تكتمل بأي متطلب فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];

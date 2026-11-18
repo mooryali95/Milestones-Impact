@@ -13,7 +13,7 @@ import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.
 import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
-import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity, { CheckinHelp } from './Activities.jsx';
 import HowEvaluated from './HowEvaluated.jsx';
@@ -654,7 +654,7 @@ function Alongside({ stage, journey, children }) {
 export function serviceLineAr(stage) {
   if (stage.status === 'locked') return stage.lock_reason || 'تُتاح لاحقًا';
   const act = (stage.items || []).map((it) => it.activity).find((a) => a && a.type === 'coaching' && a.max != null);
-  if (act) return act.at_max ? 'استفدت من كل جلساتك المتاحة' : `متاحة لك حتى نهاية رحلتك، حجزت ${act.used} من ${act.max}`;
+  if (act) return act.at_max ? sessionsBookedAr(act.max, act.max) : `متاحة لك حتى نهاية رحلتك، ${sessionsBookedAr(act.used, act.max)}`;
   return 'متاحة لك حتى نهاية رحلتك';
 }
 function Services({ list, children }) {

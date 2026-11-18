@@ -10,7 +10,7 @@ import { distributeSchedule, milestoneStatuses } from '../../supabase/functions/
 import { planEdit, planImpact, planWithCandidates, suggestDays } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { currentStages, journeyMap, positionOf, serviceUsed } from '../../supabase/functions/leaders-api/journey-map.js';
 import { journeyTimeline } from '../../supabase/functions/leaders-api/journey-timeline.js';
-import { bookingOverMax, cleanConfig, coachingStatus, journeyProgress, sessionsMax } from '../../supabase/functions/leaders-api/logic.js';
+import { bookingOverMax, cleanConfig, coachingStatus, cohortDefinition, journeyProgress, sessionsMax } from '../../supabase/functions/leaders-api/logic.js';
 import { cohortTimeline, dropToEdit, journeyKpis, journeyLanes, planDraft } from '../../admin-app/src/cohort-journey.js';
 import { formToStage, reqFields, stageFields, stageToForm } from '../../admin-app/src/methodology.js';
 import { pathOf } from './screens/Paywall.jsx';
@@ -57,6 +57,11 @@ describe('القواعد: «خدمة» تُحفظ منذ T2 بإتاحتها، �
     expect(Object.keys(untilOptions(SVC, 'ojt_coaching'))).not.toContain('stage:consulting');
     expect(planWithCandidates(SVC, {}, 'leadership_coaching').map((s) => s.key)).not.toContain('consulting');
     expect(planWithCandidates(SVC, {}, 'consulting')).toEqual([]);
+  });
+  it('إتاحة بعد أيام بالمعدود العربي', () => {
+    expect(serviceAvailAr({ rules: { lane: 'service', unlock: 'day', day: 3 } })).toBe('تُتاح بعد ثلاثة أيام من بداية الدفعة حتى نهاية الرحلة');
+    expect(serviceAvailAr({ rules: { lane: 'service', unlock: 'day', day: 2 } })).toBe('تُتاح بعد يومين من بداية الدفعة حتى نهاية الرحلة');
+    expect(serviceAvailAr({ rules: { lane: 'service', unlock: 'day', day: 30 } })).toBe('تُتاح بعد 30 يومًا من بداية الدفعة حتى نهاية الرحلة');
   });
   it('الجملة على البطاقة', () => {
     const s = SVC.find((x) => x.key === 'consulting');
@@ -182,8 +187,10 @@ describe('حد الجلسات max_sessions: sessions_required للاكتمال،
   });
   it('سطر الخدمة عند المشارك يقول ما بقي', () => {
     const st = (act) => ({ status: 'available', items: [{ id: 'c', activity: act }] });
-    expect(serviceLineAr(st(coachingStatus({ sessions_required: 1, max_sessions: 2 }, [s('booked')])))).toBe('متاحة لك حتى نهاية رحلتك، حجزت 1 من 2');
-    expect(serviceLineAr(st(coachingStatus({ sessions_required: 1, max_sessions: 1 }, [s('attended')])))).toBe('استفدت من كل جلساتك المتاحة');
+    expect(serviceLineAr(st(coachingStatus({ sessions_required: 1, max_sessions: 2 }, [s('booked')])))).toBe('متاحة لك حتى نهاية رحلتك، حجزت 1 من جلستين');
+    expect(serviceLineAr(st(coachingStatus({ sessions_required: 1, max_sessions: 1 }, [s('attended')])))).toBe('حجزت جلستك المتاحة');
+    expect(serviceLineAr(st(coachingStatus({ sessions_required: 1, max_sessions: 2 }, [s('attended'), s('booked')])))).toBe('حجزت كل جلساتك المتاحة (جلستان)');
+    expect(serviceLineAr(st(coachingStatus({ sessions_required: 1, max_sessions: 5 }, [])))).toBe('متاحة لك حتى نهاية رحلتك، لم تحجز بعد من 5 جلسات');
   });
 });
 
@@ -234,6 +241,28 @@ describe('العرض: صف «الخدمات» في الخط، وبطاقتها �
     const r = dropToEdit({ scale: model.scale, draft: dr, key: 'training', kind: 'move', pct: 0, over: { zone: 'services', key: null } });
     expect(r.reject).toMatchObject({ code: 'lane', program: true });
     expect(model.scale.spans.consulting).toBeUndefined();
+  });
+});
+
+describe('الخدمة الموقوفة لهذه الدفعة: في «الخدمات» بعلامتها، لا محطة على المسار ولا مرحلة موقوفة', () => {
+  const reqs = REQS.map((r) => (r.id === 'c-meet' ? { ...r, kind: 'coaching', config: { sessions_required: 1, max_sessions: 2 } } : r));
+  const OFF = { ...C, schedule: { consulting: { off: true } } };
+  it('الخريطة: صفها service وoff، وتعريف الدفعة يحمل قواعدها', () => {
+    const def = cohortDefinition({ live: { stages: SVC, requirements: reqs }, cohort: OFF });
+    expect(def.stages.map((s) => s.key)).not.toContain('consulting');
+    expect(def.stages_off.find((s) => s.key === 'consulting').rules).toEqual(SEED);
+    const people = [{ id: 'a', name: 'أ', status: 'enrolled', journey: journeyOf(def.stages, new Set(['p-info'])), milestones: [] }];
+    const map = journeyMap({ stages: def.stages, people, cohort: OFF, off: def.stages_off, today: new Date('2026-12-15T10:00:00Z') });
+    const row = map.stages.find((s) => s.key === 'consulting');
+    expect([row.service, row.off, row.used, row.of, row.usage_ar]).toEqual([true, true, 0, 0, '']);
+    expect(map.stages.filter((s) => !s.service).map((s) => s.key)).not.toContain('consulting');
+  });
+  it('تبويب الرحلة: بطاقتها في «الخدمات» موقوفة، ولا تُعد في المحاور ولا في «موقوفة»', () => {
+    const model = cohortTimeline({ stages: SVC, requirements: reqs, sessions: [] }, OFF, '2026-12-15');
+    const lanes = journeyLanes(model, { def: { stages: SVC, requirements: reqs }, cohort: OFF, milestones: MILESTONES });
+    expect(lanes.services.map((s) => [s.key, s.off, s.lane])).toEqual([['consulting', true, 'service']]);
+    expect(lanes.phases.flatMap((p) => p.groups.flatMap((g) => g.stages.map((x) => x.key)))).not.toContain('consulting');
+    expect(lanes.counts.off).toBe(0);
   });
 });
 

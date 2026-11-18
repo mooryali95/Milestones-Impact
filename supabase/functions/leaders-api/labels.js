@@ -182,6 +182,14 @@ export const APPROVAL_SLA_AR = 'يومي عمل';
 export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund', changes: '/legal/changes' };
 // تمييز العدد بالأرقام كما تكتبها الواجهة: 1 و2 بالاسم، و3–10 بالجمع، و11 فأكثر بالمفرد
 export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+// حد الجلسات عند المشارك (T2): ما حجزه من حده بلا ادعاء حضور (booked وrequested تُعد)، بالمعدود العربي.
+// avail: «متاحتين لك» في بطاقة النشاط، وبدونها «من جلستين» في سطر الخدمة
+export function sessionsBookedAr(used, max, { avail = false } = {}) {
+  const n = Number(used) || 0;
+  if (n >= max) return max === 1 ? 'حجزت جلستك المتاحة' : `حجزت كل جلساتك المتاحة (${countAr(max, 'جلسة واحدة', 'جلستان', 'جلسات', 'جلسة')})`;
+  const of = avail ? countAr(max, 'جلسة واحدة متاحة', 'جلستين متاحتين', 'جلسات متاحة', 'جلسة متاحة') : countAr(max, 'جلسة واحدة', 'جلستين', 'جلسات', 'جلسة');
+  return n ? `حجزت ${n} من ${of}${avail ? ' لك' : ''}` : `لم تحجز بعد من ${of}${avail ? ' لك' : ''}`;
+}
 
 // المطّلعون من الجهة: القوالب والصلاحيات بأسمائها، لوحة الإدارة وبطاقة «ماذا ترى جهتك»
 export const VIEWER_TEMPLATE_AR = { executive: 'راعٍ تنفيذي', program: 'منسّق البرنامج', hr: 'الموارد البشرية', custom: 'مخصّص' };

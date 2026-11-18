@@ -57,13 +57,13 @@ for (const [name, viewport] of [['الهاتف', { width: 390, height: 844 }], [
     await expect(shelf).toHaveCount(1);
     await expect(shelf.getByRole('heading', { name: 'خدمات متاحة لك' })).toBeVisible();
     await expect(shelf).toContainText('لمن يريد، ولا تُحسب في تقدمك');
-    await expect(shelf).toContainText('متاحة لك حتى نهاية رحلتك، حجزت 1 من 2');
+    await expect(shelf).toContainText('متاحة لك حتى نهاية رحلتك، حجزت 1 من جلستين');
     // ليست في تسلسل المراحل
     await expect(page.locator('.j-main .phase #stage-consulting')).toHaveCount(0);
     await expect(shelf.locator('#stage-consulting')).toBeVisible();
     await shelf.locator('#stage-consulting .stage-top').click();
     await expect(shelf.getByRole('button', { name: 'احجز موعدًا' })).toBeVisible();
-    await expect(shelf.getByTestId('sessions-max')).toHaveText('حجزت 1 من 2 متاحة لك.');
+    await expect(shelf.getByTestId('sessions-max')).toHaveText('حجزت 1 من جلستين متاحتين لك.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     if (SHOTS && viewport.width === 390) {
       await shelf.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 84));
@@ -77,9 +77,9 @@ test('عند بلوغ حد الجلسات: يُخفى زر الحجز ويُقا
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, journeyOf([session('x1', 'attended', '01'), session('x2', 'booked', '09')]));
   const shelf = page.getByTestId('services');
-  await expect(shelf).toContainText('استفدت من كل جلساتك المتاحة');
+  await expect(shelf).toContainText('حجزت كل جلساتك المتاحة (جلستان)');
   await shelf.locator('#stage-consulting .stage-top').click();
-  await expect(shelf.getByTestId('sessions-max')).toHaveText('استفدت من جلساتك الـ2 المتاحة، فلا حجز جديد.');
+  await expect(shelf.getByTestId('sessions-max')).toHaveText('حجزت كل جلساتك المتاحة (جلستان)، فلا حجز جديد.');
   await expect(shelf.getByRole('button', { name: 'احجز موعدًا' })).toHaveCount(0);
 });
 
