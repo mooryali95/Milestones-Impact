@@ -134,6 +134,29 @@
 .jt-m-track small { font-size: 12px; color: var(--jt-muted); }
 .jt-m-track .jt-m-title { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
 
+/* السحب في الدفعة (D1): الشريط يُسحب بالمؤشر وطرفه للمدة، والمقبض للوحة المفاتيح، والشبح يعرض الموضع الناتج وتواريخه.
+   على الحاسوب وحده: .jt-desk مخفي تحت 640 بكسل، فلا مقابض على الهاتف (العدادات وحدها) */
+.jt-editable .jt-stage.drag { position: relative; touch-action: none; cursor: grab; padding-inline-start: 22px; }
+.jt-editable .jt-trackbar.drag { touch-action: none; cursor: grab; padding-inline-start: 22px; }
+.jt-dragging, .jt-dragging * { cursor: grabbing !important; user-select: none; }
+.jt-stage.dragging, .jt-trackbar.dragging { opacity: .55; }
+.jt-grip { position: absolute; top: 6px; inset-inline-start: 3px; display: grid; place-items: center; width: 16px; height: 26px; padding: 0; border: 1px solid transparent;
+  border-radius: 4px; background: transparent; color: var(--jt-muted); cursor: grab; }
+.jt-grip:hover { color: var(--jt-ink); border-color: var(--jt-line); background: var(--jt-soft); }
+.jt-grip:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 1px; color: var(--jt-ink); }
+.jt-grip.on { color: #fff; background: var(--jt-primary); border-color: var(--jt-primary); }
+.jt-edge { position: absolute; top: 0; bottom: 0; inset-inline-end: -4px; width: 10px; cursor: ew-resize; touch-action: none; z-index: 2; }
+.jt-edge::after { content: ""; position: absolute; top: 30%; bottom: 30%; inset-inline-start: 3px; width: 4px; border-radius: 2px; background: color-mix(in srgb, var(--jt-ph) 70%, transparent); opacity: .55; }
+.jt-stage.drag:hover .jt-edge::after, .jt-trackbar.drag:hover .jt-edge::after { opacity: 1; }
+.jt-ghost { position: absolute; z-index: 3; box-sizing: border-box; pointer-events: none; border: 2px dashed var(--jt-primary); border-radius: 8px;
+  background: color-mix(in srgb, var(--jt-primary) 10%, transparent); }
+.jt-ghost span { position: absolute; bottom: calc(100% + 4px); inset-inline-start: 0; max-width: 420px; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 700;
+  color: #fff; background: var(--jt-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jt-ghost.bad { border-color: var(--st-bad, #a23b2a); background: color-mix(in srgb, var(--st-bad, #a23b2a) 9%, transparent); }
+.jt-ghost.bad span { background: var(--st-bad, #a23b2a); white-space: normal; }
+.jt-drag-live { margin: 8px 0 0; font-size: 12px; color: var(--jt-muted); }
+@media (prefers-reduced-motion: reduce) { .jt-ghost { transition: none; } }
+
 /* الجدول البديل */
 .jt-table { margin-top: 10px; font-size: 13px; }
 .jt-table summary { cursor: pointer; color: var(--jt-primary); font-weight: 600; }

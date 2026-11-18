@@ -13,6 +13,9 @@
 // وأيام الورشة (W3، تصور 2026-11-18 ب5.4): في بطاقة كل مرحلة فيها حضور جلسات أيامها لهذه الدفعة بموعدها ومكانها وطريقتها
 // وحضورها وسعتها، و«+ يوم أو ورشة» والتحرير والإلغاء بنموذج «الحضور والجلسات» وadmin.workshop-save نفسيهما (مسار كتابة واحد).
 // وغير الإلزامية (T0): «عند الحاجة» أو «اختيارية» بإطار متقطع في الخط والبطاقة.
+// والسحب (D1، ب5.3): في وضع التحرير لمن يكتب، سحب الشريط في الخط يكتب في المسودة نفسها التي تكتبها العدادات (dropToEdit ثم
+// mergeEdit ثم planDraft)، والحفظ بنافذة الأثر نفسها. البداية للممر والمسار (الإزاحة)، والطرف للمدة أو نهاية المسار، والإفلات
+// على مرحلة أخرى «تسير مع»، والإفلات في «مسارات مستمرة» يُرفض برابط «غيّرها في البرنامج». بلا مكتبة، والعدادات بديل دائم.
 // البيانات: admin.cohort-definition وadmin.milestones وadmin.cohort-journey وadmin.cohort-workshops للقراءة، وadmin.cohort-plan للخطة.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
@@ -24,10 +27,11 @@ import { dateTime } from '../dates.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 import {
-  cohortTimeline, fromUnit, historyRows, impactAr, inUnit, journeyHeader, journeyKpis, journeyLanes, membersAr, planBody, planCohort, planDraft,
+  applyDrop, cohortTimeline, dragGhostAr, dropToEdit, fromUnit, historyRows, mergeEdit, impactAr, inUnit, journeyHeader, journeyKpis, journeyLanes, membersAr, planBody, planCohort, planDraft,
   planLock, stepDays, suggestDays, TAB_TIMELINE_OMIT, unitFor,
 } from '../cohort-journey.js';
 import { PLAN_DAYS_MAX, planDaysMin } from '../../../supabase/functions/leaders-api/stage-windows.js';
+import { scalePos } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
@@ -411,29 +415,83 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const mapFailed = want && map && !map.success;
   const lock = planLock(cohort);
   const stageOf = (k) => (d?.def?.stages || []).find((x) => x.key === k);
-  const onDays = (k, v) => setEdit((e) => ({ ...(e || {}), days: { ...(e?.days || {}), [k]: v } }));
-  // الإيقاف والإعادة: ما يطابق الخطة المحفوظة لا يبقى تعديلًا
-  const onOff = (k, v) => setEdit((e) => {
-    const off = { ...(e?.off || {}) };
-    const was = cohort.schedule?.[k]?.off === true;
-    if (v === was) delete off[k]; else off[k] = v;
-    return { ...(e || {}), off };
-  });
-  // التوازي (R3a): تغيير المرجع يعيد إزاحته إلى قاعدته (planEdit)، والإزاحة لما له مرجع وحده
-  const onWith = (k, v) => setEdit((e) => {
-    const offset = { ...(e?.offset || {}) };
-    delete offset[k];
-    return { ...(e || {}), with: { ...(e?.with || {}), [k]: v }, offset };
-  });
-  const onOffset = (k, v) => setEdit((e) => ({ ...(e || {}), offset: { ...(e?.offset || {}), [k]: v } }));
-  // نهاية المسار المستمر (T1): ما يطابق المحفوظ لا يبقى تعديلًا، وnull يعيد قاعدة البرنامج
-  const onUntil = (k, v) => setEdit((e) => {
-    const until = { ...(e?.until || {}) };
-    const was = cohort.schedule?.[k]?.until ?? null;
-    if ((v ?? null) === was) delete until[k]; else until[k] = v;
-    return { ...(e || {}), until };
-  });
+  // العدادات والسحب يدمجان بالدالة نفسها (mergeEdit): الإيقاف والنهاية ما يطابق المحفوظ منهما لا يبقى تعديلًا، وتغيير
+  // المرجع يعيد إزاحته إلى قاعدته (planEdit)، وnull يعيد قاعدة البرنامج
+  const put = (patch) => setEdit((e) => mergeEdit(e, patch, cohort.schedule || {}));
+  const onDays = (k, v) => put({ days: { [k]: v } });
+  const onOff = (k, v) => put({ off: { [k]: v } });
+  const onWith = (k, v) => put({ with: { [k]: v } });
+  const onOffset = (k, v) => put({ offset: { [k]: v } });
+  const onUntil = (k, v) => put({ until: { [k]: v } });
   const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, onWith, onOffset, onUntil, stageOf } : null;
+
+  // ── السحب في الخط (D1): لمن يكتب في وضع التحرير وحده، والخطة غير مقفلة. الحركة تُحسب من مقياس الخط عند الالتقاط ──
+  const [drag, setDrag] = useState(null);
+  const [dragNote, setDragNote] = useState(null);
+  const [dragLive, setDragLive] = useState('');
+  const canDrag = !!(edit && draft && canWrite && !lock && model && !model.empty && model.scale);
+  useEffect(() => { if (!canDrag) setDrag(null); }, [canDrag]);
+  useEffect(() => { if (!edit) setDragNote(null); }, [edit]);
+  const titleAt = (k) => [...(model?.stages || []), ...(model?.tracks || [])].find((x) => x.key === k)?.title || stageOf(k)?.title_ar || k;
+  // الحركة إلى تعديل، ثم فحصه بالمسودة نفسها، ثم الشبح بتواريخه: ما يُرفض يُرسم أحمر بسببه
+  const evalDrag = (g) => {
+    const res = dropToEdit({ scale: model.scale, draft, key: g.key, kind: g.kind, shift: g.shift || 0, pct: g.kbd ? null : g.pct ?? 0, over: g.over || null,
+      snap: g.kbd ? 'exact' : 'near', stage: stageOf(g.key), title: titleAt });
+    const check = res.patch ? applyDrop({ def: d.def, cohort, edit, patch: res.patch }) : null;
+    const reject = res.reject || check?.reject || null;
+    const sp = model.scale.spans[g.key];
+    const [a, b] = res.ghost || sp;
+    const at = scalePos(model.scale.slots, a);
+    const label = reject ? reject.msg : dragGhostAr((check?.draft || draft).rows[g.key], titleAt(g.key));
+    return { ...g, res, check, reject, ghost: { at, width: Math.max(1, scalePos(model.scale.slots, Math.max(a, b)) - at), label, bad: !!reject } };
+  };
+  const finishDrag = (g) => {
+    setDrag(null);
+    if (!g) return;
+    if (g.reject) { setDragNote({ ...g.reject, key: g.key }); setDragLive(`لم يتغير شيء: ${g.reject.msg}`); return; }
+    setDragNote(null);
+    if (g.check?.edit) {
+      setEdit(g.check.edit);
+      setDragLive(`${g.ghost.label}. التعديل في المسودة، واحفظه بـ«راجع واحفظ».`);
+    } else setDragLive('لم يتغير شيء.');
+  };
+  const cancelDrag = () => { setDrag(null); setDragLive('أُلغي السحب، ولم يتغير شيء.'); };
+  const bars = canDrag ? Object.fromEntries([...model.stages, ...(model.tracks || [])].filter((x) => draft.rows[x.key] && !draft.rows[x.key].off)
+    .map((x) => [x.key, { edge_ar: draft.rows[x.key].track ? 'اسحب الطرف لتغيير نهايته (يلتصق بنهاية الطور والرحلة)' : 'اسحب الطرف لتغيير المدة' }])) : null;
+  const dragRef = useRef(null);
+  dragRef.current = drag;
+  const editable = canDrag ? {
+    bars, drag, hintId: 'cj-drag-hint', live: dragLive,
+    onStart: ({ key, kind }) => { setDragNote(null); setDrag(evalDrag({ key, kind, pct: 0 })); },
+    onMove: ({ pct, over }) => { const g = dragRef.current; if (g && !g.kbd) setDrag(evalDrag({ ...g, pct, over })); },
+    onEnd: ({ pct, over }) => { const g = dragRef.current; if (g && !g.kbd) finishDrag(evalDrag({ ...g, pct, over })); },
+    onCancel: cancelDrag,
+    // لوحة المفاتيح (WCAG 2.5.7): Enter أو مسافة يلتقط ويُفلت، والأسهم يومًا وShift أسبوعًا، وAlt للمدة، وEsc يلغي. RTL: اليسار لاحق
+    onKey: (key, e) => {
+      const g = dragRef.current;
+      const picked = g?.kbd && g.key === key;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (picked) { finishDrag(g); return; }
+        setDragNote(null);
+        const n = evalDrag({ key, kind: 'move', shift: 0, kbd: true });
+        setDrag(n);
+        setDragLive(`التقطت «${titleAt(key)}». الأسهم تحرك بدايتها يومًا وShift أسبوعًا، وAlt مع الأسهم يغير المدة، وEnter يُفلت، وEsc يلغي.`);
+        return;
+      }
+      if (!picked) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDrag(); return; }
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
+      const later = rtl ? e.key === 'ArrowLeft' : e.key === 'ArrowRight';
+      const step = (later ? 1 : -1) * (e.shiftKey ? 7 : 1);
+      const kind = e.altKey ? 'end' : 'move';
+      const n = evalDrag({ ...g, kind, shift: (g.kind === kind ? g.shift || 0 : 0) + step });
+      setDrag(n);
+      setDragLive(n.ghost.label);
+    },
+  } : null;
   // القفز إلى البطاقة: التركيز البرمجي بعد نقرة الفأرة لا يُظهر :focus-visible، فإبراز قصير يدل على البطاقة
   const flashT = useRef(0);
   useEffect(() => () => clearTimeout(flashT.current), []);
@@ -619,7 +677,12 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         </p>
       )}
 
-      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} />}
+      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} editable={editable} />}
+      {dragNote && (
+        <p className="cj-alert cj-drag-note" role="alert" data-testid="cj-drag-note"><span aria-hidden="true">!</span>
+          <span>{String(dragNote.msg).replace(/[.،\s]+$/, '')}. لم تتغير المسودة.{dragNote.program && on.journey && <> <button type="button" className="la-link" onClick={() => on.journey()}>غيّرها في البرنامج</button></>}
+            {' '}<button type="button" className="la-link" onClick={() => setDragNote(null)}>حسنًا</button></span></p>
+      )}
 
       {lanes.phases.length > 0 && (
         <section className="cj-stages" aria-labelledby="cj-stages-h">

@@ -4,11 +4,11 @@
 // لا حساب تاريخ هنا: النوافذ والحالات والمدد والخط الزمني كلها من journeyTimeline (وهو يقرأ stageWindows)، ومواعيد
 // المعالم من milestoneDueInfo بالنوافذ نفسها كما يقرؤها milestoneStatuses، وأعداد الناس من خريطة الرحلة (admin.cohort-journey).
 // هذا الملف يجمع الثلاثة في رأس وممرات وبطاقات، فلا يختلف تاريخ بين الخط والبطاقة والمعلم.
-import { journeyTimeline, STAGE_TAG_AR } from '../../supabase/functions/leaders-api/journey-timeline.js';
+import { journeyTimeline, scaleDay, scalePos, STAGE_TAG_AR } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import { daysAr, renderJourneyText, stageRules, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from '../../supabase/functions/leaders-api/milestones.js';
-import { cohortPlan, PLAN_DAYS_MAX, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
+import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { PHASE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import {
   impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, planRestartBlock, planWithCandidates, planWithLock, sameSchedule,
@@ -334,3 +334,136 @@ export function historyRows(list) {
 }
 // سطور نافذة الأثر بتاريخ اللوحة
 export const impactAr = (impact, opts = {}) => impactLines(impact, dateOnly, opts);
+
+// ══ السحب في الدفعة (D1، تصور 2026-11-18 ب5.3): طبقة تكتب في المسودة نفسها، لا مسار حفظ ثانٍ ══
+// كل حركة تُترجم إلى edit={days,off,with,offset,until} (dropToEdit)، ثم تُدمج بالدالة التي تدمج بها العدادات (mergeEdit)،
+// ثم تُفحص بـplanDraft نفسه (applyDrop): ما يخالف حراس R2b وR3a يُرفض بسببه ولا تتغير المسودة. والحفظ بنافذة الأثر كما هو.
+
+/** دمج تعديل في المسودة، وهو ما تناديه العدادات والسحب معًا فلا يختلف أثرهما:
+ * المدة والإزاحة تُكتبان، وتغيير المرجع يعيد إزاحته إلى قاعدته ما لم تُكتب معه، والإيقاف والنهاية ما يطابق المحفوظ منهما لا يبقى تعديلًا
+ * @param {any} edit المسودة الحالية @param {{ days?: any, offset?: any, with?: any, until?: any, off?: any }} patch @param {any} [saved] جدول الدفعة المحفوظ */
+export function mergeEdit(edit, patch = {}, saved = {}) {
+  const e = { ...(edit || {}) };
+  if (patch.days) e.days = { ...(e.days || {}), ...patch.days };
+  if (patch.with) {
+    const offset = { ...(e.offset || {}) };
+    for (const k of Object.keys(patch.with)) if (!(patch.offset && k in patch.offset)) delete offset[k];
+    e.with = { ...(e.with || {}), ...patch.with };
+    e.offset = offset;
+  }
+  if (patch.offset) e.offset = { ...(e.offset || {}), ...patch.offset };
+  if (patch.until) {
+    const until = { ...(e.until || {}) };
+    for (const [k, v] of Object.entries(patch.until)) {
+      if ((v ?? null) === (saved?.[k]?.until ?? null)) delete until[k]; else until[k] = v;
+    }
+    e.until = until;
+  }
+  if (patch.off) {
+    const off = { ...(e.off || {}) };
+    for (const [k, v] of Object.entries(patch.off)) {
+      if (v === (saved?.[k]?.off === true)) delete off[k]; else off[k] = v;
+    }
+    e.off = off;
+  }
+  return e;
+}
+
+// قرب الالتصاق بالحدود بالنقاط المئوية على المسار (السحب بالمؤشر)، ولوحة المفاتيح تلتصق باليوم المطابق وحده
+export const DRAG_SNAP_PCT = 1.2;
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+/** حركة السحب إلى تعديل في المسودة، باليوم الصحيح وبالحدود. لا تقرأ بكسلًا: الإزاحة بالأيام من المقياس (scaleDay)
+ * @param {{ scale: any, draft: any, key: string, kind: 'move' | 'end', shift?: number, pct?: number | null, over?: { zone?: string | null, key?: string | null } | null,
+ *   snap?: 'near' | 'exact', stage?: any, title?: (k: string) => string }} o
+ *  shift: الأيام (من لوحة المفاتيح)، أو pct: النقاط المئوية التي تحرّكها المؤشر من موضع الالتقاط (يُحوَّل بعكس المقياس)
+ * @returns {{ none?: true, patch?: any, ghost?: [number, number], reject?: { code: string, msg: string, program?: boolean } }} */
+export function dropToEdit({ scale, draft, key, kind, shift = 0, pct = null, over = null, snap = 'near', stage = null, title = (k) => k }) {
+  const row = draft?.rows?.[key];
+  const sp = scale?.spans?.[key];
+  if (!row || !sp || row.off) return { reject: { code: 'off', msg: `«${title(key)}» موقوفة لهذه الدفعة، فلا تُسحب. أعدها بمفتاحها أولًا` } };
+  const [f, e] = sp;
+  const pos = (d) => scalePos(scale.slots, d);
+  // النقطة الجديدة بالأيام: من لوحة المفاتيح مباشرة، ومن المؤشر بعكس المقياس من موضع الطرف أو البداية
+  const moved = (d0) => (pct == null ? d0 + shift : scaleDay(scale.slots, pos(d0) + pct));
+  const lane = row.track ? 'track' : 'stage';
+  const programMsg = row.track
+    ? `«${title(key)}» مسار مستمر في البرنامج، وطبيعته يقررها البرنامج لكل دفعاته`
+    : `«${title(key)}» مرحلة متتابعة في البرنامج، وطبيعتها (مرحلة أو مسار مستمر أو خدمة) يقررها البرنامج لكل دفعاته`;
+  if (kind === 'move') {
+    // الإفلات في صف غير صفه: «مسارات مستمرة» أو «الخدمات» لمرحلة، أو صف المراحل لمسار بلا مرحلة تحته
+    const zone = over?.zone || null;
+    if ((zone === 'tracks' || zone === 'services') && lane !== 'track') return { reject: { code: 'lane', msg: programMsg, program: true } };
+    if (zone === 'services' || (zone === 'stages' && lane === 'track' && !over?.key)) return { reject: { code: 'lane', msg: programMsg, program: true } };
+    // الإفلات على شريط مرحلة أخرى: «تسير مع» (أو «يبدأ مع» للمسار)، والمرشحون من planWithCandidates
+    if (over?.key && over.key !== key && over.key !== row.with) {
+      if (row.with_lock) return { reject: { code: 'with_lock', msg: row.with_lock.msg } };
+      if (!row.with_options.some((o) => o.key === over.key)) {
+        return { reject: { code: 'with_target', msg: `لا ${lane === 'track' ? 'يبدأ' : 'تسير'} «${title(key)}» مع «${title(over.key)}»: المرجع مرحلة متتابعة تعمل قبلها في الترتيب${lane === 'track' ? '' : ' من محورها، وليست بوابة قبول'}` } };
+      }
+      const ts = scale.spans[over.key]?.[0] ?? f;
+      return { patch: { with: { [key]: over.key } }, ghost: [ts, ts + (e - f)] };
+    }
+    if (!row.with) {
+      if (Math.round(moved(f) - f) === 0) return { none: true, ghost: [f, e] };
+      return { reject: { code: 'sequential', msg: `«${title(key)}» تبدأ بعد ما قبلها، فلا تُسحب بدايتها. غيّر مدة ما قبلها، أو اسحب طرفها لتغيير مدتها` } };
+    }
+    const d = Math.round(moved(f) - f);
+    const offset = clamp(row.offset + d, 0, row.offset_max);
+    if (offset === row.offset) return { none: true, ghost: [f, e] };
+    const dd = offset - row.offset;
+    return { patch: { offset: { [key]: offset } }, ghost: [f + dd, e + dd] };
+  }
+  // سحب الطرف: المدة، أو نهاية المسار
+  if (row.pinned) return { reject: { code: 'pinned', msg: `«${title(key)}» مثبتة بتاريخ (${row.days_ar})، فلا تتبع المدد. حرّرها بـ«حرّر التواريخ لتتبع المدد»` } };
+  const raw = moved(e);
+  const near = (target) => (snap === 'near' ? Math.abs(pos(target) - pos(raw)) <= DRAG_SNAP_PCT || Math.abs(target - raw) < 0.5 : Math.round(raw) === target);
+  if (row.track) {
+    // يلتصق بنهاية الرحلة ثم بنهاية طور (بنهاية مفتوحة: اليوم التالي لآخر يوم)
+    const targets = [['journey_end', scale.journey_end], ...Object.entries(scale.phase_ends || {}).map(([k, v]) => [`phase:${k}`, v])];
+    for (const [u, t] of targets) {
+      if (t > f && near(t)) {
+        if (row.until === u) return { none: true, ghost: [f, t] };
+        return { patch: { until: { [key]: u } }, ghost: [f, t] };
+      }
+    }
+    const n = clamp(Math.round(raw) - f, 1, PLAN_DAYS_MAX);
+    if (row.until === 'days' && n === row.days) return { none: true, ghost: [f, f + n] };
+    return { patch: { ...(row.until === 'days' ? {} : { until: { [key]: 'days' } }), days: { [key]: n } }, ghost: [f, f + n] };
+  }
+  // المرحلة: يلتصق بحدود الخانات (بداية خانة أو نهايتها)، ثم باليوم الصحيح، ولا ينزل عن حدها
+  let end = Math.round(raw);
+  if (snap === 'near') {
+    const bounds = [...new Set(scale.slots.flatMap((x) => [x.from, x.to]))].filter((b) => b > f && b !== e);
+    const hit = bounds.find((b) => Math.abs(pos(b) - pos(raw)) <= DRAG_SNAP_PCT / 2);
+    if (hit != null) end = hit;
+  }
+  const min = stage ? planDaysMin(stage) : 0;
+  const n = clamp(end - f, min, PLAN_DAYS_MAX);
+  if (n === row.days) return { none: true, ghost: [f, f + n] };
+  return { patch: { days: { [key]: n } }, ghost: [f, f + n] };
+}
+
+/** تطبيق الحركة على المسودة بالفحص نفسه: المسودة الجديدة من planDraft، وما يظهر فيها من خطأ جديد (حارس الإيقاف أو التوازي
+ * أو المدى) يرفض الحركة بسببه، فلا تتغير المسودة
+ * @param {{ def: any, cohort: any, edit: any, patch: any }} o
+ * @returns {{ edit?: any, draft: any, reject?: { code: string, msg: string } }} */
+export function applyDrop({ def, cohort, edit, patch }) {
+  const base = edit || { days: {}, off: {}, with: {}, offset: {}, until: {} };
+  const before = planDraft({ def, cohort, edit: base });
+  const next = mergeEdit(base, patch, cohort?.schedule || {});
+  const after = planDraft({ def, cohort, edit: next });
+  const had = new Set(before.errors.map((x) => `${x.stage}:${x.code}:${x.msg}`));
+  const fresh = after.errors.filter((x) => !had.has(`${x.stage}:${x.code}:${x.msg}`));
+  if (fresh.length) return { draft: before, reject: { code: fresh[0].code, msg: fresh[0].msg } };
+  return { edit: next, draft: after };
+}
+
+/** سطر الشبح أثناء السحب: التواريخ الناتجة من المسودة بعد الحركة (planDraft)، أو المدة إن كانت الدفعة بلا تواريخ
+ * @param {any} row صف المرحلة في المسودة بعد الحركة @param {string} title */
+export function dragGhostAr(row, title) {
+  if (!row) return '';
+  const when = row.from && row.to ? (row.from === row.to ? dateOnly(row.from) : `${dateOnly(row.from)} إلى ${dateOnly(row.to)}`) : '';
+  const off = row.with && row.offset ? `، تبدأ بعد ${daysAr(row.offset)} من بداية مرجعها` : '';
+  return `«${title}»: ${when ? `${when}، ` : ''}${row.days_ar}${off}`;
+}
