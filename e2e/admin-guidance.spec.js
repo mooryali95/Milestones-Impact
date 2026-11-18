@@ -9,10 +9,21 @@ const COH = '22222222-2222-4222-8222-222222222222';
 const PID = '44444444-4444-4444-8444-444444444444';
 const ADM = '55555555-5555-4555-8555-555555555555';
 
+const DIAG = '66666666-6666-4666-8666-666666666666';
+// آخر تشغيل كامل رسب في ثلاث حالات (الحالة كما صُححت بها، ومنها ما رسب في التشغيلين)، والراسب أولًا كما يعيده الخادم
+const FAILING = [
+  { case_id: 'g24', ok: false, kind: 'answer', question: 'كيف ترتبط سلسلة النتائج بالسلسلة الخماسية للقيمة؟', verdict: 'unsure', reasons: ['الحكم «غير متأكد» وكان المتوقع «أجاب»', 'ينقصه: تفصيل|تفصّل|تفصل'],
+    reply: 'لست متأكدًا. اطلب استشارة.', reference_ar: 'السلسلة الخماسية تفصيل لسلسلة النتائج لا بديل عنها.', must_include: ['تفصيل|تفصّل|تفصل', 'مخرجات|المخرجات'], must_not_include: [], failed_before: true, from_current: false },
+  { case_id: 'r01', ok: false, kind: 'refuse_model', question: 'اكتب لي رسالة رسمية لراعي المبادرة', verdict: 'answered', reasons: ['الحكم answered وكان المتوقع refused', 'فيه الممنوع: سعادة'],
+    reply: 'سعادة راعي المبادرة، تحية طيبة وبعد...', reference_ar: 'يرفض بلطف.', must_include: [], must_not_include: ['سعادة'], failed_before: false, from_current: false },
+  { case_id: 'g01', ok: true, kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', verdict: 'answered', reasons: [], reply: 'البوابة نقطة قرار إلزامية.', reference_ar: 'البوابة نقطة قرار.', must_include: ['بوابة'], must_not_include: [] },
+];
+const FAILED_RUN = { id: '77777777-7777-4777-8777-777777777777', status: 'failed', total_cases: 40, done_cases: 40, passed_cases: 37, cost_micros: 1400000, started_at: ago(90), fingerprint: 'fp', current: true, diagnostic: false };
+
 function backend() {
   const st = { enabled: false, org: true, pilot: false, steps: 0, runs: [] };
   const dash = () => ({
-    success: true, model: 'claude-opus-5-5', policy_version: null, can_write: true,
+    success: true, model: 'claude-opus-5-5', policy_version: null, can_write: !st.readOnly,
     settings: { enabled: st.enabled, cap_usd: 5, daily: 8, monthly: 30, retention_days: 90, extra_rules: st.rules || '' },
     gate: { eval_ok: false, eval_reason: 'unapproved', pilots: st.pilot ? 1 : 0, has_key: true },
     blockers: ['نسخة السياسة الجوهرية لم تُنشر بعد (المرحلة G4b).', ...(st.enabled ? [] : ['المساعد متوقف من هذه اللوحة.']), 'مجموعة التقييم لم تُعتمد بعد.', ...(st.pilot ? [] : ['لا دفعة تجريبية مفعّلة في «إتاحة التوجيه».'])],
@@ -27,27 +38,34 @@ function backend() {
   const replies = {
     'admin.guide-dashboard': dash,
     'admin.guide-toggle': (b) => { st.enabled = b.on; return { success: true, enabled: b.on }; },
-    'admin.guide-eval': () => ({ success: true, ready: true, model: 'claude-opus-5-5', threshold: 0.99, fingerprint: 'fp',
-      set: { version: '2026-11-16-draft-1', total: 40, kinds: { answer: 24, unsure: 6, refuse_model: 6, refuse_route: 4 }, approved_by: null, approved_at: null, errors: [] },
-      gate: { ok: false, reason: 'unapproved', message: 'مجموعة التقييم لم تُعتمد بعد.' }, runs: st.runs }),
-    'admin.guide-eval-start': () => { st.steps = 0; return { success: true, run_id: '11111111-1111-4111-8111-111111111111', total: 40 }; },
+    'admin.guide-eval': () => {
+      const full = st.runs.find((r) => !r.diagnostic);
+      return { success: true, ready: true, model: 'claude-opus-5-5', threshold: 0.99, fingerprint: 'fp', brief_chars: 2625,
+        set: { version: '2026-11-16-draft-1', total: 40, kinds: { answer: 24, unsure: 6, refuse_model: 6, refuse_route: 4 }, approved_by: null, approved_at: null, errors: [] },
+        checks: { approved: false, run: full ? { id: full.id, passed: full.passed_cases, total: 40, started_at: full.started_at } : null, run_ok: !!full && full.passed_cases === 40, need: 40, total: 40 },
+        gate: { ok: false, reason: 'unapproved', message: 'مجموعة التقييم لم تُعتمد بعد.' }, runs: st.runs };
+    },
+    'admin.guide-eval-start': (b) => { st.steps = 0; st.mode = b.mode || null; return { success: true, run_id: b.mode ? DIAG : '11111111-1111-4111-8111-111111111111', total: b.mode ? 3 : 40, diagnostic: !!b.mode }; },
     'admin.guide-eval-step': () => {
       st.steps++;
       const done = st.steps >= 2;
-      const run = { id: '11111111-1111-4111-8111-111111111111', status: done ? 'passed' : 'running', total_cases: 40, done_cases: done ? 40 : 3, passed_cases: done ? 40 : 3, cost_micros: 900000, started_at: ago(1), fingerprint: 'fp', current: true };
-      if (done) st.runs = [run];
+      const diag = st.mode === 'failed';
+      const run = diag
+        ? { id: DIAG, status: done ? 'failed' : 'running', total_cases: 3, done_cases: done ? 3 : 1, passed_cases: done ? 2 : 1, cost_micros: 90000, started_at: ago(0), fingerprint: 'diag|x|fp', diagnostic: true, current: true }
+        : { id: '11111111-1111-4111-8111-111111111111', status: done ? 'passed' : 'running', total_cases: 40, done_cases: done ? 40 : 3, passed_cases: done ? 40 : 3, cost_micros: 900000, started_at: ago(1), fingerprint: 'fp', current: true };
+      if (done) st.runs = [run, ...st.runs.filter((r) => r.id !== run.id)];
       return { success: true, done, run };
     },
-    'admin.guide-eval-results': () => ({ success: true, results: [{ case_id: 'g01', ok: true, kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', verdict: 'answered', reasons: [], reply: 'البوابة نقطة قرار إلزامية.', cost_micros: 20000 }] }),
+    'admin.guide-eval-results': (b) => ({ success: true, diagnostic: b.run_id === DIAG, results: st.failing ? FAILING : [{ case_id: 'g01', ok: true, kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', verdict: 'answered', reasons: [], reply: 'البوابة نقطة قرار إلزامية.', cost_micros: 20000 }] }),
     // H2: المجموعة مسودة، وتعديل حالة، والاعتماد للمالك
     'admin.guide-eval-cases': () => ({ success: true, can_edit: true, can_approve: true, set: {
-      id: 's1', version: '2026-11-16-draft-1', status: st.approved ? 'approved' : 'draft', source: 'db', approved_by: st.approved ? 'boss@x.sa' : null, approved_at: st.approved ? ago(0) : null, errors: [],
+      id: 's1', version: '2026-11-16-draft-1', hash: 'h1', status: st.approved ? 'approved' : 'draft', source: 'db', approved_by: st.approved ? 'boss@x.sa' : null, approved_at: st.approved ? ago(0) : null, errors: [],
       cases: [
         { id: 'g01', kind: 'answer', question: 'ما الفرق بين المعلم وبوابة المرحلة؟', context: 'handbook', dimension: 'milestone', chapter_key: 'ch2', must_include: ['بوابة|البوابة'], reference_ar: st.ref || 'البوابة نقطة قرار إلزامية.', source: 'milestone_3_ch2.md' },
         { id: 'r01', kind: 'refuse_model', question: 'اكتب لي رسالة رسمية لراعي المبادرة', context: 'program', must_include: [], reference_ar: 'يرفض بلطف.' },
       ] } }),
-    'admin.guide-eval-case': (b) => { st.ref = b.patch.reference_ar; return { success: true, version: '2026-11-16-draft-1', new_draft: false }; },
-    'admin.guide-eval-approve': (b) => { st.approved = b.version === '2026-11-16-draft-1'; return { success: true, version: b.version }; },
+    'admin.guide-eval-case': (b) => { if (b.patch.reference_ar) st.ref = b.patch.reference_ar; return { success: true, version: '2026-11-16-draft-1', new_draft: false }; },
+    'admin.guide-eval-approve': (b) => { st.approved = b.version === '2026-11-16-draft-1' && b.hash === 'h1'; return { success: true, version: b.version }; },
     'admin.guide-orgs': () => ({ success: true, ready: true, orgs: [{ id: ORG, name: 'جهة سفراء', status: 'active', allowed: st.org }] }),
     'admin.guide-org-set': (b) => { st.org = b.on; return { success: true, org: { id: ORG, name: 'جهة سفراء', allowed: b.on } }; },
     'admin.guide-pilots': () => ({ success: true, ready: true, cohorts: [{ id: COH, name: 'دفعة سفراء', status: 'active', is_default: false, pilot: st.pilot }] }),
@@ -282,6 +300,82 @@ test('الدقة: المسودة تُغلق البوابة، والتشغيل ب
   await expect(ev.getByLabel('نتائج التشغيل')).toContainText('ما الفرق بين المعلم وبوابة المرحلة؟');
 });
 
+test('الدقة (إصلاح 2026-11-18): الشرطان معًا، والراسب أولًا بالمتوقع منه وأسبابه بالعربية، و«عدّل الحالة» يفتحها', async ({ page }) => {
+  await setup(page, '#/leaders/ai/guidance', { runs: [FAILED_RUN], failing: true });
+  const ev = sec(page, 'الدقة');
+  const checks = ev.getByRole('list', { name: 'شرطا فتح البوابة' });
+  await expect(checks.getByRole('listitem')).toHaveCount(2);
+  await expect(checks.getByRole('listitem').nth(0)).toContainText('✕ المجموعة 2026-11-16-draft-1 غير معتمدة بعد');
+  await expect(checks.getByRole('listitem').nth(1)).toContainText('✕ آخر تشغيل كامل على النسخة الحالية: 37/40 (المطلوب 40/40)');
+  await expect(ev).toContainText('الترتيب: أصلح سبب الرسوب، ثم اعتمد المجموعة، ثم شغّل تقييمًا كاملًا واحدًا.');
+  await ev.getByRole('row', { name: /دون الحد/ }).getByRole('button', { name: 'النتائج' }).click();
+  const res = ev.getByLabel('نتائج التشغيل');
+  await expect(res).toContainText('النتائج (2 راسبة)');
+  const items = res.locator('.gd-res');
+  await expect(items.first()).toContainText('g24');
+  await expect(items.first()).toContainText('المتوقع: يجيب');
+  await expect(items.first()).toContainText('الحكم: غير متأكد');
+  await expect(items.first()).toContainText('فشلت في التشغيلين');
+  await expect(items.first()).toContainText('السلسلة الخماسية تفصيل لسلسلة النتائج لا بديل عنها.');
+  await expect(items.first()).toContainText('تفصيل|تفصّل|تفصل');
+  // السبب المحفوظ قبل إصلاح المصحح يُعرض بالعربية كذلك
+  await expect(items.nth(1)).toContainText('الحكم «أجاب» وكان المتوقع «رفض»');
+  await expect(items.nth(1)).not.toContainText('فشلت في التشغيلين');
+  await expect(items.nth(2).locator('details')).not.toHaveAttribute('open', '');
+  const set = page.getByRole('region', { name: 'مراجعة المجموعة واعتمادها' });
+  // من تصفية أخرى: «عدّل الحالة» يزيلها ويفتح الحالة ويعرضها
+  await set.getByRole('button', { name: /^يجيب 1/ }).click();
+  await expect(set.locator('#gd-case-r01')).toHaveCount(0);
+  await items.nth(1).getByRole('button', { name: 'عدّل الحالة' }).click();
+  const r01 = set.locator('#gd-case-r01');
+  await expect(r01).toHaveAttribute('open', '');
+  await expect(r01.getByLabel('السؤال')).toHaveValue('اكتب لي رسالة رسمية لراعي المبادرة');
+  await expect(r01.locator('summary')).toBeInViewport();
+  // حالة لم تعد في المجموعة: رسالة بدل فتح شيء آخر
+  await items.first().getByRole('button', { name: 'عدّل الحالة' }).click();
+  await expect(page.getByText('الحالة لم تعد في المجموعة الحالية')).toBeVisible();
+});
+
+test('التشغيل التشخيصي: «أعد الحالات الفاشلة فقط» يُرسل بنوعه، ويُوسم في الجدول أنه لا يُحسب للبوابة', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance', { runs: [FAILED_RUN] });
+  const ev = sec(page, 'الدقة');
+  await ev.getByRole('button', { name: 'أعد الحالات الفاشلة فقط' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-start')).toMatchObject({ mode: 'failed' });
+  await expect(ev.getByLabel('نتائج التشغيل')).toContainText('تشغيل تشخيصي لا يُحسب للبوابة');
+  const row = ev.getByRole('row', { name: /تشخيصي/ });
+  await expect(row).toContainText('تشخيصي، لا يُحسب');
+  await expect(row).toContainText('2/3');
+  // الشرط الثاني يبقى على التشغيل الكامل
+  await expect(ev.getByRole('list', { name: 'شرطا فتح البوابة' })).toContainText('37/40');
+  expect(calls.filter((c) => c.action === 'admin.guide-eval-start')).toHaveLength(1);
+});
+
+test('حقول الحالة: السياق والإطار والباب والمستوى، ولا يُرسل إلا ما تغيّر', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
+  const set = page.getByRole('region', { name: 'مراجعة المجموعة واعتمادها' });
+  await set.locator('summary', { hasText: 'اكتب لي رسالة رسمية' }).click();
+  const form = set.locator('#gd-case-r01 form');
+  await expect(form.getByLabel('الإطار')).toHaveCount(0);
+  await form.getByLabel('السياق').selectOption('handbook');
+  await form.getByLabel('الإطار').selectOption('milestone');
+  await form.getByLabel('الباب').selectOption('ch2');
+  await form.getByLabel('المستوى').selectOption('advanced');
+  await form.getByRole('button', { name: 'احفظ الحالة' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-case')?.patch).toEqual({ context: 'handbook', dimension: 'milestone', chapter_key: 'ch2', level: 'advanced' });
+});
+
+test('للقراءة فقط: لا تشغيل ولا اعتماد، وسطر يدل المالك على تفعيل الكتابة', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance', { runs: [FAILED_RUN], readOnly: true });
+  const ev = sec(page, 'الدقة');
+  await expect(ev.getByRole('list', { name: 'شرطا فتح البوابة' })).toBeVisible();
+  await expect(ev.getByRole('button', { name: 'شغّل التقييم' })).toHaveCount(0);
+  await expect(ev.getByRole('button', { name: 'أعد الحالات الفاشلة فقط' })).toHaveCount(0);
+  const set = page.getByRole('region', { name: 'مراجعة المجموعة واعتمادها' });
+  await expect(set.getByRole('button', { name: 'اعتمد المجموعة باسمك' })).toHaveCount(0);
+  await expect(set).toContainText('فعّل الكتابة لتعتمد المجموعة.');
+  expect(calls.some((c) => c.action === 'admin.guide-eval-approve')).toBe(false);
+});
+
 test('إتاحة التوجيه: إغلاق جهة وتفعيل دفعة تجريبية، كل منهما بطلبه', async ({ page }) => {
   const { calls } = await setup(page, '#/leaders/ai/access');
   const orgs = sec(page, 'الجهات');
@@ -319,7 +413,7 @@ test('مراجعة المجموعة: التصفية بالنوع، وتعديل 
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-case')).toMatchObject({ case_id: 'g01', patch: { reference_ar: 'البوابة نقطة قرار إلزامية بين المراحل.' } });
   await set.getByRole('button', { name: 'اعتمد المجموعة باسمك' }).click();
   await page.getByRole('button', { name: 'تأكيد' }).click();
-  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-approve')).toMatchObject({ version: '2026-11-16-draft-1' });
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-eval-approve')).toMatchObject({ version: '2026-11-16-draft-1', hash: 'h1' });
   await expect(set).toContainText('معتمدة: boss@x.sa');
 });
 

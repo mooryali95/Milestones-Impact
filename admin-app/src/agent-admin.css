@@ -109,6 +109,25 @@
 .gd-cases details { border: 1px solid rgba(11, 39, 47, .12); border-radius: 8px; padding: 8px 12px; }
 .gd-cases summary { cursor: pointer; }
 .gd-case-form textarea, .gd-case-form select { width: 100%; }
+/* إصلاح تقييم الدقة 2026-11-18: شرطا البوابة، والنتائج بما كان متوقعًا، وحقول الحالة في صف */
+.gd-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gd-checks li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 6px; background: var(--st-bad-bg, #fbeaea); }
+.gd-checks li[data-ok="ok"] { background: rgba(46, 125, 91, .1); }
+.gd-checks li > span { font-weight: 700; }
+.gd-order { border-inline-start: 3px solid var(--line-strong, #ccc); padding-inline-start: 8px; }
+.gd-res-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gd-res { border: 1px solid rgba(11, 39, 47, .12); border-radius: 8px; padding: 8px 12px; display: grid; gap: 6px; min-width: 0; }
+.gd-res[data-ok="fail"] { border-inline-start: 3px solid var(--st-bad, #b3261e); }
+.gd-res-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gd-res-q { margin: 0; font-weight: 600; }
+.gd-res-why { margin: 0; padding-inline-start: 18px; }
+.gd-res-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; }
+.gd-res-grid > div { min-width: 0; }
+.gd-res-grid p { margin: 2px 0; }
+.gd-res-grid code { margin-inline-end: 4px; white-space: normal; overflow-wrap: anywhere; font-family: inherit; letter-spacing: normal; }
+.gd-res-k { display: block; font-size: .74rem; color: var(--ink-light, #6b7a80); }
+.gd-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.gd-case-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 
 /* H3: سجل المحادثات */
 .gd-table-wrap { overflow-x: auto; }

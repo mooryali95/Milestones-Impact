@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261117100000_leaders_book_proposals_save
+-- as-of migration: 20261118100000_leaders_guidance_eval_case_snapshot
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -972,7 +972,9 @@ create table if not exists leaders.guidance_eval_results (
   reply text,
   cost_micros bigint default 0 not null,
   created_at timestamp with time zone default now() not null,
+  case_snapshot jsonb,
   constraint guidance_eval_results_case_id_check CHECK ((char_length(case_id) <= 20)),
+  constraint guidance_eval_results_case_snapshot_check CHECK (((case_snapshot IS NULL) OR ((jsonb_typeof(case_snapshot) = 'object'::text) AND (pg_column_size(case_snapshot) <= 16384)))),
   constraint guidance_eval_results_reply_check CHECK ((char_length(reply) <= 6000)),
   constraint guidance_eval_results_verdict_check CHECK ((char_length(verdict) <= 20)),
   constraint guidance_eval_results_pkey PRIMARY KEY (run_id, case_id)

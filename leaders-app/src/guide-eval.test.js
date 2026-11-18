@@ -1,9 +1,11 @@
 // «التوجيه والإرشاد» G4a: تصحيح حالات التقييم، وصحة المجموعة، والبصمة، وحكم البوابة (99٪ على مجموعة معتمدة)
 import { describe, expect, it } from 'vitest';
-import { EVAL_THRESHOLD, evalFingerprint, evalGate, gradeCase, validateCases } from '../../supabase/functions/leaders-api/guide-eval.js';
+import {
+  diagFingerprint, EVAL_THRESHOLD, evalFingerprint, evalGate, gateChecklist, gradeCase, GRADER_VERSION, isDiagnostic, parseDiag, setHash, validateCases,
+} from '../../supabase/functions/leaders-api/guide-eval.js';
 import SET from '../../supabase/functions/leaders-api/guide-eval/cases.json';
 import { applyCaseAdd, nextFlagId, scrubQuestion } from '../../supabase/functions/leaders-api/guide-eval.js';
-import { GUIDE_RULES, rulesWith } from '../../supabase/functions/leaders-api/guide.js';
+import { GUIDE_RULES, normAr, programBrief, rulesWith } from '../../supabase/functions/leaders-api/guide.js';
 import { cleanField, DEFAULTS, SETTINGS } from '../../supabase/functions/leaders-api/settings.js';
 
 const answer = { id: 'a1', kind: 'answer', question: 'ما المعلم؟', context: 'handbook', dimension: 'milestone', chapter_key: 'ch1', must_include: ['قرار'] };
@@ -32,6 +34,34 @@ describe('gradeCase', () => {
   });
 });
 
+describe('gradeCase بعد التطبيع (إصلاح 2026-11-18)', () => {
+  const c = (must, extra = {}) => ({ id: 'x', kind: 'answer', question: 'س', context: 'program', must_include: must, ...extra });
+  it('الشدة والتشكيل والتطويل لا تُسقط جوابًا صحيحًا', () => {
+    for (const [p, t] of [['التحكم', 'نقاط التحكّم واضحة'], ['التفهم', 'التفهُّم أولًا'], ['التتبع', 'التتبّع'], ['تأخر', 'تأخّر المعلم'], ['المعلم', 'المعـــلم']]) {
+      expect(gradeCase(c([p]), { source: 'model', verdict: 'answered', text: t }).pass, `${p} / ${t}`).toBe(true);
+    }
+  });
+  it('الهمزات والتاء المربوطة والألف المقصورة والأرقام بصورة واحدة في الرد والنمط', () => {
+    expect(gradeCase(c(['أسأل']), { source: 'model', verdict: 'answered', text: 'اسال خبيرك' }).pass).toBe(true);
+    expect(gradeCase(c(['اسال']), { source: 'model', verdict: 'answered', text: 'إسأل خبيرك' }).pass).toBe(true);
+    expect(gradeCase(c(['المبادرة']), { source: 'model', verdict: 'answered', text: 'المبادره' }).pass).toBe(true);
+    expect(gradeCase(c(['مستوى']), { source: 'model', verdict: 'answered', text: 'مستوي' }).pass).toBe(true);
+    expect(gradeCase(c(['0[.٫,]8']), { source: 'model', verdict: 'answered', text: 'المؤشر ٠٫٨' }).pass).toBe(true);
+    // ما يُمنع يُطبَّع كذلك، فلا يمر بتغيير الإملاء
+    expect(gradeCase(c([], { kind: 'refuse_model', must_not_include: ['تحية طيبة'] }), { source: 'model', verdict: 'refused', text: 'تحيّة طيبه وبعد' }).pass).toBe(false);
+  });
+  it('المفهوم الغائب يبقى غائبًا، ورموز النمط لا تنقلب', () => {
+    expect(gradeCase(c(['تفصيل|تفصّل|تفصل', 'منافع']), { source: 'model', verdict: 'answered', text: 'السلسلة بديل عن سلسلة النتائج والمخرجات' }).reasons)
+      .toEqual(['ينقصه: تفصيل|تفصّل|تفصل', 'ينقصه: منافع']);
+    expect(gradeCase(c(['\\D{2}']), { source: 'model', verdict: 'answered', text: '12' }).pass).toBe(false);
+    expect(normAr('أإآٱ ى ة ـ ٣۴')).toBe('اااا ي ه  34');
+  });
+  it('أسباب الحكم بالعربية', () => {
+    expect(gradeCase(c([]), { source: 'model', verdict: 'unsure', text: 'نص' }).reasons).toEqual(['الحكم «غير متأكد» وكان المتوقع «أجاب»']);
+    expect(gradeCase(c([]), { source: 'model', verdict: null, text: 'نص' }).reasons).toEqual(['الحكم بلا وسم وكان المتوقع «أجاب»']);
+  });
+});
+
 describe('validateCases', () => {
   it('يكشف المعرّف المكرر والنوع الخاطئ وسؤال الكتاب بلا باب والنمط التالف وحالة الموجّه التي لا يلتقطها', () => {
     const errs = validateCases({ version: 'x', cases: [
@@ -54,6 +84,39 @@ describe('البصمة وحكم البوابة', () => {
   it('تتغير البصمة بتغير المجموعة', async () => {
     expect(await evalFingerprint(set)).not.toBe(await evalFingerprint({ ...set, cases: set.cases.slice(1) }));
     expect(await evalFingerprint(set)).toMatch(/^claude-opus-5-5\|v1\|[0-9a-f]{16}$/);
+  });
+  it('نسخة المصحح ومرجع البرنامج في البصمة', async () => {
+    expect(GRADER_VERSION).toBe('2026-11-18');
+    expect(await evalFingerprint(set, undefined, undefined, 'مرجع')).not.toBe(await evalFingerprint(set));
+    expect(await evalFingerprint(set, undefined, undefined, '')).toBe(await evalFingerprint(set));
+  });
+  it('التشخيصي لا يُحسب للبوابة أبدًا، ولو حمل بصمة اليوم ونجح كله', async () => {
+    const fp = await evalFingerprint(set);
+    const d = diagFingerprint('11111111-1111-4111-8111-111111111111', fp);
+    expect(isDiagnostic({ fingerprint: d })).toBe(true);
+    expect(parseDiag(d)).toEqual({ source: '11111111-1111-4111-8111-111111111111', fingerprint: fp });
+    expect(parseDiag(fp)).toBe(null);
+    const run = { fingerprint: d, status: 'passed', done_cases: 100, passed_cases: 100, started_at: '2026-11-21' };
+    expect(evalGate(set, [run], fp).reason).toBe('none');
+    expect(evalGate(set, [run], d).reason).toBe('none');
+    const full = { fingerprint: fp, status: 'failed', done_cases: 100, passed_cases: 90, started_at: '2026-11-20' };
+    expect(evalGate(set, [full, run], fp).reason).toBe('failed');
+  });
+  it('الشرطان معًا: الاعتماد وآخر تشغيل كامل بعدده، والمطلوب كل الحالات حين تكون 40', async () => {
+    const forty = { version: 'v', approved_by: null, approved_at: null, cases: set.cases.slice(0, 40) };
+    const fp = await evalFingerprint(forty);
+    const r = { id: 'r1', fingerprint: fp, status: 'failed', done_cases: 40, passed_cases: 37, started_at: '2026-11-18' };
+    expect(gateChecklist(forty, [r], fp)).toEqual({ approved: false, run: { id: 'r1', passed: 37, total: 40, started_at: '2026-11-18' }, run_ok: false, need: 40, total: 40 });
+    const ok = { ...r, id: 'r2', status: 'passed', passed_cases: 40, started_at: '2026-11-19' };
+    expect(gateChecklist({ ...forty, approved_by: 'م', approved_at: 'ي' }, [r, ok], fp)).toMatchObject({ approved: true, run_ok: true, run: { id: 'r2' } });
+    expect(gateChecklist(forty, [], fp).run).toBe(null);
+    expect(gateChecklist({ ...set, approved_by: 'م', approved_at: 'ي' }, [], fp).need).toBe(99);
+  });
+  it('بصمة محتوى النسخة تتغير بتعديل حالة أو بآخر تعديل', async () => {
+    const a = { version: 'v', cases: [answer], updated_at: '2026-11-18T08:00:00Z' };
+    expect(await setHash(a)).toBe(await setHash({ ...a }));
+    expect(await setHash(a)).not.toBe(await setHash({ ...a, cases: [{ ...answer, question: 'غيره' }] }));
+    expect(await setHash(a)).not.toBe(await setHash({ ...a, updated_at: '2026-11-18T08:00:01Z' }));
   });
   it('آخر تشغيل منتهٍ للبصمة يحكم: 99 من 100 تنجح، و98 لا، وتشغيل لبصمة أخرى لا يُحسب', async () => {
     const fp = await evalFingerprint(set);
@@ -129,5 +192,24 @@ describe('H4: حالة من رد غير دقيق', () => {
     expect(applyCaseAdd(SET.cases, { question: '  ' }).ok).toBe(false);
     expect(applyCaseAdd(SET.cases, { question: 'ما الإجابة الصحيحة في اختبار الباب الثاني؟' }).error).toMatch(/الموجّه/);
     expect(applyCaseAdd(SET.cases, { question: 'سؤال عن الباب', context: 'handbook' }).error).toMatch(/باب/);
+  });
+});
+
+describe('مرجع البرنامج من الكتاب (إصلاح 2026-11-18)', () => {
+  it('يُبنى من أبواب الكتاب في المستودع بالأقسام الثلاثة، ويحمل ما تحتاجه حالتا البرنامج', async () => {
+    const fs = await import('node:fs');
+    const { join } = await import('node:path');
+    const dir = join(__dirname, '../../supabase/content/handbook/v3.1/');
+    const mods = fs.readdirSync(dir).map((f) => f.match(/^(\w+)_\d+_(\w+)\.md$/)).filter(Boolean)
+      .map((m) => ({ dimension: m[1], chapter_key: m[2], title_ar: m[0], body_md: fs.readFileSync(dir + m[0], 'utf8') }));
+    const b = programBrief(mods);
+    expect(b).toContain('إطار المعلم: ربط التنفيذ بالأثر');
+    expect(b).toContain('هذه السلسلة تفصيل لسلسلة النتائج');
+    expect(b).toContain('سلسلة النتائج (RBM):');
+    expect(b.length).toBeLessThan(6000);
+    for (const id of ['g23', 'g24']) {
+      const c = SET.cases.find((x) => x.id === id);
+      for (const p of c.must_include) expect(new RegExp(normAr(p), 'i').test(normAr(b)), `${id} ${p}`).toBe(true);
+    }
   });
 });

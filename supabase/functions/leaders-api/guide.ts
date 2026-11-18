@@ -18,7 +18,7 @@ import { guidanceFor } from './guidance.ts';
 import { currentStages } from './journey-map.js';
 import {
   contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RULES,
-  guideGate, left, parseReply, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
+  guideGate, left, parseReply, PROGRAM_BRIEF_SOURCES, programBrief, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
 } from './guide.js';
 import { costMicros, estimateTokens, worstCaseMicros } from '../agent-chat/pricing.ts';
 import { sanitizeOutput } from '../agent-chat/redact.ts';
@@ -36,6 +36,8 @@ export const GD = {
   gate: (p: any): Promise<any> => gateFor(p),
   chapter: (p: any, id: string): Promise<any> => chapterFor(p, id),
   titles: (p: any): Promise<string[]> => chapterTitles(p),
+  // مرجع البرنامج من الكتاب نفسه للسؤال من خارج الأبواب (مشترك بين المشاركين والتقييم)
+  brief: (): Promise<string> => programBriefNow(),
   // حكم تقييم الدقة (guide-eval.ts) باستيراد متأخر، فلا حلقة بين الملفين
   evalOk: async (): Promise<boolean> => (await (await import('./guide-eval.ts')).evalGateNow()).ok,
   key: async (): Promise<string> => {
@@ -118,6 +120,21 @@ async function chapterTitles(p: any) {
   return handbookModulesFor(data || [], levels).map((m: any) => m.title_ar).slice(0, 40);
 }
 
+// مرجع البرنامج: الأقسام المسماة في PROGRAM_BRIEF_SOURCES من أبواب القاعدة، يُخزَّن دقيقة في النسخة. التعذر يعيده فارغًا
+// (يجيب النموذج بالقواعد وحدها كما كان) ولا يُخزَّن، فيُعاد في الطلب التالي
+let briefCache: { at: number; value: string } | null = null;
+export const resetBrief = () => { briefCache = null; };
+export async function programBriefNow(): Promise<string> {
+  if (briefCache && Date.now() - briefCache.at < 60e3) return briefCache.value;
+  const keys = [...new Set(PROGRAM_BRIEF_SOURCES.map((x) => x.chapter_key))];
+  const { data, error } = await db.from('handbook_modules').select('dimension, chapter_key, title_ar, body_md').in('chapter_key', keys)
+    .then((r: any) => r, (e: any) => ({ data: null, error: e }));
+  if (error) { console.error('guide brief', (error as any)?.code || 'error'); return ''; }
+  const value = programBrief(data || []);
+  briefCache = { at: Date.now(), value };
+  return value;
+}
+
 async function save(row: Record<string, unknown>): Promise<number | null> {
   const { data, error } = await db.from('guidance_messages').insert(row).select('id').single();
   if (error) throw error;
@@ -127,12 +144,12 @@ async function save(row: Record<string, unknown>): Promise<number | null> {
 // ── التوليد: مسار واحد يجيب به المشارك ويُقيَّم به قبل الإطلاق (guide-eval.ts)، فما يُقيَّم هو ما يعمل ──
 type Chapter = { title: string; md: string; quiz: any[] } | null;
 type Turn = { role: string; body: string };
-export function worstFor(o: { chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string }) {
-  const prefix = estimateTokens(o.rules || GUIDE_RULES) + (o.chapter ? estimateTokens(o.chapter.md) : 0);
+export function worstFor(o: { chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string; brief?: string }) {
+  const prefix = estimateTokens(o.rules || GUIDE_RULES) + (o.chapter ? estimateTokens(o.chapter.md) : o.brief ? estimateTokens(o.brief) : 0);
   const rest = estimateTokens(o.ctx) + estimateTokens(o.text) + o.past.reduce((a, m) => a + estimateTokens(m.body), 0);
   return worstCaseMicros(GUIDE_MODEL, prefix, rest, GUIDE_MAX_TOKENS);
 }
-export async function generate(o: { key: string; chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string }) {
+export async function generate(o: { key: string; chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string; brief?: string }) {
   // الرسائل تتناوب بدءًا بالمشارك: يُسقط ما قبل أول سؤال، ويُدمج المتتالي من الدور نفسه
   const messages: { role: 'user' | 'assistant'; content: any }[] = [];
   for (const m of o.past) {
@@ -145,11 +162,16 @@ export async function generate(o: { key: string; chapter: Chapter; ctx: string; 
   messages.push({ role: 'user', content: [{ type: 'text', text: o.ctx }, { type: 'text', text: o.text }] });
   const system: any[] = [{ type: 'text', text: o.rules || GUIDE_RULES, cache_control: { type: 'ephemeral' } }];
   if (o.chapter) system.push({ type: 'text', text: `نص باب «${o.chapter.title}» من كتاب المشارك:\n\n${o.chapter.md}`, cache_control: { type: 'ephemeral' } });
+  // السؤال من خارج الأبواب: مرجع البرنامج من الكتاب نفسه، مشترك ومخزّن مؤقتًا كالقواعد
+  else if (o.brief) system.push({ type: 'text', text: o.brief, cache_control: { type: 'ephemeral' } });
   const res = await GD.model({
     model: GUIDE_MODEL, max_tokens: GUIDE_MAX_TOKENS, system, messages,
     thinking: { type: 'adaptive' }, output_config: { effort: 'high' }, inference_geo: 'us',
   }, o.key);
   const cost = costMicros(String(res?.model || GUIDE_MODEL), res?.usage || {});
+  // سبب التوقف: الامتناع من النموذج نفسه رفض بنص ثابت، والقطع عند الحد يُسجَّل (بلا نص) ويُقرأ ما وصل
+  if (res?.stop_reason === 'refusal') return { verdict: 'refused', text: REFUSAL_AR.model, res, cost };
+  if (res?.stop_reason === 'max_tokens') console.warn('guide max_tokens', JSON.stringify({ max: GUIDE_MAX_TOKENS, output_tokens: res?.usage?.output_tokens ?? null }));
   const raw = (res?.content || []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
   let { verdict, text } = parseReply(raw);
   if (verdict !== 'error') {
@@ -195,6 +217,7 @@ export async function guideAsk(p: any, b: Body) {
   // التأسيس: نص الباب من كتابه إن سأل من الكتاب، وإلا عناوين أبواب كتابه
   const chapter = chapterId ? await GD.chapter(p, chapterId).catch(async (e) => { await unclaim(); throw e; }) : null;
   const titles = chapter ? [] : await GD.titles(p).catch(() => []);
+  const brief = chapter ? '' : await GD.brief().catch(() => '');
   // المرحلة الحالية كما يراها في رحلته (currentStages، R3b): ما يسير معًا يُسمى كله، وبلا نشطة لا مرحلة
   const cur = currentStages(j.journey || []);
   const stage = cur.stage?.status === 'active' ? cur.stages.map((x: any) => x.title_ar).join(' و') : null;
@@ -205,7 +228,7 @@ export async function guideAsk(p: any, b: Body) {
     .slice(-GUIDE_HISTORY);
   // السقف اليومي: حجز أسوأ تكلفة قبل الاستدعاء
   const rules = rulesWith(s.extra_rules);
-  const worst = worstFor({ chapter, ctx, text, past, rules });
+  const worst = worstFor({ chapter, ctx, text, past, rules, brief });
   const cap = Math.round(Number(s.daily_spend_usd) * 1e6);
   const { data: reserved, error: re } = await db.rpc('guidance_spend_reserve', { p_day: w.dayKey, p_micros: worst, p_cap: cap });
   if (re || reserved === null || reserved === undefined) {
@@ -216,7 +239,7 @@ export async function guideAsk(p: any, b: Body) {
 
   let g: Awaited<ReturnType<typeof generate>>;
   try {
-    g = await generate({ key, chapter, ctx, text, past, rules });
+    g = await generate({ key, chapter, ctx, text, past, rules, brief });
   } catch (e) {
     // الحجز يبقى محسوبًا (قد يكون فوتر)، والسؤال لا يُحسب على المشارك
     console.error('guide model', (e as any)?.status || (e as Error)?.name);

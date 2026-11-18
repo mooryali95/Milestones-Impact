@@ -135,6 +135,31 @@ Deno.test('التخزين المؤقت على القواعد ونص الباب �
   } finally { x.restore(); }
 });
 
+Deno.test('مرجع البرنامج: السؤال من الرحلة يصله مقتطف الكتاب مخزّنًا مؤقتًا بعد القواعد، والسؤال من الباب نص الباب وحده', async () => {
+  const x = setup({});
+  try {
+    G.GD.brief = async () => 'مرجع البرنامج من «كتاب القائد»: السلسلة الخماسية تفصيل لسلسلة النتائج';
+    await G.guideAsk(p1, { text: 'كيف ترتبط السلسلتان؟' });
+    const req = x.sent[0];
+    assertEquals(req.system.map((b: any) => b.cache_control?.type), ['ephemeral', 'ephemeral']);
+    assert(req.system[1].text.startsWith('مرجع البرنامج'));
+    assert(!JSON.stringify(req.system).includes('كيف ترتبط'), 'لا سؤال في الجزء المخزّن');
+    G.GD.chapter = async () => ({ title: 'إعادة تعريف المعلم', md: 'المعلم نقطة قرار لا تاريخ.', quiz: [] });
+    await G.guideAsk(p1, { text: 'ما المعلم؟', context: 'handbook', chapter_id: 'hb-1' });
+    assertEquals(x.sent[1].system.length, 2);
+    assert(x.sent[1].system[1].text.startsWith('نص باب «إعادة تعريف المعلم»') && !x.sent[1].system[1].text.includes('السلسلة الخماسية'));
+  } finally { x.restore(); }
+});
+
+Deno.test('الوسم داخل تنسيق خفيف يُقرأ، ولا يرى المشارك وسمًا باقيًا في النص', async () => {
+  const x = setup({}, { reply: '**[[answered]]**\nالمعلم نقطة قرار [[unsure]] كما في «إعادة تعريف المعلم».' });
+  try {
+    const r = await G.guideAsk(p1, { text: 'ما المعلم؟' });
+    assertEquals(r.reply.verdict, 'answered');
+    assert(!r.reply.text.includes('[['), r.reply.text);
+  } finally { x.restore(); }
+});
+
 Deno.test('الإخفاء (H3، قرار المالك v8 ب): «احذف محادثتي» يخفي صفوف صاحب الجلسة وحده، وتبقى النسخة ومحسوبة من الحد', async () => {
   const now = new Date().toISOString();
   const x = setup({ guidance_messages: [
