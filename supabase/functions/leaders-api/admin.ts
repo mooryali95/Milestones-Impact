@@ -5,12 +5,12 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
-import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
+import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, POST_IN_TRACK_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
-import { PLAN_ACTIONS, planCutoffFor, planGuard } from './cohort-plan.js';
+import { MAIL_GUARD_ACTIONS, planCutoffFor, planGuard } from './cohort-plan.js';
 import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
@@ -1339,7 +1339,8 @@ export async function save(a: Admin, b: Body) {
     catch (err) { throw new Fail((err as Error).message, 400, 'rules'); }
     // المسار المستمر (T1، ب5.1 الحراس): مرحلة فيها القياس البعدي (E-POST) لا تصير مسارًا، فعليه يُبنى التقييم والتقرير
     if (row.rules?.lane === 'track') {
-      const { data: post } = await db.from('stage_requirements').select('code').eq('program_id', pid).eq('stage_key', String(b.row.key)).eq('code', 'E-POST').eq('active', true);
+      // والمخفي منه يمنعها أيضًا: إظهاره لاحقًا يعيد الحال الممنوعة
+      const { data: post } = await db.from('stage_requirements').select('code').eq('program_id', pid).eq('stage_key', String(b.row.key)).eq('code', 'E-POST');
       if ((post || []).length) throw new Fail('مرحلة فيها القياس البعدي لا تصير مسارًا مستمرًا: عليها يُبنى التقييم والتقرير', 400, 'rules');
     }
     const after = list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s));
@@ -1384,6 +1385,16 @@ export async function save(a: Admin, b: Body) {
         if (clash) throw new Fail(`النطاق ${list.find((d) => clash.domains.includes(d))} مرتبط بجهة ${clash.name}`);
       }
       row.domains = list;
+    }
+  }
+
+  // والاتجاه الآخر (T1، ب5.1 الحراس): متطلب القياس البعدي لا يُضاف إلى مسار مستمر ولا يُنقل إليه ولا يُظهر فيه
+  if (b.entity === 'stage_requirements' && ['code', 'stage_key', 'active'].some((k) => k in row)) {
+    const merged = { ...(current || {}), ...row };
+    if (merged.code === 'E-POST' && merged.active !== false && merged.stage_key) {
+      const pid = merged.program_id || b.row?.program_id || await defaultProgramId();
+      const { data: st } = await db.from('journey_stages').select('key, rules').eq('program_id', String(pid)).eq('key', String(merged.stage_key)).maybeSingle();
+      if (st && isTrack(st)) throw new Fail(POST_IN_TRACK_AR, 400, 'rules');
     }
   }
 
@@ -1581,13 +1592,14 @@ export async function lateMilestoneNotices(limit = 200) {
   const cutoff = cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF'));
   // وحارس الخطة (R2a): لكل معلم يوم آخر حفظ أو تراجع لخطة دفعته حرّك موعده (admin.cohort-plan في السجل، after.moved_ids).
   // تقصير مدة يجعل مواعيد في الماضي، فما صار متأخرًا بالتعديل لا يُرسل عنه، وما لم يحركه التعديل يُرسل كالمعتاد.
+  // وترقية الدفعة إلى نسخة (cohort.upgrade) مثله: سطرها بلا moved_ids فيُحجب ما صار متأخرًا يومها من كل معالم الدفعة.
   // السجل يُقرأ لكل دفعة وحدها (لا سقف عام يُسقط دفعة قديمة الحفظ)، وما قبل يوم البيئة لا أثر له فلا يُقرأ.
   // تعذّر القراءة يرمي (must)، فتتوقف تشغيلة المعالم ولا يُرسل شيء بلا حارسه
   const guards = new Map<string, any>();
   const guardOf = async (cohortId: string) => {
     if (!cohortId) return null;
     if (!guards.has(cohortId)) {
-      const rows = must(await db.from('audit_log').select('entity_id, created_at, after').eq('entity_id', cohortId).in('action', [...PLAN_ACTIONS])
+      const rows = must(await db.from('audit_log').select('entity_id, created_at, after').eq('entity_id', cohortId).in('action', [...MAIL_GUARD_ACTIONS])
         .gte('created_at', cutoff).order('created_at', { ascending: false }).limit(1000)) || [];
       guards.set(cohortId, planGuard(rows as any[]));
     }

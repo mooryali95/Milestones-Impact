@@ -57,7 +57,9 @@ const preview = (reqs, f) => (v) => {
 export function stageToForm(s) {
   const r = stageRules(s);
   const track = r.lane === 'track';
-  return { ...s, rule_mode: r.mode, rule_unlock: r.unlock, rule_after: r.after, rule_with: track ? '' : r.with ?? '', rule_offset: r.offset || '', rule_day: r.day ?? '', rule_complete: r.complete,
+  // المسار يبدأ مع مرجعه دائمًا (حقله rule_with_track)، فحقل «متى تُفتح» المخفي له يبدأ «بعد السابقة»: إن عاد المدير بها
+  // مرحلة متتابعة وصلت قاعدة صالحة، لا «تبدأ مع» بلا مرجع يرفضها الخادم (مرجع المسار قد يكون من طور آخر فلا يصلح لها)
+  return { ...s, rule_mode: r.mode, rule_unlock: track ? 'previous' : r.unlock, rule_after: r.after, rule_with: track ? '' : r.with ?? '', rule_offset: r.offset || '', rule_day: r.day ?? '', rule_complete: r.complete,
     rule_lane: track ? 'track' : 'stage', rule_with_track: track ? r.with ?? '' : '', rule_until: track ? r.until : TRACK_UNTIL_DEFAULT,
     rule_due_before: track ? (s.rules?.due_before ?? '') : '' };
 }

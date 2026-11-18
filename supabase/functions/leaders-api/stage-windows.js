@@ -317,6 +317,12 @@ export function cohortPlan(stages, cohort = {}) {
   const windows = {};
   for (const x of dated) windows[x.key] = { from: x.from, to: x.to };
   const trackRows = effTracks.length ? trackPlan(effTracks, { sched, byKey, order, first, end, endsOn: c.is_default ? null : endsOn, titleOf, issues, phaseOf: new Map((stages || []).map((x) => [x.key, stagePhase(x)])) }) : [];
+  // بلا تواريخ (المفتوحة أو بلا بداية): مدة المسار إلى نهاية السلسلة أو طور أو مرحلة نسبية، من الخطة نفسها من بداية افتراضية
+  // كما يرسمها الخط (journeyTimeline)، لا مدة البرنامج
+  if (!c.relative_span && trackRows.some((x) => !x.from && x.until !== 'days')) {
+    const rel = cohortPlan(stages, { starts_on: SPAN_EPOCH, schedule: planDaysOnly(c.schedule), relative_span: true });
+    for (const x of trackRows) if (!x.from && x.until !== 'days') x.days = rel.byKey[x.key]?.days ?? null;
+  }
   for (const x of trackRows) { byKey[x.key] = x; if (x.from) windows[x.key] = { from: x.from, to: x.to }; }
   // الصفوف بترتيب المراحل، والموقوفة في مكانها بعلامتها (تُعرض باهتة وتعود بنقرة)
   const at = new Map((stages || []).map((s, i) => [s.key, i]));

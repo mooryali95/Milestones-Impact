@@ -125,3 +125,36 @@ Deno.test('الرفض: الحقول المجهولة كما كانت، وuntil �
     assertEquals(w.tables.audit_log.length, 0);
   } finally { w.restore(); }
 });
+
+// الحارس في الاتجاهين (ب5.1): القياس البعدي لا يصل إلى مسار مستمر بأي ترتيب للخطوات: لا يُضاف إليه ولا يُنقل إليه ولا يُظهر
+// فيه، ومرحلة فيها قياس بعدي ولو مخفي لا تصير مسارًا. والمسموح يمر
+Deno.test('القياس البعدي والمسار: يُرفض من جهة المتطلب كما من جهة المرحلة، والمخفي يمنع المسار', async () => {
+  const { save } = await import('./admin.ts');
+  const w = world();
+  const POST = U(30), HIDDEN = U(31);
+  w.tables.stage_requirements.push(
+    { id: POST, program_id: PA, stage_key: 'support', code: 'E-POST', kind: 'check', title_ar: 'القياس البعدي', required: true, active: true, sort: 2 },
+    { id: HIDDEN, program_id: PA, stage_key: 'report', code: 'E-POST', kind: 'check', title_ar: 'القياس البعدي القديم', required: true, active: false, sort: 2 },
+  );
+  try {
+    const msg = 'لا يوضع القياس البعدي في مسار مستمر: عليه يُبنى التقييم والتقرير';
+    const no = async (b: any) => { const f = await failOf(() => save(admin, b)); assertEquals([f.code, f.message], ['rules', msg]); };
+    // إنشاء E-POST جديد وتغيير رمز متطلب إليه مرفوضان أصلًا بقفل المحتوى (رمز نظامي، والرمز ثابت بعد إنشائه)
+    const locked = async (b: any) => assertEquals((await failOf(() => save(admin, b))).code, 'content_locked');
+    await locked({ entity: 'stage_requirements', row: { program_id: PA, stage_key: 'ojt_coaching', code: 'E-POST', kind: 'check', title_ar: 'القياس البعدي' } });
+    await locked({ entity: 'stage_requirements', row: { id: U(12), code: 'E-POST' } });
+    // نقل القائم إلى المسار
+    await no({ entity: 'stage_requirements', row: { id: POST, stage_key: 'ojt_coaching' } });
+    assertEquals(w.tables.stage_requirements.find((r) => r.id === POST)?.stage_key, 'support');
+    // إظهار مخفي داخل المسار
+    w.tables.stage_requirements.find((r) => r.id === HIDDEN)!.stage_key = 'ojt_coaching';
+    await no({ entity: 'stage_requirements', row: { id: HIDDEN, active: true } });
+    assertEquals(w.tables.stage_requirements.find((r) => r.id === HIDDEN)?.active, false);
+    w.tables.stage_requirements.find((r) => r.id === HIDDEN)!.stage_key = 'report';
+    // مرحلة فيها E-POST مخفي لا تصير مسارًا، فإظهاره لاحقًا لا يعيد الحال الممنوعة
+    w.tables.stage_requirements.find((r) => r.id === POST)!.active = false;
+    const f = await failOf(() => save(admin, { entity: 'journey_stages', row: { program_id: PA, key: 'support', rules: SEED } }));
+    assertEquals(f.code, 'rules');
+    assert(/القياس البعدي/.test(f.message), f.message);
+  } finally { w.restore(); }
+});

@@ -173,6 +173,15 @@ export function untilOf(v) {
 // أخطاء القواعد التي تمنع الحفظ والنشر والترتيب (withGuard وversionBlock): «تبدأ مع»، وطبيعة المسار، وما يشترطه المسار
 export const BLOCKING_RULES = Object.freeze(['with', 'lane', 'due_before']);
 export const isTrack = (s) => stageRules(s).lane === 'track';
+// القياس البعدي (E-POST) لا يوضع في مسار مستمر (ب5.1 الحراس): عليه يُبنى التقييم والتقرير، فلا يسير بجانب الرحلة.
+// يقرؤه حفظ قاعدة المرحلة وحفظ المتطلب وحفظ النسخة، فلا يصل إليه أي ترتيب للخطوات
+export const POST_IN_TRACK_AR = 'لا يوضع القياس البعدي في مسار مستمر: عليه يُبنى التقييم والتقرير';
+/** أول مسار مستمر فيه متطلب E-POST فعّال، أو null @param {any[]} stages @param {any[]} requirements */
+export function postInTrack(stages, requirements) {
+  const tracks = new Set((stages || []).filter((s) => s && s.active !== false && isTrack(s)).map((s) => s.key));
+  const r = (requirements || []).find((x) => x && x.code === 'E-POST' && x.active !== false && tracks.has(x.stage_key));
+  return r ? r.stage_key : null;
+}
 
 // القواعد كما تُقرأ: كل مفتاح بقيمته الافتراضية إن غاب
 export function stageRules(stage) {

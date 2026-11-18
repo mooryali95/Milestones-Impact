@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { cohortPlan, planSpanDays, todayStages, trackWindows, withGroups } from '../../supabase/functions/leaders-api/stage-windows.js';
+import { cohortPlan, planDaysOnly, planSpanDays, todayStages, trackWindows, withGroups } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { cleanStageRules, resolveStages, stageRuleSummary, stageRules, stageRulesIssues, untilOptions, withCandidates } from '../../supabase/functions/leaders-api/journey.js';
 import { cleanScheduleReport, distributeSchedule, lateNoticeAllowed, milestoneStatuses } from '../../supabase/functions/leaders-api/milestones.js';
 import { impactLines, impactSummary, planEdit, planImpact, planNotice, planWithCandidates, planWithIssues } from '../../supabase/functions/leaders-api/cohort-plan.js';
@@ -14,6 +14,9 @@ import { cohortDefinition, journeyProgress } from '../../supabase/functions/lead
 import { cohortTimeline, historyRows, journeyHeader, journeyKpis, journeyLanes, planBody, planDraft } from '../../admin-app/src/cohort-journey.js';
 import { formToStage, stageFields, stageToForm } from '../../admin-app/src/methodology.js';
 import { pathOf } from './screens/Paywall.jsx';
+import { heroNow, phaseRail } from './screens/Journey.jsx';
+import { MAIL_GUARD_ACTIONS, PLAN_ACTIONS, planCutoffFor, planGuard } from '../../supabase/functions/leaders-api/cohort-plan.js';
+import { POST_IN_TRACK_AR, postInTrack } from '../../supabase/functions/leaders-api/journey.js';
 import JourneyTimeline from '../../shared/ui/JourneyTimeline.jsx';
 import { COHORTS, MILESTONES, REQS, STAGES } from './journey-legacy.cases.js';
 
@@ -55,6 +58,23 @@ describe('النافذة: من التدريب +1 حتى نهاية الدفعة�
     const open = cohortPlan(TRACK, { starts_on: '2000-01-02', schedule: {} });
     expect(open.byKey.ojt_coaching.to).toBe(open.end);
     expect(cohortPlan(TRACK, COHORTS.open).byKey.ojt_coaching.from).toBe(null);
+  });
+  it('بلا تواريخ: المدة نسبية إلى نهاية السلسلة كما يرسمها الخط، لا مدة البرنامج (28)', () => {
+    for (const c of [COHORTS.undated, COHORTS.open]) {
+      const rel = cohortPlan(TRACK, { starts_on: '2000-01-02', schedule: planDaysOnly(c.schedule) }).byKey.ojt_coaching;
+      const x = cohortPlan(TRACK, c).byKey.ojt_coaching;
+      expect([x.from, x.to]).toEqual([null, null]);
+      expect(x.days).toBe(rel.days);
+      expect(x.days).not.toBe(28);
+      expect(trackWindows(TRACK, c).ojt_coaching.days).toBe(x.days);
+    }
+    // والخط يرسم الدفعة بلا تاريخ بالخطة نفسها من بدايته الافتراضية، فالمدة واحدة
+    const tl = journeyTimeline({ stages: TRACK, requirements: REQS, cohort: COHORTS.undated });
+    expect(tl.tracks[0].label).toBe('6 أشهر');
+    expect(cohortPlan(TRACK, COHORTS.undated).byKey.ojt_coaching.days).toBe(166);
+    // بنهاية بمدته لا يتغير شيء: مدته هي
+    const days = STAGES.map((s) => (s.key === 'ojt_coaching' ? { ...s, rules: { ...SEED, until: 'days' } } : s));
+    expect(cohortPlan(days, COHORTS.undated).byKey.ojt_coaching.days).toBe(28);
   });
   it('تنبيه واحد chain_end_mismatch إن انتهت السلسلة قبل نهاية الدفعة، وover_end كما هو بعدها', () => {
     const early = cohortPlan(TRACK, { ...C, ends_on: '2027-06-30' });
@@ -117,6 +137,25 @@ describe('«X من Y» والتقدم والموضع لا تعد المسار', 
     const seq = j.filter((s) => s.key !== 'ojt_coaching');
     expect(journeyProgress(j)).toBe(journeyProgress(seq));
   });
+  it('شريط الأطوار: التأهيل منجز والمسار فيه جارٍ، والأثر وحده جارٍ', () => {
+    // التأهيل بلا مراحل «عند الطلب» (تُعرض متاحة فتضيء طورها كما كانت)، فيُرى أثر المسار وحده
+    const plain = TRACK.filter((s) => !['consulting', 'leadership_coaching'].includes(s.key));
+    const k = journeyOf(plain, new Set(['p-info', 'a-done', 't-att', 't-hb']), { approval: 'complete' });
+    expect(Object.fromEntries(k.map((s) => [s.key, s.status]))).toMatchObject({ training: 'done', ojt_coaching: 'active', support: 'active' });
+    const rail = Object.fromEntries(phaseRail(k).map((x) => [x.key, x.state]));
+    expect(rail.qualification).toBe('done');
+    expect(Object.values(rail).filter((x) => x === 'on')).toHaveLength(1);
+    expect(rail.impact).toBe('on');
+  });
+  it('الرأس: إن لم يبق إلا المسار نشطًا والتقرير ينتظره، فهو ما يُشار إليه', () => {
+    const k = journeyOf(TRACK, ALL_BUT_OJT);
+    expect(Object.fromEntries(k.map((s) => [s.key, s.status]))).toMatchObject({ ojt_coaching: 'active', report: 'locked' });
+    const h = heroNow(k);
+    expect([h.now.length, h.tracksNow.map((s) => s.key), h.current?.key]).toEqual([0, ['ojt_coaching'], 'ojt_coaching']);
+    // وفي منتصف الرحلة المرحلة الحالية متتابعة كما كانت
+    expect(heroNow(j).current.key).toBe('support');
+    expect(heroNow(j).tracksNow).toEqual([]);
+  });
   it('مسار الدفع: عدد المراحل وأسماؤها بلا المسار، والمدة بلا امتداده', () => {
     const p = pathOf(j);
     expect(p.stages).toBe(9);
@@ -139,6 +178,16 @@ describe('المعالم: نهاية المسار موعد معلمه، وحار
     const sup = ms.find((x) => x.id === 'm-sup');
     const old = milestoneStatuses(MILESTONES, { cohort: { ...C, schedule: { ojt_coaching: { off: true } } }, stages: STAGES, today: '2026-12-15' }).find((x) => x.id === 'm-sup');
     expect(sup.due).toBe(old.due);
+  });
+  it('حارس البريد يقرأ ترقية الدفعة كحفظ خطة حرّك كل معالمها يومها، وتراجع الخطة لا يقرؤها', () => {
+    expect(MAIL_GUARD_ACTIONS).toEqual([...PLAN_ACTIONS, 'cohort.upgrade']);
+    expect(PLAN_ACTIONS).not.toContain('cohort.upgrade');
+    const g = planGuard([{ created_at: '2026-12-10T09:00:00Z', after: { from: 1, to: 2, affected: 0, dropped: [] } }]);
+    expect(g.all).toBe('2026-12-10');
+    const cut = planCutoffFor('2026-11-17', g, 'm-sup');
+    // موعد صار في الماضي بالترقية لا يُرسل عنه، وما يتأخر بعدها يُرسل كالمعتاد
+    expect(lateNoticeAllowed({ status: 'late', late_days: 9, due_source: 'window', due: '2026-12-01' }, 3, cut)).toBe(false);
+    expect(lateNoticeAllowed({ status: 'late', late_days: 9, due_source: 'window', due: '2026-12-20' }, 3, cut)).toBe(true);
   });
   it('حارس البريد: معلم نافذة صار متأخرًا قبل يوم R0 لا يُرسل عنه', () => {
     expect(lateNoticeAllowed({ status: 'late', late_days: 9, due_source: 'window', due: '2026-11-01' })).toBe(false);
@@ -168,6 +217,14 @@ describe('القواعد في البرنامج: الحفظ والفحص والج
     expect(bad({ lane: 'x' })).toContain('طبيعة المرحلة');
     expect(bad({ unlock: 'with', with: 'ojt_coaching' }, 'consulting')).toContain('مسار مستمر');
   });
+  it('القياس البعدي لا يكون في مسار مستمر: postInTrack لحفظ النسخة', () => {
+    const post = { id: 'x', code: 'E-POST', stage_key: 'evaluation', active: true };
+    expect(postInTrack(TRACK, [...REQS, post])).toBe(null);
+    expect(postInTrack(TRACK, [...REQS, { ...post, stage_key: 'ojt_coaching' }])).toBe('ojt_coaching');
+    expect(postInTrack(TRACK, [...REQS, { ...post, stage_key: 'ojt_coaching', active: false }])).toBe(null);
+    expect(postInTrack(STAGES, [...REQS, { ...post, stage_key: 'ojt_coaching' }])).toBe(null);
+    expect(POST_IN_TRACK_AR).toContain('القياس البعدي');
+  });
   it('الفحص: لا خطأ في البذرة، والحلقة عبر due_before خطأ يمنع النشر', () => {
     expect(stageRulesIssues(TRACK).filter((x) => x.level === 'error')).toEqual([]);
     const loop = TRACK.map((s) => (s.key === 'ojt_coaching' ? { ...s, rules: { ...SEED, due_before: 'training' } } : s));
@@ -187,6 +244,13 @@ describe('القواعد في البرنامج: الحفظ والفحص والج
     expect(formToStage({ ...f, rule_until: 'stage:support' }).rules).toEqual({ ...SEED, mode: 'required', complete: 'required', until: 'stage:support' });
     const back = formToStage({ ...f, rule_lane: 'stage', rule_unlock: 'previous' }).rules;
     expect(back).toEqual({ mode: 'required', unlock: 'previous', complete: 'required' });
+    // العودة إلى «مرحلة متتابعة» بتغيير الطبيعة وحده: قاعدة صالحة يقبلها الخادم، لا «تبدأ مع» بلا مرجع
+    const only = formToStage({ ...f, rule_lane: 'stage' }).rules;
+    expect(only).toEqual({ mode: 'required', unlock: 'previous', complete: 'required' });
+    expect(() => cleanStageRules(only, TRACK, 'ojt_coaching')).not.toThrow();
+    // والمرحلة المتتابعة «تبدأ مع» تبقى كما هي
+    const w = stageToForm({ ...TRACK[4], rules: { unlock: 'with', with: 'training', offset: 1 } });
+    expect([w.rule_lane, w.rule_unlock, w.rule_with]).toEqual(['stage', 'with', 'training']);
     const names = stageFields([], TRACK, 'ojt_coaching').map((x) => x.name);
     expect(names).toEqual(expect.arrayContaining(['rule_lane', 'rule_with_track', 'rule_until', 'rule_due_before']));
     expect(stageFields([], TRACK, 'profile').find((x) => x.name === 'rule_lane').show({})).toBe(false);

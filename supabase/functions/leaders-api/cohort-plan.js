@@ -623,6 +623,10 @@ export const impactSummary = (impact) => (impact ? {
 
 // أفعال حفظ خطة الدفعة في السجل: حارس بريد «معلم متأخر» يقرؤها (lateMilestoneNotices)
 export const PLAN_ACTIONS = Object.freeze(['cohort.plan', 'cohort.plan-undo']);
+// وما يقرؤه حارس البريد وحده: ترقية الدفعة إلى نسخة (cohort.upgrade) تحرك مواعيد المراحل كما يحركها حفظ الخطة (مسار مستمر
+// يخرج من السلسلة فيتقدم ما بعده)، وسطرها بلا moved_ids فيُعامل كأنه حرّك كل معالم الدفعة يومها. لا يدخل PLAN_ACTIONS لأن
+// تراجع الخطة يقرأ آخر سطر منها، والترقية لا يتراجع عنها التراجع
+export const MAIL_GUARD_ACTIONS = Object.freeze([...PLAN_ACTIONS, 'cohort.upgrade']);
 // الحارس لدفعة: الأحدث بين يوم البيئة (cutoffFrom) ويوم آخر حفظ لخطتها، فما صار متأخرًا بتعديل الخطة لا يُرسل عنه
 export const planCutoff = (cutoff, planDay) => (planDay && (!cutoff || planDay > cutoff) ? planDay : cutoff);
 /** حارس الخطة لدفعة من صفوف سجلها (cohort.plan وcohort.plan-undo، بعمود after): لكل معلم يوم آخر حفظ حرّك موعده

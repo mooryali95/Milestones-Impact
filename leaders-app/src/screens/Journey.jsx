@@ -649,6 +649,22 @@ function Alongside({ stage, journey, children }) {
   );
 }
 
+// رأس الرحلة (T1): المرحلة الحالية من currentStages، وإن لم يبق نشطًا إلا المسار المستمر (المتتابعة أُنجزت والتالية تنتظره)
+// فهو ما يُشار إليه، فلا يبقى الرأس بلا «ماذا الآن». tracksNow للرأس وحده، فالموضع والعد بلاه كما هما
+export function heroNow(journey) {
+  const now = currentStages(journey).stages.filter((s) => s.status === 'active');
+  const tracksNow = now.length ? [] : journey.filter((s) => s.lane === 'track' && s.status === 'active');
+  return { now, tracksNow, current: now[0] || tracksNow[0] || null };
+}
+// شريط الأطوار: الطور منجز إن أُنجزت مراحله المتتابعة، وجارٍ إن فيها نشطة. المسار المستمر لا يُعد فيه كما لا يُعد في
+// «X من Y»، فلا يبقى طوره جاريًا والمشارك في طور بعده، ولا يضيء طوران معًا بسببه
+export function phaseRail(journey) {
+  return PHASES.map((ph) => {
+    const st = journey.filter((s) => s.lane !== 'track' && (s.phase || 'qualification') === ph.key);
+    return { key: ph.key, title: ph.title, state: st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '' };
+  });
+}
+
 // مراحل قادمة مقفلة: على الحاسب تُعرض كما هي، وعلى الشاشات الضيقة سطر واحد يُفتح
 function Later({ n, after, children }) {
   const [narrow] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(NARROW).matches);
@@ -764,10 +780,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // حالة الاستبيان من الطلب المجمّع عند الفتح، تُقرأ مرة في أول رسم (البند 7.5)
   const [susFirst] = useState(() => bootPreload.take('sus'));
   // المرحلة الحالية (R3b): الموضع ومعه ما يسير معه نشطًا، من currentStages التي تعدّه بها الخريطة ويذكّره بها التذكير
-  const now = currentStages(journey).stages.filter((s) => s.status === 'active');
-  const current = now[0] || null;
+  const { now, tracksNow, current } = heroNow(journey);
   const nowKeys = new Set(now.map((s) => s.key));
-  const [expanded, setExpanded] = useState(() => new Set(now.map((s) => s.key)));
+  const [expanded, setExpanded] = useState(() => new Set((now.length ? now : tracksNow).map((s) => s.key)));
   const [toast, setToast] = useState('');
   const [passkey, setPasskey] = useState(me.prompt_passkey);
   const [welcome, setWelcome] = useState(() => !welcomeSeen.get());
@@ -815,17 +830,14 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
           <p className="muted">
             {now.length > 1 ? <>{now.length === 2 ? 'مرحلتاك الحاليتان تسيران معًا' : 'مراحلك الحالية تسير معًا'}: {now.map((s, i) => <React.Fragment key={s.key}>{i ? (i === now.length - 1 ? ' و' : '، ') : ''}<b style={{ color: '#fff' }}>{s.title_ar}</b></React.Fragment>)} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
+              : tracksNow.length ? <>بقي لك المسار المستمر: <b style={{ color: '#fff' }}>«{current.title_ar}»</b>{(() => { const due = journey.find((x) => x.key === current.track?.due_before); return due ? `، وبنوده مطلوبة قبل «${due.title_ar}»` : ''; })()} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
               : current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
               : doneCount === counted.length && counted.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
                 : !approved ? `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
                   : `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
           </p>
           <div className="phase-rail" aria-label="أطوار الرحلة">
-            {PHASES.map((ph) => {
-              const st = journey.filter((s) => (s.phase || 'qualification') === ph.key);
-              const state = st.length && st.every((s) => s.status === 'done') ? 'done' : st.some((s) => s.status === 'active') ? 'on' : '';
-              return <div key={ph.key} className={state}><i />{ph.title}</div>;
-            })}
+            {phaseRail(journey).map((ph) => <div key={ph.key} className={ph.state}><i />{ph.title}</div>)}
           </div>
         </div>
         <Ring value={me.progress} />

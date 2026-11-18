@@ -72,6 +72,32 @@ for (const [name, viewport] of [['الهاتف', { width: 390, height: 844 }], [
   });
 }
 
+test('بعد إنجاز المتتابعة كلها والتقرير ينتظر المسار: الرأس يسمي المسار وما ينتظره، وشريط الأطوار يضيء الأثر وحده', async ({ page }) => {
+  const items = { ...ITEMS, support: [it('s1', 'تقرير الأثر', 'done')], evaluation: [it('e1', 'القياس البعدي', 'done')] };
+  const end = resolveStages(STAGES.map((s) => ({ ...s, items: items[s.key], done: items[s.key].filter((x) => x.status === 'done').length, total: items[s.key].length })),
+    { cohortStart: COHORT.starts_on, today: '2027-03-20' }).map((s) => (tw[s.key] ? { ...s, track: tw[s.key] } : s));
+  expect(Object.fromEntries(end.map((s) => [s.key, s.status]))).toMatchObject({ evaluation: 'done', ojt_coaching: 'active', report: 'locked' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, end);
+  const hero = page.locator('.hero');
+  await expect(hero).toContainText('بقي لك المسار المستمر: «التوجيه على رأس العمل»، وبنوده مطلوبة قبل «التقرير النهائي»');
+  await expect(hero).toContainText('أنجزت 5 من 6 مراحل');
+  // التأهيل منجز (المسار لا يُعد فيه)، والأثر جارٍ لأن التقرير لم يُنجز بعد ولا شيء فيه نشط، فلا طور يضيء خطأ
+  await expect(page.locator('.phase-rail > div.on')).toHaveCount(0);
+  await expect(page.locator('.phase-rail > div.done')).toHaveCount(2);
+  await expect(page.getByTestId('track').locator('#stage-ojt_coaching')).toBeVisible();
+  if (SHOTS) {
+    await page.screenshot({ path: `${SHOTS}/participant-journey-track-end-390.png` });
+  }
+});
+
+test('منتصف الرحلة: التأهيل منجز والمسار فيه جارٍ، والأثر وحده يضيء', async ({ page }) => {
+  await open(page);
+  await expect(page.locator('.phase-rail > div.on')).toHaveCount(1);
+  await expect(page.locator('.phase-rail > div.on')).toContainText('الأثر');
+  await expect(page.locator('.phase-rail > div.done')).toHaveCount(2);
+});
+
 test('برنامج بلا مسار لا يتغير: لا كتلة مسار، والتوجيه مرحلة تُعد كما كانت', async ({ page }) => {
   const plain = JOURNEY.map(({ lane: _l, track: _t, ...s }) => (s.key === 'ojt_coaching' ? { ...s, rules: {} } : s));
   await open(page, plain);

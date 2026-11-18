@@ -6,7 +6,7 @@
 // 20261116110000 ثبّت القائم)، فتعديل البرنامج يمس مسودته وحدها حتى تُحفظ نسخة وتُرقّى إليها كل دفعة بنفسها.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, upgradePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, upgradePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { planUpgradeBlock } from './cohort-plan.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
@@ -52,7 +52,8 @@ function versionBlock(live: { stages: any[]; requirements: any[] }): { code: str
   if (!live.requirements.some((r: any) => r.active !== false)) return { code: 'program_empty', msg: 'البرنامج بلا متطلبات بعد، فلا تُحفظ له نسخة. ابنِ رحلته أولًا.' };
   // «تبدأ مع»، وطبيعة المسار المستمر وما يشترطه وحلقته (T1): كلها تقفل من يمر بها إلى الأبد
   const bad = stageRulesIssues(live.stages).find((x: any) => x.level === 'error' && BLOCKING_RULES.includes(x.rule));
-  return bad ? { code: 'rules', msg: `لا تُحفظ النسخة: ${bad.msg}` } : null;
+  if (bad) return { code: 'rules', msg: `لا تُحفظ النسخة: ${bad.msg}` };
+  return postInTrack(live.stages, live.requirements) ? { code: 'rules', msg: `لا تُحفظ النسخة: ${POST_IN_TRACK_AR}` } : null;
 }
 
 // ── للمشارك ──
