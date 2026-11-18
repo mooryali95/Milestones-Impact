@@ -331,6 +331,47 @@ Deno.test('إشعار الحجز: يُسجَّل لمن تفتح له مرحلت
   } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
 });
 
+// حد الجلسات (T2، ب5.2): زر الحجز يختفي عند بلوغه، والحجز الزائد من منصة الحجز (يصل بعد وقوعه) يُسجَّل ويُنبَّه عليه ولا يُرفض
+Deno.test('حد الجلسات: الحجز يُخفى عند الحد، والزائد من webhook يُسجَّل بتنبيه بلا بيانات شخصية، وبلا حد كما كان', async () => {
+  const w = await world();
+  const saved = CONFIG.calcomSecret;
+  Object.assign(CONFIG, { calcomSecret: 'cal-secret' });
+  const sign = async (raw: string) => {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('cal-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    return Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw))), (b) => b.toString(16).padStart(2, '0')).join('');
+  };
+  const p = w.ps.approved;
+  const book = async (uid: string, day: number) => {
+    const raw = JSON.stringify({ triggerEvent: 'BOOKING_CREATED', payload: { uid, metadata: { ref: `${p.id}.${REQ_C}` }, startTime: new Date(NOW + day * 864e5).toISOString(),
+      endTime: new Date(NOW + day * 864e5 + 18e5).toISOString(), videoCallData: { url: `https://meet.example.sa/${uid}` }, organizer: { email: 'coach@example.sa' }, attendees: [{ email: p.email }] } });
+    return await V.bookingWebhook('calcom', raw, new Headers({ 'x-cal-signature-256': await sign(raw) })) as Row;
+  };
+  const alerts = () => w.tables.audit_log.filter((x) => x.action === 'system.alert' && String(x.entity_id).startsWith('booking_over_max:'));
+  const req = w.tables.stage_requirements.find((x) => x.id === REQ_C)!;
+  try {
+    // بلا حد: الحجز حتى المطلوب للاكتمال كما كان، ولا تنبيه
+    assertEquals(await book('m0', 1), { success: true });
+    assertEquals(coachItem(await w.call('approved', 'me')).activity.can_book, false);
+    w.tables.coaching_sessions.length = 0;
+    req.config = { ...req.config, sessions_required: 1, max_sessions: 2 };
+    let it = coachItem(await w.call('approved', 'me'));
+    assertEquals([it.activity.can_book, it.activity.max, it.activity.used, it.activity.at_max], [true, 2, 0, false]);
+    assertEquals(await book('m1', 1), { success: true });
+    assertEquals(await book('m2', 2), { success: true });
+    it = coachItem(await w.call('approved', 'me'));
+    assertEquals([it.activity.can_book, it.activity.book_url, it.activity.instant, it.activity.used, it.activity.at_max], [false, null, false, 2, true]);
+    assertEquals(alerts().length, 0);
+    // الثالث يصل من منصة الحجز بعد وقوعه: يُسجَّل كما هو، ويُعلَّم ويُنبَّه عليه
+    assertEquals(await book('m3', 3), { success: true, over_max: true });
+    assertEquals(w.tables.coaching_sessions.filter((x) => x.status === 'booked').map((x) => x.external_id), ['calcom:m1', 'calcom:m2', 'calcom:m3']);
+    assertEquals(alerts().map((x) => [x.entity_id, x.after.booking, x.after.count, x.after.max, x.after.requirement, x.after.participant]),
+      [['booking_over_max:calcom:m3', 'calcom:m3', 3, 2, REQ_C, p.id]]);
+    assert(!JSON.stringify(alerts()[0].after).includes('@'));
+    assert(!JSON.stringify(alerts()[0].after).includes(p.full_name));
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'coaching.over_max').map((x) => [x.entity_id, x.after.count, x.after.max]), [['calcom:m3', 3, 2]]);
+  } finally { Object.assign(CONFIG, { calcomSecret: saved }); w.restore(); }
+});
+
 // إعادة جدولة موعد من خرج من البرنامج: كان التجاهل قبل إلغاء القديم فيبقى «محجوزًا» ويصله تذكيره، ولا يعرف أحد أن يلغيه
 Deno.test('إعادة جدولة لمن لم يعد أهلًا: القديم يُلغى، وتنبيه واحد للتشغيل بمعرّف الحجز بلا بيانات شخصية، وإعادتها ثانية لا تنبّه', async () => {
   const w = await world();

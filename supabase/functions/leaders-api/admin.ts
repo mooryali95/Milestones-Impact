@@ -5,7 +5,7 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
-import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, POST_IN_TRACK_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
+import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
@@ -1346,6 +1346,11 @@ export async function save(a: Admin, b: Body) {
       const { data: post } = await db.from('stage_requirements').select('code').eq('program_id', pid).eq('stage_key', String(b.row.key)).eq('code', 'E-POST');
       if ((post || []).length) throw new Fail('مرحلة فيها القياس البعدي لا تصير مسارًا مستمرًا: عليها يُبنى التقييم والتقرير', 400, 'rules');
     }
+    // والخدمة (T2): لمن يريد، فمرحلة فيها القياس البعدي لا تصيرها
+    if (row.rules?.lane === 'service') {
+      const { data: post } = await db.from('stage_requirements').select('code').eq('program_id', pid).eq('stage_key', String(b.row.key)).eq('code', 'E-POST');
+      if ((post || []).length) throw new Fail('مرحلة فيها القياس البعدي لا تصير خدمة: الخدمة لمن يريد، وعليه يُبنى التقييم والتقرير', 400, 'rules');
+    }
     const after = list.map((s: any) => (s.key === b.row.key ? { ...s, ...row } : s));
     const bad = stageRulesIssues(after).find((x: any) => x.level === 'error' && (x.stage === b.row.key || /حلقة/.test(x.msg)));
     if (bad) throw new Fail(bad.msg, 400, 'rules');
@@ -1398,6 +1403,7 @@ export async function save(a: Admin, b: Body) {
       const pid = merged.program_id || b.row?.program_id || await defaultProgramId();
       const { data: st } = await db.from('journey_stages').select('key, rules').eq('program_id', String(pid)).eq('key', String(merged.stage_key)).maybeSingle();
       if (st && isTrack(st)) throw new Fail(POST_IN_TRACK_AR, 400, 'rules');
+      if (st && isService(st)) throw new Fail(POST_IN_SERVICE_AR, 400, 'rules');
     }
   }
 

@@ -1920,3 +1920,8 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .gd-msg.assistant { align-self: flex-end; background: var(--surface); border: 1px solid var(--line); }
 .gd-msg .chip { margin-bottom: 6px; }
 .gd-msg .link { display: block; margin-top: 6px; }
+
+/* خدمات متاحة لك (T2): رف منفصل عن تسلسل المراحل، بإطار منقط */
+.svc-shelf { border: 2px dotted rgba(148, 112, 46, .45); }
+.svc-shelf .svc-item + .svc-item { border-top: 1px dashed rgba(148, 112, 46, .3); padding-top: 10px; }
+.svc-shelf .svc-line { margin: 0 0 6px; }

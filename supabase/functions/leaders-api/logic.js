@@ -456,7 +456,8 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
 // الاختيارية لا تُنقص التقدم إن لم يحتجها المشارك، وتُحسب له إن أتمّها.
 // والمسار المستمر (T1) يسير بجانب الرحلة فلا يُحسب في نسبتها، وتُشترط بنوده قبل مرحلته المسماة (due_before)
 export function journeyProgress(journey) {
-  const counted = journey.filter((s) => s.lane !== 'track' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
+  // والخدمة (T2) لمن يريد: لا تُحسب في النسبة ولو استفاد منها
+  const counted = journey.filter((s) => s.lane !== 'track' && s.lane !== 'service' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
   if (!counted.length) return 0;
   let score = 0;
   for (const s of counted) {
@@ -1257,7 +1258,12 @@ export function coachingStatus(config, sessions, now = Date.now()) {
   const need = Math.max(1, Number(config?.sessions_required) || 1);
   const count = list.filter((s) => s.status === 'attended').length;
   const open = list.filter((s) => s.status === 'booked' || s.status === 'requested').length;
-  return { type: 'coaching', done: count >= need, count, total: need, can_book: count + open < need, sessions: list };
+  // حد الحجز (T2، ب5.2): max_sessions إن ضُبط، وإلا المطلوب للاكتمال كما كان. sessions_required يبقى «المطلوب للاكتمال»
+  const max = sessionsMax(config);
+  const out = { type: 'coaching', done: count >= need, count, total: need, can_book: count + open < (max ?? need), sessions: list };
+  // عند الحد: يُخفى زر الحجز ويُقال لماذا. ومعه used للخدمة («استفدت من N من M»)
+  if (max != null) return { ...out, max, used: count + open, at_max: count + open >= max };
+  return out;
 }
 
 // الاتصال الفوري عن بعد فقط
@@ -1383,6 +1389,22 @@ export function modelStatus(c, models) {
 const httpsUrl = (u) => { try { const x = new URL(String(u || '').trim()); return x.protocol === 'https:' ? x.toString() : null; } catch { return null; } };
 // القيم الافتراضية لإعداد الجلسات: يعرضها كل من يقرأ إعدادًا ناقصًا
 export const SESSION_DEFAULTS = { sessions_required: 1, minutes: 60 };
+// حد جلسات الحجز للمشارك (T2): عدد صحيح من 1 إلى 30، وإلا لا حد (null)
+export const SESSIONS_MAX_LIMIT = 30;
+/** @param {any} config @returns {number|null} */
+export function sessionsMax(config) {
+  const v = config?.max_sessions;
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= SESSIONS_MAX_LIMIT ? n : null;
+}
+/** هل تجاوز عدد الجلسات غير الملغاة حد الحجز (حجز وصل بـwebhook بعد وقوعه): يُنبَّه عليه ولا يُرفض
+ * @param {any} config @param {any[]} sessions جلسات المشارك في هذا البند @returns {{ over: boolean, count: number, max: number|null }} */
+export function bookingOverMax(config, sessions) {
+  const max = sessionsMax(config);
+  const count = (sessions || []).filter((s) => s.status !== 'cancelled' && s.status !== 'no_show').length;
+  return { over: max != null && count > max, count, max };
+}
 const intIn = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
 export function cleanConfig(kind, cfg, prev = {}) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
@@ -1436,6 +1458,13 @@ export function cleanConfig(kind, cfg, prev = {}) {
       sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), minutes: intIn(c.minutes, 5, 480, SESSION_DEFAULTS.minutes),
       mode: ['online', 'in_person', 'any'].includes(c.mode) ? c.mode : 'online',
     };
+    // حد الحجز للمشارك (T2): فارغ = بلا حد. لا يقل عن المطلوب للاكتمال، وإلا لم يكتمل البند أبدًا
+    if (c.max_sessions != null && String(c.max_sessions).trim() !== '') {
+      const m = Number(latinDigits(String(c.max_sessions).trim()));
+      if (!Number.isInteger(m) || m < 1 || m > SESSIONS_MAX_LIMIT) throw new Error(`حد الجلسات للمشارك عدد صحيح من 1 إلى ${SESSIONS_MAX_LIMIT}، أو اتركه فارغًا`);
+      if (m < out.sessions_required) throw new Error(`حد الجلسات (${m}) أقل من المطلوب للاكتمال (${out.sessions_required})`);
+      out.max_sessions = m;
+    }
     if (out.mode !== 'online' && String(c.location_ar || '').trim()) out.location_ar = String(c.location_ar).trim().slice(0, 300);
     if (String(c.booking_url || '').trim()) {
       out.booking_url = httpsUrl(c.booking_url);

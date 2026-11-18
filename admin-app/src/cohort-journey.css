@@ -293,3 +293,8 @@
 .cj-tracks .cj-card { border-inline-start: 4px double var(--gold); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--gold) 6%, #fff) 0 12px, #fff 12px 24px); }
 .cj-tag.cj-lane { border-style: double; border-width: 3px; border-color: color-mix(in srgb, var(--gold) 70%, transparent); color: var(--gold-text); font-weight: 700; }
 .cj-until select { max-width: 100%; }
+
+/* الخدمة (T2): بطاقة بإطار منقط لمن يريد، ومؤشر الاستخدام بدل الحالة */
+.cj-services .cj-card { border-inline-start: 4px dotted var(--gold); }
+.cj-tag.cj-svc { border-style: dotted; border-width: 2px; border-color: color-mix(in srgb, var(--gold) 70%, transparent); color: var(--gold-text); font-weight: 700; }
+.cj-usage { font-weight: 700; }

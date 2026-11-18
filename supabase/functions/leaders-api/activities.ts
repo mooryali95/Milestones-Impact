@@ -16,7 +16,7 @@ import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, qrWindow, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
-  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery,
+  bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery, bookingOverMax, sessionsMax,
   parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS,
 } from './logic.js';
 
@@ -470,7 +470,7 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
   const { data: known } = await db.from('coaching_sessions').select('participant_id, requirement_id').eq('external_id', e.previous_id || e.external_id).maybeSingle();
   const target = ref || known;
   if (!target) return { success: true, ignored: 'no_ref' };
-  const { data: r } = await db.from('stage_requirements').select('id, kind').eq('id', target.requirement_id).maybeSingle();
+  const { data: r } = await db.from('stage_requirements').select('id, kind, config').eq('id', target.requirement_id).maybeSingle();
   const { data: p } = await db.from('participants').select('*').eq('id', target.participant_id).maybeSingle();
   if (!r || r.kind !== 'coaching' || !p) return { success: true, ignored: 'unknown_ref' };
   // إعادة الجدولة تلغي الموعد القديم أولًا أيًّا كانت أهلية الجديد: كان التجاهل قبلها يبقي القديم «محجوزًا» بموعده ورابطه،
@@ -489,7 +489,26 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
     starts_at: e.starts_at, ends_at: e.ends_at, join_url: e.join_url, coach: e.coach, expert_id: await expertFor(null, e.coach, p.id), status: 'booked', updated_at: now,
   }, { onConflict: 'external_id' }));
   await audit('system', provider, 'coaching.booked', 'participants', p.id, null, { starts_at: e.starts_at });
+  // حد الحجز (T2، ب5.2): الحجز عبر Cal.com أو Calendly يصل بعد وقوعه، فما زاد على max_sessions يُسجَّل ويُنبَّه عليه ولا يُرفض
+  const over = await overMaxCheck(r, p.id);
+  if (over) {
+    await audit('system', provider, 'coaching.over_max', 'coaching_sessions', String(e.external_id), null, { requirement: r.id, participant: p.id, count: over.count, max: over.max })
+      .catch((x) => console.error('over max audit:', x));
+    await alertOps(`booking_over_max:${e.external_id}`, {
+      provider, booking: e.external_id, starts_at: e.starts_at || null, requirement: r.id, participant: p.id, count: over.count, max: over.max,
+      action: 'حجز زاد على حد الجلسات للمشارك: سُجّل كما هو، فقرر إبقاءه أو إلغاءه من منصة الحجز',
+    });
+    return { success: true, over_max: true };
+  }
   return { success: true };
+}
+
+// عدد جلسات المشارك غير الملغاة في البند بعد الحجز، والحد. null إن لم يُضبط حد أو لم يُتجاوز
+async function overMaxCheck(r: any, participantId: string) {
+  if (sessionsMax(r?.config) == null) return null;
+  const { data } = await db.from('coaching_sessions').select('status').eq('participant_id', participantId).eq('requirement_id', r.id);
+  const x = bookingOverMax(r.config, data || []);
+  return x.over ? x : null;
 }
 
 // ════════════════════════════════════════════════════════════════

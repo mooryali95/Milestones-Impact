@@ -69,7 +69,10 @@ function StagePanel({ stage, total, onClose, late }) {
 // embedded: داخل صفحة لها عنوانها (ملف الدفعة)، فلا يكرر الرأس اسم الدفعة ولا «خريطة الرحلة» عنوانًا ثانيًا
 export default function JourneyMap({ map, embedded = false }) {
   const [open, setOpen] = useState(null);
-  const stages = map?.stages || [];
+  // الخدمة (T2، ب5.2) لمن يريد: ليست محطة على المسار، فتُعرض تحته بمؤشر استخدامها («استفاد 7 من 20») لا بحالة
+  const all = map?.stages || [];
+  const services = all.filter((s) => s.service);
+  const stages = services.length ? all.filter((s) => !s.service) : all;
   const total = map?.totals?.total || 0;
   const byPhase = useMemo(() => PHASES.map((ph) => ({ ...ph, stages: stages.filter((s) => (s.phase || 'qualification') === ph.key) })).filter((ph) => ph.stages.length), [stages]);
   if (!stages.length) return null;
@@ -165,6 +168,26 @@ export default function JourneyMap({ map, embedded = false }) {
       </p>
 
       {openStage && <StagePanel stage={openStage} total={total} late={late} onClose={() => setOpen(null)} />}
+
+      {services.length > 0 && (
+        <div className="jm-svc" aria-labelledby="jm-svc-h" data-testid="jm-services">
+          <h3 id="jm-svc-h">الخدمات</h3>
+          <p className="small muted">لمن يريد حتى نهاية الرحلة، فلا تُعد في المراحل ولا في التقدم.</p>
+          <ul>
+            {services.map((s) => (
+              <li key={s.key} className={`jm-svc-row${s.off ? ' off' : ''}`}>
+                <b>{s.title}</b>
+                {s.off ? <small>موقوفة لهذه الدفعة</small> : (
+                  <>
+                    <span className="jm-m-bar" aria-hidden="true"><i style={{ width: `${s.of ? (s.used / s.of) * 100 : 0}%` }} /></span>
+                    <small className="jm-usage">{s.usage_ar}</small>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {map.milestones?.length > 0 && (
         <div className="jm-ms" aria-labelledby="jm-ms-h">

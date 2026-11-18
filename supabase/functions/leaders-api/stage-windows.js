@@ -93,6 +93,8 @@ export function planWithOf(entry) {
 const laneOfStage = (s) => stageRules(s).lane || 'stage';
 /** هل المرحلة مسار مستمر (T1) @param {any} s */
 export const planTrack = (s) => laneOfStage(s) === 'track';
+/** هل المرحلة خدمة (T2، ب5.2): لا نافذة لها في الخطة ولا أيام ولا موضع في السلسلة @param {any} s */
+export const planService = (s) => laneOfStage(s) === 'service';
 const sortOf = (a, b) => (a.sort ?? 0) - (b.sort ?? 0);
 /** المراحل بقواعد التوازي الفعلية في الدفعة: with وoffset من خطتها فوق قاعدة النسخة. يقرؤها cohortPlan (المجموعات والإزاحة)
  * والخط الزمني (الممرات) وتعريف الدفعة (cohortDefinition: «تسير مع» تُفتح مع بداية مرجعها، والإزاحة لا تقفل، القرار 6).
@@ -110,6 +112,8 @@ export function planWithRules(stages, schedule) {
     // المسار المستمر (T1): مرجعه مرحلة متتابعة سابقة من أي طور، وإزاحته بلا سقف، ونهايته من خطة الدفعة فوق قاعدة النسخة.
     // و«لا شيء» لا يُقبل له (يبدأ مع مرجع دائمًا)، فتبقى قاعدة النسخة
     if (planTrack(s)) return trackRules(s, p, byKey, idx);
+    // الخدمة (T2) لا تسير مع شيء في دفعة: إتاحتها من البرنامج
+    if (planService(s)) return s;
     if (p.with === undefined && p.offset === undefined) return s;
     const r = stageRules(s);
     if (!PLAN_WITH_UNLOCKS.includes(r.unlock)) return s;
@@ -119,7 +123,7 @@ export function planWithRules(stages, schedule) {
     const target = p.with !== undefined ? p.with : r.unlock === 'with' ? r.with : null;
     if (!target) return s;
     const ref = byKey.get(target);
-    if (!ref || target === s.key || !(idx.get(target) < idx.get(s.key)) || stagePhase(ref) !== stagePhase(s) || planTrack(ref)) return s;
+    if (!ref || target === s.key || !(idx.get(target) < idx.get(s.key)) || stagePhase(ref) !== stagePhase(s) || planTrack(ref) || planService(ref)) return s;
     // إزاحة الدفعة، وإلا إزاحة النسخة إن بقي مرجعها نفسه، وإلا من بدايته
     const off = p.offset !== undefined ? p.offset : target === r.with ? r.offset : 0;
     return { ...s, rules: { ...rest, unlock: 'with', with: target, ...(off ? { offset: off } : {}) } };
@@ -134,7 +138,7 @@ function trackRules(s, p, byKey, idx) {
   let off = r.offset;
   if (typeof p.with === 'string') {
     const ref = byKey.get(p.with);
-    if (ref && p.with !== s.key && idx.get(p.with) < idx.get(s.key) && !planTrack(ref)) { target = p.with; off = p.with === r.with ? r.offset : 0; }
+    if (ref && p.with !== s.key && idx.get(p.with) < idx.get(s.key) && !planTrack(ref) && !planService(ref)) { target = p.with; off = p.with === r.with ? r.offset : 0; }
   }
   if (p.offset !== undefined && target) off = p.offset;
   const { unlock: _u, with: _w, offset: _o, until: _t, ...rest } = raw;
@@ -183,7 +187,8 @@ export function withGroups(stages) {
   const groups = [], groupOf = new Map();
   for (const s of stages) {
     // المسار المستمر (T1) يسير بجانب السلسلة لا في مجموعة منها، فلا يصنع مجموعة ولا ينضم إليها
-    if (planTrack(s)) continue;
+    // والخدمة (T2) خارج السلسلة كلها
+    if (planTrack(s) || planService(s)) continue;
     const r = stageRules(s);
     const g = r.unlock === 'with' && r.with ? groupOf.get(r.with) : null;
     if (g) g.push(s); else groups.push([s]);
@@ -220,7 +225,9 @@ export function cohortPlan(stages, cohort = {}) {
   const effAll = planWithRules(onStages, sched);
   // المسار المستمر (T1): تُحسب السلسلة أولًا وحدها، ثم صفوفه، فلا يدخل في المجموعات ولا المؤشر ولا النهاية ولا المدة
   const effTracks = effAll.filter(planTrack);
-  const effStages = effTracks.length ? effAll.filter((x) => !planTrack(x)) : effAll;
+  // والخدمة (T2، ب5.2): لا نافذة لها ولا أيام، فلا تدخل السلسلة ولا النهاية ولا المدة. صفها بلا تواريخ بعلامتها
+  const effServices = effAll.filter(planService);
+  const effStages = effTracks.length || effServices.length ? effAll.filter((x) => !planTrack(x) && !planService(x)) : effAll;
   const titleOf = new Map((stages || []).map((s) => [s.key, s.title_ar || s.key]));
   for (const group of withGroups(effStages)) {
     let next = null;
@@ -324,15 +331,21 @@ export function cohortPlan(stages, cohort = {}) {
     for (const x of trackRows) if (!x.from && x.until !== 'days') x.days = rel.byKey[x.key]?.days ?? null;
   }
   for (const x of trackRows) { byKey[x.key] = x; if (x.from) windows[x.key] = { from: x.from, to: x.to }; }
+  const serviceRows = effServices.map((s) => ({
+    key: s.key, lane: 'service', days: 0, program_days: Math.max(0, Math.round(Number(s.duration_days) || 0)), source: 'program',
+    from: null, to: null, next: null, with: null, offset: 0, par_source: 'program',
+  }));
+  for (const x of serviceRows) byKey[x.key] = x;
   // الصفوف بترتيب المراحل، والموقوفة في مكانها بعلامتها (تُعرض باهتة وتعود بنقرة)
   const at = new Map((stages || []).map((s, i) => [s.key, i]));
-  const all = [...order, ...trackRows, ...offRows].sort((a, b) => at.get(a.key) - at.get(b.key));
+  const all = [...order, ...trackRows, ...serviceRows, ...offRows].sort((a, b) => at.get(a.key) - at.get(b.key));
   return {
     dated: dated.length > 0 && dated.length === order.length, start: first, end, over,
     total_days: first && end ? daysBetween(first, end) + 1 : null,
     stages: all, byKey, windows, issues, off: offRows.map((x) => x.key),
     changed: all.filter((x) => x.source !== 'program' || x.par_source === 'cohort' || x.until_source === 'cohort').length,
     ...(trackRows.length ? { tracks: trackRows.map((x) => x.key) } : {}),
+    ...(serviceRows.length ? { services: serviceRows.map((x) => x.key) } : {}),
   };
 }
 
@@ -395,7 +408,7 @@ export function todayStages(stages, windows, today) {
   for (const s of stages) {
     const w = windows[s.key];
     // المسار المستمر (T1) ليس «مرحلة اليوم» في الخريطة والتذكير، ولا يمد نهاية الرحلة
-    if (!w || planTrack(s)) continue;
+    if (!w || planTrack(s) || planService(s)) continue;
     if (!end || w.to > end) end = w.to;
     if (w.from <= t) started = s.key;
     if (w.from <= t && t <= w.to) inside.push(s.key);
@@ -421,7 +434,7 @@ export function planSpanDays(stages, schedule = {}) {
   if (!list.length) return 0;
   const p = cohortPlan(list, { starts_on: SPAN_EPOCH, schedule: planDaysOnly(schedule) });
   // المسار المستمر (T1) لا يدخل في مدة الرحلة: ينتهي بنهايتها أو قبلها
-  const last = p.stages.filter((x) => x.lane !== 'track').reduce((m, x) => later(m, x.next), null);
+  const last = p.stages.filter((x) => x.lane !== 'track' && x.lane !== 'service').reduce((m, x) => later(m, x.next), null);
   return last ? Math.max(0, daysBetween(SPAN_EPOCH, last)) : 0;
 }
 

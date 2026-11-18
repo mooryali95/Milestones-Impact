@@ -285,6 +285,10 @@ function Coaching({ item, open, onRefresh, setToast }) {
         </div>
       )}
       {open && a.can_book && !a.book_url && !a.instant && <p className="h">يحدد الموجّه موعد الجلسة ويصلك رابطها.</p>}
+      {/* حد الجلسات (T2): عند بلوغه يُخفى زر الحجز ويُقال لماذا */}
+      {a.max != null && (
+        <p className="h" data-testid="sessions-max">{a.at_max ? `استفدت من ${a.max === 1 ? 'جلستك' : `جلساتك الـ${a.max}`} المتاحة، فلا حجز جديد.` : `حجزت ${a.used} من ${a.max} متاحة لك.`}</p>
+      )}
       {book && (
         <div className="act-book">
           <p className="small muted">لا يظهر التقويم؟ <a href={a.book_url} target="_blank" rel="noopener noreferrer">افتحه في نافذة جديدة</a>، ثم عد واضغط «أنهيت الحجز».</p>

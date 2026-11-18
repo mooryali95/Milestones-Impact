@@ -105,7 +105,7 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
           const help = typeof f.help === 'function' ? f.help(v) : f.help;
           return (
             <label key={f.name} htmlFor={id}>
-              <span>{f.label}</span>
+              <span>{typeof f.label === 'function' ? f.label(v) : f.label}</span>
               {help && <small className="la-muted">{help}</small>}
               {f.type === 'select' ? (
                 <select {...common} disabled={f.readOnly || undefined}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
