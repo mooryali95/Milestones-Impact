@@ -12,3 +12,5 @@ export const ACT_RE = /^[a-z0-9._-]{0,60}$/;
 export const cleanAct = (a) => { const s = String(a ?? '').slice(0, 60); return ACT_RE.test(s) ? s : ''; };
 export const BUILD_RE = /^[A-Za-z0-9_-]{1,40}$/;
 export const cleanBuild = (b) => { const s = String(b ?? ''); return BUILD_RE.test(s) ? s : ''; };
+// سقف جسم الطلب بالحروف (JSON.stringify): يرفض الخادم ما فوقه بـ413، ويقصّ العميل دفعته تحته قبل الإرسال فلا تُسقط دفعة كاملة
+export const CLIENT_EVENT_BODY_CHARS = 8000;

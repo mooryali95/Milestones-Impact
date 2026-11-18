@@ -11,12 +11,15 @@
 // - قبل الترحيل 20261118150000 يرد الخادم not_migrated: يُسقط الطابور بصمت ولا يُرسل شيء آخر في هذه الصفحة.
 import { clientBuild, fnUrl, SUPABASE_KEY } from '../../src/lib/api.js';
 import { isChunkError } from '../../shared/ui/lazy-retry.js';
-import { CLIENT_EVENT_KINDS, cleanAct, MESSAGE_KINDS } from '../../supabase/functions/_shared/client-events.js';
+import { CLIENT_EVENT_BODY_CHARS, CLIENT_EVENT_KINDS, cleanAct, MESSAGE_KINDS } from '../../supabase/functions/_shared/client-events.js';
 
 export const QUEUE_KEY = 'mi_leaders_client_events';
 export const QUEUE_MAX = 30;
 export const BATCH_MAX = 20;
 export const MESSAGE_MAX = 160;
+// سقف الجسم كما يقيسه الخادم (413 فوقه) بهامش: الدفعة تُقص تحته، وما زاد يبقى في الطابور للإرسال التالي
+export const BODY_MAX = CLIENT_EVENT_BODY_CHARS - 200;
+export const batchBody = (batch) => JSON.stringify({ action: 'client.event', events: batch });
 const DEDUPE_MS = 60_000;
 // المصدر الواحد لأنواع الإخفاق وشكل اسم الفعل: _shared/client-events.js، يقرؤه الخادم أيضًا
 export { CLIENT_EVENT_KINDS };
@@ -84,6 +87,8 @@ export async function flush({ fetchImpl = typeof fetch === 'function' ? fetch : 
   const list = queued();
   if (!list.length) return null;
   const batch = list.slice(0, BATCH_MAX);
+  // نص الأخطاء بعلامات تنصيص وشرطات مائلة يتضاعف في JSON، فعشرون حدثًا قد تتجاوز السقف. الحدث الواحد يُرسل كما هو
+  while (batch.length > 1 && batchBody(batch).length > BODY_MAX) batch.pop();
   state.sending = (async () => {
     let body = null;
     try {
@@ -91,7 +96,7 @@ export async function flush({ fetchImpl = typeof fetch === 'function' ? fetch : 
         method: 'POST',
         keepalive: true,
         headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-        body: JSON.stringify({ action: 'client.event', events: batch }),
+        body: batchBody(batch),
       });
       body = await r.json().catch(() => null);
       if (body?.code === 'not_migrated') { state.off = true; save([]); return 'off'; }

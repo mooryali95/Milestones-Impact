@@ -108,6 +108,32 @@ Deno.test('تنبيه بالمعدل: أكثر من 10 أجهزة أخفق فت�
   } finally { f.restore(); }
 });
 
+Deno.test('تنبيه الفتح لا يعدّ offline (الجهاز نفسه بلا شبكة) ولا طابورًا قديمًا أُرسل بعد العودة، ومهلته ساعة', async () => {
+  const f = fake();
+  try {
+    for (let i = 0; i < CE.CLIENT_ALERT.bootDevices + 1; i += 1) await post({ action: 'client.event', events: [ev({ kind: 'offline' })] }, { ip: `198.51.100.${i + 40}` });
+    const old = new Date(Date.now() - 60 * 60_000).toISOString();
+    for (let i = 0; i < CE.CLIENT_ALERT.bootDevices + 1; i += 1) await post({ action: 'client.event', events: [ev({ at: old })] }, { ip: `198.51.100.${i + 80}` });
+    assertEquals(f.tables.client_events.length, 2 * (CE.CLIENT_ALERT.bootDevices + 1));
+    assertEquals(await CE.bootAlert(), false);
+    assertEquals(f.tables.audit_log.filter((a) => a.action === 'system.alert').length, 0);
+    const core = await import('./core.ts');
+    assertEquals(core.alertCooldown('client_boot_failures'), 36e5);
+  } finally { f.restore(); }
+});
+
+Deno.test('حد المعدل بعد الكتابة: طلبات متزامنة من شبكة واحدة قرأت العدّ نفسه لا تتجاوز الحد', async () => {
+  const f = fake();
+  try {
+    const batch = Array.from({ length: 20 }, () => ev({ act: 'x' }));
+    const rs = await Promise.all(Array.from({ length: 20 }, () => post({ action: 'client.event', events: batch })));
+    const ok = rs.filter((r) => r.status === 200).length;
+    assert(rs.every((r) => r.status === 200 || r.status === 429));
+    assert(f.tables.client_events.length <= CE.CLIENT_EVENT_LIMITS.perIp10Min, String(f.tables.client_events.length));
+    assertEquals(f.tables.client_events.length, ok * 20);
+  } finally { f.restore(); }
+});
+
 Deno.test('التنظيف يحذف ما مضى عليه 30 يومًا', async () => {
   const old = new Date(Date.now() - 31 * 864e5).toISOString();
   const f = fake({ client_events: [{ id: 1, kind: 'busy', act: 'me', at: old, created_at: old }, { id: 2, kind: 'busy', act: 'me', at: old, created_at: new Date().toISOString() }], audit_log: [] });

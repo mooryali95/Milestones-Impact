@@ -9,7 +9,7 @@ import { session } from './api.js';
 import { _resetTelemetry, BATCH_MAX, failureOf, flush, QUEUE_KEY, QUEUE_MAX, queued, report, scrub } from './telemetry.js';
 import { buildState, postAction } from '../../src/lib/api.js';
 import { NO_REPLAY, isReadAction } from '../../supabase/functions/_shared/action-kinds.js';
-import { CLIENT_EVENT_KINDS } from '../../supabase/functions/_shared/client-events.js';
+import { CLIENT_EVENT_BODY_CHARS, CLIENT_EVENT_KINDS } from '../../supabase/functions/_shared/client-events.js';
 import { POLICY_CHANGES } from '../../supabase/functions/leaders-api/labels.js';
 
 const root = join(__dirname, '../..');
@@ -155,6 +155,21 @@ describe('طابور الأحداث وإرساله (telemetry.js)', () => {
     expect(body.events).toHaveLength(BATCH_MAX);
     expect(body).not.toHaveProperty('token');
     expect(queued()).toHaveLength(5);
+  });
+  it('الدفعة تُقص تحت سقف الجسم: نص بعلامات تنصيص يتضاعف في JSON، وما زاد يبقى في الطابور لا يُسقط', async () => {
+    const msg = `Unexpected token '<', "<!DOCTYPE "... is not valid JSON \\ "\\" `.repeat(6);
+    for (let i = 0; i < BATCH_MAX; i += 1) report('error', { act: `page${i}`, message: `${i} ${msg}` }, 3_000_000 + i);
+    expect(queued()).toHaveLength(BATCH_MAX);
+    const all = JSON.stringify({ action: 'client.event', events: queued() });
+    expect(all.length).toBeGreaterThan(CLIENT_EVENT_BODY_CHARS);
+    const bodies = [];
+    const up = vi.fn(async (url, init) => { bodies.push(init.body); return { status: 200, json: async () => ({ success: true }) }; });
+    expect(await flush({ fetchImpl: up })).toBe('sent');
+    expect(bodies[0].length).toBeLessThanOrEqual(CLIENT_EVENT_BODY_CHARS);
+    const sent = JSON.parse(bodies[0]).events.length;
+    expect(sent).toBeGreaterThan(0);
+    expect(sent).toBeLessThan(BATCH_MAX);
+    expect(queued()).toHaveLength(BATCH_MAX - sent);
   });
   it('قبل الترحيل (not_migrated): يُسقط الطابور بصمت ولا يُرسل ولا يُسجَّل شيء بعده في الصفحة', async () => {
     report('busy', { act: 'me' });

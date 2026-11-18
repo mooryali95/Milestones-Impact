@@ -10,11 +10,11 @@
 // قبل الترحيل 20261118150000 (الجدول غائب) يرد not_migrated، فيُسقط العميل طابوره بصمت.
 import { alertOps, db, Fail, hash } from './core.ts';
 import { missingTable } from './missing-column.ts';
-import { cleanAct, cleanBuild, CLIENT_EVENT_KINDS, MESSAGE_KINDS } from '../_shared/client-events.js';
+import { cleanAct, cleanBuild, CLIENT_EVENT_BODY_CHARS, CLIENT_EVENT_KINDS, MESSAGE_KINDS } from '../_shared/client-events.js';
 
 type Body = Record<string, any>;
 export const CLIENT_EVENTS_TABLE = 'client_events';
-export const CLIENT_EVENT_LIMITS = Object.freeze({ batch: 20, bodyChars: 8_000, message: 160, perIp10Min: 120, global1Min: 2_000 });
+export const CLIENT_EVENT_LIMITS = Object.freeze({ batch: 20, bodyChars: CLIENT_EVENT_BODY_CHARS, message: 160, perIp10Min: 120, global1Min: 2_000 });
 export const CLIENT_ALERT = Object.freeze({ bootDevices: 10, windowMin: 5 });
 export const CLIENT_EVENTS_RETENTION_DAYS = 30;
 
@@ -58,27 +58,44 @@ export async function record(b: Body, ctx: { ip?: string | null; build?: string 
   const ipHash = ctx.ip ? await hash(`client-event:${ctx.ip}`) : null;
   const since10 = new Date(now - 6e5).toISOString();
   const since1 = new Date(now - 6e4).toISOString();
-  const [byIp, all] = await Promise.all([
+  const counts = () => Promise.all([
     ipHash ? db.from(CLIENT_EVENTS_TABLE).select('id', { count: 'exact', head: true }).eq('ip_hash', ipHash).gte('created_at', since10) : Promise.resolve({ count: 0, error: null }),
     db.from(CLIENT_EVENTS_TABLE).select('id', { count: 'exact', head: true }).gte('created_at', since1),
-  ]) as any[];
-  for (const res of [byIp, all]) if (res.error) { if (missingTable(res.error)) throw notMigrated(); throw new Fail('تعذّر الحفظ', 503, 'busy_store'); }
+  ]) as Promise<any[]>;
+  const failed = (res: any) => { if (missingTable(res.error)) throw notMigrated(); throw new Fail('تعذّر الحفظ', 503, 'busy_store'); };
+  // الفحص الأول يرد الفيضان الظاهر بلا كتابة
+  const [byIp, all] = await counts();
+  for (const res of [byIp, all]) if (res.error) failed(res);
   if ((byIp.count ?? 0) + events.length > CLIENT_EVENT_LIMITS.perIp10Min) throw new Fail('أحداث كثيرة في وقت قصير', 429, 'rate');
   // الحد العام: فيضان من شبكات كثيرة لا يملأ الجدول. يُقبل الطلب ويُسقط ما فيه، فلا يعيده العميل
   if ((all.count ?? 0) >= CLIENT_EVENT_LIMITS.global1Min) return { success: true, stored: 0, dropped: events.length };
 
   const build = cleanBuild(ctx.build) || null;
   const rows = events.map((e) => ({ ...e, build: e.build || build, ip_hash: ipHash }));
-  const ins = await db.from(CLIENT_EVENTS_TABLE).insert(rows);
-  if (ins.error) { if (missingTable(ins.error)) throw notMigrated(); throw new Fail('تعذّر الحفظ', 503, 'busy_store'); }
-  if (rows.some((r) => r.act === 'me')) await bootAlert(now).catch((e) => console.error('client boot alert:', e));
+  const ins = await db.from(CLIENT_EVENTS_TABLE).insert(rows).select('id');
+  if (ins.error) failed(ins);
+  // الفحص الثاني بعد الكتابة: طلبات متزامنة قرأت العدّ نفسه قبل أن يكتب أحدها، فكل منها يعدّ الآن ما كتبه الجميع ويحذف ما
+  // كتبه إن تجاوز العدّ الحد. فلا تتجاوز الشبكة الواحدة حدها ولا يتجاوز الجميع الحد العام مهما تزامنت الطلبات
+  const ids = ((ins.data || []) as any[]).map((r) => r.id);
+  const [byIpAfter, allAfter] = await counts();
+  const overIp = !byIpAfter.error && (byIpAfter.count ?? 0) > CLIENT_EVENT_LIMITS.perIp10Min;
+  const overAll = !allAfter.error && (allAfter.count ?? 0) > CLIENT_EVENT_LIMITS.global1Min;
+  if (overIp || overAll) {
+    if (ids.length) await db.from(CLIENT_EVENTS_TABLE).delete().in('id', ids);
+    if (overIp) throw new Fail('أحداث كثيرة في وقت قصير', 429, 'rate');
+    return { success: true, stored: 0, dropped: events.length };
+  }
+  if (rows.some((r) => r.act === 'me' && r.kind !== 'offline')) await bootAlert(now).catch((e) => console.error('client boot alert:', e));
   return { success: true, stored: rows.length };
 }
 
 // إخفاق الفتح عند أجهزة كثيرة معًا: عدد الأجهزة المختلفة (بصمات الشبكة) التي أخفق فيها me خلال 5 دقائق. التهدئة في raiseAlert
+// (ساعة لهذا النوع، ALERT_COOLDOWN_MS). لا يُعد: offline (الجهاز نفسه بلا شبكة، كقاعة بلا اتصال تُرسل طوابيرها معًا حين يعود،
+// والمنصة سليمة)، ولا حدث بلا بناء (لم يرسله تطبيق محمَّل)، ولا حدث وقته على الجهاز قبل النافذة (طابور قديم أُرسل بعد عودة)
 export async function bootAlert(now = Date.now()) {
   const since = new Date(now - CLIENT_ALERT.windowMin * 6e4).toISOString();
-  const { data, error } = await db.from(CLIENT_EVENTS_TABLE).select('ip_hash, kind, build').eq('act', 'me').gte('created_at', since).limit(1000);
+  const { data, error } = await db.from(CLIENT_EVENTS_TABLE).select('ip_hash, kind, build').eq('act', 'me').neq('kind', 'offline')
+    .not('build', 'is', null).gte('created_at', since).gte('at', since).limit(1000);
   if (error) return false;
   const rows = (data || []) as any[];
   const devices = new Set(rows.map((r) => r.ip_hash || 'none')).size;

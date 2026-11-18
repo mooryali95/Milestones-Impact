@@ -794,6 +794,8 @@ export const ALERT_COOLDOWN_MS: Record<string, number> = {
   mail_cap: 6 * 36e5, mail_quota_70: 6 * 36e5, mail_rejected: 36e5, mail_counter_unavailable: 36e5, mail_queue_stuck: 0, alert_test: 60e3,
   // سطر الترحيل اليومي (carryoverAlert): مرة في اليوم، فمهلته أقل من يوم بقليل
   mail_queue_carryover: 20 * 36e5,
+  // إخفاق الفتح عند أجهزة كثيرة (client-events.ts bootAlert): الفعل مفتوح بلا جلسة، فساعة تحد ما قد يصل من تنبيه مصطنع
+  client_boot_failures: 36e5,
   // تذكير طلب الحذف بلا تهدئة: المرحلة تُحجز في الصف قبل التنبيه (erasure.ts remindSweep) فلا يتكرر، والتهدئة كانت
   // تحجب إعادة تذكير لم يصل من أي قناة (تُكتب قبل أي قناة) ثم يُعدّ واصلًا
   erase_reminder: 0,
