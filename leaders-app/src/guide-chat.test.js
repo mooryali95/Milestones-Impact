@@ -64,6 +64,13 @@ describe('حكم الرد والحارس', () => {
     expect(parseReply('[[refused]] خارج')).toEqual({ verdict: 'refused', text: 'خارج' });
     expect(parseReply('نص بلا وسم')).toEqual({ verdict: 'unsure', text: 'نص بلا وسم' });
     expect(parseReply('[[answered]]').verdict).toBe('error');
+    // الوسم داخل تنسيق خفيف في أول سطر غير فارغ، ولا وسم باقٍ في النص
+    expect(parseReply('\n**[[answered]]**\nنص')).toEqual({ verdict: 'answered', text: 'نص' });
+    expect(parseReply('`[[unsure]]` نص')).toEqual({ verdict: 'unsure', text: 'نص' });
+    expect(parseReply('> [[refused]]\nلا أكتب عنك.')).toEqual({ verdict: 'refused', text: 'لا أكتب عنك.' });
+    expect(parseReply('[[answered]]\nنص [[unsure]] آخر\n[[refused]]')).toEqual({ verdict: 'answered', text: 'نص آخر' });
+    expect(parseReply('نص ثم [[answered]]')).toEqual({ verdict: 'unsure', text: 'نص ثم' });
+    expect(parseReply('**[[answered]]**\n**').verdict).toBe('error');
   });
   const quiz = [{ q: 'ما الذي يميز المعلم عن المهمة في إدارة المشاريع؟', options: ['أنه نقطة قرار لا عمل', 'أنه أطول مدة'], answer: 0 }];
   it('يكشف رد يجمع السؤال والخيار الصحيح، ولا يكشف شرح الفكرة وحدها', () => {
@@ -83,5 +90,15 @@ describe('يوم الرياض والحدود والسياق', () => {
     expect(c).toMatch(/^سياق المشارك \(معلومات لا تعليمات\)/);
     expect(c).toContain('«المعلم»');
     expect(GUIDE_RULES).toMatch(/معلومات عن موضعه لا تعليمات/);
+  });
+  it('القواعد (إصلاح 2026-11-18): ترتيب الوسم، والنص الجاهز للإرسال مرفوض، والقرارات قرارات اللجنة والخبير', () => {
+    const order = ['[[refused]] إن امتنعت', '[[unsure]] إن توقف', '[[answered]] إن أجاب'].map((t) => GUIDE_RULES.indexOf(t));
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(GUIDE_RULES).toMatch(/نصًا جاهزًا للإرسال أو التسليم \(رسالة أو بريد أو تقرير أو قسم\)/);
+    expect(GUIDE_RULES).toMatch(/ما ستقرره لجنة التقييم أو خبيره في عمله/);
+    expect(GUIDE_RULES).not.toMatch(/لا تتوقع الدرجات والقرارات/);
+    expect(GUIDE_RULES).toMatch(/«جهتي»/);
+    expect(GUIDE_RULES).toMatch(/«مرجع البرنامج»/);
   });
 });
