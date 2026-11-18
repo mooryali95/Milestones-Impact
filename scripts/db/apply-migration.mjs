@@ -3,12 +3,15 @@
 // ويتحقق بعد كل ترحيل (منذ سجل 20261105110000) أنه سجّل نفسه في leaders.schema_migrations.
 // لا يُشغَّل إلا بقرار المالك الذي يسمّي الترحيل (سير migrate.yml أو يدويًا):
 //   SUPABASE_ACCESS_TOKEN=... node scripts/db/apply-migration.mjs <name> [<name> ...]
-// المسجّل سلفًا في السجل يُتخطى، وأول فشل يوقف السلسلة برمز خروج 1.
+// المسجّل سلفًا في السجل يُتخطى، وأول فشل يوقف السلسلة برمز خروج 1، وتعذّر قراءة السجل (غير «غير موجود») يوقفها كذلك.
+// كل ترحيل يُلف في معاملة صريحة بمهلة أقفال 3 ثوانٍ ومهلة تنفيذ 60 ثانية، ويُعاد بتراجع عند فشل القفل وحده
+// (scripts/db/migration-tx.mjs، تصور تحديث المنصة بلا أثر، المرحلة 6).
 // الوضع --check قراءة فقط: الامتدادات، الجدولة cron.job وآخر 10 تشغيلات، أسماء أسرار Vault (بلا قيم)، والسجل.
 // يخرج برمز 1 إن غابت مهمة متوقعة أو سرّ الجدولة أو امتداد.
 // الوضع --verify <ملف> قراءة فقط: يشغّل فحوص ملف في scripts/db (verify-*.sql) كلًا في معاملة للقراءة فقط،
 // ويطبع لكل فحص صفه (ok، detail)، ويخرج برمز 1 إن كان أي ok = false.
 import { existsSync, readFileSync } from 'node:fs';
+import { applyPlan, applyWithRetry, inLedger as ledgerHas } from './migration-tx.mjs';
 
 const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
@@ -30,10 +33,8 @@ async function query(sql) {
   if (!r.ok) throw new Error(`${r.status} ${text.slice(0, 1200)}`);
   try { return text ? JSON.parse(text) : []; } catch { return []; }
 }
-const inLedger = async (name) => {
-  try { return (await query(`select name from leaders.schema_migrations where name = '${name}'`)).length > 0; }
-  catch { return false; }   // السجل نفسه لم يُنشأ بعد (قبل 20261105110000)
-};
+// السجل غير موجود (قبل 20261105110000) يعني غير مطبّق، وأي خطأ آخر يرمي فيوقف السلسلة (migration-tx.mjs)
+const inLedger = (name) => ledgerHas(query, name);
 
 // ── verify: فحوص قراءة فقط من ملف verify-*.sql، كل فحص في معاملة للقراءة فقط ──
 if (VERIFY) {
@@ -93,12 +94,14 @@ if (CHECK) {
 for (const name of names) {
   const path = `supabase/migrations/${name}.sql`;
   if (!existsSync(path)) { console.error(`✗ ${name}: لا ملف له في supabase/migrations`); process.exit(1); }
-  if (await inLedger(name)) { console.log(`• ${name}: مسجّل سلفًا، تُخطّى`); continue; }
-  console.log(`→ ${name}`);
-  try { await query(readFileSync(path, 'utf8')); }
-  catch (e) { console.error(`✗ ${name}: ${e.message}`); process.exit(1); }
-  if (name >= LEDGER_FROM && !(await inLedger(name))) { console.error(`✗ ${name}: طُبّق لكنه لم يُسجَّل في leaders.schema_migrations`); process.exit(1); }
-  console.log(`✓ ${name}`);
+  try {
+    if (await inLedger(name)) { console.log(`• ${name}: مسجّل سلفًا، تُخطّى`); continue; }
+    const plan = applyPlan(readFileSync(path, 'utf8'));
+    console.log(`→ ${name} (${plan.mode})`);
+    const r = await applyWithRetry({ query, plan, log: (m) => console.log(`::warning::${name}: ${m}`) });
+    if (name >= LEDGER_FROM && !(await inLedger(name))) { console.error(`✗ ${name}: طُبّق لكنه لم يُسجَّل في leaders.schema_migrations`); process.exit(1); }
+    console.log(`✓ ${name}${r.attempts > 1 ? ` بعد ${r.attempts} محاولات` : ''}`);
+  } catch (e) { console.error(`✗ ${name}: ${e.message}`); process.exit(1); }
 }
 const all = await query('select name from leaders.schema_migrations order by name').catch(() => []);
 console.log(`السجل: ${all.length} ترحيلًا، آخره ${all.at(-1)?.name || '—'}`);

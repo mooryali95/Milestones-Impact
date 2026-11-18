@@ -10,6 +10,8 @@ name: Deploy or roll back (manual)
 #
 # يعمل بالسر SUPABASE_ACCESS_TOKEN وحده (حساب Supabase، Access Tokens)، وبلا السر يحمرّ: التراجع لا يكون نصفيًا.
 # ترحيلات SQL لا تُنشر هنا: تُطبَّق بقرار المالك عبر migrate.yml. ولا نافذة ولا تجميد هنا: التراجع للطوارئ.
+# ويستدعيه migrate.yml (workflow_call) في وضع apply-and-deploy فور تطبيق ترحيل حاجب، بـ ref = رأس main (المرحلة 6، البند 8).
+# مجموعة التزامن على الوظيفة لا على السير: السير المستدعي لا يحمل المجموعة نفسها على مستواه فلا يقع قفل متبادل.
 # بعده يبقى main على الإيداع المعطوب، فالدفع التالي إلى main ينشره ثانية: يُدمج إصلاحه أو عكسه (git revert) قبل أي دمج آخر.
 
 on:
@@ -19,10 +21,12 @@ on:
         description: 'الإيداع (SHA كاملًا بأربعين حرفًا) أو الوسم أو الفرع الذي تُنقل إليه الدوال وrelease معًا. يجب أن يكون في تاريخ main'
         required: true
         type: string
-
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+  workflow_call:
+    inputs:
+      ref:
+        description: 'الإيداع الذي تُنقل إليه الدوال وrelease معًا (من migrate.yml: رأس main)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -33,6 +37,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg

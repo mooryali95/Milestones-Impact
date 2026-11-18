@@ -1,0 +1,4 @@
+{
+  "note": "إجراءات حُذفت من جداول توزيع leaders-api عمدًا بعد 14 يومًا على الأقل من نشر بديلها (scripts/ops/action-contract.mjs). لكل سطر action وtable وreplacement_released (تاريخ نشر البديل) وreason.",
+  "retired": []
+}

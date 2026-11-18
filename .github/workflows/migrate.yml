@@ -6,12 +6,23 @@ name: Apply migrations (production)
 # الوضع check قراءة فقط: يطبع الجدولة الحية (cron.job وآخر تشغيلاتها) وأسماء أسرار Vault بلا قيم
 # وسجل الترحيلات وأسماء أسرار الدوال (ومنها مفتاحا Turnstile)، ولا يغيّر شيئًا (RUNBOOK.md §3).
 # الوضع verify قراءة فقط: يشغّل فحوص ملف scripts/db/verify-*.sql (يُسمّى في migrations)، كل فحص في معاملة للقراءة فقط.
+#
+# التطبيق (تصور تحديث المنصة بلا أثر، المرحلة 6):
+# - الوظيفة apply في بيئة production: موافقة المالك على البيئة قبل أن تبدأ هي موافقته الصريحة التي تسمّي الترحيل
+#   (RUNBOOK.md §1). البيئة يضبطها المالك (مراجع واحد هو نفسه، وفرع main وحده)، وبلا ضبطها تُنشأ آليًا بلا موافقة.
+# - في مجموعة deploy-production مع نشر ci.yml وسير التراجع الموحد: لا يتداخل ترحيل ونشر ولا ترحيلان.
+# - قبل التطبيق نسخة إلزامية بـ pg_dump للجداول التي يمسها الترحيل إلى R2 (البادئة premigration/)، وبلا أسرار النسخ لا تطبيق.
+# - كل ترحيل في معاملة صريحة بمهلة أقفال 3 ثوانٍ ومهلة تنفيذ 60 ثانية، ويُعاد بتراجع عند فشل القفل وحده (migration-tx.mjs).
+# - apply-and-deploy للترحيل الحاجب: يطبّق ثم ينشر الدوال وrelease من main بسير التراجع الموحد (deploy-leaders-api.yml)
+#   في التشغيل نفسه، فلا نافذة بشرية يعمل فيها الكود القديم على البنية الجديدة (ق5). يرفض قبل أي تطبيق إن بقي حاجب لم يُسمَّ.
+# الأسرار بأسمائها: SUPABASE_ACCESS_TOKEN، وللنسخ SUPABASE_DB_URL وBACKUP_PUBLIC_KEY (أو BACKUP_PASSPHRASE) وR2_ACCOUNT_ID
+# وR2_ACCESS_KEY_ID وR2_SECRET_ACCESS_KEY وR2_BUCKET (كما في backup.yml).
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'apply = تطبيق الترحيلات المسمّاة · check = قراءة الجدولة والسجل فقط · verify = فحوص قراءة من scripts/db/verify-*.sql'
+        description: 'apply = نسخة ثم تطبيق · apply-and-deploy = نسخة ثم تطبيق ثم نشر main (للترحيل الحاجب) · check = قراءة الجدولة والسجل فقط · verify = فحوص قراءة من scripts/db/verify-*.sql'
         required: true
         type: choice
         default: apply
@@ -19,6 +30,7 @@ on:
           - apply
           - check
           - verify
+          - apply-and-deploy
       migrations:
         description: 'أسماء الترحيلات بالترتيب مفصولة بمسافة (بلا .sql)؛ تُهمل في وضع check. في وضع verify: مسار ملف الفحص'
         required: false
@@ -28,7 +40,9 @@ permissions:
   contents: read
 
 jobs:
-  migrate:
+  # قراءة فقط: بلا بيئة ولا مجموعة تزامن، فلا تنتظر موافقة ولا نشرًا
+  read:
+    if: inputs.mode == 'check' || inputs.mode == 'verify'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -53,9 +67,84 @@ jobs:
       - name: Verify (read only)
         if: env.MODE == 'verify'
         run: node scripts/db/apply-migration.mjs --verify "$MIGRATIONS"
-      - name: Nothing to apply
-        if: env.MODE == 'apply' && env.MIGRATIONS == ''
-        run: echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations" && exit 1
+
+  apply:
+    if: inputs.mode == 'apply' || inputs.mode == 'apply-and-deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      MODE: ${{ inputs.mode }}
+      MIGRATIONS: ${{ inputs.migrations }}
+    steps:
+      # لا تطبيق بلا رمز، ولا بلا أسماء، ولا بلا مكان للنسخة: النسخة قبل الترحيل إلزامية (ش5)
+      - name: Token, names, and backup secrets are set
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::SUPABASE_ACCESS_TOKEN is not set (see RUNBOOK.md §1)"; exit 1; fi
+          if [ -z "$MIGRATIONS" ]; then echo "::error::سمِّ ترحيلًا واحدًا على الأقل في المدخل migrations"; exit 1; fi
+          if [ -z "$SUPABASE_DB_URL" ] || { [ -z "$BACKUP_PUBLIC_KEY" ] && [ -z "$BACKUP_PASSPHRASE" ]; }; then
+            echo "::error::SUPABASE_DB_URL or an encryption key (BACKUP_PUBLIC_KEY) is not set: no backup, so no apply (RUNBOOK.md §4)."
+            exit 1
+          fi
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
+            echo "::error::An R2 secret is not set: the pre-migration backup would be stored nowhere, so no apply."
+            exit 1
+          fi
+          if [ "$MODE" = "apply-and-deploy" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::apply-and-deploy ينشر main: شغّله من main («Use workflow from» = main). الآن: $GITHUB_REF"
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      # قبل أي تطبيق: النشر بعده يقف على أي حاجب لم يُسمَّ، فلا يُطبَّق نصف المطلوب ثم يحمرّ النشر
+      - name: Every pending blocking migration is named (apply-and-deploy)
+        if: env.MODE == 'apply-and-deploy'
+        run: node scripts/ops/pending-migrations.mjs --expect="$MIGRATIONS"
+      - name: What the migrations touch
+        id: plan
+        run: node scripts/db/premigration-backup.mjs $MIGRATIONS >> "$GITHUB_OUTPUT"
+      - name: Install age
+        if: steps.plan.outputs.skip != 'true'
+        run: command -v age >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq age; }
+      # pg_dump للجداول الممسوسة (أو المخططين كاملين إن جُهل الهدف)، مشفّرًا عند المصدر، إلى R2 premigration/. تفشل فلا تطبيق
+      - name: Back up the touched tables to R2 (mandatory)
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          BACKUP_PREFIX: premigration
+          BACKUP_TABLES: ${{ steps.plan.outputs.full != 'true' && steps.plan.outputs.tables || '' }}
+          BACKUP_SCHEMAS: leaders,public
+          BACKUP_LABEL: ${{ steps.plan.outputs.label }}
+          BACKUP_OUT: premigration-out
+        run: |
+          bash scripts/ops/backup.sh
+          for m in premigration-out/manifest-*.json; do
+            [ -f "$m" ] || continue
+            node -e "const m=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));console.log('النسخة: '+m.schemas+'\n'+m.files.map(f=>'- '+f.key+' ('+f.bytes+' بايت)').join('\n')+'\nالإرجاع: RUNBOOK.md §4 «نسخة ما قبل الترحيل»')" "$m" >> "$GITHUB_STEP_SUMMARY"
+          done
       - name: Apply in order
-        if: env.MODE == 'apply' && env.MIGRATIONS != ''
         run: node scripts/db/apply-migration.mjs $MIGRATIONS
+
+  # الترحيل الحاجب: النشر فور التطبيق بسير التراجع الموحد نفسه (الدوال السبع ثم release ثم الدخان)، إلى رأس main
+  deploy:
+    needs: apply
+    if: inputs.mode == 'apply-and-deploy' && needs.apply.result == 'success'
+    permissions:
+      contents: write
+      actions: write
+    uses: ./.github/workflows/deploy-leaders-api.yml
+    with:
+      ref: ${{ github.sha }}
+    secrets: inherit

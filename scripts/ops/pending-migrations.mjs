@@ -4,6 +4,8 @@
 //   SUPABASE_ACCESS_TOKEN=... node scripts/ops/pending-migrations.mjs          بوابة: رمز 1 إن بقي ترحيل حاجب
 //   SUPABASE_ACCESS_TOKEN=... node scripts/ops/pending-migrations.mjs --list   قائمة فقط، رمز 0 دائمًا
 //   ... --dir=<مجلد ترحيلات>   ترحيلات شجرة أخرى (هدف التراجع في deploy-leaders-api.yml)
+//   ... --expect="<أسماء>"      قبل «طبّق ثم انشر» (migrate.yml): رمز 1 إن بقي ترحيل حاجب غير مطبّق لم يُسمَّ، فلا يُطبَّق
+//                               شيء ثم يقف النشر بعده على ترحيل منسي (المرحلة 6، البند 8)
 //
 // كل ترحيل حاجب ما لم يحمل في سطوره الأولى أحد وسمين:
 //   -- deploy-gate: tolerant   الدوال تقرؤه قراءة متسامحة، فتعمل قبله وبعده
@@ -31,6 +33,9 @@ export function gateOf(sql, name) {
   return m ? { gate: m[1], note: m[2].trim() } : { gate: 'blocking', note: '' };
 }
 
+// الحاجب غير المطبّق الذي لم يسمّه المالك
+export const unnamedBlocking = (pending, named) => pending.filter((p) => p.gate === 'blocking' && !named.includes(p.name)).map((p) => p.name);
+
 export function classify(repoNames, applied, readSql) {
   const set = new Set(applied);
   return repoNames.filter((n) => !set.has(n)).map((n) => ({ name: n, ...gateOf(readSql(n), n) }));
@@ -49,6 +54,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const blocking = pending.filter((p) => p.gate === 'blocking');
   console.log(`السجل: ${applied.length} مطبّقًا، والمستودع ${names.length}، وغير المطبّق ${pending.length}`);
   for (const p of pending) console.log(`${p.gate === 'blocking' ? '✗' : '•'} ${p.name} (${p.gate}${p.note ? `: ${p.note}` : ''})`);
+  const EXPECT = process.argv.find((a) => a.startsWith('--expect='))?.slice('--expect='.length);
+  if (EXPECT !== undefined) {
+    const missing = unnamedBlocking(pending, EXPECT.split(/\s+/).filter(Boolean).map((n) => n.replace(/\.sql$/, '')));
+    if (missing.length) {
+      console.error(`::error::ترحيل حاجب غير مطبّق لم يُسمَّ: ${missing.join('، ')}. النشر بعد التطبيق سيقف عليه، فلا يُطبَّق شيء. سمِّ الترحيلات الحاجبة كلها بالترتيب.`);
+      process.exit(1);
+    }
+    console.log('كل ترحيل حاجب غير مطبّق مسمّى: يُطبَّق ثم يُنشر.');
+    process.exit(0);
+  }
   if (blocking.length && !LIST) {
     console.error(`\n::error::${blocking.length} ترحيل حاجب غير مطبّق. يطبّقه المالك بسير migrate.yml بأسمائه بالترتيب أعلاه، ثم يُعاد تشغيل النشر. لا تُنشر الدوال قبله.`);
     process.exit(1);

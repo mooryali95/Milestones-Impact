@@ -176,7 +176,7 @@ describe('ملفات السير تطابق القواعد', () => {
     expect(dep.needs).toEqual(['release-gate']);
     expect(dep.if).toMatch(/!cancelled\(\) && needs\.release-gate\.result == 'success' && needs\.release-gate\.outputs\.run == 'true'/);
     expect(dep.concurrency.group).toBe('deploy-production');
-    expect(manual.concurrency.group).toBe('deploy-production');
+    expect(manual.jobs.deploy.concurrency.group).toBe('deploy-production');
     // أول ما يفعله النشر: يستهلك آثار التأجيل كلها، بلا || true
     const consume = dep.steps.find((s) => s.name === 'Consume the deferred-deploy markers');
     expect(dep.steps.indexOf(consume)).toBe(2);

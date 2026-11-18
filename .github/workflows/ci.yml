@@ -125,6 +125,13 @@ jobs:
           node scripts/handbook/build-version.mjs --check
           node scripts/concepts/registry.mjs --check
 
+      # تصور تحديث المنصة بلا أثر، المرحلة 6 (ش4 وش5): فاحص الترحيلات الجديدة (لا يُفشل القديمة، والاستثناء باسم وسبب في
+      # scripts/db/migration-lint-allow.json)، وعقد الإجراءات: كل إجراء في جداول توزيع leaders-api عند release باقٍ في جدوله
+      - name: Migration linter and the action contract with the previous release
+        run: |
+          node scripts/db/migration-lint.mjs
+          node scripts/ops/action-contract.mjs --fetch --against=origin/release
+
       # لا مفتاح خدمة ولا رمز وصول ولا مفتاح خاص في أي ملف مودع (مفتاح anon العام وحده مسموح)
       - name: No secrets in tracked files
         run: node scripts/ops/secrets-scan.mjs

@@ -116,6 +116,8 @@ describe('بوابة النشر', () => {
     expect(mig).toMatch(/workflow_dispatch/);
     expect(mig).not.toMatch(/\n  push:|\n  pull_request:|schedule:/);
     expect(mig).toMatch(/apply-migration\.mjs \$MIGRATIONS/);
-    expect(read('scripts/db/apply-migration.mjs')).toMatch(/schema_migrations where name = /);
+    // السجل يُقرأ في migration-tx.mjs (المرحلة 6 من تصور التحديث بلا أثر) ويستورده apply-migration.mjs
+    expect(read('scripts/db/apply-migration.mjs')).toContain("from './migration-tx.mjs'");
+    expect(read('scripts/db/migration-tx.mjs')).toMatch(/schema_migrations where name = /);
   });
 });
