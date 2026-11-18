@@ -31,4 +31,4 @@ export const viewHref = () => (typeof location === 'undefined' ? null : urlForVi
 export const reloadToView = (opts = {}) => reloadOnce({ to: viewHref, ...opts });
 
 /** شاشة كسولة: محاولة ثانية، ثم إعادة تحميل واحدة إلى القسم المطلوب */
-export const lazyView = (load) => lazy(() => retryImport(load, { reloadPage: () => reloadToView() }));
+export const lazyView = (load) => lazy(() => retryImport(load, { reloadPage: (o) => reloadToView(o) }));

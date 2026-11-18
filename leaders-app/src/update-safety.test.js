@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { _resetReloadFlag, installPreloadRecovery, isChunkError, reloadOnce, retryImport, RELOAD_PARAM } from '../../shared/ui/lazy-retry.js';
+import { _resetReloadFlag, failedAssetUrl, installPreloadRecovery, isChunkError, refreshFailedAsset, reloadOnce, retryImport, RELOAD_PARAM } from '../../shared/ui/lazy-retry.js';
 import { _requestedView, noteView, reloadToView, urlForView } from './reload-view.js';
 import { tabFromSearch } from './deeplink.js';
 
@@ -90,6 +90,62 @@ describe('مصدر واحد لإعادة التحميل في التطبيقين'
   });
 });
 
+describe('404 الملف الغائب المخزَّن في المتصفح يُجدَّد قبل إعادة التحميل (التراجع إلى نشر سابق)', () => {
+  const origin = 'https://leaders.sunkvalue.com';
+  it('failedAssetUrl يأخذ رابط /assets/ من رسالة Chromium وFirefox، من النطاق نفسه وحده', () => {
+    expect(failedAssetUrl(chunkErr, origin)).toBe(`${origin}/assets/Handbook-OLD1234.js`);
+    expect(failedAssetUrl(new TypeError(`error loading dynamically imported module: ${origin}/assets/Lab-abc.js`), origin)).toBe(`${origin}/assets/Lab-abc.js`);
+    expect(failedAssetUrl(new Error(`Unable to preload CSS for ${origin}/assets/index-abc.css`), origin)).toBe(`${origin}/assets/index-abc.css`);
+    // Safari لا يذكر الرابط، ونطاق آخر لا يُطلب
+    expect(failedAssetUrl(new TypeError('Importing a module script failed.'), origin)).toBeNull();
+    expect(failedAssetUrl(new TypeError('Failed to fetch dynamically imported module: https://evil.example/assets/x.js'), origin)).toBeNull();
+  });
+  it('refreshFailedAsset يطلب الملف بـcache: reload، ولا يرمي إن فشل الطلب، وينتهي بالمهلة', async () => {
+    const fetchImpl = vi.fn(() => Promise.resolve({ status: 200 }));
+    await refreshFailedAsset(chunkErr, { fetchImpl, origin });
+    expect(fetchImpl).toHaveBeenCalledWith(`${origin}/assets/Handbook-OLD1234.js`, { cache: 'reload', credentials: 'same-origin' });
+    await expect(refreshFailedAsset(chunkErr, { fetchImpl: () => Promise.reject(new TypeError('offline')), origin })).resolves.toBeUndefined();
+    await expect(refreshFailedAsset(chunkErr, { fetchImpl: () => new Promise(() => {}), origin, timeoutMs: 5 })).resolves.toBeUndefined();
+    expect(refreshFailedAsset(new TypeError('Importing a module script failed.'), { fetchImpl, origin })).toBeNull();
+  });
+  it('reloadOnce بالخطأ يجدد الملف ثم يعيد التحميل، وبلا خطأ يعيد فورًا كما كان', async () => {
+    _resetReloadFlag();
+    const order = [];
+    let release;
+    const refresh = vi.fn(() => new Promise((r) => { release = () => { order.push('refresh'); r(); }; }));
+    const navigate = vi.fn(() => order.push('navigate'));
+    const location = { href: `${origin}/`, origin };
+    expect(reloadOnce({ storage: memStorage(), navigate, location, now: 1000, to: () => `${origin}/?tab=lab`, error: chunkErr, refresh })).toBe(true);
+    expect(refresh).toHaveBeenCalledWith(chunkErr, { origin });
+    expect(navigate).not.toHaveBeenCalled();
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(order).toEqual(['refresh', 'navigate']);
+    // التجديد الذي يرمي لا يمنع إعادة التحميل
+    _resetReloadFlag();
+    const reload = vi.fn();
+    expect(reloadOnce({ storage: memStorage(), reload, location, now: 1000, error: chunkErr, refresh: () => { throw new Error('x'); } })).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+  it('مستمع preloadError ومحاولة الاستيراد الثانية يمرران الخطأ إلى reloadOnce', async () => {
+    _resetReloadFlag();
+    const target = new EventTarget();
+    const refresh = vi.fn(() => Promise.resolve());
+    const navigate = vi.fn();
+    installPreloadRecovery(target, { storage: memStorage(), navigate, refresh, location: { href: `${origin}/`, origin }, now: 1000 });
+    const ev = new Event('vite:preloadError', { cancelable: true });
+    ev.payload = chunkErr;
+    target.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(refresh).toHaveBeenCalledWith(chunkErr, { origin });
+    const reloadPage = vi.fn(() => true);
+    retryImport(() => Promise.reject(chunkErr), { reloadPage });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(reloadPage).toHaveBeenCalledWith({ error: chunkErr });
+    expect(read('leaders-app/src/reload-view.js')).toContain('reloadPage: (o) => reloadToView(o)');
+  });
+});
+
 describe('إعادة التحميل تفتح القسم المطلوب لا «رحلتي»', () => {
   it('urlForView يكتب /?tab= في مسار المشارك ويبقي ما سواه، ويقرؤه tabFromSearch', () => {
     const u = urlForView('https://leaders.sunkvalue.com/?org=abc#x', 'handbook');
@@ -152,6 +208,13 @@ describe('عامل الخدمة: ما يُخزَّن وما لا يُخزَّن'
     expect(p.cacheableAsset(req(), res(200, 0, 'font/woff2'), '/fonts/NotoKufiArabic-arabic-s2.woff2')).toBe(true);
     expect(p.cacheableAsset(req(), res(200, 0, 'text/css'), '/fonts/fonts-s2.css')).toBe(true);
   });
+  it('يخزن صور /assets/ (الشعار وصور الكتيب) فتبقى دون اتصال', () => {
+    expect(p.cacheableAsset(req(), res(200, 0, 'image/svg+xml'), '/assets/milestone-impact-inverted-abc.svg')).toBe(true);
+    expect(p.cacheableAsset(req(), res(200, 0, 'image/webp'), '/assets/cover-abc.webp')).toBe(true);
+    expect(p.cacheableAsset(req(), res(200, 0, 'image/png'), '/assets/logo-abc.png')).toBe(true);
+    expect(p.cacheableAsset(req(), res(404, 0, 'image/webp'), '/assets/cover-OLD.webp')).toBe(false);
+    expect(p.cacheableAsset(req(), res(200, 0, 'text/html'), '/assets/cover-OLD.webp')).toBe(false);
+  });
   it('لا يخزن HTML تحت اسم ملف JS (رد الملف الغائب أو تحدي جدار الحماية)', () => {
     expect(p.cacheableAsset(req(), res(200, 0, 'text/html; charset=utf-8'), '/assets/Handbook-OLD.js')).toBe(false);
     expect(p.cacheableAsset(req(), res(404, 0, 'text/html'), '/assets/Handbook-OLD.js')).toBe(false);
@@ -161,7 +224,7 @@ describe('عامل الخدمة: ما يُخزَّن وما لا يُخزَّن'
   it('لا يخزن خارج /assets/ و/fonts/ (الفيديو والصور والملف التعريفي)', () => {
     expect(p.cacheableAsset(req(), res(200, 0, 'video/mp4'), '/media/intro-v3.mp4')).toBe(false);
     expect(p.cacheableAsset(req(), res(200, 0, 'application/javascript'), '/media/x.js')).toBe(false);
-    expect(p.cacheableAsset(req(), res(200, 0, 'image/png'), '/assets/logo.png')).toBe(false);
+    expect(p.cacheableAsset(req(), res(200, 0, 'image/png'), '/media/cover.png')).toBe(false);
     expect(p.inCachedDir('/assetsx/a.js')).toBe(false);
   });
   it('لا يخزن ردًا جزئيًا (206) ولا طلب Range، ولا ردًا معتمًا من نطاق آخر', () => {
@@ -193,14 +256,14 @@ describe('ملف /assets/ الغائب يعطي 404 لا صفحة التطبيق
         expect(read(f)).toMatch(/^<!doctype html>/i);
         expect(read(f).length).toBeLessThan(1024);
       }
+      // _headers تطابق مسار الطلب لا الملف المقدَّم: قاعدة لـ/assets/404.html لا تمس رد الملف الغائب، فلا تُكتب
       const h = read(`${out}/_headers`);
-      expect(h, out).toMatch(/\/assets\/404\.html\n(?: {2}! Cache-Control\n)? {2}Cache-Control: no-store/);
+      expect(h, out).not.toMatch(/^\/assets\/404\.html$/m);
       // لا 404.html في الجذر: يبقى Pages في وضع التطبيق ذي الصفحة الواحدة لمسارات التطبيق
       expect(existsSync(join(root, `${app}/public/404.html`)), app).toBe(false);
+      // ولا قاعدة /* إلى index.html في _redirects: قد تتقدم على أقرب 404.html فيعود الملف الغائب صفحةً برمز 200
+      for (const f of [`${app}/public/_redirects`, `${out}/_redirects`]) expect(read(f), f).not.toMatch(/^\/\*\s/m);
     }
-    // في القادة: الفصل بعد قاعدة /assets/* الثابتة سنة، لا قبلها (القاعدة الأضيق بعد الأوسع)
-    const lh = read('leaders-app/public/_headers');
-    expect(lh.indexOf('/assets/404.html')).toBeGreaterThan(lh.indexOf('/assets/*\n'));
   });
   it('لا شرطة طويلة ولا متوسطة في ملفات المرحلة', () => {
     for (const f of ['shared/ui/lazy-retry.js', 'admin-app/src/lazy-retry.js', 'leaders-app/src/reload-view.js', 'leaders-app/public/sw.js', 'leaders-app/public/assets/404.html', 'admin-app/public/assets/404.html', 'leaders-app/src/update-safety.test.js', 'leaders-app/src/main.jsx', 'leaders-app/src/ErrorBoundary.jsx', 'leaders-app/src/deeplink.js']) {

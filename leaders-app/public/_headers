@@ -10,12 +10,12 @@
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com https://www.youtube.com https://s.ytimg.com https://challenges.cloudflare.com https://static.cloudflareinsights.com; frame-src https://accounts.google.com https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com https://cal.com https://app.cal.com https://calendly.com; media-src 'self' https:; style-src 'self' 'unsafe-inline' https://accounts.google.com; font-src 'self'; img-src 'self' data: blob: https://i.ytimg.com https://*.googleusercontent.com; connect-src 'self' https://eormhcupwgwpllhrfxxg.supabase.co https://accounts.google.com https://cloudflareinsights.com; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; worker-src 'self'; manifest-src 'self'; form-action 'self'; upgrade-insecure-requests
 
+# ملفات البناء تحمل بصمة في اسمها فتُخزَّن سنة. _headers تطابق مسار الطلب لا الملف المقدَّم، فرد الملف الغائب
+# (assets/404.html برمز 404) يحمل هذه الترويسة أيضًا، ولا قاعدة هنا تفرّق 404 عن 200 في المسار نفسه. المعالجة في المتصفح:
+# reloadOnce يطلب الملف الفاشل بـcache: 'reload' قبل إعادة التحميل (shared/ui/lazy-retry.js)، والبديل على الخادم دالة Pages
+# محصورة في /assets/* (تصور تحديث المنصة، المرحلة 1 البند 2)
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
-# صفحة الملف الغائب (assets/404.html) لا تُخزَّن: يُفصل الثابت سنة أعلاه ثم يُضبط من جديد (قاعدة أضيق بعد الأوسع)
-/assets/404.html
-  ! Cache-Control
-  Cache-Control: no-store
 
 /index.html
   Cache-Control: public, max-age=0, must-revalidate

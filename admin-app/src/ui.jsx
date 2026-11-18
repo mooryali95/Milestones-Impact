@@ -140,7 +140,7 @@ export class ScreenBoundary extends React.Component {
   static getDerivedStateFromError(error) { return { error }; }
   componentDidCatch(error) {
     console.error(this.props.scope === 'app' ? 'تعذّر رسم اللوحة:' : 'تعذّر رسم الشاشة:', error?.message || error, error);   // eslint-disable-line no-console
-    if (this.props.scope === 'app' && isChunkError(error)) (this.props.reloadPage || reloadOnce)();
+    if (this.props.scope === 'app' && isChunkError(error)) (this.props.reloadPage || reloadOnce)({ error });
   }
   render() {
     const { error } = this.state;
