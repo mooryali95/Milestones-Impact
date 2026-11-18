@@ -2,7 +2,7 @@
 // ويستعمله scripts/content/export-live.mjs. المستودع هو الأصل، فكل فرق إما تعديل من اللوحة
 // يُصدَّر إلى المستودع (نص غير مُقاس) وإما انحراف يُحسم بقرار (محتوى مُقاس).
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadChapters, ROOT } from '../handbook/content.mjs';
 
@@ -32,8 +32,22 @@ export function repoContent(root = ROOT) {
     const items = JSON.parse(readFileSync(join(root, `supabase/content/questions/${ver}/items.json`), 'utf8'));
     for (const it of items.filter((x) => x.instrument === inst)) questions.set(it.id, { ...it, source: ver });
   }
-  const katon = new Map(JSON.parse(readFileSync(join(root, 'supabase/content/katon/v1/topics.json'), 'utf8')).map((t) => [t.key, t]));
+  const katon = new Map();
+  for (const ver of katonVersions(root)) {
+    for (const t of JSON.parse(readFileSync(join(root, `supabase/content/katon/${ver}/topics.json`), 'utf8'))) katon.set(t.key, { ...t, source_version: ver });
+  }
   return { handbook, questions, katon };
+}
+
+// كل إصدارات بنك كاتون بترتيبها (v1 بنك البداية، وv2 موضوعات الأثر والقيادة، وما بعدها). الإصدارات تُضاف ولا تحل
+// محل ما قبلها، فالموضوع يُقرأ من أحدث إصدار يحمل مفتاحه. قراءة v1 وحده جعلت موضوعات v2 الستة «في الإنتاج وحده»
+// كل ليلة منذ 2026-11-11، فاحمرّ الفحص الليلي بإنذار كاذب (تصور تحديث المنصة، ص9).
+export function katonVersions(root = ROOT) {
+  const num = (v) => v.slice(1).split('.').map(Number);
+  const cmp = (a, b) => { const x = num(a); const y = num(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; };
+  return readdirSync(join(root, 'supabase/content/katon'), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && /^v\d+(\.\d+)*$/.test(d.name))
+    .map((d) => d.name).sort(cmp);
 }
 
 // live: { handbook_modules: [], questions: [] (مع instrument_key), katon_topics: [], katon_sentences: [] (مع topic_key) }

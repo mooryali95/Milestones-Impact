@@ -32,6 +32,8 @@ export default defineConfig({
     testTimeout: 20_000,
     include: ['src/**/*.test.{js,jsx}', 'leaders-app/src/**/*.test.{js,jsx}', 'admin-app/src/**/*.test.{js,jsx}',
       // اختبارات سكربتات الموقع الثابت home/: خارج home/ لأن المجلد يُنشر كما هو
-      'tests/home/**/*.test.js'],
+      'tests/home/**/*.test.js',
+      // منطق سكربتات التشغيل النقي (الدخان ش6، ونافذة النشر ش13، وحراس التراجع والفحوص الليلية)
+      'scripts/ops/**/*.test.js'],
   },
 });

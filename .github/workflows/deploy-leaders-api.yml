@@ -1,55 +1,83 @@
-name: Deploy functions (manual)
+name: Deploy or roll back (manual)
 
-# النشر الاعتيادي يتم في ci.yml (الوظيفة deploy) بعد خضرة الفحوص على main.
-# هذا السير للنشر اليدوي أو للتراجع: شغّله من Actions واختر الفرع أو الوسم
-# أو الإيداع القديم في «Use workflow from»، فتُنشر الدوال الست من ذلك المرجع.
-# يفعل شيئًا فقط إن وُجد السر SUPABASE_ACCESS_TOKEN (حساب Supabase، Access Tokens).
-# ترحيلات SQL لا تُنشر هنا: تُطبَّق بقرار المالك عبر migrate.yml (بأسمائها، مع سجل
-# leaders.schema_migrations)، ووضعه check يقرأ الجدولة والسجل بلا تغيير.
+# سير التراجع الموحد (تصور تحديث المنصة، المرحلة 2 البند 6، وش7): يحرك الدوال السبع وفرع release معًا إلى إيداع واحد،
+# ثم يشغّل الدخان الكامل. النشر الاعتيادي في ci.yml (الوظيفة deploy) بعد خضرة الفحوص على main.
+#
+# يُشغَّل دائمًا من main: Actions، ثم «Deploy or roll back (manual)»، ثم Run workflow، و«Use workflow from» = main،
+# والإيداع المطلوب في الحقل ref. ملف السير وخطواته وسكربتاته (بوابة الأسرار والترحيلات والدخان) من main،
+# والمرجع القديم يُسحب منه كود الدوال وحده إلى مجلد جانبي، فلا يفقد التراجع فحوصه (د10). تشغيله من فرع
+# آخر يتوقف في أول خطوة. (اختيار مرجع قديم في «Use workflow from» يشغّل ملف ذلك المرجع القديم، وهو ما كان يُفقد الفحوص.)
+#
+# يعمل بالسر SUPABASE_ACCESS_TOKEN وحده (حساب Supabase، Access Tokens)، وبلا السر يحمرّ: التراجع لا يكون نصفيًا.
+# ترحيلات SQL لا تُنشر هنا: تُطبَّق بقرار المالك عبر migrate.yml. ولا نافذة ولا تجميد هنا: التراجع للطوارئ.
+# بعده يبقى main على الإيداع المعطوب، فالدفع التالي إلى main ينشره ثانية: يُدمج إصلاحه أو عكسه (git revert) قبل أي دمج آخر.
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'الإيداع (SHA كاملًا بأربعين حرفًا) أو الوسم أو الفرع الذي تُنقل إليه الدوال وrelease معًا. يجب أن يكون في تاريخ main'
+        required: true
+        type: string
 
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  # حذف آثار النشر المؤجل، فلا تعيد الجدولة نشر رأس main فوق التراجع
+  actions: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg
       SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
+      TARGET_REF: ${{ inputs.ref }}
     steps:
-      - name: Skip without a token
-        id: gate
+      - name: The workflow runs from main, with the deploy token
         run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::شغّل هذا السير من main («Use workflow from» = main) وضع المرجع المطلوب في الحقل ref. الآن: $GITHUB_REF"
+            exit 1
+          fi
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
-            echo "::notice::SUPABASE_ACCESS_TOKEN is not set; deploy by hand (RUNBOOK.md)."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set; نفّذ مسار الطوارئ في RUNBOOK.md بيد المالك."
+            exit 1
           fi
       - uses: actions/checkout@v7
-        if: steps.gate.outputs.skip != 'true'
       - uses: actions/setup-node@v7
-        if: steps.gate.outputs.skip != 'true'
         with:
           node-version: '20'
+      # الكود المطلوب في مجلد جانبي، والتحقق أنه من تاريخ main (لا فرع لم يمر بالفحوص)
+      - name: Check out the target code beside main
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$TARGET_REF"
+          sha=$(git rev-parse FETCH_HEAD)
+          status=$(gh api "repos/${{ github.repository }}/compare/$sha...main" --jq .status)
+          case "$status" in ahead|identical) ;; *) echo "::error::$TARGET_REF ($sha) ليس في تاريخ main (compare: $status). التراجع إلى إيداع مر بالفحوص على main وحده."; exit 1;; esac
+          git worktree add --detach "$RUNNER_TEMP/target" "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "dir=$RUNNER_TEMP/target" >> "$GITHUB_OUTPUT"
+          echo "::notice::الهدف $sha (من $TARGET_REF)"
       # CLI من npm لا من GitHub Releases (كما في ci.yml وintegration.yml)
       - name: Install Supabase CLI
-        if: steps.gate.outputs.skip != 'true'
         run: npm i -g supabase@3.1.0 --no-audit --no-fund && supabase --version
-      # كما في ci.yml: ترحيل حاجب غير مطبّق يوقف النشر. التراجع إلى إيداع أقدم يمر لأن ترحيلاته مطبّقة،
-      # والإيداعات السابقة لهذه البوابة بلا السكربت فتُتخطى.
+      # كما في ci.yml: أسرار الدخول قبل أي نشر (أسماء فقط)
+      - name: Sign-in secrets are set on the project (names only)
+        run: node scripts/ops/function-secrets.mjs --require=signin
+      # بوابة main نفسها على ترحيلات الهدف: التراجع إلى إيداع أقدم يمر لأن ترحيلاته مطبّقة
       - name: Pending migrations block deploy
-        if: steps.gate.outputs.skip != 'true'
-        run: if [ -f scripts/ops/pending-migrations.mjs ]; then node scripts/ops/pending-migrations.mjs; fi
-      - name: Deploy
-        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/ops/pending-migrations.mjs --dir="${{ steps.target.outputs.dir }}/supabase/migrations"
+      - name: Deploy the functions from the target
+        working-directory: ${{ steps.target.outputs.dir }}
         run: |
           # نشر كل دالة بثلاث محاولات: واجهة Supabase ترد أحيانًا 401 أو 5xx عابرة وسط السلسلة (حدث في 2026-11-05)
           deploy() {
@@ -57,6 +85,7 @@ jobs:
               if supabase functions deploy "$@" --project-ref "$PROJECT_REF" --yes; then return 0; fi
               echo "::warning::فشل نشر $1 (محاولة $i من 3)"; sleep $((i * 10))
             done
+            echo "::error::فشل نشر $1: الدوال مختلطة بين القديم والهدف، وrelease لم يتحرك. أعد تشغيل السير بالمرجع نفسه."
             return 1
           }
           deploy leaders-api
@@ -66,16 +95,42 @@ jobs:
           deploy admin-api
           deploy user-api
           deploy agent-chat
+      # الطبقتان معًا (ش7): الواجهة تتبع الدوال إلى الإيداع نفسه، فلا تنادي واجهة جديدة واجهة برمجية قديمة (د5)
+      - name: Move release to the same commit
+        run: git push --force origin "${{ steps.target.outputs.sha }}:refs/heads/release"
+      - name: Cancel deferred deploys of main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("deploy-deferred-")) | .id' \
+            | while read -r id; do gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true; done
+      # الدخان الكامل بمعيار ش6 (scripts/ops/smoke.mjs من main)، وحالة كل دالة في الملخص
       - name: Verify the live functions answer real requests
-        if: steps.gate.outputs.skip != 'true'
+        run: node scripts/ops/smoke.mjs deploy
+      # تسخين بعد الدخان، كما في ci.yml، وحالة كل دالة في السجل
+      - name: Warm up the functions
+        if: always()
         run: |
           ping() {
             body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
               -H 'Origin: https://leaders.sunkvalue.com' -d "{\"action\":\"$2\"}" "https://$PROJECT_REF.supabase.co/functions/v1/$1?forceFunctionRegion=ap-south-1")
             echo "$1: $body"
-            echo "$body" | grep -q '"success":true'
           }
-          ping leaders-api system.ping
-          ping admin-api ping
-          ping user-api ping
-          ping agent-chat ping
+          health() {
+            body=$(curl -s --max-time 20 "https://$PROJECT_REF.supabase.co/functions/v1/$1?forceFunctionRegion=ap-south-1")
+            echo "$1: $body"
+          }
+          for i in 1 2; do
+            ping leaders-api system.ping
+            health creem-webhook
+            health leaders-hooks
+            ping send-otp ping
+            ping admin-api ping
+            ping user-api ping
+            ping agent-chat ping
+          done
+      - name: Record the rollback
+        if: always()
+        run: |
+          printf '### التراجع الموحد\n\n- الهدف: `%s` (من `%s`)\n- النتيجة: %s\n- بعده: أصلح main أو اعكس الإيداع المعطوب قبل أي دمج، ثم صف في HANDOFF بزمن التمرين أو الحادث.\n' \
+            "${{ steps.target.outputs.sha }}" "$TARGET_REF" "${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
