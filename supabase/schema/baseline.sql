@@ -972,7 +972,9 @@ create table if not exists leaders.guidance_eval_results (
   reply text,
   cost_micros bigint default 0 not null,
   created_at timestamp with time zone default now() not null,
+  case_snapshot jsonb,
   constraint guidance_eval_results_case_id_check CHECK ((char_length(case_id) <= 20)),
+  constraint guidance_eval_results_case_snapshot_check CHECK (((case_snapshot IS NULL) OR ((jsonb_typeof(case_snapshot) = 'object'::text) AND (pg_column_size(case_snapshot) <= 16384)))),
   constraint guidance_eval_results_reply_check CHECK ((char_length(reply) <= 6000)),
   constraint guidance_eval_results_verdict_check CHECK ((char_length(verdict) <= 20)),
   constraint guidance_eval_results_pkey PRIMARY KEY (run_id, case_id)

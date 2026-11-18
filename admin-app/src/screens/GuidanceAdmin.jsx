@@ -5,7 +5,7 @@
 // والدقة (التقييم قبل الإطلاق). «الإتاحة» تحت «المساعد الذكي»: الجهات بمفتاحها القائم والدفعات التجريبية.
 // أعداد وكلفة بلا نص محادثة، وسجل المحادثات (H3) للمالك وللمدير الأعلى بمنحه، وكل فتح يُسجَّل.
 import React, { useEffect, useState } from 'react';
-import { date, L } from '../leaders.js';
+import { date, dayMonth, L } from '../leaders.js';
 import { Empty, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
 import { aiLoad } from '../ai-hub-data.js';
@@ -26,10 +26,48 @@ function Section({ id, title, summary, level = 'green', children }) {
 }
 
 // G4a: تقييم دقة «التوجيه والإرشاد» والدفعة التجريبية (للمدير الأعلى والمالك). البوابة لا تفتح إلا بمجموعة اعتمدتها لجنة
-// المحتوى وآخر تشغيل ناجح بنسبة لا تقل عن 99٪ لبصمة اليوم (النموذج والقواعد والمجموعة)، ثم للدفعات المفعّلة وحدها
+// المحتوى وآخر تشغيل كامل ناجح بنسبة لا تقل عن 99٪ لبصمة اليوم (النموذج والقواعد والمجموعة والمصحح ومرجع البرنامج)، ثم للدفعات
+// المفعّلة وحدها. إصلاح 2026-11-18: الشرطان معًا، والراسب أولًا بما كان متوقعًا منه، وتشغيل تشخيصي لا يُحسب للبوابة
 const RUN_AR = { running: 'يعمل', passed: 'ناجح', failed: 'دون الحد', stopped: 'متوقف', error: 'تعذّر' };
+const STOP_AR = { stale: 'تغيرت البصمة', max_cost: 'بلغ حد الكلفة', key: 'لا مفتاح' };
 const KIND_AR = { answer: 'يجيب', unsure: 'لا يتأكد', refuse_model: 'يرفض', refuse_route: 'يرفضه الموجّه' };
-function GuidanceEval({ canWrite = false }) {
+const VERDICT_AR = { answered: 'أجاب', unsure: 'غير متأكد', refused: 'رفض', route: 'رفض الموجّه', error: 'تعذّر' };
+// الأسباب المحفوظة قبل إصلاح المصحح بالإنجليزية: تُعرض بالعربية كذلك
+const reasonAr = (t) => String(t || '').replace(/\b(answered|unsure|refused)\b/g, (w) => `«${VERDICT_AR[w]}»`);
+const pct = (r) => Math.round((r.passed_cases / r.total_cases) * 1000) / 10;
+
+// نص لاتيني (رقم النسخة) داخل جملة عربية في نص خام (تأكيد، تنبيه): يُعزل بـ FSI/PDI فلا يقلبه الاتجاه
+const iso = (t) => `\u2068${t}\u2069`;
+
+function ResultItem({ x, onEdit, canWrite = false }) {
+  const body = (
+    <div className="gd-res-grid">
+      <div><span className="gd-res-k">الرد</span>{x.reply ? <p className="small gd-pre">{x.reply}</p> : <p className="la-muted small">بلا رد</p>}</div>
+      <div><span className="gd-res-k">المتوقع</span>
+        {x.reference_ar && <p className="small gd-pre">{x.reference_ar}</p>}
+        {x.must_include?.length > 0 && <p className="small">يجب أن يرد: {x.must_include.map((p) => <code key={p} dir="auto">{p}</code>)}</p>}
+        {x.must_not_include?.length > 0 && <p className="small">يُمنع: {x.must_not_include.map((p) => <code key={p} dir="auto">{p}</code>)}</p>}
+      </div>
+    </div>
+  );
+  return (
+    <li data-ok={x.ok ? 'ok' : 'fail'} className="gd-res">
+      <div className="gd-res-head">
+        <b>{x.case_id}</b> <span role="img" aria-label={x.ok ? 'ناجحة' : 'راسبة'}>{x.ok ? '✓' : '✕'}</span>
+        <span className="la-chip">المتوقع: {KIND_AR[x.kind] || x.kind || '؟'}</span>
+        <span className="la-chip">الحكم: {VERDICT_AR[x.verdict] || x.verdict || 'بلا وسم'}</span>
+        {x.failed_before && <span className="la-chip bad">فشلت في التشغيلين</span>}
+        {onEdit && <button type="button" className="la-link" onClick={() => onEdit(x.case_id)}>{canWrite ? 'عدّل الحالة' : 'اعرض الحالة'}</button>}
+      </div>
+      <p className="gd-res-q">{x.question}</p>
+      {x.from_current && <small className="la-muted">السؤال من المجموعة الحالية (التشغيل أقدم من حفظ الحالة مع نتيجتها).</small>}
+      {!x.ok && <ul className="gd-res-why la-err small">{(x.reasons || []).map((r) => <li key={r}>{reasonAr(r)}</li>)}</ul>}
+      {x.ok ? <details><summary className="la-muted small">الرد والمتوقع</summary>{body}</details> : body}
+    </li>
+  );
+}
+
+function GuidanceEval({ canWrite = false, onEdit }) {
   const { toast } = useUI();
   const [s, setS] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -38,9 +76,9 @@ function GuidanceEval({ canWrite = false }) {
   const load = () => L('admin.guide-eval').then(setS);
   useEffect(() => { load(); }, []);
   if (!s?.success || !s.ready) return null;
-  const run = async () => {
-    setBusy(true);
-    const r = await L('admin.guide-eval-start', {});
+  const run = async (mode) => {
+    setBusy(mode || 'full');
+    const r = await L('admin.guide-eval-start', mode ? { mode } : {});
     if (!r.success) { setBusy(false); toast(r.message); return; }
     // الدفعات من اللوحة حتى ينتهي التشغيل: كل طلب بضع حالات، فلا يتجاوز حد زمن الدالة
     for (let i = 0; i < 200; i++) {
@@ -52,40 +90,56 @@ function GuidanceEval({ canWrite = false }) {
     setBusy(false);
     setLive(null);
     load();
+    if (mode) showResults(r.run_id);
   };
-  const showResults = async (id) => setResults(await L('admin.guide-eval-results', { run_id: id }));
+  const showResults = async (id) => setResults({ id, ...(await L('admin.guide-eval-results', { run_id: id })) });
   const set = s.set;
+  const ck = s.checks || null;
+  const hasFailed = (s.runs || []).some((r) => !r.diagnostic && ['passed', 'failed'].includes(r.status) && r.passed_cases < r.done_cases);
+  const failedCount = results?.success ? results.results.filter((x) => !x.ok).length : 0;
   return (
     <section className="ag-guide-eval stack" aria-labelledby="ag-geval-h">
       <h4 id="ag-geval-h">تقييم دقة «التوجيه والإرشاد» قبل الإطلاق</h4>
-      <p className={s.gate.ok ? 'ops-flag on' : 'ops-flag off'} role="status">{s.gate.ok ? `✓ اجتاز التقييم (${s.threshold * 100}٪ فأكثر) على النسخة الحالية` : `✕ ${s.gate.message}`}</p>
+      <p className={s.gate.ok ? 'ops-flag on' : 'ops-flag off'} role="status">{s.gate.ok ? `✓ اجتاز التقييم (${s.threshold * 100}٪ فأكثر) على النسخة الحالية` : '✕ البوابة مغلقة حتى يتحقق الشرطان'}</p>
+      {ck && (
+        <ul className="gd-checks" aria-label="شرطا فتح البوابة">
+          <li data-ok={ck.approved ? 'ok' : 'no'}><span aria-hidden="true">{ck.approved ? '✓' : '✕'}</span> المجموعة <bdi dir="ltr">{set.version}</bdi> {ck.approved ? <>معتمدة (<bdi dir="ltr">{set.approved_by}</bdi>)</> : 'غير معتمدة بعد'}</li>
+          <li data-ok={ck.run_ok ? 'ok' : 'no'}><span aria-hidden="true">{ck.run_ok ? '✓' : '✕'}</span> آخر تشغيل كامل على النسخة الحالية:{' '}
+            {ck.run ? <b>{ck.run.passed}/{ck.run.total}</b> : 'لم يُشغَّل بعد'} (المطلوب {ck.need}/{ck.total})</li>
+        </ul>
+      )}
+      <p className="la-muted small gd-order">الترتيب: أصلح سبب الرسوب، ثم اعتمد المجموعة، ثم شغّل تقييمًا كاملًا واحدًا. التشغيل التشخيصي يختبر الإصلاح ولا يفتح البوابة.</p>
       <p className="la-muted small">
-        المجموعة {set.version}: {set.total} حالة ({Object.entries(set.kinds).map(([k, n]) => `${KIND_AR[k] || k} ${n}`).join('، ')}).{' '}
-        {set.approved_by ? `اعتمدها ${set.approved_by} في ${date(set.approved_at)}.` : 'مسودة بانتظار اعتماد المالك للإجابات المرجعية.'}
+        {set.total} حالة ({Object.entries(set.kinds).map(([k, n]) => `${KIND_AR[k] || k} ${n}`).join('، ')}).{' '}
+        {set.approved_by ? <>اعتمدها <bdi dir="ltr">{set.approved_by}</bdi> في {date(set.approved_at)}.</> : 'مسودة بانتظار اعتماد المالك للإجابات المرجعية.'}
         {' '}النموذج <code dir="ltr">{s.model}</code>.
+        {s.brief_chars != null && (s.brief_chars > 0 ? ' مرجع البرنامج من الكتاب مرفق للأسئلة من خارج الأبواب.' : ' مرجع البرنامج غير متاح (أقسامه غير موجودة في أبواب الكتاب).')}
       </p>
       {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء في المجموعة: {set.errors.slice(0, 5).join('؛ ')}</div>}
-      {canWrite && <div className="la-row"><button type="button" className="btn-sm primary" disabled={busy || set.errors.length > 0} onClick={run}>{busy ? 'يعمل…' : 'شغّل التقييم'}</button>
+      {canWrite && <div className="la-row">
+        <button type="button" className="btn-sm primary" disabled={!!busy || set.errors.length > 0} onClick={() => run()}>{busy === 'full' ? 'يعمل…' : 'شغّل التقييم'}</button>
+        {hasFailed && <button type="button" className="btn-sm ghost" disabled={!!busy || set.errors.length > 0} onClick={() => run('failed')}>{busy === 'failed' ? 'يعمل…' : 'أعد الحالات الفاشلة فقط'}</button>}
         {live && <span className="la-muted small" role="status">{live.done_cases} من {live.total_cases} · ناجح {live.passed_cases} · {usd(Number(live.cost_micros) / 1e6)}</span>}</div>}
       {s.runs.length > 0 && (
-        <table className="la-table">
-          <thead><tr><th>البدء</th><th>الحال</th><th>النجاح</th><th>الكلفة</th><th>النسخة</th><th></th></tr></thead>
-          <tbody>{s.runs.map((r) => (
-            <tr key={r.id}><td>{date(r.started_at)}</td><td>{RUN_AR[r.status] || r.status}{r.stop_reason ? ` (${r.stop_reason})` : ''}</td>
-              <td>{r.passed_cases}/{r.total_cases}{r.done_cases ? ` (${Math.round((r.passed_cases / r.total_cases) * 1000) / 10}٪)` : ''}</td>
-              <td>{usd(Number(r.cost_micros) / 1e6)}</td><td>{r.current ? 'الحالية' : 'أقدم'}</td>
-              <td><button type="button" className="la-link" onClick={() => showResults(r.id)}>النتائج</button></td></tr>
-          ))}</tbody>
-        </table>
+        <div className="ag-scroll">
+          <table className="la-table">
+            <thead><tr><th>التشغيل</th><th>النوع</th><th>الحال</th><th>النجاح</th><th className="gd-opt">الكلفة</th><th className="gd-opt">النسخة</th></tr></thead>
+            <tbody>{s.runs.map((r) => (
+              <tr key={r.id} data-diag={r.diagnostic ? 'yes' : 'no'}>
+                {/* الدخول إلى النتائج في الخلية الأولى، فيبقى ظاهرًا على الهاتف بلا تمرير */}
+                <td><div className="gd-run-cell"><button type="button" className="la-link" onClick={() => showResults(r.id)}>النتائج</button><small className="gd-nowrap" title={date(r.started_at)}>{dayMonth(r.started_at)}</small></div></td>
+                <td>{r.diagnostic ? <span className="la-chip warn" title="يعيد الحالات الراسبة وحدها، ولا يُحسب للبوابة">تشخيصي، لا يُحسب</span> : 'كامل'}</td>
+                <td>{RUN_AR[r.status] || r.status}{r.stop_reason ? ` (${STOP_AR[r.stop_reason] || r.stop_reason})` : ''}</td>
+                <td>{r.passed_cases}/{r.total_cases}{r.done_cases ? ` (${pct(r)}٪)` : ''}</td>
+                <td className="gd-opt">{usd(Number(r.cost_micros) / 1e6)}</td><td className="gd-opt">{r.current ? 'الحالية' : 'أقدم'}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
       )}
       {results?.success && (
-        <div className="stack" aria-label="نتائج التشغيل">
-          <div className="la-row between"><b>النتائج ({results.results.filter((x) => !x.ok).length} راسبة)</b><button type="button" className="la-link" onClick={() => setResults(null)}>إغلاق</button></div>
-          <ul className="la-reqs">{results.results.map((x) => (
-            <li key={x.case_id} data-ok={x.ok ? 'ok' : 'fail'}><span><b>{x.case_id}</b> {x.ok ? '✓' : '✕'} {KIND_AR[x.kind] || x.kind} · {x.question}</span>
-              {!x.ok && <small className="la-err">{(x.reasons || []).join('؛ ')}</small>}
-              {x.reply && <details><summary className="la-muted small">الرد</summary><p className="small" style={{ whiteSpace: 'pre-wrap' }}>{x.reply}</p></details>}</li>
-          ))}</ul>
+        <div className="stack gd-results" aria-label="نتائج التشغيل">
+          <div className="la-row between"><b>النتائج ({failedCount} راسبة{results.diagnostic ? '، تشغيل تشخيصي لا يُحسب للبوابة' : ''})</b><button type="button" className="la-link" onClick={() => setResults(null)}>إغلاق</button></div>
+          <ul className="gd-res-list">{results.results.map((x) => <ResultItem key={x.case_id} x={x} onEdit={onEdit} canWrite={canWrite} />)}</ul>
         </div>
       )}
     </section>
@@ -95,51 +149,88 @@ function GuidanceEval({ canWrite = false }) {
 
 // H2: مراجعة مجموعة التقييم وتعديلها واعتمادها (قرار المالك v8). تعديل نسخة معتمدة يبدأ مسودة جديدة، والاعتماد للمالك وحده
 const FIELD_KIND = Object.entries(KIND_AR);
+const DIMS = [['milestone', 'المعلم'], ['impact', 'الأثر'], ['leadership', 'القيادة']];
+const CHAPTERS = [['intro', 'المقدمة'], ['ch1', 'الفصل 1'], ['ch2', 'الفصل 2'], ['ch3', 'الفصل 3'], ['ch4', 'الفصل 4'], ['ch5', 'الفصل 5'], ['ch6', 'الفصل 6'], ['labs', 'المختبرات'], ['close', 'الخاتمة']];
+const LEVELS = [['', 'افتراضي (متوسط)'], ['beginner', 'مبتدئ'], ['intermediate', 'متوسط'], ['advanced', 'متقدم']];
+const fieldsOf = (c) => ({ kind: c.kind, question: c.question, context: c.context === 'handbook' ? 'handbook' : 'program', dimension: c.dimension || '', chapter_key: c.chapter_key || '',
+  level: c.level || '', reference_ar: c.reference_ar || '', must_include: (c.must_include || []).join('\n'), must_not_include: (c.must_not_include || []).join('\n') });
 function CaseEditor({ c, canWrite, onSaved }) {
   const { toast } = useUI();
-  const [v, setV] = useState(() => ({ kind: c.kind, question: c.question, reference_ar: c.reference_ar || '', must_include: (c.must_include || []).join('\n'), must_not_include: (c.must_not_include || []).join('\n') }));
+  const [init] = useState(() => fieldsOf(c));
+  const [v, setV] = useState(init);
   const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setV({ ...v, [k]: e.target.value });
   const save = async (e) => {
     e.preventDefault();
+    // ما تغيّر وحده: حقل لم يُلمس لا يُكتب، فلا يتغير محتوى الحالة (وبصمتها) بلا تعديل
+    const patch = {};
+    for (const k of Object.keys(v)) if (v[k] !== init[k]) patch[k] = k.startsWith('must_') ? v[k].split('\n') : v[k];
+    if (v.context === 'handbook' && (patch.context || patch.dimension || patch.chapter_key)) { patch.dimension = v.dimension; patch.chapter_key = v.chapter_key; }
+    if (!Object.keys(patch).length) { toast('لا تغيير لحفظه'); return; }
     setBusy(true);
-    const r = await L('admin.guide-eval-case', { case_id: c.id, patch: { ...v, must_include: v.must_include.split('\n'), must_not_include: v.must_not_include.split('\n') } });
+    const r = await L('admin.guide-eval-case', { case_id: c.id, patch });
     setBusy(false);
     if (!r.success) { toast(r.message); return; }
     toast(r.new_draft ? `حُفظت في مسودة جديدة ${r.version}، والمعتمدة باقية كما هي` : 'حُفظت الحالة');
     onSaved();
   };
+  const hb = v.context === 'handbook';
   return (
     <form className="stack gd-case-form" onSubmit={save}>
-      <label className="of-field"><span className="of-label">النوع المتوقع</span>
-        <select value={v.kind} disabled={!canWrite} onChange={(e) => setV({ ...v, kind: e.target.value })}>{FIELD_KIND.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
+      <div className="gd-case-row">
+        <label className="of-field"><span className="of-label">النوع المتوقع</span>
+          <select value={v.kind} disabled={!canWrite} onChange={set('kind')}>{FIELD_KIND.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
+        <label className="of-field"><span className="of-label">السياق</span>
+          <select value={v.context} disabled={!canWrite} onChange={set('context')}><option value="program">البرنامج (من الرحلة)</option><option value="handbook">باب من الكتاب</option></select></label>
+        {hb && <label className="of-field"><span className="of-label">الإطار</span>
+          <select value={v.dimension} disabled={!canWrite} onChange={set('dimension')}><option value="">اختر</option>{DIMS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>}
+        {hb && <label className="of-field"><span className="of-label">الباب</span>
+          <select value={v.chapter_key} disabled={!canWrite} onChange={set('chapter_key')}><option value="">اختر</option>{CHAPTERS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>}
+        <label className="of-field"><span className="of-label">المستوى</span>
+          <select value={v.level} disabled={!canWrite} onChange={set('level')}>{LEVELS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
+      </div>
       <label className="of-field"><span className="of-label">السؤال</span>
-        <textarea rows={2} value={v.question} disabled={!canWrite} onChange={(e) => setV({ ...v, question: e.target.value })} /></label>
+        <textarea rows={2} value={v.question} disabled={!canWrite} onChange={set('question')} /></label>
       <label className="of-field"><span className="of-label">الإجابة المرجعية</span>
-        <textarea rows={4} value={v.reference_ar} disabled={!canWrite} onChange={(e) => setV({ ...v, reference_ar: e.target.value })} /></label>
+        <textarea rows={4} value={v.reference_ar} disabled={!canWrite} onChange={set('reference_ar')} /></label>
       <label className="of-field"><span className="of-label">ما يجب أن يرد في الإجابة (نمط في كل سطر، و | تعني «أو»)</span>
-        <textarea dir="auto" rows={3} value={v.must_include} disabled={!canWrite} onChange={(e) => setV({ ...v, must_include: e.target.value })} /></label>
+        <textarea dir="auto" rows={3} value={v.must_include} disabled={!canWrite} onChange={set('must_include')} /></label>
       <label className="of-field"><span className="of-label">ما يُمنع أن يرد</span>
-        <textarea dir="auto" rows={2} value={v.must_not_include} disabled={!canWrite} onChange={(e) => setV({ ...v, must_not_include: e.target.value })} /></label>
+        <textarea dir="auto" rows={2} value={v.must_not_include} disabled={!canWrite} onChange={set('must_not_include')} /></label>
       {c.source && <small className="la-muted">المصدر: {c.source}</small>}
       {canWrite && <div className="la-row"><button className="btn-sm primary" disabled={busy}>{busy ? 'لحظة…' : 'احفظ الحالة'}</button></div>}
     </form>
   );
 }
 
-function SetReview({ canWrite, onChanged }) {
+function SetReview({ canWrite, onChanged, focus }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
   const [kind, setKind] = useState('all');
   const load = () => L('admin.guide-eval-cases').then(setD);
   useEffect(() => { load(); }, []);
+  // «عدّل الحالة» من النتائج: تُزال التصفية أولًا، ثم تُفتح الحالة وتُعرض بعد أن تظهر في القائمة
+  const [pending, setPending] = useState(null);
+  useEffect(() => { if (focus?.id) { setKind('all'); setPending(focus); } }, [focus]);
+  useEffect(() => {
+    if (!pending || !d?.success || kind !== 'all') return;
+    setPending(null);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`gd-case-${pending.id}`);
+      if (!el) { toast('الحالة لم تعد في المجموعة الحالية'); return; }
+      el.open = true;
+      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      el.querySelector('summary')?.focus();
+    });
+  }, [pending, d, kind]);
   if (!d?.success) return null;
   const set = d.set;
   const changed = () => { load(); onChanged?.(); };
   const approve = async () => {
-    if (!(await confirm(`اعتماد المجموعة ${set.version} (${set.cases.length} حالة) باسمك؟ بعد الاعتماد لا تتغير، وأي تعديل يبدأ مسودة جديدة ويلزمه تقييم جديد.`))) return;
-    const r = await L('admin.guide-eval-approve', { version: set.version });
-    if (!r.success) { toast(r.message); return; }
-    toast(`اعتُمدت المجموعة ${set.version}`);
+    if (!(await confirm(`اعتماد المجموعة ${iso(set.version)} (${set.cases.length} حالة) باسمك؟ بعد الاعتماد لا تتغير، وأي تعديل يبدأ مسودة جديدة ويلزمه تقييم جديد.`))) return;
+    const r = await L('admin.guide-eval-approve', { version: set.version, hash: set.hash });
+    if (!r.success) { toast(r.message); if (r.code === 'stale' || /تغيرت/.test(String(r.message || ''))) load(); return; }
+    toast(`اعتُمدت المجموعة ${iso(set.version)}`);
     changed();
   };
   const shown = set.cases.filter((c) => kind === 'all' || c.kind === kind);
@@ -147,9 +238,9 @@ function SetReview({ canWrite, onChanged }) {
     <section className="stack gd-set" aria-labelledby="gd-set-h">
       <div className="gd-set-head">
         <h4 id="gd-set-h">مراجعة المجموعة واعتمادها</h4>
-        <span className={`la-chip ${set.status === 'approved' ? 'ok' : 'warn'}`}>{set.status === 'approved' ? `معتمدة: ${set.approved_by} في ${date(set.approved_at)}` : 'مسودة'}</span>
+        <span className={`la-chip ${set.status === 'approved' ? 'ok' : 'warn'}`}>{set.status === 'approved' ? <>معتمدة: <bdi dir="ltr">{set.approved_by}</bdi> في {date(set.approved_at)}</> : 'مسودة'}</span>
       </div>
-      <p className="la-muted small">النسخة {set.version}{set.updated_by && set.updated_by !== 'seed' ? `، آخر تعديل ${set.updated_by} في ${date(set.updated_at)}` : ''}. {set.source === 'file' ? 'جدول المجموعة لم يُرحَّل بعد، فلا تعديل ولا اعتماد حتى يُطبَّق ترحيله.' : 'كل تعديل يُسجَّل، ويُسقط نجاح التقييم السابق حتى يُشغَّل من جديد.'}</p>
+      <p className="la-muted small">النسخة <bdi dir="ltr">{set.version}</bdi>{set.updated_by && set.updated_by !== 'seed' ? <>، آخر تعديل <bdi dir="ltr">{set.updated_by}</bdi> في {date(set.updated_at)}</> : ''}. {set.source === 'file' ? 'جدول المجموعة لم يُرحَّل بعد، فلا تعديل ولا اعتماد حتى يُطبَّق ترحيله.' : 'كل تعديل يُسجَّل، ويُسقط نجاح التقييم السابق حتى يُشغَّل من جديد.'}</p>
       {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء تمنع الاعتماد: {set.errors.slice(0, 5).join('؛ ')}</div>}
       <div className="la-row gd-filter" role="group" aria-label="تصفية بالنوع">
         {[['all', `الكل ${set.cases.length}`], ...FIELD_KIND.map(([k, t]) => [k, `${t} ${set.cases.filter((c) => c.kind === k).length}`])].map(([k, t]) => (
@@ -157,16 +248,17 @@ function SetReview({ canWrite, onChanged }) {
         ))}
       </div>
       <ol className="gd-cases">{shown.map((c) => (
-        <li key={`${set.version}-${c.id}`}>
-          <details>
+        <li key={`${set.version}-${set.hash || ''}-${c.id}`}>
+          <details id={`gd-case-${c.id}`}>
             <summary><b>{c.id}</b> · {KIND_AR[c.kind] || c.kind} · {c.question}</summary>
             <CaseEditor c={c} canWrite={canWrite && d.can_edit} onSaved={changed} />
           </details>
         </li>
       ))}</ol>
-      {d.can_approve && set.status !== 'approved' && (
+      {d.can_approve && canWrite && set.status !== 'approved' && (
         <div className="la-row"><button type="button" className="btn-sm primary" disabled={set.errors.length > 0} onClick={approve}>اعتمد المجموعة باسمك</button></div>
       )}
+      {d.can_approve && !canWrite && set.status !== 'approved' && <p className="la-muted small">فعّل الكتابة لتعتمد المجموعة.</p>}
       {!d.can_approve && set.status !== 'approved' && <p className="la-muted small">الاعتماد للمالك وحده.</p>}
     </section>
   );
@@ -274,6 +366,7 @@ function RulesEditor({ d, canWrite, onSaved }) {
 export default function GuidanceAdmin() {
   const [d, setD] = useState(null);
   const [evalKey, setEvalKey] = useState(0);
+  const [focus, setFocus] = useState(null);
   // القراءة الأولى تنضم إلى طلب رأس القسم (ai-hub-data.js)، وإعادة التحميل بعد التشغيل أو الإيقاف طلب جديد
   const load = (first) => aiLoad('admin.guide-dashboard', { reuse: first === true }).then(setD);
   useEffect(() => { load(true); }, []);
@@ -295,7 +388,7 @@ export default function GuidanceAdmin() {
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'}><StatusPart d={d} reload={load} setD={setD} /></Section>
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${dollarsOf(d.today.usd, d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
-      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} /><SetReview canWrite={d.can_write} onChanged={() => setEvalKey((k) => k + 1)} /><RulesEditor d={d} canWrite={d.can_write} onSaved={() => { load(); setEvalKey((k) => k + 1); }} /></Section>
+      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} onEdit={(id) => setFocus({ id, n: Date.now() })} /><SetReview canWrite={d.can_write} focus={focus} onChanged={() => setEvalKey((k) => k + 1)} /><RulesEditor d={d} canWrite={d.can_write} onSaved={() => { load(); setEvalKey((k) => k + 1); }} /></Section>
       <Section id="gd-transcripts" title="سجل المحادثات" summary="محادثة كل مشارك كاملة لتتبع أي مشكلة، بحكم كل رد ونموذجه وكلفته. للمالك، وللمدير الأعلى بصلاحية يمنحها المالك، وكل فتح يُسجَّل."><GuideConversations /></Section>
     </div>
   );
