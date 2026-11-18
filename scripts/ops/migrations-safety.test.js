@@ -315,7 +315,7 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
     const ciGuard = dep.findIndex((s) => s.name === 'Release does not move backwards');
     expect(dep[ciGuard].run).toBe('node scripts/ops/release-direction.mjs "$GITHUB_SHA"');
     expect(dep[ciGuard].env.ROLLBACK).toBeUndefined();
-    expect(ciGuard).toBe(dep.findIndex((s) => s.name === 'Consume the deferred-deploy markers') + 1);
+    expect(dep.findIndex((s) => s.name === 'Consume the deferred-deploy markers')).toBe(ciGuard + 1);
     expect(ciGuard).toBeLessThan(dep.findIndex((s) => s.name === 'Functions changed since the last release?'));
   });
   it('اتجاه النشر: الأقدم من release يُرفض، والمقصود يمر، والمجهول يُرفض', () => {
