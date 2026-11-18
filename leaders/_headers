@@ -23,6 +23,10 @@
 /sw.js
   Cache-Control: public, max-age=0, must-revalidate
 
+# بصمة الإصدار المنشور (تصور تحديث المنصة، المرحلة 5): تُقرأ كل مرة من الخادم، فيعرف التبويب المفتوح أن تحديثًا صدر
+/version.json
+  Cache-Control: no-store
+
 # الصفحة ومسارات التطبيق (تُعاد كتابتها إلى index.html) تُفحص في كل زيارة فتظهر آخر نسخة فورًا
 # وبلا Access-Control-Allow-Origin: * الذي تضيفه Cloudflare Pages لكل ملف افتراضيًا (البند 4.1): الصفحة لا تُطلب من نطاق آخر
 /

@@ -8,6 +8,7 @@
 // باب في الكتاب بطاقات "طبّق ما قرأت" للأدوات المرتبطة به.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { call } from '../api.js';
+import { useUnsavedFlag } from '../../../shared/ui/unsaved-registry.js';
 import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
 import { computeSchedule, KINDS, labLevel, LINK_LABEL, LINK_TYPES, MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import LabBoard, { BOARD_LEVEL_AR, BoardInsight, boardReady, scaffoldText } from '../../../shared/lab/LabBoard.jsx';
@@ -371,6 +372,8 @@ function BoardPlay({ step, value, onChange, result, attempt, at, init }) {
   const [checkMsg, setCheckMsg] = useState('');
   const [msg, setMsg] = useState('');
   const dirty = useRef(false);
+  // خطوة فيها ما لم يُحفظ تمنع إعادة التحميل التلقائية للتحديث (المرحلة 5)
+  useUnsavedFlag(() => dirty.current);
   const timer = useRef(null);
   const latest = useRef(value);
   const flush = async () => {

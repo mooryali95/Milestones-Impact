@@ -17,7 +17,8 @@ import logo from './milestone-impact-inverted.svg';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
 import { tabFromSearch } from './deeplink.js';
-import { lazyView, noteView } from './reload-view.js';
+import { lazyView, noteView, urlForView } from './reload-view.js';
+import { appUpdate, reloadOnNavigate } from '../../shared/ui/app-update.js';
 import { welcomeSeen } from './api.js';
 import Profile from './screens/Profile.jsx';
 import MyData from './screens/MyData.jsx';
@@ -422,6 +423,9 @@ function Participant() {
   const hasLab = !!lab?.items?.length;
   // تغيير القسم يبدأ من أعلى الصفحة وينقل التركيز إلى المحتوى لقارئ الشاشة
   const go = useCallback((v, fromHistory = false) => {
+    // تحديث متاح (المرحلة 5 البند 4): أول تنقل داخلي يعيد التحميل إلى القسم المطلوب نفسه، ما لم يكن هنا نموذج غير محفوظ.
+    // وبلا تحديث معروف يُفحص version.json (بفاصل دقيقة على الأقل)
+    if (reloadOnNavigate(appUpdate(), { to: () => urlForView(location.href, v) })) return;
     // كل قسم خطوة في سجل المتصفح، فزر الرجوع يعيد إلى القسم السابق ولا يخرج من المنصة
     if (!fromHistory && viewRef.current !== v) history.pushState({ view: v }, '');
     setView(v);

@@ -7,6 +7,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { isChunkError, reloadOnce } from './lazy-retry.js';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
+import { useUnsavedFlag } from '../../shared/ui/unsaved-registry.js';
 
 const Ctx = createContext(null);
 export const useUI = () => useContext(Ctx);
@@ -92,8 +93,10 @@ export function useEscape(onClose, active = true) {
 }
 
 // إغلاق نافذة فيها تعديلات لم تُحفظ: Esc والنقر خارجها و«إلغاء» سواء، يُسأل قبله فلا يضيع ما كُتب سهوًا
+// والنافذة ذات التعديل غير المحفوظ تمنع إعادة التحميل التلقائية للتحديث (shared/ui/unsaved-registry.js، المرحلة 5)
 export function useGuardedClose(dirty, onClose) {
   const { confirm } = useUI();
+  useUnsavedFlag(dirty);
   return async () => {
     if (dirty && !(await confirm('لديك تعديلات لم تُحفظ. إغلاق دون حفظ؟', { danger: true, ok: 'إغلاق دون حفظ' }))) return;
     onClose();
