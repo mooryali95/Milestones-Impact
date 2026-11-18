@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261118100000_leaders_guidance_eval_case_snapshot
+-- as-of migration: 20261118110000_leaders_workshop_scan_receipts
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -2118,6 +2118,19 @@ create table if not exists leaders.workshop_attendance (
   constraint workshop_attendance_pkey PRIMARY KEY (session_id, participant_id)
 );
 
+create table if not exists leaders.workshop_scan_receipts (
+  id uuid not null,
+  session_id uuid not null,
+  ip_hash text,
+  expires_at timestamp with time zone not null,
+  created_at timestamp with time zone default now() not null,
+  participant_id uuid,
+  consumed_at timestamp with time zone,
+  constraint workshop_scan_receipts_consumed_check CHECK (((participant_id IS NULL) = (consumed_at IS NULL))),
+  constraint workshop_scan_receipts_ip_hash_check CHECK (((ip_hash IS NULL) OR (char_length(ip_hash) = 64))),
+  constraint workshop_scan_receipts_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.workshop_sessions (
   id uuid default gen_random_uuid() not null,
   requirement_id uuid not null,
@@ -3106,6 +3119,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.workshop_scan_receipts add constraint workshop_scan_receipts_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.workshop_scan_receipts add constraint workshop_scan_receipts_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.workshop_sessions add constraint workshop_sessions_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3455,6 +3476,12 @@ CREATE INDEX IF NOT EXISTS sus_responses_role ON leaders.sus_responses USING btr
 
 CREATE INDEX IF NOT EXISTS workshop_attendance_participant_idx ON leaders.workshop_attendance USING btree (participant_id);
 
+CREATE INDEX IF NOT EXISTS workshop_scan_receipts_expires_idx ON leaders.workshop_scan_receipts USING btree (expires_at);
+
+CREATE INDEX IF NOT EXISTS workshop_scan_receipts_ip_idx ON leaders.workshop_scan_receipts USING btree (ip_hash, created_at);
+
+CREATE INDEX IF NOT EXISTS workshop_scan_receipts_session_idx ON leaders.workshop_scan_receipts USING btree (session_id, created_at);
+
 CREATE INDEX IF NOT EXISTS workshop_sessions_cohort_idx ON leaders.workshop_sessions USING btree (cohort_id);
 
 CREATE INDEX IF NOT EXISTS workshop_sessions_req_idx ON leaders.workshop_sessions USING btree (requirement_id, starts_at);
@@ -3740,6 +3767,8 @@ alter table leaders.video_progress enable row level security;
 alter table leaders.webauthn_challenges enable row level security;
 
 alter table leaders.workshop_attendance enable row level security;
+
+alter table leaders.workshop_scan_receipts enable row level security;
 
 alter table leaders.workshop_sessions enable row level security;
 

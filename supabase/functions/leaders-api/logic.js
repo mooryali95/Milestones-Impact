@@ -1190,6 +1190,39 @@ export async function verifyQrToken(t, secret, now = Date.now()) {
   return (await qrToken(p.sessionId, secret, p.window)) === t;
 }
 
+// ── إيصال المسح (W1، تصور الحضور 2026-11-18 ب5.5) ──
+// من مسح الرمز قبل دخوله يأخذ إيصالًا يتحقق منه الخادم بعد الدخول، فلا يضيع الحضور حين يتجاوز الدخول عمر الرمز.
+// الشكل: r1.<الجلسة>.<معرّف الإيصال>.<الانتهاء بالثواني>.<توقيع>، والتوقيع HMAC بسر الجلسة نفسه (لا يخرج من الخادم)
+// على نص يبدأ بـscan: فلا يلتبس برمز QR. لا يحمل بيانات شخصية. والاستهلاك مرة واحدة في workshop_scan_receipts.
+export const SCAN_RECEIPT_MINUTES = 15;
+const scanMsg = (sessionId, id, exp) => `scan:${sessionId}.${id}.${exp}`;
+// مقارنة لا يتوقف زمنها على موضع أول اختلاف
+export function sameText(a, b) {
+  const x = String(a), y = String(b);
+  let d = x.length ^ y.length;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) d |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0);
+  return d === 0;
+}
+// انتهاء الإيصال: 15 دقيقة من المسح، ولا يتجاوز إغلاق نافذة الحضور (checkinOpen: نصف ساعة بعد الانتهاء)
+export function scanReceiptExpiry(session, now = Date.now()) {
+  const close = new Date(session.ends_at).getTime() + 1800e3;
+  return Math.floor(Math.min(now + SCAN_RECEIPT_MINUTES * 6e4, close) / 1000);
+}
+export async function scanReceipt(sessionId, id, exp, secret) {
+  return `r1.${sessionId}.${id}.${exp}.${(await hmacHex(secret, scanMsg(sessionId, id, exp))).slice(0, 32)}`;
+}
+export function parseScanReceipt(r) {
+  const m = String(r || '').match(/^r1\.([0-9a-f-]{36})\.([0-9a-f-]{36})\.(\d{10})\.([0-9a-f]{32})$/);
+  return m ? { sessionId: m[1], id: m[2], exp: Number(m[3]), sig: m[4] } : null;
+}
+// valid: التوقيع صحيح لهذه الجلسة. expired: صحيح وانتهى عمره
+export async function verifyScanReceipt(r, secret, now = Date.now()) {
+  const p = parseScanReceipt(r);
+  if (!p || !secret) return { valid: false, expired: false };
+  const valid = sameText(await scanReceipt(p.sessionId, p.id, p.exp, secret), String(r));
+  return { valid, expired: valid && p.exp * 1000 <= now };
+}
+
 // ── جلسات التوجيه ──
 export function coachingStatus(config, sessions, now = Date.now()) {
   const list = (sessions || []).filter((s) => s.status !== 'cancelled')

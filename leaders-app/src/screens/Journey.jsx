@@ -15,7 +15,7 @@ import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS }
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
-import Activity from './Activities.jsx';
+import Activity, { CheckinHelp } from './Activities.jsx';
 import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
@@ -368,7 +368,8 @@ function Stage({ stage, n, expanded, onToggle, level = 4, ...rest }) {
 // جلستك القادمة: أقرب جلسة ورشة لم تنتهِ، من بنود الرحلة نفسها (مصدرها workshop_sessions). في نافذتها تفتح القاعة.
 // وبلا جلسة مؤرخة قادمة: أول جلسة لم يُحدد موعدها بعد (J1)، فيظهر «لك جلسة سيُعلن موعدها» لا تاريخ 1970
 export function nextSession(journey, now = Date.now()) {
-  const all = (journey || []).flatMap((st) => (st.items || []).filter((i) => i.activity?.type === 'workshop').flatMap((i) => i.activity.sessions || []));
+  // وطريقة توثيق بندها مع كل جلسة، فيظهر «سجّل حضوري» للجلسة الحضورية الجارية التي تُوثَّق بالرمز (CheckinHelp)
+  const all = (journey || []).flatMap((st) => (st.items || []).filter((i) => i.activity?.type === 'workshop').flatMap((i) => (i.activity.sessions || []).map((x) => ({ ...x, verify: i.activity.verify }))));
   const dated = all.filter((x) => x.starts_at && x.ends_at && new Date(x.ends_at).getTime() > now).sort((x, y) => String(x.starts_at).localeCompare(String(y.starts_at)));
   return dated[0] || all.find((x) => (!x.starts_at || !x.ends_at) && !x.attended) || null;
 }
@@ -397,6 +398,7 @@ export function NextSession({ session, onHall }) {
       <b>{session.title}</b>
       <span className="small muted">{[when, session.mode === 'online' ? 'عن بعد' : session.location, !session.open && linkPending(session) ? SESSION_LINK_LATER_AR : ''].filter(Boolean).join(' · ')}</span>
       {session.attended && <span className="chip ok">سُجّل حضورك</span>}
+      <CheckinHelp session={session} />
       <div className="row">
         {session.open && onHall && <button className="btn sm" onClick={onHall}>ادخل القاعة</button>}
         {!undated && <button className="btn ghost sm" onClick={download}>أضفها إلى تقويمك</button>}

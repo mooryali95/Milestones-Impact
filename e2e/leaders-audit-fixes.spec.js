@@ -40,8 +40,12 @@ test('القسم المقفل يقول سبب قفله عند لمسه', async (
   await expect(page.getByRole('heading', { name: 'مراحل الرحلة' })).toBeVisible();
 });
 
+// وقبل ترحيل إيصال المسح (W1) يرد workshop.scan بـnot_migrated، فيُحفظ الرمز نفسه كما كان (checkin.js)
 test('رمز الحضور الممسوح قبل الدخول يُحفظ لما بعد الدخول', async ({ page }) => {
-  await page.route(/functions\/v1\/leaders-api/, (route) => route.fulfill({ json: { success: false, code: 'session' } }));
+  await page.route(/functions\/v1\/leaders-api/, (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    route.fulfill({ json: b.action === 'workshop.scan' ? { success: false, code: 'not_migrated', message: 'إيصال المسح غير متاح بعد' } : { success: false, code: 'session' } });
+  });
   await page.route(/cloudflareinsights|challenges\.cloudflare/, (r) => r.abort());
   await page.goto(`${APP}?checkin=abc123`);
   await expect(page.getByText('نسجّل حضورك بعده مباشرة')).toBeVisible();

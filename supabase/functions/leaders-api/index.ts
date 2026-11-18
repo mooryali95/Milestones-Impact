@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify
+//   مفتوحة:   cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
@@ -94,6 +94,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'coord.auth-verify': C.authVerify,
   'passkey.auth-options': () => K.authOptions(),
   'passkey.auth-verify': K.authVerify,
+  // مسح رمز الحضور قبل الدخول (W1): إيصال موقّع بلا بيانات شخصية يُستهلك بـworkshop.checkin بعد الدخول، بحد معدل في activities.ts
+  'workshop.scan': (b, ctx) => V.workshopScan(b, ctx),
   'cert.verify': Z.verify,
   'rater.get': I.raterGet,
   'rater.submit': I.raterSubmit,
@@ -150,7 +152,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
-  'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent']);
+  'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'ratings.pending', 'consent.accept', 'org.share-consent',
+  // الحضور في القاعة لا تمنعه بوابة الدفع (W1): من حضر حضر، وحقه في البرنامج يُسوّى في مكانه. وworkshop.scan مفتوح أصلًا
+  'workshop.checkin']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
 // ورابطه يُعرض على شاشة: لا يدخل القاعة الحية الحقيقية، ولا يرفع ملفات، ولا يسجّل مفتاح مرور، ولا يبدّل إلى دور آخر (M5)
 // ورابط الجلسة عن بعد يُعرض على شاشة الورشة، ورمز الجهة يربطه بجهة حقيقية، وتقييم 360 يفتح دورة ترشيح (P1-04)
@@ -348,7 +352,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'tracking.save': (p, b) => T.save(p, b),
 };
 // تصنيف أفعال المشارك كما يقرؤه program_gate_test.ts
-export const ACTION_GATES = { actions: Object.keys(participant), account: GATE_ACCOUNT, pre: GATE_PRE, program: GATE_PROGRAM, kept: GATE_KEPT, demoBlocked: DEMO_BLOCKED, demoOpen: DEMO_OPEN };
+export const ACTION_GATES = { actions: Object.keys(participant), account: GATE_ACCOUNT, pre: GATE_PRE, program: GATE_PROGRAM, kept: GATE_KEPT, demoBlocked: DEMO_BLOCKED, demoOpen: DEMO_OPEN, payFree: PAY_FREE, open: Object.keys(open) };
 
 // نتيجة فعل داخل طلب مجمّع بالشكل نفسه الذي يرده الفعل وحده، فخطؤه يبقى له ولا يُفشل الطلب كله
 async function settle(action: string, p: Promise<unknown>) {

@@ -15,7 +15,7 @@ import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 
 import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { isUndated, minutesAr, QR_WINDOW, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
+import { isUndated, minutesAr, QR_WINDOW, SCAN_RECEIPT_MINUTES, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 // موعد الجلسة أو «يُحدد لاحقًا» (J1): لا خانة فارغة ولا تاريخ 1970
 const sessionWhen = (s) => (isUndated(s) ? SESSION_TBD_AR : when(s.starts_at));
@@ -56,7 +56,19 @@ const COACH_ST = Object.fromEntries(Object.entries({ booked: '', requested: 'war
 function QrScreen({ id, onClose }) {
   const [d, setD] = useState(null);
   const [img, setImg] = useState('');
+  // المتوقع وأسماء من لم يحضر من قائمة الحضور نفسها (admin.workshop-attendance)، تُقرأ أول مرة وكلما تغيّر عدد الحاضرين
+  const [people, setPeople] = useState(null);
+  const [absentShown, setAbsentShown] = useState(false);
   useEscape(onClose);
+  const attended = d?.success ? d.attended : null;
+  useEffect(() => {
+    if (attended == null) return;
+    let alive = true;
+    L('admin.workshop-attendance', { id }).then((r) => { if (alive) setPeople(r.success ? r.people : null); });
+    return () => { alive = false; };
+  }, [id, attended]);
+  const expected = people ? people.length : null;
+  const absent = people ? people.filter((p) => !p.attendance) : [];
   useEffect(() => {
     let t = 0, alive = true;
     const load = async () => {
@@ -76,8 +88,13 @@ function QrScreen({ id, onClose }) {
         <h2>{d.session.title}</h2>
         <p>{[d.session.location, sessionWhen(d.session)].filter(Boolean).join(' · ')}</p>
         {d.open ? <img src={img} alt="رمز الحضور" /> : <div className="la-err">{isUndated(d.session) ? 'حدد موعد الجلسة أولًا: تسجيل الحضور يُفتح قبل البدء بساعة.' : 'تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة).'}</div>}
-        <p className="la-qr-hint">امسح الرمز بكاميرا جوالك لتسجيل حضورك. يتجدد الرمز كل {QR_WINDOW} ثانية.</p>
-        <b className="la-qr-count">{d.attended} حاضر</b>
+        <p className="la-qr-hint">امسح الرمز بكاميرا جوالك لتسجيل حضورك، وإن طُلب منك الدخول فادخل خلال {SCAN_RECEIPT_MINUTES} دقيقة دون مسح ثانٍ. يتجدد الرمز كل {QR_WINDOW} ثانية.</p>
+        <b className="la-qr-count">{expected ? `${expected - absent.length} من ${expected} حضروا` : `${d.attended} حاضر`}</b>
+        {absent.length > 0 && <>
+          {/* الأسماء مطوية افتراضيًا: الشاشة تُعرض في القاعة، فيفتحها المدرب حين يريد */}
+          <button className="la-link la-qr-absent-t" aria-expanded={absentShown} onClick={() => setAbsentShown((v) => !v)}>{absentShown ? 'أخفِ الأسماء' : `من لم يحضر بعد (${absent.length})`}</button>
+          {absentShown && <ul className="la-qr-absent">{absent.map((p) => <li key={p.id}>{p.full_name}</li>)}</ul>}
+        </>}
       </>}
     </div>
   );
@@ -167,7 +184,9 @@ function Workshops({ data, reload, canWrite }) {
                     <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? (s.join_url ? '' : ' · الرابط لاحقًا') : s.location_ar ? ` · ${s.location_ar}` : ''}</td>
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">
-                      {(r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+                      {/* بطريقة الجلسة الفعلية (تخصيص دفعتها يغلب البرنامج، overview في activities.ts) */}
+                      {(s.verify || r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+                      {s.verify && s.verify !== (r.config?.verify || 'qr') && <small className="la-chip" title="تخصيص الدفعة يغلب طريقة البرنامج">{VERIFY_AR[s.verify] || s.verify} لهذه الدفعة</small>}
                       {canWrite && s.cohort_id && isUndated(s) && <small className="la-muted" title="الدعوة وملف التقويم والتذكير تحتاج موعدًا">الدعوة بعد تحديد الموعد</small>}
                       {canWrite && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
