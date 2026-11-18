@@ -22,6 +22,8 @@ jobs:
     if: vars.R2_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # بيئة backup: فرعها main وحده، وفيها أسرار R2 والتشفير، فلا يقرؤها سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: backup
     env:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -49,6 +51,8 @@ jobs:
     if: (github.event_name == 'workflow_dispatch' || github.event.schedule == '17 3 2 * *') && github.repository_visibility != 'public'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # بيئة backup: فرعها main وحده، وفيها أسرار R2 والتشفير، فلا يقرؤها سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: backup
     env:
       DRILL_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
       PUBLIC_KEY: ${{ secrets.BACKUP_PUBLIC_KEY }}

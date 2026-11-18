@@ -262,7 +262,7 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
     // لا مجموعة على مستوى السير في أي منهما، فلا قفل متبادل حين يستدعي migrate.yml سير التراجع
     expect(migrate.concurrency).toBeUndefined();
     expect(manual.concurrency).toBeUndefined();
-    expect(migrate.jobs.read.environment).toBeUndefined();
+    expect(migrate.jobs.read.environment).toBe('supabase');
     expect(migrate.jobs.read.concurrency).toBeUndefined();
     expect(migrate.on.workflow_dispatch.inputs.mode.options).toEqual(['apply', 'check', 'verify', 'apply-and-deploy']);
   });
@@ -287,6 +287,37 @@ describe('التزامن والموافقة والنشر بعد التطبيق (
     const pending = [{ name: 'a', gate: 'blocking' }, { name: 'b', gate: 'tolerant' }, { name: 'c', gate: 'blocking' }];
     expect(unnamedBlocking(pending, ['a'])).toEqual(['c']);
     expect(unnamedBlocking(pending, ['a', 'c'])).toEqual([]);
+  });
+});
+
+// بوابة production لا يتجاوزها فرع غير مدموج: كل سر يكتب في القاعدة أو يفك النسخ سرّ بيئة، وكل وظيفة تقرؤه تعلن بيئة
+// مقصورة على main (RUNBOOK.md §5). سطر environment ناقص يعني أن السر بقي في أسرار المستودع ليعمل السير، فتنفتح الثغرة
+describe('أسرار الكتابة في القاعدة أسرار بيئة (البند 9)', () => {
+  const dir = join(root, '.github/workflows');
+  const ENVS = {
+    SUPABASE_ACCESS_TOKEN: ['production', 'supabase'],
+    SUPABASE_DB_URL: ['production', 'backup'],
+    SUPABASE_SERVICE_ROLE_KEY: ['backup'],
+    BACKUP_PASSPHRASE: ['production', 'backup'],
+    BACKUP_PUBLIC_KEY: ['production', 'backup'],
+    R2_ACCESS_KEY_ID: ['production', 'backup'],
+    R2_SECRET_ACCESS_KEY: ['production', 'backup'],
+    R2_BUCKET: ['production', 'backup'],
+  };
+  const jobs = readdirSync(dir).filter((f) => f.endsWith('.yml')).flatMap((f) =>
+    Object.entries(yaml.load(readFileSync(join(dir, f), 'utf8')).jobs || {}).map(([id, job]) => ({ where: `${f}:${id}`, job, text: JSON.stringify(job) })));
+  it('كل وظيفة تقرأ سرًا منها تعلن بيئة يحمله، ولا سير يمرره بـ secrets: inherit إلا إلى وظيفة تعلن بيئتها', () => {
+    const seen = new Set();
+    for (const { where, job, text } of jobs) {
+      for (const [secret, envs] of Object.entries(ENVS)) {
+        if (!text.includes(`secrets.${secret}`)) continue;
+        seen.add(secret);
+        expect({ where, secret, env: job.environment }).toEqual({ where, secret, env: expect.toBeOneOf(envs) });
+      }
+    }
+    expect([...seen].sort()).toEqual(Object.keys(ENVS).sort());
+    const manual = yaml.load(read('.github/workflows/deploy-leaders-api.yml'));
+    expect(manual.jobs.deploy.environment).toBe('supabase');
   });
 });
 

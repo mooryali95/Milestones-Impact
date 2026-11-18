@@ -17,6 +17,8 @@ jobs:
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: supabase
     steps:
       - name: Skip without a token
         id: gate
