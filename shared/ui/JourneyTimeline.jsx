@@ -5,7 +5,10 @@
 // المواضع والنصوص والحالات كلها من النموذج. لا تحرير هنا: المدة تُحرر في المرحلة، والموعد في الدفعة (مصدر واحد).
 // الحاسوب (حاوٍ أعرض من 640px): محاور ومراحل ومسارات مكدسة لما «تسير معًا» ومسطرة، ولوحة تفاصيل ثابتة المكان،
 // ويتمرر المسار أفقيًا داخل إطاره وحده. الهاتف: خط رأسي بمراحل details أصلية. وتحتهما جدول بديل لقارئ الشاشة.
-import React, { useState } from 'react';
+// السحب (D1، تصور 2026-11-18 ب5.3): بـeditable وحده (وضع تحرير خطة الدفعة لمن يكتب) يصير الشريط قابلًا للسحب بالمؤشر
+// (فأرة وقلم ولمس) وطرفه لتغيير مدته، وبلوحة المفاتيح من زر المقبض. المكوّن يقيس المؤشر نسبةً على المسار ويرسم الشبح
+// والسطر وحدهما، والمعنى كله عند المضيف (dropToEdit في cohort-journey.js). على الحاسوب وحده: الهاتف بلا مقابض.
+import React, { useEffect, useRef, useState } from 'react';
 
 // أيقونات الأنواع بالخط نفسه الذي في Ico.jsx (سماكة واحدة تأخذ لون النص)، زخرفية دائمًا والمعنى في aria-label
 const PATHS = {
@@ -46,6 +49,24 @@ function Act({ a, sel, onPick, onOpen }) {
   );
 }
 
+// الشبح: الموضع الناتج على المسار وتواريخه، في صف الشريط المسحوب، ولا يأخذ المؤشر
+function GhostBar({ ghost, band }) {
+  if (!band) return null;
+  return (
+    <div className={`jt-ghost${ghost.bad ? ' bad' : ''}`} data-testid="jt-ghost" aria-hidden="true"
+      style={{ insetInlineStart: `${ghost.at}%`, width: `${Math.max(1, ghost.width)}%`, top: `${band.top}px`, height: `${band.height}px` }}>
+      <span>{ghost.label}</span>
+    </div>
+  );
+}
+function measureNow(ref, k) {
+  const t = ref.current;
+  const b = t?.querySelector(`[data-stage="${k}"],[data-track="${k}"]`);
+  if (!t || !b) return null;
+  const tr = t.getBoundingClientRect(), br = b.getBoundingClientRect();
+  return { top: br.top - tr.top, height: br.height };
+}
+
 function Panel({ a, model, onOpen, openLabel }) {
   if (!a) return <div className="jt-panel" aria-live="polite"><p className="jt-muted">مرر المؤشر أو اضغط أي نشاط لترى تفاصيله.</p></div>;
   return (
@@ -65,11 +86,50 @@ function Panel({ a, model, onOpen, openLabel }) {
   );
 }
 
+// عتبة بدء السحب بالبكسل (كما في LabBoard): نقرة لا تصير سحبًا، والسحب لا يُبدأ تحت 640 بكسل
+const DRAG_THRESHOLD = 4;
+const DRAG_MIN_WIDTH = 640;
+
+/** مقابض السحب لشريط واحد: المقبض (لوحة المفاتيح، ويُسحب بالمؤشر أيضًا) وطرف المدة. pointer: بدء الحركة من المضيف */
+function Grips({ k, title, editable, pointer, clicked }) {
+  const bar = editable.bars?.[k];
+  if (!bar) return null;
+  const picked = editable.drag?.key === k && editable.drag?.kbd;
+  return (
+    <>
+      <button type="button" className={`jt-grip${picked ? ' on' : ''}`} data-grip={k} aria-pressed={!!picked}
+        aria-label={`حرّك «${title}»: Enter يلتقط، والأسهم يومًا وShift أسبوعًا، وAlt مع الأسهم للمدة، وEsc يلغي`}
+        aria-describedby={editable.hintId} onKeyDown={(e) => editable.onKey?.(k, e)} onPointerDown={(e) => pointer(e, k, 'move')}
+        onClick={() => { if (clicked()) editable.onToggle?.(k); }} onBlur={() => editable.onBlur?.(k)}>
+        <svg viewBox="0 0 12 16" width="10" height="14" aria-hidden="true" focusable="false"><g fill="currentColor"><circle cx="3" cy="3" r="1.4" /><circle cx="9" cy="3" r="1.4" /><circle cx="3" cy="8" r="1.4" /><circle cx="9" cy="8" r="1.4" /><circle cx="3" cy="13" r="1.4" /><circle cx="9" cy="13" r="1.4" /></g></svg>
+      </button>
+      <span className="jt-edge" data-edge={k} aria-hidden="true" title={bar.edge_ar || 'اسحب الطرف لتغيير المدة'} onPointerDown={(e) => pointer(e, k, 'end')} />
+    </>
+  );
+}
+
 /** onStage: إن مُرر صار اسم المرحلة على المسار زرًا ينقل إلى بطاقتها خارج الخط (تبويب «الرحلة» في ملف الدفعة)
  * omitCards: مفاتيح بطاقات الملخص التي يعرضها المضيف فوق الخط، فلا تتكرر (تبويب «الرحلة» يحمل المدة والنافذة والآن في رأسه)
  * @param {{ model: any, onOpen?: (a: any) => void, openLabel?: (a: any) => string, onEmpty?: () => void, onStage?: (key: string) => void, id?: string, omitCards?: readonly string[] }} props */
-export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [] }) {
+/* editable (D1): { bars: { مفتاح: { edge_ar } }, drag: { key, kind, kbd, ghost: { at, width, label, bad } } | null,
+ *   onStart({ key, kind }), onMove({ pct, over }), onEnd({ pct, over }), onCancel(), onKey(key, event), live, hintId }
+ *   pct: النقاط المئوية التي تحرّكها المؤشر على المسار من موضع الالتقاط باتجاه الزمن (مع مراعاة RTL)، وover: الصف والشريط تحت المؤشر */
+export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null }) {
   const [sel, setSel] = useState(model?.selected || null);
+  const trackRef = useRef(null);
+  const press = useRef(null);
+  // نقرة تأتي بعد سحب بالمؤشر على المقبض ليست التقاطًا بلوحة المفاتيح
+  const dragged = useRef(false);
+  // موضع الشريط المسحوب على المسار (أعلاه وارتفاعه)، فيُرسم الشبح في صفه
+  const [band, setBand] = useState(null);
+  const dragging = !!editable?.drag;
+  // Esc يلغي السحب بالمؤشر أينما كان التركيز، ولا يصل إلى غيره (نافذة أو ملف)
+  useEffect(() => {
+    if (!dragging || editable?.drag?.kbd) return undefined;
+    const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); press.current = null; editable.onCancel?.(); } };
+    window.addEventListener('keydown', esc, true);
+    return () => window.removeEventListener('keydown', esc, true);
+  }, [dragging, editable]);
   if (!model) return null;
   const head = `${id}-h`;
   if (model.empty) {
@@ -86,9 +146,70 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const current = acts.get(sel) || acts.get(model.selected) || null;
   const cohort = model.context === 'cohort';
   const pick = (k) => setSel(k);
+  // ── السحب بالمؤشر: النسبة على المسار باتجاه الزمن، وما تحت المؤشر (الصف والشريط)، وعتبة قبل البدء ──
+  const pctOf = (x) => {
+    const el = trackRef.current;
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    const rtl = getComputedStyle(el).direction === 'rtl';
+    return (((rtl ? r.right - x : x - r.left) / (r.width || 1)) * 100);
+  };
+  const overAt = (x, y, own) => {
+    const el = typeof document !== 'undefined' ? document.elementFromPoint(x, y) : null;
+    if (!el || !trackRef.current?.contains(el)) return { zone: null, key: null };
+    const bar = el.closest('[data-stage],[data-track]');
+    const k = bar ? bar.getAttribute('data-stage') || bar.getAttribute('data-track') : null;
+    const zone = el.closest('.jt-tracks') ? 'tracks' : el.closest('.jt-services') ? 'services' : el.closest('.jt-slots') ? 'stages' : null;
+    return { zone, key: k && k !== own ? k : null };
+  };
+  const measure = (k) => {
+    const t = trackRef.current;
+    const b = t?.querySelector(`[data-stage="${k}"],[data-track="${k}"]`);
+    if (!t || !b) return null;
+    const tr = t.getBoundingClientRect(), br = b.getBoundingClientRect();
+    return { top: br.top - tr.top, height: br.height };
+  };
+  const pointer = (e, k, kind) => {
+    if (!editable?.bars?.[k] || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const box = trackRef.current?.closest('.jt');
+    if (box && box.getBoundingClientRect().width < DRAG_MIN_WIDTH) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragged.current = false;
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch { /* المتصفح بلا التقاط: يكفي التتبع */ }
+    press.current = { k, kind, x: e.clientX, y: e.clientY, p0: pctOf(e.clientX), on: false, id: e.pointerId, grip: !!e.currentTarget.closest?.('.jt-grip') };
+  };
+  const onPointerMove = (e) => {
+    const p = press.current;
+    if (!p || p.id !== e.pointerId) return;
+    if (!p.on) {
+      if (Math.hypot(e.clientX - p.x, e.clientY - p.y) < DRAG_THRESHOLD) return;
+      p.on = true;
+      setBand(measure(p.k));
+      editable.onStart?.({ key: p.k, kind: p.kind });
+    }
+    editable.onMove?.({ pct: pctOf(e.clientX) - p.p0, over: overAt(e.clientX, e.clientY, p.k) });
+  };
+  const onPointerUp = (e) => {
+    const p = press.current;
+    if (!p || p.id !== e.pointerId) return;
+    press.current = null;
+    if (p.on) { dragged.current = p.grip; editable.onEnd?.({ pct: pctOf(e.clientX) - p.p0, over: overAt(e.clientX, e.clientY, p.k) }); }
+    else if (p.kind === 'move') e.target?.closest?.('.jt-grip')?.focus?.();
+  };
+  const onPointerCancel = () => { if (press.current?.on) editable.onCancel?.(); press.current = null; };
+  // لوحة المفاتيح: المضيف يلتقط ويحرك، وهنا يُقاس صف الشريط للشبح
+  const kbdBand = editable?.drag?.kbd ? editable.drag.key : null;
+  const ghost = editable?.drag?.ghost || null;
+  const bandNow = band && editable?.drag && !editable.drag.kbd ? band : null;
+  const clicked = () => { const was = dragged.current; dragged.current = false; return !was; };
+  const grips = (k, title) => (editable ? <Grips k={k} title={title} editable={editable} pointer={pointer} clicked={clicked} /> : null);
+  // جسم الشريط بالفأرة والقلم وحدهما: اللمس عليه يمرر الخط، ويُسحب باللمس من المقبض والطرف
+  const barDrag = (k) => (editable?.bars?.[k] ? { onPointerDown: (e) => { if (e.pointerType !== 'touch' && !e.target.closest('button,a,input,select,.jt-edge')) pointer(e, k, 'move'); } } : {});
   const lane = (s) => (
-    <div key={s.key} className={`jt-stage ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}
+    <div key={s.key} data-stage={s.key} {...barDrag(s.key)} className={`jt-stage${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''} ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}
       style={s.together ? { marginInlineStart: `${s.lane_at}%`, width: `${Math.min(s.lane_width, 100 - s.lane_at)}%` } : undefined}>
+      {grips(s.key, s.title)}
       <div className="jt-stage-head">
         {onStage ? (
           <button type="button" className="jt-stage-link" onClick={() => onStage(s.key)} aria-label={`${s.title}: انتقل إلى بطاقتها`}>
@@ -128,7 +249,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   );
 
   return (
-    <section className={`jt ctx-${model.context}`} aria-labelledby={head}>
+    <section className={`jt ctx-${model.context}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}`} aria-labelledby={head}>
       <header className="jt-head">
         <div>
           <p className="jt-eyebrow">الرحلة في لمحة{cohort ? '، بالتواريخ' : '، بالأسابيع'}</p>
@@ -145,7 +266,8 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
       {/* الحاسوب: المسار على مقياس واحد، يتمرر وحده إن ضاق الحاوي */}
       <div className="jt-desk">
         <div className="jt-scroll" tabIndex={0} role="group" aria-label="الخط الزمني، يتحرك بالأسهم">
-          <div className="jt-track">
+          <div className="jt-track" ref={trackRef} onPointerMove={editable ? onPointerMove : undefined} onPointerUp={editable ? onPointerUp : undefined}
+            onPointerCancel={editable ? onPointerCancel : undefined} onLostPointerCapture={editable ? onPointerUp : undefined}>
             {model.today && <div className="jt-today" style={{ insetInlineStart: `${model.today.at}%` }}><span>{model.today.label}</span></div>}
             <div className="jt-row jt-phases">
               {model.phases.map((p) => (
@@ -166,8 +288,9 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
               <div className="jt-row jt-tracks" role="group" aria-label={model.tracks_ar} style={{ minHeight: `${24 + tracks.length * 106}px` }}>
                 <span className="jt-row-label">{model.tracks_ar}</span>
                 {tracks.map((s, i) => (
-                  <div key={s.key} className={`jt-trackbar ph-${s.phase}${s.status ? ` st-${s.status}` : ''}`} data-track={s.key}
-                    style={{ insetInlineStart: `${s.at}%`, width: `${s.width}%`, top: `${20 + i * 106}px` }}>
+                  <div key={s.key} className={`jt-trackbar ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''}`} data-track={s.key}
+                    {...barDrag(s.key)} style={{ insetInlineStart: `${s.at}%`, width: `${s.width}%`, top: `${20 + i * 106}px` }}>
+                    {grips(s.key, s.title)}
                     {trackHead(s)}
                     <div className="jt-acts">
                       {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
@@ -190,11 +313,17 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                 })}
               </div>
             )}
+            {ghost && (bandNow || kbdBand) && (
+              <GhostBar ghost={ghost} band={bandNow || measureNow(trackRef, kbdBand)} />
+            )}
             <div className="jt-row jt-ruler">
               {model.ticks.map((t) => <span key={`${t.at}-${t.label}`} style={{ insetInlineStart: `${t.at}%` }}>{t.label}</span>)}
             </div>
           </div>
         </div>
+        {editable && (
+          <p className="jt-drag-live" id={editable.hintId} aria-live="polite">{editable.live || 'اسحب الشريط لتغيير بدايته، وطرفه لتغيير مدته، أو استعمل المقبض بلوحة المفاتيح. والعدادات في البطاقات تفعل الشيء نفسه.'}</p>
+        )}
         <div className="jt-foot">
           <ul className="jt-legend" aria-label="مفتاح الرموز">
             <li><i className="sq req" />إلزامي</li><li><i className="sq opt" />اختياري</li>
