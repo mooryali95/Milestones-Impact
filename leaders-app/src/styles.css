@@ -823,6 +823,9 @@ details.mf-guide:not([open]) { background: transparent; border-inline-start-colo
 .checkin-mark { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; font-size: 34px; color: #fff; }
 .checkin-mark.ok { background: var(--ok); }
 .checkin-mark.bad { background: var(--bad); }
+.checkin-help { flex-basis: 100%; display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.checkin-help ol { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; }
+.checkin-help p { margin: 0; }
 
 /* القياس البعدي: تقدير الآن وقبل البرنامج، ومقارنة البداية بالنهاية */
 .retro-label { font-size: 14px; font-weight: 700; color: var(--slate); margin: 14px 0 8px; }

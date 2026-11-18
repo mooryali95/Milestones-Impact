@@ -27,6 +27,7 @@ const LabScreen = lazy(() => import('./screens/Lab.jsx'));
 const OrgPortal = lazy(() => import('./screens/OrgPortal.jsx'));
 const Verify = lazy(() => import('./screens/Verify.jsx'));
 import { CheckIn } from './screens/Activities.jsx';
+import { checkinKeep, receiptFor, signInNote } from './checkin.js';
 const Impact = lazy(() => import('./screens/Impact.jsx'));
 const Feedback360 = lazy(() => import('./screens/Feedback360.jsx'));
 const Feedback360Entry = lazy(() => import('./screens/Feedback360.jsx').then((m) => ({ default: m.Feedback360Entry })));
@@ -146,14 +147,7 @@ export default function App() {
 }
 
 // مسارات تطبيق المشارك نفسه: الرئيسية، ورابط الدخول من البريد
-// رمز الحضور الممسوح قبل الدخول يُحفظ ساعتين، فيُسجَّل الحضور بعد الدخول ولو فُتح رابط البريد في تبويب آخر
-const CHECKIN_KEY = 'mi_checkin';
-const checkinKeep = {
-  set: (t) => { try { localStorage.setItem(CHECKIN_KEY, JSON.stringify({ t, at: Date.now() })); } catch { /* تخزين محجوب: يبقى في الذاكرة */ } },
-  get: () => { try { const v = JSON.parse(localStorage.getItem(CHECKIN_KEY) || 'null'); return v && Date.now() - v.at < 2 * 3600e3 ? v.t : null; } catch { return null; } },
-  clear: () => { try { localStorage.removeItem(CHECKIN_KEY); } catch { /* لا شيء محفوظ */ } },
-};
-
+// رمز الحضور الممسوح قبل الدخول: إيصاله يُحفظ في الجهاز (checkin.js)، فيُسجَّل الحضور بعد الدخول ولو فُتح رابط البريد في تبويب آخر
 const PARTICIPANT_PATHS = ['/', '/verify', '/index.html'];
 
 function NotFound() {
@@ -234,11 +228,27 @@ function Participant() {
   // رمز حضور الورشة من مسح QR: /?checkin=...
   // رابط العرض من لوحة الإدارة: يُلتقط قبل أي شيء
   const [demo, setDemo] = useState(() => captureDemoLink() || demoPending());
+  // { t } رمز ممسوح، أو { r, exp, title } إيصال مسح قبل الدخول، أو { error } رفض لحظة المسح، أو { t, kept } رمز حُفظ
+  // احتياطًا (قبل ترحيل الإيصال أو انقطاع الشبكة)
   const [checkin, setCheckin] = useState(() => {
     const t = new URLSearchParams(location.search).get('checkin');
-    if (t) { history.replaceState(null, '', '/'); checkinKeep.set(t); }
-    return t || checkinKeep.get();
+    if (t) { history.replaceState(null, '', '/'); return { t }; }
+    return checkinKeep.get();
   });
+  // مسح بلا دخول (أو بجلسة انتهت): الخادم يتحقق من الرمز الآن ويعطي إيصالًا، فلا ينتهي الرمز أثناء الدخول (W1)
+  const scanning = !!checkin?.t && !checkin.kept && !me && (!session.get() || !booting);
+  useEffect(() => {
+    if (!scanning) return;
+    let alive = true;
+    receiptFor(checkin.t, call).then((c) => {
+      if (!alive) return;
+      if (c.error) checkinKeep.clear(); else checkinKeep.set(c);
+      setCheckin(c.t ? { ...c, kept: true } : c);
+    });
+    return () => { alive = false; };
+  }, [scanning, checkin?.t]);
+  // ما ينتظر التسجيل بعد الدخول: لا الرفض ولا ما زال يُطلب إيصاله
+  const pendingCheckin = checkin && !checkin.error && !scanning ? checkin : null;
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -335,11 +345,11 @@ function Participant() {
   // الأقسام المتاحة الآن فقط: الكتاب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
   // الحق في البرنامج (دفع أو رعاية أو إعفاء): مصدره الخادم (me.access)، وغيابه يعني الدفع مطفأ (hasAccess في gates.js)
   const paidFor = (item) => hasAccess(me, item);
-  const inJourney = me && gateDone(me, 'profile') && gateDone(me, 'assessment') && paidFor('program') && !checkin;
+  const inJourney = me && gateDone(me, 'profile') && gateDone(me, 'assessment') && paidFor('program') && !pendingCheckin;
   // معالج البداية: خطوته من البوابات نفسها (Onboarding.jsx)؛ الرأس يظهر فوق شاشات القبول، والخطوة 4 بطاقة في الرحلة
   const [onbTick, setOnbTick] = useState(0);
   const [consentLater, setConsentLater] = useState(false);   // D18: أجّل تجديد الموافقة في هذه الجلسة
-  const onb = me && !checkin ? onboardingStep(me, { assessmentPaywall: !paidFor('assessment') }) : null;
+  const onb = me && !pendingCheckin ? onboardingStep(me, { assessmentPaywall: !paidFor('assessment') }) : null;
   const rail = onb && onb.key !== 'next' && onbTick >= 0 ? <OnboardingRail step={onb} /> : null;
   const approved = !!me?.profile?.approved;
   // مفاتيح الميزات قيد البناء من الخادم (me.features): القاعة وكاتون و360 لا تظهر ولا تُفتح حين تُخفى، ورابط /?tab=hall يقع على الرحلة
@@ -370,11 +380,13 @@ function Participant() {
       <button className="link small" onClick={() => { session.clear(); setBootError(''); }}>ادخل بحساب آخر</button>
     </div>
   );
-  else if (!me) screen = <SignIn onSignedIn={accept} initialError={verifyError || (checkin ? 'سجّل دخولك، ونسجّل حضورك بعده مباشرة دون مسح الرمز مرة أخرى.' : '')} />;
+  else if (!me && scanning) screen = <div className="center-load"><div className="spinner" aria-label="جارٍ حفظ المسح" /></div>;
+  else if (!me) screen = <SignIn onSignedIn={accept} initialError={verifyError || signInNote(checkin)} />;
   // D18: من لم يوافق قط يوافق مرة، ومن وافق قبل آخر نسخة جوهرية يرى ما تغيّر ويوافق أو يؤجل (الحالة من الخادم)
   else if (consentNeed === 'first' && !me.participant.is_demo) screen = <Consent consent={me.participant.consent} onAccepted={accept} />;
+  // الحضور قبل تجديد الموافقة القابل للتأجيل (W1): من في القاعة يُسجَّل أولًا، ويرى التجديد بعده
+  else if (pendingCheckin) screen = <CheckIn token={pendingCheckin.t} receipt={pendingCheckin.r} onDone={async () => { checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (consentNeed === 'renew' && !me.participant.is_demo && !consentLater) screen = <Consent consent={me.participant.consent} onAccepted={accept} onLater={() => setConsentLater(true)} />;
-  else if (checkin) screen = <CheckIn token={checkin} onDone={async () => { checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
     screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}{gateDone(me, 'profile') && me.profile?.approved && ft.f360 && <Feedback360Entry onOpen={() => go('f360')} />}</>;

@@ -26,14 +26,18 @@ const RETENTION_DAYS = 90;
 export async function purge() {
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 864e5).toISOString();
   const out: Record<string, number | string> = {};
-  const run = async (key: string, q: any) => {
-    const { data, error } = await q.select('id');
+  const run = async (key: string, q: any, col = 'id') => {
+    const { data, error } = await q.select(col);
     out[key] = error ? `error: ${error.message}` : (data || []).length;
   };
   for (const t of ['email_challenges', 'coordinator_challenges', 'expert_challenges', 'webauthn_challenges']) await run(t, db.from(t).delete().lt('created_at', cutoff));
   for (const t of ['auth_sessions', 'coordinator_sessions', 'expert_sessions']) await run(t, db.from(t).delete().lt('expires_at', cutoff));
   await run('certificate_checks', db.from('certificate_checks').delete().lt('created_at', cutoff));
   await run('handbook_views', db.from('handbook_views').update({ ip: null, user_agent: null }).lt('viewed_at', cutoff).not('ip', 'is', null));
+  // عنوان الشبكة ونوع المتصفح مع الحضور (W1، افتراض أ8 في تصور الحضور): يُصفّران بعد المدة نفسها ويبقى الحضور. الجدول بلا id
+  await run('workshop_attendance', db.from('workshop_attendance').update({ ip: null, user_agent: null }).lt('checked_in_at', cutoff).or('ip.not.is.null,user_agent.not.is.null'), 'session_id');
+  // إيصالات المسح: عمرها 15 دقيقة، فتُحذف بعد انتهائها بيوم. قبل الترحيل 20261118100000 يُسجَّل الخطأ ولا يقف التنظيف
+  await run('workshop_scan_receipts', db.from('workshop_scan_receipts').delete().lt('expires_at', new Date(Date.now() - 864e5).toISOString()));
   // سجل الإرسال 180 يومًا (D15، نسب استجابة المقيّمين عبر الدفعة)، والطابور بعد إرساله أو تركه 30 يومًا
   await run('mail_events', db.from('mail_events').delete().lt('created_at', new Date(Date.now() - MAIL_RETENTION_DAYS * 864e5).toISOString()));
   const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();

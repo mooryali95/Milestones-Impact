@@ -5,7 +5,8 @@
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
-import { alertOps, audit, CONFIG, db, Fail, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import { alertOps, audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import { missingTable } from './missing-column.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
@@ -16,6 +17,7 @@ import {
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
   bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery,
+  parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt,
 } from './logic.js';
 
 type Body = Record<string, any>;
@@ -236,7 +238,50 @@ export async function videoPing(p: any, b: Body) {
 }
 
 // ── تسجيل الحضور بمسح رمز QR ──
+// برمز QR الحالي (t) لمن مسح وهو داخل، أو بإيصال المسح (r) لمن مسح قبل دخوله (workshopScan). والإيصال يُستهلك
+// بعد كل الفحوص، فمن ليس من دفعة الجلسة لا يحرق إيصالًا، ومن استهلكه لا يعطيه لغيره
+const RECEIPT_INVALID = 'إيصال المسح غير صالح، امسح الرمز المعروض الآن';
 export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
+  const viaReceipt = b.r != null && b.r !== '';
+  const receipt = viaReceipt ? parseScanReceipt(b.r) : null;
+  const parsed = viaReceipt ? null : parseQrToken(String(b.t || ''));
+  if (viaReceipt ? !receipt : !parsed) throw new Fail(viaReceipt ? RECEIPT_INVALID : 'رمز الحضور غير صالح', 400, viaReceipt ? 'receipt_invalid' : 'qr_invalid');
+  const s = must(await db.from('workshop_sessions').select('*').eq('id', viaReceipt ? receipt!.sessionId : parsed!.sessionId).maybeSingle());
+  if (!s) throw new Fail(viaReceipt ? RECEIPT_INVALID : 'رمز الحضور غير صالح', 400, viaReceipt ? 'receipt_invalid' : 'qr_invalid');
+  if (viaReceipt) {
+    const v = await verifyScanReceipt(String(b.r), s.secret);
+    if (!v.valid) throw new Fail(RECEIPT_INVALID, 400, 'receipt_invalid');
+    if (v.expired) throw new Fail('مضت أكثر من ربع ساعة على المسح، امسح الرمز المعروض الآن', 400, 'receipt_expired');
+  } else if (!(await verifyQrToken(String(b.t), s.secret))) throw new Fail('انتهت صلاحية الرمز، امسح الرمز المعروض الآن', 400, 'qr_expired');
+  if (isUndated(s)) throw new Fail('موعد هذه الجلسة لم يُحدد بعد، فلا يُسجل حضورها الآن', 400, 'undated');
+  if (!checkinOpen(s)) throw new Fail('تسجيل الحضور لهذه الجلسة غير متاح الآن', 400, 'closed');
+  const r = await myRequirement(p, s.requirement_id, 'workshop', s);
+  if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
+  if (viaReceipt) await consumeReceipt(receipt!.id, s.id, p.id);
+  const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
+  if (!prev) {
+    must(await db.from('workshop_attendance').insert({ session_id: s.id, participant_id: p.id, method: 'qr', ip: ctx.ip, user_agent: ctx.ua }));
+    await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, viaReceipt ? { via: 'receipt' } : null);
+  }
+  return { success: true, already: !!prev, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+}
+// الاستهلاك ذري: يكتب المشارك على الصف غير المستهلك وحده. وصاحبه يعيده بلا أثر (إعادة المحاولة بعد انقطاع)
+async function consumeReceipt(id: string, sessionId: string, participantId: string) {
+  const { data, error } = await db.from('workshop_scan_receipts').update({ participant_id: participantId, consumed_at: new Date().toISOString() })
+    .eq('id', id).eq('session_id', sessionId).is('consumed_at', null).select('id');
+  if (error) throw new Fail(RECEIPT_INVALID, 400, 'receipt_invalid');
+  if (data?.length) return;
+  const row = must(await db.from('workshop_scan_receipts').select('participant_id').eq('id', id).eq('session_id', sessionId).maybeSingle()) as any;
+  if (!row) throw new Fail(RECEIPT_INVALID, 400, 'receipt_invalid');
+  if (row.participant_id !== participantId) throw new Fail('سُجّل بهذا المسح حضور مشارك آخر، امسح الرمز المعروض الآن من جوالك', 409, 'receipt_used');
+}
+
+// ── إيصال المسح بلا دخول (workshop.scan، مفتوح) ──
+// يتحقق من الرمز لحظة المسح كما يتحقق workshop.checkin (التوقيع والنافذة والموعد وطريقة التوثيق بتخصيص الدفعة)، ويعطي
+// إيصالًا موقّعًا مربوطًا بالجلسة. حد المعدل بعدّ الصفوف كبقية الأفعال المفتوحة (share.ts): القاعة شبكة واحدة غالبًا، فحد
+// الشبكة واسع، والجلسة حد ثانٍ. قبل الترحيل 20261118100000 يرد not_migrated فيحفظ التطبيق الرمز كما كان
+export const SCAN_LIMITS = Object.freeze({ perIp10Min: 300, perSession10Min: 600 });
+export async function workshopScan(b: Body, ctx: Ctx) {
   const t = String(b.t || '');
   const parsed = parseQrToken(t);
   if (!parsed) throw new Fail('رمز الحضور غير صالح', 400, 'qr_invalid');
@@ -245,14 +290,21 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   if (!(await verifyQrToken(t, s.secret))) throw new Fail('انتهت صلاحية الرمز، امسح الرمز المعروض الآن', 400, 'qr_expired');
   if (isUndated(s)) throw new Fail('موعد هذه الجلسة لم يُحدد بعد، فلا يُسجل حضورها الآن', 400, 'undated');
   if (!checkinOpen(s)) throw new Fail('تسجيل الحضور لهذه الجلسة غير متاح الآن', 400, 'closed');
-  const r = await myRequirement(p, s.requirement_id, 'workshop', s);
-  if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
-  const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
-  if (!prev) {
-    must(await db.from('workshop_attendance').insert({ session_id: s.id, participant_id: p.id, method: 'qr', ip: ctx.ip, user_agent: ctx.ua }));
-    await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id);
-  }
-  return { success: true, already: !!prev, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+  if ((await workshopVerify(s)) !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
+  const notMigrated = () => new Fail('إيصال المسح غير متاح بعد', 503, 'not_migrated');
+  const ipHash = ctx.ip ? await hash(`workshop-scan:${ctx.ip}`) : null;
+  const since = new Date(Date.now() - 6e5).toISOString();
+  const [byIp, bySession] = await Promise.all([
+    ipHash ? db.from('workshop_scan_receipts').select('id', { count: 'exact', head: true }).eq('ip_hash', ipHash).gte('created_at', since) : Promise.resolve({ count: 0, error: null }),
+    db.from('workshop_scan_receipts').select('id', { count: 'exact', head: true }).eq('session_id', s.id).gte('created_at', since),
+  ]) as any[];
+  for (const res of [byIp, bySession]) if (res.error) { if (missingTable(res.error)) throw notMigrated(); must(res); }
+  if ((byIp.count ?? 0) >= SCAN_LIMITS.perIp10Min || (bySession.count ?? 0) >= SCAN_LIMITS.perSession10Min) throw new Fail('مسحات كثيرة في وقت قصير، حاول بعد دقيقة', 429, 'rate');
+  const id = crypto.randomUUID();
+  const exp = scanReceiptExpiry(s);
+  const ins = await db.from('workshop_scan_receipts').insert({ id, session_id: s.id, ip_hash: ipHash, expires_at: new Date(exp * 1000).toISOString() });
+  if (ins.error) { if (missingTable(ins.error)) throw notMigrated(); must(ins); }
+  return { success: true, receipt: await scanReceipt(s.id, id, exp, s.secret), expires_at: new Date(exp * 1000).toISOString(), session: { title: s.title_ar } };
 }
 
 // ── الانضمام إلى جلسة جماعية عن بعد ──
@@ -377,10 +429,17 @@ export async function overview() {
   ]);
   const counts: Record<string, number> = {};
   for (const a of att.data || []) counts[a.session_id] = (counts[a.session_id] || 0) + 1;
+  // طريقة التوثيق الفعلية لكل جلسة (W1): من متطلبها وتخصيص دفعتها، كما يحكم بها workshop.checkin والبريد (workshopVerify).
+  // زر «اعرض رمز الحضور» يتبعها، فلا يُعرض رمز لجلسة تُوثَّق دفعتها بالانضمام، ولا يغيب عن دفعة خصّصتها بالرمز
+  const cohortIds = [...new Set((ws.data || []).map((s: any) => s.cohort_id).filter(Boolean))];
+  const delivery = cohortIds.length ? ((await db.from('cohorts').select('id, delivery').in('id', cohortIds)).data || []) as any[] : [];
+  const deliveryOf = Object.fromEntries(delivery.map((c: any) => [c.id, c.delivery || {}]));
+  const reqOf = Object.fromEntries((reqs.data || []).map((r: any) => [r.id, r]));
+  const verifyOf = (s: any) => sessionVerify(reqOf[s.requirement_id], deliveryOf[s.cohort_id]);
   return {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
-    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0 }; delete row.secret; return row; }),
+    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s) }; delete row.secret; return row; }),
     coaching: coach.data || [],
     programs: programs.data || [], cohorts: cohorts.data || [],
   };
@@ -589,7 +648,12 @@ async function workshopVerify(s: any): Promise<string> {
   const req = must(await db.from('stage_requirements').select('code, kind, config').eq('id', s.requirement_id).maybeSingle()) as any;
   if (!req) throw new Error('requirement');
   const cohort = s.cohort_id ? (must(await db.from('cohorts').select('delivery').eq('id', s.cohort_id).maybeSingle()) as any) : null;
-  return applyDelivery(req, cohort?.delivery?.[req.code])?.config?.verify || 'qr';
+  return sessionVerify(req, cohort?.delivery);
+}
+// المصدر الواحد للحساب: المتطلب بتخصيص الدفعة (applyDelivery)، وبلا متطلب مقروء «qr» كما كان
+export function sessionVerify(req: any, delivery: any): string {
+  if (!req) return 'qr';
+  return applyDelivery(req, delivery?.[req.code])?.config?.verify || 'qr';
 }
 async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   // غير المؤرخة لا دعوة لها ولا تذكير ولا ملف تقويم (الدعوة تمنعها، وفلتر التذكير يتجاهلها، وهذا حارس ثالث)

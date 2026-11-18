@@ -168,6 +168,26 @@ function SessionChip({ s }) {
   return <span className="chip">قادمة</span>;
 }
 
+// «سجّل حضوري» (W1): جلسة حضورية جارية تُوثَّق بالرمز ولم يُسجَّل حضورها. الزر يقول ما يفعله المشارك الآن بخطوات قصيرة،
+// والماسح داخل التطبيق والأرقام الستة في المرحلة التالية (W2)
+export function CheckinHelp({ session }) {
+  const [shown, setShown] = useState(false);
+  if (!session?.open || session.attended || session.mode === 'online' || session.verify !== 'qr') return null;
+  return (
+    <div className="checkin-help">
+      <button type="button" className="btn sm" aria-expanded={shown} onClick={() => setShown((v) => !v)}>سجّل حضوري</button>
+      {shown && (
+        <ol className="small">
+          <li>افتح كاميرا جوالك ووجّهها إلى الرمز على شاشة القاعة.</li>
+          <li>اضغط الرابط الذي يظهر فوق الرمز.</li>
+          <li>يُسجَّل حضورك فورًا. وإن طُلب منك الدخول فادخل خلال ربع ساعة، ويُسجَّل حضورك بعده دون مسح ثانٍ.</li>
+        </ol>
+      )}
+      {shown && <p className="small muted">تعذّر المسح؟ اطلب من المدرب تسجيل حضورك من قائمته.</p>}
+    </div>
+  );
+}
+
 function Workshop({ item, open, setToast }) {
   const a = item.activity;
   const [busy, setBusy] = useState('');
@@ -200,6 +220,7 @@ function Workshop({ item, open, setToast }) {
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
               <SessionChip s={s} />
+              {open && <CheckinHelp session={{ ...s, verify: a.verify }} />}
             </li>
           ))}
         </ul>
@@ -388,11 +409,12 @@ export default function Activity({ item, open, onUpdate, onHandbook, onCapstone,
 }
 
 // ── شاشة تسجيل الحضور بعد مسح رمز QR ──
-export function CheckIn({ token, onDone }) {
+// بالرمز نفسه لمن مسح وهو داخل، أو بإيصال المسح لمن مسح قبل دخوله (checkin.js)
+export function CheckIn({ token, receipt, onDone }) {
   const [state, setState] = useState({ busy: true });
   useEffect(() => {
-    call('workshop.checkin', { t: token }).then((r) => setState(r.success ? { ok: r } : { error: r.message }));
-  }, [token]);
+    call('workshop.checkin', receipt ? { r: receipt } : { t: token }).then((r) => setState(r.success ? { ok: r } : { error: r.message }));
+  }, [token, receipt]);
   return (
     <div className="page narrow">
       <section className="card checkin">
