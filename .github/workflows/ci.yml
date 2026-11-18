@@ -197,6 +197,12 @@ jobs:
         if: needs.changes.outputs.admin == 'true'
         run: git add -N admin && git diff --exit-code --stat -- admin
 
+      # ش2 (تصور تحديث المنصة، المرحلة 5 البند 6): تبويب فُتح قبل النشر يجد ملفات إصداره. كل ملف يقدّمه الإصدار المرقّى
+      # (فرع release) موجود في الناتج الجديد، إلا ما مضى عليه 14 يومًا في releases/، والمجلد يطابق قائمته الصريحة
+      - name: Previous release files are kept
+        if: needs.changes.outputs.leaders == 'true' || needs.changes.outputs.admin == 'true'
+        run: node scripts/ops/retain-assets.mjs check
+
       # متصفح Playwright من الذاكرة بإصداره؛ مكتبات النظام وحدها عند الإصابة
       - name: Playwright version
         id: pw
@@ -334,7 +340,7 @@ jobs:
     # !cancelled: الوظائف قبل البوابة قد تُتخطى (شجرة مفحوصة، أو الجدولة)، والتخطي يسري إلى ما بعدها بلا هذا الشرط
     if: ${{ !cancelled() && needs.release-gate.result == 'success' && needs.release-gate.outputs.run == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 55
     # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
     environment: supabase
     concurrency:
@@ -361,6 +367,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"
+      # ش2 قبل أي نشر: إصدار رُقّي بعد أن فُحص طلب الدمج (طلبان متوازيان) قد لا تكون ملفاته في هذا الناتج، فلا نشر ولا ترقية
+      # حتى يُعاد تحديث releases/ (RUNBOOK §2). قبل الدوال، فلا يبقى نشر دوال بلا ترقية واجهة
+      - name: Previous release files are kept
+        run: node scripts/ops/retain-assets.mjs check
       # الدوال تُنشر حين تغيّرت منذ آخر إيداع وصل الإنتاج (فرع release)، لا منذ الدفعة السابقة وحدها
       - name: Functions changed since the last release?
         id: fn
@@ -493,3 +503,7 @@ jobs:
           done
       - name: Promote to release (Cloudflare Pages production branch)
         run: git push --force origin "$GITHUB_SHA:refs/heads/release"
+      # ش8: الإنتاج يقدّم version.json بالبصمة الجديدة خلال 15 دقيقة، وكل ملف JS وCSS (الأقسام الكسولة وملفات الإصدارات
+      # السابقة) يُخدم بنوعه. pages.dev بديلًا حين يحجب جدار الحماية المشغّل (كما في probe.yml). الفشل: تنبيه وتعليمات التراجع
+      - name: Production serves the new release
+        run: node scripts/ops/verify-live.mjs --wait=900

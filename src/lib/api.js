@@ -8,6 +8,7 @@
 // it grants no access to registrations, OTP codes, or admin data.
 
 import { isAuthAction, isReadAction, replayable } from '../../supabase/functions/_shared/action-kinds.js';
+import { CLIENT_LEVEL, LEVEL_PARAM } from '../../supabase/functions/_shared/client-compat.js';
 
 export const SUPABASE_URL = 'https://eormhcupwgwpllhrfxxg.supabase.co';
 // منطقة تنفيذ الدوال هي منطقة القاعدة نفسها (مومباي)، مصدر واحد لعملاء الدوال كلهم. بلا تثبيت تعمل الدالة في أقرب
@@ -206,7 +207,9 @@ export async function postAction(fn, payload, extra = {}) {
   try {
     // خطأ شبكة في محاولة حملت الترويسة: الإعادة التالية بلا ترويسة
     const onRetry = (n, why) => { if (sentBuild && why instanceof Error && !why.timeout) buildState.accepted = false; extra.onRetry?.(n, why); };
-    const r = await fetchRetry(fnUrl(fn), init, { ...policy, ...extra, onRetry });
+    // مستوى الواجهة في الرابط (المرحلة 5 البند 7، _shared/client-compat.js): leaders-api يرد update_required لما هو أقدم من حده الأدنى
+    const url = leaders ? `${fnUrl(fn)}&${LEVEL_PARAM}=${CLIENT_LEVEL}` : fnUrl(fn);
+    const r = await fetchRetry(url, init, { ...policy, ...extra, onRetry });
     if (leaders) { learnIdem(r); learnBuild(r); }
     // كتابة بمفتاح انتهت بعطل خادم أو ما زالت تعمل (409 pending): قد تكون نُفذت، فيبقى مفتاحها لإعادة يدوية. وما سوى ذلك
     // نتيجة معروفة، ومنها رفض 409 من الفعل نفسه (المقاعد تغيرت…): يُصحَّح ثم يُعاد بمفتاح جديد لا يعيد الرفض القديم

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callFn, fnUrl, FUNCTION_REGION, SUPABASE_URL } from '../../src/lib/api.js';
 import { call, coordCall, xpCall } from './api.js';
+import { CLIENT_LEVEL } from '../../supabase/functions/_shared/client-compat.js';
 
 const ROOT = join(__dirname, '../..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -26,7 +27,9 @@ describe('منطقة تنفيذ الدوال', () => {
     await coordCall('coord.me');
     await xpCall('xp.me');
     await callFn('user-api', { action: 'ping' });
-    expect(urls).toEqual([PINNED('leaders-api'), PINNED('leaders-api'), PINNED('leaders-api'), PINNED('user-api')]);
+    // leaders-api ومعه مستوى الواجهة (المرحلة 5 البند 7، _shared/client-compat.js) بعد معامل المنطقة نفسه
+    const leaders = `${PINNED('leaders-api')}&cl=${CLIENT_LEVEL}`;
+    expect(urls).toEqual([leaders, leaders, leaders, PINNED('user-api')]);
   });
 
   it('لا عميل يبني عنوان دالة بنفسه: fnUrl مصدره الوحيد', () => {
@@ -44,7 +47,7 @@ describe('منطقة تنفيذ الدوال', () => {
     // اللوحة تطلب الدالتين باسمهما عبر postAction، وهي تبني العنوان من fnUrl (ش9)
     expect(read('admin-app/src/api.js')).toContain("await post('admin-api', {");
     expect(read('admin-app/src/leaders.js')).toContain("await post('leaders-api', {");
-    expect(read('src/lib/api.js')).toMatch(/fetchRetry\(fnUrl\(fn\)/);
+    expect(read('src/lib/api.js')).toMatch(/const url = leaders \? `\$\{fnUrl\(fn\)\}&\$\{LEVEL_PARAM\}=\$\{CLIENT_LEVEL\}` : fnUrl\(fn\);\n\s+const r = await fetchRetry\(url,/);
   });
 
   it('المسبار وفحوص ما بعد النشر تطلب المنطقة نفسها', () => {

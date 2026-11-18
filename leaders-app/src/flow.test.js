@@ -53,7 +53,8 @@ describe('حراس المصدر', () => {
   });
   it('حاجز الأخطاء يلف التطبيق ويُعاد التحميل عند فشل استيراد قطعة بعد النشر', () => {
     const main = read('main.jsx');
-    expect(main).toMatch(/<ErrorBoundary><Suspense fallback=\{<Loading \/>\}><App \/><\/Suspense><\/ErrorBoundary>/);
+    // شريط «تحديث جديد متاح» (المرحلة 5) داخل الحاجز قبل التطبيق
+    expect(main).toMatch(/<ErrorBoundary><UpdateBar to=\{viewHref\} \/><Suspense fallback=\{<Loading \/>\}><App \/><\/Suspense><\/ErrorBoundary>/);
     // vite:preloadError بالحارس المشترك (shared/ui/lazy-retry.js): إعادة واحدة في الدقيقة إلى القسم المطلوب، لا حلقة
     expect(main).toMatch(/installPreloadRecovery\(window, \{ to: viewHref \}\)/);
   });

@@ -6,6 +6,7 @@
 import { netMessage, postAction } from '../../src/lib/api.js';
 import { lastJourney } from './last-journey.js';
 import { afterSuccess, failureOf, report } from './telemetry.js';
+import { appUpdate } from '../../shared/ui/app-update.js';
 
 const TOKEN_KEY = 'mi_leaders_session';
 
@@ -54,6 +55,9 @@ export async function send(action, token, body = {}) {
     const res = await parse(r);
     const kind = failureOf(r.status, res);
     if (kind) report(kind, { act: action, tries: r.attempts }); else afterSuccess();
+    // عميل أقدم من الخادم (المرحلة 5 البند 7): update_required يُظهر شريط «تحديث جديد متاح»، وunknown_action يُظهره إن كان على
+    // الخادم إصدار أحدث فعلًا (shared/ui/app-update.js)، والتحديث عند أول تنقل بلا نموذج غير محفوظ
+    if (res?.code === 'update_required' || res?.code === 'unknown_action') appUpdate()?.serverSaid(res.code);
     return res;
   } catch (e) {
     report(e?.offline ? 'offline' : e?.timeout ? 'timeout' : 'TypeError', { act: action, tries: e?.attempts });
