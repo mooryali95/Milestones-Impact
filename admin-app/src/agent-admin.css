@@ -293,3 +293,7 @@
 .gd-flag { margin-top: 6px; padding: 8px 10px; border: 1px dashed var(--ink-faint, #ccc); border-radius: 8px; display: grid; gap: 6px; }
 .gd-flag textarea, .gd-rules textarea { width: 100%; }
 .gd-rules { margin-top: 14px; display: grid; gap: 6px; }
+/* جدول التشغيلات على الهاتف: «النتائج» في الخلية الأولى، والتاريخ سطر واحد، والكلفة والنسخة تختفيان دون 600 */
+.gd-run-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.gd-nowrap, .gd-checks bdi { white-space: nowrap; }
+@media (max-width: 600px) { .ag-guide-eval .gd-opt { display: none; } }

@@ -10,8 +10,11 @@ export const GUIDE_POLICY_VERSION = '2026-11-22';
 
 export const GUIDE_MODEL = 'claude-opus-5-5';
 // التفكير التكيّفي بجهد عالٍ يأخذ من الحد نفسه: 4000 كانت تقطع بعض الردود (stop_reason: max_tokens)، و16000 تتسع للتفكير
-// والإجابة معًا. الحجز قبل الاستدعاء بأسوأ تكلفة ثم يُسوّى بالفعلية، فلا يزيد الإنفاق الفعلي بهذا الرفع
+// والإجابة معًا. الحجز قبل الاستدعاء بـ GUIDE_RESERVE_TOKENS ثم يُسوّى بالفعلية، فلا يزيد الإنفاق الفعلي بهذا الرفع
 export const GUIDE_MAX_TOKENS = 16000;
+// ما يُحجز من الإنفاق للمخرجات قبل الاستدعاء: أقرب إلى الفعلي من الحد الأعلى، فلا يُوقف الحد اليومي الأسئلة وفي الميزانية
+// متسع ظاهر في اللوحة. التسوية بعد الرد تصحح الفرق بالتكلفة الفعلية
+export const GUIDE_RESERVE_TOKENS = 6000;
 export const GUIDE_MAX_INPUT = 1200;       // حروف السؤال
 export const GUIDE_HISTORY = 6;            // آخر رسائل المحادثة التي تُرسل للنموذج
 export const GUIDE_CHAPTER_CHARS = 40000;  // نص الباب المرسل للتأسيس
@@ -161,17 +164,18 @@ export const PROGRAM_BRIEF_SOURCES = [
   { dimension: 'milestone', chapter_key: 'ch2', headings: ['الإدارة القائمة على النتائج (RBM)'] },
   { dimension: 'impact', chapter_key: 'ch2', headings: ['سلسلة القيمة الخماسية'] },
 ];
-// قسم من الباب بعنوانه (## العنوان) إلى العنوان التالي من مستواه، بلا كتل المستويات
+// قسم من الباب بعنوانه (## العنوان) إلى العنوان التالي من مستواه، بلا كتل المستويات. حال الكتلة تُتتبع في كل سطر قبل
+// العنوان وبعده، والعنوان داخل كتلة لا يُعدّ عنوانًا، فلا يدخل المرجعَ المشتركَ قسمٌ مقيد بمستوى أو نطاق
 export function mdSection(md, heading) {
   const out = [];
   let on = false, block = false;
   for (const line of String(md || '').replace(/\r/g, '').split('\n')) {
     const t = line.trim();
-    if (/^##\s/.test(t) && !/^###/.test(t)) { if (on) break; on = t.replace(/^##\s+/, '').trim() === heading; continue; }
-    if (!on) continue;
     if (/^:::\S/.test(t)) { block = true; continue; }
     if (t === ':::') { block = false; continue; }
-    if (!block) out.push(line.replace(/^@chain\s+(.+)$/, '$1:'));
+    if (block) continue;
+    if (/^##\s/.test(t) && !/^###/.test(t)) { if (on) break; on = t.replace(/^##\s+/, '').trim() === heading; continue; }
+    if (on) out.push(line.replace(/^@chain\s+(.+)$/, '$1:'));
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }

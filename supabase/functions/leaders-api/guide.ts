@@ -17,7 +17,7 @@ import { companionAllowed, filterHandbookMd, handbookModulesFor, pickCohort, qui
 import { guidanceFor } from './guidance.ts';
 import { currentStages } from './journey-map.js';
 import {
-  contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RULES,
+  contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RESERVE_TOKENS, GUIDE_RULES,
   guideGate, left, parseReply, PROGRAM_BRIEF_SOURCES, programBrief, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
 } from './guide.js';
 import { costMicros, estimateTokens, worstCaseMicros } from '../agent-chat/pricing.ts';
@@ -120,8 +120,9 @@ async function chapterTitles(p: any) {
   return handbookModulesFor(data || [], levels).map((m: any) => m.title_ar).slice(0, 40);
 }
 
-// مرجع البرنامج: الأقسام المسماة في PROGRAM_BRIEF_SOURCES من أبواب القاعدة، يُخزَّن دقيقة في النسخة. التعذر يعيده فارغًا
-// (يجيب النموذج بالقواعد وحدها كما كان) ولا يُخزَّن، فيُعاد في الطلب التالي
+// مرجع البرنامج: الأقسام المسماة في PROGRAM_BRIEF_SOURCES من أبواب القاعدة، يُخزَّن دقيقة في النسخة. تعذر القراءة خطأ لا
+// مرجع فارغ: تُعاد آخر قيمة سليمة إن وُجدت، وإلا يُرمى الخطأ، فلا تتغير بصمة التقييم بتعثر عابر. السؤال (guideAsk) يجيب
+// بالقواعد وحدها حين يُرمى، والتقييم يؤجل دفعته، والبوابة تُغلق بلا تسجيل تشغيل متقادم
 let briefCache: { at: number; value: string } | null = null;
 export const resetBrief = () => { briefCache = null; };
 export async function programBriefNow(): Promise<string> {
@@ -129,7 +130,11 @@ export async function programBriefNow(): Promise<string> {
   const keys = [...new Set(PROGRAM_BRIEF_SOURCES.map((x) => x.chapter_key))];
   const { data, error } = await db.from('handbook_modules').select('dimension, chapter_key, title_ar, body_md').in('chapter_key', keys)
     .then((r: any) => r, (e: any) => ({ data: null, error: e }));
-  if (error) { console.error('guide brief', (error as any)?.code || 'error'); return ''; }
+  if (error) {
+    console.error('guide brief', (error as any)?.code || 'error');
+    if (briefCache) return briefCache.value;
+    throw error;
+  }
   const value = programBrief(data || []);
   briefCache = { at: Date.now(), value };
   return value;
@@ -147,7 +152,7 @@ type Turn = { role: string; body: string };
 export function worstFor(o: { chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string; brief?: string }) {
   const prefix = estimateTokens(o.rules || GUIDE_RULES) + (o.chapter ? estimateTokens(o.chapter.md) : o.brief ? estimateTokens(o.brief) : 0);
   const rest = estimateTokens(o.ctx) + estimateTokens(o.text) + o.past.reduce((a, m) => a + estimateTokens(m.body), 0);
-  return worstCaseMicros(GUIDE_MODEL, prefix, rest, GUIDE_MAX_TOKENS);
+  return worstCaseMicros(GUIDE_MODEL, prefix, rest, GUIDE_RESERVE_TOKENS);
 }
 export async function generate(o: { key: string; chapter: Chapter; ctx: string; text: string; past: Turn[]; rules?: string; brief?: string }) {
   // الرسائل تتناوب بدءًا بالمشارك: يُسقط ما قبل أول سؤال، ويُدمج المتتالي من الدور نفسه
@@ -226,7 +231,7 @@ export async function guideAsk(p: any, b: Body) {
   const past = (await history(p.id, s.retention_days, GUIDE_HISTORY * 2 + 1))
     .filter((m: any) => m.id !== questionId && m.verdict !== 'refused' && m.verdict !== 'error')
     .slice(-GUIDE_HISTORY);
-  // السقف اليومي: حجز أسوأ تكلفة قبل الاستدعاء
+  // السقف اليومي: حجز تقديري قبل الاستدعاء (GUIDE_RESERVE_TOKENS للمخرجات)، ويُسوّى بالفعلية بعده
   const rules = rulesWith(s.extra_rules);
   const worst = worstFor({ chapter, ctx, text, past, rules, brief });
   const cap = Math.round(Number(s.daily_spend_usd) * 1e6);

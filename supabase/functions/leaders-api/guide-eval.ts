@@ -24,8 +24,11 @@ const missing = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' ||
 // القواعد الفعلية كما يجيب بها المشارك (H4: الثابتة وتوجيهات المالك)، فالبصمة والتشغيل بالقواعد نفسها
 export const rulesNow = async () => rulesWith(((await appSettings()).guidance as any)?.extra_rules);
 // ومرجع البرنامج نفسه الذي يصل السؤال من خارج الأبواب (guide.ts programBriefNow)، فتعديل أقسامه في الكتاب يُسقط النجاح
-export const briefNow = () => GD.brief().catch(() => '');
-export const fingerprintNow = async (set: any) => evalFingerprint(set, GUIDE_MODEL, await rulesNow(), await briefNow());
+// تعذر قراءته يُرمى ولا يصير مرجعًا فارغًا، فلا تُحسب بصمة لا تطابق ما يُقيَّم. ومن يملك القواعد والمرجع لخطوته يمررهما،
+// فتشهد البصمة على اللقطة نفسها التي تُصحَّح بها الدفعة
+export const briefNow = () => GD.brief();
+export const fingerprintNow = async (set: any, rules?: string, brief?: string) =>
+  evalFingerprint(set, GUIDE_MODEL, rules ?? await rulesNow(), brief ?? await briefNow());
 export const EVAL = { batch: 3, leaseSeconds: 140, maxMicros: 12_000_000 };
 // المجموعة الحالية: أحدث نسخة في القاعدة (H2). القاعدة الفارغة تُبذر مرة من الملف مسودةً، وغياب الجدول (قبل ترحيله)
 // يعمل من الملف كما كان. تُخزَّن دقيقة في النسخة، وكل تعديل أو اعتماد يمسحها
@@ -122,13 +125,13 @@ const snapshotOf = (c: any) => ({
 export async function evalState(a: Admin) {
   requireAgentRead(a);
   const set = await evalSet();
-  const fp = await fingerprintNow(set);
+  const brief = await briefNow();
+  const fp = await fingerprintNow(set, undefined, brief);
   const { data: runs, error } = await db.from('guidance_eval_runs').select('*').order('started_at', { ascending: false }).limit(10);
   if (error) { if (missing(error)) return { success: true, ready: false }; throw error; }
   const kinds: Record<string, number> = {};
   for (const c of set.cases) kinds[c.kind] = (kinds[c.kind] || 0) + 1;
   const gate = evalGate(set, runs || [], fp);
-  const brief = await briefNow();
   return {
     success: true, ready: true, model: GUIDE_MODEL, threshold: EVAL_THRESHOLD, fingerprint: fp,
     // الشرطان معًا للوحة، وحكم البوابة نفسه في gate
@@ -198,7 +201,15 @@ export async function evalStep(a: Admin, b: Body) {
   };
   if (!run) return progress();
   const set = await evalSet();
-  const fp = await fingerprintNow(set);
+  // القواعد والمرجع مرة واحدة للخطوة: البصمة والدفعة باللقطة نفسها. تعذر قراءة المرجع لا يُنهي التشغيل متقادمًا:
+  // يُفك الحجز وتُعاد الخطوة التالية
+  const rules = await rulesNow();
+  let brief: string;
+  try { brief = await briefNow(); } catch {
+    await db.from('guidance_eval_runs').update({ lease_until: null }).eq('id', id).eq('status', 'running');
+    return progress();
+  }
+  const fp = await fingerprintNow(set, rules, brief);
   const finish = async (status: string, stop: string | null, extra: Record<string, unknown> = {}) => {
     await db.from('guidance_eval_runs').update({ status, stop_reason: stop, finished_at: new Date().toISOString(), lease_until: null, ...extra }).eq('id', id).eq('status', 'running');
     resetEvalGate();
@@ -215,16 +226,14 @@ export async function evalStep(a: Admin, b: Body) {
   const total = diag ? Number(run.total_cases) : set.cases.length;
   const pending = scope.filter((c: any) => !done.has(c.id)).slice(0, EVAL.batch);
   let cost = Number(run.cost_micros || 0);
-  const rules = await rulesNow();
-  const brief = await briefNow();
   // حارس التشغيل: لا تبدأ دفعة قد تتجاوز حده
   const worst = pending.reduce((s: number, c: any) => s + worstFor({ chapter: c.context === 'handbook' ? { title: '', md: 'x'.repeat(GUIDE_CHAPTER_CHARS), quiz: [] } : null, ctx: '', text: c.question, past: [], rules, brief }), 0);
   if (cost + worst > Number(run.max_micros)) return finish('stopped', 'max_cost');
   const outcomes = await Promise.all(pending.map(async (c: any) => ({ c, o: await runCase(c, key, rules, brief) })));
   for (const { c, o } of outcomes) {
-    // خطأ عابر لا يُحسب راسبًا: تُعاد الحالة في الدفعة التالية
-    if ((o as any).transient) continue;
+    // ما أُنفق يُحسب على التشغيل دائمًا، ولو انتهت الحالة بخطأ عابر لا يُحسب راسبًا وتُعاد في الدفعة التالية
     cost += o.cost;
+    if ((o as any).transient) continue;
     const row = { run_id: id, case_id: c.id, ok: o.pass, verdict: o.verdict, reasons: o.reasons, reply: String(o.text || '').slice(0, 6000), cost_micros: o.cost };
     // الحالة كما صُححت بها (20261118100000)، وقبل العمود تُحفظ النتيجة بلاها كما كانت
     const { error: ie } = await db.from('guidance_eval_results').insert({ ...row, case_snapshot: snapshotOf(c) });

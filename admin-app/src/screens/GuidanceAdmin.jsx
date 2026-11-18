@@ -5,7 +5,7 @@
 // والدقة (التقييم قبل الإطلاق). «الإتاحة» تحت «المساعد الذكي»: الجهات بمفتاحها القائم والدفعات التجريبية.
 // أعداد وكلفة بلا نص محادثة، وسجل المحادثات (H3) للمالك وللمدير الأعلى بمنحه، وكل فتح يُسجَّل.
 import React, { useEffect, useState } from 'react';
-import { date, L } from '../leaders.js';
+import { date, dayMonth, L } from '../leaders.js';
 import { Empty, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
 import { aiLoad } from '../ai-hub-data.js';
@@ -36,7 +36,10 @@ const VERDICT_AR = { answered: 'أجاب', unsure: 'غير متأكد', refused:
 const reasonAr = (t) => String(t || '').replace(/\b(answered|unsure|refused)\b/g, (w) => `«${VERDICT_AR[w]}»`);
 const pct = (r) => Math.round((r.passed_cases / r.total_cases) * 1000) / 10;
 
-function ResultItem({ x, onEdit }) {
+// نص لاتيني (رقم النسخة) داخل جملة عربية في نص خام (تأكيد، تنبيه): يُعزل بـ FSI/PDI فلا يقلبه الاتجاه
+const iso = (t) => `\u2068${t}\u2069`;
+
+function ResultItem({ x, onEdit, canWrite = false }) {
   const body = (
     <div className="gd-res-grid">
       <div><span className="gd-res-k">الرد</span>{x.reply ? <p className="small gd-pre">{x.reply}</p> : <p className="la-muted small">بلا رد</p>}</div>
@@ -50,11 +53,11 @@ function ResultItem({ x, onEdit }) {
   return (
     <li data-ok={x.ok ? 'ok' : 'fail'} className="gd-res">
       <div className="gd-res-head">
-        <b>{x.case_id}</b> <span aria-label={x.ok ? 'ناجحة' : 'راسبة'}>{x.ok ? '✓' : '✕'}</span>
+        <b>{x.case_id}</b> <span role="img" aria-label={x.ok ? 'ناجحة' : 'راسبة'}>{x.ok ? '✓' : '✕'}</span>
         <span className="la-chip">المتوقع: {KIND_AR[x.kind] || x.kind || '؟'}</span>
         <span className="la-chip">الحكم: {VERDICT_AR[x.verdict] || x.verdict || 'بلا وسم'}</span>
         {x.failed_before && <span className="la-chip bad">فشلت في التشغيلين</span>}
-        {onEdit && <button type="button" className="la-link" onClick={() => onEdit(x.case_id)}>عدّل الحالة</button>}
+        {onEdit && <button type="button" className="la-link" onClick={() => onEdit(x.case_id)}>{canWrite ? 'عدّل الحالة' : 'اعرض الحالة'}</button>}
       </div>
       <p className="gd-res-q">{x.question}</p>
       {x.from_current && <small className="la-muted">السؤال من المجموعة الحالية (التشغيل أقدم من حفظ الحالة مع نتيجتها).</small>}
@@ -100,7 +103,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
       <p className={s.gate.ok ? 'ops-flag on' : 'ops-flag off'} role="status">{s.gate.ok ? `✓ اجتاز التقييم (${s.threshold * 100}٪ فأكثر) على النسخة الحالية` : '✕ البوابة مغلقة حتى يتحقق الشرطان'}</p>
       {ck && (
         <ul className="gd-checks" aria-label="شرطا فتح البوابة">
-          <li data-ok={ck.approved ? 'ok' : 'no'}><span aria-hidden="true">{ck.approved ? '✓' : '✕'}</span> المجموعة {set.version} {ck.approved ? `معتمدة (${set.approved_by})` : 'غير معتمدة بعد'}</li>
+          <li data-ok={ck.approved ? 'ok' : 'no'}><span aria-hidden="true">{ck.approved ? '✓' : '✕'}</span> المجموعة <bdi dir="ltr">{set.version}</bdi> {ck.approved ? <>معتمدة (<bdi dir="ltr">{set.approved_by}</bdi>)</> : 'غير معتمدة بعد'}</li>
           <li data-ok={ck.run_ok ? 'ok' : 'no'}><span aria-hidden="true">{ck.run_ok ? '✓' : '✕'}</span> آخر تشغيل كامل على النسخة الحالية:{' '}
             {ck.run ? <b>{ck.run.passed}/{ck.run.total}</b> : 'لم يُشغَّل بعد'} (المطلوب {ck.need}/{ck.total})</li>
         </ul>
@@ -108,7 +111,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
       <p className="la-muted small gd-order">الترتيب: أصلح سبب الرسوب، ثم اعتمد المجموعة، ثم شغّل تقييمًا كاملًا واحدًا. التشغيل التشخيصي يختبر الإصلاح ولا يفتح البوابة.</p>
       <p className="la-muted small">
         {set.total} حالة ({Object.entries(set.kinds).map(([k, n]) => `${KIND_AR[k] || k} ${n}`).join('، ')}).{' '}
-        {set.approved_by ? `اعتمدها ${set.approved_by} في ${date(set.approved_at)}.` : 'مسودة بانتظار اعتماد المالك للإجابات المرجعية.'}
+        {set.approved_by ? <>اعتمدها <bdi dir="ltr">{set.approved_by}</bdi> في {date(set.approved_at)}.</> : 'مسودة بانتظار اعتماد المالك للإجابات المرجعية.'}
         {' '}النموذج <code dir="ltr">{s.model}</code>.
         {s.brief_chars != null && (s.brief_chars > 0 ? ' مرجع البرنامج من الكتاب مرفق للأسئلة من خارج الأبواب.' : ' مرجع البرنامج غير متاح (أقسامه غير موجودة في أبواب الكتاب).')}
       </p>
@@ -120,14 +123,15 @@ function GuidanceEval({ canWrite = false, onEdit }) {
       {s.runs.length > 0 && (
         <div className="ag-scroll">
           <table className="la-table">
-            <thead><tr><th>البدء</th><th>النوع</th><th>الحال</th><th>النجاح</th><th>الكلفة</th><th>النسخة</th><th></th></tr></thead>
+            <thead><tr><th>التشغيل</th><th>النوع</th><th>الحال</th><th>النجاح</th><th className="gd-opt">الكلفة</th><th className="gd-opt">النسخة</th></tr></thead>
             <tbody>{s.runs.map((r) => (
-              <tr key={r.id} data-diag={r.diagnostic ? 'yes' : 'no'}><td>{date(r.started_at)}</td>
+              <tr key={r.id} data-diag={r.diagnostic ? 'yes' : 'no'}>
+                {/* الدخول إلى النتائج في الخلية الأولى، فيبقى ظاهرًا على الهاتف بلا تمرير */}
+                <td><div className="gd-run-cell"><button type="button" className="la-link" onClick={() => showResults(r.id)}>النتائج</button><small className="gd-nowrap" title={date(r.started_at)}>{dayMonth(r.started_at)}</small></div></td>
                 <td>{r.diagnostic ? <span className="la-chip warn" title="يعيد الحالات الراسبة وحدها، ولا يُحسب للبوابة">تشخيصي، لا يُحسب</span> : 'كامل'}</td>
                 <td>{RUN_AR[r.status] || r.status}{r.stop_reason ? ` (${STOP_AR[r.stop_reason] || r.stop_reason})` : ''}</td>
                 <td>{r.passed_cases}/{r.total_cases}{r.done_cases ? ` (${pct(r)}٪)` : ''}</td>
-                <td>{usd(Number(r.cost_micros) / 1e6)}</td><td>{r.current ? 'الحالية' : 'أقدم'}</td>
-                <td><button type="button" className="la-link" onClick={() => showResults(r.id)}>النتائج</button></td></tr>
+                <td className="gd-opt">{usd(Number(r.cost_micros) / 1e6)}</td><td className="gd-opt">{r.current ? 'الحالية' : 'أقدم'}</td></tr>
             ))}</tbody>
           </table>
         </div>
@@ -135,7 +139,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
       {results?.success && (
         <div className="stack gd-results" aria-label="نتائج التشغيل">
           <div className="la-row between"><b>النتائج ({failedCount} راسبة{results.diagnostic ? '، تشغيل تشخيصي لا يُحسب للبوابة' : ''})</b><button type="button" className="la-link" onClick={() => setResults(null)}>إغلاق</button></div>
-          <ul className="gd-res-list">{results.results.map((x) => <ResultItem key={x.case_id} x={x} onEdit={onEdit} />)}</ul>
+          <ul className="gd-res-list">{results.results.map((x) => <ResultItem key={x.case_id} x={x} onEdit={onEdit} canWrite={canWrite} />)}</ul>
         </div>
       )}
     </section>
@@ -223,10 +227,10 @@ function SetReview({ canWrite, onChanged, focus }) {
   const set = d.set;
   const changed = () => { load(); onChanged?.(); };
   const approve = async () => {
-    if (!(await confirm(`اعتماد المجموعة ${set.version} (${set.cases.length} حالة) باسمك؟ بعد الاعتماد لا تتغير، وأي تعديل يبدأ مسودة جديدة ويلزمه تقييم جديد.`))) return;
+    if (!(await confirm(`اعتماد المجموعة ${iso(set.version)} (${set.cases.length} حالة) باسمك؟ بعد الاعتماد لا تتغير، وأي تعديل يبدأ مسودة جديدة ويلزمه تقييم جديد.`))) return;
     const r = await L('admin.guide-eval-approve', { version: set.version, hash: set.hash });
     if (!r.success) { toast(r.message); if (r.code === 'stale' || /تغيرت/.test(String(r.message || ''))) load(); return; }
-    toast(`اعتُمدت المجموعة ${set.version}`);
+    toast(`اعتُمدت المجموعة ${iso(set.version)}`);
     changed();
   };
   const shown = set.cases.filter((c) => kind === 'all' || c.kind === kind);
@@ -234,9 +238,9 @@ function SetReview({ canWrite, onChanged, focus }) {
     <section className="stack gd-set" aria-labelledby="gd-set-h">
       <div className="gd-set-head">
         <h4 id="gd-set-h">مراجعة المجموعة واعتمادها</h4>
-        <span className={`la-chip ${set.status === 'approved' ? 'ok' : 'warn'}`}>{set.status === 'approved' ? `معتمدة: ${set.approved_by} في ${date(set.approved_at)}` : 'مسودة'}</span>
+        <span className={`la-chip ${set.status === 'approved' ? 'ok' : 'warn'}`}>{set.status === 'approved' ? <>معتمدة: <bdi dir="ltr">{set.approved_by}</bdi> في {date(set.approved_at)}</> : 'مسودة'}</span>
       </div>
-      <p className="la-muted small">النسخة {set.version}{set.updated_by && set.updated_by !== 'seed' ? `، آخر تعديل ${set.updated_by} في ${date(set.updated_at)}` : ''}. {set.source === 'file' ? 'جدول المجموعة لم يُرحَّل بعد، فلا تعديل ولا اعتماد حتى يُطبَّق ترحيله.' : 'كل تعديل يُسجَّل، ويُسقط نجاح التقييم السابق حتى يُشغَّل من جديد.'}</p>
+      <p className="la-muted small">النسخة <bdi dir="ltr">{set.version}</bdi>{set.updated_by && set.updated_by !== 'seed' ? <>، آخر تعديل <bdi dir="ltr">{set.updated_by}</bdi> في {date(set.updated_at)}</> : ''}. {set.source === 'file' ? 'جدول المجموعة لم يُرحَّل بعد، فلا تعديل ولا اعتماد حتى يُطبَّق ترحيله.' : 'كل تعديل يُسجَّل، ويُسقط نجاح التقييم السابق حتى يُشغَّل من جديد.'}</p>
       {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء تمنع الاعتماد: {set.errors.slice(0, 5).join('؛ ')}</div>}
       <div className="la-row gd-filter" role="group" aria-label="تصفية بالنوع">
         {[['all', `الكل ${set.cases.length}`], ...FIELD_KIND.map(([k, t]) => [k, `${t} ${set.cases.filter((c) => c.kind === k).length}`])].map(([k, t]) => (

@@ -89,6 +89,17 @@ Deno.test('سبب التوقف: امتناع النموذج رفض بنص ثاب
   } finally { Object.assign(G.GD, prev); }
 });
 
+Deno.test('حجز السؤال تقديري (GUIDE_RESERVE_TOKENS) لا بالحد الأعلى، فلا يُوقف السقف اليومي الأسئلة مبكرًا', async () => {
+  const { GUIDE_MAX_TOKENS, GUIDE_RESERVE_TOKENS, GUIDE_MODEL } = await import('./guide.js');
+  const { worstCaseMicros } = await import('../agent-chat/pricing.ts');
+  assertEquals(GUIDE_RESERVE_TOKENS, 6000);
+  assert(GUIDE_RESERVE_TOKENS < GUIDE_MAX_TOKENS);
+  const w = G.worstFor({ chapter: null, ctx: '', text: 'س', past: [], rules: 'ق', brief: '' });
+  const out = (n: number) => worstCaseMicros(GUIDE_MODEL, 0, 0, n);
+  // جزء المخرجات من الحجز بـ 6000 رمز (نحو 0.12 دولار)، لا بـ 16000 (نحو 0.32)
+  assert(w - out(GUIDE_RESERVE_TOKENS) < out(GUIDE_RESERVE_TOKENS) && w < out(GUIDE_MAX_TOKENS), String(w));
+});
+
 Deno.test('مرجع البرنامج: يصل الحالة بلا باب من الكتاب نفسه ومخزّنًا مؤقتًا، ولا يصل حالة الباب', async () => {
   const prev = { ...G.GD };
   const sent: any[] = [];
@@ -106,7 +117,7 @@ Deno.test('مرجع البرنامج: يصل الحالة بلا باب من ا�
   } finally { Object.assign(G.GD, prev); }
 });
 
-Deno.test('programBriefNow: الأقسام المسماة من أبواب القاعدة بلا كتل المستويات، والتعذر فارغ', async () => {
+Deno.test('programBriefNow: الأقسام المسماة من أبواب القاعدة بلا كتل المستويات، والتعذر خطأ لا مرجع فارغ', async () => {
   const { programBrief } = await import('./guide.js');
   const mods = [
     { dimension: 'milestone', chapter_key: 'intro', title_ar: 'مقدمة إطار المعلم', body_md: '## لماذا\nلا\n## الأطر الثلاثة\n@chain الأطر\nإطار المعلم: التحكم.\n:::min=advanced\nسر المتقدم\n:::\n## موقع هذا الإطار وأهدافه\nالأساس.\n## تركيزك\nلا' },
@@ -116,15 +127,72 @@ Deno.test('programBriefNow: الأقسام المسماة من أبواب الق
   assert(b.includes('الأطر:') && b.includes('إطار المعلم: التحكم.') && b.includes('الأساس.') && b.includes('تفصيل لسلسلة النتائج') && b.includes('مثال داخل القسم'));
   assert(!b.includes('سر المتقدم') && !b.includes('لكل حلقة') && !b.includes('لماذا'));
   assertEquals(programBrief([]), '');
+  // عنوان مطلوب داخل كتلة مستوى أو نطاق لا يُعدّ عنوانًا، فلا يدخل المرجع المشترك ما فيها
+  const hidden = [{ dimension: 'impact', chapter_key: 'ch2', title_ar: 'س', body_md: '## مقدمة\nعام\n:::min=advanced\n## سلسلة القيمة الخماسية\nسر المتقدم\n:::\n:::only=org\n## سلسلة القيمة الخماسية\nسر النطاق\n:::\n## بعدها\nلا' }];
+  assertEquals(programBrief(hidden), '');
+  const { mdSection } = await import('./guide.js');
+  assertEquals(mdSection(':::min=advanced\n## الأطر الثلاثة\nسر\n:::\n## الأطر الثلاثة\nعام\n:::scope=org\nمقيد\n:::\nعام2\n## غيره\nلا', 'الأطر الثلاثة'), 'عام\nعام2');
   const prev = (db as any).from;
-  (db as any).from = () => { const q: any = new Proxy({}, { get: (_t, k: string) => k === 'then' ? (ok: any) => Promise.resolve({ data: mods, error: null }).then(ok) : () => q }); return q; };
+  const ok = () => { const q: any = new Proxy({}, { get: (_t, k: string) => k === 'then' ? (f: any) => Promise.resolve({ data: mods, error: null }).then(f) : () => q }); return q; };
+  const bad = () => { const q: any = new Proxy({}, { get: (_t, k: string) => k === 'then' ? (f: any) => Promise.resolve({ data: null, error: { code: 'XX' } }).then(f) : () => q }); return q; };
+  const realNow = Date.now;
+  (db as any).from = ok;
   try {
     G.resetBrief();
     assertEquals(await G.programBriefNow(), b);
+    // انتهت مدة التخزين وتعذرت القراءة: آخر قيمة سليمة، لا فارغ
+    const t0 = realNow();
+    Date.now = () => t0 + 120e3;
+    (db as any).from = bad;
+    assertEquals(await G.programBriefNow(), b);
+    // بلا قيمة سليمة سابقة: يُرمى الخطأ
     G.resetBrief();
-    (db as any).from = () => { const q: any = new Proxy({}, { get: (_t, k: string) => k === 'then' ? (ok: any) => Promise.resolve({ data: null, error: { code: 'XX' } }).then(ok) : () => q }); return q; };
-    assertEquals(await G.programBriefNow(), '');
-  } finally { (db as any).from = prev; G.resetBrief(); }
+    await assertRejects(() => G.programBriefNow());
+  } finally { Date.now = realNow; (db as any).from = prev; G.resetBrief(); }
+});
+
+Deno.test('تعذر قراءة المرجع في خطوة التقييم لا يُنهي التشغيل متقادمًا، والخطوة التالية تكمله', async () => {
+  const cases = [{ id: 'g01', kind: 'answer', question: 'ما المعلم؟', context: 'program', must_include: ['قرار'] }];
+  const tables: Record<string, Row[]> = {
+    guidance_eval_sets: [{ id: 's1', version: 'v1', status: 'approved', approved_by: 'owner@x.sa', approved_at: '2026-11-18T08:00:00Z', created_at: '2026-11-18T08:00:00Z', cases }],
+    guidance_eval_runs: [], guidance_eval_results: [],
+  };
+  const restore = evalDb(tables);
+  const prev = { ...G.GD };
+  G.GD.key = async () => 'sk';
+  G.GD.brief = async () => 'مرجع';
+  G.GD.model = async () => reply('[[answered]]\nالمعلم نقطة قرار.');
+  try {
+    const r = await E.evalStart(superA, {});
+    G.GD.brief = () => Promise.reject(Object.assign(new Error('blip'), { code: 'XX' }));
+    const s1: any = await E.evalStep(superA, { run_id: r.run_id });
+    assertEquals([s1.run.status, s1.run.stop_reason ?? null, s1.done], ['running', null, false]);
+    assertEquals(tables.guidance_eval_results.length, 0);
+    G.GD.brief = async () => 'مرجع';
+    const s2: any = await E.evalStep(superA, { run_id: r.run_id });
+    assertEquals([s2.run.status, s2.run.passed_cases], ['passed', 1]);
+  } finally { Object.assign(G.GD, prev); restore(); }
+});
+
+Deno.test('الإنفاق على حالة انتهت بخطأ عابر بعد رد مدفوع يُحسب على التشغيل', async () => {
+  const cases = [{ id: 'g01', kind: 'answer', question: 'ما المعلم؟', context: 'program', must_include: ['قرار'] }];
+  const tables: Record<string, Row[]> = {
+    guidance_eval_sets: [{ id: 's1', version: 'v1', status: 'approved', approved_by: 'owner@x.sa', approved_at: '2026-11-18T08:00:00Z', created_at: '2026-11-18T08:00:00Z', cases }],
+    guidance_eval_runs: [], guidance_eval_results: [],
+  };
+  const restore = evalDb(tables);
+  const prev = { ...G.GD };
+  G.GD.key = async () => 'sk';
+  G.GD.brief = async () => '';
+  let calls = 0;
+  // الأولى رد فارغ مدفوع، والثانية تعطل عابر
+  G.GD.model = async () => { calls++; if (calls === 1) return reply(''); throw Object.assign(new Error('busy'), { status: 529 }); };
+  try {
+    const r = await E.evalStart(superA, {});
+    const s: any = await E.evalStep(superA, { run_id: r.run_id });
+    assertEquals(tables.guidance_eval_results.length, 0);
+    assert(Number(s.run.cost_micros) > 0, 'ما أُنفق محسوب');
+  } finally { Object.assign(G.GD, prev); restore(); }
 });
 
 Deno.test('المجموعة المحفوظة مسودة غير معتمدة، فحكم التقييم مغلق مهما جرى', async () => {
@@ -143,7 +211,9 @@ Deno.test('حراسة نصية: التقييم يجيب بـgenerate نفسه، 
   assert(/rules = rules \?\? await rulesNow\(\)/.test(src));
   assert(/g = await generate\(\{ key, chapter, ctx, text, past, rules, brief \}\)/.test(await Deno.readTextFile(new URL('./guide.ts', import.meta.url))));
   // مرجع البرنامج في البصمة، والبصمة في التشغيل والبوابة معًا
-  assert(/evalFingerprint\(set, GUIDE_MODEL, await rulesNow\(\), await briefNow\(\)\)/.test(src));
+  assert(/evalFingerprint\(set, GUIDE_MODEL, rules \?\? await rulesNow\(\), brief \?\? await briefNow\(\)\)/.test(src));
+  // خطوة التقييم: البصمة والدفعة بلقطة واحدة من القواعد والمرجع
+  assert(/const fp = await fingerprintNow\(set, rules, brief\);/.test(src));
   const g = await Deno.readTextFile(new URL('./guide.ts', import.meta.url));
   assert(/evalOk, pilot: !!j\.def\?\.cohort\?\.guidance_pilot/.test(g));
   const idx = await Deno.readTextFile(new URL('./index.ts', import.meta.url));

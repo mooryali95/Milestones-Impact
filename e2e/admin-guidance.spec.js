@@ -313,6 +313,7 @@ test('الدقة (إصلاح 2026-11-18): الشرطان معًا، والراس
   await expect(res).toContainText('النتائج (2 راسبة)');
   const items = res.locator('.gd-res');
   await expect(items.first()).toContainText('g24');
+  await expect(items.first().getByRole('img', { name: 'راسبة' })).toBeVisible();
   await expect(items.first()).toContainText('المتوقع: يجيب');
   await expect(items.first()).toContainText('الحكم: غير متأكد');
   await expect(items.first()).toContainText('فشلت في التشغيلين');
@@ -334,6 +335,25 @@ test('الدقة (إصلاح 2026-11-18): الشرطان معًا، والراس
   // حالة لم تعد في المجموعة: رسالة بدل فتح شيء آخر
   await items.first().getByRole('button', { name: 'عدّل الحالة' }).click();
   await expect(page.getByText('الحالة لم تعد في المجموعة الحالية')).toBeVisible();
+});
+
+test('الدقة على الهاتف (390): «النتائج» ظاهرة بلا تمرير، ورقم النسخة يُقرأ كما هو', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page, '#/leaders/ai/guidance', { runs: [FAILED_RUN], failing: true });
+  const ev = sec(page, 'الدقة');
+  const btn = ev.getByRole('row', { name: /دون الحد/ }).getByRole('button', { name: 'النتائج' });
+  // كاملة داخل حاوية الجدول وهي على أولها، فلا يلزم تمرير أفقي لبلوغها
+  const inside = await btn.evaluate((el) => {
+    const c = el.closest('.ag-scroll').getBoundingClientRect(); const r = el.getBoundingClientRect();
+    return r.width > 0 && r.left >= c.left - 0.5 && r.right <= c.right + 0.5;
+  });
+  expect(inside).toBe(true);
+  await expect(ev.getByRole('columnheader', { name: 'الكلفة' })).toBeHidden();
+  const v = ev.getByRole('list', { name: 'شرطا فتح البوابة' }).locator('bdi').first();
+  await expect(v).toHaveText('2026-11-16-draft-1');
+  await expect(v).toHaveAttribute('dir', 'ltr');
+  const noScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  expect(noScroll).toBe(true);
 });
 
 test('التشغيل التشخيصي: «أعد الحالات الفاشلة فقط» يُرسل بنوعه، ويُوسم في الجدول أنه لا يُحسب للبوابة', async ({ page }) => {
@@ -373,6 +393,11 @@ test('للقراءة فقط: لا تشغيل ولا اعتماد، وسطر يد
   const set = page.getByRole('region', { name: 'مراجعة المجموعة واعتمادها' });
   await expect(set.getByRole('button', { name: 'اعتمد المجموعة باسمك' })).toHaveCount(0);
   await expect(set).toContainText('فعّل الكتابة لتعتمد المجموعة.');
+  // النتائج تُعرض، والحالة «تُعرض» لا «تُعدَّل»
+  await ev.getByRole('row', { name: /دون الحد/ }).getByRole('button', { name: 'النتائج' }).click();
+  const res = ev.getByLabel('نتائج التشغيل');
+  await expect(res.getByRole('button', { name: 'اعرض الحالة' }).first()).toBeVisible();
+  await expect(res.getByRole('button', { name: 'عدّل الحالة' })).toHaveCount(0);
   expect(calls.some((c) => c.action === 'admin.guide-eval-approve')).toBe(false);
 });
 
