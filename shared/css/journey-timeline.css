@@ -207,3 +207,17 @@
 }
 @media (prefers-reduced-motion: reduce) { .jt-act { transition: none; } .jt-act:hover, .jt-act.on { transform: none; } }
 @media print { .jt-scroll { overflow: visible; } }
+
+/* الخدمة (T2): صف «الخدمات» بلا مقياس ولا تاريخ، بطاقات بإطار منقط لمن يريد. وعلى الهاتف قائمة قبل المراحل */
+.jt-services { position: relative; margin-top: 10px; padding-top: 20px; border-top: 1px dashed var(--jt-line); }
+.jt-svc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.jt-svc { box-sizing: border-box; flex: 1 1 260px; max-width: 420px; min-width: 0; padding: 6px 8px; border: 1px dotted color-mix(in srgb, var(--jt-ph) 70%, transparent);
+  border-inline-start: 4px dotted var(--jt-ph); border-radius: 8px; background: var(--jt-surface); }
+.jt-svc .jt-stage-head small { flex-basis: 100%; }
+.jt-svc .jt-acts { margin-top: 4px; }
+.jt-svc-tag { border-style: dotted; }
+.jt-legend .sq.svc { border: 2px dotted var(--jt-gold); background: transparent; }
+.jt-m-services { list-style: none; margin: 12px 0 0; padding: 0; }
+.jt-m-svc { display: grid; gap: 3px; margin: 0 0 10px; padding: 8px 10px; border: 1px dotted color-mix(in srgb, var(--jt-ph) 70%, transparent); border-inline-end: 4px dotted var(--jt-ph); border-radius: 8px; }
+.jt-m-svc small { font-size: 12px; color: var(--jt-muted); }
+.jt-m-svc .jt-m-title { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }

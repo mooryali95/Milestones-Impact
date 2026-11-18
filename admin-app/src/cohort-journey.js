@@ -5,7 +5,7 @@
 // المعالم من milestoneDueInfo بالنوافذ نفسها كما يقرؤها milestoneStatuses، وأعداد الناس من خريطة الرحلة (admin.cohort-journey).
 // هذا الملف يجمع الثلاثة في رأس وممرات وبطاقات، فلا يختلف تاريخ بين الخط والبطاقة والمعلم.
 import { journeyTimeline, scaleDay, scalePos, STAGE_TAG_AR } from '../../supabase/functions/leaders-api/journey-timeline.js';
-import { daysAr, renderJourneyText, stageRules, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
+import { daysAr, LANE_AR, renderJourneyText, SERVICE_NOTE_AR, serviceAvailAr, stageRules, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from '../../supabase/functions/leaders-api/milestones.js';
 import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
@@ -177,7 +177,10 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
 
   // البطاقات الموقوفة في محاورها بترتيب المراحل، والمحور الذي كل مراحله موقوفة يظهر بها وحدها
   const sortOf = (k) => raw.get(k)?.sort ?? 0;
-  const offStages = [...raw.values()].filter((s) => s.active !== false && offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  // والخدمة الموقوفة (T2) ليست مرحلة: تبقى في «الخدمات» بعلامتها، فلا تُرسم في المحاور ولا تُعد في «موقوفة»
+  const offAll = [...raw.values()].filter((s) => s.active !== false && offKeys.has(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const offServices = offAll.filter((s) => stageRules(s).lane === 'service');
+  const offStages = offAll.filter((s) => stageRules(s).lane !== 'service');
   for (const s of offStages) {
     const c = offCard(s);
     let ph = phases.find((p) => p.key === c.phase);
@@ -194,10 +197,33 @@ export function journeyLanes(model, { def = {}, cohort = {}, milestones = [], ma
   const tracks = (model.tracks || []).map((s) => ({ ...card({ ...s, offset_ar: '', with_note: '' }, true, ''), lane: 'track', lane_ar: s.lane_ar,
     with_ar: s.start_ar, until_ar: s.until_ar, due_ar: s.due_ar, window_source: s.window ? 'plan' : null, window_source_ar: s.window ? 'من بداية مرجعه حتى نهايته في خطة الدفعة' : '' }));
   for (const x of model.tracks || []) stageBy.set(x.key, x);
+  // الخدمة (T2، ب5.2): بطاقتها في «الخدمات» بإتاحتها وحد جلساتها، ومؤشر الاستخدام من الخريطة بدل الحالة («استفاد 7 من 20»)
+  const services = (model.services || []).map((s) => {
+    const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
+    const p = mapStage.get(s.key);
+    return {
+      key: s.key, title: s.title, phase: s.phase, lane: 'service', lane_ar: s.lane_ar, mode: s.mode, mode_ar: s.mode_ar, optional: true,
+      avail_ar: s.avail_ar, max_ar: s.max_ar, note_ar: s.note_ar, lead: true,
+      acts: { shown: rs.filter((r) => !r.hidden).length, total: rs.length, text: rs.length ? actsAr(rs.length) : 'لا أنشطة بعد' },
+      usage: p && p.service ? { used: p.used, of: p.of, text: p.usage_ar } : null,
+      milestones: stageMs(s.key),
+    };
+  });
+  for (const s of offServices) {
+    const rs = reqs.filter((r) => r.stage_key === s.key && r.active !== false);
+    const r = stageRules(s);
+    services.push({
+      key: s.key, title: titleOf(s.key), phase: s.phase && PHASE_AR[s.phase] ? s.phase : 'qualification', lane: 'service', lane_ar: LANE_AR.service,
+      mode: r.mode, mode_ar: STAGE_TAG_AR[r.mode] || '', optional: true, avail_ar: serviceAvailAr(s, titleOf), max_ar: '', note_ar: SERVICE_NOTE_AR, lead: true, off: true,
+      acts: { shown: 0, total: rs.length, text: rs.length ? `${actsAr(rs.length)} لا تظهر لأعضاء الدفعة ما دامت موقوفة، وما أُنجز منها محفوظ` : 'لا أنشطة' },
+      usage: null, milestones: offMs(s.key),
+    });
+  }
+  for (const x of model.services || []) stageBy.set(x.key, x);
   const cohortMs = live.filter((m) => (!['stage_end', 'stage_start'].includes(m.anchor) || !stageBy.has(m.stage_key)) && !milestoneOff(m, offKeys)).map(msOut);
   const together = phases.reduce((n, p) => n + p.groups.filter((g) => g.together).length, 0);
   return { phases, cohort_milestones: cohortMs, counts: { stages: model.stages.length, off: offStages.length, together, milestones: live.filter((m) => !milestoneOff(m, offKeys)).length },
-    ...(tracks.length ? { tracks } : {}) };
+    ...(tracks.length ? { tracks } : {}), ...(services.length ? { services } : {}) };
 }
 
 /** صف المؤشرات تحت الرأس: المدة والمراحل وما يسير معًا والمعالم، والناس من الخريطة إن قُرئت
@@ -212,6 +238,10 @@ export function journeyKpis(model, lanes, map = null, { msError = false } = {}) 
     { key: 'milestones', label: 'المعالم', value: msError ? 'تعذّرت القراءة' : lanes.counts.milestones ? milestonesAr(lanes.counts.milestones) : 'لا معالم', tone: msError ? 'warn' : '' },
   ];
   if (lanes.tracks?.length) out.splice(3, 0, { key: 'tracks', label: 'مسارات مستمرة', value: lanes.tracks.map((x) => x.title).join('، ') });
+  // الخدمات (T2): أسماؤها ومن استفاد منها إن قُرئت الخريطة
+  if (lanes.services?.length) {
+    out.splice(out.findIndex((x) => x.key === 'milestones'), 0, { key: 'services', label: 'الخدمات', value: lanes.services.map((x) => (x.usage ? `${x.title} (${x.usage.text})` : x.title)).join('، ') });
+  }
   if (map?.totals) {
     const t = map.totals;
     out.push({ key: 'people', label: 'في الرحلة', value: `${membersAr(t.total)}${t.late ? `، منهم ${t.late} تجاوز موعده` : ''}`, tone: t.late ? 'warn' : '' });

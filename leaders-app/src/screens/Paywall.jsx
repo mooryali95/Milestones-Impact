@@ -146,7 +146,8 @@ export function pathOf(journey = []) {
   const items = journey.flatMap((s) => s.items || []);
   const days = planSpanDays(journey);
   // المسار المستمر (T1) يسير بجانب المراحل: لا يُعد في عددها، ولا يطيل المدة (planSpanDays يستبعده)
-  const seq = journey.filter((s) => s.lane !== 'track');
+  // والخدمة (T2) لمن يريد: لا تُعد في المراحل
+  const seq = journey.filter((s) => s.lane !== 'track' && s.lane !== 'service');
   return {
     stages: seq.length,
     readings: items.filter((i) => i.kind === 'reading').length,

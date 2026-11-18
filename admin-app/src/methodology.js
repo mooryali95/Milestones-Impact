@@ -6,9 +6,9 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, withCandidates, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, withCandidates, SESSIONS_MAX_LIMIT, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
-import { GATE_STAGE_KEYS, TRACK_UNTIL_DEFAULT, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
+import { GATE_STAGE_KEYS, SERVICE_NOTE_AR, SERVICE_UNLOCK_DEFAULT, TRACK_UNTIL_DEFAULT, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 
 export const LVLS = Object.keys(LVL);
 export const TIER = { ...TIER_AR, transfer: 'انتقال التعلم (بعدي، بلا درجة)' };
@@ -57,10 +57,11 @@ const preview = (reqs, f) => (v) => {
 export function stageToForm(s) {
   const r = stageRules(s);
   const track = r.lane === 'track';
+  const service = r.lane === 'service';
   // المسار يبدأ مع مرجعه دائمًا (حقله rule_with_track)، فحقل «متى تُفتح» المخفي له يبدأ «بعد السابقة»: إن عاد المدير بها
   // مرحلة متتابعة وصلت قاعدة صالحة، لا «تبدأ مع» بلا مرجع يرفضها الخادم (مرجع المسار قد يكون من طور آخر فلا يصلح لها)
   return { ...s, rule_mode: r.mode, rule_unlock: track ? 'previous' : r.unlock, rule_after: r.after, rule_with: track ? '' : r.with ?? '', rule_offset: r.offset || '', rule_day: r.day ?? '', rule_complete: r.complete,
-    rule_lane: track ? 'track' : 'stage', rule_with_track: track ? r.with ?? '' : '', rule_until: track ? r.until : TRACK_UNTIL_DEFAULT,
+    rule_lane: track ? 'track' : service ? 'service' : 'stage', rule_with_track: track ? r.with ?? '' : '', rule_until: track ? r.until : TRACK_UNTIL_DEFAULT,
     rule_due_before: track ? (s.rules?.due_before ?? '') : '' };
 }
 export function formToStage(v) {
@@ -70,6 +71,14 @@ export function formToStage(v) {
     const rules = { mode: rule_mode, unlock: 'with', with: rule_with_track || null, complete: rule_complete, lane: 'track', until: rule_until || TRACK_UNTIL_DEFAULT };
     if (rule_offset !== '' && rule_offset != null && Number(rule_offset) !== 0) rules.offset = rule_offset;
     if (rule_due_before) rules.due_before = rule_due_before;
+    return { ...rest, rules };
+  }
+  // الخدمة (T2، ب5.2): «عند الحاجة» دائمًا، وإتاحتها بشرط فتح. و«بعد ما قبلها» لها تعني الموصى به: من بعد اعتماد المستوى
+  if (rule_lane === 'service') {
+    const unlock = !rule_unlock || rule_unlock === 'previous' ? SERVICE_UNLOCK_DEFAULT.unlock : rule_unlock;
+    const rules = { mode: rule_mode === 'optional' ? 'optional' : 'on_demand', unlock, complete: rule_complete, lane: 'service' };
+    if (unlock === 'stages') rules.after = rule_unlock === 'stages' && rule_after?.length ? rule_after : [...SERVICE_UNLOCK_DEFAULT.after];
+    if (unlock === 'day') rules.day = rule_day;
     return { ...rest, rules };
   }
   const rules = { mode: rule_mode, unlock: rule_unlock, complete: rule_complete };
@@ -96,26 +105,30 @@ export function trackWithOptions(stages = [], selfKey = null) {
   const as = stages.map((x) => (x.key === selfKey ? { ...x, rules: { ...(x.rules || {}), lane: 'track', unlock: 'with' } } : x));
   return Object.fromEntries(withCandidates(as, selfKey).map((s) => [s.key, s.title_ar]));
 }
-export const LANE_FORM_AR = Object.freeze({ stage: 'مرحلة متتابعة', track: 'مسار مستمر يسير بجانب المراحل' });
+export const LANE_FORM_AR = Object.freeze({ stage: 'مرحلة متتابعة', track: 'مسار مستمر يسير بجانب المراحل', service: 'خدمة لمن يريد' });
 const LANE_HELP = {
   stage: 'تأخذ أيامها من الرحلة بترتيبها، وما بعدها يبدأ بعدها.',
   track: 'يبدأ مع مرحلة قبله ويمتد بجانب المراحل (التوجيه على رأس العمل مثلًا)، فلا يؤخر ما بعده ولا يقفله، ولا يُعد في «المرحلة X من Y» ولا في نسبة التقدم. بنوده الإلزامية تُشترط قبل مرحلة واحدة تختارها.',
+  service: `يحجزها من يريد حتى نهاية الرحلة (الاستشارة مثلًا)، بعدد جلسات تحدده في نشاطها. ${SERVICE_NOTE_AR}. تُتاح افتراضيًا بعد اعتماد المستوى.`,
 };
+// الخدمة لا يُشترط اكتمالها لفتح غيرها، ولا يبدأ معها شيء ولا تُشترط قبلها بنود مسار
+const notService = (s) => stageRules(s).lane !== 'service';
 export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'rule_lane', label: 'طبيعتها في الرحلة', type: 'select', options: LANE_FORM_AR, help: (v) => LANE_HELP[v.rule_lane || 'stage'],
     show: () => !GATE_STAGE_KEYS.includes(selfKey) },
-  { name: 'rule_mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.rule_mode] },
+  { name: 'rule_mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.rule_mode], show: (v) => v.rule_lane !== 'service' },
   { name: 'rule_with_track', label: 'يبدأ مع', type: 'select', show: (v) => v.rule_lane === 'track', empty: 'اختر المرحلة',
     options: trackWithOptions(stages, selfKey),
     help: 'يُفتح مع بداية المرحلة المختارة، من أي محور، ويبدأ في الخط بعد الأيام المكتوبة أدناه.' },
   { name: 'rule_until', label: 'يمتد حتى', type: 'select', show: (v) => v.rule_lane === 'track', options: untilOptions(stages, selfKey),
     help: 'نهاية الرحلة هي نهاية الدفعة في ملفها، وإن لم يكن لها تاريخ فنهاية المراحل المتتابعة. المسار لا يطيل الرحلة، وتعدّل كل دفعة نهايته من تبويب «الرحلة».' },
   { name: 'rule_due_before', label: 'بنوده الإلزامية مطلوبة قبل', type: 'select', show: (v) => v.rule_lane === 'track', empty: 'التقرير النهائي (الافتراضي)',
-    options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false && stageRules(s).lane !== 'track' && !GATE_STAGE_KEYS.includes(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((s) => [s.key, s.title_ar])),
+    options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false && stageRules(s).lane !== 'track' && notService(s) && !GATE_STAGE_KEYS.includes(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((s) => [s.key, s.title_ar])),
     help: 'هذه المرحلة وحدها تنتظر اكتمال بنود المسار الإلزامية، وما سواها (الدعم والتقييم مثلًا) لا ينتظره.' },
-  { name: 'rule_unlock', label: 'متى تُفتح', type: 'select', options: STAGE_UNLOCK_AR, show: (v) => v.rule_lane !== 'track' },
+  { name: 'rule_unlock', label: (v) => (v.rule_lane === 'service' ? 'متى تُتاح' : 'متى تُفتح'), type: 'select', options: STAGE_UNLOCK_AR, show: (v) => v.rule_lane !== 'track',
+    help: (v) => (v.rule_lane === 'service' ? 'الموصى به: «بعد مراحل محددة» واعتماد المستوى، وهو ما يُحفظ لـ«بعد ما قبلها». لا «يفتحها الأدمن»: تلك لكل مشارك بيد الفريق.' : null) },
   { name: 'rule_after', label: 'تُفتح بعد اكتمال', type: 'multi', show: (v) => v.rule_lane !== 'track' && v.rule_unlock === 'stages',
-    options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false).map((s) => [s.key, s.title_ar])) },
+    options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false && notService(s)).map((s) => [s.key, s.title_ar])) },
   { name: 'rule_with', label: 'تبدأ مع', type: 'select', show: (v) => v.rule_lane !== 'track' && v.rule_unlock === 'with', empty: 'اختر المرحلة',
     options: withOptions(stages, selfKey),
     help: 'تُفتح مع بداية المرحلة المختارة وتسير معها في الأسابيع نفسها، والمرحلة التي بعد المجموعة تنتظر اكتمالها كلها. القائمة تعرض المراحل الظاهرة قبل هذه في محورها نفسه، بشرط ألا تفصل بينهما مرحلة لا تسير معهما.' },
@@ -154,6 +167,9 @@ export const reqFields = (stages, models = [], labs = []) => [
   { name: 'cfg_title', label: 'عنوان الفيديو كما يراه المشارك', show: (v) => v.kind === 'video' },
   { name: 'cfg_min_pct', label: 'نسبة المشاهدة المطلوبة %', type: 'number', show: (v) => v.kind === 'video' },
   { name: 'cfg_sessions_required', label: 'عدد الجلسات المطلوب حضورها', type: 'number', show: (v) => v.kind === 'workshop' || v.kind === 'coaching' },
+  // حد الحجز (T2): للخدمة خاصة. يُخفى زر الحجز عند بلوغه، والحجز الزائد من منصة الحجز يُنبَّه عليه ولا يُرفض
+  { name: 'cfg_max_sessions', label: 'حد الجلسات للمشارك', type: 'number', show: (v) => v.kind === 'coaching',
+    help: () => `فارغ: بلا حد غير المطلوب حضوره. من 1 إلى ${SESSIONS_MAX_LIMIT}، ولا يقل عن المطلوب حضوره. يُخفى زر الحجز عند بلوغه، وما يصل زائدًا من منصة الحجز يُنبَّه عليه.` },
   { name: 'cfg_verify', label: 'توثيق الحضور', type: 'select', options: VERIFY, show: (v) => v.kind === 'workshop' },
   { name: 'cfg_mode', label: 'طريقة الجلسة', type: 'select', options: COACH_MODE, show: (v) => v.kind === 'coaching' },
   { name: 'cfg_location_ar', label: 'المكان للجلسات الحضورية', show: (v) => v.kind === 'coaching' && v.cfg_mode !== 'online' },

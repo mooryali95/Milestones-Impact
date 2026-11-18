@@ -7,7 +7,7 @@
 // صلاحية «النشاط» (activity). لا درجات ولا مستويات هنا أبدًا.
 import { addDays, daysBetween, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { renderJourneyText } from './journey.js';
-import { cohortPlan, planTrack, stageWindows, todayStage, todayStages, withGroups } from './stage-windows.js';
+import { cohortPlan, planService, planTrack, stageWindows, todayStage, todayStages, withGroups } from './stage-windows.js';
 import { inProgram } from './logic.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
@@ -19,13 +19,19 @@ export { stageWindows, todayStage, todayStages };
 // موضع المشارك: المرحلة النشطة، وإلا أول مرحلة إلزامية لم تكتمل (مقفلة بانتظار اعتماد مثلًا). -1: أنهى الرحلة
 // المسار المستمر (T1) يسير بجانب الرحلة فليس موضعًا: لا يُعد «مرحلة حالية» ولا «المرحلة X من Y»
 export function positionOf(journey) {
-  const seq = (s) => s.lane !== 'track' && !planTrack(s);
+  // والخدمة (T2) لمن يريد: ليست موضعًا ولا تنقص من أحد
+  const seq = (s) => s.lane !== 'track' && s.lane !== 'service' && !planTrack(s) && !planService(s);
   const active = journey.findIndex((s) => s.status === 'active' && seq(s));
   if (active >= 0) return active;
   return journey.findIndex((s) => s.status !== 'done' && (s.stage_mode || 'required') === 'required' && seq(s));
 }
 /** مسارات الرحلة المستمرة (T1) بترتيبها @param {any[]} journey */
 export const journeyTracks = (journey) => (journey || []).filter((s) => s.lane === 'track' || planTrack(s));
+/** خدمات الرحلة (T2) بترتيبها @param {any[]} journey */
+export const journeyServices = (journey) => (journey || []).filter((s) => s.lane === 'service' || planService(s));
+/** هل استفاد المشارك من الخدمة: جلسة محجوزة أو حاضرة في أحد بنودها (الملغاة لا تُعد)، أو بند منها مكتمل
+ * @param {any} st مرحلة الخدمة في رحلته */
+export const serviceUsed = (st) => (st?.items || []).some((it) => it.status === 'done' || (it.activity?.sessions || []).some((x) => x.status !== 'cancelled' && x.status !== 'no_show'));
 
 // مجموعة «تسير معًا» التي فيها المرحلة idx من رحلة المشارك (withGroups على قواعد رحلته نفسها، بعد خطة دفعته)،
 // ومرحلة لا تسير مع غيرها مجموعة وحدها
@@ -85,7 +91,7 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   const windows = plan.windows;
   const daysOf = (s) => plan.byKey[s.key]?.days ?? (Number(s.duration_days) || 0);
   const t = isoDay(today);
-  const acc = Object.fromEntries(stages.map((s) => [s.key, { here: 0, done: 0, late: 0, rows: [], reasons: new Map() }]));
+  const acc = Object.fromEntries(stages.map((s) => [s.key, { here: 0, done: 0, late: 0, used: 0, of: 0, rows: [], reasons: new Map() }]));
   const ms = new Map();
   let finished = 0;
   // من تأخر في أي مرحلة جارية له يُعدّ مرة واحدة في الإجمالي، ومن يقف في مراحل تسير معًا يُعدّ مرة واحدة في محوره
@@ -100,7 +106,13 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
     const startPos = key ? keys.indexOf(j[cur.start].key) : keys.length;
     // المسار المستمر (T1) يُعد بحالته عليه لا بموضعه: «هنا» ما دام جاريًا، و«تجاوزه» إن اكتمل
     const trackKeys = new Set(journeyTracks(j).map((s) => s.key));
-    for (let i = 0; i < startPos; i++) if (!trackKeys.has(keys[i])) acc[keys[i]].done += 1;
+    // والخدمة (T2): مؤشر استخدام لا حالة. «استفاد N من M» بدل «هنا» و«تجاوزها»
+    const serviceKeys = new Set(journeyServices(j).map((s) => s.key));
+    for (const st of j.filter((x) => serviceKeys.has(x.key))) {
+      acc[st.key].of += 1;
+      if (serviceUsed(st)) acc[st.key].used += 1;
+    }
+    for (let i = 0; i < startPos; i++) if (!trackKeys.has(keys[i]) && !serviceKeys.has(keys[i])) acc[keys[i]].done += 1;
     for (const st of j.filter((x) => trackKeys.has(x.key))) {
       if (st.status === 'done') acc[st.key].done += 1;
       else if (st.status === 'active') acc[st.key].here += 1;
@@ -143,9 +155,12 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
     const a = acc[s.key];
     const row = { key: s.key, title: s.title_ar, phase: s.phase || 'qualification', duration_days: daysOf(s),
       here: a.here, done: a.done, late: a.late, window: windows[s.key] || null };
+
     // الأسماء لصلاحية «القائمة» وحدها، الأطول مكوثًا أولًا. وبدونها أسباب مجمّعة بلا أسماء (أكثرها أولًا)
     if (list) row.people = a.rows.sort((x, y) => y.days - x.days || String(x.name).localeCompare(String(y.name), 'ar'));
     else row.reasons = [...a.reasons].map(([text, count]) => ({ text, count })).sort((x, y) => y.count - x.count).slice(0, 5);
+    // الخدمة (T2): مؤشر الاستخدام وحده، فلا تُرسم حالة ولا عنق زجاجة. برنامج بلا خدمة لا يتغير صفه
+    if (planService(s)) return { ...row, service: true, used: a.used, of: a.of, usage_ar: `استفاد ${a.used} من ${a.of}` };
     return row;
   });
   // الموقوفة في مكانها بترتيب المراحل، بلا أعداد ولا نافذة، فلا تُحسب في عنق الزجاجة ولا في «تجاوزوها»
@@ -153,6 +168,8 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   for (const s of (off || []).filter((x) => x && !keys.includes(x.key))) {
     const row = { key: s.key, title: s.title_ar || s.key, phase: s.phase || 'qualification', duration_days: 0, here: 0, done: 0, late: 0, window: null, off: true };
     if (list) row.people = []; else row.reasons = [];
+    // الخدمة الموقوفة (T2) تبقى في «الخدمات» بعلامة off، لا محطة موقوفة على المسار
+    if (planService(s)) Object.assign(row, { service: true, used: 0, of: 0, usage_ar: '' });
     const at = stages.findIndex((x) => sortOf(x) > sortOf(s));
     const idx = at < 0 ? out.length : out.findIndex((x) => x.key === stages[at].key);
     out.splice(idx < 0 ? out.length : idx, 0, row);

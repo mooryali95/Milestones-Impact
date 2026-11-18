@@ -18,6 +18,8 @@ const MASC = { 3: 'ثلاثة', 4: 'أربعة', 5: 'خمسة', 6: 'ستة', 7: 
 const counted = (n, one, two, few, many, words) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${words ? words[n] : n} ${few}` : `${n} ${many}`);
 export const sessionsAr = (n) => counted(n, 'جلسة واحدة', 'جلستان', 'جلسات', 'جلسة', FEM);
 export const daysAr = (n) => counted(n, 'يوم واحد', 'يومان', 'أيام', 'يومًا', MASC);
+// بعد حرف جر («بعد يومين»): المثنى مجرور، والمجهول «؟ يومًا»
+const afterDaysAr = (n) => (n == null ? '؟ يومًا' : n === 2 ? 'يومين' : daysAr(n));
 export const minutesAr = (n) => `${n} دقيقة`;
 export function durationAr(days) {
   const d = Number(days) || 0;
@@ -153,7 +155,8 @@ const MODES = ['required', 'on_demand', 'optional'];
 const UNLOCKS = ['previous', 'with', 'always', 'stages', 'day', 'approval'];
 const COMPLETES = ['required', 'any', 'approval'];
 // طبيعة عنصر الرحلة (T1، تصور 2026-11-18 ب5): «مرحلة» متتابعة (الافتراضي)، و«مسار مستمر» يسير بجانب السلسلة فلا يأخذ منها
-// أيامًا ولا يقفل ما بعدها إلا المرحلة المسماة في due_before، و«خدمة» تُبنى في T2 (تُقرأ هنا فلا تسقط، وتُعامل مرحلة حتى تُبنى)
+// أيامًا ولا يقفل ما بعدها إلا المرحلة المسماة في due_before، و«خدمة» (T2، ب5.2) يطلبها من يريد: لا أيام لها في السلسلة ولا تقفل
+// شيئًا ولا تُحسب في التقدم ولا يُشترط اكتمالها، وتبقى في الرحلة بحقل lane فيجدها الحجز وفتح الجلسات
 export const LANES = Object.freeze(['stage', 'track', 'service']);
 export const LANE_AR = Object.freeze({ stage: 'مرحلة متتابعة', track: 'مسار مستمر', service: 'خدمة' });
 // نهاية المسار (until): نهاية الرحلة (الافتراضي: نهاية الدفعة في ملفها، وإلا نهاية السلسلة)، أو مدته بالأيام، أو نهاية طور، أو نهاية مرحلة
@@ -173,6 +176,18 @@ export function untilOf(v) {
 // أخطاء القواعد التي تمنع الحفظ والنشر والترتيب (withGuard وversionBlock): «تبدأ مع»، وطبيعة المسار، وما يشترطه المسار
 export const BLOCKING_RULES = Object.freeze(['with', 'lane', 'due_before']);
 export const isTrack = (s) => stageRules(s).lane === 'track';
+/** هل المرحلة خدمة (T2) @param {any} s */
+export const isService = (s) => stageRules(s).lane === 'service';
+// إتاحة الخدمة الموصى بها (ب5.2): من بعد اعتماد المستوى. لا unlock:'approval'، فتلك «لا تُفتح إلا بيد الأدمن أو الخبير لكل مشارك»
+export const SERVICE_UNLOCK_DEFAULT = Object.freeze({ unlock: 'stages', after: Object.freeze(['approval']) });
+// والقياس البعدي لا يوضع في خدمة: الخدمة لمن يريد، وعليه يُبنى التقييم والتقرير
+export const POST_IN_SERVICE_AR = 'لا يوضع القياس البعدي في خدمة: الخدمة لمن يريد، وعليه يُبنى التقييم والتقرير';
+/** أول خدمة فيها متطلب E-POST فعّال، أو null @param {any[]} stages @param {any[]} requirements */
+export function postInService(stages, requirements) {
+  const services = new Set((stages || []).filter((s) => s && s.active !== false && isService(s)).map((s) => s.key));
+  const r = (requirements || []).find((x) => x && x.code === 'E-POST' && x.active !== false && services.has(x.stage_key));
+  return r ? r.stage_key : null;
+}
 // القياس البعدي (E-POST) لا يوضع في مسار مستمر (ب5.1 الحراس): عليه يُبنى التقييم والتقرير، فلا يسير بجانب الرحلة.
 // يقرؤه حفظ قاعدة المرحلة وحفظ المتطلب وحفظ النسخة، فلا يصل إليه أي ترتيب للخطوات
 export const POST_IN_TRACK_AR = 'لا يوضع القياس البعدي في مسار مستمر: عليه يُبنى التقييم والتقرير';
@@ -187,7 +202,8 @@ export function postInTrack(stages, requirements) {
 export function stageRules(stage) {
   const r = stage?.rules && typeof stage.rules === 'object' ? stage.rules : {};
   return {
-    mode: MODES.includes(r.mode) ? r.mode : 'required',
+    // الخدمة (T2) لمن يريد، فلا تكون إلزامية أبدًا: «عند الحاجة» أو «اختيارية» بنمطها
+    mode: r.lane === 'service' ? (r.mode === 'optional' ? 'optional' : 'on_demand') : MODES.includes(r.mode) ? r.mode : 'required',
     unlock: UNLOCKS.includes(r.unlock) ? r.unlock : 'previous',
     after: Array.isArray(r.after) ? r.after.map(String) : [],
     with: r.with != null && r.with !== '' ? String(r.with) : null,
@@ -236,14 +252,16 @@ export function withPlacementIssue(live, self, refKey) {
   if (idx < 0 || at < 0 || at >= idx) return null;
   const ref = live[at];
   // المسار المستمر (T1) يبدأ مع أي مرحلة سابقة من أي طور، ولا يدخل مجموعة «تسير معًا»، فلا قيد محور ولا مجاورة عليه
-  if (laneKey(self) === 'track') return null;
+  // والخدمة (T2) خارج السلسلة: لا تدخل مجموعة ولا تُرسم في خانة
+  if (laneKey(self) === 'track' || laneKey(self) === 'service') return null;
   if (laneKey(ref) === 'track') return `«${ref.title_ar || ref.key}» مسار مستمر، فلا تبدأ معه مرحلة متتابعة`;
+  if (laneKey(ref) === 'service') return `«${ref.title_ar || ref.key}» خدمة لمن يريد، فلا تبدأ معها مرحلة`;
   if (phaseOf(ref) !== phaseOf(self)) {
     return `تبدأ مع «${ref.title_ar || ref.key}» وهي في محور «${PHASE_AR[phaseOf(ref)]}» وهذه في «${PHASE_AR[phaseOf(self)]}»، والمراحل التي تسير معًا من محور واحد`;
   }
   const root = withRoot(live, refKey);
   // المسار المستمر بين المرجع وتابعه لا يفصلهما: يسير بجانب السلسلة لا فيها
-  const odd = live.slice(at + 1, idx).find((x) => laneKey(x) !== 'track' && !(stageRules(x).unlock === 'with' && withRoot(live, x.key) === root));
+  const odd = live.slice(at + 1, idx).find((x) => laneKey(x) !== 'track' && laneKey(x) !== 'service' && !(stageRules(x).unlock === 'with' && withRoot(live, x.key) === root));
   if (odd) return `تبدأ مع «${ref.title_ar || ref.key}» وبينهما «${odd.title_ar || odd.key}» لا تسير معهما؛ رتّب «${odd.title_ar || odd.key}» بعد المجموعة أو اختر مرجعًا يليها مباشرة`;
   return null;
 }
@@ -255,7 +273,7 @@ export function withCandidates(stages, selfKey) {
   const live = all.filter((s) => s.active !== false || s.key === selfKey).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   if (!self) return live.filter((s) => s.active !== false);
   const idx = live.indexOf(self);
-  return live.slice(0, idx).filter((s) => s.active !== false && laneKey(s) !== 'track' && !withPlacementIssue(live, self, s.key));
+  return live.slice(0, idx).filter((s) => s.active !== false && laneKey(s) !== 'track' && laneKey(s) !== 'service' && !withPlacementIssue(live, self, s.key));
 }
 
 // القواعد كما تُحفظ: تُرفض القيم المجهولة، ويُحذف ما يساوي الافتراضي فيبقى الفارغ فارغًا.
@@ -280,14 +298,24 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     if (!after.length) throw new Error('اختر المرحلة أو المراحل التي تُفتح هذه بعد اكتمالها');
     const bad = after.find((k) => !keys.has(k) || k === selfKey);
     if (bad) throw new Error(bad === selfKey ? 'المرحلة لا تشترط نفسها' : `مرحلة غير موجودة في البرنامج: ${bad}`);
+    // الخدمة (T2) لمن يريد، فلا يُشترط اكتمالها لفتح غيرها
+    const svc = list.find((x) => after.includes(x.key) && x.rules && laneKey(x) === 'service');
+    if (svc) throw new Error(`«${svc.title_ar || svc.key}» خدمة لمن يريد، فلا يُشترط اكتمالها لفتح مرحلة`);
     out.after = after;
   }
   // الطبيعة (T1): المسار المستمر يبدأ مع مرحلة سابقة من أي طور بإزاحة بلا سقف، وينتهي بـuntil، وتُشترط بنوده الإلزامية
   // قبل المرحلة المسماة في due_before وحدها. «مرحلة» هي الافتراضي فلا تُحفظ، و«الخدمة» في الخطوة التالية (T2)
   const lane = r.lane != null && r.lane !== '' ? String(r.lane) : 'stage';
   if (!LANES.includes(lane)) throw new Error('طبيعة المرحلة غير معروفة');
-  if (lane === 'service') throw new Error('«خدمة» تُبنى في خطوة لاحقة؛ اجعلها اليوم مرحلة «عند الحاجة»');
   const track = lane === 'track';
+  // الخدمة (T2، ب5.2): يطلبها من يريد، فلا تكون بوابة قبول ولا «تبدأ مع» غيرها. إتاحتها الموصى بها من بعد اعتماد المستوى
+  // (SERVICE_UNLOCK_DEFAULT)، ونمطها «عند الحاجة» إلا «اختيارية» صراحة
+  const service = lane === 'service';
+  if (service) {
+    if (selfKey && GATE_STAGE_KEYS.includes(selfKey)) throw new Error('بوابات القبول (الملف وتحديد المستوى واعتماده) لا تصير خدمة: عليها يُبنى فتح ما بعدها');
+    if (out.unlock === 'with') throw new Error('الخدمة لا تبدأ مع مرحلة: تُتاح بشرط فتح (بعد اعتماد المستوى مثلًا) حتى نهاية الرحلة');
+    out.mode = out.mode === 'optional' ? 'optional' : 'on_demand';
+  }
   if (track) {
     if (selfKey && GATE_STAGE_KEYS.includes(selfKey)) throw new Error('بوابات القبول (الملف وتحديد المستوى واعتماده) لا تصير مسارًا مستمرًا: عليها يُبنى فتح ما بعدها');
     if (out.unlock !== 'with') throw new Error('المسار المستمر يبدأ مع مرحلة قبله: اختر «تبدأ مع» ثم المرحلة');
@@ -305,6 +333,7 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
       throw new Error(`«${name}» بعد هذه المرحلة في الترتيب؛ اختر مرحلة قبلها، أو رتّب المراحل أولًا`);
     }
     if (target.rules && laneKey(target) === 'track') throw new Error(`«${name}» مسار مستمر، فلا تبدأ معه مرحلة. اختر مرحلة متتابعة`);
+    if (target.rules && laneKey(target) === 'service') throw new Error(`«${name}» خدمة لمن يريد، فلا تبدأ معها مرحلة. اختر مرحلة متتابعة`);
     out.with = k;
     // الإزاحة (R3a): تُخطَّط بعد N يومًا من بداية مرجعها، من 0 إلى مدته (البند 4.6). صفر هو الافتراضي فلا يُحفظ
     if (r.offset != null && r.offset !== '') {
@@ -335,6 +364,7 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
       const t = list.find((x) => x.key === k);
       if (!t || k === selfKey) throw new Error(k === selfKey ? 'المسار لا ينتهي بنهايته هو؛ اختر «مدته بالأيام»' : `مرحلة غير موجودة في البرنامج: ${k}`);
       if (t.rules && laneKey(t) === 'track') throw new Error(`«${t.title_ar || k}» مسار مستمر آخر؛ ينتهي المسار بنهاية مرحلة متتابعة`);
+      if (t.rules && laneKey(t) === 'service') throw new Error(`«${t.title_ar || k}» خدمة بلا نهاية في الرحلة؛ ينتهي المسار بنهاية مرحلة متتابعة`);
     }
     out.until = until;
     // ما يشترط بنوده الإلزامية: «التقرير النهائي» افتراضيًا إن كان في البرنامج، أو مرحلة متتابعة تسميها
@@ -345,10 +375,12 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
       const t = list.find((x) => x.key === due);
       if (!t) throw new Error(`مرحلة غير موجودة في البرنامج: ${due}`);
       if (t.rules && laneKey(t) === 'track') throw new Error(`«${t.title_ar || due}» مسار مستمر؛ تُشترط بنود المسار قبل مرحلة متتابعة`);
+      if (t.rules && laneKey(t) === 'service') throw new Error(`«${t.title_ar || due}» خدمة لمن يريد؛ تُشترط بنود المسار قبل مرحلة متتابعة`);
       if (GATE_STAGE_KEYS.includes(due)) throw new Error(`«${t.title_ar || due}» من بوابات القبول، فلا تنتظر مسارًا يبدأ بعدها`);
       out.due_before = due;
     }
   }
+  if (service) out.lane = 'service';
   return out;
 }
 
@@ -405,8 +437,19 @@ export function stageRulesIssues(stages) {
       if (due === s.key) lane('مسار يشترط نفسه', 'error', 'due_before');
       else if (byKey.has(due) && byKey.get(due).active === false) lane(`تُشترط بنوده قبل «${title(due)}» وهي مخفية، فلا ينتظره أحد`, 'warn', 'due_before');
       else if (byKey.has(due) && laneKey(byKey.get(due)) === 'track') lane(`تُشترط بنوده قبل «${title(due)}» وهي مسار مستمر`, 'error', 'due_before');
+      else if (byKey.has(due) && laneKey(byKey.get(due)) === 'service') lane(`تُشترط بنوده قبل «${title(due)}» وهي خدمة`, 'error', 'due_before');
       else if (!byKey.has(due) && due !== TRACK_DUE_DEFAULT) lane(`تُشترط بنوده قبل مرحلة غير موجودة (${due})`, 'error', 'due_before');
       if (r.until.startsWith('stage:') && !live.some((x) => x.key === r.until.slice(6))) lane(`ينتهي بنهاية مرحلة غير موجودة أو مخفية (${r.until.slice(6)})، فينتهي بنهاية الرحلة`, 'warn', 'until');
+    }
+    // الخدمة (T2): ليست بوابة قبول ولا تبدأ مع غيرها، ولا يُشترط اكتمالها لفتح مرحلة (وإلا صارت إلزامية بلا اسمها)
+    if (r.lane === 'service') {
+      const lane = (msg) => out.push({ level: 'error', stage: s.key, rule: 'lane', msg: `«${s.title_ar}»: ${msg}` });
+      if (GATE_STAGE_KEYS.includes(s.key)) lane('من بوابات القبول، فلا تكون خدمة');
+      if (r.unlock === 'with') lane('خدمة تبدأ مع مرحلة؛ اجعل إتاحتها بشرط فتح (بعد اعتماد المستوى مثلًا)');
+    }
+    if (r.unlock === 'stages') {
+      const svc = r.after.find((k) => byKey.has(k) && laneKey(byKey.get(k)) === 'service');
+      if (svc) out.push({ level: 'error', stage: s.key, rule: 'lane', msg: `«${s.title_ar}»: تُفتح بعد «${title(svc)}» وهي خدمة لمن يريد، فلا يُشترط اكتمالها` });
     }
     if (r.unlock === 'stages' && !r.after.length) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح «بعد مراحل» بلا مراحل محددة` });
     if (r.unlock === 'day' && r.day == null) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: شرط الفتح بالأيام بلا عدد أيام` });
@@ -435,6 +478,24 @@ export function stageRulesIssues(stages) {
 // وسم نمط المرحلة غير الإلزامية: المصدر الواحد لملخص القاعدة هنا ولوسم الخط والبطاقة (journey-timeline.js)،
 // و«عند الحاجة» هي كلمة المشارك نفسها («متاحة عند الحاجة»)
 export const STAGE_TAG_AR = Object.freeze({ on_demand: 'عند الحاجة', optional: 'اختيارية' });
+// الخدمة بجملة واحدة يقرؤها الأدمن في البطاقة والخط والنموذج
+export const SERVICE_NOTE_AR = 'لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم ولا يُشترط اكتمالها';
+/** إتاحة الخدمة بجملة: من متى تُتاح، وحتى نهاية الرحلة @param {any} stage @param {(k: string) => string} [title] */
+export function serviceAvailAr(stage, title = (k) => k) {
+  const r = stageRules(stage);
+  const from = {
+    previous: 'تُتاح بعد اكتمال الإلزامية قبلها', always: 'متاحة من بداية الرحلة',
+    stages: `تُتاح بعد اكتمال ${r.after.map((k) => `«${title(k)}»`).join(' و')}`,
+    with: 'تُتاح مع مرجعها', day: r.day === 0 ? 'تُتاح مع بداية الدفعة' : `تُتاح بعد ${afterDaysAr(r.day)} من بداية الدفعة`,
+    approval: 'يتيحها الأدمن أو الخبير لكل مشارك',
+  }[r.unlock];
+  return `${from} حتى نهاية الرحلة`;
+}
+/** عدد الجلسات للمشارك بجملة: «حتى جلستين للمشارك» @param {number|null} n */
+export function sessionsMaxAr(n) {
+  if (!n) return '';
+  return `حتى ${n === 1 ? 'جلسة واحدة' : n === 2 ? 'جلستين' : n <= 10 ? `${n} جلسات` : `${n} جلسة`} للمشارك`;
+}
 
 // القاعدة بجملة يقرؤها الأدمن على بطاقة المرحلة
 export function stageRuleSummary(stage, stages = []) {
@@ -446,11 +507,13 @@ export function stageRuleSummary(stage, stages = []) {
     always: 'متاحة من البداية',
     stages: `تُفتح بعد اكتمال: ${r.after.map(title).join('، ')}`,
     with: `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»${r.offset ? `، ومخطط بعد ${daysAr(r.offset)} من بدايتها` : ''}`,
-    day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${r.day ?? '؟'} يومًا من بداية الدفعة`,
+    day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${afterDaysAr(r.day)} من بداية الدفعة`,
     approval: 'يفتحها الأدمن أو الخبير',
   }[r.unlock];
   const complete = { required: 'تكتمل بمتطلباتها الإلزامية', any: 'تكتمل بأي متطلب فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];
   if (r.lane === 'track') return `${LANE_AR.track} · ${unlock} · ${untilAr(r.until, title)} · ${dueBeforeAr(r.due_before, stages)}`;
+  // الخدمة (T2): إتاحتها، ثم أنها لا تأخذ من الرحلة أيامًا ولا تُحسب في التقدم
+  if (r.lane === 'service') return `${LANE_AR.service} ${STAGE_TAG_AR[r.mode] || ''} · ${serviceAvailAr(stage, title)} · ${SERVICE_NOTE_AR}`;
   return `${mode} · ${unlock} · ${complete}`;
 }
 /** نهاية المسار بجملة @param {string} until @param {(k: string) => string} [title] */
@@ -469,7 +532,7 @@ export function dueBeforeAr(due, stages = []) {
 }
 // خيارات نهاية المسار للمحرر: نهاية الرحلة والمدة، ونهاية كل محور فيه مراحل، ونهاية كل مرحلة متتابعة ظاهرة غيره
 export function untilOptions(stages = [], selfKey = null) {
-  const live = (stages || []).filter((s) => s.active !== false && s.key !== selfKey && laneKey(s) !== 'track').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const live = (stages || []).filter((s) => s.active !== false && s.key !== selfKey && laneKey(s) !== 'track' && laneKey(s) !== 'service').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
   const phases = [...new Set(live.map(phaseOf))];
   return {
     journey_end: 'نهاية الرحلة (نهاية الدفعة في ملفها)', days: 'مدته بالأيام',

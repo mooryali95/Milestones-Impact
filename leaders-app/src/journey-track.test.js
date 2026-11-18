@@ -213,7 +213,8 @@ describe('القواعد في البرنامج: الحفظ والفحص والج
     expect(bad({ ...SEED, due_before: 'ojt_coaching' })).toContain('لا يشترط نفسه');
     expect(bad({ ...SEED, due_before: 'profile' })).toContain('بوابات القبول');
     expect(bad({ ...SEED, unlock: 'with', with: 'training' }, 'approval')).toContain('بوابات القبول');
-    expect(bad({ lane: 'service' })).toContain('خطوة لاحقة');
+    // الخدمة تُحفظ منذ T2، وتُرفض «تبدأ مع» لها (journey-service.test.js)
+    expect(bad({ lane: 'service', unlock: 'with', with: 'training' }, 'consulting')).toContain('الخدمة لا تبدأ مع مرحلة');
     expect(bad({ lane: 'x' })).toContain('طبيعة المرحلة');
     expect(bad({ unlock: 'with', with: 'ojt_coaching' }, 'consulting')).toContain('مسار مستمر');
   });
