@@ -73,6 +73,7 @@ import * as GA from './guide-admin.ts';
 import * as TD from './today-desk.ts';
 import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
+import * as IK from './idempotency.ts';
 
 type Body = Record<string, any>;
 
@@ -731,7 +732,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.agent-key-clear': (a, b) => A.superWriter(a, AG.keyClear, b),
 };
 
-Deno.serve(async (req) => {
+// كل رد يعلن (x-idem) إن كان مفتاح منع التكرار محفوظًا، فيعرف العميل أن إعادة الكتابة مأمونة (idempotency.ts، ش9)
+Deno.serve(async (req) => IK.advertise(await handle(req)));
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return preflight(req);
   if (req.method !== 'POST') return reply(req, { success: false, message: 'Method not allowed' }, 405);
   let action = '';
@@ -739,16 +743,19 @@ Deno.serve(async (req) => {
     const b: Body = await req.json().catch(() => ({}));
     action = String(b.action || '');
     const ctx = { ip: clientIp(req), ua: req.headers.get('user-agent')?.slice(0, 300) || null };
+    // مفتاح منع التكرار يُؤخذ ويُحذف من الجسم قبل أي فعل، ويُستعمل لكتابات الأدوار ذات الجلسة وحدها (فاعل معروف)
+    const key = IK.takeKey(action, b);
+    const once = async (role: string, id: string, run: () => Promise<unknown>) => IK.withIdempotency(req, action, b, key, key ? await IK.actorHash(role, id) : null, run);
 
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
       // البوابات كلها في asAction، مصدرها الواحد للطلب وحده وللطلب المجمّع
-      return reply(req, await asAction(action, p, b, sessionId, ctx));
+      return await once('participant', p.id, () => asAction(action, p, b, sessionId, ctx));
     }
     if (coordinator[action]) {
       const { coordinator: c, sessionId } = await C.fromToken(b.token);
-      return reply(req, await coordinator[action](c, b, sessionId, ctx));
+      return await once('coordinator', c.id, () => coordinator[action](c, b, sessionId, ctx));
     }
     if (expert[action]) {
       const { expert: e, sessionId } = await E.expertFromToken(b.token);
@@ -761,13 +768,13 @@ Deno.serve(async (req) => {
       // مفاتيح الميزات: القاعة و360 المخفيان عن الخبير يُرفضان، وقراءتهما تُجاب بلا شيء
       const soft = await FT.gate(action);
       if (soft) return reply(req, soft);
-      return reply(req, await expert[action](e, b, sessionId, ctx));
+      return await once('expert', e.id, () => expert[action](e, b, sessionId, ctx));
     }
     if (admin[action]) {
       const a = await A.adminFromToken(b.token);
       // المدير مستثنى من مفاتيح الميزات ليبنيها، إلا فتح القاعة المخفية (features.js)
       await FT.gate(action);
-      return reply(req, await admin[action](a, b, ctx));
+      return await once('admin', a.id || a.email, () => admin[action](a, b, ctx));
     }
     throw new Fail('إجراء غير معروف', 400, 'unknown_action');
   } catch (e) {
@@ -786,4 +793,4 @@ Deno.serve(async (req) => {
     await alertOps('internal', { ref, action, message: String((e as Error)?.message || e).slice(0, 300) });
     return reply(req, { success: false, message: `خطأ داخلي، حاول بعد قليل (المرجع ${ref})`, code: 'internal', ref }, 500);
   }
-});
+}

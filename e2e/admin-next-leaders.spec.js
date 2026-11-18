@@ -134,7 +134,10 @@ test('ملف المشارك: التدخل في مرحلة يصل إلى الخا
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect(page.getByRole('status')).toHaveText('تم');
   const sent = calls.filter((c) => c.action === 'admin.stage-override');
-  expect(sent[0]).toEqual({ action: 'admin.stage-override', token: 't', participant_id: 'p1', stage_key: 's1', stage_action: 'complete', note: 'أنجزها في ورشة حضورية موثقة' });
+  // idem: مفتاح منع التكرار لكتابات leaders-api (ش9)، لا يمس الإجراء ولا حقوله
+  const { idem, ...first } = sent[0];
+  expect(first).toEqual({ action: 'admin.stage-override', token: 't', participant_id: 'p1', stage_key: 's1', stage_action: 'complete', note: 'أنجزها في ورشة حضورية موثقة' });
+  expect(idem).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
 
   await page.getByRole('button', { name: 'إلغاء التدخل' }).click();
   await page.getByRole('dialog').locator('input').fill('أُعفي خطأً');

@@ -18,6 +18,7 @@ import { route, slackStateOf } from '../_shared/notify-routing.js';
 import { notifySettings } from '../_shared/notify-settings.ts';
 import { slackConfigured, slackDeliver } from '../_shared/slack.ts';
 import { SITES } from '../_shared/sites.js';
+import { IDEM_TTL_HOURS } from './idempotency.ts';
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
@@ -38,6 +39,8 @@ export async function purge() {
   await run('workshop_attendance', db.from('workshop_attendance').update({ ip: null, user_agent: null }).lt('checked_in_at', cutoff).or('ip.not.is.null,user_agent.not.is.null'), 'session_id');
   // إيصالات المسح: عمرها 15 دقيقة، فتُحذف بعد انتهائها بيوم. قبل الترحيل 20261118110000 يُسجَّل الخطأ ولا يقف التنظيف
   await run('workshop_scan_receipts', db.from('workshop_scan_receipts').delete().lt('expires_at', new Date(Date.now() - 864e5).toISOString()));
+  // مفاتيح منع التكرار (ش9): تُعاد النتيجة 24 ساعة ثم يُحذف الصف. قبل الترحيل 20261118140000 يُسجَّل الخطأ ولا يقف التنظيف
+  await run('idempotency_keys', db.from('idempotency_keys').delete().lt('created_at', new Date(Date.now() - IDEM_TTL_HOURS * 36e5).toISOString()), 'key');
   // سجل الإرسال 180 يومًا (D15، نسب استجابة المقيّمين عبر الدفعة)، والطابور بعد إرساله أو تركه 30 يومًا
   await run('mail_events', db.from('mail_events').delete().lt('created_at', new Date(Date.now() - MAIL_RETENTION_DAYS * 864e5).toISOString()));
   const monthAgo = new Date(Date.now() - 30 * 864e5).toISOString();

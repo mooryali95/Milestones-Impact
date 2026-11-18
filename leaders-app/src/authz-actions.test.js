@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { LEADERS_ADMIN_LOGGED_READS, LEADERS_ADMIN_READS } from '../../supabase/functions/_shared/action-kinds.js';
 
 const root = join(__dirname, '../..');
 const fn = (p) => readFileSync(join(root, 'supabase/functions/leaders-api', p), 'utf8');
@@ -22,34 +23,10 @@ function bodyOf(impl) {
   const d = src.match(new RegExp(`export (?:async )?function ${m[2]}\\b[^{]*\\{`));
   return d ? src.slice(d.index + d[0].length, d.index + d[0].length + 1500) : null;
 }
-// أفعال الإدارة للقراءة وحدها: تُفتح لكل أدوار اللوحة بما فيها «عرض فقط»
-const ADMIN_READS = new Set(['health', 'inbox', 'today', 'insight', 'changes', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'peer', 'reviews', 'evidence-url',
-  'participant-impact', 'sus', 'erasures', 'erasure-get', 'catalog', 'nudge-preview', 'nudge-ledger', 'nudge-report', 'track', 'orgs', 'org', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'cohort-journey', 'book-preview',
-  'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'cohort-workshops', 'impact',
-  'curriculum', 'programs', 'payments', 'payment', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'program', 'program-compare', 'milestones', 'cohort-definition',
-  'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'outcomes',
-  // قراءة يحصرها الخادم في المدير ذي الكتابة كـevidence-url (answer-review.test.js يحرس الفحص)
-  'assessment-answers',
-  // الكتاب الأم: قراءة لكل مدير، والتعليق والحسم بغلاف writer (master-book.ts)
-  'book',
-  // مركز البريد: الحصة والأعداد وحدها قراءة. تشخيص العنوان ونص الرسالة والإرسال بغلاف writer، ورابط الدخول بغلاف superWriter
-  'mail-center',
-  // الإعدادات العامة: التعريف والقيم لكل مدير، والحفظ (settings-save) بغلاف writer وفحوص المجموعة في دالته
-  'settings',
-  // قسم «التوجيه» في مركز البريد: الإعداد المحفوظ وأعداد أحداث 7 أيام بمفاتيحها، بلا أسماء ولا عناوين. حفظه بـ settings-save
-  // للمالك وحده (notify_center_test.ts يحرس الفحص)
-  'notify-routing',
-  // صحة البريد والتنبيه: أعداد وحالات بلا عناوين ولا قيم أسرار، يحصرها الخادم في المدير ذي الكتابة (ops_health_test.ts يحرس الفحص)
-  'ops-health',
-  // تقييم 360: حالة الدورات وأعدادها بلا نتيجة فرد
-  'f360',
-  // شاشة المساعد الآلي: قراءة يحصرها الخادم في المدير الأعلى والمالك (requireAgentRead، agent_admin_test.ts يحرس الفحص)،
-  // وفتح نص محادثة أو تشغيل يُسجَّل. الكتابة كلها بغلاف superWriter
-  'agent-state', 'agent-usage', 'agent-conversations', 'agent-transcript', 'agent-eval-runs', 'agent-eval-run',
-  // «التوجيه والإرشاد»: أعداد وإنفاق بلا نص، يحصرها الخادم في المدير الأعلى والمالك (requireAgentRead)
-  'guide-report', 'guide-eval', 'guide-eval-results', 'guide-pilots', 'guide-dashboard', 'guide-orgs', 'guide-eval-cases',
-  // H3 سجل المحادثات: القراءة يحصرها الخادم في المالك والمدير الأعلى بمنحه وبالعامل الثاني، وكل فتح نص يُسجَّل (guide_transcripts_test.ts)
-  'guide-transcript-access', 'guide-transcripts', 'guide-transcript', 'guide-transcript-grants']);
+// أفعال الإدارة للقراءة وحدها: تُفتح لكل أدوار اللوحة بما فيها «عرض فقط». مصدرها الواحد _shared/action-kinds.js (تستعمله
+// إعادة المحاولة في العميل أيضًا، ش9)
+// والاطلاع المسجَّل قراءة هنا أيضًا (لا يُعاد تلقائيًا فقط)
+const ADMIN_READS = new Set([...LEADERS_ADMIN_READS, ...LEADERS_ADMIN_LOGGED_READS].map((k) => k.replace('admin.', '')));
 
 describe('4.4 صلاحيات الأدوار على الخادم', () => {
   it('لا فعل باسم واحد في خريطتين، فلا يُفتح فعل دور بجلسة دور آخر', () => {

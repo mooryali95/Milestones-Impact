@@ -371,6 +371,14 @@ textarea.input { min-height: 96px; resize: vertical; }
 .foot { text-align: center; font-size: 14px; color: var(--muted); padding: 24px 16px 40px; }
 
 .center-load { min-height: 60vh; display: grid; place-items: center; color: var(--muted); }
+/* «جارٍ إعادة الاتصال…» عند إخفاق الإقلاع العابر (reconnect.js، ش9): حالة هادئة لا رسالة خطأ */
+.reconnect { min-height: 60vh; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.reconnect-card { display: flex; flex-direction: column; align-items: center; padding: 28px 20px; }
+.reconnect-card > * + * { margin-top: 10px; }
+.reconnect-card h2 { margin: 0; font-size: 1.15rem; }
+.reconnect-card p { margin: 0; }
+.reconnect > .link { align-self: center; }
+.switch-note { padding-bottom: 0; text-align: center; }
 .spinner {
   width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--gold);
   animation: spin .8s linear infinite;

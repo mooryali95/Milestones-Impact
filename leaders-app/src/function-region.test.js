@@ -41,8 +41,10 @@ describe('منطقة تنفيذ الدوال', () => {
       .filter((p) => /\/functions\/v1\//.test(readFileSync(p, 'utf8')))
       .map((p) => p.slice(ROOT.length + 1));
     expect(builders).toEqual(['src/lib/api.js']);
-    expect(read('admin-app/src/api.js')).toContain("const ADMIN_API = fnUrl('admin-api');");
-    expect(read('admin-app/src/leaders.js')).toContain("const API = fnUrl('leaders-api');");
+    // اللوحة تطلب الدالتين باسمهما عبر postAction، وهي تبني العنوان من fnUrl (ش9)
+    expect(read('admin-app/src/api.js')).toContain("await post('admin-api', {");
+    expect(read('admin-app/src/leaders.js')).toContain("await post('leaders-api', {");
+    expect(read('src/lib/api.js')).toMatch(/fetchRetry\(fnUrl\(fn\)/);
   });
 
   it('المسبار وفحوص ما بعد النشر تطلب المنطقة نفسها', () => {
