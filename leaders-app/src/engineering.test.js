@@ -38,10 +38,15 @@ describe('الخطوط والعامل والتحميل', () => {
     const h = read('leaders-app/public/_headers');
     for (const path of ['/\n', '/org\n', '/legal/*\n', '/j/*\n']) expect(h).toContain(`${path}  Cache-Control: no-cache`);
   });
-  it('الشاشات الثقيلة كسولة في التطبيقين مع Suspense، وقطعة React مستقلة', () => {
+  it('الشاشات الثقيلة كسولة في التطبيقين مع Suspense وبحارس ملف القسم بعد النشر، وقطعة React مستقلة', () => {
+    // التطبيقان على الوحدة المشتركة shared/ui/lazy-retry.js: القادة بـlazyView (إعادة واحدة إلى القسم المطلوب، reload-view.js)
     const app = read('leaders-app/src/App.jsx');
-    for (const s of ['Handbook', 'Capstone', 'Hall', 'Katon', 'OrgPortal', 'ExpertPortal', 'Legal', 'Impact']) expect(app).toMatch(new RegExp(`const ${s}(?:Screen)? = lazy\\(\\(\\) => import\\('./screens/${s}\\.jsx'\\)\\)`));
+    for (const s of ['Handbook', 'Capstone', 'Hall', 'Katon', 'OrgPortal', 'ExpertPortal', 'Legal', 'Impact']) expect(app).toMatch(new RegExp(`const ${s}(?:Screen)? = lazyView\\(\\(\\) => import\\('./screens/${s}\\.jsx'\\)\\)`));
+    expect(app).not.toMatch(/\blazy\(/);
+    expect(read('leaders-app/src/reload-view.js')).toContain("from '../../shared/ui/lazy-retry.js'");
     expect(read('leaders-app/src/main.jsx')).toMatch(/<Suspense fallback=/);
+    expect(read('leaders-app/src/main.jsx')).toMatch(/installPreloadRecovery\(window, \{ to: viewHref \}\)/);
+    expect(read('admin-app/src/main.jsx')).toMatch(/installPreloadRecovery\(\)/);
     const admin = read('admin-app/src/App.jsx');
     for (const s of ['Leaders', 'Matrix', 'Visits', 'Contacts', 'Settings']) expect(admin).toContain(`const ${s} = lazyRetry(() => import('./screens/${s}.jsx'))`);
     expect(read('admin-app/src/main.jsx')).toMatch(/<Suspense fallback=/);

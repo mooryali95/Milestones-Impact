@@ -12,6 +12,10 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+# صفحة الملف الغائب (assets/404.html) لا تُخزَّن: يُفصل الثابت سنة أعلاه ثم يُضبط من جديد (قاعدة أضيق بعد الأوسع)
+/assets/404.html
+  ! Cache-Control
+  Cache-Control: no-store
 
 /index.html
   Cache-Control: public, max-age=0, must-revalidate

@@ -3,7 +3,8 @@
 // ════════════════════════════════════════════════════════════════
 // يرسله بريد الأمان (أجهزتك) وإشعار مشاركة الجهة (ماذا ترى جهتك) في core.ts. يُقرأ مرة عند الإقلاع
 // ويُحذف من العنوان، والقسم غير المتاح بعد يقع على الرحلة بحراس العرض نفسها في App.jsx.
-export const TABS = ['profile', 'handbook', 'capstone', 'hall', 'impact', 'lab'];
+// وتكتبه إعادة التحميل بعد فشل ملف قسم (reload-view.js) فيعود المشارك إلى القسم نفسه، ومنه كاتون و360 بمفتاحيهما
+export const TABS = ['profile', 'handbook', 'capstone', 'hall', 'impact', 'lab', 'katon', 'f360'];
 
 /** @returns {{ view: string, search: string } | null} القسم وما بقي من العنوان، أو null حين لا رابط قسم */
 export function tabFromSearch(search) {

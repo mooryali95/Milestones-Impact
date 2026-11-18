@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import ErrorBoundary from './ErrorBoundary.jsx';
 import { captureAttribution } from './attribution.js';
+import { installPreloadRecovery } from '../../shared/ui/lazy-retry.js';
+import { viewHref } from './reload-view.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
@@ -14,8 +16,9 @@ captureAttribution();
 // الشاشات الثقيلة تُحمَّل كسولًا (lazy في App.jsx)؛ هذا ما يظهر أثناء جلب قطعتها
 const Loading = () => <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
 createRoot(document.getElementById('root')).render(<ErrorBoundary><Suspense fallback={<Loading />}><App /></Suspense></ErrorBoundary>);
-// بعد كل نشر تتغير أسماء القطع المهشّرة؛ تبويب مفتوح قبل النشر يفشل استيرادها، فيُعاد تحميله
-window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); location.reload(); });
+// بعد كل نشر تتغير أسماء القطع المهشّرة؛ تبويب مفتوح قبل النشر يفشل تحميلها المسبق، فيُعاد تحميله مرة واحدة
+// في الدقيقة على الأكثر (لا حلقة إن تكرر الفشل لوكيل أو انقطاع)، وإلى القسم الذي طلبه المشارك (reload-view.js)
+installPreloadRecovery(window, { to: viewHref });
 
 // التثبيت والعمل دون اتصال في النسخة المنشورة فقط، فلا يخزّن خادم التطوير شيئًا
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
