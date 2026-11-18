@@ -48,7 +48,7 @@
 
 | السر | من يقرؤه | الغرض |
 |---|---|---|
-| `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال الست، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
+| `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال السبع والتراجع بها، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
 | `SUPABASE_DB_URL` | `backup.yml`، `restore-drill.yml` | النسخ الليلي وتمرين الاستعادة |
 | `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم (gpg). لا تُشفَّر به نسخة جديدة ما دام `BACKUP_PUBLIC_KEY` مضبوطًا، **ويبقى ولا يُحذف**: النسخ المتماثلة السابقة للانتقال باقية في `monthly/` (قفل 365 يومًا) و`archive/` ولا تُفك إلا به. قيمته في GitHub وفي مدير كلمات المرور (`RUNBOOK.md` §4) |
 | `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml` | سطر مفتاح age عام لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، ومفاتيحها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |

@@ -3,6 +3,7 @@
 // في الإنتاج عبر Management API (قراءة فقط)، ويفشل إن بقي ترحيل غير مطبّق تعتمد عليه الدوال.
 //   SUPABASE_ACCESS_TOKEN=... node scripts/ops/pending-migrations.mjs          بوابة: رمز 1 إن بقي ترحيل حاجب
 //   SUPABASE_ACCESS_TOKEN=... node scripts/ops/pending-migrations.mjs --list   قائمة فقط، رمز 0 دائمًا
+//   ... --dir=<مجلد ترحيلات>   ترحيلات شجرة أخرى (هدف التراجع في deploy-leaders-api.yml)
 //
 // كل ترحيل حاجب ما لم يحمل في سطوره الأولى أحد وسمين:
 //   -- deploy-gate: tolerant   الدوال تقرؤه قراءة متسامحة، فتعمل قبله وبعده
@@ -12,14 +13,16 @@
 // scripts/db/applied-manifest.json لا تتغير)، بل يصير حاجبًا لأي قاعدة تنقصه لأن اسمه في البيان.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const APPLIED = new Set(Object.keys(JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../db/applied-manifest.json'), 'utf8')).migrations));
 
 const REF = process.env.SUPABASE_PROJECT_REF || 'eormhcupwgwpllhrfxxg';
 const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
 const LIST = process.argv.includes('--list');
-const DIR = new URL('../../supabase/migrations/', import.meta.url);
+// --dir=<مسار>: ترحيلات شجرة أخرى (سير التراجع الموحد يفحص ترحيلات الإيداع الهدف بسكربت main)
+const DIR_ARG = process.argv.find((a) => a.startsWith('--dir='))?.slice('--dir='.length);
+const DIR = DIR_ARG ? pathToFileURL(`${DIR_ARG.replace(/\/+$/, '')}/`) : new URL('../../supabase/migrations/', import.meta.url);
 
 export function gateOf(sql, name) {
   if (name && APPLIED.has(name)) return { gate: 'blocking', note: 'مطبّق على الإنتاج، فوسمه منتهٍ' };

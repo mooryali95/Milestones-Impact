@@ -1,7 +1,8 @@
 name: Production probe
 
-# مسبار احتياطي كل ثلاث ساعات (كان كل ساعة حتى 2026-11-11؛ خُفّض لترشيد دقائق Actions، فكل تشغيل يُحتسب دقيقة كاملة): طلب حقيقي إلى كل دالة تخدم واجهة (leaders-api وadmin-api وuser-api)
-# يمر بالقاعدة، وصفحات المنصات الثلاث. فشل أي منها يُفشل السير، فيصل المالك بريد GitHub عن فشل سير العمل.
+# مسبار احتياطي كل ثلاث ساعات (كان كل ساعة حتى 2026-11-11؛ خُفّض لترشيد دقائق Actions، فكل تشغيل يُحتسب دقيقة كاملة): طلب حقيقي إلى كل دالة تخدم واجهة (leaders-api وadmin-api وuser-api،
+# وsend-otp لنموذج التواصل منذ 2026-11-18) يمر بالقاعدة، وفحص صحة GET بلا أثر للخطافين (creem-webhook وleaders-hooks)، وصفحات المنصات الثلاث،
+# وحارس الفحوص الليلية (لم ينجح أي منها منذ 36 ساعة). فشل أي منها يُفشل السير، فيصل المالك بريد GitHub عن فشل سير العمل.
 # جدولة GitHub قد تتأخر ساعات، فالمراقب الخارجي كل 5 دقائق (RUNBOOK.md) هو الأساس
 # وهذا شبكة أمان له.
 
@@ -12,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  # حارس الفحوص الليلية يقرأ سجل Actions وحده
+  actions: read
 
 jobs:
   probe:
@@ -32,6 +35,17 @@ jobs:
           ping leaders-api system.ping
           ping admin-api ping
           ping user-api ping
+          ping send-otp ping
+      # الخطافان منشوران بلا تحقق JWT، وGET عليهما فحص صحة لا يقرأ قاعدة ولا سرًا (_shared/health.ts)
+      - name: The webhooks boot
+        run: |
+          health() {
+            body=$(curl -s --max-time 20 "https://$PROJECT_REF.supabase.co/functions/v1/$1?forceFunctionRegion=ap-south-1")
+            echo "$1: $body"
+            echo "$body" | grep -q '"success":true'
+          }
+          health creem-webhook
+          health leaders-hooks
       # Cloudflare قد يحجب عناوين مشغّلات GitHub على النطاق (403 مع server: cloudflare) وهذا ليس تعطلًا؛
       # عندها يُفحص النشر نفسه على pages.dev (أصل Cloudflare Pages بلا قواعد النطاق)، ولا يُقبل إلا بعنوان صفحة
       # فيه Milestone Impact، فلا يمر موقع آخر على العنوان نفسه. غير ذلك يُفشل السير.
@@ -55,3 +69,13 @@ jobs:
           probe https://leaders.sunkvalue.com/ https://mi-leaders.pages.dev/
           probe https://mi.sunkvalue.com/
           probe https://admin.sunkvalue.com/ https://mi-admin.pages.dev/
+      # ش11: فشل الفوترة أوقف الفحوص الليلية أيامًا بلا إشارة تخصه. يقرأ سجل Actions وحده
+      - uses: actions/checkout@v7
+        if: always()
+        with:
+          sparse-checkout: scripts/ops
+      - name: Nightly checks succeeded within 36 hours
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ops/nightly-watch.mjs
