@@ -255,3 +255,36 @@
   .cj-par-with { flex-wrap: wrap; inline-size: 100%; }
   .cj-par-with select { flex: 1 1 100%; }
 }
+
+/* أيام الورشة في البطاقة (W3): العداد، وصف لكل يوم بموعده ومكانه وطريقته، والأعداد والسعة، وتنبيهان لا يمنعان */
+.cj-days { display: grid; gap: 8px; padding-block-start: 10px; border-block-start: 1px solid var(--line); }
+.cj-days:focus { outline: none; }
+.cj-days-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.cj-days-head h6 { margin: 0; font-size: .86rem; font-weight: 700; color: var(--ink); }
+.cj-days-count { padding: 1px 9px; border-radius: 99px; font-size: .76rem; font-weight: 600; background: var(--sand-light); color: var(--ink-mid); }
+.cj-days-count.tone-warn { background: var(--st-warn-bg, #efe7d8); color: var(--st-warn-text); }
+.cj-days-count.tone-ok { background: color-mix(in srgb, var(--st-ok) 10%, #fff); color: var(--st-ok-text, var(--st-ok)); }
+.cj-days-head .cj-day-add { margin-inline-start: auto; }
+.cj-days-none { margin: 0; font-size: .82rem; }
+.cj-day-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.cj-day { display: grid; gap: 4px; min-width: 0; padding: 10px 12px; border-radius: 10px; background: var(--sand-light); border: 1px solid transparent; }
+.cj-day.tbd { background: transparent; border: 1px dashed var(--line-strong); }
+.cj-day.off { background: transparent; border: 1px dashed var(--line-strong); }
+.cj-day.off .cj-day-t { color: var(--ink-mid); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ink-light) 55%, transparent); }
+.cj-day-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.cj-day-t { font-size: .88rem; color: var(--ink); }
+.cj-day-req { font-size: .74rem; color: var(--ink-light); }
+.cj-day-meta, .cj-day-nums { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: .8rem; color: var(--ink-soft); }
+.cj-day-meta > span { min-width: 0; overflow-wrap: anywhere; }
+.cj-day-nums { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.cj-day-nums .over { color: var(--st-warn-text); }
+.cj-day-warn { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 6px 10px; border-radius: 8px; font-size: .78rem; line-height: 1.7;
+  background: var(--st-warn-bg, #efe7d8); color: var(--st-warn-text); }
+.cj-day-warn > span { display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px; border-radius: 50%; flex: none; margin-block-start: 3px;
+  background: var(--st-warn); color: #fff; font-size: .7rem; font-weight: 700; }
+.cj-day-acts { gap: 4px 12px; }
+.cj-day-acts .la-link.danger { color: var(--st-bad); }
+@media (max-width: 640px) {
+  .cj-days-head .cj-day-add { margin-inline-start: 0; inline-size: 100%; }
+  .cj-day { padding: 9px 10px; }
+}

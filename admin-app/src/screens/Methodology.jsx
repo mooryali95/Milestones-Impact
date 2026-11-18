@@ -107,7 +107,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
       <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} />
       <Coherence stages={stages} reqs={reqs} />
       <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
-      <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الطلب، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
+      <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الحاجة، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
         <React.Fragment key={ph}>
           <div className="la-row between">

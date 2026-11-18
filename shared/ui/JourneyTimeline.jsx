@@ -87,7 +87,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const cohort = model.context === 'cohort';
   const pick = (k) => setSel(k);
   const lane = (s) => (
-    <div key={s.key} className={`jt-stage ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}`}
+    <div key={s.key} className={`jt-stage ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}
       style={s.together ? { marginInlineStart: `${s.lane_at}%`, width: `${Math.min(s.lane_width, 100 - s.lane_at)}%` } : undefined}>
       <div className="jt-stage-head">
         {onStage ? (
@@ -96,6 +96,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
           </button>
         ) : <b>{s.status === 'done' && <Glyph name="check" size={12} />}{s.title}</b>}
         <small>{cohort && s.window_ar ? s.window_ar : s.label}{s.with_note ? `، ${s.with_note}` : ''}</small>
+        {s.mode_ar && <span className="jt-mode">{s.mode_ar}</span>}
         {s.status_ar && s.status !== 'upcoming' && <span className={`jt-status ${s.status}`}>{s.status_ar}</span>}
       </div>
       <div className="jt-acts">
@@ -169,6 +170,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             <li><i className="sq req" />إلزامي</li><li><i className="sq opt" />اختياري</li>
             <li><Glyph name="online" size={13} />عن بعد</li><li><Glyph name="in_person" size={13} />حضوري</li>
             <li><Glyph name="clock" size={13} />يُحدد لاحقًا</li><li><i className="sq tog" />تسير معًا</li>
+            {model.stages.some((s) => s.mode_ar) && <li><i className="sq nonreq" />مرحلة غير إلزامية</li>}
             {model.today && <li><i className="ln" />اليوم</li>}
           </ul>
           <Panel a={current} model={model} onOpen={onOpen} openLabel={openLabel} />
@@ -182,11 +184,11 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             <p className="jt-m-phase-head"><b>{p.title}</b><small>{p.label}</small></p>
             <ol>
               {model.stages.filter((s) => s.phase === p.key).map((s) => (
-                <li key={s.key} className={`jt-m-stage${s.status ? ` st-${s.status}` : ''}${s.together ? ' together' : ''}`}>
+                <li key={s.key} className={`jt-m-stage${s.status ? ` st-${s.status}` : ''}${s.together ? ' together' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}>
                   <details open={openFirst(s)}>
                     <summary>
                       <span className="jt-m-node" aria-hidden="true" />
-                      <span className="jt-m-title"><b>{s.title}</b>{s.status_ar && <span className={`jt-status ${s.status}`}>{s.status_ar}</span>}</span>
+                      <span className="jt-m-title"><b>{s.title}</b>{s.mode_ar && <span className="jt-mode">{s.mode_ar}</span>}{s.status_ar && <span className={`jt-status ${s.status}`}>{s.status_ar}</span>}</span>
                       <small>{cohort && s.window_ar ? s.window_ar : s.label}{s.with_note ? `، ${s.with_note}` : ''}</small>
                       <span className="jt-m-bar" aria-hidden="true"><i style={{ width: `${s.bar}%` }} /></span>
                       <span className="jt-m-icons" aria-hidden="true">

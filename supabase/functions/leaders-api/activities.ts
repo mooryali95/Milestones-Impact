@@ -6,7 +6,7 @@
 import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
 import { alertOps, audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
-import { missingTable } from './missing-column.ts';
+import { missingColumn, missingTable } from './missing-column.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
@@ -509,6 +509,7 @@ export async function overview() {
     db.from('programs').select('id, name').is('archived_at', null),
     db.from('cohorts').select('id, name, program_id, status').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
+  const capacity_ready = await capacityReady();
   const counts: Record<string, number> = {};
   for (const a of att.data || []) counts[a.session_id] = (counts[a.session_id] || 0) + 1;
   // طريقة التوثيق الفعلية لكل جلسة (W1): من متطلبها وتخصيص دفعتها، كما يحكم بها workshop.checkin والبريد (workshopVerify).
@@ -523,8 +524,25 @@ export async function overview() {
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
     workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s) }; delete row.secret; return row; }),
     coaching: coach.data || [],
-    programs: programs.data || [], cohorts: cohorts.data || [],
+    programs: programs.data || [], cohorts: cohorts.data || [], capacity_ready,
   };
+}
+
+// ── سعة يوم الورشة (W3، الترحيل 20261118130000) ──
+// عرض وتنبيه فقط لا حجز مقاعد (أ8): فارغ = بلا سعة، وإلا عدد صحيح من 1 إلى CAPACITY_MAX كقيد القاعدة
+export const CAPACITY_MAX = 10000;
+export function cleanCapacity(v: unknown): number | null {
+  if (v == null || String(v).trim() === '') return null;
+  const n = Number(latinDigits(String(v).trim()));
+  if (!Number.isInteger(n) || n < 1 || n > CAPACITY_MAX) throw new Fail(`السعة عدد صحيح من 1 إلى ${CAPACITY_MAX}، أو اتركها فارغة`);
+  return n;
+}
+// قبل الترحيل لا عمود: اللوحة تخفي الحقل، والحفظ يعيد المحاولة بلاه (missingColumn). وتعذّر القراءة لسبب آخر يخفيه
+// أيضًا فلا تسقط الشاشة به، والتحرير بلا الحقل يبقي السعة المحفوظة
+export async function capacityReady(): Promise<boolean> {
+  const { error } = await db.from('workshop_sessions').select('capacity').limit(1);
+  if (error && !missingColumn(error)) console.error('workshop capacity', error.message);
+  return !error;
 }
 
 export async function workshopSave(a: any, b: Body) {
@@ -544,10 +562,21 @@ export async function workshopSave(a: any, b: Body) {
   if ('cohort_id' in row || !row.id) out.cohort_id = /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null;
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
   if (when.error) throw new Fail(when.error);
+  // السعة (W3): تُكتب حين يرسلها النموذج وحده، فغيابها في التحرير يُبقي القائمة
+  if ('capacity' in row) out.capacity = cleanCapacity(row.capacity);
   // قبل الترحيل 20261116060000 يرفض القيد الموعد الفارغ (23502 أو 23514): رسالة تقول السبب بدل «تعذّر الحفظ»
   const undatedBlocked = (res: any) => {
     if (res.error && !out.starts_at && ['23502', '23514'].includes(String(res.error.code))) throw new Fail('الجلسة بلا موعد تحتاج تحديث قاعدة البيانات أولًا؛ حدد موعدها الآن أو أعد المحاولة بعد التحديث');
     return res;
+  };
+  // قبل الترحيل 20261118130000 لا عمود للسعة: يُعاد الحفظ بلاها، ويُقال للوحة إنها لم تُحفظ إن كانت لها قيمة
+  let capacitySkipped = false;
+  const tolerant = async (write: (x: Body) => PromiseLike<any>) => {
+    const res = await write(out);
+    if (!res.error || !('capacity' in out) || !missingColumn(res.error)) return res;
+    capacitySkipped = out.capacity != null;
+    delete out.capacity;
+    return await write(out);
   };
   let saved: any;
   if (row.id) {
@@ -558,14 +587,15 @@ export async function workshopSave(a: any, b: Body) {
     if (prev && at(prev.starts_at) !== at(out.starts_at)) {
       for (const k of ['invited_at', 'reminded_day_at', 'reminded_hour_at']) if (k in prev) out[k] = null;
     }
-    saved = must(undatedBlocked(await db.from('workshop_sessions').update(out).eq('id', row.id).select('id').single()), 'تعذّر الحفظ');
+    saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').update(x).eq('id', row.id).select('id').single())), 'تعذّر الحفظ');
   } else {
     const r = must(await db.from('stage_requirements').select('id, kind').eq('id', String(row.requirement_id || '')).maybeSingle());
     if (!r || r.kind !== 'workshop') throw new Fail('اختر متطلب ورشة');
-    saved = must(undatedBlocked(await db.from('workshop_sessions').insert({ ...out, requirement_id: r.id, secret: randomToken(32) }).select('id').single()), 'تعذّر الحفظ');
+    const secret = randomToken(32);
+    saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').insert({ ...x, requirement_id: r.id, secret }).select('id').single())), 'تعذّر الحفظ');
   }
   await audit('admin', a.email, row.id ? 'workshop.update' : 'workshop.create', 'workshop_sessions', saved.id, null, out);
-  return { success: true, id: saved.id };
+  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}) };
 }
 
 export async function workshopDelete(a: any, b: Body) {
@@ -592,34 +622,84 @@ export async function workshopQr(b: Body) {
   };
 }
 
-// الحضور ومن يُتوقع حضوره (من ينطبق عليهم المتطلب بعد اعتماد مسارهم)
-export async function workshopAttendance(b: Body) {
-  const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
-  if (!s) throw new Fail('الجلسة غير موجودة', 404);
+// من يُتوقع حضوره (من ينطبق عليهم المتطلب بعد اعتماد مسارهم): المصدر الواحد لقائمة الحضور وشاشة الرمز وأيام بطاقة المرحلة
+async function attendanceWorld(withCohorts: boolean) {
   const none = Promise.resolve({ data: [] as any[] });
-  const [{ data: r }, { data: att }, { data: pl }, { data: enr }, { data: cohorts }] = await Promise.all([
-    db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),
-    db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', s.id),
+  const [{ data: pl }, { data: enr }, { data: cohorts }] = await Promise.all([
     db.from('placements').select('participant_id, dimension, level, approved_at, participants(full_name, email, organization_name, organization_id, status)'),
-    s.cohort_id ? db.from('enrollments').select('participant_id, cohort_id, status, created_at') : none,
-    s.cohort_id ? db.from('cohorts').select('id, organization_id, status, is_default, starts_on, created_at') : none,
+    withCohorts ? db.from('enrollments').select('participant_id, cohort_id, status, created_at') : none,
+    withCohorts ? db.from('cohorts').select('id, organization_id, status, is_default, starts_on, created_at') : none,
   ]);
-  // جلسة دفعة بعينها: المتوقع حضورهم مشاركو تلك الدفعة فقط
-  const inCohort = (e: any) => !s.cohort_id || pickCohort({
-    enrollments: (enr || []).filter((x: any) => x.participant_id === e.id), cohorts: cohorts || [], organizationId: e.organization_id || null,
-  }).cohort?.id === s.cohort_id;
   const by: Record<string, any> = {};
   for (const x of pl || []) {
     const e = (by[x.participant_id] ||= { id: x.participant_id, ...x.participants, levels: {}, approved: 0 });
     e.levels[x.dimension] = x.level;
     if (x.approved_at) e.approved++;
   }
+  const memo = new Map<string, string | null>();
+  // دفعة المشارك الفعلية (pickCohort) مرة واحدة لكل مشارك
+  const cohortOf = (e: any) => {
+    if (!memo.has(e.id)) memo.set(e.id, pickCohort({ enrollments: (enr || []).filter((x: any) => x.participant_id === e.id), cohorts: cohorts || [], organizationId: e.organization_id || null }).cohort?.id || null);
+    return memo.get(e.id);
+  };
+  return { people: Object.values(by), cohortOf };
+}
+// cohortId: جلسة دفعة بعينها، فالمتوقع مشاركو تلك الدفعة فقط. strict: الحاضر يُعد أيضًا من الدفعة وحدها (جلسة عامة في بطاقة دفعة)
+function attendancePeople(r: any, w: Awaited<ReturnType<typeof attendanceWorld>>, cohortId: string | null, att: any[], strict = false) {
+  const inCohort = (e: any) => !cohortId || w.cohortOf(e) === cohortId;
   const present = Object.fromEntries((att || []).map((a: any) => [a.participant_id, a]));
-  const people = Object.values(by)
-    .filter((e: any) => (e.approved === 3 && inProgram(e.status) && requirementApplies(r, e.levels) && inCohort(e)) || present[e.id])
+  return w.people
+    .filter((e: any) => (e.approved === 3 && inProgram(e.status) && requirementApplies(r, e.levels) && inCohort(e)) || (present[e.id] && (!strict || inCohort(e))))
     .map((e: any) => ({ id: e.id, full_name: e.full_name, email: e.email, organization_name: e.organization_name, attendance: present[e.id] || null }))
     .sort((x: any, y: any) => String(x.full_name).localeCompare(String(y.full_name), 'ar'));
+}
+
+// الحضور ومن يُتوقع حضوره
+export async function workshopAttendance(b: Body) {
+  const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
+  if (!s) throw new Fail('الجلسة غير موجودة', 404);
+  // cohort_id: الجلسة العامة من بطاقة دفعة تُقرأ بأعضاء تلك الدفعة وحاضريها وحدهم، كما تعدّها البطاقة (cohortWorkshops).
+  // جلسة الدفعة لا يغيّرها هذا: متوقعها دفعتها هي دائمًا
+  const view = b.cohort_id ? String(b.cohort_id) : null;
+  const [{ data: r }, { data: att }, w] = await Promise.all([
+    db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),
+    db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', s.id),
+    attendanceWorld(!!(s.cohort_id || view)),
+  ]);
+  const people = attendancePeople(r, w, s.cohort_id || view, att || [], !s.cohort_id && !!view);
   return { success: true, session: s, requirement: { id: r.id, title_ar: r.title_ar }, people };
+}
+
+// أيام الورشة في بطاقة المرحلة (W3، تصور 2026-11-18 ب5.4): جلسات متطلبات الحضور لهذه الدفعة والجلسات العامة، ولكل جلسة
+// طريقتها الفعلية (sessionVerify: تخصيص الدفعة لجلساتها وحدها، والعامة بطريقة البرنامج كما يفرضها التسجيل في workshopVerify) والمتوقع والحاضر من attendancePeople نفسها التي تعدّ بها شاشة الرمز، والسعة إن رُحّلت.
+// قراءة فقط: الإضافة والتحرير والإلغاء بـadmin.workshop-save نفسه، فلا مسار كتابة ثانٍ
+export async function cohortWorkshops(b: Body) {
+  const c = must(await db.from('cohorts').select('id, program_id, delivery').eq('id', String(b.cohort_id || '')).maybeSingle()) as any;
+  if (!c) throw new Fail('الدفعة غير موجودة', 404);
+  const ids = [...new Set((Array.isArray(b.requirement_ids) ? b.requirement_ids : []).map(String))].filter((x) => /^[0-9a-f-]{36}$/.test(x)).slice(0, 50);
+  const capacity_ready = await capacityReady();
+  if (!ids.length) return { success: true, capacity_ready, sessions: [] };
+  // متطلبات برنامج الدفعة وحدها، فلا تُقرأ جلسات برنامج آخر برقم متطلب مرسل
+  const reqs = (must(await db.from('stage_requirements').select('*').in('id', ids).eq('program_id', c.program_id).eq('kind', 'workshop')) || []) as any[];
+  if (!reqs.length) return { success: true, capacity_ready, sessions: [] };
+  const reqOf = Object.fromEntries(reqs.map((r: any) => [r.id, r]));
+  const rows = ((must(await db.from('workshop_sessions').select('*').in('requirement_id', reqs.map((r: any) => r.id))) || []) as any[])
+    .filter((s: any) => !s.cohort_id || s.cohort_id === c.id).sort(bySessionTime);
+  const [att, w] = await Promise.all([
+    rows.length ? db.from('workshop_attendance').select('session_id, participant_id').in('session_id', rows.map((s: any) => s.id)) : Promise.resolve({ data: [] as any[] }),
+    attendanceWorld(true),
+  ]);
+  const attOf: Record<string, any[]> = {};
+  for (const a of (att as any).data || []) (attOf[a.session_id] ||= []).push(a);
+  // المتوقع لهذه الدفعة: جلستها كما تعدّها شاشة الرمز، والعامة بأعضاء هذه الدفعة وحاضريها وحدهم
+  const sessions = rows.map((s: any) => {
+    const people = attendancePeople(reqOf[s.requirement_id], w, c.id, attOf[s.id] || [], !s.cohort_id);
+    const row: Body = { ...s, verify: sessionVerify(reqOf[s.requirement_id], s.cohort_id ? c.delivery : null), expected: people.length, attended: people.filter((p: any) => p.attendance).length };
+    delete row.secret;
+    if (!capacity_ready) delete row.capacity;
+    return row;
+  });
+  return { success: true, capacity_ready, sessions };
 }
 
 export async function workshopMark(a: any, b: Body) {

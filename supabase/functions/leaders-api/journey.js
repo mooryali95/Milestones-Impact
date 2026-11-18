@@ -331,11 +331,15 @@ export function stageRulesIssues(stages) {
   return out;
 }
 
+// وسم نمط المرحلة غير الإلزامية: المصدر الواحد لملخص القاعدة هنا ولوسم الخط والبطاقة (journey-timeline.js)،
+// و«عند الحاجة» هي كلمة المشارك نفسها («متاحة عند الحاجة»)
+export const STAGE_TAG_AR = Object.freeze({ on_demand: 'عند الحاجة', optional: 'اختيارية' });
+
 // القاعدة بجملة يقرؤها الأدمن على بطاقة المرحلة
 export function stageRuleSummary(stage, stages = []) {
   const r = stageRules(stage);
   const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
-  const mode = { required: 'إلزامية', on_demand: 'عند الطلب', optional: 'اختيارية مقترحة' }[r.mode];
+  const mode = { required: 'إلزامية', on_demand: STAGE_TAG_AR.on_demand, optional: `${STAGE_TAG_AR.optional} مقترحة` }[r.mode];
   const unlock = {
     previous: 'تُفتح بعد اكتمال الإلزامية قبلها',
     always: 'متاحة من البداية',
