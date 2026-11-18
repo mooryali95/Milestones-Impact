@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261118130000_leaders_workshop_capacity
+-- as-of migration: 20261118140000_leaders_idempotency_keys
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1160,6 +1160,24 @@ create table if not exists leaders.handbook_views (
   user_agent text,
   viewed_at timestamp with time zone default now() not null,
   constraint handbook_views_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.idempotency_keys (
+  actor text not null,
+  key text not null,
+  action text not null,
+  req_hash text not null,
+  status smallint,
+  response jsonb,
+  created_at timestamp with time zone default now() not null,
+  finished_at timestamp with time zone,
+  constraint idempotency_keys_action_check CHECK ((char_length(action) <= 80)),
+  constraint idempotency_keys_actor_check CHECK ((char_length(actor) = 64)),
+  constraint idempotency_keys_key_check CHECK ((key ~ '^[A-Za-z0-9_-]{16,64}$'::text)),
+  constraint idempotency_keys_req_hash_check CHECK ((char_length(req_hash) = 64)),
+  constraint idempotency_keys_response_check CHECK (((response IS NULL) OR (pg_column_size(response) <= 65536))),
+  constraint idempotency_keys_status_check CHECK (((status IS NULL) OR ((status >= 200) AND (status < 600)))),
+  constraint idempotency_keys_pkey PRIMARY KEY (actor, key)
 );
 
 create table if not exists leaders.instruments (
@@ -3360,6 +3378,8 @@ CREATE INDEX IF NOT EXISTS handbook_exports_participant_idx ON leaders.handbook_
 
 CREATE INDEX IF NOT EXISTS handbook_views_participant_idx ON leaders.handbook_views USING btree (participant_id, viewed_at DESC);
 
+CREATE INDEX IF NOT EXISTS idempotency_keys_created_idx ON leaders.idempotency_keys USING btree (created_at);
+
 CREATE INDEX IF NOT EXISTS katon_answers_sentence_idx ON leaders.katon_answers USING btree (sentence_id);
 
 CREATE INDEX IF NOT EXISTS katon_sentences_topic_idx ON leaders.katon_sentences USING btree (topic_id, sort);
@@ -3673,6 +3693,8 @@ alter table leaders.handbook_modules enable row level security;
 alter table leaders.handbook_progress enable row level security;
 
 alter table leaders.handbook_views enable row level security;
+
+alter table leaders.idempotency_keys enable row level security;
 
 alter table leaders.instruments enable row level security;
 

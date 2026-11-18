@@ -2,11 +2,8 @@
 // تطبيق القادة: الاتصال بـ leaders-api والمسميات والحسابات المشتركة
 // ════════════════════════════════════════════════════════════════
 // توكن جلسة الإدارة نفسه يُرسل إلى leaders-api، فتتحقق منه في api_sessions.
-import { fnUrl } from '../../src/lib/api.js';
 import { BRAND } from '../../shared/js/brand.js';
 import { post, session } from './api.js';
-
-const API = fnUrl('leaders-api');
 
 let onExpired = () => {};
 export const setLeadersExpired = (fn) => { onExpired = fn; };
@@ -28,7 +25,7 @@ export const changesPending = (action, body = {}) => CHANGES_PENDING.has(action)
 // اسم الإجراء والتوكن آخر الجسم، فلا يكتب فوقهما حقل بالاسم نفسه في body (تدقيق الجاهزية، admin-core-1:
 // كان فعل المرحلة action يحل محل admin.stage-override فيرد الخادم «إجراء غير معروف»)
 export async function L(action, body = {}) {
-  const d = await post(API, { ...body, action, token: session.load()?.token }, 'تعذّر الاتصال بالخادم');
+  const d = await post('leaders-api', { ...body, action, token: session.load()?.token }, 'تعذّر الاتصال بالخادم');
   if (!d.success && d.code === 'session') { session.clear(); onExpired(); }
   if (d.success && changesPending(action, body) && typeof window !== 'undefined') window.dispatchEvent(new Event('mi:pending'));
   return d;

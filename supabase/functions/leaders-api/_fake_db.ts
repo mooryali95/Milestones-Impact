@@ -54,6 +54,8 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       const m = /^(and|or)\((.*)\)$/.exec(t);
       if (m) { const parts = split(m[2]).map(cond); return m[1] === 'and' ? (r) => parts.every((f) => f(r)) : (r) => parts.some((f) => f(r)); }
       const [c, o, ...rest] = t.split('.'); const v = rest.join('.');
+      // نفي شرط: col.not.is.null وأمثاله
+      if (o === 'not') { const f = cond(`${c}.${v}`); return (r) => !f(r); }
       if (o === 'is') return (r) => (r[c] ?? null) === (v === 'null' ? null : v === 'true' ? true : v === 'false' ? false : v);
       if (o === 'eq') return (r) => String(r[c]) === v;
       if (o === 'gte') return (r) => r[c] != null && String(r[c]) >= v;

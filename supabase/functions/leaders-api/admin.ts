@@ -22,6 +22,7 @@ import { cleanProfile } from './certificates.ts';
 import { defaultProgramId, journeyDefinition, orgCohortSetups, runningCohort } from './programs.ts';
 import { privateFile } from './guards.js';
 import { closeOnDelete as closeErasure, markNotified, noteOnDone, pendingEraseId } from './privacy.ts';
+import { forgetActor } from './idempotency.ts';
 import { lockedChanges, removeLocked, REPO_EDIT_AR } from './content-lock.js';
 import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
@@ -549,6 +550,8 @@ export async function removeParticipant(a: Admin, impact: Awaited<ReturnType<typ
   }
   // ما ينتظر له في طابور البريد يُحذف: لا يخرج إلى من حُذفت بياناته، ولا يبقى عنوانه محفوظًا
   const purged = await purgeQueuedMail(email, refs);
+  // ردود كتاباته المحفوظة بمفتاح منع التكرار (ش9) تُحذف معه، فلا يبقى منها شيء بعد محو بياناته
+  await forgetActor('participant', id);
   let filesError: string | null = null;
   if (paths.length) {
     const remove = () => storage.from(BUCKET).remove(paths).then((r: any) => r.error, (e: unknown) => e as Error);

@@ -94,7 +94,7 @@ test('«اسأل المساعد»: سؤال وإجابة، و«أريد التأ
   await expect(page.getByLabel(/ما الذي تحتاجه؟/)).toHaveValue(/سألت المساعد الذكي: «ما المعلم؟»/);
   expect(s.calls.some((c) => c.action === 'experts.choose')).toBe(false);
   // G3: الضغط يُسجَّل عددًا بمعرّف الرد وحده، بلا نص
-  await expect.poll(() => { const { token: _t, ...rest } = s.calls.find((c) => c.action === 'guide.confirm') || {}; return rest; }).toEqual({ action: 'guide.confirm', message_id: 42 });
+  await expect.poll(() => { const { token: _t, idem: _i, ...rest } = s.calls.find((c) => c.action === 'guide.confirm') || {}; return rest; }).toEqual({ action: 'guide.confirm', message_id: 42 });
 
   page.once('dialog', (d) => d.accept());
   await chat.getByRole('button', { name: 'احذف محادثتي' }).click();

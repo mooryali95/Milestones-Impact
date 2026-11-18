@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // نفس منهجية تطبيق المصفوفة: المفتاح العام في الترويسة لبوابة Supabase،
 // وتوكن الجلسة داخل الجسم يُتحقق منه على الخادم.
-import { BUSY_STATUS, fetchRetry, fnUrl, SUPABASE_KEY } from '../../src/lib/api.js';
+import { netMessage, postAction } from '../../src/lib/api.js';
 
 const TOKEN_KEY = 'mi_leaders_session';
 
@@ -40,18 +40,20 @@ export async function parse(r) {
   throw new Error(`bad response ${r.status}`);
 }
 
-export async function call(action, body = {}) {
-  let res;
+// طلب فعل من leaders-api بتوكن الدور. سياسة الإعادة ومفتاح منع التكرار في postAction (src/lib/api.js، ش9)، والرسالة عند
+// تعذّر الاتصال تميز الجهاز بلا اتصال، والكتابة التي لا يُعرف مصيرها («تعذّر التأكد، تحقّق قبل الإعادة»). الرمز يبقى
+// network في الحالات كلها، فما يعيد المحاولة به (القاعة والحضور) يعمل كما كان، وoffline وuncertain علامتان إضافيتان
+export async function send(action, token, body = {}) {
   try {
-    const r = await fetchRetry(fnUrl('leaders-api'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      body: JSON.stringify({ action, token: session.get(), ...body }),
-    });
-    res = await parse(r);
-  } catch {
-    res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
+    const { r } = await postAction('leaders-api', { action, token, ...body });
+    return await parse(r);
+  } catch (e) {
+    return { success: false, message: netMessage(e), code: 'network', ...(e?.offline && { offline: true }), ...(e?.uncertain && { uncertain: true }) };
   }
+}
+
+export async function call(action, body = {}) {
+  const res = await send(action, session.get(), body);
   if (!res.success && res.code === 'session') { session.clear(); onExpired(); }
   return res;
 }
@@ -86,17 +88,7 @@ let onCoordExpired = () => {};
 export const setCoordExpired = (fn) => { onCoordExpired = fn; };
 
 export async function coordCall(action, body = {}) {
-  let res;
-  try {
-    const r = await fetchRetry(fnUrl('leaders-api'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      body: JSON.stringify({ action, token: coordSession.get(), ...body }),
-    });
-    res = await parse(r);
-  } catch {
-    res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
-  }
+  const res = await send(action, coordSession.get(), body);
   if (!res.success && (res.code === 'session' || res.code === 'suspended')) { coordSession.clear(); onCoordExpired(res.message); }
   return res;
 }
@@ -109,17 +101,7 @@ export const xpSession = {
   clear() { try { localStorage.removeItem(XP_KEY); } catch { /* وضع خاص */ } },
 };
 export async function xpCall(action, body = {}) {
-  let res;
-  try {
-    const r = await fetchRetry(fnUrl('leaders-api'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-      body: JSON.stringify({ action, token: xpSession.get(), ...body }),
-    });
-    res = await parse(r);
-  } catch {
-    res = { success: false, message: 'تعذّر الاتصال، تحقّق من الشبكة وحاول مرة أخرى', code: 'network' };
-  }
+  const res = await send(action, xpSession.get(), body);
   if (!res.success && (res.code === 'session' || res.code === 'suspended')) xpSession.clear();
   return res;
 }

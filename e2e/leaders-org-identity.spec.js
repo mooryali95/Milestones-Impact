@@ -91,5 +91,7 @@ test('شهادة البرنامج: يُحفظ ما يختلف عن العام ف
   await dlg.getByRole('button', { name: 'حفظ' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.program-save')).toEqual({
     action: 'admin.program-save', token: expect.anything(), id: 'pb', cert: { hours: 24, program_ar: 'برنامج سفراء الأثر', signatory: null },
+    // مفتاح منع التكرار لكتابات leaders-api (ش9)
+    idem: expect.stringMatching(/^[A-Za-z0-9_-]{16,64}$/),
   });
 });
