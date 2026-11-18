@@ -10,6 +10,11 @@ name: Deploy or roll back (manual)
 #
 # يعمل بالسر SUPABASE_ACCESS_TOKEN وحده (حساب Supabase، Access Tokens)، وبلا السر يحمرّ: التراجع لا يكون نصفيًا.
 # ترحيلات SQL لا تُنشر هنا: تُطبَّق بقرار المالك عبر migrate.yml. ولا نافذة ولا تجميد هنا: التراجع للطوارئ.
+# ويستدعيه migrate.yml (workflow_call) في وضع apply-and-deploy فور تطبيق ترحيل حاجب، بـ ref = main، فيُنشر رأس main
+# ساعة النشر لا ساعة التشغيل (المرحلة 6، البند 8).
+# لا يرجع release إلى الخلف إلا بالمدخل rollback = true من التشغيل اليدوي (scripts/ops/release-direction.mjs): هدف أقدم من
+# release يعني أن إيداعًا أحدث نُشر بعد أن بدأ التشغيل، فيُرفض قبل أي نشر.
+# مجموعة التزامن على الوظيفة لا على السير: السير المستدعي لا يحمل المجموعة نفسها على مستواه فلا يقع قفل متبادل.
 # بعده يبقى main على الإيداع المعطوب، فالدفع التالي إلى main ينشره ثانية: يُدمج إصلاحه أو عكسه (git revert) قبل أي دمج آخر.
 
 on:
@@ -19,10 +24,17 @@ on:
         description: 'الإيداع (SHA كاملًا بأربعين حرفًا) أو الوسم أو الفرع الذي تُنقل إليه الدوال وrelease معًا. يجب أن يكون في تاريخ main'
         required: true
         type: string
-
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
+      rollback:
+        description: 'تراجع مقصود: اسمح بنقل release إلى إيداع أقدم منه. بلاه يُرفض الهدف الأقدم'
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        description: 'الإيداع الذي تُنقل إليه الدوال وrelease معًا (من migrate.yml: main). لا تراجع من هنا: الهدف الأقدم من release يُرفض'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -33,6 +45,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    # secrets: inherit من migrate.yml لا يمرر أسرار البيئات، فالوظيفة تعلن بيئتها هنا
+    # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: supabase
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PROJECT_REF: eormhcupwgwpllhrfxxg
@@ -67,6 +85,13 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "dir=$RUNNER_TEMP/target" >> "$GITHUB_OUTPUT"
           echo "::notice::الهدف $sha (من $TARGET_REF)"
+      # قبل أي نشر: هدف أقدم من release يرجع الإنتاج إلى الخلف، فلا يمر إلا تراجعًا مقصودًا من التشغيل اليدوي.
+      # workflow_call لا يعرّف rollback فيبقى false لـ migrate.yml دائمًا (github.event_name فيه حدث المستدعي، فلا يُعتمد عليه)
+      - name: Release does not move backwards unless this is a rollback
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK: ${{ inputs.rollback == true }}
+        run: node scripts/ops/release-direction.mjs "${{ steps.target.outputs.sha }}"
       # CLI من npm لا من GitHub Releases (كما في ci.yml وintegration.yml)
       - name: Install Supabase CLI
         run: npm i -g supabase@3.1.0 --no-audit --no-fund && supabase --version

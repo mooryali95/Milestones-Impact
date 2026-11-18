@@ -23,6 +23,8 @@ jobs:
     name: Schema drift (live structure equals the snapshot)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: supabase
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
@@ -47,6 +49,8 @@ jobs:
     name: Content drift (live measured content equals the repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: supabase
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:

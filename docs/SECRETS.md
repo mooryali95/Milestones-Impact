@@ -44,15 +44,17 @@
 | `ADMIN_RP_ID`، `ADMIN_ORIGINS` | لا (`sunkvalue.com`، `SITES`) | `admin-api` | مفاتيح مرور الإدارة وأصولها | عند تغيير النطاق |
 | `USER_RP_ID`، `USER_ORIGINS` | لا (`sunkvalue.com`، `SITES`) | `user-api` | مفاتيح مرور مشاركي المصفوفة | عند تغيير النطاق |
 
-## GitHub (Settings ← Secrets and variables ← Actions)
+## GitHub
+
+ما يكتب في القاعدة أو يفك النسخ **سر بيئة** لا سر مستودع (Settings ← Environments، والبيئات وترتيب نقلها في `RUNBOOK.md` §5): `SUPABASE_ACCESS_TOKEN` في `production` و`supabase`، و`SUPABASE_DB_URL` و`BACKUP_PUBLIC_KEY` و`BACKUP_PASSPHRASE` و`R2_ACCESS_KEY_ID` و`R2_SECRET_ACCESS_KEY` و`R2_BUCKET` في `production` و`backup`. لا تُعاد إلى أسرار المستودع، فذلك يفتح تطبيق SQL على الإنتاج بلا موافقة. ويبقى `R2_ACCOUNT_ID` في المستودع (أو `CLOUDFLARE_ACCOUNT_ID`) لأن `deploy-backup-monitor.yml` يقرؤه بلا بيئة.
 
 | السر | من يقرؤه | الغرض |
 |---|---|---|
-| `SUPABASE_ACCESS_TOKEN` | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `scripts/db/snapshot.mjs` | نشر الدوال السبع والتراجع بها، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
-| `SUPABASE_DB_URL` | `backup.yml`، `restore-drill.yml` | النسخ الليلي وتمرين الاستعادة |
-| `BACKUP_PASSPHRASE` | `backup.yml`، `restore-drill.yml` | التشفير المتماثل القديم (gpg). لا تُشفَّر به نسخة جديدة ما دام `BACKUP_PUBLIC_KEY` مضبوطًا، **ويبقى ولا يُحذف**: النسخ المتماثلة السابقة للانتقال باقية في `monthly/` (قفل 365 يومًا) و`archive/` ولا تُفك إلا به. قيمته في GitHub وفي مدير كلمات المرور (`RUNBOOK.md` §4) |
-| `BACKUP_PUBLIC_KEY` | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml` | سطر مفتاح age عام لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، ومفاتيحها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
-| `R2_ACCOUNT_ID`، `R2_ACCESS_KEY_ID`، `R2_SECRET_ACCESS_KEY`، `R2_BUCKET` | `backup.yml`، `restore-drill.yml`، `scripts/ops/r2.mjs` | دلو النسخ خارج GitHub. الرمز مقصور على الدلو بقراءة الكائنات وكتابتها، والحذف ممنوع بقفل الاحتفاظ |
+| `SUPABASE_ACCESS_TOKEN` (بيئتا `production` و`supabase`) | `ci.yml` (deploy)، `deploy-leaders-api.yml`، `migrate.yml`، `schema-check.yml`، `stage-gates.yml`، `handbook-release.yml`، `scripts/db/snapshot.mjs` | نشر الدوال السبع والتراجع بها، وتطبيق الترحيلات بقرار المالك وقراءة الجدولة (`check`)، وقراءة بنية القاعدة الحية |
+| `SUPABASE_DB_URL` (بيئتا `production` و`backup`) | `backup.yml`، `restore-drill.yml`، `migrate.yml` (apply: النسخة قبل التطبيق) | النسخ الليلي وتمرين الاستعادة |
+| `BACKUP_PASSPHRASE` (بيئتا `production` و`backup`) | `backup.yml`، `restore-drill.yml`، `migrate.yml` (apply) | التشفير المتماثل القديم (gpg). لا تُشفَّر به نسخة جديدة ما دام `BACKUP_PUBLIC_KEY` مضبوطًا، **ويبقى ولا يُحذف**: النسخ المتماثلة السابقة للانتقال باقية في `monthly/` (قفل 365 يومًا) و`archive/` ولا تُفك إلا به. قيمته في GitHub وفي مدير كلمات المرور (`RUNBOOK.md` §4) |
+| `BACKUP_PUBLIC_KEY` (بيئتا `production` و`backup`) | `backup.yml` (و`scripts/ops/backup.sh`)، `restore-drill.yml`، `migrate.yml` (apply) | سطر مفتاح age عام لكل مستلم (المعتمد)، أو كتلة GnuPG لكل مفتاح مصدّرة ببصمته (المالك، ومستلم ثانٍ اختياري)، للتشفير عند المصدر، ومفاتيحها في بيان كل نسخة. المفتاح الخاص عند المالك في مكانين خارج GitHub وCloudflare، ولا يُضبط سرًّا في أي مكان |
+| `R2_ACCOUNT_ID`، `R2_ACCESS_KEY_ID`، `R2_SECRET_ACCESS_KEY`، `R2_BUCKET` (بيئتا `production` و`backup`) | `backup.yml`، `restore-drill.yml`، `migrate.yml` (apply)، `scripts/ops/r2.mjs` | دلو النسخ خارج GitHub. الرمز مقصور على الدلو بقراءة الكائنات وكتابتها، والحذف ممنوع بقفل الاحتفاظ |
 | `RESEND_API_KEY`، `ALERT_TO` (اختياريان) | Worker `mi-backup-monitor` (Cloudflare ← Settings ← Variables and Secrets) | بريد تنبيه تأخر النسخ؛ بدونهما يبقى `/health` للمراقب الخارجي |
 | `SLACK_BOT_TOKEN`، `SLACK_CHANNEL` (اختياريان، موصى بهما) | Worker `mi-backup-monitor` (Cloudflare ← Settings ← Variables and Secrets) | تنبيه تأخر النسخ في `#mi-ops` فيصل الهاتف بإشعار سلاك. القيمتان هما `LEADERS_SLACK_BOT_TOKEN` و`LEADERS_SLACK_CHANNEL` نفسيهما |
 | `CLOUDFLARE_API_TOKEN` | GitHub ← Secrets، `deploy-backup-monitor.yml` | نشر `mi-backup-monitor` بـ wrangler (قالب «Edit Cloudflare Workers» مقصور على حساب المنصة). بلاه يتخطى السير بتحذير. `CLOUDFLARE_ACCOUNT_ID` اختياري، والبديل `R2_ACCOUNT_ID` |

@@ -20,6 +20,11 @@ export const STEPS = [
     'node scripts/handbook/build-version.mjs --check',
     'node scripts/concepts/registry.mjs --check',
   ] },
+  // المرحلة 6 من تصور تحديث المنصة بلا أثر: فاحص الترحيلات الجديدة، وعقد الإجراءات مع آخر ما وصل الإنتاج (فرع release)
+  { id: 'contracts', title: 'فاحص الترحيلات وعقد الإجراءات مع release', ci: true, cmds: [
+    'node scripts/db/migration-lint.mjs',
+    'node scripts/ops/action-contract.mjs --fetch --against=origin/release',
+  ] },
   { id: 'secrets', title: 'لا أسرار في الملفات المودعة', ci: true, cmds: ['node scripts/ops/secrets-scan.mjs'] },
   { id: 'audit', title: 'لا ثغرة عالية في حزم الإنتاج', ci: true, cmds: ['npm audit --omit=dev --audit-level=high'] },
   { id: 'lint', title: 'Lint', ci: true, cmds: ['npm run lint'] },

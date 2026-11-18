@@ -176,10 +176,11 @@ describe('ملفات السير تطابق القواعد', () => {
     expect(dep.needs).toEqual(['release-gate']);
     expect(dep.if).toMatch(/!cancelled\(\) && needs\.release-gate\.result == 'success' && needs\.release-gate\.outputs\.run == 'true'/);
     expect(dep.concurrency.group).toBe('deploy-production');
-    expect(manual.concurrency.group).toBe('deploy-production');
-    // أول ما يفعله النشر: يستهلك آثار التأجيل كلها، بلا || true
+    expect(manual.jobs.deploy.concurrency.group).toBe('deploy-production');
+    // أول ما يفعله النشر بعد حارس الاتجاه: يستهلك آثار التأجيل كلها، بلا || true. الحارس قبله فلا يمحو تشغيل قديم مرفوض أثر نشر أحدث مؤجل
     const consume = dep.steps.find((s) => s.name === 'Consume the deferred-deploy markers');
-    expect(dep.steps.indexOf(consume)).toBe(2);
+    expect(dep.steps.indexOf(consume)).toBe(3);
+    expect(dep.steps[2].name).toBe('Release does not move backwards');
     expect(consume.run).toBe('node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"');
     expect(runOf(manual, 'deploy', 'Cancel deferred deploys')).toBe('node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"');
     // لا قائمة أدوات بصفحة واحدة في أي من السيرين

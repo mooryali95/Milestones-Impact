@@ -33,6 +33,8 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    # بيئة supabase: فرعها main وحده بلا مراجعين، وفيها SUPABASE_ACCESS_TOKEN، فلا يقرؤه سير من فرع غير مدموج (RUNBOOK.md §5)
+    environment: supabase
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       GH_TOKEN: ${{ github.token }}

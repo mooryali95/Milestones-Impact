@@ -8,6 +8,8 @@
 # خيارات البيئة: BACKUP_SCHEMAS (افتراضيًا leaders,public,auth)، وBACKUP_EXCLUDE_DATA (جداول بلا صفوف، افتراضيًا
 # leaders.guidance_messages)، وBACKUP_PREFIX (daily، أو archive لتفريغ مرة واحدة
 # مثل مخطط sspdf في D13)، وBACKUP_OUT (مجلد تبقى فيه النسخ المشفرة، افتراضيًا مجلد مؤقت يُحذف).
+# وBACKUP_TABLES (جداول مؤهلة بمخططها مفصولة بفاصلة) مع BACKUP_LABEL: نسخة الجداول التي يمسها ترحيل قبل تطبيقه
+# (migrate.yml، البادئة premigration). الجدول غير الموجود بعد يُرشَّح، وإن لم يبق جدول فلا نسخة ولا رفع.
 # بلا مفتاح عام وبـ BACKUP_PASSPHRASE وحده يعمل بالتشفير المتماثل القديم مع تحذير، حتى يضبط المالك المفتاح.
 # المتطلبات: bash وage (أو gpg) وnode 20، وpg_dump من إصدار الخادم (BACKUP_PG_MAJOR، افتراضيًا 17) أو docker.
 set -euo pipefail
@@ -26,6 +28,16 @@ trap 'rm -rf "$WORK"' EXIT
 [ -n "$OUT" ] || OUT="$WORK/out"
 mkdir -p "$OUT"
 TAG="$(echo "$SCHEMAS" | tr ',' '-')"
+TABLES="${BACKUP_TABLES:-}"
+if [ -n "$TABLES" ]; then
+  printf '%s' "$TABLES" | grep -Eq '^[a-z0-9_]+\.[a-z0-9_]+(,[a-z0-9_]+\.[a-z0-9_]+)*$' || { echo "BACKUP_TABLES ليست أسماء جداول مؤهلة (مخطط.جدول مفصولة بفاصلة): $TABLES" >&2; exit 1; }
+  TAG=tables
+fi
+# الوسم يُطبَّق كلما ضُبط، ولو فُرّغ المخططان كاملين (هدف غير معروف في migrate.yml): نسخة ما قبل الترحيل اسمها db-premig-* دائمًا
+if [ -n "${BACKUP_LABEL:-}" ]; then
+  TAG="$BACKUP_LABEL"
+  printf '%s' "$TAG" | grep -Eq '^[a-z0-9_-]+$' || { echo "BACKUP_LABEL غير صالح: $TAG" >&2; exit 1; }
+fi
 
 pgtool() {   # pg_dump/psql من الإصدار 17 محليًا، وإلا من docker
   local tool="$1"; shift
@@ -113,7 +125,17 @@ bytes() { wc -c < "$1" | tr -d ' '; }
 # ── القاعدة ──
 dump="$OUT/db-$TAG-$STAMP.dump"
 args=(--no-owner --no-privileges -Fc)
-for s in ${SCHEMAS//,/ }; do args+=("--schema=$s"); done
+if [ -n "$TABLES" ]; then
+  # ما يوجد منها الآن وحده: جدول ينشئه الترحيل لم يوجد بعد، وpg_dump يفشل إن لم يطابق أي نمط جدولًا
+  list="'$(printf '%s' "$TABLES" | sed "s/,/','/g")'"
+  present="$(pgtool psql "$SUPABASE_DB_URL" -At -v ON_ERROR_STOP=1 -c "select string_agg(t, ',' order by t) from unnest(array[$list]) t where to_regclass(t) is not null")"
+  if [ -z "$present" ]; then echo "لا جدول قائم من ($TABLES): لا نسخة قبل الترحيل."; exit 0; fi
+  echo "الجداول المنسوخة: $present"
+  for t in ${present//,/ }; do args+=("--table=$t"); done
+  SCHEMAS="tables:$present"   # في البيان: ما نُسخ فعلًا، لا المخططات الافتراضية
+else
+  for s in ${SCHEMAS//,/ }; do args+=("--schema=$s"); done
+fi
 # جداول تُنسخ بنيتها بلا صفوفها (قرار المالك 2026-11-17): محادثات «التوجيه والإرشاد» مدة حفظها 90 يومًا، والنسخة الشهرية
 # مقفلة 365 يومًا، فنسخ صفوفها يطيل بقاءها خلافًا لما يُقال للمشارك. ليست بيانًا يلزم استرجاعه، والاستعادة تعيد الجدول فارغًا.
 EXCLUDE_DATA="${BACKUP_EXCLUDE_DATA:-leaders.guidance_messages}"
