@@ -4,7 +4,7 @@ import { MAIL_FROM_DEFAULT, sendCounted } from "../_shared/mail.ts";
 import { clientIp, turnstileOk as turnstileCheck } from "../_shared/guard.ts";
 import { CONTACT_PAGES, CONTACT_SELECT, confirmSender as confirmContact, formContext, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";
 
-// send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل.
+// send-otp: نموذج التواصل فقط: إدراج الطلب (contact)، وتنبيه الإدارة، وتأكيد المرسل. ومسبار ping بلا أثر للدخان والمراقب.
 // الإدراج والرسالتان في _shared/contact.ts، والتحقق البشري وعنوان الشبكة في _shared/guard.ts (يشاركها agent-chat).
 // صفوف المساعد الآلي (context يبدأ بـ [agent]) لا تُحسب في حدود النموذج، فلا تأكل التحويلات حده العام.
 // النشر: يتطلب جدول mail_log (supabase/migrations/20261022030000_mail_log.sql)،
@@ -131,6 +131,15 @@ Deno.serve(async (req: Request) => {
     // دخول الإدارة كله الآن عبر admin-api.
     if (action === "send" || action === "verify") {
       return json({ success: false, message: "استخدم admin-api" }, 410);
+    }
+
+    // مسبار خفيف لدخان ما بعد النشر والمراقب الخارجي: قراءة صف واحد تمر بالقاعدة، بلا كتابة ولا بريد ولا تحقق بشري،
+    // والرد زمن القاعدة وحده (كمسبار admin-api وuser-api)
+    if (action === "ping") {
+      const t0 = Date.now();
+      const { error } = await supabase.from("contact_requests").select("id").limit(1);
+      if (error) throw error;
+      return json({ success: true, fn: "send-otp", db_ms: Date.now() - t0 });
     }
 
     if (action === "contact") return await contact(supabase, body, req);

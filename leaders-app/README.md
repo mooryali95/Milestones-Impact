@@ -24,4 +24,4 @@ npm run leaders:build   # يكتب في leaders/ (مُودع؛ CI يرفض اخ�
 
 1. **القاعدة:** الترحيلات في `supabase/migrations/` بالترتيب (الملفات القديمة في `server/` أرشيف لا يُشغَّل، انظر `server/ARCHIVE.md`). سجل ما طُبّق في `leaders.schema_migrations`، وما لم يُطبَّق يظهر في لوحة الإدارة ← النظرة العامة.
 2. **الأسرار:** `LEADERS_TOKEN_PEPPER` إلزامي (الدالة ترفض الإقلاع بدونه)، و`RESEND_API_KEY` للبريد، وبقية المتغيرات واختياريتها في `docs/SECRETS.md`.
-3. **الدالة:** تُنشر من CI (`ci.yml` ← deploy) أو يدويًا من Actions ← «Deploy functions (manual)». محليًا: `supabase start` ثم `supabase functions serve --env-file supabase/functions/ci.env --no-verify-jwt`، والمسارات الذهبية بـ`node scripts/integration/golden.mjs`.
+3. **الدالة:** تُنشر من CI (`ci.yml` ← deploy) أو يدويًا من Actions ← «Deploy or roll back (manual)» (`deploy-leaders-api.yml`)، يُشغَّل من main دائمًا والإيداع المطلوب في الحقل `ref` (سير التراجع الموحد، `RUNBOOK.md` §2). محليًا: `supabase start` ثم `supabase functions serve --env-file supabase/functions/ci.env --no-verify-jwt`، والمسارات الذهبية بـ`node scripts/integration/golden.mjs`.
