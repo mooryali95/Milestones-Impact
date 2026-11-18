@@ -26,4 +26,4 @@ create index if not exists workshop_scan_receipts_expires_idx on leaders.worksho
 alter table leaders.workshop_scan_receipts enable row level security;
 revoke all on leaders.workshop_scan_receipts from anon, authenticated;
 
-insert into leaders.schema_migrations (name) values ('20261118100000_leaders_workshop_scan_receipts') on conflict do nothing;
+insert into leaders.schema_migrations (name) values ('20261118110000_leaders_workshop_scan_receipts') on conflict do nothing;

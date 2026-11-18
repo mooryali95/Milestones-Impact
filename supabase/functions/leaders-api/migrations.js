@@ -153,7 +153,7 @@ export const MIGRATIONS = [
   '20261116180000_leaders_guidance_transcripts',
   '20261116190000_leaders_slack_digest_category',
   '20261117100000_leaders_book_proposals_save',
-  '20261118100000_leaders_workshop_scan_receipts',
+  '20261118110000_leaders_workshop_scan_receipts',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -223,5 +223,5 @@ export const MIGRATION_GATES = {
   '20261116180000_leaders_guidance_transcripts': ["tolerant", "قبل العمود يبقى «احذف محادثتي» حذفًا كما كان، ومسارات السجل ترد not_migrated"],
   '20261116190000_leaders_slack_digest_category': ["tolerant", "قبله يرفض القيد حجز سلسلة الملخص، فينشر slack.ts الملخص رسالة مستقلة بلا سلسلة ويبقى يعمل"],
   '20261117100000_leaders_book_proposals_save': ["tolerant", "قبل الدالة يحفظ الخادم كل قسم وحده كما كان (book-proposals.ts proposeFromEdit)"],
-  '20261118100000_leaders_workshop_scan_receipts': ["tolerant", "قبله يرد workshop.scan بـnot_migrated فيحفظ التطبيق الرمز نفسه كما كان، ويبقى المسح بعد الدخول كما هو (activities.ts: workshopScan وworkshopCheckin)"],
+  '20261118110000_leaders_workshop_scan_receipts': ["tolerant", "قبله يرد workshop.scan بـnot_migrated فيحفظ التطبيق الرمز نفسه كما كان، ويبقى المسح بعد الدخول كما هو (activities.ts: workshopScan وworkshopCheckin)"],
 };

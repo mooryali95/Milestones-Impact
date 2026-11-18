@@ -283,7 +283,7 @@ async function consumeReceipt(id: string, sessionId: string, participantId: stri
 // ── إيصال المسح بلا دخول (workshop.scan، مفتوح) ──
 // يتحقق من الرمز لحظة المسح كما يتحقق workshop.checkin (التوقيع والنافذة والموعد وطريقة التوثيق بتخصيص الدفعة)، ويعطي
 // إيصالًا موقّعًا مربوطًا بالجلسة. حد المعدل بعدّ الصفوف كبقية الأفعال المفتوحة (share.ts): القاعة شبكة واحدة غالبًا، فحد
-// الشبكة واسع، والجلسة حد ثانٍ. قبل الترحيل 20261118100000 يرد not_migrated فيحفظ التطبيق الرمز كما كان
+// الشبكة واسع، والجلسة حد ثانٍ. قبل الترحيل 20261118110000 يرد not_migrated فيحفظ التطبيق الرمز كما كان
 export const SCAN_LIMITS = Object.freeze({ perIp10Min: 300, perSession10Min: 600 });
 export async function workshopScan(b: Body, ctx: Ctx) {
   const t = String(b.t || '');

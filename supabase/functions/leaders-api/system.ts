@@ -36,7 +36,7 @@ export async function purge() {
   await run('handbook_views', db.from('handbook_views').update({ ip: null, user_agent: null }).lt('viewed_at', cutoff).not('ip', 'is', null));
   // عنوان الشبكة ونوع المتصفح مع الحضور (W1، افتراض أ8 في تصور الحضور): يُصفّران بعد المدة نفسها ويبقى الحضور. الجدول بلا id
   await run('workshop_attendance', db.from('workshop_attendance').update({ ip: null, user_agent: null }).lt('checked_in_at', cutoff).or('ip.not.is.null,user_agent.not.is.null'), 'session_id');
-  // إيصالات المسح: عمرها 15 دقيقة، فتُحذف بعد انتهائها بيوم. قبل الترحيل 20261118100000 يُسجَّل الخطأ ولا يقف التنظيف
+  // إيصالات المسح: عمرها 15 دقيقة، فتُحذف بعد انتهائها بيوم. قبل الترحيل 20261118110000 يُسجَّل الخطأ ولا يقف التنظيف
   await run('workshop_scan_receipts', db.from('workshop_scan_receipts').delete().lt('expires_at', new Date(Date.now() - 864e5).toISOString()));
   // سجل الإرسال 180 يومًا (D15، نسب استجابة المقيّمين عبر الدفعة)، والطابور بعد إرساله أو تركه 30 يومًا
   await run('mail_events', db.from('mail_events').delete().lt('created_at', new Date(Date.now() - MAIL_RETENTION_DAYS * 864e5).toISOString()));

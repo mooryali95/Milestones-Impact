@@ -1,4 +1,4 @@
-// حضور لا يتعثر (W1، تصور الحضور 2026-11-18): إيصال المسح في logic.js، والترحيل 20261118100000 على PGlite، وحفظ الإيصال
+// حضور لا يتعثر (W1، تصور الحضور 2026-11-18): إيصال المسح في logic.js، والترحيل 20261118110000 على PGlite، وحفظ الإيصال
 // في الجهاز وسطر شاشة الدخول (checkin.js)، وموضع شاشة الحضور قبل تجديد الموافقة (App.jsx)
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,7 +42,7 @@ describe('إيصال المسح (logic.js)', () => {
 });
 
 const dir = join(__dirname, '../../supabase/migrations');
-const MIG = readFileSync(join(dir, '20261118100000_leaders_workshop_scan_receipts.sql'), 'utf8');
+const MIG = readFileSync(join(dir, '20261118110000_leaders_workshop_scan_receipts.sql'), 'utf8');
 describe('ترحيل إيصالات المسح', () => {
   it('متسامح بوسم البوابة، ومغلق أمام المتصفح كبقية جداول الحضور', () => {
     expect(MIG).toMatch(/^-- deploy-gate: tolerant /m);
@@ -63,7 +63,7 @@ describe('ترحيل إيصالات المسح', () => {
     await expect(d.exec(`insert into leaders.workshop_scan_receipts (id, session_id, expires_at, ip_hash) values (gen_random_uuid(), '${SID}', now(), 'short')`)).rejects.toThrow();
     await d.exec(`delete from leaders.workshop_sessions`);
     expect((await d.query('select count(*)::int n from leaders.workshop_scan_receipts')).rows[0].n).toBe(0);
-    expect((await d.query('select name from leaders.schema_migrations')).rows.map((r) => r.name)).toContain('20261118100000_leaders_workshop_scan_receipts');
+    expect((await d.query('select name from leaders.schema_migrations')).rows.map((r) => r.name)).toContain('20261118110000_leaders_workshop_scan_receipts');
   });
 });
 
