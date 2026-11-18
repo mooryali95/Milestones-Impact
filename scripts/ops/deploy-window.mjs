@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // نافذة النشر والتجميد (ش13، تصور تحديث المنصة، المرحلة 2): هل تُنشر الدوال وتُرقّى الواجهة الآن؟
-// منطق نقي يختبره tests/ops/release-safety.test.js، وتستدعيه وظيفة deploy في ci.yml قبل أي نشر.
+// منطق نقي يختبره scripts/ops/release-safety.test.js، وتستدعيه وظيفة deploy في ci.yml قبل أي نشر.
 //
 //   DEPLOY_WINDOW='23:00-05:00' node scripts/ops/deploy-window.mjs     يطبع القرار ويكتب allowed= في $GITHUB_OUTPUT
 //   node scripts/ops/deploy-window.mjs --validate                       يتحقق من صيغة تقويم التجميد وحده

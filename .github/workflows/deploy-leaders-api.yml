@@ -97,16 +97,19 @@ jobs:
           deploy agent-chat
       # الطبقتان معًا (ش7): الواجهة تتبع الدوال إلى الإيداع نفسه، فلا تنادي واجهة جديدة واجهة برمجية قديمة (د5)
       - name: Move release to the same commit
+        id: move
         run: git push --force origin "${{ steps.target.outputs.sha }}:refs/heads/release"
+      # كل أثر deploy-deferred-* بكل الصفحات، ورأس main بالاسم، وتعذّر القراءة يُحمّر الخطوة (scripts/ops/deferred-deploy.mjs)
       - name: Cancel deferred deploys of main
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("deploy-deferred-")) | .id' \
-            | while read -r id; do gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true; done
-      # الدخان الكامل بمعيار ش6 (scripts/ops/smoke.mjs من main)، وحالة كل دالة في الملخص
+        run: node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"
+      # الدخان الكامل بمعيار ش6 (scripts/ops/smoke.mjs من main)، وحالة كل دالة في الملخص. --tree: يُسأل كل دالة بما
+      # تعرفه شجرة الهدف، فالتراجع إلى إيداع يسبق مسابير 2026-11-18 لا يحمرّ وهو سليم
+      # بعد نقل release يجري الدخان ولو تعذّر حذف الآثار (تحمرّ تلك الخطوة وحدها باسمها)
       - name: Verify the live functions answer real requests
-        run: node scripts/ops/smoke.mjs deploy
+        if: ${{ !cancelled() && steps.move.outcome == 'success' }}
+        run: node scripts/ops/smoke.mjs deploy --tree="${{ steps.target.outputs.dir }}"
       # تسخين بعد الدخان، كما في ci.yml، وحالة كل دالة في السجل
       - name: Warm up the functions
         if: always()

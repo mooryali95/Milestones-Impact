@@ -26,14 +26,15 @@ on:
         description: 'إصلاح عاجل على main: يتجاوز نافذة النشر وتقويم التجميد'
         type: boolean
         default: false
-  # النشر المؤجل (ش13): كل ثلاث ساعات (00:37 و03:37 و06:37... بتوقيت الرياض) تعمل وظيفة deploy وحدها، بلا فحوص،
+  # النشر المؤجل (ش13): كل ثلاث ساعات (00:37 و03:37 و06:37... بتوقيت الرياض) تعمل release-gate وdeploy وحدهما، بلا فحوص،
   # فتنشر رأس main إن أُجّل نشره خارج النافذة أو في يوم تجميد وصار النشر مسموحًا. لا تعمل أصلًا (فلا دقائق) ما لم
   # يُضبط متغير المستودع DEPLOY_WINDOW، أو DEPLOY_SCHEDULE=on لمن يجمّد بلا نافذة.
   schedule:
     - cron: '37 */3 * * *'
 
 # طلب الدمج: الدفعة الأحدث تلغي الأقدم. main: تنتظر، فلا يُقطع نشر في منتصفه.
-# الجدولة في مجموعة وحدها، فلا يلغي تشغيلها المنتظر تشغيل دفع منتظرًا على main.
+# الجدولة في مجموعة وحدها، فلا يلغي تشغيلها المنتظر تشغيل دفع منتظرًا على main. وعلى مستوى الوظيفة لا يدخل
+# deploy-production إلا نشر قررته release-gate، فتشغيل جدولة لا ينشر شيئًا لا يلغي نشرًا ولا تراجعًا منتظرًا.
 concurrency:
   group: ${{ github.event_name == 'schedule' && 'ci-deferred-deploy' || format('ci-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -249,12 +250,16 @@ jobs:
   # الدوال أولًا حين تغيّرت منذ آخر نشر (الخادم يقرأ الأعمدة الجديدة وتطلبه الواجهة)، ثم دخان الدوال السبع بمعيار ش6،
   # ثم تسخينها، ثم يُدفع فرع release فتبني Cloudflare Pages المنصات منه. لا شيء يصل الإنتاج إن احمرّ فحص.
   # المرحلة 2 من تصور تحديث المنصة (docs/ops/2026-11-18-تصور-تحديث-المنصة-بلا-أثر-على-المستخدمين-v1.md):
-  # - نافذة النشر والتجميد (ش13): خارجهما تنجح الوظيفة بلا نشر، ويُترك أثر deploy-deferred-<sha> تنشره الجدولة لاحقًا.
+  # - نافذة النشر والتجميد (ش13): خارجهما تنجح البوابة بلا نشر، ويُترك أثر deploy-deferred-<sha> تنشره الجدولة لاحقًا.
   # - فشل نشر في منتصفه أو فشل دخان مستمر: تُعاد الدوال السبع من origin/release في الوظيفة نفسها، ثم تحمرّ الوظيفة
   #   بحالة كل دالة ولا تُرقّى الواجهة. ولا تراجع آلي إن تلا النشر ترحيلًا حاجبًا (scripts/ops/rollback-guard.mjs).
   # - تغيّرت الدوال وغاب رمز النشر: تحمرّ الوظيفة ولا تُرقّى الواجهة (ش7).
   # التنبيه: الوظيفة الحمراء وبريد GitHub عن فشل سير العمل، وملخص التشغيل بحالة كل دالة.
-  deploy:
+  #
+  # القرار (نشر الآن أو تأجيل) في وظيفة release-gate بلا مجموعة تزامن، والنشر في deploy داخل deploy-production.
+  # فتشغيل الجدولة الذي لا ينشر شيئًا لا يدخل المجموعة أصلًا، فلا يلغي نشر دفع منتظرًا ولا تراجعًا يدويًا منتظرًا
+  # (GitHub يلغي المنتظر في المجموعة حين ينتظر غيره).
+  release-gate:
     needs: [changes, checks, web]
     if: >-
       always() && github.ref == 'refs/heads/main' && (
@@ -264,20 +269,13 @@ jobs:
         (needs.checks.result == 'success' || needs.checks.result == 'skipped') &&
         (needs.web.result == 'success' || needs.web.result == 'skipped')))
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    concurrency:
-      group: deploy-production
-      cancel-in-progress: false
+    timeout-minutes: 5
     permissions:
-      contents: write
-      # أثر النشر المؤجل: يُرفع حين يؤجَّل، ويُحذف حين يبدأ نشر
-      actions: write
-    env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      PROJECT_REF: eormhcupwgwpllhrfxxg
-      SUPABASE_CLI: 3.1.0
-      # المفتاح العام (anon) كما في الواجهات؛ الدالة تتحقق من JWT فلا تقبل طلبًا بلا مفتاح
-      SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
+      contents: read
+      # قراءة آثار النشر المؤجل وتشغيلاتها (رفع الأثر لا يحتاج إذنًا)
+      actions: read
+    outputs:
+      run: ${{ steps.go.outputs.run }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -297,23 +295,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ALLOWED: ${{ steps.window.outputs.allowed }}
           EVENT: ${{ github.event_name }}
-          REPO: ${{ github.repository }}
         run: |
           if [ "$ALLOWED" != "true" ]; then
             if [ "$EVENT" != "schedule" ]; then echo "defer=true" >> "$GITHUB_OUTPUT"; fi
             exit 0
           fi
           if [ "$EVENT" = "schedule" ]; then
-            # الجدولة تنشر رأس main وحده، وفقط إن أُجّل نشره: لا تعيد نشر إيداع تراجع عنه المالك أو فشل نشره
+            # الجدولة تنشر رأس main وحده، وفقط إن أُجّل نشره: لا تعيد نشر إيداع تراجع عنه المالك أو فشل نشره.
+            # والأثر لا يُقبل إلا من تشغيل دفع أو يدوي لـ ci.yml على main في هذا المستودع (scripts/ops/deferred-deploy.mjs)
             rel=$(git ls-remote origin release | cut -f1)
             if [ "$rel" = "$GITHUB_SHA" ]; then echo "::notice::release عند رأس main؛ لا نشر مؤجل."; exit 0; fi
-            n=$(gh api "repos/$REPO/actions/artifacts?name=deploy-deferred-$GITHUB_SHA&per_page=1" --jq '[.artifacts[] | select(.expired == false)] | length' || echo 0)
-            if [ "$n" -eq 0 ]; then echo "::notice::رأس main لم يؤجَّل نشره (نُشر أو فشل أو تراجع عنه المالك)؛ لا نشر من الجدولة."; exit 0; fi
+            pending=$(node scripts/ops/deferred-deploy.mjs pending "$GITHUB_SHA")
+            if [ "$pending" != "true" ]; then echo "::notice::رأس main لم يؤجَّل نشره (نُشر أو فشل أو تراجع عنه المالك)؛ لا نشر من الجدولة."; exit 0; fi
           fi
           echo "run=true" >> "$GITHUB_OUTPUT"
-          # النشر يبدأ: كل أثر تأجيل سابق يُستهلك هنا، فلا تعيده الجدولة بعد فشل أو تراجع
-          gh api "repos/$REPO/actions/artifacts?per_page=100" --jq '.artifacts[] | select(.name | startswith("deploy-deferred-")) | .id' \
-            | while read -r id; do gh api -X DELETE "repos/$REPO/actions/artifacts/$id" || true; done
       - name: Record the deferred deploy
         if: steps.go.outputs.defer == 'true'
         run: |
@@ -326,10 +321,40 @@ jobs:
           path: deferred.txt
           # أطول من أي تجميد متوقع، فلا ينتهي الأثر قبل أن تُفتح النافذة
           retention-days: 30
+
+  deploy:
+    needs: [release-gate]
+    # !cancelled: الوظائف قبل البوابة قد تُتخطى (شجرة مفحوصة، أو الجدولة)، والتخطي يسري إلى ما بعدها بلا هذا الشرط
+    if: ${{ !cancelled() && needs.release-gate.result == 'success' && needs.release-gate.outputs.run == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      # حذف آثار النشر المؤجل حين يبدأ نشر
+      actions: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: eormhcupwgwpllhrfxxg
+      SUPABASE_CLI: 3.1.0
+      # المفتاح العام (anon) كما في الواجهات؛ الدالة تتحقق من JWT فلا تقبل طلبًا بلا مفتاح
+      SUPABASE_ANON: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvcm1oY3Vwd2d3cGxsaHJmeHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3OTY2OTksImV4cCI6MjA4NjM3MjY5OX0.xbZtLH9R9mE3ogfNToojrtzQUK799y5rZrj29ggB1f0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      # النشر يبدأ: كل أثر تأجيل يُستهلك هنا (كل الصفحات)، فلا تعيده الجدولة بعد فشل أو تراجع. تعذّر القراءة يُفشل الخطوة
+      - name: Consume the deferred-deploy markers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"
       # الدوال تُنشر حين تغيّرت منذ آخر إيداع وصل الإنتاج (فرع release)، لا منذ الدفعة السابقة وحدها
       - name: Functions changed since the last release?
         id: fn
-        if: steps.go.outputs.run == 'true'
         run: |
           # بلا فرع النشر (أو تعذّر جلبه) تُنشر الدوال: الشك ينشر، ولا تراجع آلي لأنه لا مرجع سليم
           if git fetch --no-tags --depth=1 origin release 2>/dev/null; then
@@ -342,22 +367,22 @@ jobs:
           echo "deploy=true" >> "$GITHUB_OUTPUT"
       # ش7: الواجهة لا تسبق واجهتها البرمجية. كان تحذيرًا وحيدًا ثم ترقية (د4)
       - name: Functions changed but the deploy token is missing
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN == '' && steps.fn.outputs.deploy == 'true'
+        if: env.SUPABASE_ACCESS_TOKEN == '' && steps.fn.outputs.deploy == 'true'
         run: |
           echo "::error::تغيّرت الدوال وSUPABASE_ACCESS_TOKEN غير مضبوط: لا نشر للدوال ولا ترقية للواجهة. اضبط السر ثم أعد تشغيل الوظيفة (RUNBOOK.md)."
           exit 1
       - name: Functions not deployed
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN == ''
+        if: env.SUPABASE_ACCESS_TOKEN == ''
         run: echo "::warning::SUPABASE_ACCESS_TOKEN is not set; the functions did not change, so the sites are promoted without a smoke test (see RUNBOOK.md)."
       # CLI من npm لا من GitHub Releases: setup-cli يستعلم واجهة GitHub فيفشل عند 504 أو حد المعدل (كما في integration.yml).
       # بإصدار مثبّت ومخزّن، فلا يتغير سلوك النشر بإصدار جديد ولا يُنزَّل في كل مرة.
       - uses: actions/cache@v6
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         with:
           path: ~/.supabase-cli
           key: supabase-cli-${{ runner.os }}-${{ env.SUPABASE_CLI }}
       - name: Install Supabase CLI
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         run: |
           [ -x ~/.supabase-cli/bin/supabase ] || npm i -g supabase@$SUPABASE_CLI --prefix ~/.supabase-cli --no-audit --no-fund
           echo "$HOME/.supabase-cli/bin" >> "$GITHUB_PATH"
@@ -365,22 +390,22 @@ jobs:
       # منذ المرحلة ل1 يفشل التحقق البشري مغلقًا: نشر الدوال بلا مفتاحَي Turnstile (أو بلا الفلفل أو مفتاح البريد)
       # يوقف الدخول برمز البريد، فيتوقف النشر هنا برسالة واضحة قبل أن يمس الإنتاج. الأسماء فقط، لا قيم.
       - name: Sign-in secrets are set on the project (names only)
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         run: node scripts/ops/function-secrets.mjs --require=signin
       # لا تُنشر دالة قبل ترحيل تعتمد عليه: كل ترحيل في المستودع غير مطبّق في الإنتاج يوقف النشر
       # ما لم يوسم tolerant أو deferred في سطوره الأولى (scripts/ops/pending-migrations.mjs). قراءة فقط.
       - name: Pending migrations block deploy
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != ''
+        if: env.SUPABASE_ACCESS_TOKEN != ''
         run: node scripts/ops/pending-migrations.mjs
       # ترحيل حاجب جديد منذ release طُبّق للتو: الكود القديم قد لا يعمل عليه، فلا تراجع آلي (ق5)
       - name: Is an automatic rollback safe?
         id: guard
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         run: node scripts/ops/rollback-guard.mjs "${{ steps.fn.outputs.release }}"
       # ش6: دخان الدوال السبع على مدى دقيقتين (scripts/ops/smoke.mjs deploy). الفشل العابر يُعاد فحصه، والمستمر
       # (3 متتالية، أو أكثر من 20% من 10) أو فشل نشر في منتصف السلسلة يعيد الدوال السبع من origin/release هنا.
       - name: Deploy edge functions, smoke, and roll back on persistent failure
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy == 'true'
         env:
           RELEASE_SHA: ${{ steps.fn.outputs.release }}
           AUTO_ROLLBACK: ${{ steps.guard.outputs.auto }}
@@ -425,17 +450,18 @@ jobs:
           cd "$here"
           echo "::endgroup::"
           # حالة كل دالة بعد التراجع تصل الملخص في كل الأحوال، ولو فشل التراجع في منتصفه
-          node scripts/ops/smoke.mjs check || rolled="$rolled، ودخان ما بعد التراجع فاشل"
+          # الدخان بما تعرفه شجرة release (قد تسبق مسابير اليوم): --tree
+          node scripts/ops/smoke.mjs check --tree="$RUNNER_TEMP/release" || rolled="$rolled، ودخان ما بعد التراجع فاشل"
           echo "::error::$reason. $rolled. الواجهة لم تُرقَّ. RUNBOOK.md §2."
           printf '### تراجع آلي\n\n%s\n\n%s\n' "$reason" "$rolled" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       # بلا نشر للدوال (ترقية الواجهة وحدها): كل دالة سليمة بأول نجاح، وتوقف الترقية بثلاثة إخفاقات متتالية
       - name: Smoke test the live functions (no function deploy)
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy != 'true'
+        if: env.SUPABASE_ACCESS_TOKEN != '' && steps.fn.outputs.deploy != 'true'
         run: node scripts/ops/smoke.mjs check
       # تسخين (د9): طلبان لكل دالة قبل ترقية الواجهة، فيدفع CI الإقلاع البارد لا المستخدم. لا يُفشل شيئًا: الحكم للدخان
       - name: Warm up the functions before promoting the sites
-        if: steps.go.outputs.run == 'true' && env.SUPABASE_ACCESS_TOKEN != ''
+        if: env.SUPABASE_ACCESS_TOKEN != ''
         run: |
           ping() {
             body=$(curl -s --max-time 20 -X POST -H 'Content-Type: application/json' -H "apikey: $SUPABASE_ANON" -H "Authorization: Bearer $SUPABASE_ANON" \
@@ -457,5 +483,4 @@ jobs:
             ping agent-chat ping
           done
       - name: Promote to release (Cloudflare Pages production branch)
-        if: steps.go.outputs.run == 'true'
         run: git push --force origin "$GITHUB_SHA:refs/heads/release"

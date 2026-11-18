@@ -37,11 +37,15 @@ describe('بوابة النشر', () => {
   const ci = read('.github/workflows/ci.yml');
   it('النشر وظيفة تلي الفحوص على main فقط', () => {
     const deploy = ci.slice(ci.indexOf('\n  deploy:'));
-    expect(deploy).toMatch(/needs: \[changes, checks, web\]/);
+    // القرار في release-gate (تلي الفحوص)، والنشر في deploy بعدها وحدها
+    const gate = ci.slice(ci.indexOf('\n  release-gate:'), ci.indexOf('\n  deploy:'));
+    expect(gate).toMatch(/needs: \[changes, checks, web\]/);
+    expect(deploy).toMatch(/needs: \[release-gate\]/);
+    expect(deploy).toMatch(/needs\.release-gate\.outputs\.run == 'true'/);
     // لا نشر إن فشلت وظيفة فحص أو أُلغيت؛ التخطي (لا تغيير أو شجرة مفحوصة في الطلب) وحده مقبول
-    expect(deploy).toMatch(/needs\.checks\.result == 'success' \|\| needs\.checks\.result == 'skipped'/);
-    expect(deploy).toMatch(/needs\.web\.result == 'success' \|\| needs\.web\.result == 'skipped'/);
-    expect(deploy).toMatch(/github\.ref == 'refs\/heads\/main'/);
+    expect(gate).toMatch(/needs\.checks\.result == 'success' \|\| needs\.checks\.result == 'skipped'/);
+    expect(gate).toMatch(/needs\.web\.result == 'success' \|\| needs\.web\.result == 'skipped'/);
+    expect(gate).toMatch(/github\.ref == 'refs\/heads\/main'/);
     expect(deploy).toMatch(/system\.ping/);
     expect(deploy).toMatch(/refs\/heads\/release/);
     // الدوال قبل دفع release

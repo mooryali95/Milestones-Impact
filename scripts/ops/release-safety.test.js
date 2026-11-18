@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { evaluate, inWindow, parseCalendar, parseWindow, riyadh } from './deploy-window.mjs';
-import { FUNCTIONS, MODES, judge, probeRequest, runSmoke, verdict } from './smoke.mjs';
+import { FUNCTIONS, MODES, judge, probeRequest, probesFor, runSmoke, verdict } from './smoke.mjs';
+import { PREFIX, clear, github, pending, trustedMarker } from './deferred-deploy.mjs';
 import { rollbackSafety } from './rollback-guard.mjs';
 import { watch } from './nightly-watch.mjs';
 import { diffContent, katonVersions, repoContent } from '../content/live.mjs';
@@ -162,26 +163,47 @@ describe('ملفات السير تطابق القواعد', () => {
     expect(warmOrder(runOf(manual, 'deploy', 'Warm up'))).toEqual(FUNCTIONS.map((f) => f.name));
     expect(runOf(ci, 'deploy', 'Warm up')).toMatch(/for i in 1 2; do/);
   });
-  it('ci.yml: النافذة أولًا، والدخان ش6 والتراجع من release، ولا ترقية إن غاب الرمز وتغيرت الدوال', () => {
+  it('ci.yml: القرار في release-gate بلا مجموعة تزامن، والنشر في deploy-production بعده وحده', () => {
+    const gate = ci.jobs['release-gate'];
+    expect(gate.concurrency).toBeUndefined();
+    expect(gate.outputs.run).toBe('${{ steps.go.outputs.run }}');
+    const gnames = gate.steps.map((s) => s.name || s.uses);
+    expect(gnames.indexOf('Deploy window and freeze calendar')).toBeLessThan(gnames.indexOf('Deploy now or defer'));
+    expect(runOf(ci, 'release-gate', 'Deploy now or defer')).toMatch(/node scripts\/ops\/deferred-deploy\.mjs pending "\$GITHUB_SHA"/);
+    expect(runOf(ci, 'release-gate', 'Deploy now or defer')).not.toMatch(/\|\| echo 0|gh api/);
+    expect(gate.steps.find((s) => s.uses === 'actions/upload-artifact@v7').with.name).toBe('deploy-deferred-${{ github.sha }}');
+    const dep = ci.jobs.deploy;
+    expect(dep.needs).toEqual(['release-gate']);
+    expect(dep.if).toMatch(/!cancelled\(\) && needs\.release-gate\.result == 'success' && needs\.release-gate\.outputs\.run == 'true'/);
+    expect(dep.concurrency.group).toBe('deploy-production');
+    expect(manual.concurrency.group).toBe('deploy-production');
+    // أول ما يفعله النشر: يستهلك آثار التأجيل كلها، بلا || true
+    const consume = dep.steps.find((s) => s.name === 'Consume the deferred-deploy markers');
+    expect(dep.steps.indexOf(consume)).toBe(2);
+    expect(consume.run).toBe('node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"');
+    expect(runOf(manual, 'deploy', 'Cancel deferred deploys')).toBe('node scripts/ops/deferred-deploy.mjs clear "$GITHUB_SHA"');
+    // لا قائمة أدوات بصفحة واحدة في أي من السيرين
+    for (const t of [ciText, manualText]) expect(t).not.toMatch(/actions\/artifacts\?per_page=100"/);
+  });
+  it('ci.yml: الدخان ش6 والتراجع من release، ولا ترقية إن غاب الرمز وتغيرت الدوال', () => {
     const names = steps(ci, 'deploy').map((s) => s.name || s.uses);
     const idx = (n) => names.findIndex((x) => x && x.startsWith(n));
-    expect(idx('Deploy window and freeze calendar')).toBeLessThan(idx('Functions changed since'));
+    expect(idx('Functions changed since')).toBeLessThan(idx('Deploy edge functions'));
     expect(idx('Is an automatic rollback safe?')).toBeLessThan(idx('Deploy edge functions'));
     expect(idx('Warm up')).toBeLessThan(idx('Promote to release'));
     const dep = runOf(ci, 'deploy', 'Deploy edge functions');
     expect(dep).toMatch(/node scripts\/ops\/smoke\.mjs deploy/);
     expect(dep).toMatch(/git worktree add --detach "\$RUNNER_TEMP\/release" "\$RELEASE_SHA"/);
     expect(dep).toMatch(/AUTO_ROLLBACK" != "true"/);
+    expect(dep).toMatch(/node scripts\/ops\/smoke\.mjs check --tree="\$RUNNER_TEMP\/release"/);
     const miss = steps(ci, 'deploy').find((s) => s.name === 'Functions changed but the deploy token is missing');
     expect(miss.if).toMatch(/env\.SUPABASE_ACCESS_TOKEN == '' && steps\.fn\.outputs\.deploy == 'true'/);
     expect(miss.run).toMatch(/exit 1/);
-    // كل خطوة بعد البوابة مشروطة بقرارها، فلا نشر ولا ترقية خارج النافذة
-    for (const s of steps(ci, 'deploy').slice(idx('Functions changed since'))) expect(s.if, s.name || s.uses).toMatch(/steps\.go\.outputs\.run == 'true'/);
   });
   it('ci.yml: الجدولة تشغّل وظيفة deploy وحدها بشرط متغير النافذة، ومجموعة تزامن مستقلة، وDeno مثبّت', () => {
     expect(ci.on.schedule[0].cron).toBe('37 */3 * * *');
     expect(ci.jobs.changes.if).toMatch(/^github\.event_name != 'schedule' && /);
-    expect(ci.jobs.deploy.if).toMatch(/github\.event_name == 'schedule' && \(vars\.DEPLOY_WINDOW != '' \|\| vars\.DEPLOY_SCHEDULE == 'on'\)/);
+    expect(ci.jobs['release-gate'].if).toMatch(/github\.event_name == 'schedule' && \(vars\.DEPLOY_WINDOW != '' \|\| vars\.DEPLOY_SCHEDULE == 'on'\)/);
     expect(ci.concurrency.group).toMatch(/'ci-deferred-deploy'/);
     expect(ci.on.workflow_dispatch.inputs.urgent.default).toBe(false);
     const deno = steps(ci, 'checks').find((s) => s.uses === 'denoland/setup-deno@v2');
@@ -198,7 +220,8 @@ describe('ملفات السير تطابق القواعد', () => {
     expect(idx('Deploy the functions')).toBeLessThan(idx('Move release'));
     expect(idx('Move release')).toBeLessThan(idx('Verify the live functions'));
     expect(s.find((x) => x.name === 'Deploy the functions from the target')['working-directory']).toBe('${{ steps.target.outputs.dir }}');
-    expect(runOf(manual, 'deploy', 'Verify the live functions')).toBe('node scripts/ops/smoke.mjs deploy');
+    expect(runOf(manual, 'deploy', 'Verify the live functions')).toBe('node scripts/ops/smoke.mjs deploy --tree="${{ steps.target.outputs.dir }}"');
+    expect(s.find((x) => x.name === 'Verify the live functions answer real requests').if).toMatch(/steps\.move\.outcome == 'success'/);
     expect(runOf(manual, 'deploy', 'Pending migrations')).toMatch(/--dir=/);
   });
   it('الفحص الليلي وظيفتان باسمين، والمسبار يسأل send-otp والخطافين ويحرس الليلي', () => {
@@ -223,5 +246,125 @@ describe('ملفات السير تطابق القواعد', () => {
       expect(src.indexOf(`healthCheck(req, '${fn}')`), fn).toBeGreaterThan(0);
       expect(src.indexOf(`healthCheck(req, '${fn}')`), fn).toBeLessThan(src.indexOf("if (req.method !== 'POST')"));
     }
+  });
+});
+
+describe('دخان التراجع بما تعرفه الشجرة المنشورة (--tree)', () => {
+  const tree = (files) => ({
+    read: (p) => files[p] ?? null,
+    list: (d) => Object.keys(files).filter((p) => p.startsWith(`${d}/`) && !p.slice(d.length + 1).includes('/')).map((p) => p.slice(d.length + 1)),
+  });
+  const current = {
+    'supabase/functions/leaders-api/index.ts': "'system.ping': () => S.ping(),",
+    'supabase/functions/creem-webhook/index.ts': "const health = healthCheck(req, 'creem-webhook');",
+    'supabase/functions/leaders-hooks/index.ts': "const health = healthCheck(req, 'leaders-hooks');",
+    'supabase/functions/send-otp/index.ts': 'if (action === "ping") {',
+    'supabase/functions/admin-api/index.ts': "case 'ping':",
+    'supabase/functions/user-api/index.ts': "if (action === 'ping')",
+    'supabase/functions/agent-chat/handler.ts': "if (action === 'ping')",
+  };
+  it('الشجرة الحالية: المسابير كما هي', () => {
+    expect(probesFor(tree(current))).toEqual(FUNCTIONS);
+  });
+  it('شجرة قبل 2026-11-18: الخطافان يُقبل منهما 405 {success:false}، وsend-otp يُقبل منه 400 Invalid action', () => {
+    const legacy = { ...current,
+      'supabase/functions/creem-webhook/index.ts': "if (req.method !== 'POST') return json({ success: false }, 405);",
+      'supabase/functions/leaders-hooks/index.ts': "if (req.method !== 'POST') return json({ success: false }, 405);",
+      'supabase/functions/send-otp/index.ts': 'return json({ error: "Invalid action" }, 400);' };
+    const p = Object.fromEntries(probesFor(tree(legacy)).map((f) => [f.name, f]));
+    expect(p['creem-webhook'].legacy).toEqual({ status: 405, body: { success: false } });
+    expect(p['send-otp'].legacy).toEqual({ status: 400, body: { error: 'Invalid action' } });
+    expect(p['leaders-api'].legacy).toBeUndefined();
+    expect(judge(405, '{"success":false}', p['creem-webhook'].legacy).ok).toBe(true);
+    expect(judge(400, '{"error":"Invalid action"}', p['send-otp'].legacy).ok).toBe(true);
+    // عطل الإقلاع يبقى فشلًا: رد البوابة لا يطابق رد الدالة
+    expect(judge(503, '{"code":"BOOT_ERROR","message":"Function failed to start"}', p['creem-webhook'].legacy).ok).toBe(false);
+    expect(judge(500, '{"error":"خطأ داخلي"}', p['send-otp'].legacy).ok).toBe(false);
+    expect(judge(405, '{"success":false}').ok).toBe(false);
+  });
+  it('دالة لا تعرف شجرتها مسبارها، أو غائبة، لا تُفحص ولا تُفشل الدخان', async () => {
+    const old = { ...current, 'supabase/functions/agent-chat/handler.ts': 'export {}' };
+    delete old['supabase/functions/user-api/index.ts'];
+    const fns = probesFor(tree(old));
+    expect(fns.find((f) => f.name === 'agent-chat').skip).toMatch(/ping/);
+    expect(fns.find((f) => f.name === 'user-api').skip).toBeTruthy();
+    const res = await runSmoke({ functions: fns, rule: MODES.check, probe: async () => ({ ok: true, note: 'ok' }), sleep: async () => {} });
+    expect(res.ok).toBe(true);
+    expect(res.rows.find((r) => r.name === 'agent-chat')).toMatchObject({ verdict: 'skipped', tries: 0 });
+  });
+  it('الشجرة الحقيقية الآن تُسأل بالمسابير الكاملة', async () => {
+    const { treeReader } = await import('./smoke.mjs');
+    expect(probesFor(treeReader(root))).toEqual(FUNCTIONS);
+  });
+});
+
+describe('أثر النشر المؤجل: الثقة والحذف بكل الصفحات', () => {
+  const sha = 'a'.repeat(40);
+  const art = (over = {}, wr = {}) => ({ id: 1, name: `${PREFIX}${sha}`, expired: false, ...over,
+    workflow_run: { id: 10, repository_id: 7, head_repository_id: 7, head_branch: 'main', head_sha: sha, ...wr } });
+  const run = (over = {}) => ({ id: 10, event: 'push', head_branch: 'main', head_sha: sha, path: '.github/workflows/ci.yml',
+    repository: { id: 7 }, head_repository: { id: 7 }, ...over });
+  it('يُقبل من دفع أو تشغيل يدوي لـ ci.yml على main في المستودع نفسه وحده', () => {
+    expect(trustedMarker(art(), run(), sha)).toBe(true);
+    expect(trustedMarker(art(), run({ event: 'workflow_dispatch' }), sha)).toBe(true);
+  });
+  it('يُرفض أثر طلب دمج من مستودع متفرع (ولو من فرعه main)، أو من سير آخر، أو لإيداع آخر، أو منتهٍ', () => {
+    expect(trustedMarker(art({}, { head_repository_id: 99 }), run({ head_repository: { id: 99 } }), sha)).toBe(false);
+    expect(trustedMarker(art(), run({ event: 'pull_request' }), sha)).toBe(false);
+    expect(trustedMarker(art(), run({ event: 'pull_request_target' }), sha)).toBe(false);
+    expect(trustedMarker(art(), run({ path: '.github/workflows/evil.yml' }), sha)).toBe(false);
+    expect(trustedMarker(art({}, { head_branch: 'feature' }), run({ head_branch: 'feature' }), sha)).toBe(false);
+    expect(trustedMarker(art({}, { head_sha: 'b'.repeat(40) }), run(), sha)).toBe(false);
+    expect(trustedMarker(art({ expired: true }), run(), sha)).toBe(false);
+    expect(trustedMarker(art({ name: 'deploy-deferred-x' }), run(), sha)).toBe(false);
+    expect(trustedMarker(art(), run({ id: 11 }), sha)).toBe(false);
+    expect(trustedMarker(art(), null, sha)).toBe(false);
+  });
+  // واجهة GitHub مزيفة: 250 أداة على ثلاث صفحات، والأثر في الصفحة الثالثة
+  const fakeApi = (artifacts, runs = {}, { failList = false } = {}) => {
+    const deleted = [];
+    const store = [...artifacts];
+    const fetchImpl = async (url, init = {}) => {
+      const u = new URL(url);
+      const path = u.pathname.replace(/^\/repos\/o\/r\//, '');
+      if (init.method === 'DELETE') {
+        const id = Number(path.split('/').pop());
+        const i = store.findIndex((a) => a.id === id);
+        if (i < 0) return { status: 404, ok: false };
+        store.splice(i, 1); deleted.push(id);
+        return { status: 204, ok: true };
+      }
+      if (path === 'actions/artifacts') {
+        if (failList) return { status: 502, ok: false };
+        const name = u.searchParams.get('name');
+        const page = Number(u.searchParams.get('page'));
+        const list = store.filter((a) => !name || a.name === name);
+        return { status: 200, ok: true, json: async () => ({ total_count: list.length, artifacts: list.slice((page - 1) * 100, page * 100) }) };
+      }
+      const m = path.match(/^actions\/runs\/(\d+)$/);
+      if (m && runs[m[1]]) return { status: 200, ok: true, json: async () => runs[m[1]] };
+      return { status: 404, ok: false };
+    };
+    return { api: github({ repo: 'o/r', token: 't', fetchImpl }), deleted, store };
+  };
+  const filler = Array.from({ length: 248 }, (_, i) => ({ id: 1000 + i, name: `ci-pass-${i}`, expired: false, workflow_run: { id: 1 } }));
+  it('الحذف يقرأ كل الصفحات: أثر بعد أحدث مئة أداة يُحذف، ولا يُمس غيره', async () => {
+    const old = art({ id: 5, name: `${PREFIX}${'c'.repeat(40)}` });
+    const { api, deleted, store } = fakeApi([...filler, art({ id: 4 }), old]);
+    const r = await clear(api, sha);
+    expect(r).toEqual({ deleted: 2, left: 0 });
+    expect(deleted.sort()).toEqual([4, 5]);
+    expect(store.length).toBe(248);
+  });
+  it('تعذّر قراءة القائمة يرمي خطأ (يحمّر الخطوة)، لا يمر صامتًا', async () => {
+    const { api } = fakeApi(filler, {}, { failList: true });
+    await expect(clear(api, sha)).rejects.toThrow(/502/);
+    await expect(pending(api, sha)).rejects.toThrow(/502/);
+  });
+  it('pending: صحيح لأثر موثوق، وخطأ لأثر مزوّر من طلب دمج متفرع', async () => {
+    expect(await pending(fakeApi([...filler, art()], { 10: run() }).api, sha)).toBe(true);
+    const forged = art({}, { id: 20, head_repository_id: 99 });
+    expect(await pending(fakeApi([...filler, forged], { 20: run({ id: 20, event: 'pull_request', head_repository: { id: 99 } }) }).api, sha)).toBe(false);
+    expect(await pending(fakeApi(filler).api, sha)).toBe(false);
   });
 });

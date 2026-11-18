@@ -2,7 +2,7 @@
 // حارس الفحوص الليلية (ش11، تصور تحديث المنصة، المرحلة 0 البند 3): يحمرّ إن لم ينجح أي فحص ليلي منذ 36 ساعة.
 // فشل الفوترة في GitHub أوقف الفحوص الليلية من 2026-11-07 إلى 2026-11-10 («The job was not started because recent
 // account payments have failed»)، فضاع وسط إنذار المحتوى الكاذب. يشغّله probe.yml كل ثلاث ساعات بـ GITHUB_TOKEN
-// (قراءة سجل Actions وحده، لا الإنتاج). منطق القرار نقي يختبره tests/ops/release-safety.test.js.
+// (قراءة سجل Actions وحده، لا الإنتاج). منطق القرار نقي يختبره scripts/ops/release-safety.test.js.
 //
 //   GH_TOKEN=... GITHUB_REPOSITORY=owner/repo node scripts/ops/nightly-watch.mjs
 import { appendFileSync } from 'node:fs';
