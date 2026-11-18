@@ -363,9 +363,11 @@ function ExpertAttendance({ initial }) {
         <article key={s.id} className="xpp-attend">
           <div className="grow"><b>{s.title}</b>
             <small className="muted">{[s.cohort, when(s.starts_at), s.location].filter(Boolean).join(' · ')}</small></div>
-          {s.open
-            ? <button type="button" className="btn sm" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>
-            : <small className="muted">يُفتح الرمز قبل البدء بساعة</small>}
+          {/* الزر دائمًا: open من تحميل البوابة وحده لا يتجدد، وشاشة الرمز تسأل الخادم كل نافذة فتنتقل إلى الرمز وحدها حين يُفتح */}
+          <div className="xpp-attend-go">
+            <button type="button" className="btn sm" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>
+            {!s.open && <small className="muted">يظهر الرمز قبل البدء بساعة، ويمكنك فتح الشاشة الآن</small>}
+          </div>
         </article>
       ))}</div>
       {qr && <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={() => setQr(null)} whenText={(x) => (x.starts_at ? when(x.starts_at) : '')} />}

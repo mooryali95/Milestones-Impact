@@ -28,7 +28,12 @@ function install(tables: Record<string, Row[]>) {
     const run = () => {
       const rows = tables[table] ||= [];
       if (mode === 'insert' || mode === 'upsert') {
-        const added = (Array.isArray(payload) ? payload : [payload]).map((x) => ({ id: `${table}-${++seq}`, created_at: new Date(Date.now() + seq).toISOString(), ...x }));
+        const list = Array.isArray(payload) ? payload : [payload];
+        // المفتاح الأساسي لجدول الحضور (session_id, participant_id) كما في القاعدة
+        if (table === 'workshop_attendance' && list.some((x: Row) => rows.some((r) => r.session_id === x.session_id && r.participant_id === x.participant_id))) {
+          return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "workshop_attendance_pkey"' } };
+        }
+        const added = list.map((x: Row) => ({ id: `${table}-${++seq}`, created_at: new Date(Date.now() + seq).toISOString(), ...x }));
         rows.push(...added);
         return { data: single ? added[0] : added, error: null };
       }
@@ -206,8 +211,10 @@ Deno.test('حد المحاولات: خمس خاطئة في عشر دقائق ث�
     const blocked = await w.call('a', 'workshop.checkin', { code: await nowCode() });
     assertEquals([blocked.status, blocked.code], [429, 'code_rate']);
     assertEquals(w.tables.workshop_attendance.length, 0);
-    // كل محاولة مسجلة، والمرفوضة بالحد أيضًا
-    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.code-try').length, CODE_LIMITS.wrongPer10Min + 1);
+    // كل محاولة دون الحد مسجلة، والمرفوضة بالحد لا تضيف صفًا: حلقة طلبات لا تملأ السجل
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.code-try').length, CODE_LIMITS.wrongPer10Min);
+    for (let i = 0; i < 20; i++) assertEquals((await w.call('a', 'workshop.checkin', { code: bad })).code, 'code_rate');
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.code-try').length, CODE_LIMITS.wrongPer10Min);
     const b = await w.call('b', 'workshop.checkin', { code: await nowCode() });
     assertEquals([b.status, b.method], [200, 'code']);
     // المحاولات المتزامنة لا تتجاوز الحد: تُكتب قبل العدّ
@@ -215,6 +222,48 @@ Deno.test('حد المحاولات: خمس خاطئة في عشر دقائق ث�
     const burst = await Promise.all(Array.from({ length: 12 }, () => w.call('other', 'workshop.checkin', { code: wrong })));
     assert(burst.filter((x) => x.code === 'code_wrong').length <= CODE_LIMITS.wrongPer10Min, JSON.stringify(burst.map((x) => x.code)));
     assert(burst.every((x) => ['code_wrong', 'code_rate'].includes(x.code)));
+  } finally { w.restore(); }
+});
+
+Deno.test('إعادة أرقام جلسة سُجّل حضورها لا تسترد محاولة: لا تخمين بلا حد لجلسة ثانية مفتوحة معها', async () => {
+  const w = await world();
+  try {
+    // جلسة ثانية لدفعته مفتوحة في الوقت نفسه (صباحية ومسائية في يوم واحد)، بسر آخر فأرقامها غير أرقام الأولى
+    const WS2 = U(880009), SECRET2 = 'r'.repeat(32);
+    w.tables.workshop_sessions.push({ ...w.tables.workshop_sessions.find((x) => x.id === WS)!, id: WS2, title_ar: 'اليوم الثالث مساءً', secret: SECRET2 });
+    assertEquals((await w.call('a', 'workshop.checkin', { code: await nowCode() })).already, false);
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.code-hit').length, 1);
+    let wrong = '';
+    for (let n = 0; ; n++) {
+      const c = String(n).padStart(6, '0');
+      if ((await matchQrCode(c, WS, SECRET)) == null && (await matchQrCode(c, WS2, SECRET2)) == null) { wrong = c; break; }
+    }
+    const seen: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      seen.push((await w.call('a', 'workshop.checkin', { code: wrong })).code);
+      const again = await w.call('a', 'workshop.checkin', { code: await nowCode() });
+      seen.push(again.already ? 'already' : again.code);
+    }
+    // استرداد واحد للجلسة الأولى فقط: بعد خمس خاطئة (والمكررة تُحسب) يُرد كل شيء بالحد
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.code-hit').length, 1);
+    assert(seen.filter((c) => c === 'code_wrong').length <= CODE_LIMITS.wrongPer10Min, seen.join());
+    assertEquals(seen.slice(-4), ['code_rate', 'code_rate', 'code_rate', 'code_rate']);
+    assertEquals(w.tables.workshop_attendance.map((x) => x.session_id), [WS]);
+  } finally { w.restore(); }
+});
+
+Deno.test('مسح وأرقام متزامنان للمشارك والجلسة نفسيهما: صف واحد وسطر سجل واحد، والثاني «مسجل مسبقًا» لا خطأ', async () => {
+  const w = await world();
+  try {
+    const [t, code] = await Promise.all([qrToken(WS, SECRET), nowCode()]);
+    const out = await Promise.all([w.call('a', 'workshop.checkin', { t }), w.call('a', 'workshop.checkin', { code }), w.call('a', 'workshop.checkin', { t })]);
+    assertEquals(out.map((x) => [x.status, x.success]), [[200, true], [200, true], [200, true]]);
+    assertEquals(out.filter((x) => !x.already).length, 1);
+    assertEquals(w.tables.workshop_attendance.length, 1);
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.checkin').length, 1);
+    // والأرقام إن خسرت السباق لا تُكتب لها «ناجحة»
+    const codeWon = w.tables.workshop_attendance[0].method === 'code';
+    assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.code-hit').length, codeWon ? 1 : 0);
   } finally { w.restore(); }
 });
 

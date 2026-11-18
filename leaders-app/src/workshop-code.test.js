@@ -162,7 +162,7 @@ describe('أماكن الواجهة', () => {
   });
   it('شاشة الرمز واحدة للإدارة وبوابة الخبير، والأرقام فيها LTR داخل bdi', () => {
     const p = read('shared/ui/PresenterQr.jsx');
-    expect(p).toMatch(/<bdi dir="ltr" className="pq-digits">/);
+    expect(p).toMatch(/<bdi dir="ltr" className="pq-digits"[ >]/);
     expect(read('admin-app/src/screens/Activities.jsx')).toMatch(/<PresenterQr loadQr=\{loadQr\}/);
     const x = read('leaders-app/src/screens/ExpertPortal.jsx');
     expect(x).toMatch(/xpCall\('xp\.workshop-qr'/);
@@ -171,5 +171,24 @@ describe('أماكن الواجهة', () => {
     const v = read('supabase/functions/leaders-api/activities.ts');
     expect(v).toMatch(/export async function expertWorkshopAttendance[\s\S]{0,200}await workshopAttendance\(\{ id: b\.id \}\)/);
     expect(v).toMatch(/export async function expertWorkshopQr[\s\S]{0,120}return workshopQr\(\{ id: b\.id \}\)/);
+  });
+});
+
+describe('الماسح لا يكرر رمزًا مرفوضًا، وعدّ الحاضرين يطابق المعدود', async () => {
+  const { scanVerdict } = await import('./checkin.js');
+  const { attendedAr } = await import('../../shared/ui/PresenterQr.jsx');
+  it('النجاح ينهي، والرمز المنتهي والإخفاق المؤقت ينتظران رمزًا آخر، وما سواهما يوقف المسح', () => {
+    expect(scanVerdict({ success: true })).toBe('done');
+    for (const code of ['qr_expired', 'network', 'busy', 'internal', 'db_error']) expect(scanVerdict({ success: false, code })).toBe('retry');
+    for (const code of ['closed', 'undated', 'method', 'qr_invalid', 'forbidden', undefined]) expect(scanVerdict({ success: false, code })).toBe('final');
+  });
+  it('«حاضر واحد» و«حاضران» و«5 حاضرين» و«11 حاضرًا»، والصفر جملة', () => {
+    expect([0, 1, 2, 5, 11].map(attendedAr)).toEqual(['لم يحضر أحد بعد', 'حاضر واحد', 'حاضران', '5 حاضرين', '11 حاضرًا']);
+  });
+  it('الماسح يتخطى الرمز المرفوض ويطفئ الكاميرا عند الرفض النهائي وعند أي إخفاق بعد فتحها', () => {
+    const src = read('leaders-app/src/screens/CheckinSheet.jsx');
+    expect(src).toContain('t !== rejected');
+    expect(src).toMatch(/verdict === 'final'\) \{ off\(\)/);
+    expect(src).toMatch(/catch \(e\) \{[\s\S]*?off\(\);/);
   });
 });

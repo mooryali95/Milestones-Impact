@@ -266,17 +266,24 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   return recordAttendance(p, s, r, ctx, 'qr', viaReceipt ? { via: 'receipt' } : null);
 }
 // كتابة الحضور الواحدة للرمز والإيصال والأرقام: مرة لكل مشارك وجلسة، ومن سُجّل يُرد «مسجل مسبقًا» بلا أثر.
-// الطريقة code قبل الترحيل 20261118120000 يرفضها القيد (23514)، فيُكتب الحضور qr ويبقى السجل يقول {via:'code'}
+// الطريقة code قبل الترحيل 20261118120000 يرفضها القيد (23514)، فيُكتب الحضور qr ويبقى السجل يقول {via:'code'}.
+// وتسجيلان متزامنان (المسح والأرقام معًا، أو نقرتان) يقرآن «لا صف» كلاهما، فيرد المفتاح (session_id, participant_id)
+// الثاني بـ23505: يُعامل «مسجل مسبقًا» لا خطأ قاعدة، ويُكتب السجل مرة واحدة للذي أدرج
+const DUP = (e: any) => String(e?.code) === '23505';
 async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' | 'code', after: Body | null) {
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
+  let already = !!prev;
   if (!prev) {
     const row = { session_id: s.id, participant_id: p.id, method, ip: ctx.ip, user_agent: ctx.ua };
-    const first = await db.from('workshop_attendance').insert(row);
-    if (first.error && method === 'code' && String(first.error.code) === '23514') must(await db.from('workshop_attendance').insert({ ...row, method: 'qr' }));
-    else must(first);
-    await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, after);
+    let res = await db.from('workshop_attendance').insert(row);
+    if (res.error && method === 'code' && String(res.error.code) === '23514') res = await db.from('workshop_attendance').insert({ ...row, method: 'qr' });
+    if (DUP(res.error)) already = true;
+    else {
+      must(res);
+      await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, after);
+    }
   }
-  return { success: true, already: !!prev, method, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+  return { success: true, already, method, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
 }
 
 // ── تسجيل الحضور بالأرقام الستة (W2، تصور الحضور 2026-11-18 ب5.5 البند 4) ──
@@ -285,6 +292,9 @@ async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' |
 // أخرى أو نافذة مغلقة لا تطابق شيئًا. المطابقة بالنافذتين كما الرمز وبمقارنة ثابتة الزمن (matchQrCode).
 // حد المحاولات الخاطئة لكل مشارك (والأرقام بلا جلسة، فالحد يشمل جلساته كلها، وهو أضيق من حد لكل جلسة): كل محاولة تُكتب
 // في السجل قبل التحقق ثم تُعدّ، فالمحاولات المتزامنة لا تتجاوز الحد. الخاطئة = المحاولات ناقص الناجحة في 10 دقائق.
+// و«الناجحة» (code-hit) تُكتب فقط حين يُدرج حضور جديد فعلًا، فلا تُسترد محاولة بإعادة أرقام جلسة سُجّل حضورها (وهو
+// ما كان يفتح تخمينًا بلا حد لجلسة ثانية مفتوحة معها)، ولكل جلسة استرداد واحد على الأكثر. ومن بلغ الحد يُرد قبل الكتابة
+// بعدّ مسبق، فحلقة طلبات لا تضيف صفوفًا إلى السجل بلا حد.
 // ستة أرقام مليون احتمال، ويُقبل منها رقمان في كل نافذة، فخمس محاولات في عشر دقائق تجعل التخمين بلا جدوى
 export const CODE_LIMITS = Object.freeze({ wrongPer10Min: 5 });
 const CODE_TRY = 'workshop.code-try', CODE_HIT = 'workshop.code-hit';
@@ -318,10 +328,13 @@ async function codeCheckin(p: any, b: Body, ctx: Ctx) {
   // لا جلسة مفتوحة له تُوثَّق بالرمز: لا معنى للمطابقة ولا تُحسب محاولة
   if (!open.length) throw new Fail('لا جلسة حضورية مفتوحة لك الآن تُسجَّل بالرمز', 400, 'no_session');
   const since = new Date(Date.now() - 6e5).toISOString();
+  const tooMany = () => new Fail('محاولات خاطئة كثيرة. امسح الرمز بالكاميرا، أو اطلب من المدرب تسجيل حضورك، أو أعد المحاولة بعد عشر دقائق', 429, 'code_rate');
+  // عدّ مسبق بلا كتابة: من بلغ الحد لا يُكتب له صف. والناجحة لا تنقص، فعدّها المسبق يكفي للعدّ الثاني (أشد لا أرخى)
+  const [triesBefore, hits] = await Promise.all([codeCount(p, CODE_TRY, since), codeCount(p, CODE_HIT, since)]);
+  if (triesBefore - hits >= CODE_LIMITS.wrongPer10Min) throw tooMany();
   await audit('participant', p.email, CODE_TRY, 'participants', p.id);
-  const [tries, hits] = await Promise.all([codeCount(p, CODE_TRY, since), codeCount(p, CODE_HIT, since)]);
-  const wrongBefore = tries - 1 - hits;
-  if (wrongBefore >= CODE_LIMITS.wrongPer10Min) throw new Fail('محاولات خاطئة كثيرة. امسح الرمز بالكاميرا، أو اطلب من المدرب تسجيل حضورك، أو أعد المحاولة بعد عشر دقائق', 429, 'code_rate');
+  const wrongBefore = (await codeCount(p, CODE_TRY, since)) - 1 - hits;
+  if (wrongBefore >= CODE_LIMITS.wrongPer10Min) throw tooMany();
   let hit: { s: any; r: any } | null = null;
   for (const c of open) if ((await matchQrCode(code, c.s.id, c.s.secret)) != null && !hit) hit = c;
   if (!hit) {
@@ -329,8 +342,9 @@ async function codeCheckin(p: any, b: Body, ctx: Ctx) {
     throw new Fail(left > 0 ? `الأرقام غير صحيحة أو تغيّرت. اكتب الأرقام الظاهرة الآن (${left === 1 ? 'بقيت محاولة واحدة' : left === 2 ? 'بقيت محاولتان' : `بقيت ${left} محاولات`})` : 'الأرقام غير صحيحة، وانتهت محاولاتك لعشر دقائق. امسح الرمز بالكاميرا أو اطلب من المدرب تسجيل حضورك',
       400, 'code_wrong', { left });
   }
-  await audit('participant', p.email, CODE_HIT, 'participants', p.id, null, { session_id: hit.s.id });
-  return recordAttendance(p, hit.s, hit.r, ctx, 'code', { via: 'code' });
+  const done = await recordAttendance(p, hit.s, hit.r, ctx, 'code', { via: 'code' });
+  if (!done.already) await audit('participant', p.email, CODE_HIT, 'participants', p.id, null, { session_id: hit.s.id });
+  return done;
 }
 // الاستهلاك ذري: يكتب المشارك على الصف غير المستهلك وحده. وصاحبه يعيده بلا أثر (إعادة المحاولة بعد انقطاع)
 async function consumeReceipt(id: string, sessionId: string, participantId: string) {

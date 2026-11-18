@@ -9,14 +9,15 @@ import { createPortal } from 'react-dom';
 import { call } from '../api.js';
 import { CAMERA_AR, makeDetector, openCamera, stopStream, tokenFromScan } from '../scanner.js';
 import { latinDigits, QR_WINDOW } from '../../../supabase/functions/leaders-api/logic.js';
-import { sentence } from '../checkin.js';
+import { scanVerdict, sentence } from '../checkin.js';
 
 const SCAN_EVERY_MS = 250;
 
 export default function CheckinSheet({ session, onClose }) {
   const video = useRef(null);
   const panel = useRef(null);
-  const [cam, setCam] = useState({ state: 'starting' });   // starting | live | error
+  const [cam, setCam] = useState({ state: 'starting' });   // starting | live | error | stopped
+  const [run, setRun] = useState(0);   // «امسح مرة أخرى» بعد رفض نهائي يعيد فتح الكاميرا
   const [scanNote, setScanNote] = useState('');
   const [digits, setDigits] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,14 +25,18 @@ export default function CheckinSheet({ session, onClose }) {
   const [done, setDone] = useState(null);
   const finished = !!done;
 
-  // الكاميرا والقراءة: تبدأ مع فتح اللوح، وتتوقف مع النجاح أو الإغلاق
+  // الكاميرا والقراءة: تبدأ مع فتح اللوح، وتتوقف مع النجاح أو الإغلاق أو الرفض النهائي أو أي إخفاق بعد فتحها.
+  // الرمز المرفوض لا يُرسل ثانية وهو ما زال أمام الكاميرا: يُنتظر الرمز التالي (كل QR_WINDOW ثانية) إن كان الرفض مما
+  // يصلحه رمز جديد، وإلا يتوقف المسح ويُقال السبب وحده
   useEffect(() => {
     if (finished) return undefined;
-    let alive = true, stream = null, timer = 0, sending = false;
+    let alive = true, stream = null, timer = 0, sending = false, rejected = null;
+    const off = () => { stopStream(stream); stream = null; if (video.current) video.current.srcObject = null; };
+    setCam({ state: 'starting' }); setScanNote('');
     (async () => {
       try {
         stream = await openCamera();
-        if (!alive) { stopStream(stream); return; }
+        if (!alive) { off(); return; }
         const v = video.current;
         v.srcObject = stream;
         await v.play().catch(() => {});
@@ -44,12 +49,15 @@ export default function CheckinSheet({ session, onClose }) {
             const text = await det.detect(v).catch(() => null);
             const t = text ? tokenFromScan(text) : null;
             if (text && !t) setScanNote('هذا ليس رمز حضور البرنامج. وجّه الكاميرا إلى الرمز على شاشة القاعة.');
-            if (t && alive) {
+            if (t && t !== rejected && alive) {
               sending = true;
               setScanNote('قرأنا الرمز، نسجّل حضورك…');
               const r = await call('workshop.checkin', { t });
               if (!alive) return;
-              if (r.success) { setDone(r); return; }
+              const verdict = scanVerdict(r);
+              if (verdict === 'done') { setDone(r); return; }
+              if (verdict === 'final') { off(); setScanNote(''); setCam({ state: 'stopped', message: sentence(r.message) }); return; }
+              rejected = t;
               setScanNote(`${sentence(r.message)} نحاول مع الرمز الظاهر الآن.`);
               sending = false;
             }
@@ -58,11 +66,13 @@ export default function CheckinSheet({ session, onClose }) {
         };
         tick();
       } catch (e) {
+        // فشل بعد فتح الكاميرا (تحميل الفاك عند الطلب بعد نشر جديد أو بلا شبكة): تُطفأ ولا تبقى حية خلف الرسالة
+        off();
         if (alive) setCam({ state: 'error', message: CAMERA_AR[e?.reason] || CAMERA_AR.failed });
       }
     })();
-    return () => { alive = false; clearTimeout(timer); stopStream(stream); if (video.current) video.current.srcObject = null; };
-  }, [finished]);
+    return () => { alive = false; clearTimeout(timer); off(); };
+  }, [finished, run]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(done); };
@@ -99,6 +109,10 @@ export default function CheckinSheet({ session, onClose }) {
             {cam.state === 'live' && <span className="ck-frame" aria-hidden="true" />}
             {cam.state === 'starting' && <p className="ck-cam-note">نفتح الكاميرا…</p>}
             {cam.state === 'error' && <p className="ck-cam-note" role="alert">{cam.message}</p>}
+            {cam.state === 'stopped' && <div className="ck-cam-note" role="alert">
+              <p>{cam.message}</p>
+              <button type="button" className="btn sm" onClick={() => setRun((n) => n + 1)}>امسح مرة أخرى</button>
+            </div>}
           </div>
           <p className="small muted" aria-live="polite">{scanNote || (cam.state === 'live' ? 'وجّه الكاميرا إلى الرمز على شاشة القاعة، ويُسجَّل حضورك فور قراءته.' : '')}</p>
           <form className="ck-code" onSubmit={sendCode}>

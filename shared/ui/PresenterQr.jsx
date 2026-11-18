@@ -8,10 +8,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { BRAND } from '../js/brand.js';
+import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import { isUndated, QR_WINDOW, SCAN_RECEIPT_MINUTES } from '../../supabase/functions/leaders-api/logic.js';
 
 // «123 456»: مجموعتان من ثلاثة أرقام تُقرأ من آخر القاعة، باتجاه LTR دائمًا داخل bdi
 export const codeGroups = (c) => (/^\d{6}$/.test(String(c || '')) ? `${String(c).slice(0, 3)} ${String(c).slice(3)}` : '');
+
+// العدد يطابق المعدود: «حاضر واحد»، «حاضران»، «5 حاضرين»، «11 حاضرًا»
+export const attendedAr = (n) => (n ? countAr(n, 'حاضر واحد', 'حاضران', 'حاضرين', 'حاضرًا') : 'لم يحضر أحد بعد');
 
 export default function PresenterQr({ loadQr, loadPeople, onClose, whenText = () => '' }) {
   const [d, setD] = useState(null);
@@ -55,13 +59,14 @@ export default function PresenterQr({ loadQr, loadPeople, onClose, whenText = ()
         <p className="pq-sub">{[d.session.location, whenText(d.session)].filter(Boolean).join(' · ')}</p>
         {d.open ? <>
           <img src={img} alt="رمز الحضور" />
-          {code && <div className="pq-code" aria-label={`أو اكتب الأرقام ${d.code}`}>
+          {code && <div className="pq-code">
             <span className="pq-code-k">أو اكتب الأرقام في التطبيق</span>
-            <bdi dir="ltr" className="pq-digits">{code}</bdi>
+            {/* تُنطق رقمًا رقمًا لا عددًا واحدًا من ستة منازل */}
+            <bdi dir="ltr" className="pq-digits" aria-label={d.code.split('').join(' ')}>{code}</bdi>
           </div>}
-        </> : <div className="pq-err">{isUndated(d.session) ? 'حدد موعد الجلسة أولًا: تسجيل الحضور يُفتح قبل البدء بساعة.' : 'تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة).'}</div>}
+        </> : <div className="pq-err">{isUndated(d.session) ? 'حدد موعد الجلسة أولًا: تسجيل الحضور يُفتح قبل البدء بساعة.' : 'تسجيل الحضور لهذه الجلسة غير متاح الآن (يُفتح قبل البدء بساعة)، ويظهر الرمز هنا وحده حين يُفتح.'}</div>}
         <p className="pq-hint">امسح الرمز بكاميرا جوالك أو من «سجّل حضوري» في التطبيق، وإن طُلب منك الدخول فادخل خلال {SCAN_RECEIPT_MINUTES} دقيقة دون مسح ثانٍ. يتجدد الرمز والأرقام كل {QR_WINDOW} ثانية.</p>
-        <b className="pq-count" aria-live="polite">{expected ? <><bdi dir="ltr">{expected - absent.length}</bdi> من <bdi dir="ltr">{expected}</bdi> حضروا</> : <><bdi dir="ltr">{d.attended}</bdi> حاضر</>}</b>
+        <b className="pq-count" aria-live="polite">{expected ? <><bdi dir="ltr">{expected - absent.length}</bdi> من <bdi dir="ltr">{expected}</bdi> حضروا</> : attendedAr(d.attended)}</b>
         {absent.length > 0 && <>
           <button type="button" className="pq-absent-t" aria-expanded={absentShown} onClick={() => setAbsentShown((v) => !v)}>{absentShown ? 'أخفِ الأسماء' : `من لم يحضر بعد (${absent.length})`}</button>
           {absentShown && <ul className="pq-absent">{absent.map((p) => <li key={p.id}>{p.full_name}</li>)}</ul>}
