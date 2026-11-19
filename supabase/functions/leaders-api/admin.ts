@@ -28,6 +28,8 @@ import { reviewAnswers } from './answer-review.js';
 import { saveEffort } from './effort.ts';
 import { inboxOf } from './inbox.js';
 import { daysLeft, leftAr } from './erasure.js';
+import { phoneNeedle } from './search-text.js';
+import { lastActive } from './last-active.js';
 import * as OB from './observations.ts';
 import { cleanStatusReason, MODEL_RETURN_COUNT, RULES, statusNeedsReason } from './notice-rules.js';
 import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retakeText } from './retake.js';
@@ -325,10 +327,12 @@ export async function participants(b: Body) {
   if (b.status) q = q.eq('status', String(b.status));
   if (b.search) {
     const s = String(b.search).replace(/[%,()]/g, ' ').trim();
-    if (s) q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,organization_name.ilike.%${s}%`);
+    // الجوال بأي صيغة يُكتب بها (phoneNeedle، المصدر نفسه لبحث المتصفح): أرقام وحدها تُطابق الرقم المحفوظ دوليًا
+    const phone = phoneNeedle(b.search);
+    if (s) q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,organization_name.ilike.%${s}%${phone ? `,phone.ilike.%${phone}%` : ''}`);
   }
   const rows = (must(await q) ?? []) as any[];
-  const progress = await baselineProgress(rows.map((r) => r.id));
+  const [progress, active] = await Promise.all([baselineProgress(rows.map((r) => r.id)), lastActiveFor(rows)]);
   // دفعة كل مشارك بالقاعدة نفسها التي تحكم رحلته (pickCohort): تسجيله الصريح، ثم دفعة جهته، ثم الافتراضية. لفلتر «الدفعات» في القائمة
   const [cohorts, enr] = await Promise.all([
     db.from('cohorts').select('id, name, status, is_default, organization_id, starts_on, created_at').then((r) => (r.data || []) as any[]),
@@ -340,8 +344,17 @@ export async function participants(b: Body) {
   // effort وretake من سجل القياس نفسه (المصدر الواحد): وسم المستعجل وفلتره، وطلب الإعادة القائم
   return { success: true, participants: rows.map((r) => {
     const g = progress[r.id] || null;
-    return { ...r, cohort_id: cohortId(r), onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
+    return { ...r, last_active_at: active[r.id] ?? r.last_login_at ?? null, cohort_id: cohortId(r), onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
   }), cohorts: cohorts.map((c) => ({ id: c.id, name: c.name })), ...capInfo(rows) };
+}
+
+// آخر نشاط فعلي لكل مشارك (last-active.js): الأحدث من آخر دخول ومن آخر استعمال لجلساته (auth_sessions.last_seen_at).
+// لقائمة المشاركين وملف المشارك. تعذّر قراءة الجلسات لا يُسقط القائمة: يبقى آخر دخول
+export async function lastActiveFor(rows: { id: string; last_login_at?: string | null }[]) {
+  const seen: Record<string, string[]> = {};
+  const got = await allFor(rows.map((r) => r.id), () => db.from('auth_sessions').select('participant_id, last_seen_at').not('last_seen_at', 'is', null).order('participant_id').order('id')).catch(() => [] as any[]);
+  for (const x of got as any[]) (seen[x.participant_id] ||= []).push(x.last_seen_at);
+  return Object.fromEntries(rows.map((r) => [r.id, lastActive(r.last_login_at, seen[r.id] || [])])) as Record<string, string | null>;
 }
 
 // التذكير اليدوي لمن تعثر صار في المحرك الموحد (nudges.ts): المعاينة والإرسال والسجل لكل المراحل ولكل مرسل
@@ -385,6 +398,7 @@ export async function baselineProgress(ids: string[]) {
 export async function participant(b: Body) {
   const p = must(await db.from('participants').select('*').eq('id', String(b.id)).maybeSingle());
   if (!p) throw new Fail('المشارك غير موجود', 404);
+  p.last_active_at = (await lastActiveFor([p]))[p.id] ?? p.last_login_at ?? null;
   const [results, reqs, views, audits] = await Promise.all([
     db.from('assessments').select('id, status, started_at, submitted_at, instrument_id, form, instruments(key, kind), assessment_results(*)')
       .eq('participant_id', p.id).order('started_at', { ascending: false }),

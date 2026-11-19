@@ -540,7 +540,8 @@ for (const width of [1440, 390]) {
     await expect(panel.getByRole('article', { name: 'الدعم والتمكين' }).locator('.cj-window')).toContainText('10 ديسمبر');
     // الممر في الخط يبدأ بعد إزاحته داخل خانته
     const lane = panel.locator('section.jt .jt-stage.lane', { hasText: 'التوجيه على رأس العمل' }).first();
-    if (width > 500) expect(await lane.evaluate((el) => parseFloat(el.style.marginInlineStart))).toBeGreaterThan(0);
+    // بدايته نسبة من خانته محصورة بحد العمود المقروء: min(N%, ...)
+    if (width > 500) expect(await lane.evaluate((el) => parseFloat(el.style.marginInlineStart.replace(/^min\(/, '')))).toBeGreaterThan(0);
     await expect(lane).toContainText('تُفتح مع «التدريب»، ومخطط بعد سبعة أيام من بدايتها');
     await expect(lane).not.toContainText('تبدأ مع «التدريب» بعد');
     await expect(panel.locator('.cj-savebar')).toContainText('تعديل واحد غير محفوظ');

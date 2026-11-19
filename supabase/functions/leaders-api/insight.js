@@ -88,9 +88,14 @@ export function expertLoad(experts, { requests = {}, upcoming = {}, people = {} 
 export const ACTOR_AR = { admin: 'الإدارة', participant: 'مشارك', system: 'النظام', coordinator: 'منسق جهة', expert: 'خبير' };
 export const CHANGE_AREAS = {
   participant: 'المشاركون', placement: 'المستويات', assessment: 'القياس', requirement: 'المتطلبات', submission: 'الأعمال', capstone: 'مشاريع التخرج',
-  cohort: 'الدفعات', program: 'البرامج', expert: 'الخبراء', certificate: 'الشهادات', payment: 'الدفع', sponsor: 'الرعاية', settings: 'الإعدادات', system: 'النظام',
+  cohort: 'الدفعات', workshop: 'الحضور والجلسات', program: 'البرامج', expert: 'الخبراء', certificate: 'الشهادات', payment: 'الدفع', sponsor: 'الرعاية', settings: 'الإعدادات', system: 'النظام',
 };
-export const areaOf = (action) => String(action || '').split('.')[0];
+// «الحضور والجلسات» مجال واحد لبادئتين في السجل: حضور الورش (workshop.*) والجلسات الفردية (coaching.*)، كاسم شاشتهما
+const AREA_PREFIXES = { workshop: ['workshop', 'coaching'] };
+const AREA_OF_PREFIX = Object.fromEntries(Object.entries(AREA_PREFIXES).flatMap(([area, list]) => list.map((x) => [x, area])));
+/** بادئات الأحداث التي يضمها مجال، لفلتر الخادم */
+export const areaPrefixes = (area) => AREA_PREFIXES[area] || [area];
+export const areaOf = (action) => { const x = String(action || '').split('.')[0]; return AREA_OF_PREFIX[x] || x; };
 /**
  * @param {any} h صف من audit_log
  * @param {Record<string, string>} [names] أسماء المشاركين بمعرّفاتهم

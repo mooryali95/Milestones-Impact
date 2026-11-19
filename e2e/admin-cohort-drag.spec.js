@@ -114,7 +114,8 @@ const days = (panel, title) => panel.getByRole('article', { name: title }).getBy
 const offset = (panel, title) => panel.getByRole('article', { name: title }).getByRole('textbox', { name: new RegExp(`^إزاحة ${title}`) });
 // يسحب من وسط عنصر بمقدار dx بكسل (سالب: إلى اليسار، أي لاحقًا في RTL) ويبقي الزر مضغوطًا إن طُلب
 async function dragBy(page, el, dx, { dy = 0, hold = false, steps = 8 } = {}) {
-  await el.evaluate((x) => x.closest('.jt-track').scrollIntoView({ block: 'center' }));
+  // المسار قد يكون أعرض من إطاره (حد العمود المقروء) فيتمرر داخله: ما يُسحب يُحضر إلى وسط الإطار أولًا
+  await el.evaluate((x) => { x.closest('.jt-track').scrollIntoView({ block: 'center' }); x.scrollIntoView({ block: 'nearest', inline: 'center' }); });
   const b = await el.boundingBox();
   const x = b.x + b.width / 2, y = b.y + b.height / 2;
   await page.mouse.move(x, y);
@@ -205,11 +206,14 @@ test('الإفلات في «مسارات مستمرة» يُرفض برابط «
   const from = tl.locator('[data-stage="support"] .jt-stage-head small');
   const row = tl.getByRole('group', { name: 'مسارات مستمرة' });
   await row.scrollIntoViewIfNeeded();
+  // المسار يتمرر داخل إطاره: المرحلة المسحوبة إلى وسطه، والإفلات في الجزء الظاهر من صف المسارات
+  await from.evaluate((x) => x.scrollIntoView({ block: 'nearest', inline: 'center' }));
   const a = await from.boundingBox();
   const r = await row.boundingBox();
+  const view = await tl.locator('.jt-scroll').boundingBox();
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
-  await page.mouse.move(r.x + 30, r.y + r.height - 6, { steps: 10 });
+  await page.mouse.move(Math.max(r.x, view.x) + 30, r.y + r.height - 6, { steps: 10 });
   await expect(tl.getByTestId('jt-ghost')).toHaveClass(/bad/);
   await page.mouse.up();
   const note = panel.getByTestId('cj-drag-note');

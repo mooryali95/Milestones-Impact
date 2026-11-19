@@ -17,7 +17,7 @@ const { counted, isCounted, isListed, listed, simulated } = await import('./coun
 
 type Row = Record<string, any>;
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const REAL = U(1), DEMO = U(2), TEST = U(3), WS = U(10), REQ = U(11), INST = U(12);
+const REAL = U(1), DEMO = U(2), TEST = U(3), ABSENT = U(4), WS = U(10), REQ = U(11), INST = U(12);
 const now = new Date().toISOString();
 const person = (id: string, extra: Row = {}) => ({
   id, full_name: id === DEMO ? 'مشارك العرض' : id === TEST ? 'حساب اختبار' : 'مشارك حقيقي', email: id === DEMO ? 'demo@demo.milestone-impact.org' : `p${id.slice(-1)}@example.sa`,
@@ -42,8 +42,8 @@ Deno.test('القواعد المسماة: حساب العرض خارج القو�
 
 Deno.test('الحضور: حساب العرض ليس في المتوقعين ولا في عدّاد «حضر»، ولا يُكتب له حضور يدوي', async () => {
   const f = fake({
-    participants: [person(REAL, { status: 'enrolled' }), person(DEMO, { status: 'placed' })],
-    placements: [...placed(REAL), ...placed(DEMO)],
+    participants: [person(REAL, { status: 'enrolled' }), person(DEMO, { status: 'placed' }), person(ABSENT, { status: 'enrolled' })],
+    placements: [...placed(REAL), ...placed(DEMO), ...placed(ABSENT)],
     stage_requirements: [{ id: REQ, kind: 'workshop', dimension: null, level: null, title_ar: 'الأيام التدريبية', config: { verify: 'qr' } }],
     workshop_sessions: [{ id: WS, requirement_id: REQ, cohort_id: null, title_ar: 'اليوم الأول', location_ar: 'القاعة', secret: 's'.repeat(32), mode: 'in_person', active: true,
       starts_at: new Date(Date.now() - 6e5).toISOString(), ends_at: new Date(Date.now() + 72e5).toISOString() }],
@@ -53,13 +53,19 @@ Deno.test('الحضور: حساب العرض ليس في المتوقعين ول
   });
   try {
     const att: any = await V.workshopAttendance({ id: WS });
-    assertEquals(att.people.map((p: any) => p.id), [REAL]);
+    assertEquals(att.people.map((p: any) => p.id).sort(), [REAL, ABSENT].sort());
+    assertEquals(att.people.filter((p: any) => p.attendance).map((p: any) => p.id), [REAL]);
     assertEquals(((await V.workshopQr({ id: WS })) as any).attended, 1);
     assertEquals(await code(() => V.workshopMark({ email: 'admin@example.sa' }, { session_id: WS, participant_id: DEMO, present: true })), 'demo');
+    // يُرد أولًا مهما كان غيره: جلسة غير موجودة لا تغيّر الرد، وصف حضوره القديم لا يجعله «مسجل مسبقًا»
+    assertEquals(await code(() => V.workshopMark({ email: 'admin@example.sa' }, { session_id: U(999), participant_id: DEMO, present: true })), 'demo');
     assertEquals(f.writes.filter((w) => w.table === 'workshop_attendance').length, 0);
-    // والحقيقي يُسجَّل يدويًا كما كان
-    await V.workshopMark({ email: 'admin@example.sa' }, { session_id: WS, participant_id: REAL, present: true });
+    // والحقيقي الغائب يُسجَّل يدويًا كما كان (من له حضور قائم لا يُكتب فوقه: workshop_mark_test.ts)
+    assertEquals(await V.workshopMark({ email: 'admin@example.sa' }, { session_id: WS, participant_id: ABSENT, present: true }), { success: true });
     assertEquals(f.writes.filter((w) => w.table === 'workshop_attendance').length, 1);
+    // وصف حساب العرض القديم يُلغى (حذف لا كتابة حضور)
+    await V.workshopMark({ email: 'admin@example.sa' }, { session_id: WS, participant_id: DEMO, present: false, reason: 'صف قديم لحساب العرض' });
+    assertEquals(f.tables.workshop_attendance.some((x) => x.participant_id === DEMO), false);
   } finally { f.restore(); }
 });
 

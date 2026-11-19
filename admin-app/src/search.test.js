@@ -24,4 +24,17 @@ describe('البحث الشامل', () => {
     const many = Array.from({ length: 10 }, (_, i) => ({ kind: 'participant', id: i, title: `أحمد ${i}` }));
     expect(rank('أحمد', many, { perKind: 3 })).toHaveLength(3);
   });
+
+  // تصور تشغيل الدفعة 2026-11-19: المشارك يُوجد بجواله بأي صيغة، والجوال ليس نصًا يُطابَق حرفيًا
+  it('المشارك يُوجد بجواله: 05 و5 و9665 و+9665 وبمسافات وأرقام عربية', () => {
+    const items = [
+      { kind: 'participant', id: 1, title: 'سارة', keys: ['s@example.sa'], phone: '+966551234567' },
+      { kind: 'participant', id: 2, title: 'خالد', keys: ['k@example.sa'], phone: '+966509876543' },
+      { kind: 'org', id: 3, title: 'وزارة الأثر' },
+    ];
+    for (const q of ['0551234567', '551234567', '966551234567', '+966551234567', '055 123 4567', '٠٥٥١٢٣٤٥٦٧']) expect(rank(q, items).map((x) => x.id), q).toEqual([1]);
+    expect(rank('05', items)).toEqual([]);
+    expect(rank('0509', items).map((x) => x.id)).toEqual([2]);
+    expect(rank('سارة', items).map((x) => x.id)).toEqual([1]);
+  });
 });

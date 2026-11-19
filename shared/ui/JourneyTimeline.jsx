@@ -9,6 +9,7 @@
 // (فأرة وقلم ولمس) وطرفه لتغيير مدته، وبلوحة المفاتيح من زر المقبض. المكوّن يقيس المؤشر نسبةً على المسار ويرسم الشبح
 // والسطر وحدهما، والمعنى كله عند المضيف (dropToEdit في cohort-journey.js). على الحاسوب وحده: الهاتف بلا مقابض.
 import React, { useEffect, useRef, useState } from 'react';
+import { BOARD_COL_MIN, boardMinWidth } from '../../supabase/functions/leaders-api/journey-timeline.js';
 
 // أيقونات الأنواع بالخط نفسه الذي في Ico.jsx (سماكة واحدة تأخذ لون النص)، زخرفية دائمًا والمعنى في aria-label
 const PATHS = {
@@ -207,9 +208,13 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const grips = (k, title) => (editable ? <Grips k={k} title={title} editable={editable} pointer={pointer} clicked={clicked} /> : null);
   // جسم الشريط بالفأرة والقلم وحدهما: اللمس عليه يمرر الخط، ويُسحب باللمس من المقبض والطرف
   const barDrag = (k) => (editable?.bars?.[k] ? { onPointerDown: (e) => { if (e.pointerType !== 'touch' && !e.target.closest('button,a,input,select,.jt-edge')) pointer(e, k, 'move'); } } : {});
+  // الممر داخل خانة «تسير معًا» وشريط المسار المستمر: موضعهما وعرضهما من المقياس، ولا ينزل العرض عن حد العمود المقروء ولا يخرج
+  // من حاويه (كان الممر القصير شريحة يُقص نصها حرفًا حرفًا). والمسار كله يتسع حتى تبلغ أضيق خانة حدها (boardMinWidth)
+  const laneBox = (at, width) => ({ marginInlineStart: `min(${at}%, calc(100% - ${BOARD_COL_MIN}px))`, width: `max(${width}%, ${BOARD_COL_MIN}px)` });
+  const trackBox = (at, width) => ({ insetInlineStart: `min(${at}%, calc(100% - ${BOARD_COL_MIN}px))`, width: `max(${width}%, ${BOARD_COL_MIN}px)` });
   const lane = (s) => (
     <div key={s.key} data-stage={s.key} {...barDrag(s.key)} className={`jt-stage${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''} ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}
-      style={s.together ? { marginInlineStart: `${s.lane_at}%`, width: `${Math.min(s.lane_width, 100 - s.lane_at)}%` } : undefined}>
+      style={s.together ? laneBox(s.lane_at, Math.min(s.lane_width, 100 - s.lane_at)) : undefined}>
       {grips(s.key, s.title)}
       <div className="jt-stage-head">
         {onStage ? (
@@ -270,7 +275,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
       {/* الحاسوب: المسار على مقياس واحد، يتمرر وحده إن ضاق الحاوي */}
       <div className="jt-desk">
         <div className="jt-scroll" tabIndex={0} role="group" aria-label="الخط الزمني، يتحرك بالأسهم">
-          <div className="jt-track" ref={trackRef} onPointerMove={editable ? onPointerMove : undefined} onPointerUp={editable ? onPointerUp : undefined}
+          <div className="jt-track" ref={trackRef} style={{ minWidth: `${boardMinWidth(model.slots)}px` }} onPointerMove={editable ? onPointerMove : undefined} onPointerUp={editable ? onPointerUp : undefined}
             onPointerCancel={editable ? onPointerCancel : undefined} onLostPointerCapture={editable ? onPointerUp : undefined}>
             {model.today && <div className="jt-today" style={{ insetInlineStart: `${model.today.at}%` }}><span>{model.today.label}</span></div>}
             <div className="jt-row jt-phases">
@@ -293,7 +298,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                 <span className="jt-row-label">{model.tracks_ar}</span>
                 {tracks.map((s, i) => (
                   <div key={s.key} className={`jt-trackbar ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''}`} data-track={s.key}
-                    {...barDrag(s.key)} style={{ insetInlineStart: `${s.at}%`, width: `${s.width}%`, top: `${20 + i * 106}px` }}>
+                    {...barDrag(s.key)} style={{ ...trackBox(s.at, s.width), top: `${20 + i * 106}px` }}>
                     {grips(s.key, s.title)}
                     {trackHead(s)}
                     <div className="jt-acts">

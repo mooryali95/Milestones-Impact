@@ -51,6 +51,10 @@ export function primaryAction(r, canWrite) {
   return { tab: 'log', label: 'أضف ملاحظة', focus: 'pf-obs-h' };
 }
 
+// آخر نشاط فعلي من الخادم (last_active_at: الأحدث من آخر دخول وآخر استعمال للجلسة، last-active.js)، وقبل وصوله آخر دخول.
+// «آخر دخول» وحده يقلل من النشاط: الجلسة تبقى 14 يومًا بلا دخول جديد
+export const seenAt = (p) => p?.last_active_at || p?.last_login_at || null;
+
 /** لمحة: ما يحتاجه المراجع في نظرة، من بيانات الملف نفسها */
 export function glance(r) {
   const p = r.participant;
@@ -63,7 +67,7 @@ export function glance(r) {
   return [
     ['التقدم', `${r.progress || 0}%`, journey.length ? `${done} من ${journey.length} مراحل` : ''],
     ['المرحلة الحالية', active || (journey.length && done === journey.length ? 'أتم الرحلة' : '·'), ''],
-    ['آخر دخول', p.last_login_at ? date(p.last_login_at) : 'لم يدخل', ''],
+    ['آخر نشاط', seenAt(p) ? date(seenAt(p)) : 'لم يدخل', p.last_login_at && date(p.last_login_at) !== date(seenAt(p)) ? `آخر دخول ${date(p.last_login_at)}` : ''],
     ['سجّل', date(p.created_at), ''],
     ['كتاب القائد', `${(r.book || []).length} باب`, r.points ? `${r.points.rank?.title || ''} · ${r.points.total || 0} نقطة` : ''],
     ['الجلسات', sessions.length ? `${sessions.filter((s) => s.status === 'attended').length} حضرها` : 'لا جلسات', sessions.length ? `من ${sessions.length}` : ''],

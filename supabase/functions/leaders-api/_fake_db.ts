@@ -1,4 +1,4 @@
-// قاعدة في الذاكرة لاختبارات Deno (طابور البريد وتنفيذ الحذف): تصفية eq وneq وis وnot وin وlt وgte وlte وor، وترتيب بأكثر من عمود،
+// قاعدة في الذاكرة لاختبارات Deno (طابور البريد وتنفيذ الحذف): تصفية eq وneq وis وnot وin وlt وgte وlte وlike وilike وor، وترتيب بأكثر من عمود،
 // وlimit والعدّ، والإدراج والتحديث والحذف، وكل كتابة تُسجَّل. fail: جدول وأعمدة يُرفض بها الطلب (ترحيل لم يُطبَّق)
 import { db } from './core.ts';
 
@@ -48,7 +48,10 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       const out = sorted.slice(0, limit).map(view);
       return { data: single ? out[0] ?? null : out, error: null, count: hit.length };
     };
-    const inList = (v: unknown) => String(v).replace(/^\(|\)$/g, '').split(',');
+    // قيم in بين علامتي اقتباس (بريد فيه نقطة) تُقرأ بلا العلامتين كما يقرؤها PostgREST
+    const inList = (v: unknown) => String(v).replace(/^\(|\)$/g, '').split(',').map((x) => x.replace(/^"(.*)"$/, '$1').replace(/\\(.)/g, '$1'));
+    // like وilike: % لأي نص، كما في PostgreSQL
+    const likeRe = (pattern: string, flags: string) => new RegExp(`^${pattern.split('%').map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, flags);
     // عمود مضمَّن (participants.is_demo) يُقرأ من الصف المضمَّن نفسه، والعمود المسطح كما كان
     const get = (r: Row, c: string) => (c in r ? r[c] : c.split('.').reduce((x: any, k) => x?.[k], r));
     // or بصيغة PostgREST: شروط بفاصلة على المستوى الأعلى، وand(...) متداخلة، وعواملها eq وis وgte وlte وlt وin
@@ -65,6 +68,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       if (o === 'lte') return (r) => r[c] != null && String(r[c]) <= v;
       if (o === 'lt') return (r) => r[c] != null && String(r[c]) < v;
       if (o === 'in') return (r) => inList(v).includes(String(r[c]));
+      if (o === 'like' || o === 'ilike') { const re = likeRe(v, o === 'ilike' ? 'i' : ''); return (r) => r[c] != null && re.test(String(r[c])); }
       throw new Error(`fake or: ${t}`);
     };
     const q: any = {
@@ -77,6 +81,8 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       delete: () => { op = { kind: 'delete' }; return q; },
       eq: (c: string, v: unknown) => { filters.push((r) => (get(r, c) ?? null) === v); return q; },
       or: (t: string) => { filters.push(cond(`or(${t})`)); return q; },
+      like: (c: string, v: string) => { const re = likeRe(v, ''); filters.push((r) => r[c] != null && re.test(String(r[c]))); return q; },
+      ilike: (c: string, v: string) => { const re = likeRe(v, 'i'); filters.push((r) => r[c] != null && re.test(String(r[c]))); return q; },
       neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return q; },
       in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       is: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; },
