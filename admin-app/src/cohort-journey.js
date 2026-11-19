@@ -16,9 +16,14 @@ import {
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
 
-// تبويبا ملف الدفعة، والمختار في العنوان (?view=journey) فيُفتح الرابط عليه ويبقى بعد التحديث
-export const COHORT_TABS = [['overview', 'الملف'], ['journey', 'الرحلة']];
-export const cohortTab = (qs = '') => (new URLSearchParams(String(qs)).get('view') === 'journey' ? 'journey' : 'overview');
+// تبويبات ملف الدفعة، والمختار في العنوان (?view=journey أو ?view=follow) فيُفتح الرابط عليه ويبقى بعد التحديث.
+// «المتابعة» (تصور تشغيل الدفعة 2026-11-19): صف لكل عضو. ورابطها قد يحمل مرحلة الخريطة التي ضُغطت (?view=follow&stage=<المفتاح>)
+export const COHORT_TABS = [['overview', 'الملف'], ['journey', 'الرحلة'], ['follow', 'المتابعة']];
+export const cohortTab = (qs = '') => { const v = new URLSearchParams(String(qs)).get('view'); return v === 'journey' || v === 'follow' ? v : 'overview'; };
+/** مرحلة الخريطة التي يُفتح عليها تبويب «المتابعة» من رابطه، أو '' */
+export const followStage = (qs = '') => { const p = new URLSearchParams(String(qs)); return p.get('view') === 'follow' ? p.get('stage') || '' : ''; };
+/** ما يُكتب في العنوان لتبويب: لا شيء للملف، والمرحلة مع «المتابعة» وحدها */
+export const tabQuery = (k, stage = '') => (k === 'overview' ? '' : `view=${k}${k === 'follow' && stage ? `&stage=${encodeURIComponent(stage)}` : ''}`);
 
 // من أين جاء موعد المعلم (مصدر milestoneDueInfo)، بكلمات المدير
 export const DUE_SOURCE_AR = Object.freeze({

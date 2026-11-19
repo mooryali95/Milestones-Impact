@@ -33,7 +33,7 @@ export function laneAr(s, stages, lanes) {
 }
 const peopleAr = (n) => (n === 0 ? 'لا أحد' : n === 1 ? 'شخص واحد' : n === 2 ? 'شخصان' : n <= 10 ? `${n} أشخاص` : `${n} شخصًا`);
 
-function StagePanel({ stage, total, onClose, late }) {
+function StagePanel({ stage, total, onClose, late, onPeople }) {
   const ahead = Math.max(0, total - stage.done - stage.here);
   return (
     <div className="jm-panel" id={`jm-panel-${stage.key}`} role="region" aria-label={`تفاصيل مرحلة ${stage.title}`}>
@@ -54,6 +54,9 @@ function StagePanel({ stage, total, onClose, late }) {
         <div><dt>لم يصلوها</dt><dd>{ahead}</dd></div>
         <div className={stage.late ? 'is-late' : ''}><dt>{late.one}</dt><dd>{stage.late}</dd></div>
       </dl>
+      {onPeople && stage.here > 0 && (
+        <p className="jm-follow"><button type="button" className="link small" onClick={() => onPeople(stage.key)}>اعرضهم في «المتابعة» ({stage.here})</button></p>
+      )}
       {stage.people ? (
         stage.people.length ? (
           <table className="jm-people">
@@ -80,7 +83,8 @@ function StagePanel({ stage, total, onClose, late }) {
 }
 
 // embedded: داخل صفحة لها عنوانها (ملف الدفعة)، فلا يكرر الرأس اسم الدفعة ولا «خريطة الرحلة» عنوانًا ثانيًا
-export default function JourneyMap({ map, embedded = false }) {
+// onPeople(مفتاح المرحلة): ملف الدفعة في لوحة الإدارة وحده يمرره، فيظهر في تفاصيل المرحلة زر يفتح أهلها صفوفًا في «المتابعة»
+export default function JourneyMap({ map, embedded = false, onPeople = null }) {
   const [open, setOpen] = useState(null);
   // الخدمة (T2، ب5.2) لمن يريد: ليست محطة على المسار، فتُعرض تحته بمؤشر استخدامها («استفاد 7 من 20») لا بحالة
   const all = map?.stages || [];
@@ -182,7 +186,7 @@ export default function JourneyMap({ map, embedded = false }) {
         <span><i className="d" /> تجاوزوا المرحلة</span><span><i className="h" /> هنا الآن</span><span><i className="a" /> لم يصلوها</span>
       </p>
 
-      {openStage && <StagePanel stage={openStage} total={total} late={late} onClose={() => setOpen(null)} />}
+      {openStage && <StagePanel stage={openStage} total={total} late={late} onClose={() => setOpen(null)} onPeople={onPeople} />}
 
       {services.length > 0 && (
         <section className="jm-svc" aria-labelledby="jm-svc-h" data-testid="jm-services">

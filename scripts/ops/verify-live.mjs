@@ -80,6 +80,18 @@ export async function checkFiles(site, names, { fetchImpl = fetch, state = {}, p
   return problems.sort();
 }
 
+/** فحص الملفات مع مهلة للتوزيع: بعد الترقية يظهر version.json على الحافة قبل بعض الملفات بلحظات (حدث في 2026-11-19: خمسة ملفات 404
+ *  ثم نجحت كلها بعد دقائق). فما فشل يُعاد طلبه وحده حتى `rounds` جولات بينها `everyMs`، وما بقي فاشلًا بعدها مشكلة حقيقية. */
+export async function checkFilesSettled(site, names, { fetchImpl = fetch, state = {}, parallel = 6, rounds = 5, everyMs = 30_000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = () => {} } = {}) {
+  let problems = await checkFiles(site, names, { fetchImpl, state, parallel });
+  for (let i = 1; problems.length && i < rounds; i++) {
+    log(`${problems.length} ملف لم يصل بعد، يُعاد طلبه بعد ${everyMs / 1000} ثانية (جولة ${i + 1} من ${rounds})`);
+    await sleep(everyMs);
+    problems = await checkFiles(site, problems.map((p) => p.slice(0, p.indexOf(': '))), { fetchImpl, state, parallel });
+  }
+  return problems;
+}
+
 /** ملف غائب: 404 لا صفحة التطبيق برمز 200. يعيد نص تحذير أو null */
 export async function missingIs404(site, { fetchImpl = fetch, state = {}, rand = () => Math.random().toString(36).slice(2, 10) } = {}) {
   try {
@@ -122,7 +134,7 @@ async function main() {
     }
     if (state.useFallback) console.log(`::warning::${key}: ${site.origin} حُجب بـ403 من Cloudflare لعنوان المشغّل (ليس تعطلًا)؛ فُحص النشر على ${w.base}`);
     const names = assetsOf(tree, site.out);
-    const problems = await checkFiles(site, names, { state });
+    const problems = await checkFilesSettled(site, names, { state, log: (m) => console.log(`${key}: ${m}`) });
     for (const p of problems) console.log(`::error::${key}: ${p}`);
     if (problems.length) failed = true;
     else console.log(`${key}: الإصدار ${expected} منشور، و${names.length} ملف JS وCSS (منها ملفات الإصدارات السابقة) تُخدم بنوعها من ${w.base}`);

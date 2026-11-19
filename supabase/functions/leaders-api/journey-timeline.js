@@ -49,8 +49,8 @@ const approxAr = (d) => (d % 30 === 0 || d % 7 === 0 || d < 14 ? durationAr(d) |
   : d >= 56 ? `نحو ${countAr(Math.round(d / 30), 'شهر', 'شهرين', 'أشهر', 'شهرًا')}` : aboutWeeksAr(Math.round(d / 7)));
 const andAr = (list) => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join('، ')} و${list.at(-1)}`);
 
-// من يكمل النشاط: من مصدر إكماله
-function ownerOf(r) {
+// من يكمل النشاط: من مصدر إكماله. يقرؤه «على من الدور» في journey-map.js أيضًا، فلا يُعرَّف صاحب النشاط مرتين
+export function ownerOf(r) {
   if (completionSource(r) === 'auto') return 'system';
   if (r.kind === 'workshop') return 'admin';
   if (r.kind === 'coaching') return 'coach';

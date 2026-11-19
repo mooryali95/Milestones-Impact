@@ -919,7 +919,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
           : <>
             {!jm.totals?.total && <p className="la-muted">لا أعضاء في الرحلة بعد، فالأعداد كلها صفر.</p>}
             {jm.cohort?.starts_on && !jm.cohort?.is_default && <p className="la-muted small">«متأخر» هنا من تجاوز اليوم موعد نهاية مرحلته على جدول الدفعة بعد مهلة ثلاثة أيام، أيًا كان يوم دخوله إليها.</p>}
-            <JourneyMap map={jm} embedded />
+            <JourneyMap map={jm} embedded onPeople={on.follow} />
           </>}
       </section>
     </div>
