@@ -163,6 +163,8 @@
 .la-form input, .la-form textarea, .la-form select { border: 1px solid var(--line-strong); border-radius: 5px; padding: 8px 10px; font-size: .9rem; font-weight: 400; color: var(--ink); width: 100%; }
 .la-form label.la-check { display: flex; align-items: center; gap: 8px; }
 .la-form label.la-check input { width: auto; }
+/* سبب التسجيل اليدوي فوق قائمة الحضور: عنوانه ثم خانته */
+.att-why { display: grid; gap: 6px; }
 .la-opts { display: grid; gap: 6px; font-size: .82rem; font-weight: 600; }
 .la-opt { display: grid; grid-template-columns: 1fr 80px auto; gap: 6px; }
 .la-opt input { border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px 8px; font-weight: 400; }

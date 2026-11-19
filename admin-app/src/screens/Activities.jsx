@@ -66,14 +66,27 @@ export function QrScreen({ id, onClose }) {
 
 // ── قائمة الحضور للتسجيل اليدوي ──
 // cohortId (من بطاقة مرحلة الدفعة): الجلسة العامة تُقرأ بأعضاء تلك الدفعة وحدهم، فتطابق أعداد البطاقة
+// سبب التسجيل اليدوي (تصور تشغيل الدفعة 2026-11-19): اختياري ويُحفظ مع كل تسجيل في السجل. وإلغاء حضور سجّله المشارك
+// بنفسه يطلب سببًا مكتوبًا (الخادم يرفضه بلا سبب)، وإلغاء اليدوي بنقرة
+export const MARK_REASONS = ['تعطل الرمز', 'بلا هاتف', 'سُجل لاحقًا'];
+export const selfMarked = (attendance) => !!attendance && attendance.method !== 'manual';
 export function Attendance({ id, cohortId = null, canWrite, onClose }) {
-  const { toast } = useUI();
+  const { toast, prompt } = useUI();
   const [d, setD] = useState(null);
+  const [why, setWhy] = useState('');
+  const [other, setOther] = useState('');
   const load = useCallback(async () => setD(await L('admin.workshop-attendance', cohortId ? { id, cohort_id: cohortId } : { id })), [id, cohortId]);
   useEffect(() => { load(); }, [load]);
   useEscape(onClose);
-  const mark = async (pid, present) => {
-    const r = await L('admin.workshop-mark', { session_id: id, participant_id: pid, present });
+  const mark = async (p, present) => {
+    let reason = present ? (why === 'other' ? other.trim() : why) : '';
+    if (!present && selfMarked(p.attendance)) {
+      const typed = await prompt(`سجّل ${p.full_name} حضوره بنفسه (${ATTEND_METHOD_AR[p.attendance.method] || p.attendance.method}). اكتب سبب الإلغاء، ويُحفظ في السجل.`, '', { danger: true, ok: 'إلغاء الحضور' });
+      if (typed === null) return;
+      reason = typed.trim();
+      if (!reason) { toast('السبب مطلوب لإلغاء حضور سجّله المشارك بنفسه'); return; }
+    }
+    const r = await L('admin.workshop-mark', { session_id: id, participant_id: p.id, present, ...(reason ? { reason } : {}) });
     if (!r.success) toast(r.message);
     load();
   };
@@ -84,16 +97,28 @@ export function Attendance({ id, cohortId = null, canWrite, onClose }) {
           <h3>{d.session.title_ar} · {d.people.filter((p) => p.attendance).length} من {d.people.length}</h3>
           <p className="la-muted">{reqTitle(d.requirement)} · {sessionWhen(d.session)}</p>
           {cohortId && !d.session.cohort_id && <p className="la-muted">جلسة عامة لكل الدفعات، والقائمة هنا لأعضاء هذه الدفعة وحدهم.</p>}
+          {canWrite && (
+            <div className="att-why">
+              <small className="la-muted">سبب التسجيل اليدوي (اختياري، يُحفظ في السجل)</small>
+              <select className="filter-select" aria-label="سبب التسجيل اليدوي" value={why} onChange={(e) => setWhy(e.target.value)}>
+                <option value="">بلا سبب</option>
+                {MARK_REASONS.map((x) => <option key={x} value={x}>{x}</option>)}
+                <option value="other">سبب آخر</option>
+              </select>
+              {why === 'other' && <input className="search-input" aria-label="اكتب السبب" placeholder="اكتب السبب" maxLength={300} value={other} onChange={(e) => setOther(e.target.value)} />}
+            </div>
+          )}
           <table className="la-table">
             <thead><tr><th>المشارك</th><th>الجهة</th><th>الحضور</th><th /></tr></thead>
             <tbody>{d.people.map((p) => (
               <tr key={p.id}>
                 <td>{p.full_name}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                 <td>{p.organization_name || ''}</td>
-                <td>{p.attendance ? <span className="la-chip ok">{ATTEND_METHOD_AR[p.attendance.method] || ATTEND_METHOD_AR.manual} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}</td>
+                <td>{p.attendance ? <span className="la-chip ok">{ATTEND_METHOD_AR[p.attendance.method] || ATTEND_METHOD_AR.manual} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}
+                  {p.attendance?.method === 'manual' && p.attendance.recorded_by && <><br /><small className="la-muted" dir="auto">سجّله {p.attendance.recorded_by}</small></>}</td>
                 <td>{canWrite && (p.attendance
-                  ? <button className="la-link" onClick={() => mark(p.id, false)}>إلغاء</button>
-                  : <button className="btn-sm ghost" onClick={() => mark(p.id, true)}>تسجيل حضور</button>)}</td>
+                  ? <button className="la-link" onClick={() => mark(p, false)}>إلغاء</button>
+                  : <button className="btn-sm ghost" onClick={() => mark(p, true)}>تسجيل حضور</button>)}</td>
               </tr>
             ))}</tbody>
           </table>

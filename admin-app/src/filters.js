@@ -5,6 +5,8 @@
 // يعرضها بالشكل نفسه. الحالة كائن بسيط { مفتاح: قيمة } يُحفظ في عنوان الصفحة
 // (يُشارك ويعود مع زر الرجوع) وتُحفظ منه عروض باسم في المتصفح.
 
+import { digitQuery, searchMatcher } from '../../supabase/functions/leaders-api/search-text.js';
+
 const DAY = 864e5;
 
 // فترات زمنية مشتركة لحقول التاريخ
@@ -31,13 +33,15 @@ export function matchField(item, field, value, now) {
   return String(v ?? '') === String(value);
 }
 
-// العنصر يمر إن طابق كل حقل مفعّل، والعرض السريع المختار، ونص البحث
-export function applyFilters(list, { fields = [], presets = [], text = (x) => '' }, state, now = Date.now()) {
+// العنصر يمر إن طابق كل حقل مفعّل، والعرض السريع المختار، ونص البحث.
+// البحث بتوحيد الحروف العربية («اسامه» تجد «أسامة») كالبحث الشامل، وphone(x) إن عرّفته الشاشة يُطابق الجوال بأي صيغة
+// (05 و5 و9665 و+9665 بمسافات أو شرطات أو أرقام عربية) من search-text.js، المصدر نفسه لبحث الخادم
+export function applyFilters(list, { fields = [], presets = [], text = (x) => '', phone = null }, state, now = Date.now()) {
   const preset = presets.find((p) => p.key === state.view);
-  const q = String(state.q || '').trim().toLowerCase();
+  const hit = searchMatcher(state.q);
   return list.filter((x) => (!preset || preset.test(x, now))
     && fields.every((f) => matchField(x, f, state[f.key], now))
-    && (!q || text(x).toLowerCase().includes(q)));
+    && hit(text(x), phone ? phone(x) : null));
 }
 
 // عدد العناصر في كل عرض سريع: يظهر على الرقاقة قبل الضغط
@@ -74,13 +78,20 @@ export function sortRows(list, cols, sort) {
   }).map((r) => r[0]);
 }
 
+// ── الخصوصية: نص بحث يشبه رقمًا (جوال) يبقى في الخانة وحدها ──
+// لا يُكتب في عنوان الصفحة (فلا يبقى في سجل المتصفح ولا يُنسخ مع الرابط)، ولا يُحفظ للزيارة التالية، ولا في عرض محفوظ باسم
+export const shareable = (state) => (state && digitQuery(state.q) ? { ...state, q: '' } : state);
+
+// رقم بمسافات أو شرطات يُقرأ من اليسار كما يُكتب (في خانة عربية تنقلب مجموعاته)، ويبقى في جهة الخانة نفسها
+export const ltrDigits = (q) => (digitQuery(q) ? { dir: 'ltr', style: { textAlign: 'right' } } : {});
+
 // ── بقاء الفلاتر عند العودة للشاشة (في هذه الجلسة من المتصفح) ──
 const keptKey = (scope) => `mi_admin_flt_${scope}`;
 export function recallState(scope) {
   try { return JSON.parse(sessionStorage.getItem(keptKey(scope))); } catch { return null; }
 }
 export function rememberState(scope, state) {
-  try { sessionStorage.setItem(keptKey(scope), JSON.stringify(state)); } catch { /* التخزين محجوب: تبقى للشاشة المفتوحة فقط */ }
+  try { sessionStorage.setItem(keptKey(scope), JSON.stringify(shareable(state))); } catch { /* التخزين محجوب: تبقى للشاشة المفتوحة فقط */ }
 }
 // ما تبدأ به الشاشة، بالأولوية: العنوان (رابط مشارَك)، ثم ما جاء به التنقل (initial)، ثم ما تُرك آخر مرة، ثم الافتراضي
 export function startState(keys, { fromUrl = '', initial = {}, kept = null, defaults = {} } = {}) {
@@ -96,7 +107,7 @@ export function startState(keys, { fromUrl = '', initial = {}, kept = null, defa
 // ── الحفظ في عنوان الصفحة: #/leaders/participants?status=placed&view=idle ──
 export function encodeState(state) {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(state)) if (v !== '' && v != null) p.set(k, v);
+  for (const [k, v] of Object.entries(shareable(state))) if (v !== '' && v != null) p.set(k, v);
   return p.toString();
 }
 export function decodeState(qs, keys) {
@@ -110,7 +121,7 @@ export function loadViews(scope) {
   try { return JSON.parse(localStorage.getItem(savedKey(scope))) || []; } catch { return []; }
 }
 export function saveView(scope, name, state) {
-  const list = loadViews(scope).filter((v) => v.name !== name).concat([{ name, state }]).slice(-12);
+  const list = loadViews(scope).filter((v) => v.name !== name).concat([{ name, state: shareable(state) }]).slice(-12);
   try { localStorage.setItem(savedKey(scope), JSON.stringify(list)); } catch { /* التخزين محجوب: يبقى العرض للجلسة */ }
   return list;
 }

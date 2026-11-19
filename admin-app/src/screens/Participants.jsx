@@ -15,6 +15,7 @@ import { enrollCohort } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
+import { phoneMatches } from '../../../supabase/functions/leaders-api/search-text.js';
 import { Submission } from './Handbook.jsx';
 import { ActivitySummary } from './Activities.jsx';
 import { ExpertAssign } from './ExpertMatch.jsx';
@@ -30,7 +31,7 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 // حد الإجراء الجماعي (يطابق BULK_MAX في admin.ts، والخادم هو الحكم)
 const BULK_MAX = 50;
 import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
-import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, startTab } from './PersonShell.jsx';
+import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
@@ -54,7 +55,7 @@ const PRESETS = [
   { key: 'rushed', label: 'أجابوا باستعجال', test: (p) => p.effort?.level === 'low' },
   { key: 'retake', label: 'طُلبت منهم الإعادة', test: (p) => !!p.retake },
   { key: 'tentative', label: 'مستوى مبدئي', test: (p) => (p.placements || []).some((x) => !x.approved_at) },
-  { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!p.last_login_at || now - Date.parse(p.last_login_at) > 14 * DAY) },
+  { key: 'idle', label: 'متوقف 14 يومًا', test: (p, now) => ACTIVE.includes(p.status) && (!seenAt(p) || now - Date.parse(seenAt(p)) > 14 * DAY) },
   { key: 'new', label: 'جدد هذا الأسبوع', test: (p, now) => now - Date.parse(p.created_at) <= 7 * DAY },
   { key: 'orphan', label: 'بلا جهة', test: (p) => !p.organization_id },
   { key: 'out', label: 'موقوف أو منسحب', test: (p) => p.status === 'suspended' || p.status === 'withdrawn' },
@@ -131,9 +132,10 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     // دفعة المشارك من الخادم بقاعدة pickCohort نفسها التي تحكم رحلته
     { key: 'cohort', label: 'الدفعات', get: (p) => p.cohort_id || 'none', options: [...listCohorts.map((c) => [c.id, c.name]), ['none', 'بلا دفعة']] },
     { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (p) => p.created_at },
-    { key: 'seen', label: 'آخر دخول', all: 'أي آخر دخول', type: 'period', get: (p) => p.last_login_at },
+    { key: 'seen', label: 'آخر نشاط', all: 'أي آخر نشاط', type: 'period', get: seenAt },
   ], [orgs, tracks, listCohorts]);
-  const spec = { fields, presets: PRESETS, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, trackOfPlacements(p.placements)].join(' ') };
+  // phone: الجوال يُطابَق بأي صيغة يُكتب بها (filters.js)، وهو في النص أيضًا كما كان
+  const spec = { fields, presets: PRESETS, phone: (p) => p.phone, text: (p) => [p.full_name, p.email, p.phone, p.job_title, orgOf(p)?.name || p.organization_name, trackOfPlacements(p.placements)].join(' ') };
   const SORTS = useMemo(() => ({
     name: (p) => p.full_name, org: (p) => orgOf(p)?.name || p.organization_name, track: (p) => trackOfPlacements(p.placements),
     status: (p) => STATUS[p.status] || p.status, step: (p) => ONBOARDING_STEPS.indexOf(p.onboarding?.step), joined: (p) => p.created_at,
@@ -219,7 +221,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     { key: 'step', label: 'أين توقف', width: 18, get: (p) => p.onboarding?.label }, { key: 'remaining', label: 'المتبقي', width: 40, get: (p) => p.onboarding?.remaining },
     { key: 'effort', label: 'جدية الإجابة', width: 16, get: (p) => EFFORT_AR[p.effort?.level] },
     { key: 'retake', label: 'طلب الإعادة', width: 16, get: (p) => (p.retake ? date(p.retake.requested_at) : '') },
-    { key: 'joined', label: 'التسجيل', width: 16, get: (p) => date(p.created_at) }, { key: 'seen', label: 'آخر دخول', width: 16, get: (p) => date(p.last_login_at) },
+    { key: 'joined', label: 'التسجيل', width: 16, get: (p) => date(p.created_at) }, { key: 'seen', label: 'آخر نشاط', width: 16, get: (p) => date(seenAt(p)) }, { key: 'login', label: 'آخر دخول', width: 16, get: (p) => date(p.last_login_at) },
   ];
 
   return (
@@ -282,7 +284,9 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   return (
                     <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
-                      <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
+                      <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small>
+                        {/* وُجد برقمه: الرقم ظاهر تحت البريد، فيُعرف لماذا ظهر الصف */}
+                        {phoneMatches(f.q, p.phone) && <><br /><small className="la-muted pt-phone" dir="ltr">{p.phone}</small></>}</td>
                       <td data-label="الجهة">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
                       <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
@@ -539,7 +543,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
                   <b>أين توقف:</b> {r.onboarding.label}. {r.onboarding.remaining}.
                   {r.onboarding.started_at && <> بدأ القياس {date(r.onboarding.started_at)}.</>}
                   {r.onboarding.last_answer_at && <> آخر إجابة {date(r.onboarding.last_answer_at)}.</>}
-                  {!p.last_login_at ? ' لم يدخل بعد التسجيل.' : <> آخر دخول {date(p.last_login_at)}.</>}
+                  {!seenAt(p) ? ' لم يدخل بعد التسجيل.' : <> آخر نشاط {date(seenAt(p))}.</>}
                 </p>
               )}
               {r.needs?.length > 0 && <p className="la-muted">المطلوب الآن: {r.needs.map((n) => n.text).join(' · ')}</p>}
@@ -637,7 +641,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
                 <dt>السيرة</dt><dd>{!p.cv_path ? 'لم تُرفع' : canWrite
                   ? <button className="la-link" onClick={() => evidence(p.cv_path)}>فتح (رابط مؤقت، يُسجَّل الفتح)</button>
                   : <span className="la-muted">مرفوعة · فتحها للمدير</span>}</dd>
-                <dt>آخر دخول</dt><dd>{date(p.last_login_at)}</dd>
+                <dt>آخر نشاط</dt><dd>{seenAt(p) ? date(seenAt(p)) : 'لم يدخل'}</dd>
+                <dt>آخر دخول</dt><dd>{p.last_login_at ? date(p.last_login_at) : 'لم يدخل'}</dd>
                 <dt>الدفعة</dt><dd>
                   {r.program?.cohort?.id ? <a href={`#/leaders/programs/${encodeURIComponent(r.program.cohort.id)}`}>{r.program.cohort.is_default ? 'الدفعة المفتوحة' : r.program.cohort.name}</a> : 'بلا دفعة'}
                   {VIA_COHORT[r.program?.via] && <small className="la-muted"> ({VIA_COHORT[r.program.via]})</small>}{r.team_ar ? ` · ${r.team_ar}` : ''}{r.program?.cohort?.content_release ? ` · إصدار المحتوى ${r.program.cohort.content_release}` : ''}

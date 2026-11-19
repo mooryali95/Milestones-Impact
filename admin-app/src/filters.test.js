@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeChips, applyFilters, decodeState, encodeState, inPeriod, isFiltered, nextSort, presetCounts, sortRows, startState } from './filters.js';
+import { activeChips, applyFilters, decodeState, encodeState, inPeriod, isFiltered, loadViews, nextSort, presetCounts, recallState, rememberState, saveView, shareable, sortRows, startState } from './filters.js';
 
 const NOW = Date.parse('2026-10-30T12:00:00Z');
 const day = (n) => new Date(NOW - n * 864e5).toISOString();
@@ -90,5 +90,59 @@ describe('ما تبدأ به الشاشة', () => {
   });
   it('مفتاح محفوظ لم يعد من مفاتيح الشاشة يُهمل', () => {
     expect(startState(keys, { kept: { old: '1', q: 'a' } })).toEqual({ q: 'a', status: '', sort: '' });
+  });
+});
+
+// تصور تشغيل الدفعة 2026-11-19، المرحلة 0: البحث بالجوال بأي صيغة، وتوحيد الحروف، ونص يشبه رقمًا لا يُكتب في العنوان ولا يُحفظ
+describe('بحث القائمة: الجوال والحروف العربية', () => {
+  const list = [
+    { id: 1, name: 'أسامة الأحمد', phone: '+966551234567' },
+    { id: 2, name: 'منى العلي', phone: '+966509876543' },
+    { id: 3, name: 'هدى', phone: null },
+  ];
+  const s = { text: (p) => [p.name, p.phone].join(' '), phone: (p) => p.phone };
+  const hit = (q, sp = s) => applyFilters(list, sp, { q }, NOW).map((p) => p.id);
+
+  it('05 و5 و9665 و+9665 بمسافات وشرطات وأرقام عربية تجد صاحب الرقم وحده', () => {
+    for (const q of ['0551234567', '551234567', '966551234567', '+966551234567', '055 123 4567', '055-123-4567', '٠٥٥١٢٣٤٥٦٧', '+966 55 123 4567']) expect(hit(q), q).toEqual([1]);
+    expect(hit('05')).toEqual([]);          // أقل من ثلاثة أرقام: نص عادي لا يطابق شيئًا
+    expect(hit('0509')).toEqual([2]);
+  });
+  it('شاشة لم تعرّف phone لا تبحث في الجوال بالصيغ الأخرى', () => {
+    expect(hit('0551234567', { text: (p) => p.name })).toEqual([]);
+  });
+  it('«اسامه» تجد «أسامة»، و«مني» تجد «منى»، و«هدي» تجد «هدى»', () => {
+    expect(hit('اسامه')).toEqual([1]);
+    expect(hit('الاحمد')).toEqual([1]);
+    expect(hit('مني')).toEqual([2]);
+    expect(hit('هدي')).toEqual([3]);
+    expect(hit('أُسَامَة')).toEqual([1]);
+  });
+});
+
+describe('نص بحث يشبه رقمًا لا يغادر الخانة', () => {
+  const KEYS = ['q', 'status'];
+  it('لا يُكتب في عنوان الصفحة، وبقية الفلاتر تُكتب', () => {
+    for (const q of ['0551234567', '055 123 4567', '+966551234567', '٠٥٥١٢٣٤٥٦٧', '5512', 'سارة 0551234567']) {
+      const qs = encodeState({ q, status: 'placed' });
+      expect(qs, q).toBe('status=placed');
+      expect(decodeURIComponent(qs)).not.toMatch(/\d{3}/);
+    }
+    expect(encodeState({ q: 'سارة', status: '' })).toBe(`q=${encodeURIComponent('سارة')}`);
+    expect(shareable({ q: '0551234567', status: 'placed' })).toEqual({ q: '', status: 'placed' });
+    expect(shareable({ q: 'سارة' })).toEqual({ q: 'سارة' });
+  });
+  it('لا يُحفظ للزيارة التالية ولا في عرض محفوظ باسم', () => {
+    sessionStorage.clear(); localStorage.clear();
+    rememberState('t', { q: '0551234567', status: 'placed' });
+    expect(recallState('t')).toEqual({ q: '', status: 'placed' });
+    expect(sessionStorage.getItem('mi_admin_flt_t')).not.toContain('055');
+    saveView('t', 'عرض', { q: '+966 55 123 4567', status: 'placed' });
+    expect(loadViews('t')).toEqual([{ name: 'عرض', state: { q: '', status: 'placed' } }]);
+    expect(localStorage.getItem('mi_admin_views_t')).not.toMatch(/\d{3}/);
+    // والنص العادي يُحفظ كما كان
+    rememberState('t', { q: 'سارة', status: '' });
+    expect(recallState('t').q).toBe('سارة');
+    expect(startState(KEYS, { kept: recallState('t') }).q).toBe('سارة');
   });
 });
