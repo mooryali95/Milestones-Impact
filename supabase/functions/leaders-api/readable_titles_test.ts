@@ -1,7 +1,7 @@
 // أسماء مقروءة في ملف المشارك وطابور المراجعة (P8): عنوان المتطلب يحمل رموز إعداد النشاط فيُحوَّل بإعداد برنامجه،
 // وكل برنامج بإعداده هو، وما لا رمز فيه لا يمس القاعدة.
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 
 const A = await import('./admin.ts');
