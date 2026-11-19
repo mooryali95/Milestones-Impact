@@ -307,3 +307,50 @@ test('المحور الزمني: شريط لكل مرحلة بتواريخها،
   await to(panel, 'التدريب').fill('2026-11-21');
   await expect(axis.getByRole('button', { name: /^التدريب، 18 نوفمبر إلى 21 نوفمبر/ })).toBeVisible();
 });
+
+for (const width of [1440, 768]) {
+  test(`سطر «تسير معًا» ${width}: كل سطوره داخل خانته لثلاث ولاثنتين، وخط اليوم خلف النص لا فوقه`, async ({ page }) => {
+    await setup(page, width);
+    const panel = await openJourney(page);
+    const tl = panel.getByRole('region', { name: 'الخط الزمني للدفعة' });
+    await expect(tl.locator('.jt-slot.together')).toHaveCount(2);
+    const m = await tl.locator('.jt-track').evaluate((track) => {
+      const b = (r) => ({ l: r.left, r: r.right, t: r.top, b: r.bottom });
+      // لون معتم: لا شفافية في القيمة المحسوبة
+      const opaque = (el) => { const c = getComputedStyle(el).backgroundColor; return !/\/|rgba\(.*,\s*0?\.\d+\)|transparent/.test(c); };
+      const z = (el) => { const v = Number(getComputedStyle(el).zIndex); return Number.isFinite(v) ? v : 0; };
+      const today = track.querySelector('.jt-today');
+      return {
+        slots: [...track.querySelectorAll('.jt-slot.together')].map((slot) => {
+          const p = slot.querySelector('.jt-together');
+          const range = document.createRange();
+          range.selectNodeContents(p);
+          return { n: slot.querySelectorAll('.jt-stage').length, slot: b(slot.getBoundingClientRect()), p: b(p.getBoundingClientRect()), lines: [...range.getClientRects()].map(b),
+            clipped: p.scrollWidth > p.clientWidth + 1, opaque: opaque(slot) };
+        }),
+        today: today ? { box: b(today.getBoundingClientRect()), z: z(today) } : null,
+        slotsZ: z(track.querySelector('.jt-slots')), phasesZ: z(track.querySelector('.jt-phases')),
+        phases: [...track.querySelectorAll('.jt-phase')].map((el) => ({ box: b(el.getBoundingClientRect()), opaque: opaque(el) })),
+      };
+    });
+    expect(m.slots.map((x) => x.n).sort()).toEqual([2, 3]);
+    for (const x of m.slots) {
+      expect(x.clipped).toBe(false);
+      for (const r of [x.p, ...x.lines]) {
+        expect(r.l, `يسار سطر في خانة ${x.n}`).toBeGreaterThanOrEqual(x.slot.l - 0.5);
+        expect(r.r, `يمين سطر في خانة ${x.n}`).toBeLessThanOrEqual(x.slot.r + 0.5);
+        expect(r.t).toBeGreaterThanOrEqual(x.slot.t - 0.5);
+        expect(r.b).toBeLessThanOrEqual(x.slot.b + 0.5);
+      }
+      // خانة «تسير معًا» معتمة وفوق خط اليوم، فلا يمر في سطرها
+      expect(x.opaque).toBe(true);
+    }
+    // اليوم (19 نوفمبر) يقع في خانة الثلاث وتحت شريط المحاور: الخط خلفهما
+    expect(m.today).not.toBeNull();
+    const hit = m.slots.find((x) => m.today.box.l >= x.slot.l && m.today.box.r <= x.slot.r);
+    expect(hit?.n).toBe(3);
+    expect(m.slotsZ).toBeGreaterThan(m.today.z);
+    expect(m.phasesZ).toBeGreaterThan(m.today.z);
+    for (const ph of m.phases) expect(ph.opaque).toBe(true);
+  });
+}

@@ -291,3 +291,11 @@ div.ja-bar:hover .ja-label b { text-decoration: none; }
 .ja-legend .ja-ln-end { display: inline-block; width: 0; height: 14px; border-inline-start: 2px dashed var(--jt-ink); opacity: .6; }
 .ja-legend .ja-dot-key { display: inline-block; width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--jt-ink); }
 @media print { .ja-scroll { overflow: visible; } }
+
+/* خط اليوم خلف النص دائمًا: شريط المحاور وخانة «تسير معًا» بخلفية معتمة فوق الخط (كان يمر في اسم المحور وفي سطر «تسير معًا»
+   لأن خلفيتهما شفافة). يبقى ظاهرًا بشارته أعلى المسار، وبين الشريط والخانات، وفي صفي المسارات والمواعيد */
+.jt-phases { z-index: 1; }
+.jt-phase { background: color-mix(in srgb, var(--jt-ph) 14%, var(--jt-surface)); }
+.jt-slot.together { background: color-mix(in srgb, var(--jt-gold) 7%, var(--jt-surface)); }
+/* وسطر «تسير معًا» داخل خانته: لا يتسع عنها، وينكسر بالكلمة */
+.jt-together { max-width: 100%; min-width: 0; }
