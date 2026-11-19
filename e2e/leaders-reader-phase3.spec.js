@@ -50,7 +50,8 @@ test('«تابع القراءة» في الباب الأول: تظهر بعد ف
   await expect.poll(() => sec.evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBeLessThan(200);
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('mi-master-book:'))))?.pos))
     .toEqual({ id: id('a1'), section: 'الأسئلة الأربعة' });
-  await page.reload();
+  // فتح البوابة من جديد بلا رابط الباب (الرابط نفسه يعيد الباب مباشرة، leaders-reader-link.spec.js)
+  await page.goto(PORTAL);
   // الباب الأول ترتيبه 0، وكانت العلة أن 0 لا يُعد موضعًا
   await expect(page.getByRole('button', { name: 'تابع القراءة' })).toBeVisible();
   await expect(page.locator('.mb-last')).toContainText('تمهيد المعالم · الأسئلة الأربعة');
@@ -85,7 +86,7 @@ test('«Aa»: الخط والحجم والمسافات والوضع تُطبَّ
   await dlg.getByRole('radiogroup', { name: 'الخط' }).getByRole('radio', { name: 'كوفي' }).click();
   await expect.poll(() => p.evaluate((el) => getComputedStyle(el).fontFamily)).toContain('Noto Kufi Arabic');
   await dlg.getByRole('button', { name: 'إغلاق' }).click();
-  await page.reload();
+  await page.goto(PORTAL);
   await page.getByRole('button', { name: 'تابع القراءة' }).click();
   await expect.poll(() => p.evaluate((el) => getComputedStyle(el).fontSize)).toBe('20px');
   await expect(page.locator('.mb-reader')).toHaveClass(/theme-night/);

@@ -169,3 +169,34 @@ export function inHScroll(el, stop) {
   }
   return false;
 }
+
+// ── رابط لكل باب (المرحلة 3، آخر بنودها) ──
+// مرجع ثابت بالجزء ومفتاح الباب لا بالمعرف ولا بالترتيب، فيبقى الرابط صالحًا بعد إعادة ترتيب الأبواب أو تحديث نصها.
+// والمسودة بلا مفتاح باب فمرجعها معرّفها. الرابط لا يمنح وصولًا: يُبحث عنه في الأبواب التي أعادها الخادم لهذا القارئ وحدها،
+// فباب خارج ما يُتاح له (مسودة لغير لجنتها مثلًا) لا يُفتح، ويقول الرف ذلك
+export const BOOK_LINK_PARAM = 'ch';
+export const chapterRef = (c) => (!c ? '' : c.chapter_key && !c.draft ? `${c.dimension}.${c.chapter_key}` : String(c.id || ''));
+export function refIndex(chapters, ref) {
+  const r = String(ref || '').trim();
+  if (!r) return -1;
+  return (chapters || []).findIndex((c) => chapterRef(c) === r);
+}
+// الرابط في الـhash لأن اللوحة وبوابة الخبير تُخدمان من مجلد ثابت: ‎#/leaders/book?ch=…‎ في اللوحة، و‎#ch=…‎ في البوابة
+function splitHash(hash) {
+  const h = String(hash || '').replace(/^#/, '');
+  const i = h.indexOf('?');
+  if (i >= 0) return [h.slice(0, i), h.slice(i + 1)];
+  return h.startsWith('/') || !h.includes('=') ? [h, ''] : ['', h];
+}
+export function hashRef(hash) {
+  const [, q] = splitHash(hash);
+  return new URLSearchParams(q).get(BOOK_LINK_PARAM) || null;
+}
+export function hashWithRef(hash, ref) {
+  const [base, q] = splitHash(hash);
+  const p = new URLSearchParams(q);
+  if (ref) p.set(BOOK_LINK_PARAM, ref); else p.delete(BOOK_LINK_PARAM);
+  const qs = p.toString();
+  if (!qs) return base ? `#${base}` : '';
+  return base ? `#${base}?${qs}` : `#${qs}`;
+}

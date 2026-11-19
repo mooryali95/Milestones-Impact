@@ -1572,6 +1572,11 @@ body:has(.tour) main{padding-bottom:260px}
 .xf-needs { padding: 12px 14px; border-radius: 10px; background: var(--brand-cream-pale); border: 1px solid var(--line); }
 .xf-needs ul { margin: 6px 0 0; padding-inline-start: 18px; font-size: 14px; }
 .xf-journey li { grid-template-columns: 1fr auto; display: grid; }
+/* التوازي 2 عند الخبير: المراحل التي تسير معًا كتلة واحدة، والمسار المستمر والخدمات بعدها */
+.xf-journey li.xf-together { display: block; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); border-inline-start: 3px solid var(--accent); background: var(--brand-cream-pale); }
+.xf-together > .ca-list { margin: 4px 0 0; }
+.xf-lane { display: block; font-size: 13px; font-weight: 700; color: var(--gold-text); }
+.xf-side { margin-top: 8px; }
 .xf-adj { margin-top: 4px; }
 .xf-adj .input { max-width: 180px; }
 .xf-peer { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }

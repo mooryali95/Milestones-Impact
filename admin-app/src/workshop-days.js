@@ -7,6 +7,7 @@
 import { countAr, SESSION_MODE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { isUndated, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { timeOnly, weekTime } from './dates.js';
+import { outsideSessions } from '../../supabase/functions/leaders-api/journey-timeline.js';
 
 // طريقة توثيق الحضور بكلمات المدير: مصدر واحد للوحة (شاشة الحضور والجلسات وبطاقة المرحلة)
 export const VERIFY_AR = Object.freeze({ qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا', auto: 'التوثيق آلي بانتهاء الجلسة' });
@@ -49,7 +50,7 @@ export function workshopDays({ def, stage, sessions = null, model = null, cohort
   const ids = new Set(reqs.map((r) => r.id));
   const list = (sessions ?? def?.sessions ?? []).filter((s) => ids.has(s.requirement_id) && (!s.cohort_id || !cohortId || s.cohort_id === cohortId));
   // «خارج نافذة المرحلة» من الخط نفسه: كل جلسة مؤرخة لها نقطة بعلامة outside
-  const outside = new Set((model?.activities || []).flatMap((a) => (a.dates || []).filter((d) => d.outside && d.session).map((d) => d.session)));
+  const outside = new Set(outsideSessions(model).map((x) => x.session));
   const reqTitle = new Map(reqs.map((r) => [r.id, r.title]));
   const rows = list.map((s) => {
     const undated = isUndated(s);

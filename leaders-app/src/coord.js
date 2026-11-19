@@ -10,8 +10,10 @@ export const NOT_STARTED = '@pre';
 export const stageOf = (p) => p.stage || PARTICIPANT_STATUS[p.status] || p.status;
 // خيارات مرشّح «المرحلة» من المراحل الظاهرة في الصفوف نفسها، بترتيب مراحل البرنامج ثم البقية،
 // فلا يُختار خيار يعرض صفوفًا بعنوان مرحلة غيره (org-2)
+// ومن يسير في مرحلتين معًا (stages، التوازي 2) يظهر تحت كل منهما في المرشّح، لا تحت خيار باسميهما معًا
+export const stagesOf = (p) => (Array.isArray(p.stages) && p.stages.length > 1 ? p.stages : [stageOf(p)]);
 export function stageOptions(rows, order = []) {
-  const seen = [...new Set(rows.map(stageOf).filter(Boolean))];
+  const seen = [...new Set(rows.flatMap(stagesOf).filter(Boolean))];
   const rank = (t) => { const i = order.indexOf(t); return i < 0 ? order.length : i; };
   return seen.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'ar'));
 }
@@ -20,7 +22,7 @@ export const STALE = '@stale';
 
 export function filterRows(rows, { q = '', stage = '', track = '' }, now = Date.now()) {
   const s = q.trim().toLowerCase();
-  const byStage = (p) => !stage || (stage === NOT_STARTED ? PRE_BASELINE.includes(p.status) : stage === STALE ? isStale(p, now) : stageOf(p) === stage);
+  const byStage = (p) => !stage || (stage === NOT_STARTED ? PRE_BASELINE.includes(p.status) : stage === STALE ? isStale(p, now) : stagesOf(p).includes(stage));
   return rows.filter((p) => byStage(p) && (!track || p.track === track)
     && (!s || `${p.full_name} ${p.job_title || ''} ${p.track_title || ''}`.toLowerCase().includes(s)));
 }

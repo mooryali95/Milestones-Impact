@@ -887,6 +887,9 @@ export function coordParticipant(p, perms) {
     // ولمن خرج من البرنامج لا مرحلة، فتعرض اللوحة وملف Excel حالته كما يعرضها التقرير المطبوع
     stage: inProgram(p.status) ? p.stage || null : null,
   };
+  // من يسير في مرحلتين معًا (التوازي 2): المرحلتان باسميهما للمرشّح، والمسار المستمر الجاري بجانبهما. برنامج بلا توازٍ ولا مسار لا يضيف شيئًا
+  if (inProgram(p.status) && Array.isArray(p.stages) && p.stages.length > 1) out.stages = p.stages;
+  if (inProgram(p.status) && Array.isArray(p.tracks) && p.tracks.length) out.tracks = p.tracks;
   if (perms.activity) out.last_login_at = p.last_login_at || null;
   if (perms.contact) { out.email = p.email || null; out.phone = p.phone || null; }
   // D18: المسار مشتق من المستويات الثلاثة (مفتاحه وملف تعريفه)، فيخرج معها وحدها:

@@ -59,6 +59,31 @@ export function currentStages(journey) {
   return { idx, start: list.indexOf(group[0]), stage, stages, group, together: stages.length > 1 };
 }
 
+// ── «أين هو» عند الخبير ومنسق الجهة (التوازي 2 خارج الخريطة، بعد R3b) ──
+// القيمة نفسها التي يراها المشارك في رحلته (currentStages)، فلا يسمي الخبير أو المنسق مرحلة واحدة لمن يسير في مرحلتين معًا.
+// المسار المستمر (T1) والخدمة (T2) ليسا موضعًا: يُذكران بجانبه لا مكانه
+const isSide = (s) => s.lane === 'track' || s.lane === 'service' || planTrack(s) || planService(s);
+const andAr = (list) => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join('، ')} و${list.at(-1)}`);
+/** @param {any[]} journey رحلة المشارك كما يراها (journeyFor)
+ * @returns {{ stage: string | null, stages: string[], together: boolean, tracks: string[], label: string }} */
+export function stageNow(journey) {
+  const list = journey || [];
+  const cur = currentStages(list);
+  const stages = cur.stages.map((s) => s.title_ar);
+  const tracks = journeyTracks(list).filter((s) => s.status === 'active').map((s) => s.title_ar);
+  const stage = !stages.length ? null : stages.length === 1 ? stages[0] : `${andAr(stages)} معًا`;
+  const label = !stages.length ? '' : stages.length === 1 ? `المرحلة الحالية: ${stages[0]}`
+    : `${stages.length === 2 ? 'المرحلتان الحاليتان تسيران' : 'المراحل الحالية تسير'} معًا: ${andAr(stages)}`;
+  return { stage, stages, together: cur.together, tracks, label };
+}
+/** الرحلة كتلًا بترتيبها كما يراها المشارك: مرحلة وحدها، أو مراحل «تسير معًا» كتلة واحدة، ثم المسارات المستمرة والخدمات
+ * @param {any[]} journey @returns {{ blocks: { key: string, together: boolean, stages: any[] }[], tracks: any[], services: any[] }} */
+export function journeyBlocks(journey) {
+  const list = journey || [];
+  const blocks = withGroups(list.filter((s) => !isSide(s))).map((g) => ({ key: g[0].key, together: g.length > 1, stages: g }));
+  return { blocks, tracks: journeyTracks(list), services: journeyServices(list).map((s) => ({ ...s, used: serviceUsed(s) })) };
+}
+
 // متى دخل مرحلته: أحدث تاريخ إتمام معروف لما قبلها (بنود الرحلة، وإتمام الملف والقياس والاعتماد)، وإلا تسجيله.
 // المراحل التي «تسير معًا» دخلها معًا: ما قبل أول مجموعتها وحده يُحسب، فإتمام مرحلة تسير معها لا يجعله «دخل للتو» (R3b)
 export function stageEntry(journey, idx, dates = []) {
@@ -77,6 +102,16 @@ export function needsOf(stage) {
   if (stage.status === 'locked') return stage.lock_reason || 'بانتظار فتح المرحلة';
   const it = (stage.items || []).find((x) => x.required && x.status !== 'done') || (stage.items || []).find((x) => x.status !== 'done');
   return it ? renderJourneyText(it.title_ar, { reqs: stage.items }) : null;
+}
+
+/** التوازي والمسار المستمر في الخريطة كما يرسمهما الخط وتبويب «الرحلة» (withGroups على قواعد التعريف بعد خطة الدفعة):
+ * together لكل مرحلة في مجموعة «تسير معًا» مفتاح أولها، وtracks مفاتيح المسارات. يضيفه مستدعيا journeyMap (لوحة الجهة وملف
+ * الدفعة) في journey_map.lanes بجانب مخرجها، فلا يتغير مخرج journeyMap نفسه (journey-legacy) ولا يُحسب التوازي في الواجهة
+ * @param {any[]} stages مراحل التعريف الظاهرة بترتيبها @returns {{ together: Record<string, string>, tracks: string[] }} */
+export function mapLanes(stages) {
+  const together = {};
+  for (const g of withGroups(stages || [])) if (g.length > 1) for (const x of g) together[x.key] = g[0].key;
+  return { together, tracks: (stages || []).filter((s) => planTrack(s)).map((s) => s.key) };
 }
 
 // people: [{ id, name, status, created_at, journey, milestones, dates }]

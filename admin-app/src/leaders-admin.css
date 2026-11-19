@@ -1254,3 +1254,6 @@
   .today-pulse-t th[scope="row"], .today-pulse-t td { border: 0; padding: 3px 0; }
   .today-pulse-t td::before { content: attr(data-label) ": "; color: var(--ink-soft); font-size: .8rem; }
 }
+/* «الحضور والجلسات»: يوم خارج نافذة مرحلته في دفعة مؤرخة (تنبيه لا منع) */
+.ws-out { display: block; margin-top: 4px; font-size: .8rem; line-height: 1.6; color: var(--st-warn-text); }
+.ws-out::before { content: '!'; display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px; margin-inline-end: 6px; border-radius: 50%; background: var(--st-warn); color: #fff; font-size: .7rem; font-weight: 700; }

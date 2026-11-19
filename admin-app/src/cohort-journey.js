@@ -11,7 +11,7 @@ import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from
 import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { PHASE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import {
-  impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planLock, planOffBlock, planRestartBlock, planWithCandidates, planWithLock, sameSchedule,
+  chainEndOffer, impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planEndsIssue, planLock, planOffBlock, planRestartBlock, planWithCandidates, planWithLock, sameSchedule,
   suggestDays, unitFor,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
@@ -272,7 +272,14 @@ export function planDraft({ def, cohort, edit = null }) {
   const requirements = def?.requirements || [];
   const saved = cohort?.schedule || {};
   const r = edit ? planEdit({ stages, schedule: saved, edit, cohort, requirements }) : { schedule: saved, errors: [] };
-  const plan = cohortPlan(stages, { ...cohort, schedule: r.schedule });
+  // «اجعل نهاية الدفعة …»: نهاية الدفعة المسجلة في المسودة نفسها، فيُرى أثرها في الرأس والخط قبل «راجع واحفظ»
+  const savedEnds = cohort?.ends_on ? String(cohort.ends_on).slice(0, 10) : null;
+  const endsEdit = edit && edit.ends_on !== undefined && edit.ends_on !== savedEnds ? edit.ends_on : undefined;
+  const endsBad = endsEdit !== undefined ? planEndsIssue(cohort, endsEdit) : null;
+  if (endsBad) r.errors = [...(r.errors || []), { key: null, ...endsBad }];
+  const ends = endsEdit !== undefined && !endsBad ? { before: savedEnds, after: endsEdit } : null;
+  const base = ends ? { ...cohort, ends_on: ends.after } : cohort;
+  const plan = cohortPlan(stages, { ...base, schedule: r.schedule });
   const was = cohortPlan(stages, { ...cohort, schedule: saved });
   const rows = {};
   const stageBy = new Map(stages.map((s) => [s.key, s]));
@@ -304,14 +311,21 @@ export function planDraft({ def, cohort, edit = null }) {
       was_ar: before && !before.off && !x.off && before.days !== x.days ? `كانت ${planDurationAr(before.days)}` : before && !!before.off !== !!x.off ? (x.off ? 'كانت تعمل' : 'كانت موقوفة') : '',
     };
   }
-  const edits = stages.filter((s) => rows[s.key]?.edited).length;
+  const edits = stages.filter((s) => rows[s.key]?.edited).length + (ends ? 1 : 0);
   return {
-    schedule: r.schedule, errors: r.errors, anchored: r.anchored || [], rows, edits, issues: plan.issues,
+    schedule: r.schedule, errors: r.errors, anchored: r.anchored || [], rows, edits, issues: plan.issues, ends,
     pinned: stages.filter((s) => rows[s.key]?.pinned).length,
     changed: plan.stages.filter((x) => x.source === 'cohort').length,
     off: plan.stages.filter((x) => x.off).length,
-    cohort: { ...cohort, schedule: r.schedule },
+    cohort: { ...base, schedule: r.schedule },
   };
+}
+// زر «اجعل نهاية الدفعة …» في الرأس: نهاية السلسلة المحسوبة على المسودة حين تخالف نهاية الدفعة المسجلة، لمن يكتب والخطة غير
+// مقفلة. لا يطبق شيئًا: يضع النهاية في المسودة، والحفظ بـ«راجع واحفظ» ونافذة الأثر وحارس البريد كبقية الخطة
+export function endsOffer({ def, cohort, canWrite = false, lock = null }) {
+  if (!canWrite || lock) return null;
+  const o = chainEndOffer(liveStages(def), cohort);
+  return o ? { ...o, label: `اجعل نهاية الدفعة ${dateOnly(o.end)}` } : null;
 }
 
 // العداد: خطوة بوحدته (يوم أو أسبوع)، والأسبوع يقفز إلى الأسبوع التام التالي أو السابق، ولا ينزل عن حد المرحلة
@@ -340,6 +354,8 @@ export const planBody = (cohort, edit, op, opts = {}) => ({
   ...(edit?.offset && Object.keys(edit.offset).length ? { offset: edit.offset } : {}),
   // نهاية المسار المستمر (T1) لما عُدّل وحده
   ...(edit?.until && Object.keys(edit.until).length ? { until: edit.until } : {}),
+  // نهاية الدفعة المسجلة («اجعل نهاية الدفعة …») إن غيّرتها المسودة
+  ...(edit?.ends_on !== undefined && edit.ends_on !== (cohort.ends_on ? String(cohort.ends_on).slice(0, 10) : null) ? { ends_on: edit.ends_on } : {}),
   ...(op === 'save' && opts.notify ? { notify: true } : {}), ...(op === 'save' && opts.reenable === 'apply' ? { reenable: 'apply' } : {}),
   ...(cohort.updated_at ? { base_updated_at: cohort.updated_at } : {}),
 });
@@ -357,7 +373,9 @@ export function historyRows(list) {
     const offAr = [stopped ? `${countAr(stopped, 'أُوقفت مرحلة', 'أُوقفت مرحلتان', 'مراحل أُوقفت', 'مرحلة أُوقفت')}` : '', started ? `${countAr(started, 'أُعيدت مرحلة', 'أُعيدت مرحلتان', 'مراحل أُعيدت', 'مرحلة أُعيدت')}` : ''].filter(Boolean).join('، و');
     const durAr = !n ? '' : n === 2 ? 'مرحلتان تغيّرت مدتهما' : `${countAr(n, 'مرحلة واحدة', 'مرحلتان', 'مراحل', 'مرحلة')} ${n === 1 ? 'تغيّرت مدتها' : 'تغيّرت مددها'}`;
     const trAr = tr ? `${countAr(tr, 'مسار مستمر واحد', 'مساران مستمران', 'مسارات مستمرة', 'مسارًا مستمرًا')} ${tr === 1 ? 'تغيّر امتداده' : 'تغيّر امتدادها'}` : '';
-    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr || parAr || trAr ? [offAr, durAr, parAr, trAr].filter(Boolean).join('، و') : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
+    // «اجعل نهاية الدفعة …»: النهاية المسجلة قبل وبعد
+    const endsAr = Array.isArray(r.summary?.ends) && r.summary.ends[1] ? `ضُبطت نهاية الدفعة ${dateOnly(r.summary.ends[1])}` : '';
+    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr || parAr || trAr || endsAr ? [offAr, durAr, parAr, trAr, endsAr].filter(Boolean).join('، و') : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
     const sh = r.summary?.shift ? `، ${r.summary.shift > 0 ? 'تأخرت' : 'تقدمت'} النهاية ${daysAr(Math.abs(r.summary.shift))}` : '';
     return { id: r.id, at: r.at, by: r.actor || '', text: `${what}${sh}`, undo: r.action === 'cohort.plan-undo' };
   });
@@ -382,6 +400,8 @@ export function mergeEdit(edit, patch = {}, saved = {}) {
     e.offset = offset;
   }
   if (patch.offset) e.offset = { ...(e.offset || {}), ...patch.offset };
+  // نهاية الدفعة المسجلة («اجعل نهاية الدفعة …»): planDraft يتجاهلها إن طابقت المحفوظ
+  if ('ends_on' in patch) e.ends_on = patch.ends_on;
   if (patch.until) {
     const until = { ...(e.until || {}) };
     for (const [k, v] of Object.entries(patch.until)) {

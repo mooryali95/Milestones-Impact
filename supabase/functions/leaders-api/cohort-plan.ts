@@ -8,7 +8,7 @@
 //   history: آخر الحفظات والتراجعات لهذه الدفعة
 // الجسم: { cohort_id, op, days: { مفتاح: عدد أو null }, off: { مفتاح: true أو false } (R2b)،
 // with: { مفتاح: مفتاح مرجع أو false لـ«لا شيء» أو null لقاعدة البرنامج } وoffset: { مفتاح: أيام أو null } (R3a)، until: { مفتاح مسار
-// مستمر: نهايته أو null } (T1)، follow: true، base_updated_at (مطلوب للحفظ
+// مستمر: نهايته أو null } (T1)، ends_on: يوم لنهاية الدفعة المسجلة («اجعل نهاية الدفعة …»)، follow: true، base_updated_at (مطلوب للحفظ
 // والتراجع)، reenable: 'exempt' (الافتراضي) أو 'apply' لمن تجاوز مرحلة تعود (القرار 12)، notify: true لـ«أبلغ المشاركين» (القرار 13) }.
 // الحفظ والتراجع للكاتب وحده
 // (index.ts يلفهما بـA.writer كما admin.cohort-save)، والمعاينة والسجل لكل مدير. لا ترحيل: الخطة في cohorts.schedule،
@@ -22,7 +22,7 @@ import { cohortMemberIds, defOf } from './programs.ts';
 import { journeyFor } from './participant.ts';
 import { currentStages } from './journey-map.js';
 import { cohortPlan, planOffKeys } from './stage-windows.js';
-import { impactSummary, PLAN_ACTIONS, planEdit, planImpact, planLock, planNotice, planRestartBlock, planWithIssues, sameSchedule } from './cohort-plan.js';
+import { impactSummary, PLAN_ACTIONS, planEdit, planEndsIssue, planImpact, planLock, planNotice, planRestartBlock, planWithIssues, sameSchedule } from './cohort-plan.js';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -140,7 +140,20 @@ async function bookedIn(c: any, base: any, keys: string[]) {
   return out;
 }
 
-async function impactOf(c: any, base: any, after: any) {
+// «اجعل نهاية الدفعة …» (4.2 أ): ends_on في الجسم يوم أو بلا تغيير (undefined). لا تُمحى النهاية من هنا، والتحقق من
+// planEndsIssue نفسها التي تقرؤها اللوحة
+function endsOf(c: any, b: Body): string | undefined {
+  if (!('ends_on' in b) || b.ends_on === undefined) return undefined;
+  const v = b.ends_on === null || b.ends_on === '' ? null : String(b.ends_on).slice(0, 10);
+  const cur = c.ends_on ? String(c.ends_on).slice(0, 10) : null;
+  if (v === cur) return undefined;
+  if (v === null) throw new Fail('نهاية الدفعة لا تُمحى من تبويب «الرحلة». غيّرها من «تحرير الدفعة».', 400, 'plan_invalid');
+  const bad = planEndsIssue(c, v);
+  if (bad) throw new Fail(bad.msg, 400, 'plan_invalid', { code: bad.code });
+  return v;
+}
+
+async function impactOf(c: any, base: any, after: any, endsOn?: string | null) {
   const offOf = (sch: any) => Object.keys(sch || {}).filter((k) => sch[k]?.off === true);
   const was = new Set(offOf(c.schedule || {})), now = new Set(offOf(after));
   // حين تعود مرحلة موقوفة وحده تُحسب الرحلة بالخطة الجديدة لكل عضو، فيُعرف من تجاوزها
@@ -148,7 +161,7 @@ async function impactOf(c: any, base: any, after: any) {
   const people = await peopleOf(c, restarts ? after : null);
   const booked = await bookedIn(c, base, [...now].filter((k) => !was.has(k)));
   const impact = planImpact({ stages: base.stages, before: c.schedule || {}, after, cohort: c, milestones: base.milestones, people,
-    today: new Date(), cutoff: cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF')), booked });
+    today: new Date(), cutoff: cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF')), booked, endsOn });
   return { impact, people };
 }
 
@@ -211,13 +224,16 @@ async function lastRow(cohortId: string) {
   return (rows as any[]).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 }
 
-async function write(a: Admin, c: any, base: any, after: any, action: 'cohort.plan' | 'cohort.plan-undo', extra: Body = {}, opts: { reenable?: string; notify?: boolean; unskip?: any[] } = {}) {
-  const { impact, people } = await impactOf(c, base, after);
+async function write(a: Admin, c: any, base: any, after: any, action: 'cohort.plan' | 'cohort.plan-undo', extra: Body = {}, opts: { reenable?: string; notify?: boolean; unskip?: any[]; endsOn?: string | null } = {}) {
+  const { impact, people } = await impactOf(c, base, after, opts.endsOn);
+  // نهاية الدفعة تُكتب مع الخطة في الطلب نفسه وتحت الحارس نفسه، وسطر السجل يحملها قبل وبعد فيعيدها التراجع
+  const endsBefore = c.ends_on ? String(c.ends_on).slice(0, 10) : null;
+  const ends = opts.endsOn !== undefined ? { ends_on: opts.endsOn } : {};
   const before = JSON.parse(JSON.stringify(c.schedule || {}));
   const updated_at = new Date().toISOString();
   const prevAt = c.updated_at ?? null;
   // الكتابة مشروطة بأن الصف لم يتغير منذ قُرئ (والأثر قد يأخذ ثواني): كاتبان معًا لا يكتب أحدهما فوق الآخر بصمت
-  const q = db.from('cohorts').update({ schedule: after, updated_at }).eq('id', c.id);
+  const q = db.from('cohorts').update({ schedule: after, updated_at, ...ends }).eq('id', c.id);
   const saved = must(await (prevAt ? q.eq('updated_at', prevAt) : q.is('updated_at', null)).select('*').maybeSingle()) as any;
   if (!saved) throw new Fail('تغيّرت الدفعة أثناء الحفظ. أعد فتح التبويب لترى الخطة الحالية ثم عدّل.', 409, 'stale');
   // المعالم التي حرّك الحفظ موعدها: حارس البريد يحجب ما صار متأخرًا منها وحدها (lateMilestoneNotices)، لا كل معالم الدفعة.
@@ -227,11 +243,11 @@ async function write(a: Admin, c: any, base: any, after: any, action: 'cohort.pl
   const skips: { participant_id: string; stage_key: string }[] = [];
   try {
     await exemptPassed(a, c, impact, opts.reenable || 'exempt', skips);
-    await audit('admin', a.email, action, 'cohorts', c.id, { schedule: before }, { schedule: after, summary: impactSummary(impact), moved_ids,
+    await audit('admin', a.email, action, 'cohorts', c.id, { schedule: before, ...(opts.endsOn !== undefined ? { ends_on: endsBefore } : {}) }, { schedule: after, ...ends, summary: impactSummary(impact), moved_ids,
       ...(skips.length ? { skips } : {}), ...(opts.notify ? { notify: true } : {}), ...extra });
   } catch (err) {
     // بلا سطر في السجل لا تراجع ولا حارس بريد للحفظ: تُعاد الخطة كما كانت ويُحذف ما كُتب من الإعفاءات، ويفشل الطلب
-    const { error } = await db.from('cohorts').update({ schedule: before, updated_at: prevAt }).eq('id', c.id).eq('updated_at', saved.updated_at || updated_at);
+    const { error } = await db.from('cohorts').update({ schedule: before, updated_at: prevAt, ...(opts.endsOn !== undefined ? { ends_on: endsBefore } : {}) }).eq('id', c.id).eq('updated_at', saved.updated_at || updated_at);
     if (error) console.error('cohort-plan: restore after write failure', error.message);
     await unexempt(c, skips).catch((e) => console.error('cohort-plan: unexempt after write failure', e));
     throw err;
@@ -241,8 +257,8 @@ async function write(a: Admin, c: any, base: any, after: any, action: 'cohort.pl
   // البلاغ بعد السجل: الحفظ تم، وتعذّر البلاغ يُقال في الرد ولا يُسقطه
   let notified: number | null = null;
   if (opts.notify) notified = await notifyMembers(c, impact, people, `${c.id}:${saved.updated_at || updated_at}`).catch((e) => { console.error('cohort-plan: notify', e); return null; });
-  return { success: true, saved: true, cohort: { id: saved.id, schedule: saved.schedule || after, updated_at: saved.updated_at || updated_at },
-    plan: planOut(base, c, after), impact, exempted: skips.length, notified };
+  return { success: true, saved: true, cohort: { id: saved.id, schedule: saved.schedule || after, updated_at: saved.updated_at || updated_at, ends_on: saved.ends_on ?? (opts.endsOn !== undefined ? opts.endsOn : c.ends_on ?? null) },
+    plan: planOut(base, { ...c, ...ends }, after), impact, exempted: skips.length, notified };
 }
 
 // إعادة التشغيل بعد التجاوز: «اعفِ من تجاوزها» افتراضيًا، و«أعدها عليهم» باختيار صريح
@@ -260,8 +276,10 @@ export async function cohortPlanAction(a: Admin, b: Body) {
   const lock = planLock(c);
   if (op === 'preview') {
     const after = nextSchedule(c, base, b);
-    const { impact } = await impactOf(c, base, after);
-    return { success: true, preview: true, locked: lock, changed: !sameSchedule(c.schedule || {}, after), plan: planOut(base, c, after), impact };
+    const endsOn = endsOf(c, b);
+    const { impact } = await impactOf(c, base, after, endsOn);
+    return { success: true, preview: true, locked: lock, changed: !sameSchedule(c.schedule || {}, after) || endsOn !== undefined,
+      plan: planOut(base, endsOn !== undefined ? { ...c, ends_on: endsOn } : c, after), impact };
   }
   // الحفظ والتراجع: الدفعة المغلقة والمفتوحة غير المثبتة للقراءة (planLock)، وحفظ من خطة أقدم من الحالية يُرفض
   if (lock) throw new Fail(lock.msg, 409, lock.code);
@@ -277,10 +295,16 @@ export async function cohortPlanAction(a: Admin, b: Body) {
     if (!last || last.action !== 'cohort.plan') throw new Fail('لا حفظ للخطة يُتراجع عنه.', 409, 'nothing_to_undo');
     if (!sameSchedule(last.after?.schedule, c.schedule || {})) throw new Fail('تغيّرت خطة الدفعة بعد آخر حفظ (ترقية نسخة أو تعديل آخر)، فلا يُتراجع عنه تلقائيًا.', 409, 'plan_changed');
     const after = nextSchedule(c, base, b, last.before?.schedule || {});
+    // حفظ ضبط نهاية الدفعة: يعيدها كما كانت ما لم تتغير بعده (من «تحرير الدفعة» مثلًا)
+    const hadEnds = !!last.after && Object.prototype.hasOwnProperty.call(last.after, 'ends_on');
+    if (hadEnds && (c.ends_on ? String(c.ends_on).slice(0, 10) : null) !== (last.after.ends_on ?? null)) {
+      throw new Fail('تغيّرت نهاية الدفعة بعد آخر حفظ، فلا يُتراجع عنه تلقائيًا.', 409, 'plan_changed');
+    }
     // التراجع عن إيقاف يعيد المرحلة، فيُعفى من تجاوزها كما في الحفظ (الافتراضي)، ويحذف إعفاءات الحفظ الذي يتراجع عنه
-    return write(a, c, base, after, 'cohort.plan-undo', { undoes: last.id }, { reenable: reenableOf(b), unskip: last.after?.skips || [] });
+    return write(a, c, base, after, 'cohort.plan-undo', { undoes: last.id }, { reenable: reenableOf(b), unskip: last.after?.skips || [], ...(hadEnds ? { endsOn: last.before?.ends_on ?? null } : {}) });
   }
   const after = nextSchedule(c, base, b);
-  if (sameSchedule(c.schedule || {}, after)) return { success: true, unchanged: true, plan: planOut(base, c, after) };
-  return write(a, c, base, after, 'cohort.plan', b.follow === true ? { follow: true } : {}, { reenable: reenableOf(b), notify: b.notify === true });
+  const endsOn = endsOf(c, b);
+  if (sameSchedule(c.schedule || {}, after) && endsOn === undefined) return { success: true, unchanged: true, plan: planOut(base, c, after) };
+  return write(a, c, base, after, 'cohort.plan', b.follow === true ? { follow: true } : {}, { reenable: reenableOf(b), notify: b.notify === true, endsOn });
 }

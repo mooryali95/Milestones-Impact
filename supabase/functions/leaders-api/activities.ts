@@ -9,7 +9,7 @@ import { alertOps, audit, CONFIG, db, Fail, hash, mailButton, must, randomToken,
 import { missingColumn, missingTable } from './missing-column.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
-import { cohortMembers, contentLevelsFor, releaseOf, requirementFor } from './programs.ts';
+import { cohortMembers, contentLevelsFor, defOf, releaseOf, requirementFor } from './programs.ts';
 import { journeyFor } from './participant.ts';
 import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
@@ -17,8 +17,9 @@ import {
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, qrWindow, QR_WINDOW, readingVerdict, requirementApplies,
   verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
   bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery, bookingOverMax, sessionsMax, coachingStatus,
-  parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS,
+  parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS, cohortDefinitionView,
 } from './logic.js';
+import { journeyTimeline, outsideSessions } from './journey-timeline.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null; ua: string | null };
@@ -535,9 +536,10 @@ export async function overview() {
     db.from('coaching_sessions').select('*, participants(full_name, email), experts(full_name)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
     db.from('programs').select('id, name').is('archived_at', null),
-    db.from('cohorts').select('id, name, program_id, status').neq('status', 'closed').order('created_at', { ascending: false }),
+    db.from('cohorts').select('*').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
   const capacity_ready = await capacityReady();
+  const outside = await outsideByCohort((cohorts.data || []) as any[], (ws.data || []) as any[]).catch((e) => { console.error('activities outside', e); return {}; });
   const counts: Record<string, number> = {};
   for (const a of att.data || []) counts[a.session_id] = (counts[a.session_id] || 0) + 1;
   // طريقة التوثيق الفعلية لكل جلسة (W1): من متطلبها وتخصيص دفعتها، كما يحكم بها workshop.checkin والبريد (workshopVerify).
@@ -550,10 +552,31 @@ export async function overview() {
   return {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
-    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s) }; delete row.secret; return row; }),
+    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [] }; delete row.secret; return row; }),
     coaching: coach.data || [],
-    programs: programs.data || [], cohorts: cohorts.data || [], capacity_ready,
+    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready,
   };
+}
+
+// «خارج نافذة المرحلة» في «الحضور والجلسات» (تصور محرر رحلة الدفعة 4.2 د): لكل جلسة مؤرخة الدفعات التي يقع يومها فيها خارج
+// نافذة مرحلتها، من علامة الخط نفسه (journeyTimeline ثم outsideSessions) بتعريف كل دفعة وخطتها كما يرسمها تبويب «الرحلة»، فلا
+// حساب تاريخ ثانٍ. الجلسة العامة تُفحص في كل دفعة مؤرخة من برنامج متطلبها. تنبيه لا منع: الحضور يُحسب في أي يوم
+export async function outsideByCohort(cohorts: any[], sessions: any[]) {
+  const out: Record<string, { cohort_id: string; cohort: string; stage: string; window_ar: string; text: string }[]> = {};
+  const defs = new Map<string, any>();
+  for (const c of cohorts.filter((x) => x.starts_on && !x.is_default && x.status !== 'closed')) {
+    const mine = sessions.filter((s) => s.active !== false && !isUndated(s) && (!s.cohort_id || s.cohort_id === c.id));
+    if (!mine.length) continue;
+    const k = `${c.program_version_id || ''}|${c.program_id}`;
+    if (!defs.has(k)) defs.set(k, await defOf(c.program_version_id, c.program_id));
+    const view = cohortDefinitionView({ live: defs.get(k), version: null, cohort: c });
+    const ids = new Set(view.requirements.filter((r: any) => r.kind === 'workshop' && r.id).map((r: any) => r.id));
+    const own = mine.filter((s) => ids.has(s.requirement_id));
+    if (!own.length) continue;
+    const model = journeyTimeline({ stages: view.stages, requirements: view.requirements }, { cohort: c, sessions: own });
+    for (const x of outsideSessions(model)) (out[x.session] ||= []).push({ cohort_id: c.id, cohort: c.name, stage: x.stage_title, window_ar: x.window_ar, text: x.text });
+  }
+  return out;
 }
 
 // ── سعة يوم الورشة (W3، الترحيل 20261118130000) ──

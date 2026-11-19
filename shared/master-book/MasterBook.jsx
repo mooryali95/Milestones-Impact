@@ -13,7 +13,7 @@ import { chapterDeps } from './deps.js';
 import { ProposalEditor, ProposalsSheet, useDialogFocus } from './Proposals.jsx';
 import ReleaseSheet from './Release.jsx';
 import { REFLECTION } from '../../supabase/functions/leaders-api/book-proposals.js';
-import { canResume, cleanPrefs, FONTS, inHScroll, isMarked, LEGACY_KEY, lineHeight, liveMarks, normalizeAr, readerKey, resumeAt, searchBook, SIZES, SPACINGS, THEMES, toggleMark } from './reader.js';
+import { canResume, chapterRef, cleanPrefs, FONTS, hashRef, hashWithRef, inHScroll, isMarked, LEGACY_KEY, lineHeight, liveMarks, normalizeAr, readerKey, refIndex, resumeAt, searchBook, SIZES, SPACINGS, THEMES, toggleMark } from './reader.js';
 import './master-book.css';
 
 const ROMAN = { milestone: 'I', impact: 'II', leadership: 'III' };
@@ -392,7 +392,7 @@ function QuizReview({ md }) {
 }
 
 // ── صفحة الباب ──
-function Chapter({ ch, idx, partIdx, level, data, scope, marks = [], onMark, onThread, onDeps, onProposals, flip }) {
+function Chapter({ ch, idx, partIdx, level, data, scope, marks = [], onMark, onThread, onDeps, onProposals, onCopyLink, flip }) {
   const sections = useMemo(() => bookSections(ch.md), [ch.md]);
   const img = chapterImage(ch.id);
   const part = PARTS.find((p) => p.key === ch.dimension);
@@ -412,6 +412,7 @@ function Chapter({ ch, idx, partIdx, level, data, scope, marks = [], onMark, onT
                 : <span className="mb-chip lvl">{ch.min_level === 'beginner' ? 'لكل المستويات' : `من المستوى ${LEVEL_AR[ch.min_level]}`}</span>}
               <span className="mb-chip">{sections.filter((s) => s.title).length} أقسام</span>
               {n > 0 && <span className="mb-chip open">{n} تعليق مفتوح</span>}
+              {onCopyLink && <button type="button" className="mb-chip link" onClick={onCopyLink}>انسخ رابط الباب</button>}
               {data.deps !== undefined && data.viewer.kind === 'admin' && !ch.draft && (() => { const t = chapterDeps({ chapter: ch, deps: data.deps, counts: data.counts }).total; return <button type="button" className="mb-chip deps" onClick={() => onDeps({ section: null })}>ما يعتمد على هذا الباب{t ? ` (${t})` : ''}</button>; })()}
             </p>
           </div>
@@ -570,6 +571,10 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   const [opening, setOpening] = useState(false);
   const [flip, setFlip] = useState(null);
   const [sel, setSel] = useState(null);
+  // رابط الباب (reader.js): الباب الذي فتحه الرابط عند التحميل، وتنبيه رابط لا يُتاح لهذا القارئ، وسطر النسخ
+  const firstRef = useRef(typeof window !== 'undefined' ? hashRef(window.location.hash) : null);
+  const [missing, setMissing] = useState(false);
+  const [copied, setCopied] = useState(null);
   const selGone = useRef(null);
   const [progress, setProgress] = useState(0);
   const reader = useRef(null);
@@ -630,19 +635,64 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
     return () => { clearTimeout(still); sc?.removeEventListener('scroll', onScroll); document.removeEventListener('selectionchange', onSel); };
   }, [view, idx, data]);
 
-  const go = useCallback((to, section = null, dir = null) => {
+  // الرابط في العنوان: كل باب يُفتح يُكتب في سجل المتصفح فيعمل الرجوع والتقدم، والرف بلا باب. replace لا يضيف خطوة
+  const linkTo = useCallback((ref, replace = false) => {
+    if (typeof window === 'undefined') return;
+    const next = hashWithRef(window.location.hash, ref);
+    if (next === (window.location.hash || '')) return;
+    const url = `${window.location.pathname}${window.location.search}${next}`;
+    if (replace) window.history.replaceState(window.history.state, '', url);
+    else window.history.pushState(window.history.state, '', url);
+  }, []);
+  const go = useCallback((to, section = null, dir = null, record = true) => {
     if (!data) return;
     const n = Math.max(0, Math.min(data.chapters.length - 1, to));
     setFlip(dir && !reduced() ? dir : null);
     setIdx(n);
     patch({ pos: { id: data.chapters[n].id, section: section || '' } });
     setView('read');
+    setMissing(false);
+    if (record) linkTo(chapterRef(data.chapters[n]));
     setToc(false); setAll(false);
     requestAnimationFrame(() => {
       if (section) document.getElementById(anchor(section))?.scrollIntoView({ block: 'start' });
       else root.current?.scrollTo({ top: 0 });
     });
-  }, [data, patch]);
+  }, [data, patch, linkTo]);
+  const toShelf = () => { setView('shelf'); linkTo(null); };
+  // فتح الرابط عند التحميل بعد أن يعرّف الخادم القارئ وأبوابه: الباب إن كان بين ما أُتيح له، وإلا الرف بتنبيه
+  const linked = useRef(false);
+  useEffect(() => {
+    if (!data?.success || !prefs || linked.current) return;
+    linked.current = true;
+    const ref = firstRef.current;
+    if (!ref) return;
+    const at = refIndex(data.chapters, ref);
+    // تحديث الصفحة على الباب نفسه يعود إلى القسم الذي بلغه القارئ فيه، كما يعود إليه «تابع القراءة»
+    if (at >= 0) go(at, prefs.pos?.id === data.chapters[at].id ? prefs.pos.section || null : null, null, false);
+    else { setMissing(true); linkTo(null, true); }
+  }, [data, prefs, go, linkTo]);
+  // الرجوع والتقدم في المتصفح بين الأبواب والرف
+  useEffect(() => {
+    if (!data?.success) return undefined;
+    const on = () => {
+      const ref = hashRef(window.location.hash);
+      if (!ref) { setView('shelf'); return; }
+      const at = refIndex(data.chapters, ref);
+      if (at >= 0) go(at, null, null, false);
+      else { setView('shelf'); setMissing(true); }
+    };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, [data, go]);
+  // إغلاق القارئ يزيل الباب من العنوان، فلا يفتحه التحديث بعد الخروج
+  useEffect(() => () => { if (typeof window !== 'undefined' && hashRef(window.location.hash)) linkTo(null, true); }, [linkTo]);
+  const copyLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}${window.location.search}${hashWithRef(window.location.hash, chapterRef(ch))}`;
+    try { await navigator.clipboard.writeText(url); setCopied({ text: 'نُسخ رابط الباب. يفتحه من له وصول إلى الكتاب وحده.' }); }
+    catch { setCopied({ text: 'انسخ الرابط:', url }); }
+  };
+  useEffect(() => { if (!copied) return undefined; const t = setTimeout(() => setCopied(null), 5000); return () => clearTimeout(t); }, [copied]);
   const goChapter = (c, section) => go(data.chapters.findIndex((x) => x.id === c.id), section);
   // في وضع الجزء يقف التقليب عند حدود الجزء الحالي، وفي وضع الكتاب يعبر الأجزاء كما كان
   const scoped = data && ch ? (scope === 'part' ? data.chapters.map((c, i) => [c, i]).filter(([c]) => c.dimension === ch.dimension).map(([, i]) => i) : data.chapters.map((_, i) => i)) : [];
@@ -746,12 +796,13 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
               );
             })}
           </section>
+          {missing && <p className="mb-note" role="alert">الرابط لباب غير متاح لك، أو لم يعد في الكتاب. اختر بابًا من الأجزاء أو الفهرس.</p>}
           {!data.comments_ready && <p className="mb-note">التعليقات تُفعَّل بعد تطبيق ترحيلها على الإنتاج. القراءة متاحة الآن.</p>}
         </div>
       ) : (
         <div className={`mb-reader font-${prefs.font} theme-${prefs.theme}`} style={{ '--mb-size': `${prefs.size}px`, '--mb-lh': lineHeight(prefs.spacing) }} ref={reader} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
           <header className="mb-top">
-            <button type="button" className="mb-ic" onClick={() => setView('shelf')} aria-label="غلاف الكتاب">⌂</button>
+            <button type="button" className="mb-ic" onClick={toShelf} aria-label="غلاف الكتاب">⌂</button>
             <div className="mb-top-t"><small>{PARTS.find((p) => p.key === ch.dimension)?.label}</small><b>{ch.title}</b></div>
             <button type="button" className="mb-ic mb-aa" onClick={() => setLook(true)} aria-label="إعدادات القراءة" aria-haspopup="dialog" aria-expanded={look}>Aa</button>
             <button type="button" className="mb-ic" onClick={() => setAll(true)} aria-label="كل التعليقات">✎{total ? <i className="mb-dot">{total}</i> : null}</button>
@@ -766,7 +817,9 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
             <span className="mb-row-l" aria-hidden="true">المستوى</span>
             {LEVELS.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={level === k ? 'on' : ''} onClick={() => setLevel(k)}>{l}</button>)}
           </div>
-          <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} scope={scope} flip={flip} marks={prefs.marks} onMark={onMark} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} onProposals={(t) => {
+          {/* منطقة الإعلان ثابتة يتغير نصها وحده، فيقرؤها قارئ الشاشة؛ والرابط معزول باتجاهه كي لا تقلبه الفقرة العربية */}
+          <p className={copied ? 'mb-copied' : 'sr-only'} role="status">{copied && <>{copied.text}{copied.url && <> <bdi dir="ltr">{copied.url}</bdi></>}</>}</p>
+          <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} scope={scope} flip={flip} marks={prefs.marks} onMark={onMark} onCopyLink={copyLink} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} onProposals={(t) => {
             // قسم بلا مقترحات: يفتح المحرر مباشرة لمن يقترح، وإلا قائمة مقترحات القسم
             const has = (data.proposals || []).some((p) => p.module_id === ch.id && p.section === t.section && ['draft', 'review', 'approved'].includes(p.status));
             if (!has && data.viewer.propose && api.propose) setEditing({ chapter: ch, section: t.section, proposal: null });

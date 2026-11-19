@@ -25,6 +25,7 @@ import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
+import { hashRef } from '../../../shared/master-book/reader.js';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
 // ملف الكتاب الأم بعد نشر أحدث: محاولة ثانية ثم إعادة تحميل واحدة (shared/ui/lazy-retry.js)
@@ -478,6 +479,13 @@ function Dashboard({ onOut }) {
   const [view, setView] = useState(null);
   // null: لم يختر بعد، فعضو اللجنة بلا دور يدخل القارئ مباشرة ومن جمع الخدمتين يرى لوحته
   const [book, setBook] = useState(null);
+  // رابط باب من الكتاب (‎#ch=…‎): يفتح القارئ على الباب لمن له وصول إلى الكتاب، والقارئ نفسه يتحقق أن الباب متاح له
+  const [linked, setLinked] = useState(() => !!hashRef(window.location.hash));
+  useEffect(() => {
+    const on = () => { if (hashRef(window.location.hash)) { setLinked(true); setBook(null); } };
+    window.addEventListener('popstate', on);
+    return () => window.removeEventListener('popstate', on);
+  }, []);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
   const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
@@ -492,12 +500,12 @@ function Dashboard({ onOut }) {
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) await load(); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
-  const reading = book ?? (!!d.content_only && !!d.book_access);
+  const reading = !!d.book_access && (book ?? (linked || !!d.content_only));
   if (reading && d.pledge_needed) {
     return <BookPledge lines={d.pledge} onCancel={d.content_only ? null : () => setBook(false)}
       onAccept={async () => { const r = await xpCall('xp.pledge'); if (r.success) await load(); return r; }} />;
   }
-  if (reading) return <React.Suspense fallback={<DashboardSkeleton />}><MasterBook api={BOOK_API} place="expert" onClose={() => setBook(false)} /></React.Suspense>;
+  if (reading) return <React.Suspense fallback={<DashboardSkeleton />}><MasterBook api={BOOK_API} place="expert" onClose={() => { setLinked(false); setBook(false); }} /></React.Suspense>;
   if (d.content_only || d.no_service) return <ReviewerHome d={d} onOut={onOut} openBook={() => setBook(true)} />;
   const e = d.expert;
   const pre = d.preload || {};
