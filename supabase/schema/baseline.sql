@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261119120000_leaders_cohort_updates
+-- as-of migration: 20261119130000_leaders_workshop_trainer
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -2248,6 +2248,7 @@ create table if not exists leaders.workshop_sessions (
   reminded_day_at timestamp with time zone,
   reminded_hour_at timestamp with time zone,
   capacity integer,
+  expert_id uuid,
   constraint workshop_sessions_capacity_check CHECK (((capacity IS NULL) OR ((capacity >= 1) AND (capacity <= 10000)))),
   constraint workshop_sessions_dates_check CHECK ((((starts_at IS NULL) AND (ends_at IS NULL)) OR ((starts_at IS NOT NULL) AND (ends_at IS NOT NULL) AND (ends_at > starts_at)))),
   constraint workshop_sessions_join_url_check CHECK ((char_length(join_url) <= 500)),
@@ -3245,6 +3246,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.workshop_sessions add constraint workshop_sessions_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.workshop_sessions add constraint workshop_sessions_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3607,6 +3612,8 @@ CREATE INDEX IF NOT EXISTS workshop_scan_receipts_ip_idx ON leaders.workshop_sca
 CREATE INDEX IF NOT EXISTS workshop_scan_receipts_session_idx ON leaders.workshop_scan_receipts USING btree (session_id, created_at);
 
 CREATE INDEX IF NOT EXISTS workshop_sessions_cohort_idx ON leaders.workshop_sessions USING btree (cohort_id);
+
+CREATE INDEX IF NOT EXISTS workshop_sessions_expert_idx ON leaders.workshop_sessions USING btree (expert_id) WHERE (expert_id IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS workshop_sessions_req_idx ON leaders.workshop_sessions USING btree (requirement_id, starts_at);
 

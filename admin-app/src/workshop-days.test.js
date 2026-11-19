@@ -91,7 +91,8 @@ describe('أيام الورشة في البطاقة (W3)', () => {
     // أدوات الكتابة لمن يكتب وحده (وضع القراءة فقط)
     expect(ui).toMatch(/act\.canWrite && <button type="button" className="btn-sm primary cj-day-add"/);
     const acts = read('admin-app/src/screens/Activities.jsx');
-    expect(acts).toMatch(/import \{ VERIFY_AR, withCapacity \} from '\.\.\/workshop-days\.js'/);
+    // المرحلة 4 أضافت إلى السطر نفسه حقول المدرب والبريد (sessionExtras وأخواتها): المصدر ما زال workshop-days.js وحده
+    expect(acts).toMatch(/import \{ [^}]*\bVERIFY_AR, withCapacity \} from '\.\.\/workshop-days\.js'/);
     expect(acts).not.toMatch(/const VERIFY_AR = /);
     const name = '20261118130000_leaders_workshop_capacity';
     expect(MIGRATIONS).toContain(name);

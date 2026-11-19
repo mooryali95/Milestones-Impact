@@ -394,3 +394,12 @@ fieldset.cj-dates { margin: 0; min-inline-size: 0; }
   .cr-table tr.cr-late td:first-child { box-shadow: none; }
   .cr-table tr.cr-late { border-inline-start: 3px solid var(--st-bad); }
 }
+
+/* ورشة من الخط (المرحلة 4): مدرب اليوم في صفه، والمرحلة بلا نشاط حضور بزر باهت وجملته، ونافذة ما يمكن فعله */
+.cj-day-trainer { font-weight: 600; color: var(--ink); }
+.cj-noattend .cj-day-add[aria-disabled="true"] { opacity: .6; border-style: dashed; }
+.cj-noattend-dlg { gap: 14px; }
+.cj-noattend-dlg p { margin: 0; line-height: 1.8; }
+.cj-noattend-dlg section { display: grid; gap: 8px; justify-items: start; }
+.cj-noattend-dlg h4 { margin: 0; font-size: .95rem; color: var(--ink); }
+.cj-na-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }

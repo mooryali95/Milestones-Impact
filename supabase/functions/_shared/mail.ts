@@ -276,11 +276,12 @@ export async function sendCounted(client: Client, to: string, subject: string, h
 }
 
 // دعوة تقويم (iCalendar) لموعد واحد: تُضاف إلى أي تقويم بنقرة. النصوص تُهرَّب حسب RFC 5545
-export function icsEvent({ uid, start, end, title, description = '', url = '' }: { uid: string; start: string; end: string; title: string; description?: string; url?: string }) {
+// sequence: رقم تسلسل للحدث المحدَّث (RFC 5545). التقويم يستبدل الحدث ذا المعرّف نفسه بالنسخة الأحدث تسلسلًا
+export function icsEvent({ uid, start, end, title, description = '', url = '', sequence }: { uid: string; start: string; end: string; title: string; description?: string; url?: string; sequence?: number }) {
   const t = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const x = (v: string) => String(v).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:${uid}@sunkvalue.com`, `DTSTAMP:${t(new Date().toISOString())}`, `DTSTART:${t(start)}`, `DTEND:${t(end)}`,
+    `UID:${uid}@sunkvalue.com`, `DTSTAMP:${t(new Date().toISOString())}`, `DTSTART:${t(start)}`, `DTEND:${t(end)}`, ...(sequence != null ? [`SEQUENCE:${Math.max(0, Math.floor(sequence))}`] : []),
     `SUMMARY:${x(title)}`, ...(description ? [`DESCRIPTION:${x(description)}`] : []), ...(url ? [`URL:${url}`, `LOCATION:${x(url)}`] : []),
     'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${x(title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'];
   const text = lines.join('\r\n') + '\r\n';

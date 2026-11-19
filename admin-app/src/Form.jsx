@@ -6,18 +6,21 @@
 // show(قيم) ← يظهر الحقل ويُحفظ فقط حين تعيد true (حقول تتبع نوعًا مختارًا) · datetime ← تاريخ ووقت محليان يُحفظان ISO
 // check ← قيمة منطقية · multi ← مربعات اختيار من options تُحفظ مصفوفة مفاتيح · options ← قائمة [{ label, score }] · empty ← خيار فارغ أول في القائمة (يُحفظ null)
 // onSave(قيم) ← وعد بـ { success, message }. الحذف اختياري بتأكيد.
+// options ← كائن، أو دالة تعيده بحسب القيم الحالية (قائمة تتبع حقلًا آخر، كمدربي الدفعة المختارة) · check يقبل help أيضًا
+// notes(قيم) ← سطور تنبيه قبل الأزرار [{ text, tone?: 'warn' }] · saveLabel ← نص زر الحفظ
+// confirmSave(المحفوظ، القيم) ← نص تأكيد قبل الحفظ، أو null بلا تأكيد (حفظ يرسل بريدًا أو يضيف من الخط الزمني)
 // الإغلاق دون حفظ (Esc أو النقر خارجه أو «إلغاء») يسأل أولًا إن تغيّر شيء، فلا يضيع ما كُتب سهوًا.
 import React, { useState } from 'react';
 import { useEscape, useGuardedClose, useUI } from './ui.jsx';
 
 // ISO ← قيمة حقل datetime-local بتوقيت المتصفح
-const toLocal = (iso) => {
+export const toLocal = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
   return isNaN(d) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
 };
 
-export default function Form({ title, fields, values = {}, onSave, onDelete, onClose }) {
+export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, saveLabel = 'حفظ' }) {
   const { confirm } = useUI();
   const [start] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
     f.type === 'check' ? !!values[f.name]
@@ -34,7 +37,8 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
   const set = (name) => (e) => setV({ ...v, [name]: e.target.value });
   const submit = async (e) => {
     e.preventDefault();
-    setBusy(true); setError('');
+    if (busy) return;
+    setError('');
     const out = Object.fromEntries(fields.filter((f) => !f.show || f.show(v)).map((f) => {
       const x = v[f.name];
       if (f.type === 'datetime') return [f.name, x ? new Date(x).toISOString() : null];
@@ -44,10 +48,15 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
       if (f.type === 'options') return [f.name, x.map((o) => ({ label: String(o.label).trim(), score: Number(o.score || 0) })).filter((o) => o.label)];
       return [f.name, String(x).trim() || null];
     }));
+    const ask = confirmSave ? confirmSave(out, v) : null;
+    if (ask && !(await confirm(ask.text || ask, { ok: ask.ok || saveLabel }))) return;
+    setBusy(true);
     const res = await onSave(out);
     setBusy(false);
     if (res?.success) onClose(true); else setError(res?.message || 'تعذّر الحفظ');
   };
+  const optionsOf = (f) => (typeof f.options === 'function' ? f.options(v) : f.options) || {};
+  const noteList = notes ? (notes(v) || []).filter((n) => n?.text) : [];
   const remove = async () => {
     if (!(await confirm('حذف نهائي؟', { danger: true }))) return;
     setBusy(true);
@@ -64,9 +73,10 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
           const id = `f-${f.name}`;
           const common = { id, name: f.name, value: v[f.name], onChange: set(f.name), dir: f.dir, readOnly: f.readOnly || undefined };
           if (f.type === 'check') {
+            const help = typeof f.help === 'function' ? f.help(v) : f.help;
             return (
-              <label key={f.name} htmlFor={id} className="la-check">
-                <input id={id} type="checkbox" checked={v[f.name]} onChange={(e) => setV({ ...v, [f.name]: e.target.checked })} /> <span>{f.label}</span>
+              <label key={f.name} htmlFor={id} className={`la-check${help ? ' with-help' : ''}`}>
+                <input id={id} type="checkbox" checked={v[f.name]} aria-describedby={help ? `${id}-help` : undefined} onChange={(e) => setV({ ...v, [f.name]: e.target.checked })} /> <span>{f.label}{help && <small id={`${id}-help`} className="la-muted">{help}</small>}</span>
               </label>
             );
           }
@@ -108,15 +118,20 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
               <span>{typeof f.label === 'function' ? f.label(v) : f.label}</span>
               {help && <small className="la-muted">{help}</small>}
               {f.type === 'select' ? (
-                <select {...common} disabled={f.readOnly || undefined}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(f.options).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+                <select {...common} disabled={f.readOnly || undefined}>{f.empty != null && <option value="">{f.empty}</option>}{Object.entries(optionsOf(f)).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
               ) : f.type === 'textarea' ? <textarea {...common} rows={f.rows || 3} />
                 : <input {...common} type={f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : f.type === 'datetime' ? 'datetime-local' : f.type === 'date' ? 'date' : 'text'} step={f.type === 'number' ? 'any' : undefined} />}
             </label>
           );
         })}
+        {noteList.length > 0 && (
+          <ul className="la-form-notes" data-testid="form-notes">
+            {noteList.map((n) => <li key={n.text} className={n.tone === 'warn' ? 'warn' : ''}>{n.tone === 'warn' && <span aria-hidden="true">! </span>}{n.text}</li>)}
+          </ul>
+        )}
         {error && <div className="la-err" role="alert">{error}</div>}
         <div className="la-row">
-          <button className="btn-sm primary" type="submit" disabled={busy}>حفظ</button>
+          <button className="btn-sm primary" type="submit" disabled={busy}>{saveLabel}</button>
           <button className="btn-sm ghost" type="button" onClick={close}>إلغاء</button>
           {onDelete && <><span style={{ flex: 1 }} /><button className="btn-sm danger" type="button" onClick={remove} disabled={busy}>حذف</button></>}
         </div>

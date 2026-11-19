@@ -5,9 +5,9 @@
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
-import { alertOps, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import { alertOps, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_CHANGE_MAIL, WORKSHOP_MAIL, workshopChangeMail, workshopMail } from './core.ts';
 import { missingColumn, missingTable } from './missing-column.ts';
-import { listed, simulated } from './counting.ts';
+import { counted, listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, defOf, releaseOf, requirementFor } from './programs.ts';
@@ -48,6 +48,16 @@ async function expertFor(id: unknown, coach: unknown, participantId?: string): P
   const { data: req } = await db.from('expert_requests').select('expert_id').eq('participant_id', participantId).eq('role', 'coach').eq('status', 'accepted').maybeSingle();
   return req?.expert_id || null;
 }
+// جلسات الورش لرحلة المشارك، ومع كل جلسة اسم مدربها إن سُمّي («مع فلان»، الترحيل 20261119130000). قبل الترحيل لا عمود:
+// تُقرأ بلاه كما كانت. والاسم وحده يخرج للمشارك، لا معرّف الخبير ولا بريده
+const JOURNEY_SESSION_COLS = 'id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url';
+async function journeySessions(ids: string[]): Promise<{ data: any[] }> {
+  let res: { data: any; error: any } = await db.from('workshop_sessions').select(`${JOURNEY_SESSION_COLS}, expert_id`).in('requirement_id', ids);
+  if (res.error && missingColumn(res.error)) res = await db.from('workshop_sessions').select(JOURNEY_SESSION_COLS).in('requirement_id', ids);
+  const rows = (res.data || []) as any[];
+  const names = await trainerNames(rows.map((s) => s.expert_id));
+  return { data: rows.map(({ expert_id, ...s }) => (expert_id && names[expert_id] ? { ...s, trainer: names[expert_id] } : s)) };
+}
 export async function evidenceFor(p: any, reqs: any[], levels: Record<string, string>, approved: boolean, cohortId: string | null = null) {
   const mine = reqs.filter((r) => VERIFIED_KINDS.includes(r.kind) && r.active !== false && requirementApplies(r, levels));
   if (!mine.length) return {};
@@ -64,7 +74,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('reading') ? db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id) : none,
     kinds.has('reading') ? db.from('handbook_progress').select('module_id').eq('participant_id', p.id) : none,
     kinds.has('video') ? db.from('video_progress').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
-    kinds.has('workshop') ? db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url').in('requirement_id', ids) : none,
+    kinds.has('workshop') ? journeySessions(ids) : none,
     kinds.has('workshop') ? db.from('workshop_attendance').select('session_id').eq('participant_id', p.id) : none,
     kinds.has('coaching') ? db.from('coaching_sessions').select('*').eq('participant_id', p.id).in('requirement_id', ids) : none,
     // منهج المسار يُفتح مع الكتاب بعد اعتماد المستويات
@@ -544,7 +554,10 @@ export async function overview() {
     db.from('programs').select('id, name').is('archived_at', null),
     db.from('cohorts').select('*').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
-  const capacity_ready = await capacityReady();
+  const [capacity_ready, trainer_ready] = await Promise.all([capacityReady(), trainerReady()]);
+  // مدرب الجلسة (المرحلة 4): خبراء كل دفعة لقائمة النموذج، واسم مدرب كل جلسة. تعذّرهما لا يسقط الشاشة: يُخفى الحقل
+  const cohort_trainers = trainer_ready ? await cohortTrainers((cohorts.data || []).map((c: any) => c.id)).catch((e) => { console.error('activities trainers', e); return {}; }) : {};
+  const trainerOf = trainer_ready ? await trainerNames((ws.data || []).map((s: any) => s.expert_id)) : {};
   const outside = await outsideByCohort((cohorts.data || []) as any[], (ws.data || []) as any[]).catch((e) => { console.error('activities outside', e); return {}; });
   const counts: Record<string, number> = {};
   for (const a of att.data || []) counts[a.session_id] = (counts[a.session_id] || 0) + 1;
@@ -558,9 +571,9 @@ export async function overview() {
   return {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
-    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [] }; delete row.secret; return row; }),
+    workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [], trainer: (s.expert_id && trainerOf[s.expert_id]) || null }; delete row.secret; return row; }),
     coaching: coach.data || [],
-    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready,
+    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready, cohort_trainers,
   };
 }
 
@@ -602,6 +615,60 @@ export async function capacityReady(): Promise<boolean> {
   return !error;
 }
 
+// ── مدرب الجلسة (تصور تشغيل الدفعة 2026-11-19، المرحلة 4، الترحيل 20261119130000) ──
+// اختياري، ومن خبراء دفعة الجلسة وحدهم: مستشار الدفعة (cohorts.advisor_expert_id) أو عضو فريقها (cohort_experts)، وهو الربط
+// نفسه الذي يكلف المدرب بدفعته (expertCohortIds)، وممن يخدمون في الرحلة (journeyApproved). فالمدرب المسمى مكلف بدفعة جلسته
+// دائمًا، وصلاحية ورقة الحضور تبقى بالتكليف لا بالاسم: من أُزيل من فريق الدفعة لا يسجل حضورها ولو بقي اسمه على جلسة.
+// قبل الترحيل لا عمود: اللوحة تخفي الحقل، والحفظ يعيد المحاولة بلاه (trainer_skipped)
+export async function trainerReady(): Promise<boolean> {
+  const { error } = await db.from('workshop_sessions').select('expert_id').limit(1);
+  if (error && !missingColumn(error)) console.error('workshop trainer', error.message);
+  return !error;
+}
+/** خبراء كل دفعة ممن يُسمَّون مدربين لجلساتها: { معرّف الدفعة: [{ id, full_name }] } */
+export async function cohortTrainers(cohortIds: unknown[]): Promise<Record<string, { id: string; full_name: string }[]>> {
+  const ids = [...new Set(cohortIds.map((x) => String(x || '')).filter((x) => UUID_RE.test(x)))];
+  if (!ids.length) return {};
+  const [cs, team] = await Promise.all([
+    db.from('cohorts').select('id, advisor_expert_id').in('id', ids),
+    db.from('cohort_experts').select('cohort_id, expert_id').in('cohort_id', ids),
+  ]);
+  const by = new Map<string, Set<string>>(ids.map((id) => [id, new Set<string>()]));
+  for (const c of (must(cs) ?? []) as any[]) if (c.advisor_expert_id) by.get(c.id)?.add(c.advisor_expert_id);
+  for (const x of (must(team) ?? []) as any[]) if (x.expert_id) by.get(x.cohort_id)?.add(x.expert_id);
+  const all = [...new Set([...by.values()].flatMap((x) => [...x]))];
+  const experts = all.length ? ((must(await db.from('experts').select('id, full_name, status, roles').in('id', all)) ?? []) as any[]) : [];
+  const ok = new Map<string, string>(experts.filter(journeyApproved).map((e: any) => [e.id, e.full_name]));
+  return Object.fromEntries(ids.map((id) => [id, [...(by.get(id) || [])].filter((x) => ok.has(x)).map((x) => ({ id: x, full_name: ok.get(x)! }))
+    .sort((x, y) => x.full_name.localeCompare(y.full_name, 'ar'))]));
+}
+/** أسماء المدربين بمعرّفاتهم، لمن يخدم في الرحلة وحده (journeyApproved): مدرب أُوقف بعد تسميته لا يُعرض اسمه للمشارك ولا في
+ * الدعوة. تعذّر القراءة يعيد فارغًا: الجلسة تُعرض بلا مدرب ولا تسقط به */
+async function trainerNames(ids: unknown[]): Promise<Record<string, string>> {
+  const want = [...new Set(ids.map((x) => String(x || '')).filter(Boolean))];
+  if (!want.length) return {};
+  const { data, error } = await db.from('experts').select('id, full_name, status, roles').in('id', want);
+  if (error) { console.error('trainer names', error.message); return {}; }
+  return Object.fromEntries(((data || []) as any[]).filter(journeyApproved).map((e) => [e.id, e.full_name]));
+}
+// المدرب المرسل يُفحص حين يتغير وحده: تحرير جلسة بمدربها القائم (عنوان أو مكان) لا يتعطل إن أُوقف المدرب بعد تسميته.
+// ونقل الجلسة إلى دفعة أخرى بلا مدرب مرسل يفرغ المدرب إن لم يكن من خبراء الدفعة الجديدة
+async function checkTrainer(row: Body, out: Body, prev: any) {
+  const cohortId = 'cohort_id' in out ? out.cohort_id : prev?.cohort_id ?? null;
+  if ('expert_id' in row) {
+    out.expert_id = UUID_RE.test(String(row.expert_id || '')) ? String(row.expert_id) : null;
+    const same = !!prev && (prev.expert_id || null) === out.expert_id && (prev.cohort_id || null) === (cohortId || null);
+    if (!out.expert_id || same) return;
+    if (!cohortId) throw new Fail('المدرب يُسمى لجلسة دفعة بعينها. اختر الدفعة أولًا، أو اترك المدرب فارغًا', 400, 'trainer_needs_cohort');
+    if (!(await cohortTrainers([cohortId]))[cohortId]?.some((e) => e.id === out.expert_id)) throw new Fail('المدرب ليس من خبراء هذه الدفعة. اختره من مستشارها أو فريقها', 400, 'trainer_not_in_cohort');
+    return;
+  }
+  if (!prev?.expert_id || !('cohort_id' in out) || (prev.cohort_id || null) === (out.cohort_id || null)) return;
+  if (!out.cohort_id || !(await cohortTrainers([out.cohort_id]))[out.cohort_id]?.some((e) => e.id === prev.expert_id)) out.expert_id = null;
+}
+
+// الحفظ الواحد للجلسة (القرار 23): من «الحضور والجلسات» وبطاقة المرحلة والنقرة على الخط الزمني (المرحلة 4). ومعه اختياران
+// صريحان من النموذج لا يُرسل بريد بغيرهما: invite (أرسل الدعوة عند الحفظ) وnotify_change (أبلغ المدعوين بتغيّر الموعد أو المكان)
 export async function workshopSave(a: any, b: Body) {
   const row = b.row || {};
   const mode = row.mode === 'online' ? 'online' : 'in_person';
@@ -626,20 +693,29 @@ export async function workshopSave(a: any, b: Body) {
     if (res.error && !out.starts_at && ['23502', '23514'].includes(String(res.error.code))) throw new Fail('الجلسة بلا موعد تحتاج تحديث قاعدة البيانات أولًا؛ حدد موعدها الآن أو أعد المحاولة بعد التحديث');
     return res;
   };
-  // قبل الترحيل 20261118130000 لا عمود للسعة: يُعاد الحفظ بلاها، ويُقال للوحة إنها لم تُحفظ إن كانت لها قيمة
-  let capacitySkipped = false;
+  // قبل الترحيل 20261118130000 لا عمود للسعة، وقبل 20261119130000 لا عمود للمدرب: يُعاد الحفظ بلا العمود الغائب، ويُقال
+  // للوحة إنه لم يُحفظ إن كانت له قيمة. العمود يُعرف من رسالة الخطأ، وإن لم تسمِّه يُجرَّب إسقاطهما واحدًا واحدًا
+  let capacitySkipped = false, trainerSkipped = false;
   const tolerant = async (write: (x: Body) => PromiseLike<any>) => {
-    const res = await write(out);
-    if (!res.error || !('capacity' in out) || !missingColumn(res.error)) return res;
-    capacitySkipped = out.capacity != null;
-    delete out.capacity;
-    return await write(out);
+    let res = await write(out);
+    for (let i = 0; i < 2 && res.error && missingColumn(res.error); i++) {
+      const msg = String(res.error.message || '');
+      const k = ['expert_id', 'capacity'].find((c) => c in out && msg.includes(c)) || ['expert_id', 'capacity'].find((c) => c in out);
+      if (!k) break;
+      if (k === 'capacity') capacitySkipped = out.capacity != null; else trainerSkipped = out.expert_id != null;
+      delete out[k];
+      res = await write(out);
+    }
+    return res;
   };
-  let saved: any;
+  let saved: any, prev: any = null;
   if (row.id) {
     // تغيّر الموعد يُسقط أختام الدعوة والتذكير: الموعد الجديد يُذكَّر به وتُرسل دعوته من جديد (كان يبقى «أُرسلت الدعوة» ويسقط التذكير)
     // بـ* وبما يحمله الصف فقط: الأعمدة من ترحيلات لاحقة، فلا يُكتب عمود غير موجود قبلها
-    const prev = must(await db.from('workshop_sessions').select('*').eq('id', row.id).maybeSingle()) as any;
+    // نسخة مما قبل الحفظ: يُقارن بها ما بعده (إشعار التغيير)، فلا تتبع صفًا يتغير بالحفظ نفسه
+    const read = must(await db.from('workshop_sessions').select('*').eq('id', row.id).maybeSingle()) as any;
+    prev = read ? { ...read } : null;
+    await checkTrainer(row, out, prev);
     const at = (v: any) => (v ? Date.parse(v) : null);
     if (prev && at(prev.starts_at) !== at(out.starts_at)) {
       for (const k of ['invited_at', 'reminded_day_at', 'reminded_hour_at']) if (k in prev) out[k] = null;
@@ -648,11 +724,53 @@ export async function workshopSave(a: any, b: Body) {
   } else {
     const r = must(await db.from('stage_requirements').select('id, kind').eq('id', String(row.requirement_id || '')).maybeSingle());
     if (!r || r.kind !== 'workshop') throw new Fail('اختر متطلب ورشة');
+    await checkTrainer(row, out, null);
     const secret = randomToken(32);
     saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').insert({ ...x, requirement_id: r.id, secret }).select('id').single())), 'تعذّر الحفظ');
   }
   await audit('admin', a.email, row.id ? 'workshop.update' : 'workshop.create', 'workshop_sessions', saved.id, null, out);
-  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}) };
+  // البريد بعد الحفظ وباختيار صريح وحده. تعذّره لا يُسقط الحفظ (فلا تُنشأ الجلسة مرتين بإعادة المحاولة): يُرد بنتيجته
+  const mail = await saveMail(a, saved.id, prev, b).catch((e) => { console.error('workshop save mail', saved.id, (e as Error).message); return { mail_error: true }; });
+  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...(trainerSkipped ? { trainer_skipped: true } : {}), ...mail };
+}
+
+// ── البريد عند الحفظ (المرحلة 4): «أرسل الدعوة عند الحفظ» و«أبلغ المدعوين بالتغيير» ──
+// الدعوة: الدعوة القائمة نفسها (workshopSend) لجلسة دفعة مؤرخة قائمة لم تنتهِ ولم تُدعَ. الختم invited_at يُحجز قبل الإرسال
+// بشرط أنه فارغ، فطلبان معًا أو طلب معاد لا يرسلان مرتين، ويُحرر إن لم تخرج رسالة.
+// التغيير: لجلسة دُعي أعضاؤها ثم تغيّر موعدها أو مكانها في هذا الحفظ نفسه. يُقارن الصف قبل الحفظ بما بعده، فالحفظ المعاد
+// بالقيم نفسها لا يجد تغيّرًا ولا يرسل. بعده تبقى الجلسة «مدعوة» (الإشعار يحمل الموعد الجديد وملف تقويمه)، والتذكيران
+// يُعادان للموعد الجديد كما كان. وبلا الاختيار يبقى السلوك السابق: تغيّر الموعد يعيد فتح الدعوة.
+type MailSkip = 'general' | 'undated' | 'ended' | 'inactive' | 'invited';
+const mailSkip = (s: any): MailSkip | null => (!s.cohort_id ? 'general' : s.active === false ? 'inactive' : isUndated(s) ? 'undated' : Date.parse(s.ends_at) < Date.now() ? 'ended' : null);
+const whenOf = (s: any) => `${s?.starts_at ? Date.parse(s.starts_at) : ''}|${s?.ends_at ? Date.parse(s.ends_at) : ''}`;
+const placeOf = (s: any) => (s?.mode === 'online' ? `online|${s.join_url || ''}` : `in_person|${s?.location_ar || ''}`);
+async function saveMail(a: any, id: string, prev: any, b: Body): Promise<Body> {
+  const wantInvite = b.invite === true, wantChange = b.notify_change === true;
+  if (!wantInvite && !wantChange) return {};
+  const s = must(await db.from('workshop_sessions').select('*').eq('id', id).maybeSingle()) as any;
+  if (!s) return {};
+  const skip = mailSkip(s);
+  const changed = { when: !!prev && whenOf(prev) !== whenOf(s), where: !!prev && placeOf(prev) !== placeOf(s) };
+  if (wantChange && prev?.invited_at && (changed.when || changed.where)) {
+    if (skip) return { change: { skipped: skip } };
+    const r = await workshopSend(s, 'change', changed);
+    // تبقى مدعوة بعد الإشعار. قبل الترحيل 20261110140000 لا عمود للختم: يُرسل الإشعار ولا يُحفظ وقته
+    if (r.sent) await db.from('workshop_sessions').update({ invited_at: new Date().toISOString() }).eq('id', s.id);
+    await audit('admin', a.email, 'workshop.change-notice', 'workshop_sessions', s.id, null, { ...r, ...changed });
+    return { change: r };
+  }
+  if (!wantInvite) return {};
+  if (skip) return { invite: { skipped: skip } };
+  if (s.invited_at) return { invite: { skipped: 'invited' } };
+  const stamp = await db.from('workshop_sessions').update({ invited_at: new Date().toISOString() }).eq('id', s.id).is('invited_at', null).select('id');
+  // قبل ترحيل الختم لا عمود: تُرسل الدعوة بلا حجز كما يفعل زر «أرسل الدعوة»
+  const stamped = !stamp.error;
+  if (stamp.error && !missingColumn(stamp.error)) must(stamp);
+  if (stamped && !(stamp.data || []).length) return { invite: { skipped: 'invited' } };
+  const r = await workshopSend(s, 'invite');
+  if (stamped && !r.sent) await db.from('workshop_sessions').update({ invited_at: null }).eq('id', s.id);
+  await audit('admin', a.email, 'workshop.invite', 'workshop_sessions', s.id, null, { ...r, on_save: true });
+  return { invite: r };
 }
 
 export async function workshopDelete(a: any, b: Body) {
@@ -746,11 +864,14 @@ export async function cohortWorkshops(b: Body) {
   const c = must(await db.from('cohorts').select('id, program_id, delivery').eq('id', String(b.cohort_id || '')).maybeSingle()) as any;
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
   const ids = [...new Set((Array.isArray(b.requirement_ids) ? b.requirement_ids : []).map(String))].filter((x) => /^[0-9a-f-]{36}$/.test(x)).slice(0, 50);
-  const capacity_ready = await capacityReady();
-  if (!ids.length) return { success: true, capacity_ready, sessions: [] };
+  const [capacity_ready, trainer_ready] = await Promise.all([capacityReady(), trainerReady()]);
+  // خبراء هذه الدفعة لحقل «المدرب» في نموذج اليوم (المرحلة 4). قبل ترحيل العمود لا حقل ولا قائمة
+  const trainers = trainer_ready ? ((await cohortTrainers([c.id]).catch((e) => { console.error('cohort trainers', e); return {} as Record<string, any[]>; }))[c.id] || []) : [];
+  const base = { success: true, capacity_ready, trainer_ready, trainers };
+  if (!ids.length) return { ...base, sessions: [] };
   // متطلبات برنامج الدفعة وحدها، فلا تُقرأ جلسات برنامج آخر برقم متطلب مرسل
   const reqs = (must(await db.from('stage_requirements').select('*').in('id', ids).eq('program_id', c.program_id).eq('kind', 'workshop')) || []) as any[];
-  if (!reqs.length) return { success: true, capacity_ready, sessions: [] };
+  if (!reqs.length) return { ...base, sessions: [] };
   const reqOf = Object.fromEntries(reqs.map((r: any) => [r.id, r]));
   const rows = ((must(await db.from('workshop_sessions').select('*').in('requirement_id', reqs.map((r: any) => r.id))) || []) as any[])
     .filter((s: any) => !s.cohort_id || s.cohort_id === c.id).sort(bySessionTime);
@@ -761,15 +882,17 @@ export async function cohortWorkshops(b: Body) {
   ]);
   const attOf: Record<string, any[]> = {};
   for (const a of (att as any).data || []) (attOf[a.session_id] ||= []).push(a);
+  const trainerOf = trainer_ready ? await trainerNames(rows.map((s: any) => s.expert_id)) : {};
   // المتوقع لهذه الدفعة: جلستها كما تعدّها شاشة الرمز، والعامة بأعضاء هذه الدفعة وحاضريها وحدهم
   const sessions = rows.map((s: any) => {
     const people = attendancePeople(reqOf[s.requirement_id], w, c.id, attOf[s.id] || [], !s.cohort_id);
-    const row: Body = { ...s, verify: sessionVerify(reqOf[s.requirement_id], s.cohort_id ? c.delivery : null), expected: people.length, attended: people.filter((p: any) => p.attendance).length };
+    const row: Body = { ...s, verify: sessionVerify(reqOf[s.requirement_id], s.cohort_id ? c.delivery : null), expected: people.length, attended: people.filter((p: any) => p.attendance).length,
+      trainer: (s.expert_id && trainerOf[s.expert_id]) || null };
     delete row.secret;
     if (!capacity_ready) delete row.capacity;
     return row;
   });
-  return { success: true, capacity_ready, sessions };
+  return { ...base, sessions };
 }
 
 // ── التسجيل اليدوي للحضور: كاتب واحد للفردي والجماعي وللمدرب (تصور تشغيل الدفعة 2026-11-19، المرحلتان 0 و2) ──
@@ -986,12 +1109,17 @@ export async function sessionReminders() {
 // والتذكيران من المهمة الساعية: قبل يوم (23 إلى 25 ساعة) وقبل ساعة (30 إلى 90 دقيقة). كلٌّ مرة واحدة لكل جلسة.
 // جلسة بلا دفعة (لكل الدفعات) لا يُعرف مدعووها، فلا تُرسل دعوتها ولا تذكيرها آليًا.
 const workshopWhen = (iso: string | null) => (!iso ? SESSION_TBD_AR : new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' }));
-async function workshopRecipients(s: any) {
+// realOnly (الدعوة وإشعار التغيير): بلا حسابات الاختبار أيضًا (counted)، فبريد يطلبه المدير بنقرة لا يصل حساب العرض ولا
+// حساب اختبار. والتذكيران الآليان كما كانا: لأعضاء الدفعة كلهم (cohortMembers يستبعد حساب العرض بـlisted)
+async function workshopRecipients(s: any, realOnly = false) {
   if (!s.cohort_id) return [];
   const cohort = (await db.from('cohorts').select('*').eq('id', s.cohort_id).maybeSingle()).data as any;
   if (!cohort) return [];
   // المنسحب والموقوف خارج البرنامج (inProgram مصدر واحد): لا دعوة ولا تذكير (كان الموقوف يُدعى)
-  return ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && inProgram(m.status));
+  const people = ((await cohortMembers(cohort)) as any[]).filter((m) => m.email && inProgram(m.status));
+  if (!realOnly || !people.length) return people;
+  const real = new Set((((must(await counted(db.from('participants').select('id').in('id', people.map((m) => m.id)))) ?? []) as any[])).map((x) => x.id));
+  return people.filter((m) => real.has(m.id));
 }
 // رابط الجلسة عن بعد في البريد بقاعدة workshop.join نفسها (sessionOpen): البريد والخادم مصدر واحد. فمن فتح الأدمن مرحلته
 // قبل اعتماده يأخذه، والمعتمد يأخذه كما كان. تعذّر الحساب لأحدهم يحجب الرابط عنه وحده، ويبقى زر الانضمام في رحلته حكمه
@@ -1019,10 +1147,15 @@ export function sessionVerify(req: any, delivery: any): string {
   if (!req) return 'qr';
   return applyDelivery(req, delivery?.[req.code])?.config?.verify || 'qr';
 }
-async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
+// change (المرحلة 4): إشعار قصير بالموعد أو المكان الجديد لمن دُعي، ومعه ملف تقويم بالمعرّف نفسه ورقم تسلسل أحدث فيحدّث
+// الموعد في تقويم المدعو بدل أن يضيف ثانيًا
+async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', changed: { when: boolean; where: boolean } = { when: true, where: false }) {
   // غير المؤرخة لا دعوة لها ولا تذكير ولا ملف تقويم (الدعوة تمنعها، وفلتر التذكير يتجاهلها، وهذا حارس ثالث)
   if (isUndated(s)) return { sent: 0, failed: 0, total: 0 };
-  const people = await workshopRecipients(s);
+  const byAdmin = kind === 'invite' || kind === 'change';
+  const people = await workshopRecipients(s, byAdmin);
+  // المدرب المسمى في الدعوة وإشعار التغيير («مع فلان»)، والتذكيران كما كانا
+  const trainer = byAdmin && s.expert_id ? (await trainerNames([s.expert_id]))[s.expert_id] || null : null;
   const when = workshopWhen(s.starts_at);
   // ومن لا تفتح له مرحلتها يُدعى بموعدها، ونص البريد له أن الرابط في رحلته حين تُفتح، لا تعليمات القاعة
   const online = s.mode === 'online' && !!s.join_url;
@@ -1033,13 +1166,17 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour') {
   // الجلسة نفسها (config.verify بتخصيص الدفعة كما في workshop.checkin)، فلا يُقال لمن ينضم عن بعد «امسح رمز QR»
   const hall = await features().then((f) => f.hall).catch(() => false);
   const verify = hall ? null : await workshopVerify(s).catch(() => null);
-  const ics = (url: string) => (kind === 'invite' ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url })] : []);
+  const sequence = kind === 'change' ? Math.floor(Date.now() / 1000) : undefined;
+  const ics = (url: string) => (byAdmin ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url, sequence })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   let sent = 0, failed = 0;
   // التذكير والدعوة مؤرخان بموعد الجلسة: إن انتظرا في الطابور حتى بدأت يُتركان ولا يخرجان بعدها (expiresAt)
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
-    try { await sendMail(m.email, WORKSHOP_MAIL[kind].subject, workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, online && !link ? 'staged' : linkLater ? 'later' : false, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link)), link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at }); sent += 1; }
+    const staged = online && !link ? 'staged' : linkLater ? 'later' : false;
+    const html = kind === 'change' ? workshopChangeMail(m.name, s.title_ar, when, s.location_ar || null, link, staged, changed, trainer)
+      : workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, staged, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link), trainer);
+    try { await sendMail(m.email, kind === 'change' ? WORKSHOP_CHANGE_MAIL.subject : WORKSHOP_MAIL[kind].subject, html, link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at }); sent += 1; }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
   return { sent, failed, total: people.length };
@@ -1107,7 +1244,8 @@ export async function expertWorkshops(e: any) {
   const ids = [...(await expertCohortIds(e.id))];
   if (!ids.length) return { success: true, sessions: [] };
   const now = Date.now();
-  const rows = (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').in('cohort_id', ids)
+  // بـ* لتحمل expert_id بعد الترحيل 20261119130000 وتعمل قبله. والسر لا يخرج: الرد يُبنى حقلًا حقلًا أدناه
+  const rows = (must(await db.from('workshop_sessions').select('*').in('cohort_id', ids)
     .eq('active', true)) ?? []) as any[];
   const dated = rows.filter((s) => !isUndated(s));
   const soon = (s: any) => s.mode === 'in_person' && Date.parse(s.ends_at) + 1800e3 >= now && Date.parse(s.starts_at) <= now + 14 * 864e5;
@@ -1120,8 +1258,12 @@ export async function expertWorkshops(e: any) {
   const reqOf = Object.fromEntries(((must(reqs) ?? []) as any[]).map((r: any) => [r.id, r]));
   const cohortOf = Object.fromEntries(((must(cohorts) ?? []) as any[]).map((c: any) => [c.id, c]));
   const qr = (s: any) => soon(s) && sessionVerify(reqOf[s.requirement_id], cohortOf[s.cohort_id]?.delivery) === 'qr';
-  const sessions = live.filter((s) => qr(s) || trainerSheetOpen(s, now)).sort(bySessionTime).slice(0, 20)
-    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now), qr: qr(s), sheet: trainerSheetOpen(s, now) }));
+  const shown = live.filter((s) => qr(s) || trainerSheetOpen(s, now)).sort(bySessionTime).slice(0, 20);
+  // المدرب المسمى للجلسة (المرحلة 4): mine لجلسته هو («أنت مدربها»)، واسم غيره من زملاء الدفعة. الصلاحية لا تتبع الاسم
+  const trainerOf = await trainerNames(shown.map((s) => s.expert_id).filter((x) => x && x !== e.id));
+  const sessions = shown
+    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now), qr: qr(s), sheet: trainerSheetOpen(s, now),
+      ...(s.expert_id === e.id ? { mine: true } : s.expert_id && trainerOf[s.expert_id] ? { trainer: trainerOf[s.expert_id] } : {}) }));
   return { success: true, sessions };
 }
 export async function expertWorkshopQr(e: any, b: Body) {

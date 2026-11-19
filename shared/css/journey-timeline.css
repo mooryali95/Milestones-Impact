@@ -158,6 +158,36 @@
 .jt-drag-live { margin: 8px 0 0; font-size: 12px; color: var(--jt-muted); }
 @media (prefers-reduced-motion: reduce) { .jt-ghost { transition: none; } }
 
+/* وضع إضافة ورشة من الخط (المرحلة 4): زر صريح، وممر فوق كل شريط مرحلة، وعلامة «+» بتاريخ اليوم تحت المؤشر أو المختار بالأسهم.
+   خارج الوضع لا أثر لشيء من هذا، فنقرة الشريط تفتح بطاقته كما كانت */
+.jt-addbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; }
+.jt-add, .ja-add { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 700; color: var(--jt-primary); border: 1px solid var(--jt-primary); background: var(--jt-surface); white-space: nowrap; }
+.jt-add:hover, .ja-add:hover { background: color-mix(in srgb, var(--jt-primary) 8%, var(--jt-surface)); }
+.jt-add:focus-visible, .ja-add:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 2px; }
+.jt-add.on, .ja-add.on { color: #fff; background: var(--jt-primary); }
+.jt-add-hint, .ja-add-hint { font-size: 12.5px; line-height: 1.7; color: var(--jt-ink); }
+.ja-add-hint { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--jt-primary) 7%, var(--jt-surface)); border: 1px solid color-mix(in srgb, var(--jt-primary) 25%, transparent); }
+.jt-add-hint { flex: 1 1 320px; }
+.jt-adding .jt-stage { position: relative; }
+.jt-add-lane, .ja-add-lane { all: unset; box-sizing: border-box; position: absolute; inset: 0; z-index: 4; cursor: copy; border-radius: 8px;
+  background: color-mix(in srgb, var(--jt-primary) 6%, transparent); border: 1px dashed color-mix(in srgb, var(--jt-primary) 55%, transparent); }
+.ja-add-lane { inset: 2px 0; border-radius: 6px; }
+.jt-add-lane:hover, .ja-add-lane:hover { background: color-mix(in srgb, var(--jt-primary) 12%, transparent); }
+.jt-add-lane:focus-visible, .ja-add-lane:focus-visible { outline: 3px solid var(--jt-gold); outline-offset: -3px; background: color-mix(in srgb, var(--jt-gold) 14%, transparent); }
+.jt-add-lane.off, .ja-add-lane.off { cursor: help; border-color: var(--jt-line); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--jt-muted) 9%, transparent) 0 6px, transparent 6px 12px); }
+.jt-add-mark, .ja-add-mark { position: absolute; z-index: 5; width: 0; pointer-events: none; border-inline-start: 2px solid var(--jt-primary); }
+.ja-add-mark { top: 2px; bottom: 2px; }
+.jt-add-mark i, .ja-add-mark i { position: absolute; top: 50%; inset-inline-start: -12px; display: grid; place-items: center; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%;
+  font: 700 16px/1 system-ui, sans-serif; font-style: normal; color: #fff; background: var(--jt-primary); box-shadow: 0 0 0 2px var(--jt-surface); }
+.jt-add-mark b, .ja-add-mark b { position: absolute; top: 50%; inset-inline-start: 16px; transform: translateY(-50%); padding: 2px 10px; border-radius: 99px; white-space: nowrap; font-size: 12px; font-weight: 700;
+  color: #fff; background: var(--jt-primary); }
+.jt-add-mark.flip b, .ja-add-mark.flip b { inset-inline-start: auto; inset-inline-end: 16px; }
+.jt-add-mark.off, .ja-add-mark.off { border-inline-start-color: var(--jt-muted); }
+.jt-add-mark.off i, .ja-add-mark.off i, .jt-add-mark.off b, .ja-add-mark.off b { background: var(--jt-muted); }
+.ja-head .ja-add { margin-inline-start: auto; }
+@media (max-width: 640px) { .ja-add-kbd { display: none; } .ja-head .ja-add { margin-inline-start: 0; inline-size: 100%; justify-content: center; min-height: 44px; } }
+
 /* الجدول البديل */
 .jt-table { margin-top: 10px; font-size: 13px; }
 .jt-table summary { cursor: pointer; color: var(--jt-primary); font-weight: 600; }

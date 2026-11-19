@@ -16,14 +16,20 @@
 // والسحب (D1، ب5.3): في وضع التحرير لمن يكتب، سحب الشريط في الخط يكتب في المسودة نفسها التي تكتبها العدادات (dropToEdit ثم
 // mergeEdit ثم planDraft)، والحفظ بنافذة الأثر نفسها. البداية للممر والمسار (الإزاحة)، والطرف للمدة أو نهاية المسار، والإفلات
 // على مرحلة أخرى «تسير مع»، والإفلات في «مسارات مستمرة» يُرفض برابط «غيّرها في البرنامج». بلا مكتبة، والعدادات بديل دائم.
+// وورشة من الخط (تصور تشغيل الدفعة 2026-11-19، المرحلة 4): زر «+ ورشة على الخط» في المحور الزمني الكامل وفي اللوحة يدخل وضع إضافة
+// صريحًا، وفيه نقرة على يوم في صف مرحلة (أو الأسهم ثم Enter) تفتح نموذج الجلسة نفسه معبأً بالمرحلة والتاريخ بتوقيت الرياض، ثم
+// تأكيد قبل الحفظ بـadmin.workshop-save نفسه. خارج الوضع نقرة الشريط تفتح بطاقته وحدها، وفي وضع تحرير الخطة (السحب) لا وضع
+// إضافة. والنموذج يحمل المدرب (من خبراء الدفعة) و«أرسل الدعوة عند الحفظ» و«أبلغ المدعوين بالتغيير». والمرحلة بلا نشاط حضور
+// لا تُضاف فيها جلسة (القرار 5: لا جلسة بلا نشاط): تُقال الجملة ويُعرض ما يمكن.
 // البيانات: admin.cohort-definition وadmin.milestones وadmin.cohort-journey وadmin.cohort-workshops للقراءة، وadmin.cohort-plan للخطة.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import Form from '../Form.jsx';
 import { Attendance, inviteSession, QrScreen, sessionFields } from './Activities.jsx';
-import { workshopDays } from '../workshop-days.js';
-import { dateOnly, dateTime } from '../dates.js';
+import { extraEffectAr, mailConfirm, OUTSIDE_SAVE_AR, saveBody, savedAr, stageWorkshopReqs, workshopDays } from '../workshop-days.js';
+import { ADD_MINUTES, addScale, outsideWindow, sessionTimes } from '../timeline-add.js';
+import { dateOnly, dateTime, riyadhWhen as whenRiyadh } from '../dates.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 import JourneyAxis from '../../../shared/ui/JourneyAxis.jsx';
@@ -38,6 +44,7 @@ import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
 
+export const NO_ATTEND_AR = 'هذه المرحلة ليس في برنامجها نشاط حضور.';
 const GENERAL_EDIT_AR = 'جلسة عامة لكل دفعات البرنامج: ما تغيّره هنا أو تحذفه يسري على كل الدفعات.';
 const editsAr = (n) => countAr(n, 'تعديل واحد', 'تعديلان', 'تعديلات', 'تعديلًا');
 
@@ -248,6 +255,7 @@ function StageDays({ s, days, act }) {
                 <span className={r.undated ? 'cj-warn' : ''}>{r.when_ar}</span>
                 <span>{r.place_ar}</span>
                 <span>{r.verify_ar}</span>
+                {r.trainer_ar && <span className="cj-day-trainer">{r.trainer_ar}</span>}
               </p>
               {(r.counts_ar || r.capacity_ar) && (
                 <p className="cj-day-nums">
@@ -277,6 +285,20 @@ function StageDays({ s, days, act }) {
 // rows: صف كل مرحلة في خطة الدفعة (planDraft) دائمًا، وplan: أدوات التحرير في وضع التحرير وحده
 // days: أيام الورشة لهذه المرحلة (workshopDays) إن كان فيها حضور جلسات، وact: أدواتها
 // onEditDates: خارج وضع التحرير لمن يكتب، «عدّل التاريخين» يدخل وضع التحرير ويضع التركيز في حقل بداية هذه المرحلة
+// مرحلة بلا نشاط حضور (القرار 5): الزر باهت وجملته تحته، ومعه الطريقان القائمان. لا جلسة بلا نشاط
+function NoAttend({ s, act }) {
+  const id = `cj-noattend-${s.key}`;
+  return (
+    <section className="cj-days cj-noattend" id={`cj-days-${s.key}`} tabIndex={-1} aria-labelledby={`${id}-h`} data-testid={`cj-noattend-${s.key}`}>
+      <header className="cj-days-head">
+        <h6 id={`${id}-h`}>أيام وورش {s.title}</h6>
+        <button type="button" className="btn-sm ghost cj-day-add" aria-disabled="true" aria-describedby={`${id}-why`} aria-label={`يوم أو ورشة في ${s.title}`} onClick={() => act.noAttend(s)}>+ يوم أو ورشة</button>
+      </header>
+      <p className="la-muted cj-days-none" id={`${id}-why`}>{NO_ATTEND_AR} <button type="button" className="la-link" onClick={() => act.noAttend(s)}>ما الذي يمكن فعله؟</button></p>
+    </section>
+  );
+}
+
 function StageCard({ s, rows = null, plan = null, days = null, act = null, onEditDates = null }) {
   const head = `cj-st-${s.key}`;
   const row = rows?.[s.key];
@@ -335,6 +357,7 @@ function StageCard({ s, rows = null, plan = null, days = null, act = null, onEdi
         </ul>
       )}
       {days && act && !off && <StageDays s={s} days={days} act={act} />}
+      {!days && act?.canWrite && act.noAttend && !plan && !off && <NoAttend s={s} act={act} />}
     </article>
   );
 }
@@ -360,6 +383,32 @@ function ServiceCard({ s, rows = null, plan = null }) {
         <div><dt>الاستخدام</dt><dd className="cj-usage">{off ? 'لا حجز ما دامت موقوفة' : s.usage ? s.usage.text : 'يظهر بعد قراءة الخريطة'}</dd></div>
       </dl>
     </article>
+  );
+}
+
+// نافذة المرحلة بلا نشاط حضور (القرار 5): الجملة، ثم «أضفها في مرحلة أخرى» بأسماء المراحل التي فيها نشاط حضور، ثم طريق
+// إضافة النشاط نفسه: من رحلة البرنامج ثم نسخة وترقية (المسار القائم). لا تُنشأ هنا جلسة ولا نشاط
+function NoAttendDialog({ stage, others, picked, onStage, onProgram, onClose }) {
+  useEscape(onClose);
+  return (
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="la-form mi-form cj-noattend-dlg" role="dialog" aria-modal="true" aria-labelledby="cj-na-h" data-testid="cj-noattend-dialog">
+        <h3 id="cj-na-h">لا ورشة في «{stage.title}» الآن</h3>
+        <p>{NO_ATTEND_AR} كل ورشة تتبع نشاط حضور في مرحلتها، فمنه تظهر للمشارك في رحلته ويُحسب حضورها.</p>
+        <section aria-labelledby="cj-na-o"><h4 id="cj-na-o">أضفها في مرحلة أخرى</h4>
+          {others.length ? (
+            <ul className="cj-na-list">
+              {others.map((o) => <li key={o.key}><button type="button" className="btn-sm ghost" onClick={() => onStage(o)}>{o.title}{picked?.label ? `، ${picked.label}` : ''}</button></li>)}
+            </ul>
+          ) : <p className="la-muted">لا مرحلة في برنامج هذه الدفعة فيها نشاط حضور بعد.</p>}
+        </section>
+        <section aria-labelledby="cj-na-p"><h4 id="cj-na-p">أو أضف نشاط ورش لهذه المرحلة</h4>
+          <p className="la-muted">يُضاف النشاط من رحلة البرنامج. والدفعة المثبتة على نسخة تصلها الإضافة بعد حفظ نسخة جديدة وترقيتها إليها. بعدها يعمل الزر هنا.</p>
+          {onProgram && <button type="button" className="btn-sm ghost" onClick={onProgram}>افتح رحلة البرنامج</button>}
+        </section>
+        <div className="la-row"><button type="button" className="btn-sm ghost" onClick={onClose}>أغلق</button></div>
+      </div>
+    </div>
   );
 }
 
@@ -444,6 +493,9 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const [dayForm, setDayForm] = useState(null);
   const [qr, setQr] = useState(null);
   const [att, setAtt] = useState(null);
+  // ورشة من الخط (المرحلة 4): وضع الإضافة الصريح، ونافذة المرحلة بلا نشاط حضور
+  const [addMode, setAddMode] = useState(false);
+  const [noAttend, setNoAttend] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -647,25 +699,51 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const capacity = !!ws?.capacity_ready;
   const wsError = ws && !ws.success ? `${ws.message || 'تعذّرت قراءة الأيام'}، فلا تظهر الأعداد والسعة` : '';
   const daysOf = (st) => (d?.def ? workshopDays({ def: d.def, stage: st, sessions: wsList, model, cohortId: c.id }) : null);
-  const savedDay = (msg) => (r) => { if (r?.success) { toast(r.capacity_skipped ? `${msg}، والسعة لم تُحفظ لأن قاعدة البيانات لم تُحدَّث بعد` : msg); setWsRetry((n) => n + 1); } return r; };
+  const savedDay = (msg) => (r) => { if (r?.success) { toast(savedAr(msg, r)); setWsRetry((n) => n + 1); } return r; };
   const dayRow = (r) => ({ title_ar: r.raw.title_ar, mode: r.raw.mode || 'in_person', location_ar: r.raw.location_ar || null, join_url: r.raw.join_url || null, starts_at: r.raw.starts_at || null, ends_at: r.raw.ends_at || null });
+  // مدرب الجلسة من خبراء هذه الدفعة (admin.cohort-workshops)، بعد ترحيل عموده وحده. والجلسة العامة بلا مدرب
+  const trainers = ws?.trainer_ready ? ws.trainers || [] : null;
+  const fieldsFor = (original = null, general = false) => sessionFields([], null, { capacity, trainersOf: trainers && !general ? () => trainers : null, mail: general ? null : { original, cohortId: c.id } });
+  // يوم جديد في مرحلة: من زر البطاقة (بلا موعد مقترح)، أو من الخط الزمني (picked: اليوم تحت المؤشر، from: 'axis' أو 'board').
+  // النموذج نفسه والحفظ نفسه. من الخط: تأكيد دائم قبل الحفظ يسمي المرحلة والموعد وهل تخرج دعوة
+  const openAdd = (days, st, picked = null) => {
+    const reqOf = (v) => days.reqs.find((r) => r.id === v.requirement_id) || days.reqs[0];
+    // بند حضور واحد في المرحلة يكفي، وأكثر من واحد يُسأل «لأي نشاط؟» (ب5.4)
+    const pick = days.reqs.length > 1 ? [{ name: 'requirement_id', label: 'لأي نشاط؟', type: 'select', options: Object.fromEntries(days.reqs.map((r) => [r.id, r.title])) }] : [];
+    const times = picked?.date ? sessionTimes(picked.date, Number(d.def.requirements.find((r) => r.id === days.reqs[0].id)?.config?.minutes) || ADD_MINUTES) : { starts_at: null, ends_at: null };
+    const fromLine = !!picked;
+    setDayForm({
+      title: fromLine ? `ورشة في «${st.title}»${picked.date ? `، ${picked.label}` : ''}` : `يوم أو ورشة في «${st.title}»`,
+      fields: [...pick, ...fieldsFor()],
+      values: { active: true, mode: 'in_person', requirement_id: days.reqs[0].id, title_ar: `اليوم ${days.rows.length + 1}`, invite: true, ...times },
+      saveLabel: fromLine ? 'أضف الورشة' : 'حفظ',
+      // سطر الأثر قبل الحفظ (القرار 6)، والموعد بتوقيت الرياض، و«خارج نافذة المرحلة» بيوم الرياض كما يحسبه الخط بعد الحفظ
+      notes: (v) => [
+        { text: extraEffectAr(reqOf(v)) },
+        v.starts_at && fromLine ? { text: `الموعد بتوقيت الرياض: ${whenRiyadh(v.starts_at)}. عدّله من حقلي البدء والانتهاء.` } : null,
+        v.starts_at && outsideWindow(model, st.key, new Date(v.starts_at).getTime()) ? { text: OUTSIDE_SAVE_AR, tone: 'warn' } : null,
+      ],
+      confirmSave: (out) => {
+        if (!fromLine) return mailConfirm(out);
+        const when = out.starts_at ? `${whenRiyadh(out.starts_at)} بتوقيت الرياض` : 'بلا موعد بعد (يُحدد لاحقًا)';
+        return { text: `تُضاف «${out.title_ar || 'الورشة'}» إلى «${st.title}»، ${when}، وتظهر للمشاركين في رحلتهم. ${out.invite === true ? 'وتُرسل دعوتها بالبريد إلى أعضاء الدفعة الآن، ومعها ملف تقويم.' : 'لا يُرسل بريد الآن.'} متابعة؟`,
+          ok: out.invite === true ? 'أضف وأرسل الدعوة' : 'أضف الورشة' };
+      },
+      onSave: (v) => L('admin.workshop-save', saveBody({ ...v, requirement_id: v.requirement_id || days.reqs[0].id }, { cohort_id: c.id })).then(savedDay(fromLine ? 'أُضيفت الورشة وتظهر للمشاركين في رحلتهم' : 'أُضيف اليوم ويظهر للمشاركين في رحلتهم')),
+    });
+  };
   const dayAct = {
     canWrite, error: wsError, retry: () => setWsRetry((n) => n + 1),
-    add: (days, st) => {
-      // بند حضور واحد في المرحلة يكفي، وأكثر من واحد يُسأل «لأي نشاط؟» (ب5.4)
-      const pick = days.reqs.length > 1 ? [{ name: 'requirement_id', label: 'لأي نشاط؟', type: 'select', options: Object.fromEntries(days.reqs.map((r) => [r.id, r.title])) }] : [];
-      setDayForm({
-        title: `يوم أو ورشة في «${st.title}»`, fields: [...pick, ...sessionFields([], null, { capacity })],
-        values: { active: true, mode: 'in_person', requirement_id: days.reqs[0].id, title_ar: `اليوم ${days.rows.length + 1}` },
-        onSave: (v) => L('admin.workshop-save', { row: { ...v, requirement_id: v.requirement_id || days.reqs[0].id, cohort_id: c.id } }).then(savedDay('أُضيف اليوم ويظهر للمشاركين في رحلتهم')),
-      });
-    },
+    add: (days, st) => openAdd(days, st),
+    noAttend: (st) => setNoAttend({ stage: { key: st.key, title: st.title }, picked: null }),
     // الجلسة العامة يسري تحريرها وحذفها على كل دفعات البرنامج، فيُقال ذلك في العنوان وتحت أول حقل كما يقوله الإلغاء
     edit: (r) => setDayForm({
       title: r.general ? `تحرير «${r.title}» (جلسة عامة لكل الدفعات)` : `تحرير «${r.title}»`,
-      fields: r.general ? sessionFields([], null, { capacity }).map((f, i) => (i ? f : { ...f, help: GENERAL_EDIT_AR })) : sessionFields([], null, { capacity }),
-      values: r.raw,
-      onSave: (v) => L('admin.workshop-save', { row: { ...v, id: r.id } }).then(savedDay('حُفظ اليوم')),
+      fields: r.general ? fieldsFor(r.raw, true).map((f, i) => (i ? f : { ...f, help: GENERAL_EDIT_AR })) : fieldsFor(r.raw),
+      // «أبلغ المدعوين بالتغيير» يظهر معلَّمًا حين يتغير موعد جلسة مدعوة أو مكانها، وتأكيد الحفظ يسأل قبل أن يخرج بريد
+      values: { ...r.raw, notify_change: true },
+      confirmSave: mailConfirm,
+      onSave: (v) => L('admin.workshop-save', saveBody(v, { id: r.id })).then(savedDay('حُفظ اليوم')),
       onDelete: r.attended ? undefined : () => L('admin.workshop-delete', { id: r.id }).then(savedDay('حُذف اليوم')),
     }),
     cancel: async (r) => {
@@ -682,6 +760,26 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     qr: (r) => setQr(r.id),
     attendance: (r) => setAtt(r.id),
   };
+
+  // ── ورشة من الخط (المرحلة 4): وضع إضافة صريح لمن يكتب خارج وضع تحرير الخطة. النقرة تسلّم المرحلة واليوم، والوضع ينتهي بها
+  // (نقرة واحدة لكل دخول)، ثم النموذج فالتأكيد فالحفظ. المرحلة بلا نشاط حضور تفتح نافذتها بدل النموذج ──
+  const canAdd = canWrite && !edit && !!d?.def && !!model && !model.empty;
+  useEffect(() => { if (!canAdd) setAddMode(false); }, [canAdd]);
+  // Esc ينهي وضع الإضافة أينما كان التركيز، وبترتيب النوافذ نفسه: نموذج مفتوح فوقه يُغلق أولًا
+  useEscape(() => setAddMode(false), addMode);
+  const scaleAdd = useMemo(() => (canAdd ? addScale(model, axis) : null), [canAdd, model, axis]);
+  const addStages = useMemo(() => (scaleAdd ? [...model.stages, ...(model.tracks || [])].map((x) => ({ key: x.key, title: x.title, ok: stageWorkshopReqs(d.def, x.key).length > 0 })) : []), [scaleAdd, model, d]);
+  const pickDay = (key, info) => {
+    const st = addStages.find((x) => x.key === key);
+    if (!st) return;
+    setAddMode(false);
+    const picked = scaleAdd.dated ? info : { ...info, date: null };
+    if (!st.ok) { setNoAttend({ stage: st, picked }); return; }
+    openAdd(daysOf(st), st, picked);
+  };
+  const addBase = scaleAdd ? { on: addMode, onToggle: () => setAddMode((x) => !x), can: Object.fromEntries(addStages.map((x) => [x.key, x.ok])), range: scaleAdd.range, startDay: scaleAdd.startDay, onPick: pickDay } : null;
+  const addAxis = addBase ? { ...addBase, dayAt: scaleAdd.axis.dayAt, day: scaleAdd.axis.day } : null;
+  const addBoard = addBase ? { ...addBase, dayAt: scaleAdd.board.dayAt, day: scaleAdd.board.day } : null;
 
   // راجع واحفظ: الأثر من الخادم وحده (planImpact على رحلة كل عضو)، ثم الحفظ بما بُنيت عليه المسودة
   const openReview = async () => {
@@ -825,8 +923,8 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         </p>
       )}
 
-      {axis && <JourneyAxis axis={axis} id="ja-cohort" onStage={toCard} />}
-      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} editable={editable}
+      {axis && <JourneyAxis axis={axis} id="ja-cohort" onStage={toCard} add={addAxis} />}
+      {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} editable={editable} add={addBoard}
         usage={lanes.services ? Object.fromEntries(lanes.services.filter((x) => x.usage).map((x) => [x.key, x.usage.text])) : null} />}
       {dragNote && (
         <p className="cj-alert cj-drag-note" role="alert" data-testid="cj-drag-note"><span aria-hidden="true">!</span>
@@ -902,6 +1000,11 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         </div>
       )}
       {dayForm && <Form {...dayForm} onClose={() => setDayForm(null)} />}
+      {noAttend && (
+        <NoAttendDialog stage={noAttend.stage} picked={noAttend.picked} others={addStages.filter((x) => x.ok)} onClose={() => setNoAttend(null)}
+          onProgram={on.journey ? () => { setNoAttend(null); on.journey(); } : null}
+          onStage={(o) => { const p = noAttend.picked; setNoAttend(null); openAdd(daysOf(o), o, p || { date: null, label: '' }); }} />
+      )}
       {qr && <QrScreen id={qr} onClose={() => { setQr(null); setWsRetry((n) => n + 1); }} onSheet={canWrite ? () => { setAtt(qr); setQr(null); } : null} />}
       {att && <Attendance id={att} cohortId={c.id} canWrite={canWrite} onClose={() => { setAtt(null); setWsRetry((n) => n + 1); }} />}
       {review && <ImpactDialog r={review.r} busy={busy} canSave={canWrite && !lock} lock={lock} onSave={save} onClose={() => setReview(null)} opts={saveOpts} setOpts={setSaveOpts} />}
