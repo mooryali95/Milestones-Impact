@@ -52,6 +52,8 @@ const ALL = ['email', 'slack', 'digest'];
 const NO_EMAIL = ['slack', 'digest'];
 const ev = (key, category, tier, label, extra = {}) => ({ key, category, tier, label, locked: false, allow: ALL, digest: false, ...extra });
 
+// on: حدث له قناة واحدة بعينها (ملخص أسبوعي بالبريد، سطر في الملخص اليومي) يحدد قنواته هو لا طبقته، في «متوازن» و«كل شيء».
+// و«هادئ» يسكته كما يسكت كل معلوماتي، وصفه المعدَّل في المركز يسبق الاثنين.
 // فهرس الأحداث (جرد القسم 5). المفتاح ثابت: نوع التنبيه في raiseAlert كما هو، أو اسم الحدث للإشعارات التي تمر
 // بالوحدة في المراحل التالية. digest: يدخل الملخص اليومي بعدده حين يصل Slack فورًا (طابور عمل).
 // screen: شاشة الحدث في لوحة الإدارة، رابط سطره في Slack والملخص (فارغ: اللوحة نفسها)
@@ -120,6 +122,10 @@ export const EVENTS = [
   // ── النشاط ──
   ev('expert_profile_done', 'activity', 'info', 'خبير مدعو استكمل ملفه', { screen: '#/leaders/experts' }),
   ev('matrix_plan', 'activity', 'info', 'خطة مقدمة في مصفوفة التأثير', { screen: '#/matrix' }),
+  // تقدم الدفعات (تصور تشغيل الدفعة 2026-11-19، المرحلة 3): أعداد من لقطة الدفعات اليومية، بلا أسماء. كلاهما معلوماتي بقناة
+  // واحدة يحددها on: الملخص الأسبوعي بريد لكل دفعة جارية، وسطر التقدم في الملخص اليومي. يُطفآن من صفيهما في المركز
+  ev('cohort_weekly', 'activity', 'info', 'الملخص الأسبوعي لكل دفعة جارية', { allow: ['email'], on: { email: true }, screen: '#/leaders/programs' }),
+  ev('cohort_progress', 'activity', 'info', 'تقدم الدفعات في الملخص اليومي', { allow: ['digest'], on: { digest: true }, screen: '#/leaders/programs' }),
 ];
 export const EVENT_INDEX = Object.freeze(Object.fromEntries(EVENTS.map((e) => [e.key, Object.freeze(e)])));
 
@@ -156,7 +162,7 @@ export function wanted(event, settings = DEFAULT_SETTINGS) {
   const e = eventOf(event);
   const s = normalizeSettings(settings);
   const row = s.rows[e.key];
-  const base = row ?? PRESETS[s.preset].tiers[e.tier] ?? PRESETS[s.preset].tiers[UNKNOWN_TIER];
+  const base = row ?? (e.on && s.preset !== 'quiet' ? e.on : null) ?? PRESETS[s.preset].tiers[e.tier] ?? PRESETS[s.preset].tiers[UNKNOWN_TIER];
   const want = { email: !!base.email, slack: !!base.slack, digest: !!base.digest || (!row && !!base.slack && e.digest) };
   for (const c of CHANNELS) if (!e.allow.includes(c)) want[c] = false;
   if (e.locked) want.email = true;

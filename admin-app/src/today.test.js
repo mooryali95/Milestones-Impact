@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { greetingAr, healthLine, healthOpen, healthProblems, inboxView, problemsSig, riyadhHour, systemIssues, systemNotes, todayNumbers, waitingSub } from './today.js';
+import { alertHref, greetingAr, healthLine, healthOpen, healthProblems, inboxView, problemsSig, riyadhHour, systemIssues, systemNotes, todayNumbers, waitingSub } from './today.js';
 import { dayFull } from './dates.js';
 
 const inbox = (items, extra = {}) => ({ success: true, items, total: items.length, late: items.filter((i) => i.late).length, ...extra });
@@ -109,5 +109,12 @@ describe('مكتب اليوم: الرأس بتوقيت الرياض', () => {
     expect(dayFull('2026-11-17T22:30:00Z')).toMatch(/18/);
     expect(dayFull('2026-11-17T22:30:00Z')).toMatch(/2026/);
     expect(dayFull('x')).toBe('');
+  });
+});
+
+describe('رابط التنبيه', () => {
+  it('إلى ملف هدفه، ومعه العرض حين يحمله (المتأخرون في «المتابعة»، المرحلة 3 من تشغيل الدفعة)', () => {
+    expect(alertHref({ target: { tab: 'programs', id: 'c1' } })).toBe('#/leaders/programs/c1');
+    expect(alertHref({ target: { tab: 'programs', id: 'c1', query: 'view=follow&show=late' } })).toBe('#/leaders/programs/c1?view=follow&show=late');
   });
 });

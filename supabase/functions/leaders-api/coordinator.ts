@@ -24,6 +24,9 @@ import { visibilityOfOrg } from './visibility.ts';
 import { features } from './features.ts';
 import { coordFeedbackShown } from './features.js';
 import { listed } from './counting.ts';
+import { completionTimes } from './cohort-times.ts';
+import { visitFor } from './cohort-visits.ts';
+import { annotateJourney } from './cohort-changes.js';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -475,13 +478,14 @@ function mapPeople(rows: any[], journeys: Record<string, any>) {
 // بمنطق admin.org-journey نفسه وصلاحيته (قراءة لكل مدير): أعضاء الدفعة الفعليون (cohortMemberIds بقاعدة pickCohort)، ورحلة
 // كل منهم من journeyFor، وتعريف الدفعة نفسها (journeyDefinition بدفعتها)، ثم journeyMap بالأسماء وما ينقص كل شخص
 export const COHORT_JOURNEY_MAX = 1500;
-export async function adminCohortJourney(a: Admin, b: Body) {
-  const cohortId = String(b.cohort_id || '');
-  if (!cohortId) throw new Fail('حدد الدفعة', 400);
+// الحساب نفسه بلا سجل ولا صلاحية: تقرؤه admin.cohort-journey، واللقطة اليومية للدفعة (cohort-pulse.ts) بحدها (max).
+// null: الدفعة غير موجودة. و{ over }: أعضاؤها أكثر من الحد، فلا تُحسب رحلاتهم
+export async function cohortRoster(cohortId: string, { max = COHORT_JOURNEY_MAX, now = Date.now() }: { max?: number; now?: number } = {}) {
   const m = await cohortMemberIds(cohortId);
-  if (!m) throw new Fail('الدفعة غير موجودة', 404);
-  // رحلة كل عضو تُحسب هنا، فلدفعة أكبر من السقف (الدفعة المفتوحة غالبًا) رسالة صريحة بدل مهلة الدالة
-  if (m.ids.length > COHORT_JOURNEY_MAX) throw new Fail(`الدفعة أكبر من أن تُرسم خريطتها هنا (${m.ids.length} عضوًا، والحد ${COHORT_JOURNEY_MAX}). اعرضها من «أين توقفوا» أو من صفحة كل جهة`, 413);
+  if (!m) return null;
+  if (m.ids.length > max) return { over: m.ids.length, cohort: m.cohort } as const;
+  // لحظة القراءة قبل الاستعلامات: ما يقع بعدها يظهر في القراءة التالية، ومنها يتقدم وقت آخر زيارة (cohort-visits.ts)
+  const at = new Date(now).toISOString();
   const [rows, def]: any[] = await Promise.all([
     // counting-exempt: معرّفات أعضاء الدفعة من cohortMemberIds (listed)
     m.ids.length ? allFor(m.ids, () => db.from('participants').select('*').order('id'), 'id') : Promise.resolve([]),
@@ -492,12 +496,21 @@ export async function adminCohortJourney(a: Admin, b: Body) {
   await Promise.all(Array.from({ length: 8 }, async () => {
     for (let r = queue.shift(); r; r = queue.shift()) journeys[r.id] = await journeyFor(r, { lite: true });
   }));
+  // «منذ آخر زيارة» (المرحلة 3): تواريخ الدفعة كلها من جداولها بقراءة واحدة لكل جدول (cohort-times.ts)، تُعلَّم بها بنود كل
+  // رحلة في مكانها، فيحمل صف العضو لحظاته من الحلقة نفسها. تعذّرها لا يُسقط الجدول: تبقى اللحظات من صف البند وحده
+  const facts = Object.fromEntries((rows as any[]).map((r) => {
+    const pl = (journeys[r.id]?.pl || []) as any[];
+    const approvedAt = journeys[r.id]?.approved ? pl.map((x) => x.approved_at).filter(Boolean).sort().at(-1) || null : null;
+    return [r.id, { profile_completed_at: r.profile_completed_at, baselineAt: journeys[r.id]?.baselineAt || null, approvedAt }];
+  }));
+  const times = await completionTimes((rows as any[]).map((r) => r.id), facts, now).catch((e) => { console.error('cohort times', cohortId, e); return {} as Record<string, any>; });
+  for (const r of rows as any[]) annotateJourney(journeys[r.id]?.journey || [], times[r.id] || {});
   const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
   const mapStages = (def.stages || []).filter((s: any) => s.active !== false).sort((x: any, y: any) => x.sort - y.sort);
   const journey_map: any = journeyMap({
     stages: mapStages,
-    people: mapPeople(rows as any[], journeys),
-    cohort: def.cohort, program, list: true, activity: true,
+    people: mapPeople(rows as any[], journeys).map((p: any) => ({ ...p, joined_at: m.joined[p.id] || p.created_at || null })),
+    cohort: def.cohort, program, list: true, activity: true, today: new Date(now),
     // الموقوفة لهذه الدفعة (R2b) تظهر في مكانها باهتة بلا أعداد
     off: def.stages_off || [],
     // صف لكل عضو من الحلقة نفسها (تبويب «المتابعة»): لا حساب ثانٍ للمرحلة ولا قراءة ثانية للرحلات
@@ -509,8 +522,19 @@ export async function adminCohortJourney(a: Admin, b: Body) {
   const drift = rosterAgrees(journey_map);
   if (drift.length) console.error('cohort roster drift', cohortId, drift.length);
   const roster = await rosterRows(cohortId, rows as any[], members || []);
+  return { cohort: m.cohort, journey_map: map, roster, at };
+}
+export async function adminCohortJourney(a: Admin, b: Body) {
+  const cohortId = String(b.cohort_id || '');
+  if (!cohortId) throw new Fail('حدد الدفعة', 400);
+  const r = await cohortRoster(cohortId);
+  if (!r) throw new Fail('الدفعة غير موجودة', 404);
+  // رحلة كل عضو تُحسب هنا، فلدفعة أكبر من السقف (الدفعة المفتوحة غالبًا) رسالة صريحة بدل مهلة الدالة
+  if ('over' in r) throw new Fail(`الدفعة أكبر من أن تُرسم خريطتها هنا (${r.over} عضوًا، والحد ${COHORT_JOURNEY_MAX}). اعرضها من «أين توقفوا» أو من صفحة كل جهة`, 413);
+  // وقت آخر زيارة هذا المدير لهذه الدفعة: يُقرأ ولا يتقدم بالقراءة (يتقدم بعد عرض الشريط، admin.cohort-visit)
+  const visit = await visitFor(a, cohortId);
   await audit('admin', a.email, 'admin.cohort-journey', 'cohorts', cohortId);
-  return { success: true, journey_map: map, roster };
+  return { success: true, journey_map: r.journey_map, roster: r.roster, at: r.at, visit };
 }
 
 // صفوف «المتابعة»: ما حسبته الخريطة لكل عضو (المرحلة وسبب التوقف والدور والحضور)، ومعه ما يُعرض ويُبحث به من صفه نفسه

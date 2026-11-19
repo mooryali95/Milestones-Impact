@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261119110000_leaders_workshop_attendance_note
+-- as-of migration: 20261119120000_leaders_cohort_updates
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -26,6 +26,16 @@ create sequence if not exists public.email_otps_id_seq as integer;
 create sequence if not exists public.process_details_id_seq as integer;
 
 create sequence if not exists public.reports_id_seq as integer;
+
+create table if not exists leaders.admin_cohort_visits (
+  admin_email text not null,
+  cohort_id uuid not null,
+  since_at timestamp with time zone,
+  seen_at timestamp with time zone not null,
+  touched_at timestamp with time zone default now() not null,
+  constraint admin_cohort_visits_admin_email_check CHECK (((char_length(admin_email) >= 3) AND (char_length(admin_email) <= 320))),
+  constraint admin_cohort_visits_pkey PRIMARY KEY (admin_email, cohort_id)
+);
 
 create table if not exists leaders.agent_eval_results (
   run_id uuid not null,
@@ -504,6 +514,36 @@ create table if not exists leaders.cohort_roles (
   constraint cohort_roles_table_no_check CHECK (((table_no IS NULL) OR ((table_no >= 1) AND (table_no <= 99)))),
   constraint cohort_roles_team_check CHECK ((team = ANY (ARRAY['support'::text, 'lead'::text, 'guide'::text, 'eval'::text]))),
   constraint cohort_roles_pkey PRIMARY KEY (cohort_id, participant_id)
+);
+
+create table if not exists leaders.cohort_snapshots (
+  cohort_id uuid not null,
+  day date not null,
+  taken_at timestamp with time zone default now() not null,
+  since_at timestamp with time zone not null,
+  members integer default 0 not null,
+  finished integer default 0 not null,
+  late integer default 0 not null,
+  late_new integer default 0 not null,
+  waiting integer default 0 not null,
+  active_week integer default 0 not null,
+  done_items integer default 0 not null,
+  done_people integer default 0 not null,
+  entered integer default 0 not null,
+  joined integer default 0 not null,
+  stages jsonb default '[]'::jsonb not null,
+  weekly_sent_at timestamp with time zone,
+  constraint cohort_snapshots_active_week_check CHECK ((active_week >= 0)),
+  constraint cohort_snapshots_done_items_check CHECK ((done_items >= 0)),
+  constraint cohort_snapshots_done_people_check CHECK ((done_people >= 0)),
+  constraint cohort_snapshots_entered_check CHECK ((entered >= 0)),
+  constraint cohort_snapshots_finished_check CHECK ((finished >= 0)),
+  constraint cohort_snapshots_joined_check CHECK ((joined >= 0)),
+  constraint cohort_snapshots_late_check CHECK ((late >= 0)),
+  constraint cohort_snapshots_late_new_check CHECK ((late_new >= 0)),
+  constraint cohort_snapshots_members_check CHECK ((members >= 0)),
+  constraint cohort_snapshots_waiting_check CHECK ((waiting >= 0)),
+  constraint cohort_snapshots_pkey PRIMARY KEY (cohort_id, day)
 );
 
 create table if not exists leaders.cohorts (
@@ -1615,6 +1655,7 @@ create table if not exists leaders.participant_requirements (
   reviewed_by text,
   reviewed_at timestamp with time zone,
   answers jsonb,
+  submitted_at timestamp with time zone,
   constraint participant_requirements_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'submitted'::text, 'done'::text, 'returned'::text]))),
   constraint participant_requirements_pkey PRIMARY KEY (participant_id, requirement_id)
 );
@@ -2576,6 +2617,10 @@ create table if not exists public.webauthn_challenges (
 );
 
 do $$ begin
+  alter table leaders.admin_cohort_visits add constraint admin_cohort_visits_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.agent_eval_results add constraint agent_eval_results_run_id_fkey FOREIGN KEY (run_id) REFERENCES leaders.agent_eval_runs(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -2701,6 +2746,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.cohort_roles add constraint cohort_roles_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_snapshots add constraint cohort_snapshots_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3343,6 +3392,8 @@ CREATE INDEX IF NOT EXISTS cohort_groups_advisor ON leaders.cohort_groups USING 
 
 CREATE INDEX IF NOT EXISTS cohort_groups_cohort_idx ON leaders.cohort_groups USING btree (cohort_id, sort);
 
+CREATE INDEX IF NOT EXISTS cohort_snapshots_day_idx ON leaders.cohort_snapshots USING btree (day DESC);
+
 CREATE INDEX IF NOT EXISTS cohorts_advisor ON leaders.cohorts USING btree (advisor_expert_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS cohorts_one_default ON leaders.cohorts USING btree ((true)) WHERE is_default;
@@ -3627,6 +3678,8 @@ CREATE INDEX IF NOT EXISTS user_passkeys_reg_idx ON public.user_passkeys USING b
 
 CREATE INDEX IF NOT EXISTS webauthn_challenges_created_idx ON public.webauthn_challenges USING btree (created_at);
 
+alter table leaders.admin_cohort_visits enable row level security;
+
 alter table leaders.agent_eval_results enable row level security;
 
 alter table leaders.agent_eval_runs enable row level security;
@@ -3676,6 +3729,8 @@ alter table leaders.cohort_group_members enable row level security;
 alter table leaders.cohort_groups enable row level security;
 
 alter table leaders.cohort_roles enable row level security;
+
+alter table leaders.cohort_snapshots enable row level security;
 
 alter table leaders.cohorts enable row level security;
 

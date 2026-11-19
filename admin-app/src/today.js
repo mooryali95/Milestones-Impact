@@ -116,7 +116,8 @@ export const greetingAr = (now = new Date()) => (riyadhHour(now) < 12 ? 'صبا�
 // ── التنبيهات ونبض الدفعات (المرحلة 3ب): الحساب كله في الخادم (admin.today ← today-desk.js)، وهنا العرض وحده ──
 
 // وجهة التنبيه: ملف الجهة أو الدفعة أو الخبير بمعرّفه، في تبويبه القائم
-export const alertHref = (a) => formatRoute({ ctx: 'leaders', tab: a.target?.tab, id: a.target?.id || undefined });
+// query: ما بعد «?» حين يفتح التنبيه عرضًا بعينه (المتأخرون في «المتابعة»)
+export const alertHref = (a) => formatRoute({ ctx: 'leaders', tab: a.target?.tab, id: a.target?.id || undefined }) + (a.target?.query ? `?${a.target.query}` : '');
 
 /**
  * سطر خافت بما لم يُقرأ: لا يُفهم غياب التنبيه أو النبض «لا شيء» وهو «لم يُفحص».

@@ -350,6 +350,25 @@ fieldset.cj-dates { margin: 0; min-inline-size: 0; }
 .cr-table td[data-label="المرحلة الحالية"] { min-inline-size: 140px; }
 .cr-table td[data-label="الدور"] { min-inline-size: 104px; }
 .cr-since { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; white-space: nowrap; }
+/* شريط «منذ آخر زيارة» (المرحلة 3): سطور مجمعة تُضغط فتصفّي الجدول. يلتف على الجوال ولا يُمرَّر أفقيًا */
+.cs { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--sand-light); min-inline-size: 0; }
+.cs-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.cs-head h3 { margin: 0; font-size: 1rem; }
+.cs-opts { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.cs-opt { min-block-size: 32px; padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: 99px; background: #fff; color: var(--ink); font: inherit; font-size: .8rem; cursor: pointer; }
+.cs-opt.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.cs-read { margin-inline-start: auto; }
+.cs-when, .cs-empty { margin: 0; line-height: 1.8; }
+.cs-empty { font-weight: 600; color: var(--ink-soft); }
+.cs-lines { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.cs-line { min-block-size: 36px; max-inline-size: 100%; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; font-size: .86rem; line-height: 1.6; text-align: start; cursor: pointer; }
+.cs-line:hover { border-color: var(--ink-soft); }
+.cs-line.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); font-weight: 600; }
+.cs-line.k-late { border-inline-start: 3px solid var(--st-bad); }
+.cs-line.k-submitted { border-inline-start: 3px solid var(--st-warn-text); }
+.cs-opt:focus-visible, .cs-line:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: 2px; }
+.cs-only { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 0; padding: 8px 12px; border-radius: 10px; background: rgba(10, 42, 61, .06); line-height: 1.7; }
+@media (max-width: 720px) { .cs-read { margin-inline-start: 0; } }
 /* شبكة أمان: إن ضاق العرض عن الأعمدة يُمرَّر الجدول داخل إطاره، ولا يُقص عمود ولا تُمرَّر الصفحة */
 .cr .table-wrap { overflow-x: auto; }
 .cr-table td[data-label="آخر نشاط"] { min-inline-size: 84px; }

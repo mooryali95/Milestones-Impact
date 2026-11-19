@@ -169,6 +169,9 @@ describe('R0: خريطة الرحلة في ملف الدفعة', () => {
     // الخريطة بلا مراحل تظهر رسالتها (الخادم لا يرجع null بل stages فارغة)، والدفعة المفتوحة أو الكبيرة تُقرأ بطلب
     expect(ui).toContain('!jm?.stages?.length ?');
     expect(ui).toContain('اعرض خريطة الرحلة');
-    expect(c).toContain('if (m.ids.length > COHORT_JOURNEY_MAX)');
+    // الحد في cohortRoster (تقرؤه اللقطة اليومية بحدها أيضًا)، والرفض برسالته في الإجراء
+    expect(c).toContain('export async function cohortRoster(cohortId: string, { max = COHORT_JOURNEY_MAX');
+    expect(c).toContain('if (m.ids.length > max) return { over: m.ids.length');
+    expect(c).toContain("if ('over' in r) throw new Fail(`الدفعة أكبر من أن تُرسم خريطتها هنا");
   });
 });

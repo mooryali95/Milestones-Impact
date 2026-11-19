@@ -20,7 +20,7 @@ import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
 import CohortRoster from './CohortRoster.jsx';
-import { COHORT_TABS, cohortTab, followStage, tabQuery } from '../cohort-journey.js';
+import { COHORT_TABS, cohortTab, followShow, followStage, tabQuery } from '../cohort-journey.js';
 
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
 const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
@@ -71,10 +71,12 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
   const [tab, setTab] = useState(() => cohortTab(readQuery()));
   // مرحلة الخريطة التي ضُغطت: يُفتح «المتابعة» مفلترًا بها (من الرابط أو من زر الخريطة)، ونقرة التبويب نفسه تفتحه بفلاتره المحفوظة
   const [stage, setStage] = useState(() => followStage(readQuery()));
-  useEffect(() => { setTab(cohortTab(readQuery())); setStage(followStage(readQuery())); }, [route, c.id]);
+  // والعرض السريع الذي يحمله الرابط (?show=late من تنبيه المتأخرين): يُقرأ مرة عند الفتح، ونقرة أي تبويب تسقطه
+  const [show, setShow] = useState(() => followShow(readQuery()));
+  useEffect(() => { setTab(cohortTab(readQuery())); setStage(followStage(readQuery())); setShow(followShow(readQuery())); }, [route, c.id]);
   const tabsRef = useRef(null);
   const openTab = (k, focus = false, st = '') => {
-    setTab(k); setStage(k === 'follow' ? st : '');
+    setTab(k); setStage(k === 'follow' ? st : ''); setShow('');
     writeQuery(tabQuery(k, st));
     if (focus) tabsRef.current?.querySelector(`#cohort-tab-${k}`)?.focus();
   };
@@ -130,7 +132,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
           </div>
         ) : tab === 'follow' ? (
           <div role="tabpanel" id="cohort-panel-follow" aria-labelledby="cohort-tab-follow">
-            <CohortRoster key={`${c.id}:${stage}`} c={c} canWrite={canWrite} stage={stage} onPerson={on.person} onJourney={() => openTab('journey', true)} />
+            <CohortRoster key={`${c.id}:${stage}:${show}`} c={c} canWrite={canWrite} stage={stage} show={show} onPerson={on.person} onJourney={() => openTab('journey', true)} />
           </div>
         ) : (
         <div role="tabpanel" id="cohort-panel-overview" aria-labelledby="cohort-tab-overview">

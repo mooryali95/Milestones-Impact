@@ -13,20 +13,25 @@ import { orgReadinessOf, readinessSummary, seatsFull } from './org-readiness.js'
 import { cohortKind, cohortReadiness, hubSummary } from './cohort-readiness.js';
 import { SESSION_WINDOW_MS, usesHandbook, workshopOf } from './cohort-setup.js';
 import { isRunning } from './cohort-running.js';
+import { lateAlertText } from './cohort-changes.js';
 
 // نافذة «جلسة قادمة» للدفعة الجارية: نافذة الجلسات نفسها في cohort-setup.js (SESSION_WINDOW_MS، أربعة عشر يومًا)
 const DAY = 864e5;
 export const UPCOMING_DAYS = Math.round(SESSION_WINDOW_MS / DAY);
 const isoDay = (now) => new Date(now).toISOString().slice(0, 10);
+// عمر اللقطة التي يُبنى عليها تنبيه «صاروا متأخرين منذ أمس»: يوم ونصف، فتعطل المهمة الليلية لا يبقي تنبيهًا قديمًا
+export const LATE_FRESH_MS = 36 * 36e5;
 
 // المصادر بأسمائها كما تُعرض في سطر «تعذّرت قراءة»
 export const SOURCE_AR = {
-  orgs: 'الجهات', org_setups: 'جاهزية دفعات الجهات', programs: 'الدفعات والبرامج', inbox: 'صندوق القرارات', experts: 'حِمل الخبراء', sessions: 'الجلسات', members: 'أعضاء الدفعات',
+  orgs: 'الجهات', org_setups: 'جاهزية دفعات الجهات', programs: 'الدفعات والبرامج', inbox: 'صندوق القرارات', experts: 'حِمل الخبراء', sessions: 'الجلسات', members: 'أعضاء الدفعات', snapshots: 'لقطة الدفعات اليومية',
 };
 // ما يقوم عليه كل نوع تنبيه: تعذّر أحدها لا يُقال معه «لا تنبيه» عن هذا النوع
 export const ALERT_KINDS = {
   seats_full: { label: 'المقاعد ممتلئة', needs: ['orgs'] },
   cohort_no_session: { label: 'دفعة جارية بلا جلسة قريبة', needs: ['programs', 'sessions', 'members'] },
+  // تصور تشغيل الدفعة 2026-11-19، المرحلة 3: من صار متأخرًا في الدفعة منذ لقطة أمس، من اللقطة اليومية (cohort-pulse.ts)
+  cohort_late: { label: 'متأخرون جدد في دفعة', needs: ['programs', 'snapshots'] },
   expert_over: { label: 'خبير فوق طاقته', needs: ['experts'] },
   // جاهزية دفعات الجهات مصدر فرعي من الجهات (orgCohortSetups): تعذّرها يُبقي التنبيه بما قُرئ ويقول إن بند الدفعة لم يُفحص
   org_readiness: { label: 'جهة لم تكتمل جاهزيتها', needs: ['orgs', 'org_setups'] },
@@ -63,6 +68,7 @@ const countAr = (n, one, two, many, single) => (n === 1 ? one : n === 2 ? two : 
  *   inbox?: { items: any[] }|null,                // admin.inbox
  *   experts?: any[]|null,                          // expertLoad
  *   sessions?: { workshops: any[], coaching: any[] }|null,
+ *   snapshots?: any[]|null,                        // أحدث لقطة لكل دفعة (latestSnapshots): cohort_id وtaken_at وlate وlate_new
  *   members?: Record<string, string|null>|null,   // دفعة كل مشارك (pickCohort)، بلا حسابات العرض
  *   skipped?: string[], now?: number,
  * }} src
@@ -109,6 +115,18 @@ export function deskOf(src = {}) {
     if (!next || Date.parse(next) > horizon) {
       alerts.push({ kind: 'cohort_no_session', severity: 'warn', id: `cohort:${c.id}`, target: { tab: 'programs', id: c.id },
         text: `دفعة «${c.name}» جارية ولا جلسة لها في الأيام الـ${UPCOMING_DAYS} القادمة${next ? `: أقربها ${isoDay(Date.parse(next))}` : ''}` });
+    }
+  }
+
+  // ── متأخرون جدد: من لقطة الدفعة اليومية، لا من رحلة كل عضو عند كل فتح. اللقطة الأقدم من LATE_FRESH_MS لا يُبنى عليها
+  // «منذ أمس». والرابط يفتح «المتابعة» على عرض «متأخرون» (target.query)
+  if (has('programs') && has('snapshots')) {
+    const snapOf = Object.fromEntries((src.snapshots || []).map((x) => [x.cohort_id, x]));
+    for (const c of running) {
+      const snap = snapOf[c.id];
+      if (!snap || !(Number(snap.late_new) > 0) || now - Date.parse(snap.taken_at) > LATE_FRESH_MS) continue;
+      alerts.push({ kind: 'cohort_late', severity: 'warn', id: `late:${c.id}`, target: { tab: 'programs', id: c.id, query: 'view=follow&show=late' },
+        text: lateAlertText(c.name, snap), taken_at: snap.taken_at });
     }
   }
 

@@ -27,6 +27,7 @@ import { JOURNEY_AUTO_MAX } from './CohortJourney.jsx';
 import {
   attendanceAr, consultAr, heldSessions, ROSTER_KEYS, ROSTER_PRESETS, ROSTER_SORTS, rosterExportCols, rosterOrder, rosterSorts, rosterSpec, stageAr, STATE_AR, stayAr, TURN_AR,
 } from '../cohort-roster.js';
+import CohortSince from './CohortSince.jsx';
 import '../cohort-journey.css';
 
 const COLS = 9;
@@ -70,14 +71,16 @@ function PickSession({ c, count, onPick, onClose }) {
   );
 }
 
-export default function CohortRoster({ c, canWrite = false, stage = '', onPerson, onJourney }) {
+export default function CohortRoster({ c, canWrite = false, stage = '', show = '', onPerson, onJourney }) {
   const auto = !c.is_default && (Number(c.members) || 0) <= JOURNEY_AUTO_MAX;
   const [want, setWant] = useState(auto);
   const [r, setR] = useState(null);
   const [retry, setRetry] = useState(0);
   // url=false: للتبويب عنوانه (?view=follow)، فلا يكتب فوقه شريط الفلترة ولا يصل نص البحث إلى العنوان أبدًا
-  const [f, setF, clearF, replaceF] = useFilters(ROSTER_KEYS, stage ? { stage } : {}, { scope: `cohort-roster-${c.id}`, url: false });
+  const [f, setF, clearF, replaceF] = useFilters(ROSTER_KEYS, show ? { view: show } : stage ? { stage } : {}, { scope: `cohort-roster-${c.id}`, url: false });
   const [picked, setPicked] = useState(() => new Set());
+  // سطر من شريط «منذ آخر زيارة» ضُغط: الجدول يُصفّى بأصحابه (بمعرّفاتهم)، فوق الفلاتر لا بدلها
+  const [only, setOnly] = useState(null);
   const [nudging, setNudging] = useState(null);
   const [bulkApprove, setBulkApprove] = useState(null);
   // null، أو { ids, names } لاختيار الجلسة، ثم معها session لورقة الحضور
@@ -87,7 +90,7 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
   useEffect(() => { setWant(auto); }, [c.id, auto]);
   useEffect(() => {
     let live = true;
-    setR(null);
+    setR(null); setOnly(null);
     // ردّ دفعة سابقة يصل بعد الانتقال إلى غيرها لا يكتب فوقها
     if (want) L('admin.cohort-journey', { cohort_id: c.id }).then((x) => { if (live) setR(x || { success: false }); });
     return () => { live = false; };
@@ -97,7 +100,9 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
   const all = useMemo(() => (r?.success ? rosterOrder(r.journey_map, r.roster || []) : []), [r]);
   const spec = useMemo(() => rosterSpec(map, all), [map, all]);
   const sorts = useMemo(() => rosterSorts(map), [map]);
-  const shown = useMemo(() => sortRows(applyFilters(all, spec, f), sorts, f.sort), [all, spec, sorts, f]);
+  const shown = useMemo(() => { const rows = sortRows(applyFilters(all, spec, f), sorts, f.sort); return only ? rows.filter((m) => only.ids.has(m.id)) : rows; }, [all, spec, sorts, f, only]);
+  // ضغط السطر يمسح الفلاتر أولًا، فيظهر أصحابه كلهم لا من وافق منهم فلترًا قديمًا
+  const pickLine = (l) => { if (l) clearF(); setOnly(l ? { key: l.key, text: l.text, ids: new Set(l.ids) } : null); };
   const counts = useMemo(() => presetCounts(all, ROSTER_PRESETS), [all]);
   const exportCols = useMemo(() => rosterExportCols({ date }), []);
 
@@ -150,6 +155,7 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
     <div className="cr" data-testid="cohort-roster">
       <p className="la-muted small cr-note">صف لكل عضو من رحلته كما يراها هو. «متأخر» {late ? 'من تجاوز موعد نهاية مرحلته على جدول الدفعة بعد مهلة ثلاثة أيام' : 'من تجاوز مدة مرحلته بعد مهلة ثلاثة أيام'}،
         وهو تعريف خريطة الرحلة نفسه.{onJourney && <> <button type="button" className="la-link" onClick={onJourney}>افتح خريطة الرحلة</button></>}</p>
+      <CohortSince cohortId={c.id} rows={all} map={map} at={r.at} visit={r.visit} picked={only?.key || ''} onPick={pickLine} />
       <FilterBar scope={`cohort-roster-${c.id}`} state={f} set={setF} clear={clearF} replace={replaceF} fields={spec.fields} presets={ROSTER_PRESETS} counts={counts}
         shown={shown.length} total={all.length} noun="عضو" placeholder="ابحث بالاسم أو البريد أو الجوال" sorts={ROSTER_SORTS}
         actions={<>
@@ -176,6 +182,7 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
         </div>
       )}
 
+      {only && <p className="cs-only" role="status" data-testid="cs-only"><span>يُعرض من الشريط: <b>{only.text}</b></span> <button type="button" className="la-link" onClick={() => setOnly(null)}>اعرض الكل</button></p>}
       <div className="table-wrap"><table className="data-table la-cards cr-table">
         <caption className="sr-only">أعضاء دفعة {c.name}: مرحلة كل عضو وسبب توقفه وعلى من الدور</caption>
         <thead><tr>

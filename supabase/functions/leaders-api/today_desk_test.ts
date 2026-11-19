@@ -18,6 +18,8 @@ Deno.test('admin.today: مصدر متعذر يُسمّى في skipped، والب
     inbox: async () => ({ items: [{ kind: 'approval', id: 'a', participant_id: 'a' }], skipped: [] }),
     experts: async () => { throw new Error('experts down'); },
     sessions: async () => [],
+    // لقطة الدفعات اليومية (المرحلة 3 من تشغيل الدفعة): مصدر تنبيه المتأخرين الجدد، وله اختباره في cohort_pulse_test.ts
+    snapshots: async () => [],
   });
   assertEquals(r.success, true);
   assertEquals(r.skipped, ['experts']);
@@ -34,6 +36,7 @@ Deno.test('admin.today: العضوية والورش من رد الدفعات ن�
     inbox: async () => ({ items: [], skipped: [] }),
     experts: async () => [],
     sessions: async () => [],
+    snapshots: async () => [],
   };
   const r: any = await TD.today({}, base);
   assertEquals(r.skipped, ['org_setups', 'members', 'sessions']);

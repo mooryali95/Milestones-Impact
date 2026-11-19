@@ -34,6 +34,7 @@ import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
 import { features } from './features.ts';
 import { trackWindows } from './stage-windows.js';
+import { stampSubmitted } from './cohort-times.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -1040,6 +1041,8 @@ export async function requirementUpdate(p: any, b: Body) {
     evidence_path: evidence, note: b.note ? String(b.note).slice(0, 1000) : null,
     completed_at: status === 'done' ? new Date().toISOString() : null,
   }));
+  // وقت التسليم للمراجعة، لسطر «سلّموا ما ينتظر مراجعتك» في «منذ آخر زيارة»: كتابة ثانية بعد نجاح الأولى لا تُسقطها (cohort-times.ts)
+  if (status === 'submitted') await stampSubmitted(p.id, r.id);
   return { success: true, ...(await mePayload(p)) };
 }
 

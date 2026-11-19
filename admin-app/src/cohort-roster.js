@@ -8,13 +8,15 @@
 import { TURN_AR, TURNS } from '../../supabase/functions/leaders-api/journey-map.js';
 import { PARTICIPANT_STATUS } from '../../supabase/functions/leaders-api/labels.js';
 import { daysAr } from '../../supabase/functions/leaders-api/journey.js';
+import { IDLE_DAYS } from '../../supabase/functions/leaders-api/cohort-changes.js';
 
 const DAY = 864e5;
 export const ROSTER_KEYS = ['q', 'view', 'stage', 'state', 'turn', 'needs', 'group', 'seen', 'sort'];
 // الحالة من الخادم (journeyMap): خارج البرنامج، أتم، متأخر (تعريف الخريطة نفسه)، قبل الاعتماد، وإلا على الموعد
 export const STATE_AR = Object.freeze({ ontime: 'على الموعد', late: 'متأخر', onboarding: 'لم يكمل التسجيل', finished: 'أتم الرحلة', out: 'خارج البرنامج' });
 export { TURN_AR };
-export const IDLE_DAYS = 7;
+// مدة «لم يدخلوا» هي نفسها مدة سطر «توقفوا» في «منذ آخر زيارة» (cohort-changes.js)
+export { IDLE_DAYS };
 
 const seenAt = (m) => m.last_active_at || m.last_login_at || null;
 const inside = (m) => m.state !== 'out';

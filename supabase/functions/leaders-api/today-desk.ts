@@ -8,6 +8,7 @@ import { inbox, orgs } from './admin.ts';
 import { list as programsList } from './programs.ts';
 import { expertLoadNow } from './insight.ts';
 import { deskOf } from './today-desk.js';
+import { latestSnapshots } from './cohort-pulse.ts';
 
 type Body = Record<string, any>;
 
@@ -27,6 +28,8 @@ export const LOADERS = {
   inbox: async () => ok(await inbox()),
   experts: () => expertLoadNow(),
   sessions: coaching,
+  // لقطة الدفعات اليومية (cohort-pulse.ts): لتنبيه «صاروا متأخرين منذ أمس». قراءة واحدة، وقبل ترحيلها قائمة فارغة
+  snapshots: () => latestSnapshots(),
 };
 
 /** @param loaders للاختبار: مصادر بديلة بالأسماء نفسها */

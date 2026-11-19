@@ -1,6 +1,6 @@
 // مكتب اليوم 3ب: التنبيهات ونبض الدفعات من مصادرها (today-desk.js في الخادم)، والمصدر المتعذر لا يصير «لا شيء»
 import { describe, expect, it } from 'vitest';
-import { deskOf, isRunning, nextSessionAt, UPCOMING_DAYS } from '../../supabase/functions/leaders-api/today-desk.js';
+import { deskOf, isRunning, LATE_FRESH_MS, nextSessionAt, SOURCE_AR, UPCOMING_DAYS } from '../../supabase/functions/leaders-api/today-desk.js';
 import { orgReadinessOf } from './org-hub.js';
 import { cohortHub, hubSummary } from './cohort-hub.js';
 
@@ -18,6 +18,8 @@ const src = (over = {}) => ({
   programs: { cohorts: [running, quiet, ended], organizations: [orgReady], programs: [program] },
   inbox: { items: [{ kind: 'approval', id: 'p1', participant_id: 'p1' }, { kind: 'capstone', id: 'p2' }, { kind: 'approval', id: 'p9', participant_id: 'p9' }, { kind: 'expert_application', id: 'x' }], skipped: [] },
   experts: [{ id: 'e1', name: 'سارة', state: 'over', demand: 5, hours: 3 }, { id: 'e2', name: 'علي', state: 'busy', demand: 2, hours: 2 }],
+  // لقطة الدفعات اليومية (المرحلة 3 من تشغيل الدفعة): مصدر تنبيه المتأخرين الجدد. فارغة هنا، ولها اختباراتها أدناه
+  snapshots: [],
   sessions: { workshops: [{ cohort_id: 'c1', active: true, starts_at: inDays(3) }, { cohort_id: 'c2', active: true, starts_at: inDays(30) }, { cohort_id: 'c2', active: true, starts_at: null }], coaching: [] },
   members: { p1: 'c1', p2: 'c1', p9: 'c2' },
   skipped: [],
@@ -127,5 +129,34 @@ describe('إصلاحات المراجعة', () => {
     const d = deskOf(src({ programs: { cohorts: [running, quiet], organizations: [], programs: [program] } }));
     expect(d.pulse.find((p) => p.id === 'c1')).toMatchObject({ org: null, kind: 'org' });
     expect(d.pulse.find((p) => p.id === 'c2')).toMatchObject({ kind: 'individuals' });
+  });
+});
+
+describe('متأخرون جدد منذ أمس (تصور تشغيل الدفعة 2026-11-19، المرحلة 3)', () => {
+  const snap = (cohort_id, late_new, late, hoursAgo = 6) => ({ cohort_id, late_new, late, taken_at: new Date(NOW - hoursAgo * 36e5).toISOString() });
+  const late = (d) => d.alerts.filter((a) => a.kind === 'cohort_late');
+  it('تنبيه لكل دفعة جارية صار فيها متأخرون منذ لقطة أمس، بعددهم وعدد المتأخرين الآن، ورابطه عرض «متأخرون» في «المتابعة»', () => {
+    const d = deskOf(src({ snapshots: [snap('c1', 2, 5), snap('c2', 1, 1)] }));
+    expect(late(d).map((a) => [a.id, a.target])).toEqual([
+      ['late:c1', { tab: 'programs', id: 'c1', query: 'view=follow&show=late' }], ['late:c2', { tab: 'programs', id: 'c2', query: 'view=follow&show=late' }]]);
+    expect(late(d)[0].text).toBe(`دفعة «${running.name}»: عضوان صارا متأخرين منذ أمس، والمتأخرون الآن 5`);
+    expect(late(d)[1].text).toContain('عضو واحد صار متأخرًا منذ أمس');
+    expect(d.unchecked).toEqual([]);
+  });
+  it('لا تنبيه: بلا متأخرين جدد، أو لقطة أقدم من يوم ونصف، أو دفعة غير جارية، أو قبل ترحيل اللقطة (قائمة فارغة)', () => {
+    expect(late(deskOf(src({ snapshots: [snap('c1', 0, 4)] })))).toEqual([]);
+    expect(late(deskOf(src({ snapshots: [snap('c1', 3, 4, LATE_FRESH_MS / 36e5 + 1)] })))).toEqual([]);
+    expect(late(deskOf(src({ snapshots: [snap(ended.id, 3, 4)] })))).toEqual([]);
+    expect(late(deskOf(src({ snapshots: [] })))).toEqual([]);
+  });
+  it('النص أعداد واسم الدفعة وحدهما، بلا اسم مشارك', () => {
+    const d = deskOf(src({ snapshots: [snap('c1', 11, 12)] }));
+    expect(late(d)[0].text).toBe(`دفعة «${running.name}»: 11 عضوًا صاروا متأخرين منذ أمس، والمتأخرون الآن 12`);
+  });
+  it('تعذّر قراءة اللقطة: لا تنبيه منها، ونوعه «لم يُفحص» لا «لا شيء»', () => {
+    const d = deskOf(src({ snapshots: null, skipped: ['snapshots'] }));
+    expect(late(d)).toEqual([]);
+    expect(d.unchecked).toEqual(['cohort_late']);
+    expect(SOURCE_AR.snapshots).toBe('لقطة الدفعات اليومية');
   });
 });

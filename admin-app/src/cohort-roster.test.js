@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { TURN_AR, TURNS, turnOf } from '../../supabase/functions/leaders-api/journey-map.js';
 import { applyFilters, encodeState, presetCounts, shareable, sortRows } from './filters.js';
 import { tableOf } from './exports.js';
-import { COHORT_TABS, cohortTab, followStage, tabQuery } from './cohort-journey.js';
+import { COHORT_TABS, cohortTab, followShow, followStage, tabQuery } from './cohort-journey.js';
 import {
   attendanceAr, consultAr, HELD_MAX, heldSessions, needsOptions, ROSTER_KEYS, ROSTER_PRESETS, rosterExportCols, rosterFields, rosterOrder, rosterSorts, rosterSpec, stageAr, stageOptions, stayAr, turnAr,
 } from './cohort-roster.js';
@@ -211,12 +211,15 @@ describe('التبويب الثالث ورابطه', () => {
     expect(cohortTab('view=follow&stage=training')).toBe('follow');
     expect(followStage('view=follow&stage=training')).toBe('training');
     expect(followStage('view=journey&stage=training')).toBe('');
+    // رابط تنبيه المتأخرين في «نظرة عامة» (المرحلة 3): يفتح «المتابعة» على عرض «متأخرون»، ولا عرض غيره من الرابط
+    expect([followShow('view=follow&show=late'), followShow('view=follow&show=mine'), followShow('view=journey&show=late'), followShow('')]).toEqual(['late', '', '', '']);
     expect([tabQuery('overview'), tabQuery('journey'), tabQuery('follow'), tabQuery('journey', 'x')]).toEqual(['', 'view=journey', 'view=follow', 'view=journey']);
   });
   it('الصفوف من admin.cohort-journey نفسها: الخادم يطلبها من حلقة الخريطة، والواجهة لا تحسب مرحلة', () => {
     const c = read('supabase/functions/leaders-api/coordinator.ts');
     expect(c).toContain('roster: true,');
-    expect(c).toContain('return { success: true, journey_map: map, roster };');
+    // المرحلة 3: الرد يحمل لحظة القراءة ووقت آخر زيارة مع الخريطة والصفوف
+    expect(c).toContain('return { success: true, journey_map: r.journey_map, roster: r.roster, at: r.at, visit };');
     const ui = read('admin-app/src/screens/CohortRoster.jsx');
     expect(ui).toContain("L('admin.cohort-journey', { cohort_id: c.id })");
     expect(ui).not.toMatch(/currentStages|positionOf|journeyFor/);
@@ -247,5 +250,29 @@ describe('«سجّل حضورهم في جلسة»: جلسات الدفعة ال�
     expect(heldSessions(null, cohort, now)).toEqual([]);
     const many = { requirements: acts.requirements, workshops: Array.from({ length: HELD_MAX + 5 }, (_, i) => w(`s${i}`, new Date(now - (i + 1) * 864e5).toISOString())) };
     expect(heldSessions(many, cohort, now)).toHaveLength(HELD_MAX);
+  });
+});
+
+describe('شريط «منذ آخر زيارة» في التبويب (المرحلة 3)', () => {
+  const ui = read('admin-app/src/screens/CohortRoster.jsx');
+  const strip = read('admin-app/src/screens/CohortSince.jsx');
+  it('فوق الفلاتر، من صفوف «المتابعة» نفسها، والضغط على سطر يصفّي الجدول بأصحابه', () => {
+    expect(ui.indexOf('<CohortSince')).toBeGreaterThan(0);
+    expect(ui.indexOf('<CohortSince')).toBeLessThan(ui.indexOf('<FilterBar'));
+    expect(ui).toContain('rows={all} map={map} at={r.at} visit={r.visit}');
+    expect(ui).toContain('only ? rows.filter((m) => only.ids.has(m.id)) : rows');
+    // السطور من الدالة المشتركة مع الخادم، ولا حساب للمرحلة ولا للتأخر في الواجهة
+    expect(strip).toContain("from '../../../supabase/functions/leaders-api/cohort-changes.js'");
+    expect(strip).not.toMatch(/currentStages|positionOf|journeyFor|localStorage|sessionStorage/);
+  });
+  it('وقت آخر زيارة لا يتقدم بفتح التبويب: يُرسل بعد العرض والصفحة ظاهرة، مرة لكل قراءة', () => {
+    expect(strip).toContain("if (document.visibilityState !== 'visible' || sent.current === at) return;");
+    expect(strip).toContain("L('admin.cohort-visit', { cohort_id: cohortId, at, op: 'seen' })");
+    expect(strip).toContain("L('admin.cohort-visit', { cohort_id: cohortId, at, op: 'read' })");
+    expect(strip).toContain('if (!stored || !at) return undefined;');
+  });
+  it('من رابط التنبيه يُفتح على عرض «متأخرون»', () => {
+    expect(ui).toContain("show ? { view: show } : stage ? { stage } : {}");
+    expect(read('admin-app/src/screens/Programs.jsx')).toContain('show={show}');
   });
 });
