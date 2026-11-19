@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
-import React, { Suspense, useCallback, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { lazyNamed, lazyRetry } from '../lazy-retry.js';
 import { L } from '../leaders.js';
 // كل قسم يُحمَّل عند أول فتح له (التدقيق 2026-11-10، البند 9.13): كانت الأقسام الاثنان والعشرون في الحزمة الرئيسية
@@ -100,19 +100,32 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   const [flags, setFlags] = useState(null);
   useEffect(() => { L('admin.settings').then((r) => { if (r?.success) setFlags(featureFlags(r.values)); }); }, []);
   const hiddenOf = (k) => !!flags && FEATURE_TABS[k] && !flags[FEATURE_TABS[k]];
-  const [programId, setProgramId] = useState(null);
+  const [programId, setProgramId] = useState(() => (tab === 'journey' ? route.id || null : null));
+  const wantPid = useRef(programId);
 
   const loadOrgs = useCallback(async () => {
     const r = await L('admin.orgs');
     setOrgData(r.success ? r : { orgs: [], unassigned: {} });
   }, []);
   useEffect(() => { loadOrgs(); }, [loadOrgs]);
-  const loadCatalog = useCallback(async () => setCatalog(await L('admin.catalog', programId ? { program_id: programId } : {})), [programId]);
+  // رد برنامج سابق لا يكتب فوق كتالوج البرنامج المختار بعده (تبديل سريع أو رابط بعد الفتح)
+  const loadCatalog = useCallback(async () => {
+    wantPid.current = programId;
+    const r = await L('admin.catalog', programId ? { program_id: programId } : {});
+    if (wantPid.current === programId) setCatalog(r);
+  }, [programId]);
   useEffect(() => { if (NEEDS_CATALOG.has(tab) && !catalog) loadCatalog(); }, [tab, catalog, loadCatalog]);
-  // برنامج آخر في «الرحلة والمتطلبات»: يُعاد تحميل الكتالوج له
-  const pickProgram = (id) => { setProgramId(id); setCatalog(null); };
+  // البرنامج المختار في «الرحلة والمتطلبات» في الرابط (P9): ‎#/leaders/journey/<البرنامج>‎، فالتحديث وزر الرجوع والرابط
+  // المنسوخ تفتح البرنامج نفسه. الرابط مصدره الوحيد، وتغيّره يعيد تحميل الكتالوج له
+  const journeyPid = tab === 'journey' ? route.id || null : undefined;
+  useEffect(() => {
+    if (journeyPid === undefined || journeyPid === programId) return;
+    setProgramId(journeyPid); setCatalog(null);
+  }, [journeyPid, programId]);
+  const pickProgram = (id) => at('journey', id || null);
 
-  const go = (t) => { setStatus(''); at(t); };
+  // العودة إلى «الرحلة والمتطلبات» من القائمة تبقي البرنامج الذي كان مفتوحًا
+  const go = (t) => { setStatus(''); at(t, t === 'journey' ? programId : null); };
   const openPerson = (id) => { at('participants', id); window.scrollTo({ top: 0 }); };
   const openTrack = (k) => { at('tracks', k); window.scrollTo({ top: 0 }); };
   const openOrg = (id) => { at('orgs', id); window.scrollTo({ top: 0 }); };
@@ -136,7 +149,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'certs') body = <Certificates canWrite={canWrite} onPerson={openPerson} orgs={orgData?.orgs || []} />;
   else if (tab === 'tracks') body = <Tracks {...meth} trackKey={track} onOpen={(k) => (k ? openTrack(k) : at('tracks'))} onPerson={openPerson} />;
   else if (tab === 'journey') body = <Journey {...meth} onProgram={pickProgram} />;
-  else if (tab === 'programs') body = <Programs canWrite={canWrite} cohortId={cohortId} onCohort={(id) => { at('programs', id); window.scrollTo({ top: 0 }); }} onEditJourney={(id) => { pickProgram(id); at('journey'); }} />;
+  else if (tab === 'programs') body = <Programs canWrite={canWrite} cohortId={cohortId} onCohort={(id) => { at('programs', id); window.scrollTo({ top: 0 }); }} onEditJourney={pickProgram} />;
   else if (tab === 'content') body = <ContentBank {...meth} />;
   else if (tab === 'activities') body = <Activities canWrite={canWrite} />;
   else if (tab === 'handbook') body = <Handbook {...meth} />;

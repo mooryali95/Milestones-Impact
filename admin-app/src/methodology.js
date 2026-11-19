@@ -284,7 +284,9 @@ export function reorderIds(rows, entity, id, dir) {
 }
 
 // ══ البرامج والدفعات ══
-export const COHORT_STATUS = { planned: 'مخطط لها', open: 'التسجيل مفتوح', running: 'جارية', closed: 'مغلقة' };
+// أسماء حالات الدفعة و«جارية» من مصدر واحد (cohort-running.js، P10)
+export { COHORT_STATUS, cohortStateAr } from '../../supabase/functions/leaders-api/cohort-running.js';
+import { COHORT_STATUS } from '../../supabase/functions/leaders-api/cohort-running.js';
 const INHERIT = 'كما في البرنامج';
 
 // حقول نموذج الدفعة: الأساسيات، ثم طريقة تنفيذ كل نشاط جماعي أو فردي في البرنامج

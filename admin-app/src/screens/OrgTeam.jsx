@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { Empty, Spinner } from '../ui.jsx';
-import { COHORT_STATUS } from '../methodology.js';
+import { cohortStateAr } from '../methodology.js';
 import { coverageNotes, expertsAr, peopleAr, periodAr, roleAr, statusChip } from '../team.js';
 import CohortTeam from './CohortTeam.jsx';
 
@@ -27,7 +27,7 @@ export default function OrgTeam({ orgId, canWrite }) {
     const roles = Object.entries(c.roles || {}).map(([k, n]) => `${roleAr(k)} ${n}`).join(' · ');
     return (
       <div key={c.id} className="ot-cohort">
-        <div className="la-row between"><b>{c.name}</b><small className="la-muted">{COHORT_STATUS[c.status] || c.status} · {peopleAr(c.coverage.members)} · {periodAr(c)}</small></div>
+        <div className="la-row between"><b>{c.name}</b><small className="la-muted">{cohortStateAr(c)} · {peopleAr(c.coverage.members)} · {periodAr(c)}</small></div>
         <dl className="ot-dl">
           <dt>المستشار الأساسي</dt>
           <dd>{c.advisor ? <>{c.advisor.full_name} {c.advisor.status !== 'active' && <span className={`la-chip ${statusChip(c.advisor.status)[1]}`}>{statusChip(c.advisor.status)[0]}</span>}</> : <span className="la-muted">بلا مستشار</span>}</dd>

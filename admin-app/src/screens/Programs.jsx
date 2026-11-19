@@ -6,7 +6,8 @@
 // المشارك يتبع دفعة جهته الجارية تلقائيًا، ومن ليس له جهة يتبع الدفعة المفتوحة.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { date, dateOnly, L, LVL, STATUS } from '../leaders.js';
-import { COHORT_STATUS } from '../methodology.js';
+import { cohortStateAr } from '../methodology.js';
+import { programReach } from '../program-reach.js';
 import CohortEditor from './CohortEditor.jsx';
 import { CertOverride } from '../cert.jsx';
 import { Empty, Spinner, useCopy, useEscape, useGuardedClose, useUI } from '../ui.jsx';
@@ -91,7 +92,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
     ['الرحلة', 'المراحل بتواريخها ومددها في هذه الدفعة، وتعديل المدة بمعاينة أثرها، والخط الزمني، ومن في كل مرحلة', () => openTab('journey', true), false],
     ['الفريق والمجموعات', 'المستشار الأساسي وفريق الخبراء ومجموعات المشاركين', on.team, true],
     ['الرؤية', 'ما يراه مستشار الدفعة والخبير المسند من مشاركيها', on.vis, true],
-    ['رحلة البرنامج', `مراحل «${progName(c.program_id)}» ومتطلباته. تسري على كل دفعاته`, on.journey, false],
+    ['رحلة البرنامج', `مراحل «${progName(c.program_id)}» ومتطلباته. ${c.program_version_id ? 'تعديلها مسودة لا يصل إلى هذه الدفعة حتى تُحفظ نسخة وتُرقّى إليها' : 'تعديلها يصل إلى هذه الدفعة فورًا لأنها غير مثبتة على نسخة'}`, on.journey, false],
     ['الشهادة', 'شهادة البرنامج، وتضيف الجهة شعارها فوقها', on.cert, true],
     ['التقييم الختامي', 'معايير الحكم على المشروع والاجتياز في البرنامج', on.final, true],
     ...(kind === 'org' ? [['الجهة', `بيانات «${orgName(c.organization_id)}» ورابطها ومنسقها وعقدها`, on.org, false]] : []),
@@ -105,7 +106,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
           <div>
             <div className="la-muted">ملف الدفعة</div>
             <h2>{c.name}{c.is_default && <> <small className="la-chip">المفتوحة</small></>}</h2>
-            <p className="la-muted">{c.is_default ? 'من ليس له جهة' : orgName(c.organization_id) || 'أفراد'} · {progName(c.program_id)} · {version ? `النسخة ${version.number}` : <span className="la-chip warn">غير مثبتة</span>} · {COHORT_STATUS[c.status]}
+            <p className="la-muted">{c.is_default ? 'من ليس له جهة' : orgName(c.organization_id) || 'أفراد'} · {progName(c.program_id)} · {version ? `النسخة ${version.number}` : <span className="la-chip warn">غير مثبتة</span>} · {cohortStateAr(c)}
               {(c.starts_on || c.ends_on) && <> · {[dateOnly(c.starts_on), dateOnly(c.ends_on)].filter(Boolean).join(' إلى ')}</>}</p>
             <p className="cohort-kind">{KIND_AR[kind]}</p>
           </div>
@@ -211,7 +212,10 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     load();
     return r;
   };
+  // «برنامج جديد من هذا» (قرار المالك 16): يسبقه سؤال «لجهة بعينها؟»، لأن تخصيص جهة مكانه دفعتها لا نسخة من البرنامج
+  // (النسخة لا ترث تحسينات الأصل ولا يُنقل إليها تقدم)
   const newProgram = async (from, from_version) => {
+    if (from && !(await confirm(`لجهة بعينها؟ خصّص دفعتها بدل النسخ: أنشئ لها دفعة على «${progName(from)}»، ثم من ملف الدفعة أخفِ ما لا يلزمها من البنود واضبط مدد مراحلها، فتصلها تحسينات البرنامج حين ترقّيها إلى نسخه الجديدة. أما البرنامج الجديد فمنهج مستقل لا يرث ما يُحسَّن في الأصل بعد اليوم.`, { ok: 'برنامج جديد من هذا' }))) return;
     const name = await prompt('اسم البرنامج الجديد', from ? `${progName(from)} (نسخة)` : '');
     if (name) act('admin.program-save', { name, from, from_version }, 'أُنشئ البرنامج بنسخة من المراحل والمتطلبات');
   };
@@ -249,15 +253,8 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     const r = await act('admin.program-save', { id: cert.p.id, cert: cert.value }, 'حُفظت شهادة البرنامج. تسري على ما يصدر من الآن.');
     if (r) setCert(null);
   };
-  // لمن يسري البرنامج: الدفعة المفتوحة (الجميع بلا جهة)، وجهات دفعاته غير المغلقة
-  const reach = (p) => {
-    const live = d.cohorts.filter((c) => c.program_id === p.id && c.status !== 'closed');
-    const general = live.some((c) => c.is_default);
-    const orgs = [...new Set(live.filter((c) => c.organization_id).map((c) => orgName(c.organization_id)))];
-    const indiv = live.filter((c) => !c.is_default && !c.organization_id).length;
-    const parts = [general && 'الجميع (الدفعة المفتوحة)', orgs.length && `الجهات: ${orgs.join('، ')}`, indiv && `${indiv} دفعة أفراد`].filter(Boolean);
-    return parts.length ? { on: true, text: `يسري على: ${parts.join(' · ')}` } : { on: false, text: 'لا توجد دفعة على هذا البرنامج بعد، فلا يسري على أي مشارك. أنشئ له دفعة لجهة أو لأفراد متى احتجته.' };
-  };
+  // لمن يسري البرنامج: أعضاء دفعاته غير المغلقة الفعليون من الخادم (program-reach.js، P9)، لا عدد الدفعات
+  const reach = (p) => programReach(p, d.cohorts, orgName);
   // تحرير الدفعة بالأقسام (CohortEditor.jsx): الرحلة من تعريفها، والحفظ بالإجراء الواحد وحارس النقل
   const editCohort = (c = {}) => setEditor(c);
 
@@ -361,7 +358,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
               {canWrite && <button className="la-link" onClick={() => setFinalCfg(p)}>التقييم الختامي</button>}
               <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}>النسخ ({p.versions.length})</button>
               {canWrite && <button className="la-link" onClick={() => editCert(p)}>الشهادة{p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}</button>}
-              {canWrite && <button className="la-link" onClick={() => newProgram(p.id)}>تكرار</button>}
+              {canWrite && <button className="la-link" onClick={() => newProgram(p.id)}>برنامج جديد من هذا</button>}
               {canWrite && !p.is_default && <button className="la-link" onClick={() => archive(p)}>{p.archived_at ? 'إعادة' : 'أرشفة'}</button>}
             </div>
           </div>
@@ -401,7 +398,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
                   <td>{v ? `النسخة ${v.number}` : <small className="la-chip warn" title="تتبع البرنامج كما هو: كل تعديل على رحلته يصل إلى أعضائها فورًا">غير مثبتة</small>}
                     {latest && (!v || latest.id !== v.id) && canWrite && <> <button className="la-link" onClick={() => upgrade(c)}>{v ? 'رقِّ إلى' : 'ثبّت على'} {latest.number}</button></>}</td>
                   <td>{[dateOnly(c.starts_on), dateOnly(c.ends_on)].filter(Boolean).join(' إلى ')}</td>
-                  <td>{COHORT_STATUS[c.status]}</td>
+                  <td>{cohortStateAr(c)}</td>
                   <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
                   <td>{(() => { const h = cohortHub({ cohort: c, cohorts: d.cohorts, orgs: d.organizations, programs }); return <span className={`la-chip ${h.missing ? 'warn' : 'ok'}`}>{hubSummary(h)}</span>; })()}</td>
                   <td><button className="btn-sm ghost" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button>{canWrite && <> <button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <a className="la-link" href={`#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`}>الرحلة والمدد</a> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button> <button className="la-link" onClick={() => setVis(c)}>الرؤية</button></>}</td>

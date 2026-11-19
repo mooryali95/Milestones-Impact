@@ -9,6 +9,7 @@
 // أسرار الدالة التي لا قيمة افتراضية آمنة لها: بلا مفتاح التوقيع لا تصدر شهادة، وبلا قناة التنبيه (ALERT_CHANNELS) لا إنذار بغير البريد.
 // البقية لها افتراضي آمن في docs/SECRETS.md. البوابة تشترطها بأسمائها، وحالة النظام تفحص قيمها
 import { sessionsFor, undatedAr, usesHandbook } from './cohort-setup.js';
+import { isRunning, LIVE } from './cohort-running.js';
 
 export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY'];
 
@@ -54,7 +55,6 @@ export function migrationsSummary(pending) {
 }
 
 // ── إعدادات اللوحة قبل أول دفعة ──
-const LIVE = ['open', 'running'];
 const newestOf = (list, kind) => list.filter((x) => x.kind === kind)
   .sort((a, b) => (b.version ?? 0) - (a.version ?? 0) || String(b.created_at).localeCompare(String(a.created_at)))[0];
 
@@ -100,18 +100,19 @@ const asJson = (v) => { if (typeof v !== 'string') return v; try { return JSON.p
  *   sessions: cohort_id, active, starts_at, ends_at · finalEval: programs.final_eval للبرنامج الافتراضي
  *   advisors: معرّفات المستشارين الذين يخدمون في الرحلة فعلًا (journeyApproved)؛ غيابها يكتفي بوجود الإسناد */
 export function launchReadiness({ organizations = [], cohorts = [], sessions = [], finalEval = null, advisors = null } = {}, now = Date.now()) {
-  const orgCohorts = cohorts.filter((c) => c.organization_id && LIVE.includes(c.status));
+  const orgCohorts = cohorts.filter((c) => c.organization_id && LIVE.has(c.status));
   const perOrg = organizations.filter((o) => o.status === 'active')
-    .map((o) => ({ kind: 'org', id: o.id, name: o.name, has: cohorts.some((c) => c.organization_id === o.id && LIVE.includes(c.status)) }));
+    .map((o) => ({ kind: 'org', id: o.id, name: o.name, has: cohorts.some((c) => c.organization_id === o.id && LIVE.has(c.status)) }));
   const advisor = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.advisor_expert_id && (!advisors || advisors.includes(c.advisor_expert_id)) }));
   const dated = orgCohorts.map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: sessionsFor(c, sessions, now) > 0 || usesHandbook(c) }));
   // الجلسة غير المؤرخة تُعد (قرار المالك: «يُحدد لاحقًا» لا يمنع الإطلاق) ويظهر عددها في السطر
   // كل جلسة مرة واحدة: الجلسة بلا دفعة تعم الدفعات، وجمع undatedFor لكل دفعة كان يعدها مرة لكل دفعة
   const undated = sessions.filter((w) => w.active !== false && !w.starts_at
     && orgCohorts.some((c) => !w.cohort_id || w.cohort_id === c.id)).length;
-  const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
+  // «جارية» بالتعريف الواحد (cohort-running.js، P10): بالتاريخ، لا بالحالة المحفوظة
+  const running = cohorts.filter((c) => isRunning(c, now)).map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
   // نسخة البرنامج: كل دفعة مفتوحة أو جارية، والدفعة المفتوحة العامة أيًا كانت حالتها، مثبتة على نسخة (ترحيل 20261116110000)
-  const pinned = cohorts.filter((c) => c.is_default || LIVE.includes(c.status)).map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.program_version_id }));
+  const pinned = cohorts.filter((c) => c.is_default || LIVE.has(c.status)).map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.program_version_id }));
   const fe = asJson(finalEval);
   const finalSaved = fe != null && JSON.stringify(fe) !== '{}';
   const noOrgCohort = 'لا دفعة جهة مفتوحة أو جارية بعد';

@@ -30,7 +30,8 @@ describe('الترحيلات بوسم بوابة النشر', () => {
 
 describe('بنود الإطلاق: حكم واحد للوحة والبوابات', () => {
   const org = { id: 'o1', name: 'جهة أ', status: 'active' };
-  const cohort = { id: 'c1', name: 'دفعة أ', organization_id: 'o1', status: 'running', advisor_expert_id: null, content_release: null, delivery: {} };
+  // «جارية» بالتعريف الواحد (cohort-running.js، P10): حية وبدأت بتاريخها
+  const cohort = { id: 'c1', name: 'دفعة أ', organization_id: 'o1', status: 'running', starts_on: '2026-11-01', advisor_expert_id: null, content_release: null, delivery: {} };
   const open = { id: 'd', name: 'الدفعة المفتوحة', organization_id: null, is_default: true, status: 'running', content_release: '2026.11-c1' };
 
   it('حالة التدقيق: دفعة جهة بلا مستشار ولا مواعيد ولا إعداد ختامي ولا إصدار، فاللوحة لا تقول «شبه جاهزة»', () => {

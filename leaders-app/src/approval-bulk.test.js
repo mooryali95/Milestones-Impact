@@ -143,11 +143,14 @@ describe('المرحلة 3: التحقق بالعينة', () => {
 });
 
 describe('بريد قرار المراجعة يحوّل رموز العنوان ولا يرسلها خامًا (تنسيق الزميل)', () => {
-  it('notifyReview يمر بـrenderJourneyText بإعداد متطلبات البرنامج نفسه', () => {
+  it('notifyReview يمر بالدالة الواحدة readableReqTitles بإعداد متطلبات البرنامج نفسه (P8)', () => {
     const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/admin.ts'), 'utf8');
     const fn = src.slice(src.indexOf('async function notifyReview'), src.indexOf('async function notifyReview') + 1500);
-    expect(fn).toContain("renderJourneyText(r?.title_ar || '', { reqs })");
-    expect(fn).toContain(".select('code, config').eq('program_id', r.program_id)");
+    expect(fn).toContain('await readableReqTitles([{ stage_requirements: r }])');
+    expect(fn).toContain("select('title_ar, program_id')");
     expect(fn).not.toMatch(/reviewMail\(p\.full_name, r\?\.title_ar/);
+    const helper = src.slice(src.indexOf('export async function readableReqTitles'), src.indexOf('export async function readableReqTitles') + 1200);
+    expect(helper).toContain(".select('code, config, program_id').in('program_id', programs)");
+    expect(helper).toContain('renderJourneyText(sr.title_ar, { reqs: byProgram.get(sr.program_id) || [] })');
   });
 });
