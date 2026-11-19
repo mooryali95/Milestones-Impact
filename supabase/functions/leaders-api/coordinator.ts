@@ -5,13 +5,16 @@
 // الطلب أبدًا، والحقول تمر عبر coordParticipant حسب صلاحياته.
 import { journeyFor } from './participant.ts';
 import { cohortMemberIds, journeyDefinition, orgCohortSetups } from './programs.ts';
-import { journeyMap, mapLanes, stageNow } from './journey-map.js';
+import { journeyMap, mapLanes, rosterAgrees, stageNow } from './journey-map.js';
 import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, orgJoinUrl, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
 import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
+// لصفوف «المتابعة» في ملف الدفعة (rosterRows): القراءتان نفساهما اللتان في قائمة المشاركين
+import { baselineProgress, lastActiveFor } from './admin.ts';
+import { onboardingOf, STUCK_STEPS } from './onboarding.js';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
 import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
@@ -462,6 +465,8 @@ export async function adminJourney(a: Admin, b: Body) {
 function mapPeople(rows: any[], journeys: Record<string, any>) {
   return rows.map((r: any) => ({
     id: r.id, name: r.full_name, status: r.status, created_at: r.created_at, journey: journeys[r.id]?.journey || [], milestones: journeys[r.id]?.milestones || [],
+    // نسبة التقدم كما يراها المشارك (journeyProgress): لصف العضو في «المتابعة» وحده، والخريطة لا تقرؤها
+    progress: journeys[r.id]?.progress ?? null,
     dates: [r.profile_completed_at, journeys[r.id]?.baselineAt, ...((journeys[r.id]?.pl || []) as any[]).map((x: any) => x.approved_at)],
   }));
 }
@@ -495,10 +500,45 @@ export async function adminCohortJourney(a: Admin, b: Body) {
     cohort: def.cohort, program, list: true, activity: true,
     // الموقوفة لهذه الدفعة (R2b) تظهر في مكانها باهتة بلا أعداد
     off: def.stages_off || [],
+    // صف لكل عضو من الحلقة نفسها (تبويب «المتابعة»): لا حساب ثانٍ للمرحلة ولا قراءة ثانية للرحلات
+    roster: true,
   });
   journey_map.lanes = mapLanes(mapStages);
+  // الصفوف تخرج من الخريطة إلى حقلها، فتبقى journey_map كما يقرؤها تبويب «الرحلة»
+  const { members, ...map } = journey_map;
+  const drift = rosterAgrees(journey_map);
+  if (drift.length) console.error('cohort roster drift', cohortId, drift.length);
+  const roster = await rosterRows(cohortId, rows as any[], members || []);
   await audit('admin', a.email, 'admin.cohort-journey', 'cohorts', cohortId);
-  return { success: true, journey_map };
+  return { success: true, journey_map: map, roster };
+}
+
+// صفوف «المتابعة»: ما حسبته الخريطة لكل عضو (المرحلة وسبب التوقف والدور والحضور)، ومعه ما يُعرض ويُبحث به من صفه نفسه
+// المقروء أعلاه (الاسم والبريد والجوال والمسمى والجهة)، وآخر نشاط ومجموعته وأين توقف قبل الاعتماد. ثلاث قراءات للدفعة كلها
+// أيًا كان عدد أعضائها، ولا قراءة لكل صف. الجوال والبريد للإدارة وحدها كما في قائمة المشاركين (التصور 2.7)، فلا يقرأ هذا
+// المسار منسق ولا خبير
+async function rosterRows(cohortId: string, rows: any[], members: any[]) {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  // قبل الاعتماد وحدهم: خانة «أين توقف» القائمة (onboardingOf)، بقياسهم المبدئي من القراءة نفسها التي تقرؤها قائمة المشاركين
+  const before = rows.filter((r) => !['placed', 'enrolled', 'completed', 'suspended', 'withdrawn'].includes(r.status)).map((r) => r.id as string);
+  const [active, groups, progress] = await Promise.all([
+    lastActiveFor(rows),
+    db.from('cohort_group_members').select('participant_id, cohort_groups(name)').eq('cohort_id', cohortId).then((r: any) => (r.data || []) as any[]),
+    // بدفعات كقائمة المشاركين (حدها 500)، فلا يطول عنوان الاستعلام في دفعة كبيرة. تعذّرها يُسقط الخانة وحدها لا الجدول
+    Promise.all(Array.from({ length: Math.ceil(before.length / 400) }, (_, i) => baselineProgress(before.slice(i * 400, (i + 1) * 400))))
+      .then((parts) => Object.assign({}, ...parts) as Record<string, any>).catch(() => ({} as Record<string, any>)),
+  ]);
+  const groupOf = new Map(groups.map((g: any) => [g.participant_id, g.cohort_groups?.name || null]));
+  return members.map((m: any) => {
+    const r = byId.get(m.id) || {};
+    const g = progress[m.id] || null;
+    const o = before.includes(m.id) ? onboardingOf(r, g?.id ? g : null) : null;
+    return {
+      ...m, email: r.email || null, phone: r.phone || null, job_title: r.job_title || null, organization_name: r.organization_name || null,
+      group: groupOf.get(m.id) || null, last_active_at: active[m.id] ?? r.last_login_at ?? null, last_login_at: r.last_login_at || null,
+      onboarding: o && STUCK_STEPS.includes(o.step) ? { step: o.step, label: o.label, remaining: o.remaining } : null,
+    };
+  });
 }
 
 // ── 5. الملخص الأسبوعي (من cron.reminders) ──

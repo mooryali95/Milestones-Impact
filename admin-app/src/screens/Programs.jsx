@@ -19,7 +19,8 @@ import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
-import { COHORT_TABS, cohortTab } from '../cohort-journey.js';
+import CohortRoster from './CohortRoster.jsx';
+import { COHORT_TABS, cohortTab, followStage, tabQuery } from '../cohort-journey.js';
 
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
 const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
@@ -65,14 +66,16 @@ const ACTION_LABEL = {
 };
 function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: given }) {
   const copy = useCopy();
-  // تبويبا الملف: «الملف» (الجاهزية والإعدادات) و«الرحلة» (R1)، والمختار في العنوان ?view=journey فيُفتح الرابط عليه
+  // تبويبات الملف: «الملف» (الجاهزية والإعدادات) و«الرحلة» (R1) و«المتابعة» (صف لكل عضو)، والمختار في العنوان ?view= فيُفتح الرابط عليه
   const route = useRoute();
   const [tab, setTab] = useState(() => cohortTab(readQuery()));
-  useEffect(() => { setTab(cohortTab(readQuery())); }, [route, c.id]);
+  // مرحلة الخريطة التي ضُغطت: يُفتح «المتابعة» مفلترًا بها (من الرابط أو من زر الخريطة)، ونقرة التبويب نفسه تفتحه بفلاتره المحفوظة
+  const [stage, setStage] = useState(() => followStage(readQuery()));
+  useEffect(() => { setTab(cohortTab(readQuery())); setStage(followStage(readQuery())); }, [route, c.id]);
   const tabsRef = useRef(null);
-  const openTab = (k, focus = false) => {
-    setTab(k);
-    writeQuery(k === 'journey' ? 'view=journey' : '');
+  const openTab = (k, focus = false, st = '') => {
+    setTab(k); setStage(k === 'follow' ? st : '');
+    writeQuery(tabQuery(k, st));
     if (focus) tabsRef.current?.querySelector(`#cohort-tab-${k}`)?.focus();
   };
   const tabKey = (e) => {
@@ -83,13 +86,14 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
     openTab(COHORT_TABS[(to + COHORT_TABS.length) % COHORT_TABS.length][0], true);
   };
   // خطة المراحل في تبويب «الرحلة» (القرار 23): بند الجاهزية وزر المواعيد يفتحانه، لا نافذة ثانية
-  const on = { ...given, plan: () => openTab('journey', true) };
+  const on = { ...given, plan: () => openTab('journey', true), follow: (st) => { openTab('follow', true, st || ''); window.scrollTo({ top: 0 }); } };
   const { items, missing, link, kind } = hub;
   const people = `#/leaders/participants?cohort=${encodeURIComponent(c.id)}`;
   // كل إعدادات الدفعة وما تتبعه في مكان واحد: ما يُضبط للدفعة نفسها، وما يُضبط في برنامجها أو جهتها ويسري عليها
   const tiles = [
     ['الأساسيات', 'الاسم والجهة والبرنامج والمدة والحالة، والرحلة بندًا بندًا (الظاهر والمخفي)، وصيغة كل نشاط، والنسخة والمستويات', on.edit, true],
     ['الرحلة', 'المراحل بتواريخها ومددها في هذه الدفعة، وتعديل المدة بمعاينة أثرها، والخط الزمني، ومن في كل مرحلة', () => openTab('journey', true), false],
+    ['المتابعة', 'صف لكل عضو: مرحلته الحالية وسبب توقفه وعلى من الدور، ببحث بالاسم أو الجوال وتصدير', () => openTab('follow', true), false],
     ['الفريق والمجموعات', 'المستشار الأساسي وفريق الخبراء ومجموعات المشاركين', on.team, true],
     ['الرؤية', 'ما يراه مستشار الدفعة والخبير المسند من مشاركيها', on.vis, true],
     ['رحلة البرنامج', `مراحل «${progName(c.program_id)}» ومتطلباته. ${c.program_version_id ? 'تعديلها مسودة لا يصل إلى هذه الدفعة حتى تُحفظ نسخة وتُرقّى إليها' : 'تعديلها يصل إلى هذه الدفعة فورًا لأنها غير مثبتة على نسخة'}`, on.journey, false],
@@ -123,6 +127,10 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
         {tab === 'journey' ? (
           <div role="tabpanel" id="cohort-panel-journey" aria-labelledby="cohort-tab-journey">
             <CohortJourney c={c} canWrite={canWrite} on={on} onSaved={on.reload} />
+          </div>
+        ) : tab === 'follow' ? (
+          <div role="tabpanel" id="cohort-panel-follow" aria-labelledby="cohort-tab-follow">
+            <CohortRoster key={`${c.id}:${stage}`} c={c} canWrite={canWrite} stage={stage} onPerson={on.person} onJourney={() => openTab('journey', true)} />
           </div>
         ) : (
         <div role="tabpanel" id="cohort-panel-overview" aria-labelledby="cohort-tab-overview">
@@ -168,7 +176,7 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
   );
 }
 
-export default function Programs({ canWrite, onEditJourney, cohortId = null, onCohort = () => {} }) {
+export default function Programs({ canWrite, onEditJourney, cohortId = null, onCohort = () => {}, onPerson = null }) {
   const { toast, confirm, prompt } = useUI();
   const [d, setD] = useState(null);
   const [wizard, setWizard] = useState(null);
@@ -316,6 +324,8 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
       org: shown.organization_id && (() => navigate({ ctx: 'leaders', tab: 'orgs', id: shown.organization_id })),
       other: (x) => onCohort(x.other), activities: () => { window.location.hash = `#/leaders/activities?cohort=${encodeURIComponent(shown.id)}`; },
       participants: () => { window.location.hash = people; }, approve: () => { window.location.hash = `${people}&status=pending_approval`; },
+      // صف في «المتابعة» يفتح ملف العضو
+      person: (id) => (onPerson ? onPerson(id) : navigate({ ctx: 'leaders', tab: 'participants', id })),
     };
     return (
       <>

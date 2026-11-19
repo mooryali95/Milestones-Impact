@@ -29,8 +29,9 @@ const milestones = [
 const today = new Date('2026-11-16T09:00:00Z');
 
 describe('تبويب الرحلة في ملف الدفعة: التبويب من العنوان', () => {
-  it('view=journey يفتح الرحلة، وما سواه الملف', () => {
+  it('view=journey يفتح الرحلة، وview=follow المتابعة (cohort-roster.test.js)، وما سواهما الملف', () => {
     expect(cohortTab('view=journey')).toBe('journey');
+    expect(cohortTab('view=follow')).toBe('follow');
     expect(cohortTab('view=x&y=1')).toBe('overview');
     expect(cohortTab('')).toBe('overview');
   });

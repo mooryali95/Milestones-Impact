@@ -28,8 +28,8 @@ import { GuideTranscriptButton } from '../GuideTranscripts.jsx';
 import { PreviewAs } from './CohortVisibility.jsx';
 import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/functions/leaders-api/notice-rules.js';
 
-// حد الإجراء الجماعي (يطابق BULK_MAX في admin.ts، والخادم هو الحكم)
-const BULK_MAX = 50;
+// حد الإجراء الجماعي وإجراءا الحالة والدفعة من BulkPeople.jsx: يستدعيهما تبويب «المتابعة» في ملف الدفعة أيضًا
+import { BULK_MAX, BulkEnroll, BulkStatus, useBulkCohorts } from '../BulkPeople.jsx';
 import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
 import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
@@ -93,7 +93,7 @@ export function Where({ o }) {
 }
 
 function List({ orgs, canWrite, onOpen, initialStatus }) {
-  const { toast, confirm, prompt } = useUI();
+  const { toast, confirm } = useUI();
   const [f, setF, clearF, replaceF] = useFilters(KEYS, initialStatus ? { status: initialStatus } : {}, { scope: 'participants' });
   const [list, setList] = useState(null);
   const [error, setError] = useState('');
@@ -176,39 +176,9 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   };
   // أعمدة التصدير: تعريف واحد، والزر الموحد يسأل ماذا يُصدَّر وأي أعمدة
   const lv = (p, d) => LVL[(p.placements || []).find((x) => x.dimension === d)?.level] || '';
-  // تغيير الحالة والإلحاق بدفعة للمحددين: الإجراءان نفساهما اللذان في ملف المشارك (admin.status و admin.cohort-enroll)، بطلب واحد
-  const [statusTo, setStatusTo] = useState('');
-  const [cohortTo, setCohortTo] = useState('');
-  const [enrolling, setEnrolling] = useState(false);
-  const [cohorts, setCohorts] = useState([]);
-  useEffect(() => { if (canWrite) L('admin.programs', {}).then((x) => setCohorts(x.success ? (x.cohorts || []).filter((c) => !c.is_default && c.status !== 'closed') : [])); }, [canWrite]);
-  const bulkStatus = async () => {
-    if (!statusTo) return toast('اختر الحالة');
-    if (picked.size > BULK_MAX) return toast(`الحد ${BULK_MAX} مشاركًا في المرة الواحدة`);
-    if (!(await confirm(`تغيير حالة ${picked.size} مشارك إلى «${STATUS[statusTo]}»؟`, { danger: statusNeedsReason(statusTo), ok: 'تغيير الحالة' }))) return;
-    let reason;
-    if (statusNeedsReason(statusTo)) {
-      reason = await prompt(`سبب الإيقاف أو الانسحاب (يُحفظ في ملف كل واحد من الـ${picked.size} ويُبلَّغ به بالبريد):`);
-      if (reason === null) return;
-      if (String(reason).trim().length < STATUS_REASON_MIN) return toast('اكتب السبب بوضوح');
-    }
-    const r = await L('admin.status', { participant_ids: [...picked], status: statusTo, ...(reason ? { reason } : {}) });
-    if (!r.success) return toast(r.message);
-    toast(`غُيّرت حالة ${r.done ?? picked.size}${r.skipped ? `، وتُخطّي ${r.skipped} على الحالة نفسها` : ''}`);
-    setPicked(new Set()); setStatusTo(''); load(serverQ);
-  };
-  const bulkEnroll = async () => {
-    if (enrolling) return;
-    const c = cohorts.find((x) => x.id === cohortTo);
-    if (!c) return toast('اختر الدفعة');
-    if (picked.size > BULK_MAX) return toast(`الحد ${BULK_MAX} مشاركًا في المرة الواحدة`);
-    if (!(await confirm(`نقل ${picked.size} مشارك إلى دفعة «${c.name}»؟ لا حاجة لهذا لمن انضم برابط جهة الدفعة: يدخلها تلقائيًا. من كان ملحقًا يدويًا بدفعة أخرى يُسحب منها.`))) return;
-    setEnrolling(true);
-    const r = await enrollCohort({ cohort_id: c.id, participant_ids: [...picked] }, confirm).finally(() => setEnrolling(false));
-    toast(r.success ? `نُقل ${r.enrolled} مشارك إلى دفعة «${c.name}»` : r.message);
-    // القائمة تُقرأ من جديد، فيظهر عمود الدفعة والتصدير بالدفعة الجديدة
-    if (r.success) { setPicked(new Set()); setCohortTo(''); load(serverQ); }
-  };
+  // تغيير الحالة والإلحاق بدفعة للمحددين: الإجراءان نفساهما اللذان في ملف المشارك (admin.status و admin.cohort-enroll)، بطلب واحد (BulkPeople.jsx)
+  const cohorts = useBulkCohorts(canWrite);
+  const bulkDone = () => { setPicked(new Set()); load(serverQ); };
   const exportCols = [
     { key: 'name', label: 'الاسم', width: 26, get: (p) => p.full_name }, { key: 'email', label: 'البريد', width: 30, get: (p) => p.email },
     { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.phone }, { key: 'title', label: 'المسمى', width: 22, get: (p) => p.job_title },
@@ -253,16 +223,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           {pickedPending.length > 0 && <button className="btn-sm primary" onClick={() => setBulkApprove(pickedPending.slice(0, 50))} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة">اعتماد جماعي ({pickedPending.length})…</button>}
           <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
           <button className="btn-sm primary" onClick={move}>نقل</button>
-          <select className="filter-select" aria-label="تغيير حالة المحددين" value={statusTo} onChange={(e) => setStatusTo(e.target.value)}>
-            <option value="">تغيير الحالة إلى…</option>{Object.entries(STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
-          <button className="btn-sm ghost" onClick={bulkStatus} disabled={!statusTo}>غيّر الحالة</button>
-          {cohorts.length > 0 && <>
-            <select className="filter-select" aria-label="نقل المحددين إلى دفعة أخرى (استثناء)" title="المشارك يدخل دفعة جهته تلقائيًا. هذا للاستثناء: فرد في دفعة جهة، أو نقل بين دفعتين" value={cohortTo} onChange={(e) => setCohortTo(e.target.value)}>
-              <option value="">نقل إلى دفعة أخرى (استثناء)…</option>{cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <button className="btn-sm ghost" onClick={bulkEnroll} disabled={!cohortTo || enrolling}>{enrolling ? "يُنقل…" : "انقلهم"}</button>
-          </>}
+          <BulkStatus ids={[...picked]} onDone={bulkDone} />
+          <BulkEnroll ids={[...picked]} cohorts={cohorts} onDone={bulkDone} />
           {pickedRetake > 0 && <button className="btn-sm ghost" onClick={askRetake} title="يُلغى قياسهم، وتظهر لكل منهم بطاقة في الموقع ويصله بريد يطلب الإعادة بتأنٍّ">اطلب إعادة القياس ({pickedRetake})</button>}
           <button className="btn-sm ghost" onClick={() => setNudging([...picked].slice(0, BULK_MAX))} title={picked.size > BULK_MAX ? `التذكير ${BULK_MAX} في كل مرة: يُذكَّر أول ${BULK_MAX} من المحددين، ثم حدّد الباقين` : 'بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال'}>
             {picked.size > BULK_MAX ? `ذكّر أول ${BULK_MAX} من المحددين` : `ذكّر المحددين (${picked.size})`}</button>

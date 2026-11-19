@@ -328,3 +328,50 @@ fieldset.cj-dates { margin: 0; min-inline-size: 0; }
 .cj-plan.locked { flex-wrap: nowrap; align-items: flex-start; }
 .cj-plan.locked > .cj-lock { margin-block-start: 8px; }
 .cj-plan.locked > span:last-child { flex: 1 1 auto; }
+
+/* ══ تبويب «المتابعة»: صف لكل عضو (تصور تشغيل الدفعة 2026-11-19، المرحلة 1) ══
+   الجدول بنمط القوائم العريضة القائم (data-table la-cards): بطاقات على الجوال فلا تمرير أفقي للصفحة */
+.cr { display: grid; gap: 12px; margin-block-start: 14px; min-inline-size: 0; }
+.cr-note { margin: 0; line-height: 1.8; }
+.cr-wait { margin: 0; text-align: center; }
+.cr-table td { vertical-align: top; }
+.cr-cell { display: grid; gap: 2px; min-inline-size: 0; }
+.cr-cell small { font-size: .76rem; line-height: 1.6; }
+.cr-need { line-height: 1.7; }
+.cr-track { color: var(--ink-soft); }
+.cr-table tr.cr-late td:first-child { box-shadow: inset -3px 0 0 var(--st-bad); }
+.cr-table tbody tr:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: -3px; }
+.cr-turn { white-space: nowrap; }
+.cr-turn-item { display: grid; gap: 2px; justify-items: start; }
+.cr-short { white-space: nowrap; }
+.cr-table th, .cr-table td { padding-inline: 10px; }
+.cr-table td[data-label="سبب التوقف"] { min-inline-size: 170px; }
+.cr-table td[data-label="العضو"] { min-inline-size: 150px; }
+.cr-table td[data-label="المرحلة الحالية"] { min-inline-size: 140px; }
+.cr-table td[data-label="الدور"] { min-inline-size: 104px; }
+.cr-since { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; white-space: nowrap; }
+/* شبكة أمان: إن ضاق العرض عن الأعمدة يُمرَّر الجدول داخل إطاره، ولا يُقص عمود ولا تُمرَّر الصفحة */
+.cr .table-wrap { overflow-x: auto; }
+.cr-table td[data-label="آخر نشاط"] { min-inline-size: 84px; }
+/* الفرز من القائمة للبطاقات وحدها: على الحاسوب رؤوس الأعمدة تفرز */
+@media (min-width: 1181px) { .cr .flt select[aria-label="الترتيب"] { display: none; } }
+.cr-turn.t-admin { background: rgba(178, 107, 0, .12); color: var(--st-warn-text); }
+.cr-turn.t-schedule, .cr-turn.t-expert { background: rgba(10, 42, 61, .08); color: var(--ink); }
+@media (max-width: 720px) {
+  .cohort-tabs { display: flex; }
+  .cohort-tabs [role="tab"] { flex: 1 1 0; padding-inline: 8px; }
+}
+/* عشرة أعمدة لا تسعها شاشة لوحية ولا حاسوب صغير بجانب القائمة: البطاقات (نمط la-cards نفسه) حتى 1180 بدل 600، فلا تمرير أفقي */
+@media (max-width: 1180px) {
+  .cr-table thead { display: none; }
+  .cr-table, .cr-table tbody, .cr-table tr, .cr-table td { display: block; width: 100%; }
+  .cr-table tr { border: 1px solid var(--line, rgba(11,39,47,.12)); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+  .cr-table td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 4px 0; border: 0; text-align: start; }
+  .cr-table td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-faint, var(--brand-muted-soft)); flex: none; }
+  .cr-table td .cr-cell, .cr-table td .cr-turn-item { justify-items: end; text-align: end; }
+  /* خانة بلا قيمة لا تأخذ سطرًا في البطاقة */
+  .cr-table td.cr-nil { display: none; }
+  .cr-table td[data-label] { min-inline-size: 0; }
+  .cr-table tr.cr-late td:first-child { box-shadow: none; }
+  .cr-table tr.cr-late { border-inline-start: 3px solid var(--st-bad); }
+}
