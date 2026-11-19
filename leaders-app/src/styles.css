@@ -1940,3 +1940,59 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .svc-shelf { border: 2px dotted rgba(148, 112, 46, .45); }
 .svc-shelf .svc-item + .svc-item { border-top: 1px dashed rgba(148, 112, 46, .3); padding-top: 10px; }
 .svc-shelf .svc-line { margin: 0 0 6px; }
+
+/* ════ جولة المشارك 2026-11-19: إصلاحات مؤكدة على عرض 390 ════ */
+/* أبواب القراءة على الشاشة الضيقة: عنوان الباب سطر كامل والشارات تحته، كصف الجلسة (كان العنوان ينضغط إلى نحو 30 بكسل) */
+@media (max-width: 620px) { .act-read > .grow { flex-basis: 100%; } }
+
+/* شريط «تحديث جديد متاح» وشريط «أنت دون اتصال»: تحت الترويسة وثابتان عند التمرير. الجذر عمود مرن ليُرتَّب شريط التحديث
+   بعد الترويسة (هو قبلها في الشجرة، main.jsx)، وارتفاع الترويسة من topbar-height.js. دون اتصال يعلو شريط التحديث إن اجتمعا */
+#root { display: flex; flex-direction: column; }
+#root > .skip-link, #root > .topbar { order: -1; }
+#root > .update-bar, #root > .offline-bar { position: sticky; top: var(--topbar-h, 0px); }
+#root > .update-bar { z-index: 18; }
+#root > .offline-bar { z-index: 19; }
+@media (max-width: 760px) {
+  /* إشعار الهاتف يظهر تحت الترويسة: ينزل تحت الشريط الثابت إن وُجد فلا يغطيه */
+  #root:has(> .update-bar) .toast, #root:has(> .offline-bar) .toast { top: calc(var(--topbar-h, 64px) + 60px); }
+}
+/* رسالة رفض الخادم (update_required) بزر «حدّث»: أسفل الشاشة فوق شريط التنقل، وتبقى حتى يتصرف المشارك (UpdateRefusal.jsx) */
+.update-refusal { position: fixed; inset-inline: 0; bottom: 72px; z-index: 60; margin: 0 auto; width: max-content; max-width: min(560px, calc(100% - 24px));
+  display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px;
+  background: var(--graphite); color: var(--mist); font-size: 14px; line-height: 1.6; box-shadow: var(--shadow); }
+.update-refusal-text { flex: 1 1 200px; font-weight: 600; }
+.update-refusal-acts { display: inline-flex; align-items: center; gap: 6px; }
+.update-refusal .update-bar-btn { min-height: 44px; }
+.update-refusal-x { font: inherit; min-height: 44px; min-width: 44px; padding: 0 10px; border: 0; background: none; color: var(--mist); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+@media (max-width: 760px) { .update-refusal { bottom: calc(88px + env(safe-area-inset-bottom)); } }
+
+/* النتيجة الختامية تحت الرأس: القرار، ثم ملاحظة الخبير، ثم «التالي» */
+.final-result { align-items: flex-start; }
+.final-result:not(.gold) { background: var(--surface); border: 1px solid var(--line); }
+.final-result p { margin: 0; max-inline-size: none; }
+.final-result p + p { margin-top: 6px; }
+
+/* بطاقة الخبير المرشح: الاسم، ثم المسمى، ثم النبذة، ثم الزر، كل في سطره (كان الاسم ملتصقًا بالمسمى والزر وسط السطر) */
+.cx-card { display: flex; flex-direction: column; align-items: flex-start; }
+.cx-card.stack > * + * { margin-top: 0; }
+.cx-card > b { font-size: 15px; }
+.cx-card > p { margin: 0; }
+.cx-card > .btn { margin-top: auto; align-self: stretch; }
+
+/* نجوم الاستبانة وتقييم الخبير: هدف لمس 44 (كان 34)، وخمسها تسع عمود البند على 390 */
+.rx-stars { gap: 0; }
+.rx-stars button { width: 44px; height: 44px; font-size: 24px; }
+.survey-q > label { display: block; }
+
+/* «اذهب إليها»: البند المقصود يُبرز لحظة ثم يهدأ */
+.item { scroll-margin-block: 96px; }
+.item.goto { box-shadow: 0 0 0 3px rgba(199, 154, 75, .45); }
+@media (prefers-reduced-motion: no-preference) { .item { transition: box-shadow .4s; } }
+
+/* مربع الموافقة في «ماذا ترى جهتك»: بجانب نصه لا فوقه، وبحجم يُلمس (كان 13 بكسل وحده في سطر) */
+.consent-check { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; min-height: 44px; cursor: pointer; }
+.consent-check input[type="checkbox"] { flex: none; width: 24px; height: 24px; margin: 2px 0 0; accent-color: var(--slate); }
+.consent-check span { flex: 1; min-width: 0; }
+
+/* عنوان «كيف يُقيَّم عملك» القابل للفتح: هدف لمس 44 على شاشات اللمس (كان 26) */
+@media (pointer: coarse) { .how-eval > summary { padding-block: 9px; } }

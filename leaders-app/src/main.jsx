@@ -8,6 +8,8 @@ import { viewHref } from './reload-view.js';
 import { installTelemetry } from './telemetry.js';
 import { adoptWaitingIfAlone, buildFromScripts, installAppUpdate } from '../../shared/ui/app-update.js';
 import UpdateBar from '../../shared/ui/UpdateBar.jsx';
+import UpdateRefusal from './UpdateRefusal.jsx';
+import { trackTopbarHeight } from './topbar-height.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
@@ -20,11 +22,13 @@ captureAttribution();
 // الرصد من جهة العميل (المرحلة 4): أخطاء الصفحة وفشل القطع، وإرسال ما بقي في الطابور بعد عودة الاتصال
 installTelemetry(window);
 // تحديث بالدعوة لا بالكسر (المرحلة 5): version.json يُفحص عند الرجوع إلى التبويب وعند التنقل وكل 20 دقيقة، وعند الاختلاف شريط
-// «تحديث جديد متاح» فوق الترويسة، و«حدّث» يفتح القسم نفسه (shared/ui/app-update.js)
+// «تحديث جديد متاح» تحت الترويسة وثابت عند التمرير (styles.css)، و«حدّث» يفتح القسم نفسه (shared/ui/app-update.js).
+// ورسالة رفض الخادم update_required تبقى أسفل الشاشة بزر «حدّث» (UpdateRefusal.jsx)
 installAppUpdate(window);
 // الشاشات الثقيلة تُحمَّل كسولًا (lazy في App.jsx)؛ هذا ما يظهر أثناء جلب قطعتها
 const Loading = () => <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
-createRoot(document.getElementById('root')).render(<ErrorBoundary><UpdateBar to={viewHref} /><Suspense fallback={<Loading />}><App /></Suspense></ErrorBoundary>);
+createRoot(document.getElementById('root')).render(<ErrorBoundary><UpdateBar to={viewHref} /><Suspense fallback={<Loading />}><App /></Suspense><UpdateRefusal to={viewHref} /></ErrorBoundary>);
+trackTopbarHeight(window);
 // بعد كل نشر تتغير أسماء القطع المهشّرة؛ تبويب مفتوح قبل النشر يفشل تحميلها المسبق، فيُعاد تحميله مرة واحدة
 // في الدقيقة على الأكثر (لا حلقة إن تكرر الفشل لوكيل أو انقطاع)، وإلى القسم الذي طلبه المشارك (reload-view.js)
 installPreloadRecovery(window, { to: viewHref });
