@@ -1,7 +1,7 @@
 // P1-14 على قاعدة مزيفة تطبّق المرشحات: التذكير يضيف بصمة رابط جديد ولا يستبدلها، فرابط الدعوة الأولى والرابط الجديد
 // كلاهما صالح حتى الإغلاق ومرفوضان بعده؛ والإغلاق 23:59 بتوقيت الرياض، ويوم الإغلاق يُعرض بيوم الرياض.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail, hash } = await import('./core.ts');
 const FB = await import('./feedback360.ts');
 const { raterGet, tokenPatch } = await import('./impact.ts');

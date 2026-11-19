@@ -1,5 +1,5 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import "jsr:@supabase/functions-js@2.119.1/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.119.1";
 import { MAIL_FROM_DEFAULT, sendCounted } from "../_shared/mail.ts";
 import { clientIp, turnstileOk as turnstileCheck } from "../_shared/guard.ts";
 import { CONTACT_PAGES, CONTACT_SELECT, confirmSender as confirmContact, formContext, formOnly, insertContactRequest, notifyAdmin as notifyContact } from "../_shared/contact.ts";

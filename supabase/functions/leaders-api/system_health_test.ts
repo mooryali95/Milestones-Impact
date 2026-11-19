@@ -1,7 +1,7 @@
 // حالة النظام في اللوحة (ops-4) على قاعدة مزيفة: الترحيل المؤجل بقرار لا يُطلب تطبيقه، وقناة التنبيه من الأسرار
 // المفحوصة، وجاهزية الإطلاق تضم بنود م2 التي تحكم بها بوابات المراحل (دفعة جهة بلا مستشار مثلًا).
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
 const { health } = await import('./system.ts');
 const { MIGRATIONS } = await import('./migrations.js');

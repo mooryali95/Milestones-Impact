@@ -1,7 +1,7 @@
 // قناة سلاك (#mi-ops) على قاعدة مزيفة وشبكة محاكاة: سلسلة واحدة لكل فئة في يوم الرياض، والرمز لا يُنشر،
 // والبريد مقنّع، وتعطل سلاك لا يُفشل المستدعي، وغياب الجدول ينشر بلا سلاسل، والفيض يُجمع، ورسالة الربط مرة.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const S = await import('../_shared/slack.ts');
 const { sendCounted, alertWebhook } = await import('../_shared/mail.ts');
 const { db, raiseAlert, sendMail, CONFIG } = await import('./core.ts');

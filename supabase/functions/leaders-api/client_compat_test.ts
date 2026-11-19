@@ -1,7 +1,7 @@
 // عميل أقدم من الحد الأدنى (تصور تحديث المنصة، المرحلة 5 البند 7): على الموجّه الحقيقي (index.ts). مستوى معروف أقل من
 // MIN_CLIENT_LEVEL يرد update_required برمز 426 وبترويسات CORS، والعميل بلا مستوى يُخدم كما كان، والرصد من جهة العميل معفى.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 import { CLIENT_LEVEL, MIN_CLIENT_LEVEL, clientLevelOf, needsUpdate } from '../_shared/client-compat.js';
 

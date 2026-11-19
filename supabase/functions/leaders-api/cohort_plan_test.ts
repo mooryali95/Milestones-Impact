@@ -2,7 +2,7 @@
 // المثبتة والمثبت والحدود والحقول اللاحقة والنسخة القديمة)، والسجل في audit_log بقيمته قبل وبعد، والأثر على عضو حي من رحلته
 // كما يراها، وadmin.cohort-save يرفض schedule وdistribute (كاتب واحد، القرار 23). قاعدة في الذاكرة بنمط cohort_guard_test.ts.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { writer } = await import('./admin.ts');
 const { cohortPlanAction } = await import('./cohort-plan.ts');

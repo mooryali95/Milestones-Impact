@@ -2,7 +2,7 @@
 // ولا يظهر في أي موضع من الرحلة، ولا يُطلب منه D18. على قاعدة في الذاكرة وResend محاكى: الاعتماد بدور أو لجنة،
 // وبريد الاعتماد للكتاب، والبوابة بلا أقسام الرحلة وبتعهد السرية، واستكمال الملف بلا حقول المطابقة، والأقران فارغة.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, CONFIG, Fail } = await import('./core.ts');
 const E = await import('./experts.ts');
 const PR = await import('./peer.ts');

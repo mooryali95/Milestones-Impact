@@ -2,7 +2,7 @@
 // والجولة الحية في الورش ترفع منه طلب توجيه. على قاعدة مزيفة تطبّق المرشحات والتضمين: طلبه لا يراه مشارك ولا خبير
 // ولا الإدارة ولا يصل مستشارها بريد عنه، ولا يرى هو طلباتهم ولا قاعتهم، وإجاباته لا تدخل إحصاء كاتون. ويبقى يرى طلبه.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const PR = await import('./peer.ts');
 const H = await import('./hall.ts');

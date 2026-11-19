@@ -2,7 +2,7 @@
 // لا يخرج من الرد بنك الجمل ولا مفتاح قبل كشف الخبير، وقفل القاعة في hallGate وحده (لا قفل «أتممت الموضوع»)،
 // و«كاتون» المخفي (features.katon) مقفل على الخادم أيضًا، والقاعة المخفية (features.hall) لا تفتح جملة للإجابة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 
 type Row = Record<string, any>;
 const KEYS: Record<string, string[]> = { katon_answers: ['participant_id', 'sentence_id'] };

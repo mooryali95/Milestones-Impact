@@ -1,7 +1,7 @@
 // التحقق من رمز هوية Google محليًا: مفتاح RSA مولَّد في الاختبار، وJWKS مزيّفة عبر fetch
 //   deno test --node-modules-dir=none --allow-env --allow-read supabase/functions/leaders-api/
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { verifyGoogleToken } = await import('./google.ts');
 const { Fail } = await import('./core.ts');
 type F = InstanceType<typeof Fail>;

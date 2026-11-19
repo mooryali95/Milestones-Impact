@@ -6,7 +6,7 @@
 //   3) السبب: حالة سلاك تُكتب بعد رد admin.alert-test (الضخ لا يُنتظر)، فالبطاقة التي لا تعيد السؤال بعد التجربة، أو تعيده
 //      فورًا مرة واحدة، تبقى على الأرقام القديمة. العلاج في المتصفح (ops-watch.js refreshAfterTest): سؤال فوري ثم بعد ثوانٍ.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const S = await import('../_shared/slack.ts');
 const { CONFIG, mailUsage, db } = await import('./core.ts');
 const { alertTest } = await import('./system.ts');

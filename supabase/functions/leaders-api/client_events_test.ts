@@ -2,7 +2,7 @@
 // الذاكرة. الشكل والحقول المسموحة وحدها، وسقف الحجم والعدد، وحد المعدل لكل شبكة ببصمتها، ولا بيانات شخصية ولا عنوان في
 // الصف، وnot_migrated قبل الترحيل، وتنبيه أجهزة كثيرة أخفق فتحها، وترويسة x-client-build معلنة ومقبولة في CORS.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));

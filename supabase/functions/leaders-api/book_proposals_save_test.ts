@@ -1,7 +1,7 @@
 // محرر الاستوديو يحفظ أقسام الباب في عملية واحدة (20261117100000): الدالة تُستدعى مرة بالأقسام كلها، وتغيّر حالة
 // مقترح أثناء الحفظ يُرد برسالة واضحة دون أن يُحفظ شيء، وقبل الترحيل يبقى الحفظ قسمًا قسمًا كما كان.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 
 const B = await import('./book-proposals.ts');

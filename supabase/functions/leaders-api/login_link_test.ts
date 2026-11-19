@@ -1,7 +1,7 @@
 // P1-06 مع #330: صاحب حساب قائم يدخل برابط جهة يُربط بها بحكم رمز الجهة نفسه (sponsorDecision وتثبيت آلي)، فلا يرد
 // رابطٌ قرارَ الإدارة في رعايته ولا يأخذ مقعدًا لمنسحب. العالم الوهمي نفسه الذي في seat_return_test.ts
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
 const { assignOrg, setStatus } = await import('./admin.ts');
 const { adminDecide } = await import('./sponsor.ts');

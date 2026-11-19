@@ -1,7 +1,7 @@
 // p-capstone-6 (تدقيق 2026-11-11): دعوة المقيّم المرسلة إذا انقضت مهلتها قال رابطها «انتهت صلاحية الرابط»، وظلت للمشارك
 // «بانتظار تقديره» بلا ما يدله على إعادة الإرسال. raterView تحمل expired بالقاعدة نفسها التي يحكم بها الرابط.
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 const { raterView } = await import('./impact.ts');
 
 const day = 864e5;

@@ -1,7 +1,7 @@
 // تقييم 360، المرحلة 2 على قاعدة مزيفة تطبّق المرشحات: الترشيح لا يتجاوز سقف المجموعة المضبوط في الإعدادات،
 // ولا يُعدَّل بعد إرسال القائمة، والشاشة تقول «غير متاح» قبل الترحيل بدل أن تفشل.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const FB = await import('./feedback360.ts');
 const { resetSettingsCache } = await import('./settings.ts');

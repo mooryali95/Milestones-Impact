@@ -2,7 +2,7 @@
 // تحت الرمز المتغير فيُسجَّل حضوره بطريقة code، بحد للمحاولات الخاطئة، ولا تطابق الأرقام إلا جلسة مفتوحة له. والخبير المكلف
 // بدفعة الجلسة وحده يعرض الرمز من بوابته. على الموجّه الحقيقي (index.ts) بقاعدة في الذاكرة كما في workshop_scan_test.ts
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
 (Deno as any).serve = (h: any) => { handler = h; return { finished: Promise.resolve(), shutdown: () => Promise.resolve(), ref() {}, unref() {} }; };

@@ -3,7 +3,7 @@
 // (admin.final-eval) تقرأ كلها mePayload ثم access، فيُستهلك المقعد المردود في النقرة نفسها. دالة المقاعد هنا بسلوكها
 // قبل الحارس (بلا نظر في الإلغاء ولا الحالة)، فما يمنع التثبيت هو فحص الخادم وحده، ويبقى الحارس في القاعدة طبقة ثانية.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
 const { assignOrg, setStatus } = await import('./admin.ts');
 const { adminDecide } = await import('./sponsor.ts');

@@ -26,8 +26,10 @@ test-results/
 playwright-report/
 .probe/
 
-# ناتج محلي لفحص deno خارج CI؛ CI يحل الاعتماديات بنفسه
+# ناتج محلي لفحص deno خارج CI. المودع منها اثنان: supabase/functions/deno.lock (يفحص به CI مجمّدًا)
+# وsupabase/functions/leaders-api/deno.lock (بجانب deno.json الدالة)، تصور تحديث المنصة المرحلة 2 البند 7
 deno.lock
+!supabase/functions/deno.lock
 
 # Supabase المحلي (supabase start)
 supabase/.temp/

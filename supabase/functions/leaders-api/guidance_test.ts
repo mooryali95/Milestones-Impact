@@ -1,7 +1,7 @@
 // «التوجيه والإرشاد» (G1): حكم التفعيل على مسار الخادم الحقيقي (guidance.ts) بقاعدة في الذاكرة.
 // أهم ما يثبته: لا تدخل صفوف مشارك في حكم مشارك آخر أبدًا، وكل استعلام مقيد بمعرّف الجلسة.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
 const { db } = await import('./core.ts');
 const { guidanceFor } = await import('./guidance.ts');

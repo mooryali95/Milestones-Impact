@@ -1,6 +1,6 @@
 // الإعدادات العامة: الحفظ للمدير ذي الكتابة وحده، والقراءة تعمل بالقيم الافتراضية قبل الترحيل
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { adminSave } = await import('./settings.ts');
 const { Fail } = await import('./core.ts');
 const { DEFAULTS, resolveSettings } = await import('./settings.js');

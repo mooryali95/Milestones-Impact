@@ -2,7 +2,7 @@
 // على أحدث نسخ الهدف، وإلغاء التثبيت يُرفض، وكل برنامج جديد يولد بنسخته الأولى. حفظ النسخة واسترجاعها يمسان المسودة
 // وحدها، والترقية وحدها تنقل الدفعة بمعاينة وحارس الإخفاء وإعادة ضبط إعدادها على الهدف. قاعدة في الذاكرة بلا شبكة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortSave, cohortUpgrade, journeyDefinition, programPublish, programRestore, programSave, list } = await import('./programs.ts');
 

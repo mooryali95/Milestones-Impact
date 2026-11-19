@@ -2,7 +2,7 @@
 // إلا فتح القاعة، والمهمة الساعية لا تذكّر ولا تغلق، وبريد 360 في الطابور يُمسك، ومقيّم 360 يرى «متوقف مؤقتًا» ومثله مقيّم
 // الأثر قبل البرنامج وبعده (مؤجل مع 360 بقرار المالك 2026-11-16)، ورسائل الورشة بلا القاعة، وبطاقة المنسق null، وقفل القاعة مغلق، والدرجة لا تتغير.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail, hash, workshopMail, WORKSHOP_MAIL, FEEDBACK_MAIL, drainMailQueue, stuckQueueAlert } = await import('./core.ts');
 const FT = await import('./features.ts');
 const FB = await import('./feedback360.ts');

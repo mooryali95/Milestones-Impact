@@ -1,5 +1,5 @@
 // إشعار الخطة المقدَّمة (matrix_plan، _shared/plan-notice.ts): لا خطة بلا قناة في أي إعداد، وسطر Slack بلا اسم ولا بريد
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { planLine, planNotice } from '../_shared/plan-notice.ts';
 
 function deps(settings: unknown, { advisor = false, configured = true, delivered = true } = {}) {

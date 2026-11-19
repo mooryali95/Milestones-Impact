@@ -1,6 +1,6 @@
 // دعوة المنسق رسالة الترحيب الوحيدة للجهة: تحمل رابط تسجيل الموظفين والمقاعد والمدة والخطوات الأولى، وبلا رابط حين لا رمز
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const { coordinatorInviteMail, orgJoinUrl, CONFIG } = await import('./core.ts');
 
 Deno.test('دعوة المنسق تحمل رابط تسجيل الموظفين والمقاعد والمدة والخطوات', () => {

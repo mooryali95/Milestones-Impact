@@ -1,7 +1,7 @@
 // org-15: لوحة الجهة تحسب رحلة كل مشارك عند كل فتح. الحساب الخفيف (lite) يترك المجموعة والتقييم المستمر
 // اللذين لا تأخذهما اللوحة، والرحلة والتقدم والمعالم وما تبني عليه خريطة الرحلة كما هي بلا فرق
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
 const { journeyFor } = await import('./participant.ts');
 

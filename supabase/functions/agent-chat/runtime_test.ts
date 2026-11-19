@@ -1,5 +1,5 @@
 // حالة المساعد الفعلية من اللوحة ومفتاح الطوارئ (runtime.ts)، وربط العميل بمفتاحه (model.ts)، وأثرهما في الدالة كاملة.
-import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1.0.19';
 import { decide, envMode, keyErrorCode, readRuntime, resetRuntime, RUNTIME_FAIL_TTL_MS, RUNTIME_TTL_MS, type Runtime, type RuntimeRow } from './runtime.ts';
 import { anthropic, resetClient, streamAnswer } from './model.ts';
 import { type Deps, type Env, handle } from './handler.ts';

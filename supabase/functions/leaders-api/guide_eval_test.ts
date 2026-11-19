@@ -1,7 +1,7 @@
 // «التوجيه والإرشاد» G4a على مسار الخادم: الحالة تمر بالموجّه ثم generate نفسه الذي يجيب به المشارك، والبوابة مغلقة
 // ما لم ينجح التقييم وتُفعَّل الدفعة التجريبية
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 
 const { db } = await import('./core.ts');
 const G = await import('./guide.ts');

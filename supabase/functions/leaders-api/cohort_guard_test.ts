@@ -2,7 +2,7 @@
 // نفسه تمر بلا تأكيد، وإخفاء آخر بند إلزامي في مرحلة تكتمل بإلزاميتها يُرفض، وبرنامج دفعة لأعضائها تقدم لا يتغير.
 // قاعدة في الذاكرة بنمط program_gate_test.ts، بلا شبكة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortSave, cohortEnroll, defaultProgramId, orgCohortSetups, cohortDefinitionFor, cohortGroups, journeyDefinition } = await import('./programs.ts');
 const { cohortPlanAction } = await import('./cohort-plan.ts');

@@ -1,6 +1,6 @@
 // المساعد الآلي (agent-chat) على مخزن في الذاكرة ونموذج وشبكة محاكاة: لا اتصال بـ Anthropic ولا Slack ولا Resend.
 // الحجب والفحص، والأجوبة الجاهزة، والسقف اليومي، والبث، والتحويل، والرفض، وشكل الطلب إلى Claude.
-import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1.0.19';
 import { redactInput, sanitizeOutput, StreamSanitizer, luhn, normalizeDigits, ALLOWED_HOSTS } from './redact.ts';
 import { matchFaq, normalizeText, productOf } from './faq.ts';
 import { capState, costMicros, FALLBACK, PRICES, worstCaseMicros } from './pricing.ts';

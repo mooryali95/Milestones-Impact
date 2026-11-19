@@ -1,7 +1,7 @@
 // ما لا يمنح شيئًا عند العطل: إعداد الدفع غير المقروء لا يجعل البندين مجانيين، وتعذّر فحص المقعد (D20)
 // لا يثبّت إعفاءً، وتعذّر تعليق الشهادة لا يصير إلغاءً (D05). قاعدة مزيفة مكان العميل، بلا شبكة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { countSeats, pinSponsor, pinSponsorFor, seatsUsed, seatsUsedByOrg, settings } = await import('./entitlements.ts');
 const { access } = await import('./payments.ts');
