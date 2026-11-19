@@ -1,6 +1,6 @@
 // هيكل ملف المشارك (P2): التبويب الافتتاحي، وأرقام ما ينتظر في كل تبويب، والإجراء الأهم، واللمحة
 import { describe, expect, it } from 'vitest';
-import { glance, primaryAction, startTab, tabBadges, TABS } from './screens/PersonShell.jsx';
+import { glance, primaryAction, seenAt, startTab, tabBadges, TABS } from './screens/PersonShell.jsx';
 
 const file = (o = {}) => ({ participant: { status: 'enrolled', created_at: '2026-10-01', ...o.p }, journey: [], models: [], observations: [], sessions: [], book: [], ...o });
 
@@ -42,7 +42,21 @@ describe('اللمحة', () => {
     expect(g['التقدم']).toEqual(['40%', '1 من 2 مراحل']);
     expect(g['المرحلة الحالية'][0]).toBe('التدريب');
     expect(g['الجلسات']).toEqual(['1 حضرها', 'من 2']);
-    expect(g['آخر دخول'][0]).toBe('لم يدخل');
+    expect(g['آخر نشاط']).toEqual(['لم يدخل', '']);
+  });
+  // تصور تشغيل الدفعة 2026-11-19: «آخر نشاط» من الخادم (last_active_at)، و«آخر دخول» تحته حين يختلف يومه
+  it('آخر نشاط بدل آخر دخول، وآخر دخول تحته إن كان في يوم آخر', () => {
+    const at = (p) => Object.fromEntries(glance({ participant: { created_at: '2026-10-01', ...p } }).map(([k, v, s]) => [k, [v, s]]))['آخر نشاط'];
+    const [v, sub] = at({ last_login_at: '2026-11-01T08:00:00Z', last_active_at: '2026-11-18T19:30:00Z' });
+    expect(v).toContain('18');
+    expect(sub).toMatch(/^آخر دخول .*1/);
+    // اليوم نفسه: لا تكرار
+    expect(at({ last_login_at: '2026-11-18T08:00:00Z', last_active_at: '2026-11-18T19:30:00Z' })[1]).toBe('');
+    // خادم لم يرسل آخر نشاط بعد: آخر دخول نفسه
+    expect(at({ last_login_at: '2026-11-01T08:00:00Z' })[0]).toContain('1');
+    expect(seenAt({ last_login_at: 'a', last_active_at: 'b' })).toBe('b');
+    expect(seenAt({ last_login_at: 'a' })).toBe('a');
+    expect(seenAt({})).toBe(null);
   });
   it('مرحلتان تسيران معًا نشطتان تُسميان معًا (currentStages، R3b)', () => {
     const g = Object.fromEntries(glance(file({ journey: [

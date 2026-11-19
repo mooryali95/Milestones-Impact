@@ -1,11 +1,12 @@
 // ════════════════════════════════════════════════════════════════
 // الرؤية الشاملة للإدارة (admin.insight و admin.changes): قراءة فقط، والحساب في insight.js
 // ════════════════════════════════════════════════════════════════
-import { all, db, must } from './core.ts';
+import { all, allFor, db, Fail, must } from './core.ts';
 import { baselineProgress } from './admin.ts';
 import { onboardingOf } from './onboarding.js';
 import { journeyApproved, pickCohort } from './logic.js';
-import { changeRow, expertLoad, pipelineBy } from './insight.js';
+import { areaPrefixes, changeRow, expertLoad, pipelineBy } from './insight.js';
+import { cohortMemberIds } from './programs.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
@@ -62,13 +63,47 @@ export async function adminInsight() {
 
 // ماذا تغيّر: آخر أحداث سجل التدقيق كله، الأحدث أولًا، بصفحات (before = created_at لآخر صف وصل)
 const CHANGES_PAGE = 100;
+const COHORT_CHUNK = 40;   // أعضاء في كل طلب: معرّفاتهم وبُرُدهم في شرط واحد، فلا يتجاوز الرابط حده
+const quoted = (v: string) => `"${String(v).replace(/[\\"]/g, '\\$&')}"`;
 export async function adminChanges(b: Body = {}) {
-  let q = db.from('audit_log').select('id, actor_type, actor, action, entity, entity_id, after, created_at').order('created_at', { ascending: false }).limit(CHANGES_PAGE + 1);
-  if (b.before) q = q.lt('created_at', String(b.before));
-  if (['admin', 'participant', 'system', 'coordinator', 'expert'].includes(b.actor_type)) q = q.eq('actor_type', b.actor_type);
-  if (b.area && /^[a-z_]{2,30}$/.test(String(b.area))) q = q.like('action', `${b.area}.%`);
-  if (Number(b.days) > 0) q = q.gte('created_at', new Date(Date.now() - Math.min(365, Number(b.days)) * 864e5).toISOString());
-  const got = (must(await q) ?? []) as any[];
+  const base = () => {
+    let q = db.from('audit_log').select('id, actor_type, actor, action, entity, entity_id, after, created_at').order('created_at', { ascending: false }).limit(CHANGES_PAGE + 1);
+    if (b.before) q = q.lt('created_at', String(b.before));
+    if (['admin', 'participant', 'system', 'coordinator', 'expert'].includes(b.actor_type)) q = q.eq('actor_type', b.actor_type);
+    if (b.area && /^[a-z_]{2,30}$/.test(String(b.area))) {
+      const prefixes = areaPrefixes(String(b.area));
+      q = prefixes.length === 1 ? q.like('action', `${prefixes[0]}.%`) : q.or(prefixes.map((x: string) => `action.like.${x}.%`).join(','));
+    }
+    if (Number(b.days) > 0) q = q.gte('created_at', new Date(Date.now() - Math.min(365, Number(b.days)) * 864e5).toISOString());
+    return q;
+  };
+  let got: any[];
+  if (b.cohort_id) {
+    // فلتر الدفعة (تصور تشغيل الدفعة 2026-11-19، 4.6): ما جرى على أعضائها (entity_id) وما فعلوه هم (actor بمعرّف المشارك أو بريده،
+    // كما يكتبهما السجل)، وما جرى على الدفعة نفسها وجلسات ورشها. الأعضاء بقاعدة الخريطة نفسها (cohortMemberIds)
+    if (!isUuid(b.cohort_id)) throw new Fail('الدفعة غير موجودة', 404);
+    const m = await cohortMemberIds(String(b.cohort_id));
+    if (!m) throw new Fail('الدفعة غير موجودة', 404);
+    const [people, sessions] = await Promise.all([
+      allFor(m.ids, () => db.from('participants').select('id, email').order('id'), 'id') as Promise<any[]>,
+      db.from('workshop_sessions').select('id').eq('cohort_id', m.cohort.id).then((r) => (must(r) ?? []) as any[]),
+    ]);
+    const own = [m.cohort.id, ...sessions.map((x) => x.id)];
+    const asks: (() => any)[] = [];
+    for (let i = 0; i < own.length; i += 100) asks.push(() => base().in('entity_id', own.slice(i, i + 100)));
+    for (let i = 0; i < people.length; i += COHORT_CHUNK) {
+      const part = people.slice(i, i + COHORT_CHUNK);
+      const ids = part.map((p) => p.id).join(',');
+      const actors = [...part.map((p) => p.id), ...part.filter((p) => p.email).map((p) => quoted(p.email))].join(',');
+      asks.push(() => base().or(`entity_id.in.(${ids}),actor.in.(${actors})`));
+    }
+    // كل طلب يعيد أحدث صفحته، فأحدث مئة من مجموعها هي أحدث مئة للدفعة
+    const seen = new Map<string, any>();
+    for (let i = 0; i < asks.length; i += 6) {
+      for (const rows of await Promise.all(asks.slice(i, i + 6).map((f) => f().then((r: any) => (must(r) ?? []) as any[])))) for (const h of rows) seen.set(String(h.id), h);
+    }
+    got = [...seen.values()].sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at) || String(y.created_at).localeCompare(String(x.created_at)));
+  } else got = (must(await base()) ?? []) as any[];
   const page = got.slice(0, CHANGES_PAGE);
   const pids = [...new Set(page.filter((h) => h.entity === 'participants' && isUuid(h.entity_id)).map((h) => h.entity_id))] as string[];
   const names: Record<string, string> = {};

@@ -753,14 +753,34 @@ export async function cohortWorkshops(b: Body) {
   return { success: true, capacity_ready, sessions };
 }
 
+// التسجيل اليدوي من الإدارة (تصور تشغيل الدفعة 2026-11-19، المرحلة 0):
+// 1. الحضور لمن يُتوقع حضوره وحده، بالقاعدة نفسها التي تبني القائمة (attendancePeople)، فلا يُكتب حضور لغير أهل الجلسة.
+// 2. لا يكتب فوق حضور قائم: من سجّل نفسه يبقى بطريقته ووقته.
+// 3. إلغاء حضور سجّله المشارك بنفسه (أي طريقة غير «يدوي») بسبب مكتوب، وإلغاء اليدوي بنقرة.
+// السبب (اختياري في التسجيل والإلغاء اليدوي) والحالة قبل الحذف في سجل التدقيق: لا عمود للسبب في workshop_attendance قبل المرحلة 2
+export const MARK_REASON_MAX = 300;
 export async function workshopMark(a: any, b: Body) {
   const sid = String(b.session_id || ''), pid = String(b.participant_id || '');
+  const reason = String(b.reason || '').trim().slice(0, MARK_REASON_MAX);
+  const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id').eq('id', sid).maybeSingle()) as any;
+  if (!s) throw new Fail('الجلسة غير موجودة', 404);
+  const prior = must(await db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', sid).eq('participant_id', pid).maybeSingle()) as any;
   if (b.present) {
+    if (prior) return { success: true, already: true };
+    const [{ data: r }, w] = await Promise.all([
+      db.from('stage_requirements').select('*').eq('id', s.requirement_id).maybeSingle(),
+      attendanceWorld(!!s.cohort_id),
+    ]);
+    if (!r || !attendancePeople(r, w, s.cohort_id || null, []).some((e: any) => e.id === pid)) throw new Fail('هذا المشارك ليس ممن يُتوقع حضورهم في هذه الجلسة', 409, 'not_expected');
     must(await db.from('workshop_attendance').upsert({ session_id: sid, participant_id: pid, method: 'manual', recorded_by: a.email }, { onConflict: 'session_id,participant_id', ignoreDuplicates: true }));
-  } else {
-    must(await db.from('workshop_attendance').delete().eq('session_id', sid).eq('participant_id', pid));
+    await audit('admin', a.email, 'workshop.mark', 'participants', pid, null, { session_id: sid, ...(reason ? { reason } : {}) });
+    return { success: true };
   }
-  await audit('admin', a.email, b.present ? 'workshop.mark' : 'workshop.unmark', 'participants', pid, null, { session_id: sid });
+  if (!prior) return { success: true, already: true };
+  if (prior.method !== 'manual' && !reason) throw new Fail('اكتب سبب إلغاء حضور سجّله المشارك بنفسه', 400, 'reason_required');
+  must(await db.from('workshop_attendance').delete().eq('session_id', sid).eq('participant_id', pid));
+  await audit('admin', a.email, 'workshop.unmark', 'participants', pid,
+    { session_id: sid, method: prior.method, checked_in_at: prior.checked_in_at || null, recorded_by: prior.recorded_by || null }, { session_id: sid, ...(reason ? { reason } : {}) });
   return { success: true };
 }
 

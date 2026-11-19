@@ -1,7 +1,7 @@
 // شريط الفلترة الموحّد: بحث، وعروض سريعة بعدّاداتها، وحقول، ورقائق للفلاتر المفعّلة،
 // وعروض محفوظة باسم. المنطق في filters.js، والحالة في عنوان الصفحة عبر useFilters.
 import React, { useEffect, useState } from 'react';
-import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, nextSort, PERIODS, recallState, rememberState, saveView, startState } from './filters.js';
+import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, ltrDigits, nextSort, PERIODS, recallState, rememberState, saveView, startState } from './filters.js';
 import { readQuery, writeQuery } from './route.js';
 
 // حالة الفلاتر لشاشة واحدة، مقروءة من العنوان ومكتوبة إليه.
@@ -43,7 +43,7 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
     <div className="flt" role="search">
       <div className="flt-row">
         <div className="search-wrap flt-search">
-          <input className="search-input" type="search" aria-label="بحث" placeholder={placeholder || 'ابحث'} value={state.q || ''} onChange={(e) => set({ q: e.target.value })} />
+          <input className="search-input" type="search" aria-label="بحث" placeholder={placeholder || 'ابحث'} value={state.q || ''} {...ltrDigits(state.q)} onChange={(e) => set({ q: e.target.value })} />
         </div>
         {fields.slice(0, more ? fields.length : 3).map((f) => (
           <select key={f.key} className={`filter-select${state[f.key] ? ' on' : ''}`} aria-label={f.aria || f.label} value={state[f.key] || ''} onChange={(e) => set({ [f.key]: e.target.value })}>
