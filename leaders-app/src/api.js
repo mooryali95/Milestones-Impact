@@ -7,6 +7,7 @@ import { netMessage, postAction } from '../../src/lib/api.js';
 import { lastJourney } from './last-journey.js';
 import { afterSuccess, failureOf, report } from './telemetry.js';
 import { appUpdate } from '../../shared/ui/app-update.js';
+import { updateRefusal } from './update-refusal.js';
 
 const TOKEN_KEY = 'mi_leaders_session';
 
@@ -58,6 +59,8 @@ export async function send(action, token, body = {}) {
     // عميل أقدم من الخادم (المرحلة 5 البند 7): update_required يُظهر شريط «تحديث جديد متاح»، وunknown_action يُظهره إن كان على
     // الخادم إصدار أحدث فعلًا (shared/ui/app-update.js)، والتحديث عند أول تنقل بلا نموذج غير محفوظ
     if (res?.code === 'update_required' || res?.code === 'unknown_action') appUpdate()?.serverSaid(res.code);
+    // ورسالة الرفض نفسها تبقى أمام المشارك بزر «حدّث» (UpdateRefusal.jsx)، لا إشعارًا عابرًا بلا فعل
+    if (res?.code === 'update_required') updateRefusal.set(res.message);
     return res;
   } catch (e) {
     report(e?.offline ? 'offline' : e?.timeout ? 'timeout' : 'TypeError', { act: action, tries: e?.attempts });

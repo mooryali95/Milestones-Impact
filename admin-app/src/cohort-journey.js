@@ -7,11 +7,11 @@
 import { journeyTimeline, scaleDay, scalePos, STAGE_TAG_AR } from '../../supabase/functions/leaders-api/journey-timeline.js';
 import { daysAr, LANE_AR, renderJourneyText, SERVICE_NOTE_AR, serviceAvailAr, stageRules, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 import { countAr } from '../../supabase/functions/leaders-api/labels.js';
-import { daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from '../../supabase/functions/leaders-api/milestones.js';
-import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planOffKeys, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
+import { addDays, daysBetween, MILESTONE_ANCHOR_AR, milestoneDueInfo, milestoneOff } from '../../supabase/functions/leaders-api/milestones.js';
+import { cohortPlan, PLAN_DAYS_MAX, planDaysMin, planOffKeys, planPinned, planSchedule } from '../../supabase/functions/leaders-api/stage-windows.js';
 import { PHASE_AR } from '../../supabase/functions/leaders-api/labels.js';
 import {
-  chainEndOffer, impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDurationAr, planEdit, planEndsIssue, planLock, planOffBlock, planRestartBlock, planWithCandidates, planWithLock, sameSchedule,
+  chainEndOffer, impactLines, PLAN_SOURCE_AR, PLAN_UNITS, planDatesResolve, planDurationAr, planEdit, planEndsIssue, planLock, planOffBlock, planRestartBlock, planWithCandidates, planWithLock, sameSchedule,
   suggestDays, unitFor,
 } from '../../supabase/functions/leaders-api/cohort-plan.js';
 import { dateOnly, dayLong } from './dates.js';
@@ -266,7 +266,7 @@ const liveStages = (def) => [...(def?.stages || [])].filter((s) => s.active !== 
 /** الخطة في المسودة: الجديدة بعد تعديل المدير، وصف لكل مرحلة (المدة ومصدرها ومدة البرنامج والتثبيت والإيقاف وسبب منعه)،
  * وعدد التعديلات. edit.off: { مفتاح: true أو false } (R2b). edit.with وedit.offset (R3a): «تسير مع» وإزاحتها، ولكل صف
  * المرجع الفعلي وإزاحته ومصدرهما، والمراجع المقبولة (planWithCandidates) وسبب المنع، وحد الإزاحة (مدة المرجع) وتنبيه التجاوز
- * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, boolean>, with?: Record<string, any>, offset?: Record<string, any>, until?: Record<string, any> } | null }} o */
+ * @param {{ def: any, cohort: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, boolean>, with?: Record<string, any>, offset?: Record<string, any>, until?: Record<string, any>, dates?: Record<string, any>, ends_on?: any } | null }} o */
 export function planDraft({ def, cohort, edit = null }) {
   const stages = liveStages(def);
   const requirements = def?.requirements || [];
@@ -299,6 +299,12 @@ export function planDraft({ def, cohort, edit = null }) {
       track: true, until: x.until, until_source: x.until_source, program_until: pr.until,
       until_options: untilOptions(stages.filter((y) => !(r.schedule[y.key]?.off === true)), x.key),
     } : {};
+    // التواريخ المباشرة: للمرحلة المتتابعة المؤرخة في دفعة لها بداية. حدودها تُعرض تحت الحقلين، والحكم لـplanDatesResolve
+    const ref = x.with ? plan.byKey[x.with] : null;
+    const dates = !x.off && !track && x.lane !== 'service' && x.from && x.to && cohortDated(base) ? {
+      from: x.from, to: x.to, min: String(base.starts_on).slice(0, 10),
+      ...(ref?.from ? { with_title: stageBy.get(x.with)?.title_ar || x.with, with_min: ref.from, with_max: addDays(ref.from, Math.max(0, ref.days)) } : {}),
+    } : null;
     rows[x.key] = {
       ...x, ...trackRow, pinned: x.source === 'pinned', off: !!x.off, block,
       // التوازي (R3a): المرجع الفعلي وإزاحته، وقاعدة البرنامج للمقارنة، والقائمة وسبب منعها، وحد الإزاحة وتنبيه التجاوز
@@ -310,6 +316,8 @@ export function planDraft({ def, cohort, edit = null }) {
       days_ar: x.off ? 'موقوفة' : planDurationAr(x.days), edited: !sameSchedule(saved[x.key] || {}, r.schedule[x.key] || {}),
       was_ar: before && !before.off && !x.off && before.days !== x.days ? `كانت ${planDurationAr(before.days)}` : before && !!before.off !== !!x.off ? (x.off ? 'كانت تعمل' : 'كانت موقوفة') : '',
     };
+    // خاصية غير معدودة كمقياس الخط (scale): تقرؤها البطاقة وحدها، ولا تدخل في نسخ الصف ولا لقطته (journey-legacy)
+    Object.defineProperty(rows[x.key], 'dates', { enumerable: false, value: dates });
   }
   const edits = stages.filter((s) => rows[s.key]?.edited).length + (ends ? 1 : 0);
   return {
@@ -354,6 +362,8 @@ export const planBody = (cohort, edit, op, opts = {}) => ({
   ...(edit?.offset && Object.keys(edit.offset).length ? { offset: edit.offset } : {}),
   // نهاية المسار المستمر (T1) لما عُدّل وحده
   ...(edit?.until && Object.keys(edit.until).length ? { until: edit.until } : {}),
+  // التواريخ المباشرة لما ثُبّت بتاريخ أو أُعيد إلى المدد وحده
+  ...(edit?.dates && Object.keys(edit.dates).length ? { dates: edit.dates } : {}),
   // نهاية الدفعة المسجلة («اجعل نهاية الدفعة …») إن غيّرتها المسودة
   ...(edit?.ends_on !== undefined && edit.ends_on !== (cohort.ends_on ? String(cohort.ends_on).slice(0, 10) : null) ? { ends_on: edit.ends_on } : {}),
   ...(op === 'save' && opts.notify ? { notify: true } : {}), ...(op === 'save' && opts.reenable === 'apply' ? { reenable: 'apply' } : {}),
@@ -375,7 +385,9 @@ export function historyRows(list) {
     const trAr = tr ? `${countAr(tr, 'مسار مستمر واحد', 'مساران مستمران', 'مسارات مستمرة', 'مسارًا مستمرًا')} ${tr === 1 ? 'تغيّر امتداده' : 'تغيّر امتدادها'}` : '';
     // «اجعل نهاية الدفعة …»: النهاية المسجلة قبل وبعد
     const endsAr = Array.isArray(r.summary?.ends) && r.summary.ends[1] ? `ضُبطت نهاية الدفعة ${dateOnly(r.summary.ends[1])}` : '';
-    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr || parAr || trAr || endsAr ? [offAr, durAr, parAr, trAr, endsAr].filter(Boolean).join('، و') : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
+    // تواريخ تحركت ومددها كما هي (تاريخ كُتب مباشرة أو حُرر): تُقال، فلا يُظن الحفظ بلا أثر
+    const what = r.action === 'cohort.plan-undo' ? 'تراجع عن آخر حفظ' : offAr || durAr || parAr || trAr || endsAr ? [offAr, durAr, parAr, trAr, endsAr].filter(Boolean).join('، و')
+      : r.summary?.changes?.length ? 'تغيّرت تواريخ مراحل بلا تغيير في مددها' : r.summary?.changes ? 'حفظ الخطة بلا تغيير في المدد' : 'حفظ الخطة';
     const sh = r.summary?.shift ? `، ${r.summary.shift > 0 ? 'تأخرت' : 'تقدمت'} النهاية ${daysAr(Math.abs(r.summary.shift))}` : '';
     return { id: r.id, at: r.at, by: r.actor || '', text: `${what}${sh}`, undo: r.action === 'cohort.plan-undo' };
   });
@@ -392,6 +404,22 @@ export const impactAr = (impact, opts = {}) => impactLines(impact, dateOnly, opt
  * @param {any} edit المسودة الحالية @param {{ days?: any, offset?: any, with?: any, until?: any, off?: any }} patch @param {any} [saved] جدول الدفعة المحفوظ */
 export function mergeEdit(edit, patch = {}, saved = {}) {
   const e = { ...(edit || {}) };
+  // التواريخ المباشرة: التثبيت بتاريخين يغلب مدة كُتبت قبله، و«اتبع المدد» لمرحلة غير مثبتة في المحفوظ لا يبقى تعديلًا
+  if (patch.dates) {
+    const dates = { ...(e.dates || {}) }, days = { ...(e.days || {}) };
+    for (const [k, v] of Object.entries(patch.dates)) {
+      if (v === null && !planPinned(saved?.[k])) delete dates[k]; else dates[k] = v;
+      if (v !== null) delete days[k];
+    }
+    e.dates = dates; e.days = days;
+  }
+  // والمدة أو الإزاحة بعد تاريخ كُتب في المسودة تحل محله: المثبتة في المحفوظ تُحرر أولًا (null)، وغيرها يسقط تثبيتها
+  const touched = [...Object.keys(patch.days || {}), ...Object.keys(patch.offset || {})].filter((k) => e.dates?.[k] && !(patch.dates && k in patch.dates));
+  if (touched.length) {
+    const dates = { ...e.dates };
+    for (const k of touched) { if (planPinned(saved?.[k])) dates[k] = null; else delete dates[k]; }
+    e.dates = dates;
+  }
   if (patch.days) e.days = { ...(e.days || {}), ...patch.days };
   if (patch.with) {
     const offset = { ...(e.offset || {}) };
@@ -548,6 +576,26 @@ export function applyDrop({ def, cohort, edit, patch }) {
   if (fresh.length) return { draft: before, reject: { code: fresh[0].code, msg: fresh[0].msg } };
   return { edit: next, draft: after };
 }
+
+/** بداية ونهاية كتبهما المدير في بطاقة المرحلة، إلى تعديل في المسودة نفسها التي تكتبها العدادات والسحب (لا مسار حفظ ثانٍ):
+ * من «تسير مع» مرجعًا إزاحة ومدة، وما لم تتحرك بدايته مدة وحدها، وغيرهما تثبيت بتاريخين (dates). المعنى من planDatesResolve
+ * التي يقرؤها الخادم نفسها. والمثبتة في المحفوظ تمر بـdates دائمًا، فيُزال تثبيتها في الخادم مع ما يُكتب.
+ * @param {{ def: any, draft: any, key: string, start: string, end: string }} o draft: planDraft الحالي
+ * @returns {{ patch?: any, reject?: { code: string, msg: string } }} */
+export function datesPatch({ def, draft, key, start, end }) {
+  const stages = liveStages(def);
+  const stage = stages.find((s) => s.key === key);
+  const title = (k) => stages.find((s) => s.key === k)?.title_ar || k;
+  if (!stage || !draft) return { reject: { code: 'unknown', msg: 'المرحلة ليست من رحلة الدفعة' } };
+  const entry = draft.schedule?.[key];
+  const res = planDatesResolve({ stage, plan: cohortPlan(stages, draft.cohort), cohort: draft.cohort, entry, start, end, title });
+  if (res.error) return { reject: res.error };
+  if (res.kind === 'pin' || planPinned(entry)) return { patch: { dates: { [key]: { start, end } } } };
+  if (res.kind === 'offset') return { patch: { offset: { [key]: res.offset }, days: { [key]: res.days } } };
+  return { patch: { days: { [key]: res.days } } };
+}
+/** «اتبع المدد» لمرحلة مثبتة واحدة: تصير مدة بطولها الحالي وتتبع ما قبلها */
+export const unpinPatch = (key) => ({ dates: { [key]: null } });
 
 /** سطر الشبح أثناء السحب: التواريخ الناتجة من المسودة بعد الحركة (planDraft)، أو المدة إن كانت الدفعة بلا تواريخ
  * @param {any} row صف المرحلة في المسودة بعد الحركة @param {string} title */

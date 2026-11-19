@@ -191,11 +191,12 @@ export function planWithIssues({ stages = [], schedule = {}, before = null, coho
 /** الخطة بعد تعديل المدير، وأسباب الرفض إن وُجدت.
  * with: { مفتاح: مفتاح مرجع، أو false لـ«لا شيء»، أو null لقاعدة البرنامج } (R3a). offset: { مفتاح: أيام من بداية المرجع، أو null }.
  *  ما يساوي قاعدة النسخة لا يُكتب، فلا يبقى فرق بلا أثر
- * @param {{ stages: any[], schedule?: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, any>, with?: Record<string, any>, offset?: Record<string, any>, until?: Record<string, any> }, cohort?: any, requirements?: any[] }} o
+ * @param {{ stages: any[], schedule?: any, edit?: { days?: Record<string, any>, follow?: boolean, off?: Record<string, any>, with?: Record<string, any>, offset?: Record<string, any>, until?: Record<string, any>, dates?: Record<string, any> }, cohort?: any, requirements?: any[] }} o
  *  stages: مراحل تعريف الدفعة الظاهرة بمدد النسخة. days: { مفتاح: عدد أيام، أو null لـ«ارجع لمدة البرنامج» }.
  *  follow: «حرّر التواريخ لتتبع المدد»: كل مرحلة مثبتة تصير مدة بطولها الحالي فتتبع ما قبلها.
  *  off: { مفتاح: true لـ«أوقف لهذه الدفعة» أو false لإعادتها }. الإيقاف يبقي مدتها الخاصة إن كانت، فتعود بها بنقرة.
- *  requirements: بنود تعريف الدفعة، تُعرف منها المراحل المحمية (planOffBlock) */
+ *  requirements: بنود تعريف الدفعة، تُعرف منها المراحل المحمية (planOffBlock).
+ *  dates: { مفتاح: { start, end } لكتابة بداية المرحلة ونهايتها مباشرة، أو null لـ«اتبع المدد» } (planDatesResolve) */
 export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, requirements = [] }) {
   const next = JSON.parse(JSON.stringify(schedule && typeof schedule === 'object' ? schedule : {}));
   const errors = [];
@@ -235,6 +236,16 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
       if (row.days === Math.round(Number(byKey.get(s.key)?.duration_days) || 0)) delete next[s.key].days;
       anchored.push(s.key);
     }
+  }
+  // «اتبع المدد» لمرحلة واحدة (dates: null): المثبتة تصير مدة بطولها الحالي وتتبع ما قبلها. قبل المدد، فتُعدَّل مدتها في التعديل نفسه
+  const datesEdit = edit.dates && typeof edit.dates === 'object' ? edit.dates : {};
+  for (const [k, raw] of Object.entries(datesEdit)) {
+    const e = next[k];
+    if (raw !== null || !byKey.has(k) || !planPinned(e)) continue;
+    const row = cohortPlan(stages, { ...cohort, schedule: next }).byKey[k];
+    const { start: _s, end: _e, ...rest } = e;
+    if (Object.keys(rest).length) next[k] = rest; else delete next[k];
+    setDays(k, row?.from ? row.days : planDaysOf(e) ?? null);
   }
   for (const [k, raw] of Object.entries(edit.days && typeof edit.days === 'object' ? edit.days : {})) {
     const s = byKey.get(k);
@@ -316,6 +327,29 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
     if (raw) { if (!planOff(e)) stopping.push(k); e.off = true; } else delete e.off;
     if (Object.keys(e).length) next[k] = e; else delete next[k];
   }
+  // التواريخ المباشرة: بداية ونهاية من بطاقة المرحلة. تُحل على الخطة كما صارت بعد ما سبق (planDatesResolve): من «تسير مع» مرجعًا
+  // إزاحة ومدة، وما لم تتحرك بدايته مدة وحدها، وغيرهما تثبيت بتاريخين
+  const datesTouched = [];
+  for (const [k, raw] of Object.entries(datesEdit)) {
+    const s = byKey.get(k);
+    if (!s) { errors.push({ stage: k, code: 'unknown', msg: `«${k}» ليست من مراحل رحلة الدفعة الظاهرة` }); continue; }
+    if (raw === undefined || raw === null) continue;
+    const plan = cohortPlan(stages, { ...cohort, schedule: next });
+    const res = planDatesResolve({ stage: s, plan, cohort, entry: next[k], start: raw?.start, end: raw?.end, title });
+    if (res.error) { errors.push({ stage: k, ...res.error }); continue; }
+    const e = { ...(next[k] || {}) };
+    delete e.start; delete e.end;
+    if (res.kind === 'pin') { delete e.days; next[k] = { ...e, start: res.start, end: res.end }; continue; }
+    if (res.kind === 'offset') {
+      // كما تُكتب الإزاحة من عدادها: إزاحة النسخة على مرجعها لا تُكتب، والصفر على مرجع الدفعة لا يُكتب
+      delete e.offset;
+      const same = e.with === undefined ? res.offset === stageRules(s).offset : res.offset === 0;
+      if (!same) e.offset = res.offset;
+      datesTouched.push(k);
+    }
+    put(k, e);
+    setDays(k, res.days);
+  }
   for (const k of stopping) {
     const block = planOffBlock(byKey.get(k), { stages, requirements, schedule: next });
     if (block) errors.push({ stage: k, code: block.code, msg: block.msg });
@@ -330,11 +364,54 @@ export function planEdit({ stages = [], schedule = {}, edit = {}, cohort = {}, r
   // والإيقاف، فتقصير المرجع تحت الإزاحة أو إيقاف ما بين المرجع وتابعه يُرفض أيضًا
   const seen = new Set(errors.map((x) => `${x.stage}:${x.code}`));
   // ما أعاده التعديل إلى قاعدة البرنامج (null) لا يُحسب لمسًا: خطأ قاعدة النسخة ليس من الدفعة
-  const touched = [...Object.entries(withEdit), ...Object.entries(offsetEdit), ...Object.entries(untilEdit)].filter(([, v]) => v !== null && v !== undefined).map(([k]) => k);
+  const touched = [...[...Object.entries(withEdit), ...Object.entries(offsetEdit), ...Object.entries(untilEdit)].filter(([, v]) => v !== null && v !== undefined).map(([k]) => k), ...datesTouched];
   for (const x of planWithIssues({ stages, schedule: next, before: schedule, cohort, touched })) if (!seen.has(`${x.stage}:${x.code}`)) errors.push(x);
   return { schedule: next, errors, anchored, changed: !sameSchedule(schedule, next) };
 }
 const ISO_PAIR = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.start || '') && /^\d{4}-\d{2}-\d{2}$/.test(e.end || '');
+
+// ══ التواريخ المباشرة للمرحلة (واجهة التثبيت، R5 في تصور محرر رحلة الدفعة) ══
+const realDay = (v) => { const d = String(v ?? ''); return /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d ? d : null; };
+const dayAr = (iso) => { try { return new Date(`${iso}T12:00:00Z`).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); } catch { return iso; } };
+/** بداية ونهاية كتبهما المدير لمرحلة، إلى ما يُكتب في خطة الدفعة. المصدر الواحد لمعنى التاريخ المباشر: يقرؤه planEdit (الخادم
+ * والمعاينة الحية) وبطاقة المرحلة في اللوحة (planDatesPatch)، فلا يختلفان.
+ *  offset: المرحلة «تسير مع» مرجعًا، فبدايتها إزاحة من بدايته (من 0 إلى مدته، البند 4.6) ونهايتها مدة. لا تثبيت.
+ *  days:   مرحلة غير مثبتة لم تتحرك بدايتها: النهاية مدة وحدها، فتبقى تتبع ما قبلها.
+ *  pin:    غير ذلك: تثبيت بتاريخين، والمرحلة مرساة يُزاح ما بعدها منها.
+ * لا تواريخ للمسار المستمر (بدايته من مرجعه ونهايته من «يمتد حتى») ولا للخدمة ولا للموقوفة ولا للدفعة المفتوحة أو بلا بداية (القرار 21)
+ * @param {{ stage: any, plan: any, cohort?: any, entry?: any, start: unknown, end: unknown, title?: (k: string) => string }} o plan: cohortPlan على الخطة الحالية
+ * @returns {{ kind: 'offset', offset: number, days: number } | { kind: 'days', days: number } | { kind: 'pin', start: string, end: string } | { error: { code: string, msg: string } }} */
+export function planDatesResolve({ stage, plan, cohort = {}, entry = null, start, end, title = (k) => k }) {
+  const k = stage?.key;
+  const name = title(k);
+  const err = (code, msg) => ({ error: { code, msg } });
+  if (planService(stage)) return err('dates_service', `«${name}» خدمة لمن يريد بلا أيام في الرحلة، فلا تواريخ لها`);
+  if (planTrack(stage)) return err('dates_track', `«${name}» مسار مستمر: بدايته من «يبدأ مع» ونهايته من «يمتد حتى»، فلا تُكتب له تواريخ`);
+  if (cohort?.is_default) return err('dates_open', 'الدفعة المفتوحة مددها نسبية من دخول كل مشارك، فلا تواريخ تُكتب لمراحلها');
+  const c0 = realDay(String(cohort?.starts_on || '').slice(0, 10));
+  if (!c0) return err('dates_undated', 'حدد تاريخ بداية الدفعة أولًا، ثم اكتب تواريخ مراحلها');
+  const row = plan?.byKey?.[k];
+  if (!row || row.off) return err('dates_off', `«${name}» موقوفة لهذه الدفعة، فلا تواريخ لها. أعدها أولًا`);
+  const a = realDay(start), b = realDay(end);
+  if (!a || !b) return err('dates_value', `اكتب بداية «${name}» ونهايتها بتاريخين صحيحين`);
+  if (b < a) return err('dates_order', `نهاية «${name}» قبل بدايتها`);
+  if (a < c0) return err('dates_before', `بداية «${name}» قبل بداية الدفعة (${dayAr(c0)})`);
+  const days = daysBetween(a, b) + 1;
+  if (days > PLAN_DAYS_MAX) return err('range', `مدة «${name}» من ${planDaysMin(stage)} إلى ${PLAN_DAYS_MAX} يومًا`);
+  if (row.with) {
+    const ref = plan.byKey[row.with];
+    if (!ref?.from) return err('dates_with', `«${name}» تسير مع «${title(row.with)}» ولا تاريخ لها بعد`);
+    const cap = Math.max(0, ref.days);
+    const offset = daysBetween(ref.from, a);
+    if (offset < 0 || offset > cap) {
+      const last = addDays(ref.from, cap);
+      return err('dates_with', `«${name}» تسير مع «${title(row.with)}»، فبدايتها من ${dayAr(ref.from)} إلى ${dayAr(last)}. اختر بداية في هذا المدى، أو اجعلها لا تسير مع شيء`);
+    }
+    return { kind: 'offset', offset, days };
+  }
+  if (!planPinned(entry) && row.from === a) return { kind: 'days', days };
+  return { kind: 'pin', start: a, end: b };
+}
 
 // «اقترح مددًا تملأ مدة الدفعة» (كان «وزّع على مدة الدفعة»): التوزيع النسبي نفسه (distributeSchedule) لكن مددًا لا تواريخ،
 // فتبقى الخطة نسبية ويتبع ما بعد كل مرحلة مدتها. يقترح للإلزامية وحدها، والاختيارية وعند الطلب تبقى بمدتها. وcohortPlan
@@ -521,7 +598,9 @@ export function impactLines(impact, fmt = (d) => d, { notify = false } = {}) {
     const dur = x.days_changed ? `${planDurationAr(x.before.days)} إلى ${planDurationAr(x.after.days)}` : par ? '' : 'بمدتها نفسها';
     const lead = [par, dur].filter(Boolean).join('، ومدتها ');
     const when = x.after.from ? `${x.days_changed || par ? '، فتصير' : '، وتصير'} ${x.after.from === x.after.to ? fmt(x.after.from) : `من ${fmt(x.after.from)} إلى ${fmt(x.after.to)}`}` : '';
-    out.push({ key: `c-${x.key}`, kind: 'change', text: `${x.title}: ${lead}${when}` });
+    // التثبيت بتاريخ (التواريخ المباشرة) وتحريره: يُقال صراحة، لأن المثبتة لا تتحرك بعدها بتغيير ما قبلها
+    const pin = x.after.source === 'pinned' && x.before.source !== 'pinned' ? '، مثبتة بتاريخها فلا تتبع ما قبلها' : x.before.source === 'pinned' && x.after.source !== 'pinned' ? '، وتتبع المدد بعد أن كانت مثبتة بتاريخ' : '';
+    out.push({ key: `c-${x.key}`, kind: 'change', text: `${x.title}: ${lead}${when}${pin}` });
   }
   // التوازي (R3a والقرار 6): متى تُفتح لأصحابها، والإزاحة تخطيط للتواريخ وحدها لا تقفل حتى موعدها
   for (const x of impact.changes.filter((c) => c.with_changed && !c.off && !c.track)) {

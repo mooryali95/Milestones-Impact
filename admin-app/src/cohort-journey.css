@@ -306,3 +306,25 @@
 /* أيام الورش خارج نافذة مراحلها: قائمة روابط إلى بطاقات المراحل */
 .cj-outside { margin: 6px 0 0; padding-inline-start: 18px; display: grid; gap: 4px; }
 .cj-outside .la-link { text-align: start; white-space: normal; }
+
+/* تاريخا المرحلة في بطاقتها: حقلا تاريخ بتسميتيهما، وتلميح بما يفعله كل منهما، وسبب الرفض تحتهما */
+fieldset.cj-dates { margin: 0; min-inline-size: 0; }
+.cj-dates legend { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.cj-dates label { display: inline-flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--ink-soft); min-inline-size: 0; }
+.cj-dates input[type="date"] { box-sizing: border-box; min-block-size: 40px; max-inline-size: 100%; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line-strong); background: #fff;
+  font: inherit; font-size: .88rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cj-dates input[type="date"]:focus-visible { outline: 3px solid var(--gold-deep); outline-offset: 1px; }
+.cj-dates.bad input[type="date"] { border-color: var(--st-bad, #a23b2a); }
+.cj-dates-hint { flex: 1 1 100%; font-size: .76rem; color: var(--ink-light); }
+.cj-dates-err { flex: 1 1 100%; margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: .82rem; font-weight: 600; color: var(--st-bad-text, var(--st-bad, #a23b2a)); }
+.cj-dates-err > span[aria-hidden] { flex: none; display: inline-grid; place-items: center; inline-size: 18px; block-size: 18px; border-radius: 50%; background: var(--st-bad, #a23b2a); color: #fff; font-size: .74rem; }
+.cj-dates-open { font-size: .8rem; }
+.cj-plan.locked > span:last-child { min-inline-size: 0; }
+@media (max-width: 640px) {
+  .cj-dates label { flex: 1 1 100%; justify-content: space-between; }
+  .cj-dates input[type="date"] { flex: 1 1 auto; }
+}
+/* سطر «مثبتة بتاريخ»: القفل بجانب أول سطر، والنص يلتف بجانبه لا تحته */
+.cj-plan.locked { flex-wrap: nowrap; align-items: flex-start; }
+.cj-plan.locked > .cj-lock { margin-block-start: 8px; }
+.cj-plan.locked > span:last-child { flex: 1 1 auto; }

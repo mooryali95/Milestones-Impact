@@ -26,12 +26,14 @@ import { workshopDays } from '../workshop-days.js';
 import { dateOnly, dateTime } from '../dates.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
+import JourneyAxis from '../../../shared/ui/JourneyAxis.jsx';
 import {
-  applyDrop, cohortTimeline, endsOffer, dragGhostAr, dropToEdit, fromUnit, historyRows, mergeEdit, impactAr, inUnit, journeyHeader, journeyKpis, journeyLanes, membersAr, planBody, planCohort, planDraft,
-  planLock, stepDays, suggestDays, TAB_TIMELINE_OMIT, unitFor,
+  applyDrop, cohortTimeline, datesPatch, endsOffer, dragGhostAr, dropToEdit, fromUnit, historyRows, mergeEdit, impactAr, inUnit, journeyHeader, journeyKpis, journeyLanes, membersAr, planBody, planCohort, planDraft,
+  planLock, stepDays, suggestDays, TAB_TIMELINE_OMIT, unitFor, unpinPatch,
 } from '../cohort-journey.js';
 import { PLAN_DAYS_MAX, planDaysMin } from '../../../supabase/functions/leaders-api/stage-windows.js';
-import { outsideSessions, scalePos } from '../../../supabase/functions/leaders-api/journey-timeline.js';
+import { outsideSessions, scalePos, timelineAxis } from '../../../supabase/functions/leaders-api/journey-timeline.js';
+import { addDays, daysBetween } from '../../../supabase/functions/leaders-api/milestones.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
@@ -43,15 +45,20 @@ const editsAr = (n) => countAr(n, 'تعديل واحد', 'تعديلان', 'تع
 export const JOURNEY_AUTO_MAX = 300;
 
 // عداد المدة في البطاقة: [-] الرقم بوحدته [+]، والوحدة أيام أو أسابيع، ومصدر المدة، و«ارجع لمدة البرنامج».
-// المثبتة بتاريخ لا تتبع مدتها: العداد مقفل وسببه مكتوب، والحل «حرّر التواريخ لتتبع المدد» أعلى البطاقات
-function PlanControl({ s, row, stage, onDays }) {
+// المثبتة بتاريخ لا تتبع مدتها: العداد مقفل وسببه مكتوب، وتاريخاها يُغيَّران من حقلي التاريخ تحته، و«اتبع المدد» يحررها وحدها
+function PlanControl({ s, row, stage, onDays, onUnpin }) {
   const [unit, setUnit] = useState(() => unitFor(row.days));
   const [text, setText] = useState(null);
   const min = planDaysMin(stage || {});
   const id = `cj-days-${s.key}`;
   const set = (d) => { setText(null); onDays(s.key, Math.max(min, Math.min(PLAN_DAYS_MAX, d))); };
   if (row.pinned) {
-    return <p className="cj-plan locked" id={id}><span className="cj-lock" aria-hidden="true" />مثبتة بتاريخ ({row.days_ar})، فلا تتبع المدد. حرّرها بـ«حرّر التواريخ لتتبع المدد».</p>;
+    return (
+      <p className="cj-plan locked" id={id}><span className="cj-lock" aria-hidden="true" />
+        <span>مثبتة بتاريخ ({row.days_ar})، فلا تتحرك بتغيير ما قبلها. غيّر تاريخيها من الحقلين، أو
+          {' '}<button type="button" className="la-link" aria-label={`اجعلها تتبع المدد: ${s.title}`} onClick={() => onUnpin(s.key)}>اجعلها تتبع المدد</button>.</span>
+      </p>
+    );
   }
   const value = text ?? String(inUnit(row.days, unit));
   return (
@@ -73,6 +80,48 @@ function PlanControl({ s, row, stage, onDays }) {
         {row.source === 'cohort' && <button type="button" className="la-link" onClick={() => onDays(s.key, null)}>ارجع لمدة البرنامج</button>}
       </span>
     </div>
+  );
+}
+
+// تاريخا المرحلة في بطاقتها: بداية ونهاية بحقلي تاريخ، للمثبتة بتاريخ وغيرها. يكتبان في المسودة نفسها (datesPatch ثم mergeEdit)،
+// فالخط والبطاقات معاينة حية، والحفظ بـ«راجع واحفظ» ونافذة الأثر. تغيير البداية ينقل المرحلة بمدتها، وتغيير النهاية يغيّر مدتها.
+// ما يرفضه الحارس (planDatesResolve: قبل بداية الدفعة، أو خارج مدى مرجع «تسير مع») يُكتب سببه تحت الحقلين ولا تتغير المسودة
+const fullDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && v >= '2000-01-01';
+function DatesControl({ s, row, onDates }) {
+  const [text, setText] = useState(null);
+  const [err, setErr] = useState('');
+  const d = row.dates;
+  // المسودة تغيرت من غير هذين الحقلين (عداد أو سحب أو إلغاء): يعرضان ما فيها
+  useEffect(() => { setText(null); setErr(''); }, [d?.from, d?.to]);
+  if (!d) return null;
+  const from = text?.from ?? d.from, to = text?.to ?? d.to;
+  const id = `cj-dates-${s.key}`;
+  const apply = (next) => {
+    setText(next);
+    if (!fullDay(next.from) || !fullDay(next.to)) { setErr(''); return; }
+    if (next.from === d.from && next.to === d.to) { setText(null); setErr(''); return; }
+    const r = onDates(s.key, next.from, next.to);
+    setErr(r?.reject ? String(r.reject.msg).replace(/[.،\s]+$/, '') : '');
+    if (!r?.reject) setText(null);
+  };
+  // البداية تنقل المرحلة بمدتها (النهاية تتبعها)، والنهاية تغيّر المدة
+  const len = Math.max(0, daysBetween(d.from, d.to));
+  const hint = row.with ? `تسير مع «${d.with_title}»: بدايتها من ${dateOnly(d.with_min)} إلى ${dateOnly(d.with_max)}.`
+    : row.pinned ? 'مثبتة بتاريخيها، وما بعدها يُزاح منها.' : 'تغيير البداية يثبّتها بتاريخها فيُزاح ما بعدها منها، وتغيير النهاية يغيّر مدتها وحدها.';
+  return (
+    <fieldset className={`cj-plan cj-dates${row.edited ? ' edited' : ''}${err ? ' bad' : ''}`} id={id}>
+      <legend>تاريخا {s.title}</legend>
+      <label htmlFor={`${id}-from`}><span>تبدأ</span>
+        <input id={`${id}-from`} type="date" dir="ltr" aria-label={`تبدأ ${s.title}`} value={from} min={row.with ? d.with_min : d.min} max={row.with ? d.with_max : undefined} aria-describedby={`${id}-hint${err ? ` ${id}-err` : ''}`} aria-invalid={!!err}
+          onChange={(e) => apply({ from: e.target.value, to: fullDay(e.target.value) ? addDays(e.target.value, len) : to })} />
+      </label>
+      <label htmlFor={`${id}-to`}><span>تنتهي</span>
+        <input id={`${id}-to`} type="date" dir="ltr" aria-label={`تنتهي ${s.title}`} value={to} min={fullDay(from) ? from : d.min} aria-describedby={`${id}-hint${err ? ` ${id}-err` : ''}`} aria-invalid={!!err}
+          onChange={(e) => apply({ from, to: e.target.value })} />
+      </label>
+      <small id={`${id}-hint`} className="cj-dates-hint">{hint}</small>
+      {err && <p id={`${id}-err`} className="cj-dates-err" role="alert"><span aria-hidden="true">!</span>{err}. لم تتغير المسودة.</p>}
+    </fieldset>
   );
 }
 
@@ -227,7 +276,8 @@ function StageDays({ s, days, act }) {
 
 // rows: صف كل مرحلة في خطة الدفعة (planDraft) دائمًا، وplan: أدوات التحرير في وضع التحرير وحده
 // days: أيام الورشة لهذه المرحلة (workshopDays) إن كان فيها حضور جلسات، وact: أدواتها
-function StageCard({ s, rows = null, plan = null, days = null, act = null }) {
+// onEditDates: خارج وضع التحرير لمن يكتب، «عدّل التاريخين» يدخل وضع التحرير ويضع التركيز في حقل بداية هذه المرحلة
+function StageCard({ s, rows = null, plan = null, days = null, act = null, onEditDates = null }) {
   const head = `cj-st-${s.key}`;
   const row = rows?.[s.key];
   const off = !!(s.off || row?.off);
@@ -242,13 +292,15 @@ function StageCard({ s, rows = null, plan = null, days = null, act = null }) {
         {s.status_ar && <span className={`cj-state ${s.status}`}><i aria-hidden="true" />{s.status_ar}</span>}
       </header>
       {plan && row && <OffSwitch s={s} row={row} onOff={plan.onOff} />}
-      {plan && row && !off && (!row.track || row.until === 'days') && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} />}
+      {plan && row && !off && (!row.track || row.until === 'days') && <PlanControl s={s} row={row} stage={plan.stageOf(s.key)} onDays={plan.onDays} onUnpin={plan.onUnpin} />}
+      {plan && row && !off && <DatesControl s={s} row={row} onDates={plan.onDates} />}
       {plan && row && !off && <WithControl s={s} row={row} onWith={plan.onWith} onOffset={plan.onOffset} />}
       {plan && row?.track && !off && <UntilControl s={s} row={row} onUntil={plan.onUntil} />}
       {plan && row?.over && !off && <p className="cj-over" role="note"><span aria-hidden="true">!</span>{row.over.msg}. التجاوز مسموح، والمجموعة تنتهي بأطول أعضائها.</p>}
       {off ? <p className="cj-window"><small>لا نافذة لها في هذه الدفعة، وما بعدها يبدأ في مكانها. من يقف فيها ينتقل إلى ما بعدها، وما أنجزه محفوظ.</small></p>
         : s.window_ar ? (
-          <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small></p>
+          <p className="cj-window"><b>{s.window_ar}</b><small>{s.window_source_ar}</small>
+            {!plan && onEditDates && row?.dates && <button type="button" className="la-link cj-dates-open" aria-label={`عدّل التاريخين: ${s.title}`} onClick={() => onEditDates(s.key)}>عدّل التاريخين</button>}</p>
         ) : <p className="cj-window"><small>بلا تواريخ: {s.label}</small></p>}
       {(s.with_ar || s.offset_ar || s.rule_ar || s.until_ar) && (
         <ul className="cj-rules">
@@ -436,6 +488,8 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const lanes = useMemo(() => (model ? journeyLanes(model, { def: d.def, cohort: shown, milestones: d.milestones, map: jm }) : null), [model, d, shown, jm]);
   const head = model ? journeyHeader(model, shown) : null;
   const outside = useMemo(() => outsideSessions(model), [model]);
+  // المحور الزمني الكامل من نموذج الخط نفسه (نوافذه ومواعيده)، فيتبع المسودة كما يتبعها
+  const axis = useMemo(() => timelineAxis(model), [model]);
   const kpis = model ? journeyKpis(model, lanes, jm, { msError: !!d?.msError }) : [];
   const mapFailed = want && map && !map.success;
   const lock = planLock(cohort);
@@ -449,7 +503,26 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const onWith = (k, v) => put({ with: { [k]: v } });
   const onOffset = (k, v) => put({ offset: { [k]: v } });
   const onUntil = (k, v) => put({ until: { [k]: v } });
-  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, onWith, onOffset, onUntil, stageOf } : null;
+  // التواريخ المباشرة: تُحل إلى تعديل (datesPatch) ثم تُفحص بالمسودة نفسها كما يُفحص السحب (applyDrop)، فالمرفوض لا يغيّرها
+  const onDates = (k, start, end) => {
+    const res = datesPatch({ def: d.def, draft, key: k, start, end });
+    if (res.reject) return { reject: res.reject };
+    const check = applyDrop({ def: d.def, cohort, edit, patch: res.patch });
+    if (check.reject) return { reject: check.reject };
+    setEdit(check.edit);
+    return {};
+  };
+  const onUnpin = (k) => put(unpinPatch(k));
+  const planCtl = edit && draft ? { rows: draft.rows, onDays, onOff, onWith, onOffset, onUntil, onDates, onUnpin, stageOf } : null;
+  // «عدّل التاريخين» في بطاقة خارج وضع التحرير: يدخله، ثم يوضع التركيز في حقل بداية تلك المرحلة بعد أن يُرسم
+  const [focusDates, setFocusDates] = useState(null);
+  const editDates = canWrite && !lock ? (k) => { setEdit((e) => e || { days: {}, off: {}, with: {}, offset: {}, until: {} }); setFocusDates(k); } : null;
+  useEffect(() => {
+    if (!focusDates || !edit) return;
+    const el = document.getElementById(`cj-dates-${focusDates}-from`);
+    if (el) { el.scrollIntoView({ block: 'center' }); el.focus({ preventScroll: true }); }
+    setFocusDates(null);
+  }, [focusDates, edit]);
 
   // ── السحب في الخط (D1): لمن يكتب في وضع التحرير وحده، والخطة غير مقفلة. الحركة تُحسب من مقياس الخط عند الالتقاط ──
   const [drag, setDrag] = useState(null);
@@ -747,11 +820,12 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
 
       {editing && (
         <p className="cj-ro" role="note">
-          تعديل المدد والإيقاف والتوازي لهذه الدفعة وحدها، والبرنامج لا يتغير. الخط والبطاقات تعرض التواريخ الجديدة قبل الحفظ، ونافذة الأثر تسمي من يتأثر قبل أن يُحفظ شيء.
+          تعديل المدد والتواريخ والإيقاف والتوازي لهذه الدفعة وحدها، والبرنامج لا يتغير. الخط والبطاقات تعرض التواريخ الجديدة قبل الحفظ، ونافذة الأثر تسمي من يتأثر قبل أن يُحفظ شيء.
           {cohort.starts_on && cohort.ends_on && <> <button type="button" className="la-link" onClick={suggest}>اقترح مددًا تملأ مدة الدفعة</button></>}
         </p>
       )}
 
+      {axis && <JourneyAxis axis={axis} id="ja-cohort" onStage={toCard} />}
       {!model.empty && <JourneyTimeline key={c.id} id="jt-cohort" model={model} onOpen={openAct} openLabel={actLabel} onStage={toCard} omitCards={TAB_TIMELINE_OMIT} editable={editable}
         usage={lanes.services ? Object.fromEntries(lanes.services.filter((x) => x.usage).map((x) => [x.key, x.usage.text])) : null} />}
       {dragNote && (
@@ -776,9 +850,9 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
                 {p.groups.map((g) => (g.together ? (
                   <div key={g.key} className="cj-group together" role="group" aria-label={`مراحل تسير معًا: ${g.note_ar}`}>
                     <p className="cj-group-note"><span>تسير معًا</span>{g.note_ar}</p>
-                    <div className="cj-lanes">{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} />)}</div>
+                    <div className="cj-lanes">{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} onEditDates={editDates} />)}</div>
                   </div>
-                ) : <div key={g.key} className={`cj-group${g.off ? ' off' : ''}`}>{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} />)}</div>))}
+                ) : <div key={g.key} className={`cj-group${g.off ? ' off' : ''}`}>{g.stages.map((s) => <StageCard key={s.key} s={s} rows={draft.rows} plan={planCtl} days={daysOf(s)} act={dayAct} onEditDates={editDates} />)}</div>))}
               </div>
             </section>
           ))}

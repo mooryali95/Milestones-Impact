@@ -10,6 +10,7 @@ import Ico from './Ico.jsx';
 import { PARTICIPANT_VIDEO as VIDEO } from '../../shared/video/scenes.js';
 import { gateDone, gateStage, hasAccess } from './gates.js';
 import { nextSeen, welcomeSeen } from './api.js';
+import { leftToDo } from './journey-copy.js';
 import { APPROVAL_SLA_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { afterApprovalAr, flagsOf } from './features.js';
 import IntroVideo, { IntroPlayer } from './IntroVideo.jsx';
@@ -105,7 +106,8 @@ export function OnboardingNextCard({ me, onClose }) {
         <b>أرسلت قياسك. ما بعد ذلك:</b>
         <ol className="small">
           <li>يراجع المستشار نتيجتك ويعتمد مسارك خلال {wait}، ويصلك بريد حين يكتمل.</li>
-          <li>حتى ذلك الحين تكمل ما بقي من قائمة التحقق أدناه، وتفعّل مفتاح المرور لدخول أسرع.</li>
+          {/* «تكمل ما بقي» فقط إن بقي للمشارك بند يفعله بنفسه (leftToDo)، وإلا لا يُرسل للبحث عما لا يوجد */}
+          <li>{leftToDo(me.journey) ? 'حتى ذلك الحين تكمل ما بقي من قائمة التحقق أدناه، وتفعّل مفتاح المرور لدخول أسرع.' : 'حتى ذلك الحين لا شيء مطلوب منك. ولك أن تفعّل مفتاح المرور لدخول أسرع.'}</li>
           <li>بعد الاعتماد تُفتح لك: {afterApprovalAr(flagsOf(me))}.</li>
         </ol>
         <IntroVideo className="link small" label="أعد مشاهدة الفيديو التعريفي" />

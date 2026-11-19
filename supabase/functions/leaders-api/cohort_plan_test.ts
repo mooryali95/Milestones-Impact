@@ -505,3 +505,42 @@ Deno.test('R3a الحراس: مرجع لاحق أو بوابة أو موقوف،
     assert(e.message.includes('إزاحة «التوجيه» من 0 إلى مدة «التدريب»'));
   } finally { w.restore(); }
 });
+
+Deno.test('التواريخ المباشرة (dates): معاينة بلا كتابة، وحفظ بتثبيت في الخطة وصف في السجل، وتراجع، وحراسها وشكل الجسم', async () => {
+  const w = world();
+  try {
+    // التدريب يبدأ بعد الملف (يومان): بداية أخرى تثبته بتاريخين، وما بعده يُزاح منه
+    const from = iso(-6), to = iso(1);
+    const pre: any = await cohortPlanAction(viewer, { cohort_id: C1, op: 'preview', dates: { training: { start: from, end: to } } });
+    assertEquals([pre.preview, pre.changed], [true, true]);
+    assertEquals(pre.plan.stages.find((s: any) => s.key === 'training'), { ...pre.plan.stages.find((s: any) => s.key === 'training'), from, to, days: 8, source: 'pinned' });
+    assertEquals(pre.plan.stages.find((s: any) => s.key === 'support').from, iso(2));
+    assertEquals(w.tables.cohorts[0].schedule, {});
+    assertEquals(w.tables.audit_log.length, 0);
+    const r: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', dates: { training: { start: from, end: to } } });
+    assertEquals(r.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { training: { start: from, end: to } });
+    const [row] = w.tables.audit_log;
+    assertEquals([row.action, row.before, row.after.schedule], ['cohort.plan', { schedule: {} }, { training: { start: from, end: to } }]);
+    // النهاية وحدها لمرحلة لم تتحرك بدايتها: مدة لا تثبيت
+    const s2: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', dates: { profile: { start: START, end: iso(-8) } } });
+    assertEquals(s2.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule.profile, { days: 3 });
+    // «اتبع المدد» لمرحلة واحدة: مدة بطولها الحالي
+    const s3: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'save', dates: { training: null } });
+    assertEquals(s3.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { profile: { days: 3 }, training: { days: 8 } });
+    // التراجع يعيد التثبيت كما كان قبل آخر حفظ
+    const u: any = await cohortPlanAction(admin, { ...B(w), cohort_id: C1, op: 'undo' });
+    assertEquals(u.saved, true);
+    assertEquals(w.tables.cohorts[0].schedule, { profile: { days: 3 }, training: { start: from, end: to } });
+    // الحراس: قبل بداية الدفعة، ونهاية قبل البداية، وشكل الجسم، والمفتوحة بلا تواريخ. ولا كتابة
+    const codes = async (dates: unknown, cohort = C1, i = 0) => { const e = await failOf(() => cohortPlanAction(admin, { ...B(w, i), cohort_id: cohort, op: 'preview', dates })); return [e.code, ((e.extra?.errors || []) as any[]).map((x) => x.code)]; };
+    assertEquals(await codes({ training: { start: iso(-12), end: to } }), ['plan_invalid', ['dates_before']]);
+    assertEquals(await codes({ training: { start: to, end: from } }), ['plan_invalid', ['dates_order']]);
+    assertEquals(await codes({ training: { start: 'x', end: to } }), ['plan_invalid', ['dates_value']]);
+    assertEquals(await codes([from, to]), ['plan_invalid', []]);
+    assertEquals(await codes({ training: { start: from, end: to } }, OPEN, 1), ['plan_invalid', ['dates_open']]);
+    assertEquals(w.tables.cohorts[0].schedule, { profile: { days: 3 }, training: { start: from, end: to } });
+  } finally { w.restore(); }
+});

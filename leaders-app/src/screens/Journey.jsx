@@ -22,6 +22,7 @@ import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
 import { GuidancePanel } from './Guidance.jsx';
 import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
+import { finalView, fmtWhen, lateBannerAr, lateByAr, lateShortAr, stageTally, stagesOfAr } from '../journey-copy.js';
 import { withGroups } from '../../../supabase/functions/leaders-api/stage-windows.js';
 const CONTACT_EMAIL = CONTACT.email;
 
@@ -191,10 +192,13 @@ function Survey({ item, open, onUpdate, setToast }) {
     <div className="survey stack">
       {qs.map((q) => (
         <div key={q.key} className="survey-q">
-          <span>{q.label}{!q.required && <small className="muted"> (اختياري)</small>}</span>
+          {/* سؤال النص مربوط بحقله (label)، وسؤال النجوم اسم مجموعتها (aria-label) */}
+          {q.type === 'rating'
+            ? <span>{q.label}{!q.required && <small className="muted"> (اختياري)</small>}</span>
+            : <label htmlFor={`sv-${item.id}-${q.key}`}>{q.label}{!q.required && <small className="muted"> (اختياري)</small>}</label>}
           {q.type === 'rating'
             ? <span className="rx-stars" role="radiogroup" aria-label={q.label}>{[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={v[q.key] === n} aria-label={`${n} من 5`} className={n <= (v[q.key] || 0) ? 'on' : ''} onClick={() => setV({ ...v, [q.key]: n })}>★</button>)}</span>
-            : <textarea className="input" rows={2} maxLength={2000} value={v[q.key] || ''} onChange={(e) => setV({ ...v, [q.key]: e.target.value })} />}
+            : <textarea id={`sv-${item.id}-${q.key}`} className="input" rows={2} maxLength={2000} value={v[q.key] || ''} onChange={(e) => setV({ ...v, [q.key]: e.target.value })} />}
         </div>
       ))}
       <div className="actions"><button className="btn sm" disabled={busy || !ready} onClick={send}>{busy ? 'لحظة…' : 'أرسل إجاباتك'}</button></div>
@@ -248,7 +252,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
   const mark = item.status === 'done' ? '✓' : item.status === 'submitted' ? '…' : '';
 
   return (
-    <li ref={li} tabIndex={-1} className={`item ${item.status}`}>
+    <li ref={li} id={`item-${item.id}`} tabIndex={-1} className={`item ${item.status}`}>
       <span className="box" aria-hidden="true">{mark}</span>
       <div className="grow">
         <div className="row between">
@@ -260,7 +264,8 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
         {item.help_ar && !(item.code === 'T-360' && sys && !verified && item.status !== 'done') && <p className="h">{item.help_ar}</p>}
         {item.status === 'returned' && item.note && <p className="h" style={{ color: 'var(--bad)' }}>ملاحظة: {item.note}</p>}
         {verified && <Activity item={item} open={open} onUpdate={onUpdate} onHandbook={onHandbook} onCapstone={onCapstone} onLabItem={onLabItem} setToast={setToast} />}
-        {sys && !verified && item.kind !== 'survey' && item.status !== 'done' && (
+        {/* «يُفتح القياس البعدي حين تصل…» للمرحلة المقفلة وحدها: في المفتوحة زر «ابدأ القياس البعدي» تحته يكفي */}
+        {sys && !verified && item.kind !== 'survey' && item.status !== 'done' && !(item.code === 'E-POST' && open) && (
           <p className="h">{AUTO_HINT[item.code] || (item.kind === 'meeting' ? 'يُسجَّل بعد انعقاد الجلسة.' : 'يُنجز تلقائيًا.')}
             {item.code === 'P-INFO' || item.code === 'P-CV' || item.code === 'T-360' ? <> <button className="link" onClick={onEditProfile}>افتح ملفي</button></> : null}
             {item.code === 'P-PROJECT' && <> <button className="link" onClick={onCapstone}>اكتب بطاقة مبادرتك</button></>}
@@ -386,7 +391,8 @@ export function sessionIcs(x) {
 export function NextSession({ session, onHall, onCheckedIn }) {
   const undated = !session.starts_at || !session.ends_at;
   // العنوان «لك جلسة سيُعلن موعدها» يقول ذلك، فلا يُكرر في السطر
-  const when = undated ? '' : new Date(session.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  // الصيغة نفسها التي في قائمة الجلسات داخل المرحلة (journey-copy.js)
+  const when = undated ? '' : fmtWhen(session.starts_at);
   const download = () => {
     const url = URL.createObjectURL(new Blob([sessionIcs(session)], { type: 'text/calendar;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = 'session.ics'; a.click();
@@ -710,14 +716,14 @@ function Milestones({ list, summary }) {
         <h2 id="ms-h" className="as-h3">معالمك</h2>
         <span className="small muted">{summary.done} من {summary.total} منجزة</span>
       </div>
-      {summary.late > 0 && <div className="banner"><span className="ico"><Ico name="clock" /></span><div className="grow">لديك {summary.late === 1 ? 'معلم متأخر' : `${summary.late} معالم متأخرة`}، أقصاها {summary.max_late} يومًا. ابدأ بالأقدم، أو اطلب استشارة إن احتجت دعمًا.</div></div>}
+      {summary.late > 0 && <div className="banner"><span className="ico"><Ico name="clock" /></span><div className="grow">{lateBannerAr(summary.late, summary.max_late)} ابدأ بالأقدم، أو اطلب استشارة إن احتجت دعمًا.</div></div>}
       <div className="ms-bar" role="progressbar" aria-label="نسبة إنجاز معالمك" aria-valuetext={`${summary.done} من ${summary.total} منجزة`} aria-valuenow={summary.pct || 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${summary.pct || 0}%` }} /></div>
       <ol className="ms-list">{list.map((m) => (
         <li key={m.id} className={m.status}>
           <div className="grow"><b>{m.title_ar}</b>{m.description_ar && <p className="small muted">{m.description_ar}</p>}</div>
           <div className="ms-when">
             {m.due && <small className="muted">{msDay(m.due)}</small>}
-            <span className={`chip ${MS_CHIP[m.status]}`}>{MS_AR[m.status]}{m.status === 'late' ? ` ${m.late_days} يومًا` : ''}</span>
+            <span className={`chip ${MS_CHIP[m.status]}`}>{m.status === 'late' && m.late_days > 0 ? lateByAr(m.late_days) : MS_AR[m.status]}</span>
           </div>
         </li>
       ))}</ol>
@@ -816,9 +822,17 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   const [nextCard, setNextCard] = useState(() => !nextSeen.get());
   const closeNext = () => { nextSeen.set(true); setNextCard(false); };
   const next = nextStep(journey);
-  const goTo = (key) => {
+  // «اذهب إليها» يصل إلى البند نفسه لا إلى رأس مرحلته: يُمرَّر إليه ويأخذ التركيز ويُبرز لحظة. وبلا بند (التذكير) رأس المرحلة
+  const goTo = (key, itemId = null) => {
     setExpanded((s) => new Set(s).add(key));
-    setTimeout(() => document.getElementById(`stage-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    setTimeout(() => {
+      const item = itemId ? document.getElementById(`item-${itemId}`) : null;
+      if (!item) return document.getElementById(`stage-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      item.focus({ preventScroll: true });
+      item.classList.add('goto');
+      return setTimeout(() => item.classList.remove('goto'), 2400);
+    }, 50);
   };
   const approved = !!profile?.approved;
   const reading = approved ? lastRead.get() : null;
@@ -839,8 +853,11 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // المرحلة عند الطلب أو الاختيارية لا تُحسب على المشارك إن لم يحتجها
   // والمسار المستمر (T1) يسير بجانب المراحل فلا يُعد فيها
   // والخدمة (T2) لمن يريد: خارج العد والتسلسل، في «خدمات متاحة لك»
-  const counted = journey.filter((s) => s.lane !== 'track' && s.lane !== 'service' && ((s.stage_mode || 'required') === 'required' || s.status === 'done'));
-  const doneCount = counted.filter((s) => s.status === 'done').length;
+  // القاعدة في stageTally (journey-copy.js)، وعناوين الأطوار تعد بها نفسها فلا يختلف مجموعها عن الرأس
+  const { done: doneCount, total: countedN } = stageTally(journey);
+  const tallyAr = `أنجزت ${doneCount} من ${stagesOfAr(countedN)}`;
+  // الرأس يتبع قرار التقييم الختامي: لا تهنئة فوق «لم يجتز»، ولا «أثرك موثّق» قبل أن تصدر النتيجة
+  const fin = finalView({ final: me.final, approved, allDone: countedN > 0 && doneCount === countedN, hasPolicy: !!me.final_policy, firstName });
   const services = journey.filter((s) => s.lane === 'service');
   // موعد المراجعة المعلن (D04) بصيغة الجملة؛ وسم المرحلة المرفوع «يوما عمل» يظهر وحده في خط الرحلة
   const reviewWait = APPROVAL_SLA_AR;
@@ -854,14 +871,15 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
       <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
-          <h1>{approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`}</h1>
+          <h1>{fin.title || (approved ? `${firstName}، رحلتك مفتوحة` : `شكرًا ${firstName}، نتيجتك قيد المراجعة`)}</h1>
           <p className="muted">
-            {now.length > 1 ? <>{now.length === 2 ? 'مرحلتاك الحاليتان تسيران معًا' : 'مراحلك الحالية تسير معًا'}: {now.map((s, i) => <React.Fragment key={s.key}>{i ? (i === now.length - 1 ? ' و' : '، ') : ''}<b style={{ color: '#fff' }}>{s.title_ar}</b></React.Fragment>)} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
-              : tracksNow.length ? <>بقي لك المسار المستمر: <b style={{ color: '#fff' }}>«{current.title_ar}»</b>{(() => { const due = journey.find((x) => x.key === current.track?.due_before); return due ? `، وبنوده مطلوبة قبل «${due.title_ar}»` : ''; })()} · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
-              : current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · أنجزت {doneCount} من {countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}</>
-              : doneCount === counted.length && counted.length ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
-                : !approved ? `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}، والخطوة التالية اعتماد مسارك`
-                  : `أنجزت ${doneCount} من ${countAr(counted.length, 'مرحلة واحدة', 'مرحلتين', 'مراحل', 'مرحلة')}`}
+            {now.length > 1 ? <>{now.length === 2 ? 'مرحلتاك الحاليتان تسيران معًا' : 'مراحلك الحالية تسير معًا'}: {now.map((s, i) => <React.Fragment key={s.key}>{i ? (i === now.length - 1 ? ' و' : '، ') : ''}<b style={{ color: '#fff' }}>{s.title_ar}</b></React.Fragment>)} · {tallyAr}</>
+              : tracksNow.length ? <>بقي لك المسار المستمر: <b style={{ color: '#fff' }}>«{current.title_ar}»</b>{(() => { const due = journey.find((x) => x.key === current.track?.due_before); return due ? `، وبنوده مطلوبة قبل «${due.title_ar}»` : ''; })()} · {tallyAr}</>
+              : current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · {tallyAr}</>
+              : fin.line ? fin.line
+                : doneCount === countedN && countedN ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
+                  : !approved ? `${tallyAr}، والخطوة التالية اعتماد مسارك`
+                    : tallyAr}
           </p>
           <div className="phase-rail" aria-label="أطوار الرحلة">
             {phaseRail(journey).map((ph) => <div key={ph.key} className={ph.state}><i />{ph.title}</div>)}
@@ -869,6 +887,16 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </div>
         <Ring value={me.progress} />
       </section>
+      {/* النتيجة الختامية تحت الرأس مباشرة، ومعها سطر «التالي» بحسب القرار (finalView): لا تُدفن تحت أقسام الرحلة */}
+      {me.final && (
+        <div className={`banner final-result ${fin.kind === 'pass' || fin.kind === 'pass_notes' ? 'gold' : ''}`} data-testid="final-result"><span className="ico"><Ico name="cap" /></span>
+          <div className="grow">
+            <p>نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪).</p>
+            {me.final.notes && <p className="small">ملاحظات خبيرك: «{me.final.notes}»</p>}
+            {fin.next && <p className="small" data-testid="final-next"><b>التالي:</b> {fin.next}{fin.contact && <> <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</>}
+              {fin.review && ' ولطلب مراجعة القرار: الطريقة والمهلة في «كيف يُقيَّم عملك في نهاية البرنامج» أدناه.'}</p>}
+          </div></div>
+      )}
       {(participant.status === 'completed' || ['pass', 'pass_notes'].includes(me.final?.decision)) && <CertificateCard participant={participant} />}
       <RateExpert />
       {approved && <SusCard call={call} initial={susFirst} />}
@@ -911,8 +939,9 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                 <div className="next-card">
                   <span className="k">{next.item.status === 'returned' ? 'مطلوب تعديله' : 'خطوتك التالية'}</span>
                   <b>{next.item.title_ar}</b>
-                  <span className="small muted">{next.stage.title_ar}</span>
-                  <div className="row"><button className="btn" onClick={() => goTo(next.stage.key)}>اذهب إليها</button></div>
+                  {/* بند من المسار المستمر والرأس يسمي مرحلة أخرى: يُقال إنه من المسار، فلا تتعارض الجملتان */}
+                  <span className="small muted">{next.stage.lane === 'track' ? `من مسارك المستمر: ${next.stage.title_ar}` : next.stage.title_ar}</span>
+                  <div className="row"><button className="btn" onClick={() => goTo(next.stage.key, next.item.id)}>اذهب إليها</button></div>
                 </div>
               )}
               {upcoming && !upcoming.open && <NextSession session={upcoming} onHall={onHall} onCheckedIn={refreshMe} />}
@@ -950,13 +979,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
 
         <div className="j-main" data-tour="stages">
           {/* تحت «خطوتك التالية» لا فوقها: الفعل التالي أول ما يراه المشارك، ثم مواعيده وتقدمه */}
-          {approved && me.milestones?.length > 0 && <Fold title="معالمك" meta={`${me.milestone_summary.done} من ${me.milestone_summary.total} منجزة${me.milestone_summary.late ? ` · ${me.milestone_summary.late} متأخرة` : ''}`}><Milestones list={me.milestones} summary={me.milestone_summary} /></Fold>}
+          {approved && me.milestones?.length > 0 && <Fold title="معالمك" meta={`${me.milestone_summary.done} من ${me.milestone_summary.total} منجزة${me.milestone_summary.late ? ` · ${lateShortAr(me.milestone_summary.late)}` : ''}`}><Milestones list={me.milestones} summary={me.milestone_summary} /></Fold>}
           {approved && me.final_policy && <HowEvaluated policy={me.final_policy} />}
-          {me.final && (
-            <div className={`banner ${me.final.decision === 'pass' || me.final.decision === 'pass_notes' ? 'gold' : ''}`}><span className="ico"><Ico name="cap" /></span>
-              <div className="grow">نتيجة تقييمك الختامي: <b>{me.final.decision_ar}</b> ({me.final.score}٪). {me.final.decision === 'extend' ? 'مُدّدت مرحلتك لتستكمل ما ينقص؛ تواصل مع خبيرك لخطة الاستكمال.' : ''}
-                {me.final.notes && <><br /><small>ملاحظات خبيرك: «{me.final.notes}»</small></>}</div></div>
-          )}
           {approved && me.continuous?.index != null && <Fold title="تقدمك في التقييم المستمر" meta={`${me.continuous.index}٪`}><Continuous c={me.continuous} /></Fold>}
           {/* «التوجيه والإرشاد»: الاستشارة وأسئلة الفريق في مكان واحد، وبطاقة «ابدأ» قبل أن يبدأ ما يوجَّه إليه */}
           {approved && <GuidancePanel guidance={me.guidance} onHandbook={onHandbook} />}
@@ -990,17 +1014,19 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           // المسار المستمر (T1) كتلة بجانب المراحل بعد مرجعه، وخارج عد الطور
           const stages = inPhase.filter((s) => s.lane !== 'track');
           const laneHere = inPhase.filter((s) => s.lane === 'track');
-          const doneHere = stages.filter((s) => s.status === 'done').length;
+          // عد الطور بقاعدة الرأس نفسها: «عند الحاجة» لا تُحسب عليه، فمجموع الأطوار يساوي ما في الرأس
+          const { done: doneHere, total: totalHere } = stageTally(stages);
+          const tallyHere = totalHere ? `${doneHere} من ${totalHere}` : '';
           // على الشاشات الضيقة يبقى الطور الذي فيه عملك مفتوحًا، والبقية عناوين تُفتح: الرئيسية شاشتان لا خمس
           const here = inPhase.some((s) => s.status === 'active' || s.key === next?.stage.key || expanded.has(s.key));
           const Wrap = here ? PhaseOpen : Fold;
           return (
-            <Wrap key={ph.key} title={`${pi + 1}. ${ph.title}`} meta={`${doneHere} من ${stages.length}`}>
+            <Wrap key={ph.key} title={`${pi + 1}. ${ph.title}`} meta={tallyHere}>
             <div className="phase">
               <div className={`phase-head ${here ? '' : 'fold-h'}`}>
                 <span className="phase-no">{pi + 1}</span>
                 <div className="grow"><h3>{ph.title}</h3><span className="small muted">{ph.hint}</span></div>
-                <span className="small muted">{doneHere} من {stages.length}</span>
+                {tallyHere && <span className="small muted">{tallyHere}</span>}
               </div>
               <div className="timeline">
                 {(() => {
