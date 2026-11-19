@@ -8,8 +8,8 @@ import Ico from '../Ico.jsx';
 import { call } from '../api.js';
 import { downloadIcs } from '../ics.js';
 
-const fmtDay = (d) => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
-const fmtTime = (d) => new Date(d).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
+// صيغة الموعد من مصدرها الواحد، فلا تختلف القائمة هنا عن بطاقة «جلستك» في أعلى الرحلة
+import { fmtDay, fmtTime } from '../journey-copy.js';
 const mins = (s) => Math.max(1, Math.round((s || 0) / 60));
 
 function Bar({ value, label }) {
@@ -51,7 +51,7 @@ function Reading({ a, onHandbook }) {
         {a.chapters.map((c) => {
           const [cls, t] = READ_CHIP[c.state];
           return (
-            <li key={c.id}>
+            <li key={c.id} className="act-read">
               <span className="grow">{label(c).dim && <small className="muted">{label(c).dim} · </small>}{label(c).t}
                 {c.state !== 'read' && c.pct > 0 && <span className="read-pct" style={{ '--p': `${Math.min(100, c.pct)}%` }} title={`قرأت ${Math.round(c.pct)}%`}><i /></span>}</span>
               {c.state !== 'read' && c.pct > 0 && <span className="chip">{Math.round(c.pct)}%</span>}

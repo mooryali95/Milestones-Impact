@@ -35,7 +35,7 @@ function OrgVisibility() {
         <p className="muted">{countAr(v.viewers, 'مطّلع واحد', 'مطّلعان', 'مطّلعين', 'مطّلعًا')} من {d.org} {v.viewers === 1 ? 'يرى' : v.viewers === 2 ? 'يريان' : 'يرون'} {v.list ? 'من رحلتك:' : 'أرقامًا مجمّعة عن مشاركي جهتك فقط، بلا اسمك.'}</p>
         {v.list && <ul className="org-see-list">{open.map(([k, [l, h]]) => <li key={k}><b>{l}</b><small>{v.scores && k === 'scores' ? (d.share_consented ? `${h}؛ بموافقتك` : 'طلبت جهتك الاطلاع عليها ولا تصلها إلا بموافقتك أدناه') : h}</small></li>)}</ul>}
       </>}
-      <label className="row small" style={{ gap: '.5rem', alignItems: 'center' }}>
+      <label className="small consent-check">
         <input type="checkbox" checked={!!d.share_consented} disabled={busy} onChange={(e) => share(e.target.checked)} />
         <span>أوافق على اطلاع {d.org} على مساري ومستوياتي في الأبعاد الثلاثة (تأسيسي أو متوسط أو احترافي)، وعلى ظهور مساري ومستواي العام في وثيقة مبادرتي لجهتي ولراعي مبادرتي. أستطيع سحب الموافقة في أي وقت.</span>
       </label>
