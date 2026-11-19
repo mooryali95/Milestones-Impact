@@ -152,6 +152,13 @@
     "20261116160000_leaders_erasure_decisions": "b066800aded7cba02a691b3c16754a05eb05e25e4679ae1521afc94d4b7b6961",
     "20261116170000_leaders_guidance_eval_sets": "870c2d40569842372e34372f7b6bcb423b15eb0b9cdb6d00f29944f544a8400b",
     "20261116180000_leaders_guidance_transcripts": "3b3ecac49c229661602f1c155273bb235d0e4d28afaa5a8719ed1cbec6ec2a60",
-    "20261116190000_leaders_slack_digest_category": "8d7b62375ac841e11b4c0f2f37d6f1aa253f36ab86941991413bc2a19ced9fb1"
+    "20261116190000_leaders_slack_digest_category": "8d7b62375ac841e11b4c0f2f37d6f1aa253f36ab86941991413bc2a19ced9fb1",
+    "20261117100000_leaders_book_proposals_save": "5afacb82a2d5b5b398fa8f46f25ad63f4f8a1b623d5675c804f1dcbb9fcde80f",
+    "20261118100000_leaders_guidance_eval_case_snapshot": "c5f6be7050028ac9d7841cec655e153e47970dfe2fc3d4ca42c6aeb3b6f1f0d0",
+    "20261118110000_leaders_workshop_scan_receipts": "99017dfdd9a228db0df0f5ffab6447a545933df5e67ecedd975c8d1e1fbd79dc",
+    "20261118120000_leaders_workshop_code_method": "555dcff9f026e510da886cbff65bfdd49c1e8b2048c53df50298c2e6338d3111",
+    "20261118130000_leaders_workshop_capacity": "ba884a39e0b5e978b77fe9ac95126135edc97d8b5e53877a3639b511d69f6ecb",
+    "20261118140000_leaders_idempotency_keys": "887dadcaf8a51f3bf969d6c91b007786ffc8c1f48363580233d7dd7adf386cb6",
+    "20261118150000_leaders_client_events": "60efc1e339f3d912ad562dcec7bfd85ed2788b69307c05874866a6e3a1e6c75f"
   }
 }
