@@ -90,7 +90,9 @@ async function world() {
     consented_at: '2026-10-01T08:00:00Z', consent_version: null, status: 'enrolled', ...extra,
   });
   // اثنان من الدفعة نفسها بحق البرنامج، وثالث فيها بلا دفع ولا رعاية (الدفع مفعّل)، ورابع من دفعة أخرى
-  const ps = { a: who(1, {}), b: who(2, {}), unpaid: who(3, { organization_id: null, status: 'placed' }), other: who(4, { organization_id: null }) };
+  // وخامس حساب العرض، مسجَّل في الدفعة نفسها ليبلغ الكتابة: حضوره يُحاكى ولا يُكتب (تصور الحساب التجريبي 2026-11-19، المرحلة 0)
+  const ps = { a: who(1, {}), b: who(2, {}), unpaid: who(3, { organization_id: null, status: 'placed' }), other: who(4, { organization_id: null }),
+    demo: who(5, { organization_id: null, status: 'placed', is_demo: true, email: 'demo@demo.milestone-impact.org' }) };
   const tokens: Record<string, string> = {};
   const sessions: Row[] = [];
   // ثلاثة خبراء معتمدون: مستشار الدفعة، وعضو فريقها، وخبير لا تكليف له فيها
@@ -121,6 +123,7 @@ async function world() {
     enrollments: [
       { participant_id: ps.unpaid.id, cohort_id: COHORT, status: 'active', created_at: '2026-10-06T08:00:00Z' },
       { participant_id: ps.other.id, cohort_id: OTHER, status: 'active', created_at: '2026-10-06T08:00:00Z' },
+      { participant_id: ps.demo.id, cohort_id: COHORT, status: 'active', created_at: '2026-10-06T08:00:00Z' },
     ],
     journey_stages: [{ program_id: 'prog', key: 'approval', sort: 3, title_ar: 'اعتماد المسار', active: true }, { program_id: 'prog', key: 'training', sort: 4, title_ar: 'التدريب', active: true }],
     stage_requirements: [
@@ -181,6 +184,33 @@ Deno.test('أرقام صحيحة: يُسجَّل الحضور بطريقة code 
     // بلا حق في البرنامج: الحضور بالأرقام خارج بوابة الدفع كالمسح
     const u = await w.call('unpaid', 'workshop.checkin', { code });
     assertEquals([u.status, u.success], [200, true]);
+  } finally { w.restore(); }
+});
+
+Deno.test('حساب العرض: الأرقام والمسح والإيصال تُرد «سُجّل حضورك» كما لغيره، ولا يُكتب حضور ولا سجل ولا يُستهلك إيصال', async () => {
+  const w = await world();
+  try {
+    const byCode = await w.call('demo', 'workshop.checkin', { code: await nowCode() });
+    assertEquals([byCode.status, byCode.success, byCode.already, byCode.method, byCode.simulated, byCode.session.title], [200, true, false, 'code', true, 'اليوم الثالث']);
+    const t = await qrToken(WS, SECRET, qrWindow());
+    const byScan = await w.call('demo', 'workshop.checkin', { t });
+    assertEquals([byScan.status, byScan.success, byScan.already, byScan.method, byScan.simulated], [200, true, false, 'qr', true]);
+    // مسح قبل الدخول ثم دخول بحساب العرض: الإيصال لا يُستهلك، فيبقى صالحًا لمن مسحه فعلًا
+    const scan = await w.call(null, 'workshop.scan', { t });
+    assertEquals([scan.status, scan.success], [200, true]);
+    const byReceipt = await w.call('demo', 'workshop.checkin', { r: scan.receipt });
+    assertEquals([byReceipt.status, byReceipt.success, byReceipt.simulated], [200, true, true]);
+    assertEquals(w.tables.workshop_scan_receipts.map((x) => [x.consumed_at ?? null, x.participant_id ?? null]), [[null, null]]);
+    // لا صف حضور ولا سطر تسجيل ولا «ناجحة» للأرقام: لا شيء يدخل عدّاد «حضر»
+    assertEquals(w.tables.workshop_attendance, []);
+    assertEquals(w.tables.audit_log.filter((x) => ['workshop.checkin', 'workshop.code-hit'].includes(x.action)), []);
+    // والرفض كما لغيره: رمز غير صالح لا يُحاكى نجاحه
+    const bad = await w.call('demo', 'workshop.checkin', { t: 'not-a-token' });
+    assertEquals([bad.status, bad.code], [400, 'qr_invalid']);
+    // والمشارك الحقيقي بالإيصال نفسه يُسجَّل حضوره كما كان
+    const real = await w.call('a', 'workshop.checkin', { r: scan.receipt });
+    assertEquals([real.status, real.success, real.simulated], [200, true, undefined]);
+    assertEquals(w.tables.workshop_attendance.map((x) => x.participant_id), [w.ps.a.id]);
   } finally { w.restore(); }
 });
 

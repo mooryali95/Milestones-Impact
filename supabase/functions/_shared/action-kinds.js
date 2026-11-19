@@ -88,11 +88,13 @@ export const NO_REPLAY = new Set([
   // أحداث الإخفاق من جهة العميل (المرحلة 4): مفتوحة، ويرسلها telemetry.js بـfetch مباشرة لا postAction، فلا إعادة ولا مفتاح
   'client.event',
   'me.switch', 'xp.switch', 'coord.switch', 'upload.url', 'pay.checkout', 'capstone.share-create', 'admin.demo-open', 'admin.mail-login-link', 'xp.workshop-qr',
+  // رابط تجربة حساب العرض: إنشاؤه يرد الرابط برمزه مرة واحدة، وفتحه مفتوح بلا جلسة ويرد جلسة جديدة
+  'admin.demo-link-create', 'demo.link-open',
 ]);
 // أفعال الدخول: لا يُعاد طلبها تلقائيًا، لكن تعذّر الاتصال فيها يُعرض برسالة الشبكة لا «تعذّر التأكد» (لا شيء يُتحقق منه في
 // شاشة الدخول، والرمز إن أُرسل يصل البريد). leaders-api ودخول لوحة admin-api
 const AUTH_LEADERS = new Set(['auth.start', 'auth.verify', 'auth.google', 'coord.auth-start', 'coord.auth-verify', 'passkey.auth-options', 'passkey.auth-verify',
-  'xp.auth-start', 'xp.auth-verify', 'xp.auth-google']);
+  'xp.auth-start', 'xp.auth-verify', 'xp.auth-google', 'demo.link-open']);
 export const isAuthAction = (fn, action) => {
   const a = String(action || '');
   if (fn === 'leaders-api') return AUTH_LEADERS.has(a);

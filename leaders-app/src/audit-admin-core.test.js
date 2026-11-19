@@ -26,7 +26,7 @@ describe('admin-core-6: فلتر الجهة يسري على كل بطاقات ا
     expect(index).toContain("'admin.reviews': (_a, b) => A.reviews(b),");
     const body = fn(admin, 'export async function reviews(');
     expect(body).toMatch(/scopeOrg\([\s\S]*participant_requirements[\s\S]*b\.org, 'participants\.organization_id'\)/);
-    expect(body).toMatch(/scopeOrg\(db\.from\('participants'\)[\s\S]*b\.org\)/);
+    expect(body).toMatch(/scopeOrg\(listed\(db\.from\('participants'\)[\s\S]*b\.org\)/);
   });
 
   it('عدد المتطلبات المنتظرة في admin.overview بفلتر الجهة نفسه', () => {

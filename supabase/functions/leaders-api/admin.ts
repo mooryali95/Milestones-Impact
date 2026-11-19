@@ -35,6 +35,7 @@ import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
 import { BULK_APPROVE_MAX, mailForecast, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
+import { counted, listed } from './counting.ts';
 
 type Body = Record<string, any>;
 // id وowner وsessionHash لشاشة المساعد: المالك يقرؤها، والتحقق الإضافي مربوط بهاش الجلسة نفسها (agent-admin.ts)
@@ -107,9 +108,9 @@ function funnel(rows: any[]) {
 // 'none' = بلا جهة. المصدر الواحد لهذه القاعدة، ويستعمله تقرير الأثر كذلك (impact.ts).
 // col يسمح بالتصفية على جدول مضمَّن (participants.organization_id مع participants!inner)
 export const scopeOrg = (q: any, org: unknown, col = 'organization_id') => (org === 'none' ? q.is(col, null) : org ? q.eq(col, String(org)) : q);
-export const forStats = (q: any) => q.eq('is_demo', false).eq('is_test', false);
+export const forStats = (q: any) => counted(q);
 const orgFilter = (q: any, org: unknown) => scopeOrg(forStats(q), org);   // الإحصاءات وصفحة الجهة ولوحة منسقها
-const listFilter = (q: any, org: unknown) => scopeOrg(q.eq('is_demo', false), org);   // قائمة المشاركين
+const listFilter = (q: any, org: unknown) => scopeOrg(listed(q), org);   // قائمة المشاركين
 
 export async function orgs() {
   const [{ data: list }, { data: ps }, { data: coords }, { data: ents }] = await Promise.all([
@@ -183,17 +184,19 @@ export async function assignOrg(a: Admin, b: Body) {
     if (!target) throw new Fail('الجهة غير موجودة', 404);
   }
   // ربط كل من كتب اسمًا معينًا في خانة الجهة دفعة واحدة
-  let q = db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null });   // جهة العمل يكتبها المشارك ولا تُستبدل
+  // حساب العرض لا يُربط بجهة أبدًا (listed، وقيد participants_demo_no_org): اسم جهته المكتوب في ملفه لا يدخله ربط الاسم
+  let q = listed(db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null }));   // جهة العمل يكتبها المشارك ولا تُستبدل
   // جهة كل منهم قبل الفعل: يُسجَّل معها القرار في سجله (recordOrgDecisions)، ومن كتب اسمًا بلا جهة قبله
   const before = new Map<string, string | null>();
   if (b.typed_name) q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
   else if (ids.length) {
     for (let i = 0; i < ids.length; i += 150) {
+      // counting-exempt: جهة كل معرّف مختار قبل الفعل لسجل القرار، والكتابة نفسها بـlisted أعلاه
       for (const r of (must(await db.from('participants').select('id, organization_id').in('id', ids.slice(i, i + 150))) ?? []) as any[]) before.set(String(r.id), r.organization_id ?? null);
     }
     q = q.in('id', ids);
   } else throw new Fail('لم يُحدَّد مشاركون');
-  const done = must(await q.select('id')) ?? [];
+  const done = (must(await q.select('id')) ?? []) as any[];
   // النقل أو الفك يُلغي إعفاء الراعي السابق: ما ثُبّت لجهة لا يبقى بعد مغادرتها
   // (الجهة الجديدة تثبّت إعفاءها عند أول دخول للمشارك، كالمعتاد في access())
   let revoked = 0;
@@ -221,13 +224,14 @@ export async function overview(b: Body = {}) {
   const byStatus: Record<string, number> = {};
   for (const r of data || []) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
   // بفلتر الجهة نفسه الذي تُحسب به بقية الأرقام، وبلا حساب العرض كقائمة المراجعة
-  const { count: pendingReviews } = await scopeOrg(db.from('participant_requirements')
-    .select('participant_id, participants!inner(organization_id, is_demo)', { count: 'exact', head: true }).eq('status', 'submitted')
-    .eq('participants.is_demo', false), b.org, 'participants.organization_id');
+  const { count: pendingReviews } = await scopeOrg(listed(db.from('participant_requirements')
+    .select('participant_id, participants!inner(organization_id, is_demo)', { count: 'exact', head: true }).eq('status', 'submitted'), 'participants'), b.org, 'participants.organization_id');
   const ids = new Set((data || []).map((r: any) => r.id));
   // مع تصفية الجهة تُقرأ صفوف مشاركيها فقط، وبدونها الكل
   const scope = b.org ? [...ids] as string[] : null;
-  const grid = await allFor(scope, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension'));
+  // بلا تصفية الجهة تُقرأ الصفوف كلها، فتُحصر هنا في من يُعدّون (ids من orgFilter): مصفوفة المستويات والمسارات والمستوى
+  // العام كانت تعدّ حساب العرض وحساب الاختبار (تصور الحساب التجريبي 2026-11-19، المرحلة 0)
+  const grid = (await allFor(scope, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension'))).filter((p: any) => ids.has(p.participant_id));
   const matrix: Record<string, Record<string, number>> = {};
   for (const d of DIMENSIONS) matrix[d] = Object.fromEntries(LEVELS.map((l) => [l, 0]));
   for (const p of grid) matrix[p.dimension][p.level]++;
@@ -259,19 +263,23 @@ export async function overview(b: Body = {}) {
     new_week: rows.filter((r: any) => Date.parse(r.created_at) > weekAgo).length,
     active_week: rows.filter((r: any) => r.last_login_at && Date.parse(r.last_login_at) > weekAgo).length,
     overall, top_orgs, orgs_count: Object.keys(orgN).length, via,
-    ...(await overviewMore(scope)),
+    ...(await overviewMore(scope, ids)),
   };
 }
 
 // القياس والكتاب والنماذج لمجموعة مشاركين
 // ids = null: كل المشاركين. القراءة بصفحات، فلا تقف الأرقام عند أول 1000 صف
-async function overviewMore(ids: string[] | null) {
-  const [as, p, s, ledger] = await Promise.all([
+// keep: من يُعدّون (orgFilter). ids = null يقرأ صفوف الجميع، فتُحصر بعد القراءة فيهم، فلا يدخل القياس ولا الكتاب ولا النماذج
+// ولا النقاط حساب عرض ولا حساب اختبار
+async function overviewMore(ids: string[] | null, keep: Set<string>) {
+  const only = (rows: any[]) => rows.filter((r) => keep.has(r.participant_id));
+  const [as, p, s, ledger] = (await Promise.all([
+    // counting-exempt: تُحصر الصفوف بعد القراءة في من يُعدّون (only بـkeep من orgFilter)
     allFor(ids, () => db.from('assessments').select('id, participant_id, instruments(key, kind, title_ar, active), assessment_results(dimension, composite_pct)').eq('status', 'submitted').order('id')),
     allFor(ids, () => db.from('handbook_progress').select('participant_id, quiz_score, quiz_total').order('participant_id').order('module_id')),
     allFor(ids, () => db.from('model_submissions').select('participant_id, status, rating').order('id')),
     allFor(ids, () => db.from('points_ledger').select('participant_id, points').order('id')),
-  ]);
+  ])).map(only);
   // القياس: لكل أداة عدد من أنهوها ومتوسط النسبة المركبة لكل إطار
   const inst: Record<string, any> = {};
   for (const a of as) {
@@ -309,6 +317,7 @@ async function overviewMore(ids: string[] | null) {
 export const LIST_LIMIT = 500;
 export const capInfo = (rows: any[], limit = LIST_LIMIT) => (rows.length >= limit ? { capped: true, limit } : {});
 export async function participants(b: Body) {
+  // counting-exempt: قائمة المشاركين تُصفّى في السطر الذي يلي الاستعلام بـlistFilter (listed وفلتر الجهة)
   let q = db.from('participants')
     .select('id, full_name, email, phone, job_title, organization_id, organization_name, years_experience, status, created_at, last_login_at, is_test, placements(dimension, level, approved_at)')
     .order('created_at', { ascending: false }).limit(LIST_LIMIT);
@@ -340,6 +349,7 @@ export async function participants(b: Body) {
 export async function baselineProgress(ids: string[]) {
   const out: Record<string, any> = {};
   if (!ids.length) return out;
+  // counting-exempt: تقدم قياس معرّفات يمررها المستدعي من قائمته المصفاة (listFilter)، لا عدّ
   const { data: as } = await db.from('assessments')
     .select('id, participant_id, instrument_id, status, started_at, submitted_at, form, effort, retake_requested_at, retake_reason, instruments!inner(kind), assessment_answers(count)')
     .in('participant_id', ids).eq('instruments.kind', 'baseline').order('started_at', { ascending: false });
@@ -622,11 +632,11 @@ async function purgeQueuedMail(email: string, refs: string[]) {
 // b.org (اختياري): جهة واحدة أو 'none' كفلتر النظرة العامة، فلا تختلط قائمتها بجهات أخرى
 export async function reviews(b: Body = {}) {
   // حساب العرض لا يدخل طوابير المراجعة (participants!inner يسمح بالفلترة على المشارك)
-  const rows = must(await scopeOrg(db.from('participant_requirements')
+  const rows = must(await scopeOrg(listed(db.from('participant_requirements')
     .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind, program_id)')
-    .eq('status', 'submitted').eq('participants.is_demo', false), b.org, 'participants.organization_id').limit(200)) ?? [];
-  const { data: waiting } = await scopeOrg(db.from('participants').select('id, full_name, email, organization_name, updated_at')
-    .eq('status', 'pending_approval').eq('is_demo', false), b.org).order('updated_at', { ascending: true }).limit(200);
+    .eq('status', 'submitted'), 'participants'), b.org, 'participants.organization_id').limit(200)) ?? [];
+  const { data: waiting } = await scopeOrg(listed(db.from('participants').select('id, full_name, email, organization_name, updated_at')
+    .eq('status', 'pending_approval')), b.org).order('updated_at', { ascending: true }).limit(200);
   return { success: true, submitted: await readableReqTitles(rows as any[]), pending_approval: waiting || [] };
 }
 
@@ -637,10 +647,10 @@ export async function inbox(_b: Body = {}) {
   // حد القراءة لكل نوع: النوع الذي يبلغه عدده «على الأقل» (capped)
   const LIMIT = { approval: 200, requirement: 200, model: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100 };
   const q = {
-    approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(LIMIT.approval),
-    requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar, program_id)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.requirement),
-    model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.model),
-    capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.capstone),
+    approval: listed(db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval')).order('updated_at', { ascending: true }).limit(LIMIT.approval),
+    requirement: listed(db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar, program_id)`).eq('status', 'submitted'), 'participants').limit(LIMIT.requirement),
+    model: listed(db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted'), 'participants').limit(LIMIT.model),
+    capstone: listed(db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted'), 'participants').limit(LIMIT.capstone),
     // journey-guard: صندوق الإدارة يعدّ طلبات الانضمام بانتظار المراجعة، لا ترشيح فيه
     expert_application: db.from('experts').select('id, full_name, title, created_at').eq('status', 'applied').limit(LIMIT.expert_application),
     expert_unmatched: db.from('expert_requests').select(`id, participant_id, role, created_at, ${P}`).eq('status', 'unmatched').limit(LIMIT.expert_unmatched),
@@ -768,6 +778,7 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
 // إشارات الاعتماد لمجموعة: المستوى المحفوظ، وتقييم آخر قياس مسلَّم لكل بُعد بالنموذج الحالي (evaluatePlacement
 // والموافقة المطلقة كما في ملف المشارك)، وجدية الإجابة وطلب الإعادة من baselineProgress. قراءة واحدة لكل مصدر
 async function approvalSignals(ids: string[]) {
+  // counting-exempt: إشارات اعتماد لمعرّفات اختارها المدير، وis_demo يُقرأ ليُعامل حساب العرض في مكانه
   const people = (must(await db.from('participants').select('id, full_name, email, status, is_demo, placements(dimension, level)').in('id', ids)) ?? []) as any[];
   const progress = await baselineProgress(ids);
   const submitted = Object.values(progress).filter((g: any) => g?.id && g.status === 'submitted').map((g: any) => g.id as string);
@@ -863,6 +874,7 @@ export async function setStatus(a: Admin, b: Body) {
   const reason = statusNeedsReason(b.status) ? cleanStatusReason(b.reason) : null;
   if (statusNeedsReason(b.status) && !reason) throw new Fail('اكتب سبب الإيقاف أو الانسحاب: يُحفظ في ملف المشارك ويُبلَّغ به', 400, 'reason');
   // من هو على الحالة المطلوبة أصلًا يُتخطى: لا سجل ولا بريد مكرر
+  // counting-exempt: حالة معرّفات اختارها المدير من قائمته (listFilter) قبل تغييرها، لا عدّ
   const current = (must(await db.from('participants').select('id, status').in('id', ids)) ?? []) as any[];
   const todo = current.filter((p) => p.status !== b.status).map((p) => p.id as string);
   const was = new Map(current.map((p) => [p.id as string, p.status as string]));
@@ -899,6 +911,7 @@ export async function resetAssessment(a: Admin, b: Body) {
   const bulk = Array.isArray(b.participant_ids);
   const ids = [...new Set((bulk ? b.participant_ids : [b.participant_id]).map(String).filter(isUuid))].slice(0, 50) as string[];
   if (!ids.length) throw new Fail('اختر من تُطلب منهم الإعادة');
+  // counting-exempt: طلب إعادة القياس لمعرّفات اختارها المدير، وis_demo يُقرأ ليُتخطى بريد حساب العرض
   const rows = (must(await db.from('participants').select('id, full_name, email, status, is_demo').in('id', ids)) ?? []) as any[];
   const progress = await baselineProgress(ids);
   const { data: inst } = await db.from('instruments').select('est_minutes').eq('kind', 'baseline').eq('active', true).limit(1).maybeSingle();
@@ -1097,12 +1110,13 @@ async function placementsByParticipant() {
 }
 
 async function trackStats() {
-  const [byP, { data: ps }] = await Promise.all([placementsByParticipant(), db.from('participants').select('id, status')]);
+  // أعداد المسارات بقاعدة العد (counted) وبصفحات: كان حساب العرض المعتمد آليًا يُعدّ في مساره، والقراءة تقف عند 1000 صف
+  const [byP, ps] = await Promise.all([placementsByParticipant(), all((f, t) => counted(db.from('participants').select('id, status')).order('id').range(f, t))]);
   const status = Object.fromEntries((ps || []).map((p: any) => [p.id, p.status]));
   const out: Record<string, { total: number; active: number; pending: number; completed: number }> = {};
   for (const [id, x] of Object.entries(byP)) {
     const k = trackKey(x.levels);
-    if (!k) continue;
+    if (!k || !(id in status)) continue;
     const t = (out[k] ||= { total: 0, active: 0, pending: 0, completed: 0 });
     t.total++;
     if (status[id] === 'completed') t.completed++;
@@ -1125,7 +1139,7 @@ export async function track(b: Body) {
   ]);
   const ids = Object.entries(byP).filter(([, x]) => trackKey(x.levels) === key).map(([id, x]) => ({ id, approved: x.approved === 3 }));
   const { data: ps } = ids.length
-    ? await db.from('participants').select('id, full_name, email, organization_name, status').in('id', ids.map((x) => x.id))
+    ? await listed(db.from('participants').select('id, full_name, email, organization_name, status').in('id', ids.map((x) => x.id)))
     : { data: [] };
   const approved = new Set(ids.filter((x) => x.approved).map((x) => x.id));
   const priority = (t.data as any)?.priority_dimension || null;
@@ -1174,6 +1188,7 @@ export async function catalog(b: Body = {}) {
   const out: Body = { success: true, program_id: programId };
   names.forEach((n, i) => { out[n] = res[i]; });
   // أي أداة لها إجابات مُرسلة؟ تعديل أسئلتها يتطلب إصدارًا جديدًا
+  // counting-exempt: قفل تحرير الأداة لا عدّ: أي قياس مُرسل عليها يقفلها مهما كان صاحبه
   const used = await all((f, t) => db.from('assessments').select('instrument_id').eq('status', 'submitted').order('id').range(f, t));
   out.locked_instruments = [...new Set(used.map((u: any) => u.instrument_id))];
   // مختبرات كل باب: يراها المحرر ويُنبَّه بها قبل حذف الباب
@@ -1245,9 +1260,9 @@ export async function bookPreview(b: Body) {
 }
 
 export async function submissions(b: Body) {
-  let q = db.from('model_submissions')
+  let q = listed(db.from('model_submissions')
     .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants!inner(full_name, email, organization_name, is_demo), learning_models(title_ar, dimension, points)')
-    .neq('status', 'draft').eq('participants.is_demo', false).order('submitted_at', { ascending: false }).limit(LIST_LIMIT);
+    .neq('status', 'draft'), 'participants').order('submitted_at', { ascending: false }).limit(LIST_LIMIT);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.model_id) q = q.eq('model_id', String(b.model_id));
   const rows = (must(await q) ?? []) as any[];
@@ -1498,6 +1513,7 @@ export async function remove(a: Admin, b: Body) {
   if (b.entity === 'organizations') {
     requireSuper(a);   // حذف جهة نهائي: للمدير الأعلى وحده
     const [{ count: ps }, { count: rs }] = await Promise.all([
+      // counting-exempt: حارس حذف الجهة لا عدّ: أي صف مرتبط بها يمنع الحذف
       db.from('participants').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
       db.from('reports').select('id', { count: 'exact', head: true }).eq('organization_id', b.id),
     ]);
@@ -1587,6 +1603,7 @@ export async function participantsImport(a: Admin, b: Body) {
   const emails = [...new Set(rows.map((r: any) => normalizeEmail(r?.email)).filter(isEmail))];
   const existing = new Set<string>();
   for (let i = 0; i < emails.length; i += 100) {
+    // counting-exempt: كشف تكرار البريد عند الاستيراد: أي حساب قائم بالبريد نفسه يمنع إنشاء ثانٍ
     const found = must(await db.from('participants').select('email').in('email', emails.slice(i, i + 100))) as any[];
     for (const f of found || []) existing.add(f.email);
   }
@@ -1613,7 +1630,7 @@ export async function participantsImport(a: Admin, b: Body) {
 // يُذكَّر من غاب 7 أيام وأمامه عمل: بنود أعادها المستشار، أو تسجيل لم يكتمل.
 // لا يُذكَّر أحد أكثر من مرة في الأسبوع، والحد 200 رسالة في التشغيلة.
 export async function lateMilestoneNotices(limit = 200) {
-  const { data: people } = await db.from('participants').select('*').in('status', ['placed', 'enrolled']).eq('is_demo', false).limit(limit);
+  const { data: people } = await listed(db.from('participants').select('*').in('status', ['placed', 'enrolled'])).limit(limit);
   let n = 0;
   // يوم الحارس: R0_DATED_SINCE، أو أحدث منه من البيئة إن تأخر النشر (cutoffFrom لا يقبل أقدم منه)
   const cutoff = cutoffFrom(Deno.env.get('MILESTONE_R0_CUTOFF'));
@@ -1657,7 +1674,7 @@ export async function reminders(b: Record<string, any>) {
   // حالات لا تذكير لها (WEEKLY_OUT_STATUSES) تُستبعد في الاستعلام، والترتيب ثابت بالمعرّف عند التساوي.
   // والتذكير من نوع bulk: إن بلغ نصيب غير الرموز من السقف اليومي دخل الطابور ولم يزاحم رموز الدخول (mail-budget.js)
   const out = `(${WEEKLY_OUT_STATUSES.join(',')})`;
-  const base = () => db.from('participants').select('id, reminded_at').not('status', 'in', out).eq('is_demo', false).not('email', 'is', null);
+  const base = () => listed(db.from('participants').select('id, reminded_at').not('status', 'in', out)).not('email', 'is', null);
   const [{ data: away, error: e1 }, { data: never, error: e2 }] = await Promise.all([
     base().lt('last_login_at', weekAgo).order('last_login_at', { ascending: true }).order('id').limit(600),
     base().is('last_login_at', null).lt('created_at', weekAgo).order('created_at', { ascending: false }).order('id').limit(600),

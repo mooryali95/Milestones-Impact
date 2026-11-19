@@ -13,6 +13,7 @@ import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, mon
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, SEAT_STOPPED, settings, type Item } from './entitlements.ts';
+import { counted, listed } from './counting.ts';
 
 type Body = Record<string, any>;
 export { ITEMS, settings };
@@ -326,7 +327,7 @@ export const REMINDER_DAYS = [3, 7];
 export async function payReminders(now = Date.now()) {
   const s: any = await settings();
   if (!s.enabled) return { sent: 0 };
-  const { data: people } = await db.from('participants').select('id, full_name, email').eq('status', 'placed').eq('is_demo', false).limit(200);
+  const { data: people } = await listed(db.from('participants').select('id, full_name, email').eq('status', 'placed')).limit(200);
   let sent = 0;
   for (const p of people || []) {
     const { data: pl } = await db.from('placements').select('approved_at').eq('participant_id', p.id).not('approved_at', 'is', null);
@@ -359,7 +360,7 @@ export async function adminOverview() {
       .order('created_at', { ascending: false }).limit(2000),
     db.from('entitlements').select('id, participant_id, item, source, organization_id, value_cents, created_at, revoked_at, granted_by, note, participants(full_name, email)').order('created_at', { ascending: false }).limit(5000),
     db.from('payment_events').select('type, received_at, processed_at, error').order('received_at', { ascending: false }).limit(20),
-    db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).eq('is_test', false),
+    counted(db.from('participants').select('id', { count: 'exact', head: true })),
   ]);
   const live = (pays || []).filter((x: any) => x.mode === 'live');
   const paid = live.filter((x: any) => x.status === 'paid');
@@ -412,7 +413,7 @@ export async function participantEntitlements(participantId: string) {
 }
 
 async function funnel() {
-  const count = async (statuses: string[]) => (await db.from('participants').select('id', { count: 'exact', head: true }).eq('is_demo', false).eq('is_test', false).in('status', statuses)).count ?? 0;
+  const count = async (statuses: string[]) => (await counted(db.from('participants').select('id', { count: 'exact', head: true })).in('status', statuses)).count ?? 0;
   const [assessed, approved] = await Promise.all([count(['pending_approval', ...APPROVED]), count(APPROVED)]);
   const { data: prog } = await db.from('entitlements').select('participant_id').eq('item', 'program').is('revoked_at', null);
   return { assessed, approved, enrolled: new Set((prog || []).map((x: any) => x.participant_id)).size };
@@ -448,7 +449,7 @@ export async function adminSettings(a: Admin, b: Body) {
 
 async function grandfatherAll(by: string) {
   const [{ data: people }, { data: live }] = await Promise.all([
-    db.from('participants').select('id').eq('is_demo', false).limit(10000),
+    listed(db.from('participants').select('id')).limit(10000),
     db.from('entitlements').select('participant_id, item').is('revoked_at', null).limit(50000),
   ]);
   const has = new Set((live || []).map((e: any) => `${e.participant_id}:${e.item}`));

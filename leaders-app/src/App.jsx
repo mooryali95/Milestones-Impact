@@ -50,6 +50,7 @@ const Capstone = lazyView(() => import('./screens/Capstone.jsx'));
 const Katon = lazyView(() => import('./screens/Katon.jsx'));
 const HallScreen = lazyView(() => import('./screens/Hall.jsx'));
 import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
+import { captureTryLink, DemoSharedBar, TRY_GONE, TryLinkAsk, TryLinkGone } from './TryLink.jsx';
 const Legal = lazyView(() => import('./screens/Legal.jsx'));
 import Consent, { PolicyBanner } from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
@@ -302,6 +303,15 @@ function Participant() {
   // رمز حضور الورشة من مسح QR: /?checkin=...
   // رابط العرض من لوحة الإدارة: يُلتقط قبل أي شيء
   const [demo, setDemo] = useState(() => captureDemoLink() || demoPending());
+  // رابط تجربة حساب العرض (/#try=...): رمزه يُلتقط مرة ويُبدَّل بجلسة في الإقلاع. tryGone: الرابط لا يفتح (انتهى أو أُلغي أو
+  // خاطئ، أو تعذّر الاتصال) فتُعرض رسالته. demoShared: الجلسة بدأها رابط، فيظهر سطر «حساب تجريبي مشترك»
+  const tryToken = useRef(undefined);
+  if (tryToken.current === undefined) tryToken.current = captureTryLink();
+  const [tryGone, setTryGone] = useState(null);
+  // tryAsk: على الجهاز جلسة قائمة، فيُسأل صاحبها قبل أن يستبدلها الرابط (لا يخرجه رابط أُرسل إليه من حسابه بصمت)
+  const [tryAsk, setTryAsk] = useState(false);
+  const tryOk = useRef(false);
+  const [demoShared, setDemoShared] = useState(false);
   // { t } رمز ممسوح، أو { r, exp, title } إيصال مسح قبل الدخول، أو { error } رفض لحظة المسح، أو { t, kept } رمز حُفظ
   // احتياطًا (قبل ترحيل الإيصال أو انقطاع الشبكة)
   const [checkin, setCheckin] = useState(() => {
@@ -344,7 +354,11 @@ function Participant() {
 
   const accept = useCallback((res) => {
     if (res?.token) { session.set(res.token); clearAttribution(); }
-    if (res?.participant) setMe(res);
+    if (res?.participant) {
+      setMe(res);
+      // كثير من الردود يحمل الحساب بلا هذه العلامة (حفظ الملف، إرسال القياس): تبقى ما دام الحساب حساب العرض
+      if (res.demo_shared) setDemoShared(true); else if (!res.participant.is_demo) setDemoShared(false);
+    }
     // بعد الدخول تظهر الرحلة بتلاشٍ ناعم بدل القفزة من شاشة الانتقال
     if (res?.token) { document.body.classList.add('entering'); setTimeout(() => document.body.classList.remove('entering'), 700); }
   }, []);
@@ -393,6 +407,19 @@ function Participant() {
       setBooting(false);
       return;
     }
+    // رابط التجربة: يُبدَّل رمزه بجلسة حساب العرض. ما لا يفتح يعرض رسالته، والرمز يبقى لإعادة المحاولة إن كان العطل عابرًا
+    if (tryToken.current && session.get() && !tryOk.current) { setTryAsk(true); setBooting(false); return; }
+    if (tryToken.current) {
+      const t = tryToken.current;
+      tryOk.current = false;
+      const res = await call('demo.link-open', { t });
+      if (stale()) return;
+      if (res.success) { tryToken.current = null; setTryGone(null); setReconnect(false); accept(res); setBooting(false); return; }
+      if (TRY_GONE.includes(res.code)) tryToken.current = null;
+      setTryGone({ code: res.code, message: res.message });
+      setBooting(false);
+      return;
+    }
     if (session.get()) {
       // الفتح الأول يجمع الرئيسية في رحلة واحدة (البند 7.5)، وتأخذ الأقسام ما يخصها منه مرة واحدة
       const res = await call('me', { with_home: true });
@@ -409,8 +436,26 @@ function Participant() {
   // إعادة الإقلاع تلقائيًا ما دام الإخفاق عابرًا، وتتوقف أثناء الدخول بحساب آخر
   useEffect(() => autoReboot({ active: reconnect && !me && !switching, tries: Math.max(0, rebootTries - 1), reboot: boot }), [reconnect, me, switching, rebootTries, boot]);
   useEffect(() => {
-    setExpiredHandler(() => { setMe(null); setView('home'); setVerifyError('انتهت جلستك. ادخل مرة أخرى.'); });
+    // جلسة رابط تجربة انتهى رابطها أو أُلغي أثناء الاستعمال (res.link): رسالة الرابط لا «انتهت جلستك»
+    setExpiredHandler((res) => {
+      setMe(null); setView('home'); setDemoShared(false);
+      if (res?.link) setTryGone({ code: res.link === 'expired' ? 'link_expired' : 'link_revoked', message: res.message });
+      else setVerifyError('انتهت جلستك. ادخل مرة أخرى.');
+    });
     boot();
+  }, [boot]);
+
+  // رابط تجربة يُلصق في صفحة مفتوحة أصلًا: تغيّر جزء الرابط لا يعيد التحميل، فيُلتقط هنا ويُفتح
+  useEffect(() => {
+    const on = () => {
+      const t = captureTryLink();
+      if (!t) return;
+      tryToken.current = t;
+      tryOk.current = false;
+      setTryGone(null); setBooting(true); boot();
+    };
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
   }, [boot]);
 
   // المختبر قسم مستقل: يظهر مدخله متى فُتح للمشارك أو لجهته شيء منه
@@ -446,6 +491,7 @@ function Participant() {
     try { localStorage.removeItem(LOGO_KEY); } catch { /* لا شيء محفوظ */ }
     setMe(null);
     setView('home');
+    setDemoShared(false);
   };
 
   // الأقسام المتاحة الآن فقط: الكتاب والمبادرة بعد الاعتماد، والمختبر متى فُتح، والأثر متى فُتحت مرحلته
@@ -480,7 +526,18 @@ function Participant() {
   // بطاقة «جارٍ إعادة الاتصال…» معروضة فعلًا: هي تقول «لا اتصال» فلا يتكرر الشريط. وفي شاشة الدخول يبقى الشريط
   const reconnectShown = !booting && !me && reconnect && !switching && !linkChoice;
   let screen;
-  if (booting) screen = session.get() ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  if (booting) screen = session.get() && !tryToken.current ? <JourneySkeleton /> : <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+  else if (tryAsk) screen = (
+    <TryLinkAsk
+      onOpen={() => { tryOk.current = true; setTryAsk(false); setMe(null); setBooting(true); boot(); }}
+      onStay={() => { tryToken.current = null; setTryAsk(false); if (!me) { setBooting(true); boot(); } }} />
+  );
+  // رابط تجربة لا يفتح: رسالته أولًا، ومنها إلى حسابه إن كان داخلًا أو إلى شاشة الدخول
+  else if (tryGone && !me) screen = (
+    <TryLinkGone gone={tryGone} hasSession={!!session.get()}
+      onContinue={() => { tryToken.current = null; setTryGone(null); if (session.get()) { setBooting(true); boot(); } }}
+      onRetry={tryToken.current ? () => { setTryGone(null); setBooting(true); boot(); } : null} />
+  );
   else if (!me && switching) screen = (
     <>
       <div className="page narrow stack switch-note">
@@ -543,6 +600,7 @@ function Participant() {
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
       </header>
+      {me?.participant?.is_demo && demoShared && <DemoSharedBar />}
       {!online && !reconnectShown && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
         {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}

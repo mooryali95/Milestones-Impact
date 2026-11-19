@@ -63,7 +63,7 @@ describe('صندوق «ينتظرني»', () => {
   it('الخادم يقرأ كل نوع معرَّف، وتعذّر مصدر يُسمّى ولا يُسقط الصندوق', () => {
     const admin = read('supabase/functions/leaders-api/admin.ts');
     const body = admin.slice(admin.indexOf('export async function inbox('), admin.indexOf('// الملفات الخاصة (السيرة والأدلة)'));
-    for (const k of Object.keys(INBOX_KINDS)) expect(body, k).toMatch(new RegExp(`\\b${k}: db\\.from\\(`));
+    for (const k of Object.keys(INBOX_KINDS)) expect(body, k).toMatch(new RegExp(`\\b${k}: (?:listed\\()?db\\.from\\(`));
     expect(body).toContain('if (res[i].error) skipped.push(k);');
   });
 });

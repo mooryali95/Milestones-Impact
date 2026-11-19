@@ -15,6 +15,7 @@ import { features } from './features.ts';
 import { FEATURE_OFF_AR } from './features.js';
 import { hallAnswered, hallGate } from './hall.ts';
 import type { Admin } from './admin.ts';
+import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -111,7 +112,7 @@ export async function adminList(b: Body) {
     db.from('katon_topics').select('*').order('sort'),
     db.from('katon_sentences').select('*').order('sort'),
     // إجابات حساب العرض (الجولة الحية في الورش) لا تدخل إحصاء البنود (server-sec-5)
-    db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances, participants!inner(is_demo)').eq('participants.is_demo', false),
+    listed(db.from('katon_answers').select('sentence_id, choice, verdict, confidence, stances, participants!inner(is_demo)'), 'participants'),
     programId ? db.from('programs').select('id, name, katon_points').eq('id', programId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const bySent = new Map<string, any[]>();

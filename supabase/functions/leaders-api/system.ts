@@ -6,6 +6,7 @@
 import { all, audit, CONFIG, db, Fail, healthMail, MAIL_GALLERY, mailUsage, publicDb, QUEUE_ALERT_HOURS, QUEUE_MAX_ATTEMPTS, raiseAlert, sendMail } from './core.ts';
 import { requireSuper, requireWrite } from './admin.ts';
 import type { Admin } from './admin.ts';
+import { counted } from './counting.ts';
 import { compositeReliability, DEFAULT_MODEL, itemAnalysis, journeyApproved, TIERS, weeklySeries } from './logic.js';
 import { fairnessReport, measurementEvidence } from './evidence.js';
 import { PARTICIPANT_STATUS } from './labels.js';
@@ -149,7 +150,8 @@ export async function itemReport(b: Record<string, any>) {
   const id = String(b.instrument_id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new Fail('أداة القياس غير محددة');
   const { data: questions } = await db.from('questions').select('id, code, dimension, tier, kind, text_ar, options, active, form').eq('instrument_id', id).eq('active', true);
-  const sessions = await all((f, t) => db.from('assessments').select('id, form, participant_id').eq('instrument_id', id).eq('status', 'submitted').range(f, t));
+  // جودة الأداة من إجابات من يُعدّون وحدهم (counted): إجابات حساب العرض نمطية يولّدها زر التخطي، وحساب الاختبار ليس مشاركًا
+  const sessions = await all((f, t) => counted(db.from('assessments').select('id, form, participant_id, participants!inner(is_demo, is_test)').eq('instrument_id', id).eq('status', 'submitted'), 'participants').range(f, t));
   const ids = sessions.map((x: any) => x.id);
   const rows: any[] = [];
   for (let i = 0; i < ids.length; i += 200) {
@@ -177,6 +179,7 @@ async function evidenceReport(scored: any[], rows: any[], sessions: any[], forms
     for (const p of part(ids)) results.push(...await all((f, t) => db.from('assessment_results').select('assessment_id, dimension, level, composite_pct').in('assessment_id', p).range(f, t)));
     for (const p of part(pids)) {
       placements.push(...await all((f, t) => db.from('placements').select('participant_id, dimension, level, approved_at, assessment_id').in('participant_id', p).range(f, t)));
+      // counting-exempt: معرّفات أصحاب القياسات المعدودة أعلاه (counted)، فلا يعود منها حساب عرض ولا اختبار
       people.push(...await all((f, t) => db.from('participants').select('id, years_experience').in('id', p).range(f, t)));
     }
     const { data: model } = await db.from('placement_model').select('*').eq('id', 1).maybeSingle();
@@ -213,10 +216,11 @@ async function evidenceReport(scored: any[], rows: any[], sessions: any[], forms
 export async function trends() {
   const since = new Date(Date.now() - 12 * 7 * 864e5).toISOString();
   const [joined, assessed, placed, logins] = await Promise.all([
-    all((f, t) => db.from('participants').select('created_at').gte('created_at', since).range(f, t)),
-    all((f, t) => db.from('assessments').select('submitted_at').eq('status', 'submitted').gte('submitted_at', since).range(f, t)),
-    all((f, t) => db.from('placements').select('participant_id, approved_at').gte('approved_at', since).range(f, t)),
-    all((f, t) => db.from('auth_sessions').select('participant_id, created_at, last_seen_at').gte('created_at', since).range(f, t)),
+    // الأربعة بقاعدة العد نفسها (counted): كل إعادة ضبط لحساب العرض كانت تُحسب «منضمًا جديدًا» وقياسًا واعتمادًا ونشاطًا
+    all((f, t) => counted(db.from('participants').select('created_at').gte('created_at', since)).range(f, t)),
+    all((f, t) => counted(db.from('assessments').select('submitted_at, participants!inner(is_demo, is_test)').eq('status', 'submitted').gte('submitted_at', since), 'participants').range(f, t)),
+    all((f, t) => counted(db.from('placements').select('participant_id, approved_at, participants!inner(is_demo, is_test)').gte('approved_at', since), 'participants').range(f, t)),
+    all((f, t) => counted(db.from('auth_sessions').select('participant_id, created_at, last_seen_at, participants!inner(is_demo, is_test)').gte('created_at', since), 'participants').range(f, t)),
   ]);
   // الاعتماد يشمل الأبعاد الثلاثة، فيُعد المشارك مرة عند آخر اعتماد له
   const last = new Map<string, string>();
@@ -259,20 +263,26 @@ export function weeklyLine(issues: string[], rows: [string, string][]) {
   return [head, nums, top, `${SITES.admin}/#/leaders/overview`].filter(Boolean).join('\n').replace(/(?<![A-Za-z0-9_])\d{6}(?![A-Za-z0-9_])/g, '••••••').slice(0, 600);
 }
 
+// أرقام المالك في تقرير الأسبوع بقاعدة العد الواحدة (counted): بلا حساب العرض ولا حساب الاختبار، كما في النظرة العامة.
+// كانت تُعدّ بلا استبعاد، فكل إعادة ضبط لحساب العرض «مسجل جديد» و«نشط» (تصور الحساب التجريبي 2026-11-19، المرحلة 0)
+export async function weeklyNumbers(weekAgo = new Date(Date.now() - 7 * 864e5).toISOString()) {
+  const count = async (q: any) => (await q).count ?? 0;
+  const [joined, active, pending, submitted] = await Promise.all([
+    count(counted(db.from('participants').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo))),
+    count(counted(db.from('participants').select('id', { count: 'exact', head: true }).gte('last_login_at', weekAgo))),
+    count(counted(db.from('participants').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'))),
+    count(counted(db.from('participant_requirements').select('participant_id, participants!inner(is_demo, is_test)', { count: 'exact', head: true }).eq('status', 'submitted'), 'participants')),
+  ]);
+  return { joined, active, pending, submitted };
+}
+
 // تقرير الصحة الأسبوعي للمالك: يُرسل من تشغيلة cron.reminders نفسها. في سلسلة التنبيهات دائمًا، والبريد بجدول التوجيه:
 // فيه ما يحتاج تدخلًا (weekly_health_action، حرج) بريد وسلاك، وإلا (weekly_health، مهم) سلاك وحده والبريد إن لم يصل
 export async function weeklyHealth() {
   if (!CONFIG.alertEmail && !slackConfigured()) return { sent: false, reason: 'no LEADERS_ALERT_EMAIL' };
   const h = await health();
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
-  const count = async (q: any) => (await q).count ?? 0;
-  const [joined, active, pending, submitted, mail] = await Promise.all([
-    count(db.from('participants').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo)),
-    count(db.from('participants').select('id', { count: 'exact', head: true }).gte('last_login_at', weekAgo)),
-    count(db.from('participants').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval')),
-    count(db.from('participant_requirements').select('participant_id', { count: 'exact', head: true }).eq('status', 'submitted')),
-    mailWeek(weekAgo),
-  ]);
+  const [{ joined, active, pending, submitted }, mail] = await Promise.all([weeklyNumbers(weekAgo), mailWeek(weekAgo)]);
   const left = mail.expired == null || mail.dropped == null ? null : mail.expired + mail.dropped;
   const unread = [mail.waiting, mail.expired, mail.dropped, mail.blocked, mail.rejected].some((v) => v == null);
   const issues = [

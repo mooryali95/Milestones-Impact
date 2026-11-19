@@ -90,6 +90,7 @@ describe('صمود الإقلاع', () => {
     expect(app).toContain('onOther={startSwitch}');
     // جيل الإقلاع: ما بدأ قبل الدخول بحساب آخر لا يطبّق نتيجته (e2e leaders-boot-resilience يثبت السباق نفسه)
     expect(app).toContain('const startSwitch = () => { bootGen.current += 1; setSwitching(true); };');
-    expect(app.match(/if \(stale\(\)\) return;/g)?.length).toBe(3);
+    // ومعها فتح رابط تجربة حساب العرض في الإقلاع (demo.link-open): رده كذلك لا يُطبَّق بعد دخول بحساب آخر
+    expect(app.match(/if \(stale\(\)\) return;/g)?.length).toBe(4);
   });
 });

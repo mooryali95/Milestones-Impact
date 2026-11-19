@@ -7,6 +7,7 @@
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { award } from './participant.ts';
+import { simulated } from './counting.ts';
 import { isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail } from './logic.js';
 import {
   CHECKPOINTS, cleanUpdate, HEALTH, latestState, M_STATUS, periodOf, portfolioOutcomes, saveTarget, trackingPlan, trackingSummary,
@@ -99,7 +100,7 @@ export function verifyMail(sponsor: string | null, who: string, initiative: stri
     { family: 'capstone', preheader: `${who} يطلب تأكيد أثر مبادرة «${initiative}»`, footnote: '' });
 }
 
-async function inviteVerifier(p: any, cap: any, updateId: string, checkpoint: string): Promise<'sent' | 'failed' | 'none'> {
+export async function inviteVerifier(p: any, cap: any, updateId: string, checkpoint: string): Promise<'sent' | 'failed' | 'none'> {
   const email = normalizeEmail(cap.sponsor_email || cap.snapshot?.meta?.sponsor_email || '');
   if (!isEmail(email)) return 'none';
   const token = randomToken();
@@ -108,6 +109,8 @@ async function inviteVerifier(p: any, cap: any, updateId: string, checkpoint: st
     verify_status: 'pending', verify_note: null, verify_at: null, verify_expires_at: new Date(Date.now() + VERIFY_DAYS * 864e5).toISOString(),
   }).eq('id', updateId));
   const title = CHECKPOINTS.find((c) => c.key === checkpoint)?.title || 'مراجعة الأثر';
+  // حساب العرض: تُكتب حالة «بانتظار الراعي» ويُرد «أُرسلت» كما لغيره، ولا يخرج بريد إلى البريد الذي كتبه في بطاقته
+  if (simulated(p)) return 'sent';
   try {
     await sendMail(email, `تأكيد أثر مبادرة «${initiativeOf(cap.snapshot)}»`,
       verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`));

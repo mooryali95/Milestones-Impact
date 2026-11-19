@@ -334,6 +334,7 @@ export async function guideBreakdown(days = 30) {
   const ids = [...new Set(rows.map((r: any) => r.participant_id))];
   if (!ids.length) return { days, orgs: [], cohorts: [] };
   const [parts, enr, cohorts, orgs] = await Promise.all([
+    // counting-exempt: جهات أصحاب رسائل قائمة، وسؤال المساعد مغلق على حساب العرض (DEMO_BLOCKED) فلا رسائل له
     db.from('participants').select('id, organization_id').in('id', ids),
     db.from('enrollments').select('participant_id, cohort_id, status, created_at').in('participant_id', ids),
     db.from('cohorts').select('*'),

@@ -153,6 +153,7 @@ export async function remindSweep(now = Date.now()) {
   if (error) { if (missingTable(error)) return { reminded: 0, ready: false }; throw new Error(error.message); }
   const due = ((data || []) as any[]).map((r) => ({ r, stage: reminderDue(r, now) })).filter((x) => x.stage != null && x.r.participant_id);
   if (!due.length) return { reminded: 0 };
+  // counting-exempt: أسماء أصحاب طلبات حذف قائمة، وطلب الحذف مغلق على حساب العرض (DEMO_BLOCKED)
   const { data: people } = await db.from('participants').select('id, full_name').in('id', due.map((x) => x.r.participant_id));
   const nameOf = new Map(((people || []) as any[]).map((p) => [p.id, p.full_name]));
   let reminded = 0, failed = 0;

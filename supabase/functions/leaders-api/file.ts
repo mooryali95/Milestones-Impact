@@ -25,6 +25,7 @@ import * as OB from './observations.ts';
 import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { flagsOf, timelineOf } from './observations.js';
 import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
+import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -181,7 +182,7 @@ export async function participants(e: any) {
   const scope = await expertScope(e);
   const ids = [...new Set([...scope.advisor, ...scope.assigned.keys()])].slice(0, 60);
   if (!ids.length) return { success: true, items: [], cohorts: await advisorCohorts(e.id), raters_pending: [] };
-  const { data: ps } = await db.from('participants').select('*').in('id', ids).eq('is_demo', false).order('full_name');
+  const { data: ps } = await listed(db.from('participants').select('*').in('id', ids)).order('full_name');
   const items: any[] = [];
   for (let i = 0; i < (ps || []).length; i += 5) {
     const chunk = (ps || []).slice(i, i + 5);

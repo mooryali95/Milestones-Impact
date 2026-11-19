@@ -7,6 +7,7 @@ import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
 import { alertOps, audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
 import { missingColumn, missingTable } from './missing-column.ts';
+import { listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMembers, contentLevelsFor, defOf, releaseOf, requirementFor } from './programs.ts';
@@ -263,7 +264,8 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
   if (expired) throw new Fail('مضت أكثر من ربع ساعة على المسح، امسح الرمز المعروض الآن', 400, 'receipt_expired');
   const r = await myRequirement(p, s.requirement_id, 'workshop', s);
   if ((r.config?.verify || 'qr') !== 'qr') throw new Fail('حضور هذه الجلسة يُوثَّق بطريقة أخرى', 400, 'method');
-  if (viaReceipt) await consumeReceipt(receipt!.id, s.id, p.id);
+  // حساب العرض: كل الفحوص جرت كما تجري لغيره، ثم محاكاة. لا يُستهلك إيصال ولا يُكتب حضور (recordAttendance)
+  if (viaReceipt && !simulated(p)) await consumeReceipt(receipt!.id, s.id, p.id);
   return recordAttendance(p, s, r, ctx, 'qr', viaReceipt ? { via: 'receipt' } : null);
 }
 // كتابة الحضور الواحدة للرمز والإيصال والأرقام: مرة لكل مشارك وجلسة، ومن سُجّل يُرد «مسجل مسبقًا» بلا أثر.
@@ -272,6 +274,9 @@ export async function workshopCheckin(p: any, b: Body, ctx: Ctx) {
 // الثاني بـ23505: يُعامل «مسجل مسبقًا» لا خطأ قاعدة، ويُكتب السجل مرة واحدة للذي أدرج
 const DUP = (e: any) => String(e?.code) === '23505';
 async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' | 'code', after: Body | null) {
+  // حساب العرض يُحاكى حضوره (تصور الحساب التجريبي 2026-11-19، المرحلة 0): يرى شاشة «سُجّل حضورك» نفسها، ولا يُكتب صف
+  // حضور ولا سطر سجل، فلا يدخل «حضر» في شاشة القاعة ولا نظرة الأنشطة ولا بطاقة الدفعة، ولو مسح رمز جلسة حقيقية
+  if (simulated(p)) return { success: true, already: false, method, simulated: true, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: new Date().toISOString() };
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
   let already = !!prev;
   if (!prev) {
@@ -343,8 +348,8 @@ async function codeCheckin(p: any, b: Body, ctx: Ctx) {
     throw new Fail(left > 0 ? `الأرقام غير صحيحة أو تغيّرت. اكتب الأرقام الظاهرة الآن (${left === 1 ? 'بقيت محاولة واحدة' : left === 2 ? 'بقيت محاولتان' : `بقيت ${left} محاولات`})` : 'الأرقام غير صحيحة، وانتهت محاولاتك لعشر دقائق. امسح الرمز بالكاميرا أو اطلب من المدرب تسجيل حضورك',
       400, 'code_wrong', { left });
   }
-  const done = await recordAttendance(p, hit.s, hit.r, ctx, 'code', { via: 'code' });
-  if (!done.already) await audit('participant', p.email, CODE_HIT, 'participants', p.id, null, { session_id: hit.s.id });
+  const done: any = await recordAttendance(p, hit.s, hit.r, ctx, 'code', { via: 'code' });
+  if (!done.already && !done.simulated) await audit('participant', p.email, CODE_HIT, 'participants', p.id, null, { session_id: hit.s.id });
   return done;
 }
 // الاستهلاك ذري: يكتب المشارك على الصف غير المستهلك وحده. وصاحبه يعيده بلا أثر (إعادة المحاولة بعد انقطاع)
@@ -532,7 +537,7 @@ export async function overview() {
     db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
     // بـ* لتحمل invited_at بعد الترحيل 20261110140000 وتعمل قبله؛ والسر لا يخرج إلى اللوحة (يُحذف أدناه)
     db.from('workshop_sessions').select('*').order('starts_at', { nullsFirst: false }),
-    db.from('workshop_attendance').select('session_id'),
+    listed(db.from('workshop_attendance').select('session_id, participants!inner(is_demo)'), 'participants'),
     db.from('coaching_sessions').select('*, participants(full_name, email), experts(full_name)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
     db.from('programs').select('id, name').is('archived_at', null),
@@ -651,6 +656,7 @@ export async function workshopSave(a: any, b: Body) {
 
 export async function workshopDelete(a: any, b: Body) {
   const id = String(b.id || '');
+  // counting-exempt: حارس الحذف لا عدّ: أي صف حضور مهما كان صاحبه يمنع حذف الجلسة
   const { count } = await db.from('workshop_attendance').select('session_id', { count: 'exact', head: true }).eq('session_id', id);
   if (count) throw new Fail('للجلسة حضور مسجل؛ أوقفها بدل حذفها');
   must(await db.from('workshop_sessions').delete().eq('id', id));
@@ -665,7 +671,7 @@ export async function workshopQr(b: Body) {
   // الرمز والأرقام الستة من التوقيع نفسه والنافذة نفسها (W2): يتغيران معًا كل 30 ثانية
   const w = qrWindow();
   const [t, code] = await Promise.all([qrToken(s.id, s.secret, w), qrCode(s.id, s.secret, w)]);
-  const { count } = await db.from('workshop_attendance').select('session_id', { count: 'exact', head: true }).eq('session_id', s.id);
+  const { count } = await listed(db.from('workshop_attendance').select('session_id, participants!inner(is_demo)', { count: 'exact', head: true }).eq('session_id', s.id), 'participants');
   const left = QR_WINDOW - (Math.floor(Date.now() / 1000) % QR_WINDOW);
   return {
     success: true, url: `${CONFIG.appUrl}/?checkin=${encodeURIComponent(t)}`, code, refresh_in: left, open: checkinOpen(s), attended: count || 0,
@@ -677,7 +683,8 @@ export async function workshopQr(b: Body) {
 async function attendanceWorld(withCohorts: boolean) {
   const none = Promise.resolve({ data: [] as any[] });
   const [{ data: pl }, { data: enr }, { data: cohorts }] = await Promise.all([
-    db.from('placements').select('participant_id, dimension, level, approved_at, participants(full_name, email, organization_name, organization_id, status)'),
+    // حساب العرض معتمد آليًا وفي الدفعة المفتوحة، فكان يظهر في متوقعي الجلسات العامة: خارج المتوقعين والحاضرين (listed)
+    listed(db.from('placements').select('participant_id, dimension, level, approved_at, participants!inner(full_name, email, organization_name, organization_id, status, is_demo)'), 'participants'),
     withCohorts ? db.from('enrollments').select('participant_id, cohort_id, status, created_at') : none,
     withCohorts ? db.from('cohorts').select('id, organization_id, status, is_default, starts_on, created_at') : none,
   ]);
@@ -714,6 +721,7 @@ export async function workshopAttendance(b: Body) {
   const view = b.cohort_id ? String(b.cohort_id) : null;
   const [{ data: r }, { data: att }, w] = await Promise.all([
     db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),
+    // counting-exempt: صفوف الحضور لا تُعدّ وحدها: attendancePeople يعرض منها من في attendanceWorld وحدهم (listed)
     db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', s.id),
     attendanceWorld(!!(s.cohort_id || view)),
   ]);
@@ -737,6 +745,7 @@ export async function cohortWorkshops(b: Body) {
   const rows = ((must(await db.from('workshop_sessions').select('*').in('requirement_id', reqs.map((r: any) => r.id))) || []) as any[])
     .filter((s: any) => !s.cohort_id || s.cohort_id === c.id).sort(bySessionTime);
   const [att, w] = await Promise.all([
+    // counting-exempt: كالسابق، العدّ في attendancePeople على attendanceWorld وحده (listed)
     rows.length ? db.from('workshop_attendance').select('session_id, participant_id').in('session_id', rows.map((s: any) => s.id)) : Promise.resolve({ data: [] as any[] }),
     attendanceWorld(true),
   ]);
@@ -756,6 +765,9 @@ export async function cohortWorkshops(b: Body) {
 export async function workshopMark(a: any, b: Body) {
   const sid = String(b.session_id || ''), pid = String(b.participant_id || '');
   if (b.present) {
+    // حساب العرض لا يُكتب له حضور من أي مسار، ولو أُرسل معرّفه باليد (ليس في قائمة الحضور أصلًا)
+    const { data: who } = await db.from('participants').select('is_demo').eq('id', pid).maybeSingle();
+    if (simulated(who)) throw new Fail('حساب العرض لا يُسجَّل له حضور', 400, 'demo');
     must(await db.from('workshop_attendance').upsert({ session_id: sid, participant_id: pid, method: 'manual', recorded_by: a.email }, { onConflict: 'session_id,participant_id', ignoreDuplicates: true }));
   } else {
     must(await db.from('workshop_attendance').delete().eq('session_id', sid).eq('participant_id', pid));
@@ -850,6 +862,7 @@ async function workshopRecipients(s: any) {
 async function openStageFor(ids: string[], requirementId: string) {
   const open = new Set<string>();
   if (!ids.length) return open;
+  // counting-exempt: معرّفات أعضاء الدفعة من cohortMembers (listed)، فلا يعود منها حساب العرض
   const rows = (must(await db.from('participants').select('*').in('id', ids)) ?? []) as any[];
   for (let i = 0; i < rows.length; i += 5) {
     await Promise.all(rows.slice(i, i + 5).map(async (p) => {

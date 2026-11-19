@@ -11,6 +11,7 @@ import { cohortOf } from './programs.ts';
 import { reviewSubmissionBy } from './admin.ts';
 import { firstName } from './hall.js';
 import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved } from './logic.js';
+import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
 
@@ -71,7 +72,7 @@ export async function myParticipantIds(expertId: string) {
     all((f, t) => db.from('cohorts').select('*').order('id').range(f, t), msg),
     all((f, t) => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id').range(f, t), msg),
     open || orgs.length
-      ? all((f, t) => { const q = db.from('participants').select('id, organization_id').eq('is_demo', false); return (open ? q : q.in('organization_id', orgs)).order('id').range(f, t); }, msg)
+      ? all((f, t) => { const q = listed(db.from('participants').select('id, organization_id')); return (open ? q : q.in('organization_id', orgs)).order('id').range(f, t); }, msg)
       : Promise.resolve([] as any[]),
   ]);
   const ids = advisorCohortParticipantIds(cohorts, allCohorts, enrollments, candidates);

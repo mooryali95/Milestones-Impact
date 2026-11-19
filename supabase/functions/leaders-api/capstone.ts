@@ -21,6 +21,7 @@ import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
 import { profileFor } from './profiles.ts';
+import { listed, simulated } from './counting.ts';
 
 type Body = Record<string, any>;
 
@@ -236,8 +237,7 @@ export async function doc(p: any) {
 
 // ── المستشار ──
 export async function adminList(b: Body) {
-  let q = db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)')
-    .eq('participants.is_demo', false).order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
+  let q = listed(db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)'), 'participants').order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
   if (b.status) q = q.eq('status', String(b.status));
   const rows = must(await q) as any[] ?? [];
   const ids = rows.map((r) => r.participant_id);
@@ -311,7 +311,7 @@ function sponsorEmailOf(charter: any): string | null {
 const NO_SPONSOR_WAIVER_AR = 'لا راعٍ فعلي للمبادرة: الراعي موضّح دوره في بطاقتها، فاعتمدها قبول المستشار';
 const NO_SPONSOR_EMAIL_AR = 'لا بريد صحيح للراعي في بطاقة المبادرة. اعتمد دون تأييد بسبب مكتوب، أو أعدها للمشارك ليصحح البريد';
 
-async function inviteSponsor(p: any, c: any, charter: any = null) {
+export async function inviteSponsor(p: any, c: any, charter: any = null) {
   charter = charter || (await build(p)).charter;
   const email = sponsorEmailOf(charter);
   if (!email) throw new Fail(NO_SPONSOR_EMAIL_AR, 400, 'sponsor_email');
@@ -323,6 +323,9 @@ async function inviteSponsor(p: any, c: any, charter: any = null) {
     updated_at: new Date().toISOString(),
   }).eq('participant_id', p.id));
   const initiative = String(charter.title || '').trim() || 'المبادرة';
+  // حساب العرض: الحالة تُكتب كما تُكتب لغيره («بانتظار الراعي») فيرى صاحبه التجربة كاملة، والبريد لا يخرج والرمز لا يصل
+  // أحدًا. البريد يكتبه الحساب في بطاقة مبادرته، فحارس نطاق العرض في sendMail لا يكفيه (تصور 2026-11-19، المرحلة 0)
+  if (simulated(p)) return;
   await sendMail(email, `طلب تأييد مبادرة «${initiative}»`, sponsorMail(charter.sponsor || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`));
 }
 
@@ -448,7 +451,7 @@ export async function sponsorSubmit(b: Body) {
 // ── الجهة: محفظة مبادرات الدفعة ──
 // المنسق يرى عناوين مبادرات جهته وحالتها، والوثيقة كاملة بعد اعتمادها فقط
 export async function orgList(orgId: string) {
-  const people = must(await db.from('participants').select('id, full_name, work_scope').eq('organization_id', orgId)) as any[] ?? [];
+  const people = must(await listed(db.from('participants').select('id, full_name, work_scope').eq('organization_id', orgId))) as any[] ?? [];
   const ids = people.map((x) => x.id);
   if (!ids.length) return [];
   const [caps, charters, costs] = await Promise.all([

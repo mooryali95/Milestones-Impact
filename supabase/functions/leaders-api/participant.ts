@@ -403,14 +403,17 @@ export async function logout(sessionId: string) {
 }
 
 // أجهزة المشارك: الجلسات السارية، وإنهاء غير الحالية
+// حساب العرض حساب واحد يدخله المدير ومن أُعطوا روابط تجربة (demo.ts): كل منهم يرى جلسته وحدها ولا ينهي جلسة غيره
 export async function sessionsList(p: any, sessionId: string) {
-  const { data } = await db.from('auth_sessions').select('id, method, user_agent, created_at, last_seen_at')
-    .eq('participant_id', p.id).is('revoked_at', null).gt('expires_at', new Date().toISOString())
-    .order('last_seen_at', { ascending: false, nullsFirst: false }).limit(20);
+  let q = db.from('auth_sessions').select('id, method, user_agent, created_at, last_seen_at')
+    .eq('participant_id', p.id).is('revoked_at', null).gt('expires_at', new Date().toISOString());
+  if (p.is_demo) q = q.eq('id', sessionId);
+  const { data } = await q.order('last_seen_at', { ascending: false, nullsFirst: false }).limit(20);
   return { success: true, sessions: (data || []).map((x) => ({ ...x, current: x.id === sessionId })) };
 }
 
 export async function sessionsRevoke(p: any, b: Body, sessionId: string) {
+  if (p.is_demo) return sessionsList(p, sessionId);
   let q = db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('participant_id', p.id).is('revoked_at', null).neq('id', sessionId);
   if (b.id) q = q.eq('id', String(b.id));
   must(await q);

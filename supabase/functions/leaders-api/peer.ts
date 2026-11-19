@@ -15,6 +15,7 @@ import { journeyApproved } from './logic.js';
 import { cohortOf } from './programs.ts';
 import { advisorCohorts, advisorOf } from './advisor.ts';
 import { features } from './features.ts';
+import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -157,7 +158,7 @@ async function requestFor(e: any, requestId: unknown) {
 export async function expertList(e: any) {
   const { cohorts, ids } = await cohortsOf(e);
   if (!ids.size) return { success: true, advisor: false, cohorts: [], items: [] };
-  const { data: reqs } = await db.from('peer_requests').select(REQ_COLS).in('cohort_id', [...ids]).eq('participants.is_demo', false).neq('status', 'closed').order('created_at', { ascending: false }).limit(200);
+  const { data: reqs } = await listed(db.from('peer_requests').select(REQ_COLS).in('cohort_id', [...ids]), 'participants').neq('status', 'closed').order('created_at', { ascending: false }).limit(200);
   const [answers, teams] = await Promise.all([answersFor((reqs || []).map((r: any) => r.id)), hallTeams()]);
   const items = (reqs || []).map((r: any) => ({
     ...requestView(r, answers.filter((a: any) => a.request_id === r.id), null, teams),
@@ -216,7 +217,7 @@ export async function expertClose(e: any, b: Body) {
 // ── للإدارة: قراءة طلبات دفعة ──
 export async function adminList(b: Body) {
   if (!isUuid(b.cohort_id)) throw new Fail('اختر الدفعة');
-  const { data: reqs } = await db.from('peer_requests').select(REQ_COLS).eq('cohort_id', String(b.cohort_id)).eq('participants.is_demo', false).order('created_at', { ascending: false }).limit(200);
+  const { data: reqs } = await listed(db.from('peer_requests').select(REQ_COLS).eq('cohort_id', String(b.cohort_id)), 'participants').order('created_at', { ascending: false }).limit(200);
   const answers = await answersFor((reqs || []).map((r: any) => r.id));
   return { success: true, items: (reqs || []).map((r: any) => requestView(r, answers.filter((a: any) => a.request_id === r.id), null)) };
 }

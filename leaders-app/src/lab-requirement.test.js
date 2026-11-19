@@ -140,7 +140,7 @@ describe('المستشار والإدارة', () => {
     expect(idx).toContain("'admin.lab-preview': (_a, b) => L.adminPreview(b),");
     expect(idx).toContain("'admin.lab-cards': (_a, b) => L.adminCards(b),");
     const ts = read('supabase/functions/leaders-api/lab.ts');
-    expect(ts).toMatch(/\.eq\('participants\.is_demo', false\)\.eq\('participants\.is_test', false\)/);
+    expect(ts).toMatch(/counted\(db\.from\('lab_attempts'\)[^;]*, 'participants'\)/);
     expect(ts).toMatch(/publicSpec\(it\.spec, \(list: any\[\]\) => list, level\)/);
   });
 });
