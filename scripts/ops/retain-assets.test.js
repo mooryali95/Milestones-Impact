@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { describe, expect, it, vi } from 'vitest';
 import { daysBetween, expired, KEEP_DAYS, missingFromNext, ownFromBuilt, planRetention, storeProblems } from './retain-assets.mjs';
-import { blocked, checkFiles, fetchSite, missingIs404, SITES, typeOk, waitForBuild } from './verify-live.mjs';
+import { blocked, checkFiles, checkFilesSettled, fetchSite, missingIs404, SITES, typeOk, waitForBuild } from './verify-live.mjs';
 import { decide } from './ci-changes.mjs';
 import { builtListFile, ownAssetsOf } from '../../shared/build/release-files.mjs';
 
@@ -140,6 +140,24 @@ describe('التحقق بعد الترقية', () => {
     const map = { 'a.js': resp(200, { ct: 'text/javascript' }), 'b.css': resp(200, { ct: 'text/css' }), 'c.js': resp(200, { ct: 'text/html' }), 'd.js': resp(404, { ct: 'text/html' }) };
     const fetchImpl = (url) => Promise.resolve(map[url.split('/assets/')[1]]);
     expect(await checkFiles(site, Object.keys(map), { fetchImpl })).toEqual(['c.js: نوعه text/html لا JavaScript', 'd.js: HTTP 404']);
+  });
+  it('ملف تأخر توزيعه بعد الترقية يُعاد طلبه وحده، وما بقي فاشلًا بعد الجولات مشكلة حقيقية', async () => {
+    const calls = {};
+    const fetchImpl = (url) => {
+      const n = url.split('/assets/')[1];
+      calls[n] = (calls[n] || 0) + 1;
+      if (n === 'late.js') return Promise.resolve(calls[n] >= 3 ? resp(200, { ct: 'text/javascript' }) : resp(404, { ct: 'text/html' }));
+      if (n === 'gone.js') return Promise.resolve(resp(404, { ct: 'text/html' }));
+      return Promise.resolve(resp(200, { ct: 'text/javascript' }));
+    };
+    let slept = 0;
+    const out = await checkFilesSettled(site, ['ok.js', 'late.js', 'gone.js'], { fetchImpl, rounds: 4, everyMs: 30_000, sleep: async (ms) => { slept += ms; } });
+    expect(out).toEqual(['gone.js: HTTP 404']);
+    expect(calls).toEqual({ 'ok.js': 1, 'late.js': 3, 'gone.js': 4 });
+    expect(slept).toBe(90_000);
+    slept = 0;
+    expect(await checkFilesSettled(site, ['ok.js'], { fetchImpl, sleep: async (ms) => { slept += ms; } })).toEqual([]);
+    expect(slept).toBe(0);
   });
   it('الملف الغائب 404 لا صفحة التطبيق (تحذير)', async () => {
     expect(await missingIs404(site, { fetchImpl: () => Promise.resolve(resp(404)) })).toBe(null);
