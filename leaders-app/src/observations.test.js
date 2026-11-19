@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { auditAr, cleanObservation, flagsOf, timelineOf } from '../../supabase/functions/leaders-api/observations.js';
+import { AUDIT_AR, auditAr, auditLabel, cleanObservation, flagsOf, timelineOf } from '../../supabase/functions/leaders-api/observations.js';
 
 const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
 const NOW = Date.parse('2026-11-13T12:00:00Z');
@@ -38,6 +38,21 @@ describe('ملف المشارك: الملاحظات والأعلام والخط 
     expect(t[0].detail).toContain('السبب: طلب الجهة');
     expect(t[1]).toMatchObject({ tone: 'warn', by: 'النظام' });
     expect(auditAr('unknown.action')).toBe('unknown.action');
+  });
+  it('P8: لا رمز خام في الخط الزمني: الحالة باسمها، والفعل غير المسمى بوصف عام، وكل فعل على المشارك مسمى', () => {
+    const t = timelineOf({ history: [
+      { created_at: '2026-11-12T10:00:00Z', action: 'participant.status', actor_type: 'admin', after: { status: 'suspended' } },
+      { created_at: '2026-11-11T10:00:00Z', action: 'some.new-action', actor_type: 'robot' },
+    ] });
+    expect(t[0].detail).toBe('الحالة: موقوف');
+    expect(t[1]).toMatchObject({ text: 'إجراء في السجل', by: '' });
+    expect(auditLabel('placement.approve')).toBe('اعتُمد مستواه');
+    // كل فعل يُسجَّل على كيان participants في الخادم له تسمية في AUDIT_AR
+    const dir = join(__dirname, '../../supabase/functions/leaders-api');
+    const src = readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('_test.ts')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n');
+    const acts = [...src.matchAll(/audit\([^,]+, [^,]+, '([a-z0-9._-]+)', 'participants'/g)].map((m) => m[1]);
+    expect(acts.length).toBeGreaterThan(30);
+    expect([...new Set(acts)].filter((a) => !AUDIT_AR[a])).toEqual([]);
   });
   it('مصدر واحد: الملف يقرأ الأعلام والخط الزمني من observations.js، ونسخة المشارك تحمل المرئي وحده', () => {
     const file = read('supabase/functions/leaders-api/file.ts');

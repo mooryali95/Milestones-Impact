@@ -54,7 +54,9 @@ export function UIProvider({ children }) {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setMsg(''), 2500);
   }, []);
-  const ask = useCallback((d) => new Promise((resolve) => setDialog({ ...d, resolve })), []);
+  // لكل سؤال مفتاحه: سؤال يتبع سؤالًا مباشرة (تأكيد ثم اسم) نافذة جديدة بقيمتها الأولى، لا الأولى بحالتها
+  const seq = useRef(0);
+  const ask = useCallback((d) => new Promise((resolve) => setDialog({ ...d, resolve, id: (seq.current += 1) })), []);
   const confirm = useCallback((m, o = {}) => ask({ msg: m, ...o }), [ask]);
   const prompt = useCallback((m, value = '', o = {}) => ask({ msg: m, value, input: true, ...o }), [ask]);
 
@@ -63,7 +65,7 @@ export function UIProvider({ children }) {
   return (
     <Ctx.Provider value={{ toast, confirm, prompt }}>
       {children}
-      {dialog && <Dialog d={dialog} onDone={(v) => { dialog.resolve(v); setDialog(null); }} />}
+      {dialog && <Dialog key={dialog.id} d={dialog} onDone={(v) => { dialog.resolve(v); setDialog(null); }} />}
       <div className={`toast${msg ? ' show' : ''}`} role="status" aria-live="polite">{msg}</div>
     </Ctx.Provider>
   );

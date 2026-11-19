@@ -12,6 +12,8 @@ export const APPROVED = EXPERT_APPROVED;
 export { journeyApproved };
 const cohortsAr = (n) => countAr(n, 'دفعة واحدة', 'دفعتين', 'دفعات', 'دفعة');
 export const peopleAr = (n) => countAr(n, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا');
+// بعد حرف الجر («يسري على مشاركَين»)
+export const peopleGenAr = (n) => countAr(n, 'مشارك واحد', 'مشاركَين', 'مشاركين', 'مشاركًا');
 export const expertsAr = (n) => countAr(n, 'خبير واحد', 'خبيران', 'خبراء', 'خبيرًا');
 const groupsAr = (n) => countAr(n, 'مجموعة واحدة', 'مجموعتان', 'مجموعات', 'مجموعة');
 

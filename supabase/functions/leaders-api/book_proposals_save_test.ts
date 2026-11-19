@@ -1,5 +1,5 @@
 // محرر الاستوديو يحفظ أقسام الباب في عملية واحدة (20261117100000): الدالة تُستدعى مرة بالأقسام كلها، وتغيّر حالة
-// مقترح أثناء الحفظ يُرد برسالة واضحة دون أن يُحفظ شيء، وقبل الترحيل يبقى الحفظ قسمًا قسمًا كما كان.
+// مقترح أثناء الحفظ يُرد برسالة واضحة دون أن يُحفظ شيء، ولا رجوع إلى الحفظ قسمًا قسمًا بعد تطبيق الترحيل على الإنتاج.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
@@ -44,12 +44,11 @@ Deno.test('تغيّر حالة مقترح أثناء الحفظ: رسالة با
   } finally { w.restore(); }
 });
 
-Deno.test('قبل الترحيل: الحفظ قسمًا قسمًا كما كان، مع سجل لكل قسم', async () => {
+Deno.test('الترحيل مطبّق على الإنتاج: غياب الدالة خطأ ظاهر لا رجوع صامت إلى الحفظ قسمًا قسمًا', async () => {
   const w = installFake(seed(), { rpc: (name) => name === 'book_proposals_save' ? { data: null, error: { code: 'PGRST202', message: 'function not found' } } : null });
   try {
-    const r = await B.proposeFromEdit(v, req);
-    assertEquals(r.count, 2);
-    assertEquals(w.tables.book_proposals.length, 2);
-    assertEquals(w.tables.audit_log.map((x: any) => x.action), ['book.proposal', 'book.proposal']);
+    await assertRejects(() => B.proposeFromEdit(v, req));
+    assertEquals(w.tables.book_proposals.length, 0);
+    assertEquals(w.tables.audit_log.length, 0);
   } finally { w.restore(); }
 });

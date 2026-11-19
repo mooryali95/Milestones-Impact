@@ -12,7 +12,7 @@ import { applyFilters, encodeState, sortRows } from '../filters.js';
 import { Empty, NoMatch, Spinner } from '../ui.jsx';
 import { ACTOR_AR, CHANGE_AREAS, LOAD_AR, LOAD_TONE, PIPELINE, PIPELINE_AR, stageFilter, STUCK_STAGES, WAITING_STAGES } from '../../../supabase/functions/leaders-api/insight.js';
 import { EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { COHORT_STATUS as COHORT_STATUS_AR } from '../methodology.js';
+import { cohortStateAr } from '../methodology.js';
 import { readQuery, writeQuery } from '../route.js';
 import OverviewAnalytics from './Analytics.jsx';
 
@@ -58,7 +58,7 @@ function Pipeline({ data, group, noun, extra, only = null }) {
         <tbody>
           {rows.map((g) => (
             <tr key={g.key}>
-              <td><a className="la-link" href={listHref(group, g.key)}><b>{g.name}</b></a>{g.status && <><br /><small className="la-muted">{COHORT_STATUS_AR[g.status] || g.status}{g.org ? ` · ${g.org}` : ''}</small></>}</td>
+              <td><a className="la-link" href={listHref(group, g.key)}><b>{g.name}</b></a>{g.status && <><br /><small className="la-muted">{cohortStateAr(g) || g.status}{g.org ? ` · ${g.org}` : ''}</small></>}</td>
               <td>{g.total}</td>
               {PIPELINE.map((k) => <td key={k}>{cell(g, k)}</td>)}
               <td>{g.approved_pct}%</td><td>{g.active_pct}%</td>

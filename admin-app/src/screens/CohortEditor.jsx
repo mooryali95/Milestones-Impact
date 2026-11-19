@@ -8,7 +8,7 @@
 // والرؤية والعقد) لا يُحرَّر هنا، بل يُذكر للقراءة برابط إلى نافذته.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from '../leaders.js';
-import { COACH_MODE, COHORT_SECTIONS, COHORT_STATUS, cohortErrors, cohortFields, cohortOut, cohortToForm, formToCohort, itemsAr, journeyView, KIND, NEW_EMPTY, stagesAr, UNPINNED_EMPTY, UNPINNED_UPGRADE, VERSION_ON_SAVE } from '../methodology.js';
+import { COACH_MODE, COHORT_SECTIONS, COHORT_STATUS, cohortErrors, cohortStateAr, cohortFields, cohortOut, cohortToForm, formToCohort, itemsAr, journeyView, KIND, NEW_EMPTY, stagesAr, UNPINNED_EMPTY, UNPINNED_UPGRADE, VERSION_ON_SAVE } from '../methodology.js';
 import { LEVEL_MODE_AR, orgProgram, PROJECT_MODE_AR } from '../../../supabase/functions/leaders-api/logic.js';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { saveCohort } from '../cohort-guard.js';
@@ -191,7 +191,7 @@ export default function CohortEditor({ cohort = {}, data, canWrite = true, onClo
       <form className="la-form mi-form wide ce" role="dialog" aria-modal="true" aria-label={title} onSubmit={save} noValidate>
         <header className="ce-head">
           <h3>{isNew ? 'دفعة جديدة' : cohort.name}</h3>
-          <p className="la-muted">{KIND_AR[cohortKind({ ...cohort, organization_id: v.organization_id })]}{!isNew && ` · ${COHORT_STATUS[cohort.status] || ''}`}</p>
+          <p className="la-muted">{KIND_AR[cohortKind({ ...cohort, organization_id: v.organization_id })]}{!isNew && ` · ${cohortStateAr(cohort)}`}</p>
           {!canWrite && <p className="ce-ro" role="note">للقراءة فقط: لا تملك صلاحية تعديل الدفعات، فالحقول معطلة.</p>}
         </header>
 

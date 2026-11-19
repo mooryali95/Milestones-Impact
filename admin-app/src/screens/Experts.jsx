@@ -14,7 +14,7 @@ import { readQuery } from '../route.js';
 import { COACH_STATUS_ADMIN as COACH_AR, DIM_AR, EXPERT_ROLE_AR, EXPERT_STATUS, LEVEL_AR, RATE_TO_EXPERT } from '../../../supabase/functions/leaders-api/labels.js';
 import { COMMITTEE_AR, committeeApplication, committeeApplicationAr, CONTENT_TRACK_AR, contentOnly, expertService } from '../../../supabase/functions/leaders-api/committees.js';
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
-import { COHORT_STATUS } from '../methodology.js';
+import { cohortStateAr } from '../methodology.js';
 import { periodAr, scopeText } from '../team.js';
 
 const TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
@@ -178,7 +178,7 @@ function Assignments({ list, stale = false }) {
       {!list.length ? <p className="la-muted">لا تكليف له في أي دفعة. يُكلَّف من «الفريق والمجموعات» في الدفعة، أو من صفحة الجهة.</p> : (
         <ul className="la-log">{list.map((a) => (
           <li key={a.cohort_id}><b>{a.org ? `${a.org} · ` : ''}{a.cohort}</b> <span>{scopeText(a)}</span>
-            {' '}<small className="la-muted">{[COHORT_STATUS[a.status] || a.status, periodAr(a)].filter(Boolean).join(' · ')}</small></li>
+            {' '}<small className="la-muted">{[cohortStateAr(a), periodAr(a)].filter(Boolean).join(' · ')}</small></li>
         ))}</ul>
       )}
     </section>
