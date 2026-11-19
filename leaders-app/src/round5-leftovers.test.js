@@ -154,6 +154,11 @@ describe('mapLanes وخريطة الجهة', () => {
     expect(laneAr(rows.find((s) => s.key === 'training'), rows, mapLanes(stages))).toBe('«مرحلة ojt_coaching» تسير معها');
     expect(laneAr(rows.find((s) => s.key === 'support'), rows, mapLanes(stages))).toBe('');
     expect(laneAr(rows.find((s) => s.key === 'support'), rows, null)).toBe('');
+    // المطابقة: واحدة «تسير»، واثنتان «تسيران»، وثلاث فأكثر (جمع غير العاقل) «تسير»
+    const four = ['a', 'b', 'c', 'd'].map((k) => ({ key: k, title: k }));
+    const lanes = (n) => ({ together: Object.fromEntries(four.slice(0, n).map((x) => [x.key, 'a'])), tracks: [] });
+    expect(laneAr(four[0], four, lanes(3))).toBe('«b» و«c» تسيران معها');
+    expect(laneAr(four[0], four, lanes(4))).toBe('«b» و«c» و«d» تسير معها');
     const html = renderToStaticMarkup(React.createElement(JourneyMap, { map: { ...map, lanes: mapLanes(stages) } }));
     expect(html).toContain('<small class="jm-lane">تسير مع «مرحلة training»</small>');
     expect(html).toMatch(/class="jm-stage[^"]* jm-with"/);

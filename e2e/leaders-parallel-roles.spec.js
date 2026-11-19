@@ -156,6 +156,13 @@ for (const width of [1440, 390]) {
     await expect(node('التوجيه القيادي')).toContainText('موقوفة لهذه الدفعة');
     await expect(node('التقرير النهائي').locator('.jm-lane')).toHaveCount(0);
     await expect(jm).toContainText('الجدول اليوم عند التدريب والتوجيه على رأس العمل معًا');
+    if (width < 500) {
+      // على الجوال السطر تحت المدة وفوق شريط التقدم، لا تحت الشريط
+      const n = node('التدريب');
+      const top = (sel) => n.locator(sel).evaluate((el) => el.getBoundingClientRect().top);
+      expect(await top('.jm-lane')).toBeGreaterThan(await top('.jm-dur'));
+      expect(await top('.jm-lane')).toBeLessThan(await top('.jm-bar'));
+    }
     await shot(page, 'org-map-lanes', jm);
     // صف المشارك: المرحلتان معًا، والمسار بجانبهما، والمرشّح بكل منهما
     const sara = page.locator('tr', { hasText: 'سارة الأحمد' });

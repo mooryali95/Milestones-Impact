@@ -574,7 +574,7 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   // رابط الباب (reader.js): الباب الذي فتحه الرابط عند التحميل، وتنبيه رابط لا يُتاح لهذا القارئ، وسطر النسخ
   const firstRef = useRef(typeof window !== 'undefined' ? hashRef(window.location.hash) : null);
   const [missing, setMissing] = useState(false);
-  const [copied, setCopied] = useState('');
+  const [copied, setCopied] = useState(null);
   const selGone = useRef(null);
   const [progress, setProgress] = useState(0);
   const reader = useRef(null);
@@ -689,10 +689,10 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
   useEffect(() => () => { if (typeof window !== 'undefined' && hashRef(window.location.hash)) linkTo(null, true); }, [linkTo]);
   const copyLink = async () => {
     const url = `${window.location.origin}${window.location.pathname}${window.location.search}${hashWithRef(window.location.hash, chapterRef(ch))}`;
-    try { await navigator.clipboard.writeText(url); setCopied('نُسخ رابط الباب. يفتحه من له وصول إلى الكتاب وحده.'); }
-    catch { setCopied(`انسخ الرابط: ${url}`); }
+    try { await navigator.clipboard.writeText(url); setCopied({ text: 'نُسخ رابط الباب. يفتحه من له وصول إلى الكتاب وحده.' }); }
+    catch { setCopied({ text: 'انسخ الرابط:', url }); }
   };
-  useEffect(() => { if (!copied) return undefined; const t = setTimeout(() => setCopied(''), 5000); return () => clearTimeout(t); }, [copied]);
+  useEffect(() => { if (!copied) return undefined; const t = setTimeout(() => setCopied(null), 5000); return () => clearTimeout(t); }, [copied]);
   const goChapter = (c, section) => go(data.chapters.findIndex((x) => x.id === c.id), section);
   // في وضع الجزء يقف التقليب عند حدود الجزء الحالي، وفي وضع الكتاب يعبر الأجزاء كما كان
   const scoped = data && ch ? (scope === 'part' ? data.chapters.map((c, i) => [c, i]).filter(([c]) => c.dimension === ch.dimension).map(([, i]) => i) : data.chapters.map((_, i) => i)) : [];
@@ -817,7 +817,8 @@ export default function MasterBook({ api, onClose, onExperts, place = 'admin' })
             <span className="mb-row-l" aria-hidden="true">المستوى</span>
             {LEVELS.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={level === k} className={level === k ? 'on' : ''} onClick={() => setLevel(k)}>{l}</button>)}
           </div>
-          {copied && <p className="mb-copied" role="status">{copied}</p>}
+          {/* منطقة الإعلان ثابتة يتغير نصها وحده، فيقرؤها قارئ الشاشة؛ والرابط معزول باتجاهه كي لا تقلبه الفقرة العربية */}
+          <p className={copied ? 'mb-copied' : 'sr-only'} role="status">{copied && <>{copied.text}{copied.url && <> <bdi dir="ltr">{copied.url}</bdi></>}</>}</p>
           <Chapter key={ch.id} ch={ch} idx={idx} partIdx={partIdx} level={level} data={data} scope={scope} flip={flip} marks={prefs.marks} onMark={onMark} onCopyLink={copyLink} onThread={(t) => setThread(t)} onDeps={(t) => setDepsOf(t)} onProposals={(t) => {
             // قسم بلا مقترحات: يفتح المحرر مباشرة لمن يقترح، وإلا قائمة مقترحات القسم
             const has = (data.proposals || []).some((p) => p.module_id === ch.id && p.section === t.section && ['draft', 'review', 'approved'].includes(p.status));

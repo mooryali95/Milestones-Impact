@@ -20,6 +20,7 @@ export const lateWords = (map) => (map?.cohort?.starts_on && !map?.cohort?.is_de
   ? { one: 'تجاوزوا موعدها', all: 'تجاوزوا موعد مرحلتهم' } : { one: 'تجاوزوا مدتها', all: 'تجاوزوا مدة مرحلتهم' });
 // التوازي والمسار المستمر (map.lanes من mapLanes: together مفتاح أول المجموعة، وtracks): سطر تحت المرحلة كما في الخط وتبويب «الرحلة»
 // lanes: من الخادم بجانب الخريطة (mapLanes)، وخريطة بلا lanes (قبل هذا الإصدار) كما كانت
+// المطابقة: المثنى «تسيران» لاثنتين وحدهما، والواحدة وجمع غير العاقل (ثلاث فأكثر) «تسير»
 export function laneAr(s, stages, lanes) {
   const tg = lanes?.together || {};
   if ((lanes?.tracks || []).includes(s.key)) return 'مسار مستمر يسير بجانب الرحلة';
@@ -28,7 +29,7 @@ export function laneAr(s, stages, lanes) {
   const title = (k) => stages.find((x) => x.key === k)?.title || k;
   if (head !== s.key) return `تسير مع «${title(head)}»`;
   const rest = stages.filter((x) => tg[x.key] === s.key && x.key !== s.key).map((x) => `«${x.title}»`);
-  return rest.length ? `${rest.join(' و')} ${rest.length === 1 ? 'تسير' : 'تسيران'} معها` : '';
+  return rest.length ? `${rest.join(' و')} ${rest.length === 2 ? 'تسيران' : 'تسير'} معها` : '';
 }
 const peopleAr = (n) => (n === 0 ? 'لا أحد' : n === 1 ? 'شخص واحد' : n === 2 ? 'شخصان' : n <= 10 ? `${n} أشخاص` : `${n} شخصًا`);
 

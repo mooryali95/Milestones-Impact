@@ -122,3 +122,20 @@ test('اللوحة: ‎#/leaders/book?ch=…‎ يفتح الباب، والنس
   await expect(title(page)).toHaveText('تمهيد الأثر');
   await shot(page, 'admin-reader-link');
 });
+
+test('منطقة إعلان النسخ ثابتة قبل الضغط، وإن تعذر النسخ يظهر الرابط معزولًا باتجاهه', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) } }); });
+  await portal(page, '#ch=milestone.ka2');
+  await expect(title(page)).toHaveText('خاتمة المعالم');
+  // المنطقة موجودة فارغة قبل الضغط، فيُعلَن نصها حين يتغير
+  const live = page.locator('p[role="status"].sr-only');
+  await expect(live).toHaveCount(1);
+  await expect(live).toHaveText('');
+  await page.getByRole('button', { name: 'انسخ رابط الباب' }).click();
+  const st = page.locator('p.mb-copied[role="status"]');
+  await expect(st).toContainText('انسخ الرابط:');
+  await expect(st.locator('bdi[dir="ltr"]')).toHaveText(`${PORTAL}#ch=milestone.ka2`);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await shot(page, 'reader-link-fallback');
+});
