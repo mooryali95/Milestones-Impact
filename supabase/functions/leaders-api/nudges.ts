@@ -11,6 +11,7 @@ import { effectReport, NUDGE_REPORT_WINDOWS, gate, groupPreview, ledgerSummary, 
 import { baselineProgress } from './admin.ts';
 import { coordPermissions } from './logic.js';
 import { COORD_NUDGE_DAILY, COORD_NUDGE_GROUPS, inCoordGroup } from './coord-groups.js';
+import { listed } from './counting.ts';
 
 export const NUDGE_MAX = 50; // في الطلب الواحد، كحد الإجراء الجماعي في اللوحة
 export type Sender = { kind: 'admin' | 'mentor' | 'assistant' | 'coordinator' | 'auto'; label: string; by: string; ref?: string | null; signature?: string };
@@ -38,7 +39,7 @@ async function lastBy(rows: any[]) {
 /** المشاركون بما يلزم المحرك: صفوفهم، وتقدمهم في القياس قبل الاعتماد، ورحلتهم بعده (journeyFor نفسه الذي يراه المشارك) */
 async function subjects(ids: string[], lanes = 6) {
   if (!ids.length) return [];
-  const { data: rows, error } = await db.from('participants').select('*').in('id', ids);
+  const { data: rows, error } = await listed(db.from('participants').select('*').in('id', ids));
   if (error) throw error;
   const pre = (rows || []).filter((r: any) => !['placed', 'enrolled', 'completed'].includes(r.status));
   const progress = await baselineProgress(pre.map((r: any) => r.id));
@@ -214,7 +215,7 @@ async function coordTargets(c: any, group: string) {
   const { data: org } = await db.from('organizations').select('*').eq('id', c.organization_id).maybeSingle();
   if (!org) throw new Fail('الجهة غير موجودة', 404);
   if (org.coord_nudges === false) throw new Fail('التذكير من بوابة جهتك موقوف بقرار إدارة البرنامج', 403, 'disabled');
-  const { data: ps, error } = await db.from('participants').select('id, status, last_login_at, is_demo').eq('organization_id', org.id).eq('is_demo', false);
+  const { data: ps, error } = await listed(db.from('participants').select('id, status, last_login_at, is_demo').eq('organization_id', org.id));
   if (error) throw new Fail('تعذّر قراءة مشاركي جهتك الآن، حاول بعد قليل', 503, 'busy');
   const now = Date.now();
   return { org, ids: (ps || []).filter((p: any) => inCoordGroup(p, group, now)).map((p: any) => p.id) as string[] };

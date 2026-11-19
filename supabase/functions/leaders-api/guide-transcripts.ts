@@ -77,6 +77,7 @@ export async function list(a: Admin) {
   const ids = rows.map((r) => String(r.participant_id));
   const people = new Map<string, any>();
   for (let i = 0; i < ids.length; i += 150) {
+    // counting-exempt: أسماء أصحاب محادثات قائمة، وسؤال المساعد مغلق على حساب العرض (DEMO_BLOCKED)
     const { data: ps, error: pe } = await db.from('participants').select('id, full_name, email, organization_name').in('id', ids.slice(i, i + 150));
     if (pe) throw pe;
     for (const p of ps || []) people.set(String((p as any).id), p);
@@ -135,6 +136,7 @@ export async function grants(a: Admin) {
   const ids = [...new Set((reads || []).map((r: any) => String(r.entity_id)))];
   const names = new Map<string, string>();
   if (ids.length) {
+    // counting-exempt: أسماء لسطور سجل اطلاع قائمة، لا عدّ
     const { data: ps } = await db.from('participants').select('id, full_name').in('id', ids);
     for (const p of ps || []) names.set(String((p as any).id), (p as any).full_name || '');
   }

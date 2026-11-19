@@ -73,6 +73,7 @@ export const AUDIT_AR = {
   'placement.approve-bulk': 'اعتُمد مستواه في اعتماد جماعي', 'final.reopen': 'أُعيد فتح تقييمه الختامي', 'group.assign': 'وُزّع على مجموعة',
   'coaching.add': 'أُضيفت له جلسة توجيه', 'coaching.booked': 'حجز جلسة توجيه', 'coaching.instant': 'طلب اتصالًا فوريًا',
   'certificate.awaiting-name': 'شهادته تنتظر تأكيد اسمه', 'certificate.skipped-disabled': 'لم تصدر شهادته لأن الإصدار موقوف',
+  'certificate.skipped-demo': 'لا تصدر شهادة لحساب العرض',
   'sponsor.approve': 'قُبلت رعايته', 'sponsor.hold': 'عُلّقت رعايته حتى يتوفر مقعد', 'sponsor.reject': 'رُفضت رعايته',
   'admin.preview-as': 'عُرض ملفه كما يراه خبيره', 'expert.capstone-view': 'اطّلع خبير على وثيقة مبادرته', 'guide.transcript-read': 'قُرئت محادثته في التوجيه والإرشاد',
   'demo.open': 'فُتح حساب العرض', 'demo.reset': 'أُعيد ضبط حساب العرض',

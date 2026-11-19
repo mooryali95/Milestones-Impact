@@ -12,6 +12,7 @@ import { journeyDefinition, releaseOf } from './programs.ts';
 import { approvedLevels, award, pointsOf } from './participant.ts';
 import { requirementApplies, seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
+import { counted } from './counting.ts';
 import {
   AUDIENCES, BOARD_FEEDBACK, boardCheck, boardScaffold, gradeStep, grantLive, HINT_MAX, hintCount, hintFor, hintsView, labAward, labLevelOf, labVisible, MASTERY,
   meterState, nextIndex, practicePct, publicSpec, revealedOf, boardCardStats, LEVELS,
@@ -374,8 +375,7 @@ export async function adminCards(b: Body) {
   const boards = (it.spec?.steps || []).map((st: any, i: number) => ({ st, i })).filter((x: any) => x.st.type === 'board');
   if (!boards.length) return { success: true, boards: [] };
   // بـ* لتحمل عمود التلميحات قبل ترحيل 20261111120200 وبعده
-  const rows = await all((f, t) => db.from('lab_attempts').select('*, participants!inner(is_demo, is_test)').eq('item_id', id)
-    .eq('participants.is_demo', false).eq('participants.is_test', false).order('id').range(f, t));
+  const rows = await all((f, t) => counted(db.from('lab_attempts').select('*, participants!inner(is_demo, is_test)').eq('item_id', id), 'participants').order('id').range(f, t));
   return {
     success: true,
     boards: boards.map(({ st, i }: any) => ({

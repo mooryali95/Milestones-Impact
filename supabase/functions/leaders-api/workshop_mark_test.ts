@@ -13,7 +13,7 @@ const ORG = U(880001), COHORT = U(880002), OTHER = U(880003), REQ_W = U(880004),
 const ADMIN = { email: 'a@example.sa' };
 
 function world() {
-  const who = (n: number, org: string | null, extra: Row = {}) => ({ id: U(880100 + n), full_name: `مشارك ${n}`, email: `m${n}@example.sa`, organization_id: org, organization_name: 'جهة', status: 'enrolled', ...extra });
+  const who = (n: number, org: string | null, extra: Row = {}) => ({ id: U(880100 + n), full_name: `مشارك ${n}`, email: `m${n}@example.sa`, organization_id: org, organization_name: 'جهة', status: 'enrolled', is_demo: false, ...extra });   // is_demo كما في القاعدة (not null default false): المتوقعون يُقرؤون بـlisted
   // 1 و2 في دفعة الجهة، 3 في دفعة أخرى، 4 منسحب من دفعة الجهة، 5 مساره لم يُعتمد كله
   const ps = [who(1, ORG), who(2, ORG), who(3, null), who(4, ORG, { status: 'withdrawn' }), who(5, ORG)];
   const placed = (p: Row, approved = 3) => ['milestone', 'impact', 'leadership'].map((dimension, i) => ({ participant_id: p.id, dimension, level: 'intermediate', approved_at: i < approved ? '2026-10-05T08:00:00Z' : null, participants: p }));

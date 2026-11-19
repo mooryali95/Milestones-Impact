@@ -6,6 +6,7 @@ import { baselineProgress } from './admin.ts';
 import { onboardingOf } from './onboarding.js';
 import { journeyApproved, pickCohort } from './logic.js';
 import { areaPrefixes, changeRow, expertLoad, pipelineBy } from './insight.js';
+import { listed } from './counting.ts';
 import { cohortMemberIds } from './programs.ts';
 
 type Body = Record<string, any>;
@@ -25,9 +26,9 @@ export async function expertLoadNow() {
   const [experts, reqs, upcoming, roles] = await Promise.all([
     // طاقة خبراء الرحلة وحدهم (journeyApproved): عضو اللجنة بلا دور لا يُحسب فيها
     db.from('experts').select('id, full_name, title, status, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => ((must(r) ?? []) as any[]).filter(journeyApproved)),
-    db.from('expert_requests').select(`expert_id, ${P}`).in('status', ['offered', 'accepted']).not('expert_id', 'is', null).eq('participants.is_demo', false).limit(5000).then((r) => (must(r) ?? []) as any[]),
-    db.from('coaching_sessions').select(`expert_id, ${P}`).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null).eq('participants.is_demo', false).limit(5000).then((r) => (must(r) ?? []) as any[]),
-    db.from('expert_requests').select(`expert_id, participant_id, ${P}`).eq('status', 'accepted').not('expert_id', 'is', null).eq('participants.is_demo', false).limit(5000).then((r) => (must(r) ?? []) as any[]),
+    listed(db.from('expert_requests').select(`expert_id, ${P}`).in('status', ['offered', 'accepted']).not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
+    listed(db.from('coaching_sessions').select(`expert_id, ${P}`).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
+    listed(db.from('expert_requests').select(`expert_id, participant_id, ${P}`).eq('status', 'accepted').not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
   ]);
   const people_by: Record<string, Set<string>> = {};
   for (const r of roles) (people_by[r.expert_id] ||= new Set()).add(r.participant_id);
@@ -36,9 +37,8 @@ export async function expertLoadNow() {
 
 // أين توقف المشاركون (بالجهة وبالدفعة) وحِمل الخبراء. بلا حسابات العرض، وحسابات الاختبار داخلة كما في قائمة المشاركين
 export async function adminInsight() {
-  const people = await all((f, t) => db.from('participants')
-    .select('id, full_name, phone, job_title, organization_id, organization_name, years_experience, status, last_login_at')
-    .eq('is_demo', false).order('id').range(f, t)) as any[];
+  const people = await all((f, t) => listed(db.from('participants')
+    .select('id, full_name, phone, job_title, organization_id, organization_name, years_experience, status, last_login_at')).order('id').range(f, t)) as any[];
   const ids = people.map((p) => p.id);
   const [progress, orgs, cohorts, enr, experts] = await Promise.all([
     baselineProgress(ids),
@@ -85,6 +85,7 @@ export async function adminChanges(b: Body = {}) {
     const m = await cohortMemberIds(String(b.cohort_id));
     if (!m) throw new Fail('الدفعة غير موجودة', 404);
     const [people, sessions] = await Promise.all([
+      // counting-exempt: بُرُد أعضاء الدفعة من cohortMemberIds (listed)، فلا يدخل فلتر الدفعة حساب العرض ولا سجله
       allFor(m.ids, () => db.from('participants').select('id, email').order('id'), 'id') as Promise<any[]>,
       db.from('workshop_sessions').select('id').eq('cohort_id', m.cohort.id).then((r) => (must(r) ?? []) as any[]),
     ]);
@@ -107,6 +108,7 @@ export async function adminChanges(b: Body = {}) {
   const page = got.slice(0, CHANGES_PAGE);
   const pids = [...new Set(page.filter((h) => h.entity === 'participants' && isUuid(h.entity_id)).map((h) => h.entity_id))] as string[];
   const names: Record<string, string> = {};
+  // counting-exempt: أسماء لسطور سجل التغييرات المعروضة، لا عدّ
   if (pids.length) for (const p of (must(await db.from('participants').select('id, full_name').in('id', pids)) ?? []) as any[]) names[p.id] = p.full_name;
   return { success: true, changes: page.map((h) => changeRow(h, names)), more: got.length > CHANGES_PAGE, next: page.length ? page[page.length - 1].created_at : null };
 }

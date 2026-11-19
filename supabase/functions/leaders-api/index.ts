@@ -102,6 +102,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'passkey.auth-verify': K.authVerify,
   // مسح رمز الحضور قبل الدخول (W1): إيصال موقّع بلا بيانات شخصية يُستهلك بـworkshop.checkin بعد الدخول، بحد معدل في activities.ts
   'workshop.scan': (b, ctx) => V.workshopScan(b, ctx),
+  // رابط تجربة حساب العرض (demo.ts): يفتح جلسة مشارك لحساب العرض وحده، بحد معدل لمحاولات الرمز من كل شبكة
+  'demo.link-open': (b, ctx) => D.linkOpen(b, ctx),
   'cert.verify': Z.verify,
   'rater.get': I.raterGet,
   'rater.submit': I.raterSubmit,
@@ -247,6 +249,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   // ثم ثلاثة بعده. كل جزء يمر بالبوابات نفسها التي يمر بها لو طُلب وحده (asAction)، ونتيجته كما لو طُلب وحده
   'me': async (p, b, sid, ctx) => {
     const m: any = await P.me(p);
+    // جلسة بدأها رابط تجربة: يعرض التطبيق سطر «حساب تجريبي مشترك» (linkSession في معالج الطلب)
+    if (m?.success && ctx?.demoShared) m.demo_shared = true;
     if (b.with_home !== true || !m?.success) return m;
     const [lab, ratings, sus] = await Promise.all(['lab.list', 'ratings.pending', 'sus.state'].map((a) => settle(a, asAction(a, p, {}, sid, ctx))));
     return { ...m, preload: { lab, ratings, sus } };
@@ -659,6 +663,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.hall': (_a, b) => H.adminState(b),
   'admin.demo-open': (a, b, ctx) => A.writer(a, (x, y) => D.open(x, y, ctx), b),
   'admin.demo-reset': (a, b) => A.superWriter(a, D.reset, b),
+  // روابط التجربة: القائمة والإنشاء والإلغاء للمدير ذي الكتابة كفتح العرض نفسه، وكلها في السجل
+  'admin.demo-links': (a) => A.writer(a, () => D.linkList(), {}),
+  'admin.demo-link-create': (a, b) => A.writer(a, D.linkCreate, b),
+  'admin.demo-link-revoke': (a, b) => A.writer(a, D.linkRevoke, b),
   'admin.hall-open': (a, b) => A.writer(a, H.open, b),
   'admin.hall-step': (a, b) => A.writer(a, H.step, b),
   'admin.hall-split': (a, b) => A.writer(a, H.split, b),
@@ -767,6 +775,8 @@ async function handle(req: Request): Promise<Response> {
     if (open[action]) return reply(req, await open[action](b, ctx));
     if (participant[action]) {
       const { participant: p, sessionId } = await P.participantFromToken(b.token);
+      // جلسة حساب العرض من رابط تجربة تنتهي بانتهاء رابطها أو إلغائه، في كل فعل (demo.ts). استعلام واحد لحساب العرض وحده
+      if (p.is_demo && await D.linkSession(sessionId)) (ctx as any).demoShared = true;
       // البوابات كلها في asAction، مصدرها الواحد للطلب وحده وللطلب المجمّع
       return await once('participant', p.id, () => asAction(action, p, b, sessionId, ctx));
     }

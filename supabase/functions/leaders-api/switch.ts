@@ -7,6 +7,7 @@ import { audit, CONFIG, db, Fail, hash, must, randomToken } from './core.ts';
 import { issueSession } from './participant.ts';
 import { viewerActive } from './logic.js';
 import { Door, rolesOf } from './doors.ts';
+import { listed } from './counting.ts';
 
 type Ctx = { ip: string | null; ua?: string | null };
 const SESSION_TABLE: Record<Door, string> = { participant: 'auth_sessions', expert: 'expert_sessions', org: 'coordinator_sessions' };
@@ -25,7 +26,7 @@ export async function switchTo(email: string, from: Door, to: unknown, ctx: Ctx,
   if (!(await rolesOf(email)).includes(target)) throw new Fail('لا حساب لك في هذه البوابة', 403, 'no_role');
   let token = '';
   if (target === 'participant') {
-    const { data: p } = await db.from('participants').select('id').eq('email', email).eq('is_demo', false).maybeSingle();
+    const { data: p } = await listed(db.from('participants').select('id').eq('email', email)).maybeSingle();
     if (!p) throw new Fail('لا حساب لك في هذه البوابة', 403, 'no_role');
     token = await issueSession(p.id, 'switch', { ip: ctx.ip, ua: ctx.ua ?? null } as any, bornAt);
   } else if (target === 'expert') {

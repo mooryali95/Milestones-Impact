@@ -10,6 +10,8 @@ export type FakeOpts = {
   onDelete?: (table: string, rows: Row[], tables: Record<string, Row[]>) => void;
   // دوال القاعدة (db.rpc). erasure_purge محاكاة افتراضيًا: الشهادات ثم الصف في معاملة واحدة، ولا صف = P0002 بلا أثر
   rpc?: (name: string, args: any, tables: Record<string, Row[]>) => { data: unknown; error: { code?: string; message: string } | null } | null;
+  // تضمين PostgREST (participants!inner وأمثاله): حقول تُضاف إلى الصف عند القراءة والتصفية، فيعمل مرشح participants.is_demo
+  embed?: (table: string, row: Row, tables: Record<string, Row[]>) => Row | null;
 };
 
 export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) {
@@ -29,7 +31,8 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
         rows.push(...added);
         return { data: single ? added[0] : added, error: null };
       }
-      const hit = rows.filter((r) => filters.every((f) => f(r)));
+      const view = (r: Row) => { const extra = opts.embed?.(table, r, tables); return extra ? { ...r, ...extra } : r; };
+      const hit = rows.filter((r) => { const v = view(r); return filters.every((f) => f(v)); });
       if (op.kind === 'update') { writes.push({ table, kind: 'update', value: op.value, ids: hit.map((r) => r.id) }); hit.forEach((r) => Object.assign(r, structuredClone(op.value))); }
       if (op.kind === 'delete') {
         writes.push({ table, kind: 'delete', ids: hit.map((r) => r.id) });
@@ -42,7 +45,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
         for (const [c, asc] of orders) { const x = String(a[c] ?? ''), y = String(b[c] ?? ''); if (x !== y) return (x < y ? -1 : 1) * (asc ? 1 : -1); }
         return 0;
       });
-      const out = sorted.slice(0, limit);
+      const out = sorted.slice(0, limit).map(view);
       return { data: single ? out[0] ?? null : out, error: null, count: hit.length };
     };
     // قيم in بين علامتي اقتباس (بريد فيه نقطة) تُقرأ بلا العلامتين كما يقرؤها PostgREST
@@ -90,6 +93,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
         return q;
       },
       lt: (c: string, v: string) => { filters.push((r) => String(r[c]) < v); return q; },
+      gt: (c: string, v: string) => { filters.push((r) => r[c] != null && String(r[c]) > v); return q; },
       gte: (c: string, v: string) => { filters.push((r) => r[c] != null && String(r[c]) >= v); return q; },
       lte: (c: string, v: string) => { filters.push((r) => r[c] != null && String(r[c]) <= v); return q; },
       maybeSingle: () => { single = true; return q; }, single: () => { single = true; return q; },

@@ -14,7 +14,7 @@ const NOW = Date.now();
 const iso = (ms: number) => new Date(NOW + ms).toISOString();
 
 function world() {
-  const who = (n: number, org: string | null) => ({ id: U(990100 + n), full_name: `مشارك ${n}`, email: `d${n}@example.sa`, organization_id: org, organization_name: 'جهة', status: 'enrolled' });
+  const who = (n: number, org: string | null) => ({ id: U(990100 + n), full_name: `مشارك ${n}`, email: `d${n}@example.sa`, organization_id: org, organization_name: 'جهة', status: 'enrolled', is_demo: false });   // is_demo كما في القاعدة (not null default false): المتوقعون يُقرؤون بـlisted
   const ps = [who(1, ORG), who(2, ORG), who(3, ORG), who(4, null)];
   const placed = (p: Row) => ['milestone', 'impact', 'leadership'].map((dimension) => ({ participant_id: p.id, dimension, level: 'intermediate', approved_at: '2026-10-05T08:00:00Z', participants: p }));
   return {

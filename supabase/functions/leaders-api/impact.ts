@@ -20,6 +20,7 @@ import { FEEDBACK_OPEN_AR } from './labels.js';
 import { missingColumn } from './missing-column.ts';
 import { FEATURE_OFF_AR, RATER_PAUSED_AR } from './features.js';
 import { features } from './features.ts';
+import { counted } from './counting.ts';
 
 type Body = Record<string, any>;
 
@@ -34,7 +35,10 @@ export const IMPACT_PHASES = ['pre', 'post'];
 // (pairs_with البعدي لا يساوي مفتاح المبدئي) يُعلَّم غير قابل للمقارنة ولا
 // تُقرأ نتائجه.
 async function latestResults(ids: string[] | null) {
-  const rows = await allFor(ids, () => db.from('assessments').select('id, participant_id, submitted_at, instrument_id, form, instruments(kind, key, pairs_with)')
+  // ids = null يقرأ قياسات الجميع (أثر التكرار في impactConfig): بقاعدة العد (counted). وبمعرّفات، المستدعي مسؤول عنها
+  // (تقرير الإدارة يمررها من قائمة counted، والمشارك يقرأ قياسه هو ولو كان حساب العرض)
+  const COLS = 'id, participant_id, submitted_at, instrument_id, form, instruments(kind, key, pairs_with)';
+  const rows = await allFor(ids, () => (ids ? db.from('assessments').select(COLS) : counted(db.from('assessments').select(`${COLS}, participants!inner(is_demo, is_test)`), 'participants'))
     .eq('status', 'submitted').order('submitted_at', { ascending: false }).order('id'));
   const pick: Record<string, { baseline?: any; post?: any; comparable?: boolean; reason?: string | null }> = {};
   for (const a of rows) {
@@ -88,7 +92,8 @@ async function impactConfig() {
   if (base) {
     const [qs, sessions] = await Promise.all([
       all((f, t) => db.from('questions').select('id, code, dimension, tier, options, form, active, anchor_code, min_level').eq('instrument_id', base.id).eq('active', true).range(f, t)),
-      all((f, t) => db.from('assessments').select('id, form').eq('instrument_id', base.id).eq('status', 'submitted').range(f, t)),
+      // ثبات الأداة من قياسات من يُعدّون وحدهم (counted): إجابات حساب العرض النمطية كانت تدخل ألفا وانحرافها المعياري
+      all((f, t) => counted(db.from('assessments').select('id, form, participants!inner(is_demo, is_test)').eq('instrument_id', base.id).eq('status', 'submitted'), 'participants').range(f, t)),
     ]);
     const rows: any[] = [];
     for (let i = 0; i < sessions.length; i += 200) {
@@ -527,7 +532,7 @@ export async function adminReport(b: Body) {
   const people = await all((f, t) => {
     // حساب العرض خارج إحصاءات الأثر كما في النظرة العامة (التدقيق 2026-11-10، البند 9.8: 6 هنا مقابل 5 هناك)
     // وحساب الاختبار خارجه كذلك (is_test، قرار المالك 2026-11-11)
-    let q = db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)').eq('is_demo', false).eq('is_test', false);
+    let q = counted(db.from('participants').select('id, full_name, email, organization_id, status, organizations(name)'));
     q = scopeOrg(q, b.organization_id);   // 'none' = بلا جهة، كما في فلتر النظرة العامة وشاشة الأثر
     if (b.participant_id) q = q.eq('id', String(b.participant_id));
     return q.order('id').range(f, t);
@@ -607,6 +612,7 @@ async function reactionStats(ids: string[] | null) {
 // بنود انتقال التعلم: نسبة الموافقة (أوافق وأوافق بشدة) لكل بند
 async function transferStats(ids: string[]) {
   if (!ids.length) return [];
+  // counting-exempt: قياسات معرّفات من قائمة تقرير الأثر المقروءة بـcounted
   const posts = must(await db.from('assessments').select('id, instruments!inner(kind)').eq('status', 'submitted')
     .eq('instruments.kind', 'post').in('participant_id', ids)) as any[] ?? [];
   if (!posts.length) return [];

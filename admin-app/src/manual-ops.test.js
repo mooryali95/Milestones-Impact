@@ -68,12 +68,14 @@ describe('عزل حساب العرض', () => {
   it('لا يدخل طوابير المراجعة ولا القاعة ولا التذكير', () => {
     const admin = api('admin.ts');
     // organization_id في الاختيار نفسه لفلتر الجهة في النظرة العامة (admin-core-6)
-    expect(admin).toMatch(/participants!inner\(full_name, email, is_demo[^)]*\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
-    expect(admin).toMatch(/\.eq\('status', 'pending_approval'\)\.eq\('is_demo', false\)/);
-    expect(admin).toMatch(/model_submissions[\s\S]*participants!inner\([^)]*is_demo\)[\s\S]*\.eq\('participants\.is_demo', false\)/);
+    // الشرط بقاعدته المسماة (counting.ts، تصور الحساب التجريبي 2026-11-19): listed = ليس حساب العرض، على الجدول أو على المضمَّن
+    expect(api('counting.ts')).toContain("export const listed = (q: any, col = '') => q.eq(at(col, 'is_demo'), false);");
+    expect(admin).toMatch(/listed\(db\.from\('participant_requirements'\)[\s\S]*?participants!inner\(full_name, email, is_demo[^)]*\)[\s\S]*?, 'participants'\)/);
+    expect(admin).toMatch(/listed\(db\.from\('participants'\)[^;]*\.eq\('status', 'pending_approval'\)\)/);
+    expect(admin).toMatch(/listed\(db\.from\('model_submissions'\)[\s\S]*?participants!inner\([^)]*is_demo\)[\s\S]*?, 'participants'\)/);
     // التذكير الأسبوعي: حالات لا تذكير لها (ومنها الموقوف) تُستبعد في الاستعلام، ومعها حساب العرض
-    expect(admin).toMatch(/\.not\('status', 'in', out\)\.eq\('is_demo', false\)/);
-    expect(api('capstone.ts')).toMatch(/participants!inner\([^)]*is_demo\)'\)\s*\.eq\('participants\.is_demo', false\)/);
-    expect(api('programs.ts')).toMatch(/\.in\('id', all\)\.eq\('is_demo', false\)/);
+    expect(admin).toMatch(/listed\(db\.from\('participants'\)\.select\('id, reminded_at'\)\.not\('status', 'in', out\)\)/);
+    expect(api('capstone.ts')).toMatch(/listed\(db\.from\('capstones'\)[^;]*participants!inner\([^)]*is_demo\)'\), 'participants'\)/);
+    expect(api('programs.ts')).toMatch(/listed\(db\.from\('participants'\)[^;]*\.in\('id', all\)\)/);
   });
 });

@@ -1259,3 +1259,26 @@
 /* «الحضور والجلسات»: يوم خارج نافذة مرحلته في دفعة مؤرخة (تنبيه لا منع) */
 .ws-out { display: block; margin-top: 4px; font-size: .8rem; line-height: 1.6; color: var(--st-warn-text); }
 .ws-out::before { content: '!'; display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px; margin-inline-end: 6px; border-radius: 50%; background: var(--st-warn); color: #fff; font-size: .7rem; font-weight: 700; }
+
+/* روابط تجربة حساب العرض (DemoLinks.jsx): داخل بطاقة حساب العرض، بخط فاصل فوقها */
+.demo-links { border-block-start: 1px solid var(--line-strong); margin-block-start: 14px; padding-block-start: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.demo-links-fresh, .demo-links-fresh .la-row { min-inline-size: 0; }
+.demo-links-fresh { grid-template-columns: minmax(0, 1fr); }
+.demo-links > p { margin: 0; }
+.demo-links-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.demo-links-form label { display: grid; gap: 4px; font-size: .8rem; font-weight: 600; color: var(--ink-soft); }
+.demo-links-form label:first-child { flex: 1 1 220px; min-inline-size: 0; }
+.demo-links-form input, .demo-links-form select, .demo-links-fresh input { border: 1px solid var(--line-strong); border-radius: 5px; padding: 7px 10px; font: inherit; font-size: .86rem; font-weight: 400; color: var(--ink); background: #fff; min-block-size: 36px; }
+.demo-links-form input { inline-size: 100%; }
+.demo-links-fresh { display: grid; gap: 8px; margin: 0; }
+.demo-links-fresh .la-row { flex-wrap: nowrap; }
+.demo-links-fresh input { flex: 1 1 auto; min-inline-size: 0; font-size: .78rem; }
+.demo-links-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.demo-links-list li { display: flex; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid var(--line-strong); border-radius: 6px; padding: 10px 12px; }
+.demo-links-list li > div { display: grid; gap: 2px; min-inline-size: 0; }
+.demo-links-list li > div > span { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .demo-links-form > button { inline-size: 100%; }
+  .demo-links-fresh .la-row { flex-wrap: wrap; }
+  .demo-links-fresh input { flex-basis: 100%; }
+}

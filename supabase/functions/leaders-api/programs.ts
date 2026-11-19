@@ -16,6 +16,7 @@ import { seatsUsedByOrg } from './entitlements.ts';
 import { features } from './features.ts';
 import { featureHiddenCodes, featureHiddenFor } from './features.js';
 import { isRunning, LIVE } from './cohort-running.js';
+import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
 
@@ -149,7 +150,7 @@ export async function cohortMemberIds(cohortId: string) {
   const [cohorts, enr, people] = await Promise.all([
     db.from('cohorts').select(COHORT_COLS).then((r: any) => must(r) as any[]),
     all((f, t) => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id').order('cohort_id').range(f, t)),
-    all((f, t) => db.from('participants').select('id, organization_id, is_test').eq('is_demo', false).order('id').range(f, t)),
+    all((f, t) => listed(db.from('participants').select('id, organization_id, is_test')).order('id').range(f, t)),
   ]);
   const list = cohorts || [];
   const cohort = list.find((c: any) => c.id === cohortId) || null;
@@ -188,7 +189,7 @@ export async function orgCohortSetups(orgIds: string[]) {
   const [cohorts, enr, people, team, sess, progs] = await Promise.all([
     db.from('cohorts').select(COHORT_COLS),
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
-    db.from('participants').select('id, organization_id').eq('is_demo', false).limit(5000),
+    listed(db.from('participants').select('id, organization_id')).limit(5000),
     db.from('cohort_experts').select('cohort_id, expert_id'),
     db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
     db.from('programs').select('id, name, archived_at'),
@@ -265,7 +266,7 @@ export async function list(_b: Body = {}, opt: { desk?: boolean } = {}) {
   for (const e of enr.data || []) if (e.status !== 'withdrawn') enrolled[e.cohort_id] = (enrolled[e.cohort_id] || 0) + 1;
   // الأعضاء الفعليون بالقاعدة نفسها التي تعمل بها المجموعات والقاعة والفريق (pickCohort): المسجّل صراحة،
   // ومن يتبع الدفعة بجهته. عمود الجدول كان يعدّ التسجيل الصريح وحده فيُظهر صفرًا لدفعة فيها أعضاء.
-  const people = must(await db.from('participants').select('id, organization_id, status, is_test').eq('is_demo', false).limit(5000)) as any[];
+  const people = must(await listed(db.from('participants').select('id, organization_id, status, is_test')).limit(5000)) as any[];
   const members = memberCounts(people, enr.data || [], cohorts.data || []);
   // لملف الدفعة: من ينتظر الاعتماد فيها، وجلساتها القادمة، واسم مستشارها، من قراءة واحدة لكل مصدر
   // العدد يستبعد حساب الاختبار كما في صفحة الجهة والنظرة العامة (forStats)، والقائمة تعرضه بشارته
@@ -475,13 +476,13 @@ async function liveWorld(scope: { orgs: (string | null)[]; cohortId: string | nu
       for (const e of await all((f, t) => db.from('enrollments').select('participant_id').eq('cohort_id', scope.cohortId).neq('status', 'withdrawn').order('id').range(f, t))) set.add(e.participant_id);
     }
     for (const o of new Set(scope.orgs.filter(Boolean))) {
-      for (const r of await all((f, t) => db.from('participants').select('id').eq('organization_id', o).eq('is_demo', false).order('id').range(f, t))) set.add(r.id);
+      for (const r of await all((f, t) => listed(db.from('participants').select('id').eq('organization_id', o)).order('id').range(f, t))) set.add(r.id);
     }
     ids = [...set];
     if (!ids.length) return { cohorts, participants: [] as any[], enrollments: [] as any[], progress: [] as any[] };
   }
   const [participants, enrollments, progress] = await Promise.all([
-    allFor(ids, () => db.from('participants').select('id, organization_id').eq('is_demo', false).order('id'), 'id'),
+    allFor(ids, () => listed(db.from('participants').select('id, organization_id')).order('id'), 'id'),
     allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
     // يكفي وجود صف: من له صف تقدم واحد يفقده بالنقل
     allFor(ids, () => db.from('participant_requirements').select('participant_id').order('participant_id').order('requirement_id')),
@@ -746,7 +747,7 @@ async function progressOn(c: any, requirementIds: string[]) {
   if (!ids.length) return 0;
   const [cohorts, people, enrollments] = await Promise.all([
     all((f, t) => db.from('cohorts').select(COHORT_COLS).order('id').range(f, t)),
-    allFor(ids, () => db.from('participants').select('id, organization_id').eq('is_demo', false).order('id'), 'id'),
+    allFor(ids, () => listed(db.from('participants').select('id, organization_id')).order('id'), 'id'),
     allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
   ]);
   const byP = new Map<string, any[]>();
@@ -765,6 +766,7 @@ export async function cohortEnroll(a: Admin, b: Body) {
   if (b.confirm_move !== true) {
     const [cohorts, participants, enrollments, progress] = await Promise.all([
       all((f, t) => db.from('cohorts').select(COHORT_COLS).order('id').range(f, t)),
+      // counting-exempt: جهات معرّفات اختارها المدير من قائمته (listFilter) لحارس النقل، لا عدّ
       allFor(ids, () => db.from('participants').select('id, organization_id').order('id'), 'id'),
       allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')),
       allFor(ids, () => db.from('participant_requirements').select('participant_id').order('participant_id').order('requirement_id')),
@@ -852,11 +854,12 @@ export async function cohortMembers(c: any) {
     db.from('cohorts').select(COHORT_COLS),
   ]);
   let ids = new Set((enr.data || []).filter((e: any) => e.cohort_id === c.id && e.status !== 'withdrawn').map((e: any) => e.participant_id));
+  // counting-exempt: معرّفات تُصفّى بعد سطرين بـlisted قبل أن تُعاد
   const extra = c.organization_id ? ((await db.from('participants').select('id').eq('organization_id', c.organization_id)).data || []).map((r: any) => r.id) : [];
   const all = [...new Set([...ids, ...extra])] as string[];
   if (!all.length) return [];
   // حساب العرض ليس عضوًا في أي دفعة: لا يظهر في القاعة ولا المجموعات ولا الحضور
-  const { data: ps } = await db.from('participants').select('id, full_name, email, organization_id, organization_name, job_title, status').in('id', all).eq('is_demo', false);
+  const { data: ps } = await listed(db.from('participants').select('id, full_name, email, organization_id, organization_name, job_title, status').in('id', all));
   const byP = new Map<string, any[]>();
   for (const e of enr.data || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
   const mine = (ps || []).filter((p: any) => pickCohort({ enrollments: byP.get(p.id) || [], cohorts: cohorts.data || [], organizationId: p.organization_id }).cohort?.id === c.id);

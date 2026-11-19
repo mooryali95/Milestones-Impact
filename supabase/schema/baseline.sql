@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261118150000_leaders_client_events
+-- as-of migration: 20261119100000_leaders_demo_share_links
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -206,6 +206,7 @@ create table if not exists leaders.auth_sessions (
   last_seen_at timestamp with time zone default now() not null,
   expires_at timestamp with time zone not null,
   revoked_at timestamp with time zone,
+  demo_link_id uuid,
   constraint auth_sessions_method_check CHECK ((method = ANY (ARRAY['email_link'::text, 'email_code'::text, 'passkey'::text, 'google'::text, 'demo'::text, 'switch'::text]))),
   constraint auth_sessions_pkey PRIMARY KEY (id),
   constraint auth_sessions_token_hash_key UNIQUE (token_hash)
@@ -717,6 +718,24 @@ create table if not exists leaders.coordinator_sessions (
   revoked_at timestamp with time zone,
   constraint coordinator_sessions_pkey PRIMARY KEY (id),
   constraint coordinator_sessions_token_hash_key UNIQUE (token_hash)
+);
+
+create table if not exists leaders.demo_links (
+  id uuid default gen_random_uuid() not null,
+  token_hash text not null,
+  label text not null,
+  created_by text not null,
+  created_at timestamp with time zone default now() not null,
+  expires_at timestamp with time zone not null,
+  revoked_at timestamp with time zone,
+  revoked_by text,
+  last_used_at timestamp with time zone,
+  uses integer default 0 not null,
+  constraint demo_links_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 80))),
+  constraint demo_links_token_hash_check CHECK ((char_length(token_hash) = 64)),
+  constraint demo_links_uses_check CHECK ((uses >= 0)),
+  constraint demo_links_pkey PRIMARY KEY (id),
+  constraint demo_links_token_hash_key UNIQUE (token_hash)
 );
 
 create table if not exists leaders.dimensions (
@@ -1652,6 +1671,7 @@ create table if not exists leaders.participants (
   is_test boolean default false not null,
   constraint participants_bio_check CHECK ((char_length(bio) <= 2000)),
   constraint participants_campaign_check CHECK (((campaign IS NULL) OR (campaign ~ '^[a-z0-9_-]{1,40}$'::text))),
+  constraint participants_demo_no_org CHECK ((NOT (is_demo AND (organization_id IS NOT NULL)))),
   constraint participants_email_check CHECK ((char_length(email) <= 254)),
   constraint participants_full_name_check CHECK ((char_length(full_name) <= 120)),
   constraint participants_job_title_check CHECK ((char_length(job_title) <= 120)),
@@ -2583,6 +2603,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.assessments add constraint assessments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.auth_sessions add constraint auth_sessions_demo_link_id_fkey FOREIGN KEY (demo_link_id) REFERENCES leaders.demo_links(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3670,6 +3694,8 @@ alter table leaders.conversations enable row level security;
 alter table leaders.coordinator_challenges enable row level security;
 
 alter table leaders.coordinator_sessions enable row level security;
+
+alter table leaders.demo_links enable row level security;
 
 alter table leaders.dimensions enable row level security;
 

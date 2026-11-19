@@ -33,9 +33,11 @@ describe('حساب العرض خارج الدفعة المفتوحة الحقي�
     expect(hall.match(/await hallCohortOf\(p\)/g)).toHaveLength(5);
     expect(hall.match(/await cohortOf\(p\)/g)).toHaveLength(1);
     const peer = api('peer.ts');
-    expect(peer.match(/\.eq\('participants\.is_demo', /g)).toHaveLength(3);
+    // قائمة المشارك بجهته من العزل (حساب العرض يرى طلباته وحدها)، وقائمتا الخبير والإدارة بالقاعدة المسماة listed (counting.ts)
+    expect(peer.match(/\.eq\('participants\.is_demo', !!p\.is_demo\)/g)).toHaveLength(1);
+    expect(peer.match(/listed\(db\.from\('peer_requests'\)[^;]*, 'participants'\)/g)).toHaveLength(2);
     expect(peer).toMatch(/if \(!r \|\| !sameSide\(p, r\)\) throw new Fail\('الطلب غير موجود', 404\)/);
     expect(peer).toMatch(/r\.participants\?\.is_demo\) throw new Fail\('هذا الطلب ليس من دفعاتك', 403\)/);
-    expect(api('katon.ts')).toMatch(/from\('katon_answers'\)\.select\('[^']*participants!inner\(is_demo\)'\)\.eq\('participants\.is_demo', false\)/);
+    expect(api('katon.ts')).toMatch(/listed\(db\.from\('katon_answers'\)\.select\('[^']*participants!inner\(is_demo\)'\), 'participants'\)/);
   });
 });

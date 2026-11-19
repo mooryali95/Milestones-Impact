@@ -9,6 +9,11 @@ import { DEFAULT_MODEL } from './logic.js';
 import { mePayload } from './participant.ts';
 import { compareFor } from './impact.ts';
 import type { Actor } from './admin.ts';
+import { simulated } from './counting.ts';
+
+// حساب العرض لا يُرفع له تقييم ختامي ولا يُصوَّت عليه ولا يُعاد فتحه (تصور الحساب التجريبي 2026-11-19، المرحلة 0): القرار
+// يغيّر حالة المشارك ويصدر شهادة ويدخل لوحات الإدارة. القراءة (get) تبقى، وحارس الشهادة نفسه في certificates.ts
+const noDemo = (p: any) => { if (simulated(p)) throw new Fail('حساب العرض لا يُقيَّم ختاميًا: لا قرار له ولا شهادة', 400, 'demo'); };
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
@@ -73,6 +78,7 @@ export async function get(b: Body, a?: { email: string }) {
 export async function save(a: Actor, b: Body) {
   const p = must(await db.from('participants').select('*').eq('id', String(b.participant_id || '')).maybeSingle());
   if (!p) throw new Fail('المشارك غير موجود', 404);
+  noDemo(p);
   const { program, components, record, ctx } = await sources(p);
   if (record?.status === 'approved') throw new Fail('التقييم معتمد؛ أعد فتحه أولًا لتعديله', 409);
   let adjust: any;
@@ -102,6 +108,7 @@ export async function vote(a: Actor, b: Body) {
   const pid = String(b.participant_id || '');
   if (!isUuid(pid)) throw new Fail('بيانات ناقصة');
   const p = must(await db.from('participants').select('*').eq('id', pid).maybeSingle());
+  noDemo(p);
   const { program, record } = await sources(p);
   if (!record || record.status !== 'pending') throw new Fail('لا تقييم بانتظار الاعتماد', 409);
   const block = voteBlock(a.email, record, program.final_eval);
@@ -147,6 +154,7 @@ export async function reopen(a: Actor, b: Body) {
   const note = String(b.note || '').trim();
   if (note.length < 10) throw new Fail('اكتب سبب إعادة الفتح');
   const p = must(await db.from('participants').select('*').eq('id', pid).maybeSingle());
+  noDemo(p);
   const { program, record } = await sources(p);
   if (!record) throw new Fail('لا تقييم', 404);
   must(await db.from('final_evaluations').update({ status: 'draft', votes: [], decided_at: null, updated_at: new Date().toISOString() }).eq('participant_id', pid).eq('program_id', program.id));

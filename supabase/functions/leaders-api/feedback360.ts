@@ -21,6 +21,7 @@ import {
 } from './feedback360.js';
 import { FEEDBACK_GROUP_AR } from './labels.js';
 import { requireVisible, visibilityOfParticipant } from './visibility.ts';
+import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
 type Settings = Awaited<ReturnType<typeof appSettings>>['feedback360'];
@@ -297,8 +298,7 @@ export async function sweep() {
 
 // ── الإدارة: حالة الدورات ونسب الاستجابة، بلا نتيجة فرد ──
 export async function adminList(b: Body) {
-  let q = db.from('feedback_cycles').select('id, participant_id, wave, status, submitted_at, opens_at, closes_at, closed_at, released_at, participants!inner(full_name, organization_id, is_demo, is_test)')
-    .eq('participants.is_demo', false).order('created_at', { ascending: false }).limit(500);
+  let q = listed(db.from('feedback_cycles').select('id, participant_id, wave, status, submitted_at, opens_at, closes_at, closed_at, released_at, participants!inner(full_name, organization_id, is_demo, is_test)'), 'participants').order('created_at', { ascending: false }).limit(500);
   if (b.status) q = q.eq('status', String(b.status));
   const { data, error } = await q;
   if (error) { if (missingTable(error)) return { success: true, ready: false, cycles: [], totals: null }; throw error; }

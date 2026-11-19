@@ -1941,6 +1941,12 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .svc-shelf .svc-item + .svc-item { border-top: 1px dashed rgba(148, 112, 46, .3); padding-top: 10px; }
 .svc-shelf .svc-line { margin: 0 0 6px; }
 
+/* رابط تجربة حساب العرض (TryLink.jsx): سطر الجلسة المشتركة، ورسالة الرابط الذي لا يفتح */
+.demo-shared-bar { background: var(--graphite); color: #fff; text-align: center; font-size: .875rem; line-height: 1.6; padding: 8px 16px; }
+.try-gone { padding-block-start: 48px; text-align: center; }
+.try-gone h1 { font-size: 1.375rem; margin: 0; }
+.try-gone p { margin: 0; color: var(--muted); }
+.try-gone .row { justify-content: center; }
 /* ════ جولة المشارك 2026-11-19: إصلاحات مؤكدة على عرض 390 ════ */
 /* أبواب القراءة على الشاشة الضيقة: عنوان الباب سطر كامل والشارات تحته، كصف الجلسة (كان العنوان ينضغط إلى نحو 30 بكسل) */
 @media (max-width: 620px) { .act-read > .grow { flex-basis: 100%; } }

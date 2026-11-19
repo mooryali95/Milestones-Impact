@@ -39,7 +39,9 @@ describe('5.1 حساب الاختبار is_test: خارج الإحصاءات و�
   });
   it('الإحصاءات تستبعده، والقوائم تُظهره بشارته، والمدير يضبطه', () => {
     const a = read('supabase/functions/leaders-api/admin.ts');
-    expect(a).toContain("export const forStats = (q: any) => q.eq('is_demo', false).eq('is_test', false);");
+    // القاعدة في counting.ts (تصور الحساب التجريبي 2026-11-19)، وforStats اسمها القديم في admin.ts
+    expect(read('supabase/functions/leaders-api/counting.ts')).toContain("export const counted = (q: any, col = '') => q.eq(at(col, 'is_demo'), false).eq(at(col, 'is_test'), false);");
+    expect(a).toContain('export const forStats = (q: any) => counted(q);');
     expect(a).toContain('const orgFilter = (q: any, org: unknown) => scopeOrg(forStats(q), org);');
     // النظرة العامة وصفحة الجهة (ولوحة منسقها عبر orgPayload) بـ orgFilter، وقائمة المشاركين بـ listFilter
     expect(a.slice(a.indexOf('export async function overview'), a.indexOf('export async function overview') + 200)).toContain('orgFilter(');
@@ -48,8 +50,8 @@ describe('5.1 حساب الاختبار is_test: خارج الإحصاءات و�
     expect(a).toContain("if ('is_test' in f) row.is_test = f.is_test === true;");
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toContain("import { org as orgPayload, requireWrite } from './admin.ts';");
     const pay = read('supabase/functions/leaders-api/payments.ts');
-    expect(pay.match(/\.eq\('is_demo', false\)\.eq\('is_test', false\)/g)).toHaveLength(2);
-    expect(read('supabase/functions/leaders-api/impact.ts')).toContain(".eq('is_demo', false).eq('is_test', false);");
+    expect(pay.match(/counted\(db\.from\('participants'\)/g)).toHaveLength(2);
+    expect(read('supabase/functions/leaders-api/impact.ts')).toContain("counted(db.from('participants')");
     const ui = read('admin-app/src/screens/Participants.jsx');
     expect(ui).toContain("fields: { is_test: !p.is_test }");
     // شارة الملف في رأسه (PersonShell.jsx منذ إعادة تصميم الملف 2026-11-16)

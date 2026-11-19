@@ -159,6 +159,7 @@ export const MIGRATIONS = [
   '20261118130000_leaders_workshop_capacity',
   '20261118140000_leaders_idempotency_keys',
   '20261118150000_leaders_client_events',
+  '20261119100000_leaders_demo_share_links',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -234,4 +235,5 @@ export const MIGRATION_GATES = {
   '20261118130000_leaders_workshop_capacity': ["tolerant", "قبله تُخفى السعة في اللوحة ويُحفظ اليوم بلاها، والحفظ بالسعة يعيد المحاولة بدونها (activities.ts: capacityReady وworkshopSave)"],
   '20261118140000_leaders_idempotency_keys': ["tolerant", "قبله يتجاهل الخادم المفتاح ولا يعلن x-idem، فلا يعيد العميل الكتابة تلقائيًا بعد خطأ شبكة ويعرض «تعذّر التأكد، تحقّق قبل الإعادة» (idempotency.ts)"],
   '20261118150000_leaders_client_events': ["tolerant", "قبله يرد client.event بـnot_migrated فيُسقط العميل طابوره بصمت، ولا يتغير شيء للمستخدم (client-events.ts)"],
+  '20261119100000_leaders_demo_share_links': ["tolerant", "قبله ترد أفعال روابط التجربة not_migrated وتعرض اللوحة «لم تُفعَّل بعد»، وفتح حساب العرض من اللوحة يبطل جلساته كلها كما كان (demo.ts)"],
 };

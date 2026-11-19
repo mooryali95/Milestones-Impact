@@ -73,7 +73,7 @@ describe('حساب العرض وحسابات الاختبار في الشهاد�
   });
   it('السجل بلا حساب العرض وبشارة الاختبار، وشهادات الشخص بعينه كلها', () => {
     expect(list).toContain('participants!inner(is_demo, is_test)');
-    expect(list).toContain("if (person) q = q.eq('participant_id', person); else q = q.eq('participants.is_demo', false);");
+    expect(list).toContain("if (person) q = q.eq('participant_id', person); else q = listed(q, 'participants');");
     expect(list).toContain('is_test: !!p?.is_test');
   });
   it('لا بريد شهادة ولا بريد قرار لحساب العرض', () => {

@@ -14,6 +14,7 @@ import { focusOpsCard, OpsHealthCard, OPS_REVEAL, opsRevealPending } from '../Op
 import { useOpsHealth } from '../ops-watch.js';
 import { useInbox } from '../pending.js';
 import { Spinner, useUI } from '../ui.jsx';
+import { DemoLinks, resetConfirmAr, useDemoLinks } from '../DemoLinks.jsx';
 import ReqQueue from './ReqQueue.jsx';
 import { readinessSummary } from '../org-hub.js';
 import { ageAr } from '../../../supabase/functions/leaders-api/inbox.js';
@@ -94,6 +95,8 @@ function OrgsReadiness({ orgs, onOrg }) {
 function DemoCard() {
   const { toast, confirm } = useUI();
   const [busy, setBusy] = useState(false);
+  // روابط التجربة: تُسمّى النشطة منها في تأكيد إعادة الضبط، فالحساب واحد يشتركون فيه
+  const links = useDemoLinks();
   const openDemo = async () => {
     // النافذة تُفتح فورًا بضغطة المستخدم، ثم يُكتب فيها الرابط، فلا يمنعها المتصفح
     const w = window.open('', '_blank');
@@ -104,7 +107,9 @@ function DemoCard() {
     if (w) w.location.href = r.url; else location.href = r.url;
   };
   const reset = async () => {
-    if (!(await confirm('إعادة حساب العرض إلى البداية؟ تُمسح إجاباته وتقدمه، ويبدأ العرض التالي من شاشة الدخول.'))) return;
+    // القائمة تُقرأ من جديد قبل السؤال: رابط أنشأه مدير آخر للتو يُذكر باسمه
+    const now = await links.load();
+    if (!(await confirm(resetConfirmAr(now?.success ? now.links : links.state?.links), { danger: true }))) return;
     setBusy(true);
     const r = await L('admin.demo-reset');
     setBusy(false);
@@ -119,6 +124,7 @@ function DemoCard() {
           <button className="btn-sm ghost" disabled={busy} onClick={reset}>أعِده إلى البداية</button>
         </span>
       </div>
+      <DemoLinks state={links.state} load={links.load} />
     </section>
   );
 }

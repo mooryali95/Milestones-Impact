@@ -70,7 +70,7 @@ export async function send(action, token, body = {}) {
 
 export async function call(action, body = {}) {
   const res = await send(action, session.get(), body);
-  if (!res.success && res.code === 'session') { session.clear(); onExpired(); }
+  if (!res.success && res.code === 'session') { session.clear(); onExpired(res); }
   return res;
 }
 

@@ -20,6 +20,7 @@ import { orgFeedback } from './feedback360.ts';
 import { visibilityOfOrg } from './visibility.ts';
 import { features } from './features.ts';
 import { coordFeedbackShown } from './features.js';
+import { listed } from './counting.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -142,6 +143,7 @@ export async function dashboardFor(c: any) {
 
   // نسبة التقدم بالحساب نفسه الذي يراه المشارك في رحلته (journeyFor)، لا بعدّ منفصل
   const [rows, levels] = await Promise.all([
+    // counting-exempt: معرّفات مشاركي الجهة من orgPayload (orgFilter)، فلا يعود منها حساب عرض ولا اختبار
     allFor(ids, () => db.from('participants').select('*').order('id'), 'id'),
     perms.scores ? allFor(ids, () => db.from('placements').select('participant_id, dimension, level').order('participant_id').order('dimension')) : Promise.resolve([]),
   ]);
@@ -187,6 +189,7 @@ export async function dashboardFor(c: any) {
   const [{ data: seated }, { data: pending }, { data: tests }] = await Promise.all([
     db.from('entitlements').select('participant_id').eq('organization_id', c.organization_id).eq('source', 'sponsor').is('revoked_at', null),
     db.from('sponsor_requests').select('participant_id').eq('organization_id', c.organization_id).eq('status', 'pending').in('kind', ['seats', 'contract']).then((r: any) => (r.error ? { data: [] } : r)),
+    // counting-exempt: عدّ حسابات الاختبار نفسها لتذكرها البوابة بصدق، وحساب العرض بلا جهة أبدًا (participants_demo_no_org)
     db.from('participants').select('id').eq('organization_id', c.organization_id).eq('is_test', true),
   ]);
   const testIds = new Set((tests || []).map((t: any) => t.id));
@@ -238,7 +241,7 @@ export async function impactFor(c: any) {
   // دون الحد الأدنى تكشف المتوسطات درجة الفرد: تبقى الأعداد وتُحجب المقارنة
   if ((r.counts?.paired ?? 0) < MIN_COHORT) return { counts: r.counts, cohort: null, transfer: null, caution: null, suppressed: MIN_COHORT, participants: [] };
   // الصفوف بالأسماء لمن وافق على اطلاع جهته على مستوياته فقط
-  const { data: ok } = await db.from('participants').select('id').eq('organization_id', c.organization_id).not('org_share_consented_at', 'is', null);
+  const { data: ok } = await listed(db.from('participants').select('id').eq('organization_id', c.organization_id).not('org_share_consented_at', 'is', null));
   const shared = new Set((ok || []).map((x: any) => x.id));
   // D18: متوسط الجميع مع صفوف من وافق يكشف بالطرح نتيجة من لم يوافق إن قلّوا. فالصفوف بالأسماء لا تخرج
   // إلا إن كان غير الموافقين من المقيسين صفرًا أو بلغوا حد الإخفاء نفسه
@@ -369,7 +372,7 @@ async function notifyNewAccess(orgId: string, orgName: string, before: Record<st
   const opened = Object.keys(SENSITIVE).filter((k) => after[k] && !before[k]).map((k) => SENSITIVE[k]);
   if (!opened.length) return;
   await audit('system', null, 'org.access-widened', 'organizations', orgId, null, { opened });
-  const { data: people } = await db.from('participants').select('full_name, email').eq('organization_id', orgId).neq('status', 'withdrawn').limit(500);
+  const { data: people } = await listed(db.from('participants').select('full_name, email').eq('organization_id', orgId).neq('status', 'withdrawn')).limit(500);
   for (const p of people || []) {
     if (p.email) sendMail(p.email, `${orgName} تطّلع على رحلتك`, orgAccessMail(p.full_name, orgName, opened)).catch((e) => console.error('org access mail', e));
   }
@@ -475,6 +478,7 @@ export async function adminCohortJourney(a: Admin, b: Body) {
   // رحلة كل عضو تُحسب هنا، فلدفعة أكبر من السقف (الدفعة المفتوحة غالبًا) رسالة صريحة بدل مهلة الدالة
   if (m.ids.length > COHORT_JOURNEY_MAX) throw new Fail(`الدفعة أكبر من أن تُرسم خريطتها هنا (${m.ids.length} عضوًا، والحد ${COHORT_JOURNEY_MAX}). اعرضها من «أين توقفوا» أو من صفحة كل جهة`, 413);
   const [rows, def]: any[] = await Promise.all([
+    // counting-exempt: معرّفات أعضاء الدفعة من cohortMemberIds (listed)
     m.ids.length ? allFor(m.ids, () => db.from('participants').select('*').order('id'), 'id') : Promise.resolve([]),
     journeyDefinition({}, m.cohort),
   ]);
@@ -522,6 +526,7 @@ export async function weeklyReports() {
 export async function orgImpact(_a: Admin, b: Body) {
   const id = String(b.id || '');
   const [{ count: participants }, { count: reports }, coord] = await Promise.all([
+    // counting-exempt: أثر حذف الجهة: كل صف مرتبط بها يُذكر، وحساب العرض بلا جهة أبدًا (participants_demo_no_org)
     db.from('participants').select('id', { count: 'exact', head: true }).eq('organization_id', id),
     db.from('reports').select('id', { count: 'exact', head: true }).eq('organization_id', id),
     coordinatorOf(id),
