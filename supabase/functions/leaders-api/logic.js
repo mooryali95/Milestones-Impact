@@ -2762,7 +2762,7 @@ export function expertAssignments(expertId, cohorts, team, groups) {
   const out = new Map();
   const byId = new Map((cohorts || []).map((c) => [c.id, c]));
   const of = (c) => {
-    if (!out.has(c.id)) out.set(c.id, { cohort_id: c.id, cohort: c.name, organization_id: c.organization_id || null, status: c.status || null, starts_on: c.starts_on || null, ends_on: c.ends_on || null, advisor: false, member: false, groups: [] });
+    if (!out.has(c.id)) out.set(c.id, { cohort_id: c.id, cohort: c.name, organization_id: c.organization_id || null, status: c.status || null, is_default: !!c.is_default, starts_on: c.starts_on || null, ends_on: c.ends_on || null, advisor: false, member: false, groups: [] });
     return out.get(c.id);
   };
   for (const c of cohorts || []) if (c.advisor_expert_id === expertId) of(c).advisor = true;

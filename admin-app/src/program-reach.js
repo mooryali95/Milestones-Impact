@@ -4,9 +4,8 @@
 // المصدر الواحد لـ«من يتبع البرنامج الآن» هو عدد أعضاء كل دفعة كما يحسبه الخادم بقاعدة الالتحاق (members في
 // admin.programs، memberCounts وpickCohort): المسجّل صراحة ومن يتبع الدفعة بجهته. فلا يُعد هنا شيء من جديد، ولا يُقال
 // «يسري على» دفعة لا عضو فيها.
-import { countAr } from '../../supabase/functions/leaders-api/labels.js';
+import { peopleAr, peopleGenAr } from './team.js';
 
-export const peopleAr = (n) => countAr(n, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا');
 const membersOf = (c) => Number(c?.members ?? c?.enrolled ?? 0) || 0;
 const liveOn = (pid, cohorts) => (cohorts || []).filter((c) => c.program_id === pid && c.status !== 'closed');
 
@@ -23,7 +22,7 @@ export function programReach(p, cohorts, orgName = () => '') {
   if (!total) return { on: false, total: 0, text: `${live.length === 1 ? 'دفعته' : 'دفعاته'} بلا أعضاء بعد، فلا يسري الآن على أي مشارك.` };
   const where = (c) => (c.is_default ? 'الدفعة المفتوحة' : c.organization_id ? orgName(c.organization_id) || c.name : `«${c.name}»`);
   const parts = withPeople.sort((a, b) => membersOf(b) - membersOf(a)).map((c) => `${where(c)} ${membersOf(c)}`);
-  return { on: true, total, text: `يسري على ${peopleAr(total)}: ${parts.join('، ')}` };
+  return { on: true, total, text: `يسري على ${peopleGenAr(total)}: ${parts.join('، ')}` };
 }
 
 /**

@@ -21,6 +21,10 @@ describe('«يسري على» من الأعضاء الفعليين', () => {
     expect(r.text).toBe('يسري على 42 مشاركًا: الدفعة المفتوحة 30، جمعية سفراء 12');
     expect(r.text).not.toContain('منظومة');
   });
+  it('المثنى بعد حرف الجر مجرور: «يسري على مشاركَين»', () => {
+    const two = [{ id: 'c9', program_id: 'pa', status: 'open', name: 'دفعة', members: 2 }];
+    expect(programReach({ id: 'pa' }, two, org).text).toBe('يسري على مشاركَين: «دفعة» 2');
+  });
   it('دفعات بلا أعضاء لا تُعد سريانًا، وبرنامج بلا دفعة كما كان', () => {
     expect(programReach({ id: 'pa' }, [cohorts[2]], org)).toMatchObject({ on: false, total: 0, text: 'دفعته بلا أعضاء بعد، فلا يسري الآن على أي مشارك.' });
     expect(programReach({ id: 'pb' }, cohorts, org).on).toBe(false);

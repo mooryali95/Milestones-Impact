@@ -30,5 +30,7 @@ export function cohortStateAr(c, now = Date.now()) {
     if (!c.starts_on) return 'لم يُحدد تاريخ بدئها';
     return String(c.starts_on).slice(0, 10) > isoDay(now) ? 'لم تبدأ بعد' : 'انتهت مدتها';
   }
+  // المفتوحة التي مضى تاريخ نهايتها لا تقفل شيئًا، فلا تُعرض «التسجيل مفتوح» وحدها
+  if (c.status === 'open' && c.ends_on && String(c.ends_on).slice(0, 10) < isoDay(now)) return 'انتهت مدتها، والتسجيل مفتوح';
   return COHORT_STATUS[c.status] || '';
 }

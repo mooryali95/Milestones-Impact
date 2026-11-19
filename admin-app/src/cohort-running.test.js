@@ -36,6 +36,7 @@ describe('«جارية» تعريف واحد', () => {
     expect(cohortStateAr({ ...c, status: 'planned' }, NOW)).toBe('مخطط لها');
     expect(cohortStateAr({ ...c, is_default: true, starts_on: null }, NOW)).toBe('مفتوحة على الدوام');
     expect(cohortStateAr({ ...c, status: 'closed' }, NOW)).toBe('مغلقة');
+    expect(cohortStateAr({ ...c, status: 'open', ends_on: '2026-11-10' }, NOW)).toBe('انتهت مدتها، والتسجيل مفتوح');
   });
   it('الجاهزية: بند إصدار المحتوى للجارية بالتاريخ، لا بالحالة المحفوظة', () => {
     const rows = (cohorts) => launchReadiness({ cohorts }, NOW).find((x) => x.key === 'content-release' || /إصدار محتوى/.test(x.label));
