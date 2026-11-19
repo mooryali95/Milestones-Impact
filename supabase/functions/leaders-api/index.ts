@@ -71,6 +71,8 @@ import * as GU from './guide.ts';
 import * as GE from './guide-eval.ts';
 import * as GA from './guide-admin.ts';
 import * as TD from './today-desk.ts';
+import * as CV from './cohort-visits.ts';
+import * as CU from './cohort-pulse.ts';
 import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
@@ -150,6 +152,11 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       slack_hello: await slackHello(db).catch((e) => { console.error('slack hello', e); return 'failed' as const; }),
       // الملخص اليومي لإشعارات الإدارة: مرة في اليوم في أول تشغيل بعد 9:00 بالرياض (المهمة في الدقيقة 17، فنحو 9:17)، لا يُنشر فارغًا، وبريد واحد بدله إن لم يصل Slack
       daily_digest: await DG.dailyDigest().catch((e) => ({ due: true, error: String(e?.message || e) })),
+      // لقطة الدفعات الجارية (cohort-pulse.ts): مرة في يوم UTC لكل دفعة، أعداد وحدها. آخر الخطوات لأنها الأثقل (رحلة كل عضو)،
+      // فإن طالت لم تؤخر ما قبلها، وما لم يُلتقط يُلتقط في الساعة التالية. والملخص اليومي يقرأ سطره مما التُقط قبله
+      cohort_snapshots: await CU.cohortSnapshots().catch((e) => ({ taken: 0, error: String(e?.message || e) })),
+      // الملخص الأسبوعي لكل دفعة جارية: يستحق الأحد 9:00 بالرياض، ويُعاد كل ساعة حتى 48 ساعة إن ضاقت حصة البريد
+      cohort_weekly: await CU.cohortWeekly().catch((e) => ({ due: true, error: String(e?.message || e) })),
     };
   },
   'xp.auth-start': E.portalStart,
@@ -588,6 +595,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.org-journey': C.adminJourney,
   // خريطة رحلة الدفعة في ملفها: قراءة بمنطق org-journey وصلاحيته نفسها
   'admin.cohort-journey': C.adminCohortJourney,
+  // وقت آخر زيارة المدير للدفعة (المرحلة 3 من تشغيل الدفعة): علامة قراءة له وحده بعد عرض شريط «منذ آخر زيارة»، لكل حساب إدارة
+  'admin.cohort-visit': (a, b) => CV.adminCohortVisit(a, b),
   'admin.book-preview': (_a, b) => A.bookPreview(b),
   'admin.submissions': (_a, b) => A.submissions(b),
   'admin.submission': (_a, b) => A.submission(b),

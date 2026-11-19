@@ -773,6 +773,23 @@ export function healthMail(rows: [string, string][], issues: string[]) {
     issues.length ? `${issues.length} يحتاج تدخلك` : 'لا شيء يحتاج تدخلك', 'يصلك هذا التقرير كل أسبوع لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.');
 }
 
+// الملخص الأسبوعي لدفعة جارية (تصور تشغيل الدفعة 2026-11-19، المرحلة 3، القرار 11): أعداد من لقطة الدفعة اليومية وحدها، بلا اسم
+// مشارك ولا بريد ولا جوال. اسم الدفعة ومراحلها ليست بيانات مشارك. والزر يفتح تبويب «المتابعة» في ملفها
+// الاسم بعد النقطتين لا داخل الجملة: أسماء الدفعات تبدأ غالبًا بكلمة «دفعة»
+export const cohortWeeklySubject = (cohort: string) => `الملخص الأسبوعي: ${cohort}`;
+export type CohortWeekly = { members: number; active_week: number; late: number; waiting: number; finished: number; done_week: number; stages: { title: string; here: number }[]; next_at: string | null; taken_at: string };
+const riyadhTime = (iso: string) => new Intl.DateTimeFormat('ar-SA-u-nu-latn-ca-gregory', { timeZone: 'Asia/Riyadh', weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+export function cohortWeeklyMail(cohort: { id: string; name: string }, k: CohortWeekly) {
+  return shell('admin', mailTitle`الملخص الأسبوعي: ${cohort.name}`,
+    mailRows([['الأعضاء', k.members], ['نشطون هذا الأسبوع', k.active_week], ['أنشطة مكتملة هذا الأسبوع', k.done_week],
+      ...k.stages.filter((x) => x.here > 0).map((x) => [`في مرحلة ${x.title}`, x.here] as [string, unknown]),
+      ['أتموا الرحلة', k.finished], ['متأخرون', k.late], ['ينتظرون قرارك', k.waiting],
+      ['أقرب جلسة', k.next_at ? riyadhTime(k.next_at) : 'لا جلسة مؤرخة']])
+    + mailNote(`الأعداد من لقطة ${esc(riyadhTime(k.taken_at))} بتوقيت الرياض، بلا أسماء. التفاصيل في تبويب «المتابعة».`)
+    + mailButton(`${SITES.admin}/#/leaders/programs/${encodeURIComponent(cohort.id)}?view=follow`, 'افتح المتابعة'),
+    `${k.active_week} نشطون · ${k.late} متأخرون · ${k.waiting} ينتظرون قرارك`, 'يصلك هذا الملخص كل أحد لكل دفعة جارية. توقفه من مركز الإشعارات في لوحة الإدارة.');
+}
+
 // تنبيه أمني بتغيير مفتاح المساعد للمالكين: الحساب والطريقة والوقت وآخر أربعة وحدها، بلا شيء آخر من المفتاح
 export const AGENT_KEY_MAIL_SUBJECT = { changed: 'تنبيه أمني: تم تغيير مفتاح المساعد', reverted: 'تنبيه أمني: أُعيد مفتاح المساعد إلى سر الخادم' };
 export function agentKeyMail(kind: 'changed' | 'reverted', rows: [string, string][]) {
@@ -971,6 +988,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'passkey-added', family: 'access', label: 'إضافة مفتاح مرور', subject: 'أُضيف مفتاح مرور إلى حسابك', html: () => passkeyAddedMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
+  { key: 'cohort-weekly', family: 'admin', label: 'ملخص الدفعة الأسبوعي', subject: cohortWeeklySubject('دفعة التجربة'), html: () => cohortWeeklyMail({ id: '00000000-0000-0000-0000-000000000000', name: 'دفعة التجربة' }, { members: 24, active_week: 17, late: 3, waiting: 2, finished: 1, done_week: 31, stages: [{ title: 'التدريب', here: 14 }, { title: 'التطبيق في العمل', here: 6 }], next_at: '2026-11-24T06:00:00Z', taken_at: '2026-11-22T00:17:00Z' }) },
   { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
   { key: 'team-assigned', family: 'experts', label: 'التكليف في فريق دفعة', subject: 'كُلّفت في فريق دفعة وزارة التجربة 2026', html: () => teamAssignedMail('منى', { cohort: 'دفعة وزارة التجربة 2026', org: 'وزارة التجربة', role: 'موجّه', scope: 'خبير المجموعة 2', period: '1 مارس 2026 إلى 30 يونيو 2026' }) },

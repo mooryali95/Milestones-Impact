@@ -23,6 +23,8 @@ export const cohortTab = (qs = '') => { const v = new URLSearchParams(String(qs)
 /** مرحلة الخريطة التي يُفتح عليها تبويب «المتابعة» من رابطه، أو '' */
 export const followStage = (qs = '') => { const p = new URLSearchParams(String(qs)); return p.get('view') === 'follow' ? p.get('stage') || '' : ''; };
 /** ما يُكتب في العنوان لتبويب: لا شيء للملف، والمرحلة مع «المتابعة» وحدها */
+// عرض سريع يُفتح به «المتابعة» من رابط (?view=follow&show=late، تنبيه المتأخرين في «نظرة عامة»): «متأخرون» وحده اليوم
+export const followShow = (qs = '') => { const p = new URLSearchParams(String(qs)); return p.get('view') === 'follow' && p.get('show') === 'late' ? 'late' : ''; };
 export const tabQuery = (k, stage = '') => (k === 'overview' ? '' : `view=${k}${k === 'follow' && stage ? `&stage=${encodeURIComponent(stage)}` : ''}`);
 
 // من أين جاء موعد المعلم (مصدر milestoneDueInfo)، بكلمات المدير

@@ -158,7 +158,10 @@ export async function cohortMemberIds(cohortId: string) {
   const byP = new Map<string, any[]>();
   for (const e of enr) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id)!.push(e); }
   const ids = people.filter((p: any) => !p.is_test && pickCohort({ enrollments: byP.get(p.id) || [], cohorts: list, organizationId: p.organization_id || null }).cohort?.id === cohortId).map((p: any) => p.id as string);
-  return { cohort, ids };
+  // متى أُلحق كل عضو بهذه الدفعة (صف إلحاقه إن وُجد): لسطر «انضموا للدفعة» في «منذ آخر زيارة». من دخلها بجهته بلا إلحاق لا صف له
+  const joined: Record<string, string> = {};
+  for (const id of ids) { const e = (byP.get(id) || []).find((x: any) => x.cohort_id === cohortId); if (e?.created_at) joined[id] = e.created_at; }
+  return { cohort, ids, joined };
 }
 
 // عدد أعضاء كل دفعة فعلًا، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة

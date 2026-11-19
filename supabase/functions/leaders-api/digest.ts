@@ -19,6 +19,7 @@ import { DIGEST_HOUR_RIYADH, DIGEST_SUBJECT, digestEvents, EVENT_INDEX, eventOf,
 import { notifySettings } from '../_shared/notify-settings.ts';
 import { NOTICE_ACTION } from './notify.ts';
 import { SITES } from '../_shared/sites.js';
+import { cohortDigest } from './cohort-pulse.ts';
 
 export const DIGEST_ACTION = 'system.digest';
 const DAY_MS = 864e5;
@@ -26,7 +27,8 @@ const MAX_WINDOW_MS = 2 * DAY_MS;
 // سقف القراءة لكل مصدر: يوم مزدحم لا يقرأ السجل كله، وما زاد يُذكر «أكثر من»
 const READ_LIMIT = 2000;
 
-export type DigestRow = { key: string; label: string; count: number; more?: boolean };
+// text: سطر بنصه بدل عدده (تقدم الدفعات: «14 نشاطًا مكتملًا، متأخران جديدان»)، وعدده صفر فلا يدخل مجموع الإشعارات
+export type DigestRow = { key: string; label: string; count: number; more?: boolean; text?: string };
 export type DigestResult = { due: boolean; posted?: boolean; slack?: boolean; email?: boolean; empty?: boolean; rows?: number; error?: string };
 
 // ساعة الرياض الآن (UTC+3 بلا توقيت صيفي)
@@ -40,7 +42,17 @@ function tally(keys: string[], allowed: Set<string>, into: Map<string, number>) 
   }
 }
 
-export async function digestRows(since: string, allowed: Set<string>): Promise<{ rows: DigestRow[]; errors: string[] }> {
+// سطر تقدم الدفعات (cohort_progress، تصور تشغيل الدفعة 2026-11-19، المرحلة 3): من لقطات الدفعات التي التُقطت في نافذة الملخص،
+// أعداد وحدها. آخر السطور. تعذّر قراءته خطأ يعيد الملخص في الساعة التالية، وقبل ترحيل اللقطة لا سطر
+export const COHORT_EVENT = 'cohort_progress';
+async function cohortRow(since: string, until: string, errors: string[]): Promise<DigestRow[]> {
+  try {
+    const line = await cohortDigest(since, until);
+    return line ? [{ key: COHORT_EVENT, label: 'تقدم الدفعات', count: 0, text: line.text }] : [];
+  } catch (e) { errors.push(`cohorts: ${(e as Error)?.message || e}`); return []; }
+}
+
+export async function digestRows(since: string, allowed: Set<string>, until = new Date().toISOString()): Promise<{ rows: DigestRow[]; errors: string[] }> {
   const counts = new Map<string, number>();
   const capped = new Set<string>();
   const errors: string[] = [];
@@ -59,7 +71,8 @@ export async function digestRows(since: string, allowed: Set<string>): Promise<{
   // ترتيب الفهرس نفسه، فيثبت ترتيب السطور من يوم إلى يوم
   const rows = [...counts.entries()]
     .sort(([a], [b]) => Object.keys(EVENT_INDEX).indexOf(a) - Object.keys(EVENT_INDEX).indexOf(b))
-    .map(([key, count]) => ({ key, label: eventOf(key).label, count, ...(capped.has(key) ? { more: true } : {}) }));
+    .map(([key, count]) => ({ key, label: eventOf(key).label, count, ...(capped.has(key) ? { more: true } : {}) })) as DigestRow[];
+  if (allowed.has(COHORT_EVENT)) rows.push(...await cohortRow(since, until, errors));
   return { rows, errors };
 }
 
@@ -68,8 +81,8 @@ export async function digestRows(since: string, allowed: Set<string>): Promise<{
 export const DIGEST_CHUNK = 600;
 export function digestTexts(rows: DigestRow[]): string[] {
   const total = rows.reduce((n, r) => n + r.count, 0);
-  const lines = [`🗞️ ${total} إشعارًا منذ الملخص السابق`,
-    ...rows.map((r) => `• ${r.label}: ${r.more ? 'أكثر من ' : ''}${r.count} ${SITES.admin}/${screenOf(r.key)}`)].map((l) => maskText(l).slice(0, DIGEST_CHUNK));
+  const lines = [total ? `🗞️ ${total} إشعارًا منذ الملخص السابق` : '🗞️ الملخص اليومي',
+    ...rows.map((r) => `• ${r.label}: ${r.text ?? `${r.more ? 'أكثر من ' : ''}${r.count}`} ${SITES.admin}/${screenOf(r.key)}`)].map((l) => maskText(l).slice(0, DIGEST_CHUNK));
   const out: string[] = [];
   let cur = '';
   for (const l of lines) {
@@ -82,7 +95,7 @@ export function digestTexts(rows: DigestRow[]): string[] {
 export function digestMail(rows: DigestRow[], why: 'unconfigured' | 'failed') {
   return mailShell(DIGEST_SUBJECT,
     mailText(why === 'failed' ? 'لم يصل الملخص اليومي إلى Slack، فهذه نسخته بالبريد.' : 'Slack غير مضبوط، فهذا الملخص اليومي بالبريد.')
-    + mailRows(rows.map((r) => [r.label, `${r.more ? 'أكثر من ' : ''}${r.count}`] as [string, string]))
+    + mailRows(rows.map((r) => [r.label, r.text ?? `${r.more ? 'أكثر من ' : ''}${r.count}`] as [string, string]))
     + mailNote('هذا بريد واحد في اليوم بدل الملخص في Slack. والإشعارات الحرجة تصلك بالبريد فور وقوعها كما هي.')
     + mailButton(`${SITES.admin}/#/leaders/overview`, 'افتح لوحة الإدارة'),
     { family: 'admin', preheader: 'الملخص اليومي لإشعارات الإدارة', footnote: 'يصلك هذا الملخص لأن بريدك مضبوط في LEADERS_ALERT_EMAIL.' });
@@ -109,7 +122,7 @@ export async function dailyDigest(now = Date.now()): Promise<DigestResult> {
   const since = new Date(Math.max(prevAt, floor)).toISOString();
   // لحظة القراءة قبل الاستعلامات: ما يقع بعدها يعدّه الملخص التالي
   const until = new Date(now).toISOString();
-  const { rows, errors } = await digestRows(since, new Set(digestEvents(settings)));
+  const { rows, errors } = await digestRows(since, new Set(digestEvents(settings)), until);
   // مصدر لم يُقرأ: لا يُعلَّم اليوم، فيُعاد في الساعة التالية بدل ملخص ناقص يُعدّ كاملًا
   if (errors.length) return { due: true, error: errors.join('; ').slice(0, 300) };
   // ما وصل يُعلَّم في هذه النسخة أولًا، فتعذّر العلامة لا يعيد الإرسال منها. والعلامة تُحاول مرتين
@@ -119,7 +132,7 @@ export async function dailyDigest(now = Date.now()): Promise<DigestResult> {
     await write().catch(() => write()).catch((e) => console.error('digest mark:', e));
   };
   if (!rows.length) { await mark({ empty: true }); return { due: true, posted: false, empty: true }; }
-  const counts = Object.fromEntries(rows.map((r) => [r.key, r.count]));
+  const counts = Object.fromEntries(rows.map((r) => [r.key, r.text ?? r.count]));
   const parts = digestTexts(rows);
   const slack = slackConfigured() ? (await Promise.all(parts.map((t) => slackDeliver('digest', t, { client: db })))).every(Boolean) : false;
   if (slack) { await mark({ slack: true, counts, parts: parts.length }); return { due: true, posted: true, slack: true, email: false, rows: rows.length }; }

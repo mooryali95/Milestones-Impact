@@ -11,6 +11,7 @@ import { cohortPlan, planService, planTrack, stageWindows, todayStage, todayStag
 import { inProgram } from './logic.js';
 import { ownerOf } from './journey-timeline.js';
 import { stageRules } from './journey.js';
+import { changeFacts, momentOf } from './cohort-changes.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
 export const STAGE_GRACE_DAYS = MILESTONE_GRACE_DAYS;
@@ -88,12 +89,14 @@ export function journeyBlocks(journey) {
 
 // متى دخل مرحلته: أحدث تاريخ إتمام معروف لما قبلها (بنود الرحلة، وإتمام الملف والقياس والاعتماد)، وإلا تسجيله.
 // المراحل التي «تسير معًا» دخلها معًا: ما قبل أول مجموعتها وحده يُحسب، فإتمام مرحلة تسير معها لا يجعله «دخل للتو» (R3b)
-export function stageEntry(journey, idx, dates = []) {
+// at: من أين تُقرأ لحظة البند. الافتراضي تاريخ إتمامه في صفه كما كان، و«المتابعة» تمرر momentOf (اللحظة المعلَّمة من جدول
+// البند نفسه، cohort-changes.js) لسطر «دخلوا مرحلة» وحده
+export function stageEntry(journey, idx, dates = [], at = (it) => it.completed_at) {
   let best = null;
   const take = (d) => { if (d && (!best || String(d) > String(best))) best = d; };
   const group = groupAt(journey, idx);
   const start = group.length ? journey.indexOf(group[0]) : idx;
-  for (const s of journey.slice(0, Math.max(0, start))) for (const it of s.items || []) take(it.completed_at);
+  for (const s of journey.slice(0, Math.max(0, start))) for (const it of s.items || []) take(at(it));
   if (start > 0) dates.forEach(take);
   return best;
 }
@@ -207,6 +210,11 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   const herePhase = new Map();
   const members = [];
   const titleOf = (k) => stages[keys.indexOf(k)]?.title_ar || k;
+  // لحظة انقضاء مهلة مرحلة مؤرخة على جدول الدفعة (غداة نهاية نافذتها والمهلة)، أو null لما لا موعد له
+  const dueOf = (k) => {
+    const s = stages[keys.indexOf(k)], w = s && windows[s.key];
+    return w && !cohort?.is_default && (daysOf(s) > 0 || plan.byKey[s.key]?.source === 'pinned') ? `${addDays(w.to, STAGE_GRACE_DAYS + 1)}T00:00:00.000Z` : null;
+  };
   for (const p of people) {
     const mem = roster ? { id: p.id, name: p.name, status: p.status, state: 'ontime', stage_keys: [], track_keys: [], late_keys: [], stage: null, tracks: [], days: null, late: false,
       needs: null, turn: 'none', why: null, turns: [], stuck: [], progress: p.progress ?? null, services: [] } : null;
@@ -238,6 +246,12 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
       const entry = stageEntry(j, cur.idx, p.dates || []) || p.created_at || null;
       const days = entry ? Math.max(0, daysBetween(isoDay(entry), t)) : 0;
       const phases = new Set();
+      // لحظة دخوله موضعه بلحظات البنود المعلَّمة من جداولها (momentOf)، لسطر «دخلوا مرحلة» و«صاروا متأخرين» في «منذ آخر زيارة».
+      // أول مرحلة ليست دخولًا. وأيام المكوث والتأخر نفسه يبقيان على حسابهما كما في لوحة الجهة
+      const enteredAt = mem && cur.start > 0 ? stageEntry(j, cur.idx, p.dates || [], momentOf) : null;
+      // في أول مرحلة: لحظة انضمامه، فمن انضم ومهلتها منقضية صار متأخرًا لحظة انضم لا قبل أن يكون عضوًا
+      const sinceHere = enteredAt || (cur.start > 0 ? null : p.joined_at || p.created_at || null);
+      const lateFrom = [];
       for (const st of cur.stages) {
         const s = stages[keys.indexOf(st.key)];
         const a = acc[st.key];
@@ -251,6 +265,11 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
         const dated = w && !cohort?.is_default && (d > 0 || plan.byKey[s.key]?.source === 'pinned');
         const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
         if (late) { a.late += 1; latePeople.add(p.id); }
+        // متى بدأ تأخره في هذه المرحلة: غداة انقضاء المهلة (بيوم UTC كما يُحسب التأخر)، أو لحظة دخوله إن دخلها وموعدها منقضٍ
+        if (late && mem) {
+          const due = `${dated ? addDays(w.to, STAGE_GRACE_DAYS + 1) : addDays(isoDay(entry || t), d + STAGE_GRACE_DAYS + 1)}T00:00:00.000Z`;
+          lateFrom.push(dated && sinceHere && timeOf(sinceHere) > timeOf(due) ? lateChain(j, cur.start, sinceHere, p, dueOf) : due);
+        }
         const needs = needsOf(st);
         if (needs) a.reasons.set(needs, (a.reasons.get(needs) || 0) + 1);
         a.rows.push({ id: p.id, name: p.name, days, late, needs: activity ? needs : null });
@@ -265,12 +284,15 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
         // الصف يحمل موضعه (أول ما في stuck من مرحلة الموضع نفسها)، ومن يسير في مرحلتين معًا تُسمى مرحلتاه ودور كل منهما
         const at = mem.stuck.find((x) => x.key === key) || mem.stuck[0];
         const titles = mem.stuck.map((x) => x.title);
-        Object.assign(mem, { days, late: mem.late_keys.length > 0, needs: at?.needs ?? null, turn: at?.turn || 'none', why: at?.why || null,
+        // «منذ» في الصف من لحظة دخوله المعلَّمة إن عُرفت، فلا يقول الصف «منذ 26 يومًا» لمن يقول الشريط إنه دخل أمس. التأخر وأعداد
+        // الخريطة على حسابها كما هي
+        Object.assign(mem, { days: enteredAt ? Math.max(0, daysBetween(isoDay(enteredAt), t)) : days, late: mem.late_keys.length > 0, needs: at?.needs ?? null, turn: at?.turn || 'none', why: at?.why || null,
           turns: [...new Set(mem.stuck.map((x) => x.turn))], stage: titles.length < 2 ? titles[0] || null : `${andAr(titles)} معًا`,
-          state: mem.late_keys.length ? 'late' : phases.has('admission') ? 'onboarding' : 'ontime' });
+          state: mem.late_keys.length ? 'late' : phases.has('admission') ? 'onboarding' : 'ontime',
+          entered_at: enteredAt, late_since: lateFrom.length ? lateFrom.sort((x, y) => timeOf(x) - timeOf(y))[0] : null });
       }
     } else if (mem) mem.state = 'finished';
-    if (mem) { Object.assign(mem, memberActivity(j, today)); members.push(mem); }
+    if (mem) { Object.assign(mem, memberActivity(j, today), changeFacts(j, { now: new Date(today).getTime() }), { joined_at: p.joined_at || p.created_at || null }); members.push(mem); }
     for (const m of p.milestones || []) {
       const x = ms.get(m.id) || { id: m.id, title: m.title_ar, due: m.due || null, done: 0, late: 0, sort: m.sort ?? 0 };
       if (m.done) x.done += 1;
@@ -312,7 +334,8 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
     // المنسحب والموقوف خارج الرحلة: صف بلا مرحلة ولا تأخر، فلا يدخل عدًّا في الخريطة
     for (const p of all.filter((x) => !inProgram(x.status))) {
       members.push({ id: p.id, name: p.name, status: p.status, state: 'out', stage_keys: [], track_keys: [], late_keys: [], stage: null, tracks: [], days: null, late: false,
-        needs: null, turn: 'none', why: null, turns: [], stuck: [], progress: p.progress ?? null, services: [], attendance: null, consult: null, missed_last: false });
+        needs: null, turn: 'none', why: null, turns: [], stuck: [], progress: p.progress ?? null, services: [], attendance: null, consult: null, missed_last: false,
+        entered_at: null, late_since: null, done_at: [], waiting: [], finished_at: null, ws: [], joined_at: p.joined_at || p.created_at || null });
     }
   }
   const peak = out.reduce((b, s) => (s.here > (b?.here || 0) || (s.here === b?.here && s.late > b.late) ? s : b), null);
@@ -329,6 +352,27 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
       .map(({ sort, ...m }) => m),
     ...(roster ? { members } : {}),
   };
+}
+
+// «صار متأخرًا» لمن دخل مرحلة وموعدها منقضٍ: إن كان متأخرًا في ما قبلها حين غادره فتأخره متصل، وبدايته بداية ذاك (وهكذا
+// رجوعًا)، فلا يُعدّ «متأخرًا جديدًا» من انتقل وهو متأخر. وإن لم يكن متأخرًا قبلها فبداية تأخره لحظة دخوله
+function lateChain(journey, start, entered, p, dueOf) {
+  let since = entered, at = start;
+  while (at > 0) {
+    // ما قبل مجموعته من المراحل المتتابعة (لا مسار مستمر ولا خدمة)
+    let prev = at - 1;
+    while (prev >= 0 && isSide(journey[prev])) prev -= 1;
+    if (prev < 0) break;
+    const group = groupAt(journey, prev);
+    const first = journey.indexOf(group[0]);
+    const due = group.map((s) => dueOf(s.key)).filter(Boolean).sort()[0] || null;
+    if (!due || timeOf(due) >= timeOf(since)) break;
+    const prevEntry = (first > 0 ? stageEntry(journey, prev, p.dates || [], momentOf) : null) || p.joined_at || p.created_at || null;
+    since = prevEntry && timeOf(prevEntry) > timeOf(due) ? prevEntry : due;
+    if (since === due || first <= 0) break;
+    at = first;
+  }
+  return since;
 }
 
 // حضور العضو واستشارته من بنود رحلته نفسها (activity من evidenceFor)، بلا قراءة ثانية:

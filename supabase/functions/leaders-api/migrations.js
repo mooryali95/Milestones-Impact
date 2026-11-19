@@ -161,6 +161,7 @@ export const MIGRATIONS = [
   '20261118150000_leaders_client_events',
   '20261119100000_leaders_demo_share_links',
   '20261119110000_leaders_workshop_attendance_note',
+  '20261119120000_leaders_cohort_updates',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -238,4 +239,5 @@ export const MIGRATION_GATES = {
   '20261118150000_leaders_client_events': ["tolerant", "قبله يرد client.event بـnot_migrated فيُسقط العميل طابوره بصمت، ولا يتغير شيء للمستخدم (client-events.ts)"],
   '20261119100000_leaders_demo_share_links': ["tolerant", "قبله ترد أفعال روابط التجربة not_migrated وتعرض اللوحة «لم تُفعَّل بعد»، وفتح حساب العرض من اللوحة يبطل جلساته كلها كما كان (demo.ts)"],
   '20261119110000_leaders_workshop_attendance_note': ["tolerant", "قبله يُكتب الحضور اليدوي بلا العمود ويبقى سببه في سجل التدقيق وحده، وورقة الحضور تُقرأ بلا السبب (activities.ts: markBatch وattendanceRows)"],
+  '20261119120000_leaders_cohort_updates': ["tolerant", "قبله يعرض شريط «منذ آخر زيارة» آخر سبعة أيام بجملة واضحة ولا يحفظ وقت الزيارة (cohort-visits.ts)، ولا لقطة فلا تنبيه متأخرين ولا سطر في الملخص اليومي ولا ملخص أسبوعي (cohort-pulse.ts)، والتسليم يُحفظ بلا وقته (participant.ts)"],
 };
