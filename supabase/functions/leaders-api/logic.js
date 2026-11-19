@@ -1157,6 +1157,8 @@ export function workshopStatus(config, sessions, attended, now = Date.now()) {
         id: s.id, title: s.title_ar, mode, location: s.location_ar || null, starts_at: undated ? null : s.starts_at, ends_at: undated ? null : s.ends_at,
         undated, link_later: mode === 'online' && !s.join_url,
         attended: attended.has(s.id) || (verify === 'auto' && !undated && Date.parse(s.ends_at) <= now), open, can_join: mode === 'online' && open && !!s.join_url,
+        // المدرب المسمى للجلسة إن سُمّي (المرحلة 4): اسمه وحده، ويُعرض «مع فلان»
+        ...(s.trainer ? { trainer: String(s.trainer) } : {}),
       };
     });
   const need = Math.max(1, Number(config?.sessions_required) || list.length || 1);

@@ -210,7 +210,7 @@ function Workshop({ item, open, setToast, onRefresh }) {
         <ul className="act-list">
           {a.sessions.map((s) => (
             <li key={s.id} className="act-session">
-              <span className="grow"><b>{s.title}</b><span className="small muted">{s.starts_at ? ` · ${fmtDay(s.starts_at)}، ${fmtTime(s.starts_at)}` : ''}{s.location ? ` · ${s.location}` : ''}{linkPending(s) ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span></span>
+              <span className="grow"><b>{s.title}</b><span className="small muted">{s.starts_at ? ` · ${fmtDay(s.starts_at)}، ${fmtTime(s.starts_at)}` : ''}{s.location ? ` · ${s.location}` : ''}{s.trainer ? ` · مع ${s.trainer}` : ''}{linkPending(s) ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span></span>
               <span className="chip">{MODE_CHIP[s.mode]}</span>
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}

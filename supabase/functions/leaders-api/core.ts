@@ -587,13 +587,32 @@ export const WORKSHOP_STAGED_NOTE = 'رابط الانضمام يظهر في ر�
 // later: جلسة عن بعد لم يُضف رابطها بعد (J1)، فلا تعليمات القاعة: الرابط يصل قبلها ويظهر في رحلته
 export const WORKSHOP_LINK_LATER_NOTE = 'هذه الجلسة عن بعد، ورابط الانضمام يُضاف لاحقًا ويظهر في رحلتك قبل بدئها بساعة.';
 // hall: مفتاح القاعة (features.hall). مطفأة: ملاحظة بلا ذكرها بطريقة توثيق حضور الجلسة (method، WORKSHOP_NO_HALL_NOTE)
-export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false, hall = true, method: 'qr' | 'join' | 'other' = 'qr') {
+// trainer: المدرب المسمى للجلسة (المرحلة 4) سطر في الدعوة، وبلاه لا سطر
+export function workshopMail(kind: keyof typeof WORKSHOP_MAIL, name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false, hall = true, method: 'qr' | 'join' | 'other' = 'qr', trainer: string | null = null) {
   const m = WORKSHOP_MAIL[kind];
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
-    + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
+    + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(trainer ? [['المدرب', trainer] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(CONFIG.appUrl, 'افتح رحلتي')
     + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : hall ? m.note : WORKSHOP_NO_HALL_NOTE[method][kind]),
+    `${title} · ${when}`, '');
+}
+
+// إشعار تغيّر موعد جلسة أو مكانها لمن دُعي إليها (تصور تشغيل الدفعة، المرحلة 4): قصير، بالموعد والمكان الجديدين وملف تقويم
+// محدَّث. ثابت مستقل عن WORKSHOP_MAIL: ليس من ملاحظات القاعة التي يبدّلها الطابور (hallNoteRewrite)
+export const WORKSHOP_CHANGE_MAIL = {
+  subject: 'تحديث: جلستك التدريبية',
+  lead: { when: 'تغيّر موعد جلستك التدريبية.', where: 'تغيّر مكان جلستك التدريبية.', both: 'تغيّر موعد جلستك التدريبية ومكانها.' },
+  note: 'الملف المرفق يحدّث الموعد في تقويمك. إن بقي الموعد القديم فاحذفه.',
+} as const;
+export function workshopChangeMail(name: string, title: string, when: string, where: string | null, joinUrl: string | null, staged: boolean | 'staged' | 'later' = false, changed: { when: boolean; where: boolean } = { when: true, where: false }, trainer: string | null = null) {
+  const c = WORKSHOP_CHANGE_MAIL;
+  const m = { subject: c.subject, note: c.note, lead: changed.when && changed.where ? c.lead.both : changed.where ? c.lead.where : c.lead.when };
+  return shell('sessions', m.subject,
+    mailText(`${hello(name)} ${m.lead} هذا ما صار عليه:`)
+    + mailRows([['الجلسة', title], ['الموعد', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(trainer ? [['المدرب', trainer] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي')
+    + mailNote(staged === 'later' ? WORKSHOP_LINK_LATER_NOTE : staged ? WORKSHOP_STAGED_NOTE : m.note),
     `${title} · ${when}`, '');
 }
 
@@ -977,6 +996,8 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'f360-ready', family: 'journey', label: 'تقييم 360: التقرير جاهز للمستشار', subject: FEEDBACK_MAIL.ready.subject('سارة'), html: () => feedbackMail('ready', 'د. منى', 'سارة الحربي', { url: `${CONFIG.appUrl}/x` }) },
   { key: 'f360-released', family: 'journey', label: 'تقييم 360: التقرير متاح للمشارك', subject: FEEDBACK_MAIL.released.subject(), html: () => feedbackMail('released', 'سارة', 'سارة', { url: CONFIG.appUrl }) },
   { key: 'workshop-invite', family: 'sessions', label: 'دعوة الجلسة التدريبية', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
+  { key: 'workshop-invite-trainer', family: 'sessions', label: 'دعوة الجلسة التدريبية: بمدرب مسمى', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'ورشة التفاوض', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null, false, true, 'qr', 'د. منى القحطاني') },
+  { key: 'workshop-change', family: 'sessions', label: 'تحديث الجلسة التدريبية: تغيّر الموعد أو المكان', subject: WORKSHOP_CHANGE_MAIL.subject, html: () => workshopChangeMail('سارة', 'ورشة التفاوض', 'الاثنين 16 نوفمبر · 10:00', 'قاعة الملك فهد، الدور الأول', null, false, { when: true, where: true }, 'د. منى القحطاني') },
   { key: 'workshop-day', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل يوم', subject: WORKSHOP_MAIL.day.subject, html: () => workshopMail('day', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },

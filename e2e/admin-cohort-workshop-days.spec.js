@@ -118,12 +118,15 @@ for (const width of [1440, 390]) {
     const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
     await expect(form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)')).toHaveValue('اليوم 2');
     // لا حقل للدفعة: اليوم لهذه الدفعة وحدها
-    await expect(form.getByLabel('الدفعة')).toHaveCount(0);
+    await expect(form.locator('#f-cohort_id')).toHaveCount(0);
     await form.getByLabel('المكان (القاعة والمدينة)').fill('الرياض، قاعة الملك فهد');
     await form.getByLabel('تبدأ').fill('2026-11-17T07:00');
     await form.getByLabel('تنتهي').fill('2026-11-17T13:00');
     await form.getByLabel('السعة (اختياري)').fill('20');
     if (width > 500) await shot(page, 'add-day-form', form);
+    // المرحلة 4: «أرسل الدعوة عند الحفظ» معلَّمة لجلسة الدفعة المؤرخة. هنا يُحفظ اليوم بلا دعوة، فتبقى دعوته بزرها كما يفحص ما بعده
+    await expect(form.getByLabel('أرسل الدعوة عند الحفظ')).toBeChecked();
+    await form.getByLabel('أرسل الدعوة عند الحفظ').uncheck();
     await form.getByRole('button', { name: 'حفظ' }).click();
     await expect(form).toBeHidden();
     // admin.workshop-save نفسه، لهذه الدفعة وبند الحضور، والسعة رقمًا
@@ -182,6 +185,7 @@ test('قبل ترحيل السعة: الحقل مخفي في البطاقة و«
   await form.getByLabel('المكان (القاعة والمدينة)').fill('جدة');
   await form.getByLabel('تبدأ').fill('2026-11-18T07:00');
   await form.getByLabel('تنتهي').fill('2026-11-18T13:00');
+  await form.getByLabel('أرسل الدعوة عند الحفظ').uncheck();
   await form.getByRole('button', { name: 'حفظ' }).click();
   await expect(days.locator('.cj-day', { hasText: 'اليوم 2' })).toContainText('جدة');
   const save = calls.find((c) => c.action === 'admin.workshop-save');
@@ -257,6 +261,7 @@ test('المشارك يرى اليوم المضاف من البطاقة في ر�
   // اليوم نفسه: نافذة الحضور مفتوحة (من ساعة قبل البدء)
   await form.getByLabel('تبدأ').fill('2026-11-16T08:30');
   await form.getByLabel('تنتهي').fill('2026-11-16T14:00');
+  await form.getByLabel('أرسل الدعوة عند الحفظ').uncheck();
   await form.getByRole('button', { name: 'حفظ' }).click();
   await expect(form).toBeHidden();
 

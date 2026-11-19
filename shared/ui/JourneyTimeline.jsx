@@ -116,8 +116,14 @@ function Grips({ k, title, editable, pointer, clicked }) {
  *   onStart({ key, kind }), onMove({ pct, over }), onEnd({ pct, over }), onCancel(), onKey(key, event), live, hintId }
  *   pct: النقاط المئوية التي تحرّكها المؤشر على المسار من موضع الالتقاط باتجاه الزمن (مع مراعاة RTL)، وover: الصف والشريط تحت المؤشر */
 // usage: مؤشر استخدام كل خدمة بمفتاحها («استفاد 7 من 20») من خريطة الدفعة، إن قُرئت (T2)
-export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null, usage = null }) {
+// add (المرحلة 4، كما في JourneyAxis): وضع إضافة ورشة بزر صريح. فيه يغطي كل شريط مرحلة ممر يُختار منه يوم بالمؤشر أو بالأسهم،
+// والنقرة تسلّم المرحلة واليوم للمضيف (add.onPick). لا يجتمع مع السحب (editable)، وعلى الحاسوب وحده كاللوحة نفسها
+export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فتح', onEmpty, onStage, id = 'jt', omitCards = [], editable = null, usage = null, add = null }) {
   const [sel, setSel] = useState(model?.selected || null);
+  // اليوم تحت المؤشر أو المختار بالأسهم على شريط مرحلة في وضع الإضافة: { key, info, kbd, band }
+  const [addPick, setAddPick] = useState(null);
+  const adding = !!add?.on && !editable;
+  useEffect(() => { if (!adding) setAddPick(null); }, [adding]);
   const trackRef = useRef(null);
   const press = useRef(null);
   // نقرة تأتي بعد سحب بالمؤشر على المقبض ليست التقاطًا بلوحة المفاتيح
@@ -205,6 +211,33 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   const ghost = editable?.drag?.ghost || null;
   const bandNow = band && editable?.drag && !editable.drag.kbd ? band : null;
   const clicked = () => { const was = dragged.current; dragged.current = false; return !was; };
+  // ── وضع الإضافة: ممر فوق كل شريط، يومه من نسبة المؤشر على المسار (pctOf نفسها التي يقيس بها السحب) ──
+  const addKbd = (k) => (addPick?.key === k ? addPick.info : add.day(add.startDay(k), k));
+  const addKey = (k, e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); add.onToggle(); return; }
+    const [lo, hi] = add.range(k);
+    const cur = addKbd(k).day;
+    let next = null;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
+      const later = rtl ? e.key === 'ArrowLeft' : e.key === 'ArrowRight';
+      next = cur + (later ? 1 : -1) * (e.shiftKey ? 7 : 1);
+    } else if (e.key === 'Home') next = lo;
+    else if (e.key === 'End') next = hi;
+    if (next == null) return;
+    e.preventDefault();
+    setAddPick({ key: k, info: add.day(next, k), kbd: true, band: measure(k) });
+  };
+  const addLane = (k, title) => (adding ? (
+    <button type="button" className={`jt-add-lane${add.can?.[k] ? '' : ' off'}`} data-add-lane={k}
+      aria-label={`${add.can?.[k] ? 'أضف ورشة في' : 'لا نشاط حضور في'} «${title}»${addPick?.key === k ? `، ${addPick.info.label}` : ''}. الأسهم تغيّر اليوم، ومفتاح Enter يفتح النموذج`}
+      onPointerMove={(e) => setAddPick({ key: k, info: add.dayAt(pctOf(e.clientX), k), band: measure(k) })}
+      onPointerLeave={() => setAddPick((h) => (h?.kbd ? h : null))}
+      onFocus={() => setAddPick((h) => (h?.key === k ? h : { key: k, info: add.day(add.startDay(k), k), kbd: true, band: measure(k) }))}
+      onBlur={() => setAddPick((h) => (h?.key === k ? null : h))}
+      onKeyDown={(e) => addKey(k, e)}
+      onClick={(e) => add.onPick(k, e.detail > 0 && (e.clientX || e.clientY) ? add.dayAt(pctOf(e.clientX), k) : addKbd(k))} />
+  ) : null);
   const grips = (k, title) => (editable ? <Grips k={k} title={title} editable={editable} pointer={pointer} clicked={clicked} /> : null);
   // جسم الشريط بالفأرة والقلم وحدهما: اللمس عليه يمرر الخط، ويُسحب باللمس من المقبض والطرف
   const barDrag = (k) => (editable?.bars?.[k] ? { onPointerDown: (e) => { if (e.pointerType !== 'touch' && !e.target.closest('button,a,input,select,.jt-edge')) pointer(e, k, 'move'); } } : {});
@@ -216,6 +249,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
     <div key={s.key} data-stage={s.key} {...barDrag(s.key)} className={`jt-stage${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''} ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${s.together ? ' lane' : ''}${s.mode_ar ? ` nonreq md-${s.mode}` : ''}`}
       style={s.together ? laneBox(s.lane_at, Math.min(s.lane_width, 100 - s.lane_at)) : undefined}>
       {grips(s.key, s.title)}
+      {addLane(s.key, s.title)}
       <div className="jt-stage-head">
         {onStage ? (
           <button type="button" className="jt-stage-link" onClick={() => onStage(s.key)} aria-label={`${s.title}: انتقل إلى بطاقتها`}>
@@ -258,7 +292,8 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
   );
 
   return (
-    <section className={`jt ctx-${model.context}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}`} aria-labelledby={head}>
+    <section className={`jt ctx-${model.context}${editable ? ' jt-editable' : ''}${dragging ? ' jt-dragging' : ''}${adding ? ' jt-adding' : ''}`} aria-labelledby={head}
+      onKeyDown={adding ? (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); add.onToggle(); } } : undefined}>
       <header className="jt-head">
         <div>
           <p className="jt-eyebrow">الرحلة في لمحة{cohort ? '، بالتواريخ' : '، بالأسابيع'}</p>
@@ -274,6 +309,14 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
 
       {/* الحاسوب: المسار على مقياس واحد، يتمرر وحده إن ضاق الحاوي */}
       <div className="jt-desk">
+        {add && !editable && (
+          <div className="jt-addbar">
+            <button type="button" className={`jt-add${adding ? ' on' : ''}`} aria-pressed={adding} data-testid="jt-add" onClick={add.onToggle}>
+              {adding ? 'أنهِ الإضافة' : <><span aria-hidden="true">+ </span>ورشة على الخط</>}
+            </button>
+            {adding && <span className="jt-add-hint" role="note">اختر يومًا على شريط المرحلة: النقرة تفتح نموذج الورشة بمرحلتها وتاريخها، ولا يُحفظ شيء قبل تأكيدك. بلوحة المفاتيح: انتقل إلى الشريط بمفتاح Tab، وغيّر اليوم بالأسهم، وافتح النموذج بمفتاح Enter، وأنهِ بمفتاح Esc.</span>}
+          </div>
+        )}
         <div className="jt-scroll" tabIndex={0} role="group" aria-label="الخط الزمني، يتحرك بالأسهم">
           <div className="jt-track" ref={trackRef} style={{ minWidth: `${boardMinWidth(model.slots)}px` }} onPointerMove={editable ? onPointerMove : undefined} onPointerUp={editable ? onPointerUp : undefined}
             onPointerCancel={editable ? onPointerCancel : undefined} onLostPointerCapture={editable ? onPointerUp : undefined}>
@@ -300,6 +343,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                   <div key={s.key} className={`jt-trackbar ph-${s.phase}${s.status ? ` st-${s.status}` : ''}${editable?.bars?.[s.key] ? ' drag' : ''}${editable?.drag?.key === s.key ? ' dragging' : ''}`} data-track={s.key}
                     {...barDrag(s.key)} style={{ ...trackBox(s.at, s.width), top: `${20 + i * 106}px` }}>
                     {grips(s.key, s.title)}
+                    {addLane(s.key, s.title)}
                     {trackHead(s)}
                     <div className="jt-acts">
                       {s.empty ? <span className="jt-none">لا أنشطة بعد</span>
@@ -344,6 +388,10 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
                 })}
               </div>
             )}
+            {adding && addPick?.band && (
+              <div className={`jt-add-mark${add.can?.[addPick.key] ? '' : ' off'}${addPick.info.at > 60 ? ' flip' : ''}`} data-testid="jt-add-mark" aria-hidden="true"
+                style={{ insetInlineStart: `${addPick.info.at}%`, top: `${addPick.band.top}px`, height: `${addPick.band.height}px` }}><i>+</i><b>{addPick.info.label}</b></div>
+            )}
             {ghost && (bandNow || kbdBand) && (
               <GhostBar ghost={ghost} band={bandNow || measureNow(trackRef, kbdBand)} />
             )}
@@ -352,6 +400,7 @@ export default function JourneyTimeline({ model, onOpen, openLabel = () => 'فت
             </div>
           </div>
         </div>
+        {adding && <p className="sr-only" aria-live="polite">{addPick?.kbd ? `${stageBy.get(addPick.key)?.title || ''}، ${addPick.info.label}` : ''}</p>}
         {editable && (
           <p className="jt-drag-live" id={editable.hintId} aria-live="polite">{editable.live || 'اسحب الشريط لتغيير بدايته، وطرفه لتغيير مدته، أو استعمل المقبض بلوحة المفاتيح. والعدادات في البطاقات تفعل الشيء نفسه.'}</p>
         )}

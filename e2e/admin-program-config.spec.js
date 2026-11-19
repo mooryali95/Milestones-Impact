@@ -82,13 +82,16 @@ test.describe('جلسات برنامج بدفعة واحدة (admin-program-3)',
     await expect(page.getByRole('button', { name: 'أرسل الدعوة' })).toBeVisible();
     await page.getByRole('button', { name: '+ موعد' }).click();
     const form = page.getByRole('dialog', { name: 'موعد جديد' });
-    await expect(form.getByLabel('الدفعة')).toHaveValue('11111111-1111-1111-1111-111111111111');
+    await expect(form.locator('#f-cohort_id')).toHaveValue('11111111-1111-1111-1111-111111111111');
     await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('اليوم الثاني');
     await form.getByLabel('المكان (القاعة والمدينة)').fill('القاعة الكبرى');
     await form.getByLabel('تبدأ').fill('2026-12-01T09:00');
     await form.getByLabel('تنتهي').fill('2026-12-01T15:00');
     await form.getByRole('button', { name: 'حفظ' }).click();
+    // تصور تشغيل الدفعة، المرحلة 4: «أرسل الدعوة عند الحفظ» معلَّمة لجلسة الدفعة المؤرخة، والحفظ الذي يرسل بريدًا يُؤكَّد أولًا
+    await page.getByRole('button', { name: 'احفظ وأرسل الدعوة' }).click();
     await expect.poll(() => calls.find((c) => c.action === 'admin.workshop-save')?.row).toMatchObject({ requirement_id: 'r1', cohort_id: '11111111-1111-1111-1111-111111111111' });
+    expect(calls.find((c) => c.action === 'admin.workshop-save').invite).toBe(true);
     await page.getByRole('button', { name: 'تحرير' }).click();
     await page.getByRole('dialog', { name: 'تحرير موعد' }).getByRole('button', { name: 'حفظ' }).click();
     await expect.poll(() => calls.filter((c) => c.action === 'admin.workshop-save')[1]?.row).toMatchObject({ id: 'w1', cohort_id: '11111111-1111-1111-1111-111111111111' });

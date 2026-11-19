@@ -6,14 +6,14 @@
 // الجلسات الفردية: حجوزات منصة المواعيد، وتوفر
 // الاتصال الفوري، وتأكيد الموجّه لكل جلسة (حضر أو لم يحضر).
 // إعداد كل نشاط (الرابط، العدد المطلوب) في «الرحلة والمتطلبات».
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import AttendanceSheet from '../../../shared/ui/AttendanceSheet.jsx';
 import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
-import { VERIFY_AR, withCapacity } from '../workshop-days.js';
+import { mailConfirm, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
@@ -43,10 +43,14 @@ export const SESSION_FIELDS = [
 export const cohortsOfProgram = (cohorts, programId) => (cohorts || []).filter((c) => c.program_id === programId);
 export const cohortNameOf = (cohorts, id) => cohorts.find((c) => c.id === id)?.name || 'دفعة مغلقة';
 // capacity: حقل السعة بعد ترحيل عمودها وحده (W3، capacity_ready من الخادم)، وقبله يُحفظ اليوم بلاها
-export const sessionFields = (cohorts, current = null, { capacity = false } = {}) => {
+// trainersOf وmail (المرحلة 4): حقل المدرب واختيارا البريد عند الحفظ (sessionExtras)، قبل «مفعّلة» آخر النموذج
+export const sessionFields = (cohorts, current = null, { capacity = false, trainersOf = null, mail = null } = {}) => {
   const options = Object.fromEntries(cohorts.map((c) => [c.id, c.name]));
   if (current && !options[current]) options[current] = 'دفعة مغلقة';
-  const own = withCapacity(SESSION_FIELDS, capacity);
+  const base = withCapacity(SESSION_FIELDS, capacity);
+  const at = base.findIndex((f) => f.name === 'active');
+  const extra = sessionExtras({ trainersOf, mail });
+  const own = at < 0 ? [...base, ...extra] : [...base.slice(0, at), ...extra.filter((f) => f.name === 'expert_id'), ...base.slice(at), ...extra.filter((f) => f.name !== 'expert_id')];
   return !Object.keys(options).length ? own : [
     { name: 'cohort_id', label: 'الدفعة', type: 'select', empty: 'كل الدفعات', options,
       help: 'لكل دفعة مواعيدها وقاعاتها، ودعوتها بملف التقويم وتذكيرها قبل يوم وقبل ساعة يصلان أعضاءها. الجلسة العامة تظهر لكل الدفعات بلا دعوة ولا تذكير.' },
@@ -97,7 +101,10 @@ function Workshops({ data, reload, canWrite }) {
   const [att, setAtt] = useState(null);
   const reqs = data.requirements.filter((r) => r.kind === 'workshop');
   const capacity = !!data.capacity_ready;
-  const save = (base) => async (row) => L('admin.workshop-save', { row: { ...base, ...row } });
+  // مدربو كل دفعة من الخادم (cohort_trainers)، والحقل للجلسة ذات الدفعة وحدها. ورسالة الحفظ تحمل ما جرى للبريد
+  const trainersOf = data.trainer_ready ? (v) => (v.cohort_id ? data.cohort_trainers?.[v.cohort_id] || [] : null) : null;
+  const saved = useRef(null);
+  const save = (base) => async (v) => { const r = await L('admin.workshop-save', saveBody(v, base)); saved.current = r?.success ? r : null; return r; };
   // القفز من «الرحلة في لمحة» (‎?req=<المتطلب>‎): إلى جلسات النشاط وزر «+ موعد» عنده
   useEffect(() => {
     const req = new URLSearchParams(readQuery()).get('req');
@@ -117,14 +124,14 @@ function Workshops({ data, reload, canWrite }) {
           <section key={r.id} id={`ws-${r.id}`} className="la-card" tabIndex={-1}>
             <div className="la-row between">
               <div><b title={r.code}>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted">المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
-              {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts, null, { capacity }), values: { active: true, mode: 'in_person', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }) })}>+ موعد</button>}
+              {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts, null, { capacity, trainersOf, mail: {} }), values: { active: true, mode: 'in_person', invite: true, cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }), confirmSave: mailConfirm })}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
                 <thead><tr><th>الجلسة</th><th>الموعد</th><th>الطريقة</th><th>الحضور</th><th /></tr></thead>
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
-                    <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
+                    <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}{s.trainer && <small className="la-muted"> · مع {s.trainer}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
                     <td>{isUndated(s) ? <span className="la-chip warn">{SESSION_TBD_AR}</span> : when(s.starts_at)}
                       {/* خارج نافذة مرحلته في دفعة مؤرخة (4.2 د): من علامة الخط نفسه على الخادم، تنبيه لا منع */}
                       {(s.outside || []).map((x) => <small key={x.cohort_id} className="ws-out" role="note">{outsideAr(x, !s.cohort_id || s.outside.length > 1)}</small>)}</td>
@@ -138,7 +145,7 @@ function Workshops({ data, reload, canWrite }) {
                       {canWrite && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: sessionFields(cohorts, s.cohort_id, { capacity }), values: s, onSave: save({ id: s.id }), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), values: { ...s, notify_change: true }, onSave: save({ id: s.id }), confirmSave: mailConfirm, onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>
@@ -147,7 +154,7 @@ function Workshops({ data, reload, canWrite }) {
           </section>
         );
       })}
-      {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); reload(); } }} />}
+      {form && <Form {...form} onClose={(done) => { setForm(null); if (done) { toast(savedAr('تم الحفظ', saved.current)); saved.current = null; reload(); } }} />}
       {qr && <QrScreen id={qr} onClose={() => { setQr(null); reload(); }} onSheet={canWrite ? () => { setAtt(qr); setQr(null); } : null} />}
       {att && <Attendance id={att} canWrite={canWrite} onClose={() => { setAtt(null); reload(); }} />}
     </>

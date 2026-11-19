@@ -372,8 +372,8 @@ function ExpertAttendance({ initial }) {
         {anySheet && ' ومن تعذّر عليه الرمز تسجّله أنت من ورقة الحضور، بسبب مكتوب.'}</p>
       <div className="xpp-attend-list">{d.sessions.map((s) => (
         <article key={s.id} className="xpp-attend">
-          <div className="grow"><b>{s.title}</b>
-            <small className="muted">{[s.cohort, when(s.starts_at), s.location].filter(Boolean).join(' · ')}</small></div>
+          <div className="grow"><b>{s.title}</b>{s.mine && <span className="chip ok xpp-attend-mine">أنت مدربها</span>}
+            <small className="muted">{[s.cohort, when(s.starts_at), s.location, s.trainer ? `مع ${s.trainer}` : ''].filter(Boolean).join(' · ')}</small></div>
           {/* الزر دائمًا: open من تحميل البوابة وحده لا يتجدد، وشاشة الرمز تسأل الخادم كل نافذة فتنتقل إلى الرمز وحدها حين يُفتح */}
           <div className="xpp-attend-go">
             {s.qr !== false && <button type="button" className="btn sm" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}

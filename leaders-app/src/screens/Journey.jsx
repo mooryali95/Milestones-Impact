@@ -402,7 +402,7 @@ export function NextSession({ session, onHall, onCheckedIn }) {
     <div className={`next-card j-session${session.open ? ' live' : ''}`} data-tour="next-session">
       <span className="k">{session.open ? 'جلستك الآن' : undated ? 'لك جلسة سيُعلن موعدها' : 'جلستك القادمة'}</span>
       <b>{session.title}</b>
-      <span className="small muted">{[when, session.mode === 'online' ? 'عن بعد' : session.location, !session.open && linkPending(session) ? SESSION_LINK_LATER_AR : ''].filter(Boolean).join(' · ')}</span>
+      <span className="small muted">{[when, session.mode === 'online' ? 'عن بعد' : session.location, session.trainer ? `مع ${session.trainer}` : '', !session.open && linkPending(session) ? SESSION_LINK_LATER_AR : ''].filter(Boolean).join(' · ')}</span>
       {session.attended && <span className="chip ok">سُجّل حضورك</span>}
       <CheckinHelp session={session} onDone={onCheckedIn} />
       <div className="row">
