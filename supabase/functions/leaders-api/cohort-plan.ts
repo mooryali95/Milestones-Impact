@@ -8,7 +8,7 @@
 //   history: آخر الحفظات والتراجعات لهذه الدفعة
 // الجسم: { cohort_id, op, days: { مفتاح: عدد أو null }, off: { مفتاح: true أو false } (R2b)،
 // with: { مفتاح: مفتاح مرجع أو false لـ«لا شيء» أو null لقاعدة البرنامج } وoffset: { مفتاح: أيام أو null } (R3a)، until: { مفتاح مسار
-// مستمر: نهايته أو null } (T1)، ends_on: يوم لنهاية الدفعة المسجلة («اجعل نهاية الدفعة …»)، follow: true، base_updated_at (مطلوب للحفظ
+// مستمر: نهايته أو null } (T1)، dates: { مفتاح: { start, end } لبداية المرحلة ونهايتها مباشرة أو null لـ«اتبع المدد» }، ends_on: يوم لنهاية الدفعة المسجلة («اجعل نهاية الدفعة …»)، follow: true، base_updated_at (مطلوب للحفظ
 // والتراجع)، reenable: 'exempt' (الافتراضي) أو 'apply' لمن تجاوز مرحلة تعود (القرار 12)، notify: true لـ«أبلغ المشاركين» (القرار 13) }.
 // الحفظ والتراجع للكاتب وحده
 // (index.ts يلفهما بـA.writer كما admin.cohort-save)، والمعاينة والسجل لكل مدير. لا ترحيل: الخطة في cohorts.schedule،
@@ -101,9 +101,10 @@ function nextSchedule(c: any, base: any, b: Body, target?: any) {
     if (par.length) throw new Fail(`لا يُعاد الحفظ السابق: ${par.map((x: any) => x.msg).join('، ')}`, 409, 'undo_invalid');
     return out;
   }
-  // المدة (R2a) والإيقاف (R2b) والتوازي (R3a) و«حرّر التواريخ لتتبع المدد». التاريخ المثبت للدفعة في مرحلة لاحقة، فلا يُقبل بصمت
+  // المدة (R2a) والإيقاف (R2b) والتوازي (R3a) و«حرّر التواريخ لتتبع المدد» والتواريخ المباشرة (dates). الجدول الخام لا يُقبل بصمت:
+  // تواريخ المرحلة تمر بـdates وحراسها (planDatesResolve)
   for (const k of ['start', 'end', 'schedule']) {
-    if (k in b) throw new Fail('تُعدَّل من تبويب «الرحلة» مدة كل مرحلة وإيقافها وتوازيها لهذه الدفعة. التاريخ المثبت للدفعة في مرحلة لاحقة.', 400, 'plan_field');
+    if (k in b) throw new Fail('تُعدَّل من تبويب «الرحلة» مدة كل مرحلة وتواريخها وإيقافها وتوازيها لهذه الدفعة، بحقولها لا بجدول خام.', 400, 'plan_field');
   }
   const isMap = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v);
   if ('off' in b && !isMap(b.off)) throw new Fail('الإيقاف: { مفتاح المرحلة: نعم أو لا }', 400, 'plan_invalid');
@@ -111,9 +112,11 @@ function nextSchedule(c: any, base: any, b: Body, target?: any) {
   if ('offset' in b && !isMap(b.offset)) throw new Fail('الإزاحة: { مفتاح المرحلة: عدد أيام }', 400, 'plan_invalid');
   // نهاية المسار المستمر لهذه الدفعة (T1): { مفتاح: 'journey_end' أو 'days' أو 'phase:…' أو 'stage:…' أو null لقاعدة البرنامج }
   if ('until' in b && !isMap(b.until)) throw new Fail('نهاية المسار: { مفتاح المسار: نهايته أو لا شيء لقاعدة البرنامج }', 400, 'plan_invalid');
+  // التواريخ المباشرة: { مفتاح المرحلة: { start, end } أو null لـ«اتبع المدد» }
+  if ('dates' in b && !isMap(b.dates)) throw new Fail('التواريخ: { مفتاح المرحلة: بدايتها ونهايتها }', 400, 'plan_invalid');
   const r = planEdit({
     stages: base.stages, schedule: c.schedule || {}, cohort: c, requirements: base.requirements,
-    edit: { days: b.days || {}, follow: b.follow === true, off: b.off || {}, with: b.with || {}, offset: b.offset || {}, until: b.until || {} },
+    edit: { days: b.days || {}, follow: b.follow === true, off: b.off || {}, with: b.with || {}, offset: b.offset || {}, until: b.until || {}, dates: b.dates || {} },
   });
   if (r.errors.length) throw new Fail(r.errors.map((e: any) => e.msg).join('، '), 400, 'plan_invalid', { errors: r.errors });
   try { return cleanScheduleReport(r.schedule, base.keys, base.titles).schedule; }

@@ -221,3 +221,73 @@
 .jt-m-svc { display: grid; gap: 3px; margin: 0 0 10px; padding: 8px 10px; border: 1px dotted color-mix(in srgb, var(--jt-ph) 70%, transparent); border-inline-end: 4px dotted var(--jt-ph); border-radius: 8px; }
 .jt-m-svc small { font-size: 12px; color: var(--jt-muted); }
 .jt-m-svc .jt-m-title { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: baseline; }
+
+/* اللوحة: أقل عرض مقروء لعمود المرحلة (BOARD_COL_MIN في journey-timeline.js). الممر داخل خانة «تسير معًا» يحفظ حده ولا يخرج من خانته،
+   وشريط المسار المستمر كذلك، والنص ينكسر بالكلمة لا بالحرف */
+.jt-stage, .jt-trackbar, .jt-together { overflow-wrap: break-word; }
+
+/* ══ المحور الزمني الكامل (shared/ui/JourneyAxis.jsx): خط واحد خطي، صف لكل مرحلة، يتمرر داخل إطاره وحده ══ */
+/* لا يحمل الصنف jt: الخط الزمني (section.jt) واحد في الصفحة. الرموز والألوان نفسها تُعرَّف له هنا */
+.ja {
+  --jt-ink: var(--brand-ink-deep, #0b272f); --jt-muted: var(--brand-muted, #5d6f73); --jt-line: rgba(10, 42, 61, .13);
+  --jt-surface: #fff; --jt-soft: #f7f6f2; --jt-primary: var(--st-info, #12414e); --jt-gold: var(--brand-copper, #b07a33);
+  --jt-ok: var(--st-ok, #2e7d5b); --jt-warn: var(--st-warn, #a97a2e); --jt-warn-text: var(--st-warn-text, #7a5518);
+  --jt-ph: var(--jt-primary); --ja-row: 52px;
+  position: relative; margin: 0; padding: 18px 20px; border: 1px solid var(--jt-line); border-radius: 12px; background: var(--jt-surface); color: var(--jt-ink);
+}
+.ja .ph-admission { --jt-ph: var(--jt-primary); }
+.ja .ph-qualification { --jt-ph: var(--jt-gold); }
+.ja .ph-impact { --jt-ph: var(--jt-ok); }
+.ja-eyebrow { margin: 0; font-size: 12px; font-weight: 700; color: var(--jt-warn-text); }
+.ja-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px 24px; }
+.ja-head h3 { margin: 2px 0 0; font-size: 18px; color: var(--jt-ink); }
+.ja-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--jt-muted); }
+.ja-legend li { display: inline-flex; align-items: center; gap: 5px; }
+.ja-legend .ln { display: inline-block; width: 2px; height: 14px; background: var(--jt-warn); }
+.ja-legend .sq.lane { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 3px double var(--jt-gold); background: color-mix(in srgb, var(--jt-gold) 10%, transparent); }
+.ja-scroll { margin-top: 14px; overflow-x: auto; overscroll-behavior-inline: contain; border-radius: 10px; }
+.ja-scroll:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 2px; }
+.ja-track { box-sizing: border-box; padding: 26px 16px 4px; }
+.ja-plot { position: relative; }
+.ja-lines i { position: absolute; top: 0; bottom: 0; width: 0; border-inline-start: 1px solid var(--jt-line); opacity: .7; }
+.ja-months, .ja-weeks { position: relative; }
+.ja-months { height: 26px; }
+.ja-months span { position: absolute; top: 0; box-sizing: border-box; height: 24px; padding: 3px 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px;
+  background: var(--jt-soft); border: 1px solid var(--jt-line); border-radius: 6px; }
+.ja-weeks { height: 22px; border-bottom: 1px solid var(--jt-line); }
+.ja-weeks span { position: absolute; top: 0; box-sizing: border-box; height: 22px; padding: 3px 5px; overflow: hidden; white-space: nowrap; font-size: 11px; color: var(--jt-muted); }
+.ja-weeks b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ja-rows { position: relative; z-index: 1; list-style: none; margin: 6px 0 0; padding: 0; }
+.ja-row { position: relative; height: var(--ja-row); }
+.ja-row + .ja-row { border-top: 1px dashed color-mix(in srgb, var(--jt-line) 70%, transparent); }
+.ja-bar { all: unset; box-sizing: border-box; position: absolute; top: 24px; height: 22px; min-width: 12px; cursor: pointer; border-radius: 6px; }
+div.ja-bar { cursor: default; }
+.ja-fill { position: absolute; inset: 2px 0; border-radius: 6px; background: var(--jt-ph); border: 1px solid var(--jt-ph); box-sizing: border-box; }
+.ja-row.st-done .ja-fill { background: color-mix(in srgb, var(--jt-ph) 45%, var(--jt-surface)); }
+.ja-row.st-active .ja-fill { box-shadow: 0 0 0 2px var(--jt-surface), 0 0 0 4px var(--jt-ph); }
+.ja-row.opt .ja-fill { background: color-mix(in srgb, var(--jt-ph) 22%, var(--jt-surface)); border-style: dashed; }
+.ja-row.k-track .ja-fill { border: 3px double var(--jt-ph); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--jt-ph) 30%, var(--jt-surface)) 0 8px, var(--jt-surface) 8px 16px); }
+.ja-bar.instant .ja-fill { top: 5px; bottom: auto; inset-inline: 0 auto; width: 12px; height: 12px; border-radius: 3px; transform: rotate(45deg); }
+.ja-label { position: absolute; bottom: 100%; inset-inline-start: 0; display: flex; gap: 8px; align-items: baseline; white-space: nowrap; padding: 0 3px 1px; margin-inline: -3px; border-radius: 4px; background: var(--jt-surface); }
+.ja-bar.flip .ja-label { inset-inline-start: auto; inset-inline-end: 0; }
+.ja-label b { font-size: 12.5px; color: var(--jt-ink); }
+.ja-label small { font-size: 11px; color: var(--jt-muted); }
+.ja-bar:hover .ja-label b, .ja-bar:focus-visible .ja-label b { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--jt-ph); }
+.ja-bar:focus-visible { outline: 2px solid var(--jt-gold); outline-offset: 2px; }
+div.ja-bar:hover .ja-label b { text-decoration: none; }
+.ja-dot { position: absolute; top: 31px; width: 8px; height: 8px; margin-inline-start: -4px; box-sizing: border-box; border-radius: 50%; background: var(--jt-surface); border: 2px solid var(--jt-ink); pointer-events: none; z-index: 2; }
+.ja-dot.opt { border-style: dotted; }
+.ja-dot.out { border-color: var(--jt-warn); box-shadow: 0 0 0 2px var(--jt-warn); }
+/* خط اليوم خلف الصفوف: يظهر بينها ولا يغطي اسم مرحلة ولا شريطها */
+.ja-today { position: absolute; top: -22px; bottom: 0; width: 0; border-inline-start: 2px solid var(--jt-warn); z-index: 0; pointer-events: none; }
+.ja-today span { position: absolute; top: 0; inset-inline-start: -1px; width: 0; display: flex; justify-content: center; }
+.ja-today b { flex: none; white-space: nowrap; font-size: 11px; font-weight: 700; color: #fff; background: var(--jt-warn-text); border-radius: 99px; padding: 1px 10px; }
+.ja-mark { position: absolute; top: 0; bottom: 0; width: 0; border-inline-start: 2px dashed var(--jt-ink); opacity: .55; z-index: 0; pointer-events: none; }
+.ja-mark.k-chain { border-inline-start-style: dotted; }
+.ja-foot { position: relative; margin-top: 4px; }
+.ja-foot span { position: absolute; white-space: nowrap; font-size: 11px; font-weight: 700; color: var(--jt-ink); padding: 1px 10px; margin-inline-end: 4px; border-radius: 99px; background: var(--jt-soft); border: 1px solid var(--jt-line); }
+.ja-foot span.k-chain { font-weight: 600; }
+.ja-hint { margin: 8px 0 0; font-size: 12px; color: var(--jt-muted); }
+.ja-legend .ja-ln-end { display: inline-block; width: 0; height: 14px; border-inline-start: 2px dashed var(--jt-ink); opacity: .6; }
+.ja-legend .ja-dot-key { display: inline-block; width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--jt-ink); }
+@media print { .ja-scroll { overflow: visible; } }

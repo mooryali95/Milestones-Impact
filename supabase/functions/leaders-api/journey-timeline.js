@@ -354,6 +354,9 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   const spans = {};
   for (const s of stages) spans[s.key] = place(s.key);
   for (const s of laneStages) spans[s.key] = span(s.key);
+  // النوافذ كما هي بالأيام من بداية الخط (نهاية مفتوحة)، بلا حصر في الخانة: منها المحور الزمني الخطي (timelineAxis)
+  const spansRaw = {};
+  for (const s of [...stages, ...laneStages]) spansRaw[s.key] = span(s.key);
   const phaseEnds = {};
   for (const ph of PHASES) {
     const list = stages.filter((s) => (PHASES.includes(s.phase) ? s.phase : 'qualification') === ph);
@@ -363,7 +366,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
   Object.defineProperty(out, 'scale', {
     enumerable: false,
     value: Object.freeze({
-      start, dated, end, journey_end: endsOn ? day(endsOn) + 1 : end, phase_ends: phaseEnds, spans,
+      start, dated, end, journey_end: endsOn ? day(endsOn) + 1 : end, phase_ends: phaseEnds, spans, windows: spansRaw,
+      ends_on: endsOn, today: dated ? day(t) : null,
       slots: slots.map(({ key, from, to, days, at, width }) => ({ key, from, to, days, at, width })),
     }),
   });
@@ -413,4 +417,89 @@ export function outsideSessions(model) {
       text: `«${a.title}» يوم ${d.label} خارج نافذة «${a.stage_title}»${st?.window_ar ? ` (${st.window_ar})` : ''}`,
     };
   }));
+}
+
+// ══ اللوحة: أقل عرض مقروء لعمود المرحلة ══
+// عمود المرحلة في اللوحة بطاقة فيها اسم وتواريخ وأنشطة، وعرضه نصيب خانته من المقياس. مرحلة قصيرة بين طويلات كانت تنزل إلى
+// شريحة لا تُقرأ، فالمسار كله يتسع حتى تبلغ أضيق خانة هذا الحد، ويتمرر داخل إطاره. والممر داخل خانة «تسير معًا» لا ينزل عنه
+export const BOARD_COL_MIN = 168;
+export const BOARD_TOGETHER_MIN = 200;
+export const BOARD_TRACK_MIN = 960;
+export const BOARD_TRACK_MAX = 6400;
+/** أقل عرض للمسار بالبكسل ليبلغ كل عمود حده: الخانة بعرضها المئوي من المسار، وخانة «تسير معًا» أوسع لإطارها
+ * @param {{ width: number, together?: boolean }[]} slots @returns {number} */
+export function boardMinWidth(slots) {
+  let w = BOARD_TRACK_MIN;
+  for (const x of slots || []) {
+    if (!(x.width > 0)) continue;
+    w = Math.max(w, Math.ceil(((x.together ? BOARD_TOGETHER_MIN : BOARD_COL_MIN) * 100) / x.width));
+  }
+  return Math.min(BOARD_TRACK_MAX, w);
+}
+
+// ══ المحور الزمني الكامل: خط واحد خطي من أول يوم إلى آخر يوم ══
+// المسار في اللوحة مقياسه هجين (الخانة أقلها 14 يومًا عرضًا)، فلا يساوي فيه البكسل اليوم. هذا المحور خطي: كل يوم بالعرض نفسه،
+// وكل مرحلة شريط من أول يومها إلى آخره في صفها، فما «يسير معًا» يُرى متراكبًا في الزمن. لا حساب تاريخ هنا: الأيام من نوافذ
+// النموذج نفسه (scale.windows، وهي نوافذ cohortPlan)، والنقاط من مواعيد أنشطته، واليوم ونهاية الدفعة من مقياسه
+const AXIS_DAY_PX = 14;
+const AXIS_MIN_PX = 720;
+const AXIS_MAX_PX = 4200;
+/** @param {any} model نموذج journeyTimeline
+ * @returns {null | { dated: boolean, days: number, min_width: number, months: any[], weeks: any[], rows: any[], today: any, markers: any[], weeks_ar: string }} */
+export function timelineAxis(model) {
+  const sc = model?.scale;
+  if (!model || model.empty || !sc) return null;
+  const all = [...(model.stages || []), ...(model.tracks || [])];
+  const win = (k) => sc.windows?.[k] || null;
+  const ends = all.map((s) => win(s.key)?.[1] ?? 0);
+  const total = Math.max(1, sc.end, sc.dated && sc.ends_on ? sc.journey_end : 0, ...ends);
+  const pct = (d) => round((Math.min(Math.max(d, 0), total) / total) * 100);
+  const iso = (d) => addDays(sc.start, d);
+  const acts = model.activities || [];
+  const rows = all.map((s) => {
+    const [f, e] = win(s.key) || [0, 0];
+    const at = pct(f);
+    const dots = sc.dated ? acts.filter((a) => a.stage === s.key).flatMap((a) => (a.dates || []).map((d) => ({
+      at: pct(daysBetween(sc.start, d.date) + 0.5), date: d.date, label: d.label, title: a.title, required: !!d.required, outside: !!d.outside,
+    }))) : [];
+    const when = sc.dated && s.window_ar ? s.window_ar : s.label;
+    return {
+      key: s.key, title: s.title, phase: s.phase, kind: s.lane_kind === 'track' ? 'track' : 'stage', status: s.status || null, status_ar: s.status_ar || '',
+      from: f, to: e, at, width: round(pct(e) - at), instant: e <= f, flip: at > 55,
+      together: !!s.together, optional: !!s.optional && s.lane_kind !== 'track', when_ar: when, label: s.label, dots,
+      text: [s.title, s.lane_kind === 'track' ? s.lane_ar : '', when, sc.dated && s.label && s.label !== when ? s.label : '', s.status_ar || '',
+        dots.length ? `${countAr(dots.length, 'يوم ورشة', 'يوما ورشة', 'أيام ورش', 'يوم ورشة')}: ${andAr(dots.map((d) => d.label))}` : ''].filter(Boolean).join('، '),
+    };
+  });
+  // الأسابيع: علامة كل سبعة أيام من البداية برقمها. والأشهر (الدفعة المؤرخة): قطعة لكل شهر من أول يوم فيه داخل المحور إلى آخره
+  const weeks = [];
+  for (let d = 0, n = 1; d < total; d += 7, n += 1) weeks.push({ at: pct(d), width: round(pct(Math.min(total, d + 7)) - pct(d)), n, label: `الأسبوع ${n}` });
+  const months = [];
+  if (sc.dated) {
+    let d = 0;
+    while (d < total && months.length < 60) {
+      const day0 = iso(d);
+      const [y, m] = day0.split('-').map(Number);
+      const next = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`;
+      const to = Math.min(total, daysBetween(sc.start, next));
+      months.push({ at: pct(d), width: round(pct(to) - pct(d)), label: fmtDay(day0, months.length === 0 || m === 1 ? { month: 'long', year: 'numeric' } : { month: 'long' }), days: to - d });
+      d = to;
+    }
+  }
+  const today = sc.dated && sc.today != null && sc.today >= 0 && sc.today < total ? { at: pct(sc.today + 0.5), label: `اليوم ${fmtDay(iso(sc.today))}` } : null;
+  // نهاية الرحلة (آخر يوم في السلسلة)، ونهاية الدفعة المسجلة إن وُجدت. إن تطابقتا فعلامة واحدة
+  const chainEnd = Math.max(0, sc.end - 1);
+  const markers = [];
+  if (sc.dated) {
+    const cohortEnd = sc.ends_on ? sc.journey_end - 1 : null;
+    if (cohortEnd != null && cohortEnd === chainEnd) markers.push({ key: 'end', kind: 'cohort', at: pct(chainEnd + 1), label: `نهاية الدفعة والرحلة ${fmtDay(iso(chainEnd))}` });
+    else {
+      markers.push({ key: 'chain', kind: 'chain', at: pct(chainEnd + 1), label: `نهاية الرحلة ${fmtDay(iso(chainEnd))}` });
+      if (cohortEnd != null) markers.push({ key: 'cohort', kind: 'cohort', at: pct(cohortEnd + 1), label: `نهاية الدفعة ${fmtDay(sc.ends_on)}` });
+    }
+  }
+  return {
+    dated: !!sc.dated, days: total, min_width: Math.min(AXIS_MAX_PX, Math.max(AXIS_MIN_PX, total * AXIS_DAY_PX)), months, weeks, rows, today, markers,
+    start_ar: sc.dated ? fmtDay(sc.start) : 'البداية', weeks_ar: 'الأسابيع',
+  };
 }
