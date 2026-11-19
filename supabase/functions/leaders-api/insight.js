@@ -5,6 +5,7 @@
 // وحِمل الخبير بالعدّ نفسه الذي يرتّب به الترشيح (طلبات قائمة + جلسات قادمة)، ونص الحدث من auditAr (observations.js).
 import { ONBOARDING_AR } from './onboarding.js';
 import { auditAr } from './observations.js';
+import { PARTICIPANT_STATUS } from './labels.js';
 
 // ── مراحل الخط كله بترتيبها: أربع قبل الاعتماد (من onboarding.js) ثم حالات البرنامج ──
 export const PIPELINE = ['profile', 'assessment_todo', 'assessment_doing', 'approval', 'placed', 'enrolled', 'completed', 'out'];
@@ -101,6 +102,6 @@ export function changeRow(h, names = {}) {
     id: h.id, at: h.created_at, area, area_ar: CHANGE_AREAS[area] || area, text: auditAr(h.action), known: auditAr(h.action) !== h.action,
     actor_type: h.actor_type, by: h.actor_type === 'admin' ? h.actor : ACTOR_AR[h.actor_type] || h.actor_type || '',
     participant_id: isPerson ? h.entity_id : null, who: isPerson ? names[h.entity_id] || '' : '',
-    detail: h.after?.reason ? String(h.after.reason) : h.action === 'participant.status' && h.after?.status ? String(h.after.status) : '',
+    detail: h.after?.reason ? String(h.after.reason) : h.action === 'participant.status' && h.after?.status ? PARTICIPANT_STATUS[h.after.status] || String(h.after.status) : '',
   };
 }

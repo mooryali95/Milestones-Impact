@@ -4,6 +4,8 @@
 // الملاحظة تُكتب في participant_observations وحده. الأعلام لا تُخزَّن: تُشتق عند العرض من مصادرها (مؤشر الجهد من
 // القياس، والتأخر من المعالم، والغياب من الجلسات…)، فلا تختلف عن شاشاتها. والخط الزمني يجمع سجل التدقيق والملاحظات
 // بتسمية عربية واحدة لكل فعل.
+import { PARTICIPANT_STATUS } from './labels.js';
+
 export const OBS_KINDS = ['note', 'warning', 'commendation'];
 export const OBS_KIND_AR = { note: 'ملاحظة', warning: 'تنبيه', commendation: 'إشادة' };
 export const OBS_SOURCE_AR = { admin: 'الإدارة', advisor: 'المستشار', system: 'النظام' };
@@ -65,9 +67,28 @@ export const AUDIT_AR = {
   'entitlement.grant': 'مُنح حقًا', 'entitlement.revoke': 'سُحب منه حق', 'certificate.issue': 'صدرت شهادته', 'certificate.revoke': 'أُلغيت شهادته',
   'observation.add': 'أُضيفت ملاحظة إلى ملفه', 'observation.remove': 'حُذفت ملاحظة من ملفه', 'observation.ack': 'اطّلع على تنبيه',
   'expert.rated-participant': 'قيّمه خبير',
+  // ما يُسجَّل على المشارك من الخادم (P8): كل فعل كيانه participants له تسمية، ويحرسه اختبار يقرأ الشيفرة
+  'participant.create': 'أُنشئ حسابه', 'participant.register': 'سجّل في المنصة', 'participant.delete': 'حُذف حسابه', 'participants.import': 'أُضيف باستيراد قائمة',
+  'participant.nudge': 'ذُكِّر بمتابعة رحلته', 'nudge.seen': 'رأى تذكيرًا في رحلته', 'mail.login-link': 'أُرسل إليه رابط دخول',
+  'placement.approve-bulk': 'اعتُمد مستواه في اعتماد جماعي', 'final.reopen': 'أُعيد فتح تقييمه الختامي', 'group.assign': 'وُزّع على مجموعة',
+  'coaching.add': 'أُضيفت له جلسة توجيه', 'coaching.booked': 'حجز جلسة توجيه', 'coaching.instant': 'طلب اتصالًا فوريًا',
+  'certificate.awaiting-name': 'شهادته تنتظر تأكيد اسمه', 'certificate.skipped-disabled': 'لم تصدر شهادته لأن الإصدار موقوف',
+  'sponsor.approve': 'قُبلت رعايته', 'sponsor.hold': 'عُلّقت رعايته حتى يتوفر مقعد', 'sponsor.reject': 'رُفضت رعايته',
+  'admin.preview-as': 'عُرض ملفه كما يراه خبيره', 'expert.capstone-view': 'اطّلع خبير على وثيقة مبادرته', 'guide.transcript-read': 'قُرئت محادثته في التوجيه والإرشاد',
+  'demo.open': 'فُتح حساب العرض', 'demo.reset': 'أُعيد ضبط حساب العرض',
+  // ما يفعله المشارك نفسه (السجل يُقرأ أيضًا بمعرّفه فاعلًا)
+  'assessment.submit-post': 'سلّم القياس البعدي', 'sponsor.request': 'طلب رعاية جهته', 'participant.sponsor': 'انضم إلى جهته', 'rater.invite': 'دعا مقيّمًا',
+  'f360.start': 'بدأ تقييم 360', 'f360.self': 'أكمل تقييمه الذاتي في 360', 'f360.nominate': 'رشّح مقيّمًا في 360', 'f360.submit': 'أرسل مقيّميه في 360 للاعتماد', 'f360.plan': 'حفظ خطته من تقرير 360',
+  'expert-request.create': 'طلب خبيرًا', 'expert-request.cancel': 'ألغى طلب خبير', 'expert-request.chosen': 'اختار خبيرًا', 'expert.rated': 'قيّم خبيرًا',
+  'peer.ask': 'سأل الأقران', 'peer.answer': 'أجاب سؤال زميل', 'peer.close': 'أغلق سؤاله للأقران', 'sus.submit': 'أجاب استبيان سهولة الاستخدام',
+  'capstone.share-create': 'شارك وثيقة مبادرته', 'capstone.share-revoke': 'أوقف مشاركة وثيقة مبادرته', 'capstone.sponsor-invite': 'دعا راعي مبادرته',
+  'workshop.join': 'انضم إلى ورشة عن بعد', 'guide.clear': 'حذف محادثته في التوجيه والإرشاد', 'passkey.register': 'أضاف مفتاح مرور', 'passkey.remove': 'حذف مفتاح مرور',
 };
 export const auditAr = (action) => AUDIT_AR[action] || action;
-const ACTOR_AR = { admin: 'الإدارة', participant: 'المشارك', system: 'النظام', coordinator: 'منسق الجهة' };
+// في ملف المشارك لا يظهر رمز خام (P8): فعل لم يُسمَّ بعد يُعرض بوصف عام، ويسقط اختبار التسمية حين يُضاف فعل على المشارك بلا اسم
+export const auditLabel = (action) => AUDIT_AR[action] || 'إجراء في السجل';
+const statusAr = (s) => PARTICIPANT_STATUS[s] || 'حالة أخرى';
+const ACTOR_AR = { admin: 'الإدارة', participant: 'المشارك', system: 'النظام', coordinator: 'منسق الجهة', expert: 'خبير' };
 
 /**
  * الخط الزمني: سجل التدقيق والملاحظات في ترتيب واحد، الأحدث أولًا.
@@ -75,7 +96,7 @@ const ACTOR_AR = { admin: 'الإدارة', participant: 'المشارك', syste
  */
 export function timelineOf({ history = [], observations = [] }) {
   const rows = [
-    ...history.map((h) => ({ at: h.created_at, kind: 'event', tone: 'info', text: auditAr(h.action), by: ACTOR_AR[h.actor_type] || h.actor_type || '', detail: h.action === 'participant.status' && h.after?.status ? `الحالة: ${h.after.status}${h.after.reason ? `، السبب: ${h.after.reason}` : ''}` : '' })),
+    ...history.map((h) => ({ at: h.created_at, kind: 'event', tone: 'info', text: auditLabel(h.action), by: ACTOR_AR[h.actor_type] || '', detail: h.action === 'participant.status' && h.after?.status ? `الحالة: ${statusAr(h.after.status)}${h.after.reason ? `، السبب: ${h.after.reason}` : ''}` : '' })),
     ...observations.map((o) => ({ at: o.created_at, kind: o.kind, tone: o.kind === 'warning' ? 'warn' : o.kind === 'commendation' ? 'ok' : 'info',
       text: `${OBS_KIND_AR[o.kind] || o.kind}${o.title ? `: ${o.title}` : ''}`, by: OBS_SOURCE_AR[o.source] || o.source, detail: o.body })),
   ];

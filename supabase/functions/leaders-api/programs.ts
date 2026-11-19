@@ -15,6 +15,7 @@ import { cleanProfile } from './certificates.ts';
 import { seatsUsedByOrg } from './entitlements.ts';
 import { features } from './features.ts';
 import { featureHiddenCodes, featureHiddenFor } from './features.js';
+import { isRunning, LIVE } from './cohort-running.js';
 
 type Body = Record<string, any>;
 
@@ -970,10 +971,11 @@ export async function groupOf(participantId: string, cohortId: string | null) {
 }
 
 // دفعة جارية في البرنامج: بدأت ولم تنتهِ (يُقفل أثناءها ما يُقاس به)
+// «جارية» بالتعريف الواحد (cohort-running.js، P10): الاستعلام يضيّق بالتاريخ، والحكم لـisRunning نفسه
 export async function runningCohort(programId: string | null) {
   const today = new Date().toISOString().slice(0, 10);
-  let q = db.from('cohorts').select('name, starts_on, ends_on').lte('starts_on', today).or(`ends_on.is.null,ends_on.gte.${today}`).limit(1);
+  let q = db.from('cohorts').select('name, status, starts_on, ends_on').lte('starts_on', today).or(`ends_on.is.null,ends_on.gte.${today}`).in('status', [...LIVE]).limit(50);
   if (programId) q = q.eq('program_id', programId);
   const { data } = await q;
-  return data?.[0]?.name || null;
+  return (data || []).find((c: any) => isRunning(c, today))?.name || null;
 }

@@ -378,7 +378,7 @@ export async function participant(b: Body) {
   const [results, reqs, views, audits] = await Promise.all([
     db.from('assessments').select('id, status, started_at, submitted_at, instrument_id, form, instruments(key, kind), assessment_results(*)')
       .eq('participant_id', p.id).order('started_at', { ascending: false }),
-    db.from('participant_requirements').select('*, stage_requirements(code, title_ar, stage_key, kind)').eq('participant_id', p.id),
+    db.from('participant_requirements').select('*, stage_requirements(code, title_ar, stage_key, kind, program_id)').eq('participant_id', p.id),
     db.from('handbook_views').select('viewed_at').eq('participant_id', p.id).order('viewed_at', { ascending: false }).limit(1),
     // الخط الزمني: ما جرى عليه (entity_id) وما فعله هو (actor بمعرّفه)، لا آخر ثلاثين على كيانه وحده
     db.from('audit_log').select('*').or(`entity_id.eq.${p.id},actor.eq.${p.id}`).order('created_at', { ascending: false }).limit(150),
@@ -440,7 +440,7 @@ export async function participant(b: Body) {
   return {
     success: true, participant: p, effort, retake: g?.retake || null, can_retake: canRequestRetake(p, prog), onboarding: { ...onboardingOf(p, prog), started_at: prog?.started_at || null, last_answer_at: lastAnswer }, profile: state.profile, journey: state.journey, progress: state.progress, milestones: state.milestones, milestone_summary: state.milestone_summary, group: state.group, continuous: state.continuous,
     program: state.program || null,   // دفعته وبرنامجه كما يراهما الخادم (للعرض والتسجيل الصريح في دفعة)
-    assessments, requirements: reqs.data || [], last_view: views.data?.[0]?.viewed_at || null,
+    assessments, requirements: await readableReqTitles(reqs.data || []), last_view: views.data?.[0]?.viewed_at || null,
     placement_model: model || DEFAULT_MODEL,   // حدود مقياس المؤشر في بطاقة المستوى (للعرض وحده)
     history: audits.data || [],
     points: pts, book: book || [], models: subs || [], labs,
@@ -623,11 +623,11 @@ async function purgeQueuedMail(email: string, refs: string[]) {
 export async function reviews(b: Body = {}) {
   // حساب العرض لا يدخل طوابير المراجعة (participants!inner يسمح بالفلترة على المشارك)
   const rows = must(await scopeOrg(db.from('participant_requirements')
-    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind)')
+    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind, program_id)')
     .eq('status', 'submitted').eq('participants.is_demo', false), b.org, 'participants.organization_id').limit(200)) ?? [];
   const { data: waiting } = await scopeOrg(db.from('participants').select('id, full_name, email, organization_name, updated_at')
     .eq('status', 'pending_approval').eq('is_demo', false), b.org).order('updated_at', { ascending: true }).limit(200);
-  return { success: true, submitted: rows, pending_approval: waiting || [] };
+  return { success: true, submitted: await readableReqTitles(rows as any[]), pending_approval: waiting || [] };
 }
 
 // ── صندوق «ينتظرني»: كل ما ينتظر قرار الإدارة من جداوله، في قائمة واحدة بعمره (inbox.js) ──
@@ -638,7 +638,7 @@ export async function inbox(_b: Body = {}) {
   const LIMIT = { approval: 200, requirement: 200, model: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100 };
   const q = {
     approval: db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval').eq('is_demo', false).order('updated_at', { ascending: true }).limit(LIMIT.approval),
-    requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.requirement),
+    requirement: db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar, program_id)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.requirement),
     model: db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.model),
     capstone: db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted').eq('participants.is_demo', false).limit(LIMIT.capstone),
     // journey-guard: صندوق الإدارة يعدّ طلبات الانضمام بانتظار المراجعة، لا ترشيح فيه
@@ -654,6 +654,7 @@ export async function inbox(_b: Body = {}) {
   keys.forEach((k, i) => { if (res[i].error) skipped.push(k); rows[k] = (res[i].data || []) as any[]; });
   // capped: نوع بلغ حد قراءته فعدده أقل من الحقيقة؛ يعلّم به مكتب اليوم «ينتظر قرارًا» بأنه «على الأقل»
   const capped = keys.filter((k) => rows[k].length >= LIMIT[k]);
+  rows.requirement = await readableReqTitles(rows.requirement).catch(() => rows.requirement);
   const name = (r: any) => r.participants?.full_name || '';
   const src = {
     approval: rows.approval.map((r) => ({ id: r.id, participant_id: r.id, title: r.full_name, sub: r.organization_name || '', at: r.updated_at })),
@@ -924,6 +925,23 @@ export async function resetAssessment(a: Admin, b: Body) {
   return { success: true, done, skipped };
 }
 
+// عناوين المتطلبات بلا رموز خام (P8): العنوان يحمل رموز إعداد النشاط ({sessions:الرمز} وأخواتها)، فيُحوَّل
+// بإعدادات متطلبات برنامجه كما يراه المشارك في رحلته وفي بريد قرار المراجعة. قراءة واحدة لكل البرامج في القائمة،
+// وتعذّرها يُبقي العنوان كما هو (renderJourneyText يترك ما لا يعرفه) ولا يُسقط القائمة.
+export async function readableReqTitles<T extends { stage_requirements?: any }>(rows: T[]): Promise<T[]> {
+  const programs = [...new Set(rows.map((r) => r.stage_requirements?.program_id).filter(Boolean))];
+  const withToken = rows.some((r) => String(r.stage_requirements?.title_ar || '').includes('{'));
+  if (!programs.length || !withToken) return rows;
+  const { data } = await db.from('stage_requirements').select('code, config, program_id').in('program_id', programs);
+  const byProgram = new Map<string, any[]>();
+  for (const r of data || []) (byProgram.get(r.program_id) || byProgram.set(r.program_id, []).get(r.program_id)!).push(r);
+  return rows.map((r) => {
+    const sr = r.stage_requirements;
+    if (!sr?.title_ar || !String(sr.title_ar).includes('{')) return r;
+    return { ...r, stage_requirements: { ...sr, title_ar: renderJourneyText(sr.title_ar, { reqs: byProgram.get(sr.program_id) || [] }) } };
+  });
+}
+
 // مراجعة متطلب أرسله المشارك (سجل معالم، خطة تطوير…) أو تسجيل جلسة
 // بريد للمشارك بقرار المراجعة؛ فشله لا يُفشل القرار نفسه
 async function notifyReview(participantId: string, requirementId: string, returned: boolean, note?: unknown) {
@@ -933,8 +951,8 @@ async function notifyReview(participantId: string, requirementId: string, return
   ]);
   if (!p?.email) return;
   // العنوان يحمل رموز إعداد النشاط ({sessions:الرمز} وأخواتها) فيُحوَّل بما يراه المشارك في رحلته، لا يُرسل خامًا
-  const reqs = r?.program_id ? (await db.from('stage_requirements').select('code, config').eq('program_id', r.program_id)).data || [] : [];
-  const title = renderJourneyText(r?.title_ar || '', { reqs }) || 'بند في رحلتك';
+  const [row] = await readableReqTitles([{ stage_requirements: r }]);
+  const title = row.stage_requirements?.title_ar || 'بند في رحلتك';
   sendMail(p.email, returned ? 'ملاحظة من المستشار على رحلتك' : 'اعتُمد بند في رحلتك',
     reviewMail(p.full_name, title, returned, note ? String(note) : null)).catch((e) => console.error(e));
 }

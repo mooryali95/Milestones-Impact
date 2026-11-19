@@ -17,6 +17,7 @@ import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
 import { useUI } from '../ui.jsx';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
+import { journeyAudience, journeyAudienceAr } from '../program-reach.js';
 import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 
 const save = (entity, base) => (row) => L('admin.save', { entity, row: { ...base, ...row } });
@@ -52,9 +53,8 @@ function Move({ catalog, entity, id, reload, canWrite }) {
 
 // ══ الرحلة والمتطلبات ══
 // برامج الرحلة: يختار المشرف أيها يحرر
-function ProgramBar({ current, onProgram }) {
-  const [list, setList] = useState(null);
-  useEffect(() => { L('admin.programs').then((r) => setList(r.success ? r.programs.filter((p) => !p.archived_at || p.id === current) : [])); }, [current]);
+function ProgramBar({ current, onProgram, programs }) {
+  const list = programs ? programs.filter((p) => !p.archived_at || p.id === current) : null;
   if (!list || list.length < 2) return null;
   return (
     <label className="la-row">
@@ -78,10 +78,19 @@ function Coherence({ stages, reqs }) {
   );
 }
 
+// من يصله ما يُحرَّر هنا (P9): كل دفعة على البرنامج باسمها ونسختها وأعضائها، من admin.programs نفسه (program-reach.js)
+function JourneyAudience({ pid, data }) {
+  if (!data?.success) return <p className="la-muted">ما تحرره هنا مسودة البرنامج، ولا يصل إلى الدفعات المثبتة على نسخة حتى تحفظه نسخة وترقّيها إليها من «البرامج والدفعات».</p>;
+  const lines = journeyAudienceAr(journeyAudience(pid, data.programs, data.cohorts));
+  return <div className="j-audience" aria-label="من يصله التعديل">{lines.map((l, i) => <p key={i} className={l.tone === 'warn' ? 'la-note' : 'la-muted'} role={l.tone === 'warn' ? 'note' : undefined}>{l.text}</p>)}</div>;
+}
+
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
   const { toast, prompt } = useUI();
   const pid = catalog.program_id;
+  const [pdata, setPdata] = useState(null);
+  useEffect(() => { L('admin.programs').then(setPdata); }, [pid]);
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
@@ -103,11 +112,12 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   };
   return (
     <>
-      {onProgram && <ProgramBar current={pid} onProgram={onProgram} />}
+      {onProgram && <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} />}
+      <JourneyAudience pid={pid} data={pdata} />
       <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} />
       <Coherence stages={stages} reqs={reqs} />
       <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
-      <p className="la-muted">ما تحرره هنا يظهر مباشرة لمشاركي الدفعات التي تتبع آخر تعديل على هذا البرنامج، والدفعات المثبتة على نسخة لا تتأثر حتى ترقيها. الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الحاجة، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
+      <p className="la-muted">الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الحاجة، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
         <React.Fragment key={ph}>
           <div className="la-row between">

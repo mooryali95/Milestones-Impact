@@ -9,6 +9,7 @@
 // أسرار الدالة التي لا قيمة افتراضية آمنة لها: بلا مفتاح التوقيع لا تصدر شهادة، وبلا قناة التنبيه (ALERT_CHANNELS) لا إنذار بغير البريد.
 // البقية لها افتراضي آمن في docs/SECRETS.md. البوابة تشترطها بأسمائها، وحالة النظام تفحص قيمها
 import { sessionsFor, undatedAr, usesHandbook } from './cohort-setup.js';
+import { isRunning } from './cohort-running.js';
 
 export const REQUIRED_SECRETS = ['LEADERS_CERT_SIGNING_KEY'];
 
@@ -109,7 +110,8 @@ export function launchReadiness({ organizations = [], cohorts = [], sessions = [
   // كل جلسة مرة واحدة: الجلسة بلا دفعة تعم الدفعات، وجمع undatedFor لكل دفعة كان يعدها مرة لكل دفعة
   const undated = sessions.filter((w) => w.active !== false && !w.starts_at
     && orgCohorts.some((c) => !w.cohort_id || w.cohort_id === c.id)).length;
-  const running = cohorts.filter((c) => c.status === 'running').map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
+  // «جارية» بالتعريف الواحد (cohort-running.js، P10): بالتاريخ، لا بالحالة المحفوظة
+  const running = cohorts.filter((c) => isRunning(c, now)).map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.content_release }));
   // نسخة البرنامج: كل دفعة مفتوحة أو جارية، والدفعة المفتوحة العامة أيًا كانت حالتها، مثبتة على نسخة (ترحيل 20261116110000)
   const pinned = cohorts.filter((c) => c.is_default || LIVE.includes(c.status)).map((c) => ({ kind: 'cohort', id: c.id, name: c.name, has: !!c.program_version_id }));
   const fe = asJson(finalEval);

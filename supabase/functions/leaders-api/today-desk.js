@@ -12,6 +12,7 @@
 import { orgReadinessOf, readinessSummary, seatsFull } from './org-readiness.js';
 import { cohortKind, cohortReadiness, hubSummary } from './cohort-readiness.js';
 import { SESSION_WINDOW_MS, usesHandbook, workshopOf } from './cohort-setup.js';
+import { isRunning } from './cohort-running.js';
 
 // نافذة «جلسة قادمة» للدفعة الجارية: نافذة الجلسات نفسها في cohort-setup.js (SESSION_WINDOW_MS، أربعة عشر يومًا)
 const DAY = 864e5;
@@ -32,13 +33,8 @@ export const ALERT_KINDS = {
 };
 const SEVERITY_RANK = { bad: 0, warn: 1 };
 
-// الدفعة الجارية: حالها «التسجيل مفتوح» أو «جارية» (الدفعة الحية كما في live_cohorts في programs.ts؛ «مخططة» لم تبدأ
-// ولا يدخلها أحد تلقائيًا)، وبدأت ولم تنتهِ بتاريخ UTC كما في runningCohort
-const LIVE = new Set(['open', 'running']);
-export function isRunning(c, now = Date.now()) {
-  const today = isoDay(now);
-  return !!c && LIVE.has(c.status) && !!c.starts_on && c.starts_on <= today && (!c.ends_on || c.ends_on >= today);
-}
+// الدفعة الجارية بالتعريف الواحد (cohort-running.js، P10): حية وبدأت ولم تنتهِ بتاريخ UTC، وهو نفسه الذي تقفل به الأقفال
+export { isRunning };
 
 /**
  * أقرب جلسة مؤرخة قادمة للدفعة: ورشة تخصها (workshopOf، قاعدة sessionsFor نفسها)، أو جلسة توجيه محجوزة لأحد أعضائها.
