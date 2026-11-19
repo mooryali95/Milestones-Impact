@@ -12,6 +12,7 @@ import { xpCall } from '../api.js';
 import { lastLine, NUDGE_OUTCOME_AR, NUDGE_SKIP_AR } from '../../../supabase/functions/leaders-api/nudge.js';
 import ExpertAnswers from './ExpertAnswers.jsx';
 import { ErrorBox, Notice, useNotice } from '../ui.jsx';
+import { journeyBlocks, stageNow } from '../../../supabase/functions/leaders-api/journey-map.js';
 import { DIM_AR, LEVEL_AR, MILESTONE_RUBRIC, RUBRIC_LEVEL_AR, rubricLevelAr, STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { FINAL_APPROVAL_AR, FINAL_DECISION_AR, FINAL_STATUS_AR, finalApproveConfirm, MILESTONE_STATUS_AR, NOTES_REQUIRED, SUPERVISION_AR } from '../../../supabase/functions/leaders-api/logic.js';
 
@@ -247,6 +248,29 @@ function MentorNudge({ pid }) {
   );
 }
 
+// الرحلة بعين الخبير كما يراها المشارك (التوازي 2): المراحل التي تسير معًا كتلة واحدة «تسير معًا»، ثم المسارات المستمرة
+// والخدمات لمن يريد، فلا تُقرأ مرحلتان متوازيتان كأنهما متتاليتان
+const stageRow = (s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{STAGE_STATUS_AR[s.status]}{s.total ? ` · ${s.done}/${s.total}` : ''}</small></li>;
+function JourneyShape({ shape }) {
+  return (
+    <>
+      <ul className="ca-list xf-journey">{shape.blocks.map((b) => (b.together ? (
+        <li key={b.key} className="xf-together" aria-label={`تسير معًا: ${b.stages.map((s) => s.title_ar).join(' و')}`}>
+          <b className="xf-lane">تسير معًا</b>
+          <ul className="ca-list">{b.stages.map(stageRow)}</ul>
+        </li>
+      ) : stageRow(b.stages[0])))}</ul>
+      {shape.tracks.length > 0 && (
+        <div className="xf-side"><b className="xf-lane">مسار مستمر يسير بجانب الرحلة</b><ul className="ca-list xf-journey">{shape.tracks.map(stageRow)}</ul></div>
+      )}
+      {shape.services.length > 0 && (
+        <div className="xf-side"><b className="xf-lane">خدمات لمن يريد</b>
+          <ul className="ca-list xf-journey">{shape.services.map((s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{s.used ? 'استفاد منها' : 'لم يستفد منها بعد'}</small></li>)}</ul></div>
+      )}
+    </>
+  );
+}
+
 export default function ExpertFile({ id, onBack }) {
   const [d, setD] = useState(null);
   const [msNote, sayMs] = useNotice();
@@ -257,7 +281,9 @@ export default function ExpertFile({ id, onBack }) {
   if (!d) return <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
   if (!d.success) return <div className="page narrow"><ErrorBox message={d.message} onRetry={load} /><button className="link small" onClick={onBack}>→ مشاركوك</button></div>;
   const p = d.participant, advisor = d.scope === 'advisor';
-  const current = d.journey.find((s) => s.status === 'active');
+  // المرحلة الحالية والرحلة كتلًا من الدالتين نفسيهما اللتين تقرأ منهما رحلة المشارك (currentStages وwithGroups)
+  const now = stageNow(d.journey);
+  const shape = journeyBlocks(d.journey);
   const c = d.continuous;
   const rateMilestone = async (m, body) => {
     const r = await xpCall('xp.milestone', { participant_id: p.id, milestone_id: m.id, ...body });
@@ -302,8 +328,8 @@ export default function ExpertFile({ id, onBack }) {
 
         <section className="card stack" aria-label="أين هو">
           <h3>أين هو</h3>
-          <p className="small">التقدم <b>{d.progress}٪</b>{current ? <> · المرحلة الحالية: <b>{current.title_ar}</b></> : ''}</p>
-          <ul className="ca-list xf-journey">{d.journey.map((s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{STAGE_STATUS_AR[s.status]}{s.total ? ` · ${s.done}/${s.total}` : ''}</small></li>)}</ul>
+          <p className="small">التقدم <b>{d.progress}٪</b>{now.label ? <> · {now.together ? now.label : <>المرحلة الحالية: <b>{now.stage}</b></>}</> : ''}</p>
+          <JourneyShape shape={shape} />
           {d.milestones?.length > 0 && (
             <>
               <p className="small muted">المعالم: {d.milestone_summary.done}/{d.milestone_summary.total} منجز{d.milestone_summary.late ? ` · ${d.milestone_summary.late} متأخر (أقصاه ${d.milestone_summary.max_late} يومًا)` : ''}</p>

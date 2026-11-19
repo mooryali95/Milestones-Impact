@@ -392,10 +392,12 @@ const windowsFor = (stages, cohort) => (cohort?.starts_on && !cohort?.is_default
  * people: [{ id, at, stagesDone, records, open, after }] من رحلة كل عضو كما يراها (journeyFor)، أو null إن لم تُحسب.
  *   at: موضعه الآن، وstagesDone: ما أكمل (منهما يُعرف من تجاوز مرحلة تعود)، وopen: مراحل ليست مقفلة عليه الآن، وafter: حالة كل مرحلة عليه بالخطة الجديدة (تُحسب حين يُعاد تشغيل مرحلة فقط)
  * booked: { مفتاح مرحلة: عدد جلسات التوجيه المحجوزة القادمة فيها } لما يُوقف (تحذير لا منع، البند 4.6)
- * @param {{ stages: any[], before?: any, after?: any, cohort?: any, milestones?: any[], people?: any[]|null, today?: any, cutoff?: string, booked?: Record<string, number> }} o */
-export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, milestones = [], people = null, today = null, cutoff = undefined, booked = {} }) {
+ * @param {{ stages: any[], before?: any, after?: any, cohort?: any, milestones?: any[], people?: any[]|null, today?: any, cutoff?: string, booked?: Record<string, number>, endsOn?: string | null }} o */
+export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, milestones = [], people = null, today = null, cutoff = undefined, booked = {}, endsOn = undefined }) {
   const c0 = { ...cohort, schedule: before || {} };
-  const c1 = { ...cohort, schedule: after || {} };
+  // نهاية الدفعة المسجلة بعد التعديل («اجعل نهاية الدفعة …»): تحرك معالم «نهاية الدفعة» والمسار الممتد إلى نهايتها
+  const ends = endsOn !== undefined && (endsOn || null) !== (cohort.ends_on ? String(cohort.ends_on).slice(0, 10) : null) ? { before: cohort.ends_on ? String(cohort.ends_on).slice(0, 10) : null, after: endsOn || null } : null;
+  const c1 = { ...cohort, schedule: after || {}, ...(ends ? { ends_on: ends.after } : {}) };
   const p0 = cohortPlan(stages, c0), p1 = cohortPlan(stages, c1);
   const titleOf = new Map(stages.map((s) => [s.key, s.title_ar || s.key]));
   const changes = stages.map((s) => {
@@ -433,7 +435,7 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
   const live = (milestones || []).filter((m) => m.active !== false);
   const in0 = new Set(cohortMilestones(live, c0).map((m) => m.id)), in1 = new Set(cohortMilestones(live, c1).map((m) => m.id));
   // الخطة كما تقرؤها المعالم (planSchedule): المفتوحة بلا تواريخ مثبتة، كما في milestoneStatuses
-  const ctx = (w, cc) => ({ startsOn: cohort.starts_on || null, endsOn: cohort.ends_on || null, schedule: planSchedule(cc), windows: w });
+  const ctx = (w, cc) => ({ startsOn: cohort.starts_on || null, endsOn: cc.ends_on || null, schedule: planSchedule(cc), windows: w });
   const moved = live.filter((m) => in0.has(m.id) && in1.has(m.id)).map((m) => {
     const a = milestoneDueInfo(m, ctx(w0, c0)).due, b = milestoneDueInfo(m, ctx(w1, c1)).due;
     return a === b ? null : { id: m.id, title: m.title_ar, before: a, after: b };
@@ -483,7 +485,7 @@ export function planImpact({ stages = [], before = {}, after = {}, cohort = {}, 
   }
   const bookedRows = stopped.map((k) => ({ key: k, title: titleOf.get(k), sessions: Number(booked?.[k]) || 0 })).filter((x) => x.sessions > 0);
   return {
-    changes, stopped, started, end: { before: p0.end, after: p1.end, shift }, total: { before: p0.total_days, after: p1.total_days },
+    changes, stopped, started, end: { before: p0.end, after: p1.end, shift }, ...(ends ? { ends } : {}), total: { before: p0.total_days, after: p1.total_days },
     day_rules: dayRules, rewrites, milestones: moved, excluded, restored, people: who, moving, reenabled, booked: bookedRows, late, mail, notify, issues: p1.issues,
     open: cohort.is_default ? { members: Array.isArray(people) ? people.length : null } : null,
     ...(p1.tracks ? { titles: Object.fromEntries(titleOf) } : {}),
@@ -527,6 +529,10 @@ export function impactLines(impact, fmt = (d) => d, { notify = false } = {}) {
     if ((a.with || null) === (b.with || null) && !b.offset) continue;
     const open = b.with ? `«${x.title}» تُفتح لأصحابها مع بداية «${b.with_title}»` : `«${x.title}» تُفتح لأصحابها بعد اكتمال الإلزامية قبلها`;
     out.push({ key: `par-${x.key}`, kind: 'note', text: b.with && b.offset ? `${open}، والإزاحة تخطيط للتواريخ وحدها فلا تقفلها حتى موعدها المخطط` : open });
+  }
+  if (impact.ends) {
+    const e = impact.ends;
+    out.push({ key: 'ends', kind: 'end', text: `نهاية الدفعة المسجلة تصير ${e.after ? fmt(e.after) : 'بلا تاريخ'}${e.before ? ` بدل ${fmt(e.before)}` : ''}، فتتبعها معالم «نهاية الدفعة» وما يمتد إلى نهايتها` });
   }
   const sh = impact.end.shift;
   if (sh) out.push({ key: 'end', kind: 'end', text: `${sh > 0 ? 'تتأخر' : 'تتقدم'} نهاية الرحلة ${daysAr(Math.abs(sh))}${impact.end.after ? `، فتنتهي ${fmt(impact.end.after)}` : ''}` });
@@ -609,6 +615,7 @@ export function planNotice(impact, fmt = dayLongAr) {
   const lane = impact.changes.filter((x) => !x.off && x.track).map((x) => x.key);
   if (lane.length) parts.push(`تغيّر امتداد ${list(lane)} الذي يسير معك.`);
   if (impact.end?.after && impact.end.shift) parts.push(`وتنتهي رحلتك الآن ${fmt(impact.end.after)}.`);
+  else if (impact.ends?.after) parts.push(`وتنتهي دفعتك الآن ${fmt(impact.ends.after)}.`);
   parts.push('افتح رحلتك لترى المواعيد الجديدة لكل مرحلة ومعلم.');
   return { title: 'تغيّرت مواعيد رحلتك', body: `حدّث فريق البرنامج خطة دفعتك. ${parts.join(' ')}` };
 }
@@ -621,10 +628,36 @@ export const impactSummary = (impact) => (impact ? {
     ...(x.track ? { track: true } : {}), ...(x.until_changed ? { until: [x.before.until || null, x.after.until || null] } : {}),
   })),
   stopped: impact.stopped || [], started: impact.started || [], excluded: (impact.excluded || []).length,
-  shift: impact.end.shift, milestones: impact.milestones.length,
+  shift: impact.end.shift, milestones: impact.milestones.length, ...(impact.ends ? { ends: [impact.ends.before, impact.ends.after] } : {}),
   late: impact.late ? impact.late.milestones : null, held: impact.mail ? impact.mail.held : null,
   people: impact.people ? impact.people.total : null,
 } : null);
+
+// «اجعل نهاية الدفعة …» (تصور محرر رحلة الدفعة 4.2 أ): نهاية الدفعة المسجلة تُضبط من التبويب على نهاية السلسلة المحسوبة،
+// بمعاينة الأثر والحفظ نفسيهما. يوم صالح في دفعة مؤرخة غير مفتوحة، لا قبل بدايتها. null: لا تعديل
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** @param {any} cohort @param {unknown} v @returns {{ code: string, msg: string } | null} */
+export function planEndsIssue(cohort, v) {
+  const c = cohort || {};
+  if (c.is_default) return { code: 'ends_open', msg: 'الدفعة المفتوحة بلا نهاية واحدة، فلا تُضبط نهايتها من هنا' };
+  if (!c.starts_on) return { code: 'ends_undated', msg: 'حدد تاريخ بداية الدفعة أولًا' };
+  const d = String(v ?? '');
+  if (!ISO_DAY.test(d) || Number.isNaN(Date.parse(`${d}T00:00:00Z`))) return { code: 'ends_value', msg: 'نهاية الدفعة يوم بصيغة سنة-شهر-يوم' };
+  if (d < String(c.starts_on).slice(0, 10)) return { code: 'ends_before', msg: 'نهاية الدفعة قبل بدايتها' };
+  return null;
+}
+/** نهاية السلسلة المحسوبة حين تخالف نهاية الدفعة المسجلة (over_end بعدها، وchain_end_mismatch قبلها مع مسار ممتد)، وإلا null.
+ * هي القيمة التي يقترحها زر «اجعل نهاية الدفعة …»
+ * @param {any[]} stages @param {any} cohort */
+export function chainEndOffer(stages, cohort) {
+  const c = cohort || {};
+  if (c.is_default || !c.starts_on || !c.ends_on) return null;
+  const p = cohortPlan(stages, c);
+  const ends = String(c.ends_on).slice(0, 10);
+  if (!p.end || p.end === ends) return null;
+  const why = (p.issues || []).find((x) => x.code === 'over_end' || x.code === 'chain_end_mismatch');
+  return why ? { end: p.end, ends_on: ends, code: why.code } : null;
+}
 
 // أفعال حفظ خطة الدفعة في السجل: حارس بريد «معلم متأخر» يقرؤها (lateMilestoneNotices)
 export const PLAN_ACTIONS = Object.freeze(['cohort.plan', 'cohort.plan-undo']);

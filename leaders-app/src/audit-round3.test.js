@@ -13,14 +13,16 @@ const read = (p) => readFileSync(join(root, p), 'utf8');
 describe('لوحة الجهة', () => {
   it('8.2 المرحلة الجارية من رحلة المشارك نفسها', () => {
     const c = read('supabase/functions/leaders-api/coordinator.ts');
-    expect(c).toContain("stageBy[r.id] = (j.journey || []).find((s: any) => s.status === 'active')?.title_ar || null;");
+    // ومن يسير في مرحلتين معًا تُسميان معًا من currentStages نفسها (stageNow، التوازي 2)
+    expect(c).toContain('const now = stageNow(j.journey || []);');
+    expect(c).toContain('stageBy[r.id] = now.stage;');
     expect(coordParticipant({ id: 'p', full_name: 'س', status: 'approved', stage: 'التدريب' }, coordPermissions({})).stage).toBe('التدريب');
     // stageOf في coord.js مصدر واحد للعمود وملف Excel ومرشّح «المرحلة» (org-2)
     expect(read('leaders-app/src/coord.js')).toContain('export const stageOf = (p) => p.stage || PARTICIPANT_STATUS[p.status] || p.status;');
     expect(stageOf({ stage: 'التدريب', status: 'enrolled' })).toBe('التدريب');
     expect(stageOf({ stage: null, status: 'withdrawn' })).toBe(PARTICIPANT_STATUS.withdrawn);
     const o = read('leaders-app/src/screens/OrgPortal.jsx');
-    expect(o).toContain('<td data-label="المرحلة"><span className="chip">{stageOf(p)}</span></td>');
+    expect(o).toContain('<td data-label="المرحلة"><span className="chip">{stageOf(p)}</span>');
     expect(o).toContain("...(perms.scores ? [p.track_title || ''] : []), stageOf(p), p.progress,");
     expect(o).not.toContain('p.stage ||');
   });

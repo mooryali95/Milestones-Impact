@@ -298,3 +298,11 @@
 .cj-services .cj-card { border-inline-start: 4px dotted var(--gold); }
 .cj-tag.cj-svc { border-style: dotted; border-width: 2px; border-color: color-mix(in srgb, var(--gold) 70%, transparent); color: var(--gold-text); font-weight: 700; }
 .cj-usage { font-weight: 700; }
+
+/* «اجعل نهاية الدفعة …» تحت تنبيه النهاية، وسطرها في المسودة */
+.cj-ends { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: .86rem; color: var(--la-muted, #5b6770); }
+.cj-ends.on { padding: 8px 12px; border-radius: 10px; border: 1px dashed color-mix(in srgb, var(--st-warn) 45%, transparent); color: inherit; }
+.cj-ends small { flex: 1 1 260px; min-width: 0; }
+/* أيام الورش خارج نافذة مراحلها: قائمة روابط إلى بطاقات المراحل */
+.cj-outside { margin: 6px 0 0; padding-inline-start: 18px; display: grid; gap: 4px; }
+.cj-outside .la-link { text-align: start; white-space: normal; }

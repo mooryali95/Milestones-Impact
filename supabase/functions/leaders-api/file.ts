@@ -20,6 +20,7 @@ import { forParticipant as peerFor, hallTeams } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { journeyApproved, overallLevel } from './logic.js';
+import { stageNow } from './journey-map.js';
 import * as OB from './observations.ts';
 import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { flagsOf, timelineOf } from './observations.js';
@@ -194,14 +195,15 @@ export async function participants(e: any) {
         db.from('final_evaluations').select('status').eq('participant_id', p.id).eq('program_id', st.program?.id || '').maybeSingle(),
         db.from('peer_requests').select('id').eq('participant_id', p.id).eq('status', 'answered'),
       ]);
-      const current = st.journey.find((s: any) => s.status === 'active');
+      // المرحلة الحالية كما يراها المشارك (currentStages): مرحلتان تسيران معًا تُسميان معًا، والمسار المستمر ليس موضعًا
+      const now = stageNow(st.journey);
       const level = vis && vis.asg_levels === false ? null : overallLevel(Object.fromEntries((st.profile?.dimensions || []).map((d: any) => [d.dimension, d.level])));
       const needs = needsFor({ submissions: Array.from({ length: subs.count || 0 }, () => ({ status: 'submitted' })), milestones: st.milestones, final: fe.data, peerAnswers: (peer.data || []).map(() => ({ status: 'pending' })) });
       return {
         id: p.id, name: p.full_name, first: firstName(p.full_name), title: p.job_title || null, org: p.organization_name || null, status: p.status,
         cohort: st.program?.cohort?.name || null, advisor: scope.advisor.has(p.id), role_ar: scope.assigned.has(p.id) ? roleAr(scope.assigned.get(p.id)!) : null,
         level, level_ar: level ? (LEVEL_AR as Record<string, string>)[level] : null, approved: !!st.profile?.approved,
-        stage: current?.title_ar || null, progress: st.progress, late: st.milestone_summary?.late || 0, continuous: vis && vis.asg_continuous === false ? null : st.continuous?.index ?? null,
+        stage: now.stage, together: now.together, tracks: now.tracks, progress: st.progress, late: st.milestone_summary?.late || 0, continuous: vis && vis.asg_continuous === false ? null : st.continuous?.index ?? null,
         needs: needs.reduce((n: number, x: any) => n + x.n, 0),
       };
     }));

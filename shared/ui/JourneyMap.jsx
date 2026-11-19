@@ -18,6 +18,18 @@ const durationAr = (d) => (!d ? 'بلا مدة' : d % 7 === 0 && d >= 14 ? `${d 
 // فقد يتأخر من دخلها أمس إن انقضت نافذتها. وبلا تاريخ يبقى المعنى مدة المرحلة من دخول المشارك
 export const lateWords = (map) => (map?.cohort?.starts_on && !map?.cohort?.is_default
   ? { one: 'تجاوزوا موعدها', all: 'تجاوزوا موعد مرحلتهم' } : { one: 'تجاوزوا مدتها', all: 'تجاوزوا مدة مرحلتهم' });
+// التوازي والمسار المستمر (map.lanes من mapLanes: together مفتاح أول المجموعة، وtracks): سطر تحت المرحلة كما في الخط وتبويب «الرحلة»
+// lanes: من الخادم بجانب الخريطة (mapLanes)، وخريطة بلا lanes (قبل هذا الإصدار) كما كانت
+export function laneAr(s, stages, lanes) {
+  const tg = lanes?.together || {};
+  if ((lanes?.tracks || []).includes(s.key)) return 'مسار مستمر يسير بجانب الرحلة';
+  const head = tg[s.key];
+  if (!head) return '';
+  const title = (k) => stages.find((x) => x.key === k)?.title || k;
+  if (head !== s.key) return `تسير مع «${title(head)}»`;
+  const rest = stages.filter((x) => tg[x.key] === s.key && x.key !== s.key).map((x) => `«${x.title}»`);
+  return rest.length ? `${rest.join(' و')} ${rest.length === 1 ? 'تسير' : 'تسيران'} معها` : '';
+}
 const peopleAr = (n) => (n === 0 ? 'لا أحد' : n === 1 ? 'شخص واحد' : n === 2 ? 'شخصان' : n <= 10 ? `${n} أشخاص` : `${n} شخصًا`);
 
 function StagePanel({ stage, total, onClose, late }) {
@@ -139,16 +151,18 @@ export default function JourneyMap({ map, embedded = false }) {
                   }
                   const isToday = todayKeys.includes(s.key);
                   const ahead = Math.max(0, total - s.done - s.here);
+                  const lane = laneAr(s, stages, map.lanes);
                   return (
-                    <li key={s.key} className={`jm-stage${s.here ? ' has' : ''}${isToday ? ' today' : ''}${open === s.key ? ' on' : ''}`}>
+                    <li key={s.key} className={`jm-stage${s.here ? ' has' : ''}${isToday ? ' today' : ''}${open === s.key ? ' on' : ''}${map.lanes?.together?.[s.key] ? ' jm-with' : ''}${map.lanes?.tracks?.includes(s.key) ? ' jm-track' : ''}`}>
                       <button type="button" className="jm-node" aria-expanded={open === s.key} aria-controls={`jm-panel-${s.key}`}
-                        aria-label={`${s.title}${isToday ? ' (موقع الدفعة على جدولها اليوم)' : ''}: ${peopleAr(s.here)} هنا، ${s.done} تجاوزوها، ${ahead} لم يصلوها${s.late ? `، ${s.late} ${late.one}` : ''}`}
+                        aria-label={`${s.title}${lane ? ` (${lane})` : ''}${isToday ? ' (موقع الدفعة على جدولها اليوم)' : ''}: ${peopleAr(s.here)} هنا، ${s.done} تجاوزوها، ${ahead} لم يصلوها${s.late ? `، ${s.late} ${late.one}` : ''}`}
                         onClick={() => setOpen(open === s.key ? null : s.key)}>
                         {isToday && <span className="jm-today">اليوم</span>}
                         <span className="jm-mark" aria-hidden="true" style={{ '--w': s.here / max }} />
                         <b className="jm-here">{s.here}</b>
                         <span className="jm-title">{s.title}</span>
                         <small className="jm-dur">{durationAr(s.duration_days)}</small>
+                        {lane && <small className="jm-lane">{lane}</small>}
                         <span className="jm-bar" aria-hidden="true">
                           <i className="d" style={{ width: `${total ? (s.done / total) * 100 : 0}%` }} />
                           <i className="h" style={{ width: `${total ? (s.here / total) * 100 : 0}%` }} />
@@ -208,7 +222,7 @@ export default function JourneyMap({ map, embedded = false }) {
       <table className="sr-only">
         <caption>خريطة الرحلة: عدد المشاركين عند كل مرحلة</caption>
         <thead><tr><th scope="col">الطور</th><th scope="col">المرحلة</th><th scope="col">هنا الآن</th><th scope="col">تجاوزوها</th><th scope="col">{late.one}</th></tr></thead>
-        <tbody>{stages.map((s) => <tr key={s.key}><td>{PHASES.find((p) => p.key === s.phase)?.title}</td><td>{s.title}{s.off ? ' (موقوفة لهذه الدفعة)' : ''}</td><td>{s.here}</td><td>{s.done}</td><td>{s.late}</td></tr>)}</tbody>
+        <tbody>{stages.map((s) => <tr key={s.key}><td>{PHASES.find((p) => p.key === s.phase)?.title}</td><td>{s.title}{s.off ? ' (موقوفة لهذه الدفعة)' : ''}{laneAr(s, stages, map.lanes) ? ` (${laneAr(s, stages, map.lanes)})` : ''}</td><td>{s.here}</td><td>{s.done}</td><td>{s.late}</td></tr>)}</tbody>
       </table>
     </section>
   );

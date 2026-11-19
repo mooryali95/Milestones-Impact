@@ -72,7 +72,8 @@ test('«الجزء وحده»: الفهرس والتقليب يقتصران عل
   // مفتاح لكل قارئ (المرحلة 3 من القارئ)، والموضع معرّف الباب لا رقم ترتيبه
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.startsWith('mi-master-book:')))));
   expect(saved).toMatchObject({ pos: { id: id('b1') }, level: 'all', scope: 'part' });
-  await page.reload();
+  // فتح البوابة من جديد بلا رابط الباب (الرابط نفسه يعيد الباب مباشرة، leaders-reader-link.spec.js)
+  await page.goto(PORTAL);
   await page.getByRole('button', { name: 'تابع القراءة' }).click();
   await expect(page.locator('.mb-top-t b')).toHaveText('تمهيد الأثر');
   await expect(scopeBtn(page, 'الجزء وحده')).toHaveAttribute('aria-checked', 'true');

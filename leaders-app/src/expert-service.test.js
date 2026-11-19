@@ -107,7 +107,7 @@ describe('عضو اللجنة بلا دور لا يظهر في أي موضع م�
     const index = read('supabase/functions/leaders-api/index.ts');
     expect(index).toContain('if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;');
     const portal = read('leaders-app/src/screens/ExpertPortal.jsx');
-    expect(portal).toContain('const reading = book ?? (!!d.content_only && !!d.book_access);');
+    expect(portal).toContain('const reading = !!d.book_access && (book ?? (linked || !!d.content_only));');
     expect(portal).toContain('if (reading && d.pledge_needed) {');
     expect(portal).toContain('if (d.content_only || d.no_service) return <ReviewerHome');
     // بعد التعهد تُعاد اللوحة كاملة (بطاقة الكتاب والتكليفات)، لا ردّ xp.pledge وحده

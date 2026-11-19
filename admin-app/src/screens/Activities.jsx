@@ -17,6 +17,8 @@ import { VERIFY_AR, withCapacity } from '../workshop-days.js';
 import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
+// «خارج نافذة «التدريب» (1 إلى 14 مارس)»، واسم الدفعة للجلسة العامة أو حين تقع خارج النافذة في أكثر من دفعة
+export const outsideAr = (x, named = false) => `خارج نافذة «${x.stage}»${x.window_ar ? ` (${x.window_ar})` : ''}${named ? ` في ${x.cohort}` : ''}. الحضور يُحسب، وراجع الموعد أو مدة المرحلة`;
 // موعد الجلسة أو «يُحدد لاحقًا» (J1): لا خانة فارغة ولا تاريخ 1970
 const sessionWhen = (s) => (isUndated(s) ? SESSION_TBD_AR : when(s.starts_at));
 // عنوان المتطلب برموزه مملوءة كما يراه المشارك: «حضور الأيام التدريبية (أربعة أيام)» لا «({days:T-ATTEND})» (التدقيق 2026-11-10، البند 9.9)
@@ -147,7 +149,9 @@ function Workshops({ data, reload, canWrite }) {
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
                     <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
-                    <td>{isUndated(s) ? <span className="la-chip warn">{SESSION_TBD_AR}</span> : when(s.starts_at)}</td>
+                    <td>{isUndated(s) ? <span className="la-chip warn">{SESSION_TBD_AR}</span> : when(s.starts_at)}
+                      {/* خارج نافذة مرحلته في دفعة مؤرخة (4.2 د): من علامة الخط نفسه على الخادم، تنبيه لا منع */}
+                      {(s.outside || []).map((x) => <small key={x.cohort_id} className="ws-out" role="note">{outsideAr(x, !s.cohort_id || s.outside.length > 1)}</small>)}</td>
                     <td>{MODE_AR[s.mode || 'in_person']}{s.mode === 'online' ? (s.join_url ? '' : ' · الرابط لاحقًا') : s.location_ar ? ` · ${s.location_ar}` : ''}{capacity && s.capacity ? <small className="la-muted"> · السعة {s.capacity}</small> : null}</td>
                     <td><button className="la-link" onClick={() => setAtt(s.id)}>{s.attended} حاضر</button></td>
                     <td className="la-row">

@@ -398,7 +398,8 @@ function Dashboard({ me, onLogout }) {
             <tr key={p.id}>
               <td className="op-name"><b>{p.full_name}</b><br /><small className="muted">{p.job_title}</small></td>
               {perms.scores && <td data-label="المسار">{p.track_title || <span className="muted">·</span>}{p.track && !p.approved && <small className="muted"> (مبدئي)</small>}</td>}
-              <td data-label="المرحلة"><span className="chip">{stageOf(p)}</span></td>
+              <td data-label="المرحلة"><span className="chip">{stageOf(p)}</span>
+                {p.tracks?.length > 0 && <small className="muted op-lane"><br />ومسار مستمر: {p.tracks.join('، ')}</small>}</td>
               <td data-label="الإنجاز"><span><span className="op-prog"><i style={{ width: `${p.progress}%` }} /></span> {p.progress}%</span></td>
               {perms.activity && <td data-label="آخر دخول">{fmt(p.last_login_at)}</td>}
               {perms.contact && <td className="ltr op-wide" data-label="التواصل"><small>{p.email}<br />{p.phone}</small></td>}

@@ -396,3 +396,21 @@ export function scaleDay(slots, pct) {
   }
   return last.to + (pct - (last.at + last.width)) * per(last);
 }
+
+/** الأيام المؤرخة الواقعة خارج نافذة مرحلتها في الدفعة: من علامة outside التي يضعها الخط نفسه لكل نقطة، فلا حساب ثانٍ.
+ * يقرؤها قسم أيام الورشة في البطاقة، وتنبيه رأس تبويب «الرحلة»، وشاشة «الحضور والجلسات» (admin.activities). تنبيه لا منع:
+ * الحضور يُحسب في أي يوم
+ * @param {any} model نموذج journeyTimeline لدفعة مؤرخة
+ * @returns {{ session: string, date: string, date_ar: string, activity: string, stage: string, stage_title: string, window: { from: string, to: string } | null, window_ar: string, text: string }[]} */
+export function outsideSessions(model) {
+  if (!model?.dated) return [];
+  const rows = new Map([...(model.stages || []), ...(model.tracks || [])].map((s) => [s.key, s]));
+  return (model.activities || []).flatMap((a) => (a.dates || []).filter((d) => d.outside && d.session).map((d) => {
+    const st = rows.get(a.stage);
+    const w = st?.window || null;
+    return {
+      session: d.session, date: d.date, date_ar: d.label, activity: a.title, stage: a.stage, stage_title: a.stage_title, window: w, window_ar: st?.window_ar || '',
+      text: `«${a.title}» يوم ${d.label} خارج نافذة «${a.stage_title}»${st?.window_ar ? ` (${st.window_ar})` : ''}`,
+    };
+  }));
+}

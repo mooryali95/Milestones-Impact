@@ -23,15 +23,15 @@ import { Spinner, useEscape, useUI } from '../ui.jsx';
 import Form from '../Form.jsx';
 import { Attendance, inviteSession, QrScreen, sessionFields } from './Activities.jsx';
 import { workshopDays } from '../workshop-days.js';
-import { dateTime } from '../dates.js';
+import { dateOnly, dateTime } from '../dates.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import JourneyMap from '../../../shared/ui/JourneyMap.jsx';
 import {
-  applyDrop, cohortTimeline, dragGhostAr, dropToEdit, fromUnit, historyRows, mergeEdit, impactAr, inUnit, journeyHeader, journeyKpis, journeyLanes, membersAr, planBody, planCohort, planDraft,
+  applyDrop, cohortTimeline, endsOffer, dragGhostAr, dropToEdit, fromUnit, historyRows, mergeEdit, impactAr, inUnit, journeyHeader, journeyKpis, journeyLanes, membersAr, planBody, planCohort, planDraft,
   planLock, stepDays, suggestDays, TAB_TIMELINE_OMIT, unitFor,
 } from '../cohort-journey.js';
 import { PLAN_DAYS_MAX, planDaysMin } from '../../../supabase/functions/leaders-api/stage-windows.js';
-import { scalePos } from '../../../supabase/functions/leaders-api/journey-timeline.js';
+import { outsideSessions, scalePos } from '../../../supabase/functions/leaders-api/journey-timeline.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { durationAr } from '../../../supabase/functions/leaders-api/journey.js';
 import '../cohort-journey.css';
@@ -435,9 +435,11 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const model = useMemo(() => (defShown ? cohortTimeline(defShown, shown, new Date()) : null), [defShown, shown]);
   const lanes = useMemo(() => (model ? journeyLanes(model, { def: d.def, cohort: shown, milestones: d.milestones, map: jm }) : null), [model, d, shown, jm]);
   const head = model ? journeyHeader(model, shown) : null;
+  const outside = useMemo(() => outsideSessions(model), [model]);
   const kpis = model ? journeyKpis(model, lanes, jm, { msError: !!d?.msError }) : [];
   const mapFailed = want && map && !map.success;
   const lock = planLock(cohort);
+  const ends = d?.def ? endsOffer({ def: d.def, cohort: shown, canWrite, lock }) : null;
   const stageOf = (k) => (d?.def?.stages || []).find((x) => x.key === k);
   // العدادات والسحب يدمجان بالدالة نفسها (mergeEdit): الإيقاف والنهاية ما يطابق المحفوظ منهما لا يبقى تعديلًا، وتغيير
   // المرجع يعيد إزاحته إلى قاعدته (planEdit)، وnull يعيد قاعدة البرنامج
@@ -616,7 +618,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
     setReview({ r });
   };
   const applySaved = (r, msg) => {
-    setCp((x) => ({ ...(x || {}), schedule: r.cohort.schedule, updated_at: r.cohort.updated_at }));
+    setCp((x) => ({ ...(x || {}), schedule: r.cohort.schedule, updated_at: r.cohort.updated_at, ...(r.cohort.ends_on !== undefined ? { ends_on: r.cohort.ends_on } : {}) }));
     setEdit(null); setReview(null); setHistory(null);
     setMapRetry((n) => n + 1);
     toast(msg);
@@ -681,6 +683,26 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       )}
       {head.over_ar && <p className="cj-alert" role="note"><span aria-hidden="true">!</span>{head.over_ar}</p>}
       {head.gap_ar && <p className="cj-alert" role="note" data-testid="chain-gap"><span aria-hidden="true">!</span>{head.gap_ar}</p>}
+      {/* «اجعل نهاية الدفعة …» (4.2 أ): يضع نهاية السلسلة في المسودة وحدها، والحفظ بنافذة الأثر وحارس البريد كبقية الخطة */}
+      {ends && (
+        <p className="cj-ends" data-testid="cj-ends">
+          <button type="button" className="btn-sm primary" onClick={() => put({ ends_on: ends.end })}>{ends.label}</button>
+          <small>{ends.code === 'over_end' ? 'أو قصّر مرحلة.' : 'أو اقترح مددًا تملأ مدة الدفعة.'} لا يُحفظ شيء قبل «راجع واحفظ»، وتسمي نافذة الأثر المعالم التي يتغير موعدها.</small>
+        </p>
+      )}
+      {draft.ends && (
+        <p className="cj-ends on" role="note" data-testid="cj-ends-draft">
+          <span>في المسودة: نهاية الدفعة <b>{dateOnly(draft.ends.after)}</b> بدل {draft.ends.before ? dateOnly(draft.ends.before) : 'بلا تاريخ'}.</span>
+          <button type="button" className="la-link" onClick={() => put({ ends_on: draft.ends.before })}>أبقِ النهاية كما كانت</button>
+        </p>
+      )}
+      {/* أيام ورش خارج نافذة مرحلتها (4.2 د): من علامة الخط نفسه، تنبيه لا منع، والنقر يفتح بطاقة المرحلة */}
+      {outside.length > 0 && (
+        <div className="cj-alert" role="note" data-testid="cj-outside"><span aria-hidden="true">!</span>
+          <span>{outside.length === 1 ? 'يوم ورشة خارج نافذة مرحلته' : `${countAr(outside.length, 'يوم', 'يومان', 'أيام', 'يومًا')} ورش خارج نافذة مراحلها`}. الحضور يُحسب، وراجع الموعد أو مدة المرحلة:
+            <ul className="cj-outside">{outside.map((x) => <li key={x.session}><button type="button" className="la-link" onClick={() => toCard(x.stage)}>{x.text}</button></li>)}</ul></span>
+        </div>
+      )}
       {d.msError && (
         <p className="cj-alert" role="alert"><span aria-hidden="true">!</span>
           <span>{d.msError}، فلا تظهر المعالم في البطاقات. <button type="button" className="la-link" onClick={() => setRetry((n) => n + 1)}>أعد المحاولة</button></span></p>
@@ -798,7 +820,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       {editing && (
         <div className="cj-savebar" role="region" aria-label="حفظ الخطة">
           {/* منطقة الإعلان الوحيدة في وضع التحرير: سطر واحد لكل تغيير بدل إعلان لكل بطاقة تزاح تواريخها */}
-          <span aria-live="polite">{draft.errors.length ? draft.errors[0].msg : draft.edits ? `${editsAr(draft.edits)} غير ${draft.edits === 1 ? 'محفوظ' : draft.edits === 2 ? 'محفوظين' : 'محفوظة'}${head.kind === 'dated' ? `، وتنتهي الرحلة ${head.end_ar}` : ''}` : 'لا تعديل بعد'}</span>
+          <span aria-live="polite">{draft.errors.length ? draft.errors[0].msg : draft.edits ? `${editsAr(draft.edits)} غير ${draft.edits === 1 ? 'محفوظ' : draft.edits === 2 ? 'محفوظين' : 'محفوظة'}${head.kind === 'dated' ? `، وتنتهي الرحلة ${head.end_ar}` : ''}${draft.ends ? `، ونهاية الدفعة ${dateOnly(draft.ends.after)}` : ''}` : 'لا تعديل بعد'}</span>
           <div className="la-row">
             <button type="button" className="btn-sm ghost" onClick={() => setEdit(null)}>ألغِ</button>
             <button type="button" className="btn-sm primary" disabled={!draft.edits || draft.errors.length > 0} onClick={openReview}>راجع واحفظ</button>
