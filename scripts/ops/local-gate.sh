@@ -19,8 +19,8 @@ step "الكتيب وسجل المفاهيم" bash -c 'node scripts/handbook/bui
 step "لا أسرار في الملفات" node scripts/ops/secrets-scan.mjs
 step "تدقيق الاعتماديات" npm audit --omit=dev --audit-level=high
 step "الفحص النحوي" npm run lint
-step "فحص أنواع الدوال" bash -c 'deno check --node-modules-dir=none supabase/functions/*/index.ts'
-step "اختبارات Deno" deno test --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/
+step "فحص أنواع الدوال" bash -c 'DENO_NO_PACKAGE_JSON=1 deno check --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none supabase/functions/*/index.ts'
+step "اختبارات Deno" env DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/
 step "اختبارات الوحدة" npm test
 step "بناء الموقع" npm run build
 step "بناء القادة مودع" bash -c 'npm run leaders:build && git add -N leaders && git diff --exit-code --stat -- leaders'

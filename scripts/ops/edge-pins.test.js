@@ -8,7 +8,7 @@
 //   (cd supabase/functions/leaders-api && deno check --node-modules-dir=none index.ts && deno test --node-modules-dir=none -A .)
 // واحذف من "specifiers" ما لم يعد مستوردًا. إصدار عمره أقل من 24 ساعة يحتاج --min-dep-age=0، والأفضل انتظاره.
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = join(__dirname, '../..');
@@ -112,5 +112,26 @@ describe('تثبيت إصدارات الدوال (المرحلة 2 البند 7)
     expect(steps.length).toBe(2);
     for (const l of steps) expect(l).toContain('run: DENO_NO_PACKAGE_JSON=1 deno ' + (l.includes('deno check') ? 'check' : 'test') + ' --lock=supabase/functions/deno.lock --frozen ');
     expect(read('.gitignore')).toContain('!supabase/functions/deno.lock');
+    // البوابة المحلية (npm run gate) تعيد خطوات CI نفسها، فلا تنجح محليًا وتفشل في CI على القفل
+    const gate = read('scripts/ops/local-gate.sh');
+    expect(gate).toContain("DENO_NO_PACKAGE_JSON=1 deno check --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none supabase/functions/*/index.ts");
+    expect(gate).toContain('DENO_NO_PACKAGE_JSON=1 deno test --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none --allow-env --allow-read --allow-net=127.0.0.1 supabase/functions/leaders-api/ supabase/functions/agent-chat/ supabase/functions/admin-api/ supabase/functions/_shared/');
+  });
+
+  it('قفل leaders-api يحمل كل حزمة في رسم استيرادها (يقرؤه نشرها وحده، والنشر لا يجمّده)', () => {
+    // من index.ts عبر الاستيرادات النسبية كلها (ومنها ../agent-chat و../_shared): كل npm: وjsr: لها مفتاح في قفلها
+    const seen = new Set();
+    const keys = new Set();
+    const walk = (file) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const src = readFileSync(file, 'utf8');
+      for (const spec of externalImports(src)) { const p = parsePin(spec); if (p.key) keys.add(p.key); }
+      for (const m of src.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.{1,2}\/[^'"]+)\1/g)) walk(join(dirname(file), m[2]));
+    };
+    walk(join(fnDir, 'leaders-api/index.ts'));
+    expect(seen.size).toBeGreaterThan(5);
+    expect([...keys].some((k) => k.startsWith('npm:@anthropic-ai/sdk@'))).toBe(true);
+    expect([...keys].filter((k) => !(k in leadersLock.specifiers))).toEqual([]);
   });
 });
