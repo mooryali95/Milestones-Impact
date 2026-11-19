@@ -27,6 +27,9 @@ export const focusedGroup = (byCohort, focus) => (focus ? (byCohort?.groups || [
 // صفوف الجدول: المجموعة المختارة وحدها، وإلا كلها
 export const pipelineRows = (groups, only) => (only ? groups.filter((g) => g.key === only) : groups);
 
+// دفعات فلتر «ماذا تغيّر»: دفعات «بالدفعة» بأسمائها، بلا «بلا دفعة» (لا أعضاء يُسأل عنهم السجل)
+export const changeCohorts = (d) => (d?.success ? (d.by_cohort?.groups || []).filter((g) => g.key !== 'none') : []);
+
 // جدول المراحل: صف لكل جهة أو دفعة، وعمود لكل مرحلة، والخانة رابط إلى أصحابها. only: صف مجموعة واحدة بلا الإجمالي
 function Pipeline({ data, group, noun, extra, only = null }) {
   const [f, setF] = useFilters(['sort'], {}, { scope: `insight-${group}`, url: false });
@@ -112,19 +115,22 @@ const CHANGE_COLS = [
   { key: 'at', label: 'الوقت', width: 22, get: (c) => dateTime(c.at) }, { key: 'area', label: 'المجال', width: 16, get: (c) => c.area_ar }, { key: 'text', label: 'ما حدث', width: 36, get: (c) => c.text },
   { key: 'who', label: 'المشارك', width: 26, get: (c) => c.who }, { key: 'by', label: 'من', width: 28, get: (c) => c.by }, { key: 'detail', label: 'تفصيل', width: 40, get: (c) => c.detail },
 ];
-// سجل التدقيق كله: الفلترة على الخادم (المجال والفاعل والمدة) لأن السجل أكبر من أن يُحمَّل كله، والبحث في ما حُمّل
-function Changes({ onPerson }) {
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'area', 'actor', 'days'], {}, { scope: 'insight-changes', url: false, defaults: { days: '7' } });
+// سجل التدقيق كله: الفلترة على الخادم (المجال والفاعل والمدة والدفعة) لأن السجل أكبر من أن يُحمَّل كله، والبحث في ما حُمّل.
+// cohorts: دفعات «بالدفعة» نفسها. فلتر الدفعة يعرض ما جرى على أعضائها وما فعلوه، وما جرى عليها وعلى جلساتها
+function Changes({ onPerson, cohorts = [] }) {
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'area', 'actor', 'days', 'cohort'], {}, { scope: 'insight-changes', url: false, defaults: { days: '7' } });
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
-  const query = useCallback((before) => L('admin.changes', { area: f.area || undefined, actor_type: f.actor || undefined, days: f.days ? Number(f.days) : undefined, ...(before ? { before } : {}) }), [f.area, f.actor, f.days]);
+  const query = useCallback((before) => L('admin.changes', { area: f.area || undefined, actor_type: f.actor || undefined, days: f.days ? Number(f.days) : undefined, cohort_id: f.cohort || undefined, ...(before ? { before } : {}) }), [f.area, f.actor, f.days, f.cohort]);
   useEffect(() => { let on = true; setD(null); query().then((r) => { if (on) setD(r); }); return () => { on = false; }; }, [query]);
   const more = async () => { setBusy(true); const r = await query(d.next); setBusy(false); if (r.success) setD({ ...r, changes: [...d.changes, ...r.changes] }); };
   const fields = useMemo(() => [
+    // الثلاثة الأولى ظاهرة والباقي خلف «+ فلاتر» (FilterBar): الفاعل أقلها استعمالًا
     { key: 'area', label: 'المجالات', aria: 'المجال', get: (c) => c.area, options: Object.entries(CHANGE_AREAS) },
-    { key: 'actor', label: 'الفاعلين', aria: 'الفاعل', all: 'كل الفاعلين', get: (c) => c.actor_type, options: Object.entries(ACTOR_AR) },
+    { key: 'cohort', label: 'الدفعات', aria: 'الدفعة', get: () => f.cohort, options: cohorts.map((c) => [c.key, c.name]) },
     { key: 'days', label: 'المدة', all: 'كل المدة', get: () => f.days, options: [['1', 'آخر يوم'], ['7', 'آخر 7 أيام'], ['30', 'آخر 30 يومًا'], ['90', 'آخر 90 يومًا']] },
-  ], [f.days]);
+    { key: 'actor', label: 'الفاعلين', aria: 'الفاعل', all: 'كل الفاعلين', get: (c) => c.actor_type, options: Object.entries(ACTOR_AR) },
+  ], [f.days, f.cohort, cohorts]);
   const all = (d?.success && d.changes) || [];
   const rows = applyFilters(all, { fields: [], text: (c) => [c.text, c.who, c.by, c.detail, c.area_ar].join(' ') }, { q: f.q });
   return (
@@ -179,7 +185,7 @@ export default function Insight({ onPerson, onExpert, orgs, onTrack, onStatus, o
         <div className="la-subtabs" role="tablist" aria-label="أقسام الرؤية الشاملة">
           {VIEWS.map(([k, l]) => <button key={k} role="tab" aria-selected={view === k} className={view === k ? 'on' : ''} onClick={() => pick(k)}>{l}</button>)}
         </div>
-        {view === 'changes' ? <Changes onPerson={onPerson} />
+        {view === 'changes' ? <Changes onPerson={onPerson} cohorts={changeCohorts(d)} />
           : !d ? <Spinner />
             : !d.success ? <div className="la-err" role="alert">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div>
               : view === 'org' ? <Pipeline data={d.by_org} group="org" noun="الجهة" />

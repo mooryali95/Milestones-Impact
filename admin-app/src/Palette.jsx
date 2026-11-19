@@ -1,14 +1,17 @@
 // ════════════════════════════════════════════════════════════════
 // البحث الشامل: Ctrl+K (أو ⌘K) من أي شاشة
 // ════════════════════════════════════════════════════════════════
+// المشارك يُوجد بجواله أيضًا بأي صيغة (search-text.js)، ونص هذا البحث لا يُكتب في عنوان الصفحة ولا يُحفظ.
 // يبحث في المشاركين والجهات والخبراء والدفعات والمبادرات والمسارات والأبواب والنماذج وأقسام اللوحة،
 // والأسهم تتنقل وEnter يفتح. البيانات تُحمَّل عند أول فتح فقط.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { L } from './leaders.js';
 import { navigate } from './route.js';
 import { KIND_LABEL, rank } from './search.js';
+import { phoneMatches } from '../../supabase/functions/leaders-api/search-text.js';
 import { AI_TABS, OWNER_TABS, TABS } from './leaders-tabs.js';
 import { useEscape } from './ui.jsx';
+import { ltrDigits } from './filters.js';
 
 const SECTIONS = [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
   ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, to: { ctx: 'leaders', tab: k } })),
@@ -24,7 +27,7 @@ async function loadIndex() {
   const at = (tab, id) => ({ ctx: 'leaders', tab, id });
   return [
     ...SECTIONS,
-    ...(p.participants || []).map((x) => ({ kind: 'participant', id: x.id, title: x.full_name, sub: x.organization_name || x.email, keys: [x.email, x.organization_name, x.job_title], to: at('participants', x.id) })),
+    ...(p.participants || []).map((x) => ({ kind: 'participant', id: x.id, title: x.full_name, sub: x.organization_name || x.email, keys: [x.email, x.organization_name, x.job_title], phone: x.phone || null, to: at('participants', x.id) })),
     ...(o.orgs || []).map((x) => ({ kind: 'org', id: x.id, title: x.name, sub: x.short_name, keys: [x.short_name], to: at('orgs', x.id) })),
     ...(e.experts || []).map((x) => ({ kind: 'expert', id: x.id, title: x.full_name, sub: x.title || x.email, keys: [x.email, x.title, ...(x.sectors || [])], to: at('experts', x.id) })),
     ...(g.cohorts || []).map((x) => ({ kind: 'cohort', id: x.id, title: x.name, sub: 'البرامج والدفعات', keys: [], to: at('programs', x.id) })),
@@ -76,7 +79,7 @@ export default function Palette({ owner = false }) {
   return (
     <div className="mid-ov pal-ov" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
       <div className="pal" role="dialog" aria-modal="true" aria-label="البحث الشامل" onKeyDown={key}>
-        <input ref={input} className="pal-in" value={q} placeholder="ابحث عن مشارك أو جهة أو مسار أو باب…" aria-label="البحث الشامل"
+        <input ref={input} className="pal-in" value={q} placeholder="ابحث عن مشارك (بالاسم أو الجوال) أو جهة أو مسار أو باب…" aria-label="البحث الشامل" {...ltrDigits(q)}
           role="combobox" aria-expanded="true" aria-controls="pal-list" aria-activedescendant={hits[i] ? `pal-${i}` : undefined}
           onChange={(e) => { setQ(e.target.value); setI(0); }} />
         <ul className="pal-list" id="pal-list" role="listbox">
@@ -86,7 +89,7 @@ export default function Palette({ owner = false }) {
             <li key={`${h.kind}:${h.id}`} id={`pal-${k}`} role="option" aria-selected={k === i} className={k === i ? 'on' : ''}
               onMouseEnter={() => setI(k)} onMouseDown={(e) => { e.preventDefault(); go(h); }}>
               <span className="pal-kind">{KIND_LABEL[h.kind]}</span>
-              <b>{h.title}</b>{h.sub && <small dir="auto">{h.sub}</small>}
+              <b>{h.title}</b>{phoneMatches(q, h.phone) ? <small dir="ltr">{h.phone}</small> : h.sub && <small dir="auto">{h.sub}</small>}
             </li>
           ))}
         </ul>
