@@ -40,8 +40,11 @@ describe('الحضور والجلسات بلا رموز خام', () => {
     expect(a.match(/<b title=\{r\.code\}>\{reqTitle\(r\)\}<\/b>/g)).toHaveLength(2);
   });
   it('طريقة الحضور من ATTEND_METHOD_AR لا من خريطة في الشاشة', () => {
-    expect(a).toMatch(/ATTEND_METHOD_AR\[p\.attendance\.method\] \|\| ATTEND_METHOD_AR\.manual/);
-    expect(a).not.toMatch(/hall: 'القاعة'/);
+    // قائمة الحضور صارت ورقة الحضور المشتركة (تشغيل الدفعة، المرحلة 2): الطريقة تُقرأ في منطقها من المصدر نفسه
+    const sheet = read('shared/ui/attendance-sheet.js');
+    expect(sheet).toMatch(/ATTEND_METHOD_AR\[attendance\.method\] \|\| ATTEND_METHOD_AR\.manual/);
+    expect(a).toMatch(/<AttendanceSheet /);
+    for (const src of [a, sheet, read('shared/ui/AttendanceSheet.jsx')]) expect(src).not.toMatch(/hall: 'القاعة'/);
   });
 });
 

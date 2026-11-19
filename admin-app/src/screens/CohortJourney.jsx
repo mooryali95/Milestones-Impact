@@ -902,7 +902,7 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
         </div>
       )}
       {dayForm && <Form {...dayForm} onClose={() => setDayForm(null)} />}
-      {qr && <QrScreen id={qr} onClose={() => { setQr(null); setWsRetry((n) => n + 1); }} />}
+      {qr && <QrScreen id={qr} onClose={() => { setQr(null); setWsRetry((n) => n + 1); }} onSheet={canWrite ? () => { setAtt(qr); setQr(null); } : null} />}
       {att && <Attendance id={att} cohortId={c.id} canWrite={canWrite} onClose={() => { setAtt(null); setWsRetry((n) => n + 1); }} />}
       {review && <ImpactDialog r={review.r} busy={busy} canSave={canWrite && !lock} lock={lock} onSave={save} onClose={() => setReview(null)} opts={saveOpts} setOpts={setSaveOpts} />}
 

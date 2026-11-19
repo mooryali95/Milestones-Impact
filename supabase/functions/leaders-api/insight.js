@@ -105,7 +105,8 @@ export function changeRow(h, names = {}) {
   const isPerson = h.entity === 'participants' && h.entity_id;
   return {
     id: h.id, at: h.created_at, area, area_ar: CHANGE_AREAS[area] || area, text: auditAr(h.action), known: auditAr(h.action) !== h.action,
-    actor_type: h.actor_type, by: h.actor_type === 'admin' ? h.actor : ACTOR_AR[h.actor_type] || h.actor_type || '',
+    // فعل خبير (تسجيل المدرب للحضور): السجل يكتبه «system» ببريده وعلامة by، فيُقرأ هنا «خبير» ببريده لا «النظام»
+    actor_type: h.actor_type, by: h.actor_type === 'admin' ? h.actor : h.after?.by === 'expert' && h.actor ? `${ACTOR_AR.expert} ${h.actor}` : ACTOR_AR[h.actor_type] || h.actor_type || '',
     participant_id: isPerson ? h.entity_id : null, who: isPerson ? names[h.entity_id] || '' : '',
     detail: h.after?.reason ? String(h.after.reason) : h.action === 'participant.status' && h.after?.status ? PARTICIPANT_STATUS[h.after.status] || String(h.after.status) : '',
   };

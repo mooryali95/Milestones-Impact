@@ -1311,7 +1311,8 @@ body.entering main { animation: mi-enter .45s ease-out both; }
 .xpp-attend { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
 .xpp-attend .grow { flex: 1 1 220px; display: grid; gap: 2px; min-width: 0; }
 .xpp-attend .btn { min-height: 44px; }
-.xpp-attend-go { display: grid; gap: 4px; justify-items: start; max-width: 100%; }
+.xpp-attend-go { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; max-width: 100%; }
+.xpp-attend-go small { flex-basis: 100%; }
 .xpp-person { display: grid; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .xpp-person:last-child { border-bottom: 0; }
 .xpp-torate { padding: 10px 0; border-bottom: 1px solid var(--line); }

@@ -163,8 +163,6 @@
 .la-form input, .la-form textarea, .la-form select { border: 1px solid var(--line-strong); border-radius: 5px; padding: 8px 10px; font-size: .9rem; font-weight: 400; color: var(--ink); width: 100%; }
 .la-form label.la-check { display: flex; align-items: center; gap: 8px; }
 .la-form label.la-check input { width: auto; }
-/* سبب التسجيل اليدوي فوق قائمة الحضور: عنوانه ثم خانته */
-.att-why { display: grid; gap: 6px; }
 .la-opts { display: grid; gap: 6px; font-size: .82rem; font-weight: 600; }
 .la-opt { display: grid; grid-template-columns: 1fr 80px auto; gap: 6px; }
 .la-opt input { border: 1px solid var(--line-strong); border-radius: 5px; padding: 6px 8px; font-weight: 400; }
@@ -286,7 +284,9 @@
 .la-org-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
 .la-org-kpis span { background: rgba(255,255,255,.06); border-radius: 8px; padding: 8px 10px; font-size: .76rem; color: rgba(255,255,255,.8); }
 .la-org-kpis b { display: block; font-size: 1.2rem; color: #fff; }
-.la-bulk { display: flex; gap: 10px; align-items: center; padding: 8px 10px; background: var(--sand-light); border-radius: 8px; margin: 8px 0; }
+/* يلتف حين يضيق العرض: الإجراءات تزيد (سجّل حضورهم في جلسة)، فلا تمرير أفقي للصفحة على الجوال ولا على الحاسوب */
+.la-bulk { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 8px 10px; background: var(--sand-light); border-radius: 8px; margin: 8px 0; }
+.la-bulk .filter-select { min-width: 0; max-width: 100%; }
 .la-orgtag { --org: var(--gold); display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
 .la-orgtag::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--org); }
 .la-pill code { font-size: .7rem; }

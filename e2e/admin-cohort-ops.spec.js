@@ -1,5 +1,5 @@
 // تشغيل الدفعة، المرحلة 0 (تصور 2026-11-19): البحث بالجوال بأي صيغة في قائمة المشاركين والبحث الشامل بلا أثر في عنوان الصفحة
-// ولا في تخزين المتصفح، و«آخر نشاط» بدل «آخر دخول»، والتسجيل اليدوي للحضور بسبب، وإلغاء حضور سجّله المشارك بنفسه بسبب مكتوب،
+// ولا في تخزين المتصفح، و«آخر نشاط» بدل «آخر دخول»، والتسجيل اليدوي للحضور بسبب (في ورقة الحضور منذ المرحلة 2)، وإلغاء حضور سجّله المشارك بنفسه بسبب مكتوب،
 // وفلتر الدفعة في «ماذا تغيّر». الخلفية مُحاكاة. SHOTS_DIR: مجلد اللقطات (1440 و390).
 import { test, expect } from '@playwright/test';
 
@@ -37,7 +37,7 @@ const CHANGES = [
   { id: 3, at: '2026-11-17T10:00:00Z', area: 'cohort', area_ar: 'الدفعات', text: 'حُفظت الدفعة', known: true, actor_type: 'admin', by: 'a@x', participant_id: null, who: '', detail: '' },
 ];
 
-// «الخادم»: الحضور حالة واحدة يكتبها admin.workshop-mark بقواعد الخادم (الرفض بلا سبب لمن سجّل نفسه) وتقرؤها القائمة
+// «الخادم»: الحضور حالة واحدة يكتبها admin.workshop-mark-bulk بقواعد الخادم (الرفض بلا سبب لمن سجّل نفسه) وتقرؤها الورقة
 async function admin(page, width, { attendance = {} } = {}) {
   const calls = [];
   await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
@@ -46,12 +46,17 @@ async function admin(page, width, { attendance = {} } = {}) {
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push({ ...b, url: route.request().url() });
-    if (b.action === 'admin.workshop-mark') {
-      const was = attendance[b.participant_id];
-      if (b.present) { if (!was) attendance[b.participant_id] = { method: 'manual', checked_in_at: NOW, recorded_by: 'a@x' }; return route.fulfill({ json: { success: true } }); }
-      if (was && was.method !== 'manual' && !String(b.reason || '').trim()) return route.fulfill({ json: { success: false, code: 'reason_required', message: 'اكتب سبب إلغاء حضور سجّله المشارك بنفسه' } });
-      delete attendance[b.participant_id];
-      return route.fulfill({ json: { success: true } });
+    // ورقة الحضور (المرحلة 2): حفظ واحد بقواعد الخادم، والرفض لكل مشارك بسببه
+    if (b.action === 'admin.workshop-mark-bulk') {
+      const out = { success: true, marked: 0, unmarked: 0, already: 0, refused: [] };
+      for (const id of b.present || []) { if (attendance[id]) out.already += 1; else { attendance[id] = { method: 'manual', checked_in_at: NOW, recorded_by: 'a@x', ...(b.reason ? { note: b.reason } : {}) }; out.marked += 1; } }
+      for (const id of b.absent || []) {
+        const was = attendance[id];
+        if (!was) out.already += 1;
+        else if (was.method !== 'manual' && !String(b.unmark_reason || '').trim()) out.refused.push({ id, code: 'reason_required', message: 'اكتب سبب إلغاء حضور سجّله المشارك بنفسه' });
+        else { delete attendance[id]; out.unmarked += 1; }
+      }
+      return route.fulfill({ json: out });
     }
     const replies = {
       'admin.orgs': { success: true, orgs: [{ id: 'o1', name: 'وزارة التجربة', short_name: 'التجربة' }], unassigned: { total: 0, typed: [] } },
@@ -166,56 +171,69 @@ for (const width of [1440, 390]) {
     await shot(page, 'last-activity-file');
   });
 
+  // كان هذا على قائمة «تسجيل حضور» لكل صف (المرحلة 0). المرحلة 2 جعلتها ورقة حضور بحفظ واحد، فالاختبار على الورقة والقواعد نفسها:
+  // السبب مع التسجيل اليدوي، وإلغاء اليدوي بلا سبب، وإلغاء حضور سجّله المشارك بنفسه بسبب مكتوب (التفصيل في admin-attendance-sheet.spec.js)
   test(`التسجيل اليدوي بسبب، وإلغاء حضور سجّله المشارك بنفسه يطلب سببًا مكتوبًا (${width})`, async ({ page }) => {
     const attendance = { p2: { method: 'qr', checked_in_at: '2026-11-18T06:04:00Z', recorded_by: null } };
     const calls = await admin(page, width, { attendance });
     await open(page, '#/leaders/activities');
     // زر الحضور في «الحضور والجلسات» يحمل العدد
     await page.getByRole('button', { name: '1 حاضر' }).click();
-    const sheet = page.getByRole('dialog', { name: 'الحضور' });
-    await expect(sheet.getByRole('heading')).toContainText('اليوم 1 · 1 من 3');
-    const marks = () => calls.filter((c) => c.action === 'admin.workshop-mark').map(({ session_id, participant_id, present, reason }) => ({ session_id, participant_id, present, reason }));
+    const sheet = page.getByRole('dialog', { name: 'ورقة الحضور' });
+    await expect(sheet.getByRole('heading', { name: 'اليوم 1' })).toBeVisible();
+    await expect(sheet.locator('.ats-count')).toContainText('1 من 3 حضروا');
+    const marks = () => calls.filter((c) => c.action === 'admin.workshop-mark-bulk').map(({ session_id, present, absent, reason, unmark_reason }) => ({ session_id, present, absent, reason, unmark_reason }));
+    const row = (name) => sheet.locator('.ats-row', { hasText: name });
+    const saveNow = async () => { await sheet.getByRole('button', { name: 'راجع واحفظ' }).click(); await sheet.getByTestId('ats-confirm').getByRole('button', { name: 'احفظ' }).click(); };
 
     // تسجيل يدوي بسبب من القائمة القصيرة
+    await row('أسامة الأحمد').getByRole('checkbox').check();
     await sheet.getByLabel('سبب التسجيل اليدوي').selectOption('تعطل الرمز');
     await shot(page, 'manual-mark-reason');
-    await sheet.locator('tr', { hasText: 'أسامة الأحمد' }).getByRole('button', { name: 'تسجيل حضور' }).click();
-    await expect(sheet.locator('tr', { hasText: 'أسامة الأحمد' })).toContainText('يدوي');
-    await expect(sheet.locator('tr', { hasText: 'أسامة الأحمد' })).toContainText('سجّله a@x');
-    expect(marks().at(-1)).toEqual({ session_id: 'w1', participant_id: 'p1', present: true, reason: 'تعطل الرمز' });
+    await saveNow();
+    await expect(row('أسامة الأحمد')).toContainText('يدوي');
+    await expect(row('أسامة الأحمد')).toContainText('سجّله a@x');
+    await expect(row('أسامة الأحمد')).toContainText('السبب: تعطل الرمز');
+    expect(marks().at(-1)).toEqual({ session_id: 'w1', present: ['p1'], absent: undefined, reason: 'تعطل الرمز', unmark_reason: undefined });
     // سبب آخر مكتوب
+    await row('هدى القحطاني').getByRole('checkbox').check();
     await sheet.getByLabel('سبب التسجيل اليدوي').selectOption('other');
     await sheet.getByLabel('اكتب السبب').fill('حضر متأخرًا بعد إغلاق الرمز');
-    await sheet.locator('tr', { hasText: 'هدى القحطاني' }).getByRole('button', { name: 'تسجيل حضور' }).click();
-    await expect(sheet.getByRole('heading')).toContainText('3 من 3');
-    expect(marks().at(-1)).toEqual({ session_id: 'w1', participant_id: 'p3', present: true, reason: 'حضر متأخرًا بعد إغلاق الرمز' });
+    await saveNow();
+    await expect(sheet.locator('.ats-count')).toContainText('3 من 3 حضروا');
+    expect(marks().at(-1)).toMatchObject({ present: ['p3'], reason: 'حضر متأخرًا بعد إغلاق الرمز' });
     expect(await noOverflow(page)).toBe(true);
 
-    // إلغاء اليدوي بنقرة، بلا سؤال ولا سبب
-    await sheet.locator('tr', { hasText: 'هدى القحطاني' }).getByRole('button', { name: 'إلغاء' }).click();
-    await expect(sheet.getByRole('heading')).toContainText('2 من 3');
-    expect(marks().at(-1)).toEqual({ session_id: 'w1', participant_id: 'p3', present: false, reason: undefined });
+    // إلغاء اليدوي بلا سؤال عن سبب
+    await row('هدى القحطاني').getByRole('checkbox').uncheck();
+    await saveNow();
+    await expect(sheet.locator('.ats-count')).toContainText('2 من 3 حضروا');
+    expect(marks().at(-1)).toEqual({ session_id: 'w1', present: undefined, absent: ['p3'], reason: undefined, unmark_reason: undefined });
 
-    // إلغاء حضور بالرمز: يُسأل عن السبب، والفارغ لا يُرسل
+    // إلغاء حضور بالرمز: يُسأل عن السبب في التأكيد، والفارغ لا يُرسل
     const n = marks().length;
-    await sheet.locator('tr', { hasText: 'منى العلي' }).getByRole('button', { name: 'إلغاء' }).click();
-    const ask = page.locator('.mid-box');
-    await expect(ask).toContainText('سجّل منى العلي حضوره بنفسه (رمز QR)');
+    await row('منى العلي').getByRole('checkbox').uncheck();
+    await sheet.getByRole('button', { name: 'راجع واحفظ' }).click();
+    const ask = sheet.getByTestId('ats-confirm');
+    await expect(ask).toContainText('يُلغى حضور واحد سجّله صاحبه بنفسه');
+    await expect(ask).toContainText('منى العلي');
     await shot(page, 'unmark-self-reason');
-    await ask.getByRole('button', { name: 'إلغاء الحضور' }).click();
-    await expect(page.locator('.toast.show')).toHaveText('السبب مطلوب لإلغاء حضور سجّله المشارك بنفسه');
+    await ask.getByRole('button', { name: 'احفظ' }).click();
+    await expect(ask.getByRole('alert')).toHaveText('اكتب سبب إلغاء حضور من سجّل نفسه');
     expect(marks().length).toBe(n);
-    await expect(sheet.locator('tr', { hasText: 'منى العلي' })).toContainText('رمز QR');
-    // التراجع عن السؤال لا يلغي شيئًا
-    await sheet.locator('tr', { hasText: 'منى العلي' }).getByRole('button', { name: 'إلغاء' }).click();
-    await ask.getByRole('button', { name: 'إلغاء', exact: true }).click();
+    // الرجوع عن التأكيد لا يلغي شيئًا، والتراجع عن التغييرات يعيد الورقة كما في الخادم
+    await ask.getByRole('button', { name: 'رجوع' }).click();
+    await sheet.getByRole('button', { name: 'تراجع عن التغييرات' }).click();
+    await expect(row('منى العلي')).toContainText('رمز QR');
+    await expect(row('منى العلي').getByRole('checkbox')).toBeChecked();
     expect(marks().length).toBe(n);
     // بسبب مكتوب يُلغى
-    await sheet.locator('tr', { hasText: 'منى العلي' }).getByRole('button', { name: 'إلغاء' }).click();
-    await ask.locator('input').fill('مسح الرمز من خارج القاعة');
-    await ask.getByRole('button', { name: 'إلغاء الحضور' }).click();
-    await expect(sheet.locator('tr', { hasText: 'منى العلي' })).toContainText('غائب');
-    expect(marks().at(-1)).toEqual({ session_id: 'w1', participant_id: 'p2', present: false, reason: 'مسح الرمز من خارج القاعة' });
+    await row('منى العلي').getByRole('checkbox').uncheck();
+    await sheet.getByRole('button', { name: 'راجع واحفظ' }).click();
+    await ask.getByLabel(/سبب إلغاء حضور من سجّل نفسه/).fill('مسح الرمز من خارج القاعة');
+    await ask.getByRole('button', { name: 'احفظ' }).click();
+    await expect(row('منى العلي')).toContainText('غائب');
+    expect(marks().at(-1)).toEqual({ session_id: 'w1', present: undefined, absent: ['p2'], reason: undefined, unmark_reason: 'مسح الرمز من خارج القاعة' });
   });
 
   test(`«ماذا تغيّر»: فلتر الدفعة ومجال «الحضور والجلسات»، والسبب ظاهر في السطر (${width})`, async ({ page }) => {
