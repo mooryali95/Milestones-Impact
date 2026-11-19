@@ -361,7 +361,7 @@ Deno.test('عرض الخبير: المستشار وعضو الفريق يعرض�
     await w.call('a', 'workshop.checkin', { code: await nowCode() });
     for (const x of [X_ADV, X_TEAM]) {
       const list = await w.call(x, 'xp.workshops');
-      assertEquals([list.status, list.sessions.map((s: any) => [s.id, s.open])], [200, [[WS, true]]]);
+      assertEquals([list.status, list.sessions.map((s: any) => [s.id, s.open, s.qr, s.sheet])], [200, [[WS, true, true, true]]]);
       const q = await w.call(x, 'xp.workshop-qr', { id: WS });
       assertEquals([q.status, q.success, /^\d{6}$/.test(q.code), q.open], [200, true, true, true]);
       const a = await w.call(x, 'xp.workshop-attendance', { id: WS });
@@ -380,12 +380,140 @@ Deno.test('عرض الخبير: المستشار وعضو الفريق يعرض�
     assertEquals((await w.call(X_ADV, 'xp.workshop-qr', { id: WS_OTHER })).code, 'not_assigned');
     w.tables.workshop_sessions.find((x) => x.id === WS_OTHER)!.cohort_id = null;
     assertEquals((await w.call(X_ADV, 'xp.workshop-qr', { id: WS_OTHER })).code, 'not_assigned');
-    // جلسة دفعته تُوثَّق يدويًا بتخصيصها: لا تظهر في قائمته
+    // جلسة دفعته تُوثَّق يدويًا بتخصيصها: لا رمز لها، وتبقى في قائمته بورقة حضورها وحدها (تشغيل الدفعة، المرحلة 2)
     w.tables.cohorts.find((x) => x.id === COHORT)!.delivery = { 'T-ATTEND': { verify: 'manual' } };
-    assertEquals((await w.call(X_ADV, 'xp.workshops')).sessions, []);
+    assertEquals((await w.call(X_ADV, 'xp.workshops')).sessions.map((s: any) => [s.id, s.qr, s.sheet]), [[WS, false, true]]);
+    // وطلب رمزها ما زال للمكلف، وشاشة الرمز تقول إن كانت تُوثَّق به (workshopQr)
     // خبير بلا خدمة رحلة (بلا دور) يُرد قبل الدالة، والمشارك لا يصل الفعل
     w.tables.experts.find((x) => x.id === X_TEAM)!.roles = [];
     assertEquals((await w.call(X_TEAM, 'xp.workshop-qr', { id: WS })).code, 'journey');
     assertEquals((await w.call('a', 'xp.workshop-qr', { id: WS })).status, 401);
+  } finally { w.restore(); }
+});
+
+// ── ورقة الحضور للمدرب (تصور تشغيل الدفعة 2026-11-19، المرحلة 2، القرار 3): xp.workshop-mark-bulk على الموجّه الحقيقي ──
+// صفوف الخبراء ثابتة بين العوالم (EXPERTS)، واختبار سابق يفرغ أدوار أحدهم: تُعاد هنا، ويُلحق المشارك بصف مساره كما تعيده PostgREST
+const embed = (w: Awaited<ReturnType<typeof world>>) => {
+  for (const x of EXPERTS) x.roles = ['coach'];
+  for (const pl of w.tables.placements) pl.participants = w.tables.participants.find((x) => x.id === pl.participant_id);
+};
+const rows = (w: Awaited<ReturnType<typeof world>>, sid = WS) => w.tables.workshop_attendance.filter((x) => x.session_id === sid).map((x) => [x.participant_id, x.method, x.recorded_by ?? null, x.note ?? null]);
+
+Deno.test('المدرب المكلف يسجّل حضور جلسة دفعته بسبب مكتوب: صف يدوي ببريده وسببه، وسطر في السجل يقول إنه خبير', async () => {
+  const w = await world();
+  try {
+    embed(w);
+    for (const [x, mail] of [[X_ADV, 'x1@example.sa'], [X_TEAM, 'x2@example.sa']]) {
+      w.tables.workshop_attendance.length = 0; w.tables.audit_log.length = 0;
+      const r = await w.call(x, 'xp.workshop-mark-bulk', { session_id: WS, present: [w.ps.a.id, w.ps.b.id], reason: 'تعطل الرمز' });
+      assertEquals([r.status, r.marked, r.already, r.refused], [200, 2, 0, []]);
+      assertEquals(rows(w), [[w.ps.a.id, 'manual', mail, 'تعطل الرمز'], [w.ps.b.id, 'manual', mail, 'تعطل الرمز']]);
+      assertEquals(w.tables.audit_log.filter((l) => l.action === 'workshop.mark').map((l) => [l.actor_type, l.actor, l.entity_id, l.after]),
+        [w.ps.a.id, w.ps.b.id].map((id) => ['system', mail, id, { session_id: WS, reason: 'تعطل الرمز', by: 'expert' }]));
+      // إعادة الطلب نفسه: لا صف ثانٍ ولا سطر ثانٍ
+      const again = await w.call(x, 'xp.workshop-mark-bulk', { session_id: WS, present: [w.ps.a.id, w.ps.b.id], reason: 'تعطل الرمز' });
+      assertEquals([again.marked, again.already, rows(w).length, w.tables.audit_log.filter((l) => l.action === 'workshop.mark').length], [0, 2, 2, 2]);
+    }
+    // بلا سبب يُرفض الطلب كله ولا يُكتب شيء
+    w.tables.workshop_attendance.length = 0;
+    for (const reason of [undefined, '', '   ']) {
+      const r = await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS, present: [w.ps.a.id], reason });
+      assertEquals([r.status, r.code, r.message], [400, 'reason_required', 'اكتب سبب التسجيل اليدوي']);
+    }
+    assertEquals(await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS }).then((r) => [r.status, r.code]), [400, 'empty']);
+    assertEquals(rows(w), []);
+  } finally { w.restore(); }
+});
+
+Deno.test('المدرب لا يسجّل لغير دفعاته ولا لغير متوقعي الجلسة: غير المكلف والجلسة العامة وجلسة دفعة أخرى تُرد، وعضو دفعة أخرى وحساب العرض يُرفضان', async () => {
+  const w = await world();
+  try {
+    embed(w);
+    const body = { present: [w.ps.a.id], reason: 'تعطل الرمز' };
+    // خبير بلا تكليف، وجلسة دفعة ليست له، وجلسة عامة بلا دفعة، وجلسة غير موجودة
+    assertEquals(await w.call(X_NONE, 'xp.workshop-mark-bulk', { session_id: WS, ...body }).then((r) => [r.status, r.code]), [403, 'not_assigned']);
+    assertEquals(await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS_OTHER, present: [w.ps.other.id], reason: 'تعطل الرمز' }).then((r) => [r.status, r.code]), [403, 'not_assigned']);
+    w.tables.workshop_sessions.find((x) => x.id === WS_OTHER)!.cohort_id = null;
+    assertEquals(await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS_OTHER, ...body }).then((r) => [r.status, r.code]), [403, 'not_assigned']);
+    assertEquals((await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: U(1), ...body })).status, 404);
+    // عضو فريق أُزيل تكليفه يُرد من فوره
+    w.tables.cohort_experts.length = 0;
+    assertEquals(await w.call(X_TEAM, 'xp.workshop-mark-bulk', { session_id: WS, ...body }).then((r) => [r.status, r.code]), [403, 'not_assigned']);
+    // خبير بلا خدمة رحلة، ومشارك، وبلا جلسة دخول
+    w.tables.experts.find((x) => x.id === X_NONE)!.roles = [];
+    assertEquals((await w.call(X_NONE, 'xp.workshop-mark-bulk', { session_id: WS, ...body })).code, 'journey');
+    assertEquals((await w.call('a', 'xp.workshop-mark-bulk', { session_id: WS, ...body })).status, 401);
+    assertEquals((await w.call(null, 'xp.workshop-mark-bulk', { session_id: WS, ...body })).status, 401);
+    assertEquals(rows(w), []);
+    // في جلسة دفعته: عضو دفعة أخرى وحساب العرض ومعرّف غريب يُرفضون لكل واحد بسببه، والمتوقع يُسجَّل
+    const r = await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS, present: [w.ps.a.id, w.ps.other.id, w.ps.demo.id, U(7)], reason: 'بلا هاتف' });
+    assertEquals([r.status, r.marked, r.refused.map((x: Row) => [x.id, x.code])], [200, 1, [[w.ps.other.id, 'not_expected'], [w.ps.demo.id, 'not_expected'], [U(7), 'not_expected']]]);
+    // حساب العرض يُرد للمدرب كغيره ممن ليسوا في قائمته، ولا صف له
+    assertEquals(w.tables.workshop_attendance.some((x) => x.participant_id === w.ps.demo.id), false);
+    assertEquals(rows(w).map((x) => x[0]), [w.ps.a.id]);
+    // الرد بلا اسم ولا بريد لأحد
+    assert(!/مشارك|example\.sa|milestone-impact/.test(JSON.stringify(r)));
+  } finally { w.restore(); }
+});
+
+Deno.test('المدرب لا يلغي حضورًا سجّله المشارك بنفسه ولا ما سجّله غيره، ويلغي ما سجّله هو، ولا يرى من سجّل ولا السبب', async () => {
+  const w = await world();
+  try {
+    embed(w);
+    await w.call('a', 'workshop.checkin', { code: await nowCode() });
+    w.tables.workshop_attendance.push({ session_id: WS, participant_id: w.ps.b.id, method: 'manual', recorded_by: 'admin@example.sa', note: 'سبب الإدارة', checked_in_at: iso(-1e5) });
+    assertEquals((await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS, present: [w.ps.unpaid.id], reason: 'بلا هاتف' })).marked, 1);
+    const n = w.tables.audit_log.length;
+    // سبب الإلغاء المرسل لا يفتح للمدرب ما هو للإدارة وحدها
+    const r = await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS, absent: [w.ps.a.id, w.ps.b.id], unmark_reason: 'أي سبب', reason: 'أي سبب' });
+    assertEquals([r.status, r.unmarked, r.refused], [200, 0, [
+      { id: w.ps.a.id, code: 'admin_only', message: 'سجّل حضوره بنفسه، وإلغاؤه للإدارة وحدها' },
+      { id: w.ps.b.id, code: 'not_yours', message: 'سجّله غيرك، وإلغاؤه لمن سجّله أو للإدارة' },
+    ]]);
+    assertEquals([rows(w).map((x) => [x[0], x[1]]), w.tables.audit_log.length], [[[w.ps.a.id, 'code'], [w.ps.b.id, 'manual'], [w.ps.unpaid.id, 'manual']], n]);
+    // وما سجّله مدرب آخر من الفريق ليس له
+    assertEquals((await w.call(X_TEAM, 'xp.workshop-mark-bulk', { session_id: WS, absent: [w.ps.unpaid.id] })).refused.map((x: Row) => x.code), ['not_yours']);
+    // القائمة للمدرب: الاسم والطريقة و«سجّلته أنت» وحدها
+    const list = await w.call(X_ADV, 'xp.workshop-attendance', { id: WS });
+    assertEquals(list.sheet, true);
+    assertEquals(list.people.filter((p: Row) => p.attendance).map((p: Row) => [p.full_name, p.attendance]), [['مشارك 1', { method: 'code' }], ['مشارك 2', { method: 'manual' }], ['مشارك 3', { method: 'manual', mine: true }]]);
+    assert(!/example\.sa|سبب الإدارة|بلا هاتف|recorded_by|note|checked_in_at|organization/.test(JSON.stringify(list)));
+    // يلغي ما سجّله هو بلا سبب، والحالة السابقة في السجل
+    const undo = await w.call(X_ADV, 'xp.workshop-mark-bulk', { session_id: WS, absent: [w.ps.unpaid.id] });
+    assertEquals([undo.unmarked, undo.refused], [1, []]);
+    const last = w.tables.audit_log.at(-1)!;
+    assertEquals([last.actor_type, last.actor, last.action, last.before.method, last.before.recorded_by, last.before.note, last.after], ['system', 'x1@example.sa', 'workshop.unmark', 'manual', 'x1@example.sa', 'بلا هاتف', { session_id: WS, by: 'expert' }]);
+    assertEquals(rows(w).map((x) => x[0]), [w.ps.a.id, w.ps.b.id]);
+  } finally { w.restore(); }
+});
+
+Deno.test('نافذة ورقة المدرب: من قبل الجلسة بساعة إلى أسبوع بعدها، وما سواها للإدارة، والقائمة تعرض ورقة ما انتهى قريبًا بلا رمز', async () => {
+  const w = await world();
+  try {
+    embed(w);
+    const { TRAINER_SHEET_DAYS } = await import('./activities.ts');
+    const sess = w.tables.workshop_sessions.find((x) => x.id === WS)!;
+    const body = { session_id: WS, present: [w.ps.a.id], reason: 'سُجل لاحقًا' };
+    const at = async (from: number, to: number, patch: Row = {}) => {
+      Object.assign(sess, { starts_at: iso(from), ends_at: iso(to), active: true, ...patch });
+      w.tables.workshop_attendance.length = 0;
+      const r = await w.call(X_ADV, 'xp.workshop-mark-bulk', body);
+      const list = (await w.call(X_ADV, 'xp.workshops')).sessions.map((s: Row) => [s.id, s.qr, s.sheet]);
+      return [r.status, r.code ?? r.marked, list];
+    };
+    // انتهت قبل يومين: ورقتها مفتوحة ولا رمز لها
+    assertEquals(await at(-2 * 864e5 - 4 * 36e5, -2 * 864e5), [200, 1, [[WS, false, true]]]);
+    // انتهت قبل أكثر من الأسبوع: مغلقة وخارج قائمته
+    assertEquals(await at(-(TRAINER_SHEET_DAYS + 1) * 864e5 - 4 * 36e5, -(TRAINER_SHEET_DAYS + 1) * 864e5), [403, 'sheet_closed', []]);
+    // تبدأ بعد 3 ساعات: رمزها يُعرض (الشاشة تنتظر فتحه) وورقتها لم تُفتح بعد
+    assertEquals(await at(3 * 36e5, 7 * 36e5), [403, 'sheet_closed', [[WS, true, false]]]);
+    // تبدأ بعد نصف ساعة: مفتوحة
+    assertEquals(await at(18e5, 4 * 36e5), [200, 1, [[WS, true, true]]]);
+    // عن بعد: لا رمز، والورقة للمدرب
+    assertEquals(await at(-6e5, 72e5, { mode: 'online' }), [200, 1, [[WS, false, true]]]);
+    // ملغاة أو بلا موعد: مغلقة
+    assertEquals((await at(-6e5, 72e5, { active: false })).slice(0, 2), [403, 'sheet_closed']);
+    assertEquals((await at(-6e5, 72e5, { starts_at: null, ends_at: null })).slice(0, 2), [403, 'sheet_closed']);
+    assertEquals(rows(w), []);
   } finally { w.restore(); }
 });

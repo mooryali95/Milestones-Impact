@@ -74,7 +74,8 @@ const cohorts = [
 const definition = { success: true, program_id: 'pa', version: { id: 'v1', number: 1, label: 'الإطلاق' }, stages, hidden: [], sessions: [], requirements: [] };
 const emptyMap = journeyMap({ stages, people: [], cohort: { id: 'c2', name: 'دفعة فارغة', starts_on: '2026-12-01' }, program: { name: 'برنامج القادة' }, today: TODAY, list: true, activity: true });
 
-async function setup(page, { width = 1440, role = 'admin' } = {}) {
+// extra: ردود إضافية لاختبار بعينه (b) => رد أو undefined
+async function setup(page, { width = 1440, role = 'admin', extra = () => undefined } = {}) {
   const calls = [];
   await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
   await page.clock.setFixedTime(TODAY);
@@ -92,7 +93,7 @@ async function setup(page, { width = 1440, role = 'admin' } = {}) {
         : b.cohort_id === 'c0' ? { success: false, message: 'الدفعة أكبر من أن تُرسم خريطتها هنا (1600 عضوًا، والحد 1500). اعرضها من «أين توقفوا» أو من صفحة كل جهة' }
           : { success: true, journey_map: map, roster },
     };
-    await route.fulfill({ json: replies[b.action] ?? { success: true } });
+    await route.fulfill({ json: extra(b) ?? replies[b.action] ?? { success: true } });
   });
   await page.goto(BASE);
   await page.evaluate((r) => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't'.repeat(40), user: { name: 'مدير', email: 'a@x.sa', role_id: r, totp_enabled: true }, ts: Date.now() })), role);
@@ -333,4 +334,76 @@ test('عرض 390: الحالة الفارغة', async ({ page }) => {
   await expect(box.getByText('لا أعضاء في هذه الدفعة بعد')).toBeVisible();
   expect(await noOverflow(page)).toBe(true);
   await shot(page, 'roster-empty-390');
+});
+
+// لقطة الشاشة الظاهرة وحدها: النافذة ثابتة فوق الصفحة، ولقطة الصفحة كلها تشوّهها
+const vshot = async (page, name) => { if (!SHOTS) return; await page.mouse.move(2, 2); await page.waitForTimeout(350); await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
+// «سجّل حضورهم في جلسة» (المرحلة 2): المحددون يُفتحون في ورقة حضور جلسة منعقدة من جلسات الدفعة، معلَّمين مسبقًا، والحفظ واحد
+for (const width of [1440, 390]) {
+  test(`من «المتابعة»: سجّل حضور المحددين في جلسة منعقدة، ومن ليس من متوقعيها يُذكر باسمه ولا يُرسل (${width})`, async ({ page }) => {
+    const R1 = 'aaaaaaaa-0000-4000-8000-000000000001';
+    const ws = (id, title_ar, starts_at, more = {}) => ({ id, requirement_id: R1, cohort_id: 'c1', title_ar, mode: 'in_person', starts_at, ends_at: starts_at, active: true, attended: 0, ...more });
+    const attendance = { 'p-osama': { method: 'qr', checked_in_at: '2026-11-15T06:03:00Z', recorded_by: null } };
+    // متوقعو الجلسة: من اعتُمد مسارهم. فهد (بانتظار الاعتماد) ليس منهم
+    const expected = ['p-sara', 'p-osama', 'p-reem', 'p-huda'];
+    const sent = [];
+    const calls = await setup(page, { width, extra: (b) => {
+      if (b.action === 'admin.activities') return { success: true, requirements: [{ id: R1, kind: 'workshop', program_id: 'pa', title_ar: 'حضور الأيام التدريبية' }], coaching: [], programs: [], cohorts: [],
+        workshops: [ws('s1', 'اليوم 1', '2026-11-08T06:00:00Z'), ws('s2', 'اليوم 2', '2026-11-15T06:00:00Z'), ws('s3', 'اليوم 3', '2026-11-24T06:00:00Z'), ws('x1', 'يوم دفعة أخرى', '2026-11-12T06:00:00Z', { cohort_id: 'c2' })] };
+      if (b.action === 'admin.workshop-attendance') return { success: true, session: { id: b.id, title_ar: 'اليوم 2', cohort_id: 'c1', starts_at: '2026-11-15T06:00:00Z', ends_at: '2026-11-15T10:00:00Z' }, requirement: { id: R1, title_ar: 'حضور الأيام التدريبية' },
+        people: roster.filter((m) => expected.includes(m.id)).map((m) => ({ id: m.id, full_name: m.name, email: m.email, organization_name: m.organization_name, attendance: attendance[m.id] || null })) };
+      if (b.action === 'admin.workshop-mark-bulk') {
+        sent.push(b);
+        for (const id of b.present || []) attendance[id] = { method: 'manual', checked_in_at: '2026-11-20T09:00:00Z', recorded_by: 'a@x.sa', note: b.reason };
+        return { success: true, marked: (b.present || []).length, unmarked: 0, already: 0, refused: [] };
+      }
+      return undefined;
+    } });
+    const box = await openFollow(page);
+    for (const name of ['سارة العتيبي', 'أسامة الحربي', 'ريم الدوسري', 'فهد القحطاني']) await box.getByRole('checkbox', { name: `تحديد ${name}` }).check();
+    await box.getByTestId('cr-bulk').getByRole('button', { name: 'سجّل حضورهم في جلسة…' }).click();
+    const pick = page.getByTestId('cr-pick-session');
+    await expect(pick.getByRole('heading')).toHaveText('سجّل حضور المحددين (4) في جلسة');
+    // المنعقدة من جلسات هذه الدفعة وحدها، الأحدث أولًا: لا القادمة ولا جلسة دفعة أخرى
+    await expect(pick.getByRole('combobox').locator('option')).toHaveText([/^اليوم 2 · /, /^اليوم 1 · /]);
+    expect(await noOverflow(page)).toBe(true);
+    await vshot(page, `roster-attend-pick-${width}`);
+    await pick.getByRole('button', { name: 'افتح ورقة الحضور' }).click();
+
+    const sheet = page.getByRole('dialog', { name: 'ورقة الحضور' });
+    await expect(sheet.getByRole('heading', { name: 'اليوم 2' })).toBeVisible();
+    // القراءة بأعضاء هذه الدفعة، والمحددون معلَّمون مسبقًا، ومن سجّل نفسه كما هو
+    expect(calls.filter((c) => c.action === 'admin.workshop-attendance').at(-1)).toMatchObject({ id: 's2', cohort_id: 'c1' });
+    await expect(sheet.getByRole('checkbox', { checked: true })).toHaveCount(3);
+    await expect(sheet.locator('.ats-count')).toContainText('1 من 4 حضروا');
+    await expect(sheet.locator('.ats-count')).toContainText('يُسجَّل 2 (لم يُحفظ)');
+    await expect(sheet.locator('.ats-warn')).toHaveText('واحد من المحددين ليس من متوقعي هذه الجلسة، فلن يُسجَّل: فهد القحطاني.');
+    await sheet.getByLabel('سبب التسجيل اليدوي').selectOption('سُجل لاحقًا');
+    await vshot(page, `roster-attend-sheet-${width}`);
+    await sheet.getByRole('button', { name: 'راجع واحفظ' }).click();
+    await sheet.getByTestId('ats-confirm').getByRole('button', { name: 'احفظ' }).click();
+    await expect(sheet.getByTestId('ats-result')).toHaveText('حُفظ: سُجّل 2');
+    // طلب واحد بالغائبين من المحددين وحدهم: لا من سجّل نفسه ولا من ليس في القائمة
+    expect(sent.map(({ session_id, present, absent, reason }) => ({ session_id, present, absent, reason }))).toEqual([{ session_id: 's2', present: ['p-sara', 'p-reem'], absent: undefined, reason: 'سُجل لاحقًا' }]);
+    expect(await noOverflow(page)).toBe(true);
+    // الإغلاق بعد الحفظ يفرغ التحديد ويعيد قراءة الصفوف
+    const before = calls.filter((c) => c.action === 'admin.cohort-journey').length;
+    await sheet.getByRole('button', { name: 'إغلاق' }).click();
+    await expect(box.getByTestId('cr-bulk')).toHaveCount(0);
+    await expect.poll(() => calls.filter((c) => c.action === 'admin.cohort-journey').length).toBe(before + 1);
+  });
+}
+
+test('من «المتابعة»: دفعة بلا جلسة منعقدة تقول ذلك ولا تفتح ورقة', async ({ page }) => {
+  await setup(page, { extra: (b) => (b.action === 'admin.activities' ? { success: true, requirements: [], workshops: [], coaching: [] } : undefined) });
+  const box = await openFollow(page);
+  await box.getByRole('checkbox', { name: 'تحديد سارة العتيبي' }).check();
+  await box.getByTestId('cr-bulk').getByRole('button', { name: 'سجّل حضورهم في جلسة…' }).click();
+  const pick = page.getByTestId('cr-pick-session');
+  await expect(pick.getByRole('heading')).toHaveText('سجّل حضور المحدد في جلسة');
+  await expect(pick).toContainText('لا جلسة منعقدة لهذه الدفعة بعد');
+  await expect(pick.getByRole('button', { name: 'افتح ورقة الحضور' })).toHaveCount(0);
+  await pick.getByRole('button', { name: 'إلغاء' }).click();
+  await expect(pick).toHaveCount(0);
+  await expect(box.getByTestId('cr-bulk')).toContainText('1 محدد');
 });

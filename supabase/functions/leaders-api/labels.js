@@ -65,6 +65,10 @@ export const SESSION_MODE_AR = { in_person: 'حضوري', online: 'عن بعد',
 export const VERIFY_AR = { qr: 'رمز QR يعرضه المدرب (في القاعة أو على الشاشة المشتركة)', join: 'الانضمام من التطبيق (للجلسات عن بعد)', manual: 'يسجله المدرب يدويًا', auto: 'آلي: يُحتسب لكل أعضاء الدفعة بانتهاء الجلسة' };
 // كيف سُجل حضور المشارك في جلسة جماعية (قيد workshop_attendance.method)
 export const ATTEND_METHOD_AR = Object.freeze({ qr: 'رمز QR', join: 'انضمام من التطبيق', manual: 'يدوي', hall: 'القاعة', remote: 'القاعة عن بعد', code: 'الأرقام الستة' });
+// أسباب التسجيل اليدوي للحضور في ورقة الحضور (تصور تشغيل الدفعة 2026-11-19، 4.2): قائمة قصيرة، ومعها «سبب آخر» بنص حر
+// بحد MARK_REASON_MAX (حد الخادم وقيد العمود workshop_attendance.note)
+export const MARK_REASONS_AR = Object.freeze(['تعطل الرمز', 'بلا هاتف', 'سُجل لاحقًا']);
+export const MARK_REASON_MAX = 300;
 // عدد المسارات مشتق: كل تركيبة من مستوى لكل بُعد
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 

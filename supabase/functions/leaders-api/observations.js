@@ -97,7 +97,7 @@ const ACTOR_AR = { admin: 'الإدارة', participant: 'المشارك', syste
  */
 export function timelineOf({ history = [], observations = [] }) {
   const rows = [
-    ...history.map((h) => ({ at: h.created_at, kind: 'event', tone: 'info', text: auditLabel(h.action), by: ACTOR_AR[h.actor_type] || '', detail: h.action === 'participant.status' && h.after?.status ? `الحالة: ${statusAr(h.after.status)}${h.after.reason ? `، السبب: ${h.after.reason}` : ''}` : '' })),
+    ...history.map((h) => ({ at: h.created_at, kind: 'event', tone: 'info', text: auditLabel(h.action), by: (h.after?.by === 'expert' ? ACTOR_AR.expert : ACTOR_AR[h.actor_type]) || '', detail: h.action === 'participant.status' && h.after?.status ? `الحالة: ${statusAr(h.after.status)}${h.after.reason ? `، السبب: ${h.after.reason}` : ''}` : '' })),
     ...observations.map((o) => ({ at: o.created_at, kind: o.kind, tone: o.kind === 'warning' ? 'warn' : o.kind === 'commendation' ? 'ok' : 'info',
       text: `${OBS_KIND_AR[o.kind] || o.kind}${o.title ? `: ${o.title}` : ''}`, by: OBS_SOURCE_AR[o.source] || o.source, detail: o.body })),
   ];

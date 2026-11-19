@@ -15,6 +15,7 @@ import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
 import '../../shared/css/journey-map.css';
 import '../../shared/css/presenter-qr.css';
+import '../../shared/css/attendance-sheet.css';
 import '../../shared/css/update-bar.css';
 import './styles.css';
 

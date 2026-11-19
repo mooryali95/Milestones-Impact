@@ -17,7 +17,8 @@ export const codeGroups = (c) => (/^\d{6}$/.test(String(c || '')) ? `${String(c)
 // العدد يطابق المعدود: «حاضر واحد»، «حاضران»، «5 حاضرين»، «11 حاضرًا»
 export const attendedAr = (n) => (n ? countAr(n, 'حاضر واحد', 'حاضران', 'حاضرين', 'حاضرًا') : 'لم يحضر أحد بعد');
 
-export default function PresenterQr({ loadQr, loadPeople, onClose, whenText = () => '' }) {
+// onManual (اختياري): زر يفتح ورقة الحضور للتسجيل اليدوي حين يتعذر الرمز (تصور تشغيل الدفعة 2026-11-19، المرحلة 2)
+export default function PresenterQr({ loadQr, loadPeople, onClose, onManual = null, whenText = () => '' }) {
   const [d, setD] = useState(null);
   const [img, setImg] = useState('');
   const [people, setPeople] = useState(null);
@@ -71,6 +72,7 @@ export default function PresenterQr({ loadQr, loadPeople, onClose, whenText = ()
           <button type="button" className="pq-absent-t" aria-expanded={absentShown} onClick={() => setAbsentShown((v) => !v)}>{absentShown ? 'أخفِ الأسماء' : `من لم يحضر بعد (${absent.length})`}</button>
           {absentShown && <ul className="pq-absent">{absent.map((p) => <li key={p.id}>{p.full_name}</li>)}</ul>}
         </>}
+        {onManual && <button type="button" className="pq-absent-t" onClick={onManual}>تعذّر الرمز؟ سجّل الحضور يدويًا</button>}
       </>}
     </div>
   );

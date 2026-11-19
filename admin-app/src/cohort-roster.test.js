@@ -8,7 +8,7 @@ import { applyFilters, encodeState, presetCounts, shareable, sortRows } from './
 import { tableOf } from './exports.js';
 import { COHORT_TABS, cohortTab, followStage, tabQuery } from './cohort-journey.js';
 import {
-  attendanceAr, consultAr, needsOptions, ROSTER_KEYS, ROSTER_PRESETS, rosterExportCols, rosterFields, rosterOrder, rosterSorts, rosterSpec, stageAr, stageOptions, stayAr, turnAr,
+  attendanceAr, consultAr, HELD_MAX, heldSessions, needsOptions, ROSTER_KEYS, ROSTER_PRESETS, rosterExportCols, rosterFields, rosterOrder, rosterSorts, rosterSpec, stageAr, stageOptions, stayAr, turnAr,
 } from './cohort-roster.js';
 
 const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
@@ -222,5 +222,30 @@ describe('التبويب الثالث ورابطه', () => {
     expect(ui).not.toMatch(/currentStages|positionOf|journeyFor/);
     // زر الخريطة يفتح «المتابعة» بمرحلته
     expect(read('admin-app/src/screens/CohortJourney.jsx')).toContain('<JourneyMap map={jm} embedded onPeople={on.follow} />');
+  });
+});
+
+describe('«سجّل حضورهم في جلسة»: جلسات الدفعة المنعقدة من قراءة «الحضور والجلسات» نفسها', () => {
+  const now = Date.parse('2026-11-20T10:00:00Z');
+  const cohort = { id: 'c1', program_id: 'pa' };
+  const w = (id, starts_at, more = {}) => ({ id, requirement_id: 'r1', cohort_id: 'c1', title_ar: `يوم ${id}`, starts_at, ends_at: starts_at, active: true, attended: 3, ...more });
+  const acts = {
+    requirements: [{ id: 'r1', kind: 'workshop', program_id: 'pa' }, { id: 'r9', kind: 'workshop', program_id: 'pb' }, { id: 'rc', kind: 'coaching', program_id: 'pa' }],
+    workshops: [
+      w('past', '2026-11-18T06:00:00Z'), w('older', '2026-11-10T06:00:00Z'), w('running', '2026-11-20T09:00:00Z'),
+      w('future', '2026-11-25T06:00:00Z'), w('undated', null), w('off', '2026-11-17T06:00:00Z', { active: false }),
+      w('other-cohort', '2026-11-18T06:00:00Z', { cohort_id: 'c2' }),
+      w('general', '2026-11-15T06:00:00Z', { cohort_id: null }), w('general-other-program', '2026-11-15T06:00:00Z', { cohort_id: null, requirement_id: 'r9' }),
+    ],
+  };
+  it('المؤرخة القائمة التي بدأت وحدها، لهذه الدفعة والعامة من برنامجها، الأحدث أولًا', () => {
+    expect(heldSessions(acts, cohort, now).map((s) => [s.id, s.general])).toEqual([['running', false], ['past', false], ['general', true], ['older', false]]);
+    expect(heldSessions(acts, cohort, now)[1]).toEqual({ id: 'past', title: 'يوم past', starts_at: '2026-11-18T06:00:00Z', general: false, attended: 3 });
+  });
+  it('لا جلسات، وقراءة ناقصة، والحد', () => {
+    expect(heldSessions({}, cohort, now)).toEqual([]);
+    expect(heldSessions(null, cohort, now)).toEqual([]);
+    const many = { requirements: acts.requirements, workshops: Array.from({ length: HELD_MAX + 5 }, (_, i) => w(`s${i}`, new Date(now - (i + 1) * 864e5).toISOString())) };
+    expect(heldSessions(many, cohort, now)).toHaveLength(HELD_MAX);
   });
 });

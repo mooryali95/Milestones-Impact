@@ -12,7 +12,9 @@ export const EXPORT_TABLES = {
   lab_attempts: [], lab_grants: [], model_submissions: [], katon_answers: [], points_ledger: [],
   capstones: ['reviewed_by', 'approved_by'], capstone_updates: [], capstone_shares: [], capstone_share_notes: ['ip_hash'], certificates: ['issued_by', 'revoked_by'], reports: [],
   coaching_sessions: ['confirmed_by'], expert_requests: ['created_by', 'tried'], expert_ratings: [], peer_requests: ['closed_by'],
-  cohort_group_members: [], cohort_roles: [], hall_presence: [], workshop_attendance: [],
+  cohort_group_members: [], cohort_roles: [], hall_presence: [],
+  // سبب التسجيل اليدوي (note، 20261119110000) ملاحظة داخلية يكتبها المدير أو المدرب: لا تخرج، ويخرج الحضور وطريقته ووقته كما كان
+  workshop_attendance: ['note'],
   sponsor_requests: ['decided_by'],
   // التذكيرات التي وصلته (nudges.ts): نصها ومرسلها ومرحلتها. بريد المدير المرسل ولقطة القياس الداخلية لا يخرجان
   nudges: ['sender_ref', 'snapshot'],

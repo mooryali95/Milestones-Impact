@@ -107,3 +107,15 @@ export function rosterExportCols({ date }) {
     { key: 'seen', label: 'آخر نشاط', width: 16, get: (m) => date(seenAt(m)) },
   ];
 }
+
+// «سجّل حضورهم في جلسة» (تصور تشغيل الدفعة 2026-11-19، 4.2، المرحلة 2): جلسات هذه الدفعة المنعقدة، أي المؤرخة القائمة التي بدأت،
+// من قراءة «الحضور والجلسات» نفسها (admin.activities): جلسات الدفعة، والعامة من متطلبات برنامجها. الأحدث أولًا، بحد 30.
+// لا قائمة جلسات ثانية في التبويب: هذه خانة اختيار تفتح ورقة الحضور القائمة
+export const HELD_MAX = 30;
+export function heldSessions(activities, cohort, now = Date.now()) {
+  const own = new Set((activities?.requirements || []).filter((r) => r.kind === 'workshop' && r.program_id === cohort?.program_id).map((r) => r.id));
+  return (activities?.workshops || [])
+    .filter((s) => s.active !== false && s.starts_at && Date.parse(s.starts_at) <= now && (s.cohort_id ? s.cohort_id === cohort?.id : own.has(s.requirement_id)))
+    .sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at)).slice(0, HELD_MAX)
+    .map((s) => ({ id: s.id, title: s.title_ar, starts_at: s.starts_at, general: !s.cohort_id, attended: Number(s.attended) || 0 }));
+}

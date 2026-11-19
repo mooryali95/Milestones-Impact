@@ -5,7 +5,7 @@
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
-import { alertOps, audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
+import { alertOps, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_MAIL, workshopMail } from './core.ts';
 import { missingColumn, missingTable } from './missing-column.ts';
 import { listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
@@ -21,6 +21,7 @@ import {
   parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS, cohortDefinitionView,
 } from './logic.js';
 import { journeyTimeline, outsideSessions } from './journey-timeline.js';
+import { MARK_REASON_MAX } from './labels.js';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null; ua: string | null };
@@ -712,6 +713,16 @@ function attendancePeople(r: any, w: Awaited<ReturnType<typeof attendanceWorld>>
     .sort((x: any, y: any) => String(x.full_name).localeCompare(String(y.full_name), 'ar'));
 }
 
+// صفوف حضور الجلسة بسببها (note، الترحيل 20261119110000). قبل الترحيل لا عمود: تُقرأ بلاه، والسبب في سجل التدقيق وحده
+async function attendanceRows(sid: string): Promise<any[]> {
+  const cols = 'participant_id, checked_in_at, method, recorded_by';
+  // counting-exempt: صفوف الحضور لا تُعدّ وحدها: attendancePeople يعرض منها من في attendanceWorld وحدهم (listed)
+  let res: { data: any; error: any } = await db.from('workshop_attendance').select(`${cols}, note`).eq('session_id', sid);
+  // counting-exempt: القراءة نفسها بلا عمود السبب قبل ترحيله
+  if (res.error && missingColumn(res.error)) res = await db.from('workshop_attendance').select(cols).eq('session_id', sid);
+  return (must(res, 'تعذّرت قراءة الحضور') ?? []) as any[];
+}
+
 // الحضور ومن يُتوقع حضوره
 export async function workshopAttendance(b: Body) {
   const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').eq('id', String(b.id || '')).maybeSingle());
@@ -719,13 +730,12 @@ export async function workshopAttendance(b: Body) {
   // cohort_id: الجلسة العامة من بطاقة دفعة تُقرأ بأعضاء تلك الدفعة وحاضريها وحدهم، كما تعدّها البطاقة (cohortWorkshops).
   // جلسة الدفعة لا يغيّرها هذا: متوقعها دفعتها هي دائمًا
   const view = b.cohort_id ? String(b.cohort_id) : null;
-  const [{ data: r }, { data: att }, w] = await Promise.all([
+  const [{ data: r }, att, w] = await Promise.all([
     db.from('stage_requirements').select('*').eq('id', s.requirement_id).single(),
-    // counting-exempt: صفوف الحضور لا تُعدّ وحدها: attendancePeople يعرض منها من في attendanceWorld وحدهم (listed)
-    db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', s.id),
+    attendanceRows(s.id),
     attendanceWorld(!!(s.cohort_id || view)),
   ]);
-  const people = attendancePeople(r, w, s.cohort_id || view, att || [], !s.cohort_id && !!view);
+  const people = attendancePeople(r, w, s.cohort_id || view, att, !s.cohort_id && !!view);
   return { success: true, session: s, requirement: { id: r.id, title_ar: r.title_ar }, people };
 }
 
@@ -762,41 +772,144 @@ export async function cohortWorkshops(b: Body) {
   return { success: true, capacity_ready, sessions };
 }
 
-// التسجيل اليدوي من الإدارة (تصور تشغيل الدفعة 2026-11-19، المرحلة 0):
+// ── التسجيل اليدوي للحضور: كاتب واحد للفردي والجماعي وللمدرب (تصور تشغيل الدفعة 2026-11-19، المرحلتان 0 و2) ──
 // 1. الحضور لمن يُتوقع حضوره وحده، بالقاعدة نفسها التي تبني القائمة (attendancePeople)، فلا يُكتب حضور لغير أهل الجلسة.
 // 2. لا يكتب فوق حضور قائم: من سجّل نفسه يبقى بطريقته ووقته.
-// 3. إلغاء حضور سجّله المشارك بنفسه (أي طريقة غير «يدوي») بسبب مكتوب، وإلغاء اليدوي بنقرة.
-// السبب (اختياري في التسجيل والإلغاء اليدوي) والحالة قبل الحذف في سجل التدقيق: لا عمود للسبب في workshop_attendance قبل المرحلة 2
-export const MARK_REASON_MAX = 300;
+// 3. إلغاء حضور سجّله المشارك بنفسه (أي طريقة غير «يدوي») للمدير الكاتب وحده وبسبب مكتوب، وإلغاء اليدوي بنقرة.
+// 4. حساب العرض لا يُكتب له حضور، والجلسة الملغاة لا يُسجَّل فيها حضور جديد.
+// السبب يُحفظ مع صف الحضور (note بعد الترحيل 20261119110000) وفي سجل التدقيق دائمًا، ومعه الحالة قبل الحذف.
+// markBatch يحكم لكل مشارك وحده ويعيد نتيجته: مقبول يُكتب، ومسجل أصلًا يُتخطى، ومرفوض بسببه. طلب معاد لا يكتب مرتين: من سُجّل
+// في المرة الأولى «مسجل أصلًا» في الثانية بلا صف ولا سطر سجل، ومفتاح منع التكرار (idempotency.ts) يعيد الرد الأول نفسه.
+export { MARK_REASON_MAX };
+export const MARK_BULK_MAX = 500;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MARK_REFUSAL: Record<string, string> = {
+  demo: 'حساب العرض لا يُسجَّل له حضور',
+  not_expected: 'ليس ممن يُتوقع حضورهم في هذه الجلسة',
+  reason_required: 'اكتب سبب إلغاء حضور سجّله المشارك بنفسه',
+  admin_only: 'سجّل حضوره بنفسه، وإلغاؤه للإدارة وحدها',
+  not_yours: 'سجّله غيرك، وإلغاؤه لمن سجّله أو للإدارة',
+};
+// expert: المدرب المكلف بدفعة الجلسة. يُكتب في السجل «system» ببريده (كما تُكتب أفعال الخبير الأخرى: قيد actor_type بلا «expert»)
+type Marker = { email: string; expert?: boolean };
+type MarkRow = { id: string; result: 'marked' | 'unmarked' | 'already' | 'refused'; code?: string };
+const cleanMarkReason = (v: unknown) => String(v || '').trim().slice(0, MARK_REASON_MAX);
+const markIds = (v: unknown) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x || '')).filter(Boolean))];
+
+async function markBatch(by: Marker, sid: string, input: { present: string[]; absent: string[]; reason: string; unmarkReason: string }) {
+  const { present, absent, reason, unmarkReason } = input;
+  if (present.length + absent.length > MARK_BULK_MAX) throw new Fail(`الحد ${MARK_BULK_MAX} مشارك في الحفظ الواحد`, 400, 'too_many');
+  if (present.some((id) => absent.includes(id))) throw new Fail('مشارك واحد لا يُسجَّل ويُلغى في الطلب نفسه', 400, 'conflict');
+  const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, active').eq('id', sid).maybeSingle()) as any;
+  if (!s) throw new Fail('الجلسة غير موجودة', 404);
+  const prior = new Map<string, any>((await attendanceRows(sid)).map((x) => [x.participant_id, x]));
+  const out: MarkRow[] = [];
+  const logs: AuditRow[] = [];
+  const actorType = by.expert ? 'system' : 'admin';
+  const tag = by.expert ? { by: 'expert' } : {};
+
+  // ── التسجيل ──
+  const want = present.filter((id) => !prior.has(id));
+  for (const id of present) if (prior.has(id)) out.push({ id, result: 'already' });
+  if (want.length) {
+    if (s.active === false) throw new Fail('هذه الجلسة ملغاة، فلا يُسجَّل فيها حضور. أعدها أولًا', 409, 'inactive');
+    const valid = want.filter((id) => UUID_RE.test(id));
+    const [demo, { data: r }, w] = await Promise.all([
+      valid.length ? db.from('participants').select('id').in('id', valid).eq('is_demo', true) : Promise.resolve({ data: [] as any[], error: null }),
+      db.from('stage_requirements').select('*').eq('id', s.requirement_id).maybeSingle(),
+      attendanceWorld(!!s.cohort_id),
+    ]);
+    const demos = new Set(((must(demo as any) ?? []) as any[]).map((x) => x.id));
+    const expected = new Set(r ? attendancePeople(r, w, s.cohort_id || null, []).map((e: any) => e.id) : []);
+    const ok: string[] = [];
+    for (const id of want) {
+      // للمدرب لا يُميَّز حساب العرض عن غيره ممن ليسوا في قائمته: لا يُعرف معرّفه بتجربة المعرّفات
+      if (demos.has(id)) out.push({ id, result: 'refused', code: by.expert ? 'not_expected' : 'demo' });
+      else if (!expected.has(id)) out.push({ id, result: 'refused', code: 'not_expected' });
+      else ok.push(id);
+    }
+    if (ok.length) {
+      const rows = (note: boolean) => ok.map((id) => ({ session_id: sid, participant_id: id, method: 'manual', recorded_by: by.email, ...(note && reason ? { note: reason } : {}) }));
+      const write = (note: boolean) => db.from('workshop_attendance').upsert(rows(note), { onConflict: 'session_id,participant_id', ignoreDuplicates: true }).select('participant_id');
+      let res: { data: any; error: any } = await write(true);
+      // قبل الترحيل 20261119110000 لا عمود للسبب: يُكتب الحضور بلاه، والسبب في سجل التدقيق
+      if (res.error && reason && missingColumn(res.error)) res = await write(false);
+      // ما كُتب فعلًا وحده يُسجَّل: من سبق إليه تسجيل آخر في اللحظة نفسها يبقى بطريقته، و«مسجل أصلًا» هنا
+      const done = new Set(((must(res, 'تعذّر تسجيل الحضور') ?? []) as any[]).map((x) => x.participant_id));
+      for (const id of ok) {
+        if (!done.has(id)) { out.push({ id, result: 'already' }); continue; }
+        out.push({ id, result: 'marked' });
+        logs.push({ actorType, actor: by.email, action: 'workshop.mark', entity: 'participants', entityId: id, after: { session_id: sid, ...(reason ? { reason } : {}), ...tag } });
+      }
+    }
+  }
+
+  // ── الإلغاء ──
+  const manual: string[] = [], self: string[] = [];
+  for (const id of absent) {
+    const row = prior.get(id);
+    if (!row) { out.push({ id, result: 'already' }); continue; }
+    const own = row.method !== 'manual';
+    if (by.expert && own) out.push({ id, result: 'refused', code: 'admin_only' });
+    else if (by.expert && row.recorded_by !== by.email) out.push({ id, result: 'refused', code: 'not_yours' });
+    else if (own && !unmarkReason) out.push({ id, result: 'refused', code: 'reason_required' });
+    else (own ? self : manual).push(id);
+  }
+  // الحذف مشروط بما حُكم عليه: صف تغيّر بين القراءة والحذف (أُلغي ثم سجّل المشارك نفسه) لا يُحذف بحكم صف آخر
+  const removed = new Set<string>();
+  if (manual.length) {
+    let q = db.from('workshop_attendance').delete().eq('session_id', sid).in('participant_id', manual).eq('method', 'manual');
+    if (by.expert) q = q.eq('recorded_by', by.email);
+    for (const x of (must(await q.select('participant_id'), 'تعذّر إلغاء الحضور') ?? []) as any[]) removed.add(x.participant_id);
+  }
+  if (self.length) {
+    const q = db.from('workshop_attendance').delete().eq('session_id', sid).in('participant_id', self).neq('method', 'manual');
+    for (const x of (must(await q.select('participant_id'), 'تعذّر إلغاء الحضور') ?? []) as any[]) removed.add(x.participant_id);
+  }
+  for (const id of [...manual, ...self]) {
+    if (!removed.has(id)) { out.push({ id, result: 'already' }); continue; }
+    const row = prior.get(id);
+    out.push({ id, result: 'unmarked' });
+    logs.push({ actorType, actor: by.email, action: 'workshop.unmark', entity: 'participants', entityId: id,
+      before: { session_id: sid, method: row.method, checked_in_at: row.checked_in_at || null, recorded_by: row.recorded_by || null, ...(row.note ? { note: row.note } : {}) },
+      after: { session_id: sid, ...(unmarkReason ? { reason: unmarkReason } : {}), ...tag } });
+  }
+  await auditMany(logs);
+  return out;
+}
+
+// الفردي (admin.workshop-mark): الحكم نفسه لمشارك واحد، والرفض يُرمى برمزه كما كان
 export async function workshopMark(a: any, b: Body) {
   const sid = String(b.session_id || ''), pid = String(b.participant_id || '');
-  const reason = String(b.reason || '').trim().slice(0, MARK_REASON_MAX);
+  const reason = cleanMarkReason(b.reason);
   // حساب العرض لا يُكتب له حضور من أي مسار، ولو أُرسل معرّفه باليد: يُرد أولًا، قبل قراءة الجلسة والحضور السابق، فلا يغيّر
   // الرد جلسة غير موجودة ولا صف قديم له. وإلغاء صف قديم له يبقى متاحًا (حذف لا كتابة)
   if (b.present) {
     const { data: who } = await db.from('participants').select('is_demo').eq('id', pid).maybeSingle();
-    if (simulated(who)) throw new Fail('حساب العرض لا يُسجَّل له حضور', 400, 'demo');
+    if (simulated(who)) throw new Fail(MARK_REFUSAL.demo, 400, 'demo');
   }
-  const s = must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id').eq('id', sid).maybeSingle()) as any;
-  if (!s) throw new Fail('الجلسة غير موجودة', 404);
-  const prior = must(await db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by').eq('session_id', sid).eq('participant_id', pid).maybeSingle()) as any;
-  if (b.present) {
-    if (prior) return { success: true, already: true };
-    const [{ data: r }, w] = await Promise.all([
-      db.from('stage_requirements').select('*').eq('id', s.requirement_id).maybeSingle(),
-      attendanceWorld(!!s.cohort_id),
-    ]);
-    if (!r || !attendancePeople(r, w, s.cohort_id || null, []).some((e: any) => e.id === pid)) throw new Fail('هذا المشارك ليس ممن يُتوقع حضورهم في هذه الجلسة', 409, 'not_expected');
-    must(await db.from('workshop_attendance').upsert({ session_id: sid, participant_id: pid, method: 'manual', recorded_by: a.email }, { onConflict: 'session_id,participant_id', ignoreDuplicates: true }));
-    await audit('admin', a.email, 'workshop.mark', 'participants', pid, null, { session_id: sid, ...(reason ? { reason } : {}) });
-    return { success: true };
+  const [x] = await markBatch({ email: a.email }, sid, { present: b.present ? [pid] : [], absent: b.present ? [] : [pid], reason, unmarkReason: reason });
+  if (x.result === 'refused') {
+    if (x.code === 'not_expected') throw new Fail('هذا المشارك ليس ممن يُتوقع حضورهم في هذه الجلسة', 409, 'not_expected');
+    throw new Fail(MARK_REFUSAL[x.code!], 400, x.code);
   }
-  if (!prior) return { success: true, already: true };
-  if (prior.method !== 'manual' && !reason) throw new Fail('اكتب سبب إلغاء حضور سجّله المشارك بنفسه', 400, 'reason_required');
-  must(await db.from('workshop_attendance').delete().eq('session_id', sid).eq('participant_id', pid));
-  await audit('admin', a.email, 'workshop.unmark', 'participants', pid,
-    { session_id: sid, method: prior.method, checked_in_at: prior.checked_in_at || null, recorded_by: prior.recorded_by || null }, { session_id: sid, ...(reason ? { reason } : {}) });
-  return { success: true };
+  return x.result === 'already' ? { success: true, already: true } : { success: true };
+}
+
+// ورقة الحضور (admin.workshop-mark-bulk): من يُسجَّل ومن يُلغى في حفظ واحد، بسبب واحد للتسجيل وسبب للإلغاء.
+// الرد لكل مشارك بنتيجته: سُجّل، أُلغي، مسجل أصلًا (تُخطي)، أو رُفض بسببه. لا اسم ولا بيان في الرد: المعرّف وحده كما أُرسل
+function markReply(rows: MarkRow[]) {
+  const n = (k: MarkRow['result']) => rows.filter((x) => x.result === k).length;
+  return {
+    success: true, marked: n('marked'), unmarked: n('unmarked'), already: n('already'),
+    refused: rows.filter((x) => x.result === 'refused').map((x) => ({ id: x.id, code: x.code, message: MARK_REFUSAL[x.code!] })),
+  };
+}
+const markInput = (b: Body) => ({ present: markIds(b.present), absent: markIds(b.absent), reason: cleanMarkReason(b.reason), unmarkReason: cleanMarkReason(b.unmark_reason) });
+export async function workshopMarkBulk(a: any, b: Body) {
+  const input = markInput(b);
+  if (!input.present.length && !input.absent.length) throw new Fail('لا تغيير للحفظ', 400, 'empty');
+  return markReply(await markBatch({ email: a.email }, String(b.session_id || ''), input));
 }
 
 // تأكيد الموجّه: حضر، لم يحضر، أُلغيت، أو إعادتها محجوزة
@@ -978,19 +1091,27 @@ async function expertCohortIds(expertId: string) {
   return new Set<string>([...(adv.data || []).map((c: any) => c.id), ...(team.data || []).map((x: any) => x.cohort_id)].filter(Boolean));
 }
 async function assignedSession(e: any, id: unknown) {
-  const s = must(await db.from('workshop_sessions').select('id, cohort_id').eq('id', String(id || '')).maybeSingle()) as any;
+  const s = must(await db.from('workshop_sessions').select('id, cohort_id, starts_at, ends_at, active').eq('id', String(id || '')).maybeSingle()) as any;
   if (!s) throw new Fail('الجلسة غير موجودة', 404);
   if (!s.cohort_id || !(await expertCohortIds(e.id)).has(s.cohort_id)) throw new Fail(NOT_ASSIGNED, 403, 'not_assigned');
   return s;
 }
-// جلسات دفعاته الحضورية التي تُوثَّق بالرمز بطريقتها الفعلية، من الجارية إلى أسبوعين قادمين
+// ورقة الحضور للمدرب (تصور تشغيل الدفعة 2026-11-19، المرحلة 2، القرار 3): جلسات دفعاته المؤرخة القائمة، من قبل بدئها بساعة
+// (كما يُفتح تسجيل الحضور) إلى أسبوع بعد نهايتها. ما قبل ذلك وما بعده للإدارة
+export const TRAINER_SHEET_DAYS = 7;
+export const trainerSheetOpen = (s: any, now = Date.now()) => s.active !== false && !isUndated(s)
+  && Date.parse(s.starts_at) - 36e5 <= now && now <= Date.parse(s.ends_at) + TRAINER_SHEET_DAYS * 864e5;
+// جلسات دفعاته: ما يُعرض رمزه (حضورية تُوثَّق بالرمز بطريقتها الفعلية، من الجارية إلى أسبوعين قادمين: qr)، وما تُفتح ورقة
+// حضوره (sheet). الجلسة تظهر بأي منهما، فالتي تُوثَّق يدويًا أو عن بعد تظهر بورقتها وحدها
 export async function expertWorkshops(e: any) {
   const ids = [...(await expertCohortIds(e.id))];
   if (!ids.length) return { success: true, sessions: [] };
   const now = Date.now();
   const rows = (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode').in('cohort_id', ids)
-    .eq('active', true).eq('mode', 'in_person')) ?? []) as any[];
-  const live = rows.filter((s) => !isUndated(s) && Date.parse(s.ends_at) + 1800e3 >= now && Date.parse(s.starts_at) <= now + 14 * 864e5);
+    .eq('active', true)) ?? []) as any[];
+  const dated = rows.filter((s) => !isUndated(s));
+  const soon = (s: any) => s.mode === 'in_person' && Date.parse(s.ends_at) + 1800e3 >= now && Date.parse(s.starts_at) <= now + 14 * 864e5;
+  const live = dated.filter((s) => soon(s) || trainerSheetOpen(s, now));
   if (!live.length) return { success: true, sessions: [] };
   const [reqs, cohorts] = await Promise.all([
     db.from('stage_requirements').select('id, code, kind, config').in('id', [...new Set(live.map((s) => s.requirement_id))]),
@@ -998,16 +1119,28 @@ export async function expertWorkshops(e: any) {
   ]);
   const reqOf = Object.fromEntries(((must(reqs) ?? []) as any[]).map((r: any) => [r.id, r]));
   const cohortOf = Object.fromEntries(((must(cohorts) ?? []) as any[]).map((c: any) => [c.id, c]));
-  const sessions = live.filter((s) => sessionVerify(reqOf[s.requirement_id], cohortOf[s.cohort_id]?.delivery) === 'qr').sort(bySessionTime).slice(0, 20)
-    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now) }));
+  const qr = (s: any) => soon(s) && sessionVerify(reqOf[s.requirement_id], cohortOf[s.cohort_id]?.delivery) === 'qr';
+  const sessions = live.filter((s) => qr(s) || trainerSheetOpen(s, now)).sort(bySessionTime).slice(0, 20)
+    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now), qr: qr(s), sheet: trainerSheetOpen(s, now) }));
   return { success: true, sessions };
 }
 export async function expertWorkshopQr(e: any, b: Body) {
   await assignedSession(e, b.id);
   return workshopQr({ id: b.id });
 }
+// الاسم والحضور وحدهما: لا بريد ولا جهة ولا من سجّل ولا سببه. mine: سجّله هذا المدرب بيده، فيلغيه إن أخطأ
 export async function expertWorkshopAttendance(e: any, b: Body) {
-  await assignedSession(e, b.id);
+  const s = await assignedSession(e, b.id);
   const r = await workshopAttendance({ id: b.id });
-  return { success: true, people: r.people.map((x: any) => ({ id: x.id, full_name: x.full_name, attendance: x.attendance ? { method: x.attendance.method } : null })) };
+  return { success: true, sheet: trainerSheetOpen(s), people: r.people.map((x: any) => ({ id: x.id, full_name: x.full_name, attendance: x.attendance ? { method: x.attendance.method, ...(x.attendance.method === 'manual' && x.attendance.recorded_by === e.email ? { mine: true } : {}) } : null })) };
+}
+// تسجيل المدرب (xp.workshop-mark-bulk): لجلسات دفعاته المكلف بها وحدها وفي نافذتها، وبسبب مكتوب، بالكاتب نفسه (markBatch).
+// لا يلغي حضورًا سجّله المشارك بنفسه ولا ما سجّله غيره: يُرفضان في markBatch لكل مشارك
+export async function expertWorkshopMarkBulk(e: any, b: Body) {
+  const s = await assignedSession(e, b.session_id);
+  if (!trainerSheetOpen(s)) throw new Fail(`ورقة الحضور تُفتح قبل الجلسة بساعة وتبقى ${TRAINER_SHEET_DAYS} أيام بعدها. بعد ذلك يسجّل الحضور فريق الإدارة`, 403, 'sheet_closed');
+  const input = markInput(b);
+  if (!input.present.length && !input.absent.length) throw new Fail('لا تغيير للحفظ', 400, 'empty');
+  if (input.present.length && !input.reason) throw new Fail('اكتب سبب التسجيل اليدوي', 400, 'reason_required');
+  return markReply(await markBatch({ email: e.email, expert: true }, s.id, { ...input, unmarkReason: '' }));
 }

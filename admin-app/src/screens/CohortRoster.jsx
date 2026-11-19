@@ -7,9 +7,12 @@
 // الفلاتر والفرز والتصدير). الحدود حدود الخريطة: تلقائيًا حتى 300 عضو، وبزر للأكبر، والخادم يرفض فوق 1500.
 // الخصوصية: للإدارة وحدها. الفلاتر لا تُكتب في عنوان الصفحة (url=false)، ونص بحث يشبه رقمًا لا يُحفظ للزيارة التالية ولا في
 // عرض محفوظ (shareable في filters.js). والإجراءات الجماعية هي القائمة نفسها لمن يكتب (تذكير، اعتماد، حالة، دفعة) بحد 50.
+// «سجّل حضورهم في جلسة» (المرحلة 2): المحددون يُفتحون في ورقة الحضور القائمة (Attendance) لجلسة منعقدة من جلسات الدفعة، معلَّمين
+// مسبقًا، بالمسار نفسه والتحقق نفسه على الخادم. لا قائمة جلسات هنا: خانة اختيار ثم الورقة.
 import React, { useEffect, useMemo, useState } from 'react';
-import { date, L, STATUS } from '../leaders.js';
-import { Empty, NoMatch, Spinner } from '../ui.jsx';
+import { date, L, STATUS, weekTime } from '../leaders.js';
+import { Empty, NoMatch, Spinner, useEscape } from '../ui.jsx';
+import { Attendance } from './Activities.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -22,11 +25,50 @@ import { queueLabel, saveQueue } from '../review-queue.js';
 import { membersAr } from '../cohort-journey.js';
 import { JOURNEY_AUTO_MAX } from './CohortJourney.jsx';
 import {
-  attendanceAr, consultAr, ROSTER_KEYS, ROSTER_PRESETS, ROSTER_SORTS, rosterExportCols, rosterOrder, rosterSorts, rosterSpec, stageAr, STATE_AR, stayAr, TURN_AR,
+  attendanceAr, consultAr, heldSessions, ROSTER_KEYS, ROSTER_PRESETS, ROSTER_SORTS, rosterExportCols, rosterOrder, rosterSorts, rosterSpec, stageAr, STATE_AR, stayAr, TURN_AR,
 } from '../cohort-roster.js';
 import '../cohort-journey.css';
 
 const COLS = 9;
+
+// اختيار الجلسة لـ«سجّل حضورهم في جلسة»: جلسات الدفعة المنعقدة من admin.activities، ثم تُفتح ورقة حضور المختارة
+function PickSession({ c, count, onPick, onClose }) {
+  const [list, setList] = useState(null);
+  const [id, setId] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEscape(onClose);
+  useEffect(() => {
+    let live = true;
+    setList(null);
+    L('admin.activities', {}).then((r) => {
+      if (!live) return;
+      const held = r?.success ? heldSessions(r, c) : null;
+      setList(held || { error: r?.message || 'تعذّرت قراءة جلسات الدفعة' });
+      if (held?.length) setId(held[0].id);
+    });
+    return () => { live = false; };
+  }, [c, retry]);
+  return (
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="la-form mi-form" role="dialog" aria-modal="true" aria-labelledby="cr-pick-title" style={{ maxWidth: 520 }} data-testid="cr-pick-session">
+        <h3 id="cr-pick-title">سجّل حضور {count === 1 ? 'المحدد' : `المحددين (${count})`} في جلسة</h3>
+        {!list ? <Spinner /> : list.error ? <p className="la-err" role="alert">{list.error} <button type="button" className="la-link" onClick={() => setRetry((n) => n + 1)}>أعد المحاولة</button></p>
+          : !list.length ? <p className="la-muted">لا جلسة منعقدة لهذه الدفعة بعد. تظهر هنا الجلسة المؤرخة بعد أن يبدأ موعدها.</p> : <>
+            <label>الجلسة
+              <select className="filter-select" value={id} onChange={(e) => setId(e.target.value)}>
+                {list.map((s) => <option key={s.id} value={s.id}>{s.title} · {weekTime(s.starts_at)}{s.general ? ' · عامة' : ''}</option>)}
+              </select>
+            </label>
+            <p className="la-muted small">تُفتح ورقة حضورها والمحددون معلَّمون فيها. يُسجَّل من يُتوقع حضوره فيها وحده، ومن سجّل نفسه يبقى كما هو.</p>
+          </>}
+        <div className="la-row">
+          {Array.isArray(list) && list.length > 0 && <button type="button" className="btn-sm primary" onClick={() => onPick(id)} disabled={!id}>افتح ورقة الحضور</button>}
+          <button type="button" className="btn-sm ghost" onClick={onClose}>إلغاء</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CohortRoster({ c, canWrite = false, stage = '', onPerson, onJourney }) {
   const auto = !c.is_default && (Number(c.members) || 0) <= JOURNEY_AUTO_MAX;
@@ -38,6 +80,8 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
   const [picked, setPicked] = useState(() => new Set());
   const [nudging, setNudging] = useState(null);
   const [bulkApprove, setBulkApprove] = useState(null);
+  // null، أو { ids, names } لاختيار الجلسة، ثم معها session لورقة الحضور
+  const [attend, setAttend] = useState(null);
   const cohorts = useBulkCohorts(canWrite);
 
   useEffect(() => { setWant(auto); }, [c.id, auto]);
@@ -69,6 +113,10 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
   const pickedIds = all.filter((m) => picked.has(m.id)).map((m) => m.id);
   const pickedPending = all.filter((m) => picked.has(m.id) && m.status === 'pending_approval').map((m) => m.id);
   const done = () => { setPicked(new Set()); setRetry((n) => n + 1); };
+  const startAttend = () => {
+    const ids = pickedIds.slice(0, BULK_MAX);
+    setAttend({ ids, names: Object.fromEntries(all.filter((m) => ids.includes(m.id)).map((m) => [m.id, m.name])) });
+  };
   const people = `#/leaders/participants?cohort=${encodeURIComponent(c.id)}`;
 
   if (!want) {
@@ -112,12 +160,16 @@ export default function CohortRoster({ c, canWrite = false, stage = '', onPerson
 
       {nudging && <NudgeSheet ids={nudging} onClose={(sent) => { setNudging(null); if (sent) setPicked(new Set()); }} />}
       {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onPerson} onClose={(changed) => { setBulkApprove(null); if (changed) done(); }} />}
+      {attend && !attend.session && <PickSession c={c} count={attend.ids.length} onPick={(session) => setAttend((a) => ({ ...a, session }))} onClose={() => setAttend(null)} />}
+      {attend?.session && <Attendance id={attend.session} cohortId={c.id} canWrite={canWrite} preselect={attend.ids} names={attend.names} onClose={(changed) => { setAttend(null); if (changed) done(); }} />}
       {canWrite && picked.size > 0 && (
         <div className="la-bulk" data-testid="cr-bulk">
           <span><b>{picked.size}</b> محدد</span>
           {pickedPending.length > 0 && <button className="btn-sm primary" onClick={() => setBulkApprove(pickedPending.slice(0, BULK_MAX))} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة">اعتماد جماعي ({pickedPending.length})…</button>}
           <button className="btn-sm ghost" onClick={() => setNudging(pickedIds.slice(0, BULK_MAX))} title={picked.size > BULK_MAX ? `التذكير ${BULK_MAX} في كل مرة: يُذكَّر أول ${BULK_MAX} من المحددين، ثم حدّد الباقين` : 'بريد يسمّي لكل واحد مرحلته وخطوته التالية، بمعاينة قبل الإرسال'}>
             {picked.size > BULK_MAX ? `ذكّر أول ${BULK_MAX} من المحددين` : `ذكّر المحددين (${picked.size})`}</button>
+          <button className="btn-sm ghost" onClick={startAttend} title={picked.size > BULK_MAX ? `${BULK_MAX} في كل مرة: يُفتح أول ${BULK_MAX} من المحددين في ورقة الحضور` : 'تختار جلسة منعقدة من جلسات الدفعة، ثم تراجع ورقة حضورها وتحفظ مرة واحدة'}>
+            {picked.size > BULK_MAX ? `سجّل حضور أول ${BULK_MAX} في جلسة…` : 'سجّل حضورهم في جلسة…'}</button>
           <BulkStatus ids={pickedIds} onDone={done} />
           <BulkEnroll ids={pickedIds} cohorts={cohorts.filter((x) => x.id !== c.id)} onDone={done} />
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>

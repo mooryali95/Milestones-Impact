@@ -1,0 +1,87 @@
+/* ورقة الحضور (shared/ui/AttendanceSheet.jsx): لوحة الإدارة وبوابة الخبير. على الجوال ملء الشاشة: الرأس والسبب وزر الحفظ ثابتة
+   والقائمة وحدها تُمرَّر، فتبقى صالحة لجلسة من 60 مشاركًا. الصف كله هدف لمس واحد (label) بارتفاع 48 على الأقل */
+.ats-ov { position: fixed; inset: 0; z-index: 1050; background: rgba(6, 30, 44, .55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.ats { position: relative; display: flex; flex-direction: column; width: min(760px, 100%); max-height: min(92vh, 900px); background: var(--brand-white); color: var(--brand-graphite); border-radius: 14px; box-shadow: 0 20px 60px rgba(6, 19, 24, .28); overflow: hidden; text-align: start; font-size: 15px; line-height: 1.6; }
+.ats:focus { outline: none; }
+.ats-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 10px; border-bottom: 1px solid var(--brand-line); }
+.ats-titles { flex: 1; min-width: 0; }
+.ats-head h3 { margin: 0; font-size: 1.15rem; color: var(--brand-slate); overflow-wrap: anywhere; }
+.ats-sub { margin: 2px 0 0; color: var(--brand-ink-mid); font-size: .88rem; }
+.ats-x { flex: none; min-width: 40px; min-height: 40px; font: inherit; font-size: 1.1rem; background: var(--brand-white); color: var(--brand-graphite); border: 1px solid var(--brand-line-strong); border-radius: 10px; cursor: pointer; }
+.ats-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 20px 8px; }
+.ats-top p { margin: 0; }
+.ats-count { font-size: 1rem; color: var(--brand-graphite); }
+.ats-count b { color: var(--st-ok-text); font-size: 1.1rem; }
+.ats-draft { color: var(--brand-gold-deep); font-weight: 600; }
+.ats-fine { margin: 0; color: var(--brand-ink-mid); font-size: .85rem; }
+.ats-warn { background: var(--brand-cream-warm); color: var(--brand-umber); border-radius: 8px; padding: 8px 12px; font-size: .9rem; }
+.ats-err { margin: 0; color: var(--st-bad); font-size: .9rem; }
+.ats-result { border-radius: 8px; padding: 8px 12px; font-size: .92rem; background: #E8F3EC; color: var(--st-ok-text); }
+.ats-result.warn { background: var(--brand-cream-warm); color: var(--brand-umber); }
+.ats-result.bad { background: #FBEAE8; color: var(--st-bad); }
+.ats-result ul { margin: 4px 0 0; padding-inline-start: 18px; }
+.ats-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ats-tools .ats-input { flex: 1 1 180px; }
+.ats-input { font: inherit; min-height: 42px; padding: 8px 12px; border: 1.5px solid var(--brand-line-strong); border-radius: 9px; background: var(--brand-white); color: var(--brand-graphite); min-width: 0; max-width: 100%; }
+.ats-input:focus-visible, .ats-btn:focus-visible, .ats-x:focus-visible, .ats-link:focus-visible, .ats-row input:focus-visible { outline: 2px solid var(--brand-gold); outline-offset: 2px; }
+.ats-input[aria-invalid="true"] { border-color: var(--st-bad); }
+.ats-btn { font: inherit; font-weight: 600; min-height: 42px; padding: 8px 16px; border-radius: 9px; border: 1.5px solid var(--brand-line-strong); background: var(--brand-white); color: var(--brand-slate); cursor: pointer; }
+.ats-btn:hover:not(:disabled) { border-color: var(--brand-slate); }
+.ats-btn.primary { background: var(--brand-slate); border-color: var(--brand-slate); color: var(--brand-white); }
+.ats-btn.primary:hover:not(:disabled) { background: var(--brand-graphite); }
+.ats-btn.danger { border-color: var(--st-bad); color: var(--st-bad); }
+.ats-btn:disabled, .ats-x:disabled { opacity: .55; cursor: default; }
+.ats-link { font: inherit; background: none; border: 0; padding: 4px 2px; color: var(--brand-slate); text-decoration: underline; cursor: pointer; }
+.ats-list { list-style: none; margin: 0; padding: 0 12px 8px; overflow-y: auto; flex: 1 1 auto; min-height: 96px; overscroll-behavior: contain; }
+.ats-row { border-bottom: 1px solid var(--brand-line-soft); }
+.ats-row:last-child { border-bottom: 0; }
+/* الصف شبكة: المربع، ثم الاسم، ثم الحالة في آخر السطر، وتحتها تفصيلها (الوقت ومن سجّل والسبب) بعرض الصف */
+.ats-row label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; min-height: 48px; padding: 8px; border-radius: 8px; cursor: pointer; }
+.ats-row.no-box label { grid-template-columns: minmax(0, 1fr) auto; cursor: default; }
+.ats-row label:hover { background: var(--brand-cream-faint); }
+.ats-row input[type="checkbox"] { grid-row: 1 / span 2; align-self: start; width: 22px; height: 22px; margin: 4px 0 0; accent-color: var(--brand-slate); cursor: pointer; }
+.ats-row input[type="checkbox"]:disabled { cursor: not-allowed; }
+.ats-row.is-add label { background: #EEF6F1; }
+.ats-row.is-remove label { background: #FCF1EF; }
+.ats-who { min-width: 0; display: grid; }
+.ats-who b { font-weight: 600; overflow-wrap: anywhere; }
+.ats-who small, .ats-detail { color: var(--brand-ink-mid); font-size: .8rem; overflow-wrap: anywhere; }
+.ats-chips { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.ats-detail { grid-column: 2 / -1; text-align: end; }
+.ats-row.no-box .ats-detail { grid-column: 1 / -1; }
+.ats-chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .8rem; background: var(--brand-mist); color: var(--brand-ink-mid); white-space: nowrap; }
+.ats-chip.ok { background: #E8F3EC; color: var(--st-ok-text); }
+.ats-chip.new { background: var(--brand-slate); color: var(--brand-white); }
+.ats-chip.gone { background: #FBEAE8; color: var(--st-bad); }
+.ats-empty, .ats-wait { padding: 32px 20px; text-align: center; color: var(--brand-ink-mid); }
+.ats-empty b { color: var(--brand-graphite); }
+.ats-empty p { margin: 6px 0 0; }
+.ats-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; padding: 12px 20px 16px; border-top: 1px solid var(--brand-line); background: var(--brand-cream-faint); }
+.ats-reason { flex: 1 1 260px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; min-width: 0; }
+.ats-reason > .ats-input { flex: 1 1 160px; }
+.ats-field { display: grid; gap: 4px; flex: 1 1 180px; min-width: 0; font-size: .85rem; color: var(--brand-ink-mid); }
+.ats-foot .ats-err { flex-basis: 100%; order: 3; }
+.ats-foot > .ats-btn { flex: 0 0 auto; }
+.ats-body { padding: 16px 20px 20px; overflow-y: auto; display: grid; gap: 12px; }
+.ats-body h4 { margin: 0; font-size: 1.05rem; color: var(--brand-slate); }
+.ats-lines { margin: 0; padding-inline-start: 20px; display: grid; gap: 4px; font-weight: 600; }
+.ats-names { border: 1px solid var(--brand-line); border-radius: 9px; padding: 8px 12px; }
+.ats-names summary { cursor: pointer; color: var(--brand-slate); font-weight: 600; }
+.ats-names p { margin: 6px 0 0; color: var(--brand-ink-mid); max-height: 30vh; overflow-y: auto; }
+.ats-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ats-leave { position: absolute; inset-inline: 0; bottom: 0; display: grid; gap: 10px; padding: 16px 20px; background: var(--brand-white); border-top: 2px solid var(--brand-gold); box-shadow: 0 -12px 30px rgba(6, 19, 24, .16); }
+.ats-leave p { margin: 0; font-weight: 600; }
+@media (max-width: 640px) {
+  .ats-ov { padding: 0; align-items: stretch; }
+  .ats { width: 100%; max-height: none; height: 100%; border-radius: 0; }
+  .ats-head { padding: 12px 14px 8px; }
+  .ats-top { padding: 10px 14px 6px; }
+  .ats-list { padding: 0 6px 6px; }
+  .ats-row label { gap: 2px 10px; }
+  .ats-detail { text-align: start; }
+  .ats-tools .ats-btn { flex: 1 1 auto; }
+  .ats-foot { padding: 10px 14px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .ats-foot > .ats-btn { flex: 1 1 100%; }
+  .ats-body { padding: 14px; }
+  .ats-actions .ats-btn { flex: 1 1 140px; }
+}

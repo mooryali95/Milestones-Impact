@@ -188,6 +188,17 @@ export async function audit(actorType: 'admin' | 'participant' | 'system' | 'coo
   }
 }
 
+// عدة سطور في إدراج واحد (ورقة الحضور الجماعية: سطر لكل مشارك بطلب واحد)، بقاعدة audit نفسها: تعذّره يرمي فلا تُعد العملية مسجلة
+export type AuditRow = { actorType: 'admin' | 'participant' | 'system' | 'coordinator'; actor: string | null; action: string; entity: string; entityId: string | null; before?: unknown; after?: unknown };
+export async function auditMany(rows: AuditRow[]) {
+  if (!rows.length) return;
+  const { error } = await db.from('audit_log').insert(rows.map((r) => ({ actor_type: r.actorType, actor: r.actor, action: r.action, entity: r.entity, entity_id: r.entityId, before: r.before ?? null, after: r.after ?? null })));
+  if (error) {
+    console.error('leaders-api: audit insert failed', rows[0].action, error.message);
+    throw new Fail('تعذّر تسجيل العملية في السجل، فلم تكتمل. حاول بعد قليل.', 500, 'audit_failed', { action: rows[0].action });
+  }
+}
+
 // سجل الموافقات التاريخي (D18): سطر لا يُكتب فوقه بالنسخة وبصمة نص الوثائق، وهو دليل الموافقة.
 // تعذّر كتابته يرمي، فيفشل الطلب قبل أثره في السجل ولا تُعد الموافقة مسجلة بلا دليلها.
 export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater';

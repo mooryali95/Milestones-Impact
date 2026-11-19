@@ -455,6 +455,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.workshops': (e) => V.expertWorkshops(e),
   'xp.workshop-qr': (e, b) => V.expertWorkshopQr(e, b),
   'xp.workshop-attendance': (e, b) => V.expertWorkshopAttendance(e, b),
+  // ورقة الحضور للمدرب المكلف بدفعة الجلسة: تسجيل يدوي بسبب، والتحقق على الخادم (activities.ts: expertWorkshopMarkBulk)
+  'xp.workshop-mark-bulk': (e, b) => V.expertWorkshopMarkBulk(e, b),
   // المرحلة 8: طلبات الأقران في دفعاته
   'xp.peer-list': (e) => PR.expertList(e),
   'xp.peer-answer': (e, b) => PR.expertAnswer(e, b),
@@ -620,6 +622,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   // أيام الورشة في بطاقة المرحلة (W3): قراءة، والكتابة بـadmin.workshop-save نفسه
   'admin.cohort-workshops': (_a, b) => V.cohortWorkshops(b),
   'admin.workshop-mark': (a, b) => A.writer(a, V.workshopMark, b),
+  // ورقة الحضور: تسجيل وإلغاء جماعيان بحفظ واحد، بالكاتب نفسه والتحقق نفسه لكل مشارك (activities.ts: markBatch)
+  'admin.workshop-mark-bulk': (a, b) => A.writer(a, V.workshopMarkBulk, b),
   'admin.coaching-mark': (a, b) => A.writer(a, V.coachingMark, b),
   'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
   'admin.coach-available': (a, b) => A.writer(a, V.coachAvailable, b),

@@ -24,6 +24,7 @@ import Advisor360 from './Advisor360.jsx';
 import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
+import AttendanceSheet from '../../../shared/ui/AttendanceSheet.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 import { hashRef } from '../../../shared/master-book/reader.js';
 
@@ -348,32 +349,43 @@ function ExpertHall({ cohorts }) {
   );
 }
 
-// «رمز الحضور» من البوابة (W2، تصور الحضور 2026-11-18 ب5.5 البند 5): جلسات دفعاته الحضورية التي تُوثَّق بالرمز، وشاشة الرمز
-// نفسها التي في لوحة الإدارة (shared/ui/PresenterQr.jsx). الخادم يتحقق أنه المكلف بدفعة الجلسة، والقائمة لا تُظهر إلا ما له
+// «الحضور» من البوابة: جلسات دفعاته، ولكل جلسة رمزها (W2، تصور الحضور 2026-11-18 ب5.5 البند 5) وورقة حضورها (تصور تشغيل الدفعة
+// 2026-11-19، المرحلة 2، القرار 3). شاشة الرمز والورقة هما مكوّنا لوحة الإدارة نفساهما (shared/ui/PresenterQr.jsx وAttendanceSheet.jsx).
+// الخادم يتحقق أنه المكلف بدفعة الجلسة وأن الورقة في نافذتها، والقائمة لا تُظهر إلا ما له: qr للرمز وsheet للورقة.
+// خادم أقدم لا يرسل العلامتين: تُعامل الجلسة كما كانت (رمز بلا ورقة).
 // initial: من طلب اللوحة المجمّع (preload.workshops)، فلا طلب ثانٍ. ويُطلب وحده إن غاب (اللوحة الخفيفة)
 function ExpertAttendance({ initial }) {
   const [d, setD] = useState(initial ?? null);
   const [qr, setQr] = useState(null);
+  const [sheet, setSheet] = useState(null);
   useEffect(() => { if (initial === undefined) xpCall('xp.workshops').then(setD); else setD(initial); }, [initial]);
   const loadQr = useCallback(() => xpCall('xp.workshop-qr', { id: qr }), [qr]);
   const loadPeople = useCallback(() => xpCall('xp.workshop-attendance', { id: qr }), [qr]);
+  const loadSheet = useCallback(() => xpCall('xp.workshop-attendance', { id: sheet?.id }), [sheet]);
+  const saveSheet = useCallback((body) => xpCall('xp.workshop-mark-bulk', body), []);
   if (!d?.success || !Array.isArray(d.sessions) || !d.sessions.length) return null;
+  const anySheet = d.sessions.some((s) => s.sheet);
   return (
     <section className="card stack" aria-labelledby="xp-attend">
-      <h2 className="as-h3" id="xp-attend">رمز الحضور</h2>
-      <p className="small muted">اعرض الرمز على شاشة القاعة: يمسحه المشاركون أو يكتبون الأرقام الستة تحته، وترى من حضر ومن لم يحضر.</p>
+      <h2 className="as-h3" id="xp-attend">{anySheet ? 'الحضور' : 'رمز الحضور'}</h2>
+      <p className="small muted">اعرض الرمز على شاشة القاعة: يمسحه المشاركون أو يكتبون الأرقام الستة تحته، وترى من حضر ومن لم يحضر.
+        {anySheet && ' ومن تعذّر عليه الرمز تسجّله أنت من ورقة الحضور، بسبب مكتوب.'}</p>
       <div className="xpp-attend-list">{d.sessions.map((s) => (
         <article key={s.id} className="xpp-attend">
           <div className="grow"><b>{s.title}</b>
             <small className="muted">{[s.cohort, when(s.starts_at), s.location].filter(Boolean).join(' · ')}</small></div>
           {/* الزر دائمًا: open من تحميل البوابة وحده لا يتجدد، وشاشة الرمز تسأل الخادم كل نافذة فتنتقل إلى الرمز وحدها حين يُفتح */}
           <div className="xpp-attend-go">
-            <button type="button" className="btn sm" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>
-            {!s.open && <small className="muted">يظهر الرمز قبل البدء بساعة، ويمكنك فتح الشاشة الآن</small>}
+            {s.qr !== false && <button type="button" className="btn sm" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
+            {s.sheet && <button type="button" className={`btn sm${s.qr !== false ? ' ghost' : ''}`} onClick={() => setSheet(s)}>ورقة الحضور</button>}
+            {s.qr !== false && !s.open && <small className="muted">يظهر الرمز قبل البدء بساعة، ويمكنك فتح الشاشة الآن</small>}
           </div>
         </article>
       ))}</div>
-      {qr && <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={() => setQr(null)} whenText={(x) => (x.starts_at ? when(x.starts_at) : '')} />}
+      {qr && <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={() => setQr(null)} whenText={(x) => (x.starts_at ? when(x.starts_at) : '')}
+        onManual={d.sessions.find((s) => s.id === qr)?.sheet ? () => { setSheet(d.sessions.find((s) => s.id === qr)); setQr(null); } : null} />}
+      {sheet && <AttendanceSheet sessionId={sheet.id} load={loadSheet} save={saveSheet} role="trainer" title={sheet.title}
+        sub={[sheet.cohort, when(sheet.starts_at)].filter(Boolean).join(' · ')} onClose={() => setSheet(null)} />}
     </section>
   );
 }

@@ -8,13 +8,14 @@
 // إعداد كل نشاط (الرابط، العدد المطلوب) في «الرحلة والمتطلبات».
 import React, { useCallback, useEffect, useState } from 'react';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
+import AttendanceSheet from '../../../shared/ui/AttendanceSheet.jsx';
 import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 import { VERIFY_AR, withCapacity } from '../workshop-days.js';
 
-import { ATTEND_METHOD_AR, COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 // «خارج نافذة «التدريب» (1 إلى 14 مارس)»، واسم الدفعة للجلسة العامة أو حين تقع خارج النافذة في أكثر من دفعة
@@ -58,75 +59,25 @@ const COACH_ST = Object.fromEntries(Object.entries({ booked: '', requested: 'war
 // ── شاشة رمز الحضور للقاعة ──
 // المكوّن المشترك مع بوابة الخبير (shared/ui/PresenterQr.jsx): الرمز والأرقام الستة من admin.workshop-qr، والمتوقع وأسماء
 // من لم يحضر من قائمة الحضور نفسها (admin.workshop-attendance)
-export function QrScreen({ id, onClose }) {
+export function QrScreen({ id, onClose, onSheet = null }) {
   const loadQr = useCallback(() => L('admin.workshop-qr', { id }), [id]);
   const loadPeople = useCallback(() => L('admin.workshop-attendance', { id }), [id]);
-  return <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={onClose} whenText={sessionWhen} />;
+  return <PresenterQr loadQr={loadQr} loadPeople={loadPeople} onClose={onClose} onManual={onSheet} whenText={sessionWhen} />;
 }
 
-// ── قائمة الحضور للتسجيل اليدوي ──
-// cohortId (من بطاقة مرحلة الدفعة): الجلسة العامة تُقرأ بأعضاء تلك الدفعة وحدهم، فتطابق أعداد البطاقة
-// سبب التسجيل اليدوي (تصور تشغيل الدفعة 2026-11-19): اختياري ويُحفظ مع كل تسجيل في السجل. وإلغاء حضور سجّله المشارك
-// بنفسه يطلب سببًا مكتوبًا (الخادم يرفضه بلا سبب)، وإلغاء اليدوي بنقرة
-export const MARK_REASONS = ['تعطل الرمز', 'بلا هاتف', 'سُجل لاحقًا'];
-export const selfMarked = (attendance) => !!attendance && attendance.method !== 'manual';
-export function Attendance({ id, cohortId = null, canWrite, onClose }) {
-  const { toast, prompt } = useUI();
-  const [d, setD] = useState(null);
-  const [why, setWhy] = useState('');
-  const [other, setOther] = useState('');
-  const load = useCallback(async () => setD(await L('admin.workshop-attendance', cohortId ? { id, cohort_id: cohortId } : { id })), [id, cohortId]);
-  useEffect(() => { load(); }, [load]);
-  useEscape(onClose);
-  const mark = async (p, present) => {
-    let reason = present ? (why === 'other' ? other.trim() : why) : '';
-    if (!present && selfMarked(p.attendance)) {
-      const typed = await prompt(`سجّل ${p.full_name} حضوره بنفسه (${ATTEND_METHOD_AR[p.attendance.method] || p.attendance.method}). اكتب سبب الإلغاء، ويُحفظ في السجل.`, '', { danger: true, ok: 'إلغاء الحضور' });
-      if (typed === null) return;
-      reason = typed.trim();
-      if (!reason) { toast('السبب مطلوب لإلغاء حضور سجّله المشارك بنفسه'); return; }
-    }
-    const r = await L('admin.workshop-mark', { session_id: id, participant_id: p.id, present, ...(reason ? { reason } : {}) });
-    if (!r.success) toast(r.message);
-    load();
-  };
-  return (
-    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="la-form mi-form" role="dialog" aria-modal="true" aria-label="الحضور" style={{ maxWidth: 720 }}>
-        {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
-          <h3>{d.session.title_ar} · {d.people.filter((p) => p.attendance).length} من {d.people.length}</h3>
-          <p className="la-muted">{reqTitle(d.requirement)} · {sessionWhen(d.session)}</p>
-          {cohortId && !d.session.cohort_id && <p className="la-muted">جلسة عامة لكل الدفعات، والقائمة هنا لأعضاء هذه الدفعة وحدهم.</p>}
-          {canWrite && (
-            <div className="att-why">
-              <small className="la-muted">سبب التسجيل اليدوي (اختياري، يُحفظ في السجل)</small>
-              <select className="filter-select" aria-label="سبب التسجيل اليدوي" value={why} onChange={(e) => setWhy(e.target.value)}>
-                <option value="">بلا سبب</option>
-                {MARK_REASONS.map((x) => <option key={x} value={x}>{x}</option>)}
-                <option value="other">سبب آخر</option>
-              </select>
-              {why === 'other' && <input className="search-input" aria-label="اكتب السبب" placeholder="اكتب السبب" maxLength={300} value={other} onChange={(e) => setOther(e.target.value)} />}
-            </div>
-          )}
-          <table className="la-table">
-            <thead><tr><th>المشارك</th><th>الجهة</th><th>الحضور</th><th /></tr></thead>
-            <tbody>{d.people.map((p) => (
-              <tr key={p.id}>
-                <td>{p.full_name}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
-                <td>{p.organization_name || ''}</td>
-                <td>{p.attendance ? <span className="la-chip ok">{ATTEND_METHOD_AR[p.attendance.method] || ATTEND_METHOD_AR.manual} · {when(p.attendance.checked_in_at)}</span> : <span className="la-chip">غائب</span>}
-                  {p.attendance?.method === 'manual' && p.attendance.recorded_by && <><br /><small className="la-muted" dir="auto">سجّله {p.attendance.recorded_by}</small></>}</td>
-                <td>{canWrite && (p.attendance
-                  ? <button className="la-link" onClick={() => mark(p, false)}>إلغاء</button>
-                  : <button className="btn-sm ghost" onClick={() => mark(p, true)}>تسجيل حضور</button>)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </>}
-        <div className="la-row"><button className="btn-sm ghost" onClick={onClose}>إغلاق</button></div>
-      </div>
-    </div>
-  );
+// ── ورقة الحضور (تصور تشغيل الدفعة 2026-11-19، المرحلة 2) ──
+// المكوّن المشترك مع بوابة الخبير (shared/ui/AttendanceSheet.jsx): مربع لكل متوقع، و«علّم الكل حاضرًا»، وسبب واحد، وحفظ واحد
+// بـadmin.workshop-mark-bulk (الكاتب نفسه والتحقق نفسه لكل مشارك على الخادم). تُفتح من «الحضور والجلسات» ومن يوم الورشة في بطاقة
+// المرحلة ومن «سجّل حضورهم في جلسة» في تبويب «المتابعة».
+// cohortId (من بطاقة مرحلة الدفعة): الجلسة العامة تُقرأ بأعضاء تلك الدفعة وحدهم، فتطابق أعداد البطاقة.
+// preselect وnames (من «المتابعة»): المحددون معلَّمون مسبقًا، ومن ليس منهم في قائمة الجلسة يُذكر باسمه ولا يُرسل.
+// طريقة الحضور في الورقة من ATTEND_METHOD_AR نفسها (stateAr في attendance-sheet.js)
+const sheetSub = (d) => [reqTitle(d.requirement), sessionWhen(d.session)].filter(Boolean).join(' · ');
+export function Attendance({ id, cohortId = null, canWrite, preselect, names, onClose }) {
+  const load = useCallback(() => L('admin.workshop-attendance', cohortId ? { id, cohort_id: cohortId } : { id }), [id, cohortId]);
+  const save = useCallback((body) => L('admin.workshop-mark-bulk', body), []);
+  const note = useCallback((d) => (cohortId && !d.session?.cohort_id ? 'جلسة عامة لكل الدفعات، والقائمة هنا لأعضاء هذه الدفعة وحدهم.' : ''), [cohortId]);
+  return <AttendanceSheet sessionId={id} load={load} save={save} role="admin" canWrite={canWrite} preselect={preselect} names={names} sub={sheetSub} note={note} when={when} onClose={onClose} />;
 }
 
 // الدعوة تذهب لأعضاء الدفعة كلهم، فتُؤكَّد؛ وإعادتها تُؤكَّد صريحة. مصدر واحد لهذه الشاشة ولأيام بطاقة المرحلة (W3)
@@ -197,7 +148,7 @@ function Workshops({ data, reload, canWrite }) {
         );
       })}
       {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast('تم الحفظ'); reload(); } }} />}
-      {qr && <QrScreen id={qr} onClose={() => { setQr(null); reload(); }} />}
+      {qr && <QrScreen id={qr} onClose={() => { setQr(null); reload(); }} onSheet={canWrite ? () => { setAtt(qr); setQr(null); } : null} />}
       {att && <Attendance id={att} canWrite={canWrite} onClose={() => { setAtt(null); reload(); }} />}
     </>
   );
