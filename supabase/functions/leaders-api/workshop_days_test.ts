@@ -2,7 +2,7 @@
 // «الحضور والجلسات» وللمشارك، والسعة الاختيارية بالترحيل 20261118130000 وقبله تُخفى ويُحفظ اليوم بلاها،
 // وadmin.cohort-workshops يقرأ أيام الدفعة بطريقتها الفعلية والمتوقع والحاضر كما تعدّها شاشة الرمز. بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 const V = await import('./activities.ts');
 

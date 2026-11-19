@@ -1,6 +1,6 @@
 // حارس المخرج (guard.ts وclaims.ts): المبلغ خارج المنشور والسعر الحي، والادعاءات المحظورة بأي لغة ولو نافية، والبيانات
 // الحساسة، والبث بالجمل التامة، وإعادة التوليد مرة واحدة بتكلفتها في الدالة كاملة.
-import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1.0.19';
 import { allowedAmounts, amountsIn, ensureTopics, FACTS, guardReply, MATRIX_PRICE_FACT, PUBLISHED_AMOUNTS, topicFact } from './guard.ts';
 import { claimKinds } from './claims.ts';
 import { neutralizeAmounts, redactInput, StreamSanitizer } from './redact.ts';

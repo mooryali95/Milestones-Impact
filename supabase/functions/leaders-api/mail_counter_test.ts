@@ -1,5 +1,5 @@
 // العداد الموحد (D15) في شيفرته الفعلية: قاعدة مزيفة وResend محاكى، بلا شبكة.
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 import { mailRows, mailShell, plainText, resetWebhookAlerts, sendCounted, WEBHOOK_ALERT_MS } from '../_shared/mail.ts';
 
 type Row = { kind: string; source: string; status: string; created_at: string };

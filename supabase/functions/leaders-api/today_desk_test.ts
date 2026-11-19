@@ -1,7 +1,7 @@
 // مكتب اليوم 3ب (admin.today): قراءات متوازية، وتعذّر مصدر يُسمّى في skipped ولا يُسقط الرد، والعضوية بلا حسابات العرض،
 // ولا كتابة. والمنطق الخالص (today-desk.js) يُختبر هنا وفي vitest (admin-app/src/today-desk.test.js).
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 const TD = await import('./today-desk.ts');
 const { deskOf } = await import('./today-desk.js');

@@ -2,7 +2,7 @@
 // موعده، والإشعار قبل الجماعي، والتوقف عند الحصة، والممسَك ممسَك، والعمل قبل الترحيل، وسطر الترحيل اليومي مرة في اليوم.
 // قاعدة في الذاكرة وشبكة محاكاة (_fake_db.ts)، ولا يخرج طلب حقيقي.
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 import { hoursAgo, installFake, resendCalls, withNet } from './_fake_db.ts';
 const { CONFIG, carryoverAlert, CARRYOVER_HOUR_RIYADH, drainMailQueue, enqueueMail, sendMail, stuckQueueAlert } = await import('./core.ts');
 const core = await import('./core.ts');

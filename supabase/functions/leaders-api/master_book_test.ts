@@ -2,7 +2,7 @@
 // خبير الرحلة لا يُضاف من نافذة المشاركة وإزالته متاحة، ومن له الخدمتان يُضاف إلى لجنته الثانية،
 // والعضو الموقوف مؤقتًا يقرأ ولا يعلّق ولا يحذف، والعلامة المائية تحمل اسم القارئ وبريده.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const MB = await import('./master-book.ts');
 

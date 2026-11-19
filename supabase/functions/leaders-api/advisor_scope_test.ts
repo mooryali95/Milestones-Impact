@@ -1,7 +1,7 @@
 // نطاق مستشار الدفعة (server-sec-7) على قاعدة مزيفة تطبّق المرشحات فعلًا: myParticipantIds يعطي من كانت تعطيه
 // الحلقة القديمة (cohortOf لكل مرشح) بأعيانهم، وعدد استعلاماته ثابت لا يكبر بعدد المشاركين.
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
 const { myParticipantIds } = await import('./advisor.ts');
 const { cohortOf } = await import('./programs.ts');

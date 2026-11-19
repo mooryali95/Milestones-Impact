@@ -1,7 +1,7 @@
 // شاشة المساعد في leaders-api (agent-admin.ts) على مخزن في الذاكرة بلا شبكة: الصلاحيات، وبوابة التفعيل، والمفتاح
 // بالتحقق الإضافي وحده وبلا تسريب، وسجل فتح المحادثة، والتقييم بدفعات تحت عقد إيجار.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const AA = await import('./agent-admin.ts');
 const { superWriter } = await import('./admin.ts');
 const { versions } = await import('../agent-chat/version.ts');

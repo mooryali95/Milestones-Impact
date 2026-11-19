@@ -1,6 +1,6 @@
 // مفاتيح المرور: الجزء النقي (الخيارات، قراءة التحدي، رفض الردود المشوّهة) بلا قاعدة ولا مصادق
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects, assertThrows } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects, assertThrows } from 'jsr:@std/assert@1.0.19';
 const { authenticationOptionsFor, challengeOf, registrationOptionsFor, verifyAuthentication, verifyRegistration } = await import('./passkeys.ts');
 const { CONFIG, Fail } = await import('./core.ts');
 

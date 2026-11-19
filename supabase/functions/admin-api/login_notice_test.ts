@@ -1,6 +1,6 @@
 // إشعار دخول المالك (login_notice.ts و_shared/login-device.js): التصور 2026-11-16، القسمان 10.4 و10.6.
 // جهاز معروف لا يرسل بريدًا، وجهاز جديد يرسل، وحساب بلا سجل يرسل، ووصف متصفح مطابق من شبكة أخرى جهاز جديد.
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { coarseIp, deviceOf, loginFingerprint } from '../_shared/login-device.js';
 import { KNOWN_DEVICE_TITLE, knownDevice, loginLine, NEW_DEVICE_TITLE, ownerLoginNotice } from './login_notice.ts';
 

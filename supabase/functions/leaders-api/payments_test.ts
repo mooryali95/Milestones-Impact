@@ -1,6 +1,6 @@
 // الدفع: توقيع إشعار Creem (HMAC-SHA256) يُفحص قبل أي كتابة، ووضع المفتاح من بادئته
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { eventMode, modeOf, paidIssues, paymentRefs, settleable, webhook } = await import('./payments.ts');
 const { Fail } = await import('./core.ts');
 

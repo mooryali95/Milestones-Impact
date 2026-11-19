@@ -1,7 +1,7 @@
 // حارسا الكتابة في الوظيفتين قاعدة واحدة (_shared/second_factor.js): ما يقوله «me» في admin-api (writeAccess) هو ما
 // يقبله requireWrite في leaders-api، لكل دور ولكل طريقة دخول، ومنها جلسة قديمة بلا طريقة مسجلة.
 import './_test_env.ts';
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 import { writeAccess } from '../admin-api/step_up.ts';
 const A = await import('./admin.ts');
 

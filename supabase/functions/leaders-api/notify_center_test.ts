@@ -1,7 +1,7 @@
 // قسم «التوجيه» (مركز الإشعارات، المرحلة 4، خطة الاختبار 10.5): الحفظ للمالك وحده، ولا يُطفأ صف مقفل، ويُكتب السجل،
 // ويصل الملاك بريد أمني بما تغير. والقراءة تعدّ أحداث 7 أيام بمفاتيحها، والإعداد المحفوظ يحكم raiseAlert فورًا
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 const { adminSave, ST } = await import('./settings.ts');
 const { Fail, publicDb } = await import('./core.ts');

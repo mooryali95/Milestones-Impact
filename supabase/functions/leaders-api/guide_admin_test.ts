@@ -1,7 +1,7 @@
 // «التوجيه والإرشاد» H1: ما يمنع الفتح بترتيب البوابة، والتوزيع على الجهات والدفعات بلا نص محادثة،
 // وأفعال الكتابة للمدير الأعلى بغلاف superWriter
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
 const { blockers } = await import('./guide-admin.ts');
 

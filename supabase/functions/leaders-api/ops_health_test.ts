@@ -1,7 +1,7 @@
 // صحة البريد والتنبيه على قاعدة مزيفة بلا شبكة: حقائق admin.ops-health للمدير ذي الكتابة وحده بلا قيم الأسرار،
 // وحكم الألوان والشريط من العتبات نفسها، وتسجيل آخر نجاح وخطأ لسلاك في ops_status بلا انتظار ومرة في الدقيقة لكل نتيجة.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const S = await import('../_shared/slack.ts');
 const { db, QUEUE_ALERT_HOURS } = await import('./core.ts');
 const { opsHealth } = await import('./system.ts');

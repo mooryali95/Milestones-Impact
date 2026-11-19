@@ -2,7 +2,7 @@
 // وسجله، ويرفض until لمرحلة متتابعة وقيمته المجهولة، وما زال يرفض الحقول المجهولة (start وend وschedule). والمسار يبدأ بعد
 // التدريب بيوم وينتهي بنهاية الدفعة، فلا يحرك ما بعده، ومعلم نهايته بنهاية الدفعة. قاعدة في الذاكرة بنمط cohort_plan_test.ts.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortPlanAction } = await import('./cohort-plan.ts');
 const { journeyDefinition } = await import('./programs.ts');

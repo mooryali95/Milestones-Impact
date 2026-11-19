@@ -1,6 +1,6 @@
 // D05: مفتاح توقيع الشهادات مستقل عن الفلفل بمعرّف مفتاح، فتدويره لا يبطل ما صدر، وتدوير الفلفل لا يمس الجديد.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { certificateNotice, checkCertificate, heldCertificates, issueAfterNameConfirm, signCertificate, onFinalApproved, PASSING, preview } = await import('./certificates.ts');
 const { db, Fail, finalDecisionMail } = await import('./core.ts');
 

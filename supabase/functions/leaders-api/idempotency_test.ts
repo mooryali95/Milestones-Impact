@@ -1,7 +1,7 @@
 // مفتاح منع التكرار (idempotency.ts، ش9): الإعادة بالمفتاح نفسه تعيد النتيجة الأولى ولا تنفذ الفعل ثانية، والمفتاح نفسه
 // بجسم آخر يُرفض، والتنفيذ الجاري يُنتظر، وخطأ الخادم يحرر المفتاح، والرفض يُحفظ، ولا سر في الجدول، وقبل الترحيل يُتجاهل.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 const { Fail } = await import('./core.ts');
 const IK = await import('./idempotency.ts');

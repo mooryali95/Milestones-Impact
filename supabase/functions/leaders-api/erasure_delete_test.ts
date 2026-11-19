@@ -1,7 +1,7 @@
 // تنفيذ طلب الحذف (المرحلة 0 من تصوره): الصف أولًا، فإن منعه قيد شهادة غير سارية لا يُمس شيء والطلب قائم. بعده يُغلق
 // الطلب برقمه (participant_id يصير فارغًا)، وتُحذف الملفات وما في طابور البريد له، ويصله تأكيد التنفيذ خارج الطابور.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake, resendCalls, withNet } from './_fake_db.ts';
 const { CONFIG, db, ERASE_DONE_SUBJECT, Fail, storage } = await import('./core.ts');
 const { participantDelete } = await import('./admin.ts');

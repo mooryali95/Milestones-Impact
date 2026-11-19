@@ -1,7 +1,7 @@
 // استرداد Creem على قاعدة مزيفة بحالتها وشبكة محاكاة: الكامل يسحب الحق ويعلّم الدفعة مستردة ويرسل بريد الاسترداد،
 // والجزئي يبقي الدفعة مدفوعة وحقها قائمًا ويجمع المسترد في refund_cents ويرسل بريده الجزئي، وما بلغ المدفوع منه كامل.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const { webhook } = await import('./payments.ts');
 const { CONFIG, db } = await import('./core.ts');
 const { noticesIdle } = await import('./notify.ts');

@@ -1,5 +1,5 @@
 // التحقق الإضافي (step_up.ts) على قاعدة في الذاكرة ومفاتيح محاكاة: الحراس، ومفتاح مدير آخر، والرمز المعاد، والحد.
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { type StepUpDeps, type StepUpSession, stepUp, STEP_UP_TTL_MS, writeAccess } from './step_up.ts';
 
 type Row = Record<string, any>;

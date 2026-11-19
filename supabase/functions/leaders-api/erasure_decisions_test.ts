@@ -1,7 +1,7 @@
 // قرار طلب الحذف من ملف المشارك (erasure.ts): القراءة لكل مدير، والتنفيذ والرفض والسحب للمدير الأعلى وحده بعامل ثانٍ،
 // ورسالة لكل قرار إلى المشارك، وتذكير المالك قبل 10 أيام وقبل 3 ويوم المهلة ثم يوميًا بعد التأخر.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake, resendCalls, withNet } from './_fake_db.ts';
 const { CONFIG, ERASE_DECLINED_SUBJECT, ERASE_DONE_SUBJECT, ERASE_WITHDRAWN_SUBJECT, Fail, storage } = await import('./core.ts');
 const ER = await import('./erasure.ts');

@@ -1,7 +1,7 @@
 // P1-13: الاسم في التحية وقيم الجملة معزولة (bdi) في القوالب الحقيقية، فلا يقلب اسم لاتيني ترتيب الجملة العربية
 // في Gmail بواجهة إنجليزية، والرمز معزول في بطاقته، والفقرة rtl بمحاذاة يمين ولو حُذفت سمات html وbody
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const { finalDecisionMail, raterMail, signInMail } = await import('./core.ts');
 
 const bdis = (h: string) => [...h.matchAll(/<bdi>([\s\S]*?)<\/bdi>/g)].map((m) => m[1]);

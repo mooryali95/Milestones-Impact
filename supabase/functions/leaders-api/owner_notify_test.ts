@@ -3,7 +3,7 @@
 // واختبار الخصوصية: لا بريد غير مقنّع ولا رمز من ستة أرقام ولا اسم من بيانات الاختبار في أي حمولة Slack.
 // قاعدة في الذاكرة وشبكة محاكاة، فلا يخرج طلب حقيقي.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const S = await import('../_shared/slack.ts');
 const { CONFIG, db, publicDb, resetSlackDown } = await import('./core.ts');
 const N = await import('./notify.ts');

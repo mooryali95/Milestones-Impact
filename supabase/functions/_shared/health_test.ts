@@ -1,5 +1,5 @@
 // فحص الصحة: GET وHEAD وحدهما، بلا قراءة لجسم الطلب، والرد اسم الدالة وحده
-import { assertEquals } from 'jsr:@std/assert@1';
+import { assertEquals } from 'jsr:@std/assert@1.0.19';
 import { healthCheck } from './health.ts';
 
 Deno.test('GET يعيد نجاحًا باسم الدالة وحده، بلا تخزين', async () => {

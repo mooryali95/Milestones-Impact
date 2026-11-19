@@ -3,7 +3,7 @@
 // والرد بلا تحقق واحد لمسجل وجديد، ولا رسالة إلى البريد المكتوب، وتنبيه المالك مرة في النافذة جماعيًا.
 // ودورة طلب الرعاية وإلغائه محدودة بثلاثة في اليوم فلا تغرق المالك بالتنبيهات.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, CONFIG, Fail } = await import('./core.ts');
 const E = await import('./experts.ts');
 const R = await import('./sponsor.ts');

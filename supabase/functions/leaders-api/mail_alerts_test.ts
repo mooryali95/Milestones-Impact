@@ -1,7 +1,7 @@
 // P1-12 على قاعدة مزيفة بلا شبكة: تنبيه الطابور المتأخر مرة لكل رسالة، وأرقام البريد في تقرير الأسبوع،
 // وتجربة قناة التنبيه للمدير الأعلى وحده بلا كشف قيم القناتين.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { CONFIG, db, QUEUE_ALERT_HOURS, raiseAlert, stuckQueueAlert } = await import('./core.ts');
 const { alertTest, weeklyHealth } = await import('./system.ts');
 const { MIGRATIONS } = await import('./migrations.js');

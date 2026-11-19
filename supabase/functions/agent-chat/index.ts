@@ -1,5 +1,5 @@
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import 'jsr:@supabase/functions-js@2.119.1/edge-runtime.d.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2.119.1';
 import { MAIL_FROM_DEFAULT, sendCounted } from '../_shared/mail.ts';
 // التنبيه بمسار التشغيل الموحد كـ leaders-hooks وcreem-webhook: أثر system.alert في السجل، ثم سلاك والرابط، ثم بريد LEADERS_ALERT_EMAIL
 import { alertOps } from '../leaders-api/core.ts';

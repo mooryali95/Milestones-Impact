@@ -1,6 +1,6 @@
 // قرارات الخادم الحتمية قبل النموذج: لغة الرد، وكلمات السعر، وطلب سعر لجهة، وسطور سياق الخادم، والأجوبة الجاهزة
 // التي يحسمها الكود. بلا نموذج حقيقي: النموذج المحاكى يسجل ما وصله فقط.
-import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1.0.19';
 import { matchFaq } from './faq.ts';
 import { handle, type Deps, type Env } from './handler.ts';
 import { asksPrice, conversationLang, orgQuote, orgSignal, replyLang, requestedLang, uiLang } from './intent.ts';

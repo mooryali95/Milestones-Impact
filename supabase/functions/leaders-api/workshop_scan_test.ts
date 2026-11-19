@@ -2,7 +2,7 @@
 // به الحضور بعد الدخول (workshop.checkin) مرة واحدة لمشارك واحد. على الموجّه الحقيقي (index.ts) بقاعدة في الذاكرة كما في
 // program_gate_test.ts، فتُختبر البوابات معه: الحضور خارج بوابة الدفع، والجلسة لدفعة أخرى، والنافذة المغلقة، والانتهاء، والحد
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
 (Deno as any).serve = (h: any) => { handler = h; return { finished: Promise.resolve(), shutdown: () => Promise.resolve(), ref() {}, unref() {} }; };

@@ -1,6 +1,6 @@
 // الموجّه الحتمي (router.ts): ما يُحوَّل دائمًا وما يُجاب دائمًا، باللهجة والفصحى والإنجليزية، والإيجابيات الكاذبة
 // (السؤال عن السياسة لا يُحوَّل)، والرد الثابت بلغة الزائر بلا بيانات حساسة، وأثره في الدالة كاملة.
-import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertMatch, assertNotMatch } from 'jsr:@std/assert@1.0.19';
 import { matchFaq, productOf } from './faq.ts';
 import { redactInput } from './redact.ts';
 import { asksPrice } from './intent.ts';

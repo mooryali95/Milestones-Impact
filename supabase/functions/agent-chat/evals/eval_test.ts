@@ -1,7 +1,7 @@
 // بنية مجموعة التقييم على نموذج محاكى: كل حالة تمر بالدالة كاملة (الحجب والأجوبة الجاهزة والسياق والبث وفحص المخرج)
 // دون اتصال بـ Anthropic. لا يقيس جودة النموذج (ذلك run.ts على الواجهة الحقيقية)، بل يضمن أن المجموعة صحيحة الشكل،
 // وأن ما يحسمه الكود (الجواب الجاهز، والحجب، وفحص المخرج) يحسمه فعلًا، وأن المصحح يميز الصحيح من الخاطئ.
-import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertNotMatch } from 'jsr:@std/assert@1.0.19';
 import { matchFaq, productOf } from '../faq.ts';
 import { handle, type Deps, type Env } from '../handler.ts';
 import { replyLang } from '../intent.ts';

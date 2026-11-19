@@ -2,7 +2,7 @@
 // يثبت ضمانات v4: لا تداخل بين مشارك وآخر في القراءة والكتابة والحذف وما يُرسل للنموذج، والتخزين المؤقت على المشترك
 // وحده، والحدان والسقف، وما لا يصل إلى رد لا يُحسب، والحارس بعد النموذج، والسجلات بلا نص.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 
 const { db } = await import('./core.ts');
 const G = await import('./guide.ts');

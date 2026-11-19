@@ -58,8 +58,8 @@ describe('الخطوط والعامل والتحميل', () => {
 describe('CI والاختبارات', () => {
   it('أنواع كل الدوال واختبارات Deno في ci.yml، وسير التكامل بمساراته الذهبية', () => {
     const ci = read('.github/workflows/ci.yml');
-    expect(ci).toContain('deno check --node-modules-dir=none supabase/functions/*/index.ts');
-    expect(ci).toMatch(/deno test --node-modules-dir=none .*supabase\/functions\/leaders-api\//);
+    expect(ci).toContain('deno check --lock=supabase/functions/deno.lock --frozen --node-modules-dir=none supabase/functions/*/index.ts');
+    expect(ci).toMatch(/deno test --lock=supabase\/functions\/deno.lock --frozen --node-modules-dir=none .*supabase\/functions\/leaders-api\//);
     const integ = read('.github/workflows/integration.yml');
     expect(integ).toContain('supabase start');
     expect(integ).toContain('bash scripts/integration/apply-migrations.sh');

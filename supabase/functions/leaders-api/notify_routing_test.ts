@@ -3,7 +3,7 @@
 // وتقرير الأسبوع في سلاك ولا بريد إلا بما يحتاج تدخلًا أو حين لا يصل سلاك، وطلب الاستعادة بنوع alert.
 // قاعدة مزيفة وشبكة محاكاة، فلا يخرج طلب حقيقي.
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const S = await import('../_shared/slack.ts');
 const { CONFIG, db, raiseAlert, resetSlackDown } = await import('./core.ts');
 const { weeklyHealth, weeklyLine } = await import('./system.ts');

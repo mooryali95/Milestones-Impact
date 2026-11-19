@@ -2,7 +2,7 @@
 // admin.cohort-plan يعرضها بلا تواريخ ولا أيام، فما بعدها كما لو كانت موقوفة، ويرفض مدة لها و«تسير مع» عليها. وحفظ قاعدة
 // المرحلة يقبل «خدمة» منذ T2 ويرفضها لمرحلة فيها القياس البعدي. والحل (resolveStages) يبقيها في الرحلة بحقل lane.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortPlanAction } = await import('./cohort-plan.ts');
 const { cohortPlan } = await import('./stage-windows.js');

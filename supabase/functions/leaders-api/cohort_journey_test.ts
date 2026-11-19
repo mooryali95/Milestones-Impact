@@ -2,7 +2,7 @@
 // التي تعدّ بها memberCounts (pickCohort)، بلا حساب العرض ولا حساب الاختبار، والقراءة بصفحات فلا يسقط عضو عند 1000 صف.
 // قاعدة في الذاكرة بنمط cohort_guard_test.ts، بلا شبكة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortMemberIds } = await import('./programs.ts');
 const { adminCohortJourney, COHORT_JOURNEY_MAX } = await import('./coordinator.ts');

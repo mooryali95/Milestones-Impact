@@ -2,7 +2,7 @@
 // وE-MGR تختفي في طبقة التعريف (journeyDefinition) كالبنود المخفية فلا تحبس مرحلة، ودعوة مقيّمي الأثر وإلغاؤها وتأكيدهم
 // تُرفض برمز f360_off، وما أُرسل من تقديرات باقٍ لا يُمس. ومُظهَرًا يعود كل شيء. قاعدة في الذاكرة بلا شبكة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortSave, journeyDefinition, requirementIdByCode } = await import('./programs.ts');
 const I = await import('./impact.ts');

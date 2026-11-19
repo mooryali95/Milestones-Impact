@@ -2,7 +2,7 @@
 // الحفظ يقبل الفراغ برسائل صحيحة، والدعوة تُمنع لغير المؤرخة بلا بريد، والتذكير يتجاهلها، والانضمام والحضور يردّان برسالتهما،
 // والنظرة العامة ترتبها بعد المؤرخة، ورمز QR يعرضها بلا نافذة.
 import './_test_env.ts';
-import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 
 const { db, CONFIG, WORKSHOP_LINK_LATER_NOTE } = await import('./core.ts');
 const V = await import('./activities.ts');

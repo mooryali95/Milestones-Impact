@@ -1,5 +1,5 @@
 // المشغّل المشترك (runner.ts): الحالة الواحدة كما كان run.ts يخرجها، والتلخيص على الحدين، والمخزن المركب للسجل الحقيقي.
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import type { Env } from '../handler.ts';
 import { emptyMem, type Mem, memStore } from '../mem_store.ts';
 import { matchFaq } from '../faq.ts';

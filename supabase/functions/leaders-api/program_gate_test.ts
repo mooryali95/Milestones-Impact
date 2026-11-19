@@ -3,7 +3,7 @@
 // يستعمل البرنامج كله. هنا الموجّه الحقيقي (Deno.serve مستبدَل بالتقاط المعالج) على قاعدة في الذاكرة، والمستخدمون
 // الأحياء الثلاثة (الدافع والمرعي والمعفى قبل تفعيل الدفع) معتمدون يبقى لهم كل ما كان
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1';
+import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
 (Deno as any).serve = (h: any) => { handler = h; return { finished: Promise.resolve(), shutdown: () => Promise.resolve(), ref() {}, unref() {} }; };
