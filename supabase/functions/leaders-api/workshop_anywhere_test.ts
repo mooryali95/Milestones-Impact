@@ -211,14 +211,17 @@ Deno.test('الدعوة عند الحفظ لا تخرج لجلسة عامة ول
   } finally { w.f.restore(); }
 });
 
-Deno.test('حصة البريد: الدعوة عند الحفظ لا تتجاوز نصيب اليوم، وما لم يخرج يُعدّ متعذرًا', async () => {
+Deno.test('حصة البريد: الدعوة عند الحفظ لا تتجاوز نصيب اليوم، وما لم يخرج ينتظر في الطابور بدعوة تقويمه ولا يُعدّ متعذرًا', async () => {
   const w = world();
   try {
     // السقف 80 ونصيب غير الرموز 40، وأُرسل منه 39: تمر رسالة واحدة
     w.tables.mail_events = Array.from({ length: 39 }, () => ({ id: crypto.randomUUID(), kind: 'notify', status: 'sent', source: 'leaders-api', created_at: new Date(Date.now() - 6e4).toISOString() }));
     await withMail(async (calls) => {
       const r: any = await V.workshopSave(ADMIN, { row: newDay(), invite: true });
-      assertEquals([r.invite, resendCalls(calls).length], [{ sent: 1, failed: 1, total: 2 }, 1]);
+      assertEquals([r.invite, resendCalls(calls).length], [{ sent: 1, failed: 0, total: 2, queued: 1 }, 1]);
+      // المنتظرة محفوظة بدعوة التقويم وبموعد الجلسة حدًّا لها (ترحيل 20261120100000)
+      const waiting = (w.tables.mail_queue || []).filter((m: any) => !m.sent_at);
+      assertEquals([waiting.length, waiting[0]?.attachments?.[0]?.filename, !!waiting[0]?.expires_at], [1, 'session.ics', true]);
     }, 80);
   } finally { w.f.restore(); }
 });

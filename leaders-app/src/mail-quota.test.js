@@ -97,13 +97,13 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(mail).toContain("const via: MailAlert = kind === 'alert' || !alert ? alertWebhook : alert;");
     expect(mail).toMatch(/Deno\.env\.get\('LEADERS_ALERT_WEBHOOK'\)/);
     const core = read('supabase/functions/leaders-api/core.ts');
-    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps(, queued: true, flush: inFlush\(\))? \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
+    expect(core.match(/sendCounted\(db,[^\n]*alert: alertOps(, queued: true, flush: inFlush\(\)[^\n]*)? \}\)/g)?.length).toBe(2);   // sendMail والتفريغ الساعي
     // التفريغ الساعي يعيد رسالة في الطابور: حجبها بالحصة لا يُنشر في سلاك كل ساعة
-    expect(core).toMatch(/sendCounted\(db, m\.to_email,[^\n]*alert: alertOps, queued: true, flush: inFlush\(\) \}\)/);
+    expect(core).toMatch(/sendCounted\(db, m\.to_email,[^\n]*alert: alertOps, queued: true, flush: inFlush\(\)[^\n]* \}\)/);
     // تفريغ المساء للطابور وحده: الإرسال المباشر لا يمرر flush
     expect(core.match(/flush: inFlush\(\)/g)?.length).toBe(1);
     expect(core.match(/sendCounted\([^\n]*flush/g)?.length).toBe(1);
-    expect(read('supabase/functions/leaders-api/mail-center.ts')).toMatch(/force: true, alert: alertOps \}/);
+    expect(read('supabase/functions/leaders-api/mail-center.ts')).toMatch(/force: true, alert: alertOps[^\n]* \}/);
   });
   it('تعذّر العداد لا يرفع السقف: الرموز والتنبيه وحدها تمر، وما سواها محجوب والجماعي للطابور، والمالك يُنبَّه', () => {
     expect(mail).not.toMatch(/لا عداد بعد|: Promise\.resolve\(\)/);
@@ -129,7 +129,8 @@ describe('العداد الموحد في الدوال الأربع', () => {
     const core = read('supabase/functions/leaders-api/core.ts');
     expect(core).toMatch(/sendOrDiscard[\s\S]{0,200}kind: 'code'/);
     expect(core).toMatch(/alertMail\(kind, detail, windowMs\), \[\], \{ kind: 'alert' \}/);
-    expect(core).toContain("if (queue && (kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
+    // المرفق الصغير (دعوة التقويم) يدخل الطابور مع رسالته (ترحيل 20261120100000)، والكبير لا يُخزَّن
+    expect(core).toContain("if (queue && (kind === 'bulk' || kind === 'notify') && queueableAttachments(attachments) && await enqueueMail(");
     // كل تذكير (الأسبوعي والإدارة والمرشد والجهة) من المحرك الموحد في nudges.ts
     expect(read('supabase/functions/leaders-api/nudges.ts')).toMatch(/nudgeMail\([^)]*\), \[\], \{ kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ kind: 'bulk'/);

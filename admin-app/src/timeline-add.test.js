@@ -152,6 +152,9 @@ describe('حقول المدرب والبريد في نموذج الجلسة', ()
     expect(savedAr('أُضيفت الورشة', { invite: { sent: 18, failed: 0, total: 18 } })).toBe('أُضيفت الورشة، وأُرسلت الدعوة إلى 18 مشاركًا');
     expect(savedAr('حُفظ اليوم', { change: { sent: 5, failed: 0, total: 5 } })).toBe('حُفظ اليوم، وأُبلغ بالتغيير إلى 5 مشاركين');
     expect(mailResultAr({ invite: { sent: 3, failed: 2, total: 5 } })).toBe('وأُرسلت الدعوة إلى 3، وتعذّرت 2');
+    // ما لم تتسع له حصة اليوم ينتظر في الطابور ويُذكر صراحةً (ترحيل 20261120100000)
+    expect(mailResultAr({ invite: { sent: 1, failed: 0, total: 2, queued: 1 } })).toContain('و1 تنتظر حصة البريد وتخرج آليًّا');
+    expect(mailResultAr({ invite: { sent: 2, failed: 0, total: 2 } })).not.toContain('تنتظر');
     expect(mailResultAr({ invite: { skipped: 'invited' } })).toContain('أُرسلت من قبل');
     expect(mailResultAr({ invite: { sent: 0, failed: 0, total: 0 } })).toContain('لا أعضاء');
     expect(mailResultAr({ mail_error: true })).toContain('تعذّر البريد');

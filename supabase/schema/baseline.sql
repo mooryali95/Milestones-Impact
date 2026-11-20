@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261119130000_leaders_workshop_trainer
+-- as-of migration: 20261120100000_leaders_mail_queue_attachments
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1487,6 +1487,8 @@ create table if not exists leaders.mail_queue (
   reason text,
   cancelled_by text,
   expires_at timestamp with time zone,
+  attachments jsonb,
+  constraint mail_queue_attachments_check CHECK (((attachments IS NULL) OR (jsonb_typeof(attachments) = 'array'::text))),
   constraint mail_queue_cancelled_by_check CHECK ((char_length(cancelled_by) <= 254)),
   constraint mail_queue_kind_check CHECK ((kind = ANY (ARRAY['bulk'::text, 'notify'::text]))),
   constraint mail_queue_reason_check CHECK ((char_length(reason) <= 40)),

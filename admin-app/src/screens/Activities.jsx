@@ -13,7 +13,7 @@ import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
-import { mailConfirm, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
+import { mailConfirm, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
@@ -89,7 +89,7 @@ export async function inviteSession(s, { confirm, toast }) {
   if (!(await confirm(s.invited_at ? `أُرسلت دعوة «${s.title_ar}» من قبل. إرسالها مرة أخرى لكل أعضاء الدفعة؟` : `تُرسل دعوة «${s.title_ar}» بالبريد إلى كل أعضاء الدفعة، ومعها ملف تقويم. متابعة؟`))) return false;
   const r = await L('admin.workshop-invite', { id: s.id, again: !!s.invited_at });
   if (!r.success) { toast(r.message); return false; }
-  toast(r.failed ? `أُرسلت ${r.sent} دعوة، وتعذّرت ${r.failed}` : `أُرسلت الدعوة إلى ${r.sent} مشاركًا`);
+  toast((r.failed ? `أُرسلت ${r.sent} دعوة، وتعذّرت ${r.failed}` : `أُرسلت الدعوة إلى ${r.sent} مشاركًا`) + queuedAr(r));
   return true;
 }
 
