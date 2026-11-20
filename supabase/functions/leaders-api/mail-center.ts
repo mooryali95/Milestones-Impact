@@ -154,7 +154,7 @@ export async function queueSend(a: Admin, b: Body) {
   if (m.gave_up_at) await db.from('mail_queue').update({ gave_up_at: null, last_error: null }).eq('id', m.id).is('sent_at', null);
   if (!(await claimQueued(m.id))) throw new Fail('أُرسلت من قبل أو يرسلها الطابور الآن', 409, 'done');
   // قرار صريح من المدير: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي
-  const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, force: true, alert: alertOps });
+  const r = await sendCounted(db, m.to_email, m.subject, m.html, { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, force: true, alert: alertOps, ...(Array.isArray(m.attachments) && m.attachments.length ? { attachments: m.attachments } : {}) });
   if (!r.ok) {
     await releaseQueued(m.id, m.gave_up_at ? { gave_up_at: m.gave_up_at, last_error: m.last_error } : {});
     throw new Fail(r.reason === 'mail_cap' ? 'السقف اليومي ممتلئ: انسخ نص الرسالة وأرسلها بنفسك، أو انتظر تحرر الحصة' : 'تعذّر الإرسال الآن', r.reason === 'mail_cap' ? 429 : 502, r.reason);

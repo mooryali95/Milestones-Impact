@@ -86,7 +86,11 @@ describe('حراس المصدر', () => {
     expect(mailDecision('alert', { sent: 85, nonCode: 0 }, 80).ok).toBe(false);
   });
   it('الإشعار المحجوب يدخل الطابور، والرمز لا يُؤجَّل، والقديم يُترك', () => {
-    expect(core).toContain("(kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(");
+    expect(core).toContain("(kind === 'bulk' || kind === 'notify') && queueableAttachments(attachments) && await enqueueMail(");
+    // رسالة بمرفق لا تُحفظ بلاه، والتفريغ والإرسال اليدوي يخرجانها بمرفقها
+    expect(core).toContain("if (error) { console.error('mail_queue insert (attachments):', error); return false; }");
+    expect(core).toContain("...(Array.isArray(m.attachments) && m.attachments.length ? { attachments: m.attachments } : {})");
+    expect(src('supabase/functions/leaders-api/mail-center.ts')).toContain("...(Array.isArray(m.attachments) && m.attachments.length ? { attachments: m.attachments } : {})");
     expect(core).toContain("last_error: 'stale'");
   });
   it('رابط الدخول اليدوي للمدير الأعلى وحده، ويُسجَّل، ولا لحساب موقوف', () => {

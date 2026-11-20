@@ -96,7 +96,9 @@ const SKIP_AR = Object.freeze({
   general: 'لم تُرسل الدعوة: الجلسة لكل الدفعات', undated: 'لم يُرسل بريد: الجلسة بلا موعد', ended: 'لم يُرسل بريد: الجلسة انتهت',
   inactive: 'لم يُرسل بريد: الجلسة ملغاة', invited: 'الدعوة أُرسلت من قبل، فلم تُرسل ثانية',
 });
-const mailCount = (r, one, many) => (r.failed ? `${many} إلى ${r.sent}، وتعذّرت ${r.failed}` : r.total === 0 ? 'لا أعضاء في الدفعة يصلهم بريد الآن' : `${one} إلى ${r.sent} ${r.sent >= 3 && r.sent <= 10 ? 'مشاركين' : 'مشاركًا'}`);
+// queued: لم تتسع لها حصة بريد اليوم فتنتظر في «لم يُرسل» (مركز البريد) وتخرج آليًّا. تُذكر صراحةً: ليست متعذرة ولا واصلة بعد
+export const queuedAr = (r) => (r?.queued ? `، و${r.queued} تنتظر حصة البريد وتخرج آليًّا` : '');
+const mailCount = (r, one, many) => (r.failed ? `${many} إلى ${r.sent}، وتعذّرت ${r.failed}` : r.total === 0 ? 'لا أعضاء في الدفعة يصلهم بريد الآن' : `${one} إلى ${r.sent} ${r.sent >= 3 && r.sent <= 10 ? 'مشاركين' : 'مشاركًا'}`) + queuedAr(r);
 /** ما جرى للبريد بعد الحفظ، جملة تُلحق برسالة الحفظ. فارغ إن لم يُطلب بريد */
 export function mailResultAr(r) {
   if (!r) return '';

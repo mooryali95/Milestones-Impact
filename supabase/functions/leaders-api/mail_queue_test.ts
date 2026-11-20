@@ -281,3 +281,42 @@ Deno.test('المطالبة: تعذّر الإرسال يعيد الرسالة �
     }, { resendStatus: 500 }));
   } finally { w.restore(); }
 });
+
+// ── مرفق صغير في الطابور (ترحيل 20261120100000): دعوة الورشة وإشعار تغيير موعدها يحملان دعوة تقويم ──
+const ICS = { filename: 'session.ics', content: btoa('BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n'), content_type: 'text/calendar; charset=utf-8; method=PUBLISH' };
+
+Deno.test('sendMail: الرسالة ذات دعوة التقويم تدخل الطابور بمرفقها عند امتلاء الحصة، وتخرج به حين تتسع', async () => {
+  const tables: Record<string, Row[]> = { mail_queue: [], mail_events: sentNonCode(40, 1), audit_log: [] };
+  const w = installFake(tables);
+  try {
+    await withMail(() => withNet(async (calls) => {
+      const starts = hoursAgo(-48);
+      await sendMail('m@x.sa', 'تغيّر موعد الورشة', '<p>x</p>', [ICS], { kind: 'bulk', ref: 's1', expiresAt: starts });
+      assertEquals(resendCalls(calls).length, 0);
+      assertEquals(tables.mail_queue.map((m) => [m.to_email, m.reason, m.expires_at, m.attachments?.[0]?.filename]), [['m@x.sa', 'mail_share', starts, 'session.ics']]);
+      // الغد: الحصة اتسعت، فتخرج الرسالة ومعها دعوة التقويم نفسها
+      for (const e of tables.mail_events) e.created_at = hoursAgo(25);
+      assertEquals((await drainMailQueue()).sent, 1);
+      const sent = resendCalls(calls);
+      assertEquals(sent.length, 1);
+      const body = typeof sent[0].body === 'string' ? JSON.parse(sent[0].body) : sent[0].body;
+      assertEquals(body?.attachments?.[0]?.filename, 'session.ics');
+    }));
+  } finally { w.restore(); }
+});
+
+Deno.test('sendMail: مرفق أكبر من الحد لا يدخل الطابور ويُبلَّغ المرسل، والرسالة لا تُحفظ بلا مرفقها', async () => {
+  const tables: Record<string, Row[]> = { mail_queue: [], mail_events: sentNonCode(40, 1), audit_log: [] };
+  const w = installFake(tables);
+  try {
+    await withMail(() => withNet(async () => {
+      const big = { filename: 'big.pdf', content: 'x'.repeat(core.QUEUE_ATTACH_MAX + 1) };
+      let code = '';
+      await sendMail('m@x.sa', 'ملف', '<p>x</p>', [big], { kind: 'bulk' }).catch((e) => { code = (e as any).code; });
+      assertEquals([code, tables.mail_queue.length], ['mail_cap', 0]);
+      assertEquals(core.queueableAttachments([ICS]), true);
+      assertEquals(core.queueableAttachments([big]), false);
+      assertEquals(core.queueableAttachments([]), true);
+    }));
+  } finally { w.restore(); }
+});

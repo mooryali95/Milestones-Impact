@@ -1169,17 +1169,22 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', 
   const sequence = kind === 'change' ? Math.floor(Date.now() / 1000) : undefined;
   const ics = (url: string) => (byAdmin ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url, sequence })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
-  let sent = 0, failed = 0;
-  // التذكير والدعوة مؤرخان بموعد الجلسة: إن انتظرا في الطابور حتى بدأت يُتركان ولا يخرجان بعدها (expiresAt)
+  // queued: لم تتسع لها حصة اليوم فدخلت صندوق «لم يُرسل» وتخرج آليًّا (أو يرسلها المدير منه). ليست متعذرة ولا مُرسلة بعد
+  let sent = 0, failed = 0, queued = 0;
+  // التذكير والدعوة وإشعار التغيير مؤرخة بموعد الجلسة: إن انتظرت في الطابور حتى بدأت تُترك ولا تخرج بعدها (expiresAt).
+  // دعوة التقويم المرفقة تُحفظ مع الرسالة المنتظرة (QUEUE_ATTACH_MAX في core.ts)، فمن لم تتسع له حصة اليوم تصله كاملة لاحقًا
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
     const staged = online && !link ? 'staged' : linkLater ? 'later' : false;
     const html = kind === 'change' ? workshopChangeMail(m.name, s.title_ar, when, s.location_ar || null, link, staged, changed, trainer)
       : workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, staged, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link), trainer);
-    try { await sendMail(m.email, kind === 'change' ? WORKSHOP_CHANGE_MAIL.subject : WORKSHOP_MAIL[kind].subject, html, link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at }); sent += 1; }
+    try {
+      const out = await sendMail(m.email, kind === 'change' ? WORKSHOP_CHANGE_MAIL.subject : WORKSHOP_MAIL[kind].subject, html, link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+      if (out === 'queued') queued += 1; else sent += 1;
+    }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }
   }
-  return { sent, failed, total: people.length };
+  return { sent, failed, total: people.length, ...(queued ? { queued } : {}) };
 }
 
 export async function workshopInvite(a: any, b: Body) {

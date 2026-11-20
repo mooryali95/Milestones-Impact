@@ -240,7 +240,7 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 // بلا موعد تنتظر حتى تُرسل، يومًا بعد يوم
 // force: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي (كإرسال المدير من الصندوق). queue:false لا يدخل الطابور أبدًا
 // (بريد إتمام الحذف: الطابور يحفظ عنوان من مُحيت بياناته)
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null, expiresAt = null, force = false, queue = true }: { kind?: MailKind; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean } = {}) {
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null, expiresAt = null, force = false, queue = true }: { kind?: MailKind; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean } = {}): Promise<void | 'queued'> {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   if (!CONFIG.resendKey) {
     // يُبلَّغ في سلاك كما تبلغه الدوال الأخرى من sendCounted: سلاك هو الاحتياط حين يتعطل البريد
@@ -252,16 +252,26 @@ export async function sendMail(to: string, subject: string, html: string, attach
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
     // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
-    // الرمز لا يُؤجَّل (ينتهي في دقائق)، والمرفقات لا تُخزَّن
-    if (queue && (kind === 'bulk' || kind === 'notify') && !attachments.length && await enqueueMail(to, subject, html, ref, kind, r.reason, expiresAt)) return;
+    // الرمز لا يُؤجَّل (ينتهي في دقائق). المرفق الصغير (دعوة التقويم) يُحفظ مع رسالته، والكبير لا يُخزَّن
+    if (queue && (kind === 'bulk' || kind === 'notify') && queueableAttachments(attachments) && await enqueueMail(to, subject, html, ref, kind, r.reason, expiresAt, attachments)) return 'queued';   // دخلت صندوق «لم يُرسل»: يعدّها من يهمه الفرق (دعوة الورشة)
     throw new Fail('بلغت الرسائل حدها اليومي، وتصل بعد ساعات', 429, 'mail_cap');
   }
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
 }
 
 // الأعمدة الأحدث تُكتب إن وُجدت، ويُعاد الإدراج بدونها قبل ترحيلها (السبب 20261114110000، والموعد 20261116150000)
-export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null, expiresAt: string | null = null) {
+// ما يُحفظ من المرفقات مع رسالة منتظرة: دعوة تقويم وما في حجمها. أكبر منه لا يدخل الطابور (ترحيل 20261120100000)
+export const QUEUE_ATTACH_MAX = 64_000;
+export const queueableAttachments = (a: MailAttachment[] = []) => a.reduce((n, x) => n + String(x?.content || '').length, 0) <= QUEUE_ATTACH_MAX;
+
+export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null, expiresAt: string | null = null, attachments: MailAttachment[] = []) {
   const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
+  // رسالة بمرفق لا تُحفظ بلاه: إن رُفض عمود المرفقات (قبل ترحيله) تبقى خارج الطابور ويُبلَّغ المرسل بتعذّرها
+  if (attachments.length) {
+    const { error } = await db.from('mail_queue').insert({ ...row, reason, attachments, ...(expiresAt ? { expires_at: expiresAt } : {}) });
+    if (error) { console.error('mail_queue insert (attachments):', error); return false; }
+    return true;
+  }
   let { error } = await db.from('mail_queue').insert({ ...row, reason, ...(expiresAt ? { expires_at: expiresAt } : {}) });
   if (error && expiresAt) ({ error } = await db.from('mail_queue').insert({ ...row, reason }));   // قبل ترحيل الموعد
   if (error) ({ error } = await db.from('mail_queue').insert(row));   // قبل ترحيل مركز البريد: بلا عمود السبب
@@ -294,7 +304,8 @@ export const expiresIn = (hours: number) => new Date(Date.now() + hours * 36e5).
 export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), rewrite: (m: { subject: string; html: string }) => string = (m) => m.html) {
   const read = (cols: string) => db.from('mail_queue').select(cols)
     .is('sent_at', null).is('gave_up_at', null).order('kind', { ascending: false }).order('created_at').limit(limit + hold.size);
-  let { data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at');
+  let { data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at, attachments');
+  if (error) ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at'));   // قبل ترحيل المرفقات
   let legacy = false;
   if (error) { ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts')); legacy = true; }
   if (error) return { sent: 0, pending: null };
@@ -307,7 +318,7 @@ export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), 
       continue;
     }
     if (!(await claimQueued(m.id))) continue;   // أرسلها المدير أو ألغاها بعد قراءة الدفعة
-    const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true, flush: inFlush() });
+    const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true, flush: inFlush(), ...(Array.isArray(m.attachments) && m.attachments.length ? { attachments: m.attachments } : {}) });
     if (r.ok) { sent++; continue; }   // sent_at كُتب بالمطالبة، ويبقى بعد نجاح الإرسال وحده
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') { await releaseQueued(m.id); break; }   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;

@@ -163,6 +163,7 @@ export const MIGRATIONS = [
   '20261119110000_leaders_workshop_attendance_note',
   '20261119120000_leaders_cohort_updates',
   '20261119130000_leaders_workshop_trainer',
+  '20261120100000_leaders_mail_queue_attachments',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -242,4 +243,5 @@ export const MIGRATION_GATES = {
   '20261119110000_leaders_workshop_attendance_note': ["tolerant", "قبله يُكتب الحضور اليدوي بلا العمود ويبقى سببه في سجل التدقيق وحده، وورقة الحضور تُقرأ بلا السبب (activities.ts: markBatch وattendanceRows)"],
   '20261119120000_leaders_cohort_updates': ["tolerant", "قبله يعرض شريط «منذ آخر زيارة» آخر سبعة أيام بجملة واضحة ولا يحفظ وقت الزيارة (cohort-visits.ts)، ولا لقطة فلا تنبيه متأخرين ولا سطر في الملخص اليومي ولا ملخص أسبوعي (cohort-pulse.ts)، والتسليم يُحفظ بلا وقته (participant.ts)"],
   '20261119130000_leaders_workshop_trainer': ["tolerant", "قبله يُخفى حقل المدرب في اللوحة، والحفظ بمدرب يعيد المحاولة بلاه ويقول إنه لم يُحفظ، والجلسة تُقرأ بلا مدرب في رحلة المشارك والدعوة وبوابة الخبير (activities.ts: trainerReady وworkshopSave وsessionTrainers)"],
+  '20261120100000_leaders_mail_queue_attachments': ["tolerant", "قبله تبقى الرسالة ذات المرفق خارج الطابور كما كانت: تُحسب «تعذّرت» عند امتلاء الحصة (core.ts: enqueueMail يرفض المرفق إن رُفض العمود، وdrainMailQueue يقرأ بلاه)"],
 };
