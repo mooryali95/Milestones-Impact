@@ -28,7 +28,7 @@ async function call(action, body = {}, token = null) {
 
 const events = has('leaders.client_events');
 const idem = has('leaders.idempotency_keys');
-console.log(`البنية: client_events ${events ? 'موجود' : 'غائب'}، idempotency_keys ${idem ? 'موجود' : 'غائب'}، demo_links ${has('leaders.demo_links') ? 'موجود' : 'غائب'}`);
+console.log(`البنية: client_events ${events ? 'موجود' : 'غائب'}، idempotency_keys ${idem ? 'موجود' : 'غائب'}`);
 
 // 20261118150000: قبله يرد client.event بـ not_migrated (503) فيُسقط العميل طابوره بصمت، وبعده يُحفظ
 const ev = await call('client.event', { events: [{ kind: 'offline', act: 'me', tries: 1, at: new Date().toISOString() }] });
@@ -51,11 +51,9 @@ if (idem) {
   ok(first.idem === null, 'قبل ترحيل المفتاح لا تُعلن x-idem، فلا يعيد العميل الكتابة تلقائيًا', String(first.idem));
 }
 
-// 20261119100000: قبله يرد demo.link-open بـ not_migrated (503) وتعرض اللوحة «لم تُفعَّل بعد»، وبعده رمز لا رابط له يُرد link_invalid (404)
-const links = has('leaders.demo_links');
+// 20261119100000 (مطبّق، وأُزيل تسامحه): رمز لا رابط له يُرد link_invalid (404)
 const dl = await call('demo.link-open', { t: randomBytes(32).toString('base64url') });
-if (links) ok(dl.status === 404 && dl.body.code === 'link_invalid', 'demo.link-open برمز لا رابط له: link_invalid حين يوجد جدوله', JSON.stringify(dl));
-else ok(dl.status === 503 && dl.body.code === 'not_migrated', 'demo.link-open قبل ترحيله: not_migrated لا خطأ داخلي', JSON.stringify(dl));
+ok(dl.status === 404 && dl.body.code === 'link_invalid', 'demo.link-open برمز لا رابط له: link_invalid', JSON.stringify(dl));
 
 const ping = await call('system.ping');
 ok(ping.body.success === true, 'system.ping بعد ذلك كله', JSON.stringify(ping.body));

@@ -5,7 +5,7 @@
 // للتأخر هنا: السطور من صفوف «المتابعة» نفسها بلحظاتها (cohortChanges في cohort-changes.js)، فتبديل «منذ» بلا طلب جديد.
 // وقت آخر زيارة من الخادم (visit في رد admin.cohort-journey)، لكل مدير ولكل دفعة. لا يتقدم بفتح التبويب: يتقدم بعد أن
 // يُعرض هذا الشريط والصفحة ظاهرة (admin.cohort-visit)، وما عُرض يبقى معروضًا في الزيارة نفسها، و«اعتبرها مقروءة» تفرغه.
-// قبل ترحيل جدول الزيارات (stored false): آخر سبعة أيام بجملة واضحة، وبلا زر «اعتبرها مقروءة».
+// إن تعذّرت قراءة وقت آخر زيارة (visit.failed من الخادم): آخر سبعة أيام بجملة تقول ذلك، وبلا تقدم ولا زر «اعتبرها مقروءة».
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { dateTime, L } from '../leaders.js';
 import { cohortChanges, DEFAULT_SINCE_DAYS, SINCE_OPTIONS, sinceFor } from '../../../supabase/functions/leaders-api/cohort-changes.js';
@@ -14,7 +14,7 @@ const EMPTY_AR = { visit: 'لا جديد منذ آخر زيارة', yesterday: '
 
 /** @param {{ cohortId: string, rows: any[], map: any, at: string, visit: any, picked: string, onPick: (line: any|null) => void }} p */
 export default function CohortSince({ cohortId, rows, map, at, visit, picked, onPick }) {
-  const stored = !!visit?.stored;
+  const stored = !!visit && !visit.failed;
   const [opt, setOpt] = useState('visit');
   // «اعتبرها مقروءة» في هذه الجلسة: «منذ» يصير لحظة القراءة المعروضة، فيفرغ الشريط بلا إعادة تحميل
   const [readAt, setReadAt] = useState(null);
@@ -43,11 +43,11 @@ export default function CohortSince({ cohortId, rows, map, at, visit, picked, on
     setBusy(true); setErr('');
     const r = await L('admin.cohort-visit', { cohort_id: cohortId, at, op: 'read' });
     setBusy(false);
-    if (!r?.success || r.stored === false) { setErr(r?.message || 'تعذّر الحفظ، أعد المحاولة'); return; }
+    if (!r?.success) { setErr(r?.message || 'تعذّر الحفظ، أعد المحاولة'); return; }
     setReadAt(at); setOpt('visit'); onPick(null);
   };
 
-  const note = !stored ? `لم يُفعَّل حفظ وقت آخر زيارة بعد، فنعرض آخر ${DEFAULT_SINCE_DAYS} أيام.`
+  const note = !stored ? `تعذّرت قراءة وقت آخر زيارة الآن، فنعرض آخر ${DEFAULT_SINCE_DAYS} أيام. حدّث الصفحة لإعادة المحاولة.`
     : opt === 'visit' && !base ? `أول زيارة لك لهذه الدفعة، فنعرض آخر ${DEFAULT_SINCE_DAYS} أيام.` : null;
   return (
     <section className="cs" aria-labelledby="cs-h" data-testid="cohort-since">

@@ -62,7 +62,7 @@ const desk = deskOf({ now: TODAY.getTime(), orgs: [], programs: { cohorts, organ
   snapshots: [{ cohort_id: 'c1', taken_at: '2026-11-20T00:17:00Z', late: 7, late_new: 5 }] });
 
 // visit: ما يرده الخادم عن آخر زيارة. journeyOver: رد بديل لـadmin.cohort-journey
-async function setup(page, { width = 1440, role = 'admin', visit = { stored: true, since: LAST_VISIT, first: false }, journeyOver = null, hash = '' } = {}) {
+async function setup(page, { width = 1440, role = 'admin', visit = { since: LAST_VISIT, first: false }, journeyOver = null, hash = '' } = {}) {
   const calls = [];
   await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
   await page.clock.setFixedTime(TODAY);
@@ -77,7 +77,7 @@ async function setup(page, { width = 1440, role = 'admin', visit = { stored: tru
       'admin.cohort-definition': { ...definition, cohort_plan: { schedule: {}, starts_on: '2026-11-01', is_default: false, status: 'running', program_version_id: 'v1', updated_at: 'u0' } },
       'admin.milestones': { success: true, program_id: 'pa', milestones: [] },
       'admin.cohort-journey': journeyOver || { success: true, journey_map: map, roster, at: AT, visit },
-      'admin.cohort-visit': { success: true, stored: true, since: b.op === 'read' ? b.at : visit.since },
+      'admin.cohort-visit': { success: true, since: b.op === 'read' ? b.at : visit.since },
       'admin.today': desk,
       'admin.inbox': { success: true, total: 0, late: 0, skipped: [], counts: {}, items: [] },
       'admin.overview': { success: true, total: 6, by_status: { enrolled: 5, registered: 1 }, pending_reviews: 0, matrix: {}, overall: {}, top_tracks: [], tracks_used: 0 },
@@ -177,25 +177,39 @@ test('لا جديد: الحالة الفارغة بنصها، و«اعتبرها
 });
 
 test('زار قبل لحظات: لا جديد منذ آخر زيارة من أول فتح، وأول زيارة تعرض آخر 7 أيام بجملتها', async ({ page }) => {
-  await setup(page, { visit: { stored: true, since: AT, first: false } });
+  await setup(page, { visit: { since: AT, first: false } });
   await expect(page.getByTestId('cs-empty')).toHaveText('لا جديد منذ آخر زيارة');
   await expect(rows(page)).toHaveCount(6);
-  await setup(page, { visit: { stored: true, since: null, first: true } });
+  await setup(page, { visit: { since: null, first: true } });
   await expect(strip(page)).toContainText('أول زيارة لك لهذه الدفعة، فنعرض آخر 7 أيام.');
   await expect(lines(page)).toHaveCount(7);
 });
 
-test('قبل ترحيل جدول الزيارات: آخر 7 أيام بجملة واضحة، بلا زر «اعتبرها مقروءة» وبلا حفظ ولا خطأ', async ({ page }) => {
-  const calls = await setup(page, { visit: { stored: false, since: null, first: false } });
-  await expect(strip(page)).toContainText('لم يُفعَّل حفظ وقت آخر زيارة بعد، فنعرض آخر 7 أيام.');
+test('تعذّرت قراءة وقت آخر زيارة: آخر 7 أيام بجملة تقول ذلك، بلا زر «اعتبرها مقروءة» وبلا حفظ', async ({ page }) => {
+  const calls = await setup(page, { visit: { failed: true, message: 'تعذّرت قراءة وقت آخر زيارة، أعد المحاولة', since: null, first: false } });
+  await expect(strip(page)).toContainText('تعذّرت قراءة وقت آخر زيارة الآن، فنعرض آخر 7 أيام. حدّث الصفحة لإعادة المحاولة.');
   await expect(lines(page)).toHaveCount(7);
   await expect(strip(page).getByRole('button', { name: 'اعتبرها مقروءة' })).toHaveCount(0);
   await expect(page.locator('.la-err')).toHaveCount(0);
   expect(visits(calls)).toHaveLength(0);
   // خادم أقدم من الواجهة (رد بلا at ولا visit): الشريط يعمل بالنافذة الافتراضية
   await setup(page, { journeyOver: { success: true, journey_map: map, roster } });
-  await expect(strip(page)).toContainText('لم يُفعَّل حفظ وقت آخر زيارة بعد');
+  await expect(strip(page)).toContainText('تعذّرت قراءة وقت آخر زيارة الآن');
   await expect(rows(page)).toHaveCount(6);
+});
+
+test('تعذّر حفظ «اعتبرها مقروءة»: رسالة الخادم تظهر والسطور باقية', async ({ page }) => {
+  await setup(page);
+  await expect(lines(page)).not.toHaveCount(0);
+  const n = await lines(page).count();
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'admin.cohort-visit' && b.op === 'read') return route.fulfill({ status: 500, json: { success: false, code: 'db_error', message: 'تعذّر حفظ وقت آخر زيارة، أعد المحاولة' } });
+    return route.fallback();
+  });
+  await strip(page).getByRole('button', { name: 'اعتبرها مقروءة' }).click();
+  await expect(strip(page).locator('.la-err')).toHaveText('تعذّر حفظ وقت آخر زيارة، أعد المحاولة');
+  await expect(lines(page)).toHaveCount(n);
 });
 
 test('التحميل: رسالة الانتظار قبل وصول الصفوف، والشريط معها لا قبلها', async ({ page }) => {
@@ -205,7 +219,7 @@ test('التحميل: رسالة الانتظار قبل وصول الصفوف،
   await expect(lines(page)).toHaveCount(7);
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
-    if (b.action === 'admin.cohort-journey') { await gate; return route.fulfill({ json: { success: true, journey_map: map, roster, at: AT, visit: { stored: true, since: LAST_VISIT, first: false } } }); }
+    if (b.action === 'admin.cohort-journey') { await gate; return route.fulfill({ json: { success: true, journey_map: map, roster, at: AT, visit: { since: LAST_VISIT, first: false } } }); }
     return route.fallback();
   });
   await page.getByRole('button', { name: 'تحديث' }).click();

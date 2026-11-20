@@ -158,9 +158,7 @@ describe('حقول المدرب والبريد في نموذج الجلسة', ()
     expect(mailResultAr({ invite: { skipped: 'invited' } })).toContain('أُرسلت من قبل');
     expect(mailResultAr({ invite: { sent: 0, failed: 0, total: 0 } })).toContain('لا أعضاء');
     expect(mailResultAr({ mail_error: true })).toContain('تعذّر البريد');
-    expect(savedAr('حُفظ اليوم', { trainer_skipped: true })).toBe('حُفظ اليوم، المدرب لم يُحفظ لأن قاعدة البيانات لم تُحدَّث بعد');
-    expect(savedAr('حُفظ اليوم', { capacity_skipped: true })).toContain('السعة لم تُحفظ');
-    expect(savedAr('حُفظ اليوم', { capacity_skipped: true, trainer_skipped: true })).toContain('السعة والمدرب لم يُحفظا');
+    expect(savedAr('حُفظ اليوم', { capacity_skipped: true })).toBe('حُفظ اليوم، السعة لم تُحفظ لأن قاعدة البيانات لم تُحدَّث بعد');
   });
 
   it('سطر الأثر قبل الحفظ (القرار 6): تُحسب لمن ينقصه يوم ولا تزيد المطلوب', () => {

@@ -1,7 +1,7 @@
 // ورقة الحضور الجماعية (admin.workshop-mark-bulk، تصور تشغيل الدفعة 2026-11-19، المرحلة 2): حفظ واحد بسبب واحد يمر بالكاتب نفسه
 // الذي يمر به التسجيل الفردي (markBatch)، فيحكم لكل مشارك وحده: المتوقع يُسجَّل، والمسجل أصلًا يُتخطى ولا يُكتب فوقه، وغير المتوقع
-// وحساب العرض يُرفضان بسببهما، وإلغاء حضور سجّله المشارك بنفسه بسبب مكتوب. والسبب في عمود note بعد الترحيل 20261119110000 وفي
-// سجل التدقيق دائمًا، وقبل الترحيل في السجل وحده. والطلب المعاد لا يكتب مرتين. بقاعدة في الذاكرة (_fake_db.ts)
+// وحساب العرض يُرفضان بسببهما، وإلغاء حضور سجّله المشارك بنفسه بسبب مكتوب. والسبب في عمود note وفي
+// سجل التدقيق دائمًا. والطلب المعاد لا يكتب مرتين. بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
@@ -15,7 +15,7 @@ const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}
 const ORG = U(890001), COHORT = U(890002), OTHER = U(890003), REQ_W = U(890004), DAY1 = U(890006), GEN = U(890007), OFF = U(890008);
 const ADMIN = { email: 'a@example.sa' };
 
-function world({ premigration = false } = {}) {
+function world() {
   const who = (n: number, org: string | null, extra: Row = {}) => ({ id: U(890100 + n), full_name: `مشارك ${n}`, email: `m${n}@example.sa`, organization_id: org, organization_name: 'جهة', status: 'enrolled', is_demo: false, ...extra });
   // 1 و2 و3 في دفعة الجهة، 4 في دفعة أخرى، 5 منسحب من دفعة الجهة، 6 حساب العرض
   const ps = [who(1, ORG), who(2, ORG), who(3, ORG), who(4, null), who(5, ORG, { status: 'withdrawn' }), who(6, null, { is_demo: true })];
@@ -46,10 +46,6 @@ function world({ premigration = false } = {}) {
     fail: (t, op) => {
       // القيد الفريد (actor, key) لمفتاح منع التكرار كما في ترحيله
       if (t === 'idempotency_keys' && op.kind === 'insert' && tables.idempotency_keys.some((r) => r.actor === op.value.actor && r.key === op.value.key)) return { code: '23505', message: 'duplicate key' };
-      if (t !== 'workshop_attendance' || !premigration) return null;
-      // قبل الترحيل 20261119110000: القراءة بالعمود 42703، والكتابة به PGRST204
-      if (op.kind === 'select' && /\bnote\b/.test(op.cols || '')) return { code: '42703', message: 'column workshop_attendance.note does not exist' };
-      if (op.kind === 'upsert' && (Array.isArray(op.value) ? op.value : [op.value]).some((x: Row) => 'note' in x)) return { code: 'PGRST204', message: "Could not find the 'note' column of 'workshop_attendance'" };
       return null;
     },
   });
@@ -173,23 +169,6 @@ Deno.test('طلب معاد لا يكتب مرتين: بمفتاح منع الت�
     assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.unmark').length, 1);
     // الفعلان كتابة تُحفظ نتيجتها بمفتاحها، لا قراءة
     for (const a of ['admin.workshop-mark-bulk', 'xp.workshop-mark-bulk']) assertEquals([replayable('leaders-api', a), isReadAction('leaders-api', a)], [true, false], a);
-  } finally { w.f.restore(); }
-});
-
-Deno.test('قبل الترحيل 20261119110000: الحضور يُكتب بلا عمود السبب، والسبب في سجل التدقيق، والقائمة تُقرأ بلاه', async () => {
-  const w = world({ premigration: true });
-  try {
-    const [p1, p2] = w.ps.map((p) => p.id);
-    const r = await V.workshopMarkBulk(ADMIN, { session_id: DAY1, present: [p1, p2], reason: 'تعطل الرمز' });
-    assertEquals(r, { success: true, marked: 2, unmarked: 0, already: 0, refused: [] });
-    assertEquals(w.tables.workshop_attendance.map((x) => [x.participant_id, x.method, x.recorded_by, 'note' in x]), [[p1, 'manual', ADMIN.email, false], [p2, 'manual', ADMIN.email, false]]);
-    assertEquals(w.tables.audit_log.map((x) => x.after), [{ session_id: DAY1, reason: 'تعطل الرمز' }, { session_id: DAY1, reason: 'تعطل الرمز' }]);
-    const people = ((await V.workshopAttendance({ id: DAY1 })) as any).people;
-    assertEquals(people.filter((p: Row) => p.attendance).map((p: Row) => [p.id, p.attendance.method, p.attendance.recorded_by]), [[p1, 'manual', ADMIN.email], [p2, 'manual', ADMIN.email]]);
-    // والفردي والإلغاء يعملان كما كانا
-    assertEquals(await V.workshopMark(ADMIN, { session_id: DAY1, participant_id: w.ps[2].id, present: true, reason: 'بلا هاتف' }), { success: true });
-    assertEquals(await V.workshopMarkBulk(ADMIN, { session_id: DAY1, absent: [p1] }), { success: true, marked: 0, unmarked: 1, already: 0, refused: [] });
-    assertEquals(w.tables.workshop_attendance.map((x) => x.participant_id), [p2, w.ps[2].id]);
   } finally { w.f.restore(); }
 });
 

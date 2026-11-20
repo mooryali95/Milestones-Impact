@@ -48,12 +48,10 @@ async function expertFor(id: unknown, coach: unknown, participantId?: string): P
   const { data: req } = await db.from('expert_requests').select('expert_id').eq('participant_id', participantId).eq('role', 'coach').eq('status', 'accepted').maybeSingle();
   return req?.expert_id || null;
 }
-// جلسات الورش لرحلة المشارك، ومع كل جلسة اسم مدربها إن سُمّي («مع فلان»، الترحيل 20261119130000). قبل الترحيل لا عمود:
-// تُقرأ بلاه كما كانت. والاسم وحده يخرج للمشارك، لا معرّف الخبير ولا بريده
-const JOURNEY_SESSION_COLS = 'id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url';
+// جلسات الورش لرحلة المشارك، ومع كل جلسة اسم مدربها إن سُمّي («مع فلان»). والاسم وحده يخرج للمشارك، لا معرّف الخبير ولا بريده
+const JOURNEY_SESSION_COLS = 'id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url, expert_id';
 async function journeySessions(ids: string[]): Promise<{ data: any[] }> {
-  let res: { data: any; error: any } = await db.from('workshop_sessions').select(`${JOURNEY_SESSION_COLS}, expert_id`).in('requirement_id', ids);
-  if (res.error && missingColumn(res.error)) res = await db.from('workshop_sessions').select(JOURNEY_SESSION_COLS).in('requirement_id', ids);
+  const res = await db.from('workshop_sessions').select(JOURNEY_SESSION_COLS).in('requirement_id', ids);
   const rows = (res.data || []) as any[];
   const names = await trainerNames(rows.map((s) => s.expert_id));
   return { data: rows.map(({ expert_id, ...s }) => (expert_id && names[expert_id] ? { ...s, trainer: names[expert_id] } : s)) };
@@ -554,10 +552,10 @@ export async function overview() {
     db.from('programs').select('id, name').is('archived_at', null),
     db.from('cohorts').select('*').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
-  const [capacity_ready, trainer_ready] = await Promise.all([capacityReady(), trainerReady()]);
-  // مدرب الجلسة (المرحلة 4): خبراء كل دفعة لقائمة النموذج، واسم مدرب كل جلسة. تعذّرهما لا يسقط الشاشة: يُخفى الحقل
-  const cohort_trainers = trainer_ready ? await cohortTrainers((cohorts.data || []).map((c: any) => c.id)).catch((e) => { console.error('activities trainers', e); return {}; }) : {};
-  const trainerOf = trainer_ready ? await trainerNames((ws.data || []).map((s: any) => s.expert_id)) : {};
+  const capacity_ready = await capacityReady();
+  // مدرب الجلسة (المرحلة 4): خبراء كل دفعة لقائمة النموذج، واسم مدرب كل جلسة. تعذّر قراءة الخبراء لا يسقط الشاشة: القائمة فارغة
+  const cohort_trainers = await cohortTrainers((cohorts.data || []).map((c: any) => c.id)).catch((e) => { console.error('activities trainers', e); return {}; });
+  const trainerOf = await trainerNames((ws.data || []).map((s: any) => s.expert_id));
   const outside = await outsideByCohort((cohorts.data || []) as any[], (ws.data || []) as any[]).catch((e) => { console.error('activities outside', e); return {}; });
   const counts: Record<string, number> = {};
   for (const a of att.data || []) counts[a.session_id] = (counts[a.session_id] || 0) + 1;
@@ -573,7 +571,7 @@ export async function overview() {
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
     workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [], trainer: (s.expert_id && trainerOf[s.expert_id]) || null }; delete row.secret; return row; }),
     coaching: coach.data || [],
-    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready, cohort_trainers,
+    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers,
   };
 }
 
@@ -619,12 +617,6 @@ export async function capacityReady(): Promise<boolean> {
 // اختياري، ومن خبراء دفعة الجلسة وحدهم: مستشار الدفعة (cohorts.advisor_expert_id) أو عضو فريقها (cohort_experts)، وهو الربط
 // نفسه الذي يكلف المدرب بدفعته (expertCohortIds)، وممن يخدمون في الرحلة (journeyApproved). فالمدرب المسمى مكلف بدفعة جلسته
 // دائمًا، وصلاحية ورقة الحضور تبقى بالتكليف لا بالاسم: من أُزيل من فريق الدفعة لا يسجل حضورها ولو بقي اسمه على جلسة.
-// قبل الترحيل لا عمود: اللوحة تخفي الحقل، والحفظ يعيد المحاولة بلاه (trainer_skipped)
-export async function trainerReady(): Promise<boolean> {
-  const { error } = await db.from('workshop_sessions').select('expert_id').limit(1);
-  if (error && !missingColumn(error)) console.error('workshop trainer', error.message);
-  return !error;
-}
 /** خبراء كل دفعة ممن يُسمَّون مدربين لجلساتها: { معرّف الدفعة: [{ id, full_name }] } */
 export async function cohortTrainers(cohortIds: unknown[]): Promise<Record<string, { id: string; full_name: string }[]>> {
   const ids = [...new Set(cohortIds.map((x) => String(x || '')).filter((x) => UUID_RE.test(x)))];
@@ -693,17 +685,13 @@ export async function workshopSave(a: any, b: Body) {
     if (res.error && !out.starts_at && ['23502', '23514'].includes(String(res.error.code))) throw new Fail('الجلسة بلا موعد تحتاج تحديث قاعدة البيانات أولًا؛ حدد موعدها الآن أو أعد المحاولة بعد التحديث');
     return res;
   };
-  // قبل الترحيل 20261118130000 لا عمود للسعة، وقبل 20261119130000 لا عمود للمدرب: يُعاد الحفظ بلا العمود الغائب، ويُقال
-  // للوحة إنه لم يُحفظ إن كانت له قيمة. العمود يُعرف من رسالة الخطأ، وإن لم تسمِّه يُجرَّب إسقاطهما واحدًا واحدًا
-  let capacitySkipped = false, trainerSkipped = false;
+  // قبل الترحيل 20261118130000 لا عمود للسعة: يُعاد الحفظ بلاها، ويُقال للوحة إنها لم تُحفظ إن كانت لها قيمة
+  let capacitySkipped = false;
   const tolerant = async (write: (x: Body) => PromiseLike<any>) => {
     let res = await write(out);
-    for (let i = 0; i < 2 && res.error && missingColumn(res.error); i++) {
-      const msg = String(res.error.message || '');
-      const k = ['expert_id', 'capacity'].find((c) => c in out && msg.includes(c)) || ['expert_id', 'capacity'].find((c) => c in out);
-      if (!k) break;
-      if (k === 'capacity') capacitySkipped = out.capacity != null; else trainerSkipped = out.expert_id != null;
-      delete out[k];
+    if (res.error && missingColumn(res.error) && 'capacity' in out) {
+      capacitySkipped = out.capacity != null;
+      delete out.capacity;
       res = await write(out);
     }
     return res;
@@ -731,7 +719,7 @@ export async function workshopSave(a: any, b: Body) {
   await audit('admin', a.email, row.id ? 'workshop.update' : 'workshop.create', 'workshop_sessions', saved.id, null, out);
   // البريد بعد الحفظ وباختيار صريح وحده. تعذّره لا يُسقط الحفظ (فلا تُنشأ الجلسة مرتين بإعادة المحاولة): يُرد بنتيجته
   const mail = await saveMail(a, saved.id, prev, b).catch((e) => { console.error('workshop save mail', saved.id, (e as Error).message); return { mail_error: true }; });
-  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...(trainerSkipped ? { trainer_skipped: true } : {}), ...mail };
+  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...mail };
 }
 
 // ── البريد عند الحفظ (المرحلة 4): «أرسل الدعوة عند الحفظ» و«أبلغ المدعوين بالتغيير» ──
@@ -831,14 +819,10 @@ function attendancePeople(r: any, w: Awaited<ReturnType<typeof attendanceWorld>>
     .sort((x: any, y: any) => String(x.full_name).localeCompare(String(y.full_name), 'ar'));
 }
 
-// صفوف حضور الجلسة بسببها (note، الترحيل 20261119110000). قبل الترحيل لا عمود: تُقرأ بلاه، والسبب في سجل التدقيق وحده
+// صفوف حضور الجلسة بسببها (note)
 async function attendanceRows(sid: string): Promise<any[]> {
-  const cols = 'participant_id, checked_in_at, method, recorded_by';
   // counting-exempt: صفوف الحضور لا تُعدّ وحدها: attendancePeople يعرض منها من في attendanceWorld وحدهم (listed)
-  let res: { data: any; error: any } = await db.from('workshop_attendance').select(`${cols}, note`).eq('session_id', sid);
-  // counting-exempt: القراءة نفسها بلا عمود السبب قبل ترحيله
-  if (res.error && missingColumn(res.error)) res = await db.from('workshop_attendance').select(cols).eq('session_id', sid);
-  return (must(res, 'تعذّرت قراءة الحضور') ?? []) as any[];
+  return (must(await db.from('workshop_attendance').select('participant_id, checked_in_at, method, recorded_by, note').eq('session_id', sid), 'تعذّرت قراءة الحضور') ?? []) as any[];
 }
 
 // الحضور ومن يُتوقع حضوره
@@ -864,10 +848,11 @@ export async function cohortWorkshops(b: Body) {
   const c = must(await db.from('cohorts').select('id, program_id, delivery').eq('id', String(b.cohort_id || '')).maybeSingle()) as any;
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
   const ids = [...new Set((Array.isArray(b.requirement_ids) ? b.requirement_ids : []).map(String))].filter((x) => /^[0-9a-f-]{36}$/.test(x)).slice(0, 50);
-  const [capacity_ready, trainer_ready] = await Promise.all([capacityReady(), trainerReady()]);
-  // خبراء هذه الدفعة لحقل «المدرب» في نموذج اليوم (المرحلة 4). قبل ترحيل العمود لا حقل ولا قائمة
-  const trainers = trainer_ready ? ((await cohortTrainers([c.id]).catch((e) => { console.error('cohort trainers', e); return {} as Record<string, any[]>; }))[c.id] || []) : [];
-  const base = { success: true, capacity_ready, trainer_ready, trainers };
+  const capacity_ready = await capacityReady();
+  // خبراء هذه الدفعة لحقل «المدرب» في نموذج اليوم (المرحلة 4)
+  const trainers = (await cohortTrainers([c.id]).catch((e) => { console.error('cohort trainers', e); return {} as Record<string, any[]>; }))[c.id] || [];
+  // توافق مع نسخة اللوحة المنشورة قبل هذا التنظيف (تحديث بلا أثر): لوحة مفتوحة لحظة النشر تقرأ هذه الإشارة، فتبقى ثابتة إصدارًا واحدًا وتُحذف بعد 2026-12-04
+  const base = { success: true, capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, trainers };
   if (!ids.length) return { ...base, sessions: [] };
   // متطلبات برنامج الدفعة وحدها، فلا تُقرأ جلسات برنامج آخر برقم متطلب مرسل
   const reqs = (must(await db.from('stage_requirements').select('*').in('id', ids).eq('program_id', c.program_id).eq('kind', 'workshop')) || []) as any[];
@@ -882,7 +867,7 @@ export async function cohortWorkshops(b: Body) {
   ]);
   const attOf: Record<string, any[]> = {};
   for (const a of (att as any).data || []) (attOf[a.session_id] ||= []).push(a);
-  const trainerOf = trainer_ready ? await trainerNames(rows.map((s: any) => s.expert_id)) : {};
+  const trainerOf = await trainerNames(rows.map((s: any) => s.expert_id));
   // المتوقع لهذه الدفعة: جلستها كما تعدّها شاشة الرمز، والعامة بأعضاء هذه الدفعة وحاضريها وحدهم
   const sessions = rows.map((s: any) => {
     const people = attendancePeople(reqOf[s.requirement_id], w, c.id, attOf[s.id] || [], !s.cohort_id);
@@ -900,7 +885,7 @@ export async function cohortWorkshops(b: Body) {
 // 2. لا يكتب فوق حضور قائم: من سجّل نفسه يبقى بطريقته ووقته.
 // 3. إلغاء حضور سجّله المشارك بنفسه (أي طريقة غير «يدوي») للمدير الكاتب وحده وبسبب مكتوب، وإلغاء اليدوي بنقرة.
 // 4. حساب العرض لا يُكتب له حضور، والجلسة الملغاة لا يُسجَّل فيها حضور جديد.
-// السبب يُحفظ مع صف الحضور (note بعد الترحيل 20261119110000) وفي سجل التدقيق دائمًا، ومعه الحالة قبل الحذف.
+// السبب يُحفظ مع صف الحضور (note) وفي سجل التدقيق دائمًا، ومعه الحالة قبل الحذف.
 // markBatch يحكم لكل مشارك وحده ويعيد نتيجته: مقبول يُكتب، ومسجل أصلًا يُتخطى، ومرفوض بسببه. طلب معاد لا يكتب مرتين: من سُجّل
 // في المرة الأولى «مسجل أصلًا» في الثانية بلا صف ولا سطر سجل، ومفتاح منع التكرار (idempotency.ts) يعيد الرد الأول نفسه.
 export { MARK_REASON_MAX };
@@ -952,11 +937,8 @@ async function markBatch(by: Marker, sid: string, input: { present: string[]; ab
       else ok.push(id);
     }
     if (ok.length) {
-      const rows = (note: boolean) => ok.map((id) => ({ session_id: sid, participant_id: id, method: 'manual', recorded_by: by.email, ...(note && reason ? { note: reason } : {}) }));
-      const write = (note: boolean) => db.from('workshop_attendance').upsert(rows(note), { onConflict: 'session_id,participant_id', ignoreDuplicates: true }).select('participant_id');
-      let res: { data: any; error: any } = await write(true);
-      // قبل الترحيل 20261119110000 لا عمود للسبب: يُكتب الحضور بلاه، والسبب في سجل التدقيق
-      if (res.error && reason && missingColumn(res.error)) res = await write(false);
+      const rows = ok.map((id) => ({ session_id: sid, participant_id: id, method: 'manual', recorded_by: by.email, ...(reason ? { note: reason } : {}) }));
+      const res = await db.from('workshop_attendance').upsert(rows, { onConflict: 'session_id,participant_id', ignoreDuplicates: true }).select('participant_id');
       // ما كُتب فعلًا وحده يُسجَّل: من سبق إليه تسجيل آخر في اللحظة نفسها يبقى بطريقته، و«مسجل أصلًا» هنا
       const done = new Set(((must(res, 'تعذّر تسجيل الحضور') ?? []) as any[]).map((x) => x.participant_id));
       for (const id of ok) {
@@ -1249,8 +1231,8 @@ export async function expertWorkshops(e: any) {
   const ids = [...(await expertCohortIds(e.id))];
   if (!ids.length) return { success: true, sessions: [] };
   const now = Date.now();
-  // بـ* لتحمل expert_id بعد الترحيل 20261119130000 وتعمل قبله. والسر لا يخرج: الرد يُبنى حقلًا حقلًا أدناه
-  const rows = (must(await db.from('workshop_sessions').select('*').in('cohort_id', ids)
+  // الأعمدة التي يُبنى منها الرد وحدها، فلا يُقرأ سر الجلسة هنا أصلًا
+  const rows = (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, created_at, expert_id').in('cohort_id', ids)
     .eq('active', true)) ?? []) as any[];
   const dated = rows.filter((s) => !isUndated(s));
   const soon = (s: any) => s.mode === 'in_person' && Date.parse(s.ends_at) + 1800e3 >= now && Date.parse(s.starts_at) <= now + 14 * 864e5;

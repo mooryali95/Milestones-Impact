@@ -27,7 +27,7 @@ export const withCapacity = (fields, ready) => {
 
 // ── مدرب الجلسة والبريد عند الحفظ (تصور تشغيل الدفعة 2026-11-19، المرحلة 4) ──
 // حقول تُضاف إلى نموذج الجلسة نفسه في «الحضور والجلسات» وبطاقة المرحلة والنقرة على الخط، فالنموذج واحد أينما فُتح.
-// المدرب: من خبراء دفعة الجلسة (trainersOf(قيم) من الخادم)، ويظهر بعد ترحيل عموده وحده (trainer_ready).
+// المدرب: من خبراء دفعة الجلسة (trainersOf(قيم) من الخادم).
 // الدعوة عند الحفظ: لجلسة دفعة مؤرخة قائمة لم تنتهِ ولم تُدعَ. وإشعار التغيير: لجلسة دُعيت ثم تغيّر موعدها أو مكانها في النموذج.
 // كلاهما اختيار صريح يراه المدير قبل الحفظ، والخادم لا يرسل بريدًا بغيرهما ويعيد الفحص نفسه (saveMail في activities.ts)
 const localOf = (iso) => {
@@ -110,8 +110,7 @@ export function mailResultAr(r) {
 }
 /** رسالة الحفظ كاملة: النص، ثم ما لم يُحفظ قبل ترحيله، ثم ما جرى للبريد */
 export function savedAr(msg, r) {
-  const skipped = [r?.capacity_skipped ? 'السعة' : '', r?.trainer_skipped ? 'المدرب' : ''].filter(Boolean);
-  return [msg, skipped.length ? `${skipped.join(' و')} لم ${skipped.length > 1 ? 'يُحفظا' : skipped[0] === 'السعة' ? 'تُحفظ' : 'يُحفظ'} لأن قاعدة البيانات لم تُحدَّث بعد` : '', mailResultAr(r)].filter(Boolean).join('، ');
+  return [msg, r?.capacity_skipped ? 'السعة لم تُحفظ لأن قاعدة البيانات لم تُحدَّث بعد' : '', mailResultAr(r)].filter(Boolean).join('، ');
 }
 
 const daysAr = (n) => countAr(n, 'يوم واحد', 'يومان', 'أيام', 'يومًا');

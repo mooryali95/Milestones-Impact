@@ -701,8 +701,8 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
   const daysOf = (st) => (d?.def ? workshopDays({ def: d.def, stage: st, sessions: wsList, model, cohortId: c.id }) : null);
   const savedDay = (msg) => (r) => { if (r?.success) { toast(savedAr(msg, r)); setWsRetry((n) => n + 1); } return r; };
   const dayRow = (r) => ({ title_ar: r.raw.title_ar, mode: r.raw.mode || 'in_person', location_ar: r.raw.location_ar || null, join_url: r.raw.join_url || null, starts_at: r.raw.starts_at || null, ends_at: r.raw.ends_at || null });
-  // مدرب الجلسة من خبراء هذه الدفعة (admin.cohort-workshops)، بعد ترحيل عموده وحده. والجلسة العامة بلا مدرب
-  const trainers = ws?.trainer_ready ? ws.trainers || [] : null;
+  // مدرب الجلسة من خبراء هذه الدفعة (admin.cohort-workshops): الحقل بعد وصول قراءتها. والجلسة العامة بلا مدرب
+  const trainers = ws?.success ? ws.trainers || [] : null;
   const fieldsFor = (original = null, general = false) => sessionFields([], null, { capacity, trainersOf: trainers && !general ? () => trainers : null, mail: general ? null : { original, cohortId: c.id } });
   // يوم جديد في مرحلة: من زر البطاقة (بلا موعد مقترح)، أو من الخط الزمني (picked: اليوم تحت المؤشر، from: 'axis' أو 'board').
   // النموذج نفسه والحفظ نفسه. من الخط: تأكيد دائم قبل الحفظ يسمي المرحلة والموعد وهل تخرج دعوة
