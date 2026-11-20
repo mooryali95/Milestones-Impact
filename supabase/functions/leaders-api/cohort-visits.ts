@@ -24,9 +24,10 @@ export async function visitFor(a: Admin, cohortId: string, now = Date.now()) {
   const { data, error } = await rowOf(a, cohortId);
   if (error) {
     console.error('cohort visit read:', error.message || error);
-    return { failed: true, message: READ_FAILED_AR, since: null, first: false };
+    return { failed: true, message: READ_FAILED_AR, since: null, first: false, stored: false /* COMPAT_UNTIL_2026_12_04 */ };
   }
-  return { since: visitSince(data, now), first: !data };
+  // توافق مع نسخة اللوحة المنشورة قبل هذا التنظيف (تحديث بلا أثر): لوحة مفتوحة لحظة النشر تقرأ هذه الإشارة، فتبقى ثابتة إصدارًا واحدًا وتُحذف بعد 2026-12-04
+  return { since: visitSince(data, now), first: !data, stored: true /* COMPAT_UNTIL_2026_12_04 */ };
 }
 
 // لحظة القراءة التي عُرض شريطها (at من رد admin.cohort-journey): لا تُقبل من المستقبل ولا أقدم من يوم
@@ -48,5 +49,5 @@ export async function adminCohortVisit(a: Admin, b: Body, now = Date.now()) {
   const { error } = await db.from('admin_cohort_visits').upsert({ admin_email: who(a), cohort_id: cohortId, ...next }, { onConflict: 'admin_email,cohort_id' });
   // تعذّر الحفظ لا يُسقط الشاشة (الشريط معروض، ويُعاد التقدم في العرض التالي)، لكنه يُرد خطأ: «اعتبرها مقروءة» تعرضه
   if (error) { console.error('cohort visit save:', error.message || error); throw new Fail(SAVE_FAILED_AR, 500, 'db_error'); }
-  return { success: true, since: visitSince(next, now) };
+  return { success: true, since: visitSince(next, now), stored: true /* COMPAT_UNTIL_2026_12_04 */ };
 }

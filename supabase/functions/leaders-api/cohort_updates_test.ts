@@ -367,7 +367,7 @@ Deno.test('admin.cohort-journey: صف العضو يحمل لحظاته من جد
   assertEquals(cohortChanges(res.roster, { since: ago(1.5), now: res.at }).lines.map((l: Row) => l.key), ['submitted']);
   // الرد يحمل لحظة القراءة ووقت آخر زيارة، والقراءة وحدها لا تكتب زيارة
   assert(Math.abs(Date.parse(res.at) - Date.now()) < 60e3);
-  assertEquals(res.visit, { since: null, first: true });
+  assertEquals(res.visit, { since: null, first: true, stored: true });
   assertEquals(w.tables.admin_cohort_visits, []);
 });
 
@@ -377,7 +377,7 @@ Deno.test('تعذّر القاعدة: التبويب يعمل ويقول إن و
     // القراءة: التبويب لا يسقط، والزيارة failed برسالتها (لا «غير محفوظ»)، فيعرض الشريط النافذة الافتراضية ويقول السبب
     const res: any = await adminCohortJourney(admin, { cohort_id: 'c1' });
     assertEquals(res.success, true);
-    assertEquals(res.visit, { failed: true, message: 'تعذّرت قراءة وقت آخر زيارة، أعد المحاولة', since: null, first: false });
+    assertEquals(res.visit, { failed: true, message: 'تعذّرت قراءة وقت آخر زيارة، أعد المحاولة', since: null, first: false, stored: false });
     const ch = cohortChanges(res.roster, { since: sinceFor('visit', { visit: res.visit.since, now: res.at }), now: res.at });
     assertEquals(ch.lines.map((l: Row) => l.key), ['entered:apply', 'done', 'submitted', 'attended:ws1', 'joined']);
     // حفظ الزيارة وعلامة المقروء: خطأ صريح، لا success بلا حفظ
@@ -470,7 +470,7 @@ Deno.test('admin.cohort-visit: يتقدم بعد العرض لا بالقراء�
   const row = (email: string) => w.tables.admin_cohort_visits.find((r) => r.admin_email === email) || null;
   try {
     // عرض أول: الصف يُكتب ببريد المدير بحروف صغيرة، و«منذ» ما زال فارغًا في هذه الزيارة
-    assertEquals(await adminCohortVisit(admin, { cohort_id: 'c1', at: iso(t0 - 5000), op: 'seen' }, t0), { success: true, since: null });
+    assertEquals(await adminCohortVisit(admin, { cohort_id: 'c1', at: iso(t0 - 5000), op: 'seen' }, t0), { success: true, since: null, stored: true });
     assertEquals([row('owner@x.sa')!.since_at, row('owner@x.sa')!.seen_at], [null, iso(t0 - 5000)]);
     // زيارة تالية بعد ساعتين: القراءة تعرض منذ آخر لحظة قراءة، ولا تغيّر الصف حتى يُعرض الشريط
     const t1 = t0 + 2 * 36e5;
@@ -485,7 +485,7 @@ Deno.test('admin.cohort-visit: يتقدم بعد العرض لا بالقراء�
     // «اعتبرها مقروءة»
     assertEquals((await adminCohortVisit(admin, { cohort_id: 'c1', at: iso(t1 + 60e3), op: 'read' }, t1 + 90e3)).since, iso(t1 + 60e3));
     // مدير آخر (عرض فقط، بلا عامل ثانٍ): صفه هو، ولا يمس صف غيره
-    assertEquals(await adminCohortVisit(viewer, { cohort_id: 'c1', at: iso(t1), op: 'seen' }, t1 + 1000), { success: true, since: null });
+    assertEquals(await adminCohortVisit(viewer, { cohort_id: 'c1', at: iso(t1), op: 'seen' }, t1 + 1000), { success: true, since: null, stored: true });
     assertEquals(w.tables.admin_cohort_visits.length, 2);
     assertEquals(row('owner@x.sa')!.since_at, iso(t1 + 60e3));
     // لحظة من المستقبل أو أقدم من يوم أو بلا دفعة: تُرفض ولا يُكتب شيء

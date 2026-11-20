@@ -571,7 +571,7 @@ export async function overview() {
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
     workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [], trainer: (s.expert_id && trainerOf[s.expert_id]) || null }; delete row.secret; return row; }),
     coaching: coach.data || [],
-    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, cohort_trainers,
+    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers,
   };
 }
 
@@ -851,7 +851,8 @@ export async function cohortWorkshops(b: Body) {
   const capacity_ready = await capacityReady();
   // خبراء هذه الدفعة لحقل «المدرب» في نموذج اليوم (المرحلة 4)
   const trainers = (await cohortTrainers([c.id]).catch((e) => { console.error('cohort trainers', e); return {} as Record<string, any[]>; }))[c.id] || [];
-  const base = { success: true, capacity_ready, trainers };
+  // توافق مع نسخة اللوحة المنشورة قبل هذا التنظيف (تحديث بلا أثر): لوحة مفتوحة لحظة النشر تقرأ هذه الإشارة، فتبقى ثابتة إصدارًا واحدًا وتُحذف بعد 2026-12-04
+  const base = { success: true, capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, trainers };
   if (!ids.length) return { ...base, sessions: [] };
   // متطلبات برنامج الدفعة وحدها، فلا تُقرأ جلسات برنامج آخر برقم متطلب مرسل
   const reqs = (must(await db.from('stage_requirements').select('*').in('id', ids).eq('program_id', c.program_id).eq('kind', 'workshop')) || []) as any[];

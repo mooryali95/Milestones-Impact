@@ -91,7 +91,8 @@ const LINK_COLS = 'id, label, created_by, created_at, expires_at, revoked_at, la
 export async function linkList() {
   const data = must(await db.from('demo_links').select(LINK_COLS).is('revoked_at', null).gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false }).limit(DEMO_LINK_MAX_ACTIVE * 2));
-  return { success: true, max: DEMO_LINK_MAX_ACTIVE, links: ((data || []) as any[]).map((r) => demoLinkView(r)) };
+  // توافق مع نسخة اللوحة المنشورة قبل هذا التنظيف (تحديث بلا أثر): لوحة مفتوحة لحظة النشر تقرأ هذه الإشارة، فتبقى ثابتة إصدارًا واحدًا وتُحذف بعد 2026-12-04
+  return { success: true, ready: true /* COMPAT_UNTIL_2026_12_04 */, max: DEMO_LINK_MAX_ACTIVE, links: ((data || []) as any[]).map((r) => demoLinkView(r)) };
 }
 
 // رابط جديد: الرمز يُعرض مرة واحدة في الرد ولا يُحفظ (بصمته فقط)، ولا يعود من أي قراءة بعدها
