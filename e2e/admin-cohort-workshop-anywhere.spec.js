@@ -40,7 +40,6 @@ const PEOPLE = [{ id: 'p1', full_name: 'سارة الأحمد', email: 's@x.sa',
 
 // «الخادم»: admin.workshop-save يكتب في الحالة كما في activities.ts (المدرب من خبراء الدفعة، والدعوة عند الحفظ تختم الجلسة،
 // وإشعار التغيير لمن دُعي حين يتغير الموعد أو المكان)، وadmin.cohort-workshops وadmin.activities ورحلة المشارك تقرأ منها.
-// trainer: false = قبل الترحيل 20261119130000 (لا عمود: الحقل مخفي)
 function server(state) {
   const nameOf = (id) => TRAINERS.find((e) => e.id === id)?.full_name || null;
   return (b) => {
@@ -60,9 +59,9 @@ function server(state) {
       return out;
     }
     const rows = state.sessions.map((s) => ({ ...s, verify: 'qr', expected: 22, attended: Date.parse(s.ends_at) < Date.parse(NOW) ? 19 : 0, trainer: nameOf(s.expert_id) }));
-    if (b.action === 'admin.cohort-workshops') return { success: true, capacity_ready: true, trainer_ready: state.trainer !== false, trainers: state.trainer !== false ? TRAINERS : [], sessions: rows };
+    if (b.action === 'admin.cohort-workshops') return { success: true, capacity_ready: true, trainers: TRAINERS, sessions: rows };
     if (b.action === 'admin.activities') {
-      return { success: true, capacity_ready: true, trainer_ready: state.trainer !== false, cohort_trainers: state.trainer !== false ? { c1: TRAINERS } : {},
+      return { success: true, capacity_ready: true, cohort_trainers: { c1: TRAINERS },
         requirements: requirements.filter((r) => r.kind === 'workshop').map((r) => ({ ...r, program_id: 'pa' })), workshops: rows, coaching: [], programs, cohorts };
     }
     return null;
@@ -414,20 +413,7 @@ test('تحرير جلسة دُعي أعضاؤها: تغيير الموعد يُ�
   await expect(page.locator('.toast, [role="status"]').filter({ hasText: 'حُفظ اليوم' }).first()).toContainText('وأُبلغ بالتغيير إلى 22 مشاركًا');
 });
 
-test('قبل ترحيل المدرب: لا حقل مدرب في النموذج، والباقي يعمل. والقراءة فقط بلا زر إضافة', async ({ page, browser }) => {
-  const state = { trainer: false, sessions: [{ ...firstDay }] };
-  const calls = await admin(page, 1440, state);
-  const axis = page.getByTestId('cj-axis');
-  await axis.getByTestId('ja-add').click();
-  await axis.locator('[data-add-lane="training"]').click({ position: await axisPoint(page, 'training', 15) });
-  const form = page.getByRole('dialog', { name: /^ورشة في «التدريب»/ });
-  await expect(form.getByLabel('المدرب (اختياري)')).toHaveCount(0);
-  await expect(form.getByLabel('أرسل الدعوة عند الحفظ')).toBeChecked();
-  await form.getByRole('button', { name: 'أضف الورشة' }).click();
-  await page.getByRole('button', { name: 'أضف وأرسل الدعوة' }).click();
-  await expect(form).toBeHidden();
-  expect('expert_id' in saves(calls)[0].row).toBe(false);
-
+test('القراءة فقط: بلا زر إضافة على الخط ولا في البطاقة', async ({ browser }) => {
   const ctx = await browser.newContext({ timezoneId: 'UTC' });
   const ro = await ctx.newPage();
   await admin(ro, 1440, { sessions: [{ ...firstDay }] }, { readOnly: true });

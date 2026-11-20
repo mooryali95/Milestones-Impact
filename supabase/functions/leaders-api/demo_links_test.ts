@@ -1,6 +1,6 @@
 // روابط تجربة حساب العرض (تصور 2026-11-19): رابط باسم مستلمه يفتح جلسة مشارك لحساب العرض بلا رمز بريد. على الموجّه الحقيقي
 // (index.ts) بقاعدة في الذاكرة: الإنشاء والفتح والانتهاء والإلغاء والرمز الخاطئ وحد المعدل، وأن الرابط وجلسته لا يبلغان فعل
-// إدارة ولا فعلًا مغلقًا على حساب العرض، وأن جلسة المدير وجلسات الروابط لا تبطل إحداها الأخرى، وأن كل شيء قبل الترحيل كما كان.
+// إدارة ولا فعلًا مغلقًا على حساب العرض، وأن جلسة المدير وجلسات الروابط لا تبطل إحداها الأخرى، وأن تعذّر القاعدة خطأ صريح لا قائمة فارغة.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 
@@ -17,7 +17,7 @@ type Row = Record<string, any>;
 type FailHook = (table: string, mode: string, info: { cols: string; payload: any; filters: string[] }) => { code: string; message: string } | null;
 
 // جداول في الذاكرة بنمط program_gate_test.ts، ومعها gt وgte وlt على الأعمدة المباشرة (انتهاء الرابط وحد المعدل)، وfail لمحاكاة
-// جدول أو عمود لم يُرحَّل. مرشحات الجداول المضمّنة والترتيب لا تغيّر النتيجة هنا
+// تعذّر القاعدة. مرشحات الجداول المضمّنة والترتيب لا تغيّر النتيجة هنا
 function install(tables: Record<string, Row[]>, fail: FailHook = () => null) {
   let seq = 0;
   const from = (table: string) => {
@@ -133,7 +133,7 @@ Deno.test('الإنشاء: الرمز يُعرض مرة في الرابط ولا
     assertEquals(w.tables.audit_log.map((x) => [x.actor_type, x.actor, x.action, x.entity, x.entity_id, x.after]), [['admin', ADMIN.email, 'demo.link-create', 'demo_links', row.id, { label: 'مدير الدفعة', days: 14 }]]);
     assertEquals(Object.keys(r.link).sort(), ['created_at', 'created_by', 'expires_at', 'id', 'label', 'last_used_at', 'state', 'uses']);
     const list: any = await D.linkList();
-    assertEquals([list.ready, list.links.length, list.links[0].label, list.links[0].created_by, list.links[0].state], [true, 1, 'مدير الدفعة', ADMIN.email, 'active']);
+    assertEquals([list.success, list.links.length, list.links[0].label, list.links[0].created_by, list.links[0].state], [true, 1, 'مدير الدفعة', ADMIN.email, 'active']);
     assert(!JSON.stringify(list).includes(row.token_hash) && !JSON.stringify(list).includes(r.t));
     // المنتهي والملغى خارج القائمة النشطة
     w.tables.demo_links.push({ id: crypto.randomUUID(), label: 'منتهٍ', created_by: ADMIN.email, token_hash: 'x'.repeat(64), expires_at: new Date(Date.now() - 1000).toISOString(), created_at: new Date().toISOString() });
@@ -332,25 +332,22 @@ Deno.test('إعادة الضبط: يُحذف الحساب وجلساته كله�
   } finally { w.restore(); }
 });
 
-Deno.test('قبل الترحيل 20261119100000: أفعال الرابط ترد not_migrated، وفتح العرض من اللوحة يبطل جلساته كلها كما كان', async () => {
-  const missingTable = { code: '42P01', message: 'relation "leaders.demo_links" does not exist' };
-  const missingCol = { code: '42703', message: 'column auth_sessions.demo_link_id does not exist' };
-  const w = world((table, _mode, info) => {
-    if (table === 'demo_links') return missingTable;
-    if (table === 'auth_sessions' && (info.cols.includes('demo_link_id') || info.filters.includes('demo_link_id') || (info.payload && 'demo_link_id' in info.payload))) return missingCol;
-    return null;
-  });
+Deno.test('تعذّر القاعدة خطأ صريح: لا قائمة فارغة ولا «لم تُفعَّل»، ولا جلسة رابط تمر بلا فحص رابطها', async () => {
+  let down = false;
+  const w = world((table) => (down && table === 'demo_links' ? { code: '57014', message: 'canceling statement due to statement timeout' } : null));
   try {
-    assertEquals(await D.linkList(), { success: true, ready: false, links: [] });
-    assertEquals(await code(() => D.linkCreate(ADMIN, { label: 'مدير الدفعة' })), [503, 'not_migrated']);
-    assertEquals(await code(() => D.linkRevoke(ADMIN, { id: crypto.randomUUID() })), [503, 'not_migrated']);
-    const o = await w.call('demo.link-open', { t: 'T'.repeat(43) });
-    assertEquals([o.status, o.code], [503, 'not_migrated']);
-    // فتح المدير كما كان: يعمل، ويبطل ما قبله
-    const a1 = ((await D.open(ADMIN, {}, CTX)) as any).url.split('#demo=')[1];
-    assertEquals((await w.call('me', { token: a1 })).status, 200);
-    const a2 = ((await D.open(ADMIN, {}, CTX)) as any).url.split('#demo=')[1];
-    assertEquals([(await w.call('me', { token: a1 })).status, (await w.call('me', { token: a2 })).status], [401, 200]);
-    assertEquals((await w.call('me', { token: a2 })).demo_shared, undefined);
+    const { t } = await w.create();
+    const token = (await w.call('demo.link-open', { t })).token;
+    down = true;
+    assertEquals(await code(() => D.linkList()), [500, 'db_error']);
+    assertEquals(await code(() => D.linkCreate(ADMIN, { label: 'مدير الدفعة' })), [500, 'db_error']);
+    assertEquals(await code(() => D.linkRevoke(ADMIN, { id: crypto.randomUUID() })), [500, 'db_error']);
+    const o = await w.call('demo.link-open', { t });
+    assertEquals([o.status, o.code], [500, 'db_error']);
+    // جلسة الرابط القائمة لا تمر والرابط لا يُقرأ، ولا تُبطل بعطل عابر
+    const me = await w.call('me', { token });
+    assertEquals([me.status, me.code], [500, 'db_error']);
+    down = false;
+    assertEquals((await w.call('me', { token })).status, 200);
   } finally { w.restore(); }
 });

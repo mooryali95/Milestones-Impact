@@ -26,7 +26,7 @@ function backend() {
   const admin = (b) => {
     s.calls.push(b);
     switch (b.action) {
-      case 'admin.demo-links': return { success: true, ready: true, max: 20, links: s.links.filter((l) => !l.revoked).map(view) };
+      case 'admin.demo-links': return { success: true, max: 20, links: s.links.filter((l) => !l.revoked).map(view) };
       case 'admin.demo-link-create': {
         const l = { id: `00000000-0000-4000-8000-00000000000${s.links.length + 1}`, token: TRY_TOKEN, label: String(b.label).trim(), created_by: 'a@x.com', created_at: ago(0), expires_at: new Date(Date.now() + b.days * 864e5).toISOString(), last_used_at: null, uses: 0, revoked: false };
         s.links.push(l);

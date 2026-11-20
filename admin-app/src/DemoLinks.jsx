@@ -16,7 +16,7 @@ export const resetConfirmAr = (links) => ((links || []).length
   ? `إعادة حساب العرض إلى البداية؟ تُمسح إجاباته وتقدمه. الحساب واحد مشترك، فتنتهي الآن تجربة من يستعمل ${links.length === 1 ? 'الرابط النشط' : 'الروابط النشطة'}: ${linkNamesAr(links)}. يبقى ${links.length === 1 ? 'رابطه صالحًا ويبدأ' : 'روابطهم صالحة ويبدؤون'} من البداية.`
   : 'إعادة حساب العرض إلى البداية؟ تُمسح إجاباته وتقدمه، ويبدأ العرض التالي من شاشة الدخول.');
 
-// القائمة تُقرأ مع فتح البطاقة وبعد كل إنشاء وإلغاء. state: null قبل الوصول، وready: false قبل ترحيل الجدول
+// القائمة تُقرأ مع فتح البطاقة وبعد كل إنشاء وإلغاء. state: null قبل الوصول، وfailed حين تتعذر القراءة
 export function useDemoLinks() {
   const [state, setState] = useState(null);
   const load = useCallback(async () => {
@@ -60,8 +60,7 @@ export function DemoLinks({ state, load }) {
       <b>روابط التجربة</b>
       <p className="la-muted">رابط ترسله لشخص ليجرّب المنصة بحساب العرض، بلا رمز دخول. الحساب واحد مشترك الآن: ما يفعله أحدهم يراه الباقون، وإعادته إلى البداية تمسح تجربة الجميع. الروابط وفتحك للعرض لا يُخرج أحدها الآخر.</p>
       {state?.failed && <p className="la-note" role="status">تعذّرت قراءة الروابط الآن. {state.message || 'أعد المحاولة بعد قليل.'}</p>}
-      {state && !state.failed && state.ready === false && <p className="la-note" role="status">روابط التجربة لم تُفعَّل بعد: تحتاج تحديث قاعدة البيانات.</p>}
-      {state?.ready && (
+      {state && !state.failed && (
         <>
           <form className="demo-links-form" onSubmit={create}>
             <label>

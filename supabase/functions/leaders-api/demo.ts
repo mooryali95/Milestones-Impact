@@ -9,7 +9,6 @@
 import { audit, CONFIG, db, DEMO_MAIL_DOMAIN, Fail, hash, must, randomToken } from './core.ts';
 import { assessmentGet, assessmentSubmit, issueSession, mePayload, profileSave } from './participant.ts';
 import { scoreFor } from './logic.js';
-import { missingColumn, missingTable } from './missing-column.ts';
 import { cleanDemoLinkInput, DEMO_LINK_LIMITS, DEMO_LINK_MAX_ACTIVE, demoLinkState, demoLinkUrl, demoLinkView } from './demo-links.js';
 import type { Admin } from './admin.ts';
 
@@ -33,13 +32,8 @@ async function demoRow() {
 export async function open(a: Admin, _b: Body, ctx: Ctx) {
   const p = await demoRow();
   // رابط عرض جديد يُبطل ما قبله: رمز ظهر على شاشة سابقة لا يبقى صالحًا (M5). جلسات روابط التجربة (demo_link_id) ليست
-  // مما قبله: من أُعطي رابطًا لا يخرجه فتح المدير للعرض. قبل الترحيل 20261119100000 لا عمود ولا روابط، فتُبطل كلها كما كان
-  const now = new Date().toISOString();
-  const mine = await db.from('auth_sessions').update({ revoked_at: now }).eq('participant_id', p.id).is('revoked_at', null).is('demo_link_id', null);
-  if (mine.error) {
-    if (!missingColumn(mine.error)) must(mine, 'تعذّر إبطال جلسة العرض السابقة');
-    must(await db.from('auth_sessions').update({ revoked_at: now }).eq('participant_id', p.id).is('revoked_at', null), 'تعذّر إبطال جلسة العرض السابقة');
-  }
+  // مما قبله: من أُعطي رابطًا لا يخرجه فتح المدير للعرض
+  must(await db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('participant_id', p.id).is('revoked_at', null).is('demo_link_id', null), 'تعذّر إبطال جلسة العرض السابقة');
   const token = await issueSession(p.id, 'demo', ctx);
   await audit('admin', a.email, 'demo.open', 'participants', p.id);
   return { success: true, url: `${CONFIG.appUrl.replace(/\/$/, '')}/#demo=${token}`, status: p.status };
@@ -91,17 +85,13 @@ export async function fillAssessment(p: any) {
 // ════════════════════════════════════════════════════════════════
 // روابط التجربة
 // ════════════════════════════════════════════════════════════════
-const NOT_MIGRATED_AR = 'روابط التجربة لم تُفعَّل بعد: تحتاج تحديث قاعدة البيانات';
-const notMigrated = () => new Fail(NOT_MIGRATED_AR, 503, 'not_migrated');
-const absent = (e: any) => missingTable(e) || missingColumn(e);
 const LINK_COLS = 'id, label, created_by, created_at, expires_at, revoked_at, last_used_at, uses';
 
-// الروابط النشطة للوحة: الاسم ومن أنشأه ومتى، وانتهاؤه وآخر استعمال. بلا رمز ولا بصمته. ready: false قبل الترحيل
+// الروابط النشطة للوحة: الاسم ومن أنشأه ومتى، وانتهاؤه وآخر استعمال. بلا رمز ولا بصمته
 export async function linkList() {
-  const { data, error } = await db.from('demo_links').select(LINK_COLS).is('revoked_at', null).gt('expires_at', new Date().toISOString())
-    .order('created_at', { ascending: false }).limit(DEMO_LINK_MAX_ACTIVE * 2);
-  if (error) { if (absent(error)) return { success: true, ready: false, links: [] }; must({ data, error }); }
-  return { success: true, ready: true, max: DEMO_LINK_MAX_ACTIVE, links: ((data || []) as any[]).map((r) => demoLinkView(r)) };
+  const data = must(await db.from('demo_links').select(LINK_COLS).is('revoked_at', null).gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false }).limit(DEMO_LINK_MAX_ACTIVE * 2));
+  return { success: true, max: DEMO_LINK_MAX_ACTIVE, links: ((data || []) as any[]).map((r) => demoLinkView(r)) };
 }
 
 // رابط جديد: الرمز يُعرض مرة واحدة في الرد ولا يُحفظ (بصمته فقط)، ولا يعود من أي قراءة بعدها
@@ -110,7 +100,7 @@ export async function linkCreate(a: Admin, b: Body) {
   try { input = cleanDemoLinkInput(b); } catch (e) { throw new Fail((e as Error).message); }
   const now = Date.now();
   const cur = await db.from('demo_links').select('id', { count: 'exact', head: true }).is('revoked_at', null).gt('expires_at', new Date(now).toISOString());
-  if (cur.error) { if (absent(cur.error)) throw notMigrated(); must(cur); }
+  if (cur.error) must(cur);
   if ((cur.count ?? 0) >= DEMO_LINK_MAX_ACTIVE) throw new Fail(`لحساب العرض ${DEMO_LINK_MAX_ACTIVE} رابطًا نشطًا، وهذا الحد. ألغِ رابطًا لا تحتاجه ثم أنشئ الجديد`, 409, 'limit');
   const token = randomToken();
   const row = must(await db.from('demo_links').insert({
@@ -125,7 +115,7 @@ export async function linkRevoke(a: Admin, b: Body) {
   const id = String(b.id || '');
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new Fail('الرابط غير موجود', 404);
   const got = await db.from('demo_links').select(LINK_COLS).eq('id', id).maybeSingle();
-  if (got.error) { if (absent(got.error)) throw notMigrated(); must(got); }
+  if (got.error) must(got);
   const row = got.data as any;
   if (!row) throw new Fail('الرابط غير موجود', 404);
   const now = new Date().toISOString();
@@ -164,14 +154,14 @@ export async function linkOpen(b: Body, ctx: Ctx) {
   await audit('system', net, LINK_TRY, 'demo_links', null);
   if (await linkTries(net, since) > DEMO_LINK_LIMITS.triesPerNet10Min) throw tooMany();
   const got = await db.from('demo_links').select(LINK_COLS).eq('token_hash', await hash(token)).maybeSingle();
-  if (got.error) { if (absent(got.error)) throw notMigrated(); must(got); }
+  if (got.error) must(got);
   const row = got.data as any;
   if (!row) throw gone('invalid');
   const st = demoLinkState(row);
   if (st !== 'active') throw gone(st as 'revoked' | 'expired');
   const hourAgo = new Date(Date.now() - 36e5).toISOString();
   const opened = await db.from('auth_sessions').select('id', { count: 'exact', head: true }).eq('demo_link_id', row.id).gte('created_at', hourAgo);
-  if (opened.error) { if (absent(opened.error)) throw notMigrated(); must(opened); }
+  if (opened.error) must(opened);
   if ((opened.count ?? 0) >= DEMO_LINK_LIMITS.opensPerLinkHour) throw new Fail('فُتح هذا الرابط مرات كثيرة في الساعة الأخيرة. حاول بعد قليل', 429, 'rate');
   const p = await demoRow();
   const session = await issueSession(p.id, 'demo', ctx);
@@ -181,7 +171,6 @@ export async function linkOpen(b: Body, ctx: Ctx) {
   const tag = await db.from('auth_sessions').update({ demo_link_id: row.id, expires_at: new Date(hardEnd).toISOString() }).eq('token_hash', tokenHash).select('id');
   if (tag.error || !tag.data?.length) {
     await db.from('auth_sessions').update({ revoked_at: new Date().toISOString() }).eq('token_hash', tokenHash);
-    if (tag.error && absent(tag.error)) throw notMigrated();
     throw new Fail('تعذّر فتح رابط التجربة، حاول مرة أخرى', 500, 'db_error');
   }
   const used = new Date().toISOString();
@@ -192,11 +181,11 @@ export async function linkOpen(b: Body, ctx: Ctx) {
 }
 
 // جلسة حساب العرض التي بدأها رابط: تنتهي بانتهاء رابطها أو إلغائه ولو لم تُبطل هي بعد (الحارس في معالج الطلب لكل فعل
-// لحساب العرض). تعيد true لجلسة رابط سارٍ، وfalse لجلسة المدير، وقبل الترحيل
+// لحساب العرض). تعيد true لجلسة رابط سارٍ، وfalse لجلسة المدير
 export async function linkSession(sessionId: string) {
   const s = await db.from('auth_sessions').select('demo_link_id').eq('id', sessionId).maybeSingle();
-  // قبل الترحيل لا عمود ولا روابط. وأي خطأ غيره يُرد ولا يُفتح به: جلسة رابط لا تمر بلا فحص رابطها
-  if (s.error) { if (absent(s.error)) return false; must(s); }
+  // تعذّر القراءة يُرد ولا يُفتح به: جلسة رابط لا تمر بلا فحص رابطها
+  if (s.error) must(s);
   const linkId = (s.data as any)?.demo_link_id;
   if (!linkId) return false;
   const l = await db.from('demo_links').select('expires_at, revoked_at').eq('id', linkId).maybeSingle();

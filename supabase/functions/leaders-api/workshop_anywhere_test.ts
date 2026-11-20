@@ -1,5 +1,5 @@
 // الورشة من أي مكان (تصور تشغيل الدفعة 2026-11-19، المرحلة 4): الجلسة المضافة بنقرة على الخط الزمني تمر بـadmin.workshop-save
-// نفسه، فهي جلسة حقيقية في كل مكان. هنا: المدرب المسمى (من خبراء دفعة الجلسة وحدهم، الترحيل 20261119130000 وقبله)،
+// نفسه، فهي جلسة حقيقية في كل مكان. هنا: المدرب المسمى (من خبراء دفعة الجلسة وحدهم)،
 // و«أرسل الدعوة عند الحفظ» وإشعار التغيير (بلا تكرار، بلا حساب العرض ولا حسابات الاختبار، وبحصة البريد)، وأن الجلسة الجديدة
 // تظهر في كل ما يقرأ الجلسات، وأن الورشة الإضافية تُحسب لمن ينقصه يوم ولا تزيد المطلوب (القرار 6). بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
@@ -21,7 +21,7 @@ const iso = (ms: number) => new Date(NOW + ms).toISOString();
 const DAY = 864e5;
 const LEVELS = { milestone: 'intermediate', impact: 'intermediate', leadership: 'intermediate' };
 
-function world({ premigration = false } = {}) {
+function world() {
   const who = (n: number, org: string | null, extra: Row = {}) => ({ id: U(770100 + n), full_name: `مشارك ${n}`, email: `w${n}@example.sa`, organization_id: org, organization_name: 'جهة', status: 'enrolled', is_demo: false, is_test: false, ...extra });
   // 1 و2 في دفعة الجهة، 3 حساب اختبار فيها، 4 منسحب منها، 5 في دفعة أخرى، 6 حساب العرض ملحق بالدفعة
   const ps = [who(1, ORG), who(2, ORG), who(3, ORG, { is_test: true }), who(4, ORG, { status: 'withdrawn' }), who(5, null), who(6, null, { is_demo: true, email: 'demo@example.sa' })];
@@ -43,20 +43,12 @@ function world({ premigration = false } = {}) {
     journey_stages: [{ program_id: 'prog', key: 'training', title_ar: 'التدريب', sort: 1, active: true, duration_days: 7 }],
     stage_requirements: [{ id: REQ_W, program_id: 'prog', stage_key: 'training', code: 'T-ATTEND', kind: 'workshop', dimension: null, level: null, sort: 1, required: true, title_ar: 'الأيام التدريبية', config: { verify: 'qr', sessions_required: 2 }, active: true }],
     workshop_sessions: [
-      { id: DAY1, requirement_id: REQ_W, cohort_id: COHORT, title_ar: 'اليوم 1', mode: 'in_person', location_ar: 'القاعة', join_url: null, active: true, secret: 's'.repeat(32), starts_at: iso(-2 * DAY), ends_at: iso(-2 * DAY + 72e5), invited_at: null, reminded_day_at: null, reminded_hour_at: null, ...(premigration ? {} : { expert_id: null }) },
+      { id: DAY1, requirement_id: REQ_W, cohort_id: COHORT, title_ar: 'اليوم 1', mode: 'in_person', location_ar: 'القاعة', join_url: null, active: true, secret: 's'.repeat(32), starts_at: iso(-2 * DAY), ends_at: iso(-2 * DAY + 72e5), invited_at: null, reminded_day_at: null, reminded_hour_at: null, expert_id: null },
     ],
     workshop_attendance: [],
     audit_log: [], mail_events: [], mail_queue: [],
   };
-  // قبل الترحيل 20261119130000: العمود expert_id غير موجود، فقراءته بالاسم وكتابته يرفضهما PostgREST كما في الإنتاج
-  const f = installFake(tables, {
-    fail: (t, op) => {
-      if (t !== 'workshop_sessions' || !premigration) return null;
-      if (op.kind === 'select' && /\bexpert_id\b/.test(op.cols || '')) return { code: '42703', message: 'column workshop_sessions.expert_id does not exist' };
-      if ((op.kind === 'insert' || op.kind === 'update') && op.value && 'expert_id' in op.value) return { code: 'PGRST204', message: "Could not find the 'expert_id' column of 'workshop_sessions' in the schema cache" };
-      return null;
-    },
-  });
+  const f = installFake(tables);
   return { ps, tables, f };
 }
 type W = ReturnType<typeof world>;
@@ -75,17 +67,16 @@ const ics = (c: { body: any }) => atob(c.body.attachments[0].content);
 Deno.test('المدرب: يُحفظ من خبراء دفعة الجلسة، ويراه المشارك «مع فلان»، وتظهر الجلسة للمدرب في بوابته باسمه', async () => {
   const w = world();
   try {
-    assertEquals(await V.trainerReady(), true);
     // قائمة النموذج: مستشار الدفعة وعضو فريقها ممن يخدمون في الرحلة، لا الموقوف ولا خبير دفعة أخرى
     const c0: any = await V.cohortWorkshops({ cohort_id: COHORT, requirement_ids: [REQ_W] });
-    assertEquals([c0.trainer_ready, c0.trainers.map((e: Row) => e.id).sort()], [true, [ADVISOR, TEAM].sort()]);
+    assertEquals(c0.trainers.map((e: Row) => e.id).sort(), [ADVISOR, TEAM].sort());
     const r: any = await V.workshopSave(ADMIN, { row: newDay({ expert_id: TEAM }) });
-    assertEquals([r.success, r.trainer_skipped, rowOf(w, r.id).expert_id], [true, undefined, TEAM]);
+    assertEquals([r.success, rowOf(w, r.id).expert_id], [true, TEAM]);
     // بطاقة المرحلة و«الحضور والجلسات»: الاسم مع الصف
     const c: any = await V.cohortWorkshops({ cohort_id: COHORT, requirement_ids: [REQ_W] });
     assertEquals(c.sessions.find((s: Row) => s.id === r.id).trainer, 'أ. خالد العتيبي');
     const o: any = await V.overview();
-    assertEquals([o.trainer_ready, o.workshops.find((s: Row) => s.id === r.id).trainer, o.cohort_trainers[COHORT].length, o.cohort_trainers[OTHER].map((e: Row) => e.id)], [true, 'أ. خالد العتيبي', 2, [ELSEWHERE]]);
+    assertEquals([o.workshops.find((s: Row) => s.id === r.id).trainer, o.cohort_trainers[COHORT].length, o.cohort_trainers[OTHER].map((e: Row) => e.id)], ['أ. خالد العتيبي', 2, [ELSEWHERE]]);
     // رحلة المشارك: الاسم وحده، بلا معرّف الخبير ولا سر الجلسة
     const mine: any = await V.evidenceFor(w.ps[0], w.tables.stage_requirements, LEVELS, true, COHORT);
     const seen = mine[REQ_W].sessions.find((s: Row) => s.id === r.id);
@@ -127,36 +118,6 @@ Deno.test('المدرب من دفعة أخرى أو موقوف أو لجلسة �
     rowOf(w, t.id).expert_id = TEAM;   // اسم بقي على جلسة دفعة لم يعد مكلفًا بها: لا ورقة ولا رمز
     assertEquals(await code(() => V.expertWorkshopAttendance({ id: TEAM, email: 't@x.sa' }, { id: t.id })), ['not_assigned', 403]);
     assertEquals(await code(() => V.expertWorkshopMarkBulk({ id: TEAM, email: 't@x.sa' }, { session_id: t.id, present: [w.ps[4].id], reason: 'x' })), ['not_assigned', 403]);
-  } finally { w.f.restore(); }
-});
-
-Deno.test('قبل ترحيل المدرب: الحقل مخفي، والحفظ بمدرب ينجح بلاه ويقول إنه لم يُحفظ، وكل ما سواه يعمل', async () => {
-  const w = world({ premigration: true });
-  try {
-    assertEquals(await V.trainerReady(), false);
-    const r: any = await V.workshopSave(ADMIN, { row: newDay({ expert_id: TEAM, capacity: 20 }) });
-    assertEquals([r.success, r.trainer_skipped, r.capacity_skipped], [true, true, undefined]);
-    const row = rowOf(w, r.id);
-    assertEquals(['expert_id' in row, row.capacity, row.cohort_id, row.title_ar], [false, 20, COHORT, 'ورشة التفاوض']);
-    // النموذج قبل الترحيل لا يرسل الحقل أصلًا: لا إعادة ولا علامة. والفارغ يُسقط بلا تنبيه
-    const r2: any = await V.workshopSave(ADMIN, { row: { ...newDay(), id: r.id, title_ar: 'ورشة' } });
-    assertEquals([r2.success, r2.trainer_skipped, row.title_ar], [true, undefined, 'ورشة']);
-    const r3: any = await V.workshopSave(ADMIN, { row: { ...newDay(), id: r.id, expert_id: null } });
-    assertEquals([r3.success, r3.trainer_skipped], [true, undefined]);
-    // القراءات كلها بلا العمود: بطاقة المرحلة، «الحضور والجلسات»، رحلة المشارك، بوابة الخبير
-    const c: any = await V.cohortWorkshops({ cohort_id: COHORT, requirement_ids: [REQ_W] });
-    assertEquals([c.trainer_ready, c.trainers, c.sessions.find((s: Row) => s.id === r.id).trainer], [false, [], null]);
-    const o: any = await V.overview();
-    assertEquals([o.trainer_ready, o.cohort_trainers], [false, {}]);
-    const mine: any = await V.evidenceFor(w.ps[0], w.tables.stage_requirements, LEVELS, true, COHORT);
-    assert(mine[REQ_W].sessions.some((s: Row) => s.id === r.id && !('trainer' in s)));
-    const xp: any = await V.expertWorkshops({ id: TEAM, email: 't@x.sa' });
-    assert(xp.sessions.some((s: Row) => s.id === r.id && !s.mine && !s.trainer));
-    // والدعوة عند الحفظ تعمل قبل الترحيل
-    await withMail(async (calls) => {
-      const r4: any = await V.workshopSave(ADMIN, { row: { ...newDay(), id: r.id }, invite: true });
-      assertEquals([r4.invite.sent, to(calls)], [2, [w.ps[0].email, w.ps[1].email]]);
-    });
   } finally { w.f.restore(); }
 });
 

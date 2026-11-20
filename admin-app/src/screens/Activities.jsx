@@ -102,7 +102,7 @@ function Workshops({ data, reload, canWrite }) {
   const reqs = data.requirements.filter((r) => r.kind === 'workshop');
   const capacity = !!data.capacity_ready;
   // مدربو كل دفعة من الخادم (cohort_trainers)، والحقل للجلسة ذات الدفعة وحدها. ورسالة الحفظ تحمل ما جرى للبريد
-  const trainersOf = data.trainer_ready ? (v) => (v.cohort_id ? data.cohort_trainers?.[v.cohort_id] || [] : null) : null;
+  const trainersOf = (v) => (v.cohort_id ? data.cohort_trainers?.[v.cohort_id] || [] : null);
   const saved = useRef(null);
   const save = (base) => async (v) => { const r = await L('admin.workshop-save', saveBody(v, base)); saved.current = r?.success ? r : null; return r; };
   // القفز من «الرحلة في لمحة» (‎?req=<المتطلب>‎): إلى جلسات النشاط وزر «+ موعد» عنده

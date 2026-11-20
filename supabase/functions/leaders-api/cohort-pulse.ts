@@ -9,13 +9,11 @@
 // اليوم يوم UTC (يبدأ 03:00 بالرياض) لأن «متأخر» يُحسب به (journeyMap): أول تشغيل بعده (نحو 03:17 بالرياض) يرى من صار
 // متأخرًا اليوم، وملخص 9:17 يقرؤه. و«صار متأخرًا» يُحسب من لحظة بدء التأخر نفسها (late_since)، لا بمقارنة قائمتين، فلا
 // تُحفظ معرّفات.
-// قبل الترحيل 20261119120000: لا لقطة، فلا تنبيه ولا سطر ولا بريد، وبلا خطأ.
 import { CONFIG, db, sendMail, cohortWeeklyMail, cohortWeeklySubject } from './core.ts';
 import { mailCounts } from '../_shared/mail.ts';
 import { CODE_RESERVE } from '../_shared/mail-budget.js';
 import { route } from '../_shared/notify-routing.js';
 import { notifySettings } from '../_shared/notify-settings.ts';
-import { missingTable } from './missing-column.ts';
 import { cohortRoster } from './coordinator.ts';
 import { isRunning } from './cohort-running.js';
 import { nextSessionAt } from './today-desk.js';
@@ -41,7 +39,7 @@ async function runningCohorts(now: number) {
 export async function cohortSnapshots(now = Date.now(), budgetMs = SNAPSHOT_BUDGET_MS) {
   const day = utcDay(now);
   const have = await db.from('cohort_snapshots').select('cohort_id, day, taken_at').gte('day', utcDay(now - 8 * DAY)).order('day', { ascending: false });
-  if (have.error) return missingTable(have.error) ? { taken: 0, ready: false } : { taken: 0, error: String(have.error.message || have.error).slice(0, 200) };
+  if (have.error) return { taken: 0, error: String(have.error.message || have.error).slice(0, 200) };
   const rows = (have.data || []) as any[];
   const done = new Set(rows.filter((r) => String(r.day).slice(0, 10) === day).map((r) => r.cohort_id));
   const todo = (await runningCohorts(now)).filter((c) => !done.has(c.id));
@@ -65,27 +63,26 @@ export async function cohortSnapshots(now = Date.now(), budgetMs = SNAPSHOT_BUDG
   return { taken, ...(skipped ? { skipped } : {}), ...(left ? { left } : {}) };
 }
 
-/** أحدث لقطة لكل دفعة منذ يوم (day)، أو null قبل الترحيل. الخطأ غير ذلك يُرمى */
-export async function snapshotsSince(day: string): Promise<Snapshot[] | null> {
+/** أحدث لقطة لكل دفعة منذ يوم (day). تعذّر القراءة يُرمى */
+export async function snapshotsSince(day: string): Promise<Snapshot[]> {
   const { data, error } = await db.from('cohort_snapshots').select(COLS).gte('day', day).order('day', { ascending: false });
-  if (error) { if (missingTable(error)) return null; throw new Error(`cohort_snapshots: ${error.message || error}`); }
+  if (error) throw new Error(`cohort_snapshots: ${error.message || error}`);
   return (data || []) as Snapshot[];
 }
 
 // ── تنبيه «نظرة عامة»: مصدر admin.today (today-desk.ts) ──
-// أحدث لقطة لكل دفعة من اليومين الأخيرين. قبل الترحيل: قائمة فارغة لا مصدر متعذر، فلا يقول المكتب «تعذّرت قراءة»
+// أحدث لقطة لكل دفعة من اليومين الأخيرين
 export async function latestSnapshots(now = Date.now()) {
-  const rows = (await snapshotsSince(utcDay(now - DAY))) || [];
+  const rows = await snapshotsSince(utcDay(now - DAY));
   const seen = new Set<string>();
   return rows.filter((r) => (seen.has(r.cohort_id) ? false : (seen.add(r.cohort_id), true)))
     .map((r) => ({ cohort_id: r.cohort_id, taken_at: r.taken_at, since_at: r.since_at, late: r.late, late_new: r.late_new }));
 }
 
 // ── سطر الملخص اليومي: مجموع اللقطات التي التُقطت في نافذته ──
-/** @returns سطر الأعداد، أو null حين لا شيء يُذكر أو قبل الترحيل. الخطأ يُرمى فيعيد الملخص المحاولة */
+/** @returns سطر الأعداد، أو null حين لا شيء يُذكر. الخطأ يُرمى فيعيد الملخص المحاولة */
 export async function cohortDigest(since: string, until: string) {
   const rows = await snapshotsSince(utcDay(Date.parse(since) - DAY));
-  if (!rows) return null;
   return digestLine(rows.filter((r) => Date.parse(r.taken_at) > Date.parse(since) && Date.parse(r.taken_at) <= Date.parse(until)));
 }
 
@@ -102,7 +99,6 @@ export async function cohortWeekly(now = Date.now()) {
   if (!route('cohort_weekly', await notifySettings(db)).email) return { due: true, sent: 0, off: true };
   // صفوف الأسبوع (لعلامة الإرسال) وسبعة أيام قبل اليوم (لمجموع الأنشطة المكتملة)
   const rows = await snapshotsSince(utcDay(Math.min(Date.parse(due.from), now - 7 * DAY)));
-  if (!rows) return { due: true, sent: 0, ready: false };
   const weekFrom = utcDay(Date.parse(due.from));
   const today = utcDay(now);
   const cohorts = await runningCohorts(now);

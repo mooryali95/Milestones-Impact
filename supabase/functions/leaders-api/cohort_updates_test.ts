@@ -229,9 +229,9 @@ Deno.test('الملخص الأسبوعي يستحق الأحد 9:00 بالريا
 // ════════ 2. الخادم على قاعدة في الذاكرة ════════
 // قاعدة صغيرة: تصفية eq وin وis وnot is null وgte وgt وlt وlte، وor تُقرأ بلا تصفية (الكود يصفّي ما يقرؤه)، والحقل المضمَّن
 // (instruments.kind)، وrange وlimit وorder تنازلي لعمود، والإدراج بمفتاح مركب (23505)، والتحديث، وupsert بـonConflict.
-// reads: اسم الجدول لكل استعلام قراءة. fail: جدول يُرفض (PGRST205 كجدول لم يُرحَّل) أو عمود يُرفض (42703)
+// reads: اسم الجدول لكل استعلام قراءة. down: جدول تتعذر قراءته وكتابته (عطل عابر في القاعدة)
 const KEYS: Record<string, string[]> = { cohort_snapshots: ['cohort_id', 'day'], admin_cohort_visits: ['admin_email', 'cohort_id'] };
-function install(tables: Record<string, Row[]>, opts: { missing?: Set<string>; noCols?: Record<string, string[]> } = {}) {
+function install(tables: Record<string, Row[]>, opts: { down?: Set<string> } = {}) {
   const reads: string[] = [];
   const writes: { table: string; kind: string; value: any }[] = [];
   const get = (r: Row, c: string) => c.split('.').reduce((x: any, k) => x?.[k], r);
@@ -241,9 +241,7 @@ function install(tables: Record<string, Row[]>, opts: { missing?: Set<string>; n
     let order: [string, boolean] | null = null;
     let op: { kind: string; value?: any; conflict?: string } = { kind: 'select' };
     const run = () => {
-      if (opts.missing?.has(table)) return { data: null, count: null, error: { code: 'PGRST205', message: `Could not find the table 'leaders.${table}' in the schema cache` } };
-      const bad = (opts.noCols?.[table] || []).find((c) => cols.includes(c) || (op.value && typeof op.value === 'object' && c in op.value));
-      if (bad) return { data: null, count: null, error: { code: '42703', message: `column ${bad} does not exist` } };
+      if (opts.down?.has(table)) return { data: null, count: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } };
       const rows = tables[table] || (tables[table] = []);
       const keys = KEYS[table] || ['id'];
       const same = (a: Row, b: Row) => keys.every((k) => String(a[k]) === String(b[k]));
@@ -369,38 +367,52 @@ Deno.test('admin.cohort-journey: صف العضو يحمل لحظاته من جد
   assertEquals(cohortChanges(res.roster, { since: ago(1.5), now: res.at }).lines.map((l: Row) => l.key), ['submitted']);
   // الرد يحمل لحظة القراءة ووقت آخر زيارة، والقراءة وحدها لا تكتب زيارة
   assert(Math.abs(Date.parse(res.at) - Date.now()) < 60e3);
-  assertEquals(res.visit, { stored: true, since: null, first: true });
+  assertEquals(res.visit, { since: null, first: true });
   assertEquals(w.tables.admin_cohort_visits, []);
 });
 
-Deno.test('قبل الترحيل: لا جدول زيارات ولا عمود وقت التسليم ولا لقطة، والتبويب يعمل بالنافذة الافتراضية بلا خطأ', async () => {
-  const before = world();
-  // قبل الترحيل لا عمود لوقت التسليم في الصف
-  for (const r of before.participant_requirements) delete r.submitted_at;
-  const w = install(before, { missing: new Set(['admin_cohort_visits', 'cohort_snapshots']), noCols: { participant_requirements: ['submitted_at'] } });
+Deno.test('تعذّر القاعدة: التبويب يعمل ويقول إن وقت آخر زيارة تعذّرت قراءته، والحفظ واللقطة خطأ صريح لا نجاح صامت', async () => {
+  const w = install(world(), { down: new Set(['admin_cohort_visits', 'cohort_snapshots']) });
   try {
+    // القراءة: التبويب لا يسقط، والزيارة failed برسالتها (لا «غير محفوظ»)، فيعرض الشريط النافذة الافتراضية ويقول السبب
     const res: any = await adminCohortJourney(admin, { cohort_id: 'c1' });
     assertEquals(res.success, true);
-    assertEquals(res.visit, { stored: false, since: null, first: false });
-    const sara = res.roster.find((x: Row) => x.id === 'sara');
-    // التسليم ظاهر بلا وقته: ينتظر المراجعة ولا يُعدّ «جديدًا»
-    assertEquals([sara.turn, sara.waiting], ['admin', [null]]);
+    assertEquals(res.visit, { failed: true, message: 'تعذّرت قراءة وقت آخر زيارة، أعد المحاولة', since: null, first: false });
     const ch = cohortChanges(res.roster, { since: sinceFor('visit', { visit: res.visit.since, now: res.at }), now: res.at });
-    assertEquals(ch.lines.map((l: Row) => l.key), ['entered:apply', 'done', 'attended:ws1', 'joined']);
-    // حفظ الزيارة وعلامة المقروء لا يرميان
-    assertEquals(await adminCohortVisit(admin, { cohort_id: 'c1', at: res.at, op: 'seen' }), { success: true, stored: false, since: null });
-    assertEquals(await adminCohortVisit(admin, { cohort_id: 'c1', at: res.at, op: 'read' }), { success: true, stored: false, since: null });
-    // والمهام الدورية والمكتب بلا لقطة وبلا خطأ
-    assertEquals(await PU.cohortSnapshots(), { taken: 0, ready: false });
-    assertEquals(await PU.latestSnapshots(), []);
-    assertEquals(await PU.cohortDigest(ago(24), ago(0)), null);
+    assertEquals(ch.lines.map((l: Row) => l.key), ['entered:apply', 'done', 'submitted', 'attended:ws1', 'joined']);
+    // حفظ الزيارة وعلامة المقروء: خطأ صريح، لا success بلا حفظ
+    for (const op of ['seen', 'read']) {
+      const e = await assertRejects(() => adminCohortVisit(admin, { cohort_id: 'c1', at: res.at, op })) as any;
+      assertEquals([e.status, e.code, e.message], [500, 'db_error', 'تعذّرت قراءة وقت آخر زيارة، أعد المحاولة']);
+    }
+    // اللقطة: المهمة الساعية تسجل الخطأ في ردها، ومن يقرأ اللقطة يُرمى له (المكتب يقول «تعذّرت قراءة»، والملخص يعيد المحاولة)
+    const snap: any = await PU.cohortSnapshots();
+    assertEquals([snap.taken, /statement timeout/.test(snap.error), 'ready' in snap], [0, true, false]);
+    await assertRejects(() => PU.latestSnapshots(), Error, 'cohort_snapshots');
+    await assertRejects(() => PU.cohortDigest(ago(24), ago(0)), Error, 'cohort_snapshots');
     const sunday = Date.parse('2026-11-22T06:20:00Z');
     CONFIG.alertEmail = 'owner@x.sa';
-    assertEquals(await PU.cohortWeekly(sunday), { due: true, sent: 0, ready: false });
+    await assertRejects(() => PU.cohortWeekly(sunday), Error, 'cohort_snapshots');
   } finally { CONFIG.alertEmail = ''; w.restore(); }
 });
 
-Deno.test('وقت التسليم يُكتب للبند المسلَّم وحده، وقبل الترحيل أو عند تعذّره لا يرمي ولا يمس التسليم', async () => {
+Deno.test('تعذّر حفظ الزيارة بعد قراءتها: خطأ صريح برسالة الحفظ', async () => {
+  const w = install(world());
+  const from = (db as any).from;
+  // القراءة تمر والكتابة تتعذر
+  (db as any).from = (t: string) => {
+    const q = from(t);
+    if (t !== 'admin_cohort_visits') return q;
+    return new Proxy(q, { get: (o, k) => (k === 'upsert' ? () => Promise.resolve({ data: null, error: { code: '57014', message: 'timeout' } }) : (o as any)[k]) });
+  };
+  try {
+    const e = await assertRejects(() => adminCohortVisit(admin, { cohort_id: 'c1', at: new Date().toISOString(), op: 'read' })) as any;
+    assertEquals([e.status, e.code, e.message], [500, 'db_error', 'تعذّر حفظ وقت آخر زيارة، أعد المحاولة']);
+    assertEquals(w.tables.admin_cohort_visits || [], []);
+  } finally { (db as any).from = from; w.restore(); }
+});
+
+Deno.test('وقت التسليم يُكتب للبند المسلَّم وحده، وعند تعذّره لا يرمي ولا يمس التسليم', async () => {
   const { stampSubmitted } = await import('./cohort-times.ts');
   const tables = { participant_requirements: [{ participant_id: 'a', requirement_id: 'r1', status: 'submitted' }, { participant_id: 'a', requirement_id: 'r2', status: 'done' }, { participant_id: 'b', requirement_id: 'r1', status: 'submitted' }] };
   const w = install(structuredClone(tables));
@@ -409,7 +421,7 @@ Deno.test('وقت التسليم يُكتب للبند المسلَّم وحده
     await stampSubmitted('a', 'r2', '2026-11-20T09:00:00Z');
     assertEquals(w.tables.participant_requirements.map((r) => r.submitted_at ?? null), ['2026-11-20T09:00:00Z', null, null]);
   } finally { w.restore(); }
-  const old = install(structuredClone(tables), { noCols: { participant_requirements: ['submitted_at'] } });
+  const old = install(structuredClone(tables), { down: new Set(['participant_requirements']) });
   try {
     await stampSubmitted('a', 'r1');
     assertEquals(old.tables.participant_requirements, tables.participant_requirements);
@@ -458,12 +470,12 @@ Deno.test('admin.cohort-visit: يتقدم بعد العرض لا بالقراء�
   const row = (email: string) => w.tables.admin_cohort_visits.find((r) => r.admin_email === email) || null;
   try {
     // عرض أول: الصف يُكتب ببريد المدير بحروف صغيرة، و«منذ» ما زال فارغًا في هذه الزيارة
-    assertEquals(await adminCohortVisit(admin, { cohort_id: 'c1', at: iso(t0 - 5000), op: 'seen' }, t0), { success: true, stored: true, since: null });
+    assertEquals(await adminCohortVisit(admin, { cohort_id: 'c1', at: iso(t0 - 5000), op: 'seen' }, t0), { success: true, since: null });
     assertEquals([row('owner@x.sa')!.since_at, row('owner@x.sa')!.seen_at], [null, iso(t0 - 5000)]);
     // زيارة تالية بعد ساعتين: القراءة تعرض منذ آخر لحظة قراءة، ولا تغيّر الصف حتى يُعرض الشريط
     const t1 = t0 + 2 * 36e5;
     const read1: any = await adminCohortJourney(admin, { cohort_id: 'c1' });
-    assertEquals(read1.visit.stored, true);
+    assertEquals(read1.visit.failed, undefined);
     const before = structuredClone(row('owner@x.sa'));
     await adminCohortJourney(admin, { cohort_id: 'c1' });
     assertEquals(row('owner@x.sa'), before);
@@ -473,7 +485,7 @@ Deno.test('admin.cohort-visit: يتقدم بعد العرض لا بالقراء�
     // «اعتبرها مقروءة»
     assertEquals((await adminCohortVisit(admin, { cohort_id: 'c1', at: iso(t1 + 60e3), op: 'read' }, t1 + 90e3)).since, iso(t1 + 60e3));
     // مدير آخر (عرض فقط، بلا عامل ثانٍ): صفه هو، ولا يمس صف غيره
-    assertEquals(await adminCohortVisit(viewer, { cohort_id: 'c1', at: iso(t1), op: 'seen' }, t1 + 1000), { success: true, stored: true, since: null });
+    assertEquals(await adminCohortVisit(viewer, { cohort_id: 'c1', at: iso(t1), op: 'seen' }, t1 + 1000), { success: true, since: null });
     assertEquals(w.tables.admin_cohort_visits.length, 2);
     assertEquals(row('owner@x.sa')!.since_at, iso(t1 + 60e3));
     // لحظة من المستقبل أو أقدم من يوم أو بلا دفعة: تُرفض ولا يُكتب شيء

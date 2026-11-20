@@ -6,7 +6,6 @@
 // بدفعات من 150 معرّفًا (allFor)، فعدد الاستعلامات بعدد الجداول لا بعدد الأعضاء: READS لكل 150 عضوًا.
 // المعرّفات من cohortMemberIds (بلا حساب العرض ولا حساب الاختبار)، فلا يدخل أحدهما سطرًا ولا عددًا.
 import { allFor, db } from './core.ts';
-import { missingColumn } from './missing-column.ts';
 import { CHANGES_FLOOR_DAYS } from './cohort-changes.js';
 
 type Times = Record<string, any>;
@@ -19,16 +18,9 @@ export async function completionTimes(ids: string[], people: Record<string, any>
   if (!ids.length) return out;
   const floor = new Date(now - CHANGES_FLOOR_DAYS * 864e5).toISOString();
   const read = (make: () => any) => allFor(ids, make).catch((e) => { console.error('cohort times:', (e as Error)?.message || e); return [] as any[]; });
-  // وقت التسليم (submitted_at) عمود الترحيل 20261119120000: قبله تُقرأ البنود بلا وقت تسليمها، فلا يُعدّ تسليم «جديدًا»
-  const requirements = async () => {
-    const q = (cols: string) => allFor(ids, () => db.from('participant_requirements').select(cols).or(`completed_at.gte.${floor},status.eq.submitted`).order('participant_id').order('requirement_id'));
-    // must يحجب رمز الخطأ، فأي تعذّر يُعاد بلا العمود الجديد، وتعذّر الثانية يُسقط هذا المصدر وحده
-    return q('participant_id, requirement_id, status, completed_at, submitted_at')
-      .catch(() => q('participant_id, requirement_id, status, completed_at'))
-      .catch((e) => { console.error('cohort times:', (e as Error)?.message || e); return [] as any[]; });
-  };
   const [reqs, video, att, coach, content, quiz, reading, models, lab, caps, post] = await Promise.all([
-    requirements(),
+    // البنود بوقت تسليمها (submitted_at): به يُعدّ التسليم «جديدًا»
+    read(() => db.from('participant_requirements').select('participant_id, requirement_id, status, completed_at, submitted_at').or(`completed_at.gte.${floor},status.eq.submitted`).order('participant_id').order('requirement_id')),
     read(() => db.from('video_progress').select('participant_id, requirement_id, completed_at').gte('completed_at', floor).order('participant_id').order('requirement_id')),
     // counting-exempt: حضور معرّفات أعضاء الدفعة من cohortMemberIds (بلا حساب العرض ولا الاختبار)، لوقت كل حضور لا لعدّ
     read(() => db.from('workshop_attendance').select('participant_id, session_id, checked_in_at').order('participant_id').order('session_id')),
@@ -65,11 +57,10 @@ export async function completionTimes(ids: string[], people: Record<string, any>
   return out;
 }
 
-// وقت تسليم البند للمراجعة (عمود الترحيل 20261119120000): يُكتب بعد أن يُحفظ التسليم نفسه، ولا يُسقطه. قبل الترحيل لا عمود
-// فيبقى التسليم بلا وقته، وأي تعذّر آخر يُسجَّل ولا يُرمى
+// وقت تسليم البند للمراجعة (submitted_at): يُكتب بعد أن يُحفظ التسليم نفسه، ولا يُسقطه. تعذّره يُسجَّل ولا يُرمى
 export async function stampSubmitted(participantId: string, requirementId: string, at = new Date().toISOString()) {
   try {
     const { error } = await db.from('participant_requirements').update({ submitted_at: at }).eq('participant_id', participantId).eq('requirement_id', requirementId).eq('status', 'submitted');
-    if (error && !missingColumn(error)) console.error('requirement submitted_at:', error.message || error);
+    if (error) console.error('requirement submitted_at:', error.message || error);
   } catch (e) { console.error('requirement submitted_at:', (e as Error)?.message || e); }
 }
