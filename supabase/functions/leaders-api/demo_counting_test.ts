@@ -157,7 +157,7 @@ Deno.test('الشهادة: لا صف ولا رقم لحساب العرض من ا
     f.tables.certificates = f.tables.certificates.filter((c) => c.participant_id !== DEMO || c.status !== 'valid');
     const again: any = await Z.onFinalApproved(DEMO, { decision: 'pass', formula_version: 1, program_id: 'prog' }, 'admin@example.sa');
     assertEquals(again, { skipped: 'demo' });
-    assertEquals(Z.certificateNotice(again), 'اعتُمد التقييم، ولا تصدر شهادة لحساب العرض');
+    assertEquals(Z.certificateNotice(again), 'اعتُمد التقييم، ولا تصدر شهادة للحساب التجريبي');
     assertEquals(f.writes.filter((w) => w.table === 'certificates' && w.kind === 'insert').length, 0);
     assertEquals(f.tables.audit_log.map((x) => x.action), ['certificate.skipped-demo']);
     assertEquals(f.tables.certificates.length, before - 1);

@@ -83,7 +83,7 @@ export const COACH_STATUS_ADMIN = { ...COACH_STATUS, attended: 'حضر', no_show
 // مصدر واحد للخادم (coaching-groups.ts) ولوحة الإدارة وبوابة المستشار
 export const GROUP_STATE_AR = Object.freeze({ booked: 'لم يُؤكَّد', attended: 'حضر', no_show: 'لم يحضر', excused: 'اعتذر' });
 export const GROUP_SKIP_AR = Object.freeze({
-  unknown: 'حساب غير موجود', demo: 'حساب العرض لا يُدعى إلى جلسة', not_member: 'ليس من أعضاء هذه الدفعة', out: 'خارج البرنامج (منسحب أو موقوف)',
+  unknown: 'حساب غير موجود', demo: 'الحساب التجريبي لا يُدعى إلى جلسة', not_member: 'ليس من أعضاء هذه الدفعة', out: 'خارج البرنامج (منسحب أو موقوف)',
   no_service: 'لا خدمة استشارة له في برنامجه', already: 'مدعو إلى هذه الجلسة أصلًا', locked: 'الخدمة لم تُفتح له بعد (لم يُعتمد مساره)', unreadable: 'تعذّرت قراءة رحلته الآن',
 });
 export const GROUP_REFUSAL_AR = Object.freeze({

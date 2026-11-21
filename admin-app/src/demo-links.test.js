@@ -17,7 +17,7 @@ describe('نص بطاقة روابط التجربة', () => {
     expect(DEMO_LINK_DAYS).toContain(DEMO_LINK_DEFAULT_DAYS);
   });
   it('تأكيد إعادة الضبط يسمّي الروابط النشطة، وبلاها النص كما كان', () => {
-    expect(resetConfirmAr([])).toBe('إعادة حساب العرض إلى البداية؟ تُمسح إجاباته وتقدمه، ويبدأ العرض التالي من شاشة الدخول.');
+    expect(resetConfirmAr([])).toBe('إعادة الحساب التجريبي إلى البداية؟ تُمسح إجاباته وتقدمه وما تُخطي أو فُتح من مراحله، ويبدأ العرض التالي من شاشة الدخول.');
     expect(resetConfirmAr(undefined)).toBe(resetConfirmAr([]));
     expect(linkNamesAr([{ label: 'مدير الدفعة' }, { label: 'مسؤول الجهة' }])).toBe('«مدير الدفعة»، «مسؤول الجهة»');
     const one = resetConfirmAr([{ label: 'مدير الدفعة' }]);

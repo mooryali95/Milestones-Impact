@@ -26,6 +26,7 @@ import { currentStages } from '../../../supabase/functions/leaders-api/journey-m
 import { FINAL_ASK_DETAIL_AR, FINAL_NO_DETAIL_AR, finalDetailView, finalView, fmtDate, fmtTime, fmtWhen, holdLine, lateBannerAr, lateByAr, lateShortAr, stageDates, stageOffAr, stageTally, stagesOfAr } from '../journey-copy.js';
 import { foldStore, stageFoldId } from '../journey-folds.js';
 import { canReplaceFile } from '../../../supabase/functions/leaders-api/upload-file.js';
+import { DEMO_SAMPLE_AR, DEMO_SKIPPED_AR } from '../../../supabase/functions/leaders-api/demo-stage.js';
 import { withGroups } from '../../../supabase/functions/leaders-api/stage-windows.js';
 const CONTACT_EMAIL = CONTACT.email;
 
@@ -364,7 +365,7 @@ const lines = (t) => (t || '').split('\n').map((x) => x.trim()).filter(Boolean);
 
 // level: مستوى عنوان المرحلة في المخطط، h5 داخل كتلة «تسير معًا» فتكون مراحلها تحت عنوانها لا أخواته (R3b)
 // journey: الرحلة كلها، لسطر «لماذا هي متوقفة» (holdLine يسمّي ما تنتظره). narrow وstore: طيّ «عن هذه المرحلة» على الهاتف وتذكّره
-function Stage({ stage, n, expanded, onToggle, level = 4, journey = [], narrow = false, store = null, ...rest }) {
+function Stage({ stage, n, expanded, onToggle, level = 4, journey = [], narrow = false, store = null, demo = false, ...rest }) {
   const H = level === 5 ? 'h5' : 'h4';
   const locked = stage.status === 'locked';
   // تواريخ المرحلة من نافذتها في خطة الدفعة، وسبب توقفها من حالتها الفعلية (journey-copy.js). بلا نافذة لا يُعرض تاريخ
@@ -372,7 +373,8 @@ function Stage({ stage, n, expanded, onToggle, level = 4, journey = [], narrow =
   const hold = holdLine(stage, journey);
   const [about, setAbout] = useState(() => store?.get(`about:${stage.key}`) ?? false);
   const mode = MODES[stage.mode];
-  const chip = stage.skipped ? <span className="chip ok">أُعفيت منها</span>
+  // المتخطاة في الحساب التجريبي بوسمها الصريح (لا «مكتملة» ولا «أُعفيت»): تخطٍّ للعرض بلا دليل إنجاز
+  const chip = stage.skipped ? (demo ? <span className="chip demo-skip" data-testid="stage-skipped-demo">{DEMO_SKIPPED_AR}</span> : <span className="chip ok">أُعفيت منها</span>)
     : stage.status === 'done' ? <span className="chip ok">مكتملة</span>
       : stage.status === 'active' ? <span className="chip gold">الحالية</span>
         : stage.status === 'available' ? <span className="chip blue">{stage.stage_mode === 'optional' ? 'مقترحة لك' : 'متاحة عند الحاجة'}</span>
@@ -586,6 +588,35 @@ function CertificateCard({ participant }) {
         <button className="btn sm" onClick={open}>اعرض الشهادة</button>
         <button className="btn sm ghost" onClick={share}>أضفها إلى LinkedIn</button>
       </div>}
+    </section>
+  );
+}
+
+// معاينة الشهادة في الحساب التجريبي (تصور الحساب التجريبي، المرحلة 1): القالب الحقيقي بعلامة «نموذج للعرض»، بلا رقم
+// تسلسلي ولا رابط تحقق. الحساب التجريبي لا تصدر له شهادة أبدًا، فهذه البطاقة طريقه الوحيد لرؤيتها
+function DemoCertificateCard() {
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const open = async () => {
+    const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح
+    if (!win) { setMsg(POPUP_BLOCKED); return; }
+    setBusy(true); setMsg('');
+    const r = await call('demo.certificate-preview');
+    setBusy(false);
+    if (!r.success) { win.close(); setMsg(r.message || 'تعذّر عرض النموذج'); return; }
+    const { writeCertificate } = await import('../../../src/lib/brand/certificate.js');
+    await writeCertificate(win, r.certificate);
+  };
+  return (
+    <section className="card cert-card demo-cert" aria-label="نموذج شهادة الإتمام" data-testid="demo-cert">
+      <span className="cert-mark" aria-hidden="true" />
+      <div className="grow stack">
+        <p className="eyebrow">شهادة الإتمام · {DEMO_SAMPLE_AR}</p>
+        <h2>هكذا تبدو شهادة من يتم البرنامج بنجاح</h2>
+        <p className="small muted">معاينة بالقالب الحقيقي وعليها علامة «{DEMO_SAMPLE_AR}»: بلا رقم تسلسلي ولا رابط تحقق. الحساب التجريبي لا تصدر له شهادة.</p>
+        {msg && <div className="alert err small" role="alert">{msg}</div>}
+      </div>
+      <div className="row"><button className="btn sm" disabled={busy} onClick={open}>{busy ? 'لحظة…' : 'اعرض نموذج الشهادة'}</button></div>
     </section>
   );
 }
@@ -984,7 +1015,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
               : tracksNow.length ? <>بقي لك المسار المستمر: <b style={{ color: '#fff' }}>«{current.title_ar}»</b>{(() => { const due = journey.find((x) => x.key === current.track?.due_before); return due ? `، وبنوده مطلوبة قبل «${due.title_ar}»` : ''; })()} · {tallyAr}</>
               : current ? <>المرحلة الحالية: <b style={{ color: '#fff' }}>{current.title_ar}</b> · {tallyAr}</>
               : fin.line ? fin.line
-                : doneCount === countedN && countedN ? 'أكملت الرحلة كاملة. أثرك الآن موثّق.'
+                // الحساب التجريبي الذي تخطى مراحله لا يُقال له «أكملت»: التخطي للعرض وليس إنجازًا
+                : doneCount === countedN && countedN ? (participant.is_demo && journey.some((x) => x.skipped) ? 'وصلت إلى نهاية الرحلة بتخطي مراحلها للعرض.' : 'أكملت الرحلة كاملة. أثرك الآن موثّق.')
                   : !approved ? `${tallyAr}، والخطوة التالية اعتماد مسارك`
                     : tallyAr}
           </p>
@@ -1025,6 +1057,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           </div></div>
       )}
       {(participant.status === 'completed' || ['pass', 'pass_notes'].includes(me.final?.decision)) && <CertificateCard participant={participant} />}
+      {participant.is_demo && approved && <DemoCertificateCard />}
       <RateExpert />
       {approved && <SusCard call={call} initial={susFirst} />}
       {/* مجموعتك ومستشارك في بطاقة واحدة بسطرين (على الهاتف كانت بطاقتين بنحو 230 نقطة لكل منهما).
@@ -1132,7 +1165,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           {services.length > 0 && (
             <Services list={services}>
               {(s) => (
-                <Stage key={s.key} stage={s} n="+" level={4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)} journey={journey} narrow={narrow} store={store}
+                <Stage key={s.key} stage={s} n="+" level={4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)} journey={journey} narrow={narrow} store={store} demo={!!participant.is_demo}
                   onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
               )}
             </Services>
@@ -1171,7 +1204,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                   const card = (s, inGroup = false) => {
                     order += 1;
                     return (
-                      <Stage key={s.key} stage={s} n={order} level={inGroup ? 5 : 4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)} journey={journey} narrow={narrow} store={store}
+                      <Stage key={s.key} stage={s} n={order} level={inGroup ? 5 : 4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)} journey={journey} narrow={narrow} store={store} demo={!!participant.is_demo}
                         onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
                     );
                   };

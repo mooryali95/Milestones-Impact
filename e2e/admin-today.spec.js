@@ -64,7 +64,7 @@ test('الرأس: التحية باسم المدير والتاريخ، وشار
   await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
   const details = page.getByRole('region', { name: 'تفاصيل صحة المنظومة' });
   await expect(details.getByRole('region', { name: 'صحة البريد والتنبيه' })).toHaveAttribute('data-level', 'green');
-  await expect(details.getByRole('button', { name: 'افتح حساب العرض' })).toBeVisible();
+  await expect(details.getByRole('button', { name: 'افتح الحساب التجريبي' })).toBeVisible();
   await page.reload();
   await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
   await toggle(page).press('Enter');

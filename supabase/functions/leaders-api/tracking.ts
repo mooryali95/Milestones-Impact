@@ -33,8 +33,22 @@ export async function trackingFor(caps: any[]) {
   }));
 }
 
-async function load(participantId: string) {
-  const cap = must(await db.from('capstones').select('participant_id, status, approved_at, snapshot, sponsor_name, sponsor_email').eq('participant_id', participantId).maybeSingle()) as any;
+// الحساب التجريبي (تصور الحساب التجريبي، المرحلة 1، قرار المالك 2026-11-21): المتابعة تُفتح له بلا اعتماد مستشار، ليُرى
+// شكلها في العرض. الاعتماد محسوب هنا للحساب التجريبي وحده ولا يُخزَّن: صف capstones يبقى بحالته (مسودة أو مسلَّمة)، فلا
+// اسم مستشار ولا درجة ولا لقطة معتمدة، وكل قائمة أو محفظة أو تقرير يقرأ «المعتمدة» من القاعدة لا يراه معتمدًا أصلًا،
+// فوق استبعاده بقاعدة العد. الخطة من وثيقته كما هي الآن (ما كتبه هو، بلا بنود مختلقة)، والبداية لحظة الفتح.
+// demo: صف المشارك حين يطلبها صاحب الجلسة نفسه (mine وsave)، وكل مسار آخر (الراعي، المستشار، الجهة) بلا هذا الباب
+async function demoLoad(p: any, cap: any) {
+  if (!simulated(p)) return null;
+  const { demoDoc } = await import('./capstone.ts');
+  // قبل اعتماد مساره لا وثيقة له بعد (locked): لا متابعة. وكل تعذّر آخر يُرفع كما هو
+  const snapshot = await demoDoc(p).catch((e) => { if (e instanceof Fail && e.code === 'locked') return null; throw e; });
+  return snapshot ? { ...(cap || { participant_id: p.id }), status: 'approved', approved_at: new Date().toISOString(), snapshot, sponsor_name: null, sponsor_email: null, simulated: true } : null;
+}
+
+async function load(participantId: string, demo: any = null) {
+  let cap = must(await db.from('capstones').select('participant_id, status, approved_at, snapshot, sponsor_name, sponsor_email').eq('participant_id', participantId).maybeSingle()) as any;
+  if ((cap?.status !== 'approved' || !cap.snapshot) && demo) cap = await demoLoad(demo, cap);
   if (cap?.status !== 'approved' || !cap.snapshot) return null;
   const updates = must(await db.from('capstone_updates').select(UPDATE_COLS).eq('participant_id', participantId).order('period')) as any[] ?? [];
   const plan = trackingPlan(cap.snapshot);
@@ -63,14 +77,15 @@ export async function trackingOf(participantId: string) {
 
 // ── القائد ──
 export async function mine(p: any) {
-  const t = await load(p.id);
+  const t = await load(p.id, p);
   if (!t) throw new Fail('تبدأ المتابعة بعد اعتماد وثيقة مبادرتك', 403, 'not_approved');
   const current = t.updates.find((u) => u.period === t.summary.current) || null;
-  return { success: true, tracking: trackingView(t), current: current ? updateView(current) : null };
+  // simulated: المتابعة مفتوحة للعرض بلا اعتماد حقيقي، فتعرض الشاشة وسم «للعرض»
+  return { success: true, tracking: trackingView(t), current: current ? updateView(current) : null, ...(t.cap.simulated ? { simulated: true } : {}) };
 }
 
 export async function save(p: any, b: Body) {
-  const t = await load(p.id);
+  const t = await load(p.id, p);
   if (!t) throw new Fail('تبدأ المتابعة بعد اعتماد وثيقة مبادرتك', 403, 'not_approved');
   if (!t.summary.can_update) throw new Fail('انتهت مدة المتابعة لهذه المبادرة', 409, 'closed');
   // صف الشهر الجاري، أو صف المراجعة التي اعترض عليها الراعي أو انقضى رابطه ولو من شهر سابق

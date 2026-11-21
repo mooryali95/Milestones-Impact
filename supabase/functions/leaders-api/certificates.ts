@@ -172,7 +172,7 @@ import { PASSING } from './final.js';
 
 // حساب العرض لا يصدر له صف شهادة ولا رقم تسلسلي من أي مسار (اعتماد ختامي، تأكيد اسم، إعادة إصدار): الحارس هنا عند
 // الكتابة الوحيدة، ومعاينة القالب (preview) لا تكتب شيئًا فتبقى له في المرحلة التالية من التصور
-const DEMO_NO_CERT_AR = 'حساب العرض لا تصدر له شهادة';
+const DEMO_NO_CERT_AR = 'الحساب التجريبي لا تصدر له شهادة';
 async function insertCertificate(p: any, by: string | null, final: FinalRef | null = null) {
   if (simulated(p)) throw new Fail(DEMO_NO_CERT_AR, 400, 'demo');
   if (!String(p.full_name || '').trim()) throw new Fail('اسم المشارك مطلوب قبل إصدار الشهادة');
@@ -245,7 +245,7 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
 export function certificateNotice(c: any) {
   if (c?.serial) return `اعتُمد التقييم، والشهادة ${c.serial} سارية`;
   if (c?.awaiting_name) return 'اعتُمد التقييم، وتصدر الشهادة حين يؤكد المشارك اسمه';
-  if (c?.skipped === 'demo') return 'اعتُمد التقييم، ولا تصدر شهادة لحساب العرض';
+  if (c?.skipped === 'demo') return 'اعتُمد التقييم، ولا تصدر شهادة للحساب التجريبي';
   if (c?.skipped) return 'اعتُمد التقييم، ولم تصدر الشهادة لأن الإصدار التلقائي متوقف. تجد المشارك في «الشهادات» ضمن من لم تصدر شهاداتهم';
   if (c?.failed) return 'اعتُمد التقييم، وتعذّر إصدار الشهادة، وأُبلغ فريق التشغيل';
   return 'اعتُمد التقييم';
@@ -444,6 +444,16 @@ export async function preview(b: Body) {
       kind: 'completion_success', decision: 'pass',
     },
   };
+}
+
+// معاينة الشهادة للحساب التجريبي (تصور الحساب التجريبي، المرحلة 1، القرار 6): القالب الحقيقي ببيانات الحساب نفسه (اسمه
+// ومساره ودفعته) وعليه علامة «نموذج للعرض». لا رقم تسلسلي ولا رابط تحقق ولا توقيع ولا صف في certificates، فلا شيء
+// تتحقق منه الصفحة العامة. للحساب التجريبي وحده، ولا تكتب شيئًا
+export async function demoPreview(p: any) {
+  if (!simulated(p)) throw new Fail('هذا متاح للحساب التجريبي فقط', 403, 'demo_only');
+  const now = new Date().toISOString();
+  const snap: any = await buildSnapshot(p, 'SAMPLE', now);
+  return { success: true, certificate: { ...snap, serial: null, verify_url: null, sample: true, kind: 'completion_success', decision: 'pass' } };
 }
 
 // من اعتُمد تقييمه الختامي بنجاح ولا شهادة سارية أو معلّقة له: ينتظر تأكيد اسمه، أو حُجبت شهادته لتوقف الإصدار

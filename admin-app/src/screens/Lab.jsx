@@ -129,7 +129,7 @@ function CardStats({ item, onClose }) {
           const cards = [...b.cards].sort((x, y) => (x.right_pct ?? 101) - (y.right_pct ?? 101));
           return (
             <div key={b.step}>
-              <h4 className="la-phase">{b.title} · {b.attempts} إجابة (بلا حساب العرض وحسابات الاختبار)</h4>
+              <h4 className="la-phase">{b.title} · {b.attempts} إجابة (بلا الحساب التجريبي وحسابات الاختبار)</h4>
               {!b.attempts ? <p className="la-muted">لم يُجب أحد عن هذه اللوحة بعد.</p> : (
                 <table className="la-table">
                   <thead><tr><th>البطاقة</th><th>خانتها</th><th>نسبة الصواب</th><th>أكثر خانة خاطئة</th><th>متوسط درجة التلميح</th></tr></thead>

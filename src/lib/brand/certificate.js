@@ -74,7 +74,13 @@ const fmtEn = (d) => new Date(d).toLocaleDateString('en-GB', { year: 'numeric', 
 // c: { serial, name_ar, name_en, program_ar, program_en, track_ar?, track_en?, hours?, start?, end?, issued_at,
 //      org?: { name, logo? (data URL بعد المعالجة) }, signatories: [{ name, title, image? }], verify_url }
 // qrSvg: نص SVG لرمز QR (يولَّد خارج الدالة لأنه غير متزامن)
-export function certificateHtml(c, qrSvg, { status } = {}) {
+// c.sample: معاينة الحساب التجريبي (تصور الحساب التجريبي، المرحلة 1): القالب نفسه بعلامة «نموذج للعرض»، بلا رقم تسلسلي
+// ولا رمز QR ولا رابط تحقق ولا زر LinkedIn، فلا شيء فيها يتحقق كشهادة أصلية
+export const SAMPLE_STAMP_AR = 'نموذج للعرض';
+export function certificateHtml(c0, qrSvg, { status: status0 } = {}) {
+  const sample = !!c0.sample;
+  const c = sample ? { ...c0, serial: 'SAMPLE', verify_url: '' } : c0;
+  const status = sample ? SAMPLE_STAMP_AR : status0;
   const co = !!c.org?.logo;
   const signers = (c.signatories || []).slice(0, 1);
   const period = c.start && c.end ? `${fmtAr(c.start)} – ${fmtAr(c.end)}` : '';
@@ -85,7 +91,7 @@ export function certificateHtml(c, qrSvg, { status } = {}) {
   const kindAr = success ? 'شهادة إتمام بنجاح' : 'شهادة مشاركة';
   const micro = `MILESTONE IMPACT · ${c.serial} · ${kindEn.toUpperCase()} · `.repeat(14);
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<title>${kindAr} · ${esc(c.name_ar)} · ${esc(c.serial)}</title>
+<title>${kindAr} · ${esc(c.name_ar)} · ${sample ? SAMPLE_STAMP_AR : esc(c.serial)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">
 <style>
@@ -171,18 +177,21 @@ body { font-family: "Noto Kufi Arabic", "Noto Sans", sans-serif; font-weight: 30
     <footer class="foot">
       ${attest(signers[0], c)}
       ${SEAL}
-      <div class="verify">
+      ${sample ? `<div class="verify"><dl>
+          <dt>رقم الشهادة</dt><dd>${SAMPLE_STAMP_AR}، بلا رقم</dd>
+          <dt>التحقق</dt><dd>لا رابط تحقق لهذا النموذج</dd>
+        </dl></div>` : `<div class="verify">
         <dl>
           <dt>رقم الشهادة</dt><dd class="ltr">${esc(c.serial)}</dd>
           <dt>تاريخ الإصدار</dt><dd>${esc(fmtAr(c.issued_at))}</dd>
           <dt>التحقق</dt><dd class="ltr">${esc(c.verify_url.replace(/^https?:\/\//, ''))}</dd>
         </dl>
         <div class="qr">${qrSvg}</div>
-      </div>
+      </div>`}
     </footer>
   </div>
   <div class="micro">${esc(micro)}</div>
-  <div class="rights">جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(c.issued_at).getFullYear()} Milestone Impact</bdi> · تحقّق من صحة الشهادة بمسح الرمز</div>
+  <div class="rights">جميع الحقوق محفوظة <bdi dir="ltr">© ${new Date(c.issued_at).getFullYear()} Milestone Impact</bdi> · ${sample ? `${SAMPLE_STAMP_AR}، لا يثبت إتمام البرنامج` : 'تحقّق من صحة الشهادة بمسح الرمز'}</div>
   ${status ? `<div class="status"><span>${esc(status)}</span></div>` : ''}
 </article>
 </body></html>`;
@@ -207,7 +216,7 @@ export async function qrSvgFor(url) {
 // لأن سياسة المحتوى تمنع السكربت داخل الصفحة.
 export async function writeCertificate(win, c, opts = {}) {
   if (!win) return false;
-  const html = certificateHtml(c, await qrSvgFor(c.verify_url), opts);
+  const html = certificateHtml(c, c.sample ? '' : await qrSvgFor(c.verify_url), opts);
   win.document.open();
   win.document.write(html);
   win.document.close();

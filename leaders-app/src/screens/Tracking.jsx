@@ -9,6 +9,7 @@ import { call } from '../api.js';
 import { drafts, useUnsavedGuard } from '../unsaved.js';
 import ChooseExpert from './ChooseExpert.jsx';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
+import { DEMO_FOR_SHOW_AR, DEMO_TRACKING_NOTE_AR } from '../../../supabase/functions/leaders-api/demo-stage.js';
 
 const HEALTH_CHIP = { green: 'ok', amber: 'warn', red: 'bad', stale: 'warn', pending: '', closed: 'ok' };
 const pct = (v) => (v == null ? '·' : `${v}%`);
@@ -85,18 +86,20 @@ export default function Tracking({ owner = '' }) {
   };
 
   return (
-    <section className="card tr">
+    <section className={`card tr${d.simulated ? ' tr-demo' : ''}`}>
       <div className="tr-head">
         <div>
-          <span className="mg-cap">بعد الاعتماد</span>
+          {/* الحساب التجريبي: مفتوحة للعرض بلا اعتماد حقيقي (tracking.ts: demoLoad)، فتقول ذلك صراحة */}
+          {d.simulated ? <span className="chip demo-skip" data-testid="tracking-demo">{DEMO_FOR_SHOW_AR}</span> : <span className="mg-cap">بعد الاعتماد</span>}
           <h2>متابعة التنفيذ والأثر</h2>
-          <p className="muted small">الخطة من وثيقتك المعتمدة. حدّث كل شهر حالة المعالم وقيم المؤشرات. في اليوم 90 و180 تقيس كل المنافع ويؤكدها راعي المبادرة.</p>
+          {d.simulated && <p className="small demo-note" data-testid="tracking-demo-note">{DEMO_TRACKING_NOTE_AR}</p>}
+          <p className="muted small">{d.simulated ? 'الخطة من وثيقتك كما هي الآن.' : 'الخطة من وثيقتك المعتمدة.'} حدّث كل شهر حالة المعالم وقيم المؤشرات. في اليوم 90 و180 تقيس كل المنافع ويؤكدها راعي المبادرة.</p>
         </div>
         <span className={`chip ${HEALTH_CHIP[s.health] || ''}`}>{s.health_title}</span>
       </div>
 
       <div className="tr-kpis">
-        <div><b>{s.day}</b><small>يومًا منذ الاعتماد</small></div>
+        <div><b>{s.day}</b><small>{d.simulated ? 'يومًا منذ فتحها للعرض' : 'يومًا منذ الاعتماد'}</small></div>
         <div><b>{pct(s.milestones.on_time)}</b><small>معالم في موعدها · {s.milestones.done} من {s.milestones.total} تحققت</small></div>
         <div><b>{pct(s.benefits.realization)}</b><small>تحقق المنافع · {s.benefits.measured} من {s.benefits.total} مقيسة</small></div>
         <div><b>{s.updates}</b><small>تحديث شهري</small></div>

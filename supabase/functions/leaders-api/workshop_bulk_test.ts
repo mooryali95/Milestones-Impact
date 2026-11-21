@@ -87,7 +87,7 @@ Deno.test('خليط: المتوقع يُسجَّل، وغير المتوقع و�
     assertEquals([r.marked, r.already, r.unmarked], [2, 0, 0]);
     assertEquals(r.refused.map((x: Row) => [x.id, x.code]), [[other, 'not_expected'], [gone, 'not_expected'], [demo, 'demo'], [U(1), 'not_expected'], ['ليس-معرّفًا', 'not_expected']]);
     assertEquals(r.refused[0].message, 'ليس ممن يُتوقع حضورهم في هذه الجلسة');
-    assertEquals(r.refused[2].message, 'حساب العرض لا يُسجَّل له حضور');
+    assertEquals(r.refused[2].message, 'الحساب التجريبي لا يُسجَّل له حضور');
     // الرد معرّفات كما أُرسلت، بلا اسم ولا بريد لأحد
     assert(!/مشارك|example\.sa/.test(JSON.stringify(r)));
     assertEquals(att(w, DAY1).map((x) => x[0]), [p1, p2]);

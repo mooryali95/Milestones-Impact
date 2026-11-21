@@ -231,6 +231,12 @@ export async function shareDocFor(p: any) {
   return withTracking(await recordFor(p, 'sponsor'), p.id);
 }
 
+// وثيقة الحساب التجريبي كما هي الآن، لخطة متابعته المفتوحة للعرض (tracking.ts: demoLoad). للحساب التجريبي وحده، ولا تكتب
+export async function demoDoc(p: any) {
+  if (!simulated(p)) throw new Fail('هذا متاح للحساب التجريبي فقط', 403, 'demo_only');
+  return docFor(p, 'participant');
+}
+
 export async function doc(p: any) {
   return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
 }

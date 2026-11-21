@@ -127,9 +127,10 @@ test('رابط التجربة: المدير ينشئه ويراه ويلغيه،
   await guest.addInitScript(() => localStorage.setItem('mi_leaders_welcome_seen', 'true'));
   await route(guest, be);
   await guest.goto(url);
-  const bar = guest.getByTestId('demo-shared-bar');
+  const bar = guest.getByTestId('demo-bar');
   await expect(bar).toBeVisible();
-  await expect(bar).toHaveText('حساب تجريبي مشترك: ما تفعله هنا للتجربة ولا يُحسب، وقد يراه غيرك ممن يجرّب.');
+  await expect(bar.getByTestId('demo-badge')).toHaveText('حساب تجريبي');
+  await expect(bar).toContainText('ما تفعله هنا لا يُحسب، وقد يراه غيرك ممن يجرّب.');
   await expect(guest.getByRole('button', { name: /ملفي: مشارك العرض/ })).toBeVisible();
   expect(new URL(guest.url()).hash).toBe('');
   expect(be.s.calls.filter((c) => c.action === 'demo.link-open').map((c) => c.t)).toEqual([TRY_TOKEN]);
@@ -185,7 +186,7 @@ test('رابط التجربة: المدير ينشئه ويراه ويلغيه،
   expect(new URL(late.url()).hash).toBe('');
   await gone.getByRole('button', { name: 'افتح صفحة الدخول' }).click();
   await expect(gone).toBeHidden();
-  await expect(late.getByTestId('demo-shared-bar')).toHaveCount(0);
+  await expect(late.getByTestId('demo-bar')).toHaveCount(0);
 
   // والمنتهي والخاطئ كذلك، كل بعنوانه
   // رابط يُلصق في الصفحة المفتوحة نفسها (تغيّر جزء الرابط وحده) يُلتقط بلا إعادة تحميل

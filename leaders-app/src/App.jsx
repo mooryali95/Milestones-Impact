@@ -50,7 +50,8 @@ const Capstone = lazyView(() => import('./screens/Capstone.jsx'));
 const Katon = lazyView(() => import('./screens/Katon.jsx'));
 const HallScreen = lazyView(() => import('./screens/Hall.jsx'));
 import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
-import { captureTryLink, DemoSharedBar, TRY_GONE, TryLinkAsk, TryLinkGone } from './TryLink.jsx';
+import { captureTryLink, TRY_GONE, TryLinkAsk, TryLinkGone } from './TryLink.jsx';
+import DemoBar from './DemoBar.jsx';
 const Legal = lazyView(() => import('./screens/Legal.jsx'));
 import Consent, { PolicyBanner } from './Consent.jsx';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
@@ -304,7 +305,7 @@ function Participant() {
   // رابط العرض من لوحة الإدارة: يُلتقط قبل أي شيء
   const [demo, setDemo] = useState(() => captureDemoLink() || demoPending());
   // رابط تجربة حساب العرض (/#try=...): رمزه يُلتقط مرة ويُبدَّل بجلسة في الإقلاع. tryGone: الرابط لا يفتح (انتهى أو أُلغي أو
-  // خاطئ، أو تعذّر الاتصال) فتُعرض رسالته. demoShared: الجلسة بدأها رابط، فيظهر سطر «حساب تجريبي مشترك»
+  // خاطئ، أو تعذّر الاتصال) فتُعرض رسالته. demoShared: الجلسة بدأها رابط، فتقول الشارة إن الحساب يشترك فيه غيره
   const tryToken = useRef(undefined);
   if (tryToken.current === undefined) tryToken.current = captureTryLink();
   const [tryGone, setTryGone] = useState(null);
@@ -600,7 +601,8 @@ function Participant() {
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
       </header>
-      {me?.participant?.is_demo && demoShared && <DemoSharedBar />}
+      {/* شارة الحساب التجريبي: في كل شاشة منه، من اللوحة أو برابط تجربة، ولا تُغلق (DemoBar.jsx) */}
+      {me?.participant?.is_demo && <DemoBar me={me} shared={demoShared} onUpdate={accept} onRestart={() => go('home')} />}
       {!online && !reconnectShown && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
         {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}
