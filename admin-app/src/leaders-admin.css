@@ -1289,3 +1289,43 @@
   .demo-links-fresh .la-row { flex-wrap: wrap; }
   .demo-links-fresh input { flex-basis: 100%; }
 }
+
+/* الجلسة الجماعية مع المستشار (screens/GroupSession.jsx، تصور تشغيل الدفعة، المرحلة 5): نافذة الإنشاء بمعاينتها، وبطاقات الجلسات */
+.mi-form.gs-form { width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; }
+.gs-form form { display: grid; gap: 12px; }
+.gs-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gs-fields .gs-wide { grid-column: 1 / -1; }
+.gs-fields small { font-weight: 400; }
+.gs-preview { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--sand-light); transition: opacity .15s; }
+.gs-preview.is-stale { opacity: .6; }
+.gs-line { margin: 0; font-size: .9rem; line-height: 1.7; }
+.gs-group { background: #fff; border: 1px solid var(--line); border-inline-start: 4px solid var(--line-strong); border-radius: 6px; padding: 8px 12px; }
+.gs-group.ok { border-inline-start-color: var(--st-ok); }
+.gs-group.warn { border-inline-start-color: var(--st-warn-text); }
+.gs-group.bad { border-inline-start-color: var(--st-bad); }
+.gs-group h4 { margin: 0; font-size: .88rem; color: var(--ink); }
+.gs-group h4 small { font-weight: 400; color: var(--ink-soft); }
+.gs-group p { margin: 2px 0 0; }
+.gs-group ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; max-height: 190px; overflow-y: auto; }
+.gs-group li { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; min-height: 32px; font-size: .86rem; }
+.gs-who { display: grid; min-width: 0; }
+.gs-who b { font-weight: 600; overflow-wrap: anywhere; }
+.gs-who small { font-size: .78rem; }
+.la-form label.gs-ex { font-weight: 400; font-size: .82rem; white-space: nowrap; min-height: 32px; }
+.gs-conflict { display: grid; gap: 6px; padding: 10px 12px; border-radius: 6px; background: rgba(178,107,0,.1); color: var(--st-warn-text); font-size: .86rem; line-height: 1.7; }
+.gs-saved { margin: 0; padding: 12px; border-radius: 6px; background: rgba(46,125,91,.1); color: var(--st-ok); font-weight: 600; line-height: 1.8; }
+.gs-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gs-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
+.gs-card.off { opacity: .65; }
+.gs-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.gs-card-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 280px; }
+.gs-card-main b { overflow-wrap: anywhere; }
+.gs-card-main small { font-size: .8rem; line-height: 1.7; }
+.gs-card-acts { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.gs-members { list-style: none; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.gs-members li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .88rem; }
+.gs-members li > span:first-child { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .gs-fields { grid-template-columns: minmax(0, 1fr); }
+  .gs-card-acts { width: 100%; }
+}

@@ -4,7 +4,8 @@
 import { all, allFor, db, Fail, must } from './core.ts';
 import { baselineProgress } from './admin.ts';
 import { onboardingOf } from './onboarding.js';
-import { journeyApproved, pickCohort } from './logic.js';
+import { journeyApproved, pickCohort, tallyOnce } from './logic.js';
+import { groupCols } from './coaching-groups.ts';
 import { areaPrefixes, changeRow, expertLoad, pipelineBy } from './insight.js';
 import { listed } from './counting.ts';
 import { cohortMemberIds } from './programs.ts';
@@ -27,12 +28,13 @@ export async function expertLoadNow() {
     // طاقة خبراء الرحلة وحدهم (journeyApproved): عضو اللجنة بلا دور لا يُحسب فيها
     db.from('experts').select('id, full_name, title, status, roles, weekly_hours').eq('status', 'active').limit(500).then((r) => ((must(r) ?? []) as any[]).filter(journeyApproved)),
     listed(db.from('expert_requests').select(`expert_id, ${P}`).in('status', ['offered', 'accepted']).not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
-    listed(db.from('coaching_sessions').select(`expert_id, ${P}`).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
+    // group-once: tallyOnce
+    listed(db.from('coaching_sessions').select(await groupCols(`expert_id, ${P}`)).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
     listed(db.from('expert_requests').select(`expert_id, participant_id, ${P}`).eq('status', 'accepted').not('expert_id', 'is', null), 'participants').limit(5000).then((r: any) => (must(r) ?? []) as any[]),
   ]);
   const people_by: Record<string, Set<string>> = {};
   for (const r of roles) (people_by[r.expert_id] ||= new Set()).add(r.participant_id);
-  return expertLoad(experts, { requests: tally(reqs, 'expert_id'), upcoming: tally(upcoming, 'expert_id'), people: Object.fromEntries(Object.entries(people_by).map(([k, v]) => [k, v.size])) });
+  return expertLoad(experts, { requests: tally(reqs, 'expert_id'), upcoming: tallyOnce(upcoming) as Record<string, number>, people: Object.fromEntries(Object.entries(people_by).map(([k, v]) => [k, v.size])) });
 }
 
 // أين توقف المشاركون (بالجهة وبالدفعة) وحِمل الخبراء. بلا حسابات العرض، وحسابات الاختبار داخلة كما في قائمة المشاركين

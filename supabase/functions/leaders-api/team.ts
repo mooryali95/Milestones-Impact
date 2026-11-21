@@ -13,7 +13,8 @@ import { type AssignmentMail, audit, db, Fail, must, sendMail, teamAssignedMail 
 import { cohortMembers } from './programs.ts';
 import { adminSave as expertCreate } from './experts.ts';
 import { firstName } from './hall.js';
-import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, expertAssignments, journeyApproved, servedBy, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
+import { assignmentScopeAr, capacityOf, cohortPeriodAr, coordTeamView, expertAssignments, journeyApproved, servedBy, tallyOnce, TEAM_MAX, TEAM_SCOPES, teamCoverage, teamRows } from './logic.js';
+import { groupCols } from './coaching-groups.ts';
 import { EXPERT_ROLE_AR, expertRoleAr as roleAr } from './labels.js';
 
 type Body = Record<string, any>;
@@ -28,14 +29,16 @@ async function loads() {
   const now = new Date().toISOString();
   const [reqs, upcoming, open, team, groups] = await Promise.all([
     db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null),
-    db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
+    // group-once: tallyOnce
+    db.from('coaching_sessions').select(await groupCols('expert_id')).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
     db.from('cohorts').select('id, advisor_expert_id').neq('status', 'closed'),
     db.from('cohort_experts').select('cohort_id, expert_id'),
     db.from('cohort_groups').select('cohort_id, advisor_expert_id').not('advisor_expert_id', 'is', null),
   ]);
   const msg = 'تعذّر قراءة حمل الخبراء الآن، حاول بعد قليل';
   const tally = (rows: any[]) => { const m: Record<string, number> = {}; for (const x of rows || []) m[x.expert_id] = (m[x.expert_id] || 0) + 1; return m; };
-  const r = tally(must(reqs, msg) as any[]), u = tally(must(upcoming, msg) as any[]);
+  // الجلسات القادمة بالكيان: الجماعية مرة واحدة في حِمل الخبير (tallyOnce)
+  const r = tally(must(reqs, msg) as any[]), u = tallyOnce(must(upcoming, msg) as any[]) as Record<string, number>;
   const live = new Set(((must(open, msg) as any[]) || []).map((c) => c.id));
   const cohortsOf: Record<string, Set<string>> = {};
   const add = (e: string | null, c: string) => { if (e && live.has(c)) (cohortsOf[e] ||= new Set()).add(c); };

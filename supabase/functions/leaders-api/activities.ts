@@ -22,6 +22,7 @@ import {
 } from './logic.js';
 import { journeyTimeline, outsideSessions } from './journey-timeline.js';
 import { MARK_REASON_MAX } from './labels.js';
+import { adminList as coachingGroupsList, decorateGroupRows, groupCols } from './coaching-groups.ts';
 
 type Body = Record<string, any>;
 type Ctx = { ip: string | null; ua: string | null };
@@ -107,7 +108,8 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     video: Object.fromEntries((video.data || []).map((r: any) => [r.requirement_id, r])),
     workshops: (ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId),
     attended: new Set((att.data || []).map((a: any) => a.session_id)),
-    coaching: coach.data || [],
+    // صفوف الجلسة الجماعية (المرحلة 5) تحمل عنوانها ومستشارها ومكانها، بلا أسماء بقية المدعوين
+    coaching: await decorateGroupRows(coach.data || []),
     levels,
     curriculumLocked: !approved,
     content: content.data || [],
@@ -530,7 +532,8 @@ export async function bookingWebhook(provider: string, raw: string, headers: Hea
 // عدد جلسات المشارك غير الملغاة في البند بعد الحجز، والحد. null إن لم يُضبط حد أو لم يُتجاوز
 async function overMaxCheck(r: any, participantId: string) {
   if (sessionsMax(r?.config) == null) return null;
-  const { data } = await db.from('coaching_sessions').select('status').eq('participant_id', participantId).eq('requirement_id', r.id);
+  // بـ* ليُقرأ off_allowance حين يوجد (جلسة جماعية خارج الرصيد لا تدخل العدّ)، ويعمل قبل ترحيله
+  const { data } = await db.from('coaching_sessions').select('*').eq('participant_id', participantId).eq('requirement_id', r.id);
   const x = bookingOverMax(r.config, data || []);
   return x.over ? x : null;
 }
@@ -547,12 +550,15 @@ export async function overview() {
     // بـ* لتحمل invited_at بعد الترحيل 20261110140000 وتعمل قبله؛ والسر لا يخرج إلى اللوحة (يُحذف أدناه)
     db.from('workshop_sessions').select('*').order('starts_at', { nullsFirst: false }),
     listed(db.from('workshop_attendance').select('session_id, participants!inner(is_demo)'), 'participants'),
+    // group-once-exempt: قائمة عرض للجلسات الفردية لا جمع لخبير، وصفوف الجلسات الجماعية تُحذف منها أدناه وتُعرض بكيانها
     db.from('coaching_sessions').select('*, participants(full_name, email), experts(full_name)').or(`starts_at.gte.${since},status.in.(booked,requested)`)
       .order('starts_at', { ascending: true }).limit(500),
     db.from('programs').select('id, name').is('archived_at', null),
     db.from('cohorts').select('*').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
   const capacity_ready = await capacityReady();
+  // الجلسات الجماعية مع المستشار (المرحلة 5). قبل ترحيلها ready=false وقائمة فارغة، وتعذّر قراءتها لا يسقط الشاشة
+  const groups: any = await coachingGroupsList({}).catch((e) => { console.error('activities groups', e); return { ready: true, groups: [], failed: true }; });
   // مدرب الجلسة (المرحلة 4): خبراء كل دفعة لقائمة النموذج، واسم مدرب كل جلسة. تعذّر قراءة الخبراء لا يسقط الشاشة: القائمة فارغة
   const cohort_trainers = await cohortTrainers((cohorts.data || []).map((c: any) => c.id)).catch((e) => { console.error('activities trainers', e); return {}; });
   const trainerOf = await trainerNames((ws.data || []).map((s: any) => s.expert_id));
@@ -570,7 +576,9 @@ export async function overview() {
     success: true,
     requirements: (reqs.data || []).map((r: any) => ({ ...r, instant_open: instantAvailable(r.config) })),
     workshops: (ws.data || []).sort(bySessionTime).map((s: any) => { const row = { ...s, attended: counts[s.id] || 0, verify: verifyOf(s), outside: (outside as any)[s.id] || [], trainer: (s.expert_id && trainerOf[s.expert_id]) || null }; delete row.secret; return row; }),
-    coaching: coach.data || [],
+    // صفوف الجلسات الجماعية تُعرض بكيانها في coaching_groups لا صفًّا صفًّا بين الفردية
+    coaching: (coach.data || []).filter((x: any) => !x.group_id),
+    coaching_groups: groups.groups || [], groups_ready: groups.ready !== false, ...(groups.failed ? { groups_failed: true } : {}),
     programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers,
   };
 }
@@ -1022,6 +1030,9 @@ export async function coachingMark(a: any, b: Body) {
   const status = String(b.status || '');
   if (!['attended', 'no_show', 'cancelled', 'booked'].includes(status)) throw new Fail('حالة غير صالحة');
   const now = new Date().toISOString();
+  // صف جلسة جماعية يُؤكَّد من ورقتها وحدها (coaching-groups.ts)، فلا تنفصل حالة مدعو عن جلسته بنقرة هنا
+  const cur = (await db.from('coaching_sessions').select('*').eq('id', String(b.id || '')).maybeSingle()).data as any;
+  if (cur?.group_id) throw new Fail('هذه من جلسة جماعية. سجّل حضورها من ورقة حضور الجلسة', 409, 'group_session');
   must(await db.from('coaching_sessions').update({
     status, note: b.note ? String(b.note).slice(0, 2000) : null, updated_at: now,
     confirmed_by: status === 'booked' ? null : a.email, confirmed_at: status === 'booked' ? null : now,
@@ -1069,13 +1080,16 @@ export async function coachAvailable(a: any, b: Body) {
 // الجلسات المحجوزة التي تبدأ بين 23 و25 ساعة من الآن، ولم يُرسل تذكيرها: مرة واحدة لكل جلسة
 export async function sessionReminders() {
   const now = Date.now();
-  const { data } = await db.from('coaching_sessions').select('id, starts_at, ends_at, join_url, participants(full_name, email), experts(full_name)')
+  // group-once-exempt: تذكير لكل مشارك بصفه، لا جمع لخبير
+  const { data } = await db.from('coaching_sessions').select(await groupCols('id, starts_at, ends_at, join_url, participants(full_name, email, is_test), experts(full_name)'))
     .eq('status', 'booked').is('reminded_at', null)
     .gte('starts_at', new Date(now + 23 * 36e5).toISOString()).lte('starts_at', new Date(now + 25 * 36e5).toISOString()).limit(200);
   let sent = 0;
   for (const s of (data || []) as any[]) {
     const { data: mark } = await db.from('coaching_sessions').update({ reminded_at: new Date().toISOString() }).eq('id', s.id).is('reminded_at', null).select('id');
     if (!mark?.length || !s.participants?.email) continue;
+    // مدعو الجلسة الجماعية من حسابات الاختبار لا يصله بريدها (كدعوتها)، والفردية كما كانت
+    if (s.group_id && s.participants.is_test) continue;
     const when = new Date(s.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
     // ومعه دعوة تقويم تُضاف بنقرة، بتنبيه قبل الجلسة بنصف ساعة
     const ics = icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at || new Date(Date.parse(s.starts_at) + 36e5).toISOString(),

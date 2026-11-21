@@ -392,7 +392,7 @@ function memberActivity(journey, today) {
     }
     if (it.kind === 'coaching') {
       const open = (act.sessions || []).filter((x) => x.status === 'booked' || x.status === 'requested').length;
-      coach = { used: (coach?.used || 0) + (act.used ?? (Number(act.count) || 0) + open), max: (coach?.max || 0) + (act.max ?? (Number(act.total) || 0)) };
+      coach = { used: (coach?.used || 0) + (act.used ?? (Number(act.count) || 0) + open - (Number(act.off) || 0)), max: (coach?.max || 0) + (act.max ?? (Number(act.total) || 0)) };
     }
   }
   const hasWorkshop = journey.some((st) => (st.items || []).some((it) => it.kind === 'workshop' && it.activity));

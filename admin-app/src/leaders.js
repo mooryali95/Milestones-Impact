@@ -19,6 +19,8 @@ export const CHANGES_PENDING = new Set([
   'admin.sponsor-decide',
   'admin.erasure-execute', 'admin.erasure-decline', 'admin.erasure-withdrawn',
   'admin.coaching-mark', 'admin.coaching-add',
+  // تأكيد حضور الجلسة الجماعية وإلغاؤها يغيّران بند «جلسة جماعية تنتظر تأكيد الحضور»
+  'admin.coaching-group-mark', 'admin.coaching-group-cancel', 'admin.coaching-group-remove',
 ]);
 export const changesPending = (action, body = {}) => CHANGES_PENDING.has(action) && !body?.dry_run;
 

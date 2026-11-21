@@ -29,6 +29,7 @@ import * as A from './admin.ts';
 import * as C from './coordinator.ts';
 import * as Z from './certificates.ts';
 import * as V from './activities.ts';
+import * as CG from './coaching-groups.ts';
 import * as I from './impact.ts';
 import * as G from './programs.ts';
 import * as CP from './cohort-plan.ts';
@@ -464,6 +465,9 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.workshop-attendance': (e, b) => V.expertWorkshopAttendance(e, b),
   // ورقة الحضور للمدرب المكلف بدفعة الجلسة: تسجيل يدوي بسبب، والتحقق على الخادم (activities.ts: expertWorkshopMarkBulk)
   'xp.workshop-mark-bulk': (e, b) => V.expertWorkshopMarkBulk(e, b),
+  // ورقة حضور جلسته الجماعية: للمستشار صاحبها وحده، والتحقق على الخادم (coaching-groups.ts: expertGroup)
+  'xp.coaching-group': (e, b) => CG.expertSheet(e, b),
+  'xp.coaching-group-mark': (e, b) => CG.expertMark(e, b),
   // المرحلة 8: طلبات الأقران في دفعاته
   'xp.peer-list': (e) => PR.expertList(e),
   'xp.peer-answer': (e, b) => PR.expertAnswer(e, b),
@@ -636,6 +640,13 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.coaching-mark': (a, b) => A.writer(a, V.coachingMark, b),
   'admin.coaching-add': (a, b) => A.writer(a, V.coachingAdd, b),
   'admin.coach-available': (a, b) => A.writer(a, V.coachAvailable, b),
+  // الجلسة الجماعية مع المستشار (تصور تشغيل الدفعة، المرحلة 5، coaching-groups.ts): المعاينة والقائمة قراءة، والباقي بغلاف writer
+  'admin.coaching-groups': (_a, b) => CG.adminList(b),
+  'admin.coaching-group-preview': (_a, b) => CG.preview(b),
+  'admin.coaching-group-save': (a, b) => A.writer(a, CG.save, b),
+  'admin.coaching-group-cancel': (a, b) => A.writer(a, CG.cancel, b),
+  'admin.coaching-group-remove': (a, b) => A.writer(a, CG.removeMember, b),
+  'admin.coaching-group-mark': (a, b) => A.writer(a, CG.adminMark, b),
   'admin.impact': (_a, b) => I.adminReport(b),
   'admin.curriculum': (_a, b) => A.curriculum(b),
   'admin.programs': () => G.list(),

@@ -19,6 +19,9 @@ export const INBOX_KINDS = {
   // منذ الطلب: قرب منتصف ليل الرياض كانا يختلفان يومًا (تصور طلب الحذف 4.7)
   erasure: { label: 'طلب حذف بيانات', tab: 'participants', sla: 30, urgency: (at, now) => urgency(daysLeft(at, now)) },
   coaching_confirm: { label: 'جلسة تنتظر التأكيد', tab: 'activities', sla: 2 },
+  // الجلسة الجماعية مع المستشار (المرحلة 5، القرار 9): بند واحد للجلسة لا لكل مدعو، يظهر بعد يومين من نهايتها بلا تأكيد.
+  // وقته نهاية الجلسة، فهو متأخر من ظهوره (sla = يوما المهلة)
+  coaching_group_confirm: { label: 'جلسة جماعية تنتظر تأكيد الحضور', tab: 'activities', sla: 2, query: 'sub=groups' },
 };
 const DAY = 864e5;
 // late: تجاوز مهلة نوعه. soon: للنوع الذي له مهلة نظامية (urgency) وحده

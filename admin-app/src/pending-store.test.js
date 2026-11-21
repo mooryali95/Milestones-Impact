@@ -106,6 +106,7 @@ describe('أوامر القرار تحدّث العدّادات: لكل نوع �
     sponsor: ['admin.sponsor-decide'],
     erasure: ['admin.erasure-execute', 'admin.erasure-decline', 'admin.erasure-withdrawn'],
     coaching_confirm: ['admin.coaching-mark'],
+    coaching_group_confirm: ['admin.coaching-group-mark', 'admin.coaching-group-cancel'],
   };
   it('كل نوع مغطى', () => {
     expect(Object.keys(byKind).sort()).toEqual(Object.keys(INBOX_KINDS).sort());

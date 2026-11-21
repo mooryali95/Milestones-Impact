@@ -9,10 +9,13 @@
 // عرض محفوظ (shareable في filters.js). والإجراءات الجماعية هي القائمة نفسها لمن يكتب (تذكير، اعتماد، حالة، دفعة) بحد 50.
 // «سجّل حضورهم في جلسة» (المرحلة 2): المحددون يُفتحون في ورقة الحضور القائمة (Attendance) لجلسة منعقدة من جلسات الدفعة، معلَّمين
 // مسبقًا، بالمسار نفسه والتحقق نفسه على الخادم. لا قائمة جلسات هنا: خانة اختيار ثم الورقة.
+// «جلسة مع مستشار» (المرحلة 5): المحددون يُفتحون في نافذة الجلسة الجماعية (GroupSessionCreate) بمعاينة الخادم لكل واحد، والجلسة بعد حفظها
+// تُدار من «الحضور والجلسات». لمجموعة جاهزة من مجموعات الدفعة: صفِّ بفلتر «المجموعات» ثم حدّد الكل.
 import React, { useEffect, useMemo, useState } from 'react';
 import { date, L, STATUS, weekTime } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useEscape } from '../ui.jsx';
 import { Attendance } from './Activities.jsx';
+import { GroupSessionCreate } from './GroupSession.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -85,6 +88,8 @@ export default function CohortRoster({ c, canWrite = false, stage = '', show = '
   const [bulkApprove, setBulkApprove] = useState(null);
   // null، أو { ids, names } لاختيار الجلسة، ثم معها session لورقة الحضور
   const [attend, setAttend] = useState(null);
+  // معرّفات المحددين لنافذة «جلسة مع مستشار»
+  const [consult, setConsult] = useState(null);
   const cohorts = useBulkCohorts(canWrite);
 
   useEffect(() => { setWant(auto); }, [c.id, auto]);
@@ -168,6 +173,7 @@ export default function CohortRoster({ c, canWrite = false, stage = '', show = '
       {bulkApprove && <BulkApprove ids={bulkApprove} onPerson={onPerson} onClose={(changed) => { setBulkApprove(null); if (changed) done(); }} />}
       {attend && !attend.session && <PickSession c={c} count={attend.ids.length} onPick={(session) => setAttend((a) => ({ ...a, session }))} onClose={() => setAttend(null)} />}
       {attend?.session && <Attendance id={attend.session} cohortId={c.id} canWrite={canWrite} preselect={attend.ids} names={attend.names} onClose={(changed) => { setAttend(null); if (changed) done(); }} />}
+      {consult && <GroupSessionCreate c={c} ids={consult} onClose={(saved) => { setConsult(null); if (saved) done(); }} />}
       {canWrite && picked.size > 0 && (
         <div className="la-bulk" data-testid="cr-bulk">
           <span><b>{picked.size}</b> محدد</span>
@@ -176,6 +182,8 @@ export default function CohortRoster({ c, canWrite = false, stage = '', show = '
             {picked.size > BULK_MAX ? `ذكّر أول ${BULK_MAX} من المحددين` : `ذكّر المحددين (${picked.size})`}</button>
           <button className="btn-sm ghost" onClick={startAttend} title={picked.size > BULK_MAX ? `${BULK_MAX} في كل مرة: يُفتح أول ${BULK_MAX} من المحددين في ورقة الحضور` : 'تختار جلسة منعقدة من جلسات الدفعة، ثم تراجع ورقة حضورها وتحفظ مرة واحدة'}>
             {picked.size > BULK_MAX ? `سجّل حضور أول ${BULK_MAX} في جلسة…` : 'سجّل حضورهم في جلسة…'}</button>
+          <button className="btn-sm ghost" onClick={() => setConsult(pickedIds.slice(0, BULK_MAX))} title={picked.size > BULK_MAX ? `${BULK_MAX} في كل مرة: يُفتح أول ${BULK_MAX} من المحددين` : 'جلسة واحدة مع مستشار من خبراء الدفعة للمحددين، بمعاينة قبل الحفظ'}>
+            {picked.size > BULK_MAX ? `جلسة مع مستشار لأول ${BULK_MAX}…` : 'جلسة مع مستشار…'}</button>
           <BulkStatus ids={pickedIds} onDone={done} />
           <BulkEnroll ids={pickedIds} cohorts={cohorts.filter((x) => x.id !== c.id)} onDone={done} />
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>

@@ -38,6 +38,7 @@ import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
 import { BULK_APPROVE_MAX, mailForecast, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 import { counted, listed } from './counting.ts';
+import { inboxRows as groupInboxRows } from './coaching-groups.ts';
 
 type Body = Record<string, any>;
 // id وowner وsessionHash لشاشة المساعد: المالك يقرؤها، والتحقق الإضافي مربوط بهاش الجلسة نفسها (agent-admin.ts)
@@ -659,7 +660,7 @@ export async function reviews(b: Body = {}) {
 export async function inbox(_b: Body = {}) {
   const P = 'participants!inner(full_name, is_demo)';
   // حد القراءة لكل نوع: النوع الذي يبلغه عدده «على الأقل» (capped)
-  const LIMIT = { approval: 200, requirement: 200, model: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100 };
+  const LIMIT = { approval: 200, requirement: 200, model: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100, coaching_group_confirm: 100 };
   const q = {
     approval: listed(db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval')).order('updated_at', { ascending: true }).limit(LIMIT.approval),
     requirement: listed(db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar, program_id)`).eq('status', 'submitted'), 'participants').limit(LIMIT.requirement),
@@ -670,7 +671,10 @@ export async function inbox(_b: Body = {}) {
     expert_unmatched: db.from('expert_requests').select(`id, participant_id, role, created_at, ${P}`).eq('status', 'unmatched').limit(LIMIT.expert_unmatched),
     sponsor: db.from('sponsor_requests').select(`id, participant_id, kind, created_at, ${P}`).eq('status', 'pending').limit(LIMIT.sponsor),
     erasure: db.from('erasure_requests').select(`id, participant_id, created_at, ${P}`).eq('status', 'pending').limit(LIMIT.erasure),
-    coaching_confirm: db.from('coaching_sessions').select(`id, participant_id, starts_at, ends_at, ${P}`).eq('status', 'booked').lt('ends_at', new Date().toISOString()).limit(LIMIT.coaching_confirm),
+    // group-once-exempt: بنود «تنتظر التأكيد» لكل مشارك لا جمع لخبير. بـ* ليُقرأ group_id حين يوجد، فصف الجلسة الجماعية يُحذف منها (بندها واحد في coaching_group_confirm)
+    coaching_confirm: db.from('coaching_sessions').select(`*, ${P}`).eq('status', 'booked').lt('ends_at', new Date().toISOString()).limit(LIMIT.coaching_confirm),
+    // جلسة جماعية مضى على نهايتها يومان وفيها من لم يؤكَّد حضوره (القرار 9). قبل ترحيلها قائمة فارغة
+    coaching_group_confirm: groupInboxRows().then((data) => ({ data, error: null }), (error) => ({ data: null, error })),
   };
   const keys = Object.keys(q) as (keyof typeof q)[];
   const res = await Promise.all(keys.map((k) => q[k]));
@@ -691,7 +695,8 @@ export async function inbox(_b: Body = {}) {
     sponsor: rows.sponsor.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: r.kind === 'contract' ? 'خارج مدة العقد' : 'المقاعد ممتلئة', at: r.created_at })),
     // سطر المهلة بأيامها المتبقية بتقويم الرياض (erasure.js)، لا «مهلته 30 يومًا» الثابتة
     erasure: rows.erasure.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: leftAr(daysLeft(r.created_at)), at: r.created_at })),
-    coaching_confirm: rows.coaching_confirm.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'حضر أم لم يحضر؟', at: r.ends_at || r.starts_at })),
+    coaching_group_confirm: rows.coaching_group_confirm,
+    coaching_confirm: rows.coaching_confirm.filter((r) => !r.group_id).map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: 'حضر أم لم يحضر؟', at: r.ends_at || r.starts_at })),
   };
   return { success: true, ...inboxOf(src), skipped, capped };
 }

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261120100000_leaders_mail_queue_attachments
+-- as-of migration: 20261121100000_leaders_coaching_groups
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -450,6 +450,33 @@ create table if not exists leaders.client_events (
   constraint client_events_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.coaching_groups (
+  id uuid default gen_random_uuid() not null,
+  cohort_id uuid,
+  requirement_id uuid not null,
+  expert_id uuid,
+  title_ar text not null,
+  starts_at timestamp with time zone not null,
+  ends_at timestamp with time zone not null,
+  mode text default 'online'::text not null,
+  location_ar text,
+  join_url text,
+  counts_allowance boolean default true not null,
+  status text default 'scheduled'::text not null,
+  created_by text,
+  cancelled_by text,
+  cancelled_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint coaching_groups_join_url_check CHECK ((char_length(join_url) <= 500)),
+  constraint coaching_groups_location_ar_check CHECK ((char_length(location_ar) <= 300)),
+  constraint coaching_groups_mode_check CHECK ((mode = ANY (ARRAY['online'::text, 'in_person'::text]))),
+  constraint coaching_groups_status_check CHECK ((status = ANY (ARRAY['scheduled'::text, 'cancelled'::text]))),
+  constraint coaching_groups_title_ar_check CHECK (((char_length(title_ar) >= 1) AND (char_length(title_ar) <= 200))),
+  constraint coaching_groups_window_check CHECK ((ends_at > starts_at)),
+  constraint coaching_groups_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.coaching_sessions (
   id uuid default gen_random_uuid() not null,
   participant_id uuid not null,
@@ -469,6 +496,9 @@ create table if not exists leaders.coaching_sessions (
   updated_at timestamp with time zone default now() not null,
   expert_id uuid,
   reminded_at timestamp with time zone,
+  group_id uuid,
+  off_allowance boolean,
+  constraint coaching_sessions_group_no_external_check CHECK (((group_id IS NULL) OR (external_id IS NULL))),
   constraint coaching_sessions_kind_check CHECK ((kind = ANY (ARRAY['booked'::text, 'instant'::text, 'manual'::text]))),
   constraint coaching_sessions_note_check CHECK ((char_length(note) <= 2000)),
   constraint coaching_sessions_provider_check CHECK ((provider = ANY (ARRAY['calcom'::text, 'calendly'::text, 'instant'::text, 'manual'::text]))),
@@ -2704,7 +2734,23 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.coaching_groups add constraint coaching_groups_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.coaching_groups add constraint coaching_groups_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.coaching_groups add constraint coaching_groups_requirement_id_fkey FOREIGN KEY (requirement_id) REFERENCES leaders.stage_requirements(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.coaching_sessions add constraint coaching_sessions_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.coaching_sessions add constraint coaching_sessions_group_id_fkey FOREIGN KEY (group_id) REFERENCES leaders.coaching_groups(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3385,7 +3431,13 @@ CREATE INDEX IF NOT EXISTS client_events_created_idx ON leaders.client_events US
 
 CREATE INDEX IF NOT EXISTS client_events_ip_idx ON leaders.client_events USING btree (ip_hash, created_at);
 
+CREATE INDEX IF NOT EXISTS coaching_groups_cohort_idx ON leaders.coaching_groups USING btree (cohort_id, starts_at);
+
+CREATE INDEX IF NOT EXISTS coaching_groups_expert_idx ON leaders.coaching_groups USING btree (expert_id, starts_at) WHERE (expert_id IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS coaching_sessions_expert_idx ON leaders.coaching_sessions USING btree (expert_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS coaching_sessions_group_member_uidx ON leaders.coaching_sessions USING btree (group_id, participant_id) WHERE (group_id IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS coaching_sessions_participant_idx ON leaders.coaching_sessions USING btree (participant_id, requirement_id);
 
@@ -3728,6 +3780,8 @@ alter table leaders.certificate_settings enable row level security;
 alter table leaders.certificates enable row level security;
 
 alter table leaders.client_events enable row level security;
+
+alter table leaders.coaching_groups enable row level security;
 
 alter table leaders.coaching_sessions enable row level security;
 
