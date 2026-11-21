@@ -269,9 +269,11 @@ function Coaching({ item, open, onRefresh, setToast }) {
             const [cls, t] = s.awaiting && s.status === 'booked' ? ['warn', 'بانتظار تأكيد الموجّه'] : [COACH_TONE[s.status] || '', COACH_STATUS[s.status] || s.status];
             return (
               <li key={s.id} className="act-session">
-                <span className="grow">{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}</span>
+                {/* الجلسة الجماعية مع المستشار (المرحلة 5): علامتها ومستشارها ومكانها، بلا أسماء بقية المدعوين */}
+                <span className="grow">{s.group && <><b className="act-group" data-testid="group-session">جلسة جماعية{s.with ? ` مع ${s.with}` : ''}</b>{' · '}</>}{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}
+                  {s.group && (s.location || s.off) && <small className="muted act-group-sub">{[s.location ? `المكان: ${s.location}` : '', s.off ? 'لا تُحسب من رصيدك' : ''].filter(Boolean).join(' · ')}</small>}</span>
                 {soon(s) && <a className="btn sm" href={s.join_url} target="_blank" rel="noopener noreferrer">انضم الآن</a>}
-                {s.status === 'booked' && <AddToCalendar id={s.id} title="جلسة توجيه: برنامج القادة" start={s.starts_at} end={s.ends_at} location={a.location} url={s.join_url} />}
+                {s.status === 'booked' && <AddToCalendar id={s.id} title={s.group ? `${s.title || 'جلسة جماعية'}: برنامج القادة` : 'جلسة توجيه: برنامج القادة'} start={s.starts_at} end={s.ends_at} location={s.group ? s.location : a.location} url={s.join_url} />}
                 <span className={`chip ${cls}`}>{t}</span>
               </li>
             );

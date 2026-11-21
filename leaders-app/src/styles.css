@@ -826,6 +826,9 @@ details.mf-guide:not([open]) { background: transparent; border-inline-start-colo
 .act-list li:first-child { border-top: 0; }
 /* صف الجلسة على الشاشة الضيقة: العنوان والموعد في سطر، والطريقة والأزرار والحالة في سطر تحته */
 @media (max-width: 620px) { .act-session > .grow { flex-basis: 100%; } }
+/* الجلسة الجماعية مع المستشار في قائمة جلسات الاستشارة: علامتها بلون العنوان، وتحتها مكانها */
+.act-group { font-weight: 700; color: var(--petrol, inherit); }
+.act-group-sub { display: block; }
 .act-video { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; }
 .act-video > div, .act-video iframe, .act-video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .act-frame { position: relative; }

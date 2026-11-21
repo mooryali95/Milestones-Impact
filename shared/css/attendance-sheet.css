@@ -85,3 +85,24 @@
   .ats-body { padding: 14px; }
   .ats-actions .ats-btn { flex: 1 1 140px; }
 }
+
+/* ورقة حضور الجلسة الجماعية مع المستشار (shared/ui/GroupSessionSheet.jsx): الصف اسم ثم ثلاث خانات «حضر، لم يحضر، اعتذر».
+   على الجوال الخانات تحت الاسم بعرض الصف، وكل خانة هدف لمس 44 على الأقل */
+.gss-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; min-height: 48px; padding: 8px; border-radius: 8px; }
+.gss-row { border-bottom: 1px solid var(--brand-line-soft); }
+.gss-row:last-child { border-bottom: 0; }
+.gss-row.is-changed .gss-line { background: #EEF6F1; }
+.gss-choices { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gss-choice { position: relative; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; min-width: 76px; padding: 6px 12px; border: 1.5px solid var(--brand-line-strong); border-radius: 999px; background: var(--brand-white); color: var(--brand-slate); font-size: .9rem; font-weight: 600; cursor: pointer; }
+.gss-choice input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.gss-choice:has(input:focus-visible) { outline: 2px solid var(--brand-gold); outline-offset: 2px; }
+.gss-choice.on { background: var(--brand-slate); border-color: var(--brand-slate); color: var(--brand-white); }
+.gss-choice.s-attended.on { background: var(--st-ok-text); border-color: var(--st-ok-text); }
+.gss-choice.s-no_show.on { background: var(--st-bad); border-color: var(--st-bad); }
+.gss-undo { font-size: .85rem; }
+.gss-line > .ats-chip { justify-self: start; }
+@media (max-width: 640px) {
+  .gss-line { grid-template-columns: minmax(0, 1fr); }
+  .gss-choices { justify-content: flex-start; }
+  .gss-choice { min-height: 44px; flex: 1 1 0; min-width: 0; padding: 6px 8px; }
+}

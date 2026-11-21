@@ -1259,15 +1259,22 @@ export function coachingStatus(config, sessions, now = Date.now()) {
       id: s.id, kind: s.kind, status: s.status, starts_at: s.starts_at, ends_at: s.ends_at,
       join_url: s.status === 'cancelled' || s.status === 'no_show' ? null : s.join_url,
       awaiting: s.status !== 'attended' && s.status !== 'no_show' && (!s.ends_at || new Date(s.ends_at).getTime() < now),
+      // الجلسة الجماعية (المرحلة 5): علامتها وعنوانها ومستشارها ومكانها كما حمّلها الخادم (group)، بلا أسماء بقية المدعوين.
+      // off: خارج الرصيد («لا تُحسب من الرصيد»)
+      ...(s.group_id ? { group: true, ...(s.group || {}) } : {}), ...(s.off_allowance ? { off: true } : {}),
     }));
   const need = Math.max(1, Number(config?.sessions_required) || 1);
   const count = list.filter((s) => s.status === 'attended').length;
-  const open = list.filter((s) => s.status === 'booked' || s.status === 'requested').length;
+  // الرصيد: ما حضره وما هو محجوز، إلا ما كُتب خارج الرصيد. والمطلوب للاكتمال (count) يعدّ كل حضور
+  const live = list.filter((s) => !s.off);
+  const used = live.filter((s) => s.status === 'attended').length;
+  const open = live.filter((s) => s.status === 'booked' || s.status === 'requested').length;
+  const off = list.filter((x) => x.off && x.status !== 'no_show').length;
   // حد الحجز (T2، ب5.2): max_sessions إن ضُبط، وإلا المطلوب للاكتمال كما كان. sessions_required يبقى «المطلوب للاكتمال»
   const max = sessionsMax(config);
-  const out = { type: 'coaching', done: count >= need, count, total: need, can_book: count + open < (max ?? need), sessions: list };
+  const out = { type: 'coaching', done: count >= need, count, total: need, can_book: used + open < (max ?? need), sessions: list, ...(off > 0 ? { off } : {}) };
   // عند الحد: يُخفى زر الحجز ويُقال لماذا. ومعه used للخدمة («استفدت من N من M»)
-  if (max != null) return { ...out, max, used: count + open, at_max: count + open >= max };
+  if (max != null) return { ...out, max, used: used + open, at_max: used + open >= max };
   return out;
 }
 
@@ -1407,7 +1414,8 @@ export function sessionsMax(config) {
  * @param {any} config @param {any[]} sessions جلسات المشارك في هذا البند @returns {{ over: boolean, count: number, max: number|null }} */
 export function bookingOverMax(config, sessions) {
   const max = sessionsMax(config);
-  const count = (sessions || []).filter((s) => s.status !== 'cancelled' && s.status !== 'no_show').length;
+  // ما كُتب خارج الرصيد (جلسة جماعية بخانة «لا تُحسب من الرصيد») لا يدخل العدّ
+  const count = (sessions || []).filter((s) => s.status !== 'cancelled' && s.status !== 'no_show' && !s.off_allowance).length;
   return { over: max != null && count > max, count, max };
 }
 const intIn = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= lo && n <= hi ? n : d; };
@@ -2507,23 +2515,67 @@ export function expertPublic(e) {
   return rest;
 }
 
-// خدمات الخبير من جلساته: المنعقدة وحدها تُحتسب ساعات وتكلفة (السعر للإدارة وحدها)
+// ── الجلسة الجماعية تُعدّ للخبير مرة واحدة (تصور تشغيل الدفعة 2026-11-19، المرحلة 5، القرار 8) ──
+// الجلسة الجماعية كيان واحد تحته صف لكل مشارك في coaching_sessions (group_id). كل جمع لجلسات خبير (ساعات، تكلفة، حِمل، عدد)
+// يمر من هنا فيعدّ الكيان لا صفوفه، والحارس group_once_guard_test.ts يُسقط البناء إن قرأ استعلام جلسات خبير بلا إحدى الدالتين.
+/** وحدات الجلسات: الفردية صفها، والجماعية وحدة واحدة بصفوف مشاركيها. حالة الجماعية: منعقدة إن حضر أحد، ثم محجوزة إن بقي من لم
+ * يُؤكَّد، ثم «لم يحضر» إن غابوا كلهم، وإلا ملغاة
+ * @param {any[]} rows @returns {{ key: string, group: boolean, status: string, starts_at: any, ends_at: any, rows: any[] }[]} */
+export function sessionUnits(rows = []) {
+  const units = new Map();
+  let n = 0;
+  for (const s of rows || []) {
+    const key = s.group_id ? `g:${s.group_id}` : `s:${s.id ?? (n += 1)}`;
+    if (!units.has(key)) units.set(key, { key, group: !!s.group_id, status: s.status, starts_at: s.starts_at, ends_at: s.ends_at, rows: [] });
+    units.get(key).rows.push(s);
+  }
+  for (const u of units.values()) {
+    if (!u.group) continue;
+    const has = (st) => u.rows.some((x) => x.status === st);
+    u.status = has('attended') ? 'attended' : has('booked') || has('requested') ? 'booked' : has('no_show') ? 'no_show' : 'cancelled';
+    // موعد الوحدة من صف قائم (الملغى قد يحمل موعدًا قديمًا)
+    const live = u.rows.find((x) => x.status === u.status) || u.rows[0];
+    u.starts_at = live.starts_at; u.ends_at = live.ends_at;
+  }
+  return [...units.values()];
+}
+/** عدّ لكل خبير، والجلسة الجماعية مرة واحدة: { معرّف الخبير: العدد } */
+export function tallyOnce(rows = [], key = 'expert_id') {
+  const seen = new Set(), out = {};
+  for (const x of rows || []) {
+    if (x?.[key] == null) continue;
+    if (x.group_id) { const k = `${x[key]}|${x.group_id}`; if (seen.has(k)) continue; seen.add(k); }
+    out[x[key]] = (out[x[key]] || 0) + 1;
+  }
+  return out;
+}
+// خدمات الخبير من جلساته: المنعقدة وحدها تُحتسب ساعات وتكلفة (السعر للإدارة وحدها). الجلسة الجماعية وحدة واحدة: ساعاتها مرة
+// أيًا كان عدد مشاركيها، و«المشاركون» من حضر منهم، و«الغياب» بعدد من غاب
 export function expertStats(sessions = [], rate = null, now = Date.now()) {
-  const attended = sessions.filter((s) => s.status === 'attended');
-  const minutes = attended.reduce((a, s) => {
-    const m = (Date.parse(s.ends_at) - Date.parse(s.starts_at)) / 6e4;
+  const units = sessionUnits(sessions);
+  const held = units.filter((u) => u.status === 'attended');
+  const minutes = held.reduce((a, u) => {
+    const m = (Date.parse(u.ends_at) - Date.parse(u.starts_at)) / 6e4;
     return a + (Number.isFinite(m) && m > 0 && m <= 480 ? m : 0);
   }, 0);
   const hours = Math.round((minutes / 60) * 10) / 10;
   return {
-    sessions: sessions.filter((s) => s.status !== 'cancelled').length,
-    attended: attended.length,
+    sessions: units.filter((u) => u.status !== 'cancelled').length,
+    attended: held.length,
     no_show: sessions.filter((s) => s.status === 'no_show').length,
-    upcoming: sessions.filter((s) => s.status === 'booked' && Date.parse(s.starts_at) > now).length,
-    participants: new Set(attended.map((s) => s.participant_id)).size,
+    upcoming: units.filter((u) => u.status === 'booked' && Date.parse(u.starts_at) > now).length,
+    participants: new Set(sessions.filter((s) => s.status === 'attended').map((s) => s.participant_id)).size,
     hours,
     cost: rate == null ? null : Math.round(hours * Number(rate) * 100) / 100,
   };
+}
+
+// حالة عضو في جلسة جماعية من صفه: «اعتذر» صف ملغى أكّده أحد (confirmed_at)، و«أُزيل» ملغى بلا تأكيد
+export const GROUP_MEMBER_STATES = ['booked', 'attended', 'no_show', 'excused'];
+export function groupMemberState(row) {
+  if (!row) return 'removed';
+  if (row.status === 'cancelled') return row.confirmed_at ? 'excused' : 'removed';
+  return row.status === 'requested' ? 'booked' : row.status;
 }
 
 // ── القطاع: عائلة القطاع من نص حر (ملف المشارك أو قطاعات الخبير) ──

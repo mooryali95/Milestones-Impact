@@ -25,6 +25,7 @@ import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
 import AttendanceSheet from '../../../shared/ui/AttendanceSheet.jsx';
+import GroupSessionSheet from '../../../shared/ui/GroupSessionSheet.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 import { hashRef } from '../../../shared/master-book/reader.js';
 
@@ -390,6 +391,38 @@ function ExpertAttendance({ initial }) {
   );
 }
 
+// ── جلساته الجماعية (تصور تشغيل الدفعة 2026-11-19، المرحلة 5) ──
+// صف واحد لكل جلسة بعدد مدعويها، لا صف لكل مدعو. الأسماء في ورقة الحضور وحدها (xp.coaching-group: بلا بريد ولا جوال)، ومنها
+// يسجّل من حضر ومن لم يحضر في حفظ واحد. الخادم يحصرها في جلساته هو (coaching-groups.ts: assignedGroup)
+const groupWhereAr = (g) => (g.mode === 'in_person' ? g.location || 'حضوري' : 'عن بعد');
+function ExpertGroups({ groups, onChanged }) {
+  const [sheet, setSheet] = useState(null);
+  const load = useCallback(() => xpCall('xp.coaching-group', { id: sheet?.id }), [sheet]);
+  const save = useCallback((body) => xpCall('xp.coaching-group-mark', { id: sheet?.id, ...body }), [sheet]);
+  // ما يعمل عليه الآن: القادمة، وما تُفتح ورقته، وما ينتظر تأكيده. الأقدم يبقى في شهادة الساعات وحدها
+  const shown = (Array.isArray(groups) ? groups : []).filter((g) => !g.ended || g.sheet || g.awaiting);
+  if (!shown.length) return null;
+  return (
+    <section className="card stack" aria-labelledby="xp-groups" data-testid="xp-groups">
+      <h2 className="as-h3" id="xp-groups">جلساتك الجماعية</h2>
+      <p className="small muted">جلسة واحدة لعدة مشاركين. بعد الجلسة سجّل من حضر ومن لم يحضر من ورقتها.</p>
+      <div className="xpp-attend-list">{shown.map((g) => (
+        <article key={g.id} className="xpp-attend">
+          <div className="grow"><b>{g.title}</b>{g.awaiting && <span className="chip warn xpp-attend-mine" style={{ justifySelf: 'start', width: 'fit-content' }}>تنتظر تأكيد الحضور</span>}
+            <small className="muted">{[g.cohort, when(g.starts_at), groupWhereAr(g), countAr(g.count, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا'),
+              g.attended ? `حضر ${g.attended}` : '', g.no_show ? `لم يحضر ${g.no_show}` : ''].filter(Boolean).join(' · ')}</small></div>
+          <div className="xpp-attend-go">
+            {g.join_url && <a className="btn sm ghost" href={g.join_url} target="_blank" rel="noopener noreferrer">رابط الجلسة</a>}
+            <button type="button" className={`btn sm${g.awaiting ? '' : ' ghost'}`} onClick={() => setSheet(g)}>{g.sheet ? 'ورقة الحضور' : 'المدعوون'}</button>
+          </div>
+        </article>
+      ))}</div>
+      {sheet && <GroupSessionSheet load={load} save={save} role="expert" title={sheet.title}
+        sub={[sheet.cohort, when(sheet.starts_at), groupWhereAr(sheet)].filter(Boolean).join(' · ')} onClose={(changed) => { setSheet(null); if (changed) onChanged?.(); }} />}
+    </section>
+  );
+}
+
 // ── مراجعو الكتاب الأم (تصور فصل خدمة الرحلة عن لجان الكتاب، المرحلة 1، اعتمده المالك 2026-11-15) ──
 // اللجنة التي يحملها: «لجنة المحتوى» أو «لجنتا المحتوى والقياس»
 const committeesText = (cs) => {
@@ -522,7 +555,7 @@ function Dashboard({ onOut }) {
   const e = d.expert;
   const pre = d.preload || {};
   const roles = (e.roles || []).map((r) => EXPERT_ROLE_AR[r]?.[0]).filter(Boolean);
-  const isNew = !d.requests.length && !d.sessions.length && !d.stats.participants && !(d.advisor_cohorts || []).length
+  const isNew = !d.requests.length && !d.sessions.length && !(d.groups || []).length && !d.stats.participants && !(d.advisor_cohorts || []).length
     && !(Array.isArray(d.assignments) && d.assignments.some((a) => a.status !== 'closed'));
   const offered = d.requests.filter((x) => x.status === 'offered');
   const now = Date.now();
@@ -538,7 +571,10 @@ function Dashboard({ onOut }) {
   const certificate = async () => {
     const win = window.open('', '_blank');
     const { writeDocument, section, kpis, table } = await import('../../../src/lib/brand/doc.js');
-    const done = d.sessions.filter((s) => s.status === 'attended');
+    // المنعقدة: الفردية بمشاركها، والجماعية سطر واحد بعدد من حضرها (ساعاتها محسوبة مرة واحدة في d.stats.hours)
+    const done = [...d.sessions.filter((s) => s.status === 'attended'),
+      ...(d.groups || []).filter((g) => g.attended > 0).map((g) => ({ starts_at: g.starts_at, ends_at: g.ends_at, participant: `جلسة جماعية: ${countAr(g.attended, 'مشارك واحد', 'مشاركان', 'مشاركين', 'مشاركًا')}` }))]
+      .sort((x, y) => Date.parse(y.starts_at) - Date.parse(x.starts_at));
     const body = section('Service record', 'سجل الخدمة', kpis([
       { value: d.stats.hours, label: 'ساعة خبرة مقدّمة' }, { value: d.stats.participants, label: 'قائد خدمه' }, { value: d.stats.attended, label: 'جلسة منعقدة' },
     ])) + section('Sessions', 'الجلسات المنعقدة', table(
@@ -600,6 +636,7 @@ function Dashboard({ onOut }) {
       {flagsOf(d).hall && <ExpertHall cohorts={d.advisor_cohorts || []} />}
       {/* يوم الجلسة: رمز الحضور للقاعة قبل بقية العمل، لمن كُلّف بدفعتها (W2) */}
       <ExpertAttendance initial={d.preload ? pre.workshops ?? null : undefined} />
+      <ExpertGroups groups={d.groups} onChanged={() => load(true)} />
 
       {/* العمل المعلّق قبل القائمة: ما ينتظر تقييم الخبير وتأكيده أول ما يراه، لا بعد خمسين مشاركًا */}
       <SusCard call={xpCall} stateAction="xp.sus-state" submitAction="xp.sus-submit" initial={pre.sus} />

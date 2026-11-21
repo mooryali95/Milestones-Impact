@@ -627,6 +627,43 @@ export function workshopChangeMail(name: string, title: string, when: string, wh
     `${title} · ${when}`, '');
 }
 
+// ── الجلسة الجماعية مع المستشار (تصور تشغيل الدفعة 2026-11-19، المرحلة 5) ──
+// للمدعو: الموعد والمستشار والمكان أو الرابط وملف تقويم، بلا أسماء بقية المدعوين ولا عددهم. وللمستشار بريد واحد بالتكليف
+// والعدد بلا أسماء (يراها في بوابته). الإلغاء والإزالة يقولان إن الجلسة لم تُحسب من الرصيد
+export const GROUP_SESSION_MAIL = {
+  invite: { subject: 'دعوة: جلسة جماعية مع المستشار', lead: 'ندعوك إلى جلسة جماعية مع المستشار ضمن برنامجك.', note: 'أضف الموعد إلى تقويمك من المرفق. تجد الجلسة في رحلتك تحت الاستشارة.' },
+  change: { subject: 'تحديث: جلستك الجماعية مع المستشار', lead: 'تغيّرت تفاصيل جلستك الجماعية مع المستشار. هذا ما صارت عليه:', note: 'الملف المرفق يحدّث الموعد في تقويمك. إن بقي الموعد القديم فاحذفه.' },
+  cancel: { subject: 'أُلغيت: جلستك الجماعية مع المستشار', lead: 'أُلغيت الجلسة الجماعية التالية، فلا موعد لها.', note: 'لم تُحسب من رصيد استشاراتك. احذف موعدها من تقويمك إن أضفته.' },
+  removed: { subject: 'تحديث: لست مدعوًّا إلى الجلسة الجماعية', lead: 'لم تعد مدعوًّا إلى الجلسة الجماعية التالية.', note: 'لم تُحسب من رصيد استشاراتك. احذف موعدها من تقويمك إن أضفته.' },
+} as const;
+export type GroupSessionView = { title: string; when: string; expert?: string | null; where?: string | null; joinUrl?: string | null; counts?: boolean };
+export function groupSessionMail(kind: keyof typeof GROUP_SESSION_MAIL, name: string, g: GroupSessionView) {
+  const m = GROUP_SESSION_MAIL[kind];
+  const live = kind === 'invite' || kind === 'change';
+  return shell('sessions', m.subject,
+    mailText(`${hello(name)} ${m.lead}`)
+    + mailRows([['الجلسة', g.title], ['الموعد', g.when], ...(g.expert ? [['المستشار', g.expert] as [string, string]] : []), ...(g.where ? [['المكان', g.where] as [string, string]] : []),
+      ...(live && g.joinUrl ? [['الرابط', g.joinUrl, true] as [string, string, boolean]] : [])])
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي')
+    + mailNote(kind === 'invite' ? `${m.note} ${g.counts === false ? 'لا تُحسب من رصيد استشاراتك.' : 'تُحسب جلسة واحدة من رصيد استشاراتك.'}` : m.note),
+    `${g.title} · ${g.when}`, '');
+}
+export const GROUP_EXPERT_MAIL = {
+  assign: { subject: 'تكليف: جلسة جماعية مع مشاركيك', lead: 'كُلّفت بجلسة جماعية مع مشاركين في البرنامج.', note: 'بعد الجلسة سجّل من حضر ومن لم يحضر من بوابتك، في ورقة واحدة.' },
+  change: { subject: 'تحديث: جلستك الجماعية', lead: 'تغيّرت تفاصيل الجلسة الجماعية التي كُلّفت بها. هذا ما صارت عليه:', note: 'الملف المرفق يحدّث الموعد في تقويمك.' },
+  cancel: { subject: 'أُلغيت: جلستك الجماعية', lead: 'أُلغيت الجلسة الجماعية التالية، أو أُسندت إلى غيرك.', note: 'احذف موعدها من تقويمك إن أضفته.' },
+} as const;
+export function groupExpertMail(kind: keyof typeof GROUP_EXPERT_MAIL, name: string, g: GroupSessionView & { count: number; cohort?: string | null }) {
+  const m = GROUP_EXPERT_MAIL[kind];
+  return shell('sessions', m.subject,
+    mailText(`${hello(name)} ${m.lead}`)
+    + mailRows([['الجلسة', g.title], ['الموعد', g.when], ...(g.cohort ? [['الدفعة', g.cohort] as [string, string]] : []), ['عدد المشاركين', String(g.count)], ...(g.where ? [['المكان', g.where] as [string, string]] : []),
+      ...(kind !== 'cancel' && g.joinUrl ? [['الرابط', g.joinUrl, true] as [string, string, boolean]] : [])])
+    + mailButton(CONFIG.appUrl, 'افتح بوابتي')
+    + mailNote(m.note),
+    `${g.title} · ${g.when}`, '');
+}
+
 // طلب حذف البيانات: تأكيد لصاحب الحساب بالمهلة وطريقة السحب (privacy.ts)
 export const ERASE_MAIL_SUBJECT = 'استلمنا طلب حذف بياناتك';
 export function eraseRequestMail(name: string, days: number) {
@@ -1009,6 +1046,11 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'workshop-invite', family: 'sessions', label: 'دعوة الجلسة التدريبية', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'workshop-invite-trainer', family: 'sessions', label: 'دعوة الجلسة التدريبية: بمدرب مسمى', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'ورشة التفاوض', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null, false, true, 'qr', 'د. منى القحطاني') },
   { key: 'workshop-change', family: 'sessions', label: 'تحديث الجلسة التدريبية: تغيّر الموعد أو المكان', subject: WORKSHOP_CHANGE_MAIL.subject, html: () => workshopChangeMail('سارة', 'ورشة التفاوض', 'الاثنين 16 نوفمبر · 10:00', 'قاعة الملك فهد، الدور الأول', null, false, { when: true, where: true }, 'د. منى القحطاني') },
+  { key: 'group-session-invite', family: 'sessions', label: 'الجلسة الجماعية مع المستشار: دعوة المشارك', subject: GROUP_SESSION_MAIL.invite.subject, html: () => groupSessionMail('invite', 'سارة', { title: 'جلسة جماعية: الاستشارة', when: 'الأحد 6 ديسمبر، 10:00 ص', expert: 'د. منى القحطاني', joinUrl: 'https://meet.example.com/group', counts: true }) },
+  { key: 'group-session-change', family: 'sessions', label: 'الجلسة الجماعية مع المستشار: تغيّر الموعد أو المكان', subject: GROUP_SESSION_MAIL.change.subject, html: () => groupSessionMail('change', 'سارة', { title: 'جلسة جماعية: الاستشارة', when: 'الاثنين 7 ديسمبر، 11:00 ص', expert: 'د. منى القحطاني', where: 'قاعة الاجتماعات، الدور الثالث' }) },
+  { key: 'group-session-cancel', family: 'sessions', label: 'الجلسة الجماعية مع المستشار: إلغاء', subject: GROUP_SESSION_MAIL.cancel.subject, html: () => groupSessionMail('cancel', 'سارة', { title: 'جلسة جماعية: الاستشارة', when: 'الأحد 6 ديسمبر، 10:00 ص', expert: 'د. منى القحطاني' }) },
+  { key: 'group-session-removed', family: 'sessions', label: 'الجلسة الجماعية مع المستشار: إزالة مشارك', subject: GROUP_SESSION_MAIL.removed.subject, html: () => groupSessionMail('removed', 'سارة', { title: 'جلسة جماعية: الاستشارة', when: 'الأحد 6 ديسمبر، 10:00 ص', expert: 'د. منى القحطاني' }) },
+  { key: 'group-session-expert', family: 'sessions', label: 'الجلسة الجماعية مع المستشار: تكليف المستشار', subject: GROUP_EXPERT_MAIL.assign.subject, html: () => groupExpertMail('assign', 'د. منى', { title: 'جلسة جماعية: الاستشارة', when: 'الأحد 6 ديسمبر، 10:00 ص', cohort: 'دفعة الخريف', count: 6, joinUrl: 'https://meet.example.com/group' }) },
   { key: 'workshop-day', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل يوم', subject: WORKSHOP_MAIL.day.subject, html: () => workshopMail('day', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'workshop-hour', family: 'sessions', label: 'تذكير الجلسة التدريبية: قبل ساعة', subject: WORKSHOP_MAIL.hour.subject, html: () => workshopMail('hour', 'سارة', 'اليوم التدريبي الأول', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null) },
   { key: 'session-reminder', family: 'sessions', label: 'تذكير الجلسة', subject: 'جلستك غدًا', html: () => sessionReminderMail('سارة', 'الأحد 2 نوفمبر · 10:00', 'د. منى القحطاني', 'https://meet.google.com/abc-defg-hij') },

@@ -13,6 +13,7 @@ import { L, weekTime as when } from '../leaders.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
+import { GroupSessions } from './GroupSession.jsx';
 import { mailConfirm, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -199,6 +200,8 @@ function Coaching({ data, reload, canWrite }) {
   if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «جلسات فردية بحجز». أضفه في أي مرحلة من «الرحلة والمتطلبات».</p>;
   return (
     <>
+      {/* الجلسات الجماعية مع المستشار (المرحلة 5) بكيانها، وصفوفها ليست بين الفردية أدناه */}
+      <GroupSessions data={data} reload={reload} canWrite={canWrite} />
       {reqs.map((r) => {
         const list = data.coaching.filter((s) => s.requirement_id === r.id && s.status !== 'cancelled');
         const pending = list.filter((s) => ['booked', 'requested'].includes(s.status) && (!s.ends_at || new Date(s.ends_at).getTime() < now));
@@ -262,18 +265,20 @@ function Coaching({ data, reload, canWrite }) {
 
 export default function Activities({ canWrite }) {
   const [data, setData] = useState(null);
-  const [sub, setSub] = useState('workshops');
+  // ?sub=groups من صندوق «ينتظرني» ومن نافذة الحفظ: يفتح «الجلسات الفردية» حيث قسم الجلسات الجماعية
+  const [sub, setSub] = useState(() => (['groups', 'coaching'].includes(new URLSearchParams(readQuery()).get('sub')) ? 'coaching' : 'workshops'));
   const load = useCallback(async () => setData(await L('admin.activities')), []);
   useEffect(() => { load(); }, [load]);
   if (!data) return <Spinner />;
   if (!data.success) return <div className="la-err" role="alert">{data.message}</div>;
-  const waiting = data.coaching.filter((s) => ['booked', 'requested'].includes(s.status) && (!s.ends_at || new Date(s.ends_at) < new Date())).length;
+  const waiting = data.coaching.filter((s) => ['booked', 'requested'].includes(s.status) && (!s.ends_at || new Date(s.ends_at) < new Date())).length
+    + (data.coaching_groups || []).filter((g) => g.awaiting).length;
   return (
     <>
       <p className="la-muted">الحضور هنا دليل إنجاز المشارك، فلا يكتمل بند الجلسة بنقرة منه. أي مرحلة يمكن أن تضم جلسات جماعية أو فردية، حضورية أو عن بعد؛ تضيف المتطلب ونوعه وطريقة توثيقه من «الرحلة والمتطلبات»، ثم مواعيده هنا.</p>
       <nav className="la-subtabs" style={{ margin: '12px 0' }}>
         <button className={sub === 'workshops' ? 'on' : ''} onClick={() => setSub('workshops')}>الجلسات الجماعية</button>
-        <button className={sub === 'coaching' ? 'on' : ''} onClick={() => setSub('coaching')}>الجلسات الفردية {waiting > 0 && <small>({waiting} بانتظار التأكيد)</small>}</button>
+        <button className={sub === 'coaching' ? 'on' : ''} onClick={() => setSub('coaching')}>الجلسات الفردية والاستشارة {waiting > 0 && <small>({waiting} بانتظار التأكيد)</small>}</button>
       </nav>
       {sub === 'workshops' ? <Workshops data={data} reload={load} canWrite={canWrite} /> : <Coaching data={data} reload={load} canWrite={canWrite} />}
     </>

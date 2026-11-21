@@ -11,8 +11,9 @@ import { visibilityOfParticipant } from './visibility.ts';
 import { requireWrite } from './admin.ts';
 import { ownerNoticeLater } from './notify.ts';
 import { DOOR, rolesOf, wrongDoor } from './doors.ts';
-import { cleanExpert, cleanRating, expertFieldError, expertPublic, journeyApproved, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
+import { cleanExpert, cleanRating, expertFieldError, expertPublic, journeyApproved, linkAfterDecisionOk, LINK_CLOSED_AR, expertInviteHash, expertStats, sessionUnits, tallyOnce, googleIdentity, isEmail, latinDigits, MATCH_WEIGHTS, normalizeEmail, normalizePhone, OFFER_HOURS, rankExperts, ratingSummary, teamFirst, MIN_RATINGS, expertOwnRating, ratingDrop } from './logic.js';
 import { cohortOf } from './programs.ts';
+import { expertList as expertGroups, groupCols } from './coaching-groups.ts';
 import { CONSULT_CONTEXT, CONSULT_ROLES, DIM_AR, EXPERT_REQUEST_HINT, EXPERT_REQUEST_STATUS, EXPERT_ROLE_AR, EXPERT_STATUS, expertRoleAr, LEVEL_AR, RATE_TO_EXPERT, RATE_TO_PARTICIPANT } from './labels.js';
 import { applyTrack, approvalBlock, cleanCommittees, COMMITTEE_AR, committeeApplicationAr, committeeCoverage, contentApplyError, contentOnly, workUrl } from './committees.js';
 import { bookAccess } from './master-book.js';
@@ -112,13 +113,19 @@ async function alertApplication(id: string, fields: { full_name: string | null; 
 export async function adminList() {
   const [rows, { data: sessions }] = await Promise.all([
     db.from('experts').select('*').order('created_at', { ascending: false }).limit(500).then((r) => must(r) as any[]),
-    db.from('coaching_sessions').select('expert_id, participant_id, status, starts_at, ends_at').not('expert_id', 'is', null).limit(5000),
+    // group-once: expertStats
+    db.from('coaching_sessions').select(await groupCols('id, expert_id, participant_id, status, starts_at, ends_at')).not('expert_id', 'is', null).limit(5000),
   ]);
   const by: Record<string, any[]> = {};
-  for (const x of sessions || []) (by[x.expert_id] ||= []).push(x);
+  for (const x of (sessions || []) as any[]) (by[x.expert_id] ||= []).push(x);
   // تغطية لجنتي المحتوى والقياس من السجل نفسه (committees.js): من فيهما، وما ينقص كل لجنة
   return { success: true, experts: rows.map((e) => ({ ...e, stats: expertStats(by[e.id] || [], e.hourly_rate) })), committees: committeeCoverage(rows), ...(rows.length >= 500 ? { capped: true, limit: 500 } : {}) };
 }
+
+// آخر جلسات الخبير بالكيان: الفردية بصفها، والجماعية سطر واحد بعدد مدعويها وحالتها (sessionUnits)
+const recentUnits = (rows: any[]) => sessionUnits(rows).map((u: any) => (u.group
+  ? { id: u.key, group: true, status: u.status, starts_at: u.starts_at, ends_at: u.ends_at, count: u.rows.filter((x: any) => x.status !== 'cancelled').length }
+  : u.rows[0]));
 
 // journey-guard: ملف الخبير في الإدارة بخدمتيه
 export async function adminGet(_a: Admin, b: Body) {
@@ -127,14 +134,16 @@ export async function adminGet(_a: Admin, b: Body) {
   const count = (t: string) => db.from(t).select('participant_id', { count: 'exact', head: true }).eq('reviewed_by', e.email);
   const [{ data: log }, { data: sessions }, reqs, models, caps] = await Promise.all([
     db.from('audit_log').select('actor, action, created_at').eq('entity', 'experts').eq('entity_id', e.id).order('created_at', { ascending: false }).limit(30),
-    db.from('coaching_sessions').select('id, participant_id, status, starts_at, ends_at, participants(full_name)').eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(500),
+    // group-once: expertStats
+    db.from('coaching_sessions').select(await groupCols('id, participant_id, status, starts_at, ends_at, participants(full_name)')).eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(500),
     count('participant_requirements'), count('model_submissions'), count('capstones'),
   ]);
   // المراجعات تُنسب بالبريد: المستشار يراجع من حسابه في لوحة الإدارة بالبريد نفسه
   const reviews = { requirements: reqs.count ?? 0, models: models.count ?? 0, capstones: caps.count ?? 0 };
   return {
     success: true, expert: e, activity: log || [],
-    service: { ...expertStats(sessions || [], e.hourly_rate), reviews, recent: (sessions || []).slice(0, 12) },
+    // «آخر الجلسات» بالكيان: الجلسة الجماعية سطر واحد بعدد مدعويها، لا سطر لكل مدعو
+    service: { ...expertStats(sessions || [], e.hourly_rate), reviews, recent: recentUnits((sessions || []) as any[]).slice(0, 12) },
     ratings: await expertRatings(e.id),
   };
 }
@@ -304,7 +313,9 @@ async function candidates(need: any, participantId: string, tried: string[] = []
   let [{ data: experts }, { data: reqs }, { data: upcoming }, { data: past }, { data: me }] = await Promise.all([
     db.from('experts').select('*').eq('status', 'active').contains('roles', [need.role]),
     db.from('expert_requests').select('expert_id').in('status', ['offered', 'accepted']).not('expert_id', 'is', null),
-    db.from('coaching_sessions').select('expert_id').eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
+    // group-once: tallyOnce
+    db.from('coaching_sessions').select(await groupCols('expert_id')).eq('status', 'booked').gte('starts_at', now).not('expert_id', 'is', null),
+    // group-once-exempt: جلسات مشارك واحد مع الخبراء (هل خدمه من قبل)، صف واحد له في كل جلسة
     db.from('coaching_sessions').select('expert_id').eq('participant_id', participantId).not('expert_id', 'is', null),
     db.from('participants').select('id, email, organization_id').eq('id', participantId).maybeSingle(),
   ]);
@@ -318,7 +329,8 @@ async function candidates(need: any, participantId: string, tried: string[] = []
     for (const x of rows || []) m[x.expert_id] = (m[x.expert_id] || 0) + 1;
     return m;
   };
-  const r = tally(reqs), u = tally(upcoming), served = new Set((past || []).map((x: any) => x.expert_id));
+  // الجلسات القادمة بالكيان: الجماعية مرة واحدة في حِمل الخبير
+  const r = tally(reqs), u = tallyOnce(upcoming as any[]) as Record<string, number>, served = new Set((past || []).map((x: any) => x.expert_id));
   const ratings = await ratingsBy((experts || []).map((e: any) => e.id));
   const ranked = rankExperts((experts || []).map((e: any) => ({ ...e, load: { requests: r[e.id] || 0, upcoming: u[e.id] || 0 }, served: served.has(e.id), rating: ratings[e.id] || null })), need, tried);
   return teamFirst(ranked, await cohortTeam(me));
@@ -717,7 +729,8 @@ export async function portalDashboard(e: any) {
   const [{ data: reqs }, { data: sessions }, { data: rated }, ratings] = await Promise.all([
     db.from('expert_requests').select('id, participant_id, role, dimension, status, expires_at, accepted_at, updated_at, participants(full_name, email, phone, job_title, organization_name, placements(dimension, level))')
       .eq('expert_id', e.id).in('status', ['offered', 'accepted', 'completed']).order('updated_at', { ascending: false }).limit(200),
-    db.from('coaching_sessions').select('id, participant_id, status, starts_at, ends_at, join_url, participants(full_name)').eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(500),
+    // group-once: expertStats
+    db.from('coaching_sessions').select(await groupCols('id, participant_id, status, starts_at, ends_at, join_url, participants(full_name)')).eq('expert_id', e.id).order('starts_at', { ascending: false }).limit(500),
     db.from('expert_ratings').select('session_id, request_id').eq('expert_id', e.id).eq('direction', 'to_participant'),
     expertRatings(e.id),
   ]);
@@ -752,7 +765,9 @@ export async function portalDashboard(e: any) {
     stats: { hours: stats.hours, participants: stats.participants, attended: stats.attended, upcoming: stats.upcoming, no_show: stats.no_show },
     rating: ratings.own,
     requests: (reqs || []).map(req),
-    sessions: (sessions || []).map((x: any) => ({ id: x.id, status: x.status, starts_at: x.starts_at, ends_at: x.ends_at, join_url: x.status === 'booked' && Date.parse(x.ends_at) > now ? x.join_url : null,
+    // جلساته الفردية صفًّا صفًّا، والجماعية صف واحد لكل جلسة في groups (أسماء مدعويها في ورقتها وحدها)
+    groups: await expertGroups(e).catch((err) => { console.error('expert groups', err); return []; }),
+    sessions: ((sessions || []) as any[]).filter((x) => !x.group_id).map((x: any) => ({ id: x.id, status: x.status, starts_at: x.starts_at, ends_at: x.ends_at, join_url: x.status === 'booked' && Date.parse(x.ends_at) > now ? x.join_url : null,
       participant: x.participants?.full_name, to_rate: x.status === 'attended' && !done.has(x.id) })),
     criteria: RATE_TO_PARTICIPANT,
   };
