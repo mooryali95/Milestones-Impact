@@ -46,10 +46,12 @@ describe('على من الدور: يُستنتج من حالة البند نفس
     expect(T({ kind: 'workshop' }).turn).toBe('none');
   });
   it('استبانة تنتظر أول حضور: دورها دور بند الحضور في مرحلتها', () => {
-    const attend = { title_ar: 'الحضور', kind: 'workshop', required: false, status: 'pending', activity: { sessions: [{ id: 'x', starts_at: '2026-11-25T06:00:00Z', ends_at: '2026-11-25T10:00:00Z', attended: false }] } };
+    // بند الحضور إلزامي: الاختياري لا يحبس الاستبانة أصلًا (قاعدة «الاختياري لا يُحسب» 2026-11-21)، فلا يُنسب إليه دورها
+    const attend = { title_ar: 'الحضور', kind: 'workshop', required: true, status: 'pending', activity: { sessions: [{ id: 'x', starts_at: '2026-11-25T06:00:00Z', ends_at: '2026-11-25T10:00:00Z', attended: false }] } };
     const stage = { status: 'active', items: [{ title_ar: 'رأيك', kind: 'survey', required: true, status: 'pending', waits: 'تُفتح بعد حضورك' }, attend] };
     expect(turnOf(stage, NOW).turn).toBe('schedule');
     expect(turnOf({ status: 'active', items: [stage.items[0]] }, NOW).turn).toBe('none');
+    expect(turnOf({ status: 'active', items: [stage.items[0], { ...attend, required: false }] }, NOW).turn).toBe('none');
   });
   it('التوجيه: جلسة انتهت بلا تأكيد عليك، ومحجوزة قادمة على موعد، ولم يحجز عليه، وبلغ الحد غير محدد', () => {
     const c = (sessions, can_book = true) => T({ kind: 'coaching', activity: { sessions, can_book } });

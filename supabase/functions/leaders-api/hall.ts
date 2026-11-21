@@ -69,6 +69,7 @@ const hallMembers = async (cohort: any) => ((await cohortMembers(cohort)) as any
 // جلسات الورشة التي يصح أن تنتمي إليها قاعة الدفعة: الفعّالة لدفعتها أو لكل الدفعات، من الأمس إلى أسبوع قادم
 async function workshopsFor(cohortId: string) {
   const now = Date.now();
+  // optional-exempt: جلسات تُربط بها القاعة: الاختيارية تُفتح لها قاعة كغيرها، وحضورها صف في جدوله يخرجه العدّ بوسم جلسته
   const { data } = await db.from('workshop_sessions').select('id, title_ar, starts_at, ends_at, cohort_id, active')
     .eq('active', true).gte('ends_at', new Date(now - 864e5).toISOString()).lte('starts_at', new Date(now + 7 * 864e5).toISOString()).order('starts_at');
   // غير المؤرخة خارج النافذة أصلًا (مرشحا gte وlte يسقطان الفارغ)، وهذا حارس صريح لها

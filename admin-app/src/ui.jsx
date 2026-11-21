@@ -34,6 +34,8 @@ function Dialog({ d, onDone }) {
     <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && cancel()} onKeyDown={key}>
       <div className="mid-box" role={d.input ? 'dialog' : 'alertdialog'} aria-modal="true" aria-labelledby="mid-msg">
         <p className="mid-msg" id="mid-msg">{d.msg}</p>
+        {/* سطور الأثر تحت السؤال (معاينة قبل الحفظ): كل سطر جملة برقمها */}
+        {d.lines?.length > 0 && <ul className="mid-lines" data-testid="confirm-lines">{d.lines.map((x) => <li key={x}>{x}</li>)}</ul>}
         {d.input && <input ref={field} className="mid-in" value={value} onChange={(e) => setValue(e.target.value)} />}
         <div className="mid-act">
           <button ref={yes} className={`mid-btn ${d.danger ? 'danger' : 'ok'}`} onClick={accept}>{d.ok || 'تأكيد'}</button>

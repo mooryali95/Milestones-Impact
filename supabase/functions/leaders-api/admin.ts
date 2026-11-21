@@ -1087,6 +1087,7 @@ function cleanModelFields(input: unknown) {
     keys.add(key);
     const label = String(f?.label || '').trim().slice(0, 200);
     if (!label) throw new Fail(`الحقل ${i + 1} بلا عنوان`);
+    // optional-exempt: حقل نموذج يحرره المدير، لا نشاط
     const out: Body = { key, label, type, hint: String(f?.hint || '').slice(0, 300), required: f?.required !== false };
     if (type === 'select') {
       out.options = (Array.isArray(f.options) ? f.options : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 20);

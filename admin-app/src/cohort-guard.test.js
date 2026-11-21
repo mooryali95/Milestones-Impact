@@ -90,8 +90,11 @@ describe('hideBreaksStage', () => {
   });
   it('مرحلة تكتمل بأي بند تنكسر بإخفاء كل بنودها', () => {
     expect(hideBreaksStage(stages, reqs, ['C']).map((s) => s.key)).toEqual(['s2']);
+    // قاعدة «الاختياري لا يُحسب» (2026-11-21): بند اختياري باقٍ لا يكمل المرحلة ولو كانت «بأي بند»، فإخفاء آخر إلزامي يكسرها
     const more = [...reqs, { code: 'F', stage_key: 's2', required: false }];
-    expect(hideBreaksStage(stages, more, ['C'])).toEqual([]);
+    expect(hideBreaksStage(stages, more, ['C']).map((s) => s.key)).toEqual(['s2']);
+    // وبند إلزامي آخر باقٍ يبقيها سليمة
+    expect(hideBreaksStage(stages, [...reqs, { code: 'G', stage_key: 's2', required: true }], ['C'])).toEqual([]);
   });
   it('مرحلة اختيارية لا يقف عليها شيء يُخفى ما فيها، والمسماة في «بعد مراحل» تُحرس', () => {
     const opt = [{ key: 's1', title_ar: 'إثراء', rules: { mode: 'optional' } }, { key: 's2', title_ar: 'التطبيق' }];

@@ -578,13 +578,14 @@ export function raterRejectedMail(name: string, rater: string, reason: string) {
 
 // ── الجلسات ──
 // تذكير قبل الجلسة بيوم، ومعه رابطها إن كانت عن بعد
-export function sessionReminderMail(name: string, when: string, expert: string | null, joinUrl: string | null) {
+// place: مكان الجلسة الجماعية الحضورية (المرحلة 5). بلاه البريد كما كان حرفًا
+export function sessionReminderMail(name: string, when: string, expert: string | null, joinUrl: string | null, place: string | null = null) {
   return shell('sessions', 'جلستك غدًا',
     mailText(`${hello(name)} نذكّرك بجلسة التوجيه${expert ? ` مع ${bdi(expert)}` : ''}.`)
-    + mailRows([['الموعد', when], ...(expert ? [['الخبير', expert] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
+    + mailRows([['الموعد', when], ...(place ? [['المكان', place] as [string, string]] : []), ...(expert ? [['الخبير', expert] as [string, string]] : []), ...(joinUrl ? [['الرابط', joinUrl, true] as [string, string, boolean]] : [])])
     + mailButton(joinUrl || CONFIG.appUrl, joinUrl ? 'رابط الجلسة' : 'افتح رحلتي')
     + mailNote('جهّز سؤالًا أو موقفًا من عملك هذا الأسبوع، فالجلسة على قدر ما تحمله إليها.'),
-    `${when}${expert ? ` · مع ${expert}` : ''}`, '');
+    `${when}${place ? ` · ${place}` : ''}${expert ? ` · مع ${expert}` : ''}`, '');
 }
 
 // دعوة جلسة الورشة وتذكيراها (قبل يوم وقبل ساعة): الموعد والمكان أو الرابط، والقاعة تُفتح من التطبيق

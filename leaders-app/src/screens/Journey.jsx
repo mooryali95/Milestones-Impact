@@ -14,6 +14,7 @@ import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { OPTIONAL_PARTICIPANT_AR } from '../../../supabase/functions/leaders-api/optional.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity, { CheckinHelp } from './Activities.jsx';
 import HowEvaluated from './HowEvaluated.jsx';
@@ -256,7 +257,7 @@ function Requirement({ item, open, onUpdate, onEditProfile, onHandbook, onImpact
       <span className="box" aria-hidden="true">{mark}</span>
       <div className="grow">
         <div className="row between">
-          <span className="t">{item.title_ar}{!item.required && <span className="muted small"> (اختياري)</span>}</span>
+          <span className="t">{item.title_ar}{!item.required && <span className="muted small" data-testid="item-optional"> (اختياري، لا يُحسب في تقدمك)</span>}</span>
           {item.status !== 'pending' && (
             <span className={`chip ${item.status === 'done' ? 'ok' : item.status === 'returned' ? 'bad' : 'warn'}`}>{REQ_STATUS[item.status]}</span>
           )}
@@ -403,6 +404,7 @@ export function NextSession({ session, onHall, onCheckedIn }) {
       <span className="k">{session.open ? 'جلستك الآن' : undated ? 'لك جلسة سيُعلن موعدها' : 'جلستك القادمة'}</span>
       <b>{session.title}</b>
       <span className="small muted">{[when, session.mode === 'online' ? 'عن بعد' : session.location, session.trainer ? `مع ${session.trainer}` : '', !session.open && linkPending(session) ? SESSION_LINK_LATER_AR : ''].filter(Boolean).join(' · ')}</span>
+      {session.optional && <span className="chip opt" data-testid="session-optional">{OPTIONAL_PARTICIPANT_AR}</span>}
       {session.attended && <span className="chip ok">سُجّل حضورك</span>}
       <CheckinHelp session={session} onDone={onCheckedIn} />
       <div className="row">
@@ -585,9 +587,9 @@ export const togetherAr = (titles) => (titles.length < 2 ? titles[0] || '' : `${
 const stagePct = (s) => {
   if (s.status === 'done') return 100;
   const items = s.items || [];
+  // الاختياري خارج النسبة دائمًا (قاعدة «الاختياري لا يُحسب»): مرحلة بنودها اختيارية وحدها لا نسبة لها
   const req = items.filter((i) => i.required);
-  const list = req.length ? req : items;
-  return list.length ? Math.round((list.filter((i) => i.status === 'done').length / list.length) * 100) : 0;
+  return req.length ? Math.round((req.filter((i) => i.status === 'done').length / req.length) * 100) : 0;
 };
 const STATUS_SHORT = { done: 'مكتملة', active: 'جارية', available: 'متاحة', locked: 'مقفلة' };
 

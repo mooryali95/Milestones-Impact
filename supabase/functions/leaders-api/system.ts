@@ -21,6 +21,7 @@ import { slackConfigured, slackDeliver } from '../_shared/slack.ts';
 import { SITES } from '../_shared/sites.js';
 import { IDEM_TTL_HOURS } from './idempotency.ts';
 import { CLIENT_EVENTS_RETENTION_DAYS } from './client-events.ts';
+import { sessionCols } from './workshop-optional.ts';
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
@@ -103,7 +104,7 @@ async function readiness() {
     db.from('programs').select('id', { count: 'exact', head: true }).eq('is_default', true),
     db.from('organizations').select('id, name, status').eq('status', 'active'),
     db.from('cohorts').select('*'),
-    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true),
+    db.from('workshop_sessions').select(await sessionCols('cohort_id, active, starts_at, ends_at')).eq('active', true),
     db.from('programs').select('final_eval').eq('is_default', true).maybeSingle(),
     db.from('programs').select('id, name, archived_at'),
     db.from('program_versions').select('program_id'),

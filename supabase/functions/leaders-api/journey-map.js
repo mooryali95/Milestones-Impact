@@ -12,6 +12,7 @@ import { inProgram } from './logic.js';
 import { ownerOf } from './journey-timeline.js';
 import { stageRules } from './journey.js';
 import { changeFacts, momentOf } from './cohort-changes.js';
+import { countsItem, countedItems, countedSessions } from './optional.js';
 
 // مهلة السماح نفسها التي في المعالم: من تجاوز مدة مرحلته بأكثر منها يُعدّ متأخرًا
 export const STAGE_GRACE_DAYS = MILESTONE_GRACE_DAYS;
@@ -34,6 +35,7 @@ export const journeyTracks = (journey) => (journey || []).filter((s) => s.lane =
 export const journeyServices = (journey) => (journey || []).filter((s) => s.lane === 'service' || planService(s));
 /** هل استفاد المشارك من الخدمة: جلسة محجوزة أو حاضرة في أحد بنودها (الملغاة لا تُعد)، أو بند منها مكتمل
  * @param {any} st مرحلة الخدمة في رحلته */
+// optional-exempt: هل استُعملت الخدمة (T2)، سؤال استعمال لا عدّ تقدم: الخدمة لمن يريد وخارج النسبة أصلًا
 export const serviceUsed = (st) => (st?.items || []).some((it) => it.status === 'done' || (it.activity?.sessions || []).some((x) => x.status !== 'cancelled' && x.status !== 'no_show'));
 
 // مجموعة «تسير معًا» التي فيها المرحلة idx من رحلة المشارك (withGroups على قواعد رحلته نفسها، بعد خطة دفعته)،
@@ -101,8 +103,9 @@ export function stageEntry(journey, idx, dates = [], at = (it) => it.completed_a
   return best;
 }
 
-// البند الذي يقف عنده في مرحلته: أول إلزامي لم يكتمل، وإلا أول ما لم يكتمل. يقرؤه «ما ينقصه» و«على من الدور» معًا
-const needItem = (stage) => (stage?.items || []).find((x) => x.required && x.status !== 'done') || (stage?.items || []).find((x) => x.status !== 'done') || null;
+// البند الذي يقف عنده في مرحلته: أول بند يُعد لم يكتمل. الاختياري لا يوقف أحدًا فلا يُسمى «ما ينقصه» ولا يُنسب إليه دور
+// (optional.js). يقرؤه «ما ينقصه» و«على من الدور» معًا
+const needItem = (stage) => countedItems(stage?.items).find((x) => x.status !== 'done') || null;
 // ما ينقصه الآن: أول بند إلزامي لم يكتمل في مرحلته، بنصه كما يراه المشارك
 export function needsOf(stage) {
   if (!stage) return null;
@@ -130,7 +133,7 @@ const timeOf = (d) => (d ? new Date(d).getTime() : NaN);
 function itemTurn(it, stage, now) {
   // استبانة تنتظر أول حضور (gateSurveys): دورها دور بند الحضور في مرحلتها
   if (it.waits) {
-    const attend = (stage.items || []).find((x) => x.kind === 'workshop' && x !== it);
+    const attend = (stage.items || []).find((x) => x.kind === 'workshop' && x !== it && countsItem(x));
     return attend ? itemTurn(attend, stage, now) : turn('none');
   }
   const act = it.activity || null;
@@ -140,7 +143,7 @@ function itemTurn(it, stage, now) {
   if (owner === 'system') return AUTO_TURN[it.code] ? turn(AUTO_TURN[it.code], AUTO_TURN[it.code] === 'admin' ? 'اعتماد المسار' : null) : turn('none');
   if (it.kind === 'workshop') {
     if (!act) return turn('none');
-    const ahead = (act.sessions || []).some((x) => !x.attended && !x.undated && timeOf(x.ends_at) + 1800e3 > now);
+    const ahead = countedSessions(act.sessions).some((x) => !x.attended && !x.undated && timeOf(x.ends_at) + 1800e3 > now);
     return ahead ? turn('schedule', 'جلسة قادمة') : turn('admin', 'لا جلسة قادمة له');
   }
   if (it.kind === 'coaching') {
@@ -173,7 +176,7 @@ export function turnOf(stage, today = new Date()) {
     return turn('none');
   }
   // مرحلة تكتمل باعتماد الفريق واكتملت بنودها الإلزامية: الدور على الإدارة ولو بقي فيها بند اختياري
-  if (r.complete === 'approval' && !(stage.items || []).some((x) => x.required && x.status !== 'done')) return turn('admin', 'اعتماد اكتمال المرحلة');
+  if (r.complete === 'approval' && !countedItems(stage.items).some((x) => x.status !== 'done')) return turn('admin', 'اعتماد اكتمال المرحلة');
   const it = needItem(stage);
   return it ? itemTurn(it, stage, new Date(today).getTime()) : turn('none');
 }
@@ -384,8 +387,10 @@ function memberActivity(journey, today) {
   for (const st of journey) for (const it of st.items || []) {
     const act = it.activity;
     if (!act) continue;
-    if (it.kind === 'workshop') {
-      for (const x of act.sessions || []) {
+    // الاختياري خارج «حضر 2 من 3» و«لم يحضروا آخر ورشة»: نشاط الحضور الاختياري كله، والورشة الاختيارية وحدها (optional.js).
+    // و«استفاد N من M» عدّاد رصيد الخدمة لا عدّ تقدم، فيبقى لكل نشاط توجيه كما كان
+    if (it.kind === 'workshop' && countsItem(it)) {
+      for (const x of countedSessions(act.sessions)) {
         const started = !x.undated && timeOf(x.starts_at) <= now;
         if (started || x.attended) sessions.push({ id: x.id, ends_at: x.ends_at || null, attended: !!x.attended, ended: !x.undated && timeOf(x.ends_at) <= now });
       }
@@ -395,7 +400,7 @@ function memberActivity(journey, today) {
       coach = { used: (coach?.used || 0) + (act.used ?? (Number(act.count) || 0) + open - (Number(act.off) || 0)), max: (coach?.max || 0) + (act.max ?? (Number(act.total) || 0)) };
     }
   }
-  const hasWorkshop = journey.some((st) => (st.items || []).some((it) => it.kind === 'workshop' && it.activity));
+  const hasWorkshop = journey.some((st) => (st.items || []).some((it) => it.kind === 'workshop' && it.activity && countsItem(it)));
   return { attendance: hasWorkshop ? { count: sessions.filter((x) => x.attended).length, total: sessions.length } : null, consult: coach, sessions };
 }
 

@@ -1329,3 +1329,24 @@
   .gs-fields { grid-template-columns: minmax(0, 1fr); }
   .gs-card-acts { width: 100%; }
 }
+
+/* وسم الورشة: إلزامية أو اختيارية (قرار المالك 2026-11-21). اختيار واحد صريح بزرّي راديو، ولكل اختيار سطر شرحه تحته */
+.la-choice { border: 1px solid var(--line-strong); border-radius: 10px; padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.la-choice legend { font-size: .9rem; font-weight: 700; padding: 0 6px; color: var(--ink); }
+.la-choice-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.la-form .la-choice label.la-choice-opt { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--white, #fff); min-width: 0; }
+.la-form .la-choice label.la-choice-opt input { width: auto; margin-top: 4px; flex: none; }
+.la-choice-opt > span { display: grid; gap: 2px; min-width: 0; }
+.la-choice-opt b { font-size: .92rem; }
+.la-choice-opt small.la-muted { font-size: .78rem; line-height: 1.6; }
+.la-choice-opt.on { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); background: color-mix(in srgb, var(--gold) 6%, #fff); }
+.la-choice-opt.off { cursor: not-allowed; opacity: .7; }
+.la-choice-opt .la-chip { justify-self: start; }
+/* التركيز على زر الراديو نفسه لا على البطاقة: النموذج يضع التركيز في أول حقل، فلا تبدو «إلزامية» مختارة قبل أن تُختار */
+.la-form .la-choice label.la-choice-opt input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (max-width: 560px) { .la-choice-opts { grid-template-columns: 1fr; } }
+/* شارة الوسم على صف الورشة: الاختيارية بإطار منقط، والإلزامية ممتلئة */
+.la-chip.ws-counting { margin-inline-start: 6px; }
+.la-chip.ws-counting.optional { background: transparent; border: 1px dashed var(--line-strong); color: var(--ink-mid); }
+/* سطور الأثر تحت سؤال التأكيد (معاينة قبل الحفظ) */
+.mid-lines { list-style: none; margin: -6px 0 16px; padding: 10px 12px; display: grid; gap: 6px; border-radius: 8px; background: var(--sand-light); border: 1px solid var(--line); font-size: .88rem; line-height: 1.7; text-align: start; }

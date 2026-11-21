@@ -10,6 +10,7 @@ import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
 import { planOffKeys, planRules, planSchedule, planStages, planWithRules } from './stage-windows.js';
 import { cleanStageModes } from './groups.js';
+import { countsItem, countedDef, countedProgress, countedSessions, eachWorkshop, itemOptional, optionalSession } from './optional.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
 export const LEVELS = ['beginner', 'intermediate', 'advanced'];
@@ -422,10 +423,12 @@ export function completionSource(r) {
 // في مرحلة فيها بند حضور (ورشة موثقة، kind: workshop) تنتظر الاستبانة غير المرسلة أول حضور مسجل. ما أُرسل قبل هذا يبقى كما هو.
 export const SURVEY_WAITS_AR = 'تُفتح بعد حضورك أول يوم تدريبي، فرأيك يكون فيما حضرته';
 export function gateSurveys(items) {
-  const attend = items.find((i) => i.kind === 'workshop');
+  // الورشة الاختيارية لا تحبس الاستبانة: البوابة على بند حضور يُعد وحده (optional.js)
+  const attend = items.find((i) => i.kind === 'workshop' && countsItem(i));
   if (!attend) return items;
   const attended = attend.activity ? Number(attend.activity.count || 0) > 0 : attend.status === 'done';
   if (attended) return items;
+  // optional-exempt: البوابة حُسمت أعلاه ببند حضور يُعد (countsItem)، وهذا وسم الاستبانات غير المرسلة
   return items.map((i) => (i.kind === 'survey' && i.status !== 'done' ? { ...i, waits: SURVEY_WAITS_AR } : i));
 }
 
@@ -444,10 +447,12 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         const status = auto ? (auto(state) ? 'done' : 'pending')
           : act ? (act.done || p.status === 'done' ? 'done' : 'pending')
           : p.status || 'pending';
-        return { ...r, auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
+        // الاختياري خارج العد (optional.js): يُختم هنا مرة، ومنه يقرأ كل عدّاد ونسبة وشرط بعده required وحده
+        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
       });
-    const doneCount = items.filter((i) => i.status === 'done').length;
-    return { ...stage, items: gateSurveys(items), done: doneCount, total: items.length };
+    // المنجز والمطلوب من البنود التي تُعد وحدها: الاختياري لا ينقص نسبة من يقف في المرحلة ولا يزيدها
+    const n = countedProgress(items);
+    return { ...stage, items: gateSurveys(items), done: n.done, total: n.total };
   });
   return resolveStages(withItems, { overrides, cohortStart, today });
 }
@@ -798,6 +803,7 @@ export function missingFields(fields, answers) {
   const a = answers && typeof answers === 'object' ? answers : {};
   const missing = [];
   for (const f of fields || []) {
+    // optional-exempt: حقل نموذج لا نشاط
     if (f.required === false || fieldFilled(f, a[f.key])) continue;
     missing.push(f.type === 'table' ? `${f.label}: ${f.min_rows || 1} صفوف على الأقل`
       : f.type === 'textarea' && String(a[f.key] ?? '').trim() ? `${f.label}: اكتب جملة كاملة على الأقل` : f.label);
@@ -956,9 +962,11 @@ export function cleanSurvey(config, raw) {
     const v = raw?.[q.key];
     if (q.type === 'rating') {
       const n = Math.round(Number(v));
+      // optional-exempt: سؤال استبانة لا نشاط
       if (n >= 1 && n <= 5) out[q.key] = n; else if (q.required) return { error: `أجب عن: ${q.label}` };
     } else {
       const t = String(v ?? '').trim().slice(0, 2000);
+      // optional-exempt: سؤال استبانة لا نشاط
       if (t) out[q.key] = t; else if (q.required) return { error: `أجب عن: ${q.label}` };
     }
   }
@@ -1159,11 +1167,16 @@ export function workshopStatus(config, sessions, attended, now = Date.now()) {
         attended: attended.has(s.id) || (verify === 'auto' && !undated && Date.parse(s.ends_at) <= now), open, can_join: mode === 'online' && open && !!s.join_url,
         // المدرب المسمى للجلسة إن سُمّي (المرحلة 4): اسمه وحده، ويُعرض «مع فلان»
         ...(s.trainer ? { trainer: String(s.trainer) } : {}),
+        // الورشة الاختيارية تُعرض بوسمها ويُسجَّل حضورها، ولا تُعد (optional.js)
+        ...(optionalSession(s) ? { optional: true } : {}),
       };
     });
-  const need = Math.max(1, Number(config?.sessions_required) || list.length || 1);
-  const count = list.filter((s) => s.attended).length;
-  return { type: 'workshop', done: count >= need, count, total: need, verify, sessions: list };
+  // العد على الجلسات الإلزامية وحدها. نشاط «ورش إضافية» (each): المطلوب كل ورشة إلزامية بعينها، وبلا واحدة يخمد (total 0)
+  const live = countedSessions(list);
+  const each = config?.each === true;
+  const need = each ? live.length : Math.max(1, Number(config?.sessions_required) || live.length || 1);
+  const count = live.filter((s) => s.attended).length;
+  return { type: 'workshop', done: need > 0 && count >= need, count, total: need, verify, sessions: list, ...(each ? { each: true } : {}) };
 }
 
 // نافذة الحضور: من ساعة قبل البدء إلى نصف ساعة بعد الانتهاء. غير المؤرخة لا نافذة لها
@@ -1442,6 +1455,8 @@ export function cleanConfig(kind, cfg, prev = {}) {
   if (kind === 'workshop') {
     return {
       sessions_required: intIn(c.sessions_required, 1, 30, SESSION_DEFAULTS.sessions_required), verify: VERIFY_METHODS.includes(c.verify) ? c.verify : 'qr',
+      // نشاط «ورش إضافية» (optional.js): المطلوب كل ورشة إلزامية فيه بعينها، لا عدد ثابت
+      ...(c.each === true ? { each: true } : {}),
       // مدة اليوم أو الجلسة التدريبية: مصدر ساعات الشهادة، ولا تُفترض إن لم تُكتب
       ...(c.minutes ? { minutes: intIn(c.minutes, 30, 600, 360) } : {}),
     };
@@ -1578,10 +1593,12 @@ export function curriculumStatus(config, items, levels, progress) {
     const st = contentState(i, progress?.[i.id]);
     return {
       id: i.id, kind: i.kind, title: i.title_ar, description: i.description_ar || null, minutes: i.minutes ?? null,
+      // optional-exempt: مادة منهج لا نشاط: مطلوب المنهج من مواده الإلزامية وحدها كما كان
       dimension: i.dimension || null, required: i.required !== false, url: i.url, min_pct: i.kind === 'video' ? i.min_pct || 90 : null,
       ...st,
     };
   });
+  // optional-exempt: مواد المنهج كالسطر أعلاه
   const need = list.filter((x) => x.required);
   const count = need.filter((x) => x.done).length;
   return { type: 'curriculum', done: count === need.length, count, total: need.length, items: list };
@@ -1718,7 +1735,8 @@ export const programLockedText = (n) => `لا يتغير برنامج دفعة �
 const seesItem = (r, aud) => !r.dimension || !r.level || (!!aud && aud.d === r.dimension && aud.l === r.level);
 function canComplete(items, complete, aud, hidden) {
   const mine = items.filter((x) => seesItem(x, aud) && !hidden.has(x.code));
-  return complete === 'any' ? mine.length > 0 : mine.some((x) => x.required !== false);
+  // بالقاعدتين: بند يُعد وحده يكمل المرحلة، فالاختياري لا يكملها ولو كانت «بأي متطلب» (optional.js)
+  return complete === 'any' ? mine.some(countedDef) : mine.some(countedDef);
 }
 // مراحل يتركها الإخفاء بلا بند ظاهر يكملها لجمهور ما كان يكملها قبله: «بمتطلباتها الإلزامية» بلا إلزامي ظاهر،
 // و«بأي متطلب» بلا بند ظاهر. تُعد فقط المرحلة التي يقف عليها غيرها: إلزامية (تنتظرها ما بعدها) أو مسماة في «بعد مراحل»
@@ -2000,12 +2018,14 @@ export function compositeReliability(questions, rows, { forms = {}, model = DEFA
       let nA = 0, sA = 0, nV = 0, sV = 0;
       for (const [g, aids] of groups) {
         const items = questions.filter((q) => byQ.has(q.id) && q.dimension === d && q.tier === t && (!q.form || q.form === g));
+        // optional-exempt: أسئلة أداة القياس (ثبات كرونباخ) لا بنود رحلة
         if (!items.length) continue;
         const max = items.reduce((a, q) => a + (maxScore(q) || 1), 0);
         const complete = aids.filter((aid) => items.every((q) => people.get(aid).has(q.id)));
         const mat = complete.map((aid) => items.map((q) => people.get(aid).get(q.id)));
         const pcts = mat.map((row) => (row.reduce((a, b) => a + b, 0) / max) * 100);
         complete.forEach((aid, i) => { (((pctOf[aid] ||= {})[d] ||= {})[t] = pcts[i]); });
+        // optional-exempt: أسئلة أداة القياس لا بنود رحلة
         const alpha = items.length > 1 ? cronbachAlpha(mat) : null;
         if (alpha != null) { nA += complete.length; sA += alpha * complete.length; }
         if (pcts.length > 1) { nV += pcts.length - 1; sV += variance(pcts) * (pcts.length - 1); }
@@ -2388,6 +2408,7 @@ export function itemAnalysis(questions, rows, { minN = 10, forms = {} } = {}) {
       }
     }
     const alpha = wn ? wsum / wn : null;
+    // optional-exempt: عدد أسئلة البعد في تقرير الثبات لا بنود رحلة
     dimensions.push({ dimension: d, items: qs.length, complete, alpha: round2(alpha) });
   }
   // الفصل بين الأطر: ارتباط نسب الدرجات بين كل إطارين عبر المشاركين.

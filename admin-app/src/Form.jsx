@@ -8,7 +8,9 @@
 // onSave(قيم) ← وعد بـ { success, message }. الحذف اختياري بتأكيد.
 // options ← كائن، أو دالة تعيده بحسب القيم الحالية (قائمة تتبع حقلًا آخر، كمدربي الدفعة المختارة) · check يقبل help أيضًا
 // notes(قيم) ← سطور تنبيه قبل الأزرار [{ text, tone?: 'warn' }] · saveLabel ← نص زر الحفظ
-// confirmSave(المحفوظ، القيم) ← نص تأكيد قبل الحفظ، أو null بلا تأكيد (حفظ يرسل بريدًا أو يضيف من الخط الزمني)
+// confirmSave(المحفوظ، القيم) ← نص تأكيد قبل الحفظ، أو null بلا تأكيد (حفظ يرسل بريدًا أو يضيف من الخط الزمني). يقبل وعدًا (معاينة
+// من الخادم)، و{ text, lines, ok }: lines سطور الأثر تحت السؤال، و{ error } يوقف الحفظ برسالته، وpatch يُدمج في المحفوظ
+// choice ← اختيار واحد صريح بأزرار راديو: options [{ value, label, help, disabled?, note? }]، وrequired نص الخطأ إن لم يُختر (بلا قيمة مسبقة)
 // الإغلاق دون حفظ (Esc أو النقر خارجه أو «إلغاء») يسأل أولًا إن تغيّر شيء، فلا يضيع ما كُتب سهوًا.
 import React, { useState } from 'react';
 import { useEscape, useGuardedClose, useUI } from './ui.jsx';
@@ -48,10 +50,16 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
       if (f.type === 'options') return [f.name, x.map((o) => ({ label: String(o.label).trim(), score: Number(o.score || 0) })).filter((o) => o.label)];
       return [f.name, String(x).trim() || null];
     }));
-    const ask = confirmSave ? confirmSave(out, v) : null;
-    if (ask && !(await confirm(ask.text || ask, { ok: ask.ok || saveLabel }))) return;
+    // اختيار صريح لم يُحسم: يوقف الحفظ برسالته، فلا يُحفظ بقيمة لم يخترها أحد
+    const missing = fields.find((f) => f.type === 'choice' && f.required && (!f.show || f.show(v)) && !out[f.name]);
+    if (missing) { setError(missing.required); document.getElementById(`f-${missing.name}`)?.querySelector('input:not([disabled])')?.focus(); return; }
     setBusy(true);
-    const res = await onSave(out);
+    const ask = confirmSave ? await confirmSave(out, v) : null;
+    setBusy(false);
+    if (ask?.error) { setError(ask.error); return; }
+    if (ask && (ask.text || typeof ask === 'string') && !(await confirm(ask.text || ask, { ok: ask.ok || saveLabel, lines: ask.lines || null }))) return;
+    setBusy(true);
+    const res = await onSave(ask?.patch ? { ...out, ...ask.patch } : out);
     setBusy(false);
     if (res?.success) onClose(true); else setError(res?.message || 'تعذّر الحفظ');
   };
@@ -78,6 +86,23 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
               <label key={f.name} htmlFor={id} className={`la-check${help ? ' with-help' : ''}`}>
                 <input id={id} type="checkbox" checked={v[f.name]} aria-describedby={help ? `${id}-help` : undefined} onChange={(e) => setV({ ...v, [f.name]: e.target.checked })} /> <span>{f.label}{help && <small id={`${id}-help`} className="la-muted">{help}</small>}</span>
               </label>
+            );
+          }
+          if (f.type === 'choice') {
+            const help = typeof f.help === 'function' ? f.help(v) : f.help;
+            return (
+              <fieldset key={f.name} id={id} className="la-choice" data-testid={`choice-${f.name}`}>
+                <legend>{f.label}</legend>
+                {help && <small className="la-muted">{help}</small>}
+                <div className="la-choice-opts">
+                  {f.options.map((o) => (
+                    <label key={o.value} className={`la-choice-opt${v[f.name] === o.value ? ' on' : ''}${o.disabled ? ' off' : ''}`}>
+                      <input type="radio" name={f.name} value={o.value} checked={v[f.name] === o.value} disabled={o.disabled || undefined} aria-label={o.label} aria-describedby={`${id}-${o.value}`} onChange={() => setV({ ...v, [f.name]: o.value })} />
+                      <span><b>{o.label}</b>{o.note && <small className="la-chip warn">{o.note}</small>}<small id={`${id}-${o.value}`} className="la-muted">{o.help}</small></span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
             );
           }
           if (f.type === 'multi') {

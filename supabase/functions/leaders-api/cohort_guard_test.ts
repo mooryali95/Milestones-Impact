@@ -182,7 +182,8 @@ Deno.test('مجموعة إخفاء كاسرة قائمة لا تمنع إغلا�
   try {
     assertEquals(((await cohortSave(admin, { id: C1, name: 'سفراء 2026 أ', status: 'closed', hidden_requirements: ['A-ONE'] })) as any).success, true);
     w.tables.journey_stages.push({ program_id: PA, key: 's2', title_ar: 'التطبيق', sort: 2, active: true, rules: { complete: 'any' } });
-    w.tables.stage_requirements.push({ id: U(30), program_id: PA, stage_key: 's2', code: 'B-ONE', title_ar: 'بند', kind: 'check', required: false, active: true, sort: 3 });
+    // البند إلزامي: هو ما يكمل المرحلة «بأي بند». الاختياري لا يكملها أصلًا (قاعدة «الاختياري لا يُحسب» 2026-11-21)، فإخفاؤه لا يكسر شيئًا جديدًا
+    w.tables.stage_requirements.push({ id: U(30), program_id: PA, stage_key: 's2', code: 'B-ONE', title_ar: 'بند', kind: 'check', required: true, active: true, sort: 3 });
     const e = await failOf(() => cohortSave(admin, { id: C1, hidden_requirements: ['A-ONE', 'B-ONE'] }));
     assertEquals(e.code, 'hide_breaks_stage');
     assertEquals(e.extra.stages, ['s2']);

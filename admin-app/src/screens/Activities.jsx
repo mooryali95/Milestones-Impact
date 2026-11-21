@@ -14,7 +14,7 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 import { GroupSessions } from './GroupSession.jsx';
-import { mailConfirm, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
+import { countingChip, countingConfirm, countingField, countingValue, mailConfirm, needsCountingPreview, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
@@ -106,6 +106,10 @@ function Workshops({ data, reload, canWrite }) {
   const trainersOf = (v) => (v.cohort_id ? data.cohort_trainers?.[v.cohort_id] || [] : null);
   const saved = useRef(null);
   const save = (base) => async (v) => { const r = await L('admin.workshop-save', saveBody(v, base)); saved.current = r?.success ? r : null; return r; };
+  // وسم الورشة (optional.js): اختيار صريح أول النموذج، و«اختيارية» معطلة قبل ترحيل عمودها. والجلسة العامة لا يتغير وسمها بعد إنشائها
+  const optionalReady = data.optional_ready !== false;
+  const withCounting = (fields, on = true) => (on ? [countingField({ ready: optionalReady }), ...fields] : fields);
+  const confirmFor = (base, r, original = null) => (out) => countingConfirm(L, saveBody(out, base), { base: mailConfirm(out), preview: needsCountingPreview({ original, counting: out.counting, req: r }) && !!(out.cohort_id || original?.cohort_id), counting: out.counting, title: out.title_ar, changed: !!original });
   // القفز من «الرحلة في لمحة» (‎?req=<المتطلب>‎): إلى جلسات النشاط وزر «+ موعد» عنده
   useEffect(() => {
     const req = new URLSearchParams(readQuery()).get('req');
@@ -124,15 +128,15 @@ function Workshops({ data, reload, canWrite }) {
         return (
           <section key={r.id} id={`ws-${r.id}`} className="la-card" tabIndex={-1}>
             <div className="la-row between">
-              <div><b title={r.code}>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} <small className="la-muted">المطلوب حضور {r.config?.sessions_required || SESSION_DEFAULTS.sessions_required} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
-              {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: sessionFields(cohorts, null, { capacity, trainersOf, mail: {} }), values: { active: true, mode: 'in_person', invite: true, cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }), confirmSave: mailConfirm })}>+ موعد</button>}
+              <div><b title={r.code}>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} {r.required === false && <small className="la-chip ws-counting optional" title="نشاط اختياري في البرنامج: لا يُحسب هو ولا جلساته في شيء">نشاط اختياري</small>} <small className="la-muted">{r.config?.each ? 'كل ورشة إلزامية مطلوبة بعينها' : `المطلوب حضور ${r.config?.sessions_required || SESSION_DEFAULTS.sessions_required}`} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: withCounting(sessionFields(cohorts, null, { capacity, trainersOf, mail: {} })), values: { active: true, mode: 'in_person', invite: true, counting: '', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }), confirmSave: confirmFor({ requirement_id: r.id }, r) })}>+ موعد</button>}
             </div>
             {list.length ? (
               <table className="la-table" style={{ marginTop: 10 }}>
                 <thead><tr><th>الجلسة</th><th>الموعد</th><th>الطريقة</th><th>الحضور</th><th /></tr></thead>
                 <tbody>{list.map((s) => (
                   <tr key={s.id} className={s.active ? '' : 'off'}>
-                    <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}{s.trainer && <small className="la-muted"> · مع {s.trainer}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
+                    <td>{s.title_ar}{s.cohort_id && <small className="la-chip">{cohortName(s.cohort_id)}</small>}<small className={`la-chip ws-counting${countingChip(s, r).optional ? ' optional' : ''}`} title={countingChip(s, r).title} data-testid="ws-counting">{countingChip(s, r).text}</small>{s.trainer && <small className="la-muted"> · مع {s.trainer}</small>}{!s.active && <small className="la-muted"> · موقوفة</small>}</td>
                     <td>{isUndated(s) ? <span className="la-chip warn">{SESSION_TBD_AR}</span> : when(s.starts_at)}
                       {/* خارج نافذة مرحلته في دفعة مؤرخة (4.2 د): من علامة الخط نفسه على الخادم، تنبيه لا منع */}
                       {(s.outside || []).map((x) => <small key={x.cohort_id} className="ws-out" role="note">{outsideAr(x, !s.cohort_id || s.outside.length > 1)}</small>)}</td>
@@ -146,7 +150,7 @@ function Workshops({ data, reload, canWrite }) {
                       {canWrite && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), values: { ...s, notify_change: true }, onSave: save({ id: s.id }), confirmSave: mailConfirm, onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>

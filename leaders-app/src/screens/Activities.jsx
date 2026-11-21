@@ -151,6 +151,7 @@ import { SITES } from '../../../supabase/functions/_shared/sites.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
 import { RETRYABLE, sentence } from '../checkin.js';
 import CheckinSheet from './CheckinSheet.jsx';
+import { OPTIONAL_PARTICIPANT_AR } from '../../../supabase/functions/leaders-api/optional.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
   qr: 'امسح رمز الحضور الذي يعرضه المدرب في الجلسة بكاميرا جوالك.',
@@ -204,14 +205,16 @@ function Workshop({ item, open, setToast, onRefresh }) {
   };
   return (
     <div className="act">
-      <div className="row between"><b className="small">{a.sessions.length ? `حضرت ${a.count} من ${a.total}` : 'لم تُجدول بعد'}</b></div>
-      {a.sessions.length > 0 && <Bar value={(a.count / a.total) * 100} label="الحضور" />}
+      {/* نشاط ورشه اختيارية كلها (a.total صفر) أو نشاط اختياري في البرنامج: لا عدّاد ولا شريط، بل ما يعنيه للمشارك */}
+      <div className="row between"><b className="small">{!a.sessions.length ? 'لم تُجدول بعد' : a.total ? `حضرت ${a.count} من ${a.total}` : 'ورش اختيارية: احضر ما يفيدك منها'}</b></div>
+      {a.sessions.length > 0 && a.total > 0 && <Bar value={(a.count / a.total) * 100} label="الحضور" />}
       {a.sessions.length > 0 ? (
         <ul className="act-list">
           {a.sessions.map((s) => (
             <li key={s.id} className="act-session">
               <span className="grow"><b>{s.title}</b><span className="small muted">{s.starts_at ? ` · ${fmtDay(s.starts_at)}، ${fmtTime(s.starts_at)}` : ''}{s.location ? ` · ${s.location}` : ''}{s.trainer ? ` · مع ${s.trainer}` : ''}{linkPending(s) ? ` · ${SESSION_LINK_LATER_AR}` : ''}</span></span>
               <span className="chip">{MODE_CHIP[s.mode]}</span>
+              {(s.optional || item.required === false) && <span className="chip opt" data-testid="session-optional">{OPTIONAL_PARTICIPANT_AR}</span>}
               {!s.attended && <AddToCalendar id={s.id} title={s.title} start={s.starts_at} end={s.ends_at} location={s.location} />}
               {open && s.can_join && !s.attended && <button className="btn sm" disabled={busy === s.id} onClick={() => join(s)}>انضم الآن</button>}
               <SessionChip s={s} />
@@ -257,10 +260,15 @@ function Coaching({ item, open, onRefresh, setToast }) {
   };
   const soon = (s) => s.join_url && s.status !== 'attended' && s.starts_at
     && Date.now() > new Date(s.starts_at).getTime() - 15 * 6e4 && Date.now() < new Date(s.ends_at).getTime();
+  // شارة الطريقة أعلى النشاط: طريقة النشاط نفسه (ما يحجزه المشارك)، ما دامت تصدق على كل جلساته. الجلسة الجماعية لها
+  // طريقتها (حضورية في نشاط عن بعد مثلًا): تحملها شارتها في صفها، وإن خالفت طريقة النشاط فلا شارة عامة تقول غيرها
+  const actMode = SESSION_MODE_AR[a.mode] ? a.mode : 'online';
+  const modeOf = (s) => (s.group && SESSION_MODE_AR[s.mode] ? s.mode : actMode);
+  const modes = new Set([...(a.can_book || !a.sessions.length ? [actMode] : []), ...a.sessions.map(modeOf)]);
   return (
     <div className="act">
       <div className="row between"><b className="small">حضرت {a.count} من {a.total} {a.total === 1 ? 'جلسة' : 'جلسات'}</b>
-        <span className="chip">{SESSION_MODE_AR[a.mode] || SESSION_MODE_AR.online}</span></div>
+        {modes.size === 1 && <span className="chip" data-testid="coaching-mode">{SESSION_MODE_AR[[...modes][0]]}</span>}</div>
       {a.location && <p className="h">المكان: {a.location}</p>}
       <Bar value={(a.count / a.total) * 100} label="الجلسات" />
       {a.sessions.length > 0 && (
@@ -272,6 +280,7 @@ function Coaching({ item, open, onRefresh, setToast }) {
                 {/* الجلسة الجماعية مع المستشار (المرحلة 5): علامتها ومستشارها ومكانها، بلا أسماء بقية المدعوين */}
                 <span className="grow">{s.group && <><b className="act-group" data-testid="group-session">جلسة جماعية{s.with ? ` مع ${s.with}` : ''}</b>{' · '}</>}{s.starts_at ? <>{fmtDay(s.starts_at)}، {fmtTime(s.starts_at)}</> : 'جلسة'}
                   {s.group && (s.location || s.off) && <small className="muted act-group-sub">{[s.location ? `المكان: ${s.location}` : '', s.off ? 'لا تُحسب من رصيدك' : ''].filter(Boolean).join(' · ')}</small>}</span>
+                {s.group && SESSION_MODE_AR[s.mode] && <span className="chip" data-testid="group-mode">{SESSION_MODE_AR[s.mode]}</span>}
                 {soon(s) && <a className="btn sm" href={s.join_url} target="_blank" rel="noopener noreferrer">انضم الآن</a>}
                 {s.status === 'booked' && <AddToCalendar id={s.id} title={s.group ? `${s.title || 'جلسة جماعية'}: برنامج القادة` : 'جلسة توجيه: برنامج القادة'} start={s.starts_at} end={s.ends_at} location={s.group ? s.location : a.location} url={s.join_url} />}
                 <span className={`chip ${cls}`}>{t}</span>

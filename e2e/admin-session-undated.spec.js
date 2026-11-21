@@ -45,6 +45,8 @@ async function adminCreates(page, width) {
   await page.reload();
   await page.getByRole('button', { name: '+ موعد' }).click();
   const form = page.getByRole('dialog', { name: 'موعد جديد' });
+  // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+  await form.getByRole('radio', { name: /^إلزامية/ }).check();
   await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('تدريب يومان عن بعد');
   await form.getByLabel('الطريقة').selectOption('online');
   await expect(form.getByText('اختياري: اتركه فارغًا ليُضاف لاحقًا', { exact: false })).toBeVisible();

@@ -6,6 +6,7 @@
 // وكل تذكير يُكتب في سجل واحد (leaders.nudges) بحد مشترك، فلا تتكرر التذكيرات بلا داعٍ.
 // دالة نقية بلا قاعدة: مصادرها onboardingOf وstuckMailText (onboarding.js)، وcurrentStages وstageEntry وneedsOf (journey-map.js).
 // المراحل التي تسير معًا (R3b): «أين هو» مرحلته الحالية ومعها ما يسير معها، كما يراها في رحلته وكما تعدّه الخريطة.
+import { countedItems, countedProgress } from './optional.js';
 import { ONBOARDING_AR, REMIND_GAP_DAYS, STUCK_MAIL_SUBJECT, STUCK_STEPS, stuckMailText } from './onboarding.js';
 import { currentStages, needsOf, stageEntry } from './journey-map.js';
 
@@ -67,19 +68,20 @@ export function nudgeFor({ p, onboarding = null, journey = [], progress = 0, dat
   if (s.status === 'locked') return { ok: false, why: 'locked' };
   // ما أُعيد بملاحظة في أي جارية يتقدم، ثم ما ينقص الموضع، ثم ما ينقص ما يسير معه
   let returned = null, at = s;
-  for (const st of cur.stages) { returned = (st.items || []).find((it) => it.status === 'returned'); if (returned) { at = st; break; } }
+  // الاختياري خارج التذكير (optional.js): لا يُذكَّر أحد ببند اختياري أُعيد إليه، ولا يدخل «أنجز N من M»
+  for (const st of cur.stages) { returned = countedItems(st.items).find((it) => it.status === 'returned'); if (returned) { at = st; break; } }
   let need = returned ? returned.title_ar : null;
   if (!need) for (const st of cur.stages) { need = needsOf(st); if (need) { at = st; break; } }
   if (!need) return { ok: false, why: 'nothing' };
   const entered = stageEntry(journey, cur.idx, dates) || p.created_at;
   const days = daysSince(entered, t);
-  const items = cur.stages.flatMap((st) => st.items || []);
-  const done = items.filter((it) => it.status === 'done').length;
-  const total = items.length;
+  const n = countedProgress(cur.stages.flatMap((st) => st.items || []));
+  const done = n.done;
+  const total = n.total;
   const names = stagesAr(cur.stages.map((st) => st.title_ar));
   // اللقطة على المجموعة كلها لا على الجارية وحدها: الجارية التي تكتمل تخرج من stages، فيُعدّ ما أنجز فيها ويبقى العدد لا ينقص
   // ما دام المفتاح نفسه، فيُعرف أنه تقدّم بين تذكيرين (ledgerSummary)
-  const groupDone = cur.group.flatMap((st) => st.items || []).filter((it) => it.status === 'done').length;
+  const groupDone = countedProgress(cur.group.flatMap((st) => st.items || [])).done;
   return {
     ok: true, kind: returned ? 'returned' : 'stage', key: `stage:${s.key}`, stage: s.title_ar, step: need,
     remaining: total ? `أنجز ${done} من ${total} في ${cur.together ? `«${names}» معًا` : 'هذه المرحلة'}` : '', progress: Number(progress) || 0, days,
