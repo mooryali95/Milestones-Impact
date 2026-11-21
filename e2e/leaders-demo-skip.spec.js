@@ -15,6 +15,21 @@ const STAGES = [
   ['ojt', 'التوجيه على رأس العمل', 'qualification'], ['consulting', 'الاستشارة', 'qualification'], ['evaluation', 'التقييم والقياس', 'impact'], ['report', 'التقرير النهائي', 'impact'],
 ];
 
+// متابعة الأثر كما يحسبها الخادم للحساب التجريبي: خطة من وثيقته، وبداية اليوم
+function tracking(updates) {
+  const current = new Date().toISOString().slice(0, 7);
+  return {
+    summary: { day: 0, active: true, current, health: updates ? 'green' : 'pending', health_title: updates ? 'على المسار' : 'لم تبدأ المتابعة',
+      milestones: { total: 1, done: 0, due: 0, late: 0, at_risk: 0, on_time: null }, benefits: { total: 0, measured: 0, realization: null },
+      updates, last_at: null, due: { update: true, checkpoint: null, resubmit: false }, can_update: true,
+      checkpoints: [{ key: 'd90', day: 90, title: 'مراجعة الأثر بعد 90 يومًا', status: 'upcoming', resubmit: false, verify: null, verify_title: null, period: null }] },
+    plan: { start: null, end: null },
+    state: { milestones: [{ key: 'm0', title: 'تجربة أولى للعرض', due: '2027-02-01', status: updates ? 'on_track' : null }], benefits: [] },
+    updates: [], statuses: { on_track: 'في موعده', at_risk: 'معرّض للتأخر', late: 'متأخر', done: 'تحقق', dropped: 'أُلغي بقرار' },
+    health: { green: 'على المسار', pending: 'لم تبدأ المتابعة' }, checkpoints: [{ key: 'd90', day: 90, title: 'مراجعة الأثر بعد 90 يومًا' }],
+  };
+}
+
 function server({ profileDone = true, assessed = true } = {}) {
   const s = { profileDone, assessed, skipped: new Set(), opened: false, calls: [] };
   const journey = () => {
@@ -51,6 +66,14 @@ function server({ profileDone = true, assessed = true } = {}) {
         return [200, me({ skipped: cur.key })];
       }
       case 'demo.open-all': s.opened = true; return [200, me({ opened: ['x'] })];
+      // «أعد من البداية»: الحساب يعود إلى أوله بجلسته نفسها
+      case 'demo.restart': Object.assign(s, { profileDone: false, assessed: false, opened: false, updates: 0 }); s.skipped.clear(); return [200, me({ restarted: true })];
+      // وثيقة المبادرة مسودة لم تُعتمد، والمتابعة مفتوحة للعرض (simulated) بما كتبه الحساب في سجل المعالم
+      case 'capstone.get': return [200, { success: true, initiative: 'تجربة أولى للعرض', scope: 'project', scope_title: 'مشروع', level: 'intermediate', track: { title: 'القيادة من خلال الآخرين' },
+        capstone: { status: 'draft', status_title: 'قيد البناء', summary: '' }, sections: [{ id: 'm-reg', key: 'milestone-register', title: 'سجل المعالم', icon: '◆', dimension: 'milestone', complete: true, missing: 0, status: 'draft' }],
+        checks: [], readiness: 40, ready_min: 80, card: { state: 'waiting', sla: 'يومي عمل' }, can_submit: false, blocker: 'فصول لم تكتمل', rubric: [] }];
+      case 'tracking.get': return [200, { success: true, simulated: true, tracking: tracking(s.updates || 0), current: null }];
+      case 'tracking.save': s.updates = (s.updates || 0) + 1; return [200, { success: true, simulated: true, tracking: tracking(s.updates), current: null, invited: false, mail_failed: false }];
       case 'demo.certificate-preview': return [200, { success: true, certificate: { serial: null, verify_url: null, sample: true, kind: 'completion_success', decision: 'pass', name_ar: 'مشارك تجريبي', name_en: null,
         program_ar: 'برنامج القادة', program_en: 'Leaders Program', track_ar: 'القيادة من خلال الآخرين', track_en: 'Leading Through Others', hours: 40, start: '2026-11-01', end: '2027-02-01', issued_at: '2026-11-21T08:00:00Z', org: null, signatories: [] } }];
       case 'pay.checkout': return [403, { success: false, code: 'demo', message: 'في الحساب التجريبي لا يُنفذ هذا فعليًا' }];
@@ -102,7 +125,7 @@ for (const width of [390, 1440]) {
       await expect(bar).not.toContainText('وقد يراه غيرك');
       await expect(bar.getByTestId('demo-current')).toHaveText('المرحلة الحالية: التدريب');
       // لا زر يغلق الشارة، وهي باقية بعد إخفاء لوحة الجولة
-      await expect(bar.getByRole('button')).toHaveText(['تخطَّ هذه المرحلة', 'افتح كل المراحل']);
+      await expect(bar.getByRole('button')).toHaveText(['أعد من البداية', 'تخطَّ هذه المرحلة', 'افتح كل المراحل']);
       await hideTour(page);
       await expect(bar).toBeVisible();
       await noOverflow(page);
@@ -177,6 +200,71 @@ for (const width of [390, 1440]) {
       if (SHOTS) { await pop.setViewportSize({ width: 1440, height: 1000 }); await pop.waitForTimeout(600); await pop.screenshot({ path: `${SHOTS}/certificate-preview-${width}.png`, fullPage: true }); }
     });
 
+    test('«أعد من البداية»: رابط صغير في الشريط بتأكيد، يعيد الحساب إلى أول الرحلة والجلسة باقية، والتراجع لا يفعل شيئًا', async ({ page }) => {
+      const srv = server();
+      await open(page, srv);
+      await hideTour(page);
+      const bar = page.getByTestId('demo-bar');
+      await bar.getByRole('button', { name: 'تخطَّ هذه المرحلة' }).click();
+      await bar.getByRole('button', { name: 'افتح كل المراحل' }).click();
+      await expect(page.getByTestId('stage-skipped-demo')).toHaveCount(1);
+      // الشريط لا يزيد ارتفاعًا عن ثلاثة أسطر على الهاتف وسطر على الحاسب
+      const h = (await bar.boundingBox()).height;
+      expect(h).toBeLessThanOrEqual(width === 390 ? 122 : 56);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await shot(page, `restart-link-${width}`);
+      // التراجع: لا طلب، والأدوات تعود
+      await bar.getByRole('button', { name: 'أعد من البداية', exact: true }).click();
+      const ask = bar.getByTestId('demo-restart-ask');
+      await expect(ask).toContainText('يُمسح كل ما فُعل في هذا الحساب التجريبي ويعود إلى أول الرحلة. تبقى جلستك وروابط التجربة.');
+      await expect(bar.getByRole('button', { name: 'تخطَّ هذه المرحلة' })).toHaveCount(0);
+      await noOverflow(page);
+      await shot(page, `restart-confirm-${width}`);
+      await ask.getByRole('button', { name: 'تراجع' }).click();
+      await expect(ask).toHaveCount(0);
+      expect(srv.s.calls.filter((c) => c.action === 'demo.restart')).toEqual([]);
+      await expect(page.getByTestId('stage-skipped-demo')).toHaveCount(1);
+      // التأكيد: يعود إلى الملف الشخصي، والشارة باقية، ولا خروج من الجلسة
+      await bar.getByRole('button', { name: 'أعد من البداية', exact: true }).click();
+      await bar.getByTestId('demo-restart-ask').getByRole('button', { name: 'نعم، أعد من البداية' }).click();
+      await expect(bar.getByTestId('demo-current')).toHaveText('المرحلة الحالية: الملف الشخصي');
+      await expect(bar.getByTestId('demo-restart-ask')).toHaveCount(0);
+      await expect(bar.getByTestId('demo-badge')).toHaveText('حساب تجريبي');
+      await expect(page.getByRole('button', { name: /ملفي: مشارك تجريبي/ })).toBeVisible();
+      expect(srv.s.calls.filter((c) => c.action === 'demo.restart').length).toBe(1);
+      expect(srv.s.calls.filter((c) => c.action === 'logout')).toEqual([]);
+      await shot(page, `restart-done-${width}`);
+      // ثم يبدأ من جديد بالأزرار نفسها
+      await bar.getByRole('button', { name: 'تخطَّ هذه المرحلة' }).click();
+      await bar.getByRole('button', { name: 'تخطَّ هذه المرحلة' }).click();
+      await expect(bar.getByTestId('demo-current')).toHaveText('المرحلة الحالية: التدريب');
+      await expect(page.getByTestId('stage-skipped-demo')).toHaveCount(0);
+    });
+
+    test('متابعة الأثر: تُفتح للحساب التجريبي بوسم «للعرض» والوثيقة لم تُعتمد، بلا اسم مستشار ولا درجة', async ({ page }) => {
+      const srv = server();
+      await open(page, srv);
+      await hideTour(page);
+      const nav = page.locator(width === 390 ? '.tabbar' : '.nav-tabs');
+      await nav.getByRole('button', { name: /مبادرتي/ }).click();
+      const tr = page.locator('.card.tr');
+      await expect(tr.getByRole('heading', { name: 'متابعة التنفيذ والأثر' })).toBeVisible();
+      await expect(tr.getByTestId('tracking-demo')).toHaveText('للعرض');
+      await expect(tr.getByTestId('tracking-demo-note')).toHaveText('في الحساب التجريبي تُفتح متابعة الأثر بلا اعتماد المستشار، ليُرى شكلها. لم تُعتمد هذه الوثيقة، وما تكتبه هنا لا يُحسب ولا يصل راعيًا.');
+      await expect(tr).not.toContainText('بعد الاعتماد');
+      // لا بطاقة «اعتُمدت وثيقة مبادرتك» ولا درجة مستشار: الوثيقة مسودة كما هي
+      await expect(page.getByText('اعتُمدت وثيقة مبادرتك')).toHaveCount(0);
+      await expect(page.getByText('في معيار المستشار')).toHaveCount(0);
+      await expect(tr).toContainText('الخطة من وثيقتك كما هي الآن.');
+      await expect(tr).not.toContainText('وثيقتك المعتمدة');
+      await expect(tr).toContainText('يومًا منذ فتحها للعرض');
+      await expect(tr).not.toContainText('منذ الاعتماد');
+      await expect(page.getByTestId('demo-bar')).toBeVisible();
+      await noOverflow(page);
+      await page.evaluate(() => { const el = document.querySelector('.card.tr'); window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 150 - (window.innerWidth < 700 ? 60 : 0)); });
+      await shot(page, `impact-followup-${width}`);
+    });
+
     test('برابط تجربة: الشارة نفسها بسطر «وقد يراه غيرك»، والزائر يتخطى من الملف إلى الرحلة داخل الحساب', async ({ page }) => {
       const srv = server({ profileDone: false, assessed: false });
       await open(page, srv, { link: true });
@@ -185,7 +273,7 @@ for (const width of [390, 1440]) {
       await expect(bar).toContainText('ما تفعله هنا لا يُحسب، وقد يراه غيرك ممن يجرّب.');
       // قبل الرحلة: التخطي يملأ الملف ثم القياس، ولا «افتح كل المراحل» قبل الاعتماد
       await expect(bar.getByTestId('demo-current')).toHaveText('المرحلة الحالية: الملف الشخصي');
-      await expect(bar.getByRole('button')).toHaveText(['تخطَّ هذه المرحلة']);
+      await expect(bar.getByRole('button')).toHaveText(['أعد من البداية', 'تخطَّ هذه المرحلة']);
       await hideTour(page);
       await shot(page, `link-visitor-profile-${width}`);
       await bar.getByRole('button', { name: 'تخطَّ هذه المرحلة' }).click();

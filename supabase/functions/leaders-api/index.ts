@@ -169,7 +169,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
-  'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'ratings.pending', 'consent.accept', 'org.share-consent',
+  'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'ratings.pending', 'consent.accept', 'org.share-consent',
   // الحضور في القاعة لا تمنعه بوابة الدفع (W1): من حضر حضر، وحقه في البرنامج يُسوّى في مكانه. وworkshop.scan مفتوح أصلًا
   'workshop.checkin']);
 // حساب العرض لا يُرسل بريدًا لأحد ولا يشغل خبيرًا حقيقيًا ولا يفتح دفعًا: هذه الإجراءات له مغلقة
@@ -181,7 +181,7 @@ const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f3
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
 const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
-  'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
+  'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
   'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
   'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
@@ -200,7 +200,7 @@ const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sess
 // ورابط الجلسة عن بعد وغرفة الموجّه على الخادم: للمعتمد كما كان، ولغيره حين تفتح مرحلتهما في رحلته بقاعدة الفتح أو بفتح
 // الأدمن (sessionOpen في activities.ts)
 const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
-  'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
+  'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
 const GATE_PROGRAM = new Set(['guide.state', 'guide.ask', 'guide.clear', 'guide.confirm', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
@@ -222,12 +222,13 @@ async function programGate(action: string, p: any) {
   if (!inProgram(p.status) && !GATE_KEPT.has(action)) throw new Fail(OUT_OF_PROGRAM_AR, 403, 'out_of_program');
   if (GATE_PRE.has(action)) return;
   // فعل البرنامج، وما لم يُصنَّف يُعامل معاملته فلا يُفتح بلا اعتماد. تعذّر القراءة يرمي ولا يفتح شيئًا
-  if (approvedSeen.has(p.id)) return;
+  // الحساب التجريبي لا يُحفظ اعتماده في العامل: «أعد من البداية» يسحب اعتماده بمعرّفه نفسه، فيُقرأ في كل مرة
+  if (!p.is_demo && approvedSeen.has(p.id)) return;
   if (!approvalOf(must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id))).approved) {
     throw new Fail('يُفتح هذا بعد اعتماد مسارك', 403, 'locked');
   }
   if (approvedSeen.size > 5000) approvedSeen.clear();
-  approvedSeen.add(p.id);
+  if (!p.is_demo) approvedSeen.add(p.id);
 }
 function payGate(action: string, b: Body): 'assessment' | 'program' | null {
   if (PAY_FREE.has(action)) return null;
@@ -304,6 +305,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'demo.skip-stage': (p, b, sid) => D.skipStage(p, b, sid),
   'demo.open-all': (p, b, sid) => D.openAll(p, b, sid),
   'demo.certificate-preview': (p) => Z.demoPreview(p),
+  // «أعد من البداية» من الشريط: يمسح ما يحمله الحساب ويُبقي صفه وجلساته وروابطه (demo.ts: restart)
+  'demo.restart': (p, b, sid) => D.restart(p, b, sid),
   'hall.join': (p) => H.join(p),
   'hall.hand': (p, b) => H.hand(p, b),
   'hall.pick': (p, b) => H.pick(p, b),

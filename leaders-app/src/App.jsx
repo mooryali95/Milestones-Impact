@@ -602,7 +602,7 @@ function Participant() {
         </div>
       </header>
       {/* شارة الحساب التجريبي: في كل شاشة منه، من اللوحة أو برابط تجربة، ولا تُغلق (DemoBar.jsx) */}
-      {me?.participant?.is_demo && <DemoBar me={me} shared={demoShared} onUpdate={accept} />}
+      {me?.participant?.is_demo && <DemoBar me={me} shared={demoShared} onUpdate={accept} onRestart={() => go('home')} />}
       {!online && !reconnectShown && <div className="offline-bar" role="status">أنت دون اتصال. تحتاج اتصالًا لعرض رحلتك وحفظ ما تكتبه.</div>}
       <main id="main" tabIndex={-1} className={navItems.length ? 'with-tabbar' : undefined}>
         {me && !me.participant.is_demo && <PolicyBanner consent={me.participant.consent} deferred={consentLater} onAccepted={(r) => { setConsentLater(false); accept(r); }} />}

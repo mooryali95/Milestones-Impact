@@ -1971,6 +1971,15 @@ main p.small, main p.muted { max-inline-size: 62ch; }
   .demo-btn { min-height: 44px; flex: 1 1 auto; }
 }
 @media print { .demo-bar { display: none; } }
+/* «أعد من البداية»: رابط نصي صغير في سطر الشارة، فلا يزيد الشريط ارتفاعًا. وتأكيده يحل محل صف الأدوات */
+.demo-restart { font: inherit; font-size: .8125rem; background: none; border: 0; padding: 0 2px; color: var(--graphite); text-decoration: underline; cursor: pointer; margin-inline-start: auto; }
+.demo-restart:disabled { opacity: .6; cursor: default; }
+.demo-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; flex-basis: 100%; }
+.demo-ask > span { flex: 1 1 260px; font-weight: 600; }
+.demo-note { margin: 4px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--brand-cream); border: 1px dashed var(--gold); color: var(--graphite); }
+@media (max-width: 620px) { .demo-bar-id { flex-basis: 100%; } .demo-restart { min-height: 24px; } }
+/* متابعة الأثر المفتوحة للعرض على الهاتف: النص سطر كامل وشارة الحال تحته، فلا ينضغط سطر التنبيه */
+@media (max-width: 620px) { .tr-demo .tr-head { flex-wrap: wrap; } .tr-demo .tr-head > div { flex: 1 1 100%; } }
 /* بطاقة نموذج الشهادة في الحساب التجريبي: على الهاتف النص سطر كامل والزر تحته */
 .cert-card.demo-cert { margin-bottom: 16px; }
 @media (max-width: 640px) { .cert-card.demo-cert > .grow { flex-basis: calc(100% - 60px); } .cert-card.demo-cert > .row { flex-basis: 100%; } .cert-card.demo-cert > .row .btn { flex: 1; min-height: 44px; } }

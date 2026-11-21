@@ -10,7 +10,8 @@ import { audit, CONFIG, db, DEMO_MAIL_DOMAIN, Fail, hash, must, randomToken } fr
 import { assessmentGet, assessmentSubmit, issueSession, journeyFor, mePayload, profileSave } from './participant.ts';
 import { scoreFor } from './logic.js';
 import { cleanDemoLinkInput, DEMO_LINK_LIMITS, DEMO_LINK_MAX_ACTIVE, demoLinkState, demoLinkUrl, demoLinkView } from './demo-links.js';
-import { DEMO_NAME_AR, DEMO_OPEN_NOTE, DEMO_SKIP_NOTE, demoLockedStages, demoSkipTarget } from './demo-stage.js';
+import { DEMO_FULL_NAME, DEMO_NAME_AR, DEMO_OPEN_NOTE, DEMO_RESTART_EXTRA, DEMO_RESTART_KEEP, DEMO_ROW_RESET, DEMO_SKIP_NOTE, demoLockedStages, demoSkipTarget } from './demo-stage.js';
+import { EXPORT_SKIPPED, EXPORT_TABLES } from './privacy.js';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
@@ -25,7 +26,7 @@ async function demoRow() {
   const { data } = await db.from('participants').select('*').eq('is_demo', true).eq('email', DEMO_EMAIL).maybeSingle();
   if (data) return data;
   return must(await db.from('participants').insert({
-    email: DEMO_EMAIL, full_name: 'مشارك تجريبي', is_demo: true, source: 'admin',
+    email: DEMO_EMAIL, full_name: DEMO_FULL_NAME, is_demo: true, source: 'admin',
   }).select('*').single(), 'تعذّر إنشاء الحساب التجريبي');
 }
 
@@ -58,7 +59,7 @@ const onlyDemo = (p: any) => { if (!p.is_demo) throw new Fail('هذا متاح �
 export async function fillProfile(p: any) {
   onlyDemo(p);
   return profileSave(p, { fields: {
-    full_name: 'مشارك تجريبي', job_title: 'مدير إدارة المشاريع', organization_name: 'جهة تجريبية',
+    full_name: DEMO_FULL_NAME, job_title: 'مدير إدارة المشاريع', organization_name: 'جهة تجريبية',
     sector: 'حكومي', phone: DEMO_PHONE, years_experience: 8, work_scope: null,
     bio: 'حساب تجريبي لعرض رحلة القائد في الورشة الأولى.',
   } });
@@ -137,6 +138,31 @@ export async function openAll(p: any, _b: Body, sessionId: string) {
     await audit('participant', p.id, 'demo.open-all', 'participants', p.id, null, { stages: locked.map((s: any) => s.key), program: j.def.program_id, by: await openedBy(sessionId) });
   }
   return { success: true, opened: locked.map((s: any) => s.key), ...(await mePayload(p)) };
+}
+
+// «أعد من البداية» من شريط الحساب التجريبي (قرار المالك 2026-11-21): يمسح كل ما يحمله الحساب (تجاوزات المراحل وما أُنجز
+// من بنود، والقياس والتسكين، والكتاب والنماذج والمبادرة ومتابعتها، والنقاط وطلبات الأقران وكل جدول آخر فيه صف له) ويعيد
+// صفه إلى أوله (الملف فارغ والحالة «مسجّل»). يبقى صف الحساب بمعرّفه، وجلساته كلها، وروابط التجربة: فلا يخرج زائر آخر من
+// جلسته ولا يبطل رابط، بخلاف إعادة ضبط المدير الأعلى التي تحذف الحساب نفسه.
+// قائمة الجداول من المصدر الذي يحرسه privacy.test.js (كل جدول فيه participant_id مذكور في EXPORT_TABLES أو EXPORT_SKIPPED)،
+// فجدول جديد يدخل المسح بلا تعديل هنا. والأعمدة من DEMO_ROW_RESET التي يحرسها demo_skip_test.ts مقابل المخطط.
+const GONE_TABLE = new Set(['42P01', 'PGRST205', 'PGRST204', '42703']);
+export async function restart(p: any, _b: Body, sessionId: string) {
+  onlyDemo(p);
+  const by = await openedBy(sessionId);
+  const tables = [...new Set([...Object.keys(EXPORT_TABLES), ...Object.keys(EXPORT_SKIPPED)])].filter((t) => !DEMO_RESTART_KEEP.includes(t));
+  const targets: [string, string][] = [...tables.map((t) => [t, 'participant_id'] as [string, string]), ...Object.entries(DEMO_RESTART_EXTRA as Record<string, string>)];
+  const cleared: string[] = [];
+  for (const [table, col] of targets) {
+    const r = await db.from(table).delete().eq(col, p.id).select(col);
+    // جدول لم يُرحَّل بعد لا يحمل شيئًا للحساب. وكل تعذّر آخر يوقف المسح برسالته، فلا يُقال «أُعيد» وقد بقي شيء
+    if (r.error) { if (GONE_TABLE.has(String(r.error.code))) continue; must(r, 'تعذّرت إعادة الحساب التجريبي إلى البداية، حاول مرة أخرى'); }
+    if ((r.data as any[] | null)?.length) cleared.push(table);
+  }
+  must(await db.from('participants').update({ ...DEMO_ROW_RESET }).eq('id', p.id).eq('is_demo', true), 'تعذّرت إعادة الحساب التجريبي إلى البداية، حاول مرة أخرى');
+  await audit('participant', p.id, 'demo.restart', 'participants', p.id, null, { cleared, by });
+  const fresh = must(await db.from('participants').select('*').eq('id', p.id).single());
+  return { success: true, restarted: true, ...(await mePayload(fresh)) };
 }
 
 

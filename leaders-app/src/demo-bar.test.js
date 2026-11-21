@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { demoBarState } from './DemoBar.jsx';
 import { certificateHtml, SAMPLE_STAMP_AR } from '../../src/lib/brand/certificate.js';
-import { DEMO_BADGE_LINE_AR, DEMO_NAME_AR, DEMO_NOT_REAL_AR, DEMO_SAMPLE_AR, DEMO_SHARED_LINE_AR, DEMO_SKIPPED_AR } from '../../supabase/functions/leaders-api/demo-stage.js';
+import { DEMO_BADGE_LINE_AR, DEMO_FOR_SHOW_AR, DEMO_NAME_AR, DEMO_NOT_REAL_AR, DEMO_RESTART_AR, DEMO_RESTART_ASK_AR, DEMO_RESTART_ASK_SHARED_AR, DEMO_SAMPLE_AR, DEMO_SHARED_LINE_AR, DEMO_SKIPPED_AR, DEMO_TRACKING_NOTE_AR } from '../../supabase/functions/leaders-api/demo-stage.js';
 
 // الشرطتان المتوسطة والطويلة برمزيهما، فلا يحملهما هذا الملف نفسه
 const DASH = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
@@ -46,10 +46,21 @@ describe('شريط الحساب التجريبي', () => {
   });
   it('المصدر: الشارة لكل جلسة للحساب التجريبي (من اللوحة أو برابط)، ولا زر يغلقها، والوسم للحساب التجريبي وحده', () => {
     const app = read('./App.jsx');
-    expect(app).toContain('{me?.participant?.is_demo && <DemoBar me={me} shared={demoShared} onUpdate={accept} />}');
+    expect(app).toContain("{me?.participant?.is_demo && <DemoBar me={me} shared={demoShared} onUpdate={accept} onRestart={() => go('home')} />}");
     expect(app).not.toContain('DemoSharedBar');
     const bar = read('./DemoBar.jsx');
     expect(bar).not.toMatch(/إغلاق|إخفاء|onClose|dismiss/);
+    // «أعد من البداية» بتأكيد في الشريط قبل الطلب، ولا يخرج من الجلسة
+    expect(bar).toContain("onClick={() => run('demo.restart')}");
+    expect(bar).toContain('data-testid="demo-restart-ask"');
+    expect(bar).not.toMatch(/logout|signOut|session\.clear/);
+    expect([DEMO_RESTART_AR, DEMO_FOR_SHOW_AR]).toEqual(['أعد من البداية', 'للعرض']);
+    for (const t of [DEMO_RESTART_ASK_AR, DEMO_RESTART_ASK_SHARED_AR, DEMO_TRACKING_NOTE_AR]) expect(t).not.toMatch(DASH);
+    expect(DEMO_RESTART_ASK_SHARED_AR).toContain('لك ولكل من يجرّبه الآن');
+    // متابعة الأثر: تُفتح للحساب التجريبي في شاشة المبادرة، والشاشة تسمها «للعرض» حين يقول الخادم إنها محاكاة
+    expect(read('./screens/Capstone.jsx')).toContain("{(c.status === 'approved' || me.participant.is_demo) && <Tracking owner={me.participant.id} />}");
+    const tr = read('./screens/Tracking.jsx');
+    expect(tr).toContain('{d.simulated ? <span className="chip demo-skip" data-testid="tracking-demo">{DEMO_FOR_SHOW_AR}</span> : <span className="mg-cap">بعد الاعتماد</span>}');
     expect(bar).toContain("run('demo.skip-stage')");
     expect(bar).toContain("run('demo.open-all')");
     const journey = read('./screens/Journey.jsx');

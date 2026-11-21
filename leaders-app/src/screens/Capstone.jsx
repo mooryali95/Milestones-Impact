@@ -212,7 +212,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           {c.review?.note && <p className="muted">{c.review.note}</p>}
         </div>
       )}
-      {c.status === 'approved' && <Tracking owner={me.participant.id} />}
+      {/* الحساب التجريبي: المتابعة تُفتح للعرض بلا اعتماد (الخادم يحسبه له وحده ولا يخزّنه)، والشاشة تسمها «للعرض» */}
+      {(c.status === 'approved' || me.participant.is_demo) && <Tracking owner={me.participant.id} />}
       {/* إشارات التعثر (4د): أعلاها أولوية وحدها، بثلاثة خيارات. تُشتق مما يرسله الخادم (stuck.js) */}
       {editable && (() => {
         const sig = stuckSignals({ sections: d.sections, checks: d.checks, card: d.card }).find((x) => !dismissed.includes(x.key));

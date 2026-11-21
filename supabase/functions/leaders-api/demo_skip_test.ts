@@ -3,7 +3,7 @@
 // حضورًا ولا درجة ولا شهادة ولا بريدًا، وأن أرقام الإدارة لا تتغير به، وأن المشارك الحقيقي يُرد، وأن زائر الرابط يتخطى
 // داخل الحساب ولا يبلغ فعل إدارة، وأن إعادة الضبط تمسح كل شيء، وأن لا فعل مفتوحًا للحساب يُرد بـ«مقفل» بعد «افتح الكل».
 import './_test_env.ts';
-import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake, resendCalls, withNet } from './_fake_db.ts';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
@@ -15,14 +15,17 @@ const A = await import('./admin.ts');
 const S = await import('./system.ts');
 const IN = await import('./insight.ts');
 const Z = await import('./certificates.ts');
+const X = await import('./capstone.ts');
+const T = await import('./tracking.ts');
 const { resetSettingsCache } = await import('./settings.ts');
-const { DEMO_NAME_AR, DEMO_NOT_REAL_AR, DEMO_SKIPPED_AR, demoCurrentStage, demoLockedStages, demoSkipTarget } = await import('./demo-stage.js');
+const { DEMO_NAME_AR, DEMO_NOT_REAL_AR, DEMO_SKIPPED_AR, DEMO_RESTART_EXTRA, DEMO_RESTART_KEEP, DEMO_ROW_KEEP, DEMO_ROW_RESET, demoCurrentStage, demoLockedStages, demoSkipTarget } = await import('./demo-stage.js');
+const { EXPORT_SKIPPED, EXPORT_TABLES } = await import('./privacy.js');
 
 type Row = Record<string, any>;
 // الشرطتان المتوسطة والطويلة برمزيهما، فلا يحملهما هذا الملف نفسه
 const DASH = new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`);
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const PROG = U(900), COHORT = U(901), REAL = U(1), REAL2 = U(2);
+const PROG = U(900), COHORT = U(901), REAL = U(1), REAL2 = U(2), MODEL = U(600);
 const ADMIN: any = { email: 'admin@example.sa', role: 'admin', id: 'a1' };
 const SUPER: any = { email: 'owner@example.sa', role: 'super_admin', id: 'a0' };
 const CTX = { ip: '203.0.113.7', ua: 'test-agent' };
@@ -61,14 +64,19 @@ function world() {
     placements: [...placed(REAL), ...placed(REAL2)],
     assessments: [REAL, REAL2].map((participant_id, i) => ({ id: U(100 + i), participant_id, status: 'submitted', submitted_at: now, instruments: { key: 'b', kind: 'baseline', title_ar: 'المبدئي', active: true }, assessment_results: [] })),
     participant_requirements: [{ participant_id: REAL, requirement_id: REQS[3].id, status: 'done', completed_at: now }],
-    participant_stage_overrides: [], workshop_attendance: [], final_evaluations: [], points_ledger: [], handbook_progress: [], model_submissions: [], reports: [], tracks: [],
+    // فصل «سجل المعالم» من وثيقة المبادرة: منه خطة المتابعة (trackingPlan)
+    learning_models: [{ id: MODEL, key: 'milestone-register', dimension: 'milestone', sort: 1, min_level: 'beginner', active: true, scopes: null, capstone_sort: 1, title_ar: 'سجل المعالم', icon: null, summary_ar: null, points: 10,
+      fields: [{ key: 'milestones', type: 'table', label: 'المعالم', columns: ['المعلم', 'النوع', 'التاريخ', 'معيار القبول', 'صاحب القرار'] }] }],
+    model_submissions: [{ id: U(601), participant_id: REAL, model_id: MODEL, status: 'draft', rating: null, answers: { milestones: [['إطلاق التجربة', 'قرار', '2027-01-15', 'اعتماد اللجنة', 'مدير المشروع']] }, updated_at: now }],
+    capstones: [{ id: U(602), participant_id: REAL, status: 'draft', snapshot: null, approved_at: null, revisions: 0 }], capstone_updates: [],
+    participant_stage_overrides: [], workshop_attendance: [], final_evaluations: [], points_ledger: [], handbook_progress: [], reports: [], tracks: [],
   };
   // حذف المشارك يحذف جلساته وتجاوزاته (on delete cascade في المخطط)، وتضمين participants!inner لمرشحات العد
   const f = installFake(tables, {
     embed: (_t, r, t) => (r.participant_id ? { participants: (t.participants || []).find((p) => p.id === r.participant_id) ?? null } : null),
     onDelete: (table, rows, t) => {
       if (table !== 'participants') return;
-      for (const k of ['auth_sessions', 'participant_stage_overrides', 'placements', 'assessments', 'participant_requirements']) t[k] = (t[k] || []).filter((x) => !rows.some((p) => p.id === x.participant_id));
+      for (const k of ['auth_sessions', 'participant_stage_overrides', 'placements', 'assessments', 'participant_requirements', 'model_submissions', 'capstone_updates', 'points_ledger', 'capstones']) t[k] = (t[k] || []).filter((x) => !rows.some((p) => p.id === x.participant_id));
     },
   });
   const pub = (publicDb as any).from;
@@ -86,6 +94,8 @@ function world() {
     const d = demo();
     Object.assign(d, { profile_completed_at: now, status: 'placed' });
     f.tables.placements.push(...placed(d.id));
+    // ما كتبه الحساب التجريبي بيده في فصل سجل المعالم (models.save): بيانات حقيقية على صفه وحده
+    f.tables.model_submissions.push({ id: U(699), participant_id: d.id, model_id: MODEL, status: 'draft', rating: null, answers: { milestones: [['تجربة أولى للعرض', 'قرار', '2027-02-01', 'موافقة الراعي', 'قائد المبادرة']] }, updated_at: now });
     f.tables.assessments.push({ id: U(199), participant_id: d.id, status: 'submitted', submitted_at: now, instruments: { key: 'b', kind: 'baseline', title_ar: 'المبدئي', active: true }, assessment_results: [] });
   };
   const adminOpen = async () => ((await D.open(ADMIN, {}, CTX)) as any).url.split('#demo=')[1] as string;
@@ -96,7 +106,7 @@ function world() {
 const stageOf = (r: Row, key: string) => (r.journey as Row[]).find((s) => s.key === key)!;
 const statuses = (r: Row) => Object.fromEntries((r.journey as Row[]).map((s) => [s.key, s.status]));
 // كل ما يدخل رقمًا أو تقريرًا أو شهادة أو بريدًا: لا يتغير منه شيء بالتخطي
-const COUNTED_TABLES = ['participant_requirements', 'workshop_attendance', 'certificates', 'final_evaluations', 'points_ledger', 'handbook_progress', 'model_submissions', 'reports', 'mail_queue', 'mail_log', 'placements', 'assessments', 'enrollments', 'entitlements'];
+const COUNTED_TABLES = ['capstones', 'participant_requirements', 'workshop_attendance', 'certificates', 'final_evaluations', 'points_ledger', 'handbook_progress', 'model_submissions', 'reports', 'mail_queue', 'mail_log', 'placements', 'assessments', 'enrollments', 'entitlements'];
 const frozen = (t: Record<string, Row[]>) => JSON.stringify(COUNTED_TABLES.map((k) => t[k] || []));
 
 Deno.test('المنطق الخالص: المرحلة الحالية أول متتابعة لم تنتهِ ثم المسار، والخدمة خارجها، والمقفلة وحدها تُفتح', () => {
@@ -218,9 +228,8 @@ const BODIES: Record<string, (ids: Record<string, string>) => Row> = {
   'peer.ask': () => ({ text: 'سؤال تجريبي عن المعالم', source: 'free' }), 'katon.answer': () => ({ sentence_id: U(803), verdict: 'true', confidence: 2 }),
 };
 // ردود معروفة ليست قفل مرحلة: حالة حقيقية أخرى للحساب، مسماة هنا بسببها فلا تمر صامتة
-const NOT_STAGE_LOCK: Record<string, string> = {
-  'tracking.get': 'not_approved', 'tracking.save': 'not_approved',   // المتابعة تبدأ بعد اعتماد وثيقة المبادرة، والاعتماد قرار مستشار لا يُختلق
-};
+// (المتابعة tracking.get وtracking.save كانت هنا بـnot_approved حتى قرار المالك 2026-11-21: تُفتح للحساب التجريبي للعرض)
+const NOT_STAGE_LOCK: Record<string, string> = {};
 // وفعلان مفتوحان في التصنيف يردهما حارسهما الداخلي عن الحساب التجريبي بقرار سابق (لا استبيان ولا تصدير بيانات له)
 const REFUSED_INSIDE: Record<string, string> = { 'sus.submit': 'demo', 'me.export': 'demo' };
 
@@ -277,7 +286,7 @@ Deno.test('المشي على كل مرحلة بعد «افتح الكل»: لا 
     }
     // 2) كل فعل في DEMO_OPEN: لا «مقفل» ولا «غير متاح للحساب التجريبي»
     const ids = { check: REQS.find((x) => x.code === 'E-CASE')!.id };
-    for (const action of [...ACTION_GATES.demoOpen].filter((a: string) => !['logout', 'sessions.revoke', 'demo.fill-profile', 'demo.fill-assessment'].includes(a))) {
+    for (const action of [...ACTION_GATES.demoOpen].filter((a: string) => !['logout', 'sessions.revoke', 'demo.fill-profile', 'demo.fill-assessment', 'demo.restart'].includes(a))) {
       await ask(action as string, BODIES[action as string]?.(ids) || {});
     }
     const locks = Object.entries(seen).filter(([, c]) => ['locked', 'demo', 'demo_only', 'out_of_program', 'pending'].includes(c) || c.startsWith('pay:'));
@@ -285,6 +294,8 @@ Deno.test('المشي على كل مرحلة بعد «افتح الكل»: لا 
     // 3) وما رُد بحالة أخرى تشبه القفل مسمّى بسببه، لا أكثر ولا أقل
     const lockish = Object.fromEntries(Object.entries(seen).filter(([, c]) => ['not_approved', 'closed', 'not_closed', 'no_cohort'].includes(c)));
     assertEquals(lockish, NOT_STAGE_LOCK);
+    // متابعة الأثر: مفتوحة للحساب التجريبي للعرض (قرار المالك 2026-11-21)، وقد مُشي عليها
+    assertEquals([seen['tracking.get'], seen['tracking.save']], ['ok', 'ok']);
     // القياس البعدي: حارسه حالة مرحلة التقييم، وقد فُتحت
     assert(seen['assessment.get'] !== 'locked');
     // ما أُنجز باليد إنجاز حقيقي على صف الحساب التجريبي وحده
@@ -390,4 +401,127 @@ Deno.test('معاينة الشهادة: القالب ببيانات الحساب
     assert(!issued?.serial);
     assertEquals(w.tables.certificates.length, 0);
   } finally { w.restore(); }
+});
+
+Deno.test('متابعة الأثر للحساب التجريبي: تُفتح للعرض بلا اعتماد مخزَّن ولا اسم مستشار، والمشارك الحقيقي غير المعتمدة وثيقته يُرد', async () => {
+  const w = world();
+  try {
+    const token = await w.adminOpen();
+    w.ready();
+    const demoId = w.demo().id;
+    const reports = async () => JSON.stringify([await A.overview({}), await X.adminList({}), await T.adminOutcomes({}), await IN.adminInsight()]);
+    // التقارير أولًا: بعضها يضيف حقولًا محسوبة إلى الصف المقروء في الذاكرة (أثر القاعدة المزيفة وحدها)
+    const reportsBefore = await reports();
+    const before = frozen(w.tables);
+    const mark = w.writes.length;
+    const got = await w.call('tracking.get', { token });
+    assertEquals([got.status, got.simulated, got.tracking.state.milestones.map((m: Row) => m.title)], [200, true, ['تجربة أولى للعرض']]);
+    // القراءة لا تكتب شيئًا، ولا صف مبادرة للحساب التجريبي، ولا اعتماد مخزَّن لأحد
+    assertEquals(frozen(w.tables), before);
+    assertEquals(w.tables.capstones.map((c) => [c.participant_id, c.status]), [[REAL, 'draft']]);
+    // لا مستشار ولا درجة ولا اعتماد في الرد، والوثيقة نفسها ما زالت مسودة بلا متابعة ملحقة بها
+    for (const k of ['approved_by', 'reviewed_by', 'score', 'sponsor']) assert(!JSON.stringify(got).includes(`"${k}"`), k);
+    const doc = await w.call('capstone.doc', { token });
+    assertEquals([doc.doc.meta.status, doc.doc.meta.approved_at, 'tracking' in doc.doc], ['draft', null, false]);
+    assertEquals((await w.call('capstone.get', { token })).capstone.status, 'draft');
+    // الحفظ: صف متابعة ونقاطه على الحساب التجريبي وحده، ولا بريد، ولا جدول آخر
+    const mail = await withNet(async (calls) => {
+      const saved = await w.call('tracking.save', { token, milestones: { m0: { status: 'on_track', note: 'يسير كما خُطط' } }, benefits: {}, narrative: 'تحديث أول للعرض في الحساب التجريبي', participant_id: REAL });
+      assertEquals([saved.status, saved.simulated, saved.tracking.updates.length], [200, true, 1]);
+      return resendCalls(calls).length;
+    });
+    assertEquals([mail, w.tables.mail_queue.length], [0, 0]);
+    assertEquals(w.tables.capstone_updates.map((u) => u.participant_id), [demoId]);
+    assert(w.tables.points_ledger.length >= 1 && w.tables.points_ledger.every((x) => x.participant_id === demoId));
+    assertEquals(JSON.stringify(COUNTED_TABLES.filter((k) => k !== 'points_ledger').map((k) => w.tables[k] || [])), JSON.stringify(JSON.parse(before).filter((_: unknown, i: number) => COUNTED_TABLES[i] !== 'points_ledger')));
+    assertEquals(new Set(w.writes.slice(mark).map((x) => x.table).filter((t) => !['auth_sessions', 'audit_log'].includes(t))), new Set(['capstone_updates', 'points_ledger']));
+    // قوائم الإدارة وأرقامها ومحفظة المتابعة وطابور مراجعة المبادرات كما كانت
+    assertEquals(await reports(), reportsBefore);
+    assert(!reportsBefore.includes(demoId));
+    assertEquals(((await IN.adminChanges({ cohort_id: COHORT })) as any).changes.filter((c: Row) => JSON.stringify(c).includes('tracking.')).length, 0);
+    // المشارك الحقيقي بوثيقة غير معتمدة وبالمحتوى نفسه: مردود، ولو أرسل علامة المحاكاة
+    const real = await w.realSession();
+    for (const action of ['tracking.get', 'tracking.save']) {
+      const r = await w.call(action, { token: real, simulated: true, is_demo: true, milestones: { m0: { status: 'done' } }, narrative: 'محاولة' });
+      assertEquals([action, r.status, r.code], [action, 403, 'not_approved']);
+    }
+    assertEquals(w.tables.capstone_updates.map((u) => u.participant_id), [demoId]);
+    await assertRejects(() => X.demoDoc(w.tables.participants.find((p) => p.id === REAL)), Error);
+    // ومسارات الأطراف الأخرى لا تمر بباب المحاكاة: متابعة الحساب التجريبي لغير صاحب الجلسة بلا شيء
+    assertEquals(await T.trackingOf(demoId), null);
+    // إعادة الضبط تمسحه
+    await D.reset(SUPER);
+    assertEquals([w.tables.capstone_updates.length, w.tables.points_ledger.length], [0, 0]);
+  } finally { w.restore(); }
+});
+
+Deno.test('«أعد من البداية»: يمسح كل ما يحمله الحساب التجريبي ويعيد صفه إلى أوله، وتبقى جلسات الجميع وروابطهم، ولا يمس مشاركًا حقيقيًا', async () => {
+  const w = world();
+  try {
+    const one: any = await D.linkCreate(ADMIN, { label: 'مدير الدفعة' }), two: any = await D.linkCreate(ADMIN, { label: 'مسؤول الجهة' });
+    const admin = await w.adminOpen();
+    const l1 = (await w.call('demo.link-open', { t: one.url.split('#try=')[1] })).token;
+    const l2 = (await w.call('demo.link-open', { t: two.url.split('#try=')[1] })).token;
+    w.ready();
+    const demoId = w.demo().id;
+    Object.assign(w.demo(), { job_title: 'مدير إدارة المشاريع', phone: '05' + '0'.repeat(8), bio: 'نبذة', name_confirmed_at: now, consented_at: now });
+    await w.call('demo.open-all', { token: l1 });
+    await w.call('demo.skip-stage', { token: l1 });
+    await w.call('requirement.update', { token: admin, requirement_id: REQS.find((x) => x.code === 'O-NOTE')!.id });
+    await w.call('tracking.save', { token: l2, milestones: { m0: { status: 'on_track' } }, benefits: {}, narrative: 'تحديث للعرض قبل الإعادة' });
+    w.tables.peer_answers = [{ id: U(650), request_id: U(651), author_id: demoId, text: 'إجابة', status: 'pending' }, { id: U(652), request_id: U(651), author_id: REAL, text: 'إجابة حقيقية', status: 'pending' }];
+    const held = (id: string) => Object.entries(w.tables).filter(([t, rows]) => !['participants', 'audit_log', 'auth_sessions'].includes(t) && rows.some((r) => r.participant_id === id || r.author_id === id)).map(([t]) => t).sort();
+    assert(held(demoId).length >= 7, held(demoId).join());
+    // كل صف ليس للحساب التجريبي، في كل جدول (الجداول الفارغة خارج المقارنة: القاعدة المزيفة تنشئها عند أول لمس)
+    const others = () => JSON.stringify(Object.fromEntries(Object.entries(w.tables).filter(([t]) => !['audit_log', 'auth_sessions'].includes(t)).map(([t, rows]) => [t, rows.filter((r) => r.participant_id !== demoId && r.author_id !== demoId && r.id !== demoId)] as [string, Row[]]).filter(([, rows]) => rows.length)));
+    const realBefore = others();
+    const sessions = w.tables.auth_sessions.length, links = JSON.stringify(w.tables.demo_links.map((l) => [l.id, l.revoked_at ?? null]));
+    // مشارك حقيقي يُرد ولا يُمسح له شيء
+    const real = await w.realSession();
+    const no = await w.call('demo.restart', { token: real });
+    assertEquals([no.status, no.code], [403, 'demo_only']);
+    // من جلسة رابط: يعود الحساب إلى أوله
+    const r = await w.call('demo.restart', { token: l2, participant_id: REAL });
+    assertEquals([r.status, r.restarted, r.participant.id, r.participant.full_name, r.participant.status, r.profile], [200, true, demoId, 'مشارك تجريبي', 'registered', null]);
+    assertEquals(held(demoId), []);
+    const row = w.demo();
+    for (const [k, v] of Object.entries(DEMO_ROW_RESET)) assertEquals(row[k] ?? null, v, k);
+    assertEquals([row.id, row.email, row.is_demo, row.organization_id ?? null], [demoId, DEMO_EMAIL, true, null]);
+    assert((r.journey as Row[]).every((s) => !s.skipped && !s.override));
+    assertEquals([stageOf(r, 'profile').status, stageOf(r, 'training').status], ['active', 'locked']);
+    // الجلسات كلها قائمة (جلسة المدير وجلستا الرابطين)، والروابط كما هي
+    assertEquals(await Promise.all([admin, l1, l2].map(async (t) => (await w.call('me', { token: t })).status)), [200, 200, 200]);
+    assertEquals([w.tables.auth_sessions.filter((x) => x.participant_id === demoId && !x.revoked_at).length, JSON.stringify(w.tables.demo_links.map((l) => [l.id, l.revoked_at ?? null]))], [3, links]);
+    assert(w.tables.auth_sessions.length >= sessions);
+    assertEquals((await w.call('me', { token: l1 })).demo_shared, true);
+    // لا شيء من مشارك حقيقي تغيّر
+    assertEquals(others(), realBefore);
+    // السجل يسمّي من فعلها (اسم الرابط) وما مُسح
+    const log = w.tables.audit_log.filter((x) => x.action === 'demo.restart');
+    assertEquals(log.map((x) => [x.actor_type, x.actor, x.after.by.label]), [['participant', demoId, 'مسؤول الجهة']]);
+    assert(['participant_stage_overrides', 'participant_requirements', 'placements', 'assessments', 'capstone_updates', 'model_submissions', 'peer_answers'].every((t) => log[0].after.cleared.includes(t)), log[0].after.cleared.join());
+    // الاعتماد سُحب فعلًا: ما كان مفتوحًا بعد الاعتماد عاد مقفلًا لهذا الحساب بمعرّفه نفسه (لا يُحفظ اعتماده في العامل)
+    for (const action of ['handbook.toc', 'capstone.get', 'tracking.get', 'demo.open-all']) assert(['locked', 'demo_gates'].includes((await w.call(action, { token: admin })).code), action);
+    // ثم يبدأ من جديد بالأزرار نفسها
+    assertEquals((await w.call('demo.restart', { token: admin })).status, 200);
+  } finally { w.restore(); }
+});
+
+Deno.test('حارس «أعد من البداية»: كل عمود في صف المشارك مصنّف (يعود أو يبقى)، وكل جدول يشير إلى المشارك داخل المسح أو مستثنى بسببه', async () => {
+  const sql = await Deno.readTextFile(new URL('../../schema/baseline.sql', import.meta.url));
+  const block = sql.slice(sql.indexOf('create table if not exists leaders.participants ('));
+  const cols = block.slice(0, block.indexOf('\n);')).split('\n').slice(1).map((l) => l.trim()).filter((l) => l && !l.startsWith('constraint')).map((l) => l.split(/\s+/)[0]);
+  assert(cols.length >= 30, String(cols.length));
+  const known = new Set([...Object.keys(DEMO_ROW_RESET), ...DEMO_ROW_KEEP]);
+  assertEquals(cols.filter((c) => !known.has(c)), [], 'عمود جديد في participants: صنّفه في DEMO_ROW_RESET أو DEMO_ROW_KEEP (demo-stage.js)');
+  assertEquals(Object.keys(DEMO_ROW_RESET).filter((c) => DEMO_ROW_KEEP.includes(c)), []);
+  // كل مفتاح أجنبي إلى participants: جدوله في قائمة المسح بعموده، أو يبقى (الجلسات)، أو ليس صفًا يملكه المشارك
+  const NOT_OWNED: Record<string, string> = { 'hall_sessions.leader_id': 'جلسة قاعة للدفعة، والعمود يُفرَّغ', 'hall_sessions.persona_id': 'جلسة قاعة للدفعة، والعمود يُفرَّغ' };
+  const cleared = new Map<string, string>([...[...Object.keys(EXPORT_TABLES), ...Object.keys(EXPORT_SKIPPED)].map((t) => [t, 'participant_id'] as [string, string]), ...Object.entries(DEMO_RESTART_EXTRA as Record<string, string>)]);
+  const fks = [...sql.matchAll(/alter table leaders\.(\w+) add constraint \w+ FOREIGN KEY \((\w+)\) REFERENCES leaders\.participants\(id\)/g)].map((m) => [m[1], m[2]]);
+  assert(fks.length >= 40, String(fks.length));
+  const missed = fks.filter(([t, c]) => !(cleared.get(t) === c) && !NOT_OWNED[`${t}.${c}`]).map(([t, c]) => `${t}.${c}`);
+  assertEquals(missed, []);
+  assertEquals(DEMO_RESTART_KEEP, ['auth_sessions']);
+  assert(cleared.has('auth_sessions'), 'الجلسات في القائمة العامة، وتُستثنى من المسح صراحة');
 });
