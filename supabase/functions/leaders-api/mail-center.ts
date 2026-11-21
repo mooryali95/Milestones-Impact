@@ -182,7 +182,7 @@ export async function loginLink(a: Admin, b: Body) {
   const p = must(await db.from('participants').select('id, email, full_name, status, is_demo').eq('id', String(b.participant_id)).maybeSingle()) as any;
   if (!p) throw new Fail('المشارك غير موجود', 404);
   if (p.status === 'suspended') throw new Fail('الحساب موقوف');
-  if (p.is_demo) throw new Fail('حساب العرض يُفتح من زر العرض');
+  if (p.is_demo) throw new Fail('الحساب التجريبي يُفتح من زره في النظرة العامة');
   const link = randomToken(24);
   must(await db.from('email_challenges').insert({
     email: p.email, purpose: 'login', code_hash: await hash(randomCode() + randomToken(8)), link_token_hash: await hash(link),

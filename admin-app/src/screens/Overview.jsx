@@ -91,7 +91,7 @@ function OrgsReadiness({ orgs, onOrg }) {
   );
 }
 
-// حساب العرض للورش: يفتح تطبيق المشارك من شاشة الدخول مع جولة الخطوات، ويُعاد إلى البداية بضغطة
+// الحساب التجريبي للورش: يفتح تطبيق المشارك من شاشة الدخول مع جولة الخطوات، ويُعاد إلى البداية بضغطة
 function DemoCard() {
   const { toast, confirm } = useUI();
   const [busy, setBusy] = useState(false);
@@ -113,14 +113,14 @@ function DemoCard() {
     setBusy(true);
     const r = await L('admin.demo-reset');
     setBusy(false);
-    toast(r.success ? 'أُعيد حساب العرض إلى البداية' : r.message);
+    toast(r.success ? 'أُعيد الحساب التجريبي إلى البداية' : r.message);
   };
   return (
     <section className="la-card la-demo">
       <div className="la-row between">
-        <div><b>حساب العرض التوضيحي</b><p className="la-muted">للورش: يفتح المنصة من شاشة الدخول، وجولة حيّة بثماني عشرة خطوة تضيء كل عنصر وتشرح المنظومة كاملة. لا يدخل الإحصاءات ولا يصله بريد.</p></div>
+        <div><b>الحساب التجريبي</b><p className="la-muted">للورش: يفتح المنصة من شاشة الدخول، وجولة حيّة بثماني عشرة خطوة تضيء كل عنصر وتشرح المنظومة كاملة. في أعلى شاشاته شريط «حساب تجريبي» وفيه «تخطَّ هذه المرحلة» و«افتح كل المراحل»، فتُعرض الرحلة كلها في جلسة واحدة. لا يدخل الإحصاءات ولا يصله بريد ولا تصدر له شهادة.</p></div>
         <span className="la-row">
-          <button className="btn-sm primary" disabled={busy} onClick={openDemo}>افتح حساب العرض</button>
+          <button className="btn-sm primary" disabled={busy} onClick={openDemo}>افتح الحساب التجريبي</button>
           <button className="btn-sm ghost" disabled={busy} onClick={reset}>أعِده إلى البداية</button>
         </span>
       </div>

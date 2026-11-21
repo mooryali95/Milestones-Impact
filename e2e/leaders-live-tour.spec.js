@@ -61,7 +61,7 @@ test('الجولة الحيّة: ثماني عشرة خطوة على شاشات 
   // 2: الدخول بحساب العرض من زر الجولة، والأبواب مضاءة
   await expect(tour.getByRole('heading', { name: 'أبواب الدخول' })).toBeVisible();
   await expect(page.locator('.tour-spot')).toBeVisible();
-  await tour.getByRole('button', { name: 'ادخل بحساب العرض' }).click();
+  await tour.getByRole('button', { name: 'ادخل بالحساب التجريبي' }).click();
 
   // 3: الملف يُملأ بضغطة
   await expect(tour.getByRole('heading', { name: 'الملف الشخصي' })).toBeVisible();

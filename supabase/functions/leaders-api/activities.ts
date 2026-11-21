@@ -1038,7 +1038,7 @@ export { MARK_REASON_MAX };
 export const MARK_BULK_MAX = 500;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MARK_REFUSAL: Record<string, string> = {
-  demo: 'حساب العرض لا يُسجَّل له حضور',
+  demo: 'الحساب التجريبي لا يُسجَّل له حضور',
   not_expected: 'ليس ممن يُتوقع حضورهم في هذه الجلسة',
   reason_required: 'اكتب سبب إلغاء حضور سجّله المشارك بنفسه',
   admin_only: 'سجّل حضوره بنفسه، وإلغاؤه للإدارة وحدها',

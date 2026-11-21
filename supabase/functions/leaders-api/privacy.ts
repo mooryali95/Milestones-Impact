@@ -31,7 +31,7 @@ export async function state(p: any) {
 }
 
 export async function exportData(p: any) {
-  if (p.is_demo) throw new Fail('حساب العرض لا يحمل بيانات شخصية تُصدَّر', 400, 'demo');
+  if (p.is_demo) throw new Fail('الحساب التجريبي لا يحمل بيانات شخصية تُصدَّر', 400, 'demo');
   if (await exportsToday(p) >= EXPORT_PER_DAY) throw new Fail(`بلغت حد النسخ اليومي (${EXPORT_PER_DAY}). تتاح نسخة جديدة بعد 24 ساعة`, 429, 'rate');
   const data: Record<string, unknown[]> = {};
   const skipped: string[] = [];
@@ -76,7 +76,7 @@ export async function exportData(p: any) {
 }
 
 export async function eraseRequest(p: any, b: Body) {
-  if (p.is_demo) throw new Fail('حساب العرض لا يُحذف من هنا', 400, 'demo');
+  if (p.is_demo) throw new Fail('الحساب التجريبي لا يُحذف من هنا', 400, 'demo');
   const cur = await pendingErase(p.id);
   if (!cur.ready) throw new Fail(`طلب الحذف من التطبيق غير متاح الآن. راسلنا على ${CONTACT_EMAIL} وننفذه خلال ${ERASE_REPLY_DAYS} يومًا`, 503, 'not_ready');
   if (b.cancel) {

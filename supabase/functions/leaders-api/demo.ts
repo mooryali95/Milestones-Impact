@@ -7,9 +7,10 @@
 // وروابط التجربة (تصور 2026-11-19): رابط باسم مستلمه يفتح جلسة مشارك لحساب العرض نفسه بلا رمز بريد، ينتهي ويُلغى،
 // ولا تُحفظ من رمزه إلا بصمته. جلساته وجلسة المدير لا تبطل إحداهما الأخرى. المنطق الخالص في demo-links.js.
 import { audit, CONFIG, db, DEMO_MAIL_DOMAIN, Fail, hash, must, randomToken } from './core.ts';
-import { assessmentGet, assessmentSubmit, issueSession, mePayload, profileSave } from './participant.ts';
+import { assessmentGet, assessmentSubmit, issueSession, journeyFor, mePayload, profileSave } from './participant.ts';
 import { scoreFor } from './logic.js';
 import { cleanDemoLinkInput, DEMO_LINK_LIMITS, DEMO_LINK_MAX_ACTIVE, demoLinkState, demoLinkUrl, demoLinkView } from './demo-links.js';
+import { DEMO_NAME_AR, DEMO_OPEN_NOTE, DEMO_SKIP_NOTE, demoLockedStages, demoSkipTarget } from './demo-stage.js';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
@@ -24,8 +25,8 @@ async function demoRow() {
   const { data } = await db.from('participants').select('*').eq('is_demo', true).eq('email', DEMO_EMAIL).maybeSingle();
   if (data) return data;
   return must(await db.from('participants').insert({
-    email: DEMO_EMAIL, full_name: 'مشارك العرض', is_demo: true, source: 'admin',
-  }).select('*').single(), 'تعذّر إنشاء حساب العرض');
+    email: DEMO_EMAIL, full_name: 'مشارك تجريبي', is_demo: true, source: 'admin',
+  }).select('*').single(), 'تعذّر إنشاء الحساب التجريبي');
 }
 
 // يفتح تطبيق المشارك بحساب العرض: رابط بجلسة جاهزة في جزء الرابط (لا يصل إلى أي خادم)
@@ -45,21 +46,21 @@ export async function reset(a: Admin) {
   const { data: p } = await db.from('participants').select('id').eq('is_demo', true).eq('email', DEMO_EMAIL).maybeSingle();
   if (p) {
     await db.from('certificates').delete().eq('participant_id', p.id);
-    must(await db.from('participants').delete().eq('id', p.id), 'تعذّر حذف حساب العرض');
+    must(await db.from('participants').delete().eq('id', p.id), 'تعذّر حذف الحساب التجريبي');
   }
   await audit('admin', a.email, 'demo.reset', 'participants', p?.id || 'none');
   return { success: true };
 }
 
-const onlyDemo = (p: any) => { if (!p.is_demo) throw new Fail('هذا متاح لحساب العرض فقط', 403); };
+const onlyDemo = (p: any) => { if (!p.is_demo) throw new Fail('هذا متاح للحساب التجريبي فقط', 403, 'demo_only'); };
 
 // تخطّي الملف الشخصي: بيانات عرض جاهزة
 export async function fillProfile(p: any) {
   onlyDemo(p);
   return profileSave(p, { fields: {
-    full_name: 'مشارك العرض', job_title: 'مدير إدارة المشاريع', organization_name: 'جهة العرض التوضيحي',
+    full_name: 'مشارك تجريبي', job_title: 'مدير إدارة المشاريع', organization_name: 'جهة تجريبية',
     sector: 'حكومي', phone: DEMO_PHONE, years_experience: 8, work_scope: null,
-    bio: 'حساب توضيحي لعرض رحلة القائد في الورشة الأولى.',
+    bio: 'حساب تجريبي لعرض رحلة القائد في الورشة الأولى.',
   } });
 }
 
@@ -83,6 +84,63 @@ export async function fillAssessment(p: any) {
 
 
 // ════════════════════════════════════════════════════════════════
+// المرحلة 1 من التصور: «تخطَّ هذه المرحلة» و«افتح كل المراحل»
+// ════════════════════════════════════════════════════════════════
+// التخطي يكتب تجاوزًا (skip) والفتح يكتب فتحًا (open) في participant_stage_overrides، وهي آلية تدخل الإدارة القائمة
+// في مرحلة مشارك (admin.stage-override). لا يُكتب إنجاز بند ولا حضور ولا درجة ولا اعتماد ولا شهادة، فلا دليل مختلق.
+// الصف المكتوب صف صاحب الجلسة وحده: لا معرّف مشارك يُقرأ من جسم الطلب، وonlyDemo يرد كل حساب غير تجريبي. وما يقرأ
+// هذه الصفوف (journeyFor) يحسب رحلة مشارك بعينه، وكل قائمة أو رقم يستبعد الحساب التجريبي بقاعدة counting.ts، فلا يبلغ
+// التخطي تقريرًا ولا جهة ولا خبيرًا ولا تذكيرًا. وإعادة الضبط تحذف الحساب فتُحذف صفوفه معه (on delete cascade).
+
+// من فتح الجلسة، لسطر السجل: اسم رابط التجربة لجلسة رابط، وإلا المدير صاحب آخر فتح من اللوحة (كل فتح منها يبطل ما
+// قبله، فالجلسة القائمة بلا رابط هي جلسته)
+async function openedBy(sessionId: string) {
+  const s = await db.from('auth_sessions').select('demo_link_id').eq('id', sessionId).maybeSingle();
+  const linkId = (s.data as any)?.demo_link_id;
+  if (linkId) {
+    const l = await db.from('demo_links').select('label').eq('id', linkId).maybeSingle();
+    return { link: linkId, label: (l.data as any)?.label || null };
+  }
+  const a = await db.from('audit_log').select('actor').eq('action', 'demo.open').order('created_at', { ascending: false }).limit(1);
+  return { admin: (a.data as any[] | null)?.[0]?.actor || null };
+}
+
+// يتخطى المرحلة الحالية وحدها (demoCurrentStage). بوابتا القبول تُتخطيان بما يفتحهما فعلًا في التطبيق: الملف يُملأ
+// ببيانات تجريبية، والقياس يُجاب ويُرسل فيُعتمد المسار آليًا (الزران القائمان)، فلا تبقى شاشة القبول أمام رحلة «مكتملة»
+export async function skipStage(p: any, _b: Body, sessionId: string) {
+  onlyDemo(p);
+  const j: any = p.profile_completed_at ? await journeyFor(p, { lite: true }) : null;
+  const target = demoSkipTarget({ profileDone: !!p.profile_completed_at, approved: !!j?.approved, journey: j?.journey || [] });
+  if (target.kind === 'profile') return fillProfile(p);
+  if (target.kind === 'assessment') return fillAssessment(p);
+  const stage = target.stage;
+  if (!stage) throw new Fail('لا مرحلة باقية للتخطي. أعد ضبط الحساب التجريبي من لوحة الإدارة لتبدأ من جديد', 409, 'demo_done');
+  must(await db.from('participant_stage_overrides').upsert({
+    participant_id: p.id, program_id: j.def.program_id, stage_key: stage.key, action: 'skip', note: DEMO_SKIP_NOTE, by_email: DEMO_NAME_AR, created_at: new Date().toISOString(),
+  }), 'تعذّر تخطي المرحلة');
+  await audit('participant', p.id, 'demo.stage-skip', 'participants', p.id, null, { stage: stage.key, program: j.def.program_id, by: await openedBy(sessionId) });
+  return { success: true, skipped: stage.key, ...(await mePayload(p)) };
+}
+
+// يفتح كل مرحلة مقفلة (بتتابع أو تاريخ أو اعتماد) فتظهر بمحتواها ويمكن العمل فيها، دون أن تُعد منتهية. بعد اعتماد
+// المسار وحده: قبله تقف بوابة البرنامج أمام الكتاب والمبادرة مهما فُتحت المراحل، فيُتخطى الملف والقياس أولًا
+export async function openAll(p: any, _b: Body, sessionId: string) {
+  onlyDemo(p);
+  const j: any = await journeyFor(p, { lite: true });
+  if (!p.profile_completed_at || !j.approved) throw new Fail('تخطَّ الملف والقياس أولًا، ثم افتح كل المراحل', 409, 'demo_gates');
+  const locked = demoLockedStages(j.journey);
+  if (locked.length) {
+    const at = new Date().toISOString();
+    must(await db.from('participant_stage_overrides').upsert(locked.map((s: any) => ({
+      participant_id: p.id, program_id: j.def.program_id, stage_key: s.key, action: 'open', note: DEMO_OPEN_NOTE, by_email: DEMO_NAME_AR, created_at: at,
+    }))), 'تعذّر فتح المراحل');
+    await audit('participant', p.id, 'demo.open-all', 'participants', p.id, null, { stages: locked.map((s: any) => s.key), program: j.def.program_id, by: await openedBy(sessionId) });
+  }
+  return { success: true, opened: locked.map((s: any) => s.key), ...(await mePayload(p)) };
+}
+
+
+// ════════════════════════════════════════════════════════════════
 // روابط التجربة
 // ════════════════════════════════════════════════════════════════
 const LINK_COLS = 'id, label, created_by, created_at, expires_at, revoked_at, last_used_at, uses';
@@ -102,7 +160,7 @@ export async function linkCreate(a: Admin, b: Body) {
   const now = Date.now();
   const cur = await db.from('demo_links').select('id', { count: 'exact', head: true }).is('revoked_at', null).gt('expires_at', new Date(now).toISOString());
   if (cur.error) must(cur);
-  if ((cur.count ?? 0) >= DEMO_LINK_MAX_ACTIVE) throw new Fail(`لحساب العرض ${DEMO_LINK_MAX_ACTIVE} رابطًا نشطًا، وهذا الحد. ألغِ رابطًا لا تحتاجه ثم أنشئ الجديد`, 409, 'limit');
+  if ((cur.count ?? 0) >= DEMO_LINK_MAX_ACTIVE) throw new Fail(`للحساب التجريبي ${DEMO_LINK_MAX_ACTIVE} رابطًا نشطًا، وهذا الحد. ألغِ رابطًا لا تحتاجه ثم أنشئ الجديد`, 409, 'limit');
   const token = randomToken();
   const row = must(await db.from('demo_links').insert({
     token_hash: await hash(token), label: input.label, created_by: a.email, expires_at: new Date(now + input.days * 864e5).toISOString(),

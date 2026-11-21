@@ -479,7 +479,7 @@ export async function participantSave(a: Admin, b: Body) {
   const id = String(b.participant_id || '');
   const p = must(await db.from('participants').select('id, full_name, email, phone, job_title, organization_name, is_demo, is_test').eq('id', id).maybeSingle()) as any;
   if (!p) throw new Fail('المشارك غير موجود', 404);
-  if (p.is_demo) throw new Fail('حساب العرض لا يُعدَّل من هنا', 409);
+  if (p.is_demo) throw new Fail('الحساب التجريبي لا يُعدَّل من هنا', 409);
   const f = b.fields && typeof b.fields === 'object' ? b.fields : {};
   const row: Record<string, unknown> = {};
   if ('full_name' in f) { const v = String(f.full_name || '').trim(); if (v.length < 3) throw new Fail('الاسم مطلوب (3 أحرف على الأقل)'); row.full_name = v.slice(0, 120); }
@@ -518,7 +518,7 @@ export async function participantImpact(b: Body) {
     countRows('participant_requirements', id), countRows('auth_sessions', id),
   ]);
   const blockers: string[] = [];
-  if (p.is_demo) blockers.push('حساب العرض يُعاد ضبطه من النظرة العامة ولا يُحذف من هنا');
+  if (p.is_demo) blockers.push('الحساب التجريبي يُعاد ضبطه من النظرة العامة ولا يُحذف من هنا');
   if (valid_certificates) blockers.push('له شهادة سارية يتحقق منها الناس برقمها؛ ألغِها أولًا، أو أوقف الحساب بدل حذفه');
   if (paid_payments) blockers.push('له دفع مؤكد، والحذف يفصل المال عن صاحبه؛ أوقف الحساب بدل حذفه');
   return {

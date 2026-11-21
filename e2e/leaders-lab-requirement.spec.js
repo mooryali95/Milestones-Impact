@@ -94,7 +94,7 @@ test('الإدارة: تحليل البطاقات يرتّب الأضعف أول
   await admin(page);
   await page.getByRole('button', { name: `تحليل بطاقات ${ITEM.title}` }).click();
   const sec = page.getByRole('region', { name: `تحليل بطاقات ${ITEM.title}` });
-  await expect(sec.getByText(/2 إجابة \(بلا حساب العرض وحسابات الاختبار\)/)).toBeVisible();
+  await expect(sec.getByText(/2 إجابة \(بلا الحساب التجريبي وحسابات الاختبار\)/)).toBeVisible();
   const first = sec.locator('tbody tr').first();
   await expect(first).toContainText('إدارة الجودة');
   await expect(first).toContainText('0%');

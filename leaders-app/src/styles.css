@@ -1948,7 +1948,34 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .svc-shelf .svc-line { margin: 0 0 6px; }
 
 /* رابط تجربة حساب العرض (TryLink.jsx): سطر الجلسة المشتركة، ورسالة الرابط الذي لا يفتح */
-.demo-shared-bar { background: var(--graphite); color: #fff; text-align: center; font-size: .875rem; line-height: 1.6; padding: 8px 16px; }
+/* شارة «حساب تجريبي» (DemoBar.jsx): شريط ثابت تحت الترويسة بلون لا يشبه شيئًا في رحلة المشارك الحقيقي، لا يُغلق.
+   خطوط مائلة في الحافة تميزه عن شريطي التحديث وانقطاع الاتصال */
+.demo-bar { background: var(--brand-cream); color: var(--graphite); border-block-end: 2px solid var(--gold);
+  background-image: repeating-linear-gradient(135deg, rgba(148, 112, 46, .13) 0 10px, transparent 10px 20px); font-size: .875rem; line-height: 1.6; }
+#root > .demo-bar { position: sticky; top: var(--topbar-h, 0px); z-index: 17; }
+.demo-bar-in { max-width: 1240px; margin: 0 auto; padding: 6px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+.demo-bar-id { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.demo-badge { background: var(--graphite); color: #fff; font-weight: 600; padding: 2px 12px; border-radius: 999px; white-space: nowrap; }
+.demo-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-inline-start: auto; }
+.demo-cur { color: var(--slate); }
+.demo-cur b { color: var(--graphite); font-weight: 600; }
+.demo-btn { font: inherit; font-weight: 600; min-height: 36px; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--graphite); background: var(--graphite); color: #fff; cursor: pointer; }
+.demo-btn.ghost { background: #fff; color: var(--graphite); }
+.demo-btn:disabled { opacity: .6; cursor: default; }
+.demo-open-note { color: var(--st-ok-text); font-weight: 600; }
+.demo-err { flex-basis: 100%; margin: 0; color: var(--bad); font-weight: 600; }
+@media (max-width: 620px) {
+  .demo-bar-in { padding: 6px 16px 8px; }
+  .demo-tools { margin-inline-start: 0; flex-basis: 100%; }
+  .demo-cur { flex-basis: 100%; }
+  .demo-btn { min-height: 44px; flex: 1 1 auto; }
+}
+@media print { .demo-bar { display: none; } }
+/* بطاقة نموذج الشهادة في الحساب التجريبي: على الهاتف النص سطر كامل والزر تحته */
+.cert-card.demo-cert { margin-bottom: 16px; }
+@media (max-width: 640px) { .cert-card.demo-cert > .grow { flex-basis: calc(100% - 60px); } .cert-card.demo-cert > .row { flex-basis: 100%; } .cert-card.demo-cert > .row .btn { flex: 1; min-height: 44px; } }
+/* وسم المرحلة المتخطاة في الحساب التجريبي: بلون الشارة لا بلون «مكتملة» */
+.chip.demo-skip { background: var(--brand-cream); color: var(--gold-text); border: 1px dashed var(--gold); }
 .try-gone { padding-block-start: 48px; text-align: center; }
 .try-gone h1 { font-size: 1.375rem; margin: 0; }
 .try-gone p { margin: 0; color: var(--muted); }

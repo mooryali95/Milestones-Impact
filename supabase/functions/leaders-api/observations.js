@@ -75,10 +75,11 @@ export const AUDIT_AR = {
   'coaching.group-cancelled': 'أُلغيت جلسة جماعية دُعي إليها', 'coaching.group-mark': 'سُجّل حضوره في جلسة جماعية',
   'coaching.add': 'أُضيفت له جلسة توجيه', 'coaching.booked': 'حجز جلسة توجيه', 'coaching.instant': 'طلب اتصالًا فوريًا',
   'certificate.awaiting-name': 'شهادته تنتظر تأكيد اسمه', 'certificate.skipped-disabled': 'لم تصدر شهادته لأن الإصدار موقوف',
-  'certificate.skipped-demo': 'لا تصدر شهادة لحساب العرض',
+  'certificate.skipped-demo': 'لا تصدر شهادة للحساب التجريبي',
   'sponsor.approve': 'قُبلت رعايته', 'sponsor.hold': 'عُلّقت رعايته حتى يتوفر مقعد', 'sponsor.reject': 'رُفضت رعايته',
   'admin.preview-as': 'عُرض ملفه كما يراه خبيره', 'expert.capstone-view': 'اطّلع خبير على وثيقة مبادرته', 'guide.transcript-read': 'قُرئت محادثته في التوجيه والإرشاد',
-  'demo.open': 'فُتح حساب العرض', 'demo.reset': 'أُعيد ضبط حساب العرض',
+  'demo.open': 'فُتح الحساب التجريبي', 'demo.reset': 'أُعيد ضبط الحساب التجريبي',
+  'demo.stage-skip': 'تُخطيت مرحلة في الحساب التجريبي', 'demo.open-all': 'فُتحت كل مراحل الحساب التجريبي',
   // ما يفعله المشارك نفسه (السجل يُقرأ أيضًا بمعرّفه فاعلًا)
   'assessment.submit-post': 'سلّم القياس البعدي', 'sponsor.request': 'طلب رعاية جهته', 'participant.sponsor': 'انضم إلى جهته', 'rater.invite': 'دعا مقيّمًا',
   'f360.start': 'بدأ تقييم 360', 'f360.self': 'أكمل تقييمه الذاتي في 360', 'f360.nominate': 'رشّح مقيّمًا في 360', 'f360.submit': 'أرسل مقيّميه في 360 للاعتماد', 'f360.plan': 'حفظ خطته من تقرير 360',

@@ -64,7 +64,7 @@ export async function get(a: Admin, b: Body) {
 // صفحة دفع مفتوحة: لو اكتملت بعد الحذف لخُصم ماله بلا حساب ووصله إيصال على عنوانه. تنتهي وحدها بعد أيام (expireAbandoned)
 export const PENDING_PAY_AR = `له صفحة دفع لم تكتمل بعد. تنتهي من تلقاء نفسها خلال ${EXPIRE_AFTER_DAYS} أيام، فنفّذ بعدها`;
 async function executeBlockers(impact: Awaited<ReturnType<typeof participantImpact>>) {
-  const out = impact.blockers.filter((x) => x.startsWith('حساب العرض'));
+  const out = impact.blockers.filter((x) => x.startsWith('الحساب التجريبي'));
   const { count, error } = await db.from('payments').select('id', { count: 'exact', head: true }).eq('participant_id', impact.participant.id).eq('status', 'pending');
   if (error) throw new Fail('تعذّر قراءة دفعاته', 503, 'busy');
   if ((count ?? 0) > 0) out.push(PENDING_PAY_AR);

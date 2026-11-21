@@ -118,7 +118,7 @@ export default function LiveTour({ me, onAccept, onGo }) {
     try {
       if (step.act === 'login') {
         const token = store.get(DEMO_PENDING);
-        if (!token) throw new Error('افتح رابط العرض من لوحة الإدارة من جديد');
+        if (!token) throw new Error('افتح الحساب التجريبي من لوحة الإدارة من جديد');
         onAccept({ token });
         const r = await call('me');
         if (!r.success) throw new Error(r.message);

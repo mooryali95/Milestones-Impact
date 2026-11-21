@@ -24,7 +24,7 @@ export async function state(role: Role, subject: any) {
 }
 
 export async function submit(role: Role, subject: any, b: Body) {
-  if (subject?.is_demo) throw new Fail('حساب العرض لا يشارك في الاستبيان', 400, 'demo');
+  if (subject?.is_demo) throw new Fail('الحساب التجريبي لا يشارك في الاستبيان', 400, 'demo');
   const m = await mine(role, subject.id);
   if (!m.ready) throw new Fail('الاستبيان غير متاح الآن', 503, 'not_ready');
   // «لاحقًا»: يُسجَّل التأجيل وحده

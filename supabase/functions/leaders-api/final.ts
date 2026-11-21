@@ -13,7 +13,7 @@ import { simulated } from './counting.ts';
 
 // حساب العرض لا يُرفع له تقييم ختامي ولا يُصوَّت عليه ولا يُعاد فتحه (تصور الحساب التجريبي 2026-11-19، المرحلة 0): القرار
 // يغيّر حالة المشارك ويصدر شهادة ويدخل لوحات الإدارة. القراءة (get) تبقى، وحارس الشهادة نفسه في certificates.ts
-const noDemo = (p: any) => { if (simulated(p)) throw new Fail('حساب العرض لا يُقيَّم ختاميًا: لا قرار له ولا شهادة', 400, 'demo'); };
+const noDemo = (p: any) => { if (simulated(p)) throw new Fail('الحساب التجريبي لا يُقيَّم ختاميًا: لا قرار له ولا شهادة', 400, 'demo'); };
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/.test(String(v || ''));
