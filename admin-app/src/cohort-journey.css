@@ -403,3 +403,7 @@ fieldset.cj-dates { margin: 0; min-inline-size: 0; }
 .cj-noattend-dlg section { display: grid; gap: 8px; justify-items: start; }
 .cj-noattend-dlg h4 { margin: 0; font-size: .95rem; color: var(--ink); }
 .cj-na-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* وسم الورشة في صف اليوم: الإلزامية بإطار متصل، والاختيارية منقطة باهتة (قرار المالك 2026-11-21) */
+.cj-tag.cj-counting { border-style: solid; font-weight: 600; color: var(--ink-soft); }
+.cj-tag.cj-counting.optional { border-style: dashed; font-weight: 500; color: var(--ink-mid); }

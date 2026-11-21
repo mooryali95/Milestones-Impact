@@ -116,6 +116,8 @@ for (const width of [1440, 390]) {
 
     await days.getByRole('button', { name: 'يوم أو ورشة في التدريب' }).click();
     const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
+    // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+    await form.getByRole('radio', { name: /^إلزامية/ }).check();
     await expect(form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)')).toHaveValue('اليوم 2');
     // لا حقل للدفعة: اليوم لهذه الدفعة وحدها
     await expect(form.locator('#f-cohort_id')).toHaveCount(0);
@@ -181,6 +183,8 @@ test('قبل ترحيل السعة: الحقل مخفي في البطاقة و«
   const days = page.locator('#cj-days-training');
   await days.getByRole('button', { name: 'يوم أو ورشة في التدريب' }).click();
   const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
+  // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+  await form.getByRole('radio', { name: /^إلزامية/ }).check();
   await expect(form.getByLabel('السعة (اختياري)')).toHaveCount(0);
   await form.getByLabel('المكان (القاعة والمدينة)').fill('جدة');
   await form.getByLabel('تبدأ').fill('2026-11-18T07:00');
@@ -256,6 +260,8 @@ test('المشارك يرى اليوم المضاف من البطاقة في ر�
   await admin(page, 1440, state);
   await page.locator('#cj-days-training').getByRole('button', { name: 'يوم أو ورشة في التدريب' }).click();
   const form = page.getByRole('dialog', { name: 'يوم أو ورشة في «التدريب»' });
+  // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+  await form.getByRole('radio', { name: /^إلزامية/ }).check();
   await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('اليوم الثالث');
   await form.getByLabel('المكان (القاعة والمدينة)').fill('الرياض، قاعة الأثر');
   // اليوم نفسه: نافذة الحضور مفتوحة (من ساعة قبل البدء)

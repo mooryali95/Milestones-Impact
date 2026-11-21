@@ -83,6 +83,8 @@ test.describe('جلسات برنامج بدفعة واحدة (admin-program-3)',
     await page.getByRole('button', { name: '+ موعد' }).click();
     const form = page.getByRole('dialog', { name: 'موعد جديد' });
     await expect(form.locator('#f-cohort_id')).toHaveValue('11111111-1111-1111-1111-111111111111');
+    // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+    await form.getByRole('radio', { name: /^إلزامية/ }).check();
     await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('اليوم الثاني');
     await form.getByLabel('المكان (القاعة والمدينة)').fill('القاعة الكبرى');
     await form.getByLabel('تبدأ').fill('2026-12-01T09:00');

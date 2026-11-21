@@ -17,6 +17,9 @@ import { features } from './features.ts';
 import { featureHiddenCodes, featureHiddenFor } from './features.js';
 import { isRunning, LIVE } from './cohort-running.js';
 import { listed } from './counting.ts';
+import { eachWorkshop } from './optional.js';
+import { sessionCols } from './workshop-optional.ts';
+import { cleanConfig } from './logic.js';
 
 type Body = Record<string, any>;
 
@@ -194,7 +197,7 @@ export async function orgCohortSetups(orgIds: string[]) {
     db.from('enrollments').select('participant_id, cohort_id, status, created_at'),
     listed(db.from('participants').select('id, organization_id')).limit(5000),
     db.from('cohort_experts').select('cohort_id, expert_id'),
-    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
+    db.from('workshop_sessions').select(await sessionCols('cohort_id, active, starts_at, ends_at')).eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
     db.from('programs').select('id, name, archived_at'),
   ]);
   for (const r of [cohorts, enr, people, team, sess]) if (r.error) throw r.error;
@@ -216,7 +219,7 @@ export async function orgCohortSetups(orgIds: string[]) {
     const setup = cohortSetup({
       cohort: c, advisorName: advName.get(c.advisor_expert_id) || null, advisorServes: serving.has(c.advisor_expert_id),
       teamCount: (team.data || []).filter((t: any) => t.cohort_id === c.id).length,
-      members: members[c.id] || 0, upcomingSessions: sessionsFor(c, sess.data || []), undatedSessions: undatedFor(c, sess.data || []),
+      members: members[c.id] || 0, upcomingSessions: sessionsFor(c, (sess.data || []) as any[]), undatedSessions: undatedFor(c, (sess.data || []) as any[]),
     });
     // برنامج الجهة للقراءة (P4): مشتق بترتيب pickCohort نفسه (orgProgram)، وتعذّر قراءة البرامج يتركه فارغًا
     const op = progs.error ? null : orgProgram(all, progs.data || [], id);
@@ -277,7 +280,7 @@ export async function list(_b: Body = {}, opt: { desk?: boolean } = {}) {
   const advIds = [...new Set((cohorts.data || []).map((c: any) => c.advisor_expert_id).filter(Boolean))] as string[];
   const [sess, advs] = await Promise.all([
     // الجلسات الفعّالة الحديثة والقادمة، وبلا دفعة كذلك (تعمّ الدفعات)، ثم sessionsFor لكل دفعة: القاعدة الواحدة
-    db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
+    db.from('workshop_sessions').select(await sessionCols('cohort_id, active, starts_at, ends_at')).eq('active', true).or(`starts_at.is.null,starts_at.gte.${new Date(Date.now() - 60 * 864e5).toISOString()}`).limit(5000),
     // journey-guard: اسم المستشار المعيَّن للعرض، والتعيين نفسه يحرسه journeyApproved عند الحفظ
     advIds.length ? db.from('experts').select('id, full_name, status, roles').in('id', advIds) : Promise.resolve({ data: [] as any[] }),
   ]);
@@ -303,7 +306,7 @@ export async function list(_b: Body = {}, opt: { desk?: boolean } = {}) {
     cohorts: (cohorts.data || []).map((c: any) => ({
       ...c, enrolled: enrolled[c.id] || 0, members: members[c.id] || 0, team_expert_ids: teams[c.id] || [], team_ready: true,
       // قراءة لم تنجح تترك الحقل فارغًا، فلا يظهر في الملف بند خاطئ
-      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, sess.data || []), undated_sessions: sess.error ? null : undatedFor(c, sess.data || []),
+      pending_approval: pending[c.id] || 0, upcoming_sessions: sess.error ? null : sessionsFor(c, (sess.data || []) as any[]), undated_sessions: sess.error ? null : undatedFor(c, (sess.data || []) as any[]),
       advisor_name: c.advisor_expert_id ? advisorName.get(c.advisor_expert_id) || null : null,
       advisor_serves: c.advisor_expert_id ? advisorServing.has(c.advisor_expert_id) : null,
     })),
@@ -517,7 +520,7 @@ export async function cohortDefinitionFor(b: Body) {
   // جلسات الدفعة لخطها الزمني (J1b): موعد كل جلسة جماعية أو «يُحدد لاحقًا»، قراءة فقط وبلا السر
   const wsIds = c ? view.requirements.filter((r: any) => r.kind === 'workshop' && r.id).map((r: any) => r.id) : [];
   const sessions = wsIds.length
-    ? (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, starts_at, ends_at, mode, active').in('requirement_id', wsIds)) || [])
+    ? (must(await db.from('workshop_sessions').select(await sessionCols('id, requirement_id, cohort_id, title_ar, starts_at, ends_at, mode, active')).in('requirement_id', wsIds)) || [])
       .filter((s: any) => !s.cohort_id || s.cohort_id === c.id)
     : [];
   // خطة الدفعة كما هي الآن (R2a): يقرؤها تبويب «الرحلة» مع التعريف نفسه، فلا تعرض المعاينة خطة أقدم من قائمة الدفعات
@@ -739,6 +742,62 @@ export async function cohortUpgrade(a: Admin, b: Body) {
   must(await db.from('cohorts').update({ program_version_id: to.id, ...plan.patch, updated_at: new Date().toISOString() }).eq('id', c.id));
   await audit('admin', a.email, 'cohort.upgrade', 'cohorts', c.id, null, { from: fromN, to: to.number, affected, dropped: plan.dropped });
   return out;
+}
+
+// ── المسار الموجّه: ورشة في مرحلة بلا نشاط حضور (قرار المالك 2026-11-21، تصور تشغيل الدفعة القسم 4.3 البند 6) ──
+// الجلسة دليل لنشاط دائمًا، فلا جلسة حرة: يُضاف إلى برنامج الدفعة نشاط «ورش إضافية» في المرحلة (config.each، optional.js)،
+// وتُحفظ نسخة به وتُثبَّت الدفعة عليها. النشاط خامد حتى تُضاف له ورشة إلزامية، فلا يغيّر عدًّا في هذه الدفعة ولا في دفعة
+// أخرى تُرقّى إلى النسخة لاحقًا. «البرنامج قالب» محفوظ: التغيير يمر بنسخة، ولا تُحفظ النسخة إن كان في مسودة البرنامج
+// تعديل آخر لم يُحفظ (فلا يُنشر تعديل لم يُرِده المدير)، ولا إن كانت الدفعة على نسخة أقدم (فلا تُرقّى بغير معاينتها).
+// طلب معاد بعد انقطاع يجد النشاط في المسودة فيكمل من حيث وقف ولا ينشئ ثانيًا.
+export const EXTRA_WORKSHOPS_TITLE = 'ورش إضافية';
+const NO_GUIDED_STAGES = ['profile', 'assessment'];
+/** نشاط الورش الإضافية لمرحلة في رحلة الدفعة. create=false قراءة وحدها: req فارغ إن لم يكن في نسختها بعد */
+export async function extraWorkshopReq(a: Admin, cohortId: string, stageKey: string, { create = false } = {}): Promise<{ req: any | null; created?: any }> {
+  const c = isUuid(cohortId) ? must(await db.from('cohorts').select('*').eq('id', cohortId).maybeSingle()) as any : null;
+  if (!c) throw new Fail('الدفعة غير موجودة', 404);
+  const version = c.program_version_id ? must(await db.from('program_versions').select('id, number, label, data').eq('id', c.program_version_id).maybeSingle()) as any : null;
+  if (!version) throw new Fail('الدفعة بلا نسخة مثبتة من برنامجها. ثبّتها من ملفها أولًا', 409, 'cohort_unpinned');
+  const active = (rows: any[]) => (rows || []).filter((r: any) => r.active !== false);
+  const stage = active(version.data?.stages).find((s: any) => s.key === stageKey);
+  if (!stage) throw new Fail('المرحلة ليست في رحلة هذه الدفعة', 404, 'stage_missing');
+  if (NO_GUIDED_STAGES.includes(stageKey)) throw new Fail('مرحلتا الملف والقياس تكملهما شاشتاهما، فلا تُضاف إليهما ورشة. أضفها في مرحلة بعدهما', 400, 'stage_gate');
+  const inStage = active(version.data?.requirements).filter((r: any) => r.stage_key === stageKey && r.kind === 'workshop');
+  const pinned = inStage.find(eachWorkshop);
+  if (pinned) return { req: pinned };
+  if (inStage.length) throw new Fail('في هذه المرحلة نشاط حضور. أضف الورشة إليه من بطاقة المرحلة', 400, 'stage_has_attendance');
+  if (!create) return { req: null };
+  const latest = await latestVersion(c.program_id);
+  if (latest && latest.id !== version.id) throw new Fail('الدفعة على نسخة أقدم من برنامجها. رقِّها إلى أحدث نسخة من ملفها، ثم أضف الورشة', 409, 'cohort_behind');
+  const live = await liveRows(c.program_id);
+  let req = active(live.requirements).find((r: any) => r.stage_key === stageKey && eachWorkshop(r)) || null;
+  // مسودة البرنامج تطابق نسخة الدفعة، إلا نشاط الورش الإضافية نفسه إن بقي من طلب انقطع قبل حفظ نسخته
+  const d = programDiff(version.data, programSnapshot(live.stages, live.requirements));
+  const extra = d.added.filter((x: any) => x.code !== req?.code);
+  if (extra.length || d.removed.length || d.changed.length || d.stages.added.length || d.stages.removed.length || d.stages.changed.length) {
+    throw new Fail('في رحلة البرنامج تعديلات لم تُحفظ نسخةً بعد. احفظها نسخة ورقِّ الدفعة إليها (أو تراجع عنها) من «البرامج»، ثم أضف الورشة', 409, 'program_draft');
+  }
+  if (!req) {
+    const codes = new Set(live.requirements.map((r: any) => r.code));
+    let n = 1;
+    while (codes.has(`W-EXTRA-${n}`)) n += 1;
+    const sort = Math.max(0, ...live.requirements.filter((r: any) => r.stage_key === stageKey).map((r: any) => Number(r.sort) || 0)) + 1;
+    req = must(await db.from('stage_requirements').insert({
+      program_id: c.program_id, stage_key: stageKey, code: `W-EXTRA-${n}`, title_ar: EXTRA_WORKSHOPS_TITLE, kind: 'workshop', required: true, needs_review: false, active: true, sort,
+      help_ar: 'ورش يضيفها فريق البرنامج عند الحاجة. الإلزامية منها مطلوبة لإكمال المرحلة، والاختيارية لا تُحسب في تقدمك.',
+      config: cleanConfig('workshop', { each: true, sessions_required: 1, verify: 'qr' }, {}),
+    }).select('*').single(), 'تعذّرت إضافة نشاط الورش') as any;
+    await audit('admin', a.email, 'requirement.create', 'stage_requirements', req.id, null, { code: req.code, stage_key: stageKey, auto: 'workshop.extra', cohort_id: c.id });
+  }
+  const after = await liveRows(c.program_id);
+  const block = versionBlock(after);
+  if (block) throw new Fail(block.msg, 400, block.code);
+  const v = await snapshotVersion(a, c.program_id, `${EXTRA_WORKSHOPS_TITLE} في «${stage.title_ar || stageKey}»`);
+  await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label, auto: 'workshop.extra' });
+  // النسخة الجديدة = نسخة الدفعة ومعها النشاط الخامد وحده، فالتثبيت لا يغيّر على أعضائها شيئًا ولا يُسقط من إعدادها شيئًا
+  must(await db.from('cohorts').update({ program_version_id: v.id, updated_at: new Date().toISOString() }).eq('id', c.id));
+  await audit('admin', a.email, 'cohort.upgrade', 'cohorts', c.id, null, { from: version.number, to: v.number, affected: 0, auto: 'workshop.extra' });
+  return { req, created: { id: v.id, number: v.number, label: v.label } };
 }
 
 // كم عضوًا في الدفعة له تقدم في متطلبات تختفي من رحلته: صفوف التقدم في هذه المتطلبات وحدها، ثم العضوية بقاعدة

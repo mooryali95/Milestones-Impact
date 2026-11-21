@@ -5,6 +5,7 @@
 import { requirementApplies, SESSION_DEFAULTS } from './logic.js';
 import { PHASE_AR } from './labels.js';
 import { plainInt } from './digits.js';
+import { countedDef, countedItems } from './optional.js';
 
 // ════════════════════════════════════════════════════════════════
 // نصوص الرحلة من الإعدادات: لا رقم جلسات أو مدة يُكتب في وصف
@@ -116,7 +117,7 @@ export function journeyCoherence(stages, requirements) {
     }
     // مرحلتا القبول تُكملهما شاشتان مخصصتان؛ متطلب إلزامي آخر فيهما يُكمَل من الرحلة بعدهما لا من الشاشة
     if (ONBOARDING_GATE[s.key]) {
-      for (const r of reqs.filter((x) => x.stage_key === s.key && x.required !== false && x.code !== ONBOARDING_GATE[s.key])) {
+      for (const r of reqs.filter((x) => x.stage_key === s.key && countedDef(x) && x.code !== ONBOARDING_GATE[s.key])) {
         out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: متطلب إلزامي في «${s.title_ar}» لا تُكمله شاشة ${s.key === 'profile' ? 'الملف' : 'القياس'}؛ يظهر للمشارك في رحلته بعدها، فاجعله في المرحلة التالية أو اختياريًا إن كان يمنع اكتمال المرحلة` });
       }
     }
@@ -135,7 +136,7 @@ export function programHours(requirements, levels = null) {
   let minutes = 0;
   const missing = [];
   for (const r of requirements || []) {
-    if (!TIMED_KINDS.has(r.kind) || r.required === false || (levels && !requirementApplies(r, levels))) continue;
+    if (!TIMED_KINDS.has(r.kind) || !countedDef(r) || (levels && !requirementApplies(r, levels))) continue;
     if (r.active === false) continue;
     const c = r.config || {};
     if (!c.minutes) { missing.push(r.code); continue; }
@@ -554,13 +555,14 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
   // المسار المستمر (T1): لا يدخل في «بعد الإلزامية قبلها» لأحد، وبنوده الإلزامية تُشترط قبل المرحلة المسماة في due_before
   // وحدها، أيًا كان موضعه في الترتيب (البنود معروفة قبل الحل). المسار المتجاوَز أو المعتمد اكتماله يُعد مستوفى
   const tracks = stages.filter((x) => laneKey(x) === 'track');
-  const trackReady = (t) => ['complete', 'skip'].includes(overrides[t.key]) || (t.items || []).filter((x) => x.required).every((x) => x.status === 'done');
+  const trackReady = (t) => ['complete', 'skip'].includes(overrides[t.key]) || countedItems(t.items).every((x) => x.status === 'done');
   for (let i = 0; i < stages.length; i++) {
     const s = stages[i];
     const r = stageRules(s);
     const ov = overrides[s.key] || null;
-    const required = s.items.filter((x) => x.required);
-    const byItems = r.complete === 'any' ? s.items.some((x) => x.status === 'done')
+    // الاختياري لا يكمل مرحلة بأي قاعدة (optional.js): «بأي متطلب» تعني أي بند يُعد
+    const required = countedItems(s.items);
+    const byItems = r.complete === 'any' ? required.some((x) => x.status === 'done')
       : r.complete === 'approval' ? false
         : required.length > 0 && required.every((x) => x.status === 'done');
     const before = stages.slice(0, i).filter((x) => stageRules(x).mode === 'required' && (!tracks.length || laneKey(x) !== 'track'));

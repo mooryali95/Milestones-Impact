@@ -5,12 +5,12 @@
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
-import { alertOps, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_CHANGE_MAIL, WORKSHOP_MAIL, workshopChangeMail, workshopMail } from './core.ts';
+import { alertOps, allFor, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_CHANGE_MAIL, WORKSHOP_MAIL, workshopChangeMail, workshopMail } from './core.ts';
 import { missingColumn, missingTable } from './missing-column.ts';
 import { counted, listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
-import { cohortMembers, contentLevelsFor, defOf, releaseOf, requirementFor } from './programs.ts';
+import { cohortMemberIds, cohortMembers, contentLevelsFor, defOf, extraWorkshopReq, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
 import { journeyFor } from './participant.ts';
 import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
@@ -22,6 +22,9 @@ import {
 } from './logic.js';
 import { journeyTimeline, outsideSessions } from './journey-timeline.js';
 import { MARK_REASON_MAX } from './labels.js';
+import { COUNTING, COUNTING_AR, countingOf, countsItem, eachWorkshop, optionalSession } from './optional.js';
+import { optionalReady, sessionCols } from './workshop-optional.ts';
+import { journeyProgress } from './logic.js';
 import { adminList as coachingGroupsList, decorateGroupRows, groupCols } from './coaching-groups.ts';
 
 type Body = Record<string, any>;
@@ -52,12 +55,14 @@ async function expertFor(id: unknown, coach: unknown, participantId?: string): P
 // جلسات الورش لرحلة المشارك، ومع كل جلسة اسم مدربها إن سُمّي («مع فلان»). والاسم وحده يخرج للمشارك، لا معرّف الخبير ولا بريده
 const JOURNEY_SESSION_COLS = 'id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, join_url, expert_id';
 async function journeySessions(ids: string[]): Promise<{ data: any[] }> {
-  const res = await db.from('workshop_sessions').select(JOURNEY_SESSION_COLS).in('requirement_id', ids);
+  // ومعها وسم الورشة الاختيارية حين يوجد عموده (sessionCols)، فيقرؤه workshopStatus ويخرج بها من العد
+  const res = await db.from('workshop_sessions').select(await sessionCols(JOURNEY_SESSION_COLS)).in('requirement_id', ids);
   const rows = (res.data || []) as any[];
   const names = await trainerNames(rows.map((s) => s.expert_id));
   return { data: rows.map(({ expert_id, ...s }) => (expert_id && names[expert_id] ? { ...s, trainer: names[expert_id] } : s)) };
 }
-export async function evidenceFor(p: any, reqs: any[], levels: Record<string, string>, approved: boolean, cohortId: string | null = null) {
+// patch: معاينة أثر تغيير وسم ورشة (countingImpact): جلسات المشارك كما ستكون بعد التغيير، بلا كتابة. لا يمر به إلا المعاينة
+export async function evidenceFor(p: any, reqs: any[], levels: Record<string, string>, approved: boolean, cohortId: string | null = null, patch: ((rows: any[]) => any[]) | null = null) {
   const mine = reqs.filter((r) => VERIFIED_KINDS.includes(r.kind) && r.active !== false && requirementApplies(r, levels));
   if (!mine.length) return {};
   const kinds = new Set(mine.map((r) => r.kind));
@@ -106,7 +111,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     reading: Object.fromEntries((reading.data || []).map((r: any) => [r.module_id, r])),
     quizzes: Object.fromEntries((quiz.data || []).map((r: any) => [r.module_id, true])),
     video: Object.fromEntries((video.data || []).map((r: any) => [r.requirement_id, r])),
-    workshops: (ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId),
+    workshops: (patch || ((x: any[]) => x))((ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId)),
     attended: new Set((att.data || []).map((a: any) => a.session_id)),
     // صفوف الجلسة الجماعية (المرحلة 5) تحمل عنوانها ومستشارها ومكانها، بلا أسماء بقية المدعوين
     coaching: await decorateGroupRows(coach.data || []),
@@ -546,7 +551,7 @@ async function overMaxCheck(r: any, participantId: string) {
 export async function overview() {
   const since = new Date(Date.now() - 90 * 864e5).toISOString();
   const [reqs, ws, att, coach, programs, cohorts] = await Promise.all([
-    db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active').in('kind', VERIFIED_KINDS).order('sort'),
+    db.from('stage_requirements').select('id, program_id, code, title_ar, stage_key, kind, config, dimension, level, active, required').in('kind', VERIFIED_KINDS).order('sort'),
     // بـ* لتحمل invited_at بعد الترحيل 20261110140000 وتعمل قبله؛ والسر لا يخرج إلى اللوحة (يُحذف أدناه)
     db.from('workshop_sessions').select('*').order('starts_at', { nullsFirst: false }),
     listed(db.from('workshop_attendance').select('session_id, participants!inner(is_demo)'), 'participants'),
@@ -579,7 +584,7 @@ export async function overview() {
     // صفوف الجلسات الجماعية تُعرض بكيانها في coaching_groups لا صفًّا صفًّا بين الفردية
     coaching: (coach.data || []).filter((x: any) => !x.group_id),
     coaching_groups: groups.groups || [], groups_ready: groups.ready !== false, ...(groups.failed ? { groups_failed: true } : {}),
-    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers,
+    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers, optional_ready: await optionalReady(),
   };
 }
 
@@ -616,6 +621,7 @@ export function cleanCapacity(v: unknown): number | null {
 // قبل الترحيل لا عمود: اللوحة تخفي الحقل، والحفظ يعيد المحاولة بلاه (missingColumn). وتعذّر القراءة لسبب آخر يخفيه
 // أيضًا فلا تسقط الشاشة به، والتحرير بلا الحقل يبقي السعة المحفوظة
 export async function capacityReady(): Promise<boolean> {
+  // optional-exempt: سؤال هل عمود السعة موجود، لا قراءة جلسات
   const { error } = await db.from('workshop_sessions').select('capacity').limit(1);
   if (error && !missingColumn(error)) console.error('workshop capacity', error.message);
   return !error;
@@ -667,6 +673,78 @@ async function checkTrainer(row: Body, out: Body, prev: any) {
   if (!out.cohort_id || !(await cohortTrainers([out.cohort_id]))[out.cohort_id]?.some((e) => e.id === prev.expert_id)) out.expert_id = null;
 }
 
+// ── وسم الورشة: إلزامية أو اختيارية (قرار المالك 2026-11-21، القاعدة في optional.js) ──
+// الأثر يُحسب من رحلة كل عضو كما يراها هو (journeyFor)، مرتين: كما هي، وكما ستكون بجلسات معدّلة (patch)، بلا كتابة. فلا حساب
+// ثانٍ للتقدم ولا للاكتمال. ولمرحلة لم يُنشأ نشاط ورشها بعد (المسار الموجّه أول مرة) يُحسب من الرحلة الحالية وحدها.
+// حفظ الاكتمال: من كان التغيير سيسحب منه اكتمال نشاط أو مرحلة يُكتب له صف تقدم «done» على النشاط بملاحظته وسجله، فيبقى مكتملًا.
+// لا يُسحب اكتمال من أحد بصمت، ولا تُمس شهادة (الشهادة صف صادر لا يُعاد حسابه من الرحلة).
+export const COUNTING_MEMBERS_MAX = 600;
+export const PRESERVE_NOTE = 'أتم ما يخصه قبل تغيير وسم ورشة، فحُفظ اكتماله';
+type Impact = { members: number; preserved: number; required_of: number; completes: number; progress_up: number; progress_down: number };
+async function countingPeople(cohortId: string) {
+  const m = await cohortMemberIds(cohortId);
+  if (!m) throw new Fail('الدفعة غير موجودة', 404);
+  if (m.ids.length > COUNTING_MEMBERS_MAX) throw new Fail(`الدفعة أكبر من أن يُحسب أثر الوسم على أعضائها هنا (${m.ids.length} عضوًا، والحد ${COUNTING_MEMBERS_MAX})`, 413, 'cohort_too_large');
+  // counting-exempt: معرّفات أعضاء الدفعة من cohortMemberIds (listed)، فلا يدخل الأثر حساب العرض ولا حساب الاختبار
+  const rows = (m.ids.length ? await allFor(m.ids, () => db.from('participants').select('*').order('id'), 'id') : []) as any[];
+  return rows.filter((p) => inProgram(p.status));
+}
+async function eachMember<T>(rows: any[], fn: (p: any) => Promise<T>): Promise<T[]> {
+  const out: T[] = [];
+  const queue = [...rows];
+  await Promise.all(Array.from({ length: 6 }, async () => { for (let p = queue.shift(); p; p = queue.shift()) out.push(await fn(p)); }));
+  return out;
+}
+const tally = (rows: { lose: boolean; before: number; after: number; completes: boolean; asked: boolean; id: string }[]) => {
+  const impact: Impact = { members: rows.length, preserved: 0, required_of: 0, completes: 0, progress_up: 0, progress_down: 0 };
+  const preserve: string[] = [];
+  for (const r of rows) {
+    // من حُفظ اكتماله لا يتغير له شيء، فلا يُعد في غيره
+    if (r.lose) { impact.preserved += 1; preserve.push(r.id); continue; }
+    if (r.completes) impact.completes += 1;
+    if (r.asked) impact.required_of += 1;
+    if (r.after > r.before) impact.progress_up += 1; else if (r.after < r.before) impact.progress_down += 1;
+  }
+  return { impact, preserve };
+};
+/** أثر تغيير في جلسات نشاط قائم في رحلة الدفعة: patch يعيد جلسات المشارك كما ستكون */
+async function countingImpact(cohortId: string, requirementId: string, patch: (rows: any[]) => any[]) {
+  const people = await countingPeople(cohortId);
+  const rows = (await eachMember(people, async (p) => {
+    const [b, a] = [await journeyFor(p, { lite: true }), await journeyFor(p, { lite: true, sessions: patch })];
+    const at = (j: any) => { const st = (j.journey || []).find((s: any) => (s.items || []).some((i: any) => i.id === requirementId)); return { st, it: st?.items.find((i: any) => i.id === requirementId) }; };
+    const [x, y] = [at(b), at(a)];
+    if (!x.it || !y.it) return null;
+    const lose = (x.it.status === 'done' && y.it.status !== 'done') || (x.st.status === 'done' && y.st.status !== 'done');
+    return { id: p.id as string, lose, before: b.progress, after: a.progress, completes: x.it.status !== 'done' && y.it.status === 'done',
+      asked: countsItem(y.it) && y.it.status !== 'done' && !countsItem(x.it) };
+  })).filter(Boolean) as any[];
+  return tally(rows);
+}
+/** أثر أول ورشة إلزامية في مرحلة لم يُنشأ نشاط ورشها بعد: بند جديد يُعد في مرحلتها. من أتمها يُحفظ له، والباقون تصير مطلوبة منهم */
+async function newActivityImpact(cohortId: string, stageKey: string) {
+  const people = await countingPeople(cohortId);
+  const rows = (await eachMember(people, async (p) => {
+    const b = await journeyFor(p, { lite: true });
+    const st = (b.journey || []).find((s: any) => s.key === stageKey);
+    if (!st) return null;
+    const lose = st.status === 'done';
+    const after = lose ? b.progress : journeyProgress(b.journey.map((s: any) => (s.key === stageKey ? { ...s, total: (Number(s.total) || 0) + 1 } : s)));
+    return { id: p.id as string, lose, before: b.progress, after, completes: false, asked: !lose };
+  })).filter(Boolean) as any[];
+  return tally(rows);
+}
+/** يكتب حفظ الاكتمال: صف تقدم «done» على النشاط لمن لا صف مكتمل له. بلا completed_at: ليس إنجازًا جديدًا في «ماذا تغيّر» */
+async function preserveCompletion(a: any, requirementId: string, ids: string[]) {
+  if (!ids.length) return 0;
+  const have = new Set(((must(await db.from('participant_requirements').select('participant_id, status').eq('requirement_id', requirementId).in('participant_id', ids)) ?? []) as any[])
+    .filter((r) => r.status === 'done').map((r) => r.participant_id));
+  const rows = ids.filter((id) => !have.has(id)).map((id) => ({ participant_id: id, requirement_id: requirementId, status: 'done', note: PRESERVE_NOTE, reviewed_by: a.email, reviewed_at: new Date().toISOString(), completed_at: null }));
+  if (rows.length) must(await db.from('participant_requirements').upsert(rows), 'تعذّر حفظ اكتمال من أتم قبل التغيير');
+  return rows.length;
+}
+export const OPTIONAL_NOT_READY_FAIL = 'الورشة الاختيارية غير مفعّلة بعد: تحتاج تحديث قاعدة البيانات. احفظها إلزامية، أو أعد المحاولة بعد التحديث';
+
 // الحفظ الواحد للجلسة (القرار 23): من «الحضور والجلسات» وبطاقة المرحلة والنقرة على الخط الزمني (المرحلة 4). ومعه اختياران
 // صريحان من النموذج لا يُرسل بريد بغيرهما: invite (أرسل الدعوة عند الحفظ) وnotify_change (أبلغ المدعوين بتغيّر الموعد أو المكان)
 export async function workshopSave(a: any, b: Body) {
@@ -686,6 +764,13 @@ export async function workshopSave(a: any, b: Body) {
   if ('cohort_id' in row || !row.id) out.cohort_id = /^[0-9a-f-]{36}$/.test(String(row.cohort_id || '')) ? row.cohort_id : null;
   if (!out.title_ar) throw new Fail('عنوان الجلسة مطلوب');
   if (when.error) throw new Fail(when.error);
+  // الوسم (optional.js): اللوحة تفرض اختيارًا صريحًا بلا قيمة مسبقة. وغيابه في طلب (لوحة أقدم مفتوحة لحظة النشر، أو تحرير لا
+  // يمسه) يعني في الإنشاء «إلزامية» كما كانت كل ورشة قبل القرار، وفي التحرير بقاء الوسم القائم
+  const counting: 'mandatory' | 'optional' | null = COUNTING.includes(row.counting) ? row.counting : null;
+  const preview = b.preview === true;
+  if (counting === 'optional' && !(await optionalReady())) throw new Fail(OPTIONAL_NOT_READY_FAIL, 409, 'optional_not_ready');
+  let effect: { impact: Impact; preserve: string[] } | null = null;
+  let countingFrom: string | null = null;
   // السعة (W3): تُكتب حين يرسلها النموذج وحده، فغيابها في التحرير يُبقي القائمة
   if ('capacity' in row) out.capacity = cleanCapacity(row.capacity);
   // قبل الترحيل 20261116060000 يرفض القيد الموعد الفارغ (23502 أو 23514): رسالة تقول السبب بدل «تعذّر الحفظ»
@@ -712,22 +797,75 @@ export async function workshopSave(a: any, b: Body) {
     const read = must(await db.from('workshop_sessions').select('*').eq('id', row.id).maybeSingle()) as any;
     prev = read ? { ...read } : null;
     await checkTrainer(row, out, prev);
+    // تغيير الوسم لاحقًا: بمعاينة أثره بالأرقام ثم تأكيد صريح (counting_confirm)، وسجل بالأرقام نفسها
+    if (prev && counting && counting !== countingOf(prev)) {
+      const cohortId = 'cohort_id' in out ? out.cohort_id : prev.cohort_id;
+      if (!cohortId || cohortId !== prev.cohort_id) throw new Fail('وسم ورشة تعمّ الدفعات أو تُنقل إلى دفعة أخرى لا يتغير في الحفظ نفسه. حدد دفعتها واحفظ، ثم غيّر الوسم', 400, 'counting_general');
+      const to = counting === 'optional';
+      effect = await countingImpact(cohortId, prev.requirement_id, (rows) => rows.map((s) => (s.id === prev.id ? { ...s, optional: to } : s)));
+      countingFrom = countingOf(prev);
+      out.optional = to;
+      if (!preview && b.counting_confirm !== true) throw new Fail('تغيير وسم الورشة يحتاج تأكيدًا بعد معاينة أثره', 409, 'counting_confirm', { impact: effect.impact });
+    }
+    const flipped = !!effect;
+    // إعادة ورشة إلزامية ملغاة في نشاط «ورش إضافية» ترفع المطلوب كإضافتها: يُحفظ اكتمال من أتم قبلها، بلا سؤال (لا يُسحب شيء)
+    if (prev && !effect && prev.active === false && out.active !== false && prev.cohort_id && !optionalSession(prev)) {
+      const rq = (await db.from('stage_requirements').select('id, kind, config').eq('id', prev.requirement_id).maybeSingle()).data as any;
+      if (eachWorkshop(rq)) effect = await countingImpact(prev.cohort_id, prev.requirement_id, (rows) => rows.map((s) => (s.id === prev.id ? { ...s, active: true } : s)));
+    }
+    if (preview) return { success: true, preview: true, counting: counting || (prev ? countingOf(prev) : 'mandatory'), changed: flipped, impact: effect?.impact || null };
     const at = (v: any) => (v ? Date.parse(v) : null);
     if (prev && at(prev.starts_at) !== at(out.starts_at)) {
       for (const k of ['invited_at', 'reminded_day_at', 'reminded_hour_at']) if (k in prev) out[k] = null;
     }
     saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').update(x).eq('id', row.id).select('id').single())), 'تعذّر الحفظ');
   } else {
-    const r = must(await db.from('stage_requirements').select('id, kind').eq('id', String(row.requirement_id || '')).maybeSingle());
-    if (!r || r.kind !== 'workshop') throw new Fail('اختر متطلب ورشة');
+    const want = counting || 'mandatory';
+    // المسار الموجّه: مرحلة بلا نشاط حضور. يُنشأ فيها نشاط «ورش إضافية» في برنامج الدفعة بنسخة وترقية (extraWorkshopReq)،
+    // والمعاينة لا تنشئ شيئًا
+    const guided = !row.requirement_id && !!row.stage_key;
+    let r: any;
+    let created: Body | null = null;
+    if (guided) {
+      if (!out.cohort_id) throw new Fail('الورشة في مرحلة بلا نشاط حضور تُضاف لدفعة بعينها', 400, 'guided_needs_cohort');
+      const g = await extraWorkshopReq(a, out.cohort_id, String(row.stage_key), { create: !preview });
+      r = g.req;
+      created = g.created || null;
+      if (want === 'mandatory') effect = r ? await countingImpact(out.cohort_id, r.id, (rows) => [...rows, { id: 'new', requirement_id: r.id, cohort_id: out.cohort_id, active: true, title_ar: out.title_ar, starts_at: out.starts_at, ends_at: out.ends_at, mode }])
+        : await newActivityImpact(out.cohort_id, String(row.stage_key));
+    } else {
+      r = must(await db.from('stage_requirements').select('id, kind, config').eq('id', String(row.requirement_id || '')).maybeSingle());
+      if (!r || r.kind !== 'workshop') throw new Fail('اختر متطلب ورشة');
+      // نشاط «ورش إضافية» ورشه لدفعة بعينها: ورشة عامة إلزامية فيه كانت سترفع المطلوب في كل دفعات البرنامج بلا معاينة
+      if (eachWorkshop(r) && !out.cohort_id) throw new Fail('ورش هذا النشاط تُضاف لدفعة بعينها. اختر الدفعة', 400, 'each_needs_cohort');
+      // في نشاط «ورش إضافية» كل ورشة إلزامية مطلوبة بعينها، فإضافتها ترفع المطلوب: يُحسب أثرها ويُحفظ اكتمال من أتم
+      if (want === 'mandatory' && eachWorkshop(r) && out.cohort_id && out.active !== false) {
+        effect = await countingImpact(out.cohort_id, r.id, (rows) => [...rows, { id: 'new', requirement_id: r.id, cohort_id: out.cohort_id, active: true, title_ar: out.title_ar, starts_at: out.starts_at, ends_at: out.ends_at, mode }]);
+      }
+    }
+    if (preview) return { success: true, preview: true, counting: want, changed: false, impact: effect?.impact || null, guided };
     await checkTrainer(row, out, null);
+    // العمود يُكتب بعد ترحيله وحده: قبله كل ورشة إلزامية كما كانت، و«اختيارية» رُفضت أعلاه برسالتها
+    if (await optionalReady()) out.optional = want === 'optional';
     const secret = randomToken(32);
     saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').insert({ ...x, requirement_id: r.id, secret }).select('id').single())), 'تعذّر الحفظ');
+    if (created) (saved as any).version_created = created;
+    prev = null;
+    (saved as any).requirement_id = r.id;
   }
   await audit('admin', a.email, row.id ? 'workshop.update' : 'workshop.create', 'workshop_sessions', saved.id, null, out);
+  // حفظ اكتمال من كان التغيير سيسحبه منه، ثم سطر السجل بالأرقام
+  let preserved = 0;
+  if (effect) {
+    const reqId = row.id ? prev.requirement_id : (saved as any).requirement_id;
+    preserved = await preserveCompletion(a, reqId, effect.preserve);
+    await audit('admin', a.email, 'workshop.counting', 'workshop_sessions', saved.id, countingFrom ? { counting: countingFrom } : null,
+      { counting: countingFrom ? counting : 'mandatory', ...effect.impact, preserved_written: preserved, preserved_ids: effect.preserve.slice(0, 200), requirement_id: reqId });
+  }
   // البريد بعد الحفظ وباختيار صريح وحده. تعذّره لا يُسقط الحفظ (فلا تُنشأ الجلسة مرتين بإعادة المحاولة): يُرد بنتيجته
   const mail = await saveMail(a, saved.id, prev, b).catch((e) => { console.error('workshop save mail', saved.id, (e as Error).message); return { mail_error: true }; });
-  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...mail };
+  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...mail,
+    ...(effect ? { impact: effect.impact } : {}), ...((saved as any).version_created ? { version_created: (saved as any).version_created } : {}) };
 }
 
 // ── البريد عند الحفظ (المرحلة 4): «أرسل الدعوة عند الحفظ» و«أبلغ المدعوين بالتغيير» ──
@@ -860,7 +998,7 @@ export async function cohortWorkshops(b: Body) {
   // خبراء هذه الدفعة لحقل «المدرب» في نموذج اليوم (المرحلة 4)
   const trainers = (await cohortTrainers([c.id]).catch((e) => { console.error('cohort trainers', e); return {} as Record<string, any[]>; }))[c.id] || [];
   // توافق مع نسخة اللوحة المنشورة قبل هذا التنظيف (تحديث بلا أثر): لوحة مفتوحة لحظة النشر تقرأ هذه الإشارة، فتبقى ثابتة إصدارًا واحدًا وتُحذف بعد 2026-12-04
-  const base = { success: true, capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, trainers };
+  const base = { success: true, capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, trainers, optional_ready: await optionalReady() };
   if (!ids.length) return { ...base, sessions: [] };
   // متطلبات برنامج الدفعة وحدها، فلا تُقرأ جلسات برنامج آخر برقم متطلب مرسل
   const reqs = (must(await db.from('stage_requirements').select('*').in('id', ids).eq('program_id', c.program_id).eq('kind', 'workshop')) || []) as any[];
@@ -1076,6 +1214,7 @@ export async function coachAvailable(a: any, b: Body) {
   return { success: true, instant_until: config.instant_until };
 }
 
+export const GROUP_PLACE_TBD_AR = 'حضورية، ويصلك مكانها من فريق البرنامج';
 // ── تذكير الجلسات (من المهمة الساعية) ──
 // الجلسات المحجوزة التي تبدأ بين 23 و25 ساعة من الآن، ولم يُرسل تذكيرها: مرة واحدة لكل جلسة
 export async function sessionReminders() {
@@ -1085,6 +1224,8 @@ export async function sessionReminders() {
     .eq('status', 'booked').is('reminded_at', null)
     .gte('starts_at', new Date(now + 23 * 36e5).toISOString()).lte('starts_at', new Date(now + 25 * 36e5).toISOString()).limit(200);
   let sent = 0;
+  // صفوف الجلسة الجماعية تحمل طريقتها ومكانها (decorateGroupRows)، كما يراها المشارك في رحلته
+  await decorateGroupRows((data || []) as any[]);
   for (const s of (data || []) as any[]) {
     const { data: mark } = await db.from('coaching_sessions').update({ reminded_at: new Date().toISOString() }).eq('id', s.id).is('reminded_at', null).select('id');
     if (!mark?.length || !s.participants?.email) continue;
@@ -1092,9 +1233,12 @@ export async function sessionReminders() {
     if (s.group_id && s.participants.is_test) continue;
     const when = new Date(s.starts_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
     // ومعه دعوة تقويم تُضاف بنقرة، بتنبيه قبل الجلسة بنصف ساعة
+    // الجلسة الجماعية الحضورية (المرحلة 5): التذكير يذكر مكانها، ولا رابط لها. مكان لم يُكتب بعد يُقال بصراحته
+    const place = s.group?.mode === 'in_person' ? s.group.location || GROUP_PLACE_TBD_AR : null;
+    const joinUrl = place ? null : s.join_url || null;
     const ics = icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at || new Date(Date.parse(s.starts_at) + 36e5).toISOString(),
-      title: `جلسة توجيه${s.experts?.full_name ? ` مع ${s.experts.full_name}` : ''} · برنامج القادة`, description: 'Milestone Impact · Leaders Program', url: s.join_url || '' });
-    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, s.join_url || null), [ics]).catch((e) => console.error('session reminder', s.id, e));
+      title: `جلسة توجيه${s.experts?.full_name ? ` مع ${s.experts.full_name}` : ''} · برنامج القادة`, description: place && s.group?.location ? s.group.location : 'Milestone Impact · Leaders Program', url: joinUrl || '' });
+    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, joinUrl, place), [ics]).catch((e) => console.error('session reminder', s.id, e));
     sent += 1;
   }
   return sent;
@@ -1153,6 +1297,8 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', 
   // المدرب المسمى في الدعوة وإشعار التغيير («مع فلان»)، والتذكيران كما كانا
   const trainer = byAdmin && s.expert_id ? (await trainerNames([s.expert_id]))[s.expert_id] || null : null;
   const when = workshopWhen(s.starts_at);
+  // الورشة الاختيارية تُدعى وتُذكَّر كغيرها، وعنوانها في البريد يقول إنها اختيارية
+  const title = optionalSession(s) ? `${s.title_ar} (${COUNTING_AR.optional})` : s.title_ar;
   // ومن لا تفتح له مرحلتها يُدعى بموعدها، ونص البريد له أن الرابط في رحلته حين تُفتح، لا تعليمات القاعة
   const online = s.mode === 'online' && !!s.join_url;
   // عن بعد بلا رابط بعد: البريد يقول إن الرابط يصل قبل الجلسة، لا تعليمات القاعة
@@ -1172,8 +1318,8 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', 
   for (const m of people) {
     const link = online && open.has(m.id) ? s.join_url : null;
     const staged = online && !link ? 'staged' : linkLater ? 'later' : false;
-    const html = kind === 'change' ? workshopChangeMail(m.name, s.title_ar, when, s.location_ar || null, link, staged, changed, trainer)
-      : workshopMail(kind, m.name, s.title_ar, when, s.location_ar || null, link, staged, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link), trainer);
+    const html = kind === 'change' ? workshopChangeMail(m.name, title, when, s.location_ar || null, link, staged, changed, trainer)
+      : workshopMail(kind, m.name, title, when, s.location_ar || null, link, staged, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link), trainer);
     try {
       const out = await sendMail(m.email, kind === 'change' ? WORKSHOP_CHANGE_MAIL.subject : WORKSHOP_MAIL[kind].subject, html, link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
       if (out === 'queued') queued += 1; else sent += 1;
@@ -1246,7 +1392,7 @@ export async function expertWorkshops(e: any) {
   if (!ids.length) return { success: true, sessions: [] };
   const now = Date.now();
   // الأعمدة التي يُبنى منها الرد وحدها، فلا يُقرأ سر الجلسة هنا أصلًا
-  const rows = (must(await db.from('workshop_sessions').select('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, created_at, expert_id').in('cohort_id', ids)
+  const rows = (must(await db.from('workshop_sessions').select(await sessionCols('id, requirement_id, cohort_id, title_ar, location_ar, starts_at, ends_at, active, mode, created_at, expert_id')).in('cohort_id', ids)
     .eq('active', true)) ?? []) as any[];
   const dated = rows.filter((s) => !isUndated(s));
   const soon = (s: any) => s.mode === 'in_person' && Date.parse(s.ends_at) + 1800e3 >= now && Date.parse(s.starts_at) <= now + 14 * 864e5;
@@ -1263,7 +1409,7 @@ export async function expertWorkshops(e: any) {
   // المدرب المسمى للجلسة (المرحلة 4): mine لجلسته هو («أنت مدربها»)، واسم غيره من زملاء الدفعة. الصلاحية لا تتبع الاسم
   const trainerOf = await trainerNames(shown.map((s) => s.expert_id).filter((x) => x && x !== e.id));
   const sessions = shown
-    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now), qr: qr(s), sheet: trainerSheetOpen(s, now),
+    .map((s) => ({ id: s.id, title: s.title_ar, location: s.location_ar, starts_at: s.starts_at, ends_at: s.ends_at, cohort: cohortOf[s.cohort_id]?.name || '', open: checkinOpen(s, now), qr: qr(s), sheet: trainerSheetOpen(s, now), ...(optionalSession(s) ? { optional: true } : {}),
       ...(s.expert_id === e.id ? { mine: true } : s.expert_id && trainerOf[s.expert_id] ? { trainer: trainerOf[s.expert_id] } : {}) }));
   return { success: true, sessions };
 }

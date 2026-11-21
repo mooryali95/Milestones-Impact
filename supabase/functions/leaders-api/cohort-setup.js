@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 import { countAr } from './labels.js';
 import { planDaysOf, planPinned } from './stage-windows.js';
+import { optionalSession } from './optional.js';
 
 // قائمة واحدة تقرؤها لوحة الإدارة في صفحة الجهة: لكل بند حاله بجملة تُقرأ، وأين يُضبط.
 // لا تخزّن شيئًا: كل بند مشتق من حقل الدفعة نفسه (المستشار من cohorts.advisor_expert_id، والجدول من schedule).
@@ -22,7 +23,8 @@ export function sessionsFor(cohort, sessions = [], now = Date.now()) {
     && (!w.starts_at || Date.parse(w.ends_at || w.starts_at) >= now - SESSION_WINDOW_MS)).length;
 }
 /** ورشة فعّالة تخص الدفعة: لها أو بلا دفعة (تعمّ الدفعات). القاعدة الواحدة لـsessionsFor وundatedFor وأقرب جلسة في مكتب اليوم */
-export const workshopOf = (cohort, w) => !!w && w.active !== false && (!w.cohort_id || w.cohort_id === cohort?.id);
+// والورشة الاختيارية لا تُعد جلسة للدفعة: لا في جاهزيتها ولا في «بلا جلسة قادمة» ولا في أقرب جلسة (optional.js)
+export const workshopOf = (cohort, w) => !!w && w.active !== false && !optionalSession(w) && (!w.cohort_id || w.cohort_id === cohort?.id);
 /** ما يُحدد موعده لاحقًا من جلسات الدفعة الفعّالة (جزء من sessionsFor) */
 export function undatedFor(cohort, sessions = []) {
   return (sessions || []).filter((w) => workshopOf(cohort, w) && !w.starts_at).length;

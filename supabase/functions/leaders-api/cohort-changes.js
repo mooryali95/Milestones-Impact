@@ -8,6 +8,8 @@
 // اللقطة اليومية والبريد. يستورده الخادم واللوحة معًا.
 // النافذة (since, now]: ما وقع بعد «منذ» حتى لحظة القراءة. ما وقع في لحظة «منذ» نفسها عُدّ في النافذة السابقة.
 
+import { countsItem, countedSessions } from './optional.js';
+
 const DAY = 864e5;
 export const CHANGES_FLOOR_DAYS = 31;
 export const IDLE_DAYS = 7;
@@ -32,8 +34,9 @@ export function doneAt(it, t = {}) {
   const act = it.activity;
   if (!act) return null;
   if (it.kind === 'video') return t.video?.[it.id] || null;
-  if (it.kind === 'workshop') return nth((act.sessions || []).filter((s) => s.attended).map((s) => t.ws?.[s.id] || s.ends_at), Number(act.total) || 1);
+  if (it.kind === 'workshop') return nth(countedSessions(act.sessions).filter((s) => s.attended).map((s) => t.ws?.[s.id] || s.ends_at), Number(act.total) || 1);
   if (it.kind === 'coaching') return nth((t.coach || []).filter((s) => s.requirement_id === it.id).map((s) => s.at), Number(act.total) || 1);
+  // optional-exempt: مواد منهج المسار لا أنشطة: اختياريها خارج مطلوب المنهج أصلًا (curriculumStatus)
   if (it.kind === 'curriculum') return latest((act.items || []).filter((x) => x.required !== false && x.done).map((x) => t.content?.[x.id]));
   if (it.kind === 'reading') return latest((act.chapters || []).map((c) => (act.quiz === false ? t.read?.[c.id] || t.quiz?.[c.id] : t.quiz?.[c.id] || t.read?.[c.id])));
   if (it.kind === 'model') { const m = t.model?.[act.model_id]; return m ? (act.accept === 'submitted' ? m.submitted_at : m.reviewed_at || m.submitted_at) || null : null; }
@@ -76,10 +79,12 @@ export function changeFacts(journey, { now = Date.now(), floorDays = CHANGES_FLO
   const done = [], waiting = [], ws = [];
   let last = null;
   for (const st of journey || []) for (const it of st.items || []) {
+    // الاختياري خارج «ماذا تغيّر» وأرقام البريد الأسبوعي: لا «أنجزوا نشاطًا» ولا «حضروا ورشة» ولا «سلّموا» (optional.js)
+    if (!countsItem(it)) continue;
     const d = momentOf(it);
     if (it.status === 'done' && Number.isFinite(ms(d))) { if (ms(d) >= floor) done.push(d); if (!last || ms(d) > ms(last)) last = d; }
     if (it.waiting_at !== undefined && it.status !== 'done') waiting.push(it.waiting_at || null);
-    if (it.kind === 'workshop') for (const s of it.activity?.sessions || []) {
+    if (it.kind === 'workshop') for (const s of countedSessions(it.activity?.sessions)) {
       if (s.undated) continue;
       // الجلسة التي بدأت أو حُضرت: مقام «حضر N من M» لسطرها
       if (s.attended || ms(s.starts_at) <= now) ws.push({ id: s.id, title: s.title || 'ورشة', at: s.attended ? s.attended_at || null : null });

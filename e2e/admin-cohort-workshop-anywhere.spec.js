@@ -1,7 +1,7 @@
 // الورشة من أي مكان (تصور تشغيل الدفعة 2026-11-19، المرحلة 4): زر «+ ورشة على الخط» في المحور الزمني الكامل وفي لوحة الرحلة يدخل
 // وضع إضافة صريحًا، وفيه نقرة على يوم في صف مرحلة (أو الأسهم ثم Enter) تفتح نموذج الجلسة نفسه معبأً بالمرحلة والتاريخ بتوقيت
 // الرياض، ثم تأكيد قبل الحفظ بـadmin.workshop-save نفسه. فتظهر الورشة في بطاقة المرحلة وعلى الخط وفي ورقة الحضور وفي رحلة المشارك
-// باسم مدربها. وخارج الوضع نقرة الشريط تفتح بطاقته وحدها. والمرحلة بلا نشاط حضور تقول جملتها ولا تُنشأ فيها جلسة.
+// باسم مدربها. وخارج الوضع نقرة الشريط تفتح بطاقته وحدها. والمرحلة بلا نشاط حضور تقول جملتها وتعرض طريقيها (المسار الموجّه في admin-workshop-counting.spec.js).
 // الخلفية مُحاكاة بحالة واحدة يقرؤها الطرفان، واليوم 16 نوفمبر 2026، والمتصفح بتوقيت UTC (فالتاسعة بالرياض 06:00 في الحقل).
 // SHOTS_DIR: مجلد اللقطات (1440 و390): الزر والعلامة على المحور، النموذج بالمدرب والدعوة، الورشة على الخط، رحلة المشارك.
 import { test, expect } from '@playwright/test';
@@ -153,6 +153,8 @@ for (const width of [1440, 390]) {
     // الوضع ينتهي بالنقرة، والنموذج نفسه معبأ: المرحلة في العنوان، والتاسعة بتوقيت الرياض (06:00 في متصفح UTC)
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     const form = page.getByRole('dialog', { name: /^ورشة في «التدريب»، الثلاثاء/ });
+    // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+    await form.getByRole('radio', { name: /^إلزامية/ }).check();
     await expect(form).toBeVisible();
     await expect(form.getByLabel('تبدأ')).toHaveValue('2026-11-17T06:00');
     await expect(form.getByLabel('تنتهي')).toHaveValue('2026-11-17T09:00');
@@ -252,6 +254,8 @@ test('من المحور بلوحة المفاتيح: الزر، ثم صف الم
   await expect(mark).toContainText('24 نوفمبر');
   await page.keyboard.press('Enter');
   const form = page.getByRole('dialog', { name: /^ورشة في «التدريب»، الثلاثاء/ });
+  // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+  await form.getByRole('radio', { name: /^إلزامية/ }).check();
   await expect(form.getByLabel('تبدأ')).toHaveValue('2026-11-24T06:00');
   // 24 نوفمبر بعد نافذة التدريب (تنتهي 18): التنبيه قبل الحفظ، لا منع
   await expect(form.getByTestId('form-notes')).toContainText('خارج نافذة المرحلة: الحضور يُحسب، وراجع الموعد.');
@@ -291,6 +295,8 @@ test('من اللوحة: بالمؤشر على شريط المرحلة، وبل�
   await lane.click({ position: { x: box.width / 2, y: box.height / 2 } });
   const form = page.getByRole('dialog', { name: `ورشة في «التدريب»، ${label}` });
   await expect(form).toBeVisible();
+  // وسم الورشة بلا قيمة مسبقة: لا اختيار معلَّم حين يُفتح النموذج (قرار المالك 2026-11-21)
+  await expect(form.getByRole('radio', { checked: true })).toHaveCount(0);
   // اليوم المقترح من أيام التدريب (5 إلى 18 نوفمبر)، بالتاسعة بتوقيت الرياض
   const starts = await form.getByLabel('تبدأ').inputValue();
   expect(starts).toMatch(/^2026-11-(0[5-9]|1[0-8])T06:00$/);
@@ -312,6 +318,8 @@ test('من اللوحة: بالمؤشر على شريط المرحلة، وبل�
   await expect(mark).toContainText('18 نوفمبر');
   await page.keyboard.press('Enter');
   const kbd = page.getByRole('dialog', { name: /^ورشة في «التدريب»، الأربعاء/ });
+  // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+  await kbd.getByRole('radio', { name: /^إلزامية/ }).check();
   await expect(kbd.getByLabel('تبدأ')).toHaveValue('2026-11-18T06:00');
   await kbd.getByLabel('أرسل الدعوة عند الحفظ').uncheck();
   await kbd.getByRole('button', { name: 'أضف الورشة' }).click();
@@ -350,13 +358,18 @@ test('خارج وضع الإضافة: نقرة الشريط تفتح بطاقت�
   expect(saves(calls)).toEqual([]);
 });
 
-test('مرحلة بلا نشاط حضور: الزر باهت بجملته، والنقرة عليها في الخط تفتح الطريقين ولا تنشئ جلسة، و«أضفها في مرحلة أخرى» يحمل اليوم', async ({ page }) => {
+// كان: «الزر باهت، ولا تُنشأ جلسة، وطريق إضافة النشاط من رحلة البرنامج». قرار المالك 2026-11-21 حسم القاعدة فبُني المسار
+// الموجّه: الزر يعمل والنافذة تعرض «أضفها في هذه المرحلة» أولًا. بقية المسار (الاختيار والمعاينة والحفظ) في
+// admin-workshop-counting.spec.js، وهنا ما بقي من هذا الاختبار: الجملة، والنافذة من الخط بلا إنشاء شيء، و«مرحلة أخرى» باليوم نفسه
+test('مرحلة بلا نشاط حضور: الزر يعمل بجملته، والنقرة عليها في الخط تفتح الطريقين ولا تنشئ شيئًا قبل الحفظ، و«أضفها في مرحلة أخرى» يحمل اليوم', async ({ page }) => {
   const state = { sessions: [{ ...firstDay }] };
   const calls = await admin(page, 1440, state);
   // في بطاقة المرحلة
   const none = page.getByTestId('cj-noattend-final');
   await expect(none).toContainText('هذه المرحلة ليس في برنامجها نشاط حضور.');
-  await expect(none.getByRole('button', { name: 'يوم أو ورشة في التقرير النهائي' })).toHaveAttribute('aria-disabled', 'true');
+  await expect(none).toContainText('وبأول ورشة يُنشأ لها نشاط «ورش إضافية» في برنامج الدفعة');
+  await expect(none.getByRole('button', { name: 'ورشة في التقرير النهائي' })).toBeEnabled();
+  await expect(none.getByRole('button', { name: 'ورشة في التقرير النهائي' })).not.toHaveAttribute('aria-disabled', 'true');
   // من الخط: 20 نوفمبر (اليوم 18) في صف التقرير النهائي
   const axis = page.getByTestId('cj-axis');
   await axis.getByTestId('ja-add').click();
@@ -365,8 +378,9 @@ test('مرحلة بلا نشاط حضور: الزر باهت بجملته، وا
   await lane.click({ position: await axisPoint(page, 'final', 18) });
   const dlg = page.getByTestId('cj-noattend-dialog');
   await expect(dlg).toContainText('هذه المرحلة ليس في برنامجها نشاط حضور.');
-  await expect(dlg).toContainText('أو أضف نشاط ورش لهذه المرحلة');
-  await expect(dlg.getByRole('button', { name: 'افتح رحلة البرنامج' })).toBeVisible();
+  await expect(dlg).toContainText('أضفها في هذه المرحلة');
+  await expect(dlg.getByTestId('cj-na-here')).toHaveText(/^أضف ورشة في «التقرير النهائي»، الجمعة/);
+  await expect(dlg.getByRole('button', { name: 'افتح رحلة البرنامج' })).toHaveCount(0);
   await shot(page, 'no-attendance-stage', null);
   expect(saves(calls)).toEqual([]);
   // «أضفها في مرحلة أخرى»: المراحل التي فيها نشاط حضور وحدها، باليوم نفسه
@@ -431,6 +445,8 @@ for (const width of [1440, 390]) {
     await axis.getByTestId('ja-add').click();
     await axis.locator('[data-add-lane="training"]').click({ position: await axisPoint(page, 'training', 15) });
     const form = page.getByRole('dialog', { name: /^ورشة في «التدريب»/ });
+    // وسم الورشة اختيار صريح بلا قيمة مسبقة (قرار المالك 2026-11-21): النموذج لا يُحفظ قبله
+    await form.getByRole('radio', { name: /^إلزامية/ }).check();
     await form.getByLabel('عنوان الجلسة (مثل: اليوم الأول، Milestone)').fill('ورشة التفاوض');
     await form.getByLabel('المكان (القاعة والمدينة)').fill('الرياض، قاعة الملك فهد');
     await form.getByLabel('المدرب (اختياري)').selectOption({ label: 'د. منى القحطاني' });

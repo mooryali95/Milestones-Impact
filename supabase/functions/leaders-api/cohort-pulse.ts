@@ -16,6 +16,7 @@ import { route } from '../_shared/notify-routing.js';
 import { notifySettings } from '../_shared/notify-settings.ts';
 import { cohortRoster } from './coordinator.ts';
 import { isRunning } from './cohort-running.js';
+import { sessionCols } from './workshop-optional.ts';
 import { nextSessionAt } from './today-desk.js';
 import { digestLine, snapshotOf, weeklyBudgetOk, weeklyDue } from './cohort-changes.js';
 
@@ -117,7 +118,7 @@ export async function cohortWeekly(now = Date.now()) {
   if (!weeklyBudgetOk({ usage, waiting: queue.error ? null : queue.count ?? 0, cap: CONFIG.mailDailyCap, reserve: CODE_RESERVE, count: pending.length })) {
     return { due: true, sent: 0, deferred: pending.length };
   }
-  const ws = await db.from('workshop_sessions').select('cohort_id, active, starts_at, ends_at').eq('active', true).gte('starts_at', new Date(now - DAY).toISOString()).order('starts_at').limit(2000);
+  const ws = await db.from('workshop_sessions').select(await sessionCols('cohort_id, active, starts_at, ends_at')).eq('active', true).gte('starts_at', new Date(now - DAY).toISOString()).order('starts_at').limit(2000);
   let sent = 0, failed = 0;
   for (const { c, mine, snap } of pending) {
     const claim = await db.from('cohort_snapshots').update({ weekly_sent_at: new Date(now).toISOString() }).eq('cohort_id', c.id).eq('day', snap!.day).is('weekly_sent_at', null).select('cohort_id');

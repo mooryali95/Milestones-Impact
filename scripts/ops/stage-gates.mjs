@@ -240,7 +240,8 @@ export async function collect() {
     const [organizations, cohorts, sessions, prog] = await Promise.all([
       sql(`select id, name, status from leaders.organizations where status = 'active'`),
       sql(`select id, name, organization_id, status, is_default, advisor_expert_id, content_release, program_version_id, delivery from leaders.cohorts`),
-      sql(`select cohort_id, active, starts_at, ends_at from leaders.workshop_sessions where active`),
+      // optional من to_jsonb: يُقرأ قبل ترحيل عموده (20261122100000) فارغًا وبعده بقيمته، والورشة الاختيارية لا تُعد جلسة (optional.js)
+      sql(`select cohort_id, active, starts_at, ends_at, (to_jsonb(w)->>'optional')::boolean as optional from leaders.workshop_sessions w where active`),
       sql(`select final_eval from leaders.programs where is_default`),
     ]);
     return { items: launchReadiness({ organizations, cohorts, sessions, finalEval: prog[0]?.final_eval ?? null }) };

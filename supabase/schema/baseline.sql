@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261121100000_leaders_coaching_groups
+-- as-of migration: 20261122100000_leaders_workshop_optional
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -2281,6 +2281,7 @@ create table if not exists leaders.workshop_sessions (
   reminded_hour_at timestamp with time zone,
   capacity integer,
   expert_id uuid,
+  optional boolean default false not null,
   constraint workshop_sessions_capacity_check CHECK (((capacity IS NULL) OR ((capacity >= 1) AND (capacity <= 10000)))),
   constraint workshop_sessions_dates_check CHECK ((((starts_at IS NULL) AND (ends_at IS NULL)) OR ((starts_at IS NOT NULL) AND (ends_at IS NOT NULL) AND (ends_at > starts_at)))),
   constraint workshop_sessions_join_url_check CHECK ((char_length(join_url) <= 500)),

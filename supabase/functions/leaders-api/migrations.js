@@ -165,6 +165,7 @@ export const MIGRATIONS = [
   '20261119130000_leaders_workshop_trainer',
   '20261120100000_leaders_mail_queue_attachments',
   '20261121100000_leaders_coaching_groups',
+  '20261122100000_leaders_workshop_optional',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -246,4 +247,5 @@ export const MIGRATION_GATES = {
   '20261119130000_leaders_workshop_trainer': ["tolerant", "قبله يُخفى حقل المدرب في اللوحة، والحفظ بمدرب يعيد المحاولة بلاه ويقول إنه لم يُحفظ، والجلسة تُقرأ بلا مدرب في رحلة المشارك والدعوة وبوابة الخبير (activities.ts: trainerReady وworkshopSave وsessionTrainers)"],
   '20261120100000_leaders_mail_queue_attachments': ["tolerant", "قبله تبقى الرسالة ذات المرفق خارج الطابور كما كانت: تُحسب «تعذّرت» عند امتلاء الحصة (core.ts: enqueueMail يرفض المرفق إن رُفض العمود، وdrainMailQueue يقرأ بلاه)"],
   '20261121100000_leaders_coaching_groups': ["tolerant", "قبله تقول اللوحة «غير مفعّل بعد» وتُرفض كتابة الجلسة الجماعية بـnot_migrated، والجلسات الفردية وحجزها وتذكيرها وحساب الخبير كما كانت (coaching-groups.ts: groupsReady وgroupCols، وكل قراءة تعمل بلا العمودين)"],
+  '20261122100000_leaders_workshop_optional': ["tolerant", "قبله كل ورشة إلزامية كما كانت، واختيار «اختيارية» معطل في اللوحة بجملة «غير مفعّلة بعد» والحفظ بها مرفوض برسالته، والقراءات تطلب العمود حين يوجد وحده (workshop-optional.ts: optionalReady وsessionCols، وactivities.ts: workshopSave)"],
 };

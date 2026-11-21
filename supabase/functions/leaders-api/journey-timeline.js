@@ -13,6 +13,7 @@ import {
 import { daysAr, dueBeforeAr, durationAr, LANE_AR, renderJourneyText, SERVICE_NOTE_AR, serviceAvailAr, sessionsMaxAr, STAGE_TAG_AR, stageRules, untilAr } from './journey.js';
 import { completionSource, isUndated, SESSION_TBD_AR, sessionsMax } from './logic.js';
 import { addDays, daysBetween } from './milestones.js';
+import { countedSessions, eachWorkshop, optionalReq, optionalSession } from './optional.js';
 import { cohortPlan, planDaysOnly, planOffKeys, planSchedule, planService, planTrack, planWithRules } from './stage-windows.js';
 
 // غير الإلزامية (T0، تصور 2026-11-18 ب5.2): نمطها بكلمة واحدة على الخط والبطاقة، بإطار متقطع. الإلزامية بلا وسم
@@ -249,10 +250,12 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     const modes = [...new Set(own.map((x) => (x.mode === 'online' ? 'online' : 'in_person')))];
     const mode = modes.length > 1 ? 'hybrid' : modes[0] || (MODE_AR[r.config?.mode] && r.config.mode !== 'self' ? r.config.mode : null);
     const owner = ownerOf(r);
+    // هل يُعد النشاط؟ (optional.js) الاختياري في البرنامج لا، ونشاط الورش الإضافية بورشة إلزامية قائمة لهذه الدفعة وحدها
+    const counts = !optionalReq(r) && (!eachWorkshop(r) || countedSessions(own).length > 0);
     const dates = datedS.map((x) => {
       const d = sessionDay(x.starts_at);
       const out = dated && !!w.from && (d < w.from || d > w.to);
-      return { date: d, at: pos(day(d)), label: fmtDay(d), required: !!r.required, outside: out, session: x.id || null };
+      return { date: d, at: pos(day(d)), label: fmtDay(d), required: counts && !optionalSession(x), outside: out, session: x.id || null };
     }).sort((a, b) => a.date.localeCompare(b.date));
     const timing = owner === 'system' ? 'auto' : r.kind === 'workshop' ? (undatedN || !dates.length ? 'undated' : 'dated') : r.kind === 'coaching' ? 'booked' : 'self';
     const until = dated && w.to ? ` حتى ${fmtDay(w.to)}` : '';
@@ -265,12 +268,12 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
             : dates.length ? `${andAr(dates.map((x) => x.label))}${undatedN ? `، و${countAr(undatedN, 'موعد واحد', 'موعدان', 'مواعيد', 'موعدًا')} ${SESSION_TBD_AR}` : ''}`
               : SESSION_TBD_AR;
     const kindAr = ACTIVITY_KIND_AR[r.kind] || r.kind;
-    const reqAr = r.required ? TIMELINE_AR.required : TIMELINE_AR.optional;
+    const reqAr = counts ? TIMELINE_AR.required : TIMELINE_AR.optional;
     const title = renderJourneyText(r.title_ar, { reqs: list });
     const level = r.level ? [r.dimension && DIM_AR[r.dimension], `المستوى ${LEVEL_AR[r.level] || r.level}`].filter(Boolean).join(' · ') : '';
     return {
       id: String(r.id || r.code), code: r.code || '', requirement_id: r.id || null, stage: r.stage_key, stage_title: st.title, title, kind: r.kind, kind_ar: kindAr,
-      icon: ACTIVITY_ICON[r.kind] || 'form', required: !!r.required, mode, mode_ar: mode ? MODE_AR[mode] : '', owner, owner_ar: ACTIVITY_OWNER_AR[owner],
+      icon: ACTIVITY_ICON[r.kind] || 'form', required: counts, mode, mode_ar: mode ? MODE_AR[mode] : '', owner, owner_ar: ACTIVITY_OWNER_AR[owner],
       level_ar: level, timing, undated: isCohort && timing === 'undated', undated_count: undatedN, dates, when_ar: when,
       outside: dates.some((x) => x.outside),
       aria_ar: [title, `مرحلة ${st.title}`, kindAr, reqAr, mode ? MODE_AR[mode] : '', when, ACTIVITY_OWNER_AR[owner], level].filter(Boolean).join('، '),
@@ -313,6 +316,7 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
 
   const counts = {
     stages: stageOut.length, phases: phases.length, activities: activities.length,
+    // optional-exempt: required هنا ما ختمه الخط نفسه بالقاعدة أعلاه (counts)، وهذا عدّ الاختياري للعرض
     optional: activities.filter((a) => !a.required).length, undated: activities.reduce((n, a) => n + (a.undated ? Math.max(1, a.undated_count) : 0), 0),
   };
   const sequential = (key) => stageOut.filter((s) => s.phase === key).reduce((n, s) => n + s.days, 0);
@@ -460,6 +464,7 @@ export function timelineAxis(model) {
     const [f, e] = win(s.key) || [0, 0];
     const at = pct(f);
     const dots = sc.dated ? acts.filter((a) => a.stage === s.key).flatMap((a) => (a.dates || []).map((d) => ({
+      // optional-exempt: نقطة اليوم تحمل ما ختمه الخط بالقاعدة (counts ووسم الجلسة)، للرسم وحده
       at: pct(daysBetween(sc.start, d.date) + 0.5), date: d.date, label: d.label, title: a.title, required: !!d.required, outside: !!d.outside,
     }))) : [];
     const when = sc.dated && s.window_ar ? s.window_ar : s.label;

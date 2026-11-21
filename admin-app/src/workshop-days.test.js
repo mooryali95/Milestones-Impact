@@ -35,7 +35,7 @@ const daysFor = (sessions, key = 'training', title = 'التدريب') => {
 
 describe('أيام الورشة في البطاقة (W3)', () => {
   it('المرحلة بلا بند حضور ظاهر بلا قسم، والمخفي لا يُعد', () => {
-    expect(stageWorkshopReqs({ requirements }, 'training')).toEqual([{ id: 'r1', title: 'حضور الأيام التدريبية', need: 4, verify: 'qr' }]);
+    expect(stageWorkshopReqs({ requirements }, 'training')).toEqual([{ id: 'r1', title: 'حضور الأيام التدريبية', need: 4, verify: 'qr', each: false, optional: false }]);
     expect(stageWorkshopReqs({ requirements }, 'final')).toEqual([]);
     expect(daysFor([], 'final', 'التقرير النهائي')).toBeNull();
   });

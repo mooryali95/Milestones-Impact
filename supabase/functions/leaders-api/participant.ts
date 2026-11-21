@@ -529,7 +529,8 @@ async function continuousFor(participantId: string, milestones: any[], programId
 // lite: لوحة الجهة تحسب رحلة كل مشارك عند كل فتح (org-15)، ولا تأخذ منها المجموعة ولا التقييم المستمر،
 // فيُتركان (نحو عشرة استعلامات لكل مشارك) والرحلة والتقدم والمعالم كما هي بلا فرق
 // cohort: رحلته على دفعته بخطة لم تُحفظ بعد (معاينة admin.cohort-plan حين تعود مرحلة موقوفة)، لا يُقرأ بها غير ذلك
-export async function journeyFor(p: any, { lite = false, cohort = null }: { lite?: boolean; cohort?: any } = {}) {
+// sessions: معاينة أثر تغيير وسم ورشة وحدها (countingImpact في activities.ts): الرحلة كما ستكون بجلسات معدّلة، بلا كتابة
+export async function journeyFor(p: any, { lite = false, cohort = null, sessions = null }: { lite?: boolean; cohort?: any; sessions?: ((rows: any[]) => any[]) | null } = {}) {
   const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p, cohort),
@@ -562,7 +563,7 @@ export async function journeyFor(p: any, { lite = false, cohort = null }: { lite
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   // المحتوى بمستوى الدفعة الموحد إن كانت متجانسة، وإلا بمستوى المشارك؛ القياس والمسار يبقيان من قياسه
   const content = contentLevels(levels, def.cohort) as Record<string, string>;
-  const activity = await evidenceFor(p, def.requirements, content, approved, def.cohort?.id || null);
+  const activity = await evidenceFor(p, def.requirements, content, approved, def.cohort?.id || null, sessions);
   // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
   const modes = def.cohort?.stage_modes || {};
@@ -637,7 +638,10 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
       })),
     } : { approved, level: overallLevel(levels), track },
     journey: audience === 'admin' ? journey
-      : journey.map((st: any) => ({ ...st, items: st.items.map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p, st.status !== 'locked')) })),
+      // نشاط «ورش إضافية» بلا ورشة لدفعته لا يُعرض: لا شيء فيه بعد (خامد خارج العد، optional.js)
+      // optional-exempt: إخفاء نشاط الورش الإضافية الفارغ من العرض، وهو خامد خارج العد بالقاعدة (each)
+      : journey.map((st: any) => ({ ...st, items: st.items.filter((it: any) => !(it.activity?.each && !(it.activity.sessions || []).length))
+        .map(({ dimension: _d, level: _l, ...it }: any) => participantItem(it, p, st.status !== 'locked')) })),
     progress,
     // معالم الرحلة وموقع المشارك منها (المتأخر بعدد أيامه)
     milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
@@ -1252,6 +1256,7 @@ export async function modelsList(p: any) {
     models: modelsFor(must(models) ?? [], levels, p.work_scope).map(({ fields: all, scopes: _s, capstone_sort, ...m }: any) => {
       const fields = fieldsFor(all, levels[m.dimension], p.work_scope, m.dimension === priority);
       const sub = by[m.id];
+      // optional-exempt: حقول نموذج لا أنشطة
       const total = fields.filter((f: any) => f.required !== false).length;
       const filled = total - missingFields(fields, sub?.answers || {}).length;
       return { ...m, capstone: capstone_sort != null, fields_n: fields.length, progress: { filled, total },

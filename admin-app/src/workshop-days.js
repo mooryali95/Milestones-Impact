@@ -8,6 +8,7 @@ import { countAr, SESSION_MODE_AR } from '../../supabase/functions/leaders-api/l
 import { isUndated, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { timeOnly, weekTime } from './dates.js';
 import { outsideSessions } from '../../supabase/functions/leaders-api/journey-timeline.js';
+import { COUNTING_AR, COUNTING_HELP_AR, countingImpactAr, countingOf, eachWorkshop, OPTIONAL_NOT_READY_AR, optionalReq, optionalSession } from '../../supabase/functions/leaders-api/optional.js';
 
 // طريقة توثيق الحضور بكلمات المدير: مصدر واحد للوحة (شاشة الحضور والجلسات وبطاقة المرحلة)
 export const VERIFY_AR = Object.freeze({ qr: 'التوثيق برمز QR', join: 'التوثيق بالانضمام من التطبيق', manual: 'التوثيق يدويًا', auto: 'التوثيق آلي بانتهاء الجلسة' });
@@ -84,10 +85,56 @@ export function sessionExtras({ trainersOf = null, mail = null } = {}) {
   }
   return out;
 }
-/** يفصل اختياري البريد عن صف الجلسة: الصف لـrow، والاختياران بجانبه في جسم admin.workshop-save */
+/** يفصل اختياري البريد وتأكيد الوسم عن صف الجلسة: الصف لـrow، والباقي بجانبه في جسم admin.workshop-save */
 export function saveBody(v, base = {}) {
-  const { invite, notify_change, ...row } = v;
-  return { row: { ...row, ...base }, ...(invite === true ? { invite: true } : {}), ...(notify_change === true ? { notify_change: true } : {}) };
+  const { invite, notify_change, counting_confirm, ...row } = v;
+  return { row: { ...row, ...base }, ...(invite === true ? { invite: true } : {}), ...(notify_change === true ? { notify_change: true } : {}), ...(counting_confirm === true ? { counting_confirm: true } : {}) };
+}
+
+// ── وسم الورشة: إلزامية أو اختيارية (قرار المالك 2026-11-21، القاعدة في optional.js) ──
+// اختيار صريح بلا قيمة مسبقة في كل نموذج يضيف ورشة: وسم خاطئ بالسهو يغيّر عدّ دفعة كاملة، فلا يُحفظ ما لم يختره المدير.
+// وفي التحرير يظهر الوسم القائم، وتغييره يمر بمعاينة أثره بالأرقام ثم تأكيد. قبل ترحيل العمود «اختيارية» معطلة بجملتها.
+export const COUNTING_LABEL_AR = 'هل تُحسب هذه الورشة؟';
+export const COUNTING_REQUIRED_AR = 'اختر أولًا: هل هذه الورشة إلزامية أم اختيارية؟';
+/** @param {{ ready?: boolean }} o ready: عمود الوسم مرحَّل (optional_ready من الخادم) */
+export function countingField({ ready = true } = {}) {
+  return {
+    name: 'counting', label: COUNTING_LABEL_AR, type: 'choice', required: COUNTING_REQUIRED_AR,
+    options: [
+      { value: 'mandatory', label: COUNTING_AR.mandatory, help: COUNTING_HELP_AR.mandatory },
+      { value: 'optional', label: COUNTING_AR.optional, help: COUNTING_HELP_AR.optional, disabled: !ready, note: ready ? '' : OPTIONAL_NOT_READY_AR },
+    ],
+  };
+}
+/** الوسم القائم لجلسة تُحرَّر، لقيمة الحقل */
+export const countingValue = (session) => countingOf(session);
+/** شارة الوسم على صف الورشة: للإدارة الوسمان، ولنشاط اختياري في البرنامج كله «اختيارية» */
+export const countingChip = (session, req = null) => {
+  const optional = optionalSession(session) || optionalReq(req);
+  return { optional, text: optional ? COUNTING_AR.optional : COUNTING_AR.mandatory, title: optional ? COUNTING_HELP_AR.optional : COUNTING_HELP_AR.mandatory };
+};
+// سطر ما تعنيه «إلزامية» في هذا النشاط بعينه، قبل الحفظ
+export const EACH_EFFECT_AR = 'كل ورشة إلزامية في هذه المرحلة مطلوبة بعينها لإكمالها. من أتم المرحلة قبل إضافتها يبقى مكتملًا.';
+export const OPTIONAL_EFFECT_AR = 'ورشة اختيارية: تظهر للمشاركين بوسمها ويُسجَّل حضورها، ولا تدخل في تقدم ولا اكتمال ولا نسبة حضور.';
+export const GUIDED_EFFECT_AR = 'بالحفظ يُضاف إلى برنامج الدفعة نشاط «ورش إضافية» في هذه المرحلة، وتُحفظ به نسخة من البرنامج تُثبَّت عليها الدفعة. لا يتغير على أعضائها غير هذه الورشة.';
+/** هل يحتاج الحفظ معاينة من الخادم؟ تغيير وسم جلسة قائمة، أو ورشة إلزامية جديدة في نشاط «ورش إضافية» أو في مرحلة بلا نشاط حضور
+ * @param {{ original?: any, counting?: string | null, req?: any, guided?: boolean }} o */
+export function needsCountingPreview({ original = null, counting = null, req = null, guided = false }) {
+  if (!counting) return false;
+  if (original) return counting !== countingOf(original);
+  return counting === 'mandatory' && (guided || eachWorkshop(req));
+}
+/** سؤال التأكيد قبل الحفظ ومعه أثر الوسم. base: سؤال البريد أو الخط إن وُجد. يعيد null بلا سؤال، أو { error } إن تعذّرت المعاينة
+ * @param {(action: string, body: any) => Promise<any>} call @param {any} body جسم الحفظ نفسه (saveBody)
+ * @param {{ base?: any, preview?: boolean, counting?: string | null, title?: string, changed?: boolean }} o */
+export async function countingConfirm(call, body, { base = null, preview = false, counting = null, title = '', changed = false } = {}) {
+  if (!preview) return base;
+  const r = await call('admin.workshop-save', { ...body, preview: true });
+  if (!r?.success) return { error: r?.message || 'تعذّرت معاينة أثر الوسم، فلم يُحفظ شيء' };
+  const lines = countingImpactAr(r.impact, counting);
+  const name = title || 'الورشة';
+  const text = base?.text || (changed ? `يتغير وسم «${name}» إلى «${COUNTING_AR[counting]}». هذا أثره على أعضاء الدفعة:` : `تُحفظ «${name}» ${COUNTING_AR[counting]}. هذا أثرها على أعضاء الدفعة:`);
+  return { text: base?.text ? `${base.text}\nوأثر وسمها «${COUNTING_AR[counting]}» على أعضاء الدفعة:` : text, lines, ok: base?.ok || (changed ? 'غيّر الوسم' : 'احفظ'), patch: { counting_confirm: true } };
 }
 // تأكيد قبل حفظ يرسل بريدًا (المرحلة 4): الدعوة أو إشعار التغيير لأعضاء الدفعة كلهم، فلا يخرج بنقرة واحدة
 export const mailConfirm = (out) => (out.invite === true ? { text: `تُحفظ «${out.title_ar || 'الجلسة'}» وتُرسل دعوتها بالبريد إلى أعضاء الدفعة الآن، ومعها ملف تقويم. متابعة؟`, ok: 'احفظ وأرسل الدعوة' }
@@ -130,7 +177,9 @@ export function stageWorkshopReqs(def, key) {
   const reqs = def?.requirements || [];
   return reqs.filter((r) => r.stage_key === key && r.kind === 'workshop' && r.active !== false && !r.hidden && r.id)
     .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
-    .map((r) => ({ id: r.id, title: renderJourneyText(r.title_ar || '', { reqs }), need: Number(r.config?.sessions_required) || SESSION_DEFAULTS.sessions_required, verify: r.config?.verify || 'qr' }));
+    .map((r) => ({ id: r.id, title: renderJourneyText(r.title_ar || '', { reqs }), need: Number(r.config?.sessions_required) || SESSION_DEFAULTS.sessions_required, verify: r.config?.verify || 'qr',
+      // each: نشاط «ورش إضافية» (المطلوب كل ورشة إلزامية بعينها)، وoptional: نشاط اختياري في البرنامج كله (optional.js)
+      each: eachWorkshop(r), optional: optionalReq(r) }));
 }
 
 /** قسم الأيام في بطاقة مرحلة: العنوان والعدّاد، وصف لكل يوم بموعده ومكانه وطريقته وحضوره وسعته وتنبيهاته
@@ -144,6 +193,7 @@ export function workshopDays({ def, stage, sessions = null, model = null, cohort
   // «خارج نافذة المرحلة» من الخط نفسه: كل جلسة مؤرخة لها نقطة بعلامة outside
   const outside = new Set(outsideSessions(model).map((x) => x.session));
   const reqTitle = new Map(reqs.map((r) => [r.id, r.title]));
+  const reqById = new Map((def?.requirements || []).map((r) => [r.id, r]));
   const rows = list.map((s) => {
     const undated = isUndated(s);
     const started = !undated && Date.parse(s.starts_at) <= now;
@@ -164,17 +214,27 @@ export function workshopDays({ def, stage, sessions = null, model = null, cohort
       over: known && capacityOver(s.expected, s.capacity), over_ar: known ? capacityOverAr(s.expected, s.capacity) : '',
       outside: outside.has(s.id), invited: !!s.invited_at, can_invite: !!s.cohort_id && !undated && !held && s.active !== false,
       trainer: s.trainer || '', trainer_ar: s.trainer ? `مع ${s.trainer}` : '',
+      // الوسم: الورشة الاختيارية، أو أي ورشة في نشاط اختياري في البرنامج
+      counting: countingChip(s, reqById.get(s.requirement_id)),
       raw: s,
     };
   });
-  const need = reqs.reduce((n, r) => n + r.need, 0);
-  const set = rows.filter((r) => r.active && !r.undated).length;
+  // العدّاد على ما يُعد وحده: الورش الاختيارية وأيام النشاط الاختياري خارجه، ونشاط «ورش إضافية» مطلوبه ورشه الإلزامية القائمة
+  const live = rows.filter((r) => r.active && !r.counting.optional);
+  const extra = reqs.filter((r) => r.each);
+  const fixed = reqs.filter((r) => !r.each && !r.optional);
+  const need = fixed.reduce((n, r) => n + r.need, 0) + live.filter((r) => extra.some((x) => x.id === r.req_id)).length;
+  const set = live.filter((r) => !r.undated).length;
+  const optionalN = rows.filter((r) => r.active && r.counting.optional).length;
+  const optionalAr = optionalN ? `، و${countAr(optionalN, 'ورشة اختيارية', 'ورشتان اختياريتان', 'ورش اختيارية', 'ورشة اختيارية')} خارج العد` : '';
   const head = `أيام ${stage.title}`;
+  // مرحلة ورشها إضافية وحدها (المسار الموجّه): لا عدد ثابت من البرنامج، فالعدّاد يقول ما فيها
+  const only = !fixed.length;
   return {
-    reqs, rows, need, set,
-    head_ar: head,
-    count_ar: set > need ? `${daysAr(set)} محددة، والمطلوب حضور ${need}` : `${set} من ${need} محددة`,
-    tone: set < need ? 'warn' : 'ok',
+    reqs, rows, need, set, each_only: only,
+    head_ar: only ? `ورش ${stage.title}` : head,
+    count_ar: (only ? (need ? `${countAr(need, 'ورشة إلزامية', 'ورشتان إلزاميتان', 'ورش إلزامية', 'ورشة إلزامية')}` : 'لا ورشة إلزامية') : set > need ? `${daysAr(set)} محددة، والمطلوب حضور ${need}` : `${set} من ${need} محددة`) + optionalAr,
+    tone: !only && set < need ? 'warn' : 'ok',
     empty_ar: 'لا أيام بعد. أضف أول يوم أو ورشة ليظهر للمشاركين في رحلتهم بموعده ومكانه.',
   };
 }

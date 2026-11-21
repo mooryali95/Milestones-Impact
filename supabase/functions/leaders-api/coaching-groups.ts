@@ -94,6 +94,7 @@ async function expertConflicts(expertId: string, startsAt: string, endsAt: strin
   const rows = (must(await db.from('coaching_sessions').select(await groupCols('id, expert_id, status, starts_at, ends_at')).eq('expert_id', expertId).in('status', ['booked', 'requested'])
     .lt('starts_at', endsAt).gt('ends_at', startsAt)) ?? []) as Row[];
   const units = sessionUnits(rows.filter((s) => !exceptGroup || s.group_id !== exceptGroup));
+  // optional-exempt: تعارض موعد المدرب: الورشة الاختيارية تشغل وقته كغيرها، وليس عدًّا
   const ws = (must(await db.from('workshop_sessions').select('id, title_ar, starts_at, ends_at, active').eq('expert_id', expertId).eq('active', true).lt('starts_at', endsAt).gt('ends_at', startsAt)) ?? []) as Row[];
   return [
     ...units.map((u: any) => ({ kind: u.group ? 'group' : 'session', starts_at: u.starts_at, ends_at: u.ends_at })),

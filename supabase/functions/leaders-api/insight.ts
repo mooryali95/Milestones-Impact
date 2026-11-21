@@ -89,6 +89,7 @@ export async function adminChanges(b: Body = {}) {
     const [people, sessions] = await Promise.all([
       // counting-exempt: بُرُد أعضاء الدفعة من cohortMemberIds (listed)، فلا يدخل فلتر الدفعة حساب العرض ولا سجله
       allFor(m.ids, () => db.from('participants').select('id, email').order('id'), 'id') as Promise<any[]>,
+      // optional-exempt: معرّفات جلسات الدفعة لفلترة سجل التدقيق بها، لا عدّ
       db.from('workshop_sessions').select('id').eq('cohort_id', m.cohort.id).then((r) => (must(r) ?? []) as any[]),
     ]);
     const own = [m.cohort.id, ...sessions.map((x) => x.id)];
