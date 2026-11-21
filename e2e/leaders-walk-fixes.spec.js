@@ -194,6 +194,8 @@ test('5: بطاقة الخبير المرشح: الاسم ثم المسمى ثم
   await open(page, { patch: { guidance: { ready: true, signals: ['quiz'] } }, replies: (b) => (b.action === 'experts.suggest' ? { success: true, requests: [], recent: [],
     roles: [{ key: 'coach', title: 'موجّه', hint: 'جلسات التوجيه' }], dimensions: { milestone: 'Milestone' }, contexts: { program: 'خلال البرنامج' },
     candidates: [{ id: 'e1', full_name: 'د. ريم الشهري', title: 'خبيرة إدارة مشاريع صحية', years: 12 }, { id: 'e2', full_name: 'م. فهد القحطاني', title: 'مستشار تحول', years: 15 }] } : undefined) });
+  // «التوجيه والإرشاد» مطوي على الهاتف كبقية الأقسام الثانوية (رحلة المشارك، البند 1): يُفتح بسطره ثم يُطلب
+  await page.locator('[data-fold="guidance"] > summary').click();
   await page.getByRole('button', { name: 'اطلب الآن' }).first().click();
   const card = page.locator('.cx-card').first();
   await card.scrollIntoViewIfNeeded();

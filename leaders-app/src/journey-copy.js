@@ -69,3 +69,105 @@ export function leftToDo(journey) {
   return (journey || []).some((s) => s.status !== 'locked' && s.status !== 'done'
     && (s.items || []).some((i) => (i.status === 'pending' || i.status === 'returned') && i.code !== 'AP-OK'));
 }
+
+// ── تواريخ المرحلة: من نافذتها في خطة الدفعة (stage.window من الخادم، أي cohortPlan) ──
+// ميلادي بالصيغة التي يُكتب بها امتداد المسار المستمر ومواعيد الجلسات. السنة تُذكر حين تختلف عن سنة اليوم وحدها
+const isoOf = (d) => new Date(d).toISOString().slice(0, 10);
+const dayNo = (iso) => Math.round(new Date(`${iso}T00:00:00Z`).getTime() / 864e5);
+export function fmtDate(iso, today = new Date()) {
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getUTCFullYear() !== new Date(today).getUTCFullYear();
+  return d.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', ...(year ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+}
+export const daysLeftAr = (n) => (n === 1 ? 'بقي يوم واحد' : n === 2 ? 'بقي يومان' : `بقي ${countAr(n, '', '', 'أيام', 'يومًا')}`);
+/** مدى المرحلة وسطر نهايتها. null لمرحلة بلا نافذة (دفعة بلا تواريخ): لا يُعرض شيء
+ * @param {any} stage @param {Date|string} [today]
+ * @returns {{ range: string, end: string|null, tone: ''|'soon'|'over' }|null}
+ * end للمرحلة الجارية وحدها: «تنتهي في كذا، بقي كذا»، أو أن مدتها المخططة انتهت */
+export function stageDates(stage, today = new Date()) {
+  const w = stage?.window;
+  if (!w?.from || !w?.to) return null;
+  // الشهر نفسه يُكتب مرة: «من 11 إلى 25 نوفمبر»، فيسع الوسم سطرًا على الهاتف
+  const sameMonth = w.from.slice(0, 7) === w.to.slice(0, 7);
+  const range = w.from === w.to ? fmtDate(w.from, today)
+    : `من ${sameMonth ? Number(w.from.slice(8, 10)) : fmtDate(w.from, today)} إلى ${fmtDate(w.to, today)}`;
+  if (stage.status !== 'active' && stage.status !== 'available') return { range, end: null, tone: '' };
+  const t = dayNo(isoOf(today));
+  const left = dayNo(w.to) - t;
+  if (t < dayNo(w.from)) return { range, end: `تبدأ في ${fmtDate(w.from, today)}`, tone: '' };
+  if (left < 0) return { range, end: `انتهت مدتها المخططة في ${fmtDate(w.to, today)}`, tone: 'over' };
+  if (left === 0) return { range, end: 'تنتهي اليوم', tone: 'soon' };
+  return { range, end: `تنتهي في ${fmtDate(w.to, today)}، ${daysLeftAr(left)}`, tone: left <= 3 ? 'soon' : '' };
+}
+
+// ── لماذا المرحلة متوقفة وما الذي يفتحها: سطر واحد من حالتها الفعلية ──
+// المقفلة: من تفصيل قفلها (stage.lock من resolveStages على الخادم: القاعدة، وما تنتظره، وتاريخ الفتح)، فهو الحساب نفسه الذي
+// قفلها. والجارية التي لا شيء فيها على المشارك: ما سلّمه عند مستشاره، أو أنجز بنودها واكتمالها باعتماد الفريق.
+// بلا تفصيل (خادم أقدم) يبقى نص الخادم lock_reason كما كان، ولا يُخترع سبب
+const quote = (titles) => titles.map((t) => `«${t}»`).join(titles.length === 2 ? ' و' : '، ');
+const counted = (s) => (s?.items || []).filter((i) => i.required);
+/** هل المرحلة جارية ولا ينقصها إلا مراجعة المستشار لما سُلّم؟ */
+export function awaitingReview(stage) {
+  if (!stage || (stage.status !== 'active' && stage.status !== 'available')) return [];
+  const open = counted(stage).filter((i) => i.status !== 'done');
+  return open.length && open.every((i) => i.status === 'submitted') ? open : [];
+}
+/** @param {any} stage @param {any[]} journey @param {Date|string} [today]
+ * @returns {{ kind: 'locked'|'review'|'approval', text: string }|null} */
+export function holdLine(stage, journey = [], today = new Date()) {
+  if (!stage) return null;
+  const by = new Map((journey || []).map((s) => [s.key, s]));
+  const title = (k) => by.get(k)?.title_ar || null;
+  if (stage.status === 'locked') {
+    const l = stage.lock;
+    if (!l) return stage.lock_reason ? { kind: 'locked', text: stage.lock_reason } : null;
+    const due = (l.due || []).map(title).filter(Boolean);
+    const waits = (l.waits || []).map(title).filter(Boolean);
+    let text = '';
+    if (l.unlock === 'approval') text = 'يفتحها لك فريق البرنامج حين يحين دورك فيها، ولا شيء مطلوب منك لفتحها.';
+    else if (l.unlock === 'day' && l.date) text = `لم يحن موعدها: تُفتح في ${fmtDate(l.date, today)}.`;
+    else if (l.unlock === 'with' && title(l.with)) text = by.get(l.with)?.status === 'locked' ? `تبدأ مع «${title(l.with)}»، وهي لم تُفتح بعد.` : `تُفتح مع بداية «${title(l.with)}».`;
+    else if (waits.length) {
+      // ما تنتظره وهو عند المستشار: يُقال، فلا يبحث المشارك عن شيء يفعله
+      const inReview = (l.waits || []).filter((k) => awaitingReview(by.get(k)).length).map(title).filter(Boolean);
+      text = inReview.length === waits.length
+        ? `تُفتح حين يعتمد مستشارك ما سلّمته في ${quote(waits)}.`
+        : `تُفتح بعد أن تكمل ${quote(waits)}${inReview.length ? `، وما سلّمته في ${quote(inReview)} عند مستشارك للمراجعة` : ''}.`;
+    }
+    if (due.length) text = `${text ? `${text} ` : ''}${text ? 'و' : ''}تنتظر البنود الإلزامية في مسارك المستمر ${quote(due)}.`;
+    return text ? { kind: 'locked', text } : stage.lock_reason ? { kind: 'locked', text: stage.lock_reason } : null;
+  }
+  const review = awaitingReview(stage);
+  if (review.length) {
+    return { kind: 'review', text: `لا شيء مطلوب منك الآن: ${review.length === 1 ? `«${review[0].title_ar}» عند مستشارك للمراجعة` : `${countAr(review.length, 'بند واحد', 'بندان', 'بنود', 'بندًا')} سلّمتها عند مستشارك للمراجعة`}، وتكتمل المرحلة باعتماده.` };
+  }
+  if (stage.status === 'active' && stage.rules?.complete === 'approval' && counted(stage).every((i) => i.status === 'done')) {
+    return { kind: 'approval', text: 'أنجزت ما عليك فيها، وتكتمل حين يعتمدها فريق البرنامج.' };
+  }
+  return null;
+}
+/** مرحلة أوقفتها الإدارة لدفعته بعد أن عمل فيها (stages_off من الخادم) */
+export const stageOffAr = (s) => `أُوقفت «${s.title_ar}» لدفعتك، فلا شيء مطلوب منك فيها. ما أنجزته فيها محفوظ.`;
+
+// ── تفصيل النتيجة الختامية: كل مكوّن بوزنه ودرجتك فيه (final.detail من الخادم، finalBreakdown) ──
+const STATE_AR = { zeroed: 'لم يُسلَّم قبل نهاية الدفعة، فحُسب صفرًا', missing: 'لم يدخل الحساب، ووُزّع وزنه على بقية المكوّنات' };
+/** @param {any} final رد الخادم me.final
+ * @returns {{ rows: { key: string, label: string, weight: string, score: string, note: string|null, value: number|null }[], notes: string[] }|null}
+ * null: لا تفصيل لهذه النتيجة، فتعرض الشاشة البديل الصادق (FINAL_NO_DETAIL_AR) */
+export function finalDetailView(final) {
+  const d = final?.detail;
+  if (!d?.components?.length) return null;
+  const rows = d.components.map((c) => ({
+    key: c.key, label: c.label, weight: `وزنه ${c.weight}٪`, value: c.value,
+    score: c.value == null ? 'لم يُحتسب' : `${c.value}٪`, note: STATE_AR[c.state] || null,
+  }));
+  const notes = [];
+  if (d.score_adjusted) notes.push('عُدّلت درجتك النهائية عند اعتماد التقييم، فقد تختلف عن حاصل المكوّنات بأوزانها.');
+  else notes.push('درجتك النهائية حاصل درجات المكوّنات بأوزانها.');
+  if (d.thresholds && Number.isFinite(d.thresholds.pass)) notes.push(`حدود القرار: الاجتياز من ${d.thresholds.pass}٪، والاجتياز بملاحظات من ${d.thresholds.pass_notes}٪، والتمديد من ${d.thresholds.extend}٪.`);
+  return { rows, notes };
+}
+// والبريد يُذكر بعدها مرة واحدة: حين لا يحمله سطر «التالي» (قرارا الاجتياز)
+export const FINAL_NO_DETAIL_AR = 'تفصيل درجات المكوّنات غير متاح لهذه النتيجة.';
+export const FINAL_ASK_DETAIL_AR = 'لطلبه راسل';

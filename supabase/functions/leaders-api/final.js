@@ -264,6 +264,31 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
   };
 }
 
+// ── تفصيل النتيجة للمشارك (جولة المشارك 2026-11-19، البند 12: وعد «تصلك مفصّلة» ونتيجة من سطر واحد) ──
+// من لقطة الحساب المعتمدة نفسها (final_evaluations.snapshot): كل مكوّن له وزن باسمه ووزنه ودرجة المشارك فيه. ما يحق له وحده:
+// درجته هو في كل مكوّن بعد أي تعديل معتمد. لا تعليل تعديل الخبير (ملاحظة داخلية)، ولا الدرجة الآلية قبل التعديل، ولا اسم
+// من عدّل أو اعتمد أو صوّت، ولا بيانات غيره. الملاحظة التي تصله تبقى notes_to_participant وحدها.
+// state: scored (له درجة)، zeroed (حُسب صفرًا لأنه لم يُسلَّم قبل نهاية الدفعة)، missing (لم يدخل الحساب فوُزّع وزنه على البقية).
+// score_adjusted: الدرجة النهائية ليست حاصل المكوّنات (عُدّلت عند الاعتماد)، فيُقال ذلك ولا يُترك الحساب لا يطابق.
+// null: لا لقطة أو لا مكوّنات فيها (تقييم قديم)، فتعرض الواجهة البديل الصادق
+/** @param {any} snapshot لقطة computeFinal المحفوظة عند الرفع
+ * @returns {{ components: { key: string, label: string, weight: number, value: number|null, state: 'scored'|'zeroed'|'missing' }[], coverage: number|null, score_adjusted: boolean, thresholds: Record<string, number>|null }|null} */
+export function finalBreakdown(snapshot) {
+  const rows = (Array.isArray(snapshot?.components) ? snapshot.components : []).filter((x) => x && Object.hasOwn(FINAL_COMPONENT_AR, x.key) && Number(x.weight) > 0);
+  if (!rows.length) return null;
+  const val = (x) => (x.value == null || !Number.isFinite(Number(x.value)) ? null : clamp(Math.round(Number(x.value)), 0, 100));
+  const t = snapshot.config?.thresholds;
+  return {
+    components: rows.map((x) => ({
+      key: x.key, label: FINAL_COMPONENT_AR[x.key], weight: Math.round(Number(x.weight)), value: val(x),
+      state: val(x) == null ? 'missing' : x.zeroed ? 'zeroed' : 'scored',
+    })),
+    coverage: Number.isFinite(Number(snapshot.coverage)) ? Number(snapshot.coverage) : null,
+    score_adjusted: snapshot.score != null && snapshot.formula_score != null && snapshot.score !== snapshot.formula_score,
+    thresholds: t && typeof t === 'object' ? { pass: Number(t.pass), pass_notes: Number(t.pass_notes), extend: Number(t.extend) } : null,
+  };
+}
+
 // التعديلات كما تُحفظ: كل تعديل بتعليل لا يقل عن عشرة أحرف، وملاحظات للمشارك مع القرارات التي تلزمها
 export function cleanAdjust(raw, computed, ctx = {}) {
   const r = raw && typeof raw === 'object' ? raw : {};

@@ -545,7 +545,9 @@ export function untilOptions(stages = [], selfKey = null) {
 const DAY_MS = 86400000;
 // حالة كل مرحلة بعد حساب متطلباتها. stages مرتبة، ولكل منها items محسوبة.
 // ctx: { overrides: { [stage_key]: 'open'|'complete'|'skip' }, cohortStart: 'YYYY-MM-DD'|null, today: Date|string }
-export function resolveStages(stages, { overrides = {}, cohortStart = null, today = new Date() } = {}) {
+// detail: مع كل مرحلة مقفلة سبب قفلها مفصّلًا (lock) لسطر «لماذا هي مقفلة وما الذي يفتحها» في رحلة المشارك (holdLine في
+// journey-copy.js): القاعدة، ومفاتيح ما تنتظره، وتاريخ الفتح. من الحساب نفسه الذي يقفلها، فلا مصدر ثانٍ. وبلا detail المخرج كما كان
+export function resolveStages(stages, { overrides = {}, cohortStart = null, today = new Date(), detail = false } = {}) {
   const now = new Date(today).getTime();
   const start = cohortStart ? new Date(`${cohortStart}T00:00:00Z`).getTime() : null;
   const done = new Map();
@@ -596,7 +598,12 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
       if (dueWaits.length && r.unlock !== 'stages' && r.unlock !== 'previous' && r.unlock !== 'approval') lock_reason = `تُفتح بعد اكتمال بنود: ${dueWaits.map(title).join('، ')}`;
     }
     // الطبيعة في المخرج لغير المتتابعة وحدها: الحجز وفتح الجلسات يجدان بند المسار في الرحلة، والعرض والعداد يفلترانه
-    out.push({ ...s, status, mode: s.mode, stage_mode: r.mode, lock_reason, override: ov, skipped: ov === 'skip', ...(r.lane ? { lane: r.lane } : {}) });
+    const lock = detail && status === 'locked' ? {
+      unlock: r.unlock, waits: waits.filter((k) => !dueWaits.includes(k)), due: dueWaits,
+      ...(r.unlock === 'with' && r.with ? { with: r.with } : {}),
+      ...(r.unlock === 'day' && start != null && r.day != null ? { date: new Date(start + r.day * DAY_MS).toISOString().slice(0, 10) } : {}),
+    } : null;
+    out.push({ ...s, status, mode: s.mode, stage_mode: r.mode, lock_reason, override: ov, skipped: ov === 'skip', ...(r.lane ? { lane: r.lane } : {}), ...(lock ? { lock } : {}) });
   }
   return out;
 }
