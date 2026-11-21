@@ -33,7 +33,10 @@ import { advisorOf, notifyAdvisor } from './advisor.ts';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
 import { features } from './features.ts';
-import { trackWindows } from './stage-windows.js';
+import { stageWindows, trackWindows } from './stage-windows.js';
+import { finalBreakdown } from './final.js';
+import { canReplaceFile, fileAnswers, REPLACE_REFUSED_AR } from './upload-file.js';
+import { privateFile } from './guards.js';
 import { stampSubmitted } from './cohort-times.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
@@ -542,7 +545,7 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     initiativeFor(p.id),
     db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
     // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
-    db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust').eq('participant_id', p.id),
+    db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust, snapshot').eq('participant_id', p.id),
   ]);
   const fe = (finals.data || []).find((r: any) => r.program_id === def.program_id) || null;
   const pl = placements.data || [];
@@ -567,10 +570,18 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
   // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
   const modes = def.cohort?.stage_modes || {};
-  const built = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null });
+  const built = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null, detail: true });
   // المسار المستمر (T1): نافذته من خطة الدفعة نفسها (trackWindows)، لشريط «يسير معك طوال الرحلة». برنامج بلا مسار لا يتغير
   const tw = trackWindows(def.stages, def.cohort || {});
-  const journey = Object.keys(tw).length ? built.map((s: any) => (tw[s.key] ? { ...s, track: tw[s.key] } : s)) : built;
+  // نافذة كل مرحلة للمشارك (جولة المشارك 2026-11-19، البند 10): من خطة الدفعة نفسها (stageWindows، أي cohortPlan) التي تقرؤها
+  // خريطة الإدارة والمعالم، فلا تاريخ ثانٍ. الدفعة المفتوحة أو بلا بداية بلا نوافذ فلا يُعرض شيء. المسار المستمر نافذته في track
+  const sw: Record<string, any> = def.cohort?.starts_on && !def.cohort?.is_default ? (stageWindows(def.stages, def.cohort) as Record<string, any>) : {};
+  const journey = built.map((s: any) => (tw[s.key] ? { ...s, track: tw[s.key] } : sw[s.key] && s.lane !== 'service' ? { ...s, window: sw[s.key] } : s));
+  // مراحل أوقفتها الإدارة لدفعته بعد أن عمل فيها (له صف محفوظ في بند منها): تُسمّى له بسطر، فلا تختفي بلا تفسير.
+  // من لم يعمل فيها لا يراها أصلًا كما كان (R2b). ما أنجزه محفوظ ويعود إن أُعيد تشغيلها
+  const touched = new Set((progress.data || []).map((r: any) => r.requirement_id));
+  const offKeys = new Set(((def as any).requirements_off || []).filter((r: any) => touched.has(r.id)).map((r: any) => r.stage_key));
+  const stagesOff = (def.stages_off || []).filter((s: any) => offKeys.has(s.key)).map((s: any) => ({ key: s.key, title_ar: s.title_ar, phase: s.phase || null }));
   // المعالم: استحقاقها من جدول الدفعة أو نافذة مرحلتها، واكتمالها من مراحل الرحلة نفسها أو باعتماد يدوي
   const milestones = milestoneStatuses(def.milestones || [], {
     stagesDone: new Set(journey.filter((s: any) => s.status === 'done').map((s: any) => s.key)),
@@ -584,14 +595,16 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
   ]);
   // التقييم الختامي يظهر للمشارك بعد اعتماده فقط، مع ملاحظات الخبير له (ما ينقصه وكيف يستكمله)
   const final = fe?.status === 'approved'
-    ? { score: fe.score, decision: fe.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.decision], decided_at: fe.decided_at, notes: fe.adjust?.notes_to_participant || null } : null;
+    ? { score: fe.score, decision: fe.decision, decision_ar: (FINAL_DECISION_AR as Record<string, string>)[fe.decision], decided_at: fe.decided_at, notes: fe.adjust?.notes_to_participant || null,
+      // تفصيل المكوّنات من لقطة الحساب المعتمدة (finalBreakdown): درجته هو في كل مكوّن، بلا ما هو داخلي
+      detail: finalBreakdown(fe.snapshot) } : null;
   // متى أنهى القياس المبدئي: منه موعد اعتماد المسار المعلن (يوما عمل، D04)
   const baselineAt = (assessments.data || []).filter((a: any) => a.status === 'submitted' && a.instruments?.kind === 'baseline').map((a: any) => a.submitted_at).filter(Boolean).sort().at(-1) || null;
-  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final, baselineAt, initiative: !!initiative };
+  return { pl, levels, approved, def, journey, progress: journeyProgress(journey), milestones, milestone_summary: milestoneSummary(milestones), group, continuous, final, baselineAt, initiative: !!initiative, stagesOff };
 }
 
 export async function mePayload(p: any, audience: 'participant' | 'admin' = 'participant') {
-  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt, initiative }, passkeys, cells, org, payAccess, adv] = await Promise.all([
+  const [{ pl, levels, approved, def, journey, progress, milestones, milestone_summary, group, continuous, final, baselineAt, initiative, stagesOff }, passkeys, cells, org, payAccess, adv] = await Promise.all([
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
@@ -647,7 +660,10 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     milestones: milestones.map(({ weight: _w, ...m }: any) => (audience === 'admin' ? { ...m, weight: _w } : m)),
     milestone_summary,
     // مجموعته في دفعته، ونمط المشروع
-    group, project_mode: def.cohort?.project_mode || 'individual', final,
+    // تفصيل النتيجة بأوزانها يتبع مفتاح الرؤية par_final_policy نفسه الذي يحجب معادلة التقييم: من حُجبت عنه المعادلة
+    // لا تصله أوزانها من باب آخر، ويبقى له القرار والدرجة وملاحظة خبيره
+    group, project_mode: def.cohort?.project_mode || 'individual', final: final && audience !== 'admin' && !vis.par_final_policy ? { ...final, detail: null } : final,
+    ...(audience === 'participant' && stagesOff.length ? { stages_off: stagesOff } : {}),
     advisor: adv && (audience === 'admin' || vis.par_advisor) ? { full_name: (adv as any).full_name } : null,
     // التقييم المستمر: تكويني يُعرض ولا يحكم. تعليق الخبير للإدارة فقط
     continuous: audience === 'admin' ? continuous
@@ -1038,15 +1054,47 @@ export async function requirementUpdate(p: any, b: Body) {
   const evidence = b.evidence_path ? String(b.evidence_path) : null;
   if (evidence && !evidence.startsWith(`${p.id}/evidence/`)) throw new Fail(UNEXPECTED_ERROR);
   if (r.kind === 'upload' && !evidence) throw new Fail('ارفع الملف أولًا');
+  // الملف السابق لهذا البند (بند الرفع وحده): استبداله يحذفه من المخزن بعد حفظ الجديد، فلا يبقى ملف بلا صف يشير إليه
+  const prev: any = r.kind === 'upload'
+    ? (await db.from('participant_requirements').select('status, evidence_path, answers').eq('participant_id', p.id).eq('requirement_id', r.id).maybeSingle()).data : null;
+  const dropFile = async (path: unknown) => {
+    const f = privateFile(path, p.id);
+    if (!f || f.kind !== 'evidence') return;
+    // تعذّر الحذف لا يُسقط الحفظ: يُسجَّل فيُحذف يدويًّا، والصف يشير إلى الملف الجديد على كل حال
+    const err = await storage.from(BUCKET).remove([f.path]).then((x: any) => x.error, (e: unknown) => e);
+    if (err) console.error('evidence remove:', (err as Error)?.message || err, f.path);
+  };
+  // ما اعتمده المستشار لا يُستبدل ملفه (canReplaceFile، الحكم نفسه الذي يخفي الزر في الواجهة). الملف الذي رُفع للتو
+  // ولم يُحفظ يُحذف، فلا يبقى يتيمًا
+  if (prev?.evidence_path && !canReplaceFile({ status: prev.status, needs_review: r.needs_review })) {
+    if (evidence !== prev.evidence_path) await dropFile(evidence);
+    throw new Fail(REPLACE_REFUSED_AR, 409, 'reviewed');
+  }
   const undo = b.undo === true && !r.needs_review;
   const status = undo ? 'pending' : r.needs_review ? 'submitted' : 'done';
-  must(await db.from('participant_requirements').upsert({
+  const now = new Date().toISOString();
+  const replaced = !!prev?.evidence_path && !!evidence && prev.evidence_path !== evidence;
+  const { error: saveErr } = await db.from('participant_requirements').upsert({
     participant_id: p.id, requirement_id: r.id, status,
     evidence_path: evidence, note: b.note ? String(b.note).slice(0, 1000) : null,
-    completed_at: status === 'done' ? new Date().toISOString() : null,
-  }));
+    completed_at: status === 'done' ? now : null,
+    // اسم الملف ووقت رفعه مع صفه (upload-file.js). الملف نفسه بلا تغيير يحتفظ بوصفه
+    ...(r.kind === 'upload' ? { answers: evidence && evidence === prev?.evidence_path && prev?.answers?.file ? prev.answers : fileAnswers(b.evidence_name, now) } : {}),
+  });
+  if (saveErr) {
+    // لم يُحفظ الصف: الملف الجديد بلا صف يشير إليه، فيُحذف
+    if (r.kind === 'upload' && evidence !== prev?.evidence_path) await dropFile(evidence);
+    must({ data: null, error: saveErr });
+  }
   // وقت التسليم للمراجعة، لسطر «سلّموا ما ينتظر مراجعتك» في «منذ آخر زيارة»: كتابة ثانية بعد نجاح الأولى لا تُسقطها (cohort-times.ts)
   if (status === 'submitted') await stampSubmitted(p.id, r.id);
+  if (replaced) {
+    // الاستبدال يُسجَّل بمساريه واسميه قبل حذف القديم: السجل يبقى شاهدًا على ما كان، وفتح الإدارة له مسجَّل بمساره
+    await audit('participant', p.id, 'requirement.file-replace', 'participants', p.id,
+      { requirement: r.id, path: prev.evidence_path, name: prev.answers?.file?.name || null, status: prev.status },
+      { requirement: r.id, path: evidence, name: fileAnswers(b.evidence_name, now).file.name, status });
+    await dropFile(prev.evidence_path);
+  }
   return { success: true, ...(await mePayload(p)) };
 }
 

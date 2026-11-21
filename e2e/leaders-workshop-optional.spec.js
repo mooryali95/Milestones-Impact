@@ -106,7 +106,9 @@ const coachingJourney = (sessions, cfg = CFG) => {
 };
 const openConsulting = async (page) => {
   const shelf = page.getByTestId('services');
-  await shelf.locator('#stage-consulting .stage-top').click();
+  // ما فتحه المشارك يُتذكر على جهازه (رحلة المشارك، البند 1): في التحميل الثاني للصفحة نفسها تكون مفتوحة فلا تُنقر فتُطوى
+  const top = shelf.locator('#stage-consulting .stage-top');
+  if ((await top.getAttribute('aria-expanded')) !== 'true') await top.click();
   await expect(shelf.locator('.act-session').first()).toBeVisible();
   return shelf;
 };

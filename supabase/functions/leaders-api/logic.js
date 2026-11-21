@@ -10,6 +10,7 @@ import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
 import { planOffKeys, planRules, planSchedule, planStages, planWithRules } from './stage-windows.js';
 import { cleanStageModes } from './groups.js';
+import { uploadedFile } from './upload-file.js';
 import { countsItem, countedDef, countedProgress, countedSessions, eachWorkshop, itemOptional, optionalSession } from './optional.js';
 
 export const DIMENSIONS = ['milestone', 'impact', 'leadership'];
@@ -433,7 +434,8 @@ export function gateSurveys(items) {
 }
 
 // ctx (اختياري): قواعد الفتح الزمنية وتدخل الأدمن لهذا المشارك — انظر resolveStages
-export function buildJourney({ stages, requirements, progress, levels, state, activity = {}, overrides = {}, cohortStart = null, today = new Date() }) {
+// detail: سبب القفل مفصّلًا مع كل مرحلة مقفلة (resolveStages)، لرحلة المشارك وحدها
+export function buildJourney({ stages, requirements, progress, levels, state, activity = {}, overrides = {}, cohortStart = null, today = new Date(), detail = false }) {
   const sorted = [...stages].filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort);
   const withItems = sorted.map((stage) => {
     const items = requirements
@@ -448,13 +450,15 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
           : act ? (act.done || p.status === 'done' ? 'done' : 'pending')
           : p.status || 'pending';
         // الاختياري خارج العد (optional.js): يُختم هنا مرة، ومنه يقرأ كل عدّاد ونسبة وشرط بعده required وحده
-        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(act ? { activity: act } : {}) };
+        // الملف المرفوع (بند الرفع): اسمه كما سمّاه صاحبه ووقت رفعه، لصف «ملفك المرفوع» في رحلته (uploadedFile في upload-file.js)
+        const file = r.kind === 'upload' ? uploadedFile(p) : null;
+        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
       });
     // المنجز والمطلوب من البنود التي تُعد وحدها: الاختياري لا ينقص نسبة من يقف في المرحلة ولا يزيدها
     const n = countedProgress(items);
     return { ...stage, items: gateSurveys(items), done: n.done, total: n.total };
   });
-  return resolveStages(withItems, { overrides, cohortStart, today });
+  return resolveStages(withItems, { overrides, cohortStart, today, detail });
 }
 
 // نسبة التقدم الكلية: المراحل المكتملة مع جزء الحالية. المرحلة عند الطلب أو
@@ -1832,6 +1836,8 @@ export function cohortDefinition({ live, version, cohort }) {
     requirements: (base.requirements || []).filter((r) => r.active !== false && !off.has(r.stage_key)).map((r) => applyDelivery(r, delivery[r.code])),
     // والقواعد معها لتعرف الخريطة الخدمة الموقوفة (T2) فتضعها في «الخدمات» لا محطة على المسار
     stages_off: active.filter((s) => off.has(s.key)).map((s) => ({ key: s.key, title_ar: s.title_ar, phase: s.phase || null, sort: s.sort ?? 0, ...(s.rules ? { rules: s.rules } : {}) })),
+    // بنود المراحل الموقوفة بمراحلها: ليُعرف من عمل في مرحلة قبل إيقافها، فيُقال له إنها أُوقفت لدفعته ولا تختفي بلا تفسير
+    requirements_off: (base.requirements || []).filter((r) => r.active !== false && off.has(r.stage_key)).map((r) => ({ id: r.id, stage_key: r.stage_key })),
     rule_rewrites: rewrites,
   };
 }

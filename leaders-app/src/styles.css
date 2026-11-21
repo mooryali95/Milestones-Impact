@@ -2008,3 +2008,66 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 
 /* عنوان «كيف يُقيَّم عملك» القابل للفتح: هدف لمس 44 على شاشات اللمس (كان 26) */
 @media (pointer: coarse) { .how-eval > summary { padding-block: 9px; } }
+
+/* ══ رحلة المشارك: الرئيسية الأقصر، وتواريخ المراحل، وسبب التوقف، وتفصيل النتيجة، والملف المرفوع ══ */
+/* تاريخ المرحلة وسما في سطر وسومها، ونهاية الجارية وسبب التوقف سطران تحته */
+.stage-top .meta .tag.date { color: var(--graphite); font-weight: 600; border-radius: 12px; }
+.stage-end, .stage-hold { display: block; margin-top: 6px; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.stage-end { color: var(--graphite); font-weight: 600; }
+.stage-end[data-tone="soon"] { color: var(--gold-text); }
+.stage-end[data-tone="over"] { color: var(--bad); }
+.stage-hold[data-kind="review"], .stage-hold[data-kind="approval"] { color: var(--graphite); }
+/* مراحل أُوقفت للدفعة بعد أن عمل فيها المشارك */
+.stage-off { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.stage-off li { display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; font-size: 14px; color: var(--muted); }
+.stage-off li .ico-svg { flex: none; margin-top: 3px; }
+/* على الهاتف: المنجزة المطوية سطر واحد (اسمها وشارتها)، والمقفلة المطوية اسمها وتاريخها وسبب قفلها. الوسوم تعود عند الفتح */
+@media (max-width: 720px) {
+  .stage:not(.open) .stage-top { padding-block: 10px; min-height: 48px; }
+  .stage.done:not(.open) .stage-top .meta { display: none; }
+  .stage.locked:not(.open) .stage-top .meta .tag:not(.date) { display: none; }
+  .stage.locked:not(.open) .stage-top .meta:not(:has(.tag.date)) { display: none; }
+  .stage:not(.open) .dot { top: 10px; }
+}
+/* «عن هذه المرحلة»: وصفها وما تفعله وما تخرج به في سطر يُفتح على الهاتف، فتكون قائمة التحقق أول ما يُرى */
+.stage-about { margin-top: 10px; }
+.stage-about > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--slate); }
+.stage-about > summary::-webkit-details-marker { display: none; }
+.stage-about > summary::after { content: ''; width: 8px; height: 8px; margin-inline-start: auto; border-inline-end: 2px solid var(--slate); border-bottom: 2px solid var(--slate); transform: rotate(45deg); transition: transform .15s; flex: none; }
+.stage-about[open] > summary::after { transform: rotate(-135deg); }
+.stage-about > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 8px; }
+/* مجموعتك ومستشارك: بطاقة واحدة بسطرين، والأيقونة بجانب النص لا فوقه */
+.banner.j-people { flex-wrap: nowrap; align-items: flex-start; }
+.banner.j-people .grow { flex-basis: auto; min-width: 0; }
+.banner.j-people p { margin: 0; max-inline-size: none; }
+.banner.j-people p + p { margin-top: 4px; }
+@media (max-width: 620px) { .banner.j-people { padding: 12px 14px; gap: 10px; font-size: 14px; } }
+/* «التوجيه والإرشاد» مطويًا على العمود الواحد: عنوان اللوحة في سطر الطي، فلا يتكرر تحته */
+@media (max-width: 1119px) { .j-fold[data-fold="guidance"] .gd-head h2 { display: none; } }
+/* تفصيل النتيجة الختامية: كل مكوّن بوزنه ودرجة المشارك فيه */
+.final-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.final-detail h2 { font-size: 15px; margin: 0 0 8px; }
+.final-detail ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.final-detail li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; }
+.final-detail li .grow { display: grid; gap: 2px; min-width: 0; }
+.final-detail li b { font-size: 14px; }
+.final-detail li small { font-size: 13px; line-height: 1.6; }
+.final-detail .fd-score { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.final-detail .fd-bar { grid-column: 1 / -1; display: block; height: 6px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.final-detail .fd-bar i { display: block; height: 100%; border-radius: inherit; background: var(--gold); }
+/* الملف المرفوع لبند: اسمه ووقت رفعه وزر استبداله */
+.up-file { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.up-file .up-ico { flex: none; color: var(--slate); display: grid; }
+.up-file .grow { flex: 1 1 160px; min-width: 0; display: grid; gap: 2px; }
+.up-file .up-name { font-size: 14px; overflow-wrap: anywhere; }
+.up-file small { font-size: 13px; }
+.up-file .btn { min-height: 44px; }
+.up-confirm { max-width: 480px; margin-inline: auto; }
+.up-confirm .acct-sheet-now b { color: var(--ink); overflow-wrap: anywhere; }
+/* رأس الرحلة على الهاتف: حلقة التقدم بجانب العنوان لا فوقه، وبحجم أصغر (كان الرأس وحده نحو 313 نقطة) */
+@media (max-width: 620px) {
+  .hero[data-tour="journey-hero"] { grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 18px 16px; }
+  .hero[data-tour="journey-hero"] .ring { order: 0; width: 72px; height: 72px; }
+  .hero[data-tour="journey-hero"] .ring svg { width: 72px; height: 72px; }
+  .hero[data-tour="journey-hero"] .ring b { font-size: 16px; }
+}
