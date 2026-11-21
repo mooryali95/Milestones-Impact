@@ -220,7 +220,9 @@ for (const width of WIDTHS) {
         if (kind === 'extend') await expect(d.locator('[data-component="project"]')).toContainText('لم يدخل الحساب، ووُزّع وزنه على بقية المكوّنات');
         if (kind === 'fail') {
           await expect(d.locator('[data-component="project"]')).toContainText('لم يُسلَّم قبل نهاية الدفعة، فحُسب صفرًا');
-          await expect(d).toContainText('عُدّلت درجتك النهائية عند اعتماد التقييم');
+          // قرار المالك: التعديل عند الاعتماد لا يُعلن للمشارك، ولا يُدّعى معه أن الدرجة حاصل المكوّنات
+          await expect(d).not.toContainText('عُدّلت');
+          await expect(d).not.toContainText('حاصل درجات المكوّنات');
         } else await expect(d).toContainText('درجتك النهائية حاصل درجات المكوّنات بأوزانها.');
         await expect(d).toContainText('حدود القرار: الاجتياز من 70٪، والاجتياز بملاحظات من 60٪، والتمديد من 45٪.');
         // صياغة القرار القائمة كما هي: سطر «التالي» وبريد الإدارة

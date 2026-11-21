@@ -163,8 +163,8 @@ export function finalDetailView(final) {
     score: c.value == null ? 'لم يُحتسب' : `${c.value}٪`, note: STATE_AR[c.state] || null,
   }));
   const notes = [];
-  if (d.score_adjusted) notes.push('عُدّلت درجتك النهائية عند اعتماد التقييم، فقد تختلف عن حاصل المكوّنات بأوزانها.');
-  else notes.push('درجتك النهائية حاصل درجات المكوّنات بأوزانها.');
+  // قرار المالك 2026-11-21: تعديل الدرجة عند الاعتماد لا يُعلن للمشارك. فلا يُقال حينها إنها حاصل المكوّنات (ليست كذلك)، ولا يُقال إنها عُدّلت
+  if (!d.score_adjusted) notes.push('درجتك النهائية حاصل درجات المكوّنات بأوزانها.');
   if (d.thresholds && Number.isFinite(d.thresholds.pass)) notes.push(`حدود القرار: الاجتياز من ${d.thresholds.pass}٪، والاجتياز بملاحظات من ${d.thresholds.pass_notes}٪، والتمديد من ${d.thresholds.extend}٪.`);
   return { rows, notes };
 }

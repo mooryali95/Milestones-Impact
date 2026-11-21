@@ -149,7 +149,9 @@ describe('تفصيل النتيجة الختامية', () => {
     expect(v.notes[0]).toBe('درجتك النهائية حاصل درجات المكوّنات بأوزانها.');
     expect(v.notes[1]).toBe('حدود القرار: الاجتياز من 70٪، والاجتياز بملاحظات من 60٪، والتمديد من 45٪.');
     const adj = finalDetailView({ detail: finalBreakdown(computeFinal(comps, null, { score: { value: 90, reason: 'رفع بعد مراجعة اللجنة' } }, {})) });
-    expect(adj.notes[0]).toBe('عُدّلت درجتك النهائية عند اعتماد التقييم، فقد تختلف عن حاصل المكوّنات بأوزانها.');
+    // قرار المالك: التعديل عند الاعتماد لا يُعلن، ولا يُدّعى معه أن الدرجة حاصل المكوّنات
+    expect(adj.notes).toEqual(['حدود القرار: الاجتياز من 70٪، والاجتياز بملاحظات من 60٪، والتمديد من 45٪.']);
+    expect(adj.notes.join(' ')).not.toMatch(/عُدّلت|حاصل/);
     for (const t of [...v.notes, ...adj.notes, ...v.rows.map((r) => r.note || '')]) expect(DASH.test(t)).toBe(false);
   });
   it('بلا تفصيل (تقييم قديم أو محجوب): null فيُعرض البديل الصادق', () => {

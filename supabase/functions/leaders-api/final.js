@@ -269,7 +269,8 @@ export function computeFinal(components, config, adjust = {}, ctx = {}) {
 // درجته هو في كل مكوّن بعد أي تعديل معتمد. لا تعليل تعديل الخبير (ملاحظة داخلية)، ولا الدرجة الآلية قبل التعديل، ولا اسم
 // من عدّل أو اعتمد أو صوّت، ولا بيانات غيره. الملاحظة التي تصله تبقى notes_to_participant وحدها.
 // state: scored (له درجة)، zeroed (حُسب صفرًا لأنه لم يُسلَّم قبل نهاية الدفعة)، missing (لم يدخل الحساب فوُزّع وزنه على البقية).
-// score_adjusted: الدرجة النهائية ليست حاصل المكوّنات (عُدّلت عند الاعتماد)، فيُقال ذلك ولا يُترك الحساب لا يطابق.
+// score_adjusted: الدرجة النهائية ليست حاصل المكوّنات (عُدّلت عند الاعتماد). لا يُعلن للمشارك (قرار المالك 2026-11-21)،
+// والواجهة تقرؤه لتمتنع عن قول «حاصل المكوّنات» حين لا يصدق.
 // null: لا لقطة أو لا مكوّنات فيها (تقييم قديم)، فتعرض الواجهة البديل الصادق
 /** @param {any} snapshot لقطة computeFinal المحفوظة عند الرفع
  * @returns {{ components: { key: string, label: string, weight: number, value: number|null, state: 'scored'|'zeroed'|'missing' }[], coverage: number|null, score_adjusted: boolean, thresholds: Record<string, number>|null }|null} */
