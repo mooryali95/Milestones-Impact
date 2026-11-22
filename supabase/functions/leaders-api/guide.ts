@@ -18,7 +18,7 @@ import { guidanceFor } from './guidance.ts';
 import { currentStages } from './journey-map.js';
 import {
   contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RESERVE_TOKENS, GUIDE_RULES,
-  guideGate, left, parseReply, parseVerify, VERIFY_RULES, PROGRAM_BRIEF_SOURCES, programBrief, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
+  guideGate, GUIDE_VERIFY_MODEL, left, parseReply, parseVerify, VERIFY_RULES, PROGRAM_BRIEF_SOURCES, programBrief, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
 } from './guide.js';
 import { costMicros, estimateTokens, worstCaseMicros } from '../agent-chat/pricing.ts';
 import { sanitizeOutput } from '../agent-chat/redact.ts';
@@ -27,8 +27,8 @@ type Body = Record<string, any>;
 const CONTEXTS = new Set(['program', 'handbook', 'capstone']);
 const missing = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_/.test(String(e.message || '')));
 export const UNSURE_AR = 'لست متأكدًا من الإجابة الدقيقة هنا. اطلب استشارة من خبير ليجيبك بما يناسب عملك.';
-// مدقق الرد (المرحلة ب): نموذج أصغر بكلفة نحو عُشر المجيب
-export const GUIDE_VERIFY_MODEL = 'claude-haiku-5-5';
+// مدقق الرد (المرحلة ب): نموذج أصغر بكلفة نحو عُشر المجيب، معرّف في guide.js مع بصمة الحماية
+export { GUIDE_VERIFY_MODEL };
 export const ERROR_AR = 'تعذّر الرد الآن، ولم يُحسب سؤالك. حاول بعد قليل، أو اطلب استشارة.';
 
 // ما يُحقن في الاختبار: النموذج والمفتاح والوقت ونسخة السياسة، وحالة المشارك ونص الباب (تُقرأ لصاحب الجلسة وحده)
@@ -407,4 +407,9 @@ export async function guideBreakdown(days = 30) {
     id: k === 'none' ? null : k, name: name(k), asked: acc.asked, participants: acc.participants.size, unsure: acc.unsure, confirmed: acc.confirmed, errors: acc.errors, usd: Math.round(acc.micros / 1e4) / 100,
   })).sort((x, y) => y.asked - x.asked);
   return { days, orgs: out(byOrg, (k) => (k === 'none' ? 'بلا جهة (أفراد)' : orgName.get(k) || '؟')), cohorts: out(byCohort, (k) => (k === 'none' ? 'بلا دفعة' : cohortName.get(k) || '؟')) };
+}
+
+// المرحلة ج: أحكام ردود المساعد منذ وقت، لمراقب الانحراف (guide-watch.ts). عمودان بلا نص ولا معرّف مشارك
+export async function guideReplyVerdicts(since: string) {
+  return await db.from('guidance_messages').select('verdict, guard').eq('role', 'assistant').gte('created_at', since).limit(20000);
 }

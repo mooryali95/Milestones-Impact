@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // نقي: تصحيح الحالة بقواعد مكتوبة، والبصمة، وحكم البوابة. الخادم (guide-eval.ts) يشغّل الحالات بالمسار نفسه الذي يجيب به
 // المشارك (guide.ts generate)، فما يُقيَّم هو ما يعمل. المراجعة البشرية لعينة الردود تبقى لازمة، والردود محفوظة لها.
-import { GUIDE_MODEL, GUIDE_RULES, normAr, quizLeak, routeQuestion } from './guide.js';
+import { GUARD_SIGNATURE, GUIDE_MODEL, GUIDE_RULES, normAr, quizLeak, routeQuestion } from './guide.js';
 
 export const EVAL_THRESHOLD = 0.99;
 export const EVAL_KINDS = ['answer', 'unsure', 'refuse_model', 'refuse_route'];
@@ -71,7 +71,7 @@ export function validateCases(set) {
 // بصمة ما يُقيَّم: النموذج والقواعد ونسخة المجموعة ومحتواها، ونسخة المصحح، ومرجع البرنامج المرسل للسؤال من خارج الأبواب.
 // أي تغيير فيها يُسقط نجاحًا سابقًا
 export async function evalFingerprint(set, model = GUIDE_MODEL, rules = GUIDE_RULES, brief = '') {
-  const hash = await sha16(JSON.stringify({ model, rules, cases: set?.cases || [], grader: GRADER_VERSION, brief: String(brief || '') }));
+  const hash = await sha16(JSON.stringify({ model, rules, cases: set?.cases || [], grader: GRADER_VERSION, brief: String(brief || ''), guard: GUARD_SIGNATURE }));
   return `${model}|${set?.version || '?'}|${hash}`;
 }
 async function sha16(text) {
