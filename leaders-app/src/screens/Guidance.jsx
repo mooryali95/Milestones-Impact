@@ -7,7 +7,7 @@
 // G2: «اسأل المساعد» (GuideChat) يظهر حين يكون المساعد مفتوحًا (me.guidance.ai) وبوابة الخادم مفتوحة لهذا المشارك
 // (guide.state). «لم تقنعني، أريد التأكد» يملأ طلب الاستشارة بالسؤال ويفتحه، والمشارك يرسله بنفسه: لا يصل شيء من
 // محادثته لأحد دون فعله. والمحادثة له وحده، ويحذفها متى شاء.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { call } from '../api.js';
 import ChooseExpert from './ChooseExpert.jsx';
 import PeerRequests from './PeerRequests.jsx';
@@ -15,13 +15,25 @@ import { GUIDANCE_TEXT } from '../../../supabase/functions/leaders-api/guidance.
 
 const VERDICT_AR = { refused: 'خارج نطاق المساعد', unsure: 'لم يتأكد المساعد' };
 
-export function GuideChat({ context = 'program', chapterId = null, onConfirm }) {
+// تنفيذ واحد يستعمله «التوجيه والإرشاد» والمبادرة (Assistant.jsx): البوابة والحدود والمحادثة نفسها من الخادم.
+// initialText: سياق يكتبه المشارك أو يعدّله قبل الإرسال (اسم الحقل مثلًا)، ولا يُرسل شيء من مسودته
+export function GuideChat({ context = 'program', chapterId = null, onConfirm, initialText = '', autoFocus = false, note = null }) {
   const [d, setD] = useState(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const hid = useId();
+  const box = useRef(null);
   const load = () => call('guide.state').then(setD);
   useEffect(() => { load(); }, []);
+  const ready = !!(d?.success && d.gate?.ok);
+  // التركيز في نهاية السؤال المملوء، ليكمل المشارك بعد اسم الحقل
+  useEffect(() => {
+    const t = box.current;
+    if (!ready || !autoFocus || !t) return;
+    t.focus();
+    t.setSelectionRange?.(t.value.length, t.value.length);
+  }, [ready, autoFocus]);
   if (!d?.success || !d.gate?.ok) return null;
   const msgs = d.messages || [];
   const ask = async (e) => {
@@ -43,12 +55,13 @@ export function GuideChat({ context = 'program', chapterId = null, onConfirm }) 
   // السؤال الذي سبق الرد: لزر «أريد التأكد»
   const questionOf = (i) => msgs[i].question || [...msgs.slice(0, i)].reverse().find((m) => m.role === 'user')?.body || '';
   return (
-    <section className="gd-chat stack" aria-labelledby="gd-chat-h">
+    <section className="gd-chat stack" aria-labelledby={hid}>
       <div className="row between">
-        <h3 id="gd-chat-h">اسأل المساعد <small className="muted">مساعد ذكي</small></h3>
+        <h3 id={hid}>اسأل المساعد <small className="muted">مساعد ذكي</small></h3>
         <span className="small muted" data-guide-left>بقي لك {d.left.day} اليوم و{d.left.month} هذا الشهر</span>
       </div>
       <p className="small muted">يجيب من كتابك ويخطئ أحيانًا. إن لم تقنعك إجابته فاضغط «أريد التأكد» لتطلب استشارة خبير. محادثتك خاصة بك، ويطّلع عليها فريق المنصة لضمان الجودة عند الحاجة، وتُحذف بعد {d.retention_days} يومًا.</p>
+      {note && <p className="small gd-note" data-guide-note>{note(d)}</p>}
       {msgs.length > 0 && (
         <ol className="gd-log" aria-label="محادثتك مع المساعد" aria-live="polite">
           {msgs.map((m, i) => (
@@ -69,7 +82,7 @@ export function GuideChat({ context = 'program', chapterId = null, onConfirm }) 
       )}
       <form className="stack" onSubmit={ask}>
         <label className="field"><span>سؤالك</span>
-          <textarea className="input" rows={3} maxLength={1200} value={text} onChange={(e) => setText(e.target.value)} placeholder="مثلًا: كيف أطبق فكرة هذا الباب على مشروعي؟" /></label>
+          <textarea ref={box} className="input" rows={3} maxLength={1200} value={text} onChange={(e) => setText(e.target.value)} placeholder="مثلًا: كيف أطبق فكرة هذا الباب على مشروعي؟" /></label>
         {err && <div className="alert err" role="alert">{err}</div>}
         <div className="row between">
           <button className="btn gold sm" disabled={busy || !text.trim() || d.left.day === 0 || d.left.month === 0}>{busy ? 'يفكر…' : 'اسأل'}</button>

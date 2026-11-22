@@ -1941,6 +1941,16 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .gd-msg.assistant { align-self: flex-end; background: var(--surface); border: 1px solid var(--line); }
 .gd-msg .chip { margin-bottom: 6px; }
 .gd-msg .link { display: block; margin-top: 6px; }
+.gd-note { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--mist); }
+
+/* «اسأل المساعد» من المبادرة (Assistant.jsx): زر بجانب «كيف أكتبه؟»، ولوحة جانبية تصير ورقة سفلية على الجوال */
+.as-ask { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0 4px; align-self: flex-start; justify-self: start; width: auto; }
+.as-line { margin: 0 0 8px; padding: 8px 16px; }
+.wsheet .mf > .as-ask { width: fit-content; justify-self: start; }
+@media (max-width: 640px) {
+  .as-drawer { margin: auto 0 0; width: 100vw; height: auto; max-height: 88dvh; border-radius: 18px 18px 0 0; }
+  .as-drawer .gd-drawer-body { max-height: 88dvh; height: auto; }
+}
 
 /* خدمات متاحة لك (T2): رف منفصل عن تسلسل المراحل، بإطار منقط */
 .svc-shelf { border: 2px dotted rgba(148, 112, 46, .45); }
