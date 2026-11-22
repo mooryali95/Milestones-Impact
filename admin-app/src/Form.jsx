@@ -10,6 +10,8 @@
 // notes(قيم) ← سطور تنبيه قبل الأزرار [{ text, tone?: 'warn' }] · saveLabel ← نص زر الحفظ
 // confirmSave(المحفوظ، القيم) ← نص تأكيد قبل الحفظ، أو null بلا تأكيد (حفظ يرسل بريدًا أو يضيف من الخط الزمني). يقبل وعدًا (معاينة
 // من الخادم)، و{ text, lines, ok }: lines سطور الأثر تحت السؤال، و{ error } يوقف الحفظ برسالته، وpatch يُدمج في المحفوظ
+// وcheck: { name, label, help?, checked } مربع اختيار في نافذة التأكيد، وقيمته تُدمج في المحفوظ باسمه (name)
+// confirmDelete() ← سؤال الحذف بالشكل نفسه (معاينة من الخادم)، وقيمة مربعه تمر إلى onDelete({ [name]: قيمة })
 // choice ← اختيار واحد صريح بأزرار راديو: options [{ value, label, help, disabled?, note? }]، وrequired نص الخطأ إن لم يُختر (بلا قيمة مسبقة)
 // الإغلاق دون حفظ (Esc أو النقر خارجه أو «إلغاء») يسأل أولًا إن تغيّر شيء، فلا يضيع ما كُتب سهوًا.
 import React, { useState } from 'react';
@@ -22,7 +24,7 @@ export const toLocal = (iso) => {
   return isNaN(d) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
 };
 
-export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, saveLabel = 'حفظ' }) {
+export default function Form({ title, fields, values = {}, onSave, onDelete, onClose, notes = null, confirmSave = null, confirmDelete = null, saveLabel = 'حفظ' }) {
   const { confirm } = useUI();
   const [start] = useState(() => Object.fromEntries(fields.map((f) => [f.name,
     f.type === 'check' ? !!values[f.name]
@@ -57,18 +59,26 @@ export default function Form({ title, fields, values = {}, onSave, onDelete, onC
     const ask = confirmSave ? await confirmSave(out, v) : null;
     setBusy(false);
     if (ask?.error) { setError(ask.error); return; }
-    if (ask && (ask.text || typeof ask === 'string') && !(await confirm(ask.text || ask, { ok: ask.ok || saveLabel, lines: ask.lines || null }))) return;
+    const yes = ask && (ask.text || typeof ask === 'string') ? await confirm(ask.text || ask, { ok: ask.ok || saveLabel, lines: ask.lines || null, check: ask.check || null, danger: !!ask.danger }) : true;
+    if (!yes) return;
+    const picked = ask?.check ? { [ask.check.name]: yes.checked } : null;
     setBusy(true);
-    const res = await onSave(ask?.patch ? { ...out, ...ask.patch } : out);
+    const res = await onSave(ask?.patch || picked ? { ...out, ...ask.patch, ...picked } : out);
     setBusy(false);
     if (res?.success) onClose(true); else setError(res?.message || 'تعذّر الحفظ');
   };
   const optionsOf = (f) => (typeof f.options === 'function' ? f.options(v) : f.options) || {};
   const noteList = notes ? (notes(v) || []).filter((n) => n?.text) : [];
   const remove = async () => {
-    if (!(await confirm('حذف نهائي؟', { danger: true }))) return;
+    setError('');
     setBusy(true);
-    const res = await onDelete();
+    const ask = confirmDelete ? await confirmDelete() : null;
+    setBusy(false);
+    if (ask?.error) { setError(ask.error); return; }
+    const yes = await confirm(ask?.text || 'حذف نهائي؟', { danger: true, ok: ask?.ok, lines: ask?.lines || null, check: ask?.check || null });
+    if (!yes) return;
+    setBusy(true);
+    const res = await onDelete(ask?.check ? { [ask.check.name]: yes.checked } : {});
     setBusy(false);
     if (res?.success) onClose(true); else setError(res?.message || 'تعذّر الحذف');
   };

@@ -2,6 +2,8 @@
 // واجهات مشتركة: الإشعار السريع، ونافذة التأكيد والإدخال، وسلوك كل نافذة حوارية
 // ════════════════════════════════════════════════════════════════
 // useUI().toast(نص) · await useUI().confirm(نص, {danger}) · await useUI().prompt(نص, قيمة)
+// confirm بـlines: سطور تحت السؤال (نص، أو { text, tone: 'warn' })، وبـcheck: { label, help?, checked } مربع اختيار داخل النافذة،
+// فيعود التأكيد بـ{ checked } بدل true (اختيار «أبلغ المدعوين» قبل إلغاء جلسة)
 // useEscape(إغلاق) ← Esc يغلق العليا وحدها · useGuardedClose(تغيّرت؟, إغلاق) ← إغلاق يسأل قبل أن يضيع ما كُتب
 // التركيز في كل نافذة role="dialog" aria-modal="true" من useModalFocus (shared/ui/modal-focus.js) يُركَّب هنا، بلا سطر في النافذة نفسها.
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -16,6 +18,7 @@ export const useUI = () => useContext(Ctx);
 
 function Dialog({ d, onDone }) {
   const [value, setValue] = useState(d.value || '');
+  const [checked, setChecked] = useState(d.check ? d.check.checked !== false : false);
   const field = useRef(null);
   const no = useRef(null);
   const yes = useRef(null);
@@ -24,7 +27,7 @@ function Dialog({ d, onDone }) {
     (field.current || (d.danger ? no.current : yes.current))?.focus();
     field.current?.select();
   }, [d]);
-  const accept = () => onDone(d.input ? value : true);
+  const accept = () => onDone(d.input ? value : d.check ? { checked } : true);
   const cancel = () => onDone(d.input ? null : false);
   useEscape(cancel);
   const key = (e) => {
@@ -35,7 +38,13 @@ function Dialog({ d, onDone }) {
       <div className="mid-box" role={d.input ? 'dialog' : 'alertdialog'} aria-modal="true" aria-labelledby="mid-msg">
         <p className="mid-msg" id="mid-msg">{d.msg}</p>
         {/* سطور الأثر تحت السؤال (معاينة قبل الحفظ): كل سطر جملة برقمها */}
-        {d.lines?.length > 0 && <ul className="mid-lines" data-testid="confirm-lines">{d.lines.map((x) => <li key={x}>{x}</li>)}</ul>}
+        {d.lines?.length > 0 && <ul className="mid-lines" data-testid="confirm-lines">{d.lines.map((x) => (typeof x === 'string' ? <li key={x}>{x}</li> : <li key={x.text} className={x.tone === 'warn' ? 'warn' : ''}>{x.tone === 'warn' && <span aria-hidden="true">! </span>}{x.text}</li>))}</ul>}
+        {d.check && (
+          <label className="mid-check" data-testid="confirm-check">
+            <input type="checkbox" checked={checked} aria-describedby={d.check.help ? 'mid-check-help' : undefined} onChange={(e) => setChecked(e.target.checked)} />
+            <span><b>{d.check.label}</b>{d.check.help && <small id="mid-check-help">{d.check.help}</small>}</span>
+          </label>
+        )}
         {d.input && <input ref={field} className="mid-in" value={value} onChange={(e) => setValue(e.target.value)} />}
         <div className="mid-act">
           <button ref={yes} className={`mid-btn ${d.danger ? 'danger' : 'ok'}`} onClick={accept}>{d.ok || 'تأكيد'}</button>
