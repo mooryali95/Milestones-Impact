@@ -37,6 +37,7 @@
 | `LEADERS_AGENT_ENABLED` | اختياري | `agent-chat`، `leaders-api` | مفتاح طوارئ فقط: `off` يطفئ المساعد أيًا كان ما في اللوحة. غيره لا يشغّل شيئًا: التفعيل من الشاشة بعد تقييم ناجح للإعداد المنشور (RUNBOOK §7) | يُضبط `off` فورًا عند أي خلل (لا نشر) |
 | `LEADERS_CALCOM_SECRET` | لا | `core.ts` ← `leaders-hooks` | توقيع خطاف Cal.com | من لوحة Cal.com |
 | `LEADERS_CALENDLY_KEY` | لا | `core.ts` ← `leaders-hooks` | مفتاح توقيع Calendly | من لوحة Calendly |
+| `LEADERS_GUIDE_VERIFY` | لا | `guide.ts` ← `leaders-api` | مفتاح طوارئ: `off` يوقف فحص رد «التوجيه والإرشاد» قبل وصوله (المرحلة ب). غيابه = الفحص يعمل | لا يُضبط إلا عند عطل المدقق |
 | `GITHUB_RELEASE_TOKEN` | لا (بلاه يعمل الكتاب، وتعرض لوحة «إصدار الكتاب» طريقة الإعداد) | `leaders-api/book-release.ts` | زر «أصدر الكتاب» للمدير العام: يشغّل سير Handbook release، ويفتح طلب الإصدار، ويدمجه بعد خضرة فحوصه، ويشغّل migrate. مفتاح GitHub دقيق (fine-grained) على هذا المستودع وحده بصلاحيات Actions وContents وPull requests (قراءة وكتابة) | من GitHub ← Developer settings ← Fine-grained tokens، بمدة صلاحية، ويُستبدل قبل انتهائها |
 | `GITHUB_RELEASE_REPO` | لا (الافتراضي `mooryali95/Milestones-Impact`) | `leaders-api/book-release.ts` | المستودع الذي يُصدر منه الكتاب | لا يُدوَّر |
 | `CREEM_API_KEY` (أو `CAREEM_SECRET_KEY`) | نعم للدفع | `payments.ts` | إنشاء صفحات الدفع؛ البادئة `creem_test_` = وضع الاختبار | من لوحة Creem؛ الاسم البديل يبقى مقبولًا حتى تُوحَّد الأسماء في اللوحة |

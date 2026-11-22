@@ -18,7 +18,7 @@ import { guidanceFor } from './guidance.ts';
 import { currentStages } from './journey-map.js';
 import {
   contextLine, GATE_AR, rulesWith, GUIDE_CHAPTER_CHARS, GUIDE_POLICY_VERSION, GUIDE_HISTORY, GUIDE_LIST, GUIDE_MAX_TOKENS, GUIDE_MODEL, GUIDE_RESERVE_TOKENS, GUIDE_RULES,
-  guideGate, left, parseReply, PROGRAM_BRIEF_SOURCES, programBrief, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
+  guideGate, left, parseReply, parseVerify, VERIFY_RULES, PROGRAM_BRIEF_SOURCES, programBrief, quizLeak, REFUSAL_AR, riyadhWindow, routeQuestion,
 } from './guide.js';
 import { costMicros, estimateTokens, worstCaseMicros } from '../agent-chat/pricing.ts';
 import { sanitizeOutput } from '../agent-chat/redact.ts';
@@ -27,6 +27,8 @@ type Body = Record<string, any>;
 const CONTEXTS = new Set(['program', 'handbook', 'capstone']);
 const missing = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_/.test(String(e.message || '')));
 export const UNSURE_AR = 'لست متأكدًا من الإجابة الدقيقة هنا. اطلب استشارة من خبير ليجيبك بما يناسب عملك.';
+// مدقق الرد (المرحلة ب): نموذج أصغر بكلفة نحو عُشر المجيب
+export const GUIDE_VERIFY_MODEL = 'claude-haiku-5-5';
 export const ERROR_AR = 'تعذّر الرد الآن، ولم يُحسب سؤالك. حاول بعد قليل، أو اطلب استشارة.';
 
 // ما يُحقن في الاختبار: النموذج والمفتاح والوقت ونسخة السياسة، وحالة المشارك ونص الباب (تُقرأ لصاحب الجلسة وحده)
@@ -45,6 +47,9 @@ export const GD = {
     const row = Array.isArray(data) ? data[0] : data;
     return String(row?.api_key || Deno.env.get('ANTHROPIC_API_KEY') || '');
   },
+  // مدقق الرد (المرحلة ب). LEADERS_GUIDE_VERIFY=off مفتاح طوارئ يوقفه (والاختبارات تحقنه صراحة)، فيُعاد null بلا حجب
+  verify: async (o: { key: string; chapter: any; brief?: string; question: string; reply: string }): Promise<{ verdict: { ok: boolean; reason: string } | null; cost: number } | null> =>
+    (Deno.env.get('LEADERS_GUIDE_VERIFY') === 'off' ? null : await verifyReply(o)),
   model: async (params: Record<string, unknown>, apiKey: string) => {
     const client = new Anthropic({ apiKey, authToken: null, baseURL: 'https://api.anthropic.com', maxRetries: 1, timeout: 100_000 });
     return await client.messages.create(params as any) as any;
@@ -142,6 +147,8 @@ export async function programBriefNow(): Promise<string> {
 
 async function save(row: Record<string, unknown>): Promise<number | null> {
   const { data, error } = await db.from('guidance_messages').insert(row).select('id').single();
+  // عمود guard قبل ترحيله (20261124100000): يُعاد الحفظ بلاه، فلا يتعطل المساعد بين النشر والترحيل
+  if (error && missingColumn(error) && 'guard' in row) { const { guard: _g, ...rest } = row; return save(rest); }
   if (error) throw error;
   return (data as any)?.id ?? null;
 }
@@ -185,7 +192,38 @@ export async function generate(o: { key: string; chapter: Chapter; ctx: string; 
     text = sanitizeOutput(text).text;
     if (verdict === 'unsure' && text.length < 20) text = UNSURE_AR;
   }
-  return { verdict, text, res, cost };
+  // المرحلة ب: الرد «أجاب» يُفحص قبل وصوله. المحجوب يصير «لم أتأكد» بالإحالة، وسببه في guard. تعذّر الفحص لا يحجب ويُسجَّل
+  let guard: string | null = null;
+  let total = cost;
+  if (verdict === 'answered') {
+    const v = await GD.verify({ key: o.key, chapter: o.chapter, brief: o.brief, question: o.text, reply: text });
+    if (v) {
+      total += v.cost;
+      if (v.verdict === null) guard = 'verify_error';
+      else if (!v.verdict.ok) { guard = v.verdict.reason; verdict = 'unsure'; text = UNSURE_AR; }
+    }
+  }
+  return { verdict, text, res, cost: total, guard };
+}
+
+export async function verifyReply(o: { key: string; chapter: Chapter; brief?: string; question: string; reply: string }) {
+  const ref = o.chapter ? `نص باب «${o.chapter.title}»:\n\n${o.chapter.md}` : (o.brief || '');
+  try {
+    const res = await GD.model({
+      model: GUIDE_VERIFY_MODEL, max_tokens: 120,
+      system: [{ type: 'text', text: VERIFY_RULES }, { type: 'text', text: `المرجع:\n\n${ref}`, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: `سؤال المشارك:\n${o.question}\n\nرد المساعد:\n${o.reply}` }],
+      inference_geo: 'us',
+    }, o.key);
+    const cost = costMicros(String(res?.model || GUIDE_VERIFY_MODEL), res?.usage || {});
+    const raw = (res?.content || []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n');
+    const verdict = parseVerify(raw);
+    if (!verdict) console.warn('guide verify unreadable');
+    return { verdict, cost };
+  } catch (e) {
+    console.error('guide verify', (e as any)?.status || (e as Error)?.name);
+    return { verdict: null, cost: 0 };
+  }
 }
 
 export async function guideAsk(p: any, b: Body) {
@@ -201,7 +239,7 @@ export async function guideAsk(p: any, b: Body) {
   if (route.kind === 'refuse') {
     try {
       await save({ participant_id: p.id, role: 'user', body: text, context: where, chapter_id: chapterId, verdict: 'refused' });
-      await save({ participant_id: p.id, role: 'assistant', body: REFUSAL_AR[route.reason], context: where, chapter_id: chapterId, verdict: 'refused' });
+      await save({ participant_id: p.id, role: 'assistant', body: REFUSAL_AR[route.reason], context: where, chapter_id: chapterId, verdict: 'refused', ...(route.reason === 'inject' ? { guard: 'inject' } : {}) });
     } catch (e) { if (missing(e)) throw new Fail(GATE_AR.policy, 409, 'not_migrated'); throw e; }
     return { success: true, reply: { text: REFUSAL_AR[route.reason], verdict: 'refused' }, left: left(await counts(p.id), s) };
   }
@@ -253,14 +291,15 @@ export async function guideAsk(p: any, b: Body) {
   }
   await db.rpc('guidance_spend_settle', { p_day: w.dayKey, p_delta: g.cost - worst }).then(() => null, () => null);
   if (g.verdict === 'error') { await unclaim(); throw new Fail(ERROR_AR, 502, 'guide_empty'); }
-  const { verdict, text: answer, res, cost } = g;
+  const { verdict, text: answer, res, cost, guard } = g;
   const sources = chapter ? [chapter.title] : [];
   const answerId = await save({
     participant_id: p.id, role: 'assistant', body: answer.slice(0, 6000), context: where, chapter_id: chapterId, verdict, sources,
     model: String(res?.model || GUIDE_MODEL).slice(0, 60), input_tokens: res?.usage?.input_tokens ?? null,
     cache_read_tokens: res?.usage?.cache_read_input_tokens ?? null, output_tokens: res?.usage?.output_tokens ?? null, cost_micros: cost,
+    ...(guard ? { guard } : {}),
   });
-  console.log('guide ask', JSON.stringify({ q: questionId, verdict, cost_micros: cost }));
+  console.log('guide ask', JSON.stringify({ q: questionId, verdict, guard, cost_micros: cost }));
   return { success: true, reply: { id: answerId, text: answer, verdict, sources }, left: left(await counts(p.id), s) };
 }
 

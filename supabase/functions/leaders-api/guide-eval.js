@@ -58,9 +58,12 @@ export function validateCases(set) {
     for (const p of [...(c?.must_include || []), ...(c?.must_not_include || [])]) {
       try { new RegExp(p, 'i'); } catch { errors.push(`${at}: نمط غير صالح ${p}`); }
     }
-    const routed = routeQuestion(c?.question).kind === 'refuse';
+    const route = routeQuestion(c?.question);
+    const routed = route.kind === 'refuse';
+    // محاولة التلاعب (inject) يرفضها الموجّه قبل النموذج منذ تقوية المساعد (المرحلة ب)، فحالة refuse_model منها تبقى صالحة: الرفض حاصل
+    const injectOk = c?.kind === 'refuse_model' && route.kind === 'refuse' && route.reason === 'inject';
     if (c?.kind === 'refuse_route' && !routed) errors.push(`${at}: لا يلتقطه الموجّه`);
-    if (c?.kind !== 'refuse_route' && routed) errors.push(`${at}: يلتقطه الموجّه قبل النموذج`);
+    if (c?.kind !== 'refuse_route' && routed && !injectOk) errors.push(`${at}: يلتقطه الموجّه قبل النموذج`);
   }
   return errors;
 }
