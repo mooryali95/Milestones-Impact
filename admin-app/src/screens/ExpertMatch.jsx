@@ -47,7 +47,7 @@ export function ExpertAssign({ participantId, canWrite }) {
     if (e && !first) {
       reason = await prompt(`لماذا ${e.full_name} وليس الأول في الترشيح؟ يُسجّل السبب.`, '', { ok: 'إسناد' });
       if (!reason?.trim()) return;
-    } else if (!(await confirm(e ? `عرض الطلب على ${e.full_name}؟ لديه ${OFFER_HOURS} ساعة ليقبل، ثم ينتقل للتالي.` : `إسناد ${roleAr(role)} للأنسب تلقائيًا؟`))) return;
+    } else if (!(await confirm(e ? `عرض الطلب على ${e.full_name}؟ لديه ${OFFER_HOURS} ساعة ليقبل، (أو ما ضُبط في الإعدادات)، ثم ينتقل للتالي.` : `إسناد ${roleAr(role)} للأنسب تلقائيًا؟`))) return;
     setBusy(true);
     const r = await L('admin.expert-assign', { participant_id: participantId, role, dimension: dim || null, ...(e ? { expert_id: e.id, reason } : {}) });
     setBusy(false);
@@ -176,7 +176,8 @@ export function RequestsBoard({ canWrite, onPerson, view = '' }) {
     const reason = action.endsWith('cancel') ? await prompt('سبب الإلغاء؟', '', { danger: true, ok: 'إلغاء الطلب' }) : '';
     if (action.endsWith('cancel') && !reason?.trim()) return;
     const r = await L(action, { id: x.id, reason });
-    toast(r.success ? ok : r.message);
+    // النتيجة الحقيقية لا «أُعيدت» في كل حال: قد تنتهي المحاولة فورًا بلا خبير متاح
+    toast(!r.success ? r.message : r.status === 'offered' ? `عُرض على ${r.expert_name || 'خبير'} حتى ${date(r.expires_at)}` : r.status === 'unmatched' ? 'لا خبير متاح: كل من يطابق اعتذر. استعمل «غيّر الخبير»' : ok);
     if (r.success) load();
   };
   return (
@@ -197,6 +198,7 @@ export function RequestsBoard({ canWrite, onPerson, view = '' }) {
               <td className="ce-act">{canWrite && <>
                 {x.status === 'accepted' && <button className="btn-sm ghost" onClick={() => act('admin.expert-request-complete', x, 'أُغلق الطلب')}>اكتملت الخدمة</button>}
                 {x.status === 'unmatched' && <button className="btn-sm primary" onClick={() => act('admin.expert-request-retry', x, 'أُعيدت المحاولة')}>أعد المحاولة</button>}
+                {['open', 'offered', 'unmatched'].includes(x.status) && <Reassign x={x} onDone={load} />}
                 {LIVE.includes(x.status) && <button className="btn-sm ghost" onClick={() => act('admin.expert-request-cancel', x, 'أُلغي الطلب')}>إلغاء</button>}
               </>}</td>
             </tr>
@@ -204,5 +206,45 @@ export function RequestsBoard({ canWrite, onPerson, view = '' }) {
         </table></div>
       )}
     </section>
+  );
+}
+
+// «غيّر الخبير» (قرار المالك 2026-11-22): كل الخبراء المعتمدين، المطابقون بنسبتهم ثم من خارج الترشيح بسببه،
+// وسبب مكتوب. يُلغى العرض الحالي ويُعرض على المختار فورًا بمهلته، والتغيير مسجّل في السجل
+function Reassign({ x, onDone }) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const [opts, setOpts] = useState(null);
+  const [pick, setPick] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const show = async () => {
+    setOpen(true);
+    if (!opts) { const r = await L('admin.expert-reassign-options', { id: x.id }); setOpts(r.success ? r.options : []); if (!r.success) toast(r.message); }
+  };
+  if (!open) return <button className="btn-sm ghost" onClick={show}>غيّر الخبير</button>;
+  const save = async () => {
+    setBusy(true);
+    const r = await L('admin.expert-reassign', { id: x.id, expert_id: pick, reason });
+    setBusy(false);
+    if (!r.success) { toast(r.message); return; }
+    toast(r.status === 'offered' ? `عُرض على ${r.expert_name || 'الخبير'} حتى ${date(r.expires_at)}` : 'تعذّر العرض على الخبير المختار');
+    setOpen(false); onDone();
+  };
+  const inside = (opts || []).filter((o) => !o.outside), outside = (opts || []).filter((o) => o.outside);
+  const label = (o) => `${o.full_name}${o.match != null ? ` · ${o.match}` : ''}${o.why ? ` · ${o.why}` : ''}${o.declined ? ' · اعتذر سابقًا' : ''}${o.current ? ' · الحالي' : ''}`;
+  return (
+    <div className="xm-reassign" role="group" aria-label="تغيير الخبير">
+      {!opts ? <Spinner /> : (
+        <select className="filter-select" aria-label="الخبير" value={pick} onChange={(e) => setPick(e.target.value)}>
+          <option value="">اختر خبيرًا</option>
+          {inside.length > 0 && <optgroup label="المطابقون">{inside.map((o) => <option key={o.id} value={o.id} disabled={o.current && x.status === 'offered'}>{label(o)}</option>)}</optgroup>}
+          {outside.length > 0 && <optgroup label="خارج الترشيح">{outside.map((o) => <option key={o.id} value={o.id}>{label(o)}</option>)}</optgroup>}
+        </select>
+      )}
+      <input className="filter-select" aria-label="سبب التغيير" placeholder="سبب التغيير" value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} />
+      <button className="btn-sm primary" disabled={busy || !pick || reason.trim().length < 3} onClick={save}>اعرض عليه</button>
+      <button className="btn-sm ghost" onClick={() => setOpen(false)}>إلغاء</button>
+    </div>
   );
 }

@@ -85,6 +85,7 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
       ilike: (c: string, v: string) => { const re = likeRe(v, 'i'); filters.push((r) => r[c] != null && re.test(String(r[c]))); return q; },
       neq: (c: string, v: unknown) => { filters.push((r) => r[c] !== v); return q; },
       in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; },
+      contains: (c: string, v: any) => { filters.push((r) => Array.isArray(v) ? v.every((x) => (r[c] || []).includes(x)) : Object.entries(v || {}).every(([k, x]) => (r[c] || {})[k] === x)); return q; },
       is: (c: string, v: unknown) => { filters.push((r) => (r[c] ?? null) === v); return q; },
       not: (c: string, o: string, v: unknown) => {
         if (o === 'is') filters.push((r) => (r[c] ?? null) !== v);
