@@ -117,3 +117,59 @@ Deno.test('الحارس نفسه: يلتقط العدّ بلا قاعدة، وي
   const got = scan('x.ts', src).sort((x, y) => x.line - y.line).map((s) => [s.line, s.pass, s.why != null]);
   assertEquals(got, [[1, null, false], [2, 'predicate', false], [3, 'keyed', false], [4, 'write', false], [6, null, true], [7, null, false], [8, 'predicate', false], [9, 'flag', false]]);
 });
+
+// ── حساب تجريبي لكل دفعة (المرحلة 2 من التصور) ──
+// حساب الدفعة يحمل دفعته في participants.demo_cohort_id وحده، ولا صف له في أي جدول عضوية، فكل قراءة بالدفعة لا تجده وكل
+// قراءة من المشاركين تستبعده بالقاعدة أعلاه. الحارسان التاليان يثبتان الشرطين: لا كاتب عضوية يقبله، ولا يُقرأ العمود إلا
+// في مواضعه المعروفة (قراءة جديدة به تعني طريقًا جديدًا إلى الحساب، فتُراجع هنا).
+// (الجلسة الجماعية مع المستشار صفوفها في coaching_sessions، ويرد classify في coaching-groups.ts الحساب التجريبي بسببه المكتوب)
+export const MEMBERSHIP_TABLES = ['enrollments', 'cohort_group_members', 'cohort_roles', 'hall_presence'];
+const MEMBER_MARK = /\/\/ demo-member-exempt: (.{15,})$/;
+
+export function membershipWrites(file: string, src: string) {
+  const lines = src.split('\n');
+  const out: { file: string; line: number; table: string; guarded: boolean }[] = [];
+  for (const table of MEMBERSHIP_TABLES) {
+    const re = new RegExp(`from\\('${table}'\\)\\.(insert|upsert)\\(`, 'g');
+    for (let m = re.exec(src); m; m = re.exec(src)) {
+      const line = src.slice(0, m.index).split('\n').length;
+      // الدالة التي تحوي الكتابة: من آخر «function» قبلها حتى موضعها
+      const start = Math.max(src.lastIndexOf('\nexport async function ', m.index), src.lastIndexOf('\nasync function ', m.index), src.lastIndexOf('\nfunction ', m.index));
+      const body = src.slice(start < 0 ? 0 : start, m.index);
+      const marked = MEMBER_MARK.test(lines[line - 1]) || MEMBER_MARK.test(lines[line - 2] || '') || MEMBER_MARK.test(lines[line - 3] || '');
+      out.push({ file, line, table, guarded: /\brefuseDemo\(/.test(body) || marked });
+    }
+  }
+  return out;
+}
+
+Deno.test('كل كتابة عضوية في دفعة ترد الحساب التجريبي (refuseDemo) أو تحمل سبب استثنائها', async () => {
+  const sites = (await sources()).flatMap(([f, s]) => membershipWrites(f, s));
+  assert(sites.length >= 5, `قُرئ ${sites.length} موضعًا فقط: هل تغيّر شكل الكتابة؟`);
+  assertEquals(sites.filter((s) => !s.guarded).map((s) => `${s.file}:${s.line} [${s.table}]`), [],
+    'كتابة عضوية بلا حارس: استدعِ refuseDemo (demo-cohort.ts) قبلها، أو اكتب فوقها «// demo-member-exempt: السبب»');
+  // والحارس نفسه يلتقط: كتابة بلا حارس تُرى، وبالحارس أو بالسبب تمر
+  const probe = [
+    'export async function a(ids: string[]) {', "  await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id })));", '}',
+    'export async function b(ids: string[]) {', '  await refuseDemo(ids);', "  await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id })));", '}',
+    'export async function c(rows: any[]) {', '  // demo-member-exempt: الأعضاء من cohortMembers (listed) وحدهم', "  await db.from('cohort_group_members').insert(rows);", '}',
+  ].join('\n');
+  assertEquals(membershipWrites('x.ts', probe).sort((x, y) => x.line - y.line).map((s) => [s.line, s.guarded]), [[2, false], [6, true], [10, true]]);
+});
+
+Deno.test('عمود دفعة الحساب التجريبي لا يُقرأ ولا يُكتب إلا في مواضعه: دفعة المشارك نفسه، وملف demo-cohort.ts، وفتح الحساب', async () => {
+  const ALLOWED: Record<string, string> = {
+    'demo-cohort.ts': 'تعريف الربط: دفعة الحساب، وحذفه عند إغلاق دفعته بشرطي العلامة والدفعة',
+    'demo.ts': 'إنشاء الحساب عند أول فتح بعمود دفعته',
+  };
+  const used = (await sources()).filter(([, s]) => /demo_cohort_id/.test(s.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n'))).map(([f]) => f);
+  assertEquals(used.filter((f) => !ALLOWED[f]), [], 'ملف جديد يقرأ participants.demo_cohort_id: دفعة الحساب تُقرأ بـdemoCohortOf من demo-cohort.ts وحده');
+  // ودفعة المشارك نفسه تمر بالدالة المسماة لا بالعمود
+  const programs = await Deno.readTextFile(new URL('programs.ts', DIR));
+  assert(programs.includes('const demoCohort = demoCohortOf(p as any);'));
+  // والحذف التلقائي لا يكتب حذفًا من المشاركين بلا العلامة: عبارة واحدة، وفيها is_demo والدفعة معًا
+  const dc = await Deno.readTextFile(new URL('demo-cohort.ts', DIR));
+  const deletes = dc.split('\n').filter((l) => /from\('participants'\)\.delete\(\)/.test(l));
+  assertEquals(deletes.length, 1);
+  assert(/\.eq\('is_demo', true\)\.eq\('demo_cohort_id', cohortId\)/.test(deletes[0]));
+});

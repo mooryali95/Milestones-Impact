@@ -22,6 +22,7 @@ import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
+import { brandOrgId } from './demo-cohort.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
 import { CONTACT_EMAIL, consentState, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
 import { GOOGLE_CLIENT_ID } from '../_shared/sites.js';
@@ -608,9 +609,10 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     journeyFor(p),
     db.from('passkeys').select('id', { count: 'exact', head: true }).eq('participant_id', p.id),
     db.from('grid_cells').select('dimension, level, description_ar, path_title_ar'),
-    p.organization_id
-      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data)
-      : null,
+    // هوية الجهة: من جهة المشارك، ولحساب الدفعة التجريبي من جهة دفعته بلا ربطه بها (brandOrgId)
+    brandOrgId(p).then((orgId) => (orgId
+      ? db.from('organizations').select('name, short_name, color, status, updated_at, has_logo').eq('id', orgId).maybeSingle().then((r: any) => r.data)
+      : null)),
     accessOf(p),
     // «مستشارك» (تصور ربط الخبراء بالجهة، المرحلة 2): المستشار الفعلي من advisorOf نفسه الذي يقرر من يقيّمه (خبير مجموعته
     // ثم مستشار دفعته). الاسم وحده بلا بريد، وتعذّر القراءة يخفي السطر ولا يُسقط الرحلة
@@ -718,8 +720,9 @@ export async function orgVisibilityFor(p: any) {
 }
 
 export async function orgLogo(p: any) {
-  if (!p.organization_id) return { success: true, logo: null };
-  const { data } = await db.from('organizations').select('logo, status, updated_at').eq('id', p.organization_id).maybeSingle();
+  const orgId = await brandOrgId(p);
+  if (!orgId) return { success: true, logo: null };
+  const { data } = await db.from('organizations').select('logo, status, updated_at').eq('id', orgId).maybeSingle();
   return { success: true, logo: data?.status === 'active' ? data.logo || null : null, v: data?.updated_at || null };
 }
 

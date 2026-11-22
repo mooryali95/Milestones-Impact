@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // شارة «حساب تجريبي» وأدوات التخطي (تصور الحساب التجريبي 2026-11-19، المرحلة 1، البندان 4.3 و4.6)
 // ════════════════════════════════════════════════════════════════
+// وحساب الدفعة (المرحلة 2) يسمّي دفعته بجانب الشارة، فيعرف المقدِّم والحاضرون رحلة أي دفعة تُعرض.
 // شريط ثابت تحت الترويسة في كل شاشة من الحساب التجريبي، لا يُغلق، سواء فُتح الحساب من لوحة الإدارة أو برابط تجربة
 // (ولرابط التجربة سطر «وقد يراه غيرك» لأن الحساب واحد مشترك). فيه «تخطَّ هذه المرحلة» و«افتح كل المراحل»، ورابط صغير
 // «أعد من البداية» بتأكيد في الشريط نفسه. الأزرار
@@ -9,7 +10,7 @@
 import React, { useState } from 'react';
 import { call } from './api.js';
 import { gateDone } from './gates.js';
-import { DEMO_BADGE_LINE_AR, DEMO_NAME_AR, DEMO_RESTART_AR, DEMO_RESTART_ASK_AR, DEMO_RESTART_ASK_SHARED_AR, DEMO_SHARED_LINE_AR, demoLockedStages, demoSkipTarget } from '../../supabase/functions/leaders-api/demo-stage.js';
+import { demoCohortLabel, DEMO_BADGE_LINE_AR, DEMO_NAME_AR, DEMO_RESTART_AR, DEMO_RESTART_ASK_AR, DEMO_RESTART_ASK_SHARED_AR, DEMO_SHARED_LINE_AR, demoLockedStages, demoSkipTarget } from '../../supabase/functions/leaders-api/demo-stage.js';
 
 /** ما يعرضه الشريط لهذا الحساب الآن: المرحلة التي يتخطاها الزر، وهل بقي ما يُفتح */
 export function demoBarState(me) {
@@ -24,6 +25,8 @@ export default function DemoBar({ me, shared, onUpdate, onRestart }) {
   // «أعد من البداية» بتأكيد في الشريط نفسه: سطر بما يُمسح وما يبقى، ثم زران
   const [asking, setAsking] = useState(false);
   const { target, canOpenAll, allOpen } = demoBarState(me);
+  // اسم الدفعة التي أُنشئ لها الحساب (المرحلة 2): من دفعة الحساب نفسها كما يراها أي عضو (me.cohort). الحساب العام بلا اسم
+  const cohort = demoCohortLabel(me?.cohort?.name);
   const run = async (action) => {
     setBusy(action); setErr('');
     const r = await call(action);
@@ -35,6 +38,7 @@ export default function DemoBar({ me, shared, onUpdate, onRestart }) {
       <div className="demo-bar-in">
         <p className="demo-bar-id">
           <b className="demo-badge" data-testid="demo-badge">{DEMO_NAME_AR}</b>
+          {cohort && <b className="demo-cohort" data-testid="demo-cohort">{cohort}</b>}
           <span>{DEMO_BADGE_LINE_AR}{shared ? `، ${DEMO_SHARED_LINE_AR}` : ''}.</span>
           {!asking && <button type="button" className="demo-restart" disabled={!!busy} onClick={() => { setErr(''); setAsking(true); }}>{DEMO_RESTART_AR}</button>}
         </p>

@@ -44,7 +44,7 @@ const SEED = `
     ('${U(912)}', 'دفعة بلا نسخة', '${U(900)}', null, 'open', false, '{}');
   insert into leaders.participants (id, email, full_name, status, is_demo, is_test) values
     ('${U(1)}', 'p1@x.sa', 'سارة', 'enrolled', false, false), ('${U(2)}', 'p2@x.sa', 'فهد', 'enrolled', false, false),
-    ('${U(3)}', 'p3@x.sa', 'نورة', 'enrolled', false, false), ('${U(4)}', 'demo@x.sa', 'عرض', 'enrolled', true, false),
+    ('${U(3)}', 'p3@x.sa', 'نورة', 'enrolled', false, false), ('${U(4)}', 'demo@demo.milestone-impact.org', 'عرض', 'enrolled', true, false),
     ('${U(5)}', 'out@x.sa', 'منسحب', 'withdrawn', false, false), ('${U(6)}', 'closed@x.sa', 'في المغلقة', 'enrolled', false, false);
   insert into leaders.enrollments (participant_id, cohort_id, status) values
     ('${U(1)}', '${U(910)}', 'active'), ('${U(2)}', '${U(910)}', 'active'), ('${U(3)}', '${U(910)}', 'active'),
