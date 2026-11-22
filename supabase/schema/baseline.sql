@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261123100000_leaders_demo_per_cohort
+-- as-of migration: 20261124100000_leaders_guidance_guard
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1149,9 +1149,11 @@ create table if not exists leaders.guidance_messages (
   created_at timestamp with time zone default now() not null,
   confirmed_at timestamp with time zone,
   hidden_at timestamp with time zone,
+  guard text,
   constraint guidance_messages_body_check CHECK (((char_length(body) >= 1) AND (char_length(body) <= 6000))),
   constraint guidance_messages_chapter_id_check CHECK ((char_length(chapter_id) <= 80)),
   constraint guidance_messages_context_check CHECK ((context = ANY (ARRAY['program'::text, 'handbook'::text, 'capstone'::text]))),
+  constraint guidance_messages_guard_check CHECK (((guard IS NULL) OR (guard = ANY (ARRAY['ungrounded'::text, 'quiz'::text, 'write'::text, 'grade'::text, 'personal'::text, 'offtopic'::text, 'inject'::text, 'verify_error'::text])))),
   constraint guidance_messages_model_check CHECK ((char_length(model) <= 60)),
   constraint guidance_messages_role_check CHECK ((role = ANY (ARRAY['user'::text, 'assistant'::text]))),
   constraint guidance_messages_verdict_check CHECK ((verdict = ANY (ARRAY['answered'::text, 'refused'::text, 'unsure'::text, 'error'::text]))),
