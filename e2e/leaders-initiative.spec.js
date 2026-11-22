@@ -183,7 +183,7 @@ test('طلب الاستشارة المنتهي بلا خبير يبقى ظاهر
   await card.getByRole('button', { name: 'اطلب الآن' }).click();
   await card.getByLabel(/ما الذي تحتاجه/).fill('مراجعة خطة المخاطر');
   await card.getByRole('button', { name: 'اختره' }).click();
-  await expect(card.getByText('أرسلنا طلبك إلى خالد المطيري مع ما كتبته. يصلك بريد حين يقبله خبير، وإن اعتذر عرضناه على التالي الأنسب.')).toBeVisible();
+  await expect(card.getByText('أرسلنا طلبك إلى خالد المطيري مع ما كتبته. يصلك بريد حين يقبله، وإن اعتذر أو لم يرد خلال يومين عرضناه على التالي الأنسب تلقائيًا.')).toBeVisible();
   await expect(card.locator('[data-request="offered"]')).toContainText(OFFERED);
   await expect(card.locator('[data-request="unmatched"]')).toHaveCount(0);
 });

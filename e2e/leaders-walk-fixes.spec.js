@@ -199,7 +199,7 @@ test('5: بطاقة الخبير المرشح: الاسم ثم المسمى ثم
   await page.getByRole('button', { name: 'اطلب الآن' }).first().click();
   const card = page.locator('.cx-card').first();
   await card.scrollIntoViewIfNeeded();
-  const [name, title, btn, box] = await Promise.all([rect(card.locator('b')), rect(card.locator('small')), rect(card.getByRole('button', { name: 'اختره' })), rect(card)]);
+  const [name, title, btn, box] = await Promise.all([rect(card.locator('b')), rect(card.locator('small').first()), rect(card.getByRole('button', { name: 'اختره' })), rect(card)]);
   expect(title.top).toBeGreaterThanOrEqual(name.bottom - 1);
   expect(btn.top).toBeGreaterThanOrEqual(title.bottom - 1);
   // الزر بعرض البطاقة لا في وسط السطر

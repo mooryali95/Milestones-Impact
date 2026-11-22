@@ -955,7 +955,8 @@ export async function mySuggestions(p: any, b: Body) {
   const recent = (ended || []).filter((x: any) => !requests.some((r) => r.role === x.role)).map(liveView);
   const busy = requests.some((x) => x.role === role);
   const roles = CONSULT_ROLES.map((r) => ({ key: r, title: roleAr(r), hint: (EXPERT_ROLE_AR as Record<string, string[]>)[r][1] }));
-  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests, recent };
+  // offer_hours: مهلة رد الخبير قبل الانتقال للتالي (الإعدادات العامة)، تقولها الواجهة للمشارك قبل الاختيار وبعده
+  const base = { success: true, role, role_ar: roleAr(role), roles, contexts: CONSULT_CONTEXT, dimensions: DIM_AR, requests, recent, offer_hours: await offerHours() };
   if (busy) return { ...base, candidates: [] };
   const { need } = await needFor(p.id, role, b.dimension || null);
   return { ...base, candidates: (await candidates(need, p.id)).slice(0, 3).map(publicCard) };
