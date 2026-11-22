@@ -9,6 +9,7 @@ import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
 import { canStart, guideFor, nearExample, starterFor, untouchedStarters } from '../guide.js';
 import AskExpert from './AskExpert.jsx';
+import { FieldAsk, GateLine } from './Assistant.jsx';
 import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
@@ -318,6 +319,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             <div><span>ورقة عمل · {codeOf(m)}</span><b>{m.title_ar}</b></div>
             <dl><dt>القائد</dt><dd>{name}</dd><dt>التاريخ</dt><dd>{new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
           </header>
+          {!locked && <GateLine />}
           {m.fields.map((f, i) => {
             const ok = filledOf(f, answers[f.key], initiative);
             // التسمية مربوطة بالحقل: htmlFor لحقل الكتابة، وaria-labelledby لمجموعة الاختيار والجدول (فحص الجاهزية p-entry-8)
@@ -327,6 +329,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
               <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, { ...d.examples, context: (m.key === 'initiative-charter' ? answers.context : null) ?? d.examples?.context ?? null })} />}
+                {/* داخل المبادرة وحدها (AssistantContext): المساعد نفسه بسياق اسم الحقل، والمسودة لا تُرسل */}
+                {!locked && <FieldAsk chapter={m.title_ar} field={f.label} />}
                 <Field f={f} modelKey={m.key} level={m.level} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />
                 {/* المثال للتعلم لا للنقل: تنبيه لا يمنع، ويراه المستشار في مراجعة الوثيقة أيضًا (example-check.js) */}
                 {!locked && nearExample(m.key, f.key, answers[f.key]) && <p className="alert warn small" role="status">هذا قريب جدًا من المثال المحلول. اكتبه من واقع مبادرتك، فالمستشار يرى هذا التنبيه أيضًا.</p>}

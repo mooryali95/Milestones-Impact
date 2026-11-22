@@ -16,6 +16,7 @@ import Discovery from './Discovery.jsx';
 import AskExpert from './AskExpert.jsx';
 import { CHECK_CHAPTERS, stuckSignals } from '../../../supabase/functions/leaders-api/stuck.js';
 import { GuidancePanel } from './Guidance.jsx';
+import { AssistantContext, AssistantDrawer, GateLine, useAssistantAccess } from './Assistant.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -74,6 +75,10 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const [skipDiscovery, setSkipDiscovery] = useState(false);
   const [ask, setAsk] = useState(null);
   const [dismissed, setDismissed] = useState(readDismissed);
+  // «اسأل المساعد» من الفصول: البوابة نفسها (guide.state)، ونص السؤال المملوء باسم الحقل وحده
+  const access = useAssistantAccess(me);
+  const [asst, setAsst] = useState(null);
+  const assistant = { access, open: (text) => setAsst({ text }) };
   const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
   useEffect(() => { load(); call('capstone.shares').then(setShares).catch(() => {}); }, []);
   // العودة من الكتاب تفتح الفصل الذي خرج منه المشارك
@@ -85,8 +90,11 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   if (open) {
     return (
       <div className="page">
+        <AssistantContext.Provider value={assistant}>
         <ModelView key={open} id={open} name={me.participant.full_name} backLabel="وثيقة مبادرتك" onBack={() => { setOpen(null); load(); }} onPoints={() => {}}
           nav={d?.success ? <ChapterNav sections={d.sections} id={open} onOpen={(x) => { setOpen(x); window.scrollTo({ top: 0 }); }} onHandbook={onHandbook} /> : null} />
+        </AssistantContext.Provider>
+        <AssistantDrawer open={!!asst} initialText={asst?.text || ''} onClose={() => setAsst(null)} />
       </div>
     );
   }
@@ -235,6 +243,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       {ask && <AskExpert {...ask} onClose={() => setAsk(null)} />}
 
       {c.status !== 'approved' && !ask && <GuidancePanel guidance={me.guidance} context="capstone" consultTitle="استشارة لمبادرتك" />}
+      {/* المدخل العام: المحادثة نفسها داخل اللوحة أعلاه حين تكون البوابة مفتوحة، وسطر السبب حين يستطيع المشارك فتحها */}
+      {c.status !== 'approved' && !ask && access.kind === 'line' && access.reason !== 'start' && <AssistantContext.Provider value={assistant}><GateLine /></AssistantContext.Provider>}
       {c.status === 'accepted' && (
         <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
       )}
