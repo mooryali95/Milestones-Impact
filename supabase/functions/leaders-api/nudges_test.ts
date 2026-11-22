@@ -54,6 +54,7 @@ function install(tables: Record<string, Row[]>, fail: { insert?: any } = {}) {
         if (k === 'in') return (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(r[c])); return q; };
         if (k === 'not') return (c: string, op: string, v: unknown) => {
           if (op === 'is' && v === null) filters.push((r) => r[c] != null);
+          else if (op === 'is') filters.push((r) => (r[c] ?? null) !== v);
           // not in بصيغة PostgREST: (a,b,c)
           if (op === 'in') { const vs = String(v).replace(/^\(|\)$/g, '').split(','); filters.push((r) => r[c] != null && !vs.includes(r[c])); }
           return q;
@@ -228,5 +229,14 @@ Deno.test('المنسق: بلغت الجهة حدها اليومي فلا إرس
   const t = install(world({ organizations: [{ id: ORG, name: 'هيئة التطوير' }], nudges: full }));
   try {
     await assertRejects(() => NU.coordSend(coord(), { group: 'baseline' }), Error, 'حد التذكير اليومي');
+  } finally { t.restore(); }
+});
+
+Deno.test('حساب الاختبار الداخلي (is_test) لا يصله التذكير الأسبوعي الآلي، وغيره يصله', async () => {
+  const t = install(world({ participants: [stuck(1), stuck(2, { is_test: true })] }));
+  try {
+    await runWeekly();
+    const fresh = t.tables.nudges.filter((n) => n.created_at > ago(1));
+    assertEquals(fresh.map((n) => n.participant_id), [pid(1)]);
   } finally { t.restore(); }
 });

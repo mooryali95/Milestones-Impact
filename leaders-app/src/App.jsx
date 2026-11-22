@@ -49,7 +49,7 @@ import SponsorNote from './SponsorNote.jsx';
 const Capstone = lazyView(() => import('./screens/Capstone.jsx'));
 const Katon = lazyView(() => import('./screens/Katon.jsx'));
 const HallScreen = lazyView(() => import('./screens/Hall.jsx'));
-import LiveTour, { captureDemoLink, demoPending } from './LiveTour.jsx';
+import LiveTour, { captureDemoLink, DemoConflict, demoPending, dropDemoLink, tourMode } from './LiveTour.jsx';
 import { captureTryLink, TRY_GONE, TryLinkAsk, TryLinkGone } from './TryLink.jsx';
 import DemoBar from './DemoBar.jsx';
 const Legal = lazyView(() => import('./screens/Legal.jsx'));
@@ -611,7 +611,8 @@ function Participant() {
         <SectionBoundary key={navView} onHome={navView === 'home' ? null : () => go('home')}><Suspense fallback={<SectionLoading />}>{screen}</Suspense></SectionBoundary>
       </main>
       <footer className={`foot${navItems.length ? ' with-tabbar' : ''}`}>© Milestone Impact <LegalLink /></footer>
-      {!booting && (demo || me?.participant?.is_demo) && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
+      {!booting && tourMode(me, demo) === 'conflict' && <DemoConflict onSignOut={logout} onDismiss={() => { dropDemoLink(); setDemo(false); }} />}
+      {!booting && tourMode(me, demo) === 'tour' && <LiveTour me={me} onAccept={(r) => { accept(r); setDemo(true); }} onGo={go} />}
       {navItems.length > 0 && <Nav className="tabbar" items={navItems} view={navView} onGo={onNav} />}
     </>
   );
