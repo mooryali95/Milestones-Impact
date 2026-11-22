@@ -88,7 +88,8 @@ Deno.test('الإلغاء: من دُعي يصله بريد واحد بملف إ�
   try {
     await withMail(async (calls) => {
       const r: any = await V.workshopSave(ADMIN, { row: newDay({ expert_id: TRAINER }), invite: true });
-      assertEquals(to(mails(calls)), REAL(w));
+      // المدرب المسمى تصله الدعوة مع المدعوين (المتابعة 1، 2026-11-22)
+      assertEquals(to(mails(calls)), [...REAL(w), 'mona@x.sa'].sort());
       const invite = mails(calls)[0];
       // المعاينة: العدد والمدرب من القراءة التي يرسل بها، بلا كتابة ولا بريد
       const n = mails(calls).length;

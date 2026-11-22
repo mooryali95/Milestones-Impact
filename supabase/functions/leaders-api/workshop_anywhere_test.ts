@@ -63,6 +63,8 @@ async function withMail<T>(fn: (calls: { url: string; body: any }[]) => Promise<
 }
 const to = (calls: { url: string; body: any }[]) => resendCalls(calls).map((c) => [c.body.to].flat()[0]).sort();
 const ics = (c: { body: any }) => atob(c.body.attachments[0].content);
+// بريد الخبير في هذا العالم (expert أعلاه): آخر أربع خانات من معرّفه
+const TRAINER_MAIL = (id: string) => `${id.slice(-4)}@x.sa`;
 
 Deno.test('المدرب: يُحفظ من خبراء دفعة الجلسة، ويراه المشارك «مع فلان»، وتظهر الجلسة للمدرب في بوابته باسمه', async () => {
   const w = world();
@@ -129,23 +131,26 @@ Deno.test('الدعوة عند الحفظ: لأعضاء الدفعة الفعل�
       const quiet: any = await V.workshopSave(ADMIN, { row: newDay({ title_ar: 'بلا دعوة' }) });
       assertEquals([quiet.invite, resendCalls(calls).length, rowOf(w, quiet.id).invited_at ?? null], [undefined, 0, null]);
       const r: any = await V.workshopSave(ADMIN, { row: newDay({ expert_id: ADVISOR }), invite: true });
-      assertEquals(r.invite, { sent: 2, failed: 0, total: 2 });
+      // المدرب المسمى تصله الدعوة مع المدعوين (المتابعة 1، 2026-11-22): بريد واحد له، بملف التقويم ورقم التسلسل نفسيهما
+      assertEquals(r.invite, { sent: 2, failed: 0, total: 2, trainer: 'sent' });
       // لا حساب العرض ولا حساب الاختبار ولا المنسحب ولا عضو دفعة أخرى
-      assertEquals(to(calls), [w.ps[0].email, w.ps[1].email]);
+      assertEquals(to(calls), [TRAINER_MAIL(ADVISOR), w.ps[0].email, w.ps[1].email].sort());
+      const told = resendCalls(calls).find((c) => [c.body.to].flat()[0] === TRAINER_MAIL(ADVISOR))!;
+      assertEquals([told.body.subject, /SEQUENCE:(\d+)/.exec(ics(told))?.[1], ics(told).includes(`UID:${r.id}@`)], ['دعوة: جلسة تدريبية أنت مدربها', /SEQUENCE:(\d+)/.exec(ics(resendCalls(calls)[0]))?.[1], true]);
       const first = resendCalls(calls)[0];
       assertEquals(first.body.subject, 'دعوة: جلستك التدريبية');
       assert(first.body.html.includes('ورشة التفاوض') && first.body.html.includes('قاعة الملك فهد') && first.body.html.includes('د. منى القحطاني'), 'الجلسة والمكان والمدرب في الدعوة');
       // الدعوة تحمل رقم تسلسل (قرار بريد الإلغاء 2026-11-22): دعوة تُعاد بعد تغيير أو إلغاء يجب أن تعلو ما سبقها، فكل دعوة مرقمة
       assert(ics(first).includes(`UID:${r.id}@`) && /SEQUENCE:\d+/.test(ics(first)), 'ملف تقويم الدعوة');
       assert(rowOf(w, r.id).invited_at, 'خُتمت الدعوة');
-      assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.invite').map((x) => x.after), [{ sent: 2, failed: 0, total: 2, on_save: true }]);
+      assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.invite').map((x) => x.after), [{ sent: 2, failed: 0, total: 2, on_save: true, trainer: 'sent' }]);
       // إعادة الحفظ نفسه بالاختيار نفسه (إعادة محاولة بلا مفتاح): لا رسالة ثانية
       const again: any = await V.workshopSave(ADMIN, { row: { ...newDay({ expert_id: ADVISOR }), id: r.id }, invite: true });
-      assertEquals([again.invite, resendCalls(calls).length], [{ skipped: 'invited' }, 2]);
+      assertEquals([again.invite, resendCalls(calls).length], [{ skipped: 'invited' }, 3]);
       // طلبان معًا: الختم يُحجز لواحد
       const two: any = await V.workshopSave(ADMIN, { row: newDay({ title_ar: 'متزامن' }) });
       const both: any[] = await Promise.all([1, 2].map(() => V.workshopSave(ADMIN, { row: { ...newDay({ title_ar: 'متزامن' }), id: two.id }, invite: true })));
-      assertEquals([both.filter((x) => x.invite.sent === 2).length, both.filter((x) => x.invite.skipped === 'invited').length, resendCalls(calls).length], [1, 1, 4]);
+      assertEquals([both.filter((x) => x.invite.sent === 2).length, both.filter((x) => x.invite.skipped === 'invited').length, resendCalls(calls).length], [1, 1, 5]);
     });
   } finally { w.f.restore(); }
 });
@@ -202,15 +207,16 @@ Deno.test('إشعار التغيير: لمن دُعي حين يتغير المو
       // تغيّر الموعد والمكان مع الاختيار
       const moved = newDay({ starts_at: iso(4 * DAY), ends_at: iso(4 * DAY + 6 * 36e5), location_ar: 'قاعة النخيل' });
       const c: any = await V.workshopSave(ADMIN, { row: { ...moved, id: r.id }, notify_change: true });
-      assertEquals(c.change, { sent: 2, failed: 0, total: 2 });
+      // والمدرب المسمى يصله التحديث نفسه بملفه (المتابعة 1، 2026-11-22)
+      assertEquals(c.change, { sent: 2, failed: 0, total: 2, trainer: 'sent' });
       const sent = resendCalls(calls).slice(n0);
-      assertEquals([sent.map((x) => [x.body.to].flat()[0]).sort(), sent[0].body.subject], [[w.ps[0].email, w.ps[1].email], 'تحديث: جلستك التدريبية']);
+      assertEquals([sent.map((x) => [x.body.to].flat()[0]).sort(), sent[0].body.subject, sent.at(-1)!.body.subject], [[TRAINER_MAIL(TEAM), w.ps[0].email, w.ps[1].email].sort(), 'تحديث: جلستك التدريبية', 'تحديث: جلسة تدريبية أنت مدربها']);
       assert(sent[0].body.html.includes('تغيّر موعد جلستك التدريبية ومكانها') && sent[0].body.html.includes('قاعة النخيل') && sent[0].body.html.includes('أ. خالد العتيبي'));
       assert(ics(sent[0]).includes(`UID:${r.id}@`) && /SEQUENCE:\d+/.test(ics(sent[0])), 'ملف التقويم بالمعرّف نفسه ورقم تسلسل');
       // تبقى مدعوة، والتذكيران يُعادان للموعد الجديد
       assert(row.invited_at, 'تبقى مدعوة بعد الإشعار');
       assertEquals([row.reminded_day_at, row.reminded_hour_at], [null, null]);
-      assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.change-notice').map((x) => x.after), [{ sent: 2, failed: 0, total: 2, when: true, where: true }]);
+      assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.change-notice').map((x) => x.after), [{ sent: 2, failed: 0, total: 2, when: true, where: true, trainer: 'sent' }]);
       // الحفظ نفسه معادًا (إعادة محاولة): الصف يطابق المرسل، فلا تغيّر ولا إشعار ثانٍ
       const n1 = resendCalls(calls).length;
       const retry: any = await V.workshopSave(ADMIN, { row: { ...moved, id: r.id }, notify_change: true });
@@ -219,7 +225,8 @@ Deno.test('إشعار التغيير: لمن دُعي حين يتغير المو
       row.reminded_day_at = iso(-36e5);
       const place: any = await V.workshopSave(ADMIN, { row: { ...moved, location_ar: 'قاعة الياسمين', id: r.id }, notify_change: true });
       assertEquals(place.change.sent, 2);
-      assert(resendCalls(calls).at(-1)!.body.html.includes('تغيّر مكان جلستك التدريبية.'));
+      assert(resendCalls(calls).at(-2)!.body.html.includes('تغيّر مكان جلستك التدريبية.'));
+      assert(resendCalls(calls).at(-1)!.body.html.includes('تغيّر مكان الجلسة التدريبية التي أنت مدربها.'));
       assert(row.reminded_day_at, 'تغيّر المكان لا يعيد التذكير');
     });
   } finally { w.f.restore(); }
@@ -238,11 +245,12 @@ Deno.test('إشعار التغيير: لا يخرج بلا اختيار، ولا
       const n = resendCalls(calls).length;
       await V.workshopSave(ADMIN, { row: { ...newDay({ starts_at: iso(5 * DAY), ends_at: iso(5 * DAY + 36e5) }), id: b.id } });
       assertEquals([resendCalls(calls).length, rowOf(w, b.id).invited_at], [n, null]);
-      // دُعيت ثم أُزيل موعدها مع الاختيار: لا إشعار بلا موعد
+      // دُعيت ثم أُزيل موعدها مع الاختيار: لا إشعار تغيير بلا موعد. والمدعوون يُبلَّغون بسحب الموعد (المتابعة 2، 2026-11-22:
+      // كان الموعد يبقى في تقاويمهم بلا بريد)، وتفصيله في workshop_notify_test.ts
       const c: any = await V.workshopSave(ADMIN, { row: newDay({ title_ar: 'يُزال موعدها' }), invite: true });
       const m = resendCalls(calls).length;
       const c2: any = await V.workshopSave(ADMIN, { row: { ...newDay({ starts_at: null, ends_at: null }), id: c.id }, notify_change: true });
-      assertEquals([c2.change, resendCalls(calls).length], [{ skipped: 'undated' }, m]);
+      assertEquals([c2.change, c2.undate, resendCalls(calls).length, resendCalls(calls).at(-1)!.body.subject], [undefined, { sent: 2, failed: 0, total: 2 }, m + 2, 'سُحب الموعد: جلستك التدريبية']);
     });
   } finally { w.f.restore(); }
 });
