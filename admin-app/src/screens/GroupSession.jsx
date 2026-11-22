@@ -6,13 +6,16 @@
 //   رصيده أو لم تُفتح له الخدمة (يُتخطى أو يُضاف استثناءً)، ومن لا يُضاف بسببه. وتعارض موعد المستشار تنبيه يُؤكَّد.
 // GroupSessions: قسم «جلسات جماعية» في «الحضور والجلسات ← الجلسات الفردية»: ما ينتظر تأكيد الحضور، والقادمة، والمنعقدة، ولكل جلسة
 //   ورقة حضورها وتعديلها وإلغاؤها وإزالة مدعو منها.
+// GroupSessionAdd: «أضف مدعوين» إلى جلسة قائمة: تختار من أعضاء دفعتها غير المدعوين، فتظهر المعاينة نفسها بحكم الخادم، ثم تؤكد.
+//   وتحت كل مدعو سطر بريد دعوته (من سجل البريد) وزر «أعد الدعوة» بمهلته، وزر واحد لكل من لم يُسجَّل حضوره.
 // قبل ترحيل الميزة يقول الخادم ready=false، فتقول النافذة والقسم «غير مفعّل بعد» ولا يُعرض نموذج. والمنطق في group-session.js.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GroupSessionSheet from '../../../shared/ui/GroupSessionSheet.jsx';
 import { L, weekTime as when } from '../leaders.js';
+import { timeOnly } from '../dates.js';
 import Form from '../Form.jsx';
 import { Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
-import { conflictAr, formBlock, GROUP_STATE_AR, groupCountsAr, groupSections, invited, mailAr, MODE_OPTIONS, previewBody, previewGroups, previewLine, saveBody, savedAr } from '../group-session.js';
+import { addedAr, conflictAr, formBlock, GROUP_STATE_AR, groupCountsAr, groupSections, invited, inviteLineAr, mailAr, MODE_OPTIONS, previewBody, previewGroups, previewLine, resendable, resendState, resentAr, saveBody, savedAr } from '../group-session.js';
 import { minutesAr } from '../../../supabase/functions/leaders-api/logic.js';
 
 export const NOT_READY_AR = 'الجلسة الجماعية مع المستشار غير مفعّلة بعد. تعمل بعد تحديث قاعدة البيانات القادم.';
@@ -166,12 +169,109 @@ export function GroupSessionCreate({ c, ids, onClose }) {
   );
 }
 
+// ── «أضف مدعوين» إلى جلسة قائمة: الاختيار من أعضاء الدفعة، والمعاينة نفسها بحكم الخادم ──
+export function GroupSessionAdd({ g, onClose }) {
+  const [d, setD] = useState(null);
+  const [picked, setPicked] = useState(() => new Set());
+  const [exceptions, setExceptions] = useState(() => new Set());
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(null);
+  const [fresh, setFresh] = useState(true);
+  const seq = useRef(0);
+  const close = useGuardedClose(!saved && picked.size > 0, () => onClose(!!saved));
+  useEscape(close);
+  const ids = useMemo(() => [...picked], [picked]);
+  const key = ids.join(',');
+  useEffect(() => {
+    const n = ++seq.current;
+    setFresh(false);
+    const t = setTimeout(async () => {
+      const r = await L('admin.coaching-group-candidates', { id: g.id, participant_ids: ids });
+      if (n !== seq.current) return;
+      setD(r || { success: false });
+      setFresh(true);
+    }, d ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [g.id, key]);
+  const flip = (set) => (id) => { setError(''); set((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }); };
+  const pick = flip(setPicked), toggle = flip(setExceptions);
+  const members = d?.success ? d.members || [] : [];
+  const v = useMemo(() => previewGroups(members), [members]);
+  const n = invited(members, exceptions).length;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    if (!picked.size) return setError('اختر من تضيفهم أولًا');
+    if (!n) return setError('لا أحد من المختارين يُضاف إلى هذه الجلسة');
+    if (n > d.room) return setError(`يتسع في الجلسة ${d.room} بعد، والمختارون ${n}`);
+    setBusy(true);
+    const r = await L('admin.coaching-group-add', { id: g.id, participant_ids: ids, exceptions: [...exceptions] });
+    setBusy(false);
+    if (r?.success) return setSaved(r);
+    setError(r?.message || 'تعذّرت الإضافة');
+  };
+  const shell = (body) => (
+    <div className="mid-ov" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="la-form mi-form gs-form" role="dialog" aria-modal="true" aria-labelledby="gs-add-title" data-testid="group-add">
+        <h3 id="gs-add-title">أضف مدعوين إلى «{g.title}»</h3>
+        {body}
+      </div>
+    </div>
+  );
+  const shut = <div className="la-row"><button type="button" className="btn-sm ghost" onClick={() => onClose(!!saved)}>إغلاق</button></div>;
+  if (!d) return shell(<Spinner />);
+  if (!d.success) return shell(<><p className="la-err" role="alert">{d.message || 'تعذّرت قراءة المعاينة'}</p>{shut}</>);
+  if (d.ready === false) return shell(<><p className="la-muted" role="status" data-testid="gs-not-ready">{NOT_READY_AR}</p>{shut}</>);
+  if (saved) {
+    return shell(<>
+      <p className="gs-saved" role="status" data-testid="gs-added">{addedAr(saved)}</p>
+      {saved.skipped?.length > 0 && <ul className="la-form-notes">{saved.skipped.map((x) => <li key={x.id}>{x.name || 'حساب'}: لم يُضف، {x.reason}</li>)}</ul>}
+      {shut}
+    </>);
+  }
+  if (d.blocked) return shell(<><p className="la-muted" role="status">{d.blocked}</p>{shut}</>);
+  if (!d.candidates.length) return shell(<><p className="la-muted" role="status">كل أعضاء الدفعة ممن في البرنامج مدعوون إلى هذه الجلسة.</p>{shut}</>);
+  const shown = d.candidates.filter((c) => !q.trim() || String(c.name || '').includes(q.trim()));
+  return shell(
+    <form onSubmit={submit} noValidate>
+      <p className="la-muted small">{[g.cohort, g.expert ? `مع ${g.expert}` : '', when(g.starts_at), d.session.counts ? 'تُحسب جلسة من رصيد كل مدعو' : 'لا تُحسب من الرصيد'].filter(Boolean).join(' · ')}</p>
+      <fieldset className="gs-pick">
+        <legend>أعضاء الدفعة غير المدعوين ({d.candidates.length})</legend>
+        {d.candidates.length > 8 && <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث بالاسم" aria-label="ابحث بالاسم" />}
+        <ul>{shown.map((c) => (
+          <li key={c.id}><label className="la-check"><input type="checkbox" checked={picked.has(c.id)} onChange={() => pick(c.id)} />
+            <span>{c.name || 'حساب'}{c.was && <small className="la-muted"> · {c.was === 'excused' ? 'اعتذر عنها من قبل' : 'أُزيل منها من قبل'}</small>}</span></label></li>
+        ))}</ul>
+        {!shown.length && <p className="la-muted small">لا اسم يطابق البحث.</p>}
+      </fieldset>
+
+      <div className={`gs-preview${fresh ? '' : ' is-stale'}`} aria-busy={!fresh} data-testid="gs-preview">
+        <p className="gs-line" role="status"><b>المعاينة:</b> {picked.size ? previewLine(members, exceptions) : 'اختر من القائمة لتظهر المعاينة.'}</p>
+        <Verdicts title="سيُدعون" list={v.ok} tone="ok" exceptions={exceptions} />
+        <Verdicts title="استنفدوا رصيدهم" list={v.at_max} tone="warn" exceptions={exceptions} onToggle={toggle} hint="يُتخطون، أو تضيفهم استثناءً يُكتب في السجل ويُحسب في رصيدهم كما وقع." />
+        <Verdicts title="الخدمة لم تُفتح لهم بعد" list={v.locked} tone="warn" exceptions={exceptions} onToggle={toggle} hint="يُتخطون، أو تضيفهم استثناءً: تصلهم الدعوة، وتظهر الجلسة في رحلتهم." />
+        <Verdicts title="لا يُضافون" list={v.ineligible} tone="bad" exceptions={exceptions} />
+      </div>
+      {error && <p className="la-err" role="alert">{error}</p>}
+      <div className="la-row">
+        <button type="submit" className="btn-sm primary" disabled={busy || !fresh}>{busy ? 'يُضاف…' : n ? `أضف وادعُ ${n === 1 ? 'المدعو' : `المدعوين (${n})`}` : 'أضف'}</button>
+        <button type="button" className="btn-sm ghost" onClick={close} disabled={busy}>إلغاء</button>
+      </div>
+      <p className="la-muted small">{d.session.past ? 'بدأت الجلسة، فتُحفظ الإضافة بلا بريد.' : 'تصل الدعوة بموعدها وملف تقويمها إلى من تضيفهم وحدهم. المدعوون السابقون والمستشار لا يصلهم بريد، والمستشار يرى العدد والأسماء في بوابته.'}</p>
+    </form>,
+  );
+}
+
 // ── قسم «جلسات جماعية» في «الحضور والجلسات» ──
 function GroupCard({ g, canWrite, trainers, reload }) {
   const { toast, confirm } = useUI();
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [form, setForm] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [sending, setSending] = useState('');
   const load = useCallback(async () => {
     const r = await L('admin.coaching-groups', { id: g.id });
     const x = r?.success ? r.groups?.[0] : null;
@@ -191,6 +291,17 @@ function GroupCard({ g, canWrite, trainers, reload }) {
     const r = await L('admin.coaching-group-remove', { id: g.id, participant_id: m.id });
     toast(r.success ? `أُزيل ${m.full_name} من الجلسة` : r.message);
     if (r.success) reload();
+  };
+  // إعادة الدعوة: لمدعو واحد، أو لكل من لم يُسجَّل حضوره. الخادم يحكم بالمهلة ويعيد ما خرج وما لم يُعد
+  const again = resendable(g);
+  const resend = async (m) => {
+    if (sending) return;
+    if (!m && !(await confirm(`تُعاد الدعوة بموعدها وملف تقويمها إلى ${again.length === 1 ? 'مدعو واحد لم يُسجَّل حضوره' : `${again.length} مدعوين لم يُسجَّل حضورهم`}. من أُرسلت له قبل أقل من ${g.resend_minutes || 60} دقيقة لا تُعاد له.`, { ok: 'أعد الدعوة' }))) return;
+    setSending(m ? m.id : 'all');
+    const r = await L('admin.coaching-group-resend', { id: g.id, ...(m ? { participant_id: m.id } : {}) });
+    setSending('');
+    toast(r.success ? `${resentAr(r)}.` : r.message);
+    reload();
   };
   const edit = () => setForm({
     title: `تعديل: ${g.title}`,
@@ -227,22 +338,37 @@ function GroupCard({ g, canWrite, trainers, reload }) {
           {g.awaiting && <span className="la-chip warn">تنتظر تأكيد الحضور</span>}
           {live && <button type="button" className={`btn-sm ${g.awaiting ? 'primary' : 'ghost'}`} onClick={() => setSheet(true)}>ورقة الحضور</button>}
           {live && canWrite && <button type="button" className="la-link" onClick={edit}>عدّل</button>}
+          {live && canWrite && g.can_add && <button type="button" className="la-link" onClick={() => setAdding(true)}>أضف مدعوين</button>}
           {live && canWrite && !marked && <button type="button" className="la-link" onClick={cancel}>ألغِ الجلسة</button>}
           <button type="button" className="la-link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'أخفِ المدعوين' : `المدعوون (${g.count})`}</button>
         </div>
       </div>
-      {open && (
-        <ul className="gs-members">{g.members.map((m) => (
-          <li key={m.id}>
-            <span>{m.full_name}{m.test && <small className="la-muted"> · حساب اختبار</small>}{m.off && <small className="la-muted"> · خارج الرصيد</small>}</span>
-            <span className={`la-chip ${m.state === 'attended' ? 'ok' : m.state === 'no_show' ? 'bad' : ''}`}>{GROUP_STATE_AR[m.state] || m.state}</span>
-            {live && canWrite && m.state === 'booked' && g.count > 1 && <button type="button" className="la-link" onClick={() => remove(m)} aria-label={`أزل ${m.full_name} من الجلسة`}>أزله</button>}
-          </li>
-        ))}</ul>
-      )}
+      {open && (<>
+        <ul className="gs-members">{g.members.map((m) => {
+          const rs = g.can_resend ? resendState(m) : 'none';
+          const line = g.can_resend ? inviteLineAr(m, when, g.mail_known !== false) : '';
+          return (
+            <li key={m.id}>
+              <span className="gs-member"><span>{m.full_name}{m.test && <small className="la-muted"> · حساب اختبار</small>}{m.off && <small className="la-muted"> · خارج الرصيد</small>}</span>
+                {line && <small className={m.mail?.state === 'failed' ? 'gs-mail bad' : 'gs-mail la-muted'} data-testid="gs-mail-line">{line}</small>}</span>
+              <span className={`la-chip ${m.state === 'attended' ? 'ok' : m.state === 'no_show' ? 'bad' : ''}`}>{GROUP_STATE_AR[m.state] || m.state}</span>
+              {canWrite && rs === 'ready' && <button type="button" className="la-link" disabled={!!sending} onClick={() => resend(m)} aria-label={`أعد الدعوة إلى ${m.full_name}`}>{sending === m.id ? 'تُرسل…' : 'أعد الدعوة'}</button>}
+              {canWrite && rs === 'held' && <small className="la-muted gs-held" data-testid="gs-held">أُرسلت قبل قليل، تُعاد بعد {timeOnly(m.mail.resend_at)}</small>}
+              {live && canWrite && m.state === 'booked' && g.count > 1 && <button type="button" className="la-link" onClick={() => remove(m)} aria-label={`أزل ${m.full_name} من الجلسة`}>أزله</button>}
+            </li>
+          );
+        })}</ul>
+        {canWrite && g.can_resend && again.length > 0 && (
+          <div className="gs-resend-all">
+            <button type="button" className="btn-sm ghost" disabled={!!sending} onClick={() => resend(null)}>{sending === 'all' ? 'تُرسل…' : `أعد الدعوة لمن لم يُسجَّل حضوره (${again.length})`}</button>
+            <small className="la-muted">لا تُعاد لمن أُرسلت له قبل أقل من {g.resend_minutes || 60} دقيقة.</small>
+          </div>
+        )}
+      </>)}
       {sheet && <GroupSessionSheet load={load} save={save} role="admin" canWrite={canWrite} title={g.title}
         sub={[g.cohort, g.expert ? `مع ${g.expert}` : '', when(g.starts_at)].filter(Boolean).join(' · ')} onClose={(changed) => { setSheet(false); if (changed) reload(); }} />}
       {form && <Form {...form} onClose={(ok) => { setForm(null); if (ok) reload(); }} />}
+      {adding && <GroupSessionAdd g={g} onClose={(ok) => { setAdding(false); if (ok) reload(); }} />}
     </li>
   );
 }
@@ -260,7 +386,7 @@ export function GroupSessions({ data, reload, canWrite }) {
   return (
     <section className="la-card gs-section" id="gs-section" data-testid="group-sessions">
       <h3>جلسات جماعية</h3>
-      <p className="la-muted small">جلسة واحدة مع المستشار لعدة مشاركين: تُحسب للمستشار مرة واحدة، ولكل مدعو جلسة من رصيده. تُنشأ من ملف الدفعة، تبويب «المتابعة»: حدّد المشاركين ثم «جلسة مع مستشار».</p>
+      <p className="la-muted small">جلسة واحدة مع المستشار لعدة مشاركين: تُحسب للمستشار مرة واحدة، ولكل مدعو جلسة من رصيده. تُنشأ من ملف الدفعة، تبويب «المتابعة»: حدّد المشاركين ثم «جلسة مع مستشار». ومن هنا تضيف إليها مدعوين وتعيد إرسال دعوتها.</p>
       {data.groups_failed && <p className="la-err" role="alert">تعذّرت قراءة الجلسات الجماعية الآن. حدّث الصفحة بعد قليل.</p>}
       {!any && !data.groups_failed && <p className="la-muted">لا جلسات جماعية بعد.</p>}
       {block('تنتظر تأكيد الحضور', s.awaiting)}

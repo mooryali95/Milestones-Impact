@@ -1,6 +1,6 @@
 // قالب البريد: العائلات وسطر المعاينة ودعوة التقويم
 import { describe, expect, it } from 'vitest';
-import { bdi, icsEvent, MAIL_FAMILY, mailCode, mailNote, mailRows, mailShell, mailText, plainText } from '../../supabase/functions/_shared/mail.ts';
+import { bdi, icsEvent, icsFold, icsSequence, MAIL_FAMILY, mailCode, mailNote, mailRows, mailShell, mailText, plainText } from '../../supabase/functions/_shared/mail.ts';
 
 const dec = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
 
@@ -19,6 +19,68 @@ describe('البريد', () => {
     expect(t).toContain('SUMMARY:جلسة، مع\\; د. منى');
     expect(t).toContain('TRIGGER:-PT30M');
     expect(t.split('\r\n').at(-2)).toBe('END:VCALENDAR');
+  });
+  // ملف التقويم مصدر واحد لدعوة الورشة وإشعار تغييرها ودعوة الجلسة الجماعية وإلغائها (icsEvent)
+  const bytes = (l) => new TextEncoder().encode(l).length;
+  const unfold = (t) => t.replace(/\r\n /g, '');
+  const field = (t, k) => new RegExp(`^${k}:(.*)$`, 'm').exec(unfold(t).replace(/\r/g, ''))?.[1];
+  it('الدعوة ثم تغيير الموعد ثم الإلغاء: المعرّف ثابت، ورقم التسلسل يكبر، والإلغاء بـMETHOD:CANCEL', () => {
+    const base = { uid: 'row-7', title: 'جلسة جماعية: الاستشارة · برنامج القادة', url: 'https://meet.example/x' };
+    const t0 = '2026-11-22T08:00:00.000Z', t1 = '2026-11-23T09:30:00.000Z', t2 = '2026-11-24T07:15:10.000Z';
+    const invite = icsEvent({ ...base, start: '2026-12-06T07:00:00Z', end: '2026-12-06T08:30:00Z', sequence: icsSequence(t0) });
+    const moved = icsEvent({ ...base, start: '2026-12-07T08:00:00Z', end: '2026-12-07T09:00:00Z', sequence: icsSequence(t0, t1) });
+    const off = icsEvent({ ...base, start: '2026-12-07T08:00:00Z', end: '2026-12-07T09:00:00Z', sequence: icsSequence(t1, t2, null), method: 'CANCEL' });
+    const [a, b, c] = [invite, moved, off].map((x) => dec(x.content));
+    expect([a, b, c].map((t) => field(t, 'UID'))).toEqual(['row-7@sunkvalue.com', 'row-7@sunkvalue.com', 'row-7@sunkvalue.com']);
+    expect([a, b, c].map((t) => field(t, 'METHOD'))).toEqual(['PUBLISH', 'PUBLISH', 'CANCEL']);
+    const seq = [a, b, c].map((t) => Number(field(t, 'SEQUENCE')));
+    expect(seq).toEqual([Date.parse(t0) / 1000, Date.parse(t1) / 1000, Math.floor(Date.parse(t2) / 1000)]);
+    expect(seq[0] < seq[1] && seq[1] < seq[2]).toBe(true);
+    // رقم التسلسل ضمن عدد صحيح 32 بت (حد بعض برامج التقويم)
+    expect(seq[2]).toBeLessThan(2 ** 31);
+    expect(field(b, 'DTSTART')).toBe('20261207T080000Z');
+    // ملف الإلغاء: حالة ملغاة، بلا تنبيه ولا رابط، واسم ونوع يقولان إنه إلغاء
+    expect(c).toContain('STATUS:CANCELLED');
+    expect(c).not.toMatch(/VALARM|URL:|LOCATION:/);
+    expect([off.filename, off.content_type]).toEqual(['cancel.ics', 'text/calendar; charset=utf-8; method=CANCEL']);
+    expect([invite.filename, invite.content_type]).toEqual(['session.ics', 'text/calendar; charset=utf-8; method=PUBLISH']);
+    expect(a).not.toContain('STATUS:CANCELLED');
+    // ترتيب الأقسام سليم في كل ملف
+    for (const t of [a, b, c]) {
+      const lines = t.split('\r\n');
+      expect([lines[0], lines[4], lines.at(-3), lines.at(-2), lines.at(-1)]).toEqual(['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'END:VEVENT', 'END:VCALENDAR', '']);
+    }
+  });
+  it('رقم التسلسل: أحدث الأوقات المعطاة بالثواني، ويبقى كما هو لإعادة الإرسال، وبلا وقت مقروء يأخذ الساعة', () => {
+    expect(icsSequence('2026-11-22T08:00:00Z', '2026-11-22T08:00:05.900Z')).toBe(Math.floor(Date.parse('2026-11-22T08:00:05.900Z') / 1000));
+    expect(icsSequence('2026-11-22T08:00:00Z')).toBe(icsSequence('2026-11-22T08:00:00Z', undefined, ''));
+    const now = Math.floor(Date.now() / 1000);
+    expect(icsSequence(null, 'x')).toBeGreaterThanOrEqual(now);
+    // ملف إلغاء بلا رقم يأخذ الساعة: لا يخرج إلغاء بلا تسلسل
+    expect(Number(field(dec(icsEvent({ uid: 'u', start: '2026-12-06T07:00:00Z', end: '2026-12-06T08:00:00Z', title: 'x', method: 'CANCEL' }).content), 'SEQUENCE'))).toBeGreaterThanOrEqual(now);
+    // والدعوة بلا رقم تبقى بلا سطر تسلسل (دعوة الورشة كما كانت)
+    expect(dec(icsEvent({ uid: 'u', start: '2026-12-06T07:00:00Z', end: '2026-12-06T08:00:00Z', title: 'x' }).content)).not.toContain('SEQUENCE');
+  });
+  it('الأسطر تنتهي بـCRLF، والطويل يُطوى عند 75 بايتًا بلا قطع حرف عربي، وفكّ الطي يعيد النص كما هو', () => {
+    const title = 'جلسة جماعية مع المستشار: مراجعة خطة المبادرة وقياس أثرها على المستفيدين في الربع القادم · برنامج القادة';
+    const url = `https://teams.microsoft.com/l/meetup-join/${'x'.repeat(160)}`;
+    const t = dec(icsEvent({ uid: 'x1', start: '2026-11-02T07:00:00Z', end: '2026-11-02T07:45:00Z', title, description: 'قاعة الاجتماعات، الدور الثالث; المبنى الرئيسي', url, sequence: 5 }).content);
+    expect(t.endsWith('END:VCALENDAR\r\n')).toBe(true);
+    expect(t).not.toMatch(/[^\r]\n/);
+    const lines = t.split('\r\n');
+    expect(lines.every((l) => bytes(l) <= 75)).toBe(true);
+    expect(lines.filter((l) => l.startsWith(' ')).length).toBeGreaterThan(3);
+    // لا حرف مقطوع: النص يُقرأ UTF-8 بلا حرف بديل، وفكّ الطي يعيد العنوان والرابط كاملين
+    expect(t).not.toContain('�');
+    expect(field(t, 'SUMMARY')).toBe(title);
+    expect(field(t, 'URL')).toBe(url);
+    expect(field(t, 'DESCRIPTION')).toBe('قاعة الاجتماعات، الدور الثالث\\; المبنى الرئيسي');
+    // الدالة نفسها: القصير كما هو، والطويل قطع أولها 75 وما بعدها مسافة ثم 74
+    expect(icsFold('SUMMARY:قصير')).toBe('SUMMARY:قصير');
+    const parts = icsFold(`X:${'a'.repeat(200)}`).split('\r\n');
+    expect(parts.map((l) => l.length)).toEqual([75, 75, 54]);
+    expect(parts.slice(1).every((l) => l.startsWith(' '))).toBe(true);
+    expect(parts.join('').replace(/ /g, '')).toBe(`X:${'a'.repeat(200)}`);
   });
 });
 

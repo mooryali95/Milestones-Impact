@@ -9,6 +9,9 @@
 // في المعاينة ويُتخطى أو يُضاف استثناءً مسجلًا.
 // الخصوصية: المدعو لا يرى أسماء بقية المدعوين ولا عددهم (لا في رحلته ولا في بريده)، والمستشار يرى جلساته وحدها وأسماء
 // مدعويها وحدها بلا بريد ولا جوال. والبريد لا يصل حساب العرض ولا حسابات الاختبار (counted)، ويمر بحصة البريد وطابورها.
+// المتابعات (2026-11-22، بلا ترحيل): إضافة مدعوين إلى جلسة قائمة بالمعاينة نفسها (addPreview وaddMembers)، وإعادة إرسال الدعوة بمهلة
+// (resend)، وملف إلغاء تقويم عند الإلغاء والإزالة. رقم تسلسل ملف التقويم من وقت آخر تعديل للجلسة أو لصف المدعو (updated_at): يكبر
+// مع كل تغيير، ويبقى كما هو في إعادة الإرسال. وحالة بريد الدعوة تُقرأ من سجل البريد وطابوره القائمين (mail_events وmail_queue)
 // قبل الترحيل: groupsReady يعيد false، فتقول اللوحة «غير مفعّل بعد»، وتُرفض الكتابة بـnot_migrated، ولا يُقرأ عمود جديد.
 import { auditMany, type AuditRow, db, Fail, GROUP_EXPERT_MAIL, GROUP_SESSION_MAIL, groupExpertMail, groupSessionMail, must, sendMail } from './core.ts';
 import { missingTable } from './missing-column.ts';
@@ -18,7 +21,7 @@ import { RULES } from './notice-rules.js';
 import { cohortMembers, journeyDefinition } from './programs.ts';
 import { journeyFor } from './participant.ts';
 import { cohortTrainers } from './activities.ts';
-import { icsEvent } from '../_shared/mail.ts';
+import { addressHash, icsEvent, icsSequence } from '../_shared/mail.ts';
 import { groupMemberState, inProgram, journeyApproved, sessionsMax, sessionUnits, tallyOnce } from './logic.js';
 import { GROUP_REFUSAL_AR, GROUP_SKIP_AR } from './labels.js';
 
@@ -189,8 +192,12 @@ type MailTally = { sent: number; queued: number; failed: number; skipped: number
 const groupView = (g: Row, expertName: string | null) => ({ title: g.title_ar, when: whenAr(g.starts_at), expert: expertName, where: g.mode === 'in_person' ? g.location_ar || null : null, joinUrl: g.mode === 'online' ? g.join_url || null : null, counts: g.counts_allowance !== false });
 // مؤرخ بموعد الجلسة (expiresAt): إن انتظر في الطابور حتى بدأت يُترك ولا يخرج بعدها. وجلسة مضى موعدها لا يخرج لها بريد أصلًا
 const mailable = (g: Row) => Date.parse(g.starts_at) > Date.now();
-/** بريد للمدعوين: الحقيقيون وحدهم (counted: لا حساب العرض ولا حساب اختبار). rows صفوفهم في coaching_sessions (معرّف الصف معرّف دعوة تقويمه) */
-async function mailMembers(kind: keyof typeof GROUP_SESSION_MAIL, g: Row, rows: Row[], expertName: string | null, sequence = false): Promise<MailTally> {
+// ملف التقويم: دعوة أو تحديث (PUBLISH)، أو إلغاء (CANCEL) بالمعرّف نفسه. رقم التسلسل من آخر تعديل للجلسة أو لصف المدعو
+const calendarFile = (uid: string, g: Row, view: ReturnType<typeof groupView>, cancel: boolean, ...touched: unknown[]) => icsEvent({ uid, start: g.starts_at, end: g.ends_at, title: `${g.title_ar} · برنامج القادة`,
+  description: view.where || 'Milestone Impact · Leaders Program', url: view.joinUrl || '', sequence: icsSequence(g.updated_at, ...touched), ...(cancel ? { method: 'CANCEL' as const } : {}) });
+/** بريد للمدعوين: الحقيقيون وحدهم (counted: لا حساب العرض ولا حساب اختبار). rows صفوفهم في coaching_sessions (معرّف الصف معرّف دعوة تقويمه).
+ * الدعوة والتحديث بملف تقويم، والإلغاء والإزالة بملف إلغائه. g.updated_at وقت آخر تعديل كما كُتب (يمرره المستدعي بعد الكتابة) */
+async function mailMembers(kind: keyof typeof GROUP_SESSION_MAIL, g: Row, rows: Row[], expertName: string | null): Promise<MailTally> {
   const out: MailTally = { sent: 0, queued: 0, failed: 0, skipped: 0 };
   if (!rows.length) return out;
   const people = (must(await counted(db.from('participants').select('id, full_name, email').in('id', rows.map((r) => r.participant_id)))) ?? []) as Row[];
@@ -200,7 +207,7 @@ async function mailMembers(kind: keyof typeof GROUP_SESSION_MAIL, g: Row, rows: 
   for (const r of rows) {
     const p = byId.get(r.participant_id);
     if (!p?.email) { out.skipped += 1; continue; }
-    const ics = live ? [icsEvent({ uid: r.id, start: g.starts_at, end: g.ends_at, title: `${g.title_ar} · برنامج القادة`, description: view.where || 'Milestone Impact · Leaders Program', url: view.joinUrl || '', ...(sequence ? { sequence: Math.floor(Date.now() / 1000) } : {}) })] : [];
+    const ics = [calendarFile(r.id, g, view, !live, r.updated_at)];
     try {
       const res = await sendMail(p.email, GROUP_SESSION_MAIL[kind].subject, groupSessionMail(kind, p.full_name, view), ics, { kind: 'bulk', ref: g.id, ...(live ? { expiresAt: g.starts_at } : {}) });
       if (res === 'queued') out.queued += 1; else out.sent += 1;
@@ -209,12 +216,12 @@ async function mailMembers(kind: keyof typeof GROUP_SESSION_MAIL, g: Row, rows: 
   return out;
 }
 // journey-guard: بريد مستشار الجلسة بمعرّفه ليُبلَّغ بتكليفه أو تغيّر جلسته أو إلغائها، ولو أُوقف بعد التكليف (الأهلية تُفحص عند التكليف: cohortTrainers)
-async function mailExpert(kind: keyof typeof GROUP_EXPERT_MAIL, g: Row, expertId: string | null, count: number, cohortName: string | null, sequence = false): Promise<'sent' | 'queued' | 'failed' | 'none'> {
+async function mailExpert(kind: keyof typeof GROUP_EXPERT_MAIL, g: Row, expertId: string | null, count: number, cohortName: string | null): Promise<'sent' | 'queued' | 'failed' | 'none'> {
   if (!expertId) return 'none';
   const e = (await db.from('experts').select('id, full_name, email').eq('id', expertId).maybeSingle()).data as Row | null;
   if (!e?.email) return 'none';
   const view = { ...groupView(g, null), count, cohort: cohortName };
-  const ics = kind === 'cancel' ? [] : [icsEvent({ uid: g.id, start: g.starts_at, end: g.ends_at, title: `${g.title_ar} · برنامج القادة`, description: view.where || 'Milestone Impact · Leaders Program', url: view.joinUrl || '', ...(sequence ? { sequence: Math.floor(Date.now() / 1000) } : {}) })];
+  const ics = [calendarFile(g.id, g, view, kind === 'cancel')];
   try {
     const res = await sendMail(e.email, GROUP_EXPERT_MAIL[kind].subject, groupExpertMail(kind, e.full_name, view), ics, { kind: 'bulk', ref: g.id, ...(kind === 'cancel' ? {} : { expiresAt: g.starts_at }) });
     return res === 'queued' ? 'queued' : 'sent';
@@ -326,12 +333,13 @@ async function update(a: any, b: Body) {
   const whenChanged = 'starts_at' in next, whereChanged = 'mode' in next || 'join_url' in next || 'location_ar' in next, expertChanged = 'expert_id' in next;
   // بعد تسجيل الحضور يبقى العنوان وحده قابلًا للتعديل: الموعد والمستشار صارا واقعة محسوبة
   if ((whenChanged || whereChanged || expertChanged) && marked(rows)) throw new Fail('سُجّل حضور هذه الجلسة، فلا يتغير موعدها ولا مكانها ولا مستشارها. تراجع عن الحضور أولًا', 409, 'marked');
-  const after = { ...g, ...next };
+  const now = new Date().toISOString();
+  // after يحمل وقت هذا التعديل: منه رقم تسلسل ملف التقويم، فيحدّث الموعد في تقويم المدعو ولا يضيف ثانيًا
+  const after: Row = { ...g, ...next, updated_at: now };
   if (whenChanged || expertChanged) {
     const conflicts = after.expert_id ? await expertConflicts(after.expert_id, after.starts_at, after.ends_at, g.id) : [];
     if (conflicts.length && b.confirm_conflict !== true) throw new Fail('للمستشار موعد آخر في هذا الوقت. راجع الموعد، أو أكّد الحفظ معه', 409, 'expert_conflict', { conflicts });
   }
-  const now = new Date().toISOString();
   must(await db.from('coaching_groups').update({ ...next, updated_at: now }).eq('id', g.id));
   const booked = rows.filter((r) => r.status === 'booked' || r.status === 'requested');
   if ((whenChanged || whereChanged || expertChanged) && booked.length) {
@@ -345,11 +353,11 @@ async function update(a: any, b: Body) {
   let expert_mail: string = 'none';
   // الإبلاغ عند تغيّر ما يهم المدعو: الموعد أو المكان أو المستشار. والعنوان وحده لا بريد له
   if ((whenChanged || whereChanged || expertChanged) && b.notify !== false && mailable(after)) {
-    mail = await mailMembers('change', after, booked, await expertNameOf(after.expert_id), true);
+    mail = await mailMembers('change', after, booked, await expertNameOf(after.expert_id));
     if (expertChanged) {
-      if (g.expert_id) await mailExpert('cancel', g, g.expert_id, booked.length, w.cohort.name);
+      if (g.expert_id) await mailExpert('cancel', { ...g, updated_at: now }, g.expert_id, booked.length, w.cohort.name);
       expert_mail = await mailExpert('assign', after, after.expert_id, booked.length, w.cohort.name);
-    } else expert_mail = await mailExpert('change', after, after.expert_id, booked.length, w.cohort.name, true);
+    } else expert_mail = await mailExpert('change', after, after.expert_id, booked.length, w.cohort.name);
   }
   return { success: true, id: g.id, changed: Object.keys(next), mail, expert_mail };
 }
@@ -371,9 +379,11 @@ export async function cancel(a: any, b: Body) {
   await auditMany([{ actorType: 'admin', actor: a.email, action: 'coaching.group-cancel', entity: 'coaching_groups', entityId: g.id, before: { status: 'scheduled', members: booked.length }, after: { status: 'cancelled', ...(reason ? { reason } : {}) } },
     ...booked.map((r): AuditRow => ({ actorType: 'admin', actor: a.email, action: 'coaching.group-cancelled', entity: 'participants', entityId: r.participant_id, after: { group_id: g.id, starts_at: g.starts_at } }))]);
   const tell = b.notify !== false && mailable(g);
-  const mail = tell ? await mailMembers('cancel', g, booked, await expertNameOf(g.expert_id)) : { sent: 0, queued: 0, failed: 0, skipped: 0 };
+  // ملف الإلغاء بوقت الإلغاء رقمَ تسلسل: أعلى من الدعوة ومن كل تحديث سبقه
+  const gone = { ...g, updated_at: now };
+  const mail = tell ? await mailMembers('cancel', gone, booked, await expertNameOf(g.expert_id)) : { sent: 0, queued: 0, failed: 0, skipped: 0 };
   const cohortName = g.cohort_id ? ((await db.from('cohorts').select('name').eq('id', g.cohort_id).maybeSingle()).data as Row | null)?.name || null : null;
-  const expert_mail = tell ? await mailExpert('cancel', g, g.expert_id, booked.length, cohortName) : 'none';
+  const expert_mail = tell ? await mailExpert('cancel', gone, g.expert_id, booked.length, cohortName) : 'none';
   return { success: true, cancelled: booked.length, mail, expert_mail };
 }
 
@@ -394,8 +404,175 @@ export async function removeMember(a: any, b: Body) {
   const reason = String(b.reason || '').trim().slice(0, 300);
   await auditMany([{ actorType: 'admin', actor: a.email, action: 'coaching.group-remove', entity: 'participants', entityId: pid, before: { group_id: g.id, state: groupMemberState(row) }, after: { group_id: g.id, restored: !row.off_allowance, ...(reason ? { reason } : {}) } }]);
   const wasBooked = row.status === 'booked' || row.status === 'requested';
-  const mail = wasBooked && b.notify !== false && mailable(g) ? await mailMembers('removed', g, [row], await expertNameOf(g.expert_id)) : { sent: 0, queued: 0, failed: 0, skipped: 0 };
+  const mail = wasBooked && b.notify !== false && mailable(g) ? await mailMembers('removed', g, [{ ...row, updated_at: now }], await expertNameOf(g.expert_id)) : { sent: 0, queued: 0, failed: 0, skipped: 0 };
   return { success: true, removed: true, mail };
+}
+
+// ── إضافة مدعوين إلى جلسة قائمة (admin.coaching-group-candidates وadmin.coaching-group-add) ──
+// بالمعاينة نفسها وحكمها (classify): من يُدعى، ومن استنفد رصيده أو لم تُفتح له الخدمة (يُتخطى أو يُضاف استثناءً مسجلًا)، ومن لا يُضاف بسببه.
+// قبل تسجيل الحضور وقبل نهاية الجلسة وحدهما: بعدهما صارت الجلسة واقعة محسوبة، ومن حضر بلا دعوة يُسجَّل له لقاء فردي. خانة الجلسة
+// «لا تُحسب من الرصيد» تسري على الجدد. من أُزيل أو اعتذر يعود بصفه نفسه (فهرس العضو الفريد)، فمعرّف دعوة تقويمه واحد.
+// الدعوة للجدد وحدهم، ولا بريد للمدعوين القائمين. والمستشار لا يُراسَل: العدد والأسماء في بوابته لحظة بلحظة، والإزالة لا تراسله كذلك،
+// وبريد لكل إضافة ضجيج. إعادة الطلب نفسه: الكل «مدعو أصلًا»، فلا صف ثانٍ ولا دعوة ثانية
+const ADD_BLOCK_AR = { cancelled: 'هذه الجلسة ملغاة، فلا يُضاف إليها أحد', ended: 'انتهت هذه الجلسة، فلا يُضاف إليها أحد', marked: 'سُجّل حضور هذه الجلسة، فلا يُضاف إليها أحد. تراجع عن الحضور أولًا' } as const;
+function addBlock(g: Row, rows: Row[], now = Date.now()): keyof typeof ADD_BLOCK_AR | null {
+  if (g.status !== 'scheduled') return 'cancelled';
+  if (Date.parse(g.ends_at) <= now) return 'ended';
+  return marked(rows) ? 'marked' : null;
+}
+const invitedNow = (rows: Row[]) => new Set(rows.filter((r) => groupMemberState(r) === 'booked').map((r) => r.participant_id as string));
+export async function addPreview(b: Body) {
+  if (!(await groupsReady())) return { success: true, ready: false, message: NOT_READY_AR };
+  const g = await loadGroup(b.id);
+  const rows = await groupRows(g.id);
+  const block = addBlock(g, rows);
+  const session = { id: g.id, title: g.title_ar, starts_at: g.starts_at, ends_at: g.ends_at, counts: g.counts_allowance !== false, past: !mailable(g) };
+  if (block) return { success: true, ready: true, session, blocked: ADD_BLOCK_AR[block], candidates: [], members: [], room: 0 };
+  const w = await cohortWorld(g.cohort_id);
+  const inGroup = invitedNow(rows);
+  const was = new Map(rows.filter((r) => !inGroup.has(r.participant_id)).map((r) => [r.participant_id, groupMemberState(r)]));
+  // أعضاء الدفعة ممن في البرنامج وليسوا مدعوين الآن (cohortMembers: بلا الحساب التجريبي)
+  const candidates = ((await cohortMembers(w.cohort)) as Row[]).filter((m) => inProgram(m.status) && !inGroup.has(m.id))
+    .map((m) => ({ id: m.id, name: m.name, ...(was.has(m.id) ? { was: was.get(m.id) } : {}) })).sort((x, y) => String(x.name).localeCompare(String(y.name), 'ar'));
+  const ids = cleanIds(b.participant_ids);
+  if (ids.length > GROUP_MEMBERS_MAX) throw new Fail(`الحد ${GROUP_MEMBERS_MAX} مشاركًا في الجلسة الواحدة`, 400, 'too_many');
+  const members = await classify(w.cohort, g.requirement_id, ids, { counts: session.counts, startsAt: g.starts_at, endsAt: g.ends_at, inGroup });
+  return { success: true, ready: true, session, blocked: null, candidates, members, room: Math.max(0, GROUP_MEMBERS_MAX - activeRows(rows).length), max_members: GROUP_MEMBERS_MAX };
+}
+export async function addMembers(a: any, b: Body) {
+  const g = await loadGroup(b.id);
+  const rows = await groupRows(g.id);
+  const block = addBlock(g, rows);
+  if (block) throw new Fail(ADD_BLOCK_AR[block], 409, block);
+  const w = await cohortWorld(g.cohort_id);
+  const ids = cleanIds(b.participant_ids);
+  if (!ids.length) throw new Fail('اختر من تضيفهم أولًا', 400, 'empty');
+  if (ids.length > GROUP_MEMBERS_MAX) throw new Fail(`الحد ${GROUP_MEMBERS_MAX} مشاركًا في الجلسة الواحدة`, 400, 'too_many');
+  const counts = g.counts_allowance !== false;
+  const verdicts = await classify(w.cohort, g.requirement_id, ids, { counts, startsAt: g.starts_at, endsAt: g.ends_at, inGroup: invitedNow(rows) });
+  const exceptions = new Set(cleanIds(b.exceptions));
+  const picked = verdicts.filter((v) => v.category === 'ok' || ((v.category === 'at_max' || v.category === 'locked') && exceptions.has(v.id)));
+  const skipped = verdicts.filter((v) => !picked.includes(v)).map((v) => ({ id: v.id, name: v.name, code: v.code, reason: v.reason }));
+  const none = { sent: 0, queued: 0, failed: 0, skipped: 0 };
+  if (!picked.length) {
+    // إعادة المحاولة بعد نجاحها: الكل مدعو أصلًا، فلا كتابة ولا بريد
+    if (skipped.length && skipped.every((x) => x.code === 'already')) return { success: true, id: g.id, added: 0, exceptions: 0, readded: 0, already: true, skipped, mail: none, past: !mailable(g) };
+    throw new Fail('لا أحد من المختارين يُضاف إلى هذه الجلسة. راجع المعاينة', 400, 'no_members', { skipped });
+  }
+  const old = new Map(rows.map((r) => [r.participant_id as string, r]));
+  const fresh = picked.filter((v) => !old.has(v.id));
+  if (activeRows(rows).length + picked.filter((v) => !old.has(v.id) || groupMemberState(old.get(v.id)) === 'removed').length > GROUP_MEMBERS_MAX) throw new Fail(`الحد ${GROUP_MEMBERS_MAX} مشاركًا في الجلسة الواحدة`, 400, 'too_many');
+  const now = new Date().toISOString();
+  const place = { starts_at: g.starts_at, ends_at: g.ends_at, join_url: g.mode === 'online' ? g.join_url || null : null, expert_id: g.expert_id || null };
+  const added: Row[] = [];
+  const back: Row[] = [];
+  // من أُزيل أو اعتذر: صفه نفسه يعود محجوزًا بموعد الجلسة الآن وخانة رصيدها، مشروطًا بحالته كما قُرئت (طلبان معًا يكتب أحدهما وحده)
+  for (const v of picked.filter((x) => old.has(x.id))) {
+    const row = old.get(v.id)!;
+    const hit = (must(await db.from('coaching_sessions').update({ status: 'booked', confirmed_by: null, confirmed_at: null, note: null, reminded_at: null, off_allowance: counts ? null : true, updated_at: now, ...place })
+      .eq('id', row.id).eq('status', 'cancelled').select('id')) ?? []) as Row[];
+    if (hit.length) { added.push({ id: row.id, participant_id: v.id, updated_at: now }); back.push(row); }
+  }
+  let inserted: Row[] = [];
+  if (fresh.length) {
+    const ins = await db.from('coaching_sessions').insert(fresh.map((v) => ({
+      participant_id: v.id, requirement_id: g.requirement_id, kind: 'manual', provider: 'manual', status: 'booked', group_id: g.id, ...place, ...(counts ? {} : { off_allowance: true }), updated_at: now,
+    }))).select('id, participant_id');
+    if (ins.error) {
+      // تعذّر الإدراج (أو سبقه طلب آخر بالعضو نفسه: الفهرس الفريد): يُتراجع عمّن أُعيد، فلا نصف إضافة. وإعادة المحاولة نظيفة
+      for (const r of back) await db.from('coaching_sessions').update({ status: 'cancelled', confirmed_by: r.confirmed_by ?? null, confirmed_at: r.confirmed_at ?? null, off_allowance: r.off_allowance ?? null, updated_at: now }).eq('id', r.id);
+      throw new Fail('تعذّرت إضافة المدعوين. أعد المحاولة', 500, 'db_error');
+    }
+    inserted = ((ins.data || []) as Row[]).map((r) => ({ ...r, updated_at: now }));
+    added.push(...inserted);
+  }
+  const got = new Set(added.map((r) => r.participant_id));
+  const done = picked.filter((v) => got.has(v.id));
+  // من سبقه طلب آخر بين القراءة والكتابة: مدعو أصلًا
+  for (const v of picked) if (!got.has(v.id)) skipped.push({ id: v.id, name: v.name, code: 'already', reason: GROUP_SKIP_AR.already });
+  if (!done.length) return { success: true, id: g.id, added: 0, exceptions: 0, readded: 0, already: true, skipped, mail: none, past: !mailable(g) };
+  const n = { exceptions: done.filter((v) => v.category !== 'ok').length, readded: back.length };
+  const logs: AuditRow[] = [{ actorType: 'admin', actor: a.email, action: 'coaching.group-add-members', entity: 'coaching_groups', entityId: g.id,
+    before: { members: activeRows(rows).length }, after: { added: done.length, ...n, counts } }];
+  for (const v of done) {
+    const prev = old.has(v.id) ? groupMemberState(old.get(v.id)) : null;
+    logs.push({ actorType: 'admin', actor: a.email, action: v.category === 'ok' ? 'coaching.group-add' : 'coaching.group-exception', entity: 'participants', entityId: v.id,
+      after: { group_id: g.id, starts_at: g.starts_at, counts, late: true, ...(prev ? { was: prev } : {}), ...(v.category === 'ok' ? {} : { exception: v.code, used: v.used ?? null, max: v.max ?? null }) } });
+  }
+  // السجل شرط الحفظ كما في الإنشاء: إن تعذّر يُتراجع عن الإضافة، فلا مدعو بلا أثر ولا دعوة
+  try { await auditMany(logs); } catch (e) {
+    if (inserted.length) await db.from('coaching_sessions').delete().in('id', inserted.map((r) => r.id));
+    for (const r of back) await db.from('coaching_sessions').update({ status: 'cancelled', confirmed_by: r.confirmed_by ?? null, confirmed_at: r.confirmed_at ?? null, off_allowance: r.off_allowance ?? null, updated_at: now }).eq('id', r.id);
+    throw e;
+  }
+  const mail = mailable(g) ? await mailMembers('invite', g, added, await expertNameOf(g.expert_id)) : none;
+  return { success: true, id: g.id, added: done.length, ...n, skipped, mail, past: !mailable(g) };
+}
+
+// ── حالة بريد الدعوة لكل مدعو، من سجل البريد وطابوره القائمين (لا مصدر ثانٍ) ──
+// بريد الجلسة يحمل معرّفها مرجعًا (ref)، والسجل يحمل بصمة العنوان وعنوان الرسالة. الدعوة وإشعار التغيير كلاهما يحمل موعدها وملف
+// تقويمها، فآخر أحدهما هو «آخر دعوة». sent خرجت، وwaiting تنتظر في صندوق «لم يُرسل»، وfailed لم تخرج (تعذّرت أو فات أوانها في الطابور)
+export const GROUP_RESEND_MINUTES = 60;
+type InviteMail = { state: 'sent' | 'waiting' | 'failed'; at: string; resend_at?: string };
+const INVITE_SUBJECTS = [GROUP_SESSION_MAIL.invite.subject, GROUP_SESSION_MAIL.change.subject];
+const lower = (v: unknown) => String(v || '').trim().toLowerCase();
+/** rows: صفوف المدعوين وفيها participants.email. يعيد null إن تعذّرت قراءة السجل (فلا تُعرض حالة، ولا تُعاد دعوة على عمى) */
+async function inviteMail(groupIds: string[], rows: Row[], now = Date.now()): Promise<Map<string, InviteMail> | null> {
+  const out = new Map<string, InviteMail>();
+  if (!groupIds.length || !rows.length) return out;
+  const ev = await db.from('mail_events').select('ref, to_hash, status, created_at').in('ref', groupIds).in('subject', INVITE_SUBJECTS).order('created_at', { ascending: false }).limit(5000);
+  if (ev.error) { console.error('group mail state', ev.error.message); return null; }
+  const qu = await db.from('mail_queue').select('ref, to_email, created_at').in('ref', groupIds).in('subject', INVITE_SUBJECTS).is('sent_at', null).is('gave_up_at', null).order('created_at', { ascending: false }).limit(2000);
+  if (qu.error) { console.error('group mail queue', qu.error.message); return null; }
+  const hashes = new Map<string, string>();
+  for (const r of rows) {
+    const email = lower(r.participants?.email);
+    if (!email || r.participants?.is_test || r.participants?.is_demo) continue;
+    if (!hashes.has(email)) hashes.set(email, await addressHash(email));
+    const mine = ((ev.data || []) as Row[]).filter((e) => e.ref === r.group_id && e.to_hash === hashes.get(email));
+    const last = mine[0], sent = mine.find((e) => e.status === 'sent');
+    const waiting = ((qu.data || []) as Row[]).find((m) => m.ref === r.group_id && lower(m.to_email) === email);
+    const until = sent ? Date.parse(sent.created_at) + GROUP_RESEND_MINUTES * 6e4 : 0;
+    const hold = until > now ? { resend_at: new Date(until).toISOString() } : {};
+    if (waiting && (!sent || Date.parse(waiting.created_at) > Date.parse(sent.created_at))) out.set(r.id, { state: 'waiting', at: waiting.created_at });
+    else if (last?.status === 'sent') out.set(r.id, { state: 'sent', at: last.created_at, ...hold });
+    else if (last) out.set(r.id, { state: 'failed', at: last.created_at, ...hold });
+  }
+  return out;
+}
+
+// ── إعادة إرسال الدعوة (admin.coaching-group-resend): لمدعو واحد، أو لكل من لم يُسجَّل حضوره بعد ──
+// المهلة: لا تُعاد لمدعو خرجت له دعوة أو تحديث خلال GROUP_RESEND_MINUTES، ولا لمن دعوته تنتظر في الطابور (تخرج وحدها). فالنقر
+// المتكرر وإعادة الطلب لا يرسلان مرتين. بقالب الدعوة نفسه وملف تقويمه برقم تسلسله الحالي (لا يضيف موعدًا ثانيًا)، وبحصة البريد
+// وطابورها، مؤرخة بموعد الجلسة. لا لجلسة ملغاة ولا لجلسة بدأت، ولا لحساب اختبار أو عرض
+export async function resend(a: any, b: Body) {
+  const g = await loadGroup(b.id);
+  if (g.status !== 'scheduled') throw new Fail('هذه الجلسة ملغاة، فلا تُعاد دعوتها', 409, 'cancelled');
+  if (!mailable(g)) throw new Fail('بدأت هذه الجلسة أو مضى موعدها، فلا تُعاد دعوتها', 409, 'past');
+  const one = b.participant_id ? uuid(b.participant_id) : '';
+  if (b.participant_id && !one) throw new Fail('المدعو غير موجود', 404);
+  // مدعوو جلسة بعينها بمعرّفها (listed: حساب الاختبار يظهر بصفته ولا يصله بريد، وحساب العرض لا يكون عضوًا)
+  const all = (must(await listed(db.from('coaching_sessions').select('*, participants!inner(full_name, email, is_demo, is_test)').eq('group_id', g.id), 'participants')) ?? []) as Row[];
+  const pending = all.filter((r) => groupMemberState(r) === 'booked' && (!one || r.participant_id === one));
+  if (one && !pending.length) throw new Fail('ليس مدعوًّا ينتظر هذه الجلسة، فلا دعوة تُعاد له', 409, 'not_pending');
+  const real = pending.filter((r) => !r.participants?.is_test && r.participants?.email);
+  if (one && !real.length) throw new Fail('حساب اختبار: يُدعى ولا يصله بريد', 409, 'test_account');
+  const states = await inviteMail([g.id], real);
+  if (!states) throw new Fail('تعذّرت قراءة سجل البريد الآن، فلم تُعد الدعوة. حاول بعد قليل', 503, 'mail_unreadable');
+  const held = (r: Row) => { const m = states.get(r.id); return !!m && (m.state === 'waiting' || !!m.resend_at); };
+  const go = real.filter((r) => !held(r));
+  const throttled = real.length - go.length;
+  if (one && !go.length) {
+    const m = states.get(real[0].id)!;
+    throw new Fail(m.state === 'waiting' ? 'دعوته تنتظر في صندوق «لم يُرسل» وتخرج حين تتسع حصة اليوم، فلا تُعاد' : `أُرسلت له قبل قليل. تُعاد بعد ${GROUP_RESEND_MINUTES} دقيقة من آخر إرسال`, 429, 'throttled', { resend_at: m.resend_at || null });
+  }
+  const none = { sent: 0, queued: 0, failed: 0, skipped: 0 };
+  if (!go.length) return { success: true, mail: { ...none, skipped: pending.length - real.length }, throttled, minutes: GROUP_RESEND_MINUTES };
+  const mail = await mailMembers('invite', g, go, await expertNameOf(g.expert_id));
+  mail.skipped += pending.length - real.length;
+  await auditMany([{ actorType: 'admin', actor: a.email, action: 'coaching.group-resend', entity: one ? 'participants' : 'coaching_groups', entityId: one || g.id,
+    after: { group_id: g.id, sent: mail.sent, queued: mail.queued, failed: mail.failed, ...(throttled ? { throttled } : {}) } }]);
+  return { success: true, mail, throttled, minutes: GROUP_RESEND_MINUTES };
 }
 
 // ── القراءة للإدارة (admin.coaching-groups): الجلسات بمدعويها وحالة كل منهم ──
@@ -425,6 +602,9 @@ export async function adminList(b: Body = {}) {
   ]);
   const nameOf = (list: Row[], k = 'full_name') => new Map(list.map((x) => [x.id, x[k]]));
   const eOf = nameOf(experts), cOf = nameOf(cohorts, 'name'), rOf = nameOf(reqs, 'title_ar');
+  // حالة بريد الدعوة لمدعوي الجلسات القادمة وحدها (ما تُعاد دعوته). تعذّر قراءتها لا يُسقط القائمة: تُعرض بلا حالة
+  const upcoming = new Set(groups.filter((g) => g.status === 'scheduled' && mailable(g)).map((g) => g.id));
+  const mails = upcoming.size ? await inviteMail([...upcoming], (rows as Row[]).filter((r) => upcoming.has(r.group_id) && groupMemberState(r) === 'booked')).catch(() => null) : null;
   return {
     success: true, ready: true,
     groups: groups.map((g) => {
@@ -433,7 +613,9 @@ export async function adminList(b: Body = {}) {
         id: g.id, cohort_id: g.cohort_id, cohort: cOf.get(g.cohort_id) || null, requirement_id: g.requirement_id, requirement: rOf.get(g.requirement_id) || null, expert_id: g.expert_id, expert: eOf.get(g.expert_id) || null,
         title: g.title_ar, starts_at: g.starts_at, ends_at: g.ends_at, mode: g.mode, location: g.location_ar, join_url: g.join_url, counts: g.counts_allowance !== false, status: g.status,
         ...summary(g, mine),
-        members: activeRows(mine).map((r) => ({ ...memberView(r), ...(r.participants?.is_test ? { test: true } : {}) })).sort((x, y) => x.full_name.localeCompare(y.full_name, 'ar')),
+        // can_add: تُضاف إليها مدعوون (قبل الحضور وقبل نهايتها). can_resend: تُعاد دعوتها (قادمة). resend_minutes مهلة الإعادة
+        can_add: !addBlock(g, mine), can_resend: upcoming.has(g.id), ...(upcoming.has(g.id) ? { resend_minutes: GROUP_RESEND_MINUTES, mail_known: !!mails } : {}),
+        members: activeRows(mine).map((r) => ({ ...memberView(r), ...(r.participants?.is_test ? { test: true } : {}), ...(mails?.get(r.id) ? { mail: mails.get(r.id) } : {}) })).sort((x, y) => x.full_name.localeCompare(y.full_name, 'ar')),
       };
     }),
   };

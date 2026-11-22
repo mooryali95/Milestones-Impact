@@ -58,7 +58,10 @@ function world(opts: { before?: boolean } = {}) {
     coaching_groups: [], workshop_sessions: [], workshop_attendance: [],
     audit_log: [], mail_events: [], mail_queue: [], participant_observations: [], expert_requests: [], expert_ratings: [],
   };
+  // down: جدول وعملية يتعذّران عند الطلب (مثل 'audit_log:insert')، لاختبار التراجع والقراءة المتعذرة
+  const down = new Set<string>();
   const missing = (table: string, op: { kind: string; cols?: string; value?: any }) => {
+    if (down.has(`${table}:${op.kind}`)) return { message: 'down' };
     if (!opts.before) return null;
     if (table === 'coaching_groups') return { code: 'PGRST205', message: 'relation does not exist' };
     if (table === 'coaching_sessions' && op.kind === 'select' && /group_id|off_allowance/.test(op.cols || '')) return { code: '42703', message: 'column does not exist' };
@@ -69,7 +72,7 @@ function world(opts: { before?: boolean } = {}) {
     fail: missing,
     embed: (table, row, t) => (table === 'coaching_sessions' ? { participants: t.participants.find((p) => p.id === row.participant_id) || null, experts: t.experts.find((e) => e.id === row.expert_id) || null } : null),
   });
-  return { ps, tables, f };
+  return { ps, tables, f, down };
 }
 type W = ReturnType<typeof world>;
 const code = async (fn: () => Promise<unknown>) => { const e = await assertRejects(fn, Fail) as any; return [e.code, e.status]; };
@@ -587,4 +590,261 @@ Deno.test('من اعتذر ثم أُعيد بعد تغيير الموعد يأخ
       assertEquals([ok.added, w2.tables.coaching_groups.length, to(calls).length], [2, 1, 3]);
     });
   } finally { base.from = from0; w2.f.restore(); }
+});
+
+// ── المتابعات (2026-11-22): إضافة مدعوين إلى جلسة قائمة، وإعادة إرسال الدعوة، وملف إلغاء التقويم ──
+const subjectsTo = (calls: { url: string; body: any }[], email: string) => resendCalls(calls).filter((c) => [c.body.to].flat()[0] === email).map((c) => c.body.subject);
+const seqOf = (text: string) => Number(/SEQUENCE:(\d+)/.exec(text)?.[1] ?? -1);
+const uidOf = (text: string) => /UID:([^\r\n]+)/.exec(text)?.[1];
+// ساعة سجل البريد: الأحداث المسجلة تُرجَع إلى الوراء ليمضي وقت المهلة بلا انتظار
+const ageMail = (w: W, minutes: number) => { for (const e of w.tables.mail_events) e.created_at = new Date(Date.parse(e.created_at) - minutes * 6e4).toISOString(); };
+
+Deno.test('إضافة مدعوين إلى جلسة قائمة: المعاينة نفسها، والدعوة للجدد وحدهم، ولا عضو مرتين، والإعادة بلا أثر', async () => {
+  const w = world();
+  try {
+    await withMail(async (calls) => {
+      const r: any = await CG.save(ADMIN, input(w, { participant_ids: [w.ps[0].id] }));
+      const n0 = resendCalls(calls).length;
+      // المرشحون: أعضاء الدفعة ممن في البرنامج وليسوا مدعوين. لا المنسحب ولا عضو دفعة أخرى ولا الحساب التجريبي
+      const p0: any = await CG.addPreview({ id: r.id });
+      assertEquals([p0.blocked, p0.candidates.map((c: Row) => c.name), p0.members, p0.room], [null, ['مشارك 2', 'مشارك 3', 'مشارك 4', 'مشارك 8'], [], 49]);
+      // المعاينة بحكم الإنشاء نفسه، والمدعو أصلًا لا يُضاف بسببه
+      const p: any = await CG.addPreview({ id: r.id, participant_ids: w.ps.map((x) => x.id) });
+      assertEquals(p.members.map((m: Row) => [m.name, m.category, m.code]), [
+        ['مشارك 1', 'ineligible', 'already'], ['مشارك 2', 'ok', 'ok'], ['مشارك 3', 'at_max', 'at_max'], ['مشارك 4', 'ok', 'ok'],
+        ['مشارك 5', 'ineligible', 'out'], ['مشارك 6', 'ineligible', 'not_member'], ['مشارك 7', 'ineligible', 'demo'], ['مشارك 8', 'locked', 'locked'],
+      ]);
+      // المعاينة لا تكتب ولا ترسل
+      assertEquals([rowsOf(w, r.id).length, resendCalls(calls).length], [1, n0]);
+      const logs0 = w.tables.audit_log.length;
+      const a: any = await CG.addMembers(ADMIN, { id: r.id, participant_ids: w.ps.map((x) => x.id), exceptions: [w.ps[2].id, w.ps[6].id] });
+      assertEquals([a.added, a.exceptions, a.readded, a.mail], [3, 1, 0, { sent: 2, queued: 0, failed: 0, skipped: 1 }]);
+      assertEquals(a.skipped.map((x: Row) => x.code).sort(), ['already', 'demo', 'locked', 'not_member', 'out']);
+      // الصف الجديد كصف الإنشاء: يدوي محجوز بموعد الجلسة ورابطها ومستشارها، ويُحسب من الرصيد
+      const g = w.tables.coaching_groups[0];
+      assertEquals(rowsOf(w, r.id).map((x) => x.participant_id).sort(), [w.ps[0].id, w.ps[1].id, w.ps[2].id, w.ps[3].id].sort());
+      assert(rowsOf(w, r.id).every((x) => x.kind === 'manual' && x.external_id == null && x.status === 'booked' && x.expert_id === TEAM && x.starts_at === g.starts_at && x.join_url === g.join_url && !x.off_allowance));
+      // الرصيد كما عرّفه الإنشاء: جلسة من رصيد كل مدعو، والاستثناء يُحسب كما وقع
+      assertEquals([(await mine(w, 1)).used, (await mine(w, 2)).used], [1, 3]);
+      // الدعوة للجدد الحقيقيين وحدهم بملف تقويمهم. لا بريد للمدعو القائم، ولا للمستشار، ولا لحساب الاختبار
+      const after = resendCalls(calls).slice(n0);
+      assertEquals(after.map((c) => [[c.body.to].flat()[0], c.body.subject]).sort(), [[w.ps[1].email, 'دعوة: جلسة جماعية مع المستشار'], [w.ps[2].email, 'دعوة: جلسة جماعية مع المستشار']].sort());
+      assert(after.every((c) => ics(c).includes('METHOD:PUBLISH') && !c.body.html.includes('مشارك 1') && !c.body.html.includes('عدد المشاركين')));
+      assertEquals(uidOf(ics(after.find((c) => [c.body.to].flat()[0] === w.ps[1].email)!)), `${rowOf(w, r.id, 1).id}@sunkvalue.com`);
+      // السجل: بند للجلسة وبند لكل مضاف، والاستثناء برصيده كما كان
+      const mineLogs = w.tables.audit_log.slice(logs0);
+      assertEquals(mineLogs.map((x) => x.action).sort(), ['coaching.group-add', 'coaching.group-add', 'coaching.group-add-members', 'coaching.group-exception']);
+      assertEquals(mineLogs.filter((x) => x.action === 'coaching.group-add-members').map((x) => [x.entity, x.entity_id, x.before.members, x.after.added, x.after.exceptions]), [['coaching_groups', r.id, 1, 3, 1]]);
+      assertEquals(mineLogs.filter((x) => x.action === 'coaching.group-exception').map((x) => [x.entity_id, x.after.exception, x.after.used, x.after.max, x.after.late]), [[w.ps[2].id, 'at_max', 2, 2, true]]);
+      // إعادة الطلب نفسه: لا صف ثانٍ ولا دعوة ثانية ولا سجل
+      const n1 = resendCalls(calls).length, l1 = w.tables.audit_log.length;
+      const again: any = await CG.addMembers(ADMIN, { id: r.id, participant_ids: [w.ps[1].id, w.ps[3].id] });
+      assertEquals([again.added, again.already, again.skipped.map((x: Row) => x.code), rowsOf(w, r.id).length, resendCalls(calls).length, w.tables.audit_log.length], [0, true, ['already', 'already'], 4, n1, l1]);
+      // الجلسة تُعدّ للمستشار مرة واحدة بعد الإضافة
+      // group-once: sessionUnits
+      assertEquals(sessionUnits(w.tables.coaching_sessions.filter((s) => s.expert_id === TEAM)).length, 1);
+      // لا أحد يُضاف: يُرفض بسببه
+      assertEquals(await code(() => CG.addMembers(ADMIN, { id: r.id, participant_ids: [w.ps[4].id, w.ps[6].id] })), ['no_members', 400]);
+      assertEquals(await code(() => CG.addMembers(ADMIN, { id: r.id, participant_ids: [] })), ['empty', 400]);
+    });
+  } finally { w.f.restore(); }
+});
+
+Deno.test('الإضافة: خانة «لا تُحسب من الرصيد» تسري على الجدد، ومن أُزيل أو اعتذر يعود بصفه نفسه، ولا إضافة بعد الحضور ولا لملغاة ولا لمنتهية', async () => {
+  const w = world();
+  try {
+    await withMail(async (calls) => {
+      // جلسة خارج الرصيد: من استنفد رصيده يُضاف كغيره وصفه خارج الرصيد
+      const off: any = await CG.save(ADMIN, input(w, { counts: false, participant_ids: [w.ps[0].id] }));
+      const a: any = await CG.addMembers(ADMIN, { id: off.id, participant_ids: [w.ps[2].id] });
+      assertEquals([a.added, a.exceptions, rowOf(w, off.id, 2).off_allowance, (await mine(w, 2)).used], [1, 0, true, 2]);
+      // من أُزيل ثم أُعيد: الصف نفسه (معرّف دعوة تقويمه واحد)، ورقم تسلسل الدعوة الجديدة أعلى من ملف الإلغاء
+      const r: any = await CG.save(ADMIN, input(w, { starts_at: iso(4 * DAY) }));
+      const id0 = rowOf(w, r.id, 0).id;
+      const n0 = resendCalls(calls).length;
+      await CG.removeMember(ADMIN, { id: r.id, participant_id: w.ps[0].id });
+      const gone = resendCalls(calls).slice(n0)[0];
+      assertEquals([(await mine(w, 0)).used, ics(gone).includes('METHOD:CANCEL')], [0, true]);
+      await new Promise((ok) => setTimeout(ok, 1100));
+      const pv: any = await CG.addPreview({ id: r.id, participant_ids: [w.ps[0].id] });
+      assertEquals([pv.candidates.find((c: Row) => c.id === w.ps[0].id).was, pv.members[0].category], ['removed', 'ok']);
+      const back: any = await CG.addMembers(ADMIN, { id: r.id, participant_ids: [w.ps[0].id] });
+      assertEquals([back.added, back.readded, rowsOf(w, r.id).length, rowOf(w, r.id, 0).id, rowOf(w, r.id, 0).status, rowOf(w, r.id, 0).confirmed_at, (await mine(w, 0)).used], [1, 1, 2, id0, 'booked', null, 1]);
+      const invite = resendCalls(calls).at(-1)!;
+      assertEquals([invite.body.subject, uidOf(ics(invite)), uidOf(ics(gone))], ['دعوة: جلسة جماعية مع المستشار', `${id0}@sunkvalue.com`, `${id0}@sunkvalue.com`]);
+      assert(seqOf(ics(invite)) > seqOf(ics(gone)), 'الدعوة بعد الإزالة أعلى تسلسلًا من ملف الإلغاء');
+      assertEquals(w.tables.audit_log.filter((x) => x.action === 'coaching.group-add' && x.after.was === 'removed').map((x) => x.entity_id), [w.ps[0].id]);
+      // من اعتذر ثم أُضيف: يعود محجوزًا بلا أثر تأكيد، والعدد لا يزيد
+      await CG.adminMark(ADMIN, { id: r.id, marks: [{ id: w.ps[1].id, state: 'excused' }] });
+      assertEquals((await mine(w, 1)).used, 0);
+      const ex: any = await CG.addMembers(ADMIN, { id: r.id, participant_ids: [w.ps[1].id] });
+      assertEquals([ex.added, ex.readded, groupMemberState(rowOf(w, r.id, 1)), rowOf(w, r.id, 1).confirmed_by, (await mine(w, 1)).used, rowsOf(w, r.id).length], [1, 1, 'booked', null, 1, 2]);
+      // بعد تسجيل الحضور: لا إضافة، والمعاينة تقول السبب
+      const h: any = await CG.save(ADMIN, input(w, { starts_at: iso(-HOUR / 2), minutes: 120, participant_ids: [w.ps[0].id] }));
+      // بدأت ولم يُسجَّل حضورها بعد: تُضاف بلا بريد
+      const n1 = resendCalls(calls).length;
+      const late: any = await CG.addMembers(ADMIN, { id: h.id, participant_ids: [w.ps[1].id] });
+      assertEquals([late.added, late.past, late.mail.sent, resendCalls(calls).length], [1, true, 0, n1]);
+      await CG.adminMark(ADMIN, { id: h.id, marks: [{ id: w.ps[0].id, state: 'attended' }] });
+      assertEquals(await code(() => CG.addMembers(ADMIN, { id: h.id, participant_ids: [w.ps[3].id] })), ['marked', 409]);
+      assert(((await CG.addPreview({ id: h.id })) as any).blocked.includes('سُجّل حضور'));
+      // منتهية بلا حضور مسجل، وملغاة: لا إضافة
+      const done: any = await CG.save(ADMIN, input(w, { starts_at: iso(-3 * DAY), participant_ids: [w.ps[3].id] }));
+      assertEquals(await code(() => CG.addMembers(ADMIN, { id: done.id, participant_ids: [w.ps[1].id] })), ['ended', 409]);
+      await CG.cancel(ADMIN, { id: r.id });
+      assertEquals(await code(() => CG.addMembers(ADMIN, { id: r.id, participant_ids: [w.ps[3].id] })), ['cancelled', 409]);
+      const list: any = await CG.adminList({ cohort_id: COHORT });
+      const flag = (id: string) => list.groups.find((x: Row) => x.id === id).can_add;
+      assertEquals([flag(off.id), flag(h.id), flag(done.id), flag(r.id)], [true, false, false, false]);
+    });
+    // تعذّر السجل يتراجع عن الإضافة: لا مدعو بلا أثر ولا دعوة
+    const w2 = world();
+    try {
+      const r: any = await CG.save(ADMIN, input(w2, { participant_ids: [w2.ps[0].id] }));
+      await CG.adminMark(ADMIN, { id: r.id, marks: [{ id: w2.ps[0].id, state: 'excused' }] });
+      const before = JSON.stringify(rowOf(w2, r.id, 0).confirmed_at);
+      w2.down.add('audit_log:insert');
+      await withMail(async (calls) => {
+        await assertRejects(() => CG.addMembers(ADMIN, { id: r.id, participant_ids: [w2.ps[0].id, w2.ps[1].id] }));
+        assertEquals([rowsOf(w2, r.id).length, groupMemberState(rowOf(w2, r.id, 0)), JSON.stringify(rowOf(w2, r.id, 0).confirmed_at), resendCalls(calls).length], [1, 'excused', before, 0]);
+      });
+    } finally { w2.f.restore(); }
+  } finally { w.f.restore(); }
+});
+
+Deno.test('إعادة إرسال الدعوة: لمدعو أو لكل من لم يُسجَّل حضوره، بمهلة تمنع التكرار، وحالتها من سجل البريد', async () => {
+  const w = world();
+  try {
+    await withMail(async (calls) => {
+      const r: any = await CG.save(ADMIN, input(w, { participant_ids: [w.ps[0].id, w.ps[1].id, w.ps[3].id] }));
+      const first = resendCalls(calls).find((c) => [c.body.to].flat()[0] === w.ps[0].email)!;
+      // القائمة تقول متى خرجت الدعوة، من سجل البريد، وأن إعادتها ممسوكة الآن. حساب الاختبار بلا حالة
+      const view = async () => ((await CG.adminList({ id: r.id })) as any).groups[0];
+      let g = await view();
+      const m = (n: number) => g.members.find((x: Row) => x.id === w.ps[n].id);
+      assertEquals([g.can_resend, g.resend_minutes, g.mail_known, m(0).mail.state, !!m(0).mail.resend_at, m(3).mail], [true, 60, true, 'sent', true, undefined]);
+      // داخل المهلة: الواحد يُرفض بسببه، و«الكل» لا يرسل شيئًا
+      const n0 = resendCalls(calls).length;
+      assertEquals(await code(() => CG.resend(ADMIN, { id: r.id, participant_id: w.ps[0].id })), ['throttled', 429]);
+      const none: any = await CG.resend(ADMIN, { id: r.id });
+      assertEquals([none.mail, none.throttled, resendCalls(calls).length], [{ sent: 0, queued: 0, failed: 0, skipped: 1 }, 2, n0]);
+      // حساب الاختبار: لا بريد له
+      assertEquals(await code(() => CG.resend(ADMIN, { id: r.id, participant_id: w.ps[3].id })), ['test_account', 409]);
+      // بعد المهلة: تُعاد بالقالب نفسه وملف التقويم نفسه (المعرّف ورقم التسلسل)، فلا موعد ثانٍ في تقويمه
+      ageMail(w, 61);
+      const one: any = await CG.resend(ADMIN, { id: r.id, participant_id: w.ps[0].id });
+      assertEquals([one.mail, one.throttled], [{ sent: 1, queued: 0, failed: 0, skipped: 0 }, 0]);
+      const again = resendCalls(calls).at(-1)!;
+      assertEquals([[again.body.to].flat()[0], again.body.subject, uidOf(ics(again)), seqOf(ics(again))], [w.ps[0].email, 'دعوة: جلسة جماعية مع المستشار', uidOf(ics(first)), seqOf(ics(first))]);
+      assert(seqOf(ics(first)) > 0);
+      // إعادة الطلب فورًا: ممسوكة، فلا رسالة ثانية
+      assertEquals(await code(() => CG.resend(ADMIN, { id: r.id, participant_id: w.ps[0].id })), ['throttled', 429]);
+      // «الكل»: من مضت مهلته وحده، ومن أُرسلت له للتو ممسوك، ومن اعتذر ليس منهم
+      await CG.adminMark(ADMIN, { id: r.id, marks: [{ id: w.ps[3].id, state: 'excused' }] });
+      const n1 = resendCalls(calls).length;
+      const all: any = await CG.resend(ADMIN, { id: r.id });
+      assertEquals([all.mail, all.throttled, resendCalls(calls).slice(n1).map((c) => [c.body.to].flat()[0])], [{ sent: 1, queued: 0, failed: 0, skipped: 0 }, 1, [w.ps[1].email]]);
+      // لا بريد للمستشار في الإعادة
+      assertEquals(subjectsTo(calls, w.tables.experts[1].email), ['تكليف: جلسة جماعية مع مشاركيك']);
+      // السجل: بند للمدعو الواحد وبند للجلسة
+      assertEquals(w.tables.audit_log.filter((x) => x.action === 'coaching.group-resend').map((x) => [x.entity, x.entity_id, x.after.sent]), [['participants', w.ps[0].id, 1], ['coaching_groups', r.id, 1]]);
+      // مدعو أُزيل: لا دعوة تُعاد له
+      await CG.removeMember(ADMIN, { id: r.id, participant_id: w.ps[1].id });
+      assertEquals(await code(() => CG.resend(ADMIN, { id: r.id, participant_id: w.ps[1].id })), ['not_pending', 409]);
+      // بعد الإلغاء، ولجلسة بدأت: لا إعادة
+      await CG.cancel(ADMIN, { id: r.id });
+      assertEquals(await code(() => CG.resend(ADMIN, { id: r.id })), ['cancelled', 409]);
+      const h: any = await CG.save(ADMIN, input(w, { starts_at: iso(-HOUR / 2), minutes: 120 }));
+      assertEquals(await code(() => CG.resend(ADMIN, { id: h.id })), ['past', 409]);
+      assertEquals(((await CG.adminList({ id: h.id })) as any).groups[0].can_resend, false);
+    });
+  } finally { w.f.restore(); }
+  // الحصة ممتلئة: الإعادة تدخل الطابور بملف تقويمها وموعد الجلسة حدًّا لها، وحالتها «تنتظر»، ولا تُعاد ثانية ما دامت تنتظر
+  const w2 = world();
+  try {
+    await withMail(async (calls) => {
+      const r: any = await CG.save(ADMIN, input(w2, { participant_ids: [w2.ps[0].id, w2.ps[1].id] }));
+      ageMail(w2, 61);
+      w2.tables.mail_events.push(...Array.from({ length: 40 }, () => ({ id: crypto.randomUUID(), kind: 'notify', status: 'sent', source: 'leaders-api', created_at: new Date(Date.now() - 6e4).toISOString() })));
+      const n0 = resendCalls(calls).length;
+      const q: any = await CG.resend(ADMIN, { id: r.id, participant_id: w2.ps[0].id });
+      assertEquals([q.mail, resendCalls(calls).length], [{ sent: 0, queued: 1, failed: 0, skipped: 0 }, n0]);
+      const waiting = w2.tables.mail_queue.filter((x) => !x.sent_at);
+      assertEquals(waiting.map((x) => [x.to_email, x.kind, x.ref, x.expires_at, x.attachments?.[0]?.filename]), [[w2.ps[0].email, 'bulk', r.id, w2.tables.coaching_groups[0].starts_at, 'session.ics']]);
+      const g = ((await CG.adminList({ id: r.id })) as any).groups[0];
+      assertEquals(g.members.find((x: Row) => x.id === w2.ps[0].id).mail.state, 'waiting');
+      assertEquals(await code(() => CG.resend(ADMIN, { id: r.id, participant_id: w2.ps[0].id })), ['throttled', 429]);
+      assertEquals(w2.tables.mail_queue.length, 1);
+    }, 80);
+  } finally { w2.f.restore(); }
+  // دعوة تعذّر إرسالها: حالتها «لم تخرج»، وتُعاد فورًا بلا مهلة
+  const w3 = world();
+  try {
+    const r: any = await CG.save(ADMIN, input(w3, { participant_ids: [w3.ps[0].id] }));
+    w3.tables.mail_events.push({ id: crypto.randomUUID(), kind: 'bulk', status: 'failed', source: 'leaders-api', ref: r.id, subject: 'دعوة: جلسة جماعية مع المستشار',
+      to_hash: await (await import('../_shared/mail.ts')).addressHash(w3.ps[0].email), created_at: new Date().toISOString() });
+    const g = ((await CG.adminList({ id: r.id })) as any).groups[0];
+    assertEquals([g.members[0].mail.state, g.members[0].mail.resend_at], ['failed', undefined]);
+    await withMail(async (calls) => {
+      const x: any = await CG.resend(ADMIN, { id: r.id, participant_id: w3.ps[0].id });
+      assertEquals([x.mail.sent, resendCalls(calls).length], [1, 1]);
+    });
+    // تعذّرت قراءة سجل البريد: لا إعادة على عمى، والقائمة تُعرض بلا حالة
+    ageMail(w3, 120);
+    w3.down.add('mail_events:select');
+    assertEquals(await code(() => CG.resend(ADMIN, { id: r.id, participant_id: w3.ps[0].id })), ['mail_unreadable', 503]);
+    const blind = ((await CG.adminList({ id: r.id })) as any).groups[0];
+    assertEquals([blind.mail_known, blind.members[0].mail], [false, undefined]);
+  } finally { w3.f.restore(); }
+});
+
+Deno.test('ملف التقويم: الإلغاء والإزالة بملف CANCEL بمعرّف الدعوة نفسه، ورقم التسلسل يكبر من الدعوة إلى التغيير إلى الإلغاء', async () => {
+  const w = world();
+  try {
+    await withMail(async (calls) => {
+      const r: any = await CG.save(ADMIN, input(w, { participant_ids: [w.ps[0].id, w.ps[1].id] }));
+      const mail = (email: string, subject: string) => resendCalls(calls).filter((c) => [c.body.to].flat()[0] === email && c.body.subject === subject).at(-1)!;
+      const invite = ics(mail(w.ps[0].email, 'دعوة: جلسة جماعية مع المستشار'));
+      const xInvite = ics(mail(w.tables.experts[1].email, 'تكليف: جلسة جماعية مع مشاركيك'));
+      assert(invite.includes('METHOD:PUBLISH') && invite.includes('BEGIN:VALARM') && seqOf(invite) > 0);
+      await new Promise((ok) => setTimeout(ok, 1100));
+      await CG.save(ADMIN, { id: r.id, starts_at: iso(6 * DAY), minutes: 60 });
+      const change = ics(mail(w.ps[0].email, 'تحديث: جلستك الجماعية مع المستشار'));
+      const xChange = ics(mail(w.tables.experts[1].email, 'تحديث: جلستك الجماعية'));
+      assert(change.includes('METHOD:PUBLISH') && seqOf(change) > seqOf(invite) && seqOf(xChange) > seqOf(xInvite));
+      // إزالة مدعو: ملف إلغاء له وحده، بمعرّف دعوته ورقم أعلى، بلا تنبيه ولا رابط
+      await new Promise((ok) => setTimeout(ok, 1100));
+      await CG.removeMember(ADMIN, { id: r.id, participant_id: w.ps[1].id });
+      const removed = mail(w.ps[1].email, 'تحديث: لست مدعوًّا إلى الجلسة الجماعية');
+      const gone = ics(removed);
+      assertEquals([removed.body.attachments[0].filename, removed.body.attachments[0].content_type, uidOf(gone)], ['cancel.ics', 'text/calendar; charset=utf-8; method=CANCEL', `${rowOf(w, r.id, 1).id}@sunkvalue.com`]);
+      assert(gone.includes('METHOD:CANCEL') && gone.includes('STATUS:CANCELLED') && !gone.includes('VALARM') && !gone.includes('URL:') && seqOf(gone) > seqOf(change));
+      // والجملة باقية لمن يتجاهل برنامجه الملف
+      assert(removed.body.html.includes('وإن بقي فاحذفه') && removed.body.html.includes('لم تُحسب من رصيد استشاراتك'));
+      // إلغاء الجلسة: ملف إلغاء لكل مدعو بمعرّف دعوته، وللمستشار بمعرّف الجلسة، ورقمه أعلى من التغيير
+      await new Promise((ok) => setTimeout(ok, 1100));
+      await CG.cancel(ADMIN, { id: r.id });
+      const cancelled = mail(w.ps[0].email, 'أُلغيت: جلستك الجماعية مع المستشار');
+      const off = ics(cancelled), xOff = ics(mail(w.tables.experts[1].email, 'أُلغيت: جلستك الجماعية'));
+      assertEquals([uidOf(off), uidOf(invite), uidOf(change), uidOf(xOff), uidOf(xInvite)], [uidOf(invite), `${rowOf(w, r.id, 0).id}@sunkvalue.com`, uidOf(invite), `${r.id}@sunkvalue.com`, `${r.id}@sunkvalue.com`]);
+      assert(off.includes('METHOD:CANCEL') && off.includes('STATUS:CANCELLED') && seqOf(off) > seqOf(change) && seqOf(xOff) > seqOf(xChange));
+      assert(cancelled.body.html.includes('وإن بقي فاحذفه'));
+      // كل ملف: أسطر CRLF، ولا سطر فوق 75 بايتًا
+      for (const text of [invite, change, gone, off, xOff]) {
+        assert(text.endsWith('END:VCALENDAR\r\n') && !/[^\r]\n/.test(text));
+        // ics() يعيد البايتات حرفًا لكل بايت، فطول السطر هنا طوله بالبايتات
+        assert(text.split('\r\n').every((l) => l.length <= 75));
+      }
+    });
+    // تغيير المستشار: القديم يصله ملف إلغاء بمعرّف الجلسة
+    const w2 = world();
+    try {
+      await withMail(async (calls) => {
+        const r: any = await CG.save(ADMIN, input(w2));
+        await CG.save(ADMIN, { id: r.id, expert_id: ADVISOR });
+        const old = resendCalls(calls).find((c) => c.body.subject === 'أُلغيت: جلستك الجماعية')!;
+        assert(ics(old).includes('METHOD:CANCEL') && ics(old).includes(`UID:${r.id}@`));
+      });
+    } finally { w2.f.restore(); }
+  } finally { w.f.restore(); }
 });

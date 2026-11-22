@@ -1335,9 +1335,20 @@
 .gs-members { list-style: none; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: grid; gap: 6px; }
 .gs-members li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .88rem; }
 .gs-members li > span:first-child { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.gs-member { display: grid; gap: 1px; }
+.gs-mail { font-size: .78rem; line-height: 1.6; }
+.gs-mail.bad { color: var(--st-bad); }
+.gs-held { font-size: .78rem; }
+.gs-resend-all { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--line); }
+.gs-pick { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0; min-width: 0; display: grid; gap: 6px; }
+.gs-pick legend { font-size: .88rem; font-weight: 600; padding: 0 4px; }
+.gs-pick ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; max-height: 220px; overflow-y: auto; }
+.gs-pick li { min-width: 0; }
+.la-form .gs-pick label.la-check { font-weight: 400; font-size: .88rem; min-height: 36px; overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .gs-fields { grid-template-columns: minmax(0, 1fr); }
   .gs-card-acts { width: 100%; }
+  .gs-pick ul { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* وسم الورشة: إلزامية أو اختيارية (قرار المالك 2026-11-21). اختيار واحد صريح بزرّي راديو، ولكل اختيار سطر شرحه تحته */

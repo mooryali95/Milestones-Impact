@@ -2,6 +2,7 @@
 // مستشار»، فتظهر المعاينة بحكم الخادم لكل مختار (يُدعى، استنفد رصيده، لم تُفتح له الخدمة، لا يُضاف)، وتحفظ. ثم من «الحضور والجلسات»
 // ورقة حضورها بحفظ واحد، وتعديلها وإزالة مدعو وإلغاؤها. وقبل ترحيل الميزة «غير مفعّل بعد». الخلفية مُحاكاة بقواعد الخادم
 // (coaching-groups.ts). GROUP_SHOTS: مجلد اللقطات (1440 و390). اليوم 20 نوفمبر 2026.
+// المتابعات (2026-11-22): «أضف مدعوين» إلى جلسة قائمة بالمعاينة نفسها، وسطر بريد الدعوة تحت كل مدعو وإعادة إرسالها بمهلتها.
 import { test, expect } from '@playwright/test';
 import { journeyMap, mapLanes } from '../supabase/functions/leaders-api/journey-map.js';
 
@@ -44,6 +45,8 @@ const VERDICT = {
   'p-fahd': { category: 'locked', code: 'locked', reason: 'الخدمة لم تُفتح له بعد (لم يُعتمد مساره)', used: 0, max: 2 },
   'p-majed': { category: 'ineligible', code: 'out', reason: 'خارج البرنامج (منسحب أو موقوف)' },
 };
+// بريد دعوة خرج الآن: ممسوك ساعة
+const sentNow = () => ({ state: 'sent', at: TODAY.toISOString(), resend_at: new Date(TODAY.getTime() + 36e5).toISOString() });
 const REFUSAL = { too_early: 'يُسجَّل الحضور من قبل الموعد بساعة، لا قبلها', not_member: 'ليس من مدعوي هذه الجلسة' };
 
 // «الخادم»: حالة الجلسات الجماعية تكتبها الأفعال بقواعد coaching-groups.ts وتقرؤها القائمة
@@ -52,9 +55,10 @@ function server({ ready = true, groups = [], conflictAt = null } = {}) {
     const ms = g.members.filter((m) => m.state !== 'removed');
     const n = (s) => ms.filter((m) => m.state === s).length;
     const ended = Date.parse(g.ends_at) < TODAY.getTime();
-    return { id: g.id, cohort_id: 'c1', cohort: 'دفعة نوفمبر', requirement_id: R, requirement: 'جلسات الاستشارة', expert_id: g.expert_id, expert: EXPERTS.find((e) => e.id === g.expert_id)?.full_name || null, title: g.title, starts_at: g.starts_at, ends_at: g.ends_at,
+    const upcoming = g.status === 'scheduled' && Date.parse(g.starts_at) > TODAY.getTime();
+    return { can_add: g.status === 'scheduled' && !ended && n('attended') + n('no_show') === 0, can_resend: upcoming, ...(upcoming ? { resend_minutes: 60, mail_known: true } : {}), id: g.id, cohort_id: 'c1', cohort: 'دفعة نوفمبر', requirement_id: R, requirement: 'جلسات الاستشارة', expert_id: g.expert_id, expert: EXPERTS.find((e) => e.id === g.expert_id)?.full_name || null, title: g.title, starts_at: g.starts_at, ends_at: g.ends_at,
       mode: g.mode, location: g.location || null, join_url: g.join_url || null, counts: g.counts !== false, status: g.status, count: ms.length, attended: n('attended'), no_show: n('no_show'), excused: n('excused'), pending: n('booked'), ended,
-      awaiting: g.status === 'scheduled' && ended && n('booked') > 0, members: ms.map((m) => ({ id: m.id, full_name: nameOf[m.id], email: `${m.id.slice(2)}@example.sa`, state: m.state, note: m.note || null, off: g.counts === false, ...(m.id === 'p-reem' ? { test: true } : {}) })) };
+      awaiting: g.status === 'scheduled' && ended && n('booked') > 0, members: ms.map((m) => ({ id: m.id, full_name: nameOf[m.id], email: `${m.id.slice(2)}@example.sa`, state: m.state, note: m.note || null, off: g.counts === false, ...(m.id === 'p-reem' ? { test: true } : {}), ...(upcoming && m.state === 'booked' && m.mail ? { mail: m.mail } : {}) })) };
   };
   const conflicts = (b) => (conflictAt && b.expert_id === 'x-mona' && b.starts_at === conflictAt ? [{ kind: 'session', starts_at: conflictAt, ends_at: conflictAt }] : []);
   return (b) => {
@@ -97,6 +101,41 @@ function server({ ready = true, groups = [], conflictAt = null } = {}) {
       }
       out.pending = g.members.filter((m) => m.state === 'booked').length;
       return out;
+    }
+    // المتابعات بقواعد الخادم: المرشحون أعضاء الدفعة ممن في البرنامج وليسوا مدعوين، والحكم حكم المعاينة، والإعادة بمهلتها
+    if (b.action === 'admin.coaching-group-candidates') {
+      const g = groups.find((x) => x.id === b.id);
+      const inGroup = new Set(g.members.filter((m) => m.state === 'booked').map((m) => m.id));
+      const was = Object.fromEntries(g.members.filter((m) => m.state !== 'booked').map((m) => [m.id, m.state]));
+      const candidates = people.filter((p) => VERDICT[p.id].code !== 'out' && !inGroup.has(p.id)).map((p) => ({ id: p.id, name: p.name, ...(was[p.id] ? { was: was[p.id] } : {}) }));
+      const members = (b.participant_ids || []).map((id) => ({ id, name: nameOf[id], ...(inGroup.has(id) ? { category: 'ineligible', code: 'already', reason: 'مدعو إلى هذه الجلسة أصلًا' } : VERDICT[id]) }));
+      return { success: true, ready: true, session: { id: g.id, title: g.title, starts_at: g.starts_at, ends_at: g.ends_at, counts: g.counts !== false, past: Date.parse(g.starts_at) <= TODAY.getTime() }, blocked: null, candidates, members, room: 50 - g.members.filter((m) => m.state !== 'removed').length, max_members: 50 };
+    }
+    if (b.action === 'admin.coaching-group-add') {
+      const g = groups.find((x) => x.id === b.id);
+      const ex = new Set(b.exceptions || []);
+      const inGroup = new Set(g.members.filter((m) => m.state === 'booked').map((m) => m.id));
+      const picked = b.participant_ids.filter((id) => !inGroup.has(id) && (VERDICT[id].category === 'ok' || (['at_max', 'locked'].includes(VERDICT[id].category) && ex.has(id))));
+      let readded = 0;
+      for (const id of picked) {
+        const old = g.members.find((m) => m.id === id);
+        const mail = id === 'p-reem' ? {} : { mail: sentNow() };
+        if (old) { Object.assign(old, { state: 'booked', ...mail }); readded += 1; } else g.members.push({ id, state: 'booked', ...mail });
+      }
+      const real = picked.filter((id) => id !== 'p-reem').length;
+      return { success: true, id: g.id, added: picked.length, exceptions: picked.filter((id) => VERDICT[id].category !== 'ok').length, readded,
+        skipped: b.participant_ids.filter((id) => !picked.includes(id)).map((id) => ({ id, name: nameOf[id], code: inGroup.has(id) ? 'already' : VERDICT[id].code, reason: inGroup.has(id) ? 'مدعو إلى هذه الجلسة أصلًا' : VERDICT[id].reason })),
+        mail: { sent: real, queued: 0, failed: 0, skipped: picked.length - real }, past: false };
+    }
+    if (b.action === 'admin.coaching-group-resend') {
+      const g = groups.find((x) => x.id === b.id);
+      const held = (m) => m.mail?.state === 'waiting' || (m.mail?.resend_at && Date.parse(m.mail.resend_at) > TODAY.getTime());
+      const pending = g.members.filter((m) => m.state === 'booked' && (!b.participant_id || m.id === b.participant_id));
+      const real = pending.filter((m) => m.id !== 'p-reem');
+      const go = real.filter((m) => !held(m));
+      if (b.participant_id && !go.length) return { success: false, code: 'throttled', message: 'أُرسلت له قبل قليل. تُعاد بعد 60 دقيقة من آخر إرسال' };
+      for (const m of go) m.mail = sentNow();
+      return { success: true, mail: { sent: go.length, queued: 0, failed: 0, skipped: pending.length - real.length }, throttled: real.length - go.length, minutes: 60 };
     }
     if (b.action === 'admin.coaching-group-remove') { groups.find((x) => x.id === b.id).members.find((m) => m.id === b.participant_id).state = 'removed'; return { success: true, removed: true, mail: { sent: 1, queued: 0, failed: 0, skipped: 0 } }; }
     if (b.action === 'admin.coaching-group-cancel') { const g = groups.find((x) => x.id === b.id); g.status = 'cancelled'; return { success: true, cancelled: g.members.length, mail: { sent: 2, queued: 0, failed: 0, skipped: 0 }, expert_mail: 'sent' }; }
@@ -342,4 +381,107 @@ test('من يقرأ فقط: لا زر «جلسة مع مستشار»، وورق�
   await expect(sheet.locator('.gss-row')).toHaveCount(4);
   await expect(sheet.getByRole('radio')).toHaveCount(0);
   await expect(sheet.getByRole('button', { name: 'الكل حضر' })).toHaveCount(0);
+});
+
+// ── المتابعات: إضافة مدعوين إلى جلسة قائمة، وإعادة إرسال الدعوة ──
+// سارة دعوتها خرجت أمس، وأسامة قبل عشرين دقيقة (ممسوكة)، والجلسة قادمة
+const invitedGroup = () => { const g = coming(); g.members[0].mail = { state: 'sent', at: '2026-11-19T07:10:00Z' }; g.members[1].mail = { state: 'sent', at: '2026-11-20T08:40:00Z', resend_at: '2026-11-20T09:40:00Z' }; return g; };
+for (const width of [1440, 390]) {
+  test(`«أضف مدعوين» إلى جلسة قائمة: الاختيار من أعضاء الدفعة، والمعاينة نفسها، والدعوة للجدد وحدهم (${width})`, async ({ page }) => {
+    const groups = [invitedGroup()];
+    const calls = await setup(page, { width, srv: server({ groups }), to: 'activities' });
+    const card = page.getByTestId('group-card');
+    await expect(card).toContainText('مدعوان');
+    await card.getByRole('button', { name: 'أضف مدعوين' }).click();
+    const form = page.getByTestId('group-add');
+    await expect(form.getByRole('heading', { level: 3 })).toHaveText('أضف مدعوين إلى «جلسة جماعية: جلسات الاستشارة»');
+    // المرشحون: أعضاء الدفعة غير المدعوين ممن في البرنامج. لا المدعوان ولا المنسحب
+    await expect(form.locator('.gs-pick li')).toHaveText([/ريم الدوسري/, /هدى المطيري/, /فهد القحطاني/]);
+    await expect(form.getByTestId('gs-preview')).toContainText('اختر من القائمة لتظهر المعاينة.');
+    for (const n of ['ريم الدوسري', 'هدى المطيري', 'فهد القحطاني']) await form.getByRole('checkbox', { name: n }).check();
+    // المعاينة بحكم الخادم كما في الإنشاء
+    const pv = form.getByTestId('gs-preview');
+    await expect(pv).toContainText('واحد سيُدعى. 1 استنفد رصيده ويُتخطى. 1 لم تُفتح له الخدمة ويُتخطى.');
+    await expect(pv.locator('.gs-group.ok')).toContainText('حساب اختبار: يُدعى ولا يصله بريد');
+    await pv.locator('.gs-group.warn', { hasText: 'استنفدوا رصيدهم' }).getByRole('checkbox', { name: 'أضفه استثناءً' }).check();
+    await expect(pv).toContainText('2 سيُدعون (منهم 1 استثناءً). 1 لم تُفتح له الخدمة ويُتخطى.');
+    await expect(form).toContainText('المدعوون السابقون والمستشار لا يصلهم بريد');
+    expect(await noOverflow(page)).toBe(true);
+    await shot(page, 'add-preview');
+    await form.getByRole('button', { name: 'أضف وادعُ المدعوين (2)' }).click();
+    await expect(form.getByTestId('gs-added')).toHaveText('أُضيف مشاركان (1 استثناءً). أُرسلت دعوة واحدة، 1 بلا بريد (حساب اختبار). المدعوون السابقون لم يصلهم شيء.');
+    await expect(form.locator('.la-form-notes li')).toHaveText(['فهد القحطاني: لم يُضف، الخدمة لم تُفتح له بعد (لم يُعتمد مساره)']);
+    expect(of(calls, 'admin.coaching-group-add')).toEqual([expect.objectContaining({ id: 'g-new', participant_ids: ['p-reem', 'p-huda', 'p-fahd'], exceptions: ['p-huda'] })]);
+    await shot(page, 'add-saved');
+    await form.getByRole('button', { name: 'إغلاق' }).click();
+    // القائمة بعد الإضافة: أربعة مدعوين، والجديدة دعوتها خرجت للتو
+    await expect(card).toContainText('4 مدعوين');
+    await card.getByRole('button', { name: 'المدعوون (4)' }).click();
+    await expect(card.locator('.gs-members li')).toHaveCount(4);
+    await expect(card.locator('.gs-members li', { hasText: 'هدى المطيري' }).getByTestId('gs-mail-line')).toContainText('آخر دعوة:');
+    await expect(card.locator('.gs-members li', { hasText: 'ريم الدوسري' }).getByTestId('gs-mail-line')).toHaveCount(0);
+    expect(await noOverflow(page)).toBe(true);
+    await shot(page, 'add-after');
+    // الطلب نفسه ثانية: لا مرشح مدعو يُعرض، ومن أُضيف خرج من القائمة
+    await card.getByRole('button', { name: 'أضف مدعوين' }).click();
+    await expect(page.getByTestId('group-add').locator('.gs-pick li')).toHaveText([/فهد القحطاني/]);
+  });
+
+  test(`إعادة إرسال الدعوة: سطر آخر دعوة تحت كل مدعو، وزر لكل واحد وللكل، والممسوكة بمهلتها (${width})`, async ({ page }) => {
+    const groups = [invitedGroup()];
+    groups[0].members.push({ id: 'p-reem', state: 'booked' }, { id: 'p-huda', state: 'booked', mail: { state: 'failed', at: '2026-11-19T07:10:00Z' } }, { id: 'p-fahd', state: 'booked', mail: { state: 'waiting', at: '2026-11-20T08:00:00Z' } });
+    const calls = await setup(page, { width, srv: server({ groups }), to: 'activities' });
+    const card = page.getByTestId('group-card');
+    await card.getByRole('button', { name: 'المدعوون (5)' }).click();
+    const row = (name) => card.locator('.gs-members li', { hasText: name });
+    // السطر من سجل البريد: خرجت، ممسوكة، لم تخرج، تنتظر. وحساب الاختبار بلا سطر ولا زر
+    await expect(row('سارة العتيبي').getByTestId('gs-mail-line')).toContainText('آخر دعوة:');
+    await expect(row('أسامة الحربي').getByTestId('gs-held')).toContainText('أُرسلت قبل قليل، تُعاد بعد');
+    await expect(row('أسامة الحربي').getByRole('button', { name: /أعد الدعوة/ })).toHaveCount(0);
+    await expect(row('هدى المطيري').getByTestId('gs-mail-line')).toContainText('لم تخرج دعوته');
+    await expect(row('فهد القحطاني').getByTestId('gs-mail-line')).toHaveText('دعوته تنتظر في صندوق «لم يُرسل»');
+    await expect(row('فهد القحطاني').getByRole('button', { name: /أعد الدعوة/ })).toHaveCount(0);
+    await expect(row('ريم الدوسري').getByRole('button', { name: /أعد الدعوة/ })).toHaveCount(0);
+    await expect(card.getByRole('button', { name: 'أعد الدعوة لمن لم يُسجَّل حضوره (2)' })).toBeVisible();
+    expect(await noOverflow(page)).toBe(true);
+    await shot(page, 'resend-list');
+    // لمدعو واحد: تخرج، ثم تصير ممسوكة بمهلتها
+    await row('سارة العتيبي').getByRole('button', { name: 'أعد الدعوة إلى سارة العتيبي' }).click();
+    await expect(page.getByText('أُرسلت دعوة واحدة.', { exact: true })).toBeVisible();
+    await expect(row('سارة العتيبي').getByTestId('gs-held')).toBeVisible();
+    expect(of(calls, 'admin.coaching-group-resend')[0]).toMatchObject({ id: 'g-new', participant_id: 'p-sara' });
+    await shot(page, 'resend-one-held');
+    // للكل: تأكيد يقول المهلة، ثم نتيجة الخادم بما خرج وما لم يُعد
+    await card.getByRole('button', { name: 'أعد الدعوة لمن لم يُسجَّل حضوره (1)' }).click();
+    const ask = page.locator('.mid-box').first();
+    await expect(ask).toContainText('تُعاد الدعوة بموعدها وملف تقويمها إلى مدعو واحد لم يُسجَّل حضوره. من أُرسلت له قبل أقل من 60 دقيقة لا تُعاد له.');
+    await ask.getByRole('button', { name: 'أعد الدعوة' }).click();
+    await expect(page.getByText('أُرسلت دعوة واحدة، 1 بلا بريد (حساب اختبار). 3 لم تُعد دعوتهم: أُرسلت قبل أقل من 60 دقيقة أو تنتظر في الطابور.', { exact: true })).toBeVisible();
+    expect(of(calls, 'admin.coaching-group-resend')[1].participant_id).toBeUndefined();
+    // لم يبق من تُعاد له: زر «للكل» يختفي
+    await expect(card.getByRole('button', { name: /أعد الدعوة لمن لم يُسجَّل حضوره/ })).toHaveCount(0);
+    expect(await noOverflow(page)).toBe(true);
+    await shot(page, 'resend-all-done');
+  });
+}
+
+test('جلسة انتهت أو أُلغيت: لا «أضف مدعوين» ولا إعادة دعوة، ومن يقرأ فقط لا يرى زرًّا منهما', async ({ page }) => {
+  const off = invitedGroup();
+  Object.assign(off, { id: 'g-off', status: 'cancelled' });
+  await setup(page, { srv: server({ groups: [ended(), off] }), to: 'activities' });
+  const cards = page.getByTestId('group-card');
+  await expect(cards).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'أضف مدعوين' })).toHaveCount(0);
+  await cards.first().getByRole('button', { name: 'المدعوون (4)' }).click();
+  await expect(page.getByRole('button', { name: /أعد الدعوة/ })).toHaveCount(0);
+  await expect(page.getByTestId('gs-mail-line')).toHaveCount(0);
+});
+test('من يقرأ فقط يرى سطر بريد الدعوة، ولا يضيف ولا يعيد الإرسال', async ({ page }) => {
+  await setup(page, { role: 'viewer', srv: server({ groups: [invitedGroup()] }), to: 'activities' });
+  const card = page.getByTestId('group-card');
+  await card.getByRole('button', { name: 'المدعوون (2)' }).click();
+  await expect(card.getByTestId('gs-mail-line').first()).toContainText('آخر دعوة:');
+  await expect(card.getByRole('button', { name: 'أضف مدعوين' })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: /أعد الدعوة/ })).toHaveCount(0);
+  await expect(card.getByTestId('gs-held')).toHaveCount(0);
 });
