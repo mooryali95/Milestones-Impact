@@ -561,6 +561,8 @@ export async function overview() {
     db.from('programs').select('id, name').is('archived_at', null),
     db.from('cohorts').select('*').neq('status', 'closed').order('created_at', { ascending: false }),
   ]);
+  // البرامج المؤرشفة بأسمائها، لتجميع «الحضور والجلسات» وإخفاء متطلباتها ما لم تُطلب (attendance-groups.js)
+  const archived_programs = ((await db.from('programs').select('id, name').not('archived_at', 'is', null)).data || []) as any[];
   const capacity_ready = await capacityReady();
   // الجلسات الجماعية مع المستشار (المرحلة 5). قبل ترحيلها ready=false وقائمة فارغة، وتعذّر قراءتها لا يسقط الشاشة
   const groups: any = await coachingGroupsList({}).catch((e) => { console.error('activities groups', e); return { ready: true, groups: [], failed: true }; });
@@ -584,7 +586,7 @@ export async function overview() {
     // صفوف الجلسات الجماعية تُعرض بكيانها في coaching_groups لا صفًّا صفًّا بين الفردية
     coaching: (coach.data || []).filter((x: any) => !x.group_id),
     coaching_groups: groups.groups || [], groups_ready: groups.ready !== false, ...(groups.failed ? { groups_failed: true } : {}),
-    programs: programs.data || [], cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers, optional_ready: await optionalReady(),
+    programs: programs.data || [], archived_programs, cohorts: (cohorts.data || []).map((c: any) => ({ id: c.id, name: c.name, program_id: c.program_id, status: c.status })), capacity_ready, trainer_ready: true /* COMPAT_UNTIL_2026_12_04 */, cohort_trainers, optional_ready: await optionalReady(),
   };
 }
 

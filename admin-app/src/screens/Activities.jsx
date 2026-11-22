@@ -14,6 +14,7 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 import { GroupSessions } from './GroupSession.jsx';
+import { groupWorkshopReqs, journeyHref } from '../attendance-groups.js';
 import { cancelResultAr, countingChip, countingConfirm, countingField, countingValue, deleteConfirm, leaveConfirm, leaveKind, mailConfirm, needsCountingPreview, queuedAr, saveBody, savedAr, sessionExtras, trainerAr, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -102,7 +103,21 @@ function Workshops({ data, reload, canWrite }) {
   const [form, setForm] = useState(null);
   const [qr, setQr] = useState(null);
   const [att, setAtt] = useState(null);
-  const reqs = data.requirements.filter((r) => r.kind === 'workshop');
+  const [showHidden, setShowHidden] = useState(false);
+  const [pick, setPick] = useState(false);
+  // التجميع حسب البرنامج من الحمولة نفسها (attendance-groups.js): المؤرشف والموقوف مخفيان ما لم يُطلبا
+  const { groups, hidden } = groupWorkshopReqs(data, { showHidden });
+  const programs = data.programs || [];
+  // «+ متطلب حضور»: المتطلب يُعرَّف في رحلة البرنامج وحدها، فالزر ينقل إلى محررها بنوع «جلسات جماعية» جاهزًا
+  const addReq = (pid) => { window.location.hash = journeyHref(pid, 'add=workshop'); };
+  const addBar = canWrite && programs.length > 0 && (
+    <div className="la-row ws-addreq" style={{ margin: '0 0 12px', gap: 8, flexWrap: 'wrap' }}>
+      <button className="btn-sm ghost" onClick={() => (programs.length === 1 ? addReq(programs[0].id) : setPick(!pick))}>+ متطلب حضور</button>
+      {pick && programs.map((p) => <button key={p.id} className="la-link" onClick={() => addReq(p.id)}>{p.name}</button>)}
+      <small className="la-muted">يُعرَّف المتطلب في رحلة البرنامج (مرة واحدة لكل الدفعات)، ومواعيده لكل دفعة هنا.</small>
+    </div>
+  );
+  const hiddenToggle = hidden > 0 && <button className="la-link" onClick={() => setShowHidden(!showHidden)}>{showHidden ? 'أخفِ المؤرشف والموقوف' : `أظهر المؤرشف والموقوف (${hidden})`}</button>;
   const capacity = !!data.capacity_ready;
   // مدربو كل دفعة من الخادم (cohort_trainers)، والحقل للجلسة ذات الدفعة وحدها. ورسالة الحفظ تحمل ما جرى للبريد
   const trainersOf = (v) => (v.cohort_id ? data.cohort_trainers?.[v.cohort_id] || [] : null);
@@ -122,17 +137,22 @@ function Workshops({ data, reload, canWrite }) {
     el.scrollIntoView({ block: 'center' });
     (el.querySelector('.ws-add') || el).focus?.({ preventScroll: true });
   }, []);
-  if (!reqs.length) return <p className="la-muted">لا متطلب من نوع «جلسات جماعية بمواعيد». أضفه في أي مرحلة من «الرحلة والمتطلبات».</p>;
+  if (!groups.length) return <>{addBar}<p className="la-muted">لا متطلب حضور نشط بعد. أضفه بـ«+ متطلب حضور»، ثم أضف مواعيده هنا. {hiddenToggle}</p></>;
   return (
     <>
-      {reqs.map((r) => {
+      {addBar}
+      {groups.map((g) => (
+      <React.Fragment key={g.program_id || 'none'}>
+      <h3 className="la-phase">{g.name}{g.archived && <small className="la-chip"> مؤرشف</small>}</h3>
+      {g.reqs.map((r) => {
         const list = data.workshops.filter((s) => s.requirement_id === r.id);
         const cohorts = cohortsOfProgram(data.cohorts, r.program_id);
         const cohortName = (id) => cohortNameOf(cohorts, id);
         return (
           <section key={r.id} id={`ws-${r.id}`} className="la-card" tabIndex={-1}>
             <div className="la-row between">
-              <div><b title={r.code}>{reqTitle(r)}</b> {(data.programs || []).length > 1 && <small className="la-chip">{data.programs.find((x) => x.id === r.program_id)?.name}</small>} {r.required === false && <small className="la-chip ws-counting optional" title="نشاط اختياري في البرنامج: لا يُحسب هو ولا جلساته في شيء">نشاط اختياري</small>} <small className="la-muted">{r.config?.each ? 'كل ورشة إلزامية مطلوبة بعينها' : `المطلوب حضور ${r.config?.sessions_required || SESSION_DEFAULTS.sessions_required}`} · {VERIFY_AR[r.config?.verify || 'qr']}</small></div>
+              <div><b title={r.code}>{reqTitle(r)}</b> {r.active === false && <small className="la-chip">موقوف في الرحلة</small>} {r.required === false && <small className="la-chip ws-counting optional" title="نشاط اختياري في البرنامج: لا يُحسب هو ولا جلساته في شيء">نشاط اختياري</small>} <small className="la-muted">{r.config?.each ? 'كل ورشة إلزامية مطلوبة بعينها' : `المطلوب حضور ${r.config?.sessions_required || SESSION_DEFAULTS.sessions_required}`} · {VERIFY_AR[r.config?.verify || 'qr']}</small>
+                <div><small className="la-muted">من رحلة «{g.name}»</small> {canWrite && !g.archived && <a className="la-link" href={journeyHref(r.program_id, `req=${encodeURIComponent(r.id)}`)}>عدّل المتطلب</a>}</div></div>
               {canWrite && <button className="btn-sm primary ws-add" onClick={() => setForm({ title: 'موعد جديد', fields: withCounting(sessionFields(cohorts, null, { capacity, trainersOf, mail: {} })), values: { active: true, mode: 'in_person', invite: true, counting: '', cohort_id: cohorts.length === 1 ? cohorts[0].id : '' }, onSave: save({ requirement_id: r.id }), confirmSave: confirmFor({ requirement_id: r.id }, r) })}>+ موعد</button>}
             </div>
             {list.length ? (
@@ -163,6 +183,9 @@ function Workshops({ data, reload, canWrite }) {
           </section>
         );
       })}
+      </React.Fragment>
+      ))}
+      {hiddenToggle && <p>{hiddenToggle}</p>}
       {form && <Form {...form} onClose={(done) => { setForm(null); if (done) { toast(saved.current?.deleted ? ['حُذف الموعد', cancelResultAr(saved.current.cancel)].filter(Boolean).join('، ') : savedAr('تم الحفظ', saved.current)); saved.current = null; reload(); } }} />}
       {qr && <QrScreen id={qr} onClose={() => { setQr(null); reload(); }} onSheet={canWrite ? () => { setAtt(qr); setQr(null); } : null} />}
       {att && <Attendance id={att} canWrite={canWrite} onClose={() => { setAtt(null); reload(); }} />}

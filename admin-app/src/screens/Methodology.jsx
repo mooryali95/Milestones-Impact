@@ -16,6 +16,7 @@ import Form from '../Form.jsx';
 import ItemQuality from './ItemQuality.jsx';
 import { ProgramMilestones } from './Milestones.jsx';
 import { useUI } from '../ui.jsx';
+import { readQuery, writeQuery } from '../route.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
 import { journeyAudience, journeyAudienceAr } from '../program-reach.js';
 import { journeyTimeline } from '../../../supabase/functions/leaders-api/journey-timeline.js';
@@ -103,6 +104,22 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
     el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el.querySelector('button.la-link')?.focus({ preventScroll: true });
   };
+  // القدوم من «الحضور والجلسات» (attendance-groups.js): ‎?add=workshop‎ يفتح نموذج المتطلب نفسه بنوع الجلسات الجماعية،
+  // و‎?req=<id>‎ ينقل إلى المتطلب في القائمة. يُحفظ بالمسار نفسه (stage_requirements في المسودة)، فلا نسخة ثانية للمتطلب
+  const newReq = (stageKey, kind = 'check') => edit({
+    title: 'متطلب جديد', fields: reqFields(stages, catalog.learning_models || [], catalog.lab_links || []),
+    values: reqToForm({ stage_key: stageKey, kind, required: true, active: true }),
+    onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === v.stage_key).length + 1 })(formToReq(v)),
+  });
+  useEffect(() => {
+    const q = new URLSearchParams(readQuery());
+    const add = q.get('add'), req = q.get('req');
+    if (!add && !req) return;
+    writeQuery('');
+    if (req) { setTimeout(() => openReq({ requirement_id: req }), 0); return; }
+    const first = stages.find((s) => s.active) || stages[0];
+    if (add === 'workshop' && canWrite && first) newReq(first.key, 'workshop');
+  }, [pid]);
   // الرحلة الفارغة: زر الخط الزمني ينقل إلى أول «+ مرحلة» (لمن يملك الكتابة)
   const toAddStage = () => {
     const btn = document.querySelector('[data-add-stage]');
@@ -159,11 +176,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
                 ))}
               </ul>
               {canWrite && (
-                <button className="la-link" onClick={() => edit({
-                  title: 'متطلب جديد', fields: reqFields(stages, catalog.learning_models || [], catalog.lab_links || []),
-                  values: reqToForm({ stage_key: s.key, kind: 'check', required: true, active: true }),
-                  onSave: (v) => save('stage_requirements', { program_id: pid, sort: reqs.filter((x) => x.stage_key === s.key).length + 1 })(formToReq(v)),
-                })}>+ متطلب</button>
+                <button className="la-link" onClick={() => newReq(s.key)}>+ متطلب</button>
               )}
             </section>
           ))}
