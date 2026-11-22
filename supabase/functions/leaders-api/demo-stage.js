@@ -50,6 +50,13 @@ export function demoSkipTarget({ profileDone, approved, journey }) {
   return stage ? { kind: 'stage', title: stage.title_ar || stage.key, stage } : { kind: 'none', title: null, stage: null };
 }
 
+/** سطر «عند أي مرحلة» في حالة الحساب بملف الدفعة: المرحلة التي يقف عندها بالحكم نفسه (demoSkipTarget) */
+export const DEMO_ALL_SKIPPED_AR = 'تخطى كل المراحل';
+/** @param {{ kind: string, title: string | null }} target */
+export const demoStageLine = (target) => (target?.kind === 'none' ? DEMO_ALL_SKIPPED_AR : target?.title || '');
+/** اسم الدفعة في شريط الحساب التجريبي (4.6): حساب دفعة يسمّيها، والعام بلا دفعة لا يضيف شيئًا */
+export const demoCohortLabel = (name) => (String(name || '').trim() ? `دفعة «${String(name).trim()}»` : '');
+
 // ── «أعد من البداية» من الشريط (قرار المالك 2026-11-21) ──
 // أخف من إعادة ضبط المدير الأعلى: يمسح كل ما يحمله الحساب التجريبي ويعيد صفه إلى أوله، ويُبقي صف الحساب نفسه (بمعرّفه)
 // وجلساته القائمة وروابط التجربة، فلا يخرج زائر آخر من جلسته ولا يبطل رابط.
@@ -63,7 +70,9 @@ export const DEMO_ROW_RESET = Object.freeze({
 });
 /** وأعمدته التي تبقى: هويته وعلامتاه ومصدره وأوقاته. organization_id فارغ دائمًا بقيد participants_demo_no_org */
 export const DEMO_ROW_KEEP = Object.freeze(['id', 'email', 'is_demo', 'is_test', 'source', 'created_at', 'updated_at', 'last_login_at', 'email_verified_at',
-  'organization_id', 'org_via', 'person_id', 'contact_request_id', 'campaign', 'referrer_host']);
+  'organization_id', 'org_via', 'person_id', 'contact_request_id', 'campaign', 'referrer_host',
+  // دفعة حساب الدفعة التجريبي (المرحلة 2): «أعد من البداية» يبقيه حساب دفعته
+  'demo_cohort_id']);
 /** جداول تبقى صفوف الحساب فيها عند «أعد من البداية»: جلساته وحدها */
 export const DEMO_RESTART_KEEP = Object.freeze(['auth_sessions']);
 /** جداول يشير عمود آخر فيها إلى المشارك (لا participant_id) */

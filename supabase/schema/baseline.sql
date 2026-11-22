@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261122100000_leaders_workshop_optional
+-- as-of migration: 20261123100000_leaders_demo_per_cohort
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -801,6 +801,7 @@ create table if not exists leaders.demo_links (
   revoked_by text,
   last_used_at timestamp with time zone,
   uses integer default 0 not null,
+  cohort_id uuid,
   constraint demo_links_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 80))),
   constraint demo_links_token_hash_check CHECK ((char_length(token_hash) = 64)),
   constraint demo_links_uses_check CHECK ((uses >= 0)),
@@ -1742,8 +1743,11 @@ create table if not exists leaders.participants (
   org_share_consented_at timestamp with time zone,
   name_confirmed_at timestamp with time zone,
   is_test boolean default false not null,
+  demo_cohort_id uuid,
   constraint participants_bio_check CHECK ((char_length(bio) <= 2000)),
   constraint participants_campaign_check CHECK (((campaign IS NULL) OR (campaign ~ '^[a-z0-9_-]{1,40}$'::text))),
+  constraint participants_demo_cohort_is_demo CHECK (((demo_cohort_id IS NULL) OR is_demo)),
+  constraint participants_demo_identity CHECK (((NOT is_demo) OR (lower(email) = (('demo'::text || COALESCE(('-'::text || (demo_cohort_id)::text), ''::text)) || '@demo.milestone-impact.org'::text)))),
   constraint participants_demo_no_org CHECK ((NOT (is_demo AND (organization_id IS NOT NULL)))),
   constraint participants_email_check CHECK ((char_length(email) <= 254)),
   constraint participants_full_name_check CHECK ((char_length(full_name) <= 120)),
@@ -2859,6 +2863,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.demo_links add constraint demo_links_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.enrollments add constraint enrollments_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE RESTRICT;
 exception when duplicate_object then null; end $$;
 
@@ -3108,6 +3116,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.participant_stage_overrides add constraint participant_stage_overrides_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participants add constraint participants_demo_cohort_id_fkey FOREIGN KEY (demo_cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3593,8 +3605,6 @@ CREATE INDEX IF NOT EXISTS participant_observations_person ON leaders.participan
 CREATE INDEX IF NOT EXISTS participant_requirements_status_idx ON leaders.participant_requirements USING btree (status);
 
 CREATE UNIQUE INDEX IF NOT EXISTS participants_email_uniq ON leaders.participants USING btree (lower(email));
-
-CREATE UNIQUE INDEX IF NOT EXISTS participants_one_demo ON leaders.participants USING btree ((true)) WHERE is_demo;
 
 CREATE INDEX IF NOT EXISTS participants_org_idx ON leaders.participants USING btree (organization_id);
 

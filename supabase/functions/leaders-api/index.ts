@@ -698,6 +698,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.demo-reset': (a, b) => A.superWriter(a, D.reset, b),
   // روابط التجربة: القائمة والإنشاء والإلغاء للمدير ذي الكتابة كفتح العرض نفسه، وكلها في السجل
   'admin.demo-links': (a) => A.writer(a, () => D.linkList(), {}),
+  // حساب الدفعة التجريبي (المرحلة 2): حالته وروابط تجربته في ملف الدفعة. للكاتب كبطاقة الحساب العام، والفتح والإنشاء والضبط
+  // بالأفعال نفسها أعلاه ومعها cohort_id
+  'admin.demo-cohort': (a, b) => A.writer(a, (_x, y) => D.cohortStatus(y), b),
   'admin.demo-link-create': (a, b) => A.writer(a, D.linkCreate, b),
   'admin.demo-link-revoke': (a, b) => A.writer(a, D.linkRevoke, b),
   'admin.hall-open': (a, b) => A.writer(a, H.open, b),

@@ -1268,6 +1268,16 @@
 .ws-out::before { content: '!'; display: inline-grid; place-items: center; inline-size: 16px; block-size: 16px; margin-inline-end: 6px; border-radius: 50%; background: var(--st-warn); color: #fff; font-size: .7rem; font-weight: 700; }
 
 /* روابط تجربة حساب العرض (DemoLinks.jsx): داخل بطاقة حساب العرض، بخط فاصل فوقها */
+/* الحساب التجريبي للدفعة في ملفها (CohortDemo.jsx): بطاقة بسطر حالة، وتحتها روابط تجربته */
+.cohort-demo { border: 1px solid var(--line-strong); border-radius: 8px; padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.cohort-demo > .la-row.between { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.cohort-demo > .la-row.between > div { flex: 1 1 320px; min-inline-size: 0; }
+.cohort-demo p { margin: 0; }
+.cohort-demo > .la-row.between p { margin-block-start: 4px; }
+.cohort-demo-status { background: var(--sand-light); border-radius: 6px; padding: 8px 12px; font-size: .86rem; overflow-wrap: anywhere; }
+.cohort-demo-status.on { border-inline-start: 3px solid var(--gold); }
+.cohort-demo .la-note { margin: 0; }
+@media (max-width: 560px) { .cohort-demo > .la-row.between > .la-row { inline-size: 100%; } .cohort-demo > .la-row.between > .la-row > button { flex: 1 1 auto; } }
 .demo-links { border-block-start: 1px solid var(--line-strong); margin-block-start: 14px; padding-block-start: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .demo-links-fresh, .demo-links-fresh .la-row { min-inline-size: 0; }
 .demo-links-fresh { grid-template-columns: minmax(0, 1fr); }

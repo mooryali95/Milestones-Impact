@@ -15,6 +15,9 @@ export const linkNamesAr = (links) => (links || []).map((l) => `«${l.label}»`)
 export const resetConfirmAr = (links) => ((links || []).length
   ? `إعادة الحساب التجريبي إلى البداية؟ تُمسح إجاباته وتقدمه وما تُخطي أو فُتح من مراحله. الحساب واحد مشترك، فتنتهي الآن تجربة من يستعمل ${links.length === 1 ? 'الرابط النشط' : 'الروابط النشطة'}: ${linkNamesAr(links)}. يبقى ${links.length === 1 ? 'رابطه صالحًا ويبدأ' : 'روابطهم صالحة ويبدؤون'} من البداية.`
   : 'إعادة الحساب التجريبي إلى البداية؟ تُمسح إجاباته وتقدمه وما تُخطي أو فُتح من مراحله، ويبدأ العرض التالي من شاشة الدخول.');
+// وتأكيد إعادة ضبط حساب دفعة: يسمّي الدفعة، فلا يُظن أنه الحساب العام ولا حساب دفعة أخرى
+export const cohortResetConfirmAr = (name, links) => `إعادة الحساب التجريبي لدفعة «${name}» إلى البداية؟ تُمسح إجاباته وتقدمه وما تُخطي أو فُتح من مراحله، ويُنشأ من جديد عند الفتح التالي. حسابات الدفعات الأخرى والحساب العام لا تُمس.${(links || []).length
+  ? ` تنتهي الآن تجربة من يستعمل ${links.length === 1 ? 'الرابط النشط' : 'الروابط النشطة'}: ${linkNamesAr(links)}، و${links.length === 1 ? 'يبقى رابطه صالحًا' : 'تبقى روابطهم صالحة'}.` : ''}`;
 
 // القائمة تُقرأ مع فتح البطاقة وبعد كل إنشاء وإلغاء. state: null قبل الوصول، وfailed حين تتعذر القراءة
 export function useDemoLinks() {
@@ -28,7 +31,8 @@ export function useDemoLinks() {
   return { state, load };
 }
 
-export function DemoLinks({ state, load }) {
+// cohort: { id, name } لروابط حساب دفعة (في ملفها)، وبلاه روابط الحساب العام (النظرة العامة)
+export function DemoLinks({ state, load, cohort = null }) {
   const { toast, confirm } = useUI();
   const copy = useCopy();
   const [label, setLabel] = useState('');
@@ -40,7 +44,7 @@ export function DemoLinks({ state, load }) {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
-    const r = await L('admin.demo-link-create', { label, days });
+    const r = await L('admin.demo-link-create', { label, days, ...(cohort ? { cohort_id: cohort.id } : {}) });
     setBusy(false);
     if (!r.success) return toast(r.message);
     setFresh({ label: r.link.label, url: r.url });
@@ -58,7 +62,8 @@ export function DemoLinks({ state, load }) {
   return (
     <div className="demo-links" data-testid="demo-links">
       <b>روابط التجربة</b>
-      <p className="la-muted">رابط ترسله لشخص ليجرّب المنصة بالحساب التجريبي، بلا رمز دخول. يرى شارة «حساب تجريبي» ويتخطى المراحل ويفتحها داخله، ولا يبلغ شيئًا من الإدارة. الحساب واحد مشترك الآن: ما يفعله أحدهم يراه الباقون، وإعادته إلى البداية تمسح تجربة الجميع. الروابط وفتحك للعرض لا يُخرج أحدها الآخر.</p>
+      {cohort ? <p className="la-muted">رابط ترسله لشخص ليجرّب رحلة هذه الدفعة بحسابها التجريبي، بلا رمز دخول. يرى شارة «حساب تجريبي» واسم الدفعة، ويتخطى المراحل ويفتحها داخله، ولا يبلغ شيئًا من الإدارة ولا من بيانات أعضاء الدفعة. حساب الدفعة واحد يشترك فيه كل من يُعطى رابطًا لها: ما يفعله أحدهم يراه الباقون. الرابط يتوقف عند إغلاق الدفعة.</p>
+      : <p className="la-muted">رابط ترسله لشخص ليجرّب المنصة بالحساب التجريبي، بلا رمز دخول. يرى شارة «حساب تجريبي» ويتخطى المراحل ويفتحها داخله، ولا يبلغ شيئًا من الإدارة. الحساب واحد مشترك الآن: ما يفعله أحدهم يراه الباقون، وإعادته إلى البداية تمسح تجربة الجميع. الروابط وفتحك للعرض لا يُخرج أحدها الآخر.</p>}
       {state?.failed && <p className="la-note" role="status">تعذّرت قراءة الروابط الآن. {state.message || 'أعد المحاولة بعد قليل.'}</p>}
       {state && !state.failed && (
         <>

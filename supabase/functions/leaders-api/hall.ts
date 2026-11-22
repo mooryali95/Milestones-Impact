@@ -49,7 +49,9 @@ async function saveSeats(cohortId: string, roles: Record<string, string>, tables
   const ids = only || Object.keys(roles);
   if (!ids.length) return;
   const rows = ids.map((participant_id) => ({ cohort_id: cohortId, participant_id, team: roles[participant_id], table_no: tables[participant_id] ?? null, updated_at: now }));
+  // demo-member-exempt: المعرّفات من hallMembers (cohortMembers بقاعدة listed) أو ممن دخل القاعة، والحساب التجريبي لا يدخلها (hallCohortOf)
   const { error } = await db.from('cohort_roles').upsert(rows);
+  // demo-member-exempt: المحاولة الثانية للصفوف نفسها بلا عمود الطاولة
   if (error) must(await db.from('cohort_roles').upsert(rows.map(({ table_no, ...r }) => r)));
 }
 // يضع مشاركًا في فريق (ويُلحقه بأصغر طاولاته) ويحفظ مقعده وحده
@@ -183,6 +185,7 @@ export async function join(p: any) {
   const cohort = await hallCohortOf(p);
   const s = cohort ? await openSession(cohort.id) : null;
   if (!s) throw new Fail('لا قاعة مفتوحة لدفعتك الآن', 404);
+  // demo-member-exempt: الحساب التجريبي لا يبلغ هذا السطر: hallCohortOf يعيد له null فلا جلسة، وhall.join في DEMO_BLOCKED
   must(await db.from('hall_presence').upsert({ session_id: s.id, participant_id: p.id, last_seen: new Date().toISOString() }));
   // المتأخر بعد تقسيم آلي: يُلحق بأصغر طاولة في القاعة (من غير فريق القيادة)، ويستطيع الخبير نقله
   if (['split', 'round', 'reveal'].includes(s.stage) && (s.split_method === 'mixed' || s.split_method === 'level')) {

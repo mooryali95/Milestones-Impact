@@ -20,6 +20,7 @@ import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
 import CohortRoster from './CohortRoster.jsx';
+import CohortDemo from './CohortDemo.jsx';
 import { COHORT_TABS, cohortTab, followShow, followStage, tabQuery } from '../cohort-journey.js';
 
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
@@ -171,6 +172,8 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
           <a className="cohort-tile" href={people}><b>المشاركون ({c.members ?? 0})</b><span>قائمة أعضاء الدفعة وحالاتهم، ومنها الاعتماد والنقل</span></a>
           <a className="cohort-tile" href={`#/leaders/insight?cohort=${encodeURIComponent(c.id)}`}><b>أين توقفوا</b><span>الرؤية الشاملة لتقدم المشاركين</span></a>
         </div>
+
+        {canWrite && <><h3 className="la-phase">الحساب التجريبي</h3><CohortDemo key={c.id} c={c} canWrite={canWrite} /></>}
         </div>
         )}
       </section>

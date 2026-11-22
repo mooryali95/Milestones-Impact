@@ -1956,6 +1956,7 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .demo-bar-in { max-width: 1240px; margin: 0 auto; padding: 6px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
 .demo-bar-id { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .demo-badge { background: var(--graphite); color: #fff; font-weight: 600; padding: 2px 12px; border-radius: 999px; white-space: nowrap; }
+.demo-cohort { font-weight: 600; color: var(--graphite); overflow-wrap: anywhere; }
 .demo-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-inline-start: auto; }
 .demo-cur { color: var(--slate); }
 .demo-cur b { color: var(--graphite); font-weight: 600; }

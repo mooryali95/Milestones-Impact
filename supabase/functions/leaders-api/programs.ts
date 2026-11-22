@@ -17,6 +17,7 @@ import { features } from './features.ts';
 import { featureHiddenCodes, featureHiddenFor } from './features.js';
 import { isRunning, LIVE } from './cohort-running.js';
 import { listed } from './counting.ts';
+import { demoCohortOf, refuseDemo, removeCohortDemo } from './demo-cohort.ts';
 import { eachWorkshop } from './optional.js';
 import { sessionCols } from './workshop-optional.ts';
 import { cleanConfig } from './logic.js';
@@ -65,12 +66,16 @@ function versionBlock(live: { stages: any[]; requirements: any[] }): { code: str
 // ── للمشارك ──
 // strict: خطأ القراءة يرمي بدل أن يُقرأ «بلا دفعة» (ختم الإصدار D02 لا يسقط بصمت)
 export async function cohortOf(p: { id?: string | null; organization_id?: string | null }, { strict = false } = {}) {
+  // حساب الدفعة التجريبي (demo-cohort.ts): دفعته من عموده وحده، كأنها إلحاق صريح، ولا صف له في enrollments. فيرى خطة
+  // دفعته ونسختها ومواعيدها وما أُوقف من مراحلها كما يراها أعضاؤها، ولا تجده قراءة بالدفعة. دفعة لم تعد موجودة: القاعدة العامة
+  const demoCohort = demoCohortOf(p as any);
   const [enr, cohorts] = await Promise.all([
-    p.id ? db.from('enrollments').select('cohort_id, status, created_at').eq('participant_id', p.id) : Promise.resolve({ data: [] as any[], error: null }),
+    p.id && !demoCohort ? db.from('enrollments').select('cohort_id, status, created_at').eq('participant_id', p.id) : Promise.resolve({ data: [] as any[], error: null }),
     db.from('cohorts').select(COHORT_COLS),
   ]);
   if (strict) { must(enr); must(cohorts); }
-  return pickCohort({ enrollments: enr.data || [], cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
+  const enrollments = demoCohort ? [{ cohort_id: demoCohort, status: 'active', created_at: '' }] : enr.data || [];
+  return pickCohort({ enrollments, cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
 }
 
 // إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتاب فيه لحساب بند القراءة على إصدار الدفعة.
@@ -707,7 +712,17 @@ export async function cohortSave(a: Admin, b: Body) {
     if (team.length) must(await db.from('cohort_experts').insert(team.map((expert_id) => ({ cohort_id: saved.id, expert_id, added_by: a.email }))), 'تعذّر حفظ فريق الخبراء');
   }
   await audit('admin', a.email, prev ? 'cohort.save' : 'cohort.create', 'cohorts', saved.id, null, team ? { ...row, team_expert_ids: team } : row);
-  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined },
+  // إغلاق الدفعة يحذف حسابها التجريبي ويلغي روابط تجربته (القرار 10 في تصور الحساب التجريبي). الدفعة حُفظت مغلقة قبله:
+  // تعذّر الحذف لا يرد الحفظ، ويُعلن في الرد وفي السجل، والحساب الباقي لا يُفتح لدفعة مغلقة ويُحذف بإعادة ضبطه
+  let demo: { removed: number; links: number } | { failed: true } | null = null;
+  if (prev && prev.status !== 'closed' && saved.status === 'closed') {
+    demo = await removeCohortDemo(a.email, saved.id, 'cohort-close').catch(async (e) => {
+      console.error('cohort close demo cleanup:', (e as Error)?.message);
+      await audit('admin', a.email, 'demo.cohort-close-failed', 'cohorts', saved.id, null, { error: String((e as Error)?.message || '').slice(0, 200) }).catch(() => {});
+      return { failed: true as const };
+    });
+  }
+  return { success: true, cohort: { ...saved, team_expert_ids: team ?? undefined }, ...(demo && ('failed' in demo || demo.removed || demo.links) ? { demo_closed: demo } : {}),
     ...(versionCreated ? { version_created: { id: versionCreated.id, number: versionCreated.number, label: versionCreated.label } } : {}) };
 }
 
@@ -825,6 +840,7 @@ export async function cohortEnroll(a: Admin, b: Body) {
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
   const ids = [...new Set((Array.isArray(b.participant_ids) ? b.participant_ids : []).filter(isUuid))].slice(0, 500) as string[];
   if (!ids.length) throw new Fail('اختر مشاركًا واحدًا على الأقل');
+  await refuseDemo(ids);
   // حارس النقل كما في حفظ الدفعة (P1): من له تقدم وتنقله الإلحاقة إلى دفعة على برنامج آخر يفقد رحلته، فلا يُنقل بصمت
   if (b.confirm_move !== true) {
     const [cohorts, participants, enrollments, progress] = await Promise.all([
@@ -998,6 +1014,7 @@ export async function cohortGroupSave(a: Admin, b: Body) {
 export async function cohortGroupAssign(a: Admin, b: Body) {
   const cid = String(b.cohort_id || ''), pid = String(b.participant_id || '');
   if (!isUuid(cid) || !isUuid(pid)) throw new Fail('بيانات ناقصة');
+  await refuseDemo([pid]);
   if (isUuid(b.group_id)) {
     const g = must(await db.from('cohort_groups').select('id').eq('id', b.group_id).eq('cohort_id', cid).maybeSingle());
     if (!g) throw new Fail('المجموعة لا تخص هذه الدفعة');
@@ -1022,6 +1039,7 @@ export async function cohortGroupsAuto(a: Admin, b: Body) {
   const groups = must(await db.from('cohort_groups').insert(split.map((_ids, i) => ({ cohort_id: c.id, name: `المجموعة ${i + 1}`, sort: i + 1 }))).select('id, sort')) as any[];
   const bySort = new Map(groups.map((g) => [g.sort, g.id]));
   const rows = split.flatMap((ids, i) => ids.map((pid: string) => ({ cohort_id: c.id, participant_id: pid, group_id: bySort.get(i + 1) })));
+  // demo-member-exempt: الأعضاء من cohortMembers (listed)، والحساب التجريبي ليس منهم
   if (rows.length) must(await db.from('cohort_group_members').insert(rows));
   await audit('admin', a.email, 'group.auto', 'cohorts', c.id, null, { count: n, by: b.by === 'level' ? 'level' : 'mixed', members: rows.length });
   return { success: true, groups: n, members: rows.length };
