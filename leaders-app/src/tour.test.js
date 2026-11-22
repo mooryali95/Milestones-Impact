@@ -35,8 +35,8 @@ describe('خطوات الجولة الحيّة', () => {
   });
   it('الجولة مركّبة في التطبيق لحساب العرض وحده، وطلبات الأقران تعيد التحميل عند إشارتها', () => {
     const app = read('leaders-app/src/App.jsx');
-    expect(app).toMatch(/import LiveTour, \{ captureDemoLink, demoPending \} from '\.\/LiveTour\.jsx'/);
-    expect(app).toMatch(/\(demo \|\| me\?\.participant\?\.is_demo\) && <LiveTour/);
+    expect(app).toMatch(/import LiveTour, \{ captureDemoLink, DemoConflict, demoPending, dropDemoLink, tourMode \} from '\.\/LiveTour\.jsx'/);
+    expect(app).toContain("tourMode(me, demo) === 'tour' && <LiveTour");
     expect(read('leaders-app/src/screens/PeerRequests.jsx')).toMatch(/addEventListener\('mi-tour-refresh'/);
     const tour = read('leaders-app/src/LiveTour.jsx');
     expect(tour).toMatch(/call\('peer\.ask', \{ text: TOUR_PEER_SAMPLE/);
@@ -67,5 +67,23 @@ describe('خطوات الجولة الحيّة', () => {
     const tour = read('leaders-app/src/LiveTour.jsx');
     expect(tour).toMatch(/<p>\{step\.d\}<\/p>/);
     expect(tour).toMatch(/audioOk && !step\.said[\s\S]*TOUR_AUDIO && !step\.said && <audio/);
+  });
+});
+
+// الجولة فوق حساب حقيقي (2026-11-22): رابط عرض بقي في الجلسة لا يُظهر الجولة لحساب حقيقي داخل، فلا يُكتب في حسابه شيء
+describe('الجولة لا تعمل على حساب حقيقي', async () => {
+  const { tourMode } = await import('./LiveTour.jsx');
+  it('حساب العرض أو قبل الدخول برابط: جولة؛ حساب حقيقي برابط: تنبيه؛ بلا رابط: لا شيء', () => {
+    expect(tourMode({ participant: { is_demo: true } }, false)).toBe('tour');
+    expect(tourMode(null, true)).toBe('tour');
+    expect(tourMode(null, false)).toBe(null);
+    expect(tourMode({ participant: { is_demo: false } }, true)).toBe('conflict');
+    expect(tourMode({ participant: { is_demo: false } }, false)).toBe(null);
+  });
+  it('App يعرض الجولة بـtourMode وحده، والأفعال محروسة بالحساب التجريبي', () => {
+    const app = read('leaders-app/src/App.jsx');
+    expect(app).toContain("tourMode(me, demo) === 'tour' && <LiveTour");
+    expect(app).not.toMatch(/\(demo \|\| me\?\.participant\?\.is_demo\) && <LiveTour/);
+    expect(read('leaders-app/src/LiveTour.jsx')).toContain("step.act !== 'login' && !me?.participant?.is_demo");
   });
 });

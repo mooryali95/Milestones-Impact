@@ -30,6 +30,31 @@ export function captureDemoLink() {
   return true;
 }
 export const demoPending = () => !!store.get(DEMO_PENDING);
+export const dropDemoLink = () => { store.del(DEMO_PENDING); store.del(KEY); };
+
+// متى تُعرض الجولة (2026-11-22): لحساب العرض، أو قبل الدخول برابط عرض. الحساب الحقيقي الداخل لا تُعرض له الجولة
+// ولو بقي رابط عرض في الجلسة، لأن أفعالها (طرح سؤال أقران) تُكتب في حسابه؛ يُعرض له تنبيه بدلها ('conflict')
+export function tourMode(me, demo) {
+  if (me?.participant?.is_demo) return 'tour';
+  if (!me) return demo ? 'tour' : null;
+  return demo ? 'conflict' : null;
+}
+
+// التنبيه حين يُفتح رابط عرض والجهاز داخل بحساب حقيقي: لا جولة فوق الحساب، بل خياران صريحان
+export function DemoConflict({ onSignOut, onDismiss }) {
+  return (
+    <aside className="tour" role="region" aria-label="رابط العرض">
+      <div className="tour-body">
+        <h2>رابط عرض مفتوح وأنت داخل بحسابك</h2>
+        <p>الجولة التجريبية لا تعمل على حسابك الحقيقي حتى لا يُكتب فيه شيء. اخرج ثم افتح العرض، أو تجاهل الرابط.</p>
+      </div>
+      <div className="tour-actions">
+        <button type="button" className="btn" onClick={onSignOut}>اخرج وافتح العرض</button>
+        <button type="button" className="btn ghost" onClick={onDismiss}>تجاهل الرابط</button>
+      </div>
+    </aside>
+  );
+}
 
 // يُعلم الشاشات المفتوحة بأن بيانات الجولة تغيّرت (مثل طلب أقران جديد) لتعيد التحميل
 export const TOUR_REFRESH = 'mi-tour-refresh';
@@ -116,6 +141,8 @@ export default function LiveTour({ me, onAccept, onGo }) {
   const run = async () => {
     setBusy(true); setErr('');
     try {
+      // حارس ثانٍ: لا فعل للجولة على حساب غير تجريبي، ولو عُرضت خطأً
+      if (step.act !== 'login' && !me?.participant?.is_demo) throw new Error('الجولة تعمل على الحساب التجريبي وحده');
       if (step.act === 'login') {
         const token = store.get(DEMO_PENDING);
         if (!token) throw new Error('افتح الحساب التجريبي من لوحة الإدارة من جديد');

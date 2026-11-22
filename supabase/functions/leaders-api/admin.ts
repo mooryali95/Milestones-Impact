@@ -1694,7 +1694,8 @@ export async function reminders(b: Record<string, any>) {
   // حالات لا تذكير لها (WEEKLY_OUT_STATUSES) تُستبعد في الاستعلام، والترتيب ثابت بالمعرّف عند التساوي.
   // والتذكير من نوع bulk: إن بلغ نصيب غير الرموز من السقف اليومي دخل الطابور ولم يزاحم رموز الدخول (mail-budget.js)
   const out = `(${WEEKLY_OUT_STATUSES.join(',')})`;
-  const base = () => listed(db.from('participants').select('id, reminded_at').not('status', 'in', out)).not('email', 'is', null);
+  // حساب الاختبار الداخلي (is_test) لا يصله التذكير الآلي (قرار المالك 2026-11-22)؛ التذكير اليدوي له يبقى ممكنًا للتجربة
+  const base = () => listed(db.from('participants').select('id, reminded_at').not('status', 'in', out)).not('email', 'is', null).not('is_test', 'is', true);
   const [{ data: away, error: e1 }, { data: never, error: e2 }] = await Promise.all([
     base().lt('last_login_at', weekAgo).order('last_login_at', { ascending: true }).order('id').limit(600),
     base().is('last_login_at', null).lt('created_at', weekAgo).order('created_at', { ascending: false }).order('id').limit(600),
