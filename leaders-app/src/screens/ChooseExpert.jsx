@@ -10,6 +10,15 @@ import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { CONTACT_EMAIL } from '../../../supabase/functions/leaders-api/labels.js';
 
+// مهلة الرد بالأيام (يومان لا «48 ساعة»): لا يُعرض للمشارك ما يشبه ساعات الخبير أو كلفته، والمهلة ليست منهما
+export const replyWithin = (h) => {
+  const d = h / 24;
+  if (!Number.isInteger(d)) return `${h} ساعة`;
+  return d === 1 ? 'يوم' : d === 2 ? 'يومين' : d <= 10 ? `${d} أيام` : `${d} يومًا`;
+};
+// الحرفان الأولان من الاسم بعد اللقب (م/د/أ) للصورة الرمزية: لا صور للخبراء في الملف بعد
+export const initialsOf = (name = '') => String(name).replace(/^(م|د|أ|أ\.د)\.?\s+/, '').trim().split(/\s+/).filter((w) => !['بن', 'بنت', 'ابن', 'آل', 'ال'].includes(w)).slice(0, 2).map((w) => w.replace(/^ال/, '')[0] || '').join(' ');
+
 export default function ChooseExpert({ context = 'program', note: presetNote = '', dimension: presetDim = '', role: presetRole = 'coach', title = 'اطلب استشارة', open: startOpen = false }) {
   const [d, setD] = useState(null);
   const [form, setForm] = useState({ role: presetRole, dimension: presetDim, context, note: presetNote });
@@ -23,12 +32,14 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
   useEffect(() => { setForm((f) => ({ ...f, role: presetRole })); }, [presetRole]);
   if (!d?.success || !Array.isArray(d.roles) || !Array.isArray(d.requests)) return null;
 
+  const hours = Number(d.offer_hours) || 48;
+  const within = replyWithin(hours);
   const choose = async (e) => {
     setBusy(e.id); setMsg(null);
     const r = await call('experts.choose', { ...form, dimension: form.dimension || null, expert_id: e.id });
     setBusy('');
     // ما يحدث فعلًا بعد الاختيار: إن اعتذر الخبير أو انقضت مهلته عُرض الطلب على التالي، وحالته تبقى هنا
-    if (r.success) { setMsg({ ok: `أرسلنا طلبك إلى ${r.expert} مع ما كتبته. يصلك بريد حين يقبله خبير، وإن اعتذر عرضناه على التالي الأنسب. تابع حالته هنا.` }); setOpen(false); load(); } else setMsg({ err: r.message });
+    if (r.success) { setMsg({ ok: `أرسلنا طلبك إلى ${r.expert} مع ما كتبته. يصلك بريد حين يقبله، وإن اعتذر أو لم يرد خلال ${within} عرضناه على التالي الأنسب تلقائيًا. تابع حالته هنا.` }); setOpen(false); load(); } else setMsg({ err: r.message });
   };
   const busyRole = d.requests.find((x) => x.role === form.role);
   // طلبات انتهت بلا خدمة مؤخرًا («لا خبير مطابق» أو ألغاها الفريق): تبقى ظاهرة بسببها، ولا تحجز الدور
@@ -81,13 +92,23 @@ export default function ChooseExpert({ context = 'program', note: presetNote = '
                 <p>نرتّب الخبراء بتخصصهم في الإطار ومستواك، ثم بوقتهم المتاح هذا الأسبوع، ثم بتقييم المشاركين لجلساتهم، ثم بخبرتهم في قطاعك وبخدمتهم لك من قبل، ونقدّم فريق دفعتك. لا نعرض تقييم الخبير لأنه أداة لجودة الترشيح لا سمعة عامة.</p>
               </details>
               <div className="cx-grid">
-                {d.candidates.map((e) => (
-                  <article key={e.id} className="cx-card stack">
-                    <b>{e.full_name}</b>
-                    {e.team && <span className="chip ok cx-team">من فريق دفعتك</span>}
-                    {e.title && <small className="muted">{e.title}{e.years ? ` · ${e.years} سنة خبرة` : ''}</small>}
-                    {e.bio && <p className="small">{e.bio}</p>}
-                    <button className="btn sm" disabled={!!busy || !form.note.trim()} onClick={() => choose(e)}>{busy === e.id ? 'لحظة…' : 'اختره'}</button>
+                {d.candidates.map((e, k) => (
+                  <article key={e.id} className={`cx-card stack${k === 0 ? ' best' : ''}`} data-testid="cx-card">
+                    <div className="cx-who">
+                      <span className="cx-avatar" aria-hidden="true">{initialsOf(e.full_name)}</span>
+                      <div className="stack-tight">
+                        <b>{e.full_name}</b>
+                        <small className="muted">{e.title || 'خبير البرنامج'}{e.years ? ` · ${e.years} سنة خبرة` : ''}</small>
+                      </div>
+                    </div>
+                    <div className="cx-tags">
+                      {k === 0 && <span className="chip gold">الأنسب لطلبك</span>}
+                      {e.team && <span className="chip ok cx-team">من فريق دفعتك</span>}
+                      {(e.sectors || []).slice(0, 2).map((x) => <span key={x} className="chip">{x}</span>)}
+                    </div>
+                    {e.bio ? <p className="small cx-bio">{e.bio}</p> : <p className="small muted cx-bio">ملف مختصر: يعرّفك بنفسه حين يقبل طلبك.</p>}
+                    <small className="muted cx-sla">يرد عادة خلال {within}، وإلا انتقل طلبك للتالي تلقائيًا</small>
+                    <button className="btn sm cx-pick" disabled={!!busy || !form.note.trim()} onClick={() => choose(e)}>{busy === e.id ? 'لحظة…' : 'اختره'}</button>
                   </article>
                 ))}
               </div>

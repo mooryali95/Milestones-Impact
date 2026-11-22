@@ -2108,3 +2108,13 @@ main p.small, main p.muted { max-inline-size: 62ch; }
   .hero[data-tour="journey-hero"] .ring svg { width: 72px; height: 72px; }
   .hero[data-tour="journey-hero"] .ring b { font-size: 16px; }
 }
+
+/* بطاقة الخبير (2026-11-22): صورة رمزية بالحرفين، ووسوم، ونبذة بثلاثة أسطر، ووعد الرد، والأنسب مميز */
+.cx-card.best { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.cx-who { display: flex; align-items: center; gap: 10px; }
+.cx-who .stack-tight { display: flex; flex-direction: column; gap: 2px; }
+.cx-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--ink); color: var(--surface); letter-spacing: 1px; }
+.cx-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-tags:empty { display: none; }
+.cx-bio { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cx-sla { font-size: 12px; }
