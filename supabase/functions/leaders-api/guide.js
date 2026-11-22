@@ -240,3 +240,22 @@ export function parseVerify(raw) {
     return { ok: j.ok, reason: j.ok ? 'none' : reason };
   } catch { return null; }
 }
+
+// ── المرحلة ج: حكم الانحراف (2026-11-22). نقي بلا قاعدة: عدّ ردود آخر 24 ساعة والحدود من الإعدادات ──
+// guard يُعد ما حجبه الفحص ومحاولات التلاعب، ولا يُعد verify_error (عطل المدقق لا انحراف المساعد)
+/** @returns {{ pause: boolean, reason: 'unsure'|'guard'|null, unsure_pct: number, guard_pct: number }} */
+export function watchVerdict(c, cfg) {
+  const total = Number(c?.total) || 0;
+  const pct = (n) => (total ? Math.round((Number(n) || 0) * 1000 / total) / 10 : 0);
+  const unsure_pct = pct(c?.unsure), guard_pct = pct(c?.guard);
+  if (cfg?.auto_pause === false || total < (Number(cfg?.watch_min_replies) || 20)) return { pause: false, reason: null, unsure_pct, guard_pct };
+  if (guard_pct > (Number(cfg?.watch_max_guard_pct) || 15)) return { pause: true, reason: 'guard', unsure_pct, guard_pct };
+  if (unsure_pct > (Number(cfg?.watch_max_unsure_pct) || 40)) return { pause: true, reason: 'unsure', unsure_pct, guard_pct };
+  return { pause: false, reason: null, unsure_pct, guard_pct };
+}
+export const WATCH_REASON_AR = { unsure: 'نسبة «لم أتأكد» فوق الحد', guard: 'نسبة الردود المحجوبة ومحاولات التلاعب فوق الحد' };
+
+// بصمة الحماية في بصمة التقييم (المرحلة ج): تغيّر قواعد الموجّه أو مدقق الرد أو نموذجه يُسقط نجاح التقييم السابق حتى يُعاد،
+// فلا يعمل المساعد على حماية لم تُختبر معه
+export const GUIDE_VERIFY_MODEL = 'claude-haiku-5-5';
+export const GUARD_SIGNATURE = JSON.stringify({ route: RULES.map((r) => [r.reason, r.re.source]), verify: VERIFY_RULES, model: GUIDE_VERIFY_MODEL });
