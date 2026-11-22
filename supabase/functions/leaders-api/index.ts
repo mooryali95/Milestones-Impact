@@ -684,6 +684,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.expert-requests': (_a, b) => E.adminRequests(b),
   'admin.expert-request-cancel': E.adminCancelRequest,
   'admin.expert-request-retry': E.adminRetryRequest,
+  // إعادة الإسناد (قرار المالك 2026-11-22): خيارات الخبراء للطلب قراءة، والتغيير كتابة يفحص الصلاحية داخله
+  'admin.expert-reassign-options': E.adminReassignOptions,
+  'admin.expert-reassign': E.adminReassign,
   'admin.expert-request-complete': E.adminCompleteRequest,
   'admin.program': (_a, b) => G.program(b),
   // تعريف الدفعة لنوافذها (P5): المحرر والجدول يقرآن المراحل والمتطلبات من نسختها المثبتة أو برنامجها الحي

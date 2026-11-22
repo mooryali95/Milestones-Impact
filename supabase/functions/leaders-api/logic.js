@@ -2633,7 +2633,7 @@ export function sameSector(a, b) {
 // ── الإسناد: ترشيح الخبير الأنسب لطلب ──
 // الأوزان مصدر واحد (مجموعها 100) يقرؤها الخادم ولوحة الإدارة لشرح الترتيب
 export const MATCH_WEIGHTS = { fit: 35, capacity: 25, quality: 20, context: 10, continuity: 10 };
-export const OFFER_HOURS = 24;
+export const OFFER_HOURS = 48;
 export const LEVEL_RANK = { beginner: 1, intermediate: 2, advanced: 3 };
 // need: { role, dimension, level, sector }
 // e: الخبير ومعه load (طلبات قائمة وجلسات قادمة) وrating (من المرحلة 5، وقد يكون فارغًا) وserved (خدم المشارك من قبل؟)

@@ -1502,3 +1502,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .ro-banner-text { flex: 1 1 260px; }
 /* المخرج الوحيد من وضع القراءة: هدف لمس 44 بكسل على الأقل (WCAG 2.5.5) كأزرار القارئ */
 .ro-banner .btn-sm { min-block-size: 44px; min-inline-size: 44px; }
+
+/* إعادة إسناد طلب خبير */
+.xm-reassign { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

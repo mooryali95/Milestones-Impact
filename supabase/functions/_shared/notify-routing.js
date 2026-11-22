@@ -117,6 +117,7 @@ export const EVENTS = [
   ev('contact_request', 'requests', 'critical', 'طلب تواصل جديد أو مساعد يطلب إنسانًا', { locked: true, screen: '' }),
   ev('expert_application', 'requests', 'important', 'طلب انضمام خبير أو عضوية لجنة', { digest: true, screen: '#/leaders/experts' }),
   ev('expert_no_match', 'requests', 'important', 'لا خبير متاح لطلب', { screen: '#/leaders/experts?view=requests' }),
+  ev('expert_offer_expired', 'requests', 'important', 'خبير لم يرد على عرض طلب في مهلته', { screen: '#/leaders/experts?view=requests' }),
   ev('sponsor_request', 'requests', 'important', 'طلب رعاية', { digest: true, screen: '#/leaders/payments' }),
   ev('seat_limit_owner', 'requests', 'important', 'حدود المقاعد (نسخة المالك)', { screen: '#/leaders/payments' }),
   // ── النشاط ──
