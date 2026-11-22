@@ -261,8 +261,9 @@ Deno.test('خارج كل عدّ وقائمة: كل قراءة بالدفعة و�
   try {
     const snap = async () => {
       const out: Record<string, string> = {};
-      // وقت توليد الرد وحده يتغير بين قراءتين
-      for (const [name, fn] of READS) out[name] = JSON.stringify(await fn()).replace(/"(at|now|generated_at)":"[^"]+"/g, '"$1":"T"');
+      // ما يشتق من الساعة وحده يتغير بين قراءتين: وقت التوليد، وعدّاد رمز الحضور ورمزه ورابطه (نافذة 30 ثانية تُعبر بين القراءتين)
+      for (const [name, fn] of READS) out[name] = JSON.stringify(await fn()).replace(/"(at|now|generated_at)":"[^"]+"/g, '"$1":"T"')
+        .replace(/"refresh_in":\d+/g, '"refresh_in":0').replace(/"code":"\d{6}"/g, '"code":"C"').replace(/checkin=[^"]+/g, 'checkin=Q');
       return out;
     };
     const before = await snap();
