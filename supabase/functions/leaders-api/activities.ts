@@ -5,7 +5,7 @@
 // للحضور، وwebhook موقّع من منصة الحجز. الإكمال يُحسب في logic.js.
 import { features } from './features.ts';
 import { attendNoteMethod } from './features.js';
-import { alertOps, allFor, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_CHANGE_MAIL, WORKSHOP_MAIL, workshopChangeMail, workshopMail } from './core.ts';
+import { alertOps, allFor, audit, auditMany, type AuditRow, CONFIG, db, Fail, hash, mailButton, must, randomToken, sendMail, sessionReminderMail, WORKSHOP_CANCEL_MAIL, WORKSHOP_CHANGE_MAIL, WORKSHOP_MAIL, WORKSHOP_TRAINER_MAIL, workshopCancelMail, workshopChangeMail, workshopMail, workshopTrainerMail } from './core.ts';
 import { missingColumn, missingTable } from './missing-column.ts';
 import { counted, listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
@@ -790,6 +790,7 @@ export async function workshopSave(a: any, b: Body) {
     return res;
   };
   let saved: any, prev: any = null;
+  let left: Leave | null = null, claimed = false;
   if (row.id) {
     // تغيّر الموعد يُسقط أختام الدعوة والتذكير: الموعد الجديد يُذكَّر به وتُرسل دعوته من جديد (كان يبقى «أُرسلت الدعوة» ويسقط التذكير)
     // بـ* وبما يحمله الصف فقط: الأعمدة من ترحيلات لاحقة، فلا يُكتب عمود غير موجود قبلها
@@ -808,17 +809,27 @@ export async function workshopSave(a: any, b: Body) {
       if (!preview && b.counting_confirm !== true) throw new Fail('تغيير وسم الورشة يحتاج تأكيدًا بعد معاينة أثره', 409, 'counting_confirm', { impact: effect.impact });
     }
     const flipped = !!effect;
+    // خروج الجلسة من جمهورها أو عودتها إليه (قرار المالك 2026-11-22): إلغاء، أو نقل عن دفعتها، أو إعادة ملغاة
+    const leave = prev ? leaveOf(prev, out) : null;
     // إعادة ورشة إلزامية ملغاة في نشاط «ورش إضافية» ترفع المطلوب كإضافتها: يُحفظ اكتمال من أتم قبلها، بلا سؤال (لا يُسحب شيء)
     if (prev && !effect && prev.active === false && out.active !== false && prev.cohort_id && !optionalSession(prev)) {
       const rq = (await db.from('stage_requirements').select('id, kind, config').eq('id', prev.requirement_id).maybeSingle()).data as any;
       if (eachWorkshop(rq)) effect = await countingImpact(prev.cohort_id, prev.requirement_id, (rows) => rows.map((s) => (s.id === prev.id ? { ...s, active: true } : s)));
     }
-    if (preview) return { success: true, preview: true, counting: counting || (prev ? countingOf(prev) : 'mandatory'), changed: flipped, impact: effect?.impact || null };
+    if (preview) return { success: true, preview: true, counting: counting || (prev ? countingOf(prev) : 'mandatory'), changed: flipped, impact: effect?.impact || null, leave: leave ? await leavePreview(prev, out, leave) : null };
     const at = (v: any) => (v ? Date.parse(v) : null);
-    if (prev && at(prev.starts_at) !== at(out.starts_at)) {
-      for (const k of ['invited_at', 'reminded_day_at', 'reminded_hour_at']) if (k in prev) out[k] = null;
+    // والنقل إلى دفعة أخرى وإعادة الملغاة كذلك: الدفعة الجديدة لم تُدعَ، والمعادة تُدعى من جديد أو تبقى بلا دعوة
+    if (prev && (at(prev.starts_at) !== at(out.starts_at) || leave === 'move' || leave === 'restore')) {
+      for (const k of STAMPS) if (k in prev) out[k] = null;
     }
-    saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').update(x).eq('id', row.id).select('id').single())), 'تعذّر الحفظ');
+    // الكتابة بشرط الحالة التي قُرئت: طلبان معًا أو طلب معاد لا يلغي إلا أحدهما (claimed)، فلا بريد إلغاء ولا دعوة مرتين
+    const claim: [string, unknown] | null = leave === 'cancel' ? ['active', true] : leave === 'restore' ? ['active', false] : leave === 'move' ? ['cohort_id', prev.cohort_id] : null;
+    if (claim) {
+      saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').update(x).eq('id', row.id).eq(claim[0], claim[1]).select('id').maybeSingle())), 'تعذّر الحفظ');
+      claimed = !!saved;
+    }
+    if (!saved) saved = must(undatedBlocked(await tolerant((x) => db.from('workshop_sessions').update(x).eq('id', row.id).select('id').single())), 'تعذّر الحفظ');
+    left = leave;
   } else {
     const want = counting || 'mandatory';
     // المسار الموجّه: مرحلة بلا نشاط حضور. يُنشأ فيها نشاط «ورش إضافية» في برنامج الدفعة بنسخة وترقية (extraWorkshopReq)،
@@ -863,8 +874,12 @@ export async function workshopSave(a: any, b: Body) {
       { counting: countingFrom ? counting : 'mandatory', ...effect.impact, preserved_written: preserved, preserved_ids: effect.preserve.slice(0, 200), requirement_id: reqId });
   }
   // البريد بعد الحفظ وباختيار صريح وحده. تعذّره لا يُسقط الحفظ (فلا تُنشأ الجلسة مرتين بإعادة المحاولة): يُرد بنتيجته
-  const mail = await saveMail(a, saved.id, prev, b).catch((e) => { console.error('workshop save mail', saved.id, (e as Error).message); return { mail_error: true }; });
-  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...mail,
+  // بريد الإلغاء أولًا (لمن دُعي في دفعتها قبل الحفظ)، ثم ما يطلبه الحفظ من دعوة أو إشعار
+  const gone = left === 'cancel' || left === 'move'
+    ? { cancel: await cancelNotice(a, prev, left, { notify: b.notify_cancel !== false, claimed, trainer: trainerLeaves(prev, out, left) }).catch((e) => { console.error('workshop cancel mail', saved.id, (e as Error).message); return { error: true }; }) }
+    : {};
+  const mail = await saveMail(a, saved.id, prev, b, left, claimed).catch((e) => { console.error('workshop save mail', saved.id, (e as Error).message); return { mail_error: true }; });
+  return { success: true, id: saved.id, ...(capacitySkipped ? { capacity_skipped: true } : {}), ...gone, ...mail,
     ...(effect ? { impact: effect.impact } : {}), ...((saved as any).version_created ? { version_created: (saved as any).version_created } : {}) };
 }
 
@@ -878,33 +893,145 @@ type MailSkip = 'general' | 'undated' | 'ended' | 'inactive' | 'invited';
 const mailSkip = (s: any): MailSkip | null => (!s.cohort_id ? 'general' : s.active === false ? 'inactive' : isUndated(s) ? 'undated' : Date.parse(s.ends_at) < Date.now() ? 'ended' : null);
 const whenOf = (s: any) => `${s?.starts_at ? Date.parse(s.starts_at) : ''}|${s?.ends_at ? Date.parse(s.ends_at) : ''}`;
 const placeOf = (s: any) => (s?.mode === 'online' ? `online|${s.join_url || ''}` : `in_person|${s?.location_ar || ''}`);
-async function saveMail(a: any, id: string, prev: any, b: Body): Promise<Body> {
-  const wantInvite = b.invite === true, wantChange = b.notify_change === true;
+// إعادة جلسة ملغاة (leave «restore»): إن كانت أُعلنت قبل إلغائها واختار المدير «ادعُهم من جديد» (reinvite) خرجت الدعوة القائمة
+// نفسها برقم تسلسل أعلى من ملف الإلغاء، فيعود الموعد إلى التقاويم، وللمدرب بريد بعودتها. وبلا الاختيار تبقى بلا دعوة وزرها «أرسل الدعوة».
+// والملغاة (leave «cancel») لا بريد لها هنا: بريدها cancelNotice
+async function saveMail(a: any, id: string, prev: any, b: Body, leave: Leave | null = null, claimed = false): Promise<Body> {
+  if (leave === 'cancel') return {};
+  const restored = leave === 'restore' && b.reinvite === true && !!prev?.invited_at;
+  const wantInvite = b.invite === true || restored, wantChange = b.notify_change === true && !leave;
+  if (leave === 'restore') await dropQueued(id, [WORKSHOP_CANCEL_MAIL.subject, WORKSHOP_TRAINER_MAIL.cancel.subject]);
   if (!wantInvite && !wantChange) return {};
   const s = must(await db.from('workshop_sessions').select('*').eq('id', id).maybeSingle()) as any;
   if (!s) return {};
   const skip = mailSkip(s);
   const changed = { when: !!prev && whenOf(prev) !== whenOf(s), where: !!prev && placeOf(prev) !== placeOf(s) };
+  // رقم التسلسل أعلى من آخر ما خرج لهذه الجلسة (ختمها)، والختم يُكتب بوقته
+  const seq = nextSeq(prev?.invited_at);
   if (wantChange && prev?.invited_at && (changed.when || changed.where)) {
     if (skip) return { change: { skipped: skip } };
-    const r = await workshopSend(s, 'change', changed);
+    const r = await workshopSend(s, 'change', changed, seq);
     // تبقى مدعوة بعد الإشعار. قبل الترحيل 20261110140000 لا عمود للختم: يُرسل الإشعار ولا يُحفظ وقته
-    if (r.sent) await db.from('workshop_sessions').update({ invited_at: new Date().toISOString() }).eq('id', s.id);
+    if (r.sent) await db.from('workshop_sessions').update({ invited_at: seqIso(seq) }).eq('id', s.id);
     await audit('admin', a.email, 'workshop.change-notice', 'workshop_sessions', s.id, null, { ...r, ...changed });
     return { change: r };
   }
   if (!wantInvite) return {};
   if (skip) return { invite: { skipped: skip } };
   if (s.invited_at) return { invite: { skipped: 'invited' } };
-  const stamp = await db.from('workshop_sessions').update({ invited_at: new Date().toISOString() }).eq('id', s.id).is('invited_at', null).select('id');
+  // إعادة لم تكتبها هذه الكتابة (طلب معاد أو طلبان معًا): صاحبة الكتابة هي التي تدعو
+  if (restored && b.invite !== true && !claimed) return { invite: { skipped: 'invited' } };
+  const stamp = await db.from('workshop_sessions').update({ invited_at: seqIso(seq) }).eq('id', s.id).is('invited_at', null).select('id');
   // قبل ترحيل الختم لا عمود: تُرسل الدعوة بلا حجز كما يفعل زر «أرسل الدعوة»
   const stamped = !stamp.error;
   if (stamp.error && !missingColumn(stamp.error)) must(stamp);
   if (stamped && !(stamp.data || []).length) return { invite: { skipped: 'invited' } };
-  const r = await workshopSend(s, 'invite');
+  const r = await workshopSend(s, 'invite', undefined, seq);
   if (stamped && !r.sent) await db.from('workshop_sessions').update({ invited_at: null }).eq('id', s.id);
-  await audit('admin', a.email, 'workshop.invite', 'workshop_sessions', s.id, null, { ...r, on_save: true });
-  return { invite: r };
+  const trainer = restored && (r.sent || r.queued) ? await trainerMail('restore', s, seq, r.total) : undefined;
+  await audit('admin', a.email, 'workshop.invite', 'workshop_sessions', s.id, null, { ...r, on_save: true, ...(restored ? { restored: true, trainer } : {}) });
+  return { invite: { ...r, ...(restored ? { restored: true, ...(trainer && trainer !== 'none' ? { trainer } : {}) } : {}) } };
+}
+
+// ── بريد الإلغاء (قرار المالك 2026-11-22) ──
+// كل مسار يخرج به الجلسة من جمهورها يبلّغ من دُعي إليها مرة واحدة، ومعه ملف إلغاء التقويم:
+//   الإلغاء (active من true إلى false، من «ألغِ اليوم» أو من مربع «مفعّلة» في النموذج)، والحذف، ونقلها إلى دفعة أخرى أو جعلها عامة
+//   (لأعضاء دفعتها الأولى). وتغيير الوسم إلزامية أو اختيارية لا يلغي شيئًا فلا بريد له.
+// من يُبلَّغ: المصدر نفسه الذي تُرسل به الدعوة وإشعار التغيير (workshopRecipients بـrealOnly)، فلا تعريف ثانٍ لـ«المدعو»،
+// ولا يصل حساب العرض ولا حساب اختبار. والمدرب المسمى بريد واحد.
+// لا بريد لجلسة عامة، أو بلا موعد، أو انتهت، أو لم تُعلن (invited_at فارغ)، أو ملغاة أصلًا. والمدير يرى العدد قبل التأكيد
+// (leavePreview، من القراءة نفسها) وله ألا يبلّغ (notify_cancel: false) لجلسة أُنشئت بالخطأ.
+// بلا ترحيل: رقم تسلسل الملف من ختم الدعوة (invited_at) والساعة، والختم يُقدَّم إلى وقت ملف الإلغاء فتعلوه دعوة الإعادة.
+type Leave = 'cancel' | 'move' | 'restore';
+type CancelSkip = MailSkip | 'unannounced' | 'opted_out' | 'already';
+const STAMPS = ['invited_at', 'reminded_day_at', 'reminded_hour_at'];
+function leaveOf(prev: any, out: Body): Leave | null {
+  if (prev.active === false) return out.active !== false ? 'restore' : null;
+  if (out.active === false) return 'cancel';
+  return 'cohort_id' in out && !!prev.cohort_id && (out.cohort_id || null) !== prev.cohort_id ? 'move' : null;
+}
+// المدرب يخرج مع الجلسة الملغاة والمحذوفة، ومع المنقولة إن لم يبقَ مدربها في دفعتها الجديدة (checkTrainer)
+const trainerLeaves = (prev: any, out: Body, leave: Leave | 'delete') => !!prev.expert_id && (leave !== 'move' || ('expert_id' in out && out.expert_id !== prev.expert_id));
+const cancelSkip = (s: any): CancelSkip | null => mailSkip(s) || (!s.invited_at ? 'unannounced' : null);
+// رقم تسلسل ملف التقويم التالي: الساعة بالثواني، ولا يقل عما بعد آخر ما خرج (الختم)، فالترتيب دعوة ثم تغيير ثم إلغاء ثم دعوة
+// إعادة يثبت ولو تتابعت في ثانية واحدة
+const nextSeq = (last: unknown) => Math.max(Math.floor(Date.now() / 1000), (Math.floor(Date.parse(String(last || '')) / 1000) || 0) + 1);
+const seqIso = (seq: number) => new Date(seq * 1000).toISOString();
+// journey-guard: بريد مدرب الجلسة بمعرّفه ليُبلَّغ بإلغائها أو عودتها، ولو أُوقف بعد تسميته (الأهلية تُفحص عند التسمية: cohortTrainers)
+async function trainerContact(id: unknown): Promise<{ full_name: string; email: string } | null> {
+  if (!id) return null;
+  const e = (await db.from('experts').select('id, full_name, email').eq('id', String(id)).maybeSingle()).data as any;
+  return e?.email ? e : null;
+}
+/** ما ينتظر في طابور البريد لهذه الجلسة بهذه العناوين يُترك: دعوة لم تخرج بعد لا تصل بعد إلغاء جلستها، ولا إلغاء بعد إعادتها */
+async function dropQueued(sessionId: string, subjects: string[]) {
+  const { error } = await db.from('mail_queue').update({ gave_up_at: new Date().toISOString(), last_error: 'superseded' }).eq('ref', sessionId).in('subject', subjects).is('sent_at', null).is('gave_up_at', null);
+  if (error) console.error('workshop queue drop', sessionId, error.message);
+}
+const INVITE_SUBJECTS = [WORKSHOP_MAIL.invite.subject, WORKSHOP_MAIL.day.subject, WORKSHOP_MAIL.hour.subject, WORKSHOP_CHANGE_MAIL.subject, WORKSHOP_TRAINER_MAIL.restore.subject];
+/** من سحب الإلغاء أو النقل اكتماله: نشاطه أو مرحلته مكتملان الآن ولا يبقيان بعده. من الحساب القائم نفسه (countingImpact)، بلا كتابة
+ * ولا حفظ اكتمال: السلوك كما كان، والمدير يراه رقمًا قبل التأكيد. null إن تعذّر الحساب (دفعة أكبر من حده) */
+async function uncompleted(prev: any, leave: Leave): Promise<number | null> {
+  if (!prev.cohort_id || optionalSession(prev)) return 0;
+  // counting-exempt: هل للجلسة حضور أصلًا؟ بوابة للحساب لا عدّ يُعرض: بلا حضور لا يسحب إلغاؤها اكتمالًا من أحد
+  const { count } = await db.from('workshop_attendance').select('session_id', { count: 'exact', head: true }).eq('session_id', prev.id);
+  if (!count) return 0;
+  try {
+    return (await countingImpact(prev.cohort_id, prev.requirement_id, (rows) => (leave === 'move' ? rows.filter((s) => s.id !== prev.id) : rows.map((s) => (s.id === prev.id ? { ...s, active: false } : s))))).impact.preserved;
+  } catch (e) { console.error('workshop uncomplete count', prev.id, (e as Error).message); return null; }
+}
+/** المعاينة قبل التأكيد: من يُبلَّغ (العدد من قراءة الإرسال نفسها) والمدرب، أو سبب ألا بريد، ومن يُسحب اكتماله */
+async function leavePreview(prev: any, out: Body, leave: Leave | 'delete') {
+  if (leave === 'restore') {
+    const s = { ...prev, ...out };
+    const skip: CancelSkip | null = !prev.invited_at ? 'unannounced' : mailSkip(s);
+    if (skip) return { kind: leave, notify: null, skipped: skip };
+    return { kind: leave, notify: { members: (await workshopRecipients(s, true)).length, trainer: (await trainerContact(s.expert_id))?.full_name || null }, skipped: null };
+  }
+  const skip = cancelSkip(prev);
+  const dropped = trainerLeaves(prev, out, leave);
+  const notify = skip ? null : { members: (await workshopRecipients(prev, true)).length, trainer: dropped ? (await trainerContact(prev.expert_id))?.full_name || null : null };
+  return { kind: leave, notify, skipped: skip, uncomplete: leave === 'delete' ? 0 : await uncompleted(prev, leave) };
+}
+async function trainerMail(kind: keyof typeof WORKSHOP_TRAINER_MAIL, s: any, seq: number, count: number): Promise<'sent' | 'queued' | 'failed' | 'none'> {
+  const e = await trainerContact(s.expert_id);
+  if (!e) return 'none';
+  const cohort = s.cohort_id ? ((await db.from('cohorts').select('name').eq('id', s.cohort_id).maybeSingle()).data as any)?.name || null : null;
+  const file = [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', sequence: seq, ...(kind === 'cancel' ? { method: 'CANCEL' as const } : {}) })];
+  try {
+    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: s.location_ar || null, cohort, count }), file, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+    return res === 'queued' ? 'queued' : 'sent';
+  } catch (err) { console.error('workshop trainer mail', kind, s.id, (err as Error).message); return 'failed'; }
+}
+/** بريد الإلغاء لمن دُعي إلى الجلسة كما كانت قبل الحفظ (s)، مرة واحدة: claimed أن هذه الكتابة هي التي أخرجتها */
+async function cancelNotice(a: any, s: any, reason: Leave | 'delete', { notify, claimed, trainer }: { notify: boolean; claimed: boolean; trainer: boolean }): Promise<Body> {
+  const skip: CancelSkip | null = cancelSkip(s) || (!claimed ? 'already' : !notify ? 'opted_out' : null);
+  // ما لم يخرج بعد من دعوتها وتذكيرها لا يخرج بعد الآن، أُبلغ أحد أم لا
+  if (claimed) await dropQueued(s.id, INVITE_SUBJECTS);
+  if (skip) {
+    if (skip === 'opted_out') await audit('admin', a.email, 'workshop.cancel-notice', 'workshop_sessions', s.id, null, { reason, skipped: skip });
+    return { skipped: skip };
+  }
+  const seq = nextSeq(s.invited_at);
+  const people = await workshopRecipients(s, true);
+  const title = optionalSession(s) ? `${s.title_ar} (${COUNTING_AR.optional})` : s.title_ar;
+  const when = workshopWhen(s.starts_at);
+  const named = s.expert_id ? (await trainerNames([s.expert_id]))[s.expert_id] || null : null;
+  const file = [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, sequence: seq, method: 'CANCEL' })];
+  let sent = 0, failed = 0, queued = 0;
+  // جماعي بحصة البريد وطابوره كالدعوة، ومؤرخ بموعد الجلسة الأصلي: إن انتظر حتى بدأت تُرك
+  for (const m of people) {
+    try {
+      const res = await sendMail(m.email, WORKSHOP_CANCEL_MAIL.subject, workshopCancelMail(m.name, title, when, s.location_ar || null, named), file, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+      if (res === 'queued') queued += 1; else sent += 1;
+    } catch (e) { failed += 1; console.error('workshop mail', 'cancel', s.id, (e as Error).message); }
+  }
+  const told = trainer ? await trainerMail('cancel', s, seq, people.length) : 'none';
+  // الختم يُقدَّم إلى وقت ملف الإلغاء: دعوة الإعادة تأخذ رقمًا أعلى منه. والمنقولة والمحذوفة لا ختم لهما بعد
+  if (reason === 'cancel' && (sent || queued)) await db.from('workshop_sessions').update({ invited_at: seqIso(seq) }).eq('id', s.id);
+  const r = { sent, failed, total: people.length, ...(queued ? { queued } : {}), ...(told !== 'none' ? { trainer: told } : {}) };
+  await audit('admin', a.email, 'workshop.cancel-notice', 'workshop_sessions', s.id, null, { ...r, reason, starts_at: s.starts_at });
+  return r;
 }
 
 export async function workshopDelete(a: any, b: Body) {
@@ -912,9 +1039,18 @@ export async function workshopDelete(a: any, b: Body) {
   // counting-exempt: حارس الحذف لا عدّ: أي صف حضور مهما كان صاحبه يمنع حذف الجلسة
   const { count } = await db.from('workshop_attendance').select('session_id', { count: 'exact', head: true }).eq('session_id', id);
   if (count) throw new Fail('للجلسة حضور مسجل؛ أوقفها بدل حذفها');
-  must(await db.from('workshop_sessions').delete().eq('id', id));
+  // الحذف يخرج الجلسة من جمهورها كالإلغاء: من دُعي يُبلَّغ بملف إلغاء التقويم، والمدير يرى العدد قبل التأكيد (preview)
+  const s = must(await db.from('workshop_sessions').select('*').eq('id', id).maybeSingle()) as any;
+  if (b.preview === true) {
+    if (!s) throw new Fail('الجلسة غير موجودة', 404);
+    return { success: true, preview: true, leave: await leavePreview(s, s, 'delete') };
+  }
+  // الصف المحذوف يعود من الحذف نفسه: طلبان معًا يحذف أحدهما وحده، فلا بريد إلغاء مرتين
+  const gone = (must(await db.from('workshop_sessions').delete().eq('id', id).select('id')) ?? []) as any[];
   await audit('admin', a.email, 'workshop.delete', 'workshop_sessions', id);
-  return { success: true };
+  if (!s) return { success: true };
+  const cancel = await cancelNotice(a, s, 'delete', { notify: b.notify_cancel !== false, claimed: gone.length > 0, trainer: true }).catch((e) => { console.error('workshop cancel mail', id, (e as Error).message); return { error: true }; });
+  return { success: true, cancel };
 }
 
 // رمز الحضور الحالي لعرضه على شاشة القاعة. يتجدد كل 30 ثانية.
@@ -1289,7 +1425,8 @@ export function sessionVerify(req: any, delivery: any): string {
 }
 // change (المرحلة 4): إشعار قصير بالموعد أو المكان الجديد لمن دُعي، ومعه ملف تقويم بالمعرّف نفسه ورقم تسلسل أحدث فيحدّث
 // الموعد في تقويم المدعو بدل أن يضيف ثانيًا
-async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', changed: { when: boolean; where: boolean } = { when: true, where: false }) {
+// seq: رقم تسلسل ملف التقويم. كل دعوة وإشعار يحملانه (nextSeq)، فدعوة تُعاد بعد تغيير أو إلغاء تعلو ما سبقها ولا يتجاهلها التقويم
+async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', changed: { when: boolean; where: boolean } = { when: true, where: false }, seq: number = nextSeq(s.invited_at)) {
   // غير المؤرخة لا دعوة لها ولا تذكير ولا ملف تقويم (الدعوة تمنعها، وفلتر التذكير يتجاهلها، وهذا حارس ثالث)
   if (isUndated(s)) return { sent: 0, failed: 0, total: 0 };
   const byAdmin = kind === 'invite' || kind === 'change';
@@ -1308,8 +1445,7 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', 
   // الجلسة نفسها (config.verify بتخصيص الدفعة كما في workshop.checkin)، فلا يُقال لمن ينضم عن بعد «امسح رمز QR»
   const hall = await features().then((f) => f.hall).catch(() => false);
   const verify = hall ? null : await workshopVerify(s).catch(() => null);
-  const sequence = kind === 'change' ? Math.floor(Date.now() / 1000) : undefined;
-  const ics = (url: string) => (byAdmin ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url, sequence })] : []);
+  const ics = (url: string) => (byAdmin ? [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', url, sequence: seq })] : []);
   const [withLink, noLink] = [ics(s.join_url || ''), ics('')];
   // queued: لم تتسع لها حصة اليوم فدخلت صندوق «لم يُرسل» وتخرج آليًّا (أو يرسلها المدير منه). ليست متعذرة ولا مُرسلة بعد
   let sent = 0, failed = 0, queued = 0;
@@ -1336,9 +1472,11 @@ export async function workshopInvite(a: any, b: Body) {
   if (isUndated(s)) throw new Fail('حدد موعد الجلسة أولًا لتُرسل دعوتها، ثم أرسلها من هنا', 400, 'undated');
   if (new Date(s.ends_at).getTime() < Date.now()) throw new Fail('انتهت هذه الجلسة');
   if (s.invited_at && b.again !== true) throw new Fail('أُرسلت دعوة هذه الجلسة من قبل', 409, 'invited');
-  const r = await workshopSend(s, 'invite');
+  if (s.active === false) throw new Fail('هذه الجلسة ملغاة. أعدها أولًا لتُرسل دعوتها', 409, 'inactive');
+  const seq = nextSeq(s.invited_at);
+  const r = await workshopSend(s, 'invite', undefined, seq);
   // قبل الترحيل 20261110140000 لا عمود للوسم: تُرسل الدعوة ولا يُحفظ وقتها
-  if (r.sent) await db.from('workshop_sessions').update({ invited_at: new Date().toISOString() }).eq('id', s.id);
+  if (r.sent) await db.from('workshop_sessions').update({ invited_at: seqIso(seq) }).eq('id', s.id);
   await audit('admin', a.email, 'workshop.invite', 'workshop_sessions', s.id, null, r);
   return { success: true, ...r };
 }

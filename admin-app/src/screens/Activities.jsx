@@ -14,7 +14,7 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 import { GroupSessions } from './GroupSession.jsx';
-import { countingChip, countingConfirm, countingField, countingValue, mailConfirm, needsCountingPreview, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
+import { countingChip, countingConfirm, countingField, countingValue, deleteConfirm, leaveConfirm, leaveKind, mailConfirm, needsCountingPreview, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
@@ -109,7 +109,9 @@ function Workshops({ data, reload, canWrite }) {
   // وسم الورشة (optional.js): اختيار صريح أول النموذج، و«اختيارية» معطلة قبل ترحيل عمودها. والجلسة العامة لا يتغير وسمها بعد إنشائها
   const optionalReady = data.optional_ready !== false;
   const withCounting = (fields, on = true) => (on ? [countingField({ ready: optionalReady }), ...fields] : fields);
-  const confirmFor = (base, r, original = null) => (out) => countingConfirm(L, saveBody(out, base), { base: mailConfirm(out), preview: needsCountingPreview({ original, counting: out.counting, req: r }) && !!(out.cohort_id || original?.cohort_id), counting: out.counting, title: out.title_ar, changed: !!original });
+  // إلغاء جلسة أو نقلها عن دفعتها أو إعادتها من النموذج: سؤال بعدد من يُبلَّغ من الخادم (leaveConfirm). وإلا تأكيد الوسم والبريد كما كان
+  const remove = (s) => async (o = {}) => { const r = await L('admin.workshop-delete', { id: s.id, ...(o.notify_cancel === false ? { notify_cancel: false } : {}) }); saved.current = r?.success ? r : null; return r; };
+  const confirmFor = (base, r, original = null) => (out) => (leaveKind(original, out) ? leaveConfirm(L, saveBody(out, base), { title: out.title_ar, counting: out.counting }) : countingConfirm(L, saveBody(out, base), { base: mailConfirm(out), preview: needsCountingPreview({ original, counting: out.counting, req: r }) && !!(out.cohort_id || original?.cohort_id), counting: out.counting, title: out.title_ar, changed: !!original }));
   // القفز من «الرحلة في لمحة» (‎?req=<المتطلب>‎): إلى جلسات النشاط وزر «+ موعد» عنده
   useEffect(() => {
     const req = new URLSearchParams(readQuery()).get('req');
@@ -147,10 +149,10 @@ function Workshops({ data, reload, canWrite }) {
                       {(s.verify || r.config?.verify || 'qr') === 'qr' && <button className="btn-sm primary" onClick={() => setQr(s.id)}>اعرض رمز الحضور</button>}
                       {s.verify && s.verify !== (r.config?.verify || 'qr') && <small className="la-chip" title="تخصيص الدفعة يغلب طريقة البرنامج">{VERIFY_AR[s.verify] || s.verify} لهذه الدفعة</small>}
                       {canWrite && s.cohort_id && isUndated(s) && <small className="la-muted" title="الدعوة وملف التقويم والتذكير تحتاج موعدًا">الدعوة بعد تحديد الموعد</small>}
-                      {canWrite && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
+                      {canWrite && s.active && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), onDelete: s.attended ? undefined : () => L('admin.workshop-delete', { id: s.id }) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), confirmDelete: () => deleteConfirm(L, s.id, s.title_ar), onDelete: s.attended ? undefined : remove(s) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>
