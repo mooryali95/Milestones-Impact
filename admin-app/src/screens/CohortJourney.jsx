@@ -27,7 +27,7 @@ import { L } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import Form from '../Form.jsx';
 import { Attendance, inviteSession, QrScreen, sessionFields } from './Activities.jsx';
-import { countingConfirm, countingField, countingValue, EACH_EFFECT_AR, extraEffectAr, GUIDED_EFFECT_AR, mailConfirm, needsCountingPreview, OPTIONAL_EFFECT_AR, OUTSIDE_SAVE_AR, saveBody, savedAr, stageWorkshopReqs, workshopDays } from '../workshop-days.js';
+import { cancelResultAr, countingConfirm, countingField, countingValue, deleteConfirm, EACH_EFFECT_AR, leaveAsk, leaveConfirm, leaveKind, extraEffectAr, GUIDED_EFFECT_AR, mailConfirm, needsCountingPreview, OPTIONAL_EFFECT_AR, OUTSIDE_SAVE_AR, saveBody, savedAr, stageWorkshopReqs, workshopDays } from '../workshop-days.js';
 import { ADD_MINUTES, addScale, outsideWindow, sessionTimes } from '../timeline-add.js';
 import { dateOnly, dateTime, riyadhWhen as whenRiyadh } from '../dates.js';
 import JourneyTimeline from '../../../shared/ui/JourneyTimeline.jsx';
@@ -763,18 +763,41 @@ export default function CohortJourney({ c, canWrite = false, on = {}, onSaved = 
       // «أبلغ المدعوين بالتغيير» يظهر معلَّمًا حين يتغير موعد جلسة مدعوة أو مكانها، وتأكيد الحفظ يسأل قبل أن يخرج بريد
       values: { ...r.raw, notify_change: true, counting: countingValue(r.raw) },
       // تغيير الوسم لاحقًا: معاينة أثره بالأرقام من الخادم، ثم تأكيد، ثم الحفظ بالتأكيد نفسه
-      confirmSave: (out) => countingConfirm(L, saveBody(out, { id: r.id }), { base: mailConfirm(out), preview: needsCountingPreview({ original: r.raw, counting: out.counting }), counting: out.counting, title: out.title_ar, changed: true }),
+      // إلغاء اليوم أو إعادته من مربع «مفعّلة»: السؤال نفسه بعدد من يُبلَّغ من الخادم (leaveConfirm)، وإلا تأكيد الوسم والبريد كما كان
+      confirmSave: (out) => (leaveKind(r.raw, out) ? leaveConfirm(L, saveBody(out, { id: r.id }), { title: out.title_ar, counting: out.counting })
+        : countingConfirm(L, saveBody(out, { id: r.id }), { base: mailConfirm(out), preview: needsCountingPreview({ original: r.raw, counting: out.counting }), counting: out.counting, title: out.title_ar, changed: true })),
       onSave: (v) => L('admin.workshop-save', saveBody(v, { id: r.id })).then(savedDay(v.counting_confirm ? 'حُفظ اليوم بوسمه الجديد' : 'حُفظ اليوم')),
-      onDelete: r.attended ? undefined : () => L('admin.workshop-delete', { id: r.id }).then(savedDay('حُذف اليوم')),
+      confirmDelete: () => deleteConfirm(L, r.id, r.title),
+      onDelete: r.attended ? undefined : (o = {}) => L('admin.workshop-delete', { id: r.id, ...(o.notify_cancel === false ? { notify_cancel: false } : {}) }).then((res) => { if (res?.success) { toast(['حُذف اليوم', cancelResultAr(res.cancel)].filter(Boolean).join('، ')); setWsRetry((n) => n + 1); } return res; }),
     }),
+    // الإلغاء: قبل التأكيد يُقرأ من الخادم كم مشاركًا يُبلَّغ ومن يُسحب اكتماله، وللمدير ألا يبلّغ (قرار المالك 2026-11-22)
     cancel: async (r) => {
-      const all = r.general ? ' وهو جلسة عامة، فيُلغى لكل دفعات البرنامج.' : '';
-      if (!(await confirm(`يُلغى «${r.title}»: يختفي من رحلة المشاركين ولا تُرسل له دعوة ولا تذكير، وما سُجّل من حضور محفوظ.${all} يُعاد بنقرة.`, { danger: true, ok: 'ألغِ اليوم' }))) return;
-      const res = await L('admin.workshop-save', { row: { ...dayRow(r), active: false, id: r.id } });
+      const row = { ...dayRow(r), active: false, id: r.id };
+      const pv = await L('admin.workshop-save', { row, preview: true });
+      if (!pv.success) { toast(pv.message || 'تعذّرت معاينة الإلغاء، فلم يُلغَ شيء'); return; }
+      // خادم أقدم من اللوحة لحظة النشر لا يعيد المعاينة: لا بريد منه، فيُقال ذلك
+      const ask = leaveAsk(pv.leave || { kind: 'cancel', notify: null, skipped: null }, r.title);
+      const all = r.general ? '\nوهو جلسة عامة، فيُلغى لكل دفعات البرنامج.' : '';
+      const yes = await confirm(`${ask.text}${all}`, { danger: true, ok: ask.ok, lines: ask.lines, check: ask.check || null });
+      if (!yes) return;
+      const res = await L('admin.workshop-save', { row, ...(ask.check && yes.checked === false ? { notify_cancel: false } : {}) });
       if (!res.success) toast(res.message); else savedDay('أُلغي اليوم')(res);
     },
+    // الإعادة: يوم أُعلن ثم أُلغي يسأل قبلها هل يُدعى أعضاؤه من جديد (بالعدد)، وغيره يعود بنقرته كما كان
     restore: async (r) => {
-      const res = await L('admin.workshop-save', { row: { ...dayRow(r), active: true, id: r.id } });
+      const row = { ...dayRow(r), active: true, id: r.id };
+      let again = false;
+      if (r.raw.invited_at) {
+        const pv = await L('admin.workshop-save', { row, preview: true });
+        if (!pv.success) { toast(pv.message || 'تعذّرت معاينة الإعادة، فلم يتغير شيء'); return; }
+        const ask = leaveAsk(pv.leave, r.title);
+        if (ask) {
+          const yes = await confirm(ask.text, { ok: ask.ok, lines: ask.lines, check: ask.check });
+          if (!yes) return;
+          again = yes.checked === true;
+        }
+      }
+      const res = await L('admin.workshop-save', { row, ...(again ? { reinvite: true } : {}) });
       if (!res.success) toast(res.message); else savedDay('أُعيد اليوم ويظهر للمشاركين')(res);
     },
     invite: async (r) => { if (await inviteSession(r.raw, { confirm, toast })) setWsRetry((n) => n + 1); },

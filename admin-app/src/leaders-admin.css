@@ -1371,3 +1371,11 @@
 .la-chip.ws-counting.optional { background: transparent; border: 1px dashed var(--line-strong); color: var(--ink-mid); }
 /* سطور الأثر تحت سؤال التأكيد (معاينة قبل الحفظ) */
 .mid-lines { list-style: none; margin: -6px 0 16px; padding: 10px 12px; display: grid; gap: 6px; border-radius: 8px; background: var(--sand-light); border: 1px solid var(--line); font-size: .88rem; line-height: 1.7; text-align: start; }
+
+/* نافذة التأكيد: سطر تحذير بين سطور الأثر، ومربع اختيار داخلها («أبلغ المدعوين بالإلغاء»، «ادعُهم من جديد») */
+.mid-lines li.warn { color: var(--st-warn-text); font-weight: 600; }
+.mid-check { display: flex; align-items: flex-start; gap: 10px; margin: -4px 0 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; text-align: start; min-height: 44px; }
+.mid-check input { flex: none; width: 18px; height: 18px; margin-block-start: 4px; accent-color: var(--petrol-mid); }
+.mid-check > span { display: grid; gap: 2px; font-size: .9rem; line-height: 1.7; }
+.mid-check b { font-weight: 600; }
+.mid-check small { color: var(--brand-muted); font-size: .82rem; }

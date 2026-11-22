@@ -135,7 +135,8 @@ Deno.test('الدعوة عند الحفظ: لأعضاء الدفعة الفعل�
       const first = resendCalls(calls)[0];
       assertEquals(first.body.subject, 'دعوة: جلستك التدريبية');
       assert(first.body.html.includes('ورشة التفاوض') && first.body.html.includes('قاعة الملك فهد') && first.body.html.includes('د. منى القحطاني'), 'الجلسة والمكان والمدرب في الدعوة');
-      assert(ics(first).includes(`UID:${r.id}@`) && !ics(first).includes('SEQUENCE'), 'ملف تقويم الدعوة');
+      // الدعوة تحمل رقم تسلسل (قرار بريد الإلغاء 2026-11-22): دعوة تُعاد بعد تغيير أو إلغاء يجب أن تعلو ما سبقها، فكل دعوة مرقمة
+      assert(ics(first).includes(`UID:${r.id}@`) && /SEQUENCE:\d+/.test(ics(first)), 'ملف تقويم الدعوة');
       assert(rowOf(w, r.id).invited_at, 'خُتمت الدعوة');
       assertEquals(w.tables.audit_log.filter((x) => x.action === 'workshop.invite').map((x) => x.after), [{ sent: 2, failed: 0, total: 2, on_save: true }]);
       // إعادة الحفظ نفسه بالاختيار نفسه (إعادة محاولة بلا مفتاح): لا رسالة ثانية
