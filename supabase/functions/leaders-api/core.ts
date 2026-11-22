@@ -634,10 +634,12 @@ export function workshopChangeMail(name: string, title: string, when: string, wh
 export const WORKSHOP_CANCEL_MAIL = {
   subject: 'أُلغيت: جلستك التدريبية',
   lead: 'أُلغيت الجلسة التدريبية التالية، فلا تحضر في موعدها.',
+  // stale: الموعد المخزَّن تغيّر بعد آخر دعوة ولم يُبلَّغ به أحد، فالملغى هو الموعد الذي في يد المدعو لا المخزَّن
+  staleLead: 'أُلغيت الجلسة التدريبية التالية. الموعد أدناه هو آخر موعد أبلغناك به لها، فلا تحضر فيه.',
   note: 'الملف المرفق يزيل الموعد من تقويمك، وإن بقي فاحذفه. إن حُدد لها موعد جديد وصلتك دعوته.',
 } as const;
-export function workshopCancelMail(name: string, title: string, when: string, where: string | null, trainer: string | null = null) {
-  const m = WORKSHOP_CANCEL_MAIL;
+export function workshopCancelMail(name: string, title: string, when: string, where: string | null, trainer: string | null = null, stale = false) {
+  const m = { ...WORKSHOP_CANCEL_MAIL, lead: stale ? WORKSHOP_CANCEL_MAIL.staleLead : WORKSHOP_CANCEL_MAIL.lead };
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
     + mailRows([['الجلسة', title], ['الموعد الملغى', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(trainer ? [['المدرب', trainer] as [string, string]] : [])])
@@ -645,17 +647,48 @@ export function workshopCancelMail(name: string, title: string, when: string, wh
     + mailNote(m.note),
     `${title} · ${when}`, '');
 }
-// وللمدرب المسمى بريد واحد بإلغاء الجلسة، وبريد بعودتها إن أُعيدت ودُعي أعضاؤها من جديد، فلا يبقى على ظن أنها ملغاة
-export const WORKSHOP_TRAINER_MAIL = {
-  cancel: { subject: 'أُلغيت: جلسة تدريبية أنت مدربها', lead: 'أُلغيت الجلسة التدريبية التالية التي سُمّيت مدربًا لها، فلا تُعقد في موعدها.', note: 'الملف المرفق يزيل الموعد من تقويمك إن كان فيه، وإن بقي فاحذفه.' },
-  restore: { subject: 'أُعيدت: جلسة تدريبية أنت مدربها', lead: 'أُعيدت الجلسة التدريبية التالية بعد إلغائها، وأنت مدربها.', note: 'أضف الموعد إلى تقويمك من المرفق. تجد الجلسة وورقة حضورها في بوابتك.' },
+// سحب موعد جلسة أُعلنت (قرار المالك 2026-11-22، المتابعة 2): المدير أفرغ موعدها، فالجلسة باقية في الرحلة «يُحدد لاحقًا» وموعدها
+// القديم يُزال من التقويم بملف الإلغاء نفسه. وحين يُحدد موعد جديد تخرج دعوته المعتادة برقم تسلسل أعلى
+export const WORKSHOP_UNDATE_MAIL = {
+  subject: 'سُحب الموعد: جلستك التدريبية',
+  lead: 'سُحب موعد الجلسة التدريبية التالية، فلا تحضر فيه. الجلسة باقية في برنامجك، وتصلك دعوة بموعدها الجديد حين يُحدد.',
+  note: 'الملف المرفق يزيل الموعد من تقويمك، وإن بقي فاحذفه.',
 } as const;
-export function workshopTrainerMail(kind: keyof typeof WORKSHOP_TRAINER_MAIL, name: string, g: { title: string; when: string; where?: string | null; cohort?: string | null; count: number }) {
-  const m = WORKSHOP_TRAINER_MAIL[kind];
+export function workshopUndateMail(name: string, title: string, when: string, where: string | null, trainer: string | null = null) {
+  const m = WORKSHOP_UNDATE_MAIL;
   return shell('sessions', m.subject,
     mailText(`${hello(name)} ${m.lead}`)
-    + mailRows([['الجلسة', g.title], [kind === 'cancel' ? 'الموعد الملغى' : 'الموعد', g.when], ...(g.cohort ? [['الدفعة', g.cohort] as [string, string]] : []), ...(g.where ? [['المكان', g.where] as [string, string]] : []),
-      [kind === 'cancel' ? 'أُبلغ من المشاركين' : 'دُعي من المشاركين', String(g.count)]])
+    + mailRows([['الجلسة', title], ['الموعد المسحوب', when], ...(where ? [['المكان', where] as [string, string]] : []), ...(trainer ? [['المدرب', trainer] as [string, string]] : [])])
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي')
+    + mailNote(m.note),
+    `${title} · ${when}`, '');
+}
+// بريد المدرب المسمى (المتابعة 1، 2026-11-22): يصله ما يصل المدعوين، بريد واحد لكل حدث وبملف التقويم نفسه (المعرّف ورقم
+// التسلسل): الدعوة حين تُعلن الجلسة، والتحديث حين يتغير موعدها أو مكانها أو طريقتها أو رابطها، والإلغاء، وسحب الموعد، والعودة
+// بعد الإلغاء. وعند استبداله: للسابق «release» بملف يزيل الموعد من تقويمه، وللجديد الدعوة.
+// لا شيء فيه عن مشارك بعينه: العدد وحده، كما يراه في بوابته
+export const WORKSHOP_TRAINER_MAIL = {
+  invite: { subject: 'دعوة: جلسة تدريبية أنت مدربها', lead: 'سُمّيت مدربًا للجلسة التدريبية التالية، وأُرسلت دعوتها إلى المشاركين.', note: 'أضف الموعد إلى تقويمك من المرفق. تجد الجلسة وورقة حضورها في بوابتك.' },
+  change: { subject: 'تحديث: جلسة تدريبية أنت مدربها', lead: 'تغيّر موعد الجلسة التدريبية التي أنت مدربها.', note: 'الملف المرفق يحدّث الموعد في تقويمك. إن بقي الموعد القديم فاحذفه.' },
+  cancel: { subject: 'أُلغيت: جلسة تدريبية أنت مدربها', lead: 'أُلغيت الجلسة التدريبية التالية التي سُمّيت مدربًا لها، فلا تُعقد في موعدها.', note: 'الملف المرفق يزيل الموعد من تقويمك، وإن بقي فاحذفه.' },
+  undate: { subject: 'سُحب الموعد: جلسة تدريبية أنت مدربها', lead: 'سُحب موعد الجلسة التدريبية التالية التي أنت مدربها، فلا تُعقد فيه. يصلك موعدها الجديد حين يُحدد.', note: 'الملف المرفق يزيل الموعد من تقويمك، وإن بقي فاحذفه.' },
+  release: { subject: 'تغيّر المدرب: جلسة تدريبية كنت مدربها', lead: 'لم تعد مدرب الجلسة التدريبية التالية، فلا يلزمك حضورها. الجلسة نفسها قائمة في موعدها.', note: 'الملف المرفق يزيل الموعد من تقويمك، وإن بقي فاحذفه.' },
+  restore: { subject: 'أُعيدت: جلسة تدريبية أنت مدربها', lead: 'أُعيدت الجلسة التدريبية التالية بعد إلغائها، وأنت مدربها.', note: 'أضف الموعد إلى تقويمك من المرفق. تجد الجلسة وورقة حضورها في بوابتك.' },
+} as const;
+const TRAINER_CHANGE_LEAD = { when: WORKSHOP_TRAINER_MAIL.change.lead, where: 'تغيّر مكان الجلسة التدريبية التي أنت مدربها.', both: 'تغيّر موعد الجلسة التدريبية التي أنت مدربها ومكانها.' } as const;
+const TRAINER_WHEN_LABEL: Partial<Record<keyof typeof WORKSHOP_TRAINER_MAIL, string>> = { cancel: 'الموعد الملغى', undate: 'الموعد المسحوب' };
+const TRAINER_COUNT_LABEL: Record<keyof typeof WORKSHOP_TRAINER_MAIL, string | null> = { invite: 'دُعي من المشاركين', change: 'أُبلغ من المشاركين', cancel: 'أُبلغ من المشاركين', undate: 'أُبلغ من المشاركين', release: null, restore: 'دُعي من المشاركين' };
+// where: مكان الحضورية، أو «عن بعد» لجلسة عن بعد ومعها رابطها إن وُجد (joinUrl). changed: ما تغيّر في بريد التحديث
+export function workshopTrainerMail(kind: keyof typeof WORKSHOP_TRAINER_MAIL, name: string, g: { title: string; when: string; where?: string | null; cohort?: string | null; count: number; joinUrl?: string | null; changed?: { when: boolean; where: boolean } }) {
+  const base = WORKSHOP_TRAINER_MAIL[kind];
+  const changed = kind === 'change' && g.changed ? (g.changed.when && g.changed.where ? TRAINER_CHANGE_LEAD.both : g.changed.where ? TRAINER_CHANGE_LEAD.where : TRAINER_CHANGE_LEAD.when) : base.lead;
+  // نص ثابت من الخادم: مقدمة النوع، وللتحديث ما تغيّر ثم «هذا ما صار عليه»
+  const m = { ...base, lead: kind === 'change' ? `${changed} هذا ما صار عليه:` : changed };
+  const count = TRAINER_COUNT_LABEL[kind];
+  return shell('sessions', m.subject,
+    mailText(`${hello(name)} ${m.lead}`)
+    + mailRows([['الجلسة', g.title], [TRAINER_WHEN_LABEL[kind] || 'الموعد', g.when], ...(g.cohort ? [['الدفعة', g.cohort] as [string, string]] : []), ...(g.where ? [['المكان', g.where] as [string, string]] : []),
+      ...(g.joinUrl ? [['الرابط', g.joinUrl, true] as [string, string, boolean]] : []), ...(count ? [[count, String(g.count)] as [string, string]] : [])])
     + mailButton(CONFIG.appUrl, 'افتح بوابتي')
     + mailNote(m.note),
     `${g.title} · ${g.when}`, '');
@@ -1083,6 +1116,12 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'workshop-invite-trainer', family: 'sessions', label: 'دعوة الجلسة التدريبية: بمدرب مسمى', subject: WORKSHOP_MAIL.invite.subject, html: () => workshopMail('invite', 'سارة', 'ورشة التفاوض', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', null, false, true, 'qr', 'د. منى القحطاني') },
   { key: 'workshop-change', family: 'sessions', label: 'تحديث الجلسة التدريبية: تغيّر الموعد أو المكان', subject: WORKSHOP_CHANGE_MAIL.subject, html: () => workshopChangeMail('سارة', 'ورشة التفاوض', 'الاثنين 16 نوفمبر · 10:00', 'قاعة الملك فهد، الدور الأول', null, false, { when: true, where: true }, 'د. منى القحطاني') },
   { key: 'workshop-cancel', family: 'sessions', label: 'إلغاء الجلسة التدريبية: للمدعوين', subject: WORKSHOP_CANCEL_MAIL.subject, html: () => workshopCancelMail('سارة', 'ورشة التفاوض', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', 'د. منى القحطاني') },
+  { key: 'workshop-cancel-stale', family: 'sessions', label: 'إلغاء الجلسة التدريبية: بموعد لم يُبلَّغ تغييره', subject: WORKSHOP_CANCEL_MAIL.subject, html: () => workshopCancelMail('سارة', 'ورشة التفاوض', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', 'د. منى القحطاني', true) },
+  { key: 'workshop-undate', family: 'sessions', label: 'سحب موعد الجلسة التدريبية: للمدعوين', subject: WORKSHOP_UNDATE_MAIL.subject, html: () => workshopUndateMail('سارة', 'ورشة التفاوض', 'الأحد 15 نوفمبر · 09:00', 'قاعة التدريب، الدور الثالث', 'د. منى القحطاني') },
+  { key: 'workshop-invite-to-trainer', family: 'sessions', label: 'دعوة الجلسة التدريبية: للمدرب', subject: WORKSHOP_TRAINER_MAIL.invite.subject, html: () => workshopTrainerMail('invite', 'د. منى', { title: 'ورشة التفاوض', when: 'الأحد 15 نوفمبر · 09:00', where: 'قاعة التدريب، الدور الثالث', cohort: 'دفعة الخريف', count: 18 }) },
+  { key: 'workshop-change-trainer', family: 'sessions', label: 'تحديث الجلسة التدريبية: للمدرب', subject: WORKSHOP_TRAINER_MAIL.change.subject, html: () => workshopTrainerMail('change', 'د. منى', { title: 'ورشة التفاوض', when: 'الاثنين 16 نوفمبر · 10:00', where: 'قاعة الملك فهد، الدور الأول', cohort: 'دفعة الخريف', count: 18, changed: { when: true, where: true } }) },
+  { key: 'workshop-undate-trainer', family: 'sessions', label: 'سحب موعد الجلسة التدريبية: للمدرب', subject: WORKSHOP_TRAINER_MAIL.undate.subject, html: () => workshopTrainerMail('undate', 'د. منى', { title: 'ورشة التفاوض', when: 'الأحد 15 نوفمبر · 09:00', where: 'قاعة التدريب، الدور الثالث', cohort: 'دفعة الخريف', count: 18 }) },
+  { key: 'workshop-release-trainer', family: 'sessions', label: 'استبدال مدرب الجلسة التدريبية: للمدرب السابق', subject: WORKSHOP_TRAINER_MAIL.release.subject, html: () => workshopTrainerMail('release', 'د. منى', { title: 'ورشة التفاوض', when: 'الأحد 15 نوفمبر · 09:00', where: 'قاعة التدريب، الدور الثالث', cohort: 'دفعة الخريف', count: 0 }) },
   { key: 'workshop-cancel-trainer', family: 'sessions', label: 'إلغاء الجلسة التدريبية: للمدرب', subject: WORKSHOP_TRAINER_MAIL.cancel.subject, html: () => workshopTrainerMail('cancel', 'د. منى', { title: 'ورشة التفاوض', when: 'الأحد 15 نوفمبر · 09:00', where: 'قاعة التدريب، الدور الثالث', cohort: 'دفعة الخريف', count: 18 }) },
   { key: 'workshop-restore-trainer', family: 'sessions', label: 'إعادة جلسة تدريبية ملغاة: للمدرب', subject: WORKSHOP_TRAINER_MAIL.restore.subject, html: () => workshopTrainerMail('restore', 'د. منى', { title: 'ورشة التفاوض', when: 'الأحد 15 نوفمبر · 09:00', where: 'قاعة التدريب، الدور الثالث', cohort: 'دفعة الخريف', count: 18 }) },
   { key: 'group-session-invite', family: 'sessions', label: 'الجلسة الجماعية مع المستشار: دعوة المشارك', subject: GROUP_SESSION_MAIL.invite.subject, html: () => groupSessionMail('invite', 'سارة', { title: 'جلسة جماعية: الاستشارة', when: 'الأحد 6 ديسمبر، 10:00 ص', expert: 'د. منى القحطاني', joinUrl: 'https://meet.example.com/group', counts: true }) },

@@ -60,7 +60,7 @@ export function mailChoice(ctx, v, now = Date.now()) {
   // دُعيت وتغيّر موعدها أو مكانها: إشعار بالتغيير. ودُعيت ولم يتغير شيء: لا بريد (إعادة الدعوة من زرها)
   return c.when || c.where ? 'change' : null;
 }
-export const TRAINER_HELP_AR = 'من مستشار الدفعة وفريق خبرائها. يراه المشارك «مع فلان» في رحلته ودعوته، وتظهر الجلسة للمدرب في بوابته باسمه.';
+export const TRAINER_HELP_AR = 'من مستشار الدفعة وفريق خبرائها. يراه المشارك «مع فلان» في رحلته ودعوته، وتظهر الجلسة للمدرب في بوابته باسمه. تصله دعوتها وتحديثها بالبريد مع المدعوين، وتغييره في جلسة أُرسلت دعوتها يبلّغ السابق ويدعو الجديد.';
 export const TRAINER_NONE_AR = 'لا خبراء في فريق هذه الدفعة بعد. أضفهم من «الفريق والمجموعات» ليُسمى منهم مدرب.';
 /** حقول المدرب والبريد لنموذج الجلسة
  * @param {{ trainersOf?: ((v: any) => { id: string, full_name: string }[]) | null, mail?: { original?: any, cohortId?: string | null } | null }} o */
@@ -78,11 +78,11 @@ export function sessionExtras({ trainersOf = null, mail = null } = {}) {
   if (mail) {
     out.push({
       name: 'invite', label: 'أرسل الدعوة عند الحفظ', type: 'check', show: (v) => mailChoice(mail, v) === 'invite',
-      help: 'بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. والتذكير قبل يوم وقبل ساعة يُرسل آليًا.',
+      help: 'بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة ولمدربها المسمى. والتذكير قبل يوم وقبل ساعة يُرسل آليًا.',
     });
     out.push({
       name: 'notify_change', label: 'أبلغ المدعوين بالتغيير', type: 'check', show: (v) => mailChoice(mail, v) === 'change',
-      help: 'أُرسلت دعوة هذه الجلسة من قبل. بريد قصير بالموعد والمكان الجديدين وملف تقويم محدَّث لمن دُعي.',
+      help: 'أُرسلت دعوة هذه الجلسة من قبل. بريد قصير بالموعد والمكان الجديدين وملف تقويم محدَّث لمن دُعي ولمدربها المسمى.',
     });
   }
   return out;
@@ -98,29 +98,38 @@ export function saveBody(v, base = {}) {
 // قبل التأكيد يرى المدير من الخادم كم مشاركًا يُبلَّغ (العدد من القراءة التي يرسل بها)، وله ألا يبلّغ لجلسة أُنشئت بالخطأ.
 // والافتراض الإبلاغ. جلسة لم تُعلن أو انتهت أو بلا موعد أو عامة لا بريد لها، ويُقال ذلك في سطره. ومن يسحب الإلغاء اكتماله
 // يُعدّ في سطر تحذير. وإعادة الملغاة تسأل: هل يُدعون من جديد؟
+// وسحب موعد جلسة أُعلنت (undate) يسأل السؤال نفسه: المدعوون يُبلَّغون بملف يزيل الموعد، والجلسة باقية «يُحدد لاحقًا».
+// noun: ما تسمي به الشاشة الجلسة («اليوم» في بطاقة المرحلة، «الموعد» في «الحضور والجلسات»)
 const peopleAr = (n) => countAr(n, 'مشارك واحد', 'مشاركَين', 'مشاركين', 'مشاركًا');
 /** أي خروج أو عودة في هذا الحفظ؟ يطابق leaveOf في الخادم. الدفعة تُقارن حين يحملها النموذج وحده (شاشة «الحضور والجلسات»)
- * @param {any} original الجلسة قبل التحرير @param {any} out ما سيُحفظ @returns {'cancel' | 'move' | 'restore' | null} */
+ * @param {any} original الجلسة قبل التحرير @param {any} out ما سيُحفظ @returns {'cancel' | 'move' | 'restore' | 'undate' | null} */
 export function leaveKind(original, out) {
   if (!original) return null;
   if (original.active === false) return out.active !== false ? 'restore' : null;
   if (out.active === false) return 'cancel';
-  return 'cohort_id' in out && !!original.cohort_id && (out.cohort_id || null) !== original.cohort_id ? 'move' : null;
+  if ('cohort_id' in out && !!original.cohort_id && (out.cohort_id || null) !== original.cohort_id) return 'move';
+  return !isUndated(original) && !out.starts_at ? 'undate' : null;
 }
 const NO_MAIL_AR = Object.freeze({
   unannounced: 'لا يُرسل بريد: لم تُرسل دعوة هذه الجلسة لأحد.', ended: 'لا يُرسل بريد: الجلسة انتهت.', undated: 'لا يُرسل بريد: الجلسة بلا موعد.',
   general: 'لا يُرسل بريد: الجلسة لكل الدفعات، فلا يُعرف مدعووها.', inactive: 'لا يُرسل بريد: الجلسة ملغاة من قبل.',
 });
 const LEAVE_AR = Object.freeze({
-  cancel: { ask: (t) => `يُلغى «${t}»: يختفي من رحلة المشاركين ولا يُرسل له تذكير، وما سُجّل من حضور محفوظ. يُعاد بنقرة.`, ok: 'ألغِ اليوم', mail: 'بريد الإلغاء', lost: 'بإلغائه' },
-  delete: { ask: (t) => `يُحذف «${t}» نهائيًا ولا يُستعاد.`, ok: 'احذف', mail: 'بريد الإلغاء', lost: 'بحذفه' },
-  move: { ask: (t) => `يُنقل «${t}» عن دفعته، فيختفي من رحلة أعضائها.`, ok: 'احفظ وانقله', mail: 'بريد الإلغاء', lost: 'بنقله' },
+  cancel: { ask: (t) => `يُلغى «${t}»: يختفي من رحلة المشاركين ولا يُرسل له تذكير، وما سُجّل من حضور محفوظ. يُعاد بنقرة.`, ok: (noun) => `ألغِ ${noun}`, mail: 'بريد الإلغاء', lost: 'بإلغائه', gone: 'الملغى' },
+  delete: { ask: (t) => `يُحذف «${t}» نهائيًا ولا يُستعاد.`, ok: () => 'احذف', mail: 'بريد الإلغاء', lost: 'بحذفه', gone: 'الملغى' },
+  move: { ask: (t) => `يُنقل «${t}» عن دفعته، فيختفي من رحلة أعضائها.`, ok: () => 'احفظ وانقله', mail: 'بريد الإلغاء', lost: 'بنقله', gone: 'الملغى' },
+  undate: { ask: (t) => `يُسحب موعد «${t}»: يبقى في رحلة المشاركين بلا موعد، «${SESSION_TBD_AR}».`, ok: () => 'احفظ بلا موعد', mail: 'بريد سحب الموعد', lost: '', gone: 'المسحوب' },
+});
+const LEAVE_CHECK_AR = Object.freeze({
+  undate: { label: 'أبلغ المدعوين بسحب الموعد', help: 'أزل العلامة إن لم يحتج أحد أن يعلم. يبقى الموعد حينها في تقاويمهم.' },
+  other: { label: 'أبلغ المدعوين بالإلغاء', help: 'أزل العلامة لجلسة أُنشئت بالخطأ ولا يحتاج أحد أن يعلم بها.' },
 });
 const withTrainer = (n, trainer) => (n ? `${peopleAr(n)}${trainer ? `، وإلى المدرب ${trainer}` : ''}` : trainer ? `المدرب ${trainer}` : '');
 /** سؤال التأكيد من معاينة الخادم (leave في رد admin.workshop-save وadmin.workshop-delete بـpreview)
- * @param {any} leave { kind, notify: { members, trainer } | null, skipped, uncomplete } @param {string} title عنوان الجلسة
- * @returns {{ text: string, lines: any[], ok: string, danger?: boolean, check?: any } | null} null: لا سؤال (إعادة بلا دعوة) */
-export function leaveAsk(leave, title) {
+ * @param {any} leave { kind, notify: { members, trainer } | null, skipped, uncomplete, told_at? } @param {string} title عنوان الجلسة
+ * @param {{ noun?: string }} o noun: «اليوم» أو «الموعد» كما تسميه الشاشة
+ * @returns {{ text: string, lines: any[], ok: string, danger?: boolean, check?: any } | null} null: لا سؤال (إعادة بلا دعوة، أو سحب موعد لا يبلَّغ به أحد) */
+export function leaveAsk(leave, title, { noun = 'اليوم' } = {}) {
   if (!leave) return null;
   const name = title || 'الجلسة';
   const who = leave.notify ? withTrainer(leave.notify.members, leave.notify.trainer) : '';
@@ -128,37 +137,42 @@ export function leaveAsk(leave, title) {
     if (!who) return null;
     return {
       text: `يُعاد «${name}» ويظهر للمشاركين في رحلتهم.`, ok: 'أعده',
-      lines: [`أُعلن هذا اليوم ثم أُلغي. تُرسل دعوته من جديد إلى ${who}، ومعها ملف يعيد الموعد إلى التقويم.`],
-      check: { name: 'reinvite', label: 'ادعُهم من جديد', help: 'بلا العلامة يُعاد اليوم بلا بريد، وتُرسل دعوته لاحقًا من زرها.', checked: true },
+      lines: [`أُعلن هذا ${noun} ثم أُلغي. تُرسل دعوته من جديد إلى ${who}، ومعها ملف يعيد الموعد إلى التقويم.`],
+      check: { name: 'reinvite', label: 'ادعُهم من جديد', help: `بلا العلامة يُعاد ${noun} بلا بريد، وتُرسل دعوته لاحقًا من زرها.`, checked: true },
     };
   }
+  const undate = leave.kind === 'undate';
+  // سحب موعد جلسة لم يُدعَ إليها أحد حفظ عادي: لا سؤال
+  if (undate && !who) return null;
   const t = LEAVE_AR[leave.kind] || LEAVE_AR.cancel;
   const lines = [];
   if (who) lines.push(`يصل ${t.mail} إلى ${who}، ومعه ملف يزيل الموعد من التقويم.`);
   else lines.push(leave.notify ? 'لا يُرسل بريد: لا أعضاء في الدفعة يصلهم بريد الآن.' : NO_MAIL_AR[leave.skipped] || 'لا يُرسل بريد.');
+  // الموعد تغيّر بعد آخر دعوة بلا إبلاغ: المدعوون يعرفون الموعد السابق، والبريد وملفه يقولانه
+  if (who && leave.told_at) lines.push(`المدعوون يعرفون موعدًا سابقًا لم يُبلَّغوا بتغييره: ${weekTime(leave.told_at)}. البريد يقول إنه هو ${t.gone}.`);
   if (leave.uncomplete > 0) lines.push({ tone: 'warn', text: `${peopleAr(leave.uncomplete)} ${leave.uncomplete === 1 ? 'أتم' : 'أتموا'} نشاط الحضور أو مرحلته بهذه الجلسة، و${t.lost} يعود غير مكتمل ${leave.uncomplete === 1 ? 'له' : 'لهم'}.` });
   return {
-    text: t.ask(name), ok: t.ok, danger: true, lines,
-    ...(who ? { check: { name: 'notify_cancel', label: 'أبلغ المدعوين بالإلغاء', help: 'أزل العلامة لجلسة أُنشئت بالخطأ ولا يحتاج أحد أن يعلم بها.', checked: true } } : {}),
+    text: t.ask(name), ok: t.ok(noun), ...(undate ? {} : { danger: true }), lines,
+    ...(who ? { check: { name: 'notify_cancel', ...(undate ? LEAVE_CHECK_AR.undate : LEAVE_CHECK_AR.other), checked: true } } : {}),
   };
 }
 /** معاينة الخروج من الخادم ثم سؤاله. يعيد null بلا سؤال، أو { error } إن تعذّرت المعاينة فلا يُحفظ شيء.
  * وإن تغيّر الوسم في الحفظ نفسه أُلحق أثره بالسطور وتأكيده بالمحفوظ
  * @param {(action: string, body: any) => Promise<any>} call @param {any} body جسم الحفظ (saveBody)
- * @param {{ title?: string, counting?: string | null }} o */
-export async function leaveConfirm(call, body, { title = '', counting = null } = {}) {
+ * @param {{ title?: string, counting?: string | null, noun?: string }} o */
+export async function leaveConfirm(call, body, { title = '', counting = null, noun = 'اليوم' } = {}) {
   const r = await call('admin.workshop-save', { ...body, preview: true });
   if (!r?.success) return { error: r?.message || 'تعذّرت معاينة أثر الحفظ، فلم يُحفظ شيء' };
-  const ask = leaveAsk(r.leave, title);
+  const ask = leaveAsk(r.leave, title, { noun });
   if (!r.changed) return ask;
   const flip = { lines: [`ويتغير وسمها إلى «${COUNTING_AR[counting]}»:`, ...countingImpactAr(r.impact, counting)], patch: { counting_confirm: true } };
   return ask ? { ...ask, lines: [...ask.lines, ...flip.lines], patch: flip.patch } : { text: `يتغير وسم «${title || 'الورشة'}» إلى «${COUNTING_AR[counting]}». هذا أثره على أعضاء الدفعة:`, lines: flip.lines.slice(1), ok: 'غيّر الوسم', patch: flip.patch };
 }
 /** سؤال الحذف من معاينة الخادم */
-export async function deleteConfirm(call, id, title = '') {
+export async function deleteConfirm(call, id, title = '', { noun = 'اليوم' } = {}) {
   const r = await call('admin.workshop-delete', { id, preview: true });
   if (!r?.success) return { error: r?.message || 'تعذّرت معاينة الحذف، فلم يُحذف شيء' };
-  return leaveAsk(r.leave, title);
+  return leaveAsk(r.leave, title, { noun });
 }
 
 // ── وسم الورشة: إلزامية أو اختيارية (قرار المالك 2026-11-21، القاعدة في optional.js) ──
@@ -207,21 +221,27 @@ export async function countingConfirm(call, body, { base = null, preview = false
   return { text: base?.text ? `${base.text}\nوأثر وسمها «${COUNTING_AR[counting]}» على أعضاء الدفعة:` : text, lines, ok: base?.ok || (changed ? 'غيّر الوسم' : 'احفظ'), patch: { counting_confirm: true } };
 }
 // تأكيد قبل حفظ يرسل بريدًا (المرحلة 4): الدعوة أو إشعار التغيير لأعضاء الدفعة كلهم، فلا يخرج بنقرة واحدة
-export const mailConfirm = (out) => (out.invite === true ? { text: `تُحفظ «${out.title_ar || 'الجلسة'}» وتُرسل دعوتها بالبريد إلى أعضاء الدفعة الآن، ومعها ملف تقويم. متابعة؟`, ok: 'احفظ وأرسل الدعوة' }
-  : out.notify_change === true ? { text: `يُحفظ التغيير في «${out.title_ar || 'الجلسة'}» ويُرسل به بريد إلى من دُعي إليها، ومعه ملف تقويم محدَّث. متابعة؟`, ok: 'احفظ وأبلغهم' } : null);
+export const mailConfirm = (out) => (out.invite === true ? { text: `تُحفظ «${out.title_ar || 'الجلسة'}» وتُرسل دعوتها بالبريد إلى أعضاء الدفعة${out.expert_id ? ' ومدربها' : ''} الآن، ومعها ملف تقويم. متابعة؟`, ok: 'احفظ وأرسل الدعوة' }
+  : out.notify_change === true ? { text: `يُحفظ التغيير في «${out.title_ar || 'الجلسة'}» ويُرسل به بريد إلى من دُعي إليها${out.expert_id ? ' وإلى مدربها' : ''}، ومعه ملف تقويم محدَّث. متابعة؟`, ok: 'احفظ وأبلغهم' } : null);
 const SKIP_AR = Object.freeze({
   general: 'لم تُرسل الدعوة: الجلسة لكل الدفعات', undated: 'لم يُرسل بريد: الجلسة بلا موعد', ended: 'لم يُرسل بريد: الجلسة انتهت',
   inactive: 'لم يُرسل بريد: الجلسة ملغاة', invited: 'الدعوة أُرسلت من قبل، فلم تُرسل ثانية',
 });
-const trainerAr = (m) => (m.trainer === 'sent' ? '، وأُبلغ المدرب' : m.trainer === 'queued' ? '، وبريد المدرب ينتظر حصة البريد' : m.trainer === 'failed' ? '، وتعذّر بريد المدرب' : '');
-/** ما جرى لبريد الإلغاء بعد الحفظ أو الحذف. فارغ إن لم يكن له بريد أصلًا (لم تُعلن، انتهت...) */
-export function cancelResultAr(c) {
+// المدرب المسمى يصله ما يصل المدعوين (الدعوة والتحديث والإلغاء وسحب الموعد)، بريد واحد
+export const trainerAr = (m) => (m?.trainer === 'sent' ? '، وأُبلغ المدرب' : m?.trainer === 'queued' ? '، وبريد المدرب ينتظر حصة البريد' : m?.trainer === 'failed' ? '، وتعذّر بريد المدرب' : '');
+/** ما جرى لبريد الإلغاء (أو سحب الموعد) بعد الحفظ أو الحذف. فارغ إن لم يكن له بريد أصلًا (لم تُعلن، انتهت...) */
+export function cancelResultAr(c, mail = 'بريد الإلغاء') {
   if (!c) return '';
-  if (c.error) return 'وتعذّر بريد الإلغاء، فأبلغ المدعوين بطريقتك';
+  if (c.error) return `وتعذّر ${mail}، فأبلغ المدعوين بطريقتك`;
   if (c.skipped) return c.skipped === 'opted_out' ? 'ولم يُبلَّغ أحد كما اخترت' : '';
   if (!c.total) return trainerAr(c).replace(/^، و/, 'و');
-  return mailCount(c, 'وأُرسل بريد الإلغاء', 'وأُرسل بريد الإلغاء') + trainerAr(c);
+  return mailCount(c, `وأُرسل ${mail}`, `وأُرسل ${mail}`) + trainerAr(c);
 }
+// استبدال المدرب في جلسة معلنة: للسابق بريد يزيل الموعد من تقويمه (released)، وللجديد الدعوة (trainer في رد الحفظ نفسه)
+const SWAP_AR = Object.freeze({
+  released: { sent: 'وأُبلغ المدرب السابق', queued: 'وبريد المدرب السابق ينتظر حصة البريد', failed: 'وتعذّر بريد المدرب السابق' },
+  trainer: { sent: 'وأُرسلت الدعوة إلى المدرب الجديد', queued: 'ودعوة المدرب الجديد تنتظر حصة البريد', failed: 'وتعذّرت دعوة المدرب الجديد' },
+});
 // queued: لم تتسع لها حصة بريد اليوم فتنتظر في «لم يُرسل» (مركز البريد) وتخرج آليًّا. تُذكر صراحةً: ليست متعذرة ولا واصلة بعد
 export const queuedAr = (r) => (r?.queued ? `، و${r.queued} تنتظر حصة البريد وتخرج آليًّا` : '');
 const mailCount = (r, one, many) => (r.failed ? `${many} إلى ${r.sent}، وتعذّرت ${r.failed}` : r.total === 0 ? 'لا أعضاء في الدفعة يصلهم بريد الآن' : `${one} إلى ${r.sent} ${r.sent >= 3 && r.sent <= 10 ? 'مشاركين' : 'مشاركًا'}`) + queuedAr(r);
@@ -230,11 +250,12 @@ export function mailResultAr(r) {
   if (!r) return '';
   if (r.mail_error) return 'وتعذّر البريد، فأرسل الدعوة من زرها';
   const m = r.invite || r.change;
-  const gone = cancelResultAr(r.cancel);
-  if (!m) return gone;
+  const gone = r.undate ? cancelResultAr(r.undate, 'بريد سحب الموعد') : cancelResultAr(r.cancel);
+  const swap = [SWAP_AR.released[r.released] || '', SWAP_AR.trainer[r.trainer] || ''];
+  if (!m) return [gone, ...swap].filter(Boolean).join('، ');
   const said = m.skipped ? SKIP_AR[m.skipped] || 'لم يُرسل بريد'
-    : r.invite ? mailCount(m, 'وأُرسلت الدعوة', 'وأُرسلت الدعوة') + (m.restored ? trainerAr(m) : '') : mailCount(m, 'وأُبلغ بالتغيير', 'وأُرسل إشعار التغيير');
-  return [gone, said].filter(Boolean).join('، ');
+    : r.invite ? mailCount(m, 'وأُرسلت الدعوة', 'وأُرسلت الدعوة') + trainerAr(m) : mailCount(m, 'وأُبلغ بالتغيير', 'وأُرسل إشعار التغيير') + trainerAr(m);
+  return [gone, swap[0], said].filter(Boolean).join('، ');
 }
 /** رسالة الحفظ كاملة: النص، ثم ما لم يُحفظ قبل ترحيله، ثم ما جرى للبريد */
 export function savedAr(msg, r) {

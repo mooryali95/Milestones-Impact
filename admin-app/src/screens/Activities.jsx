@@ -14,7 +14,7 @@ import Form from '../Form.jsx';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { readQuery } from '../route.js';
 import { GroupSessions } from './GroupSession.jsx';
-import { countingChip, countingConfirm, countingField, countingValue, deleteConfirm, leaveConfirm, leaveKind, mailConfirm, needsCountingPreview, queuedAr, saveBody, savedAr, sessionExtras, VERIFY_AR, withCapacity } from '../workshop-days.js';
+import { cancelResultAr, countingChip, countingConfirm, countingField, countingValue, deleteConfirm, leaveConfirm, leaveKind, mailConfirm, needsCountingPreview, queuedAr, saveBody, savedAr, sessionExtras, trainerAr, VERIFY_AR, withCapacity } from '../workshop-days.js';
 
 import { COACH_STATUS_ADMIN, READ_STATUS_ADMIN, SESSION_MODE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { isUndated, minutesAr, renderJourneyText, SESSION_DEFAULTS, SESSION_LINK_LATER_AR, SESSION_TBD_AR, sessionsAr } from '../../../supabase/functions/leaders-api/logic.js';
@@ -87,13 +87,15 @@ export function Attendance({ id, cohortId = null, canWrite, preselect, names, on
 
 // الدعوة تذهب لأعضاء الدفعة كلهم، فتُؤكَّد؛ وإعادتها تُؤكَّد صريحة. مصدر واحد لهذه الشاشة ولأيام بطاقة المرحلة (W3)
 export async function inviteSession(s, { confirm, toast }) {
-  if (!(await confirm(s.invited_at ? `أُرسلت دعوة «${s.title_ar}» من قبل. إرسالها مرة أخرى لكل أعضاء الدفعة؟` : `تُرسل دعوة «${s.title_ar}» بالبريد إلى كل أعضاء الدفعة، ومعها ملف تقويم. متابعة؟`))) return false;
+  if (!(await confirm(s.invited_at ? `أُرسلت دعوة «${s.title_ar}» من قبل. إرسالها مرة أخرى لكل أعضاء الدفعة${s.expert_id ? ' ومدربها' : ''}؟` : `تُرسل دعوة «${s.title_ar}» بالبريد إلى كل أعضاء الدفعة${s.expert_id ? ' ومدربها' : ''}، ومعها ملف تقويم. متابعة؟`))) return false;
   const r = await L('admin.workshop-invite', { id: s.id, again: !!s.invited_at });
   if (!r.success) { toast(r.message); return false; }
-  toast((r.failed ? `أُرسلت ${r.sent} دعوة، وتعذّرت ${r.failed}` : `أُرسلت الدعوة إلى ${r.sent} مشاركًا`) + queuedAr(r));
+  toast((r.failed ? `أُرسلت ${r.sent} دعوة، وتعذّرت ${r.failed}` : `أُرسلت الدعوة إلى ${r.sent} مشاركًا`) + queuedAr(r) + trainerAr(r));
   return true;
 }
 
+// هذه الشاشة تسمي الجلسة «موعدًا» («+ موعد»، «تحرير موعد»): أسئلة التأكيد بالكلمة نفسها
+const NOUN = 'الموعد';
 function Workshops({ data, reload, canWrite }) {
   const { toast, confirm } = useUI();
   const invite = async (s) => { if (await inviteSession(s, { confirm, toast })) reload(); };
@@ -110,8 +112,8 @@ function Workshops({ data, reload, canWrite }) {
   const optionalReady = data.optional_ready !== false;
   const withCounting = (fields, on = true) => (on ? [countingField({ ready: optionalReady }), ...fields] : fields);
   // إلغاء جلسة أو نقلها عن دفعتها أو إعادتها من النموذج: سؤال بعدد من يُبلَّغ من الخادم (leaveConfirm). وإلا تأكيد الوسم والبريد كما كان
-  const remove = (s) => async (o = {}) => { const r = await L('admin.workshop-delete', { id: s.id, ...(o.notify_cancel === false ? { notify_cancel: false } : {}) }); saved.current = r?.success ? r : null; return r; };
-  const confirmFor = (base, r, original = null) => (out) => (leaveKind(original, out) ? leaveConfirm(L, saveBody(out, base), { title: out.title_ar, counting: out.counting }) : countingConfirm(L, saveBody(out, base), { base: mailConfirm(out), preview: needsCountingPreview({ original, counting: out.counting, req: r }) && !!(out.cohort_id || original?.cohort_id), counting: out.counting, title: out.title_ar, changed: !!original }));
+  const remove = (s) => async (o = {}) => { const r = await L('admin.workshop-delete', { id: s.id, ...(o.notify_cancel === false ? { notify_cancel: false } : {}) }); saved.current = r?.success ? { ...r, deleted: true } : null; return r; };
+  const confirmFor = (base, r, original = null) => (out) => (leaveKind(original, out) ? leaveConfirm(L, saveBody(out, base), { title: out.title_ar, counting: out.counting, noun: NOUN }) : countingConfirm(L, saveBody(out, base), { base: mailConfirm(out), preview: needsCountingPreview({ original, counting: out.counting, req: r }) && !!(out.cohort_id || original?.cohort_id), counting: out.counting, title: out.title_ar, changed: !!original }));
   // القفز من «الرحلة في لمحة» (‎?req=<المتطلب>‎): إلى جلسات النشاط وزر «+ موعد» عنده
   useEffect(() => {
     const req = new URLSearchParams(readQuery()).get('req');
@@ -152,7 +154,7 @@ function Workshops({ data, reload, canWrite }) {
                       {canWrite && s.active && s.cohort_id && !isUndated(s) && new Date(s.ends_at) > new Date() && (
                         <button className="la-link" title="بريد بالموعد والمكان وملف تقويم لأعضاء الدفعة. التذكير قبل يوم وقبل ساعة يُرسل آليًا." onClick={() => invite(s)}>{s.invited_at ? 'أُرسلت الدعوة' : 'أرسل الدعوة'}</button>
                       )}
-                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), confirmDelete: () => deleteConfirm(L, s.id, s.title_ar), onDelete: s.attended ? undefined : remove(s) })}>تحرير</button>}
+                      {canWrite && <button className="la-link" onClick={() => setForm({ title: 'تحرير موعد', fields: withCounting(sessionFields(cohorts, s.cohort_id, { capacity, trainersOf, mail: { original: s } }), !!s.cohort_id), values: { ...s, notify_change: true, counting: countingValue(s) }, onSave: save({ id: s.id }), confirmSave: confirmFor({ id: s.id }, r, s), confirmDelete: () => deleteConfirm(L, s.id, s.title_ar, { noun: NOUN }), onDelete: s.attended ? undefined : remove(s) })}>تحرير</button>}
                     </td>
                   </tr>
                 ))}</tbody>
@@ -161,7 +163,7 @@ function Workshops({ data, reload, canWrite }) {
           </section>
         );
       })}
-      {form && <Form {...form} onClose={(done) => { setForm(null); if (done) { toast(savedAr('تم الحفظ', saved.current)); saved.current = null; reload(); } }} />}
+      {form && <Form {...form} onClose={(done) => { setForm(null); if (done) { toast(saved.current?.deleted ? ['حُذف الموعد', cancelResultAr(saved.current.cancel)].filter(Boolean).join('، ') : savedAr('تم الحفظ', saved.current)); saved.current = null; reload(); } }} />}
       {qr && <QrScreen id={qr} onClose={() => { setQr(null); reload(); }} onSheet={canWrite ? () => { setAtt(qr); setQr(null); } : null} />}
       {att && <Attendance id={att} canWrite={canWrite} onClose={() => { setAtt(null); reload(); }} />}
     </>

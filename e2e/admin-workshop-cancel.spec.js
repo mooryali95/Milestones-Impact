@@ -196,7 +196,8 @@ for (const width of [1440, 390]) {
     await box.getByRole('checkbox', { name: /أبلغ المدعوين بالإلغاء/ }).uncheck();
     expect(await inView(page, box)).toBe(true);
     await shot(page, 'cancel-no-notify');
-    await box.getByRole('button', { name: 'ألغِ اليوم', exact: true }).click();
+    // هذه الشاشة تسمي الجلسة «موعدًا»، فزر التأكيد بكلمتها (كان «ألغِ اليوم» كما في بطاقة المرحلة)
+    await box.getByRole('button', { name: 'ألغِ الموعد', exact: true }).click();
     await expect(form).toBeHidden();
     expect(saves(calls).at(-1)).toMatchObject({ notify_cancel: false, row: { id: 'w2', active: false } });
     expect(saves(calls).at(-1).preview).toBeUndefined();
@@ -219,7 +220,8 @@ for (const width of [1440, 390]) {
     await expect(ws.locator('tr', { hasText: 'اليوم 3' })).toHaveCount(0);
     const gone = calls.filter((c) => c.action === 'admin.workshop-delete');
     expect(gone.map((c) => [c.id, !!c.preview, 'notify_cancel' in c])).toEqual([['w3', true, false], ['w3', false, false]]);
-    await expect(page.locator('.toast')).toHaveText(`تم الحفظ، وأُرسل بريد الإلغاء إلى ${MEMBERS} مشاركًا`);
+    // بعد الحذف تقول الرسالة إنه حذف (كانت «تم الحفظ»)
+    await expect(page.locator('.toast')).toHaveText(`حُذف الموعد، وأُرسل بريد الإلغاء إلى ${MEMBERS} مشاركًا`);
     expect(await noOverflow(page)).toBe(true);
   });
 }
