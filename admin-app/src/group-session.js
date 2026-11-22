@@ -93,3 +93,38 @@ export function groupSections(groups) {
     cancelled: (groups || []).filter((g) => g.status === 'cancelled').slice(0, 5),
   };
 }
+
+// ── المتابعات: إضافة مدعوين إلى جلسة قائمة، وإعادة إرسال الدعوة ──
+/** نتيجة الإضافة جملة */
+export function addedAr(r) {
+  if (!r?.success) return '';
+  if (!r.added) return 'كلهم مدعوون أصلًا، فلا إضافة ولا بريد.';
+  const head = `أُضيف ${peopleAr(r.added)}${r.exceptions ? ` (${r.exceptions} استثناءً)` : ''}.`;
+  if (r.past) return `${head} بدأت الجلسة، فلا بريد.`;
+  const mail = mailAr(r.mail);
+  return mail ? `${head} ${mail}. المدعوون السابقون لم يصلهم شيء.` : head;
+}
+/** حال إعادة الدعوة لمدعو: none لا تُعاد له (ليس محجوزًا، أو حساب اختبار)، waiting دعوته في الطابور، held أُرسلت قبل قليل، ready تُعاد */
+export function resendState(m, now = Date.now()) {
+  if (!m || m.state !== 'booked' || m.test) return 'none';
+  if (m.mail?.state === 'waiting') return 'waiting';
+  return m.mail?.resend_at && Date.parse(m.mail.resend_at) > now ? 'held' : 'ready';
+}
+/** سطر بريد الدعوة تحت اسم المدعو: متى خرجت آخر مرة، أو أنها تنتظر، أو لم تخرج. known: هل قُرئ سجل البريد */
+export function inviteLineAr(m, when, known = true) {
+  if (!m || m.state !== 'booked' || m.test || !known) return '';
+  const x = m.mail;
+  if (!x) return 'لا دعوة له في سجل البريد';
+  if (x.state === 'waiting') return 'دعوته تنتظر في صندوق «لم يُرسل»';
+  if (x.state === 'failed') return `لم تخرج دعوته (${when(x.at)})`;
+  return `آخر دعوة: ${when(x.at)}`;
+}
+/** من تُعاد دعوتهم الآن بزر «للكل» */
+export const resendable = (g, now = Date.now()) => (g?.members || []).filter((m) => resendState(m, now) === 'ready');
+/** نتيجة إعادة الإرسال جملة */
+export function resentAr(r) {
+  if (!r?.success) return '';
+  const mail = mailAr(r.mail);
+  const held = r.throttled ? `${r.throttled === 1 ? 'واحد لم تُعد دعوته' : `${r.throttled} لم تُعد دعوتهم`}: أُرسلت قبل أقل من ${r.minutes || 60} دقيقة أو تنتظر في الطابور` : '';
+  return [mail, held].filter(Boolean).join('. ') || 'لا دعوة تُعاد الآن';
+}

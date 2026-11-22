@@ -71,7 +71,7 @@ export const AUDIT_AR = {
   'participant.create': 'أُنشئ حسابه', 'participant.register': 'سجّل في المنصة', 'participant.delete': 'حُذف حسابه', 'participants.import': 'أُضيف باستيراد قائمة',
   'participant.nudge': 'ذُكِّر بمتابعة رحلته', 'nudge.seen': 'رأى تذكيرًا في رحلته', 'mail.login-link': 'أُرسل إليه رابط دخول',
   'placement.approve-bulk': 'اعتُمد مستواه في اعتماد جماعي', 'final.reopen': 'أُعيد فتح تقييمه الختامي', 'group.assign': 'وُزّع على مجموعة',
-  'coaching.group-add': 'دُعي إلى جلسة جماعية مع المستشار', 'coaching.group-exception': 'دُعي إلى جلسة جماعية استثناءً', 'coaching.group-remove': 'أُزيل من جلسة جماعية',
+  'coaching.group-add': 'دُعي إلى جلسة جماعية مع المستشار', 'coaching.group-exception': 'دُعي إلى جلسة جماعية استثناءً', 'coaching.group-remove': 'أُزيل من جلسة جماعية', 'coaching.group-resend': 'أُعيد إرسال دعوة جلسته الجماعية',
   'coaching.group-cancelled': 'أُلغيت جلسة جماعية دُعي إليها', 'coaching.group-mark': 'سُجّل حضوره في جلسة جماعية',
   'coaching.add': 'أُضيفت له جلسة توجيه', 'coaching.booked': 'حجز جلسة توجيه', 'coaching.instant': 'طلب اتصالًا فوريًا',
   'certificate.awaiting-name': 'شهادته تنتظر تأكيد اسمه', 'certificate.skipped-disabled': 'لم تصدر شهادته لأن الإصدار موقوف',

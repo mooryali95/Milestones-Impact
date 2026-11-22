@@ -1,6 +1,6 @@
 // الجلسة الجماعية مع المستشار (تصور تشغيل الدفعة 2026-11-19، المرحلة 5): نموذج العرض في اللوحة، وورقة حضورها المشتركة مع بوابة المستشار
 import { describe, expect, it } from 'vitest';
-import { conflictAr, formBlock, groupCountsAr, groupSections, invited, mailAr, previewBody, previewGroups, previewLine, saveBody, savedAr } from './group-session.js';
+import { addedAr, inviteLineAr, resendable, resendState, resentAr, conflictAr, formBlock, groupCountsAr, groupSections, invited, mailAr, previewBody, previewGroups, previewLine, saveBody, savedAr } from './group-session.js';
 import { allAttended, canEdit, countsAr, draftAr, filterPeople, groupCounts, groupMarks, savedAr as sheetSavedAr, stateOf, withState } from '../../shared/ui/group-sheet.js';
 import { expertStats, sessionUnits, tallyOnce, coachingStatus, groupMemberState } from '../../supabase/functions/leaders-api/logic.js';
 import { INBOX_KINDS, inboxOf } from '../../supabase/functions/leaders-api/inbox.js';
@@ -116,5 +116,43 @@ describe('الجلسة الجماعية في الحساب: مرة واحدة ل�
     const box = inboxOf({ coaching_group_confirm: [{ id: 'g1', title: 'جلسة جماعية', sub: '3 مدعوين بلا تأكيد', at: '2026-12-07T08:00:00Z' }] }, now);
     expect(box.items[0]).toMatchObject({ kind: 'coaching_group_confirm', kind_ar: INBOX_KINDS.coaching_group_confirm.label, late: true, to: { tab: 'activities', id: null, query: 'sub=groups' } });
     expect(box.by_tab.activities).toEqual({ n: 1, late: 1 });
+  });
+});
+
+describe('المتابعات: إضافة مدعوين إلى جلسة قائمة، وإعادة إرسال الدعوة', () => {
+  const NOW = Date.parse('2026-11-20T09:00:00Z');
+  const when = (iso) => `[${iso.slice(11, 16)}]`;
+  const m = (extra = {}) => ({ id: 'p', full_name: 'سارة', state: 'booked', ...extra });
+  it('نتيجة الإضافة جملة: العدد والاستثناء والبريد، وأن السابقين لم يصلهم شيء', () => {
+    expect(addedAr({ success: true, added: 2, exceptions: 1, mail: { sent: 1, queued: 0, failed: 0, skipped: 1 } })).toBe('أُضيف مشاركان (1 استثناءً). أُرسلت دعوة واحدة، 1 بلا بريد (حساب اختبار). المدعوون السابقون لم يصلهم شيء.');
+    expect(addedAr({ success: true, added: 1, exceptions: 0, past: true, mail: {} })).toBe('أُضيف مشارك واحد. بدأت الجلسة، فلا بريد.');
+    expect(addedAr({ success: true, added: 0, already: true })).toBe('كلهم مدعوون أصلًا، فلا إضافة ولا بريد.');
+    expect(addedAr({ success: false })).toBe('');
+  });
+  it('حال إعادة الدعوة: تُعاد، أو ممسوكة بمهلتها، أو تنتظر في الطابور، ولا تُعاد لحساب اختبار ولا لمن سُجّل حضوره', () => {
+    expect(resendState(m({ mail: { state: 'sent', at: '2026-11-19T08:00:00Z' } }), NOW)).toBe('ready');
+    expect(resendState(m({ mail: { state: 'sent', at: '2026-11-20T08:30:00Z', resend_at: '2026-11-20T09:30:00Z' } }), NOW)).toBe('held');
+    // مضت المهلة منذ قُرئت القائمة: تُعاد
+    expect(resendState(m({ mail: { state: 'sent', at: '2026-11-20T07:30:00Z', resend_at: '2026-11-20T08:30:00Z' } }), NOW)).toBe('ready');
+    expect(resendState(m({ mail: { state: 'waiting', at: '2026-11-20T08:30:00Z' } }), NOW)).toBe('waiting');
+    expect(resendState(m({ mail: { state: 'failed', at: '2026-11-20T08:59:00Z' } }), NOW)).toBe('ready');
+    expect(resendState(m(), NOW)).toBe('ready');
+    expect([resendState(m({ test: true }), NOW), resendState(m({ state: 'attended' }), NOW), resendState(m({ state: 'excused' }), NOW), resendState(null, NOW)]).toEqual(['none', 'none', 'none', 'none']);
+    const g = { members: [m({ id: 'a' }), m({ id: 'b', test: true }), m({ id: 'c', mail: { state: 'waiting', at: 'x' } }), m({ id: 'd', mail: { state: 'sent', at: 'x', resend_at: '2026-11-20T09:30:00Z' } }), m({ id: 'e', state: 'no_show' })] };
+    expect(resendable(g, NOW).map((x) => x.id)).toEqual(['a']);
+  });
+  it('سطر بريد الدعوة: متى خرجت، أو أنها تنتظر، أو لم تخرج، ولا سطر حين لا يُقرأ السجل', () => {
+    expect(inviteLineAr(m({ mail: { state: 'sent', at: '2026-11-19T08:00:00Z' } }), when)).toBe('آخر دعوة: [08:00]');
+    expect(inviteLineAr(m({ mail: { state: 'waiting', at: '2026-11-19T08:00:00Z' } }), when)).toBe('دعوته تنتظر في صندوق «لم يُرسل»');
+    expect(inviteLineAr(m({ mail: { state: 'failed', at: '2026-11-19T08:00:00Z' } }), when)).toBe('لم تخرج دعوته ([08:00])');
+    expect(inviteLineAr(m(), when)).toBe('لا دعوة له في سجل البريد');
+    expect([inviteLineAr(m(), when, false), inviteLineAr(m({ test: true }), when), inviteLineAr(m({ state: 'attended', mail: { state: 'sent', at: 'x' } }), when)]).toEqual(['', '', '']);
+  });
+  it('نتيجة إعادة الإرسال جملة: ما خرج، وما لم يُعد بمهلته', () => {
+    expect(resentAr({ success: true, mail: { sent: 3, queued: 0, failed: 0, skipped: 0 }, throttled: 0, minutes: 60 })).toBe('أُرسلت 3 دعوات');
+    expect(resentAr({ success: true, mail: { sent: 1, queued: 1, failed: 0, skipped: 0 }, throttled: 2, minutes: 60 }))
+      .toBe('أُرسلت دعوة واحدة، 1 تنتظر في صندوق «لم يُرسل» وتخرج حين تتسع حصة اليوم. 2 لم تُعد دعوتهم: أُرسلت قبل أقل من 60 دقيقة أو تنتظر في الطابور');
+    expect(resentAr({ success: true, mail: { sent: 0, queued: 0, failed: 0, skipped: 0 }, throttled: 1, minutes: 60 })).toBe('واحد لم تُعد دعوته: أُرسلت قبل أقل من 60 دقيقة أو تنتظر في الطابور');
+    expect(resentAr({ success: true, mail: {}, throttled: 0 })).toBe('لا دعوة تُعاد الآن');
   });
 });

@@ -277,13 +277,42 @@ export async function sendCounted(client: Client, to: string, subject: string, h
 
 // دعوة تقويم (iCalendar) لموعد واحد: تُضاف إلى أي تقويم بنقرة. النصوص تُهرَّب حسب RFC 5545
 // sequence: رقم تسلسل للحدث المحدَّث (RFC 5545). التقويم يستبدل الحدث ذا المعرّف نفسه بالنسخة الأحدث تسلسلًا
-export function icsEvent({ uid, start, end, title, description = '', url = '', sequence }: { uid: string; start: string; end: string; title: string; description?: string; url?: string; sequence?: number }) {
+// method: PUBLISH دعوة أو تحديث، وCANCEL ملف إلغاء بالمعرّف نفسه ورقم تسلسل أعلى وSTATUS:CANCELLED، فيزيل التقويم الحدث.
+// ملف الإلغاء بلا تنبيه ولا رابط، ورقم تسلسله لا يغيب: إن لم يُمرَّر أخذ الساعة (أعلى من كل ما سبقه)
+// السطر الأطول من 75 بايتًا يُطوى (CRLF ثم مسافة) بلا قطع حرف متعدد البايتات، كما يوجب RFC 5545 (3.1)
+const ICS_LINE_MAX = 75;
+export function icsFold(line: string) {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= ICS_LINE_MAX) return line;
+  const out: string[] = [];
+  let cur = '', size = 0;
+  for (const ch of line) {
+    const n = enc.encode(ch).length;
+    // السطر التابع يبدأ بمسافة تُحسب من حده
+    if (size + n > ICS_LINE_MAX) { out.push(cur); cur = ' '; size = 1; }
+    cur += ch; size += n;
+  }
+  out.push(cur);
+  return out.join('\r\n');
+}
+export const icsSequence = (...times: unknown[]) => {
+  const at = Math.max(0, ...times.map((t) => Date.parse(String(t || '')) || 0));
+  return Math.floor((at || Date.now()) / 1000);
+};
+export function icsEvent({ uid, start, end, title, description = '', url = '', sequence, method = 'PUBLISH' }: { uid: string; start: string; end: string; title: string; description?: string; url?: string; sequence?: number; method?: 'PUBLISH' | 'CANCEL' }) {
   const t = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const x = (v: string) => String(v).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:${uid}@sunkvalue.com`, `DTSTAMP:${t(new Date().toISOString())}`, `DTSTART:${t(start)}`, `DTEND:${t(end)}`, ...(sequence != null ? [`SEQUENCE:${Math.max(0, Math.floor(sequence))}`] : []),
-    `SUMMARY:${x(title)}`, ...(description ? [`DESCRIPTION:${x(description)}`] : []), ...(url ? [`URL:${url}`, `LOCATION:${x(url)}`] : []),
-    'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${x(title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'];
-  const text = lines.join('\r\n') + '\r\n';
-  return { filename: 'session.ics', content: btoa(String.fromCharCode(...new TextEncoder().encode(text))), content_type: 'text/calendar; charset=utf-8; method=PUBLISH' };
+  const cancel = method === 'CANCEL';
+  const seq = sequence != null ? Math.max(0, Math.floor(sequence)) : cancel ? Math.floor(Date.now() / 1000) : null;
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Milestone Impact//Leaders//AR', `METHOD:${cancel ? 'CANCEL' : 'PUBLISH'}`, 'BEGIN:VEVENT',
+    `UID:${uid}@sunkvalue.com`, `DTSTAMP:${t(new Date().toISOString())}`, `DTSTART:${t(start)}`, `DTEND:${t(end)}`, ...(seq != null ? [`SEQUENCE:${seq}`] : []),
+    ...(cancel ? ['STATUS:CANCELLED'] : []), `SUMMARY:${x(title)}`,
+    ...(cancel ? [] : [...(description ? [`DESCRIPTION:${x(description)}`] : []), ...(url ? [`URL:${url}`, `LOCATION:${x(url)}`] : []),
+      'BEGIN:VALARM', 'TRIGGER:-PT30M', 'ACTION:DISPLAY', `DESCRIPTION:${x(title)}`, 'END:VALARM']),
+    'END:VEVENT', 'END:VCALENDAR'];
+  const text = lines.map(icsFold).join('\r\n') + '\r\n';
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return { filename: cancel ? 'cancel.ics' : 'session.ics', content: btoa(bin), content_type: `text/calendar; charset=utf-8; method=${cancel ? 'CANCEL' : 'PUBLISH'}` };
 }

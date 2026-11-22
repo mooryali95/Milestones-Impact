@@ -656,6 +656,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.coaching-group-cancel': (a, b) => A.writer(a, CG.cancel, b),
   'admin.coaching-group-remove': (a, b) => A.writer(a, CG.removeMember, b),
   'admin.coaching-group-mark': (a, b) => A.writer(a, CG.adminMark, b),
+  // المتابعات: إضافة مدعوين إلى جلسة قائمة بالمعاينة نفسها (قراءة ثم كتابة)، وإعادة إرسال الدعوة بمهلة
+  'admin.coaching-group-candidates': (_a, b) => CG.addPreview(b),
+  'admin.coaching-group-add': (a, b) => A.writer(a, CG.addMembers, b),
+  'admin.coaching-group-resend': (a, b) => A.writer(a, CG.resend, b),
   'admin.impact': (_a, b) => I.adminReport(b),
   'admin.curriculum': (_a, b) => A.curriculum(b),
   'admin.programs': () => G.list(),
