@@ -8,7 +8,7 @@ import { date, dateTime, L } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import PaymentFile, { PAY_ST } from './PaymentFile.jsx';
-import { creemOrderUrl, isAbandoned, NOTIFY } from '../../../supabase/functions/leaders-api/payments-ledger.js';
+import { creemOrderUrl, isAbandoned, NOTIFY, overpaidOf } from '../../../supabase/functions/leaders-api/payments-ledger.js';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 
@@ -60,7 +60,7 @@ function SettingsCard({ d, canWrite, reload }) {
         <label>معرّف منتج البرنامج<input dir="ltr" value={v.program_product} disabled={!canWrite} onChange={(e) => setV({ ...v, program_product: e.target.value })} /></label>
         <label>سعر البرنامج (USD)<input dir="ltr" inputMode="decimal" value={v.program} disabled={!canWrite} onChange={(e) => setV({ ...v, program: e.target.value })} /></label>
       </div>
-      <p className="la-muted small">المبلغ الفعلي يأخذه Creem من المنتج نفسه، والسعر هنا حد أدنى: دفعة أقل منه أو بعملة غير الدولار تُعلَّق ولا تمنح وصولًا. اجعلهما متطابقين.</p>
+      <p className="la-muted small" data-price-help>هذا هو السعر الذي يراه المتدرب. اجعله مطابقًا لسعر المنتج في Creem، فـCreem يخصم سعر منتجه.</p>
       <h3>بريد الدفع</h3>
       <><p className="la-muted small">كل بريد مغلق حتى تفتحه، والمفتوح يُرسل آليًا.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>كل بريد مغلق حتى تفتحه. المفتوح يُرسل آليًّا ويُحسب من سقف البريد اليومي. تذكير من لم يكمل الدفع فعل يدوي من صفحة العملية ولا مفتاح له.</p></details></>
       <div className="pay-notify">
@@ -93,6 +93,8 @@ const PAY_FIELDS = [
 const PAY_PRESETS = [
   { key: 'abandoned', label: 'لم يكملوا الدفع', test: (p, now) => isAbandoned(p, now) },
   { key: 'held', label: 'معلّقة للمراجعة', test: (p) => p.status === 'pending' && String(p.note || '').startsWith('held') },
+  // دفع أعلى من المطلوب: مُنح الحق، والمطلوب في note (overpaidOf في payments-ledger.js)
+  { key: 'overpaid', label: 'أعلى من المطلوب', test: (p) => !!overpaidOf(p) },
   { key: 'refunded', label: 'مستردة', test: (p) => p.status === 'refunded' },
   // الاسترداد الجزئي يُبقي الدفعة مدفوعة وحقها قائمًا (payments.ts)، والمسترد في refund_cents
   { key: 'partial', label: 'مستردة جزئيًا', test: (p) => p.status === 'paid' && p.refund_cents > 0 },
@@ -112,7 +114,7 @@ const PAY_COLS = [
   { key: 'subtotal', label: 'قبل الضريبة', width: 12, get: (p) => (p.subtotal_cents == null ? '' : p.subtotal_cents / 100) }, { key: 'tax', label: 'الضريبة', width: 10, get: (p) => (p.tax_cents == null ? '' : p.tax_cents / 100) },
   { key: 'refund', label: 'المسترد', width: 10, get: (p) => (p.refund_cents == null ? '' : p.refund_cents / 100) }, { key: 'country', label: 'بلد الدفع', width: 10, get: (p) => p.country },
   { key: 'customer', label: 'الاسم كما دفع', width: 24, get: (p) => p.customer_name }, { key: 'phone', label: 'الجوال', width: 16, get: (p) => p.participants?.phone },
-  { key: 'txn', label: 'رقم المعاملة', width: 24, get: (p) => p.transaction_id }, { key: 'admin_note', label: 'ملاحظة الإدارة', width: 40, get: (p) => p.admin_note },
+  { key: 'txn', label: 'رقم المعاملة', width: 24, get: (p) => p.transaction_id }, { key: 'expected', label: 'المطلوب إن زاد المدفوع', width: 14, get: (p) => (overpaidOf(p) ? overpaidOf(p).expected / 100 : '') }, { key: 'admin_note', label: 'ملاحظة الإدارة', width: 40, get: (p) => p.admin_note },
   { key: 'order', label: 'رقم الطلب', width: 24, get: (p) => p.order_id }, { key: 'checkout', label: 'صفحة الدفع', width: 24, get: (p) => p.checkout_id },
 ];
 const ENT_COLS = [
@@ -198,7 +200,7 @@ export default function Payments({ canWrite, onPerson, payId = null, onOpen = ()
                   <td>{p.participant_id ? <button className="la-link" onClick={() => onPerson?.(p.participant_id)}>{p.participants?.full_name || p.email}</button> : p.email}<br /><small className="la-muted" dir="ltr">{p.email}</small></td>
                   <td>{ITEM[p.item]}{p.mode === 'test' && <small className="la-chip">اختبار</small>}</td>
                   <td dir="ltr">{money(p.amount_cents, p.currency || 'USD')}</td>
-                  <td><span className={`la-chip ${PAY_ST[p.status]?.[1] || ''}`}>{PAY_ST[p.status]?.[0] || p.status}</span>{p.status === 'paid' && p.refund_cents > 0 && <span className="la-chip warn">استُرد منها {money(p.refund_cents, p.currency)}</span>}{p.note && <small className="la-muted"> {p.note}</small>}</td>
+                  <td><span className={`la-chip ${PAY_ST[p.status]?.[1] || ''}`}>{PAY_ST[p.status]?.[0] || p.status}</span>{p.status === 'paid' && p.refund_cents > 0 && <span className="la-chip warn">استُرد منها {money(p.refund_cents, p.currency)}</span>}{overpaidOf(p) ? <span data-overpaid title="مُنح الحق، واسترداد الفرق من لوحة Creem"><span className="la-chip warn">أعلى من المطلوب</span><br /><small className="la-muted">دفع <bdi dir="ltr">{money(overpaidOf(p).paid, p.currency)}</bdi> والمطلوب <bdi dir="ltr">{money(overpaidOf(p).expected, p.currency)}</bdi></small></span> : p.note && <small className="la-muted"> {p.note}</small>}</td>
                   <td><small className="la-muted" dir="ltr">{p.order_id || p.checkout_id || '·'}</small></td>
                   <td className="la-row">{p.status === 'pending' && canWrite && <button className="btn-sm ghost" onClick={() => reconcile(p)}>تحقق من Creem</button>}
                     {creemOrderUrl(p) && <a className="btn-sm ghost" href={creemOrderUrl(p)} target="_blank" rel="noopener noreferrer" title={p.status === 'paid' ? 'الاسترداد والإيصال من لوحة Creem' : 'افتح الطلب في Creem'}>Creem ↗</a>}</td>

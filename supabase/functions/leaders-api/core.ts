@@ -466,10 +466,15 @@ export function payReminderMail(name: string, days: number) {
 }
 
 // ── بريد الدفع (payments-ledger.js NOTIFY): كل واحد خلف مفتاح في اللوحة، مغلق حتى يفتحه المدير ──
-export function paymentReceiptMail(name: string, item: string, amount: string, order: string | null, next: string) {
+// paid: ما دُفع فعلًا من الإشعار (payments.ts paidTotal): المدفوع شامل الضريبة، وسطر الضريبة حين تزيد على صفر.
+// وبلا paid يبقى سطر المبلغ المسجل كما كان
+export function paymentReceiptMail(name: string, item: string, amount: string, order: string | null, next: string, paid: { total: string; tax?: string; sub?: string } | null = null) {
+  const money: [string, string][] = paid
+    ? [...(paid.tax ? [...(paid.sub ? [['المبلغ قبل الضريبة', paid.sub]] as [string, string][] : []), ['الضريبة', paid.tax]] as [string, string][] : []), [paid.tax ? 'المدفوع شامل الضريبة' : 'المبلغ المدفوع', paid.total]]
+    : [['المبلغ', amount]];
   return shell('journey', 'وصلنا دفعك',
     mailText(`${hello(name)} تأكد دفعك، وهذا ملخصه لسجلك.`)
-    + mailRows([['البند', item], ['المبلغ', amount], ...(order ? [['رقم الطلب', order] as [string, string]] : [])])
+    + mailRows([['البند', item], ...money, ...(order ? [['رقم الطلب', order] as [string, string]] : [])])
     + mailText(esc(next))
     + mailButton(CONFIG.appUrl, 'افتح رحلتك'),
     'تأكيد الدفع', 'إيصال الدفع الرسمي يصلك من مزوّد الدفع Creem على البريد نفسه.');
@@ -1087,11 +1092,12 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'coord-signin', family: 'access', label: 'رمز دخول لوحة الجهة', subject: 'رمز الدخول إلى لوحة الجهة', html: () => coordinatorSignInMail('خالد', '820417', `${CONFIG.appUrl}/org`) },
   { key: 'approved', family: 'journey', label: 'اعتماد المستوى', subject: 'اعتُمد مستواك في برنامج القادة', html: () => approvedMail('سارة') },
   { key: 'approved-pay', family: 'journey', label: 'اعتماد المسار مع رابط الدفع', subject: 'اعتُمد مسارك في برنامج القادة', html: () => approvedMail('سارة', true) },
-  { key: 'pay-receipt', family: 'journey', label: 'تأكيد الدفع للعميل (بمفتاح)', subject: 'وصلنا دفعك', html: () => paymentReceiptMail('سارة', 'القياس المبدئي', '1.99 USD', 'ord_123', 'القياس مفتوح لك الآن.') },
+  { key: 'pay-receipt', family: 'journey', label: 'تأكيد الدفع للعميل (بمفتاح)', subject: 'وصلنا دفعك', html: () => paymentReceiptMail('سارة', 'القياس المبدئي', '1.99 USD', 'ord_123', 'القياس مفتوح لك الآن.', { sub: '1.99 USD', tax: '0.30 USD', total: '2.29 USD' }) },
   { key: 'pay-refund', family: 'journey', label: 'إشعار الاسترداد للعميل (بمفتاح)', subject: 'استُردّت دفعتك', html: () => paymentRefundMail('سارة', 'القياس المبدئي', '1.99 USD') },
   { key: 'pay-refund-partial', family: 'journey', label: 'إشعار الاسترداد الجزئي للعميل (بمفتاح)', subject: 'استُردّ جزء من دفعتك', html: () => paymentRefundMail('سارة', 'رسم البرنامج', '20.00 USD', '99.00 USD') },
   { key: 'pay-abandon', family: 'journey', label: 'تذكير من لم يكمل الدفع (يدوي)', subject: 'دفعك لم يكتمل', html: () => paymentAbandonMail('سارة', 'القياس المبدئي') },
   { key: 'pay-owner', family: 'admin', label: 'تنبيه الإدارة بدفعة (بمفتاح)', subject: 'دفعة جديدة', html: () => paymentOwnerMail('دفعة جديدة', [['المشارك', 'سارة الأحمد'], ['البند', 'القياس المبدئي'], ['المبلغ', '1.99 USD']]) },
+  { key: 'pay-owner-over', family: 'admin', label: 'تنبيه الإدارة بدفعة أعلى من المطلوب', subject: 'دفعة أعلى من المطلوب', html: () => paymentOwnerMail('دفعة أعلى من المطلوب', [['المشارك', 'سارة الأحمد'], ['البند', 'القياس المبدئي'], ['المطلوب', '1.00 USD'], ['المدفوع قبل الضريبة', '1.99 USD'], ['الضريبة', '0.30 USD'], ['المدفوع', '2.29 USD'], ['القرار', 'مُنح الحق، واسترداد الفرق قرارك من لوحة Creem'], ['رقم الطلب', 'ord_123']]) },
   { key: 'pay-reminder', family: 'journey', label: 'تذكير إكمال التسجيل', subject: 'مسارك المعتمد بانتظارك', html: () => payReminderMail('سارة', 3) },
   { key: 'review-ok', family: 'journey', label: 'اعتماد عمل', subject: 'اعتُمد بند في رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', false) },
   { key: 'review-returned', family: 'journey', label: 'إعادة عمل بملاحظة', subject: 'ملاحظة من المستشار على رحلتك', html: () => reviewMail('سارة', 'خطة التطوير الشخصية', true, 'أضف مؤشرًا قابلًا للقياس لكل هدف.') },

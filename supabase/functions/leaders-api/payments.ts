@@ -9,7 +9,7 @@
 import { alertOps, audit, CONFIG, db, expiresIn, Fail, must, paymentAbandonMail, paymentOwnerMail, paymentReceiptMail, paymentRefundMail, payReminderMail, sendMail } from './core.ts';
 import { ownerNoticeLater } from './notify.ts';
 import { notifySettings, withPaymentFallback } from '../_shared/notify-settings.ts';
-import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
+import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, keepOverpaid, ledgerFields, money, overpaidBy, overpaidNote, overpaidOf, paidTotal, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, SEAT_STOPPED, settings, type Item } from './entitlements.ts';
@@ -156,15 +156,24 @@ async function settle(pay: any, obj: any) {
     return false;
   }
   const now = new Date().toISOString();
+  // أعلى من المطلوب: يُمنح الحق (قرار المالك) ويُعلَّم، والمطلوب يبقى في note لأن amount_cents يصير المدفوع الفعلي
+  const over = overpaidBy(pay, obj);
   await db.from('payments').update({
     status: 'paid', paid_at: now, order_id: obj?.order?.id || pay.order_id || null, customer_id: obj?.customer?.id || null,
     amount_cents: obj?.order?.amount ?? pay.amount_cents, currency: obj?.order?.currency || pay.currency,
+    ...(over ? { note: overpaidNote(over) } : {}),
   }).eq('id', pay.id);
   await saveLedger(pay.id, ledgerFields(obj));
   if (pay.participant_id) {
     const { error } = await db.from('entitlements').insert({ participant_id: pay.participant_id, item: pay.item, source: 'paid', payment_id: pay.id, granted_by: 'creem' });
     if (error && error.code !== '23505') throw error;
     await audit('system', 'creem', 'payment.paid', 'payments', pay.id, null, { item: pay.item });
+  }
+  // مرة واحدة: إعادة الإشعار تقف عند settleable (الدفعة صارت paid)، والمفتاح بمعرّف الدفعة فلا تحجب تهدئة دفعة أخرى
+  if (over) {
+    await audit('system', 'creem', 'payment.overpaid', 'payments', pay.id, null, { expected_cents: over.expected, paid_cents: over.paid, currency: pay.currency });
+    await alertOps('payment_mismatch', { payment: pay.id, issues: [`المبلغ ${over.paid} أعلى من ${over.expected}، ومُنح الحق`] }, { key: pay.id })
+      .catch((e) => console.error('alert:', e));
   }
   return true;
 }
@@ -191,22 +200,33 @@ async function payerOf(pay: any) {
   const { data } = await db.from('participants').select('full_name, email').eq('id', pay.participant_id).maybeSingle();
   return { name: (data as any)?.full_name || '', email: (data as any)?.email || pay.email };
 }
-async function notifyPaid(payId: string) {
+async function notifyPaid(payId: string, obj: any = null) {
   const on = await notifyOn();
   const { data: pay } = await db.from('payments').select('*').eq('id', payId).maybeSingle();
   if (!pay || pay.status !== 'paid') return;
   const who = await payerOf(pay);
   const amount = money(pay.amount_cents, pay.currency);
+  // المدفوع فعلًا شامل الضريبة من الإشعار، وإن غاب بقي البريد على المبلغ المسجل
+  const t = paidTotal(obj);
+  const paid = t ? { total: money(t.total, pay.currency), tax: t.tax > 0 ? money(t.tax, pay.currency) : '', sub: t.tax > 0 && t.sub != null ? money(t.sub, pay.currency) : '' } : null;
+  const over = overpaidOf(pay);
   if (on.receipt && who.email && !pay.receipt_sent_at) {
     const next = pay.item === 'program' ? 'رحلتك في البرنامج مفتوحة الآن.' : 'قياس تحديد المستوى مفتوح لك الآن، وتقدمك فيه يُحفظ سؤالًا سؤالًا.';
-    const sent = await sendMail(who.email, 'وصلنا دفعك', paymentReceiptMail(who.name, ITEM_AR[pay.item as Item], amount, pay.order_id, next), [], { ref: `participant:${pay.participant_id}` })
+    const sent = await sendMail(who.email, 'وصلنا دفعك', paymentReceiptMail(who.name, ITEM_AR[pay.item as Item], amount, pay.order_id, next, paid), [], { ref: `participant:${pay.participant_id}` })
       .then(() => true).catch((e) => { console.error('pay receipt', e); return false; });
     if (sent) await saveLedger(pay.id, { receipt_sent_at: new Date().toISOString() });
   }
   // لا يُنتظر سلاك: رد الخطاف لمزود الدفع لا يتأخر بمهلته
+  const title = over ? 'دفعة أعلى من المطلوب' : 'دفعة جديدة';
+  const shown = paid?.total || amount;
+  const rows: [string, string][] = [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]],
+    ...(over ? [['المطلوب', money(over.expected, pay.currency)], ['المدفوع قبل الضريبة', money(over.paid, pay.currency)]] as [string, string][] : []),
+    ...(paid ? [...(paid.tax ? [['الضريبة', paid.tax]] as [string, string][] : []), ['المدفوع', paid.total]] as [string, string][] : over ? [] : [['المبلغ', amount]] as [string, string][]),
+    ...(over ? [['القرار', 'مُنح الحق، واسترداد الفرق قرارك من لوحة Creem']] as [string, string][] : []),
+    ['رقم الطلب', pay.order_id || '']];
   ownerNoticeLater('payment_new', {
-    line: `💳 دفعة جديدة · ${ITEM_AR[pay.item as Item]} · ${amount}`, ref: `payment:${pay.id}`, settings: await ownerSettings(on.owner),
-    mail: { subject: 'دفعة جديدة', html: paymentOwnerMail('دفعة جديدة', [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ['رقم الطلب', pay.order_id || '']]) },
+    line: `💳 ${title} · ${ITEM_AR[pay.item as Item]} · ${shown}${over ? ` · المطلوب ${money(over.expected, pay.currency)}` : ''}`, ref: `payment:${pay.id}`, settings: await ownerSettings(on.owner),
+    mail: { subject: title, html: paymentOwnerMail(title, rows) },
   });
 }
 // partial: استرداد جزء من الدفعة، والحق باقٍ؛ البريد يذكر المسترد ومن كم، ولا يقول «أُقفل»
@@ -260,7 +280,7 @@ export async function webhook(raw: string, headers: Headers) {
       const pay = await findPayment(obj);
       if (!pay) throw new Error('payment not found');
       await linkEvent(id, pay.id);
-      if (await settle(pay, obj)) await notifyPaid(pay.id).catch((e) => console.error('pay notify', e));
+      if (await settle(pay, obj)) await notifyPaid(pay.id, obj).catch((e) => console.error('pay notify', e));
     } else if (type.startsWith('refund.') || type === 'dispute.created') {
       const pay = await findPayment(obj);
       if (pay) {
@@ -270,13 +290,13 @@ export async function webhook(raw: string, headers: Headers) {
         // ولا حالة جديدين، فلا يمس قيد الحالة ولا ما يقرؤها (التسوية والقمع واللوحة)
         const out = refundOutcome(pay, rf, type);
         if (!out.full) {
-          await db.from('payments').update({ note: `${type} partial` }).eq('id', pay.id);
+          await db.from('payments').update({ note: keepOverpaid(pay.note, `${type} partial`) }).eq('id', pay.id);
           await saveLedger(pay.id, { refund_cents: out.total, refund_reason: rf.refund_reason });
           await notifyRefunded(pay, out.cents, true).catch((e) => console.error('refund notify', e));
           await audit('system', 'creem', 'payment.partially-refunded', 'payments', pay.id, null, { refund_cents: out.cents, total_refunded_cents: out.total, paid_cents: pay.amount_cents });
         } else {
           const already = pay.status === 'refunded';
-          await db.from('payments').update({ status: 'refunded', refunded_at: new Date().toISOString(), note: type }).eq('id', pay.id);
+          await db.from('payments').update({ status: 'refunded', refunded_at: new Date().toISOString(), note: keepOverpaid(pay.note, type) }).eq('id', pay.id);
           await saveLedger(pay.id, { ...rf, refund_cents: out.total });
           // إشعار ثانٍ للدفعة نفسها (استرداد ثم نزاع مثلًا) لا يكرر البريد. بعد جزئي سابق يذكر البريد ما تبقى
           if (!already) await notifyRefunded(pay, out.cents).catch((e) => console.error('refund notify', e));

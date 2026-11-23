@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  cleanNotify, creemOrderUrl, isAbandoned, isExpirable, ledgerFields, money, NOTIFY_KEYS, paymentTimeline, refundFields, whatsappUrl,
+  cleanNotify, creemOrderUrl, isAbandoned, isExpirable, keepOverpaid, ledgerFields, money, NOTIFY_KEYS, overpaidBy, overpaidNote, overpaidOf, paidTotal, paymentTimeline, refundFields, whatsappUrl,
 } from '../../supabase/functions/leaders-api/payments-ledger.js';
 
 const src = (p) => readFileSync(join(process.cwd(), p), 'utf8');
@@ -105,5 +105,31 @@ describe('التواصل والعرض', () => {
     expect(money(null)).toBe('');
     expect(creemOrderUrl({ order_id: 'ord_1' })).toContain('ord_1');
     expect(creemOrderUrl({})).toBeNull();
+  });
+});
+
+describe('الدفع الزائد والمدفوع شامل الضريبة', () => {
+  it('يُكتشف الأعلى وحده، والمطلوب والمدفوع يُقرآن من الملاحظة ولا تمحوهما ملاحظة لاحقة', () => {
+    expect(overpaidBy({ amount_cents: 100 }, paid)).toEqual({ expected: 100, paid: 199 });
+    expect(overpaidBy({ amount_cents: 199 }, paid)).toBe(null);
+    expect(overpaidBy({ amount_cents: 500 }, paid)).toBe(null);
+    expect(overpaidBy({ amount_cents: null }, paid)).toBe(null);
+    const note = overpaidNote({ expected: 100, paid: 199 });
+    expect(overpaidOf({ note })).toEqual({ expected: 100, paid: 199 });
+    expect(overpaidOf({ note: 'held: x' })).toBe(null);
+    expect(overpaidOf({ note: keepOverpaid(note, 'refund.created') })).toEqual({ expected: 100, paid: 199 });
+    expect(keepOverpaid(null, 'refund.created')).toBe('refund.created');
+  });
+  it('المدفوع من amount_paid والضريبة من tax_amount، وبلا amount_paid لا رقم', () => {
+    expect(paidTotal({ order: { amount: 1000, sub_total: 1000, tax_amount: 210, amount_paid: 1210 } })).toEqual({ total: 1210, tax: 210, sub: 1000 });
+    expect(paidTotal(paid)).toEqual({ total: 199, tax: 0, sub: 199 });
+    expect(paidTotal({ order: { amount: 1000, tax_amount: 210 } })).toBe(null);
+    expect(paidTotal(null)).toBe(null);
+  });
+  it('الخط الزمني يذكر الدفع الزائد بمبلغيه', () => {
+    const t = paymentTimeline({ created_at: '2026-11-23T09:00:00Z' }, [], [], [{ action: 'payment.overpaid', actor: 'creem', created_at: '2026-11-23T09:01:00Z', after: { expected_cents: 100, paid_cents: 199, currency: 'USD' } }]);
+    const row = t.find((x) => x.text.includes('أعلى من المطلوب'));
+    expect(row.tone).toBe('warn');
+    expect(row.detail).toBe('المطلوب 1.00 USD والمدفوع 1.99 USD');
   });
 });
