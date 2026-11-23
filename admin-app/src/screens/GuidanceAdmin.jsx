@@ -11,7 +11,7 @@ import { navigate } from '../route.js';
 import { aiLoad } from '../ai-hub-data.js';
 import { AiSkeleton, dollars, dollarsOf, guideWord, Kpis, Switch, TabIntro } from '../ai-ui.jsx';
 import '../agent-admin.css';
-import { GuideConversations, TranscriptGrants, transcriptAccess } from '../GuideTranscripts.jsx';
+import { GuideConversations, TranscriptGrants, transcriptAccess, WeeklyReview } from '../GuideTranscripts.jsx';
 
 const usd = dollars;
 
@@ -410,6 +410,7 @@ export default function GuidanceAdmin() {
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${dollarsOf(d.today.usd, d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
       <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} onEdit={(id) => setFocus({ id, n: Date.now() })} /><SetReview canWrite={d.can_write} focus={focus} onChanged={() => setEvalKey((k) => k + 1)} /><RulesEditor d={d} canWrite={d.can_write} onSaved={() => { load(); setEvalKey((k) => k + 1); }} /></Section>
+      <Section id="gd-review" title="مراجعة الأسبوع" summary="ما تعثر فيه المساعد هذا الأسبوع، مجمّعًا بالموضع. كل حالة تضيفها تصير اختبارًا يمر به قبل كل إطلاق."><WeeklyReview /></Section>
       <Section id="gd-transcripts" title="سجل المحادثات" summary="محادثة كل مشارك كاملة لتتبع أي مشكلة، بحكم كل رد ونموذجه وكلفته. للمالك، وللمدير الأعلى بصلاحية يمنحها المالك، وكل فتح يُسجَّل."><GuideConversations /></Section>
     </div>
   );

@@ -176,3 +176,31 @@ Deno.test('رد غير دقيق: لمن يقرأ النص وحده، وعلى ر
     assertEquals(w.tables.guidance_eval_sets[0].cases.at(-1).kind, 'unsure');
   } finally { w.restore(); E.resetSet(); }
 });
+
+Deno.test('مراجعة الأسبوع (المرحلة د): لمن يقرأ النص وحده، والأسئلة محجوبة بلا اسم ولا معرّف، وكل فتح يُسجَّل', async () => {
+  resetSettingsCache();
+  const w = installFake({ ...seed(), handbook_modules: [{ id: 'mod-1', title_ar: 'المعلم: الفصل 1' }] });
+  w.tables.guidance_messages.push(
+    { id: 10, participant_id: P1, role: 'user', body: 'كيف أحدد أول معلم؟ بريدي sara@x.sa', created_at: now },
+    { id: 11, participant_id: P1, role: 'assistant', body: 'لست متأكدًا', verdict: 'unsure', context: 'handbook', chapter_id: 'mod-1', created_at: now },
+    { id: 12, participant_id: P2, role: 'user', body: 'اكتب لي خطتي', created_at: now },
+    { id: 13, participant_id: P2, role: 'assistant', body: 'أعتذر', verdict: 'answered', guard: 'write', context: 'program', created_at: now },
+    { id: 14, participant_id: P2, role: 'assistant', body: 'قديم', verdict: 'unsure', context: 'program', created_at: new Date(Date.now() - 10 * 864e5).toISOString() },
+  );
+  try {
+    for (const a of [admin, viewer, sup]) await assertRejects(() => T.weeklyReview(a));
+    assertEquals(w.tables.audit_log.length, 0);
+    const r: any = await T.weeklyReview(owner);
+    assertEquals(r.total, 2, 'رد السبت الماضي خارج الأسبوع، والإجابة السليمة لا تُراجع');
+    assertEquals(r.groups.map((g: any) => g.label).sort(), ['الرحلة والبرنامج', 'المعلم: الفصل 1'].sort());
+    const items = r.groups.flatMap((g: any) => g.cases);
+    assertEquals(items.find((x: any) => x.message_id === 13).reason, 'guard');
+    const q11 = items.find((x: any) => x.message_id === 11).question;
+    assert(q11.includes('كيف أحدد أول معلم') && !q11.includes('sara@x.sa'), q11);
+    const out = JSON.stringify(r);
+    for (const s of [P1, P2, 'سارة', 'خالد', 's@x.sa']) assert(!out.includes(s), s);
+    assertEquals(r.rates.prev.replies, 1);
+    const log: any = w.tables.audit_log.at(-1);
+    assertEquals([log.action, log.after.items], ['guide.weekly-review', 2]);
+  } finally { w.restore(); }
+});
