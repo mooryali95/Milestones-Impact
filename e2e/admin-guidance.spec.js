@@ -517,6 +517,10 @@ test('مراجعة الأسبوع (المرحلة د): تُفتح بطلب، ب�
   await rv.getByText('الرحلة والبرنامج').click();
   const item = rv.locator('[data-review-item="31"]');
   await expect(item).toContainText('تكرر 3 مرات');
+  await expect(rv.locator('[data-review-item="33"] [data-suggest-rule]')).toHaveCount(0);
+  await item.getByRole('button', { name: 'اقترح سطر توجيه' }).click();
+  await expect(page.getByRole('textbox', { name: 'توجيهات إضافية للمساعد' })).toHaveValue(/إن سُئلت عن «متى تبدأ المرحلة الثانية؟» فأجب من الكتاب/);
+  expect(calls.some((c) => c.action === 'admin.guide-rules')).toBe(false);
   await item.getByRole('button', { name: 'أضفها حالة تقييم' }).click();
   await item.getByLabel('الإجابة الصحيحة المرجعية').fill('تبدأ بعد اعتماد البطاقة.');
   await item.getByRole('button', { name: 'أضفها إلى مجموعة التقييم' }).click();

@@ -361,9 +361,15 @@ function UsagePart({ d }) {
 }
 
 // H4: توجيهات المالك للمساعد، تُضاف إلى قواعده الثابتة ولا تلغيها. كل حفظ يغيّر بصمة التقييم فيُسقط نجاحه
-function RulesEditor({ d, canWrite, onSaved }) {
+function RulesEditor({ d, canWrite, onSaved, draft }) {
   const { toast } = useUI();
   const [text, setText] = useState(d.settings.extra_rules || '');
+  // سطر مقترح من «مراجعة الأسبوع» يُلحق بالنص ولا يُحفظ حتى يحفظه المالك
+  useEffect(() => {
+    if (!draft?.line) return;
+    setText((t) => (t.includes(draft.line) ? t : `${t.trim() ? `${t.trimEnd()}\n` : ''}${draft.line}`));
+    document.getElementById('gd-rules-h')?.scrollIntoView({ block: 'center' });
+  }, [draft]);
   const [busy, setBusy] = useState(false);
   const dirty = text.trim() !== (d.settings.extra_rules || '').trim();
   const save = async () => {
@@ -388,6 +394,7 @@ export default function GuidanceAdmin() {
   const [d, setD] = useState(null);
   const [evalKey, setEvalKey] = useState(0);
   const [focus, setFocus] = useState(null);
+  const [ruleDraft, setRuleDraft] = useState(null);
   // القراءة الأولى تنضم إلى طلب رأس القسم (ai-hub-data.js)، وإعادة التحميل بعد التشغيل أو الإيقاف طلب جديد
   const load = (first) => aiLoad('admin.guide-dashboard', { reuse: first === true }).then(setD);
   useEffect(() => { load(true); }, []);
@@ -409,8 +416,8 @@ export default function GuidanceAdmin() {
       <Section id="gd-state" title="الحالة والتحكم" level={open ? 'green' : 'amber'}><StatusPart d={d} reload={load} setD={setD} /></Section>
       <Section id="gd-spend" title="الإنفاق" summary={`اليوم ${dollarsOf(d.today.usd, d.settings.cap_usd)}`}><SpendPart d={d} /></Section>
       <Section id="gd-usage" title="الاستعمال" summary={d.report?.windows?.[1] ? `${d.report.windows[1].asked} سؤالًا في 30 يومًا` : 'لا استعمال بعد'}><UsagePart d={d} /></Section>
-      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} onEdit={(id) => setFocus({ id, n: Date.now() })} /><SetReview canWrite={d.can_write} focus={focus} onChanged={() => setEvalKey((k) => k + 1)} /><RulesEditor d={d} canWrite={d.can_write} onSaved={() => { load(); setEvalKey((k) => k + 1); }} /></Section>
-      <Section id="gd-review" title="مراجعة الأسبوع" summary="ما تعثر فيه المساعد هذا الأسبوع، مجمّعًا بالموضع. كل حالة تضيفها تصير اختبارًا يمر به قبل كل إطلاق."><WeeklyReview /></Section>
+      <Section id="gd-accuracy" title="الدقة"><GuidanceEval key={evalKey} canWrite={d.can_write} onEdit={(id) => setFocus({ id, n: Date.now() })} /><SetReview canWrite={d.can_write} focus={focus} onChanged={() => setEvalKey((k) => k + 1)} /><RulesEditor d={d} canWrite={d.can_write} draft={ruleDraft} onSaved={() => { load(); setEvalKey((k) => k + 1); }} /></Section>
+      <Section id="gd-review" title="مراجعة الأسبوع" summary="ما تعثر فيه المساعد هذا الأسبوع، مجمّعًا بالموضع. كل حالة تضيفها تصير اختبارًا يمر به قبل كل إطلاق."><WeeklyReview onSuggest={d.can_write ? (line) => setRuleDraft({ line, n: Date.now() }) : null} /></Section>
       <Section id="gd-transcripts" title="سجل المحادثات" summary="محادثة كل مشارك كاملة لتتبع أي مشكلة، بحكم كل رد ونموذجه وكلفته. للمالك، وللمدير الأعلى بصلاحية يمنحها المالك، وكل فتح يُسجَّل."><GuideConversations /></Section>
     </div>
   );
