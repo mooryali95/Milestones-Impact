@@ -40,7 +40,7 @@ export default function Discovery({ level, charterId, onDone, onSkip }) {
         <h2 id="disc-h" className="as-h3">ابدأ من فكرة</h2>
         <button type="button" className="link small" onClick={onSkip}>لدي مبادرة، اكتب البطاقة مباشرة</button>
       </div>
-      <p className="muted small">ثلاث خطوات قصيرة تخرج منها بمسودة بطاقة مبادرتك: من واقع تعرفه، في جهة أو مجتمع أو سوق، حقيقية أو افتراضية واقعية تستطيع تنفيذها.</p>
+      <p className="muted small">ثلاث خطوات تخرج منها بمسودة بطاقة مبادرتك، من واقع تعرفه، حقيقية أو افتراضية واقعية.</p>
       <ol className="mstepper">
         {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
       </ol>
