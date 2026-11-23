@@ -11,6 +11,7 @@ import { ownerNoticeLater } from './notify.ts';
 import { notifySettings, withPaymentFallback } from '../_shared/notify-settings.ts';
 import { cleanNotify, creemOrderUrl, isAbandoned, isExpirable, keepOverpaid, ledgerFields, money, overpaidBy, overpaidNote, overpaidOf, paidTotal, NOTIFY, NOTIFY_KEYS, paymentTimeline, refundFields, netCents, refundOutcome, REMIND_GAP_HOURS, revenueKpis, whatsappUrl } from './payments-ledger.js';
 import { forStats, requireWrite } from './admin.ts';
+import { newAlerts, PRODUCT_WARN, productCheck, taxModeOf } from '../_shared/creem-product.js';
 import { revokeForRefund } from './certificates.ts';
 import { ITEMS, pinSponsor, programPaymentDue, SEAT_BLOCKED, SEAT_STOPPED, settings, type Item } from './entitlements.ts';
 import { counted, listed } from './counting.ts';
@@ -68,7 +69,9 @@ export async function access(p: any) {
   if (!s.enabled) return { ...base, assessment: has('assessment') || 'free', program: has('program') || 'free', sponsor, request };
   return { ...base, assessment: has('assessment'), program: has('program'), sponsor, request };
 }
-const prices = (s: any) => ({ currency: s.currency, assessment: s.assessment_cents, program: s.program_cents });
+// tax: نمط ضريبة كل منتج من آخر فحص لمنتج Creem (creem-product.js)، وnull إن لم يُعرف فتبقى الجملة العامة
+const prices = (s: any) => ({ currency: s.currency, assessment: s.assessment_cents, program: s.program_cents,
+  tax: { assessment: taxModeOf(s.creem_check, 'assessment'), program: taxModeOf(s.creem_check, 'program') } });
 
 export async function requireAccess(p: any, item: Item) {
   const a: any = await access(p);
@@ -456,8 +459,41 @@ async function funnel() {
 export const MIN_PRICE_CENTS = 100;
 export const MAX_PRICE_CENTS = 99999999;
 
+// ── فحص منتجي Creem (المرحلة 3): يُقرأ المنتج بمفتاح الخادم ومضيفه (الاختبار لمفتاح الاختبار كما في checkout)،
+// وتعذّر الوصول لا يمنع شيئًا: يُحفظ «unreachable» ويظهر للمدير «تعذّر التحقق من Creem الآن» ──
+async function readProduct(id: string) {
+  try {
+    const res = await fetch(`${apiBase()}/v1/products/${encodeURIComponent(id)}`, { headers: { 'x-api-key': apiKey() }, signal: AbortSignal.timeout(8000) });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  } catch (e) { console.error('creem product', String((e as any)?.message || e).slice(0, 200)); return { error: true }; }
+}
+export async function checkProducts(s: any) {
+  const key = apiKey();
+  const keyMode = key ? modeOf(key) : null;
+  const one = async (id: string | null) => (!id ? null : !key ? { id, state: 'unreachable' } : productCheck(id, await readProduct(id), { currency: s.currency, keyMode }));
+  const [assessment, program] = await Promise.all([one(s.assessment_product), one(s.program_product)]);
+  return { checked_at: new Date().toISOString(), key_mode: keyMode, assessment, program };
+}
+// يُحفظ في payment_settings.creem_check بتحديث منفصل يتحمل غياب العمود قبل ترحيله، وينبَّه المالك مرة لكل منتج لكل حالة
+async function storeCheck(prev: any, check: any) {
+  const up = await db.from('payment_settings').update({ creem_check: check }).eq('id', true).select('*').single();
+  if (up.error) console.error('creem_check:', up.error.message);
+  for (const n of newAlerts(prev, check)) {
+    await alertOps('payment_mismatch', { item: n.item, product: n.product, issues: [`منتج ${ITEM_AR[n.item as Item]} (${n.product}): ${PRODUCT_WARN[n.warning as keyof typeof PRODUCT_WARN]}`] },
+      { key: `product:${n.product}:${n.warning}` }).catch((e) => console.error('alert:', e));
+  }
+  return up.error ? null : up.data;
+}
+
 export async function adminSettings(a: Admin, b: Body) {
   requireWrite(a);
+  // زر «تحقق من Creem»: قراءة المنتجين المحفوظين وحدها، بلا تغيير في الإعداد
+  if (b.verify_only === true) {
+    const cur: any = await settings();
+    const check = await checkProducts(cur);
+    const saved = await storeCheck(cur.creem_check, check);
+    return { success: true, settings: saved || { ...cur, creem_check: check }, creem_check: check };
+  }
   const cents = (v: any, d: number) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : d);
   const s: any = await settings();
   const patch = {
@@ -486,10 +522,13 @@ export async function adminSettings(a: Admin, b: Body) {
     saved = up.data;
   }
   await audit('admin', a.email, 'payment.settings', 'payment_settings', 'true', s, saved);
+  // بعد الحفظ لا قبله: Creem لا يمنع حفظ السعر أبدًا
+  const check = await checkProducts(saved).catch((e) => { console.error('creem check', e); return null; });
+  if (check) saved = (await storeCheck(s.creem_check, check).catch(() => null)) || { ...saved, creem_check: check };
   // لحظة التفعيل: المشاركون القائمون معفون من الاثنين كما تعد رسالة التأكيد في اللوحة. كان الإعفاء لمن وُجد عند
   // الترحيل الأول وحده، فتفعيل الدفع بعده يقفل الرحلة على كل من سجّل بين التاريخين (مراجعة الدفع 2026-11-13)
   const grandfathered = patch.enabled && !s.enabled ? await grandfatherAll(a.email) : 0;
-  return { success: true, settings: saved, grandfathered };
+  return { success: true, settings: saved, grandfathered, creem_check: check };
 }
 
 async function grandfatherAll(by: string) {

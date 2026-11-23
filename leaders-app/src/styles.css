@@ -1501,6 +1501,8 @@ body:has(.tour) main{padding-bottom:260px}
 .pay-price { display: flex; align-items: baseline; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
 .pay-price b { font-size: 34px; letter-spacing: -.02em; }
 .pay-price span { color: var(--muted); font-size: 14px; }
+.pay-price { flex-wrap: wrap; }
+.pay-price .pay-tax { flex-basis: 100%; color: var(--ink, inherit); font-size: 14px; font-weight: 600; }
 .pay-sponsor { display: grid; gap: 6px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .pay-result { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--gold) 8%, transparent); }
 
