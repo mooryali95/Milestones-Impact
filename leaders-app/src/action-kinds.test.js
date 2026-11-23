@@ -40,6 +40,7 @@ const ADMIN_IDEMPOTENT_WRITES = {
   // دوال القاعدة هنا للقراءة وحدها (stable)، ولا سجل اطلاع
   'admin.visits': 'system.ts visits: publicDb.rpc لدوال التحليلات (قراءة)',
   'admin.guide-transcripts': 'guide-transcripts.ts list: rpc guidance_conversations (language sql stable، أعداد بلا نص)',
+  'admin.platform-health': 'system.ts platformHealth: rpc cron_job_status (قراءة cron.job وcron.job_run_details وحدها، 20261128100000)',
 };
 
 describe('تصنيف الأفعال (ش9)', () => {

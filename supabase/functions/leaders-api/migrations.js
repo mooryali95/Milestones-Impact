@@ -171,6 +171,7 @@ export const MIGRATIONS = [
   '20261125100000_leaders_payment_creem_check',
   '20261126100000_leaders_sponsor_codes',
   '20261127100000_leaders_model_review_light',
+  '20261128100000_leaders_atomic_and_health',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -257,4 +258,5 @@ export const MIGRATION_GATES = {
   '20261125100000_leaders_payment_creem_check': ["tolerant", "الدالة تكتب العمود بتحديث منفصل يتحمل غيابه (payments.ts storeCheck)، وتقرأ الإعداد بـ* فتعمل قبل الترحيل وبعده"],
   '20261126100000_leaders_sponsor_codes': ["tolerant", "قبله يرد نموذج «رشّحتك جهة؟» كل رمز ردَّ الرمز غير المعروف (sponsor-codes.ts: غياب الجدول أو الدالة"],
   '20261127100000_leaders_model_review_light': ["tolerant", "الدالة تعمل قبله وبعده: modelStatus (logic.js) يقرأ accept من الإعداد كما هو، فقبله تبقى الفصول الخمسة"],
+  '20261128100000_leaders_atomic_and_health': ["tolerant", "قبله يرد نقل المشارك بين المراحل (admin.stage-move) بـnot_migrated صراحةً ولا يكتب شيئًا، والتدخل في مرحلة"],
 };

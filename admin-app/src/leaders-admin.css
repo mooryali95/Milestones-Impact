@@ -1446,3 +1446,19 @@
 }
 /* نافذة النقل قبل اختيار المرحلة: تلميح بدل فراغ */
 .pj-move-hint { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--gold-pale); color: var(--ink, inherit); font-size: 13px; line-height: 1.7; }
+
+/* «صحة المنصة» في النظرة العامة (Overview.jsx PlatformHealth): صف لكل فحص بنقطة لونه وسطر علاجه */
+.ph-card { margin: 14px 0; }
+.ph-title { margin: 0 0 8px; font-size: 1rem; }
+.ph-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ph-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; border-inline-start: 3px solid var(--st-ok); }
+.ph-row.ph-warn { border-inline-start-color: var(--st-warn); background: var(--st-warn-bg); }
+.ph-row.ph-bad { border-inline-start-color: var(--st-bad); background: rgba(168, 40, 40, .06); }
+.ph-row.ph-unknown { border-inline-start-color: var(--line-strong); }
+.ph-dot { flex: none; inline-size: 20px; block-size: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .75rem; color: #fff; background: var(--st-ok); }
+.ph-warn .ph-dot { background: var(--st-warn-text); }
+.ph-bad .ph-dot { background: var(--st-bad); }
+.ph-unknown .ph-dot { background: var(--ink-soft); }
+.ph-main { min-inline-size: 0; overflow-wrap: anywhere; }
+.ph-line { color: var(--ink-soft); }
+.ph-remedy { display: block; font-size: .85rem; margin-top: 2px; }

@@ -64,7 +64,9 @@ describe('صندوق «ينتظرني»', () => {
     const admin = read('supabase/functions/leaders-api/admin.ts');
     const body = admin.slice(admin.indexOf('export async function inbox('), admin.indexOf('// الملفات الخاصة (السيرة والأدلة)'));
     // الجلسة الجماعية تُقرأ من وحدتها (coaching-groups.ts: inboxRows) لأنها قراءتان بفحص جاهزية الترحيل
-    for (const k of Object.keys(INBOX_KINDS)) expect(body, k).toMatch(new RegExp(`\\b${k}: (?:(?:listed\\()?db\\.from\\(|groupInboxRows\\()`));
+    // بطاقة المبادرة (model_gate) تُشتق من قراءة النماذج نفسها بقاعدة «للقراءة» (readingList)، فلا قراءة ثانية لها
+    expect(body).toContain('rows.model_gate = split.gates;');
+    for (const k of Object.keys(INBOX_KINDS).filter((x) => x !== 'model_gate')) expect(body, k).toMatch(new RegExp(`\\b${k}: (?:(?:listed\\()?db\\.from\\(|groupInboxRows\\()`));
     expect(body).toContain('if (res[i].error) skipped.push(k);');
   });
 });

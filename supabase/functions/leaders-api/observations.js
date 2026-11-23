@@ -130,6 +130,31 @@ export function auditType(h) {
   return h?.actor_type === 'admin' ? 'decision' : 'account';
 }
 
+// مؤشر الصفحة: الوقت ثم المفتاح الثابت للسطر (TIMELINE_CURSOR_SEP بينهما). مفاتيح سجل التدقيق «a:» ومعرّفه مبطَّنًا، فتأتي
+// بعد مفاتيح المصادر الأخرى في الترتيب التنازلي (يبدأ نوعها بحرف، و«:» قبل الحروف)، ويقرأ الخادم ما بقي منها بالمعرّف (participantTimeline).
+// مؤشر قديم بالوقت وحده يُقرأ كما كان: ما قبل وقته تمامًا
+export const TIMELINE_CURSOR_SEP = '|';
+export const auditKey = (id) => `a:${String(id).padStart(20, '0')}`;
+export function timelineCursor(r) { return `${r.at}${TIMELINE_CURSOR_SEP}${r.key}`; }
+export function parseTimelineCursor(c) {
+  if (typeof c !== 'string' || !c) return null;
+  const i = c.indexOf(TIMELINE_CURSOR_SEP);
+  const at = i < 0 ? c : c.slice(0, i);
+  if (Number.isNaN(Date.parse(at))) return null;
+  return { at, key: i < 0 ? null : c.slice(i + 1) };
+}
+/** هل السطر بعد المؤشر في الترتيب التنازلي (الوقت ثم المفتاح) */
+export function timelineBefore(r, cur) {
+  const at = String(r.at);
+  if (at !== cur.at) return at < cur.at;
+  return cur.key != null && r.key < cur.key;
+}
+/** معرّف سطر سجل التدقيق في المؤشر إن كان مفتاحه منه، وإلا null */
+export function cursorAuditId(cur) {
+  const m = cur?.key && /^a:0*(\d+)$/.exec(cur.key);
+  return m ? m[1] : null;
+}
+
 /**
  * السجل الكامل من مصادره. كل مصدر قائمة صفوفه كما تُقرأ، والناتج الأحدث أولًا، بنوع لكل سطر (TIMELINE_TYPES).
  * @param {{ participant?: any, firstLogin?: string | null, assessments?: any[], placements?: any[], models?: any[], attendance?: any[], sessions?: any[], capstone?: any, history?: any[], observations?: any[] }} src
@@ -162,15 +187,29 @@ export function fullTimelineOf(src, { before = null, types = null, limit = TIMEL
     add(c.submitted_at, 'initiative', 'سلّم وثيقة المبادرة');
     add(c.approved_at, 'initiative', 'اعتُمدت وثيقة المبادرة', { tone: 'ok' });
   }
-  for (const r of timelineOf({ history: (src.history || []).filter((h) => !TIMELINE_DERIVED.has(h.action)), observations: [] })) {
-    const h = (src.history || []).find((x) => x.created_at === r.at && auditLabel(x.action) === r.text);
-    const why = h?.after?.reason || h?.after?.note || '';
-    out.push({ ...r, type: auditType(h), detail: r.detail || (why ? `السبب: ${why}` : '') });
+  // كل سطر من سجل التدقيق يُحوَّل وحده، فلا يُخلط سطران في الوقت نفسه، ويحمل معرّفه مفتاحًا ثابتًا للمؤشر
+  for (const h of (src.history || []).filter((x) => !TIMELINE_DERIVED.has(x.action))) {
+    for (const r of timelineOf({ history: [h], observations: [] })) {
+      const why = h?.after?.reason || h?.after?.note || '';
+      out.push({ ...r, type: auditType(h), detail: r.detail || (why ? `السبب: ${why}` : ''), key: h.id != null ? auditKey(h.id) : null });
+    }
   }
   for (const o of src.observations || []) add(o.created_at, 'note', `${OBS_KIND_AR[o.kind] || o.kind}${o.title ? `: ${o.title}` : ''}`, { tone: o.kind === 'warning' ? 'warn' : o.kind === 'commendation' ? 'ok' : 'info', by: OBS_SOURCE_AR[o.source] || o.source || '', detail: o.body || '' });
+  // مفتاح ثابت لكل سطر بعد وقته: معرّف سطر السجل، وإلا نوعه ونصه وفاعله وترتيبه بين أمثاله، فلا يسقط سطر يشارك آخر وقته
+  // بين صفحتين ولا يتكرر (كان المؤشر وقتًا وحده بـ <، فيسقط ما شارك آخر سطر في الصفحة وقته)
+  const seen = new Map();
+  for (const r of out) {
+    if (r.key) continue;
+    const base = `${r.type}\u0001${r.text}\u0001${r.by || ''}\u0001${r.detail || ''}`;
+    const n = (seen.get(`${r.at}\u0001${base}`) || 0) + 1;
+    seen.set(`${r.at}\u0001${base}`, n);
+    r.key = `${base}\u0001${n}`;
+  }
+  const cur = parseTimelineCursor(before);
   const want = types?.length ? new Set(types) : null;
-  const rows = out.filter((r) => (!before || String(r.at) < before) && (!want || want.has(r.type)))
-    .sort((x, y) => String(y.at).localeCompare(String(x.at)));
+  const rows = out.filter((r) => (!cur || timelineBefore(r, cur)) && (!want || want.has(r.type)))
+    .sort((x, y) => String(y.at).localeCompare(String(x.at)) || (x.key < y.key ? 1 : x.key > y.key ? -1 : 0));
   const page = rows.slice(0, limit);
-  return { rows: page.map(({ kind: _k, ...r }) => r), next: rows.length > limit ? page[page.length - 1].at : null };
+  const last = page[page.length - 1];
+  return { rows: page.map(({ kind: _k, key: _key, ...r }) => r), next: rows.length > limit ? timelineCursor(last) : null };
 }

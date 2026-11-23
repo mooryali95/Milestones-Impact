@@ -32,7 +32,7 @@ import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
 import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
-import { consumeSponsorCode, findSponsorCode, redeemSponsorCode } from './sponsor-codes.ts';
+import { findSponsorCode, redeemAndLink, redeemSponsorCode } from './sponsor-codes.ts';
 import { SPONSOR_CODE_SPENT_AR } from './sponsor-codes.js';
 import { advisorOf, notifySubmission } from './advisor.ts';
 import { reviewerKind } from './model-review.js';
@@ -147,7 +147,7 @@ const SPONSOR_TRIES_PER_IP_HOUR = 30;
 const failsSince = async (key: string) => (await db.from('audit_log').select('id', { count: 'exact', head: true })
   .eq('action', 'sponsor.code-fail').eq('actor', key).gte('created_at', new Date(Date.now() - 36e5).toISOString())).count ?? 0;
 // رموز الرعاية التي تولّدها الإدارة وحدها (sponsor-codes.ts)، ورمز رابط الجهة لا يُقبل مكتوبًا. رمز الرعاية لا يُستهلك هنا:
-// يُعاد معه sponsor_code فيستهلكه المستدعي لحظة الربط الفعلي (consumeSponsorCode)، فمن يُرد قبل الربط لا يأخذ استخدامًا
+// يُعاد معه sponsor_code فيستهلكه المستدعي لحظة الربط الفعلي (redeemAndLink)، فمن يُرد قبل الربط لا يأخذ استخدامًا
 async function sponsorByCode(code: unknown, key: string, ipKey: string | null = null) {
   const c = String(code || '').trim();
   if (!c) return null;
@@ -230,8 +230,9 @@ export async function sponsorCode(p: any, b: Body, ctx: { ip?: string | null } =
       : `أنهت الإدارة من قبل رعاية هذه الجهة لك، فلا يعيدها الرمز. لمراجعة القرار راسل ${CONTACT_EMAIL}`, 409, 'sponsor_decided');
   }
   // رمز رعاية: يُستهلك الآن، بعد حسم القرار وقبل الربط (ذري في القاعدة؛ من سبقه إلى آخر استخدام يُرد هنا)
-  if (r.sponsor_code) await consumeSponsorCode(r.sponsor_code, p.id);
-  const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
+  // الاستهلاك والربط في معاملة واحدة (redeemAndLink)، فلا يبقى استخدام معدود إن تعذّر الربط
+  const saved = r.sponsor_code ? await redeemAndLink(r.sponsor_code, p.id, r.org.id)
+    : must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
   // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
   await pinSponsorFor(p.id, { auto: true });

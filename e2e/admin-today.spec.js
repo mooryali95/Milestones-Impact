@@ -303,3 +303,27 @@ test('3ب: قرار في طابور المتطلبات يعيد طلب admin.tod
   await page.waitForTimeout(1000);
   expect(n()).toBe(2);
 });
+
+// «صحة المنصة» (admin.platform-health): صف لكل فحص بلونه وسطر علاجه، والأحكام من الخادم كما هي
+test('صحة المنصة: صف لكل فحص بلونه، والعلاج لما يحتاجه وحده', async ({ page }) => {
+  const checks = [
+    { key: 'migrations', label: 'ترحيلات القاعدة', level: 'bad', line: '1 لم يُطبَّق: 20261128100000_leaders_atomic_and_health', remedy: 'شغّل سير «migrate» في GitHub Actions لتطبيقها على الإنتاج.' },
+    { key: 'alert_email', label: 'بريد التنبيه', level: 'ok', line: 'LEADERS_ALERT_EMAIL مضبوط', remedy: '' },
+    { key: 'cron', label: 'المهمة الساعية', level: 'unknown', line: 'تعذّرت قراءة حالة leaders-expert-offers', remedy: 'راجع صلاحية القراءة.' },
+    { key: 'digest', label: 'ملخص النماذج اليومي', level: 'ok', line: 'آخر ملخص 2026-11-23', remedy: '' },
+    { key: 'sponsor_codes', label: 'رموز الرعاية', level: 'warn', line: 'جهة بلا رمز فعّال: جهة ب', remedy: 'أنشئ رمزًا من ملف الجهة.' },
+  ];
+  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'bad', checks } } });
+  const card = page.getByRole('region', { name: 'صحة المنصة', exact: true });
+  await expect(card).toHaveAttribute('data-level', 'bad');
+  await expect(card.locator('.ph-row')).toHaveCount(5);
+  await expect(card.locator('.ph-row[data-level="bad"]')).toContainText('شغّل سير «migrate»');
+  await expect(card.locator('.ph-row[data-level="warn"]')).toContainText('جهة ب');
+  await expect(card.locator('.ph-row[data-level="ok"] .ph-remedy')).toHaveCount(0);
+});
+
+test('صحة المنصة: رد بلا فحوص لا يُرسم، وتعذّر القراءة سطر خافت', async ({ page }) => {
+  await setup(page);
+  await expect(page.getByRole('heading', { name: /الخير/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'صحة المنصة', exact: true })).toHaveCount(0);
+});

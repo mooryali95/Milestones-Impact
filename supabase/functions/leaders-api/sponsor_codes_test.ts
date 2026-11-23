@@ -160,3 +160,33 @@ Deno.test('قبل الترحيل: لا جدول = رمز غير معروف، و�
     await assertRejects(() => SC.adminCreate(ADMIN, { org_id: ORG }), Error, 'غير مفعّلة');
   } finally { w.restore(); }
 });
+
+// ترحيل 20261128100000: الاستهلاك والربط في معاملة واحدة (redeem_and_link_sponsor_code)، محاكاة بقاعدتها في _fake_db.ts
+Deno.test('الاستهلاك والربط معًا: إن صار للمشارك جهة في الأثناء رُد 409 ولم يُعدّ الاستخدام', async () => {
+  const w = world();
+  try {
+    await SC.adminCreate(ADMIN, { org_id: ORG, code: 'atomic-2027', max_uses: 1 });
+    const stale = { ...pOf(w, 1) };
+    pOf(w, 1).organization_id = OFF;   // رُبط بجهة أخرى بعد أن قُرئ ملفه
+    const e: any = await assertRejects(() => P.sponsorCode(stale, { sponsor_code: 'atomic-2027' }, { ip: '10.0.0.1' }));
+    assertEquals(e.status, 409);
+    const c = w.tables.sponsor_codes.find((x) => x.code === 'atomic-2027')!;
+    assertEquals([c.used, w.tables.sponsor_code_uses.length, pOf(w, 1).organization_id], [0, 0, OFF]);
+    // الاستخدام الذي لم يُعدّ يبقى لغيره
+    assertEquals(await link(w, 2, 'atomic-2027'), ORG);
+    assertEquals(c.used, 1);
+  } finally { w.restore(); }
+});
+
+Deno.test('قبل ترحيل الربط الذري (الدالة غائبة): يعود إلى الاستهلاك ثم الربط كما كان', async () => {
+  const tables: Record<string, Row[]> = {
+    organizations: [{ id: ORG, name: 'منظومة', short_name: 'Manzoma', color: '#123', status: 'active', invite_code: 'manzoma-invite-01', seats: null, contract_ends: null }],
+    participants: [1, 2].map(person), sponsor_codes: [], sponsor_code_uses: [], audit_log: [], entitlements: [], sponsor_decisions: [], payments: [],
+  };
+  const w = installFake(tables, { rpc: redeem, fail: (t) => t === 'rpc:redeem_and_link_sponsor_code' ? { code: 'PGRST202', message: 'not found' } : null });
+  try {
+    await SC.adminCreate(ADMIN, { org_id: ORG, code: 'legacy-2027' });
+    assertEquals(await link(w, 1, 'legacy-2027'), ORG);
+    assertEquals(w.tables.sponsor_codes[0].used, 1);
+  } finally { w.restore(); }
+});

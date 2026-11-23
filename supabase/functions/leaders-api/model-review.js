@@ -68,6 +68,16 @@ export function readingList(items, noAdvisor = new Set()) {
   return { groups: list, gates };
 }
 
+// العدّ الواحد لـ«للقراءة» وبطاقات الاعتماد: من readingList نفسها، فلا يختلف عدّاد الكتيب وصندوق «ينتظرني» عن القائمة.
+// rows: تسليمات بـstatus وlearning_models{key} وparticipants{is_demo} إن قُرئت. الحساب التجريبي لا يُعدّ (كـlisted في الخادم)
+// يعيد { read: عدد ما ينتظر القراءة (المسلَّم غير المقروء، بلا البطاقة)، gates: عدد بطاقات المبادرة بانتظار الاعتماد }
+export function readingCounts(rows) {
+  const live = (rows || []).filter((x) => !x.participants?.is_demo);
+  const { groups, gates } = readingList(live);
+  // optional-exempt: عدّ تسليمات نماذج في قائمة القراءة، لا بنود رحلة ولا نشاط اختياري
+  return { read: groups.reduce((n, g) => n + g.items.length, 0), gates: gates.length };
+}
+
 // «قرأتها كلها»: معرّفات ما يُعلَّم مقروءًا لمشارك واحد. المسلَّم وحده، والبطاقة لا تُعتمد جملةً
 export function bulkReadIds(items, participantId) {
   return (items || []).filter((x) => x.participant_id === participantId && x.status === 'submitted' && !isGateModel(x.learning_models?.key)).map((x) => x.id);
