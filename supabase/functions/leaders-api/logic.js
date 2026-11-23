@@ -407,6 +407,20 @@ export const AUTO_CHECKS = {
   'P-PROJECT': (s) => !!s.initiativeNamed,
   'T-360': (s) => !!s.preRated,
   'E-360': (s) => !!s.postRated,
+  // اعتمدهما المالك 2026-11-23 (docs/journey/2026-11-23-البنود-اليدوية-القابلة-للربط.md):
+  // العرض أمام اللجنة يُحسم باعتماد التقييم الختامي (final_evaluations.status = 'approved')، لا بمجرد حسابه
+  'E-PRES': (s) => !!s.finalApproved,
+  // قراءة الأثر بعد ستة أشهر: أرسل المشارك مراجعة اليوم 180 (capstone_updates.checkpoint = 'd180')، وتأكيد الراعي دليل يُعرض لا شرط
+  'R-6M': (s) => !!s.review180,
+};
+
+// بنود تلقائية تبقى قابلة للتجاوز اليدوي: صف «done» محفوظ لها (اعتماد سابق أو «تجاوز يدوي») يُعدّ كما كان،
+// فلا يتراجع من اعتُمدت له يدويًا قبل ربطها. بقية التلقائي يُقرأ من مصدره وحده كما كان
+export const AUTO_OVERRIDABLE = Object.freeze(['E-PRES', 'R-6M']);
+// نص الدليل حين يحسمها النظام، يظهر بجانب شارة «تلقائي» في ملف المشارك
+export const AUTO_EVIDENCE = {
+  'E-PRES': (s) => (s.finalApproved ? 'اعتُمد التقييم الختامي' : null),
+  'R-6M': (s) => (s.review180 ? (s.review180Verified ? 'سُجّلت مراجعة يوم 180 وأكّدها الراعي' : 'سُجّلت مراجعة يوم 180') : null),
 };
 
 // كيف يكتمل البند، بمصدر واحد يقرؤه محرر الرحلة: يحسمه النظام من حالة المشارك، أو دليل من مكانه
@@ -446,13 +460,15 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         const p = progress[r.id] || {};
         // النشاط الموثق يكتمل بدليله، أو باعتماد يدوي من المستشار
         const act = activity[r.id] || null;
-        const status = auto ? (auto(state) ? 'done' : 'pending')
+        const keep = auto && AUTO_OVERRIDABLE.includes(r.code);
+        const autoNote = auto && AUTO_EVIDENCE[r.code] ? AUTO_EVIDENCE[r.code](state) : null;
+        const status = auto ? (auto(state) || (keep && p.status === 'done') ? 'done' : 'pending')
           : act ? (act.done || p.status === 'done' ? 'done' : 'pending')
           : p.status || 'pending';
         // الاختياري خارج العد (optional.js): يُختم هنا مرة، ومنه يقرأ كل عدّاد ونسبة وشرط بعده required وحده
         // الملف المرفوع (بند الرفع): اسمه كما سمّاه صاحبه ووقت رفعه، لصف «ملفك المرفوع» في رحلته (uploadedFile في upload-file.js)
         const file = r.kind === 'upload' ? uploadedFile(p) : null;
-        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
+        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, ...(keep ? { override_ok: true, auto_note: autoNote } : {}), status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
       });
     // المنجز والمطلوب من البنود التي تُعد وحدها: الاختياري لا ينقص نسبة من يقف في المرحلة ولا يزيدها
     const n = countedProgress(items);
