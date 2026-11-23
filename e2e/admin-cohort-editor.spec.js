@@ -293,3 +293,16 @@ test('تعذّرت قراءة الرحلة: الحفظ لا يرسل التنف�
   await again.getByRole('button', { name: 'أعد المحاولة' }).click();
   await expect(again.locator('.ce-stage').first()).toBeVisible();
 });
+
+test('نسخة أحدث من الرحلة: تنبيه في رأس ملف الدفعة بالرقمين، و«رقِّ الدفعة» يفتح معاينة الترقية', async ({ page }) => {
+  programs[0].versions.unshift({ id: 'v2', program_id: 'pa', number: 2, label: 'بعد التعديل', created_at: '2026-11-22' });
+  try {
+    const calls = await setup(page);
+    await page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' }).getByRole('link', { name: 'الرحلة والمدد' }).click();
+    const note = page.locator('[data-version-notice="newer"]');
+    await expect(note).toContainText('على النسخة 1');
+    await expect(note).toContainText('والأحدث 2');
+    await note.getByRole('button', { name: 'رقِّ الدفعة' }).click();
+    await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-upgrade')).toMatchObject({ id: 'c2' });
+  } finally { programs[0].versions.shift(); }
+});

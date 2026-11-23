@@ -111,7 +111,7 @@
 .gd-case-form textarea, .gd-case-form select { width: 100%; }
 /* إصلاح تقييم الدقة 2026-11-18: شرطا البوابة، والنتائج بما كان متوقعًا، وحقول الحالة في صف */
 .gd-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.gd-checks li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 6px; background: var(--st-bad-bg, #fbeaea); }
+.gd-checks li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; min-width: 0; overflow-wrap: anywhere; padding: 6px 10px; border-radius: 6px; background: var(--st-bad-bg, #fbeaea); }
 .gd-checks li[data-ok="ok"] { background: rgba(46, 125, 91, .1); }
 .gd-checks li > span { font-weight: 700; }
 .gd-order { border-inline-start: 3px solid var(--line-strong, #ccc); padding-inline-start: 8px; }
@@ -295,7 +295,9 @@
 .gd-rules { margin-top: 14px; display: grid; gap: 6px; }
 /* جدول التشغيلات على الهاتف: «النتائج» في الخلية الأولى، والتاريخ سطر واحد، والكلفة والنسخة تختفيان دون 600 */
 .gd-run-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-.gd-nowrap, .gd-checks bdi { white-space: nowrap; }
+.gd-nowrap { white-space: nowrap; }
+/* بريد المعتمد ونسخة المجموعة يلتفان على الهاتف ولا يتجاوزان البطاقة */
+.gd-checks bdi { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .ag-guide-eval .gd-opt { display: none; } }
 /* المرحلة د: مراجعة الأسبوع */
 .gd-delta.ok { color: var(--st-ok); }

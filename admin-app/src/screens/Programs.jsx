@@ -16,6 +16,7 @@ import CohortVisibility from './CohortVisibility.jsx';
 import CohortWizard from './CohortWizard.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
+import { versionNotice } from '../../../supabase/functions/leaders-api/cohort-readiness.js';
 import { navigate, readQuery, useRoute, writeQuery } from '../route.js';
 import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
@@ -65,7 +66,7 @@ const ACTION_LABEL = {
   edit: 'تحرير الدفعة', plan: 'افتح الرحلة', team: 'الفريق والمجموعات', participants: 'المشاركون', approve: 'اعتمدهم',
   org: 'افتح الجهة', other: 'افتح الدفعة الأحدث', journey: 'حرّر الرحلة', upgrade: 'رقِّ النسخة', pin: 'ثبّت على نسخة', activities: 'أضف جلسة',
 };
-function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: given }) {
+function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: given, notice = null }) {
   const copy = useCopy();
   // تبويبات الملف: «الملف» (الجاهزية والإعدادات) و«الرحلة» (R1) و«المتابعة» (صف لكل عضو)، والمختار في العنوان ?view= فيُفتح الرابط عليه
   const route = useRoute();
@@ -119,6 +120,12 @@ function CohortPage({ c, hub, canWrite, orgName, progName, version, onBack, on: 
           </div>
           {canWrite && <button className="btn-sm primary" onClick={on.edit}>تحرير الدفعة</button>}
         </div>
+        {notice && (
+          <div className={`la-note version-note ${notice.kind}`} role="status" data-version-notice={notice.kind}>
+            <span>{notice.text}</span>
+            {canWrite && on[notice.action] && <button type="button" className="btn-sm primary" onClick={on[notice.action]}>{notice.button}</button>}
+          </div>
+        )}
 
         <div ref={tabsRef} className="cohort-tabs" role="tablist" aria-label="أقسام ملف الدفعة" onKeyDown={tabKey}>
           {COHORT_TABS.map(([k, l]) => (
@@ -335,7 +342,8 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     return (
       <>
         <CohortPage c={shown} hub={cohortHub({ cohort: shown, cohorts: d.cohorts, orgs: d.organizations, programs })} canWrite={canWrite}
-          orgName={orgName} progName={progName} version={versionOf(shown)} onBack={() => onCohort(null)} on={on} />
+          orgName={orgName} progName={progName} version={versionOf(shown)} onBack={() => onCohort(null)} on={on}
+          notice={versionNotice({ cohort: shown, programs })} />
         {dialogs}
       </>
     );

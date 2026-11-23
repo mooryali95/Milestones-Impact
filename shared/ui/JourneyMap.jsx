@@ -97,8 +97,17 @@ export default function JourneyMap({ map, embedded = false, onPeople = null }) {
   // موقع الدفعة اليوم: كل ما يسير اليوم معًا (today_stages، R3b)، وما قبله قيمة واحدة
   const todayKeys = map.cohort?.today_stages || (map.cohort?.today_stage ? [map.cohort.today_stage] : []);
   const todays = todayKeys.map((k) => stages.find((s) => s.key === k)).filter(Boolean);
-  const peak = map.bottleneck && stages.find((s) => s.key === map.bottleneck.stage);
-  const max = Math.max(1, ...stages.map((s) => s.here));
+  // مرحلتان تسيران معًا: من فيهما يُعدّ مرة واحدة على أولاهما (here_by_group)، والأخرى «ضمنها»، فمجموع المحور صحيح
+  const tg = map.lanes?.together || {};
+  const groupHere = (s) => (tg[s.key] === s.key ? map.here_by_group?.[s.key] ?? s.here : s.here);
+  const groupLate = (s) => (tg[s.key] === s.key ? map.late_by_group?.[s.key] ?? s.late : s.late);
+  const inGroup = (s) => !!tg[s.key] && tg[s.key] !== s.key && map.here_by_group != null;
+  const groupTitle = (s) => (tg[s.key] === s.key ? stages.filter((x) => tg[x.key] === s.key).map((x) => x.title) : [s.title]);
+  const peakAt = stages.filter((s) => !s.off && !inGroup(s)).reduce((b, s) => (groupHere(s) > (b ? groupHere(b) : 0) ? s : b), null);
+  const peak = peakAt && { title: groupTitle(peakAt).join(' و'), together: groupTitle(peakAt).length > 1, here: groupHere(peakAt), late: groupLate(peakAt) };
+  // متأخرة عن جدولها: الجدول اليوم عند مراحل لا أحد فيها، والناس قبلها
+  const behind = todays.length > 0 && todays.every((t) => groupHere(t) === 0 && !(inGroup(t) && map.here_by_group?.[tg[t.key]])) && (map.totals?.late || 0) > 0;
+  const max = Math.max(1, ...stages.map((s) => groupHere(s)));
   const openStage = stages.find((s) => s.key === open);
   // من في مرحلتي قبول تسيران معًا يُطرح مرة واحدة (here_by_phase، R3b)، وإلا مجموع مراحل القبول كما كان
   const admHere = map.here_by_phase?.admission ?? stages.filter((s) => s.phase === 'admission').reduce((a, s) => a + s.here, 0);
@@ -114,6 +123,7 @@ export default function JourneyMap({ map, embedded = false, onPeople = null }) {
             {map.program?.name}
             {map.cohort?.starts_on && <> · بدأت {fmtDate(map.cohort.starts_on)}</>}
             {todays.length > 0 && <> · الجدول اليوم عند {todays.map((t, i) => <React.Fragment key={t.key}>{i ? ' و' : ''}<b>{t.title}</b></React.Fragment>)}{todays.length > 1 ? ' معًا' : ''}</>}
+            {behind && <> · <b className="jm-behind">الدفعة متأخرة عن جدولها</b></>}
           </p>
         </div>
         <dl className="jm-totals">
@@ -127,7 +137,7 @@ export default function JourneyMap({ map, embedded = false, onPeople = null }) {
       {peak && peak.here > 0 && (
         <p className="jm-alert" role="note">
           <span className="jm-alert-mark" aria-hidden="true" />
-          <span>أكبر تجمع الآن {peopleAr(peak.here)} عند «<b>{peak.title}</b>»{peak.late ? <>، منهم <b>{peak.late}</b> {late.one}</> : null}</span>
+          <span>أكبر تجمع الآن {peopleAr(peak.here)} عند «<b>{peak.title}</b>»{peak.together ? ' معًا' : ''}{peak.late ? <>، منهم <b>{peak.late}</b> {late.one}</> : null}</span>
         </p>
       )}
 
@@ -155,16 +165,18 @@ export default function JourneyMap({ map, embedded = false, onPeople = null }) {
                     );
                   }
                   const isToday = todayKeys.includes(s.key);
+                  const sub = inGroup(s);
+                  const here = groupHere(s), lateN = sub ? 0 : groupLate(s);
                   const ahead = Math.max(0, total - s.done - s.here);
                   const lane = laneAr(s, stages, map.lanes);
                   return (
-                    <li key={s.key} className={`jm-stage${s.here ? ' has' : ''}${isToday ? ' today' : ''}${open === s.key ? ' on' : ''}${map.lanes?.together?.[s.key] ? ' jm-with' : ''}${map.lanes?.tracks?.includes(s.key) ? ' jm-track' : ''}`}>
+                    <li key={s.key} className={`jm-stage${s.here ? ' has' : ''}${sub ? ' jm-sub' : ''}${isToday ? ' today' : ''}${open === s.key ? ' on' : ''}${map.lanes?.together?.[s.key] ? ' jm-with' : ''}${map.lanes?.tracks?.includes(s.key) ? ' jm-track' : ''}`}>
                       <button type="button" className="jm-node" aria-expanded={open === s.key} aria-controls={`jm-panel-${s.key}`}
                         aria-label={`${s.title}${lane ? ` (${lane})` : ''}${isToday ? ' (موقع الدفعة على جدولها اليوم)' : ''}: ${peopleAr(s.here)} هنا، ${s.done} تجاوزوها، ${ahead} لم يصلوها${s.late ? `، ${s.late} ${late.one}` : ''}`}
                         onClick={() => setOpen(open === s.key ? null : s.key)}>
-                        {isToday && <span className="jm-today">اليوم</span>}
-                        <span className="jm-mark" aria-hidden="true" style={{ '--w': s.here / max }} />
-                        <b className="jm-here">{s.here}</b>
+                        {isToday && <span className={`jm-today${here || (sub && map.here_by_group?.[tg[s.key]]) ? '' : ' quiet'}`}>{here || sub ? 'اليوم' : 'موعدها اليوم'}</span>}
+                        <span className="jm-mark" aria-hidden="true" style={{ '--w': (sub ? 0 : here) / max }} />
+                        {sub ? <small className="jm-here jm-within" title="من فيها يُعدّ مرة واحدة مع المرحلة التي تسير معها">ضمن العدد</small> : <b className="jm-here">{here}</b>}
                         <span className="jm-title">{s.title}</span>
                         <small className="jm-dur">{durationAr(s.duration_days)}</small>
                         {lane && <small className="jm-lane">{lane}</small>}
@@ -172,7 +184,7 @@ export default function JourneyMap({ map, embedded = false, onPeople = null }) {
                           <i className="d" style={{ width: `${total ? (s.done / total) * 100 : 0}%` }} />
                           <i className="h" style={{ width: `${total ? (s.here / total) * 100 : 0}%` }} />
                         </span>
-                        {s.late > 0 && <span className="jm-late">{s.late} متأخر</span>}
+                        {lateN > 0 && <span className="jm-late">{lateN} متأخر</span>}
                       </button>
                     </li>
                   );
