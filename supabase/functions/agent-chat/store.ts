@@ -15,7 +15,7 @@ export type MessageRow = {
   input_tokens?: number | null; cache_read_tokens?: number | null; cache_write_tokens?: number | null; output_tokens?: number | null; cost_micros?: number | null;
 };
 export type Reserve = { ok: true; total: number } | { ok: false; reason: 'refused' | 'error' };
-export type Price = { enabled: boolean; currency: string; assessment_cents: number; program_cents: number };
+export type Price = { enabled: boolean; currency: string; assessment_cents: number; program_cents: number; creem_check?: unknown };
 
 // ip في العدادات: undefined للجميع، وnull للطلبات بلا عنوان معروف (دلو واحد مشترك بحده، لا إعفاء)، وإلا فالعنوان
 export interface Store {
@@ -155,8 +155,8 @@ export function supabaseStore(base: SB, insertContactRequest: (sb: SB, row: Reco
       return data === true;
     },
     async leadersPrice() {
-      // إعداد الدفع وحده: لا جدول للجهات ولا العقود
-      const { data, error } = await lead().from('payment_settings').select('enabled, currency, assessment_cents, program_cents').eq('id', true).maybeSingle();
+      // إعداد الدفع وحده: لا جدول للجهات ولا العقود. بـ* ليحمل creem_check (نمط الضريبة) بعد ترحيله ويعمل قبله
+      const { data, error } = await lead().from('payment_settings').select('*').eq('id', true).maybeSingle();
       if (error || !data) return null;
       return data as Price;
     },

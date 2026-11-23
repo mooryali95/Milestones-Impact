@@ -10,6 +10,7 @@ import ExportButton from '../ExportButton.jsx';
 import PaymentFile, { PAY_ST } from './PaymentFile.jsx';
 import { creemOrderUrl, isAbandoned, NOTIFY, overpaidOf } from '../../../supabase/functions/leaders-api/payments-ledger.js';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
+import { PRODUCT_WARN } from '../../../supabase/functions/_shared/creem-product.js';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 
 const money = (c, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${((c || 0) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
@@ -26,19 +27,55 @@ function Sparkbars({ daily }) {
   );
 }
 
+// ما يقوله Creem عن المنتج (آخر فحص في creem_check): الفوترة والعملة والضريبة والوضع، وتحذيرات صريحة.
+// سعر المنتج في Creem معلومة فقط: السعر المعتمد هو سعر الإعداد (custom_price)
+const MODE_AR = { test: 'اختبار', live: 'حي' };
+const unreachable = (c) => c?.state === 'unreachable';
+function CreemLine({ c, id }) {
+  if (!id) return null;
+  if (!c || c.id !== id) return <p className="pay-creem la-muted small" data-creem="unknown">لم يُتحقق من هذا المنتج في Creem بعد.</p>;
+  if (unreachable(c)) return <p className="pay-creem small" data-creem="unreachable"><span className="la-chip warn">تعذّر التحقق من Creem الآن</span> يُحفظ السعر كما هو، وأعد التحقق بعد قليل.</p>;
+  const warns = c.warnings || [];
+  return (
+    <div className={`pay-creem small ${warns.length ? 'bad' : 'ok'}`} data-creem={warns.length ? 'warn' : 'ok'}>
+      {c.state === 'ok' && (
+        <p>
+          <span>{c.billing === 'recurring' ? 'اشتراك متكرر' : c.billing === 'onetime' ? 'دفعة واحدة' : 'نوع الفوترة غير معروف'}</span>
+          {' · '}<bdi dir="ltr">{c.currency || '?'}</bdi>
+          {' · '}<span>{c.tax_mode === 'inclusive' ? 'شامل الضريبة' : c.tax_mode === 'exclusive' ? 'يُضاف عليه الضريبة' : 'نمط الضريبة غير معروف'}</span>
+          {' · '}<span>{MODE_AR[c.mode] ? `وضع ${MODE_AR[c.mode]}` : 'الوضع غير معروف'}</span>
+        </p>
+      )}
+      {warns.map((w) => <p key={w} className="pay-creem-warn" role="alert" data-warn={w}>✗ {PRODUCT_WARN[w] || w}</p>)}
+      {c.state === 'ok' && c.price_cents != null && <p className="la-muted" data-creem-price>سعر المنتج في Creem لم يعد مستعملًا، وهو <bdi dir="ltr">{money(c.price_cents, c.currency || 'USD')}</bdi></p>}
+    </div>
+  );
+}
+
 function SettingsCard({ d, canWrite, reload }) {
   const { toast, confirm } = useUI();
   const s = d.settings;
   const [v, setV] = useState({ assessment_product: s.assessment_product || '', program_product: s.program_product || '', assessment: (s.assessment_cents / 100).toString(), program: (s.program_cents / 100).toString() });
   const [notify, setNotify] = useState(() => ({ ...(s.notify || {}) }));
   const [busy, setBusy] = useState(false);
+  const [check, setCheck] = useState(s.creem_check || null);
+  const anyUnreachable = (c) => unreachable(c?.assessment) || unreachable(c?.program);
+  const verify = async () => {
+    setBusy(true);
+    const r = await L('admin.payment-settings', { verify_only: true });
+    setBusy(false);
+    if (r.success) setCheck(r.creem_check || null);
+    toast(r.success ? (anyUnreachable(r.creem_check) ? 'تعذّر التحقق من Creem الآن' : 'تحققنا من Creem') : r.message);
+  };
   const save = async (enabled) => {
     if (enabled && !s.enabled && !(await confirm('تفعيل الدفع يجعل القياس والبرنامج مدفوعين لكل مشارك جديد غير مرعي من جهة. المشاركون الحاليون معفون. تفعّل؟'))) return;
     setBusy(true);
     const r = await L('admin.payment-settings', { enabled, assessment_product: v.assessment_product, program_product: v.program_product,
       assessment_cents: Math.round(Number(v.assessment) * 100), program_cents: Math.round(Number(v.program) * 100), notify });
     setBusy(false);
-    toast(r.success ? (enabled ? (r.grandfathered ? `الدفع مفعّل، وأُعفي ${r.grandfathered} مشاركًا قائمًا` : 'الدفع مفعّل') : 'حُفظت الإعدادات') : r.message);
+    if (r.success && r.creem_check) setCheck(r.creem_check);
+    const note = r.success && anyUnreachable(r.creem_check) ? '. تعذّر التحقق من Creem الآن' : '';
+    toast(r.success ? (enabled ? (r.grandfathered ? `الدفع مفعّل، وأُعفي ${r.grandfathered} مشاركًا قائمًا` : 'الدفع مفعّل') : 'حُفظت الإعدادات') + note : r.message);
     if (r.success) reload();
   };
   const h = d.health;
@@ -57,8 +94,10 @@ function SettingsCard({ d, canWrite, reload }) {
       <div className="pay-form">
         <label>معرّف منتج القياس<input dir="ltr" value={v.assessment_product} disabled={!canWrite} onChange={(e) => setV({ ...v, assessment_product: e.target.value })} /></label>
         <label>سعر القياس (USD)<input dir="ltr" inputMode="decimal" value={v.assessment} disabled={!canWrite} onChange={(e) => setV({ ...v, assessment: e.target.value })} /></label>
+        <div className="pay-creem-cell" data-product="assessment"><CreemLine c={check?.assessment} id={s.assessment_product} /></div>
         <label>معرّف منتج البرنامج<input dir="ltr" value={v.program_product} disabled={!canWrite} onChange={(e) => setV({ ...v, program_product: e.target.value })} /></label>
         <label>سعر البرنامج (USD)<input dir="ltr" inputMode="decimal" value={v.program} disabled={!canWrite} onChange={(e) => setV({ ...v, program: e.target.value })} /></label>
+        <div className="pay-creem-cell" data-product="program"><CreemLine c={check?.program} id={s.program_product} /></div>
       </div>
       <p className="la-muted small" data-price-help>هذا هو السعر الذي يراه المتدرب، وهو ما يخصمه Creem قبل الضريبة. لا يُستعمل سعر المنتج في Creem.</p>
       <h3>بريد الدفع</h3>
@@ -74,6 +113,7 @@ function SettingsCard({ d, canWrite, reload }) {
       {canWrite && (
         <div className="la-row">
           <button className="btn-sm ghost" disabled={busy} onClick={() => save(s.enabled)}>احفظ</button>
+          <button className="btn-sm ghost" disabled={busy} onClick={verify} data-verify-creem>تحقق من Creem</button>
           {s.enabled
             ? <button className="btn-sm ghost" disabled={busy} onClick={() => save(false)}>أوقف الدفع (يمر الجميع مجانًا)</button>
             : <button className="btn-sm primary" disabled={busy} onClick={() => save(true)}>فعّل الدفع</button>}
