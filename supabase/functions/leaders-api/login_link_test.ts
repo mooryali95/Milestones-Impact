@@ -71,6 +71,11 @@ function install(tables: Record<string, Row[]>) {
   };
   // leaders.pin_sponsor_seat بلا الحارس: الجهة النشطة، ثم «مثبّت سلفًا» يكمل الناقص، ثم المقاعد، ثم البندان
   const rpc = (name: string, a: any) => {
+    // رمز رعاية (redeem_sponsor_code): يُقبل ما دام صفه في sponsor_codes، وحدّه وانتهاؤه في sponsor_codes_test.ts
+    if (name === 'redeem_sponsor_code') {
+      const c = (tables.sponsor_codes || []).find((x) => x.code === a.p_code);
+      return Promise.resolve({ data: [{ org_id: c?.organization_id ?? null, reason: c ? 'ok' : 'unknown' }], error: null });
+    }
     if (name !== 'pin_sponsor_seat') return Promise.resolve({ data: null, error: null });
     pins.push(a);
     const ents = tables.entitlements ||= [];
@@ -177,6 +182,8 @@ Deno.test('X4 بلا قرار ولا جهة يدخل برابط الجهة: يُ
 Deno.test('X5 الحكم نفسه برمز يكتبه: sponsorCode يرد 409 sponsor_decided لمن فكّته الإدارة', async () => {
   const f = install(world([person(44)], sponsorRows(44)));
   f.tables.organizations[0].invite_code = 'jiha-2026';
+  // ما يُكتب في «رشّحتك جهة؟» رمز رعاية وحده (قرار المالك)، فيُزرع رمز رعاية للجهة بالنص نفسه
+  f.tables.sponsor_codes = [{ id: 'sc-1', organization_id: ORG, code: 'jiha-2026', max_uses: null, used: 0, expires_at: null, active: true }];
   try {
     await assignOrg(ADMIN, { participant_ids: [U(44)] });
     const e: any = await assertRejects(() => P.sponsorCode({ ...row(f, 44) }, { sponsor_code: 'jiha-2026' }));

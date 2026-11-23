@@ -15,6 +15,7 @@ import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
 import OrgTeam from './OrgTeam.jsx';
 import OrgJourney from './OrgJourney.jsx';
+import SponsorCodes from './SponsorCodes.jsx';
 import { orgReadiness, readinessSummary, seatsUsedOf, seatsView } from '../org-hub.js';
 import { navigate } from '../route.js';
 
@@ -220,7 +221,7 @@ function OrgReadiness({ org, access, journey, members, seatsUsed, pending, canWr
 }
 
 // فهرس صفحة الجهة: ما ليس للجهة (كصفحة «بدون جهة») يُخفى من الفهرس تلقائيًا
-const ORG_SECTIONS = [['org-journey', 'الرحلة والدفعة'], ['org-team', 'الفريق'], ['org-coordinator', 'منسق الجهة'], ['org-sources', 'مصادر الانتساب'], ['org-finance', 'الرعاية والتكلفة'], ['org-tracks', 'المسارات'], ['org-members', 'المشاركون']];
+const ORG_SECTIONS = [['org-journey', 'الرحلة والدفعة'], ['org-team', 'الفريق'], ['org-coordinator', 'منسق الجهة'], ['org-sponsor-codes', 'رموز الرعاية'], ['org-sources', 'مصادر الانتساب'], ['org-finance', 'الرعاية والتكلفة'], ['org-tracks', 'المسارات'], ['org-members', 'المشاركون']];
 const MEMBER_SORTS = { name: (p) => p.full_name, title: (p) => p.job_title, track: (p) => p.track, status: (p) => STATUS[p.status] || p.status, seen: (p) => p.last_login_at, joined: (p) => p.created_at };
 
 function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
@@ -293,8 +294,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
               {!isNone && 'companion_allowed' in o && <span className={`la-chip ${o.companion_allowed === false ? 'warn' : 'ok'} org-companion`}>المرافق: {o.companion_allowed === false ? 'غير مسموح' : 'مسموح'}</span>}</div></div>
           <div className="la-row">
             {!isNone && <button className="btn-sm ghost" onClick={() => copy(inviteUrl(o), 'نُسخ رابط الدعوة')}>نسخ رابط الدعوة</button>}
-            {/* الرمز الذي يكتبه المشارك في شاشة الرسوم «رشّحتك جهة؟» هو رمز رابط الدعوة نفسه */}
-            {!isNone && o.invite_code && <button className="btn-sm ghost" onClick={() => copy(o.invite_code, `نُسخ رمز الجهة: ${o.invite_code}`)}>نسخ رمز الجهة</button>}
+            {/* ما يكتبه المشارك في «رشّحتك جهة؟» رموز الرعاية وحدها (قسم «رموز الرعاية» أدناه)، لا رمز رابط الدعوة */}
             <ExportButton scope="org-members" className="btn-sm ghost" meta={{ kind: 'ORG', title: `مشاركو ${o.name}`, subtitle: 'برنامج القادة', for: o.name, sheet: 'المشاركون', file: 'Organization', code: o.invite_code }}
               columns={memberCols} all={all} filtered={rows} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
             <button className="btn-sm ghost" onClick={printReport}>تقرير الجهة</button>
@@ -326,6 +326,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
       {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} data={journey} /></div>}
       {!isNone && <div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
       {!isNone && <div id="org-coordinator"><CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} /></div>}
+      {!isNone && <div id="org-sponsor-codes"><SponsorCodes key={`codes-${o.id}`} org={o} canWrite={canWrite} /></div>}
 
       <div id="org-sources"><Sources d={d} total={all.length} /></div>
       {!isNone && <div id="org-finance"><OrgFinance id={o.id} onPerson={onPerson} /></div>}

@@ -169,6 +169,7 @@ export const MIGRATIONS = [
   '20261123100000_leaders_demo_per_cohort',
   '20261124100000_leaders_guidance_guard',
   '20261125100000_leaders_payment_creem_check',
+  '20261126100000_leaders_sponsor_codes',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -253,4 +254,5 @@ export const MIGRATION_GATES = {
   '20261122100000_leaders_workshop_optional': ["tolerant", "قبله كل ورشة إلزامية كما كانت، واختيار «اختيارية» معطل في اللوحة بجملة «غير مفعّلة بعد» والحفظ بها مرفوض برسالته، والقراءات تطلب العمود حين يوجد وحده (workshop-optional.ts: optionalReady وsessionCols، وactivities.ts: workshopSave)"],
   '20261123100000_leaders_demo_per_cohort': ["tolerant", "قبله كل شيء كما كان بالحساب التجريبي الواحد وروابطه، وفتح حساب دفعة يُرد بـnot_migrated واللوحة تعرض «غير مفعّلة بعد» (demo-cohort.ts: demoCohortReady يسأل عن demo_links.cohort_id في كل طلب حتى يوجد)، وبعده تُفعَّل بلا نشر"],
   '20261125100000_leaders_payment_creem_check': ["tolerant", "الدالة تكتب العمود بتحديث منفصل يتحمل غيابه (payments.ts storeCheck)، وتقرأ الإعداد بـ* فتعمل قبل الترحيل وبعده"],
+  '20261126100000_leaders_sponsor_codes': ["tolerant", "قبله يرد نموذج «رشّحتك جهة؟» كل رمز ردَّ الرمز غير المعروف (sponsor-codes.ts: غياب الجدول أو الدالة"],
 };
