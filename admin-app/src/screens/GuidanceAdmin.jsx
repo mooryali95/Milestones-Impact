@@ -80,6 +80,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
     setBusy(mode || 'full');
     const r = await L('admin.guide-eval-start', mode ? { mode } : {});
     if (!r.success) { setBusy(false); toast(r.message); return; }
+    if (r.resumed) toast('يُستأنف التشغيل القائم من حيث توقف');
     // الدفعات من اللوحة حتى ينتهي التشغيل: كل طلب بضع حالات، فلا يتجاوز حد زمن الدالة
     for (let i = 0; i < 200; i++) {
       const st = await L('admin.guide-eval-step', { run_id: r.run_id });

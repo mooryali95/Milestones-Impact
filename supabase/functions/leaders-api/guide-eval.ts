@@ -22,7 +22,7 @@ import PROPOSED from './guide-eval/cases-proposed.json' with { type: 'json' };
 
 type Body = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const missing = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_eval/.test(String(e.message || '')));
+const missing = (e: any) => e && e.code !== '23505' && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_eval\S* does not exist|Could not find the (table|function)/.test(String(e.message || '')));
 // القواعد الفعلية كما يجيب بها المشارك (H4: الثابتة وتوجيهات المالك)، فالبصمة والتشغيل بالقواعد نفسها
 export const rulesNow = async () => rulesWith(((await appSettings()).guidance as any)?.extra_rules);
 // ومرجع البرنامج نفسه الذي يصل السؤال من خارج الأبواب (guide.ts programBriefNow)، فتعديل أقسامه في الكتاب يُسقط النجاح
@@ -181,8 +181,14 @@ export async function evalStart(a: Admin, b: Body = {}) {
     fingerprint, cases_version: set.version, total_cases: total, max_micros: EVAL.maxMicros, started_by: a.email,
   }).select('id').single();
   if (error) {
+    // تشغيل قائم لم يكتمل (أُغلقت اللوحة أثناءه): يُستأنف هو نفسه بدل رفض البدء. ويُفحص قبل «لم تُرحَّل»
+    // لأن رسالة قيد التشغيل الواحد تحمل اسم الجدول
+    if (error.code === '23505') {
+      const { data: cur } = await db.from('guidance_eval_runs').select('id, total_cases').eq('status', 'running').limit(1).maybeSingle();
+      if (cur) return { success: true, run_id: (cur as any).id, total: Number((cur as any).total_cases), diagnostic: false, resumed: true };
+      throw new Fail('يجري تقييم آخر الآن', 409, 'eval_running');
+    }
     if (missing(error)) throw new Fail('جداول التقييم لم تُرحَّل بعد (20261116140000)', 409, 'not_migrated');
-    if (error.code === '23505') throw new Fail('يجري تقييم آخر الآن', 409, 'eval_running');
     throw error;
   }
   await audit('admin', a.email, diag ? 'guide.eval-diagnose' : 'guide.eval-start', 'guidance_eval_runs', (data as any).id, null, { fingerprint: fp, cases: total, ...(source ? { from_run: source } : {}) });

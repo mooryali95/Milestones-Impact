@@ -295,6 +295,7 @@ function evalDb(tables: Record<string, Row[]>) {
     const run = () => {
       const rows = tables[table] ||= [];
       if (table === 'audit_log') return { data: null, error: null };
+      if (mode === 'insert' && table === 'guidance_eval_runs' && rows.some((x) => x.status === 'running')) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "guidance_eval_runs_one_running"' } };
       if (mode === 'insert') { const r = { id: crypto.randomUUID(), started_at: new Date().toISOString(), status: 'running', done_cases: 0, passed_cases: 0, cost_micros: 0, ...payload }; rows.push(r); return { data: single ? r : [r], error: null }; }
       let out = rows.filter((r) => f.every((x) => x(r)));
       if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: out, error: null }; }
@@ -345,6 +346,9 @@ Deno.test('التشغيل التشخيصي: يعيد الراسبة وحدها،
   };
   try {
     const full = await E.evalStart(superA, {});
+    // تشغيل قائم لم يكتمل (أُغلقت اللوحة): البدء يستأنفه هو، لا يرد «لم تُرحَّل»
+    const again: any = await E.evalStart(superA, {});
+    assertEquals([again.run_id, again.resumed, tables.guidance_eval_runs.length], [full.run_id, true, 1]);
     for (let i = 0; i < 3; i++) await E.evalStep(superA, { run_id: full.run_id });
     const fr = tables.guidance_eval_runs[0];
     assertEquals([fr.status, fr.passed_cases, fr.done_cases], ['failed', 2, 3]);
