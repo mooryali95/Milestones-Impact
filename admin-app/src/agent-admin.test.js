@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { convSummary, count, orgsSummary, pct, peakDay, systemLine, enableBlock, gateText, KEY_ERROR_AR, keyLooksValid, keyMessage, keySummary, ringLevel, runEvalLoop, runSummary, spendSummary, stateSummary, usd, usd2 } from './agent-admin.js';
 import { companionKnown } from './screens/OrgForm.jsx';
-import { AI_TABS, OWNER_TABS, TAB_ALIASES, TABS } from './leaders-tabs.js';
+import { AI_TABS, GROUP_OF, NAV_GROUPS, OWNER_TABS, TAB_ALIASES, TABS } from './leaders-tabs.js';
 
 describe('المال والنسب', () => {
   it('الميكرو إلى دولار: أربعة أرقام دون الدولار، واثنان فوقه، وغير المقروء لا يصير صفرًا', () => {
@@ -115,8 +115,9 @@ describe('مفتاح المرافق في نموذج الجهة وتبويب ال
     expect([...OWNER_TABS]).toEqual(['ai']);
     expect(AI_TABS.map(([k, l]) => [k, l])).toEqual([['site', 'مساعد الموقع'], ['guidance', 'التوجيه والإرشاد'], ['access', 'الإتاحة']]);
     expect(TAB_ALIASES).toEqual({ agent: ['ai', 'site'], guidance: ['ai', 'guidance'], 'guidance-access': ['ai', 'access'] });
-    const src = readFileSync(join(__dirname, 'screens/Leaders.jsx'), 'utf8');
-    expect(src).toMatch(/\['البرامج', \['programs', 'orgs', 'tracks', 'levels', 'settings', 'ai'\]\]/);
+    // في مجموعة «الإعداد» منذ المرحلة 2 من تدقيق اللوحة (leaders-tabs.js NAV_GROUPS)
+    expect(GROUP_OF.ai).toBe('الإعداد');
+    expect(NAV_GROUPS.flatMap(([, k]) => k).filter((k) => k === 'ai')).toHaveLength(1);
   });
   it('لا شرطة طويلة ولا متوسطة في الملفات الجديدة', () => {
     const files = ['agent-admin.js', 'agent-admin.css', 'screens/Agent.jsx', 'screens/AiHub.jsx', 'leaders-tabs.js', '../../supabase/functions/leaders-api/agent-admin.ts', '../../supabase/functions/agent-chat/runtime.ts',

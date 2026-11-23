@@ -52,7 +52,10 @@ async function setup(page, { delay = {} } = {}) {
 }
 const leaders = async (page, tab) => {
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
-  await page.locator('.la-tabs').getByRole('button', { name: tab }).click();
+  const btn = page.locator('.la-tabs').getByRole('button', { name: tab });
+  // أقسام «الإعداد» في مجموعة مطوية افتراضيًا (تدقيق اللوحة، المرحلة 2): تُفتح مجموعتها أولًا
+  if (!(await btn.isVisible())) await page.getByRole('button', { name: 'مجموعة الإعداد' }).click();
+  await btn.click();
 };
 // اسم النافذة التي فيها التركيز الآن، أو null إن كان خارج كل نافذة
 const focusedDialog = (page) => page.evaluate(() => document.activeElement?.closest('[aria-modal="true"]')?.getAttribute('aria-label') ?? null);

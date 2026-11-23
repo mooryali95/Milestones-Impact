@@ -38,7 +38,7 @@ const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
 import { ScreenBoundary, Spinner } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { badgeLabel, badgeText, groupBadge, tabBadge } from '../pending.js';
-import { FEATURE_TABS, OWNER_TABS, TAB_ALIASES, TABS } from '../leaders-tabs.js';
+import { FEATURE_TABS, groupOpen, NAV_GROUPS, OWNER_TABS, SETUP_GROUP, TAB_ALIASES, TABS } from '../leaders-tabs.js';
 import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
 
 // قسم ميزة مخفية عن المستخدمين: ما يعنيه إخفاؤها هنا، والمدير يبني فيها كما يشاء (مفاتيح الميزات P2)
@@ -53,13 +53,6 @@ export { TABS };
 // تحتاج كتالوج المنهجية (admin.catalog)، فيُحمَّل عند أول فتح لأحدها
 const NEEDS_CATALOG = new Set(['tracks', 'journey', 'content', 'assessment', 'levels', 'handbook', 'impact']);
 const TAB_KEYS = new Set(TABS.map(([k]) => k));
-// الأقسام في أربع مجموعات بحسب طبيعة العمل: ما يُتابع يوميًا، وما يُبنى من محتوى، وما يُدار من برامج، وما يخرج من نتائج
-const TAB_GROUPS = [
-  ['اليومي', ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts']],
-  ['المحتوى', ['journey', 'book', 'handbook', 'katon', 'lab', 'assessment', 'content']],
-  ['البرامج', ['programs', 'orgs', 'tracks', 'levels', 'settings', 'ai']],
-  ['النتائج', ['payments', 'impact', 'f360', 'certs', 'mailcenter', 'mail']],
-];
 const TAB_LABEL = Object.fromEntries(TABS);
 // التبويب والمعرّف من عنوان الصفحة: #/leaders/participants/<id> · orgs/<id> · tracks/<key> · capstones/<id>
 const at = (tab, id) => navigate({ ctx: 'leaders', tab, id });
@@ -90,9 +83,10 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   // على الشاشات الضيقة التبويبات شريط يُسحب: التبويب المفتوح يبقى ظاهرًا
   useEffect(() => { document.querySelector('.la-tabs .on')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' }); }, [tab]);
   const [status, setStatus] = useState('');
-  // المجموعات المطوية تُحفظ لهذا المتصفح: كل مدير يبقي أمامه ما يستعمله
-  const [shut, setShut] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('la.nav.shut') || '[]')); } catch { return new Set(); } });
-  const toggleGroup = (g) => setShut((prev) => { const n = new Set(prev); if (n.has(g)) n.delete(g); else n.add(g); try { localStorage.setItem('la.nav.shut', JSON.stringify([...n])); } catch { /* اختياري */ } return n; });
+  // حال كل مجموعة (مفتوحة أو مطوية) تُحفظ لهذا المتصفح: كل مدير يبقي أمامه ما يستعمله. المفتاح جديد لأن الافتراضي تغيّر
+  // (الإعداد مطوي)، والقديم la.nav.shut كان بأسماء المجموعات الأربع السابقة فلا معنى له الآن
+  const [saved, setSaved] = useState(() => { try { const v = JSON.parse(localStorage.getItem('la.nav.groups') || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } });
+  const toggleGroup = (g, open) => setSaved((prev) => { const n = { ...prev, [g]: !open }; try { localStorage.setItem('la.nav.groups', JSON.stringify(n)); } catch { /* اختياري */ } return n; });
   // عدّاد كل تبويب من صندوق «ينتظرني» بتبويب نوعه (pending.js، «العدّ الواحد»)، والمجموعة المطوية مجموع تبويباتها الظاهرة
   const groupOf = (keys) => groupBadge(pending, keys.filter(allowed));
   const [catalog, setCatalog] = useState(null);
@@ -175,19 +169,25 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
       {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
-        {TAB_GROUPS.map(([g, keys]) => {
-          const folded = shut.has(g) && !keys.includes(tab);
-          const gb = folded ? groupOf(keys) : null;
+        {NAV_GROUPS.map(([g, keys]) => {
+          const open = groupOpen(g, keys, tab, saved);
+          const gb = open ? null : groupOf(keys);
+          const shown = keys.filter(allowed);
+          if (!shown.length) return null;
+          // الأقسام المخفية عن المستخدمين آخر مجموعتها تحت عنوان صغير «تجريبي»، مع نقطتها، فلا تتوسط ما يعمل للمستخدمين
+          const live = shown.filter((k) => !hiddenOf(k));
+          const trial = shown.filter((k) => hiddenOf(k));
+          const item = (k) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-dot" title="مخفي عن المستخدمين"><span className="sr-only">مخفي عن المستخدمين</span></span>}</button>;
           return (
-          <div key={g} className={`la-tab-group${folded ? ' shut' : ''}`} role="group" aria-label={g}>
+          <div key={g} className={`la-tab-group${open ? '' : ' shut'}${g === SETUP_GROUP ? ' la-tab-group-setup' : ''}`} role="group" aria-label={g}>
             {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية،
                 ويُضم وصفه المسموع إلى اسم الزر (aria-label يحجب ما في داخله عن قارئ الشاشة) */}
-            <button type="button" className="la-tab-group-label" aria-label={gb?.n ? `مجموعة ${g}، ${badgeLabel(gb.n, gb.late, gb.partial)}` : `مجموعة ${g}`} aria-expanded={!folded} onClick={() => toggleGroup(g)}>
-              {g}{folded && <Badge b={gb} />}
+            <button type="button" className="la-tab-group-label" aria-label={gb?.n ? `مجموعة ${g}، ${badgeLabel(gb.n, gb.late, gb.partial)}` : `مجموعة ${g}`} aria-expanded={open} onClick={() => toggleGroup(g, open)}>
+              {g}{!open && <Badge b={gb} />}
             </button>
-            {keys.filter(allowed).map((k) => {
-              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-dot" title="مخفي عن المستخدمين"><span className="sr-only">مخفي عن المستخدمين</span></span>}</button>;
-            })}
+            {live.map(item)}
+            {trial.length > 0 && <span className="la-tab-trial" aria-hidden="true">تجريبي</span>}
+            {trial.map(item)}
           </div>
           );
         })}

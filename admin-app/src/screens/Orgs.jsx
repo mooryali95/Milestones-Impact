@@ -18,6 +18,7 @@ import OrgJourney from './OrgJourney.jsx';
 import SponsorCodes from './SponsorCodes.jsx';
 import { orgReadiness, readinessSummary, seatsUsedOf, seatsView } from '../org-hub.js';
 import { navigate } from '../route.js';
+import { MoreMenu } from './PersonShell.jsx';
 
 
 export function Funnel({ f, big }) {
@@ -138,8 +139,11 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
             </div>
             <div className="la-row la-org-acts">
               <button className="btn-sm primary" onClick={() => onOpen(o.id)}>لوحة الجهة</button>
-              <button className="btn-sm ghost" onClick={() => copy(inviteUrl(o), 'نُسخ رابط الدعوة')}>نسخ رابط الدعوة</button>
-              {canWrite && <button className="la-link" onClick={() => onEdit(o)}>تحرير</button>}
+              {/* فعل أساسي واحد ظاهر والثانوية في قائمة ⋯ (تدقيق 2026-11-23، المرحلة 2) */}
+              <MoreMenu label={`إجراءات أخرى لجهة «${o.name}»`} items={[
+                { label: 'نسخ رابط الدعوة', run: () => copy(inviteUrl(o), 'نُسخ رابط الدعوة') },
+                canWrite && { label: 'تحرير', run: () => onEdit(o) },
+              ]} />
             </div>
           </article>
         ))}

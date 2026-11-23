@@ -200,8 +200,11 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
             all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
-          <button className="refresh-btn" type="button" onClick={() => setReport(true)}>فاعلية التذكير</button>
-          {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
+          {/* فعل أساسي واحد ظاهر (+ مشارك) والثانوية في «المزيد» (تدقيق 2026-11-23، المرحلة 2) */}
+          <MoreMenu label="المزيد من إجراءات المشاركين" items={[
+            canWrite && { label: 'استيراد', run: () => setImporting(true) },
+            { label: 'فاعلية التذكير', run: () => setReport(true) },
+          ]} />
         </>} />
       {serverQ && <div className="flt-cap" role="status">نتائج البحث في كل المشاركين عن «{serverQ}». <button type="button" className="flt-link" onClick={() => load()}>عُد إلى القائمة</button></div>}
       <ErasureBanner data={erasures} isSuper={isSuperAdmin()} onOpen={onOpen} />

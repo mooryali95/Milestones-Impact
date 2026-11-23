@@ -15,3 +15,17 @@ export const OWNER_TABS = new Set(['ai']);
 export const AI_TABS = [['site', 'مساعد الموقع', ['المساعد الآلي']], ['guidance', 'التوجيه والإرشاد', []], ['access', 'الإتاحة', ['إتاحة التوجيه']]];
 // الروابط القديمة (بريد التنبيه والإشارات المحفوظة) تصل إلى تبويبها الداخلي: القسم القديم ← [القسم، التبويب الداخلي]
 export const TAB_ALIASES = { agent: ['ai', 'site'], guidance: ['ai', 'guidance'], 'guidance-access': ['ai', 'access'] };
+// معمارية الشريط (تدقيق لوحة الإدارة 2026-11-23، المرحلة 2): خمس مجموعات بحسب تكرار الاستعمال، العمل اليومي أعلاها والإعداد
+// النادر أسفلها مطويًا. كل قسم في مجموعة واحدة، والمفاتيح نفسها فتبقى الروابط القديمة (#/leaders/<القسم>) كما هي
+export const SETUP_GROUP = 'الإعداد';
+export const NAV_GROUPS = [
+  ['العمل', ['overview', 'participants', 'orgs', 'programs', 'activities', 'capstones', 'hall']],
+  ['الأشخاص', ['experts']],
+  ['المنهج والمحتوى', ['journey', 'book', 'handbook', 'content', 'katon', 'lab', 'assessment', 'levels', 'tracks']],
+  ['التقارير', ['insight', 'impact', 'f360']],
+  [SETUP_GROUP, ['mailcenter', 'mail', 'certs', 'payments', 'ai', 'settings']],
+];
+// مجموعة القسم: يقرؤها الشريط والبحث (Ctrl K) فيظهر كل قسم باسم مجموعته
+export const GROUP_OF = Object.fromEntries(NAV_GROUPS.flatMap(([g, keys]) => keys.map((k) => [k, g])));
+// حال المجموعة: المفتوح فيه القسم الحالي مفتوحة دائمًا، وإلا ما اختاره المدير، وإلا الافتراضي (الإعداد مطوي وحده)
+export const groupOpen = (g, keys, tab, saved) => keys.includes(tab) || (saved && g in saved ? !!saved[g] : g !== SETUP_GROUP);
