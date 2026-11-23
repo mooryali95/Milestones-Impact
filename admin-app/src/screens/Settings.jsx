@@ -9,6 +9,7 @@ import { passkeyCancelled, passkeyCreate, passkeySupported } from '../passkey.js
 import { useEscape, useUI } from '../ui.jsx';
 import QRCode from 'qrcode';
 import { isSuperAdminUser } from '../leaders.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const METHOD = { passkey: 'مفتاح المرور', totp: 'تطبيق المصادقة', email: 'رمز البريد' };
 
@@ -258,7 +259,7 @@ function Users({ me }) {
         <form className="add-user-form open" onSubmit={save}>
           <div className="form-row-3">
             <div><label className="form-label" htmlFor="nuName">الاسم</label><input id="nuName" className="form-input" placeholder="الاسم الكامل" autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-            <div><label className="form-label" htmlFor="nuEmail">البريد</label><input id="nuEmail" className="form-input" type="email" dir="ltr" placeholder="email@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div><label className="form-label" htmlFor="nuEmail">البريد</label><EmailInput id="nuEmail" className="form-input" type="email" dir="ltr" placeholder="email@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             <div><label className="form-label" htmlFor="nuRole">الدور</label>
               <select id="nuRole" className="form-input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                 <option value="admin">مدير نظام</option><option value="viewer">مراقب</option><option value="super_admin">مدير عام</option>

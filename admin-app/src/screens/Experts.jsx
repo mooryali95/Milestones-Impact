@@ -16,6 +16,7 @@ import { COMMITTEE_AR, committeeApplication, committeeApplicationAr, CONTENT_TRA
 import { MIN_RATINGS } from '../../../supabase/functions/leaders-api/logic.js';
 import { cohortStateAr } from '../methodology.js';
 import { periodAr, scopeText } from '../team.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const TONE = { applied: 'warn', invited: '', active: 'ok', paused: '', suspended: 'bad', rejected: '' };
 const ROLES = Object.entries(EXPERT_ROLE_AR);
@@ -81,7 +82,7 @@ function ExpertForm({ initial, isNew, canWrite, onSaved, onCancel }) {
         <h4>الهوية</h4>
         <div className="ex-grid">
           <label className="of-field"><span className="of-label">الاسم *</span><input required value={v.full_name} onChange={set('full_name')} maxLength={120} /></label>
-          <label className="of-field"><span className="of-label">البريد {isNew ? '*' : ''}</span><input dir="ltr" type="email" required={isNew} disabled={!isNew} value={v.email} onChange={set('email')} /></label>
+          <label className="of-field"><span className="of-label">البريد {isNew ? '*' : ''}</span><EmailInput dir="ltr" type="email" required={isNew} disabled={!isNew} value={v.email} onChange={set('email')} /></label>
           <label className="of-field"><span className="of-label">المسمى المهني</span><input value={v.title || ''} onChange={set('title')} maxLength={160} placeholder="مثل: مستشار إدارة محافظ، PMP" /></label>
           <label className="of-field"><span className="of-label">الجوال</span><input dir="ltr" value={v.phone || ''} onChange={set('phone')} /></label>
           <label className="of-field"><span className="of-label">LinkedIn</span><input dir="ltr" value={v.linkedin_url || ''} onChange={set('linkedin_url')} placeholder="https://www.linkedin.com/in/…" /></label>

@@ -11,6 +11,7 @@ import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { flagsOf, programPackageAr } from '../features.js';
 import { planSpanDays } from '../../../supabase/functions/leaders-api/stage-windows.js';
 import { taxNote } from '../../../supabase/functions/_shared/creem-product.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -133,7 +134,7 @@ export default function Paywall({ item, me, onUpdate }) {
           <form className="pay-sponsor" onSubmit={sendClaim}>
             <span className="small">اكتب اسم الجهة التي رشّحتك، ونتحقق من رعايتها لك.</span>
             <input className="input" required minLength={2} maxLength={200} value={claim.typed_name} onChange={(e) => setClaim({ ...claim, typed_name: e.target.value })} placeholder="اسم الجهة الراعية" aria-label="اسم الجهة الراعية" />
-            <input className="input ltr" type="email" maxLength={254} value={claim.contact_email} onChange={(e) => setClaim({ ...claim, contact_email: e.target.value })} placeholder="بريد منسق الجهة (اختياري)" aria-label="بريد منسق الجهة" />
+            <EmailInput className="input ltr" type="email" maxLength={254} value={claim.contact_email} onChange={(e) => setClaim({ ...claim, contact_email: e.target.value })} placeholder="بريد منسق الجهة (اختياري)" aria-label="بريد منسق الجهة" />
             <div className="row"><button className="btn ghost sm" disabled={busy || claim.typed_name.trim().length < 2}>أرسل طلب التحقق</button>
               <button type="button" className="link small" onClick={() => setClaim(null)}>إلغاء</button></div>
           </form>

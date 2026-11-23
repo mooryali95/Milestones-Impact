@@ -9,6 +9,7 @@ import { dateTime, L } from '../leaders.js';
 import { Empty, Spinner, useUI } from '../ui.jsx';
 import { DELIVERY_AR, etaAr, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
 import NotifyRouting from './NotifyRouting.jsx';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const QUEUE_ST = { waiting: ['ينتظر الحصة', 'warn'], gave_up: ['تعذّر بعد محاولات', 'bad'], stale: ['فات أوانه', ''], cancelled: ['أُغلق يدويًّا', ''] };
 // «يُتوقع إرساله» للمنتظر: الممسَك بميزة مخفية لا موعد له، والمؤرخ الذي يمضي موعده قبل دوره يُترك
@@ -72,7 +73,7 @@ function Trace({ canWrite, isSuper, onPerson }) {
       <h3>لماذا لم يصل البريد؟</h3>
       <p className="la-muted small">اكتب بريد من يشتكي. يظهر ما أرسلته المنصة إليه، وهل خرج، وهل وصل إلى خادمه، وما العمل.</p>
       <form className="la-row" onSubmit={run}>
-        <input type="email" dir="ltr" aria-label="بريد المشتكي" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <EmailInput type="email" dir="ltr" aria-label="بريد المشتكي" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
         <button className="btn-sm primary" disabled={busy || !email.trim()}>{busy ? 'لحظة…' : 'ابحث'}</button>
       </form>
       {r && !r.success && <p className="la-err" role="alert">{r.message}</p>}

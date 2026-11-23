@@ -14,6 +14,7 @@ import { flagsOf, shownView } from './features.js';
 import { bootPreload, call, session, setExpiredHandler } from './api.js';
 import { askSignOut } from './SignOutDialog.jsx';
 import logo from './milestone-impact-inverted.svg';
+import { SITES } from '../../supabase/functions/_shared/sites.js';
 import SignIn from './screens/SignIn.jsx';
 import { OnboardingRail, OnboardingWelcome, onboardingStep } from './Onboarding.jsx';
 import { tabFromSearch } from './deeplink.js';
@@ -185,6 +186,18 @@ function BackLink({ ownHome = false }) {
   return (
     <a className="topbar-back" href="/" onClick={(e) => { if (inside) { e.preventDefault(); history.back(); } }}>
       <span aria-hidden="true">→</span> {inside ? 'رجوع' : 'الرئيسية'}
+    </a>
+  );
+}
+
+// صفحة دخول المشارك هي رئيسية النطاق، فلا رجوع لها داخل المنصة: من جاء من صفحة في المنصة يعود إليها،
+// ومن فتحها مباشرة يذهب إلى الموقع العام
+const SITE_URL = SITES.mi;
+function SiteBackLink() {
+  const inside = typeof document !== 'undefined' && document.referrer.startsWith(location.origin) && history.length > 1;
+  return (
+    <a className="topbar-back" href={SITE_URL} onClick={(e) => { if (inside) { e.preventDefault(); history.back(); } }}>
+      <span aria-hidden="true">→</span> {inside ? 'رجوع' : 'الموقع الرئيسي'}
     </a>
   );
 }
@@ -585,7 +598,9 @@ function Participant() {
       <a className="skip-link" href="#main">تخطَّ إلى المحتوى</a>
       <header className="topbar" style={me?.org?.color ? { '--org': me.org.color } : undefined}>
         <div className="topbar-in">
-          <img src={logo} alt="Milestone Impact" />
+          {/* الشعار بيت صاحبه: المسجّل يعود إلى رحلته، والزائر إلى الموقع العام */}
+          {me ? <a className="topbar-logo" href="/" aria-label="Milestone Impact: رحلتي" onClick={(e) => { e.preventDefault(); go('home'); }}><img src={logo} alt="" /></a>
+            : <a className="topbar-logo" href={SITE_URL} aria-label="Milestone Impact: الموقع الرئيسي"><img src={logo} alt="" /></a>}
           {me?.org && <OrgMark org={me.org} />}
           <span className="tag">رحلة القادة</span>
           {navItems.length > 0 && <Nav className="nav-tabs" items={navItems} view={navView} onGo={onNav} />}
@@ -597,6 +612,7 @@ function Participant() {
               <span className="who-name">{me.participant.full_name}</span>
             </button>
           )}
+          {!me && !booting && <SiteBackLink />}
           {me && <AccountSwitch here="participant" doors={me.switch_to} doSwitch={(to) => call('me.switch', { to })} />}
           {me && <button className="link small logout" onClick={logout}>خروج</button>}
         </div>
