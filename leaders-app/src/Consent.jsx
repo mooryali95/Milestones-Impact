@@ -38,7 +38,7 @@ export default function Consent({ consent, onAccepted, onLater }) {
             <ul className="pay-points">
               <li>نستخدم بياناتك لتشغيل رحلتك وإصدار شهادتك.</li>
               <li>جهتك الراعية لا ترى مستوياتك إلا بإذنك.</li>
-              <li>بياناتك محمية لدينا ولدى مزودينا، وتستطيع تعديلها أو حذفها متى شئت.</li>
+              <li>بياناتك محمية، وتستطيع تعديلها أو حذفها متى شئت.</li>
             </ul>
             <p className="muted small">بالمتابعة توافق على <PolicyLink />.</p>
           </>

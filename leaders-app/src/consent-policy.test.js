@@ -85,10 +85,10 @@ describe('الواجهة', () => {
   it('أول مرة بلا تأجيل، والتجديد سطر واحد بلا تفاصيل وزر «لاحقًا»', () => {
     const first = renderToStaticMarkup(React.createElement(Consent, { consent: consentState(null, null), onAccepted: () => {} }));
     // الشكل المختصر (قرار المالك 2026-11-23): ثلاث نقاط ورابط واحد داخل جملة الموافقة
-    for (const s of ['قبل أن نتابع', 'ولدى مزودينا', 'بالمتابعة توافق على', 'الشروط وسياسة الخصوصية']) expect(first).toContain(s);
+    for (const s of ['قبل أن نتابع', 'بالمتابعة توافق على', 'الشروط وسياسة الخصوصية', 'بياناتك محمية، وتستطيع']) expect(first).toContain(s);
     expect((first.match(/<li>/g) || []).length).toBe(3);
     expect((first.match(/<a /g) || []).length).toBe(1);
-    for (const s of ['باختصار', 'الاسترداد', 'سجل التغييرات']) expect(first).not.toContain(s);
+    for (const s of ['باختصار', 'الاسترداد', 'سجل التغييرات', 'مزودينا']) expect(first).not.toContain(s);
     expect(first).not.toContain('مومباي');
     expect(first).not.toContain('لاحقًا');
     const renew = renderToStaticMarkup(React.createElement(Consent, { consent: consentState('2026-11-06', '2026-11-06T10:00:00Z'), onAccepted: () => {}, onLater: () => {} }));
