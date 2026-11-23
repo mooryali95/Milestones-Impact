@@ -41,6 +41,7 @@ test('الإدارة: سجل الشهادات وإلغاء شهادة بسبب',
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.getByRole('button', { name: 'مجموعة الإعداد' }).click();  // «الإعداد» مطوية افتراضيًا (تدقيق اللوحة، المرحلة 2)
   await page.locator('.la-tabs').getByRole('button', { name: 'الشهادات' }).click();
   await expect(page.getByText(snap.serial)).toBeVisible();
   await expect(page.getByLabel('اسم البرنامج', { exact: true })).toHaveValue('برنامج القادة');
@@ -70,6 +71,7 @@ test('المؤشرات من إحصاء الخادم بلا حسابات الاخ
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.getByRole('button', { name: 'مجموعة الإعداد' }).click();  // «الإعداد» مطوية افتراضيًا (تدقيق اللوحة، المرحلة 2)
   await page.locator('.la-tabs').getByRole('button', { name: 'الشهادات' }).click();
   const kpi = (label) => page.locator('.ce-kpis .stat-card').filter({ hasText: label }).locator('.stat-value');
   await expect(kpi('الشهادات الصادرة')).toHaveText('2');
@@ -96,6 +98,7 @@ test('الإصدار التلقائي: الوصف يقول إن التوقف ي�
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.getByRole('button', { name: 'مجموعة الإعداد' }).click();  // «الإعداد» مطوية افتراضيًا (تدقيق اللوحة، المرحلة 2)
   await page.locator('.la-tabs').getByRole('button', { name: 'الشهادات' }).click();
   await expect(page.getByText('الإصدار التلقائي متوقف')).toBeVisible();
   await expect(page.getByText('إيقاف الإصدار التلقائي يحجب شهادة كل من يُعتمد تقييمه أثناء التوقف، وإعادة تفعيله لا تصدر ما حُجب.')).toBeVisible();
@@ -129,7 +132,8 @@ test('شهادة الجهة: يُحفظ التخصيص وحده، والفارغ
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.locator('.la-tabs').getByRole('button', { name: 'الجهات' }).click();
-  await page.locator('.la-org').getByRole('button', { name: 'تحرير' }).click();
+  await page.locator('.la-org').getByRole('button', { name: /^إجراءات أخرى لجهة/ }).first().click();  // أفعال الجهة الثانوية في ⋯ (المرحلة 2)
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const f = page.getByRole('dialog', { name: /هيئة التطوير/ });
   await expect(f.getByLabel('الساعات التدريبية')).toHaveValue('30');
   await expect(f.getByRole('radio', { name: 'العام: أ. خالد' })).toHaveAttribute('aria-checked', 'true');

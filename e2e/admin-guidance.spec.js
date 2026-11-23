@@ -122,9 +122,9 @@ const ACCESS_DESC = /لمن يعمل التوجيه والإرشاد: الجهة
 // خلفية هذا الملف لا تحاكي شاشة مساعد الموقع، فترسم حالتها قبل ترحيلها: هي الشاشة نفسها لا تبويبها وحده
 const SITE_DESC = 'لم يُطبَّق ترحيل 20261115230000 بعد';
 
-test('قسم واحد في «البرامج» بثلاثة تبويبات داخلية، والتنقل بينها يبدل المحتوى والعنوان', async ({ page }) => {
+test('قسم واحد في «الإعداد» بثلاثة تبويبات داخلية، والتنقل بينها يبدل المحتوى والعنوان', async ({ page }) => {
   await setup(page, '#/leaders/ai/guidance');
-  const group = page.getByRole('group', { name: 'البرامج' });
+  const group = page.getByRole('group', { name: 'الإعداد' });
   await expect(group.getByRole('button', { name: 'المساعد الذكي' })).toHaveAttribute('aria-current', 'page');
   for (const old of ['المساعد الآلي', 'التوجيه والإرشاد', 'إتاحة التوجيه']) await expect(group.getByRole('button', { name: old, exact: true })).toHaveCount(0);
   const tabs = page.getByRole('tablist', { name: 'أقسام المساعد الذكي' }).getByRole('tab');
@@ -190,8 +190,10 @@ test('البحث (Ctrl K) يجد الأسماء الثلاثة والاسمين 
 
 test('مدير ليس مديرًا أعلى ولا مالكًا: لا قسم ولا تبويبات ولا نتيجة في البحث، والروابط القديمة والجديدة إلى «نظرة عامة»', async ({ page }) => {
   const { calls } = await setup(page, '#/leaders/ai/guidance', {}, { role_id: 'admin', is_owner: false });
-  await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'الإعدادات العامة' })).toBeVisible();
-  await expect(page.getByRole('group', { name: 'البرامج' }).getByRole('button', { name: 'المساعد الذكي' })).toHaveCount(0);
+  // «الإعداد» مطوية افتراضيًا (المرحلة 2): تُفتح ثم يُتحقق من بنودها
+  await page.getByRole('button', { name: 'مجموعة الإعداد' }).click();
+  await expect(page.getByRole('group', { name: 'الإعداد' }).getByRole('button', { name: 'الإعدادات العامة' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'الإعداد' }).getByRole('button', { name: 'المساعد الذكي' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'نظرة عامة' })).toHaveAttribute('aria-current', 'page');
   for (const h of ['#/leaders/ai/access', '#/leaders/agent', '#/leaders/guidance', '#/leaders/guidance-access']) {
     await page.goto(`${BASE}${h}`);

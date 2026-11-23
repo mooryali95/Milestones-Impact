@@ -113,9 +113,9 @@ const AGENT_DESC = 'مساعد الموقع العام: التفعيل والم�
 const sec = (page, name) => page.getByRole('region', { name });
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true }); };
 
-test('التبويب في مجموعة «البرامج»، والأقسام بخلاصاتها، والحلقة بنصها', async ({ page }) => {
+test('التبويب في مجموعة «الإعداد»، والأقسام بخلاصاتها، والحلقة بنصها', async ({ page }) => {
   await setup(page);
-  const group = page.getByRole('group', { name: 'البرامج' });
+  const group = page.getByRole('group', { name: 'الإعداد' });
   await expect(group.getByRole('button', { name: 'المساعد الذكي' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('tab', { name: 'مساعد الموقع' })).toHaveAttribute('aria-selected', 'true');
   // حال المساعد في أول صف المؤشرات وسبب التعطيل تحتها، ولا تتكرر سطرًا في بطاقة «الحالة والتحكم»
@@ -231,7 +231,9 @@ test('نموذج الجهة: مفتاح «تذكير المنسق» لجهة ق�
     'admin.orgs': () => ({ success: true, orgs: [{ id: 'o1', name: 'هيئة المثال', short_name: 'هم', color: '#12414E', invite_code: 'mithal-code1', status: 'active', domains: [], companion_allowed: true, coord_nudges: true, stats: { total: 0, registered: 0, pending_approval: 0, active_week: 0 } }], unassigned: { total: 0, typed: [] } }),
     'admin.coordinator': () => ({ success: true, coordinator: null }),
   } });
-  await page.getByRole('button', { name: 'تحرير' }).first().click();
+  // أفعال الجهة الثانوية في قائمة ⋯ (تدقيق اللوحة، المرحلة 2)
+  await page.getByRole('button', { name: 'إجراءات أخرى لجهة «هيئة المثال»' }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog').filter({ hasText: 'تذكير المنسق لمشاركي الجهة' });
   await expect(form).toContainText('يظهر «ذكّرهم» في «يحتاج تدخلك» ببوابة الجهة');
   const sec = form.locator('.of-sec').filter({ hasText: 'تذكير المنسق لمشاركي الجهة' });

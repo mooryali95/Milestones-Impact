@@ -1481,3 +1481,11 @@
 .ph-main { min-inline-size: 0; overflow-wrap: anywhere; }
 .ph-line { color: var(--ink-soft); }
 .ph-remedy { display: block; font-size: .85rem; margin-top: 2px; }
+
+/* المرحلة 2 (تدقيق 2026-11-23): عنوان «تجريبي» صغير فوق الأقسام المخفية عن المستخدمين في مجموعتها، ومجموعة الإعداد منفصلة بصريًا في الأسفل */
+.la-tab-trial { font-size: .68rem; font-weight: 700; color: var(--ink-light, var(--brand-muted-soft)); padding: 0 4px; }
+.la-tab-group.shut > .la-tab-trial { display: none; }
+@media (min-width: 1100px) {
+  .la-shell .la-tab-trial { padding: 6px 10px 0; border-top: 1px dashed var(--line); margin-top: 2px; }
+  .la-shell .la-tab-group.la-tab-group-setup { margin-top: 10px; border-top: 2px solid var(--line-strong); }
+}

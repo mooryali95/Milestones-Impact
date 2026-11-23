@@ -24,7 +24,7 @@ async function open(page, hash, cohorts) {
 
 test('مجموعة تُطوى ويبقى عددها، وتُحفظ بعد إعادة التحميل، ومجموعة القسم المفتوح لا تُطوى', async ({ page }) => {
   const nav = await open(page, '#/leaders/participants', []);
-  const content = nav.getByRole('button', { name: 'مجموعة المحتوى' });
+  const content = nav.getByRole('button', { name: 'مجموعة المنهج والمحتوى' });
   await expect(nav.getByRole('button', { name: /كتاب القائد/ })).toBeVisible();
   await content.click();
   await expect(nav.getByRole('button', { name: /كتاب القائد/ })).toBeHidden();
@@ -33,7 +33,7 @@ test('مجموعة تُطوى ويبقى عددها، وتُحفظ بعد إعا
   await page.reload();
   await expect(nav.getByRole('button', { name: /كتاب القائد/ })).toBeHidden();
   // مجموعة القسم المفتوح: الضغط على عنوانها لا يخفي القسم الذي أنت فيه
-  await nav.getByRole('button', { name: 'مجموعة اليومي' }).click();
+  await nav.getByRole('button', { name: 'مجموعة العمل' }).click();
   await expect(nav.getByRole('button', { name: /المشاركون/ })).toBeVisible();
 });
 

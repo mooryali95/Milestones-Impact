@@ -458,7 +458,8 @@ test('فاعلية التذكير: النسب بحسب المرسل والمرح
       by_sender: [t('auto', { label: 'التذكير الآلي', progressed_pct: 0 }), t('mentor', { label: 'المرشد', sent: 1, progressed_pct: 100 })],
       by_stage: [t('التدريب')], stuck: [{ id: 'p2', name: 'Omar Ali', nudges: 3, misses: 3, stage: 'التدريب', last: '2026-11-20T10:00:00Z' }] },
   });
-  await page.getByRole('button', { name: 'فاعلية التذكير' }).click();
+  await page.getByRole('button', { name: 'المزيد من إجراءات المشاركين' }).click();
+  await page.getByRole('menuitem', { name: 'فاعلية التذكير' }).click();
   const dlg = page.getByRole('dialog', { name: 'فاعلية التذكير' });
   await expect(dlg.locator('.nr-kpis')).toContainText('25%تقدّم بعده');
   await expect(dlg.getByRole('region', { name: 'بحسب المرسل' })).toContainText('المرشد');

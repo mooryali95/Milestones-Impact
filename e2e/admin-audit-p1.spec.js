@@ -54,7 +54,8 @@ test('الشريط الجانبي: داخل الشاشة بتمرير داخلي
   const m = await nav.evaluate((el) => ({ oy: getComputedStyle(el).overflowY, sh: el.scrollHeight, ch: el.clientHeight, pos: getComputedStyle(el).position }));
   expect(m.pos).toBe('sticky');
   if (m.sh > m.ch) expect(['auto', 'scroll']).toContain(m.oy);
-  // آخر بند يُبلغ بالتمرير ويُرى كاملًا داخل الشريط
+  // آخر بند يُبلغ بالتمرير ويُرى كاملًا داخل الشريط (مجموعة الإعداد مطوية افتراضيًا منذ المرحلة 2، فتُفتح ليُختبر آخر بند فعلًا)
+  await nav.getByRole('button', { name: 'مجموعة الإعداد' }).click();
   const items = nav.locator('.la-tab-group > button:not(.la-tab-group-label)');
   const last = items.last();
   await last.scrollIntoViewIfNeeded();
