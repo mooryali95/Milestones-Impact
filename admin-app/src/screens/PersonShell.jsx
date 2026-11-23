@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { date, STATUS, trackOfPlacements } from '../leaders.js';
 import { FileFlags } from './PersonFile.jsx';
 import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
+import { keepInView } from '../../../shared/ui/keep-in-view.js';
 
 export const TABS = [
   ['decision', 'القرار'],
@@ -81,6 +82,7 @@ export function MoreMenu({ items }) {
   const list = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
+    keepInView(list.current);
     list.current?.querySelector('[role="menuitem"]')?.focus();
     const out = (e) => { if (!list.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
     addEventListener('mousedown', out);

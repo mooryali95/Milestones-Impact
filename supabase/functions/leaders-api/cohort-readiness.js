@@ -98,3 +98,21 @@ export function cohortReadiness({ cohort: c, cohorts = [], orgs = [], programs =
 
 // ما بقي بجملة: يقرؤه رأس الملف وجدول الدفعات
 export const hubSummary = (hub) => (hub.missing ? `بقي ${hub.missing === 1 ? 'بند واحد' : hub.missing === 2 ? 'بندان' : `${hub.missing} بنود`}` : 'مكتملة الإعداد');
+
+// تنبيه نسخة الرحلة في رأس ملف الدفعة (قرار المالك 2026-11-23: «غيّرت الرحلة ولم تتغير الدفعة»). الدفعة مثبتة على نسخة
+// حتى لا يختفي تقدم أحد، فيُقال صراحة ما بينها وبين ما عدّله المالك، والفعل الواحد الذي يوصله: حفظ نسخة أو الترقية بمعاينة
+export function versionNotice({ cohort: c, programs = [] }) {
+  const p = programs.find((x) => x.id === c?.program_id);
+  if (!c || !p || p.archived_at || c.status === 'closed') return null;
+  const pinned = p.versions?.find((v) => v.id === c.program_version_id);
+  const latest = p.versions?.[0] || null;
+  if (pinned && latest && latest.id !== pinned.id) {
+    return { kind: 'newer', action: 'upgrade', button: 'رقِّ الدفعة',
+      text: `الدفعة على النسخة ${pinned.number} من رحلة «${p.name}»، والأحدث ${latest.number}. ما عدّلته بعد ${pinned.number} لا يظهر هنا ولا عند أعضائها حتى ترقّيها، وترى قبلها ما يتغير ومن يتأثر.` };
+  }
+  if (pinned && p.draft_changed) {
+    return { kind: 'draft', action: 'journey', button: 'افتح الرحلة واحفظها نسخة',
+      text: `في رحلة «${p.name}» تعديلات لم تُحفظ نسخة بعد، فلا تصل إلى هذه الدفعة. احفظها نسخة من محرر الرحلة، ثم رقِّ الدفعة إليها.` };
+  }
+  return null;
+}

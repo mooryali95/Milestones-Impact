@@ -125,3 +125,7 @@
 .jm-svc-row.off { opacity: .6; }
 /* زر «اعرضهم في المتابعة» في تفاصيل المرحلة (ملف الدفعة في لوحة الإدارة وحده) */
 .jm-follow { margin: 0 0 10px; }
+/* مرحلتان تسيران معًا (2026-11-23): الثانية «ضمن العدد» فلا يتكرر الشخص، و«موعدها اليوم» بلون هادئ حين لا أحد فيها */
+.jm-within { font-size: .78rem; font-weight: 600; opacity: .75; line-height: 2.4; }
+.jm-today.quiet { opacity: .7; font-weight: 500; }
+.jm-behind { color: var(--st-warn, currentColor); }

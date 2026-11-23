@@ -83,7 +83,12 @@ export function legacyOutputs() {
         c.journeys[jn] = { j, progress: journeyProgress(j), pos: positionOf(j), cur: currentStages(j) };
       }
       const people = Object.entries(c.journeys).map(([jn, x], i) => ({ id: `p${i}`, name: `مشارك ${jn}`, status: 'enrolled', created_at: '2026-11-04T00:00:00Z', journey: x.j, milestones: [] }));
-      c.map = journeyMap({ stages: def.stages, people, cohort, today: new Date('2026-12-15T10:00:00Z'), list: true, activity: true });
+      // here_by_group وlate_by_group إضافة (2026-11-23) لعدّ من في مرحلتين تسيران معًا مرة واحدة، لا تغيّر حقلًا قائمًا؛
+      // تُفصل عن اللقطة وتُفحص في journey-map-groups.test.js، وكل ما سواها مقفل كما كان
+      const full = journeyMap({ stages: def.stages, people, cohort, today: new Date('2026-12-15T10:00:00Z'), list: true, activity: true });
+      const { here_by_group: _hg, late_by_group: _lg, ...mapOut } = full;
+      c.map = mapOut;
+      Object.defineProperty(c, 'mapFull', { value: full, enumerable: false });
       c.timeline = journeyTimeline({ stages, requirements: REQS }, { cohort, today: '2026-12-15' });
       const model = cohortTimeline({ stages, requirements: REQS, sessions: [] }, cohort, '2026-12-15');
       c.lanes = journeyLanes(model, { def: { stages, requirements: REQS }, cohort, milestones: MILESTONES });
