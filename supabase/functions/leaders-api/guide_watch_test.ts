@@ -57,3 +57,31 @@ Deno.test('بصمة الحماية داخل بصمة التقييم: تغيّر 
   assert(GUARD_SIGNATURE.includes('inject') && GUARD_SIGNATURE.includes('claude-haiku-5-5'));
   assertNotEquals(fp, await evalFingerprint({ ...set, cases: [{ id: 'b' }] }, 'm', 'r', ''));
 });
+
+Deno.test('ملخص الأسبوع (د3): صباح الأحد وحده، مرة في الأسبوع، وسطره أعداد بلا نص ولا اسم', async () => {
+  const sunday = Date.parse('2026-11-29T06:20:00Z');
+  const at = (d: number) => new Date(sunday - d * 864e5).toISOString();
+  const w = installFake({
+    app_settings: [{ key: 'guidance', value: { enabled: true } }],
+    guidance_messages: [
+      { role: 'assistant', verdict: 'answered', body: 'نص سري', created_at: at(1) },
+      { role: 'assistant', verdict: 'unsure', body: 'نص سري', created_at: at(2) },
+      { role: 'assistant', verdict: 'answered', guard: 'write', created_at: at(3) },
+      { role: 'assistant', verdict: 'answered', created_at: at(10) },
+    ],
+    audit_log: [],
+  });
+  const prev = W.WATCH.now;
+  try {
+    W.WATCH.now = () => sunday - 864e5;
+    assertEquals(((await W.guideWeekly()) as any).reason, 'not_due', 'السبت لا يرسل');
+    W.WATCH.now = () => sunday;
+    const r: any = await W.guideWeekly();
+    assertEquals([r.sent, r.replies, r.to_review], [true, 3, 2]);
+    assertEquals(((await W.guideWeekly()) as any).reason, 'already', 'المهمة الساعية لا تكرره');
+    await noticesIdle();
+    const log: any = w.tables.audit_log.find((a: any) => a.action === 'guide.weekly-sent');
+    assertEquals(log.entity_id, '2026-11-29');
+    assert(!JSON.stringify(w.tables.audit_log).includes('نص سري'));
+  } finally { W.WATCH.now = prev; w.restore(); resetSettingsCache(); }
+});

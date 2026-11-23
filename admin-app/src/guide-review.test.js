@@ -48,3 +48,15 @@ describe('نسب الأسبوع', () => {
       .toEqual({ replies: 4, answered_pct: 50, unsure_pct: 25, guard_pct: 25 });
   });
 });
+
+import { weekLine } from '../../supabase/functions/leaders-api/guide-review.js';
+describe('سطر Slack الأسبوعي (د3)', () => {
+  it('أعداد ونسب بفرق الأسبوع السابق، بلا نص سؤال', () => {
+    const l = weekLine({ replies: 40, answered_pct: 80, unsure_pct: 12.5, guard_pct: 5 }, { replies: 30, answered_pct: 70, unsure_pct: 20, guard_pct: 5 }, 6);
+    expect(l).toContain('40 ردًا، أجاب 80٪ (+10)');
+    expect(l).toContain('لم يتأكد 12.5٪ (-7.5)');
+    expect(l).toContain('أوقفه الحارس 5٪.');
+    expect(l).toContain('6 حالة تنتظر مراجعتك');
+    expect(weekLine({ replies: 3, answered_pct: 100, unsure_pct: 0, guard_pct: 0 }, { replies: 0, answered_pct: null, unsure_pct: null, guard_pct: null }, 0)).toContain('لا حالة تنتظر المراجعة');
+  });
+});
