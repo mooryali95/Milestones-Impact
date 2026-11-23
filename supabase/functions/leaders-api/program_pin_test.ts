@@ -2,7 +2,7 @@
 // على أحدث نسخ الهدف، وإلغاء التثبيت يُرفض، وكل برنامج جديد يولد بنسخته الأولى. حفظ النسخة واسترجاعها يمسان المسودة
 // وحدها، والترقية وحدها تنقل الدفعة بمعاينة وحارس الإخفاء وإعادة ضبط إعدادها على الهدف. قاعدة في الذاكرة بلا شبكة.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
 const { cohortSave, cohortUpgrade, journeyDefinition, programPublish, programRestore, programSave, list } = await import('./programs.ts');
 
@@ -257,23 +257,49 @@ Deno.test('البرنامج الجديد يولد بنسخته الأولى، و
   } finally { w.restore(); }
 });
 
-Deno.test('حفظ نسخة واسترجاع أخرى لا يغيّران رحلة دفعة مثبتة، ويُقال كم دفعة بقيت على نسخة أقدم', async () => {
+Deno.test('الترقية التلقائية (قرار المالك 2026-11-23): حفظ نسخة آمنة يرقّي الدفعة المثبتة إليها ويُسجَّل آليًا، والاسترجاع لا يمس تثبيتها', async () => {
   const w = world();
   w.tables.cohorts = [{ id: C1, name: 'سفراء 2026', organization_id: ORG, program_id: PA, program_version_id: null, status: 'running', starts_on: '2026-09-01', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] }];
   try {
     await cohortSave(admin, { id: C1, program_version_id: 'latest' });
     const pinned = w.tables.cohorts[0].program_version_id;
-    const before: any = await journeyDefinition({ id: P1, organization_id: ORG });
-    // تعديل على المسودة ثم حفظ نسخة ثم استرجاع الأولى: الدفعة على نسختها
+    // تعديل على المسودة (عنوان وبند جديد، لا حذف ولا تقدم يضيع) ثم حفظ نسخة: تُرقّى الدفعة إليها تلقائيًا
     w.tables.stage_requirements.find((r: Row) => r.id === R2)!.title_ar = 'عنوان جديد';
     w.tables.stage_requirements.push(req(U(50), PA, 's1', 'A-NEW'));
     const pub: any = await programPublish(admin, { id: PA, label: 'بعد المراجعة' });
-    assertEquals([pub.version.number, pub.behind], [2, 1]);
-    await programRestore(admin, { version_id: pinned });
-    assertEquals(w.tables.cohorts[0].program_version_id, pinned);
+    assertEquals([pub.version.number, pub.behind, pub.upgraded], [2, 0, ['سفراء 2026']]);
+    assertEquals(w.tables.cohorts[0].program_version_id, pub.version.id);
+    const log: any = w.tables.audit_log.filter((x: Row) => x.action === 'cohort.upgrade').at(-1);
+    assertEquals([log.after.from, log.after.to, log.after.auto], [1, 2, true]);
     const after: any = await journeyDefinition({ id: P1, organization_id: ORG });
-    assertEquals(after.requirements.map((r: Row) => [r.code, r.title_ar]), before.requirements.map((r: Row) => [r.code, r.title_ar]));
-    assertEquals(after.version.number, 1);
+    assert(after.requirements.some((r: Row) => r.code === 'A-NEW'));
+    // الاسترجاع يمس المسودة وحدها ويحفظ نسخة، ولا يرقّي ولا يُرجع الدفعة
+    await programRestore(admin, { version_id: pinned });
+    assertEquals(w.tables.cohorts[0].program_version_id, pub.version.id);
+  } finally { w.restore(); }
+});
+
+Deno.test('الترقية التلقائية لا تمس ما يحتاج مراجعة: غير المثبتة، ومن لأعضائها تقدم فيما يُحذف، والمغلقة', async () => {
+  const w = world();
+  w.tables.cohorts = [
+    { id: C1, name: 'مثبتة بتقدم', organization_id: ORG, program_id: PA, program_version_id: null, status: 'running', starts_on: '2026-09-01', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] },
+  ];
+  try {
+    await cohortSave(admin, { id: C1, program_version_id: 'latest' });
+    const pinned = w.tables.cohorts[0].program_version_id;
+    w.tables.cohorts.push({ id: U(61), name: 'غير مثبتة', organization_id: null, program_id: PA, program_version_id: null, status: 'planned', created_at: '2026-09-02T00:00:00Z', hidden_requirements: [] });
+    w.tables.cohorts.push({ id: U(62), name: 'مغلقة', organization_id: null, program_id: PA, program_version_id: pinned, status: 'closed', created_at: '2026-09-03T00:00:00Z', hidden_requirements: [] });
+    // حذف بند لعضو الدفعة تقدم فيه: لا تُرقّى تلقائيًا، ويُقال السبب
+    w.tables.participant_requirements = [...(w.tables.participant_requirements || []), { participant_id: P1, requirement_id: R2, status: 'done' }];
+    w.tables.stage_requirements = w.tables.stage_requirements.filter((r: Row) => r.id !== R2);
+    const pub: any = await programPublish(admin, { id: PA, label: 'حذف بند' });
+    assertEquals(pub.upgraded, []);
+    const why = Object.fromEntries(pub.held.map((h: any) => [h.name, h.reason]));
+    assert(/تقدم فيما يُحذف/.test(why['مثبتة بتقدم']), why['مثبتة بتقدم']);
+    assert(/غير مثبتة/.test(why['غير مثبتة']));
+    assertEquals(why['مغلقة'], undefined, 'المغلقة لا تُرقّى ولا تُذكر');
+    assertEquals(w.tables.cohorts[0].program_version_id, pinned);
+    assertEquals(w.tables.cohorts[1].program_version_id, null);
   } finally { w.restore(); }
 });
 

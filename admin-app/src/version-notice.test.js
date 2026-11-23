@@ -20,3 +20,12 @@ describe('تنبيه نسخة الرحلة', () => {
     expect(versionNotice({ cohort: { program_id: 'p', program_version_id: null }, programs: [prog()] })).toBe(null);
   });
 });
+
+import { versionSavedAr } from './screens/Programs.jsx';
+describe('رسالة حفظ النسخة مع الترقية التلقائية', () => {
+  it('تسمي ما رُقّي وما بقي وسببه', () => {
+    const t = versionSavedAr({ version: { number: 3 }, upgraded: ['سفراء'], held: [{ name: 'القادة', reason: '2 من أعضائها لهم تقدم فيما يُحذف' }], behind: 1 });
+    expect(t).toBe('حُفظت النسخة 3. رُقّيت تلقائيًا: «سفراء». دفعة واحدة باقية على نسخة أقدم لمراجعتك: «القادة» (2 من أعضائها لهم تقدم فيما يُحذف).');
+    expect(versionSavedAr({ version: { number: 2 }, upgraded: [], held: [], behind: 0 })).toBe('حُفظت النسخة 2.');
+  });
+});
