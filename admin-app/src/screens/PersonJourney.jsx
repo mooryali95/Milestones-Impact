@@ -33,7 +33,10 @@ function Item({ it, s, canWrite, onReview, onEvidence }) {
   const src = completionSource(it);
   const system = src !== 'manual';
   // البند الموثق مكتمل بتجاوز يدوي: علامته «done» ودليله لم يكتمل
-  const overridden = src === 'evidence' && !it.auto && it.status === 'done' && it.activity && !it.activity.done;
+  // والتلقائي القابل للتجاوز (override_ok: E-PRES وR-6M) مكتمل بلا نص دليل من مصدره = اعتماد يدوي
+  const overridden = (src === 'evidence' && !it.auto && it.status === 'done' && it.activity && !it.activity.done)
+    || (it.override_ok && it.status === 'done' && !it.auto_note);
+  const canBypass = (src === 'evidence' && !it.auto) || !!it.override_ok;
   const bypass = async () => {
     const note = await prompt(`تجاوز يدوي لـ«${it.title_ar}»: يُعدّ مكتملًا دون دليله. السبب (يُحفظ في السجل):`, '');
     if (note === null) return;
@@ -49,6 +52,7 @@ function Item({ it, s, canWrite, onReview, onEvidence }) {
         <span className="pj-src">
           <span className={`la-chip ${system ? 'ok' : ''}`} title={system ? 'يحسمه النظام من مصدره' : 'يعتمده فريق البرنامج'}>{overridden ? 'تجاوز يدوي' : SOURCE_AR[src]}</span>
           {system && <ActivitySummary a={it.activity} />}
+          {it.auto_note && <small className="la-muted" data-auto-note>{it.auto_note}</small>}
         </span>
       </span>
       <span className="pj-act">
@@ -60,7 +64,7 @@ function Item({ it, s, canWrite, onReview, onEvidence }) {
           {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => onReview(it.id, 'returned')}>إرجاع</button>}
           {it.status === 'done' && <button className="btn-sm ghost" onClick={() => onReview(it.id, 'pending')}>إلغاء</button>}
         </>}
-        {live && src === 'evidence' && !it.auto && (
+        {live && canBypass && (
           <MoreMenu label={`إجراءات «${it.title_ar}»`} items={[
             it.status !== 'done' && { label: 'تجاوز يدوي', run: bypass },
             overridden && { label: 'ألغِ التجاوز', run: () => onReview(it.id, 'pending') },

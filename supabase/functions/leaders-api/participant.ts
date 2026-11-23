@@ -569,7 +569,7 @@ async function continuousFor(participantId: string, milestones: any[], programId
 // cohort: رحلته على دفعته بخطة لم تُحفظ بعد (معاينة admin.cohort-plan حين تعود مرحلة موقوفة)، لا يُقرأ بها غير ذلك
 // sessions: معاينة أثر تغيير وسم ورشة وحدها (countingImpact في activities.ts): الرحلة كما ستكون بجلسات معدّلة، بلا كتابة
 export async function journeyFor(p: any, { lite = false, cohort = null, sessions = null }: { lite?: boolean; cohort?: any; sessions?: ((rows: any[]) => any[]) | null } = {}) {
-  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
+  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals, reviews] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p, cohort),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
@@ -581,6 +581,8 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
     // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
     db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust, snapshot').eq('participant_id', p.id),
+    // مراجعة اليوم 180 في متابعة المبادرة: مصدر «قراءة الأثر بعد ستة أشهر» (R-6M)
+    db.from('capstone_updates').select('checkpoint, verify_status').eq('participant_id', p.id).eq('checkpoint', 'd180'),
   ]);
   const fe = (finals.data || []).find((r: any) => r.program_id === def.program_id) || null;
   const pl = placements.data || [];
@@ -597,6 +599,10 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     initiativeNamed: !!initiative,
     preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
     postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
+    // «عرض المشروع أمام لجنة التقييم» (E-PRES): اعتماد التقييم الختامي لبرنامجه، لا مسودته ولا ما ينتظر الاعتماد
+    finalApproved: fe?.status === 'approved',
+    review180: (reviews.data || []).length > 0,
+    review180Verified: (reviews.data || []).some((u: any) => u.verify_status === 'confirmed'),
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   // المحتوى بمستوى الدفعة الموحد إن كانت متجانسة، وإلا بمستوى المشارك؛ القياس والمسار يبقيان من قياسه
