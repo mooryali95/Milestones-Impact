@@ -87,7 +87,7 @@ export default function KatonBank({ canWrite, programId }) {
 
   return (
     <>
-      <p className="la-muted">كل موضوع ست جمل تجيب عن الأسئلة الست (لماذا، ماذا، كيف، ماذا لو، من، متى). المشارك يحكم على كل جملة (صحيحة أو خاطئة) بدرجة ثقة من ثلاث، ويضع وسوم موقفه بلا نقاط، ويُكشف المفتاح بعد إتمامه الموضوع. البنك المستورد من ملف الأسس يبدأ مسودة.</p>
+      <><p className="la-muted">كل موضوع ست جمل يحكم عليها المشارك بدرجة ثقة.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>كل موضوع ست جمل تجيب عن الأسئلة الست (لماذا، ماذا، كيف، ماذا لو، من، متى). المشارك يحكم على كل جملة (صحيحة أو خاطئة) بدرجة ثقة من ثلاث، ويضع وسوم موقفه بلا نقاط، ويُكشف المفتاح بعد إتمامه الموضوع. البنك المستورد من ملف الأسس يبدأ مسودة.</p></details></>
       <div className="la-row between">
         <div className="la-muted">النقاط{d.program_name ? ` (${d.program_name})` : ''}: {[1, 2, 3].map((c) => `${CONF_AR[c]} ${sign(d.points.right[c])}/${sign(d.points.wrong[c])}`).join('  ·  ')}
           {th && <small> · يربح الصدق فوق {Math.round(th.c1_c2 * 100)}% و{Math.round(th.c2_c3 * 100)}%</small>}

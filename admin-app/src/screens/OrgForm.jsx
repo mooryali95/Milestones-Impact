@@ -347,7 +347,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
               <label className="of-switch"><input type="checkbox" checked={v.companion_allowed} onChange={(e) => setV({ ...v, companion_allowed: e.target.checked })} />
                 <span>{v.companion_allowed ? 'مسموح' : 'غير مسموح'}</span></label>
             </Field>
-            <p className="la-muted small">المرافق الذكي داخل تطبيق القادة يعمل حين تسمح به الجهة ويُفعَّل في الدفعة، والأفراد بلا جهة مسموح لهم افتراضيًا. مساعد الموقع العام متاح لكل زائر ولا يتأثر بهذا الإعداد.</p>
+            <><p className="la-muted small">يعمل حين تسمح به الجهة ويُفعَّل في الدفعة.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>المرافق الذكي داخل تطبيق القادة يعمل حين تسمح به الجهة ويُفعَّل في الدفعة، والأفراد بلا جهة مسموح لهم افتراضيًا. مساعد الموقع العام متاح لكل زائر ولا يتأثر بهذا الإعداد.</p></details></>
             {!companionKnown(org, companionReady) && <p className="la-muted small">يُحفظ هذا الإعداد بعد تطبيق ترحيل 20261115230000.</p>}
           </section>
 

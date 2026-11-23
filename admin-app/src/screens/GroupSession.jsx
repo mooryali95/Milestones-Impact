@@ -386,7 +386,7 @@ export function GroupSessions({ data, reload, canWrite }) {
   return (
     <section className="la-card gs-section" id="gs-section" data-testid="group-sessions">
       <h3>جلسات جماعية</h3>
-      <p className="la-muted small">جلسة واحدة مع المستشار لعدة مشاركين: تُحسب للمستشار مرة واحدة، ولكل مدعو جلسة من رصيده. تُنشأ من ملف الدفعة، تبويب «المتابعة»: حدّد المشاركين ثم «جلسة مع مستشار». ومن هنا تضيف إليها مدعوين وتعيد إرسال دعوتها.</p>
+      <><p className="la-muted small">جلسة مستشار لعدة مشاركين، تُنشأ من ملف الدفعة.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>جلسة واحدة مع المستشار لعدة مشاركين: تُحسب للمستشار مرة واحدة، ولكل مدعو جلسة من رصيده. تُنشأ من ملف الدفعة، تبويب «المتابعة»: حدّد المشاركين ثم «جلسة مع مستشار». ومن هنا تضيف إليها مدعوين وتعيد إرسال دعوتها.</p></details></>
       {data.groups_failed && <p className="la-err" role="alert">تعذّرت قراءة الجلسات الجماعية الآن. حدّث الصفحة بعد قليل.</p>}
       {!any && !data.groups_failed && <p className="la-muted">لا جلسات جماعية بعد.</p>}
       {block('تنتظر تأكيد الحضور', s.awaiting)}

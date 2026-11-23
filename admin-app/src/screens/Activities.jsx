@@ -306,7 +306,7 @@ export default function Activities({ canWrite }) {
     + (data.coaching_groups || []).filter((g) => g.awaiting).length;
   return (
     <>
-      <p className="la-muted">الحضور هنا دليل إنجاز المشارك، فلا يكتمل بند الجلسة بنقرة منه. أي مرحلة يمكن أن تضم جلسات جماعية أو فردية، حضورية أو عن بعد؛ تضيف المتطلب ونوعه وطريقة توثيقه من «الرحلة والمتطلبات»، ثم مواعيده هنا.</p>
+      <><p className="la-muted">مواعيد الجلسات وحضورها. المتطلب نفسه يُضاف من «الرحلة والمتطلبات».</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الحضور هنا دليل إنجاز المشارك، فلا يكتمل بند الجلسة بنقرة منه. أي مرحلة يمكن أن تضم جلسات جماعية أو فردية، حضورية أو عن بعد؛ تضيف المتطلب ونوعه وطريقة توثيقه من «الرحلة والمتطلبات»، ثم مواعيده هنا.</p></details></>
       <nav className="la-subtabs" style={{ margin: '12px 0' }}>
         <button className={sub === 'workshops' ? 'on' : ''} onClick={() => setSub('workshops')}>الجلسات الجماعية</button>
         <button className={sub === 'coaching' ? 'on' : ''} onClick={() => setSub('coaching')}>الجلسات الفردية والاستشارة {waiting > 0 && <small>({waiting} بانتظار التأكيد)</small>}</button>

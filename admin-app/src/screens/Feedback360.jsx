@@ -66,7 +66,7 @@ export default function Feedback360({ canWrite, onPerson }) {
       {!d.ready && <div className="la-card la-muted" role="status">جدول دورات 360 لم يُرحَّل بعد، فلا دورات.</div>}
       <div className="la-card">
         <h3>تقييم 360 للتطوير</h3>
-        <p className="la-muted">للتطوير وحده: لا يدخل التقييم الختامي ولا الشهادة ولا ما تراه الجهة عن الفرد. لا تظهر هنا نتيجة فرد؛ فتح تقرير فرد للدعم الفني يُسجَّل باسمك.</p>
+        <><p className="la-muted">للتطوير وحده، ولا تظهر هنا نتيجة فرد.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>للتطوير وحده: لا يدخل التقييم الختامي ولا الشهادة ولا ما تراه الجهة عن الفرد. لا تظهر هنا نتيجة فرد؛ فتح تقرير فرد للدعم الفني يُسجَّل باسمك.</p></details></>
         {t && <p>{t.cycles} دورة · {t.open} مفتوحة · استجابة {t.response_pct == null ? '—' : `${t.response_pct}%`} ({t.submitted} من {t.invited})</p>}
         <label className="la-row">الحالة
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
