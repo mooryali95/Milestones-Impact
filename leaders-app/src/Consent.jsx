@@ -26,7 +26,7 @@ export default function Consent({ consent, onAccepted, onLater }) {
   return (
     <div className="page narrow">
       <div className="card stack consent">
-        <p className="eyebrow">قبل أن نتابع</p>
+        {renew && <p className="eyebrow">قبل أن نتابع</p>}
         {renew ? (
           <>
             {/* إشعار التحديث بسطر واحد (قرار المالك 2026-11-16): لا قائمة تغييرات ولا أرقام نسخ هنا */}
@@ -35,6 +35,7 @@ export default function Consent({ consent, onAccepted, onLater }) {
           </>
         ) : (
           <>
+            <h1>قبل أن نتابع</h1>
             <ul className="pay-points">
               <li>نستخدم بياناتك لتشغيل رحلتك وإصدار شهادتك.</li>
               <li>جهتك الراعية لا ترى مستوياتك إلا بإذنك.</li>

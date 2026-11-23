@@ -30,10 +30,11 @@ test('من سبق تسجيله يرى شاشة الموافقة مرة، وقب�
   });
   await signedIn(page);
   await page.goto(APP);
-  await expect(page.getByRole('heading', { name: 'خصوصيتك وشروط البرنامج' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'سياسة الخصوصية' })).toHaveAttribute('href', '/legal/privacy');
+  await expect(page.getByRole('heading', { name: 'قبل أن نتابع' })).toBeVisible();
+  // رابط واحد داخل جملة الموافقة (الشكل المختصر، قرار المالك 2026-11-23)
+  await expect(page.getByRole('main').getByRole('link', { name: 'الشروط وسياسة الخصوصية' })).toHaveAttribute('href', '/legal/privacy');
   await page.getByRole('button', { name: 'أوافق وأتابع' }).click();
-  await expect(page.getByRole('heading', { name: 'خصوصيتك وشروط البرنامج' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'قبل أن نتابع' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
   expect(sent).toContain('consent.accept');
   await expect(page.getByRole('contentinfo').getByRole('link', { name: 'الخصوصية والشروط' })).toHaveAttribute('href', '/legal');
@@ -100,7 +101,8 @@ test('D18: من وافق على نسخة أقدم يرى سطرًا واحدًا
   await expect(page.getByRole('heading', { name: 'حدّثنا سياسة الخصوصية والشروط' })).toBeVisible();
   await expect(page.getByText('وافقت على النسخة', { exact: false })).toHaveCount(0);
   await expect(page.getByText('مومباي بالهند', { exact: false })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'سجل التغييرات' })).toHaveAttribute('href', '/legal/changes');
+  // التفاصيل في سجل التغييرات وحده (من التذييل)، والشاشة رابط واحد للسياسة
+  await expect(page.getByRole('main').getByRole('link', { name: 'الشروط وسياسة الخصوصية' })).toHaveAttribute('href', '/legal/privacy');
   await page.getByRole('button', { name: 'لاحقًا' }).click();
   await expect(page.getByRole('button', { name: 'سارة الأحمد' })).toBeVisible();
   const bar = page.getByRole('status').filter({ hasText: 'حدّثنا سياسة الخصوصية والشروط' });
