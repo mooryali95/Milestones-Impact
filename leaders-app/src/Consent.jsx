@@ -9,9 +9,9 @@ import React, { useState } from 'react';
 import { call } from './api.js';
 import { LEGAL_PATH } from '../../supabase/functions/leaders-api/labels.js';
 
-const Links = () => (
-  <p className="small"><a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> · <a className="link" href={LEGAL_PATH.terms} target="_blank" rel="noopener noreferrer">الشروط</a> · <a className="link" href={LEGAL_PATH.refund} target="_blank" rel="noopener noreferrer">الاسترداد</a> · <a className="link" href={LEGAL_PATH.changes} target="_blank" rel="noopener noreferrer">سجل التغييرات</a></p>
-);
+// رابط واحد هادئ داخل جملة الموافقة يكفي لموافقة مستنيرة (PDPL)؛ بقية الوثائق في تذييل كل صفحة لمن يبحث عنها
+// (قرار المالك 2026-11-23: الشكل المختصر بثلاث نقاط)
+const PolicyLink = () => <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">الشروط وسياسة الخصوصية</a>;
 
 export default function Consent({ consent, onAccepted, onLater }) {
   const [busy, setBusy] = useState(false);
@@ -29,23 +29,20 @@ export default function Consent({ consent, onAccepted, onLater }) {
         <p className="eyebrow">قبل أن نتابع</p>
         {renew ? (
           <>
-            {/* إشعار التحديث بسطر واحد (قرار المالك 2026-11-16): لا قائمة تغييرات ولا أرقام نسخ هنا؛ تفاصيلها في سجل التغييرات */}
+            {/* إشعار التحديث بسطر واحد (قرار المالك 2026-11-16): لا قائمة تغييرات ولا أرقام نسخ هنا */}
             <h1>حدّثنا سياسة الخصوصية والشروط</h1>
-            <p className="muted">تجدها كاملة في الروابط أدناه. وافق لنتابع.</p>
+            <p className="muted small">بالمتابعة توافق على <PolicyLink />. وافق لنتابع.</p>
           </>
         ) : (
           <>
-            <h1>خصوصيتك وشروط البرنامج</h1>
-            <p className="muted">باختصار:</p>
             <ul className="pay-points">
-              <li>نجمع بيانات حسابك ورحلتك لتحديد مستواك وتشغيل رحلتك وإصدار شهادتك.</li>
-              <li>جهتك الراعية ترى من رحلتك ما يسمح به البرنامج، ولا ترى مستوياتك إلا بموافقتك من «ملفي».</li>
-              <li>تُعالج بياناتك لدى مزودين نتعاقد معهم لحمايتها، وبعضهم خارج المملكة، وتفاصيلهم في السياسة.</li>
-              <li>تستطيع الاطلاع على بياناتك وتصحيحها وطلب حذف حسابك في أي وقت.</li>
+              <li>نستخدم بياناتك لتشغيل رحلتك وإصدار شهادتك.</li>
+              <li>جهتك الراعية لا ترى مستوياتك إلا بإذنك.</li>
+              <li>بياناتك محمية لدينا ولدى مزودينا، وتستطيع تعديلها أو حذفها متى شئت.</li>
             </ul>
+            <p className="muted small">بالمتابعة توافق على <PolicyLink />.</p>
           </>
         )}
-        <Links />
         {err && <div className="alert err" role="alert">{err}</div>}
         <button className="btn block" disabled={busy} onClick={accept}>{busy ? 'لحظة…' : 'أوافق وأتابع'}</button>
         {renew && onLater && <button className="link small" disabled={busy} onClick={onLater}>لاحقًا</button>}
