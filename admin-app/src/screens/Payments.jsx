@@ -60,7 +60,7 @@ function SettingsCard({ d, canWrite, reload }) {
         <label>معرّف منتج البرنامج<input dir="ltr" value={v.program_product} disabled={!canWrite} onChange={(e) => setV({ ...v, program_product: e.target.value })} /></label>
         <label>سعر البرنامج (USD)<input dir="ltr" inputMode="decimal" value={v.program} disabled={!canWrite} onChange={(e) => setV({ ...v, program: e.target.value })} /></label>
       </div>
-      <p className="la-muted small" data-price-help>هذا هو السعر الذي يراه المتدرب. اجعله مطابقًا لسعر المنتج في Creem، فـCreem يخصم سعر منتجه.</p>
+      <p className="la-muted small" data-price-help>هذا هو السعر الذي يراه المتدرب، وهو ما يخصمه Creem قبل الضريبة. لا يُستعمل سعر المنتج في Creem.</p>
       <h3>بريد الدفع</h3>
       <><p className="la-muted small">كل بريد مغلق حتى تفتحه، والمفتوح يُرسل آليًا.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>كل بريد مغلق حتى تفتحه. المفتوح يُرسل آليًّا ويُحسب من سقف البريد اليومي. تذكير من لم يكمل الدفع فعل يدوي من صفحة العملية ولا مفتاح له.</p></details></>
       <div className="pay-notify">

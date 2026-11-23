@@ -57,6 +57,7 @@ for (const width of [390, 1440]) {
       await expect(help).toBeVisible();
       await expect(help).toContainText('السعر الذي يراه المتدرب');
       await expect(help).toContainText('سعر المنتج في Creem');
+      await expect(help).toContainText('ما يخصمه Creem قبل الضريبة');
       await expect(page.getByText('حد أدنى')).toHaveCount(0);
     });
   });
