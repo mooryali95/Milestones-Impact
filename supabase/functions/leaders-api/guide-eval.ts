@@ -17,10 +17,12 @@ import {
 import { missingColumn } from './missing-column.ts';
 import { GD, generate, worstFor } from './guide.ts';
 import SEED from './guide-eval/cases.json' with { type: 'json' };
+// المرحلة أ من تقوية المساعد (2026-11-22): حالات مقترحة في المستودع، لا تدخل المجموعة إلا بزر في اللوحة ثم باعتماد المالك
+import PROPOSED from './guide-eval/cases-proposed.json' with { type: 'json' };
 
 type Body = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const missing = (e: any) => e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_eval/.test(String(e.message || '')));
+const missing = (e: any) => e && e.code !== '23505' && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST202' || /guidance_eval\S* does not exist|Could not find the (table|function)/.test(String(e.message || '')));
 // القواعد الفعلية كما يجيب بها المشارك (H4: الثابتة وتوجيهات المالك)، فالبصمة والتشغيل بالقواعد نفسها
 export const rulesNow = async () => rulesWith(((await appSettings()).guidance as any)?.extra_rules);
 // ومرجع البرنامج نفسه الذي يصل السؤال من خارج الأبواب (guide.ts programBriefNow)، فتعديل أقسامه في الكتاب يُسقط النجاح
@@ -179,8 +181,14 @@ export async function evalStart(a: Admin, b: Body = {}) {
     fingerprint, cases_version: set.version, total_cases: total, max_micros: EVAL.maxMicros, started_by: a.email,
   }).select('id').single();
   if (error) {
+    // تشغيل قائم لم يكتمل (أُغلقت اللوحة أثناءه): يُستأنف هو نفسه بدل رفض البدء. ويُفحص قبل «لم تُرحَّل»
+    // لأن رسالة قيد التشغيل الواحد تحمل اسم الجدول
+    if (error.code === '23505') {
+      const { data: cur } = await db.from('guidance_eval_runs').select('id, total_cases').eq('status', 'running').limit(1).maybeSingle();
+      if (cur) return { success: true, run_id: (cur as any).id, total: Number((cur as any).total_cases), diagnostic: false, resumed: true };
+      throw new Fail('يجري تقييم آخر الآن', 409, 'eval_running');
+    }
     if (missing(error)) throw new Fail('جداول التقييم لم تُرحَّل بعد (20261116140000)', 409, 'not_migrated');
-    if (error.code === '23505') throw new Fail('يجري تقييم آخر الآن', 409, 'eval_running');
     throw error;
   }
   await audit('admin', a.email, diag ? 'guide.eval-diagnose' : 'guide.eval-start', 'guidance_eval_runs', (data as any).id, null, { fingerprint: fp, cases: total, ...(source ? { from_run: source } : {}) });
@@ -307,7 +315,7 @@ export async function setGet(a: Admin) {
   requireAgentRead(a);
   const set = await evalSet();
   // hash: بصمة المحتوى كما فُتح، يعيدها الاعتماد فلا يغطي تعديلًا جرى بعد الفتح
-  return { success: true, set: { ...set, errors: validateCases(set), hash: await setHash(set) }, can_edit: set.source === 'db', can_approve: !!a.owner && set.source === 'db' };
+  return { success: true, set: { ...set, errors: validateCases(set), hash: await setHash(set) }, can_edit: set.source === 'db', can_approve: !!a.owner && set.source === 'db', proposed: proposedNew(set).length };
 }
 
 // حفظ حالات المجموعة: في المسودة الحالية، أو في مسودة جديدة منسوخة من المعتمدة (المعتمدة لا تتغير، حارس في القاعدة)
@@ -337,6 +345,27 @@ export async function caseSave(a: Admin, b: Body) {
   const before = set.cases.find((c: any) => c.id === b.case_id);
   await audit('admin', a.email, 'guide.eval-case', 'guidance_eval_sets', version, { case: before }, { case: r.cases.find((c: any) => c.id === b.case_id) });
   return { success: true, version, new_draft: version !== set.version };
+}
+
+// الحالات المقترحة التي ليست في المجموعة بعد (بمعرّفها)، فإضافتها مرة ثانية لا تكرر شيئًا
+export const proposedNew = (set: EvalSet, proposed: any[] = (PROPOSED as any).cases || []) => {
+  const have = new Set((set.cases || []).map((c: any) => c.id));
+  return proposed.filter((c: any) => c?.id && !have.has(c.id));
+};
+// إضافة المقترحة إلى المسودة (أو مسودة جديدة من المعتمدة): المجموعة كلها تُتحقق قبل الحفظ، وتلزمها مراجعة المالك واعتماده ثم تقييم جديد
+export async function casesImport(a: Admin, _b: Body = {}) {
+  requireAgentRead(a);
+  resetSet();
+  const set = await evalSet();
+  if (set.source !== 'db') throw new Fail('جدول المجموعة لم يُرحَّل بعد (20261116170000)', 409, 'not_migrated');
+  const add = proposedNew(set);
+  if (!add.length) return { success: true, added: 0, version: set.version };
+  const cases = [...set.cases, ...add];
+  const errors = validateCases({ version: set.version, cases });
+  if (errors.length) throw new Fail(`في الحالات المقترحة أخطاء: ${errors.slice(0, 3).join('؛ ')}`, 400, 'bad_cases');
+  const version = await writeCases(a, set, cases);
+  await audit('admin', a.email, 'guide.eval-import', 'guidance_eval_sets', version, { cases: set.cases.length }, { cases: cases.length, added: add.map((c: any) => c.id) });
+  return { success: true, added: add.length, version, new_draft: version !== set.version };
 }
 
 // الاعتماد للمالك وحده، باسمه، والمجموعة بلا أخطاء

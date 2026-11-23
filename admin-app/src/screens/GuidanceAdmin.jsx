@@ -80,6 +80,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
     setBusy(mode || 'full');
     const r = await L('admin.guide-eval-start', mode ? { mode } : {});
     if (!r.success) { setBusy(false); toast(r.message); return; }
+    if (r.resumed) toast('يُستأنف التشغيل القائم من حيث توقف');
     // الدفعات من اللوحة حتى ينتهي التشغيل: كل طلب بضع حالات، فلا يتجاوز حد زمن الدالة
     for (let i = 0; i < 200; i++) {
       const st = await L('admin.guide-eval-step', { run_id: r.run_id });
@@ -233,6 +234,14 @@ function SetReview({ canWrite, onChanged, focus }) {
     toast(`اعتُمدت المجموعة ${iso(set.version)}`);
     changed();
   };
+  // المرحلة أ: الحالات المقترحة في المستودع تُضاف بزر إلى مسودة، ثم يراجعها المالك ويعتمدها، ثم يُشغَّل تقييم جديد
+  const importProposed = async () => {
+    if (!(await confirm(`إضافة ${d.proposed} حالة مقترحة إلى ${set.status === 'approved' ? 'مسودة جديدة' : 'المسودة الحالية'}؟ تُغلق بوابة المساعد حتى تراجع المجموعة وتعتمدها ثم ينجح تقييم كامل عليها.`))) return;
+    const r = await L('admin.guide-eval-import', {});
+    if (!r.success) { toast(r.message); return; }
+    toast(r.added ? `أُضيفت ${r.added} حالة إلى المسودة ${iso(r.version)}. راجعها ثم اعتمدها.` : 'لا حالات مقترحة جديدة');
+    changed();
+  };
   const shown = set.cases.filter((c) => kind === 'all' || c.kind === kind);
   return (
     <section className="stack gd-set" aria-labelledby="gd-set-h">
@@ -241,6 +250,12 @@ function SetReview({ canWrite, onChanged, focus }) {
         <span className={`la-chip ${set.status === 'approved' ? 'ok' : 'warn'}`}>{set.status === 'approved' ? <>معتمدة: <bdi dir="ltr">{set.approved_by}</bdi> في {date(set.approved_at)}</> : 'مسودة'}</span>
       </div>
       <p className="la-muted small">النسخة <bdi dir="ltr">{set.version}</bdi>{set.updated_by && set.updated_by !== 'seed' ? <>، آخر تعديل <bdi dir="ltr">{set.updated_by}</bdi> في {date(set.updated_at)}</> : ''}. {set.source === 'file' ? 'جدول المجموعة لم يُرحَّل بعد، فلا تعديل ولا اعتماد حتى يُطبَّق ترحيله.' : 'كل تعديل يُسجَّل، ويُسقط نجاح التقييم السابق حتى يُشغَّل من جديد.'}</p>
+      {d.proposed > 0 && d.can_edit && (
+        <div className="la-note gd-proposed" role="note">
+          <span>{d.proposed} حالة مقترحة جاهزة لتوسيع المجموعة (كل أبواب الكتاب ومستوياته، وأسئلة صعبة ومحاولات تلاعب).</span>
+          {canWrite ? <button type="button" className="btn-sm" onClick={importProposed}>أضفها إلى مسودة للمراجعة</button> : <small className="la-muted">فعّل الكتابة لإضافتها.</small>}
+        </div>
+      )}
       {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء تمنع الاعتماد: {set.errors.slice(0, 5).join('؛ ')}</div>}
       <div className="la-row gd-filter" role="group" aria-label="تصفية بالنوع">
         {[['all', `الكل ${set.cases.length}`], ...FIELD_KIND.map(([k, t]) => [k, `${t} ${set.cases.filter((c) => c.kind === k).length}`])].map(([k, t]) => (

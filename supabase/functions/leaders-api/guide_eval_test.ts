@@ -295,6 +295,7 @@ function evalDb(tables: Record<string, Row[]>) {
     const run = () => {
       const rows = tables[table] ||= [];
       if (table === 'audit_log') return { data: null, error: null };
+      if (mode === 'insert' && table === 'guidance_eval_runs' && rows.some((x) => x.status === 'running')) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "guidance_eval_runs_one_running"' } };
       if (mode === 'insert') { const r = { id: crypto.randomUUID(), started_at: new Date().toISOString(), status: 'running', done_cases: 0, passed_cases: 0, cost_micros: 0, ...payload }; rows.push(r); return { data: single ? r : [r], error: null }; }
       let out = rows.filter((r) => f.every((x) => x(r)));
       if (mode === 'update') { for (const r of out) Object.assign(r, payload); return { data: out, error: null }; }
@@ -345,6 +346,9 @@ Deno.test('التشغيل التشخيصي: يعيد الراسبة وحدها،
   };
   try {
     const full = await E.evalStart(superA, {});
+    // تشغيل قائم لم يكتمل (أُغلقت اللوحة): البدء يستأنفه هو، لا يرد «لم تُرحَّل»
+    const again: any = await E.evalStart(superA, {});
+    assertEquals([again.run_id, again.resumed, tables.guidance_eval_runs.length], [full.run_id, true, 1]);
     for (let i = 0; i < 3; i++) await E.evalStep(superA, { run_id: full.run_id });
     const fr = tables.guidance_eval_runs[0];
     assertEquals([fr.status, fr.passed_cases, fr.done_cases], ['failed', 2, 3]);
@@ -410,4 +414,25 @@ Deno.test('النتائج قبل ترحيل 20261118100000: تُحفظ بلا ا
     const res: any = await E.evalResults(superA, { run_id: r.run_id });
     assertEquals([res.results[0].question, res.results[0].from_current], ['ما المعلم؟', true]);
   } finally { Object.assign(G.GD, prev); restore(); }
+});
+
+Deno.test('المرحلة أ: الحالات المقترحة تُضاف بزر إلى مسودة جديدة من المعتمدة، مرة واحدة، وتلزمها مراجعة واعتماد', async () => {
+  const PROPOSED = JSON.parse(await Deno.readTextFile(new URL('./guide-eval/cases-proposed.json', import.meta.url)));
+  const SEED = JSON.parse(await Deno.readTextFile(new URL('./guide-eval/cases.json', import.meta.url)));
+  assert(PROPOSED.cases.length >= 100, 'نحو 110 حالات مقترحة');
+  assertEquals(E.proposedNew({ version: 'v', cases: SEED.cases } as any).length, PROPOSED.cases.length, 'لا تصادم في المعرّفات مع المعتمدة');
+  const tables: Record<string, Row[]> = {
+    guidance_eval_sets: [{ id: 's1', version: '2026-11-18-1', status: 'approved', approved_by: 'owner@x.sa', approved_at: '2026-11-18T08:00:00Z', created_at: '2026-11-18T08:00:00Z', cases: SEED.cases }],
+    guidance_eval_runs: [], guidance_eval_results: [], audit_log: [],
+  };
+  const restore = evalDb(tables);
+  try {
+    const r: any = await E.casesImport(owner);
+    assertEquals([r.added, r.new_draft], [PROPOSED.cases.length, true]);
+    const draft = tables.guidance_eval_sets.find((s) => s.status === 'draft')!;
+    assertEquals(draft.cases.length, SEED.cases.length + PROPOSED.cases.length);
+    assertEquals(tables.guidance_eval_sets.find((s) => s.id === 's1')!.cases.length, SEED.cases.length, 'المعتمدة لا تتغير');
+    const again: any = await E.casesImport(owner);
+    assertEquals(again.added, 0, 'الإضافة الثانية لا تكرر شيئًا');
+  } finally { restore(); }
 });
