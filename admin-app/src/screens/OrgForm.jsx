@@ -11,6 +11,7 @@ import { useEscape, useUI } from '../ui.jsx';
 import { CertOverride, Field } from '../cert.jsx';
 import { orgProgram, orgProgramLine } from '../../../supabase/functions/leaders-api/logic.js';
 import '../cohort-editor.css';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 export const SWATCHES = ['#12414E', '#0B272F', '#A97A2E', '#2E7D5B', '#1F5FA8', '#7A3E9D', '#A8322D', '#B26B00', '#4A6A72', '#00897B'];
 const HEX = /^#[0-9A-Fa-f]{6}$/;
@@ -419,7 +420,7 @@ export default function OrgForm({ org, coordinator, onClose, companionReady = fa
             <h4>منسق الجهة</h4>
             <div className="of-grid">
               <Field label="الاسم"><input value={coord.full_name} onChange={setC('full_name')} /></Field>
-              <Field label="البريد" error={err('coord_email')} hint={domainHint(coord.email, v.domains)}><input type="email" dir="ltr" value={coord.email} onChange={setC('email')} aria-invalid={!!err('coord_email')} /></Field>
+              <Field label="البريد" error={err('coord_email')} hint={domainHint(coord.email, v.domains)}><EmailInput type="email" dir="ltr" value={coord.email} onChange={setC('email')} aria-invalid={!!err('coord_email')} /></Field>
               <Field label="الجوال"><input dir="ltr" inputMode="tel" value={coord.phone} onChange={setC('phone')} /></Field>
               <Field group label="حساب الاطلاع" wide hint={`${coord.enabled
                 ? (coordinator && coordinator.email === coord.email.trim().toLowerCase() ? 'الحساب قائم. تغيير البريد ينقل الوصول وينهي جلسات البريد القديم.' : 'عند الحفظ يُنشأ الحساب، ويصل المنسق بريد ترحيب فيه رابط تسجيل الموظفين ولوحة الجهة.')

@@ -6,6 +6,7 @@ import Ico from '../../../shared/ui/Ico.jsx';
 import { call, validEmail } from '../api.js';
 import { passkeyCancelled, passkeyGet, passkeySupported } from '../passkey.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
 const Err = ({ msg }) => (msg ? <div className="login-error show" role="alert">{msg}</div> : null);
@@ -118,7 +119,7 @@ export default function Login({ onSignedIn, notice = '', initialEmail = '' }) {
               {notice && <div className="login-notice" role="alert">{notice}</div>}
               <div className="form-group">
                 <label className="form-label" htmlFor="loginEmail">البريد الإلكتروني</label>
-                <input className="form-input" type="email" id="loginEmail" placeholder="your@email.com" autoComplete="email"
+                <EmailInput className="form-input" type="email" id="loginEmail" placeholder="your@email.com" autoComplete="email"
                   value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
               </div>
               <button className="login-btn" type="submit" disabled={!!busy}>{busy === 'send' ? 'جارٍ التحقق...' : 'متابعة'}</button>

@@ -11,6 +11,7 @@ import { dimOf } from '../labels.js';
 import { ErrorBox } from '../ui.jsx';
 import { CYCLE_STATUS_AR, nominationCheck } from '../../../supabase/functions/leaders-api/feedback360.js';
 import Report360 from '../../../src/lib/Report360.jsx';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const WAVE_AR = { t1: 'الموجة الأولى', t2: 'الموجة الثانية' };
 const day = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' }) : '');
@@ -106,7 +107,7 @@ function Nominees({ data, cycle, onChange }) {
         <form className="stack" onSubmit={add}>
           <div className="grid2">
             <label className="field"><span>البريد</span>
-              <input className="input ltr" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+              <EmailInput className="input ltr" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
             <label className="field"><span>الاسم <em>(اختياري)</em></span>
               <input className="input" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></label>
             <label className="field"><span>صلته بك</span>

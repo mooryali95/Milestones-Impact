@@ -78,6 +78,7 @@ test('الملف الشخصي: سنوات الخبرة بالأرقام المش
   await page.getByRole('button', { name: 'حفظ والانتقال لتحديد المستوى' }).click();
   await expect(page.getByText(/بقي حقل واحد/)).toHaveCount(0);
   await expect.poll(() => saves.at(-1)?.years_experience).toBe('12');
-  // الجوال يُرسل كما كُتب، والخادم يوحّده (normalizePhone يقبل المشرقية: arabic-digits.test.js)
-  expect(saves.at(-1).phone).toBe('٠٥٠٠٠٠٠٠٠٠');
+  // الأرقام المشرقية تتحول إلى 0-9 لحظة الكتابة في كل حقل (shared/ui/latin-digits.js)، فيصل الجوال موحّدًا؛
+  // ويبقى الخادم يوحّده أيضًا لمن يرسل مباشرة (normalizePhone: arabic-digits.test.js)
+  expect(saves.at(-1).phone).toBe('0500000000');
 });

@@ -18,6 +18,7 @@ import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
 import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR, expertRoleAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
 const DIMS = [['milestone', 'Milestone'], ['impact', 'Impact'], ['leadership', 'Leadership']];
 const lvl = (k) => LEVELS.find((l) => l.key === k)?.title || '·';
@@ -69,7 +70,7 @@ function SignIn({ onIn, initialError, initialEmail = '' }) {
               <p className="muted">أدخل البريد المسجّل لدى Milestone Impact، ونرسل لك رمز دخول. لا كلمات مرور.</p>
             </div>
             <label className="field"><span>البريد الإلكتروني</span>
-              <input className="input ltr" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.sa" />
+              <EmailInput className="input ltr" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@org.sa" />
             </label>
             {error && <div className="alert err">{error}</div>}
             {captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => start(null, t)} />}

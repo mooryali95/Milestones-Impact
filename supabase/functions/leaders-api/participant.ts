@@ -31,6 +31,8 @@ import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
 import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
+import { consumeSponsorCode, findSponsorCode, redeemSponsorCode } from './sponsor-codes.ts';
+import { SPONSOR_CODE_SPENT_AR } from './sponsor-codes.js';
 import { advisorOf, notifyAdvisor } from './advisor.ts';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
@@ -138,18 +140,42 @@ async function resolveOrg(b: Body, key = 'anon') {
 // الجهة الراعية (organization_id) غير «جهة العمل» (organization_name، نص يكتبه المشارك ولا يُربط بشيء).
 // لا قائمة جهات علنية: الرمز الصحيح وحده يكشف اسم جهته، والخاطئ رده واحد دائمًا، ومحاولاته محدودة.
 const SPONSOR_TRIES_PER_HOUR = 10;
-async function sponsorByCode(code: unknown, key: string) {
+// ومن الشبكة الواحدة (عدة حسابات من عنوان واحد): حد أوسع لأن الشبكات المشتركة تجمع مشاركين كثيرين
+const SPONSOR_TRIES_PER_IP_HOUR = 30;
+const failsSince = async (key: string) => (await db.from('audit_log').select('id', { count: 'exact', head: true })
+  .eq('action', 'sponsor.code-fail').eq('actor', key).gte('created_at', new Date(Date.now() - 36e5).toISOString())).count ?? 0;
+// رموز الرعاية التي تولّدها الإدارة وحدها (sponsor-codes.ts)، ورمز رابط الجهة لا يُقبل مكتوبًا. رمز الرعاية لا يُستهلك هنا:
+// يُعاد معه sponsor_code فيستهلكه المستدعي لحظة الربط الفعلي (consumeSponsorCode)، فمن يُرد قبل الربط لا يأخذ استخدامًا
+async function sponsorByCode(code: unknown, key: string, ipKey: string | null = null) {
   const c = String(code || '').trim();
   if (!c) return null;
-  const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true })
-    .eq('action', 'sponsor.code-fail').eq('actor', key).gte('created_at', new Date(Date.now() - 36e5).toISOString());
-  if ((count ?? 0) >= SPONSOR_TRIES_PER_HOUR) throw new Fail('محاولات كثيرة لرمز الجهة، حاول بعد ساعة', 429, 'rate');
-  const org = await orgByCode(c);
-  if (!org) {
-    await audit('system', key, 'sponsor.code-fail', 'organizations', 'none');
+  const keys = [key, ...(ipKey && ipKey !== key ? [ipKey] : [])];
+  if ((await failsSince(key)) >= SPONSOR_TRIES_PER_HOUR || (ipKey && ipKey !== key && (await failsSince(ipKey)) >= SPONSOR_TRIES_PER_IP_HOUR)) {
+    throw new Fail('محاولات كثيرة لرمز الجهة، حاول بعد ساعة', 429, 'rate');
+  }
+  const fail = async () => { for (const k of keys) await audit('system', k, 'sponsor.code-fail', 'organizations', 'none'); };
+  // قرار المالك: الرمز المكتوب رمز رعاية وحده، ورمز رابط الجهة (invite_code) لا يُقبل مكتوبًا؛ الرابط نفسه يعمل كما كان (resolveOrg)
+  const sc = await findSponsorCode(c, ORG_COLS);
+  if (sc && sc.state !== 'active') {
+    // رمز موجود توقف أو انتهى أو اكتمل عدده: رد واضح، ويُعد محاولة خاطئة كغيره
+    await fail();
+    throw new Fail(SPONSOR_CODE_SPENT_AR, 400, 'sponsor_code_spent');
+  }
+  if (!sc) {
+    await fail();
     throw new Fail('تعذّر التحقق من رمز الجهة الراعية. تأكد منه، أو تابع دونه وتربطك الإدارة لاحقًا.', 400, 'sponsor_code');
   }
-  return { org, via: 'link' as const };   // الرمز المكتوب هو رمز رابط الجهة نفسه
+  return { org: sc.org, via: 'link' as const, sponsor_code: sc.row.code as string };
+}
+// حساب جديد رُبط برمز رعاية عند إنشائه: يُستهلك الرمز الآن (بعد وجود الصف)، وإن سبقه غيره إلى آخر استخدام يُفك الربط
+// ويبقى الحساب بلا جهة (تربطه الإدارة أو يدفع)، فلا يمنع التسجيل
+async function consumeAtSignup(p: any, r: any) {
+  if (!r?.sponsor_code || !p?.organization_id) return p;
+  const got = await redeemSponsorCode(r.sponsor_code, p.id);
+  if (got.ok) return p;
+  await audit('participant', p.id, 'sponsor.code-spent', 'sponsor_codes', null, null, { code: r.sponsor_code, reason: got.reason, at: 'signup' });
+  const { data } = await db.from('participants').update({ organization_id: null, org_via: null, source: 'self' }).eq('id', p.id).select('*').single();
+  return data || { ...p, organization_id: null, org_via: null };
 }
 // ── الربط بنطاق البريد الوظيفي: بريد موثَّق على نطاق مسجل لجهة نشطة يربط صاحبه بها ──
 // نطاقات البريد العامة لا تربط أحدًا أبدًا (القائمة في domains.js).
@@ -189,9 +215,9 @@ async function linkOrgOnLogin(p: any, code: unknown, key: string) {
 }
 
 // المشارك المسجل يضيف رمز جهته الراعية لاحقًا (مرة واحدة: الربط بعدها من الإدارة)
-export async function sponsorCode(p: any, b: Body) {
+export async function sponsorCode(p: any, b: Body, ctx: { ip?: string | null } = {}) {
   if (p.organization_id) throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
-  const r = await sponsorByCode(b.sponsor_code, `p:${p.id}`);
+  const r = await sponsorByCode(b.sponsor_code, `p:${p.id}`, ctx.ip ? `ip:${ctx.ip}` : null);
   if (!r) throw new Fail('اكتب رمز الجهة الراعية');
   // قرار سارٍ للإدارة في رعاية هذه الجهة له (سحب أو فك أو رفض طلب مقعده، P1-06) لا يرده رمز يكتبه: يُرد قبل الربط بسببه،
   // فيبقى له الدفع وطلب الرعاية من الإدارة. كان يُربط بلا رعاية، فيختفي نموذج الرمز ولا يعرف لماذا بقي الدفع عليه
@@ -201,6 +227,8 @@ export async function sponsorCode(p: any, b: Body) {
       ? `قررت الإدارة من قبل أن تتابع البرنامج بدفع فردي لا برعاية هذه الجهة، فلا يغيّر الرمز ذلك. لمراجعة القرار راسل ${CONTACT_EMAIL}`
       : `أنهت الإدارة من قبل رعاية هذه الجهة لك، فلا يعيدها الرمز. لمراجعة القرار راسل ${CONTACT_EMAIL}`, 409, 'sponsor_decided');
   }
+  // رمز رعاية: يُستهلك الآن، بعد حسم القرار وقبل الربط (ذري في القاعدة؛ من سبقه إلى آخر استخدام يُرد هنا)
+  if (r.sponsor_code) await consumeSponsorCode(r.sponsor_code, p.id);
   const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
   // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
@@ -343,7 +371,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
       : await sponsorFor({ sponsor_code: b.sponsor_code, org: pend.org }, ctx.ip || email, email);
     profile = {
       ...named, campaign: pend.campaign || null, referrer_host: pend.referrer_host || null,
-      ...(r ? { organization_id: r.org.id, org_via: r.via } : {}),
+      ...(r ? { organization_id: r.org.id, org_via: r.via, sponsor_code: (r as any).sponsor_code || null } : {}),
     };
   }
   // استهلاك ذري: لو سبق استخدامه في طلب موازٍ لا يُحدَّث أي صف
@@ -361,6 +389,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
     // أكمل التسجيل بعد إشعار الخصوصية والشروط. تعذّر تسجيلها لا يفشل الحساب المنشأ: تبقى غير مسجلة، فتطلبها شاشة الموافقة
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));
+    p = await consumeAtSignup(p, profile);   // رمز رعاية يُستهلك بعد إنشاء الحساب، قبل تثبيت الراعي
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
   } else {
     if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
@@ -393,6 +422,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
     }).select('*').single());
     await audit('participant', p.id, 'participant.register', 'participants', p.id, null, { via: 'google' });
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));   // كما في التسجيل بالبريد
+    p = await consumeAtSignup(p, r);
     if (p.organization_id) await pinSponsorFor(p.id);
   } else {
     if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
