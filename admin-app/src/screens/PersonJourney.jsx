@@ -146,6 +146,7 @@ export function MoveDialog({ p, journey, onClose, onMoved }) {
             </optgroup>
           ))}
         </select>
+        {!target && <p className="pj-move-hint la-muted" data-testid="move-hint">اختر المرحلة لترى ما ينقص قبلها. للأمام: تختار لكل مرحلة ناقصة «اعتمد اكتمالها» أو «أعفه منها». للخلف: تُعاد فتح المرحلة وما بعدها، ولا يُحذف شيء مما أنجزه.</p>}
         {plan && !plan.ok && <p className="la-err" role="alert">{plan.error}</p>}
         {plan?.ok && plan.direction === 'forward' && (
           <div className="pj-plan" data-testid="move-plan">

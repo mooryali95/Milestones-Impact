@@ -1438,3 +1438,11 @@
 .pf-tl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
 .pf-tl-chip { border: 1px solid var(--line-strong); background: none; border-radius: 99px; padding: 5px 12px; font: inherit; font-size: .8rem; cursor: pointer; color: var(--ink-soft); min-block-size: 32px; }
 .pf-tl-chip.on { background: var(--petrol-mid); border-color: transparent; color: #fff; }
+
+/* زر «⋯» مربع صغير دائمًا، ولو ورث حدًا أدنى للعرض من صف الأزرار (pj-stage-h وpj-act) */
+.pf-more > .pf-more-btn, .pj-stage-h .pf-more > .pf-more-btn, .pj-act .pf-more > .pf-more-btn {
+  min-inline-size: 32px; inline-size: 32px; block-size: 32px; min-block-size: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; border-radius: 8px;
+}
+/* نافذة النقل قبل اختيار المرحلة: تلميح بدل فراغ */
+.pj-move-hint { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--gold-pale); color: var(--ink, inherit); font-size: 13px; line-height: 1.7; }

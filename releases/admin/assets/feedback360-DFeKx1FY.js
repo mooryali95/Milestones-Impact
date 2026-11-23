@@ -1,0 +1,1 @@
+import"./index-DdkXjBAc.js";const a={nominating:"الترشيح",approval:"بانتظار اعتماد المستشار",open:"مفتوح للمقيّمين",closed:"أُغلق، بانتظار جلسة الاستلام",released:"سُلّم لك",cancelled:"أُلغي"},o={agree:"متفقون",mixed:"متباينون قليلًا",split:"مختلفون"};export{a as C,o as S};
