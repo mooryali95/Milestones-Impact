@@ -151,7 +151,7 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
 
       <section className="la-card">
         <div className="la-row between"><h3>كتاب المسار كما يقرؤه المشارك</h3><span className="la-muted">{r.handbook.length} بابًا</span></div>
-        <p className="la-muted">الكتاب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه، ويتم من «كتاب القائد».</p>
+        <><p className="la-muted">كتاب المسار من أبواب الأطر الثلاثة بمستواه؛ يُعدَّل من «كتاب القائد».</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الكتاب مركّب من أبواب الأطر الثلاثة بمستوى هذا المسار في كل إطار، والفقرات الخاصة بمستويات أخرى محذوفة. تعديل أي باب يسري على كل المسارات التي تشترك فيه، ويتم من «كتاب القائد».</p></details></>
         {r.handbook.length ? (
           <div className="la-hb">
             <nav className="la-hb-toc" aria-label="أبواب الكتاب">{groups.map((g) => g.items.length > 0 && (

@@ -88,7 +88,7 @@ export default function CohortDemo({ c, canWrite }) {
           {s.exists && s.last_opened_by && <span className="la-muted"> بواسطة <bdi dir="ltr">{s.last_opened_by}</bdi></span>}
         </p>
       )}
-      {s && !s.failed && !s.ready && <p className="la-note" role="status">الحساب التجريبي لكل دفعة يُفعَّل بعد تحديث قاعدة البيانات، بلا نشر جديد. إلى ذلك الحين استعمل الحساب التجريبي العام من النظرة العامة: يعرض رحلة الدفعة المفتوحة.</p>}
+      {s && !s.failed && !s.ready && <><p className="la-note" role="status">يُفعَّل بعد تحديث قاعدة البيانات؛ استعمل الحساب العام إلى ذلك الحين.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الحساب التجريبي لكل دفعة يُفعَّل بعد تحديث قاعدة البيانات، بلا نشر جديد. إلى ذلك الحين استعمل الحساب التجريبي العام من النظرة العامة: يعرض رحلة الدفعة المفتوحة.</p></details></>}
       {usable && !s.general && <DemoLinks state={s} load={load} cohort={{ id: c.id, name: c.name }} />}
     </section>
   );

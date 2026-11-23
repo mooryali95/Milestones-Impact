@@ -38,7 +38,7 @@ function Settings({ model, running, onSaved, canWrite }) {
     <section className="la-card">
       <h3>إعدادات الحكم بالتغير</h3>
       {running && <div className="la-note" role="note">{placementLockAr(running)}</div>}
-      <p className="la-muted">التغير الموثوق = الفرق مقسومًا على خطأ الفرق المعياري (Jacobson و Truax)، ولا يُعدّ حقيقيًا قبل 1.96 بعد خصم أثر التكرار (Chelune). حين تبلغ الدفعة العدد الأدنى يحل ثبات الأداة الفعلي (ألفا كرونباخ) وانحرافها المعياري محل القيم الافتراضية تلقائيًا.</p>
+      <><p className="la-muted">التغير يُعد حقيقيًا بعد 1.96 من خطأ الفرق المعياري.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>التغير الموثوق = الفرق مقسومًا على خطأ الفرق المعياري (Jacobson و Truax)، ولا يُعدّ حقيقيًا قبل 1.96 بعد خصم أثر التكرار (Chelune). حين تبلغ الدفعة العدد الأدنى يحل ثبات الأداة الفعلي (ألفا كرونباخ) وانحرافها المعياري محل القيم الافتراضية تلقائيًا.</p></details></>
       <div className="la-model-grid">
         {SETTINGS.map(([k, label, step]) => (
           <label key={k} className="la-mf"><span>{label}</span>
@@ -80,7 +80,7 @@ function Cohort({ r, raterOff }) {
             {r.cohort[d].response_shift != null && ` · انزياح الاستجابة ${sign(r.cohort[d].response_shift)}`}</span>
         ))}
       </div>
-      <p className="la-muted">المقارنة بالجوانب المشتركة بين النموذجين فقط وبأوزان نموذج التسكين. انزياح الاستجابة الموجب يعني أن المشاركين قدّروا ممارستهم في البداية أعلى مما يرونها اليوم، وهو سبب الاعتماد على القياس الرجعي وتقدير المدير لا على الفرق الذاتي.</p>
+      <><p className="la-muted">المقارنة بالجوانب المشتركة بين النموذجين وحدها.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>المقارنة بالجوانب المشتركة بين النموذجين فقط وبأوزان نموذج التسكين. انزياح الاستجابة الموجب يعني أن المشاركين قدّروا ممارستهم في البداية أعلى مما يرونها اليوم، وهو سبب الاعتماد على القياس الرجعي وتقدير المدير لا على الفرق الذاتي.</p></details></>
       <p className="la-muted">الثبات المستعمل (ألفا الطبقية): {DIMS.map((d) => {
         const s = r.config.source?.[d] || {};
         return `${DIM[d]} ${s.from_data ? `α ${s.alpha} من ${s.n}` : `افتراضي ${r.config.rci_reliability} (لدينا ${s.n || 0})`}`;
@@ -106,7 +106,7 @@ function Overall({ o }) {
           <td><small>{Object.entries(VERDICT).map(([k, [l]]) => `${l} ${o.verdicts[k] || 0}`).join(' · ')}</small></td>
         </tr></tbody>
       </table>
-      <p className="la-muted">متوسط الأطر الثلاثة بأسئلتها كلها، فخطأ قياسه أصغر بكثير من خطأ الإطار المنفرد. لذلك يُحكم على الفرد بالمؤشر الكلي، وتبقى الأطر منفردة وصفًا للفرد وحكمًا إحصائيًا للدفعة.</p>
+      <><p className="la-muted">الحكم على الفرد بالمؤشر الكلي، والأطر منفردة وصف.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>متوسط الأطر الثلاثة بأسئلتها كلها، فخطأ قياسه أصغر بكثير من خطأ الإطار المنفرد. لذلك يُحكم على الفرد بالمؤشر الكلي، وتبقى الأطر منفردة وصفًا للفرد وحكمًا إحصائيًا للدفعة.</p></details></>
     </section>
   );
 }
@@ -181,7 +181,7 @@ function People({ list, onPerson, raterOff }) {
         ))}</tbody>
       </table>
       {raterOff && <p className="la-muted" role="note">{RATER_OFF_AR}</p>}
-      <p className="la-muted">الحكم بالتثليث: «تغير مؤكد» يتطلب مصدرين على الأقل أحدهما خارجي غير مبني على التذكر: الاختبار بتغير موثوق، أو دليل المشروع المعتمد، أو تقدير المدير نفسه قبل البرنامج وبعده. تقدير المدير بأثر رجعي وحده يرفع الحكم إلى «مؤشرات أولية» فقط.</p>
+      <><p className="la-muted">«تغير مؤكد» يحتاج مصدرين أحدهما خارجي.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الحكم بالتثليث: «تغير مؤكد» يتطلب مصدرين على الأقل أحدهما خارجي غير مبني على التذكر: الاختبار بتغير موثوق، أو دليل المشروع المعتمد، أو تقدير المدير نفسه قبل البرنامج وبعده. تقدير المدير بأثر رجعي وحده يرفع الحكم إلى «مؤشرات أولية» فقط.</p></details></>
     </section>
   );
 }

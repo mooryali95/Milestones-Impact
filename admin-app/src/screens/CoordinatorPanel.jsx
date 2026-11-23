@@ -117,7 +117,7 @@ export default function CoordinatorPanel({ org, canWrite, onEdit }) {
     return (
       <section className="la-card cp">
         {head(0)}
-        <p className="la-muted">أنشئ حساب اطلاع لمن يتابع البرنامج من الجهة: راعٍ تنفيذي يرى الأرقام فقط، أو منسّق يرى المشاركين، أو موارد بشرية. يدخل برمز بريد بلا كلمة مرور، ويرى المشارك في ملفه ما يُتاح لجهته.</p>
+        <><p className="la-muted">حساب اطلاع لمن يتابع البرنامج من الجهة، بدخول برمز بريد.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>أنشئ حساب اطلاع لمن يتابع البرنامج من الجهة: راعٍ تنفيذي يرى الأرقام فقط، أو منسّق يرى المشاركين، أو موارد بشرية. يدخل برمز بريد بلا كلمة مرور، ويرى المشارك في ملفه ما يُتاح لجهته.</p></details></>
         {addForm}
       </section>
     );
