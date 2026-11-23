@@ -193,7 +193,7 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
 
       <section className="la-card">
         <div className="la-row between"><h3>لم يُرسل <small className="la-muted">· كل ما ينتظر، وما تُرك في آخر 7 أيام</small></h3><button className="btn-sm ghost" onClick={load}>حدّث</button></div>
-        <p className="la-muted small">الإشعار الذي يحجبه السقف ينتظر هنا حتى يُرسل، ويخرج آليًّا الأقدم أولًا: مع تصفير الحصة 03:00 بتوقيت الرياض، ومن 22:17 بما بقي من حصة اليوم، يومًا بعد يوم. لا يُترك إلا المؤرخ الذي مضى موعده (تذكير جلسة بدأت، دعوة تقييم أُغلق، عرض خدمة انتهت مهلته). لك أن ترسله الآن، أو تنسخ نصه وترسله بنفسك ثم تغلقه. رمز الدخول لا ينتظر: صاحبه يطلبه من جديد، أو تنشئ له رابطًا من البحث أعلاه.</p>
+        <><p className="la-muted small">ما يحجبه السقف ينتظر هنا ويخرج آليًا الأقدم أولًا.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الإشعار الذي يحجبه السقف ينتظر هنا حتى يُرسل، ويخرج آليًّا الأقدم أولًا: مع تصفير الحصة 03:00 بتوقيت الرياض، ومن 22:17 بما بقي من حصة اليوم، يومًا بعد يوم. لا يُترك إلا المؤرخ الذي مضى موعده (تذكير جلسة بدأت، دعوة تقييم أُغلق، عرض خدمة انتهت مهلته). لك أن ترسله الآن، أو تنسخ نصه وترسله بنفسك ثم تغلقه. رمز الدخول لا ينتظر: صاحبه يطلبه من جديد، أو تنشئ له رابطًا من البحث أعلاه.</p></details></>
         {d.queue.length === 0 ? <Empty compact title="لا رسائل منتظرة" hint="كل ما طُلب إرساله خرج." /> : (
           <div className="la-table-wrap">
             <table className="la-table">
@@ -262,7 +262,7 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
             </ul>
           ) : <p className="la-muted">{d.provider.reason}</p>}
           {d.provider.usage && Object.keys(d.provider.usage).length > 0 && <p className="la-muted small">استهلاك الحساب عند المزوّد: {Object.entries(d.provider.usage).map(([k, v]) => <span key={k} dir="ltr" className="mc-q">{k}: {v}</span>)}</p>}
-          <p className="la-muted small">المنصة تعد البريد بيوم المزوّد نفسه، ويُصفَّر 03:00 بتوقيت الرياض، وسقفها دون حصته. ما ينتظر يخرج من 22:17 بتوقيت الرياض بما بقي من حصة اليوم، ويبقى 10 لرموز الدخول ليلًا، والباقي ينتقل إلى ما بعد 03:00.</p>
+          <><p className="la-muted small">يُصفَّر العدّاد 03:00 بتوقيت الرياض، وما ينتظر يخرج من 22:17.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>المنصة تعد البريد بيوم المزوّد نفسه، ويُصفَّر 03:00 بتوقيت الرياض، وسقفها دون حصته. ما ينتظر يخرج من 22:17 بتوقيت الرياض بما بقي من حصة اليوم، ويبقى 10 لرموز الدخول ليلًا، والباقي ينتقل إلى ما بعد 03:00.</p></details></>
           {Object.keys(d.provider.quota).length > 0 && <p className="la-muted small">ما يعلنه المزوّد: {Object.entries(d.provider.quota).map(([k, v]) => <span key={k} dir="ltr" className="mc-q">{k}: {v}</span>)}</p>}
           <ul className="pay-health">
             <li className={d.alert_channel ? 'ok' : 'bad'}><b>{d.alert_channel ? '✓' : '✗'}</b><span>قناة التنبيه</span><small className="la-muted">{d.alert_channel ? 'تنبيه عند 70% من السقف وعند رفض المزوّد' : 'غير مضبوطة: اضبط بوت سلاك (LEADERS_SLACK_BOT_TOKEN وLEADERS_SLACK_CHANNEL) أو رابطًا في LEADERS_ALERT_WEBHOOK ليصلك تنبيه عند اقتراب السقف'}</small></li>

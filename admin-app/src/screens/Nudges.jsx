@@ -30,7 +30,7 @@ export function NudgeSheet({ ids, onClose }) {
       <div className="la-form mi-form bulk-approve nudge-sheet" role="dialog" aria-modal="true" aria-label="تذكير المحددين">
         <h3>تذكير المحددين</h3>
         <div className="ba-body">
-          <p className="la-muted">يصل كل واحد بريد يسمّي مرحلته وخطوته التالية وكم قطع من رحلته، بنص واحد يستعمله كل من يذكّر. ومن ذُكِّر قريبًا من أي مرسل يُتخطى، فلا تتكرر التذكيرات.</p>
+          <><p className="la-muted">بريد واحد بمرحلة كل مشارك وخطوته، بلا تكرار لمن ذُكّر قريبًا.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>يصل كل واحد بريد يسمّي مرحلته وخطوته التالية وكم قطع من رحلته، بنص واحد يستعمله كل من يذكّر. ومن ذُكِّر قريبًا من أي مرسل يُتخطى، فلا تتكرر التذكيرات.</p></details></>
           {!preview ? <Spinner /> : !preview.success ? <p className="la-err" role="alert">{preview.message}</p> : !done ? (
             <>
               <div className="ba-sum">

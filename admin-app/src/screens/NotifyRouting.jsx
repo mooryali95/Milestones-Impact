@@ -98,7 +98,7 @@ export default function NotifyRouting() {
         <h3 id="nr-title">التوجيه <small className="la-muted">· أين يصل كل إشعار للإدارة</small></h3>
         {d.updated && <small className="la-muted">آخر تعديل: {d.updated.by} · {dateTime(d.updated.at)}</small>}
       </div>
-      <p className="la-muted small">الحرج بالبريد وSlack معًا، والمهم في Slack فورًا والبريد احتياطه إن لم يصل، والمعلوماتي في الملخص اليومي. الصفوف المقفلة (الأمان والمال والحذف وطلبات التواصل) بريدها دائم، ويمكن إضافة Slack إليها فقط. رموز الدخول وبريد المشاركين لا يمر بهذا الجدول.</p>
+      <><p className="la-muted small">الحرج بريد وSlack، والمهم Slack، والمعلوماتي في الملخص اليومي.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>الحرج بالبريد وSlack معًا، والمهم في Slack فورًا والبريد احتياطه إن لم يصل، والمعلوماتي في الملخص اليومي. الصفوف المقفلة (الأمان والمال والحذف وطلبات التواصل) بريدها دائم، ويمكن إضافة Slack إليها فقط. رموز الدخول وبريد المشاركين لا يمر بهذا الجدول.</p></details></>
       {!d.ready && <p className="la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فيعمل «متوازن» ولا يُحفظ تعديل.</p>}
       {!d.owner && <p className="la-muted small" data-owner-only>الحفظ للمالك وحده. ترى هنا ما يجري الآن.</p>}
       {d.legacy_payment_owner && !d.saved && <p className="la-chip warn">مفتاح «تنبيه الإدارة عند كل دفعة» القديم مفتوح، فصفا الدفعة والاسترداد بالبريد مع Slack. عدّلهما هنا واحفظ ليحل المركز محله.</p>}

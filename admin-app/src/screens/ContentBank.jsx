@@ -66,10 +66,9 @@ export default function ContentBank({ catalog, reload, canWrite }) {
   const groups = [[null, 'للجميع'], ...DIMS.map((d) => [d, DIM[d]])];
   return (
     <>
-      <p className="la-muted">
-        ارفع المادة مرة واحدة وحدد لمن هي، فتظهر تلقائيًا لكل مسار يناسبها. أضف نشاط «منهج المسار» في أي مرحلة من «الرحلة والمتطلبات»
+      <><p className="la-muted">ارفع المادة مرة وحدد لمن هي، فتظهر لكل مسار يناسبها.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>ارفع المادة مرة واحدة وحدد لمن هي، فتظهر تلقائيًا لكل مسار يناسبها. أضف نشاط «منهج المسار» في أي مرحلة من «الرحلة والمتطلبات»
         ليعرض لكل مشارك مواد مساره، ويكتمل بمشاهدتها وفتحها فعلًا. أبواب الكتاب تبقى في «كتاب القائد».
-      </p>
+      </p></details></>
       <Preview tracks={catalog.tracks || []} />
       {groups.map(([dim, label]) => {
         const list = items.filter((x) => (x.dimension || null) === dim).sort((a, b) => a.sort - b.sort);

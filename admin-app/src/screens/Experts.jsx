@@ -314,7 +314,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
       {adding && <ExpertForm isNew canWrite={canWrite} onCancel={() => setAdding(false)} onSaved={(e) => { setAdding(false); onOpen(e.id); }} />}
       <section className="la-card">
         <div className="la-row between"><h3>شبكة الخبراء</h3>{canWrite && !adding && <button className="btn-sm primary" onClick={() => setAdding(true)}>+ خبير</button>}</div>
-        <p className="la-muted">ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير» بمساريها: خبير الرحلة، وخبير المحتوى (طلب عضوية لجنة). لا يُسند إليه شيء ولا يُفتح له الكتاب قبل اعتماده.</p>
+        <><p className="la-muted">ينضم الخبير بدعوة أو بطلب، ولا يُسند إليه شيء قبل اعتماده.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>ينضم الخبير بدعوة منك أو بطلب من صفحة «انضم كخبير» بمساريها: خبير الرحلة، وخبير المحتوى (طلب عضوية لجنة). لا يُسند إليه شيء ولا يُفتح له الكتاب قبل اعتماده.</p></details></>
         {!d ? <Spinner /> : !d.success ? <div className="la-err">{d.message}</div> : <>
           <FilterBar scope="experts" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
             shown={rows.length} total={all.length} noun="خبير" placeholder="ابحث بالاسم أو البريد أو المسمى أو القطاع"
