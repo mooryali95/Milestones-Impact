@@ -1387,3 +1387,6 @@
 /* تنبيه نسخة الرحلة في رأس ملف الدفعة (2026-11-23) */
 .version-note { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
 .version-note > span { flex: 1 1 240px; min-width: 0; }
+
+/* رموز الرعاية: حقول نموذج الإنشاء تنكمش ولا تتجاوز عرض الشاشة (390px) */
+.sc-form > input { flex: 1 1 160px; min-width: 0; max-width: 100%; box-sizing: border-box; }

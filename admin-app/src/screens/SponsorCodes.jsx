@@ -73,7 +73,7 @@ export default function SponsorCodes({ org, canWrite }) {
         </table></div>
       ) : <Empty compact title="لا رموز رعاية بعد" hint="أنشئ رمزًا وأرسله لمرشحي الجهة، أو استعمل رمز رابط الدعوة." />}
       {canWrite && (
-        <form className="la-row" onSubmit={create} aria-label="أنشئ رمز رعاية">
+        <form className="la-row sc-form" onSubmit={create} aria-label="أنشئ رمز رعاية">
           <input dir="ltr" aria-label="الرمز (اختياري)" placeholder="الرمز (اختياري، 8 أحرف فأكثر)" maxLength={40} value={form.code} onChange={set('code')} />
           <input type="number" min="1" aria-label="عدد المستخدمين (اختياري)" placeholder="عدد المستخدمين (بلا حد)" value={form.max_uses} onChange={set('max_uses')} />
           <input type="date" aria-label="تاريخ الانتهاء (اختياري)" value={form.expires_at} onChange={set('expires_at')} />

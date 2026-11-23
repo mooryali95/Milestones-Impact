@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261125100000_leaders_payment_creem_check
+-- as-of migration: 20261126100000_leaders_sponsor_codes
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -2122,6 +2122,31 @@ create table if not exists leaders.slack_threads (
   constraint slack_threads_pkey PRIMARY KEY (day, category)
 );
 
+create table if not exists leaders.sponsor_code_uses (
+  code_id uuid not null,
+  participant_id uuid not null,
+  used_at timestamp with time zone default now() not null,
+  constraint sponsor_code_uses_pkey PRIMARY KEY (code_id, participant_id)
+);
+
+create table if not exists leaders.sponsor_codes (
+  id uuid default gen_random_uuid() not null,
+  organization_id uuid not null,
+  code text not null,
+  max_uses integer,
+  used integer default 0 not null,
+  expires_at timestamp with time zone,
+  active boolean default true not null,
+  note text,
+  created_by text,
+  created_at timestamp with time zone default now() not null,
+  constraint sponsor_codes_code_check CHECK ((code ~ '^[a-z0-9-]{4,40}$'::text)),
+  constraint sponsor_codes_max_uses_check CHECK (((max_uses IS NULL) OR (max_uses > 0))),
+  constraint sponsor_codes_note_check CHECK ((char_length(note) <= 300)),
+  constraint sponsor_codes_used_check CHECK ((used >= 0)),
+  constraint sponsor_codes_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.sponsor_requests (
   id uuid default gen_random_uuid() not null,
   participant_id uuid not null,
@@ -3226,6 +3251,18 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.sponsor_code_uses add constraint sponsor_code_uses_code_id_fkey FOREIGN KEY (code_id) REFERENCES leaders.sponsor_codes(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.sponsor_code_uses add constraint sponsor_code_uses_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.sponsor_codes add constraint sponsor_codes_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.sponsor_requests add constraint sponsor_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE SET NULL;
 exception when duplicate_object then null; end $$;
 
@@ -3661,6 +3698,12 @@ CREATE INDEX IF NOT EXISTS reports_organization_idx ON leaders.reports USING btr
 
 CREATE INDEX IF NOT EXISTS reports_participant_idx ON leaders.reports USING btree (participant_id);
 
+CREATE INDEX IF NOT EXISTS sponsor_code_uses_participant_idx ON leaders.sponsor_code_uses USING btree (participant_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sponsor_codes_code_uidx ON leaders.sponsor_codes USING btree (code);
+
+CREATE INDEX IF NOT EXISTS sponsor_codes_org_idx ON leaders.sponsor_codes USING btree (organization_id, created_at);
+
 CREATE UNIQUE INDEX IF NOT EXISTS sponsor_requests_one_pending ON leaders.sponsor_requests USING btree (participant_id) WHERE (status = 'pending'::text);
 
 CREATE INDEX IF NOT EXISTS sponsor_requests_status ON leaders.sponsor_requests USING btree (status, created_at DESC);
@@ -3962,6 +4005,10 @@ alter table leaders.reports enable row level security;
 alter table leaders.schema_migrations enable row level security;
 
 alter table leaders.slack_threads enable row level security;
+
+alter table leaders.sponsor_code_uses enable row level security;
+
+alter table leaders.sponsor_codes enable row level security;
 
 alter table leaders.sponsor_requests enable row level security;
 
@@ -4694,6 +4741,48 @@ begin
   end if;
   return new;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.redeem_sponsor_code(p_code text, p_participant uuid, p_now timestamp with time zone DEFAULT now())
+ RETURNS TABLE(org_id uuid, reason text)
+ LANGUAGE plpgsql
+AS $function$
+declare
+  c leaders.sponsor_codes%rowtype;
+  took boolean;
+  bumped uuid;
+begin
+  select * into c from leaders.sponsor_codes s where s.code = lower(btrim(coalesce(p_code, '')));
+  if not found then
+    return query select null::uuid, 'unknown'::text;
+    return;
+  end if;
+  -- رموز الجهة الموقوفة تتوقف معها فورًا، كرمز غير معروف (كرمز رابطها في الخادم)
+  if not exists (select 1 from leaders.organizations o where o.id = c.organization_id and o.status is distinct from 'inactive') then
+    return query select null::uuid, 'unknown'::text;
+    return;
+  end if;
+  insert into leaders.sponsor_code_uses (code_id, participant_id, used_at) values (c.id, p_participant, p_now)
+  on conflict do nothing;
+  get diagnostics took = row_count;
+  -- استعمله المشارك نفسه من قبل: لا عدّ ثانٍ
+  if not took then
+    return query select c.organization_id, 'ok'::text;
+    return;
+  end if;
+  update leaders.sponsor_codes s set used = s.used + 1
+   where s.id = c.id and s.active and (s.expires_at is null or s.expires_at > p_now) and (s.max_uses is null or s.used < s.max_uses)
+  returning s.id into bumped;
+  if bumped is null then
+    delete from leaders.sponsor_code_uses u where u.code_id = c.id and u.participant_id = p_participant;
+    select * into c from leaders.sponsor_codes s where s.id = c.id;
+    return query select null::uuid, (case when not c.active then 'stopped'
+      when c.expires_at is not null and c.expires_at <= p_now then 'expired' else 'exhausted' end)::text;
+    return;
+  end if;
+  return query select c.organization_id, 'ok'::text;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.sync_org_name_to_participants()
