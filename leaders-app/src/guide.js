@@ -137,7 +137,7 @@ export function discoveryQuestions(level) {
   }
   const ex = level === 'beginner';
   return [
-    { key: 'who', label: 'من يتضرر منها، وكم عددهم تقريبًا؟', hint: ex ? 'مثال: 1,200 مستفيد شهريًا ينتظرون أكثر من أسبوع' : '' },
+    { key: 'who', label: 'من المستفيد أو المتأثر، وكم عددهم تقريبًا؟', hint: ex ? 'مثال لمشكلة: 1,200 مراجع شهريًا ينتظرون أكثر من أسبوع. ومثال لفرصة: 300 أسرة في الحي بلا مركز تدريب قريب' : '' },
     { key: 'size', label: 'كيف تعرف حجمها؟ رقم ومن أين أخذته', hint: ex ? 'مثال: متوسط الإنجاز 9 أيام (نظام الطلبات، 2025)' : '' },
     { key: 'goal', label: 'أي هدف أعلى تخدمه مبادرتك؟', hint: ex ? 'من استراتيجية جهة، أو خطة قطاع، أو رؤية وطنية، أو حاجة سوق. انقله بنصه واذكر مصدره' : '' },
     { key: 'first', label: 'ما خطوتك الأولى خلال 30 يومًا، ومع من؟', hint: ex ? 'مثال: اجتماع مع مالك البيانات لاستخراج أرقام الربع الماضي' : '' },
@@ -146,6 +146,22 @@ export function discoveryQuestions(level) {
 
 /** درجة الفكرة: عدد المعايير المحققة من أربعة */
 export const discoveryScore = (checks) => DISCOVERY_CRITERIA.filter(([k]) => checks?.[k]).length;
+
+// حد قبول المستشار للبطاقة: ثلاثة معايير من أربعة. «الأنسب» حكم لا يُعطى إلا لفكرة واحدة تتفوق وتبلغ الحد
+export const DISCOVERY_PASS = 3;
+/**
+ * مفاضلة الأفكار المكتوبة. best: فهرس فكرة واحدة تتفوق على البقية وتبلغ الحد، وإلا null.
+ * state: 'best' أو 'tie' (أكثر من فكرة بالدرجة العليا البالغة الحد) أو 'below' (لا فكرة تبلغ الحد) أو null (فكرة واحدة)
+ * @param {{ i: number }[]} filled @param {Record<string, boolean>[]} checks
+ */
+export function discoveryRank(filled, checks) {
+  if (filled.length < 2) return { best: null, state: null };
+  const scores = filled.map(({ i }) => ({ i, s: discoveryScore(checks[i]) }));
+  const top = Math.max(...scores.map((x) => x.s));
+  if (top < DISCOVERY_PASS) return { best: null, state: 'below' };
+  const leaders = scores.filter((x) => x.s === top);
+  return leaders.length === 1 ? { best: leaders[0].i, state: 'best' } : { best: null, state: 'tie' };
+}
 
 /**
  * مسودة البطاقة من الاكتشاف. لا تكتب فوق ما كتبه المشارك في بطاقته من قبل: تملأ الفارغ وحده
@@ -156,7 +172,7 @@ export function charterFromDiscovery(level, { idea, title, answers }, existing =
   const sentence = (t) => (t && !/[.؟!]$/.test(t) ? `${t}.` : t);
   const problem = level === 'advanced'
     ? [sentence(String(idea || '').trim()), a.metric && sentence(`المؤشر: ${a.metric}`), a.decision && sentence(`القرار المطلوب: ${a.decision}`)]
-    : [sentence(String(idea || '').trim()), a.who && sentence(`يتضرر منها ${a.who}`), a.size && sentence(`حجمها: ${a.size}`)];
+    : [sentence(String(idea || '').trim()), a.who && sentence(`المستفيدون أو المتأثرون: ${a.who}`), a.size && sentence(`حجمها: ${a.size}`)];
   const draft = {
     title: String(title || idea || '').trim().slice(0, 120),
     problem: problem.filter(Boolean).join(' '),

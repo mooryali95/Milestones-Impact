@@ -4,6 +4,7 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { hasSecondFactor } from '../_shared/second_factor.js';
+import { baselineMinutes } from './assessment-time.ts';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
@@ -933,7 +934,7 @@ export async function resetAssessment(a: Admin, b: Body) {
   // counting-exempt: طلب إعادة القياس لمعرّفات اختارها المدير، وis_demo يُقرأ ليُتخطى بريد حساب العرض
   const rows = (must(await db.from('participants').select('id, full_name, email, status, is_demo').in('id', ids)) ?? []) as any[];
   const progress = await baselineProgress(ids);
-  const { data: inst } = await db.from('instruments').select('est_minutes').eq('kind', 'baseline').eq('active', true).limit(1).maybeSingle();
+  const estMinutes = await baselineMinutes();
   const now = new Date().toISOString();
   let done = 0, skipped = 0;
   for (const p of rows) {
@@ -950,7 +951,7 @@ export async function resetAssessment(a: Admin, b: Body) {
     await audit('admin', a.email, 'assessment.reset', 'participants', p.id, null, { reason, assessment_id: cur?.id || null });
     // البريد من حصة الرسائل الجماعية (يُصفّ عند بلوغ الحد اليومي)، وتعذّره لا يُسقط الطلب المسجَّل: البطاقة في الموقع تكفي
     if (cur && p.email && !p.is_demo) {
-      await sendMail(p.email, RETAKE_MAIL_SUBJECT, retakeMail(p.full_name, retakeText(reason, inst?.est_minutes ?? null)), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error('retake mail:', e));
+      await sendMail(p.email, RETAKE_MAIL_SUBJECT, retakeMail(p.full_name, retakeText(reason, estMinutes)), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error('retake mail:', e));
     }
     done += 1;
   }
