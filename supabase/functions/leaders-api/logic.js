@@ -1405,14 +1405,22 @@ export function capstoneSectionsStatus(keys, models) {
   return { type: 'capstone', sections, done: sections.every((x) => x.saved), saved: sections.filter((x) => x.saved).length, na: !sections.length };
 }
 
+// فصول وثيقة المبادرة التي يكفيها التسليم (قرار المالك 2026-11-23: «بوابتان، والباقي ملاحظات»).
+// نسخ الرحلة المحفوظة مجمدة بقيد في القاعدة (program_version_frozen) فلا يعدّلها ترحيل، والدفعات مثبتة عليها؛
+// فالقرار يسري هنا عند الحساب على كل نسخة: هذه الفصول تكتمل بالتسليم ولو حفظت النسخة «يحتاج اعتمادًا».
+// بطاقة المبادرة (initiative-charter) ليست منها: تبقى بوابة اعتماد
+export const SUBMIT_ONLY_MODELS = Object.freeze(['milestone-register', 'benefits-register', 'stage-gate', 'stakeholder-map', 'development-plan']);
+const acceptOf = (c) => (SUBMIT_ONLY_MODELS.includes(c.model_key) ? 'submitted' : c.accept === 'submitted' ? 'submitted' : 'reviewed');
+
 export function modelStatus(c, models) {
   if (!(c.model_key in models)) return { type: 'model', done: true, na: true, model_key: c.model_key || null };
   const s = models[c.model_key] || null;
   const st = s?.status || null;
   // «يحتاج تعديلًا» (returned) لا يحبس الرحلة حين يكتمل المتطلب بالتسليم (قرار المالك 2026-11-23): أُعيد ليتحسن، لا ليعود ناقصًا.
   // والبوابة (accept: reviewed، بطاقة المبادرة) لا تكتمل إلا بالاعتماد كما كانت
-  const done = c.accept === 'submitted' ? st === 'submitted' || st === 'reviewed' || st === 'returned' : st === 'reviewed';
-  return { type: 'model', done, model_key: c.model_key || null, model_id: s?.model_id || null, title: s?.title || null, status: st, accept: c.accept === 'submitted' ? 'submitted' : 'reviewed' };
+  const accept = acceptOf(c);
+  const done = accept === 'submitted' ? st === 'submitted' || st === 'reviewed' || st === 'returned' : st === 'reviewed';
+  return { type: 'model', done, model_key: c.model_key || null, model_id: s?.model_id || null, title: s?.title || null, status: st, accept };
 }
 
 // إعداد النشاط كما يحفظه المستشار: حقول معروفة بقيم مضبوطة فقط.

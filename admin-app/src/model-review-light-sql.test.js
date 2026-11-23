@@ -1,5 +1,5 @@
 // ترحيل 20261127100000 (بوابتان، والباقي ملاحظات) على قاعدة مؤقتة حقيقية (PGlite):
-// الفصول الخمسة يكفيها التسليم، وبطاقة المبادرة تبقى بوابة اعتماد — في الصفوف الحية وفي نسخ الرحلة المثبتة عليها الدفعات،
+// الفصول الخمسة يكفيها التسليم، وبطاقة المبادرة تبقى بوابة اعتماد — في الصفوف الحية؛ ونسخ الرحلة المجمدة لا تُمس،
 // وما لم يمسه الترحيل يبقى كما هو، والإعادة بلا أثر.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,20 +36,14 @@ describe(`ترحيل ${NAME}`, { timeout: 60000 }, () => {
     expect(r['X-OTHER'].a).toBe('reviewed');
   });
 
-  it('نسخ الرحلة المثبتة: يسري التغيير نفسه، ويحفظ الترتيب وبقية البنود، والنسخة الفارغة كما هي', async () => {
+  it('نسخ الرحلة المحفوظة لا تُمس (مجمدة)؛ القرار يسري عليها عند الحساب', async () => {
     const d = await db();
-    const v = await version(d);
-    expect(v.map((x) => `${x.code}:${x.kind}:${x.config.accept}`)).toEqual(['O-MREG:model:submitted', 'CP-CARD:model:reviewed', 'L-PLAN:model:submitted', 'X-OTHER:model:reviewed', 'O-MREG:reading:reviewed']);
-    expect(v[1].needs_review).toBe(true);
-    expect((await d.query('select data from leaders.program_versions order by id offset 1')).rows[0].data).toEqual({ stages: [], requirements: [] });
-    expect((await d.query('select count(*)::int n from leaders.backup_20261127_program_versions')).rows[0].n).toBe(1);
+    expect((await version(d)).map((x) => x.config.accept)).toEqual(['reviewed', 'submitted', 'reviewed', 'reviewed', 'reviewed']);
   });
 
   it('الإعادة بلا أثر', async () => {
     const d = await db();
-    const before = JSON.stringify(await version(d));
     await d.exec(SQL);
-    expect(JSON.stringify(await version(d))).toBe(before);
     expect((await live(d))['O-MREG'].a).toBe('submitted');
   });
 });

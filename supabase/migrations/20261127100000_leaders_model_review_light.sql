@@ -33,28 +33,8 @@ update leaders.stage_requirements
        config = jsonb_set(config, '{accept}', '"reviewed"')
  where code = 'CP-CARD' and kind = 'model' and config->>'accept' = 'submitted';
 
--- الدفعات مثبتة على نسخ محفوظة من الرحلة (program_versions.data) وتقرأ متطلباتها منها لا من الصفوف الحية:
--- يُطبَّق التغيير نفسه على كل نسخة محفوظة، وإلا بقيت دفعات اليوم تنتظر الاعتماد. النسخ قبل التعديل في جدول احتياطي.
--- restore: update leaders.program_versions v set data = b.data from leaders.backup_20261127_program_versions b where b.id = v.id;
-create table if not exists leaders.backup_20261127_program_versions as
-  select id, data from leaders.program_versions
-   where data->'requirements' @> '[{"kind":"model"}]';
-alter table leaders.backup_20261127_program_versions enable row level security;
-revoke all on leaders.backup_20261127_program_versions from anon, authenticated;
-update leaders.program_versions v
-   set data = jsonb_set(v.data, '{requirements}', (
-     select jsonb_agg(case
-       when r->>'kind' = 'model' and r->>'code' in ('O-MREG', 'O-BREG', 'O-GATE', 'L-MAP', 'L-PLAN') and r->'config'->>'accept' = 'reviewed'
-         then jsonb_set(r, '{config,accept}', '"submitted"')
-       when r->>'kind' = 'model' and r->>'code' = 'CP-CARD' and r->'config'->>'accept' = 'submitted'
-         then jsonb_set(jsonb_set(r, '{config,accept}', '"reviewed"'), '{needs_review}', 'true')
-       else r end order by ord)
-     from jsonb_array_elements(v.data->'requirements') with ordinality as e(r, ord)))
- where jsonb_typeof(v.data->'requirements') = 'array'
-   and exists (select 1 from jsonb_array_elements(v.data->'requirements') r
-                where r->>'kind' = 'model'
-                  and ((r->>'code' in ('O-MREG', 'O-BREG', 'O-GATE', 'L-MAP', 'L-PLAN') and r->'config'->>'accept' = 'reviewed')
-                    or (r->>'code' = 'CP-CARD' and r->'config'->>'accept' = 'submitted')));
+-- نسخ الرحلة المحفوظة (program_versions) مجمدة بقيد program_version_frozen فلا تُعدَّل هنا؛ الدفعات المثبتة عليها
+-- يسري عليها القرار عند الحساب (SUBMIT_ONLY_MODELS في logic.js)
 
 alter table leaders.model_submissions add column if not exists digested_at timestamptz;
 comment on column leaders.model_submissions.digested_at is 'متى دخل التسليم الملخص اليومي للمراجع (model-digest.ts)؛ التسليم بعده (submitted_at أحدث) يدخل الملخص التالي';
