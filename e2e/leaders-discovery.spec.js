@@ -54,6 +54,11 @@ test('التأسيسي: ثلاث أفكار، فمفاضلة بمعايير ال
   await disc.getByLabel('فكرة 2 (اختيارية)').fill('تقارير الأداء الشهرية تُجمع يدويًا');
   await disc.getByRole('button', { name: 'التالي' }).click();
 
+  // تعادل: لا «الأنسب» للأولى، بل سطر التعادل
+  for (const fs of [0, 1]) await disc.locator('fieldset').nth(fs).getByLabel(/يمكن قياسها/).check();
+  await expect(disc.getByText('الأنسب', { exact: true })).toHaveCount(0);
+  await expect(disc).toContainText('لم تبلغ أي فكرة 3 معايير بعد');
+  for (const fs of [0, 1]) await disc.locator('fieldset').nth(fs).getByLabel(/يمكن قياسها/).uncheck();
   const first = disc.locator('fieldset').first();
   for (const c of ['قائمة اليوم في سياق تعرفه', 'يمكن البدء بها', 'لها صاحب قرار', 'يمكن قياسها']) await first.getByLabel(new RegExp(c)).check();
   await expect(first).toContainText('4 من 4');
@@ -64,7 +69,7 @@ test('التأسيسي: ثلاث أفكار، فمفاضلة بمعايير ال
   await expect(disc.getByLabel('اسم مقترح للمبادرة')).toHaveValue('تجديد الترخيص يأخذ أسبوعين ويحتاج زيارة');
   await disc.getByLabel('اسم مقترح للمبادرة').fill('تجديد الترخيص في يوم واحد');
   await expect(disc.getByText('مثال: متوسط الإنجاز 9 أيام')).toBeVisible();
-  await disc.getByLabel(/من يتضرر منها/).fill('1,200 مستفيد شهريًا');
+  await disc.getByLabel(/من المستفيد أو المتأثر/).fill('1,200 مستفيد شهريًا');
   await disc.getByLabel(/كيف تعرف حجمها/).fill('9 أيام (نظام الطلبات)');
   await disc.getByLabel(/ما خطوتك الأولى/).fill('اجتماع مع مالك البيانات');
   await disc.getByRole('button', { name: 'أنشئ مسودة البطاقة' }).click();
@@ -74,7 +79,7 @@ test('التأسيسي: ثلاث أفكار، فمفاضلة بمعايير ال
   expect(save).toMatchObject({ id: 'm-charter', submit: false });
   expect(save.answers).toMatchObject({
     title: 'تجديد الترخيص في يوم واحد', objective: 'هدف كتبه المشارك من قبل', first_step: 'اجتماع مع مالك البيانات',
-    problem: 'تجديد الترخيص يأخذ أسبوعين ويحتاج زيارة. يتضرر منها 1,200 مستفيد شهريًا. حجمها: 9 أيام (نظام الطلبات).',
+    problem: 'تجديد الترخيص يأخذ أسبوعين ويحتاج زيارة. المستفيدون أو المتأثرون: 1,200 مستفيد شهريًا. حجمها: 9 أيام (نظام الطلبات).',
   });
   // تُفتح البطاقة نفسها ليكمل فيها
   await expect(page.getByRole('heading', { name: 'بطاقة المبادرة' })).toBeVisible();

@@ -292,7 +292,7 @@ test('الإنفاق والاستعمال: اليوم مقابل السقف، و
 test('الدقة: المسودة تُغلق البوابة، والتشغيل بدفعات حتى ينتهي، والنتائج بردودها', async ({ page }) => {
   const { calls } = await setup(page, '#/leaders/ai/guidance');
   const ev = sec(page, 'الدقة');
-  await expect(ev).toContainText('مسودة بانتظار اعتماد المالك');
+  await expect(ev).toContainText('40 حالة · مسودة بانتظار اعتمادك');
   await ev.getByRole('button', { name: 'شغّل التقييم' }).click();
   await expect(ev.getByRole('row', { name: /ناجح/ })).toContainText('40/40');
   expect(calls.filter((c) => c.action === 'admin.guide-eval-step').length).toBe(2);

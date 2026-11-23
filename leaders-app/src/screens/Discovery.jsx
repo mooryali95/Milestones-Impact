@@ -5,7 +5,7 @@
 // المختارة بأسئلة تناسب مستوى المشارك (guide.js). الناتج يُحفظ مسودةً في «بطاقة المبادرة» ولا يكتب فوق ما فيها.
 import React, { useState } from 'react';
 import { call } from '../api.js';
-import { charterFromDiscovery, DISCOVERY_CRITERIA, discoveryQuestions, discoveryScore } from '../guide.js';
+import { charterFromDiscovery, DISCOVERY_CRITERIA, DISCOVERY_PASS, discoveryQuestions, discoveryRank, discoveryScore } from '../guide.js';
 
 const STEPS = ['أفكارك', 'اختر الأنسب', 'اصغها'];
 
@@ -20,8 +20,8 @@ export default function Discovery({ level, charterId, onDone, onSkip }) {
   const [err, setErr] = useState('');
   const filled = ideas.map((t, i) => ({ t: t.trim(), i })).filter((x) => x.t);
   const qs = discoveryQuestions(level);
-  // الأعلى درجة يُقترح، والمشارك يختار
-  const best = filled.length ? filled.reduce((a, b) => (discoveryScore(checks[b.i]) > discoveryScore(checks[a.i]) ? b : a)) : null;
+  // «الأنسب» لفكرة واحدة تتفوق وتبلغ حد القبول، والتعادل يُقال تعادلًا، والقرار للمشارك دائمًا
+  const rank = discoveryRank(filled, checks);
 
   const finish = async () => {
     setBusy(true); setErr('');
@@ -66,14 +66,16 @@ export default function Discovery({ level, charterId, onDone, onSkip }) {
               <legend>
                 <label><input type="radio" name="disc-pick" checked={pick === i} onChange={() => setPick(i)} /> {t}</label>
                 <span className="chip">{discoveryScore(checks[i])} من {DISCOVERY_CRITERIA.length}</span>
-                {best?.i === i && filled.length > 1 && discoveryScore(checks[i]) > 0 && <span className="chip ok">الأنسب</span>}
+                {rank.best === i && <span className="chip ok">الأنسب</span>}
               </legend>
               {DISCOVERY_CRITERIA.map(([k, label]) => (
                 <label key={k} className="disc-c"><input type="checkbox" checked={!!checks[i][k]} onChange={(e) => setChecks(checks.map((c, j) => (j === i ? { ...c, [k]: e.target.checked } : c)))} /> {label}</label>
               ))}
             </fieldset>
           ))}
-          {pick != null && discoveryScore(checks[pick]) < 3 && <p className="alert warn small" role="status">الفكرة المختارة تحقق أقل من ثلاثة معايير، فقد يعيدها المستشار. يمكنك المتابعة، أو اختيار فكرة أخرى.</p>}
+          {rank.state === 'tie' && <p className="small muted" role="status">أكثر من فكرة بالدرجة نفسها. اختر ما تستطيع البدء به الآن ومع من تعرف.</p>}
+          {rank.state === 'below' && <p className="small muted" role="status">لم تبلغ أي فكرة {DISCOVERY_PASS} معايير بعد. راجع العلامات، أو عد وأضف فكرة.</p>}
+          {pick != null && discoveryScore(checks[pick]) < DISCOVERY_PASS && <p className="alert warn small" role="status">الفكرة المختارة تحقق أقل من ثلاثة معايير، فقد يعيدها المستشار. يمكنك المتابعة، أو اختيار فكرة أخرى.</p>}
           <div className="row">
             <button type="button" className="btn ghost sm" onClick={() => setStep(0)}>السابق</button>
             <button type="button" className="btn gold sm" disabled={pick == null} onClick={() => { setTitle((x) => x || ideas[pick].trim().slice(0, 120)); setStep(2); }}>التالي</button>
