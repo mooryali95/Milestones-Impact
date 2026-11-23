@@ -415,6 +415,15 @@ export function reviewMail(name: string, title: string, returned: boolean, note?
     returned ? `ملاحظة على «${title}» قبل اعتماده` : `اعتُمد «${title}»`);
 }
 
+// نقل المشارك إلى مرحلة بقرار الإدارة (admin.stage-move): سطر يسمي مرحلته الجديدة وزر رحلته. سبب النقل للسجل الداخلي
+// وحده، فلا يُرسل في البريد
+export function stageMoveMail(name: string, stage: string) {
+  return shell('journey', 'تحديث في رحلتك',
+    mailText(`${hello(name)} حدّث فريق البرنامج رحلتك، ومرحلتك الآن «${bdi(stage)}».`)
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+    `مرحلتك الآن «${stage}»`);
+}
+
 // التذكير الموحد (nudges.ts): النص الذي بناه المحرك من رحلته (nudge.js)، وتوقيع مرسله إن لم يكن آليًا
 export function nudgeMail(name: string, heading: string, text: string, signature = '') {
   return shell('journey', esc(heading), mailText(`${hello(name)} ${esc(text)}`) + (signature ? mailText(esc(signature)) : '') + mailButton(CONFIG.appUrl, 'أكمل رحلتي'), text.slice(0, 140));

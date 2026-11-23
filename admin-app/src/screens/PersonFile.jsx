@@ -3,13 +3,16 @@
 // ════════════════════════════════════════════════════════════════
 // كله من admin.participant (file.ts): الأعلام والخط الزمني مشتقان على الخادم (observations.js)، والملاحظات من
 // participant_observations وحده. الواجهة تعرض ولا تحسب.
-import React, { useState } from 'react';
-import { date, L } from '../leaders.js';
+import React, { useCallback, useEffect, useState } from 'react';
+import { date, dateOnly, L } from '../leaders.js';
+import { openDoc } from './Capstones.jsx';
 import { useUI } from '../ui.jsx';
 import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
 // تسميات الحالات من مصادرها الوحيدة: جلسات التوجيه من labels.js، ووثيقة المبادرة من capstone.js، ودورة 360 من feedback360.js
 import { COACH_STATUS_ADMIN as SESSION_AR } from '../../../supabase/functions/leaders-api/labels.js';
-import { STATUS_TITLES as CAP_AR } from '../../../supabase/functions/leaders-api/capstone.js';
+import { CHARTER_KEY, chapterState, STATUS_TITLES_ADMIN as CAP_AR } from '../../../supabase/functions/leaders-api/capstone.js';
+import { CHAPTER_STATUS_AR, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { TIMELINE_TYPE_AR, TIMELINE_TYPES } from '../../../supabase/functions/leaders-api/observations.js';
 import { CYCLE_STATUS_AR as F360_AR } from '../../../supabase/functions/leaders-api/feedback360.js';
 
 const TONE = { bad: 'bad', warn: 'warn', info: '', ok: 'ok' };
@@ -82,13 +85,12 @@ export function Observations({ participantId, list, canWrite, onChanged, action 
   );
 }
 
-// ما كان غائبًا عن الملف: جلسات التوجيه، ووثيقة المبادرة، وتقييم 360، وحضور الورش
+// ما كان غائبًا عن الملف: جلسات التوجيه، وتقييم 360، وحضور الورش. وثيقة المبادرة في بطاقتها الحية (InitiativePanel)
 export function FileExtras({ r }) {
   const sessions = r.sessions || [], att = r.attendance || [], f360 = r.feedback360 || [];
-  const cap = r.capstone;
   return (
     <section className="la-card" aria-labelledby="pf-x-h">
-      <h3 id="pf-x-h">الجلسات والمبادرة والحضور</h3>
+      <h3 id="pf-x-h">الجلسات والحضور</h3>
       <dl className="la-dl">
         <dt>جلسات التوجيه</dt>
         <dd>{sessions.length ? (
@@ -96,8 +98,6 @@ export function FileExtras({ r }) {
             <li key={s.id}><span className={`la-chip ${s.status === 'no_show' ? 'bad' : s.status === 'attended' ? 'ok' : ''}`}>{SESSION_AR[s.status] || s.status}</span> {date(s.starts_at)}{s.expert && <> · {s.expert}</>}</li>
           ))}{sessions.length > 8 && <li className="la-muted">و{sessions.length - 8} أقدم</li>}</ul>
         ) : <span className="la-muted">لا جلسات بعد</span>}</dd>
-        <dt>وثيقة المبادرة</dt>
-        <dd>{cap ? <>{CAP_AR[cap.status] || cap.status}{cap.readiness != null && <> · الجاهزية {cap.readiness}%</>}{cap.revisions > 0 && <> · أُعيدت {cap.revisions} مرة</>}{cap.review_note && <><br /><small className="la-muted">آخر ملاحظة: {cap.review_note}</small></>}</> : <span className="la-muted">لم يبدأها</span>}</dd>
         <dt>تقييم 360</dt>
         <dd>{f360.length ? f360.map((c) => <span key={c.wave} className="la-chip" style={{ marginInlineEnd: 6 }}>{c.wave === 't2' ? 'الموجة الثانية' : 'الموجة الأولى'}: {F360_AR[c.status] || c.status}</span>) : <span className="la-muted">لا دورة بعد</span>}</dd>
         <dt>حضور الورش</dt>
@@ -107,24 +107,96 @@ export function FileExtras({ r }) {
   );
 }
 
-export function Timeline({ rows }) {
-  const [all, setAll] = useState(false);
-  const list = rows || [];
-  const shown = all ? list : list.slice(0, 25);
+// المبادرة حية (تصور 2026-11-23): الوثيقة مبنية من حالته الآن (admin.capstone، يبنيها build في capstone.ts ولو لم يسلّمها
+// ولا صف له بعد، وقراءتها لا تكتب). العنوان وحال البطاقة والوثيقة والجاهزية، ثم الفصول بحالها وآخر تعديل وملاحظة
+// المستشار، و«اقرأ الوثيقة كما هي الآن» بالقالب نفسه الذي يقرؤه المشارك والراعي
+export function InitiativePanel({ participantId }) {
+  const { toast } = useUI();
+  const [d, setD] = useState(null);
+  const load = useCallback(() => L('admin.capstone', { participant_id: participantId }).then(setD), [participantId]);
+  useEffect(() => { load(); }, [load]);
+  if (!d) return <section className="la-card" aria-busy="true"><h3>المبادرة</h3><p className="la-muted">لحظة…</p></section>;
+  if (!d.success) {
+    return (
+      <section className="la-card" aria-labelledby="pf-cap-h">
+        <h3 id="pf-cap-h">المبادرة</h3>
+        <p className="la-muted">{d.code === 'locked' ? 'تُفتح وثيقة المبادرة بعد اعتماد مساره.' : d.message}</p>
+      </section>
+    );
+  }
+  const c = d.capstone || {};
+  const card = (d.sections || []).find((x) => x.key === CHARTER_KEY);
+  const notes = c.notes || {};
+  return (
+    <section className="la-card pf-cap" aria-labelledby="pf-cap-h">
+      <div className="la-row between">
+        <h3 id="pf-cap-h">{d.doc?.meta?.initiative || 'مبادرة بلا اسم بعد'}</h3>
+        <span className="la-row">
+          <button type="button" className="btn-sm primary" onClick={() => openDoc(d.doc, toast)}>اقرأ الوثيقة كما هي الآن</button>
+          {c.id && <a className="btn-sm ghost" href={`#/leaders/capstones/${encodeURIComponent(participantId)}`}>صفحة المراجعة</a>}
+        </span>
+      </div>
+      <div className="pf-cap-kpis">
+        <span className="la-chip">الوثيقة: {CAP_AR[c.status] || CAP_AR.draft}</span>
+        <span className="la-chip">البطاقة: {card ? CHAPTER_STATUS_AR[chapterState(card)] : 'ليست من فصوله'}</span>
+        <span className={`la-chip ${d.readiness >= 80 ? 'ok' : ''}`}>الجاهزية {d.readiness ?? 0}%</span>
+        {c.revisions > 0 && <span className="la-chip">أُعيدت {c.revisions} مرة</span>}
+      </div>
+      {c.review_note && <p className="la-muted small">آخر ملاحظة: {c.review_note}</p>}
+      <ol className="pf-chapters">{(d.sections || []).map((x) => {
+        const st = chapterState(x);
+        return (
+          <li key={x.id} data-chapter={x.key}>
+            <span><b>{x.title}</b>{!x.complete && x.missing > 0 && <small className="la-muted"> · {x.missing} حقول ناقصة</small>}
+              {notes[x.key] && <><br /><small className="la-muted">ملاحظة المستشار: {notes[x.key]}</small></>}</span>
+            <span className="pf-ch-meta">
+              <span className={`la-chip ${st === 'reviewed' ? 'ok' : st === 'returned' ? 'warn' : ''}`} title={x.status ? SUBMISSION_STATUS_ADMIN[x.status] : undefined}>{CHAPTER_STATUS_AR[st]}</span>
+              <small className="la-muted">{x.updated_at ? `آخر تعديل ${dateOnly(x.updated_at)}` : 'لم يُحفظ بعد'}</small>
+            </span>
+          </li>
+        );
+      })}</ol>
+    </section>
+  );
+}
+
+// السجل الكامل (تصور 2026-11-23): كل ما جرى له من تسجيله، صفحة صفحة من admin.participant-timeline، ومرشح بالنوع
+export function FullTimeline({ participantId }) {
+  const [types, setTypes] = useState([]);
+  const [rows, setRows] = useState(null);
+  const [next, setNext] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const page = useCallback(async (before, picked) => {
+    setBusy(true);
+    const r = await L('admin.participant-timeline', { participant_id: participantId, before, types: picked });
+    setBusy(false);
+    if (!r.success) { setErr(r.message || 'تعذّر تحميل السجل'); return; }
+    setErr('');
+    setRows((old) => (before ? [...(old || []), ...r.rows] : r.rows));
+    setNext(r.next);
+  }, [participantId]);
+  useEffect(() => { page(null, types); }, [page, types]);
+  const flip = (t) => setTypes(types.includes(t) ? types.filter((x) => x !== t) : [...types, t]);
   return (
     <section className="la-card" aria-labelledby="pf-t-h">
-      <h3 id="pf-t-h">الخط الزمني <small className="la-muted">· {list.length}</small></h3>
-      {list.length ? (
-        <ol className="pf-time">
-          {shown.map((t, i) => (
-            <li key={i} className={t.tone}>
+      <h3 id="pf-t-h">السجل الكامل</h3>
+      <div className="pf-tl-chips" role="group" aria-label="نوع الأحداث">
+        <button type="button" className={`pf-tl-chip${types.length ? '' : ' on'}`} aria-pressed={!types.length} onClick={() => setTypes([])}>الكل</button>
+        {TIMELINE_TYPES.map((t) => <button key={t} type="button" className={`pf-tl-chip${types.includes(t) ? ' on' : ''}`} aria-pressed={types.includes(t)} onClick={() => flip(t)}>{TIMELINE_TYPE_AR[t]}</button>)}
+      </div>
+      {err && <p className="la-err" role="alert">{err}</p>}
+      {rows == null ? <p className="la-muted">لحظة…</p> : rows.length ? (
+        <ol className="pf-time" data-testid="full-timeline">
+          {rows.map((t, i) => (
+            <li key={`${t.at}-${i}`} className={t.tone} data-type={t.type}>
               <small className="pf-when">{date(t.at)}</small>
               <span><b>{t.text}</b>{t.by && <small className="la-muted"> · {t.by}</small>}{t.detail && <><br /><small className="la-muted">{t.detail}</small></>}</span>
             </li>
           ))}
         </ol>
-      ) : <p className="la-muted">لا شيء بعد.</p>}
-      {list.length > 25 && <button type="button" className="la-link" onClick={() => setAll(!all)}>{all ? 'اعرض الأحدث فقط' : `اعرض الكل (${list.length})`}</button>}
+      ) : <p className="la-muted">لا شيء بهذا النوع.</p>}
+      {next && <button type="button" className="btn-sm ghost" disabled={busy} onClick={() => page(next, types)}>{busy ? 'لحظة…' : 'اعرض الأقدم'}</button>}
     </section>
   );
 }

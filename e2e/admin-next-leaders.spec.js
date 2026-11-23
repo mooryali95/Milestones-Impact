@@ -112,7 +112,8 @@ test('ملف المشارك: اعتماد المستويات، وإعادة بن
   expect(calls.find((c) => c.action === 'admin.approve').notes).toMatchObject({ impact: 'تقاريره الميدانية ومختبره يفوقان المحسوب بوضوح' });
 
   await tab(page, 'الرحلة').click();
-  await page.getByRole('button', { name: 'إعادة مع ملاحظة' }).click();
+  // البند اليدوي: «اعتماد» و«إرجاع» ظاهران في سطره (تبويب «الرحلة» بخط واحد، 2026-11-23)
+  await page.getByRole('button', { name: 'إرجاع' }).click();
   await page.getByRole('dialog').locator('input').fill('أضف المؤشرات');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.review')).toMatchObject({ status: 'returned', note: 'أضف المؤشرات', requirement_id: 'r1' });
@@ -129,7 +130,8 @@ test('ملف المشارك: التدخل في مرحلة يصل إلى الخا
   const calls = await setup(page, { 'admin.participant': { ...person, journey }, 'admin.stage-override': { success: true } });
   await page.getByText('سارة الأحمد').click();
   await tab(page, 'الرحلة').click();
-  await page.getByRole('button', { name: 'اعتمد اكتمالها' }).click();
+  // «أكمل هذه المرحلة» في شريط الرأس: السؤال يسمي ما ينقصها، والسبب مطلوب
+  await page.getByRole('button', { name: 'أكمل هذه المرحلة' }).first().click();
   await page.getByRole('dialog').locator('input').fill('أنجزها في ورشة حضورية موثقة');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect(page.getByRole('status')).toHaveText('تم');
@@ -139,7 +141,9 @@ test('ملف المشارك: التدخل في مرحلة يصل إلى الخا
   expect(first).toEqual({ action: 'admin.stage-override', token: 't', participant_id: 'p1', stage_key: 's1', stage_action: 'complete', note: 'أنجزها في ورشة حضورية موثقة' });
   expect(idem).toMatch(/^[A-Za-z0-9_-]{16,64}$/);
 
-  await page.getByRole('button', { name: 'إلغاء التدخل' }).click();
+  // إلغاء التدخل من قائمة المرحلة «⋯»
+  await page.getByRole('button', { name: 'إجراءات مرحلة «التدريب»' }).click();
+  await page.getByRole('menuitem', { name: 'إلغاء التدخل' }).click();
   await page.getByRole('dialog').locator('input').fill('أُعفي خطأً');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => calls.filter((c) => c.action === 'admin.stage-override').length).toBe(2);
@@ -273,15 +277,19 @@ test('ملف المشارك الكامل: ملخص الأعلام، وإضافة
       observations: [obs],
       sessions: [{ id: 's1', status: 'no_show', starts_at: '2026-11-10T09:00:00Z', expert: 'د. سلمان' }],
       capstone: { status: 'returned', readiness: 40, revisions: 2, review_note: 'أكمل سجل المخاطر' }, feedback360: [], attendance: [],
-      timeline: [{ at: '2026-11-12T10:00:00Z', kind: 'warning', tone: 'warn', text: 'تنبيه: غياب عن جلسة توجيه', by: 'النظام', detail: 'سُجّل غيابك عن جلسة الأحد.' },
-        { at: '2026-11-10T08:00:00Z', kind: 'event', tone: 'info', text: 'سلّم القياس', by: 'المشارك', detail: '' }] },
+      timeline: [] },
     'admin.observation-add': { success: true, observation: { id: 'ob2' } },
+    // المبادرة حية من admin.capstone، والسجل الكامل صفحة من admin.participant-timeline
+    'admin.capstone': { success: true, doc: { meta: { initiative: 'رقمنة الطلبات' } }, capstone: { id: 'c1', status: 'returned', revisions: 2, review_note: 'أكمل سجل المخاطر' }, readiness: 40,
+      sections: [{ id: 'm1', key: 'initiative-charter', title: 'بطاقة المبادرة', complete: true, missing: 0, status: 'reviewed', updated_at: '2026-11-05T10:00:00Z' }] },
+    'admin.participant-timeline': { success: true, next: null, rows: [{ at: '2026-11-12T10:00:00Z', type: 'note', tone: 'warn', text: 'تنبيه: غياب عن جلسة توجيه', by: 'النظام', detail: 'سُجّل غيابك عن جلسة الأحد.' },
+      { at: '2026-11-10T08:00:00Z', type: 'assessment', tone: 'ok', text: 'سلّم القياس', by: '', detail: '' }] },
   });
   await page.locator('.data-table tbody tr').filter({ hasText: 'سارة الأحمد' }).click();
   const flags = page.getByRole('list', { name: 'ملخص الأعلام' });
   await expect(flags.locator('.la-chip.bad')).toHaveText('أجاب القياس باستعجال');
   await expect(flags).toContainText('غاب عن جلسة توجيه');
-  await tab(page, 'المبادرة والجلسات').click();
+  await tab(page, 'المبادرة').click();
   // ما كان غائبًا: الجلسات بحالتها من المصدر الواحد، والمبادرة بعدد إعاداتها
   await expect(page.getByText('لم يحضر')).toBeVisible();
   await expect(page.getByText('أُعيدت 2 مرة')).toBeVisible();

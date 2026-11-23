@@ -27,7 +27,7 @@ import { FINAL_ASK_DETAIL_AR, FINAL_NO_DETAIL_AR, finalDetailView, finalView, fm
 import { foldStore, stageFoldId } from '../journey-folds.js';
 import { canReplaceFile } from '../../../supabase/functions/leaders-api/upload-file.js';
 import { DEMO_SAMPLE_AR, DEMO_SKIPPED_AR } from '../../../supabase/functions/leaders-api/demo-stage.js';
-import { withGroups } from '../../../supabase/functions/leaders-api/stage-windows.js';
+import { journeyPhases } from '../../../supabase/functions/leaders-api/stage-move.js';
 import EmailInput from '../../../shared/ui/EmailInput.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
@@ -998,6 +998,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
   // الرأس يتبع قرار التقييم الختامي: لا تهنئة فوق «لم يجتز»، ولا «أثرك موثّق» قبل أن تصدر النتيجة
   const fin = finalView({ final: me.final, approved, allDone: countedN > 0 && doneCount === countedN, hasPolicy: !!me.final_policy, firstName });
   const services = journey.filter((s) => s.lane === 'service');
+  const phased = journeyPhases(journey).phases;
   // موعد المراجعة المعلن (D04) بصيغة الجملة؛ وسم المرحلة المرفوع «يوما عمل» يظهر وحده في خط الرحلة
   const reviewWait = APPROVAL_SLA_AR;
   let order = 0;
@@ -1181,11 +1182,12 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
             <span className="small muted">{me.progress}% من الرحلة</span>
         </div>
         {PHASES.map((ph, pi) => {
-          const inPhase = journey.filter((s) => s.lane !== 'service' && (s.phase || 'qualification') === ph.key);
-          if (!inPhase.length) return null;
+          // الطور وكتله من المصدر الواحد الذي يقرؤه ملف المشارك في اللوحة أيضًا (journeyPhases في stage-move.js):
           // المسار المستمر (T1) كتلة بجانب المراحل بعد مرجعه، وخارج عد الطور
-          const stages = inPhase.filter((s) => s.lane !== 'track');
-          const laneHere = inPhase.filter((s) => s.lane === 'track');
+          const grouped = phased.find((x) => x.key === ph.key);
+          if (!grouped) return null;
+          const { stages } = grouped;
+          const inPhase = grouped.units.flat();
           // عد الطور بقاعدة الرأس نفسها: «عند الحاجة» لا تُحسب عليه، فمجموع الأطوار يساوي ما في الرأس
           const { done: doneHere, total: totalHere } = stageTally(stages);
           const tallyHere = totalHere ? `${doneHere} من ${totalHere}` : '';
@@ -1215,12 +1217,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
                     : g.length > 1
                       ? <Together key={`g-${g[0].key}`} stages={g} now={g.some((s) => nowKeys.has(s.key))}>{g.map((s) => card(s, true))}</Together>
                       : card(g[0]));
-                  const units = withGroups(stages);
-                  // كل مسار بعد كتلة مرجعه إن كان في هذا الطور، وإلا أول الطور
-                  for (const t of laneHere) {
-                    const at = units.findIndex((g) => g.some((s) => s.key === t.track?.with || s.key === t.rules?.with));
-                    units.splice(at < 0 ? 0 : at + 1, 0, [t]);
-                  }
+                  const units = [...grouped.units];
                   // الكتل المقفلة بعد مرحلتك الحالية سطر واحد يُفتح على الشاشات الضيقة: أسماؤها ومددها بضغطة لا بتمرير
                   const shut = (g) => g.every((s) => s.status === 'locked' && !expanded.has(s.key) && s.key !== next?.stage.key);
                   let cut = units.length;
