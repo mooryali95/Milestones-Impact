@@ -755,6 +755,11 @@
 .pay-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
 .pay-form label { display: grid; gap: 4px; font-size: .78rem; color: var(--ink-light); }
 .pay-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 6px; font: inherit; }
+.pay-creem-cell { grid-column: 1 / -1; }
+.pay-creem { margin: 0; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line-strong); display: grid; gap: 4px; }
+.pay-creem p { margin: 0; }
+.pay-creem.bad { border-color: var(--st-bad); background: var(--st-bad-bg); }
+.pay-creem-warn { color: var(--st-bad-dark); font-weight: 600; }
 .pay-person { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 @media (max-width: 900px) { .pay-hero { grid-template-columns: 1fr; } .pay-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pay-form { grid-template-columns: 1fr; } }
 .pay-kpis span.warn { border-top-color: var(--st-warn); }

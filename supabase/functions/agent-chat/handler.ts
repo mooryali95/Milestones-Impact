@@ -21,6 +21,7 @@ import { HANDOFF_MARK, SYSTEM_BLOCKS } from './prompt.ts';
 import { neutralizeAmounts, redactInput, sanitizeOutput, StreamSanitizer } from './redact.ts';
 import { FORCED_LINE, fixedLang, fixedReply, paidSignal, projectsContext, route, topicsOf } from './router.ts';
 import { type Store, Unavailable } from './store.ts';
+import { taxModeOf, taxNote } from '../_shared/creem-product.js';
 import { keyErrorCode, type Runtime } from './runtime.ts';
 import type Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
 
@@ -301,7 +302,9 @@ async function send(d: Deps, b: Record<string, unknown>) {
     const priceThread = asksPrice(message) || history.filter((t) => t.role === 'visitor').slice(-6).some((t) => asksPrice(t.body) && !orgQuote(t.body, product));
     if (!quote && !projects && routed.kind !== 'handoff' && routed.kind !== 'forced' && product !== 'matrix' && priceThread && !paidSignal(message)) {
       const p = await d.store.leadersPrice();
-      if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}`;
+      // عبارة الضريبة من آخر فحص لمنتج Creem (creem-product.js)، ولا شيء إن لم يُعرف نمطها
+      const tax = (i: 'assessment' | 'program') => { const t = taxNote(taxModeOf(p?.creem_check, i)); return t ? ` (${t})` : ''; };
+      if (p?.enabled) leadersPrice = `رسم القياس المبدئي ${money(p.assessment_cents, p.currency)}${tax('assessment')}، ورسم إكمال البرنامج ${money(p.program_cents, p.currency)}${tax('program')}`;
     }
     const inHours = inServiceHours(now);
     // لغة ثالثة: الجواب الجاهز (بالإنجليزية) يصير جوابًا معتمدًا يترجمه النموذج

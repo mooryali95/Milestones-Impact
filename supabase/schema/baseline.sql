@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261124100000_leaders_guidance_guard
+-- as-of migration: 20261125100000_leaders_payment_creem_check
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1809,6 +1809,7 @@ create table if not exists leaders.payment_settings (
   updated_by text,
   updated_at timestamp with time zone default now() not null,
   notify jsonb default '{}'::jsonb not null,
+  creem_check jsonb,
   constraint payment_settings_assessment_cents_check CHECK ((assessment_cents >= 0)),
   constraint payment_settings_id_check CHECK (id),
   constraint payment_settings_program_cents_check CHECK ((program_cents >= 0)),

@@ -39,14 +39,16 @@ describe('fetchRetry', () => {
     // البوابة تفشل حتى الثانية العاشرة ثم تعود، وكل محاولة تأخذ 200 ملي ثانية
     const f = vi.fn(async () => { c.tick(200); if (c.now() < 10_000) throw new TypeError('Failed to fetch'); return res(200); });
     vi.stubGlobal('fetch', f);
-    expect((await fetchRetry('u', {}, { ...READ_POLICY, now: c.now, sleep: c.sleep })).status).toBe(200);
+    // العشوائية مثبتة: Math.random يجعل مسار التراجع (وزمن آخر محاولة) يتغير بين التشغيلات فيرسب الاختبار أحيانًا
+    const random = () => 0.5;
+    expect((await fetchRetry('u', {}, { ...READ_POLICY, now: c.now, sleep: c.sleep, random })).status).toBe(200);
     expect(c.now()).toBeGreaterThanOrEqual(10_000);
     expect(c.now()).toBeLessThan(READ_POLICY.budget);
     // عطل دائم: يتوقف قبل تجاوز الميزانية، بعدد محاولات محدود
     const d = clock();
     const g = vi.fn(async () => { d.tick(100); throw new TypeError('Failed to fetch'); });
     vi.stubGlobal('fetch', g);
-    await expect(fetchRetry('u', {}, { ...READ_POLICY, now: d.now, sleep: d.sleep })).rejects.toThrow();
+    await expect(fetchRetry('u', {}, { ...READ_POLICY, now: d.now, sleep: d.sleep, random })).rejects.toThrow();
     expect(d.now()).toBeLessThanOrEqual(READ_POLICY.budget);
     expect(g.mock.calls.length).toBeGreaterThan(3);
   });

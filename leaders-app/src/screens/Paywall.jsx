@@ -10,6 +10,7 @@ import { stepTitle } from '../Onboarding.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { flagsOf, programPackageAr } from '../features.js';
 import { planSpanDays } from '../../../supabase/functions/leaders-api/stage-windows.js';
+import { taxNote } from '../../../supabase/functions/_shared/creem-product.js';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -36,6 +37,8 @@ export default function Paywall({ item, me, onUpdate }) {
   const c = COPY[item];
   const price = me.access?.prices?.[item] ?? 0;
   const cur = me.access?.prices?.currency || 'USD';
+  // نمط ضريبة منتج Creem من آخر فحص للإدارة (creem-product.js)؛ إن لم يُعرف تبقى الجملة العامة وحدها
+  const tax = taxNote(me.access?.prices?.tax?.[item]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [confirming, setConfirming] = useState(() => new URLSearchParams(location.search).get('paid') === item);
@@ -102,7 +105,7 @@ export default function Paywall({ item, me, onUpdate }) {
         {item === 'program' && <PathSummary journey={me.journey} />}
         <p className="muted">{typeof c.lead === 'function' ? c.lead(flagsOf(me)) : c.lead}</p>
         <ul className="pay-points">{c.points.map((x) => <li key={x}>{x}</li>)}</ul>
-        <div className="pay-price"><b dir="ltr">{money(price, cur)}</b><span>دفعة واحدة · بطاقة أو Apple Pay</span></div>
+        <div className="pay-price"><b dir="ltr">{money(price, cur)}</b><span>دفعة واحدة · بطاقة أو Apple Pay</span>{tax && <span className="pay-tax" data-tax>{tax}</span>}</div>
         {err && <div className="alert err" role="alert">{err}</div>}
         <button className="btn gold block" disabled={busy} onClick={pay}>{busy ? 'نفتح صفحة الدفع…' : c.cta}</button>
         <p className="small muted">الدفع عبر Creem بصفحة آمنة باسمك وبريدك، ويصلك الإيصال على {me.participant.email}.</p>

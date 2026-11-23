@@ -254,6 +254,17 @@ Deno.test('الدالة: طلب سعر لجهة لا يقرأ السعر الح�
   assertMatch(h.seen[2], /20\.00 USD/);
 });
 
+Deno.test('الدالة: سطر السعر الحي يحمل عبارة الضريبة من فحص منتج Creem، ويبقى بلا عبارة إن لم يُعرف نمطها', async () => {
+  const h = harness({ enabled: true });
+  const mem: any = await h.deps.store.leadersPrice();
+  mem.creem_check = { assessment: { id: 'a', state: 'ok', tax_mode: 'exclusive' }, program: { id: 'p', state: 'ok', tax_mode: 'inclusive' } };
+  await ask(h.deps, 'MI-LEADERS', 'كم سعر برنامج القادة؟');
+  assertMatch(h.seen[0], /10\.00 USD \(يُضاف عليه الضريبة إن وُجدت\)، ورسم إكمال البرنامج 20\.00 USD \(شامل الضريبة\)/);
+  const k = harness({ enabled: true });
+  await ask(k.deps, 'MI-LEADERS', 'كم سعر برنامج القادة؟');
+  assertNotMatch(k.seen[0], /الضريبة إن وُجدت|شامل الضريبة/);
+});
+
 // ── الأجوبة الجاهزة التي يحسمها الكود ──
 Deno.test('الأجوبة الجاهزة: بلغة السؤال، والتواصل يقول لا رقم هاتف، وأسئلة المعرفة الجديدة تذهب إلى النموذج', () => {
   const ar = matchFaq('كيف اتواصل معكم', 'MI-HOME');
