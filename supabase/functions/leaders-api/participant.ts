@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
+import { instrumentMinutes } from './assessment-time.ts';
 import { all, audit, BUCKET, CONFIG, db, expiresIn, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, newDeviceMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
 import { deviceOf } from '../_shared/login-device.js';
@@ -847,11 +848,12 @@ export async function assessmentGet(p: any, b: Body = {}) {
   // بُعد الممارسة ثم المواقف ثم المعرفة، وبنود انتقال التعلم في البعدي آخرًا
   qs = servedOrder(qs);
 
+  const est = await instrumentMinutes(inst.id);
   return {
     success: true,
-    assessment: { id: a.id, kind, status: a.status, est_minutes: inst.est_minutes, intro: inst.intro_ar, title: inst.title_ar },
+    assessment: { id: a.id, kind, status: a.status, est_minutes: est, intro: inst.intro_ar, title: inst.title_ar },
     // طلب إعادة قائم من الإدارة (retake.js): بطاقة فوق مقدمة القياس بنص البريد نفسه، حتى يسلّم القياس الجديد
-    retake: kind === 'baseline' ? await retakeNotice(p.id, inst.est_minutes ?? null) : null,
+    retake: kind === 'baseline' ? await retakeNotice(p.id, est) : null,
     // حدود التنبيه الوقائي أثناء الإجابة (pace.js): حدود القراءة نفسها التي يحكم بها مؤشر الجهد بعد التسليم
     pace: await paceConfig(),
     questions: qs.map((q: any) => {

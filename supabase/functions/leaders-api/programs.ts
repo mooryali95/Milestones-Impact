@@ -6,6 +6,7 @@
 // 20261116110000 ثبّت القائم)، فتعديل البرنامج يمس مسودته وحدها حتى تُحفظ نسخة وتُرقّى إليها كل دفعة بنفسها.
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
+import { baselineMinutes } from './assessment-time.ts';
 import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, postInService, POST_IN_SERVICE_AR, upgradePlan } from './logic.js';
 import { READY_MIN } from './capstone.js';
 import { planUpgradeBlock } from './cohort-plan.js';
@@ -124,8 +125,7 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
     }
   }
   // نصوص المراحل تُملأ رموزها من إعدادات المتطلبات، فلا يُكتب رقم في وصف
-  const inst = (await db.from('instruments').select('est_minutes').eq('kind', 'baseline').eq('active', true).limit(1).maybeSingle()).data;
-  const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: inst?.est_minutes || null });
+  const rendered = renderJourney(def, { readyMin: READY_MIN, assessmentMinutes: await baselineMinutes() });
   return {
     ...rendered, via, program_id: programId, feature_hidden: fh.hidden,
     // الموقوفة في خطة الدفعة (R2b): خارج الرحلة، وتُعرض باهتة في خريطة ملف الدفعة
