@@ -27,6 +27,16 @@ import { COHORT_TABS, cohortTab, followShow, followStage, tabQuery } from '../co
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
 const membersAr = (n) => countAr(n, 'عضو واحد', 'عضوان', 'أعضاء', 'عضوًا');
 const cohortsAr = (n) => countAr(n, 'دفعة واحدة', 'دفعتان', 'دفعات', 'دفعة');
+// حفظ نسخة: ما رُقّي تلقائيًا (آمن: لا مانع ولا تقدم يضيع ولا إعداد يسقط)، وما بقي على نسخة أقدم بسببه، فيُفتح من ملفه
+export function versionSavedAr(r) {
+  const up = r.upgraded || [];
+  const held = r.held || [];
+  const parts = [`حُفظت النسخة ${r.version.number}.`];
+  if (up.length) parts.push(`رُقّيت تلقائيًا: ${up.map((n) => `«${n}»`).join('، ')}.`);
+  if (held.length) parts.push(`${cohortsAr(held.length)} ${held.length === 2 ? 'باقيتان' : 'باقية'} على نسخة أقدم لمراجعتك: ${held.map((h) => `«${h.name}» (${h.reason})`).join('، ')}.`);
+  else if (!up.length && r.behind) parts.push(`${cohortsAr(r.behind)} على نسخة أقدم؛ رقِّها من ملفها.`);
+  return parts.join(' ');
+}
 
 
 // الفرق في المتطلبات ثم في المراحل (programDiff)، والخادم قبل حقل المراحل يُقرأ بمتطلباته وحدها
@@ -244,7 +254,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
     if (!label) return;
     const r = await act('admin.program-version', { id: p.id, label });
     // حفظ النسخة لا يمس الدفعات: كل منها على نسختها حتى تُرقّى بنفسها
-    if (r) toast(r.behind ? `حُفظت النسخة ${r.version.number}. ${cohortsAr(r.behind)} ${r.behind === 1 ? 'باقية' : r.behind === 2 ? 'باقيتان' : 'باقية'} على نسخة أقدم أو غير مثبتة؛ رقِّ كلًا منها بنفسك بعد مراجعة الفرق.` : `حُفظت النسخة ${r.version.number}`);
+    if (r) toast(versionSavedAr(r));
   };
   const restore = async (v) => {
     if (!(await confirm(`استرجاع «${v.label}» إلى مسودة البرنامج؟ يُحفظ الوضع الحالي نسخةً أولًا، ولا يُحذف شيء من تقدم المشاركين. الدفعات باقية على نسخها المثبتة.`))) return;

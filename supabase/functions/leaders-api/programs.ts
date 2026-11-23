@@ -435,10 +435,29 @@ export async function programPublish(a: Admin, b: Body) {
   if (block) throw new Fail(block.msg, 400, block.code);
   const v = await snapshotVersion(a, id, String(b.label || '').trim());
   await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label });
-  // حفظ النسخة لا يمس أي دفعة: كل دفعة باقية على نسختها حتى تُرقّى بنفسها، ويُقال كم دفعة بقيت على نسخة أقدم
-  const behind = ((must(await db.from('cohorts').select('id, status, program_version_id').eq('program_id', id)) || []) as any[])
-    .filter((c) => c.status !== 'closed' && c.program_version_id !== v.id).length;
-  return { success: true, version: v, behind };
+  // الترقية التلقائية (قرار المالك 2026-11-23): كل دفعة غير مغلقة مثبتة على نسخة أقدم تُرقّى إلى النسخة الجديدة إن كانت
+  // آمنة: لا مانع، ولا أحد له تقدم فيما يُحذف، ولا إعداد للدفعة يسقط. غير ذلك يبقى للمدير بمعاينته وسببه. وغير المثبتة
+  // (قبل ترحيل التثبيت) تُثبَّت يدويًا كما كانت، فلا تتغير رحلة أعضائها دون معاينة
+  const rows = ((must(await db.from('cohorts').select('id, name, status, program_version_id').eq('program_id', id)) || []) as any[])
+    .filter((c) => c.status !== 'closed' && c.program_version_id !== v.id);
+  const upgraded: string[] = [];
+  const held: { id: string; name: string; reason: string }[] = [];
+  for (const c of rows) {
+    if (!c.program_version_id) { held.push({ id: c.id, name: c.name, reason: 'غير مثبتة على نسخة: ثبّتها من ملفها بعد المعاينة' }); continue; }
+    try {
+      // بلا version_id: الهدف أحدث نسخة، وهي التي حُفظت للتو
+      const pre: any = await cohortUpgrade(a, { id: c.id });
+      if (pre.unchanged) { upgraded.push(c.name); continue; }
+      if (pre.to?.id !== v.id) { held.push({ id: c.id, name: c.name, reason: 'حُفظت نسخة أحدث في اللحظة نفسها: رقِّها من ملفها' }); continue; }
+      const reason = pre.blocked || (pre.affected ? `${pre.affected} من أعضائها لهم تقدم فيما يُحذف` : '') || (pre.dropped?.length ? 'يسقط من إعدادها ما يحتاج مراجعتك' : '');
+      if (reason) { held.push({ id: c.id, name: c.name, reason }); continue; }
+      await cohortUpgrade(a, { id: c.id, confirm: true, auto: true });
+      upgraded.push(c.name);
+    } catch (e) {
+      held.push({ id: c.id, name: c.name, reason: (e as any)?.message || 'تعذّرت الترقية' });
+    }
+  }
+  return { success: true, version: v, behind: held.length, upgraded, held };
 }
 
 // استرجاع نسخة إلى البرنامج. يُحفظ الوضع الحالي نسخةً أولًا فلا يضيع شيء،
@@ -756,7 +775,7 @@ export async function cohortUpgrade(a: Admin, b: Body) {
   if (plan.blocked) throw new Fail(plan.blocked, 400, 'upgrade_blocked');
   const fromN = c.program_version_id ? (await db.from('program_versions').select('number').eq('id', c.program_version_id).maybeSingle()).data?.number ?? null : null;
   must(await db.from('cohorts').update({ program_version_id: to.id, ...plan.patch, updated_at: new Date().toISOString() }).eq('id', c.id));
-  await audit('admin', a.email, 'cohort.upgrade', 'cohorts', c.id, null, { from: fromN, to: to.number, affected, dropped: plan.dropped });
+  await audit('admin', a.email, 'cohort.upgrade', 'cohorts', c.id, null, { from: fromN, to: to.number, affected, dropped: plan.dropped, ...(b.auto === true ? { auto: true } : {}) });
   return out;
 }
 
