@@ -11,6 +11,7 @@ import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { flagsOf, programPackageAr } from '../features.js';
 import { planSpanDays } from '../../../supabase/functions/leaders-api/stage-windows.js';
 import { taxNote } from '../../../supabase/functions/_shared/creem-product.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const money = (cents, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}${cur === 'USD' ? '' : ` ${cur}`}`;
 
@@ -39,18 +40,30 @@ export default function Paywall({ item, me, onUpdate }) {
   const cur = me.access?.prices?.currency || 'USD';
   // نمط ضريبة منتج Creem من آخر فحص للإدارة (creem-product.js)؛ إن لم يُعرف تبقى الجملة العامة وحدها
   const tax = taxNote(me.access?.prices?.tax?.[item]);
-  const [busy, setBusy] = useState(false);
+  // انشغال وخطأ لكل نموذج وحده: الدفع لا يعطّل الرمز ولا طلب الرعاية، وكل رسالة تحت نموذجها
+  const [busy, setBusy] = useState(false);          // زر الدفع
   const [err, setErr] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
+  const [codeErr, setCodeErr] = useState('');
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimErr, setClaimErr] = useState('');
+  // الرجوع من صفحة الدفع بزر المتصفح يعيد الصفحة من ذاكرته بحالتها «نفتح صفحة الدفع…»، فيعلق الزر:
+  // تُعاد حالته عند كل ظهور للصفحة، وبعد مهلة إن لم يغادر المتصفح الصفحة أصلًا
+  useEffect(() => {
+    const reset = () => setBusy(false);
+    window.addEventListener('pageshow', reset);
+    return () => window.removeEventListener('pageshow', reset);
+  }, []);
   const [confirming, setConfirming] = useState(() => new URLSearchParams(location.search).get('paid') === item);
   const [code, setCode] = useState('');
   const [claim, setClaim] = useState(null);   // { typed_name, contact_email } حين يفتح «رشّحتني جهة ولا أملك رمزًا»
   const req = me.access?.request;
   const reload = async () => { const m = await call('me'); if (m.success) onUpdate(m); };
   const sendClaim = async (e) => {
-    e.preventDefault(); setBusy(true); setErr('');
+    e.preventDefault(); setClaimBusy(true); setClaimErr('');
     const r = await call('sponsor.request', claim);
-    setBusy(false);
-    if (r.success) { setClaim(null); reload(); } else setErr(r.message);
+    setClaimBusy(false);
+    if (r.success) { setClaim(null); reload(); } else setClaimErr(r.message || 'تعذّر إرسال الطلب، حاول بعد قليل');
   };
 
   // بعد العودة من Creem: ننتظر إشعار الدفع حتى 45 ثانية
@@ -70,16 +83,16 @@ export default function Paywall({ item, me, onUpdate }) {
   const pay = async () => {
     setBusy(true); setErr('');
     const r = await call('pay.checkout', { item });
-    if (r.success && r.url) { location.href = r.url; return; }
+    if (r.success && r.url) { setTimeout(() => setBusy(false), 8000); location.href = r.url; return; }
     setBusy(false);
     if (r.success && r.entitled) { const m = await call('me'); if (m.success) onUpdate(m); return; }
     setErr(r.message);
   };
   const sponsor = async (e) => {
-    e.preventDefault(); setBusy(true); setErr('');
+    e.preventDefault(); setCodeBusy(true); setCodeErr('');
     const r = await call('me.sponsor-code', { sponsor_code: code.trim() });
-    setBusy(false);
-    if (r.success) onUpdate(r); else setErr(r.message);
+    setCodeBusy(false);
+    if (r.success) onUpdate(r); else setCodeErr(r.message || 'تعذّر التحقق من الرمز، حاول بعد قليل');
   };
 
   if (confirming) {
@@ -123,9 +136,10 @@ export default function Paywall({ item, me, onUpdate }) {
           <form className="pay-sponsor" onSubmit={sponsor}>
             <span className="small">رشّحتك جهة؟ رمزها يعفيك من الرسوم</span>
             <div className="row">
-              <input className="input ltr grow" maxLength={40} autoComplete="off" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="ABC-2026" aria-label="رمز الجهة الراعية" />
-              <button className="btn ghost sm" disabled={busy || code.trim().length < 4}>تحقق</button>
+              <input className="input ltr grow" maxLength={40} autoComplete="off" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} placeholder="رمز الجهة" aria-label="رمز الجهة الراعية" aria-invalid={!!codeErr} />
+              <button className="btn ghost sm" disabled={codeBusy || code.trim().length < 4}>{codeBusy ? 'نتحقق…' : 'تحقق'}</button>
             </div>
+            {codeErr && <div className="alert err small" role="alert">{codeErr}</div>}
             {!claim && <button type="button" className="link small" onClick={() => setClaim({ typed_name: me.participant.organization_name || '', contact_email: '' })}>رشّحتني جهة ولا أملك رمزًا</button>}
           </form>
         )}
@@ -133,8 +147,9 @@ export default function Paywall({ item, me, onUpdate }) {
           <form className="pay-sponsor" onSubmit={sendClaim}>
             <span className="small">اكتب اسم الجهة التي رشّحتك، ونتحقق من رعايتها لك.</span>
             <input className="input" required minLength={2} maxLength={200} value={claim.typed_name} onChange={(e) => setClaim({ ...claim, typed_name: e.target.value })} placeholder="اسم الجهة الراعية" aria-label="اسم الجهة الراعية" />
-            <input className="input ltr" type="email" maxLength={254} value={claim.contact_email} onChange={(e) => setClaim({ ...claim, contact_email: e.target.value })} placeholder="بريد منسق الجهة (اختياري)" aria-label="بريد منسق الجهة" />
-            <div className="row"><button className="btn ghost sm" disabled={busy || claim.typed_name.trim().length < 2}>أرسل طلب التحقق</button>
+            <EmailInput className="input ltr" type="email" maxLength={254} value={claim.contact_email} onChange={(e) => setClaim({ ...claim, contact_email: e.target.value })} placeholder="بريد منسق الجهة (اختياري)" aria-label="بريد منسق الجهة" />
+            {claimErr && <div className="alert err small" role="alert">{claimErr}</div>}
+            <div className="row"><button className="btn ghost sm" disabled={claimBusy || claim.typed_name.trim().length < 2}>{claimBusy ? 'نرسل…' : 'أرسل طلب التحقق'}</button>
               <button type="button" className="link small" onClick={() => setClaim(null)}>إلغاء</button></div>
           </form>
         )}

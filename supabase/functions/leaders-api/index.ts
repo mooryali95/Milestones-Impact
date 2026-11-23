@@ -79,6 +79,7 @@ import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
 import * as CE from './client-events.ts';
+import * as SC from './sponsor-codes.ts';
 import { cleanBuild } from '../_shared/client-events.js';
 import { clientLevelOf, needsUpdate } from '../_shared/client-compat.js';
 
@@ -272,7 +273,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'sus.state': (p) => SU.state('participant', p),
   'sus.submit': (p, b) => SU.submit('participant', p, b),
   'org.logo': (p) => P.orgLogo(p),
-  'me.sponsor-code': (p, b) => P.sponsorCode(p, b),
+  'me.sponsor-code': (p, b, _s, ctx) => P.sponsorCode(p, b, ctx),
   'me.privacy': (p) => PV.state(p),
   'me.notice-ack': (p, b) => OB.ack(p, b),
   'me.nudge-seen': (p, b) => NB.seen(p, b),
@@ -599,6 +600,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.track': (_a, b) => A.track(b),
   'admin.orgs': () => A.orgs(),
   'admin.org': (_a, b) => A.org(b),
+  // رموز الرعاية لكل جهة (sponsor-codes.ts): القراءة لكل مدير، والإنشاء والتعديل لمن يكتب كتحرير الجهة
+  'admin.sponsor-codes': (_a, b) => SC.adminList(b),
+  'admin.sponsor-code-create': (a, b) => A.writer(a, SC.adminCreate, b),
+  'admin.sponsor-code-update': (a, b) => A.writer(a, SC.adminUpdate, b),
   'admin.assign-org': A.assignOrg,
   'admin.org-impact': C.orgImpact,
   'admin.org-finance': Y.adminOrgFinance,

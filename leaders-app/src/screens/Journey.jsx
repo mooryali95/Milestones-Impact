@@ -28,6 +28,7 @@ import { foldStore, stageFoldId } from '../journey-folds.js';
 import { canReplaceFile } from '../../../supabase/functions/leaders-api/upload-file.js';
 import { DEMO_SAMPLE_AR, DEMO_SKIPPED_AR } from '../../../supabase/functions/leaders-api/demo-stage.js';
 import { withGroups } from '../../../supabase/functions/leaders-api/stage-windows.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 const CONTACT_EMAIL = CONTACT.email;
 
 export function deviceLabel() {
@@ -661,7 +662,7 @@ export function PreManager({ inSettings = false }) {
             <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
               <p className="small" style={{ flexBasis: '100%' }}>5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا.</p>
               <input className="input" aria-label="اسم المدير" autoComplete="off" placeholder="اسم المدير" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-              <input className="input ltr" type="email" required aria-label="بريد المدير" placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <EmailInput className="input ltr" type="email" required aria-label="بريد المدير" placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
               <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
               {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
             </form>

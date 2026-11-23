@@ -28,6 +28,7 @@ import AttendanceSheet from '../../../shared/ui/AttendanceSheet.jsx';
 import GroupSessionSheet from '../../../shared/ui/GroupSessionSheet.jsx';
 import { COMMITTEE_AR } from '../../../supabase/functions/leaders-api/committees.js';
 import { hashRef } from '../../../shared/master-book/reader.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
 // ملف الكتاب الأم بعد نشر أحدث: محاولة ثانية ثم إعادة تحميل واحدة (shared/ui/lazy-retry.js)
@@ -109,7 +110,7 @@ function SignIn({ onIn, initialEmail = '' }) {
         <h1 className="as-h2">لوحة الخبير</h1>
         <p className="muted">{step === 'email' ? 'أدخل بريدك المسجل في شبكة الخبراء، ونرسل لك رمز دخول.' : `أرسلنا رمزًا إلى ${email} إن كان مسجلًا في شبكة الخبراء. وإن كان مسجلًا في بوابة أخرى، يصلك بريد يدلّك عليها.`}</p>
         {step === 'email'
-          ? <label className="field"><span>البريد الإلكتروني</span><input className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          ? <label className="field"><span>البريد الإلكتروني</span><EmailInput className="input" dir="ltr" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           : <label className="field"><span>رمز التحقق</span><input className="input" dir="ltr" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(codeDigits(e.target.value))} /></label>}
         {err && <div className="alert err" role="alert">{err}<DoorButtons doors={doors} /></div>}
         {step === 'email' && captchaKey && <Captcha key={captchaKey.n} siteKey={captchaKey.site} onToken={(t) => send(null, t)} />}

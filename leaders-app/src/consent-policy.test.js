@@ -84,12 +84,15 @@ describe('الخادم', () => {
 describe('الواجهة', () => {
   it('أول مرة بلا تأجيل، والتجديد سطر واحد بلا تفاصيل وزر «لاحقًا»', () => {
     const first = renderToStaticMarkup(React.createElement(Consent, { consent: consentState(null, null), onAccepted: () => {} }));
-    expect(first).toContain('خصوصيتك وشروط البرنامج');
-    expect(first).toContain('خارج المملكة');
+    // الشكل المختصر (قرار المالك 2026-11-23): ثلاث نقاط ورابط واحد داخل جملة الموافقة
+    for (const s of ['قبل أن نتابع', 'بالمتابعة توافق على', 'الشروط وسياسة الخصوصية', 'بياناتك محمية، وتستطيع']) expect(first).toContain(s);
+    expect((first.match(/<li>/g) || []).length).toBe(3);
+    expect((first.match(/<a /g) || []).length).toBe(1);
+    for (const s of ['باختصار', 'الاسترداد', 'سجل التغييرات', 'مزودينا']) expect(first).not.toContain(s);
     expect(first).not.toContain('مومباي');
     expect(first).not.toContain('لاحقًا');
     const renew = renderToStaticMarkup(React.createElement(Consent, { consent: consentState('2026-11-06', '2026-11-06T10:00:00Z'), onAccepted: () => {}, onLater: () => {} }));
-    for (const s of ['حدّثنا سياسة الخصوصية والشروط', 'وافق لنتابع', 'أوافق وأتابع', 'لاحقًا', 'سجل التغييرات']) expect(renew).toContain(s);
+    for (const s of ['حدّثنا سياسة الخصوصية والشروط', 'وافق لنتابع', 'أوافق وأتابع', 'لاحقًا', 'الشروط وسياسة الخصوصية']) expect(renew).toContain(s);
     for (const s of ['وافقت على النسخة', 'النسخة 2026', 'جوهرية', POLICY_CHANGES[0].items[0], POLICY_CHANGES.find((c) => c.material).items[0]]) expect(renew).not.toContain(s);
   });
   it('الشريط لمن أجّل التجديد وحده، بسطر وزر «موافق»، ولا شيء للنسخة غير الجوهرية', () => {

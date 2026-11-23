@@ -10,6 +10,7 @@ import { call } from '../api.js';
 import Assessment from './Assessment.jsx';
 import { ErrorBox } from '../ui.jsx';
 import { flagsOf } from '../features.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const RELATIONS = [
   { key: 'manager', title: 'المدير المباشر' },
@@ -88,7 +89,7 @@ function Invite({ data, onChange }) {
         <form className="stack" onSubmit={send}>
           <div className="grid2">
             <label className="field"><span>البريد</span>
-              <input className="input ltr" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
+              <EmailInput className="input ltr" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
             <label className="field"><span>الاسم <em>(اختياري)</em></span>
               <input className="input" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></label>
             <label className="field"><span>صلته بك</span>

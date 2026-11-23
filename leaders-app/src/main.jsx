@@ -10,6 +10,7 @@ import { adoptWaitingIfAlone, buildFromScripts, installAppUpdate } from '../../s
 import UpdateBar from '../../shared/ui/UpdateBar.jsx';
 import UpdateRefusal from './UpdateRefusal.jsx';
 import { trackTopbarHeight } from './topbar-height.js';
+import { installLatinDigits } from '../../shared/ui/latin-digits.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
@@ -28,6 +29,7 @@ installTelemetry(window);
 installAppUpdate(window);
 // الشاشات الثقيلة تُحمَّل كسولًا (lazy في App.jsx)؛ هذا ما يظهر أثناء جلب قطعتها
 const Loading = () => <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
+installLatinDigits();
 createRoot(document.getElementById('root')).render(<ErrorBoundary><UpdateBar to={viewHref} /><Suspense fallback={<Loading />}><App /></Suspense><UpdateRefusal to={viewHref} /></ErrorBoundary>);
 trackTopbarHeight(window);
 // بعد كل نشر تتغير أسماء القطع المهشّرة؛ تبويب مفتوح قبل النشر يفشل تحميلها المسبق، فيُعاد تحميله مرة واحدة

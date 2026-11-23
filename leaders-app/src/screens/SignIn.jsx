@@ -18,6 +18,7 @@ import IntroVideo from '../IntroVideo.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 import { RESEND_SECONDS } from '../labels.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 // إشعار الخصوصية والشروط قبل زر التسجيل: إكمال التسجيل بعده موافقة تُسجَّل مع نسخة السياسة
 const ConsentNote = ({ action }) => (
   <p className="small muted consent-note">
@@ -194,7 +195,7 @@ export default function SignIn({ onSignedIn, initialError, pendingLink }) {
             <div className="divider">أو بالبريد</div>
             <label className="field">
               <span>البريد الإلكتروني</span>
-              <input className="input ltr" type="email" inputMode="email" autoComplete="username webauthn" required
+              <EmailInput className="input ltr" type="email" inputMode="email" autoComplete="username webauthn" required
                 value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
             </label>
             {error && <div className="alert err" role="alert">{error}</div>}
