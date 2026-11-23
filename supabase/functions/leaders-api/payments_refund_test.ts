@@ -210,3 +210,93 @@ Deno.test('revenueKpis: الإيراد صافٍ بعد الجزئي، والكا
   assertEquals(netCents(p({ refund_cents: 12000 })), 0);
   assertEquals(revenueKpis([]), { revenue_cents: 0, refunds_cents: 0 });
 });
+
+// ── الدفع الزائد (المرحلة 1 من تصور مصدر السعر، 2026-11-23): يُمنح الحق، وتُعلَّم الدفعة بالمطلوب والمدفوع، وتنبيه واحد ──
+const paidEvent = (id: string, payId: string, order: Row) => JSON.stringify({ id, eventType: 'checkout.completed', object: {
+  id: 'ch_over', request_id: payId, mode: 'prod', product: { id: 'prod_a' }, customer: { id: 'cus_1', country: 'SA', name: 'Sara' },
+  order: { id: 'ord_over', currency: 'USD', product: 'prod_a', ...order },
+} });
+const pendingWorld = (payId: string, over: Row = {}): Record<string, Row[]> => ({
+  ...world(),
+  payments: [{ id: payId, participant_id: 'p1', item: 'assessment', status: 'pending', amount_cents: 100, currency: 'USD', mode: 'live', product_id: 'prod_a', checkout_id: 'ch_over', email: 'sara@example.com', note: null, ...over }],
+  entitlements: [],
+  payment_settings: [{ id: true, enabled: true, currency: 'USD', notify: { receipt: true, owner: true } }],
+});
+
+Deno.test('دفع زائد: يُمنح الحق، والمطلوب محفوظ في note، وأثر payment.overpaid، وتنبيه مرة واحدة مع إعادة الإشعار', async () => {
+  const restoreEnv = setupEnv();
+  const id = '21111111-2222-4333-8444-555555555555';
+  const t = pendingWorld(id);
+  const restore = install(t);
+  try {
+    await withMail(async (mails) => {
+      const raw = paidEvent('evt_over_1', id, { amount: 199, sub_total: 199, tax_amount: 30, amount_paid: 229 });
+      assertEquals((await send(raw) as any).success, true);
+      const pay = t.payments[0];
+      assertEquals([pay.status, pay.amount_cents, pay.note], ['paid', 199, 'overpaid expected=100 paid=199']);
+      assertEquals([pay.subtotal_cents, pay.tax_cents], [199, 30]);
+      assertEquals(t.entitlements.map((e) => [e.item, e.source]), [['assessment', 'paid']]);
+      assertEquals(t.audit_log.filter((a) => a.action === 'payment.overpaid').map((a) => a.after), [{ expected_cents: 100, paid_cents: 199, currency: 'USD' }]);
+      const alerts = () => t.audit_log.filter((a) => a.action === 'system.alert' && a.entity_id === `payment_mismatch:${id}`);
+      assertEquals(alerts().length, 1);
+      assert(String(alerts()[0].after.issues[0]).includes('أعلى من 100'));
+      const owner = mails.find((m) => m.subject === 'دفعة أعلى من المطلوب');
+      assert(owner, 'إشعار المالك بعنوان الدفع الزائد');
+      for (const s of ['1.00 USD', '1.99 USD', '0.30 USD', '2.29 USD', 'مُنح الحق']) assert(owner!.html.includes(s), s);
+      const n = mails.length;
+      // إعادة الإشعار نفسه (حجز بلا معالجة) وإشعار مكرر بمعرّف جديد: لا تنبيه ثانٍ ولا بريد ثانٍ
+      t.payment_events.forEach((e) => { e.processed_at = null; });
+      await send(raw);
+      await send(paidEvent('evt_over_2', id, { amount: 199, sub_total: 199, tax_amount: 30, amount_paid: 229 }));
+      assertEquals(alerts().length, 1);
+      assertEquals(t.audit_log.filter((a) => a.action === 'payment.overpaid').length, 1);
+      assertEquals(mails.length, n);
+      // الاسترداد اللاحق لا يمحو علامة المطلوب
+      await send(JSON.stringify({ id: 'evt_over_ref', eventType: 'refund.created', object: { id: 'ref_o', order: 'ord_over', checkout: 'ch_over', refund_amount: 99 } }));
+      assert(String(t.payments[0].note).startsWith('overpaid expected=100 paid=199'), String(t.payments[0].note));
+    });
+  } finally { restore(); restoreEnv(); }
+});
+
+Deno.test('دفع أقل من المطلوب: يبقى معلّقًا بلا حق كما كان، ولا علامة دفع زائد؛ والمساوي بلا علامة ولا تنبيه', async () => {
+  const restoreEnv = setupEnv();
+  const id = '31111111-2222-4333-8444-555555555555';
+  const t = pendingWorld(id, { amount_cents: 199 });
+  const restore = install(t);
+  try {
+    await withMail(async () => {
+      await send(paidEvent('evt_under', id, { amount: 100, amount_paid: 100 }));
+      assertEquals([t.payments[0].status, t.entitlements.length], ['pending', 0]);
+      assert(String(t.payments[0].note).startsWith('held'));
+      assertEquals(t.audit_log.some((a) => a.action === 'payment.overpaid'), false);
+      t.payments[0].note = null;
+      await send(paidEvent('evt_equal', id, { amount: 199, amount_paid: 199 }));
+      assertEquals([t.payments[0].status, t.payments[0].note, t.entitlements.length], ['paid', null, 1]);
+      assertEquals(t.audit_log.some((a) => a.action === 'payment.overpaid'), false);
+    });
+  } finally { restore(); restoreEnv(); }
+});
+
+Deno.test('بريد «وصلنا دفعك»: المدفوع شامل الضريبة وسطر الضريبة، وبلا ضريبة سطر المدفوع وحده، وبلا amount_paid المبلغ المسجل', async () => {
+  const restoreEnv = setupEnv();
+  const cases: [string, Row, string[], string[]][] = [
+    ['41111111-2222-4333-8444-555555555555', { amount: 199, sub_total: 199, tax_amount: 30, amount_paid: 229 }, ['المبلغ قبل الضريبة', '1.99 USD', 'الضريبة', '0.30 USD', 'المدفوع شامل الضريبة', '2.29 USD'], []],
+    ['51111111-2222-4333-8444-555555555555', { amount: 199, sub_total: 199, tax_amount: 0, amount_paid: 199 }, ['المبلغ المدفوع', '1.99 USD'], ['الضريبة']],
+    ['61111111-2222-4333-8444-555555555555', { amount: 199, sub_total: 199, tax_amount: 30 }, ['المبلغ', '1.99 USD'], ['الضريبة', 'المدفوع', '2.29']],
+  ];
+  try {
+    for (const [id, order, has, lacks] of cases) {
+      const t = pendingWorld(id, { amount_cents: 199 });
+      const restore = install(t);
+      try {
+        await withMail(async (mails) => {
+          await send(paidEvent(`evt_r_${id.slice(0, 2)}`, id, order));
+          const m = mails.find((x) => x.subject === 'وصلنا دفعك');
+          assert(m, 'بريد الإيصال');
+          for (const s of has) assert(m!.html.includes(s), `${id.slice(0, 2)} ${s}`);
+          for (const s of lacks) assert(!m!.html.includes(s), `${id.slice(0, 2)} بلا ${s}`);
+        });
+      } finally { restore(); }
+    }
+  } finally { restoreEnv(); }
+});

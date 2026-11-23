@@ -18,6 +18,35 @@ export function ledgerFields(obj) {
     transaction_id: str(idOf(o.order?.transaction), 80),
   };
 }
+// ── الدفع الزائد: المدفوع قبل الضريبة (order.amount) أعلى من المطلوب. قرار المالك 2026-11-23: يُمنح الحق ويُنبَّه،
+// وamount_cents يصير المدفوع الفعلي (الإيراد والاسترداد يقرآنه)، والمطلوب يُحفظ في note بصيغة ثابتة فلا يضيع ──
+const OVER_RE = /^overpaid expected=(\d+) paid=(\d+)/;
+/** المطلوب والمدفوع حين يزيد المدفوع، وإلا null */
+export function overpaidBy(pay, obj) {
+  const paid = int(obj?.order?.amount);
+  const expected = int(pay?.amount_cents);
+  return paid != null && expected != null && paid > expected ? { expected, paid } : null;
+}
+export const overpaidNote = (o) => `overpaid expected=${o.expected} paid=${o.paid}`;
+/** علامة الدفع الزائد من ملاحظة الدفعة: { expected, paid } أو null */
+export function overpaidOf(pay) {
+  const m = OVER_RE.exec(String(pay?.note || ''));
+  return m ? { expected: Number(m[1]), paid: Number(m[2]) } : null;
+}
+/** ملاحظة آلية لاحقة (استرداد مثلًا) لا تمحو علامة الدفع الزائد */
+export function keepOverpaid(prev, next) {
+  const m = OVER_RE.exec(String(prev || ''));
+  return m ? `${m[0]} · ${next}` : next;
+}
+/** ما دفعه العميل فعلًا من حمولة checkout.completed: order.amount_paid (شامل الضريبة) وorder.tax_amount.
+ * غياب المدفوع الكلي null، فيبقى البريد على المبلغ المسجل ولا يُحسب رقم من تخمين */
+export function paidTotal(obj) {
+  const total = int(obj?.order?.amount_paid);
+  if (total == null || total <= 0) return null;
+  const tax = int(obj?.order?.tax_amount);
+  return { total, tax: tax != null && tax > 0 ? tax : 0, sub: int(obj?.order?.amount) };
+}
+
 /** مبلغ الاسترداد وسببه من إشعار استرداد أو نزاع. صيغة الحمولة تختلف بين النوعين، فتُقرأ بأكثر من اسم */
 export function refundFields(obj, type = '') {
   const o = obj || {};
@@ -93,9 +122,9 @@ export function paymentTimeline(pay, events = [], ents = [], log = []) {
   }
   add(pay.receipt_sent_at, 'info', 'أُرسل تأكيد الدفع للعميل');
   add(pay.refunded_at, 'warn', 'استُردّت الدفعة', pay.refund_reason || '');
-  const LOG_AR = { 'payment.partially-refunded': 'استُردّ جزء من الدفعة، وبقي الحق قائمًا', 'payment.held': 'عُلّقت للمراجعة', 'payment.remind': 'ذُكِّر العميل بإكمال الدفع', 'payment.note': 'ملاحظة إدارية', 'payment.reconcile': 'طوبقت مع Creem', 'payment.expired': 'انتهت صفحة الدفع المتروكة' };
+  const LOG_AR = { 'payment.partially-refunded': 'استُردّ جزء من الدفعة، وبقي الحق قائمًا', 'payment.held': 'عُلّقت للمراجعة', 'payment.overpaid': 'المدفوع أعلى من المطلوب، ومُنح الحق', 'payment.remind': 'ذُكِّر العميل بإكمال الدفع', 'payment.note': 'ملاحظة إدارية', 'payment.reconcile': 'طوبقت مع Creem', 'payment.expired': 'انتهت صفحة الدفع المتروكة' };
   const partialAr = (h) => `${money(h.after?.refund_cents, pay.currency)} من ${money(h.after?.paid_cents, pay.currency)}، والمسترد كله ${money(h.after?.total_refunded_cents, pay.currency)}`;
-  for (const h of log) if (LOG_AR[h.action]) add(h.created_at, h.action === 'payment.held' || h.action === 'payment.partially-refunded' ? 'warn' : 'info', LOG_AR[h.action], h.action === 'payment.held' ? (h.after?.issues || []).join('؛ ') : h.action === 'payment.partially-refunded' ? partialAr(h) : h.actor && h.actor !== 'creem' ? `بواسطة ${h.actor}` : '');
+  for (const h of log) if (LOG_AR[h.action]) add(h.created_at, h.action === 'payment.held' || h.action === 'payment.partially-refunded' || h.action === 'payment.overpaid' ? 'warn' : 'info', LOG_AR[h.action], h.action === 'payment.held' ? (h.after?.issues || []).join('؛ ') : h.action === 'payment.overpaid' ? `المطلوب ${money(h.after?.expected_cents, h.after?.currency)} والمدفوع ${money(h.after?.paid_cents, h.after?.currency)}` : h.action === 'payment.partially-refunded' ? partialAr(h) : h.actor && h.actor !== 'creem' ? `بواسطة ${h.actor}` : '');
   return rows.sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
 
