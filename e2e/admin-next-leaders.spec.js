@@ -130,8 +130,10 @@ test('ملف المشارك: التدخل في مرحلة يصل إلى الخا
   const calls = await setup(page, { 'admin.participant': { ...person, journey }, 'admin.stage-override': { success: true } });
   await page.getByText('سارة الأحمد').click();
   await tab(page, 'الرحلة').click();
-  // «أكمل هذه المرحلة» في شريط الرأس: السؤال يسمي ما ينقصها، والسبب مطلوب
-  await page.getByRole('button', { name: 'أكمل هذه المرحلة' }).first().click();
+  // «أكمل هذه المرحلة» زر واحد في سطر المرحلة الحالية (لا تكرار في الرأس، تدقيق 2026-11-23): السؤال يسمي ما ينقصها، والسبب مطلوب
+  await expect(page.getByRole('button', { name: 'أكمل هذه المرحلة' })).toHaveCount(1);
+  await expect(page.locator('.pj-stage[data-stage="s1"]').getByRole('button', { name: 'أكمل هذه المرحلة' })).toBeVisible();
+  await page.getByRole('button', { name: 'أكمل هذه المرحلة' }).click();
   await page.getByRole('dialog').locator('input').fill('أنجزها في ورشة حضورية موثقة');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect(page.getByRole('status')).toHaveText('تم');

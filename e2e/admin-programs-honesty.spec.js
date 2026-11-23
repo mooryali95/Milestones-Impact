@@ -71,12 +71,14 @@ test('«برنامج جديد من هذا» يسأل «لجهة بعينها؟»
   await tab(page, 'البرامج والدفعات');
   const qa = page.locator('section.la-card', { hasText: 'برنامج القادة' }).first();
   await expect(qa.getByRole('button', { name: 'تكرار' })).toHaveCount(0);
-  await qa.getByRole('button', { name: 'برنامج جديد من هذا' }).click();
+  await qa.getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).click();
+  await page.getByRole('menuitem', { name: 'برنامج جديد من هذا' }).click();
   const ask = page.getByRole('alertdialog');
   await expect(ask).toContainText('لجهة بعينها؟ خصّص دفعتها بدل النسخ');
   await ask.getByRole('button', { name: 'إلغاء' }).click();
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
-  await qa.getByRole('button', { name: 'برنامج جديد من هذا' }).click();
+  await qa.getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).click();
+  await page.getByRole('menuitem', { name: 'برنامج جديد من هذا' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'برنامج جديد من هذا' }).click();
   const name = page.getByRole('dialog').getByRole('textbox');
   await expect(name).toHaveValue('برنامج القادة (نسخة)');

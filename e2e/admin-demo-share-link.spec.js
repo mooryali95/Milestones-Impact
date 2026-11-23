@@ -82,8 +82,8 @@ async function openDemoCard(page) {
   });
   await page.goto(`${ADMIN}#/leaders/overview`);
   await page.reload();
-  const toggle = page.getByRole('region', { name: 'صحة المنظومة', exact: true }).locator('#th-toggle');
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  // روابط التجربة في «أدوات التجربة» المطوية آخر النظرة العامة (تدقيق 2026-11-23)
+  await page.locator('#today-tools > summary').click();
   const panel = page.getByTestId('demo-links');
   await expect(panel).toBeVisible();
   return panel;
@@ -159,7 +159,7 @@ test('رابط التجربة: المدير ينشئه ويراه ويلغيه،
   // اللوحة بعد الاستعمال: آخر استعمال يظهر، وإعادة الضبط تسمّي الرابط النشط قبل التأكيد
   await page.reload();
   const panel2 = page.getByTestId('demo-links');
-  if ((await page.locator('#th-toggle').getAttribute('aria-expanded')) !== 'true') await page.locator('#th-toggle').click();
+  if ((await page.locator('#today-tools').getAttribute('open')) === null) await page.locator('#today-tools > summary').click();
   await expect(panel2.getByRole('list', { name: 'الروابط النشطة' })).toContainText('آخر استعمال');
   await page.getByRole('button', { name: 'أعِده إلى البداية' }).click();
   const dialog = page.getByRole('alertdialog');

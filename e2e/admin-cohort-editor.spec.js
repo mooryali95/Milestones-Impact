@@ -130,7 +130,8 @@ for (const width of [1440, 390]) {
 
 test('«أنشئ له دفعة» من بطاقة البرنامج يبقى على البرنامج المختار ولا يستبدله ببرنامج الجهة', async ({ page }) => {
   await setup(page);
-  await page.locator('.la-card', { hasText: 'برنامج القادة' }).first().getByRole('button', { name: 'أنشئ له دفعة' }).click();
+  await page.locator('.la-card', { hasText: 'برنامج القادة' }).first().getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).click();
+  await page.getByRole('menuitem', { name: 'أنشئ له دفعة' }).click();
   const wiz = page.getByRole('dialog', { name: 'دفعة جديدة' });
   await wiz.getByRole('combobox', { name: 'الجهة' }).selectOption('o1');
   await wiz.getByRole('button', { name: 'التالي' }).click();
@@ -143,7 +144,8 @@ test('لا نافذة «الجدول» بعد R2a: رابط الدفعة في ا
   const calls = await setup(page);
   const row = page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' });
   await expect(row.getByRole('button', { name: /^الجدول/ })).toHaveCount(0);
-  await row.getByRole('link', { name: 'الرحلة والمدد' }).click();
+  await row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'الرحلة والمدد' }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs\/c2\?view=journey$/);
   await expect(page.getByRole('tab', { name: 'الرحلة' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('dialog', { name: 'جدول الدفعة' })).toHaveCount(0);
@@ -152,7 +154,8 @@ test('لا نافذة «الجدول» بعد R2a: رابط الدفعة في ا
 
 // ── P6: محرر الدفعة بالأقسام ──
 const openEditor = async (page, name) => {
-  await page.locator('.data-table tbody tr', { hasText: name }).getByRole('button', { name: 'تحرير', exact: true }).click();
+  await page.locator('.data-table tbody tr', { hasText: name }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const ed = page.getByRole('dialog', { name: `دفعة: ${name}` });
   await expect(ed.locator('.ce-stage').first()).toBeVisible();
   return ed;
@@ -278,7 +281,8 @@ test('الدفعة المثبتة: لا خيار لإلغاء تثبيتها، �
 test('تعذّرت قراءة الرحلة: الحفظ لا يرسل التنفيذ فلا يمحو تخصيصه، وإعادة المحاولة تقرؤها', async ({ page }) => {
   const opts = { defFail: true };
   const calls = await setup(page, opts);
-  await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: 'تحرير', exact: true }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const ed = page.getByRole('dialog', { name: 'دفعة: سفراء 2026' });
   await expect(ed.getByRole('alert')).toContainText('تعذّرت قراءة رحلة الدفعة');
   await ed.getByLabel('اسم الدفعة').fill('سفراء 2026 أ');
@@ -286,7 +290,8 @@ test('تعذّرت قراءة الرحلة: الحفظ لا يرسل التنف�
   await expect.poll(() => calls.find((c) => c.action === 'admin.cohort-save')).toMatchObject({ id: 'c1', name: 'سفراء 2026 أ' });
   expect(calls.find((c) => c.action === 'admin.cohort-save')).not.toHaveProperty('delivery');
   // المحرر أُغلق بالحفظ؛ يُفتح ثانية والقراءة تنجح بإعادة المحاولة
-  await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: 'تحرير', exact: true }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const again = page.getByRole('dialog', { name: 'دفعة: سفراء 2026' });
   await expect(again.getByRole('alert')).toContainText('تعذّرت قراءة رحلة الدفعة');
   opts.defFail = false;
@@ -298,7 +303,8 @@ test('نسخة أحدث من الرحلة: تنبيه في رأس ملف الد�
   programs[0].versions.unshift({ id: 'v2', program_id: 'pa', number: 2, label: 'بعد التعديل', created_at: '2026-11-22' });
   try {
     const calls = await setup(page);
-    await page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' }).getByRole('link', { name: 'الرحلة والمدد' }).click();
+    await page.locator('.data-table tbody tr', { hasText: 'دفعة مثبتة' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+    await page.getByRole('menuitem', { name: 'الرحلة والمدد' }).click();
     const note = page.locator('[data-version-notice="newer"]');
     await expect(note).toContainText('على النسخة 1');
     await expect(note).toContainText('والأحدث 2');

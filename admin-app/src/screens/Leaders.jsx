@@ -168,7 +168,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
         <div className="page-header-left">
           <div className="page-eyebrow">المنتج الأول</div>
           <h1 className="page-title">تطبيق القادة</h1>
-          <div className="page-title-ar">leaders.sunkvalue.com · المنهجية والمسارات والمشاركون والجهات والشهادات</div>
+          <div className="page-title-ar" title="leaders.sunkvalue.com · المنهجية والمسارات والمشاركون والجهات والشهادات">leaders.sunkvalue.com · المنهجية والمسارات والمشاركون والجهات والشهادات</div>
         </div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
@@ -186,7 +186,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
               {g}{folded && <Badge b={gb} />}
             </button>
             {keys.filter(allowed).map((k) => {
-              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-badge">مخفي عن المستخدمين</span>}</button>;
+              return <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-dot" title="مخفي عن المستخدمين"><span className="sr-only">مخفي عن المستخدمين</span></span>}</button>;
             })}
           </div>
           );

@@ -131,7 +131,7 @@ test('البرنامج على الهاتف 390: خط رأسي بلا تمرير 
 // الدفعة: الخط نُقل من محرر الدفعة إلى تبويب «الرحلة» في ملفها (R1 في تصور محرر رحلة الدفعة)
 const openJourney = async (page) => {
   await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
-  await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'دفعة نوفمبر' }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'دفعة نوفمبر', exact: true }).click();
   await page.getByRole('tab', { name: 'الرحلة' }).click();
   return page.getByRole('region', { name: 'الخط الزمني للدفعة' });
 };
@@ -177,7 +177,8 @@ for (const width of [1440, 390]) {
 test('محرر الدفعة لم يعد يرسم الخط، ورابطه إلى تبويب «الرحلة» في ملفها', async ({ page }) => {
   await setup(page, 1440);
   await page.getByRole('navigation', { name: 'أقسام تطبيق القادة' }).getByRole('button', { name: 'البرامج والدفعات' }).click();
-  await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: 'تحرير', exact: true }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const ed = page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' });
   await expect(ed.locator('.jt')).toHaveCount(0);
   await ed.getByRole('button', { name: 'الرحلة بالتواريخ' }).click();

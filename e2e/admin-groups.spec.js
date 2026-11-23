@@ -27,7 +27,8 @@ test('المجموعات: عدد بحقل ومعاينة الحجم، وتواز
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.getByRole('button', { name: 'البرامج والدفعات' }).first().click();
   // المجموعات تبويب في «الفريق والمجموعات» منذ تصور ربط الخبراء بالجهة (المرحلة 1)
-  await page.getByRole('button', { name: 'الفريق والمجموعات' }).first().click();
+  await page.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).first().click();
+  await page.getByRole('menuitem', { name: 'الفريق والمجموعات' }).click();
   const dlg = page.getByRole('dialog', { name: 'الفريق والمجموعات: دفعة نوفمبر 2026' });
   await dlg.getByRole('tab', { name: 'المجموعات ونمط العمل' }).click();
   // الافتراضي نحو ستة في المجموعة: 50 ÷ 6 ≈ 8 مجموعات، والمعاينة تتبع الحقل

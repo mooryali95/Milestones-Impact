@@ -503,43 +503,50 @@ a { text-decoration: none; color: inherit; }
 .dash-body {
   max-width: 1360px;
   margin: 0 auto;
-  padding: 36px 32px;
+  padding: 20px 32px;
   width: 100%;
 }
 @media (max-width: 768px) { .dash-body { padding: 24px 16px; } }
 
 /* ─── عنوان الصفحة ─── */
+/* رأس مضغوط بسطر واحد (تدقيق 2026-11-23): العنوان ثم الوصف صغيرًا بجواره يُقص بنقاط وتمامه في التلميح، والتمهيد مخفي بصريًا */
 .page-header {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 32px;
-  padding-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
 }
-.page-header-left {}
+.page-header-left { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1 1 auto; }
 .page-eyebrow {
   /* عربي: بلا تباعد حروف (يفكّ اتصالها) وبحجم يُقرأ */
   font-size: 0.78rem;
   letter-spacing: 0;
   text-transform: none;
   color: var(--gold-text);
-  margin-bottom: 6px;
+  /* مخفي بصريًا ومسموع لقارئ الشاشة */
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
 .page-title {
   /* عنوان الصفحة عنصر h1 حقيقي لقارئ الشاشة والتنقل بالعناوين (التدقيق 2026-11-10، البند 9.15)، بشكله السابق */
   margin: 0;
   font-family: var(--font-en);
-  font-size: 1.9rem;
+  font-size: 1.35rem;
   font-weight: 500;
   color: var(--petrol);
   letter-spacing: -0.02em;
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .page-title-ar {
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   color: var(--ink-muted);
-  margin-top: 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .last-updated {
   font-size: 0.75rem;
@@ -1211,7 +1218,10 @@ a { text-decoration: none; color: inherit; }
 .of-switch { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: .88rem; }
 .of-switch input { width: 38px; height: 22px; appearance: none; background: var(--brand-line-strong); border-radius: 99px; position: relative; flex: none; cursor: pointer; transition: background .2s; margin: 0; }
 .of-switch input::after { content: ''; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: inset-inline-start .2s; }
-.of-switch input:checked { background: var(--petrol, var(--brand-slate)); } .of-switch input:checked::after { inset-inline-start: 19px; }
+/* المفعّل يُعرف بأكثر من موضع الدائرة (تدقيق 2026-11-23، WCAG 1.4.11): أرضية خضراء وعلامة ✓ في الدائرة، والمتوقف رمادي بدائرة فارغة.
+   الدائرة في جهة النهاية حين يُفعَّل (اليسار في العربية) كمفاتيح الأنظمة باتجاه من اليمين إلى اليسار */
+.of-switch input:checked { background: var(--st-ok, var(--petrol)); }
+.of-switch input:checked::after { inset-inline-start: 19px; content: '✓'; display: grid; place-items: center; font-size: 11px; line-height: 1; font-weight: 700; color: var(--st-ok, var(--petrol)); }
 .of-switch input:disabled { opacity: .5; cursor: default; }
 .of-switch span small { display: block; color: var(--ink-light, var(--brand-muted-soft)); font-size: .74rem; }
 .of-swatches { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -1356,9 +1366,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 /* تنبيه بلوغ حد القائمة: ما بعد الحد لا يُرى إلا ببحث على الخادم */
 .flt-cap { margin-top: 8px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--st-warn); background: color-mix(in srgb, var(--st-warn) 10%, transparent); font-size: .84rem; }
 /* رأس عمود يُفرز به: الزر يملأ الخانة ويرث خط الرأس */
-.th-sort { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; white-space: nowrap; }
+.th-sort { display: inline-flex; align-items: center; gap: 4px; min-block-size: 24px; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; white-space: nowrap; }
 .th-sort:hover, .th-sort:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
-.th-sort-ico { font-size: .7em; opacity: .45; }
+.th-sort-ico { font-size: .7em; opacity: .45; display: inline-grid; place-items: center; min-inline-size: 16px; }
+/* أهداف اللمس 24×24 على الأقل (WCAG 2.2 معيار 2.5.8، تدقيق 2026-11-23): خانات التحديد في الجداول ومصفوفة التوجيه،
+   والأزرار النصية الصغيرة وزر النسخ داخل الجداول
+   (الجداول المعلّمة بـ.t24: المشاركون، والخبراء، ومشاركو الجهة، وطلبات التواصل، ومصفوفة التوجيه؛ لا كل جدول فيتسع عرض جداول كثيفة الأعمدة) */
+.t24 input[type="checkbox"] { inline-size: 24px; block-size: 24px; margin: 0; vertical-align: middle; cursor: pointer; accent-color: var(--petrol-s); }
+.t24 input[type="checkbox"]:disabled { cursor: not-allowed; }
+.t24 button.la-link, .t24 a.la-link, .la-typed button.la-link { display: inline-flex; align-items: center; min-block-size: 24px; min-inline-size: 24px; }
+.t24 .copy-btn { min-block-size: 24px; min-inline-size: 24px; }
 .th-sort.ascending .th-sort-ico, .th-sort.descending .th-sort-ico { opacity: 1; color: var(--brand-gold-deep); }
 .flt-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 6px; background: var(--brand-cream); color: var(--brand-ink-soft); font-size: .8rem; }
 .flt-chip button { border: 0; background: none; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 1rem; line-height: 1; color: var(--brand-muted-soft); }
@@ -1486,6 +1503,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 .ft-switch { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--brand-line); border-radius: 10px; border-inline-start: 3px solid var(--st-warn); }
 .ft-switch.on { border-inline-start-color: var(--st-ok); }
 .ft-switch .la-chip { margin-top: 4px; }
+/* القسم المخفي عن المستخدمين في الشريط الجانبي: نقطة بتلميح ونص مسموع، لا شارة عريضة تكسر سطر الاسم (تدقيق 2026-11-23) */
+.ft-hidden-dot { position: relative; display: inline-block; flex: none; inline-size: 8px; block-size: 8px; margin-inline-start: 6px; border-radius: 50%; border: 2px solid var(--st-warn-text); background: transparent; vertical-align: middle; }
+.la-tabs button.on .ft-hidden-dot { border-color: currentColor; }
 .ft-hidden-badge { display: inline-block; margin-inline-start: 6px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--st-warn-text); color: var(--st-warn-text); font-size: 10.5px; line-height: 1.6; font-weight: 600; white-space: nowrap; vertical-align: middle; }
 .la-tabs button.on .ft-hidden-badge { border-color: currentColor; color: inherit; }
 .ft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--st-warn); background: color-mix(in srgb, var(--st-warn) 10%, transparent); font-size: .86rem; }
