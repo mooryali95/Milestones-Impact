@@ -71,7 +71,8 @@ test('النموذج العام: التركيز يدخل أول حقل ويبق�
   await setup(page);
   await leaders(page, 'البرامج والدفعات');
   const row = page.locator('.data-table tbody tr', { hasText: 'دفعة نوفمبر' });
-  await row.getByRole('button', { name: 'تحرير' }).click();
+  await row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' });
   await expect(form).toBeVisible();
   await expect.poll(() => focusedDialog(page)).toBe('دفعة: دفعة نوفمبر');
@@ -81,7 +82,8 @@ test('النموذج العام: التركيز يدخل أول حقل ويبق�
   expect(await tabsOutside(page, 30, 'Shift+Tab')).toBe(0);
   await page.keyboard.press('Escape');
   await expect(form).toBeHidden();
-  await expect(row.getByRole('button', { name: 'تحرير' })).toBeFocused();
+  // الإغلاق يعيد التركيز إلى زر القائمة ⋯ الذي فُتح منه (فعل أساسي واحد لكل صف منذ تدقيق 2026-11-23)
+  await expect(row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ })).toBeFocused();
 });
 
 test('النموذج العام: الإغلاق بتعديلات لم تُحفظ يسأل أولًا، بـEsc أو بالنقر خارجه أو بـ«إلغاء»', async ({ page }) => {
@@ -91,13 +93,15 @@ test('النموذج العام: الإغلاق بتعديلات لم تُحفظ
   const form = page.getByRole('dialog', { name: 'دفعة: دفعة نوفمبر' });
   const ask = page.getByRole('alertdialog');
   // بلا تعديل: Esc يغلق مباشرة
-  await row.getByRole('button', { name: 'تحرير' }).click();
+  await row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   await expect(form).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(form).toBeHidden();
   await expect(ask).toHaveCount(0);
   // بتعديل: Esc يسأل، وEsc على السؤال يلغيه وحده ويبقى ما كُتب
-  await row.getByRole('button', { name: 'تحرير' }).click();
+  await row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   await form.getByLabel('اسم الدفعة').fill('دفعة نوفمبر المعدلة');
   await page.keyboard.press('Escape');
   await expect(ask).toContainText('لديك تعديلات لم تُحفظ');
@@ -109,7 +113,8 @@ test('النموذج العام: الإغلاق بتعديلات لم تُحفظ
   await ask.getByRole('button', { name: 'إغلاق دون حفظ' }).click();
   await expect(form).toBeHidden();
   // «إلغاء» بتعديل يسأل أيضًا
-  await row.getByRole('button', { name: 'تحرير' }).click();
+  await row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   await form.getByLabel('اسم الدفعة').fill('تعديل آخر');
   await form.getByRole('button', { name: 'إلغاء' }).click();
   await expect(ask).toContainText('لديك تعديلات لم تُحفظ');
@@ -145,17 +150,20 @@ test('نوافذ البرامج: «قارن» والتقييم الختامي و
   await expect(page.getByRole('button', { name: 'قارن بالحالي' })).toBeFocused();
 
   // التقييم الختامي: التركيز في أول حقل، وEsc يغلقها
-  await page.getByRole('button', { name: 'التقييم الختامي' }).click();
+  const prgMore = page.getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).first();
+  await prgMore.click();
+  await page.getByRole('menuitem', { name: 'التقييم الختامي' }).click();
   const fin = page.getByRole('dialog', { name: 'إعداد التقييم الختامي' });
   await expect(fin).toBeVisible();
   await expect.poll(() => focusedDialog(page)).toBe('إعداد التقييم الختامي');
   expect(await tabsOutside(page, 15)).toBe(0);
   await page.keyboard.press('Escape');
   await expect(fin).toBeHidden();
-  await expect(page.getByRole('button', { name: 'التقييم الختامي' })).toBeFocused();
+  await expect(prgMore).toBeFocused();
 
   // الفريق والمجموعات (تبويب المجموعات ونمط العمل): Esc يغلقها، ونمط عمل لم يُحفظ يسأل قبل الإغلاق
-  await page.getByRole('button', { name: 'الفريق والمجموعات' }).click();
+  await page.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).first().click();
+  await page.getByRole('menuitem', { name: 'الفريق والمجموعات' }).click();
   const grp = page.getByRole('dialog', { name: /^الفريق والمجموعات:/ });
   await grp.getByRole('tab', { name: 'المجموعات ونمط العمل' }).click();
   await grp.getByLabel('نمط العمل في التدريب').selectOption({ index: 1 });
@@ -163,14 +171,16 @@ test('نوافذ البرامج: «قارن» والتقييم الختامي و
   await expect(page.getByRole('alertdialog')).toContainText('لديك تعديلات لم تُحفظ');
   await page.getByRole('alertdialog').getByRole('button', { name: 'إغلاق دون حفظ' }).click();
   await expect(grp).toBeHidden();
-  await page.getByRole('button', { name: 'الفريق والمجموعات' }).click();
+  await page.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).first().click();
+  await page.getByRole('menuitem', { name: 'الفريق والمجموعات' }).click();
   await grp.getByRole('tab', { name: 'المجموعات ونمط العمل' }).click();
   await expect(grp.getByLabel('نمط العمل في التدريب')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(grp).toBeHidden();
 
   // شهادة البرنامج
-  await page.getByRole('button', { name: /^الشهادة/ }).click();
+  await prgMore.click();
+  await page.getByRole('menuitem', { name: /^الشهادة/ }).click();
   const crt = page.getByRole('dialog', { name: 'شهادة برنامج القادة' });
   await expect(crt).toBeVisible();
   await expect.poll(() => focusedDialog(page)).toBe('شهادة برنامج القادة');

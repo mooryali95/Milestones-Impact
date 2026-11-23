@@ -143,7 +143,7 @@ export default function Contacts() {
         </>} />
 
       <div className="table-wrap">
-        <table className="data-table">
+        <table className="data-table t24">
           <thead><tr><SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><th>البريد</th><th>نوع الطلب</th><th>المصدر</th><SortTh k="date" state={f} set={setF}>التاريخ</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
           <tbody>
             {!rows ? <tr className="loading-row"><td colSpan={7}><Spinner /></td></tr>

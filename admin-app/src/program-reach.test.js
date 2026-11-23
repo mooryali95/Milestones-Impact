@@ -61,7 +61,8 @@ describe('صفحة البرامج', () => {
   const src = read('admin-app/src/screens/Programs.jsx');
   it('«برنامج جديد من هذا» بدل «تكرار»، ويسبقه سؤال «لجهة بعينها؟»', () => {
     expect(src).not.toMatch(/>تكرار</);
-    expect(src).toContain('>برنامج جديد من هذا</button>');
+    // في قائمة ⋯ لبطاقة البرنامج منذ تدقيق اللوحة 2026-11-23 (فعل أساسي واحد)
+    expect(src).toContain("{ label: 'برنامج جديد من هذا', run: () => newProgram(p.id) }");
     expect(src).toMatch(/if \(from && !\(await confirm\(`لجهة بعينها؟ خصّص دفعتها بدل النسخ/);
   });
   it('«يسري على» من الدالة الواحدة', () => {

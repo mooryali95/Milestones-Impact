@@ -27,6 +27,12 @@
 .la-load { padding: 60px; display: grid; place-items: center; }
 .la-err { background: var(--st-bad-bg); color: var(--st-bad); padding: 10px 14px; border-radius: 6px; font-size: .86rem; }
 .la-err-detail { display: block; margin-block-start: 6px; font-size: .74rem; opacity: .8; overflow-wrap: anywhere; }
+.la-err-more { margin-block-start: 6px; font-size: .76rem; }
+.la-err-more > summary { cursor: pointer; opacity: .85; min-block-size: 24px; }
+/* شبكة أمان: شريط خطأ وصل بلا نص (رد بلا message) لا يبقى ورديًا صامتًا (تدقيق 2026-11-23) */
+.la-err:empty::before { content: 'تعذّر إتمام الطلب الآن. أعد المحاولة بعد قليل.'; }
+/* حالة فارغة محايدة داخل البطاقات: «لا بيانات» ليست خطأ فلا تأخذ لون الخطأ */
+.la-empty-note { background: var(--sand-light); color: var(--ink-soft); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 10px 14px; font-size: .86rem; margin: 14px 0; }
 .la-note { background: var(--sand-light); border-inline-start: 3px solid var(--gold); padding: 10px 14px; margin: 14px 0; font-size: .84rem; }
 .la-muted { color: var(--ink-light); font-size: .82rem; }
 .la-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
@@ -657,15 +663,23 @@
    (كانت العناوين والبنود بوزن واحد فلا يُعرف العنوان من البند، والعمود نصًا عائمًا بلا حدود) */
 @media (min-width: 1100px) {
   .la-shell { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 28px; align-items: start; }
-  .la-shell > .la-tabs-grouped { position: sticky; top: 74px; margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin;
-    background: #fff; border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px; }
-  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 1px; padding: 6px 0; }
+  /* ملتصق بارتفاع الشاشة بتمرير داخلي: ظل أعلى وأسفل يظهر وحده حين يبقى ما لم يُعرض (تقنية ظلال التمرير بخلفيات local/scroll)،
+     وشريط التمرير ظاهر دائمًا، فلا يبدو آخر البنود مقصوصًا بلا دليل (تدقيق 2026-11-23) */
+  .la-shell > .la-tabs-grouped { position: sticky; top: 70px; margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - 82px); overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; overscroll-behavior: contain;
+    border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px;
+    background:
+      linear-gradient(#fff 30%, rgba(255,255,255,0)) top / 100% 28px no-repeat local,
+      linear-gradient(rgba(255,255,255,0), #fff 70%) bottom / 100% 28px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgba(11,39,47,.22), rgba(11,39,47,0)) top / 100% 10px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgba(11,39,47,.22), rgba(11,39,47,0)) bottom / 100% 10px no-repeat scroll,
+      #fff; }
+  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 1px; padding: 4px 0; }
   .la-shell .la-tab-group + .la-tab-group { border-top: 1px solid var(--line); }
-  .la-shell .la-tabs .la-tab-group-label, .la-shell .la-tab-group-label { width: 100%; justify-content: space-between; min-height: 30px; padding: 4px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--ink-light); }
+  .la-shell .la-tabs .la-tab-group-label, .la-shell .la-tab-group-label { width: 100%; justify-content: space-between; min-height: 26px; padding: 2px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--ink-light); }
   .la-shell .la-tab-group-label::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; margin-inline-start: auto; }
   .la-shell .la-tab-group.shut .la-tab-group-label::after { transform: rotate(135deg); }
   .la-shell .la-tab-group-label:hover { color: var(--ink-soft); }
-  .la-shell .la-tab-group > button:not(.la-tab-group-label) { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 34px; text-align: start; padding: 6px 10px; border-radius: 8px; background: transparent; font-weight: 500; font-size: .86rem; color: var(--ink); position: relative; }
+  .la-shell .la-tab-group > button:not(.la-tab-group-label) { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 30px; text-align: start; padding: 4px 10px; border-radius: 8px; white-space: nowrap; background: transparent; font-weight: 500; font-size: .86rem; color: var(--ink); position: relative; }
   .la-shell .la-tab-group.shut > button:not(.la-tab-group-label) { display: none; }
   .la-shell .la-tab-group > button:not(.la-tab-group-label):hover { background: var(--sand-light); }
   .la-shell .la-tab-group > button.on { background: var(--petrol-s); color: #fff; font-weight: 600; }
@@ -1448,8 +1462,13 @@
 .pj-move-hint { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--gold-pale); color: var(--ink, inherit); font-size: 13px; line-height: 1.7; }
 
 /* «صحة المنصة» في النظرة العامة (Overview.jsx PlatformHealth): صف لكل فحص بنقطة لونه وسطر علاجه */
-.ph-card { margin: 14px 0; }
-.ph-title { margin: 0 0 8px; font-size: 1rem; }
+.ph-card { margin: 14px 0; padding-block: 8px; }
+.ph-title { font-size: .95rem; cursor: pointer; min-block-size: 24px; }
+.ph-details[open] > .ph-title { margin-bottom: 8px; }
+/* أدوات التجربة: مطوية في آخر النظرة العامة (تدقيق 2026-11-23) */
+.today-tools { margin: 18px 0 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.today-tools > summary { cursor: pointer; font-weight: 600; min-block-size: 24px; padding: 4px 0; }
+.today-tools[open] > summary { margin-bottom: 8px; }
 .ph-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .ph-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; border-inline-start: 3px solid var(--st-ok); }
 .ph-row.ph-warn { border-inline-start-color: var(--st-warn); background: var(--st-warn-bg); }

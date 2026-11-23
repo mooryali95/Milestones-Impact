@@ -347,7 +347,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
             <OrgSelect orgs={orgs} value={moveTo} onChange={setMoveTo} all="نقل إلى جهة…" label="نقل إلى جهة" />
             <button className="btn-sm primary" onClick={move}>نقل</button></div>
         )}
-        <div className="table-wrap"><table className="data-table">
+        <div className="table-wrap"><table className="data-table t24">
           <thead><tr>
             {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={() => setPicked((s) => { const n = new Set(s); rows.forEach((p) => (allOn ? n.delete(p.id) : n.add(p.id))); return n; })} /></th>}
             <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="title" state={f} set={setF}>المسمى</SortTh><SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="seen" state={f} set={setF}>آخر دخول</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>

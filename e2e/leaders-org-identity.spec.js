@@ -82,7 +82,9 @@ test('شهادة البرنامج: يُحفظ ما يختلف عن العام ف
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.getByRole('button', { name: 'البرامج والدفعات' }).click();
-  await page.getByRole('button', { name: 'الشهادة (مخصصة)' }).click();
+  // أفعال البرنامج الثانوية في قائمة ⋯ منذ تدقيق اللوحة 2026-11-23
+  await page.locator('section.la-card', { hasText: 'برنامج سفراء' }).getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).click();
+  await page.getByRole('menuitem', { name: 'الشهادة (مخصصة)' }).click();
   const dlg = page.getByRole('dialog', { name: 'شهادة برنامج سفراء' });
   await expect(dlg.getByLabel('الساعات التدريبية')).toHaveValue('24');
   await expect(dlg.getByLabel('اسم البرنامج على شهادات البرنامج')).toHaveAttribute('placeholder', 'برنامج القادة');

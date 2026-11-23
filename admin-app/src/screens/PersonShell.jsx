@@ -107,7 +107,7 @@ export function MoreMenu({ items, label = 'إجراءات أخرى' }) {
           {shown.map((it) => (
             <li key={it.label} role="none">
               <button type="button" role="menuitem" tabIndex={-1} className={it.danger ? 'danger' : ''} title={it.title}
-                onClick={() => { setOpen(false); it.run(); }}>{it.label}</button>
+                onClick={() => { setOpen(false); btn.current?.focus(); it.run(); }}>{it.label}</button>
             </li>
           ))}
         </ul>

@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════
 // مكتب اليوم (نظرة عامة على تطبيق القادة): ماذا أفعل اليوم؟
 // ════════════════════════════════════════════════════════════════
-// المرحلة 3أ من تصور لوحة الإدارة (4.3): التحية والتاريخ وشارة صحة واحدة، ثم «قرارات اليوم» (صندوق admin.inbox نفسه)،
-// ثم أربعة أرقام من الصندوق والنظرة العامة، ثم (المرحلة 3ب) «تنبيهات» و«نبض الدفعات» من admin.today، ثم روابط سريعة،
+// المرحلة 3أ من تصور لوحة الإدارة (4.3): التحية والتاريخ، ثم «قرارات اليوم» (صندوق admin.inbox نفسه)، ثم أربعة أرقام
+// من الصندوق والنظرة العامة، ثم شارة صحة واحدة (تدقيق 2026-11-23 قدّم القرارات عليها)، ثم (المرحلة 3ب) «تنبيهات» و«نبض الدفعات» من admin.today، ثم روابط سريعة،
 // ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
 // بطاقات التحليل انتقلت إلى «الرؤية الشاملة» (Analytics.jsx)، والمنطق الخالص للأرقام والشارة في today.js.
 import React, { useEffect, useState } from 'react';
@@ -170,7 +170,6 @@ function HealthBadge({ h, orgs, orgsLoaded = true, onOrg, onTab, canWrite }) {
         <OpsHealthCard enabled={writer} isSuper={isSuperAdmin()} />
         {!h?.success && <p className="la-note" role="status">تعذّرت قراءة حالة النظام{writer ? ' وجاهزية الإطلاق' : ''} الآن، فلا يُعرف إن كانت سليمة. أعد فتح الصفحة بعد قليل.</p>}
         <Health h={h} />
-        {writer && <DemoCard />}
         {writer && <Readiness items={h?.readiness} onTab={onTab} />}
         {writer && onOrg && <OrgsReadiness orgs={orgs} onOrg={onOrg} />}
         {!bad && !checking && !writer && <p className="la-muted">حالة النظام سليمة.</p>}
@@ -316,8 +315,10 @@ function PlatformHealth() {
   if (!r.success) return <p className="la-muted small ph-err">تعذّرت قراءة صحة المنصة الآن.</p>;
   if (!Array.isArray(r.checks) || !r.checks.length) return null;
   return (
+    // مضغوطة: سطر عنوان مطوي حين تسلم الفحوص كلها، ومفتوحة وحدها عند أي خلل (تدقيق 2026-11-23)
     <section className="la-card ph-card" aria-label="صحة المنصة" data-level={r.level}>
-      <h3 className="ph-title">صحة المنصة <small className="la-muted">· {PH_LEVEL_AR[r.level] || ''}</small></h3>
+      <details className="ph-details" open={r.level !== 'ok'}>
+      <summary className="ph-title"><b>صحة المنصة</b> <small className="la-muted">· {PH_LEVEL_AR[r.level] || ''}</small></summary>
       <ul className="ph-rows">
         {r.checks.map((c) => (
           <li key={c.key} className={`ph-row ph-${c.level}`} data-level={c.level}>
@@ -328,6 +329,7 @@ function PlatformHealth() {
           </li>
         ))}
       </ul>
+      </details>
     </section>
   );
 }
@@ -368,15 +370,15 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
           <p className="la-muted today-date">{dayFull()}</p>
         </div>
       </header>
-      <HealthBadge h={h} orgs={orgs} orgsLoaded={orgsLoaded} onOrg={onOrg} onTab={onTab} canWrite={canWrite} />
       {/* جلسة رمز البريد: شريط «للقراءة فقط» بزر «فعّل الكتابة» في إطار اللوحة (App.jsx) لا هنا، فيظهر في كل صفحة */}
-
+      {/* تدقيق اللوحة 2026-11-23 (المرحلة 1): «قرارات اليوم» أول كتلة، والصحة سطر واحد بعدها يتمدد وحده عند الخلل */}
       <h2 className="today-sec">قرارات اليوم</h2>
       {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox) */}
       <div id="today-decisions" tabIndex={-1} className="today-decisions">
         <Inbox contacts={pending?.contacts || 0} canWrite={canWrite} onPerson={onPerson} view={view} onView={setView} />
       </div>
       <TodayNumbers nums={nums} onView={toDecisions} onTab={onTab} />
+      <HealthBadge h={h} orgs={orgs} orgsLoaded={orgsLoaded} onOrg={onOrg} onTab={onTab} canWrite={canWrite} />
       {!o.success && <div className="la-err" role="alert">{o.message || 'تعذّرت قراءة أرقام النظرة العامة.'}</div>}
       <Alerts t={today} />
       <Pulse t={today} />
@@ -384,6 +386,13 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
       <QuickLinks onTab={onTab} canWrite={canWrite} />
       <PlatformHealth />
       <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
+      {/* أدوات التجربة (الحساب التجريبي وروابطه) ليست عملًا يوميًا: في آخر الصفحة مطوية، ووظيفتها كما هي */}
+      {canWrite !== false && (
+        <details id="today-tools" className="today-tools">
+          <summary>أدوات التجربة <small className="la-muted">· الحساب التجريبي وروابط التجربة</small></summary>
+          <DemoCard />
+        </details>
+      )}
     </>
   );
 }

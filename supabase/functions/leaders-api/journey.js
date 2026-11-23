@@ -16,7 +16,8 @@ import { countedDef, countedItems } from './optional.js';
 //   {ready_min} عتبة جاهزية مشروع التخرج               {assessment_minutes} مدة القياس المبدئي
 const FEM = { 3: 'ثلاث', 4: 'أربع', 5: 'خمس', 6: 'ست', 7: 'سبع', 8: 'ثماني', 9: 'تسع', 10: 'عشر' };
 const MASC = { 3: 'ثلاثة', 4: 'أربعة', 5: 'خمسة', 6: 'ستة', 7: 'سبعة', 8: 'ثمانية', 9: 'تسعة', 10: 'عشرة' };
-const counted = (n, one, two, few, many, words) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${words ? words[n] : n} ${few}` : `${n} ${many}`);
+// عدد مجهول أو غير صالح يُعرض «—» لا «undefined أيام»، والصفر وما لا كلمة له في words يُكتب رقمًا (تدقيق اللوحة 2026-11-23)
+const counted = (n, one, two, few, many, words) => (!Number.isFinite(n) ? '—' : n === 1 ? one : n === 2 ? two : n <= 10 ? `${(words && words[n]) || n} ${few}` : `${n} ${many}`);
 export const sessionsAr = (n) => counted(n, 'جلسة واحدة', 'جلستان', 'جلسات', 'جلسة', FEM);
 export const daysAr = (n) => counted(n, 'يوم واحد', 'يومان', 'أيام', 'يومًا', MASC);
 // بعد حرف جر («بعد يومين»): المثنى مجرور، والمجهول «؟ يومًا»

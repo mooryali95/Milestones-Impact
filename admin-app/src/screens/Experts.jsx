@@ -322,7 +322,7 @@ export default function Experts({ canWrite, expertId, onOpen, onPerson }) {
             capped={d.capped ? { limit: d.limit } : null}
             actions={<ExportButton scope="experts" meta={{ kind: 'EXP', title: 'شبكة الخبراء', sheet: 'الخبراء', file: 'Experts' }} columns={EXPERT_COLS} all={all} filtered={rows} noun="خبير" />} />
           {!all.length ? <Empty title="لا خبراء بعد" hint="أضف أول خبير، أو شارك رابط «انضم كخبير»." /> : (
-            <div className="table-wrap"><table className="data-table la-cards ex-table">
+            <div className="table-wrap"><table className="data-table la-cards ex-table t24">
               <thead><tr><SortTh k="name" state={f} set={setF}>الخبير</SortTh><th>الأدوار</th><th>الأبعاد</th><SortTh k="hours" state={f} set={setF}>الطاقة</SortTh><SortTh k="given" state={f} set={setF}>ما قدّمه</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
               <tbody>{rows.length ? rows.map((e) => (
                 <tr key={e.id} className="la-click" tabIndex={0} onClick={() => onOpen(e.id)} onKeyDown={(k) => { if (k.key === 'Enter') onOpen(e.id); }}>

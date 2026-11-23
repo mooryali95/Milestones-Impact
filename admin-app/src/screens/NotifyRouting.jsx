@@ -114,7 +114,7 @@ export default function NotifyRouting() {
       </div>
 
       <div className="la-table-wrap">
-        <table className="la-table nr-matrix">
+        <table className="la-table nr-matrix t24">
           <thead><tr><th scope="col">الحدث</th><th scope="col">الطبقة</th>{CHANNELS.map((c) => <th key={c} scope="col">{CHANNEL_AR[c]}</th>)}<th scope="col">{CHANNEL_AR.log}</th></tr></thead>
           {groups.map(([cat, label, rows]) => (
             <tbody key={cat}>

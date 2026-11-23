@@ -122,7 +122,9 @@ describe('الإدارة: الميزات قيد البناء', () => {
   it('شارة «مخفي عن المستخدمين» وشريط على أقسام القاعة وكاتون و360', () => {
     expect(FEATURE_TABS).toEqual({ hall: 'hall', katon: 'katon', f360: 'f360' });
     const src = read('admin-app/src/screens/Leaders.jsx');
-    expect(src).toContain('<span className="ft-hidden-badge">مخفي عن المستخدمين</span>');
+    // نقطة بتلميح ونص مسموع بدل الشارة العريضة التي كانت تكسر سطر الاسم (تدقيق اللوحة 2026-11-23)
+    expect(src).toContain('<span className="ft-hidden-dot" title="مخفي عن المستخدمين"><span className="sr-only">مخفي عن المستخدمين</span></span>');
+    expect(read('admin-app/src/admin.css').match(/\.ft-hidden-dot \{[^}]*\}/)[0]).toContain('var(--st-warn-text)');
     expect(src).toContain('data-testid="feature-hidden-banner"');
   });
 });

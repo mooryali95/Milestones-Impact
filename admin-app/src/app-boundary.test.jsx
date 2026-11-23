@@ -27,6 +27,12 @@ describe('الحاجز الأخير حول اللوحة', () => {
     expect(alert).not.toBeNull();
     expect(alert.textContent).toContain('تعذّر عرض اللوحة');
     expect(alert.textContent).toContain('TypeError: x is undefined');
+    // النص التقني مطوي تحت «تفاصيل تقنية» لا ظاهر في وجه المدير
+    const more = alert.querySelector('details.la-err-more');
+    expect(more).not.toBeNull();
+    expect(more.open).toBe(false);
+    expect(more.querySelector('summary').textContent).toBe('تفاصيل تقنية');
+    expect(more.textContent).toContain('TypeError: x is undefined');
     expect([...alert.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['حاول مرة أخرى', 'أعد تحميل الصفحة']);
   });
 
