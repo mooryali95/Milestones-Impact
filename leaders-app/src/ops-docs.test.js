@@ -20,7 +20,7 @@ describe('الوثائق الثلاث', () => {
   it('صفحة الجهات تطابق السياسة والكود', () => {
     for (const s of ['ap-south-1', 'مومباي', 'Cloudflare R2', 'لا يملكه Cloudflare', 'RPO', 'RTO', '72 ساعة', `${MAIL_RETENTION} يومًا`, '90 يومًا', 'لمن وافق من المشاركين وحده']) expect(facts).toContain(s);
     for (const [title, what] of Object.values(VIEWER_PERM_AR)) { expect(facts).toContain(title); expect(facts).toContain(what); }
-    expect(read('leaders-app/src/screens/Legal.jsx')).toContain('مومباي بالهند');
+    expect(read('leaders-app/src/screens/Legal.jsx')).toContain('في الهند');
   });
   it('خطة الحوادث بمستويات وأدوار وإخطار وقوالب وسجل', () => {
     for (const s of ['ح1', 'ح2', 'ح3', 'ح4', 'قائد الحادث', 'مسؤول حماية البيانات', 'خلال 72 ساعة من العلم به', '5.1', '5.2', '5.3', 'سجل الحوادث', '42703']) expect(incident).toContain(s);

@@ -85,7 +85,8 @@ describe('الواجهة', () => {
   it('أول مرة بلا تأجيل، والتجديد سطر واحد بلا تفاصيل وزر «لاحقًا»', () => {
     const first = renderToStaticMarkup(React.createElement(Consent, { consent: consentState(null, null), onAccepted: () => {} }));
     expect(first).toContain('خصوصيتك وشروط البرنامج');
-    expect(first).toContain('مومباي');
+    expect(first).toContain('خارج المملكة');
+    expect(first).not.toContain('مومباي');
     expect(first).not.toContain('لاحقًا');
     const renew = renderToStaticMarkup(React.createElement(Consent, { consent: consentState('2026-11-06', '2026-11-06T10:00:00Z'), onAccepted: () => {}, onLater: () => {} }));
     for (const s of ['حدّثنا سياسة الخصوصية والشروط', 'وافق لنتابع', 'أوافق وأتابع', 'لاحقًا', 'سجل التغييرات']) expect(renew).toContain(s);
@@ -111,9 +112,9 @@ describe('الواجهة', () => {
 describe('نص الوثائق', () => {
   it('السياسة تجمع حقائق القرارات بمكان كل معالج', () => {
     const legal = read('leaders-app/src/screens/Legal.jsx');
-    for (const s of ['مومباي بالهند', 'Cloudflare R2', 'لا يملكه Cloudflare', '180 يومًا', 'الشهرية سنة', 'خارج المملكة العربية السعودية', 'اتفاقية معالجة بيانات',
+    for (const s of ['في الهند', 'Cloudflare R2', '180 يومًا', 'الشهرية سنة', 'خارج المملكة العربية السعودية', 'اتفاقية معالجة بيانات',
       'حالة التحقق منه', 'إشعار خصوصية خاص به', 'بلا اسمك', 'لا تدخل تقييمك الختامي', 'شهادة إتمام بنجاح', 'تُعلَّق', 'بعد اعتماد مستشارك مسارك', 'سجل موافقاتك']) expect(legal).toContain(s);
-    expect(legal).not.toMatch(/AWS Lambda|Amplify/);
+    expect(legal).not.toMatch(/AWS|مومباي|مهشّرة|لا يملكه Cloudflare/);
   });
   it('سجل التغييرات صفحة من المصدر نفسه', () => {
     const html = renderToStaticMarkup(React.createElement(Changes));
