@@ -43,7 +43,7 @@ test('اللوحة في رحلة واحدة: هيكل أثناء التحميل�
   await page.goto(PORTAL);
   await expect(page.locator('[aria-busy="true"][aria-label="جارٍ تحميل لوحتك"]')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'أهلًا د. سارة الحربي' })).toBeVisible();
-  await expect(page.getByText('بانتظار تقييمك')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^للقراءة/ })).toBeVisible();
   await expect(page.getByText('خالد العتيبي').first()).toBeVisible();
   expect(calls.map((c) => c.action)).toEqual(['xp.dashboard']);
 });

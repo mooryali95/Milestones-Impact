@@ -99,7 +99,7 @@ describe('أوامر القرار تحدّث العدّادات: لكل نوع �
   const byKind = {
     approval: ['admin.approve', 'admin.approve-bulk'],
     requirement: ['admin.review'],
-    model: ['admin.review-submission'],
+    model: ['admin.review-submission', 'admin.review-bulk'],
     capstone: ['admin.capstone-review'],
     expert_application: ['admin.expert-set-status'],
     expert_unmatched: ['admin.expert-match', 'admin.expert-assign', 'admin.expert-request-cancel', 'admin.expert-request-retry'],

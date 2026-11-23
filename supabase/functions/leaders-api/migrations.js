@@ -170,6 +170,7 @@ export const MIGRATIONS = [
   '20261124100000_leaders_guidance_guard',
   '20261125100000_leaders_payment_creem_check',
   '20261126100000_leaders_sponsor_codes',
+  '20261127100000_leaders_model_review_light',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -255,4 +256,5 @@ export const MIGRATION_GATES = {
   '20261123100000_leaders_demo_per_cohort': ["tolerant", "قبله كل شيء كما كان بالحساب التجريبي الواحد وروابطه، وفتح حساب دفعة يُرد بـnot_migrated واللوحة تعرض «غير مفعّلة بعد» (demo-cohort.ts: demoCohortReady يسأل عن demo_links.cohort_id في كل طلب حتى يوجد)، وبعده تُفعَّل بلا نشر"],
   '20261125100000_leaders_payment_creem_check': ["tolerant", "الدالة تكتب العمود بتحديث منفصل يتحمل غيابه (payments.ts storeCheck)، وتقرأ الإعداد بـ* فتعمل قبل الترحيل وبعده"],
   '20261126100000_leaders_sponsor_codes': ["tolerant", "قبله يرد نموذج «رشّحتك جهة؟» كل رمز ردَّ الرمز غير المعروف (sponsor-codes.ts: غياب الجدول أو الدالة"],
+  '20261127100000_leaders_model_review_light': ["tolerant", "الدالة تعمل قبله وبعده: modelStatus (logic.js) يقرأ accept من الإعداد كما هو، فقبله تبقى الفصول الخمسة"],
 };

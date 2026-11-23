@@ -399,7 +399,15 @@ export function signInMail(name: string, code: string, link: string, isNew: bool
 
 // ── الرحلة ──
 // قرار المستشار على بند أو نموذج: أُعيد للتعديل، أو اعتُمد
-export function reviewMail(name: string, title: string, returned: boolean, note?: string | null) {
+// light: نموذج يُحتسب بالتسليم («بوابتان، والباقي ملاحظات»): الإعادة طلب تعديل لا يحبس الرحلة، والقبول ملاحظة لا اعتماد. who: من راجع
+export function reviewMail(name: string, title: string, returned: boolean, note?: string | null, light?: { who: string }) {
+  if (light) {
+    return shell('journey', returned ? `${esc(light.who)} يقترح تعديلًا على عملك` : `ملاحظة من ${esc(light.who)} على عملك`,
+      mailText(`${hello(name)} ${returned ? `قرأ ${esc(light.who)} «${bdi(title)}» ويقترح تعديله. يبقى محتسبًا في رحلتك، وفتحناه لك لتعدّله وتسلّمه من جديد.` : `قرأ ${esc(light.who)} «${bdi(title)}» وكتب لك ملاحظة.`}`)
+      + (note ? mailNote(bdi(note)) : '')
+      + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+      returned ? `اقتراح تعديل على «${title}»` : `ملاحظة على «${title}»`);
+  }
   return shell('journey', returned ? 'ملاحظة من المستشار على عملك' : 'اعتُمد عملك',
     mailText(`${hello(name)} ${returned ? `راجع المستشار «${bdi(title)}» وطلب تعديلًا قبل اعتماده.` : `راجع المستشار «${bdi(title)}» واعتمده. أحسنت، خطوة أخرى في رحلتك.`}`)
     + (returned && note ? mailNote(bdi(note)) : '')

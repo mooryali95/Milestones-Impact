@@ -73,9 +73,24 @@ export const MARK_REASON_MAX = 300;
 export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 
 // حالات العمل المسلَّم (نموذج تعليمي أو فصل): بصوت المشارك، وما تقوله الإدارة يختلف في المخاطَب فقط
-export const SUBMISSION_STATUS = { draft: 'قيد العمل', submitted: 'بانتظار تقييم المستشار', returned: 'أُعيد إليك للتطوير', reviewed: 'قيّمه المستشار' };
+// «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والمراجع يقرأ ويكتب ملاحظة أو يطلب تعديلًا.
+// بطاقة المبادرة وحدها بوابة تنتظر الاعتماد (MODEL_GATE_STATUS)
+export const SUBMISSION_STATUS = { draft: 'قيد العمل', submitted: 'سُلّم، ويُحتسب في رحلتك', returned: 'يحتاج تعديلًا منك', reviewed: 'قُرئ' };
 // وهي نفسها حالة فصل وثيقة المبادرة في لوحة المراجعة
-export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: 'مسودة', submitted: 'بانتظار تقييمك', returned: 'أُعيد للتطوير', reviewed: 'قُيّم' };
+export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: 'مسودة', submitted: 'للقراءة', returned: 'يحتاج تعديلًا', reviewed: 'قُرئ' };
+// من يراجع نماذج المشارك: مستشاره الفعلي، وبلا مستشار فريق البرنامج (الإدارة). مصدر واحد للنص في الخادم والتطبيقين
+export const REVIEWER_AR = Object.freeze({ advisor: 'المستشار', team: 'فريق البرنامج' });
+// النموذج البوابة (بطاقة المبادرة): حالته بانتظار الاعتماد لا «سُلّم»، والاعتماد قرار
+export const MODEL_GATE_STATUS = Object.freeze({
+  submitted: (who = 'advisor') => `بانتظار اعتماد ${REVIEWER_AR[who] || REVIEWER_AR.advisor}`,
+  reviewed: 'اعتُمدت',
+});
+// حالة نموذج المشارك كما يراها: gate للبطاقة، reviewer من يراجعه (advisor أو team)
+export function modelStatusAr(status, { gate = false, reviewer = 'advisor' } = {}) {
+  if (gate && status === 'submitted') return MODEL_GATE_STATUS.submitted(reviewer);
+  if (gate && status === 'reviewed') return MODEL_GATE_STATUS.reviewed;
+  return SUBMISSION_STATUS[status] || '';
+}
 // جلسات التوجيه: COACH_STATUS بصوت المشارك، وCOACH_STATUS_ADMIN للإدارة وملف الخبير معًا (لا تُكتب نسخة ثالثة في شاشة)
 export const COACH_STATUS = { booked: 'محجوزة', requested: 'اتصال فوري', attended: 'حضرت', no_show: 'لم تحضر', cancelled: 'أُلغيت' };
 export const COACH_STATUS_ADMIN = { ...COACH_STATUS, attended: 'حضر', no_show: 'لم يحضر' };

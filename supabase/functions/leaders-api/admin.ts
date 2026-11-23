@@ -12,7 +12,8 @@ import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { MAIL_GUARD_ACTIONS, planCutoffFor, planGuard } from './cohort-plan.js';
-import { DIM_AR, expertRoleAr, RUBRIC_SCALE } from './labels.js';
+import { DIM_AR, expertRoleAr, REVIEWER_AR, RUBRIC_SCALE } from './labels.js';
+import { bulkReadIds, isGateModel } from './model-review.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
@@ -1282,12 +1283,26 @@ export async function bookPreview(b: Body) {
 
 export async function submissions(b: Body) {
   let q = listed(db.from('model_submissions')
-    .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants!inner(full_name, email, organization_name, is_demo), learning_models(title_ar, dimension, points)')
+    .select('id, status, rating, bonus, submitted_at, reviewed_at, updated_at, model_id, participant_id, participants!inner(id, full_name, email, organization_name, organization_id, is_demo), learning_models(key, title_ar, dimension, points)')
     .neq('status', 'draft'), 'participants').order('submitted_at', { ascending: false }).limit(LIST_LIMIT);
   if (b.status) q = q.eq('status', String(b.status));
   if (b.model_id) q = q.eq('model_id', String(b.model_id));
   const rows = (must(await q) ?? []) as any[];
-  return { success: true, submissions: rows, ...capInfo(rows) };
+  return { success: true, submissions: rows, no_advisor: await noAdvisorOf(rows), ...capInfo(rows) };
+}
+
+// من ينتظر تسليمه القراءة وليس له مستشار: مراجعته عند فريق البرنامج (model-review.js). يُحسب لمن له «للقراءة» وحده،
+// ومن تعذّر تحديد مستشاره لا يُعدّ بلا مستشار (لا تخمين في الصلاحية)
+export async function noAdvisorOf(rows: any[]): Promise<string[]> {
+  const { advisorOf } = await import('./advisor.ts');
+  const waiting = new Map<string, any>();
+  for (const r of rows) if (r.status === 'submitted' && r.participants && !waiting.has(r.participant_id)) waiting.set(r.participant_id, r.participants);
+  const out: string[] = [];
+  for (const [pid, p] of waiting) {
+    const adv = await advisorOf({ ...p, id: pid }).catch(() => undefined);
+    if (adv === null) out.push(pid);
+  }
+  return out;
 }
 
 export async function submission(b: Body) {
@@ -1304,15 +1319,19 @@ export async function reviewSubmission(a: Admin, b: Body) {
 }
 
 // التقييم نفسه للإدارة وللمستشار الأساسي من بوابته؛ المقيّم يُسجَّل باسمه (reviewed_by)
+// «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): في النموذج العادي reviewed «ملاحظة» (قُرئ، بتقدير ونقاط اختيارية)،
+// وreturned «يحتاج تعديلًا» يفتحه للمشارك ولا يحبس رحلته (logic.js modelStatus). بطاقة المبادرة وحدها اعتماد أو إعادة كما كانت
 export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'system', b: Body) {
   const status = b.status === 'returned' ? 'returned' : 'reviewed';
   // D08: السلّم الرباعي الواحد (labels.js)
   const rating = b.rating ? Math.max(1, Math.min(RUBRIC_SCALE.levels.length, Math.round(Number(b.rating)))) : null;
   const bonus = Math.max(0, Math.min(100, Math.round(Number(b.bonus) || 0)));
+  const feedback = String(b.feedback || '').slice(0, 4000) || null;
   const s = must(await db.from('model_submissions').update({
-    status, rating, bonus, feedback_ar: String(b.feedback || '').slice(0, 4000) || null,
+    status, rating, bonus, feedback_ar: feedback,
     reviewed_at: new Date().toISOString(), reviewed_by: reviewer,
-  }).eq('id', String(b.id)).select('id, participant_id, learning_models(title_ar)').single()) as any;
+  }).eq('id', String(b.id)).select('id, participant_id, learning_models(title_ar, key)').single()) as any;
+  const gate = isGateModel(s.learning_models?.key);
   if (status === 'reviewed' && bonus) {
     await db.from('points_ledger').upsert({ participant_id: s.participant_id, source: 'review', ref_id: s.id, points: bonus, note: `تميّز: ${s.learning_models?.title_ar || ''}` },
       { onConflict: 'participant_id,source,ref_id' });
@@ -1324,12 +1343,35 @@ export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'sys
     const times = (prior || []).filter((x: any) => x.after?.status === 'returned').length;
     if (times >= MODEL_RETURN_COUNT) await OB.record(s.participant_id, { code: 'model_returned_again', ref: `${s.id}:${times}`, ...RULES.model_returned_again({ title: s.learning_models?.title_ar, times }) });
   }
+  // النموذج العادي المقروء بلا ملاحظة: لا بريد (القراءة وحدها لا تحتاج إشعارًا)
+  if (!gate && status === 'reviewed' && !feedback) return { success: true };
   const { data: who } = await db.from('participants').select('full_name, email').eq('id', s.participant_id).single();
   if (who?.email) {
-    sendMail(who.email, status === 'returned' ? 'ملاحظة على نموذجك' : 'اعتُمد نموذجك',
-      reviewMail(who.full_name, s.learning_models?.title_ar || 'النموذج التعليمي', status === 'returned', b.feedback)).catch((e) => console.error(e));
+    const title = s.learning_models?.title_ar || 'النموذج التعليمي';
+    const light = gate ? undefined : { who: actor === 'admin' ? REVIEWER_AR.team : 'مستشارك' };
+    sendMail(who.email, status === 'returned' ? (gate ? 'ملاحظة على نموذجك' : 'اقتراح تعديل على نموذجك') : (gate ? 'اعتُمد نموذجك' : 'ملاحظة على نموذجك'),
+      reviewMail(who.full_name, title, status === 'returned', feedback, light)).catch((e) => console.error(e));
   }
   return { success: true };
+}
+
+// «قرأتها كلها»: كل ما سلّمه مشارك واحد ولم يُقرأ يُعلَّم مقروءًا بلا ملاحظة ولا بريد. البطاقة لا تُعتمد جملةً (bulkReadIds).
+// التفويض عند المستدعي (requireWrite للإدارة، ومستشار المشارك الفعلي في advisor.ts)، وسطر تدقيق واحد بالمعرّفات
+export async function reviewBulkBy(reviewer: string, actor: 'admin' | 'system', participantId: string) {
+  if (!participantId) throw new Fail('حدّد المشارك');
+  const rows = must(await db.from('model_submissions').select('id, participant_id, status, learning_models(key)')
+    .eq('participant_id', participantId).eq('status', 'submitted')) as any[];
+  const ids = bulkReadIds(rows || [], participantId);
+  if (!ids.length) return { success: true, marked: 0 };
+  must(await db.from('model_submissions').update({ status: 'reviewed', reviewed_at: new Date().toISOString(), reviewed_by: reviewer })
+    .in('id', ids).eq('status', 'submitted'));
+  await audit(actor, reviewer, 'submission.review-bulk', 'model_submissions', participantId, null, { ids, status: 'reviewed' });
+  return { success: true, marked: ids.length };
+}
+
+export async function reviewBulk(a: Admin, b: Body) {
+  requireWrite(a);
+  return reviewBulkBy(a.email, 'admin', String(b.participant_id || ''));
 }
 
 

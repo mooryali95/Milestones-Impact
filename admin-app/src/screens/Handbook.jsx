@@ -5,6 +5,7 @@
 // admin.save / admin.delete / admin.reorder، والتقييم عبر admin.review-submission.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CARD_REVIEW_CRITERIA, CHARTER_KEY } from '../../../supabase/functions/leaders-api/capstone.js';
+import { readingList } from '../../../supabase/functions/leaders-api/model-review.js';
 import { DIM, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
@@ -440,16 +441,18 @@ export function Submission({ id, canWrite, onClose }) {
   }, [id]); // eslint-disable-line
   if (!x) return <div className="mid-ov"><Spinner /></div>;
   const m = x.learning_models;
+  const gate = m.key === CHARTER_KEY;
   const submit = async (btn) => {
     if (btn === 'cancel') return close();
     if (busy) return;
-    if (btn === 'reviewed' && !rating) return setErr('اختر مستوى من السلّم');
+    // البطاقة اعتماد يحتاج تقديرًا، والنموذج العادي ملاحظة: التقدير فيه اختياري («بوابتان، والباقي ملاحظات»)
+    if (btn === 'reviewed' && gate && !rating) return setErr('اختر مستوى من السلّم');
     if (btn === 'returned' && !feedback.trim()) return setErr('اكتب ملاحظاتك ليعرف المشارك ما يطوّره');
     setBusy(true);
     const r = await L('admin.review-submission', { id: x.id, status: btn, rating: rating || undefined, feedback, bonus });
     setBusy(false);
     if (!r.success) return setErr(r.message);
-    toast(btn === 'reviewed' ? 'اعتُمد التقييم' : 'أُعيد للمشارك');
+    toast(btn === 'reviewed' ? (gate ? 'اعتُمدت البطاقة' : 'حُفظت الملاحظة') : (gate ? 'أُعيدت للمشارك' : 'أُعيد للمشارك ليعدّله، ويبقى محتسبًا'));
     onClose(true);
   };
   return (
@@ -462,7 +465,8 @@ export function Submission({ id, canWrite, onClose }) {
       <div className="hb-ed-panes sub-panes">
         <div className="hb-ed-out"><div className="hb-ed-cap">عمل المشارك</div><article className="hb-page mp"><ModelForm m={m} answers={x.answers || {}} /></article></div>
         <aside className="sub-review">
-          <h4>تقييمك</h4>
+          <h4>{gate ? 'اعتمادك' : 'ملاحظتك'}</h4>
+          {!gate && <p className="la-muted">التسليم محتسب للمشارك منذ سلّمه. اكتب ملاحظة إن شئت، أو اطلب تعديلًا يفتحه له دون أن يوقف رحلته.</p>}
           {/* بطاقة المبادرة: اعتمادها قرار على اختيار المبادرة نفسها، قبل أن يبني المشارك وثيقته عليها */}
           {m.key === CHARTER_KEY && (
             <div className="sub-gate" role="note">
@@ -476,10 +480,12 @@ export function Submission({ id, canWrite, onClose }) {
             <label key={l.n} className={rating === l.n ? 'on' : ''}><input type="radio" name="rating" value={l.n} checked={rating === l.n} disabled={!canWrite} onChange={() => setRating(l.n)} />
               <b>{l.ar}</b><small>{l.anchor_ar}</small></label>
           ))}</div>
-          <label>ملاحظاتك للمشارك<textarea rows={7} readOnly={!canWrite} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="ما الذي أجاده، وما الذي يطوّره في هذا النموذج؟" /></label>
+          <label>{gate ? 'ملاحظاتك للمشارك' : 'ملاحظتك للمشارك (اختيارية)'}<textarea rows={7} readOnly={!canWrite} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="ما الذي أجاده، وما الذي يطوّره في هذا النموذج؟" /></label>
           <label>نقاط تميّز إضافية (اختياري)<input type="number" min="0" max="100" readOnly={!canWrite} value={bonus} onChange={(e) => setBonus(e.target.value)} /></label>
-          <p className="la-muted">نقاط النموذج ({m.points}) مُنحت عند التسليم. نقاط التميّز تُضاف عند الاعتماد فقط.</p>
-          {canWrite && <><button className="btn-sm primary" value="reviewed" disabled={busy}>اعتماد التقييم</button><button className="btn-sm ghost" value="returned" disabled={busy}>إعادة للتطوير مع الملاحظات</button></>}
+          <p className="la-muted">نقاط النموذج ({m.points}) مُنحت عند التسليم. نقاط التميّز تُضاف {gate ? 'عند الاعتماد' : 'مع الملاحظة'} فقط.</p>
+          {canWrite && (gate
+            ? <><button className="btn-sm primary" value="reviewed" disabled={busy}>اعتماد البطاقة</button><button className="btn-sm ghost" value="returned" disabled={busy}>إعادة للتطوير مع الملاحظات</button></>
+            : <><button className="btn-sm primary" value="reviewed" disabled={busy}>حفظ الملاحظة</button><button className="btn-sm ghost" value="returned" disabled={busy}>يحتاج تعديلًا</button></>)}
           {err && <div className="la-err" role="alert">{err}</div>}
         </aside>
       </div>
@@ -661,6 +667,8 @@ function Reviews({ catalog, canWrite, model, onSaved }) {
   ], [catalog]);
   const rows = useMemo(() => sortRows(applyFilters(all, { fields, text: (x) => [x.participants?.full_name, x.participants?.email, x.participants?.organization_name, x.learning_models?.title_ar].join(' ') }, f), REVIEW_SORTS, f.sort), [all, f, fields]);
   return (
+    <>
+    {r?.success && <ReadingList items={all} noAdvisor={r.no_advisor || []} canWrite={canWrite} open={setSub} onDone={() => { load(); onSaved(); }} />}
     <section className="la-card">
       <FilterBar scope="reviews" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields}
         shown={rows.length} total={all.length} noun="عمل" placeholder="ابحث بالمشارك أو الجهة أو النموذج"
@@ -682,6 +690,42 @@ function Reviews({ catalog, canWrite, model, onSaved }) {
         </table></div>
       )}
       {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) { load(); onSaved(); } }} />}
+    </section>
+    </>
+  );
+}
+
+// «للقراءة» («بوابتان، والباقي ملاحظات»): ما سُلّم ولم يُقرأ، مجمّعًا بالمشارك والأحدث أولًا، و«قرأتها كلها» لكل مشارك.
+// البطاقات بوابة تُعتمد واحدةً واحدة فتظهر أولًا. «بلا مستشار»: مراجعتهم عند فريق البرنامج (model-review.js readingList)
+function ReadingList({ items, noAdvisor, canWrite, open, onDone }) {
+  const { toast } = useUI();
+  const [busy, setBusy] = useState('');
+  const { groups, gates } = useMemo(() => readingList(items, new Set(noAdvisor)), [items, noAdvisor]);
+  const orphan = groups.filter((g) => g.team).length + new Set(gates.filter((x) => noAdvisor.includes(x.participant_id)).map((x) => x.participant_id)).size;
+  if (!groups.length && !gates.length) return null;
+  const readAll = async (g) => {
+    if (busy) return;
+    setBusy(g.id);
+    const res = await L('admin.review-bulk', { participant_id: g.id });
+    setBusy('');
+    if (!res.success) return toast(res.message);
+    toast(`عُلّم ${countAr(res.marked || 0, 'نموذج واحد', 'نموذجان', 'نماذج', 'نموذجًا')} مقروءًا`);
+    onDone();
+  };
+  return (
+    <section className="la-card hb-read" aria-label="للقراءة">
+      <header className="row between"><h3>للقراءة <small className="la-muted">· {groups.reduce((n, g) => n + g.items.length, 0)}</small></h3>
+        {orphan > 0 && <span className="la-chip warn">بلا مستشار: {orphan}</span>}</header>
+      <p className="la-muted">التسليم محتسب للمشارك منذ سلّمه. اقرأ واكتب ملاحظة أو اطلب تعديلًا حين تراه لازمًا؛ ومن بلا مستشار فمراجعته عند فريق البرنامج.</p>
+      {gates.length > 0 && <div className="hb-read-gates"><b>بطاقات بانتظار الاعتماد</b>
+        <ul>{gates.map((x) => <li key={x.id}>{x.participants?.full_name} · {date(x.submitted_at)}{noAdvisor.includes(x.participant_id) ? ' · بلا مستشار' : ''} <button className="btn-sm primary" onClick={() => open(x.id)}>اعتمد أو أعد</button></li>)}</ul></div>}
+      {groups.map((g) => (
+        <div key={g.id} className="hb-read-p">
+          <div className="row between"><span><b>{g.name}</b>{g.org && <small className="la-muted"> · {g.org}</small>}{g.team && <small className="la-chip warn"> بلا مستشار</small>}</span>
+            {canWrite && <button className="btn-sm ghost" disabled={!!busy} onClick={() => readAll(g)}>{busy === g.id ? 'لحظة…' : 'قرأتها كلها'}</button>}</div>
+          <ul>{g.items.map((x) => <li key={x.id}><button className="link" onClick={() => open(x.id)}>{x.learning_models?.title_ar || ''}</button> <small className="la-muted">{date(x.submitted_at)}</small></li>)}</ul>
+        </div>
+      ))}
     </section>
   );
 }
@@ -709,7 +753,7 @@ export default function Handbook({ catalog, reload, canWrite }) {
           <div><b>{mods.length}</b><span>بابًا في الكتاب · {models.length} نماذج تعليمية</span></div>
           <div><b>{done}</b><span>إتمام باب{sc[1] ? ` · دقة ${Math.round((sc[0] / sc[1]) * 100)}%` : ''}</span></div>
           <div><b>{bs.points?.participants || 0}</b><span>مشارك بدأ يجمع النقاط{bs.points?.avg ? ` · متوسط ${bs.points.avg}` : ''}</span></div>
-          <div className={bs.to_review ? 'warn' : ''}><b>{bs.to_review || 0}</b><span>نموذج بانتظار تقييمك</span></div>
+          <div className={bs.to_review ? 'warn' : ''}><b>{bs.to_review || 0}</b><span>نموذج للقراءة</span></div>
         </div>
         <nav className="hb-views" aria-label="أقسام الكتاب">{HB_VIEWS.map(([k, l]) => (
           <button key={k} className={view === k ? 'on' : ''} aria-current={view === k ? 'page' : undefined} onClick={() => setView(k)}>{l}{k === 'reviews' && bs.to_review ? <i> {bs.to_review}</i> : null}</button>
