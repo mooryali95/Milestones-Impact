@@ -159,6 +159,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       slack_hello: await slackHello(db).catch((e) => { console.error('slack hello', e); return 'failed' as const; }),
       // الملخص اليومي لإشعارات الإدارة: مرة في اليوم في أول تشغيل بعد 9:00 بالرياض (المهمة في الدقيقة 17، فنحو 9:17)، لا يُنشر فارغًا، وبريد واحد بدله إن لم يصل Slack
       daily_digest: await DG.dailyDigest().catch((e) => ({ due: true, error: String(e?.message || e) })),
+      // ملخص مراجعي النماذج (model-digest.ts): مرة في اليوم في أول تشغيل بعد 8:00 بالرياض (نحو 8:17)، لكل مستشار بمشاركيه ولفريق
+      // البرنامج بمن لا مستشار له. بديل بريد كل تسليم؛ وبطاقة المبادرة وحدها تُبلَّغ فور تسليمها
+      model_digest: await (await import('./model-digest.ts')).modelDigest().catch((e) => ({ due: true, error: String(e?.message || e) })),
       // لقطة الدفعات الجارية (cohort-pulse.ts): مرة في يوم UTC لكل دفعة، أعداد وحدها. آخر الخطوات لأنها الأثقل (رحلة كل عضو)،
       // فإن طالت لم تؤخر ما قبلها، وما لم يُلتقط يُلتقط في الساعة التالية. والملخص اليومي يقرأ سطره مما التُقط قبله
       cohort_snapshots: await CU.cohortSnapshots().catch((e) => ({ taken: 0, error: String(e?.message || e) })),
@@ -448,6 +451,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.switch': (e, b, sid, ctx) => switchTo(e.email, 'expert', b.to, { ip: ctx?.ip ?? null, ua: ctx?.ua ?? null }, sid),
   'xp.reviews': (e) => V2.reviews(e),
   'xp.review': (e, b) => V2.review(e, b),
+  // «قرأتها كلها» لمشارك واحد من مشاركي المستشار (advisor.ts reviewBulk)
+  'xp.review-bulk': (e, b) => V2.reviewBulk(e, b),
   'xp.respond': (e, b) => E.portalRespond(e, b),
   'xp.rate': (e, b) => E.portalRate(e, b),
   'xp.logout': (_e, _b, sid) => E.portalLogout(sid),
@@ -623,6 +628,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.submissions': (_a, b) => A.submissions(b),
   'admin.submission': (_a, b) => A.submission(b),
   'admin.review-submission': A.reviewSubmission,
+  'admin.review-bulk': A.reviewBulk,
   'admin.save': A.save,
   'admin.delete': A.remove,
   'admin.reorder': A.reorder,

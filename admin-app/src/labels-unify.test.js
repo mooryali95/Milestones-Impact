@@ -92,7 +92,7 @@ describe('حالة الجلسة وحالة الفصل من labels.js لا من �
     const s = read('admin-app/src/screens/Capstones.jsx');
     expect(s).toMatch(/SECTION_STATUS_AR\[s\.status\]/);
     expect(s).not.toMatch(/'قيّمته'/);
-    expect(SECTION_STATUS_AR).toEqual({ draft: 'مسودة', submitted: 'بانتظار تقييم المستشار', returned: STATUS_TITLES_ADMIN.returned, reviewed: 'قيّمه المستشار' });
+    expect(SECTION_STATUS_AR).toEqual({ draft: 'مسودة', submitted: 'سُلّم، ويُحتسب في رحلتك', returned: STATUS_TITLES_ADMIN.returned, reviewed: 'قُرئ' });
     expect(SECTION_STATUS_AR.submitted).not.toMatch(/تقييمك/);
   });
 });

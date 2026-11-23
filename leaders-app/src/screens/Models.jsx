@@ -16,14 +16,14 @@ import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
 import { DEP_AR, DEP_TYPES, depAr, formatDeps, parseDeps } from '../../../supabase/functions/leaders-api/schedule.js';
 import logoDark from '../milestone-impact.svg';
-import { rubricLevelAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { modelStatusAr, REVIEWER_AR, rubricLevelAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { isGateModel } from '../../../supabase/functions/leaders-api/model-review.js';
+import { preSubmitHints } from '../presubmit.js';
 
-const STATUS = {
-  draft: { t: SUBMISSION_STATUS.draft, c: 'warn' },
-  submitted: { t: SUBMISSION_STATUS.submitted, c: 'gold' },
-  returned: { t: SUBMISSION_STATUS.returned, c: 'bad' },
-  reviewed: { t: SUBMISSION_STATUS.reviewed, c: 'ok' },
-};
+// «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والبطاقة وحدها تنتظر الاعتماد.
+// النص من مصدره (labels.js modelStatusAr) بمن يراجع: المستشار، وبلاه فريق البرنامج
+const TONE = { draft: 'warn', submitted: 'gold', returned: 'bad', reviewed: 'ok' };
+const chipOf = (status, key, reviewer) => ({ t: modelStatusAr(status, { gate: isGateModel(key), reviewer }), c: TONE[status] || '' });
 const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
@@ -151,14 +151,14 @@ function ImportRows({ imp, rows, onChange }) {
 // وحقل اسم المبادرة يكتمل من بطاقة المبادرة كما يملؤه الخادم عند التسليم (bindAnswers)
 const filledOf = (f, v, initiative) => f.required === false || (f.bind === 'initiative' && !!initiative) || fieldFilled(f, v);
 const codeOf = (m) => `${(DIMENSIONS.find((x) => x.key === m.dimension)?.short || 'M')[0]}-${String(m.sort || 1).padStart(2, '0')}`;
-// علامات النموذج الجيد: إرشاد للمشارك، والمستشار يقيّم بالنجوم والملاحظات
+// علامات النموذج الجيد: إرشاد للمشارك، ومرآتها فحص ما قبل التسليم (presubmit.js)، والمراجع يكتب ملاحظاته
 const RUBRIC = [
   ['الاكتمال', 'كل حقل مملوء بما يكفي ليُفهم دون شرح شفهي.'],
   ['التحديد', 'أرقام وتواريخ وأسماء أدوار، لا عبارات عامة.'],
   ['الارتباط بمبادرتك', 'مبني على مبادرة تقودها من واقع تعرفه وتستطيع تنفيذها، حقيقية كانت أو افتراضية واقعية.'],
   ['جودة القرار', 'يظهر فيه منطقك: لماذا هذا الترتيب، وما الذي ستفعله بالنتيجة.'],
 ];
-const STEPS = ['افهم النموذج', 'طبّقه على مشروعك', 'سلّمه للمستشار', 'التقييم والملاحظات'];
+const STEPS = ['افهم النموذج', 'طبّقه على مشروعك', 'سلّمه', 'الملاحظات'];
 
 // مثال الحقل من المبادرة المحلولة لقطاع المشارك: نص مقتبس، أو أول صفوف الجدول
 function FieldExample({ ex }) {
@@ -215,6 +215,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   const [savedAt, setSavedAt] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [asking, setAsking] = useState(false);
+  // تلميحات ما قبل التسليم: تُعرض مرة، و«سلّم على أي حال» يمضي. لا تمنع التسليم أبدًا
+  const [hints, setHints] = useState(null);
   const uid = useId();
 
   useEffect(() => {
@@ -253,7 +255,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
     ) : <div className="center-load"><div className="spinner" /></div>;
   }
   const m = d.model;
-  const locked = s?.status === 'reviewed' || capLocked;
+  // بطاقة المبادرة وحدها تُقفل باعتمادها؛ النموذج المقروء يبقى قابلًا للتعديل (الخادم يحكم بالقاعدة نفسها)
+  const locked = (s?.status === 'reviewed' && isGateModel(d.model.key)) || capLocked;
   const initiative = d.initiative;
   const dim = DIMENSIONS.find((x) => x.key === m.dimension);
   const req = m.fields.filter((f) => f.required !== false);
@@ -261,14 +264,22 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   const pct = req.length ? Math.round((filled / req.length) * 100) : 100;
   const step = !s || s.status === 'draft' ? (filled ? 1 : 0) : s.status === 'returned' ? 1 : s.status === 'submitted' ? 2 : 3;
 
-  const save = async (submit) => {
+  const gate = isGateModel(m.key);
+  const who = REVIEWER_AR[d.reviewer] || REVIEWER_AR.advisor;
+  const save = async (submit, anyway = false) => {
+    if (submit && !anyway) {
+      const h = preSubmitHints(m.fields, answers, { initiative });
+      if (h.length) { setHints(h); return; }
+    }
+    setHints(null);
     setBusy(submit ? 'submit' : 'save'); setMsg(null);
     const r = await call('models.save', { id: m.id, answers, submit });
     setBusy('');
     if (!r.success) return setMsg({ err: r.message });
     setD({ ...d, submission: r.submission });
     setDirty(false); setSavedAt(new Date());
-    setMsg({ ok: submit ? (r.gained ? `سُلّم النموذج، و+${r.gained} نقطة أضيفت إلى رصيدك.` : 'سُلّم النموذج للمستشار.') : 'حُفظت المسودة.' });
+    const counted = gate ? `وهي بانتظار اعتماد ${who}.` : 'ويُحتسب في رحلتك الآن، وتظهر هنا ملاحظات المراجع حين يكتبها.';
+    setMsg({ ok: submit ? (r.gained ? `سُلّم النموذج، و+${r.gained} نقطة أضيفت إلى رصيدك. ${counted}` : `سُلّم النموذج، ${counted}`) : 'حُفظت المسودة.' });
     if (submit) onPoints(r);
   };
   const set = (k, v) => { setAnswers((a) => ({ ...a, [k]: v })); setDirty(true); };
@@ -301,14 +312,14 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           </section>
           <section>
             <span className="mg-cap">علامات النموذج الجيد</span>
-            <p className="muted small">يقيّم المستشار تسليمك بالنجوم وملاحظات مكتوبة.</p>
+            <p className="muted small">{gate ? `يعتمد ${who} بطاقتك قبل أن تبني عليها وثيقتك.` : `يُحتسب تسليمك فورًا، ويقرؤه ${who} ويكتب لك ملاحظاته.`} وقبل التسليم نذكّرك بما قد ينقص منها.</p>
             <ul className="mrubric">{RUBRIC.map(([t, x]) => <li key={t}><b>{t}</b>{x}</li>)}</ul>
           </section>
           {s && s.status !== 'draft' && (
             <section className="mg-status">
-              <div className={`chip ${STATUS[s.status].c}`}>{STATUS[s.status].t}</div>
+              <div className={`chip ${chipOf(s.status, m.key, d.reviewer).c}`}>{chipOf(s.status, m.key, d.reviewer).t}</div>
               {s.rating && <div className="model-rate"><span>{rubricLevelAr(s.rating)}</span>{s.bonus ? <b>+{s.bonus} نقطة تميّز</b> : null}</div>}
-              {s.feedback_ar && <blockquote className="model-fb"><b>ملاحظات المستشار</b>{s.feedback_ar}</blockquote>}
+              {s.feedback_ar && <blockquote className="model-fb"><b>ملاحظات المراجع</b>{s.feedback_ar}</blockquote>}
             </section>
           )}
         </aside>
@@ -343,6 +354,14 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           {m.key === 'schedule' && <SchedulePreview f={m.fields.find((x) => x.key === 'activities')} rows={answers.activities} />}
           {msg?.err && <div className="alert err">{msg.err}</div>}
           {msg?.ok && <div className="alert ok">{msg.ok}</div>}
+          {hints && (
+            <div className="alert info small" role="status">
+              <b>قبل التسليم:</b>
+              <ul>{hints.map((h) => <li key={h.key}>{h.text}</li>)}</ul>
+              <div className="row"><button type="button" className="btn gold sm" disabled={!!busy} onClick={() => save(true, true)}>سلّم على أي حال</button>
+                <button type="button" className="btn ghost sm" onClick={() => setHints(null)}>أراجعها أولًا</button></div>
+            </div>
+          )}
           <div className="ws-bar">
             <div className="ws-prog">
               <span><b>{filled}</b> من {req.length} حقول مكتملة</span>
@@ -352,7 +371,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             {!locked && (
               <div className="row model-acts">
                 <button type="button" className="btn ghost sm" disabled={!!busy} onClick={() => save(false)}>{busy === 'save' ? 'لحظة…' : 'حفظ'}</button>
-                <button className="btn gold" disabled={!!busy || filled < req.length}>{busy === 'submit' ? 'لحظة…' : s?.status === 'submitted' ? 'تحديث التسليم' : `تسليم للمستشار · ${m.points} نقطة`}</button>
+                <button className="btn gold" disabled={!!busy || filled < req.length}>{busy === 'submit' ? 'لحظة…' : s?.status === 'submitted' ? 'تحديث التسليم' : `تسليم · ${m.points} نقطة`}</button>
               </div>
             )}
           </div>
@@ -366,7 +385,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   );
 }
 
-const FILTERS = [['all', 'الكل'], ['new', 'لم تبدأ'], ['draft', 'قيد العمل'], ['submitted', 'بانتظار التقييم'], ['reviewed', 'مقيّمة']];
+const FILTERS = [['all', 'الكل'], ['new', 'لم تبدأ'], ['draft', 'قيد العمل'], ['submitted', 'مسلّمة'], ['reviewed', 'مقروءة']];
 const stateOf = (m) => (!m.submission ? 'new' : m.submission.status === 'returned' ? 'draft' : m.submission.status);
 
 export function Models({ name, onPoints }) {
@@ -392,7 +411,7 @@ export function Models({ name, onPoints }) {
         <div>
           <span className="book-eyebrow">The Practice Library</span>
           <h2>مكتبة النماذج التعليمية</h2>
-          <p className="muted">أدوات عمل مستلهمة من مراجع عالمية مثل PMBOK وPRINCE2 ونظرية التغيير، مكيّفة لمسارك. تطبّق كل نموذج على مشروعك الحقيقي، ويقيّمه مستشارك بمعايير معلنة.</p>
+          <p className="muted">أدوات عمل مستلهمة من مراجع عالمية مثل PMBOK وPRINCE2 ونظرية التغيير، مكيّفة لمسارك. تطبّق كل نموذج على مشروعك الحقيقي، ويُحتسب حين تسلّمه، ويقرؤه {REVIEWER_AR[d.reviewer] || REVIEWER_AR.advisor} ويكتب لك ملاحظاته.</p>
         </div>
         <div className="models-kpis">
           <span><b>{count('submitted') + count('reviewed')}<small>/{all.length}</small></b>مسلّمة</span>
@@ -411,7 +430,7 @@ export function Models({ name, onPoints }) {
             <h3><span>{dim.short}</span>{dim.title}</h3>
             <div className="models-grid">
               {items.map((m) => {
-                const st = m.submission ? STATUS[m.submission.status] : null;
+                const st = m.submission ? chipOf(m.submission.status, m.key, d.reviewer) : null;
                 const pr = m.progress || { filled: 0, total: 0 };
                 const p = pr.total ? Math.round((pr.filled / pr.total) * 100) : 0;
                 return (

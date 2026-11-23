@@ -12,7 +12,7 @@ export const setLeadersExpired = (fn) => { onExpired = fn; };
 // كل نوع في INBOX_KINDS له هنا أوامر قراره: الاعتماد والمتطلبات والنماذج، وطلبات انضمام الخبراء وطلبات الإسناد بلا مطابق،
 // وطلبات الرعاية والحذف، وتأكيد الجلسات. المعاينة (dry_run) لا تكتب شيئًا فلا تُحدِّث
 export const CHANGES_PENDING = new Set([
-  'admin.approve', 'admin.approve-bulk', 'admin.review', 'admin.review-submission', 'admin.status', 'admin.reset-assessment',
+  'admin.approve', 'admin.approve-bulk', 'admin.review', 'admin.review-submission', 'admin.review-bulk', 'admin.status', 'admin.reset-assessment',
   'admin.capstone-review',
   'admin.expert-set-status', 'admin.expert-invite', 'admin.expert-match', 'admin.expert-assign',
   'admin.expert-request-cancel', 'admin.expert-request-retry', 'admin.expert-request-complete',

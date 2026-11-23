@@ -10,7 +10,7 @@ const catalog = {
   handbook_modules: [ch, { ...ch, id: 'h2', sort: 2, title_ar: 'الأنواع', quiz_md: '' }], learning_models: [model],
   book_stats: { chapters: { h1: { done: 4, score: 6, total: 8 } }, models: { m1: { submitted: 1, reviewed: 2, rating: 7, rated: 2 } }, points: { participants: 5, avg: 40 }, to_review: 1 },
 };
-const submission = { id: 's1', status: 'submitted', submitted_at: '2026-10-20', answers: { project: 'منصة التعلم' }, participants: { full_name: 'سارة الأحمد', job_title: 'مديرة' }, learning_models: model };
+const submission = { id: 's1', participant_id: 'p1', status: 'submitted', submitted_at: '2026-10-20', answers: { project: 'منصة التعلم' }, participants: { full_name: 'سارة الأحمد', job_title: 'مديرة' }, learning_models: model };
 
 async function setup(page) {
   const calls = [];
@@ -23,7 +23,7 @@ async function setup(page) {
       'admin.catalog': catalog,
       'admin.book-preview': { success: true, levels: { milestone: 'beginner', impact: 'beginner', leadership: 'beginner' }, chapters: [{ id: 'h1', dimension: 'milestone', min_level: 'beginner', title: 'المعلم', md: '## المفهوم\nنص للجميع', reflection: 'ما معلمك؟', quiz: [{ q: 'ما المعلم؟', options: ['تاريخ', 'نقطة قرار'], answer: 1, why: '' }] }], models: [model] },
       'admin.submissions': { success: true, submissions: [submission] }, 'admin.submission': { success: true, submission },
-      'admin.save': { success: true }, 'admin.book-proposal-edit': { success: true, count: 1, sections: ['المفهوم'], status: 'review' }, 'admin.reorder': { success: true }, 'admin.delete': { success: true }, 'admin.review-submission': { success: true },
+      'admin.save': { success: true }, 'admin.book-proposal-edit': { success: true, count: 1, sections: ['المفهوم'], status: 'review' }, 'admin.reorder': { success: true }, 'admin.delete': { success: true }, 'admin.review-submission': { success: true }, 'admin.review-bulk': { success: true, marked: 1 },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: false, message: 'غير متوقع' } });
   });
@@ -111,14 +111,24 @@ test('المعاينة كمشارك، والتقييم بالسلّم الربا
   await page.getByRole('button', { name: 'قيّم' }).click();
   const ed = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
   await expect(ed.getByText('منصة التعلم')).toBeVisible();
-  await ed.getByRole('button', { name: 'إعادة للتطوير مع الملاحظات' }).click();
+  // نموذج عادي («بوابتان، والباقي ملاحظات»): ملاحظة أو «يحتاج تعديلًا»، والتعديل يطلب ملاحظة تسمّي ما ينقص
+  await ed.getByRole('button', { name: 'يحتاج تعديلًا' }).click();
   await expect(ed.getByRole('alert')).toContainText('اكتب ملاحظاتك');
   // D08: أربعة خيارات بأسمائها ومراسيها بدل النجوم الخمس
   await expect(ed.locator('.sub-scale label')).toHaveText([/دون المطلوب/, /مقبول/, /متقن/, /متميز/]);
   await expect(ed.getByRole('radio', { name: /متميز/ })).toHaveCount(1);
   await ed.locator('.sub-scale label').filter({ hasText: 'متميز' }).click();
   await expect(ed.locator('.sub-scale label.on')).toHaveText(/متميز/);
-  await ed.getByLabel('ملاحظاتك للمشارك').fill('عمل متقن');
-  await ed.getByRole('button', { name: 'اعتماد التقييم' }).click();
+  await ed.getByLabel('ملاحظتك للمشارك (اختيارية)').fill('عمل متقن');
+  await ed.getByRole('button', { name: 'حفظ الملاحظة' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.review-submission')).toMatchObject({ id: 's1', status: 'reviewed', rating: 4, feedback: 'عمل متقن' });
+});
+
+test('«للقراءة»: ما سُلّم مجمّعًا بالمشارك، و«قرأتها كلها» يعلّمه مقروءًا بأمر واحد', async ({ page }) => {
+  const calls = await setup(page);
+  await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
+  const list = page.getByRole('region', { name: 'للقراءة' });
+  await expect(list).toContainText('سارة الأحمد');
+  await list.getByRole('button', { name: 'قرأتها كلها' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.review-bulk')).toMatchObject({ participant_id: 'p1' });
 });

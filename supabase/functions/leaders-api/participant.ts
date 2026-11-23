@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // إجراءات المشارك: الدخول بالبريد، الملف، القياس، الرحلة
 // ════════════════════════════════════════════════════════════════
+import { isGateModel } from './model-review.js';
 import { instrumentMinutes } from './assessment-time.ts';
 import { all, audit, BUCKET, CONFIG, db, expiresIn, Fail, hash, humanGate, logConsent, mailGuard, must, networkGuard, newDeviceMail, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard, sha256Hex, signInMail, storage } from './core.ts';
 import { domainCandidates, hostOf, isPublicMail } from './domains.js';
@@ -33,7 +34,8 @@ import { access as accessOf } from './payments.ts';
 import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
 import { consumeSponsorCode, findSponsorCode, redeemSponsorCode } from './sponsor-codes.ts';
 import { SPONSOR_CODE_SPENT_AR } from './sponsor-codes.js';
-import { advisorOf, notifyAdvisor } from './advisor.ts';
+import { advisorOf, notifySubmission } from './advisor.ts';
+import { reviewerKind } from './model-review.js';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
 import { features } from './features.ts';
@@ -1346,6 +1348,8 @@ export async function modelsList(p: any) {
         submission: sub ? { status: sub.status, rating: sub.rating, bonus: sub.bonus, submitted_at: sub.submitted_at, updated_at: sub.updated_at } : null };
     }),
     points: { total: pts.total, rank: pts.rank },
+    // من يراجع نماذجه (model-review.js): نص حالة البطاقة «بانتظار اعتماد المستشار/فريق البرنامج»
+    reviewer: reviewerKind(await advisorOf(p).catch(() => ({ id: '?' }))),
   };
 }
 
@@ -1375,10 +1379,12 @@ export async function modelGet(p: any, b: Body) {
     m.capstone_sort != null ? capstoneStatus(p.id) : null,
     m.capstone_sort != null ? examplesFor(p) : null,
   ]);
+  // من يراجع نماذجه: مستشاره، وبلاه فريق البرنامج (model-review.js). تعذّر القراءة يبقي النص الافتراضي (المستشار)
+  const reviewer = reviewerKind(await advisorOf(p).catch(() => ({ id: '?' })));
   const submission = sub ? { ...sub, answers: bindAnswers(m.fields, sub.answers, m.key === CHARTER_KEY ? null : initiative) } : null;
   return {
     // sector: قطاع المشارك من ملفه، يختار به التطبيق المثال المحلول الأقرب (leaders-app/src/guide.js)
-    success: true, model: m, submission, initiative, sector: p.sector || null, examples,
+    success: true, model: m, submission, initiative, sector: p.sector || null, examples, reviewer,
     imports: await importsFor(p, m.fields),
     capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
   };
@@ -1403,7 +1409,9 @@ export async function modelSave(p: any, b: Body) {
     m.key === CHARTER_KEY ? null : initiativeFor(p.id),
     m.capstone_sort != null ? capstoneStatus(p.id) : null,
   ]);
-  if (prev?.status === 'reviewed') throw new Fail('قُيّم هذا النموذج ولا يمكن تعديله');
+  // بطاقة المبادرة وحدها تُقفل بعد اعتمادها (بوابة)؛ بقية النماذج تبقى قابلة للتعديل بعد قراءتها وملاحظتها،
+  // والحفظ لا يُنزل حالتها فتبقى محتسبة في الرحلة (تصور «بوابتان، والباقي ملاحظات»)
+  if (prev?.status === 'reviewed' && isGateModel(m.key)) throw new Fail('اعتُمدت بطاقة المبادرة ولا يمكن تعديلها');
   if (CAPSTONE_LOCKED.includes(status as string)) throw new Fail('هذا فصل في وثيقة مبادرتك، وهي عند المراجعة أو معتمدة فلا يُعدَّل الآن', 409, 'capstone_locked');
   // الحقل المربوط باسم المبادرة لا يُكتب هنا: يأتي من بطاقة المبادرة دائمًا
   const answers = bindAnswers(m.fields, cleanAnswers(m.fields, b.answers), initiative);
@@ -1417,7 +1425,7 @@ export async function modelSave(p: any, b: Body) {
   else if (!prev) row.status = 'draft';
   const saved = must(await db.from('model_submissions').upsert(row, { onConflict: 'participant_id,model_id' }).select('*').single());
   const gained = submit ? await award(p.id, 'model', m.id, m.points, m.title_ar) : 0;
-  if (submit) notifyAdvisor(p, m.title_ar).catch(() => {});
+  if (submit) notifySubmission(p, m).catch(() => {});
   const pts = await pointsOf(p.id);
   return { success: true, submission: saved, gained, points: { total: pts.total, rank: pts.rank } };
 }

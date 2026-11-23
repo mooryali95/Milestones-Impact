@@ -16,6 +16,7 @@ import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
 import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
+import { isGateModel, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -162,6 +163,8 @@ function RateParticipant({ item, criteria, onDone }) {
 
 // المستشار الأساسي: نماذج مشاركي دفعته بانتظار تقييمه، بالمعيار نفسه في لوحة الإدارة
 const showVal = (v) => (Array.isArray(v) ? `جدول (${v.length} صفوف)` : v && typeof v === 'object' ? Object.values(v).filter(Boolean).join(' · ') : String(v ?? ''));
+// «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم محتسب للمشارك، والمستشار يقرأ ويكتب ملاحظة أو يطلب تعديلًا.
+// «للقراءة» مجمّعة بالمشارك والأحدث أولًا مع «قرأتها كلها»، وبطاقة المبادرة وحدها اعتماد أو إعادة (model-review.js)
 function AdvisorReviews({ initial }) {
   const [d, setD] = useState(initial ?? null);
   const [open, setOpen] = useState(null);
@@ -171,42 +174,63 @@ function AdvisorReviews({ initial }) {
   const load = () => xpCall('xp.reviews').then(setD);
   useEffect(() => { if (!initial) load(); }, []);
   if (!d?.success || !d.advisor) return null;
-  const pending = d.items.filter((x) => x.status === 'submitted');
+  const { groups, gates } = readingList(d.items);
+  const waiting = groups.reduce((n, g) => n + g.items.length, 0) + gates.length;
   const done = d.items.filter((x) => x.status !== 'submitted').slice(0, 8);
   const send = async (x, status) => {
+    const gate = isGateModel(x.learning_models?.key);
     setBusy(true); say(null);
     const r = await xpCall('xp.review', { id: x.id, status, rating: f.rating || null, feedback: f.feedback });
     setBusy(false);
-    if (r.success) { setOpen(null); setF({ rating: 0, feedback: '' }); say(status === 'returned' ? 'أُعيد للمشارك بملاحظتك.' : 'اعتُمد التسليم.'); load(); } else say(r.message, true);
+    if (r.success) { setOpen(null); setF({ rating: 0, feedback: '' }); say(status === 'returned' ? (gate ? 'أُعيدت البطاقة للمشارك بملاحظتك.' : 'أُعيد للمشارك ليعدّله، ويبقى محتسبًا له.') : (gate ? 'اعتُمدت البطاقة.' : 'حُفظت ملاحظتك.')); load(); } else say(r.message, true);
+  };
+  const readAll = async (g) => {
+    setBusy(true); say(null);
+    const r = await xpCall('xp.review-bulk', { participant_id: g.id });
+    setBusy(false);
+    if (r.success) { say(`عُلّم ما سلّمه ${g.name} مقروءًا.`); load(); } else say(r.message, true);
+  };
+  const item = (x) => {
+    const gate = isGateModel(x.learning_models?.key);
+    return (
+      <div key={x.id} className="xpp-torate">
+        <div className="row between"><span>{gate && <b>{x.participants?.full_name} · </b>}<b>{x.learning_models?.title_ar}</b> <small className="muted">{fmt(x.submitted_at)}</small></span>
+          {open !== x.id && <button className="btn ghost sm" onClick={() => { setOpen(x.id); setF({ rating: 0, feedback: '' }); }}>{gate ? 'اعتمد أو أعد' : 'اقرأ'}</button>}</div>
+        {open === x.id && (
+          <div className="stack" style={{ gap: 8 }}>
+            <dl className="adv-answers">{(x.learning_models?.fields || []).map((fl) => <React.Fragment key={fl.key}><dt>{fl.label || fl.key}</dt><dd>{showVal(x.answers?.[fl.key]) || '·'}</dd></React.Fragment>)}</dl>
+            {/* D08: السلّم الرباعي الواحد بأسمائه ومراسيه، كما في أداة المراجع في اللوحة. في النموذج العادي اختياري */}
+            <div className="rx-scale" role="radiogroup" aria-label="التقدير">{RUBRIC_SCALE.levels.map((l) => (
+              <button key={l.n} type="button" role="radio" aria-checked={f.rating === l.n} className={f.rating === l.n ? 'on' : ''} onClick={() => setF({ ...f, rating: f.rating === l.n && !gate ? 0 : l.n })}>
+                <b>{l.ar}</b><small>{l.anchor_ar}</small></button>
+            ))}</div>
+            <textarea className="input" rows={3} maxLength={4000} placeholder={gate ? 'ملاحظاتك المكتوبة للمشارك' : 'ملاحظتك للمشارك (اختيارية)'} value={f.feedback} onChange={(e) => setF({ ...f, feedback: e.target.value })} />
+            <div className="row">{gate
+              ? <><button className="btn sm" disabled={busy || !f.rating} onClick={() => send(x, 'reviewed')}>اعتمد</button>
+                <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>أعده بملاحظة</button></>
+              : <><button className="btn sm" disabled={busy} onClick={() => send(x, 'reviewed')}>{f.feedback.trim() || f.rating ? 'أرسل الملاحظة' : 'قرأته'}</button>
+                <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>يحتاج تعديلًا</button></>}
+              <button className="link small" onClick={() => setOpen(null)}>إلغاء</button></div>
+          </div>
+        )}
+      </div>
+    );
   };
   return (
     <section className="card stack">
-      <h2 className="as-h3">بانتظار تقييمك <small className="muted">· {pending.length}</small></h2>
-      <p className="small muted">أنت المستشار الأساسي لدفعة هؤلاء المشاركين؛ يصلك ما يسلّمونه هنا وبالبريد، والإدارة ترى ما تقيّمه.</p>
+      <h2 className="as-h3">للقراءة <small className="muted">· {waiting}</small></h2>
+      <p className="small muted">أنت مستشار هؤلاء المشاركين. ما يسلّمونه يُحتسب لهم فورًا، ويصلك ملخصه مرة في اليوم؛ اقرأ واكتب ملاحظة أو اطلب تعديلًا. بطاقة المبادرة وحدها تنتظر اعتمادك وتصلك فور تسليمها.</p>
       <Notice note={note} onClose={() => say(null)} reveal />
-      {!pending.length && <p className="muted small">لا تسليمات معلّقة الآن.</p>}
-      {pending.map((x) => (
-        <div key={x.id} className="xpp-torate">
-          <div className="row between"><span><b>{x.participants?.full_name}</b> <small className="muted">{x.learning_models?.title_ar} · {fmt(x.submitted_at)}</small></span>
-            {open !== x.id && <button className="btn ghost sm" onClick={() => { setOpen(x.id); setF({ rating: 0, feedback: '' }); }}>قيّم</button>}</div>
-          {open === x.id && (
-            <div className="stack" style={{ gap: 8 }}>
-              <dl className="adv-answers">{(x.learning_models?.fields || []).map((fl) => <React.Fragment key={fl.key}><dt>{fl.label || fl.key}</dt><dd>{showVal(x.answers?.[fl.key]) || '·'}</dd></React.Fragment>)}</dl>
-              {/* D08: السلّم الرباعي الواحد بأسمائه ومراسيه، كما في أداة المراجع في اللوحة */}
-              <div className="rx-scale" role="radiogroup" aria-label="التقدير">{RUBRIC_SCALE.levels.map((l) => (
-                <button key={l.n} type="button" role="radio" aria-checked={f.rating === l.n} className={f.rating === l.n ? 'on' : ''} onClick={() => setF({ ...f, rating: l.n })}>
-                  <b>{l.ar}</b><small>{l.anchor_ar}</small></button>
-              ))}</div>
-              <textarea className="input" rows={3} maxLength={4000} placeholder="ملاحظاتك المكتوبة للمشارك" value={f.feedback} onChange={(e) => setF({ ...f, feedback: e.target.value })} />
-              <div className="row"><button className="btn sm" disabled={busy || !f.rating} onClick={() => send(x, 'reviewed')}>اعتمد</button>
-                <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>أعده بملاحظة</button>
-                <button className="link small" onClick={() => setOpen(null)}>إلغاء</button></div>
-            </div>
-          )}
+      {!waiting && <p className="muted small">لا شيء ينتظر القراءة الآن.</p>}
+      {gates.length > 0 && <div className="stack" style={{ gap: 6 }}><b className="small">بطاقات بانتظار اعتمادك</b>{gates.map(item)}</div>}
+      {groups.map((g) => (
+        <div key={g.id} className="stack" style={{ gap: 6 }}>
+          <div className="row between"><b>{g.name}</b><button className="btn ghost sm" disabled={busy} onClick={() => readAll(g)}>قرأتها كلها</button></div>
+          {g.items.map(item)}
         </div>
       ))}
-      {done.length > 0 && <details><summary className="small">آخر ما قُيّم</summary>
-        <ul className="small muted">{done.map((x) => <li key={x.id}>{x.participants?.full_name} · {x.learning_models?.title_ar} · {x.status === 'returned' ? 'أُعيد' : `اعتُمد${x.rating ? ` (${rubricLevelAr(x.rating)})` : ''}`}{x.reviewed_by ? ` · ${x.reviewed_by}` : ''}</li>)}</ul></details>}
+      {done.length > 0 && <details><summary className="small">آخر ما قُرئ</summary>
+        <ul className="small muted">{done.map((x) => <li key={x.id}>{x.participants?.full_name} · {x.learning_models?.title_ar} · {x.status === 'returned' ? 'يحتاج تعديلًا' : `${isGateModel(x.learning_models?.key) ? 'اعتُمدت' : 'قُرئ'}${x.rating ? ` (${rubricLevelAr(x.rating)})` : ''}`}{x.reviewed_by ? ` · ${x.reviewed_by}` : ''}</li>)}</ul></details>}
     </section>
   );
 }

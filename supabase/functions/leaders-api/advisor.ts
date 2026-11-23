@@ -4,14 +4,12 @@
 // المصدر: cohorts.advisor_expert_id للدفعة، وcohort_groups.advisor_expert_id لمجموعة داخلها (الأخص يغلب).
 // الدفعة تُعرف من المشارك (cohortOf)، فتغيير المستشار
 // ينقل إليه المعلّق فورًا. الإدارة ترى كل شيء وتقيّم أيضًا (reviewed_by يسجّل من قيّم).
-import { bdi, mailButton, mailShell, mailText } from '../_shared/mail.ts';
-import { SITES } from '../_shared/sites.js';
-import { all, db, Fail, sendMail } from './core.ts';
+import { all, db, Fail } from './core.ts';
 import { cohortOf } from './programs.ts';
-import { reviewSubmissionBy } from './admin.ts';
-import { firstName } from './hall.js';
+import { reviewBulkBy, reviewSubmissionBy } from './admin.ts';
 import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved } from './logic.js';
 import { listed } from './counting.ts';
+import { isGateModel } from './model-review.js';
 
 type Body = Record<string, any>;
 
@@ -41,13 +39,11 @@ export async function advisorOf(p: { id: string; organization_id?: string | null
   return approved.find((e: any) => e.id === id) || null;
 }
 
-// بريد للمستشار عند كل تسليم (والإدارة تراه في قائمتها كما هي)
-export async function notifyAdvisor(p: any, what: string) {
-  const adv = await advisorOf(p);
-  if (!adv) return;
-  await sendMail(adv.email, `تسليم جديد بانتظار تقييمك: ${what}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-    mailText(`سلّم ${bdi(p.full_name)} «${bdi(what)}»، وهو بانتظار تقييمك بصفتك مستشاره.`)
-    + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'))).catch(() => {});
+// تسليم نموذج: البطاقة (البوابة) تُبلَّغ فورًا لمراجعها، وما عداها يدخل الملخص اليومي (model-digest.ts) بدل بريد لكل تسليم
+export async function notifySubmission(p: any, m: { key?: string; title_ar: string }) {
+  if (!isGateModel(m.key)) return { sent: false, digest: true };
+  const { notifyGate } = await import('./model-digest.ts');
+  return { ...(await notifyGate(p, m.title_ar)), digest: false };
 }
 
 // دفعات هذا الخبير بصفته مستشارها الأساسي
@@ -118,4 +114,13 @@ export async function review(e: any, b: Body) {
   const adv = await advisorOf((s as any).participants);
   if (adv?.id !== e.id) throw new Fail('هذا التسليم ليس من دفعتك', 403);
   return reviewSubmissionBy(e.email, 'system', b);
+}
+
+// «قرأتها كلها»: التفويض نفسه في التقييم الواحد، مستشار المشارك الفعلي وحده
+export async function reviewBulk(e: any, b: Body) {
+  const { data: p } = await db.from('participants').select('id, organization_id, is_demo').eq('id', String(b.participant_id || '')).maybeSingle();
+  if (!p) throw new Fail('المشارك غير موجود', 404);
+  const adv = await advisorOf(p as any);
+  if (adv?.id !== e.id) throw new Fail('هذا المشارك ليس من دفعتك', 403);
+  return reviewBulkBy(e.email, 'system', (p as any).id);
 }

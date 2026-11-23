@@ -125,11 +125,11 @@ test('تقييم عمل المشارك: ملاحظات لم تُعتمد لا ت
   await page.getByLabel('حالة العمل').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
   await page.getByRole('button', { name: 'عرض' }).click();
   const rev = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
-  await rev.getByLabel('ملاحظاتك للمشارك').fill('عمل جيد');
+  await rev.getByLabel('ملاحظتك للمشارك (اختيارية)').fill('عمل جيد');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('alertdialog')).toContainText('لديك تعديلات لم تُحفظ');
   await page.getByRole('alertdialog').getByRole('button', { name: 'إلغاء' }).click();
-  await expect(rev.getByLabel('ملاحظاتك للمشارك')).toHaveValue('عمل جيد');
+  await expect(rev.getByLabel('ملاحظتك للمشارك (اختيارية)')).toHaveValue('عمل جيد');
 });
 
 test('نوافذ البرامج: «قارن» والتقييم الختامي والمجموعات والشهادة تُغلق بـEsc ويعود التركيز', async ({ page }) => {
@@ -242,6 +242,7 @@ test('التقييم بالسلّم الرباعي: الجدول يعرض اسم
   await expect(cell).not.toContainText('★');
   await page.getByRole('button', { name: 'عرض' }).click();
   const rev = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
-  await rev.getByRole('button', { name: 'اعتماد التقييم' }).click();
-  await expect(rev.getByRole('alert')).toHaveText('اختر مستوى من السلّم');
+  // نموذج عادي: «يحتاج تعديلًا» بلا ملاحظة يُنبَّه، والتقدير اختياري (البطاقة وحدها تطلبه للاعتماد)
+  await rev.getByRole('button', { name: 'يحتاج تعديلًا' }).click();
+  await expect(rev.getByRole('alert')).toHaveText('اكتب ملاحظاتك ليعرف المشارك ما يطوّره');
 });

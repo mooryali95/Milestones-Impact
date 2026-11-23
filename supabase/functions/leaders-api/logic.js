@@ -1409,7 +1409,9 @@ export function modelStatus(c, models) {
   if (!(c.model_key in models)) return { type: 'model', done: true, na: true, model_key: c.model_key || null };
   const s = models[c.model_key] || null;
   const st = s?.status || null;
-  const done = c.accept === 'submitted' ? st === 'submitted' || st === 'reviewed' : st === 'reviewed';
+  // «يحتاج تعديلًا» (returned) لا يحبس الرحلة حين يكتمل المتطلب بالتسليم (قرار المالك 2026-11-23): أُعيد ليتحسن، لا ليعود ناقصًا.
+  // والبوابة (accept: reviewed، بطاقة المبادرة) لا تكتمل إلا بالاعتماد كما كانت
+  const done = c.accept === 'submitted' ? st === 'submitted' || st === 'reviewed' || st === 'returned' : st === 'reviewed';
   return { type: 'model', done, model_key: c.model_key || null, model_id: s?.model_id || null, title: s?.title || null, status: st, accept: c.accept === 'submitted' ? 'submitted' : 'reviewed' };
 }
 
