@@ -37,7 +37,7 @@ async function setup(page) {
       // صندوق «ينتظرني» (admin.inbox): اعتماد ونموذج، بعمرهما ووجهتهما
       'admin.inbox': { success: true, total: 2, late: 1, skipped: [], counts: { approval: 1, model: 1 }, items: [
         { kind: 'approval', kind_ar: 'اعتماد مسار', id: 'p1', title: 'سارة الأحمد', sub: 'وزارة التجربة', at: '2026-11-01', days: 12, late: true, to: { tab: 'participants', id: 'p1' } },
-        { kind: 'model', kind_ar: 'نموذج للتقييم', id: 'm1', title: 'خالد العتيبي', sub: 'سجل المخاطر', at: '2026-11-12', days: 1, late: false, to: { tab: 'participants', id: 'p2' } }] },
+        { kind: 'model', kind_ar: 'نموذج للقراءة', id: 'm1', title: 'خالد العتيبي', sub: 'سجل المخاطر', at: '2026-11-12', days: 1, late: false, to: { tab: 'participants', id: 'p2' } }] },
       'admin.track': { success: true, track: { key: 'M1I1L2', title_ar: 'مسار البداية', summary_ar: 'لمن يبدأ', focus_ar: '1. المعالم\n2. الأثر' }, participants: [{ id: 'p1', full_name: 'سارة الأحمد', email: 's@x.com', status: 'enrolled', approved: true }], handbook: [{ id: 'h1', dimension: 'milestone', title: 'باب', md: '## عنوان\n- بند **مهم**\n@chain سلسلة' }], levels: { milestone: 'beginner', impact: 'beginner', leadership: 'intermediate' } },
       'admin.save': { success: true }, 'admin.reorder': { success: true }, 'admin.delete': { success: true },
     };
@@ -94,7 +94,7 @@ test('التحليل في «الرؤية الشاملة»: المستوى الع
   const inbox = page.locator('.inbox');
   await expect(inbox.getByRole('heading')).toContainText('2، منها 1 تجاوزت مهلتها');
   await expect(inbox.locator('li.late')).toContainText('سارة الأحمد');
-  await inbox.getByRole('button', { name: /نموذج للتقييم/ }).click();
+  await inbox.getByRole('button', { name: /نموذج للقراءة/ }).click();
   await expect(inbox.locator('.inbox-list li')).toHaveCount(1);
   await expect(inbox.locator('.inbox-list li')).toContainText('سجل المخاطر');
   // لا بطاقة تحليل في المكتب

@@ -22,6 +22,9 @@ import { SITES } from '../_shared/sites.js';
 import { IDEM_TTL_HOURS } from './idempotency.ts';
 import { CLIENT_EVENTS_RETENTION_DAYS } from './client-events.ts';
 import { sessionCols } from './workshop-optional.ts';
+import { PLATFORM_CRON_JOB, platformChecks, platformLevel } from './platform-health.js';
+import { MODEL_DIGEST_ACTION } from './model-digest.ts';
+import { codeState } from './sponsor-codes.js';
 
 // ── تنظيف دوري (مع التذكير الأسبوعي) ──
 // بيانات تشغيلية بعناوين IP ومعرّفات أجهزة لا حاجة لها بعد 90 يومًا: رموز الدخول، الجلسات
@@ -93,6 +96,35 @@ export async function health() {
     missing_secrets: Object.entries(secrets).filter(([, ok]) => !ok).map(([k]) => k),
     mail: { today: mail, cap: CONFIG.mailDailyCap },
   };
+}
+
+// «صحة المنصة» (بطاقة النظرة العامة): خمسة فحوص للقراءة وحدها، كل قراءة مستقلة وتعذّرها «غير معروف» لا «سليم»
+// (platform-health.js يحكم ويكتب العلاج). لا قيمة سر في الرد: بريد التنبيه مضبوط أم لا فقط
+export async function platformHealth(now = Date.now()) {
+  const missingFn = (e: any) => !!e && ['PGRST202', '42883'].includes(String(e.code));
+  const [mig, cron, digest, sponsors] = await Promise.all([
+    missingMigrations().then((m) => ({ ledger: m.ledger, missing: m.pending.filter((x) => x.gate !== 'deferred').map((x) => x.name) }), () => null),
+    db.rpc('cron_job_status', { p_name: PLATFORM_CRON_JOB }).then((r: any) => {
+      if (r.error) { if (!missingFn(r.error)) console.error('cron_job_status:', r.error.message); return { readable: false }; }
+      const x = Array.isArray(r.data) ? r.data[0] : r.data;
+      return x ? { readable: true, exists: !!x.job_exists, active: !!x.job_active, last_status: x.last_status ?? null, last_run: x.last_run ?? null } : { readable: false };
+    }, () => ({ readable: false })),
+    db.from('audit_log').select('created_at').eq('action', MODEL_DIGEST_ACTION).order('created_at', { ascending: false }).limit(1)
+      .then((r: any) => (r.error ? { readable: false } : { readable: true, last: r.data?.[0]?.created_at ?? null }), () => ({ readable: false })),
+    sponsorGaps(now),
+  ]);
+  const checks = platformChecks({ migrations: mig, alertEmail: !!CONFIG.alertEmail, cron, digest, sponsors }, now);
+  return { success: true, level: platformLevel(checks), checks };
+}
+// الجهات النشطة بلا رمز رعاية فعّال الآن (codeState، كما يحكم الاستهلاك)
+async function sponsorGaps(now: number) {
+  const [orgs, codes] = await Promise.all([
+    db.from('organizations').select('id, name, status').eq('status', 'active'),
+    db.from('sponsor_codes').select('organization_id, active, expires_at, max_uses, used'),
+  ]);
+  if (orgs.error || codes.error) return { readable: false, without: [] };
+  const live = new Set((codes.data || []).filter((c: any) => codeState(c, now) === 'active').map((c: any) => c.organization_id));
+  return { readable: true, without: (orgs.data || []).filter((o: any) => !live.has(o.id)).map((o: any) => ({ id: o.id, name: o.name })) };
 }
 
 // جاهزية الإطلاق: إعدادات اللوحة قبل أول دفعة، وبنود الإطلاق التجريبي (م2) للجهات ودفعاتها، كل بند بمكان ضبطه.

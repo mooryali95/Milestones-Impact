@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261127100000_leaders_model_review_light
+-- as-of migration: 20261128100000_leaders_atomic_and_health
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -4307,6 +4307,35 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.apply_stage_move(p_participant uuid, p_program uuid, p_clears text[], p_writes jsonb, p_note text, p_by text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare
+  w jsonb;
+  n integer := 0;
+begin
+  if p_writes is not null and jsonb_typeof(p_writes) <> 'array' then
+    raise exception 'apply_stage_move: writes must be an array' using errcode = '22023';
+  end if;
+  delete from leaders.participant_stage_overrides o
+   where o.participant_id = p_participant and o.program_id = p_program and o.stage_key = any (coalesce(p_clears, '{}'::text[]));
+  for w in select * from jsonb_array_elements(coalesce(p_writes, '[]'::jsonb)) loop
+    if coalesce(w->>'action', '') not in ('open', 'complete', 'skip') or coalesce(w->>'stage_key', '') = '' then
+      raise exception 'apply_stage_move: bad write %', w using errcode = '22023';
+    end if;
+    insert into leaders.participant_stage_overrides (participant_id, program_id, stage_key, action, note, by_email, created_at)
+    values (p_participant, p_program, w->>'stage_key', w->>'action', nullif(left(coalesce(p_note, ''), 1000), ''), p_by, now())
+    on conflict (participant_id, program_id, stage_key) do update
+      set action = excluded.action, note = excluded.note, by_email = excluded.by_email, created_at = excluded.created_at;
+    n := n + 1;
+  end loop;
+  return n;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.audit_append_only()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4437,6 +4466,36 @@ begin
   end if;
   return new;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.cron_job_status(p_name text)
+ RETURNS TABLE(job_exists boolean, job_active boolean, last_status text, last_run timestamp with time zone)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+declare
+  jid bigint;
+  act boolean;
+begin
+  if to_regclass('cron.job') is null then
+    return query select false, false, null::text, null::timestamptz;
+    return;
+  end if;
+  execute 'select jobid, active from cron.job where jobname = $1 limit 1' into jid, act using p_name;
+  if jid is null then
+    return query select false, false, null::text, null::timestamptz;
+    return;
+  end if;
+  if to_regclass('cron.job_run_details') is not null then
+    return query execute 'select true, $2, d.status::text, coalesce(d.end_time, d.start_time) from cron.job_run_details d where d.jobid = $1 order by d.start_time desc nulls last limit 1' using jid, act;
+    if found then
+      return;
+    end if;
+  end if;
+  return query select true, act, null::text, null::timestamptz;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text)
@@ -4744,6 +4803,30 @@ begin
   end if;
   return new;
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.redeem_and_link_sponsor_code(p_code text, p_participant uuid, p_now timestamp with time zone DEFAULT now())
+ RETURNS TABLE(org_id uuid, reason text)
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare
+  r record;
+begin
+  select * into r from leaders.redeem_sponsor_code(p_code, p_participant, p_now) x limit 1;
+  if r.reason is distinct from 'ok' then
+    return query select null::uuid, coalesce(r.reason, 'unknown');
+    return;
+  end if;
+  -- للمشارك جهة الآن: خطأ يلغي الاستدعاء كله، والاستهلاك قبله معه (الدالة عبارة واحدة في معاملة)
+  update leaders.participants p set organization_id = r.org_id, org_via = 'link'
+   where p.id = p_participant and p.organization_id is null;
+  if not found then
+    raise exception 'redeem_and_link_sponsor_code: participant already linked' using errcode = 'P0005';
+  end if;
+  return query select r.org_id, 'ok'::text;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.redeem_sponsor_code(p_code text, p_participant uuid, p_now timestamp with time zone DEFAULT now())

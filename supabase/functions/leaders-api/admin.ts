@@ -13,7 +13,7 @@ import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { MAIL_GUARD_ACTIONS, planCutoffFor, planGuard } from './cohort-plan.js';
 import { DIM_AR, expertRoleAr, REVIEWER_AR, RUBRIC_SCALE } from './labels.js';
-import { bulkReadIds, isGateModel } from './model-review.js';
+import { bulkReadIds, isGateModel, readingCounts, readingList } from './model-review.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
@@ -663,11 +663,11 @@ export async function reviews(b: Body = {}) {
 export async function inbox(_b: Body = {}) {
   const P = 'participants!inner(full_name, is_demo)';
   // حد القراءة لكل نوع: النوع الذي يبلغه عدده «على الأقل» (capped)
-  const LIMIT = { approval: 200, requirement: 200, model: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100, coaching_group_confirm: 100 };
+  const LIMIT = { approval: 200, requirement: 200, model: 200, model_gate: 200, capstone: 200, expert_application: 100, expert_unmatched: 100, sponsor: 100, erasure: 100, coaching_confirm: 100, coaching_group_confirm: 100 };
   const q = {
     approval: listed(db.from('participants').select('id, full_name, organization_name, updated_at').eq('status', 'pending_approval')).order('updated_at', { ascending: true }).limit(LIMIT.approval),
     requirement: listed(db.from('participant_requirements').select(`participant_id, requirement_id, completed_at, ${P}, stage_requirements(title_ar, program_id)`).eq('status', 'submitted'), 'participants').limit(LIMIT.requirement),
-    model: listed(db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(title_ar)`).eq('status', 'submitted'), 'participants').limit(LIMIT.model),
+    model: listed(db.from('model_submissions').select(`id, participant_id, submitted_at, ${P}, learning_models(key, title_ar)`).eq('status', 'submitted'), 'participants').limit(LIMIT.model),
     capstone: listed(db.from('capstones').select(`participant_id, submitted_at, ${P}`).eq('status', 'submitted'), 'participants').limit(LIMIT.capstone),
     // journey-guard: صندوق الإدارة يعدّ طلبات الانضمام بانتظار المراجعة، لا ترشيح فيه
     expert_application: db.from('experts').select('id, full_name, title, created_at').eq('status', 'applied').limit(LIMIT.expert_application),
@@ -684,13 +684,19 @@ export async function inbox(_b: Body = {}) {
   const rows: Record<string, any[]> = {}, skipped: string[] = [];
   keys.forEach((k, i) => { if (res[i].error) skipped.push(k); rows[k] = (res[i].data || []) as any[]; });
   // capped: نوع بلغ حد قراءته فعدده أقل من الحقيقة؛ يعلّم به مكتب اليوم «ينتظر قرارًا» بأنه «على الأقل»
-  const capped = keys.filter((k) => rows[k].length >= LIMIT[k]);
+  const capped: string[] = keys.filter((k) => rows[k].length >= LIMIT[k]);
   rows.requirement = await readableReqTitles(rows.requirement).catch(() => rows.requirement);
+  // النماذج بقاعدة «للقراءة» نفسها (readingList): البطاقة بوابة تُعدّ وحدها، والباقي للقراءة
+  const split = readingList(rows.model);
+  rows.model_gate = split.gates;
+  rows.model = split.groups.flatMap((g: any) => g.items);
+  if (capped.includes('model')) capped.push('model_gate');
   const name = (r: any) => r.participants?.full_name || '';
   const src = {
     approval: rows.approval.map((r) => ({ id: r.id, participant_id: r.id, title: r.full_name, sub: r.organization_name || '', at: r.updated_at })),
     requirement: rows.requirement.map((r) => ({ id: `${r.participant_id}:${r.requirement_id}`, participant_id: r.participant_id, title: name(r), sub: r.stage_requirements?.title_ar || '', at: r.completed_at })),
     model: rows.model.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: r.learning_models?.title_ar || '', at: r.submitted_at })),
+    model_gate: rows.model_gate.map((r) => ({ id: r.id, participant_id: r.participant_id, title: name(r), sub: r.learning_models?.title_ar || 'بطاقة المبادرة', at: r.submitted_at })),
     // وثيقة المبادرة مفتاحها المشارك، وصفحتها في تبويب مشاريع التخرج بمعرّفه
     capstone: rows.capstone.map((r) => ({ id: r.participant_id, title: name(r), sub: 'وثيقة المبادرة', at: r.submitted_at })),
     expert_application: rows.expert_application.map((r) => ({ id: r.id, title: r.full_name, sub: r.title || '', at: r.created_at })),
@@ -1052,8 +1058,17 @@ export async function stageMove(a: Admin, b: Body) {
   const plan = planMove(j.journey, String(b.stage_key || ''), b.choices && typeof b.choices === 'object' ? b.choices : {});
   if (!plan.ok) throw new Fail(plan.error, 400, 'stage_move');
   const program = j.def.program_id;
-  for (const c of plan.clears) await writeOverride(a, p.id, program, c.key, null, null);
-  for (const w of plan.writes) await writeOverride(a, p.id, program, w.key, w.action, reason);
+  // الكتابة كلها في معاملة واحدة (leaders.apply_stage_move، ترحيل 20261128100000): تُحذف التدخلات وتُكتب معًا أو لا يتغير شيء،
+  // فلا يبقى مشارك في منتصف نقل. الصفوف بقاعدة writeOverride نفسها (الملاحظة مقصوصة، والكاتب، والوقت). قبل الترحيل يُرد النقل
+  // بـnot_migrated صراحةً بدل كتابة غير ذرية (التدخل في مرحلة الواحدة يعمل كما كان)
+  const { error } = await db.rpc('apply_stage_move', {
+    p_participant: p.id, p_program: program, p_clears: plan.clears.map((c) => c.key),
+    p_writes: plan.writes.map((w) => ({ stage_key: w.key, action: w.action })), p_note: reason.slice(0, 1000), p_by: a.email,
+  });
+  if (error) {
+    if (['PGRST202', '42883'].includes(String((error as any).code))) throw new Fail('نقل المشارك بين المراحل غير مفعّل بعد: يلزم تطبيق ترحيل القاعدة', 409, 'not_migrated');
+    throw error;
+  }
   await audit('admin', a.email, 'stage.move', 'participants', p.id, null, {
     to: plan.target.key, direction: plan.direction, program, reason,
     writes: plan.writes.map((w) => ({ stage: w.key, action: w.action })), clears: plan.clears.map((c) => ({ stage: c.key, was: c.was })),
@@ -1282,8 +1297,18 @@ async function bookStats() {
     chapters, models,
     readers: totals.length,
     points: { participants: totals.length, total: totals.reduce((a, n) => a + n, 0), avg: totals.length ? Math.round(totals.reduce((a, n) => a + n, 0) / totals.length) : 0 },
-    to_review: subs.filter((r: any) => r.status === 'submitted').length,
+    // «للقراءة» وبطاقات الاعتماد بعدّ القائمة نفسها (readingCounts): المسلَّم غير المقروء بلا البطاقة وبلا الحساب التجريبي.
+    // كان يعدّ كل مسلَّم فيدخله التجريبي والبطاقة، فيختلف العدّاد عن القائمة تحته
+    ...(await waitingModels(subs)),
   };
+}
+
+async function waitingModels(subs: any[]) {
+  const fallback = () => ({ to_review: subs.filter((r: any) => r.status === 'submitted').length, to_approve: 0 });
+  const { data, error } = await listed(db.from('model_submissions').select('participant_id, status, submitted_at, learning_models(key), participants!inner(is_demo)').eq('status', 'submitted'), 'participants');
+  if (error) return fallback();
+  const c = readingCounts(data || []);
+  return { to_review: c.read, to_approve: c.gates };
 }
 
 // الكتاب والنماذج كما يراها مشارك في مسار معين، مع الإجابات الصحيحة للإدارة
@@ -1326,15 +1351,13 @@ export async function submissions(b: Body) {
 // من ينتظر تسليمه القراءة وليس له مستشار: مراجعته عند فريق البرنامج (model-review.js). يُحسب لمن له «للقراءة» وحده،
 // ومن تعذّر تحديد مستشاره لا يُعدّ بلا مستشار (لا تخمين في الصلاحية)
 export async function noAdvisorOf(rows: any[]): Promise<string[]> {
-  const { advisorOf } = await import('./advisor.ts');
+  // بقراءات معدودة للجميع (advisorsOf)، لا قراءات لكل مشارك. من غاب عن الخريطة تعذّر تحديده فلا يُعدّ بلا مستشار
+  const { advisorsOf } = await import('./advisor.ts');
   const waiting = new Map<string, any>();
-  for (const r of rows) if (r.status === 'submitted' && r.participants && !waiting.has(r.participant_id)) waiting.set(r.participant_id, r.participants);
-  const out: string[] = [];
-  for (const [pid, p] of waiting) {
-    const adv = await advisorOf({ ...p, id: pid }).catch(() => undefined);
-    if (adv === null) out.push(pid);
-  }
-  return out;
+  for (const r of rows) if (r.status === 'submitted' && r.participants && !waiting.has(r.participant_id)) waiting.set(r.participant_id, { ...r.participants, id: r.participant_id });
+  if (!waiting.size) return [];
+  const map = await advisorsOf([...waiting.values()]).catch(() => new Map<string, any>());
+  return [...waiting.keys()].filter((pid) => map.has(pid) && map.get(pid) === null);
 }
 
 export async function submission(b: Body) {

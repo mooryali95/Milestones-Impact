@@ -46,6 +46,27 @@ export async function consumeSponsorCode(code: string, participantId: string) {
   return r;
 }
 
+// الاستهلاك والربط معًا في معاملة واحدة (redeem_and_link_sponsor_code، ترحيل 20261128100000): إن تعذّر الربط بعد الاستهلاك أُلغي
+// الاستهلاك، فلا يبقى استخدام معدود بلا ربط. يعيد صف المشارك بعد الربط. قبل الترحيل (الدالة غائبة) يعود إلى الطريق القديم:
+// الاستهلاك ثم الربط (consumeSponsorCode)، كما كان. للمشارك جهة في الأثناء: 409 كرد الحساب المرتبط
+export async function redeemAndLink(code: string, participantId: string, orgId: string) {
+  const { data, error } = await db.rpc('redeem_and_link_sponsor_code', { p_code: normalizeSponsorCode(code), p_participant: participantId });
+  if (error && missingFn(error)) {
+    await consumeSponsorCode(code, participantId);
+    return must(await db.from('participants').update({ organization_id: orgId, org_via: 'link' }).eq('id', participantId).is('organization_id', null).select('*').single());
+  }
+  if (error) {
+    if (String((error as any).code) === 'P0005') throw new Fail('حسابك مرتبط بجهة راعية. لتغييرها تواصل مع الإدارة.', 409);
+    throw error;
+  }
+  const r = Array.isArray(data) ? data[0] : data;
+  if (r?.reason !== 'ok' || !r.org_id) {
+    await audit('participant', participantId, 'sponsor.code-spent', 'sponsor_codes', null, null, { code, reason: String(r?.reason || 'unknown') });
+    throw new Fail(SPONSOR_CODE_SPENT_AR, 409, 'sponsor_code_spent');
+  }
+  return must(await db.from('participants').select('*').eq('id', participantId).single());
+}
+
 // ── الإدارة ──
 const orgIdOf = (b: Body) => {
   const id = String(b.org_id || b.organization_id || '').trim();

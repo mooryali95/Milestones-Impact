@@ -301,6 +301,37 @@ function QuickLinks({ onTab, canWrite }) {
   );
 }
 
+// «صحة المنصة» (admin.platform-health): خمسة فحوص تشغيلية للقراءة وحدها، أخضر أو كهرماني أو أحمر، وسطر علاج لكل خلل.
+// الأحكام والنصوص من الخادم (platform-health.js)، فلا تُكتب هنا مرة ثانية. تعذّر القراءة سطر خافت، ورد بلا فحوص لا يُرسم
+const PH_DOT = { ok: '✓', warn: '!', bad: '✕', unknown: '?' };
+const PH_LEVEL_AR = { ok: 'سليم', warn: 'يحتاج انتباهًا', bad: 'خلل', unknown: 'غير معروف' };
+function PlatformHealth() {
+  const [r, setR] = useState(null);
+  useEffect(() => {
+    let live = true;
+    L('admin.platform-health').then((x) => live && setR(x), () => live && setR({ success: false }));
+    return () => { live = false; };
+  }, []);
+  if (!r) return null;
+  if (!r.success) return <p className="la-muted small ph-err">تعذّرت قراءة صحة المنصة الآن.</p>;
+  if (!Array.isArray(r.checks) || !r.checks.length) return null;
+  return (
+    <section className="la-card ph-card" aria-label="صحة المنصة" data-level={r.level}>
+      <h3 className="ph-title">صحة المنصة <small className="la-muted">· {PH_LEVEL_AR[r.level] || ''}</small></h3>
+      <ul className="ph-rows">
+        {r.checks.map((c) => (
+          <li key={c.key} className={`ph-row ph-${c.level}`} data-level={c.level}>
+            <span className="ph-dot" aria-hidden="true">{PH_DOT[c.level] || '?'}</span>
+            <span className="ph-main"><b>{c.label}</b> <span className="ph-line">{c.line}</span>
+              {c.remedy && <span className="ph-remedy">{c.remedy}</span>}</span>
+            <span className="sr-only">{PH_LEVEL_AR[c.level]}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pending, canWrite }) {
   const [d, setD] = useState(null);
   const [n, setN] = useState(0);
@@ -351,6 +382,7 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
       <Pulse t={today} />
       <DeskNote t={today} />
       <QuickLinks onTab={onTab} canWrite={canWrite} />
+      <PlatformHealth />
       <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
     </>
   );

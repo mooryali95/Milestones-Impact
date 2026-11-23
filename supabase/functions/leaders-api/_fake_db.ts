@@ -107,6 +107,36 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     if (err) return { data: null, error: err };
     const own = opts.rpc?.(name, args, tables);
     if (own) return own;
+    if (name === 'apply_stage_move') {
+      // كالدالة في 20261128100000: الحذف ثم الكتابة في معاملة واحدة؛ كتابة غير معروفة ترمي قبل أي أثر
+      if ((args.p_writes || []).some((w: any) => !['open', 'complete', 'skip'].includes(w.action) || !w.stage_key)) return { data: null, error: { code: '22023', message: 'apply_stage_move: bad write' } };
+      const rows = (tables.participant_stage_overrides ||= []);
+      const same = (o: Row, k: string) => o.participant_id === args.p_participant && o.program_id === args.p_program && o.stage_key === k;
+      tables.participant_stage_overrides = rows.filter((o) => !(args.p_clears || []).some((k: string) => same(o, k)));
+      for (const w of args.p_writes || []) {
+        tables.participant_stage_overrides = tables.participant_stage_overrides.filter((o) => !same(o, w.stage_key));
+        tables.participant_stage_overrides.push({ participant_id: args.p_participant, program_id: args.p_program, stage_key: w.stage_key, action: w.action, note: args.p_note ? String(args.p_note).slice(0, 1000) : null, by_email: args.p_by, created_at: new Date().toISOString() });
+      }
+      writes.push({ table: 'participant_stage_overrides', kind: 'upsert', ids: [args.p_participant] });
+      return { data: (args.p_writes || []).length, error: null };
+    }
+    if (name === 'redeem_and_link_sponsor_code') {
+      // كالدالة في 20261128100000: الاستهلاك (محاكاة الاختبار لـredeem_sponsor_code) ثم الربط، وتعذّر الربط يلغي الاستهلاك
+      const keep = { codes: structuredClone(tables.sponsor_codes || []), uses: structuredClone(tables.sponsor_code_uses || []) };
+      const r = opts.rpc?.('redeem_sponsor_code', args, tables);
+      if (!r) return { data: null, error: { code: 'PGRST202', message: 'rpc redeem_and_link_sponsor_code not faked' } };
+      if (r.error) return r;
+      const row: any = Array.isArray(r.data) ? r.data[0] : r.data;
+      if (row?.reason !== 'ok') return r;
+      const p = (tables.participants || []).find((x) => x.id === args.p_participant);
+      if (!p || p.organization_id) {
+        tables.sponsor_codes = keep.codes; tables.sponsor_code_uses = keep.uses;
+        return { data: null, error: { code: 'P0005', message: 'redeem_and_link_sponsor_code: participant already linked' } };
+      }
+      Object.assign(p, { organization_id: row.org_id, org_via: 'link' });
+      writes.push({ table: 'participants', kind: 'update', ids: [p.id] });
+      return r;
+    }
     if (name === 'erasure_purge') {
       // كالدالة في 20261116160000: الطلب القائم أولًا، ثم الدفعة المعلّقة، ثم الإغلاق وسجل الدفع والشهادات والصف
       const req = (tables.erasure_requests || []).find((r) => r.id === args.p_request && r.participant_id === args.p_participant && r.status === 'pending');

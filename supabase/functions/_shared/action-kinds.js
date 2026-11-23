@@ -25,7 +25,7 @@ export const LEADERS_READS = new Set([
 
 // أفعال الإدارة في leaders-api للقراءة وحدها: تُفتح لكل أدوار اللوحة بما فيها «عرض فقط» (المصدر الذي كان في
 // authz-actions.test.js، ويحرس هناك أن كل فعل إدارة غيرها يفحص صلاحية الكتابة)
-export const LEADERS_ADMIN_READS = new Set(['health', 'inbox', 'today', 'insight', 'changes', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'participant-timeline', 'peer', 'reviews',
+export const LEADERS_ADMIN_READS = new Set(['health', 'platform-health', 'inbox', 'today', 'insight', 'changes', 'mail-gallery', 'visits', 'trends', 'item-analysis', 'overview', 'participants', 'participant', 'participant-timeline', 'peer', 'reviews',
   'participant-impact', 'sus', 'erasures', 'erasure-get', 'catalog', 'nudge-preview', 'nudge-ledger', 'nudge-report', 'track', 'orgs', 'org', 'sponsor-codes', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'cohort-journey', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'cohort-workshops', 'coaching-groups', 'coaching-group-preview', 'coaching-group-candidates', 'impact',
   'curriculum', 'programs', 'payments', 'payment', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'expert-reassign-options', 'program', 'program-compare', 'milestones', 'cohort-definition',

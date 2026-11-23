@@ -9,7 +9,10 @@ import { daysLeft, urgency } from './erasure.js';
 export const INBOX_KINDS = {
   approval: { label: 'اعتماد مسار', tab: 'participants', sla: 2 },
   requirement: { label: 'متطلب للمراجعة', tab: 'participants', sla: 5 },
-  model: { label: 'نموذج للتقييم', tab: 'handbook', sla: 5 },
+  // النماذج: ما ينتظر القراءة (ملاحظات لا اعتماد)، وبطاقة المبادرة وحدها بوابة تنتظر الاعتماد («بوابتان، والباقي ملاحظات»،
+  // model-review.js readingList)، فتُعدّ كل منهما وحدها كقائمة «للقراءة» في الكتيب
+  model: { label: 'نموذج للقراءة', tab: 'handbook', sla: 5 },
+  model_gate: { label: 'بطاقة مبادرة للاعتماد', tab: 'handbook', sla: 3 },
   capstone: { label: 'وثيقة مبادرة', tab: 'capstones', sla: 7 },
   expert_application: { label: 'طلب انضمام خبير', tab: 'experts', sla: 7 },
   // query: عرض مصفّى في شاشة الوجهة. الطلب بلا خبير يُرى ويُعالج في طلبات الإسناد بعرض «يحتاج تدخلًا»، لا في ملف المشارك

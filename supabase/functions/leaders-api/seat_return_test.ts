@@ -74,6 +74,13 @@ function install(tables: Record<string, Row[]>) {
   // leaders.pin_sponsor_seat بلا الحارس: الجهة النشطة، ثم «مثبّت سلفًا» يكمل الناقص، ثم المقاعد، ثم البندان
   const rpc = (name: string, a: any) => {
     // رمز رعاية (redeem_sponsor_code): يُقبل ما دام صفه في sponsor_codes، وحدّه وانتهاؤه في sponsor_codes_test.ts
+    // الاستهلاك والربط معًا (redeem_and_link_sponsor_code، 20261128100000): كالاستهلاك أعلاه ثم الربط بشرط أنه بلا جهة
+    if (name === 'redeem_and_link_sponsor_code') {
+      const c = (tables.sponsor_codes || []).find((x) => x.code === a.p_code);
+      const p = (tables.participants || []).find((x) => x.id === a.p_participant);
+      if (c && p && !p.organization_id) Object.assign(p, { organization_id: c.organization_id, org_via: 'link' });
+      return Promise.resolve({ data: [{ org_id: c?.organization_id ?? null, reason: c ? 'ok' : 'unknown' }], error: null });
+    }
     if (name === 'redeem_sponsor_code') {
       const c = (tables.sponsor_codes || []).find((x) => x.code === a.p_code);
       return Promise.resolve({ data: [{ org_id: c?.organization_id ?? null, reason: c ? 'ok' : 'unknown' }], error: null });

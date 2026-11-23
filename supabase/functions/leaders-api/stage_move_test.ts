@@ -149,3 +149,54 @@ Deno.test('السجل الكامل الخالص: قرار الإدارة يحم�
     observations: [{ created_at: '2026-11-01T00:00:00Z', kind: 'warning', title: 'غياب', body: 'غاب يومين', source: 'admin' }] });
   assertEquals(t.rows.map((r: any) => [r.type, r.text, r.detail]), [['decision', 'نُقل إلى مرحلة', 'السبب: أنجزها خارج المنصة'], ['note', 'تنبيه: غياب', 'غاب يومين']]);
 });
+
+// ترحيل 20261128100000: الكتابة كلها في معاملة واحدة (apply_stage_move)، وقبله يُرد النقل صراحةً ولا يكتب شيئًا
+Deno.test('النقل ذري: دالة واحدة تحذف وتكتب، وتعذّرها لا يترك نصف نقل، وقبل الترحيل not_migrated بلا أثر', async () => {
+  const w = world();
+  try {
+    const calls: any[] = [];
+    const rpc = (await import('./core.ts')).db.rpc.bind((await import('./core.ts')).db);
+    (await import('./core.ts')).db.rpc = ((n: string, a: any) => { calls.push([n, a]); return rpc(n, a); }) as any;
+    await A.stageMove(ADMIN, { participant_id: P, stage_key: 'consulting', choices: { ojt: 'skip' }, reason: 'أنجز التدريب والتوجيه خارج المنصة' });
+    assertEquals(calls.filter(([n]) => n === 'apply_stage_move').length, 1);
+    assertEquals(calls[0][1].p_writes, [{ stage_key: 'training', action: 'complete' }, { stage_key: 'ojt', action: 'skip' }, ...calls[0][1].p_writes.slice(2)]);
+    assertEquals(w.writes.filter((x) => x.table === 'participant_stage_overrides' && x.kind !== 'upsert').length, 0);   // لا كتابة مباشرة خارج الدالة
+  } finally { w.restore(); }
+  for (const [code, want] of [['PGRST202', 'not_migrated'], ['XX000', null]] as const) {
+    const v = world();
+    const f = installFake(v.tables, { fail: (t) => t === 'rpc:apply_stage_move' ? { code, message: 'x' } : null });
+    try {
+      const e: any = await assertRejects(() => A.stageMove(ADMIN, { participant_id: P, stage_key: 'consulting', choices: { ojt: 'skip' }, reason: 'أنجز التدريب والتوجيه خارج المنصة' }));
+      if (want) assertEquals(e.code, want);
+      assertEquals(v.ov(), {});
+      assertEquals(f.tables.audit_log.filter((x) => x.action === 'stage.move').length, 0);   // لا سطر سجل ولا بريد لنقل لم يقع
+    } finally { f.restore(); v.restore(); }
+  }
+});
+
+Deno.test('السجل الكامل: أسطر كثيرة في الوقت نفسه لا تسقط بين الصفحات ولا تتكرر (مؤشر مركب)', async () => {
+  const w = world();
+  try {
+    const T = '2026-11-01T00:00:00.000Z';
+    // 70 سطر سجل في اللحظة نفسها، ومعها نموذج سُلِّم وجلسة في اللحظة نفسها
+    for (let i = 0; i < 70; i++) w.tables.audit_log.push({ id: 1000 + i, entity_id: P, actor: 'admin@example.sa', actor_type: 'admin', action: 'participant.nudge', created_at: T });
+    w.tables.model_submissions.push({ participant_id: P, submitted_at: T, learning_models: { title_ar: 'خريطة' } });
+    w.tables.coaching_sessions.push({ participant_id: P, status: 'attended', starts_at: T });
+    const pages: any[] = [];
+    let before: string | null = null;
+    do {
+      const r: any = await FL.participantTimeline({ participant_id: P, ...(before ? { before } : {}) });
+      pages.push(r.rows);
+      before = r.next;
+    } while (before && pages.length < 10);
+    const all = pages.flat();
+    assertEquals(all.filter((x) => x.text === 'ذُكِّر بمتابعة رحلته').length, 70);
+    assertEquals(all.filter((x) => x.text === 'سلّم «خريطة»').length, 1);
+    assertEquals(all.filter((x) => x.type === 'attendance').length, 1);
+    assert(pages.length >= 2);
+    assertEquals(all.at(-1).text, 'سجّل في المنصة');
+    // المؤشر القديم (الوقت وحده) يُقرأ كما كان: ما قبله تمامًا
+    const legacy: any = await FL.participantTimeline({ participant_id: P, before: T });
+    assert(legacy.rows.every((x: any) => x.at < T));
+  } finally { w.restore(); }
+});
