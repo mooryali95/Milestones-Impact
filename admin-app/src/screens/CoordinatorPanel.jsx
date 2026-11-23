@@ -6,6 +6,7 @@ import { date, L, STATUS } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
 import { VIEWER_PERM_AR, VIEWER_TEMPLATE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { COORD_TEMPLATES } from '../../../supabase/functions/leaders-api/logic.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const ST = { invited: ['دُعي ولم يدخل بعد', 'warn'], active: ['فعّال', 'ok'], suspended: ['موقوف', 'bad'] };
 // «فريق البرنامج» ليست من بيانات المشاركين، فلا تُذكر للمشارك في «ماذا ترى جهتك» (VIEWER_PERM_AR) وتُضبط هنا بجانبها
@@ -77,7 +78,7 @@ function AddViewer({ orgId, onDone, onCancel }) {
       <h4>مطّلع جديد</h4>
       <div className="cp-add-grid">
         <label className="of-field"><span className="of-label">الاسم</span><input value={v.full_name} onChange={(e) => setV({ ...v, full_name: e.target.value })} maxLength={120} /></label>
-        <label className="of-field"><span className="of-label">البريد *</span><input dir="ltr" type="email" required value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} /></label>
+        <label className="of-field"><span className="of-label">البريد *</span><EmailInput dir="ltr" type="email" required value={v.email} onChange={(e) => setV({ ...v, email: e.target.value })} /></label>
         <label className="of-field"><span className="of-label">القالب</span>
           <select value={v.template} onChange={(e) => setV({ ...v, template: e.target.value })}>
             {Object.keys(COORD_TEMPLATES).map((k) => <option key={k} value={k}>{VIEWER_TEMPLATE_AR[k]}</option>)}

@@ -12,6 +12,7 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { DIM_AR, EXPERT_ROLE_AR, LEVEL_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { APPLY_TRACKS, COMMITTEE_AR, CONTENT_DIM_AR, COMMITTEE_NEEDED_AR } from '../../../supabase/functions/leaders-api/committees.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const LANG = { ar: 'العربية', en: 'English' };
 
@@ -158,7 +159,7 @@ function ContentForm({ onBack }) {
 
         <div className="xp-grid">
           <label className="field"><span>الاسم الكامل *</span><input className="input" required value={v.full_name} onChange={set('full_name')} maxLength={120} autoComplete="name" /></label>
-          <label className="field"><span>البريد الإلكتروني *</span><input className="input" dir="ltr" type="email" required value={v.email} onChange={set('email')} autoComplete="email" /></label>
+          <label className="field"><span>البريد الإلكتروني *</span><EmailInput className="input" dir="ltr" type="email" required value={v.email} onChange={set('email')} autoComplete="email" /></label>
           <label className="field"><span>المسمى المهني</span><input className="input" value={v.title} onChange={set('title')} maxLength={160} placeholder="مثل: مصممة تعلم، باحث في القياس" /></label>
         </div>
 
@@ -198,7 +199,7 @@ function JourneyForm({ expert = null, save = null, onSaved = null, reviewer = fa
 
         <div className="xp-grid">
           <label className="field"><span>الاسم الكامل *</span><input className="input" required value={v.full_name} onChange={set('full_name')} maxLength={120} autoComplete="name" /></label>
-          <label className="field"><span>البريد الإلكتروني *</span><input className="input" dir="ltr" type="email" required readOnly={!!expert} value={v.email} onChange={set('email')} autoComplete="email" /></label>
+          <label className="field"><span>البريد الإلكتروني *</span><EmailInput className="input" dir="ltr" type="email" required readOnly={!!expert} value={v.email} onChange={set('email')} autoComplete="email" /></label>
           <label className="field"><span>المسمى المهني</span><input className="input" value={v.title} onChange={set('title')} maxLength={160} placeholder="مثل: مستشار إدارة محافظ، PMP" /></label>
           <label className="field"><span>الجوال</span><input className="input" dir="ltr" value={v.phone} onChange={set('phone')} autoComplete="tel" /></label>
           <label className="field"><span>LinkedIn</span><input className="input" dir="ltr" value={v.linkedin_url} onChange={set('linkedin_url')} placeholder="https://www.linkedin.com/in/…" /></label>

@@ -73,6 +73,11 @@ function install(tables: Record<string, Row[]>) {
   };
   // leaders.pin_sponsor_seat بلا الحارس: الجهة النشطة، ثم «مثبّت سلفًا» يكمل الناقص، ثم المقاعد، ثم البندان
   const rpc = (name: string, a: any) => {
+    // رمز رعاية (redeem_sponsor_code): يُقبل ما دام صفه في sponsor_codes، وحدّه وانتهاؤه في sponsor_codes_test.ts
+    if (name === 'redeem_sponsor_code') {
+      const c = (tables.sponsor_codes || []).find((x) => x.code === a.p_code);
+      return Promise.resolve({ data: [{ org_id: c?.organization_id ?? null, reason: c ? 'ok' : 'unknown' }], error: null });
+    }
     if (name !== 'pin_sponsor_seat') return Promise.resolve({ data: null, error: null });
     pins.push(a);
     const ents = tables.entitlements ||= [];
@@ -376,6 +381,8 @@ Deno.test('رمز الجهة بعد سحب الإدارة رعايتها أو ر
     sponsor_requests: [{ id: 'sr-r', participant_id: U(34), organization_id: ORG, typed_name: 'جهة', kind: 'seats', status: 'rejected', reason: 'اكتمل العقد', created_at: '2026-11-01T08:00:00Z', decided_at: '2026-11-01T09:00:00Z' }],
   }));
   f.tables.organizations[0].invite_code = 'jiha-2026';
+  // ما يُكتب في «رشّحتك جهة؟» رمز رعاية وحده (قرار المالك)، فيُزرع رمز رعاية للجهة بالنص نفسه
+  f.tables.sponsor_codes = [{ id: 'sc-1', organization_id: ORG, code: 'jiha-2026', max_uses: null, used: 0, expires_at: null, active: true }];
   try {
     for (const [n, word] of [[33, 'أنهت الإدارة'], [34, 'دفع فردي']] as [number, string][]) {
       const e: any = await assertRejects(() => P.sponsorCode({ ...f.tables.participants.find((x) => x.id === U(n)) }, { sponsor_code: 'jiha-2026' }));

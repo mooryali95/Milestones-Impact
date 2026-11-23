@@ -6,6 +6,8 @@
 
 // الجداول التي تُصدَّر بعمود المشارك فيها. القيمة: الأعمدة المحجوبة من ذلك الجدول فوق الحجب العام.
 export const EXPORT_TABLES = {
+  // رموز الرعاية: متى استُخدم رمز لربط المشارك بجهته (معرّف الرمز محجوب، والجهة ظاهرة في ملفه)
+  sponsor_code_uses: ['code_id'],
   enrollments: [], placements: ['admin_note'], assessments: ['retake_requested_by'], entitlements: ['granted_by', 'revoked_by'], payments: ['customer_id', 'admin_note'],
   participant_requirements: ['reviewed_by'], participant_milestones: [], participant_stage_overrides: [],
   handbook_progress: [], handbook_views: [], handbook_exports: [], reading_progress: [], video_progress: [], content_progress: [],

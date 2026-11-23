@@ -10,6 +10,7 @@ import { Empty, Spinner, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import { EXPERT_ROLE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { coverageNotes, journeyApproved, loadText, OVER_AR, peopleAr, periodAr, rankForAdd, roleAr, rolesAr, scopeText, statusChip } from '../team.js';
 import { GroupsPanel } from './Groups.jsx';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const TABS = [['team', 'الفريق'], ['groups', 'المجموعات ونمط العمل']];
 
@@ -84,7 +85,7 @@ function AddMember({ d, preset, onDone, onCancel }) {
             <p className="la-muted small">يُنشأ ملفه مدعوًا، وتصله دعوة واحدة يستكمل بها ملفه. يدخل الفريق الآن، ويُعيَّن مستشارًا أو خبير مجموعة بعد اعتماد ملفه.</p>
             <div className="of-grid">
               <label className="of-field"><span className="of-label">الاسم الكامل *</span><input value={inv.full_name} onChange={(e) => setInv({ ...inv, full_name: e.target.value })} maxLength={120} autoComplete="off" /></label>
-              <label className="of-field"><span className="of-label">البريد *</span><input type="email" dir="ltr" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} autoComplete="off" /></label>
+              <label className="of-field"><span className="of-label">البريد *</span><EmailInput type="email" dir="ltr" value={inv.email} onChange={(e) => setInv({ ...inv, email: e.target.value })} autoComplete="off" /></label>
               <label className="of-field"><span className="of-label">المسمى</span><input value={inv.title} onChange={(e) => setInv({ ...inv, title: e.target.value })} maxLength={160} /></label>
             </div>
           </fieldset>

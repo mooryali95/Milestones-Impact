@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { ERASE_DELETED, ERASE_KEPT } from '../../../supabase/functions/leaders-api/erasure.js';
+import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const day = (iso) => new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -91,7 +92,7 @@ export default function MyData({ me }) {
           <label className="field"><span>سبب الطلب <em>(اختياري)</em></span>
             <input className="input" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
           <label className="field"><span>للتأكيد اكتب بريدك: <span className="ltr">{email}</span></span>
-            <input className="input ltr" type="email" required autoComplete="off" spellCheck={false} value={typed} onChange={(e) => setTyped(e.target.value)} /></label>
+            <EmailInput className="input ltr" type="email" required autoComplete="off" spellCheck={false} value={typed} onChange={(e) => setTyped(e.target.value)} /></label>
           <div className="row" style={{ gap: '.5rem', flexWrap: 'wrap' }}>
             <button type="submit" className="btn sm" disabled={busy || typed.trim().toLowerCase() !== String(email).toLowerCase()}>أرسل طلب الحذف</button>
             <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { setAsking(false); setTyped(''); }}>تراجع</button>
