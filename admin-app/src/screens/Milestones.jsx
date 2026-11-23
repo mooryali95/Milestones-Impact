@@ -90,9 +90,10 @@ const rubricFields = [
   { name: 'note', label: 'ملاحظة للسجل', type: 'textarea', rows: 2 },
 ];
 
-export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
+// أفعال المعلم لمشارك بعينه، مصدرها واحد: قائمة المعالم هنا، وشريحة المعلم في مرحلته بتبويب «الرحلة» (PersonJourney.jsx).
+// نافذة واحدة لاعتماد الإنجاز بالمعيار ولتمديد الموعد؛ ok رسالة نجاحها. form عنصر النافذة يُرسم حيث يُستدعى الخطاف
+export function useMilestoneActions(p, onDone) {
   const { toast, prompt, confirm } = useUI();
-  // نافذة واحدة لاعتماد الإنجاز بالمعيار ولتمديد الموعد؛ ok رسالة نجاحها
   const [form, setForm] = useState(null);
   const rate = (m) => setForm({
     ok: 'تم',
@@ -103,7 +104,6 @@ export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
       scores: Object.fromEntries(Object.keys(MILESTONE_RUBRIC).map((k) => [k, v[`r_${k}`]]).filter(([, x]) => x)),
     }),
   });
-  if (!list?.length) return null;
   const act = async (m, body, ok) => {
     const note = await prompt('السبب (يُحفظ في السجل):', '');
     if (note === null) return;
@@ -127,25 +127,44 @@ export function ParticipantMilestones({ p, list, summary, canWrite, onDone }) {
     toast(r.success ? 'أُلغي التمديد' : r.message);
     if (r.success) onDone();
   };
+  const undo = (m) => act(m, { done: false }, 'أُلغي');
+  // ما يظهر لمعلم بعينه، بالترتيب: الاعتماد أو التقييم، ثم التمديد وإلغاؤه
+  const items = (m) => [
+    !m.done && { label: 'اعتمد الإنجاز', run: () => rate(m) },
+    m.done && { label: Object.keys(m.scores || {}).length ? 'عدّل التقييم' : 'قيّم بالمعيار', run: () => rate(m) },
+    m.done && m.done_at && { label: 'إلغاء الاعتماد', run: () => undo(m) },
+    !m.done && { label: m.extended ? 'عدّل التمديد' : 'مدّد له', run: () => extend(m) },
+    !m.done && m.extended && { label: 'ألغِ التمديد', run: () => unextend(m) },
+  ].filter(Boolean);
+  const el = form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast(form.ok); onDone(); } }} />;
+  return { items, form: el };
+}
+
+// «تنتهي 25 نوفمبر · متأخرة يومين»: موعد المعلم وحاله في سطر، لشريحته في مرحلته
+export function milestoneDueAr(m) {
+  const when = m.due ? day(m.due) : 'بلا موعد';
+  if (m.status === 'done') return `${m.title_ar}: أُنجز${m.late_days > 0 ? ` بعد موعده بـ${m.late_days} يومًا` : ''}`;
+  const tail = m.status === 'late' ? ` · متأخر ${m.late_days === 1 ? 'يومًا' : m.late_days === 2 ? 'يومين' : `${m.late_days} يومًا`}` : m.status === 'due_soon' ? ' · قريب' : '';
+  return `${m.title_ar}: ${m.due ? `ينتهي ${when}` : when}${m.extended ? ' (ممدَّد)' : ''}${tail}`;
+}
+export const MILESTONE_CHIP = STATUS_CHIP;
+
+export function ParticipantMilestones({ p, list, summary, canWrite, onDone, title = 'المعالم' }) {
+  const { items, form } = useMilestoneActions(p, onDone);
+  if (!list?.length) return null;
   return (
-    <section className="la-card" aria-label="المعالم">
-      <div className="la-row between"><h3>المعالم</h3>
-        <span className="la-muted">{summary.done}/{summary.total} منجز{summary.late ? ` · ${summary.late} متأخر (أقصاه ${summary.max_late} يومًا)` : ''}</span></div>
+    <section className="la-card" aria-label={title}>
+      <div className="la-row between"><h3>{title}</h3>
+        {summary && <span className="la-muted">{summary.done}/{summary.total} منجز{summary.late ? ` · ${summary.late} متأخر (أقصاه ${summary.max_late} يومًا)` : ''}</span>}</div>
       <ul className="la-reqs">{list.map((m) => (
         <li key={m.id}>
           <span><b>{m.title_ar}</b> <span className={`la-chip ${STATUS_CHIP[m.status]}`}>{MILESTONE_STATUS_AR[m.status]}{m.status === 'late' ? ` ${m.late_days} يومًا` : ''}</span>
             <small className="la-muted"> {m.due ? day(m.due) : ''}{m.extended ? ' (ممدَّد)' : ''}</small>
             {Object.keys(m.scores || {}).length > 0 && <small className="la-muted"> · {Object.entries(m.scores).map(([k, v]) => `${MILESTONE_RUBRIC[k]?.title} ${v}/4`).join('، ')}</small>}</span>
-          {canWrite && <span className="la-row">
-            {!m.done && <button className="la-link" onClick={() => rate(m)}>اعتمد الإنجاز</button>}
-            {m.done && <button className="la-link" onClick={() => rate(m)}>{Object.keys(m.scores || {}).length ? 'عدّل التقييم' : 'قيّم بالمعيار'}</button>}
-            {m.done && m.done_at && <button className="la-link" onClick={() => act(m, { done: false }, 'أُلغي')}>إلغاء الاعتماد</button>}
-            {!m.done && <button className="la-link" onClick={() => extend(m)}>{m.extended ? 'عدّل التمديد' : 'مدّد له'}</button>}
-            {!m.done && m.extended && <button className="la-link" onClick={() => unextend(m)}>ألغِ التمديد</button>}
-          </span>}
+          {canWrite && <span className="la-row">{items(m).map((it) => <button key={it.label} className="la-link" onClick={it.run}>{it.label}</button>)}</span>}
         </li>
       ))}</ul>
-      {form && <Form {...form} onClose={(saved) => { setForm(null); if (saved) { toast(form.ok); onDone(); } }} />}
+      {form}
     </section>
   );
 }

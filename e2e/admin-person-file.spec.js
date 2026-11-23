@@ -69,7 +69,7 @@ for (const vp of [{ name: 'الحاسوب', size: { width: 1280, height: 900 } }
     await expect(glance).toContainText('40%');
     await expect(glance).toContainText('التدريب');
     await expect(glance).toContainText('1 حضرها');
-    for (const t of ['القرار', 'التعلم', 'المبادرة والجلسات', 'الملف', 'السجل']) {
+    for (const t of ['القرار', 'التعلم', 'المبادرة', 'الملف', 'السجل']) {
       await tab(page, t).click();
       await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', /pf-tab-/);
       const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

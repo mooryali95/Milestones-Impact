@@ -551,6 +551,8 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.overview': async (a, b) => ({ ...(await A.overview(b)), mfa_required: A.needsSecondFactor(a) }),
   'admin.participants': (_a, b) => A.participants(b),
   'admin.participant': (_a, b) => FL.participantFile(String(b.id || ''), 'admin', { viewer: { email: _a.email } }),
+  // السجل الكامل لتبويب «السجل»: صفحة صفحة بمؤشر زمني، قراءة فقط (file.ts)
+  'admin.participant-timeline': (_a, b) => FL.participantTimeline(b),
   'admin.peer': (_a, b) => PR.adminList(b),
   'admin.reviews': (_a, b) => A.reviews(b),
   'admin.evidence-url': (a, b) => A.evidenceUrl(a, b),
@@ -561,6 +563,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.reset-assessment': A.resetAssessment,
   'admin.review': A.reviewRequirement,
   'admin.stage-override': A.stageOverride,
+  'admin.stage-move': A.stageMove,
   'admin.stage-create': A.stageCreate,
   'admin.create-participant': A.createParticipant,
   'admin.participants-import': A.participantsImport,

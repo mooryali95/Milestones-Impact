@@ -27,7 +27,7 @@ const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', decli
 // طابور المراجعة أولًا، ثم ما قيد البناء، ثم «الكل» للمحفظة كاملة (تحليل لوحة الإدارة 2026-11-15)
 const FILTERS = ['submitted', 'accepted', 'returned', 'approved', 'draft'].map((k) => [k, STATUS[k]]);
 
-async function openDoc(doc, toast) {
+export async function openDoc(doc, toast) {
   const win = window.open('', '_blank');
   const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
   const { meta, body } = capstoneReport(doc);

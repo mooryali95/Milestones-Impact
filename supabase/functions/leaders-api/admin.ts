@@ -5,7 +5,7 @@
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
-import { alertOps, all, allFor, approvedMail, audit, CONFIG, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
@@ -38,6 +38,7 @@ import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retake
 import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
+import { MOVE_REASON_MIN, planMove } from './stage-move.js';
 import { BULK_APPROVE_MAX, mailForecast, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 import { counted, listed } from './counting.ts';
 import { inboxRows as groupInboxRows } from './coaching-groups.ts';
@@ -1001,7 +1002,7 @@ export async function reviewRequirement(a: Admin, b: Body) {
     note: b.note ? String(b.note).slice(0, 1000) : null, reviewed_by: a.email, reviewed_at: now,
     completed_at: status === 'done' ? now : null,
   }));
-  await audit('admin', a.email, 'requirement.review', 'participants', String(b.participant_id), null, { requirement: b.requirement_id, status });
+  await audit('admin', a.email, 'requirement.review', 'participants', String(b.participant_id), null, { requirement: b.requirement_id, status, ...(b.note ? { note: String(b.note).slice(0, 1000) } : {}), ...(b.override ? { override: true } : {}) });
   if (status !== 'pending') notifyReview(String(b.participant_id), String(b.requirement_id), status === 'returned', b.note);
   return { success: true };
 }
@@ -1014,21 +1015,52 @@ export async function stageOverride(a: Admin, b: Body) {
   requireWrite(a);
   // غياب الحقل لا يُفهم إلغاءً: الإلغاء يحذف التدخل، فلا يكون إلا بقيمة فارغة صريحة
   if (!('stage_action' in b)) throw new Fail('حدّد الإجراء على المرحلة');
-  const p = must(await db.from('participants').select('id, organization_id').eq('id', String(b.participant_id || '')).maybeSingle());
-  if (!p) throw new Fail('المشارك غير موجود', 404);
+  const p = await overrideTarget(b.participant_id);
   const def = await journeyDefinition(p);
   const stage = def.stages.find((s: any) => s.key === String(b.stage_key || ''));
   if (!stage) throw new Fail('المرحلة ليست في رحلة هذا المشارك', 404);
   const action = b.stage_action == null || b.stage_action === '' ? null : String(b.stage_action);
   if (action && !['open', 'complete', 'skip'].includes(action)) throw new Fail('إجراء غير معروف');
-  const key = { participant_id: p.id, program_id: def.program_id, stage_key: stage.key };
-  if (action) {
-    must(await db.from('participant_stage_overrides').upsert({ ...key, action, note: b.note ? String(b.note).slice(0, 1000) : null, by_email: a.email, created_at: new Date().toISOString() }));
-  } else {
-    must(await db.from('participant_stage_overrides').delete().match(key));
-  }
+  await writeOverride(a, p.id, def.program_id, stage.key, action, b.note);
   await audit('admin', a.email, action ? `stage.${action}` : 'stage.reset', 'participants', p.id, null, { stage: stage.key, program: def.program_id, note: b.note || null });
   return { success: true };
+}
+
+// المشارك الذي يُتدخَّل في رحلته، والكتابة الواحدة في participant_stage_overrides: يقرؤهما التدخل في مرحلة والنقل
+// بين المراحل معًا، فلا تختلف قاعدة الكتابة بينهما. action فارغ يحذف التدخل
+async function overrideTarget(id: unknown) {
+  const p = must(await db.from('participants').select('id, organization_id, full_name, email, is_demo').eq('id', String(id || '')).maybeSingle());
+  if (!p) throw new Fail('المشارك غير موجود', 404);
+  return p as any;
+}
+async function writeOverride(a: Admin, pid: string, program: string, stageKey: string, action: string | null, note: unknown) {
+  const key = { participant_id: pid, program_id: program, stage_key: stageKey };
+  if (action) must(await db.from('participant_stage_overrides').upsert({ ...key, action, note: note ? String(note).slice(0, 1000) : null, by_email: a.email, created_at: new Date().toISOString() }));
+  else must(await db.from('participant_stage_overrides').delete().eq('participant_id', pid).eq('program_id', program).eq('stage_key', stageKey));
+}
+
+// نقل مشارك إلى مرحلة (ملف المشارك، تصور 2026-11-23): خطة واحدة من planMove (stage-move.js) التي عاينها المدير،
+// تُتحقق كلها قبل أي كتابة ثم تُكتب تدخلاتها بقاعدة التدخل في مرحلة نفسها (writeOverride)، بسطر سجل واحد يحمل الخطة
+// وسببها، وبريد واحد للمشارك يسمي مرحلته الجديدة بلا السبب (السبب للسجل الداخلي). الحساب التجريبي يُنقل كالتدخل في
+// مرحلة، ولا يصله بريد (sendMail يتخطى بريده). يعيد الرحلة بعد النقل، فتعرضها الواجهة دون انتظار طلب آخر
+export async function stageMove(a: Admin, b: Body) {
+  requireWrite(a);
+  const reason = String(b.reason || '').trim();
+  if (reason.length < MOVE_REASON_MIN) throw new Fail('اكتب سبب النقل (يُحفظ في السجل)');
+  const p = await overrideTarget(b.participant_id);
+  const j: any = await journeyFor(p, { lite: true });
+  const plan = planMove(j.journey, String(b.stage_key || ''), b.choices && typeof b.choices === 'object' ? b.choices : {});
+  if (!plan.ok) throw new Fail(plan.error, 400, 'stage_move');
+  const program = j.def.program_id;
+  for (const c of plan.clears) await writeOverride(a, p.id, program, c.key, null, null);
+  for (const w of plan.writes) await writeOverride(a, p.id, program, w.key, w.action, reason);
+  await audit('admin', a.email, 'stage.move', 'participants', p.id, null, {
+    to: plan.target.key, direction: plan.direction, program, reason,
+    writes: plan.writes.map((w) => ({ stage: w.key, action: w.action })), clears: plan.clears.map((c) => ({ stage: c.key, was: c.was })),
+  });
+  if (p.email) sendMail(p.email, 'تحديث في رحلتك', stageMoveMail(p.full_name, plan.target.title_ar)).catch((e) => console.error(e));
+  const fresh: any = await journeyFor(p, { lite: true });
+  return { success: true, summary: plan.summary, direction: plan.direction, journey: fresh.journey, progress: fresh.progress ?? null };
 }
 
 // مرحلة جديدة في برنامج: مفتاح يُولَّد، وتأتي آخر الرحلة، وقواعدها تُضبط بعدها من «تحرير»

@@ -4,7 +4,7 @@
 // الملاحظة تُكتب في participant_observations وحده. الأعلام لا تُخزَّن: تُشتق عند العرض من مصادرها (مؤشر الجهد من
 // القياس، والتأخر من المعالم، والغياب من الجلسات…)، فلا تختلف عن شاشاتها. والخط الزمني يجمع سجل التدقيق والملاحظات
 // بتسمية عربية واحدة لكل فعل.
-import { PARTICIPANT_STATUS } from './labels.js';
+import { COACH_STATUS_ADMIN, PARTICIPANT_STATUS } from './labels.js';
 
 export const OBS_KINDS = ['note', 'warning', 'commendation'];
 export const OBS_KIND_AR = { note: 'ملاحظة', warning: 'تنبيه', commendation: 'إشادة' };
@@ -78,6 +78,8 @@ export const AUDIT_AR = {
   'certificate.skipped-demo': 'لا تصدر شهادة للحساب التجريبي',
   'sponsor.approve': 'قُبلت رعايته', 'sponsor.hold': 'عُلّقت رعايته حتى يتوفر مقعد', 'sponsor.reject': 'رُفضت رعايته',
   'admin.preview-as': 'عُرض ملفه كما يراه خبيره', 'expert.capstone-view': 'اطّلع خبير على وثيقة مبادرته', 'guide.transcript-read': 'قُرئت محادثته في التوجيه والإرشاد',
+  // تدخل الإدارة في مراحل رحلته (admin.stage-override وadmin.stage-move)
+  'stage.open': 'فُتحت له مرحلة يدويًا', 'stage.complete': 'اعتُمد اكتمال مرحلة له', 'stage.skip': 'أُعفي من مرحلة', 'stage.reset': 'أُلغي تدخل في مرحلة', 'stage.move': 'نُقل إلى مرحلة',
   'demo.open': 'فُتح الحساب التجريبي', 'demo.reset': 'أُعيد ضبط الحساب التجريبي',
   'demo.stage-skip': 'تُخطيت مرحلة في الحساب التجريبي', 'demo.open-all': 'فُتحت كل مراحل الحساب التجريبي', 'demo.restart': 'أُعيد الحساب التجريبي إلى البداية من شريطه',
   // ما يفعله المشارك نفسه (السجل يُقرأ أيضًا بمعرّفه فاعلًا)
@@ -105,4 +107,70 @@ export function timelineOf({ history = [], observations = [] }) {
       text: `${OBS_KIND_AR[o.kind] || o.kind}${o.title ? `: ${o.title}` : ''}`, by: OBS_SOURCE_AR[o.source] || o.source, detail: o.body })),
   ];
   return rows.filter((r) => r.at).sort((x, y) => String(y.at).localeCompare(String(x.at)));
+}
+
+// ════════════════════════════════════════════════════════════════
+// السجل الكامل (تبويب «السجل» في ملف المشارك، تصور 2026-11-23): كل ما جرى له من تسجيله، بترتيب واحد
+// ════════════════════════════════════════════════════════════════
+// يُشتق من مصادره كما هي (الحساب، القياس، الاعتماد، النماذج، الحضور، الجلسات، المبادرة، السجل، الملاحظات) ولا يُخزَّن.
+// ما له مصدر صريح لا يُكرَّر من سجل التدقيق (تسليم القياس مثلًا)، والسجل يُقرأ صفحة صفحة بمؤشر زمني (before).
+export const TIMELINE_TYPES = ['account', 'assessment', 'learning', 'attendance', 'initiative', 'decision', 'note'];
+export const TIMELINE_TYPE_AR = { account: 'الحساب', assessment: 'القياس والمستوى', learning: 'النماذج', attendance: 'الحضور والجلسات', initiative: 'المبادرة', decision: 'قرارات الإدارة', note: 'الملاحظات' };
+export const TIMELINE_PAGE = 50;
+// أفعال في سجل التدقيق لها مصدر صريح في السجل الكامل، فلا تظهر مرتين
+export const TIMELINE_DERIVED = new Set(['assessment.submit', 'assessment.submit-post', 'capstone.submit', 'workshop.checkin', 'workshop.mark', 'observation.add', 'participant.register']);
+
+/** نوع سطر سجل التدقيق في السجل الكامل: قرار إدارة، أو ما يخص بابه، وإلا الحساب */
+export function auditType(h) {
+  const a = String(h?.action || '');
+  if (/^(assessment|placement)\./.test(a)) return 'assessment';
+  if (/^(capstone|tracking)\./.test(a)) return 'initiative';
+  if (/^(workshop|coaching)\./.test(a)) return 'attendance';
+  if (/^observation\./.test(a)) return 'note';
+  return h?.actor_type === 'admin' ? 'decision' : 'account';
+}
+
+/**
+ * السجل الكامل من مصادره. كل مصدر قائمة صفوفه كما تُقرأ، والناتج الأحدث أولًا، بنوع لكل سطر (TIMELINE_TYPES).
+ * @param {{ participant?: any, firstLogin?: string | null, assessments?: any[], placements?: any[], models?: any[], attendance?: any[], sessions?: any[], capstone?: any, history?: any[], observations?: any[] }} src
+ * @param {{ before?: string | null, types?: string[] | null, limit?: number }} [opt]
+ * @returns {{ rows: any[], next: string | null }}
+ */
+export function fullTimelineOf(src, { before = null, types = null, limit = TIMELINE_PAGE } = {}) {
+  const out = [];
+  const add = (at, type, text, extra = {}) => { if (at) out.push({ at, type, text, tone: 'info', by: '', detail: '', ...extra }); };
+  const p = src.participant || {};
+  add(p.created_at, 'account', 'سجّل في المنصة');
+  add(src.firstLogin, 'account', 'أول دخول');
+  add(p.profile_completed_at, 'account', 'أكمل ملفه الشخصي');
+  for (const a of src.assessments || []) {
+    const post = a.instruments?.kind === 'post';
+    add(a.started_at, 'assessment', post ? 'بدأ القياس البعدي' : 'بدأ القياس');
+    add(a.submitted_at, 'assessment', post ? 'سلّم القياس البعدي' : 'سلّم القياس', { tone: 'ok' });
+  }
+  const approved = (src.placements || []).map((x) => x.approved_at).filter(Boolean).sort()[0];
+  add(approved, 'assessment', 'اعتُمد مستواه', { tone: 'ok' });
+  for (const m of src.models || []) {
+    const t = m.learning_models?.title_ar || 'نموذج';
+    add(m.submitted_at, 'learning', `سلّم «${t}»`);
+    if (m.reviewed_at) add(m.reviewed_at, 'learning', m.status === 'returned' ? `أُعيد «${t}» للتعديل` : `قُرئ «${t}»`, { tone: m.status === 'returned' ? 'warn' : 'ok' });
+  }
+  for (const w of src.attendance || []) add(w.at, 'attendance', w.title ? `حضر «${w.title}»` : 'حضر ورشة', { tone: 'ok' });
+  for (const s of src.sessions || []) add(s.starts_at, 'attendance', COACH_STATUS_ADMIN[s.status] ? `جلسة توجيه: ${COACH_STATUS_ADMIN[s.status]}` : 'جلسة توجيه', { tone: s.status === 'no_show' ? 'warn' : s.status === 'attended' ? 'ok' : 'info', by: s.expert || '' });
+  const c = src.capstone;
+  if (c) {
+    add(c.submitted_at, 'initiative', 'سلّم وثيقة المبادرة');
+    add(c.approved_at, 'initiative', 'اعتُمدت وثيقة المبادرة', { tone: 'ok' });
+  }
+  for (const r of timelineOf({ history: (src.history || []).filter((h) => !TIMELINE_DERIVED.has(h.action)), observations: [] })) {
+    const h = (src.history || []).find((x) => x.created_at === r.at && auditLabel(x.action) === r.text);
+    const why = h?.after?.reason || h?.after?.note || '';
+    out.push({ ...r, type: auditType(h), detail: r.detail || (why ? `السبب: ${why}` : '') });
+  }
+  for (const o of src.observations || []) add(o.created_at, 'note', `${OBS_KIND_AR[o.kind] || o.kind}${o.title ? `: ${o.title}` : ''}`, { tone: o.kind === 'warning' ? 'warn' : o.kind === 'commendation' ? 'ok' : 'info', by: OBS_SOURCE_AR[o.source] || o.source || '', detail: o.body || '' });
+  const want = types?.length ? new Set(types) : null;
+  const rows = out.filter((r) => (!before || String(r.at) < before) && (!want || want.has(r.type)))
+    .sort((x, y) => String(y.at).localeCompare(String(x.at)));
+  const page = rows.slice(0, limit);
+  return { rows: page.map(({ kind: _k, ...r }) => r), next: rows.length > limit ? page[page.length - 1].at : null };
 }

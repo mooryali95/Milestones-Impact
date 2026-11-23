@@ -80,7 +80,7 @@ for (const width of [1024, 1280, 1366]) {
     const over = () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(await over()).toBeLessThanOrEqual(0);
     // ولا يفيض أي تبويب آخر
-    for (const t of ['الرحلة', 'التعلم', 'المبادرة والجلسات', 'الملف', 'السجل']) {
+    for (const t of ['الرحلة', 'التعلم', 'المبادرة', 'الملف', 'السجل']) {
       await tab(page, t).click();
       await expect(tab(page, t)).toHaveAttribute('aria-selected', 'true');
       expect(await over(), t).toBeLessThanOrEqual(0);
@@ -215,9 +215,9 @@ test('admin-core-12: ملف المشارك يطلب حقوقه وطلبات خب
   expect(calls.filter((c) => c.action === 'admin.erasures')).toHaveLength(1);
   await page.getByText('سارة الأحمد').first().click();
   await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
-  // كل تبويب يطلب ما يخصه حين يُفتح: الدفع في «الملف»، وطلبات الخبراء في «المبادرة والجلسات»
+  // كل تبويب يطلب ما يخصه حين يُفتح: الدفع في «الملف»، وطلبات الخبراء في «المبادرة»
   await tab(page, 'الملف').click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.payments')).toMatchObject({ participant_id: 'p1' });
-  await tab(page, 'المبادرة والجلسات').click();
+  await tab(page, 'المبادرة').click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.expert-requests')).toMatchObject({ participant_id: 'p1' });
 });

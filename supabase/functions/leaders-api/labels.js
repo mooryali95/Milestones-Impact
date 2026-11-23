@@ -75,6 +75,8 @@ export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 // حالات العمل المسلَّم (نموذج تعليمي أو فصل): بصوت المشارك، وما تقوله الإدارة يختلف في المخاطَب فقط
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والمراجع يقرأ ويكتب ملاحظة أو يطلب تعديلًا.
 // بطاقة المبادرة وحدها بوابة تنتظر الاعتماد (MODEL_GATE_STATUS)
+// حال فصل وثيقة المبادرة كما يقرؤه فريق البرنامج في ملف المشارك (chapterState في capstone.js)
+export const CHAPTER_STATUS_AR = { empty: 'فارغ', draft: 'مسودة', submitted: 'مسلَّم', reviewed: 'مقروء', returned: 'يحتاج تعديلًا' };
 export const SUBMISSION_STATUS = { draft: 'قيد العمل', submitted: 'سُلّم، ويُحتسب في رحلتك', returned: 'يحتاج تعديلًا منك', reviewed: 'قُرئ' };
 // وهي نفسها حالة فصل وثيقة المبادرة في لوحة المراجعة
 export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: 'مسودة', submitted: 'للقراءة', returned: 'يحتاج تعديلًا', reviewed: 'قُرئ' };

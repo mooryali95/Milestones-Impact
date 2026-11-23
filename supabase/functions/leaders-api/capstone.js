@@ -450,3 +450,10 @@ export function returnedBy(c) {
 
 // الإطار الذي ينتمي إليه كل فصل، لترتيب الفهرس وألوانه
 export const dimensionIndex = (d) => Math.max(0, DIMENSIONS.indexOf(d));
+
+/** حال الفصل في ملف المشارك (CHAPTER_STATUS_AR): فارغ ما لم يُحفظ فيه شيء، ثم حال تسليمه كما هو
+ * @param {{ status?: string | null, updated_at?: string | null }} s فصل من sectionView */
+export function chapterState(s) {
+  if (['submitted', 'reviewed', 'returned'].includes(s?.status)) return s.status;
+  return s?.updated_at || s?.status === 'draft' ? 'draft' : 'empty';
+}

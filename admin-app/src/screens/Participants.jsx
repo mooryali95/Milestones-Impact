@@ -8,7 +8,7 @@ import ImportParticipants from './ImportParticipants.jsx';
 import { PersonAccess } from './Payments.jsx';
 import Form from '../Form.jsx';
 import {
-  date, DIM, DIMS, isSuperAdmin, L, LVL, REQ, STATUS, SUB_ST, trackOfPlacements,
+  date, DIM, DIMS, isSuperAdmin, L, LVL, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
 import { enrollCohort } from '../cohort-guard.js';
@@ -17,10 +17,8 @@ import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
 import { phoneMatches } from '../../../supabase/functions/leaders-api/search-text.js';
 import { Submission } from './Handbook.jsx';
-import { ActivitySummary } from './Activities.jsx';
 import { ExpertAssign } from './ExpertMatch.jsx';
-import { ContinuousCard, ParticipantMilestones } from './Milestones.jsx';
-import { FinalEvalCard } from './FinalEval.jsx';
+import PersonJourney from './PersonJourney.jsx';
 import { stars } from '../handbook.js';
 import { approveBlocker } from '../placement-card.js';
 import LevelCard from './LevelCard.jsx';
@@ -30,14 +28,13 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 
 // حد الإجراء الجماعي وإجراءا الحالة والدفعة من BulkPeople.jsx: يستدعيهما تبويب «المتابعة» في ملف الدفعة أيضًا
 import { BULK_MAX, BulkEnroll, BulkStatus, useBulkCohorts } from '../BulkPeople.jsx';
-import { FileExtras, Observations, Timeline } from './PersonFile.jsx';
+import { FileExtras, FullTimeline, InitiativePanel, Observations } from './PersonFile.jsx';
 import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
 import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
-import { STAGE_STATUS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { ONBOARDING_AR, ONBOARDING_STEPS, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
@@ -274,19 +271,6 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   );
 }
 
-// أزرار التدخل بحسب حالة المرحلة: لا يُعرض إلا ما له أثر
-function StageOverride({ s, onPick }) {
-  if (s.override) return <div className="la-stage-ov"><small className="la-chip">{{ open: 'فُتحت له يدويًا', complete: 'اعتُمدت يدويًا', skip: 'أُعفي منها' }[s.override]}</small><button className="la-link" onClick={() => onPick('')}>إلغاء التدخل</button></div>;
-  if (s.status === 'done') return null;
-  return (
-    <div className="la-stage-ov">
-      {s.status === 'locked' && <button className="la-link" onClick={() => onPick('open')}>افتحها له</button>}
-      <button className="la-link" onClick={() => onPick('complete')}>اعتمد اكتمالها</button>
-      <button className="la-link" onClick={() => onPick('skip')}>أعفه منها</button>
-    </div>
-  );
-}
-
 // حذف مشارك بأثر: ما سيُمحى معه، وما يمنعه (شهادة سارية أو دفع مؤكد)؛ للمدير الأعلى بكتابة البريد
 function PersonDanger({ p, onDeleted, erasurePending = false }) {
   const { toast, confirm } = useUI();
@@ -418,16 +402,18 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
     if (!(await confirm('يُلغى القياس الحالي ويعيده المشارك من البداية، وتظهر له بطاقة في الموقع ويصله بريد يطلب الإعادة. المستوى المعتمد يبقى حتى تعتمد غيره. متابعة؟', { danger: true }))) return;
     act('admin.reset-assessment', { participant_id: p.id }, 'طُلبت الإعادة وأُبلغ المشارك');
   };
-  const review = async (req, st) => {
-    let note = null;
-    if (st === 'returned') { note = await prompt('ملاحظة للمشارك: ما المطلوب تعديله؟'); if (note === null) return; }
-    act('admin.review', { participant_id: p.id, requirement_id: req, status: st, note }, st === 'returned' ? 'أُعيد مع الملاحظة' : 'تم');
+  // مراجعة بند: الإرجاع بملاحظة للمشارك، والتجاوز اليدوي لبند يحسمه دليله بسبب يأتي مكتوبًا (PersonJourney.jsx)
+  const review = async (req, st, given = null, override = false) => {
+    let note = given;
+    if (st === 'returned' && note == null) { note = await prompt('ملاحظة للمشارك: ما المطلوب تعديله؟'); if (note === null) return; }
+    act('admin.review', { participant_id: p.id, requirement_id: req, status: st, note, ...(override ? { override: true } : {}) }, st === 'returned' ? 'أُعيد مع الملاحظة' : override ? 'اعتُمد بتجاوز يدوي' : 'تم');
   };
-  // تدخل في مرحلة لهذا المشارك وحده، بسبب مكتوب يُحفظ في السجل
-  const stageAct = async (s, action) => {
+  // تدخل في مرحلة لهذا المشارك وحده، بسبب مكتوب يُحفظ في السجل. lines: ما ينقص المرحلة تحت السؤال («أكمل هذه المرحلة»)
+  const stageAct = async (s, action, lines = null) => {
     const msg = { open: `فتح «${s.title_ar}» له الآن؟`, complete: `اعتماد اكتمال «${s.title_ar}»؟`, skip: `إعفاؤه من «${s.title_ar}»؟`, '': `إلغاء التدخل في «${s.title_ar}» وإعادتها لقواعد البرنامج؟` }[action];
-    const note = await prompt(`${msg}\nالسبب (يُحفظ في السجل):`, '');
+    const note = await prompt(`${msg}\nالسبب (يُحفظ في السجل):`, '', lines?.length ? { lines } : {});
     if (note === null) return;
+    if (action && !String(note).trim()) return toast('اكتب السبب');
     act('admin.stage-override', { participant_id: p.id, stage_key: s.key, stage_action: action, note }, 'تم');
   };
   // الملفات الخاصة تُفتح بطلب صريح يُسجَّل في السجل، للمدير وحده (الخادم يرفض غيره)
@@ -514,37 +500,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
             onApproveNext={pos?.next ? () => approve(true) : null} onAnswers={canWrite ? openAnswers : null} />
           </>)}
 
-          {panel('journey', <>
-          <ContinuousCard c={r.continuous} />
-          <FinalEvalCard participantId={p.id} canWrite={canWrite} />
-          <ParticipantMilestones p={p} list={r.milestones} summary={r.milestone_summary} canWrite={canWrite} onDone={load} />
-          <section className="la-card">
-            <div className="la-row between"><h3 id="pf-journey-h">الرحلة</h3><span className="la-muted">{r.progress}% · {r.journey.filter((s) => s.status === 'done').length}/{r.journey.length} مراحل</span></div>
-            <div className="la-journey">{r.journey.map((s) => (
-              <div key={s.key} className={`la-stage ${s.status}`}>
-                <div className="la-row between"><b>{s.title_ar}</b><span className={`la-chip ${s.status === 'done' ? 'ok' : s.status === 'active' ? 'warn' : ''}`}>{s.skipped ? 'أُعفي منها' : STAGE_STATUS_AR[s.status]}</span></div>
-                {s.lock_reason && <small className="la-muted">{s.lock_reason}</small>}
-                {canWrite && <StageOverride s={s} onPick={(action) => stageAct(s, action)} />}
-                <ul>{s.items.length ? s.items.map((it) => (
-                  <li key={it.id} className={it.status}>
-                    <span>{it.status === 'done' ? '✓' : it.status === 'submitted' ? '●' : '○'} {it.title_ar} <small className="la-muted">{REQ[it.status]}</small>
-                      <ActivitySummary a={it.activity} /></span>
-                    <span className="la-row">
-                      {it.evidence_path && (canWrite
-                        ? <button className="la-link" onClick={() => evidence(it.evidence_path)}>الملف</button>
-                        : <small className="la-muted">ملف مرفق</small>)}
-                      {canWrite && !it.auto && s.status !== 'locked' && <>
-                        {it.status !== 'done' && <button className="btn-sm primary" onClick={() => review(it.id, 'done')}>اعتماد</button>}
-                        {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => review(it.id, 'returned')}>إعادة مع ملاحظة</button>}
-                        {it.status === 'done' && <button className="btn-sm ghost" onClick={() => review(it.id, 'pending')}>إلغاء</button>}
-                      </>}
-                    </span>
-                  </li>
-                )) : <li className="la-muted">لا متطلبات</li>}</ul>
-              </div>
-            ))}</div>
-          </section>
-          </>)}
+          {panel('journey', <PersonJourney key={(r.journey || []).map((s) => s.status).join()} r={r} canWrite={canWrite} onDone={load}
+            onReview={review} onStage={stageAct} onEvidence={evidence} />)}
 
           {panel('learning', <>
           <section className="la-card la-book-card">
@@ -584,7 +541,8 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
 
           {panel('initiative', <>
           {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}
-          <ExpertAssign participantId={id} canWrite={canWrite} />
+            <InitiativePanel participantId={p.id} />
+            <ExpertAssign participantId={id} canWrite={canWrite} />
             <FileExtras r={r} />
           </>)}
 
@@ -642,7 +600,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
             {!erasure?.request && <ErasureLogLine last={erasure?.last} />}
             <NudgeLog participantId={p.id} canWrite={canWrite} />
             <Observations participantId={p.id} list={r.observations} canWrite={canWrite} onChanged={load} />
-            <Timeline rows={r.timeline} />
+            <FullTimeline participantId={p.id} />
           </>)}
         </div>
         <Glance r={r} />

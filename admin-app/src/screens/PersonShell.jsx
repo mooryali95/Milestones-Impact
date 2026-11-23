@@ -13,7 +13,7 @@ export const TABS = [
   ['decision', 'القرار'],
   ['journey', 'الرحلة'],
   ['learning', 'التعلم'],
-  ['initiative', 'المبادرة والجلسات'],
+  ['initiative', 'المبادرة'],
   ['profile', 'الملف'],
   ['log', 'السجل'],
 ];
@@ -76,7 +76,8 @@ export function glance(r) {
 }
 
 // قائمة «⋯»: الإجراءات الأقل تكرارًا، بلوحة المفاتيح كاملة (الأسهم بين البنود، وEscape يغلق ويعيد التركيز)
-export function MoreMenu({ items }) {
+// label: اسم القائمة وزرها. قائمة الرأس «إجراءات أخرى»، وقائمة المرحلة أو البند تسمي ما تخصه فلا يتشابه زران في الصفحة
+export function MoreMenu({ items, label = 'إجراءات أخرى' }) {
   const [open, setOpen] = useState(false);
   const btn = useRef(null);
   const list = useRef(null);
@@ -100,9 +101,9 @@ export function MoreMenu({ items }) {
   if (!shown.length) return null;
   return (
     <span className="pf-more">
-      <button ref={btn} type="button" className="btn-sm ghost" aria-haspopup="menu" aria-expanded={open} aria-label="إجراءات أخرى" onClick={() => setOpen(!open)}>⋯</button>
+      <button ref={btn} type="button" className="btn-sm ghost" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>⋯</button>
       {open && (
-        <ul ref={list} role="menu" className="pf-menu" aria-label="إجراءات أخرى" onKeyDown={key}>
+        <ul ref={list} role="menu" className="pf-menu" aria-label={label} onKeyDown={key}>
           {shown.map((it) => (
             <li key={it.label} role="none">
               <button type="button" role="menuitem" tabIndex={-1} className={it.danger ? 'danger' : ''} title={it.title}
