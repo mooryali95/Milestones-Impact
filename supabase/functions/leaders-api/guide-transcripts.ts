@@ -13,8 +13,9 @@ import { adminSave, appSettings } from './settings.ts';
 import { GD } from './guide.ts';
 import { requireAgentRead } from './agent-admin.ts';
 import { evalSet, resetEvalGate, writeCases } from './guide-eval.ts';
-import { applyCaseAdd } from './guide-eval.js';
+import { applyCaseAdd, scrubQuestion } from './guide-eval.js';
 import { redactInput } from '../agent-chat/redact.ts';
+import { buildReview, REVIEW_DAYS, reviewReason, weekRates } from './guide-review.js';
 
 type Body = Record<string, any>;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -200,4 +201,36 @@ export async function rulesSave(a: Admin, b: Body) {
   const r = await adminSave(a, { group: 'guidance', values: { extra_rules: String(b.extra_rules ?? '') } });
   resetEvalGate();
   return { success: true, saved: !!(r as any)?.success };
+}
+
+// ── المرحلة د: مراجعة الأسبوع للتعلم (guide-review.js). نص الأسئلة فيها، فبصلاحية سجل المحادثات نفسها وكل فتح يُسجَّل.
+// الأسئلة محجوبة مما يدل على صاحبها (redactInput) ولا اسم ولا بريد ولا معرّف مشارك في الناتج
+export async function weeklyReview(a: Admin) {
+  await requireRead(a);
+  const now = GD.now();
+  const since = new Date(now - REVIEW_DAYS * 864e5).toISOString();
+  const prevSince = new Date(now - 2 * REVIEW_DAYS * 864e5).toISOString();
+  const cols = 'id, participant_id, context, chapter_id, verdict, guard, confirmed_at, created_at';
+  let rep: any = await db.from('guidance_messages').select(cols).eq('role', 'assistant').gte('created_at', prevSince).order('id', { ascending: true }).limit(20000);
+  // قبل عمود الحارس (20261124100000) تُقرأ الأحكام بلاه
+  if (rep.error && /guard/.test(String(rep.error.message || ''))) rep = await db.from('guidance_messages').select(cols.replace(', guard', '')).eq('role', 'assistant').gte('created_at', prevSince).order('id', { ascending: true }).limit(20000);
+  if (rep.error) { if (missing(rep.error)) throw notMigrated(); throw rep.error; }
+  const all = (rep.data || []) as any[];
+  const week = all.filter((r) => r.created_at >= since);
+  const prev = all.filter((r) => r.created_at < since);
+  const pids = [...new Set(week.filter((r) => reviewReason(r)).map((r) => r.participant_id))];
+  const qs: any[] = [];
+  for (let i = 0; i < pids.length; i += 150) {
+    const { data } = await db.from('guidance_messages').select('id, participant_id, body').eq('role', 'user').gte('created_at', prevSince).in('participant_id', pids.slice(i, i + 150)).limit(20000);
+    qs.push(...(data || []));
+  }
+  const chapterIds = [...new Set(week.map((r) => r.chapter_id).filter(Boolean))];
+  const titles = new Map<string, string>();
+  if (chapterIds.length) {
+    const { data } = await db.from('handbook_modules').select('id, title_ar').in('id', chapterIds);
+    for (const m of (data || []) as any[]) titles.set(String(m.id), m.title_ar);
+  }
+  const review = buildReview(week, qs.map((q) => ({ ...q, body: scrubQuestion(redactInput(String(q.body || '')).text) })), (id: any) => titles.get(String(id)) || `باب ${id}`);
+  await audit('admin', a.email, 'guide.weekly-review', 'guidance_messages', null, null, { items: review.total, owner: !!a.owner });
+  return { success: true, days: REVIEW_DAYS, ...review, rates: { week: weekRates(week), prev: weekRates(prev) } };
 }

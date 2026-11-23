@@ -83,6 +83,11 @@ function backend() {
       reads: [{ by: 'boss@x.sa', participant_id: PID, name: 'سارة القحطاني', messages: 2, at: ago(1) }] }),
     'admin.guide-transcript-grant': (b) => { st.granted = b.on; return { success: true, admin_id: b.admin_id, granted: b.on }; },
     // H4: رد غير دقيق وتوجيهات المالك
+    'admin.guide-week': () => ({ success: true, days: 7, total: 2, repeated: 1, reasons: { guard: 1, unsure: 1, refused: 0, confirmed: 0 },
+      rates: { week: { replies: 40, answered_pct: 80, unsure_pct: 12.5, guard_pct: 5 }, prev: { replies: 30, answered_pct: 70, unsure_pct: 20, guard_pct: 5 } },
+      groups: [{ key: 'program', label: 'الرحلة والبرنامج', cases: [
+        { message_id: 31, reason: 'unsure', question: 'متى تبدأ المرحلة الثانية؟', at: ago(60), repeats: 3 },
+        { message_id: 33, reason: 'guard', guard: 'write', question: 'اكتب لي خطتي', at: ago(30), repeats: 1 }] }] }),
     'admin.guide-flag': (b) => { st.flag = b; return { success: true, case_id: 'f01', version: '2026-11-17-r1', new_draft: true }; },
     'admin.guide-rules': (b) => { st.rules = b.extra_rules; return { success: true, saved: true }; },
   };
@@ -498,4 +503,28 @@ test('توجيهات المالك (H4): تُحفظ من «الدقة» ويُع�
   await box.getByRole('button', { name: 'احفظ التوجيهات' }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.guide-rules')).toMatchObject({ extra_rules: 'استعمل «المعلم» لا «المرحلة».' });
   await expect(box.getByRole('button', { name: 'احفظ التوجيهات' })).toBeDisabled();
+});
+
+test('مراجعة الأسبوع (المرحلة د): تُفتح بطلب، بالنسب مقارنة بالسابق، ومجمّعة بالموضع، وكل حالة تصير حالة تقييم', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance');
+  const rv = sec(page, 'مراجعة الأسبوع');
+  expect(calls.some((c) => c.action === 'admin.guide-week')).toBe(false);
+  await rv.getByRole('button', { name: 'افتح مراجعة الأسبوع' }).click();
+  await expect(rv).toContainText('40 ردًا، أجاب 80٪');
+  await expect(rv).toContainText('+10 عن الأسبوع السابق');
+  await expect(rv).toContainText('حالتان: أوقفه الحارس 1، لم يتأكد 1');
+  await expect(rv).toContainText('سؤال واحد تكرر ثلاث مرات فأكثر');
+  await rv.getByText('الرحلة والبرنامج').click();
+  const item = rv.locator('[data-review-item="31"]');
+  await expect(item).toContainText('تكرر 3 مرات');
+  await item.getByRole('button', { name: 'أضفها حالة تقييم' }).click();
+  await item.getByLabel('الإجابة الصحيحة المرجعية').fill('تبدأ بعد اعتماد البطاقة.');
+  await item.getByRole('button', { name: 'أضفها إلى مجموعة التقييم' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'admin.guide-flag')).toMatchObject({ message_id: 31, question: 'متى تبدأ المرحلة الثانية؟' });
+});
+
+test('مراجعة الأسبوع مقفلة لمن لم يمنحه المالك، ولا يُطلب نص', async ({ page }) => {
+  const { calls } = await setup(page, '#/leaders/ai/guidance', { locked: true });
+  await expect(sec(page, 'مراجعة الأسبوع')).toContainText('لم يمنحك المالك صلاحية');
+  expect(calls.some((c) => c.action === 'admin.guide-week')).toBe(false);
 });

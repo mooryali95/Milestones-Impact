@@ -297,3 +297,10 @@
 .gd-run-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .gd-nowrap, .gd-checks bdi { white-space: nowrap; }
 @media (max-width: 600px) { .ag-guide-eval .gd-opt { display: none; } }
+/* المرحلة د: مراجعة الأسبوع */
+.gd-delta.ok { color: var(--st-ok); }
+.gd-delta.bad { color: var(--st-bad); }
+.gd-review-group { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.gd-review-group > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.gd-review-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 12px; }
+.gd-review-list > li { border-block-start: 1px solid var(--line); padding-block-start: 8px; min-width: 0; overflow-wrap: anywhere; }

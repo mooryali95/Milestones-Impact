@@ -62,6 +62,8 @@ export const LEADERS_ADMIN_LOGGED_READS = new Set([
   // نص محادثة المساعد (admin.agent-transcript-view)، ونتائج تشغيل تقييمه بنصوص ردوده (admin.agent-eval-view)، ونص محادثة
   // التوجيه (guide.transcript-read)
   'agent-transcript', 'agent-eval-run', 'guide-transcript',
+  // مراجعة الأسبوع بنص الأسئلة (guide.weekly-review، المرحلة د)
+  'guide-week',
   // وقت آخر زيارة المدير للدفعة (cohort-visits.ts): اطلاع يُسجَّل وقته للمدير نفسه بعد عرض شريط «منذ آخر زيارة»، لكل أدوار
   // اللوحة بما فيها «عرض فقط». لا يمس بيانات المنصة، ولا يُعاد تلقائيًا (العرض التالي يسجله)
   'cohort-visit',
