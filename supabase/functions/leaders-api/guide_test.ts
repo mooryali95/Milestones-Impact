@@ -264,7 +264,9 @@ Deno.test('حراسة نصية: كل استعلام على المحادثات م
   const ADMIN_COUNTS = "db.from('guidance_messages').select('participant_id, role, verdict, confirmed_at, cost_micros')";
   // والثاني: مراقب الانحراف (المرحلة ج، guideReplyVerdicts) يعدّ أحكام الردود بعمودين بلا نص ولا معرّف مشارك، محدد حرفيًا
   const WATCH_COUNTS = "db.from('guidance_messages').select('verdict, guard').eq('role', 'assistant')";
-  for (const q of qs) assert(/\.eq\('participant_id', (p\.id|pid)\)|insert\(row\)/.test(q) || q.startsWith(ADMIN_COUNTS) || q.startsWith(WATCH_COUNTS), q);
+  // والثالث: ملخص Slack الأسبوعي (المرحلة د3، guideWeekVerdicts) بأحكام وأوقات بلا نص ولا معرّف مشارك، محدد حرفيًا
+  const WEEK_COUNTS = "db.from('guidance_messages').select('verdict, guard, confirmed_at, created_at').eq('role', 'assistant')";
+  for (const q of qs) assert(/\.eq\('participant_id', (p\.id|pid)\)|insert\(row\)/.test(q) || [ADMIN_COUNTS, WATCH_COUNTS, WEEK_COUNTS].some((x) => q.startsWith(x)), q);
   assert(!/b\.(participant_id|participant|pid|conversation_id)/.test(src), 'لا يُقرأ معرّف مشارك أو محادثة من الطلب');
   for (const line of src.split('\n').filter((l) => /console\.(log|error)/.test(l))) assert(!/text|answer|body|raw/.test(line.replace(/'[^']*'/g, '')), line);
 });

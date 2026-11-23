@@ -195,7 +195,9 @@ function Delta({ now, prev, good = 'up' }) {
   const up = now > prev;
   return <small className={(up === (good === 'up')) ? 'gd-delta ok' : 'gd-delta bad'}> ({up ? '+' : ''}{Math.round((now - prev) * 10) / 10} عن الأسبوع السابق)</small>;
 }
-export function WeeklyReview() {
+// سطر توجيه مقترح لسؤال تكرر: قالب يكمله المالك بالإجابة الصحيحة، ولا يُحفظ إلا بحفظه
+export const suggestRule = (q) => `- إن سُئلت عن «${String(q || '').replace(/\s+/g, ' ').trim().slice(0, 120)}» فأجب من الكتاب بأن: …`;
+export function WeeklyReview({ onSuggest = null }) {
   const [acc, setAcc] = useState(null);
   const [r, setR] = useState(null);
   const [openKey, setOpenKey] = useState(null);
@@ -227,6 +229,7 @@ export function WeeklyReview() {
                   <span className="la-chip">{REVIEW_REASON_AR[it.reason]}</span>
                   {it.repeats > 1 && <span className="la-chip warn">تكرر {countAr(it.repeats, 'مرة', 'مرتين', 'مرات', 'مرة')}</span>} {date(it.at)}
                 </p>
+                {onSuggest && it.repeats >= 3 && it.question && <button type="button" className="btn-sm ghost" onClick={() => onSuggest(suggestRule(it.question))} data-suggest-rule>اقترح سطر توجيه</button>}
                 <FlagReply m={{ id: it.message_id }} question={it.question} label="أضفها حالة تقييم" />
               </li>
             ))}</ul>

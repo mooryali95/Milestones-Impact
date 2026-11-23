@@ -140,6 +140,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
       feedback360: await FB.sweep().catch((e) => ({ reminded: 0, closed: 0, error: String(e?.message || e) })),
       // المساعد الذكي: إيقاف آلي عند انحراف ردود آخر 24 ساعة (المرحلة ج)
       guide_watch: await (await import('./guide-watch.ts')).guideWatch().catch((e) => ({ error: String(e?.message || e) })),
+      // ومراجعة الأسبوع في Slack صباح الأحد، أعداد بلا نص (المرحلة د3)
+      guide_weekly: await (await import('./guide-watch.ts')).guideWeekly().catch((e) => ({ error: String(e?.message || e) })),
       // بداية إخفاء مقيّمي الأثر مع 360: علامة واحدة في أول تشغيل بعد النشر (feedback360.ts impactPausedSince)
       impact_pause_mark: await FB.markImpactPause().catch((e) => ({ error: String(e?.message || e) })),
       // طلبات الحذف: تذكير المالك قبل 10 أيام وقبل 3 ويوم المهلة ثم يوميًا بعد التأخر (erasure.ts remindSweep)

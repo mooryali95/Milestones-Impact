@@ -413,3 +413,8 @@ export async function guideBreakdown(days = 30) {
 export async function guideReplyVerdicts(since: string) {
   return await db.from('guidance_messages').select('verdict, guard').eq('role', 'assistant').gte('created_at', since).limit(20000);
 }
+
+// المرحلة د3: أحكام ردود أسبوعين لملخص Slack الأسبوعي (guide-watch.ts guideWeekly). أعمدة بلا نص ولا معرّف مشارك
+export async function guideWeekVerdicts(since: string) {
+  return await db.from('guidance_messages').select('verdict, guard, confirmed_at, created_at').eq('role', 'assistant').gte('created_at', since).limit(20000);
+}

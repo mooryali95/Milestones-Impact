@@ -75,3 +75,12 @@ export function weekRates(rows) {
   const pct = (x) => (n ? Math.round((x / n) * 1000) / 10 : null);
   return { replies: n, answered_pct: pct(c((r) => r.verdict === 'answered' && !r.guard)), unsure_pct: pct(c((r) => r.verdict === 'unsure')), guard_pct: pct(c((r) => !!r.guard)) };
 }
+
+/** سطر Slack الأسبوعي: أعداد ونسب وحدها، بلا نص سؤال ولا اسم */
+export function weekLine(w, p, toReview) {
+  const d = (a, b) => (a == null || b == null || a === b ? '' : ` (${a > b ? '+' : ''}${Math.round((a - b) * 10) / 10})`);
+  const pct = (x) => (x == null ? '—' : `${x}٪`);
+  return `🧭 مراجعة أسبوع «التوجيه والإرشاد»: ${w.replies} ردًا، أجاب ${pct(w.answered_pct)}${d(w.answered_pct, p.answered_pct)}، `
+    + `لم يتأكد ${pct(w.unsure_pct)}${d(w.unsure_pct, p.unsure_pct)}، أوقفه الحارس ${pct(w.guard_pct)}${d(w.guard_pct, p.guard_pct)}. `
+    + (toReview ? `${toReview} حالة تنتظر مراجعتك في «مراجعة الأسبوع».` : 'لا حالة تنتظر المراجعة.');
+}

@@ -7,6 +7,7 @@ import { audit, db } from './core.ts';
 import { appSettings, resetSettingsCache } from './settings.ts';
 import { ownerNoticeLater } from './notify.ts';
 import { watchVerdict, WATCH_REASON_AR } from './guide.js';
+import { reviewReason, weekLine, weekRates } from './guide-review.js';
 
 export const WATCH = { now: () => Date.now() };
 
@@ -42,4 +43,25 @@ export async function guideWatch() {
     ref: `guide_auto_paused:${new Date(WATCH.now()).toISOString().slice(0, 13)}`,
   });
   return { checked: true, paused: true, reason: v.reason, ...counts };
+}
+
+// ── المرحلة د3: ملخص الأسبوع في Slack، أعداد ونسب بلا نص سؤال ولا اسم. يوم الأحد في التاسعة بتوقيت الرياض (06 UTC)،
+// مرة واحدة في الأسبوع: يُسجَّل في audit_log بمفتاح الأسبوع فلا تكرره المهمة الساعية ولا إعادة تشغيلها
+export const WEEKLY_AT = { day: 0, hourUtc: 6 };
+export async function guideWeekly() {
+  const now = new Date(WATCH.now());
+  if (now.getUTCDay() !== WEEKLY_AT.day || now.getUTCHours() !== WEEKLY_AT.hourUtc) return { sent: false, reason: 'not_due' };
+  const key = now.toISOString().slice(0, 10);
+  const { count } = await db.from('audit_log').select('id', { count: 'exact', head: true }).eq('action', 'guide.weekly-sent').eq('entity_id', key);
+  if (count) return { sent: false, reason: 'already' };
+  const since = new Date(now.getTime() - 7 * 864e5).toISOString();
+  const { data, error } = await (await import('./guide.ts')).guideWeekVerdicts(new Date(now.getTime() - 14 * 864e5).toISOString());
+  if (error) { console.error('guide weekly read', error.code || 'error'); return { sent: false, reason: 'read' }; }
+  const rows = (data || []) as any[];
+  const week = rows.filter((r) => r.created_at >= since);
+  if (!week.length) return { sent: false, reason: 'empty' };
+  const toReview = week.filter((r) => reviewReason(r)).length;
+  await audit('system', 'guide-weekly', 'guide.weekly-sent', 'app_settings', key, null, { replies: week.length, to_review: toReview });
+  ownerNoticeLater('guide_weekly', { line: weekLine(weekRates(week), weekRates(rows.filter((r) => r.created_at < since)), toReview), ref: `guide_weekly:${key}` });
+  return { sent: true, replies: week.length, to_review: toReview };
 }
