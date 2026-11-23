@@ -83,7 +83,7 @@
   color: var(--petrol); text-decoration: none; font-size: .85rem; font-weight: 700; }
 .pf-contact a:hover, .pf-contact a:focus-visible { background: var(--sand-light); }
 .pf-more { position: relative; }
-.pf-menu { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 20; min-inline-size: 210px; list-style: none; margin: 0; padding: 6px;
+.pf-menu { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 20; min-inline-size: 210px; max-inline-size: calc(100vw - 16px); list-style: none; margin: 0; padding: 6px;
   background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 10px 28px rgba(10,42,61,.16); }
 .pf-menu button { display: block; inline-size: 100%; text-align: start; padding: 8px 10px; border: 0; background: none; border-radius: 6px; font: inherit; cursor: pointer; }
 .pf-menu button:hover, .pf-menu button:focus-visible { background: var(--sand-light); outline: none; }
@@ -1384,3 +1384,6 @@
 .mid-check > span { display: grid; gap: 2px; font-size: .9rem; line-height: 1.7; }
 .mid-check b { font-weight: 600; }
 .mid-check small { color: var(--brand-muted); font-size: .82rem; }
+/* تنبيه نسخة الرحلة في رأس ملف الدفعة (2026-11-23) */
+.version-note { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.version-note > span { flex: 1 1 240px; min-width: 0; }

@@ -158,3 +158,12 @@ test('الحد المشترك: ذُكِّر أمس فالزر معطل ويقو�
   await expect(card.getByRole('button', { name: 'ذكّره الآن' })).toBeDisabled();
   await expect(card).toContainText('ذكّره المرشد أمس، والتذكير التالي بعد 3 أيام من آخر تذكير');
 });
+
+test('قائمة «⋯» على الهاتف (390): كاملة داخل الشاشة، لا تخرج عن حافتها', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page, 'enrolled');
+  await page.getByRole('button', { name: 'إجراءات أخرى' }).click();
+  const r = await page.getByRole('menu', { name: 'إجراءات أخرى' }).evaluate((el) => { const b = el.getBoundingClientRect(); return { l: b.left, r: b.right, w: innerWidth }; });
+  expect(r.l).toBeGreaterThanOrEqual(0);
+  expect(r.r).toBeLessThanOrEqual(r.w);
+});

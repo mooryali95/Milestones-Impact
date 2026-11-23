@@ -211,6 +211,10 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
   // من تأخر في أي مرحلة جارية له يُعدّ مرة واحدة في الإجمالي، ومن يقف في مراحل تسير معًا يُعدّ مرة واحدة في محوره
   const latePeople = new Set();
   const herePhase = new Map();
+  // من يقف في مرحلتين تسيران معًا يُعدّ في مجموعتهما مرة واحدة (here_by_group بمفتاح أول المجموعة)، فمجموع ما تعرضه
+  // الخريطة لكل محور يساوي عدد من فيه (here_by_phase) ولا يتكرر الشخص
+  const togetherOf = mapLanes(stages).together;
+  const hereGroup = new Map(), lateGroup = new Map();
   const members = [];
   const titleOf = (k) => stages[keys.indexOf(k)]?.title_ar || k;
   // لحظة انقضاء مهلة مرحلة مؤرخة على جدول الدفعة (غداة نهاية نافذتها والمهلة)، أو null لما لا موعد له
@@ -255,6 +259,7 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
       // في أول مرحلة: لحظة انضمامه، فمن انضم ومهلتها منقضية صار متأخرًا لحظة انضم لا قبل أن يكون عضوًا
       const sinceHere = enteredAt || (cur.start > 0 ? null : p.joined_at || p.created_at || null);
       const lateFrom = [];
+      const lateHere = new Set();
       for (const st of cur.stages) {
         const s = stages[keys.indexOf(st.key)];
         const a = acc[st.key];
@@ -267,7 +272,7 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
         // والدفعة المفتوحة (is_default) مددها نسبية من الدخول ولو كان لها starts_on (القرار 21)، فتبقى على الحساب بالمدة
         const dated = w && !cohort?.is_default && (d > 0 || plan.byKey[s.key]?.source === 'pinned');
         const late = dated ? t > addDays(w.to, STAGE_GRACE_DAYS) : d > 0 && days > d + STAGE_GRACE_DAYS;
-        if (late) { a.late += 1; latePeople.add(p.id); }
+        if (late) { a.late += 1; latePeople.add(p.id); lateHere.add(st.key); }
         // متى بدأ تأخره في هذه المرحلة: غداة انقضاء المهلة (بيوم UTC كما يُحسب التأخر)، أو لحظة دخوله إن دخلها وموعدها منقضٍ
         if (late && mem) {
           const due = `${dated ? addDays(w.to, STAGE_GRACE_DAYS + 1) : addDays(isoDay(entry || t), d + STAGE_GRACE_DAYS + 1)}T00:00:00.000Z`;
@@ -283,6 +288,11 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
         }
       }
       for (const ph of phases) herePhase.set(ph, (herePhase.get(ph) || 0) + 1);
+      const heads = new Set(cur.stages.map((x) => togetherOf[x.key]).filter(Boolean));
+      for (const h of heads) {
+        hereGroup.set(h, (hereGroup.get(h) || 0) + 1);
+        if (cur.stages.some((x) => togetherOf[x.key] === h && lateHere.has(x.key))) lateGroup.set(h, (lateGroup.get(h) || 0) + 1);
+      }
       if (mem) {
         // الصف يحمل موضعه (أول ما في stuck من مرحلة الموضع نفسها)، ومن يسير في مرحلتين معًا تُسمى مرحلتاه ودور كل منهما
         const at = mem.stuck.find((x) => x.key === key) || mem.stuck[0];
@@ -349,6 +359,8 @@ export function journeyMap({ stages, people: all, cohort = null, program = null,
     totals: { total: people.length, finished, late: latePeople.size, not_started: 0 },
     // من يقف الآن في كل محور، كل شخص مرة واحدة ولو وقف في مرحلتين تسيران معًا
     here_by_phase: Object.fromEntries(herePhase),
+    // برنامج بلا مراحل متوازية لا يتغير مخرجه حرفًا (لقطة المتتابع)
+    ...(Object.keys(togetherOf).length ? { here_by_group: Object.fromEntries(hereGroup), late_by_group: Object.fromEntries(lateGroup) } : {}),
     bottleneck: peak && peak.here > 0 ? { stage: peak.key } : null,
     stages: out,
     milestones: [...ms.values()].sort((a, b) => String(a.due || '9999').localeCompare(String(b.due || '9999')) || a.sort - b.sort)

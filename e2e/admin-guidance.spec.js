@@ -41,8 +41,8 @@ function backend() {
     'admin.guide-eval': () => {
       const full = st.runs.find((r) => !r.diagnostic);
       return { success: true, ready: true, model: 'claude-opus-5-5', threshold: 0.99, fingerprint: 'fp', brief_chars: 2625,
-        set: { version: '2026-11-16-draft-1', total: 40, kinds: { answer: 24, unsure: 6, refuse_model: 6, refuse_route: 4 }, approved_by: null, approved_at: null, errors: [] },
-        checks: { approved: false, run: full ? { id: full.id, passed: full.passed_cases, total: 40, started_at: full.started_at } : null, run_ok: !!full && full.passed_cases === 40, need: 40, total: 40 },
+        set: { version: '2026-11-16-draft-1', total: 40, kinds: { answer: 24, unsure: 6, refuse_model: 6, refuse_route: 4 }, approved_by: st.longApprover || null, approved_at: st.longApprover ? ago(60) : null, errors: [] },
+        checks: { approved: !!st.longApprover, run: full ? { id: full.id, passed: full.passed_cases, total: 40, started_at: full.started_at } : null, run_ok: !!full && full.passed_cases === 40, need: 40, total: 40 },
         gate: { ok: false, reason: 'unapproved', message: 'مجموعة التقييم لم تُعتمد بعد.' }, runs: st.runs };
     },
     'admin.guide-eval-start': (b) => { st.steps = 0; st.mode = b.mode || null; return { success: true, run_id: b.mode ? DIAG : '11111111-1111-4111-8111-111111111111', total: b.mode ? 3 : 40, diagnostic: !!b.mode }; },
@@ -531,4 +531,14 @@ test('مراجعة الأسبوع مقفلة لمن لم يمنحه المالك
   const { calls } = await setup(page, '#/leaders/ai/guidance', { locked: true });
   await expect(sec(page, 'مراجعة الأسبوع')).toContainText('لم يمنحك المالك صلاحية');
   expect(calls.some((c) => c.action === 'admin.guide-week')).toBe(false);
+});
+
+test('الدقة على الهاتف (390): بريد المعتمد الطويل يلتف داخل البطاقة ولا يتجاوزها', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page, '#/leaders/ai/guidance', { longApprover: 'very.long.approver.name2012@hotmail.example.com' });
+  const ev = sec(page, 'الدقة');
+  const li = ev.getByRole('list', { name: 'شرطا فتح البوابة' }).getByRole('listitem').first();
+  await expect(li).toContainText('معتمدة');
+  const fits = await li.evaluate((el) => { const c = el.closest('.la-card').getBoundingClientRect(); const r = el.getBoundingClientRect(); return r.left >= c.left - 0.5 && r.right <= c.right + 0.5 && el.scrollWidth <= el.clientWidth + 1; });
+  expect(fits).toBe(true);
 });
