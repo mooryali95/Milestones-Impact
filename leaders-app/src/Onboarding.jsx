@@ -40,14 +40,15 @@ export function onboardingStep(me, flags = {}) {
   const seenWelcome = flags.welcomeSeen ?? !!welcomeSeen.get();
   const seenNext = flags.nextSeen ?? !!nextSeen.get();
   if (!gateDone(me, 'profile')) return step(me, seenWelcome ? 'profile' : 'welcome');
-  if (!gateDone(me, 'assessment')) return step(me, 'assessment', flags.assessmentPaywall ? 'رسوم القياس' : undefined);
+  // قبل القياس رسومه لغير المرعي: الخطوة تحمل اسم الدفع ومدته (دقيقة)، لا مدة القياس الذي لم يبدأ
+  if (!gateDone(me, 'assessment')) return step(me, 'assessment', flags.assessmentPaywall ? { title: 'رسوم القياس', minutes: 'دقيقة' } : undefined);
   if (!me.profile?.approved && !seenNext) return step(me, 'next');
   return null;
 }
-function step(me, key, title) {
+function step(me, key, over) {
   const index = ONBOARDING_STEPS.findIndex((s) => s.key === key);
-  const steps = ONBOARDING_STEPS.map((s) => (s.key === 'assessment' ? { ...s, minutes: assessmentMinutes(me) } : s));
-  return { ...steps[index], ...(title && { title }), index, n: index + 1, total: steps.length, steps };
+  const steps = ONBOARDING_STEPS.map((s) => (s.key === 'assessment' ? { ...s, minutes: assessmentMinutes(me), ...(key === 'assessment' && over?.minutes && { minutes: over.minutes }) } : s));
+  return { ...steps[index], ...(over?.title && { title: over.title }), index, n: index + 1, total: steps.length, steps };
 }
 
 // رأس الخطوات فوق شاشة الخطوة الحالية

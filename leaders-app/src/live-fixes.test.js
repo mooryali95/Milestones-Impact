@@ -130,6 +130,13 @@ describe('عدّاد واحد ومدد من مصادرها (العيب 10)', () 
     expect(step.steps.map((s) => s.minutes)).toEqual([PARTICIPANT_VIDEO.duration_ar, 'دقيقتان', '18 دقيقة', 'دقيقة']);
   });
 
+  it('خطوة رسوم القياس تحمل مدة الدفع (دقيقة) لا مدة القياس الذي لم يبدأ', () => {
+    const step = onboardingStep(me('37 دقيقة'), { welcomeSeen: true, assessmentPaywall: true });
+    expect(step).toMatchObject({ key: 'assessment', title: 'رسوم القياس', minutes: 'دقيقة' });
+    expect(step.steps[2].minutes).toBe('دقيقة');
+    expect(onboardingStep(me('37 دقيقة'), { welcomeSeen: true }).minutes).toBe('37 دقيقة');
+  });
+
   it('رمز لم يُملأ أو مرحلة غائبة لا يُظهر رقمًا مخترعًا', () => {
     expect(assessmentMinutes(me('{assessment_minutes}'))).toBeNull();
     expect(assessmentMinutes({ journey: [] })).toBeNull();

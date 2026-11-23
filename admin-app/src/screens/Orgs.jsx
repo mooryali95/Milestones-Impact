@@ -293,6 +293,8 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
               {!isNone && 'companion_allowed' in o && <span className={`la-chip ${o.companion_allowed === false ? 'warn' : 'ok'} org-companion`}>المرافق: {o.companion_allowed === false ? 'غير مسموح' : 'مسموح'}</span>}</div></div>
           <div className="la-row">
             {!isNone && <button className="btn-sm ghost" onClick={() => copy(inviteUrl(o), 'نُسخ رابط الدعوة')}>نسخ رابط الدعوة</button>}
+            {/* الرمز الذي يكتبه المشارك في شاشة الرسوم «رشّحتك جهة؟» هو رمز رابط الدعوة نفسه */}
+            {!isNone && o.invite_code && <button className="btn-sm ghost" onClick={() => copy(o.invite_code, `نُسخ رمز الجهة: ${o.invite_code}`)}>نسخ رمز الجهة</button>}
             <ExportButton scope="org-members" className="btn-sm ghost" meta={{ kind: 'ORG', title: `مشاركو ${o.name}`, subtitle: 'برنامج القادة', for: o.name, sheet: 'المشاركون', file: 'Organization', code: o.invite_code }}
               columns={memberCols} all={all} filtered={rows} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
             <button className="btn-sm ghost" onClick={printReport}>تقرير الجهة</button>
