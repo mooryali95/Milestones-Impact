@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { dateTime as date, L } from './leaders.js';
 import { Spinner, useUI } from './ui.jsx';
 import { dollars, Switch } from './ai-ui.jsx';
+import { countAr } from '../../supabase/functions/leaders-api/labels.js';
 import './agent-admin.css';
 
 const VERDICT_AR = { answered: 'أجاب', unsure: 'لم يتأكد', refused: 'رفض', error: 'تعذّر' };
@@ -63,14 +64,14 @@ const questionBefore = (list, m) => [...list.slice(0, list.indexOf(m))].reverse(
 // H4: «رد غير دقيق» يصير حالة في مسودة مجموعة التقييم. السؤال قابل للتعديل لإزالة ما يدل على صاحبه قبل الحفظ،
 // والخادم يحجب البريد والرقم والرابط والهوية مرة أخرى، ولا يحفظ معرّف المشارك ولا اسمه في المجموعة
 const FLAG_KINDS = [['answer', 'كان يجب أن يجيب'], ['unsure', 'كان يجب أن يقول «لست متأكدًا»'], ['refuse_model', 'كان يجب أن يعتذر']];
-function FlagReply({ m, question }) {
+function FlagReply({ m, question, label = 'رد غير دقيق' }) {
   const { toast } = useUI();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ question, kind: 'answer', reference_ar: '', must_include: '' });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   if (done) return <p className="la-muted small" data-flagged>أُضيفت الحالة {done} إلى مسودة مجموعة التقييم. راجعها واعتمدها من «الدقة».</p>;
-  if (!open) return <button type="button" className="btn-sm ghost" onClick={() => setOpen(true)} data-flag-open>رد غير دقيق</button>;
+  if (!open) return <button type="button" className="btn-sm ghost" onClick={() => setOpen(true)} data-flag-open>{label}</button>;
   const save = async () => {
     setBusy(true);
     const r = await L('admin.guide-flag', { message_id: m.id, ...f, must_include: f.must_include.split('\n') });
@@ -181,6 +182,57 @@ export function TranscriptGrants() {
           <li key={i}><b>{r.by}</b> فتح محادثة {r.name || 'مشارك محذوف'}{r.messages != null ? ` (${r.messages} رسالة)` : ''} <span className="la-muted small">{date(r.at)}</span></li>
         ))}</ul>
       )}
+    </div>
+  );
+}
+
+// المرحلة د: مراجعة الأسبوع للتعلم. ما لم يتأكد منه المساعد أو اعتذر عنه أو أوقفه الحارس أو طلب فيه المشارك خبيرًا،
+// مجمّعًا بالموضع، ولكل حالة «رد غير دقيق» نفسه فتصير حالة تقييم بقرار المراجع. لا يتغير شيء آليًا
+const REVIEW_REASON_AR = { guard: 'أوقفه الحارس', unsure: 'لم يتأكد', refused: 'اعتذر', confirmed: 'طلب خبيرًا' };
+const pctAr = (x) => (x == null ? '—' : `${x}٪`);
+function Delta({ now, prev, good = 'up' }) {
+  if (now == null || prev == null || now === prev) return null;
+  const up = now > prev;
+  return <small className={(up === (good === 'up')) ? 'gd-delta ok' : 'gd-delta bad'}> ({up ? '+' : ''}{Math.round((now - prev) * 10) / 10} عن الأسبوع السابق)</small>;
+}
+export function WeeklyReview() {
+  const [acc, setAcc] = useState(null);
+  const [r, setR] = useState(null);
+  const [openKey, setOpenKey] = useState(null);
+  useEffect(() => { transcriptAccess().then(setAcc); }, []);
+  if (!acc) return <Spinner />;
+  if (!acc.can_read) return <p className="la-muted small" data-review-locked>{acc.message || 'مراجعة الأسبوع للمالك، وللمدير الأعلى بصلاحية يمنحها المالك.'}</p>;
+  if (!r) return <button type="button" className="btn-sm primary" onClick={() => L('admin.guide-week').then(setR)} data-review-open>افتح مراجعة الأسبوع</button>;
+  if (!r.success) return <p className="la-err">{r.message}</p>;
+  const w = r.rates.week, p = r.rates.prev;
+  return (
+    <div className="stack" data-weekly-review>
+      <p className="small">
+        آخر {r.days} أيام: {countAr(w.replies, 'رد واحد', 'ردّان', 'ردود', 'ردًا')}، أجاب {pctAr(w.answered_pct)}<Delta now={w.answered_pct} prev={p.answered_pct} />،
+        لم يتأكد {pctAr(w.unsure_pct)}<Delta now={w.unsure_pct} prev={p.unsure_pct} good="down" />،
+        أوقفه الحارس {pctAr(w.guard_pct)}<Delta now={w.guard_pct} prev={p.guard_pct} good="down" />.
+      </p>
+      {!r.total ? <p className="la-muted small">لا حالة تستحق المراجعة هذا الأسبوع.</p> : <>
+        <p className="la-muted small">
+          {countAr(r.total, 'حالة واحدة', 'حالتان', 'حالات', 'حالة')}: {Object.entries(r.reasons).filter(([, n]) => n).map(([k, n]) => `${REVIEW_REASON_AR[k]} ${n}`).join('، ')}.
+          {r.repeated ? ` ${countAr(r.repeated, 'سؤال واحد', 'سؤالان', 'أسئلة', 'سؤالًا')} تكرر ثلاث مرات فأكثر، فهو أولى بالإضافة.` : ''} فتحك مسجَّل باسمك.
+        </p>
+        {r.groups.map((g) => (
+          <details key={g.key} className="gd-review-group" open={openKey === g.key} onToggle={(e) => e.currentTarget.open && setOpenKey(g.key)}>
+            <summary><b>{g.label}</b> <span className="la-chip">{g.cases.length}</span></summary>
+            <ul className="gd-review-list">{g.cases.map((it) => (
+              <li key={it.message_id} data-review-item={it.message_id}>
+                <p className="gd-msg-body">{it.question || <span className="la-muted">(بلا سؤال في المحادثة)</span>}</p>
+                <p className="la-muted small">
+                  <span className="la-chip">{REVIEW_REASON_AR[it.reason]}</span>
+                  {it.repeats > 1 && <span className="la-chip warn">تكرر {countAr(it.repeats, 'مرة', 'مرتين', 'مرات', 'مرة')}</span>} {date(it.at)}
+                </p>
+                <FlagReply m={{ id: it.message_id }} question={it.question} label="أضفها حالة تقييم" />
+              </li>
+            ))}</ul>
+          </details>
+        ))}
+      </>}
     </div>
   );
 }
