@@ -71,7 +71,7 @@ export default function Katon({ onBack }) {
       {!t && (
         <>
           <section className="card stack">
-            <p className="muted">احكم على كل جملة (صحيحة أو خاطئة) بدرجة ثقتك الحقيقية: «أرجّح» لا يخسر، و«واثق» و«متيقن» يكسبان أكثر إن أصبت ويخسران أكثر إن أخطأت، فالصدق عن ثقتك هو ما يربح على المدى. موقفك من الجملة (سؤال، بحث، فكرة…) يُرى ولا يُحسب بالنقاط. يُكشف المفتاح حين تتم جمل الموضوع.</p>
+            <p className="muted">احكم على كل جملة بثقتك الحقيقية: «أرجّح» لا يخسر، والثقة الأعلى تكسب أكثر وتخسر أكثر، وموقفك من الجملة لا يُحسب. يُكشف المفتاح حين تتم جمل الموضوع.</p>
             <div className="kt-legend">
               {[1, 2, 3].map((c) => <span key={c}><b>{KATON_CONFIDENCE[c].ar}</b> <small className="muted">{KATON_CONFIDENCE[c].band}: {sign(pts.right[c])} / {sign(pts.wrong[c])}</small></span>)}
             </div>
