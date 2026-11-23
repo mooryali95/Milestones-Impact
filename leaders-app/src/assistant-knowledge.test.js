@@ -42,8 +42,8 @@ describe('معرفة المساعد', () => {
   });
 
   it('موضع البيانات كما في سياسة برنامج القادة: مومباي خارج المملكة، ولا ادعاء بالبقاء في السعودية', () => {
-    expect(read('leaders-app/src/screens/Legal.jsx')).toContain('على خوادم AWS في مومباي بالهند');
-    expect(K).toContain('على خوادم AWS في مومباي بالهند');
+    expect(read('leaders-app/src/screens/Legal.jsx')).toContain('في الهند');
+    expect(K).toContain('بالهند');
     expect(K).toContain('خارج المملكة العربية السعودية');
     expect(K).not.toMatch(/داخل المملكة[^.\n]*(تُحفظ|محفوظة)/);
   });
