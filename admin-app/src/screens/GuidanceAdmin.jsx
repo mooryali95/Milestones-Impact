@@ -73,6 +73,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
   const [busy, setBusy] = useState(false);
   const [live, setLive] = useState(null);
   const [results, setResults] = useState(null);
+  const [allRuns, setAllRuns] = useState(false);
   const load = () => L('admin.guide-eval').then(setS);
   useEffect(() => { load(); }, []);
   if (!s?.success || !s.ready) return null;
@@ -109,23 +110,27 @@ function GuidanceEval({ canWrite = false, onEdit }) {
             {ck.run ? <b>{ck.run.passed}/{ck.run.total}</b> : 'لم يُشغَّل بعد'} (المطلوب {ck.need}/{ck.total})</li>
         </ul>
       )}
-      <p className="la-muted small gd-order">الترتيب: أصلح سبب الرسوب، ثم اعتمد المجموعة، ثم شغّل تقييمًا كاملًا واحدًا. التشغيل التشخيصي يختبر الإصلاح ولا يفتح البوابة.</p>
-      <p className="la-muted small">
-        {set.total} حالة ({Object.entries(set.kinds).map(([k, n]) => `${KIND_AR[k] || k} ${n}`).join('، ')}).{' '}
-        {set.approved_by ? <>اعتمدها <bdi dir="ltr">{set.approved_by}</bdi> في {date(set.approved_at)}.</> : 'مسودة بانتظار اعتماد المالك للإجابات المرجعية.'}
-        {' '}النموذج <code dir="ltr">{s.model}</code>.
-        {s.brief_chars != null && (s.brief_chars > 0 ? ' مرجع البرنامج من الكتاب مرفق للأسئلة من خارج الأبواب.' : ' مرجع البرنامج غير متاح (أقسامه غير موجودة في أبواب الكتاب).')}
-      </p>
+      <p className="la-muted small">{set.total} حالة · {set.approved_by ? `معتمدة ${date(set.approved_at)}` : 'مسودة بانتظار اعتمادك'}</p>
+      <details className="gd-more">
+        <summary>تفاصيل</summary>
+        <p className="la-muted small gd-order">الترتيب: أصلح سبب الرسوب، ثم اعتمد المجموعة، ثم شغّل تقييمًا كاملًا واحدًا. التشغيل التشخيصي يختبر الإصلاح ولا يفتح البوابة.</p>
+        <p className="la-muted small">
+          {Object.entries(set.kinds).map(([k, n]) => `${KIND_AR[k] || k} ${n}`).join('، ')}.{' '}
+          {set.approved_by && <>اعتمدها <bdi dir="ltr">{set.approved_by}</bdi>.</>}
+          {' '}النموذج <code dir="ltr">{s.model}</code>.
+          {s.brief_chars != null && (s.brief_chars > 0 ? ' مرجع البرنامج من الكتاب مرفق للأسئلة من خارج الأبواب.' : ' مرجع البرنامج غير متاح (أقسامه غير موجودة في أبواب الكتاب).')}
+        </p>
+      </details>
       {set.errors.length > 0 && <div className="la-err" role="alert">أخطاء في المجموعة: {set.errors.slice(0, 5).join('؛ ')}</div>}
       {canWrite && <div className="la-row">
         <button type="button" className="btn-sm primary" disabled={!!busy || set.errors.length > 0} onClick={() => run()}>{busy === 'full' ? 'يعمل…' : 'شغّل التقييم'}</button>
         {hasFailed && <button type="button" className="btn-sm ghost" disabled={!!busy || set.errors.length > 0} onClick={() => run('failed')}>{busy === 'failed' ? 'يعمل…' : 'أعد الحالات الفاشلة فقط'}</button>}
         {live && <span className="la-muted small" role="status">{live.done_cases} من {live.total_cases} · ناجح {live.passed_cases} · {usd(Number(live.cost_micros) / 1e6)}</span>}</div>}
-      {s.runs.length > 0 && (
+      {s.runs.length > 0 && (<>
         <div className="ag-scroll">
           <table className="la-table">
             <thead><tr><th>التشغيل</th><th>النوع</th><th>الحال</th><th>النجاح</th><th className="gd-opt">الكلفة</th><th className="gd-opt">النسخة</th></tr></thead>
-            <tbody>{s.runs.map((r) => (
+            <tbody>{(allRuns ? s.runs : s.runs.slice(0, 3)).map((r) => (
               <tr key={r.id} data-diag={r.diagnostic ? 'yes' : 'no'}>
                 {/* الدخول إلى النتائج في الخلية الأولى، فيبقى ظاهرًا على الهاتف بلا تمرير */}
                 <td><div className="gd-run-cell"><button type="button" className="la-link" onClick={() => showResults(r.id)}>النتائج</button><small className="gd-nowrap" title={date(r.started_at)}>{dayMonth(r.started_at)}</small></div></td>
@@ -136,7 +141,8 @@ function GuidanceEval({ canWrite = false, onEdit }) {
             ))}</tbody>
           </table>
         </div>
-      )}
+          {s.runs.length > 3 && <button type="button" className="la-link" onClick={() => setAllRuns((v) => !v)}>{allRuns ? 'إخفاء الأقدم' : `عرض الأقدم (${s.runs.length - 3})`}</button>}
+      </>)}
       {results?.success && (
         <div className="stack gd-results" aria-label="نتائج التشغيل">
           <div className="la-row between"><b>النتائج ({failedCount} راسبة{results.diagnostic ? '، تشغيل تشخيصي لا يُحسب للبوابة' : ''})</b><button type="button" className="la-link" onClick={() => setResults(null)}>إغلاق</button></div>
