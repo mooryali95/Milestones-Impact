@@ -91,14 +91,21 @@ export async function checkout(p: any, b: Body) {
   // حد معقول: لا أكثر من خمس صفحات دفع في الساعة لكل مشارك
   const { count } = await db.from('payments').select('id', { count: 'exact', head: true }).eq('participant_id', p.id).gte('created_at', new Date(Date.now() - 36e5).toISOString());
   if ((count ?? 0) >= 5) throw new Fail('محاولات دفع كثيرة، حاول بعد ساعة', 429, 'rate');
+  // المصدر الواحد للسعر (تصور مصدر السعر، المرحلة 2): سعر الإعداد يُرسل إلى Creem في custom_price فيخصم ما يُعرض
+  // تمامًا قبل الضريبة. حده الأدنى 100 وحدة صغرى، وما دونه لا تُفتح له جلسة ولا يُرجع إلى سعر المنتج في Creem
+  const price = Math.round(Number(item === 'program' ? s.program_cents : s.assessment_cents));
+  if (!Number.isFinite(price) || price < MIN_PRICE_CENTS || price > MAX_PRICE_CENTS) {
+    await alertOps('payment_mismatch', { item, product, issues: [`سعر ${ITEM_AR[item]} في الإعداد ${price} خارج حد Creem (${MIN_PRICE_CENTS} إلى ${MAX_PRICE_CENTS})، ولم تُفتح صفحة الدفع`] }, { key: `checkout:${item}` }).catch((e) => console.error('alert:', e));
+    throw new Fail('تعذّر فتح صفحة الدفع، حاول بعد قليل', 502, 'pay_gateway');
+  }
   const pay = must(await db.from('payments').insert({
     participant_id: p.id, email: p.email, item, product_id: product, mode: modeOf(apiKey()),
-    amount_cents: item === 'program' ? s.program_cents : s.assessment_cents, currency: s.currency,
+    amount_cents: price, currency: s.currency,
   }).select('*').single()) as any;
   const res = await fetch(`${apiBase()}/v1/checkouts`, {
     method: 'POST', headers: { 'x-api-key': apiKey(), 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      product_id: product, request_id: pay.id,
+      product_id: product, custom_price: price, request_id: pay.id,
       success_url: `${CONFIG.appUrl.replace(/\/$/, '')}/?paid=${item}`,
       customer: { email: p.email },
       metadata: { participant_id: p.id, item, payment_id: pay.id },
@@ -108,6 +115,12 @@ export async function checkout(p: any, b: Body) {
   if (!res.ok || !out.checkout_url) {
     await db.from('payments').update({ status: 'failed', note: `checkout ${res.status}` }).eq('id', pay.id);
     console.error('creem checkout', res.status, JSON.stringify(out).slice(0, 300));
+    // رفض Creem الطلب (4xx): أغلب سببه custom_price (منتج اشتراك، أو سعر خارج حده) أو منتج لا يطابق المفتاح، وهذا لا
+    // يُصلحه انتظار، فيُنبَّه المالك بسببه مرة في مهلة التنبيه لكل بند. لا رجوع صامت إلى سعر المنتج
+    if (res.status >= 400 && res.status < 500) {
+      const reason = String(out?.message ?? out?.error ?? '').slice(0, 300) || `HTTP ${res.status}`;
+      await alertOps('payment_mismatch', { item, product, issues: [`رفض Creem فتح صفحة دفع ${ITEM_AR[item]} بسعر ${price}: ${reason}`] }, { key: `checkout:${item}` }).catch((e) => console.error('alert:', e));
+    }
     throw new Fail('تعذّر فتح صفحة الدفع، حاول بعد قليل', 502, 'pay_gateway');
   }
   await db.from('payments').update({ checkout_id: out.id }).eq('id', pay.id);
@@ -439,6 +452,10 @@ async function funnel() {
   return { assessed, approved, enrolled: new Set((prog || []).map((x: any) => x.participant_id)).size };
 }
 
+// حدا custom_price في Creem (create-checkout): من 100 وحدة صغرى إلى 99999999، للمنتجات ذات الدفع لمرة واحدة
+export const MIN_PRICE_CENTS = 100;
+export const MAX_PRICE_CENTS = 99999999;
+
 export async function adminSettings(a: Admin, b: Body) {
   requireWrite(a);
   const cents = (v: any, d: number) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.round(Number(v)) : d);
@@ -452,6 +469,14 @@ export async function adminSettings(a: Admin, b: Body) {
   };
   if (patch.enabled && (!apiKey() || !hookSecret() || !patch.assessment_product || !patch.program_product)) {
     throw new Fail('لا يُفعَّل الدفع قبل اكتمال المفتاح وسرّ الإشعارات ومعرّفي المنتجين', 409);
+  }
+  // السعر هنا ما يخصمه Creem (custom_price)، فلا يُحفظ مع التفعيل سعر خارج حده. والدفع مطفأ يقبل أي سعر غير سالب كما كان
+  // (الصفر هناك لا يُخصم به أحد، والتفعيل لاحقًا يمر بهذا الفحص)
+  if (patch.enabled) {
+    for (const [k, label] of [['assessment_cents', 'القياس المبدئي'], ['program_cents', 'إكمال البرنامج']] as const) {
+      if (patch[k] < MIN_PRICE_CENTS) throw new Fail(`سعر ${label} أقل من الحد الأدنى الذي يقبله Creem (1.00)، ارفعه أو أطفئ الدفع`, 400, 'pay_price_min');
+      if (patch[k] > MAX_PRICE_CENTS) throw new Fail(`سعر ${label} أعلى من الحد الأعلى الذي يقبله Creem`, 400, 'pay_price_max');
+    }
   }
   let saved = must(await db.from('payment_settings').update(patch).eq('id', true).select('*').single()) as any;
   // مفاتيح بريد الدفع (payments-ledger.js NOTIFY): تُحفظ حين تُرسل، في تحديث منفصل يتحمل غياب العمود قبل ترحيله
