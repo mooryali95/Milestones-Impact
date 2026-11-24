@@ -62,7 +62,7 @@ export async function create(p: any, b: Body) {
     throw new Fail(`لك ${MAX_ACTIVE_SHARES} روابط نشطة، وهذا الحد. ألغِ رابطًا لا تحتاجه ثم أنشئ الجديد`);
   }
   const token = randomToken();
-  const base = {
+  const base: Record<string, unknown> = {
     participant_id: p.id, token_hash: await hash(token), label: input.label, allow_notes: input.allow_notes, allow_download: input.allow_download,
     show_levels: input.show_levels, expires_at: new Date(now + input.days * DAY).toISOString(),
   };
