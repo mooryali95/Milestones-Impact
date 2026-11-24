@@ -8,6 +8,8 @@ import { docLevelsFor } from './capstone.js';
 
 export const SHARE_DAYS = Object.freeze([7, 30, 90]);
 export const MAX_ACTIVE_SHARES = 10;
+// هل يرى قارئ رابط المشاركة جهة الملف (شعارها ولونها على غلاف الوثيقة المؤسسية). قرار المالك معلّق؛ مفتاح واحد
+export const SHARE_SHOWS_ORG = false;
 // حد الإغراق: ملاحظات في الساعة من العنوان نفسه، وفي اليوم على الرابط نفسه
 export const NOTE_LIMITS = Object.freeze({ perIpHour: 6, perShareDay: 40 });
 // تنبيه صاحب الوثيقة بالبريد: مرة كل ساعة على الأكثر لكل رابط، ومعها عدد ما وصل
@@ -59,7 +61,7 @@ export function publicDoc(doc, share, { readiness = true } = {}) {
   if (!doc) return null;
   const sections = (doc.sections || []).map((s) => ({ ...s, fields: (s.fields || []).filter((f) => !/email/i.test(f.key)) }));
   // جهة ملف المشارك لا تصل القارئ: هي راعية البرنامج لا مالكة المبادرة، ومكان المبادرة في meta.host من بطاقتها
-  const meta = doc.meta ? { ...doc.meta, org: null, readiness: readiness && share?.show_readiness ? doc.meta.readiness ?? null : null } : doc.meta;
+  const meta = doc.meta ? { ...doc.meta, org: SHARE_SHOWS_ORG ? doc.meta.org ?? null : null, readiness: readiness && share?.show_readiness ? doc.meta.readiness ?? null : null } : doc.meta;
   const shown = docLevelsFor({ ...doc, meta, sections, review: null, checks: [], sponsor: null, rubric: [] }, !!share?.show_levels);
   return shown;
 }

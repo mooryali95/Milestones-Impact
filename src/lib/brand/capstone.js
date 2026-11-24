@@ -14,7 +14,7 @@ import { businessCase, charterData, launchPlan } from '../../../supabase/functio
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
 import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
 import { closureData } from '../../../supabase/functions/leaders-api/closure.js';
-import { cleanDoc } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { cleanDoc, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
 const money = (n) => (n == null ? '·' : `${Math.round(n).toLocaleString('en-US')} ريال`);
@@ -56,6 +56,9 @@ export const STYLE = `<style>
 .cp-gaps th { text-align: right; font-weight: 400; font-size: 7.5pt; color: #5F7176; padding: 2mm 1.5mm; border-bottom: 1px solid #0B272F; }
 .cp-gaps td { padding: 2mm 1.5mm; border-bottom: 1px solid #EEF1F0; vertical-align: top; }
 .cp-gaps td.ch { color: #0B272F; font-weight: 400; } .cp-gaps td.why { color: #5F7176; font-size: 8.2pt; }
+.cp-rev { display: inline-block; margin-inline-start: 1.5mm; font-size: 7.4pt; color: #8A6424; border-bottom: 1px dotted #A97A2E; }
+.cp-flag > .cp-p { color: #5F7176; }
+.cp-gaps td q { color: #2C4148; font-size: 8pt; }
 .cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: 9pt; margin-top: 6mm; }
 .cp-score b { font: 200 30pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
 .cp-break { break-before: page; }
@@ -222,15 +225,28 @@ export function columnWidths(columns, rows) {
 }
 export const tableOf = (columns, rows, empty) => { const ws = columnWidths(columns, rows); return table((columns || []).map((c, i) => ({ label: c, width: ws[i] })), rows, empty); };
 
+// علامة «يحتاج مراجعة» في ملف العمل: القيمة الأصلية تبقى ظاهرة، وسببها بجانبها (doc-quality.js cleanDoc keep)
+const REV = (why) => `<small class="cp-rev">يحتاج مراجعة: ${esc(REASONS[why] || why)}</small>`;
 function fieldHtml(f) {
   const v = f.value;
   if (f.type === 'table') {
     const rows = (Array.isArray(v) ? v : []).filter(filled);
     // الجدول الفارغ لا يُعرض: ما ينقص يُجمع في ملحق «ما ينقص لإكمال الوثيقة» (doc-quality.js)
     if (!rows.length) return '';
-    return `<div class="cp-f"><b>${esc(f.label)}</b>${tableOf(f.columns, rows)}</div>`;
+    if (!f.rowIssues?.length && !f.cellIssues?.length) return `<div class="cp-f"><b>${esc(f.label)}</b>${tableOf(f.columns, rows)}</div>`;
+    const dropped = new Map((f.rowIssues || []).map((x) => [x.row, x.reason]));
+    const cells = new Map((f.cellIssues || []).map(([r, c, why]) => [`${r}:${c}`, why]));
+    let k = 0;
+    const marked = rows.map((r, i) => {
+      if (dropped.has(i)) return r.map((c, j) => (j === 0 ? raw(`${esc(c)} ${REV(dropped.get(i))}`) : c));
+      const n = k++;
+      return r.map((c, j) => (cells.has(`${n}:${j}`) ? raw(`${esc(c)} ${REV(cells.get(`${n}:${j}`))}`) : c));
+    });
+    const ws = columnWidths(f.columns, rows);
+    return `<div class="cp-f"><b>${esc(f.label)}</b>${table((f.columns || []).map((c, i) => ({ label: c, width: ws[i] })), marked)}</div>`;
   }
   if (!String(v ?? '').trim()) return '';
+  if (f.issue) return `<div class="cp-f cp-flag"><b>${esc(f.label)}</b>${paras(v)}${REV(f.issue)}</div>`;
   if (f.type === 'select') return `<div class="cp-f"><b>${esc(f.label)}</b><span class="tag gold">${esc(v)}</span></div>`;
   return `<div class="cp-f"><b>${esc(f.label)}</b>${paras(v)}</div>`;
 }
@@ -252,7 +268,8 @@ function boardFigures(key, doc, viz) {
 function chapter(s, i, skip = null, viz = null, doc = null, gapKeys = null) {
   const info = chapterInfo(s.key);
   let body = info?.why ? `<p class="cp-why">${esc(info.why)}</p>` : '';
-  const shown = s.fields.filter((f) => !NEVER_PRINTED.has(f.key) && !skip?.has(f.key));
+  // حقل الميثاق التالف لا يظهر في الميثاق (يُبنى من الصالح)، فيُعرض هنا بعلامته حتى لا يضيع ما كتبه المشارك
+  const shown = s.fields.filter((f) => !NEVER_PRINTED.has(f.key) && (!skip?.has(f.key) || f.issue || f.rowIssues?.length));
   if (skip) body += `<p class="cp-ref"><b>الهدف والمشكلة والنطاق والمدة والراعي والمخرجات</b> في ميثاق المبادرة أعلاه. وهنا ما بقي من البطاقة.</p>`;
   for (const f of shown) {
     body += fieldHtml(f);
@@ -372,7 +389,7 @@ function visualsBlock(viz) {
 export function gapsBlock(gaps) {
   if (!gaps?.length) return '';
   return anchor('gaps', true) + section('ملحق', 'ما ينقص لإكمال الوثيقة', `<table class="cp-gaps"><thead><tr><th style="width:30%">الفصل</th><th style="width:30%">الحقل</th><th>ما ينقصه</th></tr></thead><tbody>${
-    gaps.map((g, i) => `<tr><td class="ch">${i && gaps[i - 1].chapter === g.chapter ? '' : esc(g.chapter)}</td><td>${esc(g.field)}</td><td class="why">${esc(g.reason_ar)}</td></tr>`).join('')}</tbody></table>`,
+    gaps.map((g, i) => `<tr><td class="ch">${i && gaps[i - 1].chapter === g.chapter ? '' : esc(g.chapter)}</td><td>${esc(g.field)}</td><td class="why">${esc(g.reason_ar)}${g.value ? `<br><q>${esc(g.value)}</q>` : ''}</td></tr>`).join('')}</tbody></table>`,
   'ما لم يُكتب أو كُتب بما لا يصلح للعرض. أكمله في فصله فيظهر في الوثيقة ويختفي من هنا.');
 }
 
@@ -427,10 +444,13 @@ export function placeRow(m) {
   return [];
 }
 
-export function capstoneReport(input) {
-  // ملف العمل الكامل: يُبنى من القيم الصالحة وحدها، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
+// appendix: ملحق «ما ينقص» وختم «مسودة عمل» للقراءة الداخلية وحدها (المشارك والإدارة)
+export function capstoneReport(input, { appendix = true } = {}) {
+  // ملف العمل الكامل: المشتق (الغلاف والميثاق وحالة العمل والمؤشرات) من القيم الصالحة، والفصول بكل ما كُتب
+  // وتالفه معلَّم «يحتاج مراجعة»، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
   const exampleIn = !!input?.meta?.example;
   const { doc, gaps } = exampleIn ? { doc: input, gaps: [] } : cleanDoc(input);
+  const annotated = exampleIn ? input : cleanDoc(input, { keep: true }).doc;
   const gapKeys = new Set(gaps.map((g) => g.chapter_key));
   const m = doc.meta || {};
   const secs = doc.sections || [];
@@ -465,13 +485,13 @@ export function capstoneReport(input) {
   const charter = charterBlock(doc), bcase = caseBlock(doc), launch = launchBlock(doc);
   const viz = scheduleModel(doc);
   const visuals = visualsBlock(viz);
-  const gapsHtml = example ? '' : gapsBlock(gaps);
+  const gapsHtml = example || !appendix ? '' : gapsBlock(gaps);
   const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'حالة العمل'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات'], gapsHtml && ['gaps', 'ما ينقص لإكمال الوثيقة']].filter(Boolean);
   body += tocBlock(doc, front, { draft: !approved && !example });
   body += charter + bcase + launch;
 
   secs.forEach((s, i) => {
-    body += chapter(s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null, viz, doc, gapKeys);
+    body += chapter(annotated.sections[i] || s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null, viz, doc, appendix ? gapKeys : null);
     if (s.key === 'cost-plan' && doc.cost?.total > 0) body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost, doc));
   });
 
@@ -520,7 +540,7 @@ export function capstoneReport(input) {
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),
       // ختم «مسودة عمل» في الغلاف لكل ما لم يُعتمد (doc.js meta.stamp)
-      stamp: approved || example ? null : 'مسودة عمل',
+      stamp: approved || example || !appendix ? null : 'مسودة عمل',
       confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد',
       closing: example
         ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع تعرفه، وقارن بنيتها بهذا المثال.'

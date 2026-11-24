@@ -202,7 +202,7 @@ async function openInitiative(pid) {
   const r = await xpCall('xp.capstone-doc', { participant_id: pid });
   if (!r.success) { win?.close(); window.alert(r.message); return; }
   const { openCapstoneDoc } = await import('./Capstone.jsx');
-  await openCapstoneDoc(r.doc, win, { keepReadiness: true });
+  await openCapstoneDoc(r.doc, win, { keepReadiness: true, kind: 'reader' });
 }
 
 // تذكير المرشد (مشرف الرحلة) لمن يرشده (P4، 2026-11-16): ما سيصله الآن بنص المحرك الموحد، ومن ذكّره ومتى،

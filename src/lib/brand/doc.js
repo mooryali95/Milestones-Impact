@@ -78,7 +78,7 @@ export const points = (items, empty = 'لا شيء') => (items.length ? `<ul cla
 // brand: { name, logo, color }. شعار الجهة أعلى الغلاف، و«بإعداد Milestone Impact» أصغر، ولون الجهة خط تمييز وحده.
 // بلا شعار يُكتب اسمها نصًا؛ بلا جهة «مبادرة مجتمعية». اللون يُقبل بصيغة #RGB أو #RRGGBB وحدها فلا يُحقن في النمط
 export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
-const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|https:\/\/|\/)/i.test(String(u || '')) ? u : null);
+const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|https:\/\/|\/(?!\/))/i.test(String(u || '')) ? u : null);
 function coBrand(b, id, kindLabel) {
   const logo = safeLogo(b.logo);
   const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`

@@ -59,7 +59,7 @@ export default function Sponsor() {
           <div><dt>التكلفة مع الاحتياطي</dt><dd>{data.doc.cost ? `${Math.round(data.doc.cost.withContingency).toLocaleString('en-US')} ريال` : '·'}</dd></div>
           <div><dt>الفصول</dt><dd>{data.doc.sections.length}</dd></div>
         </dl>
-        <button className="btn ghost" onClick={() => openCapstoneDoc(data.doc).then((ok) => !ok && setError(POPUP_BLOCKED))}>اقرأ الوثيقة كاملة</button>
+        <button className="btn ghost" onClick={() => openCapstoneDoc(data.doc, undefined, { kind: 'reader' }).then((ok) => !ok && setError(POPUP_BLOCKED))}>اقرأ الوثيقة كاملة</button>
       </div>
       <div className="card stack">
         <label className="field">

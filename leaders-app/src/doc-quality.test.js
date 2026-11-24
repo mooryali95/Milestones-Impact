@@ -73,7 +73,7 @@ describe('بوابة جودة القيم: التواريخ والأرقام', ()
     expect(reasonOf('money', '0')).toBe('zero');
     expect(reasonOf('text', '0')).toBe(null);
     expect(reasonOf('text', '45%')).toBe(null);
-    expect(reasonOf('text', YAHYA.date)).toBe('gibberish');
+    expect(reasonOf('text', YAHYA.date)).toBe('bad_date');
     expect(reasonOf('money', '0.0')).toBe('zero');
     expect(reasonOf('money', 'مجانًا')).toBe('bad_number');
     expect(reasonOf('number', '10')).toBe(null);
@@ -134,5 +134,35 @@ describe('الوثيقة النظيفة وشرط الاكتمال المؤسسي
     const g = institutionalGate(cleanDoc(fixture()).doc);
     expect(g.ok).toBe(false);
     expect(g.missing.map((m) => m.n)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    // السؤال الأول: المشكلة وحدها لا تكفي حين يكون حقل المستفيدين في النموذج
+    const d = fixture();
+    d.sections[0].fields.push({ key: 'beneficiaries', label: 'المستفيدون', type: 'textarea', value: '' });
+    expect(institutionalGate(cleanDoc(d).doc).missing[0].n).toBe(1);
+  });
+});
+
+describe('مراجعة مستقلة: توسيع ما يُقبل وما يُرفض', () => {
+  it('التاريخ: شهر وسنة، اسم الشهر، الربع، السنة، مدى الأسابيع', () => {
+    for (const v of ['مارس 2027', '1 مارس 2027', 'الربع الأول 2027', 'Q1 2027', '2027', 'عام 2027', '03/2027', 'الأسبوع 3–5', 'الأسبوع 3-5', 'week 4']) expect(validDate(v), v).toBe(true);
+    for (const v of ['قريبًا', 'مارس', '2027-13-01', 'Q5 2027', 'الأسبوع']) expect(validDate(v), v).toBe(false);
+  });
+  it('المبلغ: ألف ومليون والتقريب والأرقام الهندية', () => {
+    for (const v of ['50 ألف', 'نحو 50 ألف', '50 ألف ريال', '1.5 مليون', '٥٠٠٠٠', '12,500 ريال']) expect(reasonOf('money', v), v).toBe(null);
+    expect(reasonOf('money', 'مجانًا')).toBe('bad_number');
+  });
+  it('خلية المبلغ في الجدول: الصفر والمساهمة العينية مقبولان', () => {
+    const c = cleanRows({ columns: ['البند', 'التكلفة'], value: [['قاعة التدريب', '0'], ['المدرب', 'مجانية من الشريك']] });
+    expect(c.rows).toEqual([['قاعة التدريب', '0'], ['المدرب', 'مجانية من الشريك']]);
+  });
+  it('العبث القصير والمكرر', () => {
+    for (const v of ['فغفغفغ', 'dfgdfg', 'sdf sdf sdf', 'هههههه', 'تتتتت', 'بشسبكتنمق']) expect(isGibberish(v), v).toBe(true);
+  });
+  it('لا ترفض: Strengths، وCloudflare، 1000000، الكلمات العربية الشائعة', () => {
+    for (const v of ['Strengths', 'وCloudflare', 'نستخدم وCloudflare للحماية', '1000000', 'rhythm', 'مستشفى', 'تحسين', 'بالتنسيق', 'المملكة', 'فتشكلت لجنة']) expect(isGibberish(v), v).toBe(false);
+  });
+  it('الجدول المؤسسي: موضوع الصف شرط', () => {
+    const t = { columns: ['المخرج', 'المعيار', 'التاريخ'], value: [['لايوجد', 'يعتمده المدير', '2027-03-01']] };
+    expect(cleanRows(t).rows.length).toBe(1);
+    expect(cleanRows(t, { strict: true }).rows.length).toBe(0);
   });
 });

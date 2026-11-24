@@ -7,9 +7,9 @@
 // الأبواب: نظرة عامة، لماذا، القيمة، الخطة، الحوكمة والمخاطر، الأثر (إن وُجد)، الاعتماد.
 // لا تُصدر إلا إذا أجابت عن الأسئلة المؤسسية العشرة (institutionalGate)، وإلا تعيد ما ينقص.
 // ملف العمل الكامل بكل فصوله وملحق ما ينقص: capstone.js capstoneReport.
-import { esc, kpis, points, raw, section } from './doc.js';
-import { cleanDoc, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
-import { benefitsOf, charterData, durationAr, highRisks } from '../../../supabase/functions/leaders-api/business-case.js';
+import { esc, kpis, section } from './doc.js';
+import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { benefitsOf, charterData, durationAr } from '../../../supabase/functions/leaders-api/business-case.js';
 import { LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { capstoneReport, heatmap, paras, STYLE, tableOf } from './capstone.js';
 import { ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
@@ -31,18 +31,7 @@ const IN_STYLE = `<style>
 .in-fp { margin-top: 6mm; font: 300 8pt "Noto Sans", sans-serif; letter-spacing: .12em; color: #5F7176; direction: ltr; text-align: left; }
 </style>`;
 
-// بصمة النسخة: FNV-1a على محتوى الوثيقة النظيفة، فتتغير بأي تعديل في القيم المعروضة
-export function fingerprint(doc) {
-  const src = JSON.stringify({ i: doc?.meta?.initiative, v: doc?.meta?.version, s: (doc?.sections || []).map((s) => [s.key, (s.fields || []).map((f) => [f.key, f.value])]) });
-  let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
-  for (let i = 0; i < src.length; i++) {
-    const c = src.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
-  }
-  const h = (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).toUpperCase();
-  return h.match(/.{4}/g).join('-');
-}
+export { fingerprint };
 
 const sec = (doc, k) => (doc.sections || []).find((s) => s.key === k) || null;
 const fld = (doc, k, f) => (sec(doc, k)?.fields || []).find((x) => x.key === f) || null;
@@ -68,12 +57,16 @@ const grid = (pairs) => {
  * يعيد { blocked: true, missing } إن لم تكتمل الأسئلة العشرة، وإلا { meta, body, fingerprint }
  */
 export function institutionalReport(input) {
-  const { doc } = cleanDoc(input);
+  // المعتمدة: محتواها النظيف وبصمتها مجمّدان في اللقطة لحظة الاعتماد (capstone.ts approve: snapshot.issued)،
+  // فلا يغيّر تحسينٌ لاحق في قواعد الجودة وثيقةً صدرت. غير المعتمدة تُنظَّف لحظة العرض
+  const frozen = input?.meta?.status === 'approved' && input?.issued?.sections ? input.issued : null;
+  const doc = frozen ? { ...input, sections: frozen.sections, cost: frozen.cost ?? input.cost, summary: frozen.summary ?? input.summary, meta: { ...input.meta, ...(frozen.meta || {}) } } : cleanDoc(input, { strict: true }).doc;
   const gate = institutionalGate(doc);
   if (!gate.ok) return { blocked: true, missing: gate.missing };
   const m = doc.meta || {};
   const approved = m.status === 'approved';
-  const fp = fingerprint(doc);
+  // البصمة من اللقطة الخام لا من ناتج التنظيف
+  const fp = frozen?.fingerprint || fingerprint(input);
   const cost = doc.cost?.withContingency > 0 ? doc.cost : null;
   const c = charterData(doc);
   const benefits = benefitsOf(doc, 5);
@@ -96,7 +89,6 @@ export function institutionalReport(input) {
       ['الهدف الأعلى', val(doc, 'initiative-charter', 'objective')],
       ['المستفيدون', val(doc, 'initiative-charter', 'beneficiaries')],
       ['المدة', duration],
-      ['الراعي ودوره', m.sponsor],
       ['المطلوب', cost ? `${money(cost.withContingency)}${val(doc, 'cost-plan', 'funding') ? `، من ${val(doc, 'cost-plan', 'funding')}` : ''}` : null],
     ])}`);
 
@@ -136,7 +128,6 @@ export function institutionalReport(input) {
     field(doc, 'stakeholder-map', 'stakeholders', 'أصحاب المصلحة'),
     field(doc, 'raid', 'items', 'سجل المخاطر'),
     risks.length && raidF ? heatmap(raidF.columns, risks) : '',
-    highRisks(doc, 3).length ? points(highRisks(doc, 3).map((x) => raw(`<b>${esc(x.title)}</b>${x.owner ? ` (المالك: ${esc(x.owner)})` : ''}${x.response ? `: ${esc(x.response)}` : ''}`)), '') : '',
   ].join(''));
 
   // ── الأثر: إن كُتب ──
@@ -180,7 +171,14 @@ export function institutionalReport(input) {
 }
 
 /** الوثيقتان من مصدر واحد: 'institutional' (الوثيقة المؤسسية) أو 'working' (ملف العمل الكامل). يعيد { meta, body } أو { blocked, message } */
+// 'external': لمن هو خارج العمل (الراعي، الجهة، رابط المشاركة، الخبير): المؤسسية إن اكتملت، وإلا صفحة «قيد الإعداد» مهذبة، ولا ملحق ولا ختم مسودة
 export function renderInitiative(doc, kind = 'working') {
+  // 'reader': من يراجع قبل الاعتماد (الراعي ليؤيد، والخبير): المؤسسية إن اكتملت، وإلا ملف العمل بلا ملحق ولا ختم
+  if (kind === 'external' || kind === 'reader') {
+    const r = institutionalReport(doc);
+    if (!r.blocked) return r;
+    return kind === 'reader' ? capstoneReport(doc, { appendix: false }) : pendingReport(doc);
+  }
   if (kind !== 'institutional') return capstoneReport(doc);
   const r = institutionalReport(doc);
   return r.blocked ? { blocked: true, missing: r.missing, message: missingMessage(r.missing) } : r;
@@ -188,3 +186,16 @@ export function renderInitiative(doc, kind = 'working') {
 
 /** رسالة ما ينقص لإصدار الوثيقة المؤسسية، بلغة المشارك */
 export const missingMessage = (missing) => `لا تُصدر الوثيقة المؤسسية قبل أن تجيب عن: ${missing.map((x) => x.title).join('، ')}. اعرض «ملف العمل الكامل» لترى ما ينقص في ملحقه.`;
+
+/** صفحة مهذبة لقارئ خارجي حين لم تكتمل الوثيقة المؤسسية بعد */
+export function pendingReport(doc) {
+  const m = doc?.meta || {};
+  const org = m.org || null;
+  return {
+    meta: { id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
+      brand: { name: org?.name || null, logo: org?.logo || null, color: org?.color || null },
+      eyebrow: 'Leaders Program · Initiative', title: m.initiative || 'وثيقة المبادرة', rows: [['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
+      confidential: 'ملك قائد المبادرة وجهتها: تُتداول بإذنهما', closing: 'تصدر الوثيقة المؤسسية حين يكتمل إعدادها.' },
+    body: STYLE + section('In preparation', 'الوثيقة قيد الإعداد', '<p class="cp-p">يعمل قائد المبادرة على استكمال وثيقتها مع مستشاره. ستجدها هنا كاملة حين يكتمل إعدادها.</p>'),
+  };
+}

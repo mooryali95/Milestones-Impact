@@ -1,24 +1,25 @@
 // ════════════════════════════════════════════════════════════════
 // بوابة جودة القيم في وثيقة المبادرة (منطق خالص)
 // ════════════════════════════════════════════════════════════════
-// التصور المعتمد (الخيار ب، 2026-11-24): الوثيقة تُبنى من القيم الصالحة وحدها.
-// ما ليس صالحًا لا يُعرض في المتن بـ«لم يُملأ»، بل يُجمع بسببه في ملحق «ما ينقص لإكمال الوثيقة».
-// القاعدة متحفظة: لا تحكم على المضمون، ولا ترفض جملة عربية سليمة. ترفض الفراغ وما يقوم مقامه
-// (لا يوجد، -، ...)، والعبث (تتابع مفاتيح لوحة، حروف مكررة، كتلة طويلة بلا مسافات تخلط الحروف والأرقام)،
-// والتاريخ أو الرقم الذي لا يُقرأ، والنص الطويل دون حد المعنى (TEXTAREA_MIN من logic.js، قاعدة واحدة).
-// لا يغيّر البيانات المخزنة: يعمل على نسخة العرض فقط.
+// التصور المعتمد (الخيار ب، 2026-11-24). وثيقتان من مصدر واحد:
+// - الوثيقة المؤسسية: تُبنى من القيم الصالحة وحدها (cleanDoc strict).
+// - ملف العمل الكامل: يعرض كل ما كُتب، وما لم يصلح يُعلَّم «يحتاج مراجعة» بسببه، ويُجمع في ملحق «ما ينقص» (cleanDoc keep).
+// القاعدة متحفظة: لا تحكم على المضمون، ولا ترفض جملة عربية سليمة. ترفض الفراغ وما يقوم مقامه (لا يوجد، -، ...)،
+// والعبث (تتابع مفاتيح، تكرار مقطع، كتلة بلا مسافات تخلط الحروف والأرقام)، والتاريخ أو المبلغ الذي لا يُقرأ،
+// والنص الطويل دون حد المعنى (TEXTAREA_MIN من logic.js). لا يغيّر البيانات المخزنة.
 // يُستورد كما هو في الخادم (Deno) وفي الواجهات (vitest/vite).
 import { latinDigits, meaningful, TEXTAREA_MIN } from './logic.js';
-import { parseNumber, weekOf } from './capstone.js';
+import { costSummary, parseNumber } from './capstone.js';
 
 export const REASONS = Object.freeze({
   empty: 'لم يُكتب بعد',
   placeholder: 'كُتب فيه ما يقوم مقام الفراغ (مثل «لا يوجد»)',
-  gibberish: 'نص لا يُقرأ (أحرف عشوائية)',
+  gibberish: 'نص لا يُقرأ (أحرف عشوائية أو مكررة)',
   too_short: 'أقصر من أن يُفهم: اكتب جملة كاملة',
-  bad_date: 'تاريخ لا يُقرأ: اكتبه بصيغة 2027-03-15 أو «الأسبوع 3»',
-  bad_number: 'يُنتظر رقم',
+  bad_date: 'تاريخ لا يُقرأ: اكتبه مثل 2027-03-15 أو «مارس 2027» أو «الأسبوع 3»',
+  bad_number: 'يُنتظر مبلغ أو رقم، مثل 50000 أو «50 ألف»',
   zero: 'القيمة صفر',
+  bad_subject: 'الخانة الأولى في الصف (موضوعه) لا تصلح',
   rows_invalid: 'صفوف لا تصلح للعرض',
 });
 
@@ -27,7 +28,7 @@ const squash = (v) => latinDigits(String(v ?? '')).replace(DIACRITICS, '').repla
 
 // ما يقوم مقام الفراغ، بعد حذف المسافات والترقيم والتشكيل
 const PLACEHOLDERS = new Set(['لايوجد', 'لاتوجد', 'لاشي', 'لاشيء', 'لا', 'ليوجد', 'لايوجدشيء', 'غيرمعروف', 'لااعرف', 'لاادري', 'غيرمتوفر', 'غيرمحدد', 'لاينطبق',
-  'na', 'n/a', 'none', 'nil', 'null', 'nothing', 'no', 'x', 'xx', 'xxx', 'test', 'تجربه', 'تجربة', 'اختبار', 'ملاحظه', 'ـ']);
+  'na', 'n/a', 'none', 'nil', 'null', 'nothing', 'no', 'x', 'xx', 'xxx', 'test', 'تجربه', 'اختبار', 'ـ']);
 const placeholderKey = (s) => squash(s).toLowerCase().replace(/[\s\-–—_.,،؛;:!?؟'"«»()[\]/\\*]+/g, (m) => (m.includes('/') ? '/' : ''));
 
 /** هل النص يقوم مقام الفراغ: «لا يوجد»، «-»، «...»، «n/a» */
@@ -50,45 +51,70 @@ const AR = /[ء-ي]/;
 const LAT = /[a-z]/i;
 const DIG = /\d/;
 const kind = (c) => (AR.test(c) ? 'a' : LAT.test(c) ? 'l' : DIG.test(c) ? 'd' : 'o');
+// حروف المد والتاء المربوطة والهمزات: لا تكاد تخلو منها كلمة عربية من ثمانية أحرف فأكثر
+const AR_VOWELISH = /[اويةءئؤ]/;
 
-/** هل الكلمة الواحدة (بلا مسافات) عبث. متحفظة: الكلمات العربية الطويلة والروابط والرموز والتواريخ تمر */
+/** هل الكلمة الواحدة (بلا مسافات) عبث. متحفظة: الكلمات العربية الطويلة والروابط والرموز والعلامات التجارية تمر */
 export function gibberishToken(tok) {
   const t = squash(tok).toLowerCase();
-  if (t.length < 5) return false;
   if (/^(https?:\/\/|www\.)|@.+\./.test(t)) return false;
   const letters = t.replace(/[^ء-يa-z]/g, '');
+  if (letters.length < 3) return false;
+  // تكرار مقطع من حرف إلى ثلاثة: «فغفغفغ»، «dfgdfg»، «ههههه» (الأرقام لا تدخل: 1000000 رقم سليم)
+  if (/^(.{1,3})\1{2,}$/u.test(letters) || (letters.length >= 6 && /^(.{2,3})\1+$/u.test(letters))) return true;
+  if (/(.)\1{4,}/u.test(letters)) return true;
+  if (letters.length < 5) return false;
   // تتابع مفاتيح لوحة
   for (let i = 0; i + 5 <= letters.length; i++) if (KEY_RUNS.has(letters.slice(i, i + 5))) return true;
-  // حرف واحد مكرر خمس مرات متتالية
-  if (/(.)\1{4,}/u.test(t)) return true;
-  // تبدل متكرر بين الحروف العربية واللاتينية والأرقام داخل كلمة واحدة
+  // تبدل متكرر بين الحروف العربية واللاتينية والأرقام داخل كلمة واحدة («kjh٣٤٥قق»). «وCloudflare» تبدّل واحد فيمر
   const ks = [...t].map(kind).filter((k) => k !== 'o');
   let switches = 0;
   for (let i = 1; i < ks.length; i++) if (ks[i] !== ks[i - 1]) switches++;
   if (t.length >= 8 && switches >= 3) return true;
-  if (AR.test(t) && LAT.test(t) && t.length >= 10) return true;
-  // كتلة عربية بلا مسافة أطول من أطول كلمة عربية مألوفة
-  if (/^[ء-ي]+$/.test(t) && t.length >= 17) return true;
-  // كتلة لاتينية طويلة بلا حروف علة
-  if (/^[a-z]+$/.test(t) && t.length >= 7 && (t.match(/[aeiouy]/g) || []).length / t.length < 0.12) return true;
+  if (/^[ء-ي]+$/.test(t)) {
+    // كتلة عربية أطول من أطول كلمة مألوفة، أو ثمانية أحرف فأكثر بلا حرف مد ولا همزة ولا تاء مربوطة
+    if (t.length >= 17) return true;
+    if (t.length >= 8 && !AR_VOWELISH.test(t)) return true;
+  }
+  // كتلة لاتينية بلا حرف علة واحد («sdfghk»)؛ «Strengths» فيها e فتمر
+  if (/^[a-z]+$/.test(t) && t.length >= 6 && !/[aeiouy]/.test(t)) return true;
   return false;
 }
 
-/** هل النص كله عبث: ما يغلب عليه (بوزن الأحرف) كلمات عابثة، أو لا حرف فيه أصلًا */
+/** هل النص كله عبث: ما يغلب عليه (بوزن الأحرف) كلمات عابثة، أو كلمة واحدة مكررة، أو لا حرف فيه */
 export function isGibberish(v) {
   const s = squash(v);
   if (!s) return false;
   if (!/[ء-يa-z]/i.test(s)) return !validNumber(s) && !validDate(s);
   const toks = s.split(/\s+/).filter(Boolean);
+  // الكلمة نفسها مكررة («sdf sdf sdf»)
+  if (toks.length >= 3 && new Set(toks.map((x) => x.toLowerCase())).size === 1) return true;
   const total = toks.reduce((a, t) => a + t.length, 0) || 1;
   const bad = toks.filter(gibberishToken).reduce((a, t) => a + t.length, 0);
   return bad / total >= 0.5;
 }
 
-// التاريخ بأرقام صحيحة المدى (الشهر 1-12 واليوم 1-31 والسنة 1990-2100) أو «الأسبوع N»
+// ── التاريخ ──
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'ابريل', 'مايو', 'يونيو', 'يوليو', 'اغسطس', 'سبتمبر', 'اكتوبر', 'نوفمبر', 'ديسمبر',
+  'كانون الثاني', 'شباط', 'اذار', 'نيسان', 'ايار', 'حزيران', 'تموز', 'اب', 'ايلول', 'تشرين الاول', 'تشرين الثاني', 'كانون الاول',
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_RE = `(?:${MONTHS.map((m) => m.replace(/ /g, '\\s+')).join('|')})[a-z]*`;
+const YEAR = '(19[9]\\d|20\\d\\d|2100)';
+const WEEK = '(?:ال)?(?:اسبوع|week|wk|w)';
+const DATE_FORMS = [
+  new RegExp(`^${WEEK}\\s*[:.]?\\s*\\d{1,3}(\\s*[-–—]\\s*\\d{1,3}|\\s*(الي|to)\\s*\\d{1,3})?$`, 'i'),
+  new RegExp(`^(?:\\d{1,2}\\s+)?${MONTH_RE}\\s*[,،]?\\s*${YEAR}$`, 'i'),
+  new RegExp(`^(?:ال)?ربع\\s*(?:ال)?(?:اول|ثاني|ثالث|رابع|[1-4])\\s*(?:من\\s*)?(?:عام\\s*)?${YEAR}$`, 'i'),
+  new RegExp(`^q[1-4]\\s*[-/]?\\s*${YEAR}$`, 'i'),
+  new RegExp(`^(?:عام\\s*)?${YEAR}$`, 'i'),
+  new RegExp(`^(0?[1-9]|1[0-2])[-/.]${YEAR}$`),
+  new RegExp(`^${YEAR}[-/.](0?[1-9]|1[0-2])$`),
+];
+
+/** التاريخ بصيغه المقبولة: يوم كامل صحيح المدى، أو شهر وسنة (رقمًا أو باسم الشهر)، أو ربع، أو سنة، أو «الأسبوع 3» ومداه «الأسبوع 3–5» */
 export function validDate(v) {
-  const s = squash(v);
-  if (weekOf(s) != null) return true;
+  const s = squash(v).replace(/\s+/g, ' ');
+  if (DATE_FORMS.some((re) => re.test(s))) return true;
   let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
   let y, mo, d;
   if (m) [y, mo, d] = [+m[1], +m[2], +m[3]];
@@ -97,19 +123,26 @@ export function validDate(v) {
   if (y < 1990 || y > 2100 || mo < 1 || mo > 12 || d < 1) return false;
   return d <= new Date(Date.UTC(y, mo, 0)).getUTCDate();
 }
+/** هل يبدو المكتوب تاريخًا (أرقام بفواصل التاريخ) وإن لم يصح: فيوسم «تاريخ لا يُقرأ» لا «عبث» */
+const dateLike = (s) => /^\d{1,6}[-/.]\d{1,6}([-/.]\d{1,6})?$/.test(squash(s));
 
-// رقم مكتوب بأرقام، ويقبل الفواصل والعملة («12,000 ريال»)، ولا يقبل نصًا فيه رقم عَرَضًا
-export function validNumber(v) {
-  const s = squash(v).replace(/(ريال|ر\.س|sar|رس|%|٪)/gi, '').replace(/[,٬\s]/g, '').replace('٫', '.');
-  return /^-?\d+(\.\d+)?$/.test(s);
+// ── المبلغ والرقم ──
+// يقبل الفواصل والعملة والمضاعف («50 ألف»، «1.5 مليون») والتقريب («نحو 50 ألف»)، ولا يقبل نصًا فيه رقم عَرَضًا
+const MULT = { الف: 1e3, الاف: 1e3, k: 1e3, مليون: 1e6, ملايين: 1e6, m: 1e6 };
+export function amountOf(v) {
+  let s = squash(v).toLowerCase().replace(/(ريال|ر\.س|sar|رس|%|٪)/g, '').replace(/^(نحو|حوالي|تقريبا|قرابه|ما يقارب)\s*/, '').replace(/\s*(تقريبا)$/, '');
+  s = s.replace(/[,٬]/g, '').replace('٫', '.').trim();
+  const m = s.match(/^(-?\d+(?:\.\d+)?)\s*(الف|الاف|k|مليون|ملايين|m)?$/);
+  return m ? +m[1] * (m[2] ? MULT[m[2]] : 1) : null;
 }
+export const validNumber = (v) => amountOf(v) != null;
 
-// دلالة العمود من اسمه: تاريخ أو مبلغ أو عدد. الإدارة قد تعيد الصياغة فيُعرف بكلمة دالة
+// دلالة العمود من اسمه: تاريخ أو مبلغ. الإدارة قد تعيد الصياغة فيُعرف بكلمة دالة
 const COL_DATE = /(التاريخ|تاريخ|البداية|النهاية|الموعد|البدء|الانتهاء)/;
 const COL_MONEY = /(التكلفة|تكلفة|المبلغ|الكلفة|ريال|الميزانية)/;
 export function columnKind(label) {
   const l = squash(label);
-  if (COL_MONEY.test(l)) return 'money';
+  if (COL_MONEY.test(l)) return 'amount';
   if (COL_DATE.test(l)) return 'date';
   return 'text';
 }
@@ -130,7 +163,7 @@ export function fieldKind(field) {
 
 /**
  * سبب رفض قيمة واحدة، أو null إن كانت صالحة.
- * @param {{ key?: string, type?: string }|string} field الحقل أو نوع العمود ('date'|'money'|'number'|'text'|'textarea'|'select')
+ * @param field الحقل أو نوعه: 'date' | 'money' (لا صفر) | 'amount' (خلية مبلغ: الصفر مقبول، عينيّ أو مجاني) | 'number' | 'text' | 'textarea' | 'select'
  */
 export function reasonOf(field, value) {
   const k = typeof field === 'string' ? field : fieldKind(field);
@@ -139,10 +172,12 @@ export function reasonOf(field, value) {
   if (k === 'select') return null;
   if (isPlaceholder(s)) return 'placeholder';
   if (k === 'date') return validDate(s) ? null : 'bad_date';
-  if (k === 'money' || k === 'number') {
-    if (!validNumber(s)) return 'bad_number';
-    return k === 'money' && !(parseNumber(s) > 0) ? 'zero' : null;
+  if (k === 'money' || k === 'number' || k === 'amount') {
+    const n = amountOf(s);
+    if (n == null) return k === 'amount' && !isGibberish(s) ? null : 'bad_number';
+    return k === 'money' && !(n > 0) ? 'zero' : null;
   }
+  if (!/[ء-يa-z]/i.test(squash(s)) && dateLike(s) && !validDate(s) && !validNumber(s)) return 'bad_date';
   if (isGibberish(s)) return 'gibberish';
   if (k === 'textarea' && !meaningful(s, TEXTAREA_MIN)) return 'too_short';
   return null;
@@ -151,52 +186,72 @@ export function reasonOf(field, value) {
 export const validValue = (field, value) => reasonOf(field, value) === null;
 
 /**
- * صفوف الجدول الصالحة للعرض. الصف يبقى إن صلح عموده الأول (عنوانه) أو خليتان فيه؛ الخلية التالفة في صف باقٍ تُفرَّغ.
- * يعيد { rows, dropped, reasons } ؛ reasons أسباب الصفوف المسقطة بلا تكرار
+ * صفوف الجدول الصالحة للعرض.
+ * strict (الوثيقة المؤسسية): الصف يبقى إن صلح عموده الأول (موضوعه)، وتُفرَّغ خلاياه التالفة.
+ * غير strict (ملف العمل): يبقى إن صلح أوله أو خليتان فيه.
+ * يعيد { rows, dropped, reasons, droppedRows, cellIssues } ؛ cellIssues: [[صف، عمود، سبب]] في الصفوف الباقية
  */
-export function cleanRows(table) {
+export function cleanRows(table, { strict = false } = {}) {
   const columns = table?.columns || [];
   const kinds = columns.map(columnKind);
-  const rows = [];
+  const rows = [], droppedRows = [], cellIssues = [];
   const reasons = new Set();
-  let dropped = 0;
   for (const r of Array.isArray(table?.value ?? table?.rows) ? (table.value ?? table.rows) : []) {
     if (!Array.isArray(r) || !r.some((c) => String(c ?? '').trim())) continue;
     const why = r.map((c, i) => reasonOf(kinds[i] || 'text', c));
     const good = why.filter((x) => x === null).length;
-    if (why[0] === null || good >= 2) rows.push(r.map((c, i) => (why[i] === null ? c : '')));
-    else {
-      dropped++;
+    if (why[0] === null || (!strict && good >= 2)) {
+      why.forEach((x, i) => { if (x && x !== 'empty') cellIssues.push([rows.length, i, x]); });
+      rows.push(r.map((c, i) => (why[i] === null ? c : '')));
+    } else {
+      droppedRows.push({ row: r, reason: why[0] && why[0] !== 'empty' && good ? 'bad_subject' : why.find((x) => x && x !== 'empty') || 'bad_subject' });
       why.filter((x) => x && x !== 'empty').forEach((x) => reasons.add(x));
     }
   }
-  return { rows, dropped, reasons: [...reasons] };
+  return { rows, dropped: droppedRows.length, reasons: [...reasons], droppedRows, cellIssues };
 }
 
+const quote = (v) => { const s = String(v ?? '').replace(/\s+/g, ' ').trim(); return s.length > 80 ? `${s.slice(0, 80)}…` : s; };
+
 /**
- * الوثيقة بقيمها الصالحة وحدها، وقائمة ما ينقص بأسبابه (للملحق).
- * لا يمس الأصل. gaps: [{ chapter, chapter_key, field, field_key, reason, reason_ar }]
+ * الوثيقة بقيمها الصالحة، وقائمة ما ينقص بأسبابه (للملحق). لا يمس الأصل.
+ * strict: الوثيقة المؤسسية (موضوع الصف شرط). keep: ملف العمل، تبقى القيم الأصلية في الفصول ويُعلَّم التالف:
+ *   f.issue = سبب الحقل، f.rowIssues = [{ row, reason }] صفوف سقطت، f.cellIssues = [[صف، عمود، سبب]] و f.raw = الصفوف الأصلية الباقية.
+ * الحقول المشتقة (meta والتكلفة) تُبنى من القيم الصالحة في الحالين.
+ * gaps: [{ chapter, chapter_key, field, field_key, reason, reason_ar, value }]
  */
-export function cleanDoc(doc) {
+export function cleanDoc(doc, { strict = false, keep = false } = {}) {
   if (!doc) return { doc, gaps: [] };
   const gaps = [];
-  const sections = (doc.sections || []).map((s) => ({
-    ...s,
-    fields: (s.fields || []).map((f) => {
-      const gap = (reason) => gaps.push({ chapter: s.title, chapter_key: s.key, field: f.label || f.key, field_key: f.key, reason, reason_ar: REASONS[reason] || reason });
+  let costAnswers = null;
+  const sections = (doc.sections || []).map((s) => {
+    const fields = (s.fields || []).map((f) => {
+      const gap = (reason, value = '') => gaps.push({ chapter: s.title, chapter_key: s.key, field: f.label || f.key, field_key: f.key, reason, reason_ar: REASONS[reason] || reason, value: quote(value) });
       if (f.type === 'table') {
-        const c = cleanRows(f);
-        if (!c.rows.length) gap(c.dropped ? c.reasons[0] || 'rows_invalid' : 'empty');
-        else if (c.dropped) gap('rows_invalid');
-        return { ...f, value: c.rows };
+        const c = cleanRows(f, { strict });
+        if (!c.rows.length) gap(c.dropped ? c.droppedRows[0].reason : 'empty', c.droppedRows.map((d) => d.row.filter(Boolean).join(' · ')).join(' | '));
+        else c.droppedRows.forEach((d) => gap(d.reason, d.row.filter(Boolean).join(' · ')));
+        if (!keep) return { ...f, value: c.rows };
+        // ملف العمل: الصفوف الباقية بقيمها الأصلية، والساقطة تُعرض معلَّمة
+        const kept = (Array.isArray(f.value) ? f.value : []).filter((r) => Array.isArray(r) && r.some((x) => String(x ?? '').trim()));
+        return { ...f, value: kept, clean: c.rows, rowIssues: c.droppedRows.map((d) => ({ row: kept.indexOf(d.row), reason: d.reason })), cellIssues: c.cellIssues };
       }
       const why = reasonOf(f, f.value);
-      if (why) { gap(why); return { ...f, value: null }; }
+      if (why) {
+        if (why !== 'empty') gap(why, f.value); else gap('empty');
+        return keep && why !== 'empty' ? { ...f, issue: why, clean: null } : { ...f, value: null };
+      }
       return f;
-    }),
-  }));
+    });
+    if (s.key === 'cost-plan') {
+      const v = (k) => { const f = fields.find((x) => x.key === k); return f ? (f.clean !== undefined ? f.clean : f.value) : null; };
+      costAnswers = { model: { fields }, answers: { items: v('items') || [], contingency: v('contingency'), envelope: v('envelope') } };
+    }
+    return { ...s, fields };
+  });
+  // الحقل الصالح من البطاقة (ما يقرؤه الغلاف والميثاق): القيمة النظيفة لا الأصلية في ملف العمل
   const charter = sections.find((s) => s.key === 'initiative-charter');
-  const cv = (k) => (charter?.fields || []).find((f) => f.key === k)?.value ?? null;
+  const cv = (k) => { const f = (charter?.fields || []).find((x) => x.key === k); return f ? (f.issue ? null : f.clean !== undefined && f.type !== 'table' ? f.clean : f.value) ?? null : null; };
   const meta = doc.meta ? { ...doc.meta } : doc.meta;
   if (meta && charter) {
     meta.start = cv('start'); meta.end = cv('end'); meta.sponsor = cv('sponsor');
@@ -204,32 +259,67 @@ export function cleanDoc(doc) {
     meta.context = cv('context') ?? (reasonOf('text', meta.context) ? null : meta.context);
     if (meta.initiative && reasonOf('text', meta.initiative)) meta.initiative = null;
   }
-  const summary = reasonOf('textarea', doc.summary) ? '' : doc.summary;
-  if (doc.summary && !summary) gaps.unshift({ chapter: 'الملخص التنفيذي', chapter_key: 'summary', field: 'رسالة القائد', field_key: 'summary', reason: reasonOf('textarea', doc.summary), reason_ar: REASONS[reasonOf('textarea', doc.summary)] });
-  return { doc: { ...doc, meta, summary, sections }, gaps };
+  // التكلفة تُعاد من الصفوف الصالحة فتتسق المؤشرات مع الجدول المعروض (costSummary نفسها في الخادم)
+  let cost = doc.cost;
+  if (costAnswers && doc.cost) {
+    const items = costAnswers.model.fields.find((f) => f.key === 'items');
+    const model = { fields: costAnswers.model.fields.map((f) => (f.key === 'items' ? { ...f, value: undefined } : f)) };
+    cost = items ? costSummary(model, costAnswers.answers) || doc.cost : doc.cost;
+  }
+  const sumWhy = reasonOf('textarea', doc.summary);
+  const summary = sumWhy ? '' : doc.summary;
+  if (doc.summary && sumWhy) gaps.unshift({ chapter: 'الملخص التنفيذي', chapter_key: 'summary', field: 'رسالة القائد', field_key: 'summary', reason: sumWhy, reason_ar: REASONS[sumWhy], value: quote(doc.summary) });
+  return { doc: { ...doc, meta, summary, sections, cost }, gaps };
 }
 
 // ── شرط الاكتمال المؤسسي: الأسئلة العشرة ──
 // المرجع: docs/content/2026-11-24-مصفوفة-الوثيقة-بحسب-المستوى-v1.md §1.
-// لكل سؤال مصادره [فصل، حقل]: يكفي أن يصلح واحد منها في الوثيقة النظيفة
+// كل سؤال «كل» من مكوّنات، وكل مكوّن «أيٌّ» من مصادر [فصل، حقل] صالحة في الوثيقة النظيفة (strict)
 export const INSTITUTIONAL_QUESTIONS = Object.freeze([
-  { n: 1, title: 'ما المشكلة ولمن؟', sources: [['initiative-charter', 'problem']] },
-  { n: 2, title: 'ما الهدف وما المخرجات؟', sources: [['initiative-charter', 'objective'], ['initiative-charter', 'deliverables']] },
-  { n: 3, title: 'لماذا هذا الحل لا غيره؟', sources: [['options-analysis', 'recommendation'], ['options-analysis', 'options']] },
-  { n: 4, title: 'كيف يحدث التغيير؟', sources: [['theory-of-change', 'chain'], ['theory-of-change', 'impact']] },
-  { n: 5, title: 'ما المنفعة وكيف تُقاس؟', sources: [['benefits-register', 'benefits'], ['evidence-plan', 'plan']] },
-  { n: 6, title: 'متى وبأي خطوات؟', sources: [['milestone-register', 'milestones'], ['schedule', 'activities']] },
-  { n: 7, title: 'بأي موارد وكلفة؟', sources: [['cost-plan', 'items'], ['cost-plan', 'funding']] },
-  { n: 8, title: 'ما المخاطر وكيف تُعالج؟', sources: [['raid', 'items']] },
-  { n: 9, title: 'من يقرر ومن يشارك؟', sources: [['initiative-charter', 'sponsor'], ['stakeholder-map', 'stakeholders'], ['governance', 'structure']] },
-  { n: 10, title: 'ماذا تحقق وماذا يبقى؟', sources: [['impact-report', 'changes'], ['change-sustain', 'sustain'], ['change-sustain', 'handover'], ['initiative-charter', 'operator']] },
+  { n: 1, title: 'ما المشكلة ولمن؟', all: [[['initiative-charter', 'problem']], [['initiative-charter', 'beneficiaries']]] },
+  { n: 2, title: 'ما الهدف وما المخرجات؟', all: [[['initiative-charter', 'objective']], [['initiative-charter', 'deliverables']]] },
+  { n: 3, title: 'لماذا هذا الحل لا غيره؟', all: [[['options-analysis', 'recommendation'], ['options-analysis', 'options']]] },
+  { n: 4, title: 'كيف يحدث التغيير؟', all: [[['theory-of-change', 'chain'], ['theory-of-change', 'impact']]] },
+  { n: 5, title: 'ما المنفعة وكيف تُقاس؟', all: [[['benefits-register', 'benefits']], [['evidence-plan', 'success_signal'], ['evidence-plan', 'plan']]] },
+  { n: 6, title: 'متى وبأي خطوات؟', all: [[['milestone-register', 'milestones'], ['schedule', 'activities']]] },
+  { n: 7, title: 'بأي موارد وكلفة؟', all: [[['cost-plan', 'items']]] },
+  { n: 8, title: 'ما المخاطر وكيف تُعالج؟', all: [[['raid', 'items']]] },
+  { n: 9, title: 'من يقرر ومن يشارك؟', all: [[['initiative-charter', 'sponsor'], ['governance', 'structure']], [['stakeholder-map', 'stakeholders']]] },
+  // تقرير الأثر إن كان من فصول الوثيقة وكُتب، وإلا الاستدامة؛ والمشغّل وحده لا يكفي
+  { n: 10, title: 'ماذا تحقق وماذا يبقى؟', all: [[['impact-report', 'changes'], ['change-sustain', 'sustain'], ['change-sustain', 'handover']]] },
 ]);
 
 const has = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== '');
 
-/** هل تُصدر الوثيقة المؤسسية: { ok, missing: [{ n, title }] } من الوثيقة النظيفة (cleanDoc) */
+/** هل تُصدر الوثيقة المؤسسية: { ok, missing: [{ n, title }] } من الوثيقة النظيفة (cleanDoc strict) */
 export function institutionalGate(cleanedDoc) {
-  const val = (k, f) => ((cleanedDoc?.sections || []).find((s) => s.key === k)?.fields || []).find((x) => x.key === f)?.value;
-  const missing = INSTITUTIONAL_QUESTIONS.filter((q) => !q.sources.some(([k, f]) => has(val(k, f)))).map(({ n, title }) => ({ n, title }));
+  const fld = (k, f) => ((cleanedDoc?.sections || []).find((s) => s.key === k)?.fields || []).find((x) => x.key === f);
+  // المكوّن يتحقق بمصدر صالح؛ والمكوّن الذي لا حقل له أصلًا في نسخة نماذج المشارك (حقل أُضيف بعد بدئه، مثل «المستفيدون») لا يُطلب منه
+  const ok = (any) => any.some(([k, f]) => has(fld(k, f)?.value)) || any.every(([k, f]) => !fld(k, f));
+  // المكوّن الأول في كل سؤال (لبّه) مطلوب دائمًا
+  const missing = INSTITUTIONAL_QUESTIONS.filter((q) => !q.all.every((any, i) => (i === 0 ? any.some(([k, f]) => has(fld(k, f)?.value)) : ok(any)))).map(({ n, title }) => ({ n, title }));
   return { ok: !missing.length, missing };
+}
+
+// ── الإصدار: بصمة النسخة ومحتواها النظيف مجمّدان في لقطة الاعتماد ──
+/** بصمة النسخة: FNV-1a مزدوج على محتوى الوثيقة الخام (لا ناتج التنظيف)، فلا تتغير بتغير قواعد الجودة */
+export function fingerprint(doc) {
+  const src = JSON.stringify({ i: doc?.meta?.initiative, v: doc?.meta?.version, s: (doc?.sections || []).map((s) => [s.key, (s.fields || []).map((f) => [f.key, f.value])]) });
+  let a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
+  for (let i = 0; i < src.length; i++) {
+    const c = src.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return (a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')).toUpperCase().match(/.{4}/g).join('-');
+}
+
+/** ما يُجمَّد في snapshot.issued لحظة الاعتماد: المحتوى النظيف (strict) وبصمة الخام */
+export function freezeIssued(snapshot) {
+  const { doc } = cleanDoc(snapshot, { strict: true });
+  const m = doc.meta || {};
+  // بلا أي بريد: يُقرأ في روابط المشاركة
+  const sections = doc.sections.map((s) => ({ ...s, fields: (s.fields || []).filter((f) => !/email/i.test(f.key)) }));
+  return { fingerprint: fingerprint(snapshot), sections, cost: doc.cost ?? null, summary: doc.summary,
+    meta: { start: m.start ?? null, end: m.end ?? null, sponsor: m.sponsor ?? null, host: m.host ?? null, context: m.context ?? null, initiative: m.initiative ?? null } };
 }

@@ -17,6 +17,7 @@ import {
   capstoneListRows, capstoneState, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
+import { freezeIssued } from './doc-quality.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
@@ -156,7 +157,7 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
   const d = await build(p);
   const c = d.capstone;
   const [org, { cohort }] = await Promise.all([
-    p.organization_id ? db.from('organizations').select('name, logo, color').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data) : null,
+    p.organization_id ? db.from('organizations').select('name, logo, color, status').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data) : null,
     cohortOf(p),
   ]);
   const cost = d.sections.find((s: any) => s.model.key === 'cost-plan');
@@ -167,7 +168,8 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
       ref: `MI-CP-${String(p.id).slice(0, 8).toUpperCase()}`, version: (c?.revisions || 0) + 1, generated_at: new Date().toISOString(),
       status, status_title: (STATUS_TITLES as Record<string, string>)[status], submitted_at: c?.submitted_at || null, approved_at: c?.approved_at || null,
       participant: { name: p.full_name, name_en: p.name_en || null, job_title: p.job_title || null },
-      org: org ? { name: org.name, logo: org.logo || null, color: org.color || null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
+      // شعار الجهة ولونها للجهة النشطة وحدها، كما في participant.ts orgLogo
+      org: org ? { name: org.name, logo: org.status === 'active' ? org.logo || null : null, color: org.status === 'active' ? org.color || null : null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
       cohort: cohort && !cohort.is_default ? cohort.name : null,
       track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
       level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
@@ -368,6 +370,8 @@ async function approve(p: any, by: string, waived: string | null = null) {
   must(await db.from('capstones').update({ status: 'approved', approved_at: now, approved_by: by, sponsor_waived: waived, updated_at: now }).eq('participant_id', p.id));
   // لقطة السجل بعد الاعتماد، بمعيار المستشار
   const snapshot = await docFor(p, 'admin');
+  // الإصدار: المحتوى النظيف للوثيقة المؤسسية وبصمتها يُجمَّدان مع شعار الجهة ولونها (meta.org)، فلا يغيّرها تعديل لاحق ولا تحسين لقواعد الجودة
+  (snapshot as any).issued = freezeIssued(snapshot);
   must(await db.from('capstones').update({ snapshot }).eq('participant_id', p.id));
   const initiative = await initiativeFor(p.id);
   await award(p.id, 'capstone', p.id, APPROVAL_POINTS, `اعتماد وثيقة المبادرة: ${initiative || ''}`.trim());

@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { capstoneReport } from '../../src/lib/brand/capstone.js';
 import { documentHtml } from '../../src/lib/brand/doc.js';
-import { fingerprint, institutionalReport, missingMessage } from '../../src/lib/brand/institutional.js';
+import { fingerprint, institutionalReport, missingMessage, renderInitiative } from '../../src/lib/brand/institutional.js';
+import { freezeIssued } from '../../supabase/functions/leaders-api/doc-quality.js';
 import { EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
 import { exampleDoc } from './guide.js';
 
@@ -59,13 +60,19 @@ describe('ملف العمل الكامل', () => {
     expect(t).toContain('ما ينقص لإكمال الوثيقة');
     expect(t).toContain('تاريخ لا يُقرأ');
   });
-  it('لا مؤشر صفري ولا قيمة تالفة في المتن، وختم «مسودة عمل»', () => {
+  it('لا مؤشر صفري، والقيمة التالفة تبقى في فصلها بعلامة «يحتاج مراجعة» ومقتبسة في الملحق، وختم «مسودة عمل»', () => {
     expect(t).not.toMatch(/\b0 ريال|0\s*حزمة|0\s*منفعة|النوع\s*·/);
-    expect(t).not.toContain('لايوجد');
-    expect(t).not.toContain('123-04820-209');
-    expect(t).not.toContain('سيبلاتنم');
+    expect(t).toContain('يحتاج مراجعة');
+    expect(t).toContain('سيبلاتنم');
+    expect(t.split('ما ينقص لإكمال الوثيقة').pop()).toContain('123-04820-209');
+    expect(meta.rows.map(([, v]) => v).join(' ')).not.toContain('لايوجد');
     expect(meta.stamp).toBe('مسودة عمل');
     expect(documentHtml(meta, body)).toContain('class="stamp">مسودة عمل');
+  });
+  it('القارئ الخارجي: بلا ملحق ولا ختم', () => {
+    const r = capstoneReport(yahyaDoc(), { appendix: false });
+    expect(r.meta.stamp).toBe(null);
+    expect(r.body).not.toContain('id="ch-gaps"');
   });
   it('المعتمدة بلا ختم مسودة', () => {
     expect(capstoneReport(completeDoc()).meta.stamp).toBe(null);
@@ -105,5 +112,31 @@ describe('الوثيقة المؤسسية', () => {
     expect(fingerprint(a)).toBe(fingerprint(completeDoc()));
     const b = { ...a, sections: a.sections.map((s, i) => (i ? s : { ...s, fields: s.fields.map((f, j) => (j ? f : { ...f, value: 'عنوان آخر' })) })) };
     expect(fingerprint(b)).not.toBe(fingerprint(a));
+  });
+});
+
+describe('الإصدار والقراء', () => {
+  it('المعتمدة تُعرض من محتواها المجمّد وبصمتها، ولا يغيّرها تغيّر لاحق', () => {
+    const d = completeDoc();
+    const issued = freezeIssued(d);
+    const later = { ...d, issued, sections: d.sections.map((s) => ({ ...s, fields: s.fields.map((f) => ({ ...f, value: f.type === 'table' ? [] : '' })) })) };
+    const r = institutionalReport(later);
+    expect(r.blocked).toBeUndefined();
+    expect(r.fingerprint).toBe(issued.fingerprint);
+    expect(JSON.stringify(issued)).not.toMatch(/email/i);
+  });
+  it('الجهة: صفحة «قيد الإعداد» لما لم يكتمل؛ الراعي: ملف العمل بلا ملحق', () => {
+    expect(renderInitiative(yahyaDoc(), 'external').body).toContain('الوثيقة قيد الإعداد');
+    const rd = renderInitiative(yahyaDoc(), 'reader');
+    expect(rd.meta.stamp).toBe(null);
+    expect(rd.body).not.toContain('id="ch-gaps"');
+  });
+  it('لا تكرار للراعي ولا لصفوف المخاطر في المؤسسية', () => {
+    const b = institutionalReport(completeDoc()).body;
+    expect((b.match(/الراعي ودوره/g) || []).length).toBe(1);
+  });
+  it('الشعار: يُرفض المسار المبدوء بشرطتين', () => {
+    const r = institutionalReport(completeDoc({ name: 'جهة', logo: '//evil.example/x.png', color: null }));
+    expect(documentHtml(r.meta, r.body)).not.toContain('evil.example');
   });
 });
