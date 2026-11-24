@@ -190,10 +190,10 @@ describe('المصفوفة فصلًا فصلًا', () => {
     const b = by(before)['initiative-charter'].fields, a = by(after)['initiative-charter'].fields;
     expect(a.map((f) => f.key).sort()).toEqual(b.map((f) => f.key).sort());
     const opt = a.map(optGroup);
-    // صاحب القرار مطلوب لمن يبدأ بعد الترحيل، في مجموعة المطلوب
-    expect(a.find((f) => f.key === 'sponsor')).toMatchObject({ required: false, required_after: expect.any(String) });
-    expect(req(by(after)['initiative-charter'], 'beginner', NEW)).toContain('sponsor');
-    expect(req(by(after)['initiative-charter'], 'beginner', OLD)).not.toContain('sponsor');
+    // الراعي اختياري لكل أحد (قرار المالك 2026-11-14، وأكده 2026-11-24)، تحت «تعمّق إن شئت»
+    expect(a.find((f) => f.key === 'sponsor')).toEqual(b.find((f) => f.key === 'sponsor'));
+    expect(optGroup(a.find((f) => f.key === 'sponsor'))).toBe(true);
+    for (const since of [OLD, NEW]) expect(req(by(after)['initiative-charter'], 'beginner', since)).not.toContain('sponsor');
     expect(opt.indexOf(true)).toBeGreaterThan(0);
     expect(opt.slice(opt.indexOf(true)).every(Boolean)).toBe(true);
     expect(a.filter((f) => f.group)).toEqual([expect.objectContaining({ key: a[opt.indexOf(true)].key, group: 'تعمّق إن شئت' })]);
@@ -207,7 +207,7 @@ describe('المصفوفة فصلًا فصلًا', () => {
 
 describe('العمود الفقري: كل سؤال من العشرة له حقل مطلوب ظاهر في كل مستوى (لمن يبدأ بعد الترحيل)', () => {
   // المصادر من المصفوفة §1: فصل وحقل؛ يكفي واحد مطلوب ظاهر. الأسئلة 5 و9 و10 من المصدر الذي أضافته المصفوفة للتأسيسي
-  // (سطر النجاح، صاحب القرار، تقرير الأثر)، فلو عاد أحدها اختياريًا لمن يبدأ لسقط الاختبار
+  // (سطر النجاح، خريطة أصحاب المصلحة، تقرير الأثر)، فلو عاد أحدها اختياريًا لمن يبدأ لسقط الاختبار
   const SPINE = {
     'ما المشكلة ولمن؟': [['initiative-charter', 'problem']],
     'ما الهدف وما المخرجات؟': [['initiative-charter', 'objective'], ['initiative-charter', 'deliverables']],
@@ -217,7 +217,7 @@ describe('العمود الفقري: كل سؤال من العشرة له حقل
     'متى وبأي خطوات؟': [['milestone-register', 'milestones'], ['schedule', 'activities']],
     'بأي موارد وكلفة؟': [['cost-plan', 'items']],
     'ما المخاطر وكيف تُعالج؟': [['raid', 'items']],
-    'من يقرر ومن يشارك؟': [['initiative-charter', 'sponsor']],
+    'من يقرر ومن يشارك؟': [['stakeholder-map', 'stakeholders']],
     'ماذا تحقق وماذا يبقى؟': [['impact-report', 'changes']],
   };
   it.each(COMBOS.map((c) => [Object.values(c).join('/'), c]))('%s', (_, levels) => {
@@ -400,7 +400,7 @@ describe('محرر النماذج في اللوحة يحفظ خصائص المص
     }
     const a = by(after);
     for (const [k, f, p] of [['impact-report', 'changes', 'required_after'], ['impact-report', 'changes', 'required_from'], ['impact-report', 'changes', 'min_rows_beginner'],
-      ['evidence-plan', 'success_signal', 'required_after'], ['initiative-charter', 'sponsor', 'required_after'], ['milestone-register', 'critical_path', 'required_after']]) {
+      ['evidence-plan', 'success_signal', 'required_after'], ['milestone-register', 'critical_path', 'required_after']]) {
       const v = a[k].fields.find((x) => x.key === f)[p];
       expect(v, `${k}.${f}.${p}`).toBeTruthy();
       expect(cleanModelFieldsOf(a[k].fields).find((x) => x.key === f)[p], `${k}.${f}.${p}`).toBe(v);
