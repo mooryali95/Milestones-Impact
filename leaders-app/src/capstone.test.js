@@ -352,3 +352,32 @@ describe('من أعاد الوثيقة', () => {
     expect(returnedBy({ status: 'submitted', review: null, sponsor: { status: 'declined', at: declined } })).toBe(null);
   });
 });
+
+// الزمن النسبي (المرحلة 2): الجدول بالأسابيع، والبدء اختياري، والانتهاء بالأسبوع
+describe('فحوص الجدول بالأسابيع', () => {
+  const chk = (charter, acts) => capstoneChecks(ctx({ ...good(), 'initiative-charter': { ...good()['initiative-charter'], ...charter }, schedule: { activities: acts } }));
+  const pick = (cs, k) => cs.find((c) => c.key === k);
+  const weeks = [['A1', 'التصميم', 'الأسبوع 1', 'الأسبوع 2', ''], ['A2', 'البناء', 'الأسبوع 3', 'الأسبوع 8', 'A1']];
+  it('أسابيع بلا تاريخ بدء: واضحة، والاعتماديات سليمة، وداخل المدة', () => {
+    const cs = chk({ start: '', end: 'الأسبوع 10' }, weeks);
+    expect(pick(cs, 'dates').ok).toBe(true);
+    expect(pick(cs, 'dep-logic').ok).toBe(true);
+    expect(pick(cs, 'window').ok).toBe(true);
+    expect(pick(cs, 'critical-window').ok).toBe(true);
+  });
+  it('نشاط يتجاوز الأسبوع الأخير يُنبَّه عليه', () => {
+    expect(pick(chk({ start: '', end: 'الأسبوع 6' }, weeks), 'window').ok).toBe(false);
+  });
+  it('أسابيع مع تاريخ بدء تُحسب منه', () => {
+    expect(pick(chk({ start: '2027-01-03', end: '2027-03-31' }, weeks), 'window').ok).toBe(true);
+    expect(pick(chk({ start: '2027-01-03', end: '2027-02-01' }, weeks), 'window').ok).toBe(false);
+  });
+  it('النهاية قبل البداية بالأسابيع تُكشف', () => {
+    expect(pick(chk({}, [['A1', 'التصميم', 'الأسبوع 4', 'الأسبوع 2', '']]), 'dates').ok).toBe(false);
+  });
+  it('جدول مؤرخ مع انتهاء بالأسبوع وبلا تاريخ بدء: لا إنذار كاذب', () => {
+    const cs = chk({ start: '', end: 'الأسبوع 10' }, [['A1', 'التصميم', '2027-01-03', '2027-01-20', '']]);
+    expect(pick(cs, 'window').ok).toBe(true);
+    expect(pick(cs, 'critical-window')?.ok ?? true).toBe(true);
+  });
+});

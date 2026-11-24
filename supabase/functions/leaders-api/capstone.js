@@ -347,13 +347,19 @@ export function capstoneChecks(ctx) {
     }
     void codes; void dep;
     if (has(CHARTER_KEY) && t) {
-      const from = parseDate(A[CHARTER_KEY]?.start), to = parseDate(A[CHARTER_KEY]?.end);
+      // المدة: تاريخ البدء وتاريخ الانتهاء كما كانا، أو انتهاء بالأسبوع («الأسبوع 12»). بلا تاريخ بدء تُقارن الأسابيع
+      // بمرساة افتراضية، والصف المؤرخ حينها لا يُقارن (لا مرساة تجمعه بالأسابيع)
+      const real = parseDate(A[CHARTER_KEY]?.start || '');
+      const from = real ?? (weekOf(A[CHARTER_KEY]?.end || '') != null ? VIRTUAL_ANCHOR : null);
+      const to = from == null ? null : parseWhen(A[CHARTER_KEY]?.end, { anchor: from, edge: 'end' });
       if (from != null && to != null) {
-        const out2 = t.rows.filter((r) => { const a = parseWhen(t.cell(r, s), { anchor: from }), b = parseWhen(t.cell(r, e), { anchor: from, edge: 'end' }); return (a != null && a < from) || (b != null && b > to); });
-        add('window', 'الجدول داخل مدة المبادرة في بطاقتها', !out2.length, `${out2.length} نشاط خارج المدة بين ${A[CHARTER_KEY].start} و${A[CHARTER_KEY].end}.`);
+        const pos = (v, edge) => (real == null && weekOf(v) == null ? null : parseWhen(v, { anchor: from, edge }));
+        const out2 = t.rows.filter((r) => { const a = pos(t.cell(r, s), 'start'), b = pos(t.cell(r, e), 'end'); return (a != null && a < from) || (b != null && b > to); });
+        add('window', 'الجدول داخل مدة المبادرة في بطاقتها', !out2.length, `${out2.length} نشاط خارج المدة بين ${A[CHARTER_KEY].start || 'البداية'} و${A[CHARTER_KEY].end}.`);
         // المسار الحرج بعلاقاته (لا بالتواريخ المكتوبة) يجب أن يتسع في مدة المبادرة
         const an = sc.analysis;
-        if (an.origin != null && !an.cycle && an.order.length) {
+        // والمرساتان من نوع واحد: لا يُقارن جدول مؤرخ بانتهاء بالأسبوع بلا تاريخ بدء
+        if (an.origin != null && !an.cycle && an.order.length && isVirtual(an.origin) === isVirtual(to)) {
           const lastDay = an.origin + (an.finish - 1) * 864e5;
           add('critical-window', 'المسار الحرج ينتهي داخل مدة المبادرة', lastDay <= to, `المسار الحرج يحتاج ${an.finish} يومًا، فينتهي بعد ${A[CHARTER_KEY].end}. قصّر أنشطته أو مدّد المبادرة.`);
         }

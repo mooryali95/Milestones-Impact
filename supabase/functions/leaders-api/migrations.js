@@ -172,6 +172,7 @@ export const MIGRATIONS = [
   '20261126100000_leaders_sponsor_codes',
   '20261127100000_leaders_model_review_light',
   '20261128100000_leaders_atomic_and_health',
+  '20261128110000_leaders_relative_time_hints',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -259,4 +260,5 @@ export const MIGRATION_GATES = {
   '20261126100000_leaders_sponsor_codes': ["tolerant", "قبله يرد نموذج «رشّحتك جهة؟» كل رمز ردَّ الرمز غير المعروف (sponsor-codes.ts: غياب الجدول أو الدالة"],
   '20261127100000_leaders_model_review_light': ["tolerant", "الدالة تعمل قبله وبعده: modelStatus (logic.js) يقرأ accept من الإعداد كما هو، فقبله تبقى الفصول الخمسة"],
   '20261128100000_leaders_atomic_and_health': ["tolerant", "قبله يرد نقل المشارك بين المراحل (admin.stage-move) بـnot_migrated صراحةً ولا يكتب شيئًا، والتدخل في مرحلة"],
+  '20261128110000_leaders_relative_time_hints': ["tolerant", "محتوى نماذج فقط (تلميحات وتسميات): الدوال تقبل التاريخ و«الأسبوع N» قبله وبعده (المرحلة 1)"],
 };
