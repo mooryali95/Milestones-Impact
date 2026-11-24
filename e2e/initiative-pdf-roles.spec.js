@@ -20,7 +20,7 @@ const NAME = FULL.meta.initiative.replace(/\s+/g, '-');
 const pagesOf = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
 
 async function check(d, role, { kind, min, max }) {
-  expect(d.suggestedFilename()).toBe(`${kind === 'working' ? 'ملف-عمل-المبادرة' : 'وثيقة-المبادرة'}-${NAME}-${ymd}.pdf`);
+  expect(d.suggestedFilename()).toBe(`${kind === 'working' ? 'ملف-عمل-المبادرة' : 'وثيقة-المبادرة'}-${NAME}-${ymd}-0042-V2.pdf`);
   const buf = readFileSync(await d.path());
   expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(buf.length).toBeGreaterThan(150 * 1024);

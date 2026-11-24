@@ -93,25 +93,29 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
   // القيمة القديمة تُقرأ كما هي ولا تُمس؛ إن لم تصلح ظهر سببها ليصلحها المشارك بنفسه
   const kind = fieldKind(f);
   const why = !locked && value ? reasonOf(f, value) : null;
-  const note = why && why !== 'empty' && why !== 'too_short' ? <small className="alert warn small mf-quality" role="status">{REASONS[why]}</small> : null;
-  if (f.type === 'textarea') return <><textarea id={id} className="input" rows={4} disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />{note}</>;
-  if (kind === 'date') return <><WhenInput id={id} value={value} locked={locked} onChange={onChange} />{note}</>;
+  const hintId = `${id}-hint`;
+  const note = why && why !== 'empty' && why !== 'too_short' ? <small id={hintId} className="alert warn small mf-quality">{REASONS[why]}</small> : null;
+  const desc = note ? hintId : undefined;
+  if (f.type === 'textarea') return <><textarea id={id} className="input" rows={4} disabled={locked} value={value || ''} aria-describedby={desc} onChange={(e) => onChange(e.target.value)} />{note}</>;
+  if (kind === 'date') return <><WhenInput id={id} value={value} locked={locked} onChange={onChange} describedBy={desc} />{note}</>;
   // الرقم والمبلغ: لا يُمحى شيء أثناء الكتابة («50 ألف ريال» نص قديم صالح)، والتنبيه وحده يرشد
   if (kind === 'number' || kind === 'money') {
-    return <><input id={id} className="input" inputMode="decimal" disabled={locked} value={value || ''} placeholder="مثل 50000 أو 50 ألف" onChange={(e) => onChange(e.target.value)} />{note}</>;
+    return <><input id={id} className="input" inputMode="decimal" disabled={locked} value={value || ''} placeholder="مثل 50000 أو 50 ألف" aria-describedby={desc} onChange={(e) => onChange(e.target.value)} />{note}</>;
   }
-  return <><input id={id} className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />{note}</>;
+  return <><input id={id} className="input" disabled={locked} value={value || ''} aria-describedby={desc} onChange={(e) => onChange(e.target.value)} />{note}</>;
 }
 
 // خلية الجدول بإرشاد الحقول نفسه: عمود التاريخ بتاريخ أو أسبوع، وعمود المبلغ بأرقام (دون محو ما يُكتب)، والعبث يُنبَّه إليه.
 // السبب من reasonOf بنوع العمود، كما تقرؤه الوثيقة؛ القيمة القديمة لا تُمس
 function Cell({ kind, locked, value, label, onChange }) {
+  const hintId = useId();
   const why = !locked && value ? reasonOf(kind, value) : null;
-  const note = why && why !== 'empty' && why !== 'too_short' ? <small className="alert warn small mf-quality" role="status">{REASONS[why]}</small> : null;
-  if (kind === 'date') return <><WhenInput value={value} locked={locked} onChange={onChange} label={label} compact />{note}</>;
+  const note = why && why !== 'empty' && why !== 'too_short' ? <small id={hintId} className="alert warn small mf-quality">{REASONS[why]}</small> : null;
+  const desc = note ? hintId : undefined;
+  if (kind === 'date') return <><WhenInput value={value} locked={locked} onChange={onChange} label={label} describedBy={desc} compact />{note}</>;
   return (
     <>
-      <textarea rows={1} disabled={locked} value={value} aria-label={label} inputMode={kind === 'amount' ? 'decimal' : undefined}
+      <textarea rows={1} disabled={locked} value={value} aria-label={label} aria-describedby={desc} inputMode={kind === 'amount' ? 'decimal' : undefined}
         placeholder={kind === 'amount' ? 'مثل 50000' : undefined} onChange={(e) => onChange(e.target.value)} />
       {note}
     </>
@@ -121,7 +125,7 @@ function Cell({ kind, locked, value, label, onChange }) {
 // ── موعد البداية والنهاية: تاريخ من التقويم، أو «الأسبوع N» ومداه «الأسبوع 3–5» (الزمن النسبي، اعتمده المالك 2026-11-24) ──
 // يُفتح على صيغة القيمة المخزنة؛ النص القديم غير المقروء يُعرض كما هو ولا يُمس حتى يختار المشارك بديله
 const WEEK_VAL = /^(?:ال)?(?:أسبوع|اسبوع|week|wk|w)\s*[:.]?\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/i;
-function WhenInput({ id, value, locked, onChange, label = undefined, compact = false }) {
+function WhenInput({ id, value, locked, onChange, label = undefined, compact = false, describedBy = undefined }) {
   const v = latinDigits(String(value || '')).trim();
   const wk = v.match(WEEK_VAL);
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
@@ -137,10 +141,10 @@ function WhenInput({ id, value, locked, onChange, label = undefined, compact = f
         <button type="button" role="radio" aria-checked={mode === 'week'} className={mode === 'week' ? 'on' : ''} disabled={locked} onClick={() => setMode('week')}>أسبوع</button>
       </div>
       {mode === 'date'
-        ? <input id={id} className="input" type="date" disabled={locked} value={iso} aria-label={label} onChange={(e) => onChange(e.target.value)} />
+        ? <input id={id} className="input" type="date" disabled={locked} value={iso} aria-label={label} aria-describedby={describedBy} onChange={(e) => onChange(e.target.value)} />
         : <span className="row">
-            <label>الأسبوع <input id={id} className="input" inputMode="numeric" disabled={locked} value={from} aria-label={label ? `${label}: الأسبوع` : 'الأسبوع'} onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setFrom(n); writeWeek(n, to); }} /></label>
-            <label>إلى <input className="input" inputMode="numeric" disabled={locked} value={to} aria-label="حتى الأسبوع (اختياري)" onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setTo(n); writeWeek(from, n); }} /></label>
+            <label>الأسبوع <input id={id} className="input" inputMode="numeric" disabled={locked} value={from} aria-label={label ? `${label}: الأسبوع` : 'الأسبوع'} aria-describedby={describedBy} onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setFrom(n); writeWeek(n, to); }} /></label>
+            <label>إلى <input className="input" inputMode="numeric" disabled={locked} value={to} aria-label={label ? `${label}: حتى الأسبوع (اختياري)` : 'حتى الأسبوع (اختياري)'} aria-describedby={describedBy} onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setTo(n); writeWeek(from, n); }} /></label>
           </span>}
       {legacy && <small className="muted">المكتوب سابقًا: «{value}». يبقى كما هو حتى تختار تاريخًا أو أسبوعًا.</small>}
     </div>

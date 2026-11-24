@@ -203,8 +203,9 @@ describe('قيم رُفضت للمراجعة (rejectionStats)', () => {
     expect(r.rows.find((x) => x.field_key === 'items:التكلفة')?.rule).toBe('bad_number');
     expect(r.rules.reduce((a, x) => a + x.count, 0)).toBe(r.rows.reduce((a, x) => a + x.count, 0));
   });
-  it('العينة مقنّعة: حرفان وطول النص', () => {
-    expect(maskSample('سشيبسشيب')).toBe('سش•••••• (8)');
+  it('العينة مقنّعة: الطول وحده بلا أي حرف', () => {
+    expect(maskSample('سشيبسشيب')).toBe('•••••••• (8 حرفًا)');
+    expect(maskSample('  ')).toBe('');
     expect(r.rows.map((x) => x.sample).join(' ')).not.toContain('سشيبسشيب');
   });
 });

@@ -61,7 +61,7 @@ test('«تحميل PDF» في صفحة المبادرة: ملف A4 جاهز با
   const dl = page.waitForEvent('download', { timeout: 100000 });
   await page.getByRole('button', { name: 'تحميل PDF' }).click();
   const d = await dl;
-  expect(d.suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}\.pdf$/);
+  expect(d.suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}-0042-V3\.pdf$/);
   const buf = readFileSync(await d.path());
   expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(pagesOf(buf)).toBeGreaterThanOrEqual(5);
@@ -79,5 +79,5 @@ test('نافذة الوثيقة: «تحميل PDF» بجانب «طباعة»، 
   await expect(w.getByRole('button', { name: 'طباعة' })).toBeVisible();
   const dl = page.waitForEvent('download', { timeout: 100000 });
   await w.getByRole('button', { name: 'تحميل PDF' }).click();
-  expect((await dl).suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}\.pdf$/);
+  expect((await dl).suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}-0042-V3\.pdf$/);
 });

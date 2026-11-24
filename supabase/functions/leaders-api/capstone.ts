@@ -254,11 +254,21 @@ export async function doc(p: any) {
 
 // «قيم رُفضت للمراجعة»: قواعد الرفض على إجابات فصول المبادرة الحالية، محسوبة للقراءة لحظة الطلب (doc-quality.js rejectionStats).
 // بلا اسم ولا بريد ولا نص كامل: القاعدة ومفتاح الفصل والحقل والعدد وعينة مقنّعة. الحسابات المعدودة وحدها (لا العرض ولا الاختبار)
+const QUALITY_CAP = 3000;
 export async function adminQualityReport() {
-  const rows = must(await counted(db.from('model_submissions').select('answers, learning_models!inner(key, fields, capstone_sort), participants!inner(is_demo, is_test)')
-    .not('learning_models.capstone_sort', 'is', null), 'participants').limit(3000)) as any[] ?? [];
-  const stats = rejectionStats(rows.map((r) => ({ chapter_key: r.learning_models?.key, fields: r.learning_models?.fields || [], answers: r.answers || {} })));
-  return { success: true, ...stats, generated_at: new Date().toISOString() };
+  // حقول الفصول مرة واحدة، والإجابات الأحدث أولًا حتى الحد
+  const models = must(await db.from('learning_models').select('id, key, fields').not('capstone_sort', 'is', null)) as any[] ?? [];
+  const byId = new Map(models.map((m) => [m.id, m]));
+  const ids = models.map((m) => m.id);
+  const { data, count, error } = ids.length
+    ? await counted(db.from('model_submissions').select('model_id, answers, participants!inner(is_demo, is_test)', { count: 'exact' }).in('model_id', ids), 'participants')
+      .order('updated_at', { ascending: false }).limit(QUALITY_CAP)
+    : { data: [], count: 0, error: null };
+  if (error) throw error;
+  const rows = (data || []) as any[];
+  const stats = rejectionStats(rows.map((r) => ({ chapter_key: byId.get(r.model_id)?.key, fields: byId.get(r.model_id)?.fields || [], answers: r.answers || {} })));
+  const total = count ?? rows.length;
+  return { success: true, ...stats, total, truncated: total > rows.length, cap: QUALITY_CAP, generated_at: new Date().toISOString() };
 }
 
 // ── المستشار ──

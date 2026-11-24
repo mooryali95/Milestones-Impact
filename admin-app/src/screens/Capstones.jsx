@@ -272,7 +272,7 @@ function Rejected() {
       <summary><b>قيم رُفضت للمراجعة</b> <small className="la-muted">ما ترفضه قواعد الجودة في إجابات الفصول الآن، لضبطها ببيانات حقيقية</small></summary>
       {busy ? <Spinner /> : !r ? null : !r.success ? <div className="la-err">{r.message}</div> : !r.rows.length ? <p className="la-muted">لا قيم مرفوضة في {r.submissions} تسليمًا.</p> : (
         <>
-          <p className="la-muted">{r.rules.map((x) => `${x.rule_ar}: ${x.count}`).join(' · ')} · من {r.submissions} تسليمًا</p>
+          <p className="la-muted">{r.rules.map((x) => `${x.rule_ar}: ${x.count}`).join(' · ')} · من {r.submissions} تسليمًا{r.truncated ? ` · عيّنة من أحدث ${r.cap} من ${r.total}` : ''}</p>
           <table className="la-table">
             <thead><tr><th>القاعدة</th><th>الفصل</th><th>الحقل</th><th>العدد</th><th>عينة مقنّعة</th></tr></thead>
             <tbody>{r.rows.map((x) => (

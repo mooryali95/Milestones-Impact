@@ -39,8 +39,16 @@ describe('planPages: حدود الصفحات من مواضع الكسر المس
 describe('الوثيقة جاهزة للتصدير', () => {
   const { meta, body } = capstoneReport(exampleDoc(EXAMPLES[0]));
   it('اسم ملف عربي يدل على الوثيقة: «وثيقة-المبادرة-<اسمها>-<التاريخ>»، وملف العمل باسمه', () => {
-    expect(meta.pdfName).toMatch(/^وثيقة-المبادرة-.+-\d{4}-\d{2}-\d{2}$/);
-    expect(pdfFileName({ initiative: 'موعد أول / أقرب' }, 'working', new Date(2026, 10, 24))).toBe('ملف-عمل-المبادرة-موعد-أول-أقرب-2026-11-24');
+    expect(meta.pdfName).toMatch(/^وثيقة-المبادرة-.+-\d{4}-\d{2}-\d{2}-MI-EX-GOV-V1$/);
+    const day = new Date(2026, 10, 24);
+    expect(pdfFileName({ initiative: 'موعد أول / أقرب' }, 'working', day)).toBe('ملف-عمل-المبادرة-موعد-أول-أقرب-2026-11-24');
+    // محارف الاتجاه الخفية تُحذف، والبديل بعد التنظيف، واللاحقة رقم الوثيقة وإصدارها
+    expect(pdfFileName({ initiative: '\u202e\u200f', ref: 'MI-CP-AB12', version: 3 }, 'institutional', day)).toBe('وثيقة-المبادرة-MI-CP-AB12-2026-11-24-AB12-V3');
+    expect(pdfFileName({ initiative: '///' }, 'draft', day)).toBe('مسودة-وثيقة-المبادرة-المبادرة-2026-11-24');
+    // القص بنقاط الترميز: لا يُشطر حرف خارج BMP، ولا تبقى شرطة في الطرف
+    const long = pdfFileName({ initiative: `${'أ'.repeat(59)} 😀😀` }, 'institutional', day);
+    expect(long).toBe(`وثيقة-المبادرة-${'أ'.repeat(59)}-2026-11-24`);
+    expect(long).not.toMatch(/[\ud800-\udfff]/u);
     expect(documentHtml(meta, body, { pdf: true })).toContain('id="pdf-head"');
     expect(meta.title).toMatch(/[؀-ۿ]/);
   });
