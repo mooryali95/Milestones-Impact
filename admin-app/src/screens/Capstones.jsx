@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// مشاريع التخرج: مراجعة وثائق المبادرات واعتمادها
+// المبادرات: مراجعة وثائق المبادرات واعتمادها
 // ════════════════════════════════════════════════════════════════
 // قائمة واحدة لكل الوثائق بحالتها، وصفحة لكل وثيقة: تقرأها بالقالب
 // نفسه الذي يراه المشارك والراعي، وتقيّمها بالمعيار السداسي، ثم تعيدها
@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
-// حالة الفصل في صفحة الوثيقة: الفصول يقيّمها المستشار في كتاب القائد لا المالك، فالتسليم والتقييم بلسانه،
+// حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
 export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
 import { Empty, Spinner, useUI } from '../ui.jsx';
@@ -57,7 +57,7 @@ function Review({ d, canWrite, onSaved, onFailed }) {
       ? 'تُعتمد الوثيقة نهائيًا بقبولك، فلا راعٍ فعلي لها: تُمنح نقاط الاعتماد ويُبلَّغ المشارك بالبريد، ولا يُتراجع عن ذلك. متابعة؟'
       : why
       ? 'تُعتمد الوثيقة نهائيًا دون تأييد الراعي: تُمنح نقاط الاعتماد ويُبلَّغ المشارك بالبريد، ولا يُتراجع عن ذلك. متابعة؟'
-      : 'تُقبل الوثيقة ويُرسل طلب التأييد إلى راعيها في الجهة. متابعة؟'))) return;
+      : 'تُقبل الوثيقة ويُرسل طلب التأييد إلى راعيها. متابعة؟'))) return;
     setBusy(decision);
     const r = await L('admin.capstone-review', { participant_id: d.participant_id, decision, scores, notes, note, waive_sponsor: decision === 'accept' ? why : '' });
     setBusy('');
@@ -86,7 +86,7 @@ function Review({ d, canWrite, onSaved, onFailed }) {
         {noSponsor && <p className="la-muted" role="note">لا راعٍ فعلي في بطاقة المبادرة (الراعي توضيح لدوره، والمبادرة قد تكون افتراضية)، فقبولك يعتمد الوثيقة مباشرة.</p>}
         {!noSponsor && <label className="cps-note">اعتماد دون تأييد الراعي (اختياري، بسبب مكتوب)<input value={waive} placeholder="مثال: الراعي في إجازة طويلة، والجهة أكدت الرعاية بخطاب" onChange={(e) => setWaive(e.target.value)} /></label>}
         <div className="la-row">
-          <button className="btn-sm primary" disabled={waiveShort} title={waiveShort ? 'سبب الاعتماد دون تأييد عشرة أحرف على الأقل' : undefined} onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : noSponsor ? 'قبول واعتماد دون راعٍ' : why ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
+          <button className="btn-sm primary" disabled={waiveShort} title={waiveShort ? 'اكتب سبب الاعتماد دون تأييد (عشرة أحرف على الأقل)' : undefined} onClick={() => send('accept')}>{busy === 'accept' ? 'لحظة…' : noSponsor ? 'قبول واعتماد دون راعٍ' : why ? 'قبول واعتماد' : 'قبول وطلب تأييد الراعي'}</button>
           {canReturn && <button className="btn-sm ghost" onClick={() => send('return')}>{busy === 'return' ? 'لحظة…' : 'إعادة للتحسين'}</button>}
           {!canReturn && <small className="la-muted">استُنفد التحسين المتاح، فالقرار قبول بالمعيار.</small>}
         </div>
@@ -218,7 +218,7 @@ const CAP_COLS = [
   { key: 'org', label: 'الجهة', width: 24, get: (x) => x.organization }, { key: 'scope', label: 'النوع', width: 10, get: (x) => SCOPE[x.scope] },
   { key: 'status', label: 'الحالة', width: 18, get: (x) => STATUS[x.status] }, { key: 'sponsor', label: 'الراعي', width: 16, get: (x) => SPONSOR[x.sponsor_status] },
   { key: 'ready', label: 'الجاهزية %', width: 12, get: (x) => x.readiness }, { key: 'score', label: 'المعيار', width: 10, get: (x) => x.score },
-  { key: 'health', label: 'صحة التنفيذ', width: 16, get: (x) => x.tracking?.health_title }, { key: 'at', label: 'سُلّمت', width: 16, get: (x) => date(x.submitted_at) },
+  { key: 'health', label: 'صحة التنفيذ', width: 16, get: (x) => x.tracking?.health_title }, { key: 'at', label: 'قُدّمت', width: 16, get: (x) => date(x.submitted_at) },
 ];
 const CAP_SORTS = {
   name: (x) => x.initiative, lead: (x) => x.full_name, org: (x) => x.organization, scope: (x) => SCOPE[x.scope],
@@ -238,11 +238,11 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
   if (capId) return <Detail id={capId} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} />;
   return (
     <section className="la-card">
-      <h3>مشاريع التخرج: وثائق المبادرات</h3>
-      <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقيّمها المستشار منفردة في «كتاب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
+      <h3>وثائق المبادرات</h3>
+      <p className="la-muted">فصول كل وثيقة نماذج تعليمية يقرؤها المستشار ويكتب ملاحظاته عليها في «كتاب القائد». هنا قرار الوثيقة كاملة: إعادة للتحسين مرة، أو قبول بالمعيار ثم تأييد الراعي.</p>
       {list?.success && <FilterBar scope="capstones" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={CAP_PRESETS} counts={presetCounts(all, CAP_PRESETS)}
         shown={rows.length} total={all.length} noun="وثيقة" placeholder="ابحث بالمبادرة أو القائد أو الجهة"
-        actions={<ExportButton scope="capstones" meta={{ kind: 'CAP', title: 'مشاريع التخرج', sheet: 'المبادرات', file: 'Capstones' }} columns={CAP_COLS} all={all} filtered={rows} noun="وثيقة" />} />}
+        actions={<ExportButton scope="capstones" meta={{ kind: 'CAP', title: 'وثائق المبادرات', sheet: 'المبادرات', file: 'Capstones' }} columns={CAP_COLS} all={all} filtered={rows} noun="وثيقة" />} />}
       {!list ? <Spinner /> : !list.success ? <div className="la-err">{list.message}</div> : !rows.length ? <Empty compact {...capEmpty(f, all.length)} /> : (
         <table className="la-table">
           <thead><tr><SortTh k="name" state={f} set={setF}>المبادرة</SortTh><SortTh k="lead" state={f} set={setF}>القائد</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><SortTh k="scope" state={f} set={setF}>النوع</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="ready" state={f} set={setF}>الجاهزية</SortTh><SortTh k="score" state={f} set={setF}>المعيار</SortTh><SortTh k="at" state={f} set={setF}>سُلّمت</SortTh></tr></thead>

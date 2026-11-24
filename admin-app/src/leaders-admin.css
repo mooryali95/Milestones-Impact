@@ -641,7 +641,7 @@
 .fb-more select { max-width: 100%; }
 .fb-more > label { display: inline-flex; gap: 4px; align-items: center; }
 
-/* ── مشاريع التخرج ── */
+/* ── المبادرات ── */
 .cps { display: grid; gap: 16px; }
 .cps-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
 .cps-head h2 { margin: 4px 0 8px; font-size: 1.25rem; }

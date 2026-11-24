@@ -29,7 +29,7 @@ export default function Sponsor() {
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
           <h1 className="as-h2">شكرًا لك</h1>
-          <p className="muted">{decision === 'endorsed' ? 'سُجّل تأييدك، واعتُمدت الوثيقة.' : 'وصلت ملاحظتك إلى صاحب المبادرة ليعدّل الوثيقة.'}</p>
+          <p className="muted">{decision === 'endorsed' ? 'سُجّل تأييدك، واعتُمدت الوثيقة.' : 'وصلت ملاحظتك إلى قائد المبادرة ليعدّل الوثيقة.'}</p>
         </div>
       </div>
     );
@@ -37,7 +37,7 @@ export default function Sponsor() {
 
   const m = data.doc.meta;
   const send = async (dec) => {
-    if (dec === 'decline' && !note.trim()) return setError('اكتب ما الذي يعدّله صاحب المبادرة');
+    if (dec === 'decline' && !note.trim()) return setError('اكتب ما الذي يعدّله قائد المبادرة');
     setBusy(true); setError('');
     const r = await call('sponsor.submit', { t, decision: dec, note });
     setBusy(false);
@@ -50,7 +50,7 @@ export default function Sponsor() {
         <p className="eyebrow">تأييد راعي المبادرة</p>
         <h1 style={{ fontSize: 22 }}>{data.sponsor ? `أهلًا ${data.sponsor}، ` : ''}هل تؤيد مبادرة «{m.initiative}»؟</h1>
         <p className="muted">
-          أعدّها {m.participant?.name}{m.org?.name ? ` من ${m.org.name}` : ''} مشروع تخرجه في برنامج القادة، وراجعها المستشار وقبلها.
+          أعدّها {m.participant?.name}{m.org?.name ? ` من ${m.org.name}` : ''} في برنامج القادة، وقرأها المستشار وقبلها.
           تأييدك يعني أنها مبادرة حقيقية تخدم أولويات تعنيك، وأن خطتها واقعية.
         </p>
         <dl className="sp-meta">
@@ -63,7 +63,7 @@ export default function Sponsor() {
       </div>
       <div className="card stack">
         <label className="field">
-          <span>ملاحظتك (تصل صاحب المبادرة، وتلزم إن طلبت تعديلًا)</span>
+          <span>ملاحظتك (تصل إلى قائد المبادرة، وهي مطلوبة إن طلبت تعديلًا)</span>
           <textarea className="input" rows={4} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         {error && <div className="alert err" role="alert">{error}</div>}

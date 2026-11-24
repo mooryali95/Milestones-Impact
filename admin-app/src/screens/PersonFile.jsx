@@ -156,7 +156,7 @@ export function InitiativePanel({ participantId, canWrite = false, onChanged }) 
               <span className={`la-chip ${st === 'reviewed' ? 'ok' : st === 'returned' ? 'warn' : ''}`} title={x.status ? SUBMISSION_STATUS_ADMIN[x.status] : undefined}>{CHAPTER_STATUS_AR[st]}</span>
               <small className="la-muted">{x.updated_at ? `آخر تعديل ${dateOnly(x.updated_at)}` : 'لم يُحفظ بعد'}</small>
               {x.sub_id && ['submitted', 'reviewed', 'returned'].includes(x.status) && (
-                <button type="button" className="la-link" aria-label={`${x.status === 'submitted' && canWrite ? 'قيّم' : 'اعرض'} فصل ${x.title}`} onClick={() => setSub(x.sub_id)}>{x.status === 'submitted' && canWrite ? 'قيّم' : 'اعرض'}</button>
+                <button type="button" className="la-link" aria-label={`${x.status === 'submitted' && canWrite ? 'اقرأ' : 'اعرض'} فصل ${x.title}`} onClick={() => setSub(x.sub_id)}>{x.status === 'submitted' && canWrite ? 'اقرأ' : 'اعرض'}</button>
               )}
             </span>
           </li>

@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════
-// وثيقة المبادرة (مشروع التخرج)
+// وثيقة المبادرة
 // ════════════════════════════════════════════════════════════════
 // فصول الوثيقة هي نماذجك التعليمية نفسها، تفتحها من هنا أو من المكتبة
-// فتجد العمل ذاته. الصفحة تجمعها، وتفحص اتساقها، وتسلّمها للمستشار، وتصدر
+// فتجد العمل ذاته. الصفحة تجمعها، وتفحص اتساقها، وتقدّمها إلى المستشار، وتصدر
 // الوثيقة الاحترافية للطباعة. لا محتوى يُكتب مرتين.
 import React, { useEffect, useState } from 'react';
 import Ico from '../Ico.jsx';
@@ -137,14 +137,14 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     setMsg(r.success ? { ok: 'حُفظ الملخص.' } : { err: r.message });
   };
   const submit = async () => {
-    if (!window.confirm('تُسلَّم الوثيقة للمستشار، وتُقفل فصولها حتى تعود إليك. متابعة؟')) return;
+    if (!window.confirm('تُقدَّم الوثيقة إلى المستشار، وتُقفل فصولها حتى تعود إليك. متابعة؟')) return;
     setBusy('submit'); setMsg(null);
     if (summary !== (c.summary || '')) await call('capstone.summary', { summary });
     const r = await call('capstone.submit');
     setBusy('');
     if (!r.success) return setMsg({ err: r.message });
     setD(r);
-    setMsg({ ok: 'سُلّمت الوثيقة للمستشار. يصلك بريد بقراره.' });
+    setMsg({ ok: 'قُدّمت الوثيقة إلى المستشار. يصلك بريد بقراره.' });
   };
   // ملف PDF جاهز مباشرة، بلا نافذة طباعة (src/lib/brand/pdf.js). التقدم يظهر في الزر نفسه
   const downloadPdfNow = async () => {
@@ -176,9 +176,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     <div className="page capstone">
       <FirstOpen id="capstone" icon="compass" title="مبادرتك من واقع تعرفه" lines={[
         'ابنِ مبادرة تقودها من واقع تعرفه: في جهة أو مجتمع أو سوق، وفصول الوثيقة تتبع نوعها (مشروع أو برنامج أو محفظة) كما حددته في ملفك.',
-        'احفظ مسودتك متى شئت؛ لا يراها المستشار إلا حين تسلّمها.',
+        'احفظ مسودتك متى شئت؛ لا يراها المستشار إلا حين تقدّمها.',
         // قاعدة التحسين من مصدرها (MAX_REVISIONS): تُقال قبل التسليم لا بعده
-        `بعد التسليم لك ${REVISIONS_AR} بعد ملاحظات المستشار، ثم يقرر بدرجتها. فسلّمها حين تكتمل.`,
+        `بعد التقديم لك ${REVISIONS_AR} بعد ملاحظات المستشار، ثم يقرر بحسب درجتها. فقدّمها حين تكتمل.`,
       ]} />
       <section className="cp-hero">
         <div className="cp-hero-main">
@@ -201,7 +201,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
 
       {!d.scope && (
         <div className="alert info cp-alert">
-          نوع مشروعك (مشروع، أو برنامج، أو محفظة) يأتي من نطاق عملك في ملفك، وبه تتحدد فصول الوثيقة.
+          نوع مبادرتك (مشروع، أو برنامج، أو محفظة) يأتي من نطاق عملك في ملفك، وبه تتحدد فصول الوثيقة.
           {' '}<button className="link" onClick={onEditProfile}>حدد نطاق عملك</button>
         </div>
       )}
@@ -209,7 +209,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
 
       {/* الأحدث بين رفض الراعي ومراجعة المستشار، لا رفض راعٍ قديم بقي في السجل */}
       {c.status === 'returned' && (returnedBy(c) === 'sponsor' ? (
-        <div className="card cp-review bad"><h2>ملاحظات راعي المبادرة</h2><p>{c.sponsor.note}</p><small className="muted">عدّل الفصول ثم أعد التسليم.</small></div>
+        <div className="card cp-review bad"><h2>ملاحظات راعي المبادرة</h2><p>{c.sponsor.note}</p><small className="muted">عدّل الفصول ثم أعد التقديم.</small></div>
       ) : c.review && (
         <div className="card cp-review bad">
           <h2>ملاحظات المستشار</h2>
@@ -217,13 +217,13 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           {Object.keys(c.review.notes || {}).length > 0 && (
             <ul>{d.rubric.filter((r) => c.review.notes[r.key]).map((r) => <li key={r.key}><b>{r.title}:</b> {c.review.notes[r.key]}</li>)}</ul>
           )}
-          <small className="muted">أعاد المستشار الوثيقة إليك. عدّل الفصول ثم أعد التسليم.</small>
+          <small className="muted">أعاد المستشار الوثيقة إليك. عدّل الفصول ثم أعد التقديم.</small>
         </div>
       ))}
       {c.status === 'approved' && (
         <div className="card cp-review ok">
           <h2>اعتُمدت وثيقة مبادرتك</h2>
-          {c.review?.score != null && <p className="cp-score"><b>{c.review.score}</b> من 100 في معيار المستشار</p>}
+          {c.review?.score != null && <p className="cp-score"><b>{c.review.score}</b> من 100 بمعيار التقييم</p>}
           {c.sponsor?.status === 'endorsed' && <p>أيّدها راعيها{c.sponsor.name ? ` ${c.sponsor.name}` : ''}{c.sponsor.note ? `: «${c.sponsor.note}»` : '.'}</p>}
           {c.review?.note && <p className="muted">{c.review.note}</p>}
         </div>
@@ -241,8 +241,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
             <p><b>{sig.title}</b>{sig.detail && <small className="muted"> {isoLtr(sig.detail)}</small>}</p>
             <div className="row">
               <button type="button" className="btn gold sm" onClick={() => openSection(sig.chapter.id)}>افتح «{sig.chapter.title}»</button>
-              {ex && <button type="button" className="btn ghost sm" onClick={() => openCapstoneDoc(exampleDoc(ex))}>أرني المثال</button>}
-              <button type="button" className="btn ghost sm" onClick={() => setAsk({ chapterTitle: sig.chapter.title, detail: sig.kind === 'check' ? sig.title : null, dimension: sig.chapter.dimension })}>أريد التحدث مع مختص</button>
+              {ex && <button type="button" className="btn ghost sm" onClick={() => openCapstoneDoc(exampleDoc(ex))}>اعرض المثال</button>}
+              <button type="button" className="btn ghost sm" onClick={() => setAsk({ chapterTitle: sig.chapter.title, detail: sig.kind === 'check' ? sig.title : null, dimension: sig.chapter.dimension })}>اطلب استشارة خبير</button>
               <button type="button" className="link small" onClick={() => { const n = [...dismissed, sig.key]; setDismissed(n); saveDismissed(n); }}>ليس الآن</button>
             </div>
           </section>
@@ -267,15 +267,15 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
         return <Discovery level={d.level} charterId={charter.id} onSkip={() => setSkipDiscovery(true)} onDone={() => openSection(charter.id)} />;
       })()}
 
-      {/* بوابة البطاقة: ما ينتظره المشارك من المستشار قبل تسليم الوثيقة، وما يفعله في الأثناء */}
+      {/* بوابة البطاقة: ما ينتظره المشارك من المستشار قبل تقديم الوثيقة، وما يفعله في الأثناء */}
       {editable && d.card && d.card.state !== 'approved' && (
         <div className={`banner${d.card.state === 'returned' ? '' : ' gold'}`} data-card-gate={d.card.state}>
           <span className="ico"><Ico name={d.card.state === 'waiting' ? 'hourglass' : 'target'} /></span>
           <div className="grow">
             <b>{CARD_GATE_TITLE[d.card.state]}</b>
-            <p className="small">{d.card.state === 'none' ? `اكتب بطاقة المبادرة وسلّمها أولًا: يعتمد مستشارك اختيار المبادرة عادةً خلال ${d.card.sla}، قبل أن تبني عليها بقية الفصول.`
-              : d.card.state === 'waiting' ? `الاعتماد عادةً خلال ${d.card.sla}. تابع بقية الفصول في الأثناء، وتُسلَّم الوثيقة بعد اعتماد البطاقة.`
-                : 'افتح بطاقة المبادرة لترى ملاحظات المستشار، ثم عدّلها وسلّمها من جديد.'}</p>
+            <p className="small">{d.card.state === 'none' ? `اكتب بطاقة المبادرة وقدّمها أولًا: يعتمد مستشارك اختيار المبادرة عادةً خلال ${d.card.sla}، قبل أن تبني عليها بقية الفصول.`
+              : d.card.state === 'waiting' ? `الاعتماد عادةً خلال ${d.card.sla}. تابع بقية الفصول في الأثناء، وتُقدَّم الوثيقة بعد اعتماد البطاقة.`
+                : 'افتح بطاقة المبادرة لترى ملاحظات المستشار، ثم عدّلها وقدّمها من جديد.'}</p>
           </div>
         </div>
       )}
@@ -290,8 +290,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
               {d.checks.map((x) => {
                 const ch = !x.ok && editable ? d.sections.find((sec) => (CHECK_CHAPTERS[x.key] || []).includes(sec.key)) : null;
                 return (
-                  <li key={x.key} className={x.ok ? 'ok' : 'no'}><b><Annotated text={x.title} />{x.blocking && <span className="chip bad" title="لا تُسلَّم الوثيقة قبله"> لازم</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}
-                    {ch && <button type="button" className="link small" onClick={() => setAsk({ chapterTitle: ch.title, detail: x.title, dimension: ch.dimension })}>اسأل مختصًا</button>}
+                  <li key={x.key} className={x.ok ? 'ok' : 'no'}><b><Annotated text={x.title} />{x.blocking && <span className="chip bad" title="لا تُقدَّم الوثيقة قبله"> إلزامي</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}
+                    {ch && <button type="button" className="link small" onClick={() => setAsk({ chapterTitle: ch.title, detail: x.title, dimension: ch.dimension })}>اسأل خبيرًا</button>}
                   </li>
                 );
               })}
@@ -314,8 +314,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           )}
 
           <section className="card cp-case" aria-labelledby="cp-case-h">
-            <h3 id="cp-case-h">حالة العمل</h3>
-            <p className="muted small">خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصولك نفسها، وتظهر مع ميثاق المبادرة في الوثيقة الاحترافية.</p>
+            <h3 id="cp-case-h">مسوّغات المبادرة</h3>
+            <p className="muted small">خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصولك نفسها، وتظهر مع ميثاق المبادرة (صفحة القرار المولَّدة من بطاقتك) في الوثيقة الاحترافية.</p>
             <ul className="cp-checks">
               {caseStatus(d.sections).map((c) => (
                 <li key={c.key} className={c.state === 'done' ? 'ok' : 'no'}>
@@ -328,7 +328,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
 
           <section className="card">
             <h3 id="cp-summary-h">الملخص التنفيذي</h3>
-            <p className="muted small" id="cp-summary-hint">رسالتك لصانع القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.</p>
+            <p className="muted small" id="cp-summary-hint">رسالتك إلى صاحب القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.</p>
             <textarea className="input" rows={6} maxLength={3000} disabled={!editable} value={summary} onChange={(e) => setSummary(e.target.value)}
               aria-labelledby="cp-summary-h" aria-describedby="cp-summary-hint" />
             {editable && <button className="btn ghost sm" disabled={!!busy} onClick={saveSummary}>{busy === 'summary' ? 'لحظة…' : 'حفظ الملخص'}</button>}
@@ -346,16 +346,16 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
             <button className="btn ghost block" disabled={!!busy} onClick={downloadPdfNow} aria-live="polite">{busy === 'pdf' ? pdfNote || 'لحظة…' : 'تحميل PDF'}</button>
             {editable && (
               <>
-                <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'سلّم الوثيقة للمستشار'}</button>
+                <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'قدّم الوثيقة إلى المستشار'}</button>
                 {!d.can_submit && d.blocker && <small className="muted">{d.blocker}</small>}
-                {d.can_submit && <small className="muted">بعد التسليم تُقفل الفصول حتى يرد المستشار، ولك {REVISIONS_AR} بعد ملاحظاته، ثم تأييد الراعي إن كتبت بريده.</small>}
+                {d.can_submit && <small className="muted">بعد التقديم تُقفل الفصول حتى يرد المستشار، ولك {REVISIONS_AR} بعد ملاحظاته، ثم تأييد الراعي إن كتبت بريده.</small>}
               </>
             )}
           </section>
 
           <details className="card cp-rubric">
             <summary>كيف تُقيَّم الوثيقة</summary>
-            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. {d.track?.priority ? `أبعاد إطارك الأولوي (${dimOf(d.track.priority).short}) وزنها ×${PRIORITY_WEIGHT}.` : 'مستوياتك في الأطر الثلاثة متساوية، فكل الأبعاد بوزن واحد.'} الدرجة مكوّن «المشروع» في التقييم الختامي بوزنه المعلن في برنامجك، ومنه قرار الشهادة.</p>
+            <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. {d.track?.priority ? `أبعاد الإطار ذي الأولوية في مسارك (${dimOf(d.track.priority).short}) وزنها ×${PRIORITY_WEIGHT}.` : 'مستوياتك في الأطر الثلاثة متساوية، فكل الأبعاد بوزن واحد.'} الدرجة مكوّن «المشروع» في التقييم الختامي بوزنه المعلن في برنامجك، ومنه قرار الشهادة.</p>
             <ul>{d.rubric.map((r) => <li key={r.key}><b>{r.title}</b><small>{r.anchors[3]}</small></li>)}</ul>
           </details>
         </aside>
