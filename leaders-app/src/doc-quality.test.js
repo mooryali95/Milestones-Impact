@@ -155,14 +155,29 @@ describe('مراجعة مستقلة: توسيع ما يُقبل وما يُرف�
     expect(c.rows).toEqual([['قاعة التدريب', '0'], ['المدرب', 'مجانية من الشريك']]);
   });
   it('العبث القصير والمكرر', () => {
-    for (const v of ['فغفغفغ', 'dfgdfg', 'sdf sdf sdf', 'هههههه', 'تتتتت', 'بشسبكتنمق']) expect(isGibberish(v), v).toBe(true);
+    for (const v of ['فغفغفغ', 'dfgdfg', 'sdf sdf sdf', 'هههههه', 'تتتتت', 'ثقفغبشسكتنمق']) expect(isGibberish(v), v).toBe(true);
   });
   it('لا ترفض: Strengths، وCloudflare، 1000000، الكلمات العربية الشائعة', () => {
-    for (const v of ['Strengths', 'وCloudflare', 'نستخدم وCloudflare للحماية', '1000000', 'rhythm', 'مستشفى', 'تحسين', 'بالتنسيق', 'المملكة', 'فتشكلت لجنة']) expect(isGibberish(v), v).toBe(false);
+    for (const v of ['Strengths', 'وCloudflare', 'نستخدم وCloudflare للحماية', '1000000', 'rhythm', 'مستشفى', 'تحسين', 'بالتنسيق', 'المملكة', 'فتشكلت لجنة', 'الثالث', 'الربع الثالث', 'وأبواب', 'للمستخدم', 'واجهة للمستخدم', 'للمستثمر', 'للمستهلك', 'فنستعمله', 'فتستخدمه']) expect(isGibberish(v), v).toBe(false);
   });
   it('الجدول المؤسسي: موضوع الصف شرط', () => {
     const t = { columns: ['المخرج', 'المعيار', 'التاريخ'], value: [['لايوجد', 'يعتمده المدير', '2027-03-01']] };
     expect(cleanRows(t).rows.length).toBe(1);
     expect(cleanRows(t, { strict: true }).rows.length).toBe(0);
+  });
+});
+
+// كل كلمة عربية في محتوى المستودع (الوثائق والمحتوى والترحيلات) سليمة: صفر ضربات خارج قائمة العبث الصريحة
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+describe('مدونة المستودع: لا كلمة عربية حقيقية تُعد عبثًا', () => {
+  it('صفر ضربات', () => {
+    const ALLOWED = new Set(['هههه', 'ههههه', 'هههههه', 'ههههههههه', 'تتتتت', 'فغفغفغ', 'ضصثقفغعهخ', 'شسيبلاتنمكطظزو', 'سيبلاتنم', 'شسيبلاتنمكطظ', 'ثقفغبشسكتنمق', 'لايوجد', 'لايوجدشيء']);
+    const files = [];
+    const walk = (d) => { for (const e of readdirSync(d)) { const p = join(d, e); if (statSync(p).isDirectory()) walk(p); else if (/\.(md|json|sql)$/.test(e)) files.push(p); } };
+    ['docs', 'supabase/content', 'supabase/migrations'].forEach((r) => walk(r));
+    const hits = new Set();
+    for (const f of files) for (const w of readFileSync(f, 'utf8').match(/[\u0621-\u064A\u064B-\u0652]+/g) || []) if (!ALLOWED.has(w) && gibberishToken(w)) hits.add(w);
+    expect([...hits].slice(0, 40)).toEqual([]);
   });
 });

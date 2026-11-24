@@ -61,7 +61,8 @@ export function gibberishToken(tok) {
   const letters = t.replace(/[^ء-يa-z]/g, '');
   if (letters.length < 3) return false;
   // تكرار مقطع من حرف إلى ثلاثة: «فغفغفغ»، «dfgdfg»، «ههههه» (الأرقام لا تدخل: 1000000 رقم سليم)
-  if (/^(.{1,3})\1{2,}$/u.test(letters) || (letters.length >= 6 && /^(.{2,3})\1+$/u.test(letters))) return true;
+  // العربية تُشترط فيها ثلاث مرات على الكلمة كلها («الثالث» = الث+الث مرتين فتمر)؛ اللاتينية تكفيها مرتان («dfgdfg»)
+  if (/^(.{1,3})\1{2,}$/u.test(letters) || (/^[a-z]{6,}$/.test(letters) && /^(.{2,3})\1+$/.test(letters))) return true;
   if (/(.)\1{4,}/u.test(letters)) return true;
   if (letters.length < 5) return false;
   // تتابع مفاتيح لوحة
@@ -74,7 +75,9 @@ export function gibberishToken(tok) {
   if (/^[ء-ي]+$/.test(t)) {
     // كتلة عربية أطول من أطول كلمة مألوفة، أو ثمانية أحرف فأكثر بلا حرف مد ولا همزة ولا تاء مربوطة
     if (t.length >= 17) return true;
-    if (t.length >= 8 && !AR_VOWELISH.test(t)) return true;
+    // بعد نزع السوابق (و، ف، ب، ك، ل، ال، لل…) تبقى الكلمة بلا حرف مد عشرة أحرف فأكثر: «للمستخدم» و«فتستخدمه» تمر
+    const stem = t.replace(/^(?:[وف]?(?:بال|كال|لل|ال|ب|ك|ل)?)/, '');
+    if (stem.length >= 10 && !AR_VOWELISH.test(stem)) return true;
   }
   // كتلة لاتينية بلا حرف علة واحد («sdfghk»)؛ «Strengths» فيها e فتمر
   if (/^[a-z]+$/.test(t) && t.length >= 6 && !/[aeiouy]/.test(t)) return true;
