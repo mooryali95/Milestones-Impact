@@ -764,6 +764,7 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.cohort-enroll': (a, b) => A.writer(a, G.cohortEnroll, b),
   'admin.capstones': (_a, b) => X.adminList(b),
   'admin.capstone': (_a, b) => X.adminGet(b),
+  'admin.capstone-quality': () => X.adminQualityReport(),
   'admin.capstone-review': (a, b) => A.writer(a, X.adminReview, b),
   'admin.capstone-sponsor': (a, b) => A.writer(a, X.adminSponsor, b),
   'admin.outcomes': (_a, b) => T.adminOutcomes(b),

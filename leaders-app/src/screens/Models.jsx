@@ -11,7 +11,7 @@ import { canStart, guideFor, nearExample, starterFor, untouchedStarters } from '
 import AskExpert from './AskExpert.jsx';
 import { FieldAsk, GateLine } from './Assistant.jsx';
 import { fieldFilled, isEmail, latinDigits, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
-import { fieldKind, reasonOf, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { columnKind, fieldKind, reasonOf, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
@@ -51,6 +51,8 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
   if (f.type === 'table') {
     const cols = f.columns || [];
     const rows = Array.isArray(value) && value.length ? value : Array.from({ length: f.min_rows || 1 }, () => cols.map(() => ''));
+    // دلالة العمود من اسمه (doc-quality.js columnKind، المصدر نفسه الذي يحكم الوثيقة): تاريخ أو مبلغ أو نص
+    const kinds = cols.map(columnKind);
     const set = (ri, ci, v) => onChange(rows.map((r, i) => (i === ri ? r.map((c, j) => (j === ci ? v : c)) : r)));
     return (
       <div className="mtable-wrap">
@@ -61,7 +63,7 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
               <tr key={ri}>
                 <td className="mt-n">{ri + 1}</td>
                 {cols.map((c, ci) => (
-                  <td key={c}><textarea rows={1} disabled={locked} value={r[ci] || ''} aria-label={`${c} ${ri + 1}`} onChange={(e) => set(ri, ci, e.target.value)} />
+                  <td key={c}><Cell kind={kinds[ci]} locked={locked} value={r[ci] || ''} label={`${c} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
                     {/* علاقات الأنشطة في الجدول الزمني (schedule.js): أداة اختيار تكتب الصيغة، ووصفها العربي تحت الخلية */}
                     {modelKey === 'schedule' && String(c).includes('يعتمد') && (
                       <DepCell value={r[ci] || ''} own={String(r[0] || '').trim()} codes={rows.map((x) => String(x[0] || '').trim()).filter(Boolean)} level={level} locked={locked}
@@ -101,10 +103,25 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
   return <><input id={id} className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />{note}</>;
 }
 
+// خلية الجدول بإرشاد الحقول نفسه: عمود التاريخ بتاريخ أو أسبوع، وعمود المبلغ بأرقام (دون محو ما يُكتب)، والعبث يُنبَّه إليه.
+// السبب من reasonOf بنوع العمود، كما تقرؤه الوثيقة؛ القيمة القديمة لا تُمس
+function Cell({ kind, locked, value, label, onChange }) {
+  const why = !locked && value ? reasonOf(kind, value) : null;
+  const note = why && why !== 'empty' && why !== 'too_short' ? <small className="alert warn small mf-quality" role="status">{REASONS[why]}</small> : null;
+  if (kind === 'date') return <><WhenInput value={value} locked={locked} onChange={onChange} label={label} compact />{note}</>;
+  return (
+    <>
+      <textarea rows={1} disabled={locked} value={value} aria-label={label} inputMode={kind === 'amount' ? 'decimal' : undefined}
+        placeholder={kind === 'amount' ? 'مثل 50000' : undefined} onChange={(e) => onChange(e.target.value)} />
+      {note}
+    </>
+  );
+}
+
 // ── موعد البداية والنهاية: تاريخ من التقويم، أو «الأسبوع N» ومداه «الأسبوع 3–5» (الزمن النسبي، اعتمده المالك 2026-11-24) ──
 // يُفتح على صيغة القيمة المخزنة؛ النص القديم غير المقروء يُعرض كما هو ولا يُمس حتى يختار المشارك بديله
 const WEEK_VAL = /^(?:ال)?(?:أسبوع|اسبوع|week|wk|w)\s*[:.]?\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/i;
-function WhenInput({ id, value, locked, onChange }) {
+function WhenInput({ id, value, locked, onChange, label = undefined, compact = false }) {
   const v = latinDigits(String(value || '')).trim();
   const wk = v.match(WEEK_VAL);
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
@@ -114,15 +131,15 @@ function WhenInput({ id, value, locked, onChange }) {
   const writeWeek = (a, b) => { if (a) onChange(b && b !== a ? `الأسبوع ${a}–${b}` : `الأسبوع ${a}`); };
   const legacy = v && !iso && !wk;
   return (
-    <div className="mf-date">
-      <div className="seg-opts" role="radiogroup" aria-label="صيغة الموعد">
+    <div className={`mf-date${compact ? ' mf-date-cell' : ''}`}>
+      <div className="seg-opts" role="radiogroup" aria-label={label ? `صيغة ${label}` : 'صيغة الموعد'}>
         <button type="button" role="radio" aria-checked={mode === 'date'} className={mode === 'date' ? 'on' : ''} disabled={locked} onClick={() => setMode('date')}>تاريخ</button>
         <button type="button" role="radio" aria-checked={mode === 'week'} className={mode === 'week' ? 'on' : ''} disabled={locked} onClick={() => setMode('week')}>أسبوع</button>
       </div>
       {mode === 'date'
-        ? <input id={id} className="input" type="date" disabled={locked} value={iso} onChange={(e) => onChange(e.target.value)} />
+        ? <input id={id} className="input" type="date" disabled={locked} value={iso} aria-label={label} onChange={(e) => onChange(e.target.value)} />
         : <span className="row">
-            <label>الأسبوع <input id={id} className="input" inputMode="numeric" disabled={locked} value={from} aria-label="الأسبوع" onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setFrom(n); writeWeek(n, to); }} /></label>
+            <label>الأسبوع <input id={id} className="input" inputMode="numeric" disabled={locked} value={from} aria-label={label ? `${label}: الأسبوع` : 'الأسبوع'} onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setFrom(n); writeWeek(n, to); }} /></label>
             <label>إلى <input className="input" inputMode="numeric" disabled={locked} value={to} aria-label="حتى الأسبوع (اختياري)" onChange={(e) => { const n = latinDigits(e.target.value).replace(/\D/g, ''); setTo(n); writeWeek(from, n); }} /></label>
           </span>}
       {legacy && <small className="muted">المكتوب سابقًا: «{value}». يبقى كما هو حتى تختار تاريخًا أو أسبوعًا.</small>}

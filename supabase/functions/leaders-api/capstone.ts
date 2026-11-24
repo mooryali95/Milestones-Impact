@@ -17,12 +17,12 @@ import {
   capstoneListRows, capstoneState, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
-import { freezeIssued } from './doc-quality.js';
+import { freezeIssued, rejectionStats } from './doc-quality.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
 import { profileFor } from './profiles.ts';
-import { listed, simulated } from './counting.ts';
+import { counted, listed, simulated } from './counting.ts';
 
 type Body = Record<string, any>;
 
@@ -250,6 +250,15 @@ export async function demoDoc(p: any) {
 
 export async function doc(p: any) {
   return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
+}
+
+// «قيم رُفضت للمراجعة»: قواعد الرفض على إجابات فصول المبادرة الحالية، محسوبة للقراءة لحظة الطلب (doc-quality.js rejectionStats).
+// بلا اسم ولا بريد ولا نص كامل: القاعدة ومفتاح الفصل والحقل والعدد وعينة مقنّعة. الحسابات المعدودة وحدها (لا العرض ولا الاختبار)
+export async function adminQualityReport() {
+  const rows = must(await counted(db.from('model_submissions').select('answers, learning_models!inner(key, fields, capstone_sort), participants!inner(is_demo, is_test)')
+    .not('learning_models.capstone_sort', 'is', null), 'participants').limit(3000)) as any[] ?? [];
+  const stats = rejectionStats(rows.map((r) => ({ chapter_key: r.learning_models?.key, fields: r.learning_models?.fields || [], answers: r.answers || {} })));
+  return { success: true, ...stats, generated_at: new Date().toISOString() };
 }
 
 // ── المستشار ──

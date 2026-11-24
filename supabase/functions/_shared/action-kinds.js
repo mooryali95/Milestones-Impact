@@ -29,7 +29,7 @@ export const LEADERS_ADMIN_READS = new Set(['health', 'platform-health', 'inbox'
   'participant-impact', 'sus', 'erasures', 'erasure-get', 'catalog', 'nudge-preview', 'nudge-ledger', 'nudge-report', 'track', 'orgs', 'org', 'sponsor-codes', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'cohort-journey', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'cohort-workshops', 'coaching-groups', 'coaching-group-preview', 'coaching-group-candidates', 'impact',
   'curriculum', 'programs', 'payments', 'payment', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'expert-reassign-options', 'program', 'program-compare', 'milestones', 'cohort-definition',
-  'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'outcomes',
+  'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'capstone-quality', 'outcomes',
   // الكتاب الأم: قراءة لكل مدير، والتعليق والحسم بغلاف writer (master-book.ts)
   'book',
   // مركز البريد: الحصة والأعداد وحدها قراءة. تشخيص العنوان ونص الرسالة والإرسال بغلاف writer، ورابط الدخول بغلاف superWriter

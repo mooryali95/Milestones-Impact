@@ -256,6 +256,32 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
           ))}</tbody>
         </table>
       )}
+      <Rejected />
     </section>
+  );
+}
+
+// «قيم رُفضت للمراجعة»: ما ترفضه قواعد جودة الوثيقة (doc-quality.js) في الإجابات الحالية، لضبط القواعد ببيانات حقيقية.
+// يُحسب عند الطلب على الخادم (admin.capstone-quality)، بلا أسماء ولا نصوص: القاعدة والفصل والحقل والعدد وعينة مقنّعة
+function Rejected() {
+  const [r, setR] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => { setBusy(true); setR(await L('admin.capstone-quality', {})); setBusy(false); };
+  return (
+    <details className="cps-rejected" onToggle={(e) => { if (e.currentTarget.open && !r && !busy) load(); }}>
+      <summary><b>قيم رُفضت للمراجعة</b> <small className="la-muted">ما ترفضه قواعد الجودة في إجابات الفصول الآن، لضبطها ببيانات حقيقية</small></summary>
+      {busy ? <Spinner /> : !r ? null : !r.success ? <div className="la-err">{r.message}</div> : !r.rows.length ? <p className="la-muted">لا قيم مرفوضة في {r.submissions} تسليمًا.</p> : (
+        <>
+          <p className="la-muted">{r.rules.map((x) => `${x.rule_ar}: ${x.count}`).join(' · ')} · من {r.submissions} تسليمًا</p>
+          <table className="la-table">
+            <thead><tr><th>القاعدة</th><th>الفصل</th><th>الحقل</th><th>العدد</th><th>عينة مقنّعة</th></tr></thead>
+            <tbody>{r.rows.map((x) => (
+              <tr key={`${x.rule}|${x.chapter_key}|${x.field_key}`}><td>{x.rule_ar}</td><td dir="ltr">{x.chapter_key}</td><td dir="ltr">{x.field_key}</td><td>{x.count}</td><td>{x.sample}</td></tr>
+            ))}</tbody>
+          </table>
+          <button className="btn-sm ghost" onClick={load}>أعد الحساب</button>
+        </>
+      )}
+    </details>
   );
 }

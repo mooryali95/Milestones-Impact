@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanDoc, cleanRows, gibberishToken, institutionalGate, isGibberish, isPlaceholder, reasonOf, validDate, validValue } from '../../supabase/functions/leaders-api/doc-quality.js';
+import { cleanDoc, cleanRows, gibberishToken, institutionalGate, isGibberish, maskSample, rejectionStats, isPlaceholder, reasonOf, validDate, validValue } from '../../supabase/functions/leaders-api/doc-quality.js';
 
 // سلاسل من وثيقة يحيى (مستوى تأسيسي) كما وصلت المالك، ونظائرها
 const YAHYA = {
@@ -186,5 +186,25 @@ describe('الفصل الاختياري', () => {
   it('فراغه لا يُعد نقصًا، وتالفه يُذكر', () => {
     const d = { meta: {}, sections: [{ key: 'x', title: 'اختياري', optional: true, fields: [{ key: 'a', label: 'أ', type: 'textarea', value: '' }, { key: 'b', label: 'ب', type: 'text', value: 'لايوجد' }] }] };
     expect(cleanDoc(d).gaps.map((g) => g.field_key)).toEqual(['b']);
+  });
+});
+
+describe('قيم رُفضت للمراجعة (rejectionStats)', () => {
+  const items = [
+    { chapter_key: 'initiative-charter', fields: [{ key: 'objective', type: 'textarea' }, { key: 'start', type: 'text' }], answers: { objective: 'سشيبسشيبسشيب سشيبسشي', start: 'غدا ربما' } },
+    { chapter_key: 'cost-plan', fields: [{ key: 'items', type: 'table', columns: ['البند', 'التكلفة'] }], answers: { items: [['أجهزة', 'ثقفثقفثقفثقف'], ['تدريب', '5000']] } },
+    { chapter_key: 'initiative-charter', fields: [{ key: 'objective', type: 'textarea' }], answers: { objective: '' } },
+  ];
+  const r = rejectionStats(items);
+  it('يعد القواعد بمفتاح الفصل والحقل وحدهما، بلا الفراغ', () => {
+    expect(r.submissions).toBe(3);
+    expect(r.rows.every((x) => x.rule !== 'empty')).toBe(true);
+    expect(r.rows.find((x) => x.field_key === 'start')?.rule).toBe('bad_date');
+    expect(r.rows.find((x) => x.field_key === 'items:التكلفة')?.rule).toBe('bad_number');
+    expect(r.rules.reduce((a, x) => a + x.count, 0)).toBe(r.rows.reduce((a, x) => a + x.count, 0));
+  });
+  it('العينة مقنّعة: حرفان وطول النص', () => {
+    expect(maskSample('سشيبسشيب')).toBe('سش•••••• (8)');
+    expect(r.rows.map((x) => x.sample).join(' ')).not.toContain('سشيبسشيب');
   });
 });

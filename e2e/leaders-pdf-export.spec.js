@@ -6,6 +6,8 @@ import { readFileSync } from 'node:fs';
 const CSP = readFileSync('leaders-app/public/_headers', 'utf8').match(/Content-Security-Policy: (.+)/)[1];
 
 const APP = 'http://localhost:4304/';
+// اسم الملف عربي: المتصفح يحفظه بترميز النظام، فيُشغَّل بـ UTF-8 كأي جهاز مستخدم (بيئة بلا LANG تسقطه إلى «download»)
+test.use({ launchOptions: { ...(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {}), env: { ...process.env, LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' } } });
 const S = (id, key, title, dimension) => ({ id, key, title, icon: '◆', dimension, complete: true, missing: 0, status: 'draft' });
 const SECTIONS = [S('m1', 'initiative-charter', 'بطاقة المبادرة', 'milestone'), S('m2', 'raid', 'سجل المخاطر والافتراضات والاعتماديات', 'milestone')];
 const DOC = {
@@ -59,7 +61,7 @@ test('«تحميل PDF» في صفحة المبادرة: ملف A4 جاهز با
   const dl = page.waitForEvent('download', { timeout: 100000 });
   await page.getByRole('button', { name: 'تحميل PDF' }).click();
   const d = await dl;
-  expect(d.suggestedFilename()).toBe('Milestone-Impact-Initiative-MI-CP-0042-V3.pdf');
+  expect(d.suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}\.pdf$/);
   const buf = readFileSync(await d.path());
   expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(pagesOf(buf)).toBeGreaterThanOrEqual(5);
@@ -77,5 +79,5 @@ test('نافذة الوثيقة: «تحميل PDF» بجانب «طباعة»، 
   await expect(w.getByRole('button', { name: 'طباعة' })).toBeVisible();
   const dl = page.waitForEvent('download', { timeout: 100000 });
   await w.getByRole('button', { name: 'تحميل PDF' }).click();
-  expect((await dl).suggestedFilename()).toMatch(/^Milestone-Impact-Initiative-MI-CP-0042-V3\.pdf$/);
+  expect((await dl).suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}\.pdf$/);
 });
