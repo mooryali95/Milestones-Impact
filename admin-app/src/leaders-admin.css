@@ -104,6 +104,7 @@
 .pf-badge { min-inline-size: 18px; padding: 0 5px; border-radius: 9px; background: var(--gold-pale); color: var(--gold-text); font-size: .72rem; font-weight: 700; line-height: 18px; text-align: center; }
 /* «أين هو الآن» (المرحلة 2): أربع حقائق في شريط تحت الرأس، كل منها يفتح تبويبه */
 .pf-now { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pf-now li { display: flex; }
 .pf-now li > button, .pf-now li > span { display: flex; flex-direction: column; gap: 2px; inline-size: 100%; min-block-size: 44px; text-align: start; font: inherit; color: var(--ink);
   background: var(--sand-light); border: 1px solid var(--line); border-inline-start: 3px solid var(--line-gold); border-radius: 8px; padding: 8px 12px; }
 .pf-now li > button { cursor: pointer; }
@@ -1417,6 +1418,19 @@
 .pj-head-n { display: flex; align-items: center; gap: 10px; flex: 0 1 200px; }
 .pj-pct { flex: 1; block-size: 8px; border-radius: 99px; background: var(--sand-light); overflow: hidden; min-inline-size: 80px; }
 .pj-pct i { display: block; block-size: 100%; background: var(--gold); border-radius: inherit; }
+/* مسار الرحلة المرئي: عقد مرقمة على خط، المكتملة بعلامة والحالية مبرزة */
+.pj-path { list-style: none; margin: 4px 0 0; padding: 0; inline-size: 100%; display: flex; overflow-x: auto; scrollbar-width: thin; }
+.pj-path li { flex: 1 0 84px; position: relative; display: flex; justify-content: center; }
+.pj-path li + li::before { content: ""; position: absolute; inset-block-start: 15px; inset-inline-end: 50%; inline-size: 100%; block-size: 2px; background: var(--line-strong); }
+.pj-path li.pj-path-done + li::before, .pj-path li.pj-path-done + li.pj-path-now::before { background: var(--st-ok); }
+.pj-path button { position: relative; z-index: 1; display: grid; justify-items: center; gap: 4px; background: none; border: 0; padding: 0 4px 4px; font: inherit; color: var(--ink-mid); cursor: pointer; min-block-size: 44px; }
+.pj-path button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 6px; }
+.pj-path-dot { display: inline-grid; place-items: center; inline-size: 30px; block-size: 30px; border-radius: 50%; border: 2px solid var(--line-strong); background: var(--sand-light); font-size: .78rem; font-weight: 700; }
+.pj-path-t { font-size: .76rem; line-height: 1.3; text-align: center; max-inline-size: 110px; overflow-wrap: anywhere; }
+.pj-path-done .pj-path-dot { background: var(--st-ok); border-color: var(--st-ok); color: var(--sand-light); }
+.pj-path-now .pj-path-dot { border-color: var(--gold); background: var(--gold-pale); color: var(--gold-text); box-shadow: 0 0 0 3px var(--gold-pale); }
+.pj-path-now .pj-path-t { color: var(--ink); font-weight: 700; }
+.pj-path-locked .pj-path-dot { border-style: dashed; color: var(--ink-light); }
 .pj-head-a { display: flex; flex-wrap: wrap; gap: 8px; inline-size: 100%; }
 .pj-phase h3 { display: flex; align-items: center; gap: 8px; }
 .pj-no { display: inline-grid; place-items: center; inline-size: 24px; block-size: 24px; border-radius: 50%; background: var(--sand-light); font-size: .8rem; }
@@ -1548,3 +1562,9 @@
 .ct-empty { padding: 24px 16px; color: var(--ink-muted); text-align: center; }
 tr.ct-on > td { background: var(--gold-pale); }
 .mc-panel { display: grid; gap: 14px; min-inline-size: 0; }
+
+/* المرحلة 3 من تصور الملف: بطاقات الملف بمسافات وعناوين واحدة */
+.pf-panel > .la-card, .pf-panel > section { margin-block-end: 16px; }
+.pf-panel .la-card > h3, .pf-panel .la-card > .la-row > h3, .pf-panel .la-card > .la-row.between > h3 { margin: 0 0 12px; font-size: 1rem; line-height: 1.4; }
+.pf-panel .la-card > .la-row.between { margin-block-end: 8px; align-items: center; }
+.pf-empty-next { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--sand-light); color: var(--ink-soft); font-size: .86rem; }

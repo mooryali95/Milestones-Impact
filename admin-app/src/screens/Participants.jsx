@@ -546,6 +546,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
                   {x.status !== 'draft' && <button className="la-link" onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button>}</li>
               ))}</ul>
             )}
+            {!learnModels.length && <p className="pf-empty-next">لم يبدأ نموذجًا بعد. الخطوة التالية: أن يفتح أول باب في كتاب القائد ويسلّم نموذجه، فيظهر هنا للقراءة.</p>}
             {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) load(); }} />}
             {(r.labs || []).length > 0 && (
               <>

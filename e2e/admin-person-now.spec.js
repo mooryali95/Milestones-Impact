@@ -101,3 +101,14 @@ test('عمود «بانتظار» في قائمة المشاركين من الح
   await expect(page.locator('td[data-label="بانتظار"]').nth(1)).toContainText('المشارك · 1');
   await expect(page.locator('td[data-label="بانتظار"]').nth(2)).toContainText('لا شيء');
 });
+
+test('المسار المرئي في «الرحلة»: عقدة لكل مرحلة، والحالية مبرزة، والنقر ينزل إليها', async ({ page }) => {
+  await setup(page, '#/leaders/participants/p1');
+  await page.getByRole('tab', { name: /^الرحلة/ }).click();
+  const path = page.getByTestId('journey-path');
+  await expect(path.locator('li')).toHaveCount(2);
+  await expect(path.locator('li[aria-current="step"]')).toContainText('التدريب');
+  await expect(path.locator('li').first()).toHaveClass(/pj-path-done/);
+  await path.getByRole('button', { name: /التهيئة/ }).click();
+  await expect(page.locator('#pj-st-s1')).toBeInViewport();
+});
