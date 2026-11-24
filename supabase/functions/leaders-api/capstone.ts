@@ -246,6 +246,18 @@ export async function adminList(b: Body) {
   let q = listed(db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)'), 'participants').order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
   if (b.status) q = q.eq('status', String(b.status));
   const rows = must(await q) as any[] ?? [];
+  // من بدأ بطاقة مبادرته ولم يُنشأ له صف بعد (لم يسلّم ولم يحفظ ملخصًا) يظهر مسودةً، فلا تختفي وثيقة يعمل عليها
+  // عن الإدارة (قرار المالك 2026-11-24). الجاهزية تُحسب عند فتح ملفه، لا هنا
+  if (!b.status || b.status === 'draft') {
+    const have = new Set(rows.map((r) => r.participant_id));
+    const started = must(await listed(db.from('model_submissions').select('participant_id, updated_at, learning_models!inner(key), participants!inner(full_name, email, organization_name, work_scope, is_demo)')
+      .eq('learning_models.key', CHARTER_KEY), 'participants').order('updated_at', { ascending: false }).limit(300)) as any[] ?? [];
+    for (const s of started) {
+      if (have.has(s.participant_id)) continue;
+      have.add(s.participant_id);
+      rows.push({ participant_id: s.participant_id, status: 'draft', readiness: null, revisions: 0, submitted_at: null, reviewed_at: null, score: null, sponsor_status: null, approved_at: null, participants: s.participants });
+    }
+  }
   const ids = rows.map((r) => r.participant_id);
   const charters = ids.length ? must(await db.from('model_submissions').select('participant_id, answers, learning_models!inner(key)')
     .eq('learning_models.key', CHARTER_KEY).in('participant_id', ids)) as any[] ?? [] : [];
