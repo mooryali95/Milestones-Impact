@@ -68,3 +68,26 @@ test('الجهات والدفعات فارغتين: شرح وزر الإضافة
   await expect(cohorts).toContainText('لا دفعات بعد');
   await expect(cohorts.getByRole('button', { name: '+ دفعة جديدة' })).toBeVisible();
 });
+
+// تباين نسبي (WCAG): من لوني CSS المحسوبين
+const contrastOf = (el) => el.evaluate((n) => {
+  const rgb = (c) => (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+  const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const cs = getComputedStyle(n);
+  const [a, b] = [lum(rgb(cs.color)), lum(rgb(cs.backgroundColor))];
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+});
+
+test('القسم المفتوح في الشريط يبقى مقروءًا تحت المؤشر (تباين 4.5 على الأقل)، وغيره يتلون رمليًا', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const nav = await open(page, '#/leaders/participants', []);
+  const on = nav.getByRole('button', { name: /^المشاركون/ });
+  await expect(on).toHaveClass(/\bon\b/);
+  await on.hover();
+  // انتقال اللون إن وُجد يكتمل قبل القياس
+  await expect.poll(() => contrastOf(on)).toBeGreaterThanOrEqual(4.5);
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/sidebar-hover.png`, clip: { x: 0, y: 0, width: 1280, height: 600 } });
+  const other = nav.getByRole('button', { name: /^الجهات/ });
+  await other.hover();
+  expect(await contrastOf(other)).toBeGreaterThanOrEqual(4.5);
+});

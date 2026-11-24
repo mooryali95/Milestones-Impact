@@ -101,7 +101,25 @@ test('نقل إلى مرحلة: معاينة كل ناقص قبلها باعتم
   expect(over).toBeLessThanOrEqual(0);
   await dlg.getByRole('button', { name: 'انقله' }).click();
   await expect.poll(() => calls.filter((c) => c.action === 'admin.stage-move').length).toBe(1);
-  expect(calls.find((c) => c.action === 'admin.stage-move')).toMatchObject({ participant_id: 'p1', stage_key: 'consulting', choices: { ojt: 'skip' }, reason: 'أنهى التدريب في دفعة سابقة' });
+  expect(calls.find((c) => c.action === 'admin.stage-move')).toMatchObject({ participant_id: 'p1', stage_key: 'consulting', choices: { ojt: 'skip' }, reason: 'أنهى التدريب في دفعة سابقة', notify: true });
+});
+
+test('نقل إلى مرحلة: بريد المشارك اختياري، مفعّل افتراضيًا، وإطفاؤه يغيّر سطر الخطة ويرسل notify: false', async ({ page }) => {
+  const calls = await setup(page, { width: 1280, height: 900 });
+  await page.getByRole('button', { name: 'نقل إلى مرحلة…' }).click();
+  const dlg = page.getByRole('dialog', { name: /نقل سارة الأحمد/ });
+  await dlg.getByLabel('المرحلة').selectOption('consulting');
+  const mail = dlg.getByRole('checkbox', { name: 'أرسل بريدًا للمشارك يسمي مرحلته الجديدة' });
+  await expect(mail).toBeChecked();
+  await expect(dlg.getByRole('status')).toContainText('يصله بريد يسمي مرحلته الجديدة');
+  await mail.uncheck();
+  await expect(dlg.getByRole('status')).toContainText('، ولا يصله بريد.');
+  await expect(dlg.getByRole('status')).not.toContainText('يصله بريد يسمي');
+  await dlg.getByLabel(/السبب/).fill('أنهى التدريب في دفعة سابقة');
+  if (process.env.SHOT_DIR) await page.screenshot({ path: `${process.env.SHOT_DIR}/move-dialog.png` });
+  await dlg.getByRole('button', { name: 'انقله' }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.stage-move').length).toBe(1);
+  expect(calls.find((c) => c.action === 'admin.stage-move')).toMatchObject({ stage_key: 'consulting', notify: false });
 });
 
 test('المبادرة حية، والسجل الكامل بمرشح النوع و«اعرض الأقدم»', async ({ page }) => {

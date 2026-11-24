@@ -120,6 +120,8 @@ export function MoveDialog({ p, journey, onClose, onMoved }) {
   const [target, setTarget] = useState('');
   const [choices, setChoices] = useState({});
   const [reason, setReason] = useState('');
+  // بريد المشارك اختياري (طلب المالك 2026-11-24): مفعّل افتراضيًا، وإطفاؤه يرسل notify: false فلا يصله شيء ويُسجَّل ذلك
+  const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const close = useGuardedClose(!!(target || reason), onClose);
@@ -131,7 +133,7 @@ export function MoveDialog({ p, journey, onClose, onMoved }) {
     e.preventDefault();
     if (!ready || busy) return;
     setBusy(true); setError('');
-    const r = await L('admin.stage-move', { participant_id: p.id, stage_key: target, choices, reason: reason.trim() });
+    const r = await L('admin.stage-move', { participant_id: p.id, stage_key: target, choices, reason: reason.trim(), notify });
     setBusy(false);
     if (!r.success) { setError(r.message || 'تعذّر النقل'); return; }
     toast(`نُقل إلى «${plan.target.title_ar}»`);
@@ -182,7 +184,8 @@ export function MoveDialog({ p, journey, onClose, onMoved }) {
         )}
         <label htmlFor="pj-move-why">السبب (يُحفظ في السجل، ولا يصل المشارك)</label>
         <textarea id="pj-move-why" rows={2} required minLength={MOVE_REASON_MIN} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} />
-        {plan?.ok && <p className="pj-sum" role="status">{plan.summary}. يصله بريد يسمي مرحلته الجديدة.</p>}
+        <label className="pj-notify"><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} /> أرسل بريدًا للمشارك يسمي مرحلته الجديدة</label>
+        {plan?.ok && <p className="pj-sum" role="status">{plan.summary}{notify ? '. يصله بريد يسمي مرحلته الجديدة.' : '، ولا يصله بريد.'}</p>}
         {error && <p className="la-err" role="alert">{error}</p>}
         <div className="la-row">
           <button className="btn-sm primary" disabled={!ready || busy}>{busy ? 'لحظة…' : 'انقله'}</button>
