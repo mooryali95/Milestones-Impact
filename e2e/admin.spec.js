@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 const BASE = 'http://localhost:4303/';
 const signedIn = () => (u) => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: u, ts: Date.now() }));
 
-test('Enter على زر المتابعة يرسل الرمز مرة واحدة فقط', async ({ page }) => {
+test('Enter على زر إرسال الرمز يرسل الرمز مرة واحدة فقط', async ({ page }) => {
   const sends = [];
   await page.route(/supabase\.co\/functions\/v1\//, async (route) => {
     sends.push(route.request().postDataJSON().action);
@@ -14,7 +14,7 @@ test('Enter على زر المتابعة يرسل الرمز مرة واحدة �
   });
   await page.goto(BASE);
   await page.getByLabel('البريد الإلكتروني').fill('admin@example.com');
-  await page.getByRole('button', { name: 'متابعة' }).focus();
+  await page.getByRole('button', { name: 'أرسل رمز الدخول' }).focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('الرمز المكوّن من 6 أرقام')).toBeVisible();

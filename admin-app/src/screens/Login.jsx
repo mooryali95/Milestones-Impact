@@ -9,6 +9,24 @@ import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const LOGO = '/assets/milestone-impact-inverted.svg';
+const svg = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true, focusable: 'false' };
+// مفتاح المرور: مفتاح برأس دائري، رمزه المعتاد في واجهات الدخول
+const PasskeyIcon = () => (
+  <svg {...svg}><circle cx="8" cy="8" r="4" /><path d="M10.8 10.8 20 20M16.5 16.5l2-2M14 14l1.6-1.6" /></svg>
+);
+const LockIcon = () => (
+  <svg {...svg} width="14" height="14"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
+);
+const VALUES = [
+  [<svg {...svg} key="p"><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M21 20a6 6 0 0 0-4-5.6" /></svg>, 'ملفات المشاركين ورحلاتهم'],
+  [<svg {...svg} key="g"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 4v5" /></svg>, 'البرامج والدفعات والجلسات'],
+  [<svg {...svg} key="i"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>, 'قياس الأثر ومتابعته'],
+];
+// الشركاء في تذييل لوحة العلامة: مصدر واحد للشعارات والروابط
+const PARTNERS = [
+  { href: 'https://manzoma.sa', logo: '/assets/partners/manzoma-white.svg', alt: 'منظومة Manzoma', label: 'منظومة Manzoma (يفتح في نافذة جديدة)' },
+  { href: 'https://sunkvalue.com', logo: '/assets/partners/sunkvalue-white.svg', wordmark: 'Sunk Value', label: 'Sunk Value (يفتح في نافذة جديدة)' },
+];
 const Err = ({ msg }) => (msg ? <div className="login-error show" role="alert">{msg}</div> : null);
 
 // مهلة إعادة إرسال الرمز، وهي مهلة الخادم نفسها (OTP_COOLDOWN_MS في admin-api): قبلها يرد 429
@@ -91,51 +109,65 @@ export default function Login({ onSignedIn, notice = '', initialEmail = '' }) {
 
   return (
     <div id="screen-login">
-      <div className="login-left">
+      <aside className="login-left" aria-label="لوحة الإدارة الموحّدة">
         <div className="login-left-top">
-          <div className="mi-logo">
-            <img className="mi-logo-img" src={LOGO} alt="Milestone Impact" width="132" height="60" />
-            <div className="mi-logo-divider" />
-            <div className="mi-logo-badge">لوحة الإدارة</div>
-          </div>
+          <img className="login-logo" src={LOGO} alt="Milestone Impact" width="176" height="80" />
         </div>
         <div className="login-left-mid">
-          <div className="login-eyebrow">منصة الإدارة</div>
-          <div className="login-heading">لوحة الإدارة<br /><em>الموحّدة</em></div>
-          <div className="login-sub-heading">منظومة Milestone Impact</div>
+          <h1 className="login-heading">لوحة الإدارة الموحّدة</h1>
+          <p className="login-sub-heading">المشاركون، والبرامج، والأثر في مكان واحد</p>
+          <ul className="login-values">
+            {VALUES.map(([icon, text]) => (
+              <li key={text}><span className="login-value-ico" aria-hidden="true">{icon}</span>{text}</li>
+            ))}
+          </ul>
         </div>
         <div className="login-left-bottom">
-          <div className="login-footnote">Milestone Impact · بدعم من منظومة و Sunk Value</div>
+          <span className="login-partners-label">بالشراكة مع</span>
+          <div className="login-partners">
+            {PARTNERS.map((p, i) => (
+              <React.Fragment key={p.href}>
+                {i > 0 && <span className="login-partner-sep" aria-hidden="true" />}
+                <a className={`login-partner${p.wordmark ? ' login-partner--lockup' : ''}`} href={p.href} target="_blank" rel="noopener noreferrer" aria-label={p.label}>
+                  <img src={p.logo} alt={p.wordmark ? '' : p.alt} height={p.wordmark ? 22 : 40} />
+                  {p.wordmark && <span lang="en" dir="ltr">{p.wordmark}</span>}
+                </a>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
-      </div>
+      </aside>
 
-      <div className="login-right">
+      <section className="login-right" aria-label="دخول الإدارة">
         <div className="login-form-wrap">
           {step === 'email' ? (
             <form onSubmit={sendEmail} noValidate>
-              <div className="login-form-eyebrow">دخول المدراء</div>
-              <div className="login-form-title">مرحباً بك</div>
-              <div className="login-form-sub">أدخل بريدك الإلكتروني للمتابعة</div>
+              <h2 className="login-form-title">دخول الإدارة</h2>
+              <p className="login-form-sub">أدخل بريدك فيصلك رمز دخول</p>
               {notice && <div className="login-notice" role="alert">{notice}</div>}
               <div className="form-group">
                 <label className="form-label" htmlFor="loginEmail">البريد الإلكتروني</label>
                 <EmailInput className="form-input" type="email" id="loginEmail" placeholder="your@email.com" autoComplete="email"
                   value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
               </div>
-              <button className="login-btn" type="submit" disabled={!!busy}>{busy === 'send' ? 'جارٍ التحقق...' : 'متابعة'}</button>
+              <button className="login-btn" type="submit" disabled={!!busy}>{busy === 'send' ? 'جارٍ إرسال الرمز...' : 'أرسل رمز الدخول'}</button>
               {passkeySupported() && (
                 <>
                   <div className="login-or">أو</div>
-                  <button className="passkey-login-btn" type="button" onClick={withPasskey} disabled={!!busy}><Ico name="key" /> الدخول بمفتاح المرور</button>
+                  <button className="passkey-login-btn" type="button" onClick={withPasskey} disabled={!!busy}><PasskeyIcon /> {busy === 'passkey' ? 'بانتظار مفتاح المرور...' : 'الدخول بمفتاح المرور'}</button>
                 </>
               )}
               <Err msg={error} />
+              <p className="login-trust"><LockIcon /> دخول آمن بلا كلمة مرور</p>
+              <details className="login-help">
+                <summary>تعذّر الدخول؟</summary>
+                <p>تأكد أن البريد هو المسجّل لك في لوحة الإدارة، وابحث عن رسالة الرمز في البريد الوارد ومجلد الرسائل غير المرغوبة. إن فعّلت تطبيق المصادقة فالرمز فيه. وإن فقدت مفتاح المرور أو تطبيق المصادقة فاطلب الاستعادة من شاشة الرمز بعد إدخال بريدك.</p>
+              </details>
             </form>
           ) : (
             <form onSubmit={verify} noValidate>
-              <div className="login-form-eyebrow">Verification</div>
-              <div className="login-form-title">أدخل الرمز</div>
-              <div className="login-form-sub">أدخل الرمز من تطبيق المصادقة إن فعّلته، وإلا فالرمز الذي وصل بريدك</div>
+              <h2 className="login-form-title">أدخل الرمز</h2>
+              <p className="login-form-sub">أدخل الرمز من تطبيق المصادقة إن فعّلته، وإلا فالرمز الذي وصل بريدك <bdi dir="ltr">{email.trim()}</bdi>. إن لم تجده فانظر في مجلد الرسائل غير المرغوبة.</p>
               {info && <div className="login-notice" role="status">{info}</div>}
               <div className="form-group">
                 <label className="form-label" htmlFor="loginCode">الرمز المكوّن من 6 أرقام</label>
@@ -164,7 +196,7 @@ export default function Login({ onSignedIn, notice = '', initialEmail = '' }) {
             </form>
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
