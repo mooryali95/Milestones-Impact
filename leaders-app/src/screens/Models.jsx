@@ -10,7 +10,8 @@ import { useUnsavedGuard } from '../unsaved.js';
 import { canStart, guideFor, nearExample, starterFor, untouchedStarters } from '../guide.js';
 import AskExpert from './AskExpert.jsx';
 import { FieldAsk, GateLine } from './Assistant.jsx';
-import { fieldFilled, isEmail, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { fieldFilled, isEmail, latinDigits, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { fieldKind, reasonOf, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
@@ -86,8 +87,26 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
       </div>
     );
   }
-  if (f.type === 'textarea') return <textarea id={id} className="input" rows={4} disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
-  return <input id={id} className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />;
+  // الوقاية عند الإدخال (التصور المعتمد، المرحلة 5): التاريخ بأداة اختيار، والرقم بأرقام وحدها، والعبث يُنبَّه إليه بلطف.
+  // القيمة القديمة تُقرأ كما هي ولا تُمس؛ إن لم تصلح ظهر سببها ليصلحها المشارك بنفسه
+  const kind = fieldKind(f);
+  const why = !locked && value ? reasonOf(f, value) : null;
+  const note = why && why !== 'empty' && why !== 'too_short' ? <small className="alert warn small mf-quality" role="status">{REASONS[why]}</small> : null;
+  if (f.type === 'textarea') return <><textarea id={id} className="input" rows={4} disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />{note}</>;
+  if (kind === 'date') {
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? value : '';
+    return (
+      <div className="mf-date">
+        <input id={id} className="input" type="date" disabled={locked} value={iso} onChange={(e) => onChange(e.target.value)} aria-describedby={value && !iso ? `${id}-legacy` : undefined} />
+        {value && !iso && <small id={`${id}-legacy`} className="muted">المكتوب سابقًا: «{value}»{why ? '' : '، ويُقرأ كما هو'}. اختر التاريخ من الأداة ليحل محله.</small>}
+        {note}
+      </div>
+    );
+  }
+  if (kind === 'number' || kind === 'money') {
+    return <>{<input id={id} className="input" inputMode="decimal" disabled={locked} value={value || ''} onChange={(e) => onChange(latinDigits(e.target.value).replace(/[^\d.,]/g, ''))} />}{note}</>;
+  }
+  return <><input id={id} className="input" disabled={locked} value={value || ''} onChange={(e) => onChange(e.target.value)} />{note}</>;
 }
 
 // استيراد صفوف من جدول نموذج آخر (مصدرها الوحيد)، لقطة يعدّلها المشارك بعدها
