@@ -3005,3 +3005,54 @@ export const LINK_CLOSED_AR = 'انتهت مدة الاطلاع على هذا ا
 export function companionAllowed(org, cohort) {
   return (org ? org.companion_allowed !== false : true) && cohort?.companion !== false;
 }
+
+// حقول النموذج التعليمي: قائمة مضبوطة الأنواع، بمفاتيح ثابتة لا تتغير بتغيير العنوان
+const FIELD_TYPES = new Set(['text', 'textarea', 'select', 'table']);
+// fail: يرمي خطأ المستدعي (Fail في الخادم). يحفظ كل خاصية تقرؤها fieldsFor، فلا يُسقط حفظ اللوحة شرط إلزام أو مستوى
+/** @param {unknown} input @param {(m: string) => never} [fail] */
+export function cleanModelFieldsOf(input, fail = (m) => { throw new Error(m); }) {
+  const list = Array.isArray(input) ? input : [];
+  const keys = new Set();
+  return list.slice(0, 30).map((/** @type {any} */ f, /** @type {number} */ i) => {
+    const type = FIELD_TYPES.has(f?.type) ? f.type : 'textarea';
+    let key = String(f?.key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || `f${i + 1}`;
+    while (keys.has(key)) key += '_';
+    keys.add(key);
+    const label = String(f?.label || '').trim().slice(0, 200);
+    if (!label) fail(`الحقل ${i + 1} بلا عنوان`);
+    /** @type {Record<string, any>} */
+    // optional-exempt: حقل نموذج يحرره المدير، لا نشاط
+    const out = { key, label, type, hint: String(f?.hint || '').slice(0, 300), required: f?.required !== false };
+    if (type === 'select') {
+      out.options = (Array.isArray(f.options) ? f.options : []).map((/** @type {unknown} */ x) => String(x).trim()).filter(Boolean).slice(0, 20);
+      if (out.options.length < 2) fail(`الحقل "${label}" يحتاج خيارين على الأقل`);
+    }
+    if (type === 'table') {
+      out.columns = (Array.isArray(f.columns) ? f.columns : []).map((/** @type {unknown} */ x) => String(x).trim()).filter(Boolean).slice(0, 10);
+      if (!out.columns.length) fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
+      out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
+      // التأسيسي بصفوف أقل: لا يُحفظ إلا إن كان أقل من العام
+      const mb = Math.round(Number(f.min_rows_beginner) || 0);
+      if (mb >= 1 && mb < out.min_rows) out.min_rows_beginner = mb;
+      // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
+      const im = f.import && typeof f.import === 'object' ? f.import : null;
+      if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };
+    }
+    // التعمق داخل النموذج نفسه: حقل من مستوى أعلى، أو لنطاقات بعينها
+    if (LEVELS.includes(f?.min_level) && f.min_level !== 'beginner') out.min_level = f.min_level;
+    const scopes = (Array.isArray(f?.scopes) ? f.scopes : []).filter((/** @type {string} */ x) => SCOPES.includes(x));
+    if (scopes.length && scopes.length < SCOPES.length) out.scopes = [...new Set(scopes)];
+    // حقل اسم المشروع يأخذ قيمته من بطاقة المبادرة، فلا يكتبه المشارك مرتين
+    if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
+    // حقل تعمق المسار: يظهر لمن بُعد النموذج محور الأولوية في مساره فقط
+    if (f?.track === true) out.track = true;
+    // مطلوب من مستوى بعينه فأعلى، ظاهر لمن دونه اختياريًا (fieldsFor)، وعنوان مجموعة يسبق الحقل في ورقة العمل
+    if (LEVELS.includes(f?.required_from) && f.required_from !== 'beginner') out.required_from = f.required_from;
+    const group = String(f?.group || '').trim().slice(0, 60);
+    if (group) out.group = group;
+    // مطلوب لمن اعتُمد مساره بعد هذا الوقت (fieldsFor since): يبقى كما كتبه الترحيل
+    if (typeof f?.required_after === 'string' && Number.isFinite(Date.parse(f.required_after))) out.required_after = f.required_after.slice(0, 40);
+    return out;
+  });
+}
+

@@ -6,7 +6,7 @@
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
-import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove } from './logic.js';
+import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove, cleanModelFieldsOf } from './logic.js';
 import { journeyFor, mePayload, pointsOf } from './participant.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
@@ -1138,50 +1138,8 @@ const ENTITIES: Record<string, { table: string; key: string[]; fields: string[];
   instruments:        { table: 'instruments', key: ['id'], fields: ['title_ar', 'intro_ar', 'est_minutes', 'active'] },
 };
 
-// حقول النموذج التعليمي: قائمة مضبوطة الأنواع، بمفاتيح ثابتة لا تتغير بتغيير العنوان
-const FIELD_TYPES = new Set(['text', 'textarea', 'select', 'table']);
-function cleanModelFields(input: unknown) {
-  const list = Array.isArray(input) ? input : [];
-  const keys = new Set<string>();
-  return list.slice(0, 30).map((f: any, i: number) => {
-    const type = FIELD_TYPES.has(f?.type) ? f.type : 'textarea';
-    let key = String(f?.key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || `f${i + 1}`;
-    while (keys.has(key)) key += '_';
-    keys.add(key);
-    const label = String(f?.label || '').trim().slice(0, 200);
-    if (!label) throw new Fail(`الحقل ${i + 1} بلا عنوان`);
-    // optional-exempt: حقل نموذج يحرره المدير، لا نشاط
-    const out: Body = { key, label, type, hint: String(f?.hint || '').slice(0, 300), required: f?.required !== false };
-    if (type === 'select') {
-      out.options = (Array.isArray(f.options) ? f.options : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 20);
-      if (out.options.length < 2) throw new Fail(`الحقل "${label}" يحتاج خيارين على الأقل`);
-    }
-    if (type === 'table') {
-      out.columns = (Array.isArray(f.columns) ? f.columns : []).map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, 10);
-      if (!out.columns.length) throw new Fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
-      out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
-      // التأسيسي بصفوف أقل: لا يُحفظ إلا إن كان أقل من العام
-      const mb = Math.round(Number(f.min_rows_beginner) || 0);
-      if (mb >= 1 && mb < out.min_rows) out.min_rows_beginner = mb;
-      // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
-      const im = f.import && typeof f.import === 'object' ? f.import : null;
-      if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };
-    }
-    // التعمق داخل النموذج نفسه: حقل من مستوى أعلى، أو لنطاقات بعينها
-    if (LEVELS.includes(f?.min_level) && f.min_level !== 'beginner') out.min_level = f.min_level;
-    const scopes = (Array.isArray(f?.scopes) ? f.scopes : []).filter((x: string) => SCOPES.includes(x));
-    if (scopes.length && scopes.length < SCOPES.length) out.scopes = [...new Set(scopes)];
-    // حقل اسم المشروع يأخذ قيمته من بطاقة المبادرة، فلا يكتبه المشارك مرتين
-    if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
-    // حقل تعمق المسار: يظهر لمن بُعد النموذج محور الأولوية في مساره فقط
-    if (f?.track === true) out.track = true;
-    // مطلوب من مستوى بعينه فأعلى، ظاهر لمن دونه اختياريًا (fieldsFor)، وعنوان مجموعة يسبق الحقل في ورقة العمل
-    if (LEVELS.includes(f?.required_from) && f.required_from !== 'beginner') out.required_from = f.required_from;
-    const group = String(f?.group || '').trim().slice(0, 60);
-    if (group) out.group = group;
-    return out;
-  });
-}
+// حقول النموذج التعليمي: cleanModelFields في logic.js (نقية، يختبر حفظها لخصائص المصفوفة ذهابًا وإيابًا)
+const cleanModelFields = (input: unknown) => cleanModelFieldsOf(input, (m: string) => { throw new Fail(m); });
 
 // ── المسارات الـ27 ──
 // مسار كل مشارك من مستوياته الحالية. "مفعّل" = اعتُمدت مستوياته الثلاثة.

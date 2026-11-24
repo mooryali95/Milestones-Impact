@@ -8,7 +8,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { answeredModels, cleanAnswers, fieldsFor, keptModel, missingFields, modelsFor } from '../../supabase/functions/leaders-api/logic.js';
+import { answeredModels, cleanAnswers, cleanModelFieldsOf, fieldsFor, keptModel, missingFields, modelsFor } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneChecks, capstoneModels, costLabel, costSummary, modelFields, readiness, sectionState } from '../../supabase/functions/leaders-api/capstone.js';
 import { businessCase, caseStatus } from '../../supabase/functions/leaders-api/business-case.js';
 
@@ -385,5 +385,27 @@ describe('الاحتياطي من المتوسط: وثيقة بلا احتياط
     expect(fin).not.toContain('التكلفة مع الاحتياطي');
     const chk = capstoneChecks({ models: { 'cost-plan': { fields: [items, { key: 'envelope' }] } }, answers: { 'cost-plan': answers } }).find((x) => x.key === 'cost-envelope');
     expect(chk.title).toBe('التكلفة ضمن الميزانية المتاحة');
+  });
+});
+
+describe('محرر النماذج في اللوحة يحفظ خصائص المصفوفة ذهابًا وإيابًا', () => {
+  it('حفظ كل فصل كما هو بعد الترحيل لا يُسقط شيئًا مما تقرؤه fieldsFor', () => {
+    const KEYS = ['key', 'label', 'type', 'required', 'min_level', 'required_from', 'required_after', 'group', 'min_rows', 'min_rows_beginner', 'track', 'scopes', 'bind', 'columns', 'options', 'import'];
+    const pick = (f) => Object.fromEntries(KEYS.filter((k) => f[k] !== undefined).map((k) => [k, f[k]]));
+    for (const m of after) {
+      const once = cleanModelFieldsOf(m.fields);
+      expect(once.map(pick), m.key).toEqual(m.fields.map(pick));
+      expect(cleanModelFieldsOf(once), m.key).toEqual(once);
+    }
+    const a = by(after);
+    for (const [k, f, p] of [['impact-report', 'changes', 'required_after'], ['impact-report', 'changes', 'required_from'], ['impact-report', 'changes', 'min_rows_beginner'],
+      ['evidence-plan', 'success_signal', 'required_after'], ['initiative-charter', 'sponsor', 'required_after'], ['milestone-register', 'critical_path', 'required_after']]) {
+      const v = a[k].fields.find((x) => x.key === f)[p];
+      expect(v, `${k}.${f}.${p}`).toBeTruthy();
+      expect(cleanModelFieldsOf(a[k].fields).find((x) => x.key === f)[p], `${k}.${f}.${p}`).toBe(v);
+    }
+    expect(cleanModelFieldsOf(a['initiative-charter'].fields).filter((x) => x.group).map((x) => x.group)).toEqual(['تعمّق إن شئت']);
+    // ما تحسبه fieldsFor للمشارك لا يُخزَّن، والتاريخ غير الصالح لا يُكتب
+    expect(cleanModelFieldsOf([{ key: 'x', label: 'س', type: 'text', kept: true, kept_req: true, required_after: 'ليس تاريخًا' }])[0]).toEqual({ key: 'x', label: 'س', type: 'text', hint: '', required: true });
   });
 });
