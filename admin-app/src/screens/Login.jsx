@@ -123,7 +123,7 @@ export default function Login({ onSignedIn, notice = '', initialEmail = '' }) {
           </ul>
         </div>
         <div className="login-left-bottom">
-          <span className="login-partners-label">بدعم من</span>
+          <span className="login-partners-label">بالشراكة مع</span>
           <div className="login-partners">
             {PARTNERS.map((p, i) => (
               <React.Fragment key={p.href}>
