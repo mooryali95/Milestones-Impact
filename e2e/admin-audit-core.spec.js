@@ -115,7 +115,7 @@ test('admin-core-7: إعادة الإرسال تعرض رد الخادم الم�
   await page.route(/functions\/v1\//, (route) => route.fulfill({ json: { success: true, message: SENT } }));
   await page.goto(BASE);
   await page.getByLabel('البريد الإلكتروني').fill('admin@example.com');
-  await page.getByRole('button', { name: 'متابعة' }).click();
+  await page.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
   await expect(page.getByRole('status').filter({ hasText: SENT })).toBeVisible();
   await expect(page.getByText(/تم إرسال الرمز/)).toHaveCount(0);
   const resend = page.getByRole('button', { name: /إعادة إرسال رمز البريد بعد \d+ ثانية/ });
@@ -141,7 +141,7 @@ test('admin-core-8: انتهاء الجلسة يعرض سببه فوق الشا�
   await expect(re.getByLabel('البريد الإلكتروني')).toHaveValue('a@x.com');
   // ما كُتب باقٍ تحت النافذة
   await expect(page.locator('input[value="مديرة إدارة التميز المؤسسي"]')).toHaveCount(1);
-  await re.getByRole('button', { name: 'متابعة' }).click();
+  await re.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
   await re.getByLabel('الرمز المكوّن من 6 أرقام').fill('123456');
   await re.getByRole('button', { name: 'تأكيد الدخول' }).click();
   await expect(re).toHaveCount(0);

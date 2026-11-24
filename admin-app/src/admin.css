@@ -105,218 +105,174 @@ a { text-decoration: none; color: inherit; }
 }
 
 /* ══════════════════════════════════════════════════
-   LOGIN SCREEN
+   LOGIN SCREEN — لوحة العلامة + بطاقة الدخول
 ══════════════════════════════════════════════════ */
 #screen-login {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 45% 1fr;
+  grid-template-columns: minmax(0, 44%) minmax(0, 1fr);
+  font-family: var(--font-ar);
 }
-@media (max-width: 860px) { #screen-login { grid-template-columns: 1fr; } }
 
-/* Panel يسار */
+/* لوحة العلامة: تدرج بترولي عميق ونقش هندسي ذهبي خافت */
 .login-left {
-  background: var(--petrol);
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, var(--petrol-s) 55%, transparent), transparent 60%),
+    linear-gradient(160deg, var(--petrol) 0%, color-mix(in srgb, var(--petrol) 70%, var(--ink)) 100%);
+  color: var(--sand-cream);
   display: flex;
   flex-direction: column;
-  padding: 44px 48px;
+  padding: 48px 56px 40px;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
-@media (max-width: 860px) { .login-left { display: none; } }
-
-/* شبكة خلفية دقيقة */
 .login-left::before {
   content: '';
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(200,164,92,0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(200,164,92,0.035) 1px, transparent 1px);
-  background-size: 48px 48px;
-}
-/* بريق ركن */
-.login-left::after {
-  content: '';
-  position: absolute;
-  bottom: -80px; right: -80px;
-  width: 340px; height: 340px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(200,164,92,0.09) 0%, transparent 65%);
+    repeating-linear-gradient(45deg, color-mix(in srgb, var(--gold) 7%, transparent) 0 1px, transparent 1px 36px),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--gold) 7%, transparent) 0 1px, transparent 1px 36px);
+  -webkit-mask-image: radial-gradient(90% 70% at 15% 100%, black, transparent 75%);
+          mask-image: radial-gradient(90% 70% at 15% 100%, black, transparent 75%);
   pointer-events: none;
 }
+.login-left > * { position: relative; z-index: 1; }
 
-.login-left-top {
-  position: relative;
-  z-index: 1;
-}
-.login-left-top .mi-logo-text span:first-child { color: rgba(242,235,217,0.8); }
-.login-left-top .mi-logo-text span:last-child { color: var(--gold); }
-.login-left-top .mi-logo-badge { color: rgba(235,217,180,0.75); }
+.login-logo { display: block; width: 176px; height: auto; }
 
 .login-left-mid {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  position: relative;
-  z-index: 1;
+  align-items: center;
+  text-align: center;
   padding: 48px 0;
 }
-
-.login-eyebrow {
-  font-size: 0.62rem;
-  letter-spacing: 4px;
-  text-transform: none;
-  color: var(--gold-deep);
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.login-eyebrow::before {
-  content: '';
-  display: block;
-  width: 28px; height: 1px;
-  background: var(--gold-deep);
-  opacity: 0.7;
-}
-
 .login-heading {
-  font-family: var(--font-en);
-  font-size: 3rem;
-  font-weight: 400;
+  font-family: var(--font-ar);
+  font-size: clamp(1.9rem, 2.6vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.35;
   color: var(--sand-cream);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
-}
-.login-heading em {
-  font-style: italic;
-  color: var(--gold);
+  margin: 0 0 12px;
 }
 .login-sub-heading {
-  font-family: var(--font-en);
-  font-size: 1rem;
-  font-weight: 300;
-  color: rgba(242,235,217,0.7);
-  letter-spacing: 0.08em;
-  text-transform: none;
-  margin-bottom: 40px;
+  font-size: 1.02rem;
+  color: var(--gold-pale);
+  line-height: 1.7;
+  margin: 0 0 36px;
 }
-
-/* بطاقات المنتجات */
-.login-products {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
+.login-values {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  text-align: right;
 }
-.login-product {
+.login-values li {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 11px 16px;
-  border: 1px solid rgba(200,164,92,0.12);
+  font-size: 0.92rem;
+  color: var(--sand-cream);
+}
+.login-value-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px; height: 36px;
   border-radius: 10px;
-  background: rgba(200,164,92,0.03);
-  transition: border-color 0.2s;
-}
-.login-product.active {
-  border-color: rgba(200,164,92,0.28);
-  background: rgba(200,164,92,0.06);
-}
-.login-product-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--gold);
-  opacity: 0.4;
+  border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, transparent);
+  color: var(--gold-light);
   flex-shrink: 0;
 }
-.login-product.active .login-product-dot {
-  opacity: 1;
-  box-shadow: 0 0 10px rgba(200,164,92,0.5);
-}
-.login-product-name {
-  flex: 1;
-  font-size: 0.83rem;
-  color: var(--gold-pale);
-  font-family: var(--font-en);
-  letter-spacing: 0.02em;
-}
-.login-product-status {
-  font-size: 0.65rem;
-  padding: 2px 9px;
-  border-radius: 99px;
-  letter-spacing: 0.05em;
-}
-.login-product.active .login-product-status {
-  background: rgba(200,164,92,0.15);
-  color: var(--gold);
-}
-.login-product:not(.active) .login-product-status {
-  background: rgba(255,255,255,0.04);
-  color: rgba(235,217,180,0.3);
-}
 
-/* خط سفلي */
 .login-left-bottom {
-  position: relative;
-  z-index: 1;
-  padding-top: 32px;
-  border-top: 1px solid rgba(200,164,92,0.1);
+  padding-top: 20px;
+  border-top: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  display: grid;
+  gap: 2px;
 }
 .login-footnote {
-  font-size: 0.7rem;
-  color: rgba(242,235,217,0.55);
-  letter-spacing: 0.06em;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--sand-light);
+  line-height: 1.7;
 }
+.login-footnote-en { text-align: right; letter-spacing: 0.04em; }
 
-/* Panel يمين — النموذج */
+/* لوحة النموذج: بطاقة في المنتصف */
 .login-right {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 48px 40px;
+  padding: 48px 24px;
   background: var(--off-white);
-  position: relative;
+  min-width: 0;
 }
-/* خط ذهبي رفيع على الحافة */
-.login-right::before {
-  content: '';
-  position: absolute;
-  top: 15%; right: 0;
-  width: 1px;
-  height: 70%;
-  background: linear-gradient(to bottom, transparent, var(--line-gold), transparent);
-}
-@media (max-width: 860px) { .login-right::before { display: none; } }
-
 .login-form-wrap {
   width: 100%;
-  max-width: 380px;
-}
-
-.login-form-eyebrow {
-  font-size: 0.62rem;
-  letter-spacing: 4px;
-  text-transform: none;
-  color: var(--gold-text);
-  margin-bottom: 14px;
+  max-width: 400px;
+  background: var(--sand-paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  padding: 36px 32px 28px;
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--petrol) 8%, transparent);
 }
 .login-form-title {
-  font-family: var(--font-en);
-  font-size: 2rem;
-  font-weight: 500;
+  font-family: var(--font-ar);
+  font-size: 1.5rem;
+  font-weight: 700;
   color: var(--petrol);
-  margin-bottom: 5px;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  margin: 0 0 6px;
+  line-height: 1.4;
 }
 .login-form-sub {
-  font-size: 0.87rem;
+  font-size: 0.9rem;
   color: var(--ink-muted);
-  margin-bottom: 36px;
-  line-height: 1.6;
+  margin: 0 0 24px;
+  line-height: 1.7;
+}
+.login-trust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 20px 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-mid);
+}
+.login-help { margin-top: 10px; text-align: center; font-size: 0.84rem; }
+.login-help summary {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--petrol-s);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.login-help p {
+  margin: 10px 0 0;
+  text-align: right;
+  line-height: 1.8;
+  color: var(--ink-mid);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 860px) {
+  #screen-login { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .login-left { padding: 20px 16px; flex-direction: row; align-items: center; gap: 14px; }
+  .login-logo { width: 104px; }
+  .login-left-mid { padding: 0; align-items: flex-start; text-align: right; }
+  .login-heading { font-size: 1.15rem; margin: 0; }
+  .login-sub-heading { font-size: 0.8rem; margin: 0; }
+  .login-values, .login-left-bottom { display: none; }
+  .login-right { align-items: flex-start; padding: 20px 16px 32px; }
+  .login-form-wrap { max-width: none; padding: 24px 18px 20px; }
 }
 
 .form-group { margin-bottom: 18px; }
