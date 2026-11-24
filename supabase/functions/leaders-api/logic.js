@@ -170,9 +170,12 @@ export function levelFor(pcts, rules) {
 // مصدر واحد لكل الخادم (كانت مكتوبة في ستة مواضع).
 export function approvalOf(placements) {
   const pl = Array.isArray(placements) ? placements : [];
+  const approved = pl.length === 3 && pl.every((x) => !!x.approved_at);
   return {
-    approved: pl.length === 3 && pl.every((x) => !!x.approved_at),
+    approved,
     levels: Object.fromEntries(pl.map((x) => [x.dimension, x.level])),
+    // أول اعتماد لمستوياته: به يُعرف من بدأ قبل تغيير في النماذج (required_after في fieldsFor)، ولا يتغير بإعادة اعتماد بُعد لاحقًا
+    since: (() => { const t = approved ? pl.map((x) => Date.parse(x.approved_at)).filter(Number.isFinite) : []; return t.length ? new Date(Math.min(...t)).toISOString() : null; })(),
   };
 }
 
@@ -817,12 +820,16 @@ export const answeredModels = (/** @type {any[]} */ subs) => new Set((subs || []
 // نسخ نموذج لكل حالة. level: مستوى المشارك في بُعد النموذج.
 // primary: بُعد النموذج هو محور الأولوية في مسار المشارك، فتظهر حقول التعمق (track).
 // min_rows_beginner: أقل صفوف الجدول للتأسيسي حين يكون أخف من غيره.
-// required_from: الحقل ظاهر لكل من يرى الفصل، ومطلوب من هذا المستوى فأعلى فقط (فصل فُتح لمستوى أدنى
-// بعد أن كان لغيره، فلا تنخفض جاهزية من يعمل فيه الآن).
+// الإلزام: required !== false كما كان. وحقل مخزّن required: false يصير مطلوبًا بأحد شرطين (مصفوفة الوثيقة بحسب المستوى):
+//   required_from: من هذا المستوى فأعلى (كان مطلوبًا للاحترافي وحده قبل أن يُفتح فصله لمن دونه)
+//   required_after: لمن اعتُمد مساره في هذا الوقت أو بعده (since)، فلا يُطلب ممن بدأ قبل الترحيل ولا تنخفض جاهزيته.
+// والتخزين required: false مقصود: الدوال الأقدم تقرأ الحقل اختياريًا، فالتراجع عن الدوال لا يُنقص جاهزية أحد.
 // answers: إجابات المشارك. قاعدة «لا فقد»: حقل رُفع مستواه عن مستوى المشارك وقد كتب فيه يبقى ظاهرًا
 // وفي وثيقته، غير مطلوب (kept)، فلا يحذفه الحفظ التالي (cleanAnswers يقلّم إلى الحقول الظاهرة).
 // kept: الفصل كله ظاهر بهذه القاعدة (keptModel)، فلا يُطلب منه شيء.
-export function fieldsFor(fields, level, scope = null, primary = false, answers = null, kept = false) {
+// since: أول اعتماد لمسار المشارك (approvalOf). بلا قيمة يُعامل معاملة من بدأ قبل (الأسلم لجاهزيته).
+/** @param {any[]} fields @param {any} level @param {any} [scope] @param {boolean} [primary] @param {any} [answers] @param {boolean} [kept] @param {string | null} [since] */
+export function fieldsFor(fields, level, scope = null, primary = false, answers = null, kept = false, since = null) {
   const a = answers && typeof answers === 'object' ? answers : null;
   const out = [];
   for (const f of fields || []) {
@@ -831,7 +838,12 @@ export function fieldsFor(fields, level, scope = null, primary = false, answers 
     if (!byLevel && !(a && hasAnswer(a[f.key]))) continue;
     let g = f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f;
     if (!byLevel) g = { ...g, required: false, kept: true };
-    else if (kept || (f.required_from && !(RANK[level] >= RANK[f.required_from]))) g = { ...g, required: false };
+    // kept_req: كان مطلوبًا في الفصل لولا قاعدة «لا فقد»، فيُحسب الفصل مكتملًا في الجاهزية إن اكتمل به (sectionState)
+    // optional-exempt: حقول نموذج لا أنشطة
+    else if (kept) g = { ...g, required: false, ...(f.required !== false ? { kept_req: true } : {}) };
+    // optional-exempt: حقول نموذج لا أنشطة
+    else if (f.required === false && ((f.required_from && RANK[level] >= RANK[f.required_from])
+      || (f.required_after && since && Date.parse(since) >= Date.parse(f.required_after)))) g = { ...g, required: true };
     out.push(g);
   }
   return out;

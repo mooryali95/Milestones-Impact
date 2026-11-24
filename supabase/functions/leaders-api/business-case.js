@@ -4,7 +4,7 @@
 // التصور: docs/content/2026-11-14-تصور-بناء-المبادرة-وحالة-العمل-v1.md (اعتمده المالك، الخيار ج).
 // لكل معلومة مصدر واحد: الموازنة من «الموارد والتكلفة»، والمنافع من «سجل المنافع»، والمخاطر من «سجل المخاطر».
 // يعمل على الوثيقة كما يبنيها الخادم (docFor) وعلى لقطة الوثيقة المعتمدة معًا، فلا يمس الخادم ولا القاعدة.
-import { dateAr, norm, parseDate, parseNumber, parseWhen, RISK_HIGH } from './capstone.js';
+import { costLabel, dateAr, norm, parseDate, parseNumber, parseWhen, RISK_HIGH } from './capstone.js';
 import { countAr } from './labels.js';
 
 // التاريخ بصيغة 2026-03-15 داخل جملة عربية: يُعزل اتجاهه (LRI…PDI) فلا تنقلب أجزاؤه
@@ -86,7 +86,7 @@ export function charterData(doc) {
   const benefits = benefitsOf(doc, 3);
   const risks = highRisks(doc, 3);
   const budget = cost && (cost.envelope != null || cost.withContingency)
-    ? [cost.withContingency ? `التكلفة مع الاحتياطي ${Math.round(cost.withContingency).toLocaleString('en-US')} ريال` : null,
+    ? [cost.withContingency ? `${costLabel(cost)} ${Math.round(cost.withContingency).toLocaleString('en-US')} ريال` : null,
       cost.envelope != null ? `من موازنة متاحة ${Math.round(cost.envelope).toLocaleString('en-US')} ريال` : null].filter(Boolean).join('، ')
     : null;
   const rows = [
@@ -159,8 +159,9 @@ export function businessCase(doc) {
   const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
   add(F, [
     ['التكلفة التقديرية', cost?.total ? money(cost.total) : null],
-    ['الاحتياطي', cost?.total ? `${cost.contingency || 0}%` : null],
-    ['التكلفة مع الاحتياطي', cost?.withContingency ? money(cost.withContingency) : null],
+    // بلا احتياطي (التأسيسي، أو 0%) لا سطر له ولا «مع الاحتياطي»
+    ['الاحتياطي', cost?.total && cost.contingency ? `${cost.contingency}%` : null],
+    ['التكلفة مع الاحتياطي', cost?.withContingency && cost.contingency ? money(cost.withContingency) : null],
     ['الموازنة المتاحة', cost?.envelope != null ? `${money(cost.envelope)}${cost.withContingency ? (cost.withContingency <= cost.envelope ? '، والتكلفة ضمنها' : '، والتكلفة تتجاوزها') : ''}` : null],
     ['مصدر التمويل', text(doc, 'cost-plan', 'funding')],
   ]);

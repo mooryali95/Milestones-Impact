@@ -6,7 +6,7 @@
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
 import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js';
-import { parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { costLabel, parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
 import { DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
@@ -191,13 +191,13 @@ function costBlock(cost, doc = null) {
   if (!cost) return '';
   // منحنى الإنفاق والتكلفة بالحزمة (visuals.js) حين تكتمل بياناتهما، وإلا أشرطة البنود
   const curve = doc ? sCurveSvg(doc) : null, bars2 = doc ? costBarsSvg(doc) : null;
-  const figs = [curve?.svg && `<figure class="cp-fig">${curve.svg}<figcaption>الإنفاق التراكمي المخطط على أنشطة الجدول، مقابل الموازنة والتكلفة مع الاحتياطي</figcaption></figure>`,
+  const figs = [curve?.svg && `<figure class="cp-fig">${curve.svg}<figcaption>الإنفاق التراكمي المخطط على أنشطة الجدول، مقابل الموازنة${cost.contingency ? ' والتكلفة مع الاحتياطي' : ''}</figcaption></figure>`,
     bars2?.svg && `<figure class="cp-fig">${bars2.svg}<figcaption>التكلفة بالحزمة الأولى في هيكل التجزئة</figcaption></figure>`].filter(Boolean).join('');
   const rows = Object.entries(cost.by || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => ({ label: k, value: Math.round(v) }));
   return `${kpis([
     { value: money(cost.total), label: 'التكلفة التقديرية' },
-    { value: `${cost.contingency || 0}%`, label: 'الاحتياطي' },
-    { value: money(cost.withContingency), label: 'مع الاحتياطي' },
+    // بلا احتياطي لا خانتا «الاحتياطي 0%» و«مع الاحتياطي»
+    ...(cost.contingency ? [{ value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: money(cost.withContingency), label: 'مع الاحتياطي' }] : []),
     { value: money(cost.envelope), label: 'الميزانية المتاحة', hint: cost.envelope != null ? (cost.withContingency <= cost.envelope ? 'ضمن الميزانية' : 'تتجاوز الميزانية') : '' },
   ])}${figs || (rows.length > 1 ? `<div class="cp-fig">${bars(rows, Math.max(...rows.map((r) => r.value)), { ltr: true })}<p class="cp-legend">التكلفة بحسب رمز الحزمة</p></div>` : '')}`;
 }
@@ -426,7 +426,7 @@ export function capstoneReport(doc) {
   body += section('نظرة أولى', 'المبادرة في سطور', kpis([
     { value: m.scope_title || '·', label: 'النوع', hint: LVL[m.level] ? `مستوى ${LVL[m.level]}` : '' },
     { value: count('wbs', 'packages'), label: 'حزمة عمل' },
-    { value: doc.cost ? money(doc.cost.withContingency) : '·', label: 'التكلفة مع الاحتياطي' },
+    { value: doc.cost ? money(doc.cost.withContingency) : '·', label: costLabel(doc.cost) },
     { value: count('benefits-register', 'benefits'), label: 'منفعة مقيسة' },
     // الجاهزية مقياس عمل داخلي: تُعرض حين تحملها الوثيقة فقط، والنسخ الخارجة من المنصة بلا جاهزية إلا بإذن (withoutReadiness)
     ...(m.readiness != null ? [{ value: `${m.readiness}%`, label: 'الجاهزية' }] : []),
@@ -436,7 +436,7 @@ export function capstoneReport(doc) {
   body += section('لصاحب القرار', 'الملخص التنفيذي', `
     ${doc.summary ? callout(example ? 'عن المثال' : 'رسالة القائد', doc.summary) : ''}
     ${points([
-      doc.cost && raw(`<b>المطلوب:</b> ${esc(money(doc.cost.withContingency))} مع احتياطي ${esc(doc.cost.contingency || 0)}%${funding ? `، من ${esc(funding)}` : ''}`),
+      doc.cost && raw(`<b>المطلوب:</b> ${esc(money(doc.cost.withContingency))}${doc.cost.contingency ? ` مع احتياطي ${esc(doc.cost.contingency)}%` : ''}${funding ? `، من ${esc(funding)}` : ''}`),
       (m.start || m.end) && raw(`<b>المدة:</b> <bdi dir="ltr">${esc(m.start || '·')}</bdi> إلى <bdi dir="ltr">${esc(m.end || '·')}</bdi>`),
       m.sponsor && raw(`<b>الراعي:</b> ${esc(m.sponsor)}`),
     ].filter(Boolean), '')}

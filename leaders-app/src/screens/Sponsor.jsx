@@ -56,7 +56,7 @@ export default function Sponsor() {
         <dl className="sp-meta">
           <div><dt>النوع</dt><dd>{m.scope_title || '·'}</dd></div>
           <div><dt>المدة</dt><dd>{m.start ? dateAr(m.start) : '·'} إلى {m.end ? dateAr(m.end) : '·'}</dd></div>
-          <div><dt>التكلفة مع الاحتياطي</dt><dd>{data.doc.cost ? `${Math.round(data.doc.cost.withContingency).toLocaleString('en-US')} ريال` : '·'}</dd></div>
+          <div><dt>{data.doc.cost?.contingency ? 'التكلفة مع الاحتياطي' : 'التكلفة'}</dt><dd>{data.doc.cost ? `${Math.round(data.doc.cost.withContingency).toLocaleString('en-US')} ريال` : '·'}</dd></div>
           <div><dt>الفصول</dt><dd>{data.doc.sections.length}</dd></div>
         </dl>
         <button className="btn ghost" onClick={() => openCapstoneDoc(data.doc).then((ok) => !ok && setError(POPUP_BLOCKED))}>اقرأ الوثيقة كاملة</button>

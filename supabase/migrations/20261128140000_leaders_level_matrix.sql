@@ -1,6 +1,7 @@
--- deploy-gate: tolerant محتوى نماذج ونصوص ملفات تعريف فقط: الدوال تقرأ الحقول كما هي قبله وبعده، وتفهم required_from وgroup
--- وقاعدة «لا فقد» دون أن تحتاجها (حقل بلا required_from مطلوب كما كان). يُطبَّق بعد نشر الدوال التي تقرأ required_from،
--- وإلا رأى التأسيسي والمتوسط حقلي تقرير الأثر مطلوبين حتى تُنشر.
+-- deploy-gate: tolerant محتوى نماذج ونصوص ملفات تعريف فقط. كل حقل يصير مطلوبًا بهذا الترحيل مخزّن required: false مع شرط
+-- إلزامه (required_from أو required_after)، فالدوال الأقدم تقرؤه اختياريًا: قبل نشر الدوال الجديدة أو بعد التراجع عنها لا ينقص
+-- اكتمال فصل ولا جاهزية أحد. ما تفقده الدوال الأقدم: قاعدة «لا فقد» (فصل رُفع مستواه يختفي عمن كتب فيه حتى يُعاد النشر، وإجاباته باقية
+-- في القاعدة). إن تُراجع عن الدوال إلى ما قبل هذا الترحيل فشغّل سطر restore أدناه (RUNBOOK.md §2).
 -- ════════════════════════════════════════════════════════════════
 -- وثيقة المبادرة بحسب المستوى: المرحلتان 2 و3 من المصفوفة المعتمدة
 -- ════════════════════════════════════════════════════════════════
@@ -14,8 +15,11 @@
 --   5) حقلان للاحترافي وحده: المسار الحرج والاعتماديات في سجل المعالم، والتحالفات وتحريك المعارضين في خريطة أصحاب المصلحة.
 --   6) بطاقة المبادرة: المطلوب أولًا ثم الاختياري تحت عنوان «تعمّق إن شئت». ترتيب فقط، لا حذف.
 --   7) نصوص ثلاثة ملفات تعريف تذكر فصولًا تغيّر ظهورها (التطوير القيادي والحوكمة للتأسيسي، وتقرير الأثر للمتوسط والاحترافي).
--- لا انخفاض في جاهزية أحد: كل حقل جديد غير مطلوب، والحقول التي صارت تظهر لمستوى أدنى مطلوبة كما كانت للاحترافي وحده
--- (required_from)، وما كتبه مشارك في فصل أو حقل رُفع مستواه يبقى ظاهرًا وفي وثيقته غير مطلوب (fieldsFor/modelsFor).
+-- لا انخفاض في جاهزية أحد، ولا وثيقة ناقصة لمن يبدأ بعده:
+--   required_after (وقت تطبيق الترحيل): الحقول الجديدة، وحقول تقرير الأثر للتأسيسي والمتوسط، والراعي في البطاقة، مطلوبة لمن
+--   اعتُمد مساره بعد الترحيل، واختيارية لمن اعتُمد قبله (fieldsFor بأول اعتماد للمشارك، approvalOf.since).
+--   required_from: حقول تقرير الأثر مطلوبة للاحترافي كما كانت، أيًا كان وقت اعتماده.
+--   وما كتبه مشارك في فصل أو حقل رُفع مستواه يبقى ظاهرًا وفي وثيقته غير مطلوب (fieldsFor/modelsFor)، ولا يُحسب في الجاهزية.
 -- الفصول الثمانية التي لا يُنشئها ترحيل في المستودع (منها تقرير الأثر وسجل المعالم وخريطة أصحاب المصلحة وخطة التطوير)
 -- تُعدَّل بمفتاح الفصل والحقل، وكل خطوة مشروطة بوجودهما، فلا يفشل الترحيل في بيئة تخلو منها. آمن لإعادة التشغيل.
 
@@ -48,6 +52,17 @@ returns void language sql as $f$
    where m.key = mkey and exists (select 1 from jsonb_array_elements(m.fields) f where f->>'key' = fkey and not f ? 'min_level');
 $f$;
 
+-- يصير الحقل مطلوبًا لمن اعتُمد مساره بعد الترحيل: required_after بوقت التطبيق (مرة واحدة)، وrequired: false للدوال الأقدم
+create or replace function pg_temp.lm_require_after(mkey text, fkey text, extra jsonb default '{}'::jsonb)
+returns void language sql as $f$
+  update leaders.learning_models m
+     set fields = (select jsonb_agg(case when f->>'key' = fkey
+                     then f || extra || jsonb_build_object('required', false, 'required_after', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+                     else f end order by ord)
+                     from jsonb_array_elements(m.fields) with ordinality as e(f, ord))
+   where m.key = mkey and exists (select 1 from jsonb_array_elements(m.fields) f where f->>'key' = fkey and not f ? 'required_after');
+$f$;
+
 create or replace function pg_temp.lm_add(mkey text, field jsonb, first boolean default false)
 returns void language sql as $f$
   update leaders.learning_models m
@@ -60,18 +75,20 @@ returns void language sql as $f$
 $f$;
 
 -- ════════════ 1) تقرير الأثر من التأسيسي ════════════
--- مطلوب كما كان للاحترافي وحده (required_from)، وظاهر لمن دونه اختياريًا: لا فصل جديد ناقص في وثيقة من يعمل الآن
-select pg_temp.lm_patch('impact-report', k, '{"required_from": "advanced"}'::jsonb) from unnest(array['program', 'changes', 'lessons', 'contribution', 'not_achieved']) k;
+-- مطلوب للاحترافي كما كان (required_from)، ولكل من يراه ممن اعتُمد بعد الترحيل (required_after)، واختياري لمن دونه ممن بدأ قبله
+select pg_temp.lm_require_after('impact-report', k, '{"required_from": "advanced"}'::jsonb) from unnest(array['program', 'changes', 'lessons', 'contribution', 'not_achieved']) k;
 select pg_temp.lm_from_intermediate('impact-report', k) from unnest(array['contribution', 'not_achieved']) k;
 -- التأسيسي يكتب تغييرًا واحدًا على الأقل
 select pg_temp.lm_patch('impact-report', 'changes', '{"min_rows_beginner": 1}'::jsonb);
 select pg_temp.lm_add('impact-report', $j${"key": "track_depth", "label": "تعمق المسار: من يرصد الأثر بعد إغلاق المبادرة، ومتى، وبأي مؤشر", "type": "textarea", "hint": "هذا محور الأولوية في مسارك، ووزنه في التقييم مضاعف", "required": false, "track": true, "min_level": "advanced"}$j$::jsonb);
+select pg_temp.lm_require_after('impact-report', 'track_depth');
 update leaders.learning_models set min_level = 'beginner' where key = 'impact-report' and min_level <> 'beginner';
 
 -- ════════════ 2) خطة القياس والأدلة: سطر النجاح للتأسيسي ════════════
 select pg_temp.lm_from_intermediate('evidence-plan', k) from unnest(array['plan', 'privacy', 'attribution', 'track_depth']) k;
 select pg_temp.lm_add('evidence-plan', $j${"key": "success_signal", "label": "كيف ستعرف أنك نجحت؟", "type": "textarea", "required": false,
   "hint": "علامة واحدة تراها أو تقيسها حين تتحقق المنفعة، ومتى تنظر إليها. مثال: ينخفض زمن إنجاز الطلب من 9 أيام إلى 3 في سجل الخدمة بعد ثلاثة أشهر"}$j$::jsonb, true);
+select pg_temp.lm_require_after('evidence-plan', 'success_signal');
 update leaders.learning_models set min_level = 'beginner' where key = 'evidence-plan' and min_level <> 'beginner';
 
 -- ════════════ 3) الموارد والتكلفة للتأسيسي: ما تحتاجه وكلفته ومن يوفره ════════════
@@ -87,13 +104,19 @@ select pg_temp.lm_add('milestone-register', $j${"key": "critical_path", "label":
 select pg_temp.lm_add('stakeholder-map', $j${"key": "coalitions", "label": "التحالفات وتحريك المعارضين: من تجمعه مع من، وكيف تحرّك المعارض المؤثر إلى الحياد أو التأييد", "type": "textarea", "required": false, "min_level": "advanced",
   "hint": "تحالف صغير من أصحاب النفوذ يحرّك ما لا يحركه التواصل الفردي. مثال: يعرض مدير العمليات مع الراعي النتائج الأولى على المعارض قبل اجتماع القرار"}$j$::jsonb);
 
+select pg_temp.lm_require_after('milestone-register', 'critical_path');
+select pg_temp.lm_require_after('stakeholder-map', 'coalitions');
+
 -- ════════════ 6) بطاقة المبادرة: المطلوب أولًا ثم «تعمّق إن شئت» ════════════
--- الترتيب داخل كل مجموعة كما هو، وعنوان المجموعة على أول حقل اختياري. مرة واحدة: لا يُعاد إن وُجد العنوان
+-- صاحب القرار (الراعي: منصبه ودوره) مطلوب لمن يبدأ بعد الترحيل: مصدر «من يقرر» للتأسيسي بلا فصل الحوكمة. بريده يبقى اختياريًا
+select pg_temp.lm_require_after('initiative-charter', 'sponsor');
+-- الترتيب داخل كل مجموعة كما هو، وعنوان المجموعة على أول حقل اختياري. مرة واحدة: لا يُعاد إن وُجد العنوان.
+-- الحقل المطلوب بشرط (required_after) من مجموعة المطلوب
 update leaders.learning_models m
    set fields = (
      select jsonb_agg(case when s.opt and s.n = 1 then s.f || '{"group": "تعمّق إن شئت"}'::jsonb else s.f end order by s.opt, s.ord)
-       from (select e.f, e.ord, coalesce(e.f->>'required', 'true') = 'false' as opt,
-                    row_number() over (partition by coalesce(e.f->>'required', 'true') = 'false' order by e.ord) n
+       from (select e.f, e.ord, coalesce(e.f->>'required', 'true') = 'false' and not e.f ? 'required_after' and not e.f ? 'required_from' as opt,
+                    row_number() over (partition by coalesce(e.f->>'required', 'true') = 'false' and not e.f ? 'required_after' and not e.f ? 'required_from' order by e.ord) n
                from jsonb_array_elements(m.fields) with ordinality as e(f, ord)) s
    )
  where m.key = 'initiative-charter'

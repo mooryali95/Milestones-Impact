@@ -31,12 +31,12 @@ const MODEL_COLS = 'id, key, dimension, sort, min_level, active, scopes, capston
 async function levelsOf(participantId: string) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId)) as any[] ?? [];
   const a = approvalOf(pl);
-  return { levels: a.levels as Record<string, string>, approved: a.approved };
+  return { levels: a.levels as Record<string, string>, approved: a.approved, since: a.since };
 }
 
 // ── بناء الوثيقة من مصادرها ──
 async function build(p: any) {
-  const { levels, approved } = await levelsOf(p.id);
+  const { levels, approved, since } = await levelsOf(p.id);
   if (!approved) throw new Fail('تُفتح وثيقة مبادرتك بعد اعتماد مسارك', 403, 'locked');
   const scope = p.work_scope || null;
   // النماذج وحقولها بمستوى المحتوى (الموحد في الدفعة المتجانسة)، والمسار والأولوية من قياسه
@@ -58,13 +58,14 @@ async function build(p: any) {
   const profile = await profileFor(levels, priority);
   if ((track as any).data && profile?.title_ar) (track as any).data = { ...(track as any).data, title_ar: profile.title_ar };
   // قاعدة «لا فقد»: فصل كتب فيه المشارك قبل أن يُرفع مستواه يبقى في وثيقته، غير مطلوب
-  const mine = capstoneModels(all, content, scope, answeredModels(subs.data || []));
+  const kept = answeredModels(subs.data || []);
+  const mine = capstoneModels(all, content, scope, kept);
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
   const sections = mine.map((m: any) => {
     const sub = by[m.id];
-    const fields = modelFields(m, content, scope, priority, sub?.answers || null);
+    const fields = modelFields(m, content, scope, priority, sub?.answers || null, since);
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
     return { model: m, fields, answers, sub, state: sectionState(m, fields, { ...sub, answers }) };
   });
@@ -74,7 +75,7 @@ async function build(p: any) {
     answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
   const ready = readiness(sections.map((s: any) => s.state), checks);
-  return { levels, scope, priority, weighted, project: trackProject(all, levels, scope, priority), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
+  return { levels, scope, priority, weighted, project: trackProject(all, levels, scope, priority, kept), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
 }
 
 const sectionView = (s: any) => ({
