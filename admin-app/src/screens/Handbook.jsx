@@ -667,7 +667,7 @@ function Reviews({ catalog, canWrite, model, onSaved }) {
   useEffect(load, []); // eslint-disable-line
   const all = (r?.success && r.submissions) || [];
   const fields = useMemo(() => [
-    { key: 'status', label: 'الحالات', aria: 'حالة العمل', get: (x) => x.status, options: SUB_FILTER.filter(([k]) => k) },
+    { key: 'status', label: 'الحالات', aria: 'حالة التقديم', get: (x) => x.status, options: SUB_FILTER.filter(([k]) => k) },
     { key: 'model', label: 'النماذج', aria: 'النموذج', get: (x) => x.model_id, options: (catalog.learning_models || []).map((m) => [m.id, m.title_ar]) },
   ], [catalog]);
   const rows = useMemo(() => sortRows(applyFilters(all, { fields, text: (x) => [x.participants?.full_name, x.participants?.email, x.participants?.organization_name, x.learning_models?.title_ar].join(' ') }, f), REVIEW_SORTS, f.sort), [all, f, fields]);

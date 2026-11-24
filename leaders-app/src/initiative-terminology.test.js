@@ -37,6 +37,18 @@ export const SCANNED = [
   'supabase/functions/leaders-api/capstone.js',
   'supabase/functions/leaders-api/share.ts',
   'leaders-app/src/screens/AskExpert.jsx',
+  'supabase/functions/leaders-api/share.js',
+  'leaders-app/src/screens/Outcome.jsx',
+  'supabase/functions/leaders-api/closure.js',
+  'admin-app/src/GuideTranscripts.jsx',
+  'admin-app/src/screens/GuidanceAdmin.jsx',
+  'admin-app/src/screens/Handbook.jsx',
+  'leaders-app/src/screens/Journey.jsx',
+  'leaders-app/src/screens/PeerRequests.jsx',
+  'supabase/functions/leaders-api/migrations.js',
+  'supabase/functions/leaders-api/visibility.js',
+  'shared/video/scenes.js',
+  'shared/video/mock-server.js',
   'supabase/functions/leaders-api/insight.js',
   'admin-app/src/screens/Experts.jsx',
   'admin-app/src/screens/MailGallery.jsx',
@@ -53,6 +65,12 @@ const EXCEPTIONS = [
   ['supabase/functions/leaders-api/doc-quality.js', 'الكلفة', 'مطابقة أعمدة قديمة'],
   // «الطبيب المختص» صفة طبية في مثال الصحة، لا دور في البرنامج
   ['supabase/content/initiative-guide/v1/sectors/health.json', 'المختص', 'الطبيب المختص'],
+  // نمط يحذف بادئة قديمة مخزنة في عنوان مشروع المسار («مشروعك التطبيقي:»)، لا نص معروض
+  ['leaders-app/src/screens/Journey.jsx', 'مشروعك', 'مطابقة بيانات قديمة'],
+  // المقطع التعريفي مُصيَّر سلفًا، ويُحدَّث نصه مع إعادة تصيير الفيديو
+  ['shared/video/scenes.js', 'مشروعك', 'فيديو مُصيَّر'],
+  ['shared/video/mock-server.js', 'مشروعك', 'فيديو مُصيَّر'],
+  ['shared/video/mock-server.js', 'الميزانية', 'فيديو مُصيَّر'],
 ];
 
 const TASHKEEL = /[ً-ْـ]/g;

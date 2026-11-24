@@ -864,7 +864,7 @@ function Continuous({ c }) {
         <h2 id="ca-h" className="as-h3">تقدمك في التقييم المستمر</h2>
         <b className="ca-index">{c.index}٪</b>
       </div>
-      <p className="small muted">مرآة لتقدمك من الكتاب ونماذجك ومشروعك والمختبر، ويُبنى عليه التقييم الختامي.</p>
+      <p className="small muted">مرآة لتقدمك من الكتاب ونماذجك ومبادرتك والمختبر، ويُبنى عليه التقييم الختامي.</p>
       {c.trend && <p className="small">{TREND_AR[c.trend.dir]}</p>}
       <ul className="ca-list">{c.components.map((x) => (
         <li key={x.key}><span>{x.label}</span><small className="muted">{x.value != null ? `${x.value}٪ · ${x.reason}` : x.reason}</small></li>

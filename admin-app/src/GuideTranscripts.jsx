@@ -134,7 +134,7 @@ export function GuideConversations() {
       <label className="of-field"><span className="of-label">بحث بالاسم أو البريد أو الجهة</span><input value={q} onChange={(e) => setQ(e.target.value)} /></label>
       <div className="gd-table-wrap">
         <table className="la-table">
-          <thead><tr><th scope="col">المشارك</th><th scope="col">الجهة</th><th scope="col">أسئلة</th><th scope="col">لم يتأكد</th><th scope="col">تعذّر</th><th scope="col">الكلفة</th><th scope="col">آخر رسالة</th><th scope="col">المحادثة</th></tr></thead>
+          <thead><tr><th scope="col">المشارك</th><th scope="col">الجهة</th><th scope="col">أسئلة</th><th scope="col">لم يتأكد</th><th scope="col">تعذّر</th><th scope="col">التكلفة</th><th scope="col">آخر رسالة</th><th scope="col">المحادثة</th></tr></thead>
           <tbody>{rows.map((c) => (
             <React.Fragment key={c.participant_id}>
               <tr>

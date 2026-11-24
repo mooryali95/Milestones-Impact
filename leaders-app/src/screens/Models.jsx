@@ -410,7 +410,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             <div className="ws-prog">
               <span><b>{filled}</b> من {req.length} حقول مكتملة</span>
               <span className="bar"><i style={{ width: `${pct}%` }} /></span>
-              <small>{capLocked ? 'فصل في وثيقة مقدَّمة للمراجعة' : locked ? 'فصل مقروء ومغلق' : dirty ? 'تعديلات غير محفوظة…' : savedAt ? `محفوظ ${savedAt.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}` : 'يُحفظ تلقائيًا أثناء الكتابة'}</small>
+              <small>{capLocked ? 'فصل في وثيقة مقدَّمة للمراجعة' : locked ? 'البطاقة معتمدة ومغلقة' : dirty ? 'تعديلات غير محفوظة…' : savedAt ? `محفوظ ${savedAt.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}` : 'يُحفظ تلقائيًا أثناء الكتابة'}</small>
             </div>
             {!locked && (
               <div className="row model-acts">
