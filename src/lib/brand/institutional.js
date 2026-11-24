@@ -11,7 +11,7 @@ import { esc, kpis, section } from './doc.js';
 import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr } from '../../../supabase/functions/leaders-api/business-case.js';
 import { LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
-import { capstoneReport, heatmap, paras, STYLE, tableOf } from './capstone.js';
+import { capstoneReport, heatmap, pdfFileName, paras, STYLE, tableOf } from './capstone.js';
 import { costLabel, dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
 import { ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 
@@ -27,6 +27,9 @@ const IN_STYLE = `<style>
    فاتحة الباب لا تنفصل عن أول محتواه (keep-with-next)، والفقرة الطويلة تنساب بثلاثة أسطر على الأقل في كل طرف */
 .in-sec p, .in-sec li { orphans: 3; widows: 3; }
 .in-sec.np { break-before: page; }
+/* نظرة عامة كاملة مع الغلاف في صفحته الأولى، لا تنقسم؛ وإن طالت انتقلت كاملة إلى الصفحة التالية (pdf.js وقواعد الطباعة نفسها) */
+.in-sec.in-ov { break-inside: avoid; }
+.in-ov .in-open { margin-bottom: 4mm; }
 .in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 0 0 6mm; border-top: 0.6mm solid #0B272F; padding-top: 5mm; border-bottom: 1px solid #A97A2E; break-after: avoid; break-inside: avoid; }
 .in-open + * { break-before: avoid; }
 .in-open .n { font: 200 34pt/0.9 "Noto Sans", sans-serif; color: #A97A2E; letter-spacing: -.02em; }
@@ -188,7 +191,7 @@ export function institutionalReport(input) {
   'بصمة النسخة تتغير بأي تعديل في محتواها: تطابقها يثبت أن ما بين يديك هو النسخة المعتمدة.');
 
   // فاتحة الباب: رقم كبير ذهبي، وعنوان إنجليزي صغير، وعنوانه العربي، وسطر يشرحه. كل باب بعد الأول يبدأ صفحة جديدة
-  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}${en === 'Overview' ? ' in-ov' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const body = STYLE + IN_STYLE + parts.map(opener).join('');
   // الجهة من لقطة الاعتماد (شعارها ولونها كما كانا لحظة الإصدار)؛ بلا جهة: مبادرة مجتمعية ويُذكر راعيها
   const org = m.org || null;
@@ -196,7 +199,7 @@ export function institutionalReport(input) {
     fingerprint: fp,
     meta: {
       id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
-      pdfName: `Initiative-${m.ref || 'MI-CP'}-V${m.version || 1}`,
+      pdfName: pdfFileName(m, 'institutional'),
       brand: { name: org?.name || null, logo: org?.logo || null, color: org?.color || null },
       eyebrow: 'Leaders Program · Initiative', title: m.initiative || 'وثيقة المبادرة',
       subtitle: `وثيقة المبادرة${m.scope_title ? ` · ${m.scope_title}` : ''}${LVL[m.level] ? ` · مستوى ${LVL[m.level]}` : ''}`,

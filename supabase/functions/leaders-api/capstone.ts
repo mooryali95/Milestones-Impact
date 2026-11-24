@@ -17,12 +17,12 @@ import {
   capstoneListRows, capstoneState, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
-import { freezeIssued } from './doc-quality.js';
+import { freezeIssued, rejectionStats } from './doc-quality.js';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
 import { profileFor } from './profiles.ts';
-import { listed, simulated } from './counting.ts';
+import { counted, listed, simulated } from './counting.ts';
 
 type Body = Record<string, any>;
 
@@ -250,6 +250,25 @@ export async function demoDoc(p: any) {
 
 export async function doc(p: any) {
   return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
+}
+
+// «قيم رُفضت للمراجعة»: قواعد الرفض على إجابات فصول المبادرة الحالية، محسوبة للقراءة لحظة الطلب (doc-quality.js rejectionStats).
+// بلا اسم ولا بريد ولا نص كامل: القاعدة ومفتاح الفصل والحقل والعدد وعينة مقنّعة. الحسابات المعدودة وحدها (لا العرض ولا الاختبار)
+const QUALITY_CAP = 3000;
+export async function adminQualityReport() {
+  // حقول الفصول مرة واحدة، والإجابات الأحدث أولًا حتى الحد
+  const models = must(await db.from('learning_models').select('id, key, fields').not('capstone_sort', 'is', null)) as any[] ?? [];
+  const byId = new Map(models.map((m) => [m.id, m]));
+  const ids = models.map((m) => m.id);
+  const { data, count, error } = ids.length
+    ? await counted(db.from('model_submissions').select('model_id, answers, participants!inner(is_demo, is_test)', { count: 'exact' }).in('model_id', ids), 'participants')
+      .order('updated_at', { ascending: false }).limit(QUALITY_CAP)
+    : { data: [], count: 0, error: null };
+  if (error) throw error;
+  const rows = (data || []) as any[];
+  const stats = rejectionStats(rows.map((r) => ({ chapter_key: byId.get(r.model_id)?.key, fields: byId.get(r.model_id)?.fields || [], answers: r.answers || {} })));
+  const total = count ?? rows.length;
+  return { success: true, ...stats, total, truncated: total > rows.length, cap: QUALITY_CAP, generated_at: new Date().toISOString() };
 }
 
 // ── المستشار ──

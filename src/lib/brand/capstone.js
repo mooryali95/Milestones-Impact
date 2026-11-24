@@ -445,6 +445,21 @@ export function placeRow(m) {
 }
 
 // appendix: ملحق «ما ينقص» وختم «مسودة عمل» للقراءة الداخلية وحدها (المشارك والإدارة)
+// اسم ملف PDF بالعربية يدل على محتواه (قرار المالك 2026-11-24): «وثيقة-المبادرة-<اسم المبادرة>-<تاريخ الإصدار>».
+// ملف العمل الكامل يُسمّى باسمه فلا يُخلط بالوثيقة المؤسسية. التاريخ بأرقام لاتينية (YYYY-MM-DD)
+const PDF_PREFIX = { institutional: 'وثيقة-المبادرة', working: 'ملف-عمل-المبادرة', draft: 'مسودة-وثيقة-المبادرة' };
+// kind: 'institutional' الوثيقة المؤسسية، 'working' ملف العمل بملحقه، 'draft' ملف العمل بلا ملحق (قارئ قبل الاعتماد)
+export function pdfFileName(m = {}, kind = 'institutional', now = new Date()) {
+  const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  // تنظيف قبل البديل: محارف الاتجاه الخفية، وما لا يصلح في اسم ملف، ثم قص بنقاط الترميز لا بوحدات UTF-16 فلا يُشطر حرف
+  const clean = (v) => [...String(v ?? '').replace(/[‎‏‪-‮⁦-⁩]/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().replace(/\s+/g, '-')]
+    .slice(0, 60).join('').replace(/-+$/, '');
+  const name = clean(m.initiative) || clean(m.ref) || 'المبادرة';
+  // رقم الوثيقة وإصدارها لاحقة قصيرة: نسختان في اليوم نفسه لا تتطابقان اسمًا
+  const tag = clean(`${String(m.ref || '').replace(/^MI-CP-/, '')}${m.version ? `-V${m.version}` : ''}`).replace(/^-+/, '');
+  return [PDF_PREFIX[kind] || PDF_PREFIX.institutional, name, ymd, tag].filter(Boolean).join('-');
+}
+
 export function capstoneReport(input, { appendix = true } = {}) {
   // ملف العمل الكامل: المشتق (الغلاف والميثاق وحالة العمل والمؤشرات) من القيم الصالحة، والفصول بكل ما كُتب
   // وتالفه معلَّم «يحتاج مراجعة»، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
@@ -534,8 +549,10 @@ export function capstoneReport(input, { appendix = true } = {}) {
   return {
     meta: {
       id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
-      // اسم الملف لاتيني ثابت (رقم الوثيقة وإصدارها): بعض المتصفحات وأنظمة البريد تُسقط الاسم العربي فيصير «download». العنوان العربي في خصائص الملف
-      pdfName: `Milestone-Impact-Initiative-${m.ref || 'MI-CP'}-V${m.version || 1}`,
+      // ملف العمل بملحقه لمن يعمل عليها؛ وبلا ملحق (القارئ قبل الاعتماد) يُسمّى «وثيقة المبادرة»
+      pdfName: pdfFileName(m, example ? 'institutional' : appendix ? 'working' : 'draft'),
+      // شعار الجهة ولونها على الغلاف وترويسة الصفحات (doc.js)، كما في الوثيقة المؤسسية
+      ...(example ? {} : { brand: { name: m.org?.name || null, logo: m.org?.logo || null, color: m.org?.color || null } }),
       eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، أُعدّت في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),

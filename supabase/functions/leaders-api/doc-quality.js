@@ -326,3 +326,46 @@ export function freezeIssued(snapshot) {
   return { fingerprint: fingerprint(snapshot), sections, cost: doc.cost ?? null, summary: doc.summary,
     meta: { start: m.start ?? null, end: m.end ?? null, sponsor: m.sponsor ?? null, host: m.host ?? null, context: m.context ?? null, initiative: m.initiative ?? null } };
 }
+
+// ── قيم رُفضت للمراجعة (قرار المالك 2026-11-24): شبكة أمان لضبط قواعد الرفض ببيانات حقيقية ──
+// حساب للقراءة وحده لحظة الطلب من الإجابات الحالية، بلا سجل ولا ترحيل: القاعدة، والفصل، والحقل، والعدد، وعينة مقنّعة.
+// العينة لا تكشف النص: طوله وحده، فلا يخرج من الإجابة شيء.
+export const maskSample = (v) => {
+  const n = [...String(v ?? '').replace(/\s+/g, ' ').trim()].length;
+  return n ? `${'•'.repeat(Math.min(8, n))} (${n} حرفًا)` : '';
+};
+
+/**
+ * items: [{ chapter_key, fields: [{ key, type, columns }], answers }] لكل تسليم.
+ * يعيد { rules: [{ rule, rule_ar, count }], rows: [{ rule, rule_ar, chapter_key, field_key, count, sample }], submissions }
+ * الفراغ و«أقصر من أن يُفهم» ليسا رفضًا لقيمة مكتوبة فلا يُعدّان.
+ */
+export function rejectionStats(items) {
+  const by = new Map();
+  const hit = (rule, chapter_key, field_key, value) => {
+    if (!rule || rule === 'empty' || rule === 'too_short') return;
+    const k = `${rule}|${chapter_key}|${field_key}`;
+    const r = by.get(k) || { rule, rule_ar: REASONS[rule] || rule, chapter_key, field_key, count: 0, sample: maskSample(value) };
+    r.count++;
+    by.set(k, r);
+  };
+  let submissions = 0;
+  for (const it of items || []) {
+    submissions++;
+    const answers = it?.answers || {};
+    for (const f of Array.isArray(it?.fields) ? it.fields : []) {
+      const v = answers[f.key];
+      if (f.type === 'table') {
+        const kinds = (f.columns || []).map(columnKind);
+        for (const row of Array.isArray(v) ? v : []) {
+          if (!Array.isArray(row)) continue;
+          row.forEach((c, i) => hit(reasonOf(kinds[i] || 'text', c), it.chapter_key, `${f.key}:${(f.columns || [])[i] ?? i}`, c));
+        }
+      } else if (v != null && typeof v !== 'object') hit(reasonOf(f, v), it.chapter_key, f.key, v);
+    }
+  }
+  const rows = [...by.values()].sort((a, b) => b.count - a.count);
+  const totals = new Map();
+  rows.forEach((r) => totals.set(r.rule, (totals.get(r.rule) || 0) + r.count));
+  return { rules: [...totals].map(([rule, count]) => ({ rule, rule_ar: REASONS[rule] || rule, count })).sort((a, b) => b.count - a.count), rows: rows.slice(0, 200), submissions };
+}
