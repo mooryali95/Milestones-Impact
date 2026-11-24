@@ -26,3 +26,18 @@ describe('حماية العرض من القيم الفارغة', () => {
     expect(card?.value).toBe('—');
   });
 });
+
+// المرحلة 4: مساعد العرض المشترك في اللوحة
+import { dash, joinOr } from './display.js';
+describe('dash وjoinOr', () => {
+  it('المجهول «—» والصفر والنص كما هما', () => {
+    for (const v of [undefined, null, NaN, Infinity, '', 'undefined', 'null', 'NaN']) expect(dash(v)).toBe('—');
+    expect(dash(0)).toBe(0);
+    expect(dash('نص')).toBe('نص');
+    expect(dash(undefined, 0)).toBe(0);
+  });
+  it('joinOr: جزء غائب يُسقط القالب كله', () => {
+    expect(joinOr([3, '←', 5])).toBe('3 ← 5');
+    expect(joinOr([undefined, '←', 5])).toBe('—');
+  });
+});

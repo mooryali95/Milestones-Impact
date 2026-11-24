@@ -103,7 +103,7 @@
 .gd-bars { list-style: none; display: flex; align-items: flex-end; gap: 3px; height: 120px; margin: 8px 0; padding: 0; direction: ltr; }
 .gd-bars li { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 6px; }
 .gd-bars li span { display: block; width: 100%; background: #0b272f; border-radius: 3px 3px 0 0; }
-.gd-bars li small { font-size: 9px; color: #6b7a80; margin-top: 2px; }
+.gd-bars li small { font-size: 9px; color: var(--ink-light); margin-top: 2px; }
 .gd-toggles { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .gd-cases { margin: 0; padding-inline-start: 0; list-style: none; display: grid; gap: 6px; }
 .gd-cases details { border: 1px solid rgba(11, 39, 47, .12); border-radius: 8px; padding: 8px 12px; }

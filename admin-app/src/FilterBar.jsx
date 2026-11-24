@@ -61,7 +61,7 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
       </div>
 
       {presets.length > 0 && (
-        <div className="flt-row flt-presets" aria-label="عروض سريعة">
+        <div className="flt-row flt-presets" role="group" aria-label="عروض سريعة">
           {presets.map((p) => (
             <button key={p.key} type="button" className={`flt-preset${state.view === p.key ? ' on' : ''}`} aria-pressed={state.view === p.key}
               onClick={() => set({ view: state.view === p.key ? '' : p.key })}>

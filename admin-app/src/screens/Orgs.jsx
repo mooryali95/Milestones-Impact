@@ -80,7 +80,8 @@ const ORG_SORTS = { name: (o) => o.name, total: (o) => o.stats?.total || 0, pend
 function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
   const { toast, confirm } = useUI();
   const copy = useCopy();
-  const list = data.orgs || [];
+  // جهة بلا إحصاءات (ردّ أقدم أو ناقص) تُعدّ صفرًا لا تكسر الفلاتر والبطاقات
+  const list = useMemo(() => (data.orgs || []).map((o) => (o.stats ? o : { ...o, stats: { total: 0, pending_approval: 0, active_week: 0 } })), [data.orgs]);
   const un = data.unassigned || {};
   const [typedTo, setTypedTo] = useState({});
   const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'sector', 'state', 'sort'], {}, { scope: 'orgs' });

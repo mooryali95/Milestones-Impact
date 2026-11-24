@@ -90,8 +90,9 @@ test('الروابط القديمة: كل #/leaders/<قسم> يفتح القسم
 
 test('البحث (Ctrl K) يسمي مجموعة كل قسم، ويجد القسم باسم مجموعته', async ({ page }) => {
   await open(page, '#/leaders/overview');
-  await page.keyboard.press('Control+k');
   const pal = page.getByRole('dialog');
+  // المفتاح قد يسبق تركيب مستمعه أثناء تحميل الشاشة: يُعاد حتى تظهر اللوحة (لا يُعاد بعد ظهورها فلا تُغلق)
+  await expect(async () => { await page.keyboard.press('Control+k'); await expect(pal).toBeVisible({ timeout: 1000 }); }).toPass();
   await pal.getByRole('combobox').or(pal.getByRole('textbox')).first().fill('قوالب البريد');
   await expect(pal.getByRole('option').filter({ hasText: 'قوالب البريد' }).first()).toContainText('الإعداد');
   await pal.getByRole('combobox').or(pal.getByRole('textbox')).first().fill('التقارير');

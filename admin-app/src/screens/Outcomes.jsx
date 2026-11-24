@@ -48,7 +48,7 @@ export default function Outcomes({ org, onOpen }) {
   useEffect(() => { setR(null); L('admin.outcomes', org ? { organization_id: org } : {}).then(setR); }, [org]);
   if (!r) return <Spinner />;
   if (!r.success) return <div className="la-err" role="alert">{r.message}</div>;
-  const t = r.totals;
+  const t = r.totals || {};
   return (
     <section className="la-card">
       <h3>أثر المبادرات <small className="la-muted">· المستوى الرابع: نتائج الجهة</small></h3>
