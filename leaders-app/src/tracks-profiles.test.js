@@ -89,6 +89,14 @@ describe('ترحيل 20261101140000 على البنية المرجعية', () =>
     const second = await snap();
     expect({ ...second, profiles: second.profiles.map(({ updated_at: _u, ...p }) => p) })
       .toEqual({ ...first, profiles: first.profiles.map(({ updated_at: _u, ...p }) => p) });
+    // profiles.json مصدر النص بعد ترحيل مصفوفة الوثيقة (20261128140000) الذي يستبدل جملًا في ثلاثة ملفات تعريف
+    await db.exec(read('supabase/migrations/20261128140000_leaders_level_matrix.sql'));
+    const after = await snap();
+    const changed = after.profiles.filter((x) => first.profiles.find((y) => y.key === x.key).journey_ar !== x.journey_ar).map((x) => x.key);
+    expect(changed.sort()).toEqual(['impact-advanced', 'impact-intermediate', 'leadership-beginner']);
+    // رحلة كل مسار ما زالت رحلة ملف تعريفه
+    for (const t of after.tracks) expect(t.journey_ar, t.key).toBe(after.profiles.find((x) => x.key === t.profile_key).journey_ar);
+    first.profiles = after.profiles; first.tracks = after.tracks;
 
     const { profiles } = V2('profiles.json');
     const { tracks } = V2('tracks.json');

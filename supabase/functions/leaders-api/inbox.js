@@ -17,7 +17,9 @@ export const INBOX_KINDS = {
   expert_application: { label: 'طلب انضمام خبير', tab: 'experts', sla: 7 },
   // query: عرض مصفّى في شاشة الوجهة. الطلب بلا خبير يُرى ويُعالج في طلبات الإسناد بعرض «يحتاج تدخلًا»، لا في ملف المشارك
   expert_unmatched: { label: 'طلب خبير بلا مطابق', tab: 'experts', sla: 3, query: 'view=attention' },
-  sponsor: { label: 'طلب رعاية', tab: 'payments', sla: 3 },
+  // badge: تبويب العدّاد حين يختلف عن وجهة البند. طلب الرعاية يُقرَّر في «المدفوعات» (طلبات الرعاية)، وهي في مجموعة «الإعداد»
+  // المطوية فلا يُرى عدّادها، والطلب شأن جهة: عدّاده على «الجهات» (ملاحظة المالك 2026-11-24)، من البند نفسه لا عدّ ثانٍ
+  sponsor: { label: 'طلب رعاية', tab: 'payments', badge: 'orgs', sla: 3 },
   // urgency: «قريب» و«متأخر» بأيام المهلة على تقويم الرياض (erasure.js)، كالشريط والبطاقة وسطر البند نفسه، لا بأيام UTC
   // منذ الطلب: قرب منتصف ليل الرياض كانا يختلفان يومًا (تصور طلب الحذف 4.7)
   erasure: { label: 'طلب حذف بيانات', tab: 'participants', sla: 30, urgency: (at, now) => urgency(daysLeft(at, now)) },
@@ -59,12 +61,15 @@ export function inboxOf(src, now = Date.now()) {
   return { items, counts, by_tab: byTabOf(items), total: items.length, late: items.filter((i) => i.late).length, soon: items.filter((i) => i.soon).length };
 }
 
+// تبويب عدّاد النوع: badge إن كان له، وإلا تبويب وجهته
+export const badgeTabOf = (kind) => INBOX_KINDS[kind]?.badge || INBOX_KINDS[kind]?.tab;
+
 // «العدّ الواحد»: عدّاد كل تبويب في اللوحة من بنود الصندوق نفسه، بتبويب نوعه في INBOX_KINDS (لا جدول ثانٍ)،
 // ومعه عدد المتأخر عن مهلته ليحمرّ العدّاد. التبويب بلا بند لا يظهر. الأنواع المتعذرة (skipped) تعالجها الواجهة.
 export function byTabOf(items) {
   const out = {};
   for (const i of items || []) {
-    const tab = INBOX_KINDS[i.kind]?.tab;
+    const tab = badgeTabOf(i.kind);
     if (!tab) continue;
     const t = (out[tab] ||= { n: 0, late: 0 });
     t.n += 1;
@@ -73,7 +78,7 @@ export function byTabOf(items) {
   return out;
 }
 // تبويبات الأنواع المتعذرة: عدّادها غير معروف، لا صفر
-export const tabsOfKinds = (kinds) => [...new Set((kinds || []).map((k) => INBOX_KINDS[k]?.tab).filter(Boolean))];
+export const tabsOfKinds = (kinds) => [...new Set((kinds || []).map(badgeTabOf).filter(Boolean))];
 export const ageAr = (days) => (days == null ? '' : days === 0 ? 'اليوم' : days === 1 ? 'منذ يوم' : days === 2 ? 'منذ يومين' : days <= 10 ? `منذ ${days} أيام` : `منذ ${days} يومًا`);
 
 // «اعتمد الجاهزين» من الصندوق: المنتظرون الأقدم أولًا (ترتيب الصندوق) حتى حد الطلب الواحد

@@ -187,13 +187,14 @@ function TodayNumbers({ nums, onView, onTab }) {
     { key: 'waiting', label: 'القرارات المنتظرة', value: v(w?.n), sub: waitingSub(nums, ageAr), go: () => onView('') },
     { key: 'late', label: 'المتجاوز للمهلة الآن', value: v(nums.late), sub: 'تجاوز مهلة نوعه', go: () => onView('late'), tone: nums.late ? 'bad' : '' },
     { key: 'stale', label: `المنتظر منذ أكثر من ${STALE_DAYS} أيام`, value: v(nums.stale), sub: 'بعمر البند في الصندوق', go: () => onView('stale'), tone: nums.stale ? 'warn' : '' },
-    { key: 'program', label: 'المشاركون في البرنامج', value: nums.program ? `${nums.program.n} من ${nums.program.of}` : null, sub: nums.program ? 'من أصل المسجلين' : 'تعذّرت قراءة الأرقام', go: () => onTab?.('participants') },
+    { key: 'program', label: 'المشاركون في البرنامج', // «25 من 43» جملة عربية برقمين: كل رقم معزول وحده والجملة باتجاه الصفحة، فلا تُقرأ «25 43 من» (عزلها كلها يسارًا قلبها)
+      value: nums.program ? <><bdi>{nums.program.n}</bdi> من <bdi>{nums.program.of}</bdi></> : null, sub: nums.program ? 'من أصل المسجلين' : 'تعذّرت قراءة الأرقام', go: () => onTab?.('participants') },
   ];
   return (
     <div className="stats-grid today-nums" role="group" aria-label="أرقام اليوم">
       {cells.map((c) => (
         <button key={c.key} type="button" className={`stat-card today-n${c.tone ? ` ${c.tone}` : ''}`} data-k={c.key} onClick={c.go}>
-          <span className="stat-label">{c.label}</span><span className="stat-value">{c.value == null ? <><span aria-hidden="true">·</span><span className="sr-only">غير مقروء</span></> : <bdi dir="ltr">{c.value}</bdi>}</span><span className="stat-sub">{c.sub}</span>
+          <span className="stat-label">{c.label}</span><span className="stat-value">{c.value == null ? <><span aria-hidden="true">·</span><span className="sr-only">غير مقروء</span></> : typeof c.value === 'string' ? <bdi dir="ltr">{c.value}</bdi> : c.value}</span><span className="stat-sub">{c.sub}</span>
         </button>
       ))}
     </div>

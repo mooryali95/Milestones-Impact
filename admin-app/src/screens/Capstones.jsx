@@ -157,7 +157,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
       {blocked && (
         <section className="la-card" role="alert">
           <div className="la-row"><b>لا تُصدر الوثيقة المؤسسية بعد: تنقصها إجابات عن</b><button className="btn-sm ghost" onClick={() => setBlocked(null)}>إغلاق</button></div>
-          <ol>{blocked.map((x) => <li key={x.n}>{x.title}</li>)}</ol>
+          <ol>{blocked.map((x) => <li key={x.n}><b>{x.title}</b>{x.add ? ` ${x.add}` : ''}</li>)}</ol>
           <p className="la-muted">ما ينقص بالتفصيل في ملحق «ملف العمل الكامل».</p>
         </section>
       )}

@@ -140,3 +140,21 @@ describe('الإصدار والقراء', () => {
     expect(documentHtml(r.meta, r.body)).not.toContain('evil.example');
   });
 });
+
+describe('المراجعة الثانية: الاحتياطي ومكوّنات القيمة وما يُضاف', () => {
+  it('بلا احتياطي لا يُذكر «مع الاحتياطي»', () => {
+    const d = completeDoc();
+    const b = institutionalReport({ ...d, cost: { ...d.cost, contingency: 0 }, sections: d.sections.map((s) => (s.key === 'cost-plan' ? { ...s, fields: s.fields.map((f) => (f.key === 'contingency' ? { ...f, value: '' } : f)) } : s)) }).body;
+    expect(b).not.toContain('<span>التكلفة مع الاحتياطي</span>');
+    expect(b).not.toContain('<span>الاحتياطي</span>');
+  });
+  it('«كيف نعرف أننا نجحنا» يظهر في القيمة حين يُكتب', () => {
+    const d = completeDoc();
+    const ep = d.sections.find((s) => s.key === 'evidence-plan');
+    ep.fields.push({ key: 'success_signal', label: 'كيف ستعرف أنك نجحت؟', type: 'textarea', value: 'ينخفض زمن الإنجاز إلى ثلاثة أيام في تقرير النظام الشهري' });
+    expect(institutionalReport(d).body).toContain('كيف نعرف أننا نجحنا');
+  });
+  it('قائمة الحجب تقول ماذا يُضاف', () => {
+    expect(missingMessage(institutionalReport(yahyaDoc()).missing)).toContain('املأ سجل المخاطر');
+  });
+});

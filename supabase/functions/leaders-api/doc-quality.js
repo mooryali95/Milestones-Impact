@@ -279,17 +279,17 @@ export function cleanDoc(doc, { strict = false, keep = false } = {}) {
 // المرجع: docs/content/2026-11-24-مصفوفة-الوثيقة-بحسب-المستوى-v1.md §1.
 // كل سؤال «كل» من مكوّنات، وكل مكوّن «أيٌّ» من مصادر [فصل، حقل] صالحة في الوثيقة النظيفة (strict)
 export const INSTITUTIONAL_QUESTIONS = Object.freeze([
-  { n: 1, title: 'ما المشكلة ولمن؟', all: [[['initiative-charter', 'problem']], [['initiative-charter', 'beneficiaries']]] },
-  { n: 2, title: 'ما الهدف وما المخرجات؟', all: [[['initiative-charter', 'objective']], [['initiative-charter', 'deliverables']]] },
-  { n: 3, title: 'لماذا هذا الحل لا غيره؟', all: [[['options-analysis', 'recommendation'], ['options-analysis', 'options']]] },
-  { n: 4, title: 'كيف يحدث التغيير؟', all: [[['theory-of-change', 'chain'], ['theory-of-change', 'impact']]] },
-  { n: 5, title: 'ما المنفعة وكيف تُقاس؟', all: [[['benefits-register', 'benefits']], [['evidence-plan', 'success_signal'], ['evidence-plan', 'plan']]] },
-  { n: 6, title: 'متى وبأي خطوات؟', all: [[['milestone-register', 'milestones'], ['schedule', 'activities']]] },
-  { n: 7, title: 'بأي موارد وكلفة؟', all: [[['cost-plan', 'items']]] },
-  { n: 8, title: 'ما المخاطر وكيف تُعالج؟', all: [[['raid', 'items']]] },
-  { n: 9, title: 'من يقرر ومن يشارك؟', all: [[['initiative-charter', 'sponsor'], ['governance', 'structure']], [['stakeholder-map', 'stakeholders']]] },
+  { n: 1, title: 'ما المشكلة ولمن؟', add: 'اكتب المشكلة والمستفيدين في بطاقة المبادرة', all: [[['initiative-charter', 'problem']], [['initiative-charter', 'beneficiaries']]] },
+  { n: 2, title: 'ما الهدف وما المخرجات؟', add: 'اكتب الهدف الأعلى وجدول المخرجات في البطاقة', all: [[['initiative-charter', 'objective']], [['initiative-charter', 'deliverables']]] },
+  { n: 3, title: 'لماذا هذا الحل لا غيره؟', add: 'اكتب البدائل والتوصية في «المبرر والبدائل»', all: [[['options-analysis', 'recommendation'], ['options-analysis', 'options']]] },
+  { n: 4, title: 'كيف يحدث التغيير؟', add: 'اكتب سلسلة التغيير أو الأثر المنشود في «نظرية التغيير»', all: [[['theory-of-change', 'chain'], ['theory-of-change', 'impact']]] },
+  { n: 5, title: 'ما المنفعة وكيف تُقاس؟', add: 'املأ سجل المنافع، واكتب كيف ستعرف أنك نجحت أو خطة القياس', all: [[['benefits-register', 'benefits']], [['evidence-plan', 'success_signal'], ['evidence-plan', 'plan']]] },
+  { n: 6, title: 'متى وبأي خطوات؟', add: 'املأ سجل المعالم أو الجدول الزمني', all: [[['milestone-register', 'milestones'], ['schedule', 'activities']]] },
+  { n: 7, title: 'بأي موارد وكلفة؟', add: 'املأ بنود الموارد والتكلفة', all: [[['cost-plan', 'items']]] },
+  { n: 8, title: 'ما المخاطر وكيف تُعالج؟', add: 'املأ سجل المخاطر', all: [[['raid', 'items']]] },
+  { n: 9, title: 'من يقرر ومن يشارك؟', add: 'اكتب الراعي ودوره في البطاقة (أو بنية الحوكمة)، واملأ خريطة أصحاب المصلحة', all: [[['initiative-charter', 'sponsor'], ['governance', 'structure']], [['stakeholder-map', 'stakeholders']]] },
   // تقرير الأثر إن كان من فصول الوثيقة وكُتب، وإلا الاستدامة؛ والمشغّل وحده لا يكفي
-  { n: 10, title: 'ماذا تحقق وماذا يبقى؟', all: [[['impact-report', 'changes'], ['change-sustain', 'sustain'], ['change-sustain', 'handover']]] },
+  { n: 10, title: 'ماذا تحقق وماذا يبقى؟', add: 'اكتب ما تغيّر في «تقرير الأثر» أو التسليم والاستدامة في «التغيير والاستدامة»', all: [[['impact-report', 'changes'], ['change-sustain', 'sustain'], ['change-sustain', 'handover']]] },
 ]);
 
 const has = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== '');
@@ -300,7 +300,7 @@ export function institutionalGate(cleanedDoc) {
   // المكوّن يتحقق بمصدر صالح؛ والمكوّن الذي لا حقل له أصلًا في نسخة نماذج المشارك (حقل أُضيف بعد بدئه، مثل «المستفيدون») لا يُطلب منه
   const ok = (any) => any.some(([k, f]) => has(fld(k, f)?.value)) || any.every(([k, f]) => !fld(k, f));
   // المكوّن الأول في كل سؤال (لبّه) مطلوب دائمًا
-  const missing = INSTITUTIONAL_QUESTIONS.filter((q) => !q.all.every((any, i) => (i === 0 ? any.some(([k, f]) => has(fld(k, f)?.value)) : ok(any)))).map(({ n, title }) => ({ n, title }));
+  const missing = INSTITUTIONAL_QUESTIONS.filter((q) => !q.all.every((any, i) => (i === 0 ? any.some(([k, f]) => has(fld(k, f)?.value)) : ok(any)))).map(({ n, title, add }) => ({ n, title, add }));
   return { ok: !missing.length, missing };
 }
 

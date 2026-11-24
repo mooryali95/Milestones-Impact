@@ -16,7 +16,7 @@ import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
   contentApplies, contentState, inProgram, instantAvailable, parseBooking, parseQrToken, pickCohort, parseRef, qrToken, qrWindow, QR_WINDOW, readingVerdict, requirementApplies,
-  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, approvalOf, journeyApproved,
+  verifyQrToken, verifyWebhook, VERIFIED_KINDS, videoSource, videoStatus, wordCount, modelsFor, answeredModels, approvalOf, journeyApproved,
   bySessionTime, isUndated, SESSION_TBD_AR, workshopSchedule, applyDelivery, bookingOverMax, sessionsMax, coachingStatus,
   parseScanReceipt, scanReceipt, scanReceiptExpiry, verifyScanReceipt, latinDigits, matchQrCode, qrCode, QR_CODE_DIGITS, cohortDefinitionView,
 } from './logic.js';
@@ -86,7 +86,7 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     kinds.has('curriculum') ? db.from('content_progress').select('*').eq('participant_id', p.id) : none,
     // متطلب «نموذج»: حالة تسليم النموذج نفسه في مكتبة النماذج، لا ملف مرفوع
     needModels && approved ? db.from('learning_models').select('id, key, dimension, sort, min_level, active, scopes, title_ar') : none,
-    needModels && approved ? db.from('model_submissions').select('model_id, status').eq('participant_id', p.id) : none,
+    needModels && approved ? db.from('model_submissions').select('model_id, status, answers').eq('participant_id', p.id) : none,
     kinds.has('capstone') ? db.from('capstones').select('status, readiness').eq('participant_id', p.id).maybeSingle().then((r: any) => ({ data: r.data ? [r.data] : [] })) : none,
     labKeys.length ? db.from('lab_items').select('id, key, title_ar, active').in('key', labKeys) : none,
     labKeys.length ? db.from('lab_attempts').select('item_id, pct, finished_at').eq('participant_id', p.id).not('finished_at', 'is', null) : none,
@@ -120,7 +120,8 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     content: content.data || [],
     contentProgress: Object.fromEntries((contentProgress.data || []).map((r: any) => [r.item_id, r])),
     modelsLocked: !approved,
-    models: Object.fromEntries(modelsFor(lm.data || [], levels, p.work_scope)
+    // قاعدة «لا فقد»: فصل كتب فيه المشارك يبقى في رحلته وإن رُفع مستواه بعده
+    models: Object.fromEntries(modelsFor(lm.data || [], levels, p.work_scope, answeredModels(subs.data || []))
       .map((m: any) => [m.key, { model_id: m.id, title: m.title_ar, status: subBy[m.id] || null }])),
     capstone: cap.data?.[0] || null,
     labs,

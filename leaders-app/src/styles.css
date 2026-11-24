@@ -773,6 +773,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .mf-n { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(169,122,46,.5); color: var(--gold); font-family: "Cormorant Garamond", Georgia, serif; font-size: 16px; font-weight: 600; }
 .mf.ok .mf-n { background: var(--ok); border-color: var(--ok); color: #fff; font-family: inherit; font-size: 14px; }
 .mf-opt { color: var(--muted); font-weight: 400; }
+.mf-group { margin: 18px 0 6px; padding-top: 12px; border-top: 1px solid var(--line, rgba(0,0,0,.12)); color: var(--muted); font-weight: 700; font-size: .95em; }
 /* التعثر والسؤال (stuck.js، AskExpert.jsx) */
 .stuck { border-inline-start: 4px solid var(--gold); display: grid; gap: 6px; margin-bottom: 16px; }
 .stuck h3 { margin: 0; }

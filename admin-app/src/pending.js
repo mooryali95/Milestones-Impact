@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { call } from './api.js';
 import { L } from './leaders.js';
-import { INBOX_KINDS, byTabOf, tabsOfKinds } from '../../supabase/functions/leaders-api/inbox.js';
+import { badgeTabOf, byTabOf, tabsOfKinds } from '../../supabase/functions/leaders-api/inbox.js';
 
 export const POLL_MS = 120000;
 
@@ -31,7 +31,7 @@ export function badgesOf(d) {
     const late = byTabOf(d.items);
     tabs = {};
     for (const [k, n] of Object.entries(d.counts)) {
-      const tab = INBOX_KINDS[k]?.tab;
+      const tab = badgeTabOf(k);
       if (!tab || !n) continue;
       (tabs[tab] ||= { n: 0, late: late[tab]?.late || 0 }).n += n;
     }

@@ -67,15 +67,14 @@ test('العدّاد يحمرّ حين يتأخر بند عن مهلته، و«9
   page.on('request', (r) => { if (/leaders-api/.test(r.url())) calls.push(JSON.parse(r.postData() || '{}').action); });
   await setup(page, '#/leaders/overview', {
     success: true, total: 132, late: 2, skipped: ['erasure'], counts: { approval: 5, model: 120, sponsor: 7 },
-    by_tab: { participants: { n: 5, late: 2 }, handbook: { n: 120, late: 0 }, payments: { n: 7, late: 0 } }, items: [],
+    by_tab: { participants: { n: 5, late: 2 }, handbook: { n: 120, late: 0 }, orgs: { n: 7, late: 0 } }, items: [],
   });
   const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
   // طلب الحذف متعذر: تبويب المشاركين بلا عدّاد بدل رقم ناقص، والمجموع معلَّم بأنه قد يزيد
   await expect(tabs.getByRole('button', { name: /كتاب القائد/ }).locator('.la-badge')).toHaveText('99+');
-  // المدفوعات في «الإعداد» المطوية افتراضيًا (المرحلة 2): عددها على عنوان المجموعة، ثم على بندها بعد فتحها
-  await expect(tabs.getByRole('button', { name: /^مجموعة الإعداد/ }).locator('.la-badge')).toHaveText('7');
-  await tabs.getByRole('button', { name: /^مجموعة الإعداد/ }).click();
-  await expect(tabs.getByRole('button', { name: /^المدفوعات/ }).locator('.la-badge')).toHaveText('7');
+  // طلبات الرعاية عدّادها على «الجهات» (badge في INBOX_KINDS)، ظاهرًا في «العمل» لا في «الإعداد» المطوية
+  await expect(tabs.getByRole('button', { name: /^الجهات/ }).locator('.la-badge')).toHaveText('7');
+  await expect(tabs.getByRole('button', { name: /^مجموعة الإعداد/ }).locator('.la-badge')).toHaveCount(0);
   await expect(tabs.getByRole('button', { name: /^المشاركون/ }).locator('.la-badge')).toHaveCount(0);
   const ctx = page.getByRole('button', { name: /تطبيق القادة/ }).locator('.ctx-badge');
   await expect(ctx).toHaveText('99+');
@@ -98,21 +97,21 @@ test('عدّاد أحمر بوصف مسموع لما تأخر عن مهلته', 
 });
 
 test('قرار في نوع من الصندوق يحدّث عدّاده فورًا، والمجموعة المطوية تُعلَّم ناقصة وتُسمع عددها', async ({ page }) => {
-  // طلب رعاية ينتظر: عدّاد المدفوعات 1. بعد القرار يرد الصندوق بلا شيء، فيختفي العدّاد بلا انتظار الدقيقتين
+  // طلب رعاية ينتظر: عدّاد «الجهات» 1. بعد القرار يرد الصندوق بلا شيء، فيختفي العدّاد بلا انتظار الدقيقتين
   let decided = false;
   const inboxCalls = [];
   const req = { id: 'r1', participant_id: 'p1', kind: 'name', status: 'pending', typed_name: 'جهة', suggestions: [{ id: 'o1', name: 'جهة', score: 0.9 }], participants: { full_name: 'سارة الأحمد', email: 's@x.com' }, created_at: '2026-11-10T10:00:00Z' };
   await setup(page, '#/leaders/payments', () => {
     inboxCalls.push(decided);
     return decided ? { success: true, total: 0, late: 0, skipped: [], counts: {}, by_tab: {}, items: [] }
-      : { success: true, total: 1, late: 0, skipped: [], counts: { sponsor: 1 }, by_tab: { payments: { n: 1, late: 0 } }, items: [] };
+      : { success: true, total: 1, late: 0, skipped: [], counts: { sponsor: 1 }, by_tab: { orgs: { n: 1, late: 0 } }, items: [] };
   }, {
     'admin.payments': { success: true, settings: {}, configured: true, payments: [], entitlements: [], daily: [], sponsors: [], health: {}, kpis: {} },
     'admin.sponsor-requests': () => ({ success: true, requests: [{ ...req, status: decided ? 'approved' : 'pending' }], orgs: [{ id: 'o1', name: 'جهة' }] }),
     'admin.sponsor-decide': () => { decided = true; return { success: true }; },
   });
   const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
-  const pay = tabs.getByRole('button', { name: /^المدفوعات/ }).locator('.la-badge');
+  const pay = tabs.getByRole('button', { name: /^الجهات/ }).locator('.la-badge');
   await expect(pay).toHaveText('1');
   await page.getByRole('button', { name: 'طلبات الرعاية' }).click();
   await page.getByRole('button', { name: 'اربط وأعفِ' }).click();

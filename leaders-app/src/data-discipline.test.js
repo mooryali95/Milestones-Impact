@@ -14,10 +14,12 @@ const LEDGER = '20261105110000_leaders_schema_migrations';
 describe('قاعدة «المسار معتمد» واحدة', () => {
   it('ثلاثة تسكينات كلها معتمدة، والمستويات منها', () => {
     const pl = [{ dimension: 'milestone', level: 'beginner', approved_at: 'x' }, { dimension: 'impact', level: 'advanced', approved_at: 'x' }, { dimension: 'leadership', level: 'intermediate', approved_at: 'x' }];
-    expect(approvalOf(pl)).toEqual({ approved: true, levels: { milestone: 'beginner', impact: 'advanced', leadership: 'intermediate' } });
+    expect(approvalOf(pl)).toEqual({ approved: true, levels: { milestone: 'beginner', impact: 'advanced', leadership: 'intermediate' }, since: null });
+    // أول اعتماد، لا آخره
+    expect(approvalOf(pl.map((x, i) => ({ ...x, approved_at: `2026-11-2${i}T08:00:00+00:00` }))).since).toBe('2026-11-20T08:00:00.000Z');
     expect(approvalOf(pl.slice(0, 2)).approved).toBe(false);
     expect(approvalOf([...pl.slice(0, 2), { ...pl[2], approved_at: null }]).approved).toBe(false);
-    expect(approvalOf(null)).toEqual({ approved: false, levels: {} });
+    expect(approvalOf(null)).toEqual({ approved: false, levels: {}, since: null });
   });
   it('لا نسخة من القاعدة في معالجات الخادم', () => {
     const dir = join(root, 'supabase/functions/leaders-api');

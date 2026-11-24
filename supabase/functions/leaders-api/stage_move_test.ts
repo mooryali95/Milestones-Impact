@@ -78,9 +78,21 @@ Deno.test('النقل إلى الأمام: يعتمد ويعفي كما اختا
     assertEquals(r.summary, 'سينتقل إلى «الاستشارة»، وتُعتمد مرحلة واحدة ويُعفى من واحدة');
     const logs = w.tables.audit_log.filter((x) => x.entity_id === P);
     assertEquals(logs.map((x) => x.action), ['stage.move']);
-    assertEquals(logs[0].after, { to: 'consulting', direction: 'forward', program: PROG, reason: 'أنجز التدريب والتوجيه خارج المنصة', writes: [{ stage: 'training', action: 'complete' }, { stage: 'ojt', action: 'skip' }], clears: [] });
+    assertEquals(logs[0].after, { to: 'consulting', direction: 'forward', program: PROG, reason: 'أنجز التدريب والتوجيه خارج المنصة', writes: [{ stage: 'training', action: 'complete' }, { stage: 'ojt', action: 'skip' }], clears: [], notified: true });
     // التدخل نفسه الذي يكتبه admin.stage-override: سببه ومن كتبه
     assert(w.tables.participant_stage_overrides.every((o) => o.note === 'أنجز التدريب والتوجيه خارج المنصة' && o.by_email === ADMIN.email && o.program_id === PROG));
+  } finally { w.restore(); }
+});
+
+Deno.test('البريد اختياري: notify === false ينقل بلا بريد للمشارك، والسجل يقول إنه لم يُرسل', async () => {
+  const w = world();
+  try {
+    const before = w.tables.mail_queue.length + w.tables.mail_log.length;
+    await A.stageMove(ADMIN, { participant_id: P, stage_key: 'consulting', choices: { ojt: 'skip' }, reason: 'أنجز التدريب والتوجيه خارج المنصة', notify: false });
+    assertEquals(w.ov(), { training: 'complete', ojt: 'skip' });
+    const log = w.tables.audit_log.find((x) => x.entity_id === P && x.action === 'stage.move');
+    assertEquals(log?.after.notified, false);
+    assertEquals(w.tables.mail_queue.length + w.tables.mail_log.length, before);
   } finally { w.restore(); }
 });
 

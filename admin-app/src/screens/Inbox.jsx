@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // من admin.inbox (inbox.js على الخادم): تسعة أنواع بعمرها ووجهتها. الرقاقات تفلتر بالنوع، والمتأخر عن مهلة نوعه
 // معلَّم. رده هو رد عدّادات التبويبات نفسه (pending.js، «العدّ الواحد»)، فلا يختلف عدّاد عن الصندوق.
-// «اعتمد الجاهزين»: نافذة BulkApprove نفسها على المنتظرين الأقدم أولًا، ومعاينتها على الخادم تعطي «7 جاهزون، 5 تحتاج نظرك».
+// «اعتمد الجاهزين»: نافذة BulkApprove نفسها على المنتظرين الأقدم أولًا، ومعاينتها على الخادم تعطي «7 جاهزون، 5 تحتاج نظرك»؛ ولا جاهز: «راجع طلبات الاعتماد (5)…» بلا سطر ثانٍ.
 import React, { useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { formatRoute, navigate } from '../route.js';
@@ -56,10 +56,17 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
         {ids.length > 0 && (
           <div className="inbox-bulk">
             {/* لا جاهز في المعاينة: الزر ثانوي يفتح المراجعة، لا وعد باعتماد لا يقع */}
+            {/* عدد واحد لكل مجموعة (ملاحظة المالك 2026-11-24): العنوان يعدّ كل ما في الصندوق، والزر يسمي مجموعته هو
+                (طلبات اعتماد المسار وحدها) بعددها، فلا رقمان بلا اسم بجوار بعضهما */}
             <button type="button" className={`btn-sm ${ready && !ready.ready ? 'ghost' : 'primary'}`} onClick={() => setBulk(ids)} title="يُعتمد المتسق بمستواه المحسوب، ويُستبقى من عليه إشارة لتراجعه من ملفه">
-              {ready && !ready.ready ? 'راجع المنتظرين…' : `اعتمد الجاهزين${ready?.ready ? ` (${ready.ready})` : ''}…`}
+              {ready && !ready.ready ? `راجع طلبات الاعتماد (${ready.held})…` : `اعتمد الجاهزين${ready?.ready ? ` (${ready.ready})` : ''}…`}
             </button>
-            <small className="la-muted">{ready ? readyLineAr(ready.ready, ready.held) : `${pendingN} بانتظار الاعتماد`}{pendingN > ids.length ? ` · من أقدم ${ids.length} منتظرًا` : ''}</small>
+            {(() => {
+              const line = !ready ? `${pendingN} بانتظار الاعتماد` : ready.ready ? readyLineAr(ready.ready, ready.held) : '';
+              const more = pendingN > ids.length ? `من أقدم ${ids.length} منتظرًا` : '';
+              const txt = [line, more].filter(Boolean).join(' · ');
+              return txt ? <small className="la-muted">{txt}</small> : null;
+            })()}
           </div>
         )}
       </div>

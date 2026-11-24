@@ -12,6 +12,7 @@ import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/func
 import { benefitsOf, charterData, durationAr } from '../../../supabase/functions/leaders-api/business-case.js';
 import { LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { capstoneReport, heatmap, paras, STYLE, tableOf } from './capstone.js';
+import { costLabel } from '../../../supabase/functions/leaders-api/capstone.js';
 import { ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : null);
@@ -77,7 +78,7 @@ export function institutionalReport(input) {
   // ── نظرة عامة: صفحة واحدة ──
   const packages = (val(doc, 'wbs', 'packages') || []).length;
   const tiles = [
-    cost && { value: money(cost.withContingency), label: 'التكلفة مع الاحتياطي' },
+    cost && { value: money(cost.withContingency), label: costLabel(cost) },
     benefits.length && { value: benefits.length, label: 'منفعة مقيسة' },
     (val(doc, 'milestone-register', 'milestones') || []).length && { value: val(doc, 'milestone-register', 'milestones').length, label: 'معلمًا' },
     packages && { value: packages, label: 'حزمة عمل' },
@@ -104,6 +105,7 @@ export function institutionalReport(input) {
   // ── القيمة ──
   add('Value', 'القيمة والقياس', [
     field(doc, 'benefits-register', 'benefits', 'المنافع'),
+    field(doc, 'evidence-plan', 'success_signal', 'كيف نعرف أننا نجحنا'),
     field(doc, 'evidence-plan', 'plan', 'خطة القياس'),
     field(doc, 'cost-plan', 'cba', 'التكلفة مقابل المنفعة'),
   ].join(''));
@@ -115,9 +117,11 @@ export function institutionalReport(input) {
     grid([['داخل النطاق', val(doc, 'initiative-charter', 'in_scope')], ['خارج النطاق', val(doc, 'initiative-charter', 'out_scope')]]),
     c?.deliverables ? `<div class="cp-f"><b>المخرجات الرئيسة</b>${tableOf(c.deliverables.columns, c.deliverables.rows)}</div>` : '',
     field(doc, 'milestone-register', 'milestones', 'المعالم'),
+    field(doc, 'milestone-register', 'critical_path', 'المسار الحرج والاعتماديات'),
     g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني؛ الذهبي على المسار الحرج</figcaption></figure>` : field(doc, 'schedule', 'activities', 'الجدول الزمني'),
     field(doc, 'cost-plan', 'items', 'الموارد والتكلفة'),
-    cost ? kpis([{ value: money(cost.total), label: 'التكلفة التقديرية' }, { value: `${cost.contingency || 0}%`, label: 'الاحتياطي' }, { value: money(cost.withContingency), label: 'مع الاحتياطي' }]) : '',
+    // الاحتياطي يُذكر حين يوجد وحده؛ بلاه مؤشر التكلفة الواحد
+    cost ? kpis(cost.contingency ? [{ value: money(cost.total), label: 'التكلفة التقديرية' }, { value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: money(cost.withContingency), label: costLabel(cost) }] : [{ value: money(cost.total), label: costLabel(cost) }]) : '',
   ].join(''));
 
   // ── الحوكمة والمخاطر ──
@@ -126,12 +130,14 @@ export function institutionalReport(input) {
   add('Governance & risks', 'الحوكمة والمخاطر', [
     grid([['الراعي ودوره', m.sponsor], ['من يقرر', val(doc, 'governance', 'structure')], ['إيقاع المتابعة', val(doc, 'governance', 'cadence')]]),
     field(doc, 'stakeholder-map', 'stakeholders', 'أصحاب المصلحة'),
+    field(doc, 'stakeholder-map', 'coalitions', 'التحالفات وتحريك المعارضين'),
     field(doc, 'raid', 'items', 'سجل المخاطر'),
     risks.length && raidF ? heatmap(raidF.columns, risks) : '',
   ].join(''));
 
   // ── الأثر: إن كُتب ──
   add('Impact', 'الأثر والاستدامة', [
+    field(doc, 'impact-report', 'program', 'البرنامج ومساره'),
     field(doc, 'impact-report', 'changes', 'ماذا تغيّر'),
     field(doc, 'impact-report', 'lessons', 'ما تعلمناه'),
     field(doc, 'change-sustain', 'handover', 'التسليم والتسلم'),
@@ -185,7 +191,7 @@ export function renderInitiative(doc, kind = 'working') {
 }
 
 /** رسالة ما ينقص لإصدار الوثيقة المؤسسية، بلغة المشارك */
-export const missingMessage = (missing) => `لا تُصدر الوثيقة المؤسسية قبل أن تجيب عن: ${missing.map((x) => x.title).join('، ')}. اعرض «ملف العمل الكامل» لترى ما ينقص في ملحقه.`;
+export const missingMessage = (missing) => `لا تُصدر الوثيقة المؤسسية قبل أن تجيب عن: ${missing.map((x) => (x.add ? `${x.title} (${x.add})` : x.title)).join('، ')}. اعرض «ملف العمل الكامل» لترى ما ينقص في ملحقه.`;
 
 /** صفحة مهذبة لقارئ خارجي حين لم تكتمل الوثيقة المؤسسية بعد */
 export function pendingReport(doc) {

@@ -11,7 +11,7 @@
 //   • نوع المبادرة (مشروع، برنامج، محفظة) من نطاق عمل المشارك في ملفه،
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
-import { DIMENSIONS, fieldsFor, latinDigits, missingFields, modelsFor } from './logic.js';
+import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor } from './logic.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -108,21 +108,27 @@ export function cleanRubric(scores, notes) {
 // D05: لا حساب موازٍ هنا. النتيجة من التقييم الختامي وحده (computeFinal في final.js)، ومنها الشهادة.
 
 // ── الفصول ──
-// نماذج الوثيقة كما تخص المشارك: نماذج capstone_sort المتاحة بمستواه ونطاقه
-export function capstoneModels(models, levels, scope) {
-  return modelsFor((models || []).filter((m) => m.capstone_sort != null), levels, scope)
+// نماذج الوثيقة كما تخص المشارك: نماذج capstone_sort المتاحة بمستواه ونطاقه.
+// kept (answeredModels): فصول كتب فيها قبل أن يُرفع مستواها، تبقى في وثيقته (قاعدة «لا فقد»)
+/** @param {any[]} models @param {any} levels @param {any} scope @param {Set<string> | null} [kept] */
+export function capstoneModels(models, levels, scope, kept = null) {
+  return modelsFor((models || []).filter((m) => m.capstone_sort != null), levels, scope, kept)
     .sort((a, b) => a.capstone_sort - b.capstone_sort);
 }
 
 // حقول نموذج للمشارك: بمستواه في بُعد النموذج ونطاقه، وحقول التعمق إن كان
-// بُعد النموذج محور الأولوية في مساره
-export const modelFields = (/** @type {any} */ m, /** @type {any} */ levels, /** @type {any} */ scope, /** @type {string | null} */ priority = null) => fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority);
+// بُعد النموذج محور الأولوية في مساره. answers: إجاباته، فيبقى ما كتبه في حقل رُفع مستواه
+// ظاهرًا غير مطلوب، ويصير الفصل الباقي بقاعدة «لا فقد» كله غير مطلوب
+// since: أول اعتماد لمسار المشارك، فيُطلب منه ما صار مطلوبًا لمن بدأ بعد ترحيل (required_after)
+export const modelFields = (/** @type {any} */ m, /** @type {any} */ levels, /** @type {any} */ scope, /** @type {string | null} */ priority = null, /** @type {any} */ answers = null, /** @type {string | null} */ since = null) =>
+  fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority, answers, keptModel(m, levels), since);
 
 // مشروع المسار التطبيقي من مصدره الوحيد: فصول الوثيقة نفسها بمستوى المشارك
 // ونطاقه، وما يتعمق فيه منها بمحور أولويته. لا نص يُكتب يدويًا لكل مسار.
 const chaptersWord = (n) => (n === 1 ? 'فصل واحد' : n === 2 ? 'فصلين' : n <= 10 ? `${n} فصول` : `${n} فصلًا`);
-export function trackProject(models, levels, scope, priority) {
-  const mine = capstoneModels(models, levels, scope);
+/** @param {any[]} models @param {any} levels @param {any} scope @param {any} priority @param {Set<string> | null} [kept] */
+export function trackProject(models, levels, scope, priority, kept = null) {
+  const mine = capstoneModels(models, levels, scope, kept);
   if (!mine.length) return null;
   const deep = mine.filter((m) => m.dimension === priority).map((m) => m.title_ar);
   const where = scope ? ` على مستوى ${SCOPE_TITLES[scope]}` : '';
@@ -261,7 +267,8 @@ export function costSummary(model, answers) {
     const k = codeOf(t.cell(r, code)) || '—';
     by[k] = (by[k] || 0) + c;
   }
-  const contingency = parseNumber(answers?.contingency);
+  // الاحتياطي من المتوسط (مصفوفة الوثيقة بحسب المستوى): لا يُحسب إن لم يكن حقله من حقول المشارك
+  const contingency = model?.fields && !model.fields.some((f) => f.key === 'contingency') ? null : parseNumber(answers?.contingency);
   const envelope = parseNumber(answers?.envelope);
   const pct = contingency != null && contingency > 0 && contingency <= 50 ? contingency : 0;
   return { total, by, contingency: pct, withContingency: Math.round(total * (1 + pct / 100)), envelope };
@@ -273,6 +280,8 @@ export function costSummary(model, answers) {
 // فحوص حاجبة: لا تُسلَّم وثيقة تخالفها مهما بلغت الجاهزية. هي ما يجعل المبادرة قابلة للاعتماد
 // في أي جهة: راعٍ حقيقي، ومحاسب واحد، وتكلفة ضمن الميزانية، ومنفعة لها مالك، وخطر عالٍ له مالك.
 // حدود شدة الخطر (الاحتمال × الأثر من 1 إلى 5): مصدر واحد للفحص وخريطة المخاطر وحالة العمل
+// عنوان التكلفة: «مع الاحتياطي» حين يكون للوثيقة احتياطي فقط، فلا تقول وثيقة التأسيسي «مع احتياطي 0%»
+export const costLabel = (/** @type {any} */ cost) => (cost?.contingency ? 'التكلفة مع الاحتياطي' : 'التكلفة');
 export const RISK_HIGH = 12, RISK_MID = 6;
 export const BLOCKING = new Set(['raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
 export function capstoneChecks(ctx) {
@@ -319,8 +328,8 @@ export function capstoneChecks(ctx) {
   if (has('cost-plan')) {
     const c = costSummary(M['cost-plan'], A['cost-plan']);
     if (c && c.envelope != null) {
-      add('cost-envelope', 'التكلفة مع الاحتياطي ضمن الميزانية المتاحة', c.withContingency <= c.envelope,
-        `التكلفة مع الاحتياطي ${c.withContingency.toLocaleString('en')} تتجاوز الميزانية ${c.envelope.toLocaleString('en')}.`);
+      add('cost-envelope', `${costLabel(c)} ضمن الميزانية المتاحة`, c.withContingency <= c.envelope,
+        `${costLabel(c)} ${c.withContingency.toLocaleString('en')} تتجاوز الميزانية ${c.envelope.toLocaleString('en')}.`);
     }
   }
   const sched = has('schedule') ? table(M.schedule, A.schedule, 'activities') : null;
@@ -386,10 +395,11 @@ export function capstoneChecks(ctx) {
     const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || !t.cell(r, owner)).map((r) => t.cell(r, 0));
     add('benefit-owner', 'لكل منفعة خط أساس ومستهدف ومالك بعد التسليم', t.rows.length && !weak.length,
       t.rows.length ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : 'لم تُدخل منافع في سجل المنافع بعد.');
-    if (has('evidence-plan')) {
-      const ev = table(M['evidence-plan'], A['evidence-plan'], 'plan');
+    // خطة القياس تظهر للتأسيسي بسطر النجاح وحده (مصفوفة الوثيقة بحسب المستوى): الفحص لمن يرى جدول الخطة
+    const ev = has('evidence-plan') ? table(M['evidence-plan'], A['evidence-plan'], 'plan') : null;
+    if (ev) {
       const ind = t.col('المؤشر');
-      const planned = ev ? ev.rows.map((r) => norm(ev.cell(r, 0))) : [];
+      const planned = ev.rows.map((r) => norm(ev.cell(r, 0)));
       const miss = t.rows.map((r) => t.cell(r, ind) || t.cell(r, 0)).filter((x) => x && !planned.some((y) => y && (y.includes(norm(x)) || norm(x).includes(y))));
       add('evidence', 'خطة الأدلة تقيس كل مؤشرات المنافع', !miss.length, `مؤشرات بلا خطة قياس: ${miss.slice(0, 6).join('، ')}. استوردها من سجل المنافع.`);
     }
@@ -418,9 +428,12 @@ export function capstoneChecks(ctx) {
 }
 
 // ── الجاهزية ──
-// نصفها اكتمال الفصول، ونصفها فحوص الاتساق. sections: [{ complete }]
+// نصفها اكتمال الفصول، ونصفها فحوص الاتساق. sections: [{ complete, counted }]
+// الفصل الذي لا حقل مطلوبًا فيه (فصل باقٍ بقاعدة «لا فقد»، أو فصل لم يصر مطلوبًا لمن بدأ قبل ترحيله) لا يُحسب
+// مكتملًا ولا ناقصًا (counted: false)، فلا يرفع الجاهزية فصل لا يُطلب منه شيء
 export function readiness(sections, checks) {
-  const s = sections.length ? sections.filter((x) => x.complete).length / sections.length : 0;
+  const live = sections.filter((x) => x.counted !== false);
+  const s = live.length ? live.filter((x) => x.complete).length / live.length : (sections.length ? 1 : 0);
   const c = checks.length ? checks.filter((x) => x.ok).length / checks.length : 1;
   return Math.round((s * 0.5 + c * 0.5) * 100);
 }
@@ -430,6 +443,11 @@ export function sectionState(model, fields, sub) {
   const missing = missingFields(fields, sub?.answers || {});
   return {
     complete: !missing.length, missing,
+    // يُحسب في الجاهزية فصل فيه حقل مطلوب، أو فصل باقٍ بقاعدة «لا فقد» اكتمل بحقوله الأصلية (فلا ينقص من بدأ قبل الترحيل
+    // ما أكمله). والباقي الناقص لا يُحسب مكتملًا ولا ناقصًا
+    // optional-exempt: حقول نموذج لا أنشطة
+    counted: (fields || []).some((f) => f.required !== false)
+      || ((fields || []).some((f) => f.kept_req) && !missingFields((fields || []).map((f) => (f.kept_req ? { ...f, required: true } : f)), sub?.answers || {}).length),
     status: sub?.status || null, rating: sub?.rating ?? null,
   };
 }

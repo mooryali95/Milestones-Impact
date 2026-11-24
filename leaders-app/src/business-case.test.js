@@ -47,7 +47,9 @@ describe('حالة العمل: الأبعاد الخمسة', () => {
     const by = Object.fromEntries(s.map((x) => [x.key, x]));
     expect(by.strategic).toMatchObject({ state: 'partial', done: 1, total: 2 });
     expect(by.financial).toMatchObject({ state: 'done', done: 1, total: 1 });
-    expect(by.commercial.state).toBe('none');
+    // بلا فصل الشراء يُجاب البعد التجاري من «الموارد والتكلفة» (مصفوفة الوثيقة بحسب المستوى)، وبلاهما معًا هو غائب
+    expect(by.commercial).toMatchObject({ state: 'done', done: 1, total: 1 });
+    expect(Object.fromEntries(caseStatus([{ key: 'initiative-charter', complete: true }]).map((x) => [x.key, x])).commercial.state).toBe('none');
   });
   it('يُبنى من الفصول نفسها: التوصية والبدائل والموازنة والمخاطر العالية', () => {
     const bc = Object.fromEntries(businessCase(doc()).map((c) => [c.key, c]));
@@ -59,7 +61,7 @@ describe('حالة العمل: الأبعاد الخمسة', () => {
   });
   it('البعد الذي لا فصل له في الوثيقة يُقال إنه غائب، لا يُخفى', () => {
     const d = doc();
-    d.sections = d.sections.filter((s) => s.key !== 'procurement');
+    d.sections = d.sections.filter((s) => s.key !== 'procurement' && s.key !== 'cost-plan');
     expect(businessCase(d).find((c) => c.key === 'commercial').missing).toBe('ليس من فصول وثيقتك في مستواك');
   });
   it('المخاطر العالية: الاحتمال × الأثر 12 فأكثر فقط', () => {
