@@ -7,7 +7,7 @@ const { CONFIG, db } = await import('./core.ts');
 const MD = await import('./model-digest.ts');
 const A = await import('./admin.ts');
 const V = await import('./advisor.ts');
-const { digestGroups, needsDigest, bulkReadIds, readingList } = await import('./model-review.js');
+const { digestGroups, needsDigest, bulkReadIds, readingList, readingCounts } = await import('./model-review.js');
 const { modelStatus } = await import('./logic.js');
 const { modelStatusAr, REVIEWER_AR } = await import('./labels.js');
 
@@ -35,7 +35,7 @@ function fakeFrom(tables: Record<string, Row[]>) {
       eq: (c: string, v: unknown) => { filters.push((r) => val(r, c) === v); return q; },
       in: (c: string, vs: unknown[]) => { filters.push((r) => vs.includes(val(r, c))); return q; },
       neq: (c: string, v: unknown) => { filters.push((r) => val(r, c) !== v); return q; },
-      is: () => q, not: () => q, gte: () => q, order: () => q,
+      is: () => q, not: () => q, gte: () => q, order: () => q, range: () => q,
       limit: (n: number) => { limit = n; return q; },
       maybeSingle: () => { single = true; return q; },
       single: () => { single = true; return q; },
@@ -182,4 +182,33 @@ Deno.test('عدد «بلا مستشار» في لوحة الإدارة: من ي�
     assertEquals(groups.map((g: any) => [g.id, g.team, g.items.map((x: any) => x.id)]).sort(), [['p1', false, ['s1']], ['p2', true, ['s3']]]);
     assertEquals(gates.map((x: any) => x.id), ['s2']);
   } finally { restore(); }
+});
+
+Deno.test('advisorsOf بقراءات معدودة يطابق advisorOf لكل مشارك: خبير المجموعة يغلب، وغير المعتمد يسقط، والجهة والتجريبي', async () => {
+  const tables = world();
+  const t = new Date(at(7)).toISOString();
+  tables.cohorts.push({ id: 'cO', advisor_expert_id: 'xB', organization_id: 'o1', status: 'running' }, { id: 'cD', advisor_expert_id: 'xA', organization_id: null, is_default: true, status: 'running' });
+  tables.experts.push({ id: 'xB', full_name: 'د. علي', email: 'b@x.sa', status: 'active', roles: ['advisor'] }, { id: 'xG', full_name: 'د. هند', email: 'g@x.sa', status: 'active', roles: ['advisor'] },
+    { id: 'xN', full_name: 'معلّق', email: 'n@x.sa', status: 'applied', roles: ['advisor'] });
+  tables.cohort_groups.push({ id: 'g1', advisor_expert_id: 'xG' }, { id: 'g2', advisor_expert_id: 'xN' });
+  tables.cohort_group_members.push({ participant_id: 'p3', cohort_id: 'cA', cohort_groups: { advisor_expert_id: 'xG' } }, { participant_id: 'p4', cohort_id: 'cA', cohort_groups: { advisor_expert_id: 'xN' } },
+    { participant_id: 'p5', cohort_id: 'cB', cohort_groups: { advisor_expert_id: 'xG' } });
+  tables.enrollments.push(...['p3', 'p4'].map((id) => ({ participant_id: id, cohort_id: 'cA', status: 'active', created_at: t })));
+  const ps = [P1, P2, { id: 'p3', organization_id: null }, { id: 'p4', organization_id: null }, { id: 'p5', organization_id: null }, { id: 'p6', organization_id: 'o1' }, { id: 'p7', organization_id: null, is_demo: true }];
+  const restore = install(tables);
+  try {
+    const one: Record<string, string | null> = {};
+    for (const p of ps) one[p.id] = ((await V.advisorOf(p as any)) as any)?.id ?? null;
+    const many = await V.advisorsOf(ps as any);
+    const batch = Object.fromEntries(ps.map((p) => [p.id, many.has(p.id) ? (many.get(p.id)?.id ?? null) : 'missing']));
+    assertEquals(batch, one);
+    assertEquals(one, { p1: 'xA', p2: null, p3: 'xG', p4: 'xA', p5: 'xA', p6: 'xB', p7: null });
+  } finally { restore(); }
+});
+
+Deno.test('عدّ «للقراءة» من القائمة نفسها: المسلَّم غير المقروء بلا البطاقة ولا التجريبي، والبطاقة وحدها للاعتماد', () => {
+  const rows = world().model_submissions.concat([{ id: 's5', participant_id: 'd', status: 'submitted', participants: { is_demo: true }, learning_models: MREG }]);
+  assertEquals(readingCounts(rows), { read: 2, gates: 1 });
+  const { groups } = readingList(rows.filter((x: any) => !x.participants?.is_demo));
+  assertEquals(groups.reduce((n: number, g: any) => n + g.items.length, 0), 2);
 });

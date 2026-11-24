@@ -110,7 +110,8 @@ function AlertTest({ slackOn }) {
   );
 }
 
-// الطي والفتح: اختيار المتصفح محفوظ (localStorage)، والبطاقة مفتوحة ما لم يطوها صاحبها، وأي حال غير سليمة تفتحها مهما كان
+// الطي والفتح: اختيار المتصفح محفوظ (localStorage). السليمة سطر ملخص مطوي ما لم يفتحها صاحبها (تدقيق 2026-11-23: صحة البريد
+// شارة مضغوطة لا تتمدد إلا عند الخلل)، وأي حال غير سليمة تفتحها مهما كان
 // المحفوظ. اختيار الجلسة (chosen) مقرون بالحال التي اختير فيها: تغيّر الحال إلى غير سليمة يسقطه في الرسم نفسه، بلا رسم مطوي
 // قبله. وطي بطاقة غير سليمة لهذه الجلسة وحدها، فلا يُحفظ فيطوي زيارة سليمة لاحقة
 const PREF_KEY = 'mi_admin_ops_card';
@@ -119,7 +120,7 @@ const readPref = () => { try { return localStorage.getItem(PREF_KEY); } catch { 
 const writePref = (v) => { try { localStorage.setItem(PREF_KEY, v); } catch { /* التخزين محجوب: الاختيار لهذه الجلسة */ } };
 export const cardOpen = (level, pref, chosen = null) => {
   if (chosen && (chosen.lv === level || level === 'green')) return chosen.open;
-  return level !== 'green' ? true : pref !== 'closed';
+  return level !== 'green' ? true : pref === 'open';
 };
 
 const Ring = ({ m }) => {

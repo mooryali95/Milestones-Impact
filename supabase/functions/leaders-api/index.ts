@@ -521,6 +521,7 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any)
 
 const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>> = {
   'admin.health': () => S.health(),
+  'admin.platform-health': () => S.platformHealth(),
   // الإعدادات العامة: مخزن واحد لكل قيمة يضبطها المالك (settings.js)، والحفظ للمدير ذي الكتابة ويُسجَّل
   'admin.settings': () => ST.adminGet(),
   'admin.settings-save': (a, b) => A.writer(a, ST.adminSave, b),

@@ -10,7 +10,7 @@ import { audit, CONFIG, db, Fail, sendMail } from './core.ts';
 import { bdi, mailButton, mailNote, mailRows, mailShell, mailText } from '../_shared/mail.ts';
 import { riyadhDay } from '../_shared/slack.ts';
 import { SITES } from '../_shared/sites.js';
-import { advisorOf } from './advisor.ts';
+import { advisorOf, advisorsOf } from './advisor.ts';
 import { listed } from './counting.ts';
 import { firstName } from './hall.js';
 import { REVIEWER_AR } from './labels.js';
@@ -54,12 +54,12 @@ export async function modelDigest(now = Date.now()): Promise<ModelDigestResult> 
   if (error) return { due: true, error: `submissions: ${error.message || error}` };
   const rows = (data || []) as any[];
   // مراجع كل مشارك مرة: تعذّر معرفته يترك تسليماته للغد بدل أن تذهب لغير مراجعها
-  const reviewers = new Map<string, any>();
-  let skipped = 0;
-  for (const pid of new Set(rows.map((r) => r.participant_id))) {
-    const p = rows.find((r) => r.participant_id === pid)?.participants;
-    try { reviewers.set(pid, await advisorOf(p)); } catch { skipped++; }
-  }
+  // بقراءات معدودة للجميع (advisorsOf) بدل قراءات لكل مشارك؛ من غاب عن الخريطة تعذّر تحديده
+  const people = new Map<string, any>();
+  for (const r of rows) if (!people.has(r.participant_id)) people.set(r.participant_id, { ...r.participants, id: r.participant_id });
+  let reviewers = new Map<string, any>();
+  try { reviewers = await advisorsOf([...people.values()]); } catch (e) { console.error('model digest reviewers:', e); }
+  let skipped = [...people.keys()].filter((pid) => !reviewers.has(pid)).length;
   const groups = digestGroups(rows, reviewers);
   let sent = 0, marked = 0;
   const stamp = new Date(now).toISOString();

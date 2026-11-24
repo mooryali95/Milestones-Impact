@@ -64,6 +64,9 @@ export default function NotifyRouting() {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  // مجموعات الجدول تُطوى بفئتها (المرحلة 3 من تدقيق اللوحة)، والطيّ عرض فقط: الصفوف المطوية تبقى في المسودة كما هي
+  const [folded, setFolded] = useState(() => new Set());
+  const fold = (cat) => setFolded((s) => { const n = new Set(s); if (n.has(cat)) n.delete(cat); else n.add(cat); return n; });
   const ops = useOpsHealth(true);
   const load = useCallback(async () => {
     const r = await L('admin.notify-routing');
@@ -114,12 +117,16 @@ export default function NotifyRouting() {
       </div>
 
       <div className="la-table-wrap">
-        <table className="la-table nr-matrix">
+        <table className="la-table nr-matrix t24">
           <thead><tr><th scope="col">الحدث</th><th scope="col">الطبقة</th>{CHANNELS.map((c) => <th key={c} scope="col">{CHANNEL_AR[c]}</th>)}<th scope="col">{CHANNEL_AR.log}</th></tr></thead>
           {groups.map(([cat, label, rows]) => (
-            <tbody key={cat}>
-              <tr className="nr-cat"><th colSpan={6} scope="colgroup">{label}</th></tr>
-              {rows.map((e) => {
+            <tbody key={cat} id={`nr-g-${cat}`}>
+              <tr className="nr-cat"><th colSpan={6} scope="colgroup">
+                <button type="button" className="nr-fold" aria-expanded={!folded.has(cat)} aria-controls={`nr-g-${cat}`} onClick={() => fold(cat)}>
+                  <span aria-hidden="true">{folded.has(cat) ? '◂' : '▾'}</span> {label} <small className="la-muted">({rows.length}{rows.some((e) => e.custom) ? ` · ${rows.filter((e) => e.custom).length} معدّل` : ''})</small>
+                </button>
+              </th></tr>
+              {!folded.has(cat) && rows.map((e) => {
                 const none = !CHANNELS.some((c) => e.want[c]);
                 return (
                   <tr key={e.key} data-event={e.key} className={e.custom ? 'custom' : ''}>

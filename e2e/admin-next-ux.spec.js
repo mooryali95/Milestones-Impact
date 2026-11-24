@@ -72,6 +72,9 @@ test('العدّاد يحمرّ حين يتأخر بند عن مهلته، و«9
   const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
   // طلب الحذف متعذر: تبويب المشاركين بلا عدّاد بدل رقم ناقص، والمجموع معلَّم بأنه قد يزيد
   await expect(tabs.getByRole('button', { name: /كتاب القائد/ }).locator('.la-badge')).toHaveText('99+');
+  // المدفوعات في «الإعداد» المطوية افتراضيًا (المرحلة 2): عددها على عنوان المجموعة، ثم على بندها بعد فتحها
+  await expect(tabs.getByRole('button', { name: /^مجموعة الإعداد/ }).locator('.la-badge')).toHaveText('7');
+  await tabs.getByRole('button', { name: /^مجموعة الإعداد/ }).click();
   await expect(tabs.getByRole('button', { name: /^المدفوعات/ }).locator('.la-badge')).toHaveText('7');
   await expect(tabs.getByRole('button', { name: /^المشاركون/ }).locator('.la-badge')).toHaveCount(0);
   const ctx = page.getByRole('button', { name: /تطبيق القادة/ }).locator('.ctx-badge');
@@ -125,10 +128,10 @@ test('المجموعة المطوية: نوع متعذر فيها يجعل عد�
     by_tab: { capstones: { n: 3, late: 1 }, activities: { n: 1, late: 0 } }, items: [],
   });
   const nav = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
-  const daily = nav.getByRole('button', { name: /^مجموعة اليومي/ });
+  const daily = nav.getByRole('button', { name: /^مجموعة العمل/ });
   await daily.click();
   await expect(daily.locator('.la-badge')).toHaveText('4+');
-  await expect(daily).toHaveAttribute('aria-label', 'مجموعة اليومي، 4 أو أكثر بانتظارك، منها 1 متأخر');
+  await expect(daily).toHaveAttribute('aria-label', 'مجموعة العمل، 4 أو أكثر بانتظارك، منها 1 متأخر');
 });
 
 test('المحرر يحمي التعديل: تأكيد قبل الإغلاق، ومسودة تُستعاد', async ({ page }) => {

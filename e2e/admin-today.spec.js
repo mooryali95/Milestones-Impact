@@ -59,12 +59,17 @@ test('الرأس: التحية باسم المدير والتاريخ، وشار
   await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false');
   await expect(toggle(page)).toHaveAttribute('aria-controls', 'th-body');
   await expect(page.locator('#th-body')).toBeHidden();
-  // داخلها البطاقات كما كانت: صحة البريد وحساب العرض
+  // داخلها بطاقة صحة البريد
   await toggle(page).click();
   await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
   const details = page.getByRole('region', { name: 'تفاصيل صحة المنظومة' });
   await expect(details.getByRole('region', { name: 'صحة البريد والتنبيه' })).toHaveAttribute('data-level', 'green');
-  await expect(details.getByRole('button', { name: 'افتح الحساب التجريبي' })).toBeVisible();
+  // الحساب التجريبي خرج من الشارة إلى «أدوات التجربة» المطوية في آخر الصفحة (تدقيق 2026-11-23)
+  await expect(details.getByRole('button', { name: 'افتح الحساب التجريبي' })).toHaveCount(0);
+  const tools = page.locator('#today-tools');
+  await expect(tools.getByRole('button', { name: 'افتح الحساب التجريبي' })).toBeHidden();
+  await tools.locator(':scope > summary').click();
+  await expect(tools.getByRole('button', { name: 'افتح الحساب التجريبي' })).toBeVisible();
   await page.reload();
   await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
   await toggle(page).press('Enter');
@@ -302,4 +307,52 @@ test('3ب: قرار في طابور المتطلبات يعيد طلب admin.tod
   await expect.poll(n).toBe(2);
   await page.waitForTimeout(1000);
   expect(n()).toBe(2);
+});
+
+// «صحة المنصة» (admin.platform-health): صف لكل فحص بلونه وسطر علاجه، والأحكام من الخادم كما هي
+test('صحة المنصة: صف لكل فحص بلونه، والعلاج لما يحتاجه وحده', async ({ page }) => {
+  const checks = [
+    { key: 'migrations', label: 'ترحيلات القاعدة', level: 'bad', line: '1 لم يُطبَّق: 20261128100000_leaders_atomic_and_health', remedy: 'شغّل سير «migrate» في GitHub Actions لتطبيقها على الإنتاج.' },
+    { key: 'alert_email', label: 'بريد التنبيه', level: 'ok', line: 'LEADERS_ALERT_EMAIL مضبوط', remedy: '' },
+    { key: 'cron', label: 'المهمة الساعية', level: 'unknown', line: 'تعذّرت قراءة حالة leaders-expert-offers', remedy: 'راجع صلاحية القراءة.' },
+    { key: 'digest', label: 'ملخص النماذج اليومي', level: 'ok', line: 'آخر ملخص 2026-11-23', remedy: '' },
+    { key: 'sponsor_codes', label: 'رموز الرعاية', level: 'warn', line: 'جهة بلا رمز فعّال: جهة ب', remedy: 'أنشئ رمزًا من ملف الجهة.' },
+  ];
+  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'bad', checks } } });
+  const card = page.getByRole('region', { name: 'صحة المنصة', exact: true });
+  await expect(card).toHaveAttribute('data-level', 'bad');
+  await expect(card.locator('.ph-row')).toHaveCount(5);
+  await expect(card.locator('.ph-row[data-level="bad"]')).toContainText('شغّل سير «migrate»');
+  await expect(card.locator('.ph-row[data-level="warn"]')).toContainText('جهة ب');
+  await expect(card.locator('.ph-row[data-level="ok"] .ph-remedy')).toHaveCount(0);
+});
+
+test('صحة المنصة: رد بلا فحوص لا يُرسم، وتعذّر القراءة سطر خافت', async ({ page }) => {
+  await setup(page);
+  await expect(page.getByRole('heading', { name: /الخير/ })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'صحة المنصة', exact: true })).toHaveCount(0);
+});
+
+// تدقيق اللوحة 2026-11-23 (المرحلة 1): «قرارات اليوم» أول كتلة بعد التحية، قبل الأرقام والصحة وأدوات التجربة، ولو كانت الشارة مفتوحة بخلل
+test('الترتيب: قرارات اليوم أولًا، ثم الأرقام، ثم شارة الصحة، وأدوات التجربة في الآخر مطوية', async ({ page }) => {
+  await setup(page, { health: { ...healthOk, missing_secrets: ['X_KEY'] } });
+  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
+  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
+  await expect(page.locator('.inbox .inbox-list li')).toHaveCount(3);
+  const dec = await y('#today-decisions'), nums = await y('.today-nums'), health = await y('.today-health'), tools = await y('#today-tools');
+  expect(dec).toBeLessThan(nums);
+  expect(nums).toBeLessThan(health);
+  expect(health).toBeLessThan(tools);
+  // أول عنوان قسم بعد التحية هو «قرارات اليوم»
+  await expect(page.locator('h2.today-sec').first()).toHaveText('قرارات اليوم');
+  await expect(page.locator('#today-tools')).not.toHaveAttribute('open', '');
+});
+
+test('صحة المنصة السليمة سطر مطوي، وفتحه يُظهر الفحوص', async ({ page }) => {
+  const checks = [{ key: 'cron', label: 'المهمة الساعية', level: 'ok', line: 'تعمل', remedy: '' }];
+  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'ok', checks } } });
+  const card = page.getByRole('region', { name: 'صحة المنصة', exact: true });
+  await expect(card.locator('.ph-row')).toBeHidden();
+  await card.locator('summary').click();
+  await expect(card.locator('.ph-row')).toBeVisible();
 });

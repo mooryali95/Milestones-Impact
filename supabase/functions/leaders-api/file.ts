@@ -23,7 +23,7 @@ import { journeyApproved, overallLevel } from './logic.js';
 import { stageNow } from './journey-map.js';
 import * as OB from './observations.ts';
 import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
-import { flagsOf, fullTimelineOf, TIMELINE_PAGE, TIMELINE_TYPES, timelineOf } from './observations.js';
+import { cursorAuditId, flagsOf, fullTimelineOf, parseTimelineCursor, TIMELINE_PAGE, TIMELINE_TYPES, timelineOf } from './observations.js';
 import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
 import { listed } from './counting.ts';
 
@@ -280,14 +280,22 @@ export async function hallClose(e: any, b: Body) { await hallSessionOf(e, b); re
 export async function participantTimeline(b: Body) {
   const id = String(b.participant_id || '');
   if (!isUuid(id)) throw new Fail('بيانات ناقصة');
-  const before = typeof b.before === 'string' && !Number.isNaN(Date.parse(b.before)) ? b.before : null;
+  // مؤشر مركب (الوقت ثم المفتاح الثابت، observations.js): الأسطر في الوقت نفسه لا تسقط بين صفحتين ولا تتكرر
+  const cur = parseTimelineCursor(b.before);
+  const before = cur ? String(b.before) : null;
   const types = Array.isArray(b.types) ? b.types.filter((t: unknown) => TIMELINE_TYPES.includes(String(t))) : null;
   const limit = TIMELINE_PAGE;
   const { data: p } = await db.from('participants').select('id, created_at, profile_completed_at').eq('id', id).maybeSingle();
   if (!p) throw new Fail('المشارك غير موجود', 404);
   const wantAudit = !types?.length || types.some((t: string) => ['account', 'decision', 'assessment', 'initiative', 'attendance', 'note'].includes(t));
   let audits: any = db.from('audit_log').select('*').or(`entity_id.eq.${id},actor.eq.${id}`);
-  if (before) audits = audits.lt('created_at', before);
+  // ما شارك المؤشر وقته يُقرأ أيضًا (lte)، وما عُرض منه في الصفحة السابقة يُستبعد بالمعرّف إن كان المؤشر سطر سجل
+  if (cur) {
+    audits = audits.lte('created_at', cur.at);
+    const aid = cursorAuditId(cur);
+    if (aid) audits = audits.or(`created_at.lt.${cur.at},id.lt.${aid}`);
+    else if (cur.key == null) audits = audits.lt('created_at', cur.at);
+  }
   const safe = (r: any) => (r?.error ? [] : r?.data || []);
   const [login, assessments, placements, models, attendance, sessions, capstone, history, observations] = await Promise.all([
     db.from('auth_sessions').select('created_at').eq('participant_id', id).order('created_at', { ascending: true }).limit(1),
@@ -297,7 +305,7 @@ export async function participantTimeline(b: Body) {
     db.from('workshop_attendance').select('checked_in_at, workshop_sessions(title_ar)').eq('participant_id', id),
     db.from('coaching_sessions').select('status, starts_at, experts(full_name)').eq('participant_id', id),
     db.from('capstones').select('submitted_at, approved_at').eq('participant_id', id).maybeSingle(),
-    wantAudit ? audits.order('created_at', { ascending: false }).limit(limit + 1) : Promise.resolve({ data: [] }),
+    wantAudit ? audits.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit + 1) : Promise.resolve({ data: [] }),
     OB.listFor(id).catch(() => []),
   ]);
   const { rows, next } = fullTimelineOf({

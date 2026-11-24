@@ -2,7 +2,7 @@
 // تبويب «الرحلة» في ملف المشارك (تصور 2026-11-23، اعتمده المالك)
 // ════════════════════════════════════════════════════════════════
 // خط واحد بترتيب رحلة المشارك نفسها: الأطوار وكتلها من journeyPhases (stage-move.js) الذي تقرؤه رحلته، فلا ترتيب
-// ثانٍ. فوقه شريط بالمرحلة الحالية وخطوتها التالية ونسبتها، ومنه «نقل إلى مرحلة…» و«أكمل هذه المرحلة». المعلم في مرحلته
+// ثانٍ. فوقه شريط بالمرحلة الحالية وخطوتها التالية ونسبتها، ومنه «نقل إلى مرحلة…»، و«أكمل هذه المرحلة» في سطر المرحلة الحالية. المعلم في مرحلته
 // شريحة بموعده، وأفعاله في قائمة «⋯» المرحلة؛ وما لا مرحلة له في «معالم عامة» آخر الخط. البند يحمل مصدر اكتماله
 // (completionSource): التلقائي لا يُعتمد بزر، ويُتجاوز يدويًا بسبب مكتوب من «⋯». عرض لما يرسله admin.participant.
 import React, { useMemo, useState } from 'react';
@@ -33,7 +33,10 @@ function Item({ it, s, canWrite, onReview, onEvidence }) {
   const src = completionSource(it);
   const system = src !== 'manual';
   // البند الموثق مكتمل بتجاوز يدوي: علامته «done» ودليله لم يكتمل
-  const overridden = src === 'evidence' && !it.auto && it.status === 'done' && it.activity && !it.activity.done;
+  // والتلقائي القابل للتجاوز (override_ok: E-PRES وR-6M) مكتمل بلا نص دليل من مصدره = اعتماد يدوي
+  const overridden = (src === 'evidence' && !it.auto && it.status === 'done' && it.activity && !it.activity.done)
+    || (it.override_ok && it.status === 'done' && !it.auto_note);
+  const canBypass = (src === 'evidence' && !it.auto) || !!it.override_ok;
   const bypass = async () => {
     const note = await prompt(`تجاوز يدوي لـ«${it.title_ar}»: يُعدّ مكتملًا دون دليله. السبب (يُحفظ في السجل):`, '');
     if (note === null) return;
@@ -49,6 +52,7 @@ function Item({ it, s, canWrite, onReview, onEvidence }) {
         <span className="pj-src">
           <span className={`la-chip ${system ? 'ok' : ''}`} title={system ? 'يحسمه النظام من مصدره' : 'يعتمده فريق البرنامج'}>{overridden ? 'تجاوز يدوي' : SOURCE_AR[src]}</span>
           {system && <ActivitySummary a={it.activity} />}
+          {it.auto_note && <small className="la-muted" data-auto-note>{it.auto_note}</small>}
         </span>
       </span>
       <span className="pj-act">
@@ -60,7 +64,7 @@ function Item({ it, s, canWrite, onReview, onEvidence }) {
           {it.status === 'submitted' && <button className="btn-sm ghost" onClick={() => onReview(it.id, 'returned')}>إرجاع</button>}
           {it.status === 'done' && <button className="btn-sm ghost" onClick={() => onReview(it.id, 'pending')}>إلغاء</button>}
         </>}
-        {live && src === 'evidence' && !it.auto && (
+        {live && canBypass && (
           <MoreMenu label={`إجراءات «${it.title_ar}»`} items={[
             it.status !== 'done' && { label: 'تجاوز يدوي', run: bypass },
             overridden && { label: 'ألغِ التجاوز', run: () => onReview(it.id, 'pending') },
@@ -146,6 +150,7 @@ export function MoveDialog({ p, journey, onClose, onMoved }) {
             </optgroup>
           ))}
         </select>
+        {!target && <p className="pj-move-hint la-muted" data-testid="move-hint">اختر المرحلة لترى ما ينقص قبلها. للأمام: تختار لكل مرحلة ناقصة «اعتمد اكتمالها» أو «أعفه منها». للخلف: تُعاد فتح المرحلة وما بعدها، ولا يُحذف شيء مما أنجزه.</p>}
         {plan && !plan.ok && <p className="la-err" role="alert">{plan.error}</p>}
         {plan?.ok && plan.direction === 'forward' && (
           <div className="pj-plan" data-testid="move-plan">
@@ -226,7 +231,8 @@ export default function PersonJourney({ r, canWrite, onDone, onReview, onStage, 
         {canWrite && journey.length > 0 && (
           <div className="pj-head-a">
             <button type="button" className="btn-sm primary" onClick={() => setMoving(true)}>نقل إلى مرحلة…</button>
-            {cur.stage && cur.stage.status !== 'done' && <button type="button" className="btn-sm ghost" onClick={() => complete(cur.stage)}>أكمل هذه المرحلة</button>}
+            {/* «أكمل هذه المرحلة» في سطر المرحلة الحالية وحده لا هنا (تدقيق 2026-11-23): كان مكررًا، وزر الرأس يكمل أولى المراحل
+                الحالية فقط، أما زر السطر فعلى كل مرحلة جارية (المتزامنة معًا) وبجوار بنودها، فلا يُسأل المدير أيها يقصد */}
           </div>
         )}
       </section>

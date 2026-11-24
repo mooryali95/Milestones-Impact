@@ -12,6 +12,8 @@ import { FINAL_APPROVAL_AR, FINAL_COMPONENT_AR, FINAL_DECISION_AR, FINAL_MEASURE
 
 const DEC_CHIP = { pass: 'ok', pass_notes: 'ok', extend: 'warn', fail: 'bad' };
 
+// نص الخادم حين لا تقييم (final.ts: Fail('لا تقييم', 404))
+const FINAL_NONE_AR = 'لا تقييم';
 export function FinalEvalCard({ participantId, canWrite }) {
   const { toast, prompt, confirm } = useUI();
   const [d, setD] = useState(null);
@@ -24,7 +26,9 @@ export function FinalEvalCard({ participantId, canWrite }) {
   }, [participantId]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <Spinner />;
-  if (!d.success) return <div className="la-err">{d.message}</div>;
+  // «لا تقييم» أو الحساب التجريبي (لا يُقيَّم ختاميًا) حالة فارغة لا خطأ: سطر رمادي محايد. وما سواها خطأ برسالة دائمًا
+  if (!d.success && (d.code === 'demo' || d.message === FINAL_NONE_AR)) return <p className="la-empty-note" role="status" data-testid="final-eval-empty">{d.code === 'demo' ? d.message : 'لا تقييم ختامي لهذا المشارك بعد.'}</p>;
+  if (!d.success) return <div className="la-err" role="alert">{d.message || 'تعذّرت قراءة التقييم الختامي الآن. أعد فتح الصفحة بعد قليل.'}</div>;
 
   const rec = d.record, live = d.live, status = rec?.status || 'draft';
   const locked = !canWrite || status === 'approved' || status === 'pending';

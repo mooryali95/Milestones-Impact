@@ -130,8 +130,10 @@ test('ملف المشارك: التدخل في مرحلة يصل إلى الخا
   const calls = await setup(page, { 'admin.participant': { ...person, journey }, 'admin.stage-override': { success: true } });
   await page.getByText('سارة الأحمد').click();
   await tab(page, 'الرحلة').click();
-  // «أكمل هذه المرحلة» في شريط الرأس: السؤال يسمي ما ينقصها، والسبب مطلوب
-  await page.getByRole('button', { name: 'أكمل هذه المرحلة' }).first().click();
+  // «أكمل هذه المرحلة» زر واحد في سطر المرحلة الحالية (لا تكرار في الرأس، تدقيق 2026-11-23): السؤال يسمي ما ينقصها، والسبب مطلوب
+  await expect(page.getByRole('button', { name: 'أكمل هذه المرحلة' })).toHaveCount(1);
+  await expect(page.locator('.pj-stage[data-stage="s1"]').getByRole('button', { name: 'أكمل هذه المرحلة' })).toBeVisible();
+  await page.getByRole('button', { name: 'أكمل هذه المرحلة' }).click();
   await page.getByRole('dialog').locator('input').fill('أنجزها في ورشة حضورية موثقة');
   await page.getByRole('dialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect(page.getByRole('status')).toHaveText('تم');
@@ -178,6 +180,8 @@ test('الجهات: البطاقات ولوحة الجهة ورابط الحمل
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ id: 'o1', seats: 11, domains: 'wt.gov.sa,portal.wt.gov.sa' });
   await expect(form).toBeHidden();
 
+  // المشاركون في تبويبهم من صفحة الجهة (تدقيق اللوحة، المرحلة 3)
+  await page.getByRole('tab', { name: 'المشاركون' }).click();
   await page.getByRole('button', { name: 'سارة الأحمد' }).click();
   await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
 });
@@ -456,7 +460,8 @@ test('فاعلية التذكير: النسب بحسب المرسل والمرح
       by_sender: [t('auto', { label: 'التذكير الآلي', progressed_pct: 0 }), t('mentor', { label: 'المرشد', sent: 1, progressed_pct: 100 })],
       by_stage: [t('التدريب')], stuck: [{ id: 'p2', name: 'Omar Ali', nudges: 3, misses: 3, stage: 'التدريب', last: '2026-11-20T10:00:00Z' }] },
   });
-  await page.getByRole('button', { name: 'فاعلية التذكير' }).click();
+  await page.getByRole('button', { name: 'المزيد من إجراءات المشاركين' }).click();
+  await page.getByRole('menuitem', { name: 'فاعلية التذكير' }).click();
   const dlg = page.getByRole('dialog', { name: 'فاعلية التذكير' });
   await expect(dlg.locator('.nr-kpis')).toContainText('25%تقدّم بعده');
   await expect(dlg.getByRole('region', { name: 'بحسب المرسل' })).toContainText('المرشد');

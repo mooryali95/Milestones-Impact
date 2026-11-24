@@ -55,9 +55,9 @@ describe('opsSummary: سطر البطاقة المطوية', () => {
 });
 
 describe('cardOpen: الطي والفتح', () => {
-  it('السليم يتبع المحفوظ (والمفتوح إن لم يُحفظ شيء)، وغير السليم مفتوح مهما حُفظ', () => {
-    // أول زيارة: مفتوحة كما كانت قبل الطي
-    expect(cardOpen('green', null)).toBe(true);
+  it('السليم يتبع المحفوظ (والمطوي إن لم يُحفظ شيء)، وغير السليم مفتوح مهما حُفظ', () => {
+    // السليمة مطوية سطرًا ما لم يفتحها صاحبها (تدقيق 2026-11-23)
+    expect(cardOpen('green', null)).toBe(false);
     expect(cardOpen('green', 'open')).toBe(true);
     expect(cardOpen('green', 'closed')).toBe(false);
     expect(cardOpen('amber', 'closed')).toBe(true);

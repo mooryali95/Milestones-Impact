@@ -43,6 +43,7 @@
     "@electric-sql/pglite": "^0.5.16",
     "@playwright/test": "1.65.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "axe-core": "^4.10.3",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
     "jsdom": "^25.0.1",

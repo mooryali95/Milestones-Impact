@@ -176,7 +176,8 @@ export class ScreenBoundary extends React.Component {
         {app ? 'تعذّر عرض اللوحة. بياناتك لم تتأثر.' : 'تعذّر عرض هذه الشاشة. بقية اللوحة تعمل، وبياناتك لم تتأثر.'}{' '}
         <button className="btn-sm ghost" type="button" onClick={() => this.setState({ error: null })}>حاول مرة أخرى</button>
         {app && <button className="btn-sm ghost" type="button" onClick={() => window.location.reload()}>أعد تحميل الصفحة</button>}
-        <small className="la-err-detail" dir="ltr">{detail}</small>
+        {/* نص الخطأ التقني (TypeError…) لا يُعرض في وجه المدير: مطوي تحت «تفاصيل تقنية» لمن يبلّغ عنه (تدقيق 2026-11-23) */}
+        <details className="la-err-more"><summary>تفاصيل تقنية</summary><small className="la-err-detail" dir="ltr">{detail}</small></details>
       </div>
     );
   }

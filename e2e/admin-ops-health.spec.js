@@ -68,9 +68,10 @@ test('أخضر: البطاقة أعلى النظرة العامة بالكلمة
   await expect(card(page)).toContainText('منذ 4 دقائق');
   await expect(page.locator('.ops-banner')).toHaveCount(0);
   await expect(card(page).locator('.ops-meter')).not.toHaveClass(/near|full/);
-  // البطاقة أول ما في النظرة العامة
-  const first = await page.locator('.la-card').first().getAttribute('id');
+  // البطاقة أول ما في شارة الصحة، والشارة بعد «قرارات اليوم» (تدقيق 2026-11-23: القرارات أول النظرة العامة)
+  const first = await page.locator('#th-body .la-card').first().getAttribute('id');
   expect(first).toBe('ops-health');
+  expect((await page.locator('#today-decisions').boundingBox()).y).toBeLessThan((await page.locator('.today-health').boundingBox()).y);
   expect(calls.filter((c) => c.action === 'admin.ops-health').length).toBe(1);
 });
 
@@ -164,18 +165,23 @@ test('بعد التنبيه التجريبي تتحدث الأرقام وحده�
   await expect.poll(n, { timeout: 12000 }).toBe(3);
 });
 
-test('الطي: السليم في أول زيارة داخل شارة مطوية، وفتحها يُظهر البطاقة مفتوحة، وزرها يطويها بالفأرة ولوحة المفاتيح إلى سطر ملخص هادئ، والاختيار يُحفظ', async ({ page }) => {
+test('الطي: السليم في أول زيارة داخل شارة مطوية، وفتحها يُظهر البطاقة سطر ملخص هادئًا، وزرها يفتحها ويطويها بالفأرة ولوحة المفاتيح، والاختيار يُحفظ', async ({ page }) => {
   await setup(page, { state: 'green', pref: null, badge: false });
   // أول زيارة: الشارة مطوية لأن كل شيء سليم، والبطاقة داخلها
   const th = page.locator('#th-toggle');
   await expect(th).toHaveAttribute('aria-expanded', 'false');
   await expect(card(page)).toBeHidden();
   await th.click();
+  // والبطاقة السليمة نفسها سطر ملخص مطوي (تدقيق 2026-11-23: صحة البريد لا تتمدد إلا عند الخلل)
   const toggle = card(page).getByRole('button', { name: 'صحة البريد والتنبيه' });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(toggle).toHaveAttribute('aria-controls', 'ops-body');
-  await expect(page.locator('#ops-body')).toBeVisible();
+  await expect(page.locator('#ops-body')).toBeHidden();
   const strip = card(page).getByRole('list', { name: 'ملخص صحة البريد والتنبيه' });
+  await expect(strip).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#ops-body')).toBeVisible();
   await expect(strip).toHaveCount(0);
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');

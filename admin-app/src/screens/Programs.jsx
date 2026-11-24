@@ -22,6 +22,7 @@ import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
 import CohortRoster from './CohortRoster.jsx';
 import CohortDemo from './CohortDemo.jsx';
+import { MoreMenu } from './PersonShell.jsx';
 import { COHORT_TABS, cohortTab, followShow, followStage, tabQuery } from '../cohort-journey.js';
 
 // العدد والمعدود بقاعدة countAr: «عضوان» و«3 أعضاء» و«11 عضوًا»، و«دفعتان» و«3 دفعات» و«12 دفعة»
@@ -385,14 +386,18 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
               {p.description_ar && <p className="la-muted">{p.description_ar}</p>}
             </div>
             <div className="la-row">
-              <button className="btn-sm ghost" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
-              {canWrite && <button className="btn-sm primary" onClick={() => saveVersion(p)}>احفظ نسخة</button>}
-              {canWrite && !p.archived_at && <button className="la-link" onClick={() => onWizard({ program_id: p.id })}>أنشئ له دفعة</button>}
-              {canWrite && <button className="la-link" onClick={() => setFinalCfg(p)}>التقييم الختامي</button>}
+              {/* فعل أساسي واحد (تدقيق 2026-11-23، كما في Stripe): «حرّر الرحلة»، و«النسخ» يكشف قائمة تحت البطاقة فيبقى ظاهرًا
+                  بحالته (aria-expanded)، وبقية الأفعال في قائمة ⋯ نفسها التي في ملف المشارك */}
+              <button className="btn-sm primary" onClick={() => onEditJourney(p.id)}>حرّر الرحلة</button>
               <button className="la-link" onClick={() => setOpen(open === p.id ? null : p.id)} aria-expanded={open === p.id}>النسخ ({p.versions.length})</button>
-              {canWrite && <button className="la-link" onClick={() => editCert(p)}>الشهادة{p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}</button>}
-              {canWrite && <button className="la-link" onClick={() => newProgram(p.id)}>برنامج جديد من هذا</button>}
-              {canWrite && !p.is_default && <button className="la-link" onClick={() => archive(p)}>{p.archived_at ? 'إعادة' : 'أرشفة'}</button>}
+              {canWrite && <MoreMenu label={`إجراءات أخرى لبرنامج «${p.name}»`} items={[
+                { label: 'احفظ نسخة', run: () => saveVersion(p) },
+                !p.archived_at && { label: 'أنشئ له دفعة', run: () => onWizard({ program_id: p.id }) },
+                { label: 'التقييم الختامي', run: () => setFinalCfg(p) },
+                { label: `الشهادة${p.cert && Object.keys(p.cert).length ? ' (مخصصة)' : ''}`, run: () => editCert(p) },
+                { label: 'برنامج جديد من هذا', run: () => newProgram(p.id) },
+                !p.is_default && { label: p.archived_at ? 'إعادة' : 'أرشفة', run: () => archive(p) },
+              ]} />}
             </div>
           </div>
           {open === p.id && (
@@ -434,7 +439,13 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
                   <td>{cohortStateAr(c)}</td>
                   <td title="من يتبع الدفعة فعلًا: المسجّل فيها صراحة ومن انضم بجهتها. هو العدد نفسه في المجموعات والقاعة.">{c.members ?? c.enrolled ?? 0}{c.enrolled > 0 && c.enrolled !== c.members && <> <small className="la-muted">({c.enrolled} بتسجيل صريح)</small></>}</td>
                   <td>{(() => { const h = cohortHub({ cohort: c, cohorts: d.cohorts, orgs: d.organizations, programs }); return <span className={`la-chip ${h.missing ? 'warn' : 'ok'}`}>{hubSummary(h)}</span>; })()}</td>
-                  <td><button className="btn-sm ghost" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button>{canWrite && <> <button className="la-link" onClick={() => editCohort(c)}>تحرير</button> <a className="la-link" href={`#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`}>الرحلة والمدد</a> <button className="la-link" onClick={() => setGroups(c)}>الفريق والمجموعات</button> <button className="la-link" onClick={() => setVis(c)}>الرؤية</button></>}</td>
+                  {/* فعل أساسي واحد لكل صف (تدقيق 2026-11-23): «افتح ملف الدفعة»، والبقية في قائمة ⋯ */}
+                  <td className="la-row-acts"><button className="btn-sm primary" onClick={() => onCohort(c.id)}>افتح ملف الدفعة</button>{canWrite && <> <MoreMenu label={`إجراءات أخرى للدفعة «${c.name}»`} items={[
+                    { label: 'تحرير', run: () => editCohort(c) },
+                    { label: 'الرحلة والمدد', run: () => { window.location.hash = `#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`; } },
+                    { label: 'الفريق والمجموعات', run: () => setGroups(c) },
+                    { label: 'الرؤية', run: () => setVis(c) },
+                  ]} /></>}</td>
                 </tr>
               );
             })}

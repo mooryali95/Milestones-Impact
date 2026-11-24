@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // المشاركون: القائمة بفلاترها وتصديرها والنقل الجماعي، وملف المشارك
 // ════════════════════════════════════════════════════════════════
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deleteFollowUp } from '../erase-follow.js';
 import { ErasureBanner, ErasureCard, ErasureLogLine, ErasureSheet, takeOpen } from './Erasure.jsx';
 import ImportParticipants from './ImportParticipants.jsx';
@@ -34,7 +34,7 @@ import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
-import { navKey, position, queueLabel, readQueue, saveQueue } from '../review-queue.js';
+import { keepSpot, navKey, position, queueLabel, readQueue, saveQueue, takeSpot } from '../review-queue.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { ONBOARDING_AR, ONBOARDING_STEPS, STUCK_STEPS as STUCK } from '../../../supabase/functions/leaders-api/onboarding.js';
@@ -140,7 +140,20 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const shown = useMemo(() => sortRows(applyFilters(all, spec, f), SORTS, f.sort), [all, f, fields, SORTS]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
   // فتح مشارك يحفظ ترتيب ما يظهر الآن، فيتنقل المدير في الملفات بالسابق والتالي (review-queue.js)
-  const open = (id) => { saveQueue(shown.map((p) => p.id), queueLabel(PRESETS, f.view)); onOpen(id); };
+  const open = (id) => { saveQueue(shown.map((p) => p.id), queueLabel(PRESETS, f.view)); keepSpot(window.scrollY, id); onOpen(id); };
+  // الرجوع من الملف: التمرير نفسه والتركيز على صف آخر ملف فُتح (review-queue.js)، بعد أن تُرسم القائمة
+  const spot = useRef(undefined);
+  if (spot.current === undefined) spot.current = takeSpot();
+  useEffect(() => {
+    const s = spot.current;
+    if (!list || !s) return;
+    spot.current = null;
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: s.y });
+      const row = s.id && document.querySelector(`tr[data-pid="${CSS.escape(s.id)}"]`);
+      if (row) row.focus({ preventScroll: true });
+    });
+  }, [list]);
 
   const toggle = (id) => setPicked((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const allOn = shown.length > 0 && shown.every((p) => picked.has(p.id));
@@ -200,8 +213,11 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
             all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
-          <button className="refresh-btn" type="button" onClick={() => setReport(true)}>فاعلية التذكير</button>
-          {canWrite && <button className="refresh-btn" type="button" onClick={() => setImporting(true)}>استيراد</button>}
+          {/* فعل أساسي واحد ظاهر (+ مشارك) والثانوية في «المزيد» (تدقيق 2026-11-23، المرحلة 2) */}
+          <MoreMenu label="المزيد من إجراءات المشاركين" items={[
+            canWrite && { label: 'استيراد', run: () => setImporting(true) },
+            { label: 'فاعلية التذكير', run: () => setReport(true) },
+          ]} />
         </>} />
       {serverQ && <div className="flt-cap" role="status">نتائج البحث في كل المشاركين عن «{serverQ}». <button type="button" className="flt-link" onClick={() => load()}>عُد إلى القائمة</button></div>}
       <ErasureBanner data={erasures} isSuper={isSuperAdmin()} onOpen={onOpen} />
@@ -228,7 +244,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
-      <div className="table-wrap"><table className="data-table la-cards">
+      <div className="table-wrap"><table className="data-table la-cards t24">
         <thead><tr>
           {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
           <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
@@ -241,7 +257,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);
                   return (
-                    <tr key={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
+                    <tr key={p.id} data-pid={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
                       {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
                       <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small>
                         {/* وُجد برقمه: الرقم ظاهر تحت البريد، فيُعرف لماذا ظهر الصف */}

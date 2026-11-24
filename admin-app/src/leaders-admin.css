@@ -27,6 +27,12 @@
 .la-load { padding: 60px; display: grid; place-items: center; }
 .la-err { background: var(--st-bad-bg); color: var(--st-bad); padding: 10px 14px; border-radius: 6px; font-size: .86rem; }
 .la-err-detail { display: block; margin-block-start: 6px; font-size: .74rem; opacity: .8; overflow-wrap: anywhere; }
+.la-err-more { margin-block-start: 6px; font-size: .76rem; }
+.la-err-more > summary { cursor: pointer; opacity: .85; min-block-size: 24px; }
+/* شبكة أمان: شريط خطأ وصل بلا نص (رد بلا message) لا يبقى ورديًا صامتًا (تدقيق 2026-11-23) */
+.la-err:empty::before { content: 'تعذّر إتمام الطلب الآن. أعد المحاولة بعد قليل.'; }
+/* حالة فارغة محايدة داخل البطاقات: «لا بيانات» ليست خطأ فلا تأخذ لون الخطأ */
+.la-empty-note { background: var(--sand-light); color: var(--ink-soft); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 10px 14px; font-size: .86rem; margin: 14px 0; }
 .la-note { background: var(--sand-light); border-inline-start: 3px solid var(--gold); padding: 10px 14px; margin: 14px 0; font-size: .84rem; }
 .la-muted { color: var(--ink-light); font-size: .82rem; }
 .la-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
@@ -39,7 +45,7 @@
 .la-link { color: var(--petrol-soft); font-weight: 600; font-size: .84rem; text-decoration: underline; text-underline-offset: 3px; }
 .la-chip { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: var(--sand-light); color: var(--ink-soft); }
 .la-chip.warn { background: rgba(178,107,0,.12); color: var(--st-warn-text); }
-.la-chip.ok { background: rgba(46,125,91,.12); color: var(--st-ok); }
+.la-chip.ok { background: rgba(46,125,91,.12); color: var(--st-ok-text); } /* axe 2026-11-24: --st-ok على هذه الأرضية 4.28 إلى 1 */
 .la-chip.bad { background: var(--st-bad-bg); color: var(--st-bad); }
 .la-phase { font-size: .9rem; color: var(--gold-text); margin: 22px 0 10px; }
 
@@ -657,28 +663,37 @@
    (كانت العناوين والبنود بوزن واحد فلا يُعرف العنوان من البند، والعمود نصًا عائمًا بلا حدود) */
 @media (min-width: 1100px) {
   .la-shell { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 28px; align-items: start; }
-  .la-shell > .la-tabs-grouped { position: sticky; top: 74px; margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - 90px); overflow-y: auto; scrollbar-width: thin;
-    background: #fff; border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px; }
-  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 1px; padding: 6px 0; }
+  /* ملتصق بارتفاع الشاشة بتمرير داخلي: ظل أعلى وأسفل يظهر وحده حين يبقى ما لم يُعرض (تقنية ظلال التمرير بخلفيات local/scroll)،
+     وشريط التمرير ظاهر دائمًا، فلا يبدو آخر البنود مقصوصًا بلا دليل (تدقيق 2026-11-23) */
+  .la-shell > .la-tabs-grouped { position: sticky; top: 70px; margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - 82px); overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; overscroll-behavior: contain;
+    border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px;
+    background:
+      linear-gradient(#fff 30%, rgba(255,255,255,0)) top / 100% 28px no-repeat local,
+      linear-gradient(rgba(255,255,255,0), #fff 70%) bottom / 100% 28px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgba(11,39,47,.22), rgba(11,39,47,0)) top / 100% 10px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgba(11,39,47,.22), rgba(11,39,47,0)) bottom / 100% 10px no-repeat scroll,
+      #fff; }
+  .la-shell .la-tab-group { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 1px; padding: 4px 0; }
   .la-shell .la-tab-group + .la-tab-group { border-top: 1px solid var(--line); }
-  .la-shell .la-tabs .la-tab-group-label, .la-shell .la-tab-group-label { width: 100%; justify-content: space-between; min-height: 30px; padding: 4px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--ink-light); }
+  .la-shell .la-tabs .la-tab-group-label, .la-shell .la-tab-group-label { width: 100%; justify-content: space-between; min-height: 26px; padding: 2px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; color: var(--ink-light); }
   .la-shell .la-tab-group-label::after { content: ''; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; margin-inline-start: auto; }
   .la-shell .la-tab-group.shut .la-tab-group-label::after { transform: rotate(135deg); }
   .la-shell .la-tab-group-label:hover { color: var(--ink-soft); }
-  .la-shell .la-tab-group > button:not(.la-tab-group-label) { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 34px; text-align: start; padding: 6px 10px; border-radius: 8px; background: transparent; font-weight: 500; font-size: .86rem; color: var(--ink); position: relative; }
+  .la-shell .la-tab-group > button:not(.la-tab-group-label) { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 30px; text-align: start; padding: 4px 10px; border-radius: 8px; white-space: nowrap; background: transparent; font-weight: 500; font-size: .86rem; color: var(--ink); position: relative; }
   .la-shell .la-tab-group.shut > button:not(.la-tab-group-label) { display: none; }
   .la-shell .la-tab-group > button:not(.la-tab-group-label):hover { background: var(--sand-light); }
   .la-shell .la-tab-group > button.on { background: var(--petrol-s); color: #fff; font-weight: 600; }
   .la-shell .la-tab-group > button:focus-visible, .la-shell .la-tab-group-label:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
 }
 
-/* جدول المشاركين على الهاتف: بطاقة لكل مشارك، ولكل قيمة عنوانها من data-label */
-@media (max-width: 600px) {
+/* الجداول العريضة على الهاتف (أقل من 640، تدقيق المرحلة 4): بطاقة لكل صف، ولكل قيمة عنوانها من data-label */
+@media (max-width: 640px) {
   .la-cards thead { display: none; }
   .la-cards, .la-cards tbody, .la-cards tr, .la-cards td { display: block; width: 100%; }
   .la-cards tr { border: 1px solid var(--line, rgba(11,39,47,.12)); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
   .la-cards td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: start; }
-  .la-cards td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-faint, var(--brand-muted-soft)); flex: none; }
+  /* عنوان القيمة بلون الحاشية المقروء (4.9 إلى 1)، لا بلون الخطوط الباهت (1.6 إلى 1) */
+  .la-cards td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-light); flex: none; }
   .la-cards td small[dir="ltr"] { overflow-wrap: anywhere; }
 }
 
@@ -1438,3 +1453,86 @@
 .pf-tl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
 .pf-tl-chip { border: 1px solid var(--line-strong); background: none; border-radius: 99px; padding: 5px 12px; font: inherit; font-size: .8rem; cursor: pointer; color: var(--ink-soft); min-block-size: 32px; }
 .pf-tl-chip.on { background: var(--petrol-mid); border-color: transparent; color: #fff; }
+
+/* زر «⋯» مربع صغير دائمًا، ولو ورث حدًا أدنى للعرض من صف الأزرار (pj-stage-h وpj-act) */
+.pf-more > .pf-more-btn, .pj-stage-h .pf-more > .pf-more-btn, .pj-act .pf-more > .pf-more-btn {
+  min-inline-size: 32px; inline-size: 32px; block-size: 32px; min-block-size: 32px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; border-radius: 8px;
+}
+/* نافذة النقل قبل اختيار المرحلة: تلميح بدل فراغ */
+.pj-move-hint { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--gold-pale); color: var(--ink, inherit); font-size: 13px; line-height: 1.7; }
+
+/* «صحة المنصة» في النظرة العامة (Overview.jsx PlatformHealth): صف لكل فحص بنقطة لونه وسطر علاجه */
+.ph-card { margin: 14px 0; padding-block: 8px; }
+.ph-title { font-size: .95rem; cursor: pointer; min-block-size: 24px; }
+.ph-details[open] > .ph-title { margin-bottom: 8px; }
+/* أدوات التجربة: مطوية في آخر النظرة العامة (تدقيق 2026-11-23) */
+.today-tools { margin: 18px 0 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.today-tools > summary { cursor: pointer; font-weight: 600; min-block-size: 24px; padding: 4px 0; }
+.today-tools[open] > summary { margin-bottom: 8px; }
+.ph-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ph-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 6px; border-inline-start: 3px solid var(--st-ok); }
+.ph-row.ph-warn { border-inline-start-color: var(--st-warn); background: var(--st-warn-bg); }
+.ph-row.ph-bad { border-inline-start-color: var(--st-bad); background: rgba(168, 40, 40, .06); }
+.ph-row.ph-unknown { border-inline-start-color: var(--line-strong); }
+.ph-dot { flex: none; inline-size: 20px; block-size: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .75rem; color: #fff; background: var(--st-ok); }
+.ph-warn .ph-dot { background: var(--st-warn-text); }
+.ph-bad .ph-dot { background: var(--st-bad); }
+.ph-unknown .ph-dot { background: var(--ink-soft); }
+.ph-main { min-inline-size: 0; overflow-wrap: anywhere; }
+.ph-line { color: var(--ink-soft); }
+.ph-remedy { display: block; font-size: .85rem; margin-top: 2px; }
+
+/* المرحلة 2 (تدقيق 2026-11-23): عنوان «تجريبي» صغير فوق الأقسام المخفية عن المستخدمين في مجموعتها، ومجموعة الإعداد منفصلة بصريًا في الأسفل */
+.la-tab-trial { font-size: .68rem; font-weight: 700; color: var(--ink-light, var(--brand-muted-soft)); padding: 0 4px; }
+.la-tab-group.shut > .la-tab-trial { display: none; }
+@media (min-width: 1100px) {
+  .la-shell .la-tab-trial { padding: 6px 10px 0; border-top: 1px dashed var(--line); margin-top: 2px; }
+  .la-shell .la-tab-group.la-tab-group-setup { margin-top: 10px; border-top: 2px solid var(--line-strong); }
+}
+
+/* ─── المرحلة 3 من تدقيق اللوحة (2026-11-23) ─── */
+/* تبويبات صفحة الجهة ومركز البريد: نمط تبويبات ملف المشارك خارج رأسه */
+.org-tabs, .mc-tabs { margin: 12px 0; padding: 0; border-top: 0; border-bottom: 1px solid var(--line); background: #fff; border-radius: 8px 8px 0 0; }
+.org-tabs { position: sticky; top: 66px; z-index: 5; }
+.mc-tabs { margin-top: 0; }
+/* الإعدادات العامة: فهرس ملتصق وبحث */
+.st-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.st-index { position: sticky; top: 76px; display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; max-height: calc(100vh - 96px); overflow: auto; }
+.st-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.st-index .la-link { text-align: start; font-size: .9rem; }
+.st-search input { inline-size: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
+.st-main { min-inline-size: 0; }
+.st-group h3 { scroll-margin-top: 80px; }
+.st-fold > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+@media (max-width: 860px) {
+  .st-layout { grid-template-columns: minmax(0, 1fr); }
+  .st-index { position: static; max-height: none; }
+  .st-index ul { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+}
+/* مجموعات التوجيه المطوية */
+.nr-fold { border: 0; background: none; font: inherit; font-weight: 700; color: inherit; cursor: pointer; padding: 2px 0; display: inline-flex; gap: 6px; align-items: center; }
+.nr-fold:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+/* الكتاب الأم داخل اللوحة: شريط إدارة ثابت وإطار يحوي القارئ وعلامته المائية */
+.mbs { display: grid; gap: 8px; }
+.mbs-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px; }
+.mbs-crumbs { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1; min-inline-size: 0; font-size: .88rem; color: var(--ink-muted); }
+.mbs-crumbs li + li::before { content: '‹'; margin-inline-end: 6px; color: var(--ink-faint); }
+.mbs-frame { position: relative; transform: translateZ(0); block-size: calc(100dvh - 170px); min-block-size: 460px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); }
+.mbs-frame .mb-root { position: absolute; inset: 0; z-index: 1; }
+.mbs.full .mbs-bar { position: fixed; inset: 0 0 auto 0; z-index: 2001; border-radius: 0; }
+.mbs.full .mbs-frame { position: fixed; inset: 56px 0 0 0; z-index: 2000; block-size: auto; min-block-size: 0; border-radius: 0; border: 0; }
+@media (max-width: 640px) {
+  .mbs-crumbs { display: none; }
+  .mbs-frame { block-size: calc(100dvh - 150px); min-block-size: 380px; }
+}
+/* طلبات التواصل: القائمة ولوحة المعاينة جنبًا إلى جنب على الشاشة العريضة */
+.ct-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
+.ct-split > .table-wrap { min-inline-size: 0; }
+.ct-pane { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow: auto; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px; }
+.ct-pane .drawer-body { padding: 12px 16px 16px; }
+.ct-pane-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 12px 16px 0; }
+.ct-msg { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--gold-pale); border-radius: 8px; padding: 10px 12px; line-height: 1.9; }
+.ct-empty { padding: 24px 16px; color: var(--ink-muted); text-align: center; }
+tr.ct-on > td { background: var(--gold-pale); }
+.mc-panel { display: grid; gap: 14px; min-inline-size: 0; }

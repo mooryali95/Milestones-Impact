@@ -18,6 +18,46 @@ function Copy({ text }) {
   );
 }
 
+// تفاصيل الطلب: واحدة للوحة المعاينة على الشاشة العريضة وللدرج على الهاتف، والرسالة أولها (المرحلة 3 من تدقيق اللوحة)
+function Details({ r, onStatus }) {
+  return (
+    <div className="drawer-body">
+      <div className="detail-section">
+        <div className="detail-section-title">الرسالة</div>
+        {r.message ? <div className="ct-msg" data-contact-message>{r.message}</div> : <p className="la-muted">لم يكتب رسالة.</p>}
+      </div>
+      <div className="detail-section">
+        <div className="detail-section-title">بيانات المتواصل</div>
+        <div className="detail-row"><span className="detail-key">الاسم</span><span className="detail-val">{r.name}</span></div>
+        <div className="detail-row"><span className="detail-key">الجهة</span><span className="detail-val">{r.organization}</span></div>
+        <div className="detail-row"><span className="detail-key">البريد</span><span className="detail-val" style={{ direction: 'ltr' }}>{r.email} <Copy text={r.email} /></span></div>
+        <div className="detail-row"><span className="detail-key">الجوال</span><span className="detail-val" style={{ direction: 'ltr' }}>{r.phone} <Copy text={r.phone} /></span></div>
+      </div>
+      <div className="detail-section">
+        <div className="detail-section-title">تفاصيل الطلب</div>
+        <div className="detail-row"><span className="detail-key">نوع الطلب</span><span className="detail-val">{INTEREST_AR[r.interest] || r.interest}</span></div>
+        <div className="detail-row"><span className="detail-key">المصدر</span><span className="detail-val">{SOURCE_AR[r.product] || r.product || 'غير محدد'}</span></div>
+        <div className="detail-row"><span className="detail-key">التاريخ</span><span className="detail-val">{fmtDate(r.created_at)}</span></div>
+        {r.context && (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: '.78rem', color: 'var(--ink-light)', marginBottom: 6 }}>السياق الإضافي</div>
+            <div className="context-box">{r.context}</div>
+          </div>
+        )}
+      </div>
+      <div className="detail-section">
+        <div className="detail-section-title">تغيير الحالة</div>
+        <div className="status-changer">
+          {Object.keys(STATUS_AR).map((s) => (
+            <button key={s} className={`status-btn ${s}${r.status === s ? ' active' : ''}`} aria-pressed={r.status === s} onClick={() => onStatus(r.id, s)}>{STATUS_AR[s]}</button>
+          ))}
+        </div>
+      </div>
+      <button className="reply-btn" onClick={() => { window.open(mailto(r), '_blank'); onStatus(r.id, 'replied'); }}>✉ إرسال رد بالبريد</button>
+    </div>
+  );
+}
+
 function Drawer({ r, onClose, onStatus }) {
   useEscape(onClose);
   return (
@@ -29,39 +69,39 @@ function Drawer({ r, onClose, onStatus }) {
           <div className="drawer-title-wrap"><div className="drawer-label">تفاصيل الطلب</div><div className="drawer-title">{r.name}</div></div>
           <button className="drawer-close" onClick={onClose} aria-label="إغلاق">✕</button>
         </div>
-        <div className="drawer-body">
-          <div className="detail-section">
-            <div className="detail-section-title">بيانات المتواصل</div>
-            <div className="detail-row"><span className="detail-key">الاسم</span><span className="detail-val">{r.name}</span></div>
-            <div className="detail-row"><span className="detail-key">الجهة</span><span className="detail-val">{r.organization}</span></div>
-            <div className="detail-row"><span className="detail-key">البريد</span><span className="detail-val" style={{ direction: 'ltr' }}>{r.email} <Copy text={r.email} /></span></div>
-            <div className="detail-row"><span className="detail-key">الجوال</span><span className="detail-val" style={{ direction: 'ltr' }}>{r.phone} <Copy text={r.phone} /></span></div>
-          </div>
-          <div className="detail-section">
-            <div className="detail-section-title">تفاصيل الطلب</div>
-            <div className="detail-row"><span className="detail-key">نوع الطلب</span><span className="detail-val">{INTEREST_AR[r.interest] || r.interest}</span></div>
-            <div className="detail-row"><span className="detail-key">المصدر</span><span className="detail-val">{SOURCE_AR[r.product] || r.product || 'غير محدد'}</span></div>
-            <div className="detail-row"><span className="detail-key">التاريخ</span><span className="detail-val">{fmtDate(r.created_at)}</span></div>
-            {r.context && (
-              <div style={{ marginTop: 4 }}>
-                <div style={{ fontSize: '.78rem', color: 'var(--ink-light)', marginBottom: 6 }}>السياق الإضافي</div>
-                <div className="context-box">{r.context}</div>
-              </div>
-            )}
-          </div>
-          <div className="detail-section">
-            <div className="detail-section-title">تغيير الحالة</div>
-            <div className="status-changer">
-              {Object.keys(STATUS_AR).map((s) => (
-                <button key={s} className={`status-btn ${s}${r.status === s ? ' active' : ''}`} aria-pressed={r.status === s} onClick={() => onStatus(r.id, s)}>{STATUS_AR[s]}</button>
-              ))}
-            </div>
-          </div>
-          <button className="reply-btn" onClick={() => { window.open(mailto(r), '_blank'); onStatus(r.id, 'replied'); }}>✉ إرسال رد بالبريد</button>
-        </div>
+        <Details r={r} onStatus={onStatus} />
       </aside>
     </>
   );
+}
+
+// لوحة المعاينة بجوار القائمة على الشاشة العريضة: غير حاجبة، فيتنقل المدير بين الصفوف وهي مفتوحة
+function Pane({ r, onClose, onStatus }) {
+  useEscape(onClose, !!r);
+  if (!r) return <aside className="ct-pane" aria-label="معاينة الطلب"><p className="ct-empty">اختر طلبًا من القائمة لتقرأ رسالته هنا.</p></aside>;
+  return (
+    <aside className="ct-pane" aria-label={`معاينة طلب ${r.name}`}>
+      <div className="ct-pane-h">
+        <div className="drawer-title-wrap"><div className="drawer-label">تفاصيل الطلب</div><div className="drawer-title">{r.name}</div></div>
+        <button className="drawer-close" onClick={onClose} aria-label="إغلاق المعاينة">✕</button>
+      </div>
+      <Details r={r} onStatus={onStatus} />
+    </aside>
+  );
+}
+
+const WIDE = '(min-width: 1100px)';
+function useWide() {
+  const mq = () => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(WIDE) : null);
+  const [wide, setWide] = useState(() => !!mq()?.matches);
+  useEffect(() => {
+    const m = mq();
+    if (!m) return undefined;
+    const on = () => setWide(m.matches);
+    m.addEventListener?.('change', on);
+    return () => m.removeEventListener?.('change', on);
+  }, []);
+  return wide;
 }
 // أعمدة التصدير (الزر الموحد)
 const CONTACT_COLS = [
@@ -81,6 +121,7 @@ export default function Contacts() {
   const [f, setF, clearF, replaceF] = useFilters(['q', 'status', 'source', 'sort'], {}, { scope: 'contacts' });
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState(null);
+  const wide = useWide();
 
   const load = useCallback(async () => {
     setError('');
@@ -142,8 +183,9 @@ export default function Contacts() {
           <button className="refresh-btn" type="button" onClick={load}>↻ تحديث</button>
         </>} />
 
+      <div className={wide ? 'ct-split' : undefined}>
       <div className="table-wrap">
-        <table className="data-table">
+        <table className="data-table t24">
           <thead><tr><SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh><th>البريد</th><th>نوع الطلب</th><th>المصدر</th><SortTh k="date" state={f} set={setF}>التاريخ</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh></tr></thead>
           <tbody>
             {!rows ? <tr className="loading-row"><td colSpan={7}><Spinner /></td></tr>
@@ -154,7 +196,7 @@ export default function Contacts() {
               ) : !list.length ? (
                 <tr><td colSpan={7}>{all.length ? <NoMatch what="طلبات" /> : <Empty compact title="لا طلبات تواصل بعد" hint="يظهر هنا كل طلب يصل من الموقع أو صفحة القادة أو مقياس الجاهزية." />}</td></tr>
               ) : shown.map((r) => (
-                <tr key={r.id} tabIndex={0} onClick={() => open(r)} onKeyDown={(e) => { if (e.key === 'Enter') open(r); }} style={{ cursor: 'pointer' }}>
+                <tr key={r.id} tabIndex={0} className={r.id === openId ? 'ct-on' : undefined} onClick={() => open(r)} onKeyDown={(e) => { if (e.key === 'Enter') open(r); }} style={{ cursor: 'pointer' }}>
                   <td><strong>{r.name}</strong></td>
                   <td style={{ color: 'var(--ink-mid)' }}>{r.organization}</td>
                   <td><span style={{ fontSize: '.83rem', direction: 'ltr', display: 'inline-block' }}>{r.email}</span> <Copy text={r.email} /></td>
@@ -179,8 +221,10 @@ export default function Contacts() {
           </nav>
         )}
       </div>
+      {wide && <Pane r={opened} onClose={() => setOpenId(null)} onStatus={setStatus} />}
+      </div>
 
-      {opened && <Drawer r={opened} onClose={() => setOpenId(null)} onStatus={setStatus} />}
+      {opened && !wide && <Drawer r={opened} onClose={() => setOpenId(null)} onStatus={setStatus} />}
     </div>
   );
 }

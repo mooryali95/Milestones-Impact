@@ -498,6 +498,8 @@ Deno.test('admin.cohort-visit: يتقدم بعد العرض لا بالقراء�
 Deno.test('اللقطة اليومية: صف لكل دفعة جارية في اليوم، أعداد بلا أسماء، ولا تتكرر بإعادة التشغيل، وتنبيه «نظرة عامة» منها', async () => {
   const w = install(world());
   const now = Date.now();
+  // «إعادة التشغيل لاحقًا في اليوم نفسه»: ساعة، أو ما بقي من يوم UTC إن كان أقل، فلا يعبر الاختبار منتصف الليل في آخر ساعة من اليوم
+  const later = Math.min(36e5, Date.parse(`${new Date(now).toISOString().slice(0, 10)}T23:59:59Z`) - now);
   try {
     assertEquals(await PU.cohortSnapshots(now), { taken: 1 });
     assertEquals(w.tables.cohort_snapshots.length, 1);
@@ -508,7 +510,7 @@ Deno.test('اللقطة اليومية: صف لكل دفعة جارية في ا�
     const json = JSON.stringify(s);
     for (const leak of ['sara', 'khalid', 'reem', 'سارة', 'example.sa', '+9665']) assert(!json.includes(leak), leak);
     // إعادة المهمة في الساعة التالية (أو تشغيلتان معًا): لا صف ثانٍ
-    assertEquals(await PU.cohortSnapshots(now + 36e5), { taken: 0 });
+    assertEquals(await PU.cohortSnapshots(now + later), { taken: 0 });
     assertEquals(w.tables.cohort_snapshots.length, 1);
     // تنبيه المتأخرين الجدد يقرأ اللقطة وحدها: لا استعلام للمشاركين ولا رحلة
     s.late_new = 2; s.late = 3;

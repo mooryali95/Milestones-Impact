@@ -100,6 +100,7 @@ describe('أوامر القرار تحدّث العدّادات: لكل نوع �
     approval: ['admin.approve', 'admin.approve-bulk'],
     requirement: ['admin.review'],
     model: ['admin.review-submission', 'admin.review-bulk'],
+    model_gate: ['admin.review-submission'],
     capstone: ['admin.capstone-review'],
     expert_application: ['admin.expert-set-status'],
     expert_unmatched: ['admin.expert-match', 'admin.expert-assign', 'admin.expert-request-cancel', 'admin.expert-request-retry'],

@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
+import { dash } from '../display.js';
 import { OrgSelect } from './Participants.jsx';
 import Outcomes from './Outcomes.jsx';
 
@@ -14,7 +15,9 @@ const VERDICT = {
   confirmed: ['تغير مؤكد', 'ok'], emerging: ['مؤشرات أولية', 'warn'], none: ['لا دليل كافٍ', ''], decline: ['تراجع يحتاج مراجعة', 'bad'],
 };
 const SOURCE = { test: 'الاختبار', self: 'الذاتي', rater: 'المدير', evidence: 'دليل المشروع' };
-const sign = (x) => (x == null ? '·' : x > 0 ? `+${x}` : `${x}`);
+const sign = (x) => (x == null || !Number.isFinite(Number(x)) ? '·' : x > 0 ? `+${x}` : `${x}`);
+// حكم مجهول من الخادم لا يكسر الشاشة
+const verdictOf = (key) => VERDICT[key] || ['لا حكم', ''];
 const SETTINGS = [
   ['rci_reliability', 'الثبات الافتراضي (0 إلى 1)', 0.01],
   ['rci_sd', 'الانحراف المعياري الافتراضي للمؤشر', 0.1],
@@ -59,33 +62,33 @@ function Cohort({ r, raterOff }) {
     <section className="la-card">
       <h3>الدفعة: قبل وبعد لكل إطار</h3>
       {r.caution && <div className="la-note">{r.caution}</div>}
-      <table className="la-table" tabIndex={0} aria-label="قبل وبعد لكل إطار">
+      <table className="la-table la-cards" tabIndex={0} aria-label="قبل وبعد لكل إطار">
         <thead><tr><th>الإطار</th><th>العدد</th><th>قبل</th><th>بعد</th><th>الفرق</th><th>حجم الأثر dz</th><th>تحسن موثوق</th><th>تراجع موثوق</th><th>ارتقى مستوى</th><th>تقدير المدير قبل ← بعد{raterOff && <RaterOff />}</th></tr></thead>
         <tbody>{DIMS.map((d) => {
-          const c = r.cohort[d];
+          const c = r.cohort?.[d] || {};
           return (
             <tr key={d}>
-              <td><b>{DIM[d]}</b></td>
-              <td>{c.n}</td><td>{c.pre ?? '·'}</td><td>{c.post ?? '·'}</td><td><b>{sign(c.diff)}</b></td>
-              <td>{c.dz ?? '·'}{c.effect && <small className="la-muted"> ({c.effect})</small>}</td>
-              <td>{c.reliable_up}</td><td>{c.reliable_down}</td><td>{c.level_up}</td>
-              <td>{c.rater.n ? `${c.rater.pre} ← ${c.rater.post} (${c.rater.n})` : '·'}</td>
+              <td data-label="الإطار"><b>{DIM[d]}</b></td>
+              <td data-label="العدد">{dash(c.n, 0)}</td><td data-label="قبل">{c.pre ?? '·'}</td><td data-label="بعد">{c.post ?? '·'}</td><td data-label="الفرق"><b>{sign(c.diff)}</b></td>
+              <td data-label="حجم الأثر dz">{c.dz ?? '·'}{c.effect && <small className="la-muted"> ({c.effect})</small>}</td>
+              <td data-label="تحسن موثوق">{dash(c.reliable_up, 0)}</td><td data-label="تراجع موثوق">{dash(c.reliable_down, 0)}</td><td data-label="ارتقى مستوى">{dash(c.level_up, 0)}</td>
+              <td data-label="تقدير المدير">{c.rater?.n ? `${dash(c.rater.pre)} ← ${dash(c.rater.post)} (${c.rater.n})` : '·'}</td>
             </tr>
           );
         })}</tbody>
       </table>
       <div className="la-row" style={{ flexWrap: 'wrap', gap: 8 }}>
         {DIMS.map((d) => (
-          <span key={d} className="la-muted">{DIM[d]}: {Object.entries(VERDICT).map(([k, [l]]) => `${l} ${r.cohort[d].verdicts[k] || 0}`).join(' · ')}
-            {r.cohort[d].response_shift != null && ` · انزياح الاستجابة ${sign(r.cohort[d].response_shift)}`}</span>
+          <span key={d} className="la-muted">{DIM[d]}: {Object.entries(VERDICT).map(([k, [l]]) => `${l} ${r.cohort?.[d]?.verdicts?.[k] || 0}`).join(' · ')}
+            {r.cohort?.[d]?.response_shift != null && ` · انزياح الاستجابة ${sign(r.cohort[d].response_shift)}`}</span>
         ))}
       </div>
       <><p className="la-muted">المقارنة بالجوانب المشتركة بين النموذجين وحدها.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>المقارنة بالجوانب المشتركة بين النموذجين فقط وبأوزان نموذج التسكين. انزياح الاستجابة الموجب يعني أن المشاركين قدّروا ممارستهم في البداية أعلى مما يرونها اليوم، وهو سبب الاعتماد على القياس الرجعي وتقدير المدير لا على الفرق الذاتي.</p></details></>
       <p className="la-muted">الثبات المستعمل (ألفا الطبقية): {DIMS.map((d) => {
-        const s = r.config.source?.[d] || {};
-        return `${DIM[d]} ${s.from_data ? `α ${s.alpha} من ${s.n}` : `افتراضي ${r.config.rci_reliability} (لدينا ${s.n || 0})`}`;
+        const s = r.config?.source?.[d] || {};
+        return `${DIM[d]} ${s.from_data ? `α ${s.alpha} من ${s.n}` : `افتراضي ${dash(r.config?.rci_reliability)} (لدينا ${s.n || 0})`}`;
       }).join(' · ')}{(() => {
-        const o = r.config.source?.overall;
+        const o = r.config?.source?.overall;
         return o ? ` · الكلي ${o.from_data ? `α ${o.alpha} من ${o.n}` : 'افتراضي بمعادلة Spearman و Brown'}` : '';
       })()}</p>
     </section>
@@ -102,8 +105,8 @@ function Overall({ o }) {
         <tbody><tr>
           <td>{o.n}</td><td>{o.pre ?? '·'}</td><td>{o.post ?? '·'}</td><td><b>{sign(o.diff)}</b></td>
           <td>{o.dz ?? '·'}{o.effect && <small className="la-muted"> ({o.effect})</small>}</td>
-          <td>{o.reliable_up}</td><td>{o.reliable_down}</td>
-          <td><small>{Object.entries(VERDICT).map(([k, [l]]) => `${l} ${o.verdicts[k] || 0}`).join(' · ')}</small></td>
+          <td>{dash(o.reliable_up, 0)}</td><td>{dash(o.reliable_down, 0)}</td>
+          <td><small>{Object.entries(VERDICT).map(([k, [l]]) => `${l} ${o.verdicts?.[k] || 0}`).join(' · ')}</small></td>
         </tr></tbody>
       </table>
       <><p className="la-muted">الحكم على الفرد بالمؤشر الكلي، والأطر منفردة وصف.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>متوسط الأطر الثلاثة بأسئلتها كلها، فخطأ قياسه أصغر بكثير من خطأ الإطار المنفرد. لذلك يُحكم على الفرد بالمؤشر الكلي، وتبقى الأطر منفردة وصفًا للفرد وحكمًا إحصائيًا للدفعة.</p></details></>
@@ -112,13 +115,13 @@ function Overall({ o }) {
 }
 
 function Transfer({ rows }) {
-  if (!rows.length) return null;
+  if (!rows?.length) return null;
   return (
     <section className="la-card">
       <h3>انتقال التعلم إلى العمل</h3>
       <table className="la-table" tabIndex={0} aria-label="انتقال التعلم إلى العمل">
         <thead><tr><th>البند</th><th>العدد</th><th>موافقون</th><th>المتوسط من 4</th></tr></thead>
-        <tbody>{rows.map((t) => <tr key={t.code}><td>{t.text}</td><td>{t.n}</td><td>{t.agree_pct}%</td><td>{t.mean}</td></tr>)}</tbody>
+        <tbody>{rows.map((t) => <tr key={t.code}><td>{t.text}</td><td>{dash(t.n, 0)}</td><td>{t.agree_pct != null ? `${t.agree_pct}%` : '—'}</td><td>{dash(t.mean)}</td></tr>)}</tbody>
       </table>
       <p className="la-muted">بيئة التطبيق (Kirkpatrick المستوى 3): ضعف الدعم أو الفرص يفسّر غياب الأثر أحيانًا أكثر من جودة التدريب.</p>
     </section>
@@ -128,16 +131,17 @@ function Transfer({ rows }) {
 // رد الفعل (كيركباتريك المستوى 1): «رأيك في أيام التدريب» مجمّعة؛ كانت تُحفظ ولا تُقرأ
 function Reaction({ s }) {
   if (!s || !s.n) return null;
-  const ratings = s.questions.filter((q) => q.type === 'rating'), texts = s.questions.filter((q) => q.type === 'text' && q.n);
+  const qs = s.questions || [];
+  const ratings = qs.filter((q) => q.type === 'rating'), texts = qs.filter((q) => q.type === 'text' && q.n);
   return (
     <section className="la-card" aria-label="رأي المشاركين في أيام التدريب">
       <h3>رأي المشاركين في أيام التدريب <small className="la-muted">· {s.n} إجابة</small></h3>
       <table className="la-table" tabIndex={0} aria-label="تقديرات أيام التدريب">
         <thead><tr><th>السؤال</th><th>العدد</th><th>المتوسط من 5</th><th>4 أو 5</th><th>التوزيع 1→5</th></tr></thead>
-        <tbody>{ratings.map((q) => <tr key={q.key}><td>{q.label}</td><td>{q.n}</td><td>{q.mean ?? '—'}</td><td>{q.top2_pct != null ? `${q.top2_pct}%` : '—'}</td><td dir="ltr">{[1, 2, 3, 4, 5].map((k) => q.dist[k]).join(' · ')}</td></tr>)}</tbody>
+        <tbody>{ratings.map((q) => <tr key={q.key}><td>{q.label}</td><td>{q.n}</td><td>{q.mean ?? '—'}</td><td>{q.top2_pct != null ? `${q.top2_pct}%` : '—'}</td><td dir="ltr">{[1, 2, 3, 4, 5].map((k) => q.dist?.[k] || 0).join(' · ')}</td></tr>)}</tbody>
       </table>
       {texts.map((q) => (
-        <details key={q.key}><summary>{q.label} ({q.n})</summary><ul className="la-reqs">{q.texts.map((t, i) => <li key={i}><span>«{t}»</span></li>)}</ul></details>
+        <details key={q.key}><summary>{q.label} ({q.n})</summary><ul className="la-reqs">{(q.texts || []).map((t, i) => <li key={i}><span>«{t}»</span></li>)}</ul></details>
       ))}
       <p className="la-muted">رد الفعل (Kirkpatrick المستوى 1) يُغذّي تصميم الدفعة التالية ولا يُحكم به على أثر البرنامج.</p>
     </section>
@@ -145,7 +149,7 @@ function Reaction({ s }) {
 }
 
 function People({ list, onPerson, raterOff }) {
-  const rows = list.filter((p) => p.baseline_at);
+  const rows = (list || []).filter((p) => p.baseline_at);
   if (!rows.length) return null;
   return (
     <section className="la-card">
@@ -156,27 +160,27 @@ function People({ list, onPerson, raterOff }) {
           <tr key={p.id} className="la-click" tabIndex={0} onClick={() => onPerson(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onPerson(p.id); }}>
             <td><b>{p.full_name}</b><br /><small className="la-muted">{p.organization || ''}{p.forms?.[0] && ` · نموذج ${p.forms[0]}${p.forms[1] ? ` ← ${p.forms[1]}` : ''}`}</small></td>
             <td>{p.overall ? (() => {
-              const [vl, vc] = VERDICT[p.overall.verdict.key];
-              return <><b>{p.overall.composite_pre} ← {p.overall.composite_post}</b> <small>{sign(p.overall.change)}</small>
+              const [vl, vc] = verdictOf(p.overall.verdict?.key);
+              return <><b>{dash(p.overall.composite_pre)} ← {dash(p.overall.composite_post)}</b> <small>{sign(p.overall.change)}</small>
                 <br /><span className={`la-chip ${vc}`}>{vl}</span>
-                <br /><small className="la-muted">{p.overall.verdict.sources.map((s) => SOURCE[s]).join('، ') || 'لا مصدر'} · RCI {p.overall.rci}</small></>;
+                <br /><small className="la-muted">{(p.overall.verdict?.sources || []).map((s) => SOURCE[s]).join('، ') || 'لا مصدر'} · RCI {dash(p.overall.rci)}</small></>;
             })() : <small className="la-muted">·</small>}</td>
             {DIMS.map((d) => {
               const x = p.dimensions?.find((y) => y.dimension === d);
               // زوج أداتاه غير متطابقتين: لا أرقام، وسبب واحد في خلية الإطار الأول
               if (p.comparable === false) return <td key={d}>{d === DIMS[0] ? <><span className="la-chip">غير قابل للمقارنة</span><br /><small className="la-muted">{p.reason}{p.baseline_key && p.post_key ? ` (${p.baseline_key} ← ${p.post_key})` : ''}</small></> : <small className="la-muted">·</small>}</td>;
               if (!x) return <td key={d}><small className="la-muted">{p.post_at ? '·' : 'لم يُجرِ البعدي'}</small></td>;
-              const [vl, vc] = VERDICT[x.verdict.key];
+              const [vl, vc] = verdictOf(x.verdict?.key);
               return (
                 <td key={d}>
                   <b>{x.composite_pre ?? '·'} ← {x.composite_post ?? '·'}</b> <small>{sign(x.change)}</small>
-                  {x.pre.level && x.post.level && x.pre.level !== x.post.level && <><br /><small>{LVL[x.pre.level]} ← {LVL[x.post.level]}</small></>}
+                  {x.pre?.level && x.post?.level && x.pre.level !== x.post.level && <><br /><small>{LVL[x.pre.level]} ← {LVL[x.post.level]}</small></>}
                   <br /><span className={`la-chip ${vc}`}>{vl}</span>
-                  <br /><small className="la-muted">{x.verdict.sources.map((s) => SOURCE[s]).join('، ') || 'لا مصدر'}{x.rci != null && ` · RCI ${x.rci}`}</small>
+                  <br /><small className="la-muted">{(x.verdict?.sources || []).map((s) => SOURCE[s]).join('، ') || 'لا مصدر'}{x.rci != null && ` · RCI ${x.rci}`}</small>
                 </td>
               );
             })}
-            <td>{p.raters_done}/{p.raters_invited}</td>
+            <td>{p.raters_invited ? `${p.raters_done || 0}/${p.raters_invited}` : '—'}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -221,13 +225,13 @@ export default function Impact({ orgs, onPerson, onCapstone, catalog, reload, ca
         <div className="la-note">القياس البعدي غير مفعّل بعد: {post.map((i) => i.key).join('، ') || 'لا أداة'}. راجع أسئلته في «أسئلة القياس» ثم فعّله، فيظهر للمشاركين حين يصلون إلى مرحلة التقييم.</div>
       )}
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{r.counts.participants}</div></div>
-        <div className="stat-card"><div className="stat-label">أجروا المبدئي</div><div className="stat-value">{r.counts.baseline}</div></div>
-        <div className="stat-card"><div className="stat-label">أجروا البعدي</div><div className="stat-value">{r.counts.post}</div></div>
-        <div className="stat-card"><div className="stat-label">أزواج للمقارنة</div><div className="stat-value s-replied">{r.counts.paired}</div></div>
+        <div className="stat-card"><div className="stat-label">المشاركون</div><div className="stat-value">{dash(r.counts?.participants, 0)}</div></div>
+        <div className="stat-card"><div className="stat-label">أجروا المبدئي</div><div className="stat-value">{dash(r.counts?.baseline, 0)}</div></div>
+        <div className="stat-card"><div className="stat-label">أجروا البعدي</div><div className="stat-value">{dash(r.counts?.post, 0)}</div></div>
+        <div className="stat-card"><div className="stat-label">أزواج للمقارنة</div><div className="stat-value s-replied">{dash(r.counts?.paired, 0)}</div></div>
       </div>
-      {r.counts.paired > 0 ? <Cohort r={r} raterOff={raterOff} /> : <section className="la-card"><p className="la-muted">لا أزواج بعد: تظهر المقارنة حين يُتم مشارك القياسين.</p></section>}
-      {r.counts.paired > 0 && <Overall o={r.overall} />}
+      {r.counts?.paired > 0 ? <Cohort r={r} raterOff={raterOff} /> : <section className="la-card"><p className="la-muted">لا أزواج بعد: تظهر المقارنة حين يُتم مشارك القياسين.</p></section>}
+      {r.counts?.paired > 0 && <Overall o={r.overall} />}
       <Transfer rows={r.transfer} />
       <Reaction s={r.reaction} />
       <Outcomes org={org} onOpen={onCapstone} />

@@ -32,7 +32,7 @@ import { verifyGoogleToken } from './google.ts';
 import { rolesOf } from './doors.ts';
 import { access as accessOf } from './payments.ts';
 import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
-import { consumeSponsorCode, findSponsorCode, redeemSponsorCode } from './sponsor-codes.ts';
+import { findSponsorCode, redeemAndLink, redeemSponsorCode } from './sponsor-codes.ts';
 import { SPONSOR_CODE_SPENT_AR } from './sponsor-codes.js';
 import { advisorOf, notifySubmission } from './advisor.ts';
 import { reviewerKind } from './model-review.js';
@@ -147,7 +147,7 @@ const SPONSOR_TRIES_PER_IP_HOUR = 30;
 const failsSince = async (key: string) => (await db.from('audit_log').select('id', { count: 'exact', head: true })
   .eq('action', 'sponsor.code-fail').eq('actor', key).gte('created_at', new Date(Date.now() - 36e5).toISOString())).count ?? 0;
 // رموز الرعاية التي تولّدها الإدارة وحدها (sponsor-codes.ts)، ورمز رابط الجهة لا يُقبل مكتوبًا. رمز الرعاية لا يُستهلك هنا:
-// يُعاد معه sponsor_code فيستهلكه المستدعي لحظة الربط الفعلي (consumeSponsorCode)، فمن يُرد قبل الربط لا يأخذ استخدامًا
+// يُعاد معه sponsor_code فيستهلكه المستدعي لحظة الربط الفعلي (redeemAndLink)، فمن يُرد قبل الربط لا يأخذ استخدامًا
 async function sponsorByCode(code: unknown, key: string, ipKey: string | null = null) {
   const c = String(code || '').trim();
   if (!c) return null;
@@ -230,8 +230,9 @@ export async function sponsorCode(p: any, b: Body, ctx: { ip?: string | null } =
       : `أنهت الإدارة من قبل رعاية هذه الجهة لك، فلا يعيدها الرمز. لمراجعة القرار راسل ${CONTACT_EMAIL}`, 409, 'sponsor_decided');
   }
   // رمز رعاية: يُستهلك الآن، بعد حسم القرار وقبل الربط (ذري في القاعدة؛ من سبقه إلى آخر استخدام يُرد هنا)
-  if (r.sponsor_code) await consumeSponsorCode(r.sponsor_code, p.id);
-  const saved = must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
+  // الاستهلاك والربط في معاملة واحدة (redeemAndLink)، فلا يبقى استخدام معدود إن تعذّر الربط
+  const saved = r.sponsor_code ? await redeemAndLink(r.sponsor_code, p.id, r.org.id)
+    : must(await db.from('participants').update({ organization_id: r.org.id, org_via: 'link' }).eq('id', p.id).is('organization_id', null).select('*').single());
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
   // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
   await pinSponsorFor(p.id, { auto: true });
@@ -568,7 +569,7 @@ async function continuousFor(participantId: string, milestones: any[], programId
 // cohort: رحلته على دفعته بخطة لم تُحفظ بعد (معاينة admin.cohort-plan حين تعود مرحلة موقوفة)، لا يُقرأ بها غير ذلك
 // sessions: معاينة أثر تغيير وسم ورشة وحدها (countingImpact في activities.ts): الرحلة كما ستكون بجلسات معدّلة، بلا كتابة
 export async function journeyFor(p: any, { lite = false, cohort = null, sessions = null }: { lite?: boolean; cohort?: any; sessions?: ((rows: any[]) => any[]) | null } = {}) {
-  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals] = await Promise.all([
+  const [placements, def, progress, assessments, reports, ovr, msRecs, initiative, rated, finals, reviews] = await Promise.all([
     db.from('placements').select('dimension, level, approved_at, admin_note').eq('participant_id', p.id),
     journeyDefinition(p, cohort),
     db.from('participant_requirements').select('*').eq('participant_id', p.id),
@@ -580,6 +581,8 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
     // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
     db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust, snapshot').eq('participant_id', p.id),
+    // مراجعة اليوم 180 في متابعة المبادرة: مصدر «قراءة الأثر بعد ستة أشهر» (R-6M)
+    db.from('capstone_updates').select('checkpoint, verify_status').eq('participant_id', p.id).eq('checkpoint', 'd180'),
   ]);
   const fe = (finals.data || []).find((r: any) => r.program_id === def.program_id) || null;
   const pl = placements.data || [];
@@ -596,6 +599,10 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     initiativeNamed: !!initiative,
     preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
     postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
+    // «عرض المشروع أمام لجنة التقييم» (E-PRES): اعتماد التقييم الختامي لبرنامجه، لا مسودته ولا ما ينتظر الاعتماد
+    finalApproved: fe?.status === 'approved',
+    review180: (reviews.data || []).length > 0,
+    review180Verified: (reviews.data || []).some((u: any) => u.verify_status === 'confirmed'),
   };
   const prog = Object.fromEntries((progress.data || []).map((r: any) => [r.requirement_id, r]));
   // المحتوى بمستوى الدفعة الموحد إن كانت متجانسة، وإلا بمستوى المشارك؛ القياس والمسار يبقيان من قياسه

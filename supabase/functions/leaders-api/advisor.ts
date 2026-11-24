@@ -4,10 +4,10 @@
 // المصدر: cohorts.advisor_expert_id للدفعة، وcohort_groups.advisor_expert_id لمجموعة داخلها (الأخص يغلب).
 // الدفعة تُعرف من المشارك (cohortOf)، فتغيير المستشار
 // ينقل إليه المعلّق فورًا. الإدارة ترى كل شيء وتقيّم أيضًا (reviewed_by يسجّل من قيّم).
-import { all, db, Fail } from './core.ts';
+import { all, allFor, db, Fail } from './core.ts';
 import { cohortOf } from './programs.ts';
 import { reviewBulkBy, reviewSubmissionBy } from './admin.ts';
-import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved } from './logic.js';
+import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved, pickCohort } from './logic.js';
 import { listed } from './counting.ts';
 import { isGateModel } from './model-review.js';
 
@@ -37,6 +37,48 @@ export async function advisorOf(p: { id: string; organization_id?: string | null
   const approved = (data || []).filter(journeyApproved);
   const id = effectiveAdvisorId(ids, approved.map((e: any) => e.id));
   return approved.find((e: any) => e.id === id) || null;
+}
+
+// advisorOf لمشاركين كثيرين بقراءات معدودة (الملخص اليومي وقائمة «للقراءة»): الدفعات مرة، والإلحاقات وأعضاء المجموعات
+// بمعرّفات المشاركين بصفحات، والخبراء مرة. القاعدة نفسها: الدفعة بـpickCohort كما في cohortOf، وخبير المجموعة في تلك الدفعة،
+// ثم effectiveAdvisorId على المعتمدين. يعيد Map معرّف المشارك ← خبيره أو null (بلا مستشار). من تعذّر تحديده يغيب عن الخريطة
+// (تعذّر قراءة المجموعات كتعذّرها في groupAdvisorId: لا يُفترض مستشار الدفعة بدله)، فيعامله المستدعي كمجهول
+export async function advisorsOf(ps: { id: string; organization_id?: string | null; is_demo?: boolean | null }[]) {
+  const out = new Map<string, any>();
+  const live = new Map<string, any>();
+  for (const p of ps) { if (!p?.id) continue; if (p.is_demo) out.set(p.id, null); else live.set(p.id, p); }
+  if (!live.size) return out;
+  const ids = [...live.keys()];
+  const [cohorts, enrollments, members] = await Promise.all([
+    db.from('cohorts').select('*').then((r: any) => r.data || []),
+    allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id')).catch(() => [] as any[]),
+    allFor(ids, () => db.from('cohort_group_members').select('participant_id, cohort_id, cohort_groups(advisor_expert_id)').order('participant_id')).then((d) => d, () => null),
+  ]);
+  const enrBy = new Map<string, any[]>();
+  for (const e of enrollments) (enrBy.get(e.participant_id) || enrBy.set(e.participant_id, []).get(e.participant_id)!).push(e);
+  const pairs = new Map<string, { group: string | null; cohort: string | null }>();
+  for (const [pid, p] of live) {
+    const { cohort } = pickCohort({ enrollments: enrBy.get(pid) || [], cohorts, organizationId: (p.organization_id || null) as any }) as any;
+    const cohortAdv = cohort?.advisor_expert_id || null;
+    if (members === null) {
+      // تعذّر قراءة المجموعات: مجهول لمن قد يكون له خبير مجموعة (أي من في دفعة)، كما يرمي advisorOf
+      if (cohort?.id) continue;
+      pairs.set(pid, { group: null, cohort: cohortAdv });
+      continue;
+    }
+    const m = cohort?.id ? members.find((x: any) => x.participant_id === pid && x.cohort_id === cohort.id) : null;
+    pairs.set(pid, { group: m?.cohort_groups?.advisor_expert_id || null, cohort: cohortAdv });
+  }
+  const want = [...new Set([...pairs.values()].flatMap((x) => [x.group, x.cohort]).filter(Boolean))] as string[];
+  const experts = want.length ? ((await db.from('experts').select('id, full_name, email, status, roles').in('id', want)).data || []) : [];
+  const approved = experts.filter(journeyApproved);
+  const okIds = approved.map((e: any) => e.id);
+  for (const [pid, x] of pairs) {
+    if (!x.group && !x.cohort) { out.set(pid, null); continue; }
+    const id = effectiveAdvisorId(x, okIds);
+    out.set(pid, approved.find((e: any) => e.id === id) || null);
+  }
+  return out;
 }
 
 // تسليم نموذج: البطاقة (البوابة) تُبلَّغ فورًا لمراجعها، وما عداها يدخل الملخص اليومي (model-digest.ts) بدل بريد لكل تسليم

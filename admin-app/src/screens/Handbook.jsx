@@ -753,10 +753,10 @@ export default function Handbook({ catalog, reload, canWrite }) {
           <div><b>{mods.length}</b><span>بابًا في الكتاب · {models.length} نماذج تعليمية</span></div>
           <div><b>{done}</b><span>إتمام باب{sc[1] ? ` · دقة ${Math.round((sc[0] / sc[1]) * 100)}%` : ''}</span></div>
           <div><b>{bs.points?.participants || 0}</b><span>مشارك بدأ يجمع النقاط{bs.points?.avg ? ` · متوسط ${bs.points.avg}` : ''}</span></div>
-          <div className={bs.to_review ? 'warn' : ''}><b>{bs.to_review || 0}</b><span>نموذج للقراءة</span></div>
+          <div className={bs.to_review ? 'warn' : ''}><b>{bs.to_review || 0}</b><span>نموذج للقراءة{bs.to_approve ? ` · ${bs.to_approve} بطاقة للاعتماد` : ''}</span></div>
         </div>
         <nav className="hb-views" aria-label="أقسام الكتاب">{HB_VIEWS.map(([k, l]) => (
-          <button key={k} className={view === k ? 'on' : ''} aria-current={view === k ? 'page' : undefined} onClick={() => setView(k)}>{l}{k === 'reviews' && bs.to_review ? <i> {bs.to_review}</i> : null}</button>
+          <button key={k} className={view === k ? 'on' : ''} aria-current={view === k ? 'page' : undefined} onClick={() => setView(k)}>{l}{k === 'reviews' && (bs.to_review || bs.to_approve) ? <i> {(bs.to_review || 0) + (bs.to_approve || 0)}</i> : null}</button>
         ))}</nav>
       </section>
       {view === 'models' ? <Models {...p} onReview={(id) => { setSubModel(id); setView('reviews'); }} />

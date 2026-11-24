@@ -80,7 +80,8 @@ test('البرامج: حفظ نسخة، المقارنة، الاسترجاع، 
   await expect(page.getByText('برنامج سفراء')).toBeVisible();
   await expect(page.getByText(/آخر نسخة محفوظة: 2، بعد مراجعة أكتوبر/)).toBeVisible();
 
-  await page.getByRole('button', { name: 'احفظ نسخة' }).first().click();
+  await page.getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).first().click();
+  await page.getByRole('menuitem', { name: 'احفظ نسخة' }).click();
   await page.getByRole('dialog').getByRole('textbox').fill('قبل دفعة سفراء');
   await page.getByRole('dialog').getByRole('button', { name: /موافق|تأكيد|حفظ/ }).click();
   await expect.poll(() => calls.find((c) => c.action === 'admin.program-version')).toMatchObject({ id: 'pa', label: 'قبل دفعة سفراء' });
@@ -105,7 +106,8 @@ test('الدفعات: طريقة التنفيذ لكل نشاط، والترقي
   await expect(row).toContainText('جمعية سفراء');
   await expect(row).toContainText('النسخة 1');
 
-  await row.getByRole('button', { name: 'تحرير' }).click();
+  await row.getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: سفراء 2026' });
   await form.getByRole('button', { name: 'التنفيذ' }).click();
   await expect(form.getByLabel('حضور الأيام التدريبية: توثيق الحضور')).toHaveValue('join');
@@ -143,7 +145,8 @@ test('الدفعة غير المثبتة: شارتها وزر «ثبّت على�
 
 test('الدفعة المفتوحة لا ترتبط بجهة ولا تُغلق', async ({ page }) => {
   await setup(page);
-  await page.locator('.data-table tbody tr', { hasText: 'الدفعة المفتوحة' }).getByRole('button', { name: 'تحرير' }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'الدفعة المفتوحة' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: الدفعة المفتوحة' });
   await expect(form.getByLabel('الجهة')).toHaveCount(0);
   await expect(form.getByLabel('الحالة').locator('option')).toHaveCount(2);
@@ -151,7 +154,8 @@ test('الدفعة المفتوحة لا ترتبط بجهة ولا تُغلق',
 
 test('رؤية الدفعة: لكل مفتاح الإعداد العام واستثناء الدفعة، والحفظ يرسل الاستثناءات وحدها', async ({ page }) => {
   const calls = await setup(page);
-  await page.locator('tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: 'الرؤية' }).click();
+  await page.locator('tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+  await page.getByRole('menuitem', { name: 'الرؤية' }).click();
   const dlg = page.getByRole('dialog', { name: 'رؤية دفعة سفراء 2026' });
   await expect(dlg.getByRole('group', { name: 'مستشار الدفعة وخبير المجموعة' })).toBeVisible();
   const contact = dlg.getByLabel('مستشار الدفعة وخبير المجموعة: وسائل التواصل');
@@ -171,7 +175,7 @@ test('رؤية الدفعة: لكل مفتاح الإعداد العام واس�
 
 test('صفحة الدفعة برابطها: جاهزيتها بندًا بندًا، والناقص يفتح نافذة ضبطه، والتحديث يبقيك فيها', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  await page.getByRole('button', { name: 'سفراء 2026', exact: true }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
   await page.reload();
   const card = page.locator('.cohort-page');
@@ -202,7 +206,7 @@ test('صفحة الدفعة برابطها: جاهزيتها بندًا بندً
 
 test('ملف الدفعة: خريطة الرحلة نفسها التي في صفحة الجهة، بنوافذ الدفعة ومن تجاوز موعده (R0، وفي تبويب «الرحلة» منذ R1)', async ({ page }) => {
   const calls = await setup(page);
-  await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  await page.getByRole('button', { name: 'سفراء 2026', exact: true }).click();
   // الخريطة في تبويب «الرحلة» لا في «الملف»، فلا تُحسب قبل فتحه
   expect(calls.filter((c) => c.action === 'admin.cohort-journey')).toHaveLength(0);
   await page.getByRole('tab', { name: 'الرحلة' }).click();
@@ -240,7 +244,7 @@ test('ملف الدفعة: خريطة الرحلة نفسها التي في صف
 
 test('ملف الدفعة: رابط التسجيل ظاهر، والدفعة «مخطط لها» تُنبَّه بأنها لا تستقبل منضمي الجهة', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'سفراء 2026' }).click();
+  await page.getByRole('button', { name: 'سفراء 2026', exact: true }).click();
   const card = page.locator('.cohort-page');
   await expect(card.locator('.cohort-link code')).toHaveText('https://leaders.sunkvalue.com/j/sufara');
   await expect(page.locator('.data-table')).toHaveCount(0);
@@ -253,7 +257,8 @@ test('برنامج بلا دفعة: الرسالة تخص البرنامج بو�
   await setup(page);
   const card = page.locator('.la-card', { hasText: 'برنامج سفراء' });
   await expect(card.locator('.la-reach.none')).toContainText('لا توجد دفعة على هذا البرنامج بعد');
-  await card.getByRole('button', { name: 'أنشئ له دفعة' }).click();
+  await card.getByRole('button', { name: /^إجراءات أخرى لبرنامج/ }).click();
+  await page.getByRole('menuitem', { name: 'أنشئ له دفعة' }).click();
   const wiz = page.getByRole('dialog', { name: 'دفعة جديدة' });
   await wiz.getByRole('combobox', { name: 'الجهة' }).selectOption('o2');
   await wiz.getByRole('button', { name: 'التالي' }).click();

@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المحرر يُرسم من التعريف نفسه الذي يتحقق به الخادم (SETTINGS في settings.js)، فلا قائمة حقول ثانية هنا.
 // الحفظ للمدير ذي الكتابة، ويُسجَّل في السجل بالقيمة قبل وبعد (settings.ts).
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { date, L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { navigate } from '../route.js';
@@ -66,7 +66,21 @@ function Field({ id, f, value, error, onChange, disabled }) {
   );
 }
 
-function Group({ group, values, updated, canWrite, onSaved }) {
+// البحث في الإعدادات (المرحلة 3 من تدقيق اللوحة): يطابق اسم الحقل وشرحه، أو عنوان المجموعة ووصفها فتظهر كاملة
+const norm = (t) => String(t || '').toLowerCase().replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+export const hits = (q, ...texts) => { const n = norm(q).trim(); return !n || texts.some((t) => norm(t).includes(n)); };
+/** ما يظهر من مجموعة عند البحث: null إن لم يطابق شيء، وإلا مفاتيح الحقول الظاهرة */
+export function groupMatch(group, q) {
+  const def = SETTINGS[group];
+  const keys = Object.keys(def.fields).filter((k) => !IN_FEATURES[group]?.has(k));
+  if (hits(q, def.title_ar, def.note_ar)) return keys;
+  const some = keys.filter((k) => hits(q, def.fields[k].label_ar, def.fields[k].hint_ar));
+  return some.length ? some : null;
+}
+// مجموعة كثيرة المفاتيح تُطوى (الرؤية: مفتاح لكل ما يُعرض)، وتنفتح بنفسها حين يطابقها البحث
+const FOLDED = new Set(['visibility']);
+
+function Group({ group, values, updated, canWrite, onSaved, show, q }) {
   const { toast } = useUI();
   const def = SETTINGS[group];
   const [v, setV] = useState(values);
@@ -87,18 +101,26 @@ function Group({ group, values, updated, canWrite, onSaved }) {
     toast('حُفظت الإعدادات');
     onSaved(r);
   };
+  const fields = (
+    <div className="of-grid">
+      {Object.entries(def.fields).filter(([k]) => !IN_FEATURES[group]?.has(k)).map(([k, f]) => (
+        // الحقل المحجوب بالبحث يبقى في النموذج (hidden) فلا تضيع قيمته المحرَّرة ولا يتغير ما يُحفظ
+        <div key={k} hidden={!!show && !show.includes(k)} data-setting={`${group}.${k}`}>
+          <Field id={`st-${group}-${k}`} f={f} value={v[k]} error={errors[k]} disabled={!canWrite}
+            onChange={(x) => setV((cur) => ({ ...cur, [k]: x }))} />
+        </div>
+      ))}
+    </div>
+  );
   return (
-    <form className="la-card" onSubmit={save} aria-labelledby={`st-${group}`}>
-      <h3 id={`st-${group}`}>{def.title_ar}</h3>
+    <form className="la-card st-group" onSubmit={save} aria-labelledby={`st-${group}`} hidden={!show} data-group={group}>
+      <h3 id={`st-${group}`} tabIndex={-1}>{def.title_ar}</h3>
       <p className="la-muted">{def.note_ar}</p>
       {def.super && !canWrite && <p className="la-muted small">التعديل للمدير الأعلى والمالك وحدهما.</p>}
       {updated && <p className="la-muted small">آخر تعديل: {updated.by} · {date(updated.at)}</p>}
-      <div className="of-grid">
-        {Object.entries(def.fields).filter(([k]) => !IN_FEATURES[group]?.has(k)).map(([k, f]) => (
-          <Field key={k} id={`st-${group}-${k}`} f={f} value={v[k]} error={errors[k]} disabled={!canWrite}
-            onChange={(x) => setV((cur) => ({ ...cur, [k]: x }))} />
-        ))}
-      </div>
+      {FOLDED.has(group)
+        ? <details className="st-fold" open={q ? true : undefined}><summary>{`المفاتيح (${Object.keys(def.fields).length})`}</summary>{fields}</details>
+        : fields}
       {errors._ && <div className="la-err" role="alert">{errors._}</div>}
       {canWrite && (
         <div className="la-row">
@@ -169,16 +191,34 @@ export default function AppSettings({ canWrite, onSettings, isSuper = false, foc
   useEffect(() => { L('admin.settings').then(setD); }, []);
   // رابط مباشر لمجموعة (#/leaders/settings/<group>)، كرابط سقف التوجيه من شاشة المساعد
   useEffect(() => { if (d?.success && focus) document.getElementById(`st-${focus}`)?.scrollIntoView?.({ block: 'start' }); }, [d, focus]);
+  const [q, setQ] = useState('');
+  // مجموعة لها لوحتها (panel: توجيه الإشعارات في مركز البريد) لا تُرسم هنا
+  const groups = useMemo(() => Object.keys(SETTINGS).filter((g) => g !== 'features' && !SETTINGS[g].panel), []);
+  const featuresHit = hits(q, SETTINGS.features.title_ar, SETTINGS.features.note_ar, ...FEATURE_SWITCHES.flatMap((x) => [x.title, SETTINGS[x.group].fields[x.field]?.hint_ar]));
+  const shown = Object.fromEntries(groups.map((g) => [g, groupMatch(g, q)]));
+  const index = [['st-features', SETTINGS.features.title_ar, featuresHit], ...groups.map((g) => [`st-${g}`, SETTINGS[g].title_ar, !!shown[g]])];
+  const jump = (id) => { const el = document.getElementById(id); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); } };
   if (!d) return <Spinner />;
   if (!d.success) return <div className="la-err">{d.message}</div>;
+  const none = !featuresHit && !groups.some((g) => shown[g]);
   return (
-    <div className="stack">
-      {!d.ready && <div className="la-card la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فتعمل القيم الافتراضية ولا يُحفظ تعديل حتى يُطبَّق ترحيله.</div>}
-      <FeatureSwitches d={d} canWrite={canWrite} onSaved={setD} />
-      {/* مجموعة لها لوحتها (panel: توجيه الإشعارات في مركز البريد) لا تُرسم هنا */}
-      {Object.keys(SETTINGS).filter((g) => g !== 'features' && !SETTINGS[g].panel).map((g) => (
-        <Group key={g} group={g} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready && (!SETTINGS[g].super || isSuper)} onSaved={setD} />
-      ))}
+    <div className="st-layout">
+      {/* فهرس ملتصق وبحث (المرحلة 3 من تدقيق اللوحة): الحفظ يبقى لكل مجموعة بزرها */}
+      <nav className="st-index" aria-label="فهرس الإعدادات">
+        <label className="st-search"><span className="sr-only">ابحث في الإعدادات</span>
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ابحث في الإعدادات…" aria-label="ابحث في الإعدادات" /></label>
+        <ul>
+          {index.map(([id, label, on]) => <li key={id} hidden={!on}><button type="button" className="la-link" onClick={() => jump(id)}>{label}</button></li>)}
+        </ul>
+      </nav>
+      <div className="stack st-main">
+        {!d.ready && <div className="la-card la-muted" role="status">مخزن الإعدادات لم يُرحَّل بعد، فتعمل القيم الافتراضية ولا يُحفظ تعديل حتى يُطبَّق ترحيله.</div>}
+        {none && <p className="la-card la-muted" role="status">لا إعداد يطابق «{q}».</p>}
+        <div hidden={!featuresHit}><FeatureSwitches d={d} canWrite={canWrite} onSaved={setD} /></div>
+        {groups.map((g) => (
+          <Group key={g} group={g} q={q} show={shown[g]} values={d.values[g]} updated={d.updated?.[g]} canWrite={canWrite && d.ready && (!SETTINGS[g].super || isSuper)} onSaved={setD} />
+        ))}
+      </div>
     </div>
   );
 }

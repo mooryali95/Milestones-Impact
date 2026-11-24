@@ -57,7 +57,8 @@ for (const width of [1440, 390]) {
   test(`نموذج دفعة الجهة: أسماء مقروءة وسطر العقد والسعة المطوية (${width})`, async ({ page }) => {
     await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
     const calls = await setup(page);
-    await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: 'تحرير' }).click();
+    await page.locator('.data-table tbody tr', { hasText: 'سفراء 2026' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+    await page.getByRole('menuitem', { name: 'تحرير' }).click();
     const form = page.getByRole('dialog', { name: 'دفعة: سفراء 2026' });
     // الرموز محوَّلة والمرحلة تميز العنوانين المتطابقين، بلا الرمز الداخلي (الرحلة في قسمها، لكل بند مفتاح إظهار)
     const sw = (label) => form.getByRole('switch', { name: `إظهار ${label} في رحلة الدفعة` });
@@ -92,7 +93,8 @@ for (const width of [1440, 390]) {
   test(`دفعة جهة على برنامج آخر: سؤال بعدد المتأثرين ثم التأكيد (${width})`, async ({ page }) => {
     await page.setViewportSize({ width, height: width > 500 ? 900 : 844 });
     const calls = await setup(page);
-    await page.locator('.data-table tbody tr', { hasText: 'أفراد الربيع' }).getByRole('button', { name: 'تحرير' }).click();
+    await page.locator('.data-table tbody tr', { hasText: 'أفراد الربيع' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+    await page.getByRole('menuitem', { name: 'تحرير' }).click();
     const form = page.getByRole('dialog', { name: 'دفعة: أفراد الربيع' });
     // دفعة الأفراد: حقل المقاعد العادي ظاهر بلا سطر عقد
     await expect(form.getByLabel('المقاعد')).toHaveValue('25');
@@ -114,7 +116,8 @@ for (const width of [1440, 390]) {
 
 test('رفض النقل يبقي الدفعة بلا حفظ ويقول لماذا', async ({ page }) => {
   const calls = await setup(page);
-  await page.locator('.data-table tbody tr', { hasText: 'أفراد الربيع' }).getByRole('button', { name: 'تحرير' }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'أفراد الربيع' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+    await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: أفراد الربيع' });
   await form.locator('#f-organization_id').selectOption('o1');
   await form.locator('#f-program_id').selectOption('pb');
@@ -126,7 +129,8 @@ test('رفض النقل يبقي الدفعة بلا حفظ ويقول لماذ�
 
 test('إخفاء كاسر محفوظ قبل فتح النموذج لا يُنبَّه إليه بمنع الحفظ، وكسر جديد يُنبَّه إليه', async ({ page }) => {
   const calls = await setup(page);
-  await page.locator('.data-table tbody tr', { hasText: 'دفعة قديمة' }).getByRole('button', { name: 'تحرير' }).click();
+  await page.locator('.data-table tbody tr', { hasText: 'دفعة قديمة' }).getByRole('button', { name: /^إجراءات أخرى للدفعة/ }).click();
+    await page.getByRole('menuitem', { name: 'تحرير' }).click();
   const form = page.getByRole('dialog', { name: 'دفعة: دفعة قديمة' });
   const sw = (label) => form.getByRole('switch', { name: `إظهار ${label} في رحلة الدفعة` });
   // المخفي قبل فتح المحرر يظهر مخفيًا، ولا يمنع الحفظ، وإظهاره متاح

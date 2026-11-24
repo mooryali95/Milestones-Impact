@@ -22,7 +22,8 @@ async function open(page, importReply) {
   await page.evaluate(() => { sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })); localStorage.clear(); });
   await page.goto(`${BASE}#/leaders/participants`);
   await page.reload();
-  await page.getByRole('button', { name: 'استيراد' }).click();
+  await page.getByRole('button', { name: 'المزيد من إجراءات المشاركين' }).click();
+  await page.getByRole('menuitem', { name: 'استيراد' }).click();
   return { calls, dlg: page.getByRole('dialog', { name: 'استيراد مشاركين' }) };
 }
 

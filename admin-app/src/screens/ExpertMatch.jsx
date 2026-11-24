@@ -82,7 +82,7 @@ export function ExpertAssign({ participantId, canWrite }) {
           {m === 'loading' ? <Spinner /> : m && !m.success ? <div className="la-err">{m.message}</div> : m && (
             <div className="xm-list">
               <p className="la-muted">المطلوب: {roleAr(m.need.role)}{m.need.dimension ? ` · ${DIM_AR[m.need.dimension]}` : ''}{m.need.level ? ` · مستوى ${LEVEL_AR[m.need.level]}` : ''}{m.need.sector ? ` · قطاع ${m.need.sector}` : ''}</p>
-              {!m.candidates.length ? <p className="la-err">لا خبير نشط بهذا الدور وبطاقة متاحة. أضف خبيرًا أو فعّل أحدهم.</p> : (
+              {!m.candidates.length ? <p className="la-empty-note" role="status">لا خبير نشط بهذا الدور وبطاقة متاحة. أضف خبيرًا أو فعّل أحدهم.</p> : (
                 <ol>{m.candidates.map((e, i) => (
                   <li key={e.id} className={i === 0 ? 'top' : ''}>
                     <span className="xm-score"><b>{e.match.total}</b><small>من 100</small></span>

@@ -320,7 +320,8 @@ export function journeyTimeline(resolved, { cohort = null, sessions = [], today 
     optional: activities.filter((a) => !a.required).length, undated: activities.reduce((n, a) => n + (a.undated ? Math.max(1, a.undated_count) : 0), 0),
   };
   const sequential = (key) => stageOut.filter((s) => s.phase === key).reduce((n, s) => n + s.days, 0);
-  const totalLabel = `${daysAr(totalDays)}${totalDays >= 14 ? `، ${aboutWeeksAr(Math.round(totalDays / 7))}` : ''}`;
+  // رحلة بلا مدد مضبوطة (مجموعها صفر أو غير مقروء): «—» لا «0 أيام» ولا «undefined أيام» (تدقيق اللوحة 2026-11-23)
+  const totalLabel = !(totalDays > 0) ? '—' : `${daysAr(totalDays)}${totalDays >= 14 ? `، ${aboutWeeksAr(Math.round(totalDays / 7))}` : ''}`;
   const cards = [];
   if (!isCohort || !dated) {
     cards.push({ key: 'duration', label: 'المدة', value: totalLabel });

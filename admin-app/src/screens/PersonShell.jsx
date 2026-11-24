@@ -101,13 +101,13 @@ export function MoreMenu({ items, label = 'إجراءات أخرى' }) {
   if (!shown.length) return null;
   return (
     <span className="pf-more">
-      <button ref={btn} type="button" className="btn-sm ghost" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>⋯</button>
+      <button ref={btn} type="button" className="btn-sm ghost pf-more-btn" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>⋯</button>
       {open && (
         <ul ref={list} role="menu" className="pf-menu" aria-label={label} onKeyDown={key}>
           {shown.map((it) => (
             <li key={it.label} role="none">
               <button type="button" role="menuitem" tabIndex={-1} className={it.danger ? 'danger' : ''} title={it.title}
-                onClick={() => { setOpen(false); it.run(); }}>{it.label}</button>
+                onClick={() => { setOpen(false); btn.current?.focus(); it.run(); }}>{it.label}</button>
             </li>
           ))}
         </ul>

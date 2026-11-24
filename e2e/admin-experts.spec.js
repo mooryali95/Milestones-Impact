@@ -221,6 +221,7 @@ test('قوالب البريد: معرض بعائلاته، ونسخة تجريب
   await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
   await page.reload();
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
+  await page.getByRole('button', { name: 'مجموعة الإعداد' }).click();  // «الإعداد» مطوية افتراضيًا (تدقيق اللوحة، المرحلة 2)
   await page.locator('.la-tabs').getByRole('button', { name: 'قوالب البريد' }).click();
   await expect(page.getByRole('heading', { name: 'رمز الدخول إلى رحلتك' })).toBeVisible();
   await page.getByRole('button', { name: 'اعتماد المستوى' }).click();
