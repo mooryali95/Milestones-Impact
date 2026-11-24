@@ -1059,9 +1059,11 @@ async function writeOverride(a: Admin, pid: string, program: string, stageKey: s
 // نقل مشارك إلى مرحلة (ملف المشارك، تصور 2026-11-23): خطة واحدة من planMove (stage-move.js) التي عاينها المدير،
 // تُتحقق كلها قبل أي كتابة ثم تُكتب تدخلاتها بقاعدة التدخل في مرحلة نفسها (writeOverride)، بسطر سجل واحد يحمل الخطة
 // وسببها، وبريد واحد للمشارك يسمي مرحلته الجديدة بلا السبب (السبب للسجل الداخلي). الحساب التجريبي يُنقل كالتدخل في
-// مرحلة، ولا يصله بريد (sendMail يتخطى بريده). يعيد الرحلة بعد النقل، فتعرضها الواجهة دون انتظار طلب آخر
+// مرحلة، ولا يصله بريد (sendMail يتخطى بريده). يعيد الرحلة بعد النقل، فتعرضها الواجهة دون انتظار طلب آخر.
+// البريد اختياري بقرار المدير (طلب المالك 2026-11-24): notify === false لا يُرسل شيئًا، والسجل يحمل notified فيُعرف أُرسل أم لا
 export async function stageMove(a: Admin, b: Body) {
   requireWrite(a);
+  const notify = b.notify !== false;
   const reason = String(b.reason || '').trim();
   if (reason.length < MOVE_REASON_MIN) throw new Fail('اكتب سبب النقل (يُحفظ في السجل)');
   const p = await overrideTarget(b.participant_id);
@@ -1083,8 +1085,9 @@ export async function stageMove(a: Admin, b: Body) {
   await audit('admin', a.email, 'stage.move', 'participants', p.id, null, {
     to: plan.target.key, direction: plan.direction, program, reason,
     writes: plan.writes.map((w) => ({ stage: w.key, action: w.action })), clears: plan.clears.map((c) => ({ stage: c.key, was: c.was })),
+    notified: notify && !!p.email,
   });
-  if (p.email) sendMail(p.email, 'تحديث في رحلتك', stageMoveMail(p.full_name, plan.target.title_ar)).catch((e) => console.error(e));
+  if (notify && p.email) sendMail(p.email, 'تحديث في رحلتك', stageMoveMail(p.full_name, plan.target.title_ar)).catch((e) => console.error(e));
   const fresh: any = await journeyFor(p, { lite: true });
   return { success: true, summary: plan.summary, direction: plan.direction, journey: fresh.journey, progress: fresh.progress ?? null };
 }

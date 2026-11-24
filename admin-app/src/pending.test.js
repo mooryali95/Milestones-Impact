@@ -24,20 +24,21 @@ describe('ما ينتظر القرار: العدّ الواحد من صندوق 
     const b = badgesOf(d);
     expect(b.tabs).toEqual({
       participants: { n: 4, late: 1 }, handbook: { n: 1, late: 0 }, capstones: { n: 1, late: 0 },
-      experts: { n: 2, late: 1 }, payments: { n: 1, late: 0 }, activities: { n: 1, late: 0 },
+      experts: { n: 2, late: 1 }, orgs: { n: 1, late: 0 }, activities: { n: 1, late: 0 },
     });
     // المجموع هو مجموع الصندوق نفسه، فلا يختلف العدّاد عن «ينتظرني»
     expect(b.total).toBe(d.total);
     expect(b.late).toBe(d.late);
     expect(b.partial).toBe(false);
     // كل تبويب في الجدول من INBOX_KINDS، لا جدول ثانٍ
-    expect(new Set(Object.keys(b.tabs))).toEqual(new Set(Object.values(INBOX_KINDS).map((k) => k.tab)));
+    expect(new Set(Object.keys(b.tabs))).toEqual(new Set(Object.values(INBOX_KINDS).map((k) => k.badge || k.tab)));
     const p = { contacts: 0, badges: b };
     expect(leadersTotal(p)).toBe(10);
     expect(tabBadge(p, 'participants')).toEqual({ n: 4, late: 1 });
-    expect(tabBadge(p, 'orgs')).toBeNull();
+    expect(tabBadge(p, 'orgs')).toEqual({ n: 1, late: 0 });
+    expect(tabBadge(p, 'payments')).toBeNull();
     expect(groupBadge(p, ['overview', 'participants', 'experts'])).toEqual({ n: 6, late: 2, partial: false });
-    expect(groupBadge(p, ['orgs', 'tracks'])).toBeNull();
+    expect(groupBadge(p, ['tracks'])).toBeNull();
   });
 
   it('النوع المتعذر يُسقط عدّاد تبويبه كله ولا يُنقصه، والمجموع معلَّم بأنه ناقص', () => {

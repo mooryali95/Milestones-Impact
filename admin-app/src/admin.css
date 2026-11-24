@@ -596,7 +596,10 @@ a { text-decoration: none; color: inherit; }
   text-transform: none;
 }
 .stat-value {
-  font-family: var(--font-en);
+  /* الأرقام الكبيرة بخط الواجهة لا بالخط اللاتيني المزخرف: «1» في Cormorant يُقرأ «I» (ملاحظة المالك 2026-11-24).
+     أرقام مصطفة بعرض ثابت فلا تتراقص الأعمدة */
+  font-family: var(--font-ar);
+  font-variant-numeric: lining-nums tabular-nums;
   font-size: 2.6rem;
   font-weight: 500;
   line-height: 1;
