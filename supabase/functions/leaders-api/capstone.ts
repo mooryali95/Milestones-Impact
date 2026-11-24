@@ -284,6 +284,7 @@ export async function adminList(b: Body) {
 async function liveReadiness(ids: string[]): Promise<Record<string, number | null>> {
   const out: Record<string, number | null> = {};
   if (!ids.length) return out;
+  // counting-exempt: ids من صفوف القائمة نفسها (المحسوبة بقاعدة العد)، والقراءة لبناء الجاهزية لا للعد
   const people = must(await db.from('participants').select('*').in('id', ids)) as any[] ?? [];
   for (let i = 0; i < people.length; i += 6) {
     await Promise.all(people.slice(i, i + 6).map(async (p) => {
