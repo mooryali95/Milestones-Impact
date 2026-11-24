@@ -5,7 +5,7 @@
 // كل رسم دالة خالصة تعيد { svg, missing }: svg نص SVG جاهز، وmissing ما ينقص ليكتمل الرسم (يُقال صراحة ولا يُخفى).
 // الألوان من هوية Milestone Impact، والاتجاه من اليمين إلى اليسار: الزمن يجري نحو اليسار.
 // العناصر تحمل <title> (تلميح عند المرور في التطبيق) وdata-chapter (النقر يفتح الفصل في التطبيق).
-import { dateAr, parseDate, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
+import { isVirtual, parseDate, parseWhen, RISK_HIGH, RISK_MID, whenAr } from '../../../supabase/functions/leaders-api/capstone.js';
 import { activitiesOf, cpm, depAr, scheduleOf } from '../../../supabase/functions/leaders-api/schedule.js';
 import { BRAND } from '../../../shared/js/brand.js';
 
@@ -24,12 +24,14 @@ export function scheduleModel(doc) {
   const f = fieldOf(doc, 'schedule', 'activities');
   const wbs = fieldOf(doc, 'wbs', 'packages');
   const wbsCodes = wbs ? (wbs.value || []).map((r) => String(r?.[0] ?? '').trim()).filter(Boolean) : [];
-  const sc = f ? scheduleOf(f.columns, f.value || [], { extraCodes: wbsCodes }) : { acts: [], analysis: cpm([]), broken: [], orphan: [] };
+  // مرساة الأسابيع: تاريخ البدء في البطاقة إن وُجد
+  const anchor = parseDate(fieldOf(doc, 'initiative-charter', 'start')?.value || '');
+  const sc = f ? scheduleOf(f.columns, f.value || [], { extraCodes: wbsCodes, anchor }) : { acts: [], analysis: cpm([]), broken: [], orphan: [] };
   const ms = fieldOf(doc, 'milestone-register', 'milestones');
   const mcols = ms?.columns || [];
   const mi = (w) => mcols.findIndex((c) => String(c).includes(w));
   const milestones = (ms?.value || []).filter((r) => Array.isArray(r) && r.some((x) => String(x ?? '').trim()))
-    .map((r) => ({ title: String(r[0] ?? '').trim(), at: parseDate(r[mi('التاريخ')] ?? ''), decision: String(r[mi('القرار')] ?? '').trim(), owner: String(r[mi('صاحب القرار')] ?? '').trim(), type: String(r[mi('النوع')] ?? '').trim() }))
+    .map((r) => ({ title: String(r[0] ?? '').trim(), at: parseWhen(r[mi('التاريخ')], { anchor, edge: 'end', virtual: true }), decision: String(r[mi('القرار')] ?? '').trim(), owner: String(r[mi('صاحب القرار')] ?? '').trim(), type: String(r[mi('النوع')] ?? '').trim() }))
     .filter((m) => m.at != null);
   // بعد الاعتماد: حالة كل معلم وتاريخ تحققه من المتابعة الشهرية (المخطط مقابل الفعلي)
   const tr = Object.fromEntries((doc?.tracking?.state?.milestones || []).map((x) => [normAr(x.title), x]));
@@ -77,7 +79,7 @@ export function ganttSvg(m, { today = Date.now(), width = 1000, compact = false 
   const step = Math.max(1, Math.ceil(ticks.length / 12));
   for (const t of ticks.filter((_, i) => i % step === 0)) {
     g += `<line x1="${X(t).toFixed(1)}" y1="${top - 8}" x2="${X(t).toFixed(1)}" y2="${H - 14}" stroke="${VC.faint}" stroke-width="1"/>`
-      + `<text x="${X(t).toFixed(1)}" y="${top - 14}" font-size="12" fill="${VC.muted}" text-anchor="middle">${esc(new Date(t).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
+      + `<text x="${X(t).toFixed(1)}" y="${top - 14}" font-size="12" fill="${VC.muted}" text-anchor="middle">${esc(isVirtual(t) ? whenAr(t) : new Date(t).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'short', year: '2-digit', timeZone: 'UTC' }))}</text>`;
   }
   // صفوف متناوبة الخلفية
   rows.forEach((_, i) => { if (i % 2) g += `<rect x="0" y="${Y(i)}" width="${W}" height="${rowH}" fill="${VC.stripe}"/>`; });
@@ -112,7 +114,7 @@ export function ganttSvg(m, { today = Date.now(), width = 1000, compact = false 
       const crit = !!n?.critical;
       // الفائض على المخطط من التاريخ المكتوب: آخر نهاية تسمح بها العلاقات ناقص النهاية المخططة
       const slack = n ? Math.max(0, n.lf - n.plannedEnd) : 0;
-      const tip = [`${a.code} · ${a.name}`, `${dateAr(new Date(a.start).toISOString().slice(0, 10))} إلى ${dateAr(new Date(a.end).toISOString().slice(0, 10))} (${days(a.days)})`,
+      const tip = [`${a.code} · ${a.name}`, `${whenAr(a.start)} إلى ${whenAr(a.end)} (${days(a.days)})`,
         ...a.deps.map(depAr), n ? (crit ? 'على المسار الحرج: أي تأخير فيه يؤخر المبادرة' : slack ? `يحتمل التأخير ${days(slack)} قبل أن يؤخر المبادرة` : 'لا فائض له بتواريخه المكتوبة') : ''].filter(Boolean).join('\n');
       g += `<text x="${W - pad}" y="${y + rowH / 2 + 4.5}" font-size="${compact ? 12 : 13}" fill="${VC.ink}" text-anchor="start" direction="rtl"><tspan font-weight="500" fill="${crit ? VC.crit : VC.gold}">${esc(a.code)}</tspan>  ${esc(cut(a.name, compact ? 26 : 34))}</text>`;
       g += `<g data-chapter="schedule" data-code="${esc(a.code)}" style="cursor:pointer"><title>${esc(tip)}</title>`
@@ -122,7 +124,7 @@ export function ganttSvg(m, { today = Date.now(), width = 1000, compact = false 
         + riskMark(m.risks?.[a.code], x1, y, rowH);
     } else {
       const x = X(r.x.at);
-      const tip = [r.x.title, dateAr(new Date(r.x.at).toISOString().slice(0, 10)), r.x.decision && `القرار: ${r.x.decision}`, r.x.owner && `صاحب القرار: ${r.x.owner}`].filter(Boolean).join('\n');
+      const tip = [r.x.title, whenAr(r.x.at), r.x.decision && `القرار: ${r.x.decision}`, r.x.owner && `صاحب القرار: ${r.x.owner}`].filter(Boolean).join('\n');
       g += `<text x="${W - pad}" y="${y + rowH / 2 + 4.5}" font-size="${compact ? 12 : 13}" fill="${VC.slate}" text-anchor="start" direction="rtl"><tspan fill="${VC.ink}">◆</tspan>  ${esc(cut(r.x.title, compact ? 26 : 34))}</text>`
         + `<g data-chapter="milestone-register" style="cursor:pointer"><title>${esc(tip)}</title><rect x="${(x - 7).toFixed(1)}" y="${(y + rowH / 2 - 7).toFixed(1)}" width="14" height="14" transform="rotate(45 ${x.toFixed(1)} ${(y + rowH / 2).toFixed(1)})" fill="${VC.ink}" stroke="${VC.gold}" stroke-width="2"/></g>`;
     }
@@ -301,7 +303,7 @@ export function roadmapSvg(m, { width = 1000 } = {}) {
   let g = `<line x1="${pad - 30}" y1="${mid}" x2="${W - pad + 30}" y2="${mid}" stroke="${VC.ink}" stroke-width="2"/>`;
   ms.forEach((x, i) => {
     const px = X(x.at), up = i % 2 === 0, ty = up ? mid - 110 : mid + 40;
-    const tip = [x.title, dateAr(new Date(x.at).toISOString().slice(0, 10)), x.type && `النوع: ${x.type}`, x.decision && `القرار: ${x.decision}`, x.owner && `صاحب القرار: ${x.owner}`,
+    const tip = [x.title, whenAr(x.at), x.type && `النوع: ${x.type}`, x.decision && `القرار: ${x.decision}`, x.owner && `صاحب القرار: ${x.owner}`,
       x.status_title && `الحالة: ${x.status_title}${x.actual ? `، تحقق في ${x.actual}` : ''}`].filter(Boolean).join('\n');
     const ring = x.status === 'done' ? BRAND.graphite : x.status === 'late' || x.status === 'at_risk' ? VC.crit : null;
     g += `<g data-chapter="milestone-register" style="cursor:pointer"><title>${esc(tip)}</title>`
@@ -309,7 +311,7 @@ export function roadmapSvg(m, { width = 1000 } = {}) {
       + `<line x1="${px}" y1="${mid}" x2="${px}" y2="${up ? mid - 44 : mid + 40}" stroke="${VC.line}" stroke-width="1.2"/>`
       + `<rect x="${px - 8}" y="${mid - 8}" width="16" height="16" transform="rotate(45 ${px} ${mid})" fill="${TYPE(x.type)}" stroke="${VC.paper}" stroke-width="2"/>`
       + `<text x="${px}" y="${up ? mid - 92 : ty + 12}" font-size="12" fill="${VC.ink}" text-anchor="middle" font-weight="500">${esc(cut(x.title, 22))}</text>`
-      + `<text x="${px}" y="${up ? mid - 74 : ty + 30}" font-size="10.5" fill="${VC.muted}" text-anchor="middle">${esc(dateAr(new Date(x.at).toISOString().slice(0, 10)))}</text>`
+      + `<text x="${px}" y="${up ? mid - 74 : ty + 30}" font-size="10.5" fill="${VC.muted}" text-anchor="middle">${esc(whenAr(x.at))}</text>`
       + (x.decision ? `<text x="${px}" y="${up ? mid - 58 : ty + 46}" font-size="10" fill="${VC.slate}" text-anchor="middle">${esc(cut(`القرار: ${x.decision}`, 26))}</text>` : '')
       + '</g>';
   });

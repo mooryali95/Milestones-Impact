@@ -204,6 +204,30 @@ export function parseDate(v) {
   if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1]);
   return null;
 }
+// ── الزمن النسبي (تصور موائمة سفراء والزمن النسبي، المرحلة 1، اعتمده المالك 2026-11-24) ──
+// الخلية الزمنية تُقرأ بصيغتيها: تاريخ (كما كان) أو «الأسبوع 3». الأسبوع يُحسب من مرساة واحدة (تاريخ البدء)،
+// فبدايته أول يومه ونهايته آخر يوم فيه. بلا مرساة لا يصير الأسبوع تاريخًا، إلا بمرساة افتراضية (virtual)
+// لمقارنة الصفوف ببعضها (الترتيب والمدد والاعتماديات) دون ادعاء تاريخ. التاريخ المكتوب يُقرأ كما هو دائمًا.
+export const VIRTUAL_ANCHOR = Date.UTC(2000, 0, 3);
+const WEEK_RE = /^(?:ال)?(?:أسبوع|اسبوع|week|wk|w)\s*[:.]?\s*(\d{1,3})$/i;
+/** رقم الأسبوع (1 فأكثر) إن كتبت الخلية «الأسبوع 3»، وإلا null */
+export function weekOf(v) {
+  const m = latinDigits(v).trim().match(WEEK_RE);
+  const n = m ? +m[1] : 0;
+  return n >= 1 ? n : null;
+}
+/** @param {any} v @param {{ anchor?: number|null, edge?: 'start'|'end', virtual?: boolean }} [o] */
+export function parseWhen(v, { anchor = null, edge = 'start', virtual = false } = {}) {
+  const d = parseDate(v ?? '');
+  if (d != null) return d;
+  const w = weekOf(v ?? '');
+  const base = anchor ?? (virtual ? VIRTUAL_ANCHOR : null);
+  if (w == null || base == null) return null;
+  return base + ((w - 1) * 7 + (edge === 'end' ? 6 : 0)) * 864e5;
+}
+// موضع زمني للعرض: تاريخ حقيقي بصيغته العربية، أو «الأسبوع N» إن كان من المرساة الافتراضية (بلا تاريخ بدء)
+export const isVirtual = (ts) => ts != null && ts < Date.UTC(2001, 0, 1);
+export const whenAr = (ts) => (ts == null ? '' : isVirtual(ts) ? `الأسبوع ${Math.floor((ts - VIRTUAL_ANCHOR) / (7 * 864e5)) + 1}` : dateAr(new Date(ts).toISOString().slice(0, 10)));
 // التاريخ كما يقرؤه الراعي: «1 مارس 2027» بالتقويم الميلادي وأرقام لاتينية كبقية المنصة، لا 2027-03-01 خامًا
 // يتقلب ترتيبه في السطر العربي (links-expert-7). ما لا يُفهم تاريخًا يُعرض كما كُتب
 export function dateAr(v) {
@@ -303,15 +327,18 @@ export function capstoneChecks(ctx) {
     const t = sched;
     const codes = t ? t.rows.map((r) => codeOf(t.cell(r, t.col('الرمز')))).filter(Boolean) : [];
     const s = t?.col('البدايه'), e = t?.col('النهايه'), dep = t?.col('يعتمد');
+    // مرساة الأسابيع: تاريخ البدء في البطاقة، وإلا افتراضية تكفي لمقارنة الصفوف ببعضها
+    const anchor = parseDate(A[CHARTER_KEY]?.start || '');
+    const at = (v, edge) => parseWhen(v, { anchor, edge, virtual: true });
     const bad = t ? t.rows.filter((r) => {
-      const a = parseDate(t.cell(r, s)), b = parseDate(t.cell(r, e));
+      const a = at(t.cell(r, s), 'start'), b = at(t.cell(r, e), 'end');
       return a == null || b == null || b < a;
     }).map((r) => t.cell(r, 0) || t.cell(r, 1)) : [];
     // جدول بلا صفوف يفشل الفحص، وتفصيله يقول ذلك بدل قائمة فارغة («…معكوس: .»)
     add('dates', 'تواريخ الجدول واضحة والنهاية بعد البداية', t && t.rows.length && !bad.length,
-      t && t.rows.length ? `صفوف بتاريخ غير واضح أو معكوس: ${bad.slice(0, 6).join('، ')}. اكتب التاريخ هكذا 2026-03-15.` : 'لم تُدخل أنشطة في الجدول الزمني بعد.');
+      t && t.rows.length ? `صفوف بتاريخ غير واضح أو معكوس: ${bad.slice(0, 6).join('، ')}. اكتب التاريخ هكذا 2026-03-15، أو الأسبوع هكذا: الأسبوع 3.` : 'لم تُدخل أنشطة في الجدول الزمني بعد.');
     // العلاقات بصيغتها (schedule.js): A1، A2 SS+3. الرمز قد يكون نشاطًا أو حزمة في هيكل التجزئة
-    const sc = scheduleOf(t.columns, t.rows, { extraCodes: wbsCodes });
+    const sc = scheduleOf(t.columns, t.rows, { extraCodes: wbsCodes, anchor });
     add('deps', 'الاعتماديات تشير إلى أنشطة موجودة', !sc.orphan.length, `اعتماديات لا تجد نشاطها: ${sc.orphan.slice(0, 6).join('، ')}`);
     if (sc.acts.some((a) => a.deps.length)) {
       add('dep-cycle', 'لا حلقة في علاقات الأنشطة', !sc.analysis.cycle, `أنشطة يعتمد بعضها على بعض في حلقة: ${(sc.analysis.cycle || []).slice(0, 6).join('، ')}. احذف إحدى العلاقات.`);
@@ -322,7 +349,7 @@ export function capstoneChecks(ctx) {
     if (has(CHARTER_KEY) && t) {
       const from = parseDate(A[CHARTER_KEY]?.start), to = parseDate(A[CHARTER_KEY]?.end);
       if (from != null && to != null) {
-        const out2 = t.rows.filter((r) => { const a = parseDate(t.cell(r, s)), b = parseDate(t.cell(r, e)); return (a != null && a < from) || (b != null && b > to); });
+        const out2 = t.rows.filter((r) => { const a = parseWhen(t.cell(r, s), { anchor: from }), b = parseWhen(t.cell(r, e), { anchor: from, edge: 'end' }); return (a != null && a < from) || (b != null && b > to); });
         add('window', 'الجدول داخل مدة المبادرة في بطاقتها', !out2.length, `${out2.length} نشاط خارج المدة بين ${A[CHARTER_KEY].start} و${A[CHARTER_KEY].end}.`);
         // المسار الحرج بعلاقاته (لا بالتواريخ المكتوبة) يجب أن يتسع في مدة المبادرة
         const an = sc.analysis;

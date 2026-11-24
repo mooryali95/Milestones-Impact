@@ -10,7 +10,7 @@
 //   • نسبة التحقق لكل منفعة: (الفعلي − خط الأساس) ÷ (المستهدف − خط الأساس).
 // هذا هو المستوى الرابع في قياس الأثر (نتائج الجهة)، بجانب قياس
 // كفاءات القائد قبل البرنامج وبعده (المستوى الثالث).
-import { norm, parseDate, parseNumber } from './capstone.js';
+import { norm, parseDate, parseNumber, parseWhen } from './capstone.js';
 
 export const TRACK_DAYS = 185;
 export const FIRST_UPDATE_DAY = 25;
@@ -43,7 +43,9 @@ function tableOf(snapshot, sectionKey, fieldKey) {
 // ── الخطة: من الوثيقة المعتمدة وحدها ──
 // المعالم من سجل المعالم، وإن غاب فمن الجدول الزمني. المفاتيح بترتيب الصفوف
 // في اللقطة، واللقطة لا تتغير، فتبقى ثابتة طوال المتابعة.
-export function trackingPlan(snapshot) {
+// approvedAt: مرساة الأسابيع حين تخلو البطاقة من تاريخ البدء (الخطة تبدأ يوم اعتمادها). التواريخ المكتوبة تُقرأ كما هي.
+export function trackingPlan(snapshot, approvedAt = null) {
+  const anchor = parseDate(snapshot?.meta?.start || '') ?? (approvedAt ? parseDate(String(approvedAt).slice(0, 10)) : null);
   const reg = tableOf(snapshot, 'milestone-register', 'milestones');
   const sched = reg && reg.rows.length ? null : tableOf(snapshot, 'schedule', 'activities');
   const t = reg && reg.rows.length ? reg : sched;
@@ -52,7 +54,7 @@ export function trackingPlan(snapshot) {
     return {
       key: `m${i}`, title: reg === t ? t.cell(r, 0) : t.cell(r, t.col('النشاط')) || t.cell(r, 0),
       type: reg === t ? t.cell(r, t.col('النوع')) || null : null,
-      due: due || null, due_ts: parseDate(due),
+      due: due || null, due_ts: parseWhen(due, { anchor, edge: 'end' }),
       criterion: reg === t ? t.cell(r, t.col('معيار')) || null : null,
       owner: reg === t ? t.cell(r, t.col('صاحب')) || null : null,
     };

@@ -4,7 +4,7 @@
 // التصور: docs/content/2026-11-14-تصور-بناء-المبادرة-وحالة-العمل-v1.md (اعتمده المالك، الخيار ج).
 // لكل معلومة مصدر واحد: الموازنة من «الموارد والتكلفة»، والمنافع من «سجل المنافع»، والمخاطر من «سجل المخاطر».
 // يعمل على الوثيقة كما يبنيها الخادم (docFor) وعلى لقطة الوثيقة المعتمدة معًا، فلا يمس الخادم ولا القاعدة.
-import { dateAr, norm, parseDate, parseNumber, RISK_HIGH } from './capstone.js';
+import { dateAr, norm, parseDate, parseNumber, parseWhen, RISK_HIGH } from './capstone.js';
 import { countAr } from './labels.js';
 
 // التاريخ بصيغة 2026-03-15 داخل جملة عربية: يُعزل اتجاهه (LRI…PDI) فلا تنقلب أجزاؤه
@@ -180,14 +180,16 @@ export function launchPlan(doc) {
   const acts = tableOf(doc, 'schedule', 'activities');
   const ms = tableOf(doc, 'milestone-register', 'milestones');
   const dated = [];
+  // الأسابيع تصير تواريخ بمرساة تاريخ البدء وحدها؛ بلاها لا يُختلق تاريخ
+  const anchor = parseDate(text(doc, 'initiative-charter', 'start') || '');
   if (acts) {
     const s = acts.col('البداية'), n = acts.col('النشاط', 'الحزمة');
-    for (const r of acts.rows) { const at = parseDate(acts.cell(r, s)); if (at != null) dated.push({ at, kind: 'activity', text: `يبدأ: ${acts.cell(r, n >= 0 ? n : 1)}` }); }
+    for (const r of acts.rows) { const at = parseWhen(acts.cell(r, s), { anchor }); if (at != null) dated.push({ at, kind: 'activity', text: `يبدأ: ${acts.cell(r, n >= 0 ? n : 1)}` }); }
   }
   if (ms) {
     const d = ms.col('التاريخ'), q = ms.col('القرار'), who = ms.col('صاحب القرار');
     for (const r of ms.rows) {
-      const at = parseDate(ms.cell(r, d));
+      const at = parseWhen(ms.cell(r, d), { anchor, edge: 'end' });
       if (at == null) continue;
       const dec = ms.cell(r, q), by = ms.cell(r, who);
       dated.push({ at, kind: 'milestone', text: `معلم: ${ms.cell(r, 0)}${dec ? `، والقرار عنده ${dec}` : ''}${by ? ` (${by})` : ''}` });

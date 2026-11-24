@@ -28,7 +28,7 @@ export async function trackingFor(caps: any[]) {
   const by: Record<string, any[]> = {};
   for (const r of rows) (by[r.participant_id] ||= []).push(r);
   return Object.fromEntries(approved.map((c) => {
-    const plan = trackingPlan(c.snapshot);
+    const plan = trackingPlan(c.snapshot, c.approved_at);
     return [c.participant_id, trackingSummary(plan, by[c.participant_id] || [], c.approved_at)];
   }));
 }
@@ -51,7 +51,7 @@ async function load(participantId: string, demo: any = null) {
   if ((cap?.status !== 'approved' || !cap.snapshot) && demo) cap = await demoLoad(demo, cap);
   if (cap?.status !== 'approved' || !cap.snapshot) return null;
   const updates = must(await db.from('capstone_updates').select(UPDATE_COLS).eq('participant_id', participantId).order('period')) as any[] ?? [];
-  const plan = trackingPlan(cap.snapshot);
+  const plan = trackingPlan(cap.snapshot, cap.approved_at);
   return { cap, plan, updates, summary: trackingSummary(plan, updates, cap.approved_at)!, state: latestState(plan, updates) };
 }
 
