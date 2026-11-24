@@ -495,3 +495,33 @@ export function chapterState(s) {
   if (['submitted', 'reviewed', 'returned'].includes(s?.status)) return s.status;
   return s?.updated_at || s?.status === 'draft' ? 'draft' : 'empty';
 }
+
+// ── حالة الوثيقة الواحدة في قائمة الإدارة وملف المشارك وصفحة المراجعة ──
+// ما قيد البناء (مسودة أو أُعيد للتحسين) جاهزيته حية من فصوله الآن (build في capstone.ts)، وما سُلّم فما بعده
+// جاهزيته المحفوظة عند التسليم (الفصول مقفلة بعده). من بدأ بطاقته ولا صف له: مسودة.
+export const LIVE_READINESS = Object.freeze(['draft', 'returned']);
+/** @param {{ status?: string | null, readiness?: number | null } | null} row صف capstones أو null
+ *  @param {number | null} live الجاهزية الحية إن حُسبت */
+export function capstoneState(row, live = null) {
+  const status = row?.status || 'draft';
+  const stored = row?.readiness ?? null;
+  const readiness = LIVE_READINESS.includes(status) ? (live ?? stored) : (stored ?? live);
+  return { status, readiness: readiness == null ? null : Math.round(Number(readiness)) };
+}
+
+/** صفوف قائمة الوثائق: صفوف capstones، ثم من بدأ بطاقته (تسليم CHARTER_KEY) ولا صف له مسودةً، مرة واحدة لكل مشارك.
+ *  live: { [participant_id]: جاهزية حية } لما قيد البناء. المصدر نفسه الذي يقرأ منه ملف المشارك (capstoneState)
+ *  @param {{ capstones?: any[], started?: any[], live?: Record<string, number | null>, status?: string | null }} src */
+export function capstoneListRows({ capstones = [], started = [], live = {}, status = null }) {
+  const rows = [], have = new Set();
+  const push = (r) => {
+    if (have.has(r.participant_id)) return;
+    have.add(r.participant_id);
+    const s = capstoneState(r, live[r.participant_id] ?? null);
+    if (status && s.status !== status) return;
+    rows.push({ ...r, ...s });
+  };
+  for (const r of capstones) push(r);
+  for (const s of started) push({ participant_id: s.participant_id, status: null, readiness: null, revisions: 0, submitted_at: null, reviewed_at: null, score: null, sponsor_status: null, approved_at: null, participants: s.participants });
+  return rows;
+}

@@ -86,7 +86,7 @@ function Stage({ s, open, onToggle, now, canWrite, milestones, ms, onStage, onCo
   ] : [];
   const body = `pj-b-${s.key}`;
   return (
-    <li className={`pj-stage ${s.status}${now ? ' now' : ''}`} data-stage={s.key}>
+    <li id={`pj-st-${s.key}`} className={`pj-stage ${s.status}${now ? ' now' : ''}`} data-stage={s.key}>
       <div className="pj-stage-h">
         <button type="button" className="pj-toggle" aria-expanded={open} aria-controls={body} onClick={onToggle}>
           <span className="pj-node" aria-hidden="true" />
@@ -208,6 +208,12 @@ export default function PersonJourney({ r, canWrite, onDone, onReview, onStage, 
   const general = milestones.filter((m) => !m.stage_key || !keys.has(m.stage_key));
   const toggle = (k) => { const n = new Set(opened); if (n.has(k)) n.delete(k); else n.add(k); setOpened(n); };
   const next = cur.stage ? stageMissing(cur.stage)[0] : null;
+  // المسار المرئي (المرحلة 3 من تصور الملف): مراحل الأطوار بترتيبها نفسه (journeyPhases)، والنقر يفتح المرحلة وينزل إليها
+  const path = phases.flatMap((ph) => ph.stages);
+  const goTo = (k) => {
+    setOpened((o) => new Set([...o, k]));
+    setTimeout(() => { const el = document.getElementById(`pj-st-${k}`); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.querySelector('.pj-toggle')?.focus({ preventScroll: true }); } }, 0);
+  };
   const complete = (s) => onStage(s, 'complete', stageMissing(s).map((it) => `ينقصه: ${it.title_ar}`));
   const stage = (s) => (
     <Stage key={s.key} s={s} open={opened.has(s.key)} onToggle={() => toggle(s.key)} now={nowKeys.has(s.key)} canWrite={canWrite}
@@ -221,13 +227,29 @@ export default function PersonJourney({ r, canWrite, onDone, onReview, onStage, 
       <section className="la-card pj-head" aria-labelledby="pf-journey-h">
         <div className="pj-head-t">
           <h3 id="pf-journey-h">الرحلة</h3>
-          <p>{cur.stage ? <>المرحلة الحالية: <b>{cur.stages.map((s) => s.title_ar).join(' و')}</b></> : journey.length ? <b>أنهى الرحلة</b> : 'لا رحلة بعد'}</p>
+          <p>{cur.stage ? <>المرحلة الحالية: <b>{cur.stages.map((s) => s.title_ar).join(' و')}</b></> : journey.length ? <b>أنهى الرحلة</b> : 'لا رحلة بعد. الخطوة التالية: أن يُعتمد مساره فتُبنى رحلته من برنامج دفعته.'}</p>
           {next && <p className="la-muted small">الخطوة التالية: {next.title_ar}</p>}
         </div>
         <div className="pj-head-n">
           <span className="pj-pct" role="progressbar" aria-label="تقدمه في الرحلة" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.progress || 0}><i style={{ inlineSize: `${r.progress || 0}%` }} /></span>
           <b>{r.progress || 0}%</b>
         </div>
+        {path.length > 0 && (
+          <ol className="pj-path" aria-label="مسار الرحلة" data-testid="journey-path">
+            {path.map((s, i) => {
+              const st = nowKeys.has(s.key) ? 'now' : s.status === 'done' ? 'done' : s.status === 'locked' ? 'locked' : 'open';
+              return (
+                <li key={s.key} className={`pj-path-${st}`} aria-current={st === 'now' ? 'step' : undefined}>
+                  <button type="button" onClick={() => goTo(s.key)} title={stageMeta(s)}
+                    aria-label={`${i + 1}. ${s.title_ar}: ${st === 'now' ? 'الحالية' : stageMeta(s)}`}>
+                    <span className="pj-path-dot" aria-hidden="true">{st === 'done' ? '✓' : i + 1}</span>
+                    <span className="pj-path-t">{s.title_ar}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        )}
         {canWrite && journey.length > 0 && (
           <div className="pj-head-a">
             <button type="button" className="btn-sm primary" onClick={() => setMoving(true)}>نقل إلى مرحلة…</button>

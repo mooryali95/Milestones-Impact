@@ -21,6 +21,7 @@ import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
 import { journeyApproved, overallLevel } from './logic.js';
 import { stageNow } from './journey-map.js';
+import { waitingCounts, whereNow } from './now.js';
 import * as OB from './observations.ts';
 import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { cursorAuditId, flagsOf, fullTimelineOf, parseTimelineCursor, TIMELINE_PAGE, TIMELINE_TYPES, timelineOf } from './observations.js';
@@ -53,12 +54,15 @@ async function around(p: any, cohortId: string | null, viewer: { email: string }
 
 // ما كان غائبًا عن الملف: وثيقة المبادرة، ودورات تقييم 360، وحضور الورش. قراءة فقط، وتعذّر جدول لا يُسقط الملف
 async function moreFor(pid: string) {
-  const [cap, f360, att] = await Promise.all([
+  const [cap, f360, att, reqs] = await Promise.all([
     db.from('capstones').select('id, status, readiness, revisions, review_note, submitted_at, updated_at').eq('participant_id', pid).maybeSingle(),
     db.from('feedback_cycles').select('wave, status, opens_at, closes_at, released_at').eq('participant_id', pid).order('created_at'),
     db.from('workshop_attendance').select('checked_in_at, method, workshop_sessions(title_ar, starts_at)').eq('participant_id', pid).order('checked_in_at', { ascending: false }).limit(50),
+    // حالات المتطلبات المعلقة لـ«أين هو الآن» (now.js)، بالمصدر نفسه الذي تقرؤه قائمة المشاركين
+    db.from('participant_requirements').select('status').eq('participant_id', pid).in('status', ['submitted', 'returned']),
   ]);
   return {
+    requirement_states: reqs.error ? [] : reqs.data || [],
     capstone: cap.error ? null : cap.data || null,
     feedback360: f360.error ? [] : f360.data || [],
     attendance: att.error ? [] : (att.data || []).map((x: any) => ({ at: x.checked_in_at, method: x.method, title: x.workshop_sessions?.title_ar || null, starts_at: x.workshop_sessions?.starts_at || null })),
@@ -109,8 +113,12 @@ export async function participantFile(id: string, audience: 'admin' | 'expert', 
   if (audience === 'admin') {
     const more = await moreFor(base.participant.id);
     // «التوجيه والإرشاد» G3: أعداد بلا نص (guidance_counts). المحادثة نفسها لا تُقرأ هنا أبدًا
-    const file = { ...base, ...common, ...more, observations, guidance: await guideCounts(base.participant.id) };
-    return { ...file, flags: flagsOf(file), timeline: timelineOf({ history: base.history || [], observations }) };
+    const { requirement_states, ...rest } = more;
+    const file = { ...base, ...common, ...rest, observations, guidance: await guideCounts(base.participant.id) };
+    // «أين هو الآن» (المرحلة 2): أربع حقائق من دالة واحدة تقرؤها قائمة المشاركين أيضًا
+    const waiting = waitingCounts({ status: base.participant.status, requirements: requirement_states, models: base.models || [], capstone: rest.capstone });
+    const now = whereNow({ participant: base.participant, journey: base.journey || [], cohort, waiting, sessions: extra.sessions || [], milestones: base.milestones || [] });
+    return { ...file, now, flags: flagsOf(file), timeline: timelineOf({ history: base.history || [], observations }) };
   }
   // للخبير: بلا سجل الإدارة ولا السيرة ولا حقول الحساب الداخلية. ما يراه مستشار الدفعة والخبير المسند تحسمه مفاتيح
   // الرؤية (visibility.js): الإعداد العام ثم استثناء الدفعة، لا شرط مكتوب هنا. تعليل الإدارة لتعديل المستوى لا يخرج للمسند أبدًا.

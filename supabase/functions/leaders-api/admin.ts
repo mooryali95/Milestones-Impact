@@ -38,6 +38,7 @@ import { canRequestRetake, openRetake, RETAKE_MAIL_SUBJECT, retakeReason, retake
 import { onboardingOf, servedTotal } from './onboarding.js';
 import { appSettings } from './settings.ts';
 import { renderJourneyText } from './journey.js';
+import { waitingCounts, whereNow } from './now.js';
 import { MOVE_REASON_MIN, planMove } from './stage-move.js';
 import { BULK_APPROVE_MAX, mailForecast, notesFor, pickSample, planUniform, splitForApproval } from './approval.js';
 import { counted, listed } from './counting.ts';
@@ -345,10 +346,20 @@ export async function participants(b: Body) {
   const enrBy = new Map<string, any[]>();
   for (const e of enr as any[]) { if (!enrBy.has(e.participant_id)) enrBy.set(e.participant_id, []); enrBy.get(e.participant_id)!.push(e); }
   const cohortId = (r: any) => pickCohort({ enrollments: enrBy.get(r.id) || [], cohorts, organizationId: r.organization_id || null }).cohort?.id || null;
+  // عمود «بانتظار» من دالة «أين هو الآن» نفسها (now.js) وبحالات التسليم نفسها التي يقرؤها ملف المشارك
+  const ids = rows.map((r) => r.id);
+  const [wReqs, wModels, wCaps] = await Promise.all([
+    allFor(ids, () => db.from('participant_requirements').select('participant_id, status').in('status', ['submitted', 'returned']).order('participant_id').order('requirement_id')).catch(() => [] as any[]),
+    allFor(ids, () => db.from('model_submissions').select('participant_id, status, learning_models(capstone_sort)').in('status', ['submitted', 'returned']).order('participant_id').order('id')).catch(() => [] as any[]),
+    allFor(ids, () => db.from('capstones').select('participant_id, status').in('status', ['submitted', 'returned']).order('participant_id')).catch(() => [] as any[]),
+  ]);
+  const by = (xs: any[]) => { const m = new Map<string, any[]>(); for (const x of xs) { if (!m.has(x.participant_id)) m.set(x.participant_id, []); m.get(x.participant_id)!.push(x); } return m; };
+  const [reqBy, modBy, capBy] = [by(wReqs as any[]), by(wModels as any[]), by(wCaps as any[])];
+  const waitingOf = (r: any) => whereNow({ participant: r, waiting: waitingCounts({ status: r.status, requirements: reqBy.get(r.id) || [], models: modBy.get(r.id) || [], capstone: capBy.get(r.id)?.[0] || null }) }).waiting_on;
   // effort وretake من سجل القياس نفسه (المصدر الواحد): وسم المستعجل وفلتره، وطلب الإعادة القائم
   return { success: true, participants: rows.map((r) => {
     const g = progress[r.id] || null;
-    return { ...r, last_active_at: active[r.id] ?? r.last_login_at ?? null, cohort_id: cohortId(r), onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
+    return { ...r, last_active_at: active[r.id] ?? r.last_login_at ?? null, cohort_id: cohortId(r), waiting: waitingOf(r), onboarding: onboardingOf(r, g?.id ? g : null), effort: g?.status === 'submitted' ? g.effort || null : null, retake: g?.retake || null, can_retake: canRequestRetake(r, g?.id ? g : null) };
   }), cohorts: cohorts.map((c) => ({ id: c.id, name: c.name })), ...capInfo(rows) };
 }
 
@@ -449,7 +460,7 @@ export async function participant(b: Body) {
   const [pts, { data: book }, { data: subs }, { data: labTries }] = await Promise.all([
     pointsOf(p.id),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, reflection, completed_at, handbook_modules(title_ar, dimension)').eq('participant_id', p.id),
-    db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(title_ar, dimension, points)').eq('participant_id', p.id),
+    db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(key, title_ar, dimension, points, capstone_sort)').eq('participant_id', p.id),
     // المختبر للمستشار: بـ* لتحمل عمود التلميحات قبل ترحيل 20261111120200 وبعده
     db.from('lab_attempts').select('*, lab_items(title_ar, dimension, spec)').eq('participant_id', p.id).not('finished_at', 'is', null),
   ]);

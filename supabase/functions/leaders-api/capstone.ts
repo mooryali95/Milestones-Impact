@@ -14,7 +14,7 @@ import { cohortOf, contentLevelsFor } from './programs.ts';
 import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
+  capstoneListRows, capstoneState, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import type { Admin } from './admin.ts';
@@ -44,7 +44,7 @@ async function build(p: any) {
   const key = trackKey(levels);
   const [models, subs, cap, track] = await Promise.all([
     db.from('learning_models').select(MODEL_COLS).not('capstone_sort', 'is', null),
-    db.from('model_submissions').select('model_id, status, rating, feedback_ar, answers, updated_at').eq('participant_id', p.id),
+    db.from('model_submissions').select('id, model_id, status, rating, feedback_ar, answers, updated_at').eq('participant_id', p.id),
     db.from('capstones').select('*').eq('participant_id', p.id).maybeSingle(),
     key ? db.from('tracks').select('key, title_ar, priority_dimension').eq('key', key).maybeSingle() : Promise.resolve({ data: null }),
   ]);
@@ -82,6 +82,8 @@ const sectionView = (s: any) => ({
   complete: s.state.complete, missing: s.state.missing.length, status: s.state.status, rating: s.state.rating,
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
+  // معرّف التسليم ليقيّم المراجع الفصل من بطاقة المبادرة نفسها (لا من «التعلم»)
+  sub_id: s.sub?.id || null,
 });
 
 function reviewView(c: any, full = true) {
@@ -246,19 +248,18 @@ export async function doc(p: any) {
 export async function adminList(b: Body) {
   let q = listed(db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)'), 'participants').order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
   if (b.status) q = q.eq('status', String(b.status));
-  const rows = must(await q) as any[] ?? [];
+  const capRows = must(await q) as any[] ?? [];
   // من بدأ بطاقة مبادرته ولم يُنشأ له صف بعد (لم يسلّم ولم يحفظ ملخصًا) يظهر مسودةً، فلا تختفي وثيقة يعمل عليها
-  // عن الإدارة (قرار المالك 2026-11-24). الجاهزية تُحسب عند فتح ملفه، لا هنا
-  if (!b.status || b.status === 'draft') {
-    const have = new Set(rows.map((r) => r.participant_id));
-    const started = must(await listed(db.from('model_submissions').select('participant_id, updated_at, learning_models!inner(key), participants!inner(full_name, email, organization_name, work_scope, is_demo)')
-      .eq('learning_models.key', CHARTER_KEY), 'participants').order('updated_at', { ascending: false }).limit(300)) as any[] ?? [];
-    for (const s of started) {
-      if (have.has(s.participant_id)) continue;
-      have.add(s.participant_id);
-      rows.push({ participant_id: s.participant_id, status: 'draft', readiness: null, revisions: 0, submitted_at: null, reviewed_at: null, score: null, sponsor_status: null, approved_at: null, participants: s.participants });
-    }
-  }
+  // عن الإدارة (قرار المالك 2026-11-24)
+  const started = !b.status || b.status === 'draft'
+    ? must(await listed(db.from('model_submissions').select('participant_id, updated_at, learning_models!inner(key), participants!inner(full_name, email, organization_name, work_scope, is_demo)')
+      .eq('learning_models.key', CHARTER_KEY), 'participants').order('updated_at', { ascending: false }).limit(300)) as any[] ?? []
+    : [];
+  // الجاهزية الحية لما قيد البناء بالبناء نفسه الذي يقرؤه ملف المشارك (admin.capstone)، فلا تختلف القائمة عن الملف
+  const building = [...new Set([...capRows.filter((r) => LIVE_READINESS.includes(r.status)).map((r) => r.participant_id),
+    ...started.map((s) => s.participant_id)])].filter((id) => !capRows.some((r) => r.participant_id === id && !LIVE_READINESS.includes(r.status)));
+  const live = await liveReadiness(building);
+  const rows = capstoneListRows({ capstones: capRows, started, live, status: b.status ? String(b.status) : null });
   const ids = rows.map((r) => r.participant_id);
   const charters = ids.length ? must(await db.from('model_submissions').select('participant_id, answers, learning_models!inner(key)')
     .eq('learning_models.key', CHARTER_KEY).in('participant_id', ids)) as any[] ?? [] : [];
@@ -278,6 +279,20 @@ export async function adminList(b: Body) {
       tracking: tr[r.participant_id] || null,
     })),
   };
+}
+
+// الجاهزية الحية لعدة مشاركين: build لكل منهم (قراءة لا تكتب)، بتوازٍ محدود. من لم يُعتمد مساره أو تعذّر بناؤه: null
+async function liveReadiness(ids: string[]): Promise<Record<string, number | null>> {
+  const out: Record<string, number | null> = {};
+  if (!ids.length) return out;
+  // counting-exempt: ids من صفوف القائمة نفسها (المحسوبة بقاعدة العد)، والقراءة لبناء الجاهزية لا للعد
+  const people = must(await db.from('participants').select('*').in('id', ids)) as any[] ?? [];
+  for (let i = 0; i < people.length; i += 6) {
+    await Promise.all(people.slice(i, i + 6).map(async (p) => {
+      out[p.id] = await build(p).then((d) => d.readiness, () => null);
+    }));
+  }
+  return out;
 }
 
 async function participantRow(id: unknown) {
@@ -305,7 +320,8 @@ export async function adminGet(b: Body) {
   return {
     success: true, doc: await withTracking(document, p.id),
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
-    sections: state.sections.map(sectionView), checks: state.checks, readiness: state.readiness,
+    // الحالة والجاهزية بالقاعدة نفسها التي تقرأ بها قائمة الوثائق (capstoneState)
+    sections: state.sections.map(sectionView), checks: state.checks, readiness: capstoneState(c, state.readiness).readiness ?? 0,
     priority: state.weighted, max_revisions: MAX_REVISIONS,
     rubric: rubricFor(state.levels), leader: await leaderScore(p),
     // بلا بريد صحيح للراعي لا يُطلب تأييد: تعرض الشاشة القبول بالاعتماد دون تأييد بدل خطأ بعد الحفظ
