@@ -32,6 +32,20 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
   const { toast, confirm } = useUI();
   const [picked, setPicked] = useState(() => new Set());
   const [busy, setBusy] = useState(null);
+  // دليل المتطلب من مصدر طابور المتطلبات نفسه (admin.reviews › submitted.evidence_path)، يُطلب حين يكون في الصندوق متطلب
+  const [evidence, setEvidence] = useState({});
+  const hasReq = canWrite !== false && !!d?.success && (d.items || []).some((i) => i.kind === 'requirement');
+  useEffect(() => {
+    if (!hasReq) return undefined;
+    let live = true;
+    L('admin.reviews', {}).then((r) => live && r?.success && setEvidence(Object.fromEntries((r.submitted || []).filter((x) => x.evidence_path).map((x) => [`${x.participant_id}:${x.requirement_id}`, x.evidence_path]))), () => {});
+    return () => { live = false; };
+  }, [hasReq, d]);
+  // الدليل يُفتح بطلب صريح يُسجَّل (admin.evidence-url)، للمدير وحده
+  const openEvidence = async (i) => {
+    const r = await L('admin.evidence-url', { participant_id: reqKey(i).participant_id, path: evidence[i.id] });
+    if (r.success) window.open(r.url, '_blank', 'noopener'); else toast(r.message);
+  };
   // معاينة الاعتماد الجماعي للعدّ وحده (dry_run لا يكتب شيئًا): للمدير الذي يكتب، وتعذّرها يُبقي الزر بلا عدد
   const ids = canWrite !== false && d?.success ? approvalIdsOf(d.items, BULK_APPROVE_MAX) : [];
   const idsKey = ids.join(',');
@@ -119,6 +133,7 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
                 <button type="button" className="la-link" onClick={() => open(i)}>{i.title || INBOX_KINDS[i.kind].label}</button>
                 <span className={`la-chip ${i.late ? 'bad' : i.soon ? 'warn' : ''}`}>{i.kind_ar}{i.late ? ' · متأخر' : i.soon ? ' · قريب' : ''}</span>
                 {i.sub && <small className="la-muted">{i.sub}</small>}
+                {i.kind === 'requirement' && evidence[i.id] && <button type="button" className="la-link" onClick={() => openEvidence(i)}>الدليل</button>}
                 <small className="inbox-age">{ageAr(i.days)}</small>
               </li>
             ))}

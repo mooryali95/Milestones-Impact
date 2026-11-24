@@ -184,6 +184,21 @@ test('مراجعة المتطلبات دفعة واحدة من «قرارات ا
   expect(reviewed.map((x) => [x.participant_id, x.requirement_id, x.status])).toEqual([['p1', 'r1', 'done'], ['p2', 'r1', 'done']]);
 });
 
+test('دليل المتطلب في «قرارات اليوم»: من admin.reviews نفسه، ويُفتح بطلب admin.evidence-url المسجَّل', async ({ page }) => {
+  const opened = [];
+  await setup(page, '#/leaders/overview', REQ_INBOX, {
+    'admin.reviews': { success: true, pending_approval: [], submitted: [{ participant_id: 'p1', requirement_id: 'r1', evidence_path: 'p1/plan.pdf' }, { participant_id: 'p2', requirement_id: 'r1', evidence_path: null }] },
+    'admin.evidence-url': (b) => { opened.push(b); return { success: true, url: 'about:blank' }; },
+  });
+  const rows = page.locator('.inbox-list li');
+  await expect(rows.filter({ hasText: 'سارة الأحمد' }).getByRole('button', { name: 'الدليل' })).toBeVisible();
+  await expect(rows.filter({ hasText: 'عمر علي' }).getByRole('button', { name: 'الدليل' })).toHaveCount(0);
+  const popup = page.waitForEvent('popup');
+  await rows.filter({ hasText: 'سارة الأحمد' }).getByRole('button', { name: 'الدليل' }).click();
+  await (await popup).close();
+  expect(opened).toEqual([{ action: 'admin.evidence-url', participant_id: 'p1', path: 'p1/plan.pdf' }].map(({ action, ...x }) => expect.objectContaining(x)));
+});
+
 test('المراقب لا يرى خانات اعتماد المتطلبات', async ({ page }) => {
   await setup(page, '#/leaders/overview', REQ_INBOX);
   await page.evaluate(() => { const s = JSON.parse(sessionStorage.getItem('mi_admin_v3')); s.user.role_id = 'viewer'; sessionStorage.setItem('mi_admin_v3', JSON.stringify(s)); });
