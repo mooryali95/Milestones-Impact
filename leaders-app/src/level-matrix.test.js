@@ -346,7 +346,7 @@ describe('قاعدة «لا فقد»', () => {
   });
 });
 
-describe('حالة العمل بلا فصلي الشراء والحوكمة (التأسيسي)', () => {
+describe('مسوّغات المبادرة بلا فصلي الشراء والحوكمة (التأسيسي)', () => {
   const doc = {
     sections: [
       { key: 'initiative-charter', fields: [{ key: 'sponsor', type: 'text', value: 'مدير الإدارة: يعتمد البدء' }] },

@@ -9,7 +9,11 @@ import A from '../../supabase/content/initiative-guide/v1/anatomy.json';
 
 const root = join(__dirname, '../..');
 
+// المسرد نفسه يحمل المرفوضات، فيُفحص anatomy.json دون المسرد
+const ANATOMY_FILE = 'supabase/content/initiative-guide/v1/anatomy.json';
+
 export const SCANNED = [
+  ANATOMY_FILE,
   'leaders-app/src/screens/Capstone.jsx',
   'leaders-app/src/screens/InitiativeMap.jsx',
   'leaders-app/src/screens/Models.jsx',
@@ -29,6 +33,10 @@ export const SCANNED = [
   'supabase/functions/leaders-api/doc-quality.js',
   'supabase/functions/leaders-api/labels.js',
   'supabase/functions/leaders-api/sponsor.ts',
+  'supabase/functions/leaders-api/capstone.ts',
+  'supabase/functions/leaders-api/insight.js',
+  'admin-app/src/screens/Experts.jsx',
+  'admin-app/src/screens/MailGallery.jsx',
   'supabase/content/initiative-guide/v1/fields.json',
   'supabase/content/initiative-guide/v1/sectors/gov.json',
   'supabase/content/initiative-guide/v1/sectors/health.json',
@@ -37,64 +45,11 @@ export const SCANNED = [
 
 // [الملف، الكلمة المرفوضة، السبب]. تُفرَّغ كلما أُغلقت مرحلة.
 const EXCEPTIONS = [
-  ['admin-app/src/leaders-tabs.js', 'مشاريع التخرج', 'قائم قبل المرحلتين 2–4'],
-  ['admin-app/src/methodology.js', 'مشاريع التخرج', 'قائم قبل المرحلتين 2–4'],
-  ['admin-app/src/methodology.js', 'مشروع التخرج', 'قائم قبل المرحلتين 2–4'],
-  ['admin-app/src/screens/Capstones.jsx', 'راعيها في الجهة', 'قائم قبل المرحلتين 2–4'],
-  ['admin-app/src/screens/Capstones.jsx', 'مشاريع التخرج', 'قائم قبل المرحلتين 2–4'],
-  ['admin-app/src/screens/Capstones.jsx', 'يقيّمها المستشار', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'إطارك الأولوي', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'تُسلَّم الوثيقة', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'حالة العمل', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'سلّم الوثيقة', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'لازم', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'مختص', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'مختصًا', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Capstone.jsx', 'مشروعك', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Models.jsx', 'مختص', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Models.jsx', 'مشروعك', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Models.jsx', 'ملاحظات المراجع', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Models.jsx', 'وثيقة مسلّمة', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/SharedInitiative.jsx', 'صاحب الوثيقة', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Sponsor.jsx', 'صاحب المبادرة', 'قائم قبل المرحلتين 2–4'],
-  ['leaders-app/src/screens/Sponsor.jsx', 'مشروع تخرجه', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/capstone.js', 'الإطار الأولوي', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/capstone.js', 'الميزانية المتاحة', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/capstone.js', 'الميزانية', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/capstone.js', 'بقرار الإدارة', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/capstone.js', 'حالة العمل', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/capstone.js', 'مشروع التخرج', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/institutional.js', 'بقرار الإدارة', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/institutional.js', 'كيف نعرف أننا نجحنا', 'قائم قبل المرحلتين 2–4'],
-  ['src/lib/brand/institutional.js', 'ما تعلمناه', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/fields.json', 'المختص', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/fields.json', 'الميزانية', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/fields.json', 'بشكل', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/fields.json', 'صاحب المبادرة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/fields.json', 'كلفة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/fields.json', 'كلفتها', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/gov.json', 'المالك بعد التسليم', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/gov.json', 'الميزانية المتاحة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/gov.json', 'الميزانية', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/gov.json', 'بشكل', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/gov.json', 'كلفة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/gov.json', 'كلفتها', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'المالك بعد التسليم', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'المختص', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'الميزانية المتاحة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'الميزانية', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'بشكل', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'كلفة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/health.json', 'كلفتها', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/startup.json', 'المالك بعد التسليم', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/startup.json', 'الميزانية المتاحة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/startup.json', 'الميزانية', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/startup.json', 'بشكل', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/startup.json', 'كلفة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/content/initiative-guide/v1/sectors/startup.json', 'كلفتها', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/functions/leaders-api/doc-quality.js', 'الكلفة', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/functions/leaders-api/doc-quality.js', 'الميزانية', 'قائم قبل المرحلتين 2–4'],
-  ['supabase/functions/leaders-api/labels.js', 'مشروع التخرج', 'قائم قبل المرحلتين 2–4'],
+  // نمط مطابقة لأعمدة المال في جداول كتبها المشاركون بأي صيغة (COL_MONEY)، لا نص معروض
+  ['supabase/functions/leaders-api/doc-quality.js', 'الميزانية', 'مطابقة أعمدة قديمة'],
+  ['supabase/functions/leaders-api/doc-quality.js', 'الكلفة', 'مطابقة أعمدة قديمة'],
+  // «الطبيب المختص» صفة طبية في مثال الصحة، لا دور في البرنامج
+  ['supabase/content/initiative-guide/v1/sectors/health.json', 'المختص', 'الطبيب المختص'],
 ];
 
 const TASHKEEL = /[ً-ْـ]/g;
@@ -109,13 +64,19 @@ const REJECTS = [
   ...A.glossary.flatMap((g) => (g.reject || []).map((r) => ({ bad: r, use: g.term }))),
   ...(A.style_reject || []).map((s) => ({ bad: s.reject, use: s.use })),
 ];
+// المثال المحلول: تُفحص القيم وحدها. التسميات والأعمدة نسخة من تعريف الفصل في القاعدة، تُزامَن معه في ترحيل المرحلة 5
+// (ويحرس guide.test.js أن الأعمدة أعمدة النموذج نفسها)، فلا تسبقه هنا
+const exampleValues = (o) => (Array.isArray(o) ? o.map(exampleValues)
+  : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).filter(([k]) => !['label', 'columns', 'title'].includes(k)).map(([k, v]) => [k, exampleValues(v)])) : o);
 const AR = '\\u0621-\\u064A';
 const re = (w) => new RegExp(`(?<![${AR}])${norm(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![${AR}])`, 'g');
 
 export function hits() {
   const out = [];
   for (const f of SCANNED) {
-    const t = norm(stripComments(readFileSync(join(root, f), 'utf8'), f));
+    const t = norm(f === ANATOMY_FILE ? JSON.stringify({ ...A, glossary: null, style_reject: null, writing_rules: null })
+      : f.includes('/sectors/') ? JSON.stringify(exampleValues(JSON.parse(readFileSync(join(root, f), 'utf8'))))
+        : stripComments(readFileSync(join(root, f), 'utf8'), f));
     for (const { bad, use } of REJECTS) {
       const n = (t.match(re(bad)) || []).length;
       if (n) out.push({ file: f, bad, use, n });
