@@ -74,6 +74,21 @@ export const callout = (title, text) => `<div class="callout"><b>${esc(title)}</
 // قائمة نقاط بمعين ذهبي
 export const points = (items, empty = 'لا شيء') => (items.length ? `<ul class="points">${items.map((t) => `<li>${t && t.html != null ? t.html : esc(t)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
 
+// ── الغلاف المشترك (الوثيقة المؤسسية) ──
+// brand: { name, logo, color }. شعار الجهة أعلى الغلاف، و«بإعداد Milestone Impact» أصغر، ولون الجهة خط تمييز وحده.
+// بلا شعار يُكتب اسمها نصًا؛ بلا جهة «مبادرة مجتمعية». اللون يُقبل بصيغة #RGB أو #RRGGBB وحدها فلا يُحقن في النمط
+// نص آمن داخل سلسلة CSS (ترويسة الصفحة)
+const cssStr = (v) => String(v ?? '').replace(/[\\"\n\r<>]/g, ' ');
+export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
+const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|https:\/\/|\/(?!\/))/i.test(String(u || '')) ? u : null);
+function coBrand(b, id, kindLabel) {
+  const logo = safeLogo(b.logo);
+  const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
+    : `<span class="nm"><small>${b.name ? 'Initiative of' : 'Community initiative'}</small>${esc(b.name || 'مبادرة مجتمعية')}</span>`;
+  return `<div class="top"><div class="org">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>
+    <div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
+}
+
 // ── الوثيقة ──
 // meta: { kind: 'ORG'|'PLAN'|..., eyebrow, title, subtitle?, for?, rows: [[label, value]], confidential?: نص, pageAr?: ترقيم الصفحات بالعربية,
 //         selfFonts?: خطوط المنصة المستضافة ذاتيًا (/fonts/fonts.css): سياسة CSP في تطبيقي القادة والإدارة تمنع Google Fonts,
@@ -91,6 +106,7 @@ ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link re
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
   @bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }
+  ${meta.brand ? `@top-right { content: "${cssStr(meta.title)}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }` : ''}
   @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 300 7pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${C.muted}; } }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html { background: ${C.faint}; }
@@ -176,11 +192,27 @@ h2, h3 { break-after: avoid; }
 .rights { margin-top: 8mm; font-size: 7.2pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
 .rights b { font-weight: 400; color: ${C.slate}; }
 .dm { display: inline-block; vertical-align: middle; }
+.mast .stamp { position: absolute; top: 6mm; inset-inline-start: 50%; transform: translateX(50%) rotate(-2deg); border: 1px solid ${C.muted}; color: ${C.muted}; padding: .6mm 4mm; border-radius: 2px; font-size: 8pt; letter-spacing: .05em; background: ${C.paper}; }
+.mast.co .top { direction: rtl; align-items: center; }
+.mast.co .org img { max-height: 64px; max-width: 70mm; display: block; object-fit: contain; }
+.mast.co .org .nm { font-weight: 300; font-size: 17pt; line-height: 1.3; color: ${C.graphite}; display: block; }
+.mast.co .org .nm small { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
+.mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: 7.5pt; color: ${C.muted}; }
+.mast.co .by svg { height: 24px; width: auto; display: block; }
+.mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.2mm; }
+.mast.co { padding: 14mm 18mm 12mm; }
+.mast.co .eyebrow { margin-top: 14mm; }
+.mast.co h1 { font-size: 30pt; font-weight: 200; line-height: 1.2; margin: 3mm 0 2mm; }
+.mast.co .sub { font-size: 11.5pt; color: ${C.slate}; }
+.mast.co .meta { margin-top: 12mm; }
+.mast.co .meta b { font-size: 10pt; }
 </style></head><body>
 <div class="toolbar">${meta.pdfName ? '<button class="pri" data-act="pdf">تحميل PDF</button><button data-act="print">طباعة</button>' : '<button class="pri" data-act="print">طباعة أو حفظ PDF</button>'}<button data-act="close">إغلاق</button></div>
 <article class="sheet">
-  <header class="mast">
-    <div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>
+  <header class="mast${meta.brand ? ' co' : ''}">
+    ${meta.stamp ? `<span class="stamp">${esc(meta.stamp)}</span>` : ''}
+    ${meta.brand ? coBrand(meta.brand, id, meta.kindLabel) : `<div class="top"><div class="logo">${LOGO}</div><div class="ref">Document<b>${esc(id)}</b>${esc(meta.kindLabel || '')}</div></div>`}
+    ${meta.brand && brandColor(meta.brand.color) ? `<i class="accent" style="background:${brandColor(meta.brand.color)}"></i>` : ''}
     <span class="eyebrow">${esc(meta.eyebrow || 'Milestone Impact · Report')}</span>
     <h1>${esc(meta.title)}</h1>
     ${meta.subtitle ? `<p class="sub">${esc(meta.subtitle)}</p>` : ''}

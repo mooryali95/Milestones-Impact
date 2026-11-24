@@ -27,11 +27,13 @@ const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', decli
 // طابور المراجعة أولًا، ثم ما قيد البناء، ثم «الكل» للمحفظة كاملة (تحليل لوحة الإدارة 2026-11-15)
 const FILTERS = ['submitted', 'accepted', 'returned', 'approved', 'draft'].map((k) => [k, STATUS[k]]);
 
-export async function openDoc(doc, toast) {
+// kind: 'working' ملف العمل الكامل، و'institutional' الوثيقة المؤسسية (تُحجب حتى تكتمل الأسئلة العشرة)
+export async function openDoc(doc, toast, kind = 'working', onBlocked = null) {
   const win = window.open('', '_blank');
-  const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
-  const { meta, body } = capstoneReport(doc);
-  if (!writeDocument(win, meta, body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
+  const [{ writeDocument }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/institutional.js')]);
+  const r = renderInitiative(doc, kind);
+  if (r.blocked) { win?.close(); return onBlocked ? onBlocked(r.missing) : toast(r.message); }
+  if (!writeDocument(win, r.meta, r.body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
 }
 
 function Review({ d, canWrite, onSaved, onFailed }) {
@@ -124,6 +126,7 @@ function Sponsor({ d, canWrite, onSaved }) {
 function Detail({ id, canWrite, onBack, onPerson }) {
   const { toast } = useUI();
   const [d, setD] = useState(null);
+  const [blocked, setBlocked] = useState(null);   // ما ينقص لإصدار الوثيقة المؤسسية: قائمة لا تنبيه طويل
   const load = useCallback(() => L('admin.capstone', { participant_id: id }).then((r) => setD(r.success ? { ...r, participant_id: id } : r)), [id]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <Spinner />;
@@ -146,10 +149,18 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           </div>
         </div>
         <div className="la-row">
-          <button className="btn-sm primary" onClick={() => openDoc(d.doc, toast)}>اقرأ الوثيقة</button>
+          <button className="btn-sm primary" onClick={() => openDoc(d.doc, toast)}>ملف العمل الكامل</button>
+          <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'institutional', setBlocked)}>الوثيقة المؤسسية</button>
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>
         </div>
       </section>
+      {blocked && (
+        <section className="la-card" role="alert">
+          <div className="la-row"><b>لا تُصدر الوثيقة المؤسسية بعد: تنقصها إجابات عن</b><button className="btn-sm ghost" onClick={() => setBlocked(null)}>إغلاق</button></div>
+          <ol>{blocked.map((x) => <li key={x.n}><b>{x.title}</b>{x.add ? ` ${x.add}` : ''}</li>)}</ol>
+          <p className="la-muted">ما ينقص بالتفصيل في ملحق «ملف العمل الكامل».</p>
+        </section>
+      )}
 
       {/* حقول قريبة جدًا من المثال المحلول: تنبيه للمستشار لا يمنع (مرافق بناء المبادرة 4ب، example-check.js) */}
       {(() => {

@@ -145,7 +145,7 @@ test('الوثيقة الاحترافية: النافذة تُفتح مع الن
   await open(page, { 'capstone.doc': async () => { await held; answered = true; return { success: true, doc: DOC }; } });
   await toCapstone(page);
   const popup = page.waitForEvent('popup', { timeout: 3000 });
-  await page.getByRole('button', { name: 'اعرض الوثيقة الاحترافية' }).click();
+  await page.getByRole('button', { name: 'ملف العمل الكامل' }).click();
   const win = await popup;
   expect(answered).toBe(false);
   release();
@@ -156,7 +156,7 @@ test('الوثيقة الاحترافية: إن رفض الخادم تُغلق �
   await open(page, { 'capstone.doc': { success: false, message: 'تعذّر تجهيز الوثيقة الآن' } });
   await toCapstone(page);
   const popup = page.waitForEvent('popup', { timeout: 3000 });
-  await page.getByRole('button', { name: 'اعرض الوثيقة الاحترافية' }).click();
+  await page.getByRole('button', { name: 'ملف العمل الكامل' }).click();
   const win = await popup;
   await expect(page.getByText('تعذّر تجهيز الوثيقة الآن')).toBeVisible();
   await expect.poll(() => win.isClosed()).toBe(true);

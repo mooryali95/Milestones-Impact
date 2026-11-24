@@ -1,0 +1,239 @@
+// ════════════════════════════════════════════════════════════════
+// «الوثيقة المؤسسية»: وثيقة المبادرة للتداول خارج المنصة
+// ════════════════════════════════════════════════════════════════
+// التصور المعتمد (الخيار ب، 2026-11-24). تُبنى من القيم الصالحة وحدها (doc-quality.js cleanDoc):
+// ما لم يُكتب أو كُتب بما لا يصلح يُحذف بصمت ويُعاد ترقيم الأبواب، ولا «لم يُملأ» ولا مؤشر صفري.
+// غلاف مشترك: شعار الجهة أعلاه و«بإعداد Milestone Impact» أصغر، ولونها خط تمييز وحده (doc.js meta.brand).
+// الأبواب: نظرة عامة، لماذا، القيمة، الخطة، الحوكمة والمخاطر، الأثر (إن وُجد)، الاعتماد.
+// لا تُصدر إلا إذا أجابت عن الأسئلة المؤسسية العشرة (institutionalGate)، وإلا تعيد ما ينقص.
+// ملف العمل الكامل بكل فصوله وملحق ما ينقص: capstone.js capstoneReport.
+import { esc, kpis, section } from './doc.js';
+import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { benefitsOf, charterData, durationAr } from '../../../supabase/functions/leaders-api/business-case.js';
+import { LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+import { capstoneReport, heatmap, paras, STYLE, tableOf } from './capstone.js';
+import { costLabel, dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
+import { ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
+
+const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : null);
+const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
+
+// ── التصميم المؤسسي: هرم طباعي واضح، وفواتح أبواب برقم كبير وخط ذهبي، وإيقاع مسافات ثابت (4مم)، وكل باب رئيس يبدأ صفحة ──
+// الألوان من رموز الهوية (doc.js C): Graphite للنص، والذهب خطًا ورقمًا فقط، وMist أرضية للمؤشرات
+const IN_STYLE = `<style>
+.in-sec { margin-top: 14mm; padding-top: 0; }
+.in-sec:first-child { margin-top: 0; }
+/* الأبواب تتتابع ولا يُفرض لكل باب صفحة (فلا تبقى صفحة بذيل قصير)؛ الاعتماد وحده يبدأ صفحته.
+   فاتحة الباب لا تنفصل عن أول محتواه (keep-with-next)، والفقرة الطويلة تنساب بثلاثة أسطر على الأقل في كل طرف */
+.in-sec p, .in-sec li { orphans: 3; widows: 3; }
+.in-sec.np { break-before: page; }
+.in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 0 0 6mm; border-top: 0.6mm solid #0B272F; padding-top: 5mm; border-bottom: 1px solid #A97A2E; break-after: avoid; break-inside: avoid; }
+.in-open + * { break-before: avoid; }
+.in-open .n { font: 200 34pt/0.9 "Noto Sans", sans-serif; color: #A97A2E; letter-spacing: -.02em; }
+.in-open .eyebrow { margin-bottom: 1mm; }
+.in-open h2 { margin: 0; font-weight: 300; font-size: 19pt; line-height: 1.3; color: #0B272F; }
+.in-open p { margin: 1.5mm 0 0; font-size: 8.4pt; color: #5F7176; line-height: 1.7; }
+.in-sec h3, .in-sec .cp-f > b { break-after: avoid; }
+.in-sec .cp-f { margin: 0 0 6mm; break-inside: auto; }
+.in-sec .cp-f > b { display: block; font-weight: 400; font-size: 9pt; color: #0B272F; margin-bottom: 2mm; padding-inline-start: 3mm; border-inline-start: 0.6mm solid #A97A2E; }
+.in-sec .tbl { font-size: 8.6pt; }
+.in-sec .tbl th { color: #0B272F; font-weight: 400; background: #F7F8F6; border-bottom: 1px solid #0B272F; padding: 2.4mm 2mm; }
+.in-sec .tbl td { padding: 2.4mm 2mm; }
+.in-sec .tbl tr, .in-sec .tbl td { break-inside: avoid; }
+.in-sec .kpis { background: #F7F8F6; border-top: 0; border-bottom: 0; margin: 0 0 6mm; break-inside: avoid; }
+.in-sec .kpi { padding: 4mm 5mm 4mm 0; padding-inline-start: 5mm; }
+.in-sec .kpi b { font: 200 21pt/1.15 "Noto Sans", sans-serif; color: #0B272F; overflow-wrap: anywhere; }
+.in-sec .kpi span { margin-top: 1mm; font-size: 8pt; color: #5F7176; }
+.in-lead { position: relative; font-size: 10.8pt; line-height: 1.9; color: #0B272F; font-weight: 300; margin: 0 0 6mm; padding: 1mm 6mm 1mm 0; border-inline-start: 0.6mm solid #A97A2E; padding-inline-start: 6mm; break-inside: avoid; }
+.in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 9mm; margin: 0 0 6mm; }
+.in-grid > div { border-top: 1px solid #DCE2E1; padding-top: 2.5mm; break-inside: avoid; }
+.in-grid > div span { display: block; font-size: 7.6pt; letter-spacing: .02em; color: #8A6424; }
+.in-grid > div p { margin: .8mm 0 0; font-size: 9pt; line-height: 1.75; color: #2C4148; }
+.in-approve { border: 1px solid #DCE2E1; border-top: 0.6mm solid #0B272F; padding: 7mm 7mm 6mm; break-inside: avoid; }
+.in-approve .st { display: inline-block; border: 1px solid #A97A2E; color: #8A6424; padding: 1.2mm 5mm; font-size: 9pt; letter-spacing: .04em; margin-bottom: 6mm; }
+.in-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+.in-sign > div { padding-top: 14mm; border-bottom: 1px solid #0B272F; padding-bottom: 2mm; break-inside: avoid; }
+.in-sign span { display: block; font-size: 7.6pt; color: #8A6424; }
+.in-sign b { font-weight: 400; font-size: 9.8pt; color: #0B272F; }
+.in-sign small { display: block; font-size: 8pt; color: #2C4148; margin-top: 1mm; }
+.in-fp { display: flex; justify-content: space-between; gap: 6mm; margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font: 300 8pt "Noto Sans", sans-serif; letter-spacing: .14em; color: #5F7176; direction: ltr; }
+.in-fp b { font-weight: 400; color: #0B272F; }
+</style>`;
+
+export { fingerprint };
+
+const sec = (doc, k) => (doc.sections || []).find((s) => s.key === k) || null;
+const fld = (doc, k, f) => (sec(doc, k)?.fields || []).find((x) => x.key === f) || null;
+const val = (doc, k, f) => fld(doc, k, f)?.value ?? null;
+const has = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== '');
+
+// حقل صالح بعنوانه، أو لا شيء
+function field(doc, k, f, label) {
+  const x = fld(doc, k, f);
+  if (!x || !has(x.value)) return '';
+  const title = esc(label || x.label);
+  if (x.type === 'table') return `<div class="cp-f"><b>${title}</b>${tableOf(x.columns, x.value)}</div>`;
+  if (x.type === 'select') return `<div class="cp-f"><b>${title}</b><span class="tag gold">${esc(x.value)}</span></div>`;
+  return `<div class="cp-f"><b>${title}</b>${paras(x.value)}</div>`;
+}
+const grid = (pairs) => {
+  const ok = pairs.filter(([, v]) => has(v));
+  return ok.length ? `<div class="in-grid">${ok.map(([k, v]) => `<div><span>${esc(k)}</span><p>${v && typeof v === 'object' && 'html' in v ? v.html : esc(v)}</p></div>`).join('')}</div>` : '';
+};
+
+/**
+ * الوثيقة المؤسسية من وثيقة الخادم (docFor أو لقطة الاعتماد).
+ * يعيد { blocked: true, missing } إن لم تكتمل الأسئلة العشرة، وإلا { meta, body, fingerprint }
+ */
+export function institutionalReport(input) {
+  // المعتمدة: محتواها النظيف وبصمتها مجمّدان في اللقطة لحظة الاعتماد (capstone.ts approve: snapshot.issued)،
+  // فلا يغيّر تحسينٌ لاحق في قواعد الجودة وثيقةً صدرت. غير المعتمدة تُنظَّف لحظة العرض
+  const frozen = input?.meta?.status === 'approved' && input?.issued?.sections ? input.issued : null;
+  const doc = frozen ? { ...input, sections: frozen.sections, cost: frozen.cost ?? input.cost, summary: frozen.summary ?? input.summary, meta: { ...input.meta, ...(frozen.meta || {}) } } : cleanDoc(input, { strict: true }).doc;
+  const gate = institutionalGate(doc);
+  if (!gate.ok) return { blocked: true, missing: gate.missing };
+  const m = doc.meta || {};
+  const approved = m.status === 'approved';
+  // البصمة من اللقطة الخام لا من ناتج التنظيف
+  const fp = frozen?.fingerprint || fingerprint(input);
+  const cost = doc.cost?.withContingency > 0 ? doc.cost : null;
+  const c = charterData(doc);
+  const benefits = benefitsOf(doc, 5);
+  const duration = durationAr(m.start, m.end);
+  const parts = [];
+  const add = (en, ar, body, note) => { if (body && body.replace(/<[^>]+>/g, '').trim()) parts.push([en, ar, body, note]); };
+
+  // ── نظرة عامة: صفحة واحدة ──
+  const packages = (val(doc, 'wbs', 'packages') || []).length;
+  const tiles = [
+    // الرقم وحده في المؤشر والعملة في عنوانه، فلا يزاحم «ريال» الرقم الكبير
+    cost && { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` },
+    benefits.length && { value: benefits.length, label: 'منفعة مقيسة' },
+    (val(doc, 'milestone-register', 'milestones') || []).length && { value: val(doc, 'milestone-register', 'milestones').length, label: 'معلمًا' },
+    packages && { value: packages, label: 'حزمة عمل' },
+  ].filter(Boolean);
+  add('Overview', 'نظرة عامة', `${tiles.length ? kpis(tiles) : ''}
+    ${doc.summary ? `<p class="in-lead">${esc(doc.summary)}</p>` : ''}
+    ${grid([
+      ['المشكلة أو الفرصة', val(doc, 'initiative-charter', 'problem')],
+      ['الهدف الأعلى', val(doc, 'initiative-charter', 'objective')],
+      ['المستفيدون', val(doc, 'initiative-charter', 'beneficiaries')],
+      // التاريخ معزول الاتجاه (bdi) فلا تنقلب أجزاؤه في السطر العربي
+      ['المدة', duration && { html: [m.start && `من ${esc(dateAr(m.start))}`, m.end && `${m.start ? 'إلى' : 'حتى'} ${esc(dateAr(m.end))}`].filter(Boolean).join(' ') }],
+      ['المطلوب', cost ? `${money(cost.withContingency)}${val(doc, 'cost-plan', 'funding') ? `، من ${val(doc, 'cost-plan', 'funding')}` : ''}` : null],
+    ])}`);
+
+  // ── لماذا ──
+  add('Why', 'لماذا هذه المبادرة', [
+    field(doc, 'options-analysis', 'evidence', 'الدليل على المشكلة'),
+    field(doc, 'options-analysis', 'options', 'البدائل'),
+    field(doc, 'options-analysis', 'recommendation', 'التوصية ومبررها'),
+    field(doc, 'theory-of-change', 'chain', 'كيف يحدث التغيير'),
+    field(doc, 'theory-of-change', 'impact', 'الأثر المنشود'),
+  ].join(''));
+
+  // ── القيمة ──
+  add('Value', 'القيمة والقياس', [
+    field(doc, 'benefits-register', 'benefits', 'المنافع'),
+    field(doc, 'evidence-plan', 'success_signal', 'كيف نعرف أننا نجحنا'),
+    field(doc, 'evidence-plan', 'plan', 'خطة القياس'),
+    field(doc, 'cost-plan', 'cba', 'التكلفة مقابل المنفعة'),
+  ].join(''));
+
+  // ── الخطة ──
+  const viz = scheduleModel(doc);
+  const g = viz ? ganttSvg(viz, { today: null }) : null;
+  add('Plan', 'الخطة والموارد', [
+    grid([['داخل النطاق', val(doc, 'initiative-charter', 'in_scope')], ['خارج النطاق', val(doc, 'initiative-charter', 'out_scope')]]),
+    c?.deliverables ? `<div class="cp-f"><b>المخرجات الرئيسة</b>${tableOf(c.deliverables.columns, c.deliverables.rows)}</div>` : '',
+    field(doc, 'milestone-register', 'milestones', 'المعالم'),
+    field(doc, 'milestone-register', 'critical_path', 'المسار الحرج والاعتماديات'),
+    g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني؛ الذهبي على المسار الحرج</figcaption></figure>` : field(doc, 'schedule', 'activities', 'الجدول الزمني'),
+    // ملخص التكلفة فوق جدول بنودها فلا تبقى المؤشرات وحدها في صفحة. الاحتياطي يُذكر حين يوجد وحده
+    cost ? kpis(cost.contingency ? [{ value: Math.round(cost.total).toLocaleString('en-US'), label: 'التكلفة التقديرية (ريال)' }, { value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` }] : [{ value: Math.round(cost.total).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` }]) : '',
+    field(doc, 'cost-plan', 'items', 'الموارد والتكلفة'),
+  ].join(''));
+
+  // ── الحوكمة والمخاطر ──
+  const risks = val(doc, 'raid', 'items') || [];
+  const raidF = fld(doc, 'raid', 'items');
+  add('Governance & risks', 'الحوكمة والمخاطر', [
+    grid([['الراعي ودوره', m.sponsor], ['من يقرر', val(doc, 'governance', 'structure')], ['إيقاع المتابعة', val(doc, 'governance', 'cadence')]]),
+    field(doc, 'stakeholder-map', 'stakeholders', 'أصحاب المصلحة'),
+    field(doc, 'stakeholder-map', 'coalitions', 'التحالفات وتحريك المعارضين'),
+    field(doc, 'raid', 'items', 'سجل المخاطر'),
+    risks.length && raidF ? heatmap(raidF.columns, risks) : '',
+  ].join(''));
+
+  // ── الأثر: إن كُتب ──
+  add('Impact', 'الأثر والاستدامة', [
+    field(doc, 'impact-report', 'program', 'البرنامج ومساره'),
+    field(doc, 'impact-report', 'changes', 'ماذا تغيّر'),
+    field(doc, 'impact-report', 'lessons', 'ما تعلمناه'),
+    field(doc, 'change-sustain', 'handover', 'التسليم والتسلم'),
+    field(doc, 'change-sustain', 'sustain', 'ما يحمي المنافع'),
+    grid([['من يشغّل بعد المبادرة', val(doc, 'initiative-charter', 'operator')]]),
+  ].join(''));
+
+  // ── الاعتماد ──
+  const sp = doc.sponsor;
+  const signs = [
+    ['المستشار', approved || doc.review ? 'راجع الوثيقة وقبلها بمعيار التقييم' : 'قيد المراجعة', null],
+    ['الراعي', sp?.status === 'endorsed' ? (sp.name || m.sponsor || 'الراعي') : sp?.waived ? 'اعتُمدت بقرار الإدارة' : 'لم يؤيد بعد', sp?.status === 'endorsed' ? fmt(sp.at) : null],
+    ['تاريخ الاعتماد', approved ? fmt(m.approved_at) : 'لم تُعتمد بعد', null],
+  ];
+  add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">معتمدة · ${esc(fmt(m.approved_at) || '')}</span>` : '<span class="st">لم تُعتمد بعد</span>'}
+    <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
+    <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span><span>FINGERPRINT <b>${esc(fp)}</b></span></p></div>`,
+  'بصمة النسخة تتغير بأي تعديل في محتواها: تطابقها يثبت أن ما بين يديك هو النسخة المعتمدة.');
+
+  // فاتحة الباب: رقم كبير ذهبي، وعنوان إنجليزي صغير، وعنوانه العربي، وسطر يشرحه. كل باب بعد الأول يبدأ صفحة جديدة
+  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  const body = STYLE + IN_STYLE + parts.map(opener).join('');
+  // الجهة من لقطة الاعتماد (شعارها ولونها كما كانا لحظة الإصدار)؛ بلا جهة: مبادرة مجتمعية ويُذكر راعيها
+  const org = m.org || null;
+  return {
+    fingerprint: fp,
+    meta: {
+      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
+      pdfName: `Initiative-${m.ref || 'MI-CP'}-V${m.version || 1}`,
+      brand: { name: org?.name || null, logo: org?.logo || null, color: org?.color || null },
+      eyebrow: 'Leaders Program · Initiative', title: m.initiative || 'وثيقة المبادرة',
+      subtitle: `وثيقة المبادرة${m.scope_title ? ` · ${m.scope_title}` : ''}${LVL[m.level] ? ` · مستوى ${LVL[m.level]}` : ''}`,
+      rows: [['قائد المبادرة', m.participant?.name], ...(m.host ? [['الجهة المستضيفة', m.host]] : []), ...(!org && m.sponsor ? [['الراعي', m.sponsor]] : []), ['الإصدار', `V${m.version || 1}`], ['الحالة', approved ? 'معتمدة' : m.status_title]].filter(([, v]) => v),
+      confidential: 'ملك قائد المبادرة وجهتها: تُتداول بإذنهما',
+      closing: approved ? 'وثيقة معتمدة تُعرض من نسختها المحفوظة لحظة الاعتماد، فلا يغيّرها تعديل لاحق.' : 'نسخة لم تُعتمد بعد: تُبنى من فصول المبادرة لحظة إصدارها.',
+    },
+    body,
+  };
+}
+
+/** الوثيقتان من مصدر واحد: 'institutional' (الوثيقة المؤسسية) أو 'working' (ملف العمل الكامل). يعيد { meta, body } أو { blocked, message } */
+// 'external': لمن هو خارج العمل (الراعي، الجهة، رابط المشاركة، الخبير): المؤسسية إن اكتملت، وإلا صفحة «قيد الإعداد» مهذبة، ولا ملحق ولا ختم مسودة
+export function renderInitiative(doc, kind = 'working') {
+  // 'reader': من يراجع قبل الاعتماد (الراعي ليؤيد، والخبير): المؤسسية إن اكتملت، وإلا ملف العمل بلا ملحق ولا ختم
+  if (kind === 'external' || kind === 'reader') {
+    const r = institutionalReport(doc);
+    if (!r.blocked) return r;
+    return kind === 'reader' ? capstoneReport(doc, { appendix: false }) : pendingReport(doc);
+  }
+  if (kind !== 'institutional') return capstoneReport(doc);
+  const r = institutionalReport(doc);
+  return r.blocked ? { blocked: true, missing: r.missing, message: missingMessage(r.missing) } : r;
+}
+
+/** رسالة ما ينقص لإصدار الوثيقة المؤسسية، بلغة المشارك */
+export const missingMessage = (missing) => `لا تُصدر الوثيقة المؤسسية قبل أن تجيب عن: ${missing.map((x) => (x.add ? `${x.title} (${x.add})` : x.title)).join('، ')}. اعرض «ملف العمل الكامل» لترى ما ينقص في ملحقه.`;
+
+/** صفحة مهذبة لقارئ خارجي حين لم تكتمل الوثيقة المؤسسية بعد */
+export function pendingReport(doc) {
+  const m = doc?.meta || {};
+  const org = m.org || null;
+  return {
+    meta: { id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
+      brand: { name: org?.name || null, logo: org?.logo || null, color: org?.color || null },
+      eyebrow: 'Leaders Program · Initiative', title: m.initiative || 'وثيقة المبادرة', rows: [['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
+      confidential: 'ملك قائد المبادرة وجهتها: تُتداول بإذنهما', closing: 'تصدر الوثيقة المؤسسية حين يكتمل إعدادها.' },
+    body: STYLE + section('In preparation', 'الوثيقة قيد الإعداد', '<p class="cp-p">يعمل قائد المبادرة على استكمال وثيقتها مع مستشاره. ستجدها هنا كاملة حين يكتمل إعدادها.</p>'),
+  };
+}

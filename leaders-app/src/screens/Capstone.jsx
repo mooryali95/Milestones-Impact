@@ -55,11 +55,13 @@ function Meter({ value, min }) {
 // win: نافذة فُتحت متزامنة مع النقرة قبل أي انتظار، وإلا حجبها Safari (p-capstone-5). من يملك الوثيقة عند النقر
 // (رابط الراعي) يتركها فتُفتح هنا متزامنة أيضًا
 // keepReadiness: قراءة داخلية (الخبير) تبقي الجاهزية
-export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false } = {}) {
-  const [{ writeDocument }, { capstoneReport, withoutReadiness }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
+// kind: 'working' ملف العمل الكامل، أو 'institutional' الوثيقة المؤسسية؛ المحجوبة تعيد { blocked, message }
+export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false, kind = 'working' } = {}) {
+  const [{ writeDocument }, { withoutReadiness }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/institutional.js')]);
   // نسخة تخرج من المنصة (طباعة المشارك، ورابط الراعي): بلا نسبة الجاهزية (قرار المالك 2026-11-24)
-  const { meta, body } = capstoneReport(keepReadiness ? doc : withoutReadiness(doc));
-  return writeDocument(win, meta, body);
+  const r = renderInitiative(keepReadiness ? doc : withoutReadiness(doc), kind);
+  if (r.blocked) { win?.close(); return r; }
+  return writeDocument(win, r.meta, r.body);
 }
 
 // onHandbook: إحالة فصل إلى بابه في الكتاب؛ reopen: الفصل الذي يُفتح عند العودة من الكتاب
@@ -155,17 +157,19 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       await downloadPdf(meta, body, { onProgress: setPdfNote });
     } catch (e) {
       console.error(e);
-      setMsg({ err: 'تعذّر بناء الملف في هذا المتصفح. افتح «اعرض الوثيقة الاحترافية» واختر «طباعة» ثم «حفظ PDF».' });
+      setMsg({ err: 'تعذّر بناء الملف في هذا المتصفح. افتح «ملف العمل الكامل» واختر «طباعة» ثم «حفظ PDF».' });
     }
     setBusy(''); setPdfNote('');
   };
-  const view = async () => {
+  const view = async (kind = 'working') => {
     const win = window.open('', '_blank');   // متزامنة مع النقرة حتى لا يحجبها المتصفح، ثم تُملأ بعد رد الخادم
-    setBusy('doc'); setMsg(null);
+    setBusy(kind === 'institutional' ? 'inst' : 'doc'); setMsg(null);
     const r = await call('capstone.doc');
     setBusy('');
     if (!r.success) { win?.close(); return setMsg({ err: r.message }); }
-    if (!(await openCapstoneDoc(r.doc, win))) setMsg({ err: POPUP_BLOCKED });
+    const ok = await openCapstoneDoc(r.doc, win, { kind });
+    if (ok?.blocked) return setMsg({ err: ok.message });
+    if (!ok) setMsg({ err: POPUP_BLOCKED });
   };
 
   return (
@@ -337,7 +341,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           <section className="card cp-act">
             {msg?.err && <div className="alert err">{msg.err}</div>}
             {msg?.ok && <div className="alert ok">{msg.ok}</div>}
-            <button className="btn ghost block" disabled={!!busy} onClick={view}>{busy === 'doc' ? 'لحظة…' : 'اعرض الوثيقة الاحترافية'}</button>
+            <button className="btn ghost block" disabled={!!busy} onClick={() => view()}>{busy === 'doc' ? 'لحظة…' : 'ملف العمل الكامل'}</button>
+            <button className="btn ghost block" disabled={!!busy} onClick={() => view('institutional')}>{busy === 'inst' ? 'لحظة…' : 'الوثيقة المؤسسية'}</button>
             <button className="btn ghost block" disabled={!!busy} onClick={downloadPdfNow} aria-live="polite">{busy === 'pdf' ? pdfNote || 'لحظة…' : 'تحميل PDF'}</button>
             {editable && (
               <>

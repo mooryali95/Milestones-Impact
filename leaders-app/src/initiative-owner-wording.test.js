@@ -148,11 +148,11 @@ describe('مكان المبادرة في غلافها وصفحة مشاركته�
     const t = readFileSync('src/lib/brand/capstone.js', 'utf8');
     expect(t).not.toMatch(/\['الجهة', m\.org/);
   });
-  it('الخادم يرسل مكانها من البطاقة، والقارئ برابط المشاركة لا تصله جهة ملف صاحبها', async () => {
+  it('الخادم يرسل مكانها من البطاقة، وقارئ رابط المشاركة يرى الجهة لغلاف الوثيقة المؤسسية (قرار المالك 2026-11-24)', async () => {
     expect(readFileSync('supabase/functions/leaders-api/capstone.ts', 'utf8')).toMatch(/host: String\(d\.charter\.host/);
     const { publicDoc } = await import('../../supabase/functions/leaders-api/share.js');
     const out = publicDoc({ meta: { org: { name: 'جهة الملف' }, host: 'جمعية', initiative: 'م' }, sections: [], levels: [] }, { show_levels: false });
-    expect(out.meta.org).toBeNull();
+    expect(out.meta.org).toEqual({ name: 'جهة الملف' });
     expect(out.meta.host).toBe('جمعية');
     const page = readFileSync('leaders-app/src/screens/SharedInitiative.jsx', 'utf8');
     expect(page).not.toMatch(/m\.org/);
