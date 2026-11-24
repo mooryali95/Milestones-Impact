@@ -1156,9 +1156,21 @@ const HANDBOOK_VIEWS_PER_HOUR = 120;
 export async function approvedLevels(p: any) {
   return (await approvedState(p)).levels;
 }
+// أدلة أقدم على الاعتماد الأول من approved_at الحالي: أول قيد اعتماد في سجل التدقيق، وأول تسليم نموذج.
+// تعذّر القراءة يعيد قائمة فارغة (since من التسكينات وحدها)
+export async function approvalEvidence(participantId: string): Promise<string[]> {
+  const [log, sub] = await Promise.all([
+    db.from('audit_log').select('created_at').eq('entity', 'participants').eq('entity_id', participantId).eq('action', 'placement.approve')
+      .order('created_at', { ascending: true }).limit(1).maybeSingle().then((r: any) => r.data?.created_at, () => null),
+    db.from('model_submissions').select('submitted_at').eq('participant_id', participantId).not('submitted_at', 'is', null)
+      .order('submitted_at', { ascending: true }).limit(1).maybeSingle().then((r: any) => r.data?.submitted_at, () => null),
+  ]);
+  return [log, sub].filter(Boolean) as string[];
+}
 // المستويات ومعها أول اعتماد للمسار (since): به تُعرف حقول صارت مطلوبة لمن بدأ بعد ترحيل (required_after في fieldsFor)
 export async function approvedState(p: any) {
-  const a = approvalOf(must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? []);
+  const [pl, earlier] = await Promise.all([db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id), approvalEvidence(p.id)]);
+  const a = approvalOf(must(pl) ?? [], earlier);
   if (!a.approved) throw new Fail('يُفتح كتابك بعد اعتماد مسارك', 403, 'locked');
   return { levels: await contentLevelsFor(p, a.levels as Record<string, string>), since: a.since };
 }

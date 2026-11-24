@@ -229,7 +229,7 @@ export function cleanDoc(doc, { strict = false, keep = false } = {}) {
   let costAnswers = null;
   const sections = (doc.sections || []).map((s) => {
     const fields = (s.fields || []).map((f) => {
-      const gap = (reason, value = '') => gaps.push({ chapter: s.title, chapter_key: s.key, field: f.label || f.key, field_key: f.key, reason, reason_ar: REASONS[reason] || reason, value: quote(value) });
+      const gap = (reason, value = '') => { if (s.optional && reason === 'empty') return; gaps.push({ chapter: s.title, chapter_key: s.key, field: f.label || f.key, field_key: f.key, reason, reason_ar: REASONS[reason] || reason, value: quote(value) }); };
       if (f.type === 'table') {
         const c = cleanRows(f, { strict });
         if (!c.rows.length) gap(c.dropped ? c.droppedRows[0].reason : 'empty', c.droppedRows.map((d) => d.row.filter(Boolean).join(' · ')).join(' | '));

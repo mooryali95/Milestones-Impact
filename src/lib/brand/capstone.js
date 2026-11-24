@@ -254,7 +254,7 @@ function fieldHtml(f) {
 // أبواب الوثيقة: عنوان صغير عربي برقم الفصل وإطاره، ومرساة يقفز إليها الفهرس
 // np: القسم يبدأ صفحة جديدة
 const anchor = (key, np = false) => `<span class="cp-anchor${np ? ' cp-np' : ''}" id="ch-${esc(key)}"></span>`;
-const eyebrow = (s, n) => `الفصل ${n}${DIM_AR[s.dimension] ? ` · إطار ${DIM_AR[s.dimension]}` : ''}`;
+const eyebrow = (s, n) => `الفصل ${n}${DIM_AR[s.dimension] ? ` · إطار ${DIM_AR[s.dimension]}` : ''}${s.optional ? ' · اختياري' : ''}`;
 
 // skip: حقول عُرضت في الميثاق فلا تُكرر في فصل البطاقة
 // رسم الفصل في الوثيقة من سجل اللوحات نفسه (visuals.js BOARDS): ما يقرأ فصلًا يُطبع داخله. الجدول والإنفاق لهما موضعاهما

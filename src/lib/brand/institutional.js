@@ -50,7 +50,7 @@ function field(doc, k, f, label) {
 }
 const grid = (pairs) => {
   const ok = pairs.filter(([, v]) => has(v));
-  return ok.length ? `<div class="in-grid">${ok.map(([k, v]) => `<div><span>${esc(k)}</span><p>${esc(v)}</p></div>`).join('')}</div>` : '';
+  return ok.length ? `<div class="in-grid">${ok.map(([k, v]) => `<div><span>${esc(k)}</span><p>${v && typeof v === 'object' && 'html' in v ? v.html : esc(v)}</p></div>`).join('')}</div>` : '';
 };
 
 /**
@@ -89,7 +89,8 @@ export function institutionalReport(input) {
       ['المشكلة أو الفرصة', val(doc, 'initiative-charter', 'problem')],
       ['الهدف الأعلى', val(doc, 'initiative-charter', 'objective')],
       ['المستفيدون', val(doc, 'initiative-charter', 'beneficiaries')],
-      ['المدة', duration],
+      // التاريخ معزول الاتجاه (bdi) فلا تنقلب أجزاؤه في السطر العربي
+      ['المدة', duration && { html: [m.start && `من <bdi dir="ltr">${esc(m.start)}</bdi>`, m.end && `${m.start ? 'إلى' : 'حتى'} <bdi dir="ltr">${esc(m.end)}</bdi>`].filter(Boolean).join(' ') }],
       ['المطلوب', cost ? `${money(cost.withContingency)}${val(doc, 'cost-plan', 'funding') ? `، من ${val(doc, 'cost-plan', 'funding')}` : ''}` : null],
     ])}`);
 

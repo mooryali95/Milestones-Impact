@@ -168,14 +168,19 @@ export function levelFor(pcts, rules) {
 // ── نموذج التسكين المركّب ──
 // قاعدة «المسار معتمد»: ثلاثة تسكينات وكلها معتمدة؛ ومستويات المشارك من تسكيناته.
 // مصدر واحد لكل الخادم (كانت مكتوبة في ستة مواضع).
-export function approvalOf(placements) {
+/** @param {any} placements @param {any[]} [earlier] أدلة أقدم على الاعتماد الأول (أول قيد placement.approve، وأول تسليم نموذج) */
+export function approvalOf(placements, earlier = []) {
   const pl = Array.isArray(placements) ? placements : [];
   const approved = pl.length === 3 && pl.every((x) => !!x.approved_at);
   return {
     approved,
     levels: Object.fromEntries(pl.map((x) => [x.dimension, x.level])),
-    // أول اعتماد لمستوياته: به يُعرف من بدأ قبل تغيير في النماذج (required_after في fieldsFor)، ولا يتغير بإعادة اعتماد بُعد لاحقًا
-    since: (() => { const t = approved ? pl.map((x) => Date.parse(x.approved_at)).filter(Number.isFinite) : []; return t.length ? new Date(Math.min(...t)).toISOString() : null; })(),
+    // أول اعتماد لمستوياته: به يُعرف من بدأ قبل تغيير في النماذج (required_after في fieldsFor). أقدم approved_at في التسكينات
+    // وأقدم دليل سابق (earlier): إعادة الاعتماد أو تغيير مستوى يكتب approved_at جديدًا، فلا يصير القديم «جديدًا» بها
+    since: (() => {
+      const t = approved ? [...pl.map((x) => x.approved_at), ...(earlier || [])].map((v) => Date.parse(v)).filter(Number.isFinite) : [];
+      return t.length ? new Date(Math.min(...t)).toISOString() : null;
+    })(),
   };
 }
 

@@ -181,3 +181,10 @@ describe('مدونة المستودع: لا كلمة عربية حقيقية ت�
     expect([...hits].slice(0, 40)).toEqual([]);
   });
 });
+
+describe('الفصل الاختياري', () => {
+  it('فراغه لا يُعد نقصًا، وتالفه يُذكر', () => {
+    const d = { meta: {}, sections: [{ key: 'x', title: 'اختياري', optional: true, fields: [{ key: 'a', label: 'أ', type: 'textarea', value: '' }, { key: 'b', label: 'ب', type: 'text', value: 'لايوجد' }] }] };
+    expect(cleanDoc(d).gaps.map((g) => g.field_key)).toEqual(['b']);
+  });
+});

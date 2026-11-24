@@ -9,7 +9,7 @@
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
-import { award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
+import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
 import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
@@ -30,8 +30,9 @@ const SPONSOR_DAYS = 21;
 const MODEL_COLS = 'id, key, dimension, sort, min_level, active, scopes, capstone_sort, title_ar, icon, summary_ar, points, fields';
 
 async function levelsOf(participantId: string) {
-  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId)) as any[] ?? [];
-  const a = approvalOf(pl);
+  const [rows, earlier] = await Promise.all([db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId), approvalEvidence(participantId)]);
+  const pl = must(rows) as any[] ?? [];
+  const a = approvalOf(pl, earlier);
   return { levels: a.levels as Record<string, string>, approved: a.approved, since: a.since };
 }
 
@@ -82,6 +83,8 @@ async function build(p: any) {
 const sectionView = (s: any) => ({
   id: s.model.id, key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension, points: s.model.points,
   complete: s.state.complete, missing: s.state.missing.length, status: s.state.status, rating: s.state.rating,
+  // فصل لا حقل مطلوبًا فيه للمشارك: لا يُحسب في الجاهزية (readiness)، فيُعرض «اختياري» لا «مكتمل»
+  optional: s.state.counted === false,
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
   // معرّف التسليم ليقيّم المراجع الفصل من بطاقة المبادرة نفسها (لا من «التعلم»)
@@ -183,6 +186,8 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
     summary: c?.summary_ar || '',
     sections: d.sections.map((s: any) => ({
       key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension,
+      // الفصل الاختياري للمشارك (لا حقل مطلوبًا فيه، counted: false): يُعرض «اختياري» ولا يُعد فراغه نقصًا في ملحق ما ينقص
+      optional: s.state.counted === false,
       fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null })),
     })),
     cost: cost ? costSummary({ ...cost.model, fields: cost.fields }, cost.answers) : null,

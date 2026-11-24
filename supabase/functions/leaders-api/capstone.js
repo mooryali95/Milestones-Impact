@@ -433,7 +433,7 @@ export function capstoneChecks(ctx) {
 // مكتملًا ولا ناقصًا (counted: false)، فلا يرفع الجاهزية فصل لا يُطلب منه شيء
 export function readiness(sections, checks) {
   const live = sections.filter((x) => x.counted !== false);
-  const s = live.length ? live.filter((x) => x.complete).length / live.length : (sections.length ? 1 : 0);
+  const s = live.length ? live.filter((x) => x.complete).length / live.length : 0;
   const c = checks.length ? checks.filter((x) => x.ok).length / checks.length : 1;
   return Math.round((s * 0.5 + c * 0.5) * 100);
 }

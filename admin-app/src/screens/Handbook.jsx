@@ -20,6 +20,9 @@ import { Empty, NoMatch, Spinner, useEscape, useGuardedClose, useUI } from '../u
 import { countAr, DIM_ROMAN, RUBRIC_SCALE, TERMS, TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
 import { REPO_EDIT_AR } from '../../../supabase/functions/leaders-api/content-lock.js';
 
+// أسماء المستويات في سطر شرط الإلزام
+const LEVEL_AR_COND = { intermediate: 'المتوسط', advanced: 'الاحترافي' };
+
 const pad = (n) => String(n).padStart(2, '0');
 // العدد بتمييزه («بابان» و«5 أبواب» و«12 بابًا»)، والإطار باسمه العربي ورقمه من labels.js وحده
 export const chaptersAr = (n) => (n ? countAr(n, 'باب واحد', 'بابان', 'أبواب', 'بابًا') : 'لا أبواب');
@@ -393,6 +396,8 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                   <input aria-label={`أقل عدد صفوف للتأسيسي في الحقل ${i + 1}`} type="number" min="1" max="30" placeholder="للتأسيسي" title="أقل عدد صفوف للمستوى التأسيسي إن كان أخف" value={f.min_rows_beginner || ''} onChange={(e) => setField(i, { min_rows_beginner: Number(e.target.value) || undefined })} />
                 </>}
                 <label className="fb-req"><input type="checkbox" checked={f.required !== false} onChange={(e) => setField(i, { required: e.target.checked })} /> إلزامي</label>
+                {/* إلزام بشرط (مصفوفة الوثيقة بحسب المستوى): تأشير «إلزامي» يجعله مطلوبًا من الجميع ويلغي الشرط فعليًا */}
+                {f.required === false && (f.required_from || f.required_after) && <small className="fb-cond" title="تأشير «إلزامي» يجعله مطلوبًا من الجميع">{[f.required_from && `مطلوب من المستوى ${LEVEL_AR_COND[f.required_from] || f.required_from}`, f.required_after && `مطلوب للمعتمدين بعد ${String(f.required_after).slice(0, 10)}`].filter(Boolean).join('، و')}</small>}
                 <div className="fb-more">
                   <select aria-label={`مستوى الحقل ${i + 1}`} value={f.min_level || 'beginner'} onChange={(e) => setField(i, { min_level: e.target.value })}>
                     {LVLS.map((l) => <option key={l} value={l}>{l === 'beginner' ? 'لكل المستويات' : `من مستوى ${LVL[l]}`}</option>)}</select>
