@@ -176,3 +176,16 @@ for (const [name, hash, ready] of [
   });
 }
 
+
+// بلاغ المالك 2026-11-24: جدول المشاركين أعرض من مساحته على شاشة متوسطة فقُصّت أعمدته الأخيرة («أين توقف») بلا تمرير
+test('المشاركون على 1100: الجدول الأعرض من إطاره يُمرَّر أفقيًا داخله ولا تُقصّ أعمدته', async ({ page }) => {
+  await setup(page, '#/leaders/participants', { size: { width: 1100, height: 900 } });
+  const wrap = page.locator('.table-wrap').first();
+  await expect(wrap).toBeVisible();
+  const s = await wrap.evaluate((el) => ({ ox: getComputedStyle(el).overflowX, sw: el.scrollWidth, cw: el.clientWidth }));
+  expect(s.ox).toBe('auto');
+  if (s.sw > s.cw + 1) {
+    await wrap.evaluate((el) => { el.scrollLeft = -el.scrollWidth; });
+    expect(await wrap.evaluate((el) => Math.abs(el.scrollLeft))).toBeGreaterThan(0);
+  }
+});

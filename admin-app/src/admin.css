@@ -667,7 +667,11 @@ a { text-decoration: none; color: inherit; }
   background: var(--off-white);
   border: 1px solid var(--line);
   border-radius: 14px;
-  overflow: hidden;
+  /* الجدول الأعرض من الشاشة يُمرَّر أفقيًا داخل إطاره، ولا يُقصّ (الحواف المستديرة تبقى بالقصّ داخل الإطار) */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
   box-shadow: 0 2px 12px rgba(6,30,44,0.04);
 }
 
