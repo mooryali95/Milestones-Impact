@@ -163,6 +163,36 @@ test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النت
   await expect(page).toHaveURL(/#\/leaders\/handbook$/);
 });
 
+// طابور المتطلبات المحذوف انتقل إلى «قرارات اليوم» (تصور تبويبات الإدارة 2026-11-24): خانة لكل بند متطلب واعتماد جماعي بتأكيد
+const reqItem = (pid, name) => ({ kind: 'requirement', kind_ar: 'متطلب للمراجعة', id: `${pid}:r1`, title: name, sub: 'خطة التطوير', at: '2026-10-20', days: 3, late: false, to: { tab: 'participants', id: pid } });
+const REQ_INBOX = { success: true, total: 3, late: 0, skipped: [], counts: { requirement: 2, approval: 1 }, by_tab: { participants: { n: 3, late: 0 } },
+  items: [reqItem('p1', 'سارة الأحمد'), reqItem('p2', 'عمر علي'), { kind: 'approval', kind_ar: 'اعتماد مسار', id: 'p3', title: 'خالد', sub: '', at: '2026-10-20', days: 1, late: false, to: { tab: 'participants', id: 'p3' } }] };
+
+test('مراجعة المتطلبات دفعة واحدة من «قرارات اليوم»: تحديد وتأكيد، وadmin.review لكل واحد', async ({ page }) => {
+  const reviewed = [];
+  await setup(page, '#/leaders/overview', REQ_INBOX, { 'admin.review': (b) => { reviewed.push(b); return { success: true }; } });
+  const box = page.getByRole('group', { name: 'اعتماد المتطلبات' });
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+  // بند اعتماد المسار بلا خانة: الاعتماد الجماعي هنا للمتطلبات وحدها
+  await expect(page.locator('.inbox-list li input[type="checkbox"]')).toHaveCount(2);
+  await page.getByLabel('تحديد خطة التطوير لـ عمر علي').check();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد (1)' })).toBeEnabled();
+  await box.getByLabel(/حدد المتطلبات المعروضة \(2\)/).check();
+  await box.getByRole('button', { name: 'اعتمد المحدد (2)' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => reviewed.length).toBe(2);
+  expect(reviewed.map((x) => [x.participant_id, x.requirement_id, x.status])).toEqual([['p1', 'r1', 'done'], ['p2', 'r1', 'done']]);
+});
+
+test('المراقب لا يرى خانات اعتماد المتطلبات', async ({ page }) => {
+  await setup(page, '#/leaders/overview', REQ_INBOX);
+  await page.evaluate(() => { const s = JSON.parse(sessionStorage.getItem('mi_admin_v3')); s.user.role_id = 'viewer'; sessionStorage.setItem('mi_admin_v3', JSON.stringify(s)); });
+  await page.reload();
+  await expect(page.locator('.inbox-list li')).toHaveCount(3);
+  await expect(page.getByRole('group', { name: 'اعتماد المتطلبات' })).toHaveCount(0);
+  await expect(page.locator('.inbox-list input[type="checkbox"]')).toHaveCount(0);
+});
+
 test('القوائم: فرز بالعمود يُحفظ في العنوان، والفلاتر تبقى عند العودة للشاشة', async ({ page }) => {
   await setup(page);
   const contacts = ['منى', 'أحمد', 'سارة', 'خالد'].map((name, i) => ({ id: `c${i}`, name, email: `u${i}@x.sa`, status: 'new', product: 'MI-HOME', created_at: `2026-11-0${i + 1}T08:00:00Z` }));
