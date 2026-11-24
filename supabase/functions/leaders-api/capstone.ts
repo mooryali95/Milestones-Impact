@@ -11,7 +11,7 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
@@ -57,13 +57,14 @@ async function build(p: any) {
   // العنوان المعروض للمشارك وراعيه: ملف التعريف، وإلا عنوان المسار
   const profile = await profileFor(levels, priority);
   if ((track as any).data && profile?.title_ar) (track as any).data = { ...(track as any).data, title_ar: profile.title_ar };
-  const mine = capstoneModels(all, content, scope);
+  // قاعدة «لا فقد»: فصل كتب فيه المشارك قبل أن يُرفع مستواه يبقى في وثيقته، غير مطلوب
+  const mine = capstoneModels(all, content, scope, answeredModels(subs.data || []));
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
   const sections = mine.map((m: any) => {
-    const fields = modelFields(m, content, scope, priority);
     const sub = by[m.id];
+    const fields = modelFields(m, content, scope, priority, sub?.answers || null);
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
     return { model: m, fields, answers, sub, state: sectionState(m, fields, { ...sub, answers }) };
   });

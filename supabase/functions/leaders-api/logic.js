@@ -793,22 +793,48 @@ export function rankFor(points) {
 // scope: نطاق عمل المشارك (participants.work_scope). النموذج المخصص لنطاقات
 // بعينها (scopes) لا يظهر لغيرها، ومن لم يحدد نطاقه يُعامل معاملة المشروع.
 const scopeOk = (scopes, scope) => !(scopes || []).length || scopes.includes(scope || 'project');
-/** @param {any[]} models @param {Record<string, string>} levels @param {string|null} [scope] */
-export function modelsFor(models, levels, scope = null) {
+// kept: معرّفات نماذج كتب فيها المشارك (answeredModels). قاعدة «لا فقد» (مصفوفة الوثيقة بحسب المستوى، 2026-11-24):
+// الفصل الذي رُفع مستواه بعد أن كتب فيه المشارك يبقى ظاهرًا له وفي وثيقته، وحقوله كلها غير مطلوبة (keptModel).
+/** @param {any[]} models @param {Record<string, string>} levels @param {string|null} [scope] @param {Set<string>|null} [kept] */
+export function modelsFor(models, levels, scope = null, kept = null) {
   return models
-    .filter((m) => m.active !== false && levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && scopeOk(m.scopes, scope))
+    .filter((m) => m.active !== false && levels[m.dimension] && scopeOk(m.scopes, scope)
+      && (RANK[levels[m.dimension]] >= RANK[m.min_level] || !!kept?.has(m.id)))
     .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
 }
+// النموذج ظاهر للمشارك بقاعدة «لا فقد» وحدها، لا بمستواه
+export const keptModel = (/** @type {any} */ m, /** @type {Record<string, string>} */ levels) => !(levels?.[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level]);
+// قيمة كتبها المشارك فعلًا: نص غير فارغ، أو جدول فيه خلية واحدة مكتوبة على الأقل
+export const hasAnswer = (/** @type {any} */ v) => (Array.isArray(v)
+  ? v.some((r) => (Array.isArray(r) ? r : [r]).some((c) => String(c ?? '').trim()))
+  : v != null && typeof v === 'object' ? Object.values(v).some(hasAnswer) : !!String(v ?? '').trim());
+// النماذج التي كتب فيها المشارك شيئًا، من صفوف model_submissions
+export const answeredModels = (/** @type {any[]} */ subs) => new Set((subs || [])
+  .filter((s) => s?.answers && typeof s.answers === 'object' && Object.values(s.answers).some(hasAnswer)).map((s) => s.model_id));
 
 // حقول النموذج كما تخص المشارك: الحقل قد يُطلب من مستوى أعلى (min_level)
 // أو لنطاقات بعينها (scopes)، فيتعمق النموذج نفسه مع المستوى والنطاق دون
 // نسخ نموذج لكل حالة. level: مستوى المشارك في بُعد النموذج.
 // primary: بُعد النموذج هو محور الأولوية في مسار المشارك، فتظهر حقول التعمق (track).
 // min_rows_beginner: أقل صفوف الجدول للتأسيسي حين يكون أخف من غيره.
-export function fieldsFor(fields, level, scope = null, primary = false) {
-  return (fields || [])
-    .filter((f) => (!f.min_level || RANK[level] >= RANK[f.min_level]) && scopeOk(f.scopes, scope) && (!f.track || primary))
-    .map((f) => (f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f));
+// required_from: الحقل ظاهر لكل من يرى الفصل، ومطلوب من هذا المستوى فأعلى فقط (فصل فُتح لمستوى أدنى
+// بعد أن كان لغيره، فلا تنخفض جاهزية من يعمل فيه الآن).
+// answers: إجابات المشارك. قاعدة «لا فقد»: حقل رُفع مستواه عن مستوى المشارك وقد كتب فيه يبقى ظاهرًا
+// وفي وثيقته، غير مطلوب (kept)، فلا يحذفه الحفظ التالي (cleanAnswers يقلّم إلى الحقول الظاهرة).
+// kept: الفصل كله ظاهر بهذه القاعدة (keptModel)، فلا يُطلب منه شيء.
+export function fieldsFor(fields, level, scope = null, primary = false, answers = null, kept = false) {
+  const a = answers && typeof answers === 'object' ? answers : null;
+  const out = [];
+  for (const f of fields || []) {
+    if (!scopeOk(f.scopes, scope) || (f.track && !primary)) continue;
+    const byLevel = !f.min_level || RANK[level] >= RANK[f.min_level];
+    if (!byLevel && !(a && hasAnswer(a[f.key]))) continue;
+    let g = f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f;
+    if (!byLevel) g = { ...g, required: false, kept: true };
+    else if (kept || (f.required_from && !(RANK[level] >= RANK[f.required_from]))) g = { ...g, required: false };
+    out.push(g);
+  }
+  return out;
 }
 
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة

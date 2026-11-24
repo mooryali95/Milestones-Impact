@@ -18,7 +18,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { profileFor } from './profiles.ts';
@@ -1186,14 +1186,14 @@ export async function handbookToc(p: any) {
     db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md, quiz_md'),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, completed_at').eq('participant_id', p.id),
     db.from('learning_models').select('id, dimension, sort, min_level, active, points, scopes'),
-    db.from('model_submissions').select('model_id, status').eq('participant_id', p.id),
+    db.from('model_submissions').select('model_id, status, answers').eq('participant_id', p.id),
     pointsOf(p.id),
     db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id),
   ]);
   const chapters = handbookModulesFor(must(mods) ?? [], levels);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
   const read = Object.fromEntries((reads.data || []).map((r: any) => [r.module_id, r]));
-  const mine = modelsFor(models.data || [], levels, p.work_scope);
+  const mine = modelsFor(models.data || [], levels, p.work_scope, answeredModels(subs.data || []));
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
   return {
     success: true,
@@ -1312,11 +1312,13 @@ export async function handbookComplete(p: any, b: Body) {
 async function myModel(p: any, id: unknown) {
   const levels = await approvedLevels(p);
   const m = must(await db.from('learning_models').select('*').eq('id', String(id || '')).maybeSingle());
-  if (!m || !modelsFor([m], levels, p.work_scope).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
+  // قاعدة «لا فقد»: ما كتبه المشارك في فصل أو حقل رُفع مستواه بعده يبقى ظاهرًا له، غير مطلوب (fieldsFor)
+  const { data: sub } = m ? await db.from('model_submissions').select('model_id, answers').eq('participant_id', p.id).eq('model_id', m.id).maybeSingle() : { data: null };
+  if (!m || !modelsFor([m], levels, p.work_scope, answeredModels(sub ? [sub] : [])).length) throw new Fail('هذا النموذج لا يخص مسارك', 404);
   // الحقول كما تخص المشارك: بمستواه في بُعد النموذج ونطاق عمله
   const priority = await participantPriority(p.id, levels);
   // level: مستوى المشارك في بُعد النموذج، يحدد صورة دليل الحقل في الواجهة (leaders-app/src/guide.js)
-  return { ...m, level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority) };
+  return { ...m, level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension], p.work_scope, m.dimension === priority, (sub as any)?.answers || null, keptModel(m, levels)) };
 }
 
 // اسم المبادرة من مصدره الوحيد: بطاقة المبادرة في مكتبة النماذج
@@ -1345,9 +1347,10 @@ export async function modelsList(p: any) {
   return {
     success: true,
     // تقدم كل نموذج: الحقول الإلزامية المكتملة من مجموعها، دون إرسال الإجابات نفسها
-    models: modelsFor(must(models) ?? [], levels, p.work_scope).map(({ fields: all, scopes: _s, capstone_sort, ...m }: any) => {
-      const fields = fieldsFor(all, levels[m.dimension], p.work_scope, m.dimension === priority);
+    // قاعدة «لا فقد»: الفصل الذي كتب فيه المشارك يبقى في قائمته وإن رُفع مستواه بعده، وحقوله غير مطلوبة
+    models: modelsFor(must(models) ?? [], levels, p.work_scope, answeredModels(subs.data || [])).map(({ fields: all, scopes: _s, capstone_sort, ...m }: any) => {
       const sub = by[m.id];
+      const fields = fieldsFor(all, levels[m.dimension], p.work_scope, m.dimension === priority, sub?.answers || null, keptModel(m, levels));
       // optional-exempt: حقول نموذج لا أنشطة
       const total = fields.filter((f: any) => f.required !== false).length;
       const filled = total - missingFields(fields, sub?.answers || {}).length;

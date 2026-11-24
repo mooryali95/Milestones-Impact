@@ -1161,6 +1161,10 @@ function cleanModelFields(input: unknown) {
     if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
     // حقل تعمق المسار: يظهر لمن بُعد النموذج محور الأولوية في مساره فقط
     if (f?.track === true) out.track = true;
+    // مطلوب من مستوى بعينه فأعلى، ظاهر لمن دونه اختياريًا (fieldsFor)، وعنوان مجموعة يسبق الحقل في ورقة العمل
+    if (LEVELS.includes(f?.required_from) && f.required_from !== 'beginner') out.required_from = f.required_from;
+    const group = String(f?.group || '').trim().slice(0, 60);
+    if (group) out.group = group;
     return out;
   });
 }

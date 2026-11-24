@@ -15,7 +15,9 @@ const ltr = (v) => (v ? `\u2066${v}\u2069` : '·');
 export const FIVE_CASES = Object.freeze([
   { key: 'strategic', title: 'البعد الاستراتيجي', question: 'لماذا هذه المبادرة، ولماذا الآن؟', chapters: ['initiative-charter', 'theory-of-change'] },
   { key: 'economic', title: 'البعد الاقتصادي', question: 'هل هذا أفضل حل مقابل قيمته؟', chapters: ['options-analysis', 'benefits-register'] },
-  { key: 'commercial', title: 'البعد التجاري', question: 'هل يمكن شراء ما تحتاجه أو التعاقد عليه؟', chapters: ['procurement'] },
+  // fallback: فصل يجيب عن سؤال البعد حين لا يكون فصله الأصلي في وثيقة المستوى (مصفوفة الوثيقة بحسب المستوى، 2026-11-24):
+  // الشراء والتعاقد من المتوسط، وسؤاله للتأسيسي مُجاب في «الموارد والتكلفة» (ما تحتاجه ومن يوفره)
+  { key: 'commercial', title: 'البعد التجاري', question: 'هل يمكن شراء ما تحتاجه أو التعاقد عليه؟', chapters: ['procurement'], fallback: ['cost-plan'] },
   { key: 'financial', title: 'البعد المالي', question: 'هل هي في حدود الموازنة، ومن يموّلها؟', chapters: ['cost-plan'] },
   { key: 'management', title: 'البعد الإداري', question: 'هل يمكن تنفيذها وإدارتها وقياسها؟', chapters: ['governance', 'milestone-register', 'schedule', 'raid', 'evidence-plan'] },
 ]);
@@ -25,7 +27,8 @@ export const FIVE_CASES = Object.freeze([
 export function caseStatus(sections) {
   const by = Object.fromEntries((sections || []).map((s) => [s.key, s]));
   return FIVE_CASES.map((c) => {
-    const mine = c.chapters.filter((k) => by[k]);
+    const own = c.chapters.filter((k) => by[k]);
+    const mine = own.length ? own : (c.fallback || []).filter((k) => by[k]);
     const done = mine.filter((k) => by[k].complete).length;
     const state = !mine.length ? 'none' : done === mine.length ? 'done' : done ? 'partial' : 'todo';
     return { key: c.key, title: c.title, question: c.question, state, done, total: mine.length };
@@ -119,7 +122,7 @@ export function businessCase(doc) {
   const add = (c, points, extra = {}) => {
     const pts = points.filter(([, v]) => v);
     out.push({ key: c.key, title: c.title, question: c.question, points: pts, ...extra,
-      missing: !pts.length && !extra.table ? (c.chapters.some(has) ? 'لم تُملأ فصوله بعد' : 'ليس من فصول وثيقتك في مستواك') : null });
+      missing: !pts.length && !extra.table ? ([...c.chapters, ...(c.fallback || [])].some(has) ? 'لم تُملأ فصوله بعد' : 'ليس من فصول وثيقتك في مستواك') : null });
   };
   const [S, E, C, F, M] = FIVE_CASES;
 
@@ -142,8 +145,13 @@ export function businessCase(doc) {
   const need = text(doc, 'procurement', 'need');
   const buys = tableOf(doc, 'procurement', 'items');
   const buying = !!need && need.startsWith('نعم');
+  // بلا فصل الشراء (التأسيسي): ما تحتاجه المبادرة ومن يوفره من «الموارد والتكلفة»
+  const items = has('procurement') ? null : tableOf(doc, 'cost-plan', 'items');
+  const needs = items?.rows.length ? items.rows.map((r) => items.cell(r, items.col('البند')) || items.cell(r, 0)).filter(Boolean).slice(0, 5).join('؛ ') : null;
   add(C, [
     ['الحاجة إلى الشراء', need],
+    ['ما تحتاجه المبادرة', needs],
+    ['من يوفره', needs ? text(doc, 'cost-plan', 'funding') : null],
     ['مدة الطرح والترسية', buying ? text(doc, 'procurement', 'lead_time') : null],
     ['توزيع المخاطر في العقد', buying ? text(doc, 'procurement', 'contract') : null],
   ], buying && buys && buys.rows.length ? { table: { label: 'ما يُشترى أو يُتعاقد عليه', columns: buys.columns, rows: buys.rows } } : {});
@@ -162,7 +170,8 @@ export function businessCase(doc) {
   const activities = tableOf(doc, 'schedule', 'activities');
   const plan = tableOf(doc, 'evidence-plan', 'plan');
   add(M, [
-    ['من يقرر', text(doc, 'governance', 'structure')],
+    // بلا فصل الحوكمة (التأسيسي): صاحب القرار من البطاقة
+    ['من يقرر', text(doc, 'governance', 'structure') || (has('governance') ? null : text(doc, 'initiative-charter', 'sponsor'))],
     ['المدة', durationAr(text(doc, 'initiative-charter', 'start'), text(doc, 'initiative-charter', 'end'))],
     ['الخطة', [milestones?.rows.length ? countAr(milestones.rows.length, 'معلم واحد', 'معلمان', 'معالم', 'معلمًا') : null, activities?.rows.length ? `${countAr(activities.rows.length, 'نشاط واحد', 'نشاطان', 'أنشطة', 'نشاطًا')} في الجدول` : null].filter(Boolean).join('، و') || null],
     ['المخاطر العالية', risks.length ? risks.map((x) => `${x.title}${x.owner ? ` (المالك: ${x.owner})` : ''}`).join('؛ ') : null],

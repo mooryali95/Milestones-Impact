@@ -11,7 +11,7 @@
 //   • نوع المبادرة (مشروع، برنامج، محفظة) من نطاق عمل المشارك في ملفه،
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
-import { DIMENSIONS, fieldsFor, latinDigits, missingFields, modelsFor } from './logic.js';
+import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor } from './logic.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -108,15 +108,19 @@ export function cleanRubric(scores, notes) {
 // D05: لا حساب موازٍ هنا. النتيجة من التقييم الختامي وحده (computeFinal في final.js)، ومنها الشهادة.
 
 // ── الفصول ──
-// نماذج الوثيقة كما تخص المشارك: نماذج capstone_sort المتاحة بمستواه ونطاقه
-export function capstoneModels(models, levels, scope) {
-  return modelsFor((models || []).filter((m) => m.capstone_sort != null), levels, scope)
+// نماذج الوثيقة كما تخص المشارك: نماذج capstone_sort المتاحة بمستواه ونطاقه.
+// kept (answeredModels): فصول كتب فيها قبل أن يُرفع مستواها، تبقى في وثيقته (قاعدة «لا فقد»)
+/** @param {any[]} models @param {any} levels @param {any} scope @param {Set<string> | null} [kept] */
+export function capstoneModels(models, levels, scope, kept = null) {
+  return modelsFor((models || []).filter((m) => m.capstone_sort != null), levels, scope, kept)
     .sort((a, b) => a.capstone_sort - b.capstone_sort);
 }
 
 // حقول نموذج للمشارك: بمستواه في بُعد النموذج ونطاقه، وحقول التعمق إن كان
-// بُعد النموذج محور الأولوية في مساره
-export const modelFields = (/** @type {any} */ m, /** @type {any} */ levels, /** @type {any} */ scope, /** @type {string | null} */ priority = null) => fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority);
+// بُعد النموذج محور الأولوية في مساره. answers: إجاباته، فيبقى ما كتبه في حقل رُفع مستواه
+// ظاهرًا غير مطلوب، ويصير الفصل الباقي بقاعدة «لا فقد» كله غير مطلوب
+export const modelFields = (/** @type {any} */ m, /** @type {any} */ levels, /** @type {any} */ scope, /** @type {string | null} */ priority = null, /** @type {any} */ answers = null) =>
+  fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority, answers, keptModel(m, levels));
 
 // مشروع المسار التطبيقي من مصدره الوحيد: فصول الوثيقة نفسها بمستوى المشارك
 // ونطاقه، وما يتعمق فيه منها بمحور أولويته. لا نص يُكتب يدويًا لكل مسار.
@@ -385,10 +389,11 @@ export function capstoneChecks(ctx) {
     const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || !t.cell(r, owner)).map((r) => t.cell(r, 0));
     add('benefit-owner', 'لكل منفعة خط أساس ومستهدف ومالك بعد التسليم', t.rows.length && !weak.length,
       t.rows.length ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : 'لم تُدخل منافع في سجل المنافع بعد.');
-    if (has('evidence-plan')) {
-      const ev = table(M['evidence-plan'], A['evidence-plan'], 'plan');
+    // خطة القياس تظهر للتأسيسي بسطر النجاح وحده (مصفوفة الوثيقة بحسب المستوى): الفحص لمن يرى جدول الخطة
+    const ev = has('evidence-plan') ? table(M['evidence-plan'], A['evidence-plan'], 'plan') : null;
+    if (ev) {
       const ind = t.col('المؤشر');
-      const planned = ev ? ev.rows.map((r) => norm(ev.cell(r, 0))) : [];
+      const planned = ev.rows.map((r) => norm(ev.cell(r, 0)));
       const miss = t.rows.map((r) => t.cell(r, ind) || t.cell(r, 0)).filter((x) => x && !planned.some((y) => y && (y.includes(norm(x)) || norm(x).includes(y))));
       add('evidence', 'خطة الأدلة تقيس كل مؤشرات المنافع', !miss.length, `مؤشرات بلا خطة قياس: ${miss.slice(0, 6).join('، ')}. استوردها من سجل المنافع.`);
     }
