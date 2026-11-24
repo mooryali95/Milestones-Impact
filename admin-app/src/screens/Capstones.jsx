@@ -167,7 +167,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
         <section className="la-card">
           <h3>الفصول</h3>
           <ol className="cps-secs">{d.sections.map((s) => (
-            <li key={s.id} className={s.complete ? 'ok' : ''}><span>{s.title}</span><small>{s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SECTION_STATUS_AR[s.status] || SECTION_STATUS_AR.draft}` : ''}</small></li>
+            <li key={s.id} className={s.complete && !s.optional ? 'ok' : ''}><span>{s.title}</span><small>{s.optional ? 'اختياري' : s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SECTION_STATUS_AR[s.status] || SECTION_STATUS_AR.draft}` : ''}</small></li>
           ))}</ol>
           <h3>فحوص الاتساق</h3>
           <ul className="cps-checks">{d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}>{x.title}{x.detail && <small>{x.detail}</small>}</li>)}</ul>

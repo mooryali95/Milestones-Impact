@@ -112,7 +112,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const c = d.capstone;
   const editable = c.status === 'draft' || c.status === 'returned';
   const step = c.status === 'returned' ? 0 : Math.max(0, FLOW.findIndex(([k]) => k === c.status));
-  const done = d.sections.filter((s) => s.complete).length;
+  // الفصل الاختياري (لا حقل مطلوبًا فيه) لا يُحسب مكتملًا ولا ناقصًا، كما في الجاهزية
+  const req = d.sections.filter((s) => !s.optional);
+  const done = req.filter((s) => s.complete).length;
   const failing = d.checks.filter((x) => !x.ok);
 
   // الفصل يُفتح والصفحة قائمة خلفه (فلا يدفع حارس المغادرة الحفظ)، ثم تُحمَّل من جديد عند الرجوع فتستبدل الملخص
@@ -189,7 +191,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
         <div className="cp-hero-side">
           <Meter value={d.readiness} min={d.ready_min} />
           <span className={`chip ${STATUS_CHIP[c.status] || ''}`}>{c.status_title}</span>
-          <small>اكتمل {done} من {countAr(d.sections.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلًا')}</small>
+          <small>اكتمل {done} من {countAr(req.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلًا')}</small>
         </div>
       </section>
 

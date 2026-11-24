@@ -800,7 +800,8 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
     return {
       participant_id: id, dimension: d, level, source: changed || !old ? 'admin' : old.source,
       assessment_id: old?.assessment_id || null, decided_by: changed ? a.email : old?.decided_by || null,
-      decided_at: changed ? now : old?.decided_at || now, approved_at: now, approved_by: a.email,
+      // وقت الاعتماد يبقى لبُعد معتمد لم يتغير مستواه: منه أول اعتماد المشارك (approvalOf.since، required_after في fieldsFor)
+      decided_at: changed ? now : old?.decided_at || now, approved_at: old?.approved_at && !changed ? old.approved_at : now, approved_by: a.email,
       admin_note: notes?.[d] ? String(notes[d]).slice(0, 500) : old?.admin_note || null,
     };
   });

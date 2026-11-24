@@ -8,9 +8,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { answeredModels, cleanAnswers, cleanModelFieldsOf, fieldsFor, keptModel, missingFields, modelsFor } from '../../supabase/functions/leaders-api/logic.js';
+import { approvalOf, answeredModels, cleanAnswers, cleanModelFieldsOf, fieldsFor, keptModel, missingFields, modelsFor } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneChecks, capstoneModels, costLabel, costSummary, modelFields, readiness, sectionState } from '../../supabase/functions/leaders-api/capstone.js';
 import { businessCase, caseStatus } from '../../supabase/functions/leaders-api/business-case.js';
+import { chapterTone, countedChapters, nextChapter } from './screens/InitiativeMap.jsx';
 
 const ROOT = join(__dirname, '../..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -407,5 +408,53 @@ describe('محرر النماذج في اللوحة يحفظ خصائص المص
     expect(cleanModelFieldsOf(a['initiative-charter'].fields).filter((x) => x.group).map((x) => x.group)).toEqual(['تعمّق إن شئت']);
     // ما تحسبه fieldsFor للمشارك لا يُخزَّن، والتاريخ غير الصالح لا يُكتب
     expect(cleanModelFieldsOf([{ key: 'x', label: 'س', type: 'text', kept: true, kept_req: true, required_after: 'ليس تاريخًا' }])[0]).toEqual({ key: 'x', label: 'س', type: 'text', hint: '', required: true });
+  });
+});
+
+describe('من بدأ قبل الترحيل يبقى كذلك بعد إعادة الاعتماد أو تغيير المستوى', () => {
+  const CUT = '2026-11-28T12:00:00Z';
+  const f = [{ key: 'x', type: 'textarea', label: 'س', required: false, required_after: CUT }];
+  const pl = (at) => DIMS.map((dimension) => ({ dimension, level: 'beginner', approved_at: at }));
+  const reqFor = (a) => fieldsFor(f, 'beginner', null, false, null, false, a.since)[0].required;
+  it('إعادة الاعتماد تُبقي approved_at لبُعد لم يتغير مستواه', () => {
+    const src = read('supabase/functions/leaders-api/admin.ts');
+    expect(src).toContain('approved_at: old?.approved_at && !changed ? old.approved_at : now');
+  });
+  it('تغيير المستوى أو الاعتماد الجماعي بعد الترحيل لا يجعله «جديدًا»: أول قيد اعتماد أو أول تسليم يحسم', () => {
+    // كل التسكينات أُعيد اعتمادها بعد الترحيل (تغيّر المستوى في الأبعاد الثلاثة)
+    const re = pl('2026-12-05T09:00:00Z');
+    expect(reqFor(approvalOf(re))).toBe(true);
+    expect(reqFor(approvalOf(re, ['2026-11-10T08:00:00Z']))).toBe(false); // أول placement.approve في سجل التدقيق
+    expect(reqFor(approvalOf(re, [null, '2026-11-20T08:00:00Z']))).toBe(false); // أول تسليم نموذج
+    // بُعد واحد تغيّر بعده والباقيان على اعتمادهما الأول
+    expect(reqFor(approvalOf(pl('2026-11-01T00:00:00Z').map((x, i) => (i ? x : { ...x, approved_at: '2026-12-05T09:00:00Z' }))))).toBe(false);
+    // من بدأ بعده فعلًا مطلوب منه
+    expect(reqFor(approvalOf(pl('2026-12-01T00:00:00Z'), ['2026-12-01T00:00:00Z']))).toBe(true);
+    // أدلة غير صالحة لا تُحسب، ولا since قبل اعتماد المسار كاملًا
+    expect(approvalOf(re, ['ليس وقتًا']).since).toBe('2026-12-05T09:00:00.000Z');
+    expect(approvalOf(re.slice(0, 2), ['2026-11-10T08:00:00Z']).since).toBeNull();
+  });
+  it('الخادم يقرأ الأدلة في ملف المشارك والوثيقة', () => {
+    expect(read('supabase/functions/leaders-api/participant.ts')).toMatch(/approvalOf\(must\(pl\) \?\? \[\], earlier\)/);
+    expect(read('supabase/functions/leaders-api/capstone.ts')).toContain('approvalOf(pl, earlier)');
+  });
+});
+
+describe('الفصل الاختياري في الواجهة: لا «مكتمل» ولا حساب في الاكتمال', () => {
+  const secs = [{ id: 1, complete: true }, { id: 2, complete: true, optional: true }, { id: 3, complete: false }, { id: 4, complete: true, optional: true, status: 'returned' }];
+  it('chapterTone وnextChapter وcountedChapters', () => {
+    expect(secs.map(chapterTone)).toEqual(['ok', 'opt', 'idle', 'bad']);
+    expect(countedChapters(secs).map((s) => s.id)).toEqual([1, 3]);
+    expect(nextChapter(secs.slice(0, 3)).id).toBe(3);
+    expect(nextChapter([{ id: 9, complete: true, optional: true }])).toBeNull();
+  });
+  it('الخادم يرسل optional من counted، والواجهتان تقرآنه', () => {
+    expect(read('supabase/functions/leaders-api/capstone.ts')).toContain('optional: s.state.counted === false,');
+    expect(read('leaders-app/src/screens/Capstone.jsx')).toContain("d.sections.filter((s) => !s.optional)");
+    expect(read('admin-app/src/screens/Capstones.jsx')).toContain("s.optional ? 'اختياري'");
+  });
+  it('الجاهزية: كل الفصول غير محسوبة يعني نصف الفصول صفرًا لا كاملًا', () => {
+    expect(readiness([{ complete: true, counted: false }], [])).toBe(50);
+    expect(readiness([{ complete: true, counted: false }], [{ ok: false }])).toBe(0);
   });
 });
