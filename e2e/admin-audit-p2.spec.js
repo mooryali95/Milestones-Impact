@@ -49,7 +49,7 @@ test('خمس مجموعات بترتيبها وبنودها، والإعداد �
   await groupBtn(nav, 'الإعداد').focus();
   await page.keyboard.press('Enter');
   await expect(groupBtn(nav, 'الإعداد')).toHaveAttribute('aria-expanded', 'true');
-  await expect(items('الإعداد')).toHaveText([/مركز البريد/, /قوالب البريد/, /الشهادات/, /المدفوعات/, /المساعد الذكي/, /الإعدادات العامة/]);
+  await expect(items('الإعداد')).toHaveText([/مركز البريد/, /قوالب البريد/, /الشهادات/, /المدفوعات/, /المساعد الذكي/, /الإعدادات العامة/, /صحة المنصة/]);
   // آخر مجموعة في الأسفل فعلًا
   const boxes = await Promise.all(GROUPS.map((g) => nav.getByRole('group', { name: g }).boundingBox()));
   for (let i = 1; i < boxes.length; i++) expect(boxes[i].y).toBeGreaterThan(boxes[i - 1].y);

@@ -1,4 +1,4 @@
-// صحة البريد والتنبيه: بطاقة النظرة العامة بالأخضر والكهرماني والأحمر، والشريط الأحمر أعلى كل صفحة يفتح البطاقة،
+// صحة البريد والتنبيه: بطاقة مركز البريد (مكانها الوحيد منذ تصور تبويبات الإدارة 2026-11-24) بالأخضر والكهرماني والأحمر، والشريط الأحمر أعلى كل صفحة يفتح البطاقة،
 // والتنبيه التجريبي للمدير الأعلى، ولا شيء للمراقب. الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
@@ -21,9 +21,7 @@ const STATES = {
 };
 
 // pref: اختيار الطي المحفوظ في المتصفح ('open' افتراضًا لاختبارات المحتوى، وnull كأول زيارة). health: رد ops-health من سجل الطلبات حتى الآن.
-// badge: البطاقة داخل شارة الصحة في مكتب اليوم، والشارة مطوية حين يسلم كل شيء؛ اختبارات المحتوى تفتحها (اختيار الجلسة نفسه).
-// true يفتحها، وfalse كأول زيارة بلا اختيار، وكائن {sig, open} اختيار محفوظ بعينه
-async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/overview', alertTest, pref = 'open', health, badge = true } = {}) {
+async function setup(page, { state = 'green', role = 'super_admin', hash = '#/leaders/mailcenter', alertTest, pref = 'open', health } = {}) {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
@@ -38,17 +36,17 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
       'admin.overview': { success: true, total: 4, by_status: { pending_approval: 1, enrolled: 2 }, pending_reviews: 0, matrix: { milestone: { beginner: 1, intermediate: 1, advanced: 0 }, impact: { beginner: 2, intermediate: 0, advanced: 0 }, leadership: { beginner: 1, intermediate: 1, advanced: 0 } } },
       'admin.reviews': { success: true, pending_approval: [], submitted: [] },
       'admin.health': { success: true, readiness: [], missing_migrations: [], pending_migrations: [], migrations_ledger: true, missing_secrets: [], mail: { today: 12, cap: 80 } },
+      'admin.mail-center': { success: false, message: 'لا مركز بريد في هذا الاختبار' },
       'admin.alert-test': alertTest ?? { success: true, channels: { webhook: true, email: true, slack: true }, mail_key: true, delivered: { webhook: true, email: false } },
     };
     await route.fulfill({ json: replies[b.action] ?? { success: true } });
   });
   await page.goto(BASE);
-  await page.evaluate(([r, p, b]) => {
+  await page.evaluate(([r, p]) => {
     sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x.com', role_id: r }, ts: Date.now() }));
-    if (b) sessionStorage.setItem('mi_admin_today_health', JSON.stringify(b === true ? { sig: '', open: true } : b)); else sessionStorage.removeItem('mi_admin_today_health');
     localStorage.clear();
     if (p) localStorage.setItem('mi_admin_ops_card', p);
-  }, [role, pref, badge]);
+  }, [role, pref]);
   await page.goto(`${BASE}${hash}`);
   await page.reload();
   return calls;
@@ -56,7 +54,7 @@ async function setup(page, { state = 'green', role = 'super_admin', hash = '#/le
 
 const card = (page) => page.getByRole('region', { name: 'صحة البريد والتنبيه' });
 
-test('أخضر: البطاقة أعلى النظرة العامة بالكلمة والرمز، بلا شريط، والأسرار بأسمائها', async ({ page }) => {
+test('أخضر: البطاقة أعلى مركز البريد بالكلمة والرمز، بلا شريط، والأسرار بأسمائها', async ({ page }) => {
   const calls = await setup(page, { state: 'green' });
   await expect(card(page)).toHaveAttribute('data-level', 'green');
   await expect(card(page).getByText('يعمل', { exact: true })).toBeVisible();
@@ -68,10 +66,8 @@ test('أخضر: البطاقة أعلى النظرة العامة بالكلمة
   await expect(card(page)).toContainText('منذ 4 دقائق');
   await expect(page.locator('.ops-banner')).toHaveCount(0);
   await expect(card(page).locator('.ops-meter')).not.toHaveClass(/near|full/);
-  // البطاقة أول ما في شارة الصحة، والشارة بعد «قرارات اليوم» (تدقيق 2026-11-23: القرارات أول النظرة العامة)
-  const first = await page.locator('#th-body .la-card').first().getAttribute('id');
-  expect(first).toBe('ops-health');
-  expect((await page.locator('#today-decisions').boundingBox()).y).toBeLessThan((await page.locator('.today-health').boundingBox()).y);
+  // في مركز البريد وحده، لا في «نظرة عامة» (المصدر الواحد)
+  await expect(page.locator('#ops-health')).toHaveCount(1);
   expect(calls.filter((c) => c.action === 'admin.ops-health').length).toBe(1);
 });
 
@@ -105,37 +101,25 @@ test('أحمر: الشريط أعلى كل صفحة بالمدة، ويفتح ا
   await expect(page.getByRole('alert').filter({ hasText: 'البريد متوقف' })).toHaveText('البريد متوقف: رموز الدخول لا تصل');
   await expect(banner.locator('[aria-live="off"]')).toHaveText(/منذ 20 دقيقة/);
   await banner.getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
-  await expect(page).toHaveURL(/#\/leaders\/overview$/);
+  await expect(page).toHaveURL(/#\/leaders\/mailcenter$/);
   await expect(card(page)).toHaveAttribute('data-level', 'red');
   await expect(card(page)).toBeFocused();
   await expect(card(page).getByText('عطل الآن', { exact: true })).toBeVisible();
   await expect(card(page)).toContainText('آخر 4 محاولات تعذّرت أو حُجبت متتالية');
   await expect(card(page)).toContainText('رموز الدخول لا تصل منذ 20 دقيقة');
-  // الشريط باقٍ في النظرة العامة نفسها، والرابط يعيد التركيز إلى البطاقة
+  // الشريط باقٍ في مركز البريد نفسه، والرابط يعيد التركيز إلى البطاقة
   await page.getByRole('button', { name: 'أرسل تنبيهًا تجريبيًا' }).focus();
   await banner.getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
   await expect(card(page)).toBeFocused();
 });
 
-test('أحمر بعد طيّ الشارة على الكهرماني: الشارة تنفتح وحدها، والشريط يكشف البطاقة ولو طُويت على الأحمر نفسه', async ({ page }) => {
-  // طُويت على الكهرماني: الأحمر حال أخرى فتنفتح
-  await setup(page, { state: 'red', badge: { sig: 'ops-amber', open: false } });
-  const toggle = page.locator('#th-toggle');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(toggle).toHaveText(/عطل في البريد/);
-  // طواها المدير على الأحمر نفسه، ثم ضغط رابط الشريط: تنكشف البطاقة ويقع عليها التركيز
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(card(page)).toBeHidden();
+test('الشريط من أي صفحة يفتح مركز البريد على البطاقة، و«نظرة عامة» لا تحملها', async ({ page }) => {
+  await setup(page, { state: 'red', hash: '#/leaders/overview' });
+  await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
+  await expect(page.locator('#ops-health')).toHaveCount(0);
+  await expect(page.locator('li[data-key="ops-red"]')).toContainText('مركز البريد');
   await page.locator('.ops-banner').getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(card(page)).toBeVisible();
-  await expect(card(page)).toBeFocused();
-  // ومن صفحة أخرى بعد إعادة التحميل والطي محفوظ: الانتقال يكشفها كذلك
-  await page.goto(`${BASE}#/contacts`);
-  await page.reload();
-  await page.locator('.ops-banner').getByRole('link', { name: 'افتح بطاقة صحة البريد' }).click();
-  await expect(page).toHaveURL(/#\/leaders\/overview$/);
+  await expect(page).toHaveURL(/#\/leaders\/mailcenter$/);
   await expect(card(page)).toBeFocused();
 });
 
@@ -165,13 +149,8 @@ test('بعد التنبيه التجريبي تتحدث الأرقام وحده�
   await expect.poll(n, { timeout: 12000 }).toBe(3);
 });
 
-test('الطي: السليم في أول زيارة داخل شارة مطوية، وفتحها يُظهر البطاقة سطر ملخص هادئًا، وزرها يفتحها ويطويها بالفأرة ولوحة المفاتيح، والاختيار يُحفظ', async ({ page }) => {
-  await setup(page, { state: 'green', pref: null, badge: false });
-  // أول زيارة: الشارة مطوية لأن كل شيء سليم، والبطاقة داخلها
-  const th = page.locator('#th-toggle');
-  await expect(th).toHaveAttribute('aria-expanded', 'false');
-  await expect(card(page)).toBeHidden();
-  await th.click();
+test('الطي: السليم في أول زيارة سطر ملخص هادئ، وزرها يفتحها ويطويها بالفأرة ولوحة المفاتيح، والاختيار يُحفظ', async ({ page }) => {
+  await setup(page, { state: 'green', pref: null });
   // والبطاقة السليمة نفسها سطر ملخص مطوي (تدقيق 2026-11-23: صحة البريد لا تتمدد إلا عند الخلل)
   const toggle = card(page).getByRole('button', { name: 'صحة البريد والتنبيه' });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -244,7 +223,7 @@ test('المدير غير الأعلى يرى البطاقة والشريط بل
 });
 
 test('المراقب لا يرى البطاقة ولا الشريط، ولا يُسأل الخادم', async ({ page }) => {
-  const calls = await setup(page, { state: 'red', role: 'viewer' });
+  const calls = await setup(page, { state: 'red', role: 'viewer', hash: '#/leaders/overview' });
   await expect(page.locator('.stats-grid')).toBeVisible();
   await expect(page.locator('#ops-health')).toHaveCount(0);
   await expect(page.locator('.ops-banner')).toHaveCount(0);

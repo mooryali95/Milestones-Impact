@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alertHref, greetingAr, healthLine, healthOpen, healthProblems, inboxView, problemsSig, riyadhHour, systemIssues, systemNotes, todayNumbers, waitingSub } from './today.js';
+import { alertHref, greetingAr, healthProblems, inboxView, riyadhHour, systemIssues, systemNotes, todayNumbers, waitingSub } from './today.js';
 import { dayFull } from './dates.js';
 
 const inbox = (items, extra = {}) => ({ success: true, items, total: items.length, late: items.filter((i) => i.late).length, ...extra });
@@ -59,41 +59,22 @@ describe('مكتب اليوم: شارة الصحة', () => {
     // خادم قبل pending_migrations
     expect(systemIssues({ ...okHealth, pending_migrations: undefined, missing_migrations: ['089_y'] })).toBe(true);
   });
-  it('كل شيء سليم: لا بند، والسطر «كل شيء سليم»', () => {
+  it('كل شيء سليم: لا بند', () => {
     const p = healthProblems({ ops: green, h: okHealth, orgs: [] });
     expect(p).toEqual([]);
-    expect(healthLine(p)).toBe('كل شيء سليم');
   });
   it('الخلل بأسمائه وعدده، وبوابات الكتابة كما في البطاقات', () => {
     const h = { ...okHealth, missing_secrets: ['X'], readiness: [{ key: 'a', ok: false }] };
     const orgs = [{ id: 'o1', status: 'active', name: 'جهة' }];
     const p = healthProblems({ ops: { verdict: { level: 'amber' } }, h, orgs });
     expect(p.map((x) => x.key)).toEqual(['ops-amber', 'system', 'launch', 'orgs']);
-    expect(healthLine(p)).toBe('4 تحتاج انتباهك: البريد والتنبيه، حالة النظام، جاهزية الإطلاق، جاهزية الجهات');
     // المراقب: حالة النظام وحدها (البقية لا تُعرض له)
     expect(healthProblems({ ops: { verdict: { level: 'red' } }, h, orgs, canWrite: false }).map((x) => x.key)).toEqual(['system']);
-    expect(healthLine([{ key: 'system', label: 'حالة النظام' }])).toBe('أمر واحد يحتاج انتباهك: حالة النظام');
     expect(healthProblems({ ops: { failed: true }, h: okHealth })[0].label).toBe('صحة البريد غير مقروءة');
     expect(healthProblems({ ops: { verdict: { level: 'red' } }, h: okHealth })[0].label).toBe('عطل في البريد');
     // حالة النظام المتعذرة لا تُقرأ «سليمة»، للمراقب أيضًا
     expect(healthProblems({ ops: green, h: null }).map((x) => x.key)).toEqual(['system-unread']);
     expect(healthProblems({ h: { success: false }, canWrite: false })[0].label).toBe('حالة النظام غير مقروءة');
-    // ما لم يصل بعد: «جارٍ الفحص» لا «سليم»
-    expect(healthLine([], true)).toBe('جارٍ الفحص…');
-  });
-  it('مطوية حين يسلم كل شيء، ومفتوحة عند الخلل، واختيار المدير يسري على الحال نفسها وحدها', () => {
-    expect(healthOpen('')).toBe(false);
-    expect(healthOpen('ops')).toBe(true);
-    expect(healthOpen('ops', { sig: 'ops', open: false })).toBe(false);
-    expect(healthOpen('', { sig: '', open: true })).toBe(true);
-    // خلل جديد بعد الطي يفتحها
-    expect(healthOpen('ops,system', { sig: 'ops', open: false })).toBe(true);
-    expect(problemsSig([{ key: 'ops' }, { key: 'orgs' }])).toBe('ops,orgs');
-    // البريد من الكهرماني إلى الأحمر بعد الطي: البصمة تتغير فتنفتح الشارة
-    const amber = problemsSig(healthProblems({ ops: { verdict: { level: 'amber' } }, h: okHealth }));
-    const red = problemsSig(healthProblems({ ops: { verdict: { level: 'red' } }, h: okHealth }));
-    expect(amber).not.toBe(red);
-    expect(healthOpen(red, { sig: amber, open: false })).toBe(true);
   });
 });
 

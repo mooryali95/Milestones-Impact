@@ -1,179 +1,45 @@
 // ════════════════════════════════════════════════════════════════
-// مكتب اليوم (نظرة عامة على تطبيق القادة): ماذا أفعل اليوم؟
+// مكتب اليوم (نظرة عامة على تطبيق القادة): ماذا ينتظر قراري اليوم؟ وما الذي انكسر ويحتاجني؟
 // ════════════════════════════════════════════════════════════════
-// المرحلة 3أ من تصور لوحة الإدارة (4.3): التحية والتاريخ، ثم «قرارات اليوم» (صندوق admin.inbox نفسه)، ثم أربعة أرقام
-// من الصندوق والنظرة العامة، ثم شارة صحة واحدة (تدقيق 2026-11-23 قدّم القرارات عليها)، ثم (المرحلة 3ب) «تنبيهات» و«نبض الدفعات» من admin.today، ثم روابط سريعة،
-// ثم طابور المتطلبات حتى تنتقل إلى «المراجعات» (المرحلة 5).
-// بطاقات التحليل انتقلت إلى «الرؤية الشاملة» (Analytics.jsx)، والمنطق الخالص للأرقام والشارة في today.js.
+// تصور تبويبات الإدارة 2026-11-24 (المرحلة أ، معتمد): «نظرة عامة» = قرارات اليوم + الاستثناءات فقط. التحية، ثم «قرارات
+// اليوم» (صندوق admin.inbox)، ثم الأرقام الأربعة، ثم شريط «يحتاج انتباهك» (سطر لكل مشكلة برابط إلى مكان إصلاحها، يختفي
+// كله حين يسلم كل شيء)، ثم «تنبيهات» admin.today، ثم روابط سريعة. لا تُرسم هنا بطاقة مجال آخر: جاهزية الإطلاق والفحوص
+// وحالة النظام وبيئة التجربة في «الإعداد › صحة المنصة» (PlatformHealth.jsx)، وصحة البريد في مركز البريد، ونبض كل دفعة
+// في ملفها، وطلبات المتطلبات نوع في الصندوق نفسه. حارس ذلك single-source.test.js.
 import React, { useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
-import { L, isSuperAdmin } from '../leaders.js';
+import { L } from '../leaders.js';
 import { session } from '../api.js';
-import { dateTime, dayFull } from '../dates.js';
-import { focusOpsCard, OpsHealthCard, OPS_REVEAL, opsRevealPending } from '../OpsHealth.jsx';
+import { dayFull } from '../dates.js';
 import { useOpsHealth } from '../ops-watch.js';
 import { useInbox } from '../pending.js';
-import { Spinner, useUI } from '../ui.jsx';
-import { DemoLinks, resetConfirmAr, useDemoLinks } from '../DemoLinks.jsx';
-import ReqQueue from './ReqQueue.jsx';
-import { readinessSummary } from '../org-hub.js';
+import { Spinner } from '../ui.jsx';
 import { ageAr } from '../../../supabase/functions/leaders-api/inbox.js';
-import { alertHref, deskNote, greetingAr, healthLine, healthOpen, healthProblems, orgsReadinessRows, problemsSig, STALE_DAYS, systemNotes, todayNumbers, waitingSub } from '../today.js';
+import { alertHref, deskNote, exceptionRows, greetingAr, HEALTH_HREF, STALE_DAYS, STRIP_MAX, todayNumbers, waitingSub } from '../today.js';
 
-// حالة النظام: ترحيلات لم تُطبَّق بوسم بوابة النشر، وأسرار ناقصة، واقتراب البريد من سقفه اليومي، وما تعذّرت قراءته منها.
-// الوسم من الخادم (pending_migrations، المصدر نفسه لبوابات المراحل): المؤجل بقرار لا يُطلب تطبيقه. خادم قبل الحقل يُقرأ كما كان
-function Health({ h }) {
-  if (!systemNotes(h)) return null;
-  const near = h.mail.today >= h.mail.cap * 0.8;
-  const pending = h.pending_migrations || (h.missing_migrations || []).map((name) => ({ name, gate: 'blocking' }));
-  const gate = (g) => pending.filter((m) => m.gate === g);
-  const files = (list) => list.map((m) => <code key={m.name}>{m.name}.sql</code>);
-  return (
-    <div className="la-note la-health" role="status">
-      <b>حالة النظام</b>
-      {h.migrations_ledger === false && <p>تعذّرت قراءة سجل الترحيلات، فلا يُعرف ما لم يُطبَّق.</p>}
-      {h.mail.today == null && <p>تعذّرت قراءة عداد البريد: لا يخرج الآن إلا الرموز والتنبيه، والتذكيرات في الطابور.</p>}
-      {gate('blocking').length > 0 && <p>ترحيلات لم تُطبَّق على الإنتاج، تُطبَّق بسير migrate.yml بأسمائها قبل نشر الدوال: {files(gate('blocking'))}</p>}
-      {gate('tolerant').length > 0 && <p>ترحيلات لم تُطبَّق تعمل الدوال قبلها وبعدها، تُطبَّق بسير migrate.yml في أقرب نافذة: {files(gate('tolerant'))}</p>}
-      {gate('deferred').length > 0 && <p>ترحيلات مؤجلة بقرار، لا تُطبَّق قبل رفع التأجيل: {gate('deferred').map((m) => <span key={m.name}><code>{m.name}.sql</code>{m.note ? ` (${m.note})` : ''} </span>)}</p>}
-      {h.missing_secrets.length > 0 && <p>أسرار ناقصة في دالة leaders-api: {h.missing_secrets.map((k) => <code key={k}>{k}</code>)}</p>}
-      {near && <p>رسائل الرموز اليوم {h.mail.today} من {h.mail.cap}. عند السقف يتوقف إرسال الرموز حتى الغد، ويبقى الدخول بمفتاح المرور.</p>}
-    </div>
-  );
-}
-
-// جاهزية الإطلاق: تختفي حين تكتمل البنود كلها
-function Readiness({ items, onTab }) {
-  const todo = (items || []).filter((x) => !x.ok);
-  if (!todo.length) return null;
-  return (
-    <section className="la-card la-ready" aria-label="جاهزية الإطلاق">
-      <div className="la-row between"><h3>جاهزية الإطلاق</h3><span className="la-muted">{items.length - todo.length} من {items.length}</span></div>
-      <ul>
-        {items.map((x) => (
-          <li key={x.key} className={x.ok ? 'ok' : ''}>
-            <span aria-hidden="true">{x.ok ? '✓' : '○'}</span>
-            <span>{x.label}
-              {/* الناقص بأسمائه: كل اسم يفتح ملف الجهة أو الدفعة نفسها، والبرنامج قائمة البرامج (لا ملف لكل برنامج) */}
-              {!x.ok && x.refs?.length > 0 && <span className="la-ready-refs">{x.refs.map((r) => (
-                <a key={r.id} className="la-chip warn" href={r.kind === 'org' ? `#/leaders/orgs/${encodeURIComponent(r.id)}` : r.kind === 'program' ? '#/leaders/programs' : `#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a>
-              ))}</span>}
-            </span>
-            {!x.ok && onTab && x.where && !x.refs?.length && <button className="la-link" onClick={() => onTab(x.where)}>اضبطه</button>}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-// جاهزية الجهات: سطر لكل جهة فعّالة بما بقي فيها (org-hub.js نفسه الذي في رأس صفحتها)، ويفتح صفحتها.
-// المستوى الأوسط بين جاهزية الإطلاق (المنظومة) وملف الدفعة. حال الدفعة من admin.orgs (orgCohortSetups)، المصدر
-// نفسه لصفحة الجهة، فلا يقول السطر «جاهزة» وصفحتها تقول غير ذلك
-function OrgsReadiness({ orgs, onOrg }) {
-  const rows = orgsReadinessRows(orgs);
-  if (!rows.length) return null;
-  const ready = rows.filter((x) => !x.r.missing).length;
-  return (
-    <section className="la-card la-ready" aria-label="جاهزية الجهات">
-      <div className="la-row between"><h3>جاهزية الجهات</h3><span className="la-muted">{ready} من {rows.length} جاهزة</span></div>
-      <ul>
-        {rows.map(({ o, r }) => (
-          <li key={o.id} className={r.missing ? '' : 'ok'}>
-            <span aria-hidden="true">{r.missing ? '○' : '✓'}</span>
-            <span><button className="la-link" onClick={() => onOrg(o.id)}><b>{o.name}</b></button>
-              {r.missing > 0 && <small className="la-muted"> · {r.items.filter((x) => !x.ok).map((x) => x.title).join('، ')}</small>}</span>
-            <span className={`la-chip ${r.missing ? 'warn' : 'ok'}`}>{readinessSummary(r)}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-// الحساب التجريبي للورش: يفتح تطبيق المشارك من شاشة الدخول مع جولة الخطوات، ويُعاد إلى البداية بضغطة
-function DemoCard() {
-  const { toast, confirm } = useUI();
-  const [busy, setBusy] = useState(false);
-  // روابط التجربة: تُسمّى النشطة منها في تأكيد إعادة الضبط، فالحساب واحد يشتركون فيه
-  const links = useDemoLinks();
-  const openDemo = async () => {
-    // النافذة تُفتح فورًا بضغطة المستخدم، ثم يُكتب فيها الرابط، فلا يمنعها المتصفح
-    const w = window.open('', '_blank');
-    setBusy(true);
-    const r = await L('admin.demo-open');
-    setBusy(false);
-    if (!r.success) { w?.close(); return toast(r.message); }
-    if (w) w.location.href = r.url; else location.href = r.url;
-  };
-  const reset = async () => {
-    // القائمة تُقرأ من جديد قبل السؤال: رابط أنشأه مدير آخر للتو يُذكر باسمه
-    const now = await links.load();
-    if (!(await confirm(resetConfirmAr(now?.success ? now.links : links.state?.links), { danger: true }))) return;
-    setBusy(true);
-    const r = await L('admin.demo-reset');
-    setBusy(false);
-    toast(r.success ? 'أُعيد الحساب التجريبي إلى البداية' : r.message);
-  };
-  return (
-    <section className="la-card la-demo">
-      <div className="la-row between">
-        <div><b>الحساب التجريبي</b><><p className="la-muted">للورش: جولة حيّة كاملة بحساب لا يدخل الإحصاءات.</p><details className="la-more small muted"><summary>كيف يعمل؟</summary><p>للورش: يفتح المنصة من شاشة الدخول، وجولة حيّة بثماني عشرة خطوة تضيء كل عنصر وتشرح المنظومة كاملة. في أعلى شاشاته شريط «حساب تجريبي» وفيه «تخطَّ هذه المرحلة» و«افتح كل المراحل»، فتُعرض الرحلة كلها في جلسة واحدة. لا يدخل الإحصاءات ولا يصله بريد ولا تصدر له شهادة.</p></details></></div>
-        <span className="la-row">
-          <button className="btn-sm primary" disabled={busy} onClick={openDemo}>افتح الحساب التجريبي</button>
-          <button className="btn-sm ghost" disabled={busy} onClick={reset}>أعِده إلى البداية</button>
-        </span>
-      </div>
-      <DemoLinks state={links.state} load={links.load} />
-    </section>
-  );
-}
-
-
-// ── شارة الصحة: سطر واحد مطوي حين يسلم كل شيء، ويتمدد وحده عند الخلل ──
-// تجمع ما كان خمس بطاقات (صحة البريد، وحالة النظام، وحساب العرض، وجاهزية الإطلاق، وجاهزية الجهات) بفحوصها وأزرارها
-// وبواباتها كما هي، والذي تغيّر هو الوعاء وحده. اختيار المدير (طي أو فتح) لهذه الجلسة وحدها، مقرون ببصمة الحال
-// (healthOpen)، فخلل جديد يفتح الشارة ولو طواها قبله
-const HEALTH_KEY = 'mi_admin_today_health';
-const readChosen = () => { try { return JSON.parse(sessionStorage.getItem(HEALTH_KEY) || 'null'); } catch { return null; } };
-const writeChosen = (v) => { try { sessionStorage.setItem(HEALTH_KEY, JSON.stringify(v)); } catch { /* التخزين محجوب: الاختيار لهذا الرسم */ } };
-
-function HealthBadge({ h, orgs, orgsLoaded = true, onOrg, onTab, canWrite }) {
+// ── «يحتاج انتباهك»: سطر لكل مشكلة قائمة «ما المشكلة · أين تُصلح ←»، خمسة أسطر ثم «و3 أخرى ←» إلى صحة المنصة ──
+// يظهر لكل مدير بما يُعرض له (healthProblems بالبوابات نفسها)، وروابطه تنقُّل لا أفعال، فلا زر فيه لمن يقرأ وحده.
+// لا يُحكم بالسلامة قبل وصول المصادر، ولا يُرسم شيء حين يسلم كل شيء
+function Exceptions({ h, ph, orgs, orgsLoaded, canWrite }) {
   const writer = canWrite !== false;
   const ops = useOpsHealth(writer);
-  const [chosen, setChosen] = useState(readChosen);
-  // شريط العطل الأحمر (OpsBanner) يكشف البطاقة ولو طواها المدير، ثم يقع التركيز عليها
-  const [reveal, setReveal] = useState(opsRevealPending);
-  useEffect(() => {
-    const on = () => setReveal(true);
-    window.addEventListener(OPS_REVEAL, on);
-    return () => window.removeEventListener(OPS_REVEAL, on);
-  }, []);
-  const problems = healthProblems({ ops: writer ? ops : null, h, orgs, canWrite: writer, withOrgs: !!onOrg });
-  // ما لم يصل بعد من مصادر الشارة (صحة البريد، والجهات) لا يُحكم عليه بالسلامة
-  const checking = (writer && !ops.verdict && !ops.failed) || (writer && !!onOrg && !orgsLoaded);
-  const sig = problemsSig(problems);
-  const open = reveal || healthOpen(sig, chosen);
-  useEffect(() => { if (open) focusOpsCard(); }, [open]);
-  const toggle = () => { const v = { sig, open: !open }; setReveal(false); setChosen(v); writeChosen(v); };
-  const bad = problems.length > 0;
-  const state = bad ? 'attention' : checking ? 'checking' : 'ok';
+  const rows = exceptionRows({ ops: writer ? ops : null, h, orgs, canWrite: writer, withOrgs: orgsLoaded, ph });
+  if (!rows.length) return null;
+  const shown = rows.slice(0, STRIP_MAX);
+  const more = rows.length - shown.length;
   return (
-    <section className={`today-health${bad ? ' bad' : ''}`} aria-label="صحة المنظومة" data-state={state}>
-      <button type="button" id="th-toggle" className="th-toggle" aria-expanded={open} aria-controls="th-body" onClick={toggle}>
-        <span className="th-ic" aria-hidden="true">{bad ? '!' : checking ? '…' : '✓'}</span>
-        <span className="th-line">{healthLine(problems, checking)}</span>
-        <span className="ops-chev" aria-hidden="true" />
-      </button>
-      <div id="th-body" className="th-body" role="region" aria-label="تفاصيل صحة المنظومة" hidden={!open}>
-        {/* صحة البريد والتنبيه (للمدير ذي الكتابة): أخضر أو كهرماني أو أحمر، وشريطها الأحمر في App.jsx */}
-        <OpsHealthCard enabled={writer} isSuper={isSuperAdmin()} />
-        {!h?.success && <p className="la-note" role="status">تعذّرت قراءة حالة النظام{writer ? ' وجاهزية الإطلاق' : ''} الآن، فلا يُعرف إن كانت سليمة. أعد فتح الصفحة بعد قليل.</p>}
-        <Health h={h} />
-        {writer && <Readiness items={h?.readiness} onTab={onTab} />}
-        {writer && onOrg && <OrgsReadiness orgs={orgs} onOrg={onOrg} />}
-        {!bad && !checking && !writer && <p className="la-muted">حالة النظام سليمة.</p>}
-      </div>
+    <section className="today-exc" aria-labelledby="today-exc-h">
+      <h2 className="today-sec" id="today-exc-h">يحتاج انتباهك <span className="la-chip warn">{rows.length}</span></h2>
+      <ul role="list">
+        {shown.map((x) => (
+          <li key={x.key} className={`today-exc-row ${x.level}`} data-key={x.key}>
+            <span className="today-alert-ic" aria-hidden="true">{x.level === 'bad' ? '!' : '•'}</span>
+            <span className="today-exc-t">{x.level === 'bad' && <span className="sr-only">عاجل: </span>}{x.text}</span>
+            <a className="la-link" href={x.href}>{x.where} ←</a>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && <a className="la-link today-exc-more" href={HEALTH_HREF}>{more === 1 ? 'وأمر آخر' : `و${more} أخرى`} ←</a>}
     </section>
   );
 }
@@ -251,38 +117,6 @@ function Alerts({ t }) {
   );
 }
 
-// عمود الجهة للدفعة بلا اسم جهة: دفعة الجهة التي لم يُقرأ اسمها «جهة»، لا «أفراد»
-const KIND_AR = { open: 'مفتوحة', individuals: 'أفراد', org: 'جهة' };
-// «نبض الدفعات»: سطر لكل دفعة جارية بجاهزيتها (ملف الدفعة نفسه) وأقرب جلسة وما ينتظر قرارًا لأعضائها.
-// جدول يصير بطاقات على الهاتف (leaders-admin.css). يختفي حين لا دفعة جارية
-function Pulse({ t }) {
-  const rows = t?.success ? t.pulse || [] : [];
-  if (!rows.length) return null;
-  const plus = t.waiting_partial ? '+' : '';
-  return (
-    <section className="today-pulse" aria-labelledby="today-pulse-h">
-      <h2 className="today-sec" id="today-pulse-h">نبض الدفعات</h2>
-      <div className="today-pulse-wrap">
-        {/* الأدوار صريحة: البطاقات على الهاتف (display: block) تُسقط دلالة الجدول في Safari وVoiceOver */}
-        <table className="la-table today-pulse-t" role="table">
-          <thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">الدفعة</th><th scope="col" role="columnheader">الجهة</th><th scope="col" role="columnheader">الجاهزية</th><th scope="col" role="columnheader">أقرب جلسة</th><th scope="col" role="columnheader">ينتظر قرارًا</th></tr></thead>
-          <tbody role="rowgroup">
-            {rows.map((r) => (
-              <tr key={r.id} data-id={r.id} role="row">
-                <th scope="row" role="rowheader" data-label="الدفعة"><a className="la-link" href={`#/leaders/programs/${encodeURIComponent(r.id)}`}>{r.name}</a></th>
-                <td role="cell" data-label="الجهة">{r.org || <span className="la-muted">{KIND_AR[r.kind] || 'جهة'}</span>}</td>
-                <td role="cell" data-label="الجاهزية"><span className={`la-chip ${r.readiness.missing ? 'warn' : 'ok'}`}>{r.readiness.summary}</span></td>
-                <td role="cell" data-label="أقرب جلسة">{r.next_at ? dateTime(r.next_at) : r.handbook ? <span className="la-muted">صيغة الكتاب</span> : t.unchecked?.includes('cohort_no_session') ? <span className="la-muted">غير مقروءة</span> : <span className="la-muted">لا جلسة مؤرخة</span>}</td>
-                <td role="cell" data-label="ينتظر قرارًا">{r.waiting == null ? <span className="la-muted">غير مقروء</span> : <bdi dir="ltr">{r.waiting}{r.waiting ? plus : ''}</bdi>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
 // ── روابط سريعة إلى أماكنها القائمة: «دفعة جديدة» معالج الدفعة (‎?new=‎ في البرامج)، والباقي تبويب يحمل الفعل ──
 function QuickLinks({ onTab, canWrite }) {
   const writer = canWrite !== false;
@@ -301,60 +135,25 @@ function QuickLinks({ onTab, canWrite }) {
   );
 }
 
-// «صحة المنصة» (admin.platform-health): خمسة فحوص تشغيلية للقراءة وحدها، أخضر أو كهرماني أو أحمر، وسطر علاج لكل خلل.
-// الأحكام والنصوص من الخادم (platform-health.js)، فلا تُكتب هنا مرة ثانية. تعذّر القراءة سطر خافت، ورد بلا فحوص لا يُرسم
-const PH_DOT = { ok: '✓', warn: '!', bad: '✕', unknown: '?' };
-const PH_LEVEL_AR = { ok: 'سليم', warn: 'يحتاج انتباهًا', bad: 'خلل', unknown: 'غير معروف' };
-function PlatformHealth() {
-  const [r, setR] = useState(null);
-  useEffect(() => {
-    let live = true;
-    L('admin.platform-health').then((x) => live && setR(x), () => live && setR({ success: false }));
-    return () => { live = false; };
-  }, []);
-  if (!r) return null;
-  if (!r.success) return <p className="la-muted small ph-err">تعذّرت قراءة صحة المنصة الآن.</p>;
-  if (!Array.isArray(r.checks) || !r.checks.length) return null;
-  return (
-    // مضغوطة: سطر عنوان مطوي حين تسلم الفحوص كلها، ومفتوحة وحدها عند أي خلل (تدقيق 2026-11-23)
-    <section className="la-card ph-card" aria-label="صحة المنصة" data-level={r.level}>
-      <details className="ph-details" open={r.level !== 'ok'}>
-      <summary className="ph-title"><b>صحة المنصة</b> <small className="la-muted">· {PH_LEVEL_AR[r.level] || ''}</small></summary>
-      <ul className="ph-rows">
-        {r.checks.map((c) => (
-          <li key={c.key} className={`ph-row ph-${c.level}`} data-level={c.level}>
-            <span className="ph-dot" aria-hidden="true">{PH_DOT[c.level] || '?'}</span>
-            <span className="ph-main"><b>{c.label}</b> <span className="ph-line">{c.line}</span>
-              {c.remedy && <span className="ph-remedy">{c.remedy}</span>}</span>
-            <span className="sr-only">{PH_LEVEL_AR[c.level]}</span>
-          </li>
-        ))}
-      </ul>
-      </details>
-    </section>
-  );
-}
-
-export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pending, canWrite }) {
+export default function Overview({ orgs, orgsLoaded, onPerson, onTab, pending, canWrite }) {
   const [d, setD] = useState(null);
-  const [n, setN] = useState(0);
   const [view, setView] = useState('');
   // رد الصندوق من مخزن العدّادات نفسه (pending.js): طلب واحد يرسم الصندوق والأرقام والعدّادات
   const [inbox] = useInbox();
   const today = useToday();
   useEffect(() => {
     let live = true;
-    setD(null);
     Promise.all([
-      L('admin.overview', {}), L('admin.reviews', {}),
+      L('admin.overview', {}),
       L('admin.health').catch(() => null),
-    ]).then(([o, r, h]) => live && setD({ o, r, h }));
+      L('admin.platform-health').catch(() => ({ success: false })),
+    ]).then(([o, h, ph]) => live && setD({ o, h, ph }));
     return () => { live = false; };
-  }, [n]);
+  }, []);
 
   if (!d) return <Spinner />;
-  const { o, r, h } = d;
-  // admin.overview لا يغذي في المكتب إلا الرقم الرابع: تعذّره لا يحجب الصحة والقرارات والطابور
+  const { o, h, ph } = d;
+  // admin.overview لا يغذي في المكتب إلا الرقم الرابع: تعذّره لا يحجب القرارات والاستثناءات
   const nums = todayNumbers(inbox, o);
   const name = session.load()?.user?.name;
   const toDecisions = (v) => {
@@ -372,28 +171,17 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onOrg, onTab, pen
         </div>
       </header>
       {/* جلسة رمز البريد: شريط «للقراءة فقط» بزر «فعّل الكتابة» في إطار اللوحة (App.jsx) لا هنا، فيظهر في كل صفحة */}
-      {/* تدقيق اللوحة 2026-11-23 (المرحلة 1): «قرارات اليوم» أول كتلة، والصحة سطر واحد بعدها يتمدد وحده عند الخلل */}
       <h2 className="today-sec">قرارات اليوم</h2>
-      {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox) */}
+      {/* صندوق واحد لكل ما ينتظر القرار (Inbox.jsx، admin.inbox)، ومنه طلبات المتطلبات (النوع requirement) */}
       <div id="today-decisions" tabIndex={-1} className="today-decisions">
         <Inbox contacts={pending?.contacts || 0} canWrite={canWrite} onPerson={onPerson} view={view} onView={setView} />
       </div>
       <TodayNumbers nums={nums} onView={toDecisions} onTab={onTab} />
-      <HealthBadge h={h} orgs={orgs} orgsLoaded={orgsLoaded} onOrg={onOrg} onTab={onTab} canWrite={canWrite} />
+      <Exceptions h={h} ph={ph} orgs={orgs} orgsLoaded={orgsLoaded !== false} canWrite={canWrite} />
       {!o.success && <div className="la-err" role="alert">{o.message || 'تعذّرت قراءة أرقام النظرة العامة.'}</div>}
       <Alerts t={today} />
-      <Pulse t={today} />
       <DeskNote t={today} />
       <QuickLinks onTab={onTab} canWrite={canWrite} />
-      <PlatformHealth />
-      <div id="rq"><ReqQueue rows={r.submitted || []} canWrite={canWrite} onPerson={onPerson} onDone={() => setN((x) => x + 1)} /></div>
-      {/* أدوات التجربة (الحساب التجريبي وروابطه) ليست عملًا يوميًا: في آخر الصفحة مطوية، ووظيفتها كما هي */}
-      {canWrite !== false && (
-        <details id="today-tools" className="today-tools">
-          <summary>أدوات التجربة <small className="la-muted">· الحساب التجريبي وروابط التجربة</small></summary>
-          <DemoCard />
-        </details>
-      )}
     </>
   );
 }

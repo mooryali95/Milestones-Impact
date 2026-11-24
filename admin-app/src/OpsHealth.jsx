@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════
-// صحة البريد والتنبيه: بطاقة أعلى النظرة العامة، وشريط أحمر رفيع أعلى كل صفحة حين يكون العطل الآن
+// صحة البريد والتنبيه: بطاقة أعلى مركز البريد › الحالة والتشخيص، وشريط أحمر رفيع أعلى كل صفحة حين يكون العطل الآن
 // ════════════════════════════════════════════════════════════════
 // الحقائق من admin.ops-health (ops-watch.js، طلب واحد مشترك كل 60 ثانية والصفحة ظاهرة)، والحكم باللون والشريط من
 // ops-health.js وحده. اللون لا يحمل المعنى وحده: لكل حال رمز وكلمة. التنبيه التجريبي للمدير الأعلى وحده (admin.alert-test).
@@ -15,10 +15,6 @@ import './ops-health.css';
 const ICON = { green: '✓', amber: '!', red: '✕' };
 const CARD_ID = 'ops-health';
 let focusPending = false;
-// الشريط يطلب كشف البطاقة قبل التركيز عليها: هي داخل شارة صحة المكتب (Overview.jsx) وقد تكون مطوية
-export const OPS_REVEAL = 'mi:ops-reveal';
-export const opsRevealPending = () => focusPending;
-export const focusOpsCard = () => (focusPending ? focusCard() : false);
 
 const when = (iso) => (iso ? agoAr(iso) || dateTime(iso) : null);
 const n = (v) => (v == null ? 'غير مقروء' : String(v));
@@ -31,10 +27,9 @@ export function OpsBanner({ enabled }) {
   const open = (e) => {
     e.preventDefault();
     focusPending = true;
-    window.dispatchEvent(new Event(OPS_REVEAL));
     const r = parseRoute(window.location.hash);
-    if (r.ctx === 'leaders' && (r.tab || 'overview') === 'overview') focusCard();
-    else navigate({ ctx: 'leaders', tab: 'overview' });
+    if (r.ctx === 'leaders' && r.tab === 'mailcenter' && r.id !== 'routing') focusCard();
+    else navigate({ ctx: 'leaders', tab: 'mailcenter' });
   };
   return (
     <div className="ops-banner">
@@ -43,14 +38,14 @@ export function OpsBanner({ enabled }) {
         <b role="alert">{verdict.banner}</b>
         {verdict.bannerSince && <span className="ops-banner-since" aria-live="off"> {verdict.bannerSince}</span>}
       </span>
-      <a className="ops-banner-link" href="#/leaders/overview" onClick={open}>افتح بطاقة صحة البريد</a>
+      <a className="ops-banner-link" href="#/leaders/mailcenter" onClick={open}>افتح بطاقة صحة البريد</a>
     </div>
   );
 }
 
 function focusCard() {
   const el = document.getElementById(CARD_ID);
-  // في وعاء مطوي لا يقع التركيز: يبقى الطلب قائمًا حتى يُكشف (focusOpsCard)
+  // البطاقة لم تُرسم بعد (مركز البريد يُحمَّل): يبقى الطلب قائمًا حتى تصل بياناتها
   if (!el || el.closest('[hidden]')) return false;
   focusPending = false;
   el.scrollIntoView({ block: 'start' });

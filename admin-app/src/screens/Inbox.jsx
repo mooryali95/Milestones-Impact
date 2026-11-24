@@ -6,9 +6,9 @@
 // «اعتمد الجاهزين»: نافذة BulkApprove نفسها على المنتظرين الأقدم أولًا، ومعاينتها على الخادم تعطي «7 جاهزون، 5 تحتاج نظرك»؛ ولا جاهز: «راجع طلبات الاعتماد (5)…» بلا سطر ثانٍ.
 import React, { useEffect, useState } from 'react';
 import { L } from '../leaders.js';
+import { Spinner, useUI } from '../ui.jsx';
 import { formatRoute, navigate } from '../route.js';
 import { refreshPending, useInbox } from '../pending.js';
-import { Spinner } from '../ui.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { askOpen } from './Erasure.jsx';
 import { ageAr, approvalIdsOf, INBOX_KINDS, readyLineAr } from '../../../supabase/functions/leaders-api/inbox.js';
@@ -17,6 +17,18 @@ import { INBOX_VIEWS, inboxView } from '../today.js';
 
 // view: عرض تقود إليه أرقام مكتب اليوم («المتجاوز للمهلة» أو «المنتظر منذ أكثر من 7 أيام»)، فلتر فوق فلتر النوع.
 // بلا view يبقى الصندوق كما كان؛ onView يمسحه («اعرض الكل»)
+// طلبات المتطلبات (النوع requirement) تُعتمد هنا دفعة واحدة: معرّف البند «المشارك:المتطلب» (admin.ts inbox)، وكل اعتماد
+// يمر بـ admin.review نفسه الذي كان في طابور المتطلبات (يُسجَّل ويُبلَّغ المشارك)، واحدًا تلو الآخر، للمدير ذي الكتابة وحده.
+// انتقل من «طابور المتطلبات» المحذوف (تصور تبويبات الإدارة 2026-11-24) فلا تضيع القدرة ولا يتكرر البند في مكانين
+export const reqKey = (i) => { const [participant_id, requirement_id] = String(i.id).split(':'); return { participant_id, requirement_id }; };
+
+const reqName = (i) => `${i.title}${i.sub ? ` (${i.sub})` : ''}`;
+const namesAr = (list, max = 3) => list.slice(0, max).map(reqName).join('، ') + (list.length > max ? ` و${list.length - max} غيرها` : '');
+// التأكيد يسمّي من يُعتمد له: أول ثلاثة والعدد
+export const reqConfirmAr = (list) => `اعتماد ${list.length} من المتطلبات: ${namesAr(list)}؟ يصل كل مشارك بريد باعتماد متطلبه.`;
+// النتيجة تسمّي ما لم يُحفظ
+export const reqDoneAr = (n, failed) => (!failed.length ? `اعتُمد ${n}` : `اعتُمد ${n - failed.length} من ${n}، ولم يُحفظ: ${namesAr(failed)}`);
+
 export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onView }) {
   // الرد من مخزن العدّادات نفسه (pending.js): طلب واحد لـ admin.inbox يرسم الصندوق وعدّادات التبويبات معًا،
   // ويُحدَّث معها (كل دقيقتين والصفحة ظاهرة، وفور «mi:pending»)
@@ -24,6 +36,25 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
   const [kind, setKind] = useState('');
   const [bulk, setBulk] = useState(null);
   const [ready, setReady] = useState(null);
+  const { toast, confirm } = useUI();
+  const [picked, setPicked] = useState(() => new Set());
+  const [busy, setBusy] = useState(null);
+  // تغيير النوع أو العرض يمسح التحديد: لا يُعتمد ما لم يعد ظاهرًا
+  useEffect(() => { setPicked(new Set()); }, [kind, view]);
+  // دليل المتطلب من مصدر طابور المتطلبات نفسه (admin.reviews › submitted.evidence_path)، يُطلب حين يكون في الصندوق متطلب
+  const [evidence, setEvidence] = useState({});
+  const hasReq = canWrite !== false && !!d?.success && (d.items || []).some((i) => i.kind === 'requirement');
+  useEffect(() => {
+    if (!hasReq) return undefined;
+    let live = true;
+    L('admin.reviews', {}).then((r) => live && r?.success && setEvidence(Object.fromEntries((r.submitted || []).filter((x) => x.evidence_path).map((x) => [`${x.participant_id}:${x.requirement_id}`, x.evidence_path]))), () => {});
+    return () => { live = false; };
+  }, [hasReq, d]);
+  // الدليل يُفتح بطلب صريح يُسجَّل (admin.evidence-url)، للمدير وحده
+  const openEvidence = async (i) => {
+    const r = await L('admin.evidence-url', { participant_id: reqKey(i).participant_id, path: evidence[i.id] });
+    if (r.success) window.open(r.url, '_blank', 'noopener'); else toast(r.message);
+  };
   // معاينة الاعتماد الجماعي للعدّ وحده (dry_run لا يكتب شيئًا): للمدير الذي يكتب، وتعذّرها يُبقي الزر بلا عدد
   const ids = canWrite !== false && d?.success ? approvalIdsOf(d.items, BULK_APPROVE_MAX) : [];
   const idsKey = ids.join(',');
@@ -49,6 +80,28 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
     else navigate(to);
   };
   const pendingN = counts.approval || 0;
+  const writer = canWrite !== false;
+  const reqShown = shown.slice(0, 60).filter((i) => i.kind === 'requirement');
+  // الاعتماد على المحدد الظاهر وحده (تقاطع التحديد مع المعروض)
+  const pickedReq = reqShown.filter((i) => picked.has(i.id));
+  const allReq = reqShown.length > 0 && reqShown.every((i) => picked.has(i.id));
+  const togglePick = (id) => setPicked((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const approveReqs = async () => {
+    const list = pickedReq;
+    if (!list.length || !(await confirm(reqConfirmAr(list)))) return;
+    const failed = [];
+    try {
+      for (const [n, i] of list.entries()) {
+        setBusy(`${n + 1}/${list.length}`);
+        const r = await L('admin.review', { ...reqKey(i), status: 'done' }).catch(() => null);
+        if (!r?.success) failed.push(i);
+      }
+    } finally {
+      setBusy(null); setPicked(new Set());
+      refreshPending();
+    }
+    toast(reqDoneAr(list.length, failed));
+  };
   return (
     <section className="la-card inbox" aria-labelledby="inbox-h">
       <div className="la-row between">
@@ -80,12 +133,20 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
           {INBOX_VIEWS[view] && (
             <p className="inbox-view" role="status">يُعرض {INBOX_VIEWS[view].label} وحده ({shown.length}). {onView && <button type="button" className="la-link" onClick={() => onView('')}>اعرض الكل</button>}</p>
           )}
+          {writer && reqShown.length > 0 && (
+            <div className="la-row inbox-req" role="group" aria-label="اعتماد المتطلبات">
+              <label className="la-check"><input type="checkbox" checked={allReq} onChange={() => setPicked(allReq ? new Set() : new Set(reqShown.map((i) => i.id)))} /> <span>حدد المتطلبات المعروضة ({reqShown.length})</span></label>
+              <button type="button" className="btn-sm primary" disabled={!pickedReq.length || !!busy} onClick={approveReqs}>{busy ? `جارٍ الاعتماد ${busy}` : `اعتمد المحدد${pickedReq.length ? ` (${pickedReq.length})` : ''}`}</button>
+            </div>
+          )}
           <ul className="inbox-list">
             {shown.slice(0, 60).map((i) => (
               <li key={`${i.kind}-${i.id}`} className={i.late ? 'late' : i.soon ? 'soon' : ''}>
+                {writer && i.kind === 'requirement' && <input type="checkbox" aria-label={`تحديد ${i.sub || 'المتطلب'} لـ ${i.title}`} checked={picked.has(i.id)} onChange={() => togglePick(i.id)} />}
                 <button type="button" className="la-link" onClick={() => open(i)}>{i.title || INBOX_KINDS[i.kind].label}</button>
                 <span className={`la-chip ${i.late ? 'bad' : i.soon ? 'warn' : ''}`}>{i.kind_ar}{i.late ? ' · متأخر' : i.soon ? ' · قريب' : ''}</span>
                 {i.sub && <small className="la-muted">{i.sub}</small>}
+                {i.kind === 'requirement' && evidence[i.id] && <button type="button" className="la-link" onClick={() => openEvidence(i)}>الدليل</button>}
                 <small className="inbox-age">{ageAr(i.days)}</small>
               </li>
             ))}

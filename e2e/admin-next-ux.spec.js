@@ -163,27 +163,69 @@ test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النت
   await expect(page).toHaveURL(/#\/leaders\/handbook$/);
 });
 
-test('مراجعة المتطلبات دفعة واحدة من النظرة العامة', async ({ page }) => {
+// طابور المتطلبات المحذوف انتقل إلى «قرارات اليوم» (تصور تبويبات الإدارة 2026-11-24): خانة لكل بند متطلب واعتماد جماعي بتأكيد
+const reqItem = (pid, name) => ({ kind: 'requirement', kind_ar: 'متطلب للمراجعة', id: `${pid}:r1`, title: name, sub: 'خطة التطوير', at: '2026-10-20', days: 3, late: false, to: { tab: 'participants', id: pid } });
+const REQ_INBOX = { success: true, total: 3, late: 0, skipped: [], counts: { requirement: 2, approval: 1 }, by_tab: { participants: { n: 3, late: 0 } },
+  items: [reqItem('p1', 'سارة الأحمد'), reqItem('p2', 'عمر علي'), { kind: 'approval', kind_ar: 'اعتماد مسار', id: 'p3', title: 'خالد', sub: '', at: '2026-10-20', days: 1, late: false, to: { tab: 'participants', id: 'p3' } }] };
+
+test('مراجعة المتطلبات دفعة واحدة من «قرارات اليوم»: تحديد وتأكيد، وadmin.review لكل واحد', async ({ page }) => {
   const reviewed = [];
-  await setup(page);
-  await page.route(/functions\/v1\/leaders-api/, async (route) => {
-    const b = JSON.parse(route.request().postData() || '{}');
-    if (b.action === 'admin.review') { reviewed.push(b); return route.fulfill({ json: { success: true } }); }
-    if (b.action === 'admin.reviews') {
-      return route.fulfill({ json: { success: true, pending_approval: [], submitted: [
-        { participant_id: 'p1', requirement_id: 'r1', completed_at: '2026-10-20', participants: { full_name: 'سارة الأحمد' }, stage_requirements: { title_ar: 'خطة التطوير' } },
-        { participant_id: 'p2', requirement_id: 'r1', completed_at: '2026-10-21', participants: { full_name: 'عمر علي' }, stage_requirements: { title_ar: 'خطة التطوير' } },
-      ] } });
-    }
-    return route.fallback();
-  });
-  await page.goto(BASE + '#/leaders/overview');
-  await page.reload();
-  await page.getByLabel('تحديد الكل').check();
-  await page.getByRole('button', { name: 'اعتماد المحدد (2)' }).click();
+  await setup(page, '#/leaders/overview', REQ_INBOX, { 'admin.review': (b) => { reviewed.push(b); return { success: true }; } });
+  const box = page.getByRole('group', { name: 'اعتماد المتطلبات' });
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+  // بند اعتماد المسار بلا خانة: الاعتماد الجماعي هنا للمتطلبات وحدها
+  await expect(page.locator('.inbox-list li input[type="checkbox"]')).toHaveCount(2);
+  await page.getByLabel('تحديد خطة التطوير لـ عمر علي').check();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد (1)' })).toBeEnabled();
+  await box.getByLabel(/حدد المتطلبات المعروضة \(2\)/).check();
+  await box.getByRole('button', { name: 'اعتمد المحدد (2)' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => reviewed.length).toBe(2);
-  expect(reviewed.map((x) => [x.participant_id, x.status])).toEqual([['p1', 'done'], ['p2', 'done']]);
+  expect(reviewed.map((x) => [x.participant_id, x.requirement_id, x.status])).toEqual([['p1', 'r1', 'done'], ['p2', 'r1', 'done']]);
+});
+
+test('دليل المتطلب في «قرارات اليوم»: من admin.reviews نفسه، ويُفتح بطلب admin.evidence-url المسجَّل', async ({ page }) => {
+  const opened = [];
+  await setup(page, '#/leaders/overview', REQ_INBOX, {
+    'admin.reviews': { success: true, pending_approval: [], submitted: [{ participant_id: 'p1', requirement_id: 'r1', evidence_path: 'p1/plan.pdf' }, { participant_id: 'p2', requirement_id: 'r1', evidence_path: null }] },
+    'admin.evidence-url': (b) => { opened.push(b); return { success: true, url: 'about:blank' }; },
+  });
+  const rows = page.locator('.inbox-list li');
+  await expect(rows.filter({ hasText: 'سارة الأحمد' }).getByRole('button', { name: 'الدليل' })).toBeVisible();
+  await expect(rows.filter({ hasText: 'عمر علي' }).getByRole('button', { name: 'الدليل' })).toHaveCount(0);
+  const popup = page.waitForEvent('popup');
+  await rows.filter({ hasText: 'سارة الأحمد' }).getByRole('button', { name: 'الدليل' }).click();
+  await (await popup).close();
+  expect(opened).toEqual([{ action: 'admin.evidence-url', participant_id: 'p1', path: 'p1/plan.pdf' }].map(({ action, ...x }) => expect.objectContaining(x)));
+});
+
+test('اعتماد المتطلبات على المحدد الظاهر وحده: تغيير النوع يمسح التحديد، والتأكيد يسمّي، والمتعذر يُسمّى', async ({ page }) => {
+  const reviewed = [];
+  await setup(page, '#/leaders/overview', REQ_INBOX, { 'admin.review': (b) => { reviewed.push(b); return b.participant_id === 'p2' ? { success: false, message: 'x' } : { success: true }; } });
+  const box = page.getByRole('group', { name: 'اعتماد المتطلبات' });
+  await page.getByLabel('تحديد خطة التطوير لـ سارة الأحمد').check();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد (1)' })).toBeEnabled();
+  // تغيير النوع يمسح التحديد
+  await page.getByRole('group', { name: 'نوع البند' }).getByRole('button', { name: /اعتماد مسار/ }).click();
+  await page.getByRole('group', { name: 'نوع البند' }).getByRole('button', { name: /^الكل/ }).click();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+  await box.getByLabel(/حدد المتطلبات المعروضة/).check();
+  await box.getByRole('button', { name: 'اعتمد المحدد (2)' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('سارة الأحمد (خطة التطوير)، عمر علي (خطة التطوير)');
+  await dialog.getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => reviewed.length).toBe(2);
+  await expect(page.getByText('اعتُمد 1 من 2، ولم يُحفظ: عمر علي (خطة التطوير)')).toBeVisible();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+});
+
+test('المراقب لا يرى خانات اعتماد المتطلبات', async ({ page }) => {
+  await setup(page, '#/leaders/overview', REQ_INBOX);
+  await page.evaluate(() => { const s = JSON.parse(sessionStorage.getItem('mi_admin_v3')); s.user.role_id = 'viewer'; sessionStorage.setItem('mi_admin_v3', JSON.stringify(s)); });
+  await page.reload();
+  await expect(page.locator('.inbox-list li')).toHaveCount(3);
+  await expect(page.getByRole('group', { name: 'اعتماد المتطلبات' })).toHaveCount(0);
+  await expect(page.locator('.inbox-list input[type="checkbox"]')).toHaveCount(0);
 });
 
 test('القوائم: فرز بالعمود يُحفظ في العنوان، والفلاتر تبقى عند العودة للشاشة', async ({ page }) => {

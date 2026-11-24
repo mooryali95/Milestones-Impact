@@ -161,7 +161,7 @@ describe('حراس المصدر: لا ترجع ثغرات ل1', () => {
     expect(admin).toContain('privateFile(b.path, pid)');
     expect(admin).toMatch(/await audit\('admin', a\.email, 'admin\.file-open', 'participants', pid/);
     expect(admin).not.toMatch(/createSignedUrl\(p\.cv_path/);
-    for (const f of ['admin-app/src/screens/Participants.jsx', 'admin-app/src/screens/ReqQueue.jsx']) {
+    for (const f of ['admin-app/src/screens/Participants.jsx', 'admin-app/src/screens/Inbox.jsx']) {
       expect(read(f), f).toMatch(/L\('admin\.evidence-url', \{ participant_id: /);
     }
   });

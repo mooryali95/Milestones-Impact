@@ -80,10 +80,10 @@ async function openDemoCard(page) {
     sessionStorage.clear();
     sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'هند', email: 'a@x.com', role_id: 'super_admin' }, ts: Date.now() }));
   });
-  await page.goto(`${ADMIN}#/leaders/overview`);
+  await page.goto(`${ADMIN}#/leaders/health`);
   await page.reload();
-  // روابط التجربة في «أدوات التجربة» المطوية آخر النظرة العامة (تدقيق 2026-11-23)
-  await page.locator('#today-tools > summary').click();
+  // روابط التجربة في «بيئة التجربة» المطوية في «الإعداد › صحة المنصة» (تصور تبويبات الإدارة 2026-11-24)
+  await page.locator('#ph-demo > summary').click();
   const panel = page.getByTestId('demo-links');
   await expect(panel).toBeVisible();
   return panel;
@@ -159,7 +159,7 @@ test('رابط التجربة: المدير ينشئه ويراه ويلغيه،
   // اللوحة بعد الاستعمال: آخر استعمال يظهر، وإعادة الضبط تسمّي الرابط النشط قبل التأكيد
   await page.reload();
   const panel2 = page.getByTestId('demo-links');
-  if ((await page.locator('#today-tools').getAttribute('open')) === null) await page.locator('#today-tools > summary').click();
+  if ((await page.locator('#ph-demo').getAttribute('open')) === null) await page.locator('#ph-demo > summary').click();
   await expect(panel2.getByRole('list', { name: 'الروابط النشطة' })).toContainText('آخر استعمال');
   await page.getByRole('button', { name: 'أعِده إلى البداية' }).click();
   const dialog = page.getByRole('alertdialog');
