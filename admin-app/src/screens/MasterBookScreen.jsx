@@ -3,11 +3,32 @@
 // ════════════════════════════════════════════════════════════════
 // يقرؤه كل مدير، ويعلّق ويحسم ويقترح التعديل المدير الكاتب بعامل ثانٍ، ويعتمد المقترح المدير العام
 // (القواعد على الخادم في master-book.ts وbook-proposals.ts)
-import React, { useMemo } from 'react';
+//
+// المرحلة 3 من تدقيق اللوحة (2026-11-23): كان القارئ يغطي رأس اللوحة وشريطها. صار يُعرض داخل منطقة المحتوى
+// في إطار له شريط إدارة ثابت («→ رجوع إلى لوحة الإدارة» ومسار الصفحة و«ملء الشاشة»)، وEsc يخرج منه.
+// القارئ نفسه لا يتغير (مشترك مع بوابة الخبير): الإطار يحوي عناصره الثابتة (العلامة المائية والنوافذ) بخاصية
+// transform، فتغطي العلامة المائية الإطار كله وتبقى ظاهرة في الوضعين.
+import React, { useEffect, useMemo, useState } from 'react';
 import MasterBook from '../../../shared/master-book/MasterBook.jsx';
 import { L } from '../leaders.js';
 
+const FULL_KEY = 'mi_admin_book_full';
+const typing = (t) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(t?.tagName) || t?.isContentEditable;
+
 export default function MasterBookScreen({ onClose, onExperts }) {
+  const [full, setFullRaw] = useState(() => { try { return sessionStorage.getItem(FULL_KEY) === '1'; } catch { return false; } });
+  const setFull = (on) => { setFullRaw(on); try { sessionStorage.setItem(FULL_KEY, on ? '1' : ''); } catch { /* محجوب */ } };
+  // Esc: يخرج من ملء الشاشة أولًا، ثم من الكتاب إلى اللوحة. نافذة القارئ المفتوحة (تعليقات، فهرس…) تغلق نفسها أولًا
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || typing(e.target)) return;
+      if (document.querySelector('.mb-sheet-wrap, [aria-modal="true"]')) return;
+      e.preventDefault();
+      if (full) setFull(false); else onClose?.();
+    };
+    addEventListener('keydown', k);
+    return () => removeEventListener('keydown', k);
+  }, [full, onClose]);
   const api = useMemo(() => ({
     get: () => L('admin.book'),
     add: (b) => L('admin.book-comment', b),
@@ -22,5 +43,18 @@ export default function MasterBookScreen({ onClose, onExperts }) {
     releasePr: () => L('admin.book-release-pr'),
     releasePublish: (number, sha) => L('admin.book-release-publish', { number, sha }),
   }), []);
-  return <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" />;
+  return (
+    <div className={`mbs${full ? ' full' : ''}`}>
+      <div className="mbs-bar" role="navigation" aria-label="شريط الكتاب الأم">
+        <button type="button" className="btn-sm ghost" onClick={onClose} title="Esc">→ رجوع إلى لوحة الإدارة</button>
+        <ol className="mbs-crumbs" aria-label="المسار">
+          <li>لوحة الإدارة</li><li>المنهج والمحتوى</li><li aria-current="page"><b>الكتاب الأم</b></li>
+        </ol>
+        <button type="button" className="btn-sm ghost" aria-pressed={full} onClick={() => setFull(!full)}>{full ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}</button>
+      </div>
+      <div className="mbs-frame">
+        <MasterBook api={api} onClose={onClose} onExperts={onExperts} place="admin" />
+      </div>
+    </div>
+  );
 }

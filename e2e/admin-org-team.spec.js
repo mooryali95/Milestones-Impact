@@ -30,7 +30,8 @@ const orgTeam = { success: true, cohorts: [
     coverage: { members: 38, without_advisor: 38, groups: 0, groups_without_expert: 0, ungrouped: 38 } },
 ] };
 
-async function setup(page, extra = {}) {
+// tab: تبويب صفحة الجهة الذي يُفتح بعد دخولها (تدقيق اللوحة، المرحلة 3)، والفريق افتراضيًا لأنه موضوع الملف
+async function setup(page, extra = {}, tab = 'الفريق') {
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
   await page.route(/functions\/v1\/leaders-api/, async (route) => {
@@ -57,6 +58,7 @@ async function setup(page, extra = {}) {
   await page.getByRole('button', { name: 'تطبيق القادة' }).click();
   await page.locator('.la-tabs').getByRole('button', { name: 'الجهات' }).click();
   await page.getByRole('button', { name: 'لوحة الجهة' }).click();
+  if (tab) await page.getByRole('tablist', { name: 'أقسام صفحة الجهة' }).getByRole('tab', { name: tab }).click();
   return calls;
 }
 const sent = (calls, action) => calls.filter((c) => c.action === action).at(-1);
@@ -189,7 +191,7 @@ test('صفحة الجهة عند الإدارة: جاهزية الدفعة بم�
         milestones: [],
       },
     },
-  });
+  }, 'الرحلة');
   const card = page.locator('.oj');
   await expect(card).toContainText('بقي بندان لتكتمل جاهزية الدفعة.');
   await expect(card.locator('.oj-setup li.todo')).toHaveCount(2);
@@ -206,7 +208,7 @@ test('جاهزية الجهة في رأس صفحتها: ما ينقص بجملة
   const calls = await setup(page, {
     'admin.orgs': { success: true, orgs: [{ ...org, access: { state: 'invited', n: 1, email: 'k@x.sa' } }], unassigned: { total: 0, typed: [] } },
     'admin.org-journey': { success: true, cohort: { id: 'c1', name: 'دفعة سفراء', status: 'open' }, setup_missing: 2, setup: [], journey_map: null },
-  });
+  }, null);
   const card = page.locator('.org-ready');
   await expect(card.getByRole('heading', { name: 'جاهزية الجهة' })).toBeVisible();
   // بلا مقاعد ولا عقد ولا شعار في بيانات الجهة، والمنسق مدعو لم يدخل، والدفعة بقي فيها بندان

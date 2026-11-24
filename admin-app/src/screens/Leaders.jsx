@@ -134,7 +134,7 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   else if (tab === 'insight') body = <Insight onPerson={openPerson} onExpert={(id) => navigate({ ctx: 'leaders', tab: 'experts', id })} orgs={orgData?.orgs || []} onTrack={openTrack} onStatus={byStatus} onOrg={openOrg} onTab={go} />;
   else if (tab === 'impact') body = <Impact {...meth} f360={flags ? flags.f360 : undefined} orgs={orgData?.orgs || []} onPerson={openPerson} onCapstone={(id) => { at('capstones', id); window.scrollTo({ top: 0 }); }} />;
   else if (tab === 'mail') body = <MailGallery canWrite={canWrite} />;
-  else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} />;
+  else if (tab === 'mailcenter') body = <MailCenter canWrite={canWrite} isSuper={isSuper} onPerson={openPerson} view={route.id} onView={(v) => at('mailcenter', v === 'status' ? null : v)} />;
   else if (tab === 'settings') body = <AppSettings canWrite={canWrite} isSuper={isSuper || isOwner} focus={route.id} onSettings={(r) => setFlags(featureFlags(r.values))} />;
   else if (tab === 'ai') body = <AiHub sub={rId} isSuper={isSuper} />;
   else if (tab === 'f360') body = <Feedback360 canWrite={canWrite} onPerson={openPerson} />;

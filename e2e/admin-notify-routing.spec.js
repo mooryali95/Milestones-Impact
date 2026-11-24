@@ -38,7 +38,7 @@ async function setup(page, over = {}, save = { success: true, notice: { mailed: 
     sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'المالك', email: 'o@x.com', role_id: 'super_admin', is_owner: true }, ts: Date.now() }));
     localStorage.clear();
   });
-  await page.goto(`${BASE}#/leaders/mailcenter`);
+  await page.goto(`${BASE}#/leaders/mailcenter/routing`);
   await page.reload();
   await expect(page.locator('[data-section="routing"]')).toBeVisible();
   return calls;

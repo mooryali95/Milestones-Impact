@@ -73,7 +73,8 @@ test('طلبات التواصل: إحصاءات وبحث وصفحات ودرج �
   await page.getByLabel('بحث').fill('سارة');
   await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
   await page.getByText('سارة الأولى').click();
-  const drawer = page.getByRole('dialog', { name: /سارة الأولى/ });
+  // الشاشة العريضة: لوحة معاينة بجوار القائمة بدل الدرج (تدقيق اللوحة، المرحلة 3)، والدرج للجوال (admin-audit-p3.spec.js)
+  const drawer = page.getByRole('complementary', { name: /سارة الأولى/ });
   await expect(drawer.getByText('نص السياق')).toBeVisible();
   // فتح طلب جديد يجعله مقروءًا
   await expect.poll(() => calls.find((c) => c.action === 'update-contact')?.fields.status).toBe('read');
@@ -89,9 +90,10 @@ test('فشل تغيير الحالة يعيدها كما كانت', async ({ pag
   await signIn(page);
   await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
   await page.getByText('متواصل 1', { exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: 'تم الرد' }).click();
+  const pane = page.getByRole('complementary', { name: /متواصل 1/ });
+  await pane.getByRole('button', { name: 'تم الرد' }).click();
   await expect(page.getByRole('status')).toHaveText('رفض الخادم');
-  await expect(page.getByRole('dialog').getByRole('button', { name: 'مقروء' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(pane.getByRole('button', { name: 'مقروء' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('خطأ التحميل يعرض زر إعادة المحاولة', async ({ page }) => {

@@ -9,7 +9,7 @@ import {
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { Empty, NoMatch, SectionIndex, Spinner, useCopy, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, useCopy, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
@@ -17,7 +17,7 @@ import OrgTeam from './OrgTeam.jsx';
 import OrgJourney from './OrgJourney.jsx';
 import SponsorCodes from './SponsorCodes.jsx';
 import { orgReadiness, readinessSummary, seatsUsedOf, seatsView } from '../org-hub.js';
-import { navigate } from '../route.js';
+import { navigate, readQuery, writeQuery } from '../route.js';
 import { MoreMenu } from './PersonShell.jsx';
 
 
@@ -201,7 +201,7 @@ function OrgReadiness({ org, access, journey, members, seatsUsed, pending, canWr
     if (x.action === 'edit') return onEdit();
     if (x.action === 'cohort') return navigate({ ctx: 'leaders', tab: 'programs', id: x.other });
     if (x.action === 'new-cohort') { window.location.hash = `#/leaders/programs?new=${encodeURIComponent(org.id)}`; return undefined; }
-    if (x.action === 'coordinator') return document.getElementById('org-coordinator')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (x.action === 'coordinator') return document.getElementById('org-coordinator')?.scrollIntoView({ behavior: 'smooth', block: 'start' });   // في تبويب الجاهزية نفسه
     if (x.action === 'approve') { window.location.hash = `#/leaders/participants?org=${encodeURIComponent(org.id)}&status=pending_approval`; }
     return undefined;
   };
@@ -224,8 +224,45 @@ function OrgReadiness({ org, access, journey, members, seatsUsed, pending, canWr
   );
 }
 
-// فهرس صفحة الجهة: ما ليس للجهة (كصفحة «بدون جهة») يُخفى من الفهرس تلقائيًا
-const ORG_SECTIONS = [['org-journey', 'الرحلة والدفعة'], ['org-team', 'الفريق'], ['org-coordinator', 'منسق الجهة'], ['org-sponsor-codes', 'رموز الرعاية'], ['org-sources', 'مصادر الانتساب'], ['org-finance', 'الرعاية والتكلفة'], ['org-tracks', 'المسارات'], ['org-members', 'المشاركون']];
+// تبويبات صفحة الجهة (تدقيق اللوحة 2026-11-23، المرحلة 3): بنمط ملف المشارك، بدل تسعة أقسام في تمرير واحد.
+// كل قسم قائم في تبويب: الجاهزية ومعها منسق الجهة، والرحلة والدفعة، والفريق، ورموز الرعاية، والمالية،
+// والمشاركون ومعهم المسارات ومصادر الانتساب. التبويب في العنوان (?tab=) فيُشارك رابطه، وآخره في الجلسة
+export const ORG_TABS = [
+  ['ready', 'الجاهزية'],
+  ['journey', 'الرحلة'],
+  ['team', 'الفريق'],
+  ['codes', 'رموز الرعاية'],
+  ['finance', 'المالية'],
+  ['members', 'المشاركون'],
+];
+const ORG_TAB_KEY = 'mi_admin_org_tab';
+const tabFromUrl = () => new URLSearchParams(readQuery()).get('tab');
+/** تبويب الفتح: ما في الرابط، ثم آخر تبويب في هذه الجلسة، وإلا الجاهزية */
+export function orgStartTab(url, kept) {
+  const ok = (t) => ORG_TABS.some(([k]) => k === t);
+  return ok(url) ? url : ok(kept) ? kept : 'ready';
+}
+function OrgTabs({ tab, setTab }) {
+  const ref = React.useRef(null);
+  // يمين ويسار بين التبويبات وHome وEnd لطرفيها (الصفحة من اليمين لليسار)، كتبويبات ملف المشارك
+  const key = (e) => {
+    const i = ORG_TABS.findIndex(([k]) => k === tab);
+    const to = { ArrowLeft: i + 1, ArrowRight: i - 1, Home: 0, End: ORG_TABS.length - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    const k = ORG_TABS[(to + ORG_TABS.length) % ORG_TABS.length][0];
+    setTab(k);
+    ref.current?.querySelector(`#org-tab-${k}`)?.focus();
+  };
+  return (
+    <div ref={ref} className="pf-tabs org-tabs" role="tablist" aria-label="أقسام صفحة الجهة" onKeyDown={key}>
+      {ORG_TABS.map(([k, l]) => (
+        <button key={k} id={`org-tab-${k}`} type="button" role="tab" aria-selected={tab === k} aria-controls={`org-panel-${k}`} tabIndex={tab === k ? 0 : -1}
+          onClick={() => setTab(k)}>{l}</button>
+      ))}
+    </div>
+  );
+}
 const MEMBER_SORTS = { name: (p) => p.full_name, title: (p) => p.job_title, track: (p) => p.track, status: (p) => STATUS[p.status] || p.status, seen: (p) => p.last_login_at, joined: (p) => p.created_at };
 
 function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
@@ -237,6 +274,13 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const [campaign, setCampaign] = useState('');
   const [picked, setPicked] = useState(() => new Set());
   const [moveTo, setMoveTo] = useState('');
+  const [tab, setTabRaw] = useState(() => { let kept = null; try { kept = sessionStorage.getItem(ORG_TAB_KEY); } catch { /* محجوب */ } return orgStartTab(tabFromUrl(), kept); });
+  const setTab = (t) => {
+    setTabRaw(t);
+    const q = new URLSearchParams(readQuery()); q.set('tab', t); writeQuery(q.toString());
+  };
+  // التبويب المفتوح (ومنه ما فُتح برابط) هو آخر تبويب في الجلسة
+  useEffect(() => { try { sessionStorage.setItem(ORG_TAB_KEY, tab); } catch { /* محجوب */ } }, [tab]);
 
   const load = useCallback(async () => { setD(null); setD(await L('admin.org', { id })); }, [id]);
   useEffect(() => { load(); }, [load]);
@@ -324,17 +368,20 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
         </div>
       </section>
 
-      {!isNone && <OrgReadiness org={o} access={orgs.find((x) => x.id === o.id)?.access || null} journey={journey?.success ? journey : null}
-        members={all.length} seatsUsed={orgs.find((x) => x.id === o.id)?.seats_used ?? null} pending={fn.pending_approval || 0} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />}
-      <SectionIndex label="أقسام صفحة الجهة" sections={ORG_SECTIONS} />
-      {!isNone && <div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} data={journey} /></div>}
-      {!isNone && <div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div>}
-      {!isNone && <div id="org-coordinator"><CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} /></div>}
-      {!isNone && <div id="org-sponsor-codes"><SponsorCodes key={`codes-${o.id}`} org={o} canWrite={canWrite} /></div>}
+      {!isNone && <OrgTabs tab={tab} setTab={setTab} />}
+      {!isNone && tab === 'ready' && (
+        <div role="tabpanel" id="org-panel-ready" aria-labelledby="org-tab-ready" className="stack">
+          <OrgReadiness org={o} access={orgs.find((x) => x.id === o.id)?.access || null} journey={journey?.success ? journey : null}
+            members={all.length} seatsUsed={orgs.find((x) => x.id === o.id)?.seats_used ?? null} pending={fn.pending_approval || 0} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} />
+          <div id="org-coordinator"><CoordinatorPanel key={o.id} org={o} canWrite={canWrite} onEdit={() => onEdit(orgs.find((x) => x.id === o.id) || o)} /></div>
+        </div>
+      )}
+      {!isNone && tab === 'journey' && <div role="tabpanel" id="org-panel-journey" aria-labelledby="org-tab-journey"><div id="org-journey"><OrgJourney key={`journey-${o.id}`} orgId={o.id} canWrite={canWrite} data={journey} /></div></div>}
+      {!isNone && tab === 'team' && <div role="tabpanel" id="org-panel-team" aria-labelledby="org-tab-team"><div id="org-team"><OrgTeam key={`team-${o.id}`} orgId={o.id} canWrite={canWrite} /></div></div>}
+      {!isNone && tab === 'codes' && <div role="tabpanel" id="org-panel-codes" aria-labelledby="org-tab-codes"><div id="org-sponsor-codes"><SponsorCodes key={`codes-${o.id}`} org={o} canWrite={canWrite} /></div></div>}
+      {!isNone && tab === 'finance' && <div role="tabpanel" id="org-panel-finance" aria-labelledby="org-tab-finance"><div id="org-finance"><OrgFinance id={o.id} onPerson={onPerson} /></div></div>}
 
-      <div id="org-sources"><Sources d={d} total={all.length} /></div>
-      {!isNone && <div id="org-finance"><OrgFinance id={o.id} onPerson={onPerson} /></div>}
-
+      {(isNone || tab === 'members') && <div role={isNone ? undefined : 'tabpanel'} id="org-panel-members" aria-labelledby={isNone ? undefined : 'org-tab-members'} className="stack">
       <section className="la-card" id="org-tracks">
         <h3>توزيع المشاركين على المسارات</h3>
         {tracks.length ? <div className="la-pills">{tracks.map(([k, n]) => (
@@ -369,6 +416,8 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
           )) : <tr><td colSpan={7}>{all.length ? <NoMatch what="مشاركين" /> : <Empty compact title="لا مشاركين في هذه الجهة بعد" hint="يظهرون هنا حين يسجّلون برابط دعوتها أو تنقلهم إليها." />}</td></tr>}</tbody>
         </table></div>
       </section>
+      <div id="org-sources"><Sources d={d} total={all.length} /></div>
+      </div>}
     </>
   );
 }

@@ -180,6 +180,8 @@ test('الجهات: البطاقات ولوحة الجهة ورابط الحمل
   await expect.poll(() => calls.find((c) => c.action === 'admin.save')?.row).toMatchObject({ id: 'o1', seats: 11, domains: 'wt.gov.sa,portal.wt.gov.sa' });
   await expect(form).toBeHidden();
 
+  // المشاركون في تبويبهم من صفحة الجهة (تدقيق اللوحة، المرحلة 3)
+  await page.getByRole('tab', { name: 'المشاركون' }).click();
   await page.getByRole('button', { name: 'سارة الأحمد' }).click();
   await expect(page.getByRole('heading', { name: 'سارة الأحمد' })).toBeVisible();
 });

@@ -1489,3 +1489,49 @@
   .la-shell .la-tab-trial { padding: 6px 10px 0; border-top: 1px dashed var(--line); margin-top: 2px; }
   .la-shell .la-tab-group.la-tab-group-setup { margin-top: 10px; border-top: 2px solid var(--line-strong); }
 }
+
+/* ─── المرحلة 3 من تدقيق اللوحة (2026-11-23) ─── */
+/* تبويبات صفحة الجهة ومركز البريد: نمط تبويبات ملف المشارك خارج رأسه */
+.org-tabs, .mc-tabs { margin: 12px 0; padding: 0; border-top: 0; border-bottom: 1px solid var(--line); background: #fff; border-radius: 8px 8px 0 0; }
+.org-tabs { position: sticky; top: 66px; z-index: 5; }
+.mc-tabs { margin-top: 0; }
+/* الإعدادات العامة: فهرس ملتصق وبحث */
+.st-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
+.st-index { position: sticky; top: 76px; display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; max-height: calc(100vh - 96px); overflow: auto; }
+.st-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.st-index .la-link { text-align: start; font-size: .9rem; }
+.st-search input { inline-size: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
+.st-main { min-inline-size: 0; }
+.st-group h3 { scroll-margin-top: 80px; }
+.st-fold > summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+@media (max-width: 860px) {
+  .st-layout { grid-template-columns: minmax(0, 1fr); }
+  .st-index { position: static; max-height: none; }
+  .st-index ul { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+}
+/* مجموعات التوجيه المطوية */
+.nr-fold { border: 0; background: none; font: inherit; font-weight: 700; color: inherit; cursor: pointer; padding: 2px 0; display: inline-flex; gap: 6px; align-items: center; }
+.nr-fold:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+/* الكتاب الأم داخل اللوحة: شريط إدارة ثابت وإطار يحوي القارئ وعلامته المائية */
+.mbs { display: grid; gap: 8px; }
+.mbs-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px; }
+.mbs-crumbs { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; flex: 1; min-inline-size: 0; font-size: .88rem; color: var(--ink-muted); }
+.mbs-crumbs li + li::before { content: '‹'; margin-inline-end: 6px; color: var(--ink-faint); }
+.mbs-frame { position: relative; transform: translateZ(0); block-size: calc(100dvh - 170px); min-block-size: 460px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); }
+.mbs-frame .mb-root { position: absolute; inset: 0; z-index: 1; }
+.mbs.full .mbs-bar { position: fixed; inset: 0 0 auto 0; z-index: 2001; border-radius: 0; }
+.mbs.full .mbs-frame { position: fixed; inset: 56px 0 0 0; z-index: 2000; block-size: auto; min-block-size: 0; border-radius: 0; border: 0; }
+@media (max-width: 640px) {
+  .mbs-crumbs { display: none; }
+  .mbs-frame { block-size: calc(100dvh - 150px); min-block-size: 380px; }
+}
+/* طلبات التواصل: القائمة ولوحة المعاينة جنبًا إلى جنب على الشاشة العريضة */
+.ct-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
+.ct-split > .table-wrap { min-inline-size: 0; }
+.ct-pane { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow: auto; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px; }
+.ct-pane .drawer-body { padding: 12px 16px 16px; }
+.ct-pane-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 12px 16px 0; }
+.ct-msg { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--gold-pale); border-radius: 8px; padding: 10px 12px; line-height: 1.9; }
+.ct-empty { padding: 24px 16px; color: var(--ink-muted); text-align: center; }
+tr.ct-on > td { background: var(--gold-pale); }
+.mc-panel { display: grid; gap: 14px; min-inline-size: 0; }
