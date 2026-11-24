@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261128100000_leaders_atomic_and_health
+-- as-of migration: 20261128120000_leaders_share_readiness
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -311,6 +311,7 @@ create table if not exists leaders.capstone_shares (
   last_viewed_at timestamp with time zone,
   notified_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
+  show_readiness boolean default false not null,
   constraint capstone_shares_label_check CHECK (((char_length(label) >= 1) AND (char_length(label) <= 80))),
   constraint capstone_shares_pkey PRIMARY KEY (id),
   constraint capstone_shares_token_hash_key UNIQUE (token_hash)
