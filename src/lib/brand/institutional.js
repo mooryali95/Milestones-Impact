@@ -21,9 +21,14 @@ const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
 // ── التصميم المؤسسي: هرم طباعي واضح، وفواتح أبواب برقم كبير وخط ذهبي، وإيقاع مسافات ثابت (4مم)، وكل باب رئيس يبدأ صفحة ──
 // الألوان من رموز الهوية (doc.js C): Graphite للنص، والذهب خطًا ورقمًا فقط، وMist أرضية للمؤشرات
 const IN_STYLE = `<style>
-.in-sec { margin-top: 0; padding-top: 2mm; }
+.in-sec { margin-top: 14mm; padding-top: 0; }
+.in-sec:first-child { margin-top: 0; }
+/* الأبواب تتتابع ولا يُفرض لكل باب صفحة (فلا تبقى صفحة بذيل قصير)؛ الاعتماد وحده يبدأ صفحته.
+   فاتحة الباب لا تنفصل عن أول محتواه (keep-with-next)، والفقرة الطويلة تنساب بثلاثة أسطر على الأقل في كل طرف */
+.in-sec p, .in-sec li { orphans: 3; widows: 3; }
 .in-sec.np { break-before: page; }
-.in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 6mm 0 6mm; border-bottom: 1px solid #A97A2E; break-after: avoid; break-inside: avoid; }
+.in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 0 0 6mm; border-top: 0.6mm solid #0B272F; padding-top: 5mm; border-bottom: 1px solid #A97A2E; break-after: avoid; break-inside: avoid; }
+.in-open + * { break-before: avoid; }
 .in-open .n { font: 200 34pt/0.9 "Noto Sans", sans-serif; color: #A97A2E; letter-spacing: -.02em; }
 .in-open .eyebrow { margin-bottom: 1mm; }
 .in-open h2 { margin: 0; font-weight: 300; font-size: 19pt; line-height: 1.3; color: #0B272F; }
@@ -36,14 +41,14 @@ const IN_STYLE = `<style>
 .in-sec .tbl td { padding: 2.4mm 2mm; }
 .in-sec .tbl tr, .in-sec .tbl td { break-inside: avoid; }
 .in-sec .kpis { background: #F7F8F6; border-top: 0; border-bottom: 0; margin: 0 0 6mm; break-inside: avoid; }
-.in-sec .kpi { padding: 5mm 5mm 5mm 0; padding-inline-start: 5mm; }
+.in-sec .kpi { padding: 4mm 5mm 4mm 0; padding-inline-start: 5mm; }
 .in-sec .kpi b { font: 200 21pt/1.15 "Noto Sans", sans-serif; color: #0B272F; overflow-wrap: anywhere; }
 .in-sec .kpi span { margin-top: 1mm; font-size: 8pt; color: #5F7176; }
-.in-lead { position: relative; font-size: 11.5pt; line-height: 2; color: #0B272F; font-weight: 300; margin: 0 0 6mm; padding: 1mm 6mm 1mm 0; border-inline-start: 0.6mm solid #A97A2E; padding-inline-start: 6mm; break-inside: avoid; }
-.in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 10mm; margin: 0 0 6mm; }
+.in-lead { position: relative; font-size: 10.8pt; line-height: 1.9; color: #0B272F; font-weight: 300; margin: 0 0 6mm; padding: 1mm 6mm 1mm 0; border-inline-start: 0.6mm solid #A97A2E; padding-inline-start: 6mm; break-inside: avoid; }
+.in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 9mm; margin: 0 0 6mm; }
 .in-grid > div { border-top: 1px solid #DCE2E1; padding-top: 2.5mm; break-inside: avoid; }
 .in-grid > div span { display: block; font-size: 7.6pt; letter-spacing: .02em; color: #8A6424; }
-.in-grid > div p { margin: 1mm 0 0; font-size: 9.6pt; line-height: 1.85; color: #2C4148; }
+.in-grid > div p { margin: .8mm 0 0; font-size: 9pt; line-height: 1.75; color: #2C4148; }
 .in-approve { border: 1px solid #DCE2E1; border-top: 0.6mm solid #0B272F; padding: 7mm 7mm 6mm; break-inside: avoid; }
 .in-approve .st { display: inline-block; border: 1px solid #A97A2E; color: #8A6424; padding: 1.2mm 5mm; font-size: 9pt; letter-spacing: .04em; margin-bottom: 6mm; }
 .in-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
@@ -183,7 +188,7 @@ export function institutionalReport(input) {
   'بصمة النسخة تتغير بأي تعديل في محتواها: تطابقها يثبت أن ما بين يديك هو النسخة المعتمدة.');
 
   // فاتحة الباب: رقم كبير ذهبي، وعنوان إنجليزي صغير، وعنوانه العربي، وسطر يشرحه. كل باب بعد الأول يبدأ صفحة جديدة
-  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const body = STYLE + IN_STYLE + parts.map(opener).join('');
   // الجهة من لقطة الاعتماد (شعارها ولونها كما كانا لحظة الإصدار)؛ بلا جهة: مبادرة مجتمعية ويُذكر راعيها
   const org = m.org || null;
