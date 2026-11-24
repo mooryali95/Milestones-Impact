@@ -1,6 +1,6 @@
-// مكتب اليوم (المرحلة 3أ من تصور لوحة الإدارة 4.3): التحية والتاريخ، وشارة صحة واحدة مطوية حين يسلم كل شيء وتتمدد عند
-// الخلل، و«قرارات اليوم»، والأرقام الأربعة بعروضها في الصندوق، والروابط السريعة، وبطاقات التحليل في «الرؤية الشاملة».
-// والمرحلة 3ب: «تنبيهات» و«نبض الدفعات» من admin.today، يختفيان فارغين، والمصدر المتعذر سطر خافت لا فراغ كاذب.
+// مكتب اليوم: التحية والتاريخ، و«قرارات اليوم»، والأرقام الأربعة بعروضها في الصندوق، وشريط «يحتاج انتباهك» (تصور تبويبات
+// الإدارة 2026-11-24، المرحلة أ: سطر لكل مشكلة برابط إلى مكان إصلاحها، يختفي كله حين يسلم كل شيء)، و«تنبيهات» admin.today
+// تختفي فارغة، والروابط السريعة. البطاقات الكاملة في «الإعداد › صحة المنصة» (admin-health-tab.spec.js).
 // الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
@@ -48,41 +48,75 @@ async function setup(page, { health = healthOk, role = 'super_admin', replies: o
   await page.reload();
   return calls;
 }
-const badge = (page) => page.getByRole('region', { name: 'صحة المنظومة', exact: true });
-const toggle = (page) => badge(page).locator('#th-toggle');
+const strip = (page) => page.getByRole('region', { name: /يحتاج انتباهك/ });
 
-test('الرأس: التحية باسم المدير والتاريخ، وشارة الصحة مطوية حين يسلم كل شيء، والفتح يُحفظ للجلسة', async ({ page }) => {
-  await setup(page);
+test('الرأس: التحية باسم المدير والتاريخ، وحين يسلم كل شيء لا شريط ولا بطاقة مجال في المكتب', async ({ page }) => {
+  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'ok', checks: [{ key: 'cron', label: 'المهمة الساعية', level: 'ok', line: 'تعمل', remedy: '' }] } } });
   await expect(page.getByRole('heading', { name: /(صباح|مساء) الخير، هند/ })).toBeVisible();
   await expect(page.locator('.today-date')).toContainText(/\d{4}/);
-  await expect(toggle(page)).toHaveText(/كل شيء سليم/);
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false');
-  await expect(toggle(page)).toHaveAttribute('aria-controls', 'th-body');
-  await expect(page.locator('#th-body')).toBeHidden();
-  // داخلها بطاقة صحة البريد
-  await toggle(page).click();
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
-  const details = page.getByRole('region', { name: 'تفاصيل صحة المنظومة' });
-  await expect(details.getByRole('region', { name: 'صحة البريد والتنبيه' })).toHaveAttribute('data-level', 'green');
-  // الحساب التجريبي خرج من الشارة إلى «أدوات التجربة» المطوية في آخر الصفحة (تدقيق 2026-11-23)
-  await expect(details.getByRole('button', { name: 'افتح الحساب التجريبي' })).toHaveCount(0);
-  const tools = page.locator('#today-tools');
-  await expect(tools.getByRole('button', { name: 'افتح الحساب التجريبي' })).toBeHidden();
-  await tools.locator(':scope > summary').click();
-  await expect(tools.getByRole('button', { name: 'افتح الحساب التجريبي' })).toBeVisible();
-  await page.reload();
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
-  await toggle(page).press('Enter');
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.today-nums')).toBeVisible();
+  await page.waitForTimeout(600);
+  await expect(strip(page)).toHaveCount(0);
+  // البطاقات انتقلت إلى بيوتها: لا صحة بريد ولا جاهزية ولا أدوات تجربة ولا طابور متطلبات ولا نبض دفعات هنا
+  for (const sel of ['#ops-health', '.la-ready', '.ph-card', '#today-tools', '#rq', '.today-pulse', '.today-health']) await expect(page.locator(sel), sel).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'افتح الحساب التجريبي' })).toHaveCount(0);
 });
 
-test('الخلل يفتح الشارة وحده بعدده وأسمائه، وفيه بطاقته', async ({ page }) => {
-  await setup(page, { health: { ...healthOk, missing_secrets: ['LEADERS_CERT_SIGNING_KEY'], readiness: [{ key: 'certificate', ok: false, where: 'certs', label: 'الشهادة بلا موقّع' }] } });
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
-  await expect(toggle(page)).toHaveText(/أمران يحتاجان انتباهك: حالة النظام، جاهزية الإطلاق/);
-  await expect(badge(page)).toHaveAttribute('data-state', 'attention');
-  await expect(page.getByRole('status').filter({ hasText: 'حالة النظام' })).toContainText('LEADERS_CERT_SIGNING_KEY');
-  await expect(page.getByRole('region', { name: 'جاهزية الإطلاق', exact: true })).toContainText('0 من 1');
+test('الخلل سطر لكل مشكلة برابط إلى مكان إصلاحها، الأشد أولًا', async ({ page }) => {
+  await setup(page, { health: { ...healthOk, missing_secrets: ['LEADERS_CERT_SIGNING_KEY'], readiness: [{ key: 'baseline', ok: true, label: 'أ' }, { key: 'certificate', ok: false, where: 'certs', label: 'الشهادة بلا موقّع' }] },
+    replies: { 'admin.platform-health': { success: true, level: 'bad', checks: [{ key: 'migrations', label: 'ترحيلات القاعدة', level: 'bad', line: '1 لم يُطبَّق', remedy: 'x' }, { key: 'cron', label: 'المهمة الساعية', level: 'ok', line: 'تعمل' }] } } });
+  const rows = strip(page).locator('li');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText('ترحيلات القاعدة: 1 لم يُطبَّق');
+  await expect(rows.nth(0)).toHaveClass(/bad/);
+  await expect(strip(page)).toContainText('جاهزية الإطلاق 1 من 2');
+  await expect(strip(page)).toContainText('حالة النظام تحتاج انتباهًا');
+  // روابط تنقُّل لا أفعال: لا زر في الشريط
+  await expect(strip(page).getByRole('button')).toHaveCount(0);
+  await rows.filter({ hasText: 'جاهزية الإطلاق' }).getByRole('link', { name: /صحة المنصة/ }).click();
+  await expect(page).toHaveURL(/#\/leaders\/health$/);
+  await expect(page.getByRole('region', { name: 'جاهزية الإطلاق', exact: true })).toContainText('1 من 2');
+});
+
+test('خمسة أسطر ثم «و… أخرى» إلى صحة المنصة، وعطل البريد يقود إلى مركز البريد', async ({ page }) => {
+  const checks = ['a', 'b', 'c', 'd', 'e'].map((k) => ({ key: k, label: `فحص ${k}`, level: 'warn', line: 'يحتاج انتباهًا' }));
+  const amber = opsGreen();
+  amber.mail.sent = 78;
+  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'warn', checks }, 'admin.ops-health': amber } });
+  await expect(strip(page).locator('li')).toHaveCount(5);
+  await expect(strip(page).getByRole('link', { name: /وأمر آخر/ })).toHaveAttribute('href', '#/leaders/health');
+  await expect(strip(page).locator('li[data-key^="ops-"] a')).toHaveAttribute('href', '#/leaders/mailcenter');
+});
+
+test('لا «سليم» عما لم يُقرأ: حالة النظام المتعذرة سطر باسمه، والنظرة العامة المتعذرة لا تحجب المكتب', async ({ page }) => {
+  await setup(page, { health: { success: false, message: 'x' }, replies: { 'admin.overview': { success: false, message: 'تعذّرت قراءة النظرة العامة' }, 'admin.inbox': { success: false, message: 'تعذّر الصندوق' } } });
+  await expect(strip(page)).toContainText('تعذّرت قراءة حالة النظام');
+  await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
+  const n = (k) => page.locator(`.today-n[data-k="${k}"]`);
+  await expect(n('waiting')).toContainText('تعذّرت قراءة الصندوق');
+  await expect(n('waiting')).not.toContainText('لا شيء ينتظر');
+  await expect(n('waiting').locator('.sr-only')).toHaveText('غير مقروء');
+  await expect(n('program')).toContainText('تعذّرت قراءة الأرقام');
+  await expect(page.getByRole('alert').filter({ hasText: 'تعذّرت قراءة النظرة العامة' })).toBeVisible();
+});
+
+test('النوع المتعذر يعلّم الأرقام «على الأقل» بالرقم ثم العلامة', async ({ page }) => {
+  await setup(page, { replies: { 'admin.inbox': { ...inbox, skipped: ['sponsor'] } } });
+  const v = page.locator('.today-n[data-k="waiting"] .stat-value bdi');
+  await expect(v).toHaveText('3+');
+  await expect(v).toHaveAttribute('dir', 'ltr');
+});
+
+test('المراقب: لا «دفعة جديدة» ولا «أضف مشاركين»، ويرى الشريط بحالة النظام وحدها بلا أزرار', async ({ page }) => {
+  await setup(page, { role: 'viewer', health: { ...healthOk, missing_secrets: ['X'], readiness: [{ key: 'c', ok: false, label: 'ناقص' }] } });
+  const links = page.getByRole('navigation', { name: 'روابط سريعة' });
+  await expect(links.getByRole('link', { name: 'التحليل الكامل' })).toBeVisible();
+  await expect(links.getByRole('link', { name: 'دفعة جديدة' })).toHaveCount(0);
+  await expect(links.getByRole('link', { name: 'أضف مشاركين' })).toHaveCount(0);
+  await expect(strip(page).locator('li')).toHaveCount(1);
+  await expect(strip(page)).toContainText('حالة النظام');
+  await expect(strip(page).getByRole('button')).toHaveCount(0);
+  await expect(page.locator('#ops-health')).toHaveCount(0);
 });
 
 test('الأرقام الأربعة من الصندوق والنظرة العامة، وكل رقم يفتح عرضه في «قرارات اليوم»', async ({ page }) => {
@@ -142,45 +176,6 @@ test('الروابط السريعة تنقل إلى أماكنها القائم�
   await expect(page.getByRole('dialog', { name: 'دفعة جديدة' })).toBeVisible();
 });
 
-test('لا «سليم» عما لم يُقرأ: حالة النظام المتعذرة خلل باسمه، والنظرة العامة المتعذرة لا تحجب المكتب', async ({ page }) => {
-  await setup(page, { health: { success: false, message: 'x' }, replies: { 'admin.overview': { success: false, message: 'تعذّرت قراءة النظرة العامة' }, 'admin.inbox': { success: false, message: 'تعذّر الصندوق' } } });
-  await expect(toggle(page)).toHaveText(/أمر واحد يحتاج انتباهك: حالة النظام غير مقروءة/);
-  await expect(toggle(page)).not.toHaveText(/كل شيء سليم/);
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('#th-body')).toContainText('تعذّرت قراءة حالة النظام');
-  // المكتب قائم: القرارات والأرقام والطابور، والرقم المجهول «غير مقروء» لقارئ الشاشة لا «لا شيء ينتظر»
-  await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
-  const n = (k) => page.locator(`.today-n[data-k="${k}"]`);
-  await expect(n('waiting')).toContainText('تعذّرت قراءة الصندوق');
-  await expect(n('waiting')).not.toContainText('لا شيء ينتظر');
-  await expect(n('waiting').locator('.sr-only')).toHaveText('غير مقروء');
-  await expect(n('program')).toContainText('تعذّرت قراءة الأرقام');
-  await expect(page.getByRole('alert').filter({ hasText: 'تعذّرت قراءة النظرة العامة' })).toBeVisible();
-});
-
-test('النوع المتعذر يعلّم الأرقام «على الأقل» بالرقم ثم العلامة، والشارة لا تقول «سليم» قبل وصول صحة البريد', async ({ page }) => {
-  let release;
-  const gate = new Promise((r) => { release = r; });
-  await setup(page, { hold: gate, replies: { 'admin.inbox': { ...inbox, skipped: ['sponsor'] } } });
-  await expect(badge(page)).toHaveAttribute('data-state', 'checking');
-  await expect(toggle(page)).toHaveText(/جارٍ الفحص/);
-  release();
-  await expect(toggle(page)).toHaveText(/كل شيء سليم/);
-  const v = page.locator('.today-n[data-k="waiting"] .stat-value bdi');
-  await expect(v).toHaveText('3+');
-  await expect(v).toHaveAttribute('dir', 'ltr');
-});
-
-test('المراقب: لا «دفعة جديدة» ولا «أضف مشاركين»، والشارة بحالة النظام وحدها', async ({ page }) => {
-  await setup(page, { role: 'viewer' });
-  const links = page.getByRole('navigation', { name: 'روابط سريعة' });
-  await expect(links.getByRole('link', { name: 'التحليل الكامل' })).toBeVisible();
-  await expect(links.getByRole('link', { name: 'دفعة جديدة' })).toHaveCount(0);
-  await expect(links.getByRole('link', { name: 'أضف مشاركين' })).toHaveCount(0);
-  await expect(toggle(page)).toHaveText(/كل شيء سليم/);
-  await expect(page.locator('#ops-health')).toHaveCount(0);
-});
-
 // ── المرحلة 3ب: التنبيهات ونبض الدفعات ──
 const desk = {
   success: true, skipped: [], unchecked: [], pulse_known: true, waiting_partial: false,
@@ -195,164 +190,64 @@ const desk = {
   ],
 };
 
-test('3ب: التنبيهات بعد الأرقام وقبل نبض الدفعات والروابط، وكل تنبيه رابط إلى ملفه', async ({ page }) => {
+
+test('3ب: التنبيهات بعد الأرقام وقبل الروابط، وكل تنبيه رابط إلى ملفه', async ({ page }) => {
   await setup(page, { replies: { 'admin.today': desk } });
   const alerts = page.getByRole('region', { name: /تنبيهات/ });
   await expect(alerts.locator('li')).toHaveCount(3);
   await expect(alerts.locator('li').first()).toHaveClass(/bad/);
-  // الترتيب في الصفحة: الأرقام، ثم التنبيهات، ثم النبض، ثم الروابط
-  const order = await page.evaluate(() => ['.today-nums', '.today-alerts', '.today-pulse', '.today-links', '#rq'].map((q) => document.querySelector(q)?.getBoundingClientRect().top ?? -1));
+  const order = await page.evaluate(() => ['#today-decisions', '.today-nums', '.today-alerts', '.today-links'].map((q) => document.querySelector(q)?.getBoundingClientRect().top ?? -1));
   expect(order.every((y, i) => y >= 0 && (i === 0 || y > order[i - 1]))).toBe(true);
   await alerts.getByRole('link', { name: /مقاعد «جهة الشمال» ممتلئة/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/orgs\/o1$/);
   await page.goto(`${BASE}#/leaders/overview`);
   await page.getByRole('region', { name: /تنبيهات/ }).getByRole('link', { name: /سارة/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/experts\/e1$/);
-  await page.goto(`${BASE}#/leaders/overview`);
-  await page.getByRole('region', { name: /تنبيهات/ }).getByRole('link', { name: /دفعة الربيع/ }).click();
-  await expect(page).toHaveURL(/#\/leaders\/programs\/c2$/);
 });
 
-test('3ب: نبض الدفعات سطر لكل دفعة جارية بجاهزيتها وأقرب جلسة وما ينتظر، ويصير بطاقات على الهاتف', async ({ page }) => {
-  await setup(page, { replies: { 'admin.today': desk } });
-  const pulse = page.getByRole('region', { name: 'نبض الدفعات' });
-  const rows = pulse.locator('tbody tr');
-  await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText('دفعة الخريف');
-  await expect(rows.nth(0)).toContainText('جهة الشمال');
-  await expect(rows.nth(0)).toContainText('بقي بندان');
-  await expect(rows.nth(0).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('4');
-  await expect(rows.nth(1)).toContainText('لا جلسة مؤرخة');
-  await expect(rows.nth(1)).toContainText('مكتملة الإعداد');
-  await rows.nth(0).getByRole('link', { name: 'دفعة الخريف' }).click();
-  await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
-  await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto(`${BASE}#/leaders/overview`);
-  await expect(page.locator('.today-pulse-t thead')).toHaveCSS('position', 'absolute');
-  const noScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-  expect(noScroll).toBe(true);
-});
-
-test('3ب: بلا تنبيه ولا دفعة جارية يختفي القسمان، ولا سطر تعذّر', async ({ page }) => {
-  await setup(page, { replies: { 'admin.today': { ...desk, alerts: [], pulse: [] } } });
+test('3ب: بلا تنبيه يختفي القسم، ولا سطر تعذّر، ونبض الدفعات في ملف كل دفعة لا هنا', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': { ...desk, alerts: [] } } });
   await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
   await expect(page.locator('.today-nums')).toBeVisible();
   await expect(page.locator('.today-alerts')).toHaveCount(0);
-  await expect(page.locator('.today-pulse')).toHaveCount(0);
   await expect(page.locator('.today-skip')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'نبض الدفعات' })).toHaveCount(0);
 });
 
-test('3ب: المصدر المتعذر سطر خافت بأسمائه وما لم يُفحص، والنبض «غير مقروء» لا صفر، والحفظ يعيد الطلب', async ({ page }) => {
-  const calls = await setup(page, { replies: { 'admin.today': {
-    ...desk, alerts: [desk.alerts[0]], skipped: ['experts', 'inbox'], unchecked: ['expert_over'],
-    pulse: [{ ...desk.pulse[0], waiting: null }],
-  } } });
+test('3ب: المصدر المتعذر سطر خافت بأسمائه وما لم يُفحص، وحدث القرار يعيد الطلب مرة', async ({ page }) => {
+  const calls = await setup(page, { replies: { 'admin.today': { ...desk, alerts: [desk.alerts[0]], skipped: ['experts', 'inbox'], unchecked: ['expert_over'] } } });
   const note = page.locator('.today-skip');
   await expect(note).toHaveAttribute('role', 'status');
   await expect(note).toContainText('تعذّرت قراءة: حِمل الخبراء، صندوق القرارات');
   await expect(note).toContainText('لم يُفحص: خبير فوق طاقته');
-  await expect(page.getByRole('region', { name: 'نبض الدفعات' }).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('غير مقروء');
   await expect.poll(() => calls.filter((c) => c.action === 'admin.today').length).toBe(1);
   await page.evaluate(() => window.dispatchEvent(new Event('mi:pending')));
   await expect.poll(() => calls.filter((c) => c.action === 'admin.today').length).toBe(2);
+  await page.waitForTimeout(800);
+  expect(calls.filter((c) => c.action === 'admin.today').length).toBe(2);
 });
 
 test('3ب: admin.today متعذر كله: سطر خافت يقول إنه لم يُقرأ، والمكتب قائم', async ({ page }) => {
   await setup(page, { replies: { 'admin.today': { success: false, message: 'x' } } });
-  await expect(page.locator('.today-skip')).toContainText('تعذّرت قراءة التنبيهات ونبض الدفعات');
+  await expect(page.locator('.today-skip')).toContainText('تعذّرت قراءة التنبيهات الآن');
   await expect(page.locator('.today-alerts')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
 });
 
-test('3ب: العاجل يُقرأ «عاجل»، والقائمة والجدول بأدوارهما الصريحة، ودفعة الجهة بلا اسم مقروء «جهة» لا «أفراد»', async ({ page }) => {
-  await setup(page, { replies: { 'admin.today': { ...desk, pulse: [{ ...desk.pulse[0], org: null, kind: 'org' }, { ...desk.pulse[1], kind: 'individuals' }] } } });
+test('3ب: العاجل يُقرأ «عاجل»، والقائمة بدورها الصريح', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': desk } });
   const alerts = page.getByRole('region', { name: /تنبيهات/ });
   await expect(alerts.getByRole('list')).toHaveAttribute('role', 'list');
   await expect(alerts.getByRole('link', { name: /^عاجل: مقاعد «جهة الشمال»/ })).toBeVisible();
   await expect(alerts.getByRole('link', { name: /سارة/ })).not.toContainText('عاجل');
-  const t = page.getByRole('table');
-  await expect(t.getByRole('rowheader', { name: 'دفعة الخريف' })).toBeVisible();
-  const cells = t.locator('td[data-label="الجهة"]');
-  await expect(cells.nth(0)).toHaveText('جهة');
-  await expect(cells.nth(1)).toHaveText('أفراد');
 });
 
-test('3ب: صيغة الكتاب، والجلسة غير المقروءة، وعلامة «+» حين يبلغ الصندوق حده', async ({ page }) => {
-  await setup(page, { replies: { 'admin.today': {
-    ...desk, waiting_partial: true, unchecked: ['cohort_no_session'], skipped: ['sessions'],
-    pulse: [{ ...desk.pulse[0], next_at: null, handbook: true }, { ...desk.pulse[1], next_at: null, waiting: 0 }],
-  } } });
-  const rows = page.getByRole('region', { name: 'نبض الدفعات' }).locator('tbody tr');
-  await expect(rows.nth(0).locator('td[data-label="أقرب جلسة"]')).toHaveText('صيغة الكتاب');
-  await expect(rows.nth(1).locator('td[data-label="أقرب جلسة"]')).toHaveText('غير مقروءة');
-  await expect(rows.nth(0).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('4+');
-  // الصفر يبقى صفرًا بلا علامة
-  await expect(rows.nth(1).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('0');
-  await expect(page.locator('.today-skip')).toContainText('لم يُفحص: دفعة جارية بلا جلسة قريبة');
-});
-
-test('3ب: قرار في طابور المتطلبات يعيد طلب admin.today مرة واحدة لا مرتين', async ({ page }) => {
-  const calls = await setup(page, { replies: {
-    'admin.today': desk, 'admin.review': { success: true },
-    'admin.reviews': { success: true, pending_approval: [], submitted: [
-      { participant_id: 'p1', requirement_id: 'r1', completed_at: '2026-10-20', participants: { full_name: 'سارة الأحمد' }, stage_requirements: { title_ar: 'خطة التطوير' } },
-    ] },
-  } });
-  const n = () => calls.filter((c) => c.action === 'admin.today').length;
-  await expect.poll(n).toBe(1);
-  await page.getByLabel('تحديد الكل').check();
-  await page.getByRole('button', { name: 'اعتماد المحدد (1)' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
-  await expect.poll(() => calls.filter((c) => c.action === 'admin.review').length).toBe(1);
-  await expect.poll(n).toBe(2);
-  await page.waitForTimeout(1000);
-  expect(n()).toBe(2);
-});
-
-// «صحة المنصة» (admin.platform-health): صف لكل فحص بلونه وسطر علاجه، والأحكام من الخادم كما هي
-test('صحة المنصة: صف لكل فحص بلونه، والعلاج لما يحتاجه وحده', async ({ page }) => {
-  const checks = [
-    { key: 'migrations', label: 'ترحيلات القاعدة', level: 'bad', line: '1 لم يُطبَّق: 20261128100000_leaders_atomic_and_health', remedy: 'شغّل سير «migrate» في GitHub Actions لتطبيقها على الإنتاج.' },
-    { key: 'alert_email', label: 'بريد التنبيه', level: 'ok', line: 'LEADERS_ALERT_EMAIL مضبوط', remedy: '' },
-    { key: 'cron', label: 'المهمة الساعية', level: 'unknown', line: 'تعذّرت قراءة حالة leaders-expert-offers', remedy: 'راجع صلاحية القراءة.' },
-    { key: 'digest', label: 'ملخص النماذج اليومي', level: 'ok', line: 'آخر ملخص 2026-11-23', remedy: '' },
-    { key: 'sponsor_codes', label: 'رموز الرعاية', level: 'warn', line: 'جهة بلا رمز فعّال: جهة ب', remedy: 'أنشئ رمزًا من ملف الجهة.' },
-  ];
-  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'bad', checks } } });
-  const card = page.getByRole('region', { name: 'صحة المنصة', exact: true });
-  await expect(card).toHaveAttribute('data-level', 'bad');
-  await expect(card.locator('.ph-row')).toHaveCount(5);
-  await expect(card.locator('.ph-row[data-level="bad"]')).toContainText('شغّل سير «migrate»');
-  await expect(card.locator('.ph-row[data-level="warn"]')).toContainText('جهة ب');
-  await expect(card.locator('.ph-row[data-level="ok"] .ph-remedy')).toHaveCount(0);
-});
-
-test('صحة المنصة: رد بلا فحوص لا يُرسم، وتعذّر القراءة سطر خافت', async ({ page }) => {
-  await setup(page);
-  await expect(page.getByRole('heading', { name: /الخير/ })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'صحة المنصة', exact: true })).toHaveCount(0);
-});
-
-// تدقيق اللوحة 2026-11-23 (المرحلة 1): «قرارات اليوم» أول كتلة بعد التحية، قبل الأرقام والصحة وأدوات التجربة، ولو كانت الشارة مفتوحة بخلل
-test('الترتيب: قرارات اليوم أولًا، ثم الأرقام، ثم شارة الصحة، وأدوات التجربة في الآخر مطوية', async ({ page }) => {
+test('الترتيب: قرارات اليوم أولًا، ثم الأرقام، ثم «يحتاج انتباهك»', async ({ page }) => {
   await setup(page, { health: { ...healthOk, missing_secrets: ['X_KEY'] } });
-  await expect(toggle(page)).toHaveAttribute('aria-expanded', 'true');
-  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
   await expect(page.locator('.inbox .inbox-list li')).toHaveCount(3);
-  const dec = await y('#today-decisions'), nums = await y('.today-nums'), health = await y('.today-health'), tools = await y('#today-tools');
+  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
+  const dec = await y('#today-decisions'), nums = await y('.today-nums'), exc = await y('.today-exc');
   expect(dec).toBeLessThan(nums);
-  expect(nums).toBeLessThan(health);
-  expect(health).toBeLessThan(tools);
-  // أول عنوان قسم بعد التحية هو «قرارات اليوم»
+  expect(nums).toBeLessThan(exc);
   await expect(page.locator('h2.today-sec').first()).toHaveText('قرارات اليوم');
-  await expect(page.locator('#today-tools')).not.toHaveAttribute('open', '');
-});
-
-test('صحة المنصة السليمة سطر مطوي، وفتحه يُظهر الفحوص', async ({ page }) => {
-  const checks = [{ key: 'cron', label: 'المهمة الساعية', level: 'ok', line: 'تعمل', remedy: '' }];
-  await setup(page, { replies: { 'admin.platform-health': { success: true, level: 'ok', checks } } });
-  const card = page.getByRole('region', { name: 'صحة المنصة', exact: true });
-  await expect(card.locator('.ph-row')).toBeHidden();
-  await card.locator('summary').click();
-  await expect(card.locator('.ph-row')).toBeVisible();
 });

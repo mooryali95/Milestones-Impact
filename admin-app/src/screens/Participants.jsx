@@ -34,6 +34,7 @@ import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
 import { readQuery, writeQuery } from '../route.js';
+import { colsClass, OPTIONAL_COLS, readCols, writeCols } from '../pt-columns.js';
 import { keepSpot, navKey, position, queueLabel, readQueue, saveQueue, takeSpot } from '../review-queue.js';
 import { MASTERY as LAB_MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
@@ -89,7 +90,37 @@ export function Where({ o }) {
   );
 }
 
+// منتقي «الأعمدة»: الأعمدة الاختيارية وحدها (الدائمة لا تُخفى)، والاختيار محفوظ لهذا المدير
+function ColumnPicker({ cols, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const n = OPTIONAL_COLS.filter(([k]) => cols[k]).length;
+  return (
+    <div className="pt-cols" ref={ref}>
+      <button type="button" className="refresh-btn" aria-expanded={open} aria-controls="pt-cols-menu" onClick={() => setOpen((x) => !x)}>الأعمدة{n ? ` (+${n})` : ''}</button>
+      {open && (
+        <div id="pt-cols-menu" className="pt-cols-menu" role="group" aria-label="أعمدة اختيارية">
+          {OPTIONAL_COLS.map(([k, l]) => (
+            <label key={k}><input type="checkbox" checked={!!cols[k]} onChange={() => onChange({ ...cols, [k]: !cols[k] })} /> {l}</label>
+          ))}
+          <small className="la-muted">الجهة والمسار يظهران حين تتسع الشاشة، والاسم والحال وما ينتظر ظاهرة دائمًا.</small>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function List({ orgs, canWrite, onOpen, initialStatus }) {
+  const [cols, setColsState] = useState(readCols);
+  const setCols = (v) => { setColsState(v); writeCols(v); };
   const { toast, confirm } = useUI();
   const [f, setF, clearF, replaceF] = useFilters(KEYS, initialStatus ? { status: initialStatus } : {}, { scope: 'participants' });
   const [list, setList] = useState(null);
@@ -214,6 +245,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
         actions={<>
           <ExportButton scope="participants" meta={{ kind: 'PPL', title: 'مشاركو برنامج القادة', sheet: 'المشاركون', file: 'Participants' }} columns={exportCols}
             all={all} filtered={shown} selected={all.filter((p) => picked.has(p.id))} noun="مشارك" />
+          <ColumnPicker cols={cols} onChange={setCols} />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
           {/* فعل أساسي واحد ظاهر (+ مشارك) والثانوية في «المزيد» (تدقيق 2026-11-23، المرحلة 2) */}
           <MoreMenu label="المزيد من إجراءات المشاركين" items={[
@@ -246,10 +278,10 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <button className="btn-sm ghost" onClick={() => setPicked(new Set())}>إلغاء التحديد</button>
         </div>
       )}
-      <div className="table-wrap"><table className="data-table la-cards t24">
+      <div className="table-wrap"><table className={`data-table la-cards t24 pt-table${canWrite ? ' has-pick' : ''} ${colsClass(cols)}`}>
         <thead><tr>
-          {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
-          <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="waiting" state={f} set={setF}>بانتظار</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
+          {canWrite && <th className="col-pick"><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
+          <SortTh k="name" state={f} set={setF} className="col-name">الاسم</SortTh><SortTh k="org" state={f} set={setF} className="col-wide col-org">الجهة</SortTh>{DIMS.map((d) => <th key={d} className="col-levels">{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF} className="col-wide col-track">المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="waiting" state={f} set={setF}>بانتظار</SortTh><SortTh k="joined" state={f} set={setF} className="col-joined">التسجيل</SortTh>
         </tr></thead>
         <tbody>
           {!list ? <tr className="loading-row"><td colSpan={11}><Spinner /></td></tr>
@@ -260,20 +292,20 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                   const tk = trackOfPlacements(p.placements);
                   return (
                     <tr key={p.id} data-pid={p.id} tabIndex={0} style={{ cursor: 'pointer' }} onClick={() => open(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') open(p.id); }}>
-                      {canWrite && <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
-                      <td data-label="الاسم"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small>
+                      {canWrite && <td className="col-pick" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`تحديد ${p.full_name}`} checked={picked.has(p.id)} onChange={() => toggle(p.id)} /></td>}
+                      <td data-label="الاسم" className="col-name"><b>{p.full_name}</b>{p.is_test && <> <span className="la-chip" title="حساب اختبار داخلي: خارج الإحصاءات">اختبار</span></>}<br /><small className="la-muted" dir="ltr">{p.email}</small>
                         {/* وُجد برقمه: الرقم ظاهر تحت البريد، فيُعرف لماذا ظهر الصف */}
                         {phoneMatches(f.q, p.phone) && <><br /><small className="la-muted pt-phone" dir="ltr">{p.phone}</small></>}</td>
-                      <td data-label="الجهة">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
-                      {DIMS.map((d) => <td key={d} data-label={DIM[d]}><Lvl p={p} d={d} /></td>)}
-                      <td data-label="المسار">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
+                      <td data-label="الجهة" className="col-wide col-org">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
+                      {DIMS.map((d) => <td key={d} data-label={DIM[d]} className="col-levels"><Lvl p={p} d={d} /></td>)}
+                      <td data-label="المسار" className="col-wide col-track">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
                       <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span>
                         {p.effort?.level === 'low' && <> <span className="la-chip bad" title={p.effort.note}>مستعجل</span></>}
                         {p.effort?.level === 'watch' && <> <span className="la-chip warn" title={p.effort.note}>يُراجع</span></>}
                         {p.retake && <> <span className="la-chip" title={`طُلبت الإعادة ${date(p.retake.requested_at)}، ولم يسلّم قياسًا جديدًا بعد`}>طُلبت الإعادة</span></>}</td>
                       <td data-label="أين توقف"><Where o={p.onboarding} /></td>
                       <td data-label="بانتظار"><Waiting w={p.waiting} /></td>
-                      <td data-label="التسجيل">{date(p.created_at)}</td>
+                      <td data-label="التسجيل" className="col-joined">{date(p.created_at)}</td>
                     </tr>
                   );
                 })}

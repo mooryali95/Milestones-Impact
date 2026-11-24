@@ -9,13 +9,13 @@ import { L } from './leaders.js';
 import { navigate } from './route.js';
 import { KIND_LABEL, rank } from './search.js';
 import { phoneMatches } from '../../supabase/functions/leaders-api/search-text.js';
-import { AI_TABS, GROUP_OF, OWNER_TABS, TABS } from './leaders-tabs.js';
+import { AI_TABS, GROUP_OF, OWNER_TABS, TAB_KEYWORDS, TABS } from './leaders-tabs.js';
 import { useEscape } from './ui.jsx';
 import { ltrDigits } from './filters.js';
 
 const SECTIONS = [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
   // كل قسم باسم مجموعته في الشريط (المرحلة 2)، ويُوجد باسمها أيضًا
-  ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, sub: GROUP_OF[k], keys: [GROUP_OF[k]], to: { ctx: 'leaders', tab: k } })),
+  ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, sub: GROUP_OF[k], keys: [GROUP_OF[k], ...(TAB_KEYWORDS[k] || [])], to: { ctx: 'leaders', tab: k } })),
   // تبويبات «المساعد الذكي» الداخلية: كل اسم يفتح تبويبه، ومعرّفها يبدأ بمفتاح القسم فتحجبها OWNER_TABS مثله
   ...AI_TABS.map(([k, l, keys]) => ({ kind: 'tab', id: `ai/${k}`, title: l, sub: `${GROUP_OF.ai} · المساعد الذكي`, keys, to: { ctx: 'leaders', tab: 'ai', id: k } }))];
 const ownerOnly = (x) => x.kind === 'tab' && OWNER_TABS.has(String(x.id).split('/')[0]);

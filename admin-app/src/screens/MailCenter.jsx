@@ -10,6 +10,7 @@ import { Empty, Spinner, useUI } from '../ui.jsx';
 import { DELIVERY_AR, etaAr, KIND_AR, SOURCE_AR, STATUS_AR } from '../../../supabase/functions/leaders-api/mail-center.js';
 import NotifyRouting from './NotifyRouting.jsx';
 import EmailInput from '../../../shared/ui/EmailInput.jsx';
+import { OpsHealthCard } from '../OpsHealth.jsx';
 
 const QUEUE_ST = { waiting: ['ينتظر الحصة', 'warn'], gave_up: ['تعذّر بعد محاولات', 'bad'], stale: ['فات أوانه', ''], cancelled: ['أُغلق يدويًّا', ''] };
 // «يُتوقع إرساله» للمنتظر: الممسَك بميزة مخفية لا موعد له، والمؤرخ الذي يمضي موعده قبل دوره يُترك
@@ -190,8 +191,11 @@ function MailStatus({ canWrite, isSuper, onPerson, tabs }) {
   const [open, setOpen] = useState(null);
   const load = useCallback(async () => setD(await L('admin.mail-center')), []);
   useEffect(() => { load(); }, [load]);
-  if (!d) return <Spinner />;
-  if (!d.success) return <div className="la-err" role="alert">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div>;
+  // صحة البريد والتنبيه (للمدير ذي الكتابة): بطاقتها هنا وحدها (المصدر الواحد، تصور تبويبات الإدارة 2026-11-24)،
+  // وشريطها الأحمر في App.jsx يفتح هذه الصفحة، و«نظرة عامة» و«صحة المنصة» تقرآن حكمها سطرًا
+  const card = <OpsHealthCard enabled={canWrite !== false} isSuper={isSuper} />;
+  if (!d) return <>{card}<Spinner /></>;
+  if (!d.success) return <>{card}<div className="la-err" role="alert">{d.message} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></>;
   const b = d.budget;
   const act = async (action, id, ok, extra = {}) => {
     setBusy(true);
@@ -208,6 +212,7 @@ function MailStatus({ canWrite, isSuper, onPerson, tabs }) {
     <div className="mc">
       {tabs}
       <div role="tabpanel" id="mc-panel-status" aria-labelledby="mc-tab-status" className="mc-panel">
+      {card}
       <div className={`pay-hero mc-hero ${b.state}`}>
         <div>
           <p className="pay-eyebrow">البريد · اليوم</p>

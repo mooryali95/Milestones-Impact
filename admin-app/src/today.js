@@ -94,6 +94,45 @@ export function healthProblems({ ops = null, h = null, orgs = [], canWrite = tru
   return out;
 }
 
+// ── شريط «يحتاج انتباهك» في نظرة عامة (تصور تبويبات الإدارة 2026-11-24، المرحلة أ) ──
+// «نظرة عامة» لا ترسم مكوّن مجال آخر: تقرأ حكمه وحده (healthProblems وفحوص admin.platform-health) سطرًا برابط إلى مكان
+// إصلاحه. المصدر واحد: البنود نفسها التي تعرضها «الإعداد › صحة المنصة» ومركز البريد بتفاصيلها
+export const HEALTH_HREF = '#/leaders/health';
+export const STRIP_MAX = 5;
+const tabHref = (k) => `#/leaders/${k}`;
+/**
+ * أسطر الاستثناءات: ما المشكلة · أين تُصلح. قائمة فارغة حين يسلم كل شيء (والشريط يختفي كله).
+ * @param {{ ops?: any, h?: any, orgs?: any[], canWrite?: boolean, withOrgs?: boolean, ph?: any }} d
+ * @returns {{key: string, text: string, where: string, href: string, level: 'bad'|'warn'}[]}
+ */
+export function exceptionRows({ ops = null, h = null, orgs = [], canWrite = true, withOrgs = true, ph = null }) {
+  const out = [];
+  for (const p of healthProblems({ ops, h, orgs, canWrite, withOrgs })) {
+    if (p.key.startsWith('ops-')) {
+      const red = p.key === 'ops-red';
+      out.push({ key: p.key, level: red ? 'bad' : 'warn', where: 'مركز البريد', href: tabHref('mailcenter'),
+        text: p.key === 'ops-unread' ? 'تعذّرت قراءة صحة البريد والتنبيه' : ops.verdict.title || p.label });
+    } else if (p.key === 'system-unread') out.push({ key: p.key, level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: 'تعذّرت قراءة حالة النظام، فلا يُعرف إن كانت سليمة' });
+    else if (p.key === 'system') {
+      const blocking = pendingOf(h).filter((m) => m.gate === 'blocking').length;
+      out.push({ key: p.key, level: blocking ? 'bad' : 'warn', where: 'صحة المنصة', href: HEALTH_HREF,
+        text: blocking ? `حالة النظام: ${blocking === 1 ? 'ترحيل لم يُطبَّق' : `${blocking} ترحيلات لم تُطبَّق`} على الإنتاج` : 'حالة النظام تحتاج انتباهًا' });
+    } else if (p.key === 'launch') {
+      const all = h.readiness || [];
+      out.push({ key: p.key, level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: `جاهزية الإطلاق ${all.filter((x) => x.ok).length} من ${all.length}` });
+    } else if (p.key === 'orgs') {
+      const n = orgsReadinessRows(orgs).filter((x) => x.r.missing > 0).length;
+      out.push({ key: p.key, level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: n === 1 ? 'جهة واحدة غير جاهزة' : `${n} جهات غير جاهزة` });
+    }
+  }
+  if (ph && !ph.success) out.push({ key: 'ph-unread', level: 'warn', where: 'صحة المنصة', href: HEALTH_HREF, text: 'تعذّرت قراءة فحوص المنصة' });
+  for (const c of ph?.success && Array.isArray(ph.checks) ? ph.checks : []) {
+    if (c.level === 'warn' || c.level === 'bad') out.push({ key: `ph-${c.key}`, level: c.level, where: 'صحة المنصة', href: HEALTH_HREF, text: `${c.label}: ${c.line}` });
+  }
+  // الأشد أولًا، والترتيب داخل الدرجة كما جاء
+  return out.filter((x) => x.level === 'bad').concat(out.filter((x) => x.level !== 'bad'));
+}
+
 const needAr = (n) => (n === 1 ? 'أمر واحد يحتاج انتباهك' : n === 2 ? 'أمران يحتاجان انتباهك' : `${n} تحتاج انتباهك`);
 // سطر الشارة: «كل شيء سليم»، أو العدد بأسماء ما فيه
 // ومن لم تصل كل مصادره بعد «جارٍ الفحص»، فلا يظهر «سليم» ثم ينقلب
@@ -126,7 +165,7 @@ export const alertHref = (a) => formatRoute({ ctx: 'leaders', tab: a.target?.tab
  */
 export function deskNote(t) {
   if (!t) return null;
-  if (!t.success) return 'تعذّرت قراءة التنبيهات ونبض الدفعات الآن، فلا يُعرف إن كان فيها ما يحتاج انتباهك.';
+  if (!t.success) return 'تعذّرت قراءة التنبيهات الآن، فلا يُعرف إن كان فيها ما يحتاج انتباهك.';
   const src = (t.skipped || []).map((k) => SOURCE_AR[k] || k);
   if (!src.length) return null;
   const kinds = (t.unchecked || []).map((k) => ALERT_KINDS[k]?.label).filter(Boolean);

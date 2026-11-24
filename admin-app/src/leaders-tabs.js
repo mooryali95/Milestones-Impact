@@ -4,7 +4,7 @@ import { TRACK_COUNT } from '../../supabase/functions/leaders-api/labels.js';
 
 export const TABS = [
   ['overview', 'نظرة عامة'], ['insight', 'الرؤية الشاملة'], ['participants', 'المشاركون'], ['orgs', 'الجهات'], ['tracks', `المسارات الـ${TRACK_COUNT}`],
-  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['book', 'الكتاب الأم'], ['handbook', 'كتاب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mailcenter', 'مركز البريد'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['f360', 'تقييم 360'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'], ['settings', 'الإعدادات العامة'], ['ai', 'المساعد الذكي'],
+  ['programs', 'البرامج والدفعات'], ['hall', 'القاعة الحية'], ['journey', 'الرحلة والمتطلبات'], ['content', 'بنك المحتوى'], ['activities', 'الحضور والجلسات'], ['assessment', 'أسئلة القياس'], ['levels', 'المستويات والتسكين'], ['book', 'الكتاب الأم'], ['handbook', 'كتاب القائد'], ['katon', 'بنك كاتون'], ['capstones', 'مشاريع التخرج'], ['lab', 'مختبر القائد'], ['experts', 'الخبراء'], ['mailcenter', 'مركز البريد'], ['mail', 'قوالب البريد'], ['impact', 'قياس الأثر'], ['f360', 'تقييم 360'], ['certs', 'الشهادات'], ['payments', 'المدفوعات'], ['settings', 'الإعدادات العامة'], ['ai', 'المساعد الذكي'], ['health', 'صحة المنصة'],
 ];
 // أقسام ميزات قيد البناء ومفتاح كل منها (features.js على الخادم): عليها شارة «مخفي عن المستخدمين» حين تُطفأ
 export const FEATURE_TABS = { hall: 'hall', katon: 'katon', f360: 'f360' };
@@ -23,8 +23,11 @@ export const NAV_GROUPS = [
   ['الأشخاص', ['experts']],
   ['المنهج والمحتوى', ['journey', 'book', 'handbook', 'content', 'katon', 'lab', 'assessment', 'levels', 'tracks']],
   ['التقارير', ['insight', 'impact', 'f360']],
-  [SETUP_GROUP, ['mailcenter', 'mail', 'certs', 'payments', 'ai', 'settings']],
+  [SETUP_GROUP, ['mailcenter', 'mail', 'certs', 'payments', 'ai', 'settings', 'health']],
 ];
+// كلمات بحث إضافية للقسم (Ctrl K) فيُوجد بما كان يُعرف به: «صحة المنصة» بيت جاهزية الإطلاق وحالة النظام وبيئة التجربة
+// (تصور تبويبات الإدارة 2026-11-24، المرحلة أ)
+export const TAB_KEYWORDS = { health: ['جاهزية الإطلاق', 'حالة النظام', 'الفحوص التشغيلية', 'الحساب التجريبي', 'بيئة التجربة', 'الحالة'] };
 // مجموعة القسم: يقرؤها الشريط والبحث (Ctrl K) فيظهر كل قسم باسم مجموعته
 export const GROUP_OF = Object.fromEntries(NAV_GROUPS.flatMap(([g, keys]) => keys.map((k) => [k, g])));
 // حال المجموعة: المفتوح فيه القسم الحالي مفتوحة دائمًا، وإلا ما اختاره المدير، وإلا الافتراضي (الإعداد مطوي وحده)

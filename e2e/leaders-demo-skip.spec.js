@@ -324,10 +324,10 @@ for (const width of [390, 1440]) {
     });
     await page.goto(ADMIN);
     await page.evaluate(() => { sessionStorage.clear(); sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'هند', email: 'a@x.com', role_id: 'super_admin' }, ts: Date.now() })); });
-    await page.goto(`${ADMIN}#/leaders/overview`);
+    await page.goto(`${ADMIN}#/leaders/health`);
     await page.reload();
-    // الحساب التجريبي في «أدوات التجربة» المطوية آخر النظرة العامة (تدقيق 2026-11-23)
-    await page.locator('#today-tools > summary').click();
+    // الحساب التجريبي في «بيئة التجربة» المطوية في «الإعداد › صحة المنصة» (تصور تبويبات الإدارة 2026-11-24)
+    await page.locator('#ph-demo > summary').click();
     const card = page.locator('.la-demo');
     await expect(card).toContainText('الحساب التجريبي');
     await expect(card).toContainText('«تخطَّ هذه المرحلة» و«افتح كل المراحل»');
