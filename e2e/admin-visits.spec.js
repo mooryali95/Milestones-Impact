@@ -1,4 +1,4 @@
-// لوحة الإدارة: زيارات الموقع، وحالة النظام في النظرة العامة. الخلفية مُحاكاة.
+// لوحة الإدارة: زيارات الموقع، وحالة النظام وجاهزية الإطلاق في «الإعداد › صحة المنصة». الخلفية مُحاكاة.
 import { test, expect } from '@playwright/test';
 
 const BASE = 'http://localhost:4303/';
@@ -46,12 +46,12 @@ test('قبل تشغيل الترحيل: الشاشة تقول ما الذي يُ
   await expect(page.getByRole('alert')).toContainText('20261025200000_site_analytics.sql');
 });
 
-test('حالة النظام في النظرة العامة: ترحيلات وأسرار ناقصة واقتراب البريد من السقف', async ({ page }) => {
+test('حالة النظام في «الإعداد › صحة المنصة»: ترحيلات وأسرار ناقصة واقتراب البريد من السقف', async ({ page }) => {
   await setup(page, {
     'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
     'admin.health': { success: true, missing_migrations: ['20261025200000_site_analytics'], missing_secrets: ['LEADERS_TURNSTILE_SECRET'], mail: { today: 70, cap: 80 } },
   });
-  await page.goto(BASE + '#/leaders/overview');
+  await page.goto(BASE + '#/leaders/health');
   await page.reload();
   const note = page.getByRole('status').filter({ hasText: 'حالة النظام' });
   await expect(note).toContainText('20261025200000_site_analytics.sql');
@@ -70,7 +70,7 @@ test('حالة النظام: المؤجل بقرار لا يُطلب تطبيق�
       ],
       missing_secrets: ['LEADERS_ALERT_WEBHOOK'], mail: { today: 0, cap: 80 } },
   });
-  await page.goto(BASE + '#/leaders/overview');
+  await page.goto(BASE + '#/leaders/health');
   await page.reload();
   const note = page.getByRole('status').filter({ hasText: 'حالة النظام' });
   const line = (t) => note.locator('p').filter({ hasText: t });
@@ -92,12 +92,12 @@ test('جاهزية الإطلاق: بنود الإطلاق التجريبي من
       { key: 'release-pinned', ok: false, where: null, label: 'دفعات جارية بلا إصدار محتوى مثبّت (يُثبَّت بترحيل إصدار المحتوى): دفعة أ' },
     ] },
   });
-  await page.goto(BASE + '#/leaders/overview');
+  await page.goto(BASE + '#/leaders/health');
   await page.reload();
   const card = page.getByRole('region', { name: 'جاهزية الإطلاق' });
   await expect(card).toContainText('1 من 3');
-  await expect(card.locator('li').filter({ hasText: 'إصدار محتوى' }).getByRole('button')).toHaveCount(0);
-  await card.locator('li').filter({ hasText: 'مستشار أساسي' }).getByRole('button', { name: 'اضبطه' }).click();
+  await expect(card.locator('li').filter({ hasText: 'إصدار محتوى' }).getByRole('link')).toHaveCount(0);
+  await card.locator('li').filter({ hasText: 'مستشار أساسي' }).getByRole('link', { name: /اضبطه/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs/);
 });
 
@@ -125,11 +125,11 @@ test('جاهزية الإطلاق: البنود الناقصة تنقل إلى �
       { key: 'certificate', ok: false, where: 'certs', label: 'الشهادة بلا موقّع' },
     ] },
   });
-  await page.goto(BASE + '#/leaders/overview');
+  await page.goto(BASE + '#/leaders/health');
   await page.reload();
   const card = page.getByRole('region', { name: 'جاهزية الإطلاق' });
   await expect(card).toContainText('1 من 2');
-  await card.getByRole('button', { name: 'اضبطه' }).click();
+  await card.getByRole('link', { name: /اضبطه/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/certs/);
 });
 
@@ -147,11 +147,11 @@ test('من المنظومة إلى الجهة إلى الدفعة: الناقص 
       { key: 'advisor', ok: false, where: 'programs', label: 'دفعات جهات بلا مستشار أساسي: دفعة سفراء', refs: [{ kind: 'cohort', id: 'c1', name: 'دفعة سفراء' }] },
     ] },
   });
-  await page.goto(BASE + '#/leaders/overview');
+  await page.goto(BASE + '#/leaders/health');
   await page.reload();
   const launch = page.getByRole('region', { name: 'جاهزية الإطلاق' });
   // ما يسمّي جهة أو دفعة يفتح ملفها مباشرة بدل التبويب العام
-  await expect(launch.getByRole('button', { name: 'اضبطه' })).toHaveCount(0);
+  await expect(launch.getByRole('link', { name: /اضبطه/ })).toHaveCount(0);
   await expect(launch.getByRole('link', { name: 'دفعة سفراء' })).toHaveAttribute('href', '#/leaders/programs/c1');
   await expect(launch.getByRole('link', { name: 'منظومة' })).toHaveAttribute('href', '#/leaders/orgs/o2');
   // الجهات الفعّالة وحدها، والأكثر نقصًا أولًا
@@ -162,6 +162,6 @@ test('من المنظومة إلى الجهة إلى الدفعة: الناقص 
   // بند الدفعة من الخادم (orgCohortSetups) كما في صفحة الجهة، فلا يقول السطر «جاهزة» وصفحتها غير ذلك
   await expect(orgs.locator('li').first()).toContainText('الدفعة، منسق الجهة، الاعتماد');
   await expect(orgs).not.toContainText('جهة موقوفة');
-  await orgs.getByRole('button', { name: 'سفراء' }).click();
+  await orgs.getByRole('link', { name: 'سفراء' }).click();
   await expect(page).toHaveURL(/#\/leaders\/orgs\/o1$/);
 });

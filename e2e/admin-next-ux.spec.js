@@ -163,29 +163,6 @@ test('البحث الشامل: Ctrl+K، والأسهم وEnter تفتح النت
   await expect(page).toHaveURL(/#\/leaders\/handbook$/);
 });
 
-test('مراجعة المتطلبات دفعة واحدة من النظرة العامة', async ({ page }) => {
-  const reviewed = [];
-  await setup(page);
-  await page.route(/functions\/v1\/leaders-api/, async (route) => {
-    const b = JSON.parse(route.request().postData() || '{}');
-    if (b.action === 'admin.review') { reviewed.push(b); return route.fulfill({ json: { success: true } }); }
-    if (b.action === 'admin.reviews') {
-      return route.fulfill({ json: { success: true, pending_approval: [], submitted: [
-        { participant_id: 'p1', requirement_id: 'r1', completed_at: '2026-10-20', participants: { full_name: 'سارة الأحمد' }, stage_requirements: { title_ar: 'خطة التطوير' } },
-        { participant_id: 'p2', requirement_id: 'r1', completed_at: '2026-10-21', participants: { full_name: 'عمر علي' }, stage_requirements: { title_ar: 'خطة التطوير' } },
-      ] } });
-    }
-    return route.fallback();
-  });
-  await page.goto(BASE + '#/leaders/overview');
-  await page.reload();
-  await page.getByLabel('تحديد الكل').check();
-  await page.getByRole('button', { name: 'اعتماد المحدد (2)' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'تأكيد' }).click();
-  await expect.poll(() => reviewed.length).toBe(2);
-  expect(reviewed.map((x) => [x.participant_id, x.status])).toEqual([['p1', 'done'], ['p2', 'done']]);
-});
-
 test('القوائم: فرز بالعمود يُحفظ في العنوان، والفلاتر تبقى عند العودة للشاشة', async ({ page }) => {
   await setup(page);
   const contacts = ['منى', 'أحمد', 'سارة', 'خالد'].map((name, i) => ({ id: `c${i}`, name, email: `u${i}@x.sa`, status: 'new', product: 'MI-HOME', created_at: `2026-11-0${i + 1}T08:00:00Z` }));

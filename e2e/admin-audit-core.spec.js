@@ -103,12 +103,12 @@ test('admin-core-6: فلتر الجهة يسري على أرقام التحلي�
   await expect.poll(() => calls.find((c) => c.action === 'admin.overview' && c.org === 'none')).toBeTruthy();
   await expect(page.getByText(/تعذّر حساب قياس الأثر/)).toBeVisible();
   await expect(page.getByText('لم تُفعَّل أداة القياس البعدي بعد.')).toHaveCount(0);
-  // المكتب: قائمة المراجعة لكل الجهات عمدًا، بلا محدد
+  // المكتب لا يطلب قائمة المراجعة منذ تصور تبويبات الإدارة 2026-11-24 (طلبات المتطلبات نوع في الصندوق)
   const before = calls.length;
   await page.goto(`${BASE}#/leaders/overview`);
-  await expect.poll(() => calls.slice(before).find((c) => c.action === 'admin.reviews')).toBeTruthy();
+  await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
   const rq = calls.slice(before).filter((c) => c.action === 'admin.reviews');
-  expect(rq.every((c) => !c.org)).toBe(true);
+  expect(rq).toHaveLength(0);
 });
 
 test('admin-core-7: إعادة الإرسال تعرض رد الخادم المحايد وتنتظر مهلته، والإعدادات لا تَعِد برمز البريد لمن فعّل التطبيق', async ({ page }) => {

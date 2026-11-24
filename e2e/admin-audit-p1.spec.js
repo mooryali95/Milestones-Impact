@@ -93,7 +93,8 @@ test('جدول المشاركين: أسهم الفرز وخانات التحدي
   await expect(table.locator('tbody tr')).toHaveCount(2);
   const targets = table.locator('.th-sort, input[type="checkbox"]');
   expect(await targets.count()).toBeGreaterThanOrEqual(5);
-  const sizes = await targets.evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return [e.getAttribute('aria-label') || e.textContent, r.width, r.height]; }));
+  // العمود الاختياري المخفي (منتقي «الأعمدة») ليس هدفًا: يُقاس الظاهر وحده
+  const sizes = await targets.evaluateAll((els) => els.filter((e) => e.closest('th, td') && getComputedStyle(e.closest('th, td')).display !== 'none').map((e) => { const r = e.getBoundingClientRect(); return [e.getAttribute('aria-label') || e.textContent, r.width, r.height]; }));
   for (const [name, w, h] of sizes) {
     expect(w, name).toBeGreaterThanOrEqual(24);
     expect(h, name).toBeGreaterThanOrEqual(24);
