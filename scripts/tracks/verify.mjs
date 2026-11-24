@@ -8,7 +8,8 @@
 //   2) نصوص الملفات بلا قوالب «نحو/مسار» ولا كلمات نطاق ولا وعود جلسات أو ورش بالمستوى
 //   3) كل وعد في ملف التعريف يسلّمه النظام لذلك المستوى، ومختبرات الإطار كلها مذكورة
 //   4) المختبرات تصل كل مستوى كما هو مقصود (يطبع جدولًا)
-//   5) الأثر التأسيسي يحصل على نموذجين على الأقل، وتقرير الأثر في وثيقة الاحترافي
+//   5) الأثر التأسيسي يحصل على نموذجين على الأقل، وتقرير الأثر في وثيقة كل مستوى (مصفوفة الوثيقة بحسب المستوى)
+// والحالة بعد v2 يُطبَّق عليها ترحيل المصفوفة نفسه (20261128140000) في قاعدة محلية (PGlite)، لا محاكاة ثانية له.
 // node scripts/tracks/verify.mjs  ← يخرج بـ 1 عند أي خلل
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -53,7 +54,25 @@ export function applyContent(st) {
   const labs = st.labs.map((l) => ({ ...l, id: l.key, audience: LABS.audience[l.key] || l.audience }));
   return { models, labs };
 }
-const { models, labs } = applyContent(state);
+const MATRIX = '20261128140000_leaders_level_matrix';
+// ترحيل المصفوفة على نماذج الحالة: يعيد min_level والحقول كما يكتبها في الإنتاج
+export async function applyMatrix(list) {
+  const { PGlite } = await import('@electric-sql/pglite');
+  const db = new PGlite();
+  await db.exec(`create role anon; create role authenticated; create schema leaders;
+    create table leaders.schema_migrations (name text primary key);
+    create table leaders.learning_models (key text primary key, min_level text not null, fields jsonb not null);
+    create table leaders.track_profiles (key text primary key, journey_ar text not null);
+    create table leaders.tracks (key text primary key, profile_key text, journey_ar text);`);
+  for (const m of list) await db.query('insert into leaders.learning_models (key, min_level, fields) values ($1, $2, $3)', [m.key, m.min_level, JSON.stringify(m.fields)]);
+  await db.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), `../../supabase/migrations/${MATRIX}.sql`), 'utf8'));
+  const by = Object.fromEntries((await db.query('select key, min_level, fields from leaders.learning_models')).rows.map((r) => [r.key, r]));
+  await db.close();
+  return list.map((m) => ({ ...m, min_level: by[m.key].min_level, fields: by[m.key].fields }));
+}
+const v2 = applyContent(state);
+const labs = v2.labs;
+const models = await applyMatrix(v2.models);
 const chapters = state.chapters.map((c) => ({ ...c, body_md: 'x', sort: 0 }));
 const byKey = Object.fromEntries(models.map((m) => [m.key, m]));
 const flat = (p) => [p.title_ar, p.summary_ar, ...p.journey_ar].join('\n');
@@ -157,7 +176,8 @@ for (const p of profiles) {
       // الحقل وعد بمستوى: يجب ألا يظهر لمستوى أدنى إن كان الوعد «ما يميز مستواك»
       if (f?.min_level) check(f.min_level === p.level, `${tag}: الحقل من مستوى ${f.min_level} لا ${p.level}`);
     } else if (pr.kind === 'track_depth') {
-      const deep = myCap.filter((m) => m.fields.some((f) => f.track)).map((m) => m.key);
+      // الفصل يتعمق لمن يظهر له حقل المسار بمستواه (حقل المسار قد يكون لمستوى أعلى، كتقرير الأثر)
+      const deep = myCap.filter((m) => fieldsFor(m.fields, p.level, 'project', true).some((f) => f.track)).map((m) => m.key);
       check(JSON.stringify([...deep].sort()) === JSON.stringify([...pr.models].sort()), `${tag}: فصول التعمق الفعلية ${deep.join('، ')}`);
       for (const k of pr.models) check(txt.includes(byKey[k].title_ar), `${tag}: «${byKey[k].title_ar}» غير مذكور`);
     } else if (pr.kind === 'rubric_weight') {
@@ -214,8 +234,14 @@ const imp = (lv) => modelsFor(models, { milestone: lv, impact: lv, leadership: l
 const impCap = (lv) => capstoneModels(models, { milestone: lv, impact: lv, leadership: lv }, 'project').filter((m) => m.dimension === 'impact');
 check(imp('beginner').length >= 2, `الأثر التأسيسي: ${imp('beginner').length} نموذج`);
 check(impCap('beginner').length >= 2, `الأثر التأسيسي: ${impCap('beginner').length} فصل في الوثيقة`);
-check(impCap('advanced').some((m) => m.key === 'impact-report'), 'تقرير الأثر غائب عن وثيقة الأثر الاحترافي');
-check(!impCap('intermediate').some((m) => m.key === 'impact-report'), 'تقرير الأثر يظهر للمتوسط');
+for (const lv of LV) check(impCap(lv).some((m) => m.key === 'impact-report'), `تقرير الأثر غائب عن وثيقة الأثر (${lv})`);
+const ir = (lv) => fieldsFor(byKey['impact-report'].fields, lv, 'project', false).map((f) => f.key);
+check(JSON.stringify(ir('beginner')) === JSON.stringify(['program', 'changes', 'lessons']), `تقرير الأثر للتأسيسي: ${ir('beginner')}`);
+check(ir('intermediate').length === 5, `تقرير الأثر للمتوسط: ${ir('intermediate')}`);
+const ev = (lv) => fieldsFor(byKey['evidence-plan'].fields, lv, 'project', true).map((f) => f.key);
+check(JSON.stringify(ev('beginner')) === JSON.stringify(['success_signal']), `خطة الأدلة للتأسيسي: ${ev('beginner')}`);
+const begin = capstoneModels(models, { milestone: 'beginner', impact: 'beginner', leadership: 'beginner' }, 'project').map((m) => m.key);
+for (const k of ['governance', 'development-plan', 'roadmap', 'procurement']) check(!begin.includes(k), `${k} في وثيقة التأسيسي`);
 const toc = (lv) => fieldsFor(byKey['theory-of-change'].fields, lv, 'project', false).map((f) => f.key);
 check(JSON.stringify(toc('beginner')) === JSON.stringify(['program', 'impact', 'chain']), `نظرية التغيير للتأسيسي: ${toc('beginner')}`);
 check(toc('intermediate').includes('weakest') && toc('intermediate').includes('test') && !toc('intermediate').includes('external'), 'نظرية التغيير للمتوسط');

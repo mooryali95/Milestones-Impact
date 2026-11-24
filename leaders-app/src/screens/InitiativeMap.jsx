@@ -10,11 +10,14 @@ import { dimOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
 
 // حالة الفصل بلون واحد في الشريط والقائمة: مكتمل، أو قيد العمل، أو معاد، أو لم يبدأ
-export const chapterTone = (s) => (s.status === 'returned' ? 'bad' : s.complete ? 'ok' : s.status === 'draft' || s.status === 'submitted' ? 'warn' : 'idle');
-const TONE_AR = { ok: 'مكتمل', warn: 'قيد العمل', bad: 'أُعيد إليك', idle: 'لم يبدأ' };
+// optional: فصل لا حقل مطلوبًا فيه للمشارك (لا يُحسب في الجاهزية)، فلا يقال عنه «مكتمل»
+export const chapterTone = (s) => (s.status === 'returned' ? 'bad' : s.optional ? 'opt' : s.complete ? 'ok' : s.status === 'draft' || s.status === 'submitted' ? 'warn' : 'idle');
+const TONE_AR = { ok: 'مكتمل', warn: 'قيد العمل', bad: 'أُعيد إليك', idle: 'لم يبدأ', opt: 'اختياري' };
+/** الفصول التي تُحسب في الاكتمال والجاهزية */
+export const countedChapters = (sections) => (sections || []).filter((s) => !s.optional);
 
 /** الفصل التالي المقترح: أول فصل معاد، وإلا أول فصل لم يكتمل بترتيب الوثيقة */
-export const nextChapter = (sections) => (sections || []).find((s) => s.status === 'returned') || (sections || []).find((s) => !s.complete) || null;
+export const nextChapter = (sections) => (sections || []).find((s) => s.status === 'returned') || (sections || []).find((s) => !s.complete && !s.optional) || null;
 
 /** إحالة الفصل في الكتاب بصيغة يفهمها الكتاب، أو null */
 export function bookRef(section) {
@@ -52,14 +55,15 @@ export function Meaning({ scope, open, onHandbook }) {
 // ── فهرس الوثيقة: رؤية شاملة بشريط الفصول، والتالي المقترح، والمراحل بفصولها، وتصفية الناقص ──
 export function Navigator({ sections, busy, onOpen, onHandbook }) {
   const [only, setOnly] = useState('all');
-  const done = sections.filter((s) => s.complete).length;
+  const req = countedChapters(sections);
+  const done = req.filter((s) => s.complete).length;
   const next = nextChapter(sections);
-  const groups = groupByPhase(sections).map((g) => ({ ...g, shown: only === 'all' ? g.items : g.items.filter((s) => !s.complete) }));
+  const groups = groupByPhase(sections).map((g) => ({ ...g, shown: only === 'all' ? g.items : g.items.filter((s) => !s.complete && !s.optional) }));
   return (
     <section className="card cp-sections im-nav" data-tour="capstone-sections" aria-labelledby="im-nav-h">
       <div className="im-nav-head">
         <h2 id="im-nav-h">فهرس الوثيقة</h2>
-        <span className="muted small">اكتمل {done} من {countAr(sections.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلًا')}</span>
+        <span className="muted small">اكتمل {done} من {countAr(req.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلًا')}</span>
       </div>
       {/* الشريط: كل فصل قطعة بلون حالته، تنقر فتفتحه. رؤية الوثيقة كلها في سطر. اختصار للفأرة واللمس، والقائمة تحته
           هي طريق لوحة المفاتيح وقارئ الشاشة بالفصول نفسها، فلا يتكرر كل فصل مرتين في الأسماء المقروءة */}
@@ -69,7 +73,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
           return <span key={s.id} className={`im-seg ${t}`} onClick={() => !busy && onOpen(s.id)} title={`${i + 1}. ${s.title}: ${TONE_AR[t]}`} />;
         })}
       </div>
-      <p className="sr-only">اكتمل {done} من {sections.length}، وقائمة الفصول أدناه بحالة كل فصل.</p>
+      <p className="sr-only">اكتمل {done} من {req.length}، وقائمة الفصول أدناه بحالة كل فصل.</p>
       <div className="im-legend small muted">{Object.entries(TONE_AR).map(([k, t]) => <span key={k}><i className={`im-dot ${k}`} />{t}</span>)}</div>
 
       {next && (
@@ -84,20 +88,21 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
       )}
 
       <div className="im-filter" role="tablist" aria-label="عرض الفصول">
-        {[['all', 'كل الفصول'], ['todo', `الناقص فقط (${sections.length - done})`]].map(([k, t]) => (
+        {[['all', 'كل الفصول'], ['todo', `الناقص فقط (${req.length - done})`]].map(([k, t]) => (
           <button key={k} type="button" role="tab" aria-selected={only === k} className={only === k ? 'on' : ''} onClick={() => setOnly(k)}>{t}</button>
         ))}
       </div>
 
       {groups.map((g, gi) => {
-        const gd = g.items.filter((s) => s.complete).length;
+        const gReq = countedChapters(g.items);
+        const gd = gReq.filter((s) => s.complete).length;
         if (!g.shown.length) return null;
         return (
           <div key={g.key} className="im-phase" data-phase={g.key}>
             <header>
               <span className="im-ph-n">{gi + 1}</span>
               <div className="grow"><b>{g.title}</b>{g.lead && <small className="muted">{g.lead}</small>}</div>
-              <span className={`chip ${gd === g.items.length ? 'ok' : ''}`}>{gd}/{g.items.length}</span>
+              <span className={`chip ${gd === gReq.length ? 'ok' : ''}`}>{gd}/{gReq.length}</span>
             </header>
             <ol className="cp-list">
               {g.shown.map((s) => {
@@ -107,7 +112,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
                 const ref = bookRef(s);
                 return (
                   <li key={s.id} className="im-row">
-                    <button className={`cp-sec${s.complete ? ' done' : ''}`} disabled={busy} onClick={() => onOpen(s.id)}>
+                    <button className={`cp-sec${s.complete && !s.optional ? ' done' : ''}`} disabled={busy} onClick={() => onOpen(s.id)}>
                       <span className="cp-n">{String(s.n).padStart(2, '0')}</span>
                       <span className="model-icon sm">{s.icon}</span>
                       <span className="cp-t">
@@ -115,7 +120,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
                         <small>{info?.why || dimOf(s.dimension).short}</small>
                         <small className="im-meta">{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}{feeds.length ? ` · يغذي ${feeds.join('، ')}` : ''}</small>
                       </span>
-                      <span className={`chip ${t === 'idle' ? '' : t}`}>{t === 'warn' && s.status === 'submitted' ? 'مسلّم' : TONE_AR[t]}</span>
+                      <span className={`chip ${t === 'idle' || t === 'opt' ? '' : t}`}>{t === 'warn' && s.status === 'submitted' ? 'مسلّم' : TONE_AR[t]}</span>
                     </button>
                     {ref && onHandbook && <button type="button" className="link small im-book" onClick={() => onHandbook(ref)} aria-describedby={`im-t-${s.id}`}>في الكتاب</button>}
                   </li>
@@ -125,7 +130,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
           </div>
         );
       })}
-      {only === 'todo' && done === sections.length && <p className="muted small">اكتملت الفصول كلها.</p>}
+      {only === 'todo' && done === req.length && <p className="muted small">اكتملت الفصول كلها.</p>}
     </section>
   );
 }

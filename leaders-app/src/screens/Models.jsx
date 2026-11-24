@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل نموذج أداة عمل يملؤها المشارك على مشروعه الحقيقي: مسودة تُحفظ،
 // ثم تسليم يمنح نقاط النموذج مرة واحدة، ثم تقييم المستشار وملاحظاته.
-import React, { useEffect, useId, useState } from 'react';
+import React, { Fragment, useEffect, useId, useState } from 'react';
 import { call } from '../api.js';
 import { ErrorBox, isoLtr } from '../ui.jsx';
 import { useUnsavedGuard } from '../unsaved.js';
@@ -337,7 +337,10 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             const fid = `${uid}-${f.key}`;
             const single = f.bind === 'initiative' || !['select', 'table'].includes(f.type);
             return (
-              <div key={f.key} className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
+              <Fragment key={f.key}>
+              {/* عنوان مجموعة يسبق الحقل (group في تعريفه)، مثل «تعمّق إن شئت» قبل الحقول الاختيارية في البطاقة */}
+              {f.group && <p className="mf-group">{f.group}</p>}
+              <div className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, { ...d.examples, context: (m.key === 'initiative-charter' ? answers.context : null) ?? d.examples?.context ?? null })} />}
                 {/* داخل المبادرة وحدها (AssistantContext): المساعد نفسه بسياق اسم الحقل، والمسودة لا تُرسل */}
@@ -348,6 +351,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
                 {/* بريد الراعي اختياري، لكن الناقص منه لا يصله طلب التأييد: يُنبَّه عند الكتابة لا في فحوص الوثيقة لاحقًا */}
                 {f.key === 'sponsor_email' && String(answers[f.key] || '').trim() && !isEmail(String(answers[f.key]).trim()) && <p className="alert err small" role="alert">هذا البريد غير مكتمل، فلن يصل الراعي طلب التأييد. صحّحه أو اتركه فارغًا.</p>}
               </div>
+              </Fragment>
             );
           })}
           {/* الجدول الزمني يُرى وهو يُكتب: جانت بعلاقاته ومساره الحرج من صفوف الجدول نفسها (visuals.js) */}

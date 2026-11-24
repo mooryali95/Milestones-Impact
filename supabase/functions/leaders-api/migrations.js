@@ -175,6 +175,7 @@ export const MIGRATIONS = [
   '20261128110000_leaders_relative_time_hints',
   '20261128120000_leaders_share_readiness',
   '20261128130000_leaders_charter_beneficiaries',
+  '20261128140000_leaders_level_matrix',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -265,4 +266,5 @@ export const MIGRATION_GATES = {
   '20261128110000_leaders_relative_time_hints': ["tolerant", "محتوى نماذج فقط (تلميحات وتسميات): الدوال تقبل التاريخ و«الأسبوع N» قبله وبعده (المرحلة 1)"],
   '20261128120000_leaders_share_readiness': ["tolerant", "الدالة تتحمل غياب العمود (share.ts): قبله يُنشأ الرابط بلا جاهزية، ولا يُكتب العمود إلا إن طُلب تشغيله"],
   '20261128130000_leaders_charter_beneficiaries': ["tolerant", "محتوى نماذج فقط: حقلان اختياريان جديدان، والدوال تقرأ الحقول كما هي في القاعدة قبله وبعده"],
+  '20261128140000_leaders_level_matrix': ["tolerant", "محتوى نماذج ونصوص ملفات تعريف فقط. كل حقل يصير مطلوبًا بهذا الترحيل مخزّن required: false مع شرط"],
 };

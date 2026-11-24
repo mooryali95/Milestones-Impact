@@ -9,9 +9,9 @@
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
-import { award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
+import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
@@ -29,14 +29,15 @@ const SPONSOR_DAYS = 21;
 const MODEL_COLS = 'id, key, dimension, sort, min_level, active, scopes, capstone_sort, title_ar, icon, summary_ar, points, fields';
 
 async function levelsOf(participantId: string) {
-  const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId)) as any[] ?? [];
-  const a = approvalOf(pl);
-  return { levels: a.levels as Record<string, string>, approved: a.approved };
+  const [rows, earlier] = await Promise.all([db.from('placements').select('dimension, level, approved_at').eq('participant_id', participantId), approvalEvidence(participantId)]);
+  const pl = must(rows) as any[] ?? [];
+  const a = approvalOf(pl, earlier);
+  return { levels: a.levels as Record<string, string>, approved: a.approved, since: a.since };
 }
 
 // ── بناء الوثيقة من مصادرها ──
 async function build(p: any) {
-  const { levels, approved } = await levelsOf(p.id);
+  const { levels, approved, since } = await levelsOf(p.id);
   if (!approved) throw new Fail('تُفتح وثيقة مبادرتك بعد اعتماد مسارك', 403, 'locked');
   const scope = p.work_scope || null;
   // النماذج وحقولها بمستوى المحتوى (الموحد في الدفعة المتجانسة)، والمسار والأولوية من قياسه
@@ -57,13 +58,15 @@ async function build(p: any) {
   // العنوان المعروض للمشارك وراعيه: ملف التعريف، وإلا عنوان المسار
   const profile = await profileFor(levels, priority);
   if ((track as any).data && profile?.title_ar) (track as any).data = { ...(track as any).data, title_ar: profile.title_ar };
-  const mine = capstoneModels(all, content, scope);
+  // قاعدة «لا فقد»: فصل كتب فيه المشارك قبل أن يُرفع مستواه يبقى في وثيقته، غير مطلوب
+  const kept = answeredModels(subs.data || []);
+  const mine = capstoneModels(all, content, scope, kept);
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
   const sections = mine.map((m: any) => {
-    const fields = modelFields(m, content, scope, priority);
     const sub = by[m.id];
+    const fields = modelFields(m, content, scope, priority, sub?.answers || null, since);
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
     return { model: m, fields, answers, sub, state: sectionState(m, fields, { ...sub, answers }) };
   });
@@ -73,12 +76,14 @@ async function build(p: any) {
     answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
   const ready = readiness(sections.map((s: any) => s.state), checks);
-  return { levels, scope, priority, weighted, project: trackProject(all, levels, scope, priority), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
+  return { levels, scope, priority, weighted, project: trackProject(all, levels, scope, priority, kept), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
 }
 
 const sectionView = (s: any) => ({
   id: s.model.id, key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension, points: s.model.points,
   complete: s.state.complete, missing: s.state.missing.length, status: s.state.status, rating: s.state.rating,
+  // فصل لا حقل مطلوبًا فيه للمشارك: لا يُحسب في الجاهزية (readiness)، فيُعرض «اختياري» لا «مكتمل»
+  optional: s.state.counted === false,
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
   // معرّف التسليم ليقيّم المراجع الفصل من بطاقة المبادرة نفسها (لا من «التعلم»)

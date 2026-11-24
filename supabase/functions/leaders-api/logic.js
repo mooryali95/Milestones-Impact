@@ -168,11 +168,19 @@ export function levelFor(pcts, rules) {
 // ── نموذج التسكين المركّب ──
 // قاعدة «المسار معتمد»: ثلاثة تسكينات وكلها معتمدة؛ ومستويات المشارك من تسكيناته.
 // مصدر واحد لكل الخادم (كانت مكتوبة في ستة مواضع).
-export function approvalOf(placements) {
+/** @param {any} placements @param {any[]} [earlier] أدلة أقدم على الاعتماد الأول (أول قيد placement.approve، وأول تسليم نموذج) */
+export function approvalOf(placements, earlier = []) {
   const pl = Array.isArray(placements) ? placements : [];
+  const approved = pl.length === 3 && pl.every((x) => !!x.approved_at);
   return {
-    approved: pl.length === 3 && pl.every((x) => !!x.approved_at),
+    approved,
     levels: Object.fromEntries(pl.map((x) => [x.dimension, x.level])),
+    // أول اعتماد لمستوياته: به يُعرف من بدأ قبل تغيير في النماذج (required_after في fieldsFor). أقدم approved_at في التسكينات
+    // وأقدم دليل سابق (earlier): إعادة الاعتماد أو تغيير مستوى يكتب approved_at جديدًا، فلا يصير القديم «جديدًا» بها
+    since: (() => {
+      const t = approved ? [...pl.map((x) => x.approved_at), ...(earlier || [])].map((v) => Date.parse(v)).filter(Number.isFinite) : [];
+      return t.length ? new Date(Math.min(...t)).toISOString() : null;
+    })(),
   };
 }
 
@@ -793,22 +801,57 @@ export function rankFor(points) {
 // scope: نطاق عمل المشارك (participants.work_scope). النموذج المخصص لنطاقات
 // بعينها (scopes) لا يظهر لغيرها، ومن لم يحدد نطاقه يُعامل معاملة المشروع.
 const scopeOk = (scopes, scope) => !(scopes || []).length || scopes.includes(scope || 'project');
-/** @param {any[]} models @param {Record<string, string>} levels @param {string|null} [scope] */
-export function modelsFor(models, levels, scope = null) {
+// kept: معرّفات نماذج كتب فيها المشارك (answeredModels). قاعدة «لا فقد» (مصفوفة الوثيقة بحسب المستوى، 2026-11-24):
+// الفصل الذي رُفع مستواه بعد أن كتب فيه المشارك يبقى ظاهرًا له وفي وثيقته، وحقوله كلها غير مطلوبة (keptModel).
+/** @param {any[]} models @param {Record<string, string>} levels @param {string|null} [scope] @param {Set<string>|null} [kept] */
+export function modelsFor(models, levels, scope = null, kept = null) {
   return models
-    .filter((m) => m.active !== false && levels[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level] && scopeOk(m.scopes, scope))
+    .filter((m) => m.active !== false && levels[m.dimension] && scopeOk(m.scopes, scope)
+      && (RANK[levels[m.dimension]] >= RANK[m.min_level] || !!kept?.has(m.id)))
     .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
 }
+// النموذج ظاهر للمشارك بقاعدة «لا فقد» وحدها، لا بمستواه
+export const keptModel = (/** @type {any} */ m, /** @type {Record<string, string>} */ levels) => !(levels?.[m.dimension] && RANK[levels[m.dimension]] >= RANK[m.min_level]);
+// قيمة كتبها المشارك فعلًا: نص غير فارغ، أو جدول فيه خلية واحدة مكتوبة على الأقل
+export const hasAnswer = (/** @type {any} */ v) => (Array.isArray(v)
+  ? v.some((r) => (Array.isArray(r) ? r : [r]).some((c) => String(c ?? '').trim()))
+  : v != null && typeof v === 'object' ? Object.values(v).some(hasAnswer) : !!String(v ?? '').trim());
+// النماذج التي كتب فيها المشارك شيئًا، من صفوف model_submissions
+export const answeredModels = (/** @type {any[]} */ subs) => new Set((subs || [])
+  .filter((s) => s?.answers && typeof s.answers === 'object' && Object.values(s.answers).some(hasAnswer)).map((s) => s.model_id));
 
 // حقول النموذج كما تخص المشارك: الحقل قد يُطلب من مستوى أعلى (min_level)
 // أو لنطاقات بعينها (scopes)، فيتعمق النموذج نفسه مع المستوى والنطاق دون
 // نسخ نموذج لكل حالة. level: مستوى المشارك في بُعد النموذج.
 // primary: بُعد النموذج هو محور الأولوية في مسار المشارك، فتظهر حقول التعمق (track).
 // min_rows_beginner: أقل صفوف الجدول للتأسيسي حين يكون أخف من غيره.
-export function fieldsFor(fields, level, scope = null, primary = false) {
-  return (fields || [])
-    .filter((f) => (!f.min_level || RANK[level] >= RANK[f.min_level]) && scopeOk(f.scopes, scope) && (!f.track || primary))
-    .map((f) => (f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f));
+// الإلزام: required !== false كما كان. وحقل مخزّن required: false يصير مطلوبًا بأحد شرطين (مصفوفة الوثيقة بحسب المستوى):
+//   required_from: من هذا المستوى فأعلى (كان مطلوبًا للاحترافي وحده قبل أن يُفتح فصله لمن دونه)
+//   required_after: لمن اعتُمد مساره في هذا الوقت أو بعده (since)، فلا يُطلب ممن بدأ قبل الترحيل ولا تنخفض جاهزيته.
+// والتخزين required: false مقصود: الدوال الأقدم تقرأ الحقل اختياريًا، فالتراجع عن الدوال لا يُنقص جاهزية أحد.
+// answers: إجابات المشارك. قاعدة «لا فقد»: حقل رُفع مستواه عن مستوى المشارك وقد كتب فيه يبقى ظاهرًا
+// وفي وثيقته، غير مطلوب (kept)، فلا يحذفه الحفظ التالي (cleanAnswers يقلّم إلى الحقول الظاهرة).
+// kept: الفصل كله ظاهر بهذه القاعدة (keptModel)، فلا يُطلب منه شيء.
+// since: أول اعتماد لمسار المشارك (approvalOf). بلا قيمة يُعامل معاملة من بدأ قبل (الأسلم لجاهزيته).
+/** @param {any[]} fields @param {any} level @param {any} [scope] @param {boolean} [primary] @param {any} [answers] @param {boolean} [kept] @param {string | null} [since] */
+export function fieldsFor(fields, level, scope = null, primary = false, answers = null, kept = false, since = null) {
+  const a = answers && typeof answers === 'object' ? answers : null;
+  const out = [];
+  for (const f of fields || []) {
+    if (!scopeOk(f.scopes, scope) || (f.track && !primary)) continue;
+    const byLevel = !f.min_level || RANK[level] >= RANK[f.min_level];
+    if (!byLevel && !(a && hasAnswer(a[f.key]))) continue;
+    let g = f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f;
+    if (!byLevel) g = { ...g, required: false, kept: true };
+    // kept_req: كان مطلوبًا في الفصل لولا قاعدة «لا فقد»، فيُحسب الفصل مكتملًا في الجاهزية إن اكتمل به (sectionState)
+    // optional-exempt: حقول نموذج لا أنشطة
+    else if (kept) g = { ...g, required: false, ...(f.required !== false ? { kept_req: true } : {}) };
+    // optional-exempt: حقول نموذج لا أنشطة
+    else if (f.required === false && ((f.required_from && RANK[level] >= RANK[f.required_from])
+      || (f.required_after && since && Date.parse(since) >= Date.parse(f.required_after)))) g = { ...g, required: true };
+    out.push(g);
+  }
+  return out;
 }
 
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة
@@ -2967,3 +3010,54 @@ export const LINK_CLOSED_AR = 'انتهت مدة الاطلاع على هذا ا
 export function companionAllowed(org, cohort) {
   return (org ? org.companion_allowed !== false : true) && cohort?.companion !== false;
 }
+
+// حقول النموذج التعليمي: قائمة مضبوطة الأنواع، بمفاتيح ثابتة لا تتغير بتغيير العنوان
+const FIELD_TYPES = new Set(['text', 'textarea', 'select', 'table']);
+// fail: يرمي خطأ المستدعي (Fail في الخادم). يحفظ كل خاصية تقرؤها fieldsFor، فلا يُسقط حفظ اللوحة شرط إلزام أو مستوى
+/** @param {unknown} input @param {(m: string) => never} [fail] */
+export function cleanModelFieldsOf(input, fail = (m) => { throw new Error(m); }) {
+  const list = Array.isArray(input) ? input : [];
+  const keys = new Set();
+  return list.slice(0, 30).map((/** @type {any} */ f, /** @type {number} */ i) => {
+    const type = FIELD_TYPES.has(f?.type) ? f.type : 'textarea';
+    let key = String(f?.key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') || `f${i + 1}`;
+    while (keys.has(key)) key += '_';
+    keys.add(key);
+    const label = String(f?.label || '').trim().slice(0, 200);
+    if (!label) fail(`الحقل ${i + 1} بلا عنوان`);
+    /** @type {Record<string, any>} */
+    // optional-exempt: حقل نموذج يحرره المدير، لا نشاط
+    const out = { key, label, type, hint: String(f?.hint || '').slice(0, 300), required: f?.required !== false };
+    if (type === 'select') {
+      out.options = (Array.isArray(f.options) ? f.options : []).map((/** @type {unknown} */ x) => String(x).trim()).filter(Boolean).slice(0, 20);
+      if (out.options.length < 2) fail(`الحقل "${label}" يحتاج خيارين على الأقل`);
+    }
+    if (type === 'table') {
+      out.columns = (Array.isArray(f.columns) ? f.columns : []).map((/** @type {unknown} */ x) => String(x).trim()).filter(Boolean).slice(0, 10);
+      if (!out.columns.length) fail(`الجدول "${label}" يحتاج عمودًا واحدًا على الأقل`);
+      out.min_rows = Math.max(1, Math.min(30, Math.round(Number(f.min_rows) || 1)));
+      // التأسيسي بصفوف أقل: لا يُحفظ إلا إن كان أقل من العام
+      const mb = Math.round(Number(f.min_rows_beginner) || 0);
+      if (mb >= 1 && mb < out.min_rows) out.min_rows_beginner = mb;
+      // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
+      const im = f.import && typeof f.import === 'object' ? f.import : null;
+      if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };
+    }
+    // التعمق داخل النموذج نفسه: حقل من مستوى أعلى، أو لنطاقات بعينها
+    if (LEVELS.includes(f?.min_level) && f.min_level !== 'beginner') out.min_level = f.min_level;
+    const scopes = (Array.isArray(f?.scopes) ? f.scopes : []).filter((/** @type {string} */ x) => SCOPES.includes(x));
+    if (scopes.length && scopes.length < SCOPES.length) out.scopes = [...new Set(scopes)];
+    // حقل اسم المشروع يأخذ قيمته من بطاقة المبادرة، فلا يكتبه المشارك مرتين
+    if (type === 'text' && f?.bind === 'initiative') out.bind = 'initiative';
+    // حقل تعمق المسار: يظهر لمن بُعد النموذج محور الأولوية في مساره فقط
+    if (f?.track === true) out.track = true;
+    // مطلوب من مستوى بعينه فأعلى، ظاهر لمن دونه اختياريًا (fieldsFor)، وعنوان مجموعة يسبق الحقل في ورقة العمل
+    if (LEVELS.includes(f?.required_from) && f.required_from !== 'beginner') out.required_from = f.required_from;
+    const group = String(f?.group || '').trim().slice(0, 60);
+    if (group) out.group = group;
+    // مطلوب لمن اعتُمد مساره بعد هذا الوقت (fieldsFor since): يبقى كما كتبه الترحيل
+    if (typeof f?.required_after === 'string' && Number.isFinite(Date.parse(f.required_after))) out.required_after = f.required_after.slice(0, 40);
+    return out;
+  });
+}
+

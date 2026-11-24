@@ -357,7 +357,7 @@ export function sCurveSvg(doc, { width = 1000 } = {}) {
   const d0 = new Date(min);
   for (let t = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() + 1, 1); t <= max; ) { g += `<text x="${X(t)}" y="${H - 12}" font-size="10.5" fill="${VC.muted}" text-anchor="middle">${esc(new Date(t).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'short', timeZone: 'UTC' }))}</text>`; const d = new Date(t); t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1); }
   const hline = (v, c, t, dash) => (v ? `<line x1="${padL}" y1="${Y(v)}" x2="${W - padR}" y2="${Y(v)}" stroke="${c}" stroke-width="1.3"${dash ? ' stroke-dasharray="5 4"' : ''}/><text x="${W - padR - 4}" y="${Y(v) - 5}" font-size="10.5" fill="${c}" text-anchor="start" direction="rtl">${esc(t)}</text>` : '');
-  g += hline(cost.envelope, VC.ink, `الموازنة المتاحة ${money(cost.envelope || 0)}`, true) + hline(cost.withContingency, VC.gold, `مع الاحتياطي ${money(cost.withContingency)}`, true);
+  g += hline(cost.envelope, VC.ink, `الموازنة المتاحة ${money(cost.envelope || 0)}`, true) + (cost.contingency ? hline(cost.withContingency, VC.gold, `مع الاحتياطي ${money(cost.withContingency)}`, true) : '');
   g += `<path d="M${X(min)} ${Y(0)} ${pts.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')}" fill="none" stroke="${VC.ink}" stroke-width="2.4"/>`;
   g += `<path d="M${X(min)} ${Y(0)} ${pts.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')} L${X(max)} ${Y(0)} Z" fill="${VC.cream}" opacity=".6"/>`;
   g += `<g data-chapter="cost-plan"><title>${esc(`التكلفة التقديرية ${money(cost.total)} ريال، تتراكم بحسب أنشطة الجدول`)}</title><circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="4" fill="${VC.ink}"/></g>`;

@@ -503,6 +503,7 @@
 .fb-row > input[data-f="min_rows"] { grid-column: 2; width: 110px; }
 .fb-n { font-family: var(--font-en); color: var(--gold-text); font-weight: 700; text-align: center; }
 .fb-req { display: flex !important; align-items: center; gap: 4px; font-weight: 600 !important; grid-column: 2; }
+.fb-cond { grid-column: 1 / -1; color: var(--la-muted, #667); font-size: .85em; }
 .fb-acts { display: flex; gap: 4px; justify-content: flex-end; grid-column: 3; }
 .fb-acts button { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line-strong); background: #fff; cursor: pointer; color: var(--ink-soft); }
 .fb-acts button[data-fb="del"]:hover { color: var(--st-bad); border-color: var(--st-bad); }
