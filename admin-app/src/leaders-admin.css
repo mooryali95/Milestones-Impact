@@ -45,7 +45,7 @@
 .la-link { color: var(--petrol-soft); font-weight: 600; font-size: .84rem; text-decoration: underline; text-underline-offset: 3px; }
 .la-chip { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; background: var(--sand-light); color: var(--ink-soft); }
 .la-chip.warn { background: rgba(178,107,0,.12); color: var(--st-warn-text); }
-.la-chip.ok { background: rgba(46,125,91,.12); color: var(--st-ok); }
+.la-chip.ok { background: rgba(46,125,91,.12); color: var(--st-ok-text); } /* axe 2026-11-24: --st-ok على هذه الأرضية 4.28 إلى 1 */
 .la-chip.bad { background: var(--st-bad-bg); color: var(--st-bad); }
 .la-phase { font-size: .9rem; color: var(--gold-text); margin: 22px 0 10px; }
 
@@ -686,13 +686,14 @@
   .la-shell .la-tab-group > button:focus-visible, .la-shell .la-tab-group-label:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
 }
 
-/* جدول المشاركين على الهاتف: بطاقة لكل مشارك، ولكل قيمة عنوانها من data-label */
-@media (max-width: 600px) {
+/* الجداول العريضة على الهاتف (أقل من 640، تدقيق المرحلة 4): بطاقة لكل صف، ولكل قيمة عنوانها من data-label */
+@media (max-width: 640px) {
   .la-cards thead { display: none; }
   .la-cards, .la-cards tbody, .la-cards tr, .la-cards td { display: block; width: 100%; }
   .la-cards tr { border: 1px solid var(--line, rgba(11,39,47,.12)); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
   .la-cards td { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border: 0; text-align: start; }
-  .la-cards td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-faint, var(--brand-muted-soft)); flex: none; }
+  /* عنوان القيمة بلون الحاشية المقروء (4.9 إلى 1)، لا بلون الخطوط الباهت (1.6 إلى 1) */
+  .la-cards td[data-label]::before { content: attr(data-label); font-size: .72rem; color: var(--ink-light); flex: none; }
   .la-cards td small[dir="ltr"] { overflow-wrap: anywhere; }
 }
 

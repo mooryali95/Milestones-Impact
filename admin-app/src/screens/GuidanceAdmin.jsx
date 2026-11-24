@@ -230,7 +230,8 @@ function SetReview({ canWrite, onChanged, focus }) {
       el.querySelector('summary')?.focus();
     });
   }, [pending, d, kind]);
-  if (!d?.success) return null;
+  // ردّ بلا مجموعة (ترحيل لم يُطبَّق أو خادم أقدم) لا يكسر الشاشة
+  if (!d?.success || !Array.isArray(d.set?.cases)) return null;
   const set = d.set;
   const changed = () => { load(); onChanged?.(); };
   const approve = async () => {
