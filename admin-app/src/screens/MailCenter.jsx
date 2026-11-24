@@ -146,7 +146,44 @@ function QueueBody({ id, onClose }) {
   );
 }
 
-export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
+// تبويبا المركز (المرحلة 3 من تدقيق اللوحة): الحالة والتشخيص، وقواعد التوجيه. لكل منهما رابط:
+// #/leaders/mailcenter (الحالة، والرابط القديم كما هو) و#/leaders/mailcenter/routing
+export const MAIL_TABS = [['status', 'الحالة والتشخيص'], ['routing', 'قواعد التوجيه']];
+export const mailTab = (id) => (id === 'routing' ? 'routing' : 'status');
+
+function MailTabs({ tab, onTab }) {
+  const key = (e) => {
+    const i = MAIL_TABS.findIndex(([k]) => k === tab);
+    const to = { ArrowLeft: i + 1, ArrowRight: i - 1, Home: 0, End: MAIL_TABS.length - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    const k = MAIL_TABS[(to + MAIL_TABS.length) % MAIL_TABS.length][0];
+    onTab(k);
+    setTimeout(() => document.getElementById(`mc-tab-${k}`)?.focus(), 0);
+  };
+  return (
+    <div className="pf-tabs mc-tabs" role="tablist" aria-label="أقسام مركز البريد" onKeyDown={key}>
+      {MAIL_TABS.map(([k, l]) => (
+        <button key={k} id={`mc-tab-${k}`} type="button" role="tab" aria-selected={tab === k} aria-controls={`mc-panel-${k}`} tabIndex={tab === k ? 0 : -1} onClick={() => onTab(k)}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
+export default function MailCenter({ canWrite, isSuper = false, onPerson, view = null, onView = () => {} }) {
+  const tab = mailTab(view);
+  if (tab === 'routing') {
+    return (
+      <div className="mc">
+        <MailTabs tab={tab} onTab={onView} />
+        <div role="tabpanel" id="mc-panel-routing" aria-labelledby="mc-tab-routing"><NotifyRouting /></div>
+      </div>
+    );
+  }
+  return <MailStatus canWrite={canWrite} isSuper={isSuper} onPerson={onPerson} tabs={<MailTabs tab={tab} onTab={onView} />} />;
+}
+
+function MailStatus({ canWrite, isSuper, onPerson, tabs }) {
   const { toast, confirm } = useUI();
   const [d, setD] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -169,6 +206,8 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
   const senderDomain = d.provider.domains.find((x) => x.sender);
   return (
     <div className="mc">
+      {tabs}
+      <div role="tabpanel" id="mc-panel-status" aria-labelledby="mc-tab-status" className="mc-panel">
       <div className={`pay-hero mc-hero ${b.state}`}>
         <div>
           <p className="pay-eyebrow">البريد · اليوم</p>
@@ -242,8 +281,6 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
         )}
       </section>
 
-      <NotifyRouting />
-
       <div className="la-grid2">
         <section className="la-card">
           <h3>توزيع اليوم</h3>
@@ -271,6 +308,7 @@ export default function MailCenter({ canWrite, isSuper = false, onPerson }) {
           </ul>
           <p className="la-muted small">حالات التسليم: {Object.values(DELIVERY_AR).slice(0, 3).map(([l]) => l).join('، ')}، وغيرها كما يعلنها المزوّد.</p>
         </section>
+      </div>
       </div>
     </div>
   );

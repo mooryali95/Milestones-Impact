@@ -47,3 +47,17 @@ export function navKey(e, doc = globalThis.document) {
   if (e.key === 'ArrowRight' || e.code === 'KeyK') return 'prev';
   return null;
 }
+
+// موضع القائمة عند فتح ملف منها (المرحلة 3 من تدقيق اللوحة): الرجوع إليها يعيد التمرير نفسه ويضع التركيز على
+// صف آخر ملف فُتح، فلا يبدأ المدير من أعلى القائمة. لقطة في الجلسة فقط، تُستهلك مرة واحدة
+const SPOT = 'mi_admin_list_spot';
+export function keepSpot(y, id) {
+  try { sessionStorage.setItem(SPOT, JSON.stringify({ y: Math.max(0, Math.round(Number(y) || 0)), id: String(id || '') })); } catch { /* محجوب */ }
+}
+export function takeSpot() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SPOT));
+    sessionStorage.removeItem(SPOT);
+    return s && typeof s.y === 'number' ? { y: s.y, id: typeof s.id === 'string' ? s.id : '' } : null;
+  } catch { return null; }
+}

@@ -964,8 +964,8 @@ export const ROUTING_MAIL_SUBJECT = 'تنبيه أمني: تغير توجيه إ
 export function routingMail(rows: [string, string][]) {
   return shell('admin', ROUTING_MAIL_SUBJECT,
     mailRows(rows)
-    + mailNote('إن لم تكن أنت أو أحد الملاك، ادخل وأعد الإعداد من قسم «التوجيه» في مركز البريد، وأنهِ الجلسات الأخرى وغيّر وسيلة الدخول.')
-    + mailButton(`${SITES.admin}/#/leaders/mailcenter`, 'افتح مركز البريد'),
+    + mailNote('إن لم تكن أنت أو أحد الملاك، ادخل وأعد الإعداد من تبويب «قواعد التوجيه» في مركز البريد، وأنهِ الجلسات الأخرى وغيّر وسيلة الدخول.')
+    + mailButton(`${SITES.admin}/#/leaders/mailcenter/routing`, 'افتح قواعد التوجيه'),
     ROUTING_MAIL_SUBJECT, 'يصلك هذا لأنك من مالكي لوحة الإدارة.');
 }
 
