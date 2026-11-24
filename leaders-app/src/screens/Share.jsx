@@ -14,7 +14,10 @@ const OPTS = [
   ['allow_notes', 'يكتب ملاحظة لي', 'تصلك وحدك، ولا يراها قارئ آخر'],
   ['allow_download', 'يحمّل ملف PDF', 'وإلا يقرأ الوثيقة في الصفحة فقط'],
   ['show_levels', 'يرى مستواي ومساري', 'مخفيان افتراضيًا'],
+  ['show_readiness', 'يرى نسبة جاهزية الوثيقة', 'مخفية افتراضيًا'],
 ];
+// خيار الجاهزية لا يظهر إن حجبته الإدارة (par_share_readiness)
+const optsFor = (readinessEnabled) => OPTS.filter(([k]) => k !== 'show_readiness' || readinessEnabled !== false);
 
 /** ملخص في صفحة المبادرة: عدد الروابط النشطة والملاحظات الجديدة، وزر يفتح اللوحة */
 export function ShareCard({ data, onOpen }) {
@@ -41,14 +44,14 @@ function Toggle({ on, label, hint, disabled, onChange }) {
   );
 }
 
-function NewLink({ notesEnabled, onCreated }) {
-  const [f, setF] = useState({ label: '', days: 30, allow_notes: true, allow_download: true, show_levels: false });
+function NewLink({ notesEnabled, readinessEnabled, onCreated }) {
+  const [f, setF] = useState({ label: '', days: 30, allow_notes: true, allow_download: true, show_levels: false, show_readiness: false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const create = async (e) => {
     e.preventDefault();
     setBusy(true); setErr('');
-    const r = await call('capstone.share-create', { ...f, allow_notes: notesEnabled && f.allow_notes });
+    const r = await call('capstone.share-create', { ...f, allow_notes: notesEnabled && f.allow_notes, show_readiness: readinessEnabled !== false && f.show_readiness });
     setBusy(false);
     if (!r.success) return setErr(r.message);
     onCreated(r);
@@ -66,7 +69,7 @@ function NewLink({ notesEnabled, onCreated }) {
       </fieldset>
       <fieldset className="sh-opts">
         <legend>من يفتحه</legend>
-        {OPTS.map(([k, l, h]) => (
+        {optsFor(readinessEnabled).map(([k, l, h]) => (
           <Toggle key={k} on={k === 'allow_notes' ? notesEnabled && f[k] : f[k]} label={l} hint={k === 'allow_notes' && !notesEnabled ? 'غير متاحة في دفعتك الآن' : h}
             disabled={k === 'allow_notes' && !notesEnabled} onChange={(v) => setF({ ...f, [k]: v })} />
         ))}
@@ -95,7 +98,7 @@ function Created({ url, label, onDone }) {
   );
 }
 
-function LinkRow({ s, notesEnabled, onChange }) {
+function LinkRow({ s, notesEnabled, readinessEnabled, onChange }) {
   const [busy, setBusy] = useState(false);
   const active = s.state === 'active';
   const set = async (patch) => {
@@ -124,7 +127,7 @@ function LinkRow({ s, notesEnabled, onChange }) {
       </p>
       {active && (
         <div className="sh-opts inline">
-          {OPTS.map(([k, l]) => <Toggle key={k} on={s[k]} label={l} disabled={busy || (k === 'allow_notes' && !notesEnabled)} onChange={(v) => set({ [k]: v })} />)}
+          {optsFor(readinessEnabled).map(([k, l]) => <Toggle key={k} on={s[k]} label={l} disabled={busy || (k === 'allow_notes' && !notesEnabled)} onChange={(v) => set({ [k]: v })} />)}
         </div>
       )}
       {active && <div className="row"><button type="button" className="link small danger" disabled={busy} onClick={revoke}>ألغِ الرابط</button></div>}
@@ -199,11 +202,11 @@ export default function SharePanel({ initiative, sections, onBack, onChanged = (
               <section className="card">
                 <h2>رابط جديد</h2>
                 {created ? <Created url={created.url} label={created.share.label} onDone={() => setCreated(null)} />
-                  : <NewLink notesEnabled={d.notes_enabled} onCreated={(r) => { setCreated(r); load(); }} />}
+                  : <NewLink notesEnabled={d.notes_enabled} readinessEnabled={d.readiness_enabled} onCreated={(r) => { setCreated(r); load(); }} />}
               </section>
               <section className="card">
                 <h2>روابطك</h2>
-                {d.shares.length ? <ol className="sh-links">{d.shares.map((s) => <LinkRow key={s.id} s={s} notesEnabled={d.notes_enabled} onChange={load} />)}</ol>
+                {d.shares.length ? <ol className="sh-links">{d.shares.map((s) => <LinkRow key={s.id} s={s} notesEnabled={d.notes_enabled} readinessEnabled={d.readiness_enabled} onChange={load} />)}</ol>
                   : <p className="sh-empty muted">لم تنشئ رابطًا بعد.</p>}
               </section>
             </div>

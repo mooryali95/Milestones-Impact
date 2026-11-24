@@ -8,7 +8,7 @@
 //   A3 FF+2         ينتهي بعد انتهاء A3 بيومين
 //   A4 SF-1، A5     علاقتان، الفاصلة أو الفاصلة المنقوطة أو المسافة بينهما
 // الأيام تقويمية، والنشاط يشمل يومي بدايته ونهايته. يقرؤه محرك الاتساق (capstone.js) والرسوم (src/lib/brand/visuals.js).
-import { parseDate } from './capstone.js';
+import { parseWhen } from './capstone.js';
 
 export const DEP_TYPES = Object.freeze(['FS', 'SS', 'FF', 'SF']);
 export const DEP_AR = Object.freeze({
@@ -53,10 +53,11 @@ const colIn = (columns, ...words) => (columns || []).findIndex((c) => words.some
  * الأنشطة من جدول الفصل: [{ code, name, start, end, days, deps, row }]. start وend بالميلي ثانية (UTC)، وما لا تاريخ له null
  * @param {string[]} columns @param {any[][]} rows
  */
-export function activitiesOf(columns, rows) {
+/** anchor: مرساة الأسابيع (تاريخ البدء)، وبلاها تُقاس الأسابيع من مرساة افتراضية تكفي للترتيب والمدد */
+export function activitiesOf(columns, rows, { anchor = null } = {}) {
   const c = Math.max(0, colIn(columns, 'الرمز')), n = colIn(columns, 'النشاط', 'الحزمة'), s = colIn(columns, 'البداية'), e = colIn(columns, 'النهاية'), d = colIn(columns, 'يعتمد');
   return (rows || []).filter((r) => Array.isArray(r) && r.some((x) => String(x ?? '').trim())).map((r, i) => {
-    const start = s >= 0 ? parseDate(r[s] ?? '') : null, end = e >= 0 ? parseDate(r[e] ?? '') : null;
+    const start = s >= 0 ? parseWhen(r[s], { anchor, virtual: true }) : null, end = e >= 0 ? parseWhen(r[e], { anchor, edge: 'end', virtual: true }) : null;
     return { code: code(r[c]) || `#${i + 1}`, name: String(r[n >= 0 ? n : 1] ?? '').trim(), start, end, days: start != null && end != null && end >= start ? Math.round((end - start) / DAY) + 1 : null, deps: d >= 0 ? parseDeps(r[d]) : [], row: i };
   });
 }
@@ -135,8 +136,8 @@ export function violations(acts) {
 }
 
 /** ملخص الجدول للفحوص والرسوم: الأنشطة، والتحليل، والمخالفات، والرموز التي لا تجد نشاطها */
-export function scheduleOf(columns, rows, { extraCodes = [] } = {}) {
-  const acts = activitiesOf(columns, rows);
+export function scheduleOf(columns, rows, { extraCodes = [], anchor = null } = {}) {
+  const acts = activitiesOf(columns, rows, { anchor });
   const codes = new Set([...acts.map((a) => a.code), ...extraCodes.map(code)]);
   const orphan = [...new Set(acts.flatMap((a) => a.deps.map((d) => d.code)).filter((c) => !codes.has(c)))];
   return { acts, analysis: cpm(acts), broken: violations(acts), orphan };

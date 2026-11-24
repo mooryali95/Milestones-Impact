@@ -35,7 +35,7 @@ export function cleanShareInput(b, { create = true } = {}) {
     if (!SHARE_DAYS.includes(days)) throw new Error(`مدة الرابط ${SHARE_DAYS.join(' أو ')} يومًا`);
     out.days = days;
   }
-  for (const k of ['allow_notes', 'allow_download', 'show_levels']) if (b[k] !== undefined || create) out[k] = b[k] === undefined ? k === 'allow_download' : !!b[k];
+  for (const k of ['allow_notes', 'allow_download', 'show_levels', 'show_readiness']) if (b[k] !== undefined || create) out[k] = b[k] === undefined ? k === 'allow_download' : !!b[k];
   return out;
 }
 
@@ -54,11 +54,12 @@ export function cleanNote(b, sectionKeys = []) {
  * الوثيقة كما يقرؤها من يفتح الرابط: بلا تقييم المستشار ولا فحوصه ولا تأييد الراعي ونصه، وبلا أي بريد،
  * والمستوى والمسار بإذن صاحبها في هذا الرابط وحده (D18)
  */
-export function publicDoc(doc, share) {
+// readiness: هل تسمح الإدارة بإظهار الجاهزية في الروابط (par_share_readiness). تظهر بإذن الإدارة وصاحب الرابط معًا
+export function publicDoc(doc, share, { readiness = true } = {}) {
   if (!doc) return null;
   const sections = (doc.sections || []).map((s) => ({ ...s, fields: (s.fields || []).filter((f) => !/email/i.test(f.key)) }));
   // جهة ملف المشارك لا تصل القارئ: هي راعية البرنامج لا مالكة المبادرة، ومكان المبادرة في meta.host من بطاقتها
-  const meta = doc.meta ? { ...doc.meta, org: null } : doc.meta;
+  const meta = doc.meta ? { ...doc.meta, org: null, readiness: readiness && share?.show_readiness ? doc.meta.readiness ?? null : null } : doc.meta;
   const shown = docLevelsFor({ ...doc, meta, sections, review: null, checks: [], sponsor: null, rubric: [] }, !!share?.show_levels);
   return shown;
 }
@@ -67,7 +68,7 @@ export function publicDoc(doc, share) {
 export function ownerView(row, notes = [], now = Date.now()) {
   const mine = notes.filter((n) => n.share_id === row.id && !n.archived_at);
   return {
-    id: row.id, label: row.label, allow_notes: !!row.allow_notes, allow_download: !!row.allow_download, show_levels: !!row.show_levels,
+    id: row.id, label: row.label, allow_notes: !!row.allow_notes, allow_download: !!row.allow_download, show_levels: !!row.show_levels, show_readiness: !!row.show_readiness,
     expires_at: row.expires_at, created_at: row.created_at, views: row.views || 0, last_viewed_at: row.last_viewed_at || null,
     state: shareState(row, now), notes: mine.length, unread: mine.filter((n) => !n.read_at).length,
   };

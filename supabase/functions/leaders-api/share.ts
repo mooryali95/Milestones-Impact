@@ -14,12 +14,14 @@ import { shareDocFor } from './capstone.ts';
 type Body = Record<string, any>;
 const DAY = 864e5;
 const missing = (e: any) => /capstone_share|does not exist|42P01/i.test(String(e?.message || e?.code || e));
+// قبل ترحيل show_readiness: العمود غائب، فلا يُكتب إلا إن طُلب تشغيله
+const noReadinessCol = (e: any) => /show_readiness/i.test(String(e?.message || e));
 // الرمز في ?t= كرابط الراعي: تقرؤه الصفحة مرة ثم تزيله من العنوان (link-token.js)
 const urlOf = (token: string) => `${CONFIG.appUrl}/i?t=${encodeURIComponent(token)}`;
 
 async function flags(participantId: string) {
   const vis: Record<string, boolean> = await visibilityOfParticipant(participantId).catch(() => ({}));
-  return { share: vis.par_share !== false, notes: vis.par_share_notes !== false };
+  return { share: vis.par_share !== false, notes: vis.par_share_notes !== false, readiness: vis.par_share_readiness !== false };
 }
 
 // ── صاحب الوثيقة ──
@@ -34,7 +36,7 @@ export async function list(p: any) {
   const notes = ((n.data || []) as any[]);
   const label = Object.fromEntries(rows.map((r) => [r.id, r.label]));
   return {
-    success: true, ready: true, enabled: f.share, notes_enabled: f.notes,
+    success: true, ready: true, enabled: f.share, notes_enabled: f.notes, readiness_enabled: f.readiness,
     shares: rows.map((r) => ownerView(r, notes)),
     notes: notes.filter((x) => !x.archived_at).map((x) => ({ ...x, share_label: label[x.share_id] || null })),
     archived: notes.filter((x) => x.archived_at).length,
@@ -53,16 +55,20 @@ export async function create(p: any, b: Body) {
   let input: any;
   try { input = cleanShareInput(b); } catch (e: any) { throw new Fail(e.message); }
   if (!f.notes) input.allow_notes = false;
+  if (!f.readiness) input.show_readiness = false;
   const now = Date.now();
   const { data: rows } = await db.from('capstone_shares').select('id, expires_at, revoked_at').eq('participant_id', p.id);
   if (((rows || []) as any[]).filter((r) => shareState(r, now) === 'active').length >= MAX_ACTIVE_SHARES) {
     throw new Fail(`لك ${MAX_ACTIVE_SHARES} روابط نشطة، وهذا الحد. ألغِ رابطًا لا تحتاجه ثم أنشئ الجديد`);
   }
   const token = randomToken();
-  const row = must(await db.from('capstone_shares').insert({
+  const base: Record<string, unknown> = {
     participant_id: p.id, token_hash: await hash(token), label: input.label, allow_notes: input.allow_notes, allow_download: input.allow_download,
     show_levels: input.show_levels, expires_at: new Date(now + input.days * DAY).toISOString(),
-  }).select('*').single()) as any;
+  };
+  const res = await db.from('capstone_shares').insert(input.show_readiness ? { ...base, show_readiness: true } : base).select('*').single();
+  if (res.error && noReadinessCol(res.error)) throw new Fail('إظهار الجاهزية في الرابط لم يُفعَّل بعد. أنشئ الرابط دونه', 409, 'not_migrated');
+  const row = must(res) as any;
   await audit('participant', p.email, 'capstone.share-create', 'capstone_shares', row.id, null, { label: row.label, days: input.days, allow_notes: row.allow_notes, allow_download: row.allow_download, show_levels: row.show_levels });
   return { success: true, share: ownerView(row), url: urlOf(token) };
 }
@@ -72,8 +78,13 @@ export async function update(p: any, b: Body) {
   if (shareState(row) !== 'active') throw new Fail('الرابط منتهٍ أو ملغى، فلا يُعدَّل. أنشئ رابطًا جديدًا');
   let patch: any;
   try { patch = cleanShareInput(b, { create: false }); } catch (e: any) { throw new Fail(e.message); }
-  if (patch.allow_notes && !(await flags(p.id)).notes) throw new Fail('ملاحظات القراء غير متاحة في دفعتك الآن', 403, 'visibility');
-  const next = must(await db.from('capstone_shares').update(patch).eq('id', row.id).select('*').single()) as any;
+  const f = await flags(p.id);
+  if (patch.allow_notes && !f.notes) throw new Fail('ملاحظات القراء غير متاحة في دفعتك الآن', 403, 'visibility');
+  if (patch.show_readiness && !f.readiness) throw new Fail('إظهار الجاهزية في الروابط غير متاح في دفعتك الآن', 403, 'visibility');
+  if (patch.show_readiness === false && !row.show_readiness) delete patch.show_readiness;
+  const res = await db.from('capstone_shares').update(patch).eq('id', row.id).select('*').single();
+  if (res.error && noReadinessCol(res.error)) throw new Fail('إظهار الجاهزية في الرابط لم يُفعَّل بعد', 409, 'not_migrated');
+  const next = must(res) as any;
   await audit('participant', p.email, 'capstone.share-update', 'capstone_shares', row.id, null, patch);
   return { success: true, share: ownerView(next) };
 }
@@ -112,13 +123,13 @@ async function fromToken(t: unknown) {
   if (st === 'expired') throw new Fail('انتهت مدة هذا الرابط. اطلب من صاحب الوثيقة رابطًا جديدًا', 410, 'expired');
   const f = await flags(row.participant_id);
   if (!f.share) throw new Fail('المشاركة برابط موقوفة الآن', 410, 'paused');
-  return { row, notesOk: f.notes && !!row.allow_notes };
+  return { row, notesOk: f.notes && !!row.allow_notes, readinessOk: f.readiness };
 }
 
 export async function get(b: Body) {
-  const { row, notesOk } = await fromToken(b.t);
+  const { row, notesOk, readinessOk } = await fromToken(b.t);
   const p = row.participants;
-  const doc = publicDoc(await shareDocFor(p), row);
+  const doc = publicDoc(await shareDocFor(p), row, { readiness: readinessOk });
   // عدّ المشاهدات: مرة لكل فتح، وآخر وقت
   db.from('capstone_shares').update({ views: (row.views || 0) + 1, last_viewed_at: new Date().toISOString() }).eq('id', row.id).then(() => {}, () => {});
   return {

@@ -8,7 +8,7 @@ const read = (p) => readFileSync(join(__dirname, '../..', p), 'utf8');
 
 describe('التحكم في الرؤية', () => {
   it('كل مفتاح له جمهور وتسمية وشرح، وافتراضه «مرئي» فلا يتغير شيء عند النشر', () => {
-    expect(VISIBILITY_KEYS.length).toBe(26);
+    expect(VISIBILITY_KEYS.length).toBe(27);
     for (const k of VISIBILITY_KEYS) {
       expect(['advisor', 'assigned', 'coordinator', 'participant']).toContain(VISIBILITY[k].audience);
       expect(VISIBILITY[k].label_ar && VISIBILITY[k].hint_ar).toBeTruthy();

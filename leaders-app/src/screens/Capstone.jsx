@@ -54,9 +54,11 @@ function Meter({ value, min }) {
 
 // win: نافذة فُتحت متزامنة مع النقرة قبل أي انتظار، وإلا حجبها Safari (p-capstone-5). من يملك الوثيقة عند النقر
 // (رابط الراعي) يتركها فتُفتح هنا متزامنة أيضًا
-export async function openCapstoneDoc(doc, win = window.open('', '_blank')) {
-  const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
-  const { meta, body } = capstoneReport(doc);
+// keepReadiness: قراءة داخلية (الخبير) تبقي الجاهزية
+export async function openCapstoneDoc(doc, win = window.open('', '_blank'), { keepReadiness = false } = {}) {
+  const [{ writeDocument }, { capstoneReport, withoutReadiness }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
+  // نسخة تخرج من المنصة (طباعة المشارك، ورابط الراعي): بلا نسبة الجاهزية (قرار المالك 2026-11-24)
+  const { meta, body } = capstoneReport(keepReadiness ? doc : withoutReadiness(doc));
   return writeDocument(win, meta, body);
 }
 
@@ -146,8 +148,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     const r = await call('capstone.doc');
     if (!r.success) { setBusy(''); setPdfNote(''); return setMsg({ err: r.message }); }
     try {
-      const [{ capstoneReport }, { downloadPdf }] = await Promise.all([import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/pdf.js')]);
-      const { meta, body } = capstoneReport(r.doc);
+      const [{ capstoneReport, withoutReadiness }, { downloadPdf }] = await Promise.all([import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/pdf.js')]);
+      const { meta, body } = capstoneReport(withoutReadiness(r.doc));
       await downloadPdf(meta, body, { onProgress: setPdfNote });
     } catch (e) {
       console.error(e);

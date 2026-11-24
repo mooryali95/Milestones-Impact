@@ -15,7 +15,7 @@ describe('حالة الرابط ومدخلاته', () => {
   });
   it('رابط جديد: تسمية لازمة، ومدة من الثلاث، والتحميل مسموح افتراضًا والملاحظات والمستوى بإذن', () => {
     expect(SHARE_DAYS).toEqual([7, 30, 90]);
-    expect(cleanShareInput({ label: '  مديري  ', days: 30 })).toEqual({ label: 'مديري', days: 30, allow_notes: false, allow_download: true, show_levels: false });
+    expect(cleanShareInput({ label: '  مديري  ', days: 30 })).toEqual({ label: 'مديري', days: 30, allow_notes: false, allow_download: true, show_levels: false, show_readiness: false });
     expect(() => cleanShareInput({ label: '', days: 30 })).toThrow(/سمِّ الرابط/);
     expect(() => cleanShareInput({ label: 'س', days: 365 })).toThrow(/مدة الرابط/);
   });
