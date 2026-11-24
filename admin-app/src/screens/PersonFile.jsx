@@ -6,6 +6,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly, L } from '../leaders.js';
 import { openDoc } from './Capstones.jsx';
+import { Submission } from './Handbook.jsx';
 import { useUI } from '../ui.jsx';
 import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
 // تسميات الحالات من مصادرها الوحيدة: جلسات التوجيه من labels.js، ووثيقة المبادرة من capstone.js، ودورة 360 من feedback360.js
@@ -80,7 +81,7 @@ export function Observations({ participantId, list, canWrite, onChanged, action 
             </li>
           ))}
         </ul>
-      ) : <p className="la-muted">لا ملاحظات في الملف بعد.</p>}
+      ) : <p className="pf-empty-next">لا ملاحظات في الملف بعد.{canWrite ? ' اكتب أول ملاحظة بالنموذج أعلاه حين ترى واقعة تستحق التسجيل.' : ''}</p>}
     </section>
   );
 }
@@ -97,11 +98,11 @@ export function FileExtras({ r }) {
           <ul className="pf-mini">{sessions.slice(0, 8).map((s) => (
             <li key={s.id}><span className={`la-chip ${s.status === 'no_show' ? 'bad' : s.status === 'attended' ? 'ok' : ''}`}>{SESSION_AR[s.status] || s.status}</span> {date(s.starts_at)}{s.expert && <> · {s.expert}</>}</li>
           ))}{sessions.length > 8 && <li className="la-muted">و{sessions.length - 8} أقدم</li>}</ul>
-        ) : <span className="la-muted">لا جلسات بعد</span>}</dd>
+        ) : <span className="la-muted">لا جلسات بعد. تُحجز مع خبيره المسند أعلاه، أو من «الحضور والجلسات».</span>}</dd>
         <dt>تقييم 360</dt>
-        <dd>{f360.length ? f360.map((c) => <span key={c.wave} className="la-chip" style={{ marginInlineEnd: 6 }}>{c.wave === 't2' ? 'الموجة الثانية' : 'الموجة الأولى'}: {F360_AR[c.status] || c.status}</span>) : <span className="la-muted">لا دورة بعد</span>}</dd>
+        <dd>{f360.length ? f360.map((c) => <span key={c.wave} className="la-chip" style={{ marginInlineEnd: 6 }}>{c.wave === 't2' ? 'الموجة الثانية' : 'الموجة الأولى'}: {F360_AR[c.status] || c.status}</span>) : <span className="la-muted">لا دورة بعد. تُفتح من «تقييم 360» حين يحين موعد موجته.</span>}</dd>
         <dt>حضور الورش</dt>
-        <dd>{att.length ? <>{att.length === 1 ? 'ورشة واحدة' : `${att.length} ورش`}: {att.slice(0, 4).map((a) => a.title || date(a.at)).join('، ')}{att.length > 4 ? '…' : ''}</> : <span className="la-muted">لا حضور مسجّل</span>}</dd>
+        <dd>{att.length ? <>{att.length === 1 ? 'ورشة واحدة' : `${att.length} ورش`}: {att.slice(0, 4).map((a) => a.title || date(a.at)).join('، ')}{att.length > 4 ? '…' : ''}</> : <span className="la-muted">لا حضور مسجّل. يُسجَّل من ورقة حضور الورشة في «الحضور والجلسات».</span>}</dd>
       </dl>
     </section>
   );
@@ -110,9 +111,10 @@ export function FileExtras({ r }) {
 // المبادرة حية (تصور 2026-11-23): الوثيقة مبنية من حالته الآن (admin.capstone، يبنيها build في capstone.ts ولو لم يسلّمها
 // ولا صف له بعد، وقراءتها لا تكتب). العنوان وحال البطاقة والوثيقة والجاهزية، ثم الفصول بحالها وآخر تعديل وملاحظة
 // المستشار، و«اقرأ الوثيقة كما هي الآن» بالقالب نفسه الذي يقرؤه المشارك والراعي
-export function InitiativePanel({ participantId }) {
+export function InitiativePanel({ participantId, canWrite = false, onChanged }) {
   const { toast } = useUI();
   const [d, setD] = useState(null);
+  const [sub, setSub] = useState(null);
   const load = useCallback(() => L('admin.capstone', { participant_id: participantId }).then(setD), [participantId]);
   useEffect(() => { load(); }, [load]);
   if (!d) return <section className="la-card" aria-busy="true"><h3>المبادرة</h3><p className="la-muted">لحظة…</p></section>;
@@ -120,7 +122,7 @@ export function InitiativePanel({ participantId }) {
     return (
       <section className="la-card" aria-labelledby="pf-cap-h">
         <h3 id="pf-cap-h">المبادرة</h3>
-        <p className="la-muted">{d.code === 'locked' ? 'تُفتح وثيقة المبادرة بعد اعتماد مساره.' : d.message}</p>
+        <p className="pf-empty-next">{d.code === 'locked' ? 'تُفتح وثيقة المبادرة بعد اعتماد مساره. الخطوة التالية: اعتمد مساره من تبويب «القرار».' : d.message}</p>
       </section>
     );
   }
@@ -133,7 +135,8 @@ export function InitiativePanel({ participantId }) {
         <h3 id="pf-cap-h">{d.doc?.meta?.initiative || 'مبادرة بلا اسم بعد'}</h3>
         <span className="la-row">
           <button type="button" className="btn-sm primary" onClick={() => openDoc(d.doc, toast)}>اقرأ الوثيقة كما هي الآن</button>
-          {c.id && <a className="btn-sm ghost" href={`#/leaders/capstones/${encodeURIComponent(participantId)}`}>صفحة المراجعة</a>}
+          {/* صفحة المراجعة متاحة دائمًا: تُبنى من حالته الآن ولو لم يُنشأ له صف (admin.capstone لا يكتب عند القراءة) */}
+          <a className="btn-sm ghost" href={`#/leaders/capstones/${encodeURIComponent(participantId)}`}>صفحة المراجعة</a>
         </span>
       </div>
       <div className="pf-cap-kpis">
@@ -152,10 +155,15 @@ export function InitiativePanel({ participantId }) {
             <span className="pf-ch-meta">
               <span className={`la-chip ${st === 'reviewed' ? 'ok' : st === 'returned' ? 'warn' : ''}`} title={x.status ? SUBMISSION_STATUS_ADMIN[x.status] : undefined}>{CHAPTER_STATUS_AR[st]}</span>
               <small className="la-muted">{x.updated_at ? `آخر تعديل ${dateOnly(x.updated_at)}` : 'لم يُحفظ بعد'}</small>
+              {x.sub_id && ['submitted', 'reviewed', 'returned'].includes(x.status) && (
+                <button type="button" className="la-link" aria-label={`${x.status === 'submitted' && canWrite ? 'قيّم' : 'اعرض'} فصل ${x.title}`} onClick={() => setSub(x.sub_id)}>{x.status === 'submitted' && canWrite ? 'قيّم' : 'اعرض'}</button>
+              )}
             </span>
           </li>
         );
       })}</ol>
+      {!(d.sections || []).length && <p className="pf-empty-next">لا فصول لوثيقته بمستواه ونطاقه بعد. الخطوة التالية: أن يبدأ بطاقة المبادرة من رحلته.</p>}
+      {sub && <Submission id={sub} canWrite={canWrite} onClose={(saved) => { setSub(null); if (saved) { load(); onChanged?.(); } }} />}
     </section>
   );
 }
@@ -195,7 +203,7 @@ export function FullTimeline({ participantId }) {
             </li>
           ))}
         </ol>
-      ) : <p className="la-muted">لا شيء بهذا النوع.</p>}
+      ) : <p className="pf-empty-next">{types.length ? 'لا شيء بهذا النوع. اختر «الكل» لترى سجله كاملًا.' : 'لا أحداث في سجله بعد.'}</p>}
       {next && <button type="button" className="btn-sm ghost" disabled={busy} onClick={() => page(next, types)}>{busy ? 'لحظة…' : 'اعرض الأقدم'}</button>}
     </section>
   );
