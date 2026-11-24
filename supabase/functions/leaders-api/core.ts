@@ -416,7 +416,7 @@ export function reviewMail(name: string, title: string, returned: boolean, note?
 }
 
 // نقل المشارك إلى مرحلة بقرار الإدارة (admin.stage-move): سطر يسمي مرحلته الجديدة وزر رحلته. سبب النقل للسجل الداخلي
-// وحده، فلا يُرسل في البريد
+// وحده، فلا يُرسل في البريد. والبريد اختياري: المدير يطفئه من نافذة النقل (notify: false) فلا تُستدعى هذه الدالة
 export function stageMoveMail(name: string, stage: string) {
   return shell('journey', 'تحديث في رحلتك',
     mailText(`${hello(name)} حدّث فريق البرنامج رحلتك، ومرحلتك الآن «${bdi(stage)}».`)

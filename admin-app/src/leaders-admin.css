@@ -23,6 +23,8 @@
   padding: 8px 16px; border-radius: 99px; background: var(--sand-light); color: var(--ink-soft); font-size: .84rem; font-weight: 600;
 }
 .la-tabs button.on, .la-subtabs button.on { background: var(--petrol-s); color: #fff; }
+/* المفعّل تحت المؤشر: داكن درجة أعمق، لا أي قاعدة :hover عامة تفتّحه فيضيع نصه الأبيض */
+.la-tabs button.on:hover, .la-subtabs button.on:hover { background: var(--petrol-mid); color: #fff; }
 .la-subtabs small { opacity: .7; }
 .la-load { padding: 60px; display: grid; place-items: center; }
 .la-err { background: var(--st-bad-bg); color: var(--st-bad); padding: 10px 14px; border-radius: 6px; font-size: .86rem; }
@@ -696,6 +698,8 @@
   .la-shell .la-tab-group.shut > button:not(.la-tab-group-label) { display: none; }
   .la-shell .la-tab-group > button:not(.la-tab-group-label):hover { background: var(--sand-light); }
   .la-shell .la-tab-group > button.on { background: var(--petrol-s); color: #fff; font-weight: 600; }
+  /* القسم المفتوح يبقى داكنًا تحت المؤشر: قاعدة :hover أعلاه (رملي فاتح) كانت تغلبه فيصير نص أبيض على أرضية فاتحة (1.1 إلى 1). يدكن درجة */
+  .la-shell .la-tab-group > button.on:hover { background: var(--petrol-mid); color: #fff; }
   .la-shell .la-tab-group > button:focus-visible, .la-shell .la-tab-group-label:focus-visible { outline: 2px solid var(--gold-deep); outline-offset: -2px; }
 }
 
@@ -1470,6 +1474,8 @@
 .la-form .pj-seg input { position: absolute; opacity: 0; inline-size: 1px; block-size: 1px; }
 .la-form .pj-seg label:focus-within { outline: 2px solid var(--ink); outline-offset: -2px; }
 .pj-plan { display: grid; gap: 8px; }
+.la-form label.pj-notify { display: flex; align-items: center; gap: 8px; font-weight: 400; cursor: pointer; }
+.la-form label.pj-notify input { inline-size: 18px; block-size: 18px; width: 18px; padding: 0; margin: 0; flex: none; accent-color: var(--brand-graphite); }
 .pj-sum { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--gold-pale); font-weight: 600; }
 /* تبويب «المبادرة» والسجل الكامل */
 .pf-cap-kpis { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
@@ -1568,3 +1574,9 @@ tr.ct-on > td { background: var(--gold-pale); }
 .pf-panel .la-card > h3, .pf-panel .la-card > .la-row > h3, .pf-panel .la-card > .la-row.between > h3 { margin: 0 0 12px; font-size: 1rem; line-height: 1.4; }
 .pf-panel .la-card > .la-row.between { margin-block-end: 8px; align-items: center; }
 .pf-empty-next { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--sand-light); color: var(--ink-soft); font-size: .86rem; }
+
+/* الأرقام الكبيرة في البلاطات بخط الواجهة وأرقام مصطفة: «1» في Cormorant المزخرف يُقرأ «I» (ملاحظة المالك 2026-11-24).
+   قاعدة واحدة لكل بلاطات الأرقام فلا تُكرر في كل قاعدة؛ الخط اللاتيني يبقى للعناوين والحواشي المائلة */
+.tx-kpis b, .tx-board-n b, .tx-n b, .tx-rank-i, .tx-rank-n, .hb-num, .fb-n, .mp-pts b, .la-book-kpis b, .pay-total, .pay-kpis b, .org-funnel b, .mc-split b {
+  font-family: var(--font-ar); font-variant-numeric: lining-nums tabular-nums;
+}
