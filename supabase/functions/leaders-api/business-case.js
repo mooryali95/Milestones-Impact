@@ -72,6 +72,9 @@ export function benefitsOf(doc, limit = 5) {
 
 // ── ميثاق المبادرة في صفحة واحدة ──
 // rows: [عنوان، قيمة نصية] ؛ deliverables: جدول المخرجات كما كُتب
+// المدة كما تُقرأ: «من … إلى …»، أو «حتى الأسبوع 12» بلا تاريخ بدء (الزمن النسبي، تاريخ البدء اختياري)
+export const durationAr = (start, end) => (start && end ? `${ltr(start)} إلى ${ltr(end)}` : end ? `حتى ${ltr(end)}` : start ? `من ${ltr(start)}` : null);
+
 export function charterData(doc) {
   if (!sectionOf(doc, 'initiative-charter')) return null;
   const c = (f) => text(doc, 'initiative-charter', f);
@@ -89,9 +92,12 @@ export function charterData(doc) {
     ['الجهة المستضيفة', c('host')],
     ['الهدف الأعلى', c('objective')],
     ['المشكلة أو الفرصة', c('problem')],
+    ['المستفيدون', c('beneficiaries')],
+    ['الوصول إليهم واختيارهم', c('reach')],
     ['داخل النطاق', c('in_scope')],
     ['خارج النطاق', c('out_scope')],
-    ['المدة', c('start') || c('end') ? `${ltr(c('start'))} إلى ${ltr(c('end'))}` : null],
+    // تاريخ البدء اختياري (الزمن النسبي): بلاه تُقرأ المدة «حتى الأسبوع 12»
+    ['المدة', durationAr(c('start'), c('end'))],
     ['الموازنة', budget],
     ['مصدر التمويل', text(doc, 'cost-plan', 'funding')],
     ['أهم المنافع', benefits.length ? benefits.map((x) => `${x.title}${x.baseline || x.target ? ` (من ${x.baseline || '·'} إلى ${x.target || '·'})` : ''}`).join('؛ ') : null],
@@ -157,7 +163,7 @@ export function businessCase(doc) {
   const plan = tableOf(doc, 'evidence-plan', 'plan');
   add(M, [
     ['من يقرر', text(doc, 'governance', 'structure')],
-    ['المدة', text(doc, 'initiative-charter', 'start') ? `${ltr(text(doc, 'initiative-charter', 'start'))} إلى ${ltr(text(doc, 'initiative-charter', 'end'))}` : null],
+    ['المدة', durationAr(text(doc, 'initiative-charter', 'start'), text(doc, 'initiative-charter', 'end'))],
     ['الخطة', [milestones?.rows.length ? countAr(milestones.rows.length, 'معلم واحد', 'معلمان', 'معالم', 'معلمًا') : null, activities?.rows.length ? `${countAr(activities.rows.length, 'نشاط واحد', 'نشاطان', 'أنشطة', 'نشاطًا')} في الجدول` : null].filter(Boolean).join('، و') || null],
     ['المخاطر العالية', risks.length ? risks.map((x) => `${x.title}${x.owner ? ` (المالك: ${x.owner})` : ''}`).join('؛ ') : null],
     ['القياس', plan?.rows.length ? `${countAr(plan.rows.length, 'مؤشر واحد', 'مؤشران', 'مؤشرات', 'مؤشرًا')} بخطة قياس` : null],

@@ -101,3 +101,19 @@ describe('الجاهزية في الوثيقة المشاركة', () => {
   });
   void capstoneReport;
 });
+
+// بطاقة المبادرة من سفراء (المرحلة 3)، والمدة بلا تاريخ بدء
+import { charterData, durationAr } from '../../supabase/functions/leaders-api/business-case.js';
+describe('الميثاق: المستفيدون والوصول، والمدة', () => {
+  const card = (ans) => ({ sections: [{ key: 'initiative-charter', fields: Object.entries(ans).map(([key, value]) => ({ key, type: 'text', value })) }] });
+  it('المدة بلا تاريخ بدء تُقرأ «حتى»', () => {
+    expect(durationAr('', 'الأسبوع 12')).toContain('حتى');
+    expect(durationAr('2027-01-03', '2027-03-31')).toContain('إلى');
+    expect(durationAr('', '')).toBe(null);
+  });
+  it('المستفيدون والوصول بعد المشكلة، ويغيبان إن لم يُكتبا', () => {
+    const rows = charterData(card({ title: 'خطتي', problem: 'تنظيم المذاكرة', beneficiaries: '20 طالبًا', reach: 'عبر المدرسة' })).rows.map((r) => r[0]);
+    expect(rows.slice(1, 4)).toEqual(['المشكلة أو الفرصة', 'المستفيدون', 'الوصول إليهم واختيارهم']);
+    expect(charterData(card({ title: 'خطتي' })).rows.map((r) => r[0])).not.toContain('المستفيدون');
+  });
+});

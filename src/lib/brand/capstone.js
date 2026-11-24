@@ -291,7 +291,7 @@ function trackingBlock(t) {
 // الحقول التي يعرضها الميثاق من البطاقة (business-case.js charterData): لا تُكرر في فصل البطاقة
 // والبريد لا يُطبع في الوثيقة أصلًا: تُقرأ وتُتداول، والراعي يُعرف بمنصبه ودوره
 const NEVER_PRINTED = new Set(['sponsor_email']);
-const CHARTER_FIELDS = new Set(['sponsor_email', 'title', 'context', 'host', 'objective', 'problem', 'in_scope', 'out_scope', 'start', 'end', 'constraints', 'first_step', 'operator', 'sponsor', 'deliverables']);
+const CHARTER_FIELDS = new Set(['sponsor_email', 'title', 'context', 'host', 'objective', 'problem', 'beneficiaries', 'reach', 'in_scope', 'out_scope', 'start', 'end', 'constraints', 'first_step', 'operator', 'sponsor', 'deliverables']);
 
 function charterBlock(doc) {
   const c = charterData(doc);
