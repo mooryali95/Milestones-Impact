@@ -70,8 +70,9 @@ export default function SharedInitiative() {
     call('share.get', { t }).then(async (r) => {
       setData(r);
       if (!r.success) return;
-      const [{ capstoneReport }, { documentHtml }] = await Promise.all([import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/doc.js')]);
-      const rep = capstoneReport(r.doc);
+      // قارئ الرابط: المؤسسية إن اكتملت، وإلا ملف العمل بلا ملحق ما ينقص ولا ختم مسودة (renderInitiative 'reader')
+      const [{ renderInitiative }, { documentHtml }] = await Promise.all([import('../../../src/lib/brand/institutional.js'), import('../../../src/lib/brand/doc.js')]);
+      const rep = renderInitiative(r.doc, 'reader');
       // علامة المشاركة في الوثيقة نفسها وفي ملفها: من شاركها، وحتى متى
       const meta = { ...rep.meta, pdfName: rep.meta.pdfName, confidential: `نسخة شاركها ${r.owner} برابط خاص صالح حتى ${dateAr(r.expires_at.slice(0, 10))}` };
       setReport({ meta, body: rep.body });

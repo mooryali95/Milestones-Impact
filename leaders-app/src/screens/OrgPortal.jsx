@@ -124,8 +124,9 @@ function Initiatives({ list, outcomes }) {
     const win = window.open('', '_blank');
     const r = await coordCall('coord.capstone', { participant_id: x.participant_id });
     if (!r.success) { win?.close(); return setMsg(r.message); }
-    const [{ writeDocument }, { capstoneReport }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/capstone.js')]);
-    const { meta, body } = capstoneReport(r.doc);
+    // قارئ من الجهة: الوثيقة المؤسسية، أو «قيد الإعداد» قبل اكتمالها؛ لا ملحق ما ينقص ولا ختم مسودة
+    const [{ writeDocument }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/institutional.js')]);
+    const { meta, body } = renderInitiative(r.doc, 'external');
     if (!writeDocument(win, meta, body)) setMsg(POPUP_BLOCKED);
   };
   return (

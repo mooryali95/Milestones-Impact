@@ -72,7 +72,7 @@ test('نافذة الوثيقة: «تحميل PDF» بجانب «طباعة»، 
   test.setTimeout(120000);
   await open(page);
   const pop = page.waitForEvent('popup');
-  await page.getByRole('button', { name: 'اعرض الوثيقة الاحترافية' }).click();
+  await page.getByRole('button', { name: 'ملف العمل الكامل' }).click();
   const w = await pop;
   await expect(w.getByRole('button', { name: 'طباعة' })).toBeVisible();
   const dl = page.waitForEvent('download', { timeout: 100000 });
