@@ -1,7 +1,7 @@
 // تقسيم صفحات ملف PDF الجاهز (src/lib/brand/pdf.js): منطق خالص يحكمه CSS الوثيقة نفسه
 import { describe, expect, it } from 'vitest';
 import { PAGE, planPages } from '../../src/lib/brand/pdf.js';
-import { capstoneReport } from '../../src/lib/brand/capstone.js';
+import { capstoneReport, pdfFileName } from '../../src/lib/brand/capstone.js';
 import { documentHtml } from '../../src/lib/brand/doc.js';
 import { EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
 import { exampleDoc } from './guide.js';
@@ -38,8 +38,18 @@ describe('planPages: حدود الصفحات من مواضع الكسر المس
 
 describe('الوثيقة جاهزة للتصدير', () => {
   const { meta, body } = capstoneReport(exampleDoc(EXAMPLES[0]));
-  it('اسم ملف لاتيني ثابت برقم الوثيقة وإصدارها، والعنوان العربي في الملف نفسه', () => {
-    expect(meta.pdfName).toBe('Milestone-Impact-Initiative-MI-EX-GOV-V1');
+  it('اسم ملف عربي يدل على الوثيقة: «وثيقة-المبادرة-<اسمها>-<التاريخ>»، وملف العمل باسمه', () => {
+    expect(meta.pdfName).toMatch(/^وثيقة-المبادرة-.+-\d{4}-\d{2}-\d{2}-MI-EX-GOV-V1$/);
+    const day = new Date(2026, 10, 24);
+    expect(pdfFileName({ initiative: 'موعد أول / أقرب' }, 'working', day)).toBe('ملف-عمل-المبادرة-موعد-أول-أقرب-2026-11-24');
+    // محارف الاتجاه الخفية تُحذف، والبديل بعد التنظيف، واللاحقة رقم الوثيقة وإصدارها
+    expect(pdfFileName({ initiative: '\u202e\u200f', ref: 'MI-CP-AB12', version: 3 }, 'institutional', day)).toBe('وثيقة-المبادرة-MI-CP-AB12-2026-11-24-AB12-V3');
+    expect(pdfFileName({ initiative: '///' }, 'draft', day)).toBe('مسودة-وثيقة-المبادرة-المبادرة-2026-11-24');
+    // القص بنقاط الترميز: لا يُشطر حرف خارج BMP، ولا تبقى شرطة في الطرف
+    const long = pdfFileName({ initiative: `${'أ'.repeat(59)} 😀😀` }, 'institutional', day);
+    expect(long).toBe(`وثيقة-المبادرة-${'أ'.repeat(59)}-2026-11-24`);
+    expect(long).not.toMatch(/[\ud800-\udfff]/u);
+    expect(documentHtml(meta, body, { pdf: true })).toContain('id="pdf-head"');
     expect(meta.title).toMatch(/[؀-ۿ]/);
   });
   it('الشريط فيه «تحميل PDF» و«طباعة»، والخطوط من المنصة لا من Google (سياسة CSP)', () => {

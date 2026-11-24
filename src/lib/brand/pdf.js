@@ -15,6 +15,7 @@ import { documentHtml } from './doc.js';
 export const PAGE = Object.freeze({ w: 794, h: 1123, top: 60, bottom: 76 });
 const CONTENT_H = PAGE.h - PAGE.top - PAGE.bottom;
 const FIRST_H = PAGE.h - PAGE.bottom;
+const KEEP_NEXT = 110;
 const BLOCKISH = new Set(['block', 'flex', 'grid', 'table', 'table-row', 'list-item', 'table-row-group', 'flow-root']);
 
 /**
@@ -68,6 +69,8 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
     if (cs.breakBefore === 'page' && r.top > 4) forced.push(Math.floor(r.top));
     if ((cs.breakInside === 'avoid' || cs.breakInside === 'avoid-page') && r.bottom - r.top < pageH * 0.9) avoid.push(r);
     if (cs.breakAfter === 'avoid' || cs.breakAfter === 'avoid-page') after.push(r);
+    // break-before: avoid (خاتمة الوثيقة): لا كسر قبله ولا بين أوله وما قبله، فلا تبقى الخاتمة وحدها في صفحة أخيرة
+    if (cs.breakBefore === 'avoid' || cs.breakBefore === 'avoid-page') after.push({ top: r.top - 140, bottom: r.top - 140 + 0.5, before: r.top });
     // رأس الجدول يتكرر إن انكسر الجدول بين صفوفه
     let head = null;
     if (el.tagName === 'TR' && el.parentElement?.tagName === 'TBODY') {
@@ -85,7 +88,8 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
   }
   const cands = raw.filter((c) => c.y > 0
     && !avoid.some((a) => c.y > a.top + 1 && c.y < a.bottom - 1)
-    && !after.some((a) => c.y >= a.bottom - 1 && c.y - a.bottom < 16));
+    // ما بعد عنوان لا ينفصل عنه (break-after: avoid): يبقى معه نحو أربعة أسطر من محتواه، لا رأس جدول وحده ولا سطر واحد
+    && !after.some((a) => (a.before != null ? c.y > a.top && c.y <= a.before + 1 : c.y >= a.bottom - 1 && c.y - a.bottom < KEEP_NEXT)));
   return { total, cands, forced };
 }
 
@@ -142,6 +146,9 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
     }
 
     const fontEmbedCSS = await getFontEmbedCSS(root);
+    // ترويسة الصفحات بعد الغلاف (doc.js runningHead): تُرسم مرة وتتكرر
+    const headEl = doc.getElementById('pdf-head');
+    const runHead = headEl ? await toCanvas(headEl, { width: PAGE.w, height: PAGE.top, pixelRatio: scale, fontEmbedCSS, backgroundColor: '#ffffff', cacheBust: false }) : null;
     // المقاطع: صفحات متتالية حتى نحو 4500 بكسل في كل رسم، لحد ارتفاع اللوحة في المتصفحات
     const chunks = [];
     for (let i = 0; i < plan.length;) {
@@ -177,6 +184,7 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
         const ctx = page.getContext('2d');
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, page.width, page.height);
+        if (k > 0 && runHead) ctx.drawImage(runHead, 0, 0, page.width, PAGE.top * scale);
         let y = (k === 0 ? 0 : PAGE.top) * scale;
         const hc = p.head && heads.get(p.head.top);
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
