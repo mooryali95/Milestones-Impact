@@ -12,24 +12,47 @@ import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/func
 import { benefitsOf, charterData, durationAr } from '../../../supabase/functions/leaders-api/business-case.js';
 import { LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { capstoneReport, heatmap, paras, STYLE, tableOf } from './capstone.js';
-import { costLabel } from '../../../supabase/functions/leaders-api/capstone.js';
+import { costLabel, dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
 import { ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : null);
 const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
 
+// ── التصميم المؤسسي: هرم طباعي واضح، وفواتح أبواب برقم كبير وخط ذهبي، وإيقاع مسافات ثابت (4مم)، وكل باب رئيس يبدأ صفحة ──
+// الألوان من رموز الهوية (doc.js C): Graphite للنص، والذهب خطًا ورقمًا فقط، وMist أرضية للمؤشرات
 const IN_STYLE = `<style>
-.in-lead { font-size: 11pt; line-height: 2; color: #0B272F; font-weight: 300; margin: 0 0 4mm; }
-.in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm; margin-top: 4mm; }
-.in-grid > div { border-top: 1px solid #DCE2E1; padding-top: 2mm; break-inside: avoid; }
-.in-grid > div span { display: block; font-size: 7.6pt; color: #5F7176; }
-.in-grid > div p { margin: .5mm 0 0; font-size: 9.4pt; line-height: 1.8; color: #2C4148; }
-.in-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; margin-top: 6mm; }
-.in-sign > div { border-top: 1px solid #0B272F; padding-top: 2mm; break-inside: avoid; }
-.in-sign span { display: block; font-size: 7.6pt; color: #5F7176; }
-.in-sign b { font-weight: 400; font-size: 9.6pt; }
+.in-sec { margin-top: 0; padding-top: 2mm; }
+.in-sec.np { break-before: page; }
+.in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 6mm 0 6mm; border-bottom: 1px solid #A97A2E; break-after: avoid; break-inside: avoid; }
+.in-open .n { font: 200 34pt/0.9 "Noto Sans", sans-serif; color: #A97A2E; letter-spacing: -.02em; }
+.in-open .eyebrow { margin-bottom: 1mm; }
+.in-open h2 { margin: 0; font-weight: 300; font-size: 19pt; line-height: 1.3; color: #0B272F; }
+.in-open p { margin: 1.5mm 0 0; font-size: 8.4pt; color: #5F7176; line-height: 1.7; }
+.in-sec h3, .in-sec .cp-f > b { break-after: avoid; }
+.in-sec .cp-f { margin: 0 0 6mm; break-inside: auto; }
+.in-sec .cp-f > b { display: block; font-weight: 400; font-size: 9pt; color: #0B272F; margin-bottom: 2mm; padding-inline-start: 3mm; border-inline-start: 0.6mm solid #A97A2E; }
+.in-sec .tbl { font-size: 8.6pt; }
+.in-sec .tbl th { color: #0B272F; font-weight: 400; background: #F7F8F6; border-bottom: 1px solid #0B272F; padding: 2.4mm 2mm; }
+.in-sec .tbl td { padding: 2.4mm 2mm; }
+.in-sec .tbl tr, .in-sec .tbl td { break-inside: avoid; }
+.in-sec .kpis { background: #F7F8F6; border-top: 0; border-bottom: 0; margin: 0 0 6mm; break-inside: avoid; }
+.in-sec .kpi { padding: 5mm 5mm 5mm 0; padding-inline-start: 5mm; }
+.in-sec .kpi b { font: 200 21pt/1.15 "Noto Sans", sans-serif; color: #0B272F; overflow-wrap: anywhere; }
+.in-sec .kpi span { margin-top: 1mm; font-size: 8pt; color: #5F7176; }
+.in-lead { position: relative; font-size: 11.5pt; line-height: 2; color: #0B272F; font-weight: 300; margin: 0 0 6mm; padding: 1mm 6mm 1mm 0; border-inline-start: 0.6mm solid #A97A2E; padding-inline-start: 6mm; break-inside: avoid; }
+.in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 10mm; margin: 0 0 6mm; }
+.in-grid > div { border-top: 1px solid #DCE2E1; padding-top: 2.5mm; break-inside: avoid; }
+.in-grid > div span { display: block; font-size: 7.6pt; letter-spacing: .02em; color: #8A6424; }
+.in-grid > div p { margin: 1mm 0 0; font-size: 9.6pt; line-height: 1.85; color: #2C4148; }
+.in-approve { border: 1px solid #DCE2E1; border-top: 0.6mm solid #0B272F; padding: 7mm 7mm 6mm; break-inside: avoid; }
+.in-approve .st { display: inline-block; border: 1px solid #A97A2E; color: #8A6424; padding: 1.2mm 5mm; font-size: 9pt; letter-spacing: .04em; margin-bottom: 6mm; }
+.in-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
+.in-sign > div { padding-top: 14mm; border-bottom: 1px solid #0B272F; padding-bottom: 2mm; break-inside: avoid; }
+.in-sign span { display: block; font-size: 7.6pt; color: #8A6424; }
+.in-sign b { font-weight: 400; font-size: 9.8pt; color: #0B272F; }
 .in-sign small { display: block; font-size: 8pt; color: #2C4148; margin-top: 1mm; }
-.in-fp { margin-top: 6mm; font: 300 8pt "Noto Sans", sans-serif; letter-spacing: .12em; color: #5F7176; direction: ltr; text-align: left; }
+.in-fp { display: flex; justify-content: space-between; gap: 6mm; margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font: 300 8pt "Noto Sans", sans-serif; letter-spacing: .14em; color: #5F7176; direction: ltr; }
+.in-fp b { font-weight: 400; color: #0B272F; }
 </style>`;
 
 export { fingerprint };
@@ -78,7 +101,8 @@ export function institutionalReport(input) {
   // ── نظرة عامة: صفحة واحدة ──
   const packages = (val(doc, 'wbs', 'packages') || []).length;
   const tiles = [
-    cost && { value: money(cost.withContingency), label: costLabel(cost) },
+    // الرقم وحده في المؤشر والعملة في عنوانه، فلا يزاحم «ريال» الرقم الكبير
+    cost && { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` },
     benefits.length && { value: benefits.length, label: 'منفعة مقيسة' },
     (val(doc, 'milestone-register', 'milestones') || []).length && { value: val(doc, 'milestone-register', 'milestones').length, label: 'معلمًا' },
     packages && { value: packages, label: 'حزمة عمل' },
@@ -90,7 +114,7 @@ export function institutionalReport(input) {
       ['الهدف الأعلى', val(doc, 'initiative-charter', 'objective')],
       ['المستفيدون', val(doc, 'initiative-charter', 'beneficiaries')],
       // التاريخ معزول الاتجاه (bdi) فلا تنقلب أجزاؤه في السطر العربي
-      ['المدة', duration && { html: [m.start && `من <bdi dir="ltr">${esc(m.start)}</bdi>`, m.end && `${m.start ? 'إلى' : 'حتى'} <bdi dir="ltr">${esc(m.end)}</bdi>`].filter(Boolean).join(' ') }],
+      ['المدة', duration && { html: [m.start && `من ${esc(dateAr(m.start))}`, m.end && `${m.start ? 'إلى' : 'حتى'} ${esc(dateAr(m.end))}`].filter(Boolean).join(' ') }],
       ['المطلوب', cost ? `${money(cost.withContingency)}${val(doc, 'cost-plan', 'funding') ? `، من ${val(doc, 'cost-plan', 'funding')}` : ''}` : null],
     ])}`);
 
@@ -120,9 +144,9 @@ export function institutionalReport(input) {
     field(doc, 'milestone-register', 'milestones', 'المعالم'),
     field(doc, 'milestone-register', 'critical_path', 'المسار الحرج والاعتماديات'),
     g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني؛ الذهبي على المسار الحرج</figcaption></figure>` : field(doc, 'schedule', 'activities', 'الجدول الزمني'),
+    // ملخص التكلفة فوق جدول بنودها فلا تبقى المؤشرات وحدها في صفحة. الاحتياطي يُذكر حين يوجد وحده
+    cost ? kpis(cost.contingency ? [{ value: Math.round(cost.total).toLocaleString('en-US'), label: 'التكلفة التقديرية (ريال)' }, { value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` }] : [{ value: Math.round(cost.total).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` }]) : '',
     field(doc, 'cost-plan', 'items', 'الموارد والتكلفة'),
-    // الاحتياطي يُذكر حين يوجد وحده؛ بلاه مؤشر التكلفة الواحد
-    cost ? kpis(cost.contingency ? [{ value: money(cost.total), label: 'التكلفة التقديرية' }, { value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: money(cost.withContingency), label: costLabel(cost) }] : [{ value: money(cost.total), label: costLabel(cost) }]) : '',
   ].join(''));
 
   // ── الحوكمة والمخاطر ──
@@ -153,12 +177,14 @@ export function institutionalReport(input) {
     ['الراعي', sp?.status === 'endorsed' ? (sp.name || m.sponsor || 'الراعي') : sp?.waived ? 'اعتُمدت بقرار الإدارة' : 'لم يؤيد بعد', sp?.status === 'endorsed' ? fmt(sp.at) : null],
     ['تاريخ الاعتماد', approved ? fmt(m.approved_at) : 'لم تُعتمد بعد', null],
   ];
-  add('Approval', 'الاعتماد', `${approved ? `<p><span class="cp-stamp">معتمدة · ${esc(fmt(m.approved_at) || '')}</span></p>` : ''}
+  add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">معتمدة · ${esc(fmt(m.approved_at) || '')}</span>` : '<span class="st">لم تُعتمد بعد</span>'}
     <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
-    <p class="in-fp">${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)} · FINGERPRINT ${esc(fp)}</p>`,
+    <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span><span>FINGERPRINT <b>${esc(fp)}</b></span></p></div>`,
   'بصمة النسخة تتغير بأي تعديل في محتواها: تطابقها يثبت أن ما بين يديك هو النسخة المعتمدة.');
 
-  const body = STYLE + IN_STYLE + parts.map(([en, ar, b, note], i) => section(en, `${i + 1}. ${ar}`, b, note)).join('');
+  // فاتحة الباب: رقم كبير ذهبي، وعنوان إنجليزي صغير، وعنوانه العربي، وسطر يشرحه. كل باب بعد الأول يبدأ صفحة جديدة
+  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  const body = STYLE + IN_STYLE + parts.map(opener).join('');
   // الجهة من لقطة الاعتماد (شعارها ولونها كما كانا لحظة الإصدار)؛ بلا جهة: مبادرة مجتمعية ويُذكر راعيها
   const org = m.org || null;
   return {

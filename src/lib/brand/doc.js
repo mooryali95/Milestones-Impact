@@ -77,6 +77,8 @@ export const points = (items, empty = 'لا شيء') => (items.length ? `<ul cla
 // ── الغلاف المشترك (الوثيقة المؤسسية) ──
 // brand: { name, logo, color }. شعار الجهة أعلى الغلاف، و«بإعداد Milestone Impact» أصغر، ولون الجهة خط تمييز وحده.
 // بلا شعار يُكتب اسمها نصًا؛ بلا جهة «مبادرة مجتمعية». اللون يُقبل بصيغة #RGB أو #RRGGBB وحدها فلا يُحقن في النمط
+// نص آمن داخل سلسلة CSS (ترويسة الصفحة)
+const cssStr = (v) => String(v ?? '').replace(/[\\"\n\r<>]/g, ' ');
 export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
 const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|https:\/\/|\/(?!\/))/i.test(String(u || '')) ? u : null);
 function coBrand(b, id, kindLabel) {
@@ -104,6 +106,7 @@ ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link re
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
   @bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }
+  ${meta.brand ? `@top-right { content: "${cssStr(meta.title)}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }` : ''}
   @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 300 7pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${C.muted}; } }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html { background: ${C.faint}; }
@@ -197,6 +200,12 @@ h2, h3 { break-after: avoid; }
 .mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: 7.5pt; color: ${C.muted}; }
 .mast.co .by svg { height: 24px; width: auto; display: block; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.2mm; }
+.mast.co { padding: 14mm 18mm 12mm; }
+.mast.co .eyebrow { margin-top: 14mm; }
+.mast.co h1 { font-size: 30pt; font-weight: 200; line-height: 1.2; margin: 3mm 0 2mm; }
+.mast.co .sub { font-size: 11.5pt; color: ${C.slate}; }
+.mast.co .meta { margin-top: 12mm; }
+.mast.co .meta b { font-size: 10pt; }
 </style></head><body>
 <div class="toolbar">${meta.pdfName ? '<button class="pri" data-act="pdf">تحميل PDF</button><button data-act="print">طباعة</button>' : '<button class="pri" data-act="print">طباعة أو حفظ PDF</button>'}<button data-act="close">إغلاق</button></div>
 <article class="sheet">

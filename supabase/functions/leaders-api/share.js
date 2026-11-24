@@ -8,8 +8,9 @@ import { docLevelsFor } from './capstone.js';
 
 export const SHARE_DAYS = Object.freeze([7, 30, 90]);
 export const MAX_ACTIVE_SHARES = 10;
-// هل يرى قارئ رابط المشاركة جهة الملف (شعارها ولونها على غلاف الوثيقة المؤسسية). قرار المالك معلّق؛ مفتاح واحد
-export const SHARE_SHOWS_ORG = false;
+// قارئ رابط المشاركة يرى جهة الملف على غلاف الوثيقة المؤسسية (قرار المالك 2026-11-24). الشعار واللون للجهة النشطة وحدها،
+// ومن لقطة الاعتماد للنسخة الصادرة (capstone.ts docFor/approve). مفتاح واحد
+export const SHARE_SHOWS_ORG = true;
 // حد الإغراق: ملاحظات في الساعة من العنوان نفسه، وفي اليوم على الرابط نفسه
 export const NOTE_LIMITS = Object.freeze({ perIpHour: 6, perShareDay: 40 });
 // تنبيه صاحب الوثيقة بالبريد: مرة كل ساعة على الأكثر لكل رابط، ومعها عدد ما وصل

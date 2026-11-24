@@ -94,10 +94,14 @@ describe('الوثيقة المؤسسية', () => {
     expect(html).toContain('<img src="data:image/svg+xml;base64,');
     expect(html).toContain('بإعداد');
     expect(html).toContain('style="background:#1F6F5C"');
-    const heads = [...r.body.matchAll(/<h2>(\d+)\. ([^<]+)<\/h2>/g)].map((m) => +m[1]);
+    const heads = [...r.body.matchAll(/<span class="n">(\d+)<\/span>/g)].map((m) => +m[1]);
+    expect(heads.length).toBeGreaterThan(4);
     expect(heads).toEqual(heads.map((_, i) => i + 1));
     expect(text(r.body)).toContain('الاعتماد');
-    expect(r.body).toContain(`FINGERPRINT ${r.fingerprint}`);
+    expect(r.body).toContain(`FINGERPRINT <b>${r.fingerprint}</b>`);
+    // كل باب بعد الأول يبدأ صفحة، وفاتحته لا تنفصل عن أول محتواه
+    expect((r.body.match(/class="in-sec np"/g) || []).length).toBe(heads.length - 1);
+    expect(r.body).toContain('من 4 يناير 2026');
     expect(text(r.body)).not.toContain('لم يُملأ');
   });
   it('بلا شعار يُكتب اسم الجهة، وبلا جهة «مبادرة مجتمعية»، واللون غير الصالح لا يُحقن', () => {
