@@ -130,7 +130,7 @@ for (const [from, to, writes] of [['email', 'totp', true], ['passkey', 'email', 
     await page.locator('.ctx-tab[data-ctx="contacts"]').click();
     const re = page.getByRole('dialog', { name: 'انتهت الجلسة' });
     await expect(re).toBeVisible();
-    await re.getByRole('button', { name: 'متابعة' }).click();
+    await re.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
     await re.getByLabel('الرمز المكوّن من 6 أرقام').fill('654321');
     await re.getByRole('button', { name: 'تأكيد الدخول' }).click();
     await expect(re).toHaveCount(0);

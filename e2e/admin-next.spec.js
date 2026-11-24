@@ -34,7 +34,7 @@ async function mock(page, overrides = {}) {
 async function signIn(page) {
   await page.goto(BASE);
   await page.getByLabel('البريد الإلكتروني').fill('a@mi.test');
-  await page.getByRole('button', { name: 'متابعة' }).click();
+  await page.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
   await page.getByLabel('الرمز المكوّن من 6 أرقام').fill('123456');
   await page.getByRole('button', { name: 'تأكيد الدخول' }).click();
   await expect(page.getByText('مدير الاختبار')).toBeVisible();
@@ -44,10 +44,10 @@ test('الدخول برمز خاطئ يعرض الخطأ، والصحيح يفت
   await mock(page);
   await page.goto(BASE);
   await page.getByLabel('البريد الإلكتروني').fill('بريد-خطأ');
-  await page.getByRole('button', { name: 'متابعة' }).click();
+  await page.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
   await expect(page.getByRole('alert')).toHaveText('يرجى إدخال بريد إلكتروني صحيح');
   await page.getByLabel('البريد الإلكتروني').fill('a@mi.test');
-  await page.getByRole('button', { name: 'متابعة' }).click();
+  await page.getByRole('button', { name: 'أرسل رمز الدخول' }).click();
   await page.getByLabel('الرمز المكوّن من 6 أرقام').fill('000000');
   await page.getByRole('button', { name: 'تأكيد الدخول' }).click();
   await expect(page.getByRole('alert')).toHaveText('الرمز غير صحيح');
