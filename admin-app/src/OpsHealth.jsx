@@ -15,10 +15,6 @@ import './ops-health.css';
 const ICON = { green: '✓', amber: '!', red: '✕' };
 const CARD_ID = 'ops-health';
 let focusPending = false;
-// الشريط يطلب كشف البطاقة قبل التركيز عليها: هي في مركز البريد (MailCenter.jsx)، والحدث لمن يطوي وعاءها إن وُجد
-export const OPS_REVEAL = 'mi:ops-reveal';
-export const opsRevealPending = () => focusPending;
-export const focusOpsCard = () => (focusPending ? focusCard() : false);
 
 const when = (iso) => (iso ? agoAr(iso) || dateTime(iso) : null);
 const n = (v) => (v == null ? 'غير مقروء' : String(v));
@@ -31,7 +27,6 @@ export function OpsBanner({ enabled }) {
   const open = (e) => {
     e.preventDefault();
     focusPending = true;
-    window.dispatchEvent(new Event(OPS_REVEAL));
     const r = parseRoute(window.location.hash);
     if (r.ctx === 'leaders' && r.tab === 'mailcenter' && r.id !== 'routing') focusCard();
     else navigate({ ctx: 'leaders', tab: 'mailcenter' });
@@ -50,7 +45,7 @@ export function OpsBanner({ enabled }) {
 
 function focusCard() {
   const el = document.getElementById(CARD_ID);
-  // في وعاء مطوي لا يقع التركيز: يبقى الطلب قائمًا حتى يُكشف (focusOpsCard)
+  // البطاقة لم تُرسم بعد (مركز البريد يُحمَّل): يبقى الطلب قائمًا حتى تصل بياناتها
   if (!el || el.closest('[hidden]')) return false;
   focusPending = false;
   el.scrollIntoView({ block: 'start' });

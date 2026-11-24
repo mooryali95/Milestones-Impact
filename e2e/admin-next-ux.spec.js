@@ -199,6 +199,26 @@ test('دليل المتطلب في «قرارات اليوم»: من admin.revie
   expect(opened).toEqual([{ action: 'admin.evidence-url', participant_id: 'p1', path: 'p1/plan.pdf' }].map(({ action, ...x }) => expect.objectContaining(x)));
 });
 
+test('اعتماد المتطلبات على المحدد الظاهر وحده: تغيير النوع يمسح التحديد، والتأكيد يسمّي، والمتعذر يُسمّى', async ({ page }) => {
+  const reviewed = [];
+  await setup(page, '#/leaders/overview', REQ_INBOX, { 'admin.review': (b) => { reviewed.push(b); return b.participant_id === 'p2' ? { success: false, message: 'x' } : { success: true }; } });
+  const box = page.getByRole('group', { name: 'اعتماد المتطلبات' });
+  await page.getByLabel('تحديد خطة التطوير لـ سارة الأحمد').check();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد (1)' })).toBeEnabled();
+  // تغيير النوع يمسح التحديد
+  await page.getByRole('group', { name: 'نوع البند' }).getByRole('button', { name: /اعتماد مسار/ }).click();
+  await page.getByRole('group', { name: 'نوع البند' }).getByRole('button', { name: /^الكل/ }).click();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+  await box.getByLabel(/حدد المتطلبات المعروضة/).check();
+  await box.getByRole('button', { name: 'اعتمد المحدد (2)' }).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('سارة الأحمد (خطة التطوير)، عمر علي (خطة التطوير)');
+  await dialog.getByRole('button', { name: 'تأكيد' }).click();
+  await expect.poll(() => reviewed.length).toBe(2);
+  await expect(page.getByText('اعتُمد 1 من 2، ولم يُحفظ: عمر علي (خطة التطوير)')).toBeVisible();
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+});
+
 test('المراقب لا يرى خانات اعتماد المتطلبات', async ({ page }) => {
   await setup(page, '#/leaders/overview', REQ_INBOX);
   await page.evaluate(() => { const s = JSON.parse(sessionStorage.getItem('mi_admin_v3')); s.user.role_id = 'viewer'; sessionStorage.setItem('mi_admin_v3', JSON.stringify(s)); });

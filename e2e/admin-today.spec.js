@@ -251,3 +251,20 @@ test('الترتيب: قرارات اليوم أولًا، ثم الأرقام،
   expect(nums).toBeLessThan(exc);
   await expect(page.locator('h2.today-sec').first()).toHaveText('قرارات اليوم');
 });
+
+// نبض الدفعات انتقل من المكتب إلى «البرامج والدفعات» (تصور تبويبات الإدارة 2026-11-24) برد admin.today نفسه
+test('نبض الدفعات الجارية في البرامج والدفعات: سطر لكل دفعة بجهتها وجاهزيتها وأقرب جلسة وما ينتظر، ورابط إلى التنبيهات', async ({ page }) => {
+  await setup(page, { replies: { 'admin.today': desk } });
+  await expect(page.getByRole('region', { name: 'نبض الدفعات الجارية' })).toHaveCount(0);
+  await page.goto(`${BASE}#/leaders/programs`);
+  const pulse = page.getByRole('region', { name: 'نبض الدفعات الجارية' });
+  const rows = pulse.locator('tbody tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('جهة الشمال');
+  await expect(rows.nth(0)).toContainText('بقي بندان');
+  await expect(rows.nth(0).locator('td[data-label="ينتظر قرارًا"]')).toHaveText('4');
+  await expect(rows.nth(1)).toContainText('لا جلسة مؤرخة');
+  await expect(pulse.getByRole('link', { name: /تنبيهات/ })).toHaveAttribute('href', '#/leaders/overview');
+  await rows.nth(0).getByRole('link', { name: 'دفعة الخريف' }).click();
+  await expect(page).toHaveURL(/#\/leaders\/programs\/c1$/);
+});

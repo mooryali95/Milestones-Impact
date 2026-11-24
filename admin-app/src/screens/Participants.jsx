@@ -94,10 +94,13 @@ export function Where({ o }) {
 function ColumnPicker({ cols, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const btn = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
+    // التركيز الأول على أول خانة، وEscape يغلق ويعيد التركيز إلى الزر
+    ref.current?.querySelector('#pt-cols-menu input')?.focus();
     const away = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
@@ -105,7 +108,7 @@ function ColumnPicker({ cols, onChange }) {
   const n = OPTIONAL_COLS.filter(([k]) => cols[k]).length;
   return (
     <div className="pt-cols" ref={ref}>
-      <button type="button" className="refresh-btn" aria-expanded={open} aria-controls="pt-cols-menu" onClick={() => setOpen((x) => !x)}>الأعمدة{n ? ` (+${n})` : ''}</button>
+      <button ref={btn} type="button" className="refresh-btn" aria-expanded={open} aria-controls="pt-cols-menu" onClick={() => setOpen((x) => !x)}>الأعمدة{n ? ` (+${n})` : ''}</button>
       {open && (
         <div id="pt-cols-menu" className="pt-cols-menu" role="group" aria-label="أعمدة اختيارية">
           {OPTIONAL_COLS.map(([k, l]) => (

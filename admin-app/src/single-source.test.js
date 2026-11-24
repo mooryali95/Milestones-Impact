@@ -16,6 +16,7 @@ const DOMAIN = {
   PlatformChecks: 'PlatformHealth.jsx',
   SystemState: 'PlatformHealth.jsx',
   DemoCard: 'PlatformHealth.jsx',
+  CohortPulse: 'Programs.jsx',
 };
 
 describe('المصدر الواحد لمكوّنات المجال', () => {
@@ -27,5 +28,10 @@ describe('المصدر الواحد لمكوّنات المجال', () => {
     for (const x of [...Object.keys(DOMAIN), 'ReqQueue', 'Pulse', 'HealthBadge', 'PlatformHealth']) expect(src, x).not.toMatch(new RegExp(`<${x}[\\s/>]`));
     expect(src).not.toMatch(/from '\.\.\/OpsHealth\.jsx'/);
     expect(src).not.toMatch(/DemoLinks/);
+  });
+  it('نبض الدفعات (admin.today › pulse) يُرسم في مكان واحد: البرامج والدفعات، ولا يضيع من اللوحة', () => {
+    const users = screens.filter(([, src]) => /\bt\.pulse\b/.test(src)).map(([f]) => f);
+    expect(users).toEqual(['CohortPulse.jsx']);
+    expect(rendering('CohortPulse')).toEqual(['Programs.jsx']);
   });
 });

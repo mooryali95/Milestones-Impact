@@ -82,8 +82,13 @@ test('صحة المنصة: في مجموعة الإعداد، برأس حكم و
   // أعد الفحص يطلب من جديد
   const n = () => calls.filter((c) => c.action === 'admin.platform-health').length;
   const before = n();
+  const cnt = (k) => calls.filter((c) => c.action === k).length;
+  const opsBefore = cnt('admin.ops-health'), orgsBefore = cnt('admin.orgs');
   await page.getByRole('button', { name: 'أعد الفحص' }).click();
   await expect.poll(n).toBe(before + 1);
+  // ومعها صحة البريد والجهات
+  await expect.poll(() => cnt('admin.ops-health')).toBeGreaterThan(opsBefore);
+  await expect.poll(() => cnt('admin.orgs')).toBeGreaterThan(orgsBefore);
   // في الشريط تحت «الإعداد»
   const nav = page.getByRole('button', { name: 'صحة المنصة' });
   await expect(nav).toHaveClass(/on/);
@@ -114,6 +119,12 @@ test('أعمدة المشاركين: الدائمة ظاهرة، والاختي�
   for (const h of ['الاسم', 'الحالة', 'أين توقف', 'بانتظار', 'الجهة', 'المسار']) expect(heads, h).toContain(h);
   expect(heads).not.toContain('التسجيل');
   expect(heads.some((h) => /المنهجية|الأثر|القيادة/.test(h))).toBe(false);
+  await page.getByRole('button', { name: /^الأعمدة/ }).click();
+  // التركيز الأول على أول خانة، وEscape يغلق ويعيد التركيز إلى الزر
+  await expect(page.getByRole('group', { name: 'أعمدة اختيارية' }).getByLabel('المستويات الثلاثة')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('group', { name: 'أعمدة اختيارية' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^الأعمدة/ })).toBeFocused();
   await page.getByRole('button', { name: /^الأعمدة/ }).click();
   await page.getByRole('group', { name: 'أعمدة اختيارية' }).getByLabel('تاريخ التسجيل').check();
   heads = await visibleHeads(page);

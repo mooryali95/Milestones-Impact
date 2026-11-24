@@ -7,7 +7,7 @@
 // كل مكوّن مجال هنا يُرسم من هذه الشاشة وحدها (حارسه single-source.test.js).
 import React, { useEffect, useState } from 'react';
 import { L } from '../leaders.js';
-import { useOpsHealth } from '../ops-watch.js';
+import { refresh as refreshOps, useOpsHealth } from '../ops-watch.js';
 import { Spinner, useUI } from '../ui.jsx';
 import { DemoLinks, resetConfirmAr, useDemoLinks } from '../DemoLinks.jsx';
 import { readinessSummary } from '../org-hub.js';
@@ -172,7 +172,7 @@ function DemoCard() {
 
 const VERDICT_AR = { ok: 'سليم', warn: 'يحتاج انتباهًا', bad: 'خلل', checking: 'جارٍ الفحص…' };
 
-export default function PlatformHealth({ orgs = [], orgsLoaded = true, canWrite }) {
+export default function PlatformHealth({ orgs = [], orgsLoaded = true, canWrite, reloadOrgs = null }) {
   const writer = canWrite !== false;
   const ops = useOpsHealth(writer);
   const [d, setD] = useState(null);
@@ -186,6 +186,8 @@ export default function PlatformHealth({ orgs = [], orgsLoaded = true, canWrite 
     ]).then(([h, ph]) => live && setD({ h, ph, at: new Date().toISOString() }));
     return () => { live = false; };
   }, [n]);
+  // «أعد الفحص» يسأل كل مصادر الحكم: الحالة والفحوص، وصحة البريد، والجهات
+  const recheck = () => { setN((x) => x + 1); if (writer) refreshOps(); reloadOrgs?.(); };
   if (!d) return <Spinner />;
   const { h, ph } = d;
   const rows = exceptionRows({ ops: writer ? ops : null, h, orgs, canWrite: writer, ph });
@@ -197,7 +199,7 @@ export default function PlatformHealth({ orgs = [], orgsLoaded = true, canWrite 
         <span className="ph-dot" aria-hidden="true">{level === 'ok' ? '✓' : level === 'bad' ? '✕' : level === 'warn' ? '!' : '…'}</span>
         <span><b>صحة المنصة: {VERDICT_AR[level]}</b>{rows.length > 0 && <small className="la-muted"> · {rows.length === 1 ? 'أمر واحد' : `${rows.length} أمور`} تحتاج انتباهك</small>}
           <br /><small className="la-muted">آخر فحص {dateTime(d.at)}</small></span>
-        <button type="button" className="btn-sm ghost" onClick={() => setN((x) => x + 1)}>أعد الفحص</button>
+        <button type="button" className="btn-sm ghost" onClick={recheck}>أعد الفحص</button>
       </header>
       {writer && <Readiness items={h?.readiness} />}
       <PlatformChecks r={ph} />

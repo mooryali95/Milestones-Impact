@@ -22,6 +22,7 @@ import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
 import CohortJourney from './CohortJourney.jsx';
 import CohortRoster from './CohortRoster.jsx';
 import CohortDemo from './CohortDemo.jsx';
+import CohortPulse from './CohortPulse.jsx';
 import { MoreMenu } from './PersonShell.jsx';
 import { COHORT_TABS, cohortTab, followShow, followStage, tabQuery } from '../cohort-journey.js';
 
@@ -420,6 +421,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
         </section>
       ))}
 
+      <CohortPulse />
       <div className="la-row between"><h3 className="la-phase">الدفعات</h3>{canWrite && <button className="btn-sm primary" onClick={() => onWizard({})}>+ دفعة جديدة</button>}</div>
       <div className="table-wrap">
         <table className="data-table">

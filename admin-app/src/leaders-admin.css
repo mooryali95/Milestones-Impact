@@ -1605,3 +1605,15 @@ tr.ct-on > td { background: var(--gold-pale); }
 .pt-cols-menu { position: absolute; inset-inline-end: 0; z-index: 20; margin-top: 4px; padding: 10px 12px; min-inline-size: 200px; background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 18px rgba(6,30,44,.12); display: grid; gap: 6px; }
 .pt-cols-menu label { display: flex; align-items: center; gap: 8px; font-size: .88rem; cursor: pointer; min-block-size: 24px; }
 .pt-cols-menu small { font-size: .76rem; }
+
+/* «نبض الدفعات الجارية» في البرامج والدفعات (CohortPulse.jsx): جدول يصير بطاقات على الهاتف */
+.today-pulse-wrap { overflow-x: auto; margin: 0 0 14px; }
+.today-pulse-t { inline-size: 100%; }
+.today-pulse-t th[scope="row"] { text-align: start; font-weight: 600; }
+@media (max-width: 640px) {
+  .today-pulse-t thead { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .today-pulse-t, .today-pulse-t tbody, .today-pulse-t tr, .today-pulse-t th, .today-pulse-t td { display: block; inline-size: auto; }
+  .today-pulse-t tr { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; background: #fff; }
+  .today-pulse-t th[scope="row"], .today-pulse-t td { border: 0; padding: 3px 0; }
+  .today-pulse-t td::before { content: attr(data-label) ": "; color: var(--ink-soft); font-size: .8rem; }
+}

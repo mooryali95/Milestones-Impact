@@ -22,6 +22,13 @@ import { INBOX_VIEWS, inboxView } from '../today.js';
 // انتقل من «طابور المتطلبات» المحذوف (تصور تبويبات الإدارة 2026-11-24) فلا تضيع القدرة ولا يتكرر البند في مكانين
 export const reqKey = (i) => { const [participant_id, requirement_id] = String(i.id).split(':'); return { participant_id, requirement_id }; };
 
+const reqName = (i) => `${i.title}${i.sub ? ` (${i.sub})` : ''}`;
+const namesAr = (list, max = 3) => list.slice(0, max).map(reqName).join('، ') + (list.length > max ? ` و${list.length - max} غيرها` : '');
+// التأكيد يسمّي من يُعتمد له: أول ثلاثة والعدد
+export const reqConfirmAr = (list) => `اعتماد ${list.length} من المتطلبات: ${namesAr(list)}؟ يصل كل مشارك بريد باعتماد متطلبه.`;
+// النتيجة تسمّي ما لم يُحفظ
+export const reqDoneAr = (n, failed) => (!failed.length ? `اعتُمد ${n}` : `اعتُمد ${n - failed.length} من ${n}، ولم يُحفظ: ${namesAr(failed)}`);
+
 export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onView }) {
   // الرد من مخزن العدّادات نفسه (pending.js): طلب واحد لـ admin.inbox يرسم الصندوق وعدّادات التبويبات معًا،
   // ويُحدَّث معها (كل دقيقتين والصفحة ظاهرة، وفور «mi:pending»)
@@ -32,6 +39,8 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
   const { toast, confirm } = useUI();
   const [picked, setPicked] = useState(() => new Set());
   const [busy, setBusy] = useState(null);
+  // تغيير النوع أو العرض يمسح التحديد: لا يُعتمد ما لم يعد ظاهرًا
+  useEffect(() => { setPicked(new Set()); }, [kind, view]);
   // دليل المتطلب من مصدر طابور المتطلبات نفسه (admin.reviews › submitted.evidence_path)، يُطلب حين يكون في الصندوق متطلب
   const [evidence, setEvidence] = useState({});
   const hasReq = canWrite !== false && !!d?.success && (d.items || []).some((i) => i.kind === 'requirement');
@@ -73,21 +82,25 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
   const pendingN = counts.approval || 0;
   const writer = canWrite !== false;
   const reqShown = shown.slice(0, 60).filter((i) => i.kind === 'requirement');
-  const pickedReq = items.filter((i) => i.kind === 'requirement' && picked.has(i.id));
+  // الاعتماد على المحدد الظاهر وحده (تقاطع التحديد مع المعروض)
+  const pickedReq = reqShown.filter((i) => picked.has(i.id));
   const allReq = reqShown.length > 0 && reqShown.every((i) => picked.has(i.id));
   const togglePick = (id) => setPicked((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const approveReqs = async () => {
     const list = pickedReq;
-    if (!list.length || !(await confirm(`اعتماد ${list.length} من المتطلبات؟ يصل كل مشارك بريد باعتماد متطلبه.`))) return;
-    let ok = 0;
-    for (const [n, i] of list.entries()) {
-      setBusy(`${n + 1}/${list.length}`);
-      const r = await L('admin.review', { ...reqKey(i), status: 'done' });
-      if (r.success) ok += 1;
+    if (!list.length || !(await confirm(reqConfirmAr(list)))) return;
+    const failed = [];
+    try {
+      for (const [n, i] of list.entries()) {
+        setBusy(`${n + 1}/${list.length}`);
+        const r = await L('admin.review', { ...reqKey(i), status: 'done' }).catch(() => null);
+        if (!r?.success) failed.push(i);
+      }
+    } finally {
+      setBusy(null); setPicked(new Set());
+      refreshPending();
     }
-    setBusy(null); setPicked(new Set());
-    toast(ok === list.length ? `اعتُمد ${ok}` : `اعتُمد ${ok} من ${list.length}، والباقي لم يُحفظ`);
-    refreshPending();
+    toast(reqDoneAr(list.length, failed));
   };
   return (
     <section className="la-card inbox" aria-labelledby="inbox-h">

@@ -133,19 +133,6 @@ export function exceptionRows({ ops = null, h = null, orgs = [], canWrite = true
   return out.filter((x) => x.level === 'bad').concat(out.filter((x) => x.level !== 'bad'));
 }
 
-const needAr = (n) => (n === 1 ? 'أمر واحد يحتاج انتباهك' : n === 2 ? 'أمران يحتاجان انتباهك' : `${n} تحتاج انتباهك`);
-// سطر الشارة: «كل شيء سليم»، أو العدد بأسماء ما فيه
-// ومن لم تصل كل مصادره بعد «جارٍ الفحص»، فلا يظهر «سليم» ثم ينقلب
-export const healthLine = (problems, checking = false) => (problems.length ? `${needAr(problems.length)}: ${problems.map((p) => p.label).join('، ')}` : checking ? 'جارٍ الفحص…' : 'كل شيء سليم');
-
-// بصمة ما يحتاج الانتباه: اختيار المدير (طي أو فتح) مقرون بها، فخلل جديد يفتح الشارة ولو طواها قبله
-export const problemsSig = (problems) => problems.map((p) => p.key).join(',');
-/**
- * الشارة مطوية حين يسلم كل شيء، ومفتوحة عند الخلل، إلا أن يكون المدير اختار غير ذلك لهذه الحال نفسها في هذه الجلسة.
- * @param {string} sig بصمة الحال الآن
- * @param {{sig: string, open: boolean}|null} chosen آخر اختيار محفوظ للجلسة
- */
-export const healthOpen = (sig, chosen = null) => (chosen && chosen.sig === sig ? !!chosen.open : sig !== '');
 
 // ── الرأس ──
 // التحية بساعة الرياض (UTC+3 طوال العام، بلا توقيت صيفي)
