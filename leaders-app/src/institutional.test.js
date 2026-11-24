@@ -153,11 +153,11 @@ describe('المراجعة الثانية: الاحتياطي ومكوّنات �
     expect(b).not.toContain('<span>التكلفة مع الاحتياطي</span>');
     expect(b).not.toContain('<span>الاحتياطي</span>');
   });
-  it('«كيف نعرف أننا نجحنا» يظهر في القيمة حين يُكتب', () => {
+  it('«مؤشرات النجاح» يظهر في القيمة حين يُكتب', () => {
     const d = completeDoc();
     const ep = d.sections.find((s) => s.key === 'evidence-plan');
     ep.fields.push({ key: 'success_signal', label: 'كيف ستعرف أنك نجحت؟', type: 'textarea', value: 'ينخفض زمن الإنجاز إلى ثلاثة أيام في تقرير النظام الشهري' });
-    expect(institutionalReport(d).body).toContain('كيف نعرف أننا نجحنا');
+    expect(institutionalReport(d).body).toContain('مؤشرات النجاح');
   });
   it('قائمة الحجب تقول ماذا يُضاف', () => {
     expect(missingMessage(institutionalReport(yahyaDoc()).missing)).toContain('املأ سجل المخاطر');

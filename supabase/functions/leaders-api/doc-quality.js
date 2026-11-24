@@ -283,13 +283,13 @@ export const INSTITUTIONAL_QUESTIONS = Object.freeze([
   { n: 2, title: 'ما الهدف وما المخرجات؟', add: 'اكتب الهدف الأعلى وجدول المخرجات في البطاقة', all: [[['initiative-charter', 'objective']], [['initiative-charter', 'deliverables']]] },
   { n: 3, title: 'لماذا هذا الحل لا غيره؟', add: 'اكتب البدائل والتوصية في «المبرر والبدائل»', all: [[['options-analysis', 'recommendation'], ['options-analysis', 'options']]] },
   { n: 4, title: 'كيف يحدث التغيير؟', add: 'اكتب سلسلة التغيير أو الأثر المنشود في «نظرية التغيير»', all: [[['theory-of-change', 'chain'], ['theory-of-change', 'impact']]] },
-  { n: 5, title: 'ما المنفعة وكيف تُقاس؟', add: 'املأ سجل المنافع، واكتب كيف ستعرف أنك نجحت أو خطة القياس', all: [[['benefits-register', 'benefits']], [['evidence-plan', 'success_signal'], ['evidence-plan', 'plan']]] },
+  { n: 5, title: 'ما المنفعة وكيف تُقاس؟', add: 'املأ سجل المنافع، ثم «كيف ستعرف أنك نجحت؟» أو خطة القياس', all: [[['benefits-register', 'benefits']], [['evidence-plan', 'success_signal'], ['evidence-plan', 'plan']]] },
   { n: 6, title: 'متى وبأي خطوات؟', add: 'املأ سجل المعالم أو الجدول الزمني', all: [[['milestone-register', 'milestones'], ['schedule', 'activities']]] },
-  { n: 7, title: 'بأي موارد وكلفة؟', add: 'املأ بنود الموارد والتكلفة', all: [[['cost-plan', 'items']]] },
+  { n: 7, title: 'بأي موارد وتكلفة؟', add: 'املأ بنود الموارد والتكلفة', all: [[['cost-plan', 'items']]] },
   { n: 8, title: 'ما المخاطر وكيف تُعالج؟', add: 'املأ سجل المخاطر', all: [[['raid', 'items']]] },
   { n: 9, title: 'من يقرر ومن يشارك؟', add: 'اكتب الراعي ودوره في البطاقة (أو بنية الحوكمة)، واملأ خريطة أصحاب المصلحة', all: [[['initiative-charter', 'sponsor'], ['governance', 'structure']], [['stakeholder-map', 'stakeholders']]] },
   // تقرير الأثر إن كان من فصول الوثيقة وكُتب، وإلا الاستدامة؛ والمشغّل وحده لا يكفي
-  { n: 10, title: 'ماذا تحقق وماذا يبقى؟', add: 'اكتب ما تغيّر في «تقرير الأثر» أو التسليم والاستدامة في «التغيير والاستدامة»', all: [[['impact-report', 'changes'], ['change-sustain', 'sustain'], ['change-sustain', 'handover']]] },
+  { n: 10, title: 'ماذا تحقق وماذا يبقى؟', add: 'اكتب ما تغيّر في «تقرير الأثر» أو التسليم والتسلم واستمرار المنافع في «قيادة التغيير والاستدامة»', all: [[['impact-report', 'changes'], ['change-sustain', 'sustain'], ['change-sustain', 'handover']]] },
 ]);
 
 const has = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== '');
