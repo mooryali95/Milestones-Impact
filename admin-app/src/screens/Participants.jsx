@@ -29,7 +29,7 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 // حد الإجراء الجماعي وإجراءا الحالة والدفعة من BulkPeople.jsx: يستدعيهما تبويب «المتابعة» في ملف الدفعة أيضًا
 import { BULK_MAX, BulkEnroll, BulkStatus, useBulkCohorts } from '../BulkPeople.jsx';
 import { FileExtras, FullTimeline, InitiativePanel, Observations } from './PersonFile.jsx';
-import { Glance, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
+import { Glance, isChapter, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
@@ -465,6 +465,9 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
   };
 
   const pts = r.points || { total: 0, rank: { title: 'مستكشف' } };
+  // فصول وثيقة المبادرة في تبويب «المبادرة» وحده بحالتها الواحدة وفعل «قيّم» (المرحلة 1)، و«التعلم» يشير إليها
+  const learnModels = (r.models || []).filter((x) => !isChapter(x));
+  const chapters = (r.models || []).filter(isChapter);
   const book = r.book || [];
   const sc = book.reduce((a, b) => [a[0] + (b.quiz_score || 0), a[1] + (b.quiz_total || 0)], [0, 0]);
 
@@ -525,13 +528,16 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
             <div className="la-book-kpis">
               <span><b>{book.length}</b>باب أتمّه</span>
               <span><b>{sc[1] ? Math.round((sc[0] / sc[1]) * 100) : 0}%</b>دقة الاختبارات</span>
-              <span><b>{(r.models || []).filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
+              <span><b>{learnModels.filter((x) => x.status !== 'draft').length}</b>نموذج سلّمه</span>
             </div>
             {/* «التوجيه والإرشاد» G3: أعداد بلا نص، والمحادثة خاصة بالمشارك */}
             {r.guidance?.asked > 0 && <p className="la-muted small" data-guidance-counts>المساعد الذكي في آخر {r.guidance.days} يومًا: {r.guidance.asked} سؤالًا، ولم يتأكد في {r.guidance.unsure}، وطلب التأكد من خبير {r.guidance.confirmed}.</p>}
             {r.guidance && <GuideTranscriptButton pid={r.participant.id} />}
-            {(r.models || []).length > 0 && (
-              <ul className="la-reqs">{r.models.map((x) => (
+            {chapters.length > 0 && (
+              <p className="la-muted small" data-chapters-link>فصول وثيقة المبادرة ({chapters.length}{chapters.some((x) => x.status === 'submitted') ? `، منها ${chapters.filter((x) => x.status === 'submitted').length} للقراءة` : ''}) في تبويب <button type="button" className="la-link" onClick={() => show('initiative')}>المبادرة</button>.</p>
+            )}
+            {learnModels.length > 0 && (
+              <ul className="la-reqs">{learnModels.map((x) => (
                 <li key={x.id}><span>{x.learning_models?.title_ar} <span className={`la-chip ${SUB_ST[x.status]?.[1] || ''}`}>{SUB_ST[x.status]?.[0]}</span>{x.rating ? <span className="stars-c"> {stars(x.rating)}</span> : null}</span>
                   {x.status !== 'draft' && <button className="la-link" onClick={() => setSub(x.id)}>{x.status === 'submitted' ? 'قيّم' : 'عرض'}</button>}</li>
               ))}</ul>
@@ -557,7 +563,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
 
           {panel('initiative', <>
           {r.group && <p className="la-muted">المجموعة في دفعته: <b>{r.group.name}</b> ({r.group.members} أعضاء)</p>}
-            <InitiativePanel participantId={p.id} />
+            <InitiativePanel participantId={p.id} canWrite={canWrite} onChanged={load} />
             <ExpertAssign participantId={id} canWrite={canWrite} />
             <FileExtras r={r} />
           </>)}

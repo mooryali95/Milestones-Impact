@@ -449,7 +449,7 @@ export async function participant(b: Body) {
   const [pts, { data: book }, { data: subs }, { data: labTries }] = await Promise.all([
     pointsOf(p.id),
     db.from('handbook_progress').select('module_id, quiz_score, quiz_total, reflection, completed_at, handbook_modules(title_ar, dimension)').eq('participant_id', p.id),
-    db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(title_ar, dimension, points)').eq('participant_id', p.id),
+    db.from('model_submissions').select('id, status, rating, bonus, submitted_at, updated_at, learning_models(key, title_ar, dimension, points, capstone_sort)').eq('participant_id', p.id),
     // المختبر للمستشار: بـ* لتحمل عمود التلميحات قبل ترحيل 20261111120200 وبعده
     db.from('lab_attempts').select('*, lab_items(title_ar, dimension, spec)').eq('participant_id', p.id).not('finished_at', 'is', null),
   ]);

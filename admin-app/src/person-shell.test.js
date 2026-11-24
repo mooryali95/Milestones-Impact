@@ -24,7 +24,7 @@ describe('ما ينتظر المراجع والإجراء الأهم', () => {
   it('الأرقام على التبويبات من بيانات الملف نفسها', () => {
     expect(tabBadges(file({ p: { status: 'pending_approval' } })).decision).toBe('!');
     const b = tabBadges(file({ journey, models: [{ status: 'submitted' }, { status: 'draft' }], observations: [{}, {}] }));
-    expect(b).toEqual({ decision: null, journey: 2, learning: 1, log: 2 });
+    expect(b).toEqual({ decision: null, journey: 2, learning: 1, initiative: null, log: 2 });
   });
   it('إجراء واحد بالأولوية: الاعتماد، ثم المسلَّم، ثم النماذج، ثم الملاحظة. ولا شيء لمن لا يكتب', () => {
     expect(primaryAction(file({ p: { status: 'pending_approval' }, journey }), true)).toMatchObject({ tab: 'decision', label: 'راجع واعتمد' });

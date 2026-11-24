@@ -29,15 +29,21 @@ export function startTab(p, kept) {
 export function keptTab() { try { return sessionStorage.getItem(TAB_KEY); } catch { return null; } }
 export function keepTab(t) { try { sessionStorage.setItem(TAB_KEY, t); } catch { /* محجوب */ } }
 
-/** ما ينتظر المراجع في كل تبويب: رقم صغير على التبويب */
+// فصل من فصول وثيقة المبادرة (capstone_sort): مكانه تبويب «المبادرة» وحده، لا «التعلم» (المرحلة 1 من تصور الملف)
+export const isChapter = (m) => m?.learning_models?.capstone_sort != null;
+
+/** ما ينتظر المراجع في كل تبويب: رقم صغير على التبويب. الفصول المسلَّمة والوثيقة المسلَّمة في «المبادرة»، والنماذج الأخرى في «التعلم» */
 export function tabBadges(r) {
   const p = r?.participant || {};
   const submitted = (r?.journey || []).reduce((n, s) => n + (s.items || []).filter((it) => it.status === 'submitted').length, 0);
-  const models = (r?.models || []).filter((x) => x.status === 'submitted').length;
+  const waiting = (r?.models || []).filter((x) => x.status === 'submitted');
+  const models = waiting.filter((x) => !isChapter(x)).length;
+  const initiative = waiting.length - models + (r?.capstone?.status === 'submitted' ? 1 : 0);
   return {
     decision: p.status === 'pending_approval' ? '!' : null,
     journey: submitted || null,
     learning: models || null,
+    initiative: initiative || null,
     log: (r?.observations || []).length || null,
   };
 }
@@ -49,6 +55,7 @@ export function primaryAction(r, canWrite) {
   if (b.decision) return { tab: 'decision', label: 'راجع واعتمد', focus: 'lc-title' };
   if (b.journey) return { tab: 'journey', label: `راجع المسلَّم (${b.journey})` };
   if (b.learning) return { tab: 'learning', label: `قيّم النماذج (${b.learning})` };
+  if (b.initiative) return { tab: 'initiative', label: `راجع المبادرة (${b.initiative})` };
   return { tab: 'log', label: 'أضف ملاحظة', focus: 'pf-obs-h' };
 }
 
