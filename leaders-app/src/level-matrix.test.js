@@ -385,7 +385,7 @@ describe('الاحتياطي من المتوسط: وثيقة بلا احتياط
     expect(fin).not.toContain('الاحتياطي');
     expect(fin).not.toContain('التكلفة مع الاحتياطي');
     const chk = capstoneChecks({ models: { 'cost-plan': { fields: [items, { key: 'envelope' }] } }, answers: { 'cost-plan': answers } }).find((x) => x.key === 'cost-envelope');
-    expect(chk.title).toBe('التكلفة ضمن الميزانية المتاحة');
+    expect(chk.title).toBe('التكلفة ضمن الموازنة المتاحة');
   });
 });
 

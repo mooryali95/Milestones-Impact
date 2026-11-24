@@ -18,7 +18,7 @@ export default function AskExpert({ chapterTitle, detail = null, dimension = '',
   return (
     <section ref={ref} className="card ask" aria-labelledby="ask-h">
       <div className="row between">
-        <h3 id="ask-h">اسأل مختصًا عن «{chapterTitle}»</h3>
+        <h3 id="ask-h">اسأل خبيرًا عن «{chapterTitle}»</h3>
         {onClose && <button type="button" className="link small" onClick={onClose}>إغلاق</button>}
       </div>
       {/* الخطوة الأولى: إجابة فورية من الكتاب. GuideChat لا يظهر إلا والمساعد مفتوح لهذا المشارك (بوابته من الخادم)، وإلا تبقى النافذة للخبير وحده */}

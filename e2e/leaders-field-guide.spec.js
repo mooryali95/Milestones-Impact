@@ -98,7 +98,7 @@ test('هيكل البداية: يُدرج في الجدول الفارغ وحد�
 
 test('«عندي سؤال هنا» في الفصل يفتح السؤال عن الفصل نفسه', async ({ page }) => {
   await open(page, 'beginner');
-  await page.getByRole('button', { name: 'عندي سؤال هنا' }).click();
-  await expect(page.getByRole('region', { name: 'اسأل مختصًا عن «الموارد والتكلفة»' })).toBeVisible();
+  await page.getByRole('button', { name: 'لديّ سؤال عن هذا الفصل' }).click();
+  await expect(page.getByRole('region', { name: 'اسأل خبيرًا عن «الموارد والتكلفة»' })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'ما الذي تحتاجه؟' }).getByRole('radio')).toHaveCount(3);
 });

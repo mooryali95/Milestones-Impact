@@ -117,10 +117,10 @@ async function fromToken(t: unknown) {
   const { data, error } = await db.from('capstone_shares').select('*, participants(*)').eq('token_hash', await hash(token)).maybeSingle();
   if (error && missing(error)) throw new Fail('الرابط غير صالح', 404, 'invalid');
   const row = must({ data, error }) as any;
-  if (!row) throw new Fail('الرابط غير صالح، أو ألغاه صاحب الوثيقة', 404, 'invalid');
+  if (!row) throw new Fail('الرابط غير صالح، أو ألغاه قائد المبادرة', 404, 'invalid');
   const st = shareState(row);
-  if (st === 'revoked') throw new Fail('ألغى صاحب الوثيقة هذا الرابط', 410, 'revoked');
-  if (st === 'expired') throw new Fail('انتهت مدة هذا الرابط. اطلب من صاحب الوثيقة رابطًا جديدًا', 410, 'expired');
+  if (st === 'revoked') throw new Fail('ألغى قائد المبادرة هذا الرابط', 410, 'revoked');
+  if (st === 'expired') throw new Fail('انتهت مدة هذا الرابط. اطلب من قائد المبادرة رابطًا جديدًا', 410, 'expired');
   const f = await flags(row.participant_id);
   if (!f.share) throw new Fail('المشاركة برابط موقوفة الآن', 410, 'paused');
   return { row, notesOk: f.notes && !!row.allow_notes, readinessOk: f.readiness };
@@ -142,7 +142,7 @@ export async function get(b: Body) {
 
 export async function note(b: Body, ctx: any) {
   const { row, notesOk } = await fromToken(b.t);
-  if (!notesOk) throw new Fail('صاحب الوثيقة لم يفتح الملاحظات في هذا الرابط', 403, 'closed');
+  if (!notesOk) throw new Fail('قائد المبادرة لم يفتح الملاحظات في هذا الرابط', 403, 'closed');
   const doc = await shareDocFor(row.participants);
   let n: any;
   try { n = cleanNote(b, (doc?.sections || []).map((s: any) => s.key)); } catch (e: any) { throw new Fail(e.message); }

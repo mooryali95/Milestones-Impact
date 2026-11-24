@@ -61,7 +61,7 @@ test('المشارك: الجاهزية تمنع التسليم بسبب واضح
   await expect(page.getByRole('heading', { name: 'رقمنة خدمات المستفيدين' })).toBeVisible();
   await expect(page.locator('.cp-meter b')).toHaveText('58%');
   await expect(page.getByText('حزم بلا مالك: WP-2')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'سلّم الوثيقة للمستشار' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'قدّم الوثيقة إلى المستشار' })).toBeDisabled();
   await expect(page.getByText('فصول لم تكتمل: هيكل تجزئة العمل')).toBeVisible();
   // بوابة البطاقة: ما ينتظره من المستشار ومدته، وأنه يكمل الفصول في الأثناء
   await expect(page.locator('[data-card-gate="waiting"]')).toContainText('بطاقة مبادرتك عند المستشار');
@@ -73,8 +73,8 @@ test('المشارك: الجاهزية تمنع التسليم بسبب واضح
   await expect(page.locator('.cp-meter b')).toHaveText('100%');
   await page.getByRole('textbox').fill('المشكلة والحل والقيمة وما نطلبه.');
   page.once('dialog', (d) => d.accept());
-  await page.getByRole('button', { name: 'سلّم الوثيقة للمستشار' }).click();
-  await expect(page.getByText('سُلّمت الوثيقة للمستشار')).toBeVisible();
+  await page.getByRole('button', { name: 'قدّم الوثيقة إلى المستشار' }).click();
+  await expect(page.getByText('قُدّمت الوثيقة إلى المستشار')).toBeVisible();
   expect(srv.calls.map((c) => c.action)).toEqual(expect.arrayContaining(['capstone.summary', 'capstone.submit']));
   expect(srv.calls.find((c) => c.action === 'capstone.summary').summary).toBe('المشكلة والحل والقيمة وما نطلبه.');
 });
@@ -202,7 +202,7 @@ test('الراعي: يقرأ ملخص المبادرة من رابطه ويؤي�
   await expect(page.getByRole('heading', { name: /هل تؤيد مبادرة «رقمنة خدمات المستفيدين»/ })).toBeVisible();
   await expect(page.getByText('440,000 ريال')).toBeVisible();
   await page.getByRole('button', { name: 'أطلب تعديلًا' }).click();
-  await expect(page.getByText('اكتب ما الذي يعدّله صاحب المبادرة')).toBeVisible();
+  await expect(page.getByText('اكتب ما الذي يعدّله قائد المبادرة')).toBeVisible();
   expect(calls.some((c) => c.action === 'sponsor.submit')).toBe(false);
   await page.getByRole('button', { name: 'أؤيد المبادرة' }).click();
   await expect(page.getByText('سُجّل تأييدك، واعتُمدت الوثيقة.')).toBeVisible();

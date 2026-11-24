@@ -328,8 +328,8 @@ export function capstoneChecks(ctx) {
   if (has('cost-plan')) {
     const c = costSummary(M['cost-plan'], A['cost-plan']);
     if (c && c.envelope != null) {
-      add('cost-envelope', `${costLabel(c)} ضمن الميزانية المتاحة`, c.withContingency <= c.envelope,
-        `${costLabel(c)} ${c.withContingency.toLocaleString('en')} تتجاوز الميزانية ${c.envelope.toLocaleString('en')}.`);
+      add('cost-envelope', `${costLabel(c)} ضمن الموازنة المتاحة`, c.withContingency <= c.envelope,
+        `${costLabel(c)} ${c.withContingency.toLocaleString('en')} تتجاوز الموازنة ${c.envelope.toLocaleString('en')}.`);
     }
   }
   const sched = has('schedule') ? table(M.schedule, A.schedule, 'activities') : null;
@@ -469,9 +469,9 @@ export const CARD_REVIEW_CRITERIA = CARD_CRITERIA.map((c) => c.advisor);
 /** @param {string | null | undefined} status حالة تسليم نموذج البطاقة */
 export function cardGate(status) {
   if (status === 'reviewed') return { state: 'approved', ok: true, reason: null };
-  if (status === 'submitted') return { state: 'waiting', ok: false, reason: 'بطاقة المبادرة بانتظار اعتماد المستشار. تُسلَّم الوثيقة بعد اعتمادها.' };
+  if (status === 'submitted') return { state: 'waiting', ok: false, reason: 'بطاقة المبادرة بانتظار اعتماد المستشار. تُقدَّم الوثيقة بعد اعتمادها.' };
   if (status === 'returned') return { state: 'returned', ok: false, reason: 'أعاد المستشار بطاقة المبادرة بملاحظات. عدّلها وسلّمها ليعتمدها.' };
-  return { state: 'none', ok: false, reason: 'سلّم بطاقة المبادرة ليعتمد المستشار اختيارها قبل تسليم الوثيقة.' };
+  return { state: 'none', ok: false, reason: 'قدّم بطاقة المبادرة ليعتمد المستشار اختيارها قبل تقديم الوثيقة.' };
 }
 
 // يمكن التسليم؟ كل الفصول مكتملة، والجاهزية فوق الحد، والحالة تسمح
