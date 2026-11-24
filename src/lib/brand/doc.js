@@ -186,7 +186,7 @@ h2, h3 { break-after: avoid; }
 .tag.gold { border-color: ${C.gold}; color: ${C.gold}; }
 .mono { font-family: "Noto Sans", monospace; font-size: 8pt; letter-spacing: .05em; }
 .muted { color: ${C.muted}; }
-.close { display: flex; align-items: center; justify-content: space-between; gap: 8mm; margin-top: 12mm; padding-top: 6mm; border-top: 1px solid ${C.gold}; break-inside: avoid; }
+.close { break-before: avoid; display: flex; align-items: center; justify-content: space-between; gap: 8mm; margin-top: 12mm; padding-top: 6mm; border-top: 1px solid ${C.gold}; break-inside: avoid; }
 .close p { margin: 0; font-size: 8.5pt; color: ${C.slate}; max-width: 120mm; }
 .close .sig { font-size: 9pt; } .close .sig b { font-weight: 400; display: block; }
 .rights { margin-top: 8mm; font-size: 7.2pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
@@ -206,6 +206,13 @@ h2, h3 { break-after: avoid; }
 .mast.co .sub { font-size: 11.5pt; color: ${C.slate}; }
 .mast.co .meta { margin-top: 12mm; }
 .mast.co .meta b { font-size: 10pt; }
+/* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل، 1047 بكسل = PAGE.h - PAGE.bottom في pdf.js)، والعنوان في ثلثه الأوسط،
+   وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
+html.pdf .mast.co { min-height: 1047px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
+html.pdf .mast.co .eyebrow { margin-top: auto; }
+html.pdf .mast.co h1 { font-size: 34pt; }
+html.pdf .mast.co .meta { margin-top: auto; }
+html.pdf .mast.co .accent { bottom: 0; height: 2.4mm; }
 </style></head><body>
 <div class="toolbar">${meta.pdfName ? '<button class="pri" data-act="pdf">تحميل PDF</button><button data-act="print">طباعة</button>' : '<button class="pri" data-act="print">طباعة أو حفظ PDF</button>'}<button data-act="close">إغلاق</button></div>
 <article class="sheet">
@@ -230,7 +237,22 @@ h2, h3 { break-after: avoid; }
     <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
   </footer>
 </article>
+${opts.pdf ? runningHead(meta) : ''}
 </body></html>`;
+}
+
+// ترويسة صفحات ملف PDF بعد الغلاف (pdf.js يرسمها مرة ويكررها): شعار الجهة أو اسمها ولونها في البداية، وعنوان الوثيقة، وعلامة Milestone Impact في الطرف الآخر.
+// خارج .sheet فلا تدخل في حساب الصفحات، وتُرسم بالخطوط والصور نفسها
+function runningHead(meta) {
+  const b = meta.brand;
+  const logo = b && safeLogo(b.logo);
+  const color = (b && brandColor(b.color)) || C.gold;
+  const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
+  return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:60px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px 68px 0;font:300 8pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
+<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:60%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:22px">${org}</span><i style="width:1px;height:14px;background:${C.line}"></i>` : ''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(meta.title)}</span></span>
+<span style="margin-inline-start:auto;display:flex;align-items:center;direction:ltr" class="ph-mi">${LOGO}</span>
+<i style="position:absolute;bottom:8px;left:68px;right:68px;height:1px;background:${color};opacity:.7"></i>
+</div><style>#pdf-head img{max-height:22px;max-width:150px;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:17px;width:auto;display:block}</style>`;
 }
 
 // يفتح الوثيقة في نافذة مستقلة بشريط «طباعة أو حفظ PDF». يعيد false إن حُجبت النافذة.
