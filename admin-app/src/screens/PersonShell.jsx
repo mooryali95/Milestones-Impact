@@ -185,3 +185,27 @@ export function Glance({ r }) {
     </aside>
   );
 }
+
+// «أين هو الآن» (المرحلة 2): أربع حقائق يشتقها الخادم (whereNow في now.js)، كل منها يفتح تبويبه. خادم أقدم بلا now: لا شريط
+export function NowStrip({ now, onTab }) {
+  if (!now) return null;
+  const { stage, waiting_on: w, last_activity: a, next } = now;
+  const items = [
+    { k: 'stage', label: 'المرحلة', value: stage.text, sub: stage.week ? `الأسبوع ${stage.week}${stage.of ? ` من ${stage.of}` : ''}` : '', tab: stage.tab },
+    { k: 'waiting', label: 'بانتظار', value: w.text, tab: w.tab, tone: w.who === 'admin' ? 'warn' : '' },
+    { k: 'activity', label: 'آخر نشاط', value: a.text, sub: a.at ? date(a.at) : '', tab: a.tab, tone: a.tone || '' },
+    { k: 'next', label: 'التالي', value: next.text, sub: next.at ? date(next.at) : '', tab: next.tab },
+  ];
+  return (
+    <ul className="pf-now" aria-label="أين هو الآن" data-testid="now-strip">
+      {items.map((it) => {
+        const body = <><small>{it.label}</small><b>{it.value}</b>{it.sub && <small className="la-muted">{it.sub}</small>}</>;
+        return (
+          <li key={it.k} data-now={it.k} className={it.tone}>
+            {it.tab ? <button type="button" onClick={() => onTab(it.tab)} aria-label={`${it.label}: ${it.value}، افتح ${TABS.find(([t]) => t === it.tab)?.[1] || ''}`}>{body}</button> : <span>{body}</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

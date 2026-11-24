@@ -102,6 +102,18 @@
 .pf-tabs [role="tab"][aria-selected="true"] { color: var(--petrol); font-weight: 700; border-bottom-color: var(--gold); }
 .pf-tabs [role="tab"]:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; border-radius: 6px; }
 .pf-badge { min-inline-size: 18px; padding: 0 5px; border-radius: 9px; background: var(--gold-pale); color: var(--gold-text); font-size: .72rem; font-weight: 700; line-height: 18px; text-align: center; }
+/* «أين هو الآن» (المرحلة 2): أربع حقائق في شريط تحت الرأس، كل منها يفتح تبويبه */
+.pf-now { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.pf-now li > button, .pf-now li > span { display: flex; flex-direction: column; gap: 2px; inline-size: 100%; min-block-size: 44px; text-align: start; font: inherit; color: var(--ink);
+  background: var(--sand-light); border: 1px solid var(--line); border-inline-start: 3px solid var(--line-gold); border-radius: 8px; padding: 8px 12px; }
+.pf-now li > button { cursor: pointer; }
+.pf-now li > button:hover { border-color: var(--line-gold); }
+.pf-now li > button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.pf-now small { font-size: .74rem; color: var(--ink-mid); }
+.pf-now b { font-size: .9rem; }
+.pf-now li.warn > button, .pf-now li.warn > span { border-inline-start-color: var(--st-warn-text); }
+.pf-now li.warn b { color: var(--st-warn-text); }
+@media (max-width: 720px) { .pf-now { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pf-body { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 16px; align-items: start; }
 .pf-main { min-inline-size: 0; }
 .pf-main .table-wrap { overflow-x: auto; }

@@ -29,7 +29,7 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 // حد الإجراء الجماعي وإجراءا الحالة والدفعة من BulkPeople.jsx: يستدعيهما تبويب «المتابعة» في ملف الدفعة أيضًا
 import { BULK_MAX, BulkEnroll, BulkStatus, useBulkCohorts } from '../BulkPeople.jsx';
 import { FileExtras, FullTimeline, InitiativePanel, Observations } from './PersonFile.jsx';
-import { Glance, isChapter, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
+import { Glance, isChapter, NowStrip, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
@@ -136,6 +136,8 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
   const SORTS = useMemo(() => ({
     name: (p) => p.full_name, org: (p) => orgOf(p)?.name || p.organization_name, track: (p) => trackOfPlacements(p.placements),
     status: (p) => STATUS[p.status] || p.status, step: (p) => ONBOARDING_STEPS.indexOf(p.onboarding?.step), joined: (p) => p.created_at,
+    // ما ينتظر قرار الإدارة أولًا، ثم ما أُعيد للمشارك (waiting من whereNow في الخادم، now.js)
+    waiting: (p) => (p.waiting?.who === 'admin' ? 2000 : p.waiting?.who === 'participant' ? 1000 : 0) + (p.waiting?.n || 0),
   }), [orgs]); // eslint-disable-line
   const shown = useMemo(() => sortRows(applyFilters(all, spec, f), SORTS, f.sort), [all, f, fields, SORTS]);
   const counts = useMemo(() => presetCounts(all, PRESETS), [all]);
@@ -247,12 +249,12 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
       <div className="table-wrap"><table className="data-table la-cards t24">
         <thead><tr>
           {canWrite && <th><input type="checkbox" aria-label="تحديد الكل" checked={allOn} onChange={toggleAll} /></th>}
-          <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
+          <SortTh k="name" state={f} set={setF}>الاسم</SortTh><SortTh k="org" state={f} set={setF}>الجهة</SortTh>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<SortTh k="track" state={f} set={setF}>المسار</SortTh><SortTh k="status" state={f} set={setF}>الحالة</SortTh><SortTh k="step" state={f} set={setF}>أين توقف</SortTh><SortTh k="waiting" state={f} set={setF}>بانتظار</SortTh><SortTh k="joined" state={f} set={setF}>التسجيل</SortTh>
         </tr></thead>
         <tbody>
-          {!list ? <tr className="loading-row"><td colSpan={10}><Spinner /></td></tr>
-            : error ? <tr><td colSpan={10}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
-              : !shown.length ? <tr><td colSpan={10}>{all.length ? <NoMatch what="مشاركين" /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
+          {!list ? <tr className="loading-row"><td colSpan={11}><Spinner /></td></tr>
+            : error ? <tr><td colSpan={11}><div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div></td></tr>
+              : !shown.length ? <tr><td colSpan={11}>{all.length ? <NoMatch what="مشاركين" /> : <Empty title="لا مشاركين بعد" hint="يظهر هنا كل من يسجل من رابط جهته، ومن تضيفه أنت.">{canWrite && <><button className="btn-sm primary" type="button" onClick={() => setImporting(true)}>أضف مشاركين من قائمة</button><button className="btn-sm ghost" type="button" onClick={() => setAdding(true)}>أضف مشاركًا واحدًا</button></>}</Empty>}</td></tr>
                 : shown.map((p) => {
                   const og = orgOf(p);
                   const tk = trackOfPlacements(p.placements);
@@ -270,6 +272,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                         {p.effort?.level === 'watch' && <> <span className="la-chip warn" title={p.effort.note}>يُراجع</span></>}
                         {p.retake && <> <span className="la-chip" title={`طُلبت الإعادة ${date(p.retake.requested_at)}، ولم يسلّم قياسًا جديدًا بعد`}>طُلبت الإعادة</span></>}</td>
                       <td data-label="أين توقف"><Where o={p.onboarding} /></td>
+                      <td data-label="بانتظار"><Waiting w={p.waiting} /></td>
                       <td data-label="التسجيل">{date(p.created_at)}</td>
                     </tr>
                   );
@@ -494,6 +497,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
     <>
       <PersonHeader r={r} org={orgOf} tab={tab} setTab={(t) => show(t)} primary={primary} onPrimary={() => show(primary.tab, primary.focus)} menu={menu}
         nav={<QueueNav pos={pos} onBack={onBack} onNav={onNav} />} />
+      <NowStrip now={r.now} onTab={(t) => show(t)} />
       <ErasureCard e={erasure} onOpen={() => setErasureOpen(true)} />
       {erasureOpen && erasure?.request && (
         <ErasureSheet e={erasure} onClose={closeErasure}
@@ -636,6 +640,13 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
       {previewAs && <PreviewAs participantId={p.id} onClose={() => setPreviewAs(false)} />}
     </>
   );
+}
+
+// عمود «بانتظار»: من whereNow على الخادم (now.js) نفسه الذي يبني شريط «أين هو الآن» في الملف
+function Waiting({ w }) {
+  if (!w) return <span className="la-muted">—</span>;
+  if (!w.who) return <span className="la-muted">لا شيء</span>;
+  return <span className={`la-chip ${w.who === 'admin' ? 'warn' : ''}`} title={w.text}>{w.who === 'admin' ? `الإدارة · ${w.n}` : `المشارك · ${w.n}`}</span>;
 }
 
 // شريط أعلى الملف: العودة للقائمة (بفلاترها كما تُركت)، وموضعه فيها، والسابق والتالي
