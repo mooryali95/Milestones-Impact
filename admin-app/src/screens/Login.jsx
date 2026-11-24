@@ -22,6 +22,11 @@ const VALUES = [
   [<svg {...svg} key="g"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 4v5" /></svg>, 'البرامج والدفعات والجلسات'],
   [<svg {...svg} key="i"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>, 'قياس الأثر ومتابعته'],
 ];
+// الشركاء في تذييل لوحة العلامة: مصدر واحد للشعارات والروابط
+const PARTNERS = [
+  { href: 'https://manzoma.sa', logo: '/assets/partners/manzoma-white.svg', alt: 'منظومة Manzoma', label: 'منظومة Manzoma (يفتح في نافذة جديدة)' },
+  { href: 'https://sunkvalue.com', logo: '/assets/partners/sunkvalue-white.svg', wordmark: 'Sunk Value', label: 'Sunk Value (يفتح في نافذة جديدة)' },
+];
 const Err = ({ msg }) => (msg ? <div className="login-error show" role="alert">{msg}</div> : null);
 
 // مهلة إعادة إرسال الرمز، وهي مهلة الخادم نفسها (OTP_COOLDOWN_MS في admin-api): قبلها يرد 429
@@ -118,8 +123,18 @@ export default function Login({ onSignedIn, notice = '', initialEmail = '' }) {
           </ul>
         </div>
         <div className="login-left-bottom">
-          <p className="login-footnote" dir="rtl">بدعم من منظومة و <bdi dir="ltr">Sunk Value</bdi></p>
-          <p className="login-footnote login-footnote-en" dir="ltr" lang="en">Milestone Impact</p>
+          <span className="login-partners-label">بدعم من</span>
+          <div className="login-partners">
+            {PARTNERS.map((p, i) => (
+              <React.Fragment key={p.href}>
+                {i > 0 && <span className="login-partner-sep" aria-hidden="true" />}
+                <a className={`login-partner${p.wordmark ? ' login-partner--lockup' : ''}`} href={p.href} target="_blank" rel="noopener noreferrer" aria-label={p.label}>
+                  <img src={p.logo} alt={p.wordmark ? '' : p.alt} height={p.wordmark ? 22 : 40} />
+                  {p.wordmark && <span lang="en" dir="ltr">{p.wordmark}</span>}
+                </a>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </aside>
 

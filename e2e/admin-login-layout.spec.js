@@ -33,12 +33,20 @@ for (const [width, height] of [[1280, 800], [390, 844]]) {
       expect(card.width).toBeLessThanOrEqual(400);
       expect(Math.abs(card.y + card.height / 2 - height / 2)).toBeLessThan(40);
       await expect(page.getByText('قياس الأثر ومتابعته')).toBeVisible();
-      await expect(page.locator('.login-footnote')).toHaveCount(2);
     } else {
       expect(card.width).toBeGreaterThan(width - 40);
       const band = await page.locator('.login-left').boundingBox();
       expect(band.height).toBeLessThan(160);
       expect(band.y).toBe(0);
+    }
+    // شعارا الشريكين بروابطهما في نافذة جديدة
+    for (const [name, href] of [[/منظومة Manzoma/, 'https://manzoma.sa'], [/Sunk Value/, 'https://sunkvalue.com']]) {
+      const a = page.getByRole('link', { name });
+      await expect(a).toBeVisible();
+      await expect(a).toHaveAttribute('href', href);
+      await expect(a).toHaveAttribute('target', '_blank');
+      await expect(a).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(await a.locator('img').evaluate((i) => i.complete && i.naturalWidth > 0)).toBe(true);
     }
     expect(await axe(page)).toEqual([]);
   });

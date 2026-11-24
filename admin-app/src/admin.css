@@ -195,16 +195,29 @@ a { text-decoration: none; color: inherit; }
 .login-left-bottom {
   padding-top: 20px;
   border-top: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
-.login-footnote {
-  margin: 0;
-  font-size: 0.78rem;
-  color: var(--sand-light);
-  line-height: 1.7;
+.login-partners-label { font-size: 0.78rem; color: var(--sand-light); white-space: nowrap; }
+.login-partners { display: flex; align-items: center; gap: 18px; }
+.login-partner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  color: var(--sand-cream);
+  text-decoration: none;
+  opacity: 0.85;
+  border-radius: 6px;
+  transition: opacity 0.2s;
 }
-.login-footnote-en { text-align: right; letter-spacing: 0.04em; }
+.login-partner:hover { opacity: 1; }
+.login-partner:focus-visible { opacity: 1; outline: 2px solid var(--gold-light); outline-offset: 4px; }
+.login-partner img { display: block; height: 36px; width: auto; }
+.login-partner--lockup img { height: 20px; }
+.login-partner--lockup span { font-family: var(--font-en); font-weight: 600; font-size: 0.95rem; letter-spacing: 0.06em; }
+.login-partner-sep { width: 1px; height: 28px; background: color-mix(in srgb, var(--gold) 55%, transparent); }
 
 /* لوحة النموذج: بطاقة في المنتصف */
 .login-right {
@@ -270,7 +283,16 @@ a { text-decoration: none; color: inherit; }
   .login-left-mid { padding: 0; align-items: flex-start; text-align: right; }
   .login-heading { font-size: 1.15rem; margin: 0; }
   .login-sub-heading { font-size: 0.8rem; margin: 0; }
-  .login-values, .login-left-bottom { display: none; }
+  .login-left { flex-wrap: wrap; row-gap: 12px; }
+  .login-left-mid { flex: 1 1 0; }
+  .login-values { display: none; }
+  .login-left-bottom { flex: 1 0 100%; padding-top: 10px; gap: 12px; }
+  .login-partners { gap: 12px; }
+  .login-partner { height: 28px; }
+  .login-partner img { height: 26px; }
+  .login-partner--lockup img { height: 15px; }
+  .login-partner--lockup span { font-size: 0.82rem; }
+  .login-partner-sep { height: 20px; }
   .login-right { align-items: flex-start; padding: 20px 16px 32px; }
   .login-form-wrap { max-width: none; padding: 24px 18px 20px; }
 }
