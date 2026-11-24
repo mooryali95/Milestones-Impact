@@ -428,7 +428,8 @@ export function capstoneReport(doc) {
     { value: count('wbs', 'packages'), label: 'حزمة عمل' },
     { value: doc.cost ? money(doc.cost.withContingency) : '·', label: 'التكلفة مع الاحتياطي' },
     { value: count('benefits-register', 'benefits'), label: 'منفعة مقيسة' },
-    { value: `${m.readiness ?? 0}%`, label: 'الجاهزية' },
+    // الجاهزية مقياس عمل داخلي: تُعرض حين تحملها الوثيقة فقط، والنسخ الخارجة من المنصة بلا جاهزية إلا بإذن (withoutReadiness)
+    ...(m.readiness != null ? [{ value: `${m.readiness}%`, label: 'الجاهزية' }] : []),
   ]));
 
   // الملخص لصاحب القرار: رسالة القائد، ثم ما يُطلب منه. الهدف والمشكلة في الميثاق فلا يتكرران هنا
@@ -506,3 +507,6 @@ export function capstoneReport(doc) {
     body,
   };
 }
+
+/** الوثيقة بلا نسبة الجاهزية: لكل نسخة تخرج من المنصة (تنزيل المشارك وطباعته، ورابط الراعي). قرار المالك 2026-11-24 */
+export const withoutReadiness = (doc) => (doc?.meta ? { ...doc, meta: { ...doc.meta, readiness: null } } : doc);

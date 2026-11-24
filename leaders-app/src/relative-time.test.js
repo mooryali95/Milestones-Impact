@@ -74,3 +74,30 @@ describe('خطة الانطلاق', () => {
   });
 });
 
+
+// نسبة الجاهزية خارج المنصة (قرار المالك 2026-11-24، ب + ج)
+import { publicDoc, cleanShareInput, ownerView } from '../../supabase/functions/leaders-api/share.js';
+import { capstoneReport, withoutReadiness } from '../../src/lib/brand/capstone.js';
+import { VISIBILITY } from '../../supabase/functions/leaders-api/visibility.js';
+
+describe('الجاهزية في الوثيقة المشاركة', () => {
+  const doc = { meta: { readiness: 20, initiative: 'خطتي' }, sections: [] };
+  it('مخفية في الرابط افتراضيًا، وظاهرة بإذن صاحبه', () => {
+    expect(publicDoc(doc, {}).meta.readiness).toBe(null);
+    expect(publicDoc(doc, { show_readiness: true }).meta.readiness).toBe(20);
+  });
+  it('حجب الإدارة يغلب اختيار صاحب الرابط', () => {
+    expect(publicDoc(doc, { show_readiness: true }, { readiness: false }).meta.readiness).toBe(null);
+    expect(VISIBILITY.par_share_readiness.default).toBe(true);
+  });
+  it('الرابط الجديد بلا جاهزية ما لم تُطلب، والرابط القائم يُقرأ بلا جاهزية', () => {
+    expect(cleanShareInput({ label: 'مديري', days: 30 }).show_readiness).toBe(false);
+    expect(cleanShareInput({ label: 'مديري', days: 30, show_readiness: true }).show_readiness).toBe(true);
+    expect(ownerView({ id: 'x', expires_at: new Date(Date.now() + 864e5).toISOString() }).show_readiness).toBe(false);
+  });
+  it('التقرير لا يعرض «الجاهزية» إن خلت منها الوثيقة، وwithoutReadiness تحذفها', () => {
+    expect(withoutReadiness(doc).meta.readiness).toBe(null);
+    expect(doc.meta.readiness).toBe(20);
+  });
+  void capstoneReport;
+});
