@@ -22,6 +22,7 @@ import { demoCohortOf, refuseDemo, removeCohortDemo } from './demo-cohort.ts';
 import { eachWorkshop } from './optional.js';
 import { sessionCols } from './workshop-optional.ts';
 import { cleanConfig } from './logic.js';
+import { missingTable } from './missing-column.ts';
 
 type Body = Record<string, any>;
 
@@ -854,8 +855,9 @@ async function progressOn(c: any, requirementIds: string[]) {
 
 // تسجيل مشاركين في دفعة. تسجيلاتهم السابقة تُعلَّم منسحبة. التقدم يبقى داخل البرنامج نفسه (معرفات متطلباته ثابتة)،
 // ويضيع بالنقل إلى دفعة على برنامج آخر، فذلك لا يمر إلا بتأكيد صريح (enrollImpact وconfirm_move).
+// والنقل اليدوي يتجاوز سعة الدفعة (capacity) عمدًا: السعة تحكم الإلحاق الآلي وحده (place_participant)، وتنبّه واجهة النقل حين تمتلئ.
 export async function cohortEnroll(a: Admin, b: Body) {
-  const c = must(await db.from('cohorts').select('id, name, program_id').eq('id', String(b.cohort_id || '')).maybeSingle());
+  const c = must(await db.from('cohorts').select('id, name, program_id, organization_id').eq('id', String(b.cohort_id || '')).maybeSingle());
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
   const ids = [...new Set((Array.isArray(b.participant_ids) ? b.participant_ids : []).filter(isUuid))].slice(0, 500) as string[];
   if (!ids.length) throw new Fail('اختر مشاركًا واحدًا على الأقل');
@@ -879,6 +881,9 @@ export async function cohortEnroll(a: Admin, b: Body) {
   must(await db.from('enrollments').update({ status: 'withdrawn', updated_at: now }).in('participant_id', ids).neq('cohort_id', c.id).neq('status', 'withdrawn'));
   must(await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, status: 'active', updated_at: now })), { onConflict: 'participant_id,cohort_id' }));
   await audit('admin', a.email, 'cohort.enroll', 'cohorts', c.id, null, { participants: ids.length });
+  // سجل الإلحاق بمصدره (cohort_placements، ترحيل 20261128160000): النقل اليدوي «الإدارة». قبل الترحيل لا جدول فلا سطر
+  const placed = await db.from('cohort_placements').insert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, wanted_cohort_id: c.id, organization_id: (c as any).organization_id || null, source: 'manual', outcome: 'placed', actor: a.email })));
+  if (placed.error && !missingTable(placed.error)) must(placed);
   return { success: true, enrolled: ids.length };
 }
 

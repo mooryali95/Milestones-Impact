@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261128150000_leaders_consult_service
+-- as-of migration: 20261128160000_leaders_cohort_intake
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -536,6 +536,23 @@ create table if not exists leaders.cohort_groups (
   constraint cohort_groups_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.cohort_placements (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  cohort_id uuid,
+  wanted_cohort_id uuid,
+  organization_id uuid,
+  source text not null,
+  outcome text not null,
+  reason text,
+  actor text,
+  created_at timestamp with time zone default now() not null,
+  constraint cohort_placements_outcome_check CHECK ((outcome = ANY (ARRAY['placed'::text, 'overflow'::text]))),
+  constraint cohort_placements_reason_check CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['full'::text, 'closed'::text, 'no_intake'::text])))),
+  constraint cohort_placements_source_check CHECK ((source = ANY (ARRAY['link'::text, 'code'::text, 'platform'::text, 'manual'::text]))),
+  constraint cohort_placements_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.cohort_roles (
   cohort_id uuid not null,
   participant_id uuid not null,
@@ -604,7 +621,9 @@ create table if not exists leaders.cohorts (
   content_release text,
   visibility jsonb default '{}'::jsonb not null,
   guidance_pilot boolean default false not null,
+  is_intake boolean default false not null,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
+  constraint cohorts_intake_shape CHECK (((NOT is_intake) OR ((organization_id IS NOT NULL) AND (NOT is_default)))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
   constraint cohorts_project_mode_check CHECK ((project_mode = ANY (ARRAY['individual'::text, 'group'::text]))),
@@ -2151,6 +2170,7 @@ create table if not exists leaders.sponsor_codes (
   note text,
   created_by text,
   created_at timestamp with time zone default now() not null,
+  cohort_id uuid,
   constraint sponsor_codes_code_check CHECK ((code ~ '^[a-z0-9-]{4,40}$'::text)),
   constraint sponsor_codes_max_uses_check CHECK (((max_uses IS NULL) OR (max_uses > 0))),
   constraint sponsor_codes_note_check CHECK ((char_length(note) <= 300)),
@@ -2834,6 +2854,22 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.cohort_placements add constraint cohort_placements_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_placements add constraint cohort_placements_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_placements add constraint cohort_placements_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.cohort_placements add constraint cohort_placements_wanted_cohort_id_fkey FOREIGN KEY (wanted_cohort_id) REFERENCES leaders.cohorts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.cohort_roles add constraint cohort_roles_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3274,6 +3310,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.sponsor_codes add constraint sponsor_codes_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE SET NULL;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.sponsor_codes add constraint sponsor_codes_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES leaders.organizations(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3519,11 +3559,17 @@ CREATE INDEX IF NOT EXISTS cohort_groups_advisor ON leaders.cohort_groups USING 
 
 CREATE INDEX IF NOT EXISTS cohort_groups_cohort_idx ON leaders.cohort_groups USING btree (cohort_id, sort);
 
+CREATE INDEX IF NOT EXISTS cohort_placements_org_idx ON leaders.cohort_placements USING btree (organization_id, outcome) WHERE (outcome = 'overflow'::text);
+
+CREATE INDEX IF NOT EXISTS cohort_placements_participant_idx ON leaders.cohort_placements USING btree (participant_id, created_at DESC);
+
 CREATE INDEX IF NOT EXISTS cohort_snapshots_day_idx ON leaders.cohort_snapshots USING btree (day DESC);
 
 CREATE INDEX IF NOT EXISTS cohorts_advisor ON leaders.cohorts USING btree (advisor_expert_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS cohorts_one_default ON leaders.cohorts USING btree ((true)) WHERE is_default;
+
+CREATE UNIQUE INDEX IF NOT EXISTS cohorts_one_intake ON leaders.cohorts USING btree (organization_id) WHERE is_intake;
 
 CREATE INDEX IF NOT EXISTS cohorts_org_idx ON leaders.cohorts USING btree (organization_id, status);
 
@@ -3864,6 +3910,8 @@ alter table leaders.cohort_experts enable row level security;
 alter table leaders.cohort_group_members enable row level security;
 
 alter table leaders.cohort_groups enable row level security;
+
+alter table leaders.cohort_placements enable row level security;
 
 alter table leaders.cohort_roles enable row level security;
 
@@ -4514,6 +4562,57 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.ensure_intake_cohort(p_org uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare
+  cid uuid; o record; pid uuid; vid uuid;
+begin
+  select id into cid from leaders.cohorts where organization_id = p_org and is_intake;
+  if cid is not null then return cid; end if;
+  select id, name, status into o from leaders.organizations where id = p_org;
+  if not found or o.status = 'inactive' then return null; end if;
+  select c.program_id into pid from leaders.cohorts c join leaders.programs pr on pr.id = c.program_id and pr.archived_at is null
+   where c.organization_id = p_org and not c.is_default
+   order by coalesce(c.starts_on::timestamptz, c.created_at) desc limit 1;
+  if pid is null then select id into pid from leaders.programs where is_default limit 1; end if;
+  if pid is null then return null; end if;
+  select id into vid from leaders.program_versions where program_id = pid order by number desc limit 1;
+  if vid is null then return null; end if;
+  insert into leaders.cohorts (name, track, organization_id, program_id, program_version_id, status, is_intake)
+  values (left(o.name, 140) || ' · الاستقبال', 'institutional', p_org, pid, vid, 'open', true)
+  on conflict do nothing;
+  select id into cid from leaders.cohorts where organization_id = p_org and is_intake;
+  return cid;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.ensure_platform_cohort()
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare
+  cid uuid; pid uuid; vid uuid;
+begin
+  select id into cid from leaders.cohorts where is_default limit 1;
+  if cid is not null then return cid; end if;
+  select id into pid from leaders.programs where is_default limit 1;
+  if pid is null then return null; end if;
+  select id into vid from leaders.program_versions where program_id = pid order by number desc limit 1;
+  if vid is null then return null; end if;
+  insert into leaders.cohorts (name, track, organization_id, program_id, program_version_id, status, is_default)
+  values ('المنصة العامة', 'individual', null, pid, vid, 'open', true)
+  on conflict do nothing;
+  select id into cid from leaders.cohorts where is_default limit 1;
+  return cid;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.erasure_purge(p_participant uuid, p_request uuid, p_by text, p_email_hash text)
  RETURNS integer
  LANGUAGE plpgsql
@@ -4805,6 +4904,63 @@ begin
   on conflict do nothing;
   return 'granted';
 end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.place_participant(p_participant uuid, p_source text, p_wanted uuid DEFAULT NULL::uuid, p_actor text DEFAULT NULL::text)
+ RETURNS TABLE(cohort_id uuid, outcome text)
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+#variable_conflict use_column
+declare
+  p record; w record; target uuid; got uuid; n integer; res text := 'placed'; why text;
+begin
+  if p_source not in ('link', 'code', 'platform', 'manual') then
+    raise exception 'place_participant: bad source %', p_source using errcode = '22023';
+  end if;
+  select id, organization_id, is_demo into p from leaders.participants where id = p_participant for no key update;
+  if not found then return query select null::uuid, 'none'::text; return; end if;
+  if p.is_demo then return query select null::uuid, 'demo'::text; return; end if;
+  select e.cohort_id into got from leaders.enrollments e where e.participant_id = p_participant and e.status <> 'withdrawn'
+   order by e.created_at desc limit 1;
+  if got is not null then return query select got, 'already'::text; return; end if;
+
+  if p_wanted is not null then
+    select id into target from leaders.cohorts where id = p_wanted and organization_id is not distinct from p.organization_id and not is_default;
+  end if;
+  -- دفعة الجهة الضمنية كما يختارها pickCohort (logic.js): أحدث دفعة مفتوحة أو جارية للجهة، لا المفتوحة العامة ولا الاستقبال.
+  -- فمن كان يمر بها بلا إلحاق يُلحق بها نفسها ولا تتغير رحلته ولا تقاريره. والاستقبال حين لا دفعة جارية للجهة وحده
+  if target is null and p.organization_id is not null then
+    select id into target from leaders.cohorts
+     where organization_id = p.organization_id and not is_default and not is_intake and status in ('open', 'running')
+     order by coalesce(starts_on::timestamptz, created_at) desc limit 1;
+  end if;
+  if target is null and p.organization_id is not null then
+    target := leaders.ensure_intake_cohort(p.organization_id);
+    if target is null then res := 'overflow'; why := 'no_intake'; end if;
+  end if;
+  if target is not null then
+    -- قفل صف الدفعة يسلسل الإلحاقات المتزامنة فيها، فالعد بعده يرى ما التزمه من سبقه
+    select id, status, capacity into w from leaders.cohorts where id = target for no key update;
+    select count(*) into n from leaders.enrollments e where e.cohort_id = target and e.status <> 'withdrawn';
+    if w.status = 'closed' then res := 'overflow'; why := 'closed';
+    elsif w.capacity is not null and n >= w.capacity then res := 'overflow'; why := 'full'; end if;
+  end if;
+  if target is null or res = 'overflow' then
+    got := leaders.ensure_platform_cohort();
+    if got is null then return query select null::uuid, 'none'::text; return; end if;
+  else
+    got := target;
+  end if;
+
+  insert into leaders.enrollments (participant_id, cohort_id, status)
+  values (p_participant, got, 'active')
+  on conflict on constraint enrollments_participant_id_cohort_id_key do update set status = 'active', updated_at = now();
+  insert into leaders.cohort_placements (participant_id, cohort_id, wanted_cohort_id, organization_id, source, outcome, reason, actor)
+  values (p_participant, got, coalesce(target, got), p.organization_id, p_source, res, why, p_actor);
+  return query select got, res;
+end;
+$function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.program_version_frozen()

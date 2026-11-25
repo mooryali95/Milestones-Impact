@@ -80,6 +80,7 @@ import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
 import * as CE from './client-events.ts';
 import * as SC from './sponsor-codes.ts';
+import * as CI from './cohort-intake.ts';
 import { cleanBuild } from '../_shared/client-events.js';
 import { clientLevelOf, needsUpdate } from '../_shared/client-compat.js';
 
@@ -613,6 +614,10 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.sponsor-codes': (_a, b) => SC.adminList(b),
   'admin.sponsor-code-create': (a, b) => A.writer(a, SC.adminCreate, b),
   'admin.sponsor-code-update': (a, b) => A.writer(a, SC.adminUpdate, b),
+  // دفعة استقبال الجهة وقائمة انتظارها، وأداة إلحاق من لا دفعة له بمعاينة ثم تطبيق ببصمة الخطة (cohort-intake.ts)
+  'admin.org-intake': (_a, b) => CI.adminOrgIntake(b),
+  'admin.cohortless-plan': (a, b) => A.writer(a, CI.cohortlessPlanView, b),
+  'admin.cohortless-apply': (a, b) => A.writer(a, CI.cohortlessApply, b),
   'admin.assign-org': A.assignOrg,
   'admin.org-impact': C.orgImpact,
   'admin.org-finance': Y.adminOrgFinance,

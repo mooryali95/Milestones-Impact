@@ -1693,7 +1693,9 @@ export function pickCohort({ enrollments = [], cohorts = [], organizationId = nu
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   if (enr.length) return { cohort: byId.get(enr[0].cohort_id), via: 'enrollment' };
   if (organizationId) {
-    const org = cohorts.filter((c) => c.organization_id === organizationId && !c.is_default && (c.status === 'open' || c.status === 'running'))
+    // دفعة الاستقبال (is_intake، ترحيل 20261128160000) لا تُستنتج بالجهة: عضويتها بالإلحاق الصريح وحده (place_participant)،
+    // فإنشاؤها الكسول لا ينقل بصمت أحدًا من أعضاء الجهة غير الملحقين إلى رحلة أخرى
+    const org = cohorts.filter((c) => c.organization_id === organizationId && !c.is_default && !c.is_intake && (c.status === 'open' || c.status === 'running'))
       .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
     if (org.length) return { cohort: org[0], via: 'organization' };
   }

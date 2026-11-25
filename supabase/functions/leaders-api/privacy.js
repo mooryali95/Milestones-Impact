@@ -12,6 +12,8 @@ export const EXPORT_TABLES = {
   participant_requirements: ['reviewed_by'], participant_milestones: [], participant_stage_overrides: [],
   // فتح الخدمات (20261128150000): متى فُتحت الاستشارة له ولماذا
   service_unlocks: [],
+  // سجل إلحاقه بدفعة ومصدره (20261128160000): من أُلحق به ومتى. بريد المدير المنفّذ داخلي
+  cohort_placements: ['actor'],
   handbook_progress: [], handbook_views: [], handbook_exports: [], reading_progress: [], video_progress: [], content_progress: [],
   lab_attempts: [], lab_grants: [], model_submissions: [], katon_answers: [], points_ledger: [],
   capstones: ['reviewed_by', 'approved_by'], capstone_updates: [], capstone_shares: [], capstone_share_notes: ['ip_hash'], certificates: ['issued_by', 'revoked_by'], reports: [],
