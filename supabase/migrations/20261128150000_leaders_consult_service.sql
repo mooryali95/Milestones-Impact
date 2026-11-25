@@ -110,3 +110,5 @@ begin
      and not exists (select 1 from leaders.stage_requirements e where e.program_id = s.program_id and e.stage_key = 'consulting' and e.code = 'E-POST' and e.active is not false);
   if n > 0 then raise exception 'consult_service: % consulting stage(s) still not a service', n; end if;
 end $$;
+
+insert into leaders.schema_migrations (name) values ('20261128150000_leaders_consult_service') on conflict do nothing;
