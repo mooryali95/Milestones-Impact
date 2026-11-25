@@ -294,12 +294,12 @@ export async function raterCheck(p: any, email: string) {
 async function notifyConfirmers(p: any, flags: string[]) {
   const why = flags.map((f) => (RATER_FLAG_AR as Record<string, string>)[f] || f).join('، ');
   const adv = await advisorOf(p).catch(() => null);
-  const to: [string, string][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`]] : [];
+  const to: [string, string, 'expert_work' | 'coord_work'][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`, 'expert_work']] : [];
   if (p.organization_id) {
     const { data: coords } = await db.from('org_coordinators').select('email, status, permissions').eq('organization_id', p.organization_id).neq('status', 'suspended');
-    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`]);
+    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`, 'coord_work']);
   }
-  for (const [email, url] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { category: 'staff', ref: `participant:${p.id}` }).catch((e) => console.error('rater confirm notify', e));
+  for (const [email, url, category] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { category, ref: `participant:${p.id}` }).catch((e) => console.error('rater confirm notify', e));
   return to.length;
 }
 
@@ -356,7 +356,7 @@ export async function invite(p: any, b: Body) {
   }
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
   // ref المقيّم: منه نسب استجابة المقيّمين في سجل الإرسال (D15)
-  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { category: 'staff', ref: `rater:${saved.id}` });
+  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { category: 'request', ref: `rater:${saved.id}` });
   await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: check.verdict });
   return mine(p);
 }
@@ -403,7 +403,7 @@ export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: 
   must(await db.from('raters').update({ status: 'invited', verification: 'confirmed', verified_by: who, verified_at: now, ...tokenPatch(r, await hash(token)),
     invited_at: now, expires_at: new Date(Date.now() + 30 * 864e5).toISOString() }).eq('id', id).eq('status', 'awaiting'));
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
-  await sendMail(r.email, `طلب تقدير من ${r.participants?.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, r.participants?.full_name || 'زميلك', link, r.phase), [], { category: 'staff', ref: `rater:${id}` });
+  await sendMail(r.email, `طلب تقدير من ${r.participants?.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, r.participants?.full_name || 'زميلك', link, r.phase), [], { category: 'request', ref: `rater:${id}` });
   await audit(actorType, who, 'rater.confirm', 'raters', id, null, { participant_id: r.participant_id });
   return { success: true, decision: 'confirm' };
 }

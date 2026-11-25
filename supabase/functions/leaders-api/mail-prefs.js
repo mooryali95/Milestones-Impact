@@ -51,7 +51,7 @@ export function withPrefsFooter(html, url) {
   return at < 0 ? s + line : s.slice(0, at) + line + s.slice(at);
 }
 
-// قرار الإرسال لفئة: essential وstaff يُرسلان كما هما بلا ترويسة، والفئة المكتومة تُسجَّل في المركز ولا تُرسل
+// قرار الإرسال لفئة: الضروري وفئات غير المشارك يُرسلان كما هما بلا ترويسة، والفئة المكتومة تُسجَّل في المركز ولا تُرسل
 export function mailPlan(category, muted = []) {
   if (!isMutableMailCategory(category)) return { notify: false, send: true, headers: false };
   const off = Array.isArray(muted) && muted.includes(category);

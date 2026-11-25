@@ -128,7 +128,7 @@ export async function inviteVerifier(p: any, cap: any, updateId: string, checkpo
   if (simulated(p)) return 'sent';
   try {
     await sendMail(email, `تأكيد أثر مبادرة «${initiativeOf(cap.snapshot)}»`,
-      verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`), [], { category: 'staff' });
+      verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`), [], { category: 'request' });
     return 'sent';
   } catch (e) {
     // لم يصل الرابط: يُغلق الآن فتعود المراجعة إلى القائد ليعيد إرسالها، بدل «بانتظار الراعي» حتى تنقضي مهلته

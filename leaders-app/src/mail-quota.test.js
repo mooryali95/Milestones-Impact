@@ -133,7 +133,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(core).toContain("if (queue && (kind === 'bulk' || kind === 'notify') && queueableAttachments(attachments) && await enqueueMail(");
     // كل تذكير (الأسبوعي والإدارة والمرشد والجهة) من المحرك الموحد في nudges.ts
     expect(read('supabase/functions/leaders-api/nudges.ts')).toMatch(/nudgeMail\([^)]*\), \[\], \{ category: 'reminders', kind: 'bulk'/);
-    expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ category: 'staff', kind: 'bulk'/);
+    expect(read('supabase/functions/leaders-api/coordinator.ts')).toMatch(/coordinatorWeeklyMail\([^)]*\), \[\], \{ category: 'coord_digest', kind: 'bulk'/);
     expect(read('supabase/functions/leaders-api/tracking.ts')).toMatch(/\{ category: 'reminders', kind: 'bulk', ref: `participant:/);
     expect(read('supabase/functions/admin-api/index.ts')).toMatch(/otpHtml\(code\), "code"\)/);
   });
@@ -147,7 +147,7 @@ describe('العداد الموحد في الدوال الأربع', () => {
     expect(core).toMatch(/if \(r\.reason === 'mail_cap' \|\| r\.reason === 'mail_share'\) \{ await releaseQueued\(m\.id\); break; \}/);
   });
   it('دعوة المقيّم تحمل معرّفه فتُحسب نسب الاستجابة، ولا عنوان كامل في السجل', () => {
-    expect(read('supabase/functions/leaders-api/impact.ts')).toMatch(/\{ category: 'staff', ref: `rater:\$\{saved\.id\}` \}/);
+    expect(read('supabase/functions/leaders-api/impact.ts')).toMatch(/\{ category: 'request', ref: `rater:\$\{saved\.id\}` \}/);
     expect(read('supabase/migrations/20261107120000_leaders_mail_events.sql')).not.toMatch(/\bto_email\b[^\n]*mail_events|mail_events[^;]*\bemail text/);
   });
 });

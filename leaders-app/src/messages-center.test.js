@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAIL_CATEGORIES, MUTABLE_MAIL_CATEGORIES } from '../../supabase/functions/leaders-api/labels.js';
+import { categoriesFor, MAIL_AUDIENCES, MAIL_CATEGORIES, mailAudience, mutableFor, MUTABLE_MAIL_CATEGORIES } from '../../supabase/functions/leaders-api/labels.js';
 import { cleanMuted, mailPlan, prefsUrl, unsubHeaders, unsubToken, unsubUrl, verifyUnsubToken, withPrefsFooter } from '../../supabase/functions/leaders-api/mail-prefs.js';
 import { TABS, tabFromSearch } from './deeplink.js';
 
@@ -32,8 +32,12 @@ describe('فئات البريد', () => {
         if (/export async function sendMail|function sendMail/.test(c.text) || /^sendMail\(to: string/.test(c.text)) continue;
         if (/kind: '(code|alert)'/.test(c.text)) continue;
         n++;
-        const m = c.text.match(/category: '([a-z]+)'/);
-        if (!m || !MAIL_CATEGORIES[m[1]]) missing.push(`${f}:${c.at}`);
+        // الفئة نص صريح، أو اختيار بين نصين صريحين (team ? 'ops' : 'expert_work')، أو متغير يحمل نصوصًا صريحة في ملفه
+        const m = c.text.match(/category(?:: ([^,}]+))?[,}]/);
+        const v = String(m?.[1] || '').trim();
+        const pick = v.match(/\?\s*'([a-z_]+)'\s*:\s*'([a-z_]+)'$/);
+        const names = pick ? [pick[1], pick[2]] : [...v.matchAll(/^'([a-z_]+)'$/g)].map((x) => x[1]);
+        if (!m || (m[1] && !names.length && !/^\w+$/.test(m[1].trim())) || names.some((k) => !MAIL_CATEGORIES[k])) missing.push(`${f}:${c.at}`);
       }
     }
     expect(n).toBeGreaterThan(60);
@@ -42,7 +46,29 @@ describe('فئات البريد', () => {
   it('الضروري وبريد الفريق لا يُكتمان، والباقي يُكتم', () => {
     expect(MAIL_CATEGORIES.essential.locked).toBe(true);
     expect(MUTABLE_MAIL_CATEGORIES).toEqual(['journey', 'sessions', 'experts', 'reminders']);
-    expect(cleanMuted(['essential', 'journey', 'staff', 'journey', 'x'])).toEqual(['journey']);
+    expect(cleanMuted(['essential', 'journey', 'expert_digest', 'journey', 'x'])).toEqual(['journey']);
+  });
+  it('لكل فئة جمهور، وبريد الفريق مفكوك: التشغيلي مقفل والملخصات وحدها تُكتم (قرار المالك 2026-11-25)', () => {
+    expect(MAIL_CATEGORIES.staff).toBeUndefined();
+    for (const [k, c] of Object.entries(MAIL_CATEGORIES)) expect(MAIL_AUDIENCES, k).toContain(c.audience);
+    expect(mutableFor('expert')).toEqual(['expert_digest']);
+    expect(mutableFor('coordinator')).toEqual(['coord_digest']);
+    // الإدارة تضبط ملخصاتها من الإعدادات، والطرف الخارجي طلبه معاملي: لا كتم لهما
+    expect(mutableFor('ops')).toEqual([]);
+    expect(mutableFor('external')).toEqual([]);
+    expect(mailAudience('expert_work')).toBe('expert');
+    expect(categoriesFor('participant').map((c) => c.key)).toEqual(['essential', 'journey', 'sessions', 'experts', 'reminders']);
+  });
+  it('التصنيف في مواضعه: التشغيلي مقفل، والملخص قابل للكتم، والإدارة ops، والخارجي request', () => {
+    const src = (f) => readFileSync(join(API, f), 'utf8');
+    expect(src('peer.ts')).toMatch(/طلب توجيه[\s\S]{0,400}category: 'expert_work'/);
+    expect(src('feedback360.ts')).toMatch(/FEEDBACK_MAIL\.list[\s\S]{0,300}category: 'expert_work'/);
+    expect(src('feedback360.ts')).toMatch(/FEEDBACK_MAIL\.ready[\s\S]{0,300}category: 'expert_digest'/);
+    expect(src('model-digest.ts')).toMatch(/category: g\.kind === 'team' \? 'ops' : 'expert_digest'/);
+    expect(src('coordinator.ts')).toMatch(/الأسبوعي`[\s\S]{0,200}category: 'coord_digest'/);
+    expect(src('digest.ts')).toMatch(/category: 'ops'/);
+    expect(src('cohort-pulse.ts')).toMatch(/category: 'ops'/);
+    expect(src('impact.ts')).toMatch(/raterMail\(name[\s\S]{0,200}category: 'request'/);
   });
   it('رمز الدخول والإيصال والأمان في الفئة الضرورية', () => {
     const src = (f) => readFileSync(join(API, f), 'utf8');
@@ -58,7 +84,7 @@ describe('قرار الإرسال والتسجيل', () => {
     expect(mailPlan('journey', [])).toEqual({ notify: true, send: true, headers: true });
     expect(mailPlan('journey', ['journey'])).toEqual({ notify: true, send: false, headers: false });
     expect(mailPlan('essential', ['essential'])).toEqual({ notify: false, send: true, headers: false });
-    expect(mailPlan('staff', [])).toEqual({ notify: false, send: true, headers: false });
+    expect(mailPlan('expert_work', [])).toEqual({ notify: false, send: true, headers: false });
     expect(mailPlan(null, [])).toEqual({ notify: false, send: true, headers: false });
   });
   it('sendMail يمر بتفضيلات المشارك لغير الرموز والتنبيهات، ويكتب الإشعار قبل قرار الإرسال', () => {

@@ -138,7 +138,7 @@ export async function dailyDigest(now = Date.now()): Promise<DigestResult> {
   if (slack) { await mark({ slack: true, counts, parts: parts.length }); return { due: true, posted: true, slack: true, email: false, rows: rows.length }; }
   // بريد واحد بدل الملخص: إن لم يُضبط Slack أو لم يصل. بلا بريد مضبوط لا شيء يُعلَّم فيُعاد
   if (!CONFIG.alertEmail) return { due: true, posted: false, slack: false, email: false, rows: rows.length, error: 'no channel' };
-  const email = await sendMail(CONFIG.alertEmail, DIGEST_SUBJECT, digestMail(rows, slackConfigured() ? 'failed' : 'unconfigured'), [], { category: 'staff', kind: 'notify', ref: `digest:${day}` })
+  const email = await sendMail(CONFIG.alertEmail, DIGEST_SUBJECT, digestMail(rows, slackConfigured() ? 'failed' : 'unconfigured'), [], { category: 'ops', kind: 'notify', ref: `digest:${day}` })
     .then(() => true, (e) => { console.error('digest mail:', e); return false; });
   if (email) await mark({ slack: false, email: true, counts });
   return { due: true, posted: email, slack: false, email, rows: rows.length };

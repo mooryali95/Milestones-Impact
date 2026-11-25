@@ -54,7 +54,7 @@ Deno.test('الضروري وبريد الفريق والرمز: بلا تروي�
     await withMail(() => withNet(async (calls) => {
       await sendMail('sara@x.sa', 'وصلنا دفعك', HTML, [], { category: 'essential' });
       await sendMail('sara@x.sa', 'رمز', HTML, [], { kind: 'code' });
-      await sendMail('xp@x.sa', 'طلب خدمة', HTML, [], { category: 'staff' });
+      await sendMail('xp@x.sa', 'طلب خدمة', HTML, [], { category: 'expert_work' });
       const r = resendCalls(calls);
       assertEquals(r.length, 3);
       for (const c of r) assertEquals(c.body.headers, undefined);
@@ -94,7 +94,7 @@ Deno.test('مركز الرسائل: القائمة وعدد غير المقرو�
     const l: any = await MS.list(p);
     assertEquals([l.items.map((i: Row) => i.id), l.unread], [['n2', 'n1'], 2]);
     assert(l.categories.find((c: Row) => c.key === 'essential').locked);
-    assertEquals(l.categories.some((c: Row) => c.key === 'staff'), false);
+    assertEquals(l.categories.some((c: Row) => c.key === 'expert_work' || c.key === 'expert_digest' || c.key === 'ops'), false);
     await MS.markRead(p, { ids: ['n1'] });
     assertEquals(await MS.unreadCount(p), 1);
     await MS.markRead(p, { all: true });

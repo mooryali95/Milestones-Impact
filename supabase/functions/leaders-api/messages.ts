@@ -4,7 +4,7 @@
 // الفئات وأسماؤها من MAIL_CATEGORIES في labels.js، والتسجيل في prepareParticipantMail (core.ts) عند كل إرسال.
 // المشارك من جلسته وحدها، ولا معرّف مشارك من جسم الطلب.
 import { db, Fail } from './core.ts';
-import { MAIL_CATEGORIES, MUTABLE_MAIL_CATEGORIES } from './labels.js';
+import { categoriesFor, MUTABLE_MAIL_CATEGORIES } from './labels.js';
 import { cleanMuted } from './mail-prefs.js';
 
 // deno-lint-ignore no-explicit-any
@@ -13,8 +13,7 @@ type P = any;
 type Body = Record<string, any>;
 const LIMIT = 100;
 
-const categories = () => Object.entries(MAIL_CATEGORIES).filter(([, c]) => !(c as { staff?: boolean }).staff)
-  .map(([key, c]) => ({ key, label: c.label, hint: c.hint, locked: !!(c as { locked?: boolean }).locked }));
+const categories = () => categoriesFor('participant');
 
 export async function list(p: P, _b: Body = {}) {
   const [items, unread, pref] = await Promise.all([

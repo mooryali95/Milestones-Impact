@@ -169,7 +169,7 @@ export async function teamAdd(a: Admin, b: Body) {
   const isNew = scope === 'cohort' ? !current.some((x) => x.expert_id === e.id) : scope === 'advisor' ? c.advisor_expert_id !== e.id : group.advisor_expert_id !== e.id;
   if (!invite && isNew) {
     const m = await mailOf(c, role, { advisor: scope === 'advisor', groups: group ? [group] : [] });
-    notified = await sendMail(e.email, `كُلّفت في فريق ${c.name}`, teamAssignedMail(firstName(e.full_name), m), [], { category: 'staff', ref: `cohort:${c.id}` })
+    notified = await sendMail(e.email, `كُلّفت في فريق ${c.name}`, teamAssignedMail(firstName(e.full_name), m), [], { category: 'expert_work', ref: `cohort:${c.id}` })
       .then(() => true, (err) => { console.error('team.add mail', err); return false; });
   }
   const load = invite ? null : (await loads())(e);
