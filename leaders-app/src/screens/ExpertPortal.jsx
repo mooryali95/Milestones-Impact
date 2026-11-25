@@ -622,7 +622,8 @@ function Dashboard({ onOut }) {
       [{ label: 'التاريخ', width: '30%' }, { label: 'المشارك' }, { label: 'المدة', width: '18%' }],
       done.map((s) => [fmt(s.starts_at), s.participant || '·', `${Math.round((Date.parse(s.ends_at) - Date.parse(s.starts_at)) / 6e4)} دقيقة`]),
       'لا جلسات منعقدة بعد'));
-    if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`,
+    const { reportFileName } = await import('../../../src/lib/brand/reports.js');
+    if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`, pdfName: reportFileName('شهادة-ساعات-خبرة', e.full_name),
       subtitle: 'برنامج القادة', rows: [['الخبير', e.full_name], ['الساعات', String(d.stats.hours)], ['حتى تاريخ', fmt(new Date())]],
       closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) say(POPUP_BLOCKED, true);
   };

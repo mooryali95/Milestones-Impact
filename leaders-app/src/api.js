@@ -122,6 +122,15 @@ export async function xpCall(action, body = {}) {
   return res;
 }
 
+// تذكرة مولّد PDF على الخادم (المرحلة 3أ) بجلسة الصفحة: /x للخبير، و/org للمنسق، وغيرهما للمشارك. send لا call:
+// تعذّر التذكرة يرجع إلى بناء المتصفح، ولا يُخرج أحدًا من جلسته
+export async function pdfTicket(path = typeof location === 'undefined' ? '/' : location.pathname) {
+  const token = /^\/x(\/|$)/.test(path) ? xpSession.get() : /^\/org(\/|$)/.test(path) ? coordSession.get() : session.get();
+  if (!token) return null;
+  const r = await send('pdf.ticket', token);
+  return r?.success ? r.pdf || null : null;
+}
+
 // ما يأتي مجمّعًا مع الحساب عند فتح المنصة (me مع with_home، البند 7.5): كل جزء يُؤخذ مرة واحدة ثم يُحذف،
 // فالقسم الذي يُعاد تركيبه بعد إجراء يطلب حاله الحالية لا نسخة الفتح الأول
 let preloaded = {};

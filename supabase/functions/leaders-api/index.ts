@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · cert.verify · doc.verify (التحقق العام من وثيقة مبادرة معتمدة ببصمتها) · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
+//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · pdf.ticket (تذكرة PDF لأي جلسة صالحة، تُفحص داخله) · cert.verify · doc.verify (التحقق العام من وثيقة مبادرة معتمدة ببصمتها) · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
@@ -46,6 +46,7 @@ import * as X from './capstone.ts';
 import * as T from './tracking.ts';
 import * as SH from './share.ts';
 import * as E from './experts.ts';
+import { pdfTicketAny } from './pdf-ticket.ts';
 import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
 import { switchTo } from './switch.ts';
@@ -95,6 +96,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.verify': P.authVerify,
   'auth.google': P.authGoogle,
   'org.info': (b, ctx) => P.orgInfo(b, ctx),
+  // تذكرة PDF للجلسة أيًّا كان صاحبها (pdfTicketAny): الجلسة تُفحص داخلها لا في الموزع
+  'pdf.ticket': (b) => pdfTicketAny(b.token),
   // مسبار المراقبة وفحص ما بعد النشر: طلب حقيقي يمر بالقاعدة
   'system.ping': () => S.ping(),
   // أحداث الإخفاق من جهة العميل (المرحلة 4): بلا جلسة، بسقف حجم وحد معدل لكل شبكة ببصمتها (client-events.ts)
