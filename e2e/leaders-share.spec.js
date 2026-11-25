@@ -124,7 +124,7 @@ test('من يفتح الرابط: الوثيقة بتصميمها داخل ال�
   await expect(frame.getByText(/نسخة شاركها سارة الأحمد برابط خاص/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'تحميل PDF' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'اكتب ملاحظة لصاحبها' }).click();
+  await page.getByRole('button', { name: 'اكتب ملاحظة لقائد المبادرة' }).click();
   await page.getByLabel('اسمك').fill('خالد المطيري');
   await page.getByLabel(/صفتك/).fill('مدير الإدارة');
   await page.getByLabel(/عن أي جزء/).selectOption('cost-plan');
@@ -139,10 +139,10 @@ test('من يفتح الرابط: ما لم يسمح به صاحبه لا يظه
   await reader(page, server({ allow_notes: false, allow_download: false }));
   await expect(page.getByText('شاركك سارة الأحمد')).toBeVisible();
   await expect(page.getByRole('button', { name: 'تحميل PDF' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'اكتب ملاحظة لصاحبها' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'اكتب ملاحظة لقائد المبادرة' })).toHaveCount(0);
 
   const p2 = await page.context().newPage();
-  await reader(p2, server({ fail: { success: false, message: 'ألغى صاحب الوثيقة هذا الرابط', code: 'revoked' } }));
+  await reader(p2, server({ fail: { success: false, message: 'ألغى قائد المبادرة هذا الرابط', code: 'revoked' } }));
   await expect(p2.getByRole('heading', { name: 'الرابط غير متاح' })).toBeVisible();
-  await expect(p2.getByText('ألغى صاحب الوثيقة هذا الرابط')).toBeVisible();
+  await expect(p2.getByText('ألغى قائد المبادرة هذا الرابط')).toBeVisible();
 });

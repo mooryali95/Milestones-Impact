@@ -130,7 +130,7 @@ test('تقييم عمل المشارك: ملاحظات لم تُعتمد لا ت
   await setup(page);
   await leaders(page, 'كتاب القائد');
   await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
-  await page.getByLabel('حالة العمل').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
+  await page.getByLabel('حالة التقديم').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
   await page.getByRole('button', { name: 'عرض' }).click();
   const rev = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });
   await rev.getByLabel('ملاحظتك للمشارك (اختيارية)').fill('عمل جيد');
@@ -249,7 +249,7 @@ test('التقييم بالسلّم الرباعي: الجدول يعرض اسم
   await setup(page);
   await leaders(page, 'كتاب القائد');
   await page.getByRole('navigation', { name: 'أقسام الكتاب' }).getByRole('button', { name: /التقييم/ }).click();
-  await page.getByLabel('حالة العمل').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
+  await page.getByLabel('حالة التقديم').selectOption('');   // القائمة تبدأ بما ينتظر التقييم، والعمل هنا مقيَّم
   const cell = page.locator('td.stars-c');
   await expect(cell).toContainText('متميز (4 من 4)');
   await expect(cell).not.toContainText('★');

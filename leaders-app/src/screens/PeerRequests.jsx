@@ -99,7 +99,7 @@ export default function PeerRequests({ preset = null, onDone, compact = false })
         </>
       )}
       </ListFold>
-      {!mine.length && !forMe.length && !open && <p className="muted small">لا طلبات بعد. حين تحتاج توجيهًا في سؤال أو جزء من مشروعك، ارفعه هنا فيراه فريقك ويؤكّد خبيرك ما يُجاب.</p>}
+      {!mine.length && !forMe.length && !open && <p className="muted small">لا طلبات بعد. حين تحتاج توجيهًا في سؤال أو جزء من مبادرتك، ارفعه هنا فيراه فريقك ويؤكّد خبيرك ما يُجاب.</p>}
     </section>
   );
 }

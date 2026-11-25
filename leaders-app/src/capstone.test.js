@@ -168,7 +168,7 @@ describe('الجاهزية والتسليم', () => {
     expect(canSubmit({ ...base, card: { status: 'reviewed' } }).ok).toBe(true);
     expect(canSubmit({ ...base, card: { status: 'submitted' } })).toMatchObject({ ok: false, reason: expect.stringContaining('بانتظار اعتماد المستشار') });
     expect(canSubmit({ ...base, card: { status: 'returned' } }).reason).toContain('أعاد المستشار');
-    expect(canSubmit({ ...base, card: { status: 'draft' } }).reason).toContain('سلّم بطاقة المبادرة');
+    expect(canSubmit({ ...base, card: { status: 'draft' } }).reason).toContain('قدّم بطاقة المبادرة');
     expect(canSubmit({ ...base, card: { status: null } }).ok).toBe(false);
     expect(['reviewed', 'submitted', 'returned', 'draft', null].map((x) => cardGate(x).state)).toEqual(['approved', 'waiting', 'returned', 'none', 'none']);
   });

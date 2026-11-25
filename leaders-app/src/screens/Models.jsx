@@ -17,7 +17,7 @@ import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
 import { DEP_AR, DEP_TYPES, depAr, formatDeps, parseDeps } from '../../../supabase/functions/leaders-api/schedule.js';
 import logoDark from '../milestone-impact.svg';
-import { modelStatusAr, REVIEWER_AR, rubricLevelAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { CHAPTER_STATUS_AR, modelStatusAr, REVIEWER_AR, rubricLevelAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { isGateModel } from '../../../supabase/functions/leaders-api/model-review.js';
 import { preSubmitHints } from '../presubmit.js';
 
@@ -25,7 +25,7 @@ import { preSubmitHints } from '../presubmit.js';
 // النص من مصدره (labels.js modelStatusAr) بمن يراجع: المستشار، وبلاه فريق البرنامج
 const TONE = { draft: 'warn', submitted: 'gold', returned: 'bad', reviewed: 'ok' };
 const chipOf = (status, key, reviewer) => ({ t: modelStatusAr(status, { gate: isGateModel(key), reviewer }), c: TONE[status] || '' });
-const SOURCE = { chapter: 'إتمام باب', model: 'تسليم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تقديم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
 // id للحقل الذي تسمّيه <label htmlFor>، وlabelId لما لا تسمّيه label (مجموعة الاختيار والجدول) فيُسمّى بـaria-labelledby
@@ -35,7 +35,7 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
     return (
       <div className="mf-bound">
         <input id={id} className="input" disabled value={initiative || value || ''} placeholder="—" />
-        {!initiative && <small className="muted">اكتب اسم المبادرة في «بطاقة المبادرة» فيظهر هنا وفي كل نماذجك.</small>}
+        {!initiative && <small className="muted">اكتب اسم المبادرة في «بطاقة المبادرة» فيظهر هنا وفي كل فصول وثيقتك.</small>}
       </div>
     );
   }
@@ -189,7 +189,7 @@ function SchedulePreview({ f, rows }) {
   if (!v.svg) return null;
   return (
     <section className="sched-preview" aria-label="معاينة المخطط الزمني">
-      <span className="mg-cap">معاينة حية: جانت بعلاقاته ومساره الحرج</span>
+      <span className="mg-cap">معاينة حية: مخطط جانت بعلاقات أنشطته ومساره الحرج</span>
       {v.stats.cycle && <p className="alert err small" role="alert">حلقة في العلاقات بين {v.stats.cycle.join('، ')}: لا يُحسب المسار الحرج حتى تُحذف إحداها.</p>}
       <div className="viz-scroll" dangerouslySetInnerHTML={{ __html: v.svg }} />
       {v.missing.length > 0 && <p className="small muted">{v.missing.join('. ')}.</p>}
@@ -219,7 +219,7 @@ const RUBRIC = [
   ['الارتباط بمبادرتك', 'مبني على مبادرة تقودها من واقع تعرفه وتستطيع تنفيذها، حقيقية كانت أو افتراضية واقعية.'],
   ['جودة القرار', 'يظهر فيه منطقك: لماذا هذا الترتيب، وما الذي ستفعله بالنتيجة.'],
 ];
-const STEPS = ['افهم النموذج', 'طبّقه على مشروعك', 'سلّمه', 'الملاحظات'];
+const STEPS = ['افهم النموذج', 'طبّقه على مبادرتك', 'قدّمه', 'الملاحظات'];
 
 // مثال الحقل من المبادرة المحلولة لقطاع المشارك: نص مقتبس، أو أول صفوف الجدول
 function FieldExample({ ex }) {
@@ -339,8 +339,8 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
     if (!r.success) return setMsg({ err: r.message });
     setD({ ...d, submission: r.submission });
     setDirty(false); setSavedAt(new Date());
-    const counted = gate ? `وهي بانتظار اعتماد ${who}.` : 'ويُحتسب في رحلتك الآن، وتظهر هنا ملاحظات المراجع حين يكتبها.';
-    setMsg({ ok: submit ? (r.gained ? `سُلّم النموذج، و+${r.gained} نقطة أضيفت إلى رصيدك. ${counted}` : `سُلّم النموذج، ${counted}`) : 'حُفظت المسودة.' });
+    const counted = gate ? `وهي بانتظار اعتماد ${who}.` : `ويُحتسب في رحلتك الآن، وتظهر هنا ملاحظات ${who} حين يكتبها.`;
+    setMsg({ ok: submit ? (r.gained ? `قُدّم النموذج، و+${r.gained} نقطة أضيفت إلى رصيدك. ${counted}` : `قُدّم النموذج، ${counted}`) : 'حُفظت المسودة.' });
     if (submit) onPoints(r);
   };
   const set = (k, v) => { setAnswers((a) => ({ ...a, [k]: v })); setDirty(true); };
@@ -373,14 +373,14 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           </section>
           <section>
             <span className="mg-cap">علامات النموذج الجيد</span>
-            <p className="muted small">{gate ? `يعتمد ${who} بطاقتك قبل أن تبني عليها وثيقتك.` : `يُحتسب تسليمك فورًا، ويقرؤه ${who} ويكتب لك ملاحظاته.`} وقبل التسليم نذكّرك بما قد ينقص منها.</p>
+            <p className="muted small">{gate ? `يعتمد ${who} بطاقتك قبل أن تبني عليها وثيقتك.` : `يُحتسب تقديمك فورًا، ويقرؤه ${who} ويكتب لك ملاحظاته.`} وقبل التقديم نذكّرك بما قد ينقص منها.</p>
             <ul className="mrubric">{RUBRIC.map(([t, x]) => <li key={t}><b>{t}</b>{x}</li>)}</ul>
           </section>
           {s && s.status !== 'draft' && (
             <section className="mg-status">
               <div className={`chip ${chipOf(s.status, m.key, d.reviewer).c}`}>{chipOf(s.status, m.key, d.reviewer).t}</div>
               {s.rating && <div className="model-rate"><span>{rubricLevelAr(s.rating)}</span>{s.bonus ? <b>+{s.bonus} نقطة تميّز</b> : null}</div>}
-              {s.feedback_ar && <blockquote className="model-fb"><b>ملاحظات المراجع</b>{s.feedback_ar}</blockquote>}
+              {s.feedback_ar && <blockquote className="model-fb"><b>ملاحظات {who}</b>{s.feedback_ar}</blockquote>}
             </section>
           )}
         </aside>
@@ -421,9 +421,9 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           {msg?.ok && <div className="alert ok">{msg.ok}</div>}
           {hints && (
             <div className="alert info small" role="status">
-              <b>قبل التسليم:</b>
+              <b>قبل التقديم:</b>
               <ul>{hints.map((h) => <li key={h.key}>{h.text}</li>)}</ul>
-              <div className="row"><button type="button" className="btn gold sm" disabled={!!busy} onClick={() => save(true, true)}>سلّم على أي حال</button>
+              <div className="row"><button type="button" className="btn gold sm" disabled={!!busy} onClick={() => save(true, true)}>قدّم على أي حال</button>
                 <button type="button" className="btn ghost sm" onClick={() => setHints(null)}>أراجعها أولًا</button></div>
             </div>
           )}
@@ -431,26 +431,27 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             <div className="ws-prog">
               <span><b>{filled}</b> من {req.length} حقول مكتملة</span>
               <span className="bar"><i style={{ width: `${pct}%` }} /></span>
-              <small>{capLocked ? 'فصل في وثيقة مسلّمة' : locked ? 'نموذج مقيّم ومغلق' : dirty ? 'تعديلات غير محفوظة…' : savedAt ? `محفوظ ${savedAt.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}` : 'يُحفظ تلقائيًا أثناء الكتابة'}</small>
+              <small>{capLocked ? 'فصل في وثيقة مقدَّمة للمراجعة' : locked ? 'البطاقة معتمدة ومغلقة' : dirty ? 'تعديلات غير محفوظة…' : savedAt ? `محفوظ ${savedAt.toLocaleTimeString('ar-SA-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}` : 'يُحفظ تلقائيًا أثناء الكتابة'}</small>
             </div>
             {!locked && (
               <div className="row model-acts">
                 <button type="button" className="btn ghost sm" disabled={!!busy} onClick={() => save(false)}>{busy === 'save' ? 'لحظة…' : 'حفظ'}</button>
-                <button className="btn gold" disabled={!!busy || filled < req.length}>{busy === 'submit' ? 'لحظة…' : s?.status === 'submitted' ? 'تحديث التسليم' : `تسليم · ${m.points} نقطة`}</button>
+                <button className="btn gold" disabled={!!busy || filled < req.length}>{busy === 'submit' ? 'لحظة…' : s?.status === 'submitted' ? 'تحديث التقديم' : `تقديم · ${m.points} نقطة`}</button>
               </div>
             )}
           </div>
         </form>
       </div>
-      {/* «عندي سؤال هنا» في فصول الوثيقة (4د): إلى مختص يعرف الفصل، بدور يناسب نوع الحاجة */}
+      {/* «لديّ سؤال عن هذا الفصل» في فصول الوثيقة (4د): إلى خبير يعرف الفصل، بدور يناسب نوع الحاجة */}
       {d.capstone && !locked && (asking
         ? <AskExpert chapterTitle={m.title_ar} dimension={m.dimension} onClose={() => setAsking(false)} />
-        : <p className="row"><button type="button" className="btn ghost sm" onClick={() => setAsking(true)}>عندي سؤال هنا</button><small className="muted">مختص يعرف هذا الفصل، يرد عليك بعد أن يقرأ وثيقتك.</small></p>)}
+        : <p className="row"><button type="button" className="btn ghost sm" onClick={() => setAsking(true)}>لديّ سؤال عن هذا الفصل</button><small className="muted">خبير في هذا الفصل يرد عليك بعد قراءة وثيقتك.</small></p>)}
     </div>
   );
 }
 
-const FILTERS = [['all', 'الكل'], ['new', 'لم تبدأ'], ['draft', 'قيد العمل'], ['submitted', 'مسلّمة'], ['reviewed', 'مقروءة']];
+// الحالات من المصدر الواحد (CHAPTER_STATUS_AR)
+const FILTERS = [['all', 'الكل'], ['new', CHAPTER_STATUS_AR.empty], ['draft', CHAPTER_STATUS_AR.draft], ['submitted', CHAPTER_STATUS_AR.submitted], ['reviewed', CHAPTER_STATUS_AR.reviewed]];
 const stateOf = (m) => (!m.submission ? 'new' : m.submission.status === 'returned' ? 'draft' : m.submission.status);
 
 export function Models({ name, onPoints }) {
@@ -476,10 +477,10 @@ export function Models({ name, onPoints }) {
         <div>
           <span className="book-eyebrow">The Practice Library</span>
           <h2>مكتبة النماذج التعليمية</h2>
-          <p className="muted">أدوات عمل مستلهمة من مراجع عالمية مثل PMBOK وPRINCE2 ونظرية التغيير، مكيّفة لمسارك. تطبّق كل نموذج على مشروعك الحقيقي، ويُحتسب حين تسلّمه، ويقرؤه {REVIEWER_AR[d.reviewer] || REVIEWER_AR.advisor} ويكتب لك ملاحظاته.</p>
+          <p className="muted">أدوات عمل مستلهمة من مراجع عالمية مثل PMBOK وPRINCE2 ونظرية التغيير، مكيّفة لمسارك. تطبّق كل نموذج على مبادرتك، ويُحتسب حين تقدّمه، ويقرؤه {REVIEWER_AR[d.reviewer] || REVIEWER_AR.advisor} ويكتب لك ملاحظاته.</p>
         </div>
         <div className="models-kpis">
-          <span><b>{count('submitted') + count('reviewed')}<small>/{all.length}</small></b>مسلّمة</span>
+          <span><b>{count('submitted') + count('reviewed')}<small>/{all.length}</small></b>مقدَّمة</span>
           <span><b>{earned}<small>/{avail}</small></b>نقطة من النماذج</span>
           <span><b>{avg || '—'}</b>متوسط تقييمك</span>
         </div>
@@ -544,7 +545,7 @@ export function Wins() {
         </ol>
         <ul className="muted small wins-how">
           <li>إتمام الباب: {POINTS.chapter} · الإجابة الصحيحة: {POINTS.perCorrect} · التأمل: {POINTS.reflection}</li>
-          <li>تسليم النموذج التعليمي: حسب النموذج</li>
+          <li>تقديم النموذج التعليمي: حسب النموذج</li>
           <li>إتقان أداة في المختبر: حسب الأداة</li>
           <li>اعتماد وثيقة المبادرة: {APPROVAL_POINTS}</li>
           <li>تميّز يمنحه مستشارك</li>

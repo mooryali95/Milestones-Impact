@@ -358,8 +358,8 @@ export async function adminGet(b: Body) {
 
 export function sponsorMail(sponsor: string | null, who: string, initiative: string, link: string) {
   return mailShell(mailTitle`طلب تأييد مبادرة: ${initiative}`,
-    mailText(`${sponsor ? `أهلًا ${bdi(sponsor)}،` : 'أهلًا،'} أعدّ ${bdi(who)} وثيقة مبادرة «${bdi(initiative)}» مشروع تخرجه في برنامج القادة من Milestone Impact، وسمّاك راعيًا لها.`)
-    + mailText('راجعها المستشار وقبلها. نطلب تأييدك: أنها مبادرة حقيقية تخدم أولويات تعنيك، وأن خطتها واقعية. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.')
+    mailText(`${sponsor ? `أهلًا ${bdi(sponsor)}،` : 'أهلًا،'} أعدّ ${bdi(who)} وثيقة مبادرة «${bdi(initiative)}» في برنامج القادة من Milestone Impact، وذكرك راعيًا لها.`)
+    + mailText('راجعها المستشار وقبلها. نطلب تأييدك بأن المبادرة تخدم أولويات تعنيك، وأن خطتها قابلة للتنفيذ. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.')
     + mailButton(link, 'اقرأ الوثيقة وأيّدها')
     + mailNote(`الرابط خاص بك وصالح ${SPONSOR_DAYS} يومًا.`),
     { family: 'capstone', preheader: `${who} يطلب تأييدك لمبادرة «${initiative}»`, footnote: '' });

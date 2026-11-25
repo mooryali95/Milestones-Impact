@@ -138,7 +138,7 @@ export function institutionalReport(input) {
   // ── القيمة ──
   add('Value', 'القيمة والقياس', [
     field(doc, 'benefits-register', 'benefits', 'المنافع'),
-    field(doc, 'evidence-plan', 'success_signal', 'كيف نعرف أننا نجحنا'),
+    field(doc, 'evidence-plan', 'success_signal', 'مؤشرات النجاح'),
     field(doc, 'evidence-plan', 'plan', 'خطة القياس'),
     field(doc, 'cost-plan', 'cba', 'التكلفة مقابل المنفعة'),
   ].join(''));
@@ -172,7 +172,7 @@ export function institutionalReport(input) {
   add('Impact', 'الأثر والاستدامة', [
     field(doc, 'impact-report', 'program', 'البرنامج ومساره'),
     field(doc, 'impact-report', 'changes', 'ماذا تغيّر'),
-    field(doc, 'impact-report', 'lessons', 'ما تعلمناه'),
+    field(doc, 'impact-report', 'lessons', 'الدروس المستفادة'),
     field(doc, 'change-sustain', 'handover', 'التسليم والتسلم'),
     field(doc, 'change-sustain', 'sustain', 'ما يحمي المنافع'),
     grid([['من يشغّل بعد المبادرة', val(doc, 'initiative-charter', 'operator')]]),
@@ -182,7 +182,7 @@ export function institutionalReport(input) {
   const sp = doc.sponsor;
   const signs = [
     ['المستشار', approved || doc.review ? 'راجع الوثيقة وقبلها بمعيار التقييم' : 'قيد المراجعة', null],
-    ['الراعي', sp?.status === 'endorsed' ? (sp.name || m.sponsor || 'الراعي') : sp?.waived ? 'اعتُمدت بقرار الإدارة' : 'لم يؤيد بعد', sp?.status === 'endorsed' ? fmt(sp.at) : null],
+    ['الراعي', sp?.status === 'endorsed' ? (sp.name || m.sponsor || 'الراعي') : sp?.waived ? 'اعتُمدت بقرار فريق البرنامج' : 'لم يؤيد بعد', sp?.status === 'endorsed' ? fmt(sp.at) : null],
     ['تاريخ الاعتماد', approved ? fmt(m.approved_at) : 'لم تُعتمد بعد', null],
   ];
   add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">معتمدة · ${esc(fmt(m.approved_at) || '')}</span>` : '<span class="st">لم تُعتمد بعد</span>'}
@@ -204,7 +204,7 @@ export function institutionalReport(input) {
       eyebrow: 'Leaders Program · Initiative', title: m.initiative || 'وثيقة المبادرة',
       subtitle: `وثيقة المبادرة${m.scope_title ? ` · ${m.scope_title}` : ''}${LVL[m.level] ? ` · مستوى ${LVL[m.level]}` : ''}`,
       rows: [['قائد المبادرة', m.participant?.name], ...(m.host ? [['الجهة المستضيفة', m.host]] : []), ...(!org && m.sponsor ? [['الراعي', m.sponsor]] : []), ['الإصدار', `V${m.version || 1}`], ['الحالة', approved ? 'معتمدة' : m.status_title]].filter(([, v]) => v),
-      confidential: 'ملك قائد المبادرة وجهتها: تُتداول بإذنهما',
+      confidential: 'ملك قائد المبادرة: تُتداول بإذنه',
       closing: approved ? 'وثيقة معتمدة تُعرض من نسختها المحفوظة لحظة الاعتماد، فلا يغيّرها تعديل لاحق.' : 'نسخة لم تُعتمد بعد: تُبنى من فصول المبادرة لحظة إصدارها.',
     },
     body,
@@ -236,7 +236,7 @@ export function pendingReport(doc) {
     meta: { id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
       brand: { name: org?.name || null, logo: org?.logo || null, color: org?.color || null },
       eyebrow: 'Leaders Program · Initiative', title: m.initiative || 'وثيقة المبادرة', rows: [['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
-      confidential: 'ملك قائد المبادرة وجهتها: تُتداول بإذنهما', closing: 'تصدر الوثيقة المؤسسية حين يكتمل إعدادها.' },
+      confidential: 'ملك قائد المبادرة: تُتداول بإذنه', closing: 'تصدر الوثيقة المؤسسية حين يكتمل إعدادها.' },
     body: STYLE + section('In preparation', 'الوثيقة قيد الإعداد', '<p class="cp-p">يعمل قائد المبادرة على استكمال وثيقتها مع مستشاره. ستجدها هنا كاملة حين يكتمل إعدادها.</p>'),
   };
 }

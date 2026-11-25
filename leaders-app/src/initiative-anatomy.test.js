@@ -102,7 +102,7 @@ describe('إخراج الوثيقة الاحترافية', () => {
     }
     for (const k of ['charter', 'case', 'launch', 'glossary']) expect(body).toContain(`id="ch-${k}"`);
   });
-  it('لا تكرار: جدول البدائل في فصله وحده، وحالة العمل تحيل إليه', () => {
+  it('لا تكرار: جدول البدائل في فصله وحده، ومسوّغات المبادرة تحيل إليه', () => {
     const first = doc.sections.find((s) => s.key === 'options-analysis').fields.find((f) => f.key === 'options').value[0][0];
     expect(body.split(first).length - 1).toBe(1);
     expect(body).toMatch(/البدائل<\/b> \(\d+ صفوف\): <a href="#ch-options-analysis">/);

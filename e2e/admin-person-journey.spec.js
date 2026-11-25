@@ -131,8 +131,8 @@ test('المبادرة حية، والسجل الكامل بمرشح النوع 
   });
   await tab(page, 'المبادرة').click();
   const cap = page.getByRole('region', { name: 'رقمنة الطلبات' });
-  await expect(cap).toContainText('البطاقة: مسلَّم');
-  await expect(cap.locator('[data-chapter="risks"]')).toContainText('فارغ');
+  await expect(cap).toContainText('البطاقة: مقدَّم');
+  await expect(cap.locator('[data-chapter="risks"]')).toContainText('لم يبدأ');
   await expect(cap.getByRole('button', { name: 'اقرأ الوثيقة كما هي الآن' })).toBeVisible();
   await expect(cap.getByRole('link', { name: 'صفحة المراجعة' })).toHaveAttribute('href', /capstones/);   // متاحة دائمًا، ولو بلا صف وثيقة (تُبنى من حالته الآن)
   await tab(page, 'السجل').click();

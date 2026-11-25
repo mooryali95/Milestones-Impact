@@ -360,7 +360,7 @@ function Dashboard({ me, onLogout }) {
         {!d.journey_map && <section className="card"><h3>مراحل الرحلة</h3><Bars obj={Object.fromEntries(FUNNEL.map(([k, l]) => [l, funnel[k] || 0]))} total={funnel.registered} /></section>}
         <section className="card"><h3>المسارات</h3>
           {tracks.length ? <Bars obj={trackBars} total={kpis.total} />
-            : <p className="small muted">{perms.scores ? 'لا مسار ظاهر بعد: يظهر هنا مسار من وافق من مشاركيك على اطلاع جهته على مستوياته متى تحددت.' : 'المسار مشتق من مستويات المشارك، فلا يظهر إلا مع صلاحية المستويات وبموافقة المشارك.'}</p>}</section>
+            : <p className="small muted">{perms.scores ? 'لا مسار ظاهر بعد: يظهر هنا مسار من وافق من مشاركيك على اطّلاع جهته على مستوياته متى تحددت.' : 'المسار مشتق من مستويات المشارك، فلا يظهر إلا مع صلاحية المستويات وبموافقة المشارك.'}</p>}</section>
         <section className="card"><h3>طريقة الانضمام</h3><Bars obj={d.by_via} label={(k) => VIA[k] || k} total={kpis.total} /></section>
       </div>
 

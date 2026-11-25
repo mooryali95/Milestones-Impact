@@ -15,7 +15,7 @@ const GATES = {
   'submission.review': (e) => (e.after?.status === 'returned'
     ? { gate: 'بوابة البطاقة', decision: 'أعاد بطاقة المبادرة للتحسين', by: ROLE.admin }
     : { gate: 'بوابة البطاقة', decision: 'اعتمد اختيار المبادرة', by: ROLE.admin }),
-  'capstone.submit': () => ({ gate: 'بوابة الاعتماد', decision: 'سلّم الوثيقة للمراجعة', by: ROLE.participant }),
+  'capstone.submit': () => ({ gate: 'بوابة الاعتماد', decision: 'قدّم الوثيقة للمراجعة', by: ROLE.participant }),
   'capstone.return': (e) => ({ gate: 'بوابة الاعتماد', decision: `أعاد الوثيقة للتحسين${e.after?.revisions ? ` (التحسين ${e.after.revisions})` : ''}`, by: ROLE.admin }),
   'capstone.accept': (e) => ({ gate: 'بوابة الاعتماد', decision: `قبل الوثيقة بمعيار${e.after?.score != null ? ` ${e.after.score} من 100` : 'ه'}`, by: ROLE.admin }),
   'capstone.sponsor-invite': () => ({ gate: 'بوابة الاعتماد', decision: 'أُرسل طلب التأييد إلى الراعي', by: ROLE.admin }),
