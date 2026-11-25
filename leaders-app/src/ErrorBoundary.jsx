@@ -3,11 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 import React from 'react';
 import { UNEXPECTED_ERROR } from '../../supabase/functions/leaders-api/labels.js';
-import { isChunkError } from '../../shared/ui/lazy-retry.js';
+import { hardReload, isChunkError } from '../../shared/ui/lazy-retry.js';
 import { viewHref } from './reload-view.js';
 import { reportRender } from './telemetry.js';
 // زر التحديث بعد خطأ ملف قسم يفتح القسم نفسه لا «رحلتي» (reload-view.js)
 const reloadToSection = () => { location.assign(viewHref() || location.href); };
+// إن تكررت الرسالة بعد التحديث: تحديث كامل يتجاوز مخازن المتصفح وعامل الخدمة إلى القسم نفسه (hardReload)
+const freshToSection = () => { hardReload({ href: viewHref() || location.href }); };
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -52,10 +54,10 @@ export class SectionBoundary extends React.Component {
       <div className="page narrow stack">
         <div className="alert err stack" role="alert">
           <b>{chunk ? 'صدر تحديث للمنصة، فحدّث الصفحة لتفتح هذا القسم.' : 'تعذّر عرض هذا القسم.'}</b>
-          <span>بقية المنصة تعمل، وبياناتك لم تتأثر.</span>
+          <span>بقية المنصة تعمل، وبياناتك لم تتأثر.{chunk && ' وإن تكررت هذه الرسالة فاختر «تحديث كامل» ليجلب المتصفح المنصة من جديد.'}</span>
           <div className="row">
             {chunk
-              ? <button type="button" className="btn sm" onClick={reloadToSection}>حدّث الصفحة</button>
+              ? <><button type="button" className="btn sm" onClick={reloadToSection}>حدّث الصفحة</button><button type="button" className="btn sm ghost" onClick={freshToSection}>تحديث كامل</button></>
               : <button type="button" className="btn sm" onClick={() => this.setState({ error: null })}>حاول مرة أخرى</button>}
             {this.props.onHome && <button type="button" className="btn sm ghost" onClick={this.props.onHome}>{this.props.homeLabel || 'رحلتي'}</button>}
           </div>

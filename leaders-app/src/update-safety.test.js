@@ -29,7 +29,7 @@ describe('مصدر واحد لإعادة التحميل في التطبيقين'
     expect(main).toContain('installPreloadRecovery(window, { to: viewHref });');
     expect(main).not.toMatch(/location\.reload\(\)/);
     // حاجز القسم يميز خطأ الملف بالمطابِق المشترك نفسه
-    expect(read('leaders-app/src/ErrorBoundary.jsx')).toContain("import { isChunkError } from '../../shared/ui/lazy-retry.js';");
+    expect(read('leaders-app/src/ErrorBoundary.jsx')).toContain("import { hardReload, isChunkError } from '../../shared/ui/lazy-retry.js';");
   });
   it('to: إعادة التحميل إلى رابط آخر بالتنقل، والرابط نفسه بإعادة التحميل، ومرة واحدة في الدقيقة', () => {
     _resetReloadFlag();
@@ -116,7 +116,7 @@ describe('404 الملف الغائب المخزَّن في المتصفح يُ�
     const navigate = vi.fn(() => order.push('navigate'));
     const location = { href: `${origin}/`, origin };
     expect(reloadOnce({ storage: memStorage(), navigate, location, now: 1000, to: () => `${origin}/?tab=lab`, error: chunkErr, refresh })).toBe(true);
-    expect(refresh).toHaveBeenCalledWith(chunkErr, { origin });
+    expect(refresh).toHaveBeenCalledWith(chunkErr, { origin, load: null });
     expect(navigate).not.toHaveBeenCalled();
     release();
     await new Promise((r) => setTimeout(r, 0));
@@ -137,11 +137,11 @@ describe('404 الملف الغائب المخزَّن في المتصفح يُ�
     ev.payload = chunkErr;
     target.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
-    expect(refresh).toHaveBeenCalledWith(chunkErr, { origin });
+    expect(refresh).toHaveBeenCalledWith(chunkErr, { origin, load: null });
     const reloadPage = vi.fn(() => true);
     retryImport(() => Promise.reject(chunkErr), { reloadPage });
     await new Promise((r) => setTimeout(r, 0));
-    expect(reloadPage).toHaveBeenCalledWith({ error: chunkErr });
+    expect(reloadPage).toHaveBeenCalledWith({ error: chunkErr, load: expect.any(Function) });
     expect(read('leaders-app/src/reload-view.js')).toContain('reloadPage: (o) => reloadToView(o)');
   });
 });
