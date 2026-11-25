@@ -16,7 +16,11 @@ import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 
-import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR, expertRoleAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { countAr, CONTACT_EMAIL, FUNNEL, DIM_AR, expertRoleAr, STAFF_MESSAGES_TEXT } from '../../../supabase/functions/leaders-api/labels.js';
+import MessageCenter from './MessageCenter.jsx';
+
+// تفضيلات بريد المنسق وحدها (صندوقه لاحقًا، قرار المالك 6): coord.mail-prefs يقرأ بلا muted ويحفظ معها
+const COORD_PREFS = { list: 'coord.mail-prefs', prefs: 'coord.mail-prefs' };
 import { codeDigits } from '../../../supabase/functions/leaders-api/logic.js';
 import EmailInput from '../../../shared/ui/EmailInput.jsx';
 const VIA = { link: 'رابط الجهة', domain: 'موقع الجهة', admin: 'أضافته الإدارة', none: 'غير محدد' };
@@ -265,6 +269,8 @@ function Dashboard({ me, onLogout }) {
   const [f, setF] = useState({ q: '', stage: '', track: '' });
   const [sort, setSort] = useState('name');
   const [msg, setMsg] = useState('');
+  // رابط ذيل الملخص الأسبوعي /org?tab=messages&prefs=coord_digest يفتح التفضيلات مباشرة
+  const [prefs, setPrefs] = useState(() => { try { return new URLSearchParams(location.search).get('tab') === 'messages'; } catch { return false; } });
   const load = () => { setD(null); coordCall('coord.dashboard').then(setD); };
   // قرار المقيّم لا يغيّر في اللوحة إلا قائمة المنتظرين (تأكيده يرسل دعوته، ورحلة المشارك تتغير حين يُسلّم تقييمه)،
   // فيُزال من القائمة محليًا (org-5 وorg-15): كانت اللوحة كلها تُستبدل بالهيكل وتُعاد رحلة كل مشارك على الخادم،
@@ -277,6 +283,8 @@ function Dashboard({ me, onLogout }) {
   useEffect(() => { if (!me.preload?.dashboard) load(); }, []);
 
   const rows = useMemo(() => (d?.success ? sortRows(filterRows(d.participants, f), sort) : []), [d, f, sort]);
+  if (prefs) return <MessageCenter call={coordCall} actions={COORD_PREFS} inbox={false} text={STAFF_MESSAGES_TEXT.coordinator} backLabel="رجوع إلى لوحة الجهة"
+    onBack={() => { setPrefs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } }} />;
   if (!d) return <JourneySkeleton />;
   if (!d.success) return <div className="page narrow"><div className="alert err">{d.message}</div><button className="btn sm" style={{ marginTop: 12 }} onClick={load}>حاول مرة أخرى</button></div>;
 
@@ -334,6 +342,7 @@ function Dashboard({ me, onLogout }) {
             {perms.export && perms.list !== false && <><button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={exportXlsx}>تصدير Excel</button>
               <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={printReport}>تقرير الجهة</button></>}
             {perms.list !== false && <button type="button" className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={() => goTo('op-people-h')}>إلى قائمة المشاركين</button>}
+            <button type="button" className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={() => setPrefs(true)}>{STAFF_MESSAGES_TEXT.coordinator.open}</button>
             <AccountSwitch here="org" doors={me.switch_to} doSwitch={(to) => coordCall('coord.switch', { to })} />
             <button className="link small" style={{ color: 'var(--brand-mist)' }} onClick={onLogout}>خروج</button>
           </div>

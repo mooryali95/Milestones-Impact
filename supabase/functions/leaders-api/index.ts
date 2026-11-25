@@ -449,6 +449,10 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     return { ...d, preload: { reviews, participants, peers, sus, f360, workshops } };
   },
   'xp.consent': (e) => E.portalConsent(e),
+  // مركز رسائل الخبير وتفضيلات بريده (messages.ts، 20261129130000): صاحبه من جلسته وحدها
+  'xp.messages': (e, b) => MS.list(MS.expertOwner(e), b),
+  'xp.messages-read': (e, b) => MS.markRead(MS.expertOwner(e), b),
+  'xp.mail-prefs': (e, b) => MS.savePrefs(MS.expertOwner(e), b),
   // تعهد السرية لمراجعي الكتاب الأم في أول دخول (experts.ts)
   'xp.pledge': (e) => E.portalPledge(e),
   // الكتاب الأم: قراءة وتعليق لأعضاء لجنتي المحتوى والقياس (master-book.ts)
@@ -509,7 +513,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
 // أفعال اللوحة التي لا تمس الرحلة: لعضو اللجنة بلا دور، ولكل خبير
-const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
+const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.messages', 'xp.messages-read', 'xp.mail-prefs', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   // with_dashboard: لوحة الجهة في رحلة واحدة (البند 8.1): الهوية والموافقة واللوحة واستبيان السهولة معًا، بدل ثلاثة
@@ -521,6 +525,8 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any)
     return { ...m, preload: { dashboard, sus } };
   },
   'coord.consent': (c) => C.consent(c),
+  // تفضيلات بريد المنسق وحدها (صندوقه لاحقًا، قرار المالك 6): بلا muted قراءة ومعها حفظ (messages.ts)
+  'coord.mail-prefs': (c, b) => MS.prefs(MS.coordinatorOwner(c), b),
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b, sid, ctx) => switchTo(c.email, 'org', b.to, { ip: ctx?.ip ?? null, ua: ctx?.ua ?? null }, sid),
   'coord.dashboard': (c) => C.dashboard(c),

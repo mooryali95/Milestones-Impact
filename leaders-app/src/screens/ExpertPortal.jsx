@@ -14,7 +14,8 @@ import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
-import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE, STAFF_MESSAGES_TEXT } from '../../../supabase/functions/leaders-api/labels.js';
+import MessageCenter from './MessageCenter.jsx';
 import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import { chapterNoteOnly, isGateModel, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
 import ExpertApply from './ExpertApply.jsx';
@@ -33,6 +34,7 @@ import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
 // ملف الكتاب الأم بعد نشر أحدث: محاولة ثانية ثم إعادة تحميل واحدة (shared/ui/lazy-retry.js)
+const XP_MESSAGES = { list: 'xp.messages', read: 'xp.messages-read', prefs: 'xp.mail-prefs' };
 const MasterBook = lazyRetry(() => import('../../../shared/master-book/MasterBook.jsx'));
 const BOOK_API = {
   get: () => xpCall('xp.book'),
@@ -559,6 +561,8 @@ function Dashboard({ onOut }) {
   }, []);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
+  // مركز رسائل الخبير وتفضيلات بريده (messages.ts): رابط ذيل البريد /x?tab=messages&prefs=<الفئة> يفتحه مباشرة
+  const [msgs, setMsgs] = useState(() => { try { return new URLSearchParams(location.search).get('tab') === 'messages'; } catch { return false; } });
   const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
   // التحميل الأول يجمع أقسام اللوحة في رحلة واحدة (preload)، وإعادة التحميل بعد إجراء خفيفة (lite) فكل قسم يحدّث نفسه
   const load = (lite = false) => xpCall('xp.dashboard', lite ? { lite: true } : {}).then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
@@ -571,6 +575,8 @@ function Dashboard({ onOut }) {
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) await load(); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
+  if (msgs) return <MessageCenter call={xpCall} actions={XP_MESSAGES} text={STAFF_MESSAGES_TEXT.expert} backLabel="رجوع إلى لوحتك"
+    onBack={() => { setMsgs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } load(true); }} />;
   const reading = !!d.book_access && (book ?? (linked || !!d.content_only));
   if (reading && d.pledge_needed) {
     return <BookPledge lines={d.pledge} onCancel={d.content_only ? null : () => setBook(false)}
@@ -625,6 +631,7 @@ function Dashboard({ onOut }) {
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={certificate} disabled={!d.stats.hours}
             title={d.stats.hours ? undefined : 'تُتاح بعد أول جلسة منعقدة'} aria-describedby={d.stats.hours ? undefined : 'xp-cert-hint'}>شهادة ساعات الخبرة</button>
           {!d.stats.hours && <span id="xp-cert-hint" className="sr-only">تُتاح بعد أول جلسة منعقدة</span>}
+          <button type="button" className="btn ghost sm xp-msgs-btn" style={{ color: 'var(--brand-mist)' }} onClick={() => setMsgs(true)}>{STAFF_MESSAGES_TEXT.expert.open}</button>
           <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button>
         </div>

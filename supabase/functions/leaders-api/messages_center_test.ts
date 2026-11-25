@@ -163,3 +163,31 @@ Deno.test('الإلغاء بنقرة للخبير: الرمز رباعي الأ�
     assertEquals(t.participant_mail_prefs.at(-1)?.participant_id, PID);
   } finally { w.restore(); }
 });
+
+Deno.test('مركز الخبير وتفضيلات المنسق (المرحلة 1ج): كلٌّ بعموده، والمقفل لا يُكتم، ولا يرى أحد صندوق غيره', async () => {
+  const t = base();
+  const OTHER = '9e8d7c6b-5a49-4382-9716-a5b4c3d2e1f0';
+  t.participant_notifications.push(
+    { id: 'x1', expert_id: XID, category: 'expert_digest', title: 'ملخص', read_at: null, created_at: '2026-11-20T10:00:00Z' },
+    { id: 'x2', expert_id: OTHER, category: 'expert_digest', title: 'لغيره', read_at: null, created_at: '2026-11-21T10:00:00Z' },
+    { id: 'p1', participant_id: PID, category: 'journey', title: 'للمشارك', read_at: null, created_at: '2026-11-21T10:00:00Z' },
+  );
+  const w = installFake(t);
+  try {
+    const me = MS.expertOwner({ id: XID });
+    const l: any = await MS.list(me);
+    assertEquals([l.items.map((i: Row) => i.id), l.unread], [['x1'], 1]);
+    assertEquals(l.categories.map((c: Row) => [c.key, c.locked]), [['expert_work', true], ['expert_digest', false]]);
+    await MS.markRead(me, { all: true });
+    assertEquals(t.participant_notifications.filter((n) => n.read_at).map((n) => n.id), ['x1']);
+    const s: any = await MS.savePrefs(me, { muted: ['expert_work', 'expert_digest', 'journey'] });
+    assertEquals(s.muted, ['expert_digest']);
+    assertEquals(t.participant_mail_prefs.at(-1)?.expert_id, XID);
+    const c = MS.coordinatorOwner({ id: CID });
+    const r: any = await MS.prefs(c);
+    assertEquals([r.items, r.muted, r.categories.map((x: Row) => x.key)], [[], [], ['coord_work', 'coord_digest']]);
+    const saved: any = await MS.prefs(c, { muted: ['coord_digest', 'coord_work'] });
+    assertEquals(saved.muted, ['coord_digest']);
+    assertEquals(t.participant_mail_prefs.at(-1)?.coordinator_id, CID);
+  } finally { w.restore(); }
+});

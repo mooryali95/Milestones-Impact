@@ -44,12 +44,13 @@ describe('4.4 صلاحيات الأدوار على الخادم', () => {
     expect(gaps).toEqual([]);
   });
   it('كل فعل خبير يمس مشاركًا أو دفعة أو طلبًا محصور فيما أُسند إليه', () => {
-    const scoped = /requireAdvisorOf|requireAdvisorCohort|requireEffectiveAdvisor|hallSessionOf|requestFor|myParticipantIds|advisorOf|advisorCohorts|cohortsOf|assigned|e\.id|expert_id|mine\(/;
+    const scoped = /requireAdvisorOf|requireAdvisorCohort|requireEffectiveAdvisor|hallSessionOf|requestFor|myParticipantIds|advisorOf|advisorCohorts|cohortsOf|assigned|e\.id|expert_id|mine\(|expertOwner\(e\)/;
+    // مركز رسائل الخبير: صاحبه من جلسته (MS.expertOwner(e) يأخذ e.id وحده)
     // الكتاب الأم لا يمس مشاركًا ولا دفعة: يُحصر بعضوية لجنتي المحتوى والقياس (expertViewer ← bookAccess)
     const book = mapOf('expert').filter(({ key }) => key.startsWith('xp.book'));
     expect(book.length).toBe(3);
     for (const { key, impl } of book) expect(impl, key).toMatch(/MB\.expertViewer\(e\)/);
-    const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key) && !key.startsWith('xp.book')).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl)).map(({ key }) => key);
+    const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key) && !key.startsWith('xp.book')).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl) && !/MS\.expertOwner\(e\)/.test(impl)).map(({ key }) => key);
     expect(gaps).toEqual([]);
   });
   it('كل جلسة تُستخرج من جدولها: المشارك والخبير والمنسق والإدارة', () => {

@@ -171,3 +171,19 @@ describe('مركز الرسائل في التطبيق', () => {
     for (const a of ['me.messages', 'me.messages-read', 'me.mail-prefs']) expect(idx).toContain(`'${a}': (p, b) => MS.`);
   });
 });
+
+describe('تفضيلات الخبير والمنسق في /x و/org (المرحلة 1ج)', () => {
+  const read = (f) => readFileSync(join(__dirname, f), 'utf8');
+  it('مكوّن مشترك واحد لثلاثة جماهير، ولا نسخة ثانية من المركز', () => {
+    expect(read('screens/Messages.jsx')).toMatch(/<MessageCenter call=\{call\} actions=\{ACTIONS\}/);
+    expect(read('screens/ExpertPortal.jsx')).toMatch(/<MessageCenter call=\{xpCall\} actions=\{XP_MESSAGES\}/);
+    expect(read('screens/OrgPortal.jsx')).toMatch(/<MessageCenter call=\{coordCall\} actions=\{COORD_PREFS\} inbox=\{false\}/);
+    for (const f of ['screens/ExpertPortal.jsx', 'screens/OrgPortal.jsx']) expect(read(f)).toMatch(/get\('tab'\) === 'messages'/);
+    expect(read('screens/MessageCenter.jsx')).not.toMatch(/'me\.messages'/);
+  });
+  it('إجراءات الخادم تأخذ صاحب المركز من الجلسة وحدها', () => {
+    const idx = readFileSync(join(API, 'index.ts'), 'utf8');
+    for (const a of ['xp.messages', 'xp.messages-read', 'xp.mail-prefs']) expect(idx).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(e, b\\) => MS\\.[a-zA-Z]+\\(MS\\.expertOwner\\(e\\), b\\)`));
+    expect(idx).toContain("'coord.mail-prefs': (c, b) => MS.prefs(MS.coordinatorOwner(c), b)");
+  });
+});

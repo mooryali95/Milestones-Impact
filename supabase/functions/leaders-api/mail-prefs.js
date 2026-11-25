@@ -64,8 +64,9 @@ export const unsubHeaders = (url, mailto) => ({
 });
 
 // سطر في ذيل الرسالة إلى التفضيلات: قبل </body> إن وُجد، وإلا في آخرها
-export function withPrefsFooter(html, url) {
-  const line = `<table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0"><tr><td dir="rtl" align="center" style="padding:10px 8px 24px;font-size:11px;line-height:1.9;color:#8a8a80"><a href="${url}" style="color:#8a8a80">${MESSAGES_TEXT.mailFooter}</a></td></tr></table>`;
+/** @param {string} html @param {string} url @param {string} [label] */
+export function withPrefsFooter(html, url, label = String(MESSAGES_TEXT.mailFooter)) {
+  const line = `<table role="presentation" dir="rtl" width="100%" cellpadding="0" cellspacing="0"><tr><td dir="rtl" align="center" style="padding:10px 8px 24px;font-size:11px;line-height:1.9;color:#8a8a80"><a href="${url}" style="color:#8a8a80">${label}</a></td></tr></table>`;
   const s = String(html || '');
   const at = s.lastIndexOf('</body>');
   return at < 0 ? s + line : s.slice(0, at) + line + s.slice(at);

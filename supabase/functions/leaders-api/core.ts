@@ -12,7 +12,7 @@ import { route, SLACK_DOWN_MS, SLACK_DOWN_SUBJECT, slackStateOf } from '../_shar
 import { notifySettings } from '../_shared/notify-settings.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
-import { MAIL_CATEGORIES, mailAudience, POLICY_MATERIAL_VERSION } from './labels.js';
+import { MAIL_CATEGORIES, mailAudience, POLICY_MATERIAL_VERSION, STAFF_MESSAGES_TEXT } from './labels.js';
 import { mailPlan, prefsUrl, unsubHeaders, unsubToken, unsubUrl, verifyUnsubToken, withPrefsFooter } from './mail-prefs.js';
 import { plainText, MAIL_REPLY_TO } from '../_shared/mail.ts';
 import { WORKSHOP_NO_HALL_NOTE } from './features.js';
@@ -284,7 +284,7 @@ async function prepareStaffMail(subject: string, html: string, category: MailCat
   if (!decided.send) return { send: false, html, headers: undefined };
   if (!decided.headers) return passThrough(html);
   const token = await unsubToken(CONFIG.pepper, recipient.id, category, audience);
-  return { send: true, html: withPrefsFooter(html, prefsUrl(CONFIG.appUrl, category, audience)), headers: unsubHeaders(unsubUrl(CONFIG.url, token), MAIL_REPLY_TO) };
+  return { send: true, html: withPrefsFooter(html, prefsUrl(CONFIG.appUrl, category, audience), audience === 'coordinator' ? STAFF_MESSAGES_TEXT.coordinator.mailFooter : undefined), headers: unsubHeaders(unsubUrl(CONFIG.url, token), MAIL_REPLY_TO) };
 }
 
 // الإلغاء بنقرة (RFC 8058): POST من برنامج البريد يكتم الفئة الموقَّعة في الرمز ويرد 200 بلا تحويل. GET (فتح الرابط في
