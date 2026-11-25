@@ -7,7 +7,7 @@
 // useEscape(إغلاق) ← Esc يغلق العليا وحدها · useGuardedClose(تغيّرت؟, إغلاق) ← إغلاق يسأل قبل أن يضيع ما كُتب
 // التركيز في كل نافذة role="dialog" aria-modal="true" من useModalFocus (shared/ui/modal-focus.js) يُركَّب هنا، بلا سطر في النافذة نفسها.
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { isChunkError, reloadOnce } from './lazy-retry.js';
+import { hardReload, isChunkError, reloadOnce } from './lazy-retry.js';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
 import { useUnsavedFlag } from '../../shared/ui/unsaved-registry.js';
 
@@ -167,6 +167,8 @@ export class ScreenBoundary extends React.Component {
         <div className={`la-err${app ? ' la-err-app' : ''}`} role="alert">
           {app ? 'صدر تحديث للوحة، فأعد تحميل الصفحة. بياناتك لم تتأثر.' : 'صدر تحديث للوحة، فأعد تحميل الصفحة لتفتح هذه الشاشة. بياناتك لم تتأثر.'}{' '}
           <button className="btn-sm ghost" type="button" onClick={() => window.location.reload()}>أعد تحميل الصفحة</button>
+          {/* إن تكررت الرسالة: تحديث كامل يتجاوز مخزن المتصفح (hardReload، shared/ui/lazy-retry.js) */}
+          <button className="btn-sm ghost" type="button" onClick={() => hardReload()}>تحديث كامل</button>
         </div>
       );
     }

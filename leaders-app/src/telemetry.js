@@ -137,4 +137,8 @@ export function installTelemetry(win = typeof window === 'undefined' ? null : wi
 }
 
 // خطأ رسم يلتقطه حاجز (ErrorBoundary وSectionBoundary)
-export const reportRender = (error) => report(isChunkError(error) ? 'chunk' : 'render', { message: error?.message || String(error ?? '') });
+// وخطأ ملف القسم يحمل اسم القسم (error.chunk من retryImport) في الفعل lazy.<القسم>، فيقول الحدث أي قسم فشل
+export const reportRender = (error) => {
+  const chunk = isChunkError(error);
+  return report(chunk ? 'chunk' : 'render', { act: chunk && error?.chunk ? `lazy.${error.chunk}` : '', message: error?.message || String(error ?? '') });
+};
