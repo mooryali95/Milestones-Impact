@@ -644,10 +644,11 @@ const SCOPE_RANK = { project: 0, program: 1, portfolio: 2 };
 //   :::scope=program   … :::  لمن يقود برامج فأعلى (ومن لم يحدد نطاقه)
 //   :::min=advanced scope=portfolio … :::  الشرطان معًا
 // تُحذف على الخادم قبل الإرسال، فلا يصل للمشارك ما لا يخص مستواه ونطاقه.
-const BLOCK_RE = /^:::((?:\s*(?:min|only)=(?:beginner|intermediate|advanced)|\s*scope=(?:project|program|portfolio))+)\s*$/;
-/** @param {string} md @param {string} [level] @param {string|null} [scope] */
-/** @param {string|null} [scope] */
-export function filterHandbookMd(md, level, scope = null) {
+//   :::when=impact:advanced … :::      جسر بين الأطر: لمن مستواه في إطار آخر كذا بالضبط (بطاقة المسار، slices.json bridges)
+//   :::when=impact:intermediate+ … ::: لمن مستواه فيه كذا فأعلى. بلا مستويات الأطر الثلاثة لا يظهر
+const BLOCK_RE = /^:::((?:\s*(?:min|only)=(?:beginner|intermediate|advanced)|\s*scope=(?:project|program|portfolio)|\s*when=(?:milestone|impact|leadership):(?:beginner|intermediate|advanced)\+?)+)\s*$/;
+/** @param {string} md @param {string} [level] @param {string|null} [scope] @param {Record<string, string>|null} [levels] */
+export function filterHandbookMd(md, level, scope = null, levels = null) {
   const out = [];
   let keep = true;
   for (const line of String(md || '').split('\n')) {
@@ -657,6 +658,12 @@ export function filterHandbookMd(md, level, scope = null) {
         const [k, v] = t.split('=');
         if (k === 'min') return RANK[level] >= RANK[v];
         if (k === 'only') return level === v;
+        if (k === 'when') {
+          const [d, lv] = v.split(':');
+          const plus = lv.endsWith('+');
+          const want = plus ? lv.slice(0, -1) : lv;
+          return !!levels?.[d] && (plus ? RANK[levels[d]] >= RANK[want] : levels[d] === want);
+        }
         return !(scope in SCOPE_RANK) || SCOPE_RANK[scope] >= SCOPE_RANK[v];
       });
       continue;

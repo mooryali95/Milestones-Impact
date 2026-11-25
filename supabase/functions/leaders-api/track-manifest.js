@@ -103,6 +103,23 @@ export function termsAt(dimension, level) {
 /** مختبرات إطار حتى مستواه (يُجمع ما دونه)، ومتطلباته بمستواه بالضبط */
 export const labsAt = (dimension, level) => LEVELS.filter((l) => RANK[l] <= RANK[level]).flatMap((l) => SLICES.frameworks[dimension]?.labs?.[l] || []);
 export const journeyAt = (dimension, level) => [...(SLICES.frameworks[dimension]?.journey?.[level] || [])];
+// ── الجسور بين الأطر (slices.json bridges، حدها cards.json bridges.cap) ──
+const BRIDGES = (SLICES.bridges?.list || []).slice(0, CARDS.base.bridges.cap);
+const whenOk = (when, levels) => {
+  const [d, lv] = String(when).split(':');
+  const plus = lv?.endsWith('+');
+  const want = plus ? lv.slice(0, -1) : lv;
+  return !!levels?.[d] && (plus ? RANK[levels[d]] >= RANK[want] : levels[d] === want);
+};
+/** جسور مسار بمستوياته: ما يُلحق بأبواب كتابه */
+export const bridgesFor = (levels) => BRIDGES.filter((b) => whenOk(b.when, levels)).map(({ key, dimension, chapter_key, when, title }) => ({ key, dimension, chapter_key, when, title }));
+/** نص الباب ومعه كتل الجسور الملحقة به (:::when)، يقصها filterHandbookMd بمستويات المشارك كبقية كتل المستوى */
+export function withBridges(m) {
+  const mine = BRIDGES.filter((b) => b.dimension === m?.dimension && b.chapter_key === m?.chapter_key);
+  if (!mine.length) return m?.body_md || '';
+  return `${m.body_md || ''}\n\n${mine.map((b) => `:::when=${b.when}\n## ${b.title}\n\n${b.md}\n:::`).join('\n\n')}`;
+}
+
 /** حد الحقول المطلوبة: متوسط حدود مستويات الأطر الثلاثة */
 export const requiredCap = (levels, caps = CARDS.base.initiative.required_cap) => Math.round(DIMENSIONS.reduce((a, d) => a + caps[levels[d]], 0) / DIMENSIONS.length);
 
@@ -134,7 +151,7 @@ function cardFor({ track, levels, priority, profile, profileLevel, form, density
       case: { form: caseDef.form || density.case, questions: caseDef.questions ? { ...caseDef.questions } : null, readiness: caseDef.form === 'readiness' ? [...LENS.density.readiness_questions] : null },
       estimate_hours: [...estimate_hours],
     },
-    bridges: [],
+    bridges: bridgesFor(levels),
   };
 }
 

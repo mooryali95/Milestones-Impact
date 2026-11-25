@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto';
 import { filterHandbookMd, handbookModulesFor, priorityFor, profileKey, requirementApplies, trackKey } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneModels, modelFields } from '../../supabase/functions/leaders-api/capstone.js';
 import { labVisible } from '../../supabase/functions/leaders-api/lab.js';
-import { trackManifest } from '../../supabase/functions/leaders-api/track-manifest.js';
+import { trackManifest, withBridges } from '../../supabase/functions/leaders-api/track-manifest.js';
 import { afterState, state } from './state.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -33,7 +33,7 @@ export const chapters = readdirSync(HB).filter((f) => /^[a-z]+_\d_\w+\.md$/.test
 /** ما يصل مستويات بعينها، بالدوال التي يستعملها الخادم */
 export function deliveryFor(levels, after, priority = null) {
   const models = after.models.map((m) => ({ ...m, id: m.key }));
-  const hb = handbookModulesFor(chapters, levels).map((c) => ({ id: c.id, dimension: c.dimension, md: filterHandbookMd(c.body_md, levels[c.dimension]) }));
+  const hb = handbookModulesFor(chapters, levels).map((c) => ({ id: c.id, dimension: c.dimension, md: filterHandbookMd(withBridges(c), levels[c.dimension], null, levels) }));
   const doc = capstoneModels(models, levels, null);
   const fields = doc.map((m) => ({ key: m.key, dimension: m.dimension, f: modelFields(m, levels, null, priority).map((f) => f.key + (f.required === false ? '?' : '')) }));
   return {
@@ -60,7 +60,7 @@ export async function computeMatrix() {
       hb_chapters: d.hb.length, hb_sections: d.hb.reduce((n, c) => n + (c.md.match(/^##\s/gm) || []).length, 0), hb_words: d.hb.reduce((n, c) => n + words(c.md), 0),
       journey: d.journey.filter((c) => after.requirements.find((r) => r.code === c)?.dimension).join(' '),
       doc_chapters: d.doc.length, doc_fields: d.fields.reduce((n, x) => n + x.f.length, 0), doc_required: required, required_cap: man.card.initiative.required_cap,
-      labs: d.labs.join(' '), terms: Object.values(man.card.handbook.frameworks).reduce((n, f) => n + f.terms.length, 0),
+      labs: d.labs.join(' '), bridges: man.card.bridges.length, terms: Object.values(man.card.handbook.frameworks).reduce((n, f) => n + f.terms.length, 0),
       hb_hash: h(d.hb), doc_hash: h(d.fields),
     });
   }
@@ -68,7 +68,7 @@ export async function computeMatrix() {
 }
 
 export function distinctCounts(rows) {
-  const cols = ['hb_hash', 'journey', 'doc_hash', 'labs', 'profile', 'form', 'case', 'terms'];
+  const cols = ['hb_hash', 'journey', 'doc_hash', 'labs', 'profile', 'form', 'case', 'terms', 'bridges'];
   return Object.fromEntries(cols.map((c) => [c, new Set(rows.map((r) => r[c])).size]));
 }
 

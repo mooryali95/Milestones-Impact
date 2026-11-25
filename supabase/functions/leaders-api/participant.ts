@@ -23,7 +23,7 @@ import {
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
-import { trackManifest } from './track-manifest.js';
+import { trackManifest, withBridges } from './track-manifest.js';
 import { trackHistory, unseenNew } from './track-history.ts';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -1292,7 +1292,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   return {
     success: true,
     reading: readingVerdict(rd),
-    chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
+    chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(withBridges(m), levels[m.dimension], p.work_scope, levels) },
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
     quiz: shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
@@ -1327,7 +1327,7 @@ export async function handbookExport(p: any, ctx: Ctx) {
     book: {
       // الكتاب عام: لا شيء من بيانات المسار إلا رمزه
       ref, issued_at: now.toISOString(), name: p.full_name, email: p.email, code: trackKey(levels),
-      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope), reflection: m.reflection_ar || '' })),
+      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(withBridges(m), levels[m.dimension], p.work_scope, levels), reflection: m.reflection_ar || '' })),
       tools: modelsFor(models.data || [], levels, p.work_scope, answeredModels(answered || [])).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
     },
   };

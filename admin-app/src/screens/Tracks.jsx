@@ -11,6 +11,7 @@ import Md from '../Md.jsx';
 import { Spinner, useUI } from '../ui.jsx';
 import { ChapterEditor } from './Handbook.jsx';
 import { TRACK_COUNT } from '../../../supabase/functions/leaders-api/labels.js';
+import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
 
 // ما يصل المشارك من هوية المسار (trackView في participant.ts): حين يكون للمسار ملف تعريف يرى عنوانه ووصفه
 // وتوجيه رحلته مكان هذه الحقول، فتصير داخلية للإدارة؛ وأولويات التطوير تصله من المسار دائمًا.
@@ -51,6 +52,7 @@ function Board({ tracks, onOpen }) {
         <div className="tx-hero-head">
           <div><span className="tx-eyebrow">Leadership Tracks</span><h2>المسارات السبعة والعشرون</h2>
             <p>كل مسار تركيبة فريدة من مستويات الأطر الثلاثة، له هويته وكتابه ورحلته. افتح أي مسار لترى مشاركيه وكتابه كاملًا.</p></div>
+          <button className="la-btn" data-testid="open-track-cards" onClick={() => onOpen(CARDS_ROUTE)}>بطاقات المسارات</button>
         </div>
         <div className="tx-kpis">
           <div><b>{used}<small>/{TRACK_COUNT}</small></b><span>مسار به مشاركون</span></div>
@@ -182,7 +184,47 @@ function Track({ k, catalog, canWrite, onBack, onPerson, onSaved }) {
   );
 }
 
+// ── بطاقات المسارات الـ27: عرض فقط، كل سطر من trackManifest نفسه الذي تقرؤه الرحلة والكتاب والوثيقة (بطاقة المسار) ──
+export const CARDS_ROUTE = 'cards';
+export const ALL_TRACKS = LVLS.flatMap((m) => LVLS.flatMap((i) => LVLS.map((l) => trackKey(m, i, l))));
+const HB_AR = { guided: 'موجّه', applied: 'تطبيقي', specialist: 'متخصص' };
+const SUP_AR = { readiness: 'أسئلة الجاهزية', examples: 'أمثلة محلولة', on_demand: 'عند الطلب' };
+const CASE_AR = { readiness: '3 أسئلة جاهزية', case3: '3 مسوّغات', case5: '5 مسوّغات' };
+export function cardRow(k) {
+  const m = trackManifest(k);
+  const c = m.card;
+  return {
+    key: k, profile: c.identity.title, name: c.identity.name, priority: m.priority,
+    handbook: `${HB_AR[c.handbook.type]} · ${c.handbook.order.map((d) => DIM_ROMAN[d]).join(' ')}`,
+    doc: `${c.initiative.name} · ${c.initiative.pages[0]} إلى ${c.initiative.pages[1]} ص`, cap: c.initiative.required_cap,
+    journey: c.journey.requirements.join(' '), labs: c.journey.labs.length,
+    support: `${SUP_AR[c.support.mode]} · ${CASE_AR[c.support.case.form]} · ${c.support.estimate_hours[0]} إلى ${c.support.estimate_hours[1]} س`,
+    bridges: c.bridges.length,
+  };
+}
+export function TrackCards({ onOpen }) {
+  const rows = ALL_TRACKS.map(cardRow);
+  return (
+    <section className="la-card tx-cards" data-testid="track-cards">
+      <div className="row between"><h2>بطاقات المسارات الـ{TRACK_COUNT}</h2><button className="la-btn ghost" onClick={() => onOpen(null)}>→ لوحات المسارات</button></div>
+      <p className="la-note">ما يصل كل مسار في الكتاب والوثيقة والرحلة والدعم، محلولًا من بطاقته (supabase/content/tracks/v2/cards.json وslices.json). عرض فقط: يُحرَّر في ملفات المحتوى.</p>
+      <div className="la-table-wrap"><table className="la-table">
+        <thead><tr><th>المسار</th><th>ملف التعريف</th><th>الكتاب</th><th>الوثيقة</th><th>حد المطلوب</th><th>الرحلة</th><th>مختبرات</th><th>الدعم</th><th>جسور</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.key}>
+            <td><button className="link" onClick={() => onOpen(r.key)}><code>{r.key}</code></button><div><LvlChips k={r.key} /></div></td>
+            <td><b>{r.profile}</b><small className="muted" style={{ display: 'block' }}>{r.name}</small></td>
+            <td>{r.handbook}</td><td>{r.doc}</td><td>{r.cap}</td>
+            <td><small dir="ltr">{r.journey}</small></td><td>{r.labs}</td><td>{r.support}</td><td>{r.bridges}</td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    </section>
+  );
+}
+
 export default function Tracks({ catalog, reload, canWrite, trackKey: open, onOpen, onPerson }) {
+  if (open === CARDS_ROUTE) return <TrackCards onOpen={onOpen} />;
   return open
     ? <Track k={open} catalog={catalog} canWrite={canWrite} onBack={() => onOpen(null)} onPerson={onPerson} onSaved={reload} />
     : <Board tracks={catalog} onOpen={onOpen} />;
