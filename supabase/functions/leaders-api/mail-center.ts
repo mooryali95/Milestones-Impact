@@ -12,6 +12,7 @@ import { addressHash, mailCounts, plainText, sendCounted } from '../_shared/mail
 import { mailDayStart, RETENTION_DAYS } from '../_shared/mail-budget.js';
 import { alertChannelOk } from './readiness.js';
 import { BUDGET_AR, dailySeries, deliveryAr, diagnose, mailBudget, mailtoUrl, nextFreeAt, queueEta, tally } from './mail-center.js';
+import { participantByEmail } from './account-emails.ts';
 
 type Body = Record<string, any>;
 const isId = (v: unknown) => typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v);
@@ -105,7 +106,7 @@ export async function trace(a: Admin, b: Body) {
   const h = await addressHash(email);
   const [ev, person, expert, coord, counts, waiting] = await Promise.all([
     db.from('mail_events').select('id, created_at, kind, source, status, resend_id, subject, ref').eq('to_hash', h).order('created_at', { ascending: false }).limit(40),
-    db.from('participants').select('id, full_name, status, phone, last_login_at').eq('email', email).maybeSingle().then((r: any) => r.data),
+    participantByEmail(email, 'id, full_name, status, phone, last_login_at'),
     // journey-guard: من صاحب البريد في مركز البريد، هوية لا ترشيح
     db.from('experts').select('id, full_name').eq('email', email).maybeSingle().then((r: any) => r.data),
     db.from('org_coordinators').select('id, full_name').eq('email', email).limit(1).maybeSingle().then((r: any) => r.data),

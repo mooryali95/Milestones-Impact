@@ -22,12 +22,12 @@ export async function phoneOwner(phone: unknown, exceptId: string | null = null)
 export const isPhoneConflict = (e: any) => !!e && e.code === '23505' && /participants_phone_key_uniq/.test(`${e.message || ''} ${e.details || ''}`);
 
 // الرد الموحّد: للمشارك رسالة محايدة لا تكشف شيئًا عن الحساب القائم (لا بريد ولا مقنَّعًا: من يعرف رقمًا لا يعرف به بريد صاحبه)،
-// وللإدارة الحساب القائم باسمه لترسل الدعوة إليه
+// وللإدارة الحساب القائم باسمه لترسل الدعوة إليه، أو تربط الحسابين بدل ذلك (can_link: «ربط حساب آخر» في ملفه، account-emails.ts)
 export function participantPhoneTaken(_owner?: PhoneOwner | null) {
   return new Fail(PHONE_TAKEN_AR, 409, 'phone_exists');
 }
 export function adminPhoneTaken(owner: PhoneOwner) {
-  return new Fail(phoneTakenAdminAr(owner), 409, 'phone_exists', { existing: { id: owner.id, full_name: owner.full_name, email: owner.email, status: owner.status } });
+  return new Fail(phoneTakenAdminAr(owner), 409, 'phone_exists', { existing: { id: owner.id, full_name: owner.full_name, email: owner.email, status: owner.status }, can_link: true });
 }
 
 export async function assertPhoneFree(phone: unknown, side: 'participant' | 'admin', exceptId: string | null = null) {

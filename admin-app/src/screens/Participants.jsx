@@ -28,7 +28,7 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 
 // حد الإجراء الجماعي وإجراءا الحالة والدفعة من BulkPeople.jsx: يستدعيهما تبويب «المتابعة» في ملف الدفعة أيضًا
 import { BULK_MAX, BulkEnroll, BulkStatus, useBulkCohorts } from '../BulkPeople.jsx';
-import { FileExtras, FullTimeline, InitiativePanel, Observations } from './PersonFile.jsx';
+import { AccountEmails, FileExtras, FullTimeline, InitiativePanel, Observations } from './PersonFile.jsx';
 import { Glance, isChapter, NowStrip, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
@@ -398,6 +398,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
   const [notes, setNotes] = useState({});
   const [sub, setSub] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [linkWith, setLinkWith] = useState('');   // جوال لحساب قائم عند التعديل: يُقترح ربطه (can_link)
   const [cohorts, setCohorts] = useState(null);   // الدفعات المفتوحة للتسجيل الصريح
   const [cohortTo, setCohortTo] = useState('');
   // «إجابات القياس»: لوحة جانبية للمدير ذي الكتابة، وعنوانها قابل للنسخ (?answers=<البُعد> أو all)
@@ -657,6 +658,7 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
                 </div>
               </section>
             )}
+            <AccountEmails participantId={p.id} canWrite={canWrite} suggest={linkWith} onChanged={load} onMoved={onNav} />
             {canWrite && <PersonDanger p={p} onDeleted={onBack} erasurePending={!!erasure?.request} />}
           </>)}
 
@@ -672,7 +674,11 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
       {editing && (
         <Form title={`تعديل بيانات ${p.full_name}`} fields={EDIT_FIELDS}
           values={{ full_name: p.full_name, email: p.email, phone: p.phone || '', job_title: p.job_title || '', organization_name: p.organization_name || '' }}
-          onSave={(fields) => L('admin.participant-save', { participant_id: p.id, fields })}
+          onSave={async (fields) => {
+            const res = await L('admin.participant-save', { participant_id: p.id, fields });
+            if (res.code === 'phone_exists' && res.can_link && res.existing?.email) setLinkWith(res.existing.email);
+            return res;
+          }}
           onClose={(saved) => { setEditing(false); if (saved) { toast('حُفظت البيانات'); load(); } }} />
       )}
       {previewAs && <PreviewAs participantId={p.id} onClose={() => setPreviewAs(false)} />}

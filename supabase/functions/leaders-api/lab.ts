@@ -13,6 +13,7 @@ import { approvedLevels, award, pointsOf } from './participant.ts';
 import { requirementApplies, seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
 import { counted } from './counting.ts';
+import { participantByEmail } from './account-emails.ts';
 import {
   AUDIENCES, BOARD_FEEDBACK, boardCheck, boardScaffold, gradeStep, grantLive, HINT_MAX, hintCount, hintFor, hintsView, labAward, labLevelOf, labVisible, MASTERY,
   meterState, nextIndex, practicePct, publicSpec, revealedOf, boardCardStats, LEVELS,
@@ -322,7 +323,7 @@ export async function adminGrant(a: Admin, b: Body) {
   if (!organization_id) {
     const email = String(b.email || '').trim().toLowerCase();
     if (!email) throw new Fail('اختر جهة أو اكتب بريد المشارك');
-    const p = must(await db.from('participants').select('id').eq('email', email).maybeSingle());
+    const p = await participantByEmail(email, 'id');
     if (!p) throw new Fail('لا مشارك بهذا البريد');
     participant_id = p.id;
   }

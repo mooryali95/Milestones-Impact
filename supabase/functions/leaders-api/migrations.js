@@ -180,6 +180,7 @@ export const MIGRATIONS = [
   '20261128160000_leaders_cohort_intake',
   '20261128170000_leaders_duplicates_and_cohort_backfill',
   '20261128180000_leaders_phone_unique',
+  '20261128190000_leaders_account_emails_merge',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {

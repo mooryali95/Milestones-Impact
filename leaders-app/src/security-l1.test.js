@@ -116,7 +116,7 @@ describe('حراس المصدر: لا ترجع ثغرات ل1', () => {
     const p = read('supabase/functions/leaders-api/participant.ts');
     const start = p.slice(p.indexOf('export async function authStart'), p.indexOf('function newcomerFields'));
     const at = (s) => { const i = start.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i; };
-    expect(at('await humanGate(b, ctx, email);')).toBeLessThan(at("const { data: existing } = await db.from('participants')"));
+    expect(at('await humanGate(b, ctx, email);')).toBeLessThan(at('const existing = await participantByEmail(email'));
     // لا رد يفرّق بين مسجل وجديد: لا needs_name ولا تصريح، والرد الوحيد { success: true, sent: true }
     expect(start).not.toContain('needs_name');
     expect(start).not.toContain('issuePass');

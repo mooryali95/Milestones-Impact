@@ -80,6 +80,7 @@ import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
 import * as CE from './client-events.ts';
 import * as SC from './sponsor-codes.ts';
+import * as AE from './account-emails.ts';
 import * as CI from './cohort-intake.ts';
 import { cleanBuild } from '../_shared/client-events.js';
 import { clientLevelOf, needsUpdate } from '../_shared/client-compat.js';
@@ -585,6 +586,12 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.observation-remove': (a, b) => A.writer(a, OB.adminRemove, b),
   'admin.participant-impact': (_a, b) => A.participantImpact(b),
   'admin.participant-delete': A.participantDelete,
+  // حساب واحد بأكثر من بريد (account-emails.ts): البدائل، والربط بمعاينة ثم تطبيق ببصمتها، والأساسي، والحذف
+  'admin.participant-emails': (a, b) => AE.adminEmails(a, b),
+  'admin.participant-link-plan': (a, b) => A.writer(a, AE.linkPreview, b),
+  'admin.participant-link': (a, b) => A.writer(a, AE.linkApply, b),
+  'admin.participant-email-primary': (a, b) => A.writer(a, AE.emailMakePrimary, b),
+  'admin.participant-email-remove': (a, b) => A.writer(a, AE.emailRemove, b),
   'admin.sus': () => SU.adminSummary(),
   'admin.erasures': () => PV.pendingList(),
   // قرار طلب الحذف من ملف المشارك (erasure.ts): القراءة لكل مدير، والقرار للمدير الأعلى (requireSuper داخل كل دالة)

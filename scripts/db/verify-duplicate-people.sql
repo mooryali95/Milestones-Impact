@@ -37,3 +37,31 @@ select true as ok, 'مجموعات=' || count(*) || ' · حسابات=' || coale
 select true as ok, 'مرتبط بشخص=' || count(*) filter (where person_id is not null) || ' من ' || count(*)
        || ' · أشخاص بأكثر من حساب=' || (select count(*) from (select person_id from leaders.participants where person_id is not null group by 1 having count(*) > 1) x) as detail
   from leaders.participants where coalesce(is_demo, false) = false;
+
+-- 5) قبل 20261128190000: لكل حساب مكرر بالهاتف (غير تجريبي قائم، ومنه حساب الاختبار كنطاق الفهرس، غير الأحدث دخولًا في مجموعته) الجداول التي فيها صفوف له وعددها، وما
+--    في الحساب الباقي من الجداول نفسها (تعارض محتمل). الجداول من كل مفتاح أجنبي إلى المشارك (pg_constraint) كما يقرؤها الدمج،
+--    فلا يُنسى جدول. معرّفات مختصرة بلا أسماء ولا بريد. بعد الدمج: «لا مكرر قائم بالهاتف».
+with p as (
+  select id, k, row_number() over (partition by k order by last_login_at desc nulls last, created_at desc, id) rn
+    from (select id, last_login_at, created_at,
+                 case when d ~ '^05[0-9]{8}$' then '966' || substr(d, 2) when d ~ '^5[0-9]{8}$' then '966' || d else d end k
+            from (select id, last_login_at, created_at,
+                         regexp_replace(regexp_replace(translate(coalesce(phone, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'), '[^0-9]', '', 'g'), '^00', '') d
+                    from leaders.participants where not is_demo and status not in ('suspended', 'withdrawn')) x) y
+   where length(k) >= 8),
+pairs as (select d.id dup, kp.id kept from p d join p kp on kp.k = d.k and kp.rn = 1 where d.rn > 1),
+fks as (
+  select format('%I.%I', n.nspname, c.relname) t, c.relname, a.attname col
+    from pg_constraint k join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute a on a.attrelid = k.conrelid and a.attnum = k.conkey[1]
+   where k.contype = 'f' and k.confrelid = 'leaders.participants'::regclass and cardinality(k.conkey) = 1),
+counts as (
+  select pr.dup, pr.kept, f.relname,
+         (xpath('/row/n/text()', query_to_xml(format('select count(*) n from %s where %I = %L', f.t, f.col, pr.dup), false, true, '')))[1]::text::int nd,
+         (xpath('/row/n/text()', query_to_xml(format('select count(*) n from %s where %I = %L', f.t, f.col, pr.kept), false, true, '')))[1]::text::int nk
+    from pairs pr cross join fks f),
+per as (
+  select dup, kept, string_agg(relname || '=' || nd || case when nk > 0 then '/الباقي ' || nk else '' end, '، ' order by relname) filter (where nd > 0) t
+    from counts group by dup, kept)
+select true as ok, coalesce(string_agg('مكرر ' || left(dup::text, 8) || ' ← باقٍ ' || left(kept::text, 8) || ': ' || coalesce(t, 'لا صفوف'), ' | ' order by kept, dup), 'لا مكرر قائم بالهاتف') as detail
+  from per;

@@ -512,6 +512,10 @@ export async function participantSave(a: Admin, b: Body) {
   if (changed.includes('phone') && row.phone) await assertPhoneFree(row.phone, 'admin', id);
   const res = await db.from('participants').update(row).eq('id', id).select('*').single();
   if (isPhoneConflict(res.error)) throw await phoneConflictFail(row.phone, 'admin', id);
+  // بريد بديل لحساب آخر (participant_emails_cross_uniq، 20261128190000): رسالة تسميه ولا تكشف صاحبه للمشارك (هذا مسار الإدارة)
+  if (res.error && /participant_emails_cross_uniq|email_taken/.test(`${res.error.message || ''} ${res.error.details || ''}`)) {
+    throw new Fail('هذا البريد مرتبط بحساب آخر بريدًا بديلًا أو أساسيًا. اربط الحسابين من «البريد والحسابات المرتبطة» بدل تغيير البريد، أو اختر بريدًا غيره.', 409, 'email_linked');
+  }
   const saved = must(res, 'تعذّر الحفظ؛ قد يكون البريد مسجلًا لمشارك آخر');
   await audit('admin', a.email, 'participant.edit', 'participants', id,
     Object.fromEntries(changed.map((k) => [k, p[k]])), Object.fromEntries(changed.map((k) => [k, row[k]])));
@@ -1747,6 +1751,9 @@ export async function participantsImport(a: Admin, b: Body) {
     // counting-exempt: كشف تكرار البريد عند الاستيراد: أي حساب قائم بالبريد نفسه يمنع إنشاء ثانٍ
     const found = must(await db.from('participants').select('email').in('email', emails.slice(i, i + 100))) as any[];
     for (const f of found || []) existing.add(f.email);
+    // والبريد البديل لحساب قائم (20261128190000) كذلك: القاعدة ترده، فيُعرض قبل الإنشاء
+    const alt = must(await db.from('participant_emails').select('email').in('email', emails.slice(i, i + 100))) as any[];
+    for (const f of alt || []) existing.add(f.email);
   }
   const checked = checkImport(rows, existing) as any[];
   await phoneChecks(checked, org?.id || null);
