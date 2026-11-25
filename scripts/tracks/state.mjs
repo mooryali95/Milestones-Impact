@@ -61,7 +61,7 @@ export async function applyMatrix(list, extra = null) {
   for (const r of extra?.requirements || []) await db.query('insert into leaders.stage_requirements (program_id, stage_key, dimension, level, code, title_ar, active) values ($1, $2, $3, $4, $5, $6, $7)', [PID, r.stage_key, r.dimension, r.level, r.code, r.title_ar, r.active]);
   for (const l of extra?.labs || []) await db.query('insert into leaders.lab_items (key, dimension, chapter_key, min_level, title_ar, sort, active, audience) values ($1, $2, $3, $4, $5, $6, $7, $8)', [l.key, l.dimension, l.chapter_key, l.min_level, l.title_ar, l.sort, l.active, l.audience]);
   for (const name of [MATRIX, CARDS]) await db.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), `../../supabase/migrations/${name}.sql`), 'utf8'));
-  const rows = (await db.query('select key, dimension, min_level, capstone_sort, fields from leaders.learning_models')).rows;
+  const rows = (await db.query('select key, dimension, title_ar, min_level, capstone_sort, fields from leaders.learning_models')).rows;
   const by = Object.fromEntries(rows.map((r) => [r.key, r]));
   if (extra) {
     AFTER.requirements = (await db.query('select code, stage_key, dimension, level, active, title_ar from leaders.stage_requirements order by id')).rows;
@@ -70,7 +70,7 @@ export async function applyMatrix(list, extra = null) {
   }
   await db.close();
   // فصل جديد (لا في اللقطة) يُضاف بحقوله كما يكتبه الترحيل
-  const added = rows.filter((r) => !list.some((m) => m.key === r.key)).map((r) => ({ ...r, id: r.key, scopes: [], active: true, title_ar: r.key }));
+  const added = rows.filter((r) => !list.some((m) => m.key === r.key)).map((r) => ({ ...r, id: r.key, scopes: [], active: true }));
   return [...list.map((m) => ({ ...m, min_level: by[m.key].min_level, fields: by[m.key].fields })), ...added];
 }
 

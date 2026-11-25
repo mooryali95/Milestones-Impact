@@ -157,6 +157,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const failing = d.checks.filter((x) => !x.ok);
   // كثافة الصفحة بملف التعريف (track-manifest.js من lens.json)، لا بمستوى ملخص
   const den = manifestOf(d).density;
+  // أسئلة صاحب القرار بمستواك في الأثر من بطاقة المسار (slices.json)، متسقة مع أسئلة الجاهزية الثلاثة
+  const caseQ = manifestOf(d).card?.support.case.questions || {};
   const shownChecks = den.checks === 'blocking' ? d.checks.filter((x) => x.blocking) : d.checks;
   const cardOk = !d.card || d.card.state === 'approved';
   const recent = recentChanges(d.sections);
@@ -388,7 +390,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
               {caseStatus(d.sections).filter((x) => den.case !== 'case3' || LENS.density.case3.includes(x.key)).map((c) => (
                 <li key={c.key} className={c.state === 'done' ? 'ok' : 'no'}>
                   <b>{c.title}{c.total > 0 && <span className="muted"> · {c.done} من {c.total}</span>}</b>
-                  <small>{c.state === 'none' ? 'ليس من فصول وثيقتك في مستواك' : c.question}</small>
+                  <small>{c.state === 'none' ? 'ليس من فصول وثيقتك في مستواك' : caseQ[c.key] || c.question}</small>
                 </li>
               ))}
             </ul>

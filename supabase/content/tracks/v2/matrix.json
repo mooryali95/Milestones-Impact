@@ -16,12 +16,12 @@
    "journey": "L-PLAN L-MAP O-MREG O-BREG T-MB",
    "doc_chapters": 11,
    "doc_fields": 35,
-   "doc_required": 31,
+   "doc_required": 27,
    "required_cap": 40,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 10,
    "hb_hash": "98343930",
-   "doc_hash": "a1886e5f"
+   "doc_hash": "55d5dbc6"
   },
   {
    "key": "M1I1L2",
@@ -38,12 +38,12 @@
    "journey": "L-PLAN O-MREG O-BREG T-MB L-GOV",
    "doc_chapters": 13,
    "doc_fields": 44,
-   "doc_required": 40,
+   "doc_required": 36,
    "required_cap": 47,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 12,
    "hb_hash": "1e9abdf7",
-   "doc_hash": "fc686335"
+   "doc_hash": "a848b1d6"
   },
   {
    "key": "M1I1L3",
@@ -60,12 +60,12 @@
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG T-MB",
    "doc_chapters": 13,
    "doc_fields": 49,
-   "doc_required": 44,
+   "doc_required": 40,
    "required_cap": 53,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 13,
    "hb_hash": "7e70e04f",
-   "doc_hash": "4415b5a4"
+   "doc_hash": "1ae6c0eb"
   },
   {
    "key": "M1I2L1",
@@ -82,12 +82,12 @@
    "journey": "L-PLAN L-MAP O-MREG O-BREG T-MB O-EVID",
    "doc_chapters": 12,
    "doc_fields": 45,
-   "doc_required": 39,
+   "doc_required": 35,
    "required_cap": 47,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 11,
    "hb_hash": "ab28779a",
-   "doc_hash": "cfa81689"
+   "doc_hash": "03dd1da8"
   },
   {
    "key": "M1I2L2",
@@ -104,12 +104,12 @@
    "journey": "L-PLAN O-MREG O-BREG T-MB O-EVID L-GOV",
    "doc_chapters": 14,
    "doc_fields": 54,
-   "doc_required": 48,
+   "doc_required": 44,
    "required_cap": 53,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 13,
    "hb_hash": "6156db0c",
-   "doc_hash": "091bdad7"
+   "doc_hash": "ce1c73db"
   },
   {
    "key": "M1I2L3",
@@ -126,12 +126,12 @@
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG T-MB O-EVID",
    "doc_chapters": 14,
    "doc_fields": 59,
-   "doc_required": 52,
+   "doc_required": 48,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 14,
    "hb_hash": "e5afafc3",
-   "doc_hash": "4e8ae21d"
+   "doc_hash": "7d32b84b"
   },
   {
    "key": "M1I3L1",
@@ -146,14 +146,14 @@
    "hb_sections": 97,
    "hb_words": 13223,
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-CHAIN T-MB",
-   "doc_chapters": 12,
-   "doc_fields": 49,
-   "doc_required": 48,
+   "doc_chapters": 13,
+   "doc_fields": 53,
+   "doc_required": 44,
    "required_cap": 53,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target evidence-ladder stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 13,
    "hb_hash": "b6c5f2d9",
-   "doc_hash": "0f9d378c"
+   "doc_hash": "f7c46e28"
   },
   {
    "key": "M1I3L2",
@@ -168,14 +168,14 @@
    "hb_sections": 102,
    "hb_words": 13904,
    "journey": "L-PLAN O-MREG O-BREG O-CHAIN T-MB L-GOV",
-   "doc_chapters": 14,
-   "doc_fields": 58,
-   "doc_required": 57,
+   "doc_chapters": 15,
+   "doc_fields": 62,
+   "doc_required": 53,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target evidence-ladder stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 15,
    "hb_hash": "c210400c",
-   "doc_hash": "26314393"
+   "doc_hash": "52e118cc"
   },
   {
    "key": "M1I3L3",
@@ -190,14 +190,14 @@
    "hb_sections": 109,
    "hb_words": 14882,
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-CHAIN T-MB",
-   "doc_chapters": 14,
-   "doc_fields": 63,
-   "doc_required": 61,
+   "doc_chapters": 15,
+   "doc_fields": 67,
+   "doc_required": 57,
    "required_cap": 67,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target evidence-ladder stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 16,
    "hb_hash": "714f2e4b",
-   "doc_hash": "3a73d916"
+   "doc_hash": "2f33681a"
   },
   {
    "key": "M2I1L1",
@@ -214,12 +214,12 @@
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-COST",
    "doc_chapters": 14,
    "doc_fields": 50,
-   "doc_required": 46,
+   "doc_required": 44,
    "required_cap": 47,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 11,
    "hb_hash": "29ec80e3",
-   "doc_hash": "f2d133db"
+   "doc_hash": "d2a6e9e2"
   },
   {
    "key": "M2I1L2",
@@ -236,12 +236,12 @@
    "journey": "L-PLAN O-MREG O-BREG O-COST L-GOV",
    "doc_chapters": 16,
    "doc_fields": 59,
-   "doc_required": 55,
+   "doc_required": 53,
    "required_cap": 53,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 13,
    "hb_hash": "94200be1",
-   "doc_hash": "f89c63fc"
+   "doc_hash": "bba5ad3a"
   },
   {
    "key": "M2I1L3",
@@ -258,12 +258,12 @@
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-COST",
    "doc_chapters": 16,
    "doc_fields": 64,
-   "doc_required": 59,
+   "doc_required": 57,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 14,
    "hb_hash": "77262511",
-   "doc_hash": "730cc90f"
+   "doc_hash": "6cc99fde"
   },
   {
    "key": "M2I2L1",
@@ -280,12 +280,12 @@
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-COST O-EVID",
    "doc_chapters": 15,
    "doc_fields": 61,
-   "doc_required": 55,
+   "doc_required": 52,
    "required_cap": 53,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 12,
    "hb_hash": "bcf806d4",
-   "doc_hash": "9f9ef049"
+   "doc_hash": "ae996381"
   },
   {
    "key": "M2I2L2",
@@ -302,12 +302,12 @@
    "journey": "L-PLAN O-MREG O-BREG O-COST O-EVID L-GOV",
    "doc_chapters": 17,
    "doc_fields": 74,
-   "doc_required": 68,
+   "doc_required": 61,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 14,
    "hb_hash": "f5b57804",
-   "doc_hash": "1610e318"
+   "doc_hash": "34d6a7a5"
   },
   {
    "key": "M2I2L3",
@@ -324,12 +324,12 @@
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-COST O-EVID",
    "doc_chapters": 17,
    "doc_fields": 79,
-   "doc_required": 72,
+   "doc_required": 65,
    "required_cap": 67,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 15,
    "hb_hash": "44bdb580",
-   "doc_hash": "e732043d"
+   "doc_hash": "e43cc1e6"
   },
   {
    "key": "M2I3L1",
@@ -344,14 +344,14 @@
    "hb_sections": 103,
    "hb_words": 14346,
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-CHAIN O-COST",
-   "doc_chapters": 15,
-   "doc_fields": 65,
-   "doc_required": 64,
+   "doc_chapters": 16,
+   "doc_fields": 69,
+   "doc_required": 61,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target evidence-ladder stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 14,
    "hb_hash": "54af7f02",
-   "doc_hash": "026b328a"
+   "doc_hash": "65305e27"
   },
   {
    "key": "M2I3L2",
@@ -366,14 +366,14 @@
    "hb_sections": 108,
    "hb_words": 15027,
    "journey": "L-PLAN O-MREG O-BREG O-CHAIN O-COST L-GOV",
-   "doc_chapters": 17,
-   "doc_fields": 76,
-   "doc_required": 75,
+   "doc_chapters": 18,
+   "doc_fields": 80,
+   "doc_required": 70,
    "required_cap": 67,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target evidence-ladder stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 16,
    "hb_hash": "142964e4",
-   "doc_hash": "f830fbcd"
+   "doc_hash": "a992d426"
   },
   {
    "key": "M2I3L3",
@@ -388,14 +388,14 @@
    "hb_sections": 115,
    "hb_words": 16005,
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-CHAIN O-COST",
-   "doc_chapters": 17,
-   "doc_fields": 81,
-   "doc_required": 78,
+   "doc_chapters": 18,
+   "doc_fields": 86,
+   "doc_required": 74,
    "required_cap": 73,
    "labs": "schedule-critical-path risk-register red-gate benefits-map indicator-check baseline-target evidence-ladder stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 17,
    "hb_hash": "41182821",
-   "doc_hash": "1c534556"
+   "doc_hash": "02e18d24"
   },
   {
    "key": "M3I1L1",
@@ -412,12 +412,12 @@
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-GATE T-MA",
    "doc_chapters": 14,
    "doc_fields": 57,
-   "doc_required": 52,
+   "doc_required": 49,
    "required_cap": 53,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 12,
    "hb_hash": "44a06eb8",
-   "doc_hash": "bb5be00d"
+   "doc_hash": "25c9d916"
   },
   {
    "key": "M3I1L2",
@@ -434,12 +434,12 @@
    "journey": "L-PLAN O-MREG O-BREG O-GATE T-MA L-GOV",
    "doc_chapters": 16,
    "doc_fields": 66,
-   "doc_required": 61,
+   "doc_required": 58,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 14,
    "hb_hash": "898bf8fd",
-   "doc_hash": "20afd902"
+   "doc_hash": "1cc0811b"
   },
   {
    "key": "M3I1L3",
@@ -456,12 +456,12 @@
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-GATE T-MA",
    "doc_chapters": 16,
    "doc_fields": 71,
-   "doc_required": 65,
+   "doc_required": 62,
    "required_cap": 67,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 15,
    "hb_hash": "104c059d",
-   "doc_hash": "f970b828"
+   "doc_hash": "f5633b3d"
   },
   {
    "key": "M3I2L1",
@@ -478,12 +478,12 @@
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-GATE T-MA O-EVID",
    "doc_chapters": 15,
    "doc_fields": 68,
-   "doc_required": 61,
+   "doc_required": 57,
    "required_cap": 60,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check baseline-target stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 13,
    "hb_hash": "82cc2836",
-   "doc_hash": "3684c0e2"
+   "doc_hash": "3eade1c0"
   },
   {
    "key": "M3I2L2",
@@ -500,12 +500,12 @@
    "journey": "L-PLAN O-MREG O-BREG O-GATE T-MA O-EVID L-GOV",
    "doc_chapters": 17,
    "doc_fields": 78,
-   "doc_required": 71,
+   "doc_required": 66,
    "required_cap": 67,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check baseline-target stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 15,
    "hb_hash": "d0940a84",
-   "doc_hash": "664620eb"
+   "doc_hash": "a7c0bc85"
   },
   {
    "key": "M3I2L3",
@@ -522,12 +522,12 @@
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-GATE T-MA O-EVID",
    "doc_chapters": 17,
    "doc_fields": 84,
-   "doc_required": 76,
+   "doc_required": 70,
    "required_cap": 73,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check baseline-target stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 16,
    "hb_hash": "992a8130",
-   "doc_hash": "3475bbb1"
+   "doc_hash": "28b18719"
   },
   {
    "key": "M3I3L1",
@@ -542,14 +542,14 @@
    "hb_sections": 108,
    "hb_words": 15400,
    "journey": "L-PLAN L-MAP O-MREG O-BREG O-GATE O-CHAIN T-MA",
-   "doc_chapters": 15,
-   "doc_fields": 72,
-   "doc_required": 70,
+   "doc_chapters": 16,
+   "doc_fields": 76,
+   "doc_required": 66,
    "required_cap": 67,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check baseline-target evidence-ladder stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 15,
    "hb_hash": "7b69b759",
-   "doc_hash": "b20bc2ce"
+   "doc_hash": "0d1f3d2f"
   },
   {
    "key": "M3I3L2",
@@ -564,14 +564,14 @@
    "hb_sections": 113,
    "hb_words": 16081,
    "journey": "L-PLAN O-MREG O-BREG O-GATE O-CHAIN T-MA L-GOV",
-   "doc_chapters": 17,
-   "doc_fields": 85,
-   "doc_required": 83,
+   "doc_chapters": 18,
+   "doc_fields": 89,
+   "doc_required": 75,
    "required_cap": 73,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check baseline-target evidence-ladder stakeholder-map raci-delegation hard-week conflict-modes",
    "terms": 17,
    "hb_hash": "5a558519",
-   "doc_hash": "2b519a50"
+   "doc_hash": "73b8a2ea"
   },
   {
    "key": "M3I3L3",
@@ -586,14 +586,14 @@
    "hb_sections": 120,
    "hb_words": 17059,
    "journey": "L-PLAN L-DIRECT O-MREG O-BREG O-GATE O-CHAIN T-MA",
-   "doc_chapters": 17,
-   "doc_fields": 90,
-   "doc_required": 87,
+   "doc_chapters": 18,
+   "doc_fields": 94,
+   "doc_required": 79,
    "required_cap": 80,
    "labs": "schedule-critical-path risk-register red-gate evm-checkpoint benefits-map indicator-check baseline-target evidence-ladder stakeholder-map direct-challenge raci-delegation hard-week conflict-modes",
    "terms": 18,
    "hb_hash": "d51b0582",
-   "doc_hash": "07e8fe2e"
+   "doc_hash": "69a01319"
   }
  ]
 }

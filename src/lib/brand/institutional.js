@@ -271,6 +271,11 @@ export function institutionalReport(input) {
       field(doc, 'evidence-plan', 'success_signal', 'مؤشرات النجاح'),
       full ? field(doc, 'evidence-plan', 'plan', 'خطة القياس') : '',
       full ? field(doc, 'cost-plan', 'cba', 'التكلفة مقابل المنفعة') : '',
+      // القيمة مقابل المال: فصل الاحترافي في الأثر، فيبلغ البعد الاقتصادي في حالة العمل عمق لجنة الاستثمار
+      full ? field(doc, 'value-for-money', 'appraisal', 'تقييم البدائل اقتصاديًا') : '',
+      full ? field(doc, 'value-for-money', 'sensitivity', 'الحساسية') : '',
+      full ? field(doc, 'value-for-money', 'optimism', 'تحيز التفاؤل') : '',
+      full ? field(doc, 'value-for-money', 'affordability', 'القدرة على التحمل بعد الإغلاق') : '',
     ].join(''));
     add('Plan', 'الخطة والموارد', [
       grid([['داخل النطاق', val(doc, 'initiative-charter', 'in_scope')], ['خارج النطاق', val(doc, 'initiative-charter', 'out_scope')]]),

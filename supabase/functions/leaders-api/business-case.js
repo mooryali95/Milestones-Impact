@@ -14,7 +14,7 @@ const ltr = (v) => (v ? `\u2066${v}\u2069` : '·');
 // المرجع: Five Case Model (HM Treasury Green Book)
 export const FIVE_CASES = Object.freeze([
   { key: 'strategic', title: 'البعد الاستراتيجي', question: 'لماذا هذه المبادرة، ولماذا الآن؟', chapters: ['initiative-charter', 'theory-of-change'] },
-  { key: 'economic', title: 'البعد الاقتصادي', question: 'هل هذا أفضل حل مقابل قيمته؟', chapters: ['options-analysis', 'benefits-register'] },
+  { key: 'economic', title: 'البعد الاقتصادي', question: 'هل هذا أفضل حل مقابل قيمته؟', chapters: ['options-analysis', 'benefits-register', 'value-for-money'] },
   // fallback: فصل يجيب عن سؤال البعد حين لا يكون فصله الأصلي في وثيقة المستوى (مصفوفة الوثيقة بحسب المستوى، 2026-11-24):
   // الشراء والتعاقد من المتوسط، وسؤاله للتأسيسي مُجاب في «الموارد والتكلفة» (ما تحتاجه ومن يوفره)
   { key: 'commercial', title: 'البعد التجاري', question: 'هل يمكن شراء ما تحتاجه أو التعاقد عليه؟', chapters: ['procurement'], fallback: ['cost-plan'] },

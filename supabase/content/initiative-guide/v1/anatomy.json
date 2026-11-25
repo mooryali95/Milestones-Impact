@@ -80,6 +80,7 @@
       "lead": "المنافع بخط أساس ومستهدف ومالك، وخطة تثبت تحققها.",
       "chapters": [
         "benefits-register",
+        "value-for-money",
         "evidence-plan"
       ]
     },
@@ -300,6 +301,15 @@
       "feeds": [],
       "handbook": {
         "section_id": "L-CH4-03"
+      }
+    },
+    "value-for-money": {
+      "why": "هل تبرر المنفعة المتوقعة التكلفة مقارنة بالبدائل، وهل تصمد التوصية لو قلّت المنافع.",
+      "feeds": [
+        "case"
+      ],
+      "handbook": {
+        "section_id": "M-CH3-02"
       }
     }
   },

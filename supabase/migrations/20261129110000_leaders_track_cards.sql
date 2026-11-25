@@ -57,9 +57,9 @@ update leaders.track_profiles p set journey_ar = v.j from (values
 التقييم: معايير القيادة وزنها مضاعف ما لم تتساوَ مستوياتك في الأطر الثلاثة، وفي خريطة أصحاب المصلحة، والحوكمة والمسؤوليات، وقيادة التغيير والاستدامة، وخطة التطوير القيادي، وقصة التحول سؤال تعمق إضافي.$q$),
   ($q$impact-advanced$q$, $q$الكتيب: الباب الخامس والباب السادس من تحويل المشروع إلى أثر فوق أبوابه الأساسية.
 المختبر: سلّم الأدلة والإسناد، وخط الأساس والمستهدف، ومعهما خريطة المنافع وسلسلة القيمة، وفاحص المؤشرات.
-وثيقة مبادرتك: تقرير الأثر فصل فيها، ومعه العوامل الخارجية التي قد تكسر سلسلة الأثر، ومعايير المفاضلة بين البدائل، ومستوى الدليل لكل مؤشر، ومنحنى تحقق المنافع بعد الإغلاق.
+وثيقة مبادرتك: تقرير الأثر والقيمة مقابل المال فصلان فيها، ومعه العوامل الخارجية التي قد تكسر سلسلة الأثر، ومعايير المفاضلة بين البدائل، ومستوى الدليل لكل مؤشر، ومنحنى تحقق المنافع بعد الإغلاق.
 متطلب مستواك: نظرية التغيير لمشروعك من المخرجات إلى الأثر، يقيّمها المستشار.
-التقييم: معايير الأثر وزنها مضاعف ما لم تتساوَ مستوياتك في الأطر الثلاثة، وفي فصول الأثر سؤال تعمق إضافي: المبرر والبدائل، ونظرية التغيير، وسجل المنافع، وخطة القياس والأدلة، وتقرير الأثر.$q$),
+التقييم: معايير الأثر وزنها مضاعف ما لم تتساوَ مستوياتك في الأطر الثلاثة، وفي فصول الأثر سؤال تعمق إضافي: المبرر والبدائل، والقيمة مقابل المال، ونظرية التغيير، وسجل المنافع، وخطة القياس والأدلة، وتقرير الأثر.$q$),
   ($q$leadership-advanced$q$, $q$الكتيب: الباب الخامس والباب السادس من تمكين القائد فوق أبوابه الأساسية.
 المختبر: تحدٍّ قيادي بأداة DIRECT، ومعه خريطة أصحاب المصلحة، ومصفوفة المسؤوليات والتفويض، والأسبوع الصعب، وأنماط إدارة الخلاف.
 وثيقة مبادرتك: من تبنيه ليأخذ مكانك، وكسب المقاومين المؤثرين، واتصال الحوكمة بما فوقها، وما بقي في الجهة بعدك. وتطبّق أداة DIRECT على تحدٍّ حقيقي في مبادرتك.
@@ -101,9 +101,9 @@ update leaders.tracks t set priority_dimension = v.d, profile_key = v.p, journey
    and (t.priority_dimension, t.profile_key, t.journey_ar, t.title_en) is distinct from (v.d, v.p, p.journey_ar, v.en);
 
 -- ════════════ 2) متطلبات الرحلة ════════════
--- O-COST: مستوى المتوسط في إدارة المشروعات كان ينقص بندًا عن التأسيسي (T-MB للتأسيسي وحده). الموارد والتكلفة أول ما يضيفه مستواه إلى وثيقته، فيصير بندًا في رحلته.
+-- O-COST: مستوى المتوسط في إدارة المشروعات كان ينقص بندًا عن التأسيسي (T-MB للتأسيسي وحده). الموارد والتتكلفة أول ما يضيفه مستواه إلى وثيقته، فيصير بندًا في رحلته.
 insert into leaders.stage_requirements (program_id, stage_key, dimension, level, code, sort, title_ar, help_ar, kind, required, needs_review, active, config)
-select b.program_id, $q$ojt_coaching$q$, $q$milestone$q$, $q$intermediate$q$, $q$O-COST$q$, 3, $q$الموارد والتكلفة لمشروعك: غلاف واحتياطي ومصدر تمويل$q$, $q$من نموذج «الموارد والتكلفة» في مكتبة النماذج: بنود ما تحتاجه وكلفته، والغلاف الكلي، ونسبة احتياطي تُحسب من مخاطرك، ومن يموّل. يكتمل حين تسلّمه، وهو فصل في وثيقة مبادرتك.$q$, $q$model$q$, true, false, true,
+select b.program_id, $q$ojt_coaching$q$, $q$milestone$q$, $q$intermediate$q$, $q$O-COST$q$, 3, $q$الموارد والتتكلفة لمشروعك: غلاف واحتياطي ومصدر تمويل$q$, $q$من نموذج «الموارد والتتكلفة» في مكتبة النماذج: بنود ما تحتاجه وتكلفته، والغلاف الكلي، ونسبة احتياطي تُحسب من مخاطرك، ومن يموّل. يكتمل حين تسلّمه، وهو فصل في وثيقة مبادرتك.$q$, $q$model$q$, true, false, true,
        $j${"model_key":"cost-plan","accept":"submitted"}$j$::jsonb
   from leaders.stage_requirements b
  where b.code = 'O-BREG'
@@ -134,7 +134,105 @@ insert into leaders.lab_items (key, kind, dimension, chapter_key, sort, min_leve
   $q$evidence-ladder$q$, $q$tool$q$, $q$impact$q$, $q$ch6$q$, 4, $q$advanced$q$, 18, 50,
   $q$سلّم الأدلة والإسناد$q$,
   $q$ضع كل ادعاء أثر على سلّم الأدلة، وقرر متى يصح أن تقول «بسبب المبادرة» ومتى تقول «أسهمت المبادرة»، قبل أن يُبنى عليه قرار استثمار.$q$,
-  $j${"story_ar":"تطلب لجنة الاستثمار تعميم برنامج تأهيل الباحثين عن عمل على ثلاث مناطق بكلفة كبيرة. تقرير البرنامج يقول إن التوظيف ارتفع 18 نقطة «بفضل البرنامج». عليك أن تقول للجنة ما الذي تثبته الأدلة فعلًا.","role_ar":"مستشار التقييم لدى لجنة الاستثمار في صندوق التنمية البشرية","closing_ar":"قرار الاستثمار يُبنى على أقوى ادعاء تسنده الأدلة لا على أجمل رقم. حين لا يتيح التصميم الإسناد، قل «أسهم» واشرح كيف، فهذا أصدق وأقوى أمام لجنة تعرف الفرق.","meters":[],"steps":[{"type":"classify","title_ar":"أين يقع كل دليل على السلّم؟","prompt_ar":"صنّف ما جمعه فريق البرنامج بحسب قوة الدليل على أن التغير سببه البرنامج.","context_ar":"","why_ar":"قوة الدليل تزداد كلما وُجدت مقارنة بمن لم يتلقَّ التدخل وكان مماثلًا قبله؛ الرأي والقصة أضعف الأدلة، والمقارنة العشوائية أقواها.","weight":2,"bins":[{"id":"claim","label":"ادعاء أو رأي"},{"id":"before_after","label":"قبل وبعد بلا مقارنة"},{"id":"comparison","label":"مقارنة بمجموعة مماثلة"},{"id":"random","label":"مقارنة عشوائية"}],"items":[{"id":"stories","label":"قصص نجاح لعشرة متدربين توظفوا","bin":"claim"},{"id":"survey","label":"استبانة: 85% من المتدربين يرون أن البرنامج ساعدهم","bin":"claim"},{"id":"rate","label":"التوظيف بين المتدربين ارتفع من 30% قبل البرنامج إلى 48% بعده","bin":"before_after"},{"id":"waitlist","label":"مقارنة المتدربين بمن كانوا على قائمة الانتظار بالمؤهلات نفسها","bin":"comparison"},{"id":"lottery","label":"قرعة على المقاعد في منطقة واحدة، ومقارنة الفائزين بغيرهم","bin":"random"}]},{"type":"choice","title_ar":"ماذا تقول للجنة؟","prompt_ar":"مقارنة قائمة الانتظار تُظهر فرقًا 7 نقاط لا 18، وسوق العمل تحسن عمومًا في الفترة نفسها.","context_ar":"","why_ar":"الفرق مقابل مجموعة مماثلة هو الأقرب إلى أثر البرنامج، والباقي من ارتفاع 18 نقطة يعود إلى السوق. الصدق في حجم الأثر يحمي قرار التعميم من توقعات لن تتحقق.","weight":2,"options":[{"id":"eighteen","label":"البرنامج رفع التوظيف 18 نقطة، فالتعميم مبرر","score":0,"feedback_ar":"ينسب تحسن السوق كله إلى البرنامج، وسيُكتشف عند أول تقييم مستقل."},{"id":"seven","label":"الأثر المقدَّر نحو 7 نقاط مقابل مجموعة مماثلة؛ نوصي بالتعميم مرحليًا مع قرعة في منطقة جديدة لتأكيده","score":2,"feedback_ar":"أقوى ادعاء تسنده الأدلة، مع تصميم يرفع مستوى الدليل أثناء التعميم."},{"id":"none","label":"لا يمكن معرفة أي أثر، فلا توصية","score":0,"feedback_ar":"المقارنة المتاحة دليل معتبر، ورفض الحكم كليًا يحرم اللجنة من قرار مدروس."},{"id":"contrib","label":"البرنامج أسهم في التحسن بلا تحديد حجمه","score":1,"feedback_ar":"صحيح لكنه يترك دليلًا كميًا متاحًا، واللجنة تحتاج حجم الأثر لتقارنه بالكلفة."}]}]}$j$::jsonb, 'all'
+  $j${"story_ar":"تطلب لجنة الاستثمار تعميم برنامج تأهيل الباحثين عن عمل على ثلاث مناطق بتكلفة كبيرة. تقرير البرنامج يقول إن التوظيف ارتفع 18 نقطة «بفضل البرنامج». عليك أن تقول للجنة ما الذي تثبته الأدلة فعلًا.","role_ar":"مستشار التقييم لدى لجنة الاستثمار في صندوق التنمية البشرية","closing_ar":"قرار الاستثمار يُبنى على أقوى ادعاء تسنده الأدلة لا على أجمل رقم. حين لا يتيح التصميم الإسناد، قل «أسهم» واشرح كيف، فهذا أصدق وأقوى أمام لجنة تعرف الفرق.","meters":[],"steps":[{"type":"classify","title_ar":"أين يقع كل دليل على السلّم؟","prompt_ar":"صنّف ما جمعه فريق البرنامج بحسب قوة الدليل على أن التغير سببه البرنامج.","context_ar":"","why_ar":"قوة الدليل تزداد كلما وُجدت مقارنة بمن لم يتلقَّ التدخل وكان مماثلًا قبله؛ الرأي والقصة أضعف الأدلة، والمقارنة العشوائية أقواها.","weight":2,"bins":[{"id":"claim","label":"ادعاء أو رأي"},{"id":"before_after","label":"قبل وبعد بلا مقارنة"},{"id":"comparison","label":"مقارنة بمجموعة مماثلة"},{"id":"random","label":"مقارنة عشوائية"}],"items":[{"id":"stories","label":"قصص نجاح لعشرة متدربين توظفوا","bin":"claim"},{"id":"survey","label":"استبانة: 85% من المتدربين يرون أن البرنامج ساعدهم","bin":"claim"},{"id":"rate","label":"التوظيف بين المتدربين ارتفع من 30% قبل البرنامج إلى 48% بعده","bin":"before_after"},{"id":"waitlist","label":"مقارنة المتدربين بمن كانوا على قائمة الانتظار بالمؤهلات نفسها","bin":"comparison"},{"id":"lottery","label":"قرعة على المقاعد في منطقة واحدة، ومقارنة الفائزين بغيرهم","bin":"random"}]},{"type":"choice","title_ar":"ماذا تقول للجنة؟","prompt_ar":"مقارنة قائمة الانتظار تُظهر فرقًا 7 نقاط لا 18، وسوق العمل تحسن عمومًا في الفترة نفسها.","context_ar":"","why_ar":"الفرق مقابل مجموعة مماثلة هو الأقرب إلى أثر البرنامج، والباقي من ارتفاع 18 نقطة يعود إلى السوق. الصدق في حجم الأثر يحمي قرار التعميم من توقعات لن تتحقق.","weight":2,"options":[{"id":"eighteen","label":"البرنامج رفع التوظيف 18 نقطة، فالتعميم مبرر","score":0,"feedback_ar":"ينسب تحسن السوق كله إلى البرنامج، وسيُكتشف عند أول تقييم مستقل."},{"id":"seven","label":"الأثر المقدَّر نحو 7 نقاط مقابل مجموعة مماثلة؛ نوصي بالتعميم مرحليًا مع قرعة في منطقة جديدة لتأكيده","score":2,"feedback_ar":"أقوى ادعاء تسنده الأدلة، مع تصميم يرفع مستوى الدليل أثناء التعميم."},{"id":"none","label":"لا يمكن معرفة أي أثر، فلا توصية","score":0,"feedback_ar":"المقارنة المتاحة دليل معتبر، ورفض الحكم كليًا يحرم اللجنة من قرار مدروس."},{"id":"contrib","label":"البرنامج أسهم في التحسن بلا تحديد حجمه","score":1,"feedback_ar":"صحيح لكنه يترك دليلًا كميًا متاحًا، واللجنة تحتاج حجم الأثر لتقارنه بالتكلفة."}]}]}$j$::jsonb, 'all'
 ) on conflict (key) do nothing;
+
+-- ════════════ 4) الوثيقة ════════════
+-- فصل احترافي حقيقي في الأثر: حالة العمل الاحترافية كانت تكتفي بحقل «التتكلفة مقابل المنفعة» في الموارد. هنا تقييم اقتصادي كامل بالبدائل والحساسية، فتبلغ حالة العمل عمق لجنة الاستثمار.
+insert into leaders.learning_models (dimension, key, sort, title_ar, icon, summary_ar, when_ar, steps_ar, source_ar, min_level, points, capstone_sort, scopes, fields)
+values ('impact', 'value-for-money', 23, $q$القيمة مقابل المال$q$, $q$⚖$q$, $q$هل تبرر المنفعة المتوقعة تتكلفة المبادرة مقارنة بالبدائل؟ تقييم اقتصادي مختصر بالأرقام: التكلفة الكاملة لكل بديل ومنفعته المقدرة وصافي قيمته، ومدى صمود التوصية لو قلّت المنافع أو زادت التتكلفة. هو البعد الاقتصادي في حالة العمل بعمق لجنة الاستثمار.$q$, $q$بعد المبرر والبدائل وسجل المنافع، وقبل طلب التمويل: لجنة الاستثمار تسأل عن صافي القيمة قبل أن تسأل عن الجدول.$q$, $q$خذ البدائل من «المبرر والبدائل»، ومعها عدم التدخل.
+لكل بديل: تكلفته الكاملة طوال عمره (البناء والتشغيل)، ومنفعته المقدرة بالريال أو بمؤشرها من سجل المنافع، ومصدر كل تقدير.
+احسب صافي القيمة أو نسبة المنفعة إلى التكلفة، وقارن البدائل.
+اختبر الحساسية: ماذا لو قلّت المنافع ثلثًا أو تأخرت سنة؟ هل تبقى التوصية؟
+اذكر ما أضفته لمواجهة تحيز التفاؤل في التتكلفة والمدة.$q$, $q$مستلهم من البعد الاقتصادي في نموذج الحالات الخمس وإرشاد تحيز التفاؤل (HM Treasury Green Book)، وتحليل التتكلفة والمنفعة$q$, 'advanced', 30, 25, '{}', $q$[{"key":"appraisal","label":"تقييم البدائل اقتصاديًا","type":"table","min_rows":2,"columns":["البديل","التكلفة الكاملة (ريال)","المنفعة المقدرة","صافي القيمة أو النسبة","مصدر التقدير"],"hint":"عدم التدخل صف أول، ثم البدائل من «المبرر والبدائل»."},{"key":"sensitivity","label":"الحساسية: هل تصمد التوصية لو قلّت المنافع ثلثًا أو زادت التتكلفة؟","type":"textarea"},{"key":"optimism","label":"تحيز التفاؤل: ما أضفته إلى التتكلفة والمدة تحسبًا، ولماذا","type":"textarea","required":false},{"key":"affordability","label":"القدرة على التحمل: أثر المبادرة على موازنة الجهة بعد الإغلاق","type":"textarea","required":false},{"key":"track_depth","label":"تعمق المسار: المنفعة التي لو لم تتحقق لسقط المبرر الاقتصادي كله","track":true,"required":false}]$q$::jsonb)
+on conflict (key) do nothing;
+-- benefits-register.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$benefits-register$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- theory-of-change.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$theory-of-change$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- impact-report.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false,"required_after":null}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$impact-report$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false,"required_after":null}$j$::jsonb));
+-- options-analysis.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$options-analysis$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- evidence-plan.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$evidence-plan$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- stakeholder-map.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$stakeholder-map$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- development-plan.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$development-plan$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- governance.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$governance$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- change-sustain.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$change-sustain$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- transformation-story.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$transformation-story$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- milestone-register.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$milestone-register$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- stage-gate.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$stage-gate$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- portfolio-review.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$portfolio-review$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- initiative-charter.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$initiative-charter$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- wbs.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$wbs$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- schedule.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$schedule$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- cost-plan.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$cost-plan$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- roadmap.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$roadmap$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- raid.track_depth: سؤال تعمق المسار اختياري: يظهر لإطار الأولوية ويُقيَّم بالمعيار، ولا يُحسب في حد الحقول المطلوبة (نحو 40 و60 و80 بحسب المستوى، cards.json).
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$track_depth$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$raid$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$track_depth$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- cost-plan.cba: التتكلفة مقابل المنفعة صار لها فصل كامل للاحترافي في الأثر (القيمة مقابل المال)، فيبقى هنا اختياريًا لمن لا يصله الفصل، ولا يُطلب مرتين.
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$cba$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$cost-plan$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$cba$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- options-analysis.criteria: معايير المفاضلة يجيبها جدول التقييم في «القيمة مقابل المال» لمن بلغه، فتبقى هنا اختيارية ولا تُطلب مرتين.
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$criteria$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$options-analysis$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$criteria$q$ and not (e @> $j${"required":false}$j$::jsonb));
+-- benefits-register.realization_curve: منحنى تحقق المنافع يُقرأ من سنوات المنفعة في جدول «القيمة مقابل المال» لمن بلغه، فيبقى هنا اختياريًا ولا يُطلب مرتين.
+update leaders.learning_models m set fields = (
+  select jsonb_agg(case when e->>'key' = $q$realization_curve$q$ then e || $j${"required":false}$j$::jsonb else e end order by n) from jsonb_array_elements(m.fields) with ordinality x(e, n))
+ where m.key = $q$benefits-register$q$ and exists (select 1 from jsonb_array_elements(m.fields) e where e->>'key' = $q$realization_curve$q$ and not (e @> $j${"required":false}$j$::jsonb));
 
 insert into leaders.schema_migrations (name) values ('20261129110000_leaders_track_cards') on conflict do nothing;

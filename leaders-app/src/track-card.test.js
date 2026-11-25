@@ -129,6 +129,18 @@ describe('كل ملف تعريف يبلغه مسار', () => {
   });
 });
 
+describe('حد الحقول المطلوبة', () => {
+  it('الحد متوسط حدود مستويات الأطر: 40 و60 و80 للمسارات المتساوية', () => {
+    expect(requiredCap(trackLevels('M1I1L1'))).toBe(40);
+    expect(requiredCap(trackLevels('M2I2L2'))).toBe(60);
+    expect(requiredCap(trackLevels('M3I3L3'))).toBe(80);
+  });
+  it.each(TRACKS)('%s: المطلوب في الوثيقة لا يتجاوز حده', (key) => {
+    const r = rows.find((x) => x.key === key);
+    expect(r.doc_required, `${key} ${r.doc_required}/${r.required_cap}`).toBeLessThanOrEqual(Math.floor(r.required_cap * CAP_SLACK));
+  });
+});
+
 describe('لقطة الـ27 من سكربت المصفوفة', () => {
   it('تطابق المودعة (node scripts/tracks/matrix.mjs يعيد توليدها)', () => {
     const snap = JSON.parse(readFileSync(SNAPSHOT, 'utf8'));

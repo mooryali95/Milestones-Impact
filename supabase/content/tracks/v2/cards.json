@@ -1,32 +1,71 @@
 {
-  "_about": "بطاقة المسار: ما يصل كل مسار من الـ27 في الكتيب والوثيقة والرحلة والدعم، بيانات قصيرة يحررها المالك. يقرؤها trackManifest وحده (supabase/functions/leaders-api/track-manifest.js)، وكل شاشة (الرحلة، الكتيب، صفحة المبادرة، الوثيقة المطبوعة، شاشات المستشار والإدارة) تأخذها منه. الوراثة بالترتيب: base لكل المسارات، ثم by_level بمستوى المشارك في إطار أولويته، ثم profiles بملف التعريف (9)، ثم tracks بمفتاح المسار (قليلة). الهوية لا تُكتب هنا: الاسم من tracks.json والوصف من profiles.json. المحتوى نفسه (المتطلبات والمختبرات والمسرد وأسئلة صاحب القرار) مكتوب مرة واحدة في slices.json بالإطار والمستوى. القيم المسموحة: handbook.type guided | applied | specialist؛ support.mode readiness | examples | on_demand؛ initiative.required_cap حد الحقول المطلوبة لمن كل أطره بذلك المستوى، وحد المسار متوسط حدود مستوياته الثلاثة.",
+  "_about": "بطاقة المسار: ما يصل كل مسار من الـ27 في الكتاب والوثيقة والرحلة والدعم، بيانات قصيرة يحررها المالك. يقرؤها trackManifest وحده (supabase/functions/leaders-api/track-manifest.js)، وكل شاشة (الرحلة، الكتاب، صفحة المبادرة، الوثيقة المطبوعة، شاشات المستشار والإدارة) تأخذها منه. الوراثة بالترتيب: base لكل المسارات، ثم by_level بمستوى المشارك في إطار أولويته، ثم profiles بملف التعريف (9)، ثم tracks بمفتاح المسار (قليلة). الهوية لا تُكتب هنا: الاسم من tracks.json والوصف من profiles.json. المحتوى نفسه (المتطلبات والمختبرات والمسرد وأسئلة صاحب القرار) مكتوب مرة واحدة في slices.json بالإطار والمستوى. القيم المسموحة: handbook.type guided | applied | specialist؛ support.mode readiness | examples | on_demand؛ initiative.required_cap حد الحقول المطلوبة لمن كل أطره بذلك المستوى، وحد المسار متوسط حدود مستوياته الثلاثة، و«نحو» تعني هامشًا لا يتجاوز 5% (track-card.test.js). سؤال تعمق المسار اختياري فلا يُحسب في الحد.",
   "base": {
-    "handbook": { "type": "applied", "order": "priority_first" },
-    "initiative": { "required_cap": { "beginner": 40, "intermediate": 60, "advanced": 80 } },
-    "support": { "mode": "examples" },
-    "bridges": { "cap": 12 }
+    "handbook": {
+      "type": "applied",
+      "order": "priority_first"
+    },
+    "initiative": {
+      "required_cap": {
+        "beginner": 40,
+        "intermediate": 60,
+        "advanced": 80
+      }
+    },
+    "support": {
+      "mode": "examples"
+    },
+    "bridges": {
+      "cap": 12
+    }
   },
   "by_level": {
     "beginner": {
-      "handbook": { "type": "guided" },
-      "support": { "mode": "readiness" }
+      "handbook": {
+        "type": "guided"
+      },
+      "support": {
+        "mode": "readiness"
+      }
     },
     "intermediate": {
-      "handbook": { "type": "applied" },
-      "support": { "mode": "examples" }
+      "handbook": {
+        "type": "applied"
+      },
+      "support": {
+        "mode": "examples"
+      }
     },
     "advanced": {
-      "handbook": { "type": "specialist" },
-      "support": { "mode": "on_demand" }
+      "handbook": {
+        "type": "specialist"
+      },
+      "support": {
+        "mode": "on_demand"
+      }
     }
   },
   "profiles": {
     "_note": "تجاوز لملف تعريف بعينه، يُدمج فوق by_level. فارغ إلا ما يلزم",
-    "leadership-beginner": { "handbook": { "order": "priority_first" } }
+    "leadership-beginner": {
+      "handbook": {
+        "order": "priority_first"
+      }
+    }
   },
   "tracks": {
     "_note": "تجاوز لمسار بعينه، يُدمج فوق ملف التعريف. قليل عمدًا: كل استثناء هنا يُعلَّل",
-    "M1I1L3": { "support": { "mode": "examples" }, "_why": "قائد قوي يبدأ التخطيط من الصفر: الأمثلة المحلولة بقطاعه أنفع له من أسئلة الجاهزية، لأنه يعرف ما يُسأل ولا يعرف شكل الجواب" },
-    "M3I1L1": { "handbook": { "type": "applied" }, "_why": "محترف في إدارة المشروعات مبتدئ في الأثر والقيادة: لغة الكتيب التطبيقية أقرب إليه من الموجهة، ومحتوى كل باب يبقى بمستواه في إطاره" }
+    "M1I1L3": {
+      "support": {
+        "mode": "examples"
+      },
+      "_why": "قائد قوي يبدأ التخطيط من الصفر: الأمثلة المحلولة بقطاعه أنفع له من أسئلة الجاهزية، لأنه يعرف ما يُسأل ولا يعرف شكل الجواب"
+    },
+    "M3I1L1": {
+      "handbook": {
+        "type": "applied"
+      },
+      "_why": "محترف في إدارة المشروعات مبتدئ في الأثر والقيادة: لغة الكتاب التطبيقية أقرب إليه من الموجهة، ومحتوى كل باب يبقى بمستواه في إطاره"
+    }
   }
 }

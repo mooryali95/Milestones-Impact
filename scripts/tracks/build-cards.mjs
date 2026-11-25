@@ -98,7 +98,7 @@ select b.program_id, ${q(r.stage_key)}, ${q(r.dimension)}, ${q(r.level)}, ${q(r.
     for (const c of models.chapters || []) {
       L.push(`-- ${c.why}
 insert into leaders.learning_models (dimension, key, sort, title_ar, icon, summary_ar, when_ar, steps_ar, source_ar, min_level, points, capstone_sort, scopes, fields)
-values (${q(c.dimension)}, ${q(c.key)}, ${c.sort}, ${q(c.title_ar)}, ${q(c.icon)}, ${q(c.summary_ar)}, ${q(c.when_ar)}, ${q(c.steps_ar)}, ${q(c.source_ar)}, ${q(c.min_level)}, ${c.points}, ${c.capstone_sort}, '{}', ${jq(c.fields)})
+values ('${c.dimension}', '${c.key}', ${c.sort}, ${q(c.title_ar)}, ${q(c.icon)}, ${q(c.summary_ar)}, ${q(c.when_ar)}, ${q(c.steps_ar)}, ${q(c.source_ar)}, '${c.min_level}', ${c.points}, ${c.capstone_sort}, '{}', ${q(JSON.stringify(c.fields))}::jsonb)
 on conflict (key) do nothing;
 `);
     }

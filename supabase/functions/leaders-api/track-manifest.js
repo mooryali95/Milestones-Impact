@@ -17,7 +17,7 @@
 //   density        { examples, case, summary, rubric, checks, panels }: كثافة الصفحة (by_level ثم profiles ثم tracks في lens.json)
 //   estimate_hours [أدنى، أعلى] لوثيقة هذا المسار كاملة
 //   readiness      { questions, chapters }، rubric_lines، case3
-//   card           بطاقة المسار (supabase/content/tracks/v2/cards.json وslices.json): الهوية، والكتيب (النوع وترتيب الأطر والإطار المعمَّق
+//   card           بطاقة المسار (supabase/content/tracks/v2/cards.json وslices.json): الهوية، والكتاب (النوع وترتيب الأطر والإطار المعمَّق
 //                  ومسرد كل إطار بعمق مستواه فيه)، والوثيقة (الشكل والوحدات وحد الحقول المطلوبة)، والرحلة (المتطلبات والمختبرات)،
 //                  والدعم (الأمثلة أو أسئلة الجاهزية، وأسئلة صاحب القرار بمستوى الأثر، والزمن)، والجسور. انظر cardFor أدناه
 // بلا مسار معروف: الشكل الكامل (case) وكثافة المتوسط، فلا يُحذف من وثيقة شيء بغياب القياس.
