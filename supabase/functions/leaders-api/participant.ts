@@ -73,7 +73,7 @@ export async function issueSession(participantId: string, method: string, ctx: C
     const { data: p } = await db.from('participants').select('full_name, email, is_demo').eq('id', participantId).maybeSingle();
     if (p?.is_demo) return token;
     const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
-    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { expiresAt: expiresIn(24) }).catch((e) => console.error('new device mail', e));
+    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { category: 'essential', expiresAt: expiresIn(24) }).catch((e) => console.error('new device mail', e));
   }
   return token;
 }

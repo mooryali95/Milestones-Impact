@@ -228,7 +228,7 @@ async function notifyPaid(payId: string, obj: any = null) {
   const over = overpaidOf(pay);
   if (on.receipt && who.email && !pay.receipt_sent_at) {
     const next = pay.item === 'program' ? 'رحلتك في البرنامج مفتوحة الآن.' : 'قياس تحديد المستوى مفتوح لك الآن، وتقدمك فيه يُحفظ سؤالًا سؤالًا.';
-    const sent = await sendMail(who.email, 'وصلنا دفعك', paymentReceiptMail(who.name, ITEM_AR[pay.item as Item], amount, pay.order_id, next, paid), [], { ref: `participant:${pay.participant_id}` })
+    const sent = await sendMail(who.email, 'وصلنا دفعك', paymentReceiptMail(who.name, ITEM_AR[pay.item as Item], amount, pay.order_id, next, paid), [], { category: 'essential', ref: `participant:${pay.participant_id}` })
       .then(() => true).catch((e) => { console.error('pay receipt', e); return false; });
     if (sent) await saveLedger(pay.id, { receipt_sent_at: new Date().toISOString() });
   }
@@ -253,7 +253,7 @@ async function notifyRefunded(pay: any, cents: number | null, partial = false) {
   const of = partial ? money(pay.amount_cents, pay.currency) : '';
   const subject = partial ? 'استُردّ جزء من دفعتك' : 'استُردّت دفعتك';
   const title = partial ? 'استرداد جزئي' : 'دفعة مستردة';
-  if (on.refund && who.email) await sendMail(who.email, subject, paymentRefundMail(who.name, ITEM_AR[pay.item as Item], amount, of), [], { ref: `participant:${pay.participant_id}` }).catch((e) => console.error('pay refund mail', e));
+  if (on.refund && who.email) await sendMail(who.email, subject, paymentRefundMail(who.name, ITEM_AR[pay.item as Item], amount, of), [], { category: 'essential', ref: `participant:${pay.participant_id}` }).catch((e) => console.error('pay refund mail', e));
   ownerNoticeLater('payment_refund', {
     line: `↩️ ${title} · ${ITEM_AR[pay.item as Item]} · ${amount}`, ref: `payment:${pay.id}`, settings: await ownerSettings(on.owner),
     mail: { subject: title, html: paymentOwnerMail(title, [['المشارك', who.name || who.email], ['البند', ITEM_AR[pay.item as Item]], ['المبلغ', amount], ...(partial ? [['من المدفوع', of], ['الحق', 'باقٍ، والقرار للإدارة إن لزم سحبه']] as [string, string][] : [])]) },
@@ -377,7 +377,7 @@ export async function payReminders(now = Date.now()) {
     if (count) continue;
     if (!(await programPaymentDue(p.id))) continue;
     await audit('system', 'payments', 'payment.reminder', 'participants', p.id, null, { day: due });
-    await sendMail(p.email, 'مسارك المعتمد بانتظارك', payReminderMail(p.full_name, days), [], { ref: `participant:${p.id}`, expiresAt: expiresIn(24) }).catch((e) => console.error('pay reminder', e));
+    await sendMail(p.email, 'مسارك المعتمد بانتظارك', payReminderMail(p.full_name, days), [], { category: 'reminders', ref: `participant:${p.id}`, expiresAt: expiresIn(24) }).catch((e) => console.error('pay reminder', e));
     sent++;
   }
   return { sent };
@@ -667,7 +667,7 @@ export async function adminPaymentRemind(a: Admin, b: Body) {
   if (pay.reminded_at && Date.now() - Date.parse(pay.reminded_at) < REMIND_GAP_HOURS * 36e5) throw new Fail(`ذُكِّر خلال آخر ${REMIND_GAP_HOURS} ساعة`, 409, 'recent');
   const who = await payerOf(pay);
   if (!who.email) throw new Fail('لا بريد لهذا العميل');
-  await sendMail(who.email, 'دفعك لم يكتمل', paymentAbandonMail(who.name, ITEM_AR[pay.item as Item]), [], { ref: `participant:${pay.participant_id}`, expiresAt: expiresIn(24) });
+  await sendMail(who.email, 'دفعك لم يكتمل', paymentAbandonMail(who.name, ITEM_AR[pay.item as Item]), [], { category: 'essential', ref: `participant:${pay.participant_id}`, expiresAt: expiresIn(24) });
   await saveLedger(pay.id, { reminded_at: new Date().toISOString() });
   await audit('admin', a.email, 'payment.remind', 'payments', pay.id);
   return { success: true };

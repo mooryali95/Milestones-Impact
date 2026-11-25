@@ -182,7 +182,7 @@ async function seatAlerts(org: { id: string; name: string }) {
 async function notifyOrg(org: { id: string; name: string }, subject: string, text: string, line: string) {
   const { data: coords } = await db.from('org_coordinators').select('email, status').eq('organization_id', org.id).neq('status', 'suspended');
   const coordEmails = [...new Set((coords || []).map((c: any) => c.email).filter(Boolean))] as string[];
-  const send = (to: string, url: string, label: string) => sendMail(to, subject, mailShell(subject, mailText(text) + mailButton(url, label), { family: 'admin', footnote: '' }), [], { ref: `organization:${org.id}` })
+  const send = (to: string, url: string, label: string) => sendMail(to, subject, mailShell(subject, mailText(text) + mailButton(url, label), { family: 'admin', footnote: '' }), [], { category: 'staff', ref: `organization:${org.id}` })
     .catch((e) => console.error('seat notify', e));
   for (const t of coordEmails) await send(t, `${CONFIG.appUrl}/org`, 'افتح بوابة جهتك');
   const mail = CONFIG.alertEmail && !coordEmails.includes(CONFIG.alertEmail)

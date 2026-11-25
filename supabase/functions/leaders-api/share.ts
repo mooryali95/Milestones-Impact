@@ -160,7 +160,7 @@ export async function note(b: Body, ctx: any) {
   if (!row.notified_at || now - new Date(row.notified_at).getTime() > NOTIFY_EVERY_MS) {
     await db.from('capstone_shares').update({ notified_at: new Date(now).toISOString() }).eq('id', row.id);
     const p = row.participants;
-    sendMail(p.email, 'ملاحظة جديدة على وثيقة مبادرتك', noteMail(p.full_name, n.author_name, row.label), [], { purpose: 'capstone-share-note' }).catch((e) => console.error(e));
+    sendMail(p.email, 'ملاحظة جديدة على وثيقة مبادرتك', noteMail(p.full_name, n.author_name, row.label), [], { category: 'journey', purpose: 'capstone-share-note' }).catch((e) => console.error(e));
   }
   return { success: true };
 }

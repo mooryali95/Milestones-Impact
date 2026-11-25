@@ -433,7 +433,7 @@ export async function inviteSponsor(p: any, c: any, charter: any = null) {
   // حساب العرض: الحالة تُكتب كما تُكتب لغيره («بانتظار الراعي») فيرى صاحبه التجربة كاملة، والبريد لا يخرج والرمز لا يصل
   // أحدًا. البريد يكتبه الحساب في بطاقة مبادرته، فحارس نطاق العرض في sendMail لا يكفيه (تصور 2026-11-19، المرحلة 0)
   if (simulated(p)) return;
-  await sendMail(email, `طلب تأييد مبادرة «${initiative}»`, sponsorMail(charter.sponsor || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`));
+  await sendMail(email, `طلب تأييد مبادرة «${initiative}»`, sponsorMail(charter.sponsor || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`), [], { category: 'staff' });
 }
 
 async function approve(p: any, by: string, waived: string | null = null) {
@@ -446,7 +446,7 @@ async function approve(p: any, by: string, waived: string | null = null) {
   must(await db.from('capstones').update({ snapshot }).eq('participant_id', p.id));
   const initiative = await initiativeFor(p.id);
   await award(p.id, 'capstone', p.id, APPROVAL_POINTS, `اعتماد وثيقة المبادرة: ${initiative || ''}`.trim());
-  sendMail(p.email, 'اعتُمدت وثيقة مبادرتك', reviewMail(p.full_name, `وثيقة مبادرة «${initiative || 'مبادرتك'}»`, false))
+  sendMail(p.email, 'اعتُمدت وثيقة مبادرتك', reviewMail(p.full_name, `وثيقة مبادرة «${initiative || 'مبادرتك'}»`, false), [], { category: 'journey' })
     .catch((e) => console.error('capstone mail:', e));
 }
 
@@ -462,7 +462,7 @@ export async function adminReview(a: Admin, b: Body) {
     const notes = Object.fromEntries(Object.entries(b.notes || {}).map(([k, v]) => [k, String(v || '').trim().slice(0, 1500)]).filter(([, v]) => v));
     must(await db.from('capstones').update({ status: 'returned', review_note: note, notes, revisions: (c.revisions || 0) + 1, reviewed_by: a.email, reviewed_at: now, updated_at: now }).eq('participant_id', p.id));
     await audit('admin', a.email, 'capstone.return', 'capstones', p.id, null, { revisions: (c.revisions || 0) + 1 });
-    sendMail(p.email, 'ملاحظات المستشار على وثيقة مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك', true, note)).catch((e) => console.error(e));
+    sendMail(p.email, 'ملاحظات المستشار على وثيقة مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك', true, note), [], { category: 'journey' }).catch((e) => console.error(e));
     return adminGet({ participant_id: p.id });
   }
   if (b.decision !== 'accept') throw new Fail('قرار غير صالح');
@@ -551,7 +551,7 @@ export async function sponsorSubmit(b: Body) {
     if (!note) throw new Fail('اكتب للمشارك ما الذي يعدّله');
     // ملاحظة الراعي تعيد الوثيقة لصاحبها، ولا تُحسب من التحسين المتاح بعد المستشار
     must(await db.from('capstones').update({ status: 'returned', sponsor_status: 'declined', sponsor_note: note, sponsor_at: now, updated_at: now }).eq('participant_id', p.id));
-    sendMail(p.email, 'ملاحظات راعي مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك (من الراعي)', true, note)).catch((e) => console.error(e));
+    sendMail(p.email, 'ملاحظات راعي مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك (من الراعي)', true, note), [], { category: 'journey' }).catch((e) => console.error(e));
   } else throw new Fail('قرار غير صالح');
   await audit('system', c.sponsor_email, `capstone.sponsor-${b.decision}`, 'capstones', p.id, null, {});
   return { success: true, done: true, decision: b.decision === 'endorse' ? 'endorsed' : 'declined' };

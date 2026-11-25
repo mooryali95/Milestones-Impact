@@ -216,10 +216,10 @@ Deno.test('raiseAlert بمفتاح: طلبا حذف في عشر دقائق تن�
 Deno.test('المرسلون المؤرخون يمررون موعدهم، والمهمة الساعية تنبّه بالترحيل بعد التفريغ', async () => {
   const read = (f: string) => Deno.readTextFile(new URL(`./${f}`, import.meta.url));
   const [act, f360, exp, coord, index] = await Promise.all(['activities.ts', 'feedback360.ts', 'experts.ts', 'coordinator.ts', 'index.ts'].map(read));
-  assertEquals(act.includes("{ kind: 'bulk', ref: s.id, expiresAt: s.starts_at }"), true);
+  assertEquals(act.includes("{ category: 'sessions', kind: 'bulk', ref: s.id, expiresAt: s.starts_at }"), true);
   assertEquals(f360.includes('expiresAt: closes })'), true);
   assertEquals(f360.includes('expiresAt: c.closes_at })'), true);
-  assertEquals(exp.includes('{ expiresAt: expires.toISOString() }'), true);
+  assertEquals(exp.includes("{ category: 'staff', expiresAt: expires.toISOString() }"), true);
   assertEquals(/coordinator:\$\{c\.id\}`, expiresAt:/.test(coord), true);
   assertEquals(index.indexOf('drainMailQueue(40, hold, rewrite)') < index.indexOf('carryoverAlert(hold)'), true);
   // لا ترك بالعمر بعد اليوم
@@ -244,8 +244,8 @@ Deno.test('الإشعار الذي لا معنى له متأخرًا يحمل م
   const [act, pay, part, pk] = await Promise.all(['activities.ts', 'payments.ts', 'participant.ts', 'passkeys.ts'].map(read));
   assertEquals(/اتصال فوري[\s\S]{0,600}expiresAt: new Date\(now\.getTime\(\)/.test(act), true);
   assertEquals((pay.match(/expiresAt: expiresIn\(24\)/g) || []).length, 2);
-  assertEquals(part.includes("newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { expiresAt: expiresIn(24) })"), true);
-  assertEquals(pk.includes("[], { expiresAt: expiresIn(24) })"), true);
+  assertEquals(part.includes("newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { category: 'essential', expiresAt: expiresIn(24) })"), true);
+  assertEquals(pk.includes("[], { category: 'essential', expiresAt: expiresIn(24) })"), true);
 });
 
 Deno.test('المطالبة قبل الإرسال: ما أرسله المدير بعد قراءة الدفعة لا يرسله التفريغ ثانية، والمطالبة الثانية تُرفض', async () => {

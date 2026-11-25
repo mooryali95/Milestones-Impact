@@ -97,7 +97,7 @@ const note = (a: Admin, action: string, id: string, after: Record<string, unknow
   audit('admin', a.email, action, 'erasure_requests', id, null, after).then(() => true, (e) => { console.error(`${action} audit:`, e); return false; });
 // رسالة القرار إلى المشارك، خارج الطابور (رسالة نظامية نادرة): إن تعذّرت يُعاد عنوانه إلى المدير ليرسلها بنفسه
 const tell = (to: string, subject: string, html: string) =>
-  sendMail(to, subject, html, [], { force: true, queue: false }).then(() => true, (e) => { console.error('erasure mail:', e); return false; });
+  sendMail(to, subject, html, [], { category: 'essential', force: true, queue: false }).then(() => true, (e) => { console.error('erasure mail:', e); return false; });
 
 /** نفّذ الحذف: بتأكيد الاسم كما في الملف، وتُحذف الشهادة معه، ويُغلق الطلب برقمه ويُبلَّغ صاحبه */
 export async function execute(a: Admin, b: Body) {

@@ -56,6 +56,7 @@ export function flagsOf(f, now = Date.now()) {
 
 // تسمية أفعال سجل التدقيق كما تُقرأ في الخط الزمني. ما لا تسمية له يظهر برمزه حتى يُسمّى
 export const AUDIT_AR = {
+  'mail.unsubscribe': 'أوقف فئة من بريده بنقرة',
   'participant.edit': 'عُدّلت بياناته', 'participant.status': 'تغيّرت حالته', 'participant.remind': 'ذُكِّر بإكمال التسجيل', 'participant.org': 'تغيّرت جهته',
   'participant.export': 'حمّل نسخة بياناته', 'participant.consent': 'وافق على سياسة الخصوصية', 'participant.erase-request': 'طلب حذف بياناته',
   'participant.erase-cancel': 'سحب طلب حذف بياناته', 'participant.name-confirm': 'أكّد اسمه للشهادة',

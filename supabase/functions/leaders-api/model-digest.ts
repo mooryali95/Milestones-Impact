@@ -66,7 +66,7 @@ export async function modelDigest(now = Date.now()): Promise<ModelDigestResult> 
   for (const g of groups) {
     const to = g.kind === 'team' ? CONFIG.alertEmail : g.reviewer?.email;
     if (!to) { skipped += g.total; continue; }
-    const ok = await sendMail(to, `${MODEL_DIGEST_SUBJECT} · ${g.total}`, modelDigestMail(g), [], { kind: 'notify', ref: `model-digest:${day}:${g.key}` })
+    const ok = await sendMail(to, `${MODEL_DIGEST_SUBJECT} · ${g.total}`, modelDigestMail(g), [], { category: 'staff', kind: 'notify', ref: `model-digest:${day}:${g.key}` })
       .then(() => true, (e) => { console.error('model digest mail:', e); return false; });
     if (!ok) { skipped += g.total; continue; }
     sent++;
@@ -92,6 +92,6 @@ export async function notifyGate(p: any, title: string) {
     mailText(`سلّم ${bdi(p.full_name)} «${bdi(title)}»، وهي بانتظار ${team ? `اعتماد ${REVIEWER_AR.team} لأنه بلا مستشار` : 'اعتمادك بصفتك مستشاره'}. لا يسلّم وثيقة مبادرته قبل اعتمادها.`)
     + mailButton(reviewLink(team ? 'team' : 'advisor'), team ? 'افتح لوحة الإدارة' : 'افتح لوحة الخبير'),
     { family: team ? 'admin' : 'journey', preheader: 'بطاقة مبادرة بانتظار اعتمادك' });
-  const sent = await sendMail(to, `بطاقة مبادرة بانتظار اعتمادك: ${title}`, html).then(() => true, () => false);
+  const sent = await sendMail(to, `بطاقة مبادرة بانتظار اعتمادك: ${title}`, html, [], { category: 'staff' }).then(() => true, () => false);
   return { sent, to: team ? 'team' : 'advisor' };
 }

@@ -12,7 +12,9 @@ import { route, SLACK_DOWN_MS, SLACK_DOWN_SUBJECT, slackStateOf } from '../_shar
 import { notifySettings } from '../_shared/notify-settings.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
-import { POLICY_MATERIAL_VERSION } from './labels.js';
+import { MAIL_CATEGORIES, POLICY_MATERIAL_VERSION } from './labels.js';
+import { mailPlan, prefsUrl, unsubHeaders, unsubToken, unsubUrl, verifyUnsubToken, withPrefsFooter } from './mail-prefs.js';
+import { plainText, MAIL_REPLY_TO } from '../_shared/mail.ts';
 import { WORKSHOP_NO_HALL_NOTE } from './features.js';
 import { mailBudget, queueEta } from './mail-center.js';
 import { ERASE_DELETED, ERASE_GROUNDS, ERASE_KEPT, leftAr, PAYMENT_RETENTION_YEARS } from './erasure.js';
@@ -240,20 +242,61 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 // بلا موعد تنتظر حتى تُرسل، يومًا بعد يوم
 // force: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي (كإرسال المدير من الصندوق). queue:false لا يدخل الطابور أبدًا
 // (بريد إتمام الحذف: الطابور يحفظ عنوان من مُحيت بياناته)
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', ref = null, purpose = null, expiresAt = null, force = false, queue = true }: { kind?: MailKind; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean } = {}): Promise<void | 'queued'> {
+// ── مركز رسائل المشارك (MAIL_CATEGORIES في labels.js، mail-prefs.js) ──
+// بريد فئة قابلة للكتم إلى مشارك: يُحفظ في مركز رسائله دائمًا، ولا يُرسل إن كتمها، ويحمل ترويستي الإلغاء بنقرة وسطر
+// التفضيلات في ذيله. الضروري وبريد الفريق يمران كما هما. قبل الترحيل 20261128200000 (لا جدول) يمر البريد كما كان بلا ترويسة
+export type MailCategory = keyof typeof MAIL_CATEGORIES;
+export async function prepareParticipantMail(to: string, subject: string, html: string, category: MailCategory | null, ref: string | null) {
+  const plan = mailPlan(category, []);
+  if (!plan.notify || !category) return { send: true, html, headers: undefined as Record<string, string> | undefined };
+  const { data: p, error } = await db.from('participants').select('id, is_demo').eq('email', String(to || '').trim().toLowerCase()).limit(1).maybeSingle();
+  if (error || !p || p.is_demo) return { send: true, html, headers: undefined };
+  const pref = await db.from('participant_mail_prefs').select('muted').eq('participant_id', p.id).maybeSingle();
+  if (pref.error) return { send: true, html, headers: undefined };
+  const decided = mailPlan(category, pref.data?.muted || []);
+  const note = await db.from('participant_notifications').insert({ participant_id: p.id, category, title: String(subject || '').slice(0, 300), excerpt: plainText(html).slice(0, 600), ref, emailed: decided.send });
+  if (note.error) console.error('participant_notifications insert:', note.error);
+  if (!decided.send) return { send: false, html, headers: undefined };
+  const token = await unsubToken(CONFIG.pepper, p.id, category);
+  return { send: true, html: withPrefsFooter(html, prefsUrl(CONFIG.appUrl, category)), headers: unsubHeaders(unsubUrl(CONFIG.url, token), MAIL_REPLY_TO) };
+}
+
+// الإلغاء بنقرة (RFC 8058): POST من برنامج البريد يكتم الفئة الموقَّعة في الرمز ويرد 200 بلا تحويل. GET (فتح الرابط في
+// متصفح) لا يغيّر شيئًا، ويحوّل إلى قسم التفضيلات في مركز الرسائل، فلا يكتم فاحصُ روابط شيئًا بفتحه
+export async function unsubscribeRequest(req: Request, token: string) {
+  const t = await verifyUnsubToken(CONFIG.pepper, token);
+  if (req.method !== 'POST') return new Response(null, { status: 303, headers: { Location: prefsUrl(CONFIG.appUrl, t?.category || '') } });
+  if (!t) return new Response('invalid token', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  const cur = await db.from('participant_mail_prefs').select('muted').eq('participant_id', t.participantId).maybeSingle();
+  if (cur.error) return new Response('unavailable', { status: 503 });
+  const muted = [...new Set([...(cur.data?.muted || []), t.category])];
+  const { error } = await db.from('participant_mail_prefs').upsert({ participant_id: t.participantId, muted, updated_at: new Date().toISOString() }, { onConflict: 'participant_id' });
+  if (error) return new Response('unavailable', { status: 503 });
+  await audit('participant', t.participantId, 'mail.unsubscribe', 'participants', t.participantId, null, { category: t.category, via: 'one-click' }).catch(() => {});
+  return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
+// category: فئة الرسالة من MAIL_CATEGORIES، إلزامية لكل بريد غير الرموز والتنبيه (اختبار mail-categories)
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', category = null, ref = null, purpose = null, expiresAt = null, force = false, queue = true }: { kind?: MailKind; category?: MailCategory | null; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean } = {}): Promise<void | 'queued'> {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
+  let headers: Record<string, string> | undefined;
+  if (kind !== 'code' && kind !== 'alert') {
+    const prep = await prepareParticipantMail(to, subject, html, category, ref);
+    if (!prep.send) return;   // كتمها المشارك: في مركز رسائله وحده
+    html = prep.html; headers = prep.headers;
+  }
   if (!CONFIG.resendKey) {
     // يُبلَّغ في سلاك كما تبلغه الدوال الأخرى من sendCounted: سلاك هو الاحتياط حين يتعطل البريد
     if (kind === 'code') slackCode(db, { status: 'failed', purpose, to, source: 'leaders-api', reason: 'mail_unconfigured' });
     else slackMail(db, { kind, to, source: 'leaders-api', reason: 'mail_unconfigured' });
     throw new Fail('خدمة البريد غير مهيأة', 503, 'mail_unconfigured');
   }
-  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, purpose, force, alert: alertOps });
+  const r = await sendCounted(db, to, subject, html, { kind, source: 'leaders-api', ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, attachments, purpose, force, ...(headers ? { headers } : {}), alert: alertOps });
   if (r.ok) return;
   if (r.reason === 'mail_cap' || r.reason === 'mail_share') {
     // الجماعي والإشعار لا يضيعان بالسقف: يدخلان صندوق «لم يُرسل» ويخرجان آليًّا حين تتسع الحصة، أو يرسلهما المدير يدويًّا.
     // الرمز لا يُؤجَّل (ينتهي في دقائق). المرفق الصغير (دعوة التقويم) يُحفظ مع رسالته، والكبير لا يُخزَّن
-    if (queue && (kind === 'bulk' || kind === 'notify') && queueableAttachments(attachments) && await enqueueMail(to, subject, html, ref, kind, r.reason, expiresAt, attachments)) return 'queued';   // دخلت صندوق «لم يُرسل»: يعدّها من يهمه الفرق (دعوة الورشة)
+    if (queue && (kind === 'bulk' || kind === 'notify') && queueableAttachments(attachments) && await enqueueMail(to, subject, html, ref, kind, r.reason, expiresAt, attachments, headers)) return 'queued';   // دخلت صندوق «لم يُرسل»: يعدّها من يهمه الفرق (دعوة الورشة)
     throw new Fail('بلغت الرسائل حدها اليومي، وتصل بعد ساعات', 429, 'mail_cap');
   }
   throw new Fail('تعذّر إرسال البريد، حاول بعد قليل', 502, 'mail_failed');
@@ -264,8 +307,14 @@ export async function sendMail(to: string, subject: string, html: string, attach
 export const QUEUE_ATTACH_MAX = 64_000;
 export const queueableAttachments = (a: MailAttachment[] = []) => a.reduce((n, x) => n + String(x?.content || '').length, 0) <= QUEUE_ATTACH_MAX;
 
-export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null, expiresAt: string | null = null, attachments: MailAttachment[] = []) {
-  const row = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
+export async function enqueueMail(to: string, subject: string, html: string, ref: string | null, kind: 'bulk' | 'notify' = 'bulk', reason: string | null = null, expiresAt: string | null = null, attachments: MailAttachment[] = [], headers?: Record<string, string>) {
+  const row: Record<string, unknown> = { to_email: to, subject: subject.slice(0, 300), html, ref, kind };
+  // ترويستا الإلغاء تُحفظ مع الرسالة (20261128200000)، وتُعاد بدونها إن رُفض العمود قبل ترحيله
+  if (headers) {
+    const { error } = await db.from('mail_queue').insert({ ...row, reason, headers, ...(attachments.length ? { attachments } : {}), ...(expiresAt ? { expires_at: expiresAt } : {}) });
+    if (!error) return true;
+    console.error('mail_queue insert (headers):', error);
+  }
   // رسالة بمرفق لا تُحفظ بلاه: إن رُفض عمود المرفقات (قبل ترحيله) تبقى خارج الطابور ويُبلَّغ المرسل بتعذّرها
   if (attachments.length) {
     const { error } = await db.from('mail_queue').insert({ ...row, reason, attachments, ...(expiresAt ? { expires_at: expiresAt } : {}) });
@@ -304,7 +353,8 @@ export const expiresIn = (hours: number) => new Date(Date.now() + hours * 36e5).
 export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), rewrite: (m: { subject: string; html: string }) => string = (m) => m.html) {
   const read = (cols: string) => db.from('mail_queue').select(cols)
     .is('sent_at', null).is('gave_up_at', null).order('kind', { ascending: false }).order('created_at').limit(limit + hold.size);
-  let { data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at, attachments');
+  let { data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at, attachments, headers');
+  if (error) ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at, attachments'));   // قبل ترحيل الترويسات
   if (error) ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts, expires_at'));   // قبل ترحيل المرفقات
   let legacy = false;
   if (error) { ({ data, error } = await read('id, kind, created_at, to_email, subject, html, ref, attempts')); legacy = true; }
@@ -318,7 +368,7 @@ export async function drainMailQueue(limit = 40, hold: Set<string> = new Set(), 
       continue;
     }
     if (!(await claimQueued(m.id))) continue;   // أرسلها المدير أو ألغاها بعد قراءة الدفعة
-    const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true, flush: inFlush(), ...(Array.isArray(m.attachments) && m.attachments.length ? { attachments: m.attachments } : {}) });
+    const r = await sendCounted(db, m.to_email, m.subject, rewrite(m), { kind: m.kind === 'notify' ? 'notify' : 'bulk', source: 'leaders-api', ref: m.ref, cap: CONFIG.mailDailyCap, key: CONFIG.resendKey, from: CONFIG.mailFrom, alert: alertOps, queued: true, flush: inFlush(), ...(Array.isArray(m.attachments) && m.attachments.length ? { attachments: m.attachments } : {}), ...(m.headers && typeof m.headers === 'object' ? { headers: m.headers } : {}) });
     if (r.ok) { sent++; continue; }   // sent_at كُتب بالمطالبة، ويبقى بعد نجاح الإرسال وحده
     if (r.reason === 'mail_cap' || r.reason === 'mail_share') { await releaseQueued(m.id); break; }   // الحصة: تُستأنف في الساعة التالية
     const attempts = (m.attempts || 0) + 1;

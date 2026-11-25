@@ -209,7 +209,7 @@ async function mailMembers(kind: keyof typeof GROUP_SESSION_MAIL, g: Row, rows: 
     if (!p?.email) { out.skipped += 1; continue; }
     const ics = [calendarFile(r.id, g, view, !live, r.updated_at)];
     try {
-      const res = await sendMail(p.email, GROUP_SESSION_MAIL[kind].subject, groupSessionMail(kind, p.full_name, view), ics, { kind: 'bulk', ref: g.id, ...(live ? { expiresAt: g.starts_at } : {}) });
+      const res = await sendMail(p.email, GROUP_SESSION_MAIL[kind].subject, groupSessionMail(kind, p.full_name, view), ics, { category: 'sessions', kind: 'bulk', ref: g.id, ...(live ? { expiresAt: g.starts_at } : {}) });
       if (res === 'queued') out.queued += 1; else out.sent += 1;
     } catch (e) { out.failed += 1; console.error('group mail', kind, g.id, (e as Error).message); }
   }
@@ -223,7 +223,7 @@ async function mailExpert(kind: keyof typeof GROUP_EXPERT_MAIL, g: Row, expertId
   const view = { ...groupView(g, null), count, cohort: cohortName };
   const ics = [calendarFile(g.id, g, view, kind === 'cancel')];
   try {
-    const res = await sendMail(e.email, GROUP_EXPERT_MAIL[kind].subject, groupExpertMail(kind, e.full_name, view), ics, { kind: 'bulk', ref: g.id, ...(kind === 'cancel' ? {} : { expiresAt: g.starts_at }) });
+    const res = await sendMail(e.email, GROUP_EXPERT_MAIL[kind].subject, groupExpertMail(kind, e.full_name, view), ics, { category: 'staff', kind: 'bulk', ref: g.id, ...(kind === 'cancel' ? {} : { expiresAt: g.starts_at }) });
     return res === 'queued' ? 'queued' : 'sent';
   } catch (err) { console.error('group expert mail', kind, g.id, (err as Error).message); return 'failed'; }
 }

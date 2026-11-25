@@ -63,7 +63,7 @@ async function mailAsker(requestId: string, subject: string, text: string) {
   const { data: r } = await db.from('peer_requests').select('participants(email, full_name)').eq('id', requestId).maybeSingle();
   const p = (r as any)?.participants;
   if (!p?.email) return;
-  await sendMail(p.email, subject, mailShell(`أهلًا ${firstName(p.full_name)}`, mailText(esc(text)) + mailButton(SITES.leaders, 'افتح رحلتك'))).catch(() => {});
+  await sendMail(p.email, subject, mailShell(`أهلًا ${firstName(p.full_name)}`, mailText(esc(text)) + mailButton(SITES.leaders, 'افتح رحلتك')), [], { category: 'experts' }).catch(() => {});
 }
 
 // ── للمشارك ──
@@ -109,7 +109,7 @@ export async function ask(p: any, b: Body) {
   if (supervision === 'expert_only') {
     const adv = await advisorOf(p);
     if (adv) await sendMail(adv.email, `طلب توجيه من ${p.full_name}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير'))).catch(() => {});
+      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'staff' }).catch(() => {});
   }
   return list(p);
 }
