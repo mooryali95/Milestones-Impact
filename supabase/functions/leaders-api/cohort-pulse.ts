@@ -131,7 +131,7 @@ export async function cohortWeekly(now = Date.now()) {
       next_at: ws.error ? null : nextSessionAt(c, { workshops: ws.data || [], now }), taken_at: snap!.taken_at,
     };
     try {
-      await sendMail(CONFIG.alertEmail, cohortWeeklySubject(c.name), cohortWeeklyMail(c, k), [], { kind: 'bulk', ref: `cohort-weekly:${c.id}:${due.week}`, expiresAt: new Date(now + 3 * DAY).toISOString() });
+      await sendMail(CONFIG.alertEmail, cohortWeeklySubject(c.name), cohortWeeklyMail(c, k), [], { category: 'staff', kind: 'bulk', ref: `cohort-weekly:${c.id}:${due.week}`, expiresAt: new Date(now + 3 * DAY).toISOString() });
       sent += 1;
     } catch (e) {
       console.error('cohort weekly', c.id, (e as Error)?.message || e);

@@ -347,7 +347,7 @@ export async function weeklyHealth() {
     ['تُرك من الطابور هذا الأسبوع (فات أوانه أو استنفد محاولاته)', num(left)],
     ['حُجب بحصة البريد هذا الأسبوع', num(mail.blocked)],
     ['رفضه مزوّد البريد هذا الأسبوع', num(mail.rejected)],
-  ], issues));
+  ], issues), [], { category: 'staff' });
   return { sent: email || slack, slack, email, issues: issues.length, mail };
 }
 
@@ -421,7 +421,7 @@ export async function mailSendTest(a: import('./admin.ts').Admin, b: Record<stri
   const m = MAIL_GALLERY.find((x) => x.key === b.key);
   if (!m) throw new Fail('قالب غير معروف', 404);
   if (!a.email) throw new Fail('لا بريد لحسابك', 400);
-  await sendMail(a.email, `[تجربة] ${m.subject}`, m.html());
+  await sendMail(a.email, `[تجربة] ${m.subject}`, m.html(), [], { category: 'staff' });
   await audit('admin', a.email, 'mail.test', 'mail', m.key);
   return { success: true, to: a.email };
 }

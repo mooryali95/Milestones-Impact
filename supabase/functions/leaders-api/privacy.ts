@@ -99,7 +99,7 @@ export async function eraseRequest(p: any, b: Body) {
   // لا يُحذف منه وتصل سلاك والرابط، فلا تحمل إلا المعرّفات والمهلة. الاسم والسبب في متن البريد وحده (mail)، ولا يُحفظ متنه
   await alertOps('erase_request', { request: row.id, participant: p.id, due_at: view.due_at, days_left: daysLeft(row.created_at), url: erasureUrl(p.id) },
     { key: row.id, mail: { name: p.full_name, ...(row.reason ? { reason: row.reason } : {}) } }).catch((e) => console.error('erase alert:', e));
-  await sendMail(p.email, ERASE_MAIL_SUBJECT, eraseRequestMail(p.full_name, ERASE_REPLY_DAYS)).catch((e) => console.error('erase mail:', e));
+  await sendMail(p.email, ERASE_MAIL_SUBJECT, eraseRequestMail(p.full_name, ERASE_REPLY_DAYS), [], { category: 'essential' }).catch((e) => console.error('erase mail:', e));
   return { success: true, erase: view };
 }
 

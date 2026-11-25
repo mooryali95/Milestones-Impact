@@ -33,7 +33,7 @@ async function notify(participantId: string, o: { kind: string; title: string | 
   const { data: p } = await db.from('participants').select('full_name, email, is_demo').eq('id', participantId).maybeSingle();
   if (!p?.email || p.is_demo) return;
   const heading = o.title || (OBS_KIND_AR as Record<string, string>)[o.kind] || 'ملاحظة';
-  await sendMail(p.email, `${(OBS_KIND_AR as Record<string, string>)[o.kind]} في رحلتك: ${heading}`.slice(0, 120), observationMail(p.full_name, heading, o.body), [], { kind: 'bulk', ref: `participant:${participantId}` })
+  await sendMail(p.email, `${(OBS_KIND_AR as Record<string, string>)[o.kind]} في رحلتك: ${heading}`.slice(0, 120), observationMail(p.full_name, heading, o.body), [], { category: 'journey', kind: 'bulk', ref: `participant:${participantId}` })
     .catch((e) => console.error('observation mail:', e));
 }
 

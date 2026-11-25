@@ -93,7 +93,7 @@ export async function sendNudges(sender: Sender, ids: string[]) {
     // المصدر الواحد لآخر تذكير هو السجل (خارطة 16 نوفمبر، المرحلة 3). reminded_at يُكتب فقط إن غاب السجل
     // (قبل ترحيله)، ويبقى للقراءة في lastBy لما سبق السجل من تذكيرات
     if (!ledger) await db.from('participants').update({ reminded_at: now }).eq('id', p.id);
-    await sendMail(p.email, nudge.subject, nudgeMail(p.full_name, nudge.subject, nudge.text, sign), [], { kind: 'bulk', ref: `participant:${p.id}` });
+    await sendMail(p.email, nudge.subject, nudgeMail(p.full_name, nudge.subject, nudge.text, sign), [], { category: 'reminders', kind: 'bulk', ref: `participant:${p.id}` });
     await audit(sender.kind === 'admin' ? 'admin' : 'system', sender.by, 'participant.nudge', 'participants', p.id, null, { sender: sender.kind, stage: nudge.key });
     sent += 1;
   }
