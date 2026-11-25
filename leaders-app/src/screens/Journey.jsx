@@ -118,9 +118,9 @@ export function TrackCardFacts({ card }) {
     <div className="track-col track-facts" data-testid="track-card">
       <h4>بطاقة مسارك</h4>
       <ul className="track-journey">
-        <li><b>الكتاب</b> {HB_TYPE_AR[card.handbook.type]}، يبدأ بإطار {dimOf(card.handbook.deepened).short}</li>
+        <li><b>الكتاب</b> {HB_TYPE_AR[card.handbook.type]}، يبدأ بإطار {dimOf(card.handbook.deepened).title}</li>
         <li><b>وثيقتك</b> {card.initiative.name}{a ? ` · نحو ${a} إلى ${b} صفحات` : ''}</li>
-        <li><b>رحلتك</b> {card.journey.requirements.length} أعمال بمستواك، و{card.journey.labs.length} مختبرات</li>
+        <li><b>رحلتك</b> {card.journey.requirements.length} أعمال بمستواك، ومعها {card.journey.labs.length} مختبرات</li>
         <li><b>الدعم</b> {SUPPORT_AR[card.support.mode]}{h.length ? ` · نحو ${h[0]} إلى ${h[1]} ساعة لكتابة وثيقتك` : ''}</li>
       </ul>
     </div>

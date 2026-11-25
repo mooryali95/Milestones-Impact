@@ -423,7 +423,7 @@ export function TermsBlock({ card, dimension }) {
   if (!f?.terms?.length) return null;
   return (
     <section className="card hb-terms" aria-label="مصطلحات الإطار بمستواك">
-      <h3>مصطلحات {dimOf(dimension).short} بمستواك <small className="muted">· {DEPTH_AR[f.level]}</small></h3>
+      <h3>مصطلحات {dimOf(dimension).title} بمستواك <small className="muted">· {DEPTH_AR[f.level]}</small></h3>
       <dl>
         {f.terms.map((t) => <div key={t.term}><dt>{t.term} <small dir="ltr" className="muted">{t.en}</small></dt><dd>{t.def}</dd></div>)}
       </dl>
