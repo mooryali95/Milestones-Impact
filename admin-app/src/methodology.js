@@ -8,7 +8,7 @@ import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api
 import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, withCandidates, SESSIONS_MAX_LIMIT, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
-import { GATE_STAGE_KEYS, SERVICE_NOTE_AR, SERVICE_UNLOCK_DEFAULT, TRACK_UNTIL_DEFAULT, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
+import { CONSULT_ANY_DEFAULT, GATE_STAGE_KEYS, SERVICE_NOTE_AR, SERVICE_UNLOCK_DEFAULT, TRACK_UNTIL_DEFAULT, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 
 export const LVLS = Object.keys(LVL);
 export const TIER = { ...TIER_AR, transfer: 'انتقال التعلم (بعدي، بلا درجة)' };
@@ -62,10 +62,13 @@ export function stageToForm(s) {
   // مرحلة متتابعة وصلت قاعدة صالحة، لا «تبدأ مع» بلا مرجع يرفضها الخادم (مرجع المسار قد يكون من طور آخر فلا يصلح لها)
   return { ...s, rule_mode: r.mode, rule_unlock: track ? 'previous' : r.unlock, rule_after: r.after, rule_with: track ? '' : r.with ?? '', rule_offset: r.offset || '', rule_day: r.day ?? '', rule_complete: r.complete,
     rule_lane: track ? 'track' : service ? 'service' : 'stage', rule_with_track: track ? r.with ?? '' : '', rule_until: track ? r.until : TRACK_UNTIL_DEFAULT,
-    rule_due_before: track ? (s.rules?.due_before ?? '') : '' };
+    rule_due_before: track ? (s.rules?.due_before ?? '') : '', rule_any: anyToForm(r.unlock === 'any' ? r.any : CONSULT_ANY_DEFAULT) };
 }
+// شروط «أي من» في النموذج مفاتيح مسطحة: reading_started، وstage:<المرحلة>
+const anyToForm = (any) => (any || []).map((c) => (c.type === 'stage_done' ? `stage:${c.stage}` : c.type));
+const anyFromForm = (list) => (list || []).map((k) => (k.startsWith('stage:') ? { type: 'stage_done', stage: k.slice(6) } : { type: k }));
 export function formToStage(v) {
-  const { rule_mode, rule_unlock, rule_after, rule_with, rule_offset, rule_day, rule_complete, rule_lane, rule_with_track, rule_until, rule_due_before, ...rest } = v;
+  const { rule_mode, rule_unlock, rule_after, rule_with, rule_offset, rule_day, rule_complete, rule_lane, rule_with_track, rule_until, rule_due_before, rule_any, ...rest } = v;
   if (rule_lane === 'track') {
     // المسار يبدأ مع مرجعه دائمًا، والإزاحة بلا سقف بمدة المرجع، والنهاية وما يشترطه من حقليهما
     const rules = { mode: rule_mode, unlock: 'with', with: rule_with_track || null, complete: rule_complete, lane: 'track', until: rule_until || TRACK_UNTIL_DEFAULT };
@@ -79,6 +82,7 @@ export function formToStage(v) {
     const rules = { mode: rule_mode === 'optional' ? 'optional' : 'on_demand', unlock, complete: rule_complete, lane: 'service' };
     if (unlock === 'stages') rules.after = rule_unlock === 'stages' && rule_after?.length ? rule_after : [...SERVICE_UNLOCK_DEFAULT.after];
     if (unlock === 'day') rules.day = rule_day;
+    if (unlock === 'any') rules.any = rule_any?.length ? anyFromForm(rule_any) : CONSULT_ANY_DEFAULT.map((c) => ({ ...c }));
     return { ...rest, rules };
   }
   const rules = { mode: rule_mode, unlock: rule_unlock, complete: rule_complete };
@@ -125,8 +129,13 @@ export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'rule_due_before', label: 'بنوده الإلزامية مطلوبة قبل', type: 'select', show: (v) => v.rule_lane === 'track', empty: 'التقرير النهائي (الافتراضي)',
     options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false && stageRules(s).lane !== 'track' && notService(s) && !GATE_STAGE_KEYS.includes(s.key)).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((s) => [s.key, s.title_ar])),
     help: 'هذه المرحلة وحدها تنتظر اكتمال بنود المسار الإلزامية، وما سواها (الدعم والتقييم مثلًا) لا ينتظره.' },
-  { name: 'rule_unlock', label: (v) => (v.rule_lane === 'service' ? 'متى تُتاح' : 'متى تُفتح'), type: 'select', options: STAGE_UNLOCK_AR, show: (v) => v.rule_lane !== 'track',
-    help: (v) => (v.rule_lane === 'service' ? 'الموصى به: «بعد مراحل محددة» واعتماد المستوى، وهو ما يُحفظ لـ«بعد ما قبلها». لا «يفتحها الأدمن»: تلك لكل مشارك بيد الفريق.' : null) },
+  { name: 'rule_unlock', label: (v) => (v.rule_lane === 'service' ? 'متى تُتاح' : 'متى تُفتح'), type: 'select', show: (v) => v.rule_lane !== 'track',
+    // «أي من» للخدمة وحدها، فلا تُعرض لمرحلة متتابعة (والخادم يرفضها)
+    options: (v) => (v.rule_lane === 'service' ? STAGE_UNLOCK_AR : Object.fromEntries(Object.entries(STAGE_UNLOCK_AR).filter(([k]) => k !== 'any'))),
+    help: (v) => (v.rule_lane === 'service' ? 'للاستشارة: «حين يتحقق أي شرط» ببدء القراءة أو إنهاء التدريب (يكفي أحدهما). والفتح لا رجعة فيه، ويبقى للفريق فتحها لمشارك استثناءً من ملفه.' : null) },
+  { name: 'rule_any', label: 'تُتاح حين (يكفي أحدها)', type: 'multi', show: (v) => v.rule_lane === 'service' && v.rule_unlock === 'any',
+    options: { reading_started: 'بدأ قراءة أول كتاب (دقيقة فعلية أو 200 كلمة)',
+      ...Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false && notService(s) && stageRules(s).lane !== 'track').sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((s) => [`stage:${s.key}`, `أنهى «${s.title_ar}»`])) } },
   { name: 'rule_after', label: 'تُفتح بعد اكتمال', type: 'multi', show: (v) => v.rule_lane !== 'track' && v.rule_unlock === 'stages',
     options: Object.fromEntries(stages.filter((s) => s.key !== selfKey && s.active !== false && notService(s)).map((s) => [s.key, s.title_ar])) },
   { name: 'rule_with', label: 'تبدأ مع', type: 'select', show: (v) => v.rule_lane !== 'track' && v.rule_unlock === 'with', empty: 'اختر المرحلة',

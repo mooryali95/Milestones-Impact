@@ -44,6 +44,7 @@ import { finalBreakdown } from './final.js';
 import { canReplaceFile, fileAnswers, REPLACE_REFUSED_AR } from './upload-file.js';
 import { privateFile } from './guards.js';
 import { stampSubmitted } from './cohort-times.ts';
+import { recordServiceUnlocks, serviceSignals } from './service-unlock.ts';
 
 type Ctx = { ip: string | null; ua: string | null };
 type Body = Record<string, any>;
@@ -611,7 +612,11 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
   // تدخل الأدمن في مراحل برنامج المشارك الحالي فقط، وبداية دفعته لشروط الفتح الزمنية
   const overrides = Object.fromEntries((ovr.data || []).filter((o: any) => o.program_id === def.program_id).map((o: any) => [o.stage_key, o.action]));
   const modes = def.cohort?.stage_modes || {};
-  const built = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null, detail: true });
+  // الخدمة بشرط «أي من» (الاستشارة خدمة): إشاراتها تُقرأ لبرنامج فيه هذه الخدمة وحده، فالنسخ القديمة بلا استعلام زائد
+  const signals = await serviceSignals(p, def.stages);
+  const built = buildJourney({ stages: def.stages.map((s: any) => ({ ...s, work_mode: modes[s.key] || null })), requirements: def.requirements, progress: prog, levels: content, state, activity, overrides, cohortStart: def.cohort?.starts_on || null, detail: true, signals: signals as any });
+  // لحظة الفتح تُسجَّل مرة ومعها بريد واحد؛ المعاينة (دفعة بخطة لم تُحفظ، أو جلسات معدلة) لا تكتب
+  if (signals && !cohort && !sessions) await recordServiceUnlocks(p, built, signals, def.program_id || null);
   // المسار المستمر (T1): نافذته من خطة الدفعة نفسها (trackWindows)، لشريط «يسير معك طوال الرحلة». برنامج بلا مسار لا يتغير
   const tw = trackWindows(def.stages, def.cohort || {});
   // نافذة كل مرحلة للمشارك (جولة المشارك 2026-11-19، البند 10): من خطة الدفعة نفسها (stageWindows، أي cohortPlan) التي تقرؤها

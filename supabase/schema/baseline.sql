@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261128120000_leaders_share_readiness
+-- as-of migration: 20261128150000_leaders_consult_service
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -2115,6 +2115,15 @@ create table if not exists leaders.schema_migrations (
   constraint schema_migrations_pkey PRIMARY KEY (name)
 );
 
+create table if not exists leaders.service_unlocks (
+  participant_id uuid not null,
+  stage_key text not null,
+  program_id uuid,
+  via text,
+  created_at timestamp with time zone default now() not null,
+  constraint service_unlocks_pkey PRIMARY KEY (participant_id, stage_key)
+);
+
 create table if not exists leaders.slack_threads (
   day date not null,
   category text not null,
@@ -3253,6 +3262,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.service_unlocks add constraint service_unlocks_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.sponsor_code_uses add constraint sponsor_code_uses_code_id_fkey FOREIGN KEY (code_id) REFERENCES leaders.sponsor_codes(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -4007,6 +4020,8 @@ alter table leaders.reading_progress enable row level security;
 alter table leaders.reports enable row level security;
 
 alter table leaders.schema_migrations enable row level security;
+
+alter table leaders.service_unlocks enable row level security;
 
 alter table leaders.slack_threads enable row level security;
 

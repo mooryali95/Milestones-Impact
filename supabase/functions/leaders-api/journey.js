@@ -154,7 +154,28 @@ export function programHours(requirements, levels = null) {
 // تدخل الأدمن لمشارك بعينه (فتح، اعتماد اكتمال، إعفاء) يأتي من overrides.
 const MODES = ['required', 'on_demand', 'optional'];
 // with: تبدأ مع مرحلة قبلها في الترتيب (rules.with)، فتُفتح حين تُفتح مرجعها وتسير معها (المراحل المتوازية P1)
-const UNLOCKS = ['previous', 'with', 'always', 'stages', 'day', 'approval'];
+const UNLOCKS = ['previous', 'with', 'always', 'stages', 'day', 'approval', 'any'];
+// ── «الاستشارة خدمة» (تصور البرامج والرحلة 2026-11-24، المرحلة 2، §4.3) ──
+// شرط فتح الخدمة 'any': تُتاح إن تحقق أي شرط مسمى في any. نوعان فقط (ب1): بدأ القراءة، وانتهت مرحلة (التدريب).
+// عتبة «بدأ القراءة» (ق5): صف في reading_progress بوقت فعلي ≥ 60 ثانية أو ≥ 200 كلمة. المصدر الواحد للقيمتين هنا
+export const READING_STARTED_SECONDS = 60;
+export const READING_STARTED_WORDS = 200;
+export const ANY_TYPES = Object.freeze(['reading_started', 'stage_done']);
+// الافتراضي الذي يضبطه الترحيل 20261128150000 ويقترحه المحرر: بدأ القراءة أو أنهى التدريب
+export const CONSULT_ANY_DEFAULT = Object.freeze([Object.freeze({ type: 'reading_started' }), Object.freeze({ type: 'stage_done', stage: 'training' })]);
+/** هل صف تقدم قراءة يكفي لـ«بدأ القراءة» @param {{ active_seconds?: number|null, words?: number|null }} r */
+export const readingStarted = (r) => !!r && (Number(r.active_seconds || 0) >= READING_STARTED_SECONDS || Number(r.words || 0) >= READING_STARTED_WORDS);
+/** شروط any كما تُقرأ: المعروف منها وحده @param {any} list */
+export function anyOf(list) {
+  return (Array.isArray(list) ? list : []).filter((c) => c && ANY_TYPES.includes(c.type))
+    .map((c) => (c.type === 'stage_done' ? { type: 'stage_done', stage: String(c.stage || '') } : { type: c.type }))
+    .filter((c) => c.type !== 'stage_done' || c.stage);
+}
+/** الشرط بجملة للمشارك والأدمن: «حين تبدأ قراءة كتابك الأول أو تنهي «التدريب»» @param {any[]} any @param {(k: string) => string} [title] */
+export function anyAr(any, title = (k) => k) {
+  const parts = anyOf(any).map((c) => (c.type === 'reading_started' ? 'تبدأ قراءة كتابك الأول' : `تنهي «${title(c.stage)}»`));
+  return parts.length ? `حين ${parts.join(' أو ')}` : 'حين يتحقق شرطها';
+}
 const COMPLETES = ['required', 'any', 'approval'];
 // طبيعة عنصر الرحلة (T1، تصور 2026-11-18 ب5): «مرحلة» متتابعة (الافتراضي)، و«مسار مستمر» يسير بجانب السلسلة فلا يأخذ منها
 // أيامًا ولا يقفل ما بعدها إلا المرحلة المسماة في due_before، و«خدمة» (T2، ب5.2) يطلبها من يريد: لا أيام لها في السلسلة ولا تقفل
@@ -215,6 +236,8 @@ export function stageRules(stage) {
     offset: r.unlock === 'with' && Number.isInteger(Number(r.offset)) && Number(r.offset) > 0 && r.offset !== true ? Number(r.offset) : 0,
     complete: COMPLETES.includes(r.complete) ? r.complete : 'required',
     ...laneOf(r),
+    // شروط 'any' تظهر في القواعد المقروءة معها وحدها، فشكل القواعد لكل نسخة قديمة لا يتغير حرفًا
+    ...(r.unlock === 'any' ? { any: anyOf(r.any) } : {}),
   };
 }
 // الطبيعة وحقولها: المرحلة المتتابعة بلا حقول جديدة، فشكل القواعد لبرنامج بلا مسار لا يتغير حرفًا
@@ -317,6 +340,20 @@ export function cleanStageRules(raw, stageKeys, selfKey) {
     if (selfKey && GATE_STAGE_KEYS.includes(selfKey)) throw new Error('بوابات القبول (الملف وتحديد المستوى واعتماده) لا تصير خدمة: عليها يُبنى فتح ما بعدها');
     if (out.unlock === 'with') throw new Error('الخدمة لا تبدأ مع مرحلة: تُتاح بشرط فتح (بعد اعتماد المستوى مثلًا) حتى نهاية الرحلة');
     out.mode = out.mode === 'optional' ? 'optional' : 'on_demand';
+  }
+  // «أي من» للخدمة وحدها: لا يُشترط اكتمال الخدمة لغيرها، فلا يدخل الشرط في حلقات الفتح ولا في نوافذ المراحل المتتابعة
+  if (out.unlock === 'any') {
+    if (!service) throw new Error('شرط «أي من» للخدمة وحدها؛ اجعل المرحلة خدمة أولًا');
+    const raw = Array.isArray(r.any) ? r.any : [];
+    if (raw.some((c) => !c || !ANY_TYPES.includes(c.type))) throw new Error('شرط إتاحة غير معروف');
+    const any = anyOf(raw);
+    if (!any.length) throw new Error('اختر شرطًا واحدًا على الأقل لإتاحة الخدمة');
+    for (const c of any.filter((x) => x.type === 'stage_done')) {
+      const t = list.find((x) => x.key === c.stage);
+      if (!t || c.stage === selfKey) throw new Error(c.stage === selfKey ? 'الخدمة لا تشترط نفسها' : `مرحلة غير موجودة في البرنامج: ${c.stage}`);
+      if (t.rules && laneKey(t) === 'service') throw new Error(`«${t.title_ar || c.stage}» خدمة لمن يريد، فلا يُشترط اكتمالها`);
+    }
+    out.any = any.filter((c, i) => any.findIndex((x) => x.type === c.type && x.stage === c.stage) === i);
   }
   if (track) {
     if (selfKey && GATE_STAGE_KEYS.includes(selfKey)) throw new Error('بوابات القبول (الملف وتحديد المستوى واعتماده) لا تصير مسارًا مستمرًا: عليها يُبنى فتح ما بعدها');
@@ -449,6 +486,17 @@ export function stageRulesIssues(stages) {
       if (GATE_STAGE_KEYS.includes(s.key)) lane('من بوابات القبول، فلا تكون خدمة');
       if (r.unlock === 'with') lane('خدمة تبدأ مع مرحلة؛ اجعل إتاحتها بشرط فتح (بعد اعتماد المستوى مثلًا)');
     }
+    if (r.unlock === 'any') {
+      const err = (msg) => out.push({ level: 'error', stage: s.key, rule: 'unlock', msg: `«${s.title_ar}»: ${msg}` });
+      if (r.lane !== 'service') err('شرط «أي من» للخدمة وحدها');
+      if (!r.any.length) err('شرط الإتاحة «أي من» بلا شروط');
+      for (const c of r.any.filter((x) => x.type === 'stage_done')) {
+        const t = byKey.get(c.stage);
+        if (!t) err(`تُتاح بإنهاء مرحلة غير موجودة (${c.stage})`);
+        else if (laneKey(t) === 'service') err(`تُتاح بإنهاء «${title(c.stage)}» وهي خدمة`);
+        else if (t.active === false) out.push({ level: 'warn', stage: s.key, rule: 'unlock', msg: `«${s.title_ar}»: تُتاح بإنهاء «${title(c.stage)}» وهي مخفية` });
+      }
+    }
     if (r.unlock === 'stages') {
       const svc = r.after.find((k) => byKey.has(k) && laneKey(byKey.get(k)) === 'service');
       if (svc) out.push({ level: 'error', stage: s.key, rule: 'lane', msg: `«${s.title_ar}»: تُفتح بعد «${title(svc)}» وهي خدمة لمن يريد، فلا يُشترط اكتمالها` });
@@ -490,6 +538,7 @@ export function serviceAvailAr(stage, title = (k) => k) {
     stages: `تُتاح بعد اكتمال ${r.after.map((k) => `«${title(k)}»`).join(' و')}`,
     with: 'تُتاح مع مرجعها', day: r.day === 0 ? 'تُتاح مع بداية الدفعة' : `تُتاح بعد ${afterDaysAr(r.day)} من بداية الدفعة`,
     approval: 'يتيحها الأدمن أو الخبير لكل مشارك',
+    any: `تُتاح ${anyAr(r.any, title)}`,
   }[r.unlock];
   return `${from} حتى نهاية الرحلة`;
 }
@@ -511,6 +560,7 @@ export function stageRuleSummary(stage, stages = []) {
     with: `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»${r.offset ? `، ومخطط بعد ${daysAr(r.offset)} من بدايتها` : ''}`,
     day: r.day === 0 ? 'تُفتح مع بداية الدفعة' : `تُفتح بعد ${afterDaysAr(r.day)} من بداية الدفعة`,
     approval: 'يفتحها الأدمن أو الخبير',
+    any: `تُفتح ${anyAr(r.any, title)}`,
   }[r.unlock];
   const complete = { required: 'تكتمل بمتطلباتها الإلزامية', any: 'تكتمل بأي متطلب فيها', approval: 'تكتمل باعتماد الأدمن أو الخبير' }[r.complete];
   if (r.lane === 'track') return `${LANE_AR.track} · ${unlock} · ${untilAr(r.until, title)} · ${dueBeforeAr(r.due_before, stages)}`;
@@ -548,7 +598,9 @@ const DAY_MS = 86400000;
 // ctx: { overrides: { [stage_key]: 'open'|'complete'|'skip' }, cohortStart: 'YYYY-MM-DD'|null, today: Date|string }
 // detail: مع كل مرحلة مقفلة سبب قفلها مفصّلًا (lock) لسطر «لماذا هي مقفلة وما الذي يفتحها» في رحلة المشارك (holdLine في
 // journey-copy.js): القاعدة، ومفاتيح ما تنتظره، وتاريخ الفتح. من الحساب نفسه الذي يقفلها، فلا مصدر ثانٍ. وبلا detail المخرج كما كان
-export function resolveStages(stages, { overrides = {}, cohortStart = null, today = new Date(), detail = false } = {}) {
+// signals (الخدمة بشرط 'any' وحدها): { readingStarted: هل بدأ القراءة (readingStarted)، unlocked: مفاتيح خدمات فُتحت له
+// من قبل (سطر service.unlocked)، فالفتح لا رجعة فيه }. غيابها لا يغير شيئًا لأي نسخة بلا 'any'
+export function resolveStages(stages, { overrides = {}, cohortStart = null, today = new Date(), detail = false, signals = /** @type {any} */ (null) } = {}) {
   const now = new Date(today).getTime();
   const start = cohortStart ? new Date(`${cohortStart}T00:00:00Z`).getTime() : null;
   const done = new Map();
@@ -579,6 +631,7 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     else if (r.unlock === 'with') unlocked = !!r.with && state.has(r.with) && state.get(r.with) !== 'locked';
     else if (r.unlock === 'stages') { waits = r.after.filter((k) => !done.get(k)); unlocked = !waits.length; }
     else if (r.unlock === 'day' && start != null && r.day != null) unlocked = now >= start + r.day * DAY_MS;
+    else if (r.unlock === 'any') unlocked = anyMet(s.key, r.any, done, signals);
     else { waits = before.filter((x) => !done.get(x.key)).map((x) => x.key); unlocked = !waits.length; }
     // due_before: مع شرط فتحها، تنتظر المرحلة المسماة بنود المسار الإلزامية (إلا بفتح الأدمن)
     if (dueWaits.length && ov !== 'open' && r.unlock !== 'approval') { waits = [...new Set([...waits, ...dueWaits])]; unlocked = false; }
@@ -594,6 +647,7 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     if (status === 'locked') {
       if (r.unlock === 'with') lock_reason = `تُفتح مع بداية «${r.with ? title(r.with) : '؟'}»`;
       else if (r.unlock === 'approval') lock_reason = 'تُفتح حين يفتحها لك فريق البرنامج';
+      else if (r.unlock === 'any') lock_reason = `تُتاح ${anyAr(r.any, title)}`;
       else if (r.unlock === 'day' && start != null && r.day != null) lock_reason = `تُفتح في ${new Date(start + r.day * DAY_MS).toISOString().slice(0, 10)}`;
       else if (waits.length) lock_reason = `تُفتح بعد اكتمال: ${waits.map(title).join('، ')}`;
       if (dueWaits.length && r.unlock !== 'stages' && r.unlock !== 'previous' && r.unlock !== 'approval') lock_reason = `تُفتح بعد اكتمال بنود: ${dueWaits.map(title).join('، ')}`;
@@ -602,9 +656,26 @@ export function resolveStages(stages, { overrides = {}, cohortStart = null, toda
     const lock = detail && status === 'locked' ? {
       unlock: r.unlock, waits: waits.filter((k) => !dueWaits.includes(k)), due: dueWaits,
       ...(r.unlock === 'with' && r.with ? { with: r.with } : {}),
+      ...(r.unlock === 'any' ? { any: r.any } : {}),
       ...(r.unlock === 'day' && start != null && r.day != null ? { date: new Date(start + r.day * DAY_MS).toISOString().slice(0, 10) } : {}),
     } : null;
     out.push({ ...s, status, mode: s.mode, stage_mode: r.mode, lock_reason, override: ov, skipped: ov === 'skip', ...(r.lane ? { lane: r.lane } : {}), ...(lock ? { lock } : {}) });
   }
+  // «أي من» بمرحلة بعدها في الترتيب (التدريب بعد الخدمة مثلًا): تُحسم بعد المرور كله. آمن لأن الخدمة لا يعتمد عليها شيء
+  for (let i = 0; i < out.length; i++) {
+    const o = out[i];
+    const r = stageRules(o);
+    if (o.status !== 'locked' || r.unlock !== 'any' || o.override) continue;
+    if (!anyMet(o.key, r.any, new Map(out.map((x) => [x.key, x.status === 'done'])), signals)) continue;
+    const byItems = r.complete === 'any' ? countedItems(o.items).some((x) => x.status === 'done') : r.complete === 'approval' ? false
+      : countedItems(o.items).length > 0 && countedItems(o.items).every((x) => x.status === 'done');
+    const { lock: _l, ...rest } = o;
+    out[i] = { ...rest, status: byItems ? 'done' : r.mode === 'required' ? 'active' : 'available', lock_reason: null };
+  }
   return out;
+}
+// هل تحقق شرط من شروط 'any'، أو فُتحت الخدمة له من قبل (الفتح لا رجعة فيه)
+function anyMet(key, any, done, signals) {
+  if (signals?.unlocked && (signals.unlocked instanceof Set ? signals.unlocked.has(key) : (signals.unlocked || []).includes(key))) return true;
+  return (any || []).some((c) => (c.type === 'reading_started' ? !!signals?.readingStarted : c.type === 'stage_done' ? !!done.get(c.stage) : false));
 }

@@ -457,7 +457,7 @@ export function gateSurveys(items) {
 
 // ctx (اختياري): قواعد الفتح الزمنية وتدخل الأدمن لهذا المشارك — انظر resolveStages
 // detail: سبب القفل مفصّلًا مع كل مرحلة مقفلة (resolveStages)، لرحلة المشارك وحدها
-export function buildJourney({ stages, requirements, progress, levels, state, activity = {}, overrides = {}, cohortStart = null, today = new Date(), detail = false }) {
+export function buildJourney({ stages, requirements, progress, levels, state, activity = {}, overrides = {}, cohortStart = null, today = new Date(), detail = false, signals = /** @type {any} */ (null) }) {
   const sorted = [...stages].filter((s) => s.active !== false).sort((a, b) => a.sort - b.sort);
   const withItems = sorted.map((stage) => {
     const items = requirements
@@ -482,7 +482,7 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
     const n = countedProgress(items);
     return { ...stage, items: gateSurveys(items), done: n.done, total: n.total };
   });
-  return resolveStages(withItems, { overrides, cohortStart, today, detail });
+  return resolveStages(withItems, { overrides, cohortStart, today, detail, ...(signals ? { signals } : {}) });
 }
 
 // نسبة التقدم الكلية: المراحل المكتملة مع جزء الحالية. المرحلة عند الطلب أو

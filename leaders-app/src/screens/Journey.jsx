@@ -14,6 +14,7 @@ import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { sessionsAr } from '../../../supabase/functions/leaders-api/journey.js';
 import { OPTIONAL_PARTICIPANT_AR } from '../../../supabase/functions/leaders-api/optional.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR, surveyQuestions } from '../../../supabase/functions/leaders-api/logic.js';
 import Activity, { CheckinHelp } from './Activities.jsx';
@@ -779,13 +780,21 @@ function Alongside({ stage, journey, children }) {
 
 // «خدمات متاحة لك» (T2، ب5.2): ما يطلبه من يريد حتى نهاية الرحلة (الاستشارة مثلًا)، منفصلًا عن تسلسل المراحل وعدها.
 // كل خدمة بطاقتها نفسها، وفيها الحجز وحده: يُخفى زره عند بلوغ حد الجلسات
+// الخدمة بشرط «أي من» (الاستشارة خدمة، المرحلة 2): قبل الفتح سطر الشرط وفعل يقرّب منه، وبعده «متاحة لك · بقي لك N»
+export const anyService = (stage) => stage?.rules?.unlock === 'any';
 export function serviceLineAr(stage) {
   if (stage.status === 'locked') return stage.lock_reason || 'تُتاح لاحقًا';
+  if (anyService(stage)) {
+    const a = (stage.items || []).map((it) => it.activity).find((x) => x && x.type === 'coaching' && x.max != null);
+    if (!a) return 'متاحة لك';
+    if (a.at_max) return sessionsBookedAr(a.max, a.max);
+    return `متاحة لك · بقي لك ${sessionsAr(Math.max(0, a.max - (a.used || 0)))}`;
+  }
   const act = (stage.items || []).map((it) => it.activity).find((a) => a && a.type === 'coaching' && a.max != null);
   if (act) return act.at_max ? sessionsBookedAr(act.max, act.max) : `متاحة لك حتى نهاية رحلتك، ${sessionsBookedAr(act.used, act.max)}`;
   return 'متاحة لك حتى نهاية رحلتك';
 }
-function Services({ list, children }) {
+function Services({ list, children, onRead, onAsk }) {
   return (
     <section className="card stack svc-shelf" aria-labelledby="svc-h" data-testid="services">
       <div className="row between fold-h">
@@ -794,8 +803,14 @@ function Services({ list, children }) {
       </div>
       {list.map((s) => (
         <div key={s.key} className="svc-item" data-service={s.key}>
-          <p className="small muted svc-line">{serviceLineAr(s)}</p>
-          <div className="timeline">{children(s)}</div>
+          <p className="small muted svc-line" data-testid="svc-line">{serviceLineAr(s)}</p>
+          {anyService(s) && s.status === 'locked' && onRead && (
+            <button type="button" className="btn secondary small" data-testid="svc-read" onClick={onRead}>ابدأ القراءة</button>
+          )}
+          {anyService(s) && s.status !== 'locked' && onAsk && !(s.items || []).some((it) => it.activity?.at_max) && (
+            <button type="button" className="btn small" data-testid="svc-ask" onClick={() => onAsk(s.key)}>اطلب استشارة</button>
+          )}
+          {!(anyService(s) && s.status === 'locked') && <div className="timeline">{children(s)}</div>}
         </div>
       ))}
     </section>
@@ -1165,7 +1180,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           )}
 
           {services.length > 0 && (
-            <Services list={services}>
+            <Services list={services} onRead={approved ? onHandbook : null} onAsk={(k) => { if (!expanded.has(k)) toggle(k); requestAnimationFrame(() => document.querySelector(`[data-service="${k}"] .timeline`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })); }}>
               {(s) => (
                 <Stage key={s.key} stage={s} n="+" level={4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)} journey={journey} narrow={narrow} store={store} demo={!!participant.is_demo}
                   onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />
