@@ -54,7 +54,7 @@ export async function recordServiceUnlocks(p: any, journey: any[], signals: any,
       await audit('system', null, SERVICE_UNLOCKED, 'participant', p.id, null, { stage: st.key, program_id: programId, via });
       out.push(st.key);
       if (p.email && !p.is_demo) {
-        await sendMail(p.email, SERVICE_UNLOCK_SUBJECT(st.title_ar), serviceUnlockMail(p.full_name, st.title_ar), [], { ref: `service:${p.id}:${st.key}` })
+        await sendMail(p.email, SERVICE_UNLOCK_SUBJECT(st.title_ar), serviceUnlockMail(p.full_name, st.title_ar), [], { category: 'journey', ref: `service:${p.id}:${st.key}` })
           .catch((e: any) => console.error('service unlock mail', p.id, st.key, e?.message || e));
       }
     } catch (e: any) {

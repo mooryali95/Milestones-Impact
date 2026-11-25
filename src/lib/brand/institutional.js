@@ -226,7 +226,7 @@ export function institutionalReport(input) {
       cell('الهدف', val(doc, 'initiative-charter', 'objective'), true),
       cell('النطاق', val(doc, 'initiative-charter', 'in_scope')),
       cell('المخرجات', c?.deliverables ? c.deliverables.rows.map((r) => r[0]).filter(Boolean).slice(0, 5).join('\n') : null),
-      cell('كيف نعرف أننا نجحنا', benefits.map((b) => `${b.title}${b.target ? `: ${b.target}` : ''}`).join('\n') || val(doc, 'evidence-plan', 'success_signal')),
+      cell('مؤشرات النجاح', benefits.map((b) => `${b.title}${b.target ? `: ${b.target}` : ''}`).join('\n') || val(doc, 'evidence-plan', 'success_signal')),
       cell('الموارد والتكلفة', ask),
       cell('المخاطر', risksOf(doc, 3).map((x) => x.title).join('\n'), true),
       cell('الراعي ومن يشغّل بعدها', [m.sponsor, val(doc, 'initiative-charter', 'operator')].filter(Boolean).join('\n')),

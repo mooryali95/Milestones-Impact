@@ -187,7 +187,7 @@ async function insertCertificate(p: any, by: string | null, final: FinalRef | nu
       if (!p.name_locked_at) await db.from('participants').update({ name_locked_at: issuedAt }).eq('id', p.id);
       await audit(by ? 'admin' : 'system', by, 'certificate.issue', 'certificates', data.id, null, { serial });
       // حساب العرض لا يصله بريد من أي مسار (demo.ts)، كبريد تأكيد الاسم
-      if (p.email && !p.is_demo) sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { ref: `participant:${p.id}` })
+      if (p.email && !p.is_demo) sendMail(p.email, 'شهادة إتمامك بنجاح برنامج القادة', certificateMail(p.full_name, verifyUrl(serial)), [], { category: 'journey', ref: `participant:${p.id}` })
         .catch((e) => console.error('certificate mail:', e));
       return data;
     }
@@ -234,7 +234,7 @@ export async function onFinalApproved(participantId: string, final: FinalRef, by
   // الشهادة الجديدة تنتظر تأكيد صاحبها اسمه كما سيُطبع (7.3)؛ تأكيده يصدرها (issueAfterNameConfirm)
   if (!p.name_confirmed_at) {
     await audit('system', by, 'certificate.awaiting-name', 'participants', p.id, null, { decision: final.decision });
-    if (p.email && !p.is_demo) sendMail(p.email, 'أكّد اسمك لتصدر شهادتك', nameConfirmMail(p.full_name, CONFIG.appUrl), [], { ref: `participant:${p.id}` })
+    if (p.email && !p.is_demo) sendMail(p.email, 'أكّد اسمك لتصدر شهادتك', nameConfirmMail(p.full_name, CONFIG.appUrl), [], { category: 'journey', ref: `participant:${p.id}` })
       .catch((e) => console.error('name confirm mail:', e));
     return { awaiting_name: true };
   }

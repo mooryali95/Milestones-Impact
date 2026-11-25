@@ -42,5 +42,5 @@ export async function wrongDoor(email: string, tried: Door) {
   await audit('system', email, `door.${tried}`, 'participants', null, null, { doors });
   const body = mailText(`طلبت الدخول إلى ${DOOR[tried].title}، وبريدك غير مسجل فيها. بريدك مسجل في:`)
     + doors.map((d) => mailButton(`${APP()}${DOOR[d].path}`, DOOR[d].label)).join('');
-  await sendMail(email, 'بوابتك الصحيحة في برنامج القادة', mailShell('بوابتك في برنامج القادة', body)).catch(() => {});
+  await sendMail(email, 'بوابتك الصحيحة في برنامج القادة', mailShell('بوابتك في برنامج القادة', body), [], { category: 'essential' }).catch(() => {});
 }

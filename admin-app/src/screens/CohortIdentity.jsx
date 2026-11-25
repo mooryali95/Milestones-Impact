@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useEscape, useUI } from '../ui.jsx';
-import { ACCENT_MIN_CONTRAST, contrastRatio } from '../../../src/lib/brand/doc.js';
+import { ACCENT_MIN_CONTRAST, C, contrastRatio } from '../../../src/lib/brand/doc.js';
 import { IDENTITY_LOGO_MAX } from '../../../supabase/functions/leaders-api/cohort-identity.js';
 
 const COLOR = /^#[0-9a-f]{6}$/i;
@@ -54,8 +54,8 @@ export default function CohortIdentity({ cohort, canWrite, onClose }) {
                 <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={pick} /></label>
               {v.logo && <div className="la-row"><img src={v.logo} alt="" style={{ maxHeight: 34, maxWidth: 150, objectFit: 'contain' }} /><button type="button" className="btn-sm ghost" onClick={() => setV((x) => ({ ...x, logo: '' }))}>أزل الشعار</button></div>}
               <label className="cv-row"><span><b>اللون</b><small className="la-muted">يقود أرقام الأبواب وخطوطها حين لا لون للجهة، بشرط تباين {ACCENT_MIN_CONTRAST}:1 على الأبيض</small></span>
-                <span className="la-row"><input type="color" value={COLOR.test(v.color) ? v.color : '#a97a2e'} onChange={(e) => setV((x) => ({ ...x, color: e.target.value }))} aria-label="اللون" />
-                  <input className="la-in ltr" value={v.color} placeholder="#1F6F5C" onChange={(e) => setV((x) => ({ ...x, color: e.target.value.trim() }))} style={{ width: 110 }} />
+                <span className="la-row"><input type="color" value={COLOR.test(v.color) ? v.color : C.gold.toLowerCase()} onChange={(e) => setV((x) => ({ ...x, color: e.target.value }))} aria-label="اللون" />
+                  <input className="la-in ltr" value={v.color} placeholder="#RRGGBB" onChange={(e) => setV((x) => ({ ...x, color: e.target.value.trim() }))} style={{ width: 110 }} />
                   {v.color && <button type="button" className="btn-sm ghost" onClick={() => setV((x) => ({ ...x, color: '' }))}>بلا لون</button>}</span></label>
               {ratio != null && <p className={ratio >= ACCENT_MIN_CONTRAST ? 'la-muted' : 'la-err'}>التباين على الأبيض {ratio.toFixed(1)}:1. {ratio >= ACCENT_MIN_CONTRAST ? 'يُستعمل في البنية.' : 'أقل من الحد، فتعود البنية إلى لون الهوية الذهبي تلقائيًا.'}</p>}
             </fieldset>

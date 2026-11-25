@@ -32,6 +32,7 @@ const Verify = lazyView(() => import('./screens/Verify.jsx'));
 import { CheckIn } from './screens/Activities.jsx';
 import { checkinKeep, receiptFor, signInNote } from './checkin.js';
 const Impact = lazyView(() => import('./screens/Impact.jsx'));
+const Messages = lazyView(() => import('./screens/Messages.jsx'));
 const Feedback360 = lazyView(() => import('./screens/Feedback360.jsx'));
 const Feedback360Entry = lazyView(() => import('./screens/Feedback360.jsx').then((m) => ({ default: m.Feedback360Entry })));
 const Rater = lazyView(() => import('./screens/Rater.jsx'));
@@ -60,6 +61,7 @@ import { ErrorBox, JourneySkeleton } from './ui.jsx';
 import { autoReboot, isTransient, reconnectCopy } from './reconnect.js';
 import { lastJourney, savedAtAr, STAGE_STATE_AR } from './last-journey.js';
 import { PHASES } from './labels.js';
+import { MESSAGES_TEXT } from '../../supabase/functions/leaders-api/labels.js';
 import { SectionBoundary } from './ErrorBoundary.jsx';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
 // الشاشات الثقيلة أو النادرة تُحمَّل كسولًا (قطعة لكل منها) فتصغر قطعة الدخول؛ Suspense في main.jsx
@@ -279,6 +281,9 @@ function Reconnecting({ online, code, working, onRetry, onOther, last }) {
 function Participant() {
   const [me, setMe] = useState(null);
   const [booting, setBooting] = useState(true);
+  // عدد غير المقروء في مركز الرسائل: من me عند الإقلاع، ويحدّثه القسم نفسه
+  const [unread, setUnread] = useState(0);
+  useEffect(() => { if (typeof me?.messages_unread === 'number') setUnread(me.messages_unread); }, [me?.messages_unread]);
   // home | profile | handbook | capstone | hall | impact | lab؛ ورابط البريد /?tab=profile يفتح قسمه مباشرة (deeplink.js)
   const [view, setView] = useState(() => {
     const link = tabFromSearch(location.search);
@@ -577,6 +582,8 @@ function Participant() {
   else if (pendingCheckin) screen = <CheckIn token={pendingCheckin.t} receipt={pendingCheckin.r} onDone={async ({ keep } = {}) => { if (!keep) checkinKeep.clear(); setCheckin(null); const r = await call('me'); if (r.success) accept(r); }} />;
   else if (consentNeed === 'renew' && !me.participant.is_demo && !consentLater) screen = <Consent consent={me.participant.consent} onAccepted={accept} onLater={() => setConsentLater(true)} />;
   else if (onb?.key === 'welcome') screen = <OnboardingWelcome me={me} step={onb} onStart={() => { welcomeSeen.set(true); setOnbTick((n) => n + 1); go('home'); }} />;
+  // مركز الرسائل: مفتوح لكل مشارك داخل حسابه، قبل بوابات الرحلة، فيصل إليه رابط ذيل البريد أيًّا كانت خطوته
+  else if (view === 'messages') screen = <Messages onBack={() => go('home')} onUnread={setUnread} />;
   else if (!gateDone(me, 'profile') || view === 'profile') {
     screen = <>{!gateDone(me, 'profile') && rail}<Profile me={me} onSaved={(res) => { accept(res); go('home'); }} onboarding={!gateDone(me, 'profile')} onCancel={() => go('home')} />{gateDone(me, 'profile') && <MyData me={me} />}{gateDone(me, 'profile') && me.profile?.approved && ft.f360 && <Feedback360Entry onOpen={() => go('f360')} />}</>;
   } else if (seatHold(me) && (!paidFor('assessment') || !paidFor('program'))) screen = <SponsorshipPending />;   // D20: لا بوابة دفع أثناء قرار الرعاية
@@ -606,6 +613,13 @@ function Participant() {
           {navItems.length > 0 && <Nav className="nav-tabs" items={navItems} view={navView} onGo={onNav} />}
           <span className="spacer" />
           {install && <button className="link small install" onClick={doInstall}>ثبّت التطبيق</button>}
+          {me && !me.participant.is_demo && (
+            <button type="button" className={`msgs-btn${view === 'messages' ? ' on' : ''}`} aria-current={view === 'messages' ? 'page' : undefined}
+              aria-label={unread ? `${MESSAGES_TEXT.tab}: ${unread} ${MESSAGES_TEXT.unread}` : MESSAGES_TEXT.tab} onClick={() => go('messages')}>
+              <Ico name="inbox" size="20" /><span className="msgs-label">{MESSAGES_TEXT.tab}</span>
+              {unread > 0 && <span className="msgs-badge" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}
+            </button>
+          )}
           {me && (
             <button className="who" title="ملفي وأجهزتي" aria-label={`ملفي: ${me.participant.full_name}`} onClick={() => go('profile')}>
               <span className="avatar" aria-hidden="true">{initials(me.participant.full_name)}</span>

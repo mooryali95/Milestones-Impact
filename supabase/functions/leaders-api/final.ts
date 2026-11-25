@@ -134,7 +134,7 @@ export async function vote(a: Actor, b: Body) {
     // البريد لا يَعِد بشهادة لم تصدر: حُجبت لتوقف الإصدار التلقائي، أو تعذّر إصدارها
     const held = !!(certificate?.skipped || certificate?.failed);
     // حساب العرض لا يصله بريد القرار (demo.ts)، وحساب الاختبار يصله كأي حساب
-    if (p.email && !p.is_demo) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null, { held }), [], { ref: `participant:${pid}` })
+    if (p.email && !p.is_demo) sendMail(p.email, FINAL_MAIL_SUBJECT[decision] || 'نتيجة تقييمك الختامي', finalDecisionMail(p.full_name, decision, record.snapshot?.notes_to_participant || null, { held }), [], { category: 'journey', ref: `participant:${pid}` })
       .catch((e) => console.error('final decision mail', e));
     return { success: true, status: patch.status, approval: st, certificate, notice: certificateNotice(certificate) };
   }

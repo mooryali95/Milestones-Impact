@@ -456,7 +456,7 @@ export async function coachingInstant(p: any, b: Body) {
   if (c.coach_email) {
     sendMail(c.coach_email, `اتصال فوري: ${p.full_name}`, mailShell('مشارك ينضم إليك الآن',
       mailText(`${bdi(p.full_name)} طلب اتصالًا فوريًا في «${bdi(r.title_ar)}» وهو في طريقه إلى غرفتك الآن.`) + mailButton(c.instant_url, 'افتح الغرفة'),
-      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' }), [], { expiresAt: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString() }).catch((e) => console.error(e));
+      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' }), [], { category: 'staff', expiresAt: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString() }).catch((e) => console.error(e));
   }
   await audit('participant', p.email, 'coaching.instant', 'stage_requirements', r.id);
   return { success: true, join_url: c.instant_url };
@@ -1087,7 +1087,7 @@ async function trainerMail(kind: keyof typeof WORKSHOP_TRAINER_MAIL, s: any, seq
   const link = online && !off ? s.join_url || null : null;
   const file = [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', sequence: seq, ...(off ? { method: 'CANCEL' as const } : { url: link || '' }) })];
   try {
-    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: online ? SESSION_MODE_AR.online : s.location_ar || null, cohort, count, joinUrl: link, changed }), file, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: online ? SESSION_MODE_AR.online : s.location_ar || null, cohort, count, joinUrl: link, changed }), file, { category: 'staff', kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
     return res === 'queued' ? 'queued' : 'sent';
   } catch (err) { console.error('workshop trainer mail', kind, s.id, (err as Error).message); return 'failed'; }
 }
@@ -1126,7 +1126,7 @@ async function cancelNotice(a: any, stored: any, reason: Exclude<Leave, 'restore
   for (const m of people) {
     try {
       const html = undate ? workshopUndateMail(m.name, title, when, s.location_ar || null, named) : workshopCancelMail(m.name, title, when, s.location_ar || null, named, told.stale);
-      const res = await sendMail(m.email, subject, html, file, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+      const res = await sendMail(m.email, subject, html, file, { category: 'sessions', kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
       if (res === 'queued') queued += 1; else sent += 1;
     } catch (e) { failed += 1; console.error('workshop mail', reason, s.id, (e as Error).message); }
   }
@@ -1478,7 +1478,7 @@ export async function sessionReminders() {
     const joinUrl = place ? null : s.join_url || null;
     const ics = icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at || new Date(Date.parse(s.starts_at) + 36e5).toISOString(),
       title: `جلسة توجيه${s.experts?.full_name ? ` مع ${s.experts.full_name}` : ''} · برنامج القادة`, description: place && s.group?.location ? s.group.location : 'Milestone Impact · Leaders Program', url: joinUrl || '' });
-    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, joinUrl, place), [ics]).catch((e) => console.error('session reminder', s.id, e));
+    await sendMail(s.participants.email, 'جلستك غدًا', sessionReminderMail(s.participants.full_name, when, s.experts?.full_name || null, joinUrl, place), [ics], { category: 'sessions' }).catch((e) => console.error('session reminder', s.id, e));
     sent += 1;
   }
   return sent;
@@ -1561,7 +1561,7 @@ async function workshopSend(s: any, kind: 'invite' | 'day' | 'hour' | 'change', 
     const html = kind === 'change' ? workshopChangeMail(m.name, title, when, s.location_ar || null, link, staged, changed, trainer)
       : workshopMail(kind, m.name, title, when, s.location_ar || null, link, staged, hall, verify === null ? 'other' : attendNoteMethod(verify, !!link), trainer);
     try {
-      const out = await sendMail(m.email, kind === 'change' ? WORKSHOP_CHANGE_MAIL.subject : WORKSHOP_MAIL[kind].subject, html, link ? withLink : noLink, { kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+      const out = await sendMail(m.email, kind === 'change' ? WORKSHOP_CHANGE_MAIL.subject : WORKSHOP_MAIL[kind].subject, html, link ? withLink : noLink, { category: 'sessions', kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
       if (out === 'queued') queued += 1; else sent += 1;
     }
     catch (e) { failed += 1; console.error('workshop mail', kind, s.id, (e as Error).message); }

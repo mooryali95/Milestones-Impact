@@ -107,7 +107,7 @@ export async function registerVerify(p: any, b: Body, sessionId: string, ctx: { 
   // إشعار أمني لصاحب الحساب: مفتاح أضيف دون علمه يراه فيحذفه
   if (p.email && !p.is_demo) {
     const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
-    sendMail(p.email, 'أُضيف مفتاح مرور إلى حسابك', passkeyAddedMail(p.full_name, deviceOf(ctx?.ua || ''), when), [], { expiresAt: expiresIn(24) }).catch((e) => console.error('passkey mail', e));
+    sendMail(p.email, 'أُضيف مفتاح مرور إلى حسابك', passkeyAddedMail(p.full_name, deviceOf(ctx?.ua || ''), when), [], { category: 'essential', expiresAt: expiresIn(24) }).catch((e) => console.error('passkey mail', e));
   }
   return { success: true };
 }

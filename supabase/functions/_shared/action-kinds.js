@@ -29,7 +29,7 @@ export const LEADERS_ADMIN_READS = new Set(['health', 'participant-emails', 'pla
   'participant-impact', 'sus', 'erasures', 'erasure-get', 'catalog', 'nudge-preview', 'nudge-ledger', 'nudge-report', 'track', 'orgs', 'org', 'sponsor-codes', 'org-intake', 'org-impact', 'org-finance', 'coordinator', 'coordinator-preview', 'org-journey', 'cohort-journey', 'book-preview',
   'submissions', 'submission', 'lab', 'lab-preview', 'lab-cards', 'certificates', 'certificate', 'cert-preview', 'cert-settings', 'activities', 'workshop-qr', 'workshop-attendance', 'cohort-workshops', 'coaching-groups', 'coaching-group-preview', 'coaching-group-candidates', 'impact',
   'curriculum', 'programs', 'payments', 'payment', 'sponsor-requests', 'experts', 'expert', 'expert-match', 'expert-requests', 'expert-reassign-options', 'program', 'program-compare', 'milestones', 'cohort-definition',
-  'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'org-team', 'capstones', 'capstone', 'capstone-quality', 'outcomes',
+  'hall', 'katon', 'final-eval', 'cohort-groups', 'cohort-team', 'cohort-visibility', 'cohort-identity', 'org-team', 'capstones', 'capstone', 'capstone-quality', 'outcomes',
   // الكتاب الأم: قراءة لكل مدير، والتعليق والحسم بغلاف writer (master-book.ts)
   'book',
   // مركز البريد: الحصة والأعداد وحدها قراءة. تشخيص العنوان ونص الرسالة والإرسال بغلاف writer، ورابط الدخول بغلاف superWriter
@@ -88,7 +88,7 @@ export const isReadAction = (fn, action) => (READS[fn] || []).some((s) => s.has(
 export const NO_REPLAY = new Set([
   'me.export', 'handbook.export', ...LEADERS_ADMIN_LOGGED_READS,
   'auth.start', 'auth.verify', 'auth.google', 'coord.auth-start', 'coord.auth-verify', 'passkey.auth-options', 'passkey.auth-verify',
-  'xp.auth-start', 'xp.auth-verify', 'xp.auth-google', 'workshop.scan', 'cert.verify', 'rater.submit', 'sponsor.submit', 'share.get', 'share.note',
+  'xp.auth-start', 'xp.auth-verify', 'xp.auth-google', 'workshop.scan', 'cert.verify', 'doc.verify', 'rater.submit', 'sponsor.submit', 'share.get', 'share.note',
   'outcome.submit', 'expert.apply', 'offer.respond', 'cron.reminders', 'cron.expert-offers',
   // أحداث الإخفاق من جهة العميل (المرحلة 4): مفتوحة، ويرسلها telemetry.js بـfetch مباشرة لا postAction، فلا إعادة ولا مفتاح
   'client.event',

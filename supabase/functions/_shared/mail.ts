@@ -133,14 +133,15 @@ export function plainText(html: string) {
 
 // attachments: ملفات مرفقة بمحتواها base64 (مثل دعوة التقويم .ics)
 export type MailAttachment = { filename: string; content: string; content_type?: string };
-type DeliverOpts = { key?: string; from?: string; attachments?: MailAttachment[] };
-export async function deliverResult(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT, attachments = [] }: DeliverOpts = {}) {
+// headers: ترويسات إضافية (List-Unsubscribe وList-Unsubscribe-Post للبريد غير الضروري، mail-prefs.js)
+type DeliverOpts = { key?: string; from?: string; attachments?: MailAttachment[]; headers?: Record<string, string> };
+export async function deliverResult(to: string, subject: string, html: string, { key = Deno.env.get('RESEND_API_KEY') || '', from = MAIL_FROM_DEFAULT, attachments = [], headers }: DeliverOpts = {}) {
   if (!key) { console.error('RESEND_API_KEY missing; mail to', to, 'not sent'); return { ok: false, status: 0, unconfigured: true }; }
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO, ...(attachments.length ? { attachments } : {}) }),
+      body: JSON.stringify({ from, to: [to], subject, html, text: plainText(html), reply_to: MAIL_REPLY_TO, ...(attachments.length ? { attachments } : {}), ...(headers && Object.keys(headers).length ? { headers } : {}) }),
     });
     const text = await res.text();
     if (!res.ok) { console.error('mail failed', res.status, text.slice(0, 300)); return { ok: false, status: res.status, rejected: res.status === 403 || res.status === 422 }; }

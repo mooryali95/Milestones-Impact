@@ -19,11 +19,12 @@
 //             tracking.get · tracking.save (متابعة تنفيذ المبادرة وأثرها بعد اعتمادها)
 //   للمنسق:   coord.me · coord.dashboard · coord.capstone · coord.logout (والدخول: coord.auth-start · coord.auth-verify)
 //   للإدارة:  admin.* بتوكن جلسة لوحة الإدارة نفسها (admin-api)
-import { alertOps, carryoverAlert, clientIp, CONFIG, db, drainMailQueue, Fail, must, preflight, reply, secretEquals, stuckQueueAlert } from './core.ts';
+import { alertOps, carryoverAlert, clientIp, CONFIG, db, drainMailQueue, Fail, must, preflight, reply, secretEquals, stuckQueueAlert, unsubscribeRequest } from './core.ts';
 import { slackHello } from '../_shared/slack.ts';
 import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram, journeyApproved } from './logic.js';
 import * as P from './participant.ts';
+import * as MS from './messages.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
 import * as C from './coordinator.ts';
@@ -181,7 +182,7 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
 
 // ما لا يحتاج حقًا: الحساب والملف والدفع نفسه. القياس المبدئي بحقه، وكل ما سواه بحق البرنامج
 const PAY_FREE = new Set(['me', 'org.logo', 'me.sponsor-code', 'org.visibility', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
-  'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
+  'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.messages', 'me.messages-read', 'me.mail-prefs', 'me.export', 'me.erase-request', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss', 'pay.access', 'pay.checkout', 'sponsor.request', 'sponsor.cancel', 'me.switch',
   'sus.state', 'sus.submit', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'ratings.pending', 'consent.accept', 'org.share-consent',
   // الحضور في القاعة لا تمنعه بوابة الدفع (W1): من حضر حضر، وحقه في البرنامج يُسوّى في مكانه. وworkshop.scan مفتوح أصلًا
   'workshop.checkin']);
@@ -192,7 +193,7 @@ const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f3
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
   'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
-const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.messages', 'me.messages-read', 'me.mail-prefs', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
@@ -206,7 +207,7 @@ const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 
 // (المنسحب والموقوف خارجه، والموقوف يُرد قبل هذا في participantFromToken). الاعتماد لا يُسحب بعد منحه، فيُحفظ في العامل
 // فلا يُقرأ مع كل سؤال من أسئلة القاعة. الأولى: يبقى لكل من يدخل ومنهم المنسحب (الحساب وبياناته وملفه وشهادته)
 const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name', 'certificate',
-  'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.export', 'me.erase-request', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss',
+  'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.messages', 'me.messages-read', 'me.mail-prefs', 'me.export', 'me.erase-request', 'passkey.register-options', 'passkey.register-verify', 'passkey.list', 'passkey.remove', 'passkey.dismiss',
   'consent.accept', 'org.share-consent', 'org.visibility', 'me.switch', 'pay.access', 'sponsor.cancel', 'sus.state', 'sus.submit']);
 // داخل البرنامج قبل الاعتماد وبعده: الملف والقياس المبدئي والدفع والرعاية، ودعوة المدير للتقدير القبلي (impact)،
 // ومتطلبات المرحلة المفتوحة (requirement.update يقفل المرحلة بنفسه)، والحضور بالرمز في القاعة، والمختبر بمنحته (lab.ts)،
@@ -274,6 +275,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
     const m: any = await P.me(p);
     // جلسة بدأها رابط تجربة: يعرض التطبيق سطر «حساب تجريبي مشترك» (linkSession في معالج الطلب)
     if (m?.success && ctx?.demoShared) m.demo_shared = true;
+    // عدّاد مركز الرسائل في الترويسة (messages.ts): تعذّره لا يُسقط الرئيسية
+    if (m?.success) m.messages_unread = await MS.unreadCount(p);
     if (b.with_home !== true || !m?.success) return m;
     const [lab, ratings, sus] = await Promise.all(['lab.list', 'ratings.pending', 'sus.state'].map((a) => settle(a, asAction(a, p, {}, sid, ctx))));
     return { ...m, preload: { lab, ratings, sus } };
@@ -285,6 +288,10 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me.privacy': (p) => PV.state(p),
   'me.notice-ack': (p, b) => OB.ack(p, b),
   'me.nudge-seen': (p, b) => NB.seen(p, b),
+  // مركز الرسائل (messages.ts): ما فات المشارك وتفضيلات بريده لكل فئة من MAIL_CATEGORIES
+  'me.messages': (p, b) => MS.list(p, b),
+  'me.messages-read': (p, b) => MS.markRead(p, b),
+  'me.mail-prefs': (p, b) => MS.savePrefs(p, b),
   // «التوجيه والإرشاد» (guide.ts): المشارك من جلسته وحدها، ولا معرّف من جسم الطلب
   'guide.state': (p) => GU.guideState(p),
   'guide.ask': (p, b) => GU.guideAsk(p, b),
@@ -839,6 +846,9 @@ export function advertiseBuild(res: Response) {
 }
 
 async function handle(req: Request): Promise<Response> {
+  // الإلغاء بنقرة من ترويسة List-Unsubscribe (RFC 8058): برنامج البريد يرسل POST بنموذج لا JSON، والمتصفح GET (core.ts)
+  const unsub = new URL(req.url).searchParams.get('unsubscribe');
+  if (unsub !== null) return await unsubscribeRequest(req, unsub);
   if (req.method === 'OPTIONS') return preflight(req);
   if (req.method !== 'POST') return reply(req, { success: false, message: 'Method not allowed' }, 405);
   let action = '';
