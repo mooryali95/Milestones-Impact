@@ -424,6 +424,15 @@ export function stageMoveMail(name: string, stage: string) {
     `مرحلتك الآن «${stage}»`);
 }
 
+// إتاحة خدمة لمن يريد (الاستشارة بشرط «أي من»، service-unlock.ts): بريد واحد قصير مرة لكل مشارك وخدمة، بلا تفاصيل الشرط
+export const SERVICE_UNLOCK_SUBJECT = (title: string) => `أُتيحت لك خدمة ${title}`;
+export function serviceUnlockMail(name: string, title: string) {
+  return shell('journey', `أُتيحت لك خدمة ${esc(title)}`,
+    mailText(`${hello(name)} أصبحت خدمة «${bdi(title)}» متاحة لك، تطلبها متى احتجتها من رحلتك.`)
+    + mailButton(CONFIG.appUrl, 'افتح رحلتي'),
+    `خدمة «${title}» متاحة لك الآن`);
+}
+
 // التذكير الموحد (nudges.ts): النص الذي بناه المحرك من رحلته (nudge.js)، وتوقيع مرسله إن لم يكن آليًا
 export function nudgeMail(name: string, heading: string, text: string, signature = '') {
   return shell('journey', esc(heading), mailText(`${hello(name)} ${esc(text)}`) + (signature ? mailText(esc(signature)) : '') + mailButton(CONFIG.appUrl, 'أكمل رحلتي'), text.slice(0, 140));

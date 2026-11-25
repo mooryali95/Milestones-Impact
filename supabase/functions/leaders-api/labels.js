@@ -39,6 +39,8 @@ export const STAGE_MODE_AR = { required: 'إلزامية', on_demand: 'عند ا
 export const STAGE_UNLOCK_AR = {
   previous: 'بعد اكتمال المراحل الإلزامية قبلها', with: 'تبدأ مع مرحلة أختارها', always: 'متاحة من البداية', stages: 'بعد اكتمال مراحل أختارها',
   day: 'بعد عدد أيام من بداية الدفعة', approval: 'حين يفتحها الأدمن أو الخبير',
+  // للخدمة وحدها (الاستشارة خدمة، 2026-11-24): يكفي شرط واحد مما يختاره الأدمن
+  any: 'حين يتحقق أي شرط أختاره (للخدمة)',
 };
 export const STAGE_COMPLETE_AR = { required: 'بإنجاز متطلباتها الإلزامية', any: 'بإنجاز أي متطلب فيها', approval: 'باعتماد الأدمن أو الخبير' };
 export const STAGE_STATUS_AR = { done: 'مكتملة', active: 'الحالية', available: 'متاحة عند الحاجة', locked: 'مقفلة' };
