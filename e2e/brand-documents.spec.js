@@ -41,7 +41,9 @@ test('تقرير الجهة يفتح وثيقة بالهوية: الشعار و�
   await expect(doc.getByText(/جميع الحقوق محفوظة/)).toBeVisible();
   await expect(doc.locator('.ref b')).toHaveText(/^MI-ORG-\d{8}-[A-Z0-9]{4}$/);
   await expect(doc.getByText('سارة الأحمد')).toBeVisible();
-  await expect(doc.getByRole('button', { name: 'طباعة أو حفظ PDF' })).toBeVisible();
+  // للتقرير اسم ملف، فيظهر «تحميل PDF» (من الخادم حين تتاح تذكرة) ومعه «طباعة»
+  await expect(doc.getByRole('button', { name: 'تحميل PDF' })).toBeVisible();
+  await expect(doc.getByRole('button', { name: 'طباعة', exact: true })).toBeVisible();
 });
 
 test('تصدير المشاركين ملف xlsx حقيقي من اليمين لليسار بالترويسة وحقوق النشر', async ({ page }) => {
