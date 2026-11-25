@@ -252,16 +252,28 @@ export type MailCategory = keyof typeof MAIL_CATEGORIES;
 export type MailRecipient = { kind: 'participant' | 'expert' | 'coordinator'; id: string };
 export const OWNER_COLUMN = { participant: 'participant_id', expert: 'expert_id', coordinator: 'coordinator_id' } as const;
 const passThrough = (html: string) => ({ send: true, html, headers: undefined as Record<string, string> | undefined });
-export async function prepareParticipantMail(to: string, subject: string, html: string, category: MailCategory | null, ref: string | null, recipient: MailRecipient | null = null, about: string | null = null) {
-  const audience = category ? mailAudience(category) : null;
-  if (audience === 'expert' || audience === 'coordinator') return prepareStaffMail(subject, html, category as MailCategory, ref, recipient, about);
+// notify: المدخل الواحد لمركز الرسائل. يكتب الإشعار في صندوق صاحبه ثم يقرر البريد بـmailPlan، ويعيد ما يُرسل وبأي ترويسة.
+// sendMail يستدعيه لكل فئة غير الرموز والتنبيه، فمركز المشارك حالة خاصة منه. mail: false إشعار في المنصة وحدها بلا بريد
+// (emailed=false)، ومعه actionUntil لعنصر «ينتظرك». يتسامح مع غياب الجداول أو الأعمدة: البريد يمر كما كان
+export type NotifyInput = {
+  to?: string; subject: string; html: string; category: MailCategory | null; ref?: string | null;
+  recipient?: MailRecipient | null; about?: string | null; mail?: boolean; actionUntil?: string | null;
+};
+export async function notify(n: NotifyInput) {
+  const audience = n.category ? mailAudience(n.category) : null;
+  if (audience === 'expert' || audience === 'coordinator') return notifyStaff(n, audience);
+  return notifyParticipant(n);
+}
+
+async function notifyParticipant({ to = '', subject, html, category, ref = null, mail = true }: NotifyInput) {
   const plan = mailPlan(category, []);
   if (!plan.notify || !category) return passThrough(html);
+  // المشارك بعنوانه كما كان
   const { data: p, error } = await db.from('participants').select('id, is_demo').eq('email', String(to || '').trim().toLowerCase()).limit(1).maybeSingle();
   if (error || !p || p.is_demo) return { send: true, html, headers: undefined };
   const pref = await db.from('participant_mail_prefs').select('muted').eq('participant_id', p.id).maybeSingle();
   if (pref.error) return { send: true, html, headers: undefined };
-  const decided = mailPlan(category, pref.data?.muted || []);
+  const decided = mail ? mailPlan(category, pref.data?.muted || []) : { notify: true, send: false, headers: false };
   const note = await db.from('participant_notifications').insert({ participant_id: p.id, category, title: String(subject || '').slice(0, 300), excerpt: plainText(html).slice(0, 600), ref, emailed: decided.send });
   if (note.error) console.error('participant_notifications insert:', note.error);
   if (!decided.send) return { send: false, html, headers: undefined };
@@ -270,16 +282,18 @@ export async function prepareParticipantMail(to: string, subject: string, html: 
 }
 
 // بريد الخبير والمنسق: صاحبه من recipient وحده (لا بحث بالعنوان)، وفئته لجمهوره
-async function prepareStaffMail(subject: string, html: string, category: MailCategory, ref: string | null, recipient: MailRecipient | null, about: string | null) {
-  const audience = mailAudience(category) as 'expert' | 'coordinator';
-  if (!recipient || recipient.kind !== audience || !/^[0-9a-f-]{36}$/i.test(String(recipient.id || ''))) return passThrough(html);
+async function notifyStaff({ subject, html, category, ref = null, recipient = null, about = null, mail = true, actionUntil = null }: NotifyInput, audience: 'expert' | 'coordinator') {
+  if (!category || !recipient || recipient.kind !== audience || !/^[0-9a-f-]{36}$/i.test(String(recipient.id || ''))) return passThrough(html);
   const plan = mailPlan(category, [], audience);
-  if (!plan.notify) return passThrough(html);
+  if (!plan.notify && mail) return passThrough(html);
   const col = OWNER_COLUMN[audience];
   const pref = await db.from('participant_mail_prefs').select('muted').eq(col, recipient.id).maybeSingle();
   if (pref.error) return passThrough(html);   // قبل الترحيل 20261129130000: كما كان
-  const decided = mailPlan(category, pref.data?.muted || [], audience);
-  const note = await db.from('participant_notifications').insert({ [col]: recipient.id, category, title: String(subject || '').slice(0, 300), excerpt: plainText(html).slice(0, 600), ref, emailed: decided.send, ...(about ? { about_participant_id: about } : {}) });
+  const decided = mail ? mailPlan(category, pref.data?.muted || [], audience) : { notify: true, send: false, headers: false };
+  const note = await db.from('participant_notifications').insert({
+    [col]: recipient.id, category, title: String(subject || '').slice(0, 300), excerpt: plainText(html).slice(0, 600), ref, emailed: decided.send,
+    ...(about ? { about_participant_id: about } : {}), ...(actionUntil ? { action_until: actionUntil } : {}),
+  });
   if (note.error) console.error('participant_notifications insert (staff):', note.error);
   if (!decided.send) return { send: false, html, headers: undefined };
   if (!decided.headers) return passThrough(html);
@@ -311,7 +325,7 @@ export async function sendMail(to: string, subject: string, html: string, attach
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   let headers: Record<string, string> | undefined;
   if (kind !== 'code' && kind !== 'alert') {
-    const prep = await prepareParticipantMail(to, subject, html, category, ref, recipient, about);
+    const prep = await notify({ to, subject, html, category, ref, recipient, about });
     if (!prep.send) return;   // كتمها المشارك: في مركز رسائله وحده
     html = prep.html; headers = prep.headers;
   }

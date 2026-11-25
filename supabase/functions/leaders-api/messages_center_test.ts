@@ -191,3 +191,19 @@ Deno.test('مركز الخبير وتفضيلات المنسق (المرحلة 1
     assertEquals(t.participant_mail_prefs.at(-1)?.coordinator_id, CID);
   } finally { w.restore(); }
 });
+
+Deno.test('notify بلا بريد (المرحلة 2أ): يكتب الإشعار في الصندوق ولا يرسل، للمشارك والخبير', async () => {
+  const t = base();
+  const w = installFake(t);
+  try {
+    const { notify } = await import('./core.ts');
+    await withMail(() => withNet(async (calls) => {
+      const a = await notify({ subject: 'مسار ينتظر اعتمادك', html: HTML, category: 'expert_work', recipient: { kind: 'expert', id: XID }, about: PID, mail: false, actionUntil: '2026-12-01T00:00:00Z', ref: `track:${PID}` });
+      const b = await notify({ to: 'sara@x.sa', subject: 'خطوتك', html: HTML, category: 'journey', mail: false });
+      assertEquals([a.send, b.send], [false, false]);
+      assertEquals(resendCalls(calls).length, 0);
+      assertEquals(t.participant_notifications.map((n) => [n.expert_id ?? n.participant_id, n.emailed, n.action_until ?? null]),
+        [[XID, false, '2026-12-01T00:00:00Z'], [PID, false, null]]);
+    }));
+  } finally { w.restore(); }
+});

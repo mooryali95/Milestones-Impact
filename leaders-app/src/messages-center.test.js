@@ -87,9 +87,17 @@ describe('قرار الإرسال والتسجيل', () => {
     expect(mailPlan('expert_work', [])).toEqual({ notify: false, send: true, headers: false });
     expect(mailPlan(null, [])).toEqual({ notify: false, send: true, headers: false });
   });
+  it('notify مدخل واحد لمركز الرسائل: لا prepareParticipantMail ولا نسخة ثانية للخبير (المرحلة 2أ)', () => {
+    const core = readFileSync(join(API, 'core.ts'), 'utf8');
+    expect(core).not.toMatch(/prepareParticipantMail|prepareStaffMail/);
+    expect(core).toMatch(/export async function notify\(n: NotifyInput\)/);
+    expect((core.match(/from\('participant_notifications'\)\.insert/g) || []).length).toBe(2);
+    // إشعار بلا بريد: mail: false يكتب الإشعار emailed=false ولا يرسل
+    expect(core).toMatch(/const decided = mail \? mailPlan\(category, pref\.data\?\.muted \|\| \[\], audience\) : \{ notify: true, send: false, headers: false \}/);
+  });
   it('sendMail يمر بتفضيلات المشارك لغير الرموز والتنبيهات، ويكتب الإشعار قبل قرار الإرسال', () => {
     const core = readFileSync(join(API, 'core.ts'), 'utf8');
-    expect(core).toMatch(/if \(kind !== 'code' && kind !== 'alert'\) \{\s*const prep = await prepareParticipantMail/);
+    expect(core).toMatch(/if \(kind !== 'code' && kind !== 'alert'\) \{\s*const prep = await notify\(\{ to, subject, html, category, ref, recipient, about \}\)/);
     expect(core).toMatch(/participant_notifications'\)\.insert\([\s\S]{0,300}emailed: decided\.send/);
     expect(core).toMatch(/if \(!decided\.send\) return \{ send: false/);
   });
@@ -136,7 +144,7 @@ describe('الإلغاء بنقرة', () => {
     expect(src('model-digest.ts')).toMatch(/recipient: g\.reviewer\?\.id \? \{ kind: 'expert', id: g\.reviewer\.id \}/);
     expect(src('coordinator.ts')).toMatch(/category: 'coord_digest'[\s\S]{0,120}recipient: \{ kind: 'coordinator', id: c\.id \}/);
     const core = src('core.ts');
-    expect(core).toMatch(/async function prepareStaffMail[\s\S]{0,400}if \(!recipient \|\| recipient\.kind !== audience/);
+    expect(core).toMatch(/async function notifyStaff[\s\S]{0,200}if \(!category \|\| !recipient \|\| recipient\.kind !== audience/);
   });
   it('ترويستا RFC 8058 ورابط التفضيلات في الذيل', async () => {
     const url = unsubUrl('https://api.example.test', 'a.b.c');
