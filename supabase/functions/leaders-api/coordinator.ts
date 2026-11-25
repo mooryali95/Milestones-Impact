@@ -380,7 +380,7 @@ async function notifyNewAccess(orgId: string, orgName: string, before: Record<st
   await audit('system', null, 'org.access-widened', 'organizations', orgId, null, { opened });
   const { data: people } = await listed(db.from('participants').select('full_name, email').eq('organization_id', orgId).neq('status', 'withdrawn')).limit(500);
   for (const p of people || []) {
-    if (p.email) sendMail(p.email, `${orgName} تطّلع على رحلتك`, orgAccessMail(p.full_name, orgName, opened)).catch((e) => console.error('org access mail', e));
+    if (p.email) sendMail(p.email, `${orgName} تطّلع على رحلتك`, orgAccessMail(p.full_name, orgName, opened), [], { category: 'essential' }).catch((e) => console.error('org access mail', e));
   }
 }
 
@@ -388,7 +388,7 @@ async function sendInvite(c: any, orgName: string) {
   const { data: o } = await db.from('organizations').select('status, invite_code, seats, contract_starts, contract_ends').eq('id', c.organization_id).maybeSingle();
   // رابط التسجيل لا يُرسل لجهة موقوفة، فرابطها معطّل
   const info = o ? { ...o, invite_code: o.status === 'active' ? o.invite_code : null } : {};
-  await sendMail(c.email, `لوحة ${orgName} في برنامج القادة`, coordinatorInviteMail(c.full_name, orgName, info));
+  await sendMail(c.email, `لوحة ${orgName} في برنامج القادة`, coordinatorInviteMail(c.full_name, orgName, info), [], { category: 'staff' });
   await db.from('org_coordinators').update({ invited_at: new Date().toISOString() }).eq('id', c.id);
   return true;
 }
@@ -578,7 +578,7 @@ export async function weeklyReports() {
     try {
       const d = await dashboardFor(c);
       await db.from('org_coordinators').update({ last_report_at: new Date().toISOString() }).eq('id', c.id);
-      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis), [], { kind: 'bulk', ref: `coordinator:${c.id}`, expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() });
+      await sendMail(c.email, `ملخص ${c.organizations.name} الأسبوعي`, coordinatorWeeklyMail(c.full_name, c.organizations.name, d.kpis), [], { category: 'staff', kind: 'bulk', ref: `coordinator:${c.id}`, expiresAt: new Date(Date.now() + 7 * 864e5).toISOString() });
       await audit('system', null, 'coordinator.weekly-report', 'org_coordinators', c.id);
       sent += 1;
     } catch (e) { console.error('weekly report', c.id, e); }

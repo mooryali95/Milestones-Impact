@@ -144,7 +144,7 @@ export async function reviews(e: any) {
   // كان الاستعلام يطلب learning_models.rubric، وهو عمود لا وجود له، فيفشل ويُبتلع خطؤه وتظهر القائمة فارغة دائمًا:
   // المستشار لا يرى ما ينتظر تقييمه. المعيار من labels.js (RUBRIC_SCALE) لا من القاعدة. وخطأ القراءة يُقال ولا يُبتلع.
   const { data, error } = await db.from('model_submissions')
-    .select('id, status, submitted_at, reviewed_at, reviewed_by, rating, feedback_ar, answers, participant_id, participants(full_name, organization_name), learning_models(key, title_ar, fields)')
+    .select('id, status, submitted_at, reviewed_at, reviewed_by, rating, feedback_ar, answers, participant_id, participants(full_name, organization_name), learning_models(key, title_ar, fields, capstone_sort)')
     .in('participant_id', ids).in('status', ['submitted', 'reviewed', 'returned']).order('submitted_at', { ascending: false }).limit(200);
   if (error) throw new Fail('تعذّر قراءة ما ينتظر تقييمك الآن، حاول بعد قليل', 503, 'busy');
   return { success: true, advisor: true, items: data || [] };

@@ -110,7 +110,7 @@ const tooOld = { 'capstone.get': { success: false, code: 'update_required', mess
 test('القادة: رد الخادم update_required يُظهر الشريط نفسه إن كان على الموقع إصدار أحدث', async ({ page }) => {
   const state = await participant(page, { replies: tooOld, publishOn: 'capstone.get' });
   await page.goto(APP);
-  await page.locator('nav.nav-tabs').getByRole('button', { name: 'مبادرتي' }).click();
+  // «مبادرتك الآن» في رحلتي تقرأ capstone.get أيضًا («الوثيقة الحية»)، فيظهر الشريط من الرئيسية دون تنقل يعيد التحميل
   await expect(page.getByTestId('update-bar')).toBeVisible();
   await expect(page.getByTestId('update-bar')).toHaveText('تحديث جديد متاححدّث');
   expect(state.docs).toBe(1);

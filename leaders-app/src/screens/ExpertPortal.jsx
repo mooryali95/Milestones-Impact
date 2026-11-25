@@ -16,7 +16,7 @@ import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
 import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
 import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
-import { isGateModel, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
+import { chapterNoteOnly, isGateModel, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -209,7 +209,8 @@ function AdvisorReviews({ initial }) {
               ? <><button className="btn sm" disabled={busy || !f.rating} onClick={() => send(x, 'reviewed')}>اعتمد</button>
                 <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>أعده بملاحظة</button></>
               : <><button className="btn sm" disabled={busy} onClick={() => send(x, 'reviewed')}>{f.feedback.trim() || f.rating ? 'أرسل الملاحظة' : 'قرأته'}</button>
-                <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>يحتاج تعديلًا</button></>}
+                {/* فصل في وثيقة المبادرة: ملاحظة لا إعادة («الوثيقة الحية»، chapterNoteOnly) */}
+                {!chapterNoteOnly(x.learning_models) && <button className="btn ghost sm" disabled={busy || !f.feedback.trim()} onClick={() => send(x, 'returned')}>يحتاج تعديلًا</button>}</>}
               <button className="link small" onClick={() => setOpen(null)}>إلغاء</button></div>
           </div>
         )}

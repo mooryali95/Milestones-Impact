@@ -59,14 +59,15 @@ test('«تحميل PDF» في صفحة المبادرة: ملف A4 جاهز با
   page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) csp.push(m.text()); });
   await open(page);
   const dl = page.waitForEvent('download', { timeout: 100000 });
-  await page.getByRole('button', { name: 'تحميل PDF' }).click();
+  // زر لكل نسخة (قرار المالك 2026-11-25): ملف العمل بزره «تحميل ملف العمل PDF»
+  await page.getByRole('button', { name: 'تحميل ملف العمل PDF' }).click();
   const d = await dl;
   expect(d.suggestedFilename()).toMatch(/^ملف-عمل-المبادرة-موعد-أول-أقرب-\d{4}-\d{2}-\d{2}-0042-V3\.pdf$/);
   const buf = readFileSync(await d.path());
   expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(pagesOf(buf)).toBeGreaterThanOrEqual(5);
   expect(buf.length).toBeLessThan(6 * 1024 * 1024);
-  await expect(page.getByRole('button', { name: 'تحميل PDF' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'تحميل ملف العمل PDF' })).toBeEnabled();
   expect(csp).toEqual([]);
 });
 

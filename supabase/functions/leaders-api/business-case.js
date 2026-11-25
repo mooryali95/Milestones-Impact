@@ -78,6 +78,20 @@ export function benefitsOf(doc, limit = 5) {
 // المدة كما تُقرأ: «من … إلى …»، أو «حتى الأسبوع 12» بلا تاريخ بدء (الزمن النسبي، تاريخ البدء اختياري)
 export const durationAr = (start, end) => (start && end ? `${ltr(start)} إلى ${ltr(end)}` : end ? `حتى ${ltr(end)}` : start ? `من ${ltr(start)}` : null);
 
+// ملخص مقترح من البطاقة وحدها (كثافة summary: auto): فقرة تُقترح ويعدّلها المشارك إن شاء، ولا تُحفظ حتى يحفظها هو.
+// a: إجابات بطاقة المبادرة. null حين لا مشكلة ولا هدف
+export function summaryFromCard(a) {
+  const v = (k) => String(a?.[k] ?? '').trim().replace(/[.،\s]+$/, '');
+  if (!v('problem') && !v('objective')) return null;
+  return [
+    v('title') && `مبادرة «${v('title')}»${v('host') ? ` في ${v('host')}` : ''}.`,
+    v('problem') && `المشكلة: ${v('problem')}.`,
+    v('beneficiaries') && `المستفيدون: ${v('beneficiaries')}.`,
+    v('objective') && `الهدف: ${v('objective')}.`,
+    v('first_step') && `الخطوة الأولى: ${v('first_step')}.`,
+  ].filter(Boolean).join(' ');
+}
+
 export function charterData(doc) {
   if (!sectionOf(doc, 'initiative-charter')) return null;
   const c = (f) => text(doc, 'initiative-charter', f);

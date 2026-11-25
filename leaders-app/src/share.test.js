@@ -37,7 +37,7 @@ describe('حالة الرابط ومدخلاته', () => {
 
 describe('ما يصل القارئ: الخادم يحسمه', () => {
   const doc = {
-    meta: { level: 'advanced', track: { title: 'مسار' }, initiative: 'م' },
+    meta: { level: 'advanced', profile: 'impact-advanced', track: { title: 'مسار' }, initiative: 'م' },
     sections: [{ key: 'initiative-charter', fields: [{ key: 'sponsor', value: 'المدير' }, { key: 'sponsor_email', value: 'boss@x.sa' }] }],
     review: { score: 80 }, checks: [{ ok: false }], sponsor: { note: 'خاص' }, rubric: [{ key: 'a' }],
   };
@@ -49,8 +49,8 @@ describe('ما يصل القارئ: الخادم يحسمه', () => {
     expect(JSON.stringify(d)).not.toContain('boss@x.sa');
   });
   it('المستوى والمسار بإذن صاحب الوثيقة في هذا الرابط وحده (D18)', () => {
-    expect(publicDoc(doc, { show_levels: false }).meta).toMatchObject({ level: null, track: null });
-    expect(publicDoc(doc, { show_levels: true }).meta.level).toBe('advanced');
+    expect(publicDoc(doc, { show_levels: false }).meta).toMatchObject({ level: null, profile: null, track: null });
+    expect(publicDoc(doc, { show_levels: true }).meta.profile).toBe('impact-advanced');
   });
 });
 

@@ -1,0 +1,55 @@
+name: Deploy PDF renderer
+
+# ينشر workers/pdf-render (مولّد PDF المتجهي للوثائق، قرار المالك 2026-11-25) إلى Cloudflare بـ wrangler، عند كل تغيير فيه على main أو يدويًا.
+# يعمل فقط إن وُجد السر CLOUDFLARE_API_TOKEN، وإلا يتخطى بتحذير. السر PDF_RENDER_SECRET سر Worker يُضبط مرة في Cloudflare (README العامل).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/pdf-render/**'
+      - '.github/workflows/deploy-pdf-render.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pdf-render
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+    steps:
+      - name: Skip without a Cloudflare token
+        id: gate
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN is not set; the PDF renderer was NOT deployed (RUNBOOK.md §4)."
+            echo "### PDF renderer not deployed: set the CLOUDFLARE_API_TOKEN secret (RUNBOOK.md §4)" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::Neither CLOUDFLARE_ACCOUNT_ID nor R2_ACCOUNT_ID is set; wrangler will pick the account from the token."
+          fi
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          node-version: '20'
+      - name: Unit check before deploy
+        if: steps.gate.outputs.skip != 'true'
+        run: node --check workers/pdf-render/index.js && (cd workers/pdf-render && npm install --no-audit --no-fund)
+      - name: Deploy with wrangler
+        if: steps.gate.outputs.skip != 'true'
+        id: deploy
+        working-directory: workers/pdf-render
+        run: |
+          npx --yes wrangler@4.152.0 deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
+          echo "url=$url" >> "$GITHUB_OUTPUT"

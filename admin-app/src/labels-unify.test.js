@@ -90,7 +90,8 @@ describe('حالة الجلسة وحالة الفصل من labels.js لا من �
   });
   it('فصول وثيقة المبادرة من labels.js بلسان المستشار، و«أُعيد» بفعل الوثيقة نفسه', () => {
     const s = read('admin-app/src/screens/Capstones.jsx');
-    expect(s).toMatch(/SECTION_STATUS_AR\[s\.status\]/);
+    // «الوثيقة الحية»: حالة الفصل في خط الخبير بالحالات الأربع من مصدرها (spine.js STATE_AR)، لا نص في الشاشة
+    expect(s).toMatch(/STATE_AR\[st\]/);
     expect(s).not.toMatch(/'قيّمته'/);
     expect(SECTION_STATUS_AR).toEqual({ draft: 'قيد العمل', submitted: 'مقدَّم، ويُحتسب في رحلتك', returned: STATUS_TITLES_ADMIN.returned, reviewed: 'مقروء' });
     expect(SECTION_STATUS_AR.submitted).not.toMatch(/تقييمك/);

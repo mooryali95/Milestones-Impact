@@ -118,7 +118,8 @@ test('جدول الدفعات: فعل أساسي واحد ظاهر لكل صف،
   const more = row.getByRole('button', { name: 'إجراءات أخرى للدفعة «سفراء 2026»' });
   await more.click();
   const menu = page.getByRole('menu', { name: 'إجراءات أخرى للدفعة «سفراء 2026»' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['تحرير', 'الرحلة والمدد', 'الفريق والمجموعات', 'الرؤية']);
+  // «هويتها في الوثيقة»: هوية الدفعة في الوثيقة المطبوعة (CohortIdentity.jsx، ترحيل 20261129100000)
+  await expect(menu.getByRole('menuitem')).toHaveText(['تحرير', 'الرحلة والمدد', 'الفريق والمجموعات', 'الرؤية', 'هويتها في الوثيقة']);
   await menu.getByRole('menuitem', { name: 'الرحلة والمدد' }).click();
   await expect(page).toHaveURL(/#\/leaders\/programs\/c1\?view=journey$/);
 });

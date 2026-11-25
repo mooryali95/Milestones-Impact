@@ -7,7 +7,7 @@ const { CONFIG, db } = await import('./core.ts');
 const MD = await import('./model-digest.ts');
 const A = await import('./admin.ts');
 const V = await import('./advisor.ts');
-const { digestGroups, needsDigest, bulkReadIds, readingList, readingCounts } = await import('./model-review.js');
+const { chapterNoteOnly, digestGroups, needsDigest, bulkReadIds, readingList, readingCounts } = await import('./model-review.js');
 const { modelStatus } = await import('./logic.js');
 const { modelStatusAr, REVIEWER_AR } = await import('./labels.js');
 
@@ -110,6 +110,16 @@ Deno.test('تجميع الملخص: المستشار بمشاركيه، وفري
   assertEquals(digestGroups(rows, new Map([['p1', null]])).map((g: any) => g.ids), [['s1']]);
   assertEquals(needsDigest({ status: 'submitted', submitted_at: '2026-11-24T08:00:00Z', digested_at: '2026-11-23T05:00:00Z' }), true);
   assertEquals(needsDigest({ status: 'submitted', submitted_at: '2026-11-22T08:00:00Z', digested_at: '2026-11-23T05:00:00Z' }), false);
+});
+
+Deno.test('«الوثيقة الحية»: فصل الوثيقة ملاحظة لا إعادة، والبطاقة والنموذج خارج الوثيقة كما كانا، والفصل المعدَّل بعد قراءته يدخل الملخص', () => {
+  assertEquals(chapterNoteOnly({ key: 'raid', capstone_sort: 5 }), true);
+  assertEquals(chapterNoteOnly({ key: 'initiative-charter', capstone_sort: 1 }), false);
+  assertEquals(chapterNoteOnly({ key: 'swot', capstone_sort: null }), false);
+  const read = { status: 'reviewed', reviewed_at: '2026-11-24T08:00:00Z' };
+  assertEquals(needsDigest({ ...read, updated_at: '2026-11-24T07:00:00Z' }), false);
+  assertEquals(needsDigest({ ...read, updated_at: '2026-11-24T09:00:00Z' }), true);
+  assertEquals(needsDigest({ ...read, updated_at: '2026-11-24T09:00:00Z', digested_at: '2026-11-25T05:00:00Z' }), false);
 });
 
 Deno.test('الملخص اليومي: لا شيء قبل 8:00، ثم بريد للمستشار وبريد لفريق البرنامج (بلا مستشار)، ولا يتكرر في اليوم', async () => {

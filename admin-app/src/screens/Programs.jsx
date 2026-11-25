@@ -13,6 +13,7 @@ import { CertOverride } from '../cert.jsx';
 import { Empty, Spinner, useCopy, useEscape, useGuardedClose, useUI } from '../ui.jsx';
 import CohortTeam from './CohortTeam.jsx';
 import CohortVisibility from './CohortVisibility.jsx';
+import CohortIdentity from './CohortIdentity.jsx';
 import CohortWizard from './CohortWizard.jsx';
 import { FinalConfig } from './FinalEval.jsx';
 import { cohortHub, hubSummary, KIND_AR } from '../cohort-hub.js';
@@ -211,6 +212,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
   const [cert, setCert] = useState(null);
   const [groups, setGroups] = useState(null);
   const [vis, setVis] = useState(null);
+  const [ident, setIdent] = useState(null);
   const [finalCfg, setFinalCfg] = useState(null);
 
   const load = useCallback(async () => setD(await L('admin.programs')), []);
@@ -301,6 +303,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
       {finalCfg && <FinalConfig program={finalCfg} onClose={(saved) => { setFinalCfg(null); if (saved) load(); }} />}
       {groups && <CohortTeam cohort={groups} canWrite={canWrite} onClose={(changed) => { setGroups(null); if (changed) load(); }} />}
       {vis && <CohortVisibility cohort={vis} canWrite={canWrite} onClose={() => setVis(null)} />}
+      {ident && <CohortIdentity cohort={ident} canWrite={canWrite} onClose={() => setIdent(null)} />}
       {/* الخطوة الرابعة من المعالج: بعد الإنشاء يفتح ملف الدفعة ومعه نافذة الفريق، والرابط ظاهر في رأس الملف */}
       {wizard && <CohortWizard preset={wizard} data={d} onClose={async (created) => { setWizard(null); if (created) { await load(); onCohort(created.id); setGroups(created); } }} />}
       {compare && (
@@ -447,6 +450,7 @@ export default function Programs({ canWrite, onEditJourney, cohortId = null, onC
                     { label: 'الرحلة والمدد', run: () => { window.location.hash = `#/leaders/programs/${encodeURIComponent(c.id)}?view=journey`; } },
                     { label: 'الفريق والمجموعات', run: () => setGroups(c) },
                     { label: 'الرؤية', run: () => setVis(c) },
+                    { label: 'هويتها في الوثيقة', run: () => setIdent(c) },
                   ]} /></>}</td>
                 </tr>
               );

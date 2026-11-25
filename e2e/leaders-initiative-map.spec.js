@@ -33,7 +33,7 @@ function server({ initiative = 'موعد أول أقرب', chapters = [{ id: 'hb
       case 'capstone.get': return {
         success: true, initiative, scope: 'project', scope_title: 'مشروع', level: 'beginner', track: null,
         capstone: { status: 'draft', status_title: 'قيد البناء', summary: '' },
-        sections: SECTIONS, checks: [{ key: 'baseline', ok: false, title: 'كل منفعة لها خط الأساس' }], readiness: 20, ready_min: 80,
+        sections: SECTIONS, checks: [{ key: 'benefit-owner', ok: false, title: 'كل منفعة لها مالك' }], readiness: 20, ready_min: 80,
         card: { state: 'approved', sla: 'يومي عمل' }, can_submit: false, blocker: 'فصول لم تكتمل', rubric: [], examples: { doc: false },
       };
       case 'models.get': return { success: true, model: model(b.id), submission: { status: 'draft', answers: {} }, initiative, imports: {}, capstone: { status: 'draft', locked: false } };
@@ -63,42 +63,45 @@ test('«ما المبادرة؟» مفتوحة لمن لم يسمّ مبادرت
   await expect(m).toContainText('اختبار سريع');
 });
 
-test('من سمّى مبادرته: البطاقة مطوية، والفهرس بالمراحل والتالي المقترح، و«الناقص فقط» يُخفي المكتمل', async ({ page }) => {
+test('من سمّى مبادرته: البطاقة مطوية، وخط الوثيقة بمراحله وحالاته وسطر رأسه والتالي، وبوابة البطاقة على الخط', async ({ page }) => {
   await open(page, server());
   await expect(page.locator('[data-meaning]')).not.toHaveAttribute('open', '');
-  const nav = page.getByRole('region', { name: 'فهرس الوثيقة' });
-  await expect(nav.locator('[data-phase]')).toHaveCount(3);
-  await expect(nav.locator('[data-phase="why"]')).toContainText('لماذا هذه المبادرة؟');
-  await expect(nav.locator('.im-next')).toContainText('2. المبرر والبدائل');
-  await expect(nav.locator('.im-seg')).toHaveCount(4);
-  await expect(nav.getByRole('button', { name: /بطاقة المبادرة/ })).toBeVisible();
-  await nav.getByRole('tab', { name: /الناقص فقط \(3\)/ }).click();
-  await expect(nav.getByRole('button', { name: /بطاقة المبادرة/ })).toHaveCount(0);
-  await expect(nav.getByRole('button', { name: /سجل المنافع/ })).toBeVisible();
+  const sp = page.getByRole('complementary', { name: 'خط الوثيقة' });
+  await expect(sp.locator('.sp-phase')).toHaveCount(3);
+  await expect(sp.locator('.sp-phase').first()).toContainText('لماذا هذه المبادرة؟');
+  await expect(sp.locator('[data-spine-line]')).toContainText('أنجزت 0 من 4');
+  await expect(sp.locator('[data-spine-line]')).toContainText('التالي: بطاقة المبادرة');
+  await expect(sp.locator('.sp-node')).toHaveCount(4);
+  await expect(sp.locator('[data-chapter="options-analysis"]')).toHaveAttribute('data-state', 'writing');
+  await expect(sp.locator('[data-chapter="benefits-register"]')).toHaveAttribute('data-state', 'empty');
+  await expect(sp.locator('[data-chapter="benefits-register"] .sp-check')).toBeVisible();
+  await expect(sp.locator('[data-gate="card"]')).toContainText('تم');
+  await expect(sp.locator('[data-gate="submit"]')).toBeVisible();
 });
 
-test('داخل الفصل: أين أنا، والسابق والتالي، وتلميح المصطلح في رأس العمود دون أن يتغير اسم الجدول', async ({ page }) => {
+test('داخل الفصل: الخط نفسه بالفصل الحالي، و«الفصل N من M · المرحلة»، والتنقل من الخط، وتلميح المصطلح', async ({ page }) => {
   await open(page, server());
-  await page.getByRole('region', { name: 'فهرس الوثيقة' }).locator('.im-next').getByRole('button').click();
-  const nav = page.getByRole('navigation', { name: 'التنقل بين فصول الوثيقة' });
-  await expect(nav).toContainText('الفصل 2 من 4 · لماذا هذه المبادرة؟');
-  await nav.getByRole('button', { name: 'التالي ←' }).click();
+  await page.getByRole('complementary', { name: 'خط الوثيقة' }).getByRole('button', { name: /المبرر والبدائل/ }).click();
+  const sp = page.getByRole('complementary', { name: 'خط الوثيقة' });
+  await expect(page.locator('[data-chapter-where]')).toContainText('الفصل 2 من 4 · لماذا هذه المبادرة؟');
+  await expect(sp.locator('[aria-current="step"]')).toContainText('المبرر والبدائل');
+  await sp.getByRole('button', { name: /سجل المنافع/ }).click();
   await expect(page.getByRole('heading', { name: 'سجل المنافع' })).toBeVisible();
-  await expect(nav).toContainText('الفصل 3 من 4 · ما القيمة وكيف تُقاس؟');
+  await expect(page.locator('[data-chapter-where]')).toContainText('الفصل 3 من 4 · ما القيمة وكيف تُقاس؟');
   const term = page.locator('thead .term[data-term="خط الأساس"]');
   await term.focus();
   await expect(term.locator('.term-tip')).toBeVisible();
   await expect(term.locator('.term-tip')).toContainText('قيمة المؤشر اليوم قبل أن تبدأ');
   await expect(term).toHaveAccessibleDescription(/قيمة المؤشر اليوم/);
-  await nav.getByRole('button', { name: '→ السابق' }).click();
-  await expect(page.getByRole('heading', { name: 'المبرر والبدائل' })).toBeVisible();
+  await expect(page.locator('[data-finish]')).toContainText('أنهيت الفصل ← التالي');
+  await expect(page.getByText('يقرؤه')).toHaveCount(0);
 });
 
 test('«اقرأ في الكتاب» يفتح الباب نفسه وفوقه القسم المطلوب، و«عد» يعيد إلى الفصل الذي خرج منه', async ({ page }) => {
   const srv = server();
   await open(page, srv);
-  await page.getByRole('region', { name: 'فهرس الوثيقة' }).getByRole('button', { name: /سجل المخاطر/ }).first().click();
-  await page.getByRole('navigation', { name: 'التنقل بين فصول الوثيقة' }).getByRole('button', { name: /اقرأ في الكتاب: أساسيات الضبط حول المعلم/ }).click();
+  await page.getByRole('complementary', { name: 'خط الوثيقة' }).getByRole('button', { name: /سجل المخاطر/ }).first().click();
+  await page.getByRole('complementary', { name: 'خط الوثيقة' }).getByRole('button', { name: /اقرأ في الكتاب: أساسيات الضبط حول المعلم/ }).click();
   const seek = page.locator('[data-seek="found"]');
   await expect(seek).toContainText('اقرأ في هذا الباب قسم «أساسيات الضبط حول المعلم»');
   await expect.poll(() => srv.calls.some((c) => c.action === 'handbook.chapter' && c.id === 'hb-ch4')).toBe(true);
@@ -108,6 +111,7 @@ test('«اقرأ في الكتاب» يفتح الباب نفسه وفوقه ا�
 
 test('باب ليس في كتاب المشارك: تقول الإحالة ذلك صراحة، ولا تفتح بابًا آخر بصمت', async ({ page }) => {
   await open(page, server({ chapters: [{ id: 'other', dimension: 'impact', chapter_key: 'ch1', title: 'باب آخر', done: null }] }));
-  await page.getByRole('region', { name: 'فهرس الوثيقة' }).getByRole('button', { name: 'في الكتاب' }).first().click();
+  await page.getByRole('complementary', { name: 'خط الوثيقة' }).getByRole('button', { name: /سجل المخاطر/ }).first().click();
+  await page.getByRole('complementary', { name: 'خط الوثيقة' }).getByRole('button', { name: /اقرأ في الكتاب/ }).click();
   await expect(page.locator('[data-seek="missing"]')).toContainText('ليس في كتابك في مستواك الحالي');
 });

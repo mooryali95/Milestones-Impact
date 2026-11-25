@@ -167,7 +167,7 @@ async function openModel(page, srv) {
   await page.addInitScript(() => { localStorage.setItem('mi_leaders_welcome_seen', 'true'); localStorage.setItem('mi_leaders_session', 'tok-entry-readiness-000000000000'); });
   await page.goto(APP);
   await page.getByRole('button', { name: 'مبادرتي' }).first().click();
-  await page.locator('.cp-sec').filter({ hasText: 'بطاقة المبادرة' }).click();
+  await page.locator('.sp-node').filter({ hasText: 'بطاقة المبادرة' }).click();
 }
 
 test('p-entry-8: حقول ورقة النموذج مسمّاة، وخيارات الاختيار بحالتها', async ({ page }) => {

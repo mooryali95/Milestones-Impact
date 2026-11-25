@@ -19,13 +19,13 @@ import { guideCounts } from './guide.ts';
 import { forParticipant as peerFor, hallTeams } from './peer.ts';
 import { needsFor } from './peer.js';
 import { firstName, HALL_TEAM_AR } from './hall.js';
-import { journeyApproved, overallLevel } from './logic.js';
+import { journeyApproved, trackKey } from './logic.js';
 import { stageNow } from './journey-map.js';
 import { waitingCounts, whereNow } from './now.js';
 import * as OB from './observations.ts';
 import { requireVisible, visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { cursorAuditId, flagsOf, fullTimelineOf, parseTimelineCursor, TIMELINE_PAGE, TIMELINE_TYPES, timelineOf } from './observations.js';
-import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from './labels.js';
+import { EXPERT_REQUEST_STATUS, expertRoleAr as roleAr, SUBMISSION_STATUS_ADMIN } from './labels.js';
 import { listed } from './counting.ts';
 
 type Body = Record<string, any>;
@@ -206,12 +206,13 @@ export async function participants(e: any) {
       ]);
       // المرحلة الحالية كما يراها المشارك (currentStages): مرحلتان تسيران معًا تُسميان معًا، والمسار المستمر ليس موضعًا
       const now = stageNow(st.journey);
-      const level = vis && vis.asg_levels === false ? null : overallLevel(Object.fromEntries((st.profile?.dimensions || []).map((d: any) => [d.dimension, d.level])));
+      // هوية المشارك مساره (M{m}I{i}L{l}) لا مستوى ملخص (قرار المالك 2026-11-25)
+      const level = vis && vis.asg_levels === false ? null : trackKey(Object.fromEntries((st.profile?.dimensions || []).map((d: any) => [d.dimension, d.level])));
       const needs = needsFor({ submissions: Array.from({ length: subs.count || 0 }, () => ({ status: 'submitted' })), milestones: st.milestones, final: fe.data, peerAnswers: (peer.data || []).map(() => ({ status: 'pending' })) });
       return {
         id: p.id, name: p.full_name, first: firstName(p.full_name), title: p.job_title || null, org: p.organization_name || null, status: p.status,
         cohort: st.program?.cohort?.name || null, advisor: scope.advisor.has(p.id), role_ar: scope.assigned.has(p.id) ? roleAr(scope.assigned.get(p.id)!) : null,
-        level, level_ar: level ? (LEVEL_AR as Record<string, string>)[level] : null, approved: !!st.profile?.approved,
+        level, level_ar: level ? `مسار ${level}` : null, approved: !!st.profile?.approved,
         stage: now.stage, together: now.together, tracks: now.tracks, progress: st.progress, late: st.milestone_summary?.late || 0, continuous: vis && vis.asg_continuous === false ? null : st.continuous?.index ?? null,
         needs: needs.reduce((n: number, x: any) => n + x.n, 0),
       };

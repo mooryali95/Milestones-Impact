@@ -1621,3 +1621,9 @@ tr.ct-on > td { background: var(--gold-pale); }
   .today-pulse-t th[scope="row"], .today-pulse-t td { border: 0; padding: 3px 0; }
   .today-pulse-t td::before { content: attr(data-label) ": "; color: var(--ink-soft); font-size: .8rem; }
 }
+
+/* خط الوثيقة عند الخبير: الوحدات و«جديد» والملاحظة في مكان الفصل */
+.xsp-unit + .xsp-unit { margin-top: 6px; }
+.xsp-unit-t { display: block; font-size: .8rem; color: var(--ink-mid); margin: 6px 0 2px; }
+.xsp-note { display: block; border-inline-start: 3px solid var(--st-warn); padding-inline-start: 6px; margin-top: 2px; }
+.xsp-edit { display: grid; gap: 6px; margin-top: 6px; }

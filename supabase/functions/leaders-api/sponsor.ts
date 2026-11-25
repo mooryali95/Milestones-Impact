@@ -117,7 +117,7 @@ export async function adminDecide(a: Admin, b: Body) {
     await audit('admin', a.email, 'sponsor.approve', 'participants', p.id, null, { org: org.id, typed: r.typed_name, ...(why ? { reason: why.slice(0, 300) } : {}) });
     sendMail(p.email, `تأكدت رعايتك من ${org.name}`, shell(`أهلًا ${firstName(p.full_name)}`,
       mailText(`تأكدنا من ترشيحك للبرنامج برعاية ${bdi(org.name)}. رسوم القياس والبرنامج مغطاة من جهتك، وما دفعته من قبل لا يُطلب منك بعده شيء.`)
-      + mailButton(CONFIG.appUrl, 'تابع رحلتك'))).catch(() => {});
+      + mailButton(CONFIG.appUrl, 'تابع رحلتك')), [], { category: 'essential' }).catch(() => {});
     return { success: true };
   }
   const reason = b.reason ? String(b.reason).trim().slice(0, 300) : null;
@@ -125,6 +125,6 @@ export async function adminDecide(a: Admin, b: Body) {
   await audit('admin', a.email, 'sponsor.reject', 'participants', p.id, null, { typed: r.typed_name, reason });
   sendMail(p.email, 'بخصوص طلب الرعاية', shell(`أهلًا ${firstName(p.full_name)}`,
     mailText(`لم نتمكن من تأكيد رعاية «${bdi(r.typed_name)}» لك${reason ? `: ${bdi(reason)}` : ''}. يمكنك متابعة البرنامج مشاركًا فرديًا، أو طلب رمز الجهة من منسقها.`)
-    + mailButton(CONFIG.appUrl, 'ادخل إلى رحلتك'))).catch(() => {});
+    + mailButton(CONFIG.appUrl, 'ادخل إلى رحلتك')), [], { category: 'essential' }).catch(() => {});
   return { success: true };
 }

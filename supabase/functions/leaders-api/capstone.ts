@@ -11,13 +11,18 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
+import { summaryFromCard } from './business-case.js';
+import { trackManifest } from './track-manifest.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { freezeIssued, rejectionStats } from './doc-quality.js';
+import { docFormFor } from './doc-form.js';
+import { cohortIdentity } from './cohort-identity.js';
+import { pdfTicket } from './pdf-ticket.ts';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
@@ -46,7 +51,7 @@ async function build(p: any) {
   const key = trackKey(levels);
   const [models, subs, cap, track] = await Promise.all([
     db.from('learning_models').select(MODEL_COLS).not('capstone_sort', 'is', null),
-    db.from('model_submissions').select('id, model_id, status, rating, feedback_ar, answers, updated_at').eq('participant_id', p.id),
+    db.from('model_submissions').select('id, model_id, status, rating, feedback_ar, answers, updated_at, reviewed_at, submitted_at').eq('participant_id', p.id),
     db.from('capstones').select('*').eq('participant_id', p.id).maybeSingle(),
     key ? db.from('tracks').select('key, title_ar, priority_dimension').eq('key', key).maybeSingle() : Promise.resolve({ data: null }),
   ]);
@@ -89,6 +94,8 @@ const sectionView = (s: any) => ({
   optional: s.state.counted === false,
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
+  // «الوثيقة الحية»: ملاحظة الخبير على الفصل ووقت قراءته، منهما تُشتق الحالات الأربع و«قرأه خبيرك» و«جديد» (spine.js)
+  note: s.sub?.feedback_ar || null, reviewed_at: s.sub?.reviewed_at || null, submitted_at: s.sub?.submitted_at || null,
   // معرّف التسليم ليقيّم المراجع الفصل من بطاقة المبادرة نفسها (لا من «التعلم»)
   sub_id: s.sub?.id || null,
   // مستوى المشارك في إطار الفصل، وموقع الفصل منه (مطلوب، اختياري، باقٍ بقاعدة «لا فقد»)، ومعيار المستوى (chapterLevel)
@@ -126,11 +133,19 @@ export async function get(p: any) {
   const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, card, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   return {
     success: true,
-    scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null, level: overallLevel(d.levels),
+    scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
+    // هوية المشارك ملف تعريفه (إطار الأولوية بمستواه فيه، 9 ملفات)، لا المستوى الملخص (قرار المالك 2026-11-25).
+    // عمق كل فصل بمستوى إطاره (sections[].level)، وكثافة الصفحة بملف التعريف (spine.js densityFor)
+    // البيان الواحد للمسار (track-manifest.js): منه الكثافة والعدسة في الواجهة
+    track_key: trackKey(d.levels), profile: (({ profile, profile_level, priority }) => ({ key: profile, level: profile_level, dimension: priority }))(trackManifest(trackKey(d.levels), d.priority)),
     track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.weighted } : null,
     initiative: d.initiative,
+    // اسم النسخة المؤسسية وحجمها من المسار (document-forms.js)، لزر تحميلها
+    doc_form: docFormFor({ levels: d.levels, priority: d.priority || null }),
     sections: d.sections.map(sectionView),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
+    // ملخص مقترح من البطاقة لمن كثافته summary: auto (spine.js densityFor)؛ لا يُحفظ حتى يحفظه المشارك
+    summary_draft: summaryFromCard(d.charter),
     capstone: {
       status, status_title: (STATUS_TITLES as Record<string, string>)[status], summary: c?.summary_ar || '', revisions: c?.revisions || 0, max_revisions: MAX_REVISIONS,
       submitted_at: c?.submitted_at || null, approved_at: c?.approved_at || null,
@@ -197,8 +212,15 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       // شعار الجهة ولونها للجهة النشطة وحدها، كما في participant.ts orgLogo
       org: org ? { name: org.name, logo: org.status === 'active' ? org.logo || null : null, color: org.status === 'active' ? org.color || null : null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
       cohort: cohort && !cohort.is_default ? cohort.name : null,
+      // هوية الدفعة (اسم البرنامج وشعاره ولونه، cohorts.identity): توقيع بعد الجهة، وتُجمَّد مع اللقطة كهوية الجهة
+      cohort_brand: cohort && !cohort.is_default ? cohortIdentity(cohort) : null,
+      // شكل النسخة المؤسسية من المسار (document-forms.js): يُحل هنا، ويُجمَّد في لقطة الاعتماد
+      track_key: trackKey(d.levels), priority: d.priority || null,
+      doc_form: docFormFor({ levels: d.levels, priority: d.priority || null }),
+      app_url: CONFIG.appUrl,
       track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
-      level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
+      // profile: هوية المشارك (ملف تعريفه) لاسم الوثيقة المطبوعة وتلميح النوع فيها؛ لا مستوى ملخص في الوثيقة
+      profile: profileKey(d.levels, d.priority), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
       // مكان المبادرة من بطاقتها لا من ملف المشارك: الجهة المسجّلة في الملف راعية البرنامج، لا مالكة المبادرة (anatomy.json writing_rules)
       host: String(d.charter.host || '').trim() || null, context: String(d.charter.context || '').trim() || null,
       initiative: d.initiative, sponsor: d.charter.sponsor || null, start: d.charter.start || null, end: d.charter.end || null,
@@ -281,7 +303,36 @@ export async function demoDoc(p: any) {
 }
 
 export async function doc(p: any) {
-  return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
+  // تذكرة مولّد PDF على الخادم (workers/pdf-render) إن ضُبط؛ وإلا يبني المتصفح الملف كما كان (pdf.js)
+  return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id), pdf: await pdfTicket(p.id).catch(() => null) };
+}
+
+// ── التحقق العام من وثيقة معتمدة ببصمتها (رمز QR في صفحة الاعتماد): ما تعرضه الوثيقة على غلافها وحده، بلا محتوى ولا بريد ──
+const DOC_CHECK_LIMIT = 40; // طلبًا لكل عنوان في 10 دقائق، كالتحقق من الشهادة
+export async function verifyDoc(b: Body, ctx: { ip: string | null; ua: string | null }) {
+  const fp = String(b.fingerprint || '').trim().toUpperCase();
+  const valid = /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(fp);
+  if (ctx.ip) {
+    const since = new Date(Date.now() - 10 * 60e3).toISOString();
+    const { count, error } = await db.from('document_checks').select('id', { count: 'exact', head: true }).eq('ip', ctx.ip).gte('created_at', since);
+    if (!error && (count ?? 0) >= DOC_CHECK_LIMIT) throw new Fail('طلبات كثيرة، حاول بعد دقائق', 429, 'rate');
+  }
+  const { data: rows } = valid
+    ? await db.from('capstones').select('status, approved_at, snapshot, participants(is_demo)').eq('status', 'approved').eq('snapshot->issued->>fingerprint', fp).limit(1)
+    : { data: [] as any[] };
+  const row = ((rows || []) as any[]).find((r) => r?.participants && !r.participants.is_demo) || null;
+  // السجل اختياري: قبل ترحيله يعمل التحقق ولا يُسجَّل
+  await db.from('document_checks').insert({ fingerprint: valid ? fp : null, found: !!row, ip: ctx.ip, user_agent: ctx.ua }).then(() => null, () => null);
+  if (!row) return { success: true, found: false };
+  const s = row.snapshot || {}, m = { ...(s.meta || {}), ...(s.issued?.meta || {}) };
+  return {
+    success: true, found: true, authentic: true,
+    document: {
+      fingerprint: fp, ref: `${m.ref || 'MI-CP'}-V${m.version || 1}`, initiative: m.initiative || null,
+      form: m.doc_form?.name || null, org: m.org?.name || null, program: m.cohort_brand?.program || null,
+      approved_at: row.approved_at, issuer: 'Milestone Impact',
+    },
+  };
 }
 
 // «قيم رُفضت للمراجعة»: قواعد الرفض على إجابات فصول المبادرة الحالية، محسوبة للقراءة لحظة الطلب (doc-quality.js rejectionStats).
@@ -422,7 +473,7 @@ export async function inviteSponsor(p: any, c: any, charter: any = null) {
   // حساب العرض: الحالة تُكتب كما تُكتب لغيره («بانتظار الراعي») فيرى صاحبه التجربة كاملة، والبريد لا يخرج والرمز لا يصل
   // أحدًا. البريد يكتبه الحساب في بطاقة مبادرته، فحارس نطاق العرض في sendMail لا يكفيه (تصور 2026-11-19، المرحلة 0)
   if (simulated(p)) return;
-  await sendMail(email, `طلب تأييد مبادرة «${initiative}»`, sponsorMail(charter.sponsor || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`));
+  await sendMail(email, `طلب تأييد مبادرة «${initiative}»`, sponsorMail(charter.sponsor || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`), [], { category: 'staff' });
 }
 
 async function approve(p: any, by: string, waived: string | null = null) {
@@ -435,7 +486,7 @@ async function approve(p: any, by: string, waived: string | null = null) {
   must(await db.from('capstones').update({ snapshot }).eq('participant_id', p.id));
   const initiative = await initiativeFor(p.id);
   await award(p.id, 'capstone', p.id, APPROVAL_POINTS, `اعتماد وثيقة المبادرة: ${initiative || ''}`.trim());
-  sendMail(p.email, 'اعتُمدت وثيقة مبادرتك', reviewMail(p.full_name, `وثيقة مبادرة «${initiative || 'مبادرتك'}»`, false))
+  sendMail(p.email, 'اعتُمدت وثيقة مبادرتك', reviewMail(p.full_name, `وثيقة مبادرة «${initiative || 'مبادرتك'}»`, false), [], { category: 'journey' })
     .catch((e) => console.error('capstone mail:', e));
 }
 
@@ -451,7 +502,7 @@ export async function adminReview(a: Admin, b: Body) {
     const notes = Object.fromEntries(Object.entries(b.notes || {}).map(([k, v]) => [k, String(v || '').trim().slice(0, 1500)]).filter(([, v]) => v));
     must(await db.from('capstones').update({ status: 'returned', review_note: note, notes, revisions: (c.revisions || 0) + 1, reviewed_by: a.email, reviewed_at: now, updated_at: now }).eq('participant_id', p.id));
     await audit('admin', a.email, 'capstone.return', 'capstones', p.id, null, { revisions: (c.revisions || 0) + 1 });
-    sendMail(p.email, 'ملاحظات المستشار على وثيقة مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك', true, note)).catch((e) => console.error(e));
+    sendMail(p.email, 'ملاحظات المستشار على وثيقة مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك', true, note), [], { category: 'journey' }).catch((e) => console.error(e));
     return adminGet({ participant_id: p.id });
   }
   if (b.decision !== 'accept') throw new Fail('قرار غير صالح');
@@ -540,7 +591,7 @@ export async function sponsorSubmit(b: Body) {
     if (!note) throw new Fail('اكتب للمشارك ما الذي يعدّله');
     // ملاحظة الراعي تعيد الوثيقة لصاحبها، ولا تُحسب من التحسين المتاح بعد المستشار
     must(await db.from('capstones').update({ status: 'returned', sponsor_status: 'declined', sponsor_note: note, sponsor_at: now, updated_at: now }).eq('participant_id', p.id));
-    sendMail(p.email, 'ملاحظات راعي مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك (من الراعي)', true, note)).catch((e) => console.error(e));
+    sendMail(p.email, 'ملاحظات راعي مبادرتك', reviewMail(p.full_name, 'وثيقة مبادرتك (من الراعي)', true, note), [], { category: 'journey' }).catch((e) => console.error(e));
   } else throw new Fail('قرار غير صالح');
   await audit('system', c.sponsor_email, `capstone.sponsor-${b.decision}`, 'capstones', p.id, null, {});
   return { success: true, done: true, decision: b.decision === 'endorse' ? 'endorsed' : 'declined' };

@@ -17,7 +17,7 @@ import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-ru
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
-  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, overallLevel, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
+  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
@@ -73,7 +73,7 @@ export async function issueSession(participantId: string, method: string, ctx: C
     const { data: p } = await db.from('participants').select('full_name, email, is_demo').eq('id', participantId).maybeSingle();
     if (p?.is_demo) return token;
     const when = new Date().toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' });
-    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { expiresAt: expiresIn(24) }).catch((e) => console.error('new device mail', e));
+    if (p?.email) sendMail(p.email, 'دخول جديد إلى حسابك', newDeviceMail(p.full_name, deviceOf(ctx.ua), when), [], { category: 'essential', expiresAt: expiresIn(24) }).catch((e) => console.error('new device mail', e));
   }
   return token;
 }
@@ -717,7 +717,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
         description: cellOf(x.dimension, x.level)?.description_ar || null,
         path: cellOf(x.dimension, x.level)?.path_title_ar || null,
       })),
-    } : { approved, level: overallLevel(levels), track },
+    } : { approved, track },
     journey: audience === 'admin' ? journey
       // نشاط «ورش إضافية» بلا ورشة لدفعته لا يُعرض: لا شيء فيه بعد (خامد خارج العد، optional.js)
       // optional-exempt: إخفاء نشاط الورش الإضافية الفارغ من العرض، وهو خامد خارج العد بالقاعدة (each)
@@ -1243,7 +1243,6 @@ export async function handbookToc(p: any) {
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
   return {
     success: true,
-    level: overallLevel(levels),
     // الكتاب عام: يُعرض رمز المسار فقط
     code: trackKey(levels),
     chapters: chapters.map((m: any) => ({

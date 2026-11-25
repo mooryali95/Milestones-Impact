@@ -34,6 +34,8 @@ export const EXPORT_TABLES = {
   auth_sessions: [], passkeys: [],
   // بريده البديل (20261128190000): بريد ثانٍ رُبط بحسابه فيدخل به إليه. مصدر الربط داخلي
   participant_emails: ['source'],
+  // مركز الرسائل (20261128200000): ما وصله من إشعارات وحالة قراءتها، وفئات البريد التي كتمها. ملك له، ويُمسح مع «أعد من البداية»
+  participant_notifications: [], participant_mail_prefs: [],
   // سجل الدمج (participant_merges وparticipant_merge_rows) ونسخة الترحيل backup_20261128_account_merge لا تُصدَّر (داخلية)، ويمحوها
   // حذف المشارك: السجل بمفتاحه الأجنبي، والنسخة والحساب المدموج فيه بمشغّل participant_merge_erase قبل الحذف (erasure_purge وغيرها)
 };

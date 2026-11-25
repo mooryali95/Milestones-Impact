@@ -1,0 +1,8 @@
+{
+  "name": "mi-pdf-render",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cloudflare/puppeteer": "1.4.0"
+  }
+}

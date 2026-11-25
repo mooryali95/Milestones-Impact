@@ -455,7 +455,7 @@ describe('الفصل الاختياري في الواجهة: لا «مكتمل»
   it('الخادم يرسل optional من counted، والواجهتان تقرآنه', () => {
     expect(read('supabase/functions/leaders-api/capstone.ts')).toContain('optional: s.state.counted === false,');
     expect(read('leaders-app/src/screens/Capstone.jsx')).toContain("d.sections.filter((s) => !s.optional)");
-    expect(read('admin-app/src/screens/Capstones.jsx')).toContain("s.optional ? 'اختياري'");
+    expect(read('admin-app/src/screens/Capstones.jsx')).toContain("x.optional ? 'اختياري'");
   });
   it('الجاهزية: كل الفصول غير محسوبة يعني نصف الفصول صفرًا لا كاملًا', () => {
     expect(readiness([{ complete: true, counted: false }], [])).toBe(50);
@@ -565,7 +565,7 @@ describe('ملحق مستوى الوثيقة: للمراجع وحده', () => {
 describe('المستوى لا يصل من لم يُؤذن له، والمعتمدة القديمة بتخطيطها', () => {
   let d;
   beforeAll(() => { d = docOf(same('beginner')); });
-  const levelIn = (doc) => (doc.sections || []).some((x) => 'level' in x || 'joins' in x) || doc.meta?.level != null;
+  const levelIn = (doc) => (doc.sections || []).some((x) => 'level' in x || 'joins' in x) || doc.meta?.level != null || doc.meta?.profile != null;
   it('الوثيقة نفسها لا تحمل مستوى فصل، والتلميح وحده على التابع', () => {
     expect(d.sections.some((x) => 'level' in x)).toBe(false);
     expect(d.sections.filter((x) => x.joins).map((x) => `${x.key}>${x.joins}`).sort()).toEqual(DISPLAY_PAIRS.map((p) => `${p.joins}>${p.host}`).sort());

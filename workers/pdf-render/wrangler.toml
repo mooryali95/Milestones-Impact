@@ -1,0 +1,16 @@
+# مولّد PDF المتجهي للوثائق (قرار المالك 2026-11-25). النشر: .github/workflows/deploy-pdf-render.yml، أو من جهاز المالك (README.md).
+name = "mi-pdf-render"
+main = "index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Chromium من Cloudflare Browser Rendering (يتطلب خطة Workers المدفوعة)
+browser = { binding = "BROWSER" }
+
+# النطاق الذي يطلبه التطبيق (connect-src في leaders-app/public/_headers)
+routes = [{ pattern = "pdf.sunkvalue.com", custom_domain = true }]
+
+[vars]
+APP_ORIGIN = "https://leaders.sunkvalue.com"
+ALLOWED_ORIGINS = "https://leaders.sunkvalue.com"
+# السر PDF_RENDER_SECRET يُضبط في Cloudflare لا هنا (wrangler secret put PDF_RENDER_SECRET)، وبالقيمة نفسها في أسرار دوال Supabase

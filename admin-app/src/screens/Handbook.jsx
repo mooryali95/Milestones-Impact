@@ -5,7 +5,7 @@
 // admin.save / admin.delete / admin.reorder، والتقييم عبر admin.review-submission.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CARD_REVIEW_CRITERIA, CHARTER_KEY } from '../../../supabase/functions/leaders-api/capstone.js';
-import { readingList } from '../../../supabase/functions/leaders-api/model-review.js';
+import { chapterNoteOnly, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
 import { DIM, DIMS, L, LVL, SUB_ST, date } from '../leaders.js';
 import { LVLS, reorderIds, shortTitle } from '../methodology.js';
 import {
@@ -453,6 +453,8 @@ export function Submission({ id, canWrite, onClose }) {
     // البطاقة اعتماد يحتاج تقديرًا، والنموذج العادي ملاحظة: التقدير فيه اختياري («بوابتان، والباقي ملاحظات»)
     if (btn === 'reviewed' && gate && !rating) return setErr('اختر مستوى من السلّم');
     if (btn === 'returned' && !feedback.trim()) return setErr('اكتب ملاحظاتك ليعرف المشارك ما يطوّره');
+    // فصل في وثيقة المبادرة: ملاحظة لا إعادة («الوثيقة الحية»، chapterNoteOnly)، والخادم يحكم بالقاعدة نفسها
+    if (btn === 'returned' && chapterNoteOnly(m)) btn = 'reviewed';
     setBusy(true);
     const r = await L('admin.review-submission', { id: x.id, status: btn, rating: rating || undefined, feedback, bonus });
     setBusy(false);

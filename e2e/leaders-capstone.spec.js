@@ -71,7 +71,9 @@ test('المشارك: الجاهزية تمنع التسليم بسبب واضح
   await page.reload();
   await page.getByRole('button', { name: 'مبادرتي' }).first().click();
   await expect(page.locator('.cp-meter b')).toHaveText('100%');
-  await page.getByRole('textbox').fill('المشكلة والحل والقيمة وما نطلبه.');
+  // الملخص بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
+  await page.getByRole('textbox', { name: 'الملخص التنفيذي' }).fill('المشكلة والحل والقيمة وما نطلبه.');
   page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: 'قدّم الوثيقة إلى المستشار' }).click();
   await expect(page.getByText('قُدّمت الوثيقة إلى المستشار')).toBeVisible();

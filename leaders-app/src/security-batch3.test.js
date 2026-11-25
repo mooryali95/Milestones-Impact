@@ -67,7 +67,7 @@ describe('N6: مفاتيح الرؤية تُطبَّق في الأفعال ال�
   });
   it('قائمة مشاركي الخبير المسند ولوحته: المستوى والمؤشر ووسائل التواصل بمفاتيحها', () => {
     const f = fn('file.ts');
-    expect(f).toContain('vis && vis.asg_levels === false ? null : overallLevel(');
+    expect(f).toContain('vis && vis.asg_levels === false ? null : trackKey(');
     expect(f).toContain('vis && vis.asg_continuous === false ? null : st.continuous?.index ?? null');
     const e = fn('experts.ts');
     expect(e).toContain("vis.asg_contact === false ? null : x.participants?.email");

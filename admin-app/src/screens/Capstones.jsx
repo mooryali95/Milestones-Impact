@@ -19,6 +19,54 @@ import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, isFiltered, presetCounts, sortRows } from '../filters.js';
 import { HEALTH_CHIP, TrackingPanel } from './Outcomes.jsx';
+import { CHECK_CHAPTERS } from '../../../supabase/functions/leaders-api/stuck.js';
+import { changedSinceRead, chapterState, checksOn, hasOpenNote, STATE_AR, unitsFor } from '../../../supabase/content/initiative-guide/v1/spine.js';
+
+// خط الوثيقة عند الخبير («الوثيقة الحية»، 2026-11-25): الوحدات نفسها التي يراها المشارك، و«جديد» على ما تغيّر بعد قراءته،
+// وملاحظة لكل فصل في مكانه. الملاحظة لا تقفل الفصل ولا تعيده (admin.ts reviewSubmissionBy)، ويراها المشارك سطرًا في أعلى فصله
+export function ExpertSpine({ sections, checks, canWrite, onSaved }) {
+  const { toast } = useUI();
+  const [edit, setEdit] = useState(null);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fresh = sections.filter(changedSinceRead).length;
+  const save = async (x) => {
+    setBusy(true);
+    const r = await L('admin.review-submission', { id: x.sub_id, status: 'reviewed', feedback: text });
+    setBusy(false);
+    if (!r.success) return toast(r.message);
+    toast(text.trim() ? 'حُفظت ملاحظتك على الفصل' : 'عُلّم الفصل مقروءًا');
+    setEdit(null); onSaved();
+  };
+  return (
+    <div className="xsp" data-expert-spine>
+      <p className="la-muted">{fresh ? `${fresh} من الفصول تغيّرت منذ قراءتك الأخيرة.` : 'لا جديد منذ قراءتك الأخيرة.'} ملاحظتك على الفصل لا تقفله، ويرى المشارك «قرأه خبيرك» حين تقرؤه.</p>
+      {unitsFor(sections).map((u) => (
+        <div key={u.key} className="xsp-unit" data-unit={u.key}>
+          {u.items.length > 1 && <b className="xsp-unit-t">{u.title}</b>}
+          <ol className="cps-secs" style={{ listStyle: 'none', paddingInlineStart: 0 }}>{u.items.map((x) => {
+            const st = chapterState(x);
+            const warn = checksOn(checks, x.key, CHECK_CHAPTERS);
+            return (
+              <li key={x.id} className={st === 'done' ? 'ok' : ''} data-chapter={x.key} data-state={st} data-standing={x.standing || undefined}>
+                <span>{x.n}. {x.title}<ChapterLevel s={x} />{changedSinceRead(x) && <span className="la-chip warn"> جديد</span>}{warn.length > 0 && <span className="la-chip bad" title={warn.map((w) => w.title).join('، ')}> فحص</span>}</span>
+                <small>{x.optional ? 'اختياري' : STATE_AR[st]}{!x.complete && !x.optional ? ` · ${x.missing} حقول ناقصة` : ''}</small>
+                {hasOpenNote(x) && edit !== x.id && <small className="xsp-note">ملاحظتك: {x.note}</small>}
+                {canWrite && x.sub_id && x.status && x.status !== 'draft' && edit !== x.id && <button type="button" className="la-link" onClick={() => { setEdit(x.id); setText(x.note || ''); }}>{x.note ? 'عدّل الملاحظة' : 'ملاحظة أو قرأته'}</button>}
+                {edit === x.id && (
+                  <div className="xsp-edit">
+                    <textarea className="la-input" rows={3} maxLength={4000} placeholder="ملاحظتك للمشارك على هذا الفصل (اختيارية)" value={text} onChange={(e) => setText(e.target.value)} />
+                    <div className="la-row"><button type="button" className="btn-sm" disabled={busy} onClick={() => save(x)}>{text.trim() ? 'احفظ الملاحظة' : 'قرأته'}</button><button type="button" className="btn-sm ghost" onClick={() => setEdit(null)}>إلغاء</button></div>
+                  </div>
+                )}
+              </li>
+            );
+          })}</ol>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const STATUS = STATUS_TITLES_ADMIN;
 const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
@@ -192,12 +240,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
       <div className="la-grid2">
         <section className="la-card">
           <h3>الفصول {LEVEL_AR[d.doc?.review_levels?.level] && <small className="la-muted">· مستوى الوثيقة {LEVEL_AR[d.doc.review_levels.level]}</small>}</h3>
-          <ol className="cps-secs">{d.sections.map((s) => (
-            <li key={s.id} className={s.complete && !s.optional ? 'ok' : ''} data-chapter={s.key} data-standing={s.standing || undefined}>
-              <span>{s.title}<ChapterLevel s={s} /></span>
-              <small>{s.optional ? 'اختياري' : s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SECTION_STATUS_AR[s.status] || SECTION_STATUS_AR.draft}` : ''}</small>
-            </li>
-          ))}</ol>
+          <ExpertSpine sections={d.sections} checks={d.checks} canWrite={canWrite} onSaved={load} />
           <h3>فحوص الاتساق</h3>
           <ul className="cps-checks">{d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}>{x.title}{x.detail && <small>{x.detail}</small>}</li>)}</ul>
         </section>

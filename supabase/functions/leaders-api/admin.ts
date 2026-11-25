@@ -14,7 +14,7 @@ import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { MAIL_GUARD_ACTIONS, planCutoffFor, planGuard } from './cohort-plan.js';
 import { DIM_AR, expertRoleAr, REVIEWER_AR, RUBRIC_SCALE } from './labels.js';
-import { bulkReadIds, isGateModel, readingCounts, readingList } from './model-review.js';
+import { bulkReadIds, chapterNoteOnly, isGateModel, readingCounts, readingList } from './model-review.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
@@ -620,7 +620,7 @@ export async function removeParticipant(a: Admin, impact: Awaited<ReturnType<typ
     }, { key: request || id }).catch((e) => console.error('erase alert:', e));
   }
   // تأكيد التنفيذ إلى العنوان الملتقط، خارج الطابور، حين حُذف كل شيء: إن تعذّر أو بقيت ملفات يُعاد العنوان إلى المدير
-  const mailed = filesError ? false : await sendMail(email, ERASE_DONE_SUBJECT, eraseDoneMail(full_name, new Date().toISOString()), [], { force: true, queue: false })
+  const mailed = filesError ? false : await sendMail(email, ERASE_DONE_SUBJECT, eraseDoneMail(full_name, new Date().toISOString()), [], { category: 'essential', force: true, queue: false })
     .then(() => true, (e) => { console.error('erase done mail:', e); return false; });
   if (mailed && request) await markNotified(request);
   // الحذف تم ولا رجعة فيه: تعذّر سطر السجل لا يحجب الرد (ففيه العنوان للإرسال اليدوي)، ويُبلَّغ
@@ -827,7 +827,7 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
   // البريد يُنتظر: نسخة الدالة قد تنتهي بعد الرد فتضيع رسالة لم تُنتظر، والاعتماد الجماعي يرسل واحدة بعد أخرى فلا تتسابق
   // قراءة العداد فتتجاوز الحصة. المحجوب بالحصة يدخل الطابور (sendMail)، والمشارك يرى اعتماده في رحلته على كل حال
   const pay = await programPaymentDue(id).catch(() => false);
-  await sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { ref: `participant:${id}` }).catch((e) => console.error(e));
+  await sendMail(p.email, pay ? 'اعتُمد مسارك في برنامج القادة' : 'اعتُمد مستواك في برنامج القادة', approvedMail(p.full_name, pay), [], { category: 'journey', ref: `participant:${id}` }).catch((e) => console.error(e));
 }
 
 // إشارات الاعتماد لمجموعة: المستوى المحفوظ، وتقييم آخر قياس مسلَّم لكل بُعد بالنموذج الحالي (evaluatePlacement
@@ -1006,7 +1006,7 @@ export async function resetAssessment(a: Admin, b: Body) {
     await audit('admin', a.email, 'assessment.reset', 'participants', p.id, null, { reason, assessment_id: cur?.id || null });
     // البريد من حصة الرسائل الجماعية (يُصفّ عند بلوغ الحد اليومي)، وتعذّره لا يُسقط الطلب المسجَّل: البطاقة في الموقع تكفي
     if (cur && p.email && !p.is_demo) {
-      await sendMail(p.email, RETAKE_MAIL_SUBJECT, retakeMail(p.full_name, retakeText(reason, estMinutes)), [], { kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error('retake mail:', e));
+      await sendMail(p.email, RETAKE_MAIL_SUBJECT, retakeMail(p.full_name, retakeText(reason, estMinutes)), [], { category: 'journey', kind: 'bulk', ref: `participant:${p.id}` }).catch((e) => console.error('retake mail:', e));
     }
     done += 1;
   }
@@ -1042,7 +1042,7 @@ async function notifyReview(participantId: string, requirementId: string, return
   const [row] = await readableReqTitles([{ stage_requirements: r }]);
   const title = row.stage_requirements?.title_ar || 'بند في رحلتك';
   sendMail(p.email, returned ? 'ملاحظة من المستشار على رحلتك' : 'اعتُمد بند في رحلتك',
-    reviewMail(p.full_name, title, returned, note ? String(note) : null)).catch((e) => console.error(e));
+    reviewMail(p.full_name, title, returned, note ? String(note) : null), [], { category: 'journey' }).catch((e) => console.error(e));
 }
 
 export async function reviewRequirement(a: Admin, b: Body) {
@@ -1123,7 +1123,7 @@ export async function stageMove(a: Admin, b: Body) {
     writes: plan.writes.map((w) => ({ stage: w.key, action: w.action })), clears: plan.clears.map((c) => ({ stage: c.key, was: c.was })),
     notified: notify && !!p.email,
   });
-  if (notify && p.email) sendMail(p.email, 'تحديث في رحلتك', stageMoveMail(p.full_name, plan.target.title_ar)).catch((e) => console.error(e));
+  if (notify && p.email) sendMail(p.email, 'تحديث في رحلتك', stageMoveMail(p.full_name, plan.target.title_ar), [], { category: 'journey' }).catch((e) => console.error(e));
   const fresh: any = await journeyFor(p, { lite: true });
   return { success: true, summary: plan.summary, direction: plan.direction, journey: fresh.journey, progress: fresh.progress ?? null };
 }
@@ -1389,7 +1389,11 @@ export async function reviewSubmission(a: Admin, b: Body) {
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): في النموذج العادي reviewed «ملاحظة» (قُرئ، بتقدير ونقاط اختيارية)،
 // وreturned «يحتاج تعديلًا» يفتحه للمشارك ولا يحبس رحلته (logic.js modelStatus). بطاقة المبادرة وحدها اعتماد أو إعادة كما كانت
 export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'system', b: Body) {
-  const status = b.status === 'returned' ? 'returned' : 'reviewed';
+  // «الوثيقة الحية» (قرار المالك 2026-11-25): فصل وثيقة المبادرة غير البطاقة لا يُعاد وحده، ملاحظة الخبير عليه لا تقفله.
+  // الإعادة تبقى للبطاقة (بوابة) وللوثيقة كاملة (capstone.ts)، وللنموذج خارج الوثيقة كما كان
+  const { data: cur } = b.status === 'returned' ? await db.from('model_submissions').select('learning_models(key, capstone_sort)').eq('id', String(b.id)).maybeSingle() : { data: null };
+  const chapterNote = !!cur && chapterNoteOnly((cur as any).learning_models);
+  const status = b.status === 'returned' && !chapterNote ? 'returned' : 'reviewed';
   // D08: السلّم الرباعي الواحد (labels.js)
   const rating = b.rating ? Math.max(1, Math.min(RUBRIC_SCALE.levels.length, Math.round(Number(b.rating)))) : null;
   const bonus = Math.max(0, Math.min(100, Math.round(Number(b.bonus) || 0)));
@@ -1417,7 +1421,7 @@ export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'sys
     const title = s.learning_models?.title_ar || 'النموذج التعليمي';
     const light = gate ? undefined : { who: actor === 'admin' ? REVIEWER_AR.team : 'مستشارك' };
     sendMail(who.email, status === 'returned' ? (gate ? 'ملاحظة على نموذجك' : 'اقتراح تعديل على نموذجك') : (gate ? 'اعتُمد نموذجك' : 'ملاحظة على نموذجك'),
-      reviewMail(who.full_name, title, status === 'returned', feedback, light)).catch((e) => console.error(e));
+      reviewMail(who.full_name, title, status === 'returned', feedback, light), [], { category: 'journey' }).catch((e) => console.error(e));
   }
   return { success: true };
 }

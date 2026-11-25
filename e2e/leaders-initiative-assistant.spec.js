@@ -58,7 +58,9 @@ async function openChapter(page, s, width) {
   await page.getByRole('button', { name: 'مبادرتي' }).filter({ visible: true }).first().click();
   await expect(page.getByRole('heading', { name: 'رقمنة خدمات المستفيدين' })).toBeVisible();
   if (process.env.IA_SHOTS) await page.screenshot({ path: `${process.env.IA_SHOTS}/initiative-${width}.png`, fullPage: true });
-  await page.getByRole('button', { name: /هيكل تجزئة العمل/ }).filter({ visible: true }).first().click();
+  // على الجوال خط الوثيقة شريط علوي يفتح لوحة منزلقة
+  if (width < 900) await page.locator('.sp-bar').click();
+  await page.locator('.sp-node').filter({ hasText: 'هيكل تجزئة العمل' }).filter({ visible: true }).first().click();
   await expect(page.getByRole('heading', { name: 'هيكل تجزئة العمل' }).first()).toBeVisible();
 }
 

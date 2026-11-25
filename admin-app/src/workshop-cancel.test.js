@@ -139,7 +139,7 @@ describe('ربط اللوحة والخادم', () => {
     const src = read('supabase/functions/leaders-api/activities.ts'), core = read('supabase/functions/leaders-api/core.ts');
     const notice = src.slice(src.indexOf('async function cancelNotice'), src.indexOf('export async function workshopDelete'));
     expect(notice).toContain('await workshopRecipients(s, true)');
-    expect(notice).toContain("{ kind: 'bulk', ref: s.id, expiresAt: s.starts_at }");
+    expect(notice).toContain("{ category: 'sessions', kind: 'bulk', ref: s.id, expiresAt: s.starts_at }");
     expect(notice).toContain("method: 'CANCEL'");
     expect(notice).toContain("'workshop.cancel-notice'");
     for (const key of ['workshop-cancel', 'workshop-cancel-trainer', 'workshop-restore-trainer']) expect(core).toContain(`key: '${key}'`);

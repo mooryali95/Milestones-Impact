@@ -128,7 +128,7 @@ export async function inviteVerifier(p: any, cap: any, updateId: string, checkpo
   if (simulated(p)) return 'sent';
   try {
     await sendMail(email, `تأكيد أثر مبادرة «${initiativeOf(cap.snapshot)}»`,
-      verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`));
+      verifyMail(cap.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiativeOf(cap.snapshot), title, `${CONFIG.appUrl}/outcome?t=${encodeURIComponent(token)}`), [], { category: 'staff' });
     return 'sent';
   } catch (e) {
     // لم يصل الرابط: يُغلق الآن فتعود المراجعة إلى القائد ليعيد إرسالها، بدل «بانتظار الراعي» حتى تنقضي مهلته
@@ -182,7 +182,7 @@ export async function verifySubmit(b: Body) {
     sendMail(p.email, 'ملاحظة راعي مبادرتك على مراجعة الأثر', mailShell('ملاحظة الراعي على مراجعة الأثر',
       mailText(`أهلًا ${bdi(p.full_name || '')}، راجع راعي مبادرتك أرقام «مراجعة الأثر» وكتب:`) + mailNote(bdi(note || ''))
       + mailText('صحّح التحديث من صفحة «مبادرتي» ثم أرسله من جديد، فيصل الراعي رابط آخر.')
-      + mailButton(CONFIG.appUrl, 'افتح مبادرتي'), { family: 'capstone', footnote: '' })).catch((e) => console.error(e));
+      + mailButton(CONFIG.appUrl, 'افتح مبادرتي'), { family: 'capstone', footnote: '' }), [], { category: 'journey' }).catch((e) => console.error(e));
   }
   await audit('system', u.verify_email, `tracking.verify-${status}`, 'capstone_updates', u.id, null, {});
   return { success: true, done: true, decision: status };
@@ -230,7 +230,7 @@ export async function reminders() {
         : `أهلًا ${bdi(p.full_name || '')}، حان «${bdi(title)}» لمبادرة «${bdi(initiativeOf(c.snapshot))}».`)
       + mailText(s.due.resubmit ? 'صحّح ما يلزم من صفحة «مبادرتي» ثم أرسلها من جديد، فيصل الراعي رابط آخر.'
         : s.due.checkpoint ? 'تقيس فيها كل منافع الوثيقة بأرقامها الحالية، ويؤكدها راعي المبادرة في جهتك.' : 'دقائق تحدّث فيها حالة المعالم وما تحرك من المؤشرات، فتبقى جهتك ومستشارك على اطلاع.')
-      + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' }), [], { kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((e) => console.error(e));
+      + mailButton(CONFIG.appUrl, 'حدّث متابعتي'), { family: 'capstone', footnote: '' }), [], { category: 'reminders', kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((e) => console.error(e));
     sent += 1;
   }
   return { sent };

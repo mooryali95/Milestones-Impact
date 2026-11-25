@@ -40,7 +40,7 @@ export async function ownerNotice(event: string, { line, mail = null, ref = null
   const decided = route(event, s, state);
   let email = false;
   if (decided.email && mail && CONFIG.alertEmail) {
-    email = await sendMail(CONFIG.alertEmail, mail.subject, mail.html, [], { kind: mail.kind ?? 'notify', ref }).then(() => true, (e) => { console.error('owner notice mail:', event, e); return false; });
+    email = await sendMail(CONFIG.alertEmail, mail.subject, mail.html, [], { category: 'staff', kind: mail.kind ?? 'notify', ref }).then(() => true, (e) => { console.error('owner notice mail:', event, e); return false; });
   }
   // سلاك مضبوط ولم يستقبل: بريد «Slack لا يستقبل» نفسه، مرة كل ست ساعات بين النسخ
   if (plan.slack && !slack && slackConfigured() && CONFIG.alertEmail && CONFIG.resendKey) await slackDownNotice(event).catch(() => false);
