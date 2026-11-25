@@ -455,7 +455,7 @@ describe('الفصل الاختياري في الواجهة: لا «مكتمل»
   it('الخادم يرسل optional من counted، والواجهتان تقرآنه', () => {
     expect(read('supabase/functions/leaders-api/capstone.ts')).toContain('optional: s.state.counted === false,');
     expect(read('leaders-app/src/screens/Capstone.jsx')).toContain("d.sections.filter((s) => !s.optional)");
-    expect(read('admin-app/src/screens/Capstones.jsx')).toContain("s.optional ? 'اختياري'");
+    expect(read('admin-app/src/screens/Capstones.jsx')).toContain("x.optional ? 'اختياري'");
   });
   it('الجاهزية: كل الفصول غير محسوبة يعني نصف الفصول صفرًا لا كاملًا', () => {
     expect(readiness([{ complete: true, counted: false }], [])).toBe(50);

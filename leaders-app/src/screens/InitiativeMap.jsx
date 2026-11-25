@@ -4,10 +4,11 @@
 // المحتوى كله من anatomy.json (مصدر واحد يراجعه الخبير عند الطلب)، وحالة الفصول من الخادم كما هي.
 // التصور: docs/content/2026-11-15-تصور-فهم-المبادرة-وإخراج-وثيقتها-v1.md
 import React, { useState } from 'react';
-import { MEANING, chapterInfo, groupByPhase, phaseOf, FEEDS } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
-import { CHAPTER_STATUS_AR, countAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
-import { dimOf } from '../labels.js';
-import { Annotated } from '../Term.jsx';
+import '../spine.css';
+import { MEANING, chapterInfo } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
+import { CHAPTER_STATUS_AR, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
+import { CHECK_CHAPTERS } from '../../../supabase/functions/leaders-api/stuck.js';
+import { changedSinceRead, chapterState, checksOn, readByExpert, spineSummary, STATE_AR, STATE_ORDER, unitsFor, unitState } from '../../../supabase/content/initiative-guide/v1/spine.js';
 
 // حالة الفصل بلون واحد في الشريط والقائمة: مكتمل، أو قيد العمل، أو معاد، أو لم يبدأ
 // optional: فصل لا حقل مطلوبًا فيه للمشارك (لا يُحسب في الجاهزية)، فلا يقال عنه «مكتمل»
@@ -53,108 +54,90 @@ export function Meaning({ scope, open, onHandbook }) {
   );
 }
 
-// ── فهرس الوثيقة: رؤية شاملة بشريط الفصول، والتالي المقترح، والمراحل بفصولها، وتصفية الناقص ──
-export function Navigator({ sections, busy, onOpen, onHandbook }) {
-  const [only, setOnly] = useState('all');
-  const req = countedChapters(sections);
-  const done = req.filter((s) => s.complete).length;
-  const next = nextChapter(sections);
-  const groups = groupByPhase(sections).map((g) => ({ ...g, shown: only === 'all' ? g.items : g.items.filter((s) => !s.complete && !s.optional) }));
-  return (
-    <section className="card cp-sections im-nav" data-tour="capstone-sections" aria-labelledby="im-nav-h">
-      <div className="im-nav-head">
-        <h2 id="im-nav-h">فهرس الوثيقة</h2>
-        <span className="muted small">اكتمل {done} من {countAr(req.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلًا')}</span>
-      </div>
-      {/* الشريط: كل فصل قطعة بلون حالته، تنقر فتفتحه. رؤية الوثيقة كلها في سطر. اختصار للفأرة واللمس، والقائمة تحته
-          هي طريق لوحة المفاتيح وقارئ الشاشة بالفصول نفسها، فلا يتكرر كل فصل مرتين في الأسماء المقروءة */}
-      <div className="im-strip" aria-hidden="true">
-        {sections.map((s, i) => {
-          const t = chapterTone(s);
-          return <span key={s.id} className={`im-seg ${t}`} onClick={() => !busy && onOpen(s.id)} title={`${i + 1}. ${s.title}: ${TONE_AR[t]}`} />;
-        })}
-      </div>
-      <p className="sr-only">اكتمل {done} من {req.length}، وقائمة الفصول أدناه بحالة كل فصل.</p>
-      <div className="im-legend small muted">{Object.entries(TONE_AR).map(([k, t]) => <span key={k}><i className={`im-dot ${k}`} />{t}</span>)}</div>
+// ── خط الوثيقة («الوثيقة الحية»، اعتمده المالك 2026-11-25): مراحل محطات، ووحدات وفصول بلون حالتها، وبوابات على الخط ──
+// جانبي ثابت على الحاسب (يمين الصفحة)، وشريط علوي على الجوال يفتح لوحة منزلقة. الخط نفسه في الصفحة وداخل الفصل
+// وفي شاشة مراجعة الخبير (expert: «جديد» على ما تغيّر بعد قراءته). الوحدات بمستوى إطار كل فصل (spine.js unitsFor)
+const GATE_AR = { card: 'اعتماد البطاقة', submit: 'تقديم الوثيقة', sponsor: 'تأييد الراعي', final: 'الاعتماد النهائي' };
+function gatesOf(card, status) {
+  const after = (k) => ['submitted', 'accepted', 'approved'].indexOf(status) >= ['submitted', 'accepted', 'approved'].indexOf(k);
+  return {
+    card: card ? (card.state === 'approved' ? 'ok' : card.state === 'waiting' ? 'wait' : card.state === 'returned' ? 'bad' : 'idle') : null,
+    submit: status === 'returned' ? 'bad' : after('submitted') ? 'ok' : 'idle',
+    sponsor: after('approved') || status === 'accepted' ? (status === 'accepted' ? 'wait' : 'ok') : 'idle',
+    final: status === 'approved' ? 'ok' : 'idle',
+  };
+}
+function Gate({ k, st }) {
+  return <li className={`sp-gate ${st}`} data-gate={k}><i aria-hidden="true">◆</i><span>{GATE_AR[k]}</span><small>{st === 'ok' ? 'تم' : st === 'wait' ? 'بانتظار القرار' : st === 'bad' ? 'أُعيد بملاحظة' : ''}</small></li>;
+}
 
-      {next && (
-        <div className="im-next">
-          <div className="grow">
-            <small>{next.status === 'returned' ? 'أعاده المستشار إليك' : 'التالي المقترح'}</small>
-            <b>{sections.indexOf(next) + 1}. {next.title}</b>
-            {chapterInfo(next.key)?.why && <span className="muted small">{chapterInfo(next.key).why}</span>}
-          </div>
-          <button type="button" className="btn gold sm" disabled={busy} onClick={() => onOpen(next.id)}>{next.status === 'draft' ? 'تابع' : 'افتح'}</button>
-        </div>
+export function Spine({ sections, checks = [], card = null, status = 'draft', current = null, busy = false, onOpen, onHandbook = null, expert = false, fresh = [], lensLine = null, checkMap = CHECK_CHAPTERS }) {
+  const [sheet, setSheet] = useState(false);
+  const sum = spineSummary(sections);
+  const units = unitsFor(sections);
+  const gates = gatesOf(card, status);
+  const open = (id) => { setSheet(false); if (!busy) onOpen(id); };
+  let phase = null;
+  const rows = [];
+  units.forEach((u) => {
+    if (u.phase !== phase) { phase = u.phase; rows.push(<li key={`ph-${u.key}`} className="sp-phase">{u.phase || 'فصول أخرى'}</li>); }
+    const st = unitState(u);
+    const multi = u.items.length > 1;
+    rows.push(
+      <li key={u.key} className={`sp-unit ${st}${u.items.some((x) => x.id === current) ? ' cur' : ''}`} data-unit={u.key} data-level={u.level}>
+        {multi && <b className="sp-unit-t">{u.title}</b>}
+        <ol>
+          {u.items.map((x) => {
+            const cs = chapterState(x);
+            const warn = checksOn(checks, x.key, checkMap);
+            const isNew = expert ? changedSinceRead(x) : fresh.includes(x.key);
+            return (
+              <li key={x.id}>
+                <button type="button" className={`sp-node ${cs}${x.id === current ? ' cur' : ''}`} aria-current={x.id === current ? 'step' : undefined} disabled={busy} onClick={() => open(x.id)}
+                  data-chapter={x.key} data-state={cs}>
+                  <i className="sp-dot" aria-hidden="true" />
+                  <span className="sp-t">{x.n}. {x.title}</span>
+                  <small className="sp-st">{x.optional && cs !== 'done' ? 'اختياري' : STATE_AR[cs]}{!expert && readByExpert(x) ? ' · قرأه خبيرك' : ''}</small>
+                  {isNew && <span className="chip gold sp-new">{expert ? 'جديد' : 'جديد في مستواك'}</span>}
+                  {warn.length > 0 && <span className="chip bad sp-check" title={warn.map((w) => w.title).join('، ')}>{warn.length === 1 ? 'فحص' : `${warn.length} فحوص`}</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </li>,
+    );
+    if (u.items.some((x) => x.key === 'initiative-charter') && gates.card) rows.push(<Gate key="g-card" k="card" st={gates.card} />);
+  });
+  ['submit', 'sponsor', 'final'].forEach((k) => rows.push(<Gate key={`g-${k}`} k={k} st={gates[k]} />));
+  const body = (
+    <>
+      <div className="sp-head">
+        <h2 id="sp-h">خط الوثيقة</h2>
+        <p className="sp-line" data-spine-line>{sum.line}</p>
+        <span className="bar"><i style={{ width: `${sum.total ? Math.round((sum.done / sum.total) * 100) : 0}%` }} /></span>
+        {lensLine && <p className="small muted sp-lens">{lensLine}</p>}
+        {sum.next && sum.next.id !== current && <button type="button" className="btn gold sm" disabled={busy} onClick={() => open(sum.next.id)}>{chapterState(sum.next) === 'note' ? 'افتح ملاحظة خبيرك' : chapterState(sum.next) === 'writing' ? 'تابع' : 'ابدأ'}: {sum.next.title}</button>}
+      </div>
+      <ol className="sp-list">{rows}</ol>
+      <div className="im-legend small muted">{STATE_ORDER.map((k) => <span key={k}><i className={`sp-dot ${k}`} />{STATE_AR[k]}</span>)}</div>
+      {onHandbook && current && bookRef(sections.find((x) => x.id === current)) && (
+        <button type="button" className="btn ghost sm" onClick={() => onHandbook(bookRef(sections.find((x) => x.id === current)))}>اقرأ في الكتاب: {bookRef(sections.find((x) => x.id === current)).look_for}</button>
       )}
-
-      <div className="im-filter" role="tablist" aria-label="عرض الفصول">
-        {[['all', 'كل الفصول'], ['todo', `الناقص فقط (${req.length - done})`]].map(([k, t]) => (
-          <button key={k} type="button" role="tab" aria-selected={only === k} className={only === k ? 'on' : ''} onClick={() => setOnly(k)}>{t}</button>
-        ))}
-      </div>
-
-      {groups.map((g, gi) => {
-        const gReq = countedChapters(g.items);
-        const gd = gReq.filter((s) => s.complete).length;
-        if (!g.shown.length) return null;
-        return (
-          <div key={g.key} className="im-phase" data-phase={g.key}>
-            <header>
-              <span className="im-ph-n">{gi + 1}</span>
-              <div className="grow"><b>{g.title}</b>{g.lead && <small className="muted">{g.lead}</small>}</div>
-              <span className={`chip ${gd === gReq.length ? 'ok' : ''}`}>{gd}/{gReq.length}</span>
-            </header>
-            <ol className="cp-list">
-              {g.shown.map((s) => {
-                const t = chapterTone(s);
-                const info = chapterInfo(s.key);
-                const feeds = (info?.feeds || []).map((f) => FEEDS[f]).filter(Boolean);
-                const ref = bookRef(s);
-                return (
-                  <li key={s.id} className="im-row">
-                    <button className={`cp-sec${s.complete && !s.optional ? ' done' : ''}`} disabled={busy} onClick={() => onOpen(s.id)}>
-                      <span className="cp-n">{String(s.n).padStart(2, '0')}</span>
-                      <span className="model-icon sm">{s.icon}</span>
-                      <span className="cp-t">
-                        <b id={`im-t-${s.id}`}>{s.title}</b>
-                        <small>{info?.why || dimOf(s.dimension).short}</small>
-                        <small className="im-meta">{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}{feeds.length ? ` · يغذي ${feeds.join('، ')}` : ''}</small>
-                      </span>
-                      <span className={`chip ${t === 'idle' || t === 'opt' ? '' : t}`}>{t === 'warn' && s.status === 'submitted' ? CHAPTER_STATUS_AR.submitted : TONE_AR[t]}</span>
-                    </button>
-                    {ref && onHandbook && <button type="button" className="link small im-book" onClick={() => onHandbook(ref)} aria-describedby={`im-t-${s.id}`}>في الكتاب</button>}
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        );
-      })}
-      {only === 'todo' && done === req.length && <p className="muted small">اكتملت الفصول كلها.</p>}
-    </section>
+    </>
   );
-}
-
-// ── داخل الفصل: أين أنا في الوثيقة، والسابق والتالي، وما يشرحه في الكتاب ──
-export function ChapterNav({ sections, id, onOpen, onHandbook }) {
-  const i = sections.findIndex((s) => s.id === id);
-  if (i < 0) return null;
-  const s = sections[i], prev = sections[i - 1], next = sections[i + 1];
-  const ph = phaseOf(s.key);
-  const info = chapterInfo(s.key);
-  const ref = bookRef(s);
   return (
-    <nav className="im-chnav" aria-label="التنقل بين فصول الوثيقة">
-      <div className="im-chnav-where">
-        <small>الفصل {i + 1} من {sections.length}{ph ? ` · ${ph.title}` : ''}</small>
-        {info?.why && <span><Annotated text={info.why} /></span>}
-      </div>
-      <div className="row">
-        {prev && <button type="button" className="btn ghost sm" onClick={() => onOpen(prev.id)} title={prev.title}>→ السابق</button>}
-        {ref && onHandbook && <button type="button" className="btn ghost sm" onClick={() => onHandbook(ref)}>اقرأ في الكتاب: {ref.look_for}</button>}
-        {next && <button type="button" className="btn ghost sm" onClick={() => onOpen(next.id)} title={next.title}>التالي ←</button>}
-      </div>
-    </nav>
+    <>
+      <button type="button" className="sp-bar" aria-expanded={sheet} aria-controls="sp-panel" onClick={() => setSheet(true)}>
+        <span className="sp-bar-t">خط الوثيقة</span><span className="sp-bar-l">{sum.line}</span><span className="bar"><i style={{ width: `${sum.total ? Math.round((sum.done / sum.total) * 100) : 0}%` }} /></span>
+      </button>
+      {sheet && <div className="sp-scrim" onClick={() => setSheet(false)} aria-hidden="true" />}
+      <aside id="sp-panel" className={`card sp${sheet ? ' open' : ''}`} data-tour="capstone-sections" aria-labelledby="sp-h">
+        {sheet && <button type="button" className="sp-close link small" onClick={() => setSheet(false)}>إغلاق</button>}
+        {body}
+      </aside>
+    </>
   );
 }
+// الاسم القديم لصفحة الوثيقة: الخط نفسه
+export const Navigator = Spine;

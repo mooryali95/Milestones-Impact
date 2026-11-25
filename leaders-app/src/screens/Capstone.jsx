@@ -9,7 +9,7 @@ import Ico from '../Ico.jsx';
 import FirstOpen from '../FirstOpen.jsx';
 import { call } from '../api.js';
 import { useUnsavedGuard } from '../unsaved.js';
-import { dimOf, levelOf } from '../labels.js';
+import { DIMENSIONS, dimOf, levelOf } from '../labels.js';
 import { ModelView } from './Models.jsx';
 import Tracking from './Tracking.jsx';
 import Discovery from './Discovery.jsx';
@@ -22,7 +22,9 @@ import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.j
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
 import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
-import { ChapterNav, Meaning, Navigator } from './InitiativeMap.jsx';
+import { Meaning, Spine } from './InitiativeMap.jsx';
+import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
+import { afterOf, LENS, newInLevel, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
 import SharePanel, { ShareCard } from './Share.jsx';
 import Visuals, { VisualsCard } from './Visuals.jsx';
 import { Annotated } from '../Term.jsx';
@@ -34,6 +36,24 @@ const CARD_GATE_TITLE = { none: 'الخطوة الأولى: اعتماد بطا�
 const DISMISS_KEY = 'mi_leaders_stuck_dismissed';
 const readDismissed = () => { try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]'); } catch { return []; } };
 const saveDismissed = (list) => { try { localStorage.setItem(DISMISS_KEY, JSON.stringify(list.slice(-50))); } catch { /* تخزين محجوب: تبقى في الجلسة */ } };
+
+// «جديد في مستواك»: مفاتيح الفصول التي رآها المشارك على هذا الجهاز. راحة عرض (لا حالة رحلة)، وأول زيارة لا توسم شيئًا
+const SEEN_KEY = 'mi_leaders_spine_seen';
+const readSeen = () => { try { const v = localStorage.getItem(SEEN_KEY); return v ? JSON.parse(v) : null; } catch { return null; } };
+const saveSeen = (keys) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify(keys)); } catch { /* تخزين محجوب */ } };
+
+// سطر العدسة: لماذا يأتي إطار أعمق من غيره. من مستوى المشارك في إطار كل فصل (sections[].level)، لا من مستوى ملخص
+export function lensLine(sections) {
+  const by = {};
+  for (const s of sections || []) if (s.level && s.dimension) by[s.dimension] = s.level;
+  const ds = DIMENSIONS.filter((x) => by[x.key]);
+  if (new Set(ds.map((x) => by[x.key])).size < 2) return null;
+  return `فصول كل إطار بعمق مستواك فيه: ${ds.map((x) => `${x.short} ${levelOf(by[x.key]).title}`).join('، ')}. لذلك يأتي بعضها مجمّعًا في وحدات وبعضها فصلًا فصلًا.`;
+}
+
+// بيان المسار الواحد (track-manifest.js): الكثافة لا تُحسب من المستويات هنا. بلا مسار بعد: كثافة المتوسط
+const FALLBACK_TRACK = 'M2I2L2';
+const manifestOf = (r) => trackManifest(r?.track_key || FALLBACK_TRACK, r?.profile?.dimension) || trackManifest(FALLBACK_TRACK);
 
 const STATUS_CHIP = { draft: '', submitted: 'gold', returned: 'bad', accepted: 'gold', approved: 'ok' };
 const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي إن وُجد'], ['approved', 'الاعتماد']];
@@ -79,24 +99,40 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const [skipDiscovery, setSkipDiscovery] = useState(false);
   const [ask, setAsk] = useState(null);
   const [dismissed, setDismissed] = useState(readDismissed);
+  const [fresh, setFresh] = useState([]);
   // «اسأل المساعد» من الفصول: البوابة نفسها (guide.state)، ونص السؤال المملوء باسم الحقل وحده
   const access = useAssistantAccess(me);
   const [asst, setAsst] = useState(null);
   const assistant = { access, open: (text) => setAsst({ text }) };
-  const load = () => call('capstone.get').then((r) => { setD(r); if (r.success) setSummary(r.capstone.summary || ''); });
+  const load = () => call('capstone.get').then((r) => {
+    setD(r);
+    if (!r.success) return;
+    setSummary(r.capstone.summary || (manifestOf(r).density.summary === 'auto' ? r.summary_draft || '' : ''));
+    setFresh((f) => (f.length ? f : newInLevel(r.sections, readSeen())));
+    saveSeen(r.sections.map((x) => x.key));
+  });
   useEffect(() => { load(); call('capstone.shares').then(setShares).catch(() => {}); }, []);
   // العودة من الكتاب تفتح الفصل الذي خرج منه المشارك
   useEffect(() => { if (reopen && d?.success) { setOpen(reopen); onReopened(); } }, [reopen, d]);
   // الملخص التنفيذي يُحفظ يدويًا؛ مغادرة الصفحة وفيه تعديل تدفعه، وإغلاقها يحذّر
-  const summaryDirty = !!d?.success && ['draft', 'returned'].includes(d.capstone.status) && summary !== (d.capstone.summary || '');
+  // الملخص المقترح من البطاقة لا يُعد تعديلًا حتى يغيّره المشارك أو يحفظه
+  const summaryDirty = !!d?.success && ['draft', 'returned'].includes(d.capstone.status) && summary !== (d.capstone.summary || '') && !(!d.capstone.summary && summary === (d.summary_draft || ''));
   useUnsavedGuard(summaryDirty, () => call('capstone.summary', { summary }));
 
+  const go = (x) => { setOpen(x); load(); window.scrollTo({ top: 0 }); };
+  // «أنهيت ← التالي»: الفصل التالي غير المنتهي، و«أنهيت الوحدة» حين يكون آخر فصل في وحدته
+  const chapterCtx = (id) => {
+    const next = afterOf(d.sections, id);
+    const unit = unitsFor(d.sections).find((u) => u.items.some((x) => x.id === id));
+    return { where: whereOf(d.sections, id), nextId: next?.id || null, nextTitle: next?.title || '', unitLast: !!unit && unit.items.length > 1 && unit.items[unit.items.length - 1].id === id, onNext: (x) => go(x) };
+  };
   if (open) {
     return (
       <div className="page">
         <AssistantContext.Provider value={assistant}>
         <ModelView key={open} id={open} name={me.participant.full_name} backLabel="وثيقة مبادرتك" onBack={() => { setOpen(null); load(); }} onPoints={() => {}}
-          nav={d?.success ? <ChapterNav sections={d.sections} id={open} onOpen={(x) => { setOpen(x); window.scrollTo({ top: 0 }); }} onHandbook={onHandbook} /> : null} />
+          nav={d?.success ? <Spine sections={d.sections} checks={d.checks} card={d.card} status={d.capstone.status} current={open} fresh={fresh} onOpen={go} onHandbook={onHandbook} /> : null}
+          chapter={d?.success ? chapterCtx(open) : null} />
         </AssistantContext.Provider>
         <AssistantDrawer open={!!asst} initialText={asst?.text || ''} onClose={() => setAsst(null)} />
       </div>
@@ -118,6 +154,11 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const req = d.sections.filter((s) => !s.optional);
   const done = req.filter((s) => s.complete).length;
   const failing = d.checks.filter((x) => !x.ok);
+  // كثافة الصفحة بملف التعريف (track-manifest.js من lens.json)، لا بمستوى ملخص
+  const den = manifestOf(d).density;
+  const shownChecks = den.checks === 'blocking' ? d.checks.filter((x) => x.blocking) : d.checks;
+  const cardOk = !d.card || d.card.state === 'approved';
+  const recent = recentChanges(d.sections);
 
   // الفصل يُفتح والصفحة قائمة خلفه (فلا يدفع حارس المغادرة الحفظ)، ثم تُحمَّل من جديد عند الرجوع فتستبدل الملخص
   // بنسخة الخادم: يُحفظ الملخص المعدَّل قبل فتح الفصل، وإن تعذّر بقي في مكانه برسالة (p-capstone-3)
@@ -186,8 +227,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           <h1>{d.initiative || 'وثيقة مبادرتك'}</h1>
           <p>
             {d.scope_title ? <b>{d.scope_title}</b> : 'وثيقة مبادرتك'}
-            {' · '}مستوى {levelOf(d.level).title}{d.track?.title ? <> · {d.track.title}</> : null}
+            {d.track?.title ? <> · {d.track.title}</> : null}
           </p>
+          {lensLine(d.sections) && <p className="small muted cp-lensline" data-lens-line>{lensLine(d.sections)}</p>}
           <ol className="cp-flow">
             {FLOW.map(([k, t], i) => <li key={k} className={i < step || c.status === 'approved' ? 'past' : i === step ? 'now' : ''}><span>{i < step || c.status === 'approved' ? '✓' : i + 1}</span>{t}</li>)}
           </ol>
@@ -234,7 +276,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       {editable && (() => {
         const sig = stuckSignals({ sections: d.sections, checks: d.checks, card: d.card }).find((x) => !dismissed.includes(x.key));
         if (!sig) return null;
-        const ex = d.examples?.doc !== false ? examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null)[0] : null;
+        const ex = den.examples !== 'adjacent' && d.examples?.doc !== false ? examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null)[0] : null;
         return (
           <section className="card stuck" aria-labelledby="stuck-h" data-stuck={sig.kind}>
             <h3 id="stuck-h">تحتاج توجيهًا؟</h3>
@@ -264,7 +306,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       {(() => {
         const charter = d.sections.find((s) => s.key === 'initiative-charter');
         if (!editable || skipDiscovery || d.initiative || !charter || (d.card && d.card.state !== 'none')) return null;
-        return <Discovery level={d.level} charterId={charter.id} onSkip={() => setSkipDiscovery(true)} onDone={() => openSection(charter.id)} />;
+        return <Discovery level={charter.level} charterId={charter.id} onSkip={() => setSkipDiscovery(true)} onDone={() => openSection(charter.id)} />;
       })()}
 
       {/* بوابة البطاقة: ما ينتظره المشارك من المستشار قبل تقديم الوثيقة، وما يفعله في الأثناء */}
@@ -279,15 +321,23 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           </div>
         </div>
       )}
-      <div className="cp-grid">
-        <Navigator sections={d.sections} busy={busy === 'summary'} onOpen={openSection} onHandbook={onHandbook} />
+      <div className="cp-live">
+        <Spine sections={d.sections} checks={d.checks} card={d.card} status={c.status} busy={busy === 'summary'} fresh={fresh} onOpen={openSection} onHandbook={onHandbook} />
 
-        <aside className="cp-side">
+        <aside className="cp-side cp-live-main">
+          {recent.length > 0 && (
+            <section className="card" aria-labelledby="cp-recent-h">
+              <h3 id="cp-recent-h">آخر ما تغيّر في وثيقتك</h3>
+              <ul className="cp-recent">{recent.map((x) => (
+                <li key={x.id}><button type="button" className="link" onClick={() => openSection(x.id)}>{x.title}</button> <small className="muted">{new Date(x.updated_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' })}</small></li>
+              ))}</ul>
+            </section>
+          )}
           <section className="card">
-            <h3>فحوص الاتساق</h3>
-            <p className="muted small">يفحص النظام اتساق الفصول كلما فتحت الصفحة.</p>
+            <h3>{den.checks === 'blocking' ? 'ما يلزم قبل التسليم' : 'فحوص الاتساق'}</h3>
+            <p className="muted small">{den.checks === 'blocking' ? 'هذه وحدها تمنع تقديم الوثيقة، وكل منها يظهر أيضًا على فصله في الخط.' : 'يفحص النظام اتساق الفصول كلما فتحت الصفحة، وكل فحص مفتوح يظهر على فصله في الخط.'}</p>
             <ul className="cp-checks">
-              {d.checks.map((x) => {
+              {shownChecks.map((x) => {
                 const ch = !x.ok && editable ? d.sections.find((sec) => (CHECK_CHAPTERS[x.key] || []).includes(sec.key)) : null;
                 return (
                   <li key={x.key} className={x.ok ? 'ok' : 'no'}><b><Annotated text={x.title} />{x.blocking && <span className="chip bad" title="لا تُقدَّم الوثيقة قبله"> إلزامي</span>}</b>{x.detail && <small>{isoLtr(x.detail)}</small>}
@@ -295,29 +345,43 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
                   </li>
                 );
               })}
-              {!d.checks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
+              {!shownChecks.length && <li className="muted">تظهر الفحوص حين تملأ الفصول.</li>}
             </ul>
-            {failing.length > 0 && <small className="muted">{failing.length} فحص مفتوح</small>}
+            {failing.length > 0 && den.checks !== 'blocking' && <small className="muted">{failing.length} فحص مفتوح</small>}
           </section>
 
+          {/* البطاقات الثانوية مطوية تحت الخط (المثال والمسوّغات والملخص)، وتُعرض بكثافة ملف التعريف */}
+          <details className="card cp-fold">
+            <summary>ملحقات الوثيقة: {[den.examples !== 'adjacent' && 'مثال محلول', den.case === 'readiness' ? 'جاهزية وثيقتك' : 'مسوّغات المبادرة', 'الملخص التنفيذي'].filter(Boolean).join('، ')}</summary>
+            <div className="cp-side">
+
           {/* المبادرات المحلولة كاملة: يعرضها أو يحجبها المالك عامةً أو للدفعة، وكل قطاع وحده (examples من الخادم) */}
-          {d.examples?.doc !== false && examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).length > 0 && (
+          {den.examples !== 'adjacent' && d.examples?.doc !== false && examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).length > 0 && (
             <section className="card cp-example" aria-labelledby="cp-ex-h">
               <h3 id="cp-ex-h">مبادرة محلولة كاملة</h3>
               <p className="muted small">قبل أن تكتب، شاهد كيف تبدو وثيقة مكتملة من أول البطاقة إلى قصة التحول. للتعلم من بنيتها لا لنقلها: مبادرتك من واقع تعرفه.</p>
               <div className="row">
-                {examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).map((ex, i) => (
+                {examplesFor(me?.participant?.sector, d.examples?.sectors ?? null, d.examples?.context ?? null).slice(0, den.examples === 'sector' ? 1 : undefined).map((ex, i) => (
                   <button key={ex.sector} type="button" className={`btn ${i ? 'ghost' : 'gold'} sm`} onClick={() => openCapstoneDoc(exampleDoc(ex))}>مثال {ex.sector_title}</button>
                 ))}
               </div>
             </section>
           )}
 
-          <section className="card cp-case" aria-labelledby="cp-case-h">
+          {den.case === 'readiness' ? (
+            <section className="card cp-case" aria-labelledby="cp-case-h" data-case="readiness">
+              <h3 id="cp-case-h">جاهزية وثيقتك</h3>
+              <p className="muted small">ثلاثة أسئلة يسألها صاحب القرار، يجاب عنها من فصولك نفسها.</p>
+              <ul className="cp-checks">
+                {readinessQuestions(d.sections).map((q) => <li key={q.key} className={q.done ? 'ok' : 'no'}><b>{q.question}</b>{q.chapters[0] && !q.done && <button type="button" className="link small" onClick={() => openSection(q.chapters[0].id)}>افتح «{q.chapters[0].title}»</button>}</li>)}
+              </ul>
+            </section>
+          ) : (
+          <section className="card cp-case" aria-labelledby="cp-case-h" data-case={den.case}>
             <h3 id="cp-case-h">مسوّغات المبادرة</h3>
-            <p className="muted small">خمسة أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصولك نفسها، وتظهر مع ميثاق المبادرة (صفحة القرار المولَّدة من بطاقتك) في الوثيقة الاحترافية.</p>
+            <p className="muted small">{den.case === 'case3' ? 'ثلاثة' : 'خمسة'} أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصولك نفسها، وتظهر مع ميثاق المبادرة (صفحة القرار المولَّدة من بطاقتك) في الوثيقة الاحترافية.</p>
             <ul className="cp-checks">
-              {caseStatus(d.sections).map((c) => (
+              {caseStatus(d.sections).filter((x) => den.case !== 'case3' || LENS.density.case3.includes(x.key)).map((c) => (
                 <li key={c.key} className={c.state === 'done' ? 'ok' : 'no'}>
                   <b>{c.title}{c.total > 0 && <span className="muted"> · {c.done} من {c.total}</span>}</b>
                   <small>{c.state === 'none' ? 'ليس من فصول وثيقتك في مستواك' : c.question}</small>
@@ -325,18 +389,21 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
               ))}
             </ul>
           </section>
+          )}
 
           <section className="card">
             <h3 id="cp-summary-h">الملخص التنفيذي</h3>
-            <p className="muted small" id="cp-summary-hint">رسالتك إلى صاحب القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.</p>
+            <p className="muted small" id="cp-summary-hint">{den.summary === 'auto' && !c.summary ? 'اقترحناه لك من بطاقة مبادرتك. عدّله إن شئت ثم احفظه.' : 'رسالتك إلى صاحب القرار في فقرة أو فقرتين: المشكلة، والحل، والقيمة، وما تطلبه.'}</p>
             <textarea className="input" rows={6} maxLength={3000} disabled={!editable} value={summary} onChange={(e) => setSummary(e.target.value)}
               aria-labelledby="cp-summary-h" aria-describedby="cp-summary-hint" />
             {editable && <button className="btn ghost sm" disabled={!!busy} onClick={saveSummary}>{busy === 'summary' ? 'لحظة…' : 'حفظ الملخص'}</button>}
           </section>
+            </div>
+          </details>
 
-          <VisualsCard onOpen={() => { setVizOpen(true); window.scrollTo({ top: 0 }); }} />
+          {(den.panels !== 'after_card' || cardOk) && <VisualsCard onOpen={() => { setVizOpen(true); window.scrollTo({ top: 0 }); }} />}
 
-          <ShareCard data={shares} onOpen={() => { setShareOpen(true); window.scrollTo({ top: 0 }); }} />
+          {(den.panels !== 'after_card' || cardOk) && <ShareCard data={shares} onOpen={() => { setShareOpen(true); window.scrollTo({ top: 0 }); }} />}
 
           <section className="card cp-act">
             {msg?.err && <div className="alert err">{msg.err}</div>}
@@ -355,8 +422,13 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
 
           <details className="card cp-rubric">
             <summary>كيف تُقيَّم الوثيقة</summary>
+            {den.rubric === 'lines4' ? <>
+              <p className="muted small">ما يُنتظر منك في وثيقتك:</p>
+              <ul>{LENS.density.rubric_lines.map((x) => <li key={x}><small>{x}</small></li>)}</ul>
+            </> : <>
             <p className="muted small">{d.rubric.length} أبعاد، كل بُعد من 1 إلى {RUBRIC_MAX}. {d.track?.priority ? `أبعاد الإطار ذي الأولوية في مسارك (${dimOf(d.track.priority).short}) وزنها ×${PRIORITY_WEIGHT}.` : 'مستوياتك في الأطر الثلاثة متساوية، فكل الأبعاد بوزن واحد.'} الدرجة مكوّن «المشروع» في التقييم الختامي بوزنه المعلن في برنامجك، ومنه قرار الشهادة.</p>
-            <ul>{d.rubric.map((r) => <li key={r.key}><b>{r.title}</b><small>{r.anchors[3]}</small></li>)}</ul>
+            <ul>{d.rubric.map((r) => <li key={r.key}><b>{r.title}{den.rubric === 'weighted' && d.track?.priority === r.dimension ? ` · ×${PRIORITY_WEIGHT}` : ''}</b><small>{r.anchors[3]}</small></li>)}</ul>
+            </>}
           </details>
         </aside>
       </div>

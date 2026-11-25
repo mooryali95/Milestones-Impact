@@ -5,7 +5,6 @@
 // ونعيد قراءة الحساب حتى يظهر الحق، ومن رعته جهة لا يرى هذه الشاشة أصلًا.
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
-import { levelOf } from '../labels.js';
 import { stepTitle } from '../Onboarding.jsx';
 import { LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { flagsOf, programPackageAr } from '../features.js';
@@ -111,7 +110,7 @@ export default function Paywall({ item, me, onUpdate }) {
         <h1>{c.title}</h1>
         {item === 'program' && me.profile && (
           <div className="pay-result">
-            <span className="small muted">مستواك العام</span><b>{levelOf(me.profile.level).title}</b>
+            {/* هوية المشارك مساره (ملف تعريفه)، لا مستوى ملخص (قرار المالك 2026-11-25) */}
             {me.profile.track?.title && <><span className="small muted">مسارك</span><b>{me.profile.track.title}</b></>}
           </div>
         )}
@@ -201,7 +200,7 @@ export function AwaitingApproval({ me }) {
       <div className="card stack pay-card" role="status">
         <p className="eyebrow">نتيجتك جاهزة</p>
         <h1>مسارك قيد الاعتماد</h1>
-        {me.profile && <div className="pay-result"><span className="small muted">مستواك العام المبدئي</span><b>{levelOf(me.profile.level).title}</b></div>}
+        {me.profile?.track?.title && <div className="pay-result"><span className="small muted">مسارك المبدئي</span><b>{me.profile.track.title}</b></div>}
         <p className="muted">يراجع المستشار نتيجتك ويعتمد مسارك خلال يومي عمل{due ? `، أي قبل نهاية ${fmt(due)}` : ''}. يصلك بريد حين يُعتمد، فيه مسارك المعتمد بأبوابه ونماذجه، ومعه خطوة إكمال التسجيل إن لم ترعك جهة.</p>
         {at && <p className="small muted">أنهيت القياس في {fmt(at)}.</p>}
       </div>

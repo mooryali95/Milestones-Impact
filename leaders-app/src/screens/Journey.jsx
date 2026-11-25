@@ -11,7 +11,8 @@ import { bootPreload, call, lastRead, nextSeen, uploadFile, welcomeSeen } from '
 import IntroVideo from '../IntroVideo.jsx';
 import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { OnboardingNextCard } from '../Onboarding.jsx';
-import { DIMENSIONS, LEVEL_SUMMARY, LEVELS, levelOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
+import { DIMENSIONS, MODES, PHASES, REQ_STATUS } from '../labels.js';
+import { InitiativeNow } from './InitiativeNow.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { sessionsAr } from '../../../supabase/functions/leaders-api/journey.js';
@@ -88,25 +89,16 @@ export function PasskeyBanner({ onDone, settings = false, more = false }) {
   );
 }
 
-// مستوى واحد ملخص. الخادم يرسله جاهزًا؛ والاحتياط للنسخة الأقدم منه.
-function summaryLevel(profile) {
-  if (profile.level) return profile.level;
-  const steps = (profile.dimensions || []).map((d) => levelOf(d.level).step).filter(Boolean).sort();
-  return steps.length ? LEVELS[steps[Math.floor((steps.length - 1) / 2)] - 1].key : null;
-}
-
+// لا مستوى ملخص للمشارك (قرار المالك 2026-11-25): هويته مساره بملف تعريفه. قبل تحدد المسار: حصيلة قياسه بلا مستوى
 function Competency({ profile }) {
-  const key = summaryLevel(profile);
-  const lvl = levelOf(key);
   return (
     <div className="dim overall">
       <div className="row between">
         <span className="en">{DIMENSIONS.map((d) => d.short).join(' · ')}</span>
         {profile.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
       </div>
-      <h3>مستواك: {lvl.title}</h3>
-      <div className="steps">{[1, 2, 3].map((s) => <div key={s} className={s <= lvl.step ? 'on' : ''} />)}</div>
-      {LEVEL_SUMMARY[key] && <p className="small muted">{LEVEL_SUMMARY[key]}</p>}
+      <h3>مسارك يتحدد من قياسك في الأطر الثلاثة</h3>
+      <p className="small muted">يظهر هنا مسارك باسمه ووصفه حين تكتمل نتائجك في الأطر الثلاثة.</p>
     </div>
   );
 }
@@ -118,7 +110,6 @@ const points = (t) => String(t || '').split('\n').map((x) => x.replace(/^\s*(\d+
 
 function TrackCard({ profile, cohort }) {
   const t = profile.track;
-  const lvl = levelOf(summaryLevel(profile));
   const focus = points(t.focus);
   const journey = points(t.journey);
   return (
@@ -128,7 +119,6 @@ function TrackCard({ profile, cohort }) {
           <span className="track-eyebrow">مسارك في البرنامج</span>
           <span className="row" style={{ gap: 6 }}>
             {cohort?.name && <span className="chip">{cohort.name}</span>}
-            {lvl.title && <span className="chip track-lvl">المستوى العام: {lvl.title}</span>}
             {profile.approved ? <span className="chip ok">معتمد</span> : <span className="chip warn">مبدئي</span>}
           </span>
         </div>
@@ -1169,6 +1159,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           {/* «التوجيه والإرشاد»: الاستشارة وأسئلة الفريق في مكان واحد، وبطاقة «ابدأ» قبل أن يبدأ ما يوجَّه إليه */}
           {approved && <Fold id="guidance" store={store} title="التوجيه والإرشاد" meta="استشارة أو سؤال"><GuidancePanel guidance={me.guidance} onHandbook={onHandbook} /></Fold>}
 
+          {/* «مبادرتك الآن»: سطر من خط الوثيقة، وتنبيه إن تأخرت المبادرة عن التعلم */}
+          {approved && <InitiativeNow progress={me.progress} onOpen={onCapstone} />}
           {profile && (
             <Fold id="track" store={store} title={profile.track?.title ? 'مسارك' : 'نتيجتك'} meta={profile.track?.title || 'حصيلة قياسك في الأطر الثلاثة'}>
               <div className="section-title fold-h">

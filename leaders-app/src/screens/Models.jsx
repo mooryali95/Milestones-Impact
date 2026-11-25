@@ -267,7 +267,10 @@ function FieldGuide({ g }) {
 }
 
 // nav: شريط التنقل بين فصول وثيقة المبادرة حين يُفتح النموذج فصلًا منها (InitiativeMap.jsx)
-export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة النماذج', nav = null }) {
+// chapter: فصل في «الوثيقة الحية» (Capstone.jsx): { where، nextId، nextTitle، unitLast، onNext(id) }. الفصل غير البطاقة يُنهى ولا يُقدَّم:
+// «أنهيت الفصل ← التالي» يحتسبه ونقاطه فورًا وينتقل، وملاحظة الخبير سطر في أعلاه لا قفل (اعتمده المالك 2026-11-25)
+export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة النماذج', nav = null, chapter = null }) {
+  const [focus, setFocus] = useState(false);
   const [d, setD] = useState(null);
   const [answers, setAnswers] = useState({});
   const [busy, setBusy] = useState('');
@@ -327,6 +330,11 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
 
   const gate = isGateModel(m.key);
   const who = REVIEWER_AR[d.reviewer] || REVIEWER_AR.advisor;
+  // فصل في الوثيقة الحية: يُنهى ولا يُقدَّم، وملاحظة الخبير لا تقفله
+  const living = !!d.capstone && !gate;
+  const finished = living && s && ['submitted', 'reviewed'].includes(s.status) && !dirty;
+  const noteOpen = living && s?.feedback_ar && (!s.updated_at || !s.reviewed_at || Date.parse(s.updated_at) <= Date.parse(s.reviewed_at) + 1000);
+  const readByExpert = living && s?.status === 'reviewed' && !s.feedback_ar;
   const save = async (submit, anyway = false) => {
     if (submit && !anyway) {
       const h = preSubmitHints(m.fields, answers, { initiative });
@@ -339,20 +347,43 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
     if (!r.success) return setMsg({ err: r.message });
     setD({ ...d, submission: r.submission });
     setDirty(false); setSavedAt(new Date());
+    if (submit && living) {
+      onPoints(r);
+      if (chapter?.nextId) return chapter.onNext(chapter.nextId, r.gained);
+      return setMsg({ ok: r.gained ? `أنهيت الفصل، و+${r.gained} نقطة أضيفت إلى رصيدك.` : 'أنهيت الفصل.' });
+    }
     const counted = gate ? `وهي بانتظار اعتماد ${who}.` : `ويُحتسب في رحلتك الآن، وتظهر هنا ملاحظات ${who} حين يكتبها.`;
     setMsg({ ok: submit ? (r.gained ? `قُدّم النموذج، و+${r.gained} نقطة أضيفت إلى رصيدك. ${counted}` : `قُدّم النموذج، ${counted}`) : 'حُفظت المسودة.' });
     if (submit) onPoints(r);
   };
   const set = (k, v) => { setAnswers((a) => ({ ...a, [k]: v })); setDirty(true); };
 
-  return (
-    <div className="model">
+  const view = (
+    <div className={`model${focus ? ' focus' : ''}`}>
       <button className="link small" onClick={onBack}>→ {backLabel}</button>
-      {nav}
-      {d.capstone && <p className="alert info small">هذا فصل في وثيقة مبادرتك{capLocked ? '، والوثيقة عند المراجعة أو معتمدة فلا يُعدَّل الآن.' : '. ما تكتبه هنا يظهر في الوثيقة كما هو.'}</p>}
-      <ol className="mstepper">
-        {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
-      </ol>
+      {chapter && (
+        <div className="ch-where" data-chapter-where>
+          <small>{chapter.where}</small>
+          <span className="ws-prog"><span className="bar"><i style={{ width: `${pct}%` }} /></span></span>
+          <small className="muted">{filled} من {req.length} حقول</small>
+          {readByExpert && <span className="chip ok">قرأه خبيرك</span>}
+          <button type="button" className="link small" aria-pressed={focus} onClick={() => setFocus((x) => !x)}>{focus ? 'اعرض الدليل والخط' : 'وضع التركيز'}</button>
+        </div>
+      )}
+      {noteOpen && (
+        <div className="card ch-note" role="note" data-expert-note>
+          <b>ملاحظة من خبيرك</b>
+          <p>{s.feedback_ar}</p>
+          <small className="muted">لا تقفل الفصل: عدّل ما تراه، وتُغلق الملاحظة حين تعدّل بعدها.</small>
+        </div>
+      )}
+      {d.capstone && capLocked && <p className="alert info small">هذا فصل في وثيقة مبادرتك، والوثيقة عند المراجعة أو معتمدة فلا يُعدَّل الآن.</p>}
+      {d.capstone && !capLocked && !chapter && <p className="alert info small">هذا فصل في وثيقة مبادرتك. ما تكتبه هنا يظهر في الوثيقة كما هو.</p>}
+      {!living && (
+        <ol className="mstepper">
+          {STEPS.map((t, i) => <li key={t} className={i < step ? 'past' : i === step ? 'now' : ''}><span>{i < step ? '✓' : i + 1}</span>{t}</li>)}
+        </ol>
+      )}
       <header className="model-hero">
         <span className="model-icon">{m.icon || '◆'}</span>
         <div>
@@ -373,10 +404,10 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           </section>
           <section>
             <span className="mg-cap">علامات النموذج الجيد</span>
-            <p className="muted small">{gate ? `يعتمد ${who} بطاقتك قبل أن تبني عليها وثيقتك.` : `يُحتسب تقديمك فورًا، ويقرؤه ${who} ويكتب لك ملاحظاته.`} وقبل التقديم نذكّرك بما قد ينقص منها.</p>
+            <p className="muted small">{gate ? `يعتمد ${who} بطاقتك قبل أن تبني عليها وثيقتك. وقبل التقديم نذكّرك بما قد ينقص منها.` : living ? 'يُحتسب الفصل ونقاطه حين تنهيه، وقبلها نذكّرك بما قد ينقص منه.' : `يُحتسب تقديمك فورًا، ويقرؤه ${who} ويكتب لك ملاحظاته. وقبل التقديم نذكّرك بما قد ينقص منها.`}</p>
             <ul className="mrubric">{RUBRIC.map(([t, x]) => <li key={t}><b>{t}</b>{x}</li>)}</ul>
           </section>
-          {s && s.status !== 'draft' && (
+          {s && s.status !== 'draft' && !living && (
             <section className="mg-status">
               <div className={`chip ${chipOf(s.status, m.key, d.reviewer).c}`}>{chipOf(s.status, m.key, d.reviewer).t}</div>
               {s.rating && <div className="model-rate"><span>{rubricLevelAr(s.rating)}</span>{s.bonus ? <b>+{s.bonus} نقطة تميّز</b> : null}</div>}
@@ -421,9 +452,9 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           {msg?.ok && <div className="alert ok">{msg.ok}</div>}
           {hints && (
             <div className="alert info small" role="status">
-              <b>قبل التقديم:</b>
+              <b>{living ? 'قبل أن تنهي الفصل:' : 'قبل التقديم:'}</b>
               <ul>{hints.map((h) => <li key={h.key}>{h.text}</li>)}</ul>
-              <div className="row"><button type="button" className="btn gold sm" disabled={!!busy} onClick={() => save(true, true)}>قدّم على أي حال</button>
+              <div className="row"><button type="button" className="btn gold sm" disabled={!!busy} onClick={() => save(true, true)}>{living ? 'أنهيته على أي حال' : 'قدّم على أي حال'}</button>
                 <button type="button" className="btn ghost sm" onClick={() => setHints(null)}>أراجعها أولًا</button></div>
             </div>
           )}
@@ -436,7 +467,11 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             {!locked && (
               <div className="row model-acts">
                 <button type="button" className="btn ghost sm" disabled={!!busy} onClick={() => save(false)}>{busy === 'save' ? 'لحظة…' : 'حفظ'}</button>
-                <button className="btn gold" disabled={!!busy || filled < req.length}>{busy === 'submit' ? 'لحظة…' : s?.status === 'submitted' ? 'تحديث التقديم' : `تقديم · ${m.points} نقطة`}</button>
+                {living && finished && chapter?.nextId
+                  ? <button type="button" className="btn gold" disabled={!!busy} onClick={() => chapter.onNext(chapter.nextId, 0)}>التالي: {chapter.nextTitle} ←</button>
+                  : living
+                    ? <button className="btn gold" disabled={!!busy || filled < req.length} data-finish>{busy === 'submit' ? 'لحظة…' : `${chapter?.unitLast ? 'أنهيت الوحدة' : 'أنهيت الفصل'}${chapter?.nextId ? ' ← التالي' : ''}${!s || s.status === 'draft' ? ` · ${m.points} نقطة` : ''}`}</button>
+                    : <button className="btn gold" disabled={!!busy || filled < req.length}>{busy === 'submit' ? 'لحظة…' : s?.status === 'submitted' ? 'تحديث التقديم' : `تقديم · ${m.points} نقطة`}</button>}
               </div>
             )}
           </div>
@@ -448,6 +483,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
         : <p className="row"><button type="button" className="btn ghost sm" onClick={() => setAsking(true)}>لديّ سؤال عن هذا الفصل</button><small className="muted">خبير في هذا الفصل يرد عليك بعد قراءة وثيقتك.</small></p>)}
     </div>
   );
+  return nav ? <div className={`ch-layout${focus ? ' focus' : ''}`}>{nav}{view}</div> : view;
 }
 
 // الحالات من المصدر الواحد (CHAPTER_STATUS_AR)

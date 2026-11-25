@@ -4,8 +4,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { afterOf, changedSinceRead, chapterHours, chapterState, densityFor, LENS, newInLevel, readByExpert, readinessQuestions, spineSummary, unitsFor, unitState } from '../../supabase/content/initiative-guide/v1/spine.js';
-import { profileKey, priorityFor, trackLevels } from '../../supabase/functions/leaders-api/logic.js';
+import { afterOf, changedSinceRead, chapterHours, chapterState, LENS, newInLevel, readByExpert, readinessQuestions, spineSummary, unitsFor, unitState } from '../../supabase/content/initiative-guide/v1/spine.js';
+import { trackLevels } from '../../supabase/functions/leaders-api/logic.js';
+import { chapterLens, trackManifest } from '../../supabase/functions/leaders-api/track-manifest.js';
 import { chapterNoteOnly } from '../../supabase/functions/leaders-api/model-review.js';
 
 // إطار كل فصل كما في الإنتاج (learning_models.dimension)
@@ -67,9 +68,16 @@ describe('عدسة المسار في المسارات الـ27', () => {
       const chapters = secs.filter((x) => x.dimension === d).length;
       if (levels[d] === 'advanced') expect(mine.length).toBe(chapters);
     }
-    const profile = { key: profileKey(levels, priorityFor(levels)), level: levels[priorityFor(levels)] };
+    const man = trackManifest(key);
+    const profile = man.profile;
+    expect(man.levels).toEqual(levels);
+    for (const x of secs) expect(chapterLens(man, { dimension: x.dimension })).toBe(levels[x.dimension]);
+    expect(man.estimate_hours[0]).toBeLessThan(man.estimate_hours[1]);
+    expect(man.estimate_hours[0]).toBeGreaterThanOrEqual(4);
+    expect(man.estimate_hours[1]).toBeLessThanOrEqual(30);
     expect(profile.key).toMatch(/^(milestone|impact|leadership)-(beginner|intermediate|advanced)$/);
-    const den = densityFor(profile);
+    const den = man.density;
+    expect(den).toEqual(trackManifest(key).density);
     for (const [k, vals] of Object.entries(DENSITY_KEYS)) expect(vals, `${key} ${k}`).toContain(den[k]);
     const sum = spineSummary(secs);
     expect(sum.total).toBe(secs.length);
@@ -94,5 +102,30 @@ describe('لا مستوى ملخص في شاشات المشارك', () => {
   it.each(files)('%s لا يقرأ overallLevel ولا profile.level ولا d.level', (f) => {
     const src = readFileSync(join(dir, f), 'utf8');
     expect(src).not.toMatch(/overallLevel|profile\.level\b|\bd\.level\b|المستوى العام|مستواك العام/);
+  });
+});
+
+describe('لا مستوى ملخص في مسارات المشارك على الخادم', () => {
+  it.each(['participant.ts', 'hall.ts', 'file.ts'])('%s لا يستورد overallLevel', (f) => {
+    expect(readFileSync(join(__dirname, '../../supabase/functions/leaders-api', f), 'utf8')).not.toMatch(/overallLevel/);
+  });
+  it('capstone.get يرسل ملف التعريف لا المستوى الملخص', () => {
+    const src = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/capstone.ts'), 'utf8');
+    const get = src.slice(src.indexOf('export async function get('), src.indexOf('export async function saveSummary'));
+    expect(get).not.toMatch(/overallLevel/);
+    expect(get).toMatch(/trackManifest\(/);
+  });
+});
+
+describe('بيان المسار مصدر واحد', () => {
+  it('مفتاح غير صالح يعيد null، والأولوية المحسومة تغيّر ملف التعريف وحده', () => {
+    expect(trackManifest('X')).toBeNull();
+    expect(trackManifest('M1I1L3').profile.key).toBe('milestone-beginner');
+    expect(trackManifest('M1I1L3', 'impact').profile.key).toBe('impact-beginner');
+  });
+  it('الواجهة لا تحسب الكثافة من المستويات: Capstone.jsx يقرؤها من trackManifest', () => {
+    const src = readFileSync(join(__dirname, 'screens/Capstone.jsx'), 'utf8');
+    expect(src).toMatch(/trackManifest\(/);
+    expect(src).not.toMatch(/density\.by_level|by_level\[/);
   });
 });

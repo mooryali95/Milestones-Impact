@@ -1,12 +1,14 @@
 // ════════════════════════════════════════════════════════════════
 // خط الوثيقة («الوثيقة الحية»، اعتمده المالك 2026-11-25): حالات الفصل الأربع، ووحدات العرض بالمستوى، وسطر الرأس
 // ════════════════════════════════════════════════════════════════
-// دوال صرفة يقرؤها تطبيق المشارك (الخط وداخل الفصل ورحلتي) ولوحة الإدارة (شاشة المراجعة). المصدر: anatomy.json (lens)،
-// وحالة الفصل من الخادم كما هي (capstone.ts sectionView). لا تغير شيئًا في الجاهزية ولا النقاط ولا البوابات.
-import A from './anatomy.json';
+// دوال صرفة يقرؤها تطبيق المشارك (الخط وداخل الفصل ورحلتي) ولوحة الإدارة (شاشة المراجعة).،
+// المصدر: lens.json عبر track-manifest.js، وحالة الفصل من الخادم كما هي (capstone.ts sectionView). لا تغير شيئًا في الجاهزية ولا النقاط ولا البوابات.
 import { phaseOf } from './anatomy.js';
+import { chapterHours, LENS as LENS_DATA } from '../../../functions/leaders-api/track-manifest.js';
 
-export const LENS = Object.freeze(A.lens);
+export { chapterHours };
+
+export const LENS = Object.freeze(LENS_DATA);
 // الحالات الأربع كما يراها المشارك. الملاحظة لا تقفل الفصل
 export const STATE_AR = Object.freeze({ empty: 'لم يبدأ', writing: 'قيد الكتابة', done: 'منتهٍ', note: 'فيه ملاحظة من خبيرك' });
 export const STATE_ORDER = ['empty', 'writing', 'done', 'note'];
@@ -57,15 +59,6 @@ export function unitsFor(sections, fallbackLevel = 'advanced') {
   return out;
 }
 
-/** كثافة الصفحة بملف التعريف: by_level بمستوى إطار الأولوية، ويتجاوزها profiles[key]. بلا ملف: المتوسط */
-export function densityFor(profile) {
-  const D = LENS.density;
-  const base = D.by_level[profile?.level] || D.by_level.intermediate;
-  const over = (profile?.key && D.profiles?.[profile.key]) || {};
-  const { _note, ...rest } = over;
-  return { ...base, ...rest };
-}
-
 /** أسئلة الجاهزية الثلاثة (للكثافة readiness): كل سؤال منتهٍ حين ينتهي فصل من فصوله في الوثيقة */
 export function readinessQuestions(sections) {
   const D = LENS.density;
@@ -100,12 +93,6 @@ export function afterOf(sections, id) {
 
 const hoursAr = (n) => (n <= 1 ? 'ساعة' : n === 2 ? 'ساعتين' : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
 const leftAr = (n) => (n === 1 ? 'فصل واحد' : n === 2 ? 'فصلان' : n <= 10 ? `${n} فصول` : `${n} فصلًا`);
-
-/** زمن الفصل بالساعات بمستوى إطاره: منتصف مدى الوثيقة ÷ عدد فصولها المعتاد (anatomy.json lens.estimate_hours) */
-export function chapterHours(level) {
-  const e = LENS.estimate_hours[level] || LENS.estimate_hours.intermediate;
-  return (e.range[0] + e.range[1]) / 2 / e.chapters;
-}
 
 /**
  * سطر رأس الخط: «أنجزت X من Y · بقي N فصول، نحو مدة · التالي: ...»

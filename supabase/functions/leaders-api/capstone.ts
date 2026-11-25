@@ -12,6 +12,8 @@ import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.t
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
 import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
+import { summaryFromCard } from './business-case.js';
+import { trackManifest } from './track-manifest.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
@@ -131,11 +133,14 @@ export async function get(p: any) {
     scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
     // هوية المشارك ملف تعريفه (إطار الأولوية بمستواه فيه، 9 ملفات)، لا المستوى الملخص (قرار المالك 2026-11-25).
     // عمق كل فصل بمستوى إطاره (sections[].level)، وكثافة الصفحة بملف التعريف (spine.js densityFor)
-    profile: { key: profileKey(d.levels, d.priority), level: d.priority ? d.levels[d.priority] : null, dimension: d.priority || null },
+    // البيان الواحد للمسار (track-manifest.js): منه الكثافة والعدسة في الواجهة
+    track_key: trackKey(d.levels), profile: trackManifest(trackKey(d.levels) || '', d.priority)?.profile || { key: profileKey(d.levels, d.priority), level: null, dimension: d.priority || null },
     track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.weighted } : null,
     initiative: d.initiative,
     sections: d.sections.map(sectionView),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
+    // ملخص مقترح من البطاقة لمن كثافته summary: auto (spine.js densityFor)؛ لا يُحفظ حتى يحفظه المشارك
+    summary_draft: summaryFromCard(d.charter),
     capstone: {
       status, status_title: (STATUS_TITLES as Record<string, string>)[status], summary: c?.summary_ar || '', revisions: c?.revisions || 0, max_revisions: MAX_REVISIONS,
       submitted_at: c?.submitted_at || null, approved_at: c?.approved_at || null,
@@ -203,7 +208,8 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       org: org ? { name: org.name, logo: org.status === 'active' ? org.logo || null : null, color: org.status === 'active' ? org.color || null : null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
       cohort: cohort && !cohort.is_default ? cohort.name : null,
       track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
-      level: overallLevel(d.levels), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
+      // profile: هوية المشارك (ملف تعريفه) لاسم الوثيقة المطبوعة؛ level باقٍ لقالبها الحالي حتى ينتقل إلى profile
+      level: overallLevel(d.levels), profile: profileKey(d.levels, d.priority), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
       // مكان المبادرة من بطاقتها لا من ملف المشارك: الجهة المسجّلة في الملف راعية البرنامج، لا مالكة المبادرة (anatomy.json writing_rules)
       host: String(d.charter.host || '').trim() || null, context: String(d.charter.context || '').trim() || null,
       initiative: d.initiative, sponsor: d.charter.sponsor || null, start: d.charter.start || null, end: d.charter.end || null,

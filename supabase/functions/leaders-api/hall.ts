@@ -6,7 +6,7 @@
 import { audit, db, Fail, must } from './core.ts';
 import { answersClosed, answerSeconds, assignTables, hallAttendance, HALL_TEAMS, hallView, nextLeader, splitTeams, HALL_PRESENT_SECONDS } from './hall.js';
 import { katonPoints } from './katon.js';
-import { checkinOpen, inProgram, isUndated, overallLevel } from './logic.js';
+import { checkinOpen, inProgram, isUndated } from './logic.js';
 import { cohortMembers, cohortOf } from './programs.ts';
 import type { Actor } from './admin.ts';
 import { features } from './features.ts';
@@ -110,7 +110,8 @@ async function readShared(session: any) {
   const sentences = session.topic_id ? ((await db.from('katon_sentences').select('id, sort, question, text_ar').eq('topic_id', session.topic_id).order('sort')).data || []) : [];
   return {
     cohort, seat, answers, topic, sentences, sentence: (sentence as any).data, presence: presence.data || [],
-    members: members.map((m: any) => ({ ...m, level: overallLevel(m.levels) })),
+    // لا مستوى يُكشف للأقران (قرار المالك 2026-11-25): هوية المشارك ملف تعريفه لا مستوى ملخص
+    members: members.map(({ levels: _l, ...m }: any) => m),
     points: katonPoints((prog as any).data?.katon_points),
   };
 }
@@ -342,9 +343,9 @@ export async function split(a: Actor, b: Body) {
     const ids = new Set((pres || []).map((x: any) => x.participant_id));
     const members = (await hallMembers(cohort)).filter((m: any) => !ids.size || ids.has(m.id));
     const roles = splitTeams(members, method);
-    // تقسيم جديد يعني طاولات جديدة؛ والترتيب بالمستوى فتتنوع المستويات داخل الطاولة
-    const byLevel = [...members].sort((x: any, y: any) => String(overallLevel(x.levels)).localeCompare(String(overallLevel(y.levels)))).map((m: any) => m.id);
-    await saveSeats(s.cohort_id, roles, assignTables(roles, {}, byLevel));
+    // تقسيم جديد يعني طاولات جديدة؛ بترتيب محايد بالاسم (لا مستوى ملخص، قرار المالك 2026-11-25)
+    const order = [...members].sort((x: any, y: any) => String(x.name || x.full_name || '').localeCompare(String(y.name || y.full_name || ''), 'ar')).map((m: any) => m.id);
+    await saveSeats(s.cohort_id, roles, assignTables(roles, {}, order));
     const leader = Object.entries(roles).find(([, t]) => t === 'lead')?.[0] || null;
     await bump(s.id, { stage: 'split', split_method: method, leader_id: leader });
   } else {
