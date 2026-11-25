@@ -10,6 +10,8 @@ export const EXPORT_TABLES = {
   sponsor_code_uses: ['code_id'],
   enrollments: [], placements: ['admin_note'], assessments: ['retake_requested_by'], entitlements: ['granted_by', 'revoked_by'], payments: ['customer_id', 'admin_note'],
   participant_requirements: ['reviewed_by'], participant_milestones: [], participant_stage_overrides: [],
+  // فتح الخدمات (20261128150000): متى فُتحت الاستشارة له ولماذا
+  service_unlocks: [],
   handbook_progress: [], handbook_views: [], handbook_exports: [], reading_progress: [], video_progress: [], content_progress: [],
   lab_attempts: [], lab_grants: [], model_submissions: [], katon_answers: [], points_ledger: [],
   capstones: ['reviewed_by', 'approved_by'], capstone_updates: [], capstone_shares: [], capstone_share_notes: ['ip_hash'], certificates: ['issued_by', 'revoked_by'], reports: [],
