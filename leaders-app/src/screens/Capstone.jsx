@@ -25,10 +25,10 @@ import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 import { Meaning, Spine } from './InitiativeMap.jsx';
 import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
-import { afterOf, chapterState, LENS, newInLevel, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
+import { afterOf, chapterState, LENS, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
 import SharePanel, { ShareCard } from './Share.jsx';
 import Visuals, { VisualsCard } from './Visuals.jsx';
-import { Annotated } from '../Term.jsx';
+import { Annotated, TermLevels } from '../Term.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
 
@@ -38,10 +38,9 @@ const DISMISS_KEY = 'mi_leaders_stuck_dismissed';
 const readDismissed = () => { try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]'); } catch { return []; } };
 const saveDismissed = (list) => { try { localStorage.setItem(DISMISS_KEY, JSON.stringify(list.slice(-50))); } catch { /* تخزين محجوب: تبقى في الجلسة */ } };
 
-// «جديد في مستواك»: مفاتيح الفصول التي رآها المشارك على هذا الجهاز. راحة عرض (لا حالة رحلة)، وأول زيارة لا توسم شيئًا
-const SEEN_KEY = 'mi_leaders_spine_seen';
-const readSeen = () => { try { const v = localStorage.getItem(SEEN_KEY); return v ? JSON.parse(v) : null; } catch { return null; } };
-const saveSeen = (keys) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify(keys)); } catch { /* تخزين محجوب */ } };
+// «جديد في مستواك» من القاعدة (participant_new_items): ما أضافه مسار جديد اعتمده المستشار، حتى يفتحه المشارك على أي جهاز.
+// لا تخزين متصفح: الوسم حالة رحلة لا راحة عرض (بطاقة المسار، المرحلة 3)
+export const freshOf = (sections) => (sections || []).filter((x) => x.new || x.new_fields?.length).map((x) => x.key);
 
 // سطر العدسة: لماذا يأتي إطار أعمق من غيره. من مستوى المشارك في إطار كل فصل (sections[].level)، لا من مستوى ملخص
 export function lensLine(sections) {
@@ -108,8 +107,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     setD(r);
     if (!r.success) return;
     setSummary(r.capstone.summary || (manifestOf(r).density.summary === 'auto' ? r.summary_draft || '' : ''));
-    setFresh((f) => (f.length ? f : newInLevel(r.sections, readSeen())));
-    saveSeen(r.sections.map((x) => x.key));
+    setFresh((f) => (f.length ? f : freshOf(r.sections)));
   });
   useEffect(() => { load(); call('capstone.shares').then(setShares).catch(() => {}); }, []);
   // العودة من الكتاب تفتح الفصل الذي خرج منه المشارك
@@ -124,7 +122,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const chapterCtx = (id) => {
     const next = afterOf(d.sections, id);
     const unit = unitsFor(d.sections).find((u) => u.items.some((x) => x.id === id));
-    return { where: whereOf(d.sections, id), nextId: next?.id || null, nextTitle: next?.title || '', unitLast: !!unit && unit.items.length > 1 && unit.items[unit.items.length - 1].id === id, onNext: (x) => go(x) };
+    return { where: whereOf(d.sections, id), nextId: next?.id || null, nextTitle: next?.title || '', unitLast: !!unit && unit.items.length > 1 && unit.items[unit.items.length - 1].id === id, onNext: (x) => go(x),
+      // حقول أضافها مسار جديد في هذا الفصل («جديد في مستواك»)
+      newFields: d.sections.find((x) => x.id === id)?.new_fields || [] };
   };
   if (open) {
     return (
@@ -157,6 +157,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const failing = d.checks.filter((x) => !x.ok);
   // كثافة الصفحة بملف التعريف (track-manifest.js من lens.json)، لا بمستوى ملخص
   const den = manifestOf(d).density;
+  // أسئلة صاحب القرار بمستواك في الأثر من بطاقة المسار (slices.json)، متسقة مع أسئلة الجاهزية الثلاثة
+  const caseQ = manifestOf(d).card?.support.case.questions || {};
   const shownChecks = den.checks === 'blocking' ? d.checks.filter((x) => x.blocking) : d.checks;
   const cardOk = !d.card || d.card.state === 'approved';
   const recent = recentChanges(d.sections);
@@ -171,6 +173,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       if (!r.success) return setMsg({ err: `لم يُحفظ الملخص التنفيذي، فبقيت في الصفحة حتى لا يضيع: ${r.message}` });
     }
     setOpen(id);
+    // فتح فصل جديد في مستواك يعلّمه مرئيًا (ومعه حقوله الجديدة)
+    const sec = d.sections.find((x) => x.id === id);
+    if (sec && (sec.new || sec.new_fields?.length)) call('track.seen', { kind: 'chapter', keys: [sec.key] }).catch(() => {});
   };
   const saveSummary = async () => {
     setBusy('summary'); setMsg(null);
@@ -217,6 +222,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   };
 
   return (
+    <TermLevels.Provider value={manifestOf(d).levels}>
     <div className="page capstone">
       <FirstOpen id="capstone" icon="compass" title="مبادرتك من واقع تعرفه" lines={[
         'ابنِ مبادرة تقودها من واقع تعرفه: في جهة أو مجتمع أو سوق، وفصول الوثيقة تتبع نوعها (مشروع أو برنامج أو محفظة) كما حددته في ملفك.',
@@ -387,7 +393,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
               {caseStatus(d.sections).filter((x) => den.case !== 'case3' || LENS.density.case3.includes(x.key)).map((c) => (
                 <li key={c.key} className={c.state === 'done' ? 'ok' : 'no'}>
                   <b>{c.title}{c.total > 0 && <span className="muted"> · {c.done} من {c.total}</span>}</b>
-                  <small>{c.state === 'none' ? 'ليس من فصول وثيقتك في مستواك' : c.question}</small>
+                  <small>{c.state === 'none' ? 'ليس من فصول وثيقتك في مستواك' : caseQ[c.key] || c.question}</small>
                 </li>
               ))}
             </ul>
@@ -438,5 +444,6 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       </div>
       <p className="row"><button className="link small" onClick={onBack}>→ رحلتي</button></p>
     </div>
+    </TermLevels.Provider>
   );
 }

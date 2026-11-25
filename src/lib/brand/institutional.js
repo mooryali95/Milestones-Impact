@@ -14,6 +14,7 @@ import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/func
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { DOC_LIVE_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
+import { SLICES, termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
 import { capstoneReport, heatmap, levelAnnex, pdfFileName, paras, STYLE, tableOf } from './capstone.js';
 import { costLabel, dateAr, parseNumber, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
 import { costBarsSvg, ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
@@ -200,6 +201,10 @@ export function institutionalReport(input) {
   const add = (en, ar, body, note) => { if (body && body.replace(/<[^>]+>/g, '').trim()) parts.push([en, ar, body, note]); };
   const lean = form.key === 'card', full = form.key === 'case';
   const benefits = benefitsOf(doc, full ? 8 : lean ? 3 : 5);
+  // حالة العمل تُبنى على أسئلة صاحب القرار (slices.json، بمستوى المشارك في الأثر): كل باب يفتح بسؤاله، فيقرأ صاحب القرار
+  // الحالات الخمس (الاستراتيجية والاقتصادية والتجارية والمالية والإدارية) في أبوابها. بلا مسار معروف: أسئلة الاحترافي
+  const man = full ? trackManifest(m.track_key || null, m.priority || null) : null;
+  const ask5 = full ? (man.card?.support.case.questions || SLICES.frameworks.impact.case.advanced.questions) : {};
   const viz = scheduleModel(doc);
   const g = viz ? ganttSvg(viz, { today: null }) : null;
   const ganttFig = g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني؛ الذهبي على المسار الحرج</figcaption></figure>` : '';
@@ -264,14 +269,23 @@ export function institutionalReport(input) {
       field(doc, 'options-analysis', 'recommendation', 'التوصية ومبررها'),
       field(doc, 'theory-of-change', 'chain', 'كيف يحدث التغيير'),
       full ? field(doc, 'theory-of-change', 'impact', 'الأثر المنشود') : '',
-    ].join(''));
+      full ? field(doc, 'options-analysis', 'criteria', 'معايير المفاضلة') : '',
+      full ? grid([['أضعف حلقة في السلسلة', val(doc, 'theory-of-change', 'weakest')], ['كيف نختبرها مبكرًا', val(doc, 'theory-of-change', 'test')], ['ما خارج سيطرتنا', val(doc, 'theory-of-change', 'external')], ['القيود', val(doc, 'initiative-charter', 'constraints')]]) : '',
+    ].join(''), ask5.strategic);
     add('Value', 'القيمة والقياس', [
       benefits.length ? `<div class="cp-f"><b>المنافع</b>${benefitCards(benefits)}</div>` : '',
       benefitsChart(doc),
       field(doc, 'evidence-plan', 'success_signal', 'مؤشرات النجاح'),
       full ? field(doc, 'evidence-plan', 'plan', 'خطة القياس') : '',
       full ? field(doc, 'cost-plan', 'cba', 'التكلفة مقابل المنفعة') : '',
-    ].join(''));
+      // القيمة مقابل المال: فصل الاحترافي في الأثر، فيبلغ البعد الاقتصادي في حالة العمل عمق لجنة الاستثمار
+      full ? field(doc, 'value-for-money', 'appraisal', 'تقييم البدائل اقتصاديًا') : '',
+      full ? field(doc, 'value-for-money', 'sensitivity', 'الحساسية') : '',
+      full ? field(doc, 'value-for-money', 'optimism', 'تحيز التفاؤل') : '',
+      full ? field(doc, 'benefits-register', 'benefits', 'سجل المنافع') : '',
+      full ? field(doc, 'benefits-register', 'realization_curve', 'منحنى تحقق المنافع') : '',
+      full ? grid([['مستوى الدليل', val(doc, 'evidence-plan', 'evidence_level')], ['نسبة الأثر إلى المبادرة', val(doc, 'evidence-plan', 'attribution')], ['الخصوصية', val(doc, 'evidence-plan', 'privacy')]]) : '',
+    ].join(''), ask5.economic);
     add('Plan', 'الخطة والموارد', [
       grid([['داخل النطاق', val(doc, 'initiative-charter', 'in_scope')], ['خارج النطاق', val(doc, 'initiative-charter', 'out_scope')]]),
       c?.deliverables ? `<div class="cp-f"><b>المخرجات الرئيسة</b>${tableOf(c.deliverables.columns, c.deliverables.rows)}</div>` : '',
@@ -281,7 +295,16 @@ export function institutionalReport(input) {
       costKpis,
       costFig,
       full ? field(doc, 'cost-plan', 'items', 'الموارد والتكلفة') : '',
-    ].join(''));
+      full ? field(doc, 'wbs', 'packages', 'هيكل تجزئة العمل') : '',
+      full ? grid([['الاحتياطي الزمني', val(doc, 'schedule', 'buffer')], ['حساسية الجدول', val(doc, 'schedule', 'sensitivity')], ['المفاضلة عند الضغط', val(doc, 'initiative-charter', 'trade_off')]]) : '',
+    ].join(''), ask5.financial);
+    if (full) {
+      add('Commercial', 'الشراء والتعاقد', [
+        grid([['ما نحتاج شراءه', val(doc, 'procurement', 'need')], ['مدة التوريد', val(doc, 'procurement', 'lead_time')]]),
+        field(doc, 'procurement', 'items', 'بنود الشراء'),
+        field(doc, 'procurement', 'contract', 'شكل التعاقد وتوزيع المخاطر'),
+      ].join(''), ask5.commercial);
+    }
     const risks = val(doc, 'raid', 'items') || [];
     const raidF = fld(doc, 'raid', 'items');
     add('Governance & risks', 'الحوكمة والمخاطر', [
@@ -290,17 +313,30 @@ export function institutionalReport(input) {
       full ? field(doc, 'stakeholder-map', 'coalitions', 'التحالفات وتحريك المعارضين') : '',
       (() => { const r = risksOf(doc, full ? 10 : 5); return r.length ? `<div class="cp-f"><b>سجل المخاطر</b>${riskCards(r)}</div>` : ''; })(),
       risks.length && raidF ? heatmap(raidF.columns, risks) : '',
-    ].join(''));
+      full ? field(doc, 'governance', 'raci', 'مصفوفة المسؤوليات') : '',
+      full ? grid([['التصعيد', val(doc, 'governance', 'escalation')], ['شهية المخاطر', val(doc, 'raid', 'appetite')], ['أصحاب المصلحة الصامتون', val(doc, 'stakeholder-map', 'silent')], ['قرار البوابة', [val(doc, 'stage-gate', 'decision'), val(doc, 'stage-gate', 'justification')].filter(has).join(': ')]]) : '',
+    ].join(''), ask5.management);
     if (full) {
       add('Impact', 'الأثر والاستدامة', [
         field(doc, 'impact-report', 'program', 'البرنامج ومساره'),
         field(doc, 'impact-report', 'changes', 'ماذا تغيّر'),
         field(doc, 'impact-report', 'lessons', 'الدروس المستفادة'),
+        grid([['إسهام المبادرة', val(doc, 'impact-report', 'contribution')], ['ما لم يتحقق', val(doc, 'impact-report', 'not_achieved')]]),
+        field(doc, 'change-sustain', 'impacted', 'من يتأثر بالتغيير'),
+        grid([['المقاومة المتوقعة', val(doc, 'change-sustain', 'resistance')], ['كسب المقاومين', val(doc, 'change-sustain', 'win_resisters')]]),
         field(doc, 'change-sustain', 'handover', 'التسليم والتسلم'),
         field(doc, 'change-sustain', 'sustain', 'ما يحمي المنافع'),
         grid([['من يشغّل بعد المبادرة', val(doc, 'initiative-charter', 'operator')]]),
       ].join(''));
     }
+  }
+
+  // ── مصطلحات حالة العمل: مسرد الأطر الثلاثة من slices.json بعمق مستوى المشارك في كل إطار (المصدر نفسه لتلميح الكتاب)،
+  // فيقرأ صاحب القرار المصطلح بالمعنى الذي كُتبت به الوثيقة. بلا مسار معروف: بعمق الاحترافي ──
+  if (full) {
+    const terms = ['milestone', 'impact', 'leadership'].flatMap((d) => man.card?.handbook.frameworks[d]?.terms || termsAt(d, 'advanced'));
+    add('Glossary', 'مصطلحات الوثيقة', terms.length ? `<table class="cp-gloss"><tbody>${terms.map((t) => `<tr><th>${esc(t.term)}${t.en ? `<br><small>${esc(t.en)}</small>` : ''}</th><td>${esc(t.def)}</td></tr>`).join('')}</tbody></table>` : '',
+      'بالمعنى الذي كُتبت به هذه الوثيقة.');
   }
 
   // ── الاعتماد: المعتمدة بتاريخها وبصمتها المجمّدة ورمز تحقق عام؛ الحية بتاريخ بنائها، وبصمتها تتغير بأي تعديل ──

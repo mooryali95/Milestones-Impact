@@ -17,18 +17,25 @@
 //   density        { examples, case, summary, rubric, checks, panels }: كثافة الصفحة (by_level ثم profiles ثم tracks في lens.json)
 //   estimate_hours [أدنى، أعلى] لوثيقة هذا المسار كاملة
 //   readiness      { questions, chapters }، rubric_lines، case3
+//   card           بطاقة المسار (supabase/content/tracks/v2/cards.json وslices.json): الهوية، والكتاب (النوع وترتيب الأطر والإطار المعمَّق
+//                  ومسرد كل إطار بعمق مستواه فيه)، والوثيقة (الشكل والوحدات وحد الحقول المطلوبة)، والرحلة (المتطلبات والمختبرات)،
+//                  والدعم (الأمثلة أو أسئلة الجاهزية، وأسئلة صاحب القرار بمستوى الأثر، والزمن)، والجسور. انظر cardFor أدناه
 // بلا مسار معروف: الشكل الكامل (case) وكثافة المتوسط، فلا يُحذف من وثيقة شيء بغياب القياس.
 import LENS from '../../content/initiative-guide/v1/lens.json' with { type: 'json' };
+import CARDS from '../../content/tracks/v2/cards.json' with { type: 'json' };
+import SLICES from '../../content/tracks/v2/slices.json' with { type: 'json' };
+import TRACKS from '../../content/tracks/v2/tracks.json' with { type: 'json' };
+import PROFILES from '../../content/tracks/v2/profiles.json' with { type: 'json' };
 import { DEFAULT_BY_LEVEL, FORMS, PROFILE_FORMS, TRACK_FORMS } from './document-forms.js';
-import { DIMENSIONS, priorityFor, profileKey, trackLevels } from './logic.js';
+import { DIMENSIONS, LEVELS, priorityFor, profileKey, trackLevels } from './logic.js';
 
-export { LENS };
+export { CARDS, LENS, SLICES };
 
 // أبواب كل شكل بالترتيب (src/lib/brand/institutional.js يبنيها بهذه المفاتيح)
 export const FORM_SECTIONS = Object.freeze({
   card: Object.freeze(['decision', 'card', 'first-90-days', 'approval']),
   charter: Object.freeze(['decision', 'overview', 'why', 'value', 'plan', 'governance', 'approval']),
-  case: Object.freeze(['decision', 'overview', 'why', 'value', 'plan', 'governance', 'impact', 'approval']),
+  case: Object.freeze(['decision', 'overview', 'why', 'value', 'plan', 'commercial', 'governance', 'impact', 'glossary', 'approval']),
 });
 
 const clean = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !k.startsWith('_')));
@@ -43,7 +50,9 @@ export function chapterHours(level) {
 export function trackManifest(trackKey, priority = null) {
   const levels = trackLevels(trackKey);
   const track = levels ? String(trackKey) : null;
-  const pr = levels ? (priority && levels[priority] ? priority : priorityFor(levels)) : null;
+  // افتراض المسار عند التعادل بلا مؤشرات (tracks.priority_dimension)، كما يحسبه الخادم (participantPriority)
+  const fallback = track ? TRACK_BY_KEY[track]?.priority_dimension || null : null;
+  const pr = levels ? (priority && levels[priority] ? priority : priorityFor(levels, null, fallback)) : null;
   const profile = levels ? profileKey(levels, pr) : null;
   const profileLevel = levels && pr ? levels[pr] : null;
   let key = null, source = 'none';
@@ -53,6 +62,8 @@ export function trackManifest(trackKey, priority = null) {
   const f = FORMS[key] || FORMS.case;
   const D = LENS.density;
   const density = { ...clean(D.by_level[profileLevel] || D.by_level.intermediate), ...clean(profile && D.profiles?.[profile]), ...clean(track && D.tracks?.[track]) };
+  // أسئلة صاحب القرار بمستوى المشارك في الأثر لا بملف التعريف (قرار المالك 2026-11-25): الجاهزية، ثم المسوغات الثلاثة، ثم الخمسة
+  if (levels && SLICES.frameworks.impact.case?.[levels.impact]?.form) density.case = SLICES.frameworks.impact.case[levels.impact].form;
   const frameworks = levels ? Object.fromEntries(DIMENSIONS.map((d) => [d, { level: levels[d], units: LENS.units[levels[d]] || null, chapter_hours: chapterHours(levels[d]) }])) : null;
   const rng = (levels ? DIMENSIONS.map((d) => levels[d]) : ['intermediate']).map((l) => LENS.estimate_hours[l].range);
   const estimate_hours = [0, 1].map((i) => Math.round(rng.reduce((a, r) => a + r[i], 0) / rng.length));
@@ -61,6 +72,105 @@ export function trackManifest(trackKey, priority = null) {
     document: { key: f.key, name: f.name, en: f.en, pages: [...f.pages], sections: [...FORM_SECTIONS[f.key]], source },
     frameworks, density, estimate_hours,
     readiness: { questions: D.readiness_questions, chapters: D.readiness_chapters }, rubric_lines: D.rubric_lines, case3: D.case3,
+    card: levels ? cardFor({ track, levels, priority: pr, profile, profileLevel, form: f, density, estimate_hours }) : null,
+  };
+}
+
+// ── بطاقة المسار ──
+const TRACK_BY_KEY = Object.fromEntries(TRACKS.tracks.map((t) => [t.key, t]));
+const PROFILE_BY_KEY = Object.fromEntries(PROFILES.profiles.map((p) => [p.key, p]));
+const RANK = Object.fromEntries(LEVELS.map((l, i) => [l, i]));
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+// دمج طبقات البطاقة: الكائنات تُدمج، وغيرها يُستبدل، والمفاتيح التي تبدأ بـ_ تعليقات لا تُدمج
+function merge(a, b) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) {
+    if (k.startsWith('_')) continue;
+    out[k] = isObj(v) && isObj(a?.[k]) ? merge(a[k], v) : v;
+  }
+  return out;
+}
+/** طبقات البطاقة بالترتيب: base ← by_level ← profiles ← tracks */
+export function cardLayers(track, profile, profileLevel) {
+  return [CARDS.base, CARDS.by_level?.[profileLevel], CARDS.profiles?.[profile], CARDS.tracks?.[track]].reduce((a, l) => merge(a, l), {});
+}
+/** مسرد إطار بعمق مستوى المشارك فيه: كل مصطلح بلغ مستواه، بتعريف ذلك المستوى */
+export function termsAt(dimension, level) {
+  return (SLICES.frameworks[dimension]?.terms || [])
+    .filter((t) => RANK[level] >= RANK[t.from || 'beginner'])
+    .map((t) => ({ term: t.term, en: t.en, dimension, level, def: t[level] || t.advanced || t.intermediate || t.beginner, since: t.from || 'beginner' }));
+}
+/** مختبرات إطار حتى مستواه (يُجمع ما دونه)، ومتطلباته بمستواه بالضبط */
+export const labsAt = (dimension, level) => LEVELS.filter((l) => RANK[l] <= RANK[level]).flatMap((l) => SLICES.frameworks[dimension]?.labs?.[l] || []);
+export const journeyAt = (dimension, level) => [...(SLICES.frameworks[dimension]?.journey?.[level] || [])];
+// ── الجسور بين الأطر (slices.json bridges، حدها cards.json bridges.cap) ──
+const BRIDGES = (SLICES.bridges?.list || []).slice(0, CARDS.base.bridges.cap);
+const whenOk = (when, levels) => {
+  const [d, lv] = String(when).split(':');
+  const plus = lv?.endsWith('+');
+  const want = plus ? lv.slice(0, -1) : lv;
+  return !!levels?.[d] && (plus ? RANK[levels[d]] >= RANK[want] : levels[d] === want);
+};
+/** جسور مسار بمستوياته: ما يُلحق بأبواب كتابه */
+export const bridgesFor = (levels) => BRIDGES.filter((b) => whenOk(b.when, levels)).map(({ key, dimension, chapter_key, when, title }) => ({ key, dimension, chapter_key, when, title }));
+/** نص الباب ومعه كتل الجسور الملحقة به (:::when)، يقصها filterHandbookMd بمستويات المشارك كبقية كتل المستوى */
+export function withBridges(m) {
+  const mine = BRIDGES.filter((b) => b.dimension === m?.dimension && b.chapter_key === m?.chapter_key);
+  if (!mine.length) return m?.body_md || '';
+  return `${m.body_md || ''}\n\n${mine.map((b) => `:::when=${b.when}\n## ${b.title}\n\n${b.md}\n:::`).join('\n\n')}`;
+}
+
+/**
+ * بطاقة المسار على رحلة المشارك الفعلية: الدفعة المثبتة على نسخة رحلة مجمدة (program_versions) قد لا تحوي ما أضافته الشرائح
+ * بعدها (O-COST وO-EVID وL-GOV)، والنسخة لا تُمس. فتعدّ البطاقة من «أعمال مستواك» ما في رحلته فعلًا، ولا تعد ما ليس فيها.
+ * requirements: بنود رحلته كما تقرؤها journeyDefinition (أو null فتبقى البطاقة كما هي). المختبرات لا تتبع النسخة فتبقى.
+ */
+export function cardOnJourney(card, requirements) {
+  if (!card || !Array.isArray(requirements)) return card;
+  const have = new Set(requirements.filter((r) => r && r.active !== false).map((r) => r.code));
+  const keep = (codes) => (codes || []).filter((c) => have.has(c));
+  return {
+    ...card,
+    journey: {
+      ...card.journey,
+      requirements: keep(card.journey.requirements),
+      by_framework: Object.fromEntries(Object.entries(card.journey.by_framework || {}).map(([d, v]) => [d, { ...v, requirements: keep(v.requirements) }])),
+    },
+  };
+}
+
+/** حد الحقول المطلوبة: متوسط حدود مستويات الأطر الثلاثة */
+export const requiredCap = (levels, caps = CARDS.base.initiative.required_cap) => Math.round(DIMENSIONS.reduce((a, d) => a + caps[levels[d]], 0) / DIMENSIONS.length);
+
+function cardFor({ track, levels, priority, profile, profileLevel, form, density, estimate_hours }) {
+  const L = cardLayers(track, profile, profileLevel);
+  const t = TRACK_BY_KEY[track] || {};
+  const p = PROFILE_BY_KEY[profile] || {};
+  const order = L.handbook?.order === 'priority_first' && priority ? [priority, ...DIMENSIONS.filter((d) => d !== priority)] : [...DIMENSIONS];
+  const caseDef = SLICES.frameworks.impact.case?.[levels.impact] || {};
+  return {
+    identity: { name: t.title_ar || null, title: p.title_ar || null, description: p.summary_ar || null },
+    handbook: {
+      type: L.handbook?.type || 'applied', order, deepened: priority,
+      frameworks: Object.fromEntries(DIMENSIONS.map((d) => [d, { level: levels[d], terms: termsAt(d, levels[d]) }])),
+    },
+    initiative: {
+      form: form.key, name: form.name, pages: [...form.pages],
+      // وحدات العرض لفصول كل إطار بمستواه فيه (lens.json units): مجمّعة، أو فصلًا فصلًا للاحترافي
+      units: Object.fromEntries(DIMENSIONS.map((d) => { const keys = (LENS.units[levels[d]] || []).map((u) => u.key); return [d, { mode: keys.length ? 'grouped' : 'chapters', keys }]; })),
+      required_cap: requiredCap(levels, L.initiative?.required_cap),
+    },
+    journey: {
+      requirements: DIMENSIONS.flatMap((d) => journeyAt(d, levels[d])),
+      labs: DIMENSIONS.flatMap((d) => labsAt(d, levels[d])),
+      by_framework: Object.fromEntries(DIMENSIONS.map((d) => [d, { requirements: journeyAt(d, levels[d]), labs: labsAt(d, levels[d]) }])),
+    },
+    support: {
+      mode: L.support?.mode || 'examples', examples: density.examples,
+      case: { form: caseDef.form || density.case, questions: caseDef.questions ? { ...caseDef.questions } : null, readiness: caseDef.form === 'readiness' ? [...LENS.density.readiness_questions] : null },
+      estimate_hours: [...estimate_hours],
+    },
+    bridges: bridgesFor(levels),
   };
 }
 

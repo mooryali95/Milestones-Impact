@@ -14,6 +14,7 @@ import { cohortOf, contentLevelsFor } from './programs.ts';
 import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
+import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
@@ -127,6 +128,7 @@ const cardOf = (d: any) => { const c = d.sections.find((s: any) => s.model.key =
 // ── المشارك ──
 export async function get(p: any) {
   const [d, examples] = await Promise.all([build(p), examplesFor(p)]);
+  const fresh = await unseenNew(p.id).catch(() => ({ chapter: [] as string[], field: [] as string[] }));
   const c = d.capstone;
   const status = c?.status || 'draft';
   const card = cardOf(d);
@@ -142,7 +144,8 @@ export async function get(p: any) {
     initiative: d.initiative,
     // اسم النسخة المؤسسية وحجمها من المسار (document-forms.js)، لزر تحميلها
     doc_form: docFormFor({ levels: d.levels, priority: d.priority || null }),
-    sections: d.sections.map(sectionView),
+    // «جديد في مستواك» من القاعدة (participant_new_items، track-history.ts): الفصل الجديد، والحقول الجديدة في فصل قائم
+    sections: d.sections.map(sectionView).map((x: any) => ({ ...x, new: (fresh.chapter || []).includes(x.key), new_fields: (fresh.field || []).filter((k: string) => k.startsWith(`${x.key}.`)).map((k: string) => k.slice(x.key.length + 1)) })),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
     // ملخص مقترح من البطاقة لمن كثافته summary: auto (spine.js densityFor)؛ لا يُحفظ حتى يحفظه المشارك
     summary_draft: summaryFromCard(d.charter),

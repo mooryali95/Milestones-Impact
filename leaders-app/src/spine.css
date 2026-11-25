@@ -58,3 +58,15 @@
   .cp-live > .sp, .ch-layout > .sp { display: none; position: fixed; top: 0; bottom: 0; right: 0; width: min(88vw, 360px); max-height: none; z-index: 61; border-radius: 0; overflow: auto; }
   .cp-live > .sp.open, .ch-layout > .sp.open { display: block; }
 }
+
+/* مسرد الإطار بعمق مستوى المشارك فيه (بطاقة المسار) */
+.hb-terms { margin-top: 14px; }
+.hb-terms h3 { margin: 0 0 8px; font-size: 1rem; }
+.hb-terms dl { margin: 0; display: grid; gap: 8px; }
+.hb-terms dt { font-weight: 700; }
+.hb-terms dd { margin: 2px 0 0; line-height: 1.8; }
+/* سطر التطور وسجل المسار (بطاقة المسار، المرحلة 3) */
+.track-evolution { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: rgba(201, 162, 39, .12); line-height: 1.8; }
+.track-history { margin: 12px 16px 16px; }
+.track-history ol { margin: 8px 0 0; padding-inline-start: 20px; display: grid; gap: 6px; }
+.track-facts .track-journey li b { margin-inline-end: 6px; }

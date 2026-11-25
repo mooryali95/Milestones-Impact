@@ -12,7 +12,9 @@
     "hard-week": "all",
     "conflict-modes": "all",
     "direct-challenge": "all",
-    "portfolio-review": "granted"
+    "portfolio-review": "granted",
+    "baseline-target": "all",
+    "evidence-ladder": "all"
   },
   "granted_why": {
     "portfolio-review": "موقف مراجعة محفظة: يفترض أن المشارك يفاضل بين مبادرات متعددة. lab_items لا تحمل نطاقًا (scopes) كالنماذج، فلو فُتح لكل محترف في إدارة المشروعات لوصل قائد مشروع واحد إلى موقف لا يمارسه، بينما نموذج «مراجعة المحفظة» نفسه مقصور على نطاق المحفظة. يبقى بمنحة المستشار لمن نطاقه برنامج أو محفظة."

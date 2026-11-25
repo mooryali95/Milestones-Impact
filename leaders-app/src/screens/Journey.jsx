@@ -11,7 +11,7 @@ import { bootPreload, call, lastRead, nextSeen, uploadFile, welcomeSeen } from '
 import IntroVideo from '../IntroVideo.jsx';
 import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { OnboardingNextCard } from '../Onboarding.jsx';
-import { DIMENSIONS, MODES, PHASES, REQ_STATUS } from '../labels.js';
+import { DIMENSIONS, dimOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { InitiativeNow } from './InitiativeNow.jsx';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
@@ -108,6 +108,44 @@ function Competency({ profile }) {
 // مولَّدًا بأقوى أطره، والتفصيل لكل إطار للإدارة.
 const points = (t) => String(t || '').split('\n').map((x) => x.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim()).filter(Boolean);
 
+// بطاقة المسار كما يحلها trackManifest على الخادم: الكتاب والوثيقة والرحلة والدعم، بلا حساب من المستويات هنا
+const HB_TYPE_AR = { guided: 'موجّه بأمثلة مبسطة', applied: 'تطبيقي بأمثلة من القطاع', specialist: 'متخصص بالمعايير' };
+const SUPPORT_AR = { readiness: 'ثلاثة أسئلة جاهزية ومثال بجانب كل حقل', examples: 'أمثلة محلولة من قطاعك', on_demand: 'الأمثلة عند الطلب' };
+export function TrackCardFacts({ card }) {
+  const [a, b] = card.initiative.pages || [];
+  const h = card.support?.estimate_hours || [];
+  return (
+    <div className="track-col track-facts" data-testid="track-card">
+      <h4>بطاقة مسارك</h4>
+      <ul className="track-journey">
+        <li><b>الكتاب</b> {HB_TYPE_AR[card.handbook.type]}، يبدأ بإطار {dimOf(card.handbook.deepened).title}</li>
+        <li><b>وثيقتك</b> {card.initiative.name}{a ? ` · نحو ${a} إلى ${b} صفحات` : ''}</li>
+        <li><b>رحلتك</b> {card.journey.requirements.length} أعمال بمستواك، ومعها {card.journey.labs.length} مختبرات</li>
+        <li><b>الدعم</b> {SUPPORT_AR[card.support.mode]}{h.length ? ` · نحو ${h[0]} إلى ${h[1]} ساعة لكتابة وثيقتك` : ''}</li>
+      </ul>
+    </div>
+  );
+}
+
+// سطر التطور بعد ترقية اعتمدها المستشار (track-history.ts)، وما أضيف بأعداده، وسجل المسار كله تحته
+const addedAr = (a) => [a?.handbook && `${a.handbook} من أبواب الكتاب`, a?.chapters && `${a.chapters} من فصول الوثيقة`, a?.fields && `${a.fields} من الحقول`].filter(Boolean).join('، ');
+export function Evolution({ h }) {
+  return (
+    <div className="track-evolution" data-testid="track-evolution">
+      <b>{h.line}</b>{addedAr(h.added) ? `: ${addedAr(h.added)}، معلّمة «جديد في مستواك»، وكل ما كتبته باقٍ.` : '.'}
+    </div>
+  );
+}
+export function TrackHistory({ history }) {
+  if (!history?.length) return null;
+  return (
+    <details className="track-history" data-testid="track-history">
+      <summary>سجل مسارك ({history.length})</summary>
+      <ol>{history.map((h, i) => <li key={i}><b>{h.title || 'مسارك'}</b> <small className="muted">{String(h.created_at || '').slice(0, 10)}</small>{h.line ? <div className="small">{h.line}</div> : null}</li>)}</ol>
+    </details>
+  );
+}
+
 function TrackCard({ profile, cohort }) {
   const t = profile.track;
   const focus = points(t.focus);
@@ -125,6 +163,7 @@ function TrackCard({ profile, cohort }) {
         <h3>{t.title}</h3>
         {t.summary && <p>{t.summary}</p>}
         {t.strengths && <p className="track-strengths">{t.strengths}</p>}
+        {profile.history?.[0]?.line && <Evolution h={profile.history[0]} />}
       </header>
       <div className="track-body">
         {focus.length > 0 && (
@@ -140,6 +179,7 @@ function TrackCard({ profile, cohort }) {
             <span className="small muted">تعمل عليها طوال الرحلة، وهي أساس وثيقة مبادرتك.</span>
           </div>
         )}
+        {t.card && <TrackCardFacts card={t.card} />}
         {journey.length > 0 && (
           <div className="track-col">
             <h4>ما يميز مسارك</h4>
@@ -150,6 +190,7 @@ function TrackCard({ profile, cohort }) {
           </div>
         )}
       </div>
+      <TrackHistory history={profile.history} />
     </section>
   );
 }

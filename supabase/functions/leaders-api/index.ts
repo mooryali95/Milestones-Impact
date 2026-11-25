@@ -25,6 +25,7 @@ import { CONSENT_GATED, consentState, CONTACT_EMAIL } from './labels.js';
 import { approvalOf, inProgram, journeyApproved } from './logic.js';
 import * as P from './participant.ts';
 import * as MS from './messages.ts';
+import * as TH from './track-history.ts';
 import * as K from './passkeys.ts';
 import * as A from './admin.ts';
 import * as C from './coordinator.ts';
@@ -193,7 +194,7 @@ const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f3
   'hall.join', 'hall.hand', 'hall.pick', 'upload.url', 'cv.attach', 'passkey.register-options', 'passkey.register-verify', 'passkey.remove', 'me.switch', 'me.erase-request',
   'workshop.join', 'me.sponsor-code', 'f360.start', 'capstone.share-create']);
 // وما سواه مفتوح لحساب العرض بقرار لا بسهو: كل فعل في DEMO_BLOCKED أو هنا (program_gate_test.ts)
-const DEMO_OPEN = new Set(['guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.messages', 'me.messages-read', 'me.mail-prefs', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
+const DEMO_OPEN = new Set(['track.seen', 'guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.messages', 'me.messages-read', 'me.mail-prefs', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
@@ -217,7 +218,7 @@ const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 
   'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
-const GATE_PROGRAM = new Set(['guide.state', 'guide.ask', 'guide.clear', 'guide.confirm', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
+const GATE_PROGRAM = new Set(['track.seen', 'guide.state', 'guide.ask', 'guide.clear', 'guide.confirm', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
@@ -292,6 +293,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'me.messages': (p, b) => MS.list(p, b),
   'me.messages-read': (p, b) => MS.markRead(p, b),
   'me.mail-prefs': (p, b) => MS.savePrefs(p, b),
+  // «جديد في مستواك» (track-history.ts): المشارك فتح بابًا أو فصلًا أضافه مساره الجديد
+  'track.seen': (p, b) => TH.markSeen(p, b),
   // «التوجيه والإرشاد» (guide.ts): المشارك من جلسته وحدها، ولا معرّف من جسم الطلب
   'guide.state': (p) => GU.guideState(p),
   'guide.ask': (p, b) => GU.guideAsk(p, b),

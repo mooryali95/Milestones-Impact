@@ -23,6 +23,8 @@ import {
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
+import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
+import { trackHistory, unseenNew } from './track-history.ts';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
@@ -516,7 +518,8 @@ export async function postInstrumentFor(participantId: string) {
 // هوية المسار: للمشارك اسمه ووصفه فقط، وللإدارة الرمز ومحور الأولوية أيضًا.
 const TRACK_FIELDS = 'key, title_ar, summary_ar, focus_ar, journey_ar, priority_dimension';
 // المشروع التطبيقي لا يُكتب لكل مسار: يُشتق من فصول وثيقة المبادرة نفسها
-async function trackFor(p: any, levels: Record<string, string>, scope: string | null = null) {
+// requirements: بنود رحلته الفعلية (نسخة دفعته)، فتعد البطاقة ما فيها وحده (cardOnJourney)
+async function trackFor(p: any, levels: Record<string, string>, scope: string | null = null, requirements: any[] | null = null) {
   const key = trackKey(levels);
   if (!key) return null;
   const [{ data }, models] = await Promise.all([
@@ -527,6 +530,8 @@ async function trackFor(p: any, levels: Record<string, string>, scope: string | 
   const priority = await participantPriority(p.id, levels, t.priority_dimension || null);
   return {
     ...t, priority_dimension: priority, profile: await profileFor(levels, priority), strengths: strengthsLine(levels, priority),
+    // بطاقة المسار من مصدرها الواحد (track-manifest.js)
+    card: cardOnJourney(trackManifest(key, priority).card, requirements),
     project: trackProject(models.data || [], levels, scope, priority)?.text || null,
   };
 }
@@ -558,6 +563,8 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
   title: t.profile?.title_ar || t.title_ar || null, summary: t.profile?.summary_ar || t.summary_ar || null,
   strengths: t.strengths || null, focus: t.focus_ar || null,
   project: t.project || null, journey: t.profile?.journey_ar || t.journey_ar || null,
+  // البطاقة للمشارك بلا اسم المسار الداخلي (يرى عنوان ملف تعريفه)
+  card: !t.card ? null : audience === 'admin' ? t.card : { ...t.card, identity: { ...t.card.identity, name: null } },
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
@@ -689,7 +696,9 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   const fc: any = finalConfig(finalEval);
   // ما يراه المشارك من دفعته (visibility.js): تعذّر القراءة يعيد الافتراضي ولا يُسقط الرحلة
   const vis: Record<string, boolean> = await visibilityOfCohort(def.cohort?.id || null).catch(() => resolveVisibility(null, null));
-  const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
+  const track = trackView(await trackFor(p, levels, p.work_scope || null, def.requirements || null), audience);
+  // سجل المسار وسطر التطور (track-history.ts): يراه المشارك والمستشار، وتعذّره يعيد قائمة فارغة
+  const history = pl.length ? await trackHistory(p.id).catch(() => []) : [];
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
@@ -711,13 +720,13 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
     profile: !pl.length ? null : audience === 'admin' ? {
-      approved, track,
+      approved, track, history,
       dimensions: pl.map((x: any) => ({
         dimension: x.dimension, level: x.level, approved: !!x.approved_at, note: x.admin_note,
         description: cellOf(x.dimension, x.level)?.description_ar || null,
         path: cellOf(x.dimension, x.level)?.path_title_ar || null,
       })),
-    } : { approved, track },
+    } : { approved, track, history },
     journey: audience === 'admin' ? journey
       // نشاط «ورش إضافية» بلا ورشة لدفعته لا يُعرض: لا شيء فيه بعد (خامد خارج العد، optional.js)
       // optional-exempt: إخفاء نشاط الورش الإضافية الفارغ من العرض، وهو خامد خارج العد بالقاعدة (each)
@@ -1236,8 +1245,13 @@ export async function handbookToc(p: any) {
     pointsOf(p.id),
     db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id),
   ]);
-  const chapters = handbookModulesFor(must(mods) ?? [], levels);
+  // ترتيب أطر الكتاب ومسرد كل إطار من بطاقة المسار (إطار الأولوية أولًا)
+  const key = trackKey(levels);
+  const card = key ? trackManifest(key, await participantPriority(p.id, levels).catch(() => null)).card : null;
+  const order = card?.handbook.order || ['milestone', 'impact', 'leadership'];
+  const chapters = handbookModulesFor(must(mods) ?? [], levels).sort((a: any, b: any) => order.indexOf(a.dimension) - order.indexOf(b.dimension) || a.sort - b.sort);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
+  const fresh = new Set((await unseenNew(p.id).catch(() => ({ handbook: [] as string[] }))).handbook || []);
   const read = Object.fromEntries((reads.data || []).map((r: any) => [r.module_id, r]));
   const mine = modelsFor(models.data || [], levels, p.work_scope, answeredModels(subs.data || []));
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
@@ -1248,6 +1262,8 @@ export async function handbookToc(p: any) {
     chapters: chapters.map((m: any) => ({
       // chapter_key: إحالة فصول وثيقة المبادرة إلى الباب نفسه (anatomy.json)، فيقفز إليه المشارك من فصله
       id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
+      // «جديد في مستواك»: باب أضافه مسار جديد ولم يفتحه بعد (participant_new_items)
+      new: fresh.has(String(m.id)),
       done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
       // تعريف واحد لإتمام الباب مع الرحلة (readingStatus): قراءة فعلية ثم الاختبار. الكتاب كان يعدّ الاختبار وحده
       // فيقول «أتممت 1 من 22» والرحلة «قرأت 0 من 22» (التدقيق 2026-11-10، البند 7.2)
@@ -1257,6 +1273,7 @@ export async function handbookToc(p: any) {
       points: mine.reduce((a: number, m: any) => a + (m.points || 0), 0) },
     points: { total: pts.total, rank: pts.rank },
     name: p.full_name,
+    card: card ? { type: card.handbook.type, order: card.handbook.order, deepened: card.handbook.deepened, frameworks: card.handbook.frameworks } : null,
   };
 }
 
@@ -1276,7 +1293,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
   return {
     success: true,
     reading: readingVerdict(rd),
-    chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope) },
+    chapter: { id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, md: filterHandbookMd(withBridges(m), levels[m.dimension], p.work_scope, levels) },
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
     quiz: shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
@@ -1311,7 +1328,7 @@ export async function handbookExport(p: any, ctx: Ctx) {
     book: {
       // الكتاب عام: لا شيء من بيانات المسار إلا رمزه
       ref, issued_at: now.toISOString(), name: p.full_name, email: p.email, code: trackKey(levels),
-      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope), reflection: m.reflection_ar || '' })),
+      chapters: chapters.map((m: any) => ({ id: m.id, dimension: m.dimension, title: m.title_ar, md: filterHandbookMd(withBridges(m), levels[m.dimension], p.work_scope, levels), reflection: m.reflection_ar || '' })),
       tools: modelsFor(models.data || [], levels, p.work_scope, answeredModels(answered || [])).map((m: any) => ({ dimension: m.dimension, title: m.title_ar, summary: m.summary_ar || '', when: m.when_ar || '', steps: m.steps_ar || '', source: m.source_ar || '' })),
     },
   };

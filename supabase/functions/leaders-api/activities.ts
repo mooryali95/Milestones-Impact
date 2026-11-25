@@ -25,6 +25,7 @@ import { MARK_REASON_MAX, SESSION_MODE_AR } from './labels.js';
 import { COUNTING, COUNTING_AR, countingOf, countsItem, eachWorkshop, optionalSession } from './optional.js';
 import { optionalReady, sessionCols } from './workshop-optional.ts';
 import { journeyProgress } from './logic.js';
+import { withBridges } from './track-manifest.js';
 import { adminList as coachingGroupsList, decorateGroupRows, groupCols } from './coaching-groups.ts';
 
 type Body = Record<string, any>;
@@ -195,9 +196,9 @@ export async function readingPing(p: any, b: Body) {
   const { data: row } = await db.from('reading_progress').select('*').eq('participant_id', p.id).eq('module_id', id).maybeSingle();
   let words = row?.words || 0;
   if (!row) {
-    const m = must(await db.from('handbook_modules').select('id, dimension, min_level, body_md').eq('id', id).maybeSingle());
+    const m = must(await db.from('handbook_modules').select('id, dimension, chapter_key, min_level, body_md').eq('id', id).maybeSingle());
     if (!m || !handbookModulesFor([m], levels).length) throw new Fail('هذا الباب لا يخص مسارك', 404);
-    words = wordCount(filterHandbookMd(m.body_md, levels[m.dimension], p.work_scope));
+    words = wordCount(filterHandbookMd(withBridges(m), levels[m.dimension], p.work_scope, levels));
   }
   const now = new Date();
   const next = applyReadingPing(row, b, now.getTime());

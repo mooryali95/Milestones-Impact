@@ -5,6 +5,7 @@
 // التقييم المستمر واتجاهه، إجابات زملائه بانتظار تأكيده، والتقييم الختامي، وسطر «المطلوب منك الآن».
 // المصدر الواحد: xp.participant يبني من ملف الإدارة نفسه ويقصّه. مستشار الدفعة يعتمد الختامي ويقيّم
 // المعالم ويؤكّد إجابات الأقران؛ المسند إليه بطلب خدمة يقرأ فقط.
+import { Evolution, TrackHistory } from './Journey.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
 import { EFFORT_AR } from '../../../supabase/functions/leaders-api/answer-review.js';
 import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
@@ -317,6 +318,8 @@ export default function ExpertFile({ id, onBack }) {
                 <li key={x.dimension}><span>{DIM_AR[x.dimension]} · <b>{LEVEL_AR[x.level]}</b>{x.approved ? '' : ' (مبدئي)'}</span>{x.path && <small className="muted">{x.path}</small>}</li>
               ))}</ul>
               {d.profile.track?.title && <p className="small">المسار: <b>{d.profile.track.title}</b></p>}
+              {d.profile.history?.[0]?.line && <Evolution h={d.profile.history[0]} />}
+              <TrackHistory history={d.profile.history} />
             </>
           ) : <p className="muted small">{d.onboarding?.remaining ? `${d.onboarding.label}: ${d.onboarding.remaining}.` : 'لم يُتم القياس المبدئي بعد.'}</p>}
           {d.effort?.level && d.effort.level !== 'ok' && <p className="alert info small" role="note"><b>{EFFORT_AR[d.effort.level]}:</b> {d.effort.note}</p>}

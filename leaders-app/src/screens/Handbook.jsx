@@ -414,6 +414,23 @@ function Review({ data, onDone }) {
 const complete = (c) => (c.complete ?? !!c.done);
 
 // target: إحالة من فصل في وثيقة المبادرة { dimension, chapter_key, look_for, from }: يُفتح الباب نفسه وفوقه ما يُبحث عنه فيه وطريق العودة
+// ترتيب أطر الكتاب من بطاقة المسار (إطار الأولوية أولًا)، وبلا بطاقة ترتيب الأطر المعتاد
+export const orderedDims = (card) => (card?.order?.length ? card.order.map((k) => DIMENSIONS.find((d) => d.key === k)).filter(Boolean) : DIMENSIONS);
+const DEPTH_AR = { beginner: 'تعريف مبسط', intermediate: 'تعريف أوسع بمثال', advanced: 'تعريف متخصص بمعياره' };
+// مسرد الإطار بعمق مستوى المشارك فيه (slices.json عبر trackManifest): التأسيسي مبسط، والمتوسط بمثال، والاحترافي بالمعيار
+export function TermsBlock({ card, dimension }) {
+  const f = card?.frameworks?.[dimension];
+  if (!f?.terms?.length) return null;
+  return (
+    <section className="card hb-terms" aria-label="مصطلحات الإطار بمستواك">
+      <h3>مصطلحات {dimOf(dimension).title} بمستواك <small className="muted">· {DEPTH_AR[f.level]}</small></h3>
+      <dl>
+        {f.terms.map((t) => <div key={t.term}><dt>{t.term} <small dir="ltr" className="muted">{t.en}</small></dt><dd>{t.def}</dd></div>)}
+      </dl>
+    </section>
+  );
+}
+
 export default function Handbook({ me, lab, onLab, onBack, target = null, onReturn = null }) {
   const [toc, setToc] = useState(null);
   const [tab, setTab] = useState('read');
@@ -448,6 +465,9 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
   }, [target]);
   const retry = () => { setError(''); loadToc(true); };
   useEffect(() => { loadToc(true); }, [loadToc]);
+  // فتح باب أضافه مسار جديد يعلّمه مرئيًا على القاعدة (track-history.ts)، فلا يبقى الوسم بعد قراءته
+  const freshId = current !== COVER && (toc?.chapters || []).find((c) => c.id === current && c.new)?.id;
+  useEffect(() => { if (freshId) call('track.seen', { kind: 'handbook', keys: [String(freshId)] }).catch(() => {}); }, [freshId]);
 
   useEffect(() => {
     if (!current || current === COVER || tab !== 'read') return;
@@ -614,7 +634,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
             <button className={`toc-ch toc-cover${current === COVER ? ' on' : ''}`} onClick={() => setCurrent(COVER)}>
               <span className="toc-num">◆</span><span className="toc-t">الغلاف</span>
             </button>
-            {DIMENSIONS.map((d) => {
+            {orderedDims(toc.card).map((d) => {
               const items = list.filter((c) => c.dimension === d.key);
               if (!items.length) return null;
               const partDone = items.filter(complete).length;
@@ -629,7 +649,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
                     <button key={c.id} className={`toc-ch${c.id === current ? ' on' : ''}${complete(c) ? ' done' : ''}`} onClick={() => setCurrent(c.id)}
                       title={c.done && !complete(c) ? 'اختبرته، وبقيت القراءة ليكتمل الباب' : undefined}>
                       <span className="toc-num">{complete(c) ? '✓' : c.done ? '◐' : pad(i + 1)}</span>
-                      <span className="toc-t">{c.title}</span>
+                      <span className="toc-t">{c.title}{c.new && <span className="chip gold sp-new"> جديد في مستواك</span>}</span>
                     </button>
                   ))}
                 </div>
@@ -674,6 +694,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
             {error && <div style={{ marginTop: 10 }}><ErrorBox message={error} onRetry={current !== COVER ? () => { setError(''); setAttempt((n) => n + 1); } : null} /></div>}
             {current !== COVER && data && !loading && <Review key={data.chapter.id} data={data} onDone={onPoints} />}
             {current !== COVER && data && !loading && <ChapterLab items={chapterLab} onOpen={onLab} />}
+            {current !== COVER && data && !loading && <TermsBlock card={toc.card} dimension={data.chapter.dimension} />}
             <div className="row between book-nav">
               <button className="btn ghost sm" disabled={current === COVER} onClick={() => (idx <= 0 ? setCurrent(COVER) : go(-1))}>{idx === 0 ? 'الغلاف' : 'الباب السابق'}</button>
               <button className="btn sm" disabled={idx >= list.length - 1} onClick={() => (current === COVER ? setCurrent(list[0].id) : go(1))}>{current === COVER ? 'ابدأ القراءة' : 'الباب التالي'}</button>

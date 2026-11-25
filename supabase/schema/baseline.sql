@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261129100000_leaders_cohort_identity
+-- as-of migration: 20261129120000_leaders_track_history
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1737,6 +1737,19 @@ create table if not exists leaders.participant_milestones (
   constraint participant_milestones_pkey PRIMARY KEY (participant_id, milestone_id)
 );
 
+create table if not exists leaders.participant_new_items (
+  participant_id uuid not null,
+  kind text not null,
+  key text not null,
+  track_key text,
+  created_at timestamp with time zone default now() not null,
+  seen_at timestamp with time zone,
+  constraint participant_new_items_key_check CHECK (((char_length(key) >= 1) AND (char_length(key) <= 200))),
+  constraint participant_new_items_kind_check CHECK ((kind = ANY (ARRAY['handbook'::text, 'chapter'::text, 'field'::text]))),
+  constraint participant_new_items_track_key_check CHECK (((track_key IS NULL) OR (track_key ~ '^M[1-3]I[1-3]L[1-3]$'::text))),
+  constraint participant_new_items_pkey PRIMARY KEY (participant_id, kind, key)
+);
+
 create table if not exists leaders.participant_notifications (
   id uuid default gen_random_uuid() not null,
   participant_id uuid not null,
@@ -1795,6 +1808,21 @@ create table if not exists leaders.participant_stage_overrides (
   constraint participant_stage_overrides_action_check CHECK ((action = ANY (ARRAY['open'::text, 'complete'::text, 'skip'::text]))),
   constraint participant_stage_overrides_note_check CHECK ((char_length(note) <= 1000)),
   constraint participant_stage_overrides_pkey PRIMARY KEY (participant_id, program_id, stage_key)
+);
+
+create table if not exists leaders.participant_track_history (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  from_track text,
+  to_track text not null,
+  profile_key text,
+  line text,
+  added jsonb default '{}'::jsonb not null,
+  decided_by text,
+  created_at timestamp with time zone default now() not null,
+  constraint participant_track_history_from_track_check CHECK (((from_track IS NULL) OR (from_track ~ '^M[1-3]I[1-3]L[1-3]$'::text))),
+  constraint participant_track_history_to_track_check CHECK ((to_track ~ '^M[1-3]I[1-3]L[1-3]$'::text)),
+  constraint participant_track_history_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.participants (
@@ -3262,6 +3290,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.participant_new_items add constraint participant_new_items_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.participant_notifications add constraint participant_notifications_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3283,6 +3315,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.participant_stage_overrides add constraint participant_stage_overrides_program_id_fkey FOREIGN KEY (program_id) REFERENCES leaders.programs(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_track_history add constraint participant_track_history_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3813,6 +3849,8 @@ CREATE INDEX IF NOT EXISTS participant_observations_person ON leaders.participan
 
 CREATE INDEX IF NOT EXISTS participant_requirements_status_idx ON leaders.participant_requirements USING btree (status);
 
+CREATE INDEX IF NOT EXISTS participant_track_history_by_participant ON leaders.participant_track_history USING btree (participant_id, created_at DESC);
+
 CREATE UNIQUE INDEX IF NOT EXISTS participants_email_uniq ON leaders.participants USING btree (lower(email));
 
 CREATE INDEX IF NOT EXISTS participants_org_idx ON leaders.participants USING btree (organization_id);
@@ -4150,6 +4188,8 @@ alter table leaders.participant_merges enable row level security;
 
 alter table leaders.participant_milestones enable row level security;
 
+alter table leaders.participant_new_items enable row level security;
+
 alter table leaders.participant_notifications enable row level security;
 
 alter table leaders.participant_observations enable row level security;
@@ -4157,6 +4197,8 @@ alter table leaders.participant_observations enable row level security;
 alter table leaders.participant_requirements enable row level security;
 
 alter table leaders.participant_stage_overrides enable row level security;
+
+alter table leaders.participant_track_history enable row level security;
 
 alter table leaders.participants enable row level security;
 
