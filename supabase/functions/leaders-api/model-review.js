@@ -14,11 +14,18 @@ export const MODEL_DIGEST_SUBJECT = 'ما سُلّم من نماذج منذ أم
 // النموذج البوابة: بطاقة المبادرة، اعتمادها قرار يسبق بناء الوثيقة
 export const isGateModel = (key) => key === CHARTER_KEY;
 
+// فصل في وثيقة المبادرة غير البطاقة («الوثيقة الحية»، 2026-11-25): المراجع يكتب ملاحظة لا تقفله، ولا يُعاد وحده.
+// m: { key, capstone_sort }. النموذج خارج الوثيقة يبقى كما كان (ملاحظة أو «يحتاج تعديلًا»)
+export const chapterNoteOnly = (m) => !!m && m.capstone_sort != null && !isGateModel(m.key);
+
 // من يراجع: advisor أو team
 export const reviewerKind = (adv) => (adv ? 'advisor' : 'team');
 
 // هل ينتظر التسليم الملخص؟ مسلَّم ولم يدخل ملخصًا بعد آخر تسليم له (إعادة التسليم بعد تعديل تدخل الملخص التالي)
+// و«الوثيقة الحية»: فصل قرأه المراجع ثم عدّله المشارك يدخل الملخص أيضًا (تغيّر منذ قراءته)، مرة لكل تغيير
+const ms = (x) => (x ? Date.parse(x) : 0);
 export function needsDigest(s) {
+  if (s?.status === 'reviewed' && s.updated_at && s.reviewed_at && ms(s.updated_at) > ms(s.reviewed_at) + 1000) return ms(s.digested_at) < ms(s.updated_at);
   if (s?.status !== 'submitted' || !s.submitted_at) return false;
   if (!s.digested_at) return true;
   return Date.parse(s.digested_at) < Date.parse(s.submitted_at);

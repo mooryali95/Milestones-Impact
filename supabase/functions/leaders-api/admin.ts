@@ -14,7 +14,7 @@ import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
 import { MAIL_GUARD_ACTIONS, planCutoffFor, planGuard } from './cohort-plan.js';
 import { DIM_AR, expertRoleAr, REVIEWER_AR, RUBRIC_SCALE } from './labels.js';
-import { bulkReadIds, isGateModel, readingCounts, readingList } from './model-review.js';
+import { bulkReadIds, chapterNoteOnly, isGateModel, readingCounts, readingList } from './model-review.js';
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
@@ -1389,7 +1389,11 @@ export async function reviewSubmission(a: Admin, b: Body) {
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): في النموذج العادي reviewed «ملاحظة» (قُرئ، بتقدير ونقاط اختيارية)،
 // وreturned «يحتاج تعديلًا» يفتحه للمشارك ولا يحبس رحلته (logic.js modelStatus). بطاقة المبادرة وحدها اعتماد أو إعادة كما كانت
 export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'system', b: Body) {
-  const status = b.status === 'returned' ? 'returned' : 'reviewed';
+  // «الوثيقة الحية» (قرار المالك 2026-11-25): فصل وثيقة المبادرة غير البطاقة لا يُعاد وحده، ملاحظة الخبير عليه لا تقفله.
+  // الإعادة تبقى للبطاقة (بوابة) وللوثيقة كاملة (capstone.ts)، وللنموذج خارج الوثيقة كما كان
+  const { data: cur } = b.status === 'returned' ? await db.from('model_submissions').select('learning_models(key, capstone_sort)').eq('id', String(b.id)).maybeSingle() : { data: null };
+  const chapterNote = !!cur && chapterNoteOnly((cur as any).learning_models);
+  const status = b.status === 'returned' && !chapterNote ? 'returned' : 'reviewed';
   // D08: السلّم الرباعي الواحد (labels.js)
   const rating = b.rating ? Math.max(1, Math.min(RUBRIC_SCALE.levels.length, Math.round(Number(b.rating)))) : null;
   const bonus = Math.max(0, Math.min(100, Math.round(Number(b.bonus) || 0)));

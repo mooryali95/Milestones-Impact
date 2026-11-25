@@ -11,7 +11,7 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
@@ -46,7 +46,7 @@ async function build(p: any) {
   const key = trackKey(levels);
   const [models, subs, cap, track] = await Promise.all([
     db.from('learning_models').select(MODEL_COLS).not('capstone_sort', 'is', null),
-    db.from('model_submissions').select('id, model_id, status, rating, feedback_ar, answers, updated_at').eq('participant_id', p.id),
+    db.from('model_submissions').select('id, model_id, status, rating, feedback_ar, answers, updated_at, reviewed_at, submitted_at').eq('participant_id', p.id),
     db.from('capstones').select('*').eq('participant_id', p.id).maybeSingle(),
     key ? db.from('tracks').select('key, title_ar, priority_dimension').eq('key', key).maybeSingle() : Promise.resolve({ data: null }),
   ]);
@@ -89,6 +89,8 @@ const sectionView = (s: any) => ({
   optional: s.state.counted === false,
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
+  // «الوثيقة الحية»: ملاحظة الخبير على الفصل ووقت قراءته، منهما تُشتق الحالات الأربع و«قرأه خبيرك» و«جديد» (spine.js)
+  note: s.sub?.feedback_ar || null, reviewed_at: s.sub?.reviewed_at || null, submitted_at: s.sub?.submitted_at || null,
   // معرّف التسليم ليقيّم المراجع الفصل من بطاقة المبادرة نفسها (لا من «التعلم»)
   sub_id: s.sub?.id || null,
   // مستوى المشارك في إطار الفصل، وموقع الفصل منه (مطلوب، اختياري، باقٍ بقاعدة «لا فقد»)، ومعيار المستوى (chapterLevel)
@@ -126,7 +128,10 @@ export async function get(p: any) {
   const gate = canSubmit({ status, scope: d.scope, initiative: d.initiative, card, sections: d.sections.map((s: any) => ({ ...s.state, title: s.model.title_ar })), readiness: d.readiness, checks: d.checks });
   return {
     success: true,
-    scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null, level: overallLevel(d.levels),
+    scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
+    // هوية المشارك ملف تعريفه (إطار الأولوية بمستواه فيه، 9 ملفات)، لا المستوى الملخص (قرار المالك 2026-11-25).
+    // عمق كل فصل بمستوى إطاره (sections[].level)، وكثافة الصفحة بملف التعريف (spine.js densityFor)
+    profile: { key: profileKey(d.levels, d.priority), level: d.priority ? d.levels[d.priority] : null, dimension: d.priority || null },
     track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.weighted } : null,
     initiative: d.initiative,
     sections: d.sections.map(sectionView),
