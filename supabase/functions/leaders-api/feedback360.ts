@@ -7,7 +7,7 @@
 // بنوع bulk يدخل الطابور عند الحد)، والسجل (audit).
 // للتطوير وحده: لا يقرؤه التقييم الختامي ولا الشهادة ولا تقارير الجهة الفردية (يحرسه eval360.test.js).
 // المشارك يرى أعدادًا لكل مجموعة بعد فتح النافذة، لا من أرسل ومن لم يرسل.
-import { audit, CONFIG, db, enqueueMail, Fail, feedbackMail, FEEDBACK_MAIL, hash, must, randomToken, raterMail, sendMail } from './core.ts';
+import { actionDeadline, audit, CONFIG, db, enqueueMail, Fail, FEEDBACK_MAIL, feedbackMail, hash, must, randomToken, raterMail, resolveNotes, sendMail } from './core.ts';
 import { advisorOf, myParticipantIds } from './advisor.ts';
 import { lastBaseline } from './participant.ts';
 import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
@@ -183,7 +183,7 @@ export async function submitList(p: any, b: Body) {
   if (!adv) throw new Fail('لم يُعيَّن مستشار لدفعتك بعد، فلا أحد يعتمد القائمة. تواصل مع الإدارة', 409, 'no_advisor');
   must(await db.from('feedback_cycles').update({ status: 'approval', submitted_at: new Date().toISOString(), return_note: null }).eq('id', c.id).eq('status', 'nominating'));
   await audit('participant', p.id, 'f360.submit', 'feedback_cycles', c.id, null, { advisor: adv.email, counts: chk.counts });
-  await sendMail(adv.email, FEEDBACK_MAIL.list.subject(p.full_name || 'مشارك'), feedbackMail('list', adv.full_name, p.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `f360:${c.id}`, recipient: { kind: 'expert', id: adv.id }, about: p.id })
+  await sendMail(adv.email, FEEDBACK_MAIL.list.subject(p.full_name || 'مشارك'), feedbackMail('list', adv.full_name, p.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `f360:${c.id}`, actionUntil: actionDeadline(), recipient: { kind: 'expert', id: adv.id }, about: p.id })
     .catch((e) => console.error('f360 list mail', e));
   return mine(p);
 }
@@ -230,6 +230,8 @@ export async function advisorDecide(e: any, b: Body) {
   if (!c || c.status !== 'approval') throw new Fail('لا قائمة بانتظار اعتمادك بهذا المعرّف', 404, 'not_found');
   const p = await requireEffectiveAdvisor(e, c.participant_id);
   const who = `expert:${e.email}`;
+  // القرار، اعتمادًا أو إعادة، يُغلق «ينتظرك» في صندوقه (المرحلة 2ج)
+  await resolveNotes(`f360:${c.id}`);
   if (b.decision === 'return') {
     const note = String(b.note || '').trim().slice(0, 500);
     if (note.length < 5) throw new Fail('اكتب ملاحظتك ليعدّل المشارك قائمته');

@@ -4,7 +4,7 @@
 // المصدر: cohorts.advisor_expert_id للدفعة، وcohort_groups.advisor_expert_id لمجموعة داخلها (الأخص يغلب).
 // الدفعة تُعرف من المشارك (cohortOf)، فتغيير المستشار
 // ينقل إليه المعلّق فورًا. الإدارة ترى كل شيء وتقيّم أيضًا (reviewed_by يسجّل من قيّم).
-import { all, allFor, db, Fail } from './core.ts';
+import { all, allFor, db, Fail, resolveNotes } from './core.ts';
 import { cohortOf } from './programs.ts';
 import { reviewBulkBy, reviewSubmissionBy } from './admin.ts';
 import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved, pickCohort } from './logic.js';
@@ -82,10 +82,10 @@ export async function advisorsOf(ps: { id: string; organization_id?: string | nu
 }
 
 // تسليم نموذج: البطاقة (البوابة) تُبلَّغ فورًا لمراجعها، وما عداها يدخل الملخص اليومي (model-digest.ts) بدل بريد لكل تسليم
-export async function notifySubmission(p: any, m: { key?: string; title_ar: string }) {
+export async function notifySubmission(p: any, m: { id?: string; key?: string; title_ar: string }) {
   if (!isGateModel(m.key)) return { sent: false, digest: true };
   const { notifyGate } = await import('./model-digest.ts');
-  return { ...(await notifyGate(p, m.title_ar)), digest: false };
+  return { ...(await notifyGate(p, m.title_ar, m.id || null)), digest: false };
 }
 
 // دفعات هذا الخبير بصفته مستشارها الأساسي
@@ -151,11 +151,14 @@ export async function reviews(e: any) {
 }
 
 export async function review(e: any, b: Body) {
-  const { data: s } = await db.from('model_submissions').select('id, participant_id, participants(id, organization_id, is_demo)').eq('id', String(b.id || '')).maybeSingle();
+  const { data: s } = await db.from('model_submissions').select('id, participant_id, model_id, participants(id, organization_id, is_demo)').eq('id', String(b.id || '')).maybeSingle();
   if (!s) throw new Fail('التسليم غير موجود', 404);
   const adv = await advisorOf((s as any).participants);
   if (adv?.id !== e.id) throw new Fail('هذا التسليم ليس من دفعتك', 403);
-  return reviewSubmissionBy(e.email, 'system', b);
+  const out = await reviewSubmissionBy(e.email, 'system', b);
+  // مراجعة البطاقة تُغلق «ينتظرك» في صندوقه (المرحلة 2ج). غير البطاقة لا إشعار له، فلا شيء يُغلق
+  await resolveNotes(`model:${(s as any).participant_id}:${(s as any).model_id}`);
+  return out;
 }
 
 // «قرأتها كلها»: التفويض نفسه في التقييم الواحد، مستشار المشارك الفعلي وحده

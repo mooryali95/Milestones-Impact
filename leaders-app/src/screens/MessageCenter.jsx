@@ -53,6 +53,10 @@ export default function MessageCenter({ call, actions, inbox = true, text, onBac
     say(T.saved);
   };
 
+  // «ينتظرك»: ما له مهلة ولم يُغلق بعد، الأقرب مهلةً أولًا (المرحلة 2ج)
+  const waiting = (d?.items || []).filter((i) => i.action_until && !i.resolved_at).sort((a, b) => String(a.action_until).localeCompare(String(b.action_until)));
+  const due = (iso) => (Date.parse(iso) < Date.now() ? T.overdue : `${T.until} ${when(iso)}`);
+
   if (err && !d) return <div className="page narrow stack"><h1>{T.title}</h1><ErrorBox message={err} onRetry={load} /></div>;
   if (!d) return (
     <div className="page narrow stack" aria-busy="true" aria-label="جارٍ التحميل">
@@ -66,6 +70,20 @@ export default function MessageCenter({ call, actions, inbox = true, text, onBac
         <p className="muted">{T.lead}</p>
       </header>
       <Notice note={note} onClose={() => say(null)} />
+      {inbox && waiting.length > 0 && (
+        <section className="card stack msgs-waiting" aria-labelledby="msgs-wait-h">
+          <h2 id="msgs-wait-h">{T.waiting} <span className="la-chip">{waiting.length}</span></h2>
+          <p className="small muted">{T.waitingLead}</p>
+          <ul className="stack" role="list">
+            {waiting.map((m) => (
+              <li key={m.id} className="row between msgs-wait-item">
+                <b>{m.title}</b>
+                <span className={`small${Date.parse(m.action_until) < Date.now() ? ' bad' : ' muted'}`}>{due(m.action_until)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {inbox && (
       <section className="card stack" aria-labelledby="msgs-h">
         <div className="row between">
@@ -80,7 +98,7 @@ export default function MessageCenter({ call, actions, inbox = true, text, onBac
                   <summary>
                     {!m.read_at && <span className="sr-only">{T.unread}: </span>}
                     <b>{m.title}</b>
-                    <span className="small muted"> · {MAIL_CATEGORIES[m.category]?.label || ''} · {when(m.created_at)}{!m.emailed ? ` · ${T.muted}` : ''}</span>
+                    <span className="small muted"> · {MAIL_CATEGORIES[m.category]?.label || ''} · {when(m.created_at)}{!m.emailed ? ` · ${T.muted}` : ''}{m.resolved_at ? ` · ${T.resolved}` : ''}</span>
                   </summary>
                   {m.excerpt && <p className="small" style={{ whiteSpace: 'pre-line' }}>{m.excerpt}</p>}
                 </details>

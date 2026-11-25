@@ -4,7 +4,7 @@
 // المشارك يرفع طلب توجيه فيراه فريقه في دفعته فيجيب، ويؤكّد مستشار الدفعة الإجابة أو يصحّحها أو
 // يخفيها من بوابته. نمط الإشراف من الدفعة (cohorts.supervision). المنطق النقي في peer.js.
 // الخبير يُسجَّل في audit_log فاعلًا system ببريده (لا admin)، حفاظًا على فصل الأدوار.
-import { audit, db, Fail, must, sendMail } from './core.ts';
+import { actionDeadline, audit, db, Fail, must, resolveNotes, sendMail } from './core.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { bdi, esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
@@ -109,7 +109,7 @@ export async function ask(p: any, b: Body) {
   if (supervision === 'expert_only') {
     const adv = await advisorOf(p);
     if (adv) await sendMail(adv.email, `طلب توجيه من ${p.full_name}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `peer:${row.id}`, recipient: { kind: 'expert', id: adv.id }, about: p.id }).catch(() => {});
+      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `peer:${row.id}`, actionUntil: actionDeadline(), recipient: { kind: 'expert', id: adv.id }, about: p.id }).catch(() => {});
   }
   return list(p);
 }
@@ -182,6 +182,7 @@ export async function expertAnswer(e: any, b: Body) {
   const a = must(await db.from('peer_answers').insert({ request_id: r.id, expert_id: e.id, text, status: 'confirmed', confirmed_by: e.email, confirmed_at: now }).select('id').single()) as any;
   must(await db.from('peer_requests').update({ status: 'confirmed', updated_at: now }).eq('id', r.id));
   await audit('system', e.email, 'peer.expert-answer', 'peer_answers', a.id, null, { request_id: r.id });
+  await resolveNotes(`peer:${r.id}`);
   await mailAsker(r.id, 'أجاب خبيرك عن طلب توجيهك', `أجاب ${e.full_name} عن طلب التوجيه الذي رفعته. تجد الإجابة في رحلتك تحت «طلبات التوجيه».`);
   return expertList(e);
 }
@@ -211,6 +212,7 @@ export async function expertClose(e: any, b: Body) {
   const now = new Date().toISOString();
   must(await db.from('peer_requests').update({ status: 'closed', closed_at: now, closed_by: e.email, updated_at: now }).eq('id', r.id));
   await audit('system', e.email, 'peer.close', 'peer_requests', r.id);
+  await resolveNotes(`peer:${r.id}`);
   return expertList(e);
 }
 

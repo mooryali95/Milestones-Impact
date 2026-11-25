@@ -204,9 +204,9 @@ describe('صندوق الخبير في /x (المرحلة 2ب)', () => {
     expect(mailPlan('coord_work', [], 'coordinator')).toEqual({ notify: false, send: true, headers: false });
   });
   it('مواضع عمل الخبير تسمي مستلمها، ومرجع البريد باقٍ لمحو طابور المحذوف', () => {
-    expect(src('peer.ts')).toMatch(/ref: `participant:\$\{p\.id\}`, noteRef: `peer:\$\{row\.id\}`, recipient: \{ kind: 'expert', id: adv\.id \}, about: p\.id/);
-    expect(src('feedback360.ts')).toMatch(/ref: `participant:\$\{p\.id\}`, noteRef: `f360:\$\{c\.id\}`, recipient: \{ kind: 'expert', id: adv\.id \}, about: p\.id/);
-    expect(src('experts.ts')).toMatch(/noteRef: `offer:\$\{req\.id\}`, recipient: \{ kind: 'expert', id: e\.id \}/);
+    expect(src('peer.ts')).toMatch(/ref: `participant:\$\{p\.id\}`, noteRef: `peer:\$\{row\.id\}`,[\s\S]{0,60}recipient: \{ kind: 'expert', id: adv\.id \}, about: p\.id/);
+    expect(src('feedback360.ts')).toMatch(/ref: `participant:\$\{p\.id\}`, noteRef: `f360:\$\{c\.id\}`,[\s\S]{0,60}recipient: \{ kind: 'expert', id: adv\.id \}, about: p\.id/);
+    expect(src('experts.ts')).toMatch(/noteRef: `offer:\$\{req\.id\}`,[\s\S]{0,60}recipient: \{ kind: 'expert', id: e\.id \}/);
     expect(src('team.ts')).toMatch(/recipient: \{ kind: 'expert', id: e\.id \}/);
     expect(src('activities.ts')).toMatch(/recipient: \{ kind: 'expert', id: s\.expert_id \}/);
     expect(src('coaching-groups.ts')).toMatch(/recipient: \{ kind: 'expert', id: e\.id \}/);
@@ -219,5 +219,25 @@ describe('صندوق الخبير في /x (المرحلة 2ب)', () => {
     expect(xp).toMatch(/xpCall\('xp\.messages-unread'\)/);
     expect(xp).toMatch(/className="la-chip xp-msgs-count"/);
     expect(xp).not.toMatch(/supabase\.channel|realtime/i);
+  });
+});
+
+describe('«ينتظرك» في صندوق الخبير (المرحلة 2ج)', () => {
+  const src = (f) => readFileSync(join(API, f), 'utf8');
+  it('ما ينتظر فعلًا يحمل مهلته، ويُغلق في موضع إنجازه بالمرجع نفسه', () => {
+    expect(src('peer.ts')).toMatch(/noteRef: `peer:\$\{row\.id\}`, actionUntil: actionDeadline\(\)/);
+    expect(src('peer.ts').match(/await resolveNotes\(`peer:\$\{r\.id\}`\)/g)).toHaveLength(2);
+    expect(src('feedback360.ts')).toMatch(/noteRef: `f360:\$\{c\.id\}`, actionUntil: actionDeadline\(\)/);
+    expect(src('feedback360.ts')).toMatch(/export async function advisorDecide[\s\S]{0,600}await resolveNotes\(`f360:\$\{c\.id\}`\)/);
+    expect(src('experts.ts')).toMatch(/noteRef: `offer:\$\{req\.id\}`, actionUntil: expires\.toISOString\(\)/);
+    expect(src('experts.ts')).toMatch(/async function offerNext\(req: any, pick\?: any\) \{[\s\S]{0,200}await resolveNotes\(`offer:\$\{req\.id\}`\)/);
+    expect(src('experts.ts')).toMatch(/'expert-request\.accepted'[\s\S]{0,120}await resolveNotes\(`offer:\$\{r\.id\}`\)/);
+    expect(src('model-digest.ts')).toMatch(/noteRef: `model:\$\{p\.id\}:\$\{modelId\}`/);
+    expect(src('advisor.ts')).toMatch(/await resolveNotes\(`model:\$\{\(s as any\)\.participant_id\}:\$\{\(s as any\)\.model_id\}`\)/);
+  });
+  it('الواجهة: قسم «ينتظرك» بما لم يُغلق، الأقرب مهلةً أولًا، و«أُنجز» على المغلق', () => {
+    const mc = readFileSync(join(__dirname, 'screens/MessageCenter.jsx'), 'utf8');
+    expect(mc).toMatch(/filter\(\(i\) => i\.action_until && !i\.resolved_at\)/);
+    expect(mc).toMatch(/m\.resolved_at \? ` · \$\{T\.resolved\}`/);
   });
 });

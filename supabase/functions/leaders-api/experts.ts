@@ -6,7 +6,7 @@
 import { bdi, mailButton, mailCode, mailNote, mailShell, mailText } from '../_shared/mail.ts';
 import { GOOGLE_CLIENT_ID, SITES } from '../_shared/sites.js';
 import { verifyGoogleToken } from './google.ts';
-import { assignmentNote, type AssignmentMail, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, sendMail, sendOrDiscard, secretEquals } from './core.ts';
+import { type AssignmentMail, assignmentNote, audit, CONFIG, consentNeeded, db, Fail, hash, logConsent, mailGuard, must, randomCode, randomToken, requireHuman, reserveCodeAttempt, resolveNotes, secretEquals, sendMail, sendOrDiscard } from './core.ts';
 import { visibilityOfParticipant } from './visibility.ts';
 import { requireWrite } from './admin.ts';
 import { ownerNoticeLater } from './notify.ts';
@@ -365,6 +365,8 @@ export async function offerHours(): Promise<number> {
   try { return Number((await appSettings() as any).experts?.offer_hours) || OFFER_HOURS; } catch { return OFFER_HOURS; }
 }
 async function offerNext(req: any, pick?: any) {
+  // العرض السابق انتهى بالاعتذار أو المهلة أو التحويل: يُغلق «ينتظرك» عند من عُرض عليه (المرحلة 2ج)
+  await resolveNotes(`offer:${req.id}`);
   const { p, need } = await needFor(req.participant_id, req.role, req.dimension);
   const list = pick ? [pick] : await candidates(need, req.participant_id, req.tried || []);
   const now = new Date();
@@ -394,7 +396,7 @@ async function offerNext(req: any, pick?: any) {
     mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${bdi(what)}</b>.`)
     + (req.note ? mailNote(`<b>ما يحتاجه:</b> ${bdi(req.note)}`) : '')
     + mailText(`لديك ${bdi(String(hours))} ساعة لتقبل أو تعتذر، وبعدها يُعرض الطلب على الخبير التالي.`)
-    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب')), [], { category: 'expert_work', noteRef: `offer:${req.id}`, recipient: { kind: 'expert', id: e.id }, expiresAt: expires.toISOString() }).catch(() => {});
+    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب')), [], { category: 'expert_work', noteRef: `offer:${req.id}`, actionUntil: expires.toISOString(), recipient: { kind: 'expert', id: e.id }, expiresAt: expires.toISOString() }).catch(() => {});
   return { status: 'offered', expert_id: e.id, expert_name: e.full_name, expires_at: expires.toISOString() };
 }
 
@@ -551,6 +553,7 @@ async function respondToOffer(r: any, b: Body) {
     if (!journeyApproved(ex)) throw new Fail('لم يعد هذا العرض قائمًا لك: خدمتك في الرحلة غير فعّالة الآن', 409, 'gone');
     must(await db.from('expert_requests').update({ status: 'accepted', accepted_at: now, updated_at: now }).eq('id', r.id));
     await audit('system', null, 'expert-request.accepted', 'expert_requests', r.id, null, { expert_id: r.expert_id });
+    await resolveNotes(`offer:${r.id}`);
     const { data: p } = await db.from('participants').select('full_name, email').eq('id', r.participant_id).maybeSingle();
     if (p?.email) {
       sendMail(p.email, `خبيرك في برنامج القادة: ${r.experts?.full_name}`, shell(`أهلًا ${firstName(p.full_name)}`,
@@ -583,7 +586,7 @@ async function remindHalfway() {
     const leftH = Math.max(1, Math.round(left / 36e5));
     sendMail((r as any).experts.email, `تذكير: طلب ${roleAr(r.role)} ينتظر ردك`, shell(`أهلًا ${firstName((r as any).experts.full_name)}`,
       mailText(`ما زال طلب ${roleAr(r.role)} ينتظر ردك، وبقي نحو ${bdi(String(leftH))} ساعة قبل أن يُعرض على خبير آخر. افتح رابط الطلب في رسالتنا السابقة لتقبل أو تعتذر.`)),
-      [], { category: 'expert_work', noteRef: `offer:${r.id}`, recipient: { kind: 'expert', id: r.expert_id }, expiresAt: r.expires_at }).catch(() => {});
+      [], { category: 'expert_work', noteRef: `offer:${r.id}`, actionUntil: r.expires_at, recipient: { kind: 'expert', id: r.expert_id }, expiresAt: r.expires_at }).catch(() => {});
     n += 1;
   }
   return n;

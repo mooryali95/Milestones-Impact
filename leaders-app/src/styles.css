@@ -2149,6 +2149,11 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .msgs-item:not(.unread) summary b { font-weight: 500; }
 .msgs-item + .msgs-item { border-top: 1px solid rgba(0, 0, 0, .06); }
 .msgs-pref { gap: 12px; padding: 8px 4px; border-radius: 8px; }
+.msgs-waiting { border-inline-start: 3px solid var(--copper); }
+.msgs-waiting ul { list-style: none; margin: 0; padding: 0; }
+.msgs-wait-item { gap: 12px; padding: 6px 4px; flex-wrap: wrap; }
+.msgs-wait-item .bad { color: var(--bad); font-weight: 600; }
+.xp-msgs-count { margin-inline-start: 6px; }
 .msgs-pref.focus { background: rgba(199, 154, 75, .12); }
 .msgs-pref input[type="checkbox"] { width: 22px; height: 22px; flex: none; }
 /* حتى الحاسب: الأيقونة والعدّاد وحدهما (الاسم في aria-label) كاسم المشارك في .who، فلا يدفع زر الخروج خارج الترويسة على الآيباد الرأسي */

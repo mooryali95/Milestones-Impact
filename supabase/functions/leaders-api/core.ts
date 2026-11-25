@@ -301,6 +301,20 @@ async function notifyStaff({ subject, html, category, ref = null, recipient = nu
   return { send: true, html: withPrefsFooter(html, prefsUrl(CONFIG.appUrl, category, audience), audience === 'coordinator' ? STAFF_MESSAGES_TEXT.coordinator.mailFooter : undefined), headers: unsubHeaders(unsubUrl(CONFIG.url, token), MAIL_REPLY_TO) };
 }
 
+// عناصر «ينتظرك» في صندوق الخبير (المرحلة 2ج): ما ينتظر فعلًا منه يحمل action_until (مهلة العرض، أو أسبوع لما لا مهلة له)،
+// ويُغلق (resolved_at) في الموضع الذي يُنجز فيه العمل بمرجع الإشعار نفسه، فلا يبقى في «ينتظرك» ما فُرغ منه.
+// تعذّر الإغلاق (قبل الترحيل 20261129130000) لا يُسقط العمل نفسه
+export const ACTION_DAYS = 7;
+export const actionDeadline = (days = ACTION_DAYS, now = Date.now()) => new Date(now + days * 864e5).toISOString();
+export async function resolveNotes(ref: string, owner: MailRecipient | null = null) {
+  try {
+    let q = db.from('participant_notifications').update({ resolved_at: new Date().toISOString() }).eq('ref', ref).is('resolved_at', null);
+    if (owner) q = q.eq(OWNER_COLUMN[owner.kind], owner.id);
+    const { error } = await q;
+    if (error) console.error('participant_notifications resolve:', ref, error.message);
+  } catch (e) { console.error('participant_notifications resolve:', ref, e); }
+}
+
 // الإلغاء بنقرة (RFC 8058): POST من برنامج البريد يكتم الفئة الموقَّعة في الرمز ويرد 200 بلا تحويل. GET (فتح الرابط في
 // متصفح) لا يغيّر شيئًا، ويحوّل إلى قسم التفضيلات في مركز الرسائل، فلا يكتم فاحصُ روابط شيئًا بفتحه.
 // الرمز يحدد صاحبه: المشارك (ثلاثي الأجزاء كما كان) أو الخبير أو المنسق (رباعي)، فيُكتب صفه بعموده

@@ -396,6 +396,12 @@ export const MESSAGES_TEXT = Object.freeze({
   loadError: 'تعذّر تحميل الرسائل، حاول بعد قليل.',
   mailFooter: 'اختر ما يصلك بالبريد من مركز الرسائل',
   unsubDone: 'أوقفنا هذه الرسائل بالبريد، وتبقى في مركز الرسائل.',
+  // عناصر «ينتظرك» (صندوق الخبير): ما ينتظر فعلًا منه حتى يُنجز في موضعه
+  waiting: 'ينتظرك',
+  waitingLead: 'ما ينتظر ردك أو اعتمادك، ويخرج من هنا حين تنجزه.',
+  until: 'حتى',
+  overdue: 'فات موعده',
+  resolved: 'أُنجز',
 });
 // نصوص المركز للخبير والمنسق فوق MESSAGES_TEXT (المكوّن نفسه MessageCenter)
 export const STAFF_MESSAGES_TEXT = Object.freeze({

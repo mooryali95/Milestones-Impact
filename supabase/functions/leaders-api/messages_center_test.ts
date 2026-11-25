@@ -225,3 +225,23 @@ Deno.test('صندوق الخبير (المرحلة 2ب): عمله المقفل �
     }));
   } finally { w.restore(); }
 });
+
+Deno.test('«ينتظرك» (المرحلة 2ج): العنصر يحمل مهلته، ويُغلق بمرجعه في صندوق صاحبه وحده، والقائمة تعيد العمودين', async () => {
+  const t = base();
+  const OTHER = '9e8d7c6b-5a49-4382-9716-a5b4c3d2e1f0';
+  const w = installFake(t);
+  try {
+    const { resolveNotes } = await import('./core.ts');
+    await withMail(() => withNet(async () => {
+      await sendMail('xp@x.sa', 'طلب توجيه', HTML, [], { category: 'expert_work', noteRef: 'peer:r1', actionUntil: '2026-12-01T00:00:00Z', recipient: { kind: 'expert', id: XID }, about: PID });
+      await sendMail('o@x.sa', 'طلب توجيه', HTML, [], { category: 'expert_work', noteRef: 'peer:r1', actionUntil: '2026-12-01T00:00:00Z', recipient: { kind: 'expert', id: OTHER } });
+    }));
+    await resolveNotes('peer:r1', { kind: 'expert', id: XID });
+    assertEquals(t.participant_notifications.map((n) => [n.expert_id, !!n.resolved_at]), [[XID, true], [OTHER, false]]);
+    await resolveNotes('peer:r1');
+    assert(t.participant_notifications.every((n) => n.resolved_at));
+    const l: any = await MS.list(MS.expertOwner({ id: XID }));
+    assertEquals(l.items[0].action_until, '2026-12-01T00:00:00Z');
+    assert(l.items[0].resolved_at);
+  } finally { w.restore(); }
+});

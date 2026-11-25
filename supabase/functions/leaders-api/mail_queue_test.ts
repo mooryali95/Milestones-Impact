@@ -219,7 +219,7 @@ Deno.test('المرسلون المؤرخون يمررون موعدهم، وال�
   assertEquals(act.includes("{ category: 'sessions', kind: 'bulk', ref: s.id, expiresAt: s.starts_at }"), true);
   assertEquals(f360.includes('expiresAt: closes })'), true);
   assertEquals(f360.includes('expiresAt: c.closes_at })'), true);
-  assertEquals(exp.includes("{ category: 'expert_work', noteRef: `offer:${req.id}`, recipient: { kind: 'expert', id: e.id }, expiresAt: expires.toISOString() }"), true);
+  assertEquals(/\{ category: 'expert_work', [\s\S]{0,200}?, expiresAt: expires\.toISOString\(\) \}/.test(exp), true);
   assertEquals(/coordinator:\$\{c\.id\}`, recipient: \{ kind: 'coordinator', id: c\.id \}, expiresAt:/.test(coord), true);
   assertEquals(index.indexOf('drainMailQueue(40, hold, rewrite)') < index.indexOf('carryoverAlert(hold)'), true);
   // لا ترك بالعمر بعد اليوم
