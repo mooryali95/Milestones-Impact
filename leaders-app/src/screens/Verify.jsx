@@ -20,7 +20,7 @@ const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-la
 
 export const serialFromPath = () => decodeURIComponent(location.pathname.replace(/^\/v\/?/, '')).trim().toUpperCase();
 
-export default function Verify() {
+function CertificateVerify() {
   const [serial, setSerial] = useState(serialFromPath);
   const [q, setQ] = useState(serial);
   const [r, setR] = useState(null);
@@ -79,4 +79,43 @@ export default function Verify() {
       </div>
     </div>
   );
+}
+
+// ── التحقق العام من وثيقة مبادرة معتمدة: /v/doc/<البصمة> (رمز QR في صفحة اعتمادها) ──
+// ما يُعرض هو ما على غلاف الوثيقة وحده (الرقم، والمبادرة، والجهة، والبرنامج، وتاريخ الاعتماد)، بلا محتوى ولا أسماء أشخاص
+export const fingerprintFromPath = () => decodeURIComponent(location.pathname.replace(/^\/v\/doc\/?/, '')).trim().toUpperCase();
+
+export function DocumentVerify() {
+  const [fp] = useState(fingerprintFromPath);
+  const [r, setR] = useState(null);
+  useEffect(() => { if (fp) call('doc.verify', { fingerprint: fp }).then(setR); }, [fp]);
+  const d = r?.document;
+  return (
+    <div className="vf">
+      <h1 className="eyebrow" style={{ textAlign: 'center' }}>التحقق من وثائق المبادرات · Document verification</h1>
+      <div className="vf-card" aria-live="polite">
+        {fp && !r && <div className="spinner" aria-label="جارٍ التحقق" style={{ margin: '20px auto' }} />}
+        {r && !r.success && <p className="muted">{r.message}</p>}
+        {r?.success && !r.found && <p className="vf-state missing"><i aria-hidden="true" />لا وثيقة معتمدة بهذه البصمة. تأكد منها كما هي مطبوعة في صفحة الاعتماد (مثل 1A2B-3C4D-5E6F-7A8B). النسخة الحية غير المعتمدة لا تُتحقق.</p>}
+        {d && <>
+          <p className="vf-state valid"><i aria-hidden="true" />وثيقة معتمدة وأصلية: بصمتها تطابق النسخة المحفوظة لحظة اعتمادها</p>
+          {d.initiative && <p className="vf-name">{d.initiative}</p>}
+          <dl>
+            {d.form && <><dt>الوثيقة</dt><dd>{d.form}</dd></>}
+            <dt>رقم الوثيقة</dt><dd className="ltr" style={{ textAlign: 'start' }}>{d.ref}</dd>
+            <dt>البصمة</dt><dd className="ltr" style={{ textAlign: 'start' }}>{d.fingerprint}</dd>
+            {d.org && <><dt>الجهة</dt><dd>{d.org}</dd></>}
+            {d.program && <><dt>البرنامج</dt><dd>{d.program}</dd></>}
+            <dt>تاريخ الاعتماد</dt><dd>{fmt(d.approved_at)}</dd>
+            <dt>الجهة المصدِرة</dt><dd>{d.issuer}</dd>
+          </dl>
+          <p className="small muted">إن اختلفت البصمة المطبوعة عن هذه، فالنسخة التي بين يديك ليست المعتمدة.</p>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+export default function Verify() {
+  return location.pathname.startsWith('/v/doc/') ? <DocumentVerify /> : <CertificateVerify />;
 }

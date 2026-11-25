@@ -40,6 +40,8 @@ export async function purge() {
   for (const t of ['email_challenges', 'coordinator_challenges', 'expert_challenges', 'webauthn_challenges']) await run(t, db.from(t).delete().lt('created_at', cutoff));
   for (const t of ['auth_sessions', 'coordinator_sessions', 'expert_sessions']) await run(t, db.from(t).delete().lt('expires_at', cutoff));
   await run('certificate_checks', db.from('certificate_checks').delete().lt('created_at', cutoff));
+  // سجل التحقق العام من وثائق المبادرة (doc.verify). قبل الترحيل 20261129100000 يُسجَّل الخطأ ولا يقف التنظيف
+  await run('document_checks', db.from('document_checks').delete().lt('created_at', cutoff));
   await run('handbook_views', db.from('handbook_views').update({ ip: null, user_agent: null }).lt('viewed_at', cutoff).not('ip', 'is', null));
   // عنوان الشبكة ونوع المتصفح مع الحضور (W1، افتراض أ8 في تصور الحضور): يُصفّران بعد المدة نفسها ويبقى الحضور. الجدول بلا id
   await run('workshop_attendance', db.from('workshop_attendance').update({ ip: null, user_agent: null }).lt('checked_in_at', cutoff).or('ip.not.is.null,user_agent.not.is.null'), 'session_id');
