@@ -24,7 +24,7 @@ import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 import { Meaning, Spine } from './InitiativeMap.jsx';
 import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
-import { afterOf, LENS, newInLevel, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
+import { afterOf, chapterState, LENS, newInLevel, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
 import SharePanel, { ShareCard } from './Share.jsx';
 import Visuals, { VisualsCard } from './Visuals.jsx';
 import { Annotated } from '../Term.jsx';
@@ -152,7 +152,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const step = c.status === 'returned' ? 0 : Math.max(0, FLOW.findIndex(([k]) => k === c.status));
   // الفصل الاختياري (لا حقل مطلوبًا فيه) لا يُحسب مكتملًا ولا ناقصًا، كما في الجاهزية
   const req = d.sections.filter((s) => !s.optional);
-  const done = req.filter((s) => s.complete).length;
+  // «منتهٍ» بالتعريف الواحد على الخط (spine.js chapterState)، فلا يقول الرأس رقمًا والخط غيره
+  const done = req.filter((s) => chapterState(s) === 'done').length;
   const failing = d.checks.filter((x) => !x.ok);
   // كثافة الصفحة بملف التعريف (track-manifest.js من lens.json)، لا بمستوى ملخص
   const den = manifestOf(d).density;

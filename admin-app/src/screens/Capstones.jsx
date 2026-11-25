@@ -44,7 +44,7 @@ export function ExpertSpine({ sections, checks, canWrite, onSaved }) {
       {unitsFor(sections).map((u) => (
         <div key={u.key} className="xsp-unit" data-unit={u.key}>
           {u.items.length > 1 && <b className="xsp-unit-t">{u.title}</b>}
-          <ol className="cps-secs">{u.items.map((x) => {
+          <ol className="cps-secs" style={{ listStyle: 'none', paddingInlineStart: 0 }}>{u.items.map((x) => {
             const st = chapterState(x);
             const warn = checksOn(checks, x.key, CHECK_CHAPTERS);
             return (
@@ -52,7 +52,7 @@ export function ExpertSpine({ sections, checks, canWrite, onSaved }) {
                 <span>{x.n}. {x.title}<ChapterLevel s={x} />{changedSinceRead(x) && <span className="la-chip warn"> جديد</span>}{warn.length > 0 && <span className="la-chip bad" title={warn.map((w) => w.title).join('، ')}> فحص</span>}</span>
                 <small>{x.optional ? 'اختياري' : STATE_AR[st]}{!x.complete && !x.optional ? ` · ${x.missing} حقول ناقصة` : ''}</small>
                 {hasOpenNote(x) && edit !== x.id && <small className="xsp-note">ملاحظتك: {x.note}</small>}
-                {canWrite && x.sub_id && x.status !== 'draft' && edit !== x.id && <button type="button" className="la-link" onClick={() => { setEdit(x.id); setText(x.note || ''); }}>{x.note ? 'عدّل الملاحظة' : 'ملاحظة أو قرأته'}</button>}
+                {canWrite && x.sub_id && x.status && x.status !== 'draft' && edit !== x.id && <button type="button" className="la-link" onClick={() => { setEdit(x.id); setText(x.note || ''); }}>{x.note ? 'عدّل الملاحظة' : 'ملاحظة أو قرأته'}</button>}
                 {edit === x.id && (
                   <div className="xsp-edit">
                     <textarea className="la-input" rows={3} maxLength={4000} placeholder="ملاحظتك للمشارك على هذا الفصل (اختيارية)" value={text} onChange={(e) => setText(e.target.value)} />

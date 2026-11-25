@@ -4,6 +4,8 @@ import { test, expect } from '@playwright/test';
 
 const APP = 'http://localhost:4304/';
 const CHARTER = { id: 'm-charter', key: 'initiative-charter', title: 'بطاقة المبادرة', icon: '◆', dimension: 'milestone', complete: false, missing: 6, status: null };
+// الخادم يرسل مستوى المشارك في إطار كل فصل (sections[].level)، ومنه أسئلة الاكتشاف (لا مستوى ملخص)
+const charterAt = (level) => ({ ...CHARTER, level });
 
 function server({ level = 'beginner', initiative = null, card = 'none', examples } = {}) {
   const calls = [];
@@ -14,7 +16,7 @@ function server({ level = 'beginner', initiative = null, card = 'none', examples
   const capstone = () => ({
     success: true, initiative, scope: 'project', scope_title: 'مشروع', level, track: null,
     capstone: { status: 'draft', status_title: 'قيد البناء', summary: '' },
-    sections: [CHARTER], checks: [], readiness: 0, ready_min: 80, card: { state: card, sla: 'يومي عمل' },
+    sections: [charterAt(level)], checks: [], readiness: 0, ready_min: 80, card: { state: card, sla: 'يومي عمل' },
     can_submit: false, blocker: 'فصول لم تكتمل', rubric: [], examples,
   });
   const me = {
@@ -113,6 +115,8 @@ test('المالك حجب المبادرات المحلولة كاملة: لا �
 
 test('حجب مثال الصحة: يبقى مثال الخدمات الحكومية وحده', async ({ page }) => {
   await open(page, server({ initiative: 'مبادرة مسماة', card: 'waiting', examples: { field: true, doc: true, sectors: ['gov'] } }));
+  // المثال المحلول بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
   const ex = page.getByRole('region', { name: 'مبادرة محلولة كاملة' });
   await expect(ex.getByRole('button', { name: 'مثال الخدمات الحكومية' })).toBeVisible();
   await expect(ex.getByRole('button', { name: 'مثال الصحة' })).toHaveCount(0);

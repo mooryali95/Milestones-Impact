@@ -74,10 +74,13 @@ test('الملخص التنفيذي يُحفظ قبل فتح فصل، ويبقى
     'models.get': MODEL,
   });
   await toCapstone(page);
+  // الملخص بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
   const box = page.getByRole('textbox', { name: 'الملخص التنفيذي' });
   await box.fill('المشكلة: انتظار المستفيد عشرة أيام. الحل: خدمة رقمية.');
-  await page.getByRole('button', { name: /هيكل تجزئة العمل/ }).click();
+  await page.locator('.sp-node').filter({ hasText: 'هيكل تجزئة العمل' }).click();
   await page.getByRole('button', { name: '→ وثيقة مبادرتك' }).click();
+  await page.locator('.cp-fold > summary').click();
   await expect(box).toHaveValue('المشكلة: انتظار المستفيد عشرة أيام. الحل: خدمة رقمية.');
   const order = calls.map((c) => c.action);
   expect(order.indexOf('capstone.summary')).toBeGreaterThan(-1);
@@ -87,9 +90,11 @@ test('الملخص التنفيذي يُحفظ قبل فتح فصل، ويبقى
 test('تعذّر حفظ الملخص: لا يُفتح الفصل ويبقى النص برسالة', async ({ page }) => {
   await open(page, { 'capstone.summary': { success: false, message: 'تعذّر الاتصال' }, 'models.get': MODEL });
   await toCapstone(page);
+  // الملخص بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
   const box = page.getByRole('textbox', { name: 'الملخص التنفيذي' });
   await box.fill('نص لم يُحفظ بعد');
-  await page.getByRole('button', { name: /هيكل تجزئة العمل/ }).click();
+  await page.locator('.sp-node').filter({ hasText: 'هيكل تجزئة العمل' }).click();
   await expect(page.getByText('لم يُحفظ الملخص التنفيذي، فبقيت في الصفحة حتى لا يضيع: تعذّر الاتصال')).toBeVisible();
   await expect(box).toHaveValue('نص لم يُحفظ بعد');
 });

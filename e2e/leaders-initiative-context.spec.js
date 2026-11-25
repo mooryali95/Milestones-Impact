@@ -71,18 +71,24 @@ test('اختيار «مبادرة ريادية» في البطاقة يُظهر 
 
 test('صفحة المبادرة: السياق المحفوظ ريادي فالمثال الكامل الأول ريادي، وإن حجبه المالك فمثال القطاع', async ({ page }) => {
   await open(page, server({ context: 'مبادرة ريادية أو مستقلة' }));
+  // المثال المحلول بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
   const ex = page.getByRole('region', { name: 'مبادرة محلولة كاملة' });
   await expect(ex.getByRole('button').first()).toHaveText('مثال ريادة الأعمال');
 });
 
 test('بلا سياق: مثال قطاع المشارك من ملفه أولًا (me.participant.sector)', async ({ page }) => {
   await open(page, server());
+  // المثال المحلول بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
   const ex = page.getByRole('region', { name: 'مبادرة محلولة كاملة' });
   await expect(ex.getByRole('button').first()).toHaveText('مثال الصحة');
 });
 
 test('المثال الريادي محجوب: يبقى مثال القطاع أولًا ولو كان السياق رياديًا', async ({ page }) => {
   await open(page, server({ context: 'مبادرة ريادية أو مستقلة', sectors: ['gov', 'health'] }));
+  // المثال المحلول بين ملحقات الوثيقة المطوية تحت الخط («الوثيقة الحية»)
+  await page.locator('.cp-fold > summary').click();
   const ex = page.getByRole('region', { name: 'مبادرة محلولة كاملة' });
   await expect(ex.getByRole('button').first()).toHaveText('مثال الصحة');
   await expect(ex.getByRole('button', { name: 'مثال ريادة الأعمال' })).toHaveCount(0);
