@@ -198,7 +198,7 @@ export const MIGRATION_GATES = {
   '20261110150000_leaders_erasure_requests': ["tolerant", "الدالة تتحمل غياب الجدول (privacy.ts: pendingErase وcloseOnDelete وpendingList)، فقبله يُعرض للمشارك بريد التواصل بدل الطلب، والتصدير يعمل قبله وبعده"],
   '20261110160000_leaders_sus_responses': ["tolerant", "الدالة تتحمل غياب الجدول (sus.ts: mine وadminSummary)، فقبله لا تُعرض بطاقة الاستبيان لأحد"],
   '20261110170000_leaders_katon_impact_leadership': ["tolerant", "بيانات فقط في جدولين قائمين، والدوال تقرأ المنشور وحده فلا يتغير شيء للمشارك قبله ولا بعده"],
-  '20261110180000_leaders_capstone_card_gate': ["tolerant", "الدالة تعمل قبله وبعده: شرط تقديم الوثيقة (cardGate في capstone.js) يقرأ حالة تسليم البطاقة"],
+  '20261110180000_leaders_capstone_card_gate': ["tolerant", "الدالة تعمل قبله وبعده: شرط تسليم الوثيقة (cardGate في capstone.js) يقرأ حالة تسليم البطاقة"],
   '20261110190000_leaders_cohort_experts': ["tolerant", "الدالة تتحمل غياب الجدول (experts.ts: cohortTeam، وprograms.ts: list وcohortSave)، فقبله"],
   '20261110200000_leaders_group_advisor': ["tolerant", "الدالة تتحمل غياب العمود (advisor.ts: groupAdvisorId وgroupScoped، وprograms.ts: cohortGroups"],
   '20261110210000_leaders_name_confirmation': ["tolerant", "الدالة تتحمل غياب العمود (certificates.ts: onFinalApproved، وparticipant.ts: confirmName وprofileSave)، فقبله تصدر الشهادة كما كانت"],

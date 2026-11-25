@@ -45,7 +45,7 @@ export const SCANNED = [
   'admin-app/src/screens/Handbook.jsx',
   'leaders-app/src/screens/Journey.jsx',
   'leaders-app/src/screens/PeerRequests.jsx',
-  'supabase/functions/leaders-api/migrations.js',
+  // migrations.js مولَّد من رؤوس الترحيلات المطبّقة (مجمّدة)، فلا يُفحص: نصه تاريخي لا يُعدَّل
   'supabase/functions/leaders-api/visibility.js',
   'shared/video/scenes.js',
   'shared/video/mock-server.js',
