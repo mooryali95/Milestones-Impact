@@ -6,13 +6,14 @@
 // يُرد قبل الربط (قرار سارٍ للإدارة، sponsorDecision) لا يأخذ استخدامًا.
 // قبل الترحيل: غياب الجدول يُعامل كرمز غير معروف، وأفعال الإدارة ترد not_migrated.
 import { audit, db, Fail, must } from './core.ts';
-import { missingTable } from './missing-column.ts';
+import { missingColumn, missingTable } from './missing-column.ts';
 import {
   cleanExpiry, cleanMaxUses, codePrefix, codeState, formatCode, NOTE_MAX, normalizeSponsorCode, CUSTOM_CODE_RE, RANDOM_CHARS, SPONSOR_CODE_RE, SPONSOR_CODE_RULE_AR, SPONSOR_CODE_SPENT_AR,
 } from './sponsor-codes.js';
 
 type Body = Record<string, any>;
-const COLS = 'id, organization_id, code, max_uses, used, expires_at, active, note, created_by, created_at';
+// كل الأعمدة: دفعة الرمز (cohort_id، ترحيل 20261128160000) تغيب قبل الترحيل فتُقرأ undefined ولا تُفشل القراءة
+const COLS = '*';
 const missingFn = (e: any) => !!e && ['PGRST202', '42883'].includes(String(e.code));
 const NOT_MIGRATED = () => new Fail('رموز الرعاية غير مفعّلة بعد: يلزم تطبيق ترحيل القاعدة', 409, 'not_migrated');
 
@@ -104,6 +105,18 @@ async function codeTaken(code: string) {
 
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
+// دفعة الرمز: فارغة (دفعة استقبال الجهة)، أو دفعة غير مغلقة للجهة نفسها. undefined: لم تُرسل فلا تتغير
+async function codeCohort(b: Body, orgId: string): Promise<string | null | undefined> {
+  if (!('cohort_id' in b)) return undefined;
+  const id = String(b.cohort_id || '').trim();
+  if (!id) return null;
+  const { data: c } = await db.from('cohorts').select('id, organization_id, status').eq('id', id).maybeSingle() as { data: any };
+  if (!c || c.organization_id !== orgId) throw new Fail('اختر دفعة من دفعات هذه الجهة، أو اتركها فارغة لدفعة الاستقبال');
+  if (c.status === 'closed') throw new Fail('الدفعة مغلقة: اختر دفعة مفتوحة، أو اتركها فارغة لدفعة الاستقبال');
+  return c.id;
+}
+const NOT_MIGRATED_COHORT = () => new Fail('ربط الرمز بدفعة غير مفعّل بعد: يلزم تطبيق ترحيل القاعدة. اترك الدفعة فارغة', 409, 'not_migrated');
+
 export async function adminCreate(a: { email: string }, b: Body) {
   const orgId = orgIdOf(b);
   const { data: org } = await db.from('organizations').select('id, name, name_en, short_name, status, contract_ends').eq('id', orgId).maybeSingle();
@@ -134,13 +147,15 @@ export async function adminCreate(a: { email: string }, b: Body) {
     }
     if (!code) throw new Fail('تعذّر توليد رمز فريد، حاول مرة أخرى', 409, 'code_taken');
   }
-  const row = { organization_id: orgId, code, max_uses: max.value, used: 0, expires_at: exp.value, active: true, note, created_by: a.email };
+  const cohortId = await codeCohort(b, orgId);
+  const row: Body = { organization_id: orgId, code, max_uses: max.value, used: 0, expires_at: exp.value, active: true, note, created_by: a.email, ...(cohortId ? { cohort_id: cohortId } : {}) };
   const { data, error } = await db.from('sponsor_codes').insert(row).select(COLS).single();
   if (error) {
+    if (cohortId && missingColumn(error)) throw NOT_MIGRATED_COHORT();
     if (String(error.code) === '23505') throw new Fail('هذا الرمز مستعمل لجهة أو رمز آخر. اختر غيره أو اتركه فارغًا', 409, 'code_taken');
     throw error;
   }
-  await audit('admin', a.email, 'sponsor-code.create', 'sponsor_codes', data.id, null, { organization_id: orgId, code, max_uses: row.max_uses, expires_at: row.expires_at });
+  await audit('admin', a.email, 'sponsor-code.create', 'sponsor_codes', data.id, null, { organization_id: orgId, code, max_uses: row.max_uses, expires_at: row.expires_at, cohort_id: cohortId || null });
   return { success: true, code: { ...data, state: codeState(data), users: [] } };
 }
 
@@ -165,8 +180,13 @@ export async function adminUpdate(a: { email: string }, b: Body) {
     patch.expires_at = x.value;
   }
   if ('note' in b) patch.note = String(b.note || '').trim().slice(0, NOTE_MAX) || null;
+  // تغيير دفعة الرمز يسري على من يستعمله بعدها، ولا ينقل من أُلحق به من قبل
+  const cohortId = await codeCohort(b, cur.organization_id);
+  if (cohortId !== undefined) patch.cohort_id = cohortId;
   if (!Object.keys(patch).length) throw new Fail('لا تعديل');
-  const data = must(await db.from('sponsor_codes').update(patch).eq('id', id).select(COLS).single()) as any;
+  const res = await db.from('sponsor_codes').update(patch).eq('id', id).select(COLS).single();
+  if (res.error && missingColumn(res.error)) throw NOT_MIGRATED_COHORT();
+  const data = must(res) as any;
   const before = Object.fromEntries(Object.keys(patch).map((k) => [k, (cur as any)[k]]));
   await audit('admin', a.email, 'sponsor-code.update', 'sponsor_codes', id, before, patch);
   return { success: true, code: { ...data, state: codeState(data) } };

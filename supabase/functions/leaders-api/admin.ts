@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
+import { placeQuietly } from './cohort-intake.ts';
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
@@ -1677,6 +1678,8 @@ export async function createParticipant(a: Admin, b: Body) {
     source: b.contact_request_id ? 'contact' : 'admin', contact_request_id: b.contact_request_id ? String(b.contact_request_id) : null,
   }).select('*').single(), 'هذا البريد مسجل من قبل');
   await audit('admin', a.email, 'participant.create', 'participants', row.id, null, row);
+  // لا مشارك بلا دفعة: المضاف بلا جهة يُلحق بالمنصة العامة (المصدر «الإدارة»)
+  await placeQuietly(row.id, 'manual');
   return { success: true, participant: row };
 }
 
@@ -1715,6 +1718,8 @@ export async function participantsImport(a: Admin, b: Body) {
     if (error || !data) { r.status = 'failed'; r.reason = 'تعذّرت إضافته؛ قد يكون سُجّل للتو'; continue; }
     r.status = 'created';
     if (org && await pinSponsorFor(data.id)) seated += 1;
+    // دفعة استقبال الجهة، أو المنصة العامة بلا جهة (المصدر «الإدارة»)
+    await placeQuietly(data.id, 'manual');
   }
   const counts = importCounts(checked);
   await audit('admin', a.email, 'participants.import', 'participants', org?.id || null, null, { organization: org?.name || null, counts, seated });

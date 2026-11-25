@@ -177,6 +177,7 @@ export const MIGRATIONS = [
   '20261128130000_leaders_charter_beneficiaries',
   '20261128140000_leaders_level_matrix',
   '20261128150000_leaders_consult_service',
+  '20261128160000_leaders_cohort_intake',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -269,4 +270,5 @@ export const MIGRATION_GATES = {
   '20261128130000_leaders_charter_beneficiaries': ["tolerant", "محتوى نماذج فقط: حقلان اختياريان جديدان، والدوال تقرأ الحقول كما هي في القاعدة قبله وبعده"],
   '20261128140000_leaders_level_matrix': ["tolerant", "محتوى نماذج ونصوص ملفات تعريف فقط. كل حقل يصير مطلوبًا بهذا الترحيل مخزّن required: false مع شرط"],
   '20261128150000_leaders_consult_service': ["tolerant", "صفوف البرامج الحية (journey_stages وstage_requirements) وجدول جديد service_unlocks تقرؤه الدوال الجديدة"],
+  '20261128160000_leaders_cohort_intake': ["tolerant", "الدوال تتسامح مع غيابه: غياب place_participant (PGRST202/42883) يُقرأ «لا إلحاق» فيبقى التسجيل والربط"],
 };

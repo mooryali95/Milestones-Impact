@@ -35,6 +35,8 @@ import { pinSponsorFor, sponsorDecision } from './entitlements.ts';
 import { findSponsorCode, redeemAndLink, redeemSponsorCode } from './sponsor-codes.ts';
 import { SPONSOR_CODE_SPENT_AR } from './sponsor-codes.js';
 import { advisorOf, notifySubmission } from './advisor.ts';
+import { placeQuietly } from './cohort-intake.ts';
+import { placementSource } from './cohort-intake.js';
 import { reviewerKind } from './model-review.js';
 import { visibilityOfCohort, visibilityOfParticipant } from './visibility.ts';
 import { examplesView, resolveVisibility } from './visibility.js';
@@ -168,7 +170,8 @@ async function sponsorByCode(code: unknown, key: string, ipKey: string | null = 
     await fail();
     throw new Fail('تعذّر التحقق من رمز الجهة الراعية. تأكد منه، أو تابع دونه وتربطك الإدارة لاحقًا.', 400, 'sponsor_code');
   }
-  return { org: sc.org, via: 'link' as const, sponsor_code: sc.row.code as string };
+  // دفعة الرمز (sponsor_codes.cohort_id، ترحيل 20261128160000) يُلحق بها مستعمله، وبلاها دفعة استقبال جهته
+  return { org: sc.org, via: 'link' as const, sponsor_code: sc.row.code as string, sponsor_cohort: ((sc.row as any).cohort_id || null) as string | null };
 }
 // حساب جديد رُبط برمز رعاية عند إنشائه: يُستهلك الرمز الآن (بعد وجود الصف)، وإن سبقه غيره إلى آخر استخدام يُفك الربط
 // ويبقى الحساب بلا جهة (تربطه الإدارة أو يدفع)، فلا يمنع التسجيل
@@ -210,6 +213,8 @@ async function linkOrgOnLogin(p: any, code: unknown, key: string) {
     await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id, null, { via: 'login_link' });
     // ربط يأتي به المشارك لا يتخطى قرار الإدارة (P1-06)، كالرمز والنطاق
     await pinSponsorFor(p.id, { auto: true });
+    // الإلحاق بدفعة استقبال الجهة إن لم تكن له دفعة (من له دفعة لا يُنقل آليًا، ويظهر في قائمة انتظار جهته)
+    await placeQuietly(p.id, 'link');
     return data;
   } catch (e) {
     console.error('link org on login:', e);
@@ -237,6 +242,7 @@ export async function sponsorCode(p: any, b: Body, ctx: { ip?: string | null } =
   await audit('participant', p.id, 'participant.sponsor', 'organizations', r.org.id);
   // ربط يكتبه المشارك لا يتخطى سحب الإدارة لرعايته أو رفض طلب مقعده في الجهة (P1-06)
   await pinSponsorFor(p.id, { auto: true });
+  await placeQuietly(p.id, r.sponsor_code ? 'code' : 'link', (r as any).sponsor_cohort || null);
   return { success: true, ...(await mePayload(saved)) };
 }
 
@@ -375,7 +381,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
       : await sponsorFor({ sponsor_code: b.sponsor_code, org: pend.org }, ctx.ip || email, email);
     profile = {
       ...named, campaign: pend.campaign || null, referrer_host: pend.referrer_host || null,
-      ...(r ? { organization_id: r.org.id, org_via: r.via, sponsor_code: (r as any).sponsor_code || null } : {}),
+      ...(r ? { organization_id: r.org.id, org_via: r.via, sponsor_code: (r as any).sponsor_code || null, sponsor_cohort: (r as any).sponsor_cohort || null } : {}),
     };
   }
   // استهلاك ذري: لو سبق استخدامه في طلب موازٍ لا يُحدَّث أي صف
@@ -395,6 +401,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));
     p = await consumeAtSignup(p, profile);   // رمز رعاية يُستهلك بعد إنشاء الحساب، قبل تثبيت الراعي
     if (p.organization_id) await pinSponsorFor(p.id);   // إعفاء الراعي يُثبَّت لحظة الربط
+    // لا مشارك بلا دفعة: دفعة الرمز، أو استقبال جهته، أو المنصة العامة (بعد الاستهلاك: رمز تعذّر فكّ الربط فيُلحق بالمنصة)
+    await placeQuietly(p.id, placementSource({ organization_id: p.organization_id, sponsor_code: profile.sponsor_code }), profile.sponsor_cohort || null);
   } else {
     if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
     // الموقوف لا يُربط بجهة (كما في Google)، ورفض دخوله بعد إصدار الجلسة كما كان
@@ -428,6 +436,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));   // كما في التسجيل بالبريد
     p = await consumeAtSignup(p, r);
     if (p.organization_id) await pinSponsorFor(p.id);
+    await placeQuietly(p.id, placementSource({ organization_id: p.organization_id, sponsor_code: (r as any)?.sponsor_code }), (r as any)?.sponsor_cohort || null);   // كما في التسجيل بالبريد
   } else {
     if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
     if (p.status !== 'suspended') p = await linkOrgOnLogin(p, b.org, ctx.ip || id.email);
