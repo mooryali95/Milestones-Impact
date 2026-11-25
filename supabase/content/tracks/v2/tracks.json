@@ -1,5 +1,5 @@
 {
- "_about": "مولَّد بـ scripts/tracks/build.mjs: كل مسار من الـ27 وملف تعريفه (إطار الأولوية + مستواه فيه)، وعنوانه الإنجليزي، والعناوين الثلاثة المصححة. journey_ar للمسار = رحلة ملف تعريفه.",
+ "_about": "مولَّد بـ scripts/tracks/build.mjs: كل مسار من الـ27 وملف تعريفه (إطار الأولوية + مستواه فيه)، وعنوانه الإنجليزي، والعناوين الثلاثة المصححة. journey_ar للمسار = رحلة ملف تعريفه. منذ 2026-11-25 (بطاقة المسار) تُحدَّث أولوية أربعة مسارات وملفاتها بترحيل 20261129110000 لا بإعادة توليد ترحيل 20261101140000 المطبّق: قاعدة «قرب الإتقان» (M2I3L3 ← الأثر، M3I2L3 ← القيادة، M3I3L2 ← المعالم، logic.js nearMastery) وافتراض التعادل في M2I3L2 (القيادة).",
  "tracks": [
   {
    "key": "M1I1L1",
@@ -115,18 +115,18 @@
   },
   {
    "key": "M2I3L2",
-   "priority_dimension": "milestone",
-   "profile_key": "milestone-intermediate",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-intermediate",
    "title_ar": "مسار صانع الأثر: إحكام التنفيذ",
    "title_ar_before": "مسار الأثر المؤسسي",
-   "title_en": "Tightening Delivery: Gates and Cost · Strengths: Impact"
+   "title_en": "Influence Beyond Authority · Strengths: Impact"
   },
   {
    "key": "M2I3L3",
-   "priority_dimension": "milestone",
-   "profile_key": "milestone-intermediate",
+   "priority_dimension": "impact",
+   "profile_key": "impact-advanced",
    "title_ar": "مسار القيادة الاستراتيجية للتنفيذ",
-   "title_en": "Tightening Delivery: Gates and Cost · Strengths: Impact & Leadership"
+   "title_en": "Impact Told as Contribution · Strengths: Impact & Leadership"
   },
   {
    "key": "M3I1L1",
@@ -166,10 +166,10 @@
   },
   {
    "key": "M3I2L3",
-   "priority_dimension": "impact",
-   "profile_key": "impact-intermediate",
+   "priority_dimension": "leadership",
+   "profile_key": "leadership-advanced",
    "title_ar": "مسار قائد التنفيذ نحو قيادة القيمة",
-   "title_en": "Evidence Before Claims · Strengths: Milestone & Leadership"
+   "title_en": "Leaders Who Outlast You · Strengths: Milestone & Leadership"
   },
   {
    "key": "M3I3L1",
@@ -180,10 +180,10 @@
   },
   {
    "key": "M3I3L2",
-   "priority_dimension": "leadership",
-   "profile_key": "leadership-intermediate",
+   "priority_dimension": "milestone",
+   "profile_key": "milestone-advanced",
    "title_ar": "مسار خبير التنفيذ والأثر نحو الريادة القيادية",
-   "title_en": "Influence Beyond Authority · Strengths: Milestone & Impact"
+   "title_en": "Delivery Decisions Under Pressure · Strengths: Milestone & Impact"
   },
   {
    "key": "M3I3L3",

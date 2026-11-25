@@ -58,3 +58,10 @@
   .cp-live > .sp, .ch-layout > .sp { display: none; position: fixed; top: 0; bottom: 0; right: 0; width: min(88vw, 360px); max-height: none; z-index: 61; border-radius: 0; overflow: auto; }
   .cp-live > .sp.open, .ch-layout > .sp.open { display: block; }
 }
+
+/* مسرد الإطار بعمق مستوى المشارك فيه (بطاقة المسار) */
+.hb-terms { margin-top: 14px; }
+.hb-terms h3 { margin: 0 0 8px; font-size: 1rem; }
+.hb-terms dl { margin: 0; display: grid; gap: 8px; }
+.hb-terms dt { font-weight: 700; }
+.hb-terms dd { margin: 2px 0 0; line-height: 1.8; }

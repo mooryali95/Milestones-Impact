@@ -28,7 +28,7 @@ import { trackManifest } from '../../../supabase/functions/leaders-api/track-man
 import { afterOf, chapterState, LENS, newInLevel, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
 import SharePanel, { ShareCard } from './Share.jsx';
 import Visuals, { VisualsCard } from './Visuals.jsx';
-import { Annotated } from '../Term.jsx';
+import { Annotated, TermLevels } from '../Term.jsx';
 
 const REVISIONS_AR = MAX_REVISIONS === 1 ? 'تحسين واحد' : MAX_REVISIONS === 2 ? 'تحسينان' : `${MAX_REVISIONS} تحسينات`;
 
@@ -217,6 +217,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   };
 
   return (
+    <TermLevels.Provider value={manifestOf(d).levels}>
     <div className="page capstone">
       <FirstOpen id="capstone" icon="compass" title="مبادرتك من واقع تعرفه" lines={[
         'ابنِ مبادرة تقودها من واقع تعرفه: في جهة أو مجتمع أو سوق، وفصول الوثيقة تتبع نوعها (مشروع أو برنامج أو محفظة) كما حددته في ملفك.',
@@ -438,5 +439,6 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       </div>
       <p className="row"><button className="link small" onClick={onBack}>→ رحلتي</button></p>
     </div>
+    </TermLevels.Provider>
   );
 }

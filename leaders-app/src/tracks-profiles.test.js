@@ -96,7 +96,16 @@ describe('ترحيل 20261101140000 على البنية المرجعية', () =>
     expect(changed.sort()).toEqual(['impact-advanced', 'impact-intermediate', 'leadership-beginner']);
     // رحلة كل مسار ما زالت رحلة ملف تعريفه
     for (const t of after.tracks) expect(t.journey_ar, t.key).toBe(after.profiles.find((x) => x.key === t.profile_key).journey_ar);
-    first.profiles = after.profiles; first.tracks = after.tracks;
+    // وبعده ترحيل بطاقة المسار (20261129110000، قرار المالك 2026-11-25): رحلة الملفات التي أُضيف إلى مستواها متطلب أو مختبر،
+    // والملفات الاحترافية التي صار يبلغها مسار غير متساوٍ (وزن مضاعف)، وأولوية أربعة مسارات بقاعدة «قرب الإتقان»
+    await db.exec(read('supabase/migrations/20261129110000_leaders_track_cards.sql'));
+    const cards = await snap();
+    const changed2 = cards.profiles.filter((x) => after.profiles.find((y) => y.key === x.key).journey_ar !== x.journey_ar).map((x) => x.key);
+    expect(changed2.sort()).toEqual(['impact-advanced', 'impact-intermediate', 'leadership-advanced', 'leadership-intermediate', 'milestone-advanced', 'milestone-intermediate']);
+    const moved = cards.tracks.filter((x) => after.tracks.find((y) => y.key === x.key).profile_key !== x.profile_key).map((x) => x.key);
+    expect(moved.sort()).toEqual(['M2I3L2', 'M2I3L3', 'M3I2L3', 'M3I3L2']);
+    for (const t of cards.tracks) expect(t.journey_ar, t.key).toBe(cards.profiles.find((x) => x.key === t.profile_key).journey_ar);
+    first.profiles = cards.profiles; first.tracks = cards.tracks; first.labs = cards.labs;
 
     const { profiles } = V2('profiles.json');
     const { tracks } = V2('tracks.json');
@@ -110,7 +119,7 @@ describe('ترحيل 20261101140000 على البنية المرجعية', () =>
       const row = first.tracks.find((x) => x.key === t.key);
       expect(row, t.key).toMatchObject({ profile_key: t.profile_key, title_ar: t.title_ar, title_en: t.title_en });
       expect(row.journey_ar).not.toMatch(/ورشة|النصيب الأكبر/);
-      expect(profileKey(lv(t.key), st.tracks.find((x) => x.key === t.key).priority_dimension)).toBe(row.profile_key);
+      expect(profileKey(lv(t.key), t.priority_dimension)).toBe(row.profile_key);
       expect(trackKey(lv(t.key))).toBe(t.key);
     }
     const aud = Object.fromEntries(first.labs.map((l) => [l.key, l.audience]));

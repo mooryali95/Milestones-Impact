@@ -576,10 +576,22 @@ export function trackLevels(key) {
 // نتائج قياسه (assessment_results)، ثم ترتيب الأبعاد. بلا مؤشرات للمتعادلين
 // يبقى افتراض المسار (tracks.priority_dimension) إن كان بينهم.
 // composites: { milestone: 52.3, ... } أو null.
+// قاعدة «قرب الإتقان» (قرار المالك 2026-11-25، profiles.json _about): إطار واحد متوسط والآخران احترافيان (M2I3L3، M3I2L3، M3I3L2)
+// يُطوى إلى ملف احترافي، وأولويته الإطار الذي يلي الأضعف في ترتيب الأطر (المعالم ← الأثر ← القيادة ← المعالم)، فيبلغ كل ملف احترافي مسار.
+// الفجوة خطوة واحدة، وفصول الإطار المتوسط تبقى بمستواه فيه، فلا يُطلب منه ما فوق مستواه.
+/** @param {Record<string, string>} levels @returns {string | null} */
+export function nearMastery(levels) {
+  const ls = DIMENSIONS.map((d) => levels?.[d]);
+  if (ls.filter((l) => l === 'advanced').length !== 2 || ls.filter((l) => l === 'intermediate').length !== 1) return null;
+  const weak = ls.indexOf('intermediate');
+  return DIMENSIONS[(weak + 1) % DIMENSIONS.length];
+}
 /** @param {Record<string, string>} levels @param {Record<string, number> | null} [composites] @param {string | null} [fallback] @returns {string | null} */
 export function priorityFor(levels, composites = null, fallback = null) {
   const rank = (d) => LEVELS.indexOf(levels?.[d]);
   if (DIMENSIONS.some((d) => rank(d) < 0)) return fallback || null;
+  const near = nearMastery(levels);
+  if (near) return near;
   const min = Math.min(...DIMENSIONS.map(rank));
   const tied = DIMENSIONS.filter((d) => rank(d) === min);
   if (tied.length === 1) return tied[0];

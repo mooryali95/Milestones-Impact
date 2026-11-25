@@ -23,6 +23,7 @@ import {
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
+import { trackManifest } from './track-manifest.js';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
@@ -527,6 +528,8 @@ async function trackFor(p: any, levels: Record<string, string>, scope: string | 
   const priority = await participantPriority(p.id, levels, t.priority_dimension || null);
   return {
     ...t, priority_dimension: priority, profile: await profileFor(levels, priority), strengths: strengthsLine(levels, priority),
+    // بطاقة المسار من مصدرها الواحد (track-manifest.js)
+    card: trackManifest(key, priority).card,
     project: trackProject(models.data || [], levels, scope, priority)?.text || null,
   };
 }
@@ -558,6 +561,8 @@ const trackView = (t: any, audience: 'participant' | 'admin') => !t ? null : {
   title: t.profile?.title_ar || t.title_ar || null, summary: t.profile?.summary_ar || t.summary_ar || null,
   strengths: t.strengths || null, focus: t.focus_ar || null,
   project: t.project || null, journey: t.profile?.journey_ar || t.journey_ar || null,
+  // البطاقة للمشارك بلا اسم المسار الداخلي (يرى عنوان ملف تعريفه)
+  card: !t.card ? null : audience === 'admin' ? t.card : { ...t.card, identity: { ...t.card.identity, name: null } },
 };
 
 // الرحلة ونسبة التقدم من مصدر واحد: يستعملها المشارك والإدارة ومنسق الجهة، فلا يرى أحدهم رقمًا غير الآخر
@@ -1236,7 +1241,11 @@ export async function handbookToc(p: any) {
     pointsOf(p.id),
     db.from('reading_progress').select('module_id, words, active_seconds, slices').eq('participant_id', p.id),
   ]);
-  const chapters = handbookModulesFor(must(mods) ?? [], levels);
+  // ترتيب أطر الكتاب ومسرد كل إطار من بطاقة المسار (إطار الأولوية أولًا)
+  const key = trackKey(levels);
+  const card = key ? trackManifest(key, await participantPriority(p.id, levels).catch(() => null)).card : null;
+  const order = card?.handbook.order || ['milestone', 'impact', 'leadership'];
+  const chapters = handbookModulesFor(must(mods) ?? [], levels).sort((a: any, b: any) => order.indexOf(a.dimension) - order.indexOf(b.dimension) || a.sort - b.sort);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
   const read = Object.fromEntries((reads.data || []).map((r: any) => [r.module_id, r]));
   const mine = modelsFor(models.data || [], levels, p.work_scope, answeredModels(subs.data || []));
@@ -1257,6 +1266,7 @@ export async function handbookToc(p: any) {
       points: mine.reduce((a: number, m: any) => a + (m.points || 0), 0) },
     points: { total: pts.total, rank: pts.rank },
     name: p.full_name,
+    card: card ? { type: card.handbook.type, order: card.handbook.order, deepened: card.handbook.deepened, frameworks: card.handbook.frameworks } : null,
   };
 }
 

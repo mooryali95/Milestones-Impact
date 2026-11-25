@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DIMENSIONS, DIM_AR, LEVEL_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { fieldsFor, handbookModulesFor, modelsFor, priorityFor, profileKey, rubricPriority, strengthsLine, trackLevels } from '../../supabase/functions/leaders-api/logic.js';
+import { fieldsFor, handbookModulesFor, modelsFor, nearMastery, priorityFor, requirementApplies, profileKey, rubricPriority, strengthsLine, trackLevels } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneModels, RUBRIC, trackProject } from '../../supabase/functions/leaders-api/capstone.js';
 import { labVisible } from '../../supabase/functions/leaders-api/lab.js';
 
@@ -33,46 +33,10 @@ const DIMS = DIMENSIONS.map((d) => d.key);
 const fails = [];
 const check = (ok, msg) => { if (!ok) fails.push(msg); };
 
-// ── الحالة بعد الترحيل (المحاكاة نفسها التي يكتبها build.mjs في SQL) ──
-export function applyContent(st) {
-  const models = st.models.map((m) => {
-    let fields = m.fields.map((f) => {
-      const p = M.patch_fields.find((x) => x.model === m.key && x.field === f.key);
-      return p ? { ...f, ...p.patch } : f;
-    });
-    for (const a of M.add_fields.filter((x) => x.model === m.key)) {
-      if (fields.some((f) => f.key === a.field.key)) continue;
-      const at = fields.findIndex((f) => f.key === 'track_depth');
-      fields = at < 0 ? [...fields, a.field] : [...fields.slice(0, at), a.field, ...fields.slice(at)];
-    }
-    return {
-      ...m, fields,
-      min_level: M.min_level[m.key]?.to || m.min_level,
-      capstone_sort: m.capstone_sort ?? M.capstone_sort[m.key]?.to ?? null,
-    };
-  });
-  const labs = st.labs.map((l) => ({ ...l, id: l.key, audience: LABS.audience[l.key] || l.audience }));
-  return { models, labs };
-}
-const MATRIX = '20261128140000_leaders_level_matrix';
-// ترحيل المصفوفة على نماذج الحالة: يعيد min_level والحقول كما يكتبها في الإنتاج
-export async function applyMatrix(list) {
-  const { PGlite } = await import('@electric-sql/pglite');
-  const db = new PGlite();
-  await db.exec(`create role anon; create role authenticated; create schema leaders;
-    create table leaders.schema_migrations (name text primary key);
-    create table leaders.learning_models (key text primary key, min_level text not null, fields jsonb not null);
-    create table leaders.track_profiles (key text primary key, journey_ar text not null);
-    create table leaders.tracks (key text primary key, profile_key text, journey_ar text);`);
-  for (const m of list) await db.query('insert into leaders.learning_models (key, min_level, fields) values ($1, $2, $3)', [m.key, m.min_level, JSON.stringify(m.fields)]);
-  await db.exec(readFileSync(join(dirname(fileURLToPath(import.meta.url)), `../../supabase/migrations/${MATRIX}.sql`), 'utf8'));
-  const by = Object.fromEntries((await db.query('select key, min_level, fields from leaders.learning_models')).rows.map((r) => [r.key, r]));
-  await db.close();
-  return list.map((m) => ({ ...m, min_level: by[m.key].min_level, fields: by[m.key].fields }));
-}
-const v2 = applyContent(state);
-const labs = v2.labs;
-const models = await applyMatrix(v2.models);
+import { afterState, applyContent, applyMatrix, AFTER } from './state.mjs';
+export { applyContent, applyMatrix, AFTER };
+
+const { models, labs, requirements: REQS } = await afterState();
 const chapters = state.chapters.map((c) => ({ ...c, body_md: 'x', sort: 0 }));
 const byKey = Object.fromEntries(models.map((m) => [m.key, m]));
 const flat = (p) => [p.title_ar, p.summary_ar, ...p.journey_ar].join('\n');
@@ -88,9 +52,11 @@ for (const t of tracks) {
   check(pk === t.profile_key, `${t.key}: profile_key ${t.profile_key} ≠ ${pk}`);
   check(pkeys.has(t.profile_key), `${t.key}: لا ملف تعريف ${t.profile_key}`);
   check(t.title_en && t.title_en.length <= 200, `${t.key}: title_en فارغ`);
-  // محور الأولوية هو الأضعف (القاعدة التي يقوم عليها الطي)
+  // محور الأولوية هو الأضعف (القاعدة التي يقوم عليها الطي)، إلا «قرب الإتقان» (إطار متوسط وآخران احترافيان): الإطار الذي يلي الأضعف
   const r = DIMS.map((d) => LV.indexOf(lv[d]));
-  check(LV.indexOf(lv[t.priority_dimension]) === Math.min(...r), `${t.key}: الأولوية ليست الأضعف`);
+  if (nearMastery(lv)) check(t.priority_dimension === nearMastery(lv) && lv[t.priority_dimension] === 'advanced', `${t.key}: قرب الإتقان لا يطوي إلى ${nearMastery(lv)}`);
+  else check(LV.indexOf(lv[t.priority_dimension]) === Math.min(...r), `${t.key}: الأولوية ليست الأضعف`);
+  check(AFTER.tracks.find((x) => x.key === t.key)?.profile_key === t.profile_key, `${t.key}: ملف التعريف في القاعدة بعد الترحيل ≠ tracks.json`);
   check(!!strengthsLine(lv, t.priority_dimension), `${t.key}: سطر أقوى الأطر فارغ`);
 }
 for (const p of profiles) {
@@ -101,7 +67,7 @@ for (const p of profiles) {
 const reach = {}; // مفتاح الملف ← تركيبات المستويات التي تبلغه
 for (const t of tracks) {
   const lv = trackLevels(t.key);
-  const tied = DIMS.filter((d) => LV.indexOf(lv[d]) === Math.min(...DIMS.map((x) => LV.indexOf(lv[x]))));
+  const tied = nearMastery(lv) ? [nearMastery(lv)] : DIMS.filter((d) => LV.indexOf(lv[d]) === Math.min(...DIMS.map((x) => LV.indexOf(lv[x]))));
   for (const d of tied) {
     const comp = Object.fromEntries(DIMS.map((x) => [x, x === d ? 10 : 50]));
     const pr = priorityFor(lv, comp, t.priority_dimension);
@@ -113,6 +79,8 @@ for (const t of tracks) {
   check(priorityFor(lv, null, t.priority_dimension) === t.priority_dimension, `${t.key}: الافتراض بلا مؤشرات ≠ tracks.priority_dimension`);
 }
 for (const p of profiles) check((reach[p.key] || []).length > 0, `${p.key}: لا تركيبة تبلغه`);
+// كل ملف يبلغه مسار بافتراضه بلا مؤشرات، لا بالتعادل وحده (قرار المالك 2026-11-25)
+for (const p of profiles) check(tracks.some((t) => priorityFor(trackLevels(t.key), null, t.priority_dimension) === p.priority_dimension && trackLevels(t.key)[p.priority_dimension] === p.level), `${p.key}: لا مسار يبلغه بافتراضه`);
 check(Object.keys(reach).length === 9 && profiles.length === 9, `ملفات التعريف ${profiles.length} والممكنة ${Object.keys(reach).length}، والمطلوب 9`);
 const allEqual = (lv) => DIMS.every((d) => lv[d] === lv[DIMS[0]]);
 for (const [k, f] of Object.entries(fixes)) {
@@ -194,7 +162,7 @@ for (const p of profiles) {
       check(!/مضاعف/.test(txt) && /بوزن واحد/.test(txt), `${tag}: النص لا يقول «بوزن واحد» أو يعد بالمضاعفة`);
     }
     else if (pr.kind === 'requirement') {
-      const r = state.requirements.find((x) => x.code === pr.code);
+      const r = REQS.find((x) => x.code === pr.code);
       const st = state.stages.find((s) => s.key === r?.stage_key);
       check(r && r.active && st?.active !== false, `${tag}: المتطلب غير مفعّل`);
       check(r && r.dimension === d && r.level === p.level, `${tag}: المتطلب ليس لهذا الإطار والمستوى`);
@@ -206,7 +174,7 @@ for (const p of profiles) {
   for (const l of myLabs) check(promisedLabs.has(l.key), `${p.key}: المختبر «${l.title_ar}» يصل المستوى ولا يذكره الملف`);
   for (const l of labs) if (!myLabs.includes(l) && txt.includes(l.title_ar) && l.dimension === d) check(false, `${p.key}: يذكر «${l.title_ar}» ولا يصله`);
   // متطلبات المستوى المفعّلة كلها مذكورة
-  const reqs = state.requirements.filter((r) => r.active && r.dimension === d && r.level === p.level);
+  const reqs = REQS.filter((r) => r.active && r.dimension === d && r.level === p.level);
   for (const r of reqs) check(p.promises.some((x) => x.kind === 'requirement' && x.code === r.code), `${p.key}: متطلب المستوى ${r.code} غير مذكور`);
   // المشروع التطبيقي المشتق يتعمق في الفصول نفسها
   const proj = trackProject(models, lv, 'project', d);
@@ -260,6 +228,25 @@ for (const a of M.add_fields) {
 for (const k of ['initiative-charter', 'benefits-register', 'transformation-story', 'stage-gate', 'wbs']) {
   const n = (lv) => fieldsFor(byKey[k].fields, lv, 'project', false).length;
   check(n('advanced') > n('intermediate'), `${k}: الاحترافي = المتوسط`);
+}
+
+// ── 6) الشرائح التسع (slices.json) تطابق ما في القاعدة بعد الترحيل ──
+const SL = read('slices.json');
+for (const d of DIMS) for (const lv of LV) {
+  const levels = { milestone: 'beginner', impact: 'beginner', leadership: 'beginner', [d]: lv };
+  const got = REQS.filter((r) => r.active && r.dimension === d && requirementApplies(r, levels)).map((r) => r.code).sort();
+  check(JSON.stringify(got) === JSON.stringify([...SL.frameworks[d].journey[lv]].sort()), `${d}/${lv}: متطلبات الشريحة ${SL.frameworks[d].journey[lv]} ≠ القاعدة ${got}`);
+  const seen = labVisible(labs, { levels, participantId: 'x' }).filter((l) => l.dimension === d).map((l) => l.key).sort();
+  const want = LV.slice(0, LV.indexOf(lv) + 1).flatMap((x) => SL.frameworks[d].labs[x]).sort();
+  check(JSON.stringify(seen) === JSON.stringify(want), `${d}/${lv}: مختبرات الشريحة ${want} ≠ ما يصل ${seen}`);
+}
+// ── 7) نص كل ملف لا يذكر إطارًا آخر إلا في سطر الوزن، ولا اسم مختبر أو فصل من إطار آخر ──
+const DIM_NAMES = Object.fromEntries(DIMS.map((d) => [d, DIM_AR[d]]));
+for (const p of profiles) {
+  for (const line of [p.summary_ar, ...p.journey_ar]) {
+    for (const [d, name] of Object.entries(DIM_NAMES)) if (d !== p.priority_dimension && line.includes(name)) check(false, `${p.key}: يذكر إطار ${name} في: ${line.slice(0, 40)}`);
+    for (const l of labs) if (l.dimension !== p.priority_dimension && line.includes(l.title_ar)) check(false, `${p.key}: يذكر مختبر «${l.title_ar}» من إطار آخر`);
+  }
 }
 
 // ── التقرير ──
