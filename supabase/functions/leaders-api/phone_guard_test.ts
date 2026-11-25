@@ -16,7 +16,7 @@ const ORG = U(770001);
 // الرقم المحلي يُركَّب فلا يُقرأ رقمًا منشورًا (single-source.test.js)
 const L05 = (n: string) => '05' + n;
 const ADMIN = { email: 'a@example.sa', role: 'admin' as const, method: 'passkey' };
-const owner = { id: U(770100), full_name: 'خضر إدريس', email: 'khader@gmail.com', phone: '+966501111111', organization_id: ORG, status: 'registered', is_demo: false, is_test: false };
+const owner = { id: U(770100), full_name: 'سامر نوفل', email: 'samer@gmail.com', phone: '+966501111111', organization_id: ORG, status: 'registered', is_demo: false, is_test: false };
 const suspended = { ...owner, id: U(770101), email: 'old@gmail.com', status: 'suspended' };
 const demo = { ...owner, id: U(770102), email: 'demo@demo.milestone-impact.org', is_demo: true, organization_id: null };
 const CONFLICT = { code: '23505', message: 'duplicate key value violates unique constraint "participants_phone_key_uniq"' };
@@ -41,18 +41,18 @@ Deno.test('المفتاح: الصيغ كلها مفتاح واحد، والصي�
   for (const v of ['+966501111111', '00966501111111', L05('01111111'), '501111111', '٠٥٠١١١١١١١', '+966 50 111 1111']) assertEquals(K.phoneKey(v), '966501111111');
   assert(K.phoneVariants('966501111111').includes('+966501111111'));
   assert(K.phoneVariants('966501111111').includes(L05('01111111')));
-  assertEquals(K.nameKey('خضر إدريس'), K.nameKey('خضرادريس'));
+  assertEquals(K.nameKey('سامر نوفل'), K.nameKey('سامرنوفل'));
   assertEquals(K.nameKey('فاطِمة'), K.nameKey('فاطمه'));
-  assertEquals(K.maskEmail('khader@gmail.com'), 'kha…@gmail.com');
 });
 
-Deno.test('التسجيل بالبريد: هاتف قائم بأي صيغة يُرد برسالة محايدة ببريده مقنَّعًا، ولا حساب ولا استهلاك للرمز', async () => {
+Deno.test('التسجيل بالبريد: هاتف قائم بأي صيغة يُرد برسالة محايدة لا تكشف الحساب، ولا حساب ولا استهلاك للرمز', async () => {
   const w = world();
   try {
     const r = await status(() => register(w, L05('01111111')));
     assertEquals([r?.status, r?.code], [409, 'phone_exists']);
-    assertEquals(r?.message, 'لديك حساب مسجل بهذا الهاتف، ادخل ببريدك kha…@gmail.com');
-    assertEquals(r?.extra, { email_hint: 'kha…@gmail.com' });
+    assertEquals(r?.message, 'هذا الرقم مرتبط بحساب قائم، ادخل ببريدك الذي سجلت به أولًا');
+    assertEquals(r?.extra, {});
+    assert(!r?.message.includes('sam'));
     assertEquals(w.tables.participants.length, 3);
     assertEquals(w.tables.email_challenges[0].consumed_at, null);
   } finally { w.restore(); }
@@ -100,7 +100,7 @@ Deno.test('إضافة الإدارة: الهاتف القائم يُرد باس�
     const r = await status(() => A.createParticipant(ADMIN as any, { email: 'x@example.sa', full_name: 'شخص آخر', phone: '+966 50 111 1111' }));
     assertEquals([r?.status, r?.code], [409, 'phone_exists']);
     assertEquals((r?.extra as any).existing, { id: owner.id, full_name: owner.full_name, email: owner.email, status: 'registered' });
-    assert(r?.message.includes('khader@gmail.com'));
+    assert(r?.message.includes('samer@gmail.com'));
     assertEquals(w.tables.participants.length, 3);
     w.tables.participants.push({ ...structuredClone(owner), id: U(770400), email: 'noorg@example.sa', phone: null, organization_id: null, full_name: 'سارة الأحمد' });
     const dry: any = await A.createParticipant(ADMIN as any, { email: 'y@example.sa', full_name: 'سارة  الاحمد', dry_run: true });
@@ -117,7 +117,7 @@ Deno.test('إضافة الإدارة: تعارض الفهرس وتكرار ال�
   } finally { w.restore(); }
   const f = world({ fail: (t: string, op: any) => (t === 'participants' && op.kind === 'insert' ? { code: '23505', message: 'participants_email_uniq' } : null) });
   try {
-    const r = await status(() => A.createParticipant(ADMIN as any, { email: 'khader@gmail.com', full_name: 'شخص آخر' }));
+    const r = await status(() => A.createParticipant(ADMIN as any, { email: 'samer@gmail.com', full_name: 'شخص آخر' }));
     assertEquals([r?.status, r?.code], [409, 'email_exists']);
   } finally { f.restore(); }
 });
@@ -137,12 +137,12 @@ Deno.test('الاستيراد: هاتف قائم «مسجل من قبل» باس
       { line: 2, email: 'i1@example.sa', full_name: 'مستورد أول', phone: L05('01111111') },
       { line: 3, email: 'i2@example.sa', full_name: 'مستورد ثان', phone: L05('04444444') },
       { line: 4, email: 'i3@example.sa', full_name: 'مستورد ثالث', phone: '+966504444444' },
-      { line: 5, email: 'i4@example.sa', full_name: 'خضرإدريس' },
+      { line: 5, email: 'i4@example.sa', full_name: 'سامرنوفل' },
     ];
     const dry: any = await A.participantsImport(ADMIN as any, { organization_id: ORG, rows, dry_run: true });
     assertEquals(dry.rows.map((r: Row) => r.status), ['exists', 'ok', 'duplicate', 'ok']);
     assertEquals(dry.rows[0].existing.id, owner.id);
-    assert(dry.rows[0].reason.includes('khader@gmail.com'));
+    assert(dry.rows[0].reason.includes('samer@gmail.com'));
     assertEquals(dry.rows[3].warning, 'maybe_duplicate');
     assert(dry.rows[3].reason.startsWith('قد يكون مكررًا'));
     const done: any = await A.participantsImport(ADMIN as any, { organization_id: ORG, rows });
@@ -156,4 +156,22 @@ Deno.test('الاستيراد: تعارض الفهرس عند الكتابة ي�
     const done: any = await A.participantsImport(ADMIN as any, { organization_id: ORG, rows: [{ email: 'r1@example.sa', full_name: 'مستورد أول', phone: L05('08888888') }, { email: 'r2@example.sa', full_name: 'مستورد ثان' }] });
     assertEquals(done.rows.map((r: Row) => r.status), ['exists', 'created']);
   } finally { w.restore(); }
+});
+
+Deno.test('تغيير الحالة: إعادة مكرر مؤرشف إلى حالة قائمة يُرد باسم الباقي، والجماعي يتخطاه، وتعارض الفهرس 409', async () => {
+  const w = world();
+  try {
+    const r = await status(() => A.setStatus(ADMIN as any, { participant_id: suspended.id, status: 'registered' }));
+    assertEquals([r?.status, r?.code, (r?.extra as any)?.existing?.id], [409, 'phone_exists', owner.id]);
+    assertEquals(w.tables.participants[1].status, 'suspended');
+    const bulk: any = await A.setStatus(ADMIN as any, { participant_ids: [suspended.id], status: 'registered' });
+    assertEquals([bulk.done, bulk.phone_conflicts?.[0]?.participant_id], [0, suspended.id]);
+    assertEquals(w.tables.participants[1].status, 'suspended');
+  } finally { w.restore(); }
+  const f = world({ fail: (t: string, op: any) => (t === 'participants' && op.kind === 'update' ? CONFLICT : null) });
+  try {
+    f.tables.participants[0].phone = '+966509999999';   // الفحص قبل الكتابة لا يراه
+    const r = await status(() => A.setStatus(ADMIN as any, { participant_id: suspended.id, status: 'registered' }));
+    assertEquals([r?.status, r?.code], [409, 'phone_exists']);
+  } finally { f.restore(); }
 });

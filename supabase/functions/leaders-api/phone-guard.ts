@@ -5,7 +5,7 @@
 // يُترجم تعارضه (isPhoneConflict) إلى الرد نفسه، فلا يصل المستعمل خطأ خادم أبدًا.
 import { db, Fail } from './core.ts';
 import { listed } from './counting.ts';
-import { holdsPhone, MAYBE_DUP_AR, maskEmail, nameKey, PHONE_KEY_MIN, phoneKey, phoneTakenAdminAr, phoneTakenAr, phoneVariants } from './phone-key.js';
+import { holdsPhone, MAYBE_DUP_AR, nameKey, PHONE_KEY_MIN, PHONE_TAKEN_AR, phoneKey, phoneTakenAdminAr, phoneVariants } from './phone-key.js';
 
 export type PhoneOwner = { id: string; full_name: string | null; email: string; status: string; organization_id: string | null };
 
@@ -21,10 +21,10 @@ export async function phoneOwner(phone: unknown, exceptId: string | null = null)
 
 export const isPhoneConflict = (e: any) => !!e && e.code === '23505' && /participants_phone_key_uniq/.test(`${e.message || ''} ${e.details || ''}`);
 
-// الرد الموحّد: للمشارك رسالة محايدة ببريده مقنَّعًا، وللإدارة الحساب القائم باسمه لترسل الدعوة إليه
-export function participantPhoneTaken(owner: PhoneOwner | null) {
-  return new Fail(owner ? phoneTakenAr(owner.email) : 'لديك حساب مسجل بهذا الهاتف، ادخل ببريدك', 409, 'phone_exists',
-    owner ? { email_hint: maskEmail(owner.email) } : {});
+// الرد الموحّد: للمشارك رسالة محايدة لا تكشف شيئًا عن الحساب القائم (لا بريد ولا مقنَّعًا: من يعرف رقمًا لا يعرف به بريد صاحبه)،
+// وللإدارة الحساب القائم باسمه لترسل الدعوة إليه
+export function participantPhoneTaken(_owner?: PhoneOwner | null) {
+  return new Fail(PHONE_TAKEN_AR, 409, 'phone_exists');
 }
 export function adminPhoneTaken(owner: PhoneOwner) {
   return new Fail(phoneTakenAdminAr(owner), 409, 'phone_exists', { existing: { id: owner.id, full_name: owner.full_name, email: owner.email, status: owner.status } });

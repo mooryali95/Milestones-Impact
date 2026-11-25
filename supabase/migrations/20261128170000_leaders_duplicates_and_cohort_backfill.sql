@@ -15,11 +15,11 @@
 --      (enrollments)، وقياس (assessments)، وقراءة (reading_progress)، ونقاط (points_ledger)، ودفع (payments)، وشهادة (certificates).
 --      وإلا يُترك ويُذكر في إشعار الترحيل وفي scripts/db/verify-backfill-after.sql (الفحص 3).
 -- ب) كل مشارك حقيقي بلا دفعة يُلحق بـ place_participant بالمصدر 'manual'، عدا: التجريبي، وحساب الاختبار (is_test)، وحسابات اختبار
---    خمسة سماها المالك تُطابق ببصمة الاسم md5(btrim(full_name)) فلا تُكتب أسماؤها هنا، والمؤرشف، والموقوف والمنسحب.
+--    خمسة سماها المالك تُطابق ببصمة الاسم بعد حذف كل فراغ طرفي (المسافة والجدولة والمسافة غير الفاصلة) فلا تُكتب أسماؤها هنا، والمؤرشف، والموقوف والمنسحب.
 -- ج) تحقق ذاتي يرمي (فيُرجع الترحيل كله) إن بقي حقيقي غير مستثنى بلا دفعة، أو أُلحق أحد بدفعتين.
 -- آمن لإعادة التشغيل: المؤرشف لا يعود في مجموعة قائمة، والمُلحق له دفعة، والنسخة الاحتياطية تُنشأ مرة.
 
--- restore: update leaders.participants p set status = b.status from leaders.backup_20261128_duplicates_backfill b where b.kind = 'archive' and p.id = b.participant_id; update leaders.auth_sessions s set revoked_at = null from leaders.backup_20261128_duplicates_backfill b where b.kind = 'session' and s.id::text = b.ref; delete from leaders.enrollments e using leaders.cohort_placements c where c.actor = 'migration:20261128170000' and e.participant_id = c.participant_id and e.cohort_id = c.cohort_id
+-- restore: update leaders.participants p set status = b.status from leaders.backup_20261128_duplicates_backfill b where b.kind = 'archive' and p.id = b.participant_id; update leaders.auth_sessions s set revoked_at = null from leaders.backup_20261128_duplicates_backfill b where b.kind = 'session' and s.id::text = b.ref; delete from leaders.enrollments e using leaders.cohort_placements c where c.actor = 'migration:20261128170000' and e.participant_id = c.participant_id and e.cohort_id = c.cohort_id; delete from leaders.cohort_placements where actor = 'migration:20261128170000'; delete from leaders.cohorts c using leaders.backup_20261128_duplicates_backfill b where b.kind = 'cohort' and c.id::text = b.ref and not exists (select 1 from leaders.enrollments e where e.cohort_id = c.id)
 
 -- مفتاح الهاتف للجلسة: تعبير فهرس 20261128180000 نفسه (phoneKey في phone-key.js)
 create or replace function pg_temp.pkey(p text) returns text language sql immutable as $f$
@@ -27,9 +27,9 @@ create or replace function pg_temp.pkey(p text) returns text language sql immuta
     from (select regexp_replace(regexp_replace(translate(coalesce(p, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'), '[^0-9]', '', 'g'), '^00', '') as d) x
 $f$;
 
--- حسابات الاختبار الخمسة التي استبعدها المالك من الإلحاق: بصمة md5 للاسم بعد حذف المسافات الطرفية، مطابقة تامة
+-- حسابات الاختبار الخمسة التي استبعدها المالك من الإلحاق: بصمة md5 للاسم بعد حذف كل فراغ طرفي (\s والمسافة غير الفاصلة)، مطابقة تامة
 create or replace function pg_temp.excluded_test(n text) returns boolean language sql immutable as $f$
-  select md5(btrim(coalesce(n, ''))) in ('fabd495fc8a7654531ea1b20e4260a4a', '95f8958a8fbcda02de1a8a5cf8f4f3a9', '34bba4869d4a4a9b23ca3d3b021ffa9b',
+  select md5(regexp_replace(coalesce(n, ''), '^[\s ]+|[\s ]+$', '', 'g')) in ('fabd495fc8a7654531ea1b20e4260a4a', '95f8958a8fbcda02de1a8a5cf8f4f3a9', '34bba4869d4a4a9b23ca3d3b021ffa9b',
                                          '406c5913519e5427b9a6717e29cf2f12', 'a3b0d8be3bc69a1c348a6f2ec974a3eb')
 $f$;
 
@@ -102,17 +102,28 @@ select 'system', 'migration:20261128170000', 'participant.duplicate_archived', '
                           'why', 'حساب ثانٍ للشخص نفسه بالهاتف نفسه')
   from upd u left join leaders.backup_20261128_duplicates_backfill b on b.kind = 'archive' and b.participant_id = u.id;
 
--- ب) الإلحاق، واحدًا واحدًا بالدالة الذرية نفسها التي يستعملها التسجيل
+-- ب) الإلحاق، واحدًا واحدًا بالدالة الذرية نفسها التي يستعملها التسجيل. 'none' (لا دفعة تُنشأ: برنامج بلا نسخة) يرمي فورًا
+-- باسم المشارك. الدفعات التي ينشئها الإلحاق (استقبال جهة أو المنصة العامة) تُسجَّل في النسخة الاحتياطية فيحذفها سطر restore إن بقيت فارغة
+create temp table backfill_cohorts_before on commit drop as select id from leaders.cohorts;
 do $$
 declare r record; res record;
 begin
   for r in select id from pg_temp.to_place() order by id loop
     select * into res from leaders.place_participant(r.id, 'manual', null, 'migration:20261128170000');
+    if res.outcome = 'none' then
+      raise exception 'duplicates_backfill: place_participant returned none for participant %', r.id;
+    end if;
     insert into leaders.audit_log (actor_type, actor, action, entity, entity_id, before, after)
     values ('system', 'migration:20261128170000', 'participant.cohort_backfill', 'participants', r.id::text, null,
             jsonb_build_object('cohort_id', res.cohort_id, 'outcome', res.outcome));
   end loop;
 end $$;
+
+insert into leaders.backup_20261128_duplicates_backfill (kind, participant_id, ref, status)
+select 'cohort', null, c.id::text, null from leaders.cohorts c
+ where not exists (select 1 from backfill_cohorts_before x where x.id = c.id)
+   and not exists (select 1 from leaders.backup_20261128_duplicates_backfill b where b.kind = 'cohort' and b.ref = c.id::text);
+drop table backfill_cohorts_before;
 
 -- ج) التحقق الذاتي
 do $$

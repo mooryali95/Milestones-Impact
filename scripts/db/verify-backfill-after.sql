@@ -1,10 +1,10 @@
 -- بعد ترحيل 20261128170000_leaders_duplicates_and_cohort_backfill: هل أُرشف المكرر وأُلحق كل من بقي. قراءة فقط: لا يكتب شيئًا.
 -- يُشغَّل بسير migrate.yml في الوضع verify. كل فحص يرجع صفًا واحدًا (ok، detail) كما يقرؤه scripts/db/apply-migration.mjs --verify.
--- بصمات أسماء حسابات الاختبار الخمسة هي نفسها في الترحيل (md5(btrim(full_name)))، فلا تُكتب الأسماء هنا.
+-- بصمات أسماء حسابات الاختبار الخمسة هي نفسها في الترحيل (md5 بعد حذف كل فراغ طرفي)، فلا تُكتب الأسماء هنا.
 
 -- 1) من لا دفعة له من غير التجريبيين، بسببه. ok = لا باقٍ غير مستثنى
 with lone as (
-  select pa.*, md5(btrim(coalesce(pa.full_name, ''))) in ('fabd495fc8a7654531ea1b20e4260a4a', '95f8958a8fbcda02de1a8a5cf8f4f3a9', '34bba4869d4a4a9b23ca3d3b021ffa9b',
+  select pa.*, md5(regexp_replace(coalesce(pa.full_name, ''), '^[\s ]+|[\s ]+$', '', 'g')) in ('fabd495fc8a7654531ea1b20e4260a4a', '95f8958a8fbcda02de1a8a5cf8f4f3a9', '34bba4869d4a4a9b23ca3d3b021ffa9b',
                                                           '406c5913519e5427b9a6717e29cf2f12', 'a3b0d8be3bc69a1c348a6f2ec974a3eb') as named_test,
          exists (select 1 from leaders.audit_log l where l.action = 'participant.duplicate_archived' and l.entity_id = pa.id::text) as archived
     from leaders.participants pa

@@ -47,13 +47,13 @@ const BEFORE = `create role anon; create role authenticated; create role service
 
 // الزوج الأول: الهاتف بصيغتين (+966 و05)، والأحدث دخولًا يبقى. الثاني: الدخول متساوٍ (null) فالأحدث إنشاءً يبقى
 const SEED = `insert into leaders.participants (id, full_name, email, phone, organization_id, source, last_login_at, created_at) values
-  ('${P(1)}', 'خضر إدريس', 'a1@gmail.com', '+966501111111', '${ORG}', 'invite', '2026-11-01', '2026-10-01'),
-  ('${P(2)}', 'خضرإدريس', 'a2@gmail.com', '0501111111', '${ORG}', 'invite', '2026-11-20', '2026-10-05'),
+  ('${P(1)}', 'سامر نوفل', 'a1@gmail.com', '+966501111111', '${ORG}', 'invite', '2026-11-01', '2026-10-01'),
+  ('${P(2)}', 'سامرنوفل', 'a2@gmail.com', '0501111111', '${ORG}', 'invite', '2026-11-20', '2026-10-05'),
   ('${P(3)}', 'سارة', 'b1@gmail.com', '00966502222222', '${ORG}', 'invite', null, '2026-10-01'),
   ('${P(4)}', 'سارة', 'b2@gmail.com', '+966502222222', '${ORG}', 'invite', null, '2026-10-09'),
   ('${P(5)}', 'بلا جهة', 'c@x.sa', null, null, 'self', null, now()),
   ('${P(6)}', 'اختبار', 't@x.sa', null, null, 'self', null, now()),
-  ('${P(7)}', $n$  ${TEST_NAME}  $n$, 'o@x.sa', null, null, 'self', null, now()),
+  ('${P(7)}', $n$ 	${TEST_NAME}  $n$, 'o@x.sa', null, null, 'self', null, now()),
   ('${P(8)}', 'منسحب', 'w@x.sa', null, '${ORG}', 'self', null, now()),
   ('${P(9)}', 'جهة', 'd@x.sa', '+966503333333', '${ORG}', 'self', null, now());
   update leaders.participants set is_test = true where id = '${P(6)}';
@@ -122,13 +122,34 @@ describe('ترحيل 20261128170000 (المكرر بالهاتف وإلحاق م
     expect(await n(d, `select count(*)::int n from pg_indexes where indexname = 'participants_phone_key_uniq'`)).toBe(0);
   });
 
-  it('التحقق الذاتي يُرجع الترحيل كله إن بقي أحد بلا دفعة', async () => {
+  it('الإلحاق بلا دفعة (none) يرمي فورًا باسم المشارك ويُرجع الترحيل كله', async () => {
     const d = await db('delete from leaders.program_versions');   // لا نسخة فلا دفعة تُنشأ
-    await expect(d.exec(`begin; ${M1}; commit;`)).rejects.toThrow(/still without a cohort/);
+    await expect(d.exec(`begin; ${M1}; commit;`)).rejects.toThrow(/returned none for participant 00000000-0000-4000-8000-/);
     await d.exec('rollback').catch(() => {});
     expect(await status(d, P(1))).toBe('registered');
     expect(await n(d, `select count(*)::int n from leaders.audit_log`)).toBe(0);
     expect(await n(d, `select count(*)::int n from pg_tables where tablename = 'backup_20261128_duplicates_backfill'`)).toBe(0);
+  });
+
+  it('ثلاثة حسابات بهاتف واحد: يبقى الأحدث دخولًا ويُؤرشف الاثنان بالباقي نفسه', async () => {
+    const d = await db(`insert into leaders.participants (id, full_name, email, phone, organization_id, source, last_login_at, created_at)
+      values ('${P(11)}', 'ثالث', 'a3@gmail.com', '966501111111', '${ORG}', 'invite', '2026-11-10', '2026-10-02')`);
+    await d.exec(M1);
+    expect([await status(d, P(1)), await status(d, P(11)), await status(d, P(2))]).toEqual(['suspended', 'suspended', 'registered']);
+    const log = await rows(d, `select entity_id, after->>'kept_id' k from leaders.audit_log where action = 'participant.duplicate_archived' and after->>'kept_id' = '${P(2)}' order by entity_id`);
+    expect(log.map((r) => r.entity_id)).toEqual([P(1), P(11)]);
+    await d.exec(M2);
+  });
+
+  it('سطر restore يعيد الحال: المؤرشف إلى حاله، والإلحاقات وسجلها، والدفعات التي أنشأها الإلحاق وبقيت فارغة', async () => {
+    const d = await db();
+    await d.exec(M1);
+    expect(await n(d, `select count(*)::int n from leaders.backup_20261128_duplicates_backfill where kind = 'cohort'`)).toBe(2);
+    await d.exec(M1_REAL.match(/^-- restore: (.*)$/m)[1]);
+    expect(await status(d, P(1))).toBe('registered');
+    expect(await n(d, 'select count(*)::int n from leaders.enrollments')).toBe(0);
+    expect(await n(d, 'select count(*)::int n from leaders.cohort_placements')).toBe(0);
+    expect(await n(d, 'select count(*)::int n from leaders.cohorts')).toBe(0);
   });
 
   it('التحقق الذاتي يرمي إن كان أحد في دفعتين', async () => {

@@ -814,7 +814,11 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
   });
   must(await db.from('placements').upsert(rows));
   const to = statusAfterApprove(p.status);
-  if (to) await db.from('participants').update({ status: to }).eq('id', id);
+  if (to) {
+    const res = await db.from('participants').update({ status: to }).eq('id', id);
+    // الحالة الجديدة قائمة فيحجز الحساب هاتفه: تعارض الفهرس يُرد باسم الحساب القائم لا خطأ خادم
+    if (isPhoneConflict(res.error)) throw await phoneConflictFail(p.phone, 'admin', id);
+  }
   await audit('admin', a.email, 'placement.approve', 'participants', id, before, { rows, ...extra });
   // البريد يُنتظر: نسخة الدالة قد تنتهي بعد الرد فتضيع رسالة لم تُنتظر، والاعتماد الجماعي يرسل واحدة بعد أخرى فلا تتسابق
   // قراءة العداد فتتجاوز الحصة. المحجوب بالحصة يدخل الطابور (sendMail)، والمشارك يرى اعتماده في رحلته على كل حال
@@ -922,11 +926,29 @@ export async function setStatus(a: Admin, b: Body) {
   if (statusNeedsReason(b.status) && !reason) throw new Fail('اكتب سبب الإيقاف أو الانسحاب: يُحفظ في ملف المشارك ويُبلَّغ به', 400, 'reason');
   // من هو على الحالة المطلوبة أصلًا يُتخطى: لا سجل ولا بريد مكرر
   // counting-exempt: حالة معرّفات اختارها المدير من قائمته (listFilter) قبل تغييرها، لا عدّ
-  const current = (must(await db.from('participants').select('id, status').in('id', ids)) ?? []) as any[];
-  const todo = current.filter((p) => p.status !== b.status).map((p) => p.id as string);
+  const current = (must(await db.from('participants').select('id, status, phone').in('id', ids)) ?? []) as any[];
+  let todo = current.filter((p) => p.status !== b.status).map((p) => p.id as string);
+  // إعادة موقوف أو منسحب (ومنه المكرر المؤرشف) إلى حالة قائمة تحجز هاتفه: إن كان الهاتف لحساب قائم آخر لا يُعاد، ويُسمّى القائم.
+  // الفردي يُرد بـ409، والجماعي يتخطاه ويعدّه في phone_conflicts
+  const phoneConflicts: any[] = [];
+  const reviving = (p: any) => ['suspended', 'withdrawn'].includes(p.status) && !['suspended', 'withdrawn'].includes(b.status) && p.phone;
+  for (const p of current.filter((x) => todo.includes(x.id) && reviving(x))) {
+    const owner = await phoneOwner(p.phone, p.id);
+    if (!owner) continue;
+    if (!bulk) throw adminPhoneTaken(owner);
+    phoneConflicts.push({ participant_id: p.id, existing: adminPhoneTaken(owner).extra.existing });
+  }
+  todo = todo.filter((id) => !phoneConflicts.some((c) => c.participant_id === id));
+  const phoneOf = new Map(current.map((p) => [p.id as string, p.phone]));
   const was = new Map(current.map((p) => [p.id as string, p.status as string]));
   for (const pid of todo) {
-    must(await db.from('participants').update({ status: b.status }).eq('id', pid));
+    const res = await db.from('participants').update({ status: b.status }).eq('id', pid);
+    if (isPhoneConflict(res.error)) {
+      if (!bulk) throw await phoneConflictFail(phoneOf.get(pid), 'admin', pid);
+      phoneConflicts.push({ participant_id: pid });
+      continue;
+    }
+    must(res);
     await audit('admin', a.email, 'participant.status', 'participants', pid, null, { status: b.status, ...(reason ? { reason } : {}), ...(bulk ? { bulk: ids.length } : {}) });
     if (reason) await OB.record(pid, { code: 'account_status', ref: `${b.status}:${new Date().toISOString().slice(0, 10)}`, ...RULES.account_status({ status: b.status, reason }) });
     // D20: من ينسحب قبل فتح أول باب يُرد مقعده إلى عقد جهته
@@ -946,7 +968,8 @@ export async function setStatus(a: Admin, b: Body) {
     }
   }
   // D05: الحالة لا تُصدر شهادة؛ تصدر من اعتماد التقييم الختامي بقرار اجتاز أو اجتاز بملاحظات (final.ts)
-  return { success: true, certificate: null, done: todo.length, skipped: ids.length - todo.length };
+  const done = todo.length - phoneConflicts.filter((c) => todo.includes(c.participant_id)).length;
+  return { success: true, certificate: null, done, skipped: ids.length - done, ...(phoneConflicts.length ? { phone_conflicts: phoneConflicts } : {}) };
 }
 
 // إعادة القياس: يُلغى القياس الحالي ويُفتح جديد، والمستوى المعتمد يبقى حتى يُعتمد غيره
@@ -974,7 +997,8 @@ export async function resetAssessment(a: Admin, b: Body) {
     }
     await db.from('assessments').update({ status: 'void' }).eq('participant_id', p.id).neq('status', 'void');
     await db.from('placements').delete().eq('participant_id', p.id).is('approved_at', null);
-    await db.from('participants').update({ status: 'profiled' }).eq('id', p.id);
+    const st = await db.from('participants').update({ status: 'profiled' }).eq('id', p.id);
+    if (isPhoneConflict(st.error)) throw await phoneConflictFail((await db.from('participants').select('phone').eq('id', p.id).maybeSingle()).data?.phone, 'admin', p.id);
     await audit('admin', a.email, 'assessment.reset', 'participants', p.id, null, { reason, assessment_id: cur?.id || null });
     // البريد من حصة الرسائل الجماعية (يُصفّ عند بلوغ الحد اليومي)، وتعذّره لا يُسقط الطلب المسجَّل: البطاقة في الموقع تكفي
     if (cur && p.email && !p.is_demo) {

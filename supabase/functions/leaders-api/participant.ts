@@ -431,6 +431,8 @@ export async function authGoogle(b: Body, ctx: Ctx) {
   if (!p) {
     // حساب جديد: يتأكد صاحبه أنه مشارك (لا خبير ولا منسق جهة) قبل إنشائه، ويضيف رمز جهته إن وُجد
     if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '', roles: await otherRoles(id.email) };
+    // لا فحص هاتف هنا: حساب Google يُنشأ بالاسم والبريد وحدهما ولا هاتف فيه (phone: null)، فلا يحجز رقمًا ولا يصطدم بالفهرس.
+    // الهاتف يُضاف لاحقًا من الملف (profileSave)، وهناك يُرد إن كان لحساب قائم آخر
     const r = await sponsorFor(b, ctx.ip || id.email, id.email);
     p = must(await db.from('participants').insert({
       email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
