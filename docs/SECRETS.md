@@ -11,6 +11,8 @@
 | `LEADERS_TOKEN_PEPPER` | **نعم** (الدالة ترفض الإقلاع بدونه) | `leaders-api/core.ts` | ملح هاش رموز الدخول والجلسات، فلا يكفي تسريب القاعدة وحده | تدويره يُبطل كل الجلسات والرموز الجارية؛ يُفعل خارج ساعات الورش |
 | `LEADERS_CERT_SIGNING_KEY` | نعم قبل أول شهادة | `certificates.ts` | مفتاح توقيع الشهادات، مستقل عن الفلفل (D05)، 32 حرفًا على الأقل. بلاه لا تصدر شهادة، وتظهر في فحص الصحة | `openssl rand -hex 32`، ولا يُدوَّر إلا بإبقاء السابق في `LEADERS_CERT_PREVIOUS_KEYS` |
 | `LEADERS_CERT_KEY_ID` | لا (k1) | `certificates.ts` | معرّف المفتاح الحالي، يُكتب أمام كل توقيع (`k1:...`) | يُغيَّر مع كل تدوير (k2 ثم k3) |
+| `PDF_RENDER_URL` | لا (بلاه يبني المتصفح الملف) | `leaders-api/pdf-ticket.ts` | عنوان مولّد PDF المتجهي (`workers/pdf-render`)، مثل `https://pdf.sunkvalue.com` | عند تغيير النطاق |
+| `PDF_RENDER_SECRET` | لا (مع العنوان) | `leaders-api/pdf-ticket.ts`، وسر Worker بالقيمة نفسها | توقيع تذاكر المولّد (HMAC، عشر دقائق)، 32 حرفًا على الأقل | `openssl rand -hex 32` في الطرفين معًا |
 | `LEADERS_CERT_PREVIOUS_KEYS` | لا | `certificates.ts` | المفاتيح السابقة للتحقق وحده، بصيغة `{"k1":"..."}`، فيبقى ما صدر صحيحًا بعد التدوير | يُضاف إليه المفتاح الخارج عند كل تدوير |
 | `RESEND_API_KEY` | نعم للبريد | `core.ts`، `_shared/mail.ts`، `admin-api`، `user-api`، `send-otp` | إرسال رموز الدخول والإشعارات؛ غيابه = `mail_unconfigured` وتنبيه فوري | من لوحة Resend |
 | `LEADERS_MAIL_FROM` | لا (افتراضي في `_shared/mail.ts`) | `core.ts` | عنوان المرسل | مع النطاق الموثّق في Resend |

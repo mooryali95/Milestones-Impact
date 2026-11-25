@@ -20,6 +20,9 @@ import {
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { freezeIssued, rejectionStats } from './doc-quality.js';
+import { docFormFor } from './doc-form.js';
+import { cohortIdentity } from './cohort-identity.js';
+import { pdfTicket } from './pdf-ticket.ts';
 import type { Admin } from './admin.ts';
 import { trackingFor, trackingOf } from './tracking.ts';
 import { get as finalGet } from './final.ts';
@@ -134,9 +137,11 @@ export async function get(p: any) {
     // هوية المشارك ملف تعريفه (إطار الأولوية بمستواه فيه، 9 ملفات)، لا المستوى الملخص (قرار المالك 2026-11-25).
     // عمق كل فصل بمستوى إطاره (sections[].level)، وكثافة الصفحة بملف التعريف (spine.js densityFor)
     // البيان الواحد للمسار (track-manifest.js): منه الكثافة والعدسة في الواجهة
-    track_key: trackKey(d.levels), profile: trackManifest(trackKey(d.levels) || '', d.priority)?.profile || { key: profileKey(d.levels, d.priority), level: null, dimension: d.priority || null },
+    track_key: trackKey(d.levels), profile: (({ profile, profile_level, priority }) => ({ key: profile, level: profile_level, dimension: priority }))(trackManifest(trackKey(d.levels), d.priority)),
     track: d.track ? { title: d.track.title_ar, brief: d.project?.text || null, priority: d.weighted } : null,
     initiative: d.initiative,
+    // اسم النسخة المؤسسية وحجمها من المسار (document-forms.js)، لزر تحميلها
+    doc_form: docFormFor({ levels: d.levels, priority: d.priority || null }),
     sections: d.sections.map(sectionView),
     checks: d.checks, readiness: d.readiness, ready_min: READY_MIN,
     // ملخص مقترح من البطاقة لمن كثافته summary: auto (spine.js densityFor)؛ لا يُحفظ حتى يحفظه المشارك
@@ -207,6 +212,12 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       // شعار الجهة ولونها للجهة النشطة وحدها، كما في participant.ts orgLogo
       org: org ? { name: org.name, logo: org.status === 'active' ? org.logo || null : null, color: org.status === 'active' ? org.color || null : null } : (p.organization_name ? { name: p.organization_name, logo: null, color: null } : null),
       cohort: cohort && !cohort.is_default ? cohort.name : null,
+      // هوية الدفعة (اسم البرنامج وشعاره ولونه، cohorts.identity): توقيع بعد الجهة، وتُجمَّد مع اللقطة كهوية الجهة
+      cohort_brand: cohort && !cohort.is_default ? cohortIdentity(cohort) : null,
+      // شكل النسخة المؤسسية من المسار (document-forms.js): يُحل هنا، ويُجمَّد في لقطة الاعتماد
+      track_key: trackKey(d.levels), priority: d.priority || null,
+      doc_form: docFormFor({ levels: d.levels, priority: d.priority || null }),
+      app_url: CONFIG.appUrl,
       track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
       // profile: هوية المشارك (ملف تعريفه) لاسم الوثيقة المطبوعة؛ level باقٍ لقالبها الحالي حتى ينتقل إلى profile
       level: overallLevel(d.levels), profile: profileKey(d.levels, d.priority), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
@@ -292,7 +303,36 @@ export async function demoDoc(p: any) {
 }
 
 export async function doc(p: any) {
-  return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id) };
+  // تذكرة مولّد PDF على الخادم (workers/pdf-render) إن ضُبط؛ وإلا يبني المتصفح الملف كما كان (pdf.js)
+  return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id), pdf: await pdfTicket(p.id).catch(() => null) };
+}
+
+// ── التحقق العام من وثيقة معتمدة ببصمتها (رمز QR في صفحة الاعتماد): ما تعرضه الوثيقة على غلافها وحده، بلا محتوى ولا بريد ──
+const DOC_CHECK_LIMIT = 40; // طلبًا لكل عنوان في 10 دقائق، كالتحقق من الشهادة
+export async function verifyDoc(b: Body, ctx: { ip: string | null; ua: string | null }) {
+  const fp = String(b.fingerprint || '').trim().toUpperCase();
+  const valid = /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(fp);
+  if (ctx.ip) {
+    const since = new Date(Date.now() - 10 * 60e3).toISOString();
+    const { count, error } = await db.from('document_checks').select('id', { count: 'exact', head: true }).eq('ip', ctx.ip).gte('created_at', since);
+    if (!error && (count ?? 0) >= DOC_CHECK_LIMIT) throw new Fail('طلبات كثيرة، حاول بعد دقائق', 429, 'rate');
+  }
+  const { data: rows } = valid
+    ? await db.from('capstones').select('status, approved_at, snapshot, participants(is_demo)').eq('status', 'approved').eq('snapshot->issued->>fingerprint', fp).limit(1)
+    : { data: [] as any[] };
+  const row = ((rows || []) as any[]).find((r) => r?.participants && !r.participants.is_demo) || null;
+  // السجل اختياري: قبل ترحيله يعمل التحقق ولا يُسجَّل
+  await db.from('document_checks').insert({ fingerprint: valid ? fp : null, found: !!row, ip: ctx.ip, user_agent: ctx.ua }).then(() => null, () => null);
+  if (!row) return { success: true, found: false };
+  const s = row.snapshot || {}, m = { ...(s.meta || {}), ...(s.issued?.meta || {}) };
+  return {
+    success: true, found: true, authentic: true,
+    document: {
+      fingerprint: fp, ref: `${m.ref || 'MI-CP'}-V${m.version || 1}`, initiative: m.initiative || null,
+      form: m.doc_form?.name || null, org: m.org?.name || null, program: m.cohort_brand?.program || null,
+      approved_at: row.approved_at, issuer: 'Milestone Impact',
+    },
+  };
 }
 
 // «قيم رُفضت للمراجعة»: قواعد الرفض على إجابات فصول المبادرة الحالية، محسوبة للقراءة لحظة الطلب (doc-quality.js rejectionStats).

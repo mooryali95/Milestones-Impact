@@ -69,7 +69,7 @@ describe('عدسة المسار في المسارات الـ27', () => {
       if (levels[d] === 'advanced') expect(mine.length).toBe(chapters);
     }
     const man = trackManifest(key);
-    const profile = man.profile;
+    const profile = { key: man.profile, level: man.profile_level };
     expect(man.levels).toEqual(levels);
     for (const x of secs) expect(chapterLens(man, { dimension: x.dimension })).toBe(levels[x.dimension]);
     expect(man.estimate_hours[0]).toBeLessThan(man.estimate_hours[1]);
@@ -119,9 +119,10 @@ describe('لا مستوى ملخص في مسارات المشارك على ال�
 
 describe('بيان المسار مصدر واحد', () => {
   it('مفتاح غير صالح يعيد null، والأولوية المحسومة تغيّر ملف التعريف وحده', () => {
-    expect(trackManifest('X')).toBeNull();
-    expect(trackManifest('M1I1L3').profile.key).toBe('milestone-beginner');
-    expect(trackManifest('M1I1L3', 'impact').profile.key).toBe('impact-beginner');
+    expect(trackManifest('X').track).toBeNull();
+    expect(trackManifest('X').density).toEqual(trackManifest('M2I2L2').density);
+    expect(trackManifest('M1I1L3').profile).toBe('milestone-beginner');
+    expect(trackManifest('M1I1L3', 'impact').profile).toBe('impact-beginner');
   });
   it('الواجهة لا تحسب الكثافة من المستويات: Capstone.jsx يقرؤها من trackManifest', () => {
     const src = readFileSync(join(__dirname, 'screens/Capstone.jsx'), 'utf8');

@@ -182,6 +182,7 @@ export const MIGRATIONS = [
   '20261128180000_leaders_phone_unique',
   '20261128190000_leaders_account_emails_merge',
   '20261128200000_leaders_participant_messages',
+  '20261129100000_leaders_cohort_identity',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -278,4 +279,5 @@ export const MIGRATION_GATES = {
   '20261128170000_leaders_duplicates_and_cohort_backfill': ["tolerant", "ترحيل بيانات وحده: لا عمود ولا دالة دائمة تقرؤها الدوال. الحساب الموقوف ترده الدوال القائمة"],
   '20261128180000_leaders_phone_unique': ["tolerant", "الدوال تتحقق من الهاتف قبل الكتابة بلا الفهرس (phone-guard.ts يقرأ الحسابات بصيغ الرقم)، والفهرس سند"],
   '20261128200000_leaders_participant_messages': ["tolerant", "الدوال تتسامح مع غيابه: تعذّر قراءة participant_mail_prefs يُرسل البريد كما كان بلا ترويسة ولا تسجيل، والطابور يعيد الإدراج بلا عمود headers، ومركز الرسائل يرد 503 برسالة"],
+  '20261129100000_leaders_cohort_identity': ["tolerant", "الوثيقة تعمل بلا هوية دفعة قبل الترحيل (cohortIdentity يعيد null)، والحفظ يرد 503 برسالة (cohort-brand.ts)،"],
 };

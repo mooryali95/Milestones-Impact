@@ -160,7 +160,7 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
     const heads = new Map();
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
     pdf.setProperties({ title: meta.title || 'وثيقة', subject: meta.subtitle || '', creator: 'Milestone Impact', author: 'Milestone Impact' });
-    const line = 'MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT';
+    const line = meta.brand ? 'Milestone Impact' : 'MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT';
     const PT = 595.28 / PAGE.w;
     for (const ch of chunks) {
       onProgress(`صفحة ${ch.to + 1} من ${plan.length}…`);
@@ -209,6 +209,39 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
   } finally {
     frame.remove();
   }
+}
+
+/**
+ * الملف المتجهي من الخادم (workers/pdf-render) من HTML الوثيقة نفسه، وإلا الملف المرسوم في المتصفح.
+ * server: { url, ticket } من capstone.doc، أو null. يعيد 'server' أو 'browser'
+ */
+export async function downloadBest(meta, body, { server = null, onProgress = () => {} } = {}) {
+  if (server?.url && server?.ticket) {
+    try {
+      onProgress('يُولَّد الملف…');
+      const html = documentHtml({ ...meta, selfFonts: true }, body, { print: true, base: `${location.origin}/` });
+      const r = await fetch(`${server.url}/pdf`, { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ ticket: server.ticket, html, name: meta.pdfName || meta.title }) });
+      if (!r.ok || !/pdf/.test(r.headers.get('content-type') || '')) throw new Error(`pdf-render ${r.status}`);
+      saveBlob(await r.blob(), meta);
+      onProgress('اكتمل الملف');
+      return 'server';
+    } catch (e) {
+      console.warn('server pdf unavailable, building in the browser:', e?.message || e);
+    }
+  }
+  await downloadPdf(meta, body, { onProgress });
+  return 'browser';
+}
+
+function saveBlob(blob, meta) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${sanitize(meta.pdfName || meta.title)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 /** يبني الملف ويحفظه باسمه. الرابط يُنقر في نافذة المنصة التي أنشأت الملف: نافذة الوثيقة (about:blank) تتجاهل اسم الملف */

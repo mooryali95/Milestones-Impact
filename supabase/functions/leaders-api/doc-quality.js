@@ -324,7 +324,9 @@ export function freezeIssued(snapshot) {
   // بلا أي بريد: يُقرأ في روابط المشاركة
   const sections = doc.sections.map((s) => ({ ...s, fields: (s.fields || []).filter((f) => !/email/i.test(f.key)) }));
   return { fingerprint: fingerprint(snapshot), sections, cost: doc.cost ?? null, summary: doc.summary,
-    meta: { start: m.start ?? null, end: m.end ?? null, sponsor: m.sponsor ?? null, host: m.host ?? null, context: m.context ?? null, initiative: m.initiative ?? null } };
+    // الشكل والهوية مجمّدان مع المحتوى (قرار المالك 2026-11-25): لا تغيّر الوثيقةَ المعتمدة ترقيةُ مسار ولا تغيير شعار
+    meta: { start: m.start ?? null, end: m.end ?? null, sponsor: m.sponsor ?? null, host: m.host ?? null, context: m.context ?? null, initiative: m.initiative ?? null,
+      doc_form: m.doc_form ?? null, org: m.org ?? null, cohort_brand: m.cohort_brand ?? null } };
 }
 
 // ── قيم رُفضت للمراجعة (قرار المالك 2026-11-24): شبكة أمان لضبط قواعد الرفض ببيانات حقيقية ──

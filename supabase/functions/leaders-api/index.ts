@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · cert.verify · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
+//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · cert.verify · doc.verify (التحقق العام من وثيقة مبادرة معتمدة ببصمتها) · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
@@ -60,6 +60,7 @@ import * as FB from './feedback360.ts';
 import * as OB from './observations.ts';
 import * as IN from './insight.ts';
 import * as VS from './visibility.ts';
+import * as CB from './cohort-brand.ts';
 import * as MC from './mail-center.ts';
 import * as NC from './notify-center.ts';
 import * as AG from './agent-admin.ts';
@@ -113,6 +114,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // رابط تجربة حساب العرض (demo.ts): يفتح جلسة مشارك لحساب العرض وحده، بحد معدل لمحاولات الرمز من كل شبكة
   'demo.link-open': (b, ctx) => D.linkOpen(b, ctx),
   'cert.verify': Z.verify,
+  // التحقق العام من وثيقة مبادرة معتمدة ببصمتها (رمز QR في صفحة اعتمادها)، بحد معدل لكل عنوان (capstone.ts verifyDoc)
+  'doc.verify': (b, ctx) => X.verifyDoc(b, ctx),
   'rater.get': I.raterGet,
   'rater.submit': I.raterSubmit,
   'sponsor.get': X.sponsorGet,
@@ -768,6 +771,9 @@ const admin: Record<string, (a: A.Admin, b: Body, ctx?: any) => Promise<unknown>
   'admin.cohort-team': (_a, b) => TM.cohortTeam(b),
   'admin.cohort-visibility': (a, b) => VS.adminCohortGet(a, b),
   'admin.cohort-visibility-save': (a, b) => A.writer(a, VS.adminCohortSave, b),
+  // هوية الدفعة في وثيقة المبادرة (cohort-brand.ts): اسم البرنامج وشعاره ولونه
+  'admin.cohort-identity': (a, b) => CB.adminGet(a, b),
+  'admin.cohort-identity-save': (a, b) => A.writer(a, CB.adminSave, b),
   // معاينة ملف مشارك بعين المستشار أو الخبير المسند: الحمولة الحقيقية نفسها التي تصلهما (file.ts)، للمدير ذي الكتابة
   'admin.preview-as': (a, b) => A.writer(a, FL.adminPreviewAs, b),
   'admin.org-team': (_a, b) => TM.orgTeam(b),

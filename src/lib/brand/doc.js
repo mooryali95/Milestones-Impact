@@ -81,11 +81,31 @@ export const points = (items, empty = 'لا شيء') => (items.length ? `<ul cla
 const cssStr = (v) => String(v ?? '').replace(/[\\"\n\r<>]/g, ' ');
 export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
 const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|https:\/\/|\/(?!\/))/i.test(String(u || '')) ? u : null);
+// ── التباين: لون الجهة أو الدفعة يقود العناصر البنيوية (أرقام الأبواب وخطوطها) بعد فحص آلي، وإلا لون الهوية ──
+// WCAG 2.x: النسبة بين الإضاءتين النسبيتين. الأرقام الكبيرة والخطوط نص كبير أو عناصر غير نصية، فالحد 3:1 على الأبيض
+const lum = (hex) => {
+  let h = String(hex).replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+export const contrastRatio = (a, b = '#FFFFFF') => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+export const ACCENT_MIN_CONTRAST = 3;
+/** أول لون صالح يجتاز فحص التباين على الأبيض من المرشحين بالترتيب (الجهة ثم الدفعة)، وإلا لون الهوية الذهبي */
+export function structuralAccent(...candidates) {
+  for (const c of candidates) if (brandColor(c) && contrastRatio(c) >= ACCENT_MIN_CONTRAST) return { color: brandColor(c), source: c };
+  return { color: C.gold, source: null };
+}
+
+// ── قواعد التشارك (قرار المالك 2026-11-25): الجهة في الصدارة، والبرنامج (هوية الدفعة) سطر توقيع صغير، وMilestone علامة خافتة.
+// شعار الجهة: ارتفاع أقصى 18 مم وعرض أقصى 70 مم ومساحة أمان 3 مم حوله. شعار الدفعة: ارتفاع أقصى 9 مم. علامة Milestone: 6 مم
 function coBrand(b, id, kindLabel) {
   const logo = safeLogo(b.logo);
   const org = logo ? `<img src="${esc(logo)}" alt="${esc(b.name || '')}">`
-    : `<span class="nm"><small>${b.name ? 'Initiative of' : 'Community initiative'}</small>${esc(b.name || 'مبادرة مجتمعية')}</span>`;
-  return `<div class="top"><div class="org">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>
+    : `<span class="nm">${esc(b.name || 'مبادرة مجتمعية')}</span>`;
+  const plogo = safeLogo(b.programLogo);
+  const program = b.program || plogo ? `<div class="prog">${plogo ? `<img src="${esc(plogo)}" alt="${esc(b.program || '')}">` : ''}${b.program ? `<span>${esc(b.program)}</span>` : ''}</div>` : '';
+  return `<div class="top"><div class="org">${org}</div><div class="by"><span>بإعداد</span>${LOGO}</div></div>${program}
     <div class="ref" style="margin-top:4mm;text-align:start;direction:ltr">Document<b>${esc(id)}</b>${esc(kindLabel || '')}</div>`;
 }
 
@@ -99,15 +119,22 @@ export function documentHtml(meta, body, opts = {}) {
   const id = meta.id || docId(meta.kind || 'DOC');
   const year = new Date().getFullYear();
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
-  return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : ''}><head><meta charset="utf-8">
+  // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
+  return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
+${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${esc(meta.title)} · Milestone Impact</title>
 ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">`}
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
-  @bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }
+  ${meta.brand ? '@bottom-right { content: "Milestone Impact"; font: 400 6pt "Noto Sans", sans-serif; letter-spacing: .08em; color: #8A979A; }' : `@bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }`}
   ${meta.brand ? `@top-right { content: "${cssStr(meta.title)}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }` : ''}
   @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 300 7pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${C.muted}; } }
+${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا ترويسة (الطباعة ومولّد الخادم)، والمحتوى يبدأ الصفحة الثانية */
+@page :first { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
+@media print { html:not(.pdf) .mast.co { height: 296.5mm; overflow: hidden; display: flex; flex-direction: column; padding: 18mm 18mm 16mm; break-after: page; margin: 0; }
+  html:not(.pdf) .mast.co .eyebrow { margin-top: auto; } html:not(.pdf) .mast.co h1 { font-size: 34pt; } html:not(.pdf) .mast.co .meta { margin-top: auto; }
+  html:not(.pdf) .mast.co .accent { bottom: 0; height: 2.4mm; } html:not(.pdf) .mast.co .thesis { margin-bottom: 4mm; } }` : ''}
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html { background: ${C.faint}; }
 body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-serif; font-weight: 300; color: ${C.graphite}; font-size: 10pt; line-height: 1.65; }
@@ -116,6 +143,7 @@ body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-
 @media print { html { background: none; } .sheet { max-width: none; padding: 0; } .toolbar { display: none !important; } }
 html.pdf { background: ${C.paper}; } html.pdf .toolbar { display: none !important; }
 html.pdf .sheet { margin: 0; box-shadow: none; max-width: 210mm; width: 210mm; padding-bottom: 0; }
+html.print { background: ${C.paper}; } html.print .toolbar { display: none !important; }
 html.embed { background: transparent; } html.embed .toolbar { display: none !important; }
 html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
 @media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
@@ -194,11 +222,16 @@ h2, h3 { break-after: avoid; }
 .dm { display: inline-block; vertical-align: middle; }
 .mast .stamp { position: absolute; top: 6mm; inset-inline-start: 50%; transform: translateX(50%) rotate(-2deg); border: 1px solid ${C.muted}; color: ${C.muted}; padding: .6mm 4mm; border-radius: 2px; font-size: 8pt; letter-spacing: .05em; background: ${C.paper}; }
 .mast.co .top { direction: rtl; align-items: center; }
-.mast.co .org img { max-height: 64px; max-width: 70mm; display: block; object-fit: contain; }
-.mast.co .org .nm { font-weight: 300; font-size: 17pt; line-height: 1.3; color: ${C.graphite}; display: block; }
+.mast.co .org { padding: 3mm; margin: -3mm; }
+.mast.co .org img { max-height: 18mm; max-width: 70mm; display: block; object-fit: contain; }
+.mast.co .prog { display: flex; align-items: center; gap: 2.5mm; margin-top: 6mm; direction: rtl; font-size: 9pt; font-weight: 400; color: ${C.slate}; }
+.mast.co .prog img { max-height: 9mm; max-width: 40mm; object-fit: contain; display: block; }
+.mast.co .meta { grid-template-columns: repeat(3, 1fr); row-gap: 4mm; }
+.mast.co .meta div:nth-child(3n+1) { border-inline-start: 0; padding-inline-start: 0; }
+.mast.co .org .nm { font-weight: 400; font-size: 17pt; line-height: 1.3; color: ${C.graphite}; display: block; }
 .mast.co .org .nm small { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; color: ${C.muted}; text-transform: uppercase; }
 .mast.co .by { display: flex; align-items: center; gap: 2mm; direction: rtl; font-size: 7.5pt; color: ${C.muted}; }
-.mast.co .by svg { height: 24px; width: auto; display: block; }
+.mast.co .by svg { height: 6mm; width: auto; display: block; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.2mm; }
 .mast.co { padding: 14mm 18mm 12mm; }
 .mast.co .eyebrow { margin-top: 14mm; }
@@ -223,7 +256,7 @@ html.pdf .mast.co .accent { bottom: 0; height: 2.4mm; }
     <span class="eyebrow">${esc(meta.eyebrow || 'Milestone Impact · Report')}</span>
     <h1>${esc(meta.title)}</h1>
     ${meta.subtitle ? `<p class="sub">${esc(meta.subtitle)}</p>` : ''}
-    ${meta.rows?.length ? `<div class="meta">${meta.rows.slice(0, 4).map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
+    ${meta.rows?.length ? `<div class="meta">${meta.rows.slice(0, meta.brand ? 6 : 4).map(([l, v]) => `<div><span>${esc(l)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
     <p class="thesis">من النية… إلى الأثر</p>
   </header>
   ${body}
