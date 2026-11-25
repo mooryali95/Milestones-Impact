@@ -5,14 +5,15 @@
 // التصور: docs/content/2026-11-15-تصور-فهم-المبادرة-وإخراج-وثيقتها-v1.md
 import React, { useState } from 'react';
 import { MEANING, chapterInfo, groupByPhase, phaseOf, FEEDS } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
-import { countAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { CHAPTER_STATUS_AR, countAr, SUBMISSION_STATUS } from '../../../supabase/functions/leaders-api/labels.js';
 import { dimOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
 
 // حالة الفصل بلون واحد في الشريط والقائمة: مكتمل، أو قيد العمل، أو معاد، أو لم يبدأ
 // optional: فصل لا حقل مطلوبًا فيه للمشارك (لا يُحسب في الجاهزية)، فلا يقال عنه «مكتمل»
 export const chapterTone = (s) => (s.status === 'returned' ? 'bad' : s.optional ? 'opt' : s.complete ? 'ok' : s.status === 'draft' || s.status === 'submitted' ? 'warn' : 'idle');
-const TONE_AR = { ok: 'مكتمل', warn: 'قيد العمل', bad: 'أُعيد إليك', idle: 'لم يبدأ', opt: 'اختياري' };
+// الحالات من المصدر الواحد (labels.js)، و«مكتمل» و«اختياري» وصف للجاهزية لا حالة تقديم
+const TONE_AR = { ok: 'مكتمل', warn: CHAPTER_STATUS_AR.draft, bad: SUBMISSION_STATUS.returned, idle: CHAPTER_STATUS_AR.empty, opt: 'اختياري' };
 /** الفصول التي تُحسب في الاكتمال والجاهزية */
 export const countedChapters = (sections) => (sections || []).filter((s) => !s.optional);
 
@@ -120,7 +121,7 @@ export function Navigator({ sections, busy, onOpen, onHandbook }) {
                         <small>{info?.why || dimOf(s.dimension).short}</small>
                         <small className="im-meta">{dimOf(s.dimension).short}{!s.complete && s.missing ? ` · ${countAr(s.missing, 'حقل واحد ناقص', 'حقلان ناقصان', 'حقول ناقصة', 'حقلًا ناقصًا')}` : ''}{feeds.length ? ` · يغذي ${feeds.join('، ')}` : ''}</small>
                       </span>
-                      <span className={`chip ${t === 'idle' || t === 'opt' ? '' : t}`}>{t === 'warn' && s.status === 'submitted' ? 'مسلّم' : TONE_AR[t]}</span>
+                      <span className={`chip ${t === 'idle' || t === 'opt' ? '' : t}`}>{t === 'warn' && s.status === 'submitted' ? CHAPTER_STATUS_AR.submitted : TONE_AR[t]}</span>
                     </button>
                     {ref && onHandbook && <button type="button" className="link small im-book" onClick={() => onHandbook(ref)} aria-describedby={`im-t-${s.id}`}>في الكتاب</button>}
                   </li>

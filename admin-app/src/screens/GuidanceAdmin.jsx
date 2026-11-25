@@ -29,7 +29,7 @@ function Section({ id, title, summary, level = 'green', children }) {
 // المحتوى وآخر تشغيل كامل ناجح بنسبة لا تقل عن 99٪ لبصمة اليوم (النموذج والقواعد والمجموعة والمصحح ومرجع البرنامج)، ثم للدفعات
 // المفعّلة وحدها. إصلاح 2026-11-18: الشرطان معًا، والراسب أولًا بما كان متوقعًا منه، وتشغيل تشخيصي لا يُحسب للبوابة
 const RUN_AR = { running: 'يعمل', passed: 'ناجح', failed: 'دون الحد', stopped: 'متوقف', error: 'تعذّر' };
-const STOP_AR = { stale: 'تغيرت البصمة', max_cost: 'بلغ حد الكلفة', key: 'لا مفتاح' };
+const STOP_AR = { stale: 'تغيرت البصمة', max_cost: 'بلغ حد التكلفة', key: 'لا مفتاح' };
 const KIND_AR = { answer: 'يجيب', unsure: 'لا يتأكد', refuse_model: 'يرفض', refuse_route: 'يرفضه الموجّه' };
 const VERDICT_AR = { answered: 'أجاب', unsure: 'غير متأكد', refused: 'رفض', route: 'رفض الموجّه', error: 'تعذّر' };
 // الأسباب المحفوظة قبل إصلاح المصحح بالإنجليزية: تُعرض بالعربية كذلك
@@ -129,7 +129,7 @@ function GuidanceEval({ canWrite = false, onEdit }) {
       {s.runs.length > 0 && (<>
         <div className="ag-scroll">
           <table className="la-table">
-            <thead><tr><th>التشغيل</th><th>النوع</th><th>الحال</th><th>النجاح</th><th className="gd-opt">الكلفة</th><th className="gd-opt">النسخة</th></tr></thead>
+            <thead><tr><th>التشغيل</th><th>النوع</th><th>الحال</th><th>النجاح</th><th className="gd-opt">التكلفة</th><th className="gd-opt">النسخة</th></tr></thead>
             <tbody>{(allRuns ? s.runs : s.runs.slice(0, 3)).map((r) => (
               <tr key={r.id} data-diag={r.diagnostic ? 'yes' : 'no'}>
                 {/* الدخول إلى النتائج في الخلية الأولى، فيبقى ظاهرًا على الهاتف بلا تمرير */}
@@ -339,7 +339,7 @@ function Breakdown({ title, rows }) {
   if (!rows?.length) return null;
   return (
     <table className="la-table" aria-label={title}>
-      <thead><tr><th>{title}</th><th>أسئلة</th><th>مشاركون</th><th>لم يتأكد</th><th>«أريد التأكد»</th><th>تعذّر</th><th>الكلفة</th></tr></thead>
+      <thead><tr><th>{title}</th><th>أسئلة</th><th>مشاركون</th><th>لم يتأكد</th><th>«أريد التأكد»</th><th>تعذّر</th><th>التكلفة</th></tr></thead>
       <tbody>{rows.map((r) => <tr key={r.id || r.name}><td>{r.name}</td><td>{r.asked}</td><td>{r.participants}</td><td>{r.unsure}</td><td>{r.confirmed}</td><td>{r.errors}</td><td>{usd(r.usd)}</td></tr>)}</tbody>
     </table>
   );

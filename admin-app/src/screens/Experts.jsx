@@ -138,7 +138,7 @@ function Service({ s, rate }) {
         <span><b>{s.participants}</b>مشارك خدمه</span>
         <span><b>{s.attended}</b>جلسة منعقدة{s.no_show ? <small> · {s.no_show} غياب</small> : null}</span>
         <span><b>{s.upcoming}</b>جلسة قادمة</span>
-        <span><b>{reviews}</b>مراجعة{reviews ? <small> · {r.models || 0} نموذج · {r.capstones || 0} مشروع تخرج · {r.requirements || 0} متطلب</small> : null}</span>
+        <span><b>{reviews}</b>مراجعة{reviews ? <small> · {r.models || 0} نموذج · {r.capstones || 0} وثيقة مبادرة · {r.requirements || 0} متطلب</small> : null}</span>
         <span className="ex-cost"><b>{s.cost != null ? money(s.cost) : '·'}</b>التكلفة المحسوبة{rate == null ? <small> · حدّد سعر الساعة</small> : <small> · {money(rate)}/ساعة</small>}</span>
       </div>
       {s.recent?.length ? (

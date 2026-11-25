@@ -47,7 +47,7 @@ export function cleanNote(b, sectionKeys = []) {
   const name = text(b.name, 80);
   const role = text(b.role, 80) || null;
   const body = String(b.body ?? '').trim().slice(0, 2000);
-  if (name.length < 2) throw new Error('اكتب اسمك ليعرف صاحب المبادرة من كتب الملاحظة');
+  if (name.length < 2) throw new Error('اكتب اسمك ليعرف قائد المبادرة من كتب الملاحظة');
   if (body.length < 2) throw new Error('اكتب ملاحظتك');
   const section = sectionKeys.includes(b.section) ? b.section : null;
   return { author_name: name, author_role: role, body, section_key: section };

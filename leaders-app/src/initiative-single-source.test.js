@@ -40,7 +40,7 @@ describe('مصدر واحد لكل معلومة في بناء المبادرة',
     expect(holding('SECTOR_FAMILIES = ')).toEqual(['supabase/functions/leaders-api/logic.js']);
     expect(read('leaders-app/src/guide.js')).toContain('sectorFamily(text)');
   });
-  it('الميثاق وحالة العمل وتقرير الإغلاق وسجل القرارات عروض مولّدة: لا جدول لها في أي ترحيل (جداول النسخ الاحتياطي ليست مصدر بيانات)', () => {
+  it('الميثاق ومسوّغات المبادرة وتقرير الإغلاق وسجل القرارات عروض مولّدة: لا جدول لها في أي ترحيل (جداول النسخ الاحتياطي ليست مصدر بيانات)', () => {
     const mig = readdirSync(resolve(root, 'supabase/migrations')).filter((f) => f >= '20261114140000').map((f) => read(`supabase/migrations/${f}`)).join('\n');
     for (const name of ['business_case', 'charter_page', 'closure', 'gate_decisions', 'decisions']) expect(mig, name).not.toMatch(new RegExp(`create table if not exists leaders\\.(?!backup_)\\w*${name}`, 'i'));
   });

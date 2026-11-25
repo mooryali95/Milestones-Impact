@@ -1,5 +1,5 @@
 // تصور بناء المبادرة (اعتمده المالك 2026-11-14، الخيار ج): docs/content/2026-11-14-تصور-بناء-المبادرة-وحالة-العمل-v1.md
-// الميثاق وحالة العمل عرضان مولّدان من الفصول، والمبرر والتكلفة للتأسيسي، والراعي توضيح لا شرط، وفصل الشراء.
+// الميثاق ومسوّغات المبادرة عرضان مولّدان من الفصول، والمبرر والتكلفة للتأسيسي، والراعي توضيح لا شرط، وفصل الشراء.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -37,7 +37,7 @@ const doc = () => ({
   ],
 });
 
-describe('حالة العمل: الأبعاد الخمسة', () => {
+describe('مسوّغات المبادرة: الأبعاد الخمسة', () => {
   it('خمسة أبعاد بترتيب نموذج الحالات الخمس، ولكل بعد فصوله', () => {
     expect(FIVE_CASES.map((c) => c.key)).toEqual(['strategic', 'economic', 'commercial', 'financial', 'management']);
     for (const c of FIVE_CASES) expect(c.chapters.length).toBeGreaterThan(0);
@@ -78,7 +78,7 @@ describe('ميثاق المبادرة: صفحة مولّدة', () => {
     expect(c['مصدر التمويل']).toBe('الميزانية التشغيلية');
   });
   it('بلا بطاقة لا ميثاق', () => expect(charterData({ sections: [] })).toBeNull());
-  it('الوثيقة الاحترافية: الفهرس أولًا بروابطه، ثم الميثاق وحالة العمل قبل الفصول', () => {
+  it('الوثيقة الاحترافية: الفهرس أولًا بروابطه، ثم الميثاق ومسوّغات المبادرة قبل الفصول', () => {
     const { body } = capstoneReport(doc());
     const i = (t) => body.indexOf(t);
     expect(i('فهرس الوثيقة')).toBeGreaterThan(0);

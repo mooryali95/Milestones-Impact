@@ -644,7 +644,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
                   <small>من فصل «{seek.from}» في وثيقة مبادرتك</small>
                   {seek.found
                     ? <b>اقرأ في هذا الباب قسم «{seek.look_for}»</b>
-                    : <b>الباب الذي يشرح هذا الفصل ليس في كتابك في مستواك الحالي. اسأل مختصًا من صفحة مبادرتك.</b>}
+                    : <b>الباب الذي يشرح هذا الفصل ليس في كتابك في مستواك الحالي. اسأل خبيرًا من صفحة مبادرتك.</b>}
                 </div>
                 {onReturn && <button type="button" className="btn ghost sm" onClick={onReturn}>عد إلى «{seek.from}»</button>}
                 <button type="button" className="link small" aria-label="إخفاء" onClick={() => setSeek(null)}>×</button>

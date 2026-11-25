@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { L } from '../leaders.js';
 import { Spinner, useUI } from '../ui.jsx';
 
-const FAMILY_AR = { access: 'الدخول والأمان', journey: 'الرحلة', capstone: 'مشروع التخرج', sessions: 'الجلسات', organization: 'الجهات', experts: 'شبكة الخبراء', admin: 'تقارير الإدارة', general: 'عامة' };
+const FAMILY_AR = { access: 'الدخول والأمان', journey: 'الرحلة', capstone: 'وثيقة المبادرة', sessions: 'الجلسات', organization: 'الجهات', experts: 'شبكة الخبراء', admin: 'تقارير الإدارة', general: 'عامة' };
 
 export default function MailGallery({ canWrite }) {
   const { toast } = useUI();
