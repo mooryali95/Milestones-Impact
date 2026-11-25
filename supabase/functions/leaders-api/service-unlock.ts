@@ -3,7 +3,9 @@
 // ════════════════════════════════════════════════════════════════
 // الخدمة بشرط 'any' تُتاح حين يبدأ المشارك القراءة أو ينهي التدريب. القاعدة في journey.js (resolveStages)، وهنا إشاراتها
 // من مصادرها القائمة، وتسجيل لحظة الفتح مرة في audit_log (service.unlocked) ومعها بريد واحد.
-// الفتح لا رجعة فيه: سطر service.unlocked يُقرأ إشارةً (unlocked) فلا تنغلق الخدمة ولو حُذف تقدم القراءة لاحقًا.
+// الفتح لا رجعة فيه: صف في service_unlocks (مفتاحه participant_id + stage_key) يُقرأ إشارةً (unlocked) فلا تنغلق الخدمة ولو
+// حُذف تقدم القراءة لاحقًا. والصف هو مفتاح عدم التكرار: insert ... on conflict do nothing returning، ولا سطر سجل ولا بريد إلا
+// لمن عاد له صف، فطلبان متزامنان لا يرسلان بريدين.
 // الفتح اليدوي الاستثنائي هو تدخل الأدمن القائم (participant_stage_overrides بـ open، مسجل في السجل)، ويُسجَّل فتحه هنا أيضًا.
 // برنامج بلا خدمة بشرط 'any' (كل النسخ القديمة) لا يُقرأ له شيء ولا يُكتب: الرحلة كما كانت.
 import { audit, db, sendMail, SERVICE_UNLOCK_SUBJECT, serviceUnlockMail } from './core.ts';
@@ -17,13 +19,13 @@ export async function serviceSignals(p: any, stages: any[]) {
   if (!anyServices(stages).length) return null;
   const [reading, opened] = await Promise.all([
     db.from('reading_progress').select('active_seconds, words').eq('participant_id', p.id),
-    db.from('audit_log').select('after').eq('action', SERVICE_UNLOCKED).eq('entity', 'participant').eq('entity_id', p.id),
+    db.from('service_unlocks').select('stage_key').eq('participant_id', p.id),
   ]);
   if (reading.error) console.error('service signals: reading', reading.error.message);
   if (opened.error) console.error('service signals: unlocked', opened.error.message);
   return {
     readingStarted: (reading.data || []).some(readingStarted),
-    unlocked: new Set<string>((opened.data || []).map((r: any) => r.after?.stage).filter(Boolean)),
+    unlocked: new Set<string>((opened.data || []).map((r: any) => r.stage_key).filter(Boolean)),
   };
 }
 
@@ -43,8 +45,13 @@ export async function recordServiceUnlocks(p: any, journey: any[], signals: any,
   const out: string[] = [];
   for (const st of fresh) {
     try {
-      await audit('system', null, SERVICE_UNLOCKED, 'participant', p.id, null, { stage: st.key, program_id: programId, via: viaOf(st, signals, journey) });
+      const via = viaOf(st, signals, journey);
+      // on conflict do nothing returning: صف يعود لمن سجّل الفتح أولًا وحده، ورفض المفتاح (23505) مثله «سبق»
+      const ins = await db.from('service_unlocks').upsert({ participant_id: p.id, stage_key: st.key, program_id: programId, via }, { onConflict: 'participant_id,stage_key', ignoreDuplicates: true }).select('stage_key');
       signals.unlocked.add(st.key);
+      if (ins.error && ins.error.code !== '23505') throw ins.error;
+      if (ins.error || !(ins.data || []).length) continue;
+      await audit('system', null, SERVICE_UNLOCKED, 'participant', p.id, null, { stage: st.key, program_id: programId, via });
       out.push(st.key);
       if (p.email && !p.is_demo) {
         await sendMail(p.email, SERVICE_UNLOCK_SUBJECT(st.title_ar), serviceUnlockMail(p.full_name, st.title_ar), [], { ref: `service:${p.id}:${st.key}` })

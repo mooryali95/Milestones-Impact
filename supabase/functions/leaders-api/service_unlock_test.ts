@@ -2,7 +2,14 @@
 // والفتح لا رجعة فيه، والبرنامج بلا خدمة بشرط 'any' لا يُقرأ له شيء ولا يُكتب
 import './_test_env.ts';
 import { assertEquals } from 'jsr:@std/assert@1.0.19';
-import { installFake, resendCalls, withNet } from './_fake_db.ts';
+import { installFake as fake, resendCalls, withNet } from './_fake_db.ts';
+// المفتاح الفريد (participant_id, stage_key) كما في القاعدة: الإدراج المكرر يُرفض بـ23505
+const installFake = (t: Record<string, any[]>) => {
+  t.service_unlocks ||= [];
+  const f: any = fake(t, { fail: (table, op) => (table === 'service_unlocks' && (op.kind === 'upsert' || op.kind === 'insert')
+    && f.tables.service_unlocks.some((r: any) => r.participant_id === op.value.participant_id && r.stage_key === op.value.stage_key) ? { code: '23505', message: 'duplicate key' } : null) });
+  return f;
+};
 const { CONFIG } = await import('./core.ts');
 const { recordServiceUnlocks, serviceSignals, SERVICE_UNLOCKED } = await import('./service-unlock.ts');
 const { resolveStages, CONSULT_ANY_DEFAULT } = await import('./journey.js');
@@ -45,8 +52,8 @@ Deno.test('الفتح يُسجَّل مرة ومعه بريد واحد، ولا 
       // فتح الرحلة مرة ثانية: لا سطر ولا بريد جديد
       sig = await serviceSignals(P, STAGES);
       assertEquals(await recordServiceUnlocks(P, journey(sig), sig, 'prog'), []);
-      const rows = f.tables.audit_log.filter((r) => r.action === SERVICE_UNLOCKED);
-      assertEquals([rows.length, rows[0].entity_id, rows[0].after.stage, rows[0].after.via], [1, 'p1', 'consulting', 'reading']);
+      const rows = f.tables.audit_log.filter((r: any) => r.action === SERVICE_UNLOCKED);
+      assertEquals([rows.length, rows[0].entity_id, rows[0].after.stage, rows[0].after.via, f.tables.service_unlocks.length], [1, 'p1', 'consulting', 'reading', 1]);
       const mails = resendCalls(calls);
       assertEquals([mails.length, mails[0].body.subject], [1, 'أُتيحت لك خدمة الاستشارة']);
       // حُذف تقدم القراءة: تبقى مفتوحة بسطر السجل
@@ -78,6 +85,18 @@ Deno.test('الحساب التجريبي: يُسجَّل الفتح ولا بر�
       const sig = await serviceSignals(P, STAGES);
       assertEquals(await recordServiceUnlocks({ ...P, is_demo: true }, journey(sig), sig, 'prog'), ['consulting']);
       assertEquals(resendCalls(calls).length, 0);
+    });
+  } finally { f.restore(); }
+});
+
+Deno.test('طلبان متزامنان: صف واحد وسطر سجل واحد وبريد واحد', async () => {
+  const f = installFake({ reading_progress: [{ participant_id: 'p1', active_seconds: 90 }], audit_log: [], mail_events: [] });
+  try {
+    await withMail(async (calls) => {
+      const [a, b] = await Promise.all([serviceSignals(P, STAGES), serviceSignals(P, STAGES)]);
+      const r = await Promise.all([recordServiceUnlocks(P, journey(a), a, 'prog'), recordServiceUnlocks(P, journey(b), b, 'prog')]);
+      assertEquals(r.flat(), ['consulting']);
+      assertEquals([f.tables.service_unlocks.length, f.tables.audit_log.filter((x: any) => x.action === SERVICE_UNLOCKED).length, resendCalls(calls).length], [1, 1, 1]);
     });
   } finally { f.restore(); }
 });

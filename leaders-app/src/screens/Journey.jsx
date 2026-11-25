@@ -1180,7 +1180,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
           )}
 
           {services.length > 0 && (
-            <Services list={services} onRead={onHandbook} onAsk={(k) => { if (!expanded.has(k)) toggle(k); requestAnimationFrame(() => document.querySelector(`[data-service="${k}"] .timeline`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })); }}>
+            <Services list={services} onRead={approved ? onHandbook : null} onAsk={(k) => { if (!expanded.has(k)) toggle(k); requestAnimationFrame(() => document.querySelector(`[data-service="${k}"] .timeline`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })); }}>
               {(s) => (
                 <Stage key={s.key} stage={s} n="+" level={4} expanded={expanded.has(s.key)} onToggle={() => toggle(s.key)} journey={journey} narrow={narrow} store={store} demo={!!participant.is_demo}
                   onUpdate={onUpdate} onEditProfile={onEditProfile} onHandbook={approved ? onHandbook : null} onImpact={onImpact} onCapstone={approved ? onCapstone : null} onLabItem={onLabItem} setToast={setToast} />

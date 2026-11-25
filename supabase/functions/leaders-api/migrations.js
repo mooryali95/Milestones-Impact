@@ -268,5 +268,5 @@ export const MIGRATION_GATES = {
   '20261128120000_leaders_share_readiness': ["tolerant", "الدالة تتحمل غياب العمود (share.ts): قبله يُنشأ الرابط بلا جاهزية، ولا يُكتب العمود إلا إن طُلب تشغيله"],
   '20261128130000_leaders_charter_beneficiaries': ["tolerant", "محتوى نماذج فقط: حقلان اختياريان جديدان، والدوال تقرأ الحقول كما هي في القاعدة قبله وبعده"],
   '20261128140000_leaders_level_matrix': ["tolerant", "محتوى نماذج ونصوص ملفات تعريف فقط. كل حقل يصير مطلوبًا بهذا الترحيل مخزّن required: false مع شرط"],
-  '20261128150000_leaders_consult_service': ["tolerant", "بيانات المسودة وحدها (journey_stages وstage_requirements الحية)، ولا عمود ولا جدول تقرؤه الدوال. الدوال"],
+  '20261128150000_leaders_consult_service': ["tolerant", "صفوف البرامج الحية (journey_stages وstage_requirements) وجدول جديد service_unlocks تقرؤه الدوال الجديدة"],
 };

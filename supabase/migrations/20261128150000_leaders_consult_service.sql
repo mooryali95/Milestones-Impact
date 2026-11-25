@@ -1,7 +1,9 @@
--- deploy-gate: tolerant بيانات المسودة وحدها (journey_stages وstage_requirements الحية)، ولا عمود ولا جدول تقرؤه الدوال. الدوال
--- الأقدم تقرأ unlock:'any' شرطًا مجهولًا فتعامله «بعد ما قبلها» (stageRules)، ولا يصل ذلك أحدًا: الدفعات تقرأ نسختها المجمدة
--- (program_versions) ولا يمسها الترحيل، والمسودة لا تصل مشاركًا حتى ينشرها الأدمن ويرقّي دفعة بمعاينة compare.
--- إن تُراجع عن الدوال قبل نشر المسودة فشغّل سطر restore أدناه (RUNBOOK.md §2).
+-- deploy-gate: tolerant صفوف البرامج الحية (journey_stages وstage_requirements) وجدول جديد service_unlocks تقرؤه الدوال الجديدة
+-- وحدها. الدوال الأقدم تقرأ unlock:'any' شرطًا مجهولًا فتعامله «بعد ما قبلها» (stageRules)، ولا تعرف service_unlocks.
+-- تنبيه: «المسودة» هنا هي الصفوف الحية. الدفعات المثبتة على نسخة (cohorts.program_version_id) تقرأ نسختها المجمدة ولا يمسها الترحيل،
+-- لكن من لا دفعة له، أو دفعته بلا program_version_id، يقرأ الصفوف الحية مباشرة فيصله التحويل فور تطبيقه. عددهم لكل برنامج في
+-- scripts/db/verify-consult-programs.sql (الفحص 5)، ويُراجع قبل التطبيق على الإنتاج.
+-- إن تُراجع عن الدوال فشغّل سطر restore أدناه (RUNBOOK.md §2).
 -- ════════════════════════════════════════════════════════════════
 -- الاستشارة خدمة (تصور البرامج والرحلة 2026-11-24 v1، المرحلة 2، §6.2؛ اعتمده المالك 2026-11-24)
 -- ════════════════════════════════════════════════════════════════
@@ -13,6 +15,7 @@
 --   3) المراحل المعتمدة عليها (ق4): unlock:'stages' تُحذف منها consulting، وإن فرغت فبعد ojt_coaching (أو «بعد ما قبلها» إن لم
 --      توجد)؛ و«تبدأ مع consulting» تصير «بعد ما قبلها»؛ ومسار مستمر ينتهي بنهايتها يمتد حتى نهاية الرحلة، وما يُشترط قبلها يعود للافتراضي.
 --   4) سطر audit_log لكل مرحلة عُدّلت (program.consult_service).
+--   5) جدول service_unlocks (participant_id, stage_key) فريد: لحظة فتح الخدمة لكل مشارك مرة، ومفتاح عدم تكرار بريدها.
 -- لا يمس program_versions (الحارس المجمد مغلق) ولا cohorts.program_version_id، ولا الجلسات ولا الحجوزات ولا تقديرات الخبراء،
 -- ولا يقطع نسخة (ق7). برنامج فيه القياس البعدي (E-POST) في مرحلة consulting يُترك ويظهر في التقرير.
 -- آمن لإعادة التشغيل: كل خطوة مشروطة بأن الاستشارة ليست خدمة بعد، والنسخة الاحتياطية تُنشأ مرة.
@@ -37,7 +40,7 @@ revoke all on leaders.backup_20261128_consult_service from anon, authenticated;
 -- فالخطوة 3 تسبق التحويل لتجد البرامج نفسها
 create or replace function pg_temp.consult_targets()
 returns table (program_id uuid, has_training boolean, has_ojt boolean) language sql stable as $f$
-  select s.program_id, exists (select 1 from leaders.journey_stages x where x.program_id = s.program_id and x.key = 'training'),
+  select s.program_id, exists (select 1 from leaders.journey_stages x where x.program_id = s.program_id and x.key = 'training' and x.active is not false),
          exists (select 1 from leaders.journey_stages x where x.program_id = s.program_id and x.key = 'ojt_coaching' and x.active is not false)
     from leaders.journey_stages s
    where s.key = 'consulting' and coalesce(s.rules->>'lane', 'stage') <> 'service'
@@ -101,6 +104,20 @@ select 'system', 'migration:20261128150000', 'program.consult_service', 'journey
        jsonb_build_object('rules', b.rules), jsonb_build_object('rules', u.after)
   from upd u left join leaders.backup_20261128_consult_service b on b.kind = 'stage' and b.program_id = u.program_id and b.ref = 'consulting';
 
+-- 5) لحظة فتح الخدمة لكل مشارك (service-unlock.ts): الصف الفريد مفتاح عدم التكرار، فلا سطر سجل ولا بريد إلا لمن أُدرج صفه.
+-- تكتبه الدالة بمفتاح الخدمة وحدها؛ لا وصول لـanon ولا authenticated. reading_progress مفهرس بمفتاحه الأساسي (participant_id, module_id)
+-- فقراءة «بدأ القراءة» بالمشارك لا تحتاج فهرسًا جديدًا
+create table if not exists leaders.service_unlocks (
+  participant_id uuid not null references leaders.participants (id) on delete cascade,
+  stage_key text not null,
+  program_id uuid,
+  via text,
+  created_at timestamptz not null default now(),
+  primary key (participant_id, stage_key)
+);
+alter table leaders.service_unlocks enable row level security;
+revoke all on leaders.service_unlocks from anon, authenticated;
+
 -- تحقق: لا مرحلة consulting في المسودة بلا lane=service إلا ما فيها القياس البعدي (يُسمى في التقرير)
 do $$
 declare n int;
@@ -110,5 +127,7 @@ begin
      and not exists (select 1 from leaders.stage_requirements e where e.program_id = s.program_id and e.stage_key = 'consulting' and e.code = 'E-POST' and e.active is not false);
   if n > 0 then raise exception 'consult_service: % consulting stage(s) still not a service', n; end if;
 end $$;
+
+insert into leaders.schema_migrations (name) values ('20261128150000_leaders_consult_service') on conflict do nothing;
 
 insert into leaders.schema_migrations (name) values ('20261128150000_leaders_consult_service') on conflict do nothing;

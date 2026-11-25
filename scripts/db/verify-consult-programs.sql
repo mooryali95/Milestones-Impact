@@ -32,10 +32,24 @@ select p.name as program, v.number as version,
 
 -- 3) بعد الترحيل: سطور السجل، وعدد ما بقي مرحلة عادية في المسودة (المتوقع 0 إلا ما فيه القياس البعدي)
 select (select count(*) from leaders.audit_log where action = 'program.consult_service') as audit_rows,
-       (select count(*) from leaders.journey_stages s where s.key = 'consulting' and coalesce(s.rules->>'lane', 'stage') <> 'service') as still_regular;
+       (select count(*) from leaders.journey_stages s where s.key = 'consulting' and coalesce(s.rules->>'lane', 'stage') <> 'service'
+          and not exists (select 1 from leaders.stage_requirements e where e.program_id = s.program_id and e.stage_key = 'consulting' and e.code = 'E-POST' and e.active is not false)) as still_regular;
 
 -- 4) بعد الترقية: من فُتحت له الخدمة لكل دفعة (service.unlocked) ولماذا
-select c.name as cohort, a.after->>'via' as via, count(distinct a.entity_id) as participants
-  from leaders.audit_log a join leaders.enrollments e on e.participant_id::text = a.entity_id join leaders.cohorts c on c.id = e.cohort_id
- where a.action = 'service.unlocked'
+select c.name as cohort, u.via, count(distinct u.participant_id) as participants
+  from leaders.service_unlocks u join leaders.enrollments e on e.participant_id = u.participant_id join leaders.cohorts c on c.id = e.cohort_id
  group by 1, 2 order by 1, 2;
+
+-- 5) التعرض للصفوف الحية: مشاركون في كل برنامج مستهدف يقرؤون البرنامج الحي لا نسخة مجمدة (لا دفعة لهم، أو دفعتهم بلا
+-- program_version_id)، فيصلهم التحويل فور تطبيق الترحيل. أي رقم غير صفر يُراجع قبل التطبيق
+select p.name as program,
+       count(distinct pa.id) filter (where e.cohort_id is null) as no_cohort,
+       count(distinct pa.id) filter (where e.cohort_id is not null and c.program_version_id is null) as cohort_unpinned
+  from leaders.programs p
+  join leaders.journey_stages s on s.program_id = p.id and s.key = 'consulting'
+  cross join leaders.participants pa
+  left join leaders.enrollments e on e.participant_id = pa.id
+  left join leaders.cohorts c on c.id = e.cohort_id
+ where coalesce(pa.is_demo, false) = false
+   and ((e.cohort_id is null and p.is_default) or (c.program_id = p.id and c.program_version_id is null))
+ group by p.name order by p.name;
