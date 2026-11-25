@@ -209,3 +209,89 @@ export function FullTimeline({ participantId }) {
     </section>
   );
 }
+
+// أسماء الجداول في معاينة الربط: ما يعرفه المدير، والباقي باسمه التقني
+const MERGE_TABLE_AR = {
+  participant_emails: 'البريد', enrollments: 'الإلحاق بالدفعة', cohort_placements: 'سجل الإلحاق', assessments: 'القياس', assessment_answers: 'إجابات القياس',
+  participant_requirements: 'البنود', capstones: 'وثيقة المبادرة', capstone_updates: 'تحديثات المبادرة', points_ledger: 'النقاط', reading_progress: 'القراءة',
+  handbook_progress: 'كتاب القائد', model_submissions: 'النماذج', certificates: 'الشهادات', payments: 'المدفوعات', guidance_messages: 'محادثة التوجيه',
+  passkeys: 'مفاتيح المرور', auth_sessions: 'الجلسات', participants: 'الملف', coaching_sessions: 'جلسات التوجيه', workshop_attendance: 'حضور الورش',
+};
+const MERGE_KIND_AR = { moved: 'ينتقل', deleted: 'يتعارض فيبقى ما في الحساب الباقي', inserted: 'يُضاف', fields: 'حقول تُكمَّل', status: 'تغيير حال', revoked_at: 'تُنهى', sponsor_token_hash: 'رابط الراعي' };
+
+// البريد الأساسي والبدائل، وربط حساب آخر (ترحيل 20261128190000): المعاينة تعرض ما سينتقل ببصمة، والتطبيق بها وحدها.
+// الحساب الذي دخل منه صاحبه آخر مرة يبقى أساسيًا ويُدمج فيه الآخر، وكل ما يُنقل يُحفظ فيُرجع عند الحاجة
+export function AccountEmails({ participantId, canWrite, suggest = '', onChanged, onMoved }) {
+  const { toast, confirm } = useUI();
+  const [d, setD] = useState(null);
+  const [other, setOther] = useState(suggest);
+  const [plan, setPlan] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(() => L('admin.participant-emails', { participant_id: participantId }).then(setD), [participantId]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (suggest) { setOther(suggest); setPlan(null); } }, [suggest]);
+  const preview = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    const r = await L('admin.participant-link-plan', { participant_id: participantId, other: other.trim() });
+    setBusy(false);
+    if (!r.success) { toast(r.message); return; }
+    setPlan(r);
+  };
+  const apply = async () => {
+    if (!(await confirm(`يبقى حساب ${plan.kept.full_name} (${plan.kept.email}) ويُدمج فيه الحساب الآخر ويُوقف، ويصير بريده بديلًا يدخل به. متابعة؟`))) return;
+    setBusy(true);
+    const r = await L('admin.participant-link', { participant_id: participantId, other: other.trim(), plan_hash: plan.plan_hash });
+    setBusy(false);
+    if (!r.success) { toast(r.message); if (r.code === 'stale') setPlan(null); return; }
+    toast('رُبط الحسابان');
+    setPlan(null); setOther('');
+    if (r.kept_id !== participantId) { onMoved?.(r.kept_id); return; }
+    load(); onChanged?.();
+  };
+  const act = async (action, email, done, ask) => {
+    if (!(await confirm(ask, { danger: action.endsWith('remove') }))) return;
+    const r = await L(action, { participant_id: participantId, email });
+    toast(r.success ? done : r.message);
+    if (r.success) { load(); onChanged?.(); }
+  };
+  if (!d) return <section className="la-card" aria-busy="true"><h3>البريد والحسابات المرتبطة</h3><p className="la-muted">لحظة…</p></section>;
+  if (!d.success) return <section className="la-card"><h3>البريد والحسابات المرتبطة</h3><p className="la-muted">{d.message}</p></section>;
+  return (
+    <section className="la-card" aria-labelledby="pf-mail-h" data-testid="account-emails">
+      <h3 id="pf-mail-h">البريد والحسابات المرتبطة</h3>
+      <dl className="la-dl">
+        <dt>البريد الأساسي</dt><dd dir="ltr">{d.primary.email}</dd>
+        <dt>بريد بديل</dt>
+        <dd>{d.alternates.length ? (
+          <ul className="pf-mini">{d.alternates.map((x) => (
+            <li key={x.email}><span dir="ltr">{x.email}</span> <small className="la-muted">· {x.verified_at ? `موثّق ${dateOnly(x.verified_at)}` : 'لم يدخل به بعد'}</small>
+              {canWrite && <> · <button type="button" className="la-link" onClick={() => act('admin.participant-email-primary', x.email, 'صار البريد الأساسي', `يصير ${x.email} البريد الأساسي، ويبقى الحالي بديلًا يدخل به. متابعة؟`)}>اجعله أساسيًا</button>
+                {' '}· <button type="button" className="la-link" onClick={() => act('admin.participant-email-remove', x.email, 'حُذف البريد البديل', `حذف ${x.email}؟ لن يدخل به صاحبه إلى هذا الحساب بعد الآن.`)}>حذف</button></>}
+            </li>
+          ))}</ul>
+        ) : <span className="la-muted">لا بريد بديل. يُضاف حين يُربط بهذا الحساب حساب آخر للشخص نفسه.</span>}</dd>
+      </dl>
+      {canWrite && (
+        <form className="la-row" onSubmit={preview}>
+          <input aria-label="بريد الحساب الآخر أو معرّفه" dir="ltr" placeholder="بريد الحساب الآخر أو معرّفه" value={other} onChange={(e) => { setOther(e.target.value); setPlan(null); }} required />
+          <button className="btn-sm ghost" disabled={busy || !other.trim()}>{busy && !plan ? 'لحظة…' : 'ربط حساب آخر'}</button>
+        </form>
+      )}
+      {suggest && !plan && <p className="la-muted small">الجوال مسجل لحساب قائم. إن كان للشخص نفسه فاربط الحسابين بدل إنشاء حساب ثانٍ.</p>}
+      {plan && (
+        <div className="pf-link-plan" data-testid="link-plan">
+          <p>يبقى <b>{plan.kept.full_name}</b> <span dir="ltr">({plan.kept.email})</span>، آخر دخول {plan.kept.last_login_at ? dateOnly(plan.kept.last_login_at) : 'لا دخول'}.
+            ويُدمج فيه <b>{plan.merged.full_name}</b> <span dir="ltr">({plan.merged.email})</span>، آخر دخول {plan.merged.last_login_at ? dateOnly(plan.merged.last_login_at) : 'لا دخول'}، ثم يُوقف.</p>
+          <ul className="pf-mini">{Object.entries(plan.summary || {}).map(([t, s]) => (
+            <li key={t}><b>{MERGE_TABLE_AR[t] || t}</b>: {Object.entries(s).map(([k, v]) => `${MERGE_KIND_AR[k] || k} ${v}`).join('، ')}</li>
+          ))}</ul>
+          <div className="la-row">
+            <button type="button" className="btn-sm primary" disabled={busy} onClick={apply}>{busy ? 'لحظة…' : 'اربط الحسابين'}</button>
+            <button type="button" className="btn-sm ghost" onClick={() => setPlan(null)}>إلغاء</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

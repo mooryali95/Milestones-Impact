@@ -1747,6 +1747,9 @@ export async function participantsImport(a: Admin, b: Body) {
     // counting-exempt: كشف تكرار البريد عند الاستيراد: أي حساب قائم بالبريد نفسه يمنع إنشاء ثانٍ
     const found = must(await db.from('participants').select('email').in('email', emails.slice(i, i + 100))) as any[];
     for (const f of found || []) existing.add(f.email);
+    // والبريد البديل لحساب قائم (20261128190000) كذلك: القاعدة ترده، فيُعرض قبل الإنشاء
+    const alt = must(await db.from('participant_emails').select('email').in('email', emails.slice(i, i + 100))) as any[];
+    for (const f of alt || []) existing.add(f.email);
   }
   const checked = checkImport(rows, existing) as any[];
   await phoneChecks(checked, org?.id || null);

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261128180000_leaders_phone_unique
+-- as-of migration: 20261128190000_leaders_account_emails_merge
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1669,6 +1669,41 @@ create table if not exists leaders.organizations (
   constraint organizations_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.participant_emails (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  email text not null,
+  is_primary boolean default false not null,
+  verified_at timestamp with time zone,
+  source text default 'admin_link'::text not null,
+  created_at timestamp with time zone default now() not null,
+  constraint participant_emails_alternate_only CHECK ((NOT is_primary)),
+  constraint participant_emails_email_check CHECK (((char_length(email) <= 254) AND (email = lower(btrim(email))) AND (POSITION(('@'::text) IN (email)) > 1))),
+  constraint participant_emails_source_check CHECK ((source = ANY (ARRAY['merge'::text, 'admin_link'::text, 'migration'::text]))),
+  constraint participant_emails_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.participant_merge_rows (
+  id bigint generated always as identity not null,
+  merge_id uuid not null,
+  kind text not null,
+  tbl text not null,
+  col text not null,
+  ref jsonb not null,
+  constraint participant_merge_rows_kind_check CHECK ((kind = ANY (ARRAY['set'::text, 'deleted'::text, 'inserted'::text]))),
+  constraint participant_merge_rows_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.participant_merges (
+  id uuid default gen_random_uuid() not null,
+  kept_id uuid not null,
+  merged_id uuid not null,
+  actor text not null,
+  restored_at timestamp with time zone,
+  created_at timestamp with time zone default clock_timestamp() not null,
+  constraint participant_merges_pkey PRIMARY KEY (id)
+);
+
 create table if not exists leaders.participant_milestones (
   participant_id uuid not null,
   milestone_id uuid not null,
@@ -3166,6 +3201,22 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.participant_emails add constraint participant_emails_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_merge_rows add constraint participant_merge_rows_merge_id_fkey FOREIGN KEY (merge_id) REFERENCES leaders.participant_merges(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_merges add constraint participant_merges_kept_id_fkey FOREIGN KEY (kept_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_merges add constraint participant_merges_merged_id_fkey FOREIGN KEY (merged_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.participant_milestones add constraint participant_milestones_milestone_id_fkey FOREIGN KEY (milestone_id) REFERENCES leaders.program_milestones(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3701,6 +3752,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS organizations_invite_uniq ON leaders.organizat
 
 CREATE UNIQUE INDEX IF NOT EXISTS organizations_name_uniq ON leaders.organizations USING btree (lower(name));
 
+CREATE UNIQUE INDEX IF NOT EXISTS participant_emails_email_uniq ON leaders.participant_emails USING btree (lower(email));
+
+CREATE INDEX IF NOT EXISTS participant_emails_participant_idx ON leaders.participant_emails USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS participant_merge_rows_merge_idx ON leaders.participant_merge_rows USING btree (merge_id);
+
+CREATE INDEX IF NOT EXISTS participant_merges_merged_idx ON leaders.participant_merges USING btree (merged_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS participant_observations_once ON leaders.participant_observations USING btree (participant_id, code, ref) WHERE (code IS NOT NULL);
 
 CREATE INDEX IF NOT EXISTS participant_observations_person ON leaders.participant_observations USING btree (participant_id, created_at DESC);
@@ -4031,6 +4090,12 @@ alter table leaders.ops_status enable row level security;
 alter table leaders.org_coordinators enable row level security;
 
 alter table leaders.organizations enable row level security;
+
+alter table leaders.participant_emails enable row level security;
+
+alter table leaders.participant_merge_rows enable row level security;
+
+alter table leaders.participant_merges enable row level security;
 
 alter table leaders.participant_milestones enable row level security;
 
@@ -4569,6 +4634,26 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.email_owner_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare e text := lower(new.email);
+begin
+  if tg_op = 'UPDATE' and lower(old.email) = e then return new; end if;
+  perform pg_advisory_xact_lock(hashtextextended('leaders.email:' || e, 0));
+  if tg_table_name = 'participant_emails' then
+    if exists (select 1 from leaders.participants where lower(email) = e) then
+      raise exception using errcode = '23505', message = 'email_taken: البريد أساسي لحساب قائم', detail = 'participant_emails_cross_uniq';
+    end if;
+  elsif exists (select 1 from leaders.participant_emails where lower(email) = e) then
+    raise exception using errcode = '23505', message = 'email_taken: البريد بديل لحساب قائم', detail = 'participant_emails_cross_uniq';
+  end if;
+  return new;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.ensure_intake_cohort(p_org uuid)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -4854,6 +4939,229 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.merge_note_set(p_mid uuid, p_rel regclass, p_col text, p_row jsonb, p_new jsonb)
+ RETURNS void
+ LANGUAGE sql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+  values (p_mid, 'set', leaders.merge_qname(p_rel), p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, p_row), 'old', p_row -> p_col, 'new', p_new))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_participants(p_keep uuid, p_dup uuid, p_actor text, p_actor_type text DEFAULT 'system'::text, p_source text DEFAULT 'merge'::text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare
+  k record; d record; mid uuid; fk record; r record; cap jsonb; c text; kv jsonb; dv jsonb;
+  stages text[] := array['registered', 'profiled', 'assessing', 'pending_approval', 'placed', 'enrolled', 'completed'];
+  fill text[] := array['phone', 'job_title', 'organization_name', 'sector', 'years_experience', 'bio', 'cv_path', 'linkedin_url', 'name_en', 'work_scope', 'profile_completed_at'];
+begin
+  if p_keep is null or p_dup is null or p_keep = p_dup then raise exception 'merge_same: حسابان مختلفان مطلوبان'; end if;
+  perform 1 from leaders.participants where id in (p_keep, p_dup) order by id for update;
+  select * into k from leaders.participants where id = p_keep;
+  select * into d from leaders.participants where id = p_dup;
+  if k.id is null or d.id is null then raise exception 'merge_missing: الحساب غير موجود'; end if;
+  if k.is_demo or d.is_demo then raise exception 'merge_demo: الحساب التجريبي لا يُربط'; end if;
+  if k.status in ('suspended', 'withdrawn') then raise exception 'merge_kept_inactive: الحساب الباقي موقوف أو منسحب'; end if;
+  if d.email like 'merged-%@merged.invalid' then raise exception 'merge_already: الحساب مدموج من قبل'; end if;
+
+  insert into leaders.participant_merges (kept_id, merged_id, actor) values (p_keep, p_dup, p_actor) returning id into mid;
+
+  -- أ) البريد والحال: بريد المكرر يصير بديلًا للباقي، وصفه يُوقف بعنوان مقفل
+  perform leaders.merge_note_set(mid, 'leaders.participants', 'email', to_jsonb(d), to_jsonb('merged-' || p_dup || '@merged.invalid'));
+  perform leaders.merge_note_set(mid, 'leaders.participants', 'status', to_jsonb(d), to_jsonb('suspended'::text));
+  update leaders.participants set email = 'merged-' || p_dup || '@merged.invalid', status = 'suspended', updated_at = now() where id = p_dup;
+  insert into leaders.participant_emails (participant_id, email, verified_at, source)
+  values (p_keep, lower(d.email), d.email_verified_at, p_source) returning to_jsonb(participant_emails.*) into kv;
+  insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+  values (mid, 'inserted', 'leaders.participant_emails', 'id', jsonb_build_object('pk', jsonb_build_object('id', kv -> 'id')));
+  for r in update leaders.auth_sessions s set revoked_at = now() where s.participant_id = p_dup and s.revoked_at is null
+           returning to_jsonb(s) - 'revoked_at' || jsonb_build_object('revoked_at', null) j loop
+    perform leaders.merge_note_set(mid, 'leaders.auth_sessions', 'revoked_at', r.j, to_jsonb(now()));
+  end loop;
+
+  -- ب) ملف الباقي: الفارغ يأخذ قيمة المكرر، والحال الأبعد في الرحلة
+  for c in select unnest(fill) loop
+    kv := to_jsonb(k) -> c; dv := to_jsonb(d) -> c;
+    if (kv is null or jsonb_typeof(kv) = 'null') and dv is not null and jsonb_typeof(dv) <> 'null' then
+      perform leaders.merge_note_set(mid, 'leaders.participants', c, to_jsonb(k), dv);
+      execute format('update leaders.participants t set %I = (jsonb_populate_record(null::leaders.participants, $1)).%I where id = $2', c, c)
+        using jsonb_build_object(c, dv), p_keep;
+    end if;
+  end loop;
+  if coalesce(array_position(stages, d.status), 0) > coalesce(array_position(stages, k.status), 0) then
+    perform leaders.merge_note_set(mid, 'leaders.participants', 'status', to_jsonb(k), to_jsonb(d.status));
+    update leaders.participants set status = d.status where id = p_keep;
+  end if;
+  update leaders.participants set updated_at = now() where id = p_keep;
+
+  -- ج) إلحاق قائم بدفعة أخرى والباقي ملحق: يُسحب إلحاق المكرر فلا يصير للباقي دفعتان
+  for r in select to_jsonb(e) j, e.id from leaders.enrollments e
+            where e.participant_id = p_dup and e.status <> 'withdrawn'
+              and exists (select 1 from leaders.enrollments x where x.participant_id = p_keep and x.status <> 'withdrawn' and x.cohort_id <> e.cohort_id) loop
+    perform leaders.merge_note_set(mid, 'leaders.enrollments', 'status', r.j, to_jsonb('withdrawn'::text));
+    update leaders.enrollments set status = 'withdrawn' where id = r.id;
+  end loop;
+
+  -- د) الوثيقة: صفوف تحديثها تشير إلى capstones(participant_id) لا إلى المشارك، فإن لم تكن للباقي وثيقة تُنسخ وثيقة المكرر إليه أولًا
+  --    (بلا رمز الراعي الفريد)، فتنتقل التحديثات، ثم تُحذف وثيقة المكرر في تعارض المفتاح ويعود رمز الراعي إلى النسخة
+  select to_jsonb(x) into cap from leaders.capstones x where x.participant_id = p_dup;
+  if cap is not null and not exists (select 1 from leaders.capstones where participant_id = p_keep) then
+    insert into leaders.capstones select (jsonb_populate_record(null::leaders.capstones, cap || jsonb_build_object('participant_id', p_keep, 'sponsor_token_hash', null))).*;
+    insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+    values (mid, 'inserted', 'leaders.capstones', 'participant_id', jsonb_build_object('pk', jsonb_build_object('participant_id', p_keep)));
+  else
+    cap := null;
+  end if;
+
+  -- هـ) كل جدول يشير إلى المشارك: نقل جماعي، وعند التعارض صفًا صفًا. الوثيقة بعد صفوف تحديثها
+  for fk in
+    select c2.conrelid rel, cl.relname, a.attname col
+      from pg_constraint c2
+      join pg_class cl on cl.oid = c2.conrelid
+      join pg_attribute a on a.attrelid = c2.conrelid and a.attnum = c2.conkey[1]
+     where c2.contype = 'f' and c2.confrelid = 'leaders.participants'::regclass and cardinality(c2.conkey) = 1
+       and cl.relname not in ('auth_sessions', 'webauthn_challenges', 'participant_merges')
+     order by (cl.relname = 'capstones'), cl.relname collate "C", a.attname collate "C"
+  loop
+    begin
+      execute format('with u as (update %1$s t set %2$I = $1 where t.%2$I = $2 returning to_jsonb(t) j)
+                      insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+                      select $3, ''set'', %3$L, %4$L, jsonb_build_object(''pk'', leaders.merge_pk(%3$L::regclass, j), ''old'', to_jsonb($2), ''new'', to_jsonb($1)) from u',
+                     leaders.merge_qname(fk.rel), fk.col, leaders.merge_qname(fk.rel), fk.col)
+        using p_keep, p_dup, mid;
+    exception when unique_violation or exclusion_violation then
+      for r in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = $1', leaders.merge_qname(fk.rel), fk.col) using p_dup loop
+        perform leaders.merge_resolve(mid, fk.rel, fk.col, r.c, r.j, to_jsonb(p_keep));
+      end loop;
+    end;
+  end loop;
+
+  if cap is not null and cap ->> 'sponsor_token_hash' is not null then
+    perform leaders.merge_note_set(mid, 'leaders.capstones', 'sponsor_token_hash', (select to_jsonb(x) from leaders.capstones x where participant_id = p_keep), cap -> 'sponsor_token_hash');
+    update leaders.capstones set sponsor_token_hash = cap ->> 'sponsor_token_hash' where participant_id = p_keep and sponsor_token_hash is null;
+  end if;
+
+  insert into leaders.audit_log (actor_type, actor, action, entity, entity_id, before, after)
+  values (p_actor_type, p_actor, 'participant.merged', 'participants', p_dup::text, jsonb_build_object('status', d.status),
+          jsonb_build_object('status', 'suspended', 'kept_id', p_keep, 'merge_id', mid, 'summary', leaders.merge_summary(mid),
+                             'why', 'حساب ثانٍ للشخص نفسه: دُمج في الحساب الباقي وصار بريده بديلًا له'));
+  return mid;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_pk(p_rel regclass, p_row jsonb)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  select coalesce((select jsonb_object_agg(a.attname, p_row -> a.attname::text)
+                     from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+                    where i.indrelid = p_rel and i.indisprimary), p_row)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_preview(p_keep uuid, p_dup uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare res jsonb; mid uuid;
+begin
+  begin
+    mid := leaders.merge_participants(p_keep, p_dup, 'preview', 'system', 'admin_link');
+    res := leaders.merge_summary(mid);
+    raise exception using errcode = 'P0001', message = 'merge_preview_rollback';
+  exception when sqlstate 'P0001' then
+    if sqlerrm <> 'merge_preview_rollback' then raise; end if;
+  end;
+  return res;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_qname(p_rel regclass)
+ RETURNS text
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  select format('%I.%I', n.nspname, c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.oid = p_rel
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_resolve(p_mid uuid, p_rel regclass, p_col text, p_ctid tid, p_row jsonb, p_new jsonb, p_depth integer DEFAULT 0)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare
+  q text := leaders.merge_qname(p_rel);
+  target jsonb := p_row || jsonb_build_object(p_col, p_new);
+  after jsonb; other jsonb; cond text; ix record; fk record; ch record; oldv jsonb;
+begin
+  if p_depth > 4 then raise exception 'merge_too_deep: %', q; end if;
+  begin
+    execute format('update %s t set %I = (jsonb_populate_record(null::%s, $1)).%I where ctid = $2 returning to_jsonb(t)', q, p_col, q, p_col)
+      into after using target, p_ctid;
+    insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new));
+    return;
+  exception when unique_violation or exclusion_violation then
+    null;
+  end;
+  for ix in
+    select i.indkey::int2[] k, pg_get_expr(i.indpred, i.indrelid) pred
+      from pg_index i
+     where i.indrelid = p_rel and i.indisunique and not (0 = any(i.indkey::int2[]))
+       and (select a.attnum from pg_attribute a where a.attrelid = p_rel and a.attname = p_col) = any(i.indkey::int2[])
+     order by i.indisprimary desc, i.indexrelid
+  loop
+    select string_agg(format('t.%I is not distinct from (jsonb_populate_record(null::%s, $1)).%I', a.attname, q, a.attname), ' and ')
+      into cond from pg_attribute a where a.attrelid = p_rel and a.attnum = any(ix.k);
+    execute format('select to_jsonb(t) from %s t where %s%s and t.ctid <> $2 limit 1', q, cond, coalesce(' and (' || ix.pred || ')', ''))
+      into other using target, p_ctid;
+    exit when other is not null;
+  end loop;
+  for fk in
+    select c.conrelid, a.attname fcol, ra.attname rcol
+      from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+      join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
+     where c.contype = 'f' and c.confrelid = p_rel and cardinality(c.conkey) = 1
+  loop
+    oldv := p_row -> fk.rcol::text;
+    if oldv is null or jsonb_typeof(oldv) = 'null' then continue; end if;
+    for ch in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I',
+                             leaders.merge_qname(fk.conrelid), fk.fcol, q, fk.rcol) using p_row
+    loop
+      if other is null then raise exception 'merge_unresolved: % (يشير إليه %)', q, leaders.merge_qname(fk.conrelid); end if;
+      perform leaders.merge_resolve(p_mid, fk.conrelid, fk.fcol, ch.c, ch.j, other -> fk.rcol::text, p_depth + 1);
+    end loop;
+  end loop;
+  execute format('delete from %s where ctid = $1', q) using p_ctid;
+  insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref) values (p_mid, 'deleted', q, p_col, jsonb_build_object('row', p_row));
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_summary(p_mid uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  select coalesce(jsonb_object_agg(t, s), '{}'::jsonb) from (
+    select split_part(tbl, '.', 2) t, jsonb_object_agg(k, n) s from (
+      select tbl, case when kind = 'set' and tbl = 'leaders.participants' then 'fields'
+                       when kind = 'set' and col = 'participant_id' then 'moved'
+                       when kind = 'set' then col else kind end k, count(*) n
+        from leaders.participant_merge_rows where merge_id = p_mid group by 1, 2) x group by 1) y
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.ops_status_keep_latest()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -4876,6 +5184,23 @@ begin
     return null;
   end if;
   return new;
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.participant_email_make_primary(p_participant uuid, p_email text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare p record; a record; e text := lower(btrim(p_email));
+begin
+  select * into p from leaders.participants where id = p_participant for update;
+  if p.id is null then raise exception 'email_primary_missing: الحساب غير موجود'; end if;
+  select * into a from leaders.participant_emails where participant_id = p_participant and lower(email) = e;
+  if a.id is null then raise exception 'email_primary_not_alias: البريد ليس بديلًا لهذا الحساب'; end if;
+  delete from leaders.participant_emails where id = a.id;
+  update leaders.participants set email = e, email_verified_at = a.verified_at, updated_at = now() where id = p_participant;
+  insert into leaders.participant_emails (participant_id, email, verified_at, source) values (p_participant, lower(p.email), p.email_verified_at, a.source);
 end $function$
 ;
 
@@ -5086,6 +5411,33 @@ begin
   return new;
 end;
 $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.unmerge_participants(p_merge uuid, p_actor_type text, p_actor text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare m record; r record; cols text;
+begin
+  select * into m from leaders.participant_merges where id = p_merge for update;
+  if m.id is null or m.restored_at is not null then return; end if;
+  for r in select * from leaders.participant_merge_rows where merge_id = p_merge order by id desc loop
+    if r.kind = 'set' then
+      execute format('update %1$s t set %2$I = (jsonb_populate_record(null::%1$s, $1)).%2$I where t.%2$I is not distinct from (jsonb_populate_record(null::%1$s, $3)).%2$I and to_jsonb(t) @> $2',
+                     r.tbl, r.col) using jsonb_build_object(r.col, r.ref -> 'old'), r.ref -> 'pk', jsonb_build_object(r.col, r.ref -> 'new');
+    elsif r.kind = 'deleted' then
+      select string_agg(format('%I', a.attname), ', ' order by a.attnum) into cols
+        from pg_attribute a where a.attrelid = r.tbl::regclass and a.attnum > 0 and not a.attisdropped and a.attgenerated = '';
+      execute format('insert into %1$s (%2$s) overriding system value select %2$s from jsonb_populate_record(null::%1$s, $1)', r.tbl, cols) using r.ref -> 'row';
+    else
+      execute format('delete from %s t where to_jsonb(t) @> $1', r.tbl) using r.ref -> 'pk';
+    end if;
+  end loop;
+  update leaders.participant_merges set restored_at = now() where id = p_merge;
+  insert into leaders.audit_log (actor_type, actor, action, entity, entity_id, before, after)
+  values (p_actor_type, p_actor, 'participant.unmerged', 'participants', m.merged_id::text, null, jsonb_build_object('kept_id', m.kept_id, 'merge_id', p_merge));
+end $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.admin_owner_guard()
@@ -5706,6 +6058,10 @@ CREATE OR REPLACE TRIGGER ops_status_keep_latest BEFORE UPDATE ON leaders.ops_st
 CREATE OR REPLACE TRIGGER organizations_name_sync AFTER UPDATE OF name ON leaders.organizations FOR EACH ROW EXECUTE FUNCTION leaders.sync_org_name_to_participants();
 
 CREATE OR REPLACE TRIGGER organizations_touch BEFORE UPDATE ON leaders.organizations FOR EACH ROW EXECUTE FUNCTION leaders.touch_updated_at();
+
+CREATE OR REPLACE TRIGGER participant_emails_email_owner BEFORE INSERT OR UPDATE OF email ON leaders.participant_emails FOR EACH ROW EXECUTE FUNCTION leaders.email_owner_guard();
+
+CREATE OR REPLACE TRIGGER participants_email_owner BEFORE INSERT OR UPDATE OF email ON leaders.participants FOR EACH ROW EXECUTE FUNCTION leaders.email_owner_guard();
 
 CREATE OR REPLACE TRIGGER participants_org_name BEFORE INSERT OR UPDATE OF organization_id, organization_name ON leaders.participants FOR EACH ROW EXECUTE FUNCTION leaders.sync_participant_org_name();
 

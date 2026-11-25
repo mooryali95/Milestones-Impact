@@ -59,6 +59,9 @@ export const AUDIT_AR = {
   'participant.edit': 'عُدّلت بياناته', 'participant.status': 'تغيّرت حالته', 'participant.remind': 'ذُكِّر بإكمال التسجيل', 'participant.org': 'تغيّرت جهته',
   'participant.export': 'حمّل نسخة بياناته', 'participant.consent': 'وافق على سياسة الخصوصية', 'participant.erase-request': 'طلب حذف بياناته',
   'participant.erase-cancel': 'سحب طلب حذف بياناته', 'participant.name-confirm': 'أكّد اسمه للشهادة',
+  // حساب واحد بأكثر من بريد (20261128190000)
+  'participant.link': 'رُبط به حساب آخر له', 'participant.merged': 'دُمج حسابه الثاني في حسابه هذا', 'participant.unmerged': 'أُرجع دمج حسابه الثاني',
+  'participant.email-primary': 'تغيّر بريده الأساسي', 'participant.email-remove': 'حُذف بريد بديل من حسابه',
   'placement.approve': 'اعتُمد مستواه', 'assessment.submit': 'سلّم القياس', 'assessment.reset': 'طُلبت إعادة القياس',
   'requirement.review': 'روجع متطلب في رحلته', 'requirement.file-replace': 'استبدل ملف بند في رحلته', 'milestone.participant': 'عُدّل معلم في رحلته', 'workshop.mark': 'سُجّل حضوره في ورشة', 'workshop.unmark': 'أُلغي حضوره في ورشة', 'workshop.checkin': 'سجّل حضوره في ورشة',
   'cohort.enroll': 'سُجّل في دفعة', 'cohort.place-failed': 'تعذّر إلحاقه بدفعة تلقائيًا', 'hall.assign': 'وُزّع على طاولة في القاعة', 'admin.file-open': 'فُتحت سيرته الذاتية', 'admin.answers-view': 'فُتحت إجابات قياسه',

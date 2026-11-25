@@ -7,6 +7,7 @@
 import { mailButton, mailShell, mailText } from '../_shared/mail.ts';
 import { audit, CONFIG, db, sendMail } from './core.ts';
 import { listed } from './counting.ts';
+import { participantByEmail } from './account-emails.ts';
 
 export type Door = 'participant' | 'expert' | 'org';
 const APP = () => CONFIG.appUrl.replace(/\/$/, '');
@@ -19,7 +20,8 @@ export const DOOR = {
 // أدوار البريد كلها، من مصادرها نفسها
 export async function rolesOf(email: string): Promise<Door[]> {
   const [{ data: p }, { data: e }, { data: c }] = await Promise.all([
-    listed(db.from('participants').select('id, status').eq('email', email)).maybeSingle(),
+    // البريد البديل لحساب مشارك يفتح بابه كالأساسي (account-emails.ts)
+    participantByEmail(email, 'id, status', listed).then((data) => ({ data })),
     // journey-guard: باب /x واحد للخدمتين (رحلة وكتاب)، والبوابة تتفرع بعد الدخول (experts.ts portalDashboard)
     db.from('experts').select('status').eq('email', email).maybeSingle(),
     db.from('org_coordinators').select('status').eq('email', email).limit(5),

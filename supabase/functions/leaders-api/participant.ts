@@ -9,6 +9,7 @@ import { deviceOf } from '../_shared/login-device.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
+import { markAliasVerified, participantByEmail } from './account-emails.ts';
 import { assertPhoneFree, isPhoneConflict, phoneConflictFail } from './phone-guard.ts';
 import { noticesFor, record as recordObservation } from './observations.ts';
 import { bannerFor } from './nudge-banner.ts';
@@ -301,7 +302,8 @@ export async function authStart(b: Body, ctx: Ctx) {
   await networkGuard(ctx);
   await humanGate(b, ctx, email);
 
-  const { data: existing } = await db.from('participants').select('id, full_name').eq('email', email).maybeSingle();
+  // البريد البديل يُعامل كالأساسي: يصله الرمز ويُدخله إلى الحساب المرتبط، والرد نفسه في الحالين
+  const existing = await participantByEmail(email, 'id, full_name');
   // التسجيل الجديد: آثار الوصول وحدها الآن، والملف بعد التحقق. اسم يرسله عميل قديم (قبل هذا التغيير) يُحفظ كما كان
   // الحساب القائم: رمز رابط الجهة وحده، يُربط به عند الدخول إن لم يكن مرتبطًا بجهة (linkOrgOnLogin)
   const orgCode = String(b.org || '').trim() ? { org: String(b.org).trim().slice(0, 60) } : null;
@@ -365,7 +367,7 @@ export async function authVerify(b: Body, ctx: Ctx) {
   if (!ch || ch.consumed_at || new Date(ch.expires_at) < new Date()) {
     throw new Fail('الرمز منتهٍ أو مستخدم، اطلب رمزًا جديدًا', 400, 'expired');
   }
-  let { data: p } = await db.from('participants').select('*').eq('email', email).maybeSingle();
+  let p = await participantByEmail(email);
   let profile: Body | null = null;
   if (!p) {
     if (ch.purpose !== 'register') throw new Fail('انتهت صلاحية خطوة التسجيل. ابدأ من جديد.', 400, 'restart');
@@ -410,7 +412,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
     // لا مشارك بلا دفعة: دفعة الرمز، أو استقبال جهته، أو المنصة العامة (بعد الاستهلاك: رمز تعذّر فكّ الربط فيُلحق بالمنصة)
     await placeQuietly(p.id, placementSource({ organization_id: p.organization_id, sponsor_code: profile.sponsor_code }), profile.sponsor_cohort || null);
   } else {
-    if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+    if (p.email !== email) await markAliasVerified(email);
+    else if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
     // الموقوف لا يُربط بجهة (كما في Google)، ورفض دخوله بعد إصدار الجلسة كما كان
     if (p.status !== 'suspended') p = await linkOrgOnLogin(p, ch.pending_profile?.org, ctx.ip || email);
   }
@@ -427,7 +430,7 @@ export async function authGoogle(b: Body, ctx: Ctx) {
   const id: any = googleIdentity(await verifyGoogleToken(credential), GOOGLE_CLIENT_ID);
   if (id.error) throw new Fail(id.error, 401, 'google');
 
-  let { data: p } = await db.from('participants').select('*').eq('email', id.email).maybeSingle();
+  let p = await participantByEmail(id.email);
   if (!p) {
     // حساب جديد: يتأكد صاحبه أنه مشارك (لا خبير ولا منسق جهة) قبل إنشائه، ويضيف رمز جهته إن وُجد
     if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '', roles: await otherRoles(id.email) };
@@ -446,7 +449,8 @@ export async function authGoogle(b: Body, ctx: Ctx) {
     if (p.organization_id) await pinSponsorFor(p.id);
     await placeQuietly(p.id, placementSource({ organization_id: p.organization_id, sponsor_code: (r as any)?.sponsor_code }), (r as any)?.sponsor_cohort || null);   // كما في التسجيل بالبريد
   } else {
-    if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
+    if (p.email !== normalizeEmail(id.email)) await markAliasVerified(id.email);
+    else if (!p.email_verified_at) await db.from('participants').update({ email_verified_at: new Date().toISOString() }).eq('id', p.id);
     if (p.status !== 'suspended') p = await linkOrgOnLogin(p, b.org, ctx.ip || id.email);
   }
   if (p.status === 'suspended') throw new Fail(`الحساب موقوف. تواصل مع ${CONTACT_EMAIL}.`, 403, 'suspended');
