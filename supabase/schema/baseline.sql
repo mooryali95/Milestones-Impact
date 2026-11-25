@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261128190000_leaders_account_emails_merge
+-- as-of migration: 20261129100000_leaders_cohort_identity
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -622,7 +622,9 @@ create table if not exists leaders.cohorts (
   visibility jsonb default '{}'::jsonb not null,
   guidance_pilot boolean default false not null,
   is_intake boolean default false not null,
+  identity jsonb default '{}'::jsonb not null,
   constraint cohorts_content_level_check CHECK (((content_level IS NULL) OR (content_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text])))),
+  constraint cohorts_identity_object_chk CHECK ((jsonb_typeof(identity) = 'object'::text)),
   constraint cohorts_intake_shape CHECK (((NOT is_intake) OR ((organization_id IS NOT NULL) AND (NOT is_default)))),
   constraint cohorts_level_mode_check CHECK ((level_mode = ANY (ARRAY['mixed'::text, 'uniform'::text]))),
   constraint cohorts_notes_ar_check CHECK ((char_length(notes_ar) <= 2000)),
@@ -836,6 +838,16 @@ create table if not exists leaders.dimensions (
   sort smallint not null,
   constraint dimensions_key_check CHECK ((key = ANY (ARRAY['milestone'::text, 'impact'::text, 'leadership'::text]))),
   constraint dimensions_pkey PRIMARY KEY (key)
+);
+
+create table if not exists leaders.document_checks (
+  id bigint generated always as identity not null,
+  fingerprint text,
+  found boolean not null,
+  ip inet,
+  user_agent text,
+  created_at timestamp with time zone default now() not null,
+  constraint document_checks_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.email_challenges (
@@ -1541,6 +1553,7 @@ create table if not exists leaders.mail_queue (
   cancelled_by text,
   expires_at timestamp with time zone,
   attachments jsonb,
+  headers jsonb,
   constraint mail_queue_attachments_check CHECK (((attachments IS NULL) OR (jsonb_typeof(attachments) = 'array'::text))),
   constraint mail_queue_cancelled_by_check CHECK ((char_length(cancelled_by) <= 254)),
   constraint mail_queue_kind_check CHECK ((kind = ANY (ARRAY['bulk'::text, 'notify'::text]))),
@@ -1683,6 +1696,13 @@ create table if not exists leaders.participant_emails (
   constraint participant_emails_pkey PRIMARY KEY (id)
 );
 
+create table if not exists leaders.participant_mail_prefs (
+  participant_id uuid not null,
+  muted text[] default '{}'::text[] not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint participant_mail_prefs_pkey PRIMARY KEY (participant_id)
+);
+
 create table if not exists leaders.participant_merge_rows (
   id bigint generated always as identity not null,
   merge_id uuid not null,
@@ -1715,6 +1735,19 @@ create table if not exists leaders.participant_milestones (
   scores jsonb default '{}'::jsonb not null,
   constraint participant_milestones_note_check CHECK ((char_length(note) <= 1000)),
   constraint participant_milestones_pkey PRIMARY KEY (participant_id, milestone_id)
+);
+
+create table if not exists leaders.participant_notifications (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  category text not null,
+  title text not null,
+  excerpt text,
+  ref text,
+  emailed boolean default true not null,
+  read_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  constraint participant_notifications_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.participant_observations (
@@ -3205,6 +3238,10 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.participant_mail_prefs add constraint participant_mail_prefs_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.participant_merge_rows add constraint participant_merge_rows_merge_id_fkey FOREIGN KEY (merge_id) REFERENCES leaders.participant_merges(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3222,6 +3259,10 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.participant_milestones add constraint participant_milestones_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_notifications add constraint participant_notifications_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3574,6 +3615,8 @@ CREATE INDEX IF NOT EXISTS capstone_shares_participant ON leaders.capstone_share
 
 CREATE UNIQUE INDEX IF NOT EXISTS capstone_updates_checkpoint ON leaders.capstone_updates USING btree (participant_id, checkpoint) WHERE (checkpoint IS NOT NULL);
 
+CREATE INDEX IF NOT EXISTS capstones_issued_fingerprint_idx ON leaders.capstones USING btree ((((snapshot -> 'issued'::text) ->> 'fingerprint'::text))) WHERE (status = 'approved'::text);
+
 CREATE INDEX IF NOT EXISTS capstones_status_idx ON leaders.capstones USING btree (status, submitted_at);
 
 CREATE INDEX IF NOT EXISTS certificate_checks_ip_idx ON leaders.certificate_checks USING btree (ip, created_at DESC);
@@ -3643,6 +3686,8 @@ CREATE INDEX IF NOT EXISTS conversations_ip_created_idx ON leaders.conversations
 CREATE INDEX IF NOT EXISTS coordinator_challenges_email_idx ON leaders.coordinator_challenges USING btree (email, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS coordinator_sessions_coord_idx ON leaders.coordinator_sessions USING btree (coordinator_id);
+
+CREATE INDEX IF NOT EXISTS document_checks_ip_idx ON leaders.document_checks USING btree (ip, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS email_challenges_email_created_idx ON leaders.email_challenges USING btree (email, created_at DESC);
 
@@ -3759,6 +3804,8 @@ CREATE INDEX IF NOT EXISTS participant_emails_participant_idx ON leaders.partici
 CREATE INDEX IF NOT EXISTS participant_merge_rows_merge_idx ON leaders.participant_merge_rows USING btree (merge_id);
 
 CREATE INDEX IF NOT EXISTS participant_merges_merged_idx ON leaders.participant_merges USING btree (merged_id);
+
+CREATE INDEX IF NOT EXISTS participant_notifications_by_participant ON leaders.participant_notifications USING btree (participant_id, created_at DESC);
 
 CREATE UNIQUE INDEX IF NOT EXISTS participant_observations_once ON leaders.participant_observations USING btree (participant_id, code, ref) WHERE (code IS NOT NULL);
 
@@ -4007,6 +4054,8 @@ alter table leaders.demo_links enable row level security;
 
 alter table leaders.dimensions enable row level security;
 
+alter table leaders.document_checks enable row level security;
+
 alter table leaders.email_challenges enable row level security;
 
 alter table leaders.enrollments enable row level security;
@@ -4093,11 +4142,15 @@ alter table leaders.organizations enable row level security;
 
 alter table leaders.participant_emails enable row level security;
 
+alter table leaders.participant_mail_prefs enable row level security;
+
 alter table leaders.participant_merge_rows enable row level security;
 
 alter table leaders.participant_merges enable row level security;
 
 alter table leaders.participant_milestones enable row level security;
+
+alter table leaders.participant_notifications enable row level security;
 
 alter table leaders.participant_observations enable row level security;
 

@@ -115,6 +115,16 @@ describe('لا مستوى ملخص في مسارات المشارك على ال�
     expect(get).not.toMatch(/overallLevel/);
     expect(get).toMatch(/trackManifest\(/);
   });
+  it('الوثيقة المطبوعة: meta بلا مستوى ملخص، وقالبها يقرأ ملف التعريف', () => {
+    const ts = readFileSync(join(__dirname, '../../supabase/functions/leaders-api/capstone.ts'), 'utf8');
+    const at = ts.indexOf('cohort_brand: cohort && !cohort.is_default');
+    const meta = ts.slice(at, ts.indexOf('readiness: d.readiness,', at));
+    expect(meta).not.toMatch(/overallLevel/);
+    expect(meta).toMatch(/profile: profileKey\(/);
+    const tpl = readFileSync(join(__dirname, '../../src/lib/brand/capstone.js'), 'utf8');
+    expect(tpl).not.toMatch(/\bm\.level\b|meta\.level\b|overallLevel/);
+    expect(tpl).toMatch(/profileHint\(m\.profile\)/);
+  });
 });
 
 describe('بيان المسار مصدر واحد', () => {

@@ -565,7 +565,7 @@ describe('ملحق مستوى الوثيقة: للمراجع وحده', () => {
 describe('المستوى لا يصل من لم يُؤذن له، والمعتمدة القديمة بتخطيطها', () => {
   let d;
   beforeAll(() => { d = docOf(same('beginner')); });
-  const levelIn = (doc) => (doc.sections || []).some((x) => 'level' in x || 'joins' in x) || doc.meta?.level != null;
+  const levelIn = (doc) => (doc.sections || []).some((x) => 'level' in x || 'joins' in x) || doc.meta?.level != null || doc.meta?.profile != null;
   it('الوثيقة نفسها لا تحمل مستوى فصل، والتلميح وحده على التابع', () => {
     expect(d.sections.some((x) => 'level' in x)).toBe(false);
     expect(d.sections.filter((x) => x.joins).map((x) => `${x.key}>${x.joins}`).sort()).toEqual(DISPLAY_PAIRS.map((p) => `${p.joins}>${p.host}`).sort());

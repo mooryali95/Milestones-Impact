@@ -491,6 +491,12 @@ export function pdfFileName(m = {}, kind = 'institutional', now = new Date()) {
   return [PDF_PREFIX[kind] || PDF_PREFIX.institutional, name, ymd, tag].filter(Boolean).join('-');
 }
 
+// «impact-advanced» ← «الأثر: مستوى احترافي»؛ مفتاح غير معروف لا يُعرض
+const profileHint = (profile) => {
+  const [dim, lv] = String(profile || '').split('-');
+  return DIM_AR[dim] && LVL[lv] ? `${DIM_AR[dim]}: مستوى ${LVL[lv]}` : '';
+};
+
 export function capstoneReport(input, { appendix = true } = {}) {
   // ملف العمل الكامل: المشتق (الغلاف والميثاق وحالة العمل والمؤشرات) من القيم الصالحة، والفصول بكل ما كُتب
   // وتالفه معلَّم «يحتاج مراجعة»، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
@@ -509,7 +515,8 @@ export function capstoneReport(input, { appendix = true } = {}) {
   let body = STYLE;
   // المؤشر الصفري أو الفارغ لا يُعرض («0 ريال»، «0 حزمة عمل»، «النوع ·»)
   const tiles = [
-    m.scope_title && { value: m.scope_title, label: 'النوع', hint: LVL[m.level] ? `مستوى ${LVL[m.level]}` : '' },
+    // ملف التعريف (trackManifest): إطار الأولوية ومستوى المشارك فيه، لا مستوى ملخص (قرار المالك 2026-11-25)
+    m.scope_title && { value: m.scope_title, label: 'النوع', hint: profileHint(m.profile) },
     count('wbs', 'packages') > 0 && { value: count('wbs', 'packages'), label: 'حزمة عمل' },
     doc.cost?.withContingency > 0 && { value: money(doc.cost.withContingency), label: costLabel(doc.cost) },
     count('benefits-register', 'benefits') > 0 && { value: count('benefits-register', 'benefits'), label: 'منفعة مقيسة' },

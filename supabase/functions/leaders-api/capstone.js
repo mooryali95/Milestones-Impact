@@ -216,11 +216,11 @@ export function bindAnswers(fields, answers, initiative) {
 // اسم المبادرة من مصدره الوحيد: حقل title في بطاقة المبادرة
 export const initiativeOf = (charterAnswers) => String(charterAnswers?.title || '').trim() || null;
 
-// D18: الوثيقة كما تصل الجهة أو راعي المبادرة: مستواها العام ومسارها (بمحور أولويته) مشتقان من المستويات،
+// D18: الوثيقة كما تصل الجهة أو راعي المبادرة: ملف تعريفها (ومستواها العام في اللقطات القديمة) ومسارها (بمحور أولويته) مشتقان من المستويات،
 // فلا يبقيان إلا بموافقة المشارك، ومع صلاحية المستويات حين يطّلع منسق الجهة
 // وبلا إذن تُحذف دفاعًا أي إشارة مستوى في الفصول: level، وتلميح التجميع joins (لا يجمع إلا التأسيسي، فيدل عليه)
 export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => (show || !doc?.meta ? doc : {
-  ...doc, meta: { ...doc.meta, level: null, track: null },
+  ...doc, meta: { ...doc.meta, level: null, profile: null, track: null },
   sections: Array.isArray(doc.sections) ? doc.sections.map((/** @type {any} */ x) => { const { level: _l, joins: _j, ...rest } = x || {}; return rest; }) : doc.sections,
 });
 

@@ -19,8 +19,11 @@ const NAME = FULL.meta.initiative.replace(/\s+/g, '-');
 
 const pagesOf = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
 
+// النسخة المؤسسية تُسمّى باسم شكلها (document-forms.js): الوثيقة بلا doc_form تأخذ الشكل الكامل «حالة العمل»
+const FORM_NAME = (FULL.meta.doc_form?.name || 'حالة العمل').replace(/\s+/g, '-');
+
 async function check(d, role, { kind, min, max }) {
-  expect(d.suggestedFilename()).toBe(`${kind === 'working' ? 'ملف-عمل-المبادرة' : 'وثيقة-المبادرة'}-${NAME}-${ymd}-0042-V2.pdf`);
+  expect(d.suggestedFilename()).toBe(`${kind === 'working' ? 'ملف-عمل-المبادرة' : FORM_NAME}-${NAME}-${ymd}-0042-V2.pdf`);
   const buf = readFileSync(await d.path());
   expect(buf.subarray(0, 5).toString()).toBe('%PDF-');
   expect(buf.length).toBeGreaterThan(150 * 1024);
@@ -81,17 +84,19 @@ test.use({ launchOptions: { ...(process.env.PW_CHROMIUM ? { executablePath: proc
 test('المشارك: «تحميل PDF» مباشرة يعطي ملف العمل الكامل بملحقه، والوثيقة المؤسسية من نافذتها', async ({ page }) => {
   await participant(page, FULL);
   const dl = page.waitForEvent('download', { timeout: 150000 });
-  await page.getByRole('button', { name: 'تحميل PDF' }).click();
+  // زر لكل نسخة (قرار المالك 2026-11-25): «تحميل ملف العمل PDF» و«تحميل <اسم الشكل> PDF»، والنافذة باسم الشكل
+  await page.getByRole('button', { name: 'تحميل ملف العمل PDF' }).click();
   await check(await dl, 'participant-working', { kind: 'working', min: 12, max: 40 });
-  await check(await fromWindow(page, () => page.getByRole('button', { name: 'الوثيقة المؤسسية' }).click()), 'participant-institutional', { kind: 'institutional', min: 6, max: 30 });
+  await check(await fromWindow(page, () => page.getByRole('button', { name: 'الوثيقة المؤسسية', exact: true }).click()), 'participant-institutional', { kind: 'institutional', min: 6, max: 30 });
 });
 
 test('المشارك: الوثيقة المؤسسية محجوبة برسالة ما ينقص حين لم تكتمل، ولا نافذة ولا ملف', async ({ page }) => {
   await participant(page, PARTIAL);
   let downloads = 0;
   page.on('download', () => { downloads++; });
-  await page.getByRole('button', { name: 'الوثيقة المؤسسية' }).click();
-  await expect(page.getByText(/لا تُصدر الوثيقة المؤسسية قبل أن تجيب عن/)).toBeVisible();
+  await page.getByRole('button', { name: 'الوثيقة المؤسسية', exact: true }).click();
+  // الرسالة تسمي شكل الوثيقة (missingMessage بـ formOfDoc)
+  await expect(page.getByText(new RegExp(`لا تُصدر ${FORM_NAME.replace(/-/g, ' ')} قبل أن تجيب عن`))).toBeVisible();
   expect(downloads).toBe(0);
 });
 

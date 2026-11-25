@@ -255,10 +255,10 @@ describe('الوثيقة الاحترافية', () => {
   });
   // D18: مستوى الوثيقة ومسارها مشتقان من المستويات، فلا يصلان الجهة ولا الراعي بلا موافقة المشارك
   it('وثيقة الجهة والراعي بلا موافقة: لا مستوى ولا مسار ولا محور أولوية', () => {
-    const full = { ...doc, meta: { ...doc.meta, status: 'approved', level: 'advanced', track: { title: 'ملف التعريف الخاص', priority: 'impact' } } };
+    const full = { ...doc, meta: { ...doc.meta, status: 'approved', profile: 'impact-advanced', track: { title: 'ملف التعريف الخاص', priority: 'impact' } } };
     const hidden = docLevelsFor(full, false);
-    expect(hidden.meta).toMatchObject({ level: null, track: null, initiative: full.meta.initiative });
-    expect(full.meta.level).toBe('advanced');
+    expect(hidden.meta).toMatchObject({ level: null, profile: null, track: null, initiative: full.meta.initiative });
+    expect(full.meta.profile).toBe('impact-advanced');
     const html = (d) => { const { meta, body } = capstoneReport(d); return documentHtml(meta, body); };
     expect(html(hidden)).not.toContain('مستوى احترافي');
     expect(html(hidden)).not.toContain('ملف التعريف الخاص');

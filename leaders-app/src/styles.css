@@ -2151,4 +2151,5 @@ main p.small, main p.muted { max-inline-size: 62ch; }
 .msgs-pref { gap: 12px; padding: 8px 4px; border-radius: 8px; }
 .msgs-pref.focus { background: rgba(199, 154, 75, .12); }
 .msgs-pref input[type="checkbox"] { width: 22px; height: 22px; flex: none; }
-@media (max-width: 759px) { .msgs-label { display: none; } .msgs-btn { padding: 0 8px; } }
+/* حتى الحاسب: الأيقونة والعدّاد وحدهما (الاسم في aria-label) كاسم المشارك في .who، فلا يدفع زر الخروج خارج الترويسة على الآيباد الرأسي */
+@media (max-width: 1023px) { .msgs-label { display: none; } .msgs-btn { padding: 0 8px; min-width: 44px; justify-content: center; } }

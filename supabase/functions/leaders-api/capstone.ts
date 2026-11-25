@@ -219,8 +219,8 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       doc_form: docFormFor({ levels: d.levels, priority: d.priority || null }),
       app_url: CONFIG.appUrl,
       track: d.track ? { title: d.track.title_ar, priority: d.weighted } : null,
-      // profile: هوية المشارك (ملف تعريفه) لاسم الوثيقة المطبوعة؛ level باقٍ لقالبها الحالي حتى ينتقل إلى profile
-      level: overallLevel(d.levels), profile: profileKey(d.levels, d.priority), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
+      // profile: هوية المشارك (ملف تعريفه) لاسم الوثيقة المطبوعة وتلميح النوع فيها؛ لا مستوى ملخص في الوثيقة
+      profile: profileKey(d.levels, d.priority), scope: d.scope, scope_title: d.scope ? (SCOPE_TITLES as Record<string, string>)[d.scope] : null,
       // مكان المبادرة من بطاقتها لا من ملف المشارك: الجهة المسجّلة في الملف راعية البرنامج، لا مالكة المبادرة (anatomy.json writing_rules)
       host: String(d.charter.host || '').trim() || null, context: String(d.charter.context || '').trim() || null,
       initiative: d.initiative, sponsor: d.charter.sponsor || null, start: d.charter.start || null, end: d.charter.end || null,
