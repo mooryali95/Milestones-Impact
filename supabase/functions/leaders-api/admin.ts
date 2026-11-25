@@ -18,6 +18,8 @@ import { bulkReadIds, isGateModel, readingCounts, readingList } from './model-re
 import { hostOf, INVITE_CODE_RE, INVITE_CODE_RULE_AR, orgDomainIssue } from './domains.js';
 import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './entitlements.ts';
 import { checkImport, importCounts, importLimitIssue } from './import.js';
+import { adminPhoneTaken, assertPhoneFree, isPhoneConflict, lookalikeNote, nameLookalikes, phoneConflictFail, phoneOwner } from './phone-guard.ts';
+import { nameKey, phoneKey, phoneTakenAdminAr } from './phone-key.js';
 import { trackProject } from './capstone.js';
 import { labSummary } from './lab.js';
 import { displayTitles, profileFor } from './profiles.ts';
@@ -506,7 +508,11 @@ export async function participantSave(a: Admin, b: Body) {
   if ('is_test' in f) row.is_test = f.is_test === true;
   const changed = Object.keys(row).filter((k) => k !== 'email_verified_at' && row[k] !== p[k]);
   if (!changed.length) return { success: true, changed: [] };
-  const saved = must(await db.from('participants').update(row).eq('id', id).select('*').single(), 'تعذّر الحفظ؛ قد يكون البريد مسجلًا لمشارك آخر');
+  // هاتف يحجزه حساب قائم آخر: يُرد بالحساب القائم مسمًّى، فلا يصير للشخص حسابان بهاتف واحد
+  if (changed.includes('phone') && row.phone) await assertPhoneFree(row.phone, 'admin', id);
+  const res = await db.from('participants').update(row).eq('id', id).select('*').single();
+  if (isPhoneConflict(res.error)) throw await phoneConflictFail(row.phone, 'admin', id);
+  const saved = must(res, 'تعذّر الحفظ؛ قد يكون البريد مسجلًا لمشارك آخر');
   await audit('admin', a.email, 'participant.edit', 'participants', id,
     Object.fromEntries(changed.map((k) => [k, p[k]])), Object.fromEntries(changed.map((k) => [k, row[k]])));
   return { success: true, changed, participant: saved };
@@ -1673,14 +1679,27 @@ export async function createParticipant(a: Admin, b: Body) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new Fail('البريد غير صحيح');
   const name = String(b.full_name || '').trim();
   if (name.length < 3) throw new Fail('الاسم مطلوب');
-  const row = must(await db.from('participants').insert({
-    email, full_name: name.slice(0, 120), organization_name: b.organization_name || null, job_title: b.job_title || null,
+  const rawPhone = String(b.phone || '').trim();
+  const phone = rawPhone ? normalizePhone(rawPhone) : null;
+  if (rawPhone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
+  // الهاتف لحساب قائم: لا يُنشأ ثانٍ، ويُسمّى القائم لترسل الإدارة الدعوة إليه
+  if (phone) await assertPhoneFree(phone, 'admin');
+  // تحذير لا منع: اسم مطبَّع يطابق مشاركًا بلا جهة (المضاف هنا بلا جهة). dry_run يعرضه قبل الإنشاء
+  const alike = (await nameLookalikes([name], null)).get(nameKey(name)) || [];
+  const warnings = alike.length ? [{ code: 'maybe_duplicate', message: lookalikeNote(alike), matches: alike }] : [];
+  if (b.dry_run) return { success: true, dry_run: true, warnings };
+  const made = await db.from('participants').insert({
+    email, full_name: name.slice(0, 120), phone, organization_name: b.organization_name || null, job_title: b.job_title || null,
     source: b.contact_request_id ? 'contact' : 'admin', contact_request_id: b.contact_request_id ? String(b.contact_request_id) : null,
-  }).select('*').single(), 'هذا البريد مسجل من قبل');
+  }).select('*').single();
+  if (isPhoneConflict(made.error)) throw await phoneConflictFail(phone, 'admin');
+  // البريد مسجل: تعارض لا خطأ خادم
+  if ((made.error as any)?.code === '23505') throw new Fail('هذا البريد مسجل من قبل', 409, 'email_exists');
+  const row = must(made, 'هذا البريد مسجل من قبل');
   await audit('admin', a.email, 'participant.create', 'participants', row.id, null, row);
   // لا مشارك بلا دفعة: المضاف بلا جهة يُلحق بالمنصة العامة (المصدر «الإدارة»)
   await placeQuietly(row.id, 'manual');
-  return { success: true, participant: row };
+  return { success: true, participant: row, warnings };
 }
 
 // ── استيراد المشاركين دفعة واحدة (جهة بخمسين مشاركًا لا تُدخَل واحدًا واحدًا) ──
@@ -1706,6 +1725,7 @@ export async function participantsImport(a: Admin, b: Body) {
     for (const f of found || []) existing.add(f.email);
   }
   const checked = checkImport(rows, existing) as any[];
+  await phoneChecks(checked, org?.id || null);
   if (b.dry_run) return { success: true, dry_run: true, rows: checked, counts: importCounts(checked), organization: org?.name || null };
   const ready = checked.filter((r) => r.status === 'ok');
   let seated = 0;
@@ -1714,6 +1734,12 @@ export async function participantsImport(a: Admin, b: Body) {
       email: r.email, full_name: r.full_name, phone: r.phone, job_title: r.job_title, source: 'import',
       organization_name: org?.name || null, ...(org ? { organization_id: org.id, org_via: 'admin' } : {}),
     }).select('id').single();
+    // سباق مع تسجيل بالهاتف نفسه بين الفحص والكتابة: الفهرس الفريد يرده، فيُعد مسجلًا باسم القائم
+    if (isPhoneConflict(error)) {
+      const owner = await phoneOwner(r.phone);
+      Object.assign(r, { status: 'exists', reason: owner ? phoneTakenAdminAr(owner) : 'الجوال مسجل لحساب قائم', ...(owner ? { existing: adminPhoneTaken(owner).extra.existing } : {}) });
+      continue;
+    }
     // سباق مع تسجيل ذاتي بالبريد نفسه بين الفحص والكتابة: يُعد مسجلًا ولا تفشل الدفعة
     if (error || !data) { r.status = 'failed'; r.reason = 'تعذّرت إضافته؛ قد يكون سُجّل للتو'; continue; }
     r.status = 'created';
@@ -1724,6 +1750,27 @@ export async function participantsImport(a: Admin, b: Body) {
   const counts = importCounts(checked);
   await audit('admin', a.email, 'participants.import', 'participants', org?.id || null, null, { organization: org?.name || null, counts, seated });
   return { success: true, rows: checked, counts, seated, organization: org?.name || null };
+}
+
+// الهاتف والاسم في الاستيراد (معاينة وكتابة): الصف الجاهز بهاتف لحساب قائم «مسجل من قبل» باسم القائم لترسل الإدارة الدعوة إليه،
+// وبهاتف صف سابق في الجدول «مكرر في الجدول». والاسم المطبَّع المطابق لمشارك في الجهة نفسها تحذير «قد يكون مكررًا» يبقى معه الصف جاهزًا.
+// تُكتب هنا لا في import.js، فالمعاينة المحلية في اللوحة لا تتغير، وحكم الخادم يصلها في reason كما يصل «مسجل من قبل»
+async function phoneChecks(checked: any[], orgId: string | null) {
+  const seen = new Set<string>();
+  for (const r of checked) {
+    if (r.status !== 'ok' || !r.phone) continue;
+    const key = phoneKey(r.phone);
+    if (seen.has(key)) { Object.assign(r, { status: 'duplicate', reason: 'الجوال مكرر في الجدول' }); continue; }
+    seen.add(key);
+    const owner = await phoneOwner(r.phone);
+    if (owner) Object.assign(r, { status: 'exists', reason: phoneTakenAdminAr(owner), existing: adminPhoneTaken(owner).extra.existing });
+  }
+  const ready = checked.filter((r) => r.status === 'ok');
+  const alike = await nameLookalikes(ready.map((r) => r.full_name), orgId);
+  for (const r of ready) {
+    const m = alike.get(nameKey(r.full_name));
+    if (m?.length) Object.assign(r, { warning: 'maybe_duplicate', reason: lookalikeNote(m), matches: m });
+  }
 }
 
 // ── تذكير أسبوعي (يُشغّله pg_cron بسرّ LEADERS_CRON_SECRET) ──
