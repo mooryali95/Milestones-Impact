@@ -4,7 +4,7 @@
 // المصدر: cohorts.advisor_expert_id للدفعة، وcohort_groups.advisor_expert_id لمجموعة داخلها (الأخص يغلب).
 // الدفعة تُعرف من المشارك (cohortOf)، فتغيير المستشار
 // ينقل إليه المعلّق فورًا. الإدارة ترى كل شيء وتقيّم أيضًا (reviewed_by يسجّل من قيّم).
-import { all, allFor, db, Fail, resolveNotes } from './core.ts';
+import { all, allFor, db, Fail } from './core.ts';
 import { cohortOf } from './programs.ts';
 import { reviewBulkBy, reviewSubmissionBy } from './admin.ts';
 import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved, pickCohort } from './logic.js';
@@ -156,8 +156,6 @@ export async function review(e: any, b: Body) {
   const adv = await advisorOf((s as any).participants);
   if (adv?.id !== e.id) throw new Fail('هذا التسليم ليس من دفعتك', 403);
   const out = await reviewSubmissionBy(e.email, 'system', b);
-  // مراجعة البطاقة تُغلق «ينتظرك» في صندوقه (المرحلة 2ج). غير البطاقة لا إشعار له، فلا شيء يُغلق
-  await resolveNotes(`model:${(s as any).participant_id}:${(s as any).model_id}`);
   return out;
 }
 

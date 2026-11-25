@@ -6,7 +6,7 @@
 import { placeQuietly } from './cohort-intake.ts';
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
-import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, resolveNotes, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove, cleanModelFieldsOf } from './logic.js';
 import { journeyFor, mePayload, participantPriority, pointsOf } from './participant.ts';
 import { recordTrackChange } from './track-history.ts';
@@ -1408,7 +1408,9 @@ export async function reviewSubmissionBy(reviewer: string, actor: 'admin' | 'sys
   const s = must(await db.from('model_submissions').update({
     status, rating, bonus, feedback_ar: feedback,
     reviewed_at: new Date().toISOString(), reviewed_by: reviewer,
-  }).eq('id', String(b.id)).select('id, participant_id, learning_models(title_ar, key)').single()) as any;
+  }).eq('id', String(b.id)).select('id, participant_id, model_id, learning_models(title_ar, key)').single()) as any;
+  // أي مراجعة للبطاقة، من المستشار أو من الإدارة، تُغلق «ينتظرك» في صندوق المستشار
+  await resolveNotes(`model:${s.participant_id}:${s.model_id}`);
   const gate = isGateModel(s.learning_models?.key);
   if (status === 'reviewed' && bonus) {
     await db.from('points_ledger').upsert({ participant_id: s.participant_id, source: 'review', ref_id: s.id, points: bonus, note: `تميّز: ${s.learning_models?.title_ar || ''}` },

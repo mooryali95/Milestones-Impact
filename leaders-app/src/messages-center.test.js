@@ -233,7 +233,9 @@ describe('«ينتظرك» في صندوق الخبير (المرحلة 2ج)', (
     expect(src('experts.ts')).toMatch(/async function offerNext\(req: any, pick\?: any\) \{[\s\S]{0,200}await resolveNotes\(`offer:\$\{req\.id\}`\)/);
     expect(src('experts.ts')).toMatch(/'expert-request\.accepted'[\s\S]{0,120}await resolveNotes\(`offer:\$\{r\.id\}`\)/);
     expect(src('model-digest.ts')).toMatch(/noteRef: `model:\$\{p\.id\}:\$\{modelId\}`/);
-    expect(src('advisor.ts')).toMatch(/await resolveNotes\(`model:\$\{\(s as any\)\.participant_id\}:\$\{\(s as any\)\.model_id\}`\)/);
+    // الإغلاق في reviewSubmissionBy المشتركة، فتغلقه مراجعة المستشار ومراجعة الإدارة معًا
+    expect(src('admin.ts')).toMatch(/export async function reviewSubmissionBy[\s\S]*?await resolveNotes\(`model:\$\{s\.participant_id\}:\$\{s\.model_id\}`\)[\s\S]*?\n}/);
+    expect(src('advisor.ts')).toMatch(/reviewSubmissionBy\(e\.email/);
   });
   it('الواجهة: قسم «ينتظرك» بما لم يُغلق، الأقرب مهلةً أولًا، و«أُنجز» على المغلق', () => {
     const mc = readFileSync(join(__dirname, 'screens/MessageCenter.jsx'), 'utf8');
