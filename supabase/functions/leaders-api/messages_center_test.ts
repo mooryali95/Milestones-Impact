@@ -104,3 +104,62 @@ Deno.test('مركز الرسائل: القائمة وعدد غير المقرو�
     assertEquals(s.muted, ['experts']);
   } finally { w.restore(); }
 });
+
+// ── بريد الخبراء والمنسقين (ترحيل 20261129130000، المرحلة 1ب) ──
+const XID = '5a1c2e3f-4b5d-4e6f-8a9b-0c1d2e3f4a5b';
+const CID = '7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a';
+
+Deno.test('ملخص الخبير القابل للكتم: يُرسل بالرمز رباعي الأجزاء ورابط /x، ويُسجَّل في صندوقه بالمشارك الذي يذكره', async () => {
+  const t = base();
+  const w = installFake(t);
+  try {
+    await withMail(() => withNet(async (calls) => {
+      await sendMail('xp@x.sa', 'تقرير 360 جاهز', HTML, [], { category: 'expert_digest', recipient: { kind: 'expert', id: XID }, about: PID });
+      const [c] = resendCalls(calls);
+      const tok = decodeURIComponent(String(c.body.headers['List-Unsubscribe']).match(/unsubscribe=([^>]+)>/)?.[1] || '');
+      assertEquals(tok.split('.').slice(0, 3), ['e', XID, 'expert_digest']);
+      assert(c.body.html.includes('/x?tab=messages&prefs=expert_digest'));
+      assertEquals(t.participant_notifications.map((n) => [n.expert_id, n.participant_id, n.about_participant_id, n.emailed]), [[XID, undefined, PID, true]]);
+    }));
+  } finally { w.restore(); }
+});
+
+Deno.test('ملخص المنسق المكتوم لا يُرسل ويبقى في صندوقه، وعمل الخبير المقفل يمر بلا ترويسة، وبلا recipient كما كان', async () => {
+  const t = base();
+  t.participant_mail_prefs.push({ coordinator_id: CID, muted: ['coord_digest'] });
+  const w = installFake(t);
+  try {
+    await withMail(() => withNet(async (calls) => {
+      await sendMail('org@x.sa', 'ملخص الجهة', HTML, [], { kind: 'bulk', category: 'coord_digest', recipient: { kind: 'coordinator', id: CID } });
+      await sendMail('xp@x.sa', 'طلب توجيه', HTML, [], { category: 'expert_work', recipient: { kind: 'expert', id: XID } });
+      await sendMail('xp@x.sa', 'ملخص النماذج', HTML, [], { category: 'expert_digest' });
+      // recipient من جمهور آخر لا يُقبل: يمر كما كان
+      await sendMail('xp@x.sa', 'ملخص النماذج', HTML, [], { category: 'expert_digest', recipient: { kind: 'coordinator', id: CID } });
+      const r = resendCalls(calls);
+      assertEquals(r.length, 3);
+      for (const c of r) assertEquals(c.body.headers, undefined);
+      assertEquals(t.participant_notifications.map((n) => [n.coordinator_id, n.category, n.emailed]), [[CID, 'coord_digest', false]]);
+    }));
+  } finally { w.restore(); }
+});
+
+Deno.test('الإلغاء بنقرة للخبير: الرمز رباعي الأجزاء يكتم فئته في صفه، وGET يحوّل إلى /x، ورمز المشارك القديم يبقى صالحًا', async () => {
+  const t = base();
+  const w = installFake(t);
+  try {
+    const tok = await unsubToken(CONFIG.pepper, XID, 'expert_digest', 'expert');
+    const url = `https://api.example.test/functions/v1/leaders-api?unsubscribe=${encodeURIComponent(tok)}`;
+    const g = await unsubscribeRequest(new Request(url), tok);
+    assert(String(g.headers.get('Location')).includes('/x?tab=messages&prefs=expert_digest'));
+    const ok = await unsubscribeRequest(new Request(url, { method: 'POST', body: 'List-Unsubscribe=One-Click' }), tok);
+    assertEquals(ok.status, 200);
+    assertEquals([t.participant_mail_prefs.at(-1)?.expert_id, t.participant_mail_prefs.at(-1)?.participant_id, t.participant_mail_prefs.at(-1)?.muted], [XID, undefined, ['expert_digest']]);
+    // رمز خبير لفئة مقفلة أو لفئة المشارك يُرفض
+    const locked = `e.${XID}.expert_work.${tok.split('.')[3]}`;
+    assertEquals((await unsubscribeRequest(new Request(url, { method: 'POST' }), locked)).status, 400);
+    const old = await unsubToken(CONFIG.pepper, PID, 'journey');
+    assertEquals(old.split('.').length, 3);
+    assertEquals((await unsubscribeRequest(new Request(url, { method: 'POST' }), old)).status, 200);
+    assertEquals(t.participant_mail_prefs.at(-1)?.participant_id, PID);
+  } finally { w.restore(); }
+});

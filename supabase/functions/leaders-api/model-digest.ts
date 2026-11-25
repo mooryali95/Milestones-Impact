@@ -66,7 +66,7 @@ export async function modelDigest(now = Date.now()): Promise<ModelDigestResult> 
   for (const g of groups) {
     const to = g.kind === 'team' ? CONFIG.alertEmail : g.reviewer?.email;
     if (!to) { skipped += g.total; continue; }
-    const ok = await sendMail(to, `${MODEL_DIGEST_SUBJECT} · ${g.total}`, modelDigestMail(g), [], { category: g.kind === 'team' ? 'ops' : 'expert_digest', kind: 'notify', ref: `model-digest:${day}:${g.key}` })
+    const ok = await sendMail(to, `${MODEL_DIGEST_SUBJECT} · ${g.total}`, modelDigestMail(g), [], { category: g.kind === 'team' ? 'ops' : 'expert_digest', kind: 'notify', ref: `model-digest:${day}:${g.key}`, recipient: g.reviewer?.id ? { kind: 'expert', id: g.reviewer.id } : null })
       .then(() => true, (e) => { console.error('model digest mail:', e); return false; });
     if (!ok) { skipped += g.total; continue; }
     sent++;

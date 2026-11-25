@@ -220,7 +220,7 @@ Deno.test('المرسلون المؤرخون يمررون موعدهم، وال�
   assertEquals(f360.includes('expiresAt: closes })'), true);
   assertEquals(f360.includes('expiresAt: c.closes_at })'), true);
   assertEquals(exp.includes("{ category: 'expert_work', expiresAt: expires.toISOString() }"), true);
-  assertEquals(/coordinator:\$\{c\.id\}`, expiresAt:/.test(coord), true);
+  assertEquals(/coordinator:\$\{c\.id\}`, recipient: \{ kind: 'coordinator', id: c\.id \}, expiresAt:/.test(coord), true);
   assertEquals(index.indexOf('drainMailQueue(40, hold, rewrite)') < index.indexOf('carryoverAlert(hold)'), true);
   // لا ترك بالعمر بعد اليوم
   assertEquals('QUEUE_STALE_HOURS' in core, false);

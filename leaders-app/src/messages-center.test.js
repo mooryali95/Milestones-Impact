@@ -98,12 +98,45 @@ describe('قرار الإرسال والتسجيل', () => {
 describe('الإلغاء بنقرة', () => {
   it('الرمز يصح لصاحبه وفئته وحدهما', async () => {
     const t = await unsubToken('s3cret', PID, 'sessions');
-    expect(await verifyUnsubToken('s3cret', t)).toEqual({ participantId: PID, category: 'sessions' });
+    expect(await verifyUnsubToken('s3cret', t)).toEqual({ kind: 'participant', id: PID, participantId: PID, category: 'sessions' });
     expect(await verifyUnsubToken('other', t)).toBeNull();
     expect(await verifyUnsubToken('s3cret', t.replace('sessions', 'journey'))).toBeNull();
     expect(await verifyUnsubToken('s3cret', t.slice(0, -2) + 'xx')).toBeNull();
     expect(await verifyUnsubToken('s3cret', (await unsubToken('s3cret', PID, 'essential')))).toBeNull();
     expect(await verifyUnsubToken('s3cret', 'garbage')).toBeNull();
+  });
+  it('الرمز رباعي الأجزاء للخبير والمنسق: لجمهوره وفئته القابلة للكتم وحدهما، ولا يصلح رمز جمهور لآخر', async () => {
+    const e = await unsubToken('s3cret', PID, 'expert_digest', 'expert');
+    expect(e.split('.').slice(0, 3)).toEqual(['e', PID, 'expert_digest']);
+    expect(await verifyUnsubToken('s3cret', e)).toEqual({ kind: 'expert', id: PID, category: 'expert_digest' });
+    expect(await verifyUnsubToken('s3cret', e.replace(/^e\./, 'c.'))).toBeNull();
+    expect(await verifyUnsubToken('s3cret', e.replace('expert_digest', 'coord_digest'))).toBeNull();
+    expect(await verifyUnsubToken('s3cret', await unsubToken('s3cret', PID, 'expert_work', 'expert'))).toBeNull();
+    const c = await unsubToken('s3cret', PID, 'coord_digest', 'coordinator');
+    expect(await verifyUnsubToken('s3cret', c)).toEqual({ kind: 'coordinator', id: PID, category: 'coord_digest' });
+    // رمز المشارك بفئة خبير لا يصح
+    expect(await verifyUnsubToken('s3cret', await unsubToken('s3cret', PID, 'expert_digest'))).toBeNull();
+    expect(prefsUrl('https://leaders.sunkvalue.com', 'expert_digest', 'expert')).toBe('https://leaders.sunkvalue.com/x?tab=messages&prefs=expert_digest');
+    expect(prefsUrl('https://leaders.sunkvalue.com', 'coord_digest', 'coordinator')).toBe('https://leaders.sunkvalue.com/org?tab=messages&prefs=coord_digest');
+    expect(mailPlan('expert_digest', [], 'expert')).toEqual({ notify: true, send: true, headers: true });
+    expect(mailPlan('expert_digest', ['expert_digest'], 'expert')).toEqual({ notify: true, send: false, headers: false });
+    // فئة جمهور آخر تمر كما هي: ملخص الخبير لا يكتمه تفضيل المشارك
+    expect(mailPlan('expert_digest', ['expert_digest'])).toEqual({ notify: false, send: true, headers: false });
+    expect(cleanMuted(['expert_digest', 'journey', 'expert_work'], 'expert')).toEqual(['expert_digest']);
+  });
+  it('نسخة بيانات المشارك بعمود participant_id وحده: صفوف صناديق الخبراء والمنسقين لا تخرج فيها', () => {
+    const priv = readFileSync(join(API, 'privacy.ts'), 'utf8');
+    expect(priv).toMatch(/Object\.keys\(EXPORT_TABLES\)[\s\S]{0,200}\.eq\('participant_id', p\.id\)/);
+    const base = readFileSync(join(root, 'supabase/schema/baseline.sql'), 'utf8');
+    expect(base).toMatch(/participant_notifications_about_participant_id_fkey FOREIGN KEY \(about_participant_id\) REFERENCES leaders\.participants\(id\) ON DELETE CASCADE/);
+  });
+  it('مواضع الملخصات تسمي مستلمها صراحةً، ولا بحث بالعنوان لغير المشارك', () => {
+    const src = (f) => readFileSync(join(API, f), 'utf8');
+    expect(src('feedback360.ts')).toMatch(/category: 'expert_digest'[\s\S]{0,120}recipient: \{ kind: 'expert', id: adv\.id \}/);
+    expect(src('model-digest.ts')).toMatch(/recipient: g\.reviewer\?\.id \? \{ kind: 'expert', id: g\.reviewer\.id \}/);
+    expect(src('coordinator.ts')).toMatch(/category: 'coord_digest'[\s\S]{0,120}recipient: \{ kind: 'coordinator', id: c\.id \}/);
+    const core = src('core.ts');
+    expect(core).toMatch(/async function prepareStaffMail[\s\S]{0,400}if \(!recipient \|\| recipient\.kind !== audience/);
   });
   it('ترويستا RFC 8058 ورابط التفضيلات في الذيل', async () => {
     const url = unsubUrl('https://api.example.test', 'a.b.c');

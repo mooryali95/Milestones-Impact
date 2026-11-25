@@ -518,7 +518,9 @@ Deno.test('حارس «أعد من البداية»: كل عمود في صف ال
   // كل مفتاح أجنبي إلى participants: جدوله في قائمة المسح بعموده، أو يبقى (الجلسات)، أو ليس صفًا يملكه المشارك
   const NOT_OWNED: Record<string, string> = { 'hall_sessions.leader_id': 'جلسة قاعة للدفعة، والعمود يُفرَّغ', 'hall_sessions.persona_id': 'جلسة قاعة للدفعة، والعمود يُفرَّغ',
     // سجل الدمج (20261128190000): الحساب التجريبي لا يُدمج (merge_demo)، والسجل يُمحى مع الحساب نفسه
-    'participant_merges.kept_id': 'سجل دمج لا يُدمج فيه التجريبي', 'participant_merges.merged_id': 'سجل دمج لا يُدمج فيه التجريبي' };
+    'participant_merges.kept_id': 'سجل دمج لا يُدمج فيه التجريبي', 'participant_merges.merged_id': 'سجل دمج لا يُدمج فيه التجريبي',
+    // إشعار في صندوق خبير يذكر المشارك (20261129130000): ملك الخبير لا المشارك، ويُمحى مع حذف الحساب بالحذف المتسلسل
+    'participant_notifications.about_participant_id': 'إشعار في صندوق خبير، ملكه لا المشارك' };
   const cleared = new Map<string, string>([...[...Object.keys(EXPORT_TABLES), ...Object.keys(EXPORT_SKIPPED)].map((t) => [t, 'participant_id'] as [string, string]), ...Object.entries(DEMO_RESTART_EXTRA as Record<string, string>)]);
   const fks = [...sql.matchAll(/alter table leaders\.(\w+) add constraint \w+ FOREIGN KEY \((\w+)\) REFERENCES leaders\.participants\(id\)/g)].map((m) => [m[1], m[2]]);
   assert(fks.length >= 40, String(fks.length));

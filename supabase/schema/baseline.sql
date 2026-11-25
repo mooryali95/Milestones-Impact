@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261129120000_leaders_track_history
+-- as-of migration: 20261129130000_leaders_staff_messages
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1697,10 +1697,14 @@ create table if not exists leaders.participant_emails (
 );
 
 create table if not exists leaders.participant_mail_prefs (
-  participant_id uuid not null,
+  participant_id uuid,
   muted text[] default '{}'::text[] not null,
   updated_at timestamp with time zone default now() not null,
-  constraint participant_mail_prefs_pkey PRIMARY KEY (participant_id)
+  id uuid default gen_random_uuid() not null,
+  expert_id uuid,
+  coordinator_id uuid,
+  constraint participant_mail_prefs_one_owner CHECK ((num_nonnulls(participant_id, expert_id, coordinator_id) = 1)),
+  constraint participant_mail_prefs_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.participant_merge_rows (
@@ -1752,7 +1756,7 @@ create table if not exists leaders.participant_new_items (
 
 create table if not exists leaders.participant_notifications (
   id uuid default gen_random_uuid() not null,
-  participant_id uuid not null,
+  participant_id uuid,
   category text not null,
   title text not null,
   excerpt text,
@@ -1760,6 +1764,12 @@ create table if not exists leaders.participant_notifications (
   emailed boolean default true not null,
   read_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
+  expert_id uuid,
+  coordinator_id uuid,
+  about_participant_id uuid,
+  action_until timestamp with time zone,
+  resolved_at timestamp with time zone,
+  constraint participant_notifications_one_owner CHECK ((num_nonnulls(participant_id, expert_id, coordinator_id) = 1)),
   constraint participant_notifications_pkey PRIMARY KEY (id)
 );
 
@@ -3266,6 +3276,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.participant_mail_prefs add constraint participant_mail_prefs_coordinator_id_fkey FOREIGN KEY (coordinator_id) REFERENCES leaders.org_coordinators(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_mail_prefs add constraint participant_mail_prefs_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.participant_mail_prefs add constraint participant_mail_prefs_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3291,6 +3309,18 @@ exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.participant_new_items add constraint participant_new_items_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_notifications add constraint participant_notifications_about_participant_id_fkey FOREIGN KEY (about_participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_notifications add constraint participant_notifications_coordinator_id_fkey FOREIGN KEY (coordinator_id) REFERENCES leaders.org_coordinators(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.participant_notifications add constraint participant_notifications_expert_id_fkey FOREIGN KEY (expert_id) REFERENCES leaders.experts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3837,11 +3867,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS participant_emails_email_uniq ON leaders.parti
 
 CREATE INDEX IF NOT EXISTS participant_emails_participant_idx ON leaders.participant_emails USING btree (participant_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS participant_mail_prefs_coordinator_key ON leaders.participant_mail_prefs USING btree (coordinator_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS participant_mail_prefs_expert_key ON leaders.participant_mail_prefs USING btree (expert_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS participant_mail_prefs_participant_key ON leaders.participant_mail_prefs USING btree (participant_id);
+
 CREATE INDEX IF NOT EXISTS participant_merge_rows_merge_idx ON leaders.participant_merge_rows USING btree (merge_id);
 
 CREATE INDEX IF NOT EXISTS participant_merges_merged_idx ON leaders.participant_merges USING btree (merged_id);
 
+CREATE INDEX IF NOT EXISTS participant_notifications_by_about ON leaders.participant_notifications USING btree (about_participant_id) WHERE (about_participant_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS participant_notifications_by_coordinator ON leaders.participant_notifications USING btree (coordinator_id, created_at DESC) WHERE (coordinator_id IS NOT NULL);
+
+CREATE INDEX IF NOT EXISTS participant_notifications_by_expert ON leaders.participant_notifications USING btree (expert_id, created_at DESC) WHERE (expert_id IS NOT NULL);
+
 CREATE INDEX IF NOT EXISTS participant_notifications_by_participant ON leaders.participant_notifications USING btree (participant_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS participant_notifications_by_ref ON leaders.participant_notifications USING btree (ref) WHERE ((ref IS NOT NULL) AND (resolved_at IS NULL));
 
 CREATE UNIQUE INDEX IF NOT EXISTS participant_observations_once ON leaders.participant_observations USING btree (participant_id, code, ref) WHERE (code IS NOT NULL);
 

@@ -276,7 +276,7 @@ export async function sweep() {
       closed += 1;
       await audit('system', 'cron', 'f360.close', 'feedback_cycles', c.id);
       const adv = await advisorOf(c.participants).catch(() => null);
-      if (adv) await sendMail(adv.email, FEEDBACK_MAIL.ready.subject(c.participants?.full_name || 'مشارك'), feedbackMail('ready', adv.full_name, c.participants?.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'expert_digest', kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((x) => console.error('f360 ready mail', x));
+      if (adv) await sendMail(adv.email, FEEDBACK_MAIL.ready.subject(c.participants?.full_name || 'مشارك'), feedbackMail('ready', adv.full_name, c.participants?.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'expert_digest', kind: 'bulk', ref: `participant:${c.participant_id}`, recipient: { kind: 'expert', id: adv.id }, about: c.participant_id }).catch((x) => console.error('f360 ready mail', x));
       continue;
     }
     const due = remindersDue(c, s, now);
