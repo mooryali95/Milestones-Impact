@@ -46,7 +46,7 @@ export const STAGE_STATUS_AR = { done: 'مكتملة', active: 'الحالية',
 // الخط الزمني «الرحلة في لمحة» (J1b): نوع كل نشاط بكلمة، ومن يكمله، وحال المرحلة في الدفعة
 export const ACTIVITY_KIND_AR = Object.freeze({
   workshop: 'تدريب', check: 'تدريب', meeting: 'لقاء', reading: 'قراءة واختبار', video: 'مقطع مرئي', coaching: 'توجيه فردي',
-  curriculum: 'منهج المسار', upload: 'رفع ملف', form: 'نموذج', model: 'نموذج تطبيقي', capstone: 'مشروع التخرج',
+  curriculum: 'منهج المسار', upload: 'رفع ملف', form: 'نموذج', model: 'نموذج تطبيقي', capstone: 'وثيقة المبادرة',
   survey: 'استبانة', lab: 'أداة من المختبر', auto: 'آلي',
 });
 export const ACTIVITY_OWNER_AR = Object.freeze({
@@ -76,10 +76,12 @@ export const TRACK_COUNT = LEVELS.length ** DIMENSIONS.length;
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والمراجع يقرأ ويكتب ملاحظة أو يطلب تعديلًا.
 // بطاقة المبادرة وحدها بوابة تنتظر الاعتماد (MODEL_GATE_STATUS)
 // حال فصل وثيقة المبادرة كما يقرؤه فريق البرنامج في ملف المشارك (chapterState في capstone.js)
-export const CHAPTER_STATUS_AR = { empty: 'فارغ', draft: 'مسودة', submitted: 'مسلَّم', reviewed: 'مقروء', returned: 'يحتاج تعديلًا' };
-export const SUBMISSION_STATUS = { draft: 'قيد العمل', submitted: 'سُلّم، ويُحتسب في رحلتك', returned: 'يحتاج تعديلًا منك', reviewed: 'قُرئ' };
+// مجموعة حالات واحدة للفصل (تدقيق لغة المبادرة #71): لم يبدأ، قيد العمل، مقدَّم، مقروء، يحتاج تعديلًا.
+// صيغة المشارك (SUBMISSION_STATUS) وصيغة الإدارة (SUBMISSION_STATUS_ADMIN) مشتقتان منها، ولا تُكتب نسخة في شاشة.
+export const CHAPTER_STATUS_AR = { empty: 'لم يبدأ', draft: 'قيد العمل', submitted: 'مقدَّم', reviewed: 'مقروء', returned: 'يحتاج تعديلًا' };
+export const SUBMISSION_STATUS = { draft: CHAPTER_STATUS_AR.draft, submitted: 'مقدَّم، ويُحتسب في رحلتك', returned: 'يحتاج تعديلًا منك', reviewed: CHAPTER_STATUS_AR.reviewed };
 // وهي نفسها حالة فصل وثيقة المبادرة في لوحة المراجعة
-export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: 'مسودة', submitted: 'للقراءة', returned: 'يحتاج تعديلًا', reviewed: 'قُرئ' };
+export const SUBMISSION_STATUS_ADMIN = { ...SUBMISSION_STATUS, draft: CHAPTER_STATUS_AR.draft, submitted: 'مقدَّم، للقراءة', returned: CHAPTER_STATUS_AR.returned, reviewed: CHAPTER_STATUS_AR.reviewed };
 // من يراجع نماذج المشارك: مستشاره الفعلي، وبلا مستشار فريق البرنامج (الإدارة). مصدر واحد للنص في الخادم والتطبيقين
 export const REVIEWER_AR = Object.freeze({ advisor: 'المستشار', team: 'فريق البرنامج' });
 // النموذج البوابة (بطاقة المبادرة): حالته بانتظار الاعتماد لا «سُلّم»، والاعتماد قرار
@@ -117,8 +119,8 @@ export const TERMS = {
   coaching: 'التوجيه',            // لا «الكوتشينغ»
   community: 'مجتمع الممارسة',    // لا «مجتمع الأقران»
   handbook: 'كتاب القائد',        // لا «كتيب القائد» (قرار المالك 2026-11-16). ومصدره «الكتاب الأم»، ومنه الكتب الـ27
-  capstone: 'وثيقة المبادرة',      // المشروع نفسه «المبادرة»؛ و«مشروع التخرج» تعريف يظهر مرة واحدة في رأس شاشته
-  capstoneEyebrow: 'مشروع التخرج',
+  capstone: 'وثيقة المبادرة',      // المشروع نفسه «المبادرة»، لا «مشروع التخرج» (تدقيق لغة المبادرة v2)
+  capstoneEyebrow: 'المبادرة',
   framework: 'الإطار',            // milestone وimpact وleadership؛ «بُعد» لأبعاد معيار التقييم فقط
 };
 

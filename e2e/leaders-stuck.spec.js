@@ -15,7 +15,7 @@ function server() {
   const capstone = () => ({
     success: true, initiative: 'موعد أول أقرب', scope: 'project', scope_title: 'مشروع', level: 'beginner', track: null,
     capstone: { status: 'draft', status_title: 'قيد البناء', summary: '' }, sections,
-    checks: [{ key: 'cost-envelope', title: 'التكلفة مع الاحتياطي ضمن الميزانية المتاحة', ok: false, blocking: true, detail: 'التكلفة مع الاحتياطي 410,000 تتجاوز الميزانية 300,000.' }],
+    checks: [{ key: 'cost-envelope', title: 'التكلفة مع الاحتياطي ضمن الموازنة المتاحة', ok: false, blocking: true, detail: 'التكلفة مع الاحتياطي 410,000 تتجاوز الميزانية 300,000.' }],
     readiness: 60, ready_min: 80, card: { state: 'approved', sla: 'يومي عمل' }, can_submit: false, blocker: 'فحوص لازمة', rubric: [],
   });
   const me = {
@@ -57,9 +57,9 @@ test('فحص لازم فاشل وفصله لم يُلمس أسبوعًا: «تح
   await open(page, srv);
   const card = page.getByRole('region', { name: 'تحتاج توجيهًا؟' });
   await expect(card).toHaveAttribute('data-stuck', 'check');
-  await expect(card).toContainText('التكلفة مع الاحتياطي ضمن الميزانية المتاحة');
+  await expect(card).toContainText('التكلفة مع الاحتياطي ضمن الموازنة المتاحة');
   await expect(card.getByRole('button', { name: 'افتح «الموارد والتكلفة»' })).toBeVisible();
-  await expect(card.getByRole('button', { name: 'أرني المثال' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'اعرض المثال' })).toBeVisible();
   await card.getByRole('button', { name: 'ليس الآن' }).click();
   // الإشارة التالية: سجل المخاطر متوقف منذ 20 يومًا
   await expect(page.getByRole('region', { name: 'تحتاج توجيهًا؟' })).toHaveAttribute('data-stuck', 'draft');
@@ -71,12 +71,12 @@ test('فحص لازم فاشل وفصله لم يُلمس أسبوعًا: «تح
 test('«أريد التحدث مع مختص»: نوع الحاجة يختار الدور، والوصف يحمل الفصل والفحص، ويُرسل مع السؤال', async ({ page }) => {
   const srv = server();
   await open(page, srv);
-  await page.getByRole('region', { name: 'تحتاج توجيهًا؟' }).getByRole('button', { name: 'أريد التحدث مع مختص' }).click();
-  const ask = page.getByRole('region', { name: 'اسأل مختصًا عن «الموارد والتكلفة»' });
+  await page.getByRole('region', { name: 'تحتاج توجيهًا؟' }).getByRole('button', { name: 'اطلب استشارة خبير' }).click();
+  const ask = page.getByRole('region', { name: 'اسأل خبيرًا عن «الموارد والتكلفة»' });
   await expect(ask).toBeVisible();
   await expect.poll(() => srv.calls.filter((c) => c.action === 'experts.suggest').at(-1)).toMatchObject({ role: 'specialist', dimension: 'milestone' });
   const note = ask.getByRole('textbox');
-  await expect(note).toHaveValue('فصل «الموارد والتكلفة» في وثيقة مبادرتي (التكلفة مع الاحتياطي ضمن الميزانية المتاحة). سؤالي: ');
+  await expect(note).toHaveValue('فصل «الموارد والتكلفة» في وثيقة مبادرتي (التكلفة مع الاحتياطي ضمن الموازنة المتاحة). سؤالي: ');
   await ask.getByRole('radio', { name: 'علقت ولا أعرف كيف أكمل' }).click();
   await expect.poll(() => srv.calls.filter((c) => c.action === 'experts.suggest').at(-1)?.role).toBe('coach');
   await note.fill(`${await note.inputValue()}هل أقلص النطاق أم أطلب موازنة أكبر؟`);
@@ -88,6 +88,6 @@ test('«أريد التحدث مع مختص»: نوع الحاجة يختار ا
 
 test('«اسأل مختصًا» بجانب الفحص الفاشل يفتح السؤال عن فصله', async ({ page }) => {
   await open(page, server());
-  await page.locator('.cp-checks').getByRole('button', { name: 'اسأل مختصًا' }).click();
-  await expect(page.getByRole('region', { name: 'اسأل مختصًا عن «الموارد والتكلفة»' })).toBeVisible();
+  await page.locator('.cp-checks').getByRole('button', { name: 'اسأل خبيرًا' }).click();
+  await expect(page.getByRole('region', { name: 'اسأل خبيرًا عن «الموارد والتكلفة»' })).toBeVisible();
 });

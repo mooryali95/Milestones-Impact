@@ -30,7 +30,7 @@ export default function Outcome() {
         <div className="card milestone-card stack">
           <div className="badge"><span>✓</span></div>
           <h1 className="as-h2">شكرًا لك</h1>
-          <p className="muted">{decision === 'confirmed' ? 'سُجّل تأكيدك، وصار أثر المبادرة موثقًا في تقرير القائد والجهة.' : 'وصلت ملاحظتك إلى صاحب المبادرة ليصحح الأرقام.'}</p>
+          <p className="muted">{decision === 'confirmed' ? 'سُجّل تأكيدك، وصار أثر المبادرة موثقًا في تقرير القائد والجهة.' : 'وصلت ملاحظتك إلى قائد المبادرة ليصحح الأرقام.'}</p>
         </div>
       </div>
     );
@@ -64,14 +64,14 @@ export default function Outcome() {
         </table></div>
         <h3>المعالم</h3>
         <ul className="tr-ms">{s.milestones.map((m) => <li key={m.key}><b>{m.title}</b> · {data.statuses[m.status] || 'لم يُحدَّث'}{m.actual ? ` في ${dateAr(m.actual)}` : ''}<small> · المستهدف {m.due ? dateAr(m.due) : '·'}</small></li>)}</ul>
-        {data.narrative && <><h3>ما تغيّر بحسب صاحب المبادرة</h3><p>{data.narrative}</p></>}
+        {data.narrative && <><h3>ما تغيّر بحسب قائد المبادرة</h3><p>{data.narrative}</p></>}
         {data.blockers && <><h3>ما يعيقه</h3><p>{data.blockers}</p></>}
         {data.support && <><h3>ما يحتاجه من جهته أو مستشاره</h3><p>{data.support}</p></>}
       </div>
 
       <div className="card stack">
         <label className="field">
-          <span>ملاحظتك (تصل صاحب المبادرة، وتلزم إن اعترضت)</span>
+          <span>ملاحظتك (تصل إلى قائد المبادرة، وهي مطلوبة إن اعترضت)</span>
           <textarea className="input" rows={4} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         {error && <div className="alert err" role="alert">{error}</div>}

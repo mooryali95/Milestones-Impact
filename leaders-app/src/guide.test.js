@@ -119,7 +119,7 @@ describe('المثال المحلول: مبادرة متسقة لكل قطاع',
       const cost = costSummary(models['cost-plan'], answers['cost-plan']);
       expect(cost.withContingency).toBeLessThanOrEqual(cost.envelope);
     });
-    it(`${ex.sector_title}: حالة العمل بأبعادها الخمسة مكتملة، والميثاق يُبنى منه`, () => {
+    it(`${ex.sector_title}: مسوّغات المبادرة بأبعادها الخمسة مكتملة، والميثاق يُبنى منه`, () => {
       const doc = exampleDoc(ex);
       expect(businessCase(doc).filter((c) => c.missing)).toEqual([]);
       expect(charterData(doc).rows.length).toBeGreaterThanOrEqual(10);
@@ -131,7 +131,7 @@ describe('المثال المحلول: مبادرة متسقة لكل قطاع',
       expect(meta.confidential).toContain('مثال تعليمي');
       expect(body).not.toContain('مسودة عمل');
       expect(body).not.toContain('فحوص الاتساق بين الفصول');
-      expect(body).toContain('حالة العمل');
+      expect(body).toContain('مسوّغات المبادرة');
     });
   }
 });

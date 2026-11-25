@@ -355,7 +355,7 @@ test('الدقة على الهاتف (390): «النتائج» ظاهرة بلا
     return r.width > 0 && r.left >= c.left - 0.5 && r.right <= c.right + 0.5;
   });
   expect(inside).toBe(true);
-  await expect(ev.getByRole('columnheader', { name: 'الكلفة' })).toBeHidden();
+  await expect(ev.getByRole('columnheader', { name: 'التكلفة' })).toBeHidden();
   const v = ev.getByRole('list', { name: 'شرطا فتح البوابة' }).locator('bdi').first();
   await expect(v).toHaveText('2026-11-16-draft-1');
   await expect(v).toHaveAttribute('dir', 'ltr');

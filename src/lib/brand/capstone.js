@@ -76,7 +76,7 @@ export const STYLE = `<style>
 .tbl { table-layout: fixed; }
 .tbl th { white-space: normal; line-height: 1.5; vertical-align: bottom; }
 .tbl td { overflow-wrap: break-word; }
-/* صفحات تبدأ من أعلى الورقة: الفهرس، والميثاق، وحالة العمل، وخطة الانطلاق، وأول الفصول، والملاحق. قاعدة واحدة تحكم الطباعة وملف PDF (pdf.js) */
+/* صفحات تبدأ من أعلى الورقة: الفهرس، والميثاق، ومسوّغات المبادرة، وخطة الانطلاق، وأول الفصول، والملاحق. قاعدة واحدة تحكم الطباعة وملف PDF (pdf.js) */
 .cp-np + .sec { break-before: page; }
 .cp-why { break-after: avoid; }
 .tbl thead { break-after: avoid; }
@@ -169,7 +169,7 @@ ${list.map((r, i) => {
   return `<figure class="cp-fig">${svg}<figcaption>المخطط الزمني من ${esc(fmt(min))} إلى ${esc(fmt(max))}</figcaption></figure>`;
 }
 
-// خريطة المخاطر: الاحتمال × الأثر من 1 إلى 5
+// خريطة المخاطر: الاحتمال × شدة الأثر من 1 إلى 5 (العمود يُطابق بـ«الأثر» فيقرأ «شدة الأثر» والتسمية القديمة معًا)
 export function heatmap(columns, rows) {
   const ci = (w) => (columns || []).findIndex((c) => String(c).includes(w));
   const p = ci('الاحتمال'), im = ci('الأثر');
@@ -191,7 +191,7 @@ export function heatmap(columns, rows) {
   }
   cells += `<div class="ax"></div>${[1, 2, 3, 4, 5].map((b) => `<div class="ax">${b}</div>`).join('')}`;
   return `<figure class="cp-fig"><div class="cp-heat">${cells}</div>
-<div class="cp-legend"><span><i style="background:#E1BE85"></i>عالٍ (${RISK_HIGH} فأكثر)</span><span><i style="background:#F2E6D0"></i>متوسط</span><span><i style="background:#EEF1F0"></i>منخفض</span><span>المحور الرأسي: الاحتمال · الأفقي: الأثر</span></div>
+<div class="cp-legend"><span><i style="background:#E1BE85"></i>عالٍ (${RISK_HIGH} فأكثر)</span><span><i style="background:#F2E6D0"></i>متوسط</span><span><i style="background:#EEF1F0"></i>منخفض</span><span>المحور الرأسي: الاحتمال · الأفقي: شدة الأثر</span></div>
 <figcaption>خريطة المخاطر: عدد البنود في كل خانة</figcaption></figure>`;
 }
 
@@ -206,7 +206,7 @@ function costBlock(cost, doc = null) {
     { value: money(cost.total), label: 'التكلفة التقديرية' },
     // بلا احتياطي لا خانتا «الاحتياطي 0%» و«مع الاحتياطي»
     ...(cost.contingency ? [{ value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: money(cost.withContingency), label: 'مع الاحتياطي' }] : []),
-    { value: money(cost.envelope), label: 'الميزانية المتاحة', hint: cost.envelope != null ? (cost.withContingency <= cost.envelope ? 'ضمن الميزانية' : 'تتجاوز الميزانية') : '' },
+    { value: money(cost.envelope), label: 'الموازنة المتاحة', hint: cost.envelope != null ? (cost.withContingency <= cost.envelope ? 'ضمن الموازنة' : 'تتجاوز الموازنة') : '' },
   ])}${figs || (rows.length > 1 ? `<div class="cp-fig">${bars(rows, Math.max(...rows.map((r) => r.value)), { ltr: true })}<p class="cp-legend">التكلفة بحسب رمز الحزمة</p></div>` : '')}`;
 }
 
@@ -300,19 +300,19 @@ function trackingBlock(t) {
     ${kpis([
       { value: t.health?.[s.health] || s.health_title, label: 'حالة المبادرة', hint: `اليوم ${s.day} من الاعتماد` },
       { value: pct(s.milestones.on_time), label: 'معالم في موعدها', hint: `${s.milestones.done} من ${s.milestones.total} تحققت` },
-      { value: pct(s.benefits.realization), label: 'تحقق المنافع', hint: `${s.benefits.measured} من ${s.benefits.total} مقيسة` },
+      { value: pct(s.benefits.realization), label: 'نسبة تحقق المنافع', hint: `${s.benefits.measured} من ${s.benefits.total} مقيسة` },
       { value: s.updates, label: 'تحديث شهري' },
     ])}
     <h3>المعالم</h3>
     ${table([{ label: 'المعلم' }, { label: 'المستهدف', width: '22mm' }, { label: 'الحالة', width: '24mm' }, { label: 'تحقق في', width: '22mm' }, { label: 'ملاحظة' }], ms)}
     <h3>المنافع</h3>
-    ${table([{ label: 'المنفعة' }, { label: 'خط الأساس', width: '20mm' }, { label: 'المستهدف', width: '20mm' }, { label: 'الفعلي', width: '20mm' }, { label: 'التحقق', width: '16mm' }], bs)}
+    ${table([{ label: 'المنفعة' }, { label: 'خط الأساس', width: '20mm' }, { label: 'المستهدف', width: '20mm' }, { label: 'الفعلي', width: '20mm' }, { label: 'نسبة التحقق', width: '16mm' }], bs)}
     ${points(cps, '')}
     ${last?.narrative ? callout(`آخر ما كتبه القائد (${last.period})`, last.narrative) : ''}`,
     'الخطة من الوثيقة المعتمدة، والفعلي من تحديثات القائد الشهرية. نسبة التحقق هي ما تحرك من خط الأساس نحو المستهدف، ويؤكد الراعي أرقام نقطتي المراجعة.');
 }
 
-// ── ميثاق المبادرة وحالة العمل: عرضان مولّدان من الفصول (business-case.js) ──
+// ── ميثاق المبادرة ومسوّغات المبادرة: عرضان مولّدان من الفصول (business-case.js) ──
 // الحقول التي يعرضها الميثاق من البطاقة (business-case.js charterData): لا تُكرر في فصل البطاقة
 // والبريد لا يُطبع في الوثيقة أصلًا: تُقرأ وتُتداول، والراعي يُعرف بمنصبه ودوره
 const NEVER_PRINTED = new Set(['sponsor_email']);
@@ -327,7 +327,7 @@ function charterBlock(doc) {
   'يُولَّد من البطاقة والتكلفة والمنافع والمخاطر، فلا يُكتب مرتين. به يُؤذن بالبدء.');
 }
 
-// حالة العمل: النقاط هنا، والجداول في فصولها بإحالة إليها، فلا يقرأ صاحب القرار الجدول نفسه مرتين
+// مسوّغات المبادرة: النقاط هنا، والجداول في فصولها بإحالة إليها، فلا يقرأ صاحب القرار الجدول نفسه مرتين
 const TABLE_HOME = { 'الدليل على المشكلة': 'options-analysis', البدائل: 'options-analysis', 'ما يُشترى أو يُتعاقد عليه': 'procurement' };
 function caseBlock(doc) {
   // البعد الذي لم تُملأ فصوله لا يُعرض: يُذكر في ملحق ما ينقص
@@ -339,7 +339,7 @@ function caseBlock(doc) {
     const n = t.rows.length;
     return `<p class="cp-ref"><b>${esc(t.label)}</b> (${n} ${n === 1 ? 'صف' : n === 2 ? 'صفان' : n <= 10 ? 'صفوف' : 'صفًا'}): ${i >= 0 ? `<a href="#ch-${esc(secs[i].key)}">الفصل ${i + 1} «${esc(secs[i].title)}»</a>` : 'في فصله'}.</p>`;
   };
-  return anchor('case', true) + section('للقرار · خمسة أسئلة', 'حالة العمل', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
+  return anchor('case', true) + section('للقرار · خمسة أسئلة', 'مسوّغات المبادرة', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
     ${points(c.points.map(([k, v]) => raw(`<b>${esc(k)}:</b> ${esc(v)}`)), '')}${c.table ? ref(c.table) : ''}</div>`).join(''),
   'أسئلة يطرحها صاحب القرار قبل التمويل، يجاب عنها من فصول الوثيقة نفسها.');
 }
@@ -416,10 +416,10 @@ function closureBlock(doc) {
   return section('الإغلاق', `تقرير إغلاق المبادرة (${c.status})`, `
     ${kpis([
       { value: `${c.delivered.done} من ${c.delivered.total}`, label: 'معالم تحققت', hint: c.delivered.on_time != null ? `${c.delivered.on_time}% في موعدها` : '' },
-      { value: pct(c.realization), label: 'تحقق المنافع' },
+      { value: pct(c.realization), label: 'نسبة تحقق المنافع' },
       { value: c.sponsor || '·', label: 'مراجعة اليوم 180' },
     ])}
-    ${c.benefits.length ? `<h3>ما تحقق من المنافع</h3>${table([{ label: 'المنفعة' }, { label: 'خط الأساس', width: '22mm' }, { label: 'المستهدف', width: '22mm' }, { label: 'الفعلي', width: '22mm' }, { label: 'التحقق', width: '18mm' }],
+    ${c.benefits.length ? `<h3>ما تحقق من المنافع</h3>${table([{ label: 'المنفعة' }, { label: 'خط الأساس', width: '22mm' }, { label: 'المستهدف', width: '22mm' }, { label: 'الفعلي', width: '22mm' }, { label: 'نسبة التحقق', width: '18mm' }],
       c.benefits.map((b) => [b.title, b.baseline ?? '·', b.target ?? '·', b.value ?? '·', pct(b.pct)]))}` : ''}
     <h3>ما لم يتحقق ولماذا</h3>
     ${points([
@@ -501,7 +501,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
   const viz = scheduleModel(doc);
   const visuals = visualsBlock(viz);
   const gapsHtml = example || !appendix ? '' : gapsBlock(gaps);
-  const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'حالة العمل'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات'], gapsHtml && ['gaps', 'ما ينقص لإكمال الوثيقة']].filter(Boolean);
+  const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'مسوّغات المبادرة'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات'], gapsHtml && ['gaps', 'ما ينقص لإكمال الوثيقة']].filter(Boolean);
   body += tocBlock(doc, front, { draft: !approved && !example });
   body += charter + bcase + launch;
 
@@ -526,7 +526,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
     body += section('التقييم', 'تقييم المستشار', `
       <p class="cp-score"><b>${esc(r.score ?? '·')}</b><span>من 100</span></p>
       ${table([{ label: 'البعد' }, { label: 'الدرجة', width: '18mm' }, { label: 'الملاحظة' }], rows)}
-      ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, r.priority ? `معيار من ${RUBRIC.length} أبعاد، وأبعاد الإطار الأولوي في مسار القائد وزنها ×${PRIORITY_WEIGHT}.` : `معيار من ${RUBRIC.length} أبعاد بوزن واحد، لتساوي مستويات القائد في الأطر الثلاثة.`);
+      ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, r.priority ? `معيار من ${RUBRIC.length} أبعاد، وأبعاد الإطار ذي الأولوية في مسار القائد وزنها ×${PRIORITY_WEIGHT}.` : `معيار من ${RUBRIC.length} أبعاد بوزن واحد، لتساوي مستويات القائد في الأطر الثلاثة.`);
   }
 
   if (approved) {
@@ -536,7 +536,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
       ${points([
         raw(`<b>المستشار:</b> راجع الوثيقة وقبلها بمعيار التقييم.`),
         sp?.status === 'endorsed' ? raw(`<b>الراعي${sp.name ? `، ${esc(sp.name)}` : ''}:</b> أيّد المبادرة في ${esc(fmt(sp.at))}${sp.note ? `، وكتب: «${esc(sp.note)}»` : ''}.`)
-          : raw('<b>الراعي:</b> اعتُمدت بقرار الإدارة دون تأييد الراعي.'),
+          : raw('<b>الراعي:</b> اعتُمدت بقرار فريق البرنامج دون تأييد الراعي.'),
       ], '')}`);
   }
 
@@ -554,7 +554,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
       // شعار الجهة ولونها على الغلاف وترويسة الصفحات (doc.js)، كما في الوثيقة المؤسسية
       ...(example ? {} : { brand: { name: m.org?.name || null, logo: m.org?.logo || null, color: m.org?.color || null } }),
       eyebrow: example ? 'Leaders Program · Worked example' : 'Leaders Program · Capstone', title: m.initiative || 'وثيقة المبادرة',
-      subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، مشروع التخرج في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
+      subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، أُعدّت في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),
       // ختم «مسودة عمل» في الغلاف لكل ما لم يُعتمد (doc.js meta.stamp)
       stamp: approved || example || !appendix ? null : 'مسودة عمل',

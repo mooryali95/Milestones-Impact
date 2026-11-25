@@ -87,7 +87,7 @@ export function expertLoad(experts, { requests = {}, upcoming = {}, people = {} 
 // ── ماذا تغيّر: سجل التدقيق كله بنص يُقرأ ──
 export const ACTOR_AR = { admin: 'الإدارة', participant: 'مشارك', system: 'النظام', coordinator: 'منسق جهة', expert: 'خبير' };
 export const CHANGE_AREAS = {
-  participant: 'المشاركون', placement: 'المستويات', assessment: 'القياس', requirement: 'المتطلبات', submission: 'الأعمال', capstone: 'مشاريع التخرج',
+  participant: 'المشاركون', placement: 'المستويات', assessment: 'القياس', requirement: 'المتطلبات', submission: 'الأعمال', capstone: 'المبادرات',
   cohort: 'الدفعات', workshop: 'الحضور والجلسات', program: 'البرامج', expert: 'الخبراء', certificate: 'الشهادات', payment: 'الدفع', sponsor: 'الرعاية', settings: 'الإعدادات', system: 'النظام',
 };
 // «الحضور والجلسات» مجال واحد لبادئتين في السجل: حضور الورش (workshop.*) والجلسات الفردية (coaching.*)، كاسم شاشتهما

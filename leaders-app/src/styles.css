@@ -1149,7 +1149,7 @@ details.mf-guide:not([open]) { background: transparent; border-inline-start-colo
   .j-side .next-card:first-child { background: linear-gradient(160deg, var(--brand-cream-light), #fff 60%); box-shadow: 0 0 0 1px rgba(148, 112, 46, .3), var(--shadow); }
 }
 
-/* ── مشروع التخرج: وثيقة المبادرة ── */
+/* ── وثيقة المبادرة ── */
 .cp-hero { position: relative; overflow: hidden; border-radius: 20px; padding: 28px 30px; margin-bottom: 18px; color: #fff; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center;
   background: radial-gradient(120% 160% at 100% 0%, var(--st-info) 0%, var(--brand-slate) 35%, var(--brand-graphite) 70%, var(--brand-ink) 100%); box-shadow: 0 24px 60px rgba(6,19,24,.22); }
 .cp-hero::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgba(199,154,75,.05) 0 1px, transparent 1px 24px); }

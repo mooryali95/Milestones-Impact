@@ -90,7 +90,7 @@ test('الفصول في «المبادرة» وحده: «التعلم» يشير
   await expect(tab(page, 'المبادرة')).toHaveAttribute('aria-selected', 'true');
   const cap = page.locator('.pf-cap');
   await expect(cap.getByRole('link', { name: 'صفحة المراجعة' })).toHaveAttribute('href', '#/leaders/capstones/p1');
-  await expect(cap.getByRole('button', { name: 'قيّم فصل بطاقة المبادرة' })).toBeVisible();
+  await expect(cap.getByRole('button', { name: 'اقرأ فصل بطاقة المبادرة' })).toBeVisible();
   await expect(cap.locator('[data-chapter="stakeholders"] button')).toHaveCount(0);
 });
 

@@ -87,7 +87,7 @@ export default function SharedInitiative() {
         <div className="card stack si-closed">
           <h1 className="as-h2">الرابط غير متاح</h1>
           <p>{data.message}</p>
-          <p className="small muted">روابط المشاركة خاصة ومؤقتة، ويملك صاحب الوثيقة إلغاءها متى شاء.</p>
+          <p className="small muted">روابط المشاركة خاصة ومؤقتة، ويملك قائد المبادرة إلغاءها متى شاء.</p>
         </div>
       </div>
     );
@@ -112,14 +112,14 @@ export default function SharedInitiative() {
         </div>
         <div className="si-acts">
           {data.allow_download && <button type="button" className="btn gold" onClick={download} disabled={!report || !!pdf} aria-live="polite">{pdf || 'تحميل PDF'}</button>}
-          {data.allow_notes && !sent && <button type="button" className="btn ghost" onClick={() => { setNoteOpen(true); requestAnimationFrame(() => document.getElementById('si-note-h')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}>اكتب ملاحظة لصاحبها</button>}
+          {data.allow_notes && !sent && <button type="button" className="btn ghost" onClick={() => { setNoteOpen(true); requestAnimationFrame(() => document.getElementById('si-note-h')?.scrollIntoView({ behavior: 'smooth', block: 'start' })); }}>اكتب ملاحظة لقائد المبادرة</button>}
         </div>
       </header>
       {data.allow_notes && (sent
         ? <div className="card si-thanks" role="status"><b>وصلت ملاحظتك إلى {data.owner}.</b><span className="muted small"> شكرًا لك. لا يراها أحد غيره.</span></div>
         : noteOpen && <div className="card"><NoteForm t={t} sections={data.sections || []} owner={data.owner} onSent={() => { setSent(true); setNoteOpen(false); }} /></div>)}
       {html ? <DocFrame html={html} /> : <div className="center-load"><div className="spinner" /></div>}
-      <p className="small muted si-foot">وثيقة من برنامج القادة في Milestone Impact. لا تُنشر ولا تُعاد مشاركتها دون إذن صاحبها.</p>
+      <p className="small muted si-foot">وثيقة من برنامج القادة في Milestone Impact. لا تُنشر ولا تُعاد مشاركتها دون إذن قائدها.</p>
     </div>
   );
 }
