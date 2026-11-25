@@ -23,7 +23,7 @@ import {
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
-import { trackManifest, withBridges } from './track-manifest.js';
+import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
 import { trackHistory, unseenNew } from './track-history.ts';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
@@ -518,7 +518,8 @@ export async function postInstrumentFor(participantId: string) {
 // هوية المسار: للمشارك اسمه ووصفه فقط، وللإدارة الرمز ومحور الأولوية أيضًا.
 const TRACK_FIELDS = 'key, title_ar, summary_ar, focus_ar, journey_ar, priority_dimension';
 // المشروع التطبيقي لا يُكتب لكل مسار: يُشتق من فصول وثيقة المبادرة نفسها
-async function trackFor(p: any, levels: Record<string, string>, scope: string | null = null) {
+// requirements: بنود رحلته الفعلية (نسخة دفعته)، فتعد البطاقة ما فيها وحده (cardOnJourney)
+async function trackFor(p: any, levels: Record<string, string>, scope: string | null = null, requirements: any[] | null = null) {
   const key = trackKey(levels);
   if (!key) return null;
   const [{ data }, models] = await Promise.all([
@@ -530,7 +531,7 @@ async function trackFor(p: any, levels: Record<string, string>, scope: string | 
   return {
     ...t, priority_dimension: priority, profile: await profileFor(levels, priority), strengths: strengthsLine(levels, priority),
     // بطاقة المسار من مصدرها الواحد (track-manifest.js)
-    card: trackManifest(key, priority).card,
+    card: cardOnJourney(trackManifest(key, priority).card, requirements),
     project: trackProject(models.data || [], levels, scope, priority)?.text || null,
   };
 }
@@ -695,7 +696,7 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   const fc: any = finalConfig(finalEval);
   // ما يراه المشارك من دفعته (visibility.js): تعذّر القراءة يعيد الافتراضي ولا يُسقط الرحلة
   const vis: Record<string, boolean> = await visibilityOfCohort(def.cohort?.id || null).catch(() => resolveVisibility(null, null));
-  const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
+  const track = trackView(await trackFor(p, levels, p.work_scope || null, def.requirements || null), audience);
   // سجل المسار وسطر التطور (track-history.ts): يراه المشارك والمستشار، وتعذّره يعيد قائمة فارغة
   const history = pl.length ? await trackHistory(p.id).catch(() => []) : [];
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);

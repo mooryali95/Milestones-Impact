@@ -11,9 +11,11 @@ const ROOT = join(__dirname, '../..');
 const LIST = SLICES.bridges.list;
 
 describe('الجسور بين الأطر', () => {
-  it('حدها 12، ولكل جسر باب قائم في إطاره وشرط في إطار آخر', () => {
-    expect(LIST.length).toBeLessThanOrEqual(CARDS.base.bridges.cap);
+  it('اثنا عشر جسرًا (الحد كاملًا)، ولكل جسر باب قائم في إطاره وشرط في إطار آخر', () => {
     expect(CARDS.base.bridges.cap).toBe(12);
+    expect(LIST).toHaveLength(CARDS.base.bridges.cap);
+    // موزعة على الأطر الثلاثة، أربعة لكل إطار
+    for (const d of ['milestone', 'impact', 'leadership']) expect(LIST.filter((b) => b.dimension === d), d).toHaveLength(4);
     for (const b of LIST) {
       expect(MODULES.some((m) => m.dimension === b.dimension && m.chapter_key === b.chapter_key), b.key).toBe(true);
       const [d] = b.when.split(':');

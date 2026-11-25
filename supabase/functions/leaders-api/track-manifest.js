@@ -35,7 +35,7 @@ export { CARDS, LENS, SLICES };
 export const FORM_SECTIONS = Object.freeze({
   card: Object.freeze(['decision', 'card', 'first-90-days', 'approval']),
   charter: Object.freeze(['decision', 'overview', 'why', 'value', 'plan', 'governance', 'approval']),
-  case: Object.freeze(['decision', 'overview', 'why', 'value', 'plan', 'governance', 'impact', 'approval']),
+  case: Object.freeze(['decision', 'overview', 'why', 'value', 'plan', 'commercial', 'governance', 'impact', 'glossary', 'approval']),
 });
 
 const clean = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !k.startsWith('_')));
@@ -118,6 +118,25 @@ export function withBridges(m) {
   const mine = BRIDGES.filter((b) => b.dimension === m?.dimension && b.chapter_key === m?.chapter_key);
   if (!mine.length) return m?.body_md || '';
   return `${m.body_md || ''}\n\n${mine.map((b) => `:::when=${b.when}\n## ${b.title}\n\n${b.md}\n:::`).join('\n\n')}`;
+}
+
+/**
+ * بطاقة المسار على رحلة المشارك الفعلية: الدفعة المثبتة على نسخة رحلة مجمدة (program_versions) قد لا تحوي ما أضافته الشرائح
+ * بعدها (O-COST وO-EVID وL-GOV)، والنسخة لا تُمس. فتعدّ البطاقة من «أعمال مستواك» ما في رحلته فعلًا، ولا تعد ما ليس فيها.
+ * requirements: بنود رحلته كما تقرؤها journeyDefinition (أو null فتبقى البطاقة كما هي). المختبرات لا تتبع النسخة فتبقى.
+ */
+export function cardOnJourney(card, requirements) {
+  if (!card || !Array.isArray(requirements)) return card;
+  const have = new Set(requirements.filter((r) => r && r.active !== false).map((r) => r.code));
+  const keep = (codes) => (codes || []).filter((c) => have.has(c));
+  return {
+    ...card,
+    journey: {
+      ...card.journey,
+      requirements: keep(card.journey.requirements),
+      by_framework: Object.fromEntries(Object.entries(card.journey.by_framework || {}).map(([d, v]) => [d, { ...v, requirements: keep(v.requirements) }])),
+    },
+  };
 }
 
 /** حد الحقول المطلوبة: متوسط حدود مستويات الأطر الثلاثة */
