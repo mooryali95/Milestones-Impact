@@ -55,6 +55,24 @@ export function ownAssetsOf(bundle) {
   return Object.keys(bundle || {}).filter((k) => k.startsWith('assets/') && !k.slice(7).includes('/')).map((k) => k.slice(7)).sort();
 }
 
+// ════════════════════════════════════════════════════════════════
+// assetWorker: عامل Pages لـ/assets/* (shared/build/asset-worker.js) يُكتب إلى _worker.js في الناتج كما هو، ومعه
+// _routes.json يحصره في /assets/* وحده، فكل ما سواه يُخدم كما كان بـ_headers و_redirects. سبب العامل وسبب اختياره بدل
+// مجلد functions/ في رأس asset-worker.js. مصدر واحد للتطبيقين، والناتج المودع يطابق مصدره كبقية الملفات.
+// ════════════════════════════════════════════════════════════════
+export const ASSET_ROUTES = { version: 1, include: ['/assets/*'], exclude: [] };
+export function assetWorker() {
+  return {
+    name: 'mi-asset-worker',
+    apply: 'build',
+    generateBundle() {
+      const source = readFileSync(new URL('./asset-worker.js', import.meta.url), 'utf8');
+      this.emitFile({ type: 'asset', fileName: '_worker.js', source });
+      this.emitFile({ type: 'asset', fileName: '_routes.json', source: `${JSON.stringify(ASSET_ROUTES)}\n` });
+    },
+  };
+}
+
 export function retainedAssets(storeDir) {
   return {
     name: 'mi-retained-assets',

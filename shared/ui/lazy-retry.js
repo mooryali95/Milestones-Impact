@@ -10,7 +10,8 @@
 // الخيار error (الخطأ الذي سبّب إعادة التحميل): يُطلب الملف الفاشل من الشبكة أولًا بـcache: 'reload' فيستبدل المتصفح ما خزّنه
 // له. رد Pages للملف الغائب يحمل ترويسة /assets/* (ثابت سنة) لأن _headers تطابق مسار الطلب لا الملف المقدَّم، فيبقى 404
 // مخزنًا في المتصفح. فإن عاد الملف بعد تراجع الواجهة إلى نشر سابق، أعاد هذا الطلب تخزينه سليمًا قبل إعادة التحميل.
-// يعمل حيث تحمل رسالة الخطأ رابط الملف (Chromium وFirefox)، وSafari لا يذكره فلا طلب فيه (RUNBOOK §2).
+// Chromium وFirefox يذكران رابط الملف في رسالة الخطأ فيُطلب وحده. Safari لا يذكره، فتُسأل الملفات المرشحة (chunkCandidates)
+// ويُجدَّد منها ما رده المخزن غير سليم. وعلى الخادم عامل Pages يرد الملف الغائب بلا تخزين (shared/build/asset-worker.js).
 import { lazy } from 'react';
 
 export const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to load module script|MIME type|ChunkLoadError|Loading (?:CSS )?chunk \S+ failed|Unable to preload CSS/i;
@@ -61,25 +62,84 @@ export function failedAssetUrl(e, origin = defaultLocation()?.origin) {
   } catch { return null; }
 }
 
-// يطلب الملف الفاشل من الشبكة متجاوزًا مخزن المتصفح (فيستبدل رده المخزن)، بمهلة أقصاها timeoutMs. لا يرمي أبدًا
-export function refreshFailedAsset(e, { fetchImpl = typeof fetch === 'function' ? fetch : null, origin, timeoutMs = 3000 } = {}) {
+// ملفات الاستيراد المرشحة حين لا تذكر رسالة الخطأ رابطًا (Safari: «Importing a module script failed.»): ما في نص دالة
+// التحميل من import("…") (في البناء: import("./<القسم>-<البصمة>.js") نسبيًا إلى assets/)، وروابط modulepreload التي يضعها
+// Vite لتبعيات القسم، وسكربتات الوحدات، وما طلبته الصفحة من /assets/*.js|css (Resource Timing). من النطاق نفسه وحده، و60 على الأكثر
+const IMPORT_SPEC = /import\(\s*["'`]([^"'`]+?\.(?:m?js|jsx|css))["'`]\s*\)/g;
+const ASSET_PATH = /^\/assets\/[^?#]+\.(?:m?js|css)$/i;
+export function chunkCandidates({ load = null, origin = defaultLocation()?.origin, doc = typeof document === 'undefined' ? null : document, perf = typeof performance === 'undefined' ? null : performance, max = 60 } = {}) {
+  if (!origin) return [];
+  const base = `${origin}/assets/`;
+  const out = new Set();
+  const add = (href, rel = base) => {
+    try {
+      const u = new URL(href, rel);
+      if (u.origin === origin && ASSET_PATH.test(u.pathname)) out.add(`${u.origin}${u.pathname}`);
+    } catch { /* رابط غير صالح */ }
+  };
+  try { if (typeof load === 'function') for (const m of String(load).matchAll(IMPORT_SPEC)) add(m[1]); } catch { /* نص الدالة غير متاح */ }
+  try { if (doc) for (const el of doc.querySelectorAll('link[rel="modulepreload"][href], script[type="module"][src], link[rel="stylesheet"][href]')) add(el.getAttribute('href') || el.getAttribute('src'), doc.baseURI || origin); } catch { /* لا مستند */ }
+  try { if (perf && typeof perf.getEntriesByType === 'function') for (const e of perf.getEntriesByType('resource')) add(e.name); } catch { /* لا Resource Timing */ }
+  return [...out].slice(0, max);
+}
+
+// اسم القسم من دالة التحميل (import("./ExpertPortal-<البصمة>.js") أو ('./screens/ExpertPortal.jsx')) بحروف صغيرة لاسم فعل
+// القياس (lazy.<القسم>)، أو '' إن لم يُعرف
+export function chunkName(load) {
+  try {
+    const m = String(load).match(/import\(\s*["'`](?:[^"'`]*\/)?([A-Za-z][A-Za-z0-9]*)(?:[-.][^"'`/]*)?["'`]/);
+    return m ? m[1].toLowerCase().slice(0, 40) : '';
+  } catch { return ''; }
+}
+
+const okAsset = (res) => !!res && res.ok && !/^text\/html/i.test((res.headers && res.headers.get && res.headers.get('content-type')) || '');
+
+// يطلب الملف الفاشل من الشبكة متجاوزًا مخزن المتصفح (فيستبدل رده المخزن)، بمهلة أقصاها timeoutMs. لا يرمي أبدًا.
+// بلا رابط في الخطأ (Safari): يسأل كل ملف مرشح (chunkCandidates) بطلب عادي يجيبه المخزن غالبًا بلا شبكة، وما رده غير سليم
+// (404 مخزن، أو صفحة HTML) يُطلب ثانية بـcache: 'reload' فيستبدل المتصفح رده المخزن قبل إعادة التحميل
+export function refreshFailedAsset(e, { fetchImpl = typeof fetch === 'function' ? fetch : null, origin, timeoutMs = 3000, load = null, candidates = null } = {}) {
+  if (typeof fetchImpl !== 'function') return null;
+  const call = (url, init) => { try { return Promise.resolve(fetchImpl(url, { credentials: 'same-origin', ...init })).catch(() => null); } catch { return Promise.resolve(null); } };
   const url = failedAssetUrl(e, origin);
-  if (!url || typeof fetchImpl !== 'function') return null;
+  let req;
+  if (url) req = call(url, { cache: 'reload' });
+  else {
+    const list = Array.isArray(candidates) ? candidates : chunkCandidates({ load, origin: origin ?? undefined });
+    if (!list.length) return null;
+    req = Promise.all(list.map((u) => call(u).then((res) => (okAsset(res) ? null : call(u, { cache: 'reload' })))));
+  }
   let timer;
   const wait = new Promise((r) => { timer = setTimeout(r, timeoutMs); });
-  let req;
-  try { req = Promise.resolve(fetchImpl(url, { cache: 'reload', credentials: 'same-origin' })).catch(() => {}); } catch { req = Promise.resolve(); }
   return Promise.race([req, wait]).then(() => { clearTimeout(timer); });
+}
+
+// المخرج الأخير حين يتكرر فشل القسم بعد إعادة التحميل التلقائية: يلغي تسجيل عامل الخدمة، ويحذف مخازنه، ويجدد ملفات
+// /assets/ المرشحة من الشبكة (refreshFailedAsset بلا رابط)، ثم يفتح الصفحة برابط فيه معامل جديد فلا يُقدَّم من أي مخزن
+export const FRESH_PARAM = 'mi_fresh';
+export async function hardReload({ href = defaultLocation()?.href, navigate = defaultNavigate, now = Date.now(), win = typeof window === 'undefined' ? null : window, refresh = refreshFailedAsset } = {}) {
+  const step = (p, ms = 2500) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
+  try {
+    const sw = win && win.navigator && win.navigator.serviceWorker;
+    if (sw && typeof sw.getRegistrations === 'function') await step(sw.getRegistrations().then((rs) => Promise.all(rs.map((r) => r.unregister()))));
+  } catch { /* لا عامل خدمة */ }
+  try {
+    const store = win && win.caches;
+    if (store && typeof store.keys === 'function') await step(store.keys().then((ks) => Promise.all(ks.map((k) => store.delete(k)))));
+  } catch { /* لا مخازن */ }
+  try { await step(refresh(null, { origin: win?.location?.origin })); } catch { /* لا يمنع الفتح */ }
+  let dest = href;
+  try { const u = new URL(href); u.searchParams.set(FRESH_PARAM, String(now)); u.searchParams.delete(RELOAD_PARAM); dest = u.toString(); } catch { /* الرابط كما هو */ }
+  navigate(dest);
 }
 
 // إعادة تحميل واحدة في الدقيقة: true إن أعاد التحميل الآن، وfalse إن سبقتها إعادة قريبة (فلا حلقة). بمخزن الجلسة إن عمل،
 // وإلا بعلامة الرابط (تبقى بعد إعادة التحميل)، وإن تعذرت كذلك فلا إعادة: رسالة الشاشة بزرها أسلم من حلقة بلا نهاية
 // وبالخيار error يُجدَّد الملف الفاشل في مخزن المتصفح أولًا (refreshFailedAsset)، ثم تكون إعادة التحميل
-export function reloadOnce({ storage = defaultStorage(), reload = defaultReload, now = Date.now(), location = defaultLocation(), navigate = defaultNavigate, to = null, error = null, refresh = refreshFailedAsset } = {}) {
+export function reloadOnce({ storage = defaultStorage(), reload = defaultReload, now = Date.now(), location = defaultLocation(), navigate = defaultNavigate, to = null, error = null, load = null, refresh = refreshFailedAsset } = {}) {
   if (reloadedThisPage) return false;
   const mark = storageMark(storage, now);
   if (mark?.recent) return false;
-  const pending = error && typeof refresh === 'function' ? safeRefresh(refresh, error, location) : null;
+  const pending = error && typeof refresh === 'function' ? safeRefresh(refresh, error, location, load) : null;
   const after = (go) => { if (pending) pending.then(go, go); else go(); };
   if (mark) {
     reloadedThisPage = true;
@@ -101,9 +161,9 @@ export function reloadOnce({ storage = defaultStorage(), reload = defaultReload,
   return true;
 }
 
-function safeRefresh(refresh, error, location) {
+function safeRefresh(refresh, error, location, load) {
   try {
-    const p = refresh(error, { origin: location?.origin });
+    const p = refresh(error, { origin: location?.origin, load });
     return p && typeof p.then === 'function' ? p : null;
   } catch { return null; }
 }
@@ -123,7 +183,9 @@ export async function retryImport(load, { reloadPage = reloadOnce } = {}) {
       return mod == null ? new Promise(() => {}) : mod;
     } catch (e2) {
       // تُعاد الصفحة: الوعد لا ينتهي فلا تومض رسالة الخطأ قبل التحميل
-      if (reloadPage({ error: e2 })) return new Promise(() => {});
+      if (reloadPage({ error: e2, load })) return new Promise(() => {});
+      // اسم القسم على الخطأ: يقرؤه حاجز القسم في القياس (lazy.<القسم>) فيقول الحدث أي قسم فشل
+      try { if (e2 && typeof e2 === 'object' && !e2.chunk) e2.chunk = chunkName(load); } catch { /* خطأ مجمّد */ }
       throw e2;
     }
   }

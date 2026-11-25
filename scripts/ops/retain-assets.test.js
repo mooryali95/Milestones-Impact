@@ -184,7 +184,7 @@ describe('ملفات السير', () => {
   });
   it('الإضافتان في إعداد البناء للتطبيقين، والمجلد له وثيقة', () => {
     for (const [app, out] of [['leaders-app', 'leaders'], ['admin-app', 'admin']]) {
-      expect(read(`${app}/vite.config.js`)).toContain(`plugins: [react(), versionFile(), retainedAssets(fileURLToPath(new URL('../releases/${out}', import.meta.url)))]`);
+      expect(read(`${app}/vite.config.js`)).toContain(`plugins: [react(), versionFile(), assetWorker(), retainedAssets(fileURLToPath(new URL('../releases/${out}', import.meta.url)))]`);
     }
     expect(existsSync(join(root, 'releases/README.md'))).toBe(true);
   });
