@@ -36,7 +36,7 @@ describe('سجل قرارات البوابات: من سجل التدقيق كم�
   it('الخادم يقرؤه لحظة العرض فوق اللقطة المعتمدة، ولا يجمّده فيها', () => {
     const c = read('supabase/functions/leaders-api/capstone.ts');
     expect(c).toContain("db.from('audit_log').select('action, created_at, after').in('entity_id', ids).in('action', GATE_ACTIONS)");
-    expect(c).toContain('return { ...doc, decisions: await decisionsFor(p.id, c.approved_at || null) };');
+    expect(c).toContain('return { doc: { ...doc, decisions: await decisionsFor(p.id, c.approved_at || null) }, d: null };');
     // لقطة الاعتماد من docFor لا من recordFor، فلا يُجمَّد السجل فيها
     expect(c).toContain("const snapshot = await docFor(p, 'admin');");
   });

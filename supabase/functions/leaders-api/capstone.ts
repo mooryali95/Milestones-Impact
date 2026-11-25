@@ -14,7 +14,7 @@ import { cohortOf, contentLevelsFor } from './programs.ts';
 import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, rubricPriority, trackKey } from './logic.js';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  capstoneListRows, capstoneState, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
+  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { freezeIssued, rejectionStats } from './doc-quality.js';
@@ -69,7 +69,9 @@ async function build(p: any) {
     const sub = by[m.id];
     const fields = modelFields(m, content, scope, priority, sub?.answers || null, since);
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
-    return { model: m, fields, answers, sub, state: sectionState(m, fields, { ...sub, answers }) };
+    const state = sectionState(m, fields, { ...sub, answers });
+    // موقع الفصل من مستوى الوثيقة للمستشار والمراجع (المرحلة 4): مما حُسب هنا نفسه، لا قاعدة ثانية
+    return { model: m, fields, answers, sub, state, chapter: chapterLevel(m, fields, state, content, levels) };
   });
   const checks = capstoneChecks({
     scope,
@@ -77,7 +79,7 @@ async function build(p: any) {
     answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
   const ready = readiness(sections.map((s: any) => s.state), checks);
-  return { levels, scope, priority, weighted, project: trackProject(all, levels, scope, priority, kept), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
+  return { levels, content, scope, priority, weighted, project: trackProject(all, levels, scope, priority, kept), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
 }
 
 const sectionView = (s: any) => ({
@@ -89,6 +91,16 @@ const sectionView = (s: any) => ({
   updated_at: s.sub?.updated_at || null,
   // معرّف التسليم ليقيّم المراجع الفصل من بطاقة المبادرة نفسها (لا من «التعلم»)
   sub_id: s.sub?.id || null,
+  // مستوى المشارك في إطار الفصل، وموقع الفصل منه (مطلوب، اختياري، باقٍ بقاعدة «لا فقد»)، ومعيار المستوى (chapterLevel)
+  level: s.chapter.level, standing: s.chapter.standing, kept_fields: s.chapter.kept_fields, criteria: s.chapter.criteria,
+});
+
+// مستوى الوثيقة وموقع كل فصل منه، لملحق يقرؤه المستشار والخبير وحدهما (لا يدخل لقطة الاعتماد ولا ما يصل الراعي أو الجهة)
+// live: الوثيقة معتمدة تُعرض من لقطتها، والملحق من حالتها الآن، فيُعلَّم بذلك ولا يُنسب إلى النسخة المعتمدة
+export const levelsView = (d: any, live = false) => ({
+  level: overallLevel(d.levels), live,
+  chapters: d.sections.map((s: any) => ({ key: s.model.key, title: s.model.title_ar, level: s.chapter.level, standing: s.chapter.standing,
+    standing_title: (CHAPTER_STANDING_AR as Record<string, string>)[s.chapter.standing], kept_fields: s.chapter.kept_fields, criteria: s.chapter.criteria })),
 });
 
 function reviewView(c: any, full = true) {
@@ -159,8 +171,17 @@ export async function submit(p: any) {
 // ── الوثيقة كاملة: مصدر واحد للعرض والطباعة عند الجميع ──
 // audience: participant يرى معيار المستشار بعد الاعتماد فقط، admin يراه دائمًا
 async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org') {
+  return (await docAndBuild(p, audience)).doc;
+}
+// الوثيقة ومعها بناؤها، فلا يُبنى مرتين من يحتاج الاثنين (adminGet، expertDoc)
+async function docAndBuild(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org') {
   const d = await build(p);
+  return { d, doc: await docOf(p, audience, d) };
+}
+async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org', d: any) {
   const c = d.capstone;
+  // تجميع الفصول القصيرة للتأسيسي يُحسب هنا من مستويات المحتوى، ولا يصل المستوى نفسه: تلميح joins على التابع وحده
+  const joins = displayJoins(d.sections.map((s: any) => ({ key: s.model.key, dimension: s.model.dimension })), d.content);
   const [org, { cohort }] = await Promise.all([
     p.organization_id ? db.from('organizations').select('name, logo, color, status').eq('id', p.organization_id).maybeSingle().then((r: any) => r.data) : null,
     cohortOf(p),
@@ -186,6 +207,8 @@ async function docFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'o
     summary: c?.summary_ar || '',
     sections: d.sections.map((s: any) => ({
       key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension,
+      // تلميح عرض محايد: الفصل يُطبع في صفحة أصله (displayPages)
+      ...(joins[s.model.key] ? { joins: joins[s.model.key] } : {}),
       // الفصل الاختياري للمشارك (لا حقل مطلوبًا فيه، counted: false): يُعرض «اختياري» ولا يُعد فراغه نقصًا في ملحق ما ينقص
       optional: s.state.counted === false,
       fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null })),
@@ -217,13 +240,18 @@ async function decisionsFor(participantId: string, approvedAt: string | null) {
 
 // المعتمدة تُعرض من لقطتها، فلا يغيّرها تعديل لاحق على نموذج أو حقل. سجل القرارات يُضاف حيًا فوق أي منهما
 async function recordFor(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org') {
+  return (await recordAndBuild(p, audience)).doc;
+}
+// السجل ومعه البناء الحي إن بُني (غير المعتمدة)، وإلا null: المعتمدة من لقطتها
+async function recordAndBuild(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org'): Promise<{ doc: any; d: any }> {
   const { data: c } = await db.from('capstones').select('status, snapshot, approved_at').eq('participant_id', p.id).maybeSingle();
   if (c?.status === 'approved' && c.snapshot) {
     const doc = c.snapshot;
     if (audience !== 'admin' && audience !== 'participant') doc.review = null;
-    return { ...doc, decisions: await decisionsFor(p.id, c.approved_at || null) };
+    return { doc: { ...doc, decisions: await decisionsFor(p.id, c.approved_at || null) }, d: null };
   }
-  return { ...(await docFor(p, audience)), decisions: await decisionsFor(p.id, null) };
+  const { d, doc } = await docAndBuild(p, audience);
+  return { doc: { ...doc, decisions: await decisionsFor(p.id, null) }, d };
 }
 
 // الوثيقة المعتمدة تحمل متابعتها، فيطبع التقرير الخطة وما تحقق منها معًا
@@ -232,9 +260,13 @@ async function withTracking(doc: any, participantId: string) {
 }
 
 // للخبير من بوابته (file.ts capstoneDoc بعد فحص نطاقه ومفتاح الرؤية): الوثيقة كما يقرؤها الراعي، بلا معيار المستشار ودرجته
+// ومعها مستوى الوثيقة وموقع كل فصل منه (review_levels)، فلا يفقد المراجع تمييز المستوى. تعذّر البناء لا يحجب الوثيقة
 export async function expertDoc(participantId: string) {
   const p = await participantRow(participantId);
-  return withTracking(await recordFor(p, 'sponsor'), p.id);
+  const { doc: document, d } = await recordAndBuild(p, 'sponsor');
+  // المعتمدة من لقطتها، فالملحق يُبنى حيًا ويُعلَّم «الحالة الآن» (levelsView)
+  const levels = await (d ? Promise.resolve(d) : build(p)).then((x) => levelsView(x, !d), () => null);
+  return withTracking(levels ? { ...document, review_levels: levels } : document, p.id);
 }
 
 // لمن يفتح رابط المشاركة (share.ts): الوثيقة كما يقرؤها الراعي، وshare.js publicDoc يحذف منها ما ليس للقارئ
@@ -342,10 +374,12 @@ async function leaderScore(p: any) {
 
 export async function adminGet(b: Body) {
   const p = await participantRow(b.participant_id);
-  const [document, state] = await Promise.all([recordFor(p, 'admin'), build(p)]);
+  const r = await recordAndBuild(p, 'admin');
+  const document = r.doc;
+  const state = r.d || await build(p);
   const c = state.capstone;
   return {
-    success: true, doc: await withTracking(document, p.id),
+    success: true, doc: await withTracking({ ...document, review_levels: levelsView(state, !r.d) }, p.id),
     capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
     // الحالة والجاهزية بالقاعدة نفسها التي تقرأ بها قائمة الوثائق (capstoneState)
     sections: state.sections.map(sectionView), checks: state.checks, readiness: capstoneState(c, state.readiness).readiness ?? 0,
