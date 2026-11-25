@@ -124,7 +124,7 @@ function IntakeCard({ org, intake, copy }) {
       <h4>قائمة الانتظار {waiting.length ? `(${waiting.length})` : ''}</h4>
       {waiting.length ? (
         <ul className="la-list">{waiting.map((w) => (
-          <li key={w.participant_id}><b>{w.full_name || '·'}</b> <small className="la-muted" dir="ltr">{w.email}</small> <small className="la-muted">· في {w.cohort}{w.since ? ` منذ ${date(w.since)}` : ''}</small></li>
+          <li key={w.participant_id}><b>{w.full_name || '·'}</b> <small className="la-muted" dir="ltr">{w.email}</small> <small className="la-muted">· في {w.cohort}{w.since ? ` منذ ${date(w.since)}` : ''}{w.reason_ar ? ` · ${w.reason_ar}` : ''}</small></li>
         ))}</ul>
       ) : <p className="la-muted small">لا أحد ينتظر.</p>}
       {waiting.length > 0 && <p className="la-muted small">انقل من تريد من ملف المشارك: «نقل إلى دفعة أخرى».</p>}

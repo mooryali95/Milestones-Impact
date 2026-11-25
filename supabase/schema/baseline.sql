@@ -544,9 +544,11 @@ create table if not exists leaders.cohort_placements (
   organization_id uuid,
   source text not null,
   outcome text not null,
+  reason text,
   actor text,
   created_at timestamp with time zone default now() not null,
   constraint cohort_placements_outcome_check CHECK ((outcome = ANY (ARRAY['placed'::text, 'overflow'::text]))),
+  constraint cohort_placements_reason_check CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['full'::text, 'closed'::text, 'no_intake'::text])))),
   constraint cohort_placements_source_check CHECK ((source = ANY (ARRAY['link'::text, 'code'::text, 'platform'::text, 'manual'::text]))),
   constraint cohort_placements_pkey PRIMARY KEY (id)
 );
@@ -4911,12 +4913,12 @@ CREATE OR REPLACE FUNCTION leaders.place_participant(p_participant uuid, p_sourc
 AS $function$
 #variable_conflict use_column
 declare
-  p record; w record; target uuid; got uuid; n integer; res text := 'placed';
+  p record; w record; target uuid; got uuid; n integer; res text := 'placed'; why text;
 begin
   if p_source not in ('link', 'code', 'platform', 'manual') then
     raise exception 'place_participant: bad source %', p_source using errcode = '22023';
   end if;
-  select id, organization_id, is_demo into p from leaders.participants where id = p_participant for update;
+  select id, organization_id, is_demo into p from leaders.participants where id = p_participant for no key update;
   if not found then return query select null::uuid, 'none'::text; return; end if;
   if p.is_demo then return query select null::uuid, 'demo'::text; return; end if;
   select e.cohort_id into got from leaders.enrollments e where e.participant_id = p_participant and e.status <> 'withdrawn'
@@ -4926,12 +4928,23 @@ begin
   if p_wanted is not null then
     select id into target from leaders.cohorts where id = p_wanted and organization_id is not distinct from p.organization_id and not is_default;
   end if;
-  if target is null and p.organization_id is not null then target := leaders.ensure_intake_cohort(p.organization_id); end if;
+  -- دفعة الجهة الضمنية كما يختارها pickCohort (logic.js): أحدث دفعة مفتوحة أو جارية للجهة، لا المفتوحة العامة ولا الاستقبال.
+  -- فمن كان يمر بها بلا إلحاق يُلحق بها نفسها ولا تتغير رحلته ولا تقاريره. والاستقبال حين لا دفعة جارية للجهة وحده
+  if target is null and p.organization_id is not null then
+    select id into target from leaders.cohorts
+     where organization_id = p.organization_id and not is_default and not is_intake and status in ('open', 'running')
+     order by coalesce(starts_on::timestamptz, created_at) desc limit 1;
+  end if;
+  if target is null and p.organization_id is not null then
+    target := leaders.ensure_intake_cohort(p.organization_id);
+    if target is null then res := 'overflow'; why := 'no_intake'; end if;
+  end if;
   if target is not null then
     -- قفل صف الدفعة يسلسل الإلحاقات المتزامنة فيها، فالعد بعده يرى ما التزمه من سبقه
-    select id, status, capacity into w from leaders.cohorts where id = target for update;
+    select id, status, capacity into w from leaders.cohorts where id = target for no key update;
     select count(*) into n from leaders.enrollments e where e.cohort_id = target and e.status <> 'withdrawn';
-    if w.status = 'closed' or (w.capacity is not null and n >= w.capacity) then res := 'overflow'; end if;
+    if w.status = 'closed' then res := 'overflow'; why := 'closed';
+    elsif w.capacity is not null and n >= w.capacity then res := 'overflow'; why := 'full'; end if;
   end if;
   if target is null or res = 'overflow' then
     got := leaders.ensure_platform_cohort();
@@ -4943,8 +4956,8 @@ begin
   insert into leaders.enrollments (participant_id, cohort_id, status)
   values (p_participant, got, 'active')
   on conflict on constraint enrollments_participant_id_cohort_id_key do update set status = 'active', updated_at = now();
-  insert into leaders.cohort_placements (participant_id, cohort_id, wanted_cohort_id, organization_id, source, outcome, actor)
-  values (p_participant, got, coalesce(target, got), p.organization_id, p_source, res, p_actor);
+  insert into leaders.cohort_placements (participant_id, cohort_id, wanted_cohort_id, organization_id, source, outcome, reason, actor)
+  values (p_participant, got, coalesce(target, got), p.organization_id, p_source, res, why, p_actor);
   return query select got, res;
 end;
 $function$

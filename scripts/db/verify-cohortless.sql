@@ -28,17 +28,23 @@ with lone as (
      and not exists (select 1 from leaders.enrollments e where e.participant_id = pa.id and e.status <> 'withdrawn')),
 intake as (
   select c.organization_id, c.name from leaders.cohorts c where coalesce((to_jsonb(c)->>'is_intake')::boolean, false)),
+-- دفعة الجهة الجارية كما في place_participant وpickCohort: أحدث مفتوحة أو جارية، لا العامة ولا الاستقبال
+cur as (
+  select distinct on (c.organization_id) c.organization_id, c.id, c.name from leaders.cohorts c
+   where c.organization_id is not null and not c.is_default and not coalesce((to_jsonb(c)->>'is_intake')::boolean, false) and c.status in ('open', 'running')
+   order by c.organization_id, coalesce(c.starts_on::timestamptz, c.created_at) desc),
 platform as (select c.name from leaders.cohorts c where c.is_default limit 1)
 select true as ok, coalesce(string_agg(
          l.full_name || ' → ' || case
            when l.organization_id is null then coalesce((select name from platform), 'المنصة العامة (تُنشأ)')
-           else coalesce(i.name, o.name || ' · الاستقبال (تُنشأ)') end,
+           else coalesce(cu.name || ' (دفعة الجهة الجارية)', i.name, o.name || ' · الاستقبال (تُنشأ)') end,
          ' | ' order by o.name nulls last, l.full_name), 'لا أحد بلا دفعة') as detail
   from lone l
   left join leaders.organizations o on o.id = l.organization_id
-  left join intake i on i.organization_id = l.organization_id;
+  left join intake i on i.organization_id = l.organization_id
+  left join cur cu on cu.organization_id = l.organization_id;
 
--- 4) لكل جهة: من سيُلحق بها، ودفعة استقبالها وسعتها. ok = لا جهة يتجاوز القادمون إليها سعة استقبالها الباقية
+-- 4) لكل جهة: من سيُلحق بها، ووجهتهم (دفعة الجهة الجارية إن وُجدت، وإلا الاستقبال) وسعتها. ok = لا جهة يتجاوز القادمون إليها سعة وجهتها الباقية
 -- (من يتجاوز يبقى في المنصة العامة ويظهر في قائمة انتظار جهته، فلا خطأ، لكنه يُراجع قبل التطبيق)
 with lone as (
   select pa.organization_id from leaders.participants pa
@@ -46,15 +52,18 @@ with lone as (
      and not exists (select 1 from leaders.enrollments e where e.participant_id = pa.id and e.status <> 'withdrawn')),
 per as (
   select o.id, o.name, o.status, count(*) as incoming,
-         (select c.id from leaders.cohorts c where c.organization_id = o.id and coalesce((to_jsonb(c)->>'is_intake')::boolean, false)) as intake_id
+         coalesce(
+           (select c.id from leaders.cohorts c where c.organization_id = o.id and not c.is_default and not coalesce((to_jsonb(c)->>'is_intake')::boolean, false)
+               and c.status in ('open', 'running') order by coalesce(c.starts_on::timestamptz, c.created_at) desc limit 1),
+           (select c.id from leaders.cohorts c where c.organization_id = o.id and coalesce((to_jsonb(c)->>'is_intake')::boolean, false))) as intake_id
     from lone l join leaders.organizations o on o.id = l.organization_id group by o.id, o.name, o.status),
 cap as (
-  select per.*, c.capacity, c.status as intake_status,
+  select per.*, c.capacity, c.status as intake_status, c.name as target_name,
          (select count(*) from leaders.enrollments e where e.cohort_id = per.intake_id and e.status <> 'withdrawn') as taken
     from per left join leaders.cohorts c on c.id = per.intake_id)
 select coalesce(bool_and(status <> 'inactive' and coalesce(intake_status, 'open') <> 'closed' and (capacity is null or incoming <= capacity - taken)), true) as ok,
        coalesce(string_agg(name || ': قادمون=' || incoming
-         || case when intake_id is null then ' · الاستقبال يُنشأ' else ' · الاستقبال ' || intake_status || ' · السعة=' || coalesce(capacity::text, 'بلا حد') || ' · فيها=' || taken end
+         || case when intake_id is null then ' · الاستقبال يُنشأ' else ' · إلى «' || target_name || '» ' || intake_status || ' · السعة=' || coalesce(capacity::text, 'بلا حد') || ' · فيها=' || taken end
          || case when status = 'inactive' then ' · الجهة موقوفة: إلى المنصة العامة' else '' end,
          ' | ' order by name), 'لا جهة') as detail
   from cap;

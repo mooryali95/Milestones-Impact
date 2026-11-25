@@ -75,9 +75,10 @@ describe(`ترحيل ${NAME}`, { timeout: 60000 }, () => {
     await expect(place(d, P(1), 'nope')).rejects.toThrow(/bad source/);
   });
 
+  // دفعة الرمز مخطط لها (لا جارية) فلا دفعة جهة ضمنية، وطريق الرمز الغريب الاستقبال
   it('دفعة الرمز تُحترم إن كانت للجهة نفسها، ودفعة جهة أخرى تُتجاهل إلى الاستقبال، والمغلقة إلى المنصة العامة', async () => {
     const d = await db();
-    const own = (await d.query(`insert into leaders.cohorts (name, organization_id, program_id, program_version_id, status) values ('دفعة الربيع', '${ORG}', '${PROG}', '${V1}', 'open') returning id`)).rows[0].id;
+    const own = (await d.query(`insert into leaders.cohorts (name, organization_id, program_id, program_version_id, status) values ('دفعة الربيع', '${ORG}', '${PROG}', '${V1}', 'planned') returning id`)).rows[0].id;
     const other = (await d.query(`insert into leaders.cohorts (name, organization_id, program_id, program_version_id, status) values ('غريبة', '${ORG2}', '${PROG}', '${V1}', 'open') returning id`)).rows[0].id;
     expect((await place(d, P(1), 'code', own)).cohort_id).toBe(own);
     const r = await place(d, P(2), 'code', other);
@@ -87,6 +88,36 @@ describe(`ترحيل ${NAME}`, { timeout: 60000 }, () => {
     expect((await d.query(`select program_id from leaders.cohorts where id = '${r.cohort_id}'`)).rows[0].program_id).toBe(PROG);
     await d.exec(`update leaders.cohorts set status = 'closed' where id = '${own}'`);
     expect((await place(d, P(3), 'code', own)).outcome).toBe('overflow');
+  });
+
+  it('دفعة الجهة الجارية الضمنية (كما في pickCohort) قبل الاستقبال: أحدثها بدايةً، ولا استقبال يُنشأ', async () => {
+    const d = await db();
+    await d.exec(`insert into leaders.cohorts (name, organization_id, program_id, program_version_id, status, starts_on) values
+      ('قديمة', '${ORG}', '${PROG}', '${V1}', 'running', '2026-01-01'), ('أحدث', '${ORG}', '${PROG}', '${V1}', 'open', '2026-09-01'),
+      ('مخطط لها', '${ORG}', '${PROG}', '${V1}', 'planned', '2027-01-01'), ('مغلقة', '${ORG}', '${PROG}', '${V1}', 'closed', '2027-02-01')`);
+    const r = await place(d, P(1));
+    expect((await d.query(`select name from leaders.cohorts where id = '${r.cohort_id}'`)).rows[0].name).toBe('أحدث');
+    expect(await n(d, 'select count(*)::int n from leaders.cohorts where is_intake')).toBe(0);
+  });
+
+  it('الدفعة المغلقة: overflow إلى المنصة العامة بسبب closed، والجهة الموقوفة بلا استقبال: no_intake', async () => {
+    const d = await db();
+    await d.exec(`insert into leaders.cohorts (name, organization_id, program_id, program_version_id, status, is_intake) values ('استقبال', '${ORG}', '${PROG}', '${V1}', 'closed', true)`);
+    expect((await place(d, P(1))).outcome).toBe('overflow');
+    await d.exec(`update leaders.organizations set status = 'inactive' where id = '${ORG2}'; update leaders.participants set organization_id = '${ORG2}' where id = '${P(2)}'`);
+    expect((await place(d, P(2))).outcome).toBe('overflow');
+    expect((await d.query('select reason from leaders.cohort_placements order by created_at, reason')).rows.map((r) => r.reason).sort()).toEqual(['closed', 'no_intake']);
+  });
+
+  it('إلحاق منسحب سابقًا في الدفعة نفسها يُعاد فعّالًا (لا صف ثانٍ)، والتجريبي لا يُلحق ولا يُنشئ دفعة', async () => {
+    const d = await db();
+    expect((await place(d, P(21), 'platform')).outcome).toBe('demo');
+    expect(await n(d, 'select count(*)::int n from leaders.cohorts')).toBe(0);
+    const first = await place(d, P(20), 'platform');
+    await d.exec(`update leaders.enrollments set status = 'withdrawn' where participant_id = '${P(20)}'`);
+    const again = await place(d, P(20), 'platform');
+    expect([again.outcome, again.cohort_id]).toEqual(['placed', first.cohort_id]);
+    expect((await d.query(`select status from leaders.enrollments where participant_id = '${P(20)}'`)).rows).toEqual([{ status: 'active' }]);
   });
 
   it('القيود: استقبال واحد لكل جهة، ولا استقبال بلا جهة، ولا برنامج بلا نسخة تُنشأ عليه دفعة', async () => {

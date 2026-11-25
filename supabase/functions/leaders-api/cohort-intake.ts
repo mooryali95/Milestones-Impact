@@ -50,7 +50,14 @@ export async function adminOrgIntake(b: Body) {
   const enrollments = ids.length ? await allFor(ids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('id')) : [];
   const otherIds = [...new Set(enrollments.map((e: any) => e.cohort_id))].filter((id) => !own.some((c) => c.id === id));
   const others = otherIds.length ? must(await db.from('cohorts').select('id, name, organization_id, is_default').in('id', otherIds)) as any[] : [];
-  const waiting = waitingList({ members, enrollments, cohorts: [...own, ...others] }, orgId);
+  // سبب البقاء في المنصة العامة من سجل الإلحاق (لا جدول قبل الترحيل: بلا سبب)
+  let placements: any[] = [];
+  if (ids.length) {
+    const pr = await db.from('cohort_placements').select('participant_id, reason, created_at').eq('organization_id', orgId).eq('outcome', 'overflow').order('created_at');
+    if (pr.error && !missingTable(pr.error) && !missingColumn(pr.error)) must(pr);
+    placements = (pr.data || []) as any[];
+  }
+  const waiting = waitingList({ members, enrollments, cohorts: [...own, ...others], placements }, orgId);
   const members_in = intake ? enrollments.filter((e: any) => e.cohort_id === intake.id && e.status !== 'withdrawn').length : 0;
   return {
     success: true, ready,

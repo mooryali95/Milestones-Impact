@@ -496,7 +496,9 @@ function Person({ id, orgs, canWrite, onBack, onNav }) {
   // التسجيل الصريح في دفعة (كان يتطلب تعديل القاعدة يدويًا): يُسحب من أي دفعة أخرى سُجّل فيها صراحةً
   const enroll = async () => {
     const c = (cohorts || []).find((x) => x.id === cohortTo);
-    if (!(await confirm(`نقل ${p.full_name} إلى دفعة «${c?.name}»؟ يبقى فيها مهما كانت جهته، ويُسحب من أي دفعة أخرى أُلحق بها يدويًا.`))) return;
+    // النقل اليدوي يتجاوز السعة عمدًا (cohortEnroll)، فيُنبَّه المدير حين تكون الدفعة ممتلئة
+    const full = c?.capacity != null && Number(c.enrolled || 0) >= Number(c.capacity) ? ` تنبيه: الدفعة ممتلئة (${c.enrolled} من ${c.capacity})، والنقل اليدوي يتجاوز سعتها.` : '';
+    if (!(await confirm(`نقل ${p.full_name} إلى دفعة «${c?.name}»؟ يبقى فيها مهما كانت جهته، ويُسحب من أي دفعة أخرى أُلحق بها يدويًا.${full}`))) return;
     const d = await enrollCohort({ cohort_id: cohortTo, participant_ids: [p.id] }, confirm);
     toast(d.success ? 'نُقل إلى الدفعة' : d.message);
     if (d.success) { setCohortTo(''); load(); }

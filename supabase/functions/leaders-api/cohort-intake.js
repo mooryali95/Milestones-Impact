@@ -18,6 +18,17 @@ export function placementSource({ organization_id = null, sponsor_code = null } 
 
 const active = (e) => e && e.status !== 'withdrawn';
 
+// ترتيب place_participant نفسه: coalesce(starts_on::timestamptz, created_at) تنازليًا
+const stamp = (c) => { const t = Date.parse(c?.starts_on || c?.created_at || ''); return Number.isNaN(t) ? -Infinity : t; };
+/** دفعة الجهة الضمنية كما يختارها pickCohort وplace_participant: أحدث دفعة مفتوحة أو جارية، لا المفتوحة العامة ولا الاستقبال */
+export function orgCurrentCohort(cohorts = [], orgId = null) {
+  if (!orgId) return null;
+  return (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && !c.is_intake && (c.status === 'open' || c.status === 'running'))
+    .sort((a, b) => stamp(b) - stamp(a))[0] || null;
+}
+/** سبب البقاء في المنصة العامة (cohort_placements.reason) */
+export const WAIT_REASON_AR = { full: 'دفعته ممتلئة', closed: 'دفعته مغلقة', no_intake: 'تعذّر إنشاء دفعة استقبال (الجهة موقوفة أو برنامجها بلا نسخة)' };
+
 /** المعرّفات التي لها إلحاق قائم (غير منسحب) @param {{ participant_id: string, status?: string }[]} enrollments */
 export function enrolledIds(enrollments = []) {
   return new Set((enrollments || []).filter(active).map((e) => e.participant_id));
@@ -37,8 +48,11 @@ export function cohortlessPlan({ participants = [], enrollments = [], cohorts = 
     .filter((p) => p && !p.is_demo && !has.has(p.id))
     .map((p) => {
       if (p.organization_id) {
-        const c = intake.get(p.organization_id);
         const name = orgName.get(p.organization_id) || '';
+        // دفعة الجهة الجارية أولًا (من كان يمر بها بلا إلحاق لا تتغير رحلته)، والاستقبال حين لا دفعة جارية
+        const cur = orgCurrentCohort(cohorts, p.organization_id);
+        if (cur) return { participant_id: p.id, full_name: p.full_name || '', organization_id: p.organization_id, organization: name, kind: 'org', target_id: cur.id, target: cur.name || '', creates: false };
+        const c = intake.get(p.organization_id);
         return { participant_id: p.id, full_name: p.full_name || '', organization_id: p.organization_id, organization: name,
           kind: 'intake', target_id: c?.id || null, target: c?.name || `${name} · ${INTAKE_SUFFIX_AR}`, creates: !c };
       }
@@ -67,9 +81,12 @@ export function planSummary(rows = []) {
 /**
  * قائمة انتظار الجهة: أعضاؤها الذين إلحاقهم القائم في دفعة ليست للجهة (بقوا في المنصة العامة لأن دفعتها امتلأت أو أُغلقت،
  * أو سجّلوا بلا رمز ثم ربطتهم جهتهم، فلا يُنقلون آليًا). النقل منها بـ«نقل إلى دفعة» في ملف المشارك.
- * @param {{ members?: any[], enrollments?: any[], cohorts?: any[] }} world @param {string} orgId
+ * @param {{ members?: any[], enrollments?: any[], cohorts?: any[], placements?: any[] }} world @param {string} orgId
  */
-export function waitingList({ members = [], enrollments = [], cohorts = [] } = {}, orgId) {
+export function waitingList({ members = [], enrollments = [], cohorts = [], placements = [] } = {}, orgId) {
+  // آخر سطر إلحاق لكل مشارك: سبب بقائه في المنصة العامة
+  const why = new Map();
+  for (const r of [...(placements || [])].sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))) why.set(r.participant_id, r.reason || null);
   const byId = new Map((cohorts || []).map((c) => [c.id, c]));
   const current = new Map();
   for (const e of [...(enrollments || [])].filter(active).sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))) {
@@ -80,5 +97,6 @@ export function waitingList({ members = [], enrollments = [], cohorts = [] } = {
     const c = e ? byId.get(e.cohort_id) : null;
     return { p, c, e };
   }).filter(({ c }) => c && c.organization_id !== orgId)
-    .map(({ p, c, e }) => ({ participant_id: p.id, full_name: p.full_name || '', email: p.email || '', cohort_id: c.id, cohort: c.name || '', since: e.created_at || null }));
+    .map(({ p, c, e }) => ({ participant_id: p.id, full_name: p.full_name || '', email: p.email || '', cohort_id: c.id, cohort: c.name || '', since: e.created_at || null,
+      reason: why.get(p.id) || null, reason_ar: WAIT_REASON_AR[why.get(p.id)] || '' }));
 }

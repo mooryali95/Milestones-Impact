@@ -33,12 +33,21 @@ function placeRpc(name: string, a: any, t: Record<string, Row[]>) {
   const cohorts = t.cohorts ||= [];
   const mk = (row: Row) => { const c = { id: crypto.randomUUID(), status: 'open', capacity: null, program_id: PROG, program_version_id: V2, ...row }; cohorts.push(c); return c; };
   let target = a.p_wanted ? cohorts.find((c) => c.id === a.p_wanted && c.organization_id === (p.organization_id || null) && !c.is_default) : null;
-  if (!target && p.organization_id) target = cohorts.find((c) => c.is_intake && c.organization_id === p.organization_id) || mk({ name: 'استقبال', organization_id: p.organization_id, is_intake: true });
-  let res = 'placed';
-  if (target && (target.status === 'closed' || (target.capacity != null && enr.filter((e) => e.cohort_id === target.id && e.status !== 'withdrawn').length >= target.capacity))) res = 'overflow';
+  const stamp = (c: Row) => Date.parse(c.starts_on || c.created_at || '') || 0;
+  if (!target && p.organization_id) {
+    target = cohorts.filter((c) => c.organization_id === p.organization_id && !c.is_default && !c.is_intake && ['open', 'running'].includes(c.status)).sort((x, y) => stamp(y) - stamp(x))[0];
+  }
+  let res = 'placed', why: string | null = null;
+  if (!target && p.organization_id) {
+    const org = (t.organizations || []).find((o) => o.id === p.organization_id);
+    target = cohorts.find((c) => c.is_intake && c.organization_id === p.organization_id) || (org?.status === 'inactive' ? null : mk({ name: 'استقبال', organization_id: p.organization_id, is_intake: true }));
+    if (!target) { res = 'overflow'; why = 'no_intake'; }
+  }
+  if (target?.status === 'closed') { res = 'overflow'; why = 'closed'; }
+  else if (target && target.capacity != null && enr.filter((e) => e.cohort_id === target.id && e.status !== 'withdrawn').length >= target.capacity) { res = 'overflow'; why = 'full'; }
   const got = !target || res === 'overflow' ? (cohorts.find((c) => c.is_default) || mk({ name: 'المنصة العامة', organization_id: null, is_default: true })) : target;
   enr.push({ participant_id: p.id, cohort_id: got.id, status: 'active', created_at: new Date().toISOString() });
-  (t.cohort_placements ||= []).push({ participant_id: p.id, cohort_id: got.id, organization_id: p.organization_id || null, source: a.p_source, outcome: res, actor: a.p_actor });
+  (t.cohort_placements ||= []).push({ participant_id: p.id, cohort_id: got.id, organization_id: p.organization_id || null, source: a.p_source, outcome: res, reason: why, actor: a.p_actor, created_at: new Date().toISOString() });
   return out(got.id, res);
 }
 
@@ -63,9 +72,10 @@ const redeem = async (w: any, n: number, code: string) => {
   try { await P.sponsorCode(pOf(w, n), { sponsor_code: code }, { ip: `10.1.0.${n}` }); } catch (e) { if (!pOf(w, n).organization_id) throw e; }
 };
 
-Deno.test('رمز بدفعة يُلحق بها مستعمله، ورمز بلا دفعة يُلحق باستقبال جهته (يُنشأ)، والمصدر code', async () => {
+Deno.test('رمز بدفعة يُلحق بها مستعمله، ورمز بلا دفعة يُلحق باستقبال جهته (يُنشأ) حين لا دفعة جارية لها، والمصدر code', async () => {
   const w = world();
   try {
+    w.tables.cohorts[0].status = 'planned';
     const withCohort: any = await SC.adminCreate(ADMIN, { org_id: ORG, cohort_id: SPRING });
     assertEquals(withCohort.code.cohort_id, SPRING);
     const plain: any = await SC.adminCreate(ADMIN, { org_id: ORG });
@@ -168,5 +178,48 @@ Deno.test('أداة إلحاق من لا دفعة له: المعاينة لا ت
     assertEquals(w.tables.cohort_placements.filter((x: Row) => x.source === 'manual').map((x: Row) => x.actor), [ADMIN.email, ADMIN.email]);
     assertEquals(active(w, 4).length, 0);
     assert(w.tables.audit_log.some((x: Row) => x.action === 'cohort.cohortless-apply'));
+  } finally { w.restore(); }
+});
+
+const A = await import('./admin.ts');
+const SUPER = { email: 'a@example.sa', role: 'admin' as const, method: 'passkey' };
+
+Deno.test('دفعة الجهة الجارية الضمنية قبل الاستقبال: رابط الجهة يُلحق بأحدث دفعة مفتوحة أو جارية، ولا استقبال يُنشأ', async () => {
+  const w = world();
+  try {
+    w.tables.cohorts.push({ id: U(880030), name: 'أقدم', organization_id: ORG, status: 'running', starts_on: '2025-01-01', is_intake: false, is_default: false, program_id: PROG });
+    w.tables.cohorts[0].starts_on = '2026-09-01';
+    pOf(w, 7).organization_id = ORG;
+    const r = await CI.placeParticipant(U(880107), 'link');
+    assertEquals(r?.cohort_id, SPRING);
+    assertEquals(w.tables.cohorts.some((c: Row) => c.is_intake), false);
+    const plan: any = await CI.cohortlessPlanView(ADMIN, {});
+    assertEquals(plan.rows.filter((x: Row) => x.organization_id === ORG).length, 0);
+  } finally { w.restore(); }
+});
+
+Deno.test('الجهة الموقوفة بلا استقبال: المشارك في المنصة العامة وسبب no_intake في قائمة الانتظار', async () => {
+  const w = world();
+  try {
+    w.tables.cohorts[0].status = 'closed';
+    w.tables.organizations[0].status = 'inactive';
+    pOf(w, 8).organization_id = ORG;
+    assertEquals((await CI.placeParticipant(U(880108), 'link'))?.outcome, 'overflow');
+    const r: any = await CI.adminOrgIntake({ org_id: ORG });
+    assertEquals(r.waiting.map((x: Row) => x.reason), ['no_intake']);
+  } finally { w.restore(); }
+});
+
+Deno.test('الإضافة اليدوية والاستيراد يُلحقان بالمصدر manual: بلا جهة إلى المنصة العامة، وبجهة إلى دفعتها الجارية', async () => {
+  const w = world({ participants: [] }, { rpc: (n: string, a: any, t: any) => (n === 'pin_sponsor_seat' ? { data: [{ ok: true }], error: null } : placeRpc(n, a, t)) });
+  try {
+    const made: any = await A.createParticipant(SUPER as any, { email: 'new1@example.sa', full_name: 'مضاف يدويًا' });
+    const platform = w.tables.cohorts.find((c: Row) => c.is_default);
+    assertEquals(w.tables.enrollments.filter((e: Row) => e.participant_id === made.participant.id).map((e: Row) => e.cohort_id), [platform?.id]);
+    await A.participantsImport(SUPER as any, { organization_id: ORG, rows: [{ email: 'imp1@example.sa', full_name: 'مستورد أول' }, { email: 'imp2@example.sa', full_name: 'مستورد ثان' }] });
+    const imported = w.tables.participants.filter((p: Row) => p.source === 'import').map((p: Row) => p.id);
+    assertEquals(imported.length, 2);
+    assertEquals(w.tables.enrollments.filter((e: Row) => imported.includes(e.participant_id)).map((e: Row) => e.cohort_id), [SPRING, SPRING]);
+    assertEquals(w.tables.cohort_placements.map((r: Row) => r.source), ['manual', 'manual', 'manual']);
   } finally { w.restore(); }
 });

@@ -1,7 +1,7 @@
 // الدفعة هي الوحدة الوحيدة: المنطق الخالص (cohort-intake.js) لمصدر الإلحاق وخطة من لا دفعة له وبصمتها وقائمة انتظار الجهة،
 // واستثناء دفعة الاستقبال من استنتاج دفعة الجهة في pickCohort
 import { describe, expect, it } from 'vitest';
-import { cohortlessPlan, placementSource, planHashInput, planSummary, waitingList } from '../../supabase/functions/leaders-api/cohort-intake.js';
+import { cohortlessPlan, orgCurrentCohort, placementSource, planHashInput, planSummary, waitingList } from '../../supabase/functions/leaders-api/cohort-intake.js';
 import { pickCohort } from '../../supabase/functions/leaders-api/logic.js';
 
 const ORG = 'org-1', ORG2 = 'org-2';
@@ -34,7 +34,7 @@ describe('خطة من لا دفعة له', () => {
   it('الاستقبال القائم، أو الذي سيُنشأ باسم الجهة، أو المنصة العامة؛ ولا تجريبي ولا ملحق', () => {
     const rows = cohortlessPlan({ participants, enrollments, cohorts, orgs });
     expect(rows.map((r) => [r.participant_id, r.kind, r.target_id, r.creates])).toEqual([
-      ['p1', 'intake', 'c-intake', false], ['p2', 'platform', 'c-open', false], ['p3', 'intake', null, true],
+      ['p1', 'org', 'c-spring', false], ['p2', 'platform', 'c-open', false], ['p3', 'intake', null, true],
     ]);
     expect(rows[2].target).toBe('جهة ثانية · الاستقبال');
     expect(planSummary(rows).map((s) => s.count)).toEqual([1, 1, 1]);
@@ -47,6 +47,21 @@ describe('خطة من لا دفعة له', () => {
     const withIntake = [...cohorts, { id: 'c-i2', is_intake: true, organization_id: ORG2, name: 'x' }];
     expect(planHashInput(cohortlessPlan({ participants, enrollments, cohorts: withIntake, orgs }))).not.toBe(a);
     expect(planHashInput(cohortlessPlan({ participants, enrollments: [...enrollments, { participant_id: 'p1', cohort_id: 'c-intake', status: 'active' }], cohorts, orgs }))).not.toBe(a);
+  });
+});
+
+describe('دفعة الجهة الجارية في الخطة', () => {
+  it('kind org لمن لجهته دفعة مفتوحة أو جارية (أحدثها)، والاستقبال حين لا دفعة جارية', () => {
+    const cs = [...cohorts, { id: 'c-old', name: 'قديمة', organization_id: ORG, status: 'open', starts_on: '2025-01-01' }];
+    const rows = cohortlessPlan({ participants: [{ id: 'a', organization_id: ORG }, { id: 'b', organization_id: ORG2 }], enrollments: [], cohorts: cs, orgs: [] });
+    expect(rows.map((r) => [r.kind, r.target_id])).toEqual([['org', 'c-spring'], ['intake', null]]);
+    expect(orgCurrentCohort(cs, ORG).id).toBe('c-spring');
+    expect(orgCurrentCohort(cs.filter((c) => c.id !== 'c-spring'), ORG).id).toBe('c-old');
+  });
+  it('قائمة الانتظار تحمل سبب البقاء في المنصة العامة', () => {
+    const w = waitingList({ members: [{ id: 'w', organization_id: ORG }], enrollments: [{ participant_id: 'w', cohort_id: 'c-open', status: 'active' }], cohorts,
+      placements: [{ participant_id: 'w', reason: 'full', created_at: '2026-11-20' }] }, ORG);
+    expect([w[0].reason, w[0].reason_ar]).toEqual(['full', 'دفعته ممتلئة']);
   });
 });
 

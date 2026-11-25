@@ -855,6 +855,7 @@ async function progressOn(c: any, requirementIds: string[]) {
 
 // تسجيل مشاركين في دفعة. تسجيلاتهم السابقة تُعلَّم منسحبة. التقدم يبقى داخل البرنامج نفسه (معرفات متطلباته ثابتة)،
 // ويضيع بالنقل إلى دفعة على برنامج آخر، فذلك لا يمر إلا بتأكيد صريح (enrollImpact وconfirm_move).
+// والنقل اليدوي يتجاوز سعة الدفعة (capacity) عمدًا: السعة تحكم الإلحاق الآلي وحده (place_participant)، وتنبّه واجهة النقل حين تمتلئ.
 export async function cohortEnroll(a: Admin, b: Body) {
   const c = must(await db.from('cohorts').select('id, name, program_id, organization_id').eq('id', String(b.cohort_id || '')).maybeSingle());
   if (!c) throw new Fail('الدفعة غير موجودة', 404);
