@@ -5,14 +5,14 @@
 // participant_observations وحده. الواجهة تعرض ولا تحسب.
 import React, { useCallback, useEffect, useState } from 'react';
 import { date, dateOnly, L } from '../leaders.js';
-import { openDoc } from './Capstones.jsx';
+import { ChapterLevel, openDoc } from './Capstones.jsx';
 import { Submission } from './Handbook.jsx';
 import { useUI } from '../ui.jsx';
 import { OBS_KIND_AR, OBS_SOURCE_AR } from '../../../supabase/functions/leaders-api/observations.js';
 // تسميات الحالات من مصادرها الوحيدة: جلسات التوجيه من labels.js، ووثيقة المبادرة من capstone.js، ودورة 360 من feedback360.js
 import { COACH_STATUS_ADMIN as SESSION_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { CHARTER_KEY, chapterState, STATUS_TITLES_ADMIN as CAP_AR } from '../../../supabase/functions/leaders-api/capstone.js';
-import { CHAPTER_STATUS_AR, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { CHAPTER_STATUS_AR, LEVEL_AR, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
 import { TIMELINE_TYPE_AR, TIMELINE_TYPES } from '../../../supabase/functions/leaders-api/observations.js';
 import { CYCLE_STATUS_AR as F360_AR } from '../../../supabase/functions/leaders-api/feedback360.js';
 
@@ -141,6 +141,7 @@ export function InitiativePanel({ participantId, canWrite = false, onChanged }) 
       </div>
       <div className="pf-cap-kpis">
         <span className="la-chip">الوثيقة: {CAP_AR[c.status] || CAP_AR.draft}</span>
+        {LEVEL_AR[d.doc?.review_levels?.level] && <span className="la-chip">مستوى الوثيقة: {LEVEL_AR[d.doc.review_levels.level]}</span>}
         <span className="la-chip">البطاقة: {card ? CHAPTER_STATUS_AR[chapterState(card)] : 'ليست من فصوله'}</span>
         <span className={`la-chip ${d.readiness >= 80 ? 'ok' : ''}`}>الجاهزية {d.readiness ?? 0}%</span>
         {c.revisions > 0 && <span className="la-chip">أُعيدت {c.revisions} مرة</span>}
@@ -150,7 +151,7 @@ export function InitiativePanel({ participantId, canWrite = false, onChanged }) 
         const st = chapterState(x);
         return (
           <li key={x.id} data-chapter={x.key}>
-            <span><b>{x.title}</b>{!x.complete && x.missing > 0 && <small className="la-muted"> · {x.missing} حقول ناقصة</small>}
+            <span><b>{x.title}</b><ChapterLevel s={x} />{!x.complete && x.missing > 0 && <small className="la-muted"> · {x.missing} حقول ناقصة</small>}
               {notes[x.key] && <><br /><small className="la-muted">ملاحظة المستشار: {notes[x.key]}</small></>}</span>
             <span className="pf-ch-meta">
               <span className={`la-chip ${st === 'reviewed' ? 'ok' : st === 'returned' ? 'warn' : ''}`} title={x.status ? SUBMISSION_STATUS_ADMIN[x.status] : undefined}>{CHAPTER_STATUS_AR[st]}</span>

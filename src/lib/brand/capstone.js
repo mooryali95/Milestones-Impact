@@ -6,7 +6,7 @@
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
 import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js';
-import { costLabel, parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { costLabel, displayPages, pageNumberOf, parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
 import { DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
@@ -98,6 +98,7 @@ html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; fon
 .cp-toc2 li i.no { color: #8A6424; }
 .cp-toc2 .front { columns: 1; display: flex; flex-wrap: wrap; gap: 0 6mm; }
 .cp-toc2 .front li { border: 0; padding: .6mm 0; }
+.cp-join { margin: 6mm 0 2mm; padding-top: 3mm; border-top: 1px solid #DCE2E1; font-weight: 400; font-size: 10.4pt; color: #0B272F; break-after: avoid; }
 .cp-ref { font-size: 8.4pt; color: #5F7176; margin: 1mm 0 0; }
 .cp-ref b { font-weight: 400; color: #2C4148; }
 .cp-why { margin: -2mm 0 4mm; color: #5F7176; font-size: 8.4pt; }
@@ -265,7 +266,8 @@ function boardFigures(key, doc, viz) {
   return b.parts(doc, viz).filter((p) => p.svg).map((p) => `<figure class="cp-fig">${p.svg}${p.legend || ''}<figcaption>${esc(p.title || b.title)}: يُولَّد من هذا الفصل</figcaption></figure>`).join('');
 }
 
-function chapter(s, i, skip = null, viz = null, doc = null, gapKeys = null) {
+// متن الفصل: دليله وحقوله ورسومه، بلا فاتحة. يُطبع وحده في صفحته، أو بعد أصله في الصفحة المجمّعة للتأسيسي (displayPages)
+function chapterBody(s, skip = null, viz = null, doc = null, gapKeys = null) {
   const info = chapterInfo(s.key);
   let body = info?.why ? `<p class="cp-why">${esc(info.why)}</p>` : '';
   // حقل الميثاق التالف لا يظهر في الميثاق (يُبنى من الصالح)، فيُعرض هنا بعلامته حتى لا يضيع ما كتبه المشارك
@@ -284,7 +286,19 @@ function chapter(s, i, skip = null, viz = null, doc = null, gapKeys = null) {
   }
   body += boardFigures(s.key, doc, viz);
   if (gapKeys?.has(s.key)) body += `<p class="cp-ref">ما ينقص هذا الفصل في <a href="#ch-gaps">ملحق «ما ينقص لإكمال الوثيقة»</a>.</p>`;
-  return anchor(s.key, i === 0) + section(eyebrow(s, i + 1), `${i + 1}. ${s.title}`, body);
+  return body;
+}
+
+// عنوان الصفحة المجمّعة: الفصلان بعنوانيهما، فيبقى كل سؤال مؤسسي ظاهرًا باسم فصله
+export const pageTitle = (page) => page.map((s) => s.title).join(' و');
+
+// صفحة الفصل: فصل واحد، أو أصل وتابعه (displayPages). n رقم الصفحة في الوثيقة؛ ولكل فصل مرساته فلا ينكسر رابط إليه.
+// skipOf: حقول عُرضت في الميثاق لفصل بعينه
+function chapter(page, i, skipOf = () => null, viz = null, doc = null, gapKeys = null) {
+  const [s, ...rest] = page;
+  let body = chapterBody(s, skipOf(s), viz, doc, gapKeys);
+  for (const j of rest) body += `${anchor(j.key)}<h3 class="cp-join">${esc(j.title)}</h3>${chapterBody(j, skipOf(j), viz, doc, gapKeys)}`;
+  return anchor(s.key, i === 0) + section(eyebrow(s, i + 1), `${i + 1}. ${pageTitle(page)}`, body);
 }
 
 // ── المتابعة بعد الاعتماد: الخطة المعتمدة وما تحقق منها ──
@@ -329,15 +343,17 @@ function charterBlock(doc) {
 
 // مسوّغات المبادرة: النقاط هنا، والجداول في فصولها بإحالة إليها، فلا يقرأ صاحب القرار الجدول نفسه مرتين
 const TABLE_HOME = { 'الدليل على المشكلة': 'options-analysis', البدائل: 'options-analysis', 'ما يُشترى أو يُتعاقد عليه': 'procurement' };
-function caseBlock(doc) {
+// pages: صفحات العرض (displayPages)، فالإحالة برقم الصفحة كما في الفهرس والمتن
+function caseBlock(doc, pages = displayPages(doc.sections)) {
   // البعد الذي لم تُملأ فصوله لا يُعرض: يُذكر في ملحق ما ينقص
   const cases = businessCase(doc).filter((c) => !c.missing);
   if (!cases.length) return '';
   const secs = doc.sections || [];
   const ref = (t) => {
-    const i = secs.findIndex((x) => x.key === TABLE_HOME[t.label]);
+    const home = secs.find((x) => x.key === TABLE_HOME[t.label]);
+    const no = home ? pageNumberOf(pages, home.key) : 0;
     const n = t.rows.length;
-    return `<p class="cp-ref"><b>${esc(t.label)}</b> (${n} ${n === 1 ? 'صف' : n === 2 ? 'صفان' : n <= 10 ? 'صفوف' : 'صفًا'}): ${i >= 0 ? `<a href="#ch-${esc(secs[i].key)}">الفصل ${i + 1} «${esc(secs[i].title)}»</a>` : 'في فصله'}.</p>`;
+    return `<p class="cp-ref"><b>${esc(t.label)}</b> (${n} ${n === 1 ? 'صف' : n === 2 ? 'صفان' : n <= 10 ? 'صفوف' : 'صفًا'}): ${home && no ? `<a href="#ch-${esc(home.key)}">الفصل ${no} «${esc(home.title)}»</a>` : 'في فصله'}.</p>`;
   };
   return anchor('case', true) + section('للقرار · خمسة أسئلة', 'مسوّغات المبادرة', cases.map((c) => `<div class="cp-case"><h3>${esc(c.title)}</h3><small>${esc(c.question)}</small>
     ${points(c.points.map(([k, v]) => raw(`<b>${esc(k)}:</b> ${esc(v)}`)), '')}${c.table ? ref(c.table) : ''}</div>`).join(''),
@@ -361,9 +377,9 @@ function launchBlock(doc) {
 }
 
 // الفهرس: الأقسام الأمامية، ثم الفصول مجمّعة بمراحل بناء المبادرة، بروابط تقفز إليها، وحالة كل فصل في المسودة
-function tocBlock(doc, front, { draft }) {
-  const secs = doc.sections || [];
-  const groups = groupByPhase(secs);
+// pages: صفحات العرض (displayPages)؛ الصفحة المجمّعة سطر واحد بعنوانيها ومرساة أصلها
+function tocBlock(pages, front, { draft }) {
+  const groups = groupByPhase(pages.map((p) => ({ ...p[0], title: pageTitle(p) })));
   // لا عدّ للحقول الفارغة في الفهرس (قرار المالك 2026-11-24): ما ينقص في ملحقه وحده
   const state = () => '';
   return anchor('toc', true) + section('الفهرس', 'فهرس الوثيقة', `<div class="cp-toc2">
@@ -383,6 +399,21 @@ function visualsBlock(viz) {
     ${kpis([{ value: st.activities, label: 'نشاطًا' }, { value: st.finish, label: 'يومًا على المسار الحرج' }, { value: st.critical, label: 'نشاطًا حرجًا' }])}
     <figure class="cp-fig">${net.svg}${networkLegend()}<figcaption>المسار الحرج: ${esc(st.path.join(' ← '))}</figcaption></figure>`,
   'رسوم تُولَّد من فصول الوثيقة نفسها، فلا تُكتب مرتين.');
+}
+
+// ملحق «مستوى الوثيقة وموقع كل فصل منه» (المرحلة 4): للمستشار والخبير وحدهما. يبنيه الخادم في review_levels
+// (capstone.ts levelsView) لـ admin.capstone ووثيقة الخبير، ولا يدخل لقطة الاعتماد ولا ما يصل الراعي أو الجهة
+export function levelAnnex(doc) {
+  const v = doc?.review_levels;
+  if (!v?.chapters?.length) return '';
+  const rows = v.chapters.map((c) => [c.title, LVL[c.level] || '·',
+    raw(`${esc(c.standing_title || '')}${c.kept_fields ? ` <small>(${esc(c.kept_fields)} ${c.kept_fields === 1 ? 'حقل باقٍ' : 'حقول باقية'} مما كتبه)</small>` : ''}`),
+    raw((c.criteria || []).map((r) => `<b>${esc(r.title)}:</b> ${esc(r.anchor)}`).join('<br>'))]);
+  return anchor('levels', true) + section('للمراجعة', 'مستوى الوثيقة وموقع كل فصل منه', `
+    ${v.live ? '<p class="cp-p"><b>الحالة الآن:</b> الوثيقة معتمدة وتُعرض من نسختها المعتمدة، وهذا الملحق من حالة فصولها الآن لا من تلك النسخة.</p>' : ''}
+    ${LVL[v.level] ? `<p class="cp-p">مستوى الوثيقة: <b>${esc(LVL[v.level])}</b>. يُقرأ كل فصل بمستوى القائد في إطاره، وتُقرأ درجته بمعيار ذلك المستوى.</p>` : ''}
+    ${table([{ label: 'الفصل', width: '34mm' }, { label: 'المستوى', width: '18mm' }, { label: 'موقعه', width: '30mm' }, { label: 'معيار المستوى (الدرجة العليا)' }], rows)}`,
+  'المطلوب يُحسب في الجاهزية، والاختياري لا يُعد فراغه نقصًا، والباقي كتبه القائد قبل أن يُرفع مستوى الفصل فبقي في وثيقته غير مطلوب.');
 }
 
 // ملحق «ما ينقص لإكمال الوثيقة»: الفصل والحقل والسبب، بدل «لم يُملأ» في المتن (doc-quality.js cleanDoc)
@@ -497,17 +528,20 @@ export function capstoneReport(input, { appendix = true } = {}) {
     ].filter(Boolean), '')}
     ${approved || example ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
 
-  const charter = charterBlock(doc), bcase = caseBlock(doc), launch = launchBlock(doc);
+  const pages = displayPages(secs);
+  const charter = charterBlock(doc), bcase = caseBlock(doc, pages), launch = launchBlock(doc);
   const viz = scheduleModel(doc);
   const visuals = visualsBlock(viz);
   const gapsHtml = example || !appendix ? '' : gapsBlock(gaps);
   const front = [charter && ['charter', 'ميثاق المبادرة'], bcase && ['case', 'مسوّغات المبادرة'], launch && ['launch', 'خطة الانطلاق'], visuals && ['visuals', 'اللوحات المرئية'], ['glossary', 'مسرد المصطلحات'], gapsHtml && ['gaps', 'ما ينقص لإكمال الوثيقة']].filter(Boolean);
-  body += tocBlock(doc, front, { draft: !approved && !example });
+  body += tocBlock(pages, front, { draft: !approved && !example });
   body += charter + bcase + launch;
 
-  secs.forEach((s, i) => {
-    body += chapter(annotated.sections[i] || s, i, s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null, viz, doc, appendix ? gapKeys : null);
-    if (s.key === 'cost-plan' && doc.cost?.total > 0) body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost, doc));
+  // الفصول بصفحات العرض: للتأسيسي يُجمع الفصلان القصيران في صفحة (displayPages)، والبيانات والجاهزية كما هي
+  const marked = new Map(secs.map((s, i) => [s.key, annotated.sections[i] || s]));
+  pages.forEach((page, i) => {
+    body += chapter(page.map((s) => marked.get(s.key) || s), i, (s) => (s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null), viz, doc, appendix ? gapKeys : null);
+    if (page.some((s) => s.key === 'cost-plan') && doc.cost?.total > 0) body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost, doc));
   });
 
   body += visuals;
@@ -545,6 +579,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
   if (!example) body += decisionsBlock(doc.decisions);
   body += glossaryBlock(doc);
   body += gapsHtml;
+  body += levelAnnex(doc);
 
   return {
     meta: {

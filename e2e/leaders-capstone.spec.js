@@ -111,7 +111,7 @@ test('المستشار: يقيّم الأبعاد الستة ثم يقبل وي�
 
 // التدقيق 2026-11-11 (admin-eval-2): القبول بلا بريد راعٍ كان يحفظ القبول والدرجة ثم يرمي خطأ،
 // والشاشة تبقى على «بانتظار مراجعتك» بنموذج لم يعد صالحًا
-function reviewServer({ sponsorEmail, review }) {
+function reviewServer({ sponsorEmail, review, extend = (c) => c }) {
   const calls = [];
   const s = { status: 'submitted' };
   const doc = { meta: { initiative: 'رقمنة خدمات المستفيدين', participant: { name: 'سارة الأحمد' }, org: { name: 'جهة التجربة' }, scope_title: 'مشروع', track: { title: 'مسار التنفيذ المؤثر' } }, sections: [] };
@@ -123,7 +123,7 @@ function reviewServer({ sponsorEmail, review }) {
     const b = JSON.parse(r.request().postData() || '{}');
     calls.push(b);
     const replies = { 'admin.orgs': { success: true, orgs: [], unassigned: {} }, 'admin.capstones': { success: true, capstones: [] } };
-    if (b.action === 'admin.capstone') return r.fulfill({ json: capstone() });
+    if (b.action === 'admin.capstone') return r.fulfill({ json: extend(capstone()) });
     if (b.action === 'admin.capstone-review') return r.fulfill({ json: review(s, b, capstone) });
     return r.fulfill({ json: replies[b.action] ?? { success: true } });
   };
@@ -140,6 +140,23 @@ async function openReview(page, srv) {
   await expect(page.getByRole('heading', { name: 'رقمنة خدمات المستفيدين' })).toBeVisible();
   for (const title of RUBRIC) await page.getByRole('radiogroup', { name: title }).getByRole('radio').last().click();
 }
+
+// المرحلة 4 من مصفوفة الوثيقة بحسب المستوى: بجانب كل فصل مستوى القائد في إطاره، وموقعه منه، ومعيار مستواه
+test('المستشار: يرى مستوى الوثيقة وموقع كل فصل منه (مطلوب، اختياري، باقٍ) ومعيار مستواه', async ({ page }) => {
+  const crit = [{ key: 'value', title: 'القيمة والدليل', anchor: 'منافع مميزة عن المخرجات، بمؤشرات قابلة للقياس' }];
+  const lv = { 'initiative-charter': ['beginner', 'required'], wbs: ['beginner', 'kept'], 'benefits-register': ['beginner', 'optional'] };
+  const srv = reviewServer({ sponsorEmail: 'khalid@jiha.sa', review: () => ({ success: true }),
+    extend: (c) => ({ ...c, doc: { ...c.doc, review_levels: { level: 'beginner', chapters: [] } },
+      sections: c.sections.map((x) => ({ ...x, level: lv[x.key][0], standing: lv[x.key][1], kept_fields: 0, criteria: crit })) }) });
+  await openReview(page, srv);
+  await expect(page.getByRole('heading', { name: /الفصول/ })).toContainText('مستوى الوثيقة تأسيسي');
+  const row = (k) => page.locator(`.cps-secs li[data-chapter="${k}"]`);
+  await expect(row('initiative-charter')).toContainText('مطلوب لمستواه');
+  await expect(row('wbs')).toContainText('باقٍ مما كتبه قبل رفع مستواه');
+  await expect(row('benefits-register')).toContainText('اختياري لمستواه');
+  await expect(row('benefits-register')).toContainText('منافع مميزة عن المخرجات');
+  await expect(row('wbs').locator('.la-chip').first()).toHaveText('تأسيسي');
+});
 
 test('المستشار: وثيقة بلا بريد راعٍ تُعتمد بقبوله مباشرة، بلا سبب يكتبه ولا طلب تأييد يفشل', async ({ page }) => {
   // المبادرة قد تكون افتراضية والراعي توضيح لا شرط (قرار المالك 2026-11-14)
