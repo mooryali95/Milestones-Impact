@@ -50,7 +50,7 @@ describe('4.4 صلاحيات الأدوار على الخادم', () => {
     const book = mapOf('expert').filter(({ key }) => key.startsWith('xp.book'));
     expect(book.length).toBe(3);
     for (const { key, impl } of book) expect(impl, key).toMatch(/MB\.expertViewer\(e\)/);
-    const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key) && !key.startsWith('xp.book')).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl) && !/MS\.expertOwner\(e\)/.test(impl)).map(({ key }) => key);
+    const gaps = mapOf('expert').filter(({ key, impl }) => !['xp.dashboard', 'xp.switch'].includes(key) && !key.startsWith('xp.book')).filter(({ impl }) => !scoped.test(bodyOf(impl) || impl) && !/MS\.(?:expertOwner|unreadCount\(MS\.expertOwner)\(e\)/.test(impl)).map(({ key }) => key);
     expect(gaps).toEqual([]);
   });
   it('كل جلسة تُستخرج من جدولها: المشارك والخبير والمنسق والإدارة', () => {

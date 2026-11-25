@@ -320,12 +320,13 @@ export async function unsubscribeRequest(req: Request, token: string) {
 }
 
 // category: فئة الرسالة من MAIL_CATEGORIES، إلزامية لكل بريد غير الرموز والتنبيه (اختبار mail-categories)
-// recipient: صاحب البريد صراحةً لبريد الخبير والمنسق (مركز رسائله وتفضيلاته)، وabout: المشارك الذي يذكره الإشعار بالاسم
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', category = null, ref = null, purpose = null, expiresAt = null, force = false, queue = true, recipient = null, about = null }: { kind?: MailKind; category?: MailCategory | null; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean; recipient?: MailRecipient | null; about?: string | null } = {}): Promise<void | 'queued'> {
+// recipient: صاحب البريد صراحةً لبريد الخبير والمنسق (مركز رسائله وتفضيلاته)، وabout: المشارك الذي يذكره الإشعار بالاسم.
+// noteRef: مرجع الإشعار في الصندوق إن خالف مرجع البريد (ref يبقى لعدّ البريد ومحو طابور المحذوف)، وactionUntil لعنصر «ينتظرك»
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', category = null, ref = null, purpose = null, expiresAt = null, force = false, queue = true, recipient = null, about = null, noteRef = null, actionUntil = null }: { kind?: MailKind; category?: MailCategory | null; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean; recipient?: MailRecipient | null; about?: string | null; noteRef?: string | null; actionUntil?: string | null } = {}): Promise<void | 'queued'> {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   let headers: Record<string, string> | undefined;
   if (kind !== 'code' && kind !== 'alert') {
-    const prep = await notify({ to, subject, html, category, ref, recipient, about });
+    const prep = await notify({ to, subject, html, category, ref: noteRef ?? ref, recipient, about, actionUntil });
     if (!prep.send) return;   // كتمها المشارك: في مركز رسائله وحده
     html = prep.html; headers = prep.headers;
   }

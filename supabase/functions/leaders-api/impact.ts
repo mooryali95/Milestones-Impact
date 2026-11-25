@@ -294,12 +294,12 @@ export async function raterCheck(p: any, email: string) {
 async function notifyConfirmers(p: any, flags: string[]) {
   const why = flags.map((f) => (RATER_FLAG_AR as Record<string, string>)[f] || f).join('، ');
   const adv = await advisorOf(p).catch(() => null);
-  const to: [string, string, 'expert_work' | 'coord_work'][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`, 'expert_work']] : [];
+  const to: [string, string, 'expert_work' | 'coord_work', string | null][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`, 'expert_work', adv.id]] : [];
   if (p.organization_id) {
     const { data: coords } = await db.from('org_coordinators').select('email, status, permissions').eq('organization_id', p.organization_id).neq('status', 'suspended');
-    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`, 'coord_work']);
+    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`, 'coord_work', null]);
   }
-  for (const [email, url, category] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { category, ref: `participant:${p.id}` }).catch((e) => console.error('rater confirm notify', e));
+  for (const [email, url, category, xid] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { category, ...(xid ? { recipient: { kind: 'expert' as const, id: xid }, about: p.id } : {}), ref: `participant:${p.id}` }).catch((e) => console.error('rater confirm notify', e));
   return to.length;
 }
 

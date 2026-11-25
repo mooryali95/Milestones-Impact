@@ -124,7 +124,7 @@ Deno.test('ملخص الخبير القابل للكتم: يُرسل بالرم�
   } finally { w.restore(); }
 });
 
-Deno.test('ملخص المنسق المكتوم لا يُرسل ويبقى في صندوقه، وعمل الخبير المقفل يمر بلا ترويسة، وبلا recipient كما كان', async () => {
+Deno.test('ملخص المنسق المكتوم لا يُرسل ويبقى في صندوقه، وعمل الخبير المقفل يمر بلا ترويسة ويُسجَّل، وبلا recipient كما كان', async () => {
   const t = base();
   t.participant_mail_prefs.push({ coordinator_id: CID, muted: ['coord_digest'] });
   const w = installFake(t);
@@ -138,7 +138,8 @@ Deno.test('ملخص المنسق المكتوم لا يُرسل ويبقى في 
       const r = resendCalls(calls);
       assertEquals(r.length, 3);
       for (const c of r) assertEquals(c.body.headers, undefined);
-      assertEquals(t.participant_notifications.map((n) => [n.coordinator_id, n.category, n.emailed]), [[CID, 'coord_digest', false]]);
+      // عمل الخبير المقفل يُسجَّل في صندوقه بلا ترويسة (المرحلة 2ب)، والمنسق بلا صندوق لتشغيليّه
+      assertEquals(t.participant_notifications.map((n) => [n.coordinator_id ?? n.expert_id, n.category, n.emailed]), [[CID, 'coord_digest', false], [XID, 'expert_work', true]]);
     }));
   } finally { w.restore(); }
 });
@@ -204,6 +205,23 @@ Deno.test('notify بلا بريد (المرحلة 2أ): يكتب الإشعار 
       assertEquals(resendCalls(calls).length, 0);
       assertEquals(t.participant_notifications.map((n) => [n.expert_id ?? n.participant_id, n.emailed, n.action_until ?? null]),
         [[XID, false, '2026-12-01T00:00:00Z'], [PID, false, null]]);
+    }));
+  } finally { w.restore(); }
+});
+
+Deno.test('صندوق الخبير (المرحلة 2ب): عمله المقفل يصله بالبريد دائمًا ولو كتم، ويُسجَّل بمرجع الإشعار والمشارك الذي يذكره', async () => {
+  const t = base();
+  t.participant_mail_prefs.push({ expert_id: XID, muted: ['expert_work', 'expert_digest'] });
+  const w = installFake(t);
+  try {
+    await withMail(() => withNet(async (calls) => {
+      await sendMail('xp@x.sa', 'طلب توجيه من سارة', HTML, [], { category: 'expert_work', ref: `participant:${PID}`, noteRef: 'peer:r1', recipient: { kind: 'expert', id: XID }, about: PID });
+      const r = resendCalls(calls);
+      assertEquals(r.length, 1);
+      assertEquals(r[0].body.headers, undefined);
+      assertEquals(t.participant_notifications.map((n) => [n.expert_id, n.ref, n.about_participant_id, n.emailed]), [[XID, 'peer:r1', PID, true]]);
+      // مرجع البريد يبقى للعدّ ومحو طابور المحذوف
+      assertEquals(t.mail_events.at(-1)?.ref, `participant:${PID}`);
     }));
   } finally { w.restore(); }
 });

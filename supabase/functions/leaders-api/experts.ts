@@ -394,7 +394,7 @@ async function offerNext(req: any, pick?: any) {
     mailText(`رشّحك النظام لخدمة مشارك في برنامج القادة: <b>${bdi(what)}</b>.`)
     + (req.note ? mailNote(`<b>ما يحتاجه:</b> ${bdi(req.note)}`) : '')
     + mailText(`لديك ${bdi(String(hours))} ساعة لتقبل أو تعتذر، وبعدها يُعرض الطلب على الخبير التالي.`)
-    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب')), [], { category: 'expert_work', expiresAt: expires.toISOString() }).catch(() => {});
+    + mailButton(`${SITES.leaders}/offer?t=${token}`, 'راجع الطلب')), [], { category: 'expert_work', noteRef: `offer:${req.id}`, recipient: { kind: 'expert', id: e.id }, expiresAt: expires.toISOString() }).catch(() => {});
   return { status: 'offered', expert_id: e.id, expert_name: e.full_name, expires_at: expires.toISOString() };
 }
 
@@ -583,7 +583,7 @@ async function remindHalfway() {
     const leftH = Math.max(1, Math.round(left / 36e5));
     sendMail((r as any).experts.email, `تذكير: طلب ${roleAr(r.role)} ينتظر ردك`, shell(`أهلًا ${firstName((r as any).experts.full_name)}`,
       mailText(`ما زال طلب ${roleAr(r.role)} ينتظر ردك، وبقي نحو ${bdi(String(leftH))} ساعة قبل أن يُعرض على خبير آخر. افتح رابط الطلب في رسالتنا السابقة لتقبل أو تعتذر.`)),
-      [], { category: 'expert_work', expiresAt: r.expires_at }).catch(() => {});
+      [], { category: 'expert_work', noteRef: `offer:${r.id}`, recipient: { kind: 'expert', id: r.expert_id }, expiresAt: r.expires_at }).catch(() => {});
     n += 1;
   }
   return n;

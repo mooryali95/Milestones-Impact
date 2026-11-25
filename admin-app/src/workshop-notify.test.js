@@ -113,7 +113,7 @@ describe('ربط اللوحة والخادم', () => {
     expect(told).toContain("db.from('audit_log')");
     expect(told).toContain(".order('id', { ascending: false })");
     const trainer = src.slice(src.indexOf('async function trainerMail'), src.indexOf('async function releaseTrainer'));
-    expect(trainer).toContain("{ category: 'expert_work', kind: 'bulk', ref: s.id, expiresAt: s.starts_at }");
+    expect(trainer).toContain("{ category: 'expert_work', kind: 'bulk', ref: s.id, recipient: { kind: 'expert', id: s.expert_id }, expiresAt: s.starts_at }");
     expect(trainer).toContain('uid: s.id');
     expect(src).toContain("leave === 'undate' ? (q) => q.not('starts_at', 'is', null)");
     for (const key of ['workshop-invite-to-trainer', 'workshop-change-trainer', 'workshop-undate', 'workshop-undate-trainer', 'workshop-release-trainer', 'workshop-cancel-stale']) expect(core).toContain(`key: '${key}'`);

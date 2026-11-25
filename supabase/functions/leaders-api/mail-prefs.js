@@ -76,7 +76,8 @@ export function withPrefsFooter(html, url, label = String(MESSAGES_TEXT.mailFoot
 // - فئة جمهور آخر (أو بلا فئة): تمر كما هي بلا ترويسة ولا تسجيل.
 // - المقفلة للمشارك: كما هي بلا تسجيل. والمقفلة للخبير والمنسق: تُرسل بلا ترويسة، وتُسجَّل في صندوقه إن كان له صندوق (STAFF_INBOX).
 // - القابلة للكتم: تُسجَّل دائمًا، وتُرسل بترويسة ما لم تُكتم.
-export const STAFF_INBOX = Object.freeze({ expert: false, coordinator: false });
+// صندوق الخبير في /x (المرحلة 2ب). المنسق بلا صندوق الآن (قرار المالك 6): تشغيليّه يمر كما كان بلا تسجيل
+export const STAFF_INBOX = Object.freeze({ expert: true, coordinator: false });
 export function mailPlan(category, muted = [], audience = 'participant') {
   if (!category || !MAIL_CATEGORIES[category] || mailAudience(category) !== audience) return { notify: false, send: true, headers: false };
   if (MAIL_CATEGORIES[category].locked) return { notify: audience !== 'participant' && !!STAFF_INBOX[audience], send: true, headers: false };

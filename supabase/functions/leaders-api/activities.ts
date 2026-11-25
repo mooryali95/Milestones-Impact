@@ -1088,7 +1088,7 @@ async function trainerMail(kind: keyof typeof WORKSHOP_TRAINER_MAIL, s: any, seq
   const link = online && !off ? s.join_url || null : null;
   const file = [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', sequence: seq, ...(off ? { method: 'CANCEL' as const } : { url: link || '' }) })];
   try {
-    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: online ? SESSION_MODE_AR.online : s.location_ar || null, cohort, count, joinUrl: link, changed }), file, { category: 'expert_work', kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: online ? SESSION_MODE_AR.online : s.location_ar || null, cohort, count, joinUrl: link, changed }), file, { category: 'expert_work', kind: 'bulk', ref: s.id, recipient: { kind: 'expert', id: s.expert_id }, expiresAt: s.starts_at });
     return res === 'queued' ? 'queued' : 'sent';
   } catch (err) { console.error('workshop trainer mail', kind, s.id, (err as Error).message); return 'failed'; }
 }

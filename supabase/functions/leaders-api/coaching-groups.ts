@@ -223,7 +223,7 @@ async function mailExpert(kind: keyof typeof GROUP_EXPERT_MAIL, g: Row, expertId
   const view = { ...groupView(g, null), count, cohort: cohortName };
   const ics = [calendarFile(g.id, g, view, kind === 'cancel')];
   try {
-    const res = await sendMail(e.email, GROUP_EXPERT_MAIL[kind].subject, groupExpertMail(kind, e.full_name, view), ics, { category: 'expert_work', kind: 'bulk', ref: g.id, ...(kind === 'cancel' ? {} : { expiresAt: g.starts_at }) });
+    const res = await sendMail(e.email, GROUP_EXPERT_MAIL[kind].subject, groupExpertMail(kind, e.full_name, view), ics, { category: 'expert_work', kind: 'bulk', ref: g.id, recipient: { kind: 'expert', id: e.id }, ...(kind === 'cancel' ? {} : { expiresAt: g.starts_at }) });
     return res === 'queued' ? 'queued' : 'sent';
   } catch (err) { console.error('group expert mail', kind, g.id, (err as Error).message); return 'failed'; }
 }

@@ -563,6 +563,15 @@ function Dashboard({ onOut }) {
   const [rating, setRating] = useState(null);
   // مركز رسائل الخبير وتفضيلات بريده (messages.ts): رابط ذيل البريد /x?tab=messages&prefs=<الفئة> يفتحه مباشرة
   const [msgs, setMsgs] = useState(() => { try { return new URLSearchParams(location.search).get('tab') === 'messages'; } catch { return false; } });
+  // شارة غير المقروء: من اللوحة أول مرة، ثم عند عودة التركيز إلى النافذة (xp.messages-unread)
+  const [unread, setUnread] = useState(0);
+  useEffect(() => { if (d?.messages_unread != null) setUnread(d.messages_unread); }, [d?.messages_unread]);
+  useEffect(() => {
+    const on = () => { if (document.visibilityState === 'visible') xpCall('xp.messages-unread').then((r) => { if (r?.success) setUnread(r.unread); }); };
+    window.addEventListener('focus', on);
+    document.addEventListener('visibilitychange', on);
+    return () => { window.removeEventListener('focus', on); document.removeEventListener('visibilitychange', on); };
+  }, []);
   const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
   // التحميل الأول يجمع أقسام اللوحة في رحلة واحدة (preload)، وإعادة التحميل بعد إجراء خفيفة (lite) فكل قسم يحدّث نفسه
   const load = (lite = false) => xpCall('xp.dashboard', lite ? { lite: true } : {}).then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
@@ -575,7 +584,7 @@ function Dashboard({ onOut }) {
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) await load(); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
-  if (msgs) return <MessageCenter call={xpCall} actions={XP_MESSAGES} text={STAFF_MESSAGES_TEXT.expert} backLabel="رجوع إلى لوحتك"
+  if (msgs) return <MessageCenter call={xpCall} actions={XP_MESSAGES} text={STAFF_MESSAGES_TEXT.expert} backLabel="رجوع إلى لوحتك" onUnread={setUnread}
     onBack={() => { setMsgs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } load(true); }} />;
   const reading = !!d.book_access && (book ?? (linked || !!d.content_only));
   if (reading && d.pledge_needed) {
@@ -631,7 +640,8 @@ function Dashboard({ onOut }) {
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={certificate} disabled={!d.stats.hours}
             title={d.stats.hours ? undefined : 'تُتاح بعد أول جلسة منعقدة'} aria-describedby={d.stats.hours ? undefined : 'xp-cert-hint'}>شهادة ساعات الخبرة</button>
           {!d.stats.hours && <span id="xp-cert-hint" className="sr-only">تُتاح بعد أول جلسة منعقدة</span>}
-          <button type="button" className="btn ghost sm xp-msgs-btn" style={{ color: 'var(--brand-mist)' }} onClick={() => setMsgs(true)}>{STAFF_MESSAGES_TEXT.expert.open}</button>
+          <button type="button" className="btn ghost sm xp-msgs-btn" style={{ color: 'var(--brand-mist)' }} onClick={() => setMsgs(true)}
+            aria-label={unread ? `${STAFF_MESSAGES_TEXT.expert.open}: ${unread} غير مقروءة` : undefined}>{STAFF_MESSAGES_TEXT.expert.open}{unread > 0 && <span className="la-chip xp-msgs-count" aria-hidden="true">{unread}</span>}</button>
           <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button>
         </div>

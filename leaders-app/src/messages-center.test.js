@@ -97,7 +97,7 @@ describe('قرار الإرسال والتسجيل', () => {
   });
   it('sendMail يمر بتفضيلات المشارك لغير الرموز والتنبيهات، ويكتب الإشعار قبل قرار الإرسال', () => {
     const core = readFileSync(join(API, 'core.ts'), 'utf8');
-    expect(core).toMatch(/if \(kind !== 'code' && kind !== 'alert'\) \{\s*const prep = await notify\(\{ to, subject, html, category, ref, recipient, about \}\)/);
+    expect(core).toMatch(/if \(kind !== 'code' && kind !== 'alert'\) \{\s*const prep = await notify\(\{ to, subject, html, category, ref: noteRef \?\? ref, recipient, about, actionUntil \}\)/);
     expect(core).toMatch(/participant_notifications'\)\.insert\([\s\S]{0,300}emailed: decided\.send/);
     expect(core).toMatch(/if \(!decided\.send\) return \{ send: false/);
   });
@@ -193,5 +193,31 @@ describe('تفضيلات الخبير والمنسق في /x و/org (المرح�
     const idx = readFileSync(join(API, 'index.ts'), 'utf8');
     for (const a of ['xp.messages', 'xp.messages-read', 'xp.mail-prefs']) expect(idx).toMatch(new RegExp(`'${a.replace('.', '\\.')}': \\(e, b\\) => MS\\.[a-zA-Z]+\\(MS\\.expertOwner\\(e\\), b\\)`));
     expect(idx).toContain("'coord.mail-prefs': (c, b) => MS.prefs(MS.coordinatorOwner(c), b)");
+  });
+});
+
+describe('صندوق الخبير في /x (المرحلة 2ب)', () => {
+  const src = (f) => readFileSync(join(API, f), 'utf8');
+  it('عمل الخبير المقفل يُسجَّل في صندوقه بلا ترويسة، والمنسق بلا صندوق الآن', () => {
+    expect(mailPlan('expert_work', [], 'expert')).toEqual({ notify: true, send: true, headers: false });
+    expect(mailPlan('expert_work', ['expert_work'], 'expert')).toEqual({ notify: true, send: true, headers: false });
+    expect(mailPlan('coord_work', [], 'coordinator')).toEqual({ notify: false, send: true, headers: false });
+  });
+  it('مواضع عمل الخبير تسمي مستلمها، ومرجع البريد باقٍ لمحو طابور المحذوف', () => {
+    expect(src('peer.ts')).toMatch(/ref: `participant:\$\{p\.id\}`, noteRef: `peer:\$\{row\.id\}`, recipient: \{ kind: 'expert', id: adv\.id \}, about: p\.id/);
+    expect(src('feedback360.ts')).toMatch(/ref: `participant:\$\{p\.id\}`, noteRef: `f360:\$\{c\.id\}`, recipient: \{ kind: 'expert', id: adv\.id \}, about: p\.id/);
+    expect(src('experts.ts')).toMatch(/noteRef: `offer:\$\{req\.id\}`, recipient: \{ kind: 'expert', id: e\.id \}/);
+    expect(src('team.ts')).toMatch(/recipient: \{ kind: 'expert', id: e\.id \}/);
+    expect(src('activities.ts')).toMatch(/recipient: \{ kind: 'expert', id: s\.expert_id \}/);
+    expect(src('coaching-groups.ts')).toMatch(/recipient: \{ kind: 'expert', id: e\.id \}/);
+    expect(src('model-digest.ts')).toMatch(/recipient: \{ kind: 'expert' as const, id: adv\.id \}, about: p\.id/);
+  });
+  it('شارة غير المقروء من اللوحة وعند عودة التركيز، بلا Realtime', () => {
+    const idx = src('index.ts');
+    expect(idx).toMatch(/d\.messages_unread = await MS\.unreadCount\(MS\.expertOwner\(e\)\)/);
+    const xp = readFileSync(join(__dirname, 'screens/ExpertPortal.jsx'), 'utf8');
+    expect(xp).toMatch(/xpCall\('xp\.messages-unread'\)/);
+    expect(xp).toMatch(/className="la-chip xp-msgs-count"/);
+    expect(xp).not.toMatch(/supabase\.channel|realtime/i);
   });
 });

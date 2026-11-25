@@ -432,6 +432,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     const d: any = await E.portalDashboard(e);
     // مفاتيح الميزات للواجهة (المرحلة P3): تخفي القاعة و360 بها، والرفض على الخادم وحده
     if (d?.success) d.features = await FT.features();
+    // شارة صندوق الخبير: عدد غير المقروء (صفر قبل الترحيل أو عند تعذّره)
+    if (d?.success) d.messages_unread = await MS.unreadCount(MS.expertOwner(e));
     // من لا يخدم في الرحلة (عضو لجنة بلا دور، أو معتمد بلا خدمة): لا تكليفات ولا مشاركون ولا أقران ولا 360 (portalDashboard)
     if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
@@ -452,6 +454,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   // مركز رسائل الخبير وتفضيلات بريده (messages.ts، 20261129130000): صاحبه من جلسته وحدها
   'xp.messages': (e, b) => MS.list(MS.expertOwner(e), b),
   'xp.messages-read': (e, b) => MS.markRead(MS.expertOwner(e), b),
+  // الشارة وحدها عند عودة التركيز إلى اللوحة (لا Realtime: الجداول مغلقة على service_role بقصد)
+  'xp.messages-unread': async (e) => ({ success: true, unread: await MS.unreadCount(MS.expertOwner(e)) }),
   'xp.mail-prefs': (e, b) => MS.savePrefs(MS.expertOwner(e), b),
   // تعهد السرية لمراجعي الكتاب الأم في أول دخول (experts.ts)
   'xp.pledge': (e) => E.portalPledge(e),
@@ -513,7 +517,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
 // أفعال اللوحة التي لا تمس الرحلة: لعضو اللجنة بلا دور، ولكل خبير
-const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.messages', 'xp.messages-read', 'xp.mail-prefs', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
+const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.messages', 'xp.messages-read', 'xp.messages-unread', 'xp.mail-prefs', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   // with_dashboard: لوحة الجهة في رحلة واحدة (البند 8.1): الهوية والموافقة واللوحة واستبيان السهولة معًا، بدل ثلاثة

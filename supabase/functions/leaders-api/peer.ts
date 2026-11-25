@@ -109,7 +109,7 @@ export async function ask(p: any, b: Body) {
   if (supervision === 'expert_only') {
     const adv = await advisorOf(p);
     if (adv) await sendMail(adv.email, `طلب توجيه من ${p.full_name}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'expert_work' }).catch(() => {});
+      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `peer:${row.id}`, recipient: { kind: 'expert', id: adv.id }, about: p.id }).catch(() => {});
   }
   return list(p);
 }
