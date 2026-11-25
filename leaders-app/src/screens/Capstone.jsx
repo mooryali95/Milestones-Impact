@@ -19,6 +19,7 @@ import { GuidancePanel } from './Guidance.jsx';
 import { AssistantContext, AssistantDrawer, GateLine, useAssistantAccess } from './Assistant.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
+import { docDownloadAr, WORKING_DOWNLOAD_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
 import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
@@ -146,18 +147,20 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     setD(r);
     setMsg({ ok: 'قُدّمت الوثيقة إلى المستشار. يصلك بريد بقراره.' });
   };
-  // ملف PDF جاهز مباشرة، بلا نافذة طباعة (src/lib/brand/pdf.js). التقدم يظهر في الزر نفسه
-  const downloadPdfNow = async () => {
-    setBusy('pdf'); setMsg(null); setPdfNote('لحظة…');
+  // ملف PDF لكل نسخة بزرها (قرار المالك 2026-11-25): يُبنى من وثيقة الخادم لحظة الطلب، فيعكس آخر ما كُتب، والمعتمدة من لقطتها.
+  // متجهي من الخادم حين يتاح (r.pdf)، وإلا في المتصفح (pdf.js downloadBest). التقدم يظهر في الزر نفسه
+  const downloadPdfNow = async (kind = 'working') => {
+    setBusy(kind === 'institutional' ? 'pdf-inst' : 'pdf'); setMsg(null); setPdfNote('لحظة…');
     const r = await call('capstone.doc');
     if (!r.success) { setBusy(''); setPdfNote(''); return setMsg({ err: r.message }); }
     try {
-      const [{ capstoneReport, withoutReadiness }, { downloadPdf }] = await Promise.all([import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/pdf.js')]);
-      const { meta, body } = capstoneReport(withoutReadiness(r.doc));
-      await downloadPdf(meta, body, { onProgress: setPdfNote });
+      const [{ withoutReadiness }, { renderInitiative }, { downloadBest }] = await Promise.all([import('../../../src/lib/brand/capstone.js'), import('../../../src/lib/brand/institutional.js'), import('../../../src/lib/brand/pdf.js')]);
+      const out = renderInitiative(withoutReadiness(r.doc), kind);
+      if (out.blocked) { setBusy(''); setPdfNote(''); return setMsg({ err: out.message }); }
+      await downloadBest(out.meta, out.body, { server: r.pdf, onProgress: setPdfNote });
     } catch (e) {
       console.error(e);
-      setMsg({ err: 'تعذّر بناء الملف في هذا المتصفح. افتح «ملف العمل الكامل» واختر «طباعة» ثم «حفظ PDF».' });
+      setMsg({ err: 'تعذّر بناء الملف في هذا المتصفح. افتح الوثيقة واختر «طباعة» ثم «حفظ PDF».' });
     }
     setBusy(''); setPdfNote('');
   };
@@ -342,8 +345,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
             {msg?.err && <div className="alert err">{msg.err}</div>}
             {msg?.ok && <div className="alert ok">{msg.ok}</div>}
             <button className="btn ghost block" disabled={!!busy} onClick={() => view()}>{busy === 'doc' ? 'لحظة…' : 'ملف العمل الكامل'}</button>
-            <button className="btn ghost block" disabled={!!busy} onClick={() => view('institutional')}>{busy === 'inst' ? 'لحظة…' : 'الوثيقة المؤسسية'}</button>
-            <button className="btn ghost block" disabled={!!busy} onClick={downloadPdfNow} aria-live="polite">{busy === 'pdf' ? pdfNote || 'لحظة…' : 'تحميل PDF'}</button>
+            <button className="btn ghost block" disabled={!!busy} onClick={() => view('institutional')}>{busy === 'inst' ? 'لحظة…' : (d.doc_form?.name || 'الوثيقة المؤسسية')}</button>
+            <button className="btn ghost block" disabled={!!busy} onClick={() => downloadPdfNow('institutional')} aria-live="polite">{busy === 'pdf-inst' ? pdfNote || 'لحظة…' : docDownloadAr(d.doc_form?.name || 'الوثيقة المؤسسية')}</button>
+            <button className="btn ghost block" disabled={!!busy} onClick={() => downloadPdfNow('working')} aria-live="polite">{busy === 'pdf' ? pdfNote || 'لحظة…' : WORKING_DOWNLOAD_AR}</button>
             {editable && (
               <>
                 <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'قدّم الوثيقة إلى المستشار'}</button>
