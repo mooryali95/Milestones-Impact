@@ -19,7 +19,8 @@ const KEPT = U(880001), OLD = U(880002);
 const ADMIN = { email: 'a@example.test', role: 'admin' as const, method: 'passkey' };
 const kept = { id: KEPT, full_name: 'مشارك واحد', email: 'main@example.test', phone: '+966501111111', status: 'registered', is_demo: false, is_test: false,
   email_verified_at: '2026-11-01T00:00:00Z', last_login_at: '2026-11-20T00:00:00Z', created_at: '2026-10-01T00:00:00Z', organization_id: null };
-const other = { ...kept, id: OLD, email: 'second@example.test', phone: null, last_login_at: '2026-11-02T00:00:00Z', created_at: '2026-10-02T00:00:00Z' };
+const other = { ...kept, id: OLD, full_name: 'مشارك ثان', email: 'second@example.test', phone: '05' + '01111111',   // يُركَّب فلا يُقرأ رقمًا منشورًا (single-source.test.js)
+  last_login_at: '2026-11-02T00:00:00Z', created_at: '2026-10-02T00:00:00Z' };
 
 // البريد المرسل: يُلتقط نداء Resend
 const sent: { to: string; subject: string }[] = [];
@@ -121,7 +122,7 @@ Deno.test('الربط الإداري: من دخل آخر مرة يبقى، وا�
   const calls: any[] = [];
   const w = world((name: string, args: any) => {
     calls.push([name, args]);
-    if (name === 'merge_preview') return { data: { enrollments: { moved: 1 }, participant_emails: { inserted: 1 } }, error: null };
+    if (name === 'merge_preview') return { data: { summary: { enrollments: { moved: 1 }, participant_emails: { inserted: 1 } }, fingerprint: 'f1' }, error: null };
     if (name === 'merge_participants') return { data: U(9), error: null };
     return null;
   });
@@ -168,3 +169,56 @@ Deno.test('البريد البديل: قائمة الملف، والحذف، و�
     assert(w.tables.audit_log.some((x: Row) => x.action === 'participant.email-remove'));
   } finally { w.restore(); }
 });
+
+Deno.test('الربط الإداري: هاتفان مختلفان أو غائبان يتطلبان تأكيدًا صريحًا باسم الحساب الآخر مكتوبًا', async () => {
+  const calls: any[] = [];
+  const w = world((name: string) => {
+    calls.push(name);
+    if (name === 'merge_preview') return { data: { summary: {}, fingerprint: 'f2' }, error: null };
+    if (name === 'merge_participants') return { data: U(9), error: null };
+    return null;
+  });
+  try {
+    w.tables.participants[1].phone = null;
+    const plan: any = await AE.linkPreview(ADMIN as any, { participant_id: KEPT, other: OLD });
+    assertEquals([plan.same_phone, plan.confirm_name], [false, 'مشارك ثان']);
+    const bare: any = await AE.linkApply(ADMIN as any, { participant_id: KEPT, other: OLD, plan_hash: plan.plan_hash }).catch((e) => e);
+    assertEquals(bare.code, 'confirm_different');
+    const wrong: any = await AE.linkApply(ADMIN as any, { participant_id: KEPT, other: OLD, plan_hash: plan.plan_hash, confirm_different: true, confirm_name: 'غيره' }).catch((e) => e);
+    assertEquals(wrong.code, 'confirm_different');
+    assert(!calls.includes('merge_participants'));
+    const ok: any = await AE.linkApply(ADMIN as any, { participant_id: KEPT, other: OLD, plan_hash: plan.plan_hash, confirm_different: true, confirm_name: ' مشارك ثان ' });
+    assertEquals(ok.kept_id, KEPT);
+  } finally { w.restore(); }
+});
+
+Deno.test('البصمة تتغير بتغيّر بصمة القاعدة (صف سيُمس تغيّر) ولو بقيت الأعداد نفسها', async () => {
+  let fp = 'a';
+  const w = world((name: string) => (name === 'merge_preview' ? { data: { summary: { enrollments: { moved: 1 } }, fingerprint: fp }, error: null } : { data: U(9), error: null }));
+  try {
+    const p1: any = await AE.linkPreview(ADMIN as any, { participant_id: KEPT, other: OLD });
+    fp = 'b';
+    const stale: any = await AE.linkApply(ADMIN as any, { participant_id: KEPT, other: OLD, plan_hash: p1.plan_hash }).catch((e) => e);
+    assertEquals(stale.code, 'stale');
+  } finally { w.restore(); }
+});
+
+Deno.test('تعديل الإدارة للبريد إلى بريد بديل لحساب آخر: رسالة واضحة لا «تعذّر الحفظ»', async () => {
+  const A = await import('./admin.ts');
+  const w = world();
+  try {
+    const { db } = await import('./core.ts');
+    const orig = (db as any).from;
+    (db as any).from = (t: string) => {
+      const q = orig(t);
+      if (t !== 'participants') return q;
+      const up = q.update.bind(q);
+      q.update = (v: any) => { const r = up(v); r.select = () => ({ single: () => Promise.resolve({ data: null, error: { code: '23505', message: 'email_taken: البريد بديل لحساب قائم', details: 'participant_emails_cross_uniq' } }) }); return r; };
+      return q;
+    };
+    const e: any = await A.participantSave(ADMIN as any, { participant_id: OLD, fields: { email: 'alias@example.test' } }).catch((x) => x);
+    (db as any).from = orig;
+    assertEquals([e.status, e.code], [409, 'email_linked']);
+  } finally { w.restore(); }
+});
+

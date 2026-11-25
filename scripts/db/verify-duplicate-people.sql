@@ -38,7 +38,7 @@ select true as ok, 'مرتبط بشخص=' || count(*) filter (where person_id is
        || ' · أشخاص بأكثر من حساب=' || (select count(*) from (select person_id from leaders.participants where person_id is not null group by 1 having count(*) > 1) x) as detail
   from leaders.participants where coalesce(is_demo, false) = false;
 
--- 5) قبل 20261128190000: لكل حساب مكرر بالهاتف (حقيقي قائم، غير الأحدث دخولًا في مجموعته) الجداول التي فيها صفوف له وعددها، وما
+-- 5) قبل 20261128190000: لكل حساب مكرر بالهاتف (غير تجريبي قائم، ومنه حساب الاختبار كنطاق الفهرس، غير الأحدث دخولًا في مجموعته) الجداول التي فيها صفوف له وعددها، وما
 --    في الحساب الباقي من الجداول نفسها (تعارض محتمل). الجداول من كل مفتاح أجنبي إلى المشارك (pg_constraint) كما يقرؤها الدمج،
 --    فلا يُنسى جدول. معرّفات مختصرة بلا أسماء ولا بريد. بعد الدمج: «لا مكرر قائم بالهاتف».
 with p as (
@@ -47,7 +47,7 @@ with p as (
                  case when d ~ '^05[0-9]{8}$' then '966' || substr(d, 2) when d ~ '^5[0-9]{8}$' then '966' || d else d end k
             from (select id, last_login_at, created_at,
                          regexp_replace(regexp_replace(translate(coalesce(phone, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'), '[^0-9]', '', 'g'), '^00', '') d
-                    from leaders.participants where not is_demo and not is_test and status not in ('suspended', 'withdrawn')) x) y
+                    from leaders.participants where not is_demo and status not in ('suspended', 'withdrawn')) x) y
    where length(k) >= 8),
 pairs as (select d.id dup, kp.id kept from p d join p kp on kp.k = d.k and kp.rn = 1 where d.rn > 1),
 fks as (

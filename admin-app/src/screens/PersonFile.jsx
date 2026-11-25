@@ -227,6 +227,7 @@ export function AccountEmails({ participantId, canWrite, suggest = '', onChanged
   const [other, setOther] = useState(suggest);
   const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [sure, setSure] = useState({ on: false, name: '' });   // بلا هاتف واحد: تأكيد صريح باسم الحساب الآخر
   const load = useCallback(() => L('admin.participant-emails', { participant_id: participantId }).then(setD), [participantId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (suggest) { setOther(suggest); setPlan(null); } }, [suggest]);
@@ -236,12 +237,12 @@ export function AccountEmails({ participantId, canWrite, suggest = '', onChanged
     const r = await L('admin.participant-link-plan', { participant_id: participantId, other: other.trim() });
     setBusy(false);
     if (!r.success) { toast(r.message); return; }
-    setPlan(r);
+    setPlan(r); setSure({ on: false, name: '' });
   };
   const apply = async () => {
     if (!(await confirm(`يبقى حساب ${plan.kept.full_name} (${plan.kept.email}) ويُدمج فيه الحساب الآخر ويُوقف، ويصير بريده بديلًا يدخل به. متابعة؟`))) return;
     setBusy(true);
-    const r = await L('admin.participant-link', { participant_id: participantId, other: other.trim(), plan_hash: plan.plan_hash });
+    const r = await L('admin.participant-link', { participant_id: participantId, other: other.trim(), plan_hash: plan.plan_hash, ...(plan.same_phone ? {} : { confirm_different: sure.on, confirm_name: sure.name }) });
     setBusy(false);
     if (!r.success) { toast(r.message); if (r.code === 'stale') setPlan(null); return; }
     toast('رُبط الحسابان');
@@ -286,8 +287,15 @@ export function AccountEmails({ participantId, canWrite, suggest = '', onChanged
           <ul className="pf-mini">{Object.entries(plan.summary || {}).map(([t, s]) => (
             <li key={t}><b>{MERGE_TABLE_AR[t] || t}</b>: {Object.entries(s).map(([k, v]) => `${MERGE_KIND_AR[k] || k} ${v}`).join('، ')}</li>
           ))}</ul>
+          {!plan.same_phone && (
+            <div className="pf-link-confirm">
+              <p className="la-warn">الحسابان بلا هاتف واحد، فلا دليل آليًا على أنهما للشخص نفسه.</p>
+              <label className="pf-check"><input type="checkbox" checked={sure.on} onChange={(e) => setSure({ ...sure, on: e.target.checked })} /> تحققت أن الحسابين للشخص نفسه</label>
+              <input aria-label="اكتب اسم الحساب الآخر للتأكيد" placeholder={`اكتب «${plan.confirm_name}» للتأكيد`} value={sure.name} onChange={(e) => setSure({ ...sure, name: e.target.value })} />
+            </div>
+          )}
           <div className="la-row">
-            <button type="button" className="btn-sm primary" disabled={busy} onClick={apply}>{busy ? 'لحظة…' : 'اربط الحسابين'}</button>
+            <button type="button" className="btn-sm primary" disabled={busy || (!plan.same_phone && (!sure.on || sure.name.trim() !== String(plan.confirm_name || '').trim()))} onClick={apply}>{busy ? 'لحظة…' : 'اربط الحسابين'}</button>
             <button type="button" className="btn-sm ghost" onClick={() => setPlan(null)}>إلغاء</button>
           </div>
         </div>

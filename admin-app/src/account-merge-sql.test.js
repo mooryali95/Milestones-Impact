@@ -75,7 +75,10 @@ const snap = async (d) => JSON.stringify([
   await rows(d, 'select participant_id, period from leaders.capstone_updates order by 1, 2'),
   await rows(d, 'select participant_id, source, ref_id from leaders.points_ledger order by 1, 2'),
   await rows(d, 'select id, participant_id from leaders.guidance_messages order by id'),
-  await rows(d, 'select token_hash, participant_id, revoked_at is null live from leaders.auth_sessions order by 1'),
+  // الجلسة المبطلة لا تُحيا بالإرجاع، فالقائمة بلا حالها (حالها مختبر وحده)
+  await rows(d, 'select token_hash, participant_id from leaders.auth_sessions order by 1'),
+  await rows(d, 'select serial, participant_id, status from leaders.certificates order by 1'),
+  await rows(d, 'select participant_id, status from leaders.final_evaluations order by 1'),
   await rows(d, 'select credential_id, participant_id from leaders.passkeys order by 1'),
   await rows(d, 'select product_id, participant_id from leaders.payments order by 1'),
   await rows(d, 'select participant_id, email from leaders.participant_emails order by email'),
@@ -174,15 +177,28 @@ describe('ترحيل 20261128190000 (الربط والدمج)', { timeout: 12000
     await d.exec(M3.match(/^-- restore: (.*)$/m)[1]);
     expect(await snap(d)).toBe(before);
     expect(await n(d, `select count(*) n from leaders.audit_log where action = 'participant.unmerged'`)).toBe(3);
+    expect(await rows(d, `select after->'skipped' s from leaders.audit_log where action = 'participant.unmerged'`)).toEqual([{ s: 0 }, { s: 0 }, { s: 0 }]);
+    // جلسة المكرر تبقى مبطلة
+    expect((await one(d, `select revoked_at is null live from leaders.auth_sessions where token_hash = 'h1'`)).live).toBe(false);
     // والإرجاع مرة ثانية لا يفعل شيئًا
     await d.exec(M3.match(/^-- restore: (.*)$/m)[1]);
     expect(await snap(d)).toBe(before);
   });
 
-  it('التحقق الذاتي يرمي ويُرجع الترحيل كله إن بقي هاتف مشترك (حساب اختبار لا يُدمج)', async () => {
-    const d = await db(`insert into leaders.participants (email, full_name, phone, is_test) values ('t@example.test', 'اختبار', '+966504444444', true)`);
+  it('حساب الاختبار في النطاق نفسه: يُدمج كغيره، فالأزواج والتحقق الذاتي وفهرس 20261128180000 قاعدة واحدة', async () => {
+    const d = await db(`insert into leaders.participants (email, full_name, phone, is_test, last_login_at) values ('t@example.test', 'اختبار', '+966504444444', true, '2026-11-01')`);
+    await d.exec(M3);
+    expect((await one(d, `select status from leaders.participants where id = '${OTHER}'`)).status).toBe('suspended');
+    await d.exec(M2);
+  });
+
+  it('التحقق الذاتي يرمي ويُرجع الترحيل كله إن بقي هاتف مشترك', async () => {
+    const d = await db();
     const before = await snap(d);
-    await expect(d.exec(`begin; ${M3}; commit;`)).rejects.toThrow(/account_merge: 1 phone number\(s\) still shared/);
+    // الدمج معطّل في نسخة الاختبار فيبقى التكرار
+    const broken = M3.replace('for r in select * from pg_temp.merge_pairs() order by kept_id, dup_id loop', 'for r in select * from pg_temp.merge_pairs() where false loop');
+    expect(broken).not.toBe(M3);
+    await expect(d.exec(`begin; ${broken}; commit;`)).rejects.toThrow(/account_merge: 2 phone number\(s\) still shared/);
     await d.exec('rollback').catch(() => {});
     expect(await snap(d)).toBe(before);
   });
@@ -208,8 +224,14 @@ describe('ترحيل 20261128190000 (الربط والدمج)', { timeout: 12000
     await d.exec(`insert into leaders.points_ledger (participant_id, source, ref_id, points) values ('${K3}', 'chapter', '${U(301)}', 5), ('${OTHER}', 'chapter', '${U(301)}', 5), ('${OTHER}', 'lab', '${U(303)}', 1)`);
     const before = await snap(d);
     const prev = (await one(d, `select leaders.merge_preview('${K3}', '${OTHER}') s`)).s;
-    expect(prev.points_ledger).toEqual({ moved: 1, deleted: 1 });
-    expect(prev.participant_emails).toEqual({ inserted: 1 });
+    expect(prev.summary.points_ledger).toEqual({ moved: 1, deleted: 1 });
+    expect(prev.summary.participant_emails).toEqual({ inserted: 1 });
+    // البصمة ثابتة لما لم يتغير، وتتغير بتغيّر صف سيُمس
+    const prev2 = (await one(d, `select leaders.merge_preview('${K3}', '${OTHER}') s`)).s;
+    expect(prev2.fingerprint).toBe(prev.fingerprint);
+    await d.exec(`update leaders.points_ledger set points = 9 where participant_id = '${OTHER}' and source = 'lab'`);
+    expect((await one(d, `select leaders.merge_preview('${K3}', '${OTHER}') s`)).s.fingerprint).not.toBe(prev.fingerprint);
+    await d.exec(`update leaders.points_ledger set points = 1 where participant_id = '${OTHER}' and source = 'lab'`);
     expect(await snap(d)).toBe(before);
     expect(await n(d, `select count(*) n from leaders.participant_merges where actor = 'preview'`)).toBe(0);
     const mid = (await one(d, `select leaders.merge_participants('${K3}', '${OTHER}', 'admin@example.test', 'admin', 'admin_link') m`)).m;
@@ -218,5 +240,54 @@ describe('ترحيل 20261128190000 (الربط والدمج)', { timeout: 12000
     expect(await snap(d)).toBe(before);
     await expect(d.exec(`select leaders.merge_participants('${K3}', '${DEMO}', 'a', 'admin')`)).rejects.toThrow(/merge_demo/);
     await expect(d.exec(`select leaders.merge_participants('${K1}', '${D1}', 'a', 'admin')`)).rejects.toThrow(/merge_already/);
+  });
+
+  it('الشهادة لا تُحذف: للحسابين شهادتان ساريتان، فسارية المكرر تصير replaced وتنتقل كما هي، والإرجاع يعيدها', async () => {
+    const seed = `insert into leaders.certificates (serial, participant_id, snapshot, signature, status) values ('MI-LDR-2026-KKKKK1', '${K1}', '{}', 'sig', 'valid'), ('MI-LDR-2026-DDDDD1', '${D1}', '{}', 'sig', 'valid')`;
+    const d = await db(seed);
+    const before = await snap(d);
+    await d.exec(M3);
+    expect(await rows(d, 'select serial, participant_id, status from leaders.certificates order by 1')).toEqual([
+      { serial: 'MI-LDR-2026-DDDDD1', participant_id: K1, status: 'replaced' }, { serial: 'MI-LDR-2026-KKKKK1', participant_id: K1, status: 'valid' }]);
+    expect(await n(d, `select count(*) n from leaders.participant_merge_rows where kind = 'deleted' and tbl = 'leaders.certificates'`)).toBe(0);
+    await d.exec(M3.match(/^-- restore: (.*)$/m)[1]);
+    expect(await snap(d)).toBe(before);
+  });
+
+  it('الأبعد تقدمًا يبقى: تقييم ختامي معتمد في المكرر يغلب مسودة الباقي، ويُحفظ صف الباقي ويعود بالإرجاع', async () => {
+    const d = await db(`insert into leaders.final_evaluations (participant_id, program_id, status, score) values ('${K1}', '${PROG}', 'draft', null), ('${D1}', '${PROG}', 'approved', 88)`);
+    const before = await snap(d);
+    await d.exec(M3);
+    expect(await rows(d, `select participant_id, status, score from leaders.final_evaluations`)).toEqual([{ participant_id: K1, status: 'approved', score: 88 }]);
+    const lost = await one(d, `select ref from leaders.participant_merge_rows where kind = 'deleted' and tbl = 'leaders.final_evaluations'`);
+    expect([lost.ref.row.status, lost.ref.won]).toEqual(['draft', 'merged']);
+    await d.exec(M3.match(/^-- restore: (.*)$/m)[1]);
+    expect(await snap(d)).toBe(before);
+  });
+
+  it('الإرجاع: سطر لم يجد صفه يُعد في skipped، وصف أُضيف في الدمج ويشير إليه جديد يمنع الإرجاع', async () => {
+    const d = await db();
+    await d.exec(M3);
+    const mid = (await one(d, `select id from leaders.participant_merges where merged_id = '${D1}'`)).id;
+    // تحديث جديد على الوثيقة المنسوخة إلى الباقي بعد الدمج: لا تُحذف النسخة
+    await d.exec(`insert into leaders.capstone_updates (participant_id, period) values ('${K1}', '2026-12')`);
+    await expect(d.exec(`select leaders.unmerge_participants('${mid}', 'admin', 'a')`)).rejects.toThrow(/unmerge_blocked/);
+    await d.exec(`delete from leaders.capstone_updates where period = '2026-12'`);
+    // صف منقول تغيّر بعد الدمج (نُقل إلى حساب آخر): لا يجده الإرجاع فيُعد
+    await d.exec(`update leaders.guidance_messages set participant_id = '${OTHER}' where participant_id = '${K1}'`);
+    const res = (await one(d, `select leaders.unmerge_participants('${mid}', 'admin', 'a') r`)).r;
+    expect(res.skipped).toBe(1);
+    expect(res.skipped_rows[0].tbl).toBe('leaders.guidance_messages');
+  });
+
+  it('المحو: حذف الحساب الباقي يحذف الحساب المدموج فيه وصفوفهما في النسخة الاحتياطية وسجل الدمج', async () => {
+    const d = await db();
+    await d.exec(M3);
+    expect(await n(d, `select count(*) n from leaders.backup_20261128_account_merge where id in ('${K1}', '${D1}')`)).toBe(2);
+    await d.exec(`delete from leaders.certificates where participant_id = '${K1}'`);
+    await d.exec(`delete from leaders.participants where id = '${K1}'`);
+    expect(await n(d, `select count(*) n from leaders.participants where id in ('${K1}', '${D1}')`)).toBe(0);
+    expect(await n(d, `select count(*) n from leaders.backup_20261128_account_merge where id in ('${K1}', '${D1}') or merge_kept_id = '${K1}'`)).toBe(0);
+    expect(await n(d, `select count(*) n from leaders.participant_merges where kept_id = '${K1}' or merged_id = '${D1}'`)).toBe(0);
   });
 });

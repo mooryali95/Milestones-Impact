@@ -1,6 +1,7 @@
 -- ════════════════════════════════════════════════════════════════
 -- حساب واحد بأكثر من بريد: الربط بدل «الأرشفة والإقفال» (اعتمده المالك 2026-11-25)
 -- ════════════════════════════════════════════════════════════════
+-- الترتيب: يُطبَّق هذا الترحيل قبل 20261128180000 (فهرس الهاتف الفريد)، ثم 20261128180000 بعده: «20261128190000، 20261128180000».
 -- حاجب: الدوال بعده تقرأ participant_emails عند الدخول، وتستدعي merge_participants وmerge_preview في ربط الإدارة.
 -- 1) participant_emails: البريد البديل لحساب قائم. البريد الأساسي يبقى في participants.email وحده (المصدر الواحد)، فالجدول للبدائل
 --    وحدها وis_primary فيه false دائمًا بقيد؛ «اجعله أساسيًا» يبادل بين الموضعين في دالة واحدة (participant_email_make_primary).
@@ -9,15 +10,20 @@
 -- 2) merge_participants(keep, dup): يدمج الحساب المكرر في الباقي داخل معاملته:
 --    - بريد المكرر يصير بديلًا للباقي، ويُستبدل في صفه بعنوان مقفل (merged-<id>@merged.invalid) فلا يُدخل به إليه، ويُوقف، وتُبطل جلساته.
 --    - كل جدول له مفتاح أجنبي إلى participants (من pg_constraint، فلا يُنسى جدول) تُنقل صفوفه إلى الباقي، عدا الجلسات وتحديات الدخول.
---    - تعارض مفتاح فريد: يبقى صف الباقي، ويُحفظ صف المكرر كاملًا في سجل الدمج ثم يُحذف، وما يشير إليه من صفوف يُنقل أولًا إلى نظيره.
+--    - تعارض مفتاح فريد: يبقى الصف الأبعد تقدمًا في جداول التقدم والاعتماد (merge_rank)، وإلا صف الباقي. الخاسر يُحفظ كاملًا في سجل الدمج
+--      ثم يُحذف، وما يشير إليه من صفوف يُنقل أولًا إلى الفائز. الشهادة لا تُحذف: سارية المكرر تصير replaced إن كان للباقي سارية.
+--    - كنس أخير: كل صف بقي يشير إلى المكرر في جدول من الجداول نفسها يُنقل أو يُسجَّل، ثم تحقق يرمي إن بقي شيء.
 --    - إلحاقان قائمان بدفعتين مختلفتين: إلحاق المكرر يُسحب (withdrawn) فلا يصير للباقي دفعتان. وفي الدفعة نفسها يُدمجان.
 --    - الحقول الفارغة في ملف الباقي تأخذ قيمة المكرر، وحاله في الرحلة الأبعد بينهما.
 --    - كل تغيير سطر في participant_merge_rows (set/deleted/inserted)، فـ unmerge_participants يعيده كما كان.
 --    - سطر audit_log participant.merged بمعرّف الباقي (kept_id) وأعداد ما انتقل، بلا بريد.
 -- 3) merge_preview: الدمج نفسه داخل معاملة فرعية تُرجع، فيعيد ما سينتقل ويتعارض كما سيقع، ولا يكتب شيئًا.
--- 4) معالجة لمرة واحدة: كل زوج بهاتف واحد من الحسابات الحقيقية (لا تجريبي ولا اختبار)، الباقي الأحدث دخولًا ثم الأحدث إنشاءً
+-- 4) معالجة لمرة واحدة: كل زوج بهاتف واحد من الحسابات غير التجريبية القائمة، وحساب الاختبار منها (النطاق نفسه في التحقق الذاتي
+--    وفي فهرس 20261128180000 وفي حارس الهاتف holdsPhone، فالثلاثة قاعدة واحدة)، الباقي الأحدث دخولًا ثم الأحدث إنشاءً
 --    (قاعدة 20261128170000 نفسها)، يُدمج فيه المكرر ولو كان له أثر. والمكرر الذي أرشفه 20261128170000 يُدمج كذلك فيصير بريده بديلًا.
 --    ثم تحقق ذاتي يرمي (فيُرجع الترحيل كله) إن بقي هاتف لأكثر من حساب قائم، فيُطبَّق 20261128180000 بعده بلا رفض.
+-- الخصوصية: حذف المشارك (المحو) يحذف قبله حساباته المدموجة فيه وصفوفه في backup_20261128_account_merge (participant_merge_erase)،
+--    وسجل الدمج يُمحى معه بالمفتاح الأجنبي. جدول النسخة يُحذف بعد 30 يومًا من التطبيق (RUNBOOK.md §4).
 -- آمن لإعادة التشغيل: المكرر المدموج موقوف وبريده مقفل فلا يعود في الأزواج، والجداول والدوال بـ if not exists وor replace.
 
 -- restore: select leaders.unmerge_participants(m.id, 'system', 'restore:20261128190000') from leaders.participant_merges m where m.actor = 'migration:20261128190000' and m.restored_at is null order by m.created_at desc, m.id desc
@@ -95,25 +101,70 @@ create or replace function leaders.merge_pk(p_rel regclass, p_row jsonb) returns
                     where i.indrelid = p_rel and i.indisprimary), p_row)
 $f$;
 
--- تغيير عمود في صف إلى قيمة جديدة. إن تعارض مع مفتاح فريد: يُبحث عن نظيره بأعمدة الفهرس نفسه، ويُنقل ما يشير إلى الصف إلى نظيره
--- (بالدالة نفسها، فتعارض الصف التابع يُحل كذلك)، ثم يُحفظ الصف كاملًا ويُحذف. ما يشير إليه ولا نظير له يرمي فيُرجع الدمج كله.
+create or replace function leaders.merge_epoch(t text) returns numeric language sql immutable as $f$
+  select coalesce(extract(epoch from t::timestamptz)::numeric, 0)
+$f$;
+
+-- رتبة الصف في جداول التقدم والاعتماد: عند تعارض المفتاح يبقى الأبعد تقدمًا أيًا كان حسابه (مقارنة مصفوفات، الأكبر أبعد).
+-- null: لا رتبة للجدول، فيبقى صف الحساب الباقي. حضور الورش اتحاد بطبعه: التعارض حضور الورشة نفسها، فلا يضيع شيء.
+create or replace function leaders.merge_rank(p_tbl text, r jsonb) returns numeric[] language sql immutable as $f$
+  select case split_part(p_tbl, '.', 2)
+    when 'final_evaluations' then array[coalesce(array_position(array['draft', 'returned', 'pending', 'approved'], r ->> 'status'), 0), leaders.merge_epoch(r ->> 'decided_at'), leaders.merge_epoch(r ->> 'updated_at')]
+    when 'handbook_progress' then array[coalesce((r ->> 'quiz_score')::numeric, 0), leaders.merge_epoch(r ->> 'completed_at')]
+    when 'reading_progress' then array[coalesce((r ->> 'active_seconds')::numeric, 0), coalesce((r ->> 'words')::numeric, 0)]
+    when 'video_progress' then array[(r ->> 'completed_at' is not null)::int, coalesce((r ->> 'watched_seconds')::numeric, 0), leaders.merge_epoch(r ->> 'completed_at')]
+    when 'content_progress' then array[(r ->> 'completed_at' is not null)::int, coalesce((r ->> 'watched_seconds')::numeric, 0), leaders.merge_epoch(r ->> 'completed_at')]
+    when 'participant_requirements' then array[coalesce(array_position(array['pending', 'returned', 'submitted', 'done'], r ->> 'status'), 0), leaders.merge_epoch(r ->> 'completed_at'), leaders.merge_epoch(r ->> 'submitted_at')]
+    when 'placements' then array[(r ->> 'approved_at' is not null)::int, leaders.merge_epoch(r ->> 'approved_at'), leaders.merge_epoch(r ->> 'decided_at')]
+    when 'participant_milestones' then array[(r ->> 'done_at' is not null)::int, leaders.merge_epoch(r ->> 'done_at'), leaders.merge_epoch(r ->> 'updated_at')]
+    when 'assessments' then array[(r ->> 'status' = 'submitted')::int, leaders.merge_epoch(r ->> 'submitted_at'), leaders.merge_epoch(r ->> 'started_at')]
+    else null end
+$f$;
+
+
+-- نقل ما يشير إلى صف (p_from) إلى صف آخر (p_to) في الجدول نفسه، بـ merge_resolve فتعارض التابع يُحل كذلك
+create or replace function leaders.merge_rehome(p_mid uuid, p_rel regclass, p_from jsonb, p_to jsonb, p_depth int) returns void language plpgsql as $f$
+declare fk record; ch record; oldv jsonb; q text := leaders.merge_qname(p_rel);
+begin
+  for fk in
+    select c.conrelid, a.attname fcol, ra.attname rcol
+      from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+      join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
+     where c.contype = 'f' and c.confrelid = p_rel and cardinality(c.conkey) = 1
+  loop
+    oldv := p_from -> fk.rcol::text;
+    if oldv is null or jsonb_typeof(oldv) = 'null' then continue; end if;
+    for ch in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I',
+                             leaders.merge_qname(fk.conrelid), fk.fcol, q, fk.rcol) using p_from
+    loop
+      if p_to is null then raise exception 'merge_unresolved: % (يشير إليه %)', q, leaders.merge_qname(fk.conrelid); end if;
+      perform leaders.merge_resolve(p_mid, fk.conrelid, fk.fcol, ch.c, ch.j, p_to -> fk.rcol::text, p_depth + 1);
+    end loop;
+  end loop;
+end $f$;
+
+-- تغيير عمود في صف إلى قيمة جديدة. إن تعارض مع مفتاح فريد: يُبحث عن نظيره بأعمدة الفهرس نفسه، ثم يبقى الأبعد تقدمًا (merge_rank)،
+-- وعند التساوي أو بلا رتبة صف الحساب الباقي. ما يشير إلى الخاسر يُنقل إلى الفائز، ثم يُحفظ الخاسر كاملًا ويُحذف.
+-- الشهادة لا تُحذف أبدًا (الشهادة السارية للمكرر تصير replaced قبل النقل)، وما يشير إليه ولا نظير له يرمي فيُرجع الدمج كله.
 create or replace function leaders.merge_resolve(p_mid uuid, p_rel regclass, p_col text, p_ctid tid, p_row jsonb, p_new jsonb, p_depth int default 0)
 returns void language plpgsql as $f$
 declare
   q text := leaders.merge_qname(p_rel);
   target jsonb := p_row || jsonb_build_object(p_col, p_new);
-  after jsonb; other jsonb; cond text; ix record; fk record; ch record; oldv jsonb;
+  after jsonb; other jsonb; octid tid; cond text; ix record;
 begin
   if p_depth > 4 then raise exception 'merge_too_deep: %', q; end if;
   begin
     execute format('update %s t set %I = (jsonb_populate_record(null::%s, $1)).%I where ctid = $2 returning to_jsonb(t)', q, p_col, q, p_col)
       into after using target, p_ctid;
     insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
-    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new));
+    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new, 'updated_at', p_row -> 'updated_at', 'h', md5(p_row::text)));
     return;
   exception when unique_violation or exclusion_violation then
     null;
   end;
+  if q = 'leaders.certificates' then raise exception 'merge_certificate_conflict: شهادة لا تُحذف'; end if;
   for ix in
     select i.indkey::int2[] k, pg_get_expr(i.indpred, i.indrelid) pred
       from pg_index i
@@ -123,26 +174,22 @@ begin
   loop
     select string_agg(format('t.%I is not distinct from (jsonb_populate_record(null::%s, $1)).%I', a.attname, q, a.attname), ' and ')
       into cond from pg_attribute a where a.attrelid = p_rel and a.attnum = any(ix.k);
-    execute format('select to_jsonb(t) from %s t where %s%s and t.ctid <> $2 limit 1', q, cond, coalesce(' and (' || ix.pred || ')', ''))
-      into other using target, p_ctid;
+    execute format('select to_jsonb(t), t.ctid from %s t where %s%s and t.ctid <> $2 limit 1', q, cond, coalesce(' and (' || ix.pred || ')', ''))
+      into other, octid using target, p_ctid;
     exit when other is not null;
   end loop;
-  for fk in
-    select c.conrelid, a.attname fcol, ra.attname rcol
-      from pg_constraint c
-      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
-      join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
-     where c.contype = 'f' and c.confrelid = p_rel and cardinality(c.conkey) = 1
-  loop
-    oldv := p_row -> fk.rcol::text;
-    if oldv is null or jsonb_typeof(oldv) = 'null' then continue; end if;
-    for ch in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I',
-                             leaders.merge_qname(fk.conrelid), fk.fcol, q, fk.rcol) using p_row
-    loop
-      if other is null then raise exception 'merge_unresolved: % (يشير إليه %)', q, leaders.merge_qname(fk.conrelid); end if;
-      perform leaders.merge_resolve(p_mid, fk.conrelid, fk.fcol, ch.c, ch.j, other -> fk.rcol::text, p_depth + 1);
-    end loop;
-  end loop;
+  -- الأبعد تقدمًا يبقى: صف المكرر يفوز، فيُنقل إليه ما يشير إلى صف الباقي، ويُحفظ صف الباقي ويُحذف، ثم يُنقل صف المكرر
+  if p_depth = 0 and other is not null and leaders.merge_rank(q, p_row) > leaders.merge_rank(q, other) then
+    perform leaders.merge_rehome(p_mid, p_rel, other, p_row, p_depth);
+    execute format('delete from %s where ctid = $1', q) using octid;
+    insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref) values (p_mid, 'deleted', q, p_col, jsonb_build_object('row', other, 'won', 'merged'));
+    execute format('update %s t set %I = (jsonb_populate_record(null::%s, $1)).%I where ctid = $2 returning to_jsonb(t)', q, p_col, q, p_col)
+      into after using target, p_ctid;
+    insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new, 'updated_at', p_row -> 'updated_at', 'h', md5(p_row::text)));
+    return;
+  end if;
+  perform leaders.merge_rehome(p_mid, p_rel, p_row, other, p_depth);
   execute format('delete from %s where ctid = $1', q) using p_ctid;
   insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref) values (p_mid, 'deleted', q, p_col, jsonb_build_object('row', p_row));
 end $f$;
@@ -150,7 +197,8 @@ end $f$;
 -- تسجيل تغيير عمود في صف بمفتاحه (للإرجاع)
 create or replace function leaders.merge_note_set(p_mid uuid, p_rel regclass, p_col text, p_row jsonb, p_new jsonb) returns void language sql as $f$
   insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
-  values (p_mid, 'set', leaders.merge_qname(p_rel), p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, p_row), 'old', p_row -> p_col, 'new', p_new))
+  values (p_mid, 'set', leaders.merge_qname(p_rel), p_col,
+          jsonb_build_object('pk', leaders.merge_pk(p_rel, p_row), 'old', p_row -> p_col, 'new', p_new, 'updated_at', p_row -> 'updated_at', 'h', md5(p_row::text)))
 $f$;
 
 -- ما انتقل وما تعارض، بالأعداد وحدها لكل جدول
@@ -166,7 +214,7 @@ $f$;
 create or replace function leaders.merge_participants(p_keep uuid, p_dup uuid, p_actor text, p_actor_type text default 'system', p_source text default 'merge')
 returns uuid language plpgsql as $f$
 declare
-  k record; d record; mid uuid; fk record; r record; cap jsonb; c text; kv jsonb; dv jsonb;
+  k record; d record; mid uuid; fk record; r record; cap jsonb; c text; kv jsonb; dv jsonb; n int;
   stages text[] := array['registered', 'profiled', 'assessing', 'pending_approval', 'placed', 'enrolled', 'completed'];
   fill text[] := array['phone', 'job_title', 'organization_name', 'sector', 'years_experience', 'bio', 'cv_path', 'linkedin_url', 'name_en', 'work_scope', 'profile_completed_at'];
 begin
@@ -228,6 +276,14 @@ begin
     cap := null;
   end if;
 
+  -- الشهادة لا تُحذف: سارية المكرر تصير replaced إن كان للباقي سارية (فهرس certificates_one_valid)، ثم تنتقل كما هي بسجل replaced_by
+  for r in select to_jsonb(x) j, x.id from leaders.certificates x
+            where x.participant_id = p_dup and x.status = 'valid'
+              and exists (select 1 from leaders.certificates y where y.participant_id = p_keep and y.status = 'valid') loop
+    perform leaders.merge_note_set(mid, 'leaders.certificates', 'status', r.j, to_jsonb('replaced'::text));
+    update leaders.certificates set status = 'replaced' where id = r.id;
+  end loop;
+
   -- هـ) كل جدول يشير إلى المشارك: نقل جماعي، وعند التعارض صفًا صفًا. الوثيقة بعد صفوف تحديثها
   for fk in
     select c2.conrelid rel, cl.relname, a.attname col
@@ -241,7 +297,7 @@ begin
     begin
       execute format('with u as (update %1$s t set %2$I = $1 where t.%2$I = $2 returning to_jsonb(t) j)
                       insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
-                      select $3, ''set'', %3$L, %4$L, jsonb_build_object(''pk'', leaders.merge_pk(%3$L::regclass, j), ''old'', to_jsonb($2), ''new'', to_jsonb($1)) from u',
+                      select $3, ''set'', %3$L, %4$L, jsonb_build_object(''pk'', leaders.merge_pk(%3$L::regclass, j), ''old'', to_jsonb($2), ''new'', to_jsonb($1), ''updated_at'', j -> ''updated_at'', ''h'', md5(j::text)) from u',
                      leaders.merge_qname(fk.rel), fk.col, leaders.merge_qname(fk.rel), fk.col)
         using p_keep, p_dup, mid;
     exception when unique_violation or exclusion_violation then
@@ -249,6 +305,21 @@ begin
         perform leaders.merge_resolve(mid, fk.rel, fk.col, r.c, r.j, to_jsonb(p_keep));
       end loop;
     end;
+  end loop;
+
+  -- و) الكنس الأخير: صف بقي يشير إلى المكرر (أُضيف أثناء الدمج أو فاته النقل الجماعي) يُنقل أو يُسجَّل صفًا صفًا، ثم لا يبقى شيء
+  for fk in
+    select c2.conrelid rel, cl.relname, a.attname col
+      from pg_constraint c2 join pg_class cl on cl.oid = c2.conrelid
+      join pg_attribute a on a.attrelid = c2.conrelid and a.attnum = c2.conkey[1]
+     where c2.contype = 'f' and c2.confrelid = 'leaders.participants'::regclass and cardinality(c2.conkey) = 1
+       and cl.relname not in ('auth_sessions', 'webauthn_challenges', 'participant_merges')
+  loop
+    for r in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = $1', leaders.merge_qname(fk.rel), fk.col) using p_dup loop
+      perform leaders.merge_resolve(mid, fk.rel, fk.col, r.c, r.j, to_jsonb(p_keep));
+    end loop;
+    execute format('select count(*) from %s t where t.%I = $1', leaders.merge_qname(fk.rel), fk.col) into n using p_dup;
+    if n > 0 then raise exception 'merge_stray: % صف في %.% بقي للمكرر', n, fk.relname, fk.col; end if;
   end loop;
 
   if cap is not null and cap ->> 'sponsor_token_hash' is not null then
@@ -263,13 +334,22 @@ begin
   return mid;
 end $f$;
 
--- المعاينة: الدمج نفسه ثم إرجاعه، فيعود ما سيقع بالأعداد ولا يبقى منه شيء
+-- بصمة ما سيقع: لكل سطر في سجل الدمج جدوله ونوعه ومفتاح الصف وقيمته السابقة ووقت تحديثه وبصمة الصف كله (والصف كاملًا للمتعارض)، فأي تغيّر
+-- في صف سيُمس بعد المعاينة يغيّر البصمة. ما تولّده القاعدة عند كل تشغيل (معرّف البريد البديل الجديد، ووقت إبطال الجلسة) خارجها
+create or replace function leaders.merge_fingerprint(p_mid uuid) returns text language sql stable as $f$
+  select md5(coalesce(string_agg(concat_ws('|', tbl, kind, col,
+           case kind when 'inserted' then '' when 'deleted' then (ref -> 'row')::text
+                else concat_ws('|', (ref -> 'pk')::text, (ref -> 'old')::text, (ref -> 'updated_at')::text, ref ->> 'h') end), ';' order by id), ''))
+    from leaders.participant_merge_rows where merge_id = p_mid
+$f$;
+
+-- المعاينة: الدمج نفسه ثم إرجاعه، فيعود ما سيقع (الأعداد والبصمة) ولا يبقى منه شيء
 create or replace function leaders.merge_preview(p_keep uuid, p_dup uuid) returns jsonb language plpgsql as $f$
 declare res jsonb; mid uuid;
 begin
   begin
     mid := leaders.merge_participants(p_keep, p_dup, 'preview', 'system', 'admin_link');
-    res := leaders.merge_summary(mid);
+    res := jsonb_build_object('summary', leaders.merge_summary(mid), 'fingerprint', leaders.merge_fingerprint(mid));
     raise exception using errcode = 'P0001', message = 'merge_preview_rollback';
   exception when sqlstate 'P0001' then
     if sqlerrm <> 'merge_preview_rollback' then raise; end if;
@@ -277,27 +357,50 @@ begin
   return res;
 end $f$;
 
--- الإرجاع: سطور الدمج بعكس ترتيبها
-create or replace function leaders.unmerge_participants(p_merge uuid, p_actor_type text, p_actor text) returns void language plpgsql as $f$
-declare m record; r record; cols text;
+-- الإرجاع: سطور الدمج بعكس ترتيبها. الجلسات المبطلة تبقى مبطلة (لا تُحيا جلسة بعد الدمج). سطر لم يجد صفه (تغيّر بعد الدمج)
+-- يُعد ويعود في { skipped } وفي سطر السجل، لا يُتجاوز بصمت. وصف أُضيف في الدمج ويشير إليه الآن ما ليس في سجله يمنع الإرجاع.
+create or replace function leaders.unmerge_participants(p_merge uuid, p_actor_type text, p_actor text) returns jsonb language plpgsql as $f$
+declare m record; r record; cols text; n int; skipped int := 0; skips jsonb := '[]'::jsonb; cur jsonb; fk record; refs int;
 begin
   select * into m from leaders.participant_merges where id = p_merge for update;
-  if m.id is null or m.restored_at is not null then return; end if;
+  if m.id is null or m.restored_at is not null then return jsonb_build_object('skipped', 0, 'already', true); end if;
   for r in select * from leaders.participant_merge_rows where merge_id = p_merge order by id desc loop
     if r.kind = 'set' then
+      continue when r.tbl = 'leaders.auth_sessions';
       execute format('update %1$s t set %2$I = (jsonb_populate_record(null::%1$s, $1)).%2$I where t.%2$I is not distinct from (jsonb_populate_record(null::%1$s, $3)).%2$I and to_jsonb(t) @> $2',
                      r.tbl, r.col) using jsonb_build_object(r.col, r.ref -> 'old'), r.ref -> 'pk', jsonb_build_object(r.col, r.ref -> 'new');
+      get diagnostics n = row_count;
+      if n = 0 then skipped := skipped + 1; skips := skips || jsonb_build_object('tbl', r.tbl, 'col', r.col, 'pk', r.ref -> 'pk'); end if;
     elsif r.kind = 'deleted' then
       select string_agg(format('%I', a.attname), ', ' order by a.attnum) into cols
         from pg_attribute a where a.attrelid = r.tbl::regclass and a.attnum > 0 and not a.attisdropped and a.attgenerated = '';
       execute format('insert into %1$s (%2$s) overriding system value select %2$s from jsonb_populate_record(null::%1$s, $1)', r.tbl, cols) using r.ref -> 'row';
     else
+      execute format('select to_jsonb(t) from %s t where to_jsonb(t) @> $1', r.tbl) into cur using r.ref -> 'pk';
+      if cur is null then
+        skipped := skipped + 1; skips := skips || jsonb_build_object('tbl', r.tbl, 'col', r.col, 'pk', r.ref -> 'pk');
+        continue;
+      end if;
+      for fk in
+        select c.conrelid, a.attname fcol, ra.attname rcol from pg_constraint c
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+          join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
+         where c.contype = 'f' and c.confrelid = r.tbl::regclass and cardinality(c.conkey) = 1
+      loop
+        execute format('select count(*) from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I', leaders.merge_qname(fk.conrelid), fk.fcol, r.tbl, fk.rcol)
+          into refs using cur;
+        if refs > 0 then
+          raise exception 'unmerge_blocked: % أُضيف إليه بعد الدمج % صف في %، فلا يُحذف', r.tbl, refs, leaders.merge_qname(fk.conrelid);
+        end if;
+      end loop;
       execute format('delete from %s t where to_jsonb(t) @> $1', r.tbl) using r.ref -> 'pk';
     end if;
   end loop;
   update leaders.participant_merges set restored_at = now() where id = p_merge;
   insert into leaders.audit_log (actor_type, actor, action, entity, entity_id, before, after)
-  values (p_actor_type, p_actor, 'participant.unmerged', 'participants', m.merged_id::text, null, jsonb_build_object('kept_id', m.kept_id, 'merge_id', p_merge));
+  values (p_actor_type, p_actor, 'participant.unmerged', 'participants', m.merged_id::text, null,
+          jsonb_build_object('kept_id', m.kept_id, 'merge_id', p_merge, 'skipped', skipped, 'skipped_rows', skips));
+  return jsonb_build_object('skipped', skipped, 'skipped_rows', skips);
 end $f$;
 
 -- «اجعله أساسيًا»: البريد البديل يصير أساسيًا والأساسي بديلًا، في معاملة واحدة
@@ -313,12 +416,28 @@ begin
   insert into leaders.participant_emails (participant_id, email, verified_at, source) values (p_participant, lower(p.email), p.email_verified_at, a.source);
 end $f$;
 
+-- المحو: حذف المشارك يحذف قبله حساباته المدموجة فيه (الشخص نفسه)، وصفوفه في نسخة الترحيل الاحتياطية. سجل الدمج يُمحى بمفتاحه الأجنبي
+create or replace function leaders.participant_merge_erase() returns trigger language plpgsql as $f$
+begin
+  -- اسم جدول النسخة يُركَّب: الجدول يُحذف بعد 30 يومًا، والدالة الدائمة لا تحمل اسمه في البنية المرجعية
+  if to_regclass('leaders.backup_' || '20261128_account_merge') is not null then
+    execute format('delete from leaders.%I where id = $1 or merge_kept_id = $1', 'backup_' || '20261128_account_merge') using old.id;
+  end if;
+  delete from leaders.participants p using leaders.participant_merges m
+   where m.kept_id = old.id and m.restored_at is null and p.id = m.merged_id and p.id <> old.id;
+  return old;
+end $f$;
+create or replace trigger participants_merge_erase before delete on leaders.participants
+  for each row execute function leaders.participant_merge_erase();
+
 do $$
 declare f text;
 begin
   foreach f in array array['email_owner_guard()', 'merge_qname(regclass)', 'merge_pk(regclass, jsonb)', 'merge_resolve(uuid, regclass, text, tid, jsonb, jsonb, integer)',
                            'merge_note_set(uuid, regclass, text, jsonb, jsonb)', 'merge_summary(uuid)', 'merge_participants(uuid, uuid, text, text, text)',
-                           'merge_preview(uuid, uuid)', 'unmerge_participants(uuid, text, text)', 'participant_email_make_primary(uuid, text)'] loop
+                           'merge_preview(uuid, uuid)', 'unmerge_participants(uuid, text, text)', 'participant_email_make_primary(uuid, text)',
+                           'merge_epoch(text)', 'merge_rank(text, jsonb)', 'merge_rehome(uuid, regclass, jsonb, jsonb, integer)', 'merge_fingerprint(uuid)',
+                           'participant_merge_erase()'] loop
     execute format('alter function leaders.%s set search_path = leaders, public', f);
     execute format('revoke all on function leaders.%s from public, anon, authenticated', f);
     if exists (select 1 from pg_roles where rolname = 'service_role') then
@@ -334,14 +453,14 @@ create or replace function pg_temp.pkey(p text) returns text language sql immuta
     from (select regexp_replace(regexp_replace(translate(coalesce(p, ''), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'), '[^0-9]', '', 'g'), '^00', '') as d) x
 $f$;
 
--- الأزواج: (أ) حسابات حقيقية قائمة بهاتف واحد، الباقي الأحدث دخولًا ثم إنشاءً، (ب) ما أرشفه 20261128170000 ولم يُدمج بعد
+-- الأزواج: (أ) حسابات غير تجريبية قائمة بهاتف واحد (نطاق الفهرس نفسه)، الباقي الأحدث دخولًا ثم إنشاءً، (ب) ما أرشفه 20261128170000 ولم يُدمج بعد
 create or replace function pg_temp.merge_pairs()
 returns table (dup_id uuid, kept_id uuid) language sql stable as $f$
   with p as (
     select id, pg_temp.pkey(phone) k,
            row_number() over (partition by pg_temp.pkey(phone) order by last_login_at desc nulls last, created_at desc, id) rn
       from leaders.participants
-     where not is_demo and not is_test and status not in ('suspended', 'withdrawn') and length(pg_temp.pkey(phone)) >= 8),
+     where not is_demo and status not in ('suspended', 'withdrawn') and length(pg_temp.pkey(phone)) >= 8),
   g as (select k from p group by k having count(*) > 1)
   select d.id, kp.id from g join p d on d.k = g.k and d.rn > 1 join p kp on kp.k = g.k and kp.rn = 1
   union

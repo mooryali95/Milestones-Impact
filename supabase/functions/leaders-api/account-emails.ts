@@ -8,6 +8,7 @@
 // بالدالة نفسها التي دمج بها الترحيل (merge_participants)، فكل ما يُنقل ويتعارض يُحفظ ويُرجع بـ unmerge_participants.
 import { audit, db, Fail, must, sha256Hex } from './core.ts';
 import { isEmail, normalizeEmail } from './logic.js';
+import { PHONE_KEY_MIN, phoneKey } from './phone-key.js';
 import type { Admin } from './admin.ts';
 
 type Body = Record<string, any>;
@@ -41,6 +42,8 @@ const MERGE_ERR: Record<string, string> = {
   merge_already: 'هذا الحساب مدموج في حساب آخر من قبل',
   merge_missing: 'الحساب غير موجود',
   merge_unresolved: 'تعذّر الربط: في الحساب الآخر بيانات تتعارض ولا نظير لها. راجع الفريق التقني',
+  merge_certificate_conflict: 'تعذّر الربط: للحسابين شهادتان لا تُدمجان. راجع الفريق التقني',
+  merge_stray: 'تعذّر الربط: بقيت صفوف للحساب الآخر لم تنتقل. راجع الفريق التقني',
 };
 function mergeFail(e: any): Fail {
   const key = String(e?.message || '').split(':')[0];
@@ -86,24 +89,31 @@ async function linkPlan(b: Body) {
   const [kept, merged] = keptOf(self, other);
   const { data, error } = await db.rpc('merge_preview', { p_keep: kept.id, p_dup: merged.id });
   if (error) throw mergeFail(error);
-  const summary = data || {};
-  const hash = await sha256Hex(JSON.stringify({ kept: kept.id, merged: merged.id, summary }));
-  return { kept, merged, summary, hash };
+  const summary = data?.summary || {};
+  // البصمة من القاعدة: مفتاح كل صف سيُمس وقيمته ووقت تحديثه، لا الأعداد وحدها، فأي تغيّر بعد المعاينة يرد التطبيق
+  const hash = await sha256Hex(JSON.stringify({ kept: kept.id, merged: merged.id, fingerprint: data?.fingerprint || null, summary }));
+  // الهاتف نفسه دليل أن الحسابين لشخص واحد. بغيره (مختلف أو غائب) يُطلب تأكيد صريح باسم الحساب الآخر مكتوبًا
+  const ka = phoneKey(self.phone), kb = phoneKey(other.phone);
+  const same_phone = ka.length >= PHONE_KEY_MIN && ka === kb;
+  return { kept, merged, other, summary, hash, same_phone };
 }
 
 export async function linkPreview(_a: Admin, b: Body) {
-  const { kept, merged, summary, hash } = await linkPlan(b);
-  return { success: true, plan_hash: hash, kept: short(kept), merged: short(merged), summary };
+  const { kept, merged, other, summary, hash, same_phone } = await linkPlan(b);
+  return { success: true, plan_hash: hash, kept: short(kept), merged: short(merged), summary, same_phone, confirm_name: same_phone ? null : other.full_name };
 }
 
 export async function linkApply(a: Admin, b: Body) {
-  const { kept, merged, summary, hash } = await linkPlan(b);
+  const { kept, merged, other, summary, hash, same_phone } = await linkPlan(b);
+  if (!same_phone && (b.confirm_different !== true || String(b.confirm_name || '').trim() !== String(other.full_name || '').trim())) {
+    throw new Fail('الحسابان بلا هاتف واحد. أكّد أنهما للشخص نفسه، واكتب اسم الحساب الآخر كما هو.', 409, 'confirm_different', { confirm_name: other.full_name });
+  }
   if (!b.plan_hash || String(b.plan_hash) !== hash) {
     throw new Fail('تغيّر ما سينتقل منذ المعاينة. أعد المعاينة ثم اربط.', 409, 'stale', { plan_hash: hash });
   }
   const { data: mergeId, error } = await db.rpc('merge_participants', { p_keep: kept.id, p_dup: merged.id, p_actor: a.email, p_actor_type: 'admin', p_source: 'admin_link' });
   if (error) throw mergeFail(error);
-  await audit('admin', a.email, 'participant.link', 'participants', kept.id, null, { kept_id: kept.id, merged_id: merged.id, merge_id: mergeId, plan_hash: hash, summary });
+  await audit('admin', a.email, 'participant.link', 'participants', kept.id, null, { kept_id: kept.id, merged_id: merged.id, merge_id: mergeId, plan_hash: hash, summary, same_phone });
   return { success: true, kept_id: kept.id, merged_id: merged.id, merge_id: mergeId };
 }
 

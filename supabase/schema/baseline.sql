@@ -4939,13 +4939,37 @@ begin
 end $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.merge_epoch(t text)
+ RETURNS numeric
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  select coalesce(extract(epoch from t::timestamptz)::numeric, 0)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_fingerprint(p_mid uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  select md5(coalesce(string_agg(concat_ws('|', tbl, kind, col,
+           case kind when 'inserted' then '' when 'deleted' then (ref -> 'row')::text
+                else concat_ws('|', (ref -> 'pk')::text, (ref -> 'old')::text, (ref -> 'updated_at')::text, ref ->> 'h') end), ';' order by id), ''))
+    from leaders.participant_merge_rows where merge_id = p_mid
+$function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.merge_note_set(p_mid uuid, p_rel regclass, p_col text, p_row jsonb, p_new jsonb)
  RETURNS void
  LANGUAGE sql
  SET search_path TO 'leaders', 'public'
 AS $function$
   insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
-  values (p_mid, 'set', leaders.merge_qname(p_rel), p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, p_row), 'old', p_row -> p_col, 'new', p_new))
+  values (p_mid, 'set', leaders.merge_qname(p_rel), p_col,
+          jsonb_build_object('pk', leaders.merge_pk(p_rel, p_row), 'old', p_row -> p_col, 'new', p_new, 'updated_at', p_row -> 'updated_at', 'h', md5(p_row::text)))
 $function$
 ;
 
@@ -4955,7 +4979,7 @@ CREATE OR REPLACE FUNCTION leaders.merge_participants(p_keep uuid, p_dup uuid, p
  SET search_path TO 'leaders', 'public'
 AS $function$
 declare
-  k record; d record; mid uuid; fk record; r record; cap jsonb; c text; kv jsonb; dv jsonb;
+  k record; d record; mid uuid; fk record; r record; cap jsonb; c text; kv jsonb; dv jsonb; n int;
   stages text[] := array['registered', 'profiled', 'assessing', 'pending_approval', 'placed', 'enrolled', 'completed'];
   fill text[] := array['phone', 'job_title', 'organization_name', 'sector', 'years_experience', 'bio', 'cv_path', 'linkedin_url', 'name_en', 'work_scope', 'profile_completed_at'];
 begin
@@ -5017,6 +5041,14 @@ begin
     cap := null;
   end if;
 
+  -- الشهادة لا تُحذف: سارية المكرر تصير replaced إن كان للباقي سارية (فهرس certificates_one_valid)، ثم تنتقل كما هي بسجل replaced_by
+  for r in select to_jsonb(x) j, x.id from leaders.certificates x
+            where x.participant_id = p_dup and x.status = 'valid'
+              and exists (select 1 from leaders.certificates y where y.participant_id = p_keep and y.status = 'valid') loop
+    perform leaders.merge_note_set(mid, 'leaders.certificates', 'status', r.j, to_jsonb('replaced'::text));
+    update leaders.certificates set status = 'replaced' where id = r.id;
+  end loop;
+
   -- هـ) كل جدول يشير إلى المشارك: نقل جماعي، وعند التعارض صفًا صفًا. الوثيقة بعد صفوف تحديثها
   for fk in
     select c2.conrelid rel, cl.relname, a.attname col
@@ -5030,7 +5062,7 @@ begin
     begin
       execute format('with u as (update %1$s t set %2$I = $1 where t.%2$I = $2 returning to_jsonb(t) j)
                       insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
-                      select $3, ''set'', %3$L, %4$L, jsonb_build_object(''pk'', leaders.merge_pk(%3$L::regclass, j), ''old'', to_jsonb($2), ''new'', to_jsonb($1)) from u',
+                      select $3, ''set'', %3$L, %4$L, jsonb_build_object(''pk'', leaders.merge_pk(%3$L::regclass, j), ''old'', to_jsonb($2), ''new'', to_jsonb($1), ''updated_at'', j -> ''updated_at'', ''h'', md5(j::text)) from u',
                      leaders.merge_qname(fk.rel), fk.col, leaders.merge_qname(fk.rel), fk.col)
         using p_keep, p_dup, mid;
     exception when unique_violation or exclusion_violation then
@@ -5038,6 +5070,21 @@ begin
         perform leaders.merge_resolve(mid, fk.rel, fk.col, r.c, r.j, to_jsonb(p_keep));
       end loop;
     end;
+  end loop;
+
+  -- و) الكنس الأخير: صف بقي يشير إلى المكرر (أُضيف أثناء الدمج أو فاته النقل الجماعي) يُنقل أو يُسجَّل صفًا صفًا، ثم لا يبقى شيء
+  for fk in
+    select c2.conrelid rel, cl.relname, a.attname col
+      from pg_constraint c2 join pg_class cl on cl.oid = c2.conrelid
+      join pg_attribute a on a.attrelid = c2.conrelid and a.attnum = c2.conkey[1]
+     where c2.contype = 'f' and c2.confrelid = 'leaders.participants'::regclass and cardinality(c2.conkey) = 1
+       and cl.relname not in ('auth_sessions', 'webauthn_challenges', 'participant_merges')
+  loop
+    for r in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = $1', leaders.merge_qname(fk.rel), fk.col) using p_dup loop
+      perform leaders.merge_resolve(mid, fk.rel, fk.col, r.c, r.j, to_jsonb(p_keep));
+    end loop;
+    execute format('select count(*) from %s t where t.%I = $1', leaders.merge_qname(fk.rel), fk.col) into n using p_dup;
+    if n > 0 then raise exception 'merge_stray: % صف في %.% بقي للمكرر', n, fk.relname, fk.col; end if;
   end loop;
 
   if cap is not null and cap ->> 'sponsor_token_hash' is not null then
@@ -5074,7 +5121,7 @@ declare res jsonb; mid uuid;
 begin
   begin
     mid := leaders.merge_participants(p_keep, p_dup, 'preview', 'system', 'admin_link');
-    res := leaders.merge_summary(mid);
+    res := jsonb_build_object('summary', leaders.merge_summary(mid), 'fingerprint', leaders.merge_fingerprint(mid));
     raise exception using errcode = 'P0001', message = 'merge_preview_rollback';
   exception when sqlstate 'P0001' then
     if sqlerrm <> 'merge_preview_rollback' then raise; end if;
@@ -5093,6 +5140,52 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION leaders.merge_rank(p_tbl text, r jsonb)
+ RETURNS numeric[]
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'leaders', 'public'
+AS $function$
+  select case split_part(p_tbl, '.', 2)
+    when 'final_evaluations' then array[coalesce(array_position(array['draft', 'returned', 'pending', 'approved'], r ->> 'status'), 0), leaders.merge_epoch(r ->> 'decided_at'), leaders.merge_epoch(r ->> 'updated_at')]
+    when 'handbook_progress' then array[coalesce((r ->> 'quiz_score')::numeric, 0), leaders.merge_epoch(r ->> 'completed_at')]
+    when 'reading_progress' then array[coalesce((r ->> 'active_seconds')::numeric, 0), coalesce((r ->> 'words')::numeric, 0)]
+    when 'video_progress' then array[(r ->> 'completed_at' is not null)::int, coalesce((r ->> 'watched_seconds')::numeric, 0), leaders.merge_epoch(r ->> 'completed_at')]
+    when 'content_progress' then array[(r ->> 'completed_at' is not null)::int, coalesce((r ->> 'watched_seconds')::numeric, 0), leaders.merge_epoch(r ->> 'completed_at')]
+    when 'participant_requirements' then array[coalesce(array_position(array['pending', 'returned', 'submitted', 'done'], r ->> 'status'), 0), leaders.merge_epoch(r ->> 'completed_at'), leaders.merge_epoch(r ->> 'submitted_at')]
+    when 'placements' then array[(r ->> 'approved_at' is not null)::int, leaders.merge_epoch(r ->> 'approved_at'), leaders.merge_epoch(r ->> 'decided_at')]
+    when 'participant_milestones' then array[(r ->> 'done_at' is not null)::int, leaders.merge_epoch(r ->> 'done_at'), leaders.merge_epoch(r ->> 'updated_at')]
+    when 'assessments' then array[(r ->> 'status' = 'submitted')::int, leaders.merge_epoch(r ->> 'submitted_at'), leaders.merge_epoch(r ->> 'started_at')]
+    else null end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.merge_rehome(p_mid uuid, p_rel regclass, p_from jsonb, p_to jsonb, p_depth integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+declare fk record; ch record; oldv jsonb; q text := leaders.merge_qname(p_rel);
+begin
+  for fk in
+    select c.conrelid, a.attname fcol, ra.attname rcol
+      from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+      join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
+     where c.contype = 'f' and c.confrelid = p_rel and cardinality(c.conkey) = 1
+  loop
+    oldv := p_from -> fk.rcol::text;
+    if oldv is null or jsonb_typeof(oldv) = 'null' then continue; end if;
+    for ch in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I',
+                             leaders.merge_qname(fk.conrelid), fk.fcol, q, fk.rcol) using p_from
+    loop
+      if p_to is null then raise exception 'merge_unresolved: % (يشير إليه %)', q, leaders.merge_qname(fk.conrelid); end if;
+      perform leaders.merge_resolve(p_mid, fk.conrelid, fk.fcol, ch.c, ch.j, p_to -> fk.rcol::text, p_depth + 1);
+    end loop;
+  end loop;
+end $function$
+;
+
 CREATE OR REPLACE FUNCTION leaders.merge_resolve(p_mid uuid, p_rel regclass, p_col text, p_ctid tid, p_row jsonb, p_new jsonb, p_depth integer DEFAULT 0)
  RETURNS void
  LANGUAGE plpgsql
@@ -5101,18 +5194,19 @@ AS $function$
 declare
   q text := leaders.merge_qname(p_rel);
   target jsonb := p_row || jsonb_build_object(p_col, p_new);
-  after jsonb; other jsonb; cond text; ix record; fk record; ch record; oldv jsonb;
+  after jsonb; other jsonb; octid tid; cond text; ix record;
 begin
   if p_depth > 4 then raise exception 'merge_too_deep: %', q; end if;
   begin
     execute format('update %s t set %I = (jsonb_populate_record(null::%s, $1)).%I where ctid = $2 returning to_jsonb(t)', q, p_col, q, p_col)
       into after using target, p_ctid;
     insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
-    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new));
+    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new, 'updated_at', p_row -> 'updated_at', 'h', md5(p_row::text)));
     return;
   exception when unique_violation or exclusion_violation then
     null;
   end;
+  if q = 'leaders.certificates' then raise exception 'merge_certificate_conflict: شهادة لا تُحذف'; end if;
   for ix in
     select i.indkey::int2[] k, pg_get_expr(i.indpred, i.indrelid) pred
       from pg_index i
@@ -5122,26 +5216,22 @@ begin
   loop
     select string_agg(format('t.%I is not distinct from (jsonb_populate_record(null::%s, $1)).%I', a.attname, q, a.attname), ' and ')
       into cond from pg_attribute a where a.attrelid = p_rel and a.attnum = any(ix.k);
-    execute format('select to_jsonb(t) from %s t where %s%s and t.ctid <> $2 limit 1', q, cond, coalesce(' and (' || ix.pred || ')', ''))
-      into other using target, p_ctid;
+    execute format('select to_jsonb(t), t.ctid from %s t where %s%s and t.ctid <> $2 limit 1', q, cond, coalesce(' and (' || ix.pred || ')', ''))
+      into other, octid using target, p_ctid;
     exit when other is not null;
   end loop;
-  for fk in
-    select c.conrelid, a.attname fcol, ra.attname rcol
-      from pg_constraint c
-      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
-      join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
-     where c.contype = 'f' and c.confrelid = p_rel and cardinality(c.conkey) = 1
-  loop
-    oldv := p_row -> fk.rcol::text;
-    if oldv is null or jsonb_typeof(oldv) = 'null' then continue; end if;
-    for ch in execute format('select t.ctid c, to_jsonb(t) j from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I',
-                             leaders.merge_qname(fk.conrelid), fk.fcol, q, fk.rcol) using p_row
-    loop
-      if other is null then raise exception 'merge_unresolved: % (يشير إليه %)', q, leaders.merge_qname(fk.conrelid); end if;
-      perform leaders.merge_resolve(p_mid, fk.conrelid, fk.fcol, ch.c, ch.j, other -> fk.rcol::text, p_depth + 1);
-    end loop;
-  end loop;
+  -- الأبعد تقدمًا يبقى: صف المكرر يفوز، فيُنقل إليه ما يشير إلى صف الباقي، ويُحفظ صف الباقي ويُحذف، ثم يُنقل صف المكرر
+  if p_depth = 0 and other is not null and leaders.merge_rank(q, p_row) > leaders.merge_rank(q, other) then
+    perform leaders.merge_rehome(p_mid, p_rel, other, p_row, p_depth);
+    execute format('delete from %s where ctid = $1', q) using octid;
+    insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref) values (p_mid, 'deleted', q, p_col, jsonb_build_object('row', other, 'won', 'merged'));
+    execute format('update %s t set %I = (jsonb_populate_record(null::%s, $1)).%I where ctid = $2 returning to_jsonb(t)', q, p_col, q, p_col)
+      into after using target, p_ctid;
+    insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref)
+    values (p_mid, 'set', q, p_col, jsonb_build_object('pk', leaders.merge_pk(p_rel, after), 'old', p_row -> p_col, 'new', p_new, 'updated_at', p_row -> 'updated_at', 'h', md5(p_row::text)));
+    return;
+  end if;
+  perform leaders.merge_rehome(p_mid, p_rel, p_row, other, p_depth);
   execute format('delete from %s where ctid = $1', q) using p_ctid;
   insert into leaders.participant_merge_rows (merge_id, kind, tbl, col, ref) values (p_mid, 'deleted', q, p_col, jsonb_build_object('row', p_row));
 end $function$
@@ -5201,6 +5291,22 @@ begin
   delete from leaders.participant_emails where id = a.id;
   update leaders.participants set email = e, email_verified_at = a.verified_at, updated_at = now() where id = p_participant;
   insert into leaders.participant_emails (participant_id, email, verified_at, source) values (p_participant, lower(p.email), p.email_verified_at, a.source);
+end $function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.participant_merge_erase()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+begin
+  -- اسم جدول النسخة يُركَّب: الجدول يُحذف بعد 30 يومًا، والدالة الدائمة لا تحمل اسمه في البنية المرجعية
+  if to_regclass('leaders.backup_' || '20261128_account_merge') is not null then
+    execute format('delete from leaders.%I where id = $1 or merge_kept_id = $1', 'backup_' || '20261128_account_merge') using old.id;
+  end if;
+  delete from leaders.participants p using leaders.participant_merges m
+   where m.kept_id = old.id and m.restored_at is null and p.id = m.merged_id and p.id <> old.id;
+  return old;
 end $function$
 ;
 
@@ -5414,29 +5520,51 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION leaders.unmerge_participants(p_merge uuid, p_actor_type text, p_actor text)
- RETURNS void
+ RETURNS jsonb
  LANGUAGE plpgsql
  SET search_path TO 'leaders', 'public'
 AS $function$
-declare m record; r record; cols text;
+declare m record; r record; cols text; n int; skipped int := 0; skips jsonb := '[]'::jsonb; cur jsonb; fk record; refs int;
 begin
   select * into m from leaders.participant_merges where id = p_merge for update;
-  if m.id is null or m.restored_at is not null then return; end if;
+  if m.id is null or m.restored_at is not null then return jsonb_build_object('skipped', 0, 'already', true); end if;
   for r in select * from leaders.participant_merge_rows where merge_id = p_merge order by id desc loop
     if r.kind = 'set' then
+      continue when r.tbl = 'leaders.auth_sessions';
       execute format('update %1$s t set %2$I = (jsonb_populate_record(null::%1$s, $1)).%2$I where t.%2$I is not distinct from (jsonb_populate_record(null::%1$s, $3)).%2$I and to_jsonb(t) @> $2',
                      r.tbl, r.col) using jsonb_build_object(r.col, r.ref -> 'old'), r.ref -> 'pk', jsonb_build_object(r.col, r.ref -> 'new');
+      get diagnostics n = row_count;
+      if n = 0 then skipped := skipped + 1; skips := skips || jsonb_build_object('tbl', r.tbl, 'col', r.col, 'pk', r.ref -> 'pk'); end if;
     elsif r.kind = 'deleted' then
       select string_agg(format('%I', a.attname), ', ' order by a.attnum) into cols
         from pg_attribute a where a.attrelid = r.tbl::regclass and a.attnum > 0 and not a.attisdropped and a.attgenerated = '';
       execute format('insert into %1$s (%2$s) overriding system value select %2$s from jsonb_populate_record(null::%1$s, $1)', r.tbl, cols) using r.ref -> 'row';
     else
+      execute format('select to_jsonb(t) from %s t where to_jsonb(t) @> $1', r.tbl) into cur using r.ref -> 'pk';
+      if cur is null then
+        skipped := skipped + 1; skips := skips || jsonb_build_object('tbl', r.tbl, 'col', r.col, 'pk', r.ref -> 'pk');
+        continue;
+      end if;
+      for fk in
+        select c.conrelid, a.attname fcol, ra.attname rcol from pg_constraint c
+          join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+          join pg_attribute ra on ra.attrelid = c.confrelid and ra.attnum = c.confkey[1]
+         where c.contype = 'f' and c.confrelid = r.tbl::regclass and cardinality(c.conkey) = 1
+      loop
+        execute format('select count(*) from %s t where t.%I = (jsonb_populate_record(null::%s, $1)).%I', leaders.merge_qname(fk.conrelid), fk.fcol, r.tbl, fk.rcol)
+          into refs using cur;
+        if refs > 0 then
+          raise exception 'unmerge_blocked: % أُضيف إليه بعد الدمج % صف في %، فلا يُحذف', r.tbl, refs, leaders.merge_qname(fk.conrelid);
+        end if;
+      end loop;
       execute format('delete from %s t where to_jsonb(t) @> $1', r.tbl) using r.ref -> 'pk';
     end if;
   end loop;
   update leaders.participant_merges set restored_at = now() where id = p_merge;
   insert into leaders.audit_log (actor_type, actor, action, entity, entity_id, before, after)
-  values (p_actor_type, p_actor, 'participant.unmerged', 'participants', m.merged_id::text, null, jsonb_build_object('kept_id', m.kept_id, 'merge_id', p_merge));
+  values (p_actor_type, p_actor, 'participant.unmerged', 'participants', m.merged_id::text, null,
+          jsonb_build_object('kept_id', m.kept_id, 'merge_id', p_merge, 'skipped', skipped, 'skipped_rows', skips));
+  return jsonb_build_object('skipped', skipped, 'skipped_rows', skips);
 end $function$
 ;
 
@@ -6062,6 +6190,8 @@ CREATE OR REPLACE TRIGGER organizations_touch BEFORE UPDATE ON leaders.organizat
 CREATE OR REPLACE TRIGGER participant_emails_email_owner BEFORE INSERT OR UPDATE OF email ON leaders.participant_emails FOR EACH ROW EXECUTE FUNCTION leaders.email_owner_guard();
 
 CREATE OR REPLACE TRIGGER participants_email_owner BEFORE INSERT OR UPDATE OF email ON leaders.participants FOR EACH ROW EXECUTE FUNCTION leaders.email_owner_guard();
+
+CREATE OR REPLACE TRIGGER participants_merge_erase BEFORE DELETE ON leaders.participants FOR EACH ROW EXECUTE FUNCTION leaders.participant_merge_erase();
 
 CREATE OR REPLACE TRIGGER participants_org_name BEFORE INSERT OR UPDATE OF organization_id, organization_name ON leaders.participants FOR EACH ROW EXECUTE FUNCTION leaders.sync_participant_org_name();
 
