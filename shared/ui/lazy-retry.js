@@ -11,7 +11,7 @@
 // له. رد Pages للملف الغائب يحمل ترويسة /assets/* (ثابت سنة) لأن _headers تطابق مسار الطلب لا الملف المقدَّم، فيبقى 404
 // مخزنًا في المتصفح. فإن عاد الملف بعد تراجع الواجهة إلى نشر سابق، أعاد هذا الطلب تخزينه سليمًا قبل إعادة التحميل.
 // Chromium وFirefox يذكران رابط الملف في رسالة الخطأ فيُطلب وحده. Safari لا يذكره، فتُسأل الملفات المرشحة (chunkCandidates)
-// ويُجدَّد منها ما رده المخزن غير سليم. وعلى الخادم عامل Pages يرد الملف الغائب بلا تخزين (shared/build/asset-worker.js).
+// ويُجدَّد منها ما رده المخزن غير سليم. (عامل الخادم خيار موثق في RUNBOOK §2.)
 import { lazy } from 'react';
 
 export const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|error loading dynamically imported|Failed to load module script|MIME type|ChunkLoadError|Loading (?:CSS )?chunk \S+ failed|Unable to preload CSS/i;

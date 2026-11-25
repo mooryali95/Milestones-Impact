@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-import { assetWorker, retainedAssets, versionFile } from '../shared/build/release-files.mjs';
+import { retainedAssets, versionFile } from '../shared/build/release-files.mjs';
 
 // ════════════════════════════════════════════════════════════════
 // تطبيق القادة (leaders.sunkvalue.com) — بناء مستقل عن المصفوفة
@@ -14,7 +14,7 @@ import { assetWorker, retainedAssets, versionFile } from '../shared/build/releas
 // version.json ببصمة قطعة الدخول، وملفات الإصدارات السابقة من releases/leaders/ (تصور تحديث المنصة، المرحلة 5؛ shared/build/release-files.mjs)
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
-  plugins: [react(), versionFile(), assetWorker(), retainedAssets(fileURLToPath(new URL('../releases/leaders', import.meta.url)))],
+  plugins: [react(), versionFile(), retainedAssets(fileURLToPath(new URL('../releases/leaders', import.meta.url)))],
   build: { outDir: '../leaders', emptyOutDir: true, sourcemap: false, rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom'], fflate: ['fflate'], excel: ['write-excel-file/browser'] } } } },
   server: { port: 5174 },
 });

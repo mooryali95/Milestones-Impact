@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-import { assetWorker, retainedAssets, versionFile } from '../shared/build/release-files.mjs';
+import { retainedAssets, versionFile } from '../shared/build/release-files.mjs';
 
 // ════════════════════════════════════════════════════════════════
 // لوحة الإدارة (React) على admin.sunkvalue.com، تُبنى إلى admin/
@@ -15,7 +15,7 @@ import { assetWorker, retainedAssets, versionFile } from '../shared/build/releas
 export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   base: '/',
-  plugins: [react(), versionFile(), assetWorker(), retainedAssets(fileURLToPath(new URL('../releases/admin', import.meta.url)))],
+  plugins: [react(), versionFile(), retainedAssets(fileURLToPath(new URL('../releases/admin', import.meta.url)))],
   build: { outDir: '../admin', emptyOutDir: true, sourcemap: false, rollupOptions: { output: { manualChunks: { react: ['react', 'react-dom'], fflate: ['fflate'], excel: ['write-excel-file/browser'] } } } },
   server: { port: 5175 },
 });

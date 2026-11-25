@@ -1,77 +1,11 @@
-// عامل Pages لملفات /assets/ (shared/build/asset-worker.js)، وتجديد ملفات القسم في Safari بلا رابط في الخطأ، والمخرج الأخير
+// تجديد ملفات القسم في Safari بلا رابط في الخطأ، والمخرج الأخير
 // (حادث الخبير على iPhone، 2026-11-25: 404 مخزن سنة تحت ترويسة immutable، وSafari لا يذكر الرابط)
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import worker, { assetResponse, IMMUTABLE } from '../../shared/build/asset-worker.js';
-import { ASSET_ROUTES } from '../../shared/build/release-files.mjs';
 import { chunkCandidates, chunkName, FRESH_PARAM, hardReload, refreshFailedAsset, retryImport } from '../../shared/ui/lazy-retry.js';
 
-const root = join(__dirname, '../..');
-const read = (p) => readFileSync(join(root, p), 'utf8');
 const origin = 'https://leaders.sunkvalue.com';
-const req = (path, method = 'GET') => new Request(`${origin}${path}`, { method });
 // دالة تحميل بنص البناء (vitest يعيد كتابة import( في نص الاختبار نفسه)
 const built = (src, impl = () => {}) => Object.assign(impl, { toString: () => src });
-const assets = (res) => ({ ASSETS: { fetch: vi.fn(async () => res) } });
-
-describe('عامل /assets/: الغائب لا يُخزَّن، والموجود كما هو', () => {
-  it('404 من خادم الملفات (بترويسة immutable من _headers) يصير 404 بـno-store', async () => {
-    const res = new Response('<p>الملف غير موجود.</p>', { status: 404, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': IMMUTABLE, etag: '"x"' } });
-    const out = await worker.fetch(req('/assets/ExpertPortal-OLD.js'), assets(res), {});
-    expect(out.status).toBe(404);
-    expect(out.headers.get('cache-control')).toBe('no-store');
-    expect(out.headers.get('etag')).toBeNull();
-    expect(out.headers.get('content-type')).toMatch(/^text\/html/);
-    expect(out.headers.get('x-content-type-options')).toBe('nosniff');
-  });
-  it('صفحة HTML برمز 200 تحت اسم ملف JS أو CSS تُعامل غائبة: 404 بلا تخزين', async () => {
-    for (const p of ['/assets/a-1.js', '/assets/a-1.css']) {
-      const res = new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html', 'cache-control': IMMUTABLE } });
-      const out = await worker.fetch(req(p), assets(res), {});
-      expect(out.status).toBe(404);
-      expect(out.headers.get('cache-control')).toBe('no-store');
-    }
-  });
-  it('الملف الموجود بترويسات _headers يُرد كما هو (الكائن نفسه)', async () => {
-    const res = new Response('export{}', { status: 200, headers: { 'content-type': 'application/javascript', 'cache-control': IMMUTABLE, 'x-content-type-options': 'nosniff' } });
-    const out = await worker.fetch(req('/assets/index-abc.js'), assets(res), {});
-    expect(out).toBe(res);
-  });
-  it('الملف الموجود بلا ترويسات _headers (إن لم يطبقها خادم الملفات في العامل) يأخذ الثبات سنة وnosniff', async () => {
-    const res = new Response('export{}', { status: 200, headers: { 'content-type': 'application/javascript' } });
-    const out = await worker.fetch(req('/assets/index-abc.js'), assets(res), {});
-    expect(out.status).toBe(200);
-    expect(out.headers.get('cache-control')).toBe(IMMUTABLE);
-    expect(out.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(await out.text()).toBe('export{}');
-  });
-  it('304 يبقى 304، والصورة 200 بنوعها لا تُمس، وHEAD للغائب بلا جسم', async () => {
-    const r304 = new Response(null, { status: 304, headers: { 'cache-control': IMMUTABLE, 'x-content-type-options': 'nosniff' } });
-    expect((await worker.fetch(req('/assets/a.js'), assets(r304), {})).status).toBe(304);
-    const png = new Response('x', { status: 200, headers: { 'content-type': 'image/png', 'cache-control': IMMUTABLE, 'x-content-type-options': 'nosniff' } });
-    expect(await worker.fetch(req('/assets/logo.png'), assets(png), {})).toBe(png);
-    const head = assetResponse(req('/assets/x.js', 'HEAD'), new Response(null, { status: 404, headers: { 'cache-control': IMMUTABLE } }));
-    expect(head.status).toBe(404);
-    expect(head.headers.get('cache-control')).toBe('no-store');
-  });
-  it('مسار خارج /assets/ (لا يصل أصلًا بـ_routes.json) يمر كما هو، وpassThroughOnException مفعّل', async () => {
-    const res = new Response('x', { status: 404 });
-    const ctx = { passThroughOnException: vi.fn() };
-    expect(await worker.fetch(req('/org'), assets(res), ctx)).toBe(res);
-    expect(ctx.passThroughOnException).toHaveBeenCalled();
-  });
-  it('الناتج المبني للتطبيقين يحمل العامل نفسه و_routes.json المحصور في /assets/*', () => {
-    const src = read('shared/build/asset-worker.js');
-    expect(src).not.toMatch(/^\s*import\s/m);
-    expect(ASSET_ROUTES).toEqual({ version: 1, include: ['/assets/*'], exclude: [] });
-    for (const app of ['leaders', 'admin']) {
-      expect(read(`${app}/_worker.js`)).toBe(src);
-      expect(JSON.parse(read(`${app}/_routes.json`))).toEqual(ASSET_ROUTES);
-      expect(read(`${app}-app/vite.config.js`)).toContain('assetWorker()');
-    }
-  });
-});
 
 describe('Safari: تجديد ملفات القسم بلا رابط في الخطأ', () => {
   const safari = new TypeError('Importing a module script failed.');
