@@ -6,8 +6,8 @@ select count(*) = 7 as ok, 'موجود ' || count(*) || ' من 7: ' || string_ag
   ('participant_mail_prefs', 'participant_notifications', 'document_checks', 'backup_20261129_track_cards',
    'backup_20261129_track_profiles', 'participant_track_history', 'participant_new_items');
 -- 2) الترحيلات الأربعة في السجل
-select count(*) = 4 as ok, 'مسجل ' || count(*) || ' من 4' as detail from supabase_migrations.schema_migrations
- where version in ('20261128200000', '20261129100000', '20261129110000', '20261129120000');
+select count(*) = 4 as ok, 'مسجل ' || count(*) || ' من 4' as detail from leaders.schema_migrations
+ where left(name, 14) in ('20261128200000', '20261129100000', '20261129110000', '20261129120000');
 -- 3) المسارات الأربعة التي تغير ملفها تشير إلى الملف الجديد
 select count(*) = 4 as ok, string_agg(key || ' ← ' || coalesce(profile_key, 'بلا ملف'), '، ' order by key) as detail
   from leaders.tracks where (key, profile_key) in (('M2I3L2', 'leadership-intermediate'), ('M2I3L3', 'impact-advanced'),
