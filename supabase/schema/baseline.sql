@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261128160000_leaders_cohort_intake
+-- as-of migration: 20261128180000_leaders_phone_unique
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -3712,6 +3712,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS participants_email_uniq ON leaders.participant
 CREATE INDEX IF NOT EXISTS participants_org_idx ON leaders.participants USING btree (organization_id);
 
 CREATE INDEX IF NOT EXISTS participants_person_idx ON leaders.participants USING btree (person_id) WHERE (person_id IS NOT NULL);
+
+CREATE UNIQUE INDEX IF NOT EXISTS participants_phone_key_uniq ON leaders.participants USING btree ((
+CASE
+    WHEN (regexp_replace(regexp_replace(translate(COALESCE(phone, ''::text), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'::text, '01234567890123456789'::text), '[^0-9]'::text, ''::text, 'g'::text), '^00'::text, ''::text) ~ '^05[0-9]{8}$'::text) THEN ('966'::text || substr(regexp_replace(regexp_replace(translate(COALESCE(phone, ''::text), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'::text, '01234567890123456789'::text), '[^0-9]'::text, ''::text, 'g'::text), '^00'::text, ''::text), 2))
+    WHEN (regexp_replace(regexp_replace(translate(COALESCE(phone, ''::text), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'::text, '01234567890123456789'::text), '[^0-9]'::text, ''::text, 'g'::text), '^00'::text, ''::text) ~ '^5[0-9]{8}$'::text) THEN ('966'::text || regexp_replace(regexp_replace(translate(COALESCE(phone, ''::text), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'::text, '01234567890123456789'::text), '[^0-9]'::text, ''::text, 'g'::text), '^00'::text, ''::text))
+    ELSE regexp_replace(regexp_replace(translate(COALESCE(phone, ''::text), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'::text, '01234567890123456789'::text), '[^0-9]'::text, ''::text, 'g'::text), '^00'::text, ''::text)
+END)) WHERE ((NOT is_demo) AND (status <> ALL (ARRAY['suspended'::text, 'withdrawn'::text])) AND (length(regexp_replace(regexp_replace(translate(COALESCE(phone, ''::text), '٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹'::text, '01234567890123456789'::text), '[^0-9]'::text, ''::text, 'g'::text), '^00'::text, ''::text)) >= 8));
 
 CREATE INDEX IF NOT EXISTS participants_status_idx ON leaders.participants USING btree (status);
 

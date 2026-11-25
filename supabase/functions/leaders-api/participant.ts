@@ -9,6 +9,7 @@ import { deviceOf } from '../_shared/login-device.js';
 import { servedOrder } from './answer-review.js';
 import { profileComplete } from './onboarding.js';
 import { saveEffort } from './effort.ts';
+import { assertPhoneFree, isPhoneConflict, phoneConflictFail } from './phone-guard.ts';
 import { noticesFor, record as recordObservation } from './observations.ts';
 import { bannerFor } from './nudge-banner.ts';
 import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-rules.js';
@@ -383,6 +384,8 @@ export async function authVerify(b: Body, ctx: Ctx) {
       ...named, campaign: pend.campaign || null, referrer_host: pend.referrer_host || null,
       ...(r ? { organization_id: r.org.id, org_via: r.via, sponsor_code: (r as any).sponsor_code || null, sponsor_cohort: (r as any).sponsor_cohort || null } : {}),
     };
+    // هاتف يحجزه حساب قائم: لا يُنشأ ثانٍ، ويُدل صاحبه على بريده مقنَّعًا. قبل استهلاك الرمز فلا يضيع إن صحح الهاتف
+    if (profile.phone) await assertPhoneFree(profile.phone, 'participant');
   }
   // استهلاك ذري: لو سبق استخدامه في طلب موازٍ لا يُحدَّث أي صف
   const { data: used } = await db.from('email_challenges').update({ consumed_at: new Date().toISOString() })
@@ -390,12 +393,15 @@ export async function authVerify(b: Body, ctx: Ctx) {
   if (!used?.length) throw new Fail(b.link ? 'استُخدم رابط الدخول هذا من قبل. اطلب رمزًا جديدًا إن احتجت الدخول.' : 'استُخدم هذا الرمز من قبل. اطلب رمزًا جديدًا.', 400, 'used');
 
   if (!p && profile) {
-    p = must(await db.from('participants').insert({
+    const made = await db.from('participants').insert({
       email, full_name: profile.full_name, phone: profile.phone,
       organization_id: profile.organization_id || null,
       org_via: profile.org_via || null, campaign: profile.campaign, referrer_host: profile.referrer_host,
       email_verified_at: new Date().toISOString(), source: profile.organization_id ? 'invite' : 'self',
-    }).select('*').single());
+    }).select('*').single();
+    // سباق مع تسجيل آخر بالهاتف نفسه بين الفحص والكتابة: الفهرس الفريد يرده، والرد نفسه لا خطأ خادم
+    if (isPhoneConflict(made.error)) throw await phoneConflictFail(profile.phone, 'participant');
+    p = must(made);
     await audit('participant', p.id, 'participant.register', 'participants', p.id);
     // أكمل التسجيل بعد إشعار الخصوصية والشروط. تعذّر تسجيلها لا يفشل الحساب المنشأ: تبقى غير مسجلة، فتطلبها شاشة الموافقة
     await recordConsent(p.id).catch((e) => console.error('register consent:', e));
@@ -425,6 +431,8 @@ export async function authGoogle(b: Body, ctx: Ctx) {
   if (!p) {
     // حساب جديد: يتأكد صاحبه أنه مشارك (لا خبير ولا منسق جهة) قبل إنشائه، ويضيف رمز جهته إن وُجد
     if (b.confirm_new !== true) return { success: true, confirm_new: true, name: id.name || '', roles: await otherRoles(id.email) };
+    // لا فحص هاتف هنا: حساب Google يُنشأ بالاسم والبريد وحدهما ولا هاتف فيه (phone: null)، فلا يحجز رقمًا ولا يصطدم بالفهرس.
+    // الهاتف يُضاف لاحقًا من الملف (profileSave)، وهناك يُرد إن كان لحساب قائم آخر
     const r = await sponsorFor(b, ctx.ip || id.email, id.email);
     p = must(await db.from('participants').insert({
       email: id.email, full_name: id.name || id.email.split('@')[0], email_verified_at: new Date().toISOString(),
@@ -805,6 +813,8 @@ export async function profileSave(p: any, b: Body) {
     const phone = f.phone ? normalizePhone(f.phone) : null;
     if (f.phone && !phone) throw new Fail('رقم الجوال غير صحيح. اكتبه بصيغة 05XXXXXXXX.');
     patch.phone = phone;
+    // هاتف يحجزه حساب قائم آخر: لا يُحفظ، والرسالة محايدة ببريد ذلك الحساب مقنَّعًا
+    if (phone && phone !== p.phone) await assertPhoneFree(phone, 'participant', p.id);
   }
   if ('work_scope' in f) {
     patch.work_scope = SCOPES.includes(f.work_scope) ? f.work_scope : null;
@@ -847,7 +857,9 @@ export async function profileSave(p: any, b: Body) {
     patch.profile_completed_at = new Date().toISOString();
     if (p.status === 'registered') patch.status = 'profiled';
   }
-  const updated = must(await db.from('participants').update(patch).eq('id', p.id).select('*').single());
+  const res = await db.from('participants').update(patch).eq('id', p.id).select('*').single();
+  if (isPhoneConflict(res.error)) throw await phoneConflictFail(patch.phone, 'participant', p.id);
+  const updated = must(res);
   return { success: true, ...(await mePayload(updated)) };
 }
 
