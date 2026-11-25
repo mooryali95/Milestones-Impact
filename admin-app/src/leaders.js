@@ -33,6 +33,14 @@ export async function L(action, body = {}) {
   return d;
 }
 
+// تذكرة مولّد PDF على الخادم بجلسة الإدارة (المرحلة 3ب): post لا L، فتعذّرها يرجع إلى بناء المتصفح ولا يُخرج المدير
+export async function pdfTicket() {
+  const token = session.load()?.token;
+  if (!token) return null;
+  const d = await post('leaders-api', { action: 'pdf.ticket', token }, 'تعذّر الاتصال بالخادم');
+  return d?.success ? d.pdf || null : null;
+}
+
 import { DIM_AR as DIM, DIM_ROMAN, FUNNEL, LEVEL_AR as LVL, PARTICIPANT_STATUS as STATUS, REQ_STATUS as REQ, SUBMISSION_STATUS_ADMIN } from '../../supabase/functions/leaders-api/labels.js';
 import { SITES } from '../../supabase/functions/_shared/sites.js';
 

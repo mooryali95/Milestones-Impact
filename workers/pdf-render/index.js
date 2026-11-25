@@ -8,12 +8,12 @@
 // التطبيق (الخطوط والصور) وصور data:، وحد للحجم. بلا العامل أو عند تعذّره يبني المتصفح الملف (src/lib/brand/pdf.js).
 import puppeteer from '@cloudflare/puppeteer';
 import { verifyTicket } from '../../supabase/functions/_shared/pdf-ticket.js';
-import { allowedRequest, PDF_OPTIONS } from './policy.js';
+import { allowedRequest, appOrigins, limitKey, PDF_OPTIONS } from './policy.js';
 
 const MAX_HTML = 6 * 1024 * 1024;
 
 const cors = (env, origin) => {
-  const allow = String(env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const allow = appOrigins(env);
   return { 'Access-Control-Allow-Origin': allow.includes(origin) ? origin : allow[0] || 'null', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type', Vary: 'Origin' };
 };
 const json = (status, body, h) => new Response(JSON.stringify(body), { status, headers: { ...h, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -29,16 +29,24 @@ export default {
     if (req.method !== 'POST' || url.pathname !== '/pdf') return json(404, { success: false }, h);
     let b;
     try { b = await req.json(); } catch { return json(400, { success: false, message: 'طلب غير صالح' }, h); }
-    if (!(await verifyTicket(env.PDF_RENDER_SECRET, b?.ticket))) return json(401, { success: false, code: 'ticket' }, h);
+    const sub = await verifyTicket(env.PDF_RENDER_SECRET, b?.ticket);
+    if (!sub) return json(401, { success: false, code: 'ticket' }, h);
+    // سقف لكل صاحب تذكرة (Workers Rate Limiting، PDF_LIMIT في wrangler.toml). بلا الربط يمر الطلب كما كان، والتطبيق يرجع
+    // عند 429 إلى بناء المتصفح (downloadBest)
+    if (env.PDF_LIMIT?.limit) {
+      const { success } = await env.PDF_LIMIT.limit({ key: limitKey(sub) }).catch(() => ({ success: true }));
+      if (!success) return json(429, { success: false, code: 'limit' }, h);
+    }
     const html = String(b?.html || '');
     if (!html.startsWith('<!doctype html>') || html.length > MAX_HTML) return json(413, { success: false, code: 'html' }, h);
-    const app = env.APP_ORIGIN || 'https://leaders.sunkvalue.com';
+    // أصول التطبيقات كلها (القادة والإدارة، المرحلة 3ب): documentHtml يبني base من location.origin لمن طلب الوثيقة
+    const origins = appOrigins(env);
     const browser = await puppeteer.launch(env.BROWSER);
     try {
       const page = await browser.newPage();
       await page.setJavaScriptEnabled(false);
       await page.setRequestInterception(true);
-      page.on('request', (r) => (allowedRequest(r.url(), app) ? r.continue() : r.abort()));
+      page.on('request', (r) => (allowedRequest(r.url(), origins) ? r.continue() : r.abort()));
       await page.emulateMediaType('print');
       await page.setContent(html, { waitUntil: 'networkidle0', timeout: 25000 });
       const pdf = await page.pdf(PDF_OPTIONS);
