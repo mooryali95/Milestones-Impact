@@ -648,6 +648,10 @@
 .cps-secs, .cps-checks { margin: 0 0 14px; padding-inline-start: 20px; display: grid; gap: 6px; font-size: .86rem; }
 .cps-secs li small, .cps-checks li small { display: block; color: var(--ink-mid); font-size: .76rem; }
 .cps-secs li.ok > span::after, .cps-checks li.ok::marker { color: var(--st-ok); }
+/* موقع الفصل من مستوى الوثيقة (المرحلة 4): شارات صغيرة بعد العنوان، ومرساة معيار المستوى سطرًا تحتها */
+.cps-lvl { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-inline-start: 6px; vertical-align: middle; }
+.cps-lvl .la-chip { font-size: .7rem; padding: 0 6px; }
+.cps-lvl .cps-crit-line { flex-basis: 100%; font-size: .72rem; line-height: 1.5; }
 .cps-checks li.no { color: var(--st-bad); }
 .cps-checks li.ok { color: var(--st-ok); }
 .cps-big { font-size: 2.2rem; font-weight: 700; margin: 6px 0; }

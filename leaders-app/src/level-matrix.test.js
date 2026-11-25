@@ -9,7 +9,11 @@ import { join } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { approvalOf, answeredModels, cleanAnswers, cleanModelFieldsOf, fieldsFor, keptModel, missingFields, modelsFor } from '../../supabase/functions/leaders-api/logic.js';
-import { capstoneChecks, capstoneModels, costLabel, costSummary, modelFields, readiness, sectionState } from '../../supabase/functions/leaders-api/capstone.js';
+import { capstoneChecks, capstoneModels, chapterLevel, CHAPTER_STANDING_AR, costLabel, costSummary, displayJoins, displayPages, DISPLAY_PAIRS, docLevelsFor, modelFields, readiness, sectionState } from '../../supabase/functions/leaders-api/capstone.js';
+import { capstoneReport, levelAnnex } from '../../src/lib/brand/capstone.js';
+import { renderInitiative } from '../../src/lib/brand/institutional.js';
+import { publicDoc } from '../../supabase/functions/leaders-api/share.js';
+import { freezeIssued } from '../../supabase/functions/leaders-api/doc-quality.js';
 import { businessCase, caseStatus } from '../../supabase/functions/leaders-api/business-case.js';
 import { chapterTone, countedChapters, nextChapter } from './screens/InitiativeMap.jsx';
 
@@ -456,5 +460,152 @@ describe('الفصل الاختياري في الواجهة: لا «مكتمل»
   it('الجاهزية: كل الفصول غير محسوبة يعني نصف الفصول صفرًا لا كاملًا', () => {
     expect(readiness([{ complete: true, counted: false }], [])).toBe(50);
     expect(readiness([{ complete: true, counted: false }], [{ ok: false }])).toBe(0);
+  });
+});
+
+// ── المرحلة 4: المستشار والمراجع يريان مستوى الوثيقة وموقع كل فصل منه ──
+// الوثيقة كما يبنيها الخادم (capstone.ts build): الفصول بحقولها وحالتها وموقعها من مستواها
+const built = (levels, answered = {}, since = NEW) => capstoneModels(after, levels, 'project', new Set(Object.keys(answered))).map((m) => {
+  const answers = answered[m.id] || {};
+  const fields = modelFields(m, levels, 'project', null, answers, since);
+  const state = sectionState(m, fields, { answers });
+  return { model: m, fields, state, chapter: chapterLevel(m, fields, state, levels, levels) };
+});
+
+describe('المرحلة 4: موقع الفصل من مستوى الوثيقة', () => {
+  it('لكل فصل مستواه في إطاره، وموقعه من قاعدة الجاهزية نفسها، ومعيار مستواه من المعيار نفسه', () => {
+    for (const lv of LV) for (const s of built(same(lv))) {
+      expect(s.chapter.level, s.model.key).toBe(lv);
+      expect(s.chapter.standing, s.model.key).toBe(s.state.counted === false ? 'optional' : 'required');
+      expect(s.chapter.criteria.length, s.model.key).toBeGreaterThan(0);
+      for (const c of s.chapter.criteria) expect(c.anchor).toBeTruthy();
+    }
+    // المعيار بمستوى الإطار: مرساة التأسيسي غير مرساة الاحترافي
+    const b = built(same('beginner')).find((s) => s.model.key === 'benefits-register').chapter.criteria;
+    const a = built(same('advanced')).find((s) => s.model.key === 'benefits-register').chapter.criteria;
+    expect(b.map((c) => c.anchor)).not.toEqual(a.map((c) => c.anchor));
+  });
+  it('الفصل الباقي بقاعدة «لا فقد» يُعلَّم «باقٍ» لا «اختياري»', () => {
+    const gov = after.find((m) => m.key === 'governance');
+    const f = gov.fields.find((x) => x.type !== 'table');
+    const s = built(same('beginner'), { [gov.id]: { [f.key]: 'نص كتبه المشارك قبل أن يُرفع مستوى الفصل عن مستواه' } }).find((x) => x.model.key === 'governance');
+    expect(s.chapter.standing).toBe('kept');
+    expect(CHAPTER_STANDING_AR[s.chapter.standing]).toContain('باقٍ');
+  });
+});
+
+// ── المرحلة 5: قراءة أخف للتأسيسي دون حذف سؤال ──
+// الوثيقة كما تصل القالب (docFor): الفصل بمستواه، وكل حقل بقيمة صالحة
+const sample = (f) => (f.type === 'table' ? [(f.columns || ['أ']).map((c, i) => `${c} ${i + 1} قيمة واضحة`)] : `${f.label}: نص واضح كتبه القائد عن مبادرته بتفصيل كاف`);
+// كما يبنيها docOf في capstone.ts: التجميع يُحسب من المستويات (displayJoins) ويصل تلميحًا محايدًا joins، بلا مستوى
+const docOf = (levels, answered = {}) => {
+  const b = built(levels, answered);
+  const joins = displayJoins(b.map((s) => ({ key: s.model.key, dimension: s.model.dimension })), levels);
+  return {
+    meta: { status: 'draft', status_title: 'مسودة', level: levels.impact, initiative: 'مبادرة للاختبار', ref: 'MI-CP-TEST0001', version: 1 },
+    summary: '', checks: [], rubric: [],
+    sections: b.map((s) => ({ key: s.model.key, title: s.model.title_ar, dimension: s.model.dimension, optional: s.state.counted === false,
+      ...(joins[s.model.key] ? { joins: joins[s.model.key] } : {}),
+      fields: s.fields.map((f) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: sample(f) })) })),
+  };
+};
+
+describe('المرحلة 5: صفحات العرض للتأسيسي', () => {
+  it('العمود الفقري قبل التجميع وبعده: التجميع لا يمس الحقول ولا إلزامها (عرض وحده)', () => {
+    for (const levels of COMBOS) {
+      const secs = docOf(levels).sections;
+      const pages = displayPages(secs);
+      expect(pages.flat().map((s) => s.key).sort(), Object.values(levels).join('/')).toEqual(secs.map((s) => s.key).sort());
+      expect(pages.flat().flatMap((s) => s.fields.map((f) => `${s.key}.${f.key}`)).sort()).toEqual(secs.flatMap((s) => s.fields.map((f) => `${s.key}.${f.key}`)).sort());
+    }
+  });
+  it('التأسيسي: المنافع مع سطر النجاح، والمعالم مع الجدول الزمني، في صفحتين بدل أربع', () => {
+    const secs = docOf(same('beginner')).sections;
+    const pages = displayPages(secs);
+    expect(pages.length).toBe(secs.length - DISPLAY_PAIRS.length);
+    for (const p of DISPLAY_PAIRS) expect(pages.find((x) => x[0].key === p.host).map((s) => s.key)).toEqual([p.host, p.joins]);
+  });
+  it('المتوسط والاحترافي كما هما: صفحة لكل فصل، وإطار بمستوى أعلى لا يُجمع', () => {
+    for (const lv of ['intermediate', 'advanced']) {
+      const secs = docOf(same(lv)).sections;
+      expect(displayPages(secs).every((p) => p.length === 1)).toBe(true);
+    }
+    // المنافع وخطة القياس من إطار الأثر: أثر متوسط مع معالم تأسيسي يجمع المعالم وحدها
+    const mixed = docOf({ milestone: 'beginner', impact: 'intermediate', leadership: 'beginner' }).sections;
+    expect(displayPages(mixed).filter((p) => p.length === 2).map((p) => p[0].key)).toEqual(['milestone-register']);
+  });
+  it('ملف العمل يطبع الصفحة المجمّعة بعنوانيها، وكل حقل بعنوانه، ومرساة لكل فصل', () => {
+    const d = docOf(same('beginner'));
+    const { body } = capstoneReport(d);
+    for (const p of DISPLAY_PAIRS) {
+      const [h, j] = [p.host, p.joins].map((k) => d.sections.find((s) => s.key === k));
+      expect(body).toContain(`${h.title} و${j.title}`);
+      expect(body).toContain(`id="ch-${j.key}"`);
+      for (const f of j.fields) expect(body).toContain(f.label);
+    }
+    // المتوسط بلا تجميع
+    expect(capstoneReport(docOf(same('intermediate'))).body).not.toContain('class="cp-join"');
+  });
+});
+
+describe('ملحق مستوى الوثيقة: للمراجع وحده', () => {
+  const review_levels = { level: 'beginner', chapters: [{ key: 'raid', title: 'سجل المخاطر', level: 'beginner', standing: 'kept', standing_title: CHAPTER_STANDING_AR.kept, kept_fields: 0, criteria: [{ key: 'risk', title: 'المخاطر والتغيير', anchor: 'مرساة' }] }] };
+  it('يُطبع حين تحمله الوثيقة، ولا يُطبع لغيرها', () => {
+    const d = docOf(same('beginner'));
+    expect(levelAnnex(d)).toBe('');
+    const html = levelAnnex({ ...d, review_levels });
+    expect(html).toContain('مستوى الوثيقة وموقع كل فصل منه');
+    expect(html).toContain(CHAPTER_STANDING_AR.kept);
+    expect(capstoneReport({ ...d, review_levels }).body).toContain('id="ch-levels"');
+    // القارئ الخارجي (الراعي والجهة) لا يراه ولو حمله
+    expect(renderInitiative({ ...d, review_levels }, 'external').body).not.toContain('ch-levels');
+  });
+});
+
+describe('المستوى لا يصل من لم يُؤذن له، والمعتمدة القديمة بتخطيطها', () => {
+  let d;
+  beforeAll(() => { d = docOf(same('beginner')); });
+  const levelIn = (doc) => (doc.sections || []).some((x) => 'level' in x || 'joins' in x) || doc.meta?.level != null;
+  it('الوثيقة نفسها لا تحمل مستوى فصل، والتلميح وحده على التابع', () => {
+    expect(d.sections.some((x) => 'level' in x)).toBe(false);
+    expect(d.sections.filter((x) => x.joins).map((x) => `${x.key}>${x.joins}`).sort()).toEqual(DISPLAY_PAIRS.map((p) => `${p.joins}>${p.host}`).sort());
+  });
+  it('docLevelsFor وpublicDoc بلا إذن: لا مستوى ولا تلميح؛ وبالإذن كما هي', () => {
+    const leaky = { ...d, sections: d.sections.map((x) => ({ ...x, level: 'beginner' })) };
+    expect(levelIn(docLevelsFor(leaky, false))).toBe(false);
+    expect(levelIn(publicDoc(leaky, { show_levels: false }))).toBe(false);
+    expect(publicDoc(d, { show_levels: true }).sections.some((x) => x.joins)).toBe(true);
+  });
+  it('لقطة الاعتماد وما يُجمَّد منها بلا مستوى فصل', () => {
+    const issued = freezeIssued(d);
+    expect((issued.sections || []).some((x) => 'level' in x)).toBe(false);
+  });
+  it('لقطة معتمدة قبل التغيير (بلا تلميح) لا تُجمع ولو كان مستواها العام تأسيسيًا', () => {
+    const old = { ...d, meta: { ...d.meta, status: 'approved', level: 'beginner' }, sections: d.sections.map(({ joins: _j, ...x }) => x) };
+    expect(displayPages(old.sections).every((p) => p.length === 1)).toBe(true);
+    expect(capstoneReport(old).body).not.toContain('class="cp-join"');
+  });
+});
+
+describe('مسوّغات المبادرة تحيل برقم الصفحة بعد التجميع', () => {
+  it('فصل الشراء الباقي بقاعدة «لا فقد» يُحال إليه برقم صفحته', () => {
+    const pr = after.find((m) => m.key === 'procurement');
+    const table = pr.fields.find((f) => f.type === 'table');
+    const row = (table.columns || ['أ']).map((c, i) => `${c} ${i + 1} قيمة واضحة`);
+    const yes = (f) => (f.options || []).find((o) => String(o).startsWith('نعم')) || (f.options || [])[0];
+    const filledPr = Object.fromEntries(pr.fields.map((f) => [f.key, f.type === 'table' ? [row] : f.type === 'select' ? yes(f) : 'نص واضح كتبه القائد عن الشراء والتعاقد بتفصيل كاف']));
+    const d = docOf(same('beginner'), { [pr.id]: filledPr });
+    const prSec = d.sections.find((x) => x.key === 'procurement');
+    for (const f of prSec.fields) if (f.type === 'select') f.value = yes(pr.fields.find((y) => y.key === f.key));
+    expect(d.sections.some((x) => x.key === 'procurement')).toBe(true);
+    const pages = displayPages(d.sections);
+    const no = pages.findIndex((p) => p.some((x) => x.key === 'procurement')) + 1;
+    const body = capstoneReport(d).body;
+    const m = body.match(/<a href="#ch-procurement">الفصل (\d+) «/);
+    expect(m, "إحالة مسوّغات المبادرة إلى فصل الشراء").toBeTruthy();
+    expect(Number(m[1])).toBe(no);
+    // رقم الصفحة في المتن نفسه
+    expect(body).toContain(`${no}. ${pr.title_ar}`);
+    expect(no).toBeLessThan(d.sections.findIndex((x) => x.key === 'procurement') + 1);
   });
 });

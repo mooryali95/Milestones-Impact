@@ -11,7 +11,7 @@ import { esc, kpis, section } from './doc.js';
 import { cleanDoc, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr } from '../../../supabase/functions/leaders-api/business-case.js';
 import { LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
-import { capstoneReport, heatmap, pdfFileName, paras, STYLE, tableOf } from './capstone.js';
+import { capstoneReport, heatmap, levelAnnex, pdfFileName, paras, STYLE, tableOf } from './capstone.js';
 import { costLabel, dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
 import { ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 
@@ -217,7 +217,8 @@ export function renderInitiative(doc, kind = 'working') {
   // 'reader': من يراجع قبل الاعتماد (الراعي ليؤيد، والخبير): المؤسسية إن اكتملت، وإلا ملف العمل بلا ملحق ولا ختم
   if (kind === 'external' || kind === 'reader') {
     const r = institutionalReport(doc);
-    if (!r.blocked) return r;
+    // الخبير يقرأ بعد الوثيقة ملحق مستواها (review_levels لا يحمله إلا ما يُبنى للمراجع، فلا يصل الراعي ولا الجهة)
+    if (!r.blocked) return kind === 'reader' && doc?.review_levels ? { ...r, body: r.body + levelAnnex(doc) } : r;
     return kind === 'reader' ? capstoneReport(doc, { appendix: false }) : pendingReport(doc);
   }
   if (kind !== 'institutional') return capstoneReport(doc);

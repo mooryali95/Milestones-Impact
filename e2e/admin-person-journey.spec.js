@@ -124,15 +124,19 @@ test('نقل إلى مرحلة: بريد المشارك اختياري، مفع�
 
 test('المبادرة حية، والسجل الكامل بمرشح النوع و«اعرض الأقدم»', async ({ page }) => {
   const calls = await setup(page, undefined, {
-    'admin.capstone': { success: true, doc: { meta: { initiative: 'رقمنة الطلبات' } }, capstone: { status: 'draft' }, readiness: 30,
-      sections: [{ id: 'm1', key: 'initiative-charter', title: 'بطاقة المبادرة', complete: true, missing: 0, status: 'submitted', updated_at: '2026-11-05T10:00:00Z' },
-        { id: 'm2', key: 'risks', title: 'سجل المخاطر', complete: false, missing: 3, status: null, updated_at: null }] },
+    'admin.capstone': { success: true, doc: { meta: { initiative: 'رقمنة الطلبات' }, review_levels: { level: 'intermediate', chapters: [] } }, capstone: { status: 'draft' }, readiness: 30,
+      sections: [{ id: 'm1', key: 'initiative-charter', title: 'بطاقة المبادرة', complete: true, missing: 0, status: 'submitted', updated_at: '2026-11-05T10:00:00Z', level: 'intermediate', standing: 'required', kept_fields: 0, criteria: [] },
+        { id: 'm2', key: 'risks', title: 'سجل المخاطر', complete: false, missing: 3, status: null, updated_at: null, level: 'intermediate', standing: 'required', kept_fields: 2, criteria: [] }] },
     'admin.participant-timeline': { success: true, rows: [{ at: '2026-11-12T10:00:00Z', type: 'decision', tone: 'info', text: 'نُقل إلى مرحلة', by: 'الإدارة', detail: 'السبب: تقدم' }], next: '2026-11-12T10:00:00Z' },
   });
   await tab(page, 'المبادرة').click();
   const cap = page.getByRole('region', { name: 'رقمنة الطلبات' });
   await expect(cap).toContainText('البطاقة: مقدَّم');
   await expect(cap.locator('[data-chapter="risks"]')).toContainText('لم يبدأ');
+  // موقع الفصل من مستوى الوثيقة (المرحلة 4)
+  await expect(cap).toContainText('مستوى الوثيقة: متوسط');
+  await expect(cap.locator('[data-chapter="risks"]')).toContainText('مطلوب لمستواه');
+  await expect(cap.locator('[data-chapter="risks"]')).toContainText('2 حقول باقية مما كتبه');
   await expect(cap.getByRole('button', { name: 'اقرأ الوثيقة كما هي الآن' })).toBeVisible();
   await expect(cap.getByRole('link', { name: 'صفحة المراجعة' })).toHaveAttribute('href', /capstones/);   // متاحة دائمًا، ولو بلا صف وثيقة (تُبنى من حالته الآن)
   await tab(page, 'السجل').click();

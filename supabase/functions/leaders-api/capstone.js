@@ -123,6 +123,75 @@ export function capstoneModels(models, levels, scope, kept = null) {
 export const modelFields = (/** @type {any} */ m, /** @type {any} */ levels, /** @type {any} */ scope, /** @type {string | null} */ priority = null, /** @type {any} */ answers = null, /** @type {string | null} */ since = null) =>
   fieldsFor(m.fields, levels?.[m.dimension], scope, !!priority && m.dimension === priority, answers, keptModel(m, levels), since);
 
+// ── موقع الفصل من مستوى الوثيقة: للمستشار والمراجع (مصفوفة الوثيقة بحسب المستوى، المرحلة 4) ──
+// لا قاعدة جديدة هنا: الموقع يُقرأ مما حسبته fieldsFor وsectionState وkeptModel، والمعيار من rubricFor نفسه.
+//   required: في الفصل حقل مطلوب من المشارك بمستواه، فيُحسب في الجاهزية
+//   optional: ظاهر له ولا حقل مطلوبًا فيه
+//   kept: باقٍ بقاعدة «لا فقد»، كتب فيه قبل أن يُرفع مستواه عن مستواه
+export const CHAPTER_STANDING_AR = Object.freeze({ required: 'مطلوب لمستواه', optional: 'اختياري لمستواه', kept: 'باقٍ مما كتبه قبل رفع مستواه' });
+/** @param {{ kept?: boolean, counted?: boolean }} s kept: الفصل باقٍ بقاعدة «لا فقد» (keptModel)، counted: من sectionState */
+export const chapterStanding = (s) => (s?.kept ? 'kept' : s?.counted === false ? 'optional' : 'required');
+// معيار المستوى للفصل: أبعاد المعيار في إطار الفصل، بمرساة الدرجة العليا المكتوبة لمستوى المشارك فيه (إتقان المطلوب من مستواه)
+/** @param {string} dimension @param {Record<string, string>} levels */
+export const levelCriteria = (dimension, levels) => rubricFor(levels).filter((r) => r.dimension === dimension)
+  .map((r) => ({ key: r.key, title: r.title, anchor: r.anchors[RUBRIC_MAX - 1] }));
+// موقع الفصل كاملًا كما يقرؤه المستشار: مستوى المشارك في إطار الفصل، وموقعه، وعدد حقوله الباقية بقاعدة «لا فقد»، ومعياره
+/** @param {any} model @param {any[]} fields @param {any} state @param {Record<string, string>} content مستويات المحتوى (بها تُحسب الحقول) @param {Record<string, string>} levels مستويات المشارك (بها يُقرأ المعيار) */
+export function chapterLevel(model, fields, state, content, levels) {
+  const kept = keptModel(model, content);
+  return {
+    level: content?.[model.dimension] || null,
+    standing: chapterStanding({ kept, counted: state?.counted }),
+    kept_fields: kept ? 0 : (fields || []).filter((f) => f.kept).length,
+    criteria: levelCriteria(model.dimension, levels),
+  };
+}
+
+// ── تخفيف القراءة للتأسيسي: فصلان قصيران في صفحة عرض واحدة (المصفوفة، «ملاحظة صادقة»، المرحلة 5) ──
+// عرض وحده: لا يمس البيانات ولا الجاهزية ولا الاكتمال ولا الأسئلة العشرة، فكل حقل يُطبع بعنوانه في الصفحة المجمّعة.
+// الفصل التابع ينضم إلى أصله حين يكون كلاهما في الوثيقة بمستوى التأسيسي في إطارهما.
+export const DISPLAY_PAIRS = Object.freeze([
+  { host: 'benefits-register', joins: 'evidence-plan' },   // المنافع وسطر «كيف ستعرف أنك نجحت؟»
+  { host: 'milestone-register', joins: 'schedule' },       // المعالم والجدول الزمني
+]);
+/**
+ * يحسبه الخادم وحده (docFor) من مستويات المحتوى: مفتاح التابع ← مفتاح أصله، حين يكون الفصلان في الوثيقة بمستوى التأسيسي في إطارهما.
+ * لا يُرسل المستوى في الوثيقة: يصل القالب تلميح محايد على التابع (joins: مفتاح أصله) وحده.
+ * @param {{ key: string, dimension: string }[]} sections @param {Record<string, string>} content
+ */
+export function displayJoins(sections, content) {
+  const list = sections || [];
+  const at = (/** @type {string} */ k) => list.find((s) => s.key === k);
+  const light = (/** @type {any} */ s) => content?.[s.dimension] === 'beginner';
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const p of DISPLAY_PAIRS) {
+    const h = at(p.host), j = at(p.joins);
+    if (h && j && light(h) && light(j)) out[p.joins] = p.host;
+  }
+  return out;
+}
+/**
+ * صفحات العرض من فصول الوثيقة بترتيبها: كل صفحة [الفصل] أو [الأصل، التابع]، بتلميح joins وحده.
+ * اللقطة المعتمدة قبل هذا التغيير لا تحمل التلميح فتبقى بتخطيطها المعتمد (قرار 2026-11-25). الترقيم للصفحة.
+ * @param {any[]} sections
+ */
+export function displayPages(sections) {
+  const list = sections || [];
+  const keys = new Set(list.map((s) => s.key));
+  const joined = (/** @type {any} */ s) => DISPLAY_PAIRS.some((p) => p.joins === s.key && p.host === s.joins) && keys.has(s.joins);
+  /** @type {any[][]} */
+  const pages = [];
+  for (const s of list) {
+    if (joined(s)) continue;
+    const partner = list.find((j) => joined(j) && j.joins === s.key);
+    pages.push(partner ? [s, partner] : [s]);
+  }
+  return pages;
+}
+// رقم صفحة الفصل في الوثيقة بعد التجميع، ليحيل إليه ما يذكر الفصل برقمه (مسوّغات المبادرة). 0 لفصل غائب
+export const pageNumberOf = (/** @type {any[][]} */ pages, /** @type {string} */ key) => pages.findIndex((p) => p.some((s) => s.key === key)) + 1;
+
 // مشروع المسار التطبيقي من مصدره الوحيد: فصول الوثيقة نفسها بمستوى المشارك
 // ونطاقه، وما يتعمق فيه منها بمحور أولويته. لا نص يُكتب يدويًا لكل مسار.
 const chaptersWord = (n) => (n === 1 ? 'فصل واحد' : n === 2 ? 'فصلين' : n <= 10 ? `${n} فصول` : `${n} فصلًا`);
@@ -149,7 +218,11 @@ export const initiativeOf = (charterAnswers) => String(charterAnswers?.title || 
 
 // D18: الوثيقة كما تصل الجهة أو راعي المبادرة: مستواها العام ومسارها (بمحور أولويته) مشتقان من المستويات،
 // فلا يبقيان إلا بموافقة المشارك، ومع صلاحية المستويات حين يطّلع منسق الجهة
-export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => (show || !doc?.meta ? doc : { ...doc, meta: { ...doc.meta, level: null, track: null } });
+// وبلا إذن تُحذف دفاعًا أي إشارة مستوى في الفصول: level، وتلميح التجميع joins (لا يجمع إلا التأسيسي، فيدل عليه)
+export const docLevelsFor = (/** @type {any} */ doc, /** @type {boolean} */ show) => (show || !doc?.meta ? doc : {
+  ...doc, meta: { ...doc.meta, level: null, track: null },
+  sections: Array.isArray(doc.sections) ? doc.sections.map((/** @type {any} */ x) => { const { level: _l, joins: _j, ...rest } = x || {}; return rest; }) : doc.sections,
+});
 
 import { depAr, scheduleOf } from './schedule.js';
 

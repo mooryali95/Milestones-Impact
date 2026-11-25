@@ -9,7 +9,7 @@ import { EXAMPLES } from '../../../supabase/content/initiative-guide/v1/examples
 import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
-import { PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
+import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
 // حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
@@ -34,6 +34,21 @@ export async function openDoc(doc, toast, kind = 'working', onBlocked = null) {
   const r = renderInitiative(doc, kind);
   if (r.blocked) { win?.close(); return onBlocked ? onBlocked(r.missing) : toast(r.message); }
   if (!writeDocument(win, r.meta, r.body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
+}
+
+// موقع الفصل من مستوى الوثيقة (المرحلة 4): مستوى القائد في إطار الفصل، ومطلوب أو اختياري أو باقٍ بقاعدة «لا فقد»،
+// ومعيار المستوى في تلميح. كله من الخادم (capstone.js chapterLevel)، فلا قاعدة هنا. يقرؤه ملف المشارك أيضًا (PersonFile)
+export function ChapterLevel({ s }) {
+  if (!s?.standing) return null;
+  const crit = (s.criteria || []).map((r) => `${r.title}: ${r.anchor}`).join('\n');
+  return (
+    <span className="cps-lvl">
+      {LEVEL_AR[s.level] && <span className="la-chip" title={crit ? `معيار المستوى (الدرجة العليا)\n${crit}` : undefined}>{LEVEL_AR[s.level]}</span>}
+      <span className={`la-chip ${s.standing === 'kept' ? 'warn' : ''}`}>{CHAPTER_STANDING_AR[s.standing]}</span>
+      {s.kept_fields > 0 && <span className="la-chip warn">{s.kept_fields === 1 ? 'حقل باقٍ مما كتبه' : `${s.kept_fields} حقول باقية مما كتبه`}</span>}
+      {crit && <small className="la-muted cps-crit-line">{(s.criteria || []).map((r) => r.anchor).join(' · ')}</small>}
+    </span>
+  );
 }
 
 function Review({ d, canWrite, onSaved, onFailed }) {
@@ -176,9 +191,12 @@ function Detail({ id, canWrite, onBack, onPerson }) {
 
       <div className="la-grid2">
         <section className="la-card">
-          <h3>الفصول</h3>
+          <h3>الفصول {LEVEL_AR[d.doc?.review_levels?.level] && <small className="la-muted">· مستوى الوثيقة {LEVEL_AR[d.doc.review_levels.level]}</small>}</h3>
           <ol className="cps-secs">{d.sections.map((s) => (
-            <li key={s.id} className={s.complete && !s.optional ? 'ok' : ''}><span>{s.title}</span><small>{s.optional ? 'اختياري' : s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SECTION_STATUS_AR[s.status] || SECTION_STATUS_AR.draft}` : ''}</small></li>
+            <li key={s.id} className={s.complete && !s.optional ? 'ok' : ''} data-chapter={s.key} data-standing={s.standing || undefined}>
+              <span>{s.title}<ChapterLevel s={s} /></span>
+              <small>{s.optional ? 'اختياري' : s.complete ? 'مكتمل' : `${s.missing} حقول ناقصة`}{s.status ? ` · ${SECTION_STATUS_AR[s.status] || SECTION_STATUS_AR.draft}` : ''}</small>
+            </li>
           ))}</ol>
           <h3>فحوص الاتساق</h3>
           <ul className="cps-checks">{d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}>{x.title}{x.detail && <small>{x.detail}</small>}</li>)}</ul>
