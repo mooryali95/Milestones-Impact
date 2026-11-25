@@ -465,6 +465,9 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
   }, [target]);
   const retry = () => { setError(''); loadToc(true); };
   useEffect(() => { loadToc(true); }, [loadToc]);
+  // فتح باب أضافه مسار جديد يعلّمه مرئيًا على القاعدة (track-history.ts)، فلا يبقى الوسم بعد قراءته
+  const freshId = current !== COVER && (toc?.chapters || []).find((c) => c.id === current && c.new)?.id;
+  useEffect(() => { if (freshId) call('track.seen', { kind: 'handbook', keys: [String(freshId)] }).catch(() => {}); }, [freshId]);
 
   useEffect(() => {
     if (!current || current === COVER || tab !== 'read') return;
@@ -646,7 +649,7 @@ export default function Handbook({ me, lab, onLab, onBack, target = null, onRetu
                     <button key={c.id} className={`toc-ch${c.id === current ? ' on' : ''}${complete(c) ? ' done' : ''}`} onClick={() => setCurrent(c.id)}
                       title={c.done && !complete(c) ? 'اختبرته، وبقيت القراءة ليكتمل الباب' : undefined}>
                       <span className="toc-num">{complete(c) ? '✓' : c.done ? '◐' : pad(i + 1)}</span>
-                      <span className="toc-t">{c.title}</span>
+                      <span className="toc-t">{c.title}{c.new && <span className="chip gold sp-new"> جديد في مستواك</span>}</span>
                     </button>
                   ))}
                 </div>

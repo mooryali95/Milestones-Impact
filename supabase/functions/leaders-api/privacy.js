@@ -36,6 +36,8 @@ export const EXPORT_TABLES = {
   participant_emails: ['source'],
   // مركز الرسائل (20261128200000): ما وصله من إشعارات وحالة قراءتها، وفئات البريد التي كتمها. ملك له، ويُمسح مع «أعد من البداية»
   participant_notifications: [], participant_mail_prefs: [],
+  // سجل المسار و«جديد في مستواك» (20261129120000): متى تغيّر مساره وما أضيف إليه، وما لم يره بعد. من اعتمد التغيير داخلي
+  participant_track_history: ['decided_by'], participant_new_items: [],
   // سجل الدمج (participant_merges وparticipant_merge_rows) ونسخة الترحيل backup_20261128_account_merge لا تُصدَّر (داخلية)، ويمحوها
   // حذف المشارك: السجل بمفتاحه الأجنبي، والنسخة والحساب المدموج فيه بمشغّل participant_merge_erase قبل الحذف (erasure_purge وغيرها)
 };

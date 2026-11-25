@@ -433,7 +433,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
               {/* عنوان مجموعة يسبق الحقل (group في تعريفه)، مثل «تعمّق إن شئت» قبل الحقول الاختيارية في البطاقة */}
               {f.group && <p className="mf-group">{f.group}</p>}
               <div className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
-                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
+                <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}{chapter?.newFields?.includes(f.key) && <span className="chip gold sp-new"> جديد في مستواك</span>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
                 {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, { ...d.examples, context: (m.key === 'initiative-charter' ? answers.context : null) ?? d.examples?.context ?? null })} />}
                 {/* داخل المبادرة وحدها (AssistantContext): المساعد نفسه بسياق اسم الحقل، والمسودة لا تُرسل */}
                 {!locked && <FieldAsk chapter={m.title_ar} field={f.label} />}

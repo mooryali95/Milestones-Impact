@@ -25,7 +25,7 @@ import { exampleDoc, examplesFor } from '../guide.js';
 import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 import { Meaning, Spine } from './InitiativeMap.jsx';
 import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
-import { afterOf, chapterState, LENS, newInLevel, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
+import { afterOf, chapterState, LENS, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
 import SharePanel, { ShareCard } from './Share.jsx';
 import Visuals, { VisualsCard } from './Visuals.jsx';
 import { Annotated, TermLevels } from '../Term.jsx';
@@ -38,10 +38,9 @@ const DISMISS_KEY = 'mi_leaders_stuck_dismissed';
 const readDismissed = () => { try { return JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]'); } catch { return []; } };
 const saveDismissed = (list) => { try { localStorage.setItem(DISMISS_KEY, JSON.stringify(list.slice(-50))); } catch { /* تخزين محجوب: تبقى في الجلسة */ } };
 
-// «جديد في مستواك»: مفاتيح الفصول التي رآها المشارك على هذا الجهاز. راحة عرض (لا حالة رحلة)، وأول زيارة لا توسم شيئًا
-const SEEN_KEY = 'mi_leaders_spine_seen';
-const readSeen = () => { try { const v = localStorage.getItem(SEEN_KEY); return v ? JSON.parse(v) : null; } catch { return null; } };
-const saveSeen = (keys) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify(keys)); } catch { /* تخزين محجوب */ } };
+// «جديد في مستواك» من القاعدة (participant_new_items): ما أضافه مسار جديد اعتمده المستشار، حتى يفتحه المشارك على أي جهاز.
+// لا تخزين متصفح: الوسم حالة رحلة لا راحة عرض (بطاقة المسار، المرحلة 3)
+export const freshOf = (sections) => (sections || []).filter((x) => x.new || x.new_fields?.length).map((x) => x.key);
 
 // سطر العدسة: لماذا يأتي إطار أعمق من غيره. من مستوى المشارك في إطار كل فصل (sections[].level)، لا من مستوى ملخص
 export function lensLine(sections) {
@@ -108,8 +107,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     setD(r);
     if (!r.success) return;
     setSummary(r.capstone.summary || (manifestOf(r).density.summary === 'auto' ? r.summary_draft || '' : ''));
-    setFresh((f) => (f.length ? f : newInLevel(r.sections, readSeen())));
-    saveSeen(r.sections.map((x) => x.key));
+    setFresh((f) => (f.length ? f : freshOf(r.sections)));
   });
   useEffect(() => { load(); call('capstone.shares').then(setShares).catch(() => {}); }, []);
   // العودة من الكتاب تفتح الفصل الذي خرج منه المشارك
@@ -124,7 +122,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
   const chapterCtx = (id) => {
     const next = afterOf(d.sections, id);
     const unit = unitsFor(d.sections).find((u) => u.items.some((x) => x.id === id));
-    return { where: whereOf(d.sections, id), nextId: next?.id || null, nextTitle: next?.title || '', unitLast: !!unit && unit.items.length > 1 && unit.items[unit.items.length - 1].id === id, onNext: (x) => go(x) };
+    return { where: whereOf(d.sections, id), nextId: next?.id || null, nextTitle: next?.title || '', unitLast: !!unit && unit.items.length > 1 && unit.items[unit.items.length - 1].id === id, onNext: (x) => go(x),
+      // حقول أضافها مسار جديد في هذا الفصل («جديد في مستواك»)
+      newFields: d.sections.find((x) => x.id === id)?.new_fields || [] };
   };
   if (open) {
     return (
@@ -173,6 +173,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       if (!r.success) return setMsg({ err: `لم يُحفظ الملخص التنفيذي، فبقيت في الصفحة حتى لا يضيع: ${r.message}` });
     }
     setOpen(id);
+    // فتح فصل جديد في مستواك يعلّمه مرئيًا (ومعه حقوله الجديدة)
+    const sec = d.sections.find((x) => x.id === id);
+    if (sec && (sec.new || sec.new_fields?.length)) call('track.seen', { kind: 'chapter', keys: [sec.key] }).catch(() => {});
   };
   const saveSummary = async () => {
     setBusy('summary'); setMsg(null);

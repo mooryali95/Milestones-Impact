@@ -24,6 +24,7 @@ import {
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
 import { trackManifest } from './track-manifest.js';
+import { trackHistory, unseenNew } from './track-history.ts';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
 import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
@@ -695,6 +696,8 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
   // ما يراه المشارك من دفعته (visibility.js): تعذّر القراءة يعيد الافتراضي ولا يُسقط الرحلة
   const vis: Record<string, boolean> = await visibilityOfCohort(def.cohort?.id || null).catch(() => resolveVisibility(null, null));
   const track = trackView(await trackFor(p, levels, p.work_scope || null), audience);
+  // سجل المسار وسطر التطور (track-history.ts): يراه المشارك والمستشار، وتعذّره يعيد قائمة فارغة
+  const history = pl.length ? await trackHistory(p.id).catch(() => []) : [];
   const cellOf = (d: string, l: string) => (cells.data || []).find((c: any) => c.dimension === d && c.level === l);
 
   return {
@@ -716,13 +719,13 @@ export async function mePayload(p: any, audience: 'participant' | 'admin' = 'par
     },
     // المستوى يظهر مبدئيًا فور القياس، ويُعلَّم معتمدًا بعد قرار المستشار
     profile: !pl.length ? null : audience === 'admin' ? {
-      approved, track,
+      approved, track, history,
       dimensions: pl.map((x: any) => ({
         dimension: x.dimension, level: x.level, approved: !!x.approved_at, note: x.admin_note,
         description: cellOf(x.dimension, x.level)?.description_ar || null,
         path: cellOf(x.dimension, x.level)?.path_title_ar || null,
       })),
-    } : { approved, track },
+    } : { approved, track, history },
     journey: audience === 'admin' ? journey
       // نشاط «ورش إضافية» بلا ورشة لدفعته لا يُعرض: لا شيء فيه بعد (خامد خارج العد، optional.js)
       // optional-exempt: إخفاء نشاط الورش الإضافية الفارغ من العرض، وهو خامد خارج العد بالقاعدة (each)
@@ -1247,6 +1250,7 @@ export async function handbookToc(p: any) {
   const order = card?.handbook.order || ['milestone', 'impact', 'leadership'];
   const chapters = handbookModulesFor(must(mods) ?? [], levels).sort((a: any, b: any) => order.indexOf(a.dimension) - order.indexOf(b.dimension) || a.sort - b.sort);
   const done = Object.fromEntries((prog.data || []).map((r: any) => [r.module_id, r]));
+  const fresh = new Set((await unseenNew(p.id).catch(() => ({ handbook: [] as string[] }))).handbook || []);
   const read = Object.fromEntries((reads.data || []).map((r: any) => [r.module_id, r]));
   const mine = modelsFor(models.data || [], levels, p.work_scope, answeredModels(subs.data || []));
   const submitted = new Set((subs.data || []).filter((s: any) => s.status !== 'draft').map((s: any) => s.model_id));
@@ -1257,6 +1261,8 @@ export async function handbookToc(p: any) {
     chapters: chapters.map((m: any) => ({
       // chapter_key: إحالة فصول وثيقة المبادرة إلى الباب نفسه (anatomy.json)، فيقفز إليه المشارك من فصله
       id: m.id, dimension: m.dimension, chapter_key: m.chapter_key, title: m.title_ar, quiz: quizFor(m.quiz_md, levels[m.dimension], p.work_scope).length,
+      // «جديد في مستواك»: باب أضافه مسار جديد ولم يفتحه بعد (participant_new_items)
+      new: fresh.has(String(m.id)),
       done: done[m.id] ? { score: done[m.id].quiz_score, total: done[m.id].quiz_total, at: done[m.id].completed_at } : null,
       // تعريف واحد لإتمام الباب مع الرحلة (readingStatus): قراءة فعلية ثم الاختبار. الكتاب كان يعدّ الاختبار وحده
       // فيقول «أتممت 1 من 22» والرحلة «قرأت 0 من 22» (التدقيق 2026-11-10، البند 7.2)

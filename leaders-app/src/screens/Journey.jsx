@@ -127,6 +127,25 @@ export function TrackCardFacts({ card }) {
   );
 }
 
+// سطر التطور بعد ترقية اعتمدها المستشار (track-history.ts)، وما أضيف بأعداده، وسجل المسار كله تحته
+const addedAr = (a) => [a?.handbook && `${a.handbook} من أبواب الكتاب`, a?.chapters && `${a.chapters} من فصول الوثيقة`, a?.fields && `${a.fields} من الحقول`].filter(Boolean).join('، ');
+export function Evolution({ h }) {
+  return (
+    <div className="track-evolution" data-testid="track-evolution">
+      <b>{h.line}</b>{addedAr(h.added) ? `: ${addedAr(h.added)}، معلّمة «جديد في مستواك»، وكل ما كتبته باقٍ.` : '.'}
+    </div>
+  );
+}
+export function TrackHistory({ history }) {
+  if (!history?.length) return null;
+  return (
+    <details className="track-history" data-testid="track-history">
+      <summary>سجل مسارك ({history.length})</summary>
+      <ol>{history.map((h, i) => <li key={i}><b>{h.title || 'مسارك'}</b> <small className="muted">{String(h.created_at || '').slice(0, 10)}</small>{h.line ? <div className="small">{h.line}</div> : null}</li>)}</ol>
+    </details>
+  );
+}
+
 function TrackCard({ profile, cohort }) {
   const t = profile.track;
   const focus = points(t.focus);
@@ -144,6 +163,7 @@ function TrackCard({ profile, cohort }) {
         <h3>{t.title}</h3>
         {t.summary && <p>{t.summary}</p>}
         {t.strengths && <p className="track-strengths">{t.strengths}</p>}
+        {profile.history?.[0]?.line && <Evolution h={profile.history[0]} />}
       </header>
       <div className="track-body">
         {focus.length > 0 && (
@@ -170,6 +190,7 @@ function TrackCard({ profile, cohort }) {
           </div>
         )}
       </div>
+      <TrackHistory history={profile.history} />
     </section>
   );
 }

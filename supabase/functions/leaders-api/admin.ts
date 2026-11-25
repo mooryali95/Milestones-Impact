@@ -8,7 +8,8 @@ import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove, cleanModelFieldsOf } from './logic.js';
-import { journeyFor, mePayload, pointsOf } from './participant.ts';
+import { journeyFor, mePayload, participantPriority, pointsOf } from './participant.ts';
+import { recordTrackChange } from './track-history.ts';
 import { autoNudgeCounts, recentlyNudged, weeklyNudges } from './nudges.ts';
 import { weeklyCandidates, WEEKLY_OUT_STATUSES, WEEKLY_SEND_MAX } from './nudge.js';
 import { cutoffFrom, lateNoticeAllowed, MILESTONE_GRACE_DAYS } from './milestones.js';
@@ -817,6 +818,12 @@ async function approveOne(a: Admin, p: any, levels: Record<string, string>, note
     };
   });
   must(await db.from('placements').upsert(rows));
+  // سجل المسار و«جديد في مستواك» (بطاقة المسار): من المسار المعتمد قبله إن كان، إلى المعتمد الآن. لا يُسقط الاعتماد إن تعذّر
+  const lvOf = (list: any[]) => Object.fromEntries(list.map((x: any) => [x.dimension, x.level]));
+  const fromLv = before.length === DIMENSIONS.length && before.every((x: any) => x.approved_at) ? lvOf(before) : null;
+  const toLv = lvOf(rows);
+  const [prFrom, prTo] = await Promise.all([fromLv ? participantPriority(id, fromLv).catch(() => null) : null, participantPriority(id, toLv).catch(() => null)]);
+  await recordTrackChange(p, fromLv, toLv, a.email, { from: prFrom, to: prTo });
   const to = statusAfterApprove(p.status);
   if (to) {
     const res = await db.from('participants').update({ status: to }).eq('id', id);
