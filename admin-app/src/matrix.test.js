@@ -101,6 +101,7 @@ describe('روابط بلا أفعال، والشاشة', () => {
     expect(src).toMatch(/<LoadError message=\{error\}/);
     expect(src).toMatch(/<LoadError message=\{detailsError\}/);
     expect(src).not.toMatch(/\.catch\(\(\) => \{\}\)/);
+    // النطاق في عنوان المستند عبر PageHeader، لا في الترويسة (المرحلة 4، 2026-11-26)
     expect(src).toContain('<bdi dir="ltr">matrix.sunkvalue.com</bdi>');
   });
 });

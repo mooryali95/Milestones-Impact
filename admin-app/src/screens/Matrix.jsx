@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الخادم نفسه (admin-api: list-regs وunlock-reg) والجلسة نفسها، والعمليات من مصدرها
 // الواحد (src/lib/procs.js) وتحليل الحجوزات من src/lib/analysis.js، فلا نسخة ثانية لأي منطق.
+import { PageHeader } from '../PageHeader.jsx';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { date } from '../dates.js';
@@ -375,14 +376,8 @@ export default function Matrix({ canWrite, tab, id }) {
   const go = (k, rid = null) => navigate({ ctx: 'matrix', tab: k, id: rid });
   return (
     <div className="dash-body">
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-eyebrow">المنتج الثاني</div>
-          <h1 className="page-title">مصفوفة التأثير</h1>
-          <div className="page-title-ar"><bdi dir="ltr">matrix.sunkvalue.com</bdi> · التسجيلات وخطط الجهات وتقاريرها</div>
-        </div>
-        {!canWrite && <span className="la-chip">عرض فقط</span>}
-      </div>
+      <PageHeader eyebrow="المنتج الثاني" title="مصفوفة التأثير" domain="matrix.sunkvalue.com" desc={<><bdi dir="ltr">matrix.sunkvalue.com</bdi> · التسجيلات وخطط الجهات وتقاريرها</>}
+        status={!canWrite ? 'عرض فقط' : null} />
       <nav className="la-tabs" aria-label="أقسام المصفوفة">
         {TABS.map(([k, l]) => <button key={k} className={t === k ? 'on' : ''} aria-current={t === k ? 'page' : undefined} onClick={() => go(k)}>{l}</button>)}
       </nav>
