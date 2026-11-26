@@ -46,6 +46,18 @@ describe('ملفات التحقق للمراحل الأربع على قاعدة 
     expect(failed).toEqual([]);
   });
 
+  it('مسار القراءة يصحح لقطة نسخة مجمدة عبر منفذ التصحيح الصريح، ويبقى التجميد قائمًا بعده', async () => {
+    const PG = '00000000-0000-0000-0000-0000000000a7';
+    await db.exec(`insert into leaders.programs (id, name) values ('${PG}', 'برنامج القراءة') on conflict do nothing`);
+    await db.exec(`insert into leaders.program_versions (program_id, number, label, data) values ('${PG}', 1, 'مجمدة',
+      '{"stages":[],"requirements":[{"code":"T-HB","kind":"reading","config":{"scope":"all","quiz":true}}]}')`);
+    await db.exec(read('supabase/migrations/20261129220000_leaders_reading_track.sql'));
+    await db.exec('discard temp');
+    const [v] = (await db.query(`select data->'requirements'->0->'config'->>'scope' s from leaders.program_versions where program_id = '${PG}'`)).rows;
+    expect(v.s).toBe('track');
+    await expect(db.exec(`update leaders.program_versions set data = '{}' where program_id = '${PG}'`)).rejects.toThrow(/لا تُعدَّل/);
+  });
+
   it.each(FILES)('%s: كل فحص قراءة فقط وصف واحد ok/detail', async (name) => {
     const sql = read(`scripts/db/${name}.sql`);
     expect(sql).not.toMatch(/\b(insert|update|delete|truncate|drop|alter)\s/i);

@@ -46,6 +46,8 @@ begin
   insert into leaders.backup_20261129_reading_track_versions (version_id, data)
     select v.id, v.data from leaders.program_versions v join rt_hit h on h.id = v.id
      where v.id not in (select b.version_id from leaders.backup_20261129_reading_track_versions b);
+  -- تصحيح صريح للقطة بالمنفذ الذي يسمح به program_version_frozen، محصور في هذه المعاملة
+  perform set_config('leaders.program_version_fix', 'on', true);
   update leaders.program_versions v set data = jsonb_set(v.data, '{requirements}', (
       select coalesce(jsonb_agg(case
         when r->>'code' = 'T-HB' and r->>'kind' = 'reading' and r->'config' = '{"scope": "all", "quiz": true}'::jsonb
@@ -54,6 +56,7 @@ begin
         else r end order by o), '[]'::jsonb)
       from jsonb_array_elements(v.data->'requirements') with ordinality e(r, o)))
    where v.id in (select id from rt_hit);
+  perform set_config('leaders.program_version_fix', '', true);
   select count(*) into n from rt_hit;
   if n > 0 then raise notice 'reading track: program_versions %', n; end if;
 end $rt$;
