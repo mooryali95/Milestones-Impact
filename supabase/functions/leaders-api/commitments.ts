@@ -73,6 +73,7 @@ export async function review(p: any, b: Body) {
 
 // النقرة إلى وثيقة المبادرة: صف في جدول الأنشطة بحفظ النموذج نفسه (modelSave وحراسه)، فلا يُكتب مرتين
 export async function toInitiative(p: any, b: Body) {
+  if (!(await on())) throw new Fail(OFF_AR, 404, 'commitments_off');
   const { data: row } = await db.from('workshop_commitments').select(COLS).eq('id', String(b.id || '')).eq('participant_id', p.id).maybeSingle();
   if (!row) throw new Fail('لم نجد هذا الالتزام', 404);
   if (row.added_at) throw new Fail('أضفته إلى وثيقة مبادرتك من قبل', 409, 'added');
@@ -86,8 +87,14 @@ export async function toInitiative(p: any, b: Body) {
   if (!step) throw new Fail('يُضاف إلى الوثيقة ما طبّقته كليًا أو جزئيًا', 400, 'not_applied');
   const answers = { ...(got.submission?.answers || {}) };
   answers[COMMITMENT_STEP_FIELD] = [...(Array.isArray(answers[COMMITMENT_STEP_FIELD]) ? answers[COMMITMENT_STEP_FIELD] : []), step];
-  const out = await modelSave(p, { id: target.id, answers });
-  await db.from('workshop_commitments').update({ added_at: new Date().toISOString() }).eq('id', row.id);
+  // الحجز قبل الحفظ: نقرتان متتاليتان لا تضيفان الصف مرتين، وتعذّر الحفظ يعيد الحجز
+  const { data: claimed } = await db.from('workshop_commitments').update({ added_at: new Date().toISOString() }).eq('id', row.id).is('added_at', null).select('id');
+  if (!claimed?.length) throw new Fail('أضفته إلى وثيقة مبادرتك من قبل', 409, 'added');
+  let out: any;
+  try { out = await modelSave(p, { id: target.id, answers }); } catch (e) {
+    await db.from('workshop_commitments').update({ added_at: null }).eq('id', row.id);
+    throw e;
+  }
   return { success: true, model_id: target.id, submission: out.submission };
 }
 

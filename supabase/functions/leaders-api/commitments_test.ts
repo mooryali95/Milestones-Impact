@@ -73,6 +73,11 @@ Deno.test('3.2 يُطفأ من الإعدادات: لا سؤال ولا تذكي
   assertEquals((await CM.mine(me) as any).enabled, false);
   await assertRejects(() => CM.save(me, { session_id: S, action: 'سأبدأ اجتماع الفريق بسؤال عن الأثر', due_on: day(10 * DAY) }));
   assertEquals((await CM.reminders() as any).sent, 0);
+  // والنقرة إلى وثيقة المبادرة مطفأة معه برسالته نفسها، لا بخطأ آخر
+  t.workshop_commitments[0].outcome = 'yes';
+  const off = await CM.toInitiative(me, { id: U(930101) }).then(() => null, (e: any) => e);
+  assertEquals(off?.code, 'commitments_off');
+  assertEquals(t.workshop_commitments[0].added_at ?? null, null);
   assertEquals(t.workshop_commitments.length, 1);
   resetSettingsCache();
 });
