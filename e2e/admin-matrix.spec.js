@@ -30,13 +30,32 @@ async function admin(page) {
 test('مصفوفة التأثير في اللوحة: نظرة عامة، والتسجيلات بالفلترة، وفتح خطة للتعديل', async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 1000 });
   const calls = await admin(page);
-  await expect(page.getByText('يحتاج تدخلك')).toBeVisible();
-  await expect(page.locator('.la-reqs')).toContainText('هيئة التطوير');
-  await expect(page.locator('.la-reqs')).toContainText('شركة الطاقة');
-  if (SHOT) await page.screenshot({ path: `${SHOT}/matrix.png`, fullPage: true });
+  await expect(page.getByRole('heading', { name: 'متوقفون وطلبات إعادة فتح' })).toBeVisible();
+  await expect(page.locator('.mx-att')).toContainText('بانتظار قرارك');
+  await expect(page.locator('.mx-att')).toContainText('هيئة التطوير');
+  await expect(page.locator('.mx-att')).toContainText('شركة الطاقة');
+  await expect(page.locator('.mx-att')).toContainText('منذ آخر تعديل');
+  await expect(page.locator('.mx-att')).toContainText(/0 من \d+/);
+  if (SHOT) await page.screenshot({ path: `${SHOT}/p3-matrix-overview.png`, fullPage: true });
+  // بطاقة «متوقفة» رابط إلى التسجيلات مرشحة، بلا أي طلب يغيّر البيانات
+  const writes = calls.length;
+  await page.locator('a.mx-stat', { hasText: 'متوقفة' }).click();
+  await expect(page).toHaveURL(/#\/matrix\/regs\?view=idle/);
+  await expect(page.locator('.mx-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.mx-table tbody')).toContainText('شركة الطاقة');
+  await expect(page.locator('.mx-table tbody')).not.toContainText('b@x.com');
+  expect(calls.slice(writes).filter((c) => c.action !== 'list-regs' && c.action !== 'list-contacts')).toEqual([]);
+  // الصف يبلغه التبويب برابط في خلية الاسم
+  await page.locator('.mx-row-link').first().focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'شركة الطاقة' })).toBeVisible();
+  await page.getByRole('button', { name: '→ كل التسجيلات' }).click();
+  await page.locator('.la-tabs').getByRole('button', { name: 'نظرة عامة' }).click();
+  // الفلتر المختار من البطاقة يبقى عند العودة (scope)، كبقية الشاشات
   await page.locator('.la-tabs').getByRole('button', { name: 'التسجيلات' }).click();
-  await expect(page.locator('.mx-table tbody tr')).toHaveCount(2);
+  await expect(page.locator('.mx-table tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: /تطلب إعادة الفتح/ }).click();
+  if (SHOT) await page.screenshot({ path: `${SHOT}/p3-matrix-regs.png`, fullPage: true });
   await expect(page.locator('.mx-table tbody tr')).toHaveCount(1);
   await page.locator('.mx-table tbody tr').first().click();
   await expect(page.getByRole('heading', { name: 'هيئة التطوير' })).toBeVisible();
@@ -49,16 +68,22 @@ test('مصفوفة التأثير في اللوحة: نظرة عامة، وال�
 });
 
 // «توزيع المسارات»: المقام عمليات المسار × المسجلين، فمسار اكتمل حجزه يبلغ 100% (ضمانة نُقلت من اللوحة القديمة)
-test('الإحصاءات: مسار اكتمل حجزه يبلغ عموده كاملًا', async ({ page }) => {
+test('توزيع المسارات في النظرة العامة: مسار اكتمل حجزه يبلغ عموده كاملًا، والضغط يرشح بالمسار', async ({ page }) => {
   const full = {};
   for (const t of ['creation', 'innovation', 'establishment', 'making']) for (let ph = 1; ph <= 4; ph++) full[`${t}-${ph}`] = '2026-11-0' + ph;
   regs.splice(0, regs.length,
     { id: 'a', name: 'مكتمل', dates: full, confirmed: {}, registeredAt: '2026-10-01' },
     { id: 'b', name: 'جزئي', dates: { 'creation-1': '2026-11-01', 'creation-2': '2026-11-02' }, confirmed: {}, registeredAt: '2026-10-02' });
   await admin(page);
-  await page.locator('.la-tabs').getByRole('button', { name: 'الإحصاءات' }).click();
-  const widths = await page.locator('.la-fn-bar i').evaluateAll((els) => els.map((e) => e.style.width));
+  await expect(page.locator('.la-tabs').getByRole('button', { name: 'الإحصاءات' })).toHaveCount(0);
+  await expect(page.locator('.mx-track-bar i')).toHaveCount(4);
+  const widths = await page.locator('.mx-track-bar i').evaluateAll((els) => els.map((e) => e.style.width));
   expect(widths).toEqual(['75%', '50%', '50%', '50%']);
+  await expect(page.locator('.mx-tracks')).toContainText('6 · 75% من الممكن');
+  if (SHOT) await page.screenshot({ path: `${SHOT}/p3-matrix-tracks.png`, fullPage: true });
+  await page.locator('.mx-track').nth(1).click();
+  await expect(page).toHaveURL(/track=innovation/);
+  await expect(page.locator('.mx-table tbody tr')).toHaveCount(1);
 });
 
 test('تحكم كامل: تعديل المواعيد والتأكيد، ورفض إعادة الفتح، وتحرير العملية ونصوص الموقع', async ({ page }) => {

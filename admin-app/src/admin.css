@@ -1573,3 +1573,34 @@ tr.ct-new .ct-open { font-weight: 700; }
 /* سهم التقليب: الشكل يشير يسارًا، فالسابقة في RTL تشير يمينًا */
 [dir="rtl"] .ico-prev { transform: scaleX(-1); }
 [dir="ltr"] .ico-next { transform: scaleX(-1); }
+
+/* مصفوفة التأثير: بطاقات روابط، وقسم «متوقفون وطلبات إعادة فتح»، وتوزيع المسارات */
+a.mx-stat > span { display: block; }
+a.mx-stat { display: block; color: inherit; text-decoration: none; transition: box-shadow .15s, border-color .15s; }
+a.mx-stat:hover { box-shadow: 0 4px 16px rgba(6,30,44,0.06); }
+a.mx-stat:focus-visible, .mx-track:focus-visible, .mx-row-link:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+/* الصفر خافت بتباين لا يقل عن 4.5:1 (لون الحبر الفاتح نفسه لا لون الخطوط) */
+.mx-stat.is-zero .stat-value { color: var(--ink-light); font-weight: 500; }
+.mx-num { font-variant-numeric: tabular-nums; }
+.mx-att-sum { font-weight: 600; margin-bottom: 8px; }
+.mx-att-g { font-size: .9rem; margin: 14px 0 6px; }
+.mx-att-sub { font-size: .8rem; color: var(--ink-mid); margin: 10px 0 4px; font-weight: 600; }
+.mx-att-list { list-style: none; display: grid; gap: 2px; }
+.mx-att-row { position: relative; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 8px 10px; border-radius: 8px; }
+.mx-att-row:hover { background: var(--sand-light); }
+.mx-att-row:focus-within { background: var(--sand-light); outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+.mx-att-name:focus-visible { outline: none; }
+.mx-att-name { font-weight: 600; color: var(--ink); text-decoration: none; }
+/* الصف كله يُضغط من رابط الاسم (::after يمتد عليه)، فلا عمود إجراء مكرر */
+.mx-att-name::after { content: ''; position: absolute; inset: 0; border-radius: 8px; }
+.mx-att-name:hover { text-decoration: underline; }
+.mx-idle { white-space: nowrap; font-size: .8rem; color: var(--ink-mid); justify-self: end; }
+.tag-bad { background: var(--st-bad-bg); color: var(--st-bad); }
+.mx-att-more { display: inline-block; margin-top: 10px; }
+.mx-row-link { color: inherit; text-decoration: none; }
+.mx-row-link:hover { text-decoration: underline; }
+.mx-tracks .mx-track { grid-template-columns: 92px 1fr auto; color: inherit; text-decoration: none; padding: 4px 6px; border-radius: 6px; }
+.mx-track:hover { background: var(--sand-light); }
+.mx-track-bar { background: var(--sand-light); box-shadow: inset 0 0 0 1px var(--line); }
+.mx-track-v { text-align: end; min-inline-size: 15ch; color: var(--ink-mid); }
+@media (max-width: 600px) { .mx-att-row { grid-template-columns: 1fr auto; } .mx-att-prog { grid-column: 1; } }
