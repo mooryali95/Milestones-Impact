@@ -84,7 +84,9 @@ export function glance(r) {
 
 // قائمة «⋯»: الإجراءات الأقل تكرارًا، بلوحة المفاتيح كاملة (الأسهم بين البنود، وEscape يغلق ويعيد التركيز)
 // label: اسم القائمة وزرها. قائمة الرأس «إجراءات أخرى»، وقائمة المرحلة أو البند تسمي ما تخصه فلا يتشابه زران في الصفحة
-export function MoreMenu({ items, label = 'إجراءات أخرى' }) {
+// text: نص الزر الظاهر. «⋯» للصفوف الضيقة، وMENU_TEXT («إجراءات ▾») لقائمة ترويسة أو شريط أدوات (المرحلة 6)
+export const MENU_TEXT = 'إجراءات ▾';
+export function MoreMenu({ items, label = 'إجراءات أخرى', text = '⋯' }) {
   const [open, setOpen] = useState(false);
   const btn = useRef(null);
   const list = useRef(null);
@@ -105,10 +107,14 @@ export function MoreMenu({ items, label = 'إجراءات أخرى' }) {
     else if (e.key === 'Tab') setOpen(false);
   };
   const shown = items.filter(Boolean);
+  // الاسم المسموع يبدأ بالنص الظاهر (WCAG 2.5.3)، والسهم زخرفة لا تُقرأ
+  const caret = /▾\s*$/.test(text);
+  const word = text === '⋯' ? '' : text.replace(/\s*▾\s*$/, '');
   if (!shown.length) return null;
   return (
     <span className="pf-more">
-      <button ref={btn} type="button" className="btn-sm ghost pf-more-btn" aria-haspopup="menu" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>⋯</button>
+      <button ref={btn} type="button" className={`btn-sm ghost pf-more-btn${word ? ' labeled' : ''}`} aria-haspopup="menu" aria-expanded={open}
+        aria-label={word ? `${word}: ${label}` : label} onClick={() => setOpen(!open)}>{word ? <>{word}{caret && <span aria-hidden="true"> ▾</span>}</> : text}</button>
       {open && (
         <ul ref={list} role="menu" className="pf-menu" aria-label={label} onKeyDown={key}>
           {shown.map((it) => (

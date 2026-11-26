@@ -10,6 +10,7 @@ import React, { createContext, useCallback, useContext, useEffect, useLayoutEffe
 import { hardReload, isChunkError, reloadOnce } from './lazy-retry.js';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
 import { useUnsavedFlag } from '../../shared/ui/unsaved-registry.js';
+import { PARTICIPANT_STATUS, PARTICIPANT_STATUS_TONE } from '../../supabase/functions/leaders-api/labels.js';
 
 const Ctx = createContext(null);
 export const useUI = () => useContext(Ctx);
@@ -209,4 +210,42 @@ export function useCopy() {
   return async (text, ok, { reveal = true } = {}) => {
     try { await navigator.clipboard.writeText(text); toast(ok); } catch { if (reveal) await prompt('انسخ الرابط:', text); else toast('تعذّر النسخ'); }
   };
+}
+
+// شارة الحالة الواحدة (المرحلة 6): التسمية والنبرة من labels (PARTICIPANT_STATUS وPARTICIPANT_STATUS_TONE) لا من الشاشة.
+// labels/tones لخريطة حالة أخرى من labels نفسها. لا تُكسر الشارة على سطرين (nowrap في CSS).
+const TONES = new Set(['', 'ok', 'warn', 'bad']);
+export function statusTone(status, tones = PARTICIPANT_STATUS_TONE) {
+  const t = tones?.[status] || '';
+  return TONES.has(t) ? t : '';
+}
+export function StatusChip({ status, labels = PARTICIPANT_STATUS, tones = PARTICIPANT_STATUS_TONE, className = '' }) {
+  if (status == null || status === '') return null;
+  const tone = statusTone(status, tones);
+  return <span className={`la-chip st-chip${tone ? ` ${tone}` : ''}${className ? ` ${className}` : ''}`} data-status={status}>{labels?.[status] || status}</span>;
+}
+
+// نسبة عرض الشريط (0 إلى 100، عدد صحيح): المقام صفر أو غير رقم يعطي 0، وما فوق المقام يقف عند 100،
+// والقيمة الموجبة الصغيرة جدًا تظهر 1 فلا تبدو صفرًا.
+export function barPct(value, max) {
+  const v = Number(value); const m = Number(max);
+  if (!Number.isFinite(v) || !Number.isFinite(m) || m <= 0 || v <= 0) return 0;
+  const p = Math.round((v / m) * 100);
+  return Math.min(100, Math.max(1, p));
+}
+
+// مقياس بمقام صريح (المرحلة 6): شريط ونص «القيمة من المقام» ظاهر، وrole=meter لقارئ الشاشة.
+// label يسمي ما يُقاس. tone اختيارية (ok/warn/bad).
+export function Meter({ value, max, label, tone = '', unit = '' }) {
+  // role=meter لا progressbar: القيمة مقدار ضمن مدى معلوم (3 من 10) لا تقدم مهمة جارية. aria-valuetext يعلن المقام صريحًا.
+  const v = Math.max(0, Number(value) || 0); const m = Math.max(0, Number(max) || 0);
+  const pct = barPct(v, m);
+  const text = `${v} من ${m}${unit ? ` ${unit}` : ''}`;
+  return (
+    <span className={`la-meter${TONES.has(tone) && tone ? ` ${tone}` : ''}`} role="meter" aria-valuemin={0} aria-valuemax={m > 0 ? m : 1} aria-valuenow={m > 0 ? Math.min(v, m) : 0}
+      aria-valuetext={text} aria-label={label ? `${label}: ${text}` : text}>
+      <span className="la-meter-bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>
+      <span className="la-meter-num" aria-hidden="true">{text}</span>
+    </span>
+  );
 }
