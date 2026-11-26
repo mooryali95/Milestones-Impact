@@ -75,7 +75,8 @@ export function guideFor(modelKey, fieldKey, level, sectorText = null, examples 
   const example = mode === 'expert' || examples?.field === false ? null : exampleFor(modelKey, fieldKey, sectorText, examples?.sectors ?? null, examples?.context ?? null);
   // التأسيسي يرى المثال التطوعي المحلول بأعمدته (BEGINNER_EXAMPLE) خلف «أرني مثالًا»، وإلا مثال قطاعه
   const volunteer = mode === 'open' && examples?.field !== false ? beginnerExample(modelKey, fieldKey) : null;
-  return { mode, meaning: g.meaning, mistake: g.mistake, challenge: g.challenge, example, volunteer, context: contextNote(modelKey, fieldKey, examples?.context) };
+  // المعنى للتأسيسي بأعمدته وحدها (meaning_beginner) حين يذكر المعنى العام أعمدة مخفية عنه
+  return { mode, meaning: (mode === 'open' && g.meaning_beginner) || g.meaning, mistake: g.mistake, challenge: g.challenge, example, volunteer, context: contextNote(modelKey, fieldKey, examples?.context) };
 }
 
 /** حقل المثال التطوعي للتأسيسي: { value, sector_title } أو null */
