@@ -255,4 +255,11 @@ describe('إغلاق «ينتظرك» في كل موضع إنجاز', () => {
   it('مراجعة المستشار تغلق عنصر الطلب حين تصير حالته مؤكَّدة', () => {
     expect(src('peer.ts')).toMatch(/export async function expertReview[\s\S]{0,1400}const next = requestStatusFor\(all, r\.status\);[\s\S]{0,300}if \(next === 'confirmed'\) await resolveNotes\(`peer:\$\{r\.id\}`\)/);
   });
+  it('«مقيّم بانتظار تأكيدك» عنصر بمرجعه ومهلته، ويُغلق عند التأكيد والرفض', () => {
+    const im = src('impact.ts');
+    expect(im).toMatch(/مقيّم بانتظار تأكيدك[\s\S]{0,400}noteRef: `rater-confirm:\$\{raterId\}`, actionUntil: actionDeadline\(\)/);
+    expect(im).toMatch(/notifyConfirmers\(p, check\.flags, saved\.id\)/);
+    expect(im).toMatch(/'rater\.reject'[\s\S]{0,120}await resolveNotes\(`rater-confirm:\$\{id\}`\)/);
+    expect(im).toMatch(/'rater\.confirm'[\s\S]{0,120}await resolveNotes\(`rater-confirm:\$\{id\}`\)/);
+  });
 });
