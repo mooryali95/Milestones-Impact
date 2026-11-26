@@ -150,3 +150,16 @@ Deno.test('2.3 قبل ترحيل sponsor_reminded_at: لا تذكير ولا ب�
 Deno.test('2.3 المشارك يرى سطر انتهاء مهلة الراعي في صفحة مبادرته، ونصه لا يحيل إلى المستشار', () => {
   assertEquals(SPONSOR_EXPIRED_PARTICIPANT_AR, 'انتهت مهلة الراعي، يتابعها فريق البرنامج');
 });
+
+// مراجعة المرحلة 2: إن تعذّر بريد التذكير لا يُقتل رابط الدعوة الأولى، فلا يعلق الراعي بلا رابط صالح ولا بريد
+Deno.test('2.3 تعذّر بريد التذكير يعيد بصمة الرابط الأول، ويبقى التذكير مسجلًا فلا يتكرر', async () => {
+  const saved = { ...CONFIG };
+  Object.assign(CONFIG, { resendKey: '' });
+  try {
+    const tables = await remindWorld([{}]);
+    const r = await X.sponsorReminders();
+    assertEquals([r.reminded, r.failed], [0, 1]);
+    assertEquals(tables.capstones[0].sponsor_token_hash, 'h0', 'الرابط الأول صالح كما كان');
+    assert(tables.capstones[0].sponsor_reminded_at, 'لا يتكرر كل أسبوع');
+  } finally { Object.assign(CONFIG, saved); }
+});

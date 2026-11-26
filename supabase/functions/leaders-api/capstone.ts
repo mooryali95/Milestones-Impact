@@ -522,7 +522,7 @@ export function sponsorReminderMail(sponsor: string | null, who: string, initiat
     + mailNote('هذا الرابط يحل محل رابط الدعوة السابقة.'),
     { family: 'capstone', preheader: `تذكير: ${who} ينتظر تأييدك لمبادرة «${initiative}»`, footnote: '' });
 }
-const SPONSOR_REMIND_COLS = 'participant_id, status, sponsor_status, sponsor_email, sponsor_name, sponsor_invited_at, sponsor_expires_at, sponsor_reminded_at, participants!inner(id, full_name, is_demo, is_test, status)';
+const SPONSOR_REMIND_COLS = 'participant_id, status, sponsor_status, sponsor_token_hash, sponsor_email, sponsor_name, sponsor_invited_at, sponsor_expires_at, sponsor_reminded_at, participants!inner(id, full_name, is_demo, is_test, status)';
 export async function sponsorReminders() {
   const { data, error } = await db.from('capstones').select(SPONSOR_REMIND_COLS).eq('status', 'accepted').eq('sponsor_status', 'pending').limit(500);
   if (missingColumn(error)) return { reminded: 0, failed: 0, expired: 0, skipped: 'sponsor_reminded_at' };
@@ -537,9 +537,15 @@ export async function sponsorReminders() {
       const token = randomToken();
       const initiative = (await initiativeFor(c.participant_id)) || 'المبادرة';
       const html = sponsorReminderMail(c.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`, c.sponsor_expires_at);
-      // الرمز الجديد والتسجيل قبل البريد: إن فشل البريد بقي التذكير مسجلًا فلا يتكرر، والدعوة الأولى تُعاد من الإدارة
+      // الرمز الجديد والتسجيل قبل البريد: إن فشل البريد عادت بصمة الرابط الأول وبقي التذكير مسجلًا فلا يتكرر
       must(await db.from('capstones').update({ sponsor_token_hash: await hash(token), sponsor_reminded_at: new Date().toISOString() }).eq('participant_id', c.participant_id));
-      await sendMail(c.sponsor_email, `تذكير بطلب تأييد مبادرة «${initiative}»`, html, [], { category: 'request', ref: `participant:${c.participant_id}` });
+      try {
+        await sendMail(c.sponsor_email, `تذكير بطلب تأييد مبادرة «${initiative}»`, html, [], { category: 'request', ref: `participant:${c.participant_id}` });
+      } catch (e) {
+        // لم يصل الرمز الجديد: تعود بصمة الرابط الأول فيبقى صالحًا، والتذكير يبقى مسجلًا فلا يتكرر
+        await db.from('capstones').update({ sponsor_token_hash: c.sponsor_token_hash }).eq('participant_id', c.participant_id);
+        throw e;
+      }
       reminded += 1;
     } catch (e) {
       console.error('sponsor reminder:', (e as Error)?.message || e);
@@ -668,7 +674,7 @@ export async function sponsorSubmit(b: Body) {
   if (b.decision === 'decline' && !note) throw new Fail('اكتب للمشارك ما الذي يعدّله');
   // إشعار الخصوصية في الصفحة (تصور المرحلة 2، 2.1): القبول بالإرسال يُسجَّل قبل القرار، فلا قرار بلا موافقته
   await logConsent('sponsor', p.id, 'accept');
-if (b.decision === 'endorse') {
+  if (b.decision === 'endorse') {
     must(await db.from('capstones').update({ sponsor_status: 'endorsed', sponsor_note: note, sponsor_at: now, updated_at: now }).eq('participant_id', p.id));
     await approve(p, `sponsor:${c.sponsor_email}`);
   } else if (b.decision === 'decline') {
