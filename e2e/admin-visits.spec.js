@@ -2,6 +2,8 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = 'http://localhost:4303/';
+// أيام نسبية إلى اليوم: الواجهة تُسقط ما خارج المدى المطلوب، فالتواريخ الثابتة تشيخ
+const ago = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 const empty = { milestone: { beginner: 0, intermediate: 0, advanced: 0 }, impact: { beginner: 0, intermediate: 0, advanced: 0 }, leadership: { beginner: 0, intermediate: 0, advanced: 0 } };
 
 async function setup(page, replies) {
@@ -21,7 +23,7 @@ test('زيارات الموقع: الأرقام والصفحات والمصاد�
   const calls = await setup(page, {
     'admin.visits': {
       success: true, days: 30, site: null,
-      daily: [{ day: '2026-10-24', views: 40, visits: 20 }, { day: '2026-10-25', views: 20, visits: 10 }],
+      daily: [{ day: ago(2), views: 40, visits: 20 }, { day: ago(1), views: 20, visits: 10 }],
       pages: [{ site: 'mi-home', path: '/leaders/', views: 30, visits: 18 }],
       referrers: [{ kind: 'referrer', label: 'google.com', visits: 12 }],
       devices: [{ kind: 'device', label: 'mobile', visits: 21 }, { kind: 'device', label: 'desktop', visits: 9 }],
