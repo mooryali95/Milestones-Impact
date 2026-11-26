@@ -1227,25 +1227,41 @@ export function applyReadingPing(row, ping, now = Date.now()) {
 }
 
 // أبواب متطلب القراءة: كل أبواب المشارك، أو الباب الأول من كل إطار،
-// أو أبواب إطار واحد، أو قائمة محددة.
-export function readingChapters(config, chapters) {
+// أو أبواب إطار واحد، أو قائمة محددة، أو فصول المسار (track).
+// track (تصور المرحلة 3 §5.4، القرار 6): أبواب محور أولوية المسار كلها وأول باب من كل إطار آخر، والبقية متاحة اختيارية.
+// بلا أولوية معروفة يبقى الإلزام كاملًا. وقاعدة «لا فقد» للقراءة: باب أتمه المشارك (done) خارج النطاق يبقى محسوبًا
+/** @param {any} config @param {any[]} chapters @param {{ priority?: string | null, done?: (m: any) => boolean }} [o] */
+export function readingChapters(config, chapters, { priority = null, done = () => false } = {}) {
   const c = config || {};
+  if (c.scope === 'track') {
+    if (!priority) return chapters;
+    const firsts = new Set(DIMENSIONS.map((d) => chapters.find((m) => m.dimension === d)).filter(Boolean));
+    return chapters.filter((m) => m.dimension === priority || firsts.has(m) || done(m));
+  }
   if (c.scope === 'first') return DIMENSIONS.map((d) => chapters.find((m) => m.dimension === d)).filter(Boolean);
   if (c.scope === 'dimension') return chapters.filter((m) => m.dimension === c.dimension);
   if (c.scope === 'list') return chapters.filter((m) => (c.module_ids || []).includes(m.id));
   return chapters;
 }
 
-export function readingStatus(config, chapters, reading, quizzes) {
-  const list = readingChapters(config, chapters).map((m) => {
+/** @param {any} config @param {any[]} chapters @param {any} reading @param {any} quizzes @param {{ priority?: string | null }} [o] */
+export function readingStatus(config, chapters, reading, quizzes, { priority = null } = {}) {
+  const needQuiz = config?.quiz !== false;
+  const finished = (m) => readingVerdict(reading[m.id]).state === 'read' && (!needQuiz || !!quizzes[m.id]);
+  const required = new Set(readingChapters(config, chapters, { priority }));
+  const picked = readingChapters(config, chapters, { priority, done: finished });
+  const list = picked.map((m) => {
     const v = readingVerdict(reading[m.id]);
     const quiz = !!quizzes[m.id];
-    return { id: m.id, title: m.title_ar, dimension: m.dimension, state: v.state, pct: v.pct, seconds: v.seconds, expected: v.expected, quiz };
+    return { id: m.id, title: m.title_ar, dimension: m.dimension, state: v.state, pct: v.pct, seconds: v.seconds, expected: v.expected, quiz,
+      // باب خارج نطاق المسار أتمه المشارك: محسوب بقاعدة «لا فقد»
+      ...(required.has(m) ? {} : { kept: true }) };
   });
-  const needQuiz = config?.quiz !== false;
   const ok = (x) => x.state === 'read' && (!needQuiz || x.quiz);
   const done = list.length > 0 && list.every(ok);
-  return { type: 'reading', done, count: list.filter(ok).length, total: list.length, quiz: needQuiz, chapters: list };
+  return { type: 'reading', done, count: list.filter(ok).length, total: list.length, quiz: needQuiz, chapters: list,
+    // أبواب المشارك خارج إلزام نطاق المسار: متاحة اختيارية
+    optional: config?.scope === 'track' ? chapters.length - list.length : 0 };
 }
 
 // ── الفيديو ──
@@ -1556,7 +1572,7 @@ export async function verifyWebhook(provider, secret, raw, headers) {
 // حالة نشاط موثق لمتطلب واحد من الأدلة المجمعة
 export function activityFor(req, ev, now = Date.now()) {
   const c = req.config || {};
-  if (req.kind === 'reading') return readingStatus(c, ev.chapters || [], ev.reading || {}, ev.quizzes || {});
+  if (req.kind === 'reading') return readingStatus(c, ev.chapters || [], ev.reading || {}, ev.quizzes || {}, { priority: ev.priority || null });
   if (req.kind === 'video') return videoStatus(c, ev.video?.[req.id]);
   if (req.kind === 'workshop') return workshopStatus(c, (ev.workshops || []).filter((s) => s.requirement_id === req.id), ev.attended || new Set(), now);
   if (req.kind === 'coaching') return coachingStatus(c, (ev.coaching || []).filter((s) => s.requirement_id === req.id), now);
@@ -1629,7 +1645,7 @@ const intIn = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number
 export function cleanConfig(kind, cfg, prev = {}) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
   if (kind === 'reading') {
-    const scope = ['all', 'first', 'dimension', 'list'].includes(c.scope) ? c.scope : 'all';
+    const scope = ['all', 'track', 'first', 'dimension', 'list'].includes(c.scope) ? c.scope : 'all';
     const out = { scope, quiz: c.quiz !== false };
     if (scope === 'dimension') {
       if (!DIMENSIONS.includes(c.dimension)) throw new Error('اختر الإطار لأبواب القراءة');
@@ -1977,7 +1993,8 @@ export function applyDelivery(req, override) {
   if (req.kind === 'workshop' && override.format === 'handbook') {
     // المتطلب نفسه (المعرّف والرمز) يصير قراءة، فلا يُنشأ محتوى ثانٍ ولا يضيع ما أُنجز
     return { ...req, kind: 'reading', title_ar: HANDBOOK_DAYS_TITLE.replace('T-ATTEND', req.code),
-      config: { scope: 'all', quiz: true, sessions_required: req.config?.sessions_required || SESSION_DEFAULTS.sessions_required }, delivery: { format: 'handbook' } };
+      // فصول المسار ومحوره (تصور المرحلة 3، القرار 6)، والبقية متاحة اختيارية
+      config: { scope: 'track', quiz: true, sessions_required: req.config?.sessions_required || SESSION_DEFAULTS.sessions_required }, delivery: { format: 'handbook' } };
   }
   const pick = Object.fromEntries(keys.filter((k) => override[k] != null && override[k] !== '').map((k) => [k, override[k]]));
   if (!Object.keys(pick).length) return req;

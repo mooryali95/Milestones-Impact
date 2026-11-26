@@ -194,6 +194,7 @@ export const MIGRATIONS = [
   '20261129190000_leaders_reflection_apply',
   '20261129200000_leaders_workshop_commitments',
   '20261129210000_leaders_no_manager',
+  '20261129220000_leaders_reading_track',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -302,4 +303,5 @@ export const MIGRATION_GATES = {
   '20261129190000_leaders_reflection_apply': ["tolerant", "قبله يُحفظ التأمل وحده ويُحتسب بلا إضافة «أين ستطبقه؟» (handbookComplete يكتب الجواب بعد الختم وخطؤه يُسجَّل ولا يُسقط الإتمام)"],
   '20261129200000_leaders_workshop_commitments': ["tolerant", "قبله تُرد التزامات المشارك فارغة والكتابة «غير متاح الآن» (missingTable في commitments.ts)، ويتجاوز التذكير"],
   '20261129210000_leaders_no_manager': ["tolerant", "قبله يرد «لا يوجد مدير متاح» بـ503 «غير متاح الآن» (missingColumn في impact.ts)، وتقييم المدير يعمل بخانته كما هو"],
+  '20261129220000_leaders_reading_track': ["tolerant", "قبل نشر الدوال يُقرأ النطاق track كنطاق all (readingChapters يعيد كل الأبواب لما لا يعرفه)، فلا يتغير شيء حتى تُنشر"],
 };

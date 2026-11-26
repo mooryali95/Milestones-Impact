@@ -46,6 +46,7 @@ function Reading({ a, onHandbook }) {
       <div className="row between"><b className="small">قرأت {a.count} من {countAr(a.total, 'باب واحد', 'بابين', 'أبواب', 'بابًا')}</b>
         {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتاب</button>}</div>
       <Bar value={a.total ? (a.count / a.total) * 100 : 0} label="تقدم القراءة" />
+      {a.optional > 0 && <p className="small muted">والمطلوب أبواب مسارك ومحوره. {countAr(a.optional, 'باب آخر متاح', 'بابان آخران متاحان', 'أبواب أخرى متاحة', 'بابًا آخر متاحًا')} لك اختياريًا في الكتاب.</p>}
       <ReadFold on={a.chapters.length > READ_FOLD} label={`أبواب القراءة: ${countAr(a.total, 'باب واحد', 'بابان', 'أبواب', 'بابًا')}`}>
       <ul className="act-list">
         {a.chapters.map((c) => {

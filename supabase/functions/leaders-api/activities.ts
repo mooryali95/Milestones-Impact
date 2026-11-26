@@ -11,7 +11,7 @@ import { counted, listed, simulated } from './counting.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { cohortMemberIds, cohortMembers, contentLevelsFor, defOf, extraWorkshopReq, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
-import { journeyFor } from './participant.ts';
+import { journeyFor, participantPriority } from './participant.ts';
 import { bdi, icsEvent, mailShell, mailText } from '../_shared/mail.ts';
 import {
   activityFor, applyReadingPing, applyVideoPing, bookingUrl, checkinOpen, filterHandbookMd, handbookModulesFor,
@@ -110,6 +110,8 @@ export async function evidenceFor(p: any, reqs: any[], levels: Record<string, st
     // D02: بند القراءة على أبواب إصدار الدفعة، فلا يتغير مطلوبها بباب يُضاف أثناءها
     chapters: handbookModulesFor((mods.data || []).filter((m: any) => !inRelease || inRelease.has(m.id)).map((m: any) => ({ ...m, body_md: '1' })), levels),
     reading: Object.fromEntries((reading.data || []).map((r: any) => [r.module_id, r])),
+    // محور أولوية المسار لنطاق القراءة track (تصور المرحلة 3، 3.4). تعذّر قراءته يُبقي الإلزام كاملًا
+    priority: kinds.has('reading') && approved ? await participantPriority(p.id, levels).catch(() => null) : null,
     quizzes: Object.fromEntries((quiz.data || []).map((r: any) => [r.module_id, true])),
     video: Object.fromEntries((video.data || []).map((r: any) => [r.requirement_id, r])),
     workshops: (patch || ((x: any[]) => x))((ws.data || []).filter((s: any) => !s.cohort_id || s.cohort_id === cohortId)),
