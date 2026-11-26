@@ -12,7 +12,7 @@ import QR from 'qrcode';
 import { esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
-import { DOC_LIVE_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_PENDING_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
 import { SLICES, termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
 import { capstoneReport, heatmap, levelAnnex, pdfFileName, paras, STYLE, tableOf, withoutReadiness } from './capstone.js';
@@ -343,17 +343,17 @@ export function institutionalReport(input, options = {}) {
   // ── الاعتماد: المعتمدة بتاريخها وبصمتها المجمّدة ورمز تحقق عام؛ الحية بتاريخ بنائها، وبصمتها تتغير بأي تعديل ──
   const sp = doc.sponsor;
   const signs = [
-    ['المستشار', approved || doc.review ? 'راجع الوثيقة وقبلها بمعيار التقييم' : 'قيد المراجعة', null],
-    ['الراعي', sp?.status === 'endorsed' ? (sp.name || m.sponsor || 'الراعي') : sp?.waived ? 'اعتُمدت بقرار فريق البرنامج' : 'لم يؤيد بعد', sp?.status === 'endorsed' ? fmt(sp.at) : null],
+    ['المستشار', approved || doc.review ? 'راجع الوثيقة وقبلها بمعيار التقييم' : DOC_SIGN_AR.reviewerPending, null],
+    ['الراعي', sp?.status === 'endorsed' ? (sp.name || m.sponsor || 'الراعي') : sp?.waived ? 'اعتُمدت بقرار فريق البرنامج' : DOC_SIGN_AR.sponsorPending, sp?.status === 'endorsed' ? fmt(sp.at) : null],
     ['تاريخ الاعتماد', approved ? fmt(m.approved_at) : 'لم تُعتمد بعد', null],
   ];
   const built = fmtAt(m.generated_at) || fmtAt(new Date());
   const url = approved && opt.qr ? verifyUrl(fp, m.app_url) : null;
-  add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">معتمدة · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
+  add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
     <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
     <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span><span>FINGERPRINT <b>${esc(fp)}</b></span></p>
-    ${url ? `<div class="in-verify">${qrSvg(url)}<p>امسح الرمز أو افتح الرابط لتتحقق أن هذه النسخة المعتمدة كما صدرت: يعرض رقمها وتاريخ اعتمادها وبصمتها.<br><a href="${esc(url)}">${esc(url)}</a></p>${SEAL()}</div>` : approved ? `<div class="in-verify">${SEAL()}</div>` : '<div class="in-verify"><p>نسخة حية تُبنى من بيانات المبادرة لحظة طلبها، فتعكس آخر ما كُتب. لا تصلح للتحقق قبل الاعتماد.</p></div>'}</div>`,
-  approved ? 'بصمة النسخة تتغير بأي تعديل في محتواها: تطابقها مع صفحة التحقق يثبت أن ما بين يديك هو النسخة المعتمدة.' : null);
+    ${url ? `<div class="in-verify">${qrSvg(url)}<p>${esc(DOC_VERIFY_AR.note)}<br><a href="${esc(url)}">${esc(url)}</a></p>${SEAL()}</div>` : approved ? `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.note)}</p>${SEAL()}</div>` : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p></div>`}</div>`,
+  url ? DOC_VERIFY_AR.lead : null);
 
   const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const { brand, accent } = identityOf(m);
@@ -372,10 +372,10 @@ export function institutionalReport(input, options = {}) {
       brand,
       eyebrow: brand.program || 'برنامج القادة', title, subtitle,
       rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name],
-        ['التاريخ', approved ? fmt(m.approved_at) : fmt(m.generated_at || new Date())], ['الحالة', approved ? 'معتمدة' : DOC_LIVE_AR], ['الإصدار', `V${m.version || 1}`]].filter(([, v]) => v),
+        ['التاريخ', approved ? fmt(m.approved_at) : fmt(m.generated_at || new Date())], ['الحالة', approved ? DOC_APPROVED_AR : DOC_PENDING_AR], ['الإصدار', `V${m.version || 1}`]].filter(([, v]) => v),
       stamp: approved ? null : DOC_LIVE_AR,
-      confidential: 'ملك قائد المبادرة: تُتداول بإذنه',
-      closing: approved ? `وثيقة معتمدة تُعرض من نسختها المحفوظة لحظة الاعتماد (البصمة ${fp})، فلا يغيّرها تعديل لاحق.` : `نسخة حية بُنيت ${built} من فصول المبادرة، فتتغير بتغيّرها.`,
+      confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
+      closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', fp) : docClosingLiveAr(built),
     },
     body,
   };
@@ -426,7 +426,7 @@ export function renderInitiative(doc, kind = 'working', options = {}) {
 
 /**
  * الوثيقة النهائية كما يحمّلها الأدمن (المرحلة 21): المؤسسية بالخيارات، وإن لم تكتمل فملف العمل بالخيارات نفسها.
- * بلا نسبة الجاهزية دائمًا (withoutReadiness)، وغير المعتمدة بختم ظاهر «نسخة حية غير معتمدة» فلا تُرسل على أنها نهائية
+ * بلا نسبة الجاهزية دائمًا (withoutReadiness)، وغير المعتمدة بختم ظاهر DOC_LIVE_AR فلا تُرسل على أنها نهائية
  */
 export function finalDocument(doc, options = EXPORT_PRESETS.send) {
   const src = withoutReadiness(doc);
@@ -441,11 +441,11 @@ export function exportSummary(options = EXPORT_PRESETS.send, { approved = false 
   const o = docOptions(options, 'institutional');
   const has = [o.decision && 'صفحة القرار', o.appendix && 'ملحق ما ينقص', o.annex && 'ملحق المراجع', approved && o.qr && 'رمز التحقق'].filter(Boolean);
   const not = [!o.decision && 'صفحة القرار', !o.appendix && 'ملحق ما ينقص', !o.annex && 'ملحق المراجع', approved && !o.qr && 'رمز التحقق'].filter(Boolean);
-  return [`الوثيقة${has.length ? ` مع ${has.join(' و')}` : ''}`, not.length ? `بلا ${not.join(' ولا ')}` : '', 'وبلا نسبة الجاهزية', approved ? '' : 'وبختم «غير معتمدة»'].filter(Boolean).join('، ') + '.';
+  return [`الوثيقة${has.length ? ` مع ${has.join(' و')}` : ''}`, not.length ? `بلا ${not.join(' ولا ')}` : '', 'وبلا نسبة الجاهزية', approved ? '' : `وبختم «${DOC_LIVE_AR}»`].filter(Boolean).join('، ') + '.';
 }
 
 /** رسالة ما ينقص لإصدار النسخة المؤسسية، بلغة المشارك */
-export const missingMessage = (missing, name = 'الوثيقة المؤسسية') => `لا تُصدر ${name} قبل أن تجيب عن: ${missing.map((x) => (x.add ? `${x.title} (${x.add})` : x.title)).join('، ')}. اعرض «ملف العمل الكامل» لترى ما ينقص في ملحقه.`;
+export const missingMessage = (missing, name = 'الوثيقة المؤسسية') => docBlockedAr(missing.length, name, missing.map((x) => (x.add ? `${x.title} (${x.add})` : x.title)).join('، '));
 
 /** صفحة مهذبة لقارئ خارجي حين لم تكتمل النسخة المؤسسية بعد */
 export function pendingReport(doc) {
@@ -455,7 +455,7 @@ export function pendingReport(doc) {
     meta: { id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: form.en, pageAr: true, selfFonts: true,
       brand: identityOf(m).brand,
       eyebrow: identityOf(m).brand.program || 'برنامج القادة', title: m.initiative || form.name, rows: [['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
-      confidential: 'ملك قائد المبادرة: تُتداول بإذنه', closing: `تصدر ${form.name} حين يكتمل إعدادها.` },
+      confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR, closing: `تصدر ${form.name} حين يكتمل إعدادها.` },
     body: STYLE + section('In preparation', 'الوثيقة قيد الإعداد', `<p class="cp-p">يعمل قائد المبادرة على استكمال ${esc(form.name)} مع مستشاره. ستجدها هنا كاملة حين يكتمل إعدادها.</p>`),
   };
 }

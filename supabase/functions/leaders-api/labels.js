@@ -359,7 +359,30 @@ export const FEEDBACK_OPEN_MAX = 600;
 // اسم النسخة المؤسسية وحجمها من مسار المشارك: document-forms.js (FORMS) عبر doc-form.js، ولا يُخزَّن إلا مجمّدًا في لقطة الاعتماد.
 // «ملف العمل الكامل» نسخة العمل الداخلية للمشارك والخبير
 export const WORKING_FILE_AR = 'ملف العمل الكامل';
-export const DOC_LIVE_AR = 'نسخة حية غير معتمدة';
+// أسرة الحالات (المرحلة 23): ختم القارئ للنسخة غير المعتمدة، وحالتها في صف الغلاف، ووسم العمل الداخلي
+export const DOC_LIVE_AR = 'مسودة للمراجعة';
+export const DOC_PENDING_AR = 'قيد الاعتماد';
+export const DOC_WORKING_AR = 'مسودة عمل';
+export const DOC_APPROVED_AR = 'معتمدة';
+// نصوص الوثيقة المطبوعة: المصدر الواحد لـ src/lib/brand (اختبار doc-text يمنع كتابتها حرفيًا هناك)
+// «Milestone Impact» تُلفّ في bdi عند العرض (doc.js)
+export const DOC_RIGHTS_AR = 'المنهجية والقالب ملكية فكرية لـ Milestone Impact، ومحتوى المبادرة ملك قائدها. لا تُنسخ هذه الوثيقة ولا تُنشر ولا تُشارك مع طرف ثالث إلا بإذن كتابي منه.';
+// للتقارير غير المبادرة (reports.js): الوثيقة كلها ملك المنصة
+export const REPORT_RIGHTS_AR = 'هذه الوثيقة ومحتواها ملكية فكرية لـ Milestone Impact. لا يجوز نسخها أو نشرها أو مشاركتها مع طرف ثالث دون إذن كتابي.';
+export const CONFIDENTIAL_AR = 'ملك قائد المبادرة: يطّلع عليها مستشاره، ولا تُتداول إلا بإذنه.';
+export const DOC_SIGN_AR = Object.freeze({ reviewerPending: 'بانتظار مراجعته', sponsorPending: 'بانتظار تأييده' });
+export const DOC_VERIFY_AR = Object.freeze({
+  lead: 'للتحقق من أصالة هذه النسخة امسح الرمز، فتظهر لك بياناتها كما صدرت.',
+  note: 'تتغير البصمة بأي تعديل في المحتوى، وتطابقها يدل على أنها النسخة المحفوظة لدى المنصة.',
+  draft: 'تُبنى هذه المسودة من فصول المبادرة لحظة طلبها، فتعكس آخر ما كُتب، ولا تصلح للتحقق قبل الاعتماد.',
+});
+export const docClosingLiveAr = (date) => `بُنيت هذه النسخة في ${date} من فصول المبادرة كما كانت لحظتها، وتتغير بتغيّرها.`;
+export const docClosingApprovedAr = (date, fp) => `صدرت هذه النسخة المعتمدة في ${date}، ولا يغيّرها تعديل لاحق. بصمتها ${fp}.`;
+// رسالة الحجب: عدد الأسئلة بلفظه العربي الصحيح، ثم عناوينها
+const questionsAr = (n) => (n === 1 ? 'سؤال واحد' : n === 2 ? 'سؤالان' : n <= 10 ? `${n} أسئلة` : `${n} سؤالًا`);
+export const docBlockedAr = (n, name, list) => `${n >= 3 && n <= 10 ? 'بقيت' : 'بقي'} ${questionsAr(n)} لتكتمل ${name}: ${list}. تجدها مفصلة في ملحق ملف العمل الكامل.`;
+export const DOC_SUMMARY_AR = 'الخلاصة التنفيذية';
+export const DOC_CHARTER_NOTE_AR = 'خلاصة القرار في صفحة: ما نبدأ به، وبكم، ومن يرعاه. به يُؤذن بالبدء.';
 export const docDownloadAr = (name) => `تحميل ${name} PDF`;
 export const WORKING_DOWNLOAD_AR = 'تحميل ملف العمل PDF';
 // ── فئات البريد ومركز الرسائل (المصدر الواحد، اعتمده المالك 2026-11-25، وتوسيعه للخبراء والمنسقين 2026-11-25) ──
