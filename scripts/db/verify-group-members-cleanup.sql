@@ -15,11 +15,13 @@ select true as ok, 'أدوار في دفعة قديمة ' || count(*) as detail
   from leaders.cohort_roles r
  where not exists (select 1 from leaders.enrollments e where e.participant_id = r.participant_id and e.cohort_id = r.cohort_id and e.status <> 'withdrawn')
    and exists (select 1 from leaders.enrollments e where e.participant_id = r.participant_id and e.cohort_id <> r.cohort_id and e.status <> 'withdrawn');
--- 4) الترحيل في السجل، ونسخته محمية، وسطر السجل بالعدد (بعد التطبيق)
+-- 4) الترحيل في السجل (بعد التطبيق)
 select count(*) = 1 as ok, 'مسجل ' || count(*) || ' من 1' as detail from leaders.schema_migrations
  where name = '20261129160000_leaders_group_members_cleanup';
+-- 5) نسخته الاحتياطية محمية بـ RLS (بعد التطبيق)
 select count(*) = 1 as ok, string_agg(c.relname || case when c.relrowsecurity then '' else ' (بلا RLS)' end, '، ') as detail
   from pg_class c join pg_namespace n on n.oid = c.relnamespace
  where n.nspname = 'leaders' and c.relname = 'backup_20261129_group_members_cleanup' and c.relrowsecurity;
+-- 6) سطر السجل بعدد ما حُذف (بعد التطبيق)
 select true as ok, coalesce(max(after->>'deleted'), 'لا سطر (لا شيء حُذف أو لم يُطبَّق)') as detail
   from leaders.audit_log where action = 'group_members.cleanup';
