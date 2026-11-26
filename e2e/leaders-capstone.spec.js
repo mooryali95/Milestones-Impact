@@ -151,7 +151,10 @@ test('المستشار: يرى مستوى الوثيقة وموقع كل فصل 
     extend: (c) => ({ ...c, doc: { ...c.doc, review_levels: { level: 'beginner', chapters: [] } },
       sections: c.sections.map((x) => ({ ...x, level: lv[x.key][0], standing: lv[x.key][1], kept_fields: 0, criteria: crit })) }) });
   await openReview(page, srv);
-  await expect(page.getByRole('heading', { name: /الفصول/ })).toContainText('مستوى الوثيقة تأسيسي');
+  // المرحلة 24: مستوى الوثيقة بالمكون Meter، الشكل نفسه في ملحق المراجع
+  await expect(page.getByRole('heading', { name: /الفصول/ })).toContainText('مستوى الوثيقة: تأسيسي');
+  await expect(page.getByRole('heading', { name: /الفصول/ }).getByRole('meter', { name: 'مستوى الوثيقة: 1 من 3' })).toBeVisible();
+  await page.screenshot({ path: process.env.P24_SHOTS ? `${process.env.P24_SHOTS}/p24-admin-level-meter.png` : test.info().outputPath('p24-admin-level-meter.png') });
   const row = (k) => page.locator(`.cps-secs li[data-chapter="${k}"]`);
   await expect(row('initiative-charter')).toContainText('مطلوب لمستواه');
   await expect(row('wbs')).toContainText('باقٍ مما كتبه قبل رفع مستواه');

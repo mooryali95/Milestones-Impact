@@ -6,10 +6,10 @@
 // محرك الوثائق doc.js فتخرج بالهوية نفسها، ويضيف رسوم الوثيقة: شجرة هيكل
 // التجزئة، والمخطط الزمني، وخريطة المخاطر، وملخص التكلفة.
 import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js';
-import { costLabel, displayPages, pageNumberOf, parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { costLabel, displayPages, pageNumberOf, parseDate, parseNumber, CHAPTER_STANDING_AR, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
-import { CONFIDENTIAL_AR, DIM_AR, DOC_CHARTER_NOTE_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SUMMARY_AR, DOC_WORKING_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+import { CHAPTER_STANDING_NOTE_AR, CONFIDENTIAL_AR, DIM_AR, DOC_CHARTER_NOTE_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SUMMARY_AR, DOC_WORKING_AR, LEVEL_AR as LVL, LEVELS as LEVEL_LIST, REVIEW_ANNEX_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { businessCase, charterData, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
 import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
@@ -401,19 +401,63 @@ function visualsBlock(viz) {
   'رسوم تُولَّد من فصول الوثيقة نفسها، فلا تُكتب مرتين.');
 }
 
-// ملحق «مستوى الوثيقة وموقع كل فصل منه» (المرحلة 4): للمستشار والخبير وحدهما. يبنيه الخادم في review_levels
-// (capstone.ts levelsView) لـ admin.capstone ووثيقة الخبير، ولا يدخل لقطة الاعتماد ولا ما يصل الراعي أو الجهة
+// ملحق المراجع (المرحلة 4، وعرضه المجمّع في المرحلة 24): للمستشار والخبير والإدارة وحدهم. يبنيه الخادم في review_levels
+// (levelsView في capstone.js) ولا يدخل لقطة الاعتماد ولا ما يصل الراعي أو الجهة، ولا يُرسم إلا بخيار annex صريح.
+// مجمّع حسب الإطار: رأس لكل إطار باسمه ومعياره مرة واحدة (فلا يطول صف عن صفحة في الطباعة)، ثم فصوله وموقع كل منها
+const STANDING_ORDER = ['required', 'optional', 'kept'];
+const STANDING_MARK = Object.freeze({ required: '●', optional: '○', kept: '◆' });
+// شارة الموقع (نظير StatusChip): رمز ونص، فتُقرأ في الطباعة بالأبيض والأسود لا باللون وحده
+const standingChip = (st) => (CHAPTER_STANDING_AR[st] ? `<span class="cp-chip st-${esc(st)}" data-status="${esc(st)}"><i aria-hidden="true">${STANDING_MARK[st]}</i> ${esc(CHAPTER_STANDING_AR[st])}</span>` : '·');
+// مقياس المستوى (نظير Meter): خطوة المستوى من ثلاث
+function levelMeter(level) {
+  const l = LEVEL_LIST.find((x) => x.key === level);
+  if (!l) return '';
+  const max = LEVEL_LIST.length;
+  return `<span class="cp-meter" role="meter" aria-valuemin="1" aria-valuemax="${max}" aria-valuenow="${l.step}" aria-valuetext="${l.step} من ${max}" aria-label="مستوى الوثيقة: ${esc(l.title)}، ${l.step} من ${max}">${LEVEL_LIST.map((x) => `<i class="${x.step <= l.step ? 'on' : ''}"></i>`).join('')}<b>${esc(l.title)}</b><small class="cp-meter-num">${l.step} من ${max}</small></span>`;
+}
+const ANNEX_STYLE = `<style>
+.cp-annex-tag { display: inline-block; border: 1px solid currentColor; padding: .4mm 2mm; font-size: 8pt; margin: 0 0 2mm; }
+.cp-chip { display: inline-block; white-space: nowrap; border: 1px solid #9a9a9a; border-radius: 2mm; padding: 0 1.6mm; font-size: 8pt; }
+.cp-chip i { font-style: normal; }
+.cp-meter { display: inline-flex; align-items: center; gap: .8mm; vertical-align: middle; }
+.cp-meter i { display: inline-block; width: 6mm; height: 1.6mm; border: 1px solid #555; }
+.cp-meter i.on { background: #555; }
+.cp-meter b { margin-inline-start: 1.5mm; font-weight: 500; }
+.cp-meter-num { margin-inline-start: 1.5mm; font-size: 8pt; }
+.cp-legend { list-style: none; padding: 0; margin: 2mm 0 4mm; display: grid; gap: 1mm; font-size: 8.5pt; }
+.cp-fw { break-inside: avoid; margin-top: 5mm; }
+.cp-fw h3 { margin: 0 0 1.5mm; font-size: 11pt; }
+.cp-fw h3 small { font-weight: 400; }
+.cp-empty { border: 1px dashed #9a9a9a; padding: 3mm; text-align: center; }
+</style>`;
+// حالة التعذر (نظير Empty): طُلب الملحق ولم يصل أو لم يُبنَ، فيظهر للمراجع سطر صريح بدل الاختفاء الصامت
+export const levelAnnexEmpty = () => anchor('levels', true) + ANNEX_STYLE + section(REVIEW_ANNEX_AR.title, 'مستوى الوثيقة وموقع كل فصل منه',
+  `<p class="cp-annex-tag">${esc(REVIEW_ANNEX_AR.internal)}</p><p class="cp-empty">${esc(REVIEW_ANNEX_AR.failed)}</p>`);
 export function levelAnnex(doc) {
   const v = doc?.review_levels;
-  if (!v?.chapters?.length) return '';
-  const rows = v.chapters.map((c) => [c.title, LVL[c.level] || '·',
-    raw(`${esc(c.standing_title || '')}${c.kept_fields ? ` <small>(${esc(c.kept_fields)} ${c.kept_fields === 1 ? 'حقل باقٍ' : 'حقول باقية'} مما كتبه)</small>` : ''}`),
-    raw((c.criteria || []).map((r) => `<b>${esc(r.title)}:</b> ${esc(r.anchor)}`).join('<br>'))]);
-  return anchor('levels', true) + section('للمراجعة', 'مستوى الوثيقة وموقع كل فصل منه', `
+  if (!v?.chapters?.length || !Array.isArray(v.frameworks)) return '';
+  const legend = `<ul class="cp-legend">${STANDING_ORDER.map((st) => `<li>${standingChip(st)} ${esc(CHAPTER_STANDING_NOTE_AR[st])}</li>`).join('')}</ul>`;
+  const chapterRows = (chs) => chs.map((c) => [c.title, raw(`${standingChip(c.standing)}${c.kept_fields ? ` <small>(${esc(c.kept_fields)} ${c.kept_fields === 1 ? 'حقل باقٍ' : 'حقول باقية'} مما كتبه)</small>` : ''}`)]);
+  const byStanding = (a, b) => STANDING_ORDER.indexOf(a.standing) - STANDING_ORDER.indexOf(b.standing);
+  const known = new Set(v.frameworks.map((fw) => fw.dimension));
+  // فصول لا إطار لبعدها: تُرسم في كتلة أخيرة بدل أن تسقط من الجدول بصمت
+  const orphans = v.chapters.filter((c) => !known.has(c.dimension)).sort(byStanding);
+  const groups = v.frameworks.map((fw) => {
+    const chs = v.chapters.filter((c) => c.dimension === fw.dimension)
+      .sort((a, b) => STANDING_ORDER.indexOf(a.standing) - STANDING_ORDER.indexOf(b.standing));
+    if (!chs.length) return '';
+    // مستوى الإطار في رأسه حين يختلف عن مستوى الوثيقة وحده
+    const lvl = fw.level && fw.level !== v.level && LVL[fw.level] ? ` <small>· مستواه ${esc(LVL[fw.level])}</small>` : '';
+    const crit = (fw.criteria || []).length ? table([{ label: 'البعد', width: '40mm' }, { label: `وصف الدرجة ${RUBRIC_MAX}` }], fw.criteria.map((r) => [r.title, r.anchor])) : '';
+    const rows = chapterRows(chs);
+    return `<div class="cp-fw" data-dimension="${esc(fw.dimension)}"><h3>${esc(DIM_AR[fw.dimension] || fw.dimension)}${lvl}</h3>${crit}${table([{ label: 'الفصل' }, { label: 'موقعه', width: '58mm' }], rows)}</div>`;
+  }).join('') + (orphans.length ? `<div class="cp-fw" data-dimension="other"><h3>فصول أخرى</h3>${table([{ label: 'الفصل' }, { label: 'موقعه', width: '58mm' }], chapterRows(orphans))}</div>` : '');
+  if (!groups) return levelAnnexEmpty();
+  return anchor('levels', true) + ANNEX_STYLE + section(REVIEW_ANNEX_AR.title, 'مستوى الوثيقة وموقع كل فصل منه', `
+    <p class="cp-annex-tag">${esc(REVIEW_ANNEX_AR.internal)}</p>
     ${v.live ? '<p class="cp-p"><b>الحالة الآن:</b> الوثيقة معتمدة وتُعرض من نسختها المعتمدة، وهذا الملحق من حالة فصولها الآن لا من تلك النسخة.</p>' : ''}
-    ${LVL[v.level] ? `<p class="cp-p">مستوى الوثيقة: <b>${esc(LVL[v.level])}</b>. يُقرأ كل فصل بمستوى القائد في إطاره، وتُقرأ درجته بمعيار ذلك المستوى.</p>` : ''}
-    ${table([{ label: 'الفصل', width: '34mm' }, { label: 'المستوى', width: '18mm' }, { label: 'موقعه', width: '30mm' }, { label: 'معيار المستوى (الدرجة العليا)' }], rows)}`,
-  'المطلوب يُحسب في الجاهزية، والاختياري لا يُعد فراغه نقصًا، والباقي كتبه القائد قبل أن يُرفع مستوى الفصل فبقي في وثيقته غير مطلوب.');
+    ${LVL[v.level] ? `<p class="cp-p">مستوى الوثيقة: ${levelMeter(v.level)}. يُقرأ كل فصل بمستوى القائد في إطاره، وتُقرأ درجته بمعيار ذلك المستوى.</p>` : ''}
+    ${legend}${groups}`);
 }
 
 // ملحق «ما ينقص لإكمال الوثيقة»: الفصل والحقل والسبب، بدل «لم يُملأ» في المتن (doc-quality.js cleanDoc)
@@ -587,7 +631,7 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
   if (!example) body += decisionsBlock(doc.decisions);
   body += glossaryBlock(doc);
   body += gapsHtml;
-  if (annex) body += levelAnnex(doc);
+  if (annex) body += levelAnnex(doc) || levelAnnexEmpty();
 
   return {
     meta: {

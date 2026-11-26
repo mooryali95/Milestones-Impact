@@ -14,7 +14,7 @@ import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN }
 // حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
 export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
-import { Empty, Spinner, useUI } from '../ui.jsx';
+import { DocLevelMeter, Empty, Spinner, useUI } from '../ui.jsx';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, isFiltered, presetCounts, sortRows } from '../filters.js';
@@ -313,7 +313,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
 
       <div className="la-grid2">
         <section className="la-card">
-          <h3>الفصول {LEVEL_AR[d.doc?.review_levels?.level] && <small className="la-muted">· مستوى الوثيقة {LEVEL_AR[d.doc.review_levels.level]}</small>}</h3>
+          <h3>الفصول <DocLevelMeter level={d.doc?.review_levels?.level} /></h3>
           <ExpertSpine sections={d.sections} checks={d.checks} canWrite={canWrite} onSaved={load} />
           <h3>فحوص الاتساق</h3>
           <ul className="cps-checks">{d.checks.map((x) => <li key={x.key} className={x.ok ? 'ok' : 'no'}>{x.title}{x.detail && <small>{x.detail}</small>}</li>)}</ul>

@@ -11,6 +11,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { approvalOf, answeredModels, cleanAnswers, cleanModelFieldsOf, fieldsFor, keptModel, missingFields, modelsFor } from '../../supabase/functions/leaders-api/logic.js';
 import { capstoneChecks, capstoneModels, chapterLevel, CHAPTER_STANDING_AR, costLabel, costSummary, displayJoins, displayPages, DISPLAY_PAIRS, docLevelsFor, modelFields, readiness, sectionState } from '../../supabase/functions/leaders-api/capstone.js';
 import { capstoneReport, levelAnnex } from '../../src/lib/brand/capstone.js';
+import { levelsView, RUBRIC_MAX } from '../../supabase/functions/leaders-api/capstone.js';
+import { CHAPTER_STANDING_NOTE_AR, DIM_AR, REVIEW_ANNEX_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { renderInitiative } from '../../src/lib/brand/institutional.js';
 import { publicDoc } from '../../supabase/functions/leaders-api/share.js';
 import { freezeIssued } from '../../supabase/functions/leaders-api/doc-quality.js';
@@ -551,7 +553,7 @@ describe('المرحلة 5: صفحات العرض للتأسيسي', () => {
 });
 
 describe('ملحق مستوى الوثيقة: للمراجع وحده', () => {
-  const review_levels = { level: 'beginner', chapters: [{ key: 'raid', title: 'سجل المخاطر', level: 'beginner', standing: 'kept', standing_title: CHAPTER_STANDING_AR.kept, kept_fields: 0, criteria: [{ key: 'risk', title: 'المخاطر والتغيير', anchor: 'مرساة' }] }] };
+  const review_levels = { level: 'beginner', frameworks: [{ dimension: 'milestone', level: 'beginner', criteria: [{ key: 'risk', title: 'المخاطر والتغيير', anchor: 'مرساة' }] }], chapters: [{ key: 'raid', title: 'سجل المخاطر', dimension: 'milestone', standing: 'kept', kept_fields: 0 }] };
   it('يُطبع حين تحمله الوثيقة، ولا يُطبع لغيرها', () => {
     const d = docOf(same('beginner'));
     expect(levelAnnex(d)).toBe('');
@@ -577,7 +579,7 @@ describe('ملحق مستوى الوثيقة: للمراجع وحده', () => {
 });
 
 describe('ملحق المراجع لا يعبر حدود الخروج (المرحلة 21، اختبارات العقد)', () => {
-  const review_levels = { level: 'beginner', chapters: [{ key: 'raid', title: 'سجل المخاطر', level: 'beginner', standing: 'required', criteria: [] }] };
+  const review_levels = { level: 'beginner', frameworks: [{ dimension: 'milestone', level: 'beginner', criteria: [] }], chapters: [{ key: 'raid', title: 'سجل المخاطر', dimension: 'milestone', standing: 'required', kept_fields: 0 }] };
   it('docLevelsFor بالإذن وبغيره، وpublicDoc بالإذن وبغيره: الحقل غائب حتى لو دخل المصدر', () => {
     const d = { ...docOf(same('beginner')), review_levels };
     for (const show of [true, false]) {
@@ -641,5 +643,92 @@ describe('مسوّغات المبادرة تحيل برقم الصفحة بعد 
     // رقم الصفحة في المتن نفسه
     expect(body).toContain(`${no}. ${pr.title_ar}`);
     expect(no).toBeLessThan(d.sections.findIndex((x) => x.key === 'procurement') + 1);
+  });
+});
+
+// المرحلة 24: ملحق المراجع مجمّع حسب الإطار، والمعيار يتبع الإطار لا الفصل
+describe('ملحق المراجع: frameworks في الحمولة وعرض مجمّع حسب الإطار (المرحلة 24)', () => {
+  const crit = (dim, n) => Array.from({ length: n }, (_, i) => ({ key: `${dim}${i}`, title: `بعد ${dim} ${i}`, anchor: `مرساة ${dim} ${i} `.repeat(30) }));
+  const DIMS = ['milestone', 'impact', 'leadership'];
+  // حالة خادم بثلاثة عشر فصلًا على ثلاثة أطر، كل فصل يحمل معيار إطاره كما يبنيه chapterLevel
+  const state = {
+    levels: { milestone: 'beginner', impact: 'intermediate', leadership: 'beginner' },
+    sections: Array.from({ length: 13 }, (_, i) => {
+      const dimension = DIMS[i % 3];
+      const standing = ['kept', 'optional', 'required'][i % 3 === 0 ? i % 2 : 2];
+      return { model: { key: `ch${i}`, title_ar: `فصل ${i}`, dimension },
+        chapter: { level: dimension === 'impact' ? 'intermediate' : 'beginner', standing, kept_fields: standing === 'kept' ? 0 : i % 4, criteria: crit(dimension, 3) } };
+    }),
+  };
+  const v = levelsView(state, false);
+  const d = { ...docOf(same('beginner')), review_levels: v };
+  const html = levelAnnex(d);
+
+  it('الحمولة: لكل إطار مستواه ومعياره مرة واحدة، والفصل مرجع لإطاره بلا معيار منسوخ', () => {
+    expect(v.frameworks.map((f) => f.dimension)).toEqual(DIMS);
+    expect(v.frameworks.find((f) => f.dimension === 'impact').level).toBe('intermediate');
+    for (const f of v.frameworks) expect(f.criteria).toHaveLength(3);
+    expect(v.chapters).toHaveLength(13);
+    for (const c of v.chapters) {
+      expect(new Set(Object.keys(c))).toEqual(new Set(['dimension', 'key', 'kept_fields', 'standing', 'title']));
+      expect(DIMS).toContain(c.dimension);
+    }
+    expect(JSON.stringify(v.chapters)).not.toContain('مرساة');
+  });
+  it('الخادم يبني الملحق من levelsView وحده، ولا نسخة موازية في capstone.ts', () => {
+    const src = read('supabase/functions/leaders-api/capstone.ts');
+    expect(src).not.toMatch(/export const levelsView/);
+    expect(src).not.toMatch(/criteria: s\.chapter\.criteria \}\)\)/);
+  });
+  it('المعيار يظهر مرة واحدة لكل إطار، ورأس عموده من RUBRIC_MAX', () => {
+    for (const dim of DIMS) for (let i = 0; i < 3; i++) {
+      expect(html.split(`مرساة ${dim} ${i} `.repeat(30)).length - 1, `${dim}${i}`).toBe(1);
+    }
+    expect(html.split(`وصف الدرجة ${RUBRIC_MAX}`).length - 1).toBe(3);
+    for (const dim of DIMS) expect(html.split(`<h3>${DIM_AR[dim]}`).length - 1).toBe(1);
+  });
+  it('لا يتجاوز صف صفحة في الطباعة: كل صف يحمل مرساة واحدة على الأكثر، وطوله محدود', () => {
+    const rows = html.match(/<tr>[\s\S]*?<\/tr>/g) || [];
+    expect(rows.length).toBeGreaterThan(13);
+    for (const r of rows) {
+      expect((r.match(/مرساة /g) || []).length / 30).toBeLessThanOrEqual(1);
+      // صفحة A4 تسع نحو 3000 حرف من نص الجدول؛ الصف الأطول مرساة واحدة
+      expect(r.replace(/<[^>]+>/g, '').length).toBeLessThan(1500);
+    }
+  });
+  it('الأسطورة قبل الجدول من CHAPTER_STANDING_AR، والعنوان والوسم، والمطلوب أولًا في كل إطار', () => {
+    const legend = html.indexOf('class="cp-legend"');
+    expect(legend).toBeGreaterThan(-1);
+    expect(legend).toBeLessThan(html.indexOf('<table'));
+    for (const st of ['required', 'optional', 'kept']) {
+      expect(html).toContain(CHAPTER_STANDING_AR[st]);
+      expect(html).toContain(CHAPTER_STANDING_NOTE_AR[st]);
+    }
+    expect(CHAPTER_STANDING_NOTE_AR.kept).toBe('كتبه القائد قبل رفع مستوى الفصل، فيُحفظ ولا يُطلب.');
+    expect(html).not.toContain('بقاعدة لا فقد');
+    expect(html).toContain(`<span class="eyebrow">${REVIEW_ANNEX_AR.title}</span>`);
+    expect(html).toContain(REVIEW_ANNEX_AR.internal);
+    // شارة بالرمز والنص لا باللون وحده
+    expect(html).toMatch(/<span class="cp-chip st-required" data-status="required"><i aria-hidden="true">●<\/i> /);
+    for (const dim of DIMS) {
+      const block = html.slice(html.indexOf(`data-dimension="${dim}"`)).split('class="cp-fw"')[0];
+      const order = [...block.matchAll(/<td><span class="cp-chip st-(\w+)"/g)].map((m) => m[1]);
+      const rank = order.map((s) => ['required', 'optional', 'kept'].indexOf(s));
+      expect(rank).toEqual([...rank].sort((a, b) => a - b));
+    }
+  });
+  it('مستوى الوثيقة بمقياس، ومستوى الإطار في رأسه حين يختلف وحده', () => {
+    expect(html).toMatch(/class="cp-meter" role="meter" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1"/);
+    expect(html).toContain('مستواه متوسط');
+    expect(html.split('· مستواه').length - 1).toBe(1);
+  });
+  it('تعذّر البناء: سطر صريح للمراجع بدل الاختفاء، ولا شيء لغير المراجع', () => {
+    const bare = docOf(same('beginner'));
+    expect(capstoneReport(bare, { annex: true }).body).toContain(REVIEW_ANNEX_AR.failed);
+    expect(capstoneReport(bare).body).not.toContain(REVIEW_ANNEX_AR.failed);
+    expect(renderInitiative(bare, 'reader', { annex: true }).body).toContain(REVIEW_ANNEX_AR.failed);
+    expect(renderInitiative(bare, 'external', { annex: true }).body).not.toContain(REVIEW_ANNEX_AR.failed);
+    // الشكل القديم (بلا frameworks) لا يُرسم نصف رسم
+    expect(levelAnnex({ ...bare, review_levels: { level: 'beginner', chapters: [{ title: 'x' }] } })).toBe('');
   });
 });

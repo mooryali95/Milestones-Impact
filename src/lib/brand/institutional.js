@@ -9,19 +9,22 @@
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
 import QR from 'qrcode';
-import { esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
+import { controlStrip, esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
+// تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
-import { CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_PENDING_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
 import { SLICES, termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
-import { capstoneReport, heatmap, levelAnnex, pdfFileName, paras, STYLE, tableOf, withoutReadiness } from './capstone.js';
+import { capstoneReport, heatmap, levelAnnex, levelAnnexEmpty, pdfFileName, paras, STYLE, tableOf, withoutReadiness } from './capstone.js';
 import { costLabel, dateAr, parseNumber, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
 import { costBarsSvg, ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 
-const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : null);
-const fmtAt = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null);
+const TZ = 'Asia/Riyadh';
+export const isoDay = (d) => { const t = new Date(d); return Number.isNaN(t.getTime()) ? '' : new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(t); };
+const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { timeZone: TZ, year: 'numeric', month: 'long', day: 'numeric' }) : null);
+const fmtAt = (d) => (d ? new Date(d).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { timeZone: TZ, year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : null);
 const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
 
 // ── النظام الطباعي (قرار المالك 2026-11-25): متن 10.5pt بوزن 400، والجداول 9pt على الأقل، ولا وزن 200 أو 300 في الطباعة،
@@ -358,7 +361,7 @@ export function institutionalReport(input, options = {}) {
   const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const { brand, accent } = identityOf(m);
   const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">Decision</span><h2>ما المطلوب منك</h2><p>صفحة واحدة لصاحب القرار، والتفصيل في الأبواب بعدها.</p></div></header>${decision}</section>` : '';
-  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) : '');
+  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
   const subtitle = [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;
@@ -371,9 +374,11 @@ export function institutionalReport(input, options = {}) {
       pdfName: pdfFileName({ ...m, initiative: m.initiative }, 'institutional').replace(/^وثيقة-المبادرة/, form.name.replace(/\s+/g, '-')),
       brand,
       eyebrow: brand.program || 'برنامج القادة', title, subtitle,
-      rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name],
-        ['التاريخ', approved ? fmt(m.approved_at) : fmt(m.generated_at || new Date())], ['الحالة', approved ? DOC_APPROVED_AR : DOC_PENDING_AR], ['الإصدار', `V${m.version || 1}`]].filter(([, v]) => v),
-      stamp: approved ? null : DOC_LIVE_AR,
+      // المرحلة 25: صف رسمي واحد (الجهة، الراعي، القائد)، والرمز والإصدار والتاريخ والحالة في شريط الضبط اللاتيني، والحالة في الختم
+      rows: [['الجهة', org?.name || m.host], ['الراعي', m.sponsor], ['قائد المبادرة', m.participant?.name]].filter(([, v]) => v),
+      control: controlStrip([`${m.ref || 'MI-CP'}`, `V${m.version || 1}`, isoDay(approved ? m.approved_at : (m.generated_at || new Date())), approved ? 'APPROVED' : 'DRAFT']),
+      stamp: approved ? DOC_APPROVED_AR : DOC_LIVE_AR,
+      controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
       confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
       closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', fp) : docClosingLiveAr(built),
     },

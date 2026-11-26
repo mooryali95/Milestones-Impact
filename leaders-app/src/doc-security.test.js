@@ -30,7 +30,7 @@ function doc({ approved = true, review_levels = null } = {}) {
     ...(review_levels ? { review_levels } : {}),
   };
 }
-const LEVELS = { level: 'beginner', chapters: [{ key: 'raid', title: 'سجل المخاطر', level: 'beginner', standing: 'required', standing_title: 'مطلوب', kept_fields: 0, criteria: [] }] };
+const LEVELS = { level: 'beginner', frameworks: [{ dimension: 'milestone', level: 'beginner', criteria: [] }], chapters: [{ key: 'raid', title: 'سجل المخاطر', dimension: 'milestone', standing: 'required', kept_fields: 0 }] };
 
 describe('علامة RAW: لا يمر HTML خام إلا من raw()', () => {
   it('كائن { html } قادم من القاعدة أو JSON يُهرَّب نصًا في الجدول والنقاط', () => {
