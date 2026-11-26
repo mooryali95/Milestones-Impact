@@ -111,7 +111,7 @@ function field(doc, k, f, label) {
   const x = fld(doc, k, f);
   if (!x || !has(x.value)) return '';
   const title = esc(label || x.label);
-  if (x.type === 'table') return `<div class="cp-f"><b>${title}</b>${tableOf(x.columns, x.value)}</div>`;
+  if (x.type === 'table') return `<div class="cp-f"><b>${title}</b>${tableOf(x.labels || x.columns, x.value)}</div>`;
   if (x.type === 'select') return `<div class="cp-f"><b>${title}</b><span class="tag gold">${esc(x.value)}</span></div>`;
   return `<div class="cp-f"><b>${title}</b>${paras(x.value)}</div>`;
 }
@@ -241,7 +241,7 @@ export function institutionalReport(input) {
     const ms = val(doc, 'milestone-register', 'milestones') || [];
     add('First 90 days', 'خطة أول 90 يومًا', [
       l && !l.empty ? `<div class="in-90">${l.windows.map((w) => `<div><h3>${esc(w.title)}</h3><small>${esc(w.range || 'من تاريخ البداية')}</small>${w.items.length ? `<ul>${w.items.slice(0, 5).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}</div>`).join('')}</div>` : '',
-      ms.length ? `<div class="cp-f"><b>المعالم</b>${tableOf(fld(doc, 'milestone-register', 'milestones').columns, ms.slice(0, 5))}</div>` : '',
+      ms.length ? `<div class="cp-f"><b>المعالم</b>${tableOf(fld(doc, 'milestone-register', 'milestones').labels || fld(doc, 'milestone-register', 'milestones').columns, ms.slice(0, 5))}</div>` : '',
       // البطاقة مختصرة: المعالم تكفي، والمخطط الزمني لمن لم يكتب معالم
       ms.length ? '' : ganttFig,
     ].join(''));

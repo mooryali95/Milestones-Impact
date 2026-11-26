@@ -50,7 +50,8 @@ function tableOf(doc, key, field) {
   const rows = (Array.isArray(f.value) ? f.value : []).filter(filled);
   const cols = columns.map(norm);
   const col = (...words) => cols.findIndex((c) => words.some((w) => c.includes(norm(w))));
-  return { columns, rows, col, cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
+  // labels: عناوين العرض (أعمدة التأسيسي، viewTable)، والبحث بالأسماء المخزنة
+  return { columns, labels: f.labels || columns, rows, col, cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
 }
 
 // المخاطر العالية: الاحتمال × الأثر من RISK_HIGH فأكثر، الحد نفسه في محرك الاتساق وخريطة المخاطر
@@ -124,7 +125,7 @@ export function charterData(doc) {
     ['من يشغّل بعد المبادرة', c('operator')],
     ['الراعي ودوره', c('sponsor')],
   ].filter(([, v]) => v);
-  return { rows, deliverables: del && del.rows.length ? { columns: del.columns, rows: del.rows } : null };
+  return { rows, deliverables: del && del.rows.length ? { columns: del.labels, rows: del.rows } : null };
 }
 
 // ── حالة العمل بأبعادها الخمسة ──
@@ -145,7 +146,7 @@ export function businessCase(doc) {
     ['الهدف الأعلى', text(doc, 'initiative-charter', 'objective')],
     ['المشكلة أو الفرصة', text(doc, 'initiative-charter', 'problem')],
     ['الأثر المنشود', text(doc, 'theory-of-change', 'impact')],
-  ], evidence && evidence.rows.length ? { table: { label: 'الدليل على المشكلة', columns: evidence.columns, rows: evidence.rows } } : {});
+  ], evidence && evidence.rows.length ? { table: { label: 'الدليل على المشكلة', columns: evidence.labels, rows: evidence.rows } } : {});
 
   const options = tableOf(doc, 'options-analysis', 'options');
   const benefits = benefitsOf(doc, 5);
@@ -154,7 +155,7 @@ export function businessCase(doc) {
     ['معايير المقارنة', text(doc, 'options-analysis', 'criteria')],
     ['المنافع المقيسة', benefits.length ? benefits.map((x) => `${x.title}${x.target ? ` (المستهدف ${x.target})` : ''}`).join('؛ ') : null],
     ['التكلفة مقابل المنفعة', text(doc, 'cost-plan', 'cba')],
-  ], options && options.rows.length ? { table: { label: 'البدائل', columns: options.columns, rows: options.rows } } : {});
+  ], options && options.rows.length ? { table: { label: 'البدائل', columns: options.labels, rows: options.rows } } : {});
 
   const need = text(doc, 'procurement', 'need');
   const buys = tableOf(doc, 'procurement', 'items');
@@ -168,7 +169,7 @@ export function businessCase(doc) {
     ['من يوفره', needs ? text(doc, 'cost-plan', 'funding') : null],
     ['مدة الطرح والترسية', buying ? text(doc, 'procurement', 'lead_time') : null],
     ['توزيع المخاطر في العقد', buying ? text(doc, 'procurement', 'contract') : null],
-  ], buying && buys && buys.rows.length ? { table: { label: 'ما يُشترى أو يُتعاقد عليه', columns: buys.columns, rows: buys.rows } } : {});
+  ], buying && buys && buys.rows.length ? { table: { label: 'ما يُشترى أو يُتعاقد عليه', columns: buys.labels, rows: buys.rows } } : {});
 
   const money = (n) => `${Math.round(n).toLocaleString('en-US')} ريال`;
   add(F, [

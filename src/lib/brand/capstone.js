@@ -234,7 +234,7 @@ function fieldHtml(f) {
     const rows = (Array.isArray(v) ? v : []).filter(filled);
     // الجدول الفارغ لا يُعرض: ما ينقص يُجمع في ملحق «ما ينقص لإكمال الوثيقة» (doc-quality.js)
     if (!rows.length) return '';
-    if (!f.rowIssues?.length && !f.cellIssues?.length) return `<div class="cp-f"><b>${esc(f.label)}</b>${tableOf(f.columns, rows)}</div>`;
+    if (!f.rowIssues?.length && !f.cellIssues?.length) return `<div class="cp-f"><b>${esc(f.label)}</b>${tableOf(f.labels || f.columns, rows)}</div>`;
     const dropped = new Map((f.rowIssues || []).map((x) => [x.row, x.reason]));
     const cells = new Map((f.cellIssues || []).map(([r, c, why]) => [`${r}:${c}`, why]));
     let k = 0;
@@ -244,7 +244,7 @@ function fieldHtml(f) {
       return r.map((c, j) => (cells.has(`${n}:${j}`) ? raw(`${esc(c)} ${REV(cells.get(`${n}:${j}`))}`) : c));
     });
     const ws = columnWidths(f.columns, rows);
-    return `<div class="cp-f"><b>${esc(f.label)}</b>${table((f.columns || []).map((c, i) => ({ label: c, width: ws[i] })), marked)}</div>`;
+    return `<div class="cp-f"><b>${esc(f.label)}</b>${table((f.labels || f.columns || []).map((c, i) => ({ label: c, width: ws[i] })), marked)}</div>`;
   }
   if (!String(v ?? '').trim()) return '';
   if (f.issue) return `<div class="cp-f cp-flag"><b>${esc(f.label)}</b>${paras(v)}${REV(f.issue)}</div>`;

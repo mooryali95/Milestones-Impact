@@ -53,24 +53,28 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
     const rows = Array.isArray(value) && value.length ? value : Array.from({ length: f.min_rows || 1 }, () => cols.map(() => ''));
     // دلالة العمود من اسمه (doc-quality.js columnKind، المصدر نفسه الذي يحكم الوثيقة): تاريخ أو مبلغ أو نص
     const kinds = cols.map(columnKind);
-    const set = (ri, ci, v) => onChange(rows.map((r, i) => (i === ri ? r.map((c, j) => (j === ci ? v : c)) : r)));
+    // أعمدة المشارك الظاهرة بعناوينها (beginnerColumns في logic.js): الصف المخزن كامل، والمخفي يبقى في مكانه دون أن يُمس
+    const view = Array.isArray(f.cols_view) ? f.cols_view : cols.map((_, i) => i);
+    const head = (ci) => f.col_labels?.[ci] || cols[ci];
+    const extra = (ci) => Array.isArray(f.cols_req) && !f.cols_req.includes(ci);
+    const set = (ri, ci, v) => onChange(rows.map((r, i) => (i === ri ? cols.map((_, j) => (j === ci ? v : r[j] ?? '')) : r)));
     return (
       <div className="mtable-wrap">
-        <table className="mtable" aria-labelledby={labelId}>
-          <thead><tr><th>#</th>{cols.map((c) => <th key={c}><Annotated text={c} /></th>)}{!locked && <th />}</tr></thead>
+        <table className="mtable mtable-cards" aria-labelledby={labelId}>
+          <thead><tr><th>#</th>{view.map((ci) => <th key={cols[ci]}><Annotated text={head(ci)} />{extra(ci) && <small className="muted"> (اختياري)</small>}</th>)}{!locked && <th />}</tr></thead>
           <tbody>
             {rows.map((r, ri) => (
               <tr key={ri}>
                 <td className="mt-n">{ri + 1}</td>
-                {cols.map((c, ci) => (
-                  <td key={c}><Cell kind={kinds[ci]} locked={locked} value={r[ci] || ''} label={`${c} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
+                {view.map((ci) => { const c = cols[ci]; return (
+                  <td key={c} data-label={head(ci)}><Cell kind={kinds[ci]} locked={locked} value={r[ci] || ''} label={`${head(ci)} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
                     {/* علاقات الأنشطة في الجدول الزمني (schedule.js): أداة اختيار تكتب الصيغة، ووصفها العربي تحت الخلية */}
                     {modelKey === 'schedule' && String(c).includes('يعتمد') && (
                       <DepCell value={r[ci] || ''} own={String(r[0] || '').trim()} codes={rows.map((x) => String(x[0] || '').trim()).filter(Boolean)} level={level} locked={locked}
                         label={`${c} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
                     )}
                   </td>
-                ))}
+                ); })}
                 {!locked && <td><button type="button" className="mt-x" title="حذف الصف" disabled={rows.length <= 1}
                   onClick={() => onChange(rows.filter((_, i) => i !== ri))}>×</button></td>}
               </tr>

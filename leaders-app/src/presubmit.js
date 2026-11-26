@@ -4,7 +4,7 @@
 // دالة صرفة في المتصفح بلا شبكة ولا ذكاء اصطناعي: تقرأ الحقول والإجابات وتعيد تلميحات لطيفة «قبل التسليم: …».
 // لا تمنع التسليم أبدًا: المشارك يسلّم على أي حال، والتلميح يذكّره بالاكتمال والتحديد كما يقرؤهما المراجع.
 // الحقول الإلزامية الناقصة يمنعها الخادم وحده (missingFields)، فلا تُكرر هنا.
-import { fieldFilled, tableRows } from '../../supabase/functions/leaders-api/logic.js';
+import { fieldFilled, reqColumns, tableRows } from '../../supabase/functions/leaders-api/logic.js';
 
 // الحد الذي يُعد دونه النص الطويل مقتضبًا (أعلى من حد الاكتمال TEXTAREA_MIN: يكتمل بجملة، ويُفهم بأكثر)
 export const PRESUBMIT_MIN_CHARS = 60;
@@ -38,9 +38,11 @@ export function preSubmitHints(fields, answers, { initiative = null } = {}) {
       const ask = ASKS.find((x) => x.re.test(`${f.label} ${f.hint || ''}`));
       if (ask && !ask.has.test(t)) out.push({ key: f.key, text: `«${f.label}» يطلب ${ask.ar}، ولم أجده فيما كتبت.` });
     } else if (f.type === 'table') {
-      const rows = tableRows(v);
+      const rows = tableRows(v, f.key_col || 0);
       if (!rows.length) continue;
-      const cells = rows.flat();
+      // الخانات المطلوبة وحدها: العمود المخفي للتأسيسي لا يُعد فراغه نقصًا
+      const req = reqColumns(f);
+      const cells = rows.flatMap((r) => req.map((i) => r[i]));
       const blank = cells.filter((c) => !text(c)).length;
       if (cells.length && blank / cells.length > 0.25) out.push({ key: f.key, text: `في جدول «${f.label}» خانات فارغة (${blank} من ${cells.length}).` });
     } else if (f.type === 'text') {

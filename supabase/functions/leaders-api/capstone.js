@@ -263,9 +263,13 @@ function table(model, answers, fieldKey) {
   const f = (model?.fields || []).find((x) => x.key === fieldKey && x.type === 'table');
   if (!f) return null;
   const rows = (Array.isArray(answers?.[fieldKey]) ? answers[fieldKey] : []).filter((r) => Array.isArray(r) && r.some((c) => String(c || '').trim()));
-  const cols = (f.columns || []).map(norm);
-  const col = (...words) => cols.findIndex((c) => words.some((w) => c.includes(norm(w))));
-  return { rows, col, columns: f.columns || [], cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
+  // أعمدة المشارك المطلوبة وحدها (cols_req للتأسيسي، beginnerColumns): الفحص لا يقرأ عمودًا مخفيًا عنه ولا يحجب به،
+  // ولو كتب فيه قبل التخفيف (يبقى ظاهرًا غير مطلوب). الأسماء المخزنة هي التي تُقرأ، لا عناوين العرض
+  const req = Array.isArray(f.cols_req) ? f.cols_req : null;
+  const columns = (f.columns || []).map((c, i) => (!req || req.includes(i) ? c : ''));
+  const cols = columns.map(norm);
+  const col = (...words) => cols.findIndex((c) => c && words.some((w) => c.includes(norm(w))));
+  return { rows, col, columns, cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
 }
 
 export function parseNumber(v) {
@@ -456,11 +460,18 @@ export function capstoneChecks(ctx) {
   if (raid) {
     const t = raid;
     const p = t.col('الاحتمال'), i = t.col('الاثر'), o = t.col('المالك'), res = t.col('الاستجابه'), link = t.col('مرتبط');
-    const high = t.rows.filter((r) => (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) >= RISK_HIGH);
-    const weak = high.filter((r) => !t.cell(r, o) || !t.cell(r, res)).map((r) => t.cell(r, 0) || t.cell(r, 2));
-    add('risk-owner', 'لكل خطر عالٍ مالك واستجابة', !weak.length, `مخاطر عالية بلا مالك أو استجابة: ${weak.slice(0, 6).join('، ')}`);
+    // التأسيسي بلا احتمال ولا أثر ولا مالك (تصور التخفيف §5): لكل بند ما ستفعله إن حدث، ولا يُحسب «خطر عالٍ» من عمود مخفي
+    if (p >= 0 && i >= 0) {
+      const high = t.rows.filter((r) => (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) >= RISK_HIGH);
+      const weak = high.filter((r) => (o >= 0 && !t.cell(r, o)) || !t.cell(r, res)).map((r) => t.cell(r, 0) || t.cell(r, 2));
+      add('risk-owner', o >= 0 ? 'لكل خطر عالٍ مالك واستجابة' : 'لكل خطر عالٍ استجابة', !weak.length, `مخاطر عالية بلا مالك أو استجابة: ${weak.slice(0, 6).join('، ')}`);
+    } else if (res >= 0) {
+      const d = t.col('الوصف');
+      const weak = t.rows.filter((r) => !t.cell(r, res)).map((r) => t.cell(r, d) || t.cell(r, 0));
+      add('risk-response', 'لكل ما قد يعطلك ما ستفعله إن حدث', !weak.length, `بنود بلا استجابة: ${weak.slice(0, 6).join('، ')}`);
+    }
     if (wbs) {
-      const loose = t.rows.filter((r) => t.cell(r, link) && listCodes(t.cell(r, link)).some((c) => !known(c))).map((r) => t.cell(r, 0));
+      const loose = link < 0 ? [] : t.rows.filter((r) => t.cell(r, link) && listCodes(t.cell(r, link)).some((c) => !known(c))).map((r) => t.cell(r, 0));
       add('risk-link', 'المخاطر مرتبطة بحزم موجودة في هيكل التجزئة', !loose.length, `روابط لا تجد حزمتها: ${loose.slice(0, 6).join('، ')}`);
     }
   }
@@ -468,9 +479,11 @@ export function capstoneChecks(ctx) {
   if (benefits) {
     const t = benefits;
     const base = t.col('خط الاساس'), target = t.col('المستهدف'), owner = t.col('المالك');
-    const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || !t.cell(r, owner)).map((r) => t.cell(r, 0));
-    add('benefit-owner', 'لكل منفعة خط أساس ومستهدف ومالك بعد التسليم', t.rows.length && !weak.length,
-      t.rows.length ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : 'لم تُدخل منافع في سجل المنافع بعد.');
+    // المالك بعد التسليم مخفي للتأسيسي (تصور التخفيف §5): الفحص له خط الأساس والمستهدف وحدهما
+    const withOwner = owner >= 0;
+    const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || (withOwner && !t.cell(r, owner))).map((r) => t.cell(r, 0));
+    add('benefit-owner', withOwner ? 'لكل منفعة خط أساس ومستهدف ومالك بعد التسليم' : 'لكل منفعة رقم اليوم ومستهدف', t.rows.length && !weak.length,
+      t.rows.length ? (withOwner ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : `منافع ينقصها رقم اليوم أو المستهدف: ${weak.slice(0, 6).join('، ')}`) : 'لم تُدخل منافع في سجل المنافع بعد.');
     // خطة القياس تظهر للتأسيسي بسطر النجاح وحده (مصفوفة الوثيقة بحسب المستوى): الفحص لمن يرى جدول الخطة
     const ev = has('evidence-plan') ? table(M['evidence-plan'], A['evidence-plan'], 'plan') : null;
     if (ev) {

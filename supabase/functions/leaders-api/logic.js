@@ -861,6 +861,7 @@ export function fieldsFor(fields, level, scope = null, primary = false, answers 
     const byLevel = !f.min_level || RANK[level] >= RANK[f.min_level];
     if (!byLevel && !(a && hasAnswer(a[f.key]))) continue;
     let g = f.min_rows_beginner && level === 'beginner' ? { ...f, min_rows: f.min_rows_beginner } : f;
+    if (level === 'beginner' && f.type === 'table') g = beginnerColumns(g, a ? a[f.key] : null);
     if (!byLevel) g = { ...g, required: false, kept: true };
     // kept_req: كان مطلوبًا في الفصل لولا قاعدة «لا فقد»، فيُحسب الفصل مكتملًا في الجاهزية إن اكتمل به (sectionState)
     // optional-exempt: حقول نموذج لا أنشطة
@@ -889,13 +890,47 @@ export function workMinutes(fields) {
   return Math.round(m * WORK_MINUTES.review);
 }
 
+// ── أعمدة الجدول بالمستوى (تصور تخفيف المبادرة للتأسيسي §5، اعتمده المالك 2026-11-26) ──
+// columns_beginner: مواضع الأعمدة الظاهرة للتأسيسي في الصف المخزن، وlabels_beginner: عناوينها بلغة بسيطة بالترتيب نفسه.
+// الصف المخزن لا يتغير: الأعمدة المخفية تبقى في مكانها، فيقرأ المستشار والإدارة والوثيقة الإجابة نفسها.
+// cols_req: المطلوب (يُحسب في الجاهزية والفحوص وتقدير الزمن)، وcols_view: الظاهر، وهو المطلوب ومعه كل عمود مخفي
+// كتب فيه المشارك (قاعدة «لا فقد»: يبقى ظاهرًا وفي وثيقته غير مطلوب). col_labels: عنوان كل عمود للعرض وحده،
+// والفحوص تقرأ الأعمدة بأسمائها المخزنة. key_col: عمود موضوع الصف (أول المطلوب)، به يُعد الصف مكتوبًا
+export function validBeginnerColumns(f) {
+  const n = (f?.columns || []).length;
+  const idx = Array.isArray(f?.columns_beginner) ? [...new Set(f.columns_beginner.map(Number))].filter((i) => Number.isInteger(i) && i >= 0 && i < n).sort((x, y) => x - y) : [];
+  // كل الأعمدة مقبولة أيضًا: الجدول يبقى كاملًا للتأسيسي بعناوين أبسط (labels_beginner)
+  return idx.length ? idx : null;
+}
+/** @param {any} f @param {any} value */
+export function beginnerColumns(f, value) {
+  const req = validBeginnerColumns(f);
+  if (!req) return f;
+  const rows = Array.isArray(value) ? value : [];
+  const written = (f.columns || []).map((_, i) => i).filter((i) => !req.includes(i) && rows.some((r) => Array.isArray(r) && String(r[i] ?? '').trim()));
+  const labels = Array.isArray(f.labels_beginner) ? f.labels_beginner : [];
+  const order = (Array.isArray(f.columns_beginner) ? f.columns_beginner.map(Number) : []).filter((i) => req.includes(i));
+  const col_labels = (f.columns || []).map((c, i) => { const j = order.indexOf(i); return j >= 0 && String(labels[j] || '').trim() ? String(labels[j]).trim() : c; });
+  return { ...f, cols_req: req, cols_view: [...req, ...written].sort((x, y) => x - y), col_labels, key_col: req[0] };
+}
+/** الجدول كما يراه المشارك: { columns, rows } بأعمدته الظاهرة وعناوينها، للوثيقة والطباعة ولوحات المستشار والإدارة */
+export function viewTable(f, rows) {
+  const v = Array.isArray(f?.cols_view) ? f.cols_view : null;
+  const list = Array.isArray(rows) ? rows : rows ?? null;
+  if (!v) return { columns: f?.columns || null, rows: list };
+  // columns: الأسماء المخزنة (تقرؤها الفحوص والرسوم والتنظيف بدلالتها)، وlabels: عناوين العرض
+  const columns = v.map((i) => f.columns[i]), labels = v.map((i) => f.col_labels?.[i] ?? f.columns[i]);
+  return { columns, ...(labels.some((l, i) => l !== columns[i]) ? { labels } : {}), rows: Array.isArray(list) ? list.map((r) => (Array.isArray(r) ? v.map((i) => r[i] ?? '') : r)) : list };
+}
+
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة
 // اكتمال الحقل: قاعدة واحدة يقرؤها الخادم عند التسليم والواجهة في شريط التقدم
 // أعمدة الجدول المطلوبة من المشارك (مواضعها في الصف المخزن): كلها، أو ما تحدده fieldsFor لمستواه (cols_req)
 export const reqColumns = (/** @type {any} */ f) => (Array.isArray(f?.cols_req) ? f.cols_req : (f?.columns || []).map((/** @type {any} */ _, /** @type {number} */ i) => i));
-export const tableRows = (v) => (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim());
+// الصف المكتوب: عمود موضوعه غير فارغ (الأول، أو key_col للتأسيسي حين يُخفى الأول)
+export const tableRows = (v, k = 0) => (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[k] || '').trim());
 export function fieldFilled(f, v) {
-  if (f.type === 'table') return tableRows(v).length >= (f.min_rows || 1);
+  if (f.type === 'table') return tableRows(v, f.key_col || 0).length >= (f.min_rows || 1);
   // الحقل النصي الطويل يكتمل بجملة لها معنى، لا بحرف (TEXTAREA_MIN). القصير والاختيار كما كانا
   return f.type === 'textarea' ? meaningful(v, TEXTAREA_MIN) : !!String(v ?? '').trim();
 }
@@ -3078,6 +3113,13 @@ export function cleanModelFieldsOf(input, fail = (m) => { throw new Error(m); })
       // التأسيسي بصفوف أقل: لا يُحفظ إلا إن كان أقل من العام
       const mb = Math.round(Number(f.min_rows_beginner) || 0);
       if (mb >= 1 && mb < out.min_rows) out.min_rows_beginner = mb;
+      // أعمدة التأسيسي وعناوينها (beginnerColumns): تُحفظ إن كانت مواضع صحيحة من أعمدة الجدول
+      const cb = validBeginnerColumns({ columns: out.columns, columns_beginner: f.columns_beginner });
+      if (cb) {
+        out.columns_beginner = cb;
+        const lb = (Array.isArray(f.labels_beginner) ? f.labels_beginner : []).map((/** @type {unknown} */ x) => String(x ?? '').trim().slice(0, 80));
+        if (lb.some(Boolean)) out.labels_beginner = lb.slice(0, cb.length);
+      }
       // جدول يُبنى على جدول نموذج آخر: يستورد المشارك صفوفه منه بنقرة
       const im = f.import && typeof f.import === 'object' ? f.import : null;
       if (im && /^[a-z0-9-]{2,60}$/.test(String(im.model || '')) && /^[a-z0-9_-]{1,40}$/.test(String(im.field || ''))) out.import = { model: im.model, field: im.field };

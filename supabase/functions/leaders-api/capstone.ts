@@ -11,7 +11,7 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { answeredModels, approvalOf, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, viewTable, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
@@ -238,7 +238,9 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       ...(joins[s.model.key] ? { joins: joins[s.model.key] } : {}),
       // الفصل الاختياري للمشارك (لا حقل مطلوبًا فيه، counted: false): يُعرض «اختياري» ولا يُعد فراغه نقصًا في ملحق ما ينقص
       optional: s.state.counted === false,
-      fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null, ...(f.required === false ? { required: false } : {}) })),
+      // الجدول بأعمدة المشارك الظاهرة وعناوينها (viewTable، أعمدة التأسيسي): مصدر واحد للوثيقة والطباعة ولوحات المستشار والإدارة
+      fields: s.fields.map((f: any) => { const t = f.type === 'table' ? viewTable(f, s.answers[f.key] ?? null) : null;
+        return { key: f.key, label: f.label, type: f.type, columns: t ? t.columns : f.columns || null, ...(t?.labels ? { labels: t.labels } : {}), value: t ? t.rows : s.answers[f.key] ?? null, ...(f.required === false ? { required: false } : {}) }; }),
     })),
     cost: cost ? costSummary({ ...cost.model, fields: cost.fields }, cost.answers) : null,
     checks: d.checks,

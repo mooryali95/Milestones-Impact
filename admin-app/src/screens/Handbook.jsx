@@ -284,10 +284,13 @@ function ModelForm({ m, answers = {} }) {
       if (f.type === 'select') input = <div className="mp-seg">{(f.options || []).map((o) => <span key={o} className={v === o ? 'on' : ''}>{o}</span>)}</div>;
       else if (f.type === 'table') {
         const rows = Array.isArray(v) && v.length ? v : Array.from({ length: f.min_rows || 1 }, () => []);
+        // عمل مشارك: العمود المخفي للتأسيسي (columns_beginner) لا يُعرض إن بقي فارغًا في كل الصفوف، والمكتوب فيه يبقى ظاهرًا (قاعدة «لا فقد»)
+        const cb = Array.isArray(f.columns_beginner) && Array.isArray(v) && v.length ? f.columns_beginner : null;
+        const shown = (f.columns || []).map((c, j) => j).filter((j) => !cb || cb.includes(j) || rows.some((r) => String((r || [])[j] ?? '').trim()));
         input = (
           <div className="mp-table-wrap"><table className="mp-table">
-            <thead><tr><th>#</th>{(f.columns || []).map((c) => <th key={c}>{c}</th>)}</tr></thead>
-            <tbody>{rows.map((r, i) => <tr key={i}><td>{i + 1}</td>{(f.columns || []).map((c, j) => <td key={c}>{(r || [])[j] || ''}</td>)}</tr>)}</tbody>
+            <thead><tr><th>#</th>{shown.map((j) => <th key={f.columns[j]}>{f.columns[j]}</th>)}</tr></thead>
+            <tbody>{rows.map((r, i) => <tr key={i}><td>{i + 1}</td>{shown.map((j) => <td key={f.columns[j]}>{(r || [])[j] || ''}</td>)}</tr>)}</tbody>
           </table></div>
         );
       } else input = <div className={`mp-in${f.type === 'textarea' ? ' big' : ''}`}>{v || ''}</div>;
@@ -394,6 +397,10 @@ function ModelEditor({ m, dim, catalog, canWrite, onClose }) {
                   <input aria-label={`أعمدة الحقل ${i + 1}`} defaultValue={(f.columns || []).join('، ')} placeholder="الأعمدة مفصولة بفاصلة" onChange={(e) => setField(i, { columns: splitList(e.target.value) })} />
                   <input aria-label={`أقل عدد صفوف للحقل ${i + 1}`} type="number" min="1" max="30" value={f.min_rows || 1} onChange={(e) => setField(i, { min_rows: Number(e.target.value) || 1 })} />
                   <input aria-label={`أقل عدد صفوف للتأسيسي في الحقل ${i + 1}`} type="number" min="1" max="30" placeholder="للتأسيسي" title="أقل عدد صفوف للمستوى التأسيسي إن كان أخف" value={f.min_rows_beginner || ''} onChange={(e) => setField(i, { min_rows_beginner: Number(e.target.value) || undefined })} />
+                  {/* أعمدة التأسيسي (تخفيف المبادرة للتأسيسي): أرقام الأعمدة الظاهرة من 1، وعناوينها بلغة بسيطة بالترتيب نفسه */}
+                  <input aria-label={`أعمدة التأسيسي في الحقل ${i + 1}`} placeholder="أعمدة التأسيسي: 1، 3" title="أرقام الأعمدة الظاهرة للتأسيسي، من 1. فارغ: كل الأعمدة"
+                    defaultValue={(f.columns_beginner || []).map((x) => x + 1).join('، ')} onChange={(e) => { const n = splitList(e.target.value).map((x) => Number(x) - 1).filter((x) => Number.isInteger(x) && x >= 0); setField(i, { columns_beginner: n.length ? n : undefined }); }} />
+                  <input aria-label={`عناوين أعمدة التأسيسي في الحقل ${i + 1}`} placeholder="عناوينها للتأسيسي مفصولة بفاصلة" defaultValue={(f.labels_beginner || []).join('، ')} onChange={(e) => setField(i, { labels_beginner: splitList(e.target.value) })} />
                 </>}
                 <label className="fb-req"><input type="checkbox" checked={f.required !== false} onChange={(e) => setField(i, { required: e.target.checked })} /> إلزامي</label>
                 {/* إلزام بشرط (مصفوفة الوثيقة بحسب المستوى): تأشير «إلزامي» يجعله مطلوبًا من الجميع ويلغي الشرط فعليًا */}
