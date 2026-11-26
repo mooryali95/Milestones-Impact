@@ -5,6 +5,7 @@
 // تصور صفحة الزيارات 2026-11-26 (المرحلة 2): التقرير أولًا والمرشحان ملاصقان له ومحفوظان في الرابط (useFilters)،
 // و«اتجاه البرنامج» (بيانات مشاركين لا تتأثر بالمرشحين) في النظرة العامة برابط من هنا. الحسابات الخالصة في visits.js.
 // المصادر والمسارات نص مُطبَّع لا روابط. الرسم SVG داخلي: الزمن من اليمين (الأقدم) إلى اليسار (الأحدث) باتجاه الصفحة.
+import { PageHeader } from '../PageHeader.jsx';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { L } from '../leaders.js';
 import { useFilters } from '../FilterBar.jsx';
@@ -35,13 +36,7 @@ export default function Visits() {
 
   return (
     <div className="dash-body">
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-eyebrow">تحليلات الموقع</div>
-          <h1 className="page-title">زيارات الموقع</h1>
-          <div className="page-title-ar">بلا عنوان IP ولا كوكي، فالرقم زيارات لا أشخاص</div>
-        </div>
-      </div>
+      <PageHeader eyebrow="تحليلات الموقع" title="زيارات الموقع" desc="بلا عنوان IP ولا كوكي، فالرقم زيارات لا أشخاص" />
       <section className="vs-report" aria-labelledby="vs-range" aria-busy={busy}>
         <div className="vs-head">
           <h2 className="today-sec" id="vs-range">{rangeLabel(days, site)}</h2>

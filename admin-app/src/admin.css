@@ -1604,3 +1604,9 @@ a.mx-stat:focus-visible, .mx-track:focus-visible, .mx-row-link:focus-visible { o
 .mx-track-bar { background: var(--sand-light); box-shadow: inset 0 0 0 1px var(--line); }
 .mx-track-v { text-align: end; min-inline-size: 15ch; color: var(--ink-mid); }
 @media (max-width: 600px) { .mx-att-row { grid-template-columns: 1fr auto; } .mx-att-prog { grid-column: 1; } }
+
+/* ترويسة الصفحة الموحدة (PageHeader.jsx): منطقة الإجراءات وشارة الحالة، والعنوان يستقبل التركيز برمجيًا بلا إطار */
+.page-header .page-title:focus { outline: none; }
+.page-header .page-title:focus-visible { outline: 2px solid var(--petrol); outline-offset: 2px; border-radius: 2px; }
+.page-header .page-status { flex: 0 0 auto; align-self: center; white-space: nowrap; }
+.page-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; }
