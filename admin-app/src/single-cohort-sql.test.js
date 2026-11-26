@@ -23,7 +23,7 @@ export const BEFORE = `create role anon; create role authenticated; create role 
   create table leaders.organizations (id uuid primary key, name text not null, status text not null default 'active');
   create table leaders.participants (id uuid primary key, full_name text, email text, phone text, organization_id uuid,
     is_demo boolean not null default false, is_test boolean not null default false, status text not null default 'registered',
-    source text, last_login_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+    source text, org_via text, last_login_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
   create table leaders.cohorts (id uuid primary key default gen_random_uuid(), name text not null, track text not null default 'individual', organization_id uuid,
     program_id uuid not null, program_version_id uuid, status text not null default 'planned', capacity smallint, is_default boolean not null default false,
     starts_on date, created_at timestamptz not null default now());
@@ -33,7 +33,7 @@ export const BEFORE = `create role anon; create role authenticated; create role 
     constraint enrollments_participant_id_cohort_id_key unique (participant_id, cohort_id));
   create table leaders.sponsor_codes (id uuid primary key default gen_random_uuid(), organization_id uuid not null, code text not null);
   create table leaders.cohort_group_members (cohort_id uuid not null, participant_id uuid not null, group_id uuid not null, created_at timestamptz not null default now(), primary key (cohort_id, participant_id));
-  create table leaders.cohort_roles (id uuid primary key default gen_random_uuid(), cohort_id uuid not null, participant_id uuid not null, role text);
+  create table leaders.cohort_roles (cohort_id uuid not null, participant_id uuid not null, team text, primary key (cohort_id, participant_id));
   insert into leaders.programs (id, name, is_default) values ('${PROG}', 'برنامج القادة', true);
   insert into leaders.program_versions (id, program_id, number) values ('${V1}', '${PROG}', 1);
   insert into leaders.organizations (id, name) values ('${ORG}', 'منظومة'), ('${ORG2}', 'جهة ثانية');`;
@@ -164,5 +164,52 @@ describe(`ترحيل ${M2_NAME} (م2: التعبئة والفهرس الفريد
     await d.exec('rollback').catch(() => {});
     expect(await active(d, P(2))).toEqual([C_ORG, C_ORG2]);
     expect(await count(d, `select count(*)::int n from pg_tables where tablename = 'backup_20261129_single_cohort'`)).toBe(0);
+  });
+});
+
+const M4_NAME = '20261129240000_leaders_transfer_participant';
+const M4 = () => read(M4_NAME);
+const G1 = U(60);
+describe(`ترحيل ${M4_NAME} (م4: النقل الذري)`, { timeout: 60000 }, () => {
+  const ready = async () => {
+    const d = await db();
+    await d.exec(M2()); await d.exec(M4());
+    // ب (P2) ملحق بدفعة الثانية وعضو مجموعة فيها وله دور
+    await d.exec(`insert into leaders.cohort_group_members (cohort_id, participant_id, group_id) values ('${C_ORG2}', '${P(2)}', '${G1}');
+      insert into leaders.cohort_roles (cohort_id, participant_id, team) values ('${C_ORG2}', '${P(2)}', 'lead');`);
+    return d;
+  };
+  it('نقل الجهة: الجهة والإلحاق في معاملة واحدة، بدفعة الجهة الجديدة، وتُحذف عضوية المجموعة والدور القديمان', async () => {
+    const d = await ready();
+    const r = await rows(d, `select * from leaders.transfer_participant('${P(2)}', 'admin:a@x.sa', '${ORG}', true, null)`);
+    expect(r).toEqual([{ cohort_id: C_NEW, outcome: 'placed' }]);
+    expect((await rows(d, `select organization_id, org_via from leaders.participants where id = '${P(2)}'`))[0]).toEqual({ organization_id: ORG, org_via: 'admin' });
+    expect(await active(d, P(2))).toEqual([C_NEW]);
+    expect(await count(d, `select count(*)::int n from leaders.cohort_group_members where participant_id = '${P(2)}'`)).toBe(0);
+    expect(await count(d, `select count(*)::int n from leaders.cohort_roles where participant_id = '${P(2)}'`)).toBe(0);
+    expect(await count(d, `select count(*)::int n from leaders.cohort_placements where participant_id = '${P(2)}' and actor = 'admin:a@x.sa'`)).toBe(1);
+  });
+  it('فك الجهة يلحقه بالمنصة العامة، والنقل إلى دفعة بعينها يبقي الجهة ويلحقه بها', async () => {
+    const d = await ready();
+    await d.exec(`select * from leaders.transfer_participant('${P(7)}', 'admin', null, true, null)`);
+    const [c] = await active(d, P(7));
+    expect((await rows(d, `select is_default from leaders.cohorts where id = '${c}'`))[0].is_default).toBe(true);
+    await d.exec(`select * from leaders.transfer_participant('${P(2)}', 'admin', null, false, '${C_ORG}')`);
+    expect(await active(d, P(2))).toEqual([C_ORG]);
+    expect((await rows(d, `select organization_id from leaders.participants where id = '${P(2)}'`))[0].organization_id).toBe(ORG);
+    expect(await count(d, `select count(*)::int n from leaders.cohort_group_members where participant_id = '${P(2)}'`)).toBe(0);
+  });
+  it('تعذّر الإلحاق يرمي فيُرجع كل شيء: لا يبقى مشارك بلا دفعة ولا بجهة جديدة بلا دفعتها', async () => {
+    const d = await ready();
+    await d.exec(`delete from leaders.cohorts where is_default; delete from leaders.program_versions;`);
+    await expect(d.exec(`select * from leaders.transfer_participant('${P(7)}', 'admin', null, true, null)`)).rejects.toThrow(/transfer_participant: no cohort/);
+    expect(await active(d, P(7))).toEqual([C_ORG2]);
+    expect((await rows(d, `select organization_id from leaders.participants where id = '${P(7)}'`))[0].organization_id).toBe(ORG2);
+  });
+  it('حساب العرض لا يُنقل، وإعادة التشغيل آمنة', async () => {
+    const d = await ready();
+    expect(await rows(d, `select * from leaders.transfer_participant('${P(8)}', 'admin', '${ORG}', true, null)`)).toEqual([{ cohort_id: null, outcome: 'demo' }]);
+    await d.exec(M4());
+    expect(await count(d, `select count(*)::int n from leaders.schema_migrations where name = '${M4_NAME}'`)).toBe(1);
   });
 });

@@ -49,8 +49,10 @@ function install(tables: Record<string, Row[]>) {
     });
     return q;
   };
-  const prev = { from: (db as any).from };
-  Object.assign(db as any, { from });
+  const prev = { from: (db as any).from, rpc: (db as any).rpc };
+  // لا دوال قاعدة هنا: النقل الذري (transfer_participant) يُقرأ كما قبل ترحيله، فتمضي الخطوات المتتابعة
+  const rpc = () => Promise.resolve({ data: null, error: { code: 'PGRST202', message: 'no rpc' } });
+  Object.assign(db as any, { from, rpc });
   return { tables, restore: () => Object.assign(db as any, prev) };
 }
 

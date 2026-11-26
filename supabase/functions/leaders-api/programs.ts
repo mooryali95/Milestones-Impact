@@ -901,6 +901,21 @@ export async function cohortEnroll(a: Admin, b: Body) {
       throw new Fail(`${moveConfirmText(extra)} أكّد النقل إن كان مقصودًا.`, 409, 'confirm_move', extra);
     }
   }
+  // النقل الذري (تصور المرحلة 4، م4، ترحيل 20261129240000): لكل مشارك في معاملة واحدة سحب إلحاقاته وإلحاقه بالهدف وحذف
+  // مجموعاته وأدواره في غيره وسطر cohort_placements. قبل الترحيل (لا دالة) تمضي الخطوات المتتابعة أدناه كما كانت
+  let atomic = 0;
+  for (const pid of ids) {
+    const r = await db.rpc('transfer_participant', { p_participant: pid, p_actor: a.email, p_org: null, p_set_org: false, p_cohort: c.id });
+    if (r.error) {
+      if (!atomic && ['PGRST202', '42883'].includes(String((r.error as any).code))) break;
+      throw r.error;
+    }
+    atomic++;
+  }
+  if (atomic) {
+    await audit('admin', a.email, 'cohort.enroll', 'cohorts', c.id, null, { participants: ids.length });
+    return { success: true, enrolled: ids.length };
+  }
   const now = new Date().toISOString();
   must(await db.from('enrollments').update({ status: 'withdrawn', updated_at: now }).in('participant_id', ids).neq('cohort_id', c.id).neq('status', 'withdrawn'));
   must(await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, status: 'active', updated_at: now })), { onConflict: 'participant_id,cohort_id' }));

@@ -159,6 +159,8 @@ export function installFake(tables: Record<string, Row[]>, opts: FakeOpts = {}) 
     }
     // الإلحاق الذري (20261128160000) غير محاكى افتراضيًا: يُقرأ كما قبل الترحيل (لا دالة)، فلا يغيّر اختبارًا لا يعنيه
     if (name === 'place_participant') return { data: null, error: { code: 'PGRST202', message: 'rpc place_participant not faked' } };
+    // والنقل الذري (20261129240000) كذلك: غيابه يُقرأ كما قبل الترحيل، ومحاكاته في org_transfer_test.ts بدلالتها
+    if (name === 'transfer_participant') return { data: null, error: { code: 'PGRST202', message: 'rpc transfer_participant not faked' } };
     return { data: null, error: { message: `rpc ${name} not faked` } };
   });
   const saved = { from: (db as any).from, schema: (db as any).schema, rpc: (db as any).rpc };
