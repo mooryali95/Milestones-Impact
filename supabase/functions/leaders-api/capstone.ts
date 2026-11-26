@@ -11,7 +11,7 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor } from './programs.ts';
-import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
+import { answeredModels, approvalOf, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
@@ -90,7 +90,9 @@ async function build(p: any) {
 
 const sectionView = (s: any) => ({
   id: s.model.id, key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension, points: s.model.points,
-  complete: s.state.complete, missing: s.state.missing.length, status: s.state.status, rating: s.state.rating,
+  complete: s.state.complete, missing: s.state.missing.length,
+  // زمن الفصل بالدقائق من حقوله الظاهرة المطلوبة (workMinutes): مصدر خط الوثيقة الواحد
+  minutes: workMinutes(s.fields), status: s.state.status, rating: s.state.rating,
   // فصل لا حقل مطلوبًا فيه للمشارك: لا يُحسب في الجاهزية (readiness)، فيُعرض «اختياري» لا «مكتمل»
   optional: s.state.counted === false,
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
@@ -236,7 +238,7 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       ...(joins[s.model.key] ? { joins: joins[s.model.key] } : {}),
       // الفصل الاختياري للمشارك (لا حقل مطلوبًا فيه، counted: false): يُعرض «اختياري» ولا يُعد فراغه نقصًا في ملحق ما ينقص
       optional: s.state.counted === false,
-      fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null })),
+      fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null, ...(f.required === false ? { required: false } : {}) })),
     })),
     cost: cost ? costSummary({ ...cost.model, fields: cost.fields }, cost.answers) : null,
     checks: d.checks,

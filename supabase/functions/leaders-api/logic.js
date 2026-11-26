@@ -873,8 +873,26 @@ export function fieldsFor(fields, level, scope = null, primary = false, answers 
   return out;
 }
 
+// ── تقدير زمن الفصل من حقوله الظاهرة المطلوبة (تصور تخفيف المبادرة للتأسيسي §5 البند 9): مصدر واحد للخط والواجهة ──
+// دقائق لكل نوع، معايرة على تجربة سفراء الكاملة (2026-11-26): حقل قصير 3، ونص طويل 8، واختيار 1، وخانة جدول 1.2،
+// ويُضاف الربع للمراجعة والعودة بعد ملاحظات المستشار. الخانة: أعمدة المشارك المطلوبة (columns_beginner) × أقل صفوفه
+export const WORK_MINUTES = Object.freeze({ text: 3, textarea: 8, select: 1, cell: 1.2, review: 1.25 });
+/** @param {any[]} fields حقول المشارك كما تعيدها fieldsFor */
+export function workMinutes(fields) {
+  let m = 0;
+  for (const f of fields || []) {
+    // optional-exempt: حقل نموذج لا نشاط
+    if (f.required === false || f.bind) continue;
+    if (f.type === 'table') m += reqColumns(f).length * (f.min_rows || 1) * WORK_MINUTES.cell;
+    else m += WORK_MINUTES[f.type] ?? WORK_MINUTES.textarea;
+  }
+  return Math.round(m * WORK_MINUTES.review);
+}
+
 // يتحقق من اكتمال النموذج قبل التسليم؛ يعيد قائمة بالحقول الناقصة
 // اكتمال الحقل: قاعدة واحدة يقرؤها الخادم عند التسليم والواجهة في شريط التقدم
+// أعمدة الجدول المطلوبة من المشارك (مواضعها في الصف المخزن): كلها، أو ما تحدده fieldsFor لمستواه (cols_req)
+export const reqColumns = (/** @type {any} */ f) => (Array.isArray(f?.cols_req) ? f.cols_req : (f?.columns || []).map((/** @type {any} */ _, /** @type {number} */ i) => i));
 export const tableRows = (v) => (Array.isArray(v) ? v : []).filter((r) => Array.isArray(r) && String(r[0] || '').trim());
 export function fieldFilled(f, v) {
   if (f.type === 'table') return tableRows(v).length >= (f.min_rows || 1);

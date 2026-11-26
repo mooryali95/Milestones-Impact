@@ -444,7 +444,10 @@ export function capstoneChecks(ctx) {
         // والمرساتان من نوع واحد: لا يُقارن جدول مؤرخ بانتهاء بالأسبوع بلا تاريخ بدء
         if (an.origin != null && !an.cycle && an.order.length && isVirtual(an.origin) === isVirtual(to)) {
           const lastDay = an.origin + (an.finish - 1) * 864e5;
-          add('critical-window', 'المسار الحرج ينتهي داخل مدة المبادرة', lastDay <= to, `المسار الحرج يحتاج ${an.finish} يومًا، فينتهي بعد ${A[CHARTER_KEY].end}. قصّر أنشطته أو مدّد المبادرة.`);
+          // جدول بالأسابيع يُقال بالأسابيع: «يحتاج 13 أسبوعًا» لا «105 يومًا»
+          const weekly = sc.acts.length && sc.acts.every((x) => x.weekly || x.days == null);
+          const need = weekly ? `${Math.ceil(an.finish / 7)} أسبوعًا` : `${an.finish} يومًا`;
+          add('critical-window', 'المسار الحرج ينتهي داخل مدة المبادرة', lastDay <= to, `المسار الحرج يحتاج ${need}، فينتهي بعد ${A[CHARTER_KEY].end}. قصّر أنشطته أو مدّد المبادرة.`);
         }
       }
     }

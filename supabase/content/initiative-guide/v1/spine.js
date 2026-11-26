@@ -103,7 +103,8 @@ export function spineSummary(sections) {
   const done = c.filter((s) => chapterState(s) === 'done').length;
   const total = c.length;
   const left = total - done;
-  const rest = c.filter((s) => chapterState(s) !== 'done').reduce((a, s) => a + chapterHours(s.level), 0);
+  // الزمن من حقول الفصل الظاهرة (minutes من الخادم، workMinutes)، وإلا تقدير المستوى العام (lens.json)
+  const rest = c.filter((s) => chapterState(s) !== 'done').reduce((a, s) => a + (Number.isFinite(s.minutes) ? s.minutes / 60 : chapterHours(s.level)), 0);
   const hours = left ? Math.max(1, Math.round(rest)) : 0;
   const next = nextOf(sections);
   const parts = [`أنجزت ${done} من ${total}`];

@@ -298,9 +298,12 @@ const has = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).tri
 export function institutionalGate(cleanedDoc) {
   const fld = (k, f) => ((cleanedDoc?.sections || []).find((s) => s.key === k)?.fields || []).find((x) => x.key === f);
   // المكوّن يتحقق بمصدر صالح؛ والمكوّن الذي لا حقل له أصلًا في نسخة نماذج المشارك (حقل أُضيف بعد بدئه، مثل «المستفيدون») لا يُطلب منه
-  const ok = (any) => any.some(([k, f]) => has(fld(k, f)?.value)) || any.every(([k, f]) => !fld(k, f));
-  // المكوّن الأول في كل سؤال (لبّه) مطلوب دائمًا
-  const missing = INSTITUTIONAL_QUESTIONS.filter((q) => !q.all.every((any, i) => (i === 0 ? any.some(([k, f]) => has(fld(k, f)?.value)) : ok(any)))).map(({ n, title, add }) => ({ n, title, add }));
+  // والفحص يتبع المطلوب لمستوى المشارك (تصور تخفيف المبادرة للتأسيسي §5): مكوّن كل مصادره الموجودة اختيارية له
+  // (required: false في وثيقته، مثل «المستفيدون» و«الراعي» للتأسيسي) لا يحجب الإصدار. لقطة أقدم بلا required تُقرأ مطلوبة كما كانت
+  const optionalOnly = (any) => any.some(([k, f]) => fld(k, f)) && any.every(([k, f]) => !fld(k, f) || fld(k, f).required === false);
+  const ok = (any) => any.some(([k, f]) => has(fld(k, f)?.value)) || any.every(([k, f]) => !fld(k, f)) || optionalOnly(any);
+  // المكوّن الأول في كل سؤال (لبّه) مطلوب دائمًا ما لم يكن اختياريًا للمستوى
+  const missing = INSTITUTIONAL_QUESTIONS.filter((q) => !q.all.every((any, i) => (i === 0 ? any.some(([k, f]) => has(fld(k, f)?.value)) || optionalOnly(any) : ok(any)))).map(({ n, title, add }) => ({ n, title, add }));
   return { ok: !missing.length, missing };
 }
 

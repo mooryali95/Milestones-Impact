@@ -129,7 +129,8 @@ function WhenInput({ id, value, locked, onChange, label = undefined, compact = f
   const v = latinDigits(String(value || '')).trim();
   const wk = v.match(WEEK_VAL);
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
-  const [mode, setMode] = useState(wk ? 'week' : 'date');
+  // الأسبوع هو الأصل (الزمن النسبي): يُفتح على التاريخ إن كان المخزن تاريخًا فقط
+  const [mode, setMode] = useState(iso ? 'date' : 'week');
   const [from, setFrom] = useState(wk ? wk[1] : '');
   const [to, setTo] = useState(wk?.[2] || '');
   const writeWeek = (a, b) => { if (a) onChange(b && b !== a ? `الأسبوع ${a}–${b}` : `الأسبوع ${a}`); };
