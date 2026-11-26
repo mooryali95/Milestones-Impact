@@ -56,6 +56,8 @@ test('الشريط الجانبي: داخل الشاشة بتمرير داخلي
   if (m.sh > m.ch) expect(['auto', 'scroll']).toContain(m.oy);
   // آخر بند يُبلغ بالتمرير ويُرى كاملًا داخل الشريط (مجموعة الإعداد مطوية افتراضيًا منذ المرحلة 2، فتُفتح ليُختبر آخر بند فعلًا)
   await nav.getByRole('button', { name: 'مجموعة الإعداد' }).click();
+  // وآخر مجموعة «تجريبي» (الأقسام المخفية عن المستخدمين، مطوية افتراضيًا منذ المرحلة 7)
+  await nav.getByRole('button', { name: 'مجموعة تجريبي' }).click();
   const items = nav.locator('.la-tab-group > button:not(.la-tab-group-label)');
   const last = items.last();
   await last.scrollIntoViewIfNeeded();
