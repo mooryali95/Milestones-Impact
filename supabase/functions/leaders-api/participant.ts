@@ -1367,8 +1367,7 @@ export async function handbookComplete(p: any, b: Body) {
   const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
   if (prev) {
-    const { error } = await db.from('handbook_progress').update({ reflection, reflection_apply: apply }).eq('participant_id', p.id).eq('module_id', m.id);
-    if (error) await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
+    await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
     // إعادة الاختبار لا تغيّر الدرجة المحتسبة، لكنها تُسجَّل: كانت تمر بلا أثر، وهي دليل تعلّم يظهر في خط الملف الزمني
     await audit('participant', p.id, 'handbook.quiz-retry', 'participants', p.id, null, { module_id: m.id, score: g.score, total: g.total });
   }
@@ -1378,15 +1377,18 @@ export async function handbookComplete(p: any, b: Body) {
     const row = { participant_id: p.id, module_id: m.id, quiz_score: g.score, quiz_total: g.total, reflection };
     const stamp = { content_release: (await releaseOf(p))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
       quiz_answers: quiz.map((x: any, i: number) => ({ q: x.q, a: x.options[Number(b.answers?.[i])] ?? null })) };
-    const first = await db.from('handbook_progress').insert({ ...row, ...stamp, reflection_apply: apply });
-    if (/reflection_apply/.test(String(first.error?.message || ''))) must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
-    else must(first);
+    must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
     // ثالث باب بدرجة دون النصف: ملاحظة واحدة في ملفه تُبلَّغ له (notice-rules.js)، لا عند كل باب
     if (g.total > 0 && g.score / g.total < QUIZ_LOW_SHARE) {
       const { data: all } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id);
       const low = quizLowCount(all || []);
       if (low === QUIZ_LOW_COUNT) await recordObservation(p.id, { code: 'quiz_low', ref: String(QUIZ_LOW_COUNT), ...RULES.quiz_low({ count: low }) });
     }
+  }
+  // جواب «أين ستطبقه؟» كتابة مستقلة بعد الختم: الختم الإلزامي لا يتسامح، والعمود قبل ترحيله لا يُسقط الإتمام (خطؤه يُسجَّل)
+  if (apply || prev) {
+    const { error } = await db.from('handbook_progress').update({ reflection_apply: apply }).eq('participant_id', p.id).eq('module_id', m.id);
+    if (error) console.error('reflection_apply:', error.message);
   }
   const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection, apply), m.title_ar);
   const pts = await pointsOf(p.id);
