@@ -367,6 +367,9 @@ export const DOC_LIVE_AR = 'مسودة للمراجعة';
 export const DOC_PENDING_AR = 'قيد الاعتماد';
 export const DOC_WORKING_AR = 'مسودة عمل';
 export const DOC_APPROVED_AR = 'معتمدة';
+// المرحلة 28: ترويسة صفحات النسخة الحية، ونص علامتها المائية في كل صفحة (المعتمدة نظيفة بلا علامة)
+export const DOC_LIVE_HEAD_AR = 'مسودة للمراجعة · غير معتمدة';
+export const DOC_WATERMARK_AR = DOC_LIVE_AR;
 // نصوص الوثيقة المطبوعة: المصدر الواحد لـ src/lib/brand (اختبار doc-text يمنع كتابتها حرفيًا هناك)
 // «Milestone Impact» تُلفّ في bdi عند العرض (doc.js)
 export const DOC_RIGHTS_AR = 'المنهجية والقالب ملكية فكرية لـ Milestone Impact، ومحتوى المبادرة ملك قائدها. لا تُنسخ هذه الوثيقة ولا تُنشر ولا تُشارك مع طرف ثالث إلا بإذن كتابي منه.';

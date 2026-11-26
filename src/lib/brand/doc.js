@@ -7,7 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
-import { REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
+import { DOC_LIVE_HEAD_AR, DOC_WATERMARK_AR, REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
 // الشعار من الملف الأصلي كما هو، دون إعلان XML لأنه يُضمَّن داخل HTML
@@ -24,6 +24,12 @@ export const PAGE_MM = Object.freeze({ w: 210, h: 297, top: 22, side: 20, bottom
 export const mmPx = (mm) => Math.round((mm * 96) / 25.4);
 // السلم الطباعي للصفحات الداخلية: لا وزن دون 400 في الطباعة
 export const TYPE_SCALE = Object.freeze({ body: 10.5, leading: 1.7, chapter: 18, chapterWeight: 600, h3: 12, h3Weight: 500, label: 8.5, labelWeight: 600, table: 9, footer: 7.5, footerColor: '#5F7176' });
+// المرحلة 28: العلامة المائية للنسخة الحية في كل صفحة (المعتمدة نظيفة): زاوية 30 درجة، 54pt، لون #0B272F، شفافية 0.045.
+// مصدر واحد للطباعة ومولّد الخادم (عنصر ثابت يتكرر في كل صفحة مطبوعة) ولطبقة jsPDF في pdf.js
+export const WATERMARK = Object.freeze({ text: DOC_WATERMARK_AR, angle: 30, size: 54, color: '#0B272F', opacity: 0.045 });
+export const isLiveDoc = (meta) => meta?.live === true;
+// ختم الحية في الاعتماد: حلقة رمادية منقطة بلا ذهب، وعلامة Milestone الصغيرة في الإغلاق
+export const LIVE_RING = () => `<svg class="ring" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="none" stroke="#8A948F" stroke-width="1" stroke-dasharray="2 3"/></svg>`;
 
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : esc(n));
@@ -41,7 +47,7 @@ export function docId(kind) {
 const diamond = (size = 8, fill = C.gold) => `<svg class="dm" width="${size}" height="${size}" viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" transform="rotate(45 5 5)" fill="${fill}"/></svg>`;
 const LATTICE = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 20 20 0 40 20 20 40Z' fill='none' stroke='${C.graphite}' stroke-width='.6' opacity='.07'/></svg>`)}")`;
 
-export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="118" height="118" viewBox="0 0 120 120" aria-hidden="true">
+export const SEAL = (label = 'MILESTONE IMPACT') => `<svg class="seal" width="128" height="128" viewBox="0 0 120 120" style="width:34mm;height:34mm" aria-hidden="true">
   <circle cx="60" cy="60" r="56" fill="none" stroke="${C.gold}" stroke-width=".8"/>
   <circle cx="60" cy="60" r="49" fill="none" stroke="${C.gold}" stroke-width=".5" stroke-dasharray="1.5 2.5"/>
   <circle cx="60" cy="60" r="31" fill="none" stroke="${C.gold}" stroke-width=".5"/>
@@ -158,7 +164,7 @@ ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link re
 <style>
 @page { size: A4; margin: ${PAGE_MM.top}mm ${PAGE_MM.side}mm ${PAGE_MM.bottom}mm;
   ${meta.brand ? `@bottom-right { content: "${cssStr(id)}"; font: 400 ${T.footer}pt "Noto Sans", sans-serif; letter-spacing: .08em; color: ${T.footerColor}; }` : `@bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 400 ${T.footer}pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${T.footerColor}; }`}
-  ${meta.brand ? `@top-right { content: "${cssStr(meta.title)}"; content: string(chapter); font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; color: ${T.footerColor}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; color: ${T.footerColor}; }` : ''}
+  ${meta.brand ? `@top-right { ${isLiveDoc(meta) ? `content: "${cssStr(DOC_LIVE_HEAD_AR)}";` : `content: "${cssStr(meta.title)}"; content: string(chapter);`} font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; color: ${T.footerColor}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; color: ${T.footerColor}; }` : ''}
   @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 400 ${T.footer}pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${T.footerColor}; } }
 /* الترويسة باسم الباب الحالي (string set) */
 body { string-set: chapter "${cssStr(meta.title)}"; }
@@ -168,6 +174,10 @@ ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا تر�
 @media print { html:not(.pdf) .mast.co { height: 296.5mm; overflow: hidden; display: flex; flex-direction: column; padding: 18mm 18mm 16mm; break-after: page; margin: 0; }
   html:not(.pdf) .mast.co .eyebrow { margin-top: auto; } html:not(.pdf) .mast.co .meta { margin-top: auto; }
   html:not(.pdf) .mast.co .accent { bottom: 0; } }` : ''}
+${isLiveDoc(meta) ? `/* العلامة المائية: عنصر ثابت يتكرر في كل صفحة مطبوعة، ولا يُرسم في ملف pdf.js لأنه يضيفها طبقة بـ jsPDF */
+.wm { display: none; }
+@media print { html:not(.pdf) .wm { display: flex; position: fixed; inset: 0; align-items: center; justify-content: center; pointer-events: none; z-index: 9; }
+  html:not(.pdf) .wm span { transform: rotate(-${WATERMARK.angle}deg); font: 500 ${WATERMARK.size}pt "Noto Kufi Arabic", sans-serif; color: ${WATERMARK.color}; opacity: ${WATERMARK.opacity}; white-space: nowrap; } }` : ''}
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 /* الوثيقة فاتحة فقط (المرحلة 22): الإعلان في الجذر والرأس، ووسم قفل Dark Reader لأن الإعلان وحده لا يوقف الإضافة */
 :root { color-scheme: light; }
@@ -285,6 +295,7 @@ h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .mast.co { border-bottom: 0; }
 .close .thesis { margin: 0 0 3mm; flex-basis: 100%; }
 .close { flex-wrap: wrap; }
+.close .mi-mark svg { height: 14px; width: auto; display: block; opacity: .7; }
 /* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل: PAGE.h - PAGE.bottom في pdf.js، من PAGE_MM)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
 html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h) - mmPx(PAGE_MM.bottom)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
@@ -308,7 +319,7 @@ html.pdf .mast.co .accent { bottom: 0; }
   <div class="close">
     <p class="thesis">من النية… إلى الأثر</p>
     <p>${esc(meta.closing || 'أُعدّت هذه الوثيقة آليًا من بيانات المنصة لحظة إصدارها، وتعكس الحالة في ذلك التاريخ.')}</p>
-    ${SEAL()}
+    ${isLiveDoc(meta) ? `<span class="mi-mark" aria-hidden="true">${LOGO}</span>` : SEAL()}
   </div>
   <footer class="rights">
     <b>جميع الحقوق محفوظة <bdi dir="ltr">© ${year} Milestone Impact</bdi>.</b>
@@ -316,6 +327,7 @@ html.pdf .mast.co .accent { bottom: 0; }
     <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
   </footer>
 </article>
+${isLiveDoc(meta) && !opts.pdf ? `<div class="wm" aria-hidden="true"><span>${esc(WATERMARK.text)}</span></div>` : ''}
 ${opts.pdf ? runningHead(meta) : ''}
 </body></html>`;
 }
