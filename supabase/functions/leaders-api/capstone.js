@@ -156,6 +156,10 @@ export function chapterLevel(model, fields, state, content, levels) {
 export const DISPLAY_PAIRS = Object.freeze([
   { host: 'benefits-register', joins: 'evidence-plan' },   // المنافع وسطر «كيف ستعرف أنك نجحت؟»
   { host: 'milestone-register', joins: 'schedule' },       // المعالم والجدول الزمني
+  // تخفيف وثيقة المبادرة للتأسيسي، المرحلة 4 (التصور §5 البند 6): الوثيقة في 8 صفحات دون حذف فصل
+  { host: 'options-analysis', joins: 'theory-of-change' }, // المبرر مع نظرية التغيير
+  { host: 'cost-plan', joins: 'raid' },                    // المخاطر مع الموارد
+  { host: 'change-sustain', joins: 'transformation-story' }, // التغيير والاستدامة مع قصة التحول
 ]);
 /**
  * يحسبه الخادم وحده (docFor) من مستويات المحتوى: مفتاح التابع ← مفتاح أصله، حين يكون الفصلان في الوثيقة بمستوى التأسيسي في إطارهما.
