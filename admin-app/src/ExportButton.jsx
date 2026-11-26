@@ -1,6 +1,6 @@
 // زر التصدير الموحد: يسأل ماذا تصدّر وأي أعمدة، ثم يخرج ملف Excel بهوية واحدة. المنطق في exports.js.
 import React, { useState } from 'react';
-import { chosenColumns, loadColumns, rowsFor, saveColumns, subtitleFor, tableOf, whichOptions } from './exports.js';
+import { chosenColumns, loadColumns, rowsFor, saveColumns, sensitivePicked, subtitleFor, tableOf, whichOptions } from './exports.js';
 import { useEscape, useUI } from './ui.jsx';
 
 export function ExportDialog({ scope, meta, columns, sets, noun, onClose }) {
@@ -16,7 +16,7 @@ export function ExportDialog({ scope, meta, columns, sets, noun, onClose }) {
     e.preventDefault();
     setBusy(true);
     const cols = chosenColumns(columns, keys);
-    saveColumns(scope, cols.length === columns.length ? columns.map((c) => c.key) : cols.map((c) => c.key));
+    saveColumns(scope, cols.map((c) => c.key));
     const { exportWorkbook } = await import('../../src/lib/brand/xlsx.js');
     const { head, body } = tableOf(rows, cols);
     await exportWorkbook({ ...meta, subtitle: [meta.subtitle, subtitleFor(which, rows.length, sets.all.length, noun)].filter(Boolean).join(' · ') }, head, body);
@@ -50,6 +50,9 @@ export function ExportDialog({ scope, meta, columns, sets, noun, onClose }) {
             ))}
           </div>
         </fieldset>
+        {sensitivePicked(columns, keys).length > 0 && (
+          <p className="exp-warn" role="status">تنبيه: اخترت بيانات شخصية ({sensitivePicked(columns, keys).map((c) => c.label).join('، ')}). احفظ الملف في مكان آمن ولا تشاركه إلا لحاجة.</p>
+        )}
         <p className="la-muted">اختيار الأعمدة يُحفظ لهذه القائمة في هذا المتصفح.</p>
         <div className="la-row">
           <button className="btn-sm primary" type="submit" disabled={busy || !rows.length || !keys.length}>{busy ? 'جارٍ التصدير…' : `صدّر ${rows.length} ${noun}`}</button>

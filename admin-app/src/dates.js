@@ -26,3 +26,33 @@ export const timeOnly = (d) => (valid(d) ? new Date(d).toLocaleTimeString(DLOC, 
 export const dayFull = (d = new Date()) => (valid(d) ? new Date(d).toLocaleDateString(DLOC, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Riyadh' }) : '');
 /** الاثنين، 4 يناير 2027: يوم بلا وقت مخزّن نصًّا (رأس رحلة الدفعة)، يُقرأ بتوقيت UTC فلا ينزاح يومًا */
 export const dayLong = (d) => (d ? new Date(`${String(d).slice(0, 10)}T00:00:00Z`).toLocaleDateString(DLOC, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '');
+
+// ── التاريخ النسبي (مشترك: طلبات التواصل الآن، والزيارات والمصفوفة لاحقًا) ──
+const DAY = 86400000;
+/** عدد الأيام بجمع عربي صحيح: يوم، يومين، 3 أيام، 11 يومًا */
+export const daysAr = (n) => (n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n >= 3 && n <= 10 ? `${n} أيام` : `${n} يومًا`);
+/** الأيام الكاملة بين لحظتين بتقويم الرياض (لا بفرق الساعات): أمس 23:00 واليوم 01:00 يوم واحد */
+export const daysSince = (d, now = new Date()) => (valid(d) ? Math.max(0, Math.round((new Date(riyadhDay(now)) - new Date(riyadhDay(d))) / DAY)) : null);
+/** 13 نوفمبر 2026، 2:30 م بتوقيت الرياض: للوصف الكامل (aria-label وtitle) */
+export const riyadhFull = (d) => (valid(d) ? new Date(d).toLocaleString(DLOC, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Riyadh' }) : '');
+/**
+ * نسبي لسبعة أيام فأقل (الآن، قبل 5 دقائق، قبل 3 ساعات، أمس، قبل 4 أيام)،
+ * وبعدها مختصر: «13 نوفمبر» في السنة الجارية، و«13 نوف 2025» فيما قبلها. الكامل في riyadhFull.
+ */
+export function relDate(d, now = new Date()) {
+  if (!valid(d)) return '';
+  const t = new Date(d).getTime();
+  const ms = new Date(now).getTime() - t;
+  const days = daysSince(d, now);
+  if (ms < 60000 && ms > -60000) return 'الآن';
+  if (ms > 0 && days === 0) {
+    const m = Math.floor(ms / 60000);
+    if (m < 60) return m === 1 ? 'قبل دقيقة' : m === 2 ? 'قبل دقيقتين' : m <= 10 ? `قبل ${m} دقائق` : `قبل ${m} دقيقة`;
+    const h = Math.floor(m / 60);
+    return h === 1 ? 'قبل ساعة' : h === 2 ? 'قبل ساعتين' : h <= 10 ? `قبل ${h} ساعات` : `قبل ${h} ساعة`;
+  }
+  if (days === 1) return 'أمس';
+  if (days > 1 && days <= 7) return `قبل ${daysAr(days)}`;
+  const sameYear = new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Riyadh' }).slice(0, 4) === riyadhDay(now).slice(0, 4);
+  return new Date(t).toLocaleDateString(DLOC, sameYear ? { day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' } : { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Riyadh' });
+}

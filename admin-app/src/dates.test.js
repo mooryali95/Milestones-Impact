@@ -25,3 +25,30 @@ describe('صيغة التاريخ الواحدة في لوحة الإدارة', 
     expect(bad.map((f) => f.replace(__dirname, ''))).toEqual([]);
   });
 });
+
+describe('relDate والأيام (مشتركة بين الشاشات)', async () => {
+  const { relDate, daysAr, daysSince, riyadhFull } = await import('./dates.js');
+  const now = new Date('2026-11-26T09:00:00Z'); // 12:00 بتوقيت الرياض
+  it('نسبي لسبعة أيام فأقل', () => {
+    expect(relDate('2026-11-26T08:59:40Z', now)).toBe('الآن');
+    expect(relDate('2026-11-26T08:55:00Z', now)).toBe('قبل 5 دقائق');
+    expect(relDate('2026-11-26T06:00:00Z', now)).toBe('قبل 3 ساعات');
+    expect(relDate('2026-11-25T23:00:00Z', now)).toBe('قبل 10 ساعات'); // 02:00 اليوم في الرياض
+    expect(relDate('2026-11-25T20:00:00Z', now)).toBe('أمس'); // 23:00 أمس في الرياض;
+    expect(relDate('2026-11-25T08:00:00Z', now)).toBe('أمس');
+    expect(relDate('2026-11-22T08:00:00Z', now)).toBe('قبل 4 أيام');
+    expect(relDate('2026-11-19T08:00:00Z', now)).toBe('قبل 7 أيام');
+  });
+  it('بعد سبعة أيام: بلا سنة في السنة الجارية، وبها فيما قبلها، ولا أرقام هندية', () => {
+    expect(relDate('2026-11-10T08:00:00Z', now)).toMatch(/^10 نوفمبر$/);
+    expect(relDate('2025-11-10T08:00:00Z', now)).toMatch(/10.*2025/);
+    expect(relDate('2025-11-10T08:00:00Z', now)).not.toMatch(/[٠-٩]/);
+    expect([relDate(null), relDate('x')]).toEqual(['', '']);
+  });
+  it('الأيام بتقويم الرياض، والجمع العربي', () => {
+    expect(daysSince('2026-11-25T20:59:00Z', now)).toBe(1); // 23:59 أمس في الرياض
+    expect(daysSince('2026-11-25T21:01:00Z', now)).toBe(0); // 00:01 اليوم
+    expect([1, 2, 3, 10, 11, 100].map(daysAr)).toEqual(['يوم واحد', 'يومين', '3 أيام', '10 أيام', '11 يومًا', '100 يومًا']);
+    expect(riyadhFull('2026-11-26T09:00:00Z')).toMatch(/26 نوفمبر 2026/);
+  });
+});

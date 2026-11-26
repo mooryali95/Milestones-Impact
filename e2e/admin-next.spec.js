@@ -61,46 +61,71 @@ test('الدخول برمز خاطئ يعرض الخطأ، والصحيح يفت
   await expect(page.getByText('مدير الاختبار')).toBeVisible();
 });
 
-test('طلبات التواصل: إحصاءات وبحث وصفحات ودرج يغيّر الحالة', async ({ page }) => {
+test('طلبات التواصل: بطاقات مرشِّحة وبحث وصفحات ودرج يغيّر الحالة', async ({ page }) => {
   const calls = await mock(page);
   await signIn(page);
   await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
-  await expect(page.locator('.stat-card.s-total .stat-value')).toHaveText('23');
+  // البطاقات أزرار تكتب في مرشح الحالة نفسه، وأرقامها من كل الطلبات
+  const cards = page.getByRole('group', { name: 'ترشيح بالحالة' });
+  await expect(cards.getByRole('button', { name: /جديدة/ })).toContainText('1');
+  await expect(cards.getByRole('button', { name: /قُرئت بلا رد/ })).toContainText('22');
+  await cards.getByRole('button', { name: /جديدة/ }).click();
+  await expect(cards.getByRole('button', { name: /جديدة/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page).toHaveURL(/status=new/);
+  await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
+  await cards.getByRole('button', { name: /عرض الكل/ }).click();
   await expect(page.locator('.data-table tbody tr')).toHaveCount(20);
   await page.getByRole('button', { name: '2', exact: true }).click();
   await expect(page.locator('.data-table tbody tr')).toHaveCount(3);
 
   await page.getByLabel('بحث').fill('سارة');
   await expect(page.locator('.data-table tbody tr')).toHaveCount(1);
-  await page.getByText('سارة الأولى').click();
+  await page.getByRole('button', { name: /سارة الأولى/ }).click();
   // الشاشة العريضة: لوحة معاينة بجوار القائمة بدل الدرج (تدقيق اللوحة، المرحلة 3)، والدرج للجوال (admin-audit-p3.spec.js)
   const drawer = page.getByRole('complementary', { name: /سارة الأولى/ });
   await expect(drawer.getByText('نص السياق')).toBeVisible();
-  // فتح طلب جديد يجعله مقروءًا
+  // فتح طلب جديد يجعله مقروءًا بعد بقائه مفتوحًا قليلًا، لا فورًا
+  expect(calls.find((c) => c.action === 'update-contact')).toBeUndefined();
   await expect.poll(() => calls.find((c) => c.action === 'update-contact')?.fields.status).toBe('read');
   await drawer.getByRole('button', { name: 'مؤرشف' }).click();
   await expect(page.getByRole('status')).toContainText('مؤرشف');
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
   await expect(page.locator('.status-badge.archived')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /سارة الأولى/ })).toBeFocused();   // Esc يعيد التركيز إلى الصف
+});
+
+test('طلبات التواصل: الأسهم تنقل بين الطلبات دون تعليمها مقروءة', async ({ page }) => {
+  const calls = await mock(page);
+  await signIn(page);
+  await page.getByRole('button', { name: 'طلبات التواصل' }).click();
+  await page.getByRole('button', { name: /سارة الأولى/ }).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('complementary', { name: /متواصل 1/ })).toBeVisible();
+  await page.keyboard.press('j');
+  await expect(page.getByRole('complementary', { name: /متواصل 2/ })).toBeVisible();
+  await page.keyboard.press('k');
+  await expect(page.getByRole('complementary', { name: /متواصل 1/ })).toBeVisible();
+  await page.waitForTimeout(300);
+  expect(calls.filter((c) => c.action === 'update-contact')).toHaveLength(0);
 });
 
 test('فشل تغيير الحالة يعيدها كما كانت', async ({ page }) => {
   await mock(page, { 'update-contact': { success: false, message: 'رفض الخادم' } });
   await signIn(page);
   await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
-  await page.getByText('متواصل 1', { exact: true }).click();
+  await page.getByRole('button', { name: 'متواصل 1', exact: true }).click();
   const pane = page.getByRole('complementary', { name: /متواصل 1/ });
   await pane.getByRole('button', { name: 'تم الرد' }).click();
   await expect(page.getByRole('status')).toHaveText('رفض الخادم');
-  await expect(pane.getByRole('button', { name: 'مقروء' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(pane.getByRole('button', { name: 'مقروء', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('خطأ التحميل يعرض زر إعادة المحاولة', async ({ page }) => {
   await mock(page, { 'list-contacts': { success: false, message: 'تعذّر الاتصال' } });
   await signIn(page);
   await page.getByRole('button', { name: 'طلبات التواصل' }).click();   // الدخول يفتح تطبيق القادة، وهذا الاختبار لطلبات التواصل
-  await expect(page.getByText('خطأ في تحميل البيانات: تعذّر الاتصال')).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('تعذّر تحميل البيانات: تعذّر الاتصال');
   await expect(page.getByRole('button', { name: 'حاول مرة أخرى' })).toBeVisible();
 });
 
