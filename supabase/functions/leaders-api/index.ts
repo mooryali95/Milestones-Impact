@@ -207,7 +207,7 @@ const DEMO_OPEN = new Set(['track.seen', 'guide.state', 'guide.clear', 'guide.co
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
   'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.preview',
   'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
-  'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
+  'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'impact.no-manager', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
   'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
   'capstone.shares', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark',
   'commitment.mine', 'commitment.save', 'commitment.review', 'commitment.to-initiative']);
@@ -224,7 +224,7 @@ const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sess
 // ورابط الجلسة عن بعد وغرفة الموجّه على الخادم: للمعتمد كما كان، ولغيره حين تفتح مرحلتهما في رحلته بقاعدة الفتح أو بفتح
 // الأدمن (sessionOpen في activities.ts)
 const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
-  'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
+  'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'requirement.update', 'impact.mine', 'impact.no-manager', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant',
   // الالتزام بعد الورشة يتبع الحضور (commitments.ts)
   'commitment.mine', 'commitment.save', 'commitment.review',
@@ -401,6 +401,8 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'impact.mine': (p) => I.mine(p),
   'rater.invite': (p, b) => I.invite(p, b),
   'rater.revoke': (p, b) => I.revoke(p, b),
+  // «لا يوجد مدير متاح»: زميل أعلى أو «ذاتي فقط» بلا حبس (تصور المرحلة 3، القرار 3)
+  'impact.no-manager': (p, b) => I.noManager(p, b),
   // تقييم 360 للتطوير (feedback360.ts): الدورة والتقدير الذاتي والترشيح بالمجموعات والإرسال إلى المستشار
   'f360.mine': (p) => FB.mine(p),
   'f360.start': (p) => FB.start(p),

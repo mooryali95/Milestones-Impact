@@ -1,6 +1,6 @@
-// تقدير المدير والزملاء مع مفتاح 360 (قرار المالك 2026-11-16: يُدمج لاحقًا مع 360). المفتاح مطفأ: بنود الرحلة T-360 وE-360
-// وE-MGR تختفي في طبقة التعريف (journeyDefinition) كالبنود المخفية فلا تحبس مرحلة، ودعوة مقيّمي الأثر وإلغاؤها وتأكيدهم
-// تُرفض برمز f360_off، وما أُرسل من تقديرات باقٍ لا يُمس. ومُظهَرًا يعود كل شيء. قاعدة في الذاكرة بلا شبكة.
+// تقدير الزملاء مع مفتاح 360، وتقييم المدير خارجه (تصور المرحلة 3، القرار 2، 2026-11-26؛ كانا معًا بقرار 2026-11-16).
+// المفتاح مطفأ: E-360 يختفي في طبقة التعريف (journeyDefinition) كالبنود المخفية فلا يحبس مرحلة، وT-360 يُخفى لدفعة جارية
+// بدأت قبل الإطلاق وحدها، وE-MGR ظاهر. دعوة المقيّم وإلغاؤه وتأكيده تعمل لخانة المدير، ومقيّم 360 مرفوض. قاعدة في الذاكرة.
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -9,6 +9,7 @@ const I = await import('./impact.ts');
 const { resetSettingsCache } = await import('./settings.ts');
 const { buildJourney, hideBreaksStage, impactVerdict } = await import('./logic.js');
 const { featureHiddenCodes, featureHiddenFor, F360_JOURNEY_CODES } = await import('./features.js');
+const { NO_PRE_RUNNING_AR } = await import('./manager-rating.js');
 
 type Row = Record<string, any>;
 function install(tables: Record<string, Row[]>) {
@@ -93,50 +94,55 @@ function world(settings: Row[], extra: Record<string, Row[]> = {}) {
 const failOf = async (fn: () => Promise<unknown>) => (await assertRejects(fn, Fail)) as InstanceType<typeof Fail>;
 const codes = (d: any) => d.requirements.map((r: Row) => r.code);
 
-Deno.test('الرموز الثلاثة: مطفأ يخفيها ومُظهَر لا يخفي شيئًا، وحارس المرحلة يبقي رمزًا يترك مرحلته بلا ما يكملها', () => {
-  assertEquals(F360_JOURNEY_CODES, ['T-360', 'E-360', 'E-MGR']);
-  assertEquals(featureHiddenCodes({ f360: false }), ['T-360', 'E-360', 'E-MGR']);
-  assertEquals(featureHiddenCodes(null), ['T-360', 'E-360', 'E-MGR']);
-  assertEquals(featureHiddenCodes({ f360: true }), []);
+Deno.test('مطفأ: E-360 وحده يُخفى، والقبلي للدفعة الجارية، ومُظهَر لا يخفي شيئًا، وحارس المرحلة يبقي رمزًا يترك مرحلته بلا ما يكملها', () => {
+  assertEquals(F360_JOURNEY_CODES, ['E-360']);
+  assertEquals(featureHiddenCodes({ f360: false }), ['E-360']);
+  assertEquals(featureHiddenCodes(null), ['E-360']);
+  assertEquals(featureHiddenCodes({ f360: false }, { preAllowed: false }), ['E-360', 'T-360']);
+  assertEquals(featureHiddenCodes({ f360: true }, { preAllowed: false }), []);
   const off = { f360: false };
-  assertEquals(featureHiddenFor({ stages: STAGES, requirements: REQS, flags: off, breaks: hideBreaksStage }), { hidden: ['T-360', 'E-360', 'E-MGR'], kept: [] });
+  assertEquals(featureHiddenFor({ stages: STAGES, requirements: REQS, flags: off, breaks: hideBreaksStage }), { hidden: ['E-360'], kept: [] });
+  assertEquals(featureHiddenFor({ stages: STAGES, requirements: REQS, flags: off, breaks: hideBreaksStage, preAllowed: false }), { hidden: ['E-360', 'T-360'], kept: [] });
   assertEquals(featureHiddenFor({ stages: STAGES, requirements: REQS, flags: { f360: true }, breaks: hideBreaksStage }), { hidden: [], kept: [] });
   // ما أخفته الدفعة أو غاب عن البرنامج لا يُعد مرة أخرى
-  assertEquals(featureHiddenFor({ stages: STAGES, requirements: REQS.filter((r) => r.code !== 'E-MGR'), cohortHidden: ['T-360'], flags: off, breaks: hideBreaksStage }).hidden, ['E-360']);
-  // مرحلة إلزامية لا يكملها إلا E-360: إخفاؤه يحبس ما بعدها، فيبقى ظاهرًا، وغيره يُخفى
+  assertEquals(featureHiddenFor({ stages: STAGES, requirements: REQS, cohortHidden: ['E-360'], flags: off, breaks: hideBreaksStage, preAllowed: false }).hidden, ['T-360']);
+  // مرحلة إلزامية لا يكملها إلا E-360: إخفاؤه يحبس ما بعدها، فيبقى ظاهرًا
   const lone = [req(1, 'training', 'T-360', false), req(2, 'training', 'T-AGREE'), req(3, 'evaluation', 'E-360'), req(4, 'evaluation', 'E-MGR', false), req(5, 'after', 'A-LAST')];
-  assertEquals(featureHiddenFor({ stages: STAGES, requirements: lone, flags: off, breaks: hideBreaksStage }), { hidden: ['T-360'], kept: ['E-360', 'E-MGR'] });
+  assertEquals(featureHiddenFor({ stages: STAGES, requirements: lone, flags: off, breaks: hideBreaksStage }), { hidden: [], kept: ['E-360'] });
 });
 
-Deno.test('journeyDefinition مطفأ: البنود الثلاثة خارج الرحلة ولا تحبس المرحلة، ونسخة البرنامج وصفوفه لا تُمس؛ ومُظهَرًا تعود', async () => {
+Deno.test('journeyDefinition مطفأ: الدفعة الجارية بلا E-360 ولا قبلي، وE-MGR ظاهر ولا يحبس؛ والدفعة الجديدة ترى القبلي؛ ومُظهَرًا يعود كل شيء', async () => {
   let w = world([]);
   try {
     const d: any = await journeyDefinition({ id: P1, organization_id: ORG });
-    assertEquals(codes(d), ['T-AGREE', 'E-POST', 'A-LAST']);
-    assertEquals(d.feature_hidden, ['T-360', 'E-360', 'E-MGR']);
-    assertEquals(await requirementIdByCode({ id: P1, organization_id: ORG }, 'E-MGR'), null);
-    // ما بقي إلزاميًا منجز: التدريب والتقييم يكتملان وما بعدهما يُفتح، بلا انتظار تقدير المدير
+    assertEquals(codes(d), ['T-AGREE', 'E-POST', 'E-MGR', 'A-LAST']);
+    assertEquals(d.feature_hidden, ['E-360', 'T-360']);
+    assertEquals(await requirementIdByCode({ id: P1, organization_id: ORG }, 'E-MGR'), U(105));
     const progress = { [U(101)]: { status: 'done' }, [U(103)]: { status: 'done' } };
     const j = buildJourney({ stages: d.stages, requirements: d.requirements, progress, levels: {}, state: { preRated: false, postRated: false, postSubmitted: true } });
-    assertEquals(j.map((s: any) => [s.key, s.status, s.total]), [['training', 'done', 1], ['evaluation', 'done', 1], ['after', 'active', 1]]);
+    assertEquals(j.map((s: any) => [s.key, s.status]), [['training', 'done'], ['evaluation', 'done'], ['after', 'active']]);
     assertEquals(w.tables.program_versions[0].data.requirements.map((r: Row) => r.code), REQS.map((r) => r.code));
-    assertEquals(w.tables.stage_requirements.length, 6);
     assertEquals(w.tables.cohorts[0].hidden_requirements, []);
+  } finally { w.restore(); }
+  w = world([]);
+  w.tables.cohorts[0].starts_on = '2026-12-01';
+  try {
+    const d: any = await journeyDefinition({ id: P1, organization_id: ORG });
+    assertEquals(codes(d), ['T-AGREE', 'T-360', 'E-POST', 'E-MGR', 'A-LAST']);
+    // بلا مدير: «ذاتي فقط» يكمل T-360 فلا يحبس التدريب
+    const progress = { [U(101)]: { status: 'done' }, [U(103)]: { status: 'done' } };
+    const j = buildJourney({ stages: d.stages, requirements: d.requirements, progress, levels: {}, state: { preRated: false, selfOnly: true, postSubmitted: true } });
+    assertEquals(j.map((s: any) => [s.key, s.status]), [['training', 'done'], ['evaluation', 'done'], ['after', 'active']]);
   } finally { w.restore(); }
   w = world(ON);
   try {
     const d: any = await journeyDefinition({ id: P1, organization_id: ORG });
     assertEquals(codes(d), REQS.map((r) => r.code));
     assertEquals(d.feature_hidden, []);
-    assertEquals(await requirementIdByCode({ id: P1, organization_id: ORG }, 'E-MGR'), U(105));
-    // مُظهَرًا يعود E-360 يحبس التقييم كما كان
-    const progress = { [U(101)]: { status: 'done' }, [U(103)]: { status: 'done' } };
-    const j = buildJourney({ stages: d.stages, requirements: d.requirements, progress, levels: {}, state: { preRated: true, postRated: false, postSubmitted: true } });
-    assertEquals(j.map((s: any) => [s.key, s.status]), [['training', 'done'], ['evaluation', 'active'], ['after', 'locked']]);
   } finally { w.restore(); }
 });
 
-Deno.test('إخفاء الدفعة باقٍ مع المفتاح: مُظهَرًا يُخفى ما أخفته الدفعة وحده، ومطفأ يُضاف إليه الثلاثة', async () => {
+Deno.test('إخفاء الدفعة باقٍ مع المفتاح: مُظهَرًا يُخفى ما أخفته الدفعة وحده، ومطفأ يُضاف إليه تقدير الزملاء والقبلي للجارية', async () => {
   let w = world(ON);
   w.tables.cohorts[0].hidden_requirements = ['E-MGR'];
   try {
@@ -145,19 +151,18 @@ Deno.test('إخفاء الدفعة باقٍ مع المفتاح: مُظهَرً�
   w = world([]);
   w.tables.cohorts[0].hidden_requirements = ['A-LAST'];
   try {
-    assertEquals(codes(await journeyDefinition({ id: P1, organization_id: ORG })), ['T-AGREE', 'E-POST']);
+    assertEquals(codes(await journeyDefinition({ id: P1, organization_id: ORG })), ['T-AGREE', 'E-POST', 'E-MGR']);
   } finally { w.restore(); }
 });
 
-Deno.test('مطفأ: الدفعة لا تخفي ما يجعل بند 360 وحده ما يكمل مرحلة (لا يكتمل وهو مطفأ)، ومُظهَرًا يمر', async () => {
+Deno.test('مطفأ: الدفعة لا تخفي ما يجعل بندًا مخفيًا وحده ما يكمل مرحلة، ومُظهَرًا يمر', async () => {
   const admin = { email: 'a@x.sa', role: 'admin' as const };
   let w = world([], { cohort_experts: [] });
   try {
     const e = await failOf(() => cohortSave(admin, { id: C1, hidden_requirements: ['T-AGREE'] }));
     assertEquals(e.code, 'hide_breaks_stage');
-    assertEquals([e.message.includes('«training»'), e.message.includes('مع تقييم 360')], [true, true]);
+    assertEquals(e.message.includes('«training»'), true);
     assertEquals(w.tables.cohorts[0].hidden_requirements, []);
-    // ما لا يمس ما يكمل المرحلة يمر وهو مطفأ
     assertEquals(((await cohortSave(admin, { id: C1, hidden_requirements: ['E-MGR'] })) as any).success, true);
   } finally { w.restore(); }
   w = world(ON, { cohort_experts: [] });
@@ -172,25 +177,20 @@ const RATERS = () => [
   { id: U(203), participant_id: P1, phase: 'post', relation: 'manager', email: 'boss@org.sa', status: 'invited', invited_at: '2026-11-01T00:00:00Z', expires_at: '2026-12-01T00:00:00Z' },
 ];
 
-Deno.test('مطفأ: دعوة مقيّم الأثر وإعادة إرسالها وإلغاؤه وتأكيده مرفوضة برمز f360_off، والقائمة المنتظرة فارغة، والصفوف لا تُمس', async () => {
-  const w = world([], { raters: RATERS() });
-  const before = structuredClone(w.tables.raters);
+Deno.test('مطفأ: خانة المدير تعمل (الإلغاء ورفض المنتظر وقائمته)، والقبلي مرفوض للدفعة الجارية، ومقيّم 360 مرفوض', async () => {
+  const w = world([], { raters: [...RATERS(), { id: U(204), participant_id: P1, phase: 'f360', relation: 'peer', email: 'f@org.sa', status: 'awaiting', invited_at: '2026-11-01T00:00:00Z' }],
+    organizations: [{ id: ORG, domains: ['org.sa'] }] });
   try {
     const p = w.tables.participants[0];
-    for (const [name, fn] of [
-      ['invite pre', () => I.invite(p, { email: 'boss@org.sa', phase: 'pre' })],
-      ['invite post', () => I.invite(p, { email: 'peer2@org.sa', phase: 'post', relation: 'peer' })],
-      ['resend', () => I.invite(p, { email: 'boss@org.sa', phase: 'post' })],
-      ['revoke', () => I.revoke(p, { id: U(203) })],
-      ['confirm', () => I.confirmRater({ kind: 'coordinator', email: 'c@org.sa' }, { id: U(202) }, async () => true)],
-      ['reject', () => I.confirmRater({ kind: 'expert', email: 'x@org.sa' }, { id: U(202), decision: 'reject', reason: 'بريد عام' }, async () => true)],
-    ] as [string, () => Promise<unknown>][]) {
-      const e = await failOf(fn);
-      assertEquals([name, e.code, e.status, e.message], [name, 'f360_off', 404, 'هذا غير متاح الآن.']);
-    }
-    assertEquals(await I.awaitingFor([P1]), []);
-    assertEquals(w.tables.raters, before);
-    assertEquals(w.tables.audit_log.filter((l: Row) => String(l.action).startsWith('rater.')), []);
+    // الدفعة بدأت قبل الإطلاق: لا قبلي، برسالة تقول لماذا
+    assertEquals((await failOf(() => I.invite(p, { email: 'boss2@org.sa', phase: 'pre' }))).message, NO_PRE_RUNNING_AR);
+    await I.revoke(p, { id: U(203) });
+    assertEquals(w.tables.raters.find((r: Row) => r.id === U(203))?.status, 'revoked');
+    assertEquals((await I.awaitingFor([P1])).map((r: any) => r.id), [U(202)]);
+    const r: any = await I.confirmRater({ kind: 'expert', email: 'x@org.sa' }, { id: U(202), decision: 'reject', reason: 'بريد عام' }, async () => true);
+    assertEquals(r.decision, 'reject');
+    const e = await failOf(() => I.confirmRater({ kind: 'expert', email: 'x@org.sa' }, { id: U(204), decision: 'reject', reason: 'بريد عام' }, async () => true));
+    assertEquals([e.code, e.status], ['f360_off', 404]);
   } finally { w.restore(); }
 });
 
@@ -210,16 +210,18 @@ Deno.test('حكم الأثر بلا تقدير المدير: الاختبار و
   assertEquals(impactVerdict({ test: 'up', self: null, rater: 'up', raterProspective: true, evidence: false }).sources, ['test', 'rater']);
 });
 
-Deno.test('impact.mine مطفأ: لا دعوة ولا قائمة ولا تقدير قبل البرنامج، والملخص باقٍ؛ ومُظهَرًا القائمة كما كانت', async () => {
+Deno.test('impact.mine مطفأ: خانة المدير وحدها بدعوة وحد واحد، بلا قبلي للجارية، والملخص باقٍ؛ ومُظهَرًا القائمة كما كانت', async () => {
   let w = world([], { raters: RATERS(), assessments: [], questions: [] });
   try {
     const r: any = await I.mine(w.tables.participants[0]);
-    assertEquals([r.success, r.invite, r.pre_available, r.raters], [true, false, false, []]);
+    assertEquals([r.success, r.invite, r.manager_only, r.limit, r.pre_available, r.raters.map((x: any) => x.id)], [true, true, true, 1, false, [U(201), U(203)]]);
     assertEquals('summary' in r, true);
+    // لا إجابة مقيّم في رد المشارك: المتوسط لكل بُعد وحده (manager)
+    assertEquals(JSON.stringify(r).includes('"answers"'), false);
   } finally { w.restore(); }
   w = world(ON, { raters: RATERS(), assessments: [], questions: [] });
   try {
     const r: any = await I.mine(w.tables.participants[0]);
-    assertEquals([r.invite, r.raters.map((x: any) => x.id)], [true, [U(201), U(202), U(203)]]);
+    assertEquals([r.invite, r.manager_only, r.raters.map((x: any) => x.id)], [true, false, [U(201), U(202), U(203)]]);
   } finally { w.restore(); }
 });

@@ -25,6 +25,7 @@ import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
+import { NoManager } from './Impact.jsx';
 import { CommitmentCard } from './Commitments.jsx';
 import { GuidancePanel } from './Guidance.jsx';
 import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
@@ -679,6 +680,7 @@ export function PreManager({ inSettings = false }) {
     call('impact.mine').then((r) => setData(r.success ? r : null));
   }, [hidden]);
   if (hidden || !data?.pre_available) return null;
+  const who = data.no_manager === 'senior' ? 'الزميل الأعلى' : 'المدير';
   const pre = data.raters.find((r) => r.phase === 'pre');
   if (pre?.status === 'submitted') return null;
   const send = async (e) => {
@@ -692,7 +694,7 @@ export function PreManager({ inSettings = false }) {
     <div className="banner mist">
       <span className="ico"><Ico name="people" /></span>
       <div className="grow stack" style={{ gap: 8 }}>
-        <div className="row between"><b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
+        <div className="row between"><b>{data.no_manager === 'senior' ? 'ادعُ زميلًا أعلى يعرف عملك ليقدّر ممارستك الآن، قبل البرنامج' : 'ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج'}</b>
           {!inSettings && <button type="button" className="link small" aria-label="لاحقًا" onClick={() => { try { localStorage.setItem(PRE_HIDE, String(Date.now())); } catch { /* خاص */ } setHidden(true); }}>لاحقًا · تجدها في «ملفي»</button>}</div>
         {pre?.status === 'awaiting'
           ? <p className="small">دعوة {pre.full_name || pre.email} بانتظار تأكيد مستشارك أو منسق جهتك ({pre.flags_ar?.join('، ') || 'بريد من غير نطاق جهتك'})، وتصله فور التأكيد. بريد جهتك يصل فورًا.</p>
@@ -700,13 +702,14 @@ export function PreManager({ inSettings = false }) {
           ? <p className="small">أُرسلت الدعوة إلى {pre.full_name || pre.email}. ننتظر تقديره، وسنطلب منه التقدير نفسه بعد البرنامج.</p>
           : (
             <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
-              <p className="small" style={{ flexBasis: '100%' }}>5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا.</p>
-              <input className="input" aria-label="اسم المدير" autoComplete="off" placeholder="اسم المدير" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-              <EmailInput className="input ltr" type="email" required aria-label="بريد المدير" placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <p className="small" style={{ flexBasis: '100%' }}>ثماني عبارات في نحو 6 دقائق، بلا حساب. ترى المتوسط لكل إطار لا إجاباته.</p>
+              <input className="input" aria-label={`اسم ${who}`} autoComplete="off" placeholder={`اسم ${who}`} value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+              <EmailInput className="input ltr" type="email" required aria-label={`بريد ${who}`} placeholder={`بريد ${who}`} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
               <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
               {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
             </form>
           )}
+        {!pre && <NoManager data={data} onChange={setData} />}
       </div>
     </div>
   );

@@ -633,6 +633,8 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     reportIssued: (reports.data || []).length > 0 || fe?.status === 'approved',
     initiativeNamed: !!initiative,
     preRated: (rated.data || []).some((r: any) => r.phase === 'pre' && r.status === 'submitted'),
+    // «ذاتي فقط» لمن لا مدير له (تصور المرحلة 3، القرار 3): يكمل T-360 بلا حبس، ويوسم به تقريره
+    selfOnly: p.no_manager === 'self',
     postRated: post360.done,
     postRatedFewer: post360.fewer,
     // «عرض المشروع أمام لجنة التقييم» (E-PRES): اعتماد التقييم الختامي لبرنامجه، لا مسودته ولا ما ينتظر الاعتماد

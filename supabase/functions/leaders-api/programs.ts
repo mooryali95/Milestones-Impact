@@ -16,6 +16,7 @@ import { cleanProfile } from './certificates.ts';
 import { seatsUsedByOrg } from './entitlements.ts';
 import { features } from './features.ts';
 import { featureHiddenCodes, featureHiddenFor } from './features.js';
+import { managerPreAllowed } from './manager-rating.js';
 import { isRunning, LIVE } from './cohort-running.js';
 import { listed } from './counting.ts';
 import { demoCohortOf, refuseDemo, removeCohortDemo } from './demo-cohort.ts';
@@ -120,7 +121,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   // بنود أخفتها الدفعة: تختفي من رحلة أعضائها فورًا، ولا يُحذف ما أُنجز منها
   const cohortHidden = ((cohort as any)?.hidden_requirements || []) as string[];
   // وبنود يخفيها مفتاح ميزة مطفأ (تقدير المدير والزملاء مع 360): الطبقة نفسها، فلا تُمس النسخة ولا الصفوف وتعود حين يُظهَر
-  const fh = featureHiddenFor({ stages: def.stages, requirements: def.requirements, cohortHidden, flags: await features(), breaks: hideBreaksStage });
+  // والقبلي لتقييم المدير يُخفى لدفعة جارية بدأت قبل إطلاقه (تصور المرحلة 3، القرار 2)
+  const fh = featureHiddenFor({ stages: def.stages, requirements: def.requirements, cohortHidden, flags: await features(), breaks: hideBreaksStage, preAllowed: managerPreAllowed(cohort) });
   if (fh.kept.length) console.warn('feature-hidden kept to avoid a stuck stage:', fh.kept.join(','), cohort?.id || '');
   const hidden = new Set([...cohortHidden, ...fh.hidden]);
   if (hidden.size) def.requirements = def.requirements.filter((r: any) => !hidden.has(r.code));
@@ -576,7 +578,7 @@ async function guardLive(b: Body, row: Body, prev: any, programId: string) {
     const def = await defOf(vid, programId);
     // وما يخفيه مفتاح ميزة مطفأ الآن (بنود تقدير المدير والزملاء مع 360) يُحسب مع إخفاء الدفعة: بند يبقيه featureHiddenFor
     // ظاهرًا لئلا تفرغ مرحلته لا يكتمل ما دام المفتاح مطفأ، فلا يُسمح بإخفاء يجعله وحده ما يكمل مرحلة
-    const fcodes = featureHiddenCodes(await features());
+    const fcodes = featureHiddenCodes(await features(), { preAllowed: managerPreAllowed({ ...(prev || {}), ...row }) });
     const broken = hideBreaksStage(def.stages || [], def.requirements || [], [...hidden, ...fcodes]);
     // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها، ولا كسر من شكل البرنامج والمفتاح وحدهما
     const was = !broken.length ? []
@@ -586,7 +588,7 @@ async function guardLive(b: Body, row: Body, prev: any, programId: string) {
     const worse = newlyBroken(broken, was);
     if (worse.length) {
       const byFeature = fcodes.length && newlyBroken(worse, hideBreaksStage(def.stages || [], def.requirements || [], hidden)).length > 0;
-      throw new Fail(hideBreaksMessage(worse) + (byFeature ? ' وبنود تقدير المدير والزملاء مخفية الآن مع تقييم 360، فلا تُحسب مما يكمل المرحلة.' : ''), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+      throw new Fail(hideBreaksMessage(worse) + (byFeature ? ' وتقدير الزملاء بعد البرنامج مخفي الآن مع تقييم 360، فلا يُحسب مما يكمل المرحلة.' : ''), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
     }
   }
   const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);

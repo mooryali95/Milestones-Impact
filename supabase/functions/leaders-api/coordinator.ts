@@ -16,6 +16,7 @@ import { org as orgPayload, requireWrite } from './admin.ts';
 import { baselineProgress, lastActiveFor } from './admin.ts';
 import { onboardingOf, STUCK_STEPS } from './onboarding.js';
 import { adminReport as impactReport, awaitingFor, confirmRater } from './impact.ts';
+import { orgRaterView } from './manager-rating.js';
 import { orgList as initiativesFor } from './capstone.ts';
 import { portfolioOutcomes } from './tracking.js';
 import { coordTeam } from './team.ts';
@@ -254,9 +255,11 @@ export async function impactFor(c: any) {
   const paired = r.participants.filter((p: any) => p.dimensions);
   const hidden = paired.filter((p: any) => !shared.has(p.id)).length;
   const named = scores && (hidden === 0 || hidden >= MIN_COHORT);
+  // تقييم المدير (تصور المرحلة 3، القرار 4): مؤشر مجمع لخمسة فأكثر لكل بُعد، ولا تقدير مدير بعينه في صفوف الأسماء
+  const view = orgRaterView(r.cohort, named ? paired.filter((p: any) => shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [], MIN_COHORT);
   return {
-    counts: r.counts, cohort: r.cohort, transfer: r.transfer, caution: r.caution,
-    participants: named ? paired.filter((p: any) => shared.has(p.id)).map((p: any) => ({ full_name: p.full_name, dimensions: p.dimensions })) : [],
+    counts: r.counts, cohort: view.cohort, transfer: r.transfer, caution: r.caution,
+    participants: view.participants,
     ...(scores && !named ? { rows_withheld: true } : {}),
   };
 }

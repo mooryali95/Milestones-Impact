@@ -32,12 +32,14 @@ Deno.test('التذييل صادق: المنسق يوقفه برابط إلغا�
   assert(!html.includes('ويمكن للإدارة إيقافه'));
 });
 
-Deno.test('المصدر: الإرسال الأسبوعي يمرر raters_pending من dashboardFor نفسها، وهي بشرط list ومفتاح 360', async () => {
+Deno.test('المصدر: الإرسال الأسبوعي يمرر raters_pending من dashboardFor نفسها، وهي بشرط list، ومقيّم 360 وحده خلف مفتاحه', async () => {
   const src = await Deno.readTextFile(new URL('./coordinator.ts', import.meta.url));
   assert(src.includes('const raters = (d as any).raters_pending || [];'));
   assert(/coordinatorWeeklyMail\(c\.full_name, c\.organizations\.name, d\.kpis, raters\)/.test(src));
   assert(src.includes('list ? awaitingFor((r.participants || []).map((p: any) => p.id)) : Promise.resolve([])'));
   const imp = await Deno.readTextFile(new URL('./impact.ts', import.meta.url));
-  assert(imp.includes('if (!ids.length || !(await features()).f360) return [];'));
+  // مقيّمو الأثر (pre وpost) خارج المفتاح (تصور المرحلة 3، القرار 2)، ومقيّم 360 لا يُعرض والمفتاح مطفأ
+  assert(imp.includes('if (!ids.length) return [];'));
+  assert(imp.includes('.filter((r: any) => on || IMPACT_PHASES.includes(r.phase))'));
   assertEquals(typeof coordinatorWeeklyMail, 'function');
 });

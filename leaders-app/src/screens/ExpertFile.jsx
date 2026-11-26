@@ -384,6 +384,7 @@ export default function ExpertFile({ id, onBack }) {
         </section>
       )}
       {d.commitments && <CoachCommitments c={d.commitments} />}
+      {d.manager_rating && <CoachManagerRating list={d.manager_rating} />}
       {d.mentor && <MentorNudge pid={p.id} />}
       <PeerPending peer={d.peer} advisor={advisor} reload={load} />
       <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />
@@ -404,6 +405,23 @@ function CoachCommitments({ c }) {
           <b className="small">{title} ({list.length})</b>
           <ul className="small">
             {list.map((x) => <li key={x.id}>«{x.action}»{x.session ? ` · ${x.session}` : ''}{x.outcome_ar ? ` · ${x.outcome_ar}` : ''}{x.learned ? `: ${x.learned}` : ''}</li>)}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// فقرات تقدير خانة المدير بنصها وإجاباتها، للمستشار وحده (تصور المرحلة 3، القرار 4)
+function CoachManagerRating({ list }) {
+  return (
+    <section className="card stack" aria-label="تقدير المدير">
+      <h3>تقدير المدير</h3>
+      {list.map((r) => (
+        <div key={r.phase} className="stack">
+          <b className="small">{r.phase === 'pre' ? 'قبل البرنامج' : 'بعد البرنامج'}</b>
+          <ul className="small">
+            {r.items.map((x, i) => <li key={i}>{x.text}: {x.now}{x.before ? ` (قبل: ${x.before})` : ''}</li>)}
           </ul>
         </div>
       ))}

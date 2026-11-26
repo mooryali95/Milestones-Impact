@@ -7,7 +7,7 @@
 // إليه بطلب خدمة مقبول (قراءة الملف فقط). ما لا يحق له لا يُرسل أصلًا.
 import * as CM from './commitments.ts';
 import { allFor, audit, db, Fail } from './core.ts';
-import { awaitingFor, confirmRater } from './impact.ts';
+import { awaitingFor, confirmRater, managerItemsFor } from './impact.ts';
 import { participant as adminParticipant, answersReview } from './admin.ts';
 import type { Actor } from './admin.ts';
 import { advisorCohorts, myParticipantIds } from './advisor.ts';
@@ -251,7 +251,9 @@ export async function participant(e: any, b: Body) {
   // المرشد (مشرف الرحلة) يذكّر من يرشده بالمحرك الموحد (xp.nudge، nudges.ts)، والخادم يتحقق من الإسناد نفسه
   // التزامات ما بعد الورش للمستشار وحده: من طبّق ومن لم يطبق، مادة لحديث الجلسة (تصور المرحلة 3، 3.2)
   const commitments = f?.success && scope.advisor.has(id) ? await CM.forCoach(id) : null;
-  return f?.success ? { ...f, mentor: scope.assigned.get(id) === 'mentor', commitments } : f;
+  // وفقرات تقدير المدير بنصها للمستشار وحده (القرار 4): المشارك يرى المتوسط، والجهة المؤشر المجمع
+  const manager_rating = f?.success && scope.advisor.has(id) ? await managerItemsFor(id).catch(() => null) : null;
+  return f?.success ? { ...f, mentor: scope.assigned.get(id) === 'mentor', commitments, manager_rating } : f;
 }
 
 // ── وثيقة المبادرة من البوابة (مرافق بناء المبادرة 4د): يقرؤها الخبير وهو يجيب سؤالًا عن فصل فيها ──

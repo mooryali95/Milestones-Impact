@@ -1876,6 +1876,8 @@ create table if not exists leaders.participants (
   name_confirmed_at timestamp with time zone,
   is_test boolean default false not null,
   demo_cohort_id uuid,
+  no_manager text,
+  no_manager_at timestamp with time zone,
   constraint participants_bio_check CHECK ((char_length(bio) <= 2000)),
   constraint participants_campaign_check CHECK (((campaign IS NULL) OR (campaign ~ '^[a-z0-9_-]{1,40}$'::text))),
   constraint participants_demo_cohort_is_demo CHECK (((demo_cohort_id IS NULL) OR is_demo)),
@@ -1895,6 +1897,7 @@ create table if not exists leaders.participants (
   constraint participants_status_check CHECK ((status = ANY (ARRAY['registered'::text, 'profiled'::text, 'assessing'::text, 'pending_approval'::text, 'placed'::text, 'enrolled'::text, 'completed'::text, 'withdrawn'::text, 'suspended'::text]))),
   constraint participants_work_scope_check CHECK (((work_scope IS NULL) OR (work_scope = ANY (ARRAY['project'::text, 'program'::text, 'portfolio'::text])))),
   constraint participants_years_experience_check CHECK (((years_experience >= 0) AND (years_experience <= 60))),
+  constraint participants_no_manager_check CHECK (((no_manager IS NULL) OR (no_manager = ANY (ARRAY['senior'::text, 'self'::text])))),
   constraint participants_pkey PRIMARY KEY (id)
 );
 
