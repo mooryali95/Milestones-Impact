@@ -15,14 +15,18 @@ const enr = (p, c, status = 'active') => ({ participant_id: p, cohort_id: c, sta
 describe('orgMapCohorts', () => {
   it('جهة بدفعتين: خريطة لكل منهما بأعضائها، والأكبر عددًا أولًا', () => {
     const r = orgMapCohorts({ cohorts, orgId: 'o1', ids: ['p1', 'p2', 'p3', 'p4'], enrollments: [enr('p1', 'a'), enr('p2', 'b'), enr('p3', 'b'), enr('p4', 'a', 'withdrawn'), enr('p4', 'd')] });
-    expect(r.map((x) => [x.cohort.id, x.ids])).toEqual([['b', ['p2', 'p3']], ['a', ['p1']]]);
+    expect(r.map((x) => [x.cohort.id, x.ids])).toEqual([['b', ['p2', 'p3']], ['a', ['p1']], ['d', ['p4']]]);
   });
-  it('الاستقبال يظهر حين فيه أعضاء، والمغلقة والعامة لا', () => {
-    const r = orgMapCohorts({ cohorts, orgId: 'o1', ids: ['p1', 'p2'], enrollments: [enr('p1', 'i'), enr('p2', 'x')] });
+  it('الاستقبال يظهر حين فيه أعضاء، والمغلقة بلا أعضاء لا خريطة لها', () => {
+    const r = orgMapCohorts({ cohorts, orgId: 'o1', ids: ['p1'], enrollments: [enr('p1', 'i')] });
     expect(r.map((x) => x.cohort.id)).toEqual(['i']);
   });
-  it('لا أعضاء في أي دفعة حالية: قائمة فارغة فيبقى الملاذ خريطة دفعة الجهة الواحدة', () => {
-    expect(orgMapCohorts({ cohorts, orgId: 'o1', ids: ['p1'], enrollments: [enr('p1', 'd')] })).toEqual([]);
+  it('لا يسقط عضو من الخريطة: من إلحاقه في مغلقة للجهة أو في العامة يظهر في خريطة دفعته بعد الدفعات الحالية', () => {
+    const r = orgMapCohorts({ cohorts, orgId: 'o1', ids: ['p1', 'p2', 'p3', 'p4'], enrollments: [enr('p1', 'a'), enr('p2', 'a'), enr('p3', 'x'), enr('p4', 'd')] });
+    expect(r.map((x) => [x.cohort.id, x.ids])).toEqual([['a', ['p1', 'p2']], ['x', ['p3']], ['d', ['p4']]]);
+  });
+  it('لا إلحاق لأحد: قائمة فارغة فيبقى الملاذ خريطة دفعة الجهة الواحدة', () => {
+    expect(orgMapCohorts({ cohorts, orgId: 'o1', ids: ['p1'], enrollments: [] })).toEqual([]);
   });
 });
 

@@ -442,15 +442,27 @@ export function rosterAgrees(map) {
 }
 
 // خريطة المنسق لكل دفعة حالية للجهة (تصور المرحلة 4، م5): orgCohorts (مفتوحة أو جارية، ومعها الاستقبال)، والأعضاء بإلحاقهم
-// القائم لا بجهتهم، والدفعة بلا أعضاء من الجهة لا خريطة لها. الأكبر عددًا أولًا فهي الافتراضية في المحوّل (القرار 6)
+// القائم لا بجهتهم، والدفعة بلا أعضاء من الجهة لا خريطة لها، ومن إلحاقه في دفعة غير حالية يظهر في خريطة دفعته بعدها. الأكبر عددًا أولًا فهي الافتراضية في المحوّل (القرار 6)
 /** @param {{ cohorts?: any[], orgId?: string|null, ids?: string[], enrollments?: any[] }} w */
 export function orgMapCohorts({ cohorts = [], orgId = null, ids = [], enrollments = [] } = {}) {
   const mine = new Set(ids || []);
   const of = new Map();
   for (const e of enrollments || []) if (e.status !== 'withdrawn' && mine.has(e.participant_id)) of.set(e.participant_id, e.cohort_id);
-  return orgCohorts(cohorts, orgId)
+  const current = orgCohorts(cohorts, orgId);
+  const groups = current
     .map((cohort, order) => ({ cohort, order, ids: (ids || []).filter((id) => of.get(id) === cohort.id) }))
     .filter((x) => x.ids.length)
     .sort((a, b) => b.ids.length - a.ids.length || a.order - b.order)
     .map(({ cohort, ids: m }) => ({ cohort, ids: m }));
+  // لا يسقط عضو من خرائط منسقه: من إلحاقه في دفعة غير حالية (مغلقة للجهة أو العامة) يظهر في خريطة دفعته بعد الحالية
+  const shown = new Set(current.map((c) => c.id));
+  const byId = new Map((cohorts || []).map((c) => [c.id, c]));
+  const rest = new Map();
+  for (const id of ids || []) {
+    const cid = of.get(id);
+    if (!cid || shown.has(cid) || !byId.has(cid)) continue;
+    if (!rest.has(cid)) rest.set(cid, []);
+    rest.get(cid).push(id);
+  }
+  return [...groups, ...[...rest].map(([cid, m]) => ({ cohort: byId.get(cid), ids: m })).sort((a, b) => b.ids.length - a.ids.length)];
 }
