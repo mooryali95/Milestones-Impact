@@ -6,6 +6,7 @@
 
 import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
+import { orgCurrentCohort } from './cohort-intake.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
 import { planOffKeys, planRules, planSchedule, planStages, planWithRules } from './stage-windows.js';
@@ -413,7 +414,8 @@ export const AUTO_CHECKS = {
   'R-ISSUE': (s) => !!s.reportIssued,
   // تكتمل من مصدرها لا بنقرة «أنجزته»: اسم المبادرة في بطاقتها، وتقدير المدير والزملاء حين يصل
   'P-PROJECT': (s) => !!s.initiativeNamed,
-  'T-360': (s) => !!s.preRated,
+  // «ذاتي فقط» لمن لا مدير له يكمله بلا حبس (تصور المرحلة 3، القرار 3)
+  'T-360': (s) => !!s.preRated || !!s.selfOnly,
   'E-360': (s) => !!s.postRated,
   // اعتمدهما المالك 2026-11-23 (docs/journey/2026-11-23-البنود-اليدوية-القابلة-للربط.md):
   // العرض أمام اللجنة يُحسم باعتماد التقييم الختامي (final_evaluations.status = 'approved')، لا بمجرد حسابه
@@ -422,11 +424,30 @@ export const AUTO_CHECKS = {
   'R-6M': (s) => !!s.review180,
 };
 
+// اكتمال E-360 (تصور المرحلة 1، البند 6): لا يُعد التقييم البعدي دليلًا بمقيّم واحد. يكتمل حين يبلغ المقدَّم البعدي من غير
+// المدير minOthers (حد «أقل عدد لإصدار التقرير» min_others من إعدادات 360 نفسها يمرره المستدعي، لا رقم ثانٍ)، أو حين يغلق حد التقييم ولو بأقل: لا مقيّم
+// بعدي ينتظر (awaiting) ولا مدعو برابط سارٍ، وقد قدّم واحد على الأقل، فيُوسم «اكتمل بعدد أقل». والسريان (القرار 3):
+// من اعتُمد تقييمه الختامي يُحفظ اكتماله بالقاعدة السابقة (مقدَّم بعدي واحد)
+/** @param {{ phase?: string, status?: string, relation?: string, expires_at?: string | null }[]} raters صفوف المقيّمين (القبلي والبعدي)
+ *  @param {{ minOthers: number, finalApproved?: boolean, now?: number }} o */
+export function postRatedState(raters, { minOthers, finalApproved = false, now = Date.now() }) {
+  const post = (raters || []).filter((r) => r.phase === 'post');
+  const submitted = post.filter((r) => r.status === 'submitted');
+  const others = submitted.filter((r) => r.relation !== 'manager').length;
+  if (others >= minOthers) return { done: true, fewer: false, others };
+  if (finalApproved && submitted.length) return { done: true, fewer: false, others };
+  const waiting = post.some((r) => r.status === 'awaiting' || (r.status === 'invited' && (!r.expires_at || Date.parse(r.expires_at) > now)));
+  if (!waiting && submitted.length) return { done: true, fewer: true, others };
+  return { done: false, fewer: false, others };
+}
+
 // بنود تلقائية تبقى قابلة للتجاوز اليدوي: صف «done» محفوظ لها (اعتماد سابق أو «تجاوز يدوي») يُعدّ كما كان،
 // فلا يتراجع من اعتُمدت له يدويًا قبل ربطها. بقية التلقائي يُقرأ من مصدره وحده كما كان
 export const AUTO_OVERRIDABLE = Object.freeze(['E-PRES', 'R-6M']);
 // نص الدليل حين يحسمها النظام، يظهر بجانب شارة «تلقائي» في ملف المشارك
 export const AUTO_EVIDENCE = {
+  // اكتمل بإغلاق حد التقييم قبل أن يبلغ العدد min_others (postRatedState): يراه المرشد والإدارة بجانب شارة «تلقائي»
+  'E-360': (s) => (s.postRated && s.postRatedFewer ? 'اكتمل بعدد أقل' : null),
   'E-PRES': (s) => (s.finalApproved ? 'اعتُمد التقييم الختامي' : null),
   'R-6M': (s) => (s.review180 ? (s.review180Verified ? 'سُجّلت مراجعة يوم 180 وأكّدها الراعي' : 'سُجّلت مراجعة يوم 180') : null),
 };
@@ -476,7 +497,7 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         // الاختياري خارج العد (optional.js): يُختم هنا مرة، ومنه يقرأ كل عدّاد ونسبة وشرط بعده required وحده
         // الملف المرفوع (بند الرفع): اسمه كما سمّاه صاحبه ووقت رفعه، لصف «ملفك المرفوع» في رحلته (uploadedFile في upload-file.js)
         const file = r.kind === 'upload' ? uploadedFile(p) : null;
-        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, ...(keep ? { override_ok: true, auto_note: autoNote } : {}), status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
+        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, ...(keep ? { override_ok: true, auto_note: autoNote } : autoNote ? { auto_note: autoNote } : {}), status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
       });
     // المنجز والمطلوب من البنود التي تُعد وحدها: الاختياري لا ينقص نسبة من يقف في المرحلة ولا يزيدها
     const n = countedProgress(items);
@@ -634,6 +655,24 @@ export function handbookModulesFor(modules, levels) {
     .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
 }
 
+// الفصل الأول المشترك بين المسارات (تصور المرحلة 2، 2.5): يُقرأ أثناء انتظار الاعتماد. باب لكل المستويات (min_level
+// beginner) بنص، أوله بترتيب الأطر ثم sort. لا يعتمد على المسار فلا يتعارض مع تثبيت البرنامج. لا باب: null
+export function firstSharedModule(modules) {
+  return [...(modules || [])].filter((m) => m.min_level === 'beginner' && (m.body_md || '').trim())
+    .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort)[0] || null;
+}
+// النص المشترك وحده: تُحذف كل كتلة مشروطة (مستوى أو نطاق أو جسر)، فلا يكشف المقروء قبل الاعتماد مستوى ولا مسارًا
+export function commonHandbookMd(md) {
+  const out = [];
+  let keep = true;
+  for (const line of String(md || '').split('\n')) {
+    if (BLOCK_RE.test(line.trim())) { keep = false; continue; }
+    if (line.trim() === ':::') { keep = true; continue; }
+    if (keep) out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // نطاق العمل: المستوى يقيس الإتقان، والنطاق يحدد أين يمارسه المشارك.
 export const SCOPES = ['project', 'program', 'portfolio'];
 const SCOPE_RANK = { project: 0, program: 1, portfolio: 2 };
@@ -779,7 +818,13 @@ export function parseQuiz(md) {
   return qs.filter((q) => q.options.length >= 2 && q.answer >= 0);
 }
 
-export const POINTS = { chapter: 10, perCorrect: 5, reflection: 5 };
+// أوزان النقاط (تصور المرحلة 3 §5.3، اعتمده المالك 2026-11-26): التطبيق يُكافأ أكثر من الإجابة الصحيحة.
+// السريان من تاريخ الإطلاق بطبيعة الحفظ: النقاط تُخزن عند الكسب (points_ledger) فالمكتسب قبله لا يتغير.
+// الأوزان السابقة للتراجع بثابت واحد: { chapter: 10, perCorrect: 5, reflection: 5, reflectionApplied: 0 }
+// reflectionApplied: إضافة لمن أجاب عن «أين ستطبقه؟» بموقف من عمله وفعل، مع تأمل له معنى
+// commitment وcommitmentReview: التزام ما بعد الورشة عند كتابته وعند مراجعته بأي نتيجة (المرحلة 3.2)
+export const POINTS = { chapter: 10, perCorrect: 3, reflection: 10, reflectionApplied: 5, commitment: 10, commitmentReview: 15 };
+export const POINTS_SINCE = '2026-11-26';
 
 // يصحح إجابات المشارك ويعيد النتيجة بلا كشف الإجابات قبل الإرسال
 export function gradeQuiz(quiz, answers) {
@@ -798,8 +843,11 @@ export function meaningful(text, { chars, words }) {
   return new Set(t.split(' ').filter((w) => w.length > 1)).size >= words;
 }
 
-export function chapterPoints(score, reflection) {
-  return POINTS.chapter + score * POINTS.perCorrect + (meaningful(reflection, REFLECTION_MIN) ? POINTS.reflection : 0);
+// apply: جواب السؤال الموجه «أين ستطبقه؟». المكافأة الإضافية بوجود موقف وفعل لا بالطول، فحده حد حقول النماذج
+/** @param {number} score @param {any} reflection @param {any} [apply] */
+export function chapterPoints(score, reflection, apply = null) {
+  if (!meaningful(reflection, REFLECTION_MIN)) return POINTS.chapter + score * POINTS.perCorrect;
+  return POINTS.chapter + score * POINTS.perCorrect + POINTS.reflection + (meaningful(apply, TEXTAREA_MIN) ? POINTS.reflectionApplied : 0);
 }
 
 // ألقاب التقدم بحسب مجموع النقاط
@@ -1180,25 +1228,41 @@ export function applyReadingPing(row, ping, now = Date.now()) {
 }
 
 // أبواب متطلب القراءة: كل أبواب المشارك، أو الباب الأول من كل إطار،
-// أو أبواب إطار واحد، أو قائمة محددة.
-export function readingChapters(config, chapters) {
+// أو أبواب إطار واحد، أو قائمة محددة، أو فصول المسار (track).
+// track (تصور المرحلة 3 §5.4، القرار 6): أبواب محور أولوية المسار كلها وأول باب من كل إطار آخر، والبقية متاحة اختيارية.
+// بلا أولوية معروفة يبقى الإلزام كاملًا. وقاعدة «لا فقد» للقراءة: باب أتمه المشارك (done) خارج النطاق يبقى محسوبًا
+/** @param {any} config @param {any[]} chapters @param {{ priority?: string | null, done?: (m: any) => boolean }} [o] */
+export function readingChapters(config, chapters, { priority = null, done = () => false } = {}) {
   const c = config || {};
+  if (c.scope === 'track') {
+    if (!priority) return chapters;
+    const firsts = new Set(DIMENSIONS.map((d) => chapters.find((m) => m.dimension === d)).filter(Boolean));
+    return chapters.filter((m) => m.dimension === priority || firsts.has(m) || done(m));
+  }
   if (c.scope === 'first') return DIMENSIONS.map((d) => chapters.find((m) => m.dimension === d)).filter(Boolean);
   if (c.scope === 'dimension') return chapters.filter((m) => m.dimension === c.dimension);
   if (c.scope === 'list') return chapters.filter((m) => (c.module_ids || []).includes(m.id));
   return chapters;
 }
 
-export function readingStatus(config, chapters, reading, quizzes) {
-  const list = readingChapters(config, chapters).map((m) => {
+/** @param {any} config @param {any[]} chapters @param {any} reading @param {any} quizzes @param {{ priority?: string | null }} [o] */
+export function readingStatus(config, chapters, reading, quizzes, { priority = null } = {}) {
+  const needQuiz = config?.quiz !== false;
+  const finished = (m) => readingVerdict(reading[m.id]).state === 'read' && (!needQuiz || !!quizzes[m.id]);
+  const required = new Set(readingChapters(config, chapters, { priority }));
+  const picked = readingChapters(config, chapters, { priority, done: finished });
+  const list = picked.map((m) => {
     const v = readingVerdict(reading[m.id]);
     const quiz = !!quizzes[m.id];
-    return { id: m.id, title: m.title_ar, dimension: m.dimension, state: v.state, pct: v.pct, seconds: v.seconds, expected: v.expected, quiz };
+    return { id: m.id, title: m.title_ar, dimension: m.dimension, state: v.state, pct: v.pct, seconds: v.seconds, expected: v.expected, quiz,
+      // باب خارج نطاق المسار أتمه المشارك: محسوب بقاعدة «لا فقد»
+      ...(required.has(m) ? {} : { kept: true }) };
   });
-  const needQuiz = config?.quiz !== false;
   const ok = (x) => x.state === 'read' && (!needQuiz || x.quiz);
   const done = list.length > 0 && list.every(ok);
-  return { type: 'reading', done, count: list.filter(ok).length, total: list.length, quiz: needQuiz, chapters: list };
+  return { type: 'reading', done, count: list.filter(ok).length, total: list.length, quiz: needQuiz, chapters: list,
+    // أبواب المشارك خارج إلزام نطاق المسار: متاحة اختيارية
+    optional: config?.scope === 'track' ? chapters.length - list.length : 0 };
 }
 
 // ── الفيديو ──
@@ -1509,7 +1573,7 @@ export async function verifyWebhook(provider, secret, raw, headers) {
 // حالة نشاط موثق لمتطلب واحد من الأدلة المجمعة
 export function activityFor(req, ev, now = Date.now()) {
   const c = req.config || {};
-  if (req.kind === 'reading') return readingStatus(c, ev.chapters || [], ev.reading || {}, ev.quizzes || {});
+  if (req.kind === 'reading') return readingStatus(c, ev.chapters || [], ev.reading || {}, ev.quizzes || {}, { priority: ev.priority || null });
   if (req.kind === 'video') return videoStatus(c, ev.video?.[req.id]);
   if (req.kind === 'workshop') return workshopStatus(c, (ev.workshops || []).filter((s) => s.requirement_id === req.id), ev.attended || new Set(), now);
   if (req.kind === 'coaching') return coachingStatus(c, (ev.coaching || []).filter((s) => s.requirement_id === req.id), now);
@@ -1582,7 +1646,7 @@ const intIn = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number
 export function cleanConfig(kind, cfg, prev = {}) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
   if (kind === 'reading') {
-    const scope = ['all', 'first', 'dimension', 'list'].includes(c.scope) ? c.scope : 'all';
+    const scope = ['all', 'track', 'first', 'dimension', 'list'].includes(c.scope) ? c.scope : 'all';
     const out = { scope, quiz: c.quiz !== false };
     if (scope === 'dimension') {
       if (!DIMENSIONS.includes(c.dimension)) throw new Error('اختر الإطار لأبواب القراءة');
@@ -1758,22 +1822,34 @@ export function curriculumStatus(config, items, levels, progress) {
 // النسخة لقطة ثابتة من مراحل البرنامج ومتطلباته؛ الدفعة المثبتة على نسخة
 // لا تتأثر بتعديلات البرنامج حتى تُرقّى.
 
-// دفعة المشارك: تسجيله الصريح الأحدث (غير المنسحب)، ثم أحدث دفعة جارية
-// أو مفتوحة لجهته، ثم الدفعة الافتراضية المفتوحة.
+// دفعة المشارك = إلحاقه الصريح القائم (enrollments، صف واحد بالفهرس enrollments_one_active، تصور المرحلة 4). لا استنتاج بالجهة:
+// دفعة أحدث لجهته لا تنقله. ومن لا إلحاق له (تعذّر عابر عند التسجيل) يرى الدفعة المفتوحة العامة احتياطًا معلنًا (via 'fallback')
+// يُسجَّل في cohortOf وتلتقطه أداة من لا دفعة له. حساب العرض وحده دفعته من عموده (programs.ts cohortOf)
 /** @param {{ enrollments?: any[], cohorts?: any[], organizationId?: string|null }} [input] */
-export function pickCohort({ enrollments = [], cohorts = [], organizationId = null } = {}) {
+export function pickCohort({ enrollments = [], cohorts = [] } = {}) {
   const byId = new Map(cohorts.map((c) => [c.id, c]));
   const enr = enrollments.filter((e) => e.status !== 'withdrawn' && byId.has(e.cohort_id))
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   if (enr.length) return { cohort: byId.get(enr[0].cohort_id), via: 'enrollment' };
-  if (organizationId) {
-    // دفعة الاستقبال (is_intake، ترحيل 20261128160000) لا تُستنتج بالجهة: عضويتها بالإلحاق الصريح وحده (place_participant)،
-    // فإنشاؤها الكسول لا ينقل بصمت أحدًا من أعضاء الجهة غير الملحقين إلى رحلة أخرى
-    const org = cohorts.filter((c) => c.organization_id === organizationId && !c.is_default && !c.is_intake && (c.status === 'open' || c.status === 'running'))
-      .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
-    if (org.length) return { cohort: org[0], via: 'organization' };
-  }
   const d = cohorts.find((c) => c.is_default);
+  return d ? { cohort: d, via: 'fallback' } : { cohort: null, via: 'none' };
+}
+// سؤال «دفعة الجهة» غير سؤال «دفعة المشارك»: دفعات الجهة الحالية (مفتوحة أو جارية، ومعها الاستقبال)، الأحدث أولًا والاستقبال آخرها
+/** @param {any[]} cohorts @param {string|null} orgId */
+export function orgCohorts(cohorts = [], orgId = null) {
+  if (!orgId) return [];
+  const cur = orgCurrentCohort(cohorts, orgId);
+  const stamp = (c) => String(c.starts_on || c.created_at || '');
+  return (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && (c.status === 'open' || c.status === 'running'))
+    .sort((a, b) => (a === cur ? -1 : b === cur ? 1 : (a.is_intake ? 1 : 0) - (b.is_intake ? 1 : 0) || stamp(b).localeCompare(stamp(a))));
+}
+// الدفعة التي يدخلها أعضاء الجهة الجدد الآن (place_participant): دفعتها الجارية الأحدث عدا الاستقبال (orgCurrentCohort)، وإلا
+// المفتوحة العامة. هو الجواب الذي كان يعطيه pickCohort بإلحاقات فارغة قبل حذف درجة الجهة منه
+/** @param {any[]} cohorts @param {string|null} orgId */
+export function orgCohort(cohorts = [], orgId = null) {
+  const cur = orgCurrentCohort(cohorts, orgId);
+  if (cur) return { cohort: cur, via: 'organization' };
+  const d = (cohorts || []).find((c) => c.is_default);
   return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
 }
 
@@ -1785,7 +1861,7 @@ export function orgProgram(cohorts = [], programs = [], orgId = null) {
   if (!orgId) return null;
   const live = new Map((programs || []).filter((p) => !p.archived_at).map((p) => [p.id, p]));
   const of = (c, via) => ({ program_id: c.program_id, program_name: live.get(c.program_id)?.name || '', cohort_id: c.id, cohort_name: c.name || '', via });
-  const now = pickCohort({ enrollments: [], cohorts, organizationId: orgId }).cohort;
+  const now = orgCohort(cohorts, orgId).cohort;
   if (now && now.organization_id === orgId && live.has(now.program_id)) return of(now, 'current');
   const own = (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && live.has(c.program_id))
     .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
@@ -1841,8 +1917,9 @@ export function enrollImpact({ participants = [], enrollments = [], progress = [
   let moved = 0;
   for (const p of participants || []) {
     if (!has.has(p.id) || !target) continue;
-    const a = pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort;
-    if (!a || a.id === target.id || a.program_id === target.program_id) continue;
+    // على الإلحاق وحده (تصور المرحلة 4): من لم يكن ملحقًا لا دفعة له يُنقل منها، فلا يُعد منقولًا
+    const { cohort: a, via } = pickCohort({ enrollments: byP.get(p.id) || [], cohorts });
+    if (via !== 'enrollment' || !a || a.id === target.id || a.program_id === target.program_id) continue;
     moved++;
     from.set(a.id, a.name || '');
   }
@@ -1930,7 +2007,8 @@ export function applyDelivery(req, override) {
   if (req.kind === 'workshop' && override.format === 'handbook') {
     // المتطلب نفسه (المعرّف والرمز) يصير قراءة، فلا يُنشأ محتوى ثانٍ ولا يضيع ما أُنجز
     return { ...req, kind: 'reading', title_ar: HANDBOOK_DAYS_TITLE.replace('T-ATTEND', req.code),
-      config: { scope: 'all', quiz: true, sessions_required: req.config?.sessions_required || SESSION_DEFAULTS.sessions_required }, delivery: { format: 'handbook' } };
+      // فصول المسار ومحوره (تصور المرحلة 3، القرار 6)، والبقية متاحة اختيارية
+      config: { scope: 'track', quiz: true, sessions_required: req.config?.sessions_required || SESSION_DEFAULTS.sessions_required }, delivery: { format: 'handbook' } };
   }
   const pick = Object.fromEntries(keys.filter((k) => override[k] != null && override[k] !== '').map((k) => [k, override[k]]));
   if (!Object.keys(pick).length) return req;
@@ -2854,18 +2932,35 @@ export function advisedParticipantIds(expertId, cohortParticipantIds, membership
   return [...out];
 }
 // مشاركو الدفعات التي هو مستشارها الأساسي، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة (كان advisor.ts يقرأ
-// تسجيلات كل مرشح وكل الدفعات بالتتابع، قراءتين لكل مشارك). القاعدة نفسها: من سُجّل في إحداها بأي حالة، ومن تقع دفعته
+// تسجيلات كل مرشح وكل الدفعات بالتتابع، قراءتين لكل مشارك). القاعدة: من سُجّل في إحداها تسجيلًا غير منسحب (المنقول عنها
+// لا يبقى عند مستشارها القديم، تصور المرحلة 1 البند 1: الوصول يتبع العلاقة الحالية)، ومن تقع دفعته
 // الفعلية (pickCohort) على إحداها وهو في نطاقها: جهتها لدفعة جهة، والجميع للمفتوحة، ولا أحد لدفعة بلا جهة غير مفتوحة.
 /** @param {{ id: string, organization_id?: string | null, is_default?: boolean }[]} mine دفعاته
  *  @param {any[]} cohorts كل الدفعات (مدخل pickCohort)
  *  @param {{ participant_id: string, cohort_id: string, status?: string, created_at?: string }[]} enrollments كل التسجيلات
  *  @param {{ id: string, organization_id?: string | null }[]} candidates المرشحون بالتبعية، بلا حساب العرض */
+// عضويات المجموعات التي تقع دفعة عضوها الفعلية (pickCohort) على دفعة المجموعة نفسها. فلتر دفاعي في نطاق خبير المجموعة
+// (تصور المرحلة 1، البند 1): cohortEnroll تحذف عضويات الدفعات الأخرى عند النقل، وهذا يمنع العودة لو كتب مسار آخر صفًا عالقًا.
+// الدفعة الفعلية = الإلحاق القائم (تصور المرحلة 4)، فلا عضو بالتبعية بلا إلحاق
+/** @param {{ participant_id: string, cohort_id: string }[]} links
+ *  @param {{ enrollments: any[], cohorts: any[], participants: { id: string, organization_id?: string | null }[] }} w */
+export function currentGroupLinks(links, { enrollments = [], cohorts = [], participants = [] } = {}) {
+  const byP = new Map();
+  for (const e of enrollments || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id).push(e); }
+  const org = new Map((participants || []).map((p) => [p.id, p.organization_id || null]));
+  const cur = new Map();
+  const of = (pid) => {
+    if (!cur.has(pid)) cur.set(pid, pickCohort({ enrollments: byP.get(pid) || [], cohorts, organizationId: org.get(pid) || null }).cohort?.id || null);
+    return cur.get(pid);
+  };
+  return (links || []).filter((l) => of(l.participant_id) === l.cohort_id);
+}
 export function advisorCohortParticipantIds(mine, cohorts, enrollments, candidates) {
   const mineById = new Map((mine || []).map((c) => [c.id, c]));
   const out = new Set();
   const byP = new Map();
   for (const e of enrollments || []) {
-    if (mineById.has(e.cohort_id)) out.add(e.participant_id);
+    if (mineById.has(e.cohort_id) && e.status !== 'withdrawn') out.add(e.participant_id);
     if (!byP.has(e.participant_id)) byP.set(e.participant_id, []);
     byP.get(e.participant_id).push(e);
   }

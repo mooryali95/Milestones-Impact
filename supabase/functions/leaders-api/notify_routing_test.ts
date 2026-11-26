@@ -217,7 +217,7 @@ function healthyDb(pending = 0) {
     return { data: [], count: 0, error: null };
   };
 }
-async function weekly(state: Slack, pending: number) {
+async function weekly(state: Slack, pending: number, extra: { sponsorExpired?: number } = {}) {
   const mode = env(state);
   // بلا سلاك يكفي الرابط قناةً للتنبيه (فلا يُعد غيابها أمرًا يحتاج تدخلًا)، والتقرير لا ينشر في الرابط
   if (state === 'unconfigured') Deno.env.set('LEADERS_ALERT_WEBHOOK', 'https://hooks.example/alert');
@@ -226,7 +226,7 @@ async function weekly(state: Slack, pending: number) {
   Deno.env.set('LEADERS_CERT_SIGNING_KEY', 'k'.repeat(40));
   const restore = install(healthyDb(pending));
   try {
-    return await withNet(async (calls) => ({ r: await weeklyHealth() as any, calls }), mode);
+    return await withNet(async (calls) => ({ r: await weeklyHealth(extra) as any, calls }), mode);
   } finally { restore(); done(); Object.assign(CONFIG, savedCfg); Deno.env.delete('LEADERS_CERT_SIGNING_KEY'); }
 }
 
@@ -249,6 +249,14 @@ Deno.test('تقرير الأسبوع: ما يحتاج تدخلًا بريد وس
   const { r, calls } = await weekly('ok', 2);
   assertEquals([r.issues, r.slack, r.email], [1, true, true]);
   assertEquals(resend(calls).map((c) => c.body.subject), ['تقرير الأسبوع: 1 يحتاج تدخلك']);
+});
+
+// تصور المرحلة 2، 2.3: انتهاء مهلة الراعي يصل المدير في ملخصه الأسبوعي أمرًا يحتاج تدخله، من عدّ تشغيلة التذكير نفسها
+Deno.test('تقرير الأسبوع: وثائق انتهت مهلة راعيها أمر يحتاج تدخلًا بريدًا وسلاك', async () => {
+  const { r, calls } = await weekly('ok', 0, { sponsorExpired: 2 });
+  assertEquals([r.issues, r.email], [1, true]);
+  const html = String(resend(calls)[0]?.body?.html || '');
+  assert(html.includes('2 وثيقة انتهت مهلة راعيها'), 'السطر في البريد');
 });
 
 Deno.test('سطر تقرير الأسبوع: أعداد وأمور مختصرة بلا بريد ولا ستة أرقام، وفي حد سلاك', () => {

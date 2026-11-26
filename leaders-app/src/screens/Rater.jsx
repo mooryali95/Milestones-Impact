@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 import { dimOf } from '../labels.js';
-import { CONTACT_FREQ_AR, FEEDBACK_OPEN_AR, FEEDBACK_OPEN_MAX, LEGAL_PATH, POLICY_VERSION } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONTACT_FREQ_AR, FEEDBACK_OPEN_AR, FEEDBACK_OPEN_MAX, LEGAL_PATH } from '../../../supabase/functions/leaders-api/labels.js';
 import { linkToken } from '../link-token.js';
 
 export default function Rater() {
@@ -138,7 +138,7 @@ export default function Rater() {
         ))}
         {error && <div className="alert err" role="alert">{error}</div>}
         {/* D18 وD19: إشعار خصوصية المقيّم وسطر موافقته، ويُسجَّل قبوله بإرسال التقدير */}
-        <p className="small muted rater-privacy">نحفظ اسمك وبريدك وصلتك بالمشارك وتقديرك {f360 ? 'لتقرير تطويري له يسلّمه مستشاره في جلسة توجيه، ولا يدخل أي تقييم أو شهادة' : 'لقياس أثر البرنامج وحده'}، {f360 ? '' : 'ولا يظهر تقديرك للمشارك منفردًا. '}يُحذف مع بيانات البرنامج عند طلبك، وتراسلنا لذلك من بريدك. بإرسالك التقدير توافق على ذلك وفق <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a> (النسخة {POLICY_VERSION}).</p>
+        <p className="small muted rater-privacy">نحفظ اسمك وبريدك وصلتك بالمشارك وتقديرك {f360 ? 'لتقرير تطويري له يسلّمه مستشاره في جلسة توجيه، ولا يدخل أي تقييم أو شهادة' : 'لقياس أثر البرنامج وحده'}، {f360 ? '' : 'ولا يظهر تقديرك للمشارك منفردًا. '}يُحذف مع بيانات البرنامج عند طلبك، وتراسلنا لذلك من بريدك. بإرسالك التقدير توافق على ذلك وفق <a className="link" href={LEGAL_PATH.privacy} target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>.</p>
         <div className="row">
           <button className="btn gold" disabled={busy || left > 0} onClick={submit}>{busy ? 'جارٍ الإرسال…' : left ? `بقي ${left}` : 'أرسل التقدير'}</button>
         </div>

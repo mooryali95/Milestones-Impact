@@ -242,6 +242,9 @@ export const CONSENT_GATED = Object.freeze(['rater.invite', 'sponsor.request', '
 // موعد اعتماد المسار المعلن (D04) بصيغته في الجملة بعد «خلال» و«تستغرق»: «يومي عمل». ووسم مرحلة الاعتماد
 // في الرحلة يُعرض وحده فيُخزَّن مرفوعًا «يوما عمل» (20261110100000)، فلا تُبنى جملة من وسم المرحلة.
 export const APPROVAL_SLA_AR = 'يومي عمل';
+// إشعار خصوصية الراعي في صفحتي التأييد وتأكيد الأثر (تصور المرحلة 2، 2.1): سطر واحد يتبعه رابط «سياسة الخصوصية»، بلا رقم نسخة
+// ولا تفاصيل تغيير (قاعدة CLAUDE.md). القبول بالإرسال يُسجَّل في consent_events بنوع sponsor
+export const SPONSOR_PRIVACY_AR = 'نحفظ اسمك وبريدك وقرارك وملاحظتك لاعتماد هذه المبادرة وحده، وفق';
 export const LEGAL_PATH = { index: '/legal', privacy: '/legal/privacy', terms: '/legal/terms', refund: '/legal/refund', changes: '/legal/changes' };
 // تمييز العدد بالأرقام كما تكتبها الواجهة: 1 و2 بالاسم، و3–10 بالجمع، و11 فأكثر بالمفرد
 export const countAr = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);

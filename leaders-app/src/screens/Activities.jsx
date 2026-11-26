@@ -46,6 +46,7 @@ function Reading({ a, onHandbook }) {
       <div className="row between"><b className="small">قرأت {a.count} من {countAr(a.total, 'باب واحد', 'بابين', 'أبواب', 'بابًا')}</b>
         {onHandbook && !a.done && <button className="btn sm gold" onClick={onHandbook}>افتح الكتاب</button>}</div>
       <Bar value={a.total ? (a.count / a.total) * 100 : 0} label="تقدم القراءة" />
+      {a.optional > 0 && <p className="small muted">والمطلوب أبواب مسارك ومحوره. {countAr(a.optional, 'باب آخر متاح', 'بابان آخران متاحان', 'أبواب أخرى متاحة', 'بابًا آخر متاحًا')} لك اختياريًا في الكتاب.</p>}
       <ReadFold on={a.chapters.length > READ_FOLD} label={`أبواب القراءة: ${countAr(a.total, 'باب واحد', 'بابان', 'أبواب', 'بابًا')}`}>
       <ul className="act-list">
         {a.chapters.map((c) => {
@@ -151,6 +152,7 @@ import { SITES } from '../../../supabase/functions/_shared/sites.js';
 import { linkPending, SESSION_LINK_LATER_AR, SESSION_TBD_AR } from '../../../supabase/functions/leaders-api/logic.js';
 import { RETRYABLE, sentence } from '../checkin.js';
 import CheckinSheet from './CheckinSheet.jsx';
+import { CommitmentAsk } from './Commitments.jsx';
 import { OPTIONAL_PARTICIPANT_AR } from '../../../supabase/functions/leaders-api/optional.js';
 const MODE_CHIP = SESSION_MODE_AR;
 const VERIFY_HINT = {
@@ -436,6 +438,7 @@ export function CheckIn({ token, receipt, onDone }) {
           <h1>{state.ok.already ? 'حضورك مسجل مسبقًا' : 'سُجل حضورك'}</h1>
           <p className="muted">{state.ok.session.title}{state.ok.session.location ? ` · ${state.ok.session.location}` : ''}</p>
           <p className="small muted">{fmtTime(state.ok.at)}</p>
+          {!state.ok.simulated && <CommitmentAsk sessionId={state.ok.session.id} />}
         </>}
         {state.error && <>
           <span className="checkin-mark bad" aria-hidden="true">!</span>

@@ -95,7 +95,9 @@ describe('المرحلة 1: نموذج المقيّم', () => {
   it('الخادم يعرض عبارات مجموعة المقيّم ويلزم سؤال الصلة، ويكتب كتابة متسامحة قبل الترحيل', () => {
     const src = read('supabase/functions/leaders-api/impact.ts');
     expect(src).toMatch(/return raterItems\(qs, relation\)/);
-    expect((src.match(/raterQuestions\(r\.instrument_id, r\.relation\)/g) || []).length).toBe(2);
+    // العرض والتحقق بالنموذج نفسه: raterForm وحدها تقرأ عبارات المجموعة، ومدير الأثر بثماني فقرات (تصور المرحلة 3)
+    expect((src.match(/raterQuestions\(r\.instrument_id, r\.relation\)/g) || []).length).toBe(1);
+    expect((src.match(/const qs = await raterForm\(r\);/g) || []).length).toBe(2);
     expect(src).toMatch(/if \(!contact_freq\) throw new Fail/);
     expect(src).toMatch(/missingColumn\(saved\.error\)/);
   });
@@ -195,7 +197,8 @@ describe('المرحلة 2: الدورة والمجموعات', async () => {
   });
   it('قياس الأثر لا يقرأ مقيّمي 360، والمرشح بلا رابط، وE-MGR للبعدي وحده', () => {
     expect(imp).toMatch(/export const IMPACT_PHASES = \['pre', 'post'\];/);
-    expect(imp.match(/\.in\('phase', IMPACT_PHASES\)/g)).toHaveLength(4);
+    // والخامس فقرات المدير للمستشار (managerItemsFor، تصور المرحلة 3)
+    expect(imp.match(/\.in\('phase', IMPACT_PHASES\)/g)).toHaveLength(5);
     expect(imp).toMatch(/r\.status === 'nominated'\) throw new Fail\('الرابط غير صالح أو أُلغي'/);
     expect(imp).toMatch(/if \(r\.relation === 'manager' && r\.phase === 'post'\)/);
     expect(imp).toMatch(/const pre = r\.phase !== 'post';/);

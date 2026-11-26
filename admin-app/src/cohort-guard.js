@@ -13,10 +13,10 @@ export const MOVE_CANCELLED = 'لم تُحفظ الدفعة: لم يُؤكَّد
 export const confirmMoveText = (r) => `${moveConfirmText(r)} هل تنقلهم؟`;
 
 // L بحارس: الرد كما هو، إلا confirm_move فيُسأل المدير ثم يُعاد الإرسال بالتأكيد
-async function guarded(action, body, confirm, call, cancelled) {
+async function guarded(action, body, confirm, call, cancelled, text = confirmMoveText, ok = MOVE_OK) {
   const r = await call(action, body);
   if (r?.success || r?.code !== 'confirm_move') return r;
-  if (!(await confirm(confirmMoveText(r), { danger: true, ok: MOVE_OK }))) return { success: false, message: cancelled };
+  if (!(await confirm(text(r), { danger: true, ok }))) return { success: false, message: cancelled };
   return call(action, { ...body, confirm_move: true });
 }
 export const saveCohort = (body, confirm, call = L) => guarded('admin.cohort-save', body, confirm, call, MOVE_CANCELLED);
@@ -24,3 +24,8 @@ export const saveCohort = (body, confirm, call = L) => guarded('admin.cohort-sav
 // الإلحاق الصريح بدفعة بالحارس نفسه (admin.cohort-enroll): من له تقدم وتنقله الإلحاقة إلى برنامج آخر يُسأل عنه المدير أولًا
 export const ENROLL_CANCELLED = 'لم يُنقل أحد: لم يُؤكَّد نقل من لهم تقدم إلى برنامج آخر.';
 export const enrollCohort = (body, confirm, call = L) => guarded('admin.cohort-enroll', body, confirm, call, ENROLL_CANCELLED);
+
+// نقل الجهة بالحارس نفسه (admin.assign-org، تصور المرحلة 4): من إلحاقه في دفعة جهة أخرى تنتقل دفعته مع جهته، فيُسأل المدير
+// بنص الخادم (من أي دفعة إلى أي دفعة) ثم يُعاد بالتأكيد
+export const ORG_MOVE_CANCELLED = 'لم يُنقل أحد: لم يُؤكَّد نقل الدفعة مع الجهة.';
+export const assignOrgGuarded = (body, confirm, call = L) => guarded('admin.assign-org', body, confirm, call, ORG_MOVE_CANCELLED, (r) => r.message, 'انقل الجهة والدفعة');

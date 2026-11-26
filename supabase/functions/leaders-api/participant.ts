@@ -17,10 +17,10 @@ import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-ru
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
-  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
+  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, firstSharedModule, commonHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram, postRatedState } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { beginnerTitle, bindAnswers, CHARTER_KEY, CLOSING_CHAPTERS, closingLock, docMinutes, importRows, initiativeOf, trackProject } from './capstone.js';
 import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
@@ -611,7 +611,8 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
     db.from('participant_milestones').select('milestone_id, done_at, due_override, note, scores').eq('participant_id', p.id),
     initiativeFor(p.id),
-    db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
+    // E-360 يحتاج الصلة والصلاحية والمنتظر لا المقدَّم وحده (postRatedState)، وT-360 من المقدَّم القبلي كما كان
+    db.from('raters').select('phase, status, relation, expires_at').eq('participant_id', p.id).in('phase', ['pre', 'post']).neq('status', 'revoked'),
     // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
     db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust, snapshot').eq('participant_id', p.id),
     // مراجعة اليوم 180 في متابعة المبادرة: مصدر «قراءة الأثر بعد ستة أشهر» (R-6M)
@@ -621,6 +622,7 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
   const pl = placements.data || [];
   const { levels, approved } = approvalOf(pl);
   const submitted = (kind: string) => (assessments.data || []).some((a: any) => a.status === 'submitted' && a.instruments?.kind === kind);
+  const post360 = postRatedState(rated.data || [], { minOthers: (await appSettings()).feedback360.min_others, finalApproved: fe?.status === 'approved' });
   const state = {
     profileCompleted: !!p.profile_completed_at,
     hasCv: !!p.cv_path,
@@ -630,8 +632,11 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     // التقرير النهائي يُستلم حين يُعتمد التقييم الختامي فتظهر نتيجته المفصلة (وتعود عند إعادة فتحه)، أو بتقرير صادر في جدوله
     reportIssued: (reports.data || []).length > 0 || fe?.status === 'approved',
     initiativeNamed: !!initiative,
-    preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
-    postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
+    preRated: (rated.data || []).some((r: any) => r.phase === 'pre' && r.status === 'submitted'),
+    // «ذاتي فقط» لمن لا مدير له (تصور المرحلة 3، القرار 3): يكمل T-360 بلا حبس، ويوسم به تقريره
+    selfOnly: p.no_manager === 'self',
+    postRated: post360.done,
+    postRatedFewer: post360.fewer,
     // «عرض المشروع أمام لجنة التقييم» (E-PRES): اعتماد التقييم الختامي لبرنامجه، لا مسودته ولا ما ينتظر الاعتماد
     finalApproved: fe?.status === 'approved',
     review180: (reviews.data || []).length > 0,
@@ -1301,9 +1306,18 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
     quiz: shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
-    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
+    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, apply: done.reflection_apply ?? '', at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
   };
+}
+
+// قراءة الفصل الأول أثناء الانتظار (تصور المرحلة 2، 2.5): قراءة فقط، بلا اختبار ولا عرض يُسجَّل ولا تقدم. الإتمام
+// (handbook.complete) والقراءة المحتسبة (handbook.ping) والكتاب نفسه في GATE_PROGRAM، فلا يُحتسب شيء قبل الاعتماد
+export async function handbookPreview(_p: any) {
+  const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md')) as any[] ?? [];
+  const m = firstSharedModule(mods);
+  if (!m) throw new Fail('لا فصل متاح للقراءة الآن', 404, 'none');
+  return { success: true, preview: true, chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: commonHandbookMd(m.body_md) } };
 }
 
 // نسخة شخصية PDF من الكتاب: أبواب المسار نفسها المصفّاة بمستوى المشارك،
@@ -1350,6 +1364,8 @@ export async function handbookComplete(p: any, b: Body) {
     throw new Fail('أجب عن كل الأسئلة أولًا');
   }
   const reflection = String(b.reflection || '').trim().slice(0, 4000) || null;
+  // جواب «أين ستطبقه؟» (تصور المرحلة 3 §5.3): يمنح الإضافة مع تأمل له معنى. قبل 20261129190000 يُحفظ التأمل وحده
+  const apply = String(b.apply || '').trim().slice(0, 1000) || null;
   const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
   if (prev) {
@@ -1371,7 +1387,12 @@ export async function handbookComplete(p: any, b: Body) {
       if (low === QUIZ_LOW_COUNT) await recordObservation(p.id, { code: 'quiz_low', ref: String(QUIZ_LOW_COUNT), ...RULES.quiz_low({ count: low }) });
     }
   }
-  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
+  // جواب «أين ستطبقه؟» كتابة مستقلة بعد الختم: الختم الإلزامي لا يتسامح، والعمود قبل ترحيله لا يُسقط الإتمام (خطؤه يُسجَّل)
+  if (apply || prev) {
+    const { error } = await db.from('handbook_progress').update({ reflection_apply: apply }).eq('participant_id', p.id).eq('module_id', m.id);
+    if (error) console.error('reflection_apply:', error.message);
+  }
+  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection, apply), m.title_ar);
   const pts = await pointsOf(p.id);
   return { success: true, ...g, first: !prev, counted: prev || { quiz_score: g.score, quiz_total: g.total }, gained, points: { total: pts.total, rank: pts.rank } };
 }
