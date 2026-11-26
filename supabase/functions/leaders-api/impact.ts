@@ -12,7 +12,7 @@ import { managerItems, managerPreAllowed, managerView, NO_MANAGER, NO_MANAGER_AR
 import { scopeOrg } from './admin.ts';
 import {
   compareAssessments, compositeReliability, coordPermissions, DIMENSIONS, effectLabel, equate, formOffsets, IMPACT_DEFAULTS, isEmail, normalizeEmail,
-  levelGainReport, overallChange, pairComparable, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
+  DEFAULT_MODEL, levelGainReport, overallChange, pairComparable, placementFromAnswers, postPool, preOnPost, skillSplit, pairedStats, practiceEffect, anchorRepeat, anchorShareOf, raterPercents, raterProspective, surveySummary,
   linkAfterDecisionOk, LINK_CLOSED_AR,
 } from './logic.js';
 import { cleanOpenAnswers, CONTACT_FREQ, feedbackPromiseAr, OPEN_KEYS, raterItems } from './feedback360.js';
@@ -38,9 +38,13 @@ export const IMPACT_PHASES = ['pre', 'post'];
 async function latestResults(ids: string[] | null) {
   // ids = null يقرأ قياسات الجميع (أثر التكرار في impactConfig): بقاعدة العد (counted). وبمعرّفات، المستدعي مسؤول عنها
   // (تقرير الإدارة يمررها من قائمة counted، والمشارك يقرأ قياسه هو ولو كان حساب العرض)
-  const COLS = 'id, participant_id, submitted_at, instrument_id, form, instruments(kind, key, pairs_with)';
-  const rows = await allFor(ids, () => (ids ? db.from('assessments').select(COLS) : counted(db.from('assessments').select(`${COLS}, participants!inner(is_demo, is_test)`), 'participants'))
+  // post_form وserved_count (ترحيل 20261130020000) يُقرآن إن وُجدا، وقبله بدونهما فيُعد كل بعدي كاملًا
+  const BASE = 'id, participant_id, submitted_at, instrument_id, form, instruments(kind, key, pairs_with)';
+  const read = (COLS: string) => allFor(ids, () => (ids ? db.from('assessments').select(COLS) : counted(db.from('assessments').select(`${COLS}, participants!inner(is_demo, is_test)`), 'participants'))
     .eq('status', 'submitted').order('submitted_at', { ascending: false }).order('id'));
+  // counting-exempt: فحص وجود العمودين بصف واحد، لا يُعد ولا يُعرض
+  const probe = await db.from('assessments').select('post_form, served_count').limit(1);
+  const rows = await read(probe.error && missingColumn(probe.error) ? BASE : `${BASE}, post_form, served_count`);
   const pick: Record<string, { baseline?: any; post?: any; comparable?: boolean; reason?: string | null }> = {};
   for (const a of rows) {
     const kind = a.instruments?.kind;
@@ -67,9 +71,37 @@ async function latestResults(ids: string[] | null) {
       };
     }
   }
+  await shortPre(pick, results);
   return { pick, results };
 }
 const num = (x: unknown) => (x == null ? null : Number(x));
+
+// الفرق على التقاطع (تصور طول القياس البعدي، المرحلة 3): بعدي بالصيغة القصيرة يقابَل بقبلي يُعاد حسابه على فقرات القبلي التي
+// تقابل نواته (preOnPost)، بالمعيار نفسه الذي حُسب به القبلي عند تسليمه. البعدي الكامل (أو null قبل العمود) تقاطعه القبلي كله،
+// فتبقى نتائجه المحفوظة كما هي بلا قراءة زائدة
+async function shortPre(pick: Record<string, any>, results: Record<string, Record<string, any>>) {
+  const list = Object.values(pick).filter((x: any) => x.comparable && x.post?.post_form === 'short');
+  if (!list.length) return;
+  const model = must(await db.from('placement_model').select('*').eq('id', 1).maybeSingle()) as any;
+  const qsOf: Record<string, any[]> = {};
+  const questions = async (id: string) => (qsOf[id] ||= must(await db.from('questions').select('*').eq('instrument_id', id).eq('active', true)) as any[] ?? []);
+  for (const x of list) {
+    const pre = preOnPost(await questions(x.baseline.instrument_id), postPool(await questions(x.post.instrument_id), 'short'));
+    const scoped = x.baseline.form ? pre.filter((q: any) => !q.form || q.form === x.baseline.form) : pre;
+    const ans = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', x.baseline.id)) as any[] ?? [];
+    const answers = Object.fromEntries(ans.map((r: any) => [r.question_id, r.value?.k]));
+    const split: any = skillSplit(scoped, answers);
+    const out: Record<string, any> = {};
+    for (const r of placementFromAnswers(scoped, answers, [], model || DEFAULT_MODEL) as any[]) {
+      out[r.dimension] = {
+        ...(results[x.baseline.id]?.[r.dimension] || {}),
+        knowledge: r.knowledge ?? null, skill: r.skill ?? null, behavior: r.behavior ?? null, composite: r.composite ?? null, level: r.level,
+        skill_anchor: split[r.dimension]?.anchor ?? null, skill_form: split[r.dimension]?.form ?? null, on_served: true,
+      };
+    }
+    results[x.baseline.id] = out;
+  }
+}
 
 // إعدادات الحكم: من نموذج التسكين، ثم من بيانات الدفعة إن كفى عددها:
 // ثبات طبقي موزون لكل إطار وللمؤشر الكلي (ولحكم الاختبار وحده)، ومعادلة
@@ -214,7 +246,9 @@ export async function compareFor(ids: string[] | null) {
       baseline_key: x.baseline.instruments?.key, post_key: x.post.instruments?.key,
       repeat_group: repeat,   // أعاد المواقف المشتركة فطُرح منه أثر التكرار (إن قُدّر)
       // «مكتسبات المستوى»: فقرات البعدي الخاصة بالمستوى، خارج فرق القبلي والبعدي
-      level_gains: levelGainReport(results[x.post.id] || {}),
+      level_gains: levelGainReport(results[x.post.id] || {}, { form: x.post.post_form ?? null }),
+      // صيغة البعدي (null = كاملة، قبل العمود) وعدد ما حُسب عليه، ليُقرأ المتوسط بمحتواه
+      post_form: x.post.post_form ?? null, served_count: x.post.served_count ?? null,
       forms: x.baseline.form || x.post.form ? [x.baseline.form, x.post.form] : null,
       dimensions, overall: overallChange(dimensions, cfg, evidence.has(pid)),
     };
@@ -591,6 +625,7 @@ export async function adminReport(b: Body) {
     // زوج غير قابل للمقارنة: الأداتان غير متطابقتين، يظهر سببه بدل الأرقام
     comparable: rows[p.id]?.comparable ?? null, reason: rows[p.id]?.reason || null,
     baseline_key: rows[p.id]?.baseline_key || null, post_key: rows[p.id]?.post_key || null,
+    post_form: rows[p.id]?.post_form ?? null, served_count: rows[p.id]?.served_count ?? null, level_gains: rows[p.id]?.level_gains || null,
   }));
   const paired = list.filter((x) => x.dimensions);
   const cohort = Object.fromEntries(DIMENSIONS.map((d) => {

@@ -83,8 +83,10 @@ export function anchorRepeat(seed) {
   for (const c of `anchor:${seed}`) h = (h * 33 + c.charCodeAt(0)) >>> 0;
   return h % 4 === 0;
 }
-export function servedPost(questions, { levels = {}, repeat = false } = {}) {
-  const qs = questions || [];
+// short (الصيغة القصيرة، تصور طول القياس البعدي §4.3): النواة وحدها (questions.core)، ثم القواعد نفسها داخلها فيبقى
+// التوأم وربع التكرار كما هما. بلا short السلوك هو نفسه حرفيًا. الكاملة تضم القصيرة دائمًا، فالتحقق عند الإجابة بها يقبل الاثنتين
+export function servedPost(questions, { levels = {}, repeat = false, short = false } = {}) {
+  const qs = short ? (questions || []).filter((q) => q.core === true) : (questions || []);
   const twinned = new Set(qs.filter(isTwin).map((q) => q.anchor_code));
   return qs.filter((q) => {
     if (q.min_level && (LEVEL_RANK[q.min_level] ?? 9) > (LEVEL_RANK[levels[q.dimension]] ?? LEVEL_RANK.beginner)) return false;
@@ -92,6 +94,16 @@ export function servedPost(questions, { levels = {}, repeat = false } = {}) {
     if (twinned.has(q.code)) return repeat;
     return true;
   });
+}
+// مفتاح الصيغة القصيرة من الإعدادات المحلولة (settings.js، post_form.short). ما غاب أو لم يكن true فمطفأ
+export const postShortOn = (settings) => settings?.post_form?.short === true;
+// الفقرات التي تُحسب عليها صيغة البعدي قبل الصيغتين A وB: النواة للقصيرة، والكل للكاملة. null يعني full (القياسات قبل العمود)
+export const postPool = (postQs, form) => (form === 'short' ? (postQs || []).filter((q) => q.core === true) : (postQs || []));
+// الفرق على التقاطع: فقرات القبلي التي تقابلها فقرة في مجموعة البعدي (anchor_code، والتوأم يقابل أصله). المقابلة بالمجموعة قبل
+// الصيغتين، فالصيغة الموازية في القبلي تبقى ما دامت أختها في البعدي، وتُعادَل كما كانت (equate)
+export function preOnPost(preQs, pool) {
+  const codes = new Set((pool || []).map((q) => q.anchor_code || q.code));
+  return (preQs || []).filter((q) => codes.has(q.code));
 }
 // مكتسبات المستوى لكل بُعد: نسبة الدرجة على فقرات المستوى المقدَّمة (معرفة ومواقف معًا)
 export function levelGains(questions, answers) {
@@ -113,9 +125,12 @@ export function levelGains(questions, answers) {
 // تقرير «مكتسبات المستوى» من نتائج البعدي المحفوظة: لكل بُعد نسبته وعدد فقراته
 // ومستواه، أو null إن لم تُقدَّم له فقرات مستوى. لا يمس pre/post ولا الفرق.
 export const LEVEL_GAIN_AR = 'مكتسبات المستوى';
-export function levelGainReport(post) {
+// الصيغة القصيرة بلا إجابة ممتدة: مكتسبات المستوى لم تُقس، فتُعرض العبارة دون رقم (قرار المالك 2026-11-26، القرار 4)
+export const NOT_MEASURED_AR = 'لم تُقس';
+export function levelGainReport(post, { form = null } = {}) {
   return Object.fromEntries(DIMENSIONS.map((d) => {
     const r = post?.[d];
+    if (form === 'short' && (!r || r.level_gain == null)) return [d, { label_ar: LEVEL_GAIN_AR, pct: null, n: 0, level: null, not_measured: true, text_ar: NOT_MEASURED_AR }];
     return [d, r && r.level_gain != null ? { label_ar: LEVEL_GAIN_AR, pct: r.level_gain, n: r.level_gain_n ?? null, level: r.level_gain_level ?? null } : null];
   }));
 }

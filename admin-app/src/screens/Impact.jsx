@@ -148,6 +148,16 @@ function Reaction({ s }) {
   );
 }
 
+// صيغة البعدي (تصور طول القياس البعدي، المرحلة 3): قصيرة أو كاملة، فلا تُقارن متوسطات مختلفة المحتوى. null قبل العمود = كاملة.
+// والقصيرة بلا إجابة ممتدة: مكتسبات المستوى «لم تُقس» (not_measured من levelGainReport)
+const POST_FORM = { short: 'قصيرة', full: 'كاملة' };
+function PostForm({ p }) {
+  if (!p.post_at) return <small className="la-muted">·</small>;
+  const unmeasured = p.post_form === 'short' && Object.values(p.level_gains || {}).some((g) => g?.not_measured);
+  return <>{POST_FORM[p.post_form || 'full']}{p.served_count != null && <small className="la-muted"> ({p.served_count} فقرة)</small>}
+    {unmeasured && <><br /><small className="la-muted">مكتسبات المستوى: {Object.values(p.level_gains).find((g) => g?.not_measured).text_ar}</small></>}</>;
+}
+
 function People({ list, onPerson, raterOff }) {
   const rows = (list || []).filter((p) => p.baseline_at);
   if (!rows.length) return null;
@@ -155,7 +165,7 @@ function People({ list, onPerson, raterOff }) {
     <section className="la-card">
       <h3>المشاركون</h3>
       <table className="la-table" tabIndex={0} aria-label="أثر كل مشارك">
-        <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<th>المقيّمون{raterOff && <RaterOff />}</th></tr></thead>
+        <thead><tr><th>المشارك</th><th>الكلي</th>{DIMS.map((d) => <th key={d}>{DIM[d]}</th>)}<th>صيغة البعدي</th><th>المقيّمون{raterOff && <RaterOff />}</th></tr></thead>
         <tbody>{rows.map((p) => (
           <tr key={p.id} className="la-click" tabIndex={0} onClick={() => onPerson(p.id)} onKeyDown={(e) => { if (e.key === 'Enter') onPerson(p.id); }}>
             <td><b>{p.full_name}</b><br /><small className="la-muted">{p.organization || ''}{p.forms?.[0] && ` · نموذج ${p.forms[0]}${p.forms[1] ? ` ← ${p.forms[1]}` : ''}`}</small></td>
@@ -180,6 +190,7 @@ function People({ list, onPerson, raterOff }) {
                 </td>
               );
             })}
+            <td><PostForm p={p} /></td>
             <td>{p.raters_invited ? `${p.raters_done || 0}/${p.raters_invited}` : '—'}</td>
           </tr>
         ))}</tbody>
