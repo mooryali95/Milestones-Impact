@@ -33,10 +33,43 @@ test('زيارات الموقع: الأرقام والصفحات والمصاد�
   await expect(page.locator('.stat-value').nth(2)).toHaveText('2.0');
   await expect(page.getByRole('table', { name: 'أكثر الصفحات زيارة' })).toContainText('/leaders/');
   await expect(page.getByText('google.com')).toBeVisible();
-  await expect(page.locator('.vs-list').last()).toContainText('جوال');
-  await expect(page.locator('.vs-list').last()).toContainText('70%');
+  await expect(page.locator('.vs-devices')).toContainText('جوال 70%');
+  await expect(page.locator('#vs-range')).toHaveText('آخر 30 يومًا · كل المواقع');
+  // المسار والمصدر نص لا رابط
+  await expect(page.locator('.vs-report a')).toHaveCount(0);
   await page.getByLabel('المدة').selectOption('7');
   await expect.poll(() => calls.filter((c) => c.action === 'admin.visits').at(-1)?.days).toBe(7);
+  await page.getByLabel('الموقع', { exact: true }).selectOption('mi-home');
+  await expect(page.locator('#vs-range')).toHaveText('آخر 7 أيام · الموقع الرئيسي');
+  // المرشحان في الرابط، فيبقيان بعد إعادة التحميل، وعمود الموقع يختفي عند ترشيح موقع واحد
+  await expect(page).toHaveURL(/days=7/);
+  await page.reload();
+  await expect(page.getByLabel('المدة')).toHaveValue('7');
+  await expect(page.getByLabel('الموقع', { exact: true })).toHaveValue('mi-home');
+  await expect(page.getByRole('table', { name: 'أكثر الصفحات زيارة' }).locator('th')).toHaveCount(3);
+});
+
+test('زيارات الموقع: الفشل يعرض «حاول مرة أخرى» بدل التحميل الدائم، والإعادة تنجح', async ({ page }) => {
+  let fail = true;
+  await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts: [] } }));
+  await page.route(/functions\/v1\/leaders-api/, async (route) => {
+    const b = JSON.parse(route.request().postData() || '{}');
+    if (b.action === 'admin.visits' && fail) return route.fulfill({ json: { success: false, message: 'تعطل مؤقت' } });
+    await route.fulfill({ json: b.action === 'admin.visits' ? { success: true, days: 30, site: null, daily: [{ day: new Date().toISOString().slice(0, 10), views: 3, visits: 2 }], pages: [], referrers: [{ kind: 'referrer', label: 'مباشر', visits: 2 }], devices: [] } : { success: true } });
+  });
+  await page.goto(BASE);
+  await page.evaluate(() => sessionStorage.setItem('mi_admin_v3', JSON.stringify({ token: 't', user: { name: 'مدير', email: 'a@x', role_id: 'admin' }, ts: Date.now() })));
+  await page.goto(BASE + '#/visits');
+  await page.reload();
+  const again = page.getByRole('button', { name: 'حاول مرة أخرى' });
+  await expect(again).toBeVisible();
+  fail = false;
+  await again.click();
+  await expect(page.locator('.stat-value').first()).toHaveText('2');
+  await expect(page.getByText('مباشر أو غير معروف')).toBeVisible();
+  await expect(page.getByText('لا صفحات في هذه المدة')).toBeVisible();
+  await page.getByRole('button', { name: 'عرض كجدول' }).click();
+  await expect(page.getByRole('table', { name: 'الزيارات يومًا بيوم' }).locator('tbody tr')).toHaveCount(31);
 });
 
 test('قبل تشغيل الترحيل: الشاشة تقول ما الذي يُشغَّل', async ({ page }) => {
@@ -101,20 +134,42 @@ test('جاهزية الإطلاق: بنود الإطلاق التجريبي من
   await expect(page).toHaveURL(/#\/leaders\/programs/);
 });
 
-test('اتجاه البرنامج: هذا الأسبوع مقارنة بالماضي، والجدول من الأحدث', async ({ page }) => {
+test('اتجاه البرنامج في النظرة العامة: رابط من الزيارات، ومقارنة آخر أسبوعين مكتملين، والجدول من الأحدث', async ({ page }) => {
   const w = (week, joined, assessed, approved, active) => ({ week, joined, assessed, approved, active });
-  await setup(page, {
+  const calls = await setup(page, {
     'admin.visits': { success: true, days: 30, site: null, daily: [], pages: [], referrers: [], devices: [] },
+    'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
     'admin.trends': { success: true, weeks: [w('2026-10-11', 1, 0, 0, 2), w('2026-10-18', 4, 2, 1, 5), w('2026-10-25', 6, 2, 0, 9)] },
   });
   await page.goto(BASE + '#/visits');
   await page.reload();
-  const card = page.locator('section').filter({ hasText: 'اتجاه البرنامج' });
+  // لا يُطلب اتجاه البرنامج في صفحة الزيارات
+  await expect(page.getByRole('heading', { name: 'اتجاه البرنامج' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /النظرة العامة/ })).toHaveAttribute('href', '#/leaders/overview?trend=1');
+  await page.goto(BASE + '#/leaders/overview?trend=1');
+  await page.reload();
+  const card = page.locator('#program-trend');
   await expect(card.locator('.stat-card').first()).toContainText('6');
-  await expect(card.locator('.stat-card').first()).toContainText('+2 عن الماضي');
-  await expect(card.locator('.stat-card').nth(1)).toContainText('مثل الماضي');
-  await expect(card.locator('.stat-card').nth(2)).toContainText('-1 عن الماضي');
-  await expect(card.getByRole('table').locator('tbody tr').first()).toContainText('2026-10-25');
+  await expect(card.locator('.stat-card').first()).toContainText('6، زيادة 2 (50%) عن الأسبوع السابق (4)');
+  await expect(card.locator('.stat-card').nth(1)).toContainText('مثل الأسبوع السابق');
+  await expect(card.locator('.stat-card').nth(2)).toContainText('نقص 1');
+  await expect(card.getByRole('table').locator('tbody tr').first()).toContainText('25 أكتوبر 2026');
+  expect(calls.filter((c) => c.action === 'admin.trends')).toHaveLength(1);
+});
+
+test('اتجاه البرنامج: لا يُطلب حتى يُفتح، والفشل حالة خطأ بزر إعادة لا اختفاء', async ({ page }) => {
+  const calls = await setup(page, {
+    'admin.overview': { success: true, total: 0, by_status: {}, pending_reviews: 0, matrix: empty },
+    'admin.trends': { success: false, message: 'تعطل مؤقت' },
+  });
+  await page.goto(BASE + '#/leaders/overview');
+  await page.reload();
+  await expect(page.locator('#program-trend')).toBeVisible();
+  expect(calls.filter((c) => c.action === 'admin.trends')).toHaveLength(0);
+  await page.getByRole('button', { name: 'اعرض أسبوعًا بأسبوع' }).click();
+  await expect(page.locator('#program-trend').getByRole('alert')).toContainText('تعطل مؤقت');
+  await page.locator('#program-trend').getByRole('button', { name: 'حاول مرة أخرى' }).click();
+  await expect.poll(() => calls.filter((c) => c.action === 'admin.trends').length).toBe(2);
 });
 
 test('جاهزية الإطلاق: البنود الناقصة تنقل إلى تبويب ضبطها، وتختفي حين تكتمل', async ({ page }) => {

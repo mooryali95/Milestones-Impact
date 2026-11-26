@@ -608,8 +608,42 @@
 .la-impact tbody th { text-align: start; }
 .la-health p { margin: 6px 0 0; }
 .la-health code { display: inline-block; margin: 2px 4px; padding: 1px 6px; background: #fff; border: 1px solid var(--line-strong); border-radius: 4px; font-size: .78rem; direction: ltr; }
-.vs-bars { display: flex; align-items: flex-end; gap: 3px; height: 140px; padding-top: 8px; }
-.vs-bars span { flex: 1; min-width: 3px; background: var(--gold); border-radius: 2px 2px 0 0; }
+/* زيارات الموقع (تصور 2026-11-26، المرحلة 2): الرسم SVG داخلي، والبيانات السابقة باهتة أثناء التحميل، وارتفاع محجوز */
+.tnum { font-variant-numeric: tabular-nums; }
+.vs-report { min-height: 520px; }
+.vs-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.vs-head .today-sec { margin: 0; }
+.vs-stale { opacity: .55; transition: opacity .15s; pointer-events: none; }
+.vs-chart-card { min-height: 250px; }
+.vs-tip { margin: 0 0 6px; font-size: .84rem; min-height: 1.4em; }
+.vs-chart { position: relative; padding-inline-start: 0; }
+.vs-chart svg { display: block; width: 100%; height: 150px; overflow: visible; cursor: crosshair; touch-action: pan-y; }
+.vs-chart svg:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 4px; border-radius: 4px; }
+.vs-axis-max { position: absolute; inset-inline-start: 0; top: -2px; font-size: .72rem; color: var(--ink-mid); background: var(--card, #fff); padding-inline-end: 4px; }
+.vs-axis-x { display: flex; justify-content: space-between; font-size: .74rem; margin-top: 4px; }
+.vs-bar { fill: var(--gold); }
+.vs-area { fill: var(--gold); opacity: .22; }
+.vs-line { fill: none; stroke: var(--gold); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.vs-base { stroke: var(--line); vector-effect: non-scaling-stroke; }
+.vs-grid { stroke: var(--line); stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.vs-cursor { stroke: var(--petrol-s); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.vs-astable { margin-top: 10px; }
+.vs-table { margin-top: 8px; }
+.vs-share { position: relative; display: inline-flex; align-items: baseline; gap: 8px; min-width: 120px; padding: 1px 6px; isolation: isolate; }
+.vs-share-bar { position: absolute; inset-block: 0; inset-inline-start: 0; max-width: 100%; background: var(--gold); opacity: .18; border-radius: 3px; z-index: -1; }
+.vs-devices { margin: 0; font-size: .88rem; }
+.vs-trend-link { margin-top: 18px; }
+.pt-cmp .pt-delta { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; }
+.pt-cmp.up .pt-delta { color: var(--st-ok); } .pt-cmp.down .pt-delta { color: var(--st-bad); } .pt-cmp.neutral .pt-delta { color: var(--ink-mid); }
+.today-trend { margin-top: 18px; }
+.today-trend-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.today-trend-head .today-sec { margin: 0; }
+.tr-cell { display: inline-flex; align-items: center; gap: 6px; }
+.tr-track { display: inline-block; width: 60px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.tr-partial { margin-inline-start: 6px; font-size: .7rem; }
+.tr-gap td { color: var(--ink-mid); font-style: italic; text-align: center; }
+.tr-more { margin-top: 8px; }
+.tr-note { font-size: .78rem; margin-top: 6px; }
 .vs-list { list-style: none; margin: 0 0 14px; padding: 0; }
 .vs-list li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .86rem; }
 .iq-dims { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
@@ -619,7 +653,7 @@
 .iq-opts span { position: relative; min-width: 56px; padding: 1px 6px; font-size: .72rem; border: 1px solid var(--line-strong); border-radius: 4px; overflow: hidden; }
 .iq-opts i { position: absolute; inset-block: 0; inset-inline-start: 0; background: rgba(169,122,46,.18); z-index: -1; }
 .tr-table td { position: relative; }
-.tr-table .tr-bar { display: inline-block; vertical-align: middle; height: 6px; max-width: 60px; margin-inline-end: 6px; background: var(--gold); border-radius: 3px; }
+.tr-table .tr-bar { display: block; height: 100%; background: var(--gold); border-radius: 3px; }
 .la-ready ul { list-style: none; margin: 8px 0 0; padding: 0; }
 .la-ready li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .88rem; }
 .la-ready li > span:nth-child(2) { flex: 1; }

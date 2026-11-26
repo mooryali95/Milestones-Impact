@@ -14,6 +14,9 @@ const PATHS = {
   chevron: <path d="m14.5 6-6 6 6 6" />,   // يشير يسارًا؛ ico-prev تقلبه في RTL
   clock: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
   alert: <><path d="M12 4 2.8 19.5h18.4z" /><path d="M12 10v4.5M12 17.2v.1" /></>,
+  up: <path d="M12 19V5M6 11l6-6 6 6" />,
+  down: <path d="M12 5v14M6 13l6 6 6-6" />,
+  same: <path d="M5 12h14" />,
   unread: <><circle cx="12" cy="12" r="3.5" /><rect x="3" y="5" width="18" height="14" rx="2" opacity=".55" /></>,
 };
 export const ICONS = Object.keys(PATHS);
