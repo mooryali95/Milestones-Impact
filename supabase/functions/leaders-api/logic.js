@@ -816,7 +816,13 @@ export function parseQuiz(md) {
   return qs.filter((q) => q.options.length >= 2 && q.answer >= 0);
 }
 
-export const POINTS = { chapter: 10, perCorrect: 5, reflection: 5 };
+// أوزان النقاط (تصور المرحلة 3 §5.3، اعتمده المالك 2026-11-26): التطبيق يُكافأ أكثر من الإجابة الصحيحة.
+// السريان من تاريخ الإطلاق بطبيعة الحفظ: النقاط تُخزن عند الكسب (points_ledger) فالمكتسب قبله لا يتغير.
+// الأوزان السابقة للتراجع بثابت واحد: { chapter: 10, perCorrect: 5, reflection: 5, reflectionApplied: 0 }
+// reflectionApplied: إضافة لمن أجاب عن «أين ستطبقه؟» بموقف من عمله وفعل، مع تأمل له معنى
+// commitment وcommitmentReview: التزام ما بعد الورشة عند كتابته وعند مراجعته بأي نتيجة (المرحلة 3.2)
+export const POINTS = { chapter: 10, perCorrect: 3, reflection: 10, reflectionApplied: 5, commitment: 10, commitmentReview: 15 };
+export const POINTS_SINCE = '2026-11-26';
 
 // يصحح إجابات المشارك ويعيد النتيجة بلا كشف الإجابات قبل الإرسال
 export function gradeQuiz(quiz, answers) {
@@ -835,8 +841,11 @@ export function meaningful(text, { chars, words }) {
   return new Set(t.split(' ').filter((w) => w.length > 1)).size >= words;
 }
 
-export function chapterPoints(score, reflection) {
-  return POINTS.chapter + score * POINTS.perCorrect + (meaningful(reflection, REFLECTION_MIN) ? POINTS.reflection : 0);
+// apply: جواب السؤال الموجه «أين ستطبقه؟». المكافأة الإضافية بوجود موقف وفعل لا بالطول، فحده حد حقول النماذج
+/** @param {number} score @param {any} reflection @param {any} [apply] */
+export function chapterPoints(score, reflection, apply = null) {
+  if (!meaningful(reflection, REFLECTION_MIN)) return POINTS.chapter + score * POINTS.perCorrect;
+  return POINTS.chapter + score * POINTS.perCorrect + POINTS.reflection + (meaningful(apply, TEXTAREA_MIN) ? POINTS.reflectionApplied : 0);
 }
 
 // ألقاب التقدم بحسب مجموع النقاط

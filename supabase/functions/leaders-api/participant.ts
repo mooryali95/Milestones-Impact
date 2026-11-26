@@ -1304,7 +1304,7 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
     quiz: shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
-    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
+    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, apply: done.reflection_apply ?? '', at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
   };
 }
@@ -1362,10 +1362,13 @@ export async function handbookComplete(p: any, b: Body) {
     throw new Fail('أجب عن كل الأسئلة أولًا');
   }
   const reflection = String(b.reflection || '').trim().slice(0, 4000) || null;
+  // جواب «أين ستطبقه؟» (تصور المرحلة 3 §5.3): يمنح الإضافة مع تأمل له معنى. قبل 20261129190000 يُحفظ التأمل وحده
+  const apply = String(b.apply || '').trim().slice(0, 1000) || null;
   const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
   if (prev) {
-    await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
+    const { error } = await db.from('handbook_progress').update({ reflection, reflection_apply: apply }).eq('participant_id', p.id).eq('module_id', m.id);
+    if (error) await db.from('handbook_progress').update({ reflection }).eq('participant_id', p.id).eq('module_id', m.id);
     // إعادة الاختبار لا تغيّر الدرجة المحتسبة، لكنها تُسجَّل: كانت تمر بلا أثر، وهي دليل تعلّم يظهر في خط الملف الزمني
     await audit('participant', p.id, 'handbook.quiz-retry', 'participants', p.id, null, { module_id: m.id, score: g.score, total: g.total });
   }
@@ -1375,7 +1378,9 @@ export async function handbookComplete(p: any, b: Body) {
     const row = { participant_id: p.id, module_id: m.id, quiz_score: g.score, quiz_total: g.total, reflection };
     const stamp = { content_release: (await releaseOf(p))?.id ?? null, quiz_fingerprint: await sha256Hex(String(m.quiz_md || '')),
       quiz_answers: quiz.map((x: any, i: number) => ({ q: x.q, a: x.options[Number(b.answers?.[i])] ?? null })) };
-    must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
+    const first = await db.from('handbook_progress').insert({ ...row, ...stamp, reflection_apply: apply });
+    if (/reflection_apply/.test(String(first.error?.message || ''))) must(await db.from('handbook_progress').insert({ ...row, ...stamp }));
+    else must(first);
     // ثالث باب بدرجة دون النصف: ملاحظة واحدة في ملفه تُبلَّغ له (notice-rules.js)، لا عند كل باب
     if (g.total > 0 && g.score / g.total < QUIZ_LOW_SHARE) {
       const { data: all } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id);
@@ -1383,7 +1388,7 @@ export async function handbookComplete(p: any, b: Body) {
       if (low === QUIZ_LOW_COUNT) await recordObservation(p.id, { code: 'quiz_low', ref: String(QUIZ_LOW_COUNT), ...RULES.quiz_low({ count: low }) });
     }
   }
-  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
+  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection, apply), m.title_ar);
   const pts = await pointsOf(p.id);
   return { success: true, ...g, first: !prev, counted: prev || { quiz_score: g.score, quiz_total: g.total }, gained, points: { total: pts.total, rank: pts.rank } };
 }

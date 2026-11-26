@@ -1291,6 +1291,8 @@ create table if not exists leaders.handbook_progress (
   content_release text,
   quiz_fingerprint text,
   quiz_answers jsonb,
+  reflection_apply text,
+  constraint handbook_progress_reflection_apply_check CHECK (((reflection_apply IS NULL) OR (char_length(reflection_apply) <= 1000))),
   constraint handbook_progress_reflection_check CHECK (((reflection IS NULL) OR (char_length(reflection) <= 4000))),
   constraint handbook_progress_pkey PRIMARY KEY (participant_id, module_id)
 );

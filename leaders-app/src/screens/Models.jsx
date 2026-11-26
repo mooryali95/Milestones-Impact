@@ -615,7 +615,7 @@ export function Wins() {
           ))}
         </ol>
         <ul className="muted small wins-how">
-          <li>إتمام الباب: {POINTS.chapter} · الإجابة الصحيحة: {POINTS.perCorrect} · التأمل: {POINTS.reflection}</li>
+          <li>إتمام الباب: {POINTS.chapter} · الإجابة الصحيحة: {POINTS.perCorrect} · التأمل: {POINTS.reflection} ومع «أين ستطبقه؟» {POINTS.reflection + POINTS.reflectionApplied}</li>
           <li>تقديم النموذج التعليمي: حسب النموذج</li>
           <li>إتقان أداة في المختبر: حسب الأداة</li>
           <li>اعتماد وثيقة المبادرة: {APPROVAL_POINTS}</li>
