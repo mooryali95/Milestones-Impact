@@ -31,6 +31,17 @@ export function sponsorState(c, now = Date.now()) {
   if (c.sponsor_status === 'pending' && c.sponsor_expires_at && Date.parse(c.sponsor_expires_at) < now) return 'expired';
   return c.sponsor_status;
 }
+// تذكير الراعي (تصور المرحلة 2، 2.3): مرة واحدة لكل دعوة حين يبقى على انتهائها سبعة أيام أو أقل. المجدول أسبوعي، فيقع
+// التذكير مرة على الأقل قبل الانتهاء. «ذُكّر» = sponsor_reminded_at بعد sponsor_invited_at، فالدعوة الجديدة لها تذكيرها بلا تصفير
+export const SPONSOR_REMIND_DAYS = 7;
+/** @param {{ status?: string, sponsor_status?: string | null, sponsor_expires_at?: string | null, sponsor_invited_at?: string | null, sponsor_reminded_at?: string | null }} c */
+export function sponsorReminderDue(c, now = Date.now()) {
+  if (c?.status !== 'accepted' || sponsorState(c, now) !== 'pending' || !c.sponsor_expires_at) return false;
+  if (Date.parse(c.sponsor_expires_at) - now > SPONSOR_REMIND_DAYS * 864e5) return false;
+  return !c.sponsor_reminded_at || (!!c.sponsor_invited_at && Date.parse(c.sponsor_reminded_at) < Date.parse(c.sponsor_invited_at));
+}
+// سطر المشارك في صفحة مبادرته حين تنتهي مهلة راعيه (القرار 4: لا بريد له، والمدير يتصرف)
+export const SPONSOR_EXPIRED_PARTICIPANT_AR = 'انتهت مهلة الراعي، يتابعها فريق البرنامج';
 export const SPONSOR_STATE_AR = { pending: 'دُعي ولم يرد', expired: 'انتهت مهلة الرابط', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
 // رسالة الرابط المنتهي للراعي: الإعادة للمدير وحده (القرار 3)، فيُحال إلى فريق البرنامج ببريده لا إلى المستشار
 export const SPONSOR_LINK_EXPIRED_AR = `انتهت صلاحية الرابط. أبلغنا فريق البرنامج ليرسل دعوة جديدة على ${CONTACT_EMAIL}`;

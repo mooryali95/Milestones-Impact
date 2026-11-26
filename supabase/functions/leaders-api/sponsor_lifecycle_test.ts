@@ -5,7 +5,7 @@ import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { installFake, withNet } from './_fake_db.ts';
 const X = await import('./capstone.ts');
 const T = await import('./tracking.ts');
-const { hash } = await import('./core.ts');
+const { CONFIG, hash } = await import('./core.ts');
 
 type Row = Record<string, any>;
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -81,4 +81,72 @@ Deno.test('2.2 قائمة الإدارة تحمل الحالة المشتقة ل
   tables.model_submissions = [];
   const r = await X.adminList({});
   assertEquals(r.capstones.map((c: any) => c.sponsor_state), ['expired']);
+});
+
+// 2.3: تذكير واحد للراعي قبل الانتهاء بسبعة أيام على المجدول الأسبوعي القائم، يُسجَّل في sponsor_reminded_at فلا يتكرر،
+// ولا يُذكَّر من أيّد أو اعتُمدت وثيقته دون تأييد، ولا يخرج بريد لحساب العرض. والمنتهي يُعدّ لملخص المدير، وسطر للمشارك
+const { SPONSOR_EXPIRED_PARTICIPANT_AR } = await import('./capstone.js');
+const { resendCalls } = await import('./_fake_db.ts');
+
+// البريد مهيأ بمفتاح وهمي (الشبكة محاكاة بـ withNet)، ويُعاد بعد كل اختبار
+async function mailOn<T>(fn: () => Promise<T>) {
+  const saved = { resendKey: CONFIG.resendKey, mailDailyCap: CONFIG.mailDailyCap, alertEmail: CONFIG.alertEmail };
+  Object.assign(CONFIG, { resendKey: 're_test', mailDailyCap: 100, alertEmail: '' });
+  try { return await fn(); } finally { Object.assign(CONFIG, saved); }
+}
+async function remindWorld(rows: Row[]) {
+  const tables = await world();
+  tables.participants.push({ id: U(910010), full_name: 'عرض', email: 'demo@demo.milestone-impact.org', is_demo: true, is_test: false });
+  rows.forEach((r, i) => { if (!r.participant_id) tables.participants.push({ id: U(910100 + i), full_name: `قائد ${i}`, email: `l${i}@example.sa`, is_demo: false, is_test: false }); });
+  tables.capstones = rows.map((r, i) => ({ participant_id: U(910100 + i), status: 'accepted', sponsor_status: 'pending', sponsor_email: `s${i}@example.sa`, sponsor_name: 'راعٍ',
+    sponsor_token_hash: `h${i}`, sponsor_invited_at: iso(-15 * DAY), sponsor_expires_at: iso(5 * DAY), sponsor_reminded_at: null, ...r }));
+  return tables;
+}
+
+Deno.test('2.3 تذكير واحد قبل الانتهاء بسبعة أيام، ولا يتكرر في التشغيلة التالية', () => mailOn(async () => {
+  const tables = await remindWorld([{}]);
+  const first = await withNet(async (calls) => { const r = await X.sponsorReminders(); return { r, mails: resendCalls(calls).length }; });
+  assertEquals([first.r.reminded, first.mails], [1, 1]);
+  assert(tables.capstones[0].sponsor_reminded_at, 'سُجّل التذكير');
+  assert(tables.capstones[0].sponsor_token_hash !== 'h0', 'برمز جديد في البريد');
+  assertEquals(tables.capstones[0].sponsor_expires_at > iso(4 * DAY) && tables.capstones[0].sponsor_expires_at < iso(6 * DAY), true, 'بلا تمديد للمهلة');
+  const second = await withNet(async (calls) => { const r = await X.sponsorReminders(); return { r, mails: resendCalls(calls).length }; });
+  assertEquals([second.r.reminded, second.mails], [0, 0]);
+}));
+
+Deno.test('2.3 لا تذكير لما بعد سبعة أيام، ولا للمؤيد أو المعتمد دون تأييد أو المنتهي، ولا بريد لحساب العرض', () => mailOn(async () => {
+  const tables = await remindWorld([
+    { sponsor_expires_at: iso(12 * DAY) },
+    { sponsor_status: 'endorsed', status: 'approved' },
+    { status: 'approved', sponsor_waived: 'الراعي في إجازة طويلة' },
+    { sponsor_expires_at: iso(-DAY) },
+    { participant_id: U(910010) },
+    // ذُكّر لدعوة سابقة ثم أُعيدت الدعوة: الدعوة الجديدة لها تذكيرها
+    { sponsor_reminded_at: iso(-20 * DAY) },
+  ]);
+  const out = await withNet(async (calls) => ({ r: await X.sponsorReminders(), mails: resendCalls(calls).length }));
+  assertEquals([out.r.reminded, out.mails], [1, 1]);
+  assertEquals(out.r.expired, 1);
+  assertEquals(tables.capstones.map((c) => !!c.sponsor_reminded_at && c.sponsor_reminded_at > iso(-DAY)), [false, false, false, false, false, true]);
+}));
+
+Deno.test('2.3 تعذّر تذكير واحد لا يوقف غيره', () => mailOn(async () => {
+  const tables = await remindWorld([{}, {}]);
+  let n = 0;
+  installFake(tables, { fail: (t, op) => (t === 'capstones' && op.kind === 'update' && n++ === 0 ? { message: 'boom' } : null),
+    embed: (t, r, all) => (t === 'capstones' ? { participants: all.participants.find((x) => x.id === r.participant_id) || null } : null) });
+  const out = await withNet(async (calls) => ({ r: await X.sponsorReminders(), mails: resendCalls(calls).length }));
+  assertEquals([out.r.reminded, out.r.failed, out.mails], [1, 1, 1]);
+}));
+
+Deno.test('2.3 قبل ترحيل sponsor_reminded_at: لا تذكير ولا بريد، فلا يتكرر كل أسبوع', () => mailOn(async () => {
+  const tables = await remindWorld([{}]);
+  installFake(tables, { fail: (t, op) => (t === 'capstones' && op.kind === 'select' && String(op.cols).includes('sponsor_reminded_at') ? { code: '42703', message: 'column capstones.sponsor_reminded_at does not exist' } : null),
+    embed: (t, r, all) => (t === 'capstones' ? { participants: all.participants.find((x) => x.id === r.participant_id) || null } : null) });
+  const out = await withNet(async (calls) => ({ r: await X.sponsorReminders(), mails: resendCalls(calls).length }));
+  assertEquals([out.r.reminded, out.mails, out.r.skipped], [0, 0, 'sponsor_reminded_at']);
+}));
+
+Deno.test('2.3 المشارك يرى سطر انتهاء مهلة الراعي في صفحة مبادرته، ونصه لا يحيل إلى المستشار', () => {
+  assertEquals(SPONSOR_EXPIRED_PARTICIPANT_AR, 'انتهت مهلة الراعي، يتابعها فريق البرنامج');
 });

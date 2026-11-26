@@ -9,6 +9,7 @@
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
 import { audit, CONFIG, db, Fail, hash, logConsent, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
+import { missingColumn } from './missing-column.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
 import { emailsOf } from './account-emails.ts';
@@ -18,7 +19,7 @@ import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, SPONSOR_LINK_EXPIRED_AR, sponsorState, sponsorWarnings } from './capstone.js';
+  capstoneListRows, capstoneState, chapterLevel, dateAr, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, SPONSOR_LINK_EXPIRED_AR, sponsorReminderDue, sponsorState, sponsorWarnings } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { freezeIssued, rejectionStats } from './doc-quality.js';
@@ -507,6 +508,46 @@ export async function inviteSponsor(p: any, c: any, charter: any = null) {
   // أحدًا. البريد يكتبه الحساب في بطاقة مبادرته، فحارس نطاق العرض في sendMail لا يكفيه (تصور 2026-11-19، المرحلة 0)
   if (simulated(p)) return;
   await sendMail(email, `طلب تأييد مبادرة «${initiative}»`, sponsorMail(charter.sponsor || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`), [], { category: 'request' });
+}
+
+// تذكير الراعي قبل الانتهاء (تصور المرحلة 2، 2.3): بريد واحد لكل دعوة على المجدول الأسبوعي القائم (cron.reminders).
+// الرمز لا يُخزَّن إلا بصمته، فيحمل التذكير رمزًا جديدًا بالمهلة نفسها (لا تمديد)، والرابط الأول يقول «استُبدل بدعوة أحدث».
+// المعتمد دون تأييد والمؤيد لا يُذكَّران (accepted وpending وحدهما)، وحساب العرض لا يخرج له بريد. فشل بريد لا يوقف غيره.
+// ويعدّ المنتهي لملخص المدير الأسبوعي (weeklyHealth). قبل ترحيل 20261129180000 لا تذكير، فلا يتكرر كل أسبوع
+export function sponsorReminderMail(sponsor: string | null, who: string, initiative: string, link: string, expires: string) {
+  return mailShell(mailTitle`تذكير بطلب تأييد مبادرة: ${initiative}`,
+    mailText(`${sponsor ? `أهلًا ${bdi(sponsor)}،` : 'أهلًا،'} ما زالت وثيقة مبادرة «${bdi(initiative)}» التي أعدّها ${bdi(who)} تنتظر تأييدك.`)
+    + mailText(`ينتهي الرابط في ${bdi(dateAr(expires))}. تقرأ الوثيقة كاملة من الرابط، ثم تؤيد أو تطلب تعديلًا بملاحظة.`)
+    + mailButton(link, 'اقرأ الوثيقة وأيّدها')
+    + mailNote('هذا الرابط يحل محل رابط الدعوة السابقة.'),
+    { family: 'capstone', preheader: `تذكير: ${who} ينتظر تأييدك لمبادرة «${initiative}»`, footnote: '' });
+}
+const SPONSOR_REMIND_COLS = 'participant_id, status, sponsor_status, sponsor_email, sponsor_name, sponsor_invited_at, sponsor_expires_at, sponsor_reminded_at, participants!inner(id, full_name, is_demo, is_test, status)';
+export async function sponsorReminders() {
+  const { data, error } = await db.from('capstones').select(SPONSOR_REMIND_COLS).eq('status', 'accepted').eq('sponsor_status', 'pending').limit(500);
+  if (missingColumn(error)) return { reminded: 0, failed: 0, expired: 0, skipped: 'sponsor_reminded_at' };
+  if (error) throw error;
+  const rows = (data || []) as any[];
+  const now = Date.now();
+  let reminded = 0, failed = 0;
+  for (const c of rows.filter((x) => sponsorReminderDue(x, now))) {
+    const p = c.participants;
+    if (!p || simulated(p) || p.status === 'suspended' || !c.sponsor_email) continue;
+    try {
+      const token = randomToken();
+      const initiative = (await initiativeFor(c.participant_id)) || 'المبادرة';
+      const html = sponsorReminderMail(c.sponsor_name || null, p.full_name || 'مشارك في برنامج القادة', initiative, `${CONFIG.appUrl}/sponsor?t=${encodeURIComponent(token)}`, c.sponsor_expires_at);
+      // الرمز الجديد والتسجيل قبل البريد: إن فشل البريد بقي التذكير مسجلًا فلا يتكرر، والدعوة الأولى تُعاد من الإدارة
+      must(await db.from('capstones').update({ sponsor_token_hash: await hash(token), sponsor_reminded_at: new Date().toISOString() }).eq('participant_id', c.participant_id));
+      await sendMail(c.sponsor_email, `تذكير بطلب تأييد مبادرة «${initiative}»`, html, [], { category: 'request', ref: `participant:${c.participant_id}` });
+      reminded += 1;
+    } catch (e) {
+      console.error('sponsor reminder:', (e as Error)?.message || e);
+      failed += 1;
+    }
+  }
+  const expired = rows.filter((x) => sponsorState(x, now) === 'expired' && !simulated(x.participants) && !x.participants?.is_test).length;
+  return { reminded, failed, expired };
 }
 
 async function approve(p: any, by: string, waived: string | null = null) {

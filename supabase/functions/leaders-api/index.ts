@@ -105,7 +105,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   // التذكير الأسبوعي للمشاركين، ثم ملخص الجهات لمنسقيها، ثم تقرير الصحة للمالك، في التشغيلة نفسها
   'cron.reminders': async (b) => {
     const r: any = await A.reminders(b);
-    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth().catch((e) => ({ sent: false, reason: String(e?.message || e) })),
+    // تذكير الرعاة قبل انتهاء روابطهم، وعدّ المنتهي لتقرير الأسبوع (تصور المرحلة 2، 2.3): المجدول الأسبوعي نفسه، لا مجدول ثانٍ
+    const sponsors: any = await X.sponsorReminders().catch((e) => ({ reminded: 0, expired: 0, error: String(e?.message || e) }));
+    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), sponsors, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth({ sponsorExpired: sponsors.expired || 0 }).catch((e) => ({ sent: false, reason: String(e?.message || e) })),
       // تنظيف دوري: رموز الدخول والجلسات المنتهية وسجلات التحقق وعناوين IP بعد 90 يومًا
       purge: await S.purge().catch((e) => ({ error: String(e?.message || e) })) };
   },

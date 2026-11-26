@@ -368,6 +368,7 @@ create table if not exists leaders.capstones (
   sponsor_note text,
   sponsor_invited_at timestamp with time zone,
   sponsor_expires_at timestamp with time zone,
+  sponsor_reminded_at timestamp with time zone,
   sponsor_at timestamp with time zone,
   sponsor_waived text,
   approved_at timestamp with time zone,
