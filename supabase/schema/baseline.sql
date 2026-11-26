@@ -646,7 +646,7 @@ create table if not exists leaders.consent_events (
   version text not null,
   text_digest text,
   constraint consent_events_kind_check CHECK ((kind = ANY (ARRAY['accept'::text, 'renew'::text, 'org_share_on'::text, 'org_share_off'::text]))),
-  constraint consent_events_subject_check CHECK ((subject = ANY (ARRAY['participant'::text, 'coordinator'::text, 'expert'::text, 'rater'::text]))),
+  constraint consent_events_subject_check CHECK ((subject = ANY (ARRAY['participant'::text, 'coordinator'::text, 'expert'::text, 'rater'::text, 'sponsor'::text]))),
   constraint consent_events_subject_id_check CHECK ((char_length(subject_id) <= 64)),
   constraint consent_events_text_digest_check CHECK ((text_digest ~ '^[0-9a-f]{64}$'::text)),
   constraint consent_events_version_check CHECK ((version ~ '^\d{4}-\d{2}-\d{2}$'::text)),

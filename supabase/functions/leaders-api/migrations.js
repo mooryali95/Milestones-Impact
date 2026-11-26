@@ -189,6 +189,7 @@ export const MIGRATIONS = [
   '20261129140000_leaders_beginner_columns',
   '20261129150000_leaders_beginner_language',
   '20261129160000_leaders_group_members_cleanup',
+  '20261129170000_leaders_consent_sponsor',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -292,4 +293,5 @@ export const MIGRATION_GATES = {
   '20261129140000_leaders_beginner_columns': ["tolerant", "محتوى نماذج فقط. يضيف إلى اثني عشر جدولًا خاصيتين لا تقرؤهما الدوال الأقدم (columns_beginner وlabels_beginner)،"],
   '20261129150000_leaders_beginner_language': ["tolerant", "محتوى نماذج فقط. خاصيتان لا تقرؤهما الدوال الأقدم (label_beginner وhint_beginner)، فتعرض العنوان والتلميح"],
   '20261129160000_leaders_group_members_cleanup': ["deferred", "بقرار المالك (تصور المرحلة 1، القرار 2): يُطبَّق بعد عرض العد من scripts/db/verify-group-members-cleanup.sql قراءةً"],
+  '20261129170000_leaders_consent_sponsor': ["tolerant", "قبله يرفض القيد نوع sponsor (23514) فيسجل logConsent الخطأ ولا يوقف قرار الراعي، كما كان قبل الإشعار"],
 };

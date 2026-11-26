@@ -203,9 +203,12 @@ export async function auditMany(rows: AuditRow[]) {
 
 // سجل الموافقات التاريخي (D18): سطر لا يُكتب فوقه بالنسخة وبصمة نص الوثائق، وهو دليل الموافقة.
 // تعذّر كتابته يرمي، فيفشل الطلب قبل أثره في السجل ولا تُعد الموافقة مسجلة بلا دليلها.
-export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater';
+// الراعي (تصور المرحلة 2، 2.1): معرّفه معرّف ما قرر فيه (الوثيقة أو مراجعة الأثر) لا بريده. وقبل ترحيل 20261129170000 يرفض القيد
+// نوعه (23514)، فيُسجَّل الخطأ ولا يوقف قراره، كما كان قبل الإشعار
+export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater' | 'sponsor';
 export async function logConsent(subject: ConsentSubject, subjectId: string, kind: 'accept' | 'renew' | 'org_share_on' | 'org_share_off') {
   const { error } = await db.from('consent_events').insert({ subject, subject_id: subjectId, kind, version: POLICY_DIGEST.version, text_digest: POLICY_DIGEST.sha256 });
+  if (error && subject === 'sponsor' && error.code === '23514') { console.error('consent_events sponsor (before 20261129170000):', error.message); return; }
   if (error) {
     console.error('consent_events insert:', error.message);
     throw new Fail('تعذّر تسجيل موافقتك الآن، حاول بعد قليل', 503, 'consent_unavailable');

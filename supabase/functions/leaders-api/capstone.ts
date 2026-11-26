@@ -7,7 +7,7 @@
 // التسليم، ومعيار المستشار، وتأييد الراعي، والاعتماد، ولقطة المعتمد.
 // المسار: مسودة ← تسليم (اكتمال وجاهزية 80%) ← مراجعة المستشار (إعادة
 // للتحسين مرة، أو قبول بمعيار) ← تأييد الراعي برابط خاص ← اعتماد.
-import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
+import { audit, CONFIG, db, Fail, hash, logConsent, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
@@ -623,7 +623,11 @@ export async function sponsorSubmit(b: Body) {
   if (b.decision === 'endorse' && (await ownEmailsOf(p)).map((x) => normalizeEmail(x)).includes(normalizeEmail(c.sponsor_email))) {
     throw new Fail('لا يؤيد قائد المبادرة مبادرته. يعتمدها المستشار أو يعيدها لتصحيح بريد الراعي', 403, 'sponsor_self');
   }
-  if (b.decision === 'endorse') {
+  if (b.decision !== 'endorse' && b.decision !== 'decline') throw new Fail('قرار غير صالح');
+  if (b.decision === 'decline' && !note) throw new Fail('اكتب للمشارك ما الذي يعدّله');
+  // إشعار الخصوصية في الصفحة (تصور المرحلة 2، 2.1): القبول بالإرسال يُسجَّل قبل القرار، فلا قرار بلا موافقته
+  await logConsent('sponsor', p.id, 'accept');
+if (b.decision === 'endorse') {
     must(await db.from('capstones').update({ sponsor_status: 'endorsed', sponsor_note: note, sponsor_at: now, updated_at: now }).eq('participant_id', p.id));
     await approve(p, `sponsor:${c.sponsor_email}`);
   } else if (b.decision === 'decline') {
