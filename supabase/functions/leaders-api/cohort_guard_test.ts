@@ -330,3 +330,18 @@ Deno.test('إخفاء بند من المحرر يحفظ hidden_requirements نف
     assertEquals(d.requirements.find((r: any) => r.code === 'A-TWO').hidden, true);
   } finally { w.restore(); }
 });
+
+// تصور المرحلة 4، م6 (القرار 7): الإلحاق الصريح بدفعة بلا نسخة يعطي رحلة غير ثابتة، فلا تُفتح دفعة بلا نسخة
+Deno.test('فتح دفعة غير مثبتة على نسخة يُرد version_required، وتعديل اسمها وحده يمر', async () => {
+  const w = world();
+  w.tables.cohorts[0].status = 'planned';
+  try {
+    for (const status of ['open', 'running']) {
+      const e = await failOf(() => cohortSave(admin, { id: C1, status }));
+      assertEquals([e.status, e.code], [400, 'version_required']);
+      assertEquals(w.tables.cohorts[0].status, 'planned');
+    }
+    assertEquals(((await cohortSave(admin, { id: C1, name: 'سفراء 2026 أ' })) as any).success, true);
+    assertEquals(((await cohortSave(admin, { id: C1, status: 'closed' })) as any).success, true);
+  } finally { w.restore(); }
+});

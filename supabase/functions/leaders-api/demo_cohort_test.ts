@@ -494,7 +494,9 @@ Deno.test('إغلاق الدفعة يحذف حسابها التجريبي ويل
     const n = w.tables.participants.length;
     const again: any = await G.cohortSave(ADMIN, { id: C2, status: 'planned' });
     assertEquals([again.demo_closed, w.tables.participants.length], [undefined, n]);
-    // إعادة فتحها ثم الفتح: حساب جديد نظيف
+    // إعادة فتحها ثم الفتح: حساب جديد نظيف. الدفعة تُثبَّت على نسخة قبل فتحها (تصور المرحلة 4، م6)
+    await assertRejects(() => G.cohortSave(ADMIN, { id: C1, status: 'running' }));
+    w.tables.cohorts.find((c) => c.id === C1)!.program_version_id = U(990);
     await G.cohortSave(ADMIN, { id: C1, status: 'running' });
     await w.open(C1);
     assert(w.demoOf(C1)!.id !== d1);

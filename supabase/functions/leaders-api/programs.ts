@@ -737,6 +737,14 @@ export async function cohortSave(a: Admin, b: Body) {
     }
     row.program_version_id = v.id;
   }
+  // دفعة بلا نسخة لا تُفتح (تصور المرحلة 4، م6، القرار 7): الإلحاق الصريح بها يعطي رحلة تتغير بتعديل البرنامج. يُمنع الانتقال
+  // من حال غير حية إلى «التسجيل مفتوح» أو «جارية» وإنشاؤها كذلك، ولا يُمس ما سواه لدفعة غير مثبتة (اسمها أو إغلاقها أو حية أصلًا)
+  const liveAfter = (s: unknown) => s === 'open' || s === 'running';
+  const vidFinal = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id ?? null;
+  if (!vidFinal && liveAfter(row.status ?? prev?.status) && (!prev || ('status' in row && !liveAfter(prev.status)))) {
+    if (versionCreated) await db.from('program_versions').delete().eq('id', versionCreated.id).then(() => {}, () => {});
+    throw new Fail('لا تُفتح دفعة بلا نسخة من برنامجها: ثبّتها على نسخة من ملفها أولًا، فتبقى رحلة أعضائها ثابتة.', 400, 'version_required');
+  }
   row.updated_at = new Date().toISOString();
   // نسخة أُنشئت لهذا الحفظ ثم رُفض حفظ الدفعة نفسه: تُحذف فلا تبقى نسخة بلا سبب (لم تُثبَّت عليها دفعة بعد)
   const writeCohort = async (q: any, msg?: string) => {
