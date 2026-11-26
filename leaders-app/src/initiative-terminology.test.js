@@ -71,6 +71,9 @@ const EXCEPTIONS = [
   ['shared/video/scenes.js', 'مشروعك', 'فيديو مُصيَّر'],
   ['shared/video/mock-server.js', 'مشروعك', 'فيديو مُصيَّر'],
   ['shared/video/mock-server.js', 'الميزانية', 'فيديو مُصيَّر'],
+  // صفحة القرار في الوثيقة المؤسسية (المرحلة 26): صياغة اعتمدها المالك لقارئ خارجي («إجمالي الميزانية»، «بأي كلفة»، «كلفة عدم القرار»)
+  ['supabase/functions/leaders-api/labels.js', 'الميزانية', 'صفحة القرار'],
+  ['supabase/functions/leaders-api/labels.js', 'كلفة', 'صفحة القرار'],
 ];
 
 const TASHKEEL = /[ً-ْـ]/g;

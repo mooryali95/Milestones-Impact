@@ -8,11 +8,12 @@
 //   1. tracks[مفتاح المسار] إن ضبطه المالك لمسار بعينه
 //   2. profiles[مفتاح ملف التعريف]
 //   3. القاعدة الافتراضية: مستوى المشارك في إطار أولويته (تأسيسي ← بطاقة، متوسط ← ميثاق، احترافي ← حالة عمل)
+// limits: حدود العرض في الوثيقة (المنافع والمخاطر في أبوابها، وما يظهر منها في صفحة القرار)
 // القيم المسموحة لـ form: card | charter | case (الأسماء والصفحات في FORMS أدناه). داخل الوثيقة يبقى كل فصل بعمق مستوى إطاره.
 export const FORMS = Object.freeze({
-  card: Object.freeze({ key: 'card', name: 'بطاقة المبادرة', en: 'Initiative Card', pages: [3, 5] }),
-  charter: Object.freeze({ key: 'charter', name: 'ميثاق المبادرة', en: 'Initiative Charter', pages: [8, 12] }),
-  case: Object.freeze({ key: 'case', name: 'حالة العمل', en: 'Business Case', pages: [18, 25] }),
+  card: Object.freeze({ key: 'card', name: 'بطاقة المبادرة', en: 'Initiative Card', pages: [3, 5], limits: Object.freeze({ benefits: 3, risks: 5, decision: 3 }) }),
+  charter: Object.freeze({ key: 'charter', name: 'ميثاق المبادرة', en: 'Initiative Charter', pages: [8, 12], limits: Object.freeze({ benefits: 5, risks: 5, decision: 3 }) }),
+  case: Object.freeze({ key: 'case', name: 'حالة العمل', en: 'Business Case', pages: [18, 25], limits: Object.freeze({ benefits: 8, risks: 10, decision: 3 }) }),
 });
 
 export const DEFAULT_BY_LEVEL = Object.freeze({ beginner: 'card', intermediate: 'charter', advanced: 'case' });

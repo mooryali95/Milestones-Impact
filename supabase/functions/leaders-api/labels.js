@@ -386,6 +386,30 @@ const questionsAr = (n) => (n === 1 ? 'سؤال واحد' : n === 2 ? 'سؤال�
 export const docBlockedAr = (n, name, list) => `${n >= 3 && n <= 10 ? 'بقيت' : 'بقي'} ${questionsAr(n)} لتكتمل ${name}: ${list}. تجدها مفصلة في ملحق ملف العمل الكامل.`;
 export const DOC_SUMMARY_AR = 'الخلاصة التنفيذية';
 export const DOC_CHARTER_NOTE_AR = 'خلاصة القرار في صفحة: ما نبدأ به، وبكم، ومن يرعاه. به يُؤذن بالبدء.';
+// صفحة القرار في النسخة المؤسسية (المرحلة 26): العنوان والوصف والخانات وسطر الخيارات والموعد
+export const DOC_DECISION_AR = Object.freeze({
+  eyebrow: 'Decision Summary',
+  title: 'القرار المعروض عليكم',
+  lead: 'ما نطلبه، ولماذا، وبأي كلفة. التفصيل في الأبواب التالية.',
+  decision: 'القرار',
+  issue: 'المسألة',
+  recommend: 'ما نوصي به',
+  resources: 'الموارد المطلوبة',
+  benefits: 'ما تحققه المبادرة',
+  risks: 'ما يهدد نجاحها',
+  duration: 'المدة',
+  funding: 'مصدر التمويل',
+  noDecision: 'كلفة عدم القرار',
+  choices: ['اعتماد', 'اعتماد بشروط', 'إرجاع'],
+  response: 'الاستجابة',
+});
+// وسم المبلغ بعد الاحتياطي في كل موضع من النسخة المؤسسية؛ الرقم الأساس في باب الخطة وحده
+export const BUDGET_TOTAL_AR = 'إجمالي الميزانية (شاملًا الاحتياطي)';
+export const BUDGET_PLAIN_AR = 'إجمالي الميزانية';
+export const budgetTotalPctAr = (pct) => `إجمالي الميزانية (شاملًا احتياطي ${pct}%)`;
+export const decisionSentenceAr = (initiative, sponsor) => `نوصي باعتماد ${initiative ? `مبادرة «${initiative}»` : 'المبادرة'}${sponsor ? ` برعاية ${sponsor}` : ''}.`;
+export const decisionDeadlineAr = (date) => `يلزم القرار قبل ${date} ليبدأ التنفيذ في موعده.`;
+export const fromToAr = (a, b) => [a && `من ${a}`, b && `إلى ${b}`].filter(Boolean).join(' ');
 export const docDownloadAr = (name) => `تحميل ${name} PDF`;
 export const WORKING_DOWNLOAD_AR = 'تحميل ملف العمل PDF';
 // ── فئات البريد ومركز الرسائل (المصدر الواحد، اعتمده المالك 2026-11-25، وتوسيعه للخبراء والمنسقين 2026-11-25) ──

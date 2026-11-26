@@ -117,8 +117,8 @@ describe('الهوية والطباعة', () => {
     expect(html).not.toContain('DECISIONS  ·  DIRECTION');
     expect(html).toContain('<base href="https://leaders.sunkvalue.com/">');
     expect(r.body).toContain('class="in-dec"');
-    expect(text(r.body)).toContain('ما المطلوب منك');
-    expect(text(r.body)).toContain('القرار المطلوب');
+    expect(text(r.body)).toContain('القرار المعروض عليكم');
+    expect(text(r.body)).toContain('اعتماد · اعتماد بشروط · إرجاع');
     expect(r.body).toContain('.in-sec .tbl { font-size: 9pt; }');
   });
   it('هوية الدفعة: تنظيف ما يُحفظ ورفض غير الصالح', () => {
