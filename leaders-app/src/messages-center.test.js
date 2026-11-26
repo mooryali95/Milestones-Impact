@@ -226,7 +226,7 @@ describe('«ينتظرك» في صندوق الخبير (المرحلة 2ج)', (
   const src = (f) => readFileSync(join(API, f), 'utf8');
   it('ما ينتظر فعلًا يحمل مهلته، ويُغلق في موضع إنجازه بالمرجع نفسه', () => {
     expect(src('peer.ts')).toMatch(/noteRef: `peer:\$\{row\.id\}`, actionUntil: actionDeadline\(\)/);
-    expect(src('peer.ts').match(/await resolveNotes\(`peer:\$\{r\.id\}`\)/g)).toHaveLength(2);
+    expect(src('peer.ts').match(/await resolveNotes\(`peer:\$\{r\.id\}`\)/g)).toHaveLength(3);
     expect(src('feedback360.ts')).toMatch(/noteRef: `f360:\$\{c\.id\}`, actionUntil: actionDeadline\(\)/);
     expect(src('feedback360.ts')).toMatch(/export async function advisorDecide[\s\S]{0,600}await resolveNotes\(`f360:\$\{c\.id\}`\)/);
     expect(src('experts.ts')).toMatch(/noteRef: `offer:\$\{req\.id\}`, actionUntil: expires\.toISOString\(\)/);
@@ -248,5 +248,8 @@ describe('إغلاق «ينتظرك» في كل موضع إنجاز', () => {
   const src = (f) => readFileSync(join(API, f), 'utf8');
   it('إلغاء الإدارة للطلب يغلق عرضه في صندوق الخبير', () => {
     expect(src('experts.ts')).toMatch(/export async function adminCancelRequest[\s\S]{0,600}'expert-request\.cancel'[\s\S]{0,200}await resolveNotes\(`offer:\$\{r\.id\}`\)/);
+  });
+  it('إغلاق المشارك طلب توجيهه يغلق عنصره في صندوق المستشار', () => {
+    expect(src('peer.ts')).toMatch(/export async function close\(p: any[\s\S]{0,500}'peer\.close'[\s\S]{0,80}await resolveNotes\(`peer:\$\{r\.id\}`\)/);
   });
 });

@@ -138,6 +138,7 @@ export async function close(p: any, b: Body) {
   if (!r) throw new Fail('الطلب غير موجود', 404);
   if (r.status !== 'closed') must(await db.from('peer_requests').update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: p.email, updated_at: new Date().toISOString() }).eq('id', r.id));
   await audit('participant', p.email, 'peer.close', 'peer_requests', r.id);
+  await resolveNotes(`peer:${r.id}`);
   return list(p);
 }
 
