@@ -23,6 +23,7 @@ import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
 import Advisor360 from './Advisor360.jsx';
+import { xpActionAnchor } from './xp-anchors.js';
 import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
@@ -220,8 +221,8 @@ function AdvisorReviews({ initial }) {
     );
   };
   return (
-    <section className="card stack">
-      <h2 className="as-h3">للقراءة <small className="muted">· {waiting}</small></h2>
+    <section className="card stack" aria-labelledby="xp-reviews">
+      <h2 className="as-h3" id="xp-reviews">للقراءة <small className="muted">· {waiting}</small></h2>
       <p className="small muted">أنت مستشار هؤلاء المشاركين. ما يسلّمونه يُحتسب لهم فورًا، ويصلك ملخصه مرة في اليوم؛ اقرأ واكتب ملاحظة أو اطلب تعديلًا. بطاقة المبادرة وحدها تنتظر اعتمادك وتصلك فور تسليمها.</p>
       <Notice note={note} onClose={() => say(null)} reveal />
       {!waiting && <p className="muted small">لا شيء ينتظر القراءة الآن.</p>}
@@ -565,6 +566,13 @@ function Dashboard({ onOut }) {
   const [msgs, setMsgs] = useState(() => { try { return new URLSearchParams(location.search).get('tab') === 'messages'; } catch { return false; } });
   // شارة غير المقروء: من اللوحة أول مرة، ثم عند عودة التركيز إلى النافذة (xp.messages-unread)
   const [unread, setUnread] = useState(0);
+  // عنصر «ينتظرك» يفتح قسم إنجازه في اللوحة (xp-anchors.js): يُمرَّر إليه بعد الخروج من الصندوق
+  const [goTo, setGoTo] = useState(null);
+  useEffect(() => {
+    if (!goTo || msgs || !d) return;
+    const el = document.getElementById(goTo);
+    if (el) { el.scrollIntoView?.({ block: 'start' }); setGoTo(null); }
+  }, [goTo, msgs, d]);
   useEffect(() => { if (d?.messages_unread != null) setUnread(d.messages_unread); }, [d?.messages_unread]);
   useEffect(() => {
     const on = () => { if (document.visibilityState === 'visible') xpCall('xp.messages-unread').then((r) => { if (r?.success) setUnread(r.unread); }); };
@@ -585,6 +593,7 @@ function Dashboard({ onOut }) {
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
   if (msgs) return <MessageCenter call={xpCall} actions={XP_MESSAGES} text={STAFF_MESSAGES_TEXT.expert} backLabel="رجوع إلى لوحتك" onUnread={setUnread}
+    actionAnchor={xpActionAnchor} onAction={(anchor) => { setGoTo(anchor); setMsgs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } load(true); }}
     onBack={() => { setMsgs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } load(true); }} />;
   const reading = !!d.book_access && (book ?? (linked || !!d.content_only));
   if (reading && d.pledge_needed) {
@@ -660,8 +669,8 @@ function Dashboard({ onOut }) {
       </div>
 
       {offered.length > 0 && (
-        <section className="card stack">
-          <h2 className="as-h3">طلبات بانتظار ردك</h2>
+        <section className="card stack" aria-labelledby="xp-offers">
+          <h2 className="as-h3" id="xp-offers">طلبات بانتظار ردك</h2>
           {offered.map((x) => (
             <div key={x.id} className="xpp-offer">
               <div><b>{x.role_ar}</b> للقائد {x.participant.name}<small className="muted">{[x.dimension_ar, x.level_ar ? `مستوى ${x.level_ar}` : null].filter(Boolean).join(' · ')} · يبقى {left(x.expires_at)}</small></div>

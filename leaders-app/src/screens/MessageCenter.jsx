@@ -12,9 +12,11 @@ const when = (iso) => new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-la
 
 /**
  * @param {{ call: (action: string, body?: object) => Promise<any>, actions: { list: string, read?: string, prefs: string },
- *   inbox?: boolean, text?: Partial<typeof MESSAGES_TEXT>, onBack?: () => void, backLabel?: string, onUnread?: (n: number) => void, focus?: string }} props
+ *   inbox?: boolean, text?: Partial<typeof MESSAGES_TEXT>, onBack?: () => void, backLabel?: string, onUnread?: (n: number) => void, focus?: string,
+ *   actionAnchor?: (ref: string) => string | null, onAction?: (anchor: string) => void }} props
+ * actionAnchor: موضع إنجاز عنصر «ينتظرك» بمرجعه (قسم في لوحة صاحبه)، وonAction يفتحه فيها بلا إعادة تحميل
  */
-export default function MessageCenter({ call, actions, inbox = true, text, onBack, backLabel = 'رجوع', onUnread, focus: initialFocus }) {
+export default function MessageCenter({ call, actions, inbox = true, text, onBack, backLabel = 'رجوع', onUnread, focus: initialFocus, actionAnchor, onAction }) {
   const T = { ...MESSAGES_TEXT, ...(text || {}) };
   const [d, setD] = useState(null);
   const [err, setErr] = useState('');
@@ -75,12 +77,17 @@ export default function MessageCenter({ call, actions, inbox = true, text, onBac
           <h2 id="msgs-wait-h">{T.waiting} <span className="la-chip">{waiting.length}</span></h2>
           <p className="small muted">{T.waitingLead}</p>
           <ul className="stack" role="list">
-            {waiting.map((m) => (
+            {waiting.map((m) => {
+              const anchor = actionAnchor?.(m.ref);
+              return (
               <li key={m.id} className="row between msgs-wait-item">
-                <b>{m.title}</b>
+                <span className="grow"><b>{m.title}</b>
+                  {anchor && T.waitingGo && <> · <a className="link small" href={`${location.pathname}#${anchor}`}
+                    onClick={(e) => { if (onAction) { e.preventDefault(); onAction(anchor); } }}>{T.waitingGo}</a></>}</span>
                 <span className={`small${Date.parse(m.action_until) < Date.now() ? ' bad' : ' muted'}`}>{due(m.action_until)}</span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       )}

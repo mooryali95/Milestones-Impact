@@ -262,4 +262,15 @@ describe('إغلاق «ينتظرك» في كل موضع إنجاز', () => {
     expect(im).toMatch(/'rater\.reject'[\s\S]{0,120}await resolveNotes\(`rater-confirm:\$\{id\}`\)/);
     expect(im).toMatch(/'rater\.confirm'[\s\S]{0,120}await resolveNotes\(`rater-confirm:\$\{id\}`\)/);
   });
+  it('كل عنصر في «ينتظرك» رابط إلى موضع إنجازه بحسب بادئة مرجعه', async () => {
+    const mc = readFileSync(join(__dirname, 'screens/MessageCenter.jsx'), 'utf8');
+    expect(mc).toMatch(/actionAnchor\?\.\(m\.ref\)/);
+    expect(mc).toMatch(/T\.waitingGo/);
+    const { XP_ACTION_ANCHORS, xpActionAnchor } = await import('./screens/xp-anchors.js');
+    expect([xpActionAnchor('offer:1'), xpActionAnchor('peer:1'), xpActionAnchor('f360:1'), xpActionAnchor('model:p:m'), xpActionAnchor('rater-confirm:1'), xpActionAnchor('x:1'), xpActionAnchor(null)])
+      .toEqual(['xp-offers', 'xp-peer', 'a360-h', 'xp-reviews', 'xp-mine', null, null]);
+    const xp = readFileSync(join(__dirname, 'screens/ExpertPortal.jsx'), 'utf8') + readFileSync(join(__dirname, 'screens/Advisor360.jsx'), 'utf8');
+    for (const id of Object.values(XP_ACTION_ANCHORS)) expect(xp).toMatch(new RegExp(`id="${id}"`));
+    expect(xp).toMatch(/actionAnchor=\{xpActionAnchor\}/);
+  });
 });

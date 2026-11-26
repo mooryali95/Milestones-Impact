@@ -415,6 +415,7 @@ export const STAFF_MESSAGES_TEXT = Object.freeze({
     lead: 'ما أرسلناه إليك عن عملك في البرنامج في مكان واحد، والملخصات تصلك بالبريد بقرارك.',
     empty: 'لا رسائل بعد. ما نرسله إليك عن عملك في البرنامج يظهر هنا.',
     open: 'الرسائل',
+    waitingGo: 'افتحه في لوحتك',
   }),
   coordinator: Object.freeze({
     title: 'بريد الجهة',
