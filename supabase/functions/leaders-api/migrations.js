@@ -199,6 +199,8 @@ export const MIGRATIONS = [
   '20261129240000_leaders_transfer_participant',
   '20261129250000_leaders_group_members_cleanup',
   '20261130000000_leaders_beginner_benefits',
+  '20261130010000_leaders_post_core',
+  '20261130020000_leaders_post_form',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -311,4 +313,6 @@ export const MIGRATION_GATES = {
   '20261129240000_leaders_transfer_participant': ["tolerant", "قبله يُنقل المشارك بين الجهات كما كان (admin.assign-org يحدّث الجهة وحدها) ما دام لا إلحاق له بدفعة جهة أخرى،"],
   '20261129250000_leaders_group_members_cleanup': ["deferred", "بقرار المالك (تصور المرحلة 1، القرار 2): يُطبَّق بعد عرض العد من scripts/db/verify-group-members-cleanup.sql قراءةً"],
   '20261130000000_leaders_beginner_benefits': ["tolerant", "محتوى نماذج فقط، كالترحيل 20261129140000: خاصيتان لا تقرؤهما الدوال الأقدم، فتعرض الجدول كاملًا."],
+  '20261130010000_leaders_post_core': ["tolerant", "الدوال الأقدم لا تقرأ العمود، والجديدة تطلبه فقط والصيغة القصيرة مفعلة (post_form.short في app_settings، مطفأ افتراضيًا)"],
+  '20261130020000_leaders_post_form': ["tolerant", "الدوال تكتب العمودين في الصيغة القصيرة وحدها (مفتاح post_form.short مطفأ)، وتقرير الأثر يقرؤهما بإعادة بلاهما (missingColumn في impact.ts)"],
 };
