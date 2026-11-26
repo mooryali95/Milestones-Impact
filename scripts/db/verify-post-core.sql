@@ -62,8 +62,8 @@ with post as (
     from core c group by c.dimension
 )
 select true as ok,
-       coalesce((select string_agg(dimension || '/' || tier || ' ' || code || ': ن ' || n || '، م ' || round(mean::numeric, 2)
-                 || '، ر ' || coalesce(round(r::numeric, 2)::text, '؟'), '؛ ' order by dimension, tier, r desc nulls last, code) from items),
+       coalesce((select string_agg(dimension || '/' || tier || ' ' || code || ': ن ' || n || case when n < 5 then '، دون 5 فلا أرقام' else '، م ' || round(mean::numeric, 2)
+                 || '، ر ' || coalesce(round(r::numeric, 2)::text, '؟') end, '؛ ' order by dimension, tier, r desc nulls last, code) from items),
                 'لا إجابات قبلي مسلمة على فقرات مرتبطة') as detail;
 
 -- 2) فقرات مرتبطة ارتباطها المصحح دون 0.20 أو بلا بيانات (مرشحة للبقاء خارج النواة)

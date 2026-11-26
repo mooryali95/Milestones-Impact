@@ -134,3 +134,19 @@ describe('الترحيلان', () => {
     expect(FORM_SQL).toMatch(/insert into leaders\.schema_migrations \(name\) values \('20261130020000_leaders_post_form'\)/);
   });
 });
+
+describe('مراجعة: نواة غير معلّمة، والتقاطع بما أجيب فعلًا', () => {
+  const qs = [
+    choice('a', 'milestone', 'skill', { code: 'M-1', anchor_code: 'M-1' }),
+    choice('b', 'milestone', 'skill', { code: 'M-2', anchor_code: 'M-2' }),
+  ];
+  it('بلا فقرة نواة واحدة لا تُقدم قصيرة فارغة: تُقدم الكاملة', () => {
+    expect(servedPost(qs, { short: true })).toEqual(servedPost(qs));
+    expect(postPool(qs, 'short')).toEqual(qs);
+  });
+  it('القصيرة مع إجابة ممتدة: التقاطع يشمل الممتدة المجابة، فالقبلي والبعدي على الفقرات نفسها', () => {
+    const post = [{ ...qs[0], core: true }, qs[1], choice('c', 'milestone', 'knowledge', { code: 'M-3', anchor_code: 'M-3' })];
+    const pre = [{ id: 'p1', code: 'M-1' }, { id: 'p2', code: 'M-2' }, { id: 'p3', code: 'M-3' }];
+    expect(preOnPost(pre, postPool(post, 'short', new Set(['b']))).map((q) => q.code)).toEqual(['M-1', 'M-2']);
+  });
+});

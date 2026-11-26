@@ -86,7 +86,9 @@ export function anchorRepeat(seed) {
 // short (الصيغة القصيرة، تصور طول القياس البعدي §4.3): النواة وحدها (questions.core)، ثم القواعد نفسها داخلها فيبقى
 // التوأم وربع التكرار كما هما. بلا short السلوك هو نفسه حرفيًا. الكاملة تضم القصيرة دائمًا، فالتحقق عند الإجابة بها يقبل الاثنتين
 export function servedPost(questions, { levels = {}, repeat = false, short = false } = {}) {
-  const qs = short ? (questions || []).filter((q) => q.core === true) : (questions || []);
+  // بنك بلا فقرة نواة معلّمة لا يقدم قصيرة فارغة: يُقدم كاملًا (حارس قبل ترحيل التعليم)
+  const all = questions || [];
+  const qs = short && all.some((q) => q.core === true) ? all.filter((q) => q.core === true) : all;
   const twinned = new Set(qs.filter(isTwin).map((q) => q.anchor_code));
   return qs.filter((q) => {
     if (q.min_level && (LEVEL_RANK[q.min_level] ?? 9) > (LEVEL_RANK[levels[q.dimension]] ?? LEVEL_RANK.beginner)) return false;
@@ -98,7 +100,13 @@ export function servedPost(questions, { levels = {}, repeat = false, short = fal
 // مفتاح الصيغة القصيرة من الإعدادات المحلولة (settings.js، post_form.short). ما غاب أو لم يكن true فمطفأ
 export const postShortOn = (settings) => settings?.post_form?.short === true;
 // الفقرات التي تُحسب عليها صيغة البعدي قبل الصيغتين A وB: النواة للقصيرة، والكل للكاملة. null يعني full (القياسات قبل العمود)
-export const postPool = (postQs, form) => (form === 'short' ? (postQs || []).filter((q) => q.core === true) : (postQs || []));
+/** @param {any[]} postQs @param {string|null} form @param {Set<string>|null} [answered] */
+// answered (اختياري): معرّفات ما أجيب في البعدي، فالممتدة المجابة تُحسب في البعدي فتدخل التقاطع معه
+export const postPool = (postQs, form, answered = null) => {
+  const all = postQs || [];
+  if (form !== 'short' || !all.some((q) => q.core === true)) return all;
+  return all.filter((q) => q.core === true || (answered && answered.has(q.id)));
+};
 // الفرق على التقاطع: فقرات القبلي التي تقابلها فقرة في مجموعة البعدي (anchor_code، والتوأم يقابل أصله). المقابلة بالمجموعة قبل
 // الصيغتين، فالصيغة الموازية في القبلي تبقى ما دامت أختها في البعدي، وتُعادَل كما كانت (equate)
 export function preOnPost(preQs, pool) {

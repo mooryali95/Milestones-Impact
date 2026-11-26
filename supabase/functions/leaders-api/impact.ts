@@ -86,7 +86,9 @@ async function shortPre(pick: Record<string, any>, results: Record<string, Recor
   const qsOf: Record<string, any[]> = {};
   const questions = async (id: string) => (qsOf[id] ||= must(await db.from('questions').select('*').eq('instrument_id', id).eq('active', true)) as any[] ?? []);
   for (const x of list) {
-    const pre = preOnPost(await questions(x.baseline.instrument_id), postPool(await questions(x.post.instrument_id), 'short'));
+    // التقاطع بما حُسب عليه البعدي فعلًا: النواة وما أجيب من الممتدة
+    const postAns = must(await db.from('assessment_answers').select('question_id').eq('assessment_id', x.post.id)) as any[] ?? [];
+    const pre = preOnPost(await questions(x.baseline.instrument_id), postPool(await questions(x.post.instrument_id), 'short', new Set(postAns.map((r: any) => r.question_id))));
     const scoped = x.baseline.form ? pre.filter((q: any) => !q.form || q.form === x.baseline.form) : pre;
     const ans = must(await db.from('assessment_answers').select('question_id, value').eq('assessment_id', x.baseline.id)) as any[] ?? [];
     const answers = Object.fromEntries(ans.map((r: any) => [r.question_id, r.value?.k]));
