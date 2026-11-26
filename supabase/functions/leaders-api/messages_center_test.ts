@@ -245,3 +245,35 @@ Deno.test('«ينتظرك» (المرحلة 2ج): العنصر يحمل مهلت
     assert(l.items[0].resolved_at);
   } finally { w.restore(); }
 });
+
+Deno.test('«ينتظرك»: عنصر واحد لكل مرجع، الأحدث بين غير المغلق، والتذكير لا يضيف عنصرًا ثانيًا', async () => {
+  const t = base();
+  t.participant_notifications.push(
+    { id: 'o1', expert_id: XID, category: 'expert_work', title: 'عرض', ref: 'offer:r1', action_until: '2026-12-01T00:00:00Z', resolved_at: null, created_at: '2026-11-20T10:00:00Z' },
+    { id: 'o2', expert_id: XID, category: 'expert_work', title: 'عرض ثانٍ', ref: 'offer:r1', action_until: '2026-12-02T00:00:00Z', resolved_at: null, created_at: '2026-11-21T10:00:00Z' },
+    { id: 'p1', expert_id: XID, category: 'expert_work', title: 'طلب توجيه', ref: 'peer:q1', action_until: '2026-12-03T00:00:00Z', resolved_at: null, created_at: '2026-11-19T10:00:00Z' },
+  );
+  const w = installFake(t);
+  try {
+    const l: any = await MS.list(MS.expertOwner({ id: XID }));
+    const waiting = l.items.filter((i: Row) => i.action_until && !i.resolved_at).map((i: Row) => i.id).sort();
+    assertEquals(waiting, ['o2', 'p1']);
+    assertEquals(l.items.length, 3);
+  } finally { w.restore(); }
+  const src = await Deno.readTextFile(new URL('./experts.ts', import.meta.url));
+  const remind = src.slice(src.indexOf('async function remindHalfway'), src.indexOf('export async function sweepOffers'));
+  assert(/noteRef: `offer:\$\{r\.id\}`/.test(remind));
+  assert(!/actionUntil/.test(remind));
+});
+
+Deno.test('«ينتظرك»: ما لم يُغلق لا يسقط من القائمة ولو تجاوزته مئة رسالة أحدث', async () => {
+  const t = base();
+  t.participant_notifications.push({ id: 'old', expert_id: XID, category: 'expert_work', title: 'قديم', ref: 'peer:q0', action_until: '2026-12-01T00:00:00Z', resolved_at: null, created_at: '2026-10-01T10:00:00Z' });
+  for (let i = 0; i < 120; i++) t.participant_notifications.push({ id: `n${i}`, expert_id: XID, category: 'expert_digest', title: 'ملخص', created_at: `2026-11-${String(10 + (i % 15)).padStart(2, '0')}T10:00:00Z` });
+  const w = installFake(t);
+  try {
+    const l: any = await MS.list(MS.expertOwner({ id: XID }));
+    assert(l.items.some((i: Row) => i.id === 'old'));
+    assertEquals(new Set(l.items.map((i: Row) => i.id)).size, l.items.length);
+  } finally { w.restore(); }
+});

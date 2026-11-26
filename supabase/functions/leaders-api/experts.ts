@@ -572,7 +572,8 @@ async function respondToOffer(r: any, b: Body) {
 }
 
 // تذكير الخبير مرة في منتصف مهلته إن لم يرد. السجل (expert-request.reminded) يمنع التكرار بلا عمود جديد.
-// لا رابط جديد في التذكير: رابط العرض في البريد الأول وحده، فلا يُعاد توليد رمز ولا يبطل الأول
+// لا رابط جديد في التذكير: رابط العرض في البريد الأول وحده، فلا يُعاد توليد رمز ولا يبطل الأول.
+// وبلا مهلة (actionUntil): عنصر «ينتظرك» للعرض نفسه قائم من بريده الأول، والتذكير رسالة في السجل يغلقها مرجعه معه
 async function remindHalfway() {
   const hours = await offerHours();
   const now = Date.now();
@@ -587,7 +588,7 @@ async function remindHalfway() {
     const leftH = Math.max(1, Math.round(left / 36e5));
     sendMail((r as any).experts.email, `تذكير: طلب ${roleAr(r.role)} ينتظر ردك`, shell(`أهلًا ${firstName((r as any).experts.full_name)}`,
       mailText(`ما زال طلب ${roleAr(r.role)} ينتظر ردك، وبقي نحو ${bdi(String(leftH))} ساعة قبل أن يُعرض على خبير آخر. افتح رابط الطلب في رسالتنا السابقة لتقبل أو تعتذر.`)),
-      [], { category: 'expert_work', noteRef: `offer:${r.id}`, actionUntil: r.expires_at, recipient: { kind: 'expert', id: r.expert_id }, expiresAt: r.expires_at }).catch(() => {});
+      [], { category: 'expert_work', noteRef: `offer:${r.id}`, recipient: { kind: 'expert', id: r.expert_id }, expiresAt: r.expires_at }).catch(() => {});
     n += 1;
   }
   return n;

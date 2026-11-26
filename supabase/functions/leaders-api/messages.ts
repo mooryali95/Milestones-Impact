@@ -25,15 +25,31 @@ const STAFF_COLS = `${COLS}, ref, action_until, resolved_at`;
 const unavailable = () => new Fail('تعذّر تحميل الرسائل، حاول بعد قليل', 503, 'messages_unavailable');
 const categories = (o: Owner) => categoriesFor(o.kind);
 
+// «ينتظرك» عنصر واحد لكل مرجع: الأحدث بين ما لم يُغلق يبقى، والأقدم منه يبقى في السجل بلا مهلته فلا يتكرر في «ينتظرك»
+export function oneActionPerRef(items: P[]) {
+  const seen = new Set<string>();
+  return [...items].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).map((i) => {
+    if (!i.action_until || i.resolved_at || !i.ref) return i;
+    if (seen.has(i.ref)) return { ...i, action_until: null };
+    seen.add(i.ref);
+    return i;
+  });
+}
+
 export async function list(x: P, _b: Body = {}) {
-  const o = ownerOf(x), col = colOf(o);
-  const [items, unread, pref] = await Promise.all([
-    db.from('participant_notifications').select(o.kind === 'participant' ? COLS : STAFF_COLS).eq(col, o.id).order('created_at', { ascending: false }).limit(LIMIT),
+  const o = ownerOf(x), col = colOf(o), staff = o.kind !== 'participant';
+  const [items, unread, pref, open] = await Promise.all([
+    db.from('participant_notifications').select(staff ? STAFF_COLS : COLS).eq(col, o.id).order('created_at', { ascending: false }).limit(LIMIT),
     db.from('participant_notifications').select('id', { count: 'exact', head: true }).eq(col, o.id).is('read_at', null),
     db.from('participant_mail_prefs').select('muted').eq(col, o.id).maybeSingle(),
+    // ما ينتظر ولم يُغلق باستعلام وحده، فلا يسقط القديم منه خلف آخر مئة رسالة
+    staff ? db.from('participant_notifications').select(STAFF_COLS).eq(col, o.id).not('action_until', 'is', null).is('resolved_at', null).order('created_at', { ascending: false }).limit(LIMIT) : null,
   ]);
-  if (items.error || pref.error) throw unavailable();
-  return { success: true, items: items.data || [], unread: unread.count ?? 0, muted: cleanMuted(pref.data?.muted, o.kind), categories: categories(o) };
+  if (items.error || pref.error || open?.error) throw unavailable();
+  const recent = (items.data || []) as P[];
+  const ids = new Set(recent.map((i) => i.id));
+  const merged = [...recent, ...((open?.data || []) as P[]).filter((i) => !ids.has(i.id))];
+  return { success: true, items: staff ? oneActionPerRef(merged) : merged, unread: unread.count ?? 0, muted: cleanMuted(pref.data?.muted, o.kind), categories: categories(o) };
 }
 
 // عدد غير المقروء وحده لترويسة التطبيق (me) وشارة لوحة الخبير. قبل الترحيل أو عند تعذّره: صفر
