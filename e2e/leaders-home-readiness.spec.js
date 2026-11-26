@@ -56,7 +56,7 @@ test.describe('على الهاتف', () => {
 
 test('p-capstone-7: بطاقة دعوة المدير المخفية لا تطلب impact.mine', async ({ page }) => {
   const srv = homeServer();
-  await openHome(page, srv, () => localStorage.setItem('mi_pre_manager_hidden', '1'));
+  await openHome(page, srv, () => localStorage.setItem('mi_pre_manager_hidden', String(Date.now())));
   await page.waitForTimeout(500);
   expect(srv.calls).not.toContain('impact.mine');
   await expect(page.getByText(INVITE)).toHaveCount(0);

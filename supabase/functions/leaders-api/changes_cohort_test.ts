@@ -2,7 +2,7 @@
 // وما فعلوه هم (بمعرّفهم أو بريدهم كما يكتبهما السجل)، وما جرى على الدفعة وجلساتها، ولا شيء من دفعة أخرى. بقاعدة في الذاكرة
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake } from './_fake_db.ts';
+import { installFake, placeOrgMembers } from './_fake_db.ts';
 const IN = await import('./insight.ts');
 const { Fail } = await import('./core.ts');
 
@@ -50,6 +50,7 @@ const ids = (r: any) => r.changes.map((c: Row) => c.id);
 
 Deno.test('فلتر الدفعة: ما جرى على أعضائها وما فعلوه وما جرى عليها وعلى جلساتها، الأحدث أولًا، ولا شيء من غيرها', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     const r: any = await IN.adminChanges({ cohort_id: COHORT });
@@ -65,6 +66,7 @@ Deno.test('فلتر الدفعة: ما جرى على أعضائها وما فع�
 
 Deno.test('فلتر الدفعة مع بقية الفلاتر: المدة والفاعل والمجال والصفحة التالية', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     assertEquals(ids(await IN.adminChanges({ cohort_id: COHORT, days: 7 })), ['e1', 'e2', 'e3', 'e4', 'e5']);
@@ -78,6 +80,7 @@ Deno.test('فلتر الدفعة مع بقية الفلاتر: المدة وال
 
 Deno.test('مجال «الحضور والجلسات»: حضور الورش والجلسات الفردية معًا، وبقية المجالات ببادئتها كما كانت', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     const r: any = await IN.adminChanges({ area: 'workshop' });
@@ -92,6 +95,7 @@ Deno.test('دفعة كبيرة: الأعضاء على أكثر من طلب، و�
   const w = world(130);
   // حدث على كل عضو إضافي، أحدث من كل ما سبق
   w.ps.slice(4).forEach((p, i) => w.tables.audit_log.push({ id: `m${i}`, actor_type: 'admin', actor: 'a@example.sa', action: 'participant.status', entity: 'participants', entity_id: p.id, before: null, after: { status: 'enrolled' }, created_at: new Date(NOW - 1000 - i).toISOString() }));
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     const r: any = await IN.adminChanges({ cohort_id: COHORT });
@@ -105,6 +109,7 @@ Deno.test('دفعة كبيرة: الأعضاء على أكثر من طلب، و�
 
 Deno.test('دفعة غير موجودة أو معرّف فاسد: 404 لا سجل كامل', async () => {
   const w = world();
+  placeOrgMembers(w.tables);
   const f = installFake(w.tables);
   try {
     for (const cohort_id of [U(1), 'x', "a' or 1=1"]) assertEquals((await assertRejects(() => IN.adminChanges({ cohort_id }), Fail) as any).status, 404);

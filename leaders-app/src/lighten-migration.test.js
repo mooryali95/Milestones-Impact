@@ -23,7 +23,7 @@ const LV = ['beginner', 'intermediate', 'advanced'];
 const DIMS = ['milestone', 'impact', 'leadership'];
 const BEGINNER = { milestone: 'beginner', impact: 'beginner', leadership: 'beginner' };
 const NEW = '2099-01-01T00:00:00.000Z';
-let before, after, again;
+let before, after, again, benefits8;
 
 beforeAll(async () => {
   const db = new PGlite();
@@ -41,6 +41,13 @@ beforeAll(async () => {
   after = await snap(db);
   await db.exec(sql); await db.exec('discard temp');
   again = await snap(db);
+  // الإنتاج: سجل المنافع بثمانية أعمدة (20261030150000) فتخطاه شرط الستة، والترحيل 20261130000000 يكمله بأسماء الأعمدة
+  await db.exec(`update leaders.learning_models set fields = (select jsonb_agg(case when f->>'key' = 'benefits'
+      then (f - 'columns_beginner' - 'labels_beginner') || jsonb_build_object('columns', '["المنفعة", "المؤشر وطريقة القياس", "خط الأساس", "المستهدف", "المالك بعد التسليم", "معلم القيمة", "تاريخ التحقق", "تكرار القياس"]'::jsonb)
+      else f end order by o) from jsonb_array_elements(fields) with ordinality e(f, o)) where key = 'benefits-register'`);
+  const fix = read('supabase/migrations/20261130000000_leaders_beginner_benefits.sql');
+  await db.exec(fix); await db.exec(fix);
+  benefits8 = (await db.query(`select f from leaders.learning_models, jsonb_array_elements(fields) f where key = 'benefits-register' and f->>'key' = 'benefits'`)).rows[0].f;
 }, 180000);
 
 const COMBOS = LV.flatMap((m) => LV.flatMap((i) => LV.map((l) => ({ milestone: m, impact: i, leadership: l }))));
@@ -66,6 +73,11 @@ describe('ترحيل أعمدة التأسيسي', () => {
       touched += m.fields.filter((f) => f.columns_beginner).length;
     }
     expect(touched).toBe(12);
+  });
+  it('سجل المنافع بثمانية أعمدة كما في الإنتاج يأخذ أعمدة التأسيسي الأربعة الأولى', () => {
+    expect(benefits8.columns).toHaveLength(8);
+    expect(benefits8.columns_beginner).toEqual([0, 1, 2, 3]);
+    expect(benefits8.labels_beginner).toEqual(['المنفعة', 'كيف تقيسها', 'الرقم اليوم', 'المستهدف']);
   });
   it('حفظ اللوحة (cleanModelFieldsOf) يبقي الخاصيات كما كتبها الترحيل', () => {
     for (const m of after) for (const f of cleanModelFieldsOf(m.fields)) {

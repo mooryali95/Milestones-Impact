@@ -3,13 +3,13 @@
 // ════════════════════════════════════════════════════════════════
 // المشارك يرى مؤشرًا عامًا واحدًا قبل وبعد (لا تفصيل لكل إطار)، وتقديره
 // لممارسته الآن وقبل البرنامج. ثم يدعو مديره ليقدّر التغير من موقعه،
-// لأن الحكم بالتغير لا يقوم على التقدير الذاتي وحده. والدعوة مع مفتاح 360: مطفأ فلا بطاقة دعوة
-// (الخادم يقول invite:false في impact.mine)، ويقوم الحكم على القياسين ودليل المبادرة.
+// لأن الحكم بالتغير لا يقوم على التقدير الذاتي وحده. تقييم المدير خارج مفتاح 360 (تصور المرحلة 3، القرار 2):
+// مطفأ تبقى خانة المدير وحدها (manager_only)، ومن لا مدير له يختار زميلًا أعلى أو «ذاتي فقط» بلا حبس.
 import React, { useCallback, useEffect, useState } from 'react';
 import { call } from '../api.js';
 import Assessment from './Assessment.jsx';
 import { ErrorBox } from '../ui.jsx';
-import { flagsOf } from '../features.js';
+import { DIMENSIONS } from '../labels.js';
 import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 const RELATIONS = [
@@ -32,8 +32,31 @@ function Bars({ label, before, after, beforeLabel, afterLabel }) {
   );
 }
 
+// «لا يوجد مدير متاح» (القرار 3): زميل أعلى في خانة المدير، أو «ذاتي فقط»، أو العودة إلى خانة المدير
+export function NoManager({ data, onChange }) {
+  const [error, setError] = useState('');
+  const pick = async (choice) => {
+    setError('');
+    const res = await call('impact.no-manager', { choice });
+    if (res.success) onChange(res); else setError(res.message);
+  };
+  if (data.no_manager === 'self') {
+    return <p className="small muted">اخترت «ذاتي فقط»، فيوسم تقريرك بذلك. <button type="button" className="link small" onClick={() => pick(null)}>أدعو مديري أو زميلًا أعلى</button>{error && <span className="bad"> {error}</span>}</p>;
+  }
+  return (
+    <p className="small muted">
+      {data.no_manager === 'senior' ? 'تدعو زميلًا أعلى في خانة المدير. ' : 'لا يوجد مدير متاح؟ '}
+      {data.no_manager !== 'senior' && <button type="button" className="link small" onClick={() => pick('senior')}>{data.no_manager_options?.senior || 'زميل أعلى أختاره'}</button>}
+      {' · '}<button type="button" className="link small" onClick={() => pick('self')}>{data.no_manager_options?.self || 'ذاتي فقط'}</button>
+      {error && <span className="bad"> {error}</span>}
+    </p>
+  );
+}
+
 function Invite({ data, onChange }) {
   const raters = data.raters.filter((r) => r.phase !== 'pre');
+  const managerOnly = !!data.manager_only;
+  const who = data.no_manager === 'senior' ? 'الزميل الأعلى' : 'مديرك';
   const preManager = data.raters.find((r) => r.phase === 'pre' && r.status === 'submitted');
   const [f, setF] = useState({ email: preManager?.email || '', full_name: preManager?.full_name || '', relation: raters.some((r) => r.relation === 'manager') ? 'peer' : 'manager' });
   const [busy, setBusy] = useState(false);
@@ -63,8 +86,9 @@ function Invite({ data, onChange }) {
   return (
     <div className="card stack">
       <div>
-        <h2 style={{ fontSize: 18 }}>ادعُ مديرك ليقدّر التغير</h2>
-        <p className="small muted">يقدّر مديرك ممارستك الآن وقبل البرنامج في 5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا. يُكمل ذلك بند «إفادة المدير المباشر» في رحلتك.</p>
+        <h2 style={{ fontSize: 18 }}>ادعُ {who} ليقدّر التغير</h2>
+        <p className="small muted">يقدّر {who} ممارستك الآن وقبل البرنامج في ثماني عبارات ونحو 6 دقائق، بلا حساب. ترى المتوسط لكل إطار لا إجاباته. يُكمل ذلك بند «إفادة المدير المباشر» في رحلتك.</p>
+        <NoManager data={data} onChange={onChange} />
         {preManager && <p className="small muted">ادعُ المدير نفسه الذي قدّرك قبل البرنامج: {preManager.full_name || preManager.email}.</p>}
       </div>
       {raters.some((r) => r.status === 'awaiting') && <p className="small muted">الدعوة ببريد عام أو من غير نطاق جهتك تصل بعد أن يؤكد مستشارك أو منسق جهتك أن المقيّم يعمل معك. بريد جهتك يصل فورًا.</p>}
@@ -83,7 +107,7 @@ function Invite({ data, onChange }) {
         </ul>
       )}
       {raters.some((r) => r.expired) && <p className="small muted">انقضت مهلة الدعوة (30 يومًا) قبل أن يرسل المقيّم تقديره. «أعد الإرسال» يرسل له رابطًا جديدًا.</p>}
-      {full && <p className="small muted">دعوت {data.limit} مقيّمين، وهو الحد. لتدعو غيرهم ألغِ دعوة لم يُرسل صاحبها تقديره.</p>}
+      {full && <p className="small muted">{data.limit === 1 ? `دعوت ${who}. لتدعو غيره ألغِ الدعوة ما لم يُرسل تقديره.` : `دعوت ${data.limit} مقيّمين، وهو الحد. لتدعو غيرهم ألغِ دعوة لم يُرسل صاحبها تقديره.`}</p>}
       {full && error && <div className="alert err">{error}</div>}
       {!full && (
         <form className="stack" onSubmit={send}>
@@ -92,10 +116,10 @@ function Invite({ data, onChange }) {
               <EmailInput className="input ltr" type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></label>
             <label className="field"><span>الاسم <em>(اختياري)</em></span>
               <input className="input" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} /></label>
-            <label className="field"><span>صلته بك</span>
+            {!managerOnly && <label className="field"><span>صلته بك</span>
               <select className="input" value={f.relation} onChange={(e) => setF({ ...f, relation: e.target.value })}>
                 {RELATIONS.map((r) => <option key={r.key} value={r.key}>{r.title}</option>)}
-              </select></label>
+              </select></label>}
           </div>
           {error && <div className="alert err">{error}</div>}
           <div className="row"><button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button></div>
@@ -119,7 +143,7 @@ export default function Impact({ me, onUpdate, onBack }) {
   useEffect(() => { if (submitted) load(); }, [submitted, load]);
 
   if (!submitted) {
-    return <Assessment kind="post" invite={flagsOf(me).f360} onBack={onBack} onSubmitted={onUpdate} />;
+    return <Assessment kind="post" invite onBack={onBack} onSubmitted={onUpdate} />;
   }
   if (error) return <div className="page narrow"><ErrorBox message={error} onRetry={load} /></div>;
   if (!data) return <div className="center-load"><div className="spinner" /></div>;
@@ -136,11 +160,15 @@ export default function Impact({ me, onUpdate, onBack }) {
           <>
             <Bars label="المؤشر العام في الأطر الثلاثة" before={s.before} after={s.after} beforeLabel="البداية" afterLabel="الآن" />
             <Bars label="ممارستك كما تقدّرها اليوم" before={s.practice_then} after={s.practice_now} beforeLabel="قبل البرنامج" afterLabel="الآن" />
+            {data.manager && DIMENSIONS.filter((d) => data.manager[d.key]?.before != null).map((d) => (
+              <Bars key={d.key} label={`تقدير ${data.no_manager === 'senior' ? 'الزميل الأعلى' : 'مديرك'}: ${d.title}`} before={data.manager[d.key].before} after={data.manager[d.key].now} beforeLabel="قبل البرنامج" afterLabel="الآن" />
+            ))}
+            {data.self_only && <p className="small muted">تقريرك ذاتي فقط: بلا تقدير مدير أو زميل أعلى.</p>}
             <p className="small muted">نقارن الأسئلة المشتركة بين القياسين فقط، ونعدّ الفرق تغيرًا إذا كان أكبر من تذبذب القياس الطبيعي. {invite ? 'يكتمل الحكم بتقدير مديرك ودليل مبادرتك.' : 'يكتمل الحكم بدليل مبادرتك.'}</p>
           </>
         ) : <p className="muted">أُرسل قياسك البعدي. تظهر المقارنة هنا حين تكتمل نتائج القياسين.</p>}
       </div>
-      {invite && <Invite data={data} onChange={setData} />}
+      {invite ? <Invite data={data} onChange={setData} /> : <div className="card"><NoManager data={data} onChange={setData} /></div>}
     </div>
   );
 }
