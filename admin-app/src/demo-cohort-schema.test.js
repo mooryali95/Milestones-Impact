@@ -113,6 +113,7 @@ describe(`ترحيل ${NAME}`, { timeout: 60000 }, () => {
     expect(SQL).not.toMatch(/create\s+(unique\s+)?index/i);
     expect(SQL).not.toMatch(/[–—]/);
     const applied = JSON.parse(readFileSync(join(__dirname, '../../scripts/db/applied-manifest.json'), 'utf8')).migrations;
-    expect(Object.keys(applied)).not.toContain(NAME);
+    // طُبّق على الإنتاج (سجله 2026-11-26)، فصار في البيان وبصمته مجمدة
+    expect(Object.keys(applied)).toContain(NAME);
   });
 });

@@ -17,10 +17,10 @@ import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-ru
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
-  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
+  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, firstSharedModule, commonHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
-  servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
+  servedPost, anchorRepeat, levelGains, levelGated, postShortOn,
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram, postRatedState } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { beginnerTitle, bindAnswers, CHARTER_KEY, CLOSING_CHAPTERS, closingLock, docMinutes, importRows, initiativeOf, trackProject } from './capstone.js';
 import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
@@ -611,7 +611,8 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
     db.from('participant_milestones').select('milestone_id, done_at, due_override, note, scores').eq('participant_id', p.id),
     initiativeFor(p.id),
-    db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
+    // E-360 يحتاج الصلة والصلاحية والمنتظر لا المقدَّم وحده (postRatedState)، وT-360 من المقدَّم القبلي كما كان
+    db.from('raters').select('phase, status, relation, expires_at').eq('participant_id', p.id).in('phase', ['pre', 'post']).neq('status', 'revoked'),
     // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
     db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust, snapshot').eq('participant_id', p.id),
     // مراجعة اليوم 180 في متابعة المبادرة: مصدر «قراءة الأثر بعد ستة أشهر» (R-6M)
@@ -621,6 +622,7 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
   const pl = placements.data || [];
   const { levels, approved } = approvalOf(pl);
   const submitted = (kind: string) => (assessments.data || []).some((a: any) => a.status === 'submitted' && a.instruments?.kind === kind);
+  const post360 = postRatedState(rated.data || [], { minOthers: (await appSettings()).feedback360.min_others, finalApproved: fe?.status === 'approved' });
   const state = {
     profileCompleted: !!p.profile_completed_at,
     hasCv: !!p.cv_path,
@@ -630,8 +632,11 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     // التقرير النهائي يُستلم حين يُعتمد التقييم الختامي فتظهر نتيجته المفصلة (وتعود عند إعادة فتحه)، أو بتقرير صادر في جدوله
     reportIssued: (reports.data || []).length > 0 || fe?.status === 'approved',
     initiativeNamed: !!initiative,
-    preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
-    postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
+    preRated: (rated.data || []).some((r: any) => r.phase === 'pre' && r.status === 'submitted'),
+    // «ذاتي فقط» لمن لا مدير له (تصور المرحلة 3، القرار 3): يكمل T-360 بلا حبس، ويوسم به تقريره
+    selfOnly: p.no_manager === 'self',
+    postRated: post360.done,
+    postRatedFewer: post360.fewer,
     // «عرض المشروع أمام لجنة التقييم» (E-PRES): اعتماد التقييم الختامي لبرنامجه، لا مسودته ولا ما ينتظر الاعتماد
     finalApproved: fe?.status === 'approved',
     review180: (reviews.data || []).length > 0,
@@ -913,9 +918,12 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!a) {
     a = must(await db.from('assessments').insert({ participant_id: p.id, instrument_id: inst.id }).select('*').single());
   }
-  let qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form, anchor_code, min_level')
+  // الصيغة القصيرة (مفتاح post_form.short، مطفأ): تُثبت على القياس عند أول فتح، وتُقرأ معها النواة. مطفأ: الاستعلام نفسه حرفيًا
+  const short = kind === 'post' && await shortPost(a);
+  if (short && a.post_form !== 'short') { must(await db.from('assessments').update({ post_form: 'short' }).eq('id', a.id)); a.post_form = 'short'; }
+  let qs = must(await db.from('questions').select(`id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form, anchor_code, min_level${short ? ', core' : ''}`)
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
-  if (kind === 'post') qs = await postServed(p, qs);
+  if (kind === 'post') qs = short ? await postServed(p, qs, true) : await postServed(p, qs);
   // أداة بصيغتين: المبدئي صيغة ثابتة للمشارك، والبعدي الصيغة الأخرى
   if (usesForms(qs)) {
     if (!a.form) {
@@ -969,10 +977,18 @@ export async function retakeNotice(participantId: string, minutes: number | null
 // ما يُقدَّم في القياس البعدي: فقرات المستوى حتى المستوى المعتمد في كل بُعد،
 // والتوأم بدل المشترك (أو الأصل لربع المشاركين لتقدير أثر التكرار).
 // العرض والإجابة والإرسال كلها تمر من هنا فتُحسب الدرجة على ما قُدِّم فقط.
-export async function postServed(p: any, qs: any[]) {
+export async function postServed(p: any, qs: any[], short = false) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
   const levels = Object.fromEntries(pl.filter((x: any) => x.approved_at).map((x: any) => [x.dimension, x.level]));
-  return servedPost(qs, { levels, repeat: anchorRepeat(p.id) });
+  return short ? servedPost(qs, { levels, repeat: anchorRepeat(p.id), short }) : servedPost(qs, { levels, repeat: anchorRepeat(p.id) });
+}
+
+// هل يُقدَّم هذا البعدي بالصيغة القصيرة؟ ما ثُبّت على القياس أولًا، ثم المفتاح لقياس لم تُثبت صيغته. والإجابة (assessmentAnswer)
+// تتحقق بالكاملة دائمًا، والقصيرة جزء منها، فتُقبل النواة والممتدة بالدالة نفسها
+async function shortPost(a: any) {
+  if (a?.post_form === 'short') return true;
+  if (a?.post_form === 'full') return false;
+  return postShortOn(await appSettings().catch(() => null));
 }
 
 // القياس البعدي يُفتح حين يصل المشارك إلى مرحلة التقييم في رحلته
@@ -1024,8 +1040,19 @@ export async function assessmentSubmit(p: any, b: Body) {
   const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
   let questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
   // البعدي يُتحقق من اكتماله ويُحسب على المجموعة نفسها التي عُرضت
-  if (inst?.kind === 'post') questions = await postServed(p, questions);
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
+  // الصيغة القصيرة: النواة إلزامية، وما أجيب من الممتدة يُحسب معها. الصيغة المحفوظة full إن أجيب كل ما يُقدم في الكاملة
+  let form: { post_form: string; served_count: number } | null = null;
+  if (inst?.kind === 'post' && await shortPost(a)) {
+    const full = await postServed(p, questions);
+    const core = new Set((await postServed(p, questions, true)).map((q: any) => q.id));
+    const missingCore = full.filter((q: any) => core.has(q.id) && answers[q.id] == null).length;
+    if (missingCore) throw new Fail(`بقي ${missingCore} من الأسئلة دون إجابة`, 400, 'incomplete');
+    questions = full.filter((q: any) => core.has(q.id) || answers[q.id] != null);
+    form = { post_form: questions.length === full.length ? 'full' : 'short', served_count: questions.length };
+    return postSubmit(p, a, questions, ans.data || [], model.data || null, form);
+  }
+  if (inst?.kind === 'post') questions = await postServed(p, questions);
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
@@ -1076,7 +1103,7 @@ export async function assessmentSubmit(p: any, b: Body) {
 
 // القياس البعدي: النتيجة تُحفظ للمقارنة، ولا تغيّر المستوى المعتمد ولا الرحلة.
 // "لا ينطبق" في الآن يُغني عن تقدير ما قبل البرنامج.
-async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: any) {
+async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: any, form: { post_form: string; served_count: number } | null = null) {
   const values = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value || {}]));
   const answers = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k]));
   const noBefore = questions.filter((q: any) => q.retro && (scoreFor(q, answers[q.id]) ?? 0) >= 0 && values[q.id]?.before == null).length;
@@ -1110,7 +1137,7 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
     behavior_common_pct: common[r.dimension]?.post ?? null, behavior_pre_common_pct: common[r.dimension]?.pre ?? null,
     level_gain_pct: gains[r.dimension]?.pct ?? null, level_gain_n: gains[r.dimension]?.n ?? null, level_gain_level: gains[r.dimension]?.level ?? null,
   }))));
-  await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', a.id);
+  await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString(), ...(form || {}) }).eq('id', a.id);
   await audit('participant', p.id, 'assessment.submit-post', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(p)) };
 }
@@ -1301,9 +1328,18 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     // الأسئلة بلا الإجابات الصحيحة، وخياراتها مخلوطة بترتيب ثابت لهذا المشارك؛ التصحيح على الخادم فقط
     quiz: shuffleQuiz(quizFor(m.quiz_md, levels[m.dimension], p.work_scope), p.id + m.id).map((q: any) => ({ q: q.q, options: q.options })),
     reflection: m.reflection_ar || '',
-    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
+    done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, apply: done.reflection_apply ?? '', at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
   };
+}
+
+// قراءة الفصل الأول أثناء الانتظار (تصور المرحلة 2، 2.5): قراءة فقط، بلا اختبار ولا عرض يُسجَّل ولا تقدم. الإتمام
+// (handbook.complete) والقراءة المحتسبة (handbook.ping) والكتاب نفسه في GATE_PROGRAM، فلا يُحتسب شيء قبل الاعتماد
+export async function handbookPreview(_p: any) {
+  const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md')) as any[] ?? [];
+  const m = firstSharedModule(mods);
+  if (!m) throw new Fail('لا فصل متاح للقراءة الآن', 404, 'none');
+  return { success: true, preview: true, chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: commonHandbookMd(m.body_md) } };
 }
 
 // نسخة شخصية PDF من الكتاب: أبواب المسار نفسها المصفّاة بمستوى المشارك،
@@ -1350,6 +1386,8 @@ export async function handbookComplete(p: any, b: Body) {
     throw new Fail('أجب عن كل الأسئلة أولًا');
   }
   const reflection = String(b.reflection || '').trim().slice(0, 4000) || null;
+  // جواب «أين ستطبقه؟» (تصور المرحلة 3 §5.3): يمنح الإضافة مع تأمل له معنى. قبل 20261129190000 يُحفظ التأمل وحده
+  const apply = String(b.apply || '').trim().slice(0, 1000) || null;
   const { data: prev } = await db.from('handbook_progress').select('quiz_score, quiz_total').eq('participant_id', p.id).eq('module_id', m.id).maybeSingle();
   // أول محاولة هي التي تُحتسب؛ الإعادة للتعلم وتحديث التأمل فقط
   if (prev) {
@@ -1371,7 +1409,12 @@ export async function handbookComplete(p: any, b: Body) {
       if (low === QUIZ_LOW_COUNT) await recordObservation(p.id, { code: 'quiz_low', ref: String(QUIZ_LOW_COUNT), ...RULES.quiz_low({ count: low }) });
     }
   }
-  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection), m.title_ar);
+  // جواب «أين ستطبقه؟» كتابة مستقلة بعد الختم: الختم الإلزامي لا يتسامح، والعمود قبل ترحيله لا يُسقط الإتمام (خطؤه يُسجَّل)
+  if (apply || prev) {
+    const { error } = await db.from('handbook_progress').update({ reflection_apply: apply }).eq('participant_id', p.id).eq('module_id', m.id);
+    if (error) console.error('reflection_apply:', error.message);
+  }
+  const gained = prev ? 0 : await award(p.id, 'chapter', m.id, chapterPoints(g.score, reflection, apply), m.title_ar);
   const pts = await pointsOf(p.id);
   return { success: true, ...g, first: !prev, counted: prev || { quiz_score: g.score, quiz_total: g.total }, gained, points: { total: pts.total, rank: pts.rank } };
 }

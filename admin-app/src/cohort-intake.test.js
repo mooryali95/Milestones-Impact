@@ -2,7 +2,7 @@
 // واستثناء دفعة الاستقبال من استنتاج دفعة الجهة في pickCohort
 import { describe, expect, it } from 'vitest';
 import { cohortlessPlan, orgCurrentCohort, placementSource, planHashInput, planSummary, waitingList } from '../../supabase/functions/leaders-api/cohort-intake.js';
-import { pickCohort } from '../../supabase/functions/leaders-api/logic.js';
+import { orgCohort, orgCohorts, pickCohort } from '../../supabase/functions/leaders-api/logic.js';
 
 const ORG = 'org-1', ORG2 = 'org-2';
 const cohorts = [
@@ -81,10 +81,38 @@ describe('قائمة انتظار الجهة', () => {
 });
 
 describe('pickCohort ودفعة الاستقبال', () => {
-  it('الاستقبال لا يُستنتج بالجهة: عضويته بالإلحاق الصريح وحده', () => {
+  it('الاستقبال وكل دفعة جهة لا تُستنتج بالجهة: العضوية بالإلحاق الصريح وحده (تصور المرحلة 4)', () => {
     const onlyIntake = cohorts.filter((c) => c.id !== 'c-spring');
     expect(pickCohort({ enrollments: [], cohorts: onlyIntake, organizationId: ORG }).cohort.id).toBe('c-open');
     expect(pickCohort({ enrollments: [{ cohort_id: 'c-intake', status: 'active' }], cohorts: onlyIntake, organizationId: ORG }).cohort.id).toBe('c-intake');
-    expect(pickCohort({ enrollments: [], cohorts, organizationId: ORG }).cohort.id).toBe('c-spring');
+    expect(pickCohort({ enrollments: [], cohorts, organizationId: ORG })).toEqual({ cohort: cohorts.find((c) => c.id === 'c-open'), via: 'fallback' });
+  });
+  it('orgCohort يعطي سؤال «دفعة الجهة» الجواب الذي كان يعطيه pickCohort بإلحاقات فارغة', () => {
+    expect(orgCohort(cohorts, ORG).cohort.id).toBe('c-spring');
+    expect(orgCohort(cohorts, ORG).via).toBe('organization');
+    expect(orgCohort(cohorts.filter((c) => c.id !== 'c-spring'), ORG).via).toBe('default');
+    expect(orgCohort(cohorts, null).via).toBe('default');
+    expect(orgCohort([], ORG)).toEqual({ cohort: null, via: 'none' });
+  });
+  it('orgCohorts: دفعات الجهة الحالية (مفتوحة أو جارية، ومعها الاستقبال)، الأحدث أولًا', () => {
+    const ids = orgCohorts(cohorts, ORG).map((c) => c.id);
+    expect(ids[0]).toBe('c-spring');
+    expect(ids).toContain('c-intake');
+    expect(ids).not.toContain('c-open');
+    expect(orgCohorts(cohorts, null)).toEqual([]);
+  });
+});
+
+describe('لا سؤال «دفعة الجهة» يمر من pickCohort (تصور المرحلة 4)', () => {
+  it('لا مستدعٍ لـ pickCohort بإلحاقات فارغة في الخادم واللوحة: orgCohort صراحة', async () => {
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const dirs = [join(__dirname, '../../supabase/functions/leaders-api'), __dirname, join(__dirname, '../../leaders-app/src')];
+    const bad = [];
+    for (const d of dirs) for (const f of readdirSync(d)) {
+      if (!/\.(js|ts|jsx)$/.test(f) || /test/.test(f)) continue;
+      if (/pickCohort\(\{\s*enrollments:\s*\[\]/.test(readFileSync(join(d, f), 'utf8'))) bad.push(f);
+    }
+    expect(bad).toEqual([]);
   });
 });

@@ -4,7 +4,9 @@ import { test, expect } from '@playwright/test';
 
 const BASE = 'http://localhost:4303/';
 const SHOTS = process.env.SHOTS_DIR || '';
-const ago = (d, h = 0) => new Date(Date.now() - d * 86400000 - h * 3600000).toISOString();
+// ساعة ثابتة ظهرًا بتوقيت الرياض: التاريخ النسبي يتبع اليوم التقويمي، فبلا تثبيت يصير «قبل ساعتين» «أمس» بعد منتصف الليل
+const NOW = Date.parse('2026-06-15T09:00:00Z');
+const ago = (d, h = 0) => new Date(NOW - d * 86400000 - h * 3600000).toISOString();
 const contacts = [
   { id: 'c1', name: 'ريم السالم', organization: 'شركة الأفق للاستشارات', email: 'reem@x.com', phone: '0500000001', interest: 'leaders', product: 'MI-LEADERS', status: 'new', created_at: ago(0, 2), message: 'نرغب في تسجيل عشرين من قادتنا في الدفعة القادمة، فما الخطوات؟\nhttps://example.com' },
   { id: 'c2', name: 'فهد العتيبي', organization: 'جمعية النماء', email: 'fahd@x.com', phone: '0500000002', interest: 'assessment', product: 'MI-ASSESSMENT', status: 'new', created_at: ago(5), message: 'سؤال عن مقياس الجاهزية لفريقنا.' },
@@ -16,6 +18,7 @@ const contacts = [
 async function setup(page, { size = { width: 1440, height: 900 }, replies = {} } = {}) {
   await page.setViewportSize(size);
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.clock.setFixedTime(NOW);
   const calls = [];
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');

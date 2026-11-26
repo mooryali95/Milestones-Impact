@@ -11,7 +11,7 @@ import {
   date, DIM, DIMS, isSuperAdmin, L, LVL, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
 import { Empty, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
-import { enrollCohort } from '../cohort-guard.js';
+import { assignOrgGuarded, enrollCohort } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -200,7 +200,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
     // الهدف باسمه في التأكيد، فلا يُنقل أحد إلى جهة غير المقصودة
     const target = moveTo === 'none' ? 'فكّ ارتباطهم بأي جهة' : `«${orgs.find((o) => o.id === moveTo)?.name || 'الجهة المختارة'}»`;
     if (!(await confirm(moveTo === 'none' ? `${target} لـ${picked.size} مشارك؟` : `نقل ${picked.size} مشارك إلى ${target}؟`))) return;
-    const r = await L('admin.assign-org', { participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo });
+    const r = await assignOrgGuarded({ participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo }, confirm);
     toast(r.success ? `نُقل ${r.moved ?? picked.size} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); setMoveTo(''); load(); }
   };

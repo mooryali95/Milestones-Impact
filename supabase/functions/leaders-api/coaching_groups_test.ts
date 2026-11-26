@@ -39,6 +39,8 @@ function world(opts: { before?: boolean } = {}) {
       { id: OTHER, name: 'دفعة أخرى', is_default: false, organization_id: null, status: 'running', program_id: 'prog', starts_on: '2026-11-01', created_at: '2026-10-02', delivery: {}, advisor_expert_id: ELSEWHERE },
     ],
     enrollments: [
+      // أعضاء الجهة ملحقون بدفعتها صراحة (تصور المرحلة 4: لا استنتاج بالجهة)
+      ...ps.filter((p) => p.organization_id === ORG).map((p) => ({ participant_id: p.id, cohort_id: COHORT, status: 'active', created_at: '2026-10-05T08:00:00Z' })),
       { participant_id: ps[5].id, cohort_id: OTHER, status: 'active', created_at: '2026-10-06T08:00:00Z' },
       { participant_id: ps[6].id, cohort_id: COHORT, status: 'active', created_at: '2026-10-06T08:00:00Z' },
     ],

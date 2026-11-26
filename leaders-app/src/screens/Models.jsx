@@ -25,7 +25,7 @@ import { preSubmitHints } from '../presubmit.js';
 // النص من مصدره (labels.js modelStatusAr) بمن يراجع: المستشار، وبلاه فريق البرنامج
 const TONE = { draft: 'warn', submitted: 'gold', returned: 'bad', reviewed: 'ok' };
 const chipOf = (status, key, reviewer) => ({ t: modelStatusAr(status, { gate: isGateModel(key), reviewer }), c: TONE[status] || '' });
-const SOURCE = { chapter: 'إتمام باب', model: 'تقديم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة' };
+const SOURCE = { chapter: 'إتمام باب', model: 'تقديم نموذج', review: 'تميّز من المستشار', bonus: 'مكافأة', lab: 'إتقان أداة في المختبر', lab_bonus: 'تميّز في المختبر', capstone: 'اعتماد المبادرة وأثرها', tracking: 'متابعة تنفيذ المبادرة', commitment: 'التزام بعد ورشة', commitment_review: 'مراجعة التزام' };
 const date = (d) => (d ? new Date(d).toLocaleDateString('ar', { day: 'numeric', month: 'short' }) : '');
 
 // id للحقل الذي تسمّيه <label htmlFor>، وlabelId لما لا تسمّيه label (مجموعة الاختيار والجدول) فيُسمّى بـaria-labelledby
@@ -615,7 +615,7 @@ export function Wins() {
           ))}
         </ol>
         <ul className="muted small wins-how">
-          <li>إتمام الباب: {POINTS.chapter} · الإجابة الصحيحة: {POINTS.perCorrect} · التأمل: {POINTS.reflection}</li>
+          <li>إتمام الباب: {POINTS.chapter} · الإجابة الصحيحة: {POINTS.perCorrect} · التأمل: {POINTS.reflection} ومع «أين ستطبقه؟» {POINTS.reflection + POINTS.reflectionApplied}</li>
           <li>تقديم النموذج التعليمي: حسب النموذج</li>
           <li>إتقان أداة في المختبر: حسب الأداة</li>
           <li>اعتماد وثيقة المبادرة: {APPROVAL_POINTS}</li>

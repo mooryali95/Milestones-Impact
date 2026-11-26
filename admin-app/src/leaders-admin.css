@@ -1549,11 +1549,11 @@
 .ph-line { color: var(--ink-soft); }
 .ph-remedy { display: block; font-size: .85rem; margin-top: 2px; }
 
-/* المرحلة 2 (تدقيق 2026-11-23): عنوان «تجريبي» صغير فوق الأقسام المخفية عن المستخدمين في مجموعتها، ومجموعة الإعداد منفصلة بصريًا في الأسفل */
-.la-tab-trial { font-size: .68rem; font-weight: 700; color: var(--ink-light, var(--brand-muted-soft)); padding: 0 4px; }
-.la-tab-group.shut > .la-tab-trial { display: none; }
+/* المرحلة 7 (تصور تطبيق القادة 2026-11-26): الأقسام المخفية عن المستخدمين في مجموعة «تجريبي» أخيرة مطوية، وعنوانها شارة باهتة.
+   ومجموعة الإعداد منفصلة بصريًا في الأسفل (المرحلة 2) */
+.la-tabs .la-trial-chip { background: transparent; border: 1px dashed currentColor; color: var(--ink-soft, var(--brand-ink-blue)); font-size: .72rem; }
 @media (min-width: 1100px) {
-  .la-shell .la-tab-trial { padding: 6px 10px 0; border-top: 1px dashed var(--line); margin-top: 2px; }
+  .la-shell .la-tab-group.la-tab-group-trial { margin-top: 6px; border-top: 1px dashed var(--line); }
   .la-shell .la-tab-group.la-tab-group-setup { margin-top: 10px; border-top: 2px solid var(--line-strong); }
 }
 
@@ -1658,6 +1658,8 @@ tr.ct-on > td { background: var(--gold-pale); }
 /* اعتماد المتطلبات دفعة واحدة من «قرارات اليوم» (Inbox.jsx) */
 .inbox-req { gap: 12px; margin-top: 10px; flex-wrap: wrap; }
 .inbox-list li > input[type="checkbox"], .inbox-req input[type="checkbox"] { inline-size: 24px; block-size: 24px; margin: 0; accent-color: var(--petrol-s); cursor: pointer; }
+.inbox-return { flex-basis: 100%; display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-start; margin-top: 6px; }
+.inbox-return textarea { flex: 1 1 260px; min-inline-size: 0; }
 .pt-cols-menu { position: absolute; inset-inline-end: 0; z-index: 20; margin-top: 4px; padding: 10px 12px; min-inline-size: 200px; background: #fff; border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 18px rgba(6,30,44,.12); display: grid; gap: 6px; }
 .pt-cols-menu label { display: flex; align-items: center; gap: 8px; font-size: .88rem; cursor: pointer; min-block-size: 24px; }
 .pt-cols-menu small { font-size: .76rem; }

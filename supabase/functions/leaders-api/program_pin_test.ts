@@ -1,6 +1,7 @@
 // تثبيت الدفعة على نسخة (ترحيل 20261116110000): كل دفعة تُثبَّت على نسخة من برنامجها عند إنشائها، وتغيير البرنامج يثبّتها
 // على أحدث نسخ الهدف، وإلغاء التثبيت يُرفض، وكل برنامج جديد يولد بنسخته الأولى. حفظ النسخة واسترجاعها يمسان المسودة
 // وحدها، والترقية وحدها تنقل الدفعة بمعاينة وحارس الإخفاء وإعادة ضبط إعدادها على الهدف. قاعدة في الذاكرة بلا شبكة.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -11,6 +12,7 @@ type Row = Record<string, any>;
 // فما يعتمد على «أحدث نسخة» يُختبر بترتيب إدراج معكوس
 // hooks[table]: يُنادى قبل كل إدراج في الجدول، وما يرده خطأ يُعاد بدل الإدراج (القيد الفريد، أو رفض قيد الدفعة)
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let seq = 0;
   const hooks: Record<string, (payload: any) => any> = {};
   const from = (table: string) => {
@@ -129,10 +131,13 @@ Deno.test('حفظ مرفوض بحارس النقل لا يكتب نسخة ولا
   const w = world();
   w.tables.cohorts = [{ id: C1, name: 'سفراء 2026', organization_id: ORG, program_id: PA, program_version_id: null, status: 'running', starts_on: '2026-09-01', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] }];
   w.tables.participant_requirements = [{ participant_id: P1, requirement_id: R1 }];
+  // تصور المرحلة 4: فتح دفعة جهة لا ينقل أحدًا، فالحارس هنا حارس تغيير برنامج دفعة لعضوها الملحق تقدم
+  w.tables.enrollments = [{ participant_id: P1, cohort_id: C1, status: 'active', created_at: '2026-09-02' }];
   try {
-    assertEquals((await failOf(() => cohortSave(admin, fresh(PB)))).code, 'confirm_move');
-    assertEquals([w.tables.program_versions.length, w.tables.cohorts.length], [0, 1]);
-    await cohortSave(admin, { ...fresh(PB), confirm_move: true });
+    assertEquals((await failOf(() => cohortSave(admin, { id: C1, program_id: PB }))).code, 'program_locked');
+    assertEquals([w.tables.program_versions.length, w.tables.cohorts.length, w.tables.cohorts[0].program_id], [0, 1, PA]);
+    w.tables.participant_requirements = [];
+    await cohortSave(admin, { id: C1, program_id: PB });
     assertEquals(w.tables.program_versions.map((v: Row) => v.program_id), [PB]);
   } finally { w.restore(); }
 });
@@ -260,6 +265,7 @@ Deno.test('البرنامج الجديد يولد بنسخته الأولى، و
 Deno.test('الترقية التلقائية (قرار المالك 2026-11-23): حفظ نسخة آمنة يرقّي الدفعة المثبتة إليها ويُسجَّل آليًا، والاسترجاع لا يمس تثبيتها', async () => {
   const w = world();
   w.tables.cohorts = [{ id: C1, name: 'سفراء 2026', organization_id: ORG, program_id: PA, program_version_id: null, status: 'running', starts_on: '2026-09-01', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] }];
+  w.tables.enrollments = [{ participant_id: P1, cohort_id: C1, status: 'active', created_at: '2026-09-02' }];
   try {
     await cohortSave(admin, { id: C1, program_version_id: 'latest' });
     const pinned = w.tables.cohorts[0].program_version_id;
@@ -284,6 +290,7 @@ Deno.test('الترقية التلقائية لا تمس ما يحتاج مرا�
   w.tables.cohorts = [
     { id: C1, name: 'مثبتة بتقدم', organization_id: ORG, program_id: PA, program_version_id: null, status: 'running', starts_on: '2026-09-01', created_at: '2026-09-01T00:00:00Z', hidden_requirements: [] },
   ];
+  w.tables.enrollments = [{ participant_id: P1, cohort_id: C1, status: 'active', created_at: '2026-09-02' }];
   try {
     await cohortSave(admin, { id: C1, program_version_id: 'latest' });
     const pinned = w.tables.cohorts[0].program_version_id;
@@ -328,6 +335,7 @@ Deno.test('الاتصال الفوري لدفعة مثبتة: التوفر ور�
   w.tables.stage_requirements.push(req(C, PA, 's1', 'O-COACH', { kind: 'coaching', config: { mode: 'online' } }));
   try {
     await cohortSave(admin, fresh(PA));
+    w.tables.enrollments.push({ participant_id: P1, cohort_id: w.tables.cohorts[0].id, status: 'active', created_at: '2026-09-02' });
     const live = w.tables.stage_requirements.find((r: Row) => r.id === C)!;
     live.config = { mode: 'online', instant_url: 'https://meet.example/room', instant_until: until };
     const coach = async () => ((await journeyDefinition({ id: P1, organization_id: ORG })) as any).requirements.find((r: Row) => r.id === C).config;
@@ -355,6 +363,8 @@ function upgradeWorld() {
     hidden_requirements: [], delivery: { 'O-SESS': { mode: 'in_person' } }, schedule: { s1: { start: '2026-09-01' }, s2: { start: '2026-10-01' } }, stage_modes: { s2: 'groups' } }];
   w.tables.participant_requirements = [{ participant_id: P1, requirement_id: R2, status: 'done' }, { participant_id: U(70), requirement_id: R2, status: 'done' }];
   w.tables.participants.push({ id: U(70), organization_id: U(71), is_demo: false });
+  // عضو الدفعة ملحق بها صراحة (تصور المرحلة 4: لا استنتاج بالجهة)
+  w.tables.enrollments = [{ participant_id: P1, cohort_id: C1, status: 'active', created_at: '2026-09-02' }];
   return w;
 }
 
