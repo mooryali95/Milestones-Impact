@@ -127,10 +127,11 @@ export function documentHtml(meta, body, opts = {}) {
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
   return `<!doctype html><html lang="ar" dir="rtl"${opts.pdf ? ' class="pdf"' : opts.embed ? ' class="embed"' : opts.print ? ' class="print"' : ''}><head><meta charset="utf-8">
+<meta name="color-scheme" content="light"><meta name="darkreader-lock">
 ${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${esc(meta.title)} · Milestone Impact</title>
 ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@200;300;400;500&family=Noto+Sans:wght@200;300;400&display=swap" rel="stylesheet">`}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500&family=Noto+Sans:wght@300;400&display=swap" rel="stylesheet">`}
 <style>
 @page { size: A4; margin: 16mm 18mm 20mm;
   ${meta.brand ? '@bottom-right { content: "Milestone Impact"; font: 400 6pt "Noto Sans", sans-serif; letter-spacing: .08em; color: #8A979A; }' : `@bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }`}
@@ -142,9 +143,11 @@ ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا تر�
   html:not(.pdf) .mast.co .eyebrow { margin-top: auto; } html:not(.pdf) .mast.co h1 { font-size: 34pt; } html:not(.pdf) .mast.co .meta { margin-top: auto; }
   html:not(.pdf) .mast.co .accent { bottom: 0; height: 2.4mm; } html:not(.pdf) .mast.co .thesis { margin-bottom: 4mm; } }` : ''}
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-html { background: ${C.faint}; }
+/* الوثيقة فاتحة فقط (المرحلة 22): الإعلان في الجذر والرأس، ووسم قفل Dark Reader لأن الإعلان وحده لا يوقف الإضافة */
+:root { color-scheme: light; }
+html { background: ${C.faint}; background-color: ${C.faint}; }
 body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-serif; font-weight: 300; color: ${C.graphite}; font-size: 10pt; line-height: 1.65; }
-.sheet { max-width: 210mm; margin: 0 auto; background: ${C.paper}; padding: 0 0 14mm; }
+.sheet { max-width: 210mm; margin: 0 auto; background: ${C.paper}; background-color: ${C.paper}; padding: 0 0 14mm; }
 @media screen { .sheet { margin: 12mm auto; box-shadow: 0 0 0 1px ${C.line}; } .sheet > *:not(.mast) { padding-inline: 18mm; } }
 @media print { html { background: none; } .sheet { max-width: none; padding: 0; } .toolbar { display: none !important; } }
 html.pdf { background: ${C.paper}; } html.pdf .toolbar { display: none !important; }
@@ -159,20 +162,20 @@ h2, h3 { break-after: avoid; }
 @media screen { .toolbar { display: flex; } }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
 .toolbar button.pri { background: ${C.goldLight}; color: ${C.graphite}; }
-.mast { position: relative; background: ${C.mist} ${LATTICE}; border-bottom: 1px solid ${C.gold}; padding: 12mm 18mm 10mm; }
+.mast { position: relative; background: ${C.mist} ${LATTICE}; background-color: ${C.mist}; color: ${C.graphite}; border-bottom: 1px solid ${C.gold}; padding: 12mm 18mm 10mm; }
 .mast .top { display: flex; justify-content: space-between; align-items: flex-start; direction: ltr; }
 .mast .logo svg { height: 46px; width: auto; display: block; }
 .mast .ref { text-align: right; font: 300 7.5pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.muted}; line-height: 2; }
 .mast .ref b { display: block; font-weight: 400; letter-spacing: .12em; color: ${C.graphite}; }
 .mast .eyebrow { margin-top: 10mm; }
-.mast h1 { font-weight: 200; font-size: 26pt; line-height: 1.25; margin: 2mm 0 1mm; letter-spacing: 0; }
+.mast h1 { font-weight: 500; color: ${C.graphite}; font-size: 26pt; line-height: 1.25; margin: 2mm 0 1mm; letter-spacing: 0; }
 .mast .sub { color: ${C.slate}; font-size: 11pt; margin: 0; }
 .mast .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 8mm; border-top: 1px solid ${C.line}; }
 .mast .meta div { padding: 3mm 0 0; border-inline-start: 1px solid ${C.line}; padding-inline-start: 4mm; }
 .mast .meta div:first-child { border-inline-start: 0; padding-inline-start: 0; }
 .mast .meta span { display: block; font-size: 7.5pt; color: ${C.muted}; }
-.mast .meta b { font-weight: 400; font-size: 9.5pt; }
-.thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${C.gold}; font-size: 9pt; }
+.mast .meta b { font-weight: 400; font-size: 9.5pt; color: ${C.graphite}; }
+.thesis { display: flex; align-items: center; gap: 3mm; margin: 7mm 0 0; color: ${C.goldText}; font-size: 9pt; }
 .thesis::before, .thesis::after { content: ''; flex: 1; height: 1px; background: ${C.gold}; opacity: .45; }
 .eyebrow { display: block; font: 400 7pt "Noto Sans", sans-serif; letter-spacing: .3em; text-transform: uppercase; color: ${C.goldText}; }
 .sec { margin-top: 9mm; break-inside: auto; }
@@ -184,12 +187,12 @@ h2, h3 { break-after: avoid; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(30mm, 1fr)); border-top: 1px solid ${C.gold}; border-bottom: 1px solid ${C.line}; }
 .kpi { padding: 4mm 4mm 4mm 0; border-inline-start: 1px solid ${C.line}; padding-inline-start: 4mm; break-inside: avoid; }
 .kpi:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.kpi b { display: block; font: 200 24pt/1.1 "Noto Sans", sans-serif; color: ${C.graphite}; }
+.kpi b { display: block; font: 300 24pt/1.1 "Noto Sans", sans-serif; color: ${C.graphite}; }
 .kpi span { display: block; font-size: 8.5pt; color: ${C.slate}; }
 .kpi small { color: ${C.muted}; font-size: 7.5pt; }
 .chain { display: flex; align-items: flex-start; margin: 2mm 0; break-inside: avoid; }
 .chain .node { text-align: center; width: 24mm; flex: none; display: grid; justify-items: center; gap: 1mm; }
-.chain .n { font: 200 15pt/1 "Noto Sans", sans-serif; min-height: 15pt; }
+.chain .n { font: 300 15pt/1 "Noto Sans", sans-serif; min-height: 15pt; }
 .chain .l { font-size: 8.5pt; } .chain .e { font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: ${C.muted}; }
 .chain .node:not(.on) .n, .chain .node:not(.on) .l { color: ${C.muted}; }
 .chain .link { flex: 1; height: 1px; background: ${C.gold}; opacity: .45; margin-top: calc(15pt + 1mm + 6px); }
@@ -241,7 +244,7 @@ h2, h3 { break-after: avoid; }
 .mast .accent { position: absolute; inset-inline: 0; bottom: -1px; height: 1.2mm; }
 .mast.co { padding: 14mm 18mm 12mm; }
 .mast.co .eyebrow { margin-top: 14mm; }
-.mast.co h1 { font-size: 30pt; font-weight: 200; line-height: 1.2; margin: 3mm 0 2mm; }
+.mast.co h1 { font-size: 30pt; font-weight: 500; line-height: 1.2; margin: 3mm 0 2mm; }
 .mast.co .sub { font-size: 11.5pt; color: ${C.slate}; }
 .mast.co .meta { margin-top: 12mm; }
 .mast.co .meta b { font-size: 10pt; }
