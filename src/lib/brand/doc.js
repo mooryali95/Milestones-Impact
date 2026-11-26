@@ -66,14 +66,17 @@ export const bars = (rows, total, { ltr = false } = {}) => (rows.length ? `<div 
 
 // جدول: cols [{ label, align?, ltr?, width? }]، rows مصفوفة قيم (نص أو { html })
 export const table = (cols, rows, empty = 'لا بيانات') => `<table class="tbl"><thead><tr>${cols.map((c) => `<th${c.width ? ` style="width:${c.width}"` : ''}>${esc(c.label)}</th>`).join('')}</tr></thead>
-<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${v && typeof v === 'object' && 'html' in v ? v.html : esc(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
+<tbody>${rows.length ? rows.map((r) => `<tr>${r.map((v, i) => `<td${cols[i]?.ltr ? ' dir="ltr"' : ''}${cols[i]?.align ? ` style="text-align:${cols[i].align}"` : ''}>${isRaw(v) ? v.html : esc(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="muted c">${esc(empty)}</td></tr>`}</tbody></table>`;
 
 export const progress = (pct) => `<span class="pg"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span><span class="pgn">${num(Math.round(pct))}%</span>`;
-export const raw = (html) => ({ html });
+// علامة HTML الخام رمز لا يُزوَّر (المرحلة 21): كائن قادم من القاعدة أو JSON يحمل html لا يمر خامًا، بل يُهرَّب نصًا
+const RAW = Symbol('raw');
+export const raw = (html) => ({ [RAW]: true, html: String(html ?? '') });
+export const isRaw = (v) => !!(v && typeof v === 'object' && v[RAW] === true);
 // خلاصة مميّزة بشريط ذهبي: عنوان ونص
 export const callout = (title, text) => `<div class="callout"><b>${esc(title)}</b><p>${esc(text)}</p></div>`;
 // قائمة نقاط بمعين ذهبي
-export const points = (items, empty = 'لا شيء') => (items.length ? `<ul class="points">${items.map((t) => `<li>${t && t.html != null ? t.html : esc(t)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
+export const points = (items, empty = 'لا شيء') => (items.length ? `<ul class="points">${items.map((t) => `<li>${isRaw(t) ? t.html : esc(t)}</li>`).join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
 
 // ── الغلاف المشترك (الوثيقة المؤسسية) ──
 // brand: { name, logo, color }. شعار الجهة أعلى الغلاف، و«بإعداد Milestone Impact» أصغر، ولون الجهة خط تمييز وحده.
@@ -81,7 +84,9 @@ export const points = (items, empty = 'لا شيء') => (items.length ? `<ul cla
 // نص آمن داخل سلسلة CSS (ترويسة الصفحة)
 const cssStr = (v) => String(v ?? '').replace(/[\\"\n\r<>]/g, ' ');
 export const brandColor = (c) => (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(String(c || '')) ? c : null);
-const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|https:\/\/|\/(?!\/))/i.test(String(u || '')) ? u : null);
+// الشعار مضمّن (data:) أو من أصل المنصة نفسها وحده (المرحلة 21): رابط https خارجي يُرفض، فلا يجلب قارئ الوثيقة أو مولّد PDF
+// شيئًا من خارجها ولا يُتتبع من يفتحها. بلا شعار صالح يُكتب اسم الجهة نصًا
+export const safeLogo = (u) => (/^(data:image\/(png|jpe?g|webp|svg\+xml);base64,|\/(?!\/))/i.test(String(u || '')) ? u : null);
 // ── التباين: لون الجهة أو الدفعة يقود العناصر البنيوية (أرقام الأبواب وخطوطها) بعد فحص آلي، وإلا لون الهوية ──
 // WCAG 2.x: النسبة بين الإضاءتين النسبيتين. الأرقام الكبيرة والخطوط نص كبير أو عناصر غير نصية، فالحد 3:1 على الأبيض
 const lum = (hex) => {

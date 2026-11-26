@@ -9,7 +9,7 @@ import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js'
 import { costLabel, displayPages, pageNumberOf, parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
-import { DIM_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+import { DIM_AR, DOC_LIVE_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { businessCase, charterData, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
 import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
@@ -497,7 +497,8 @@ const profileHint = (profile) => {
   return DIM_AR[dim] && LVL[lv] ? `${DIM_AR[dim]}: مستوى ${LVL[lv]}` : '';
 };
 
-export function capstoneReport(input, { appendix = true } = {}) {
+// appendix: ملحق «ما ينقص». annex: ملحق المراجع، بطلب صريح وحده (المرحلة 21). final: تحميل الأدمن للنهائية، فغير المعتمدة بختم ظاهر
+export function capstoneReport(input, { appendix = true, annex = false, final = false } = {}) {
   // ملف العمل الكامل: المشتق (الغلاف والميثاق وحالة العمل والمؤشرات) من القيم الصالحة، والفصول بكل ما كُتب
   // وتالفه معلَّم «يحتاج مراجعة»، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
   const exampleIn = !!input?.meta?.example;
@@ -586,7 +587,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
   if (!example) body += decisionsBlock(doc.decisions);
   body += glossaryBlock(doc);
   body += gapsHtml;
-  body += levelAnnex(doc);
+  if (annex) body += levelAnnex(doc);
 
   return {
     meta: {
@@ -599,7 +600,7 @@ export function capstoneReport(input, { appendix = true } = {}) {
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، أُعدّت في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),
       // ختم «مسودة عمل» في الغلاف لكل ما لم يُعتمد (doc.js meta.stamp)
-      stamp: approved || example || !appendix ? null : 'مسودة عمل',
+      stamp: approved || example ? null : final ? DOC_LIVE_AR : !appendix ? null : 'مسودة عمل',
       confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد',
       closing: example
         ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع تعرفه، وقارن بنيتها بهذا المثال.'

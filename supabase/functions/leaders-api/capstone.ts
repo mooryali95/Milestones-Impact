@@ -17,10 +17,10 @@ import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
+  capstoneListRows, capstoneState, chapterLevel, withoutReviewLevels, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
-import { freezeIssued, rejectionStats } from './doc-quality.js';
+import { docFingerprint, freezeIssued, rejectionStats } from './doc-quality.js';
 import { docFormFor } from './doc-form.js';
 import { cohortIdentity } from './cohort-identity.js';
 import { pdfTicket } from './pdf-ticket.ts';
@@ -319,7 +319,9 @@ export async function demoDoc(p: any) {
 
 export async function doc(p: any) {
   // تذكرة مولّد PDF على الخادم (workers/pdf-render) إن ضُبط؛ وإلا يبني المتصفح الملف كما كان (pdf.js)
-  return { success: true, doc: await withTracking(await recordFor(p, 'participant'), p.id), pdf: await pdfTicket(p.id).catch(() => null) };
+  // مسار المشارك بلا ملحق المراجع صراحة (withoutReviewLevels، المرحلة 21)، والتذكرة مربوطة ببصمة هذه الوثيقة نفسها
+  const document = withoutReviewLevels(await withTracking(await recordFor(p, 'participant'), p.id));
+  return { success: true, doc: document, pdf: await pdfTicket(p.id, docFingerprint(document)).catch(() => null) };
 }
 
 // ── التحقق العام من وثيقة معتمدة ببصمتها (رمز QR في صفحة الاعتماد): ما تعرضه الوثيقة على غلافها وحده، بلا محتوى ولا بريد ──
@@ -436,6 +438,24 @@ async function leaderScore(p: any) {
     config_version: f.live.config_version ?? null, coverage: f.live.coverage ?? null,
     components: (f.live.components || []).map((x: any) => ({ key: x.key, label: x.label, weight: x.weight, value: x.value })),
   };
+}
+
+// تحميل الأدمن للوثيقة النهائية (المرحلة 21): الوثيقة نفسها التي يقرؤها admin.capstone، مع تذكرة PDF مربوطة ببصمتها،
+// وسطر تدقيق admin.docExport: من حمّل ومتى وبأي خيارات وبأي بصمة. الخيارات لكل تنزيل ولا تُحفظ (صفة للإرسال لا للوثيقة)
+export const DOC_EXPORT_KEYS = ['annex', 'decision', 'appendix', 'qr'] as const;
+export async function adminDocExport(a: Admin, b: Body) {
+  const p = await participantRow(b.participant_id);
+  const r = await recordAndBuild(p, 'admin');
+  const state = r.d || await build(p);
+  const document = await withTracking({ ...r.doc, review_levels: levelsView(state, !r.d) }, p.id);
+  const fp = docFingerprint(document);
+  const o = b.options && typeof b.options === 'object' ? b.options : {};
+  const options = Object.fromEntries(DOC_EXPORT_KEYS.map((k) => [k, o[k] === true]));
+  const preset = b.preset === 'full' ? 'full' : 'send';
+  await audit('admin', a.email, 'admin.docExport', 'capstones', p.id, null, {
+    preset, options, fingerprint: fp, status: state.capstone?.status || r.doc?.meta?.status || 'draft'
+  });
+  return { success: true, doc: document, fingerprint: fp, pdf: await pdfTicket(`admin-${a.id || 'owner'}`, fp).catch(() => null) };
 }
 
 export async function adminGet(b: Body) {

@@ -558,9 +558,41 @@ describe('ملحق مستوى الوثيقة: للمراجع وحده', () => {
     const html = levelAnnex({ ...d, review_levels });
     expect(html).toContain('مستوى الوثيقة وموقع كل فصل منه');
     expect(html).toContain(CHAPTER_STANDING_AR.kept);
-    expect(capstoneReport({ ...d, review_levels }).body).toContain('id="ch-levels"');
-    // القارئ الخارجي (الراعي والجهة) لا يراه ولو حمله
+    // المرحلة 21: حاجز ثانٍ في العارض، فلا يُرسم دون خيار annex صريح ولو وصل الحقل
+    expect(capstoneReport({ ...d, review_levels }).body).not.toContain('id="ch-levels"');
+    expect(capstoneReport({ ...d, review_levels }, { annex: true }).body).toContain('id="ch-levels"');
+    // القارئ الخارجي (الراعي والجهة) لا يراه ولو حمله، ولو طُلب
     expect(renderInitiative({ ...d, review_levels }, 'external').body).not.toContain('ch-levels');
+    expect(renderInitiative({ ...d, review_levels }, 'external', { annex: true }).body).not.toContain('ch-levels');
+  });
+  it('العارض: الأنواع الأربعة بلا ملحق المراجع دون الخيار، وبه لشاشة المراجع وحدها', () => {
+    const d = { ...docOf(same('beginner')), review_levels };
+    for (const kind of ['working', 'institutional', 'external', 'reader']) {
+      const r = renderInitiative(d, kind);
+      if (!r.blocked) expect(r.body, kind).not.toContain('ch-levels');
+    }
+    expect(renderInitiative(d, 'reader', { annex: true }).body).toContain('ch-levels');
+    expect(renderInitiative(d, 'working', { annex: true }).body).toContain('ch-levels');
+  });
+});
+
+describe('ملحق المراجع لا يعبر حدود الخروج (المرحلة 21، اختبارات العقد)', () => {
+  const review_levels = { level: 'beginner', chapters: [{ key: 'raid', title: 'سجل المخاطر', level: 'beginner', standing: 'required', criteria: [] }] };
+  it('docLevelsFor بالإذن وبغيره، وpublicDoc بالإذن وبغيره: الحقل غائب حتى لو دخل المصدر', () => {
+    const d = { ...docOf(same('beginner')), review_levels };
+    for (const show of [true, false]) {
+      expect('review_levels' in docLevelsFor(d, show)).toBe(false);
+      expect('review_levels' in publicDoc(d, { show_levels: show })).toBe(false);
+    }
+    expect(docLevelsFor(null, true)).toBe(null);
+  });
+  it('مسار المشارك capstone.doc ومسارا الراعي والجهة يمرون بحد الحذف في الخادم', () => {
+    const src = read('supabase/functions/leaders-api/capstone.ts');
+    const docFn = src.slice(src.indexOf('export async function doc(p: any)'), src.indexOf('// ── التحقق العام'));
+    expect(docFn).toMatch(/withoutReviewLevels\(await withTracking\(await recordFor\(p, 'participant'\), p\.id\)\)/);
+    expect(docFn).not.toMatch(/review_levels:/);
+    expect(src).toMatch(/doc: docLevelsFor\(await recordFor\(c\.participants, 'sponsor'\)/);
+    expect(src).toMatch(/doc: await withTracking\(docLevelsFor\(await recordFor\(p, 'org'\), show\), p\.id\)/);
   });
 });
 

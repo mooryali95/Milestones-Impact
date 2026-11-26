@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
+import { cleanLogoData } from './svg-clean.js';
 import { placeQuietly } from './cohort-intake.ts';
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
@@ -1555,6 +1556,12 @@ export async function save(a: Admin, b: Body) {
       row.invite_code = code;
     }
     if (isNew && !String(row.name || '').trim()) throw new Fail('اسم الجهة مطلوب');
+    // الشعار صورة مضمّنة وحدها، وSVG يُعقَّم (المرحلة 21): لا رابط خارجي يجلبه قارئ الوثيقة أو مولّد PDF
+    if ('logo' in row && row.logo && String(row.logo) !== String(current?.logo || '')) {
+      const logo = String(row.logo).trim();
+      if (!/^data:image\/(png|jpe?g|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(logo)) throw new Fail('الشعار صورة PNG أو JPG أو WEBP أو SVG مرفوعة، لا رابط خارجي');
+      try { row.logo = cleanLogoData(logo); } catch (e) { throw new Fail((e as Error).message); }
+    }
     if ('companion_allowed' in row) row.companion_allowed = row.companion_allowed !== false;
     if ('coord_nudges' in row) row.coord_nudges = row.coord_nudges !== false;
     // تخصيص شهادة الجهة: ما لا يُذكر يُورث من الإعداد العام

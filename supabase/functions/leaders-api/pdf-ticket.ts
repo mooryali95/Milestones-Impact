@@ -2,11 +2,12 @@
 import { signTicket } from '../_shared/pdf-ticket.js';
 import { Fail } from './core.ts';
 
-export async function pdfTicket(sub: string) {
+// fp: بصمة الوثيقة التي يُطلب ملفها (doc-quality.js docFingerprint)، فلا يطبع العامل بهذه التذكرة وثيقةً ببصمة غيرها (المرحلة 21)
+export async function pdfTicket(sub: string, fp: string | null = null) {
   const url = Deno.env.get('PDF_RENDER_URL') || '';
   const secret = Deno.env.get('PDF_RENDER_SECRET') || '';
   if (!/^https:\/\//.test(url) || secret.length < 32) return null;
-  return { url: url.replace(/\/$/, ''), ticket: await signTicket(secret, sub) };
+  return { url: url.replace(/\/$/, ''), ticket: await signTicket(secret, sub, Date.now(), fp) };
 }
 
 // تذكرة لأي جلسة صالحة (pdf.ticket، المرحلة 3أ): مشارك أو خبير أو منسق أو مدير، بالترتيب. الصاحب «نوع-معرّف» للسجل وسقف

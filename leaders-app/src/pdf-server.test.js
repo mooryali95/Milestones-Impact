@@ -76,7 +76,7 @@ describe('زر «تحميل PDF» في writeDocument (المرحلة 3أ)', () =
     expect(idx).toContain("'pdf.ticket': (b) => pdfTicketAny(b.token),");
     const t = read('supabase/functions/leaders-api/pdf-ticket.ts');
     for (const k of ['participant', 'expert', 'coordinator', 'admin']) expect(t).toContain(`\`${k}-`);
-    expect(read('supabase/functions/leaders-api/capstone.ts')).toMatch(/pdf: await pdfTicket\(p\.id\)/);
+    expect(read('supabase/functions/leaders-api/capstone.ts')).toMatch(/pdf: await pdfTicket\(p\.id, docFingerprint\(document\)\)/);
   });
 });
 

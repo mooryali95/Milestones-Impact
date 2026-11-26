@@ -7,7 +7,7 @@
 // فتقييم كل فصل منفردًا يبقى في «كتاب القائد ← التقييم».
 import { EXAMPLES } from '../../../supabase/content/initiative-guide/v1/examples.js';
 import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
@@ -75,13 +75,82 @@ const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', decli
 // طابور المراجعة أولًا، ثم ما قيد البناء، ثم «الكل» للمحفظة كاملة (تحليل لوحة الإدارة 2026-11-15)
 const FILTERS = ['submitted', 'accepted', 'returned', 'approved', 'draft'].map((k) => [k, STATUS[k]]);
 
-// kind: 'working' ملف العمل الكامل، و'institutional' الوثيقة المؤسسية (تُحجب حتى تكتمل الأسئلة العشرة)
-export async function openDoc(doc, toast, kind = 'working', onBlocked = null) {
+// kind: 'working' ملف العمل الكامل، و'institutional' الوثيقة المؤسسية (تُحجب حتى تكتمل الأسئلة العشرة).
+// شاشات الإدارة مراجع: ملحق المراجع بخيار صريح (annex، المرحلة 21) لا بمجرد وصول الحقل
+export async function openDoc(doc, toast, kind = 'working', onBlocked = null, options = { annex: true }) {
   const win = window.open('', '_blank');
   const [{ writeDocument }, { renderInitiative }] = await Promise.all([import('../../../src/lib/brand/doc.js'), import('../../../src/lib/brand/institutional.js')]);
-  const r = renderInitiative(doc, kind);
+  const r = renderInitiative(doc, kind, options);
   if (r.blocked) { win?.close(); return onBlocked ? onBlocked(r.missing) : toast(r.message); }
   if (!writeDocument(win, r.meta, r.body)) toast('اسمح بالنوافذ المنبثقة لعرض الوثيقة');
+}
+
+// تحميل الوثيقة النهائية PDF (المرحلة 21): زر أساسي ولوح صغير. «نسخة للإرسال» (الافتراض) بلا ملحق المراجع ولا صفحة القرار ولا ملحق
+// ما ينقص، أو «نسخة كاملة»، ومفاتيح ثلاثة للتعديل اليدوي. الخيارات لكل تنزيل ولا تُحفظ. الوثيقة من الخادم لحظة الطلب مع تذكرة
+// مربوطة ببصمتها، ويُسجَّل التنزيل admin.docExport. الملف عبر downloadBest فيطابق ما يُرى، وبلا نسبة الجاهزية
+const EXPORT_SWITCHES = [['decision', 'صفحة القرار'], ['annex', 'ملحق المراجع'], ['appendix', 'ملحق ما ينقص'], ['qr', 'رمز التحقق']];
+export function FinalDocExport({ participantId, approved = false }) {
+  const { toast } = useUI();
+  const [open, setOpen] = useState(false);
+  const [preset, setPreset] = useState('send');
+  const [opts, setOpts] = useState(null);
+  const [mod, setMod] = useState(null);
+  const [busy, setBusy] = useState('');
+  const trigger = useRef(null);
+  const wrap = useRef(null);
+  const panel = useRef(null);
+  const close = () => { setOpen(false); trigger.current?.focus(); };
+  useEffect(() => { if (open) panel.current?.querySelector('input[type=radio]:checked')?.focus(); }, [open]);
+  useEffect(() => {
+    if (!open || busy) return undefined;
+    const out = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', out);
+    return () => document.removeEventListener('mousedown', out);
+  }, [open, busy]);
+  useEffect(() => { if (open && !mod) import('../../../src/lib/brand/institutional.js').then(setMod); }, [open, mod]);
+  const base = mod?.EXPORT_PRESETS[preset];
+  const options = base ? { ...base, ...(opts || {}), ...(approved ? {} : { qr: false }) } : null;
+  const pick = (p) => { setPreset(p); setOpts(null); };
+  const download = async () => {
+    if (!options) return;
+    setBusy('لحظة…');
+    try {
+      const r = await L('admin.doc-export', { participant_id: participantId, preset, options });
+      if (!r.success) { setBusy(''); return toast(r.message); }
+      const [{ finalDocument }, { downloadBest }] = await Promise.all([import('../../../src/lib/brand/institutional.js'), import('../../../src/lib/brand/pdf.js')]);
+      const out = finalDocument(r.doc, options);
+      await downloadBest(out.meta, out.body, { server: r.pdf, onProgress: setBusy });
+      setOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast('تعذّر بناء الملف في هذا المتصفح. افتح الوثيقة واختر «طباعة» ثم «حفظ PDF».');
+    }
+    setBusy('');
+  };
+  return (
+    <span className="cps-export" ref={wrap}>
+      <button type="button" ref={trigger} className="btn-sm primary" aria-expanded={open} onClick={() => setOpen((x) => !x)}>تحميل الوثيقة النهائية PDF</button>
+      {open && (
+        <div ref={panel} className="la-card cps-export-panel" role="group" onKeyDown={(e) => { if (e.key === 'Escape' && !busy) { e.stopPropagation(); close(); } }} aria-label="خيارات الوثيقة النهائية">
+          <div className="la-row" role="radiogroup" aria-label="النسخة">
+            {[['send', 'نسخة للإرسال'], ['full', 'نسخة كاملة']].map(([k, t]) => (
+              <label key={k} className="row"><input type="radio" name={`cps-export-${participantId}`} checked={preset === k} onChange={() => pick(k)} /> {t}</label>
+            ))}
+          </div>
+          <div className="la-row">
+            {EXPORT_SWITCHES.map(([k, t]) => (
+              <label key={k} className="row" title={k === 'qr' && !approved ? 'رمز التحقق للوثيقة المعتمدة فقط' : undefined}><input type="checkbox" role="switch" disabled={!options || (k === 'qr' && !approved)} checked={k === 'qr' ? approved && !!options?.qr : !!options?.[k]} onChange={(e) => setOpts((o) => ({ ...(o || {}), [k]: e.target.checked }))} /> {t}</label>
+            ))}
+          </div>
+          {options && <p className="la-muted small" aria-live="polite">{mod.exportSummary(options, { approved })}</p>}
+          <div className="la-row">
+            <button type="button" className="btn-sm primary" disabled={!options || !!busy} onClick={download}>{busy || 'تحميل'}</button>
+            <button type="button" className="btn-sm ghost" disabled={!!busy} onClick={close}>إلغاء</button>
+          </div>
+        </div>
+      )}
+    </span>
+  );
 }
 
 // موقع الفصل من مستوى الوثيقة (المرحلة 4): مستوى القائد في إطار الفصل، ومطلوب أو اختياري أو باقٍ بقاعدة «لا فقد»،
@@ -212,7 +281,8 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           </div>
         </div>
         <div className="la-row">
-          <button className="btn-sm primary" onClick={() => openDoc(d.doc, toast)}>ملف العمل الكامل</button>
+          <FinalDocExport participantId={id} approved={c.status === 'approved'} />
+          <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast)}>ملف العمل الكامل</button>
           <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'institutional', setBlocked)}>الوثيقة المؤسسية</button>
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>
         </div>

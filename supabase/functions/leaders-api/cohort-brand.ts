@@ -2,7 +2,7 @@
 // قبل الترحيل: القراءة تقول «غير متاحة» والحفظ يرد 503 برسالة، ولا يفشل شيء آخر (الوثيقة تعمل بلا هوية دفعة)
 import { audit, db, Fail } from './core.ts';
 import type { Admin } from './admin.ts';
-import { cleanIdentity, IDENTITY_PROGRAM_MAX } from './cohort-identity.js';
+import { cleanIdentity, cohortIdentity, IDENTITY_PROGRAM_MAX } from './cohort-identity.js';
 
 type Body = Record<string, any>;
 const isUuid = (v: unknown) => /^[0-9a-f-]{36}$/i.test(String(v || ''));
@@ -12,8 +12,9 @@ export async function adminGet(_a: Admin, b: Body) {
   const { data, error } = await db.from('cohorts').select('id, name, identity').eq('id', String(b.cohort_id)).maybeSingle();
   if (error) return { success: true, ready: false, identity: { program: null, logo: null, color: null }, program_max: IDENTITY_PROGRAM_MAX };
   if (!data) throw new Fail('الدفعة غير موجودة', 404);
-  let identity;
-  try { identity = cleanIdentity((data as any).identity); } catch { identity = { program: null, logo: null, color: null }; }
+  let identity: any;
+  // شعار لم يعد يُقبل (المرحلة 21) يسقط وحده ويبقى الاسم واللون (cohortIdentity)
+  identity = cohortIdentity(data) || { program: null, logo: null, color: null };
   return { success: true, ready: true, identity, program_max: IDENTITY_PROGRAM_MAX };
 }
 
