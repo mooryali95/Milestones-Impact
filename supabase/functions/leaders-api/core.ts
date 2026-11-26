@@ -12,7 +12,7 @@ import { route, SLACK_DOWN_MS, SLACK_DOWN_SUBJECT, slackStateOf } from '../_shar
 import { notifySettings } from '../_shared/notify-settings.ts';
 import { passOk, reserveAttempt, signPass } from './guards.js';
 import { POLICY_DIGEST } from './policy-digest.js';
-import { MAIL_CATEGORIES, POLICY_MATERIAL_VERSION } from './labels.js';
+import { MAIL_CATEGORIES, mailAudience, POLICY_MATERIAL_VERSION, STAFF_MESSAGES_TEXT } from './labels.js';
 import { mailPlan, prefsUrl, unsubHeaders, unsubToken, unsubUrl, verifyUnsubToken, withPrefsFooter } from './mail-prefs.js';
 import { plainText, MAIL_REPLY_TO } from '../_shared/mail.ts';
 import { WORKSHOP_NO_HALL_NOTE } from './features.js';
@@ -242,18 +242,38 @@ export const isDemoMail = (to: string) => String(to || '').trim().toLowerCase().
 // بلا موعد تنتظر حتى تُرسل، يومًا بعد يوم
 // force: يتجاوز حصة الإشعارات ويبقى تحت السقف الكلي (كإرسال المدير من الصندوق). queue:false لا يدخل الطابور أبدًا
 // (بريد إتمام الحذف: الطابور يحفظ عنوان من مُحيت بياناته)
-// ── مركز رسائل المشارك (MAIL_CATEGORIES في labels.js، mail-prefs.js) ──
+// ── مركز الرسائل (MAIL_CATEGORIES في labels.js، mail-prefs.js) ──
 // بريد فئة قابلة للكتم إلى مشارك: يُحفظ في مركز رسائله دائمًا، ولا يُرسل إن كتمها، ويحمل ترويستي الإلغاء بنقرة وسطر
-// التفضيلات في ذيله. الضروري وبريد الفريق يمران كما هما. قبل الترحيل 20261128200000 (لا جدول) يمر البريد كما كان بلا ترويسة
+// التفضيلات في ذيله. الضروري وبريد غير المشارك يمران كما هما. قبل الترحيل 20261128200000 (لا جدول) يمر البريد كما كان بلا ترويسة.
+// الخبير والمنسق (20261129130000): المستلم يُسمّى صراحةً (recipient)، لأن البريد الواحد قد يكون لمشارك وخبير معًا فالبحث
+// بالعنوان يخلط الصندوقين. ملخصاتهما القابلة للكتم بالرمز رباعي الأجزاء ورابط تفضيلات /x أو /org. بلا recipient أو قبل
+// الترحيل: كما كان بلا ترويسة ولا تسجيل.
 export type MailCategory = keyof typeof MAIL_CATEGORIES;
-export async function prepareParticipantMail(to: string, subject: string, html: string, category: MailCategory | null, ref: string | null) {
+export type MailRecipient = { kind: 'participant' | 'expert' | 'coordinator'; id: string };
+export const OWNER_COLUMN = { participant: 'participant_id', expert: 'expert_id', coordinator: 'coordinator_id' } as const;
+const passThrough = (html: string) => ({ send: true, html, headers: undefined as Record<string, string> | undefined });
+// notify: المدخل الواحد لمركز الرسائل. يكتب الإشعار في صندوق صاحبه ثم يقرر البريد بـmailPlan، ويعيد ما يُرسل وبأي ترويسة.
+// sendMail يستدعيه لكل فئة غير الرموز والتنبيه، فمركز المشارك حالة خاصة منه. mail: false إشعار في المنصة وحدها بلا بريد
+// (emailed=false)، ومعه actionUntil لعنصر «ينتظرك». يتسامح مع غياب الجداول أو الأعمدة: البريد يمر كما كان
+export type NotifyInput = {
+  to?: string; subject: string; html: string; category: MailCategory | null; ref?: string | null;
+  recipient?: MailRecipient | null; about?: string | null; mail?: boolean; actionUntil?: string | null;
+};
+export async function notify(n: NotifyInput) {
+  const audience = n.category ? mailAudience(n.category) : null;
+  if (audience === 'expert' || audience === 'coordinator') return notifyStaff(n, audience);
+  return notifyParticipant(n);
+}
+
+async function notifyParticipant({ to = '', subject, html, category, ref = null, mail = true }: NotifyInput) {
   const plan = mailPlan(category, []);
-  if (!plan.notify || !category) return { send: true, html, headers: undefined as Record<string, string> | undefined };
+  if (!plan.notify || !category) return passThrough(html);
+  // المشارك بعنوانه كما كان
   const { data: p, error } = await db.from('participants').select('id, is_demo').eq('email', String(to || '').trim().toLowerCase()).limit(1).maybeSingle();
   if (error || !p || p.is_demo) return { send: true, html, headers: undefined };
   const pref = await db.from('participant_mail_prefs').select('muted').eq('participant_id', p.id).maybeSingle();
   if (pref.error) return { send: true, html, headers: undefined };
-  const decided = mailPlan(category, pref.data?.muted || []);
+  const decided = mail ? mailPlan(category, pref.data?.muted || []) : { notify: true, send: false, headers: false };
   const note = await db.from('participant_notifications').insert({ participant_id: p.id, category, title: String(subject || '').slice(0, 300), excerpt: plainText(html).slice(0, 600), ref, emailed: decided.send });
   if (note.error) console.error('participant_notifications insert:', note.error);
   if (!decided.send) return { send: false, html, headers: undefined };
@@ -261,27 +281,66 @@ export async function prepareParticipantMail(to: string, subject: string, html: 
   return { send: true, html: withPrefsFooter(html, prefsUrl(CONFIG.appUrl, category)), headers: unsubHeaders(unsubUrl(CONFIG.url, token), MAIL_REPLY_TO) };
 }
 
+// بريد الخبير والمنسق: صاحبه من recipient وحده (لا بحث بالعنوان)، وفئته لجمهوره
+async function notifyStaff({ subject, html, category, ref = null, recipient = null, about = null, mail = true, actionUntil = null }: NotifyInput, audience: 'expert' | 'coordinator') {
+  if (!category || !recipient || recipient.kind !== audience || !/^[0-9a-f-]{36}$/i.test(String(recipient.id || ''))) return passThrough(html);
+  const plan = mailPlan(category, [], audience);
+  if (!plan.notify && mail) return passThrough(html);
+  const col = OWNER_COLUMN[audience];
+  const pref = await db.from('participant_mail_prefs').select('muted').eq(col, recipient.id).maybeSingle();
+  if (pref.error) return passThrough(html);   // قبل الترحيل 20261129130000: كما كان
+  const decided = mail ? mailPlan(category, pref.data?.muted || [], audience) : { notify: true, send: false, headers: false };
+  const note = await db.from('participant_notifications').insert({
+    [col]: recipient.id, category, title: String(subject || '').slice(0, 300), excerpt: plainText(html).slice(0, 600), ref, emailed: decided.send,
+    ...(about ? { about_participant_id: about } : {}), ...(actionUntil ? { action_until: actionUntil } : {}),
+  });
+  if (note.error) console.error('participant_notifications insert (staff):', note.error);
+  if (!decided.send) return { send: false, html, headers: undefined };
+  if (!decided.headers) return passThrough(html);
+  const token = await unsubToken(CONFIG.pepper, recipient.id, category, audience);
+  return { send: true, html: withPrefsFooter(html, prefsUrl(CONFIG.appUrl, category, audience), audience === 'coordinator' ? STAFF_MESSAGES_TEXT.coordinator.mailFooter : undefined), headers: unsubHeaders(unsubUrl(CONFIG.url, token), MAIL_REPLY_TO) };
+}
+
+// عناصر «ينتظرك» في صندوق الخبير (المرحلة 2ج): ما ينتظر فعلًا منه يحمل action_until (مهلة العرض، أو أسبوع لما لا مهلة له)،
+// ويُغلق (resolved_at) في الموضع الذي يُنجز فيه العمل بمرجع الإشعار نفسه، فلا يبقى في «ينتظرك» ما فُرغ منه.
+// تعذّر الإغلاق (قبل الترحيل 20261129130000) لا يُسقط العمل نفسه
+export const ACTION_DAYS = 7;
+export const actionDeadline = (days = ACTION_DAYS, now = Date.now()) => new Date(now + days * 864e5).toISOString();
+export async function resolveNotes(ref: string, owner: MailRecipient | null = null) {
+  try {
+    let q = db.from('participant_notifications').update({ resolved_at: new Date().toISOString() }).eq('ref', ref).is('resolved_at', null);
+    if (owner) q = q.eq(OWNER_COLUMN[owner.kind], owner.id);
+    const { error } = await q;
+    if (error) console.error('participant_notifications resolve:', ref, error.message);
+  } catch (e) { console.error('participant_notifications resolve:', ref, e); }
+}
+
 // الإلغاء بنقرة (RFC 8058): POST من برنامج البريد يكتم الفئة الموقَّعة في الرمز ويرد 200 بلا تحويل. GET (فتح الرابط في
-// متصفح) لا يغيّر شيئًا، ويحوّل إلى قسم التفضيلات في مركز الرسائل، فلا يكتم فاحصُ روابط شيئًا بفتحه
+// متصفح) لا يغيّر شيئًا، ويحوّل إلى قسم التفضيلات في مركز الرسائل، فلا يكتم فاحصُ روابط شيئًا بفتحه.
+// الرمز يحدد صاحبه: المشارك (ثلاثي الأجزاء كما كان) أو الخبير أو المنسق (رباعي)، فيُكتب صفه بعموده
 export async function unsubscribeRequest(req: Request, token: string) {
   const t = await verifyUnsubToken(CONFIG.pepper, token);
-  if (req.method !== 'POST') return new Response(null, { status: 303, headers: { Location: prefsUrl(CONFIG.appUrl, t?.category || '') } });
+  if (req.method !== 'POST') return new Response(null, { status: 303, headers: { Location: prefsUrl(CONFIG.appUrl, t?.category || '', t?.kind || 'participant') } });
   if (!t) return new Response('invalid token', { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-  const cur = await db.from('participant_mail_prefs').select('muted').eq('participant_id', t.participantId).maybeSingle();
+  const col = OWNER_COLUMN[t.kind as keyof typeof OWNER_COLUMN];
+  const cur = await db.from('participant_mail_prefs').select('muted').eq(col, t.id).maybeSingle();
   if (cur.error) return new Response('unavailable', { status: 503 });
   const muted = [...new Set([...(cur.data?.muted || []), t.category])];
-  const { error } = await db.from('participant_mail_prefs').upsert({ participant_id: t.participantId, muted, updated_at: new Date().toISOString() }, { onConflict: 'participant_id' });
+  const { error } = await db.from('participant_mail_prefs').upsert({ [col]: t.id, muted, updated_at: new Date().toISOString() }, { onConflict: col });
   if (error) return new Response('unavailable', { status: 503 });
-  await audit('participant', t.participantId, 'mail.unsubscribe', 'participants', t.participantId, null, { category: t.category, via: 'one-click' }).catch(() => {});
+  const entity = t.kind === 'participant' ? 'participants' : t.kind === 'expert' ? 'experts' : 'org_coordinators';
+  await audit(t.kind, t.id, 'mail.unsubscribe', entity, t.id, null, { category: t.category, via: 'one-click' }).catch(() => {});
   return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }
 
 // category: فئة الرسالة من MAIL_CATEGORIES، إلزامية لكل بريد غير الرموز والتنبيه (اختبار mail-categories)
-export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', category = null, ref = null, purpose = null, expiresAt = null, force = false, queue = true }: { kind?: MailKind; category?: MailCategory | null; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean } = {}): Promise<void | 'queued'> {
+// recipient: صاحب البريد صراحةً لبريد الخبير والمنسق (مركز رسائله وتفضيلاته)، وabout: المشارك الذي يذكره الإشعار بالاسم.
+// noteRef: مرجع الإشعار في الصندوق إن خالف مرجع البريد (ref يبقى لعدّ البريد ومحو طابور المحذوف)، وactionUntil لعنصر «ينتظرك»
+export async function sendMail(to: string, subject: string, html: string, attachments: MailAttachment[] = [], { kind = 'notify', category = null, ref = null, purpose = null, expiresAt = null, force = false, queue = true, recipient = null, about = null, noteRef = null, actionUntil = null }: { kind?: MailKind; category?: MailCategory | null; ref?: string | null; purpose?: string | null; expiresAt?: string | null; force?: boolean; queue?: boolean; recipient?: MailRecipient | null; about?: string | null; noteRef?: string | null; actionUntil?: string | null } = {}): Promise<void | 'queued'> {
   if (isDemoMail(to)) { console.info('leaders-api: mail to the demo account skipped:', subject); return; }
   let headers: Record<string, string> | undefined;
   if (kind !== 'code' && kind !== 'alert') {
-    const prep = await prepareParticipantMail(to, subject, html, category, ref);
+    const prep = await notify({ to, subject, html, category, ref: noteRef ?? ref, recipient, about, actionUntil });
     if (!prep.send) return;   // كتمها المشارك: في مركز رسائله وحده
     html = prep.html; headers = prep.headers;
   }

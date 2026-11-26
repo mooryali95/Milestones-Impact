@@ -139,6 +139,12 @@ export const MATERIAL_CHANGE_AR = 'غرض جديد، أو فئة بيانات ج
 // لا تُعرض في رحلة المشارك ولا يُرسل بها بريد. الجوهري يطلب الموافقة بسطر واحد عند الدخول، وغير الجوهري لا يُعلَن.
 // النسخة تاريخ وحده (قيد consent_events.version)، ونسخة ثانية في اليوم نفسه تأخذ تاريخ اليوم التالي.
 export const POLICY_CHANGES = Object.freeze([
+  // غير جوهرية بقرار المالك 2026-11-25 (تصور PDF من الخادم، القرار 8): Cloudflare معالج مسمّى قائم (الاستضافة والحماية)، والوثيقة
+  // نفسها التي تُطبع في متصفحك تُرسل إليه لحظة طلب تحميلها فيعيدها ملفًا ولا يحفظها. لا غرض ولا فئة بيانات ولا معالج ولا مدة جديدة،
+  // فلا يُعلَن للمشارك ولا تُعاد الموافقة. النسخة تاريخ اليوم التالي لآخر نسخة (2026-11-26)
+  { version: '2026-11-27', material: false, items: Object.freeze([
+    'ملفات PDF: حين تطلب تحميل وثيقة من المنصة (وثيقة مبادرتك أو تقرير أو شهادة)، تُرسل الوثيقة نفسها إلى Cloudflare، معالجنا القائم للاستضافة، فيعيدها ملفًا نصه قابل للتحديد ولا يحفظ محتواها. وإن تعذّر ذلك يُبنى الملف في متصفحك كما كان.',
+  ]) },
   // غير جوهرية (مراجعة المالك 2026-11-23): لا غرض ولا فئة بيانات ولا معالج ولا مدة جديدة. اختصار تفاصيل تقنية لا تلزم القارئ
   // (آليات الحماية والإخفاء وحقول السجلات)، وتسمية دول المعالجة خارج المملكة صراحة. فلا يُعلَن ولا تُعاد الموافقة
   { version: '2026-11-26', material: false, items: Object.freeze([
@@ -350,21 +356,36 @@ export const WORKING_FILE_AR = 'ملف العمل الكامل';
 export const DOC_LIVE_AR = 'نسخة حية غير معتمدة';
 export const docDownloadAr = (name) => `تحميل ${name} PDF`;
 export const WORKING_DOWNLOAD_AR = 'تحميل ملف العمل PDF';
-// ── فئات بريد المشارك ومركز الرسائل (المصدر الواحد، اعتمده المالك 2026-11-25) ──
-// كل sendMail في leaders-api يسمي فئته (اختبار mail-categories يمنع موضع إرسال بلا فئة). locked: بريد ضروري لا يُكتم
-// ولا يحمل ترويسة إلغاء الاشتراك (رموز الدخول، الموافقة والسياسة، الإيصالات والدفع، الأمان والخصوصية). staff: بريد لغير
-// المشارك (الإدارة والخبير والمنسق والمقيّم) لا يدخل مركز رسائل المشارك. ما سواهما يقرر المشارك وصوله بالبريد، ويُحفظ
-// في مركز الرسائل وصل البريد أو كُتم.
+// ── فئات البريد ومركز الرسائل (المصدر الواحد، اعتمده المالك 2026-11-25، وتوسيعه للخبراء والمنسقين 2026-11-25) ──
+// كل sendMail في leaders-api يسمي فئته (اختبار mail-categories يمنع موضع إرسال بلا فئة). audience: لمن تُرسل الفئة
+// (participant مشارك، expert خبير أو مستشار، coordinator منسق جهة، ops المالك والإدارة، external طرف بلا حساب).
+// locked: بريد تشغيلي أو ضروري لا يُكتم ولا يحمل ترويسة إلغاء الاشتراك (رموز الدخول والموافقة والدفع والأمان للمشارك،
+// والتكليف والدعوة والطلب المنتظر للخبير والمنسق، وتنبيهات التشغيل للإدارة، والطلب لمرة واحدة للطرف الخارجي).
+// ما سواها يقرر صاحبها وصوله بالبريد، ويُحفظ في مركز رسائله وصل البريد أو كُتم. ملخصا الإدارة (اليومي ونبض الدفعة)
+// يُضبطان من إعدادات الإدارة لا بإلغاء الاشتراك، فهما ops مقفلة.
 export const MAIL_CATEGORIES = Object.freeze({
-  essential: { label: 'رسائل الحساب الضرورية', hint: 'رموز الدخول والأمان والدفع والإيصالات والخصوصية. تصلك دائمًا.', locked: true },
-  journey: { label: 'تحديثات رحلتك', hint: 'اعتماد مسارك وبنوده وملاحظات المستشار والنماذج والمبادرة والشهادة.' },
-  sessions: { label: 'الجلسات والورش', hint: 'مواعيد الورش وجلسات التوجيه وتغييرها وتذكيرها.' },
-  experts: { label: 'الخبراء والتقدير', hint: 'خبيرك المسند وطلبات التوجيه ومقيّموك وتقدير 360.' },
-  reminders: { label: 'التذكيرات والمتابعة', hint: 'تذكيرات خطوتك التالية ومتابعة الأثر والمسار الذي ينتظرك.' },
-  staff: { label: 'بريد الفريق', hint: '', locked: true, staff: true },
+  essential: { audience: 'participant', label: 'رسائل الحساب الضرورية', hint: 'رموز الدخول والأمان والدفع والإيصالات والخصوصية. تصلك دائمًا.', locked: true },
+  journey: { audience: 'participant', label: 'تحديثات رحلتك', hint: 'اعتماد مسارك وبنوده وملاحظات المستشار والنماذج والمبادرة والشهادة.' },
+  sessions: { audience: 'participant', label: 'الجلسات والورش', hint: 'مواعيد الورش وجلسات التوجيه وتغييرها وتذكيرها.' },
+  experts: { audience: 'participant', label: 'الخبراء والتقدير', hint: 'خبيرك المسند وطلبات التوجيه ومقيّموك وتقدير 360.' },
+  reminders: { audience: 'participant', label: 'التذكيرات والمتابعة', hint: 'تذكيرات خطوتك التالية ومتابعة الأثر والمسار الذي ينتظرك.' },
+  expert_work: { audience: 'expert', label: 'عملك في البرنامج', hint: 'الدعوة ورابط الدخول، والطلبات والعروض والاعتمادات التي تنتظرك، وورشك ومجموعاتك وتكليفاتك. تصلك دائمًا.', locked: true },
+  expert_digest: { audience: 'expert', label: 'الملخصات والإعلامات', hint: 'ملخص النماذج اليومي، وإعلام جاهزية تقرير 360.' },
+  coord_work: { audience: 'coordinator', label: 'عمل الجهة', hint: 'دعوة البوابة، والاستحقاقات والمقاعد، وما ينتظر تأكيدك. تصلك دائمًا.', locked: true },
+  coord_digest: { audience: 'coordinator', label: 'الملخص الأسبوعي', hint: 'ملخص جهتك الأسبوعي.' },
+  ops: { audience: 'ops', label: 'تشغيل المنصة', hint: 'تنبيهات التشغيل والأمان والملخصات، تُضبط من إعدادات الإدارة.', locked: true },
+  request: { audience: 'external', label: 'طلب لمرة واحدة', hint: 'طلب تقدير أو تأييد أو تأكيد أثر إلى من لا حساب له.', locked: true },
 });
-// الفئات التي يختار المشارك وصولها بالبريد، بترتيب العرض في مركز الرسائل
-export const MUTABLE_MAIL_CATEGORIES = Object.freeze(Object.keys(MAIL_CATEGORIES).filter((k) => !MAIL_CATEGORIES[k].locked));
+export const MAIL_AUDIENCES = Object.freeze(['participant', 'expert', 'coordinator', 'ops', 'external']);
+export const mailAudience = (k) => MAIL_CATEGORIES[String(k || '')]?.audience || null;
+// الفئات التي يختار صاحبها وصولها بالبريد لجمهور بعينه، بترتيب العرض في مركز الرسائل
+export const mutableFor = (audience) => Object.freeze(Object.keys(MAIL_CATEGORIES).filter((k) => MAIL_CATEGORIES[k].audience === audience && !MAIL_CATEGORIES[k].locked));
+export const isMutableFor = (audience, k) => mutableFor(audience).includes(String(k || ''));
+// فئات جمهور بعينه (للعرض في التفضيلات)، مقفلها وقابلها للكتم
+export const categoriesFor = (audience) => Object.entries(MAIL_CATEGORIES).filter(([, c]) => c.audience === audience)
+  .map(([key, c]) => ({ key, label: c.label, hint: c.hint, locked: !!c.locked }));
+// فئات المشارك القابلة للكتم (كما كانت): الرمز ثلاثي الأجزاء ومركز رسائل المشارك عليها وحدها
+export const MUTABLE_MAIL_CATEGORIES = mutableFor('participant');
 export const isMutableMailCategory = (k) => MUTABLE_MAIL_CATEGORIES.includes(String(k || ''));
 export const MESSAGES_TEXT = Object.freeze({
   tab: 'الرسائل',
@@ -381,4 +402,28 @@ export const MESSAGES_TEXT = Object.freeze({
   loadError: 'تعذّر تحميل الرسائل، حاول بعد قليل.',
   mailFooter: 'اختر ما يصلك بالبريد من مركز الرسائل',
   unsubDone: 'أوقفنا هذه الرسائل بالبريد، وتبقى في مركز الرسائل.',
+  // عناصر «ينتظرك» (صندوق الخبير): ما ينتظر فعلًا منه حتى يُنجز في موضعه
+  waiting: 'ينتظرك',
+  waitingLead: 'ما ينتظر ردك أو اعتمادك، ويخرج من هنا حين تنجزه.',
+  until: 'حتى',
+  overdue: 'فات موعده',
+  resolved: 'أُنجز',
+});
+// نصوص المركز للخبير والمنسق فوق MESSAGES_TEXT (المكوّن نفسه MessageCenter)
+export const STAFF_MESSAGES_TEXT = Object.freeze({
+  expert: Object.freeze({
+    lead: 'ما أرسلناه إليك عن عملك في البرنامج في مكان واحد، والملخصات تصلك بالبريد بقرارك.',
+    empty: 'لا رسائل بعد. ما نرسله إليك عن عملك في البرنامج يظهر هنا.',
+    open: 'الرسائل',
+    waitingGo: 'افتحه في لوحتك',
+  }),
+  coordinator: Object.freeze({
+    title: 'بريد الجهة',
+    lead: 'اختر ما يصلك من بريد البرنامج. عمل الجهة يصلك دائمًا.',
+    // بلا صندوق للمنسق الآن (قرار المالك 6): ما يُوقف بالبريد لا يظهر في مكان آخر
+    prefsLead: 'أوقف ما لا تريده بالبريد.',
+    mailFooter: 'اختر ما يصلك بالبريد من بوابة جهتك',
+    unsubDone: 'أوقفنا هذه الرسائل بالبريد.',
+    open: 'بريد الجهة',
+  }),
 });

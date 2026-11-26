@@ -82,10 +82,10 @@ export async function advisorsOf(ps: { id: string; organization_id?: string | nu
 }
 
 // تسليم نموذج: البطاقة (البوابة) تُبلَّغ فورًا لمراجعها، وما عداها يدخل الملخص اليومي (model-digest.ts) بدل بريد لكل تسليم
-export async function notifySubmission(p: any, m: { key?: string; title_ar: string }) {
+export async function notifySubmission(p: any, m: { id?: string; key?: string; title_ar: string }) {
   if (!isGateModel(m.key)) return { sent: false, digest: true };
   const { notifyGate } = await import('./model-digest.ts');
-  return { ...(await notifyGate(p, m.title_ar)), digest: false };
+  return { ...(await notifyGate(p, m.title_ar, m.id || null)), digest: false };
 }
 
 // دفعات هذا الخبير بصفته مستشارها الأساسي
@@ -151,11 +151,12 @@ export async function reviews(e: any) {
 }
 
 export async function review(e: any, b: Body) {
-  const { data: s } = await db.from('model_submissions').select('id, participant_id, participants(id, organization_id, is_demo)').eq('id', String(b.id || '')).maybeSingle();
+  const { data: s } = await db.from('model_submissions').select('id, participant_id, model_id, participants(id, organization_id, is_demo)').eq('id', String(b.id || '')).maybeSingle();
   if (!s) throw new Fail('التسليم غير موجود', 404);
   const adv = await advisorOf((s as any).participants);
   if (adv?.id !== e.id) throw new Fail('هذا التسليم ليس من دفعتك', 403);
-  return reviewSubmissionBy(e.email, 'system', b);
+  const out = await reviewSubmissionBy(e.email, 'system', b);
+  return out;
 }
 
 // «قرأتها كلها»: التفويض نفسه في التقييم الواحد، مستشار المشارك الفعلي وحده

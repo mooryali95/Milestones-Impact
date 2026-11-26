@@ -11,6 +11,8 @@ import UpdateBar from '../../shared/ui/UpdateBar.jsx';
 import UpdateRefusal from './UpdateRefusal.jsx';
 import { trackTopbarHeight } from './topbar-height.js';
 import { installLatinDigits } from '../../shared/ui/latin-digits.js';
+import { setPdfTicketSource } from '../../src/lib/brand/pdf-source.js';
+import { pdfTicket } from './api.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
@@ -30,6 +32,8 @@ installAppUpdate(window);
 // الشاشات الثقيلة تُحمَّل كسولًا (lazy في App.jsx)؛ هذا ما يظهر أثناء جلب قطعتها
 const Loading = () => <div className="center-load"><div className="spinner" aria-label="جارٍ التحميل" /></div>;
 installLatinDigits();
+// زر «تحميل PDF» في كل وثيقة writeDocument يطلب تذكرة الخادم بجلسة الصفحة (المرحلة 3أ)، وإلا يبني المتصفح الملف
+setPdfTicketSource(() => pdfTicket());
 createRoot(document.getElementById('root')).render(<ErrorBoundary><UpdateBar to={viewHref} /><Suspense fallback={<Loading />}><App /></Suspense><UpdateRefusal to={viewHref} /></ErrorBoundary>);
 trackTopbarHeight(window);
 // بعد كل نشر تتغير أسماء القطع المهشّرة؛ تبويب مفتوح قبل النشر يفشل تحميلها المسبق، فيُعاد تحميله مرة واحدة

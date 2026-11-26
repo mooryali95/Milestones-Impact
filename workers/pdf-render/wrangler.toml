@@ -12,5 +12,14 @@ routes = [{ pattern = "pdf.sunkvalue.com", custom_domain = true }]
 
 [vars]
 APP_ORIGIN = "https://leaders.sunkvalue.com"
-ALLOWED_ORIGINS = "https://leaders.sunkvalue.com"
+# أصول التطبيقات التي تطلب العامل وتُحمَّل منها الخطوط والصور: القادة والإدارة (المرحلة 3ب)
+ALLOWED_ORIGINS = "https://leaders.sunkvalue.com,https://admin.sunkvalue.com"
 # السر PDF_RENDER_SECRET يُضبط في Cloudflare لا هنا (wrangler secret put PDF_RENDER_SECRET)، وبالقيمة نفسها في أسرار دوال Supabase
+
+# سقف الطلبات لكل صاحب تذكرة (Workers Rate Limiting): 20 ملفًا في الدقيقة، ضبطًا لكلفة Browser Rendering.
+# بلا هذا الربط (خطة لا تدعمه) يعمل العامل بلا سقف كما كان
+[[unsafe.bindings]]
+name = "PDF_LIMIT"
+type = "ratelimit"
+namespace_id = "1101"
+simple = { limit = 20, period = 60 }

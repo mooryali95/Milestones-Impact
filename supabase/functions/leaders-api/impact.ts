@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // المنطق الحسابي في logic.js (يُختبر في vitest)، وهنا جمع البيانات فقط.
 // المشارك يرى ملخصًا واحدًا، والإدارة ترى التفصيل لكل إطار والدفعة كاملة.
-import { all, allFor, audit, CONFIG, db, Fail, hash, logConsent, must, randomToken, raterConfirmMail, raterMail, raterRejectedMail, sendMail } from './core.ts';
+import { actionDeadline, all, allFor, audit, CONFIG, db, Fail, hash, logConsent, must, randomToken, raterConfirmMail, raterMail, raterRejectedMail, resolveNotes, sendMail } from './core.ts';
 import { RATER_FLAG_AR, RATER_VERIFICATION_AR, raterVerification } from './domains.js';
 import { advisorOf } from './advisor.ts';
 import { lastBaseline, postInstrumentFor, requirePostOpen } from './participant.ts';
@@ -291,15 +291,16 @@ export async function raterCheck(p: any, email: string) {
 }
 
 // من يؤكد مقيّمًا منتظرًا: مستشار دفعة المشارك، ومنسقو جهته ممن يرون قائمة المشاركين. بريد بلا عنوان المقيّم
-async function notifyConfirmers(p: any, flags: string[]) {
+// raterId: مرجع عنصر «ينتظرك» في صندوق المستشار (rater-confirm:<id>)، يُغلق عند التأكيد أو الرفض
+async function notifyConfirmers(p: any, flags: string[], raterId: string) {
   const why = flags.map((f) => (RATER_FLAG_AR as Record<string, string>)[f] || f).join('، ');
   const adv = await advisorOf(p).catch(() => null);
-  const to: [string, string][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`]] : [];
+  const to: [string, string, 'expert_work' | 'coord_work', string | null][] = adv ? [[adv.email, `${CONFIG.appUrl}/x`, 'expert_work', adv.id]] : [];
   if (p.organization_id) {
     const { data: coords } = await db.from('org_coordinators').select('email, status, permissions').eq('organization_id', p.organization_id).neq('status', 'suspended');
-    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`]);
+    for (const c of coords || []) if (coordPermissions((c as any).permissions).list) to.push([(c as any).email, `${CONFIG.appUrl}/org`, 'coord_work', null]);
   }
-  for (const [email, url] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { category: 'staff', ref: `participant:${p.id}` }).catch((e) => console.error('rater confirm notify', e));
+  for (const [email, url, category, xid] of to) await sendMail(email, `مقيّم بانتظار تأكيدك: ${p.full_name || 'مشارك'}`, raterConfirmMail(p.full_name || 'مشارك', why, url), [], { category, ...(xid ? { recipient: { kind: 'expert' as const, id: xid }, about: p.id } : {}), ref: `participant:${p.id}`, noteRef: `rater-confirm:${raterId}`, actionUntil: actionDeadline() }).catch((e) => console.error('rater confirm notify', e));
   return to.length;
 }
 
@@ -350,13 +351,13 @@ export async function invite(p: any, b: Body) {
   // D19: تعذّر الحفظ (ومنه قيد الحالة أو الحكم) يفشل الدعوة، ولا تُرسل بلا علامات ولا تحقق
   const saved = must(await write(row)) as { id: string };
   if (awaiting) {
-    const told = await notifyConfirmers(p, check.flags);
+    const told = await notifyConfirmers(p, check.flags, saved.id);
     await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: 'pending', flags: check.flags, confirmers: told });
     return mine(p);
   }
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
   // ref المقيّم: منه نسب استجابة المقيّمين في سجل الإرسال (D15)
-  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { category: 'staff', ref: `rater:${saved.id}` });
+  await sendMail(email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(name, p.full_name || 'زميلك', link, phase), [], { category: 'request', ref: `rater:${saved.id}` });
   await audit('participant', p.id, 'rater.invite', 'raters', saved.id, null, { email, relation, phase, verification: check.verdict });
   return mine(p);
 }
@@ -395,6 +396,7 @@ export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: 
     if (reason.length < 5) throw new Fail('اكتب سبب عدم الاعتماد ليصل المشارك');
     must(await db.from('raters').update({ status: 'revoked', verification: 'rejected', verified_by: who, verified_at: now }).eq('id', id).eq('status', 'awaiting'));
     await audit(actorType, who, 'rater.reject', 'raters', id, null, { participant_id: r.participant_id, reason });
+    await resolveNotes(`rater-confirm:${id}`);
     if (r.participants?.email) await sendMail(r.participants.email, 'لم يُعتمد أحد مقيّميك', raterRejectedMail(r.participants.full_name, r.full_name || r.email, reason), [], { category: 'experts', ref: `participant:${r.participant_id}` }).catch((e) => console.error('rater reject mail', e));
     return { success: true, decision: 'reject' };
   }
@@ -403,8 +405,9 @@ export async function confirmRater(by: { kind: 'expert' | 'coordinator'; email: 
   must(await db.from('raters').update({ status: 'invited', verification: 'confirmed', verified_by: who, verified_at: now, ...tokenPatch(r, await hash(token)),
     invited_at: now, expires_at: new Date(Date.now() + 30 * 864e5).toISOString() }).eq('id', id).eq('status', 'awaiting'));
   const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
-  await sendMail(r.email, `طلب تقدير من ${r.participants?.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, r.participants?.full_name || 'زميلك', link, r.phase), [], { category: 'staff', ref: `rater:${id}` });
+  await sendMail(r.email, `طلب تقدير من ${r.participants?.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, r.participants?.full_name || 'زميلك', link, r.phase), [], { category: 'request', ref: `rater:${id}` });
   await audit(actorType, who, 'rater.confirm', 'raters', id, null, { participant_id: r.participant_id });
+  await resolveNotes(`rater-confirm:${id}`);
   return { success: true, decision: 'confirm' };
 }
 

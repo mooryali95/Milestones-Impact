@@ -457,7 +457,7 @@ export async function coachingInstant(p: any, b: Body) {
   if (c.coach_email) {
     sendMail(c.coach_email, `اتصال فوري: ${p.full_name}`, mailShell('مشارك ينضم إليك الآن',
       mailText(`${bdi(p.full_name)} طلب اتصالًا فوريًا في «${bdi(r.title_ar)}» وهو في طريقه إلى غرفتك الآن.`) + mailButton(c.instant_url, 'افتح الغرفة'),
-      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' }), [], { category: 'staff', expiresAt: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString() }).catch((e) => console.error(e));
+      { family: 'sessions', preheader: `${p.full_name} في طريقه إلى غرفتك`, footnote: '' }), [], { category: 'expert_work', expiresAt: new Date(now.getTime() + (Number(c.minutes) || 30) * 6e4).toISOString() }).catch((e) => console.error(e));
   }
   await audit('participant', p.email, 'coaching.instant', 'stage_requirements', r.id);
   return { success: true, join_url: c.instant_url };
@@ -1088,7 +1088,7 @@ async function trainerMail(kind: keyof typeof WORKSHOP_TRAINER_MAIL, s: any, seq
   const link = online && !off ? s.join_url || null : null;
   const file = [icsEvent({ uid: s.id, start: s.starts_at, end: s.ends_at, title: `${s.title_ar} · برنامج القادة`, description: s.location_ar || 'Milestone Impact · Leaders Program', sequence: seq, ...(off ? { method: 'CANCEL' as const } : { url: link || '' }) })];
   try {
-    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: online ? SESSION_MODE_AR.online : s.location_ar || null, cohort, count, joinUrl: link, changed }), file, { category: 'staff', kind: 'bulk', ref: s.id, expiresAt: s.starts_at });
+    const res = await sendMail(e.email, WORKSHOP_TRAINER_MAIL[kind].subject, workshopTrainerMail(kind, e.full_name, { title: s.title_ar, when: workshopWhen(s.starts_at), where: online ? SESSION_MODE_AR.online : s.location_ar || null, cohort, count, joinUrl: link, changed }), file, { category: 'expert_work', kind: 'bulk', ref: s.id, recipient: { kind: 'expert', id: s.expert_id }, expiresAt: s.starts_at });
     return res === 'queued' ? 'queued' : 'sent';
   } catch (err) { console.error('workshop trainer mail', kind, s.id, (err as Error).message); return 'failed'; }
 }

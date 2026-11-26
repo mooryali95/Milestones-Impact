@@ -6,7 +6,7 @@
 // مباشر للجداول من المتصفح؛ مخطط leaders مغلق إلا لـ service_role.
 //
 // الإجراءات:
-//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · cert.verify · doc.verify (التحقق العام من وثيقة مبادرة معتمدة ببصمتها) · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
+//   مفتوحة:   client.event (أحداث الإخفاق من جهة العميل) · pdf.ticket (تذكرة PDF لأي جلسة صالحة، تُفحص داخله) · cert.verify · doc.verify (التحقق العام من وثيقة مبادرة معتمدة ببصمتها) · rater.get · rater.submit (برابط المقيّم) · sponsor.get · sponsor.submit (برابط الراعي) · share.get · share.note (برابط المشاركة) · outcome.get · outcome.submit (تأكيد الراعي لأثر المبادرة) · expert.apply (طلب انضمام خبير) · offer.get · offer.respond (برابط عرض الخبير) · cron.expert-offers (بسرّ المجدول) · auth.start · auth.verify · auth.google · org.info · cron.reminders (بسرّ المجدول) · passkey.auth-options · passkey.auth-verify · workshop.scan (إيصال مسح رمز الحضور قبل الدخول)
 //   للمشارك:  me · org.logo · logout · sessions.list · sessions.revoke · profile.save · upload.url · cv.attach
 //             assessment.get · assessment.answer · assessment.submit
 //             requirement.update · passkey.register-options · passkey.register-verify · passkey.list · passkey.remove · passkey.dismiss
@@ -46,6 +46,7 @@ import * as X from './capstone.ts';
 import * as T from './tracking.ts';
 import * as SH from './share.ts';
 import * as E from './experts.ts';
+import { pdfTicketAny } from './pdf-ticket.ts';
 import * as Y from './payments.ts';
 import * as R from './sponsor.ts';
 import { switchTo } from './switch.ts';
@@ -95,6 +96,8 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
   'auth.verify': P.authVerify,
   'auth.google': P.authGoogle,
   'org.info': (b, ctx) => P.orgInfo(b, ctx),
+  // تذكرة PDF للجلسة أيًّا كان صاحبها (pdfTicketAny): الجلسة تُفحص داخلها لا في الموزع
+  'pdf.ticket': (b) => pdfTicketAny(b.token),
   // مسبار المراقبة وفحص ما بعد النشر: طلب حقيقي يمر بالقاعدة
   'system.ping': () => S.ping(),
   // أحداث الإخفاق من جهة العميل (المرحلة 4): بلا جلسة، بسقف حجم وحد معدل لكل شبكة ببصمتها (client-events.ts)
@@ -432,6 +435,8 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     const d: any = await E.portalDashboard(e);
     // مفاتيح الميزات للواجهة (المرحلة P3): تخفي القاعة و360 بها، والرفض على الخادم وحده
     if (d?.success) d.features = await FT.features();
+    // شارة صندوق الخبير: عدد غير المقروء (صفر قبل الترحيل أو عند تعذّره)
+    if (d?.success) d.messages_unread = await MS.unreadCount(MS.expertOwner(e));
     // من لا يخدم في الرحلة (عضو لجنة بلا دور، أو معتمد بلا خدمة): لا تكليفات ولا مشاركون ولا أقران ولا 360 (portalDashboard)
     if (!d?.success || d.consent_needed || d.onboarding || !journeyApproved(e)) return d;
     // «تكليفاتي» (تصور ربط الخبراء بالجهة، المرحلة 2): تكليفاته من المصادر الثلاثة بأعداد لا أسماء، وتعذّرها لا يُسقط اللوحة
@@ -449,6 +454,12 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
     return { ...d, preload: { reviews, participants, peers, sus, f360, workshops } };
   },
   'xp.consent': (e) => E.portalConsent(e),
+  // مركز رسائل الخبير وتفضيلات بريده (messages.ts، 20261129130000): صاحبه من جلسته وحدها
+  'xp.messages': (e, b) => MS.list(MS.expertOwner(e), b),
+  'xp.messages-read': (e, b) => MS.markRead(MS.expertOwner(e), b),
+  // الشارة وحدها عند عودة التركيز إلى اللوحة (لا Realtime: الجداول مغلقة على service_role بقصد)
+  'xp.messages-unread': async (e) => ({ success: true, unread: await MS.unreadCount(MS.expertOwner(e)) }),
+  'xp.mail-prefs': (e, b) => MS.savePrefs(MS.expertOwner(e), b),
   // تعهد السرية لمراجعي الكتاب الأم في أول دخول (experts.ts)
   'xp.pledge': (e) => E.portalPledge(e),
   // الكتاب الأم: قراءة وتعليق لأعضاء لجنتي المحتوى والقياس (master-book.ts)
@@ -509,7 +520,7 @@ const expert: Record<string, (e: any, b: Body, sessionId: string, ctx: any) => P
   'xp.peer-close': (e, b) => PR.expertClose(e, b),
 };
 // أفعال اللوحة التي لا تمس الرحلة: لعضو اللجنة بلا دور، ولكل خبير
-const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
+const XP_NO_JOURNEY = new Set(['xp.dashboard', 'xp.consent', 'xp.messages', 'xp.messages-read', 'xp.messages-unread', 'xp.mail-prefs', 'xp.pledge', 'xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.profile-save', 'xp.logout', 'xp.switch', 'xp.sus-state', 'xp.sus-submit']);
 
 const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any) => Promise<unknown>> = {
   // with_dashboard: لوحة الجهة في رحلة واحدة (البند 8.1): الهوية والموافقة واللوحة واستبيان السهولة معًا، بدل ثلاثة
@@ -521,6 +532,8 @@ const coordinator: Record<string, (c: any, b: Body, sessionId: string, ctx: any)
     return { ...m, preload: { dashboard, sus } };
   },
   'coord.consent': (c) => C.consent(c),
+  // تفضيلات بريد المنسق وحدها (صندوقه لاحقًا، قرار المالك 6): بلا muted قراءة ومعها حفظ (messages.ts)
+  'coord.mail-prefs': (c, b) => MS.prefs(MS.coordinatorOwner(c), b),
   'coord.rater-confirm': (c, b) => C.raterConfirm(c, b),
   'coord.switch': (c, b, sid, ctx) => switchTo(c.email, 'org', b.to, { ip: ctx?.ip ?? null, ua: ctx?.ua ?? null }, sid),
   'coord.dashboard': (c) => C.dashboard(c),

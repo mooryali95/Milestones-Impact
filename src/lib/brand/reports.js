@@ -14,6 +14,13 @@ const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-la
 
 // تقرير الجهة. audience: 'admin' (كامل بمصادر الانضمام) أو 'coordinator' (بصلاحياته فقط)
 // d: { org, participants, funnel, by_track, track_titles?, by_via, by_campaign?, by_site?, kpis?, permissions? }
+// اسم ملف PDF للتقرير: نوعه وصاحبه وتاريخ اليوم، بلا محارف لا تصلح في اسم ملف
+export function reportFileName(kind, who, now = new Date()) {
+  const ymd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const clean = (v) => [...String(v ?? '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().replace(/\s+/g, '-')].slice(0, 60).join('').replace(/-+$/, '');
+  return [clean(kind), clean(who), ymd].filter(Boolean).join('-');
+}
+
 export function orgReport(d, audience = 'admin') {
   const o = d.org;
   const ps = d.participants || [];
@@ -67,6 +74,8 @@ export function orgReport(d, audience = 'admin') {
     meta: {
       kind: 'ORG', kindLabel: 'Organization Report', eyebrow: 'Leaders Program · Organization Report',
       title: `تقرير ${o.name}`, subtitle: 'برنامج القادة من Milestone Impact',
+      // اسم الملف يُظهر زر «تحميل PDF» في الشريط: من الخادم حين تتاح تذكرة، وإلا في المتصفح (المرحلة 3أ)
+      pdfName: reportFileName('تقرير', o.name),
       rows: [['الجهة', o.name], ['القطاع', o.sector || '·'], ['تاريخ الإصدار', today()], ['الجمهور', audience === 'admin' ? 'إدارة البرنامج' : 'منسق الجهة']],
       confidential: `سري: مخصص لـ ${o.name} وإدارة البرنامج فقط`,
       closing: 'أُعدّ هذا التقرير آليًا من بيانات برنامج القادة لحظة إصداره، ويعكس حالة المشاركين في ذلك التاريخ.',
@@ -224,6 +233,7 @@ export function impactReport(r, { org = null, audience = 'admin', names = audien
     meta: {
       kind: 'IMP', kindLabel: 'Impact Report', eyebrow: 'Leaders Program · Impact Report',
       title: org ? `تقرير أثر ${org}` : 'تقرير أثر برنامج القادة', subtitle: 'القياس المبدئي مقابل القياس البعدي',
+      pdfName: reportFileName('تقرير-أثر', org || 'برنامج-القادة'),
       rows: [['النطاق', org || 'كل الجهات'], ['المقارنات', `${c.paired ?? 0} مشارك`], ['تاريخ الإصدار', today()], ['الجمهور', audience === 'admin' ? 'إدارة البرنامج' : 'منسق الجهة']],
       confidential: org ? `سري: مخصص لـ ${org} وإدارة البرنامج فقط` : 'سري: مخصص لإدارة البرنامج فقط',
       closing: 'أُعدّ هذا التقرير آليًا من نتائج القياسين لحظة إصداره. الأرقام وصفية للدفعة، ولا يُعرض فرق خام دون هامش خطأ القياس.',

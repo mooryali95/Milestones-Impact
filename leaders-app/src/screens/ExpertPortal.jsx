@@ -14,7 +14,8 @@ import GoogleButton from '../GoogleButton.jsx';
 import Captcha from '../Captcha.jsx';
 import { captchaGate } from '../captcha.js';
 import { Notice, POPUP_BLOCKED, Skel, useNotice } from '../ui.jsx';
-import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE, STAFF_MESSAGES_TEXT } from '../../../supabase/functions/leaders-api/labels.js';
+import MessageCenter from './MessageCenter.jsx';
 import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import { chapterNoteOnly, isGateModel, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
 import ExpertApply from './ExpertApply.jsx';
@@ -22,6 +23,7 @@ import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
 import ExpertFile from './ExpertFile.jsx';
 import Advisor360 from './Advisor360.jsx';
+import { xpActionAnchor } from './xp-anchors.js';
 import { flagsOf } from '../features.js';
 import HallControl, { HALL_UI_APP } from '../../../shared/hall/HallControl.jsx';
 import PresenterQr from '../../../shared/ui/PresenterQr.jsx';
@@ -33,6 +35,7 @@ import EmailInput from '../../../shared/ui/EmailInput.jsx';
 
 // الكتاب الأم لأعضاء لجنتي المحتوى والقياس: القارئ المشترك مع اللوحة، يُحمَّل عند فتحه فقط
 // ملف الكتاب الأم بعد نشر أحدث: محاولة ثانية ثم إعادة تحميل واحدة (shared/ui/lazy-retry.js)
+const XP_MESSAGES = { list: 'xp.messages', read: 'xp.messages-read', prefs: 'xp.mail-prefs' };
 const MasterBook = lazyRetry(() => import('../../../shared/master-book/MasterBook.jsx'));
 const BOOK_API = {
   get: () => xpCall('xp.book'),
@@ -218,8 +221,8 @@ function AdvisorReviews({ initial }) {
     );
   };
   return (
-    <section className="card stack">
-      <h2 className="as-h3">للقراءة <small className="muted">· {waiting}</small></h2>
+    <section className="card stack" aria-labelledby="xp-reviews">
+      <h2 className="as-h3" id="xp-reviews">للقراءة <small className="muted">· {waiting}</small></h2>
       <p className="small muted">أنت مستشار هؤلاء المشاركين. ما يسلّمونه يُحتسب لهم فورًا، ويصلك ملخصه مرة في اليوم؛ اقرأ واكتب ملاحظة أو اطلب تعديلًا. بطاقة المبادرة وحدها تنتظر اعتمادك وتصلك فور تسليمها.</p>
       <Notice note={note} onClose={() => say(null)} reveal />
       {!waiting && <p className="muted small">لا شيء ينتظر القراءة الآن.</p>}
@@ -559,6 +562,24 @@ function Dashboard({ onOut }) {
   }, []);
   const [d, setD] = useState(null);
   const [rating, setRating] = useState(null);
+  // مركز رسائل الخبير وتفضيلات بريده (messages.ts): رابط ذيل البريد /x?tab=messages&prefs=<الفئة> يفتحه مباشرة
+  const [msgs, setMsgs] = useState(() => { try { return new URLSearchParams(location.search).get('tab') === 'messages'; } catch { return false; } });
+  // شارة غير المقروء: من اللوحة أول مرة، ثم عند عودة التركيز إلى النافذة (xp.messages-unread)
+  const [unread, setUnread] = useState(0);
+  // عنصر «ينتظرك» يفتح قسم إنجازه في اللوحة (xp-anchors.js): يُمرَّر إليه بعد الخروج من الصندوق
+  const [goTo, setGoTo] = useState(null);
+  useEffect(() => {
+    if (!goTo || msgs || !d) return;
+    const el = document.getElementById(goTo);
+    if (el) { el.scrollIntoView?.({ block: 'start' }); setGoTo(null); }
+  }, [goTo, msgs, d]);
+  useEffect(() => { if (d?.messages_unread != null) setUnread(d.messages_unread); }, [d?.messages_unread]);
+  useEffect(() => {
+    const on = () => { if (document.visibilityState === 'visible') xpCall('xp.messages-unread').then((r) => { if (r?.success) setUnread(r.unread); }); };
+    window.addEventListener('focus', on);
+    document.addEventListener('visibilitychange', on);
+    return () => { window.removeEventListener('focus', on); document.removeEventListener('visibilitychange', on); };
+  }, []);
   const [note, say] = useNotice();   // رسالة خطأ لا تُعرض بعلامة النجاح
   // التحميل الأول يجمع أقسام اللوحة في رحلة واحدة (preload)، وإعادة التحميل بعد إجراء خفيفة (lite) فكل قسم يحدّث نفسه
   const load = (lite = false) => xpCall('xp.dashboard', lite ? { lite: true } : {}).then((r) => { if (!r.success && r.code === 'session') onOut(); else setD(r); });
@@ -571,6 +592,9 @@ function Dashboard({ onOut }) {
   if (d.consent_needed) return <PortalConsent role="expert" onAccept={async () => { const r = await xpCall('xp.consent'); if (r.success) await load(); return r; }} />;
   if (d.onboarding) return <Onboarding expert={{ ...d.expert, switch_to: d.switch_to }} reviewer={!!d.content_only} onOut={onOut} reload={() => { setD(null); load(); }} />;
   if (view) return <ExpertFile id={view} onBack={() => setView(null)} />;
+  if (msgs) return <MessageCenter call={xpCall} actions={XP_MESSAGES} text={STAFF_MESSAGES_TEXT.expert} backLabel="رجوع إلى لوحتك" onUnread={setUnread}
+    actionAnchor={xpActionAnchor} onAction={(anchor) => { setGoTo(anchor); setMsgs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } load(true); }}
+    onBack={() => { setMsgs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } load(true); }} />;
   const reading = !!d.book_access && (book ?? (linked || !!d.content_only));
   if (reading && d.pledge_needed) {
     return <BookPledge lines={d.pledge} onCancel={d.content_only ? null : () => setBook(false)}
@@ -607,7 +631,8 @@ function Dashboard({ onOut }) {
       [{ label: 'التاريخ', width: '30%' }, { label: 'المشارك' }, { label: 'المدة', width: '18%' }],
       done.map((s) => [fmt(s.starts_at), s.participant || '·', `${Math.round((Date.parse(s.ends_at) - Date.parse(s.starts_at)) / 6e4)} دقيقة`]),
       'لا جلسات منعقدة بعد'));
-    if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`,
+    const { reportFileName } = await import('../../../src/lib/brand/reports.js');
+    if (!writeDocument(win, { kind: 'EXP', kindLabel: 'Expert Hours', eyebrow: 'Milestone Impact · Expert Network', title: `شهادة ساعات خبرة: ${e.full_name}`, pdfName: reportFileName('شهادة-ساعات-خبرة', e.full_name),
       subtitle: 'برنامج القادة', rows: [['الخبير', e.full_name], ['الساعات', String(d.stats.hours)], ['حتى تاريخ', fmt(new Date())]],
       closing: 'تُحسب من الجلسات المنعقدة المسجلة في المنصة حتى تاريخ الإصدار.' }, body)) say(POPUP_BLOCKED, true);
   };
@@ -625,6 +650,8 @@ function Dashboard({ onOut }) {
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={certificate} disabled={!d.stats.hours}
             title={d.stats.hours ? undefined : 'تُتاح بعد أول جلسة منعقدة'} aria-describedby={d.stats.hours ? undefined : 'xp-cert-hint'}>شهادة ساعات الخبرة</button>
           {!d.stats.hours && <span id="xp-cert-hint" className="sr-only">تُتاح بعد أول جلسة منعقدة</span>}
+          <button type="button" className="btn ghost sm xp-msgs-btn" style={{ color: 'var(--brand-mist)' }} onClick={() => setMsgs(true)}
+            aria-label={unread ? `${STAFF_MESSAGES_TEXT.expert.open}: ${unread} غير مقروءة` : undefined}>{STAFF_MESSAGES_TEXT.expert.open}{unread > 0 && <span className="la-chip xp-msgs-count" aria-hidden="true">{unread}</span>}</button>
           <AccountSwitch here="expert" doors={d.switch_to} doSwitch={(to) => xpCall('xp.switch', { to })} />
           <button className="btn ghost sm" style={{ color: 'var(--brand-mist)' }} onClick={async () => { if (await askSignOut('expert')) onOut(); }}>خروج</button>
         </div>
@@ -642,8 +669,8 @@ function Dashboard({ onOut }) {
       </div>
 
       {offered.length > 0 && (
-        <section className="card stack">
-          <h2 className="as-h3">طلبات بانتظار ردك</h2>
+        <section className="card stack" aria-labelledby="xp-offers">
+          <h2 className="as-h3" id="xp-offers">طلبات بانتظار ردك</h2>
           {offered.map((x) => (
             <div key={x.id} className="xpp-offer">
               <div><b>{x.role_ar}</b> للقائد {x.participant.name}<small className="muted">{[x.dimension_ar, x.level_ar ? `مستوى ${x.level_ar}` : null].filter(Boolean).join(' · ')} · يبقى {left(x.expires_at)}</small></div>

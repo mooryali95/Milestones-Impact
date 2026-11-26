@@ -168,6 +168,29 @@ Deno.test('360 المخفي: إغلاق المدير المبكر يُنفَّذ
   } finally { w.restore(); }
 });
 
+Deno.test('360 المخفي: «التقرير جاهز» بفئة expert_digest ومستلمه كالمسار العادي، فيصل صندوقه بترويسة الإلغاء، ويحترم الكتم', async () => {
+  const XID = '5a1c2e3f-4b5d-4e6f-8a9b-0c1d2e3f4a5b';
+  for (const muted of [[], ['expert_digest']]) {
+    const w = f360World(false);
+    w.tables.cohorts = [{ id: 'co1', is_default: true, organization_id: null, status: 'running', advisor_expert_id: XID, created_at: '2026-10-01' }];
+    w.tables.enrollments = [];
+    w.tables.cohort_group_members = [];
+    w.tables.experts = [{ id: XID, full_name: 'المستشار خالد', email: 'adv@x.sa', status: 'active', roles: ['advisor'] }];
+    w.tables.participant_mail_prefs = muted.length ? [{ expert_id: XID, muted }] : [];
+    w.tables.participant_notifications = [];
+    for (const c of w.tables.feedback_cycles) c.participants = { id: PID, full_name: 'سارة', email: 'p@x.sa', organization_id: null, is_demo: false };
+    try {
+      const r: any = await FB.adminClose({ email: 'admin@x.sa' }, { cycle_id: CYC });
+      assertEquals(w.tables.participant_notifications.map((n) => [n.expert_id, n.category, n.about_participant_id, n.emailed]), [[XID, 'expert_digest', PID, !muted.length]]);
+      if (muted.length) assertEquals([r.queued, w.tables.mail_queue.length], [false, 0]);
+      else {
+        assertEquals([r.queued, w.tables.mail_queue.map((m) => [m.to_email, m.reason])], [true, [['adv@x.sa', 'f360_off']]]);
+        assertEquals(typeof w.tables.mail_queue[0].headers?.['List-Unsubscribe'], 'string');
+      }
+    } finally { w.restore(); }
+  }
+});
+
 Deno.test('استئناف 360: الساعة توقفت مع الإخفاء، فتُمد النافذة وروابط المقيّمين بقدر مدة الإخفاء، وما انقضى قبله لا يُمد', async () => {
   const H = 36e5, now = Date.parse('2026-11-25T09:00:00Z');
   const at = (h: number) => new Date(now + h * H).toISOString();

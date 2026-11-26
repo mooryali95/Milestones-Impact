@@ -6,6 +6,7 @@
 // ترويسة بالشعار ونقش الماس الخافت، وتذييل بحقوق النشر على كل صفحة.
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
+import { pdfServer } from './pdf-source.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
 // الشعار من الملف الأصلي كما هو، دون إعلان XML لأنه يُضمَّن داخل HTML
@@ -294,21 +295,23 @@ export const openDocument = (meta, body) => writeDocument(window.open('', '_blan
 
 // يكتب الوثيقة في نافذة مفتوحة سلفًا: تُفتح النافذة عند النقر مباشرة ثم تُملأ
 // بعد تحميل المحرك، وإلا عدّها المتصفح نافذة منبثقة غير مطلوبة وحجبها.
-export function writeDocument(win, meta, body) {
+// opts.pdf: مصدر تذكرة لهذه الوثيقة وحدها بدل مصدر التطبيق
+export function writeDocument(win, meta, body, opts = {}) {
   if (!win) return false;
   win.document.open();
   win.document.write(documentHtml(meta, body));
   win.document.close();
   win.document.querySelector('[data-act="print"]')?.addEventListener('click', () => win.print());
-  // «تحميل PDF»: يُبنى الملف في نافذة المنصة (pdf.js) ويُحفظ من النافذة نفسها، والزر يعرض تقدمه
+  // «تحميل PDF»: من الخادم حين تتاح تذكرة، وإلا يُبنى في نافذة المنصة (pdf.js downloadBest)، ويُحفظ من النافذة نفسها، والزر يعرض تقدمه
   const pdfBtn = win.document.querySelector('[data-act="pdf"]');
   pdfBtn?.addEventListener('click', async () => {
     if (pdfBtn.disabled) return;
     pdfBtn.disabled = true;
     const label = pdfBtn.textContent;
     try {
-      const { downloadPdf } = await import('./pdf.js');
-      await downloadPdf(meta, body, { onProgress: (t) => { pdfBtn.textContent = t; } });
+      // مصدر التذكرة يسجله كل تطبيق عند إقلاعه (pdf-source.js)، فيكسب كل مستعمل لـwriteDocument الملف المتجهي بلا تغيير في شاشته
+      const [{ downloadBest }, server] = await Promise.all([import('./pdf.js'), pdfServer(opts.pdf)]);
+      await downloadBest(meta, body, { server, onProgress: (t) => { pdfBtn.textContent = t; } });
       pdfBtn.textContent = 'حُفظ الملف';
     } catch (e) {
       console.error(e);

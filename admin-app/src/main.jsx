@@ -6,6 +6,8 @@ import { ScreenBoundary } from './ui.jsx';
 import { appUpdate, installAppUpdate, reloadOnNavigate } from '../../shared/ui/app-update.js';
 import UpdateBar from '../../shared/ui/UpdateBar.jsx';
 import { installLatinDigits } from '../../shared/ui/latin-digits.js';
+import { setPdfTicketSource } from '../../src/lib/brand/pdf-source.js';
+import { pdfTicket } from './leaders.js';
 import '../../shared/css/brand.css';
 import '../../shared/css/status.css';
 import '../../shared/css/lab-board.css';
@@ -29,6 +31,8 @@ window.addEventListener('hashchange', () => { reloadOnNavigate(appUpdate()); });
 // شاشات السياقات تُحمَّل كسولًا (lazy في App.jsx). الحاجز الأخير حول اللوحة كلها: خطأ في سياق أو نافذة أو الإطار يعرض
 // رسالة بزرين بدل صفحة بيضاء، وخطأ ملف قديم بعد نشر يعيد التحميل مرة (ScreenBoundary scope="app" في ui.jsx)
 installLatinDigits();
+// زر «تحميل PDF» في وثائق اللوحة (writeDocument) يطلب تذكرة الخادم بجلسة الإدارة (المرحلة 3ب)، وإلا يبني المتصفح الملف
+setPdfTicketSource(() => pdfTicket());
 createRoot(document.getElementById('root')).render(
   <ScreenBoundary scope="app"><UpdateBar /><Suspense fallback={<div className="la-loading">جارٍ التحميل…</div>}><App /></Suspense></ScreenBoundary>,
 );

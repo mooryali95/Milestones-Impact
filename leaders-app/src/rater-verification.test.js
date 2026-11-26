@@ -38,7 +38,7 @@ describe('الخادم', () => {
     expect(inv).toMatch(/const check = await raterCheck\(p, email\);\n\s+if \(check\.verdict === 'reject'\) throw new Fail/);
     expect(inv).toMatch(/status: awaiting \? 'awaiting' : 'invited'/);
     expect(inv).toMatch(/verification: check\.verdict, verification_flags: check\.flags/);
-    expect(inv).toMatch(/if \(awaiting\) \{\n\s+const told = await notifyConfirmers\(p, check\.flags\);[\s\S]*?return mine\(p\);\n\s+\}/);
+    expect(inv).toMatch(/if \(awaiting\) \{\n\s+const told = await notifyConfirmers\(p, check\.flags, saved\.id\);[\s\S]*?return mine\(p\);\n\s+\}/);
     expect(inv.indexOf('notifyConfirmers(')).toBeLessThan(inv.indexOf('await sendMail(email'));
   });
   it('تعذّر حفظ الدعوة يفشلها، ولا إرسال بلا علامات ولا تحقق، وقائمة المنتظرين لا تفرغ بصمت', () => {

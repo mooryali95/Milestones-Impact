@@ -4,7 +4,7 @@
 // المشارك يرفع طلب توجيه فيراه فريقه في دفعته فيجيب، ويؤكّد مستشار الدفعة الإجابة أو يصحّحها أو
 // يخفيها من بوابته. نمط الإشراف من الدفعة (cohorts.supervision). المنطق النقي في peer.js.
 // الخبير يُسجَّل في audit_log فاعلًا system ببريده (لا admin)، حفاظًا على فصل الأدوار.
-import { audit, db, Fail, must, sendMail } from './core.ts';
+import { actionDeadline, audit, db, Fail, must, resolveNotes, sendMail } from './core.ts';
 import * as OB from './observations.ts';
 import { RULES } from './notice-rules.js';
 import { bdi, esc, mailButton, mailShell, mailText } from '../_shared/mail.ts';
@@ -109,7 +109,7 @@ export async function ask(p: any, b: Body) {
   if (supervision === 'expert_only') {
     const adv = await advisorOf(p);
     if (adv) await sendMail(adv.email, `طلب توجيه من ${p.full_name}`, mailShell(`أهلًا ${firstName(adv.full_name)}`,
-      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'staff' }).catch(() => {});
+      mailText(`رفع ${bdi(p.full_name)} طلب توجيه في دفعتك «${bdi(cohort.name)}»، وهو بانتظار إجابتك بصفتك مستشارها.`) + mailButton(`${SITES.leaders}/x`, 'افتح لوحة الخبير')), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `peer:${row.id}`, actionUntil: actionDeadline(), recipient: { kind: 'expert', id: adv.id }, about: p.id }).catch(() => {});
   }
   return list(p);
 }
@@ -138,6 +138,7 @@ export async function close(p: any, b: Body) {
   if (!r) throw new Fail('الطلب غير موجود', 404);
   if (r.status !== 'closed') must(await db.from('peer_requests').update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: p.email, updated_at: new Date().toISOString() }).eq('id', r.id));
   await audit('participant', p.email, 'peer.close', 'peer_requests', r.id);
+  await resolveNotes(`peer:${r.id}`);
   return list(p);
 }
 
@@ -182,6 +183,7 @@ export async function expertAnswer(e: any, b: Body) {
   const a = must(await db.from('peer_answers').insert({ request_id: r.id, expert_id: e.id, text, status: 'confirmed', confirmed_by: e.email, confirmed_at: now }).select('id').single()) as any;
   must(await db.from('peer_requests').update({ status: 'confirmed', updated_at: now }).eq('id', r.id));
   await audit('system', e.email, 'peer.expert-answer', 'peer_answers', a.id, null, { request_id: r.id });
+  await resolveNotes(`peer:${r.id}`);
   await mailAsker(r.id, 'أجاب خبيرك عن طلب توجيهك', `أجاب ${e.full_name} عن طلب التوجيه الذي رفعته. تجد الإجابة في رحلتك تحت «طلبات التوجيه».`);
   return expertList(e);
 }
@@ -198,7 +200,10 @@ export async function expertReview(e: any, b: Body) {
   const now = new Date().toISOString();
   must(await db.from('peer_answers').update({ status, expert_note: note || null, confirmed_by: e.email, confirmed_at: status === 'hidden' ? null : now, updated_at: now }).eq('id', a.id));
   const all = await answersFor([r.id]);
-  must(await db.from('peer_requests').update({ status: requestStatusFor(all, r.status), updated_at: now }).eq('id', r.id));
+  const next = requestStatusFor(all, r.status);
+  must(await db.from('peer_requests').update({ status: next, updated_at: now }).eq('id', r.id));
+  // صار الطلب مؤكَّدًا (تأكيد أو تصحيح): لا ينتظر المستشار فيه شيء بعد
+  if (next === 'confirmed') await resolveNotes(`peer:${r.id}`);
   await audit('system', e.email, `peer.${status}`, 'peer_answers', a.id, { status: a.status }, { status, note: note || null });
   // إخفاء إجابة كان يمر بلا علم صاحبها: ملاحظة في ملفه تُبلَّغ له مرة واحدة للإجابة (notice-rules.js)
   if (status === 'hidden' && a.author_id) await OB.record(a.author_id, { code: 'peer_hidden', ref: a.id, ...RULES.peer_hidden() });
@@ -211,6 +216,7 @@ export async function expertClose(e: any, b: Body) {
   const now = new Date().toISOString();
   must(await db.from('peer_requests').update({ status: 'closed', closed_at: now, closed_by: e.email, updated_at: now }).eq('id', r.id));
   await audit('system', e.email, 'peer.close', 'peer_requests', r.id);
+  await resolveNotes(`peer:${r.id}`);
   return expertList(e);
 }
 

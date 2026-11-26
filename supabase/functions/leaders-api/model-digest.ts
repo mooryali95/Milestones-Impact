@@ -6,7 +6,7 @@
 // من المهمة الساعية القائمة (cron.expert-offers، الدقيقة 17)، مرة في يوم الرياض بعد الساعة 8 (MODEL_DIGEST_HOUR): لا جدولة
 // ولا سر جديد. علامة اليوم سطر system.model-digest في audit_log بالتاريخ، وما أُرسل يُعلَّم digested_at فلا يُذكر مرتين.
 // ما لم يُرسل (تعذّر مراجعه أو بريده) لا يُعلَّم، فيدخل ملخص الغد. وبطاقة المبادرة لا تدخل الملخص: تُبلَّغ فور تسليمها (notifyGate).
-import { audit, CONFIG, db, Fail, sendMail } from './core.ts';
+import { actionDeadline, audit, CONFIG, db, Fail, sendMail } from './core.ts';
 import { bdi, mailButton, mailNote, mailRows, mailShell, mailText } from '../_shared/mail.ts';
 import { riyadhDay } from '../_shared/slack.ts';
 import { SITES } from '../_shared/sites.js';
@@ -66,7 +66,7 @@ export async function modelDigest(now = Date.now()): Promise<ModelDigestResult> 
   for (const g of groups) {
     const to = g.kind === 'team' ? CONFIG.alertEmail : g.reviewer?.email;
     if (!to) { skipped += g.total; continue; }
-    const ok = await sendMail(to, `${MODEL_DIGEST_SUBJECT} · ${g.total}`, modelDigestMail(g), [], { category: 'staff', kind: 'notify', ref: `model-digest:${day}:${g.key}` })
+    const ok = await sendMail(to, `${MODEL_DIGEST_SUBJECT} · ${g.total}`, modelDigestMail(g), [], { category: g.kind === 'team' ? 'ops' : 'expert_digest', kind: 'notify', ref: `model-digest:${day}:${g.key}`, recipient: g.reviewer?.id ? { kind: 'expert', id: g.reviewer.id } : null })
       .then(() => true, (e) => { console.error('model digest mail:', e); return false; });
     if (!ok) { skipped += g.total; continue; }
     sent++;
@@ -80,7 +80,7 @@ export async function modelDigest(now = Date.now()): Promise<ModelDigestResult> 
 }
 
 // تسليم بطاقة المبادرة: يُبلَّغ مراجعها فورًا لأنها تحبس المشارك (المستشار، وبلاه فريق البرنامج). غيرها ينتظر الملخص اليومي
-export async function notifyGate(p: any, title: string) {
+export async function notifyGate(p: any, title: string, modelId: string | null = null) {
   if (p?.is_demo) return { sent: false, to: null };
   // تعذّر معرفة المستشار لا يحوّل البطاقة إلى الفريق بتخمين: تبقى ظاهرة في قوائم المراجعة
   let adv: any = null;
@@ -92,6 +92,6 @@ export async function notifyGate(p: any, title: string) {
     mailText(`سلّم ${bdi(p.full_name)} «${bdi(title)}»، وهي بانتظار ${team ? `اعتماد ${REVIEWER_AR.team} لأنه بلا مستشار` : 'اعتمادك بصفتك مستشاره'}. لا يسلّم وثيقة مبادرته قبل اعتمادها.`)
     + mailButton(reviewLink(team ? 'team' : 'advisor'), team ? 'افتح لوحة الإدارة' : 'افتح لوحة الخبير'),
     { family: team ? 'admin' : 'journey', preheader: 'بطاقة مبادرة بانتظار اعتمادك' });
-  const sent = await sendMail(to, `بطاقة مبادرة بانتظار اعتمادك: ${title}`, html, [], { category: 'staff' }).then(() => true, () => false);
+  const sent = await sendMail(to, `بطاقة مبادرة بانتظار اعتمادك: ${title}`, html, [], { category: team ? 'ops' : 'expert_work', ...(team ? {} : { recipient: { kind: 'expert' as const, id: adv.id }, about: p.id, actionUntil: actionDeadline(), ...(modelId ? { noteRef: `model:${p.id}:${modelId}` } : {}) }) }).then(() => true, () => false);
   return { sent, to: team ? 'team' : 'advisor' };
 }

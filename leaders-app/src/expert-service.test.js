@@ -94,9 +94,9 @@ describe('عضو اللجنة بلا دور لا يظهر في أي موضع م�
     const index = read('supabase/functions/leaders-api/index.ts');
     expect(index).toContain("if (E.portalWorking(e) && !journeyApproved(e) && !XP_NO_JOURNEY.has(action)) throw new Fail('هذا لخدمة الرحلة، ولوحتك للكتاب الأم', 403, 'journey');");
     expect(index).toContain("if (action.startsWith('xp.book')) await E.requirePledge(e);");
-    // ما يُسمح به بلا خدمة رحلة: اللوحة والكتاب والملف والخروج والتبديل والاستبيان، لا مشارك ولا دفعة ولا قاعة
+    // ما يُسمح به بلا خدمة رحلة: اللوحة والكتاب والملف والخروج والتبديل والاستبيان ومركز رسائله وتفضيلاته، لا مشارك ولا دفعة ولا قاعة
     const allowed = index.match(/const XP_NO_JOURNEY = new Set\(\[([^\]]+)\]\)/)[1].split(',').map((x) => x.trim().replace(/'/g, ''));
-    expect(allowed.sort()).toEqual(['xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.consent', 'xp.dashboard', 'xp.logout', 'xp.pledge', 'xp.profile-save', 'xp.sus-state', 'xp.sus-submit', 'xp.switch']);
+    expect(allowed.sort()).toEqual(['xp.book', 'xp.book-comment', 'xp.book-comment-delete', 'xp.consent', 'xp.dashboard', 'xp.logout', 'xp.mail-prefs', 'xp.messages', 'xp.messages-read', 'xp.messages-unread', 'xp.pledge', 'xp.profile-save', 'xp.sus-state', 'xp.sus-submit', 'xp.switch']);
     const file = read('supabase/functions/leaders-api/file.ts');
     for (const fn of ['export async function expertScope', 'async function requireAdvisorOf', 'async function requireAdvisorCohort']) {
       expect(file.slice(file.indexOf(fn), file.indexOf(fn) + 200), fn).toContain('requireJourney(e);');

@@ -13,6 +13,8 @@
 export const LEADERS_READS = new Set([
   // مفتوحة (بلا جلسة)
   'system.ping', 'org.info', 'rater.get', 'sponsor.get', 'outcome.get', 'offer.get',
+  // تذكرة PDF: تُصدر توقيعًا مؤقتًا ولا تكتب شيئًا (الجلسة تُفحص داخلها)
+  'pdf.ticket',
   // المشارك. me يحمل الرئيسية كلها في الإقلاع (with_home)، وهو الطلب الذي صُمم له هذا كله
   'me', 'sus.state', 'org.logo', 'me.privacy', 'guide.state', 'pay.access', 'org.visibility', 'ratings.pending', 'katon.mine',
   'hall.state', 'peer.list', 'sessions.list', 'passkey.list', 'handbook.toc', 'models.list', 'models.get', 'lab.list', 'achievements',

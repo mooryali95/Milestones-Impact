@@ -7,7 +7,7 @@
 // بنوع bulk يدخل الطابور عند الحد)، والسجل (audit).
 // للتطوير وحده: لا يقرؤه التقييم الختامي ولا الشهادة ولا تقارير الجهة الفردية (يحرسه eval360.test.js).
 // المشارك يرى أعدادًا لكل مجموعة بعد فتح النافذة، لا من أرسل ومن لم يرسل.
-import { audit, CONFIG, db, enqueueMail, Fail, feedbackMail, FEEDBACK_MAIL, hash, must, randomToken, raterMail, sendMail } from './core.ts';
+import { actionDeadline, audit, CONFIG, db, enqueueMail, Fail, FEEDBACK_MAIL, feedbackMail, hash, must, notify, randomToken, raterMail, resolveNotes, sendMail } from './core.ts';
 import { advisorOf, myParticipantIds } from './advisor.ts';
 import { lastBaseline } from './participant.ts';
 import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
@@ -183,7 +183,7 @@ export async function submitList(p: any, b: Body) {
   if (!adv) throw new Fail('لم يُعيَّن مستشار لدفعتك بعد، فلا أحد يعتمد القائمة. تواصل مع الإدارة', 409, 'no_advisor');
   must(await db.from('feedback_cycles').update({ status: 'approval', submitted_at: new Date().toISOString(), return_note: null }).eq('id', c.id).eq('status', 'nominating'));
   await audit('participant', p.id, 'f360.submit', 'feedback_cycles', c.id, null, { advisor: adv.email, counts: chk.counts });
-  await sendMail(adv.email, FEEDBACK_MAIL.list.subject(p.full_name || 'مشارك'), feedbackMail('list', adv.full_name, p.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'staff', ref: `participant:${p.id}` })
+  await sendMail(adv.email, FEEDBACK_MAIL.list.subject(p.full_name || 'مشارك'), feedbackMail('list', adv.full_name, p.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'expert_work', ref: `participant:${p.id}`, noteRef: `f360:${c.id}`, actionUntil: actionDeadline(), recipient: { kind: 'expert', id: adv.id }, about: p.id })
     .catch((e) => console.error('f360 list mail', e));
   return mine(p);
 }
@@ -230,6 +230,8 @@ export async function advisorDecide(e: any, b: Body) {
   if (!c || c.status !== 'approval') throw new Fail('لا قائمة بانتظار اعتمادك بهذا المعرّف', 404, 'not_found');
   const p = await requireEffectiveAdvisor(e, c.participant_id);
   const who = `expert:${e.email}`;
+  // القرار، اعتمادًا أو إعادة، يُغلق «ينتظرك» في صندوقه (المرحلة 2ج)
+  await resolveNotes(`f360:${c.id}`);
   if (b.decision === 'return') {
     const note = String(b.note || '').trim().slice(0, 500);
     if (note.length < 5) throw new Fail('اكتب ملاحظتك ليعدّل المشارك قائمته');
@@ -254,7 +256,7 @@ export async function advisorDecide(e: any, b: Body) {
     const link = `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`;
     // bulk: يدخل طابور البريد عند بلوغ الحصة اليومية، فلا تضيع دعوة ولا يتجاوز سقف البريد (D15). ومؤرخة بإغلاق الدورة:
     // دعوة انتظرت حتى أُغلقت النافذة تُترك (expiresAt)
-    await sendMail(r.email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, p.full_name || 'زميلك', link, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(closes) }), [], { category: 'staff', kind: 'bulk', ref: `rater:${r.id}`, expiresAt: closes })
+    await sendMail(r.email, `طلب تقدير من ${p.full_name || 'مشارك في برنامج القادة'}`, raterMail(r.full_name, p.full_name || 'زميلك', link, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(closes) }), [], { category: 'request', kind: 'bulk', ref: `rater:${r.id}`, expiresAt: closes })
       .then(() => { queued += 1; }).catch((x) => console.error('f360 invite mail', r.id, x));
   }
   await audit('system', who, 'f360.approve', 'feedback_cycles', c.id, null, { participant_id: p.id, invited: raters.length, mailed: queued });
@@ -276,7 +278,7 @@ export async function sweep() {
       closed += 1;
       await audit('system', 'cron', 'f360.close', 'feedback_cycles', c.id);
       const adv = await advisorOf(c.participants).catch(() => null);
-      if (adv) await sendMail(adv.email, FEEDBACK_MAIL.ready.subject(c.participants?.full_name || 'مشارك'), feedbackMail('ready', adv.full_name, c.participants?.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'staff', kind: 'bulk', ref: `participant:${c.participant_id}` }).catch((x) => console.error('f360 ready mail', x));
+      if (adv) await sendMail(adv.email, FEEDBACK_MAIL.ready.subject(c.participants?.full_name || 'مشارك'), feedbackMail('ready', adv.full_name, c.participants?.full_name || 'مشارك', { url: `${CONFIG.appUrl}/x` }), [], { category: 'expert_digest', kind: 'bulk', ref: `participant:${c.participant_id}`, recipient: { kind: 'expert', id: adv.id }, about: c.participant_id }).catch((x) => console.error('f360 ready mail', x));
       continue;
     }
     const due = remindersDue(c, s, now);
@@ -289,7 +291,7 @@ export async function sweep() {
       // الأولى، والدعوة المنتظرة في الطابور، والنموذج المفتوح برمزه، تبقى صالحة حتى الإغلاق كما وعدت الدعوة
       const token = randomToken();
       must(await db.from('raters').update(tokenPatch(r, await hash(token), true)).eq('id', r.id).eq('status', 'invited'));
-      await sendMail(r.email, `تذكير: تقديرك لـ${c.participants?.full_name || 'زميلك'}`, raterMail(r.full_name, c.participants?.full_name || 'زميلك', `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(c.closes_at), reminder: true }), [], { category: 'staff', kind: 'bulk', ref: `rater:${r.id}`, expiresAt: c.closes_at })
+      await sendMail(r.email, `تذكير: تقديرك لـ${c.participants?.full_name || 'زميلك'}`, raterMail(r.full_name, c.participants?.full_name || 'زميلك', `${CONFIG.appUrl}/rate?t=${encodeURIComponent(token)}`, 'f360', { promise: feedbackPromiseAr(r.relation, s), closes: dayAr(c.closes_at), reminder: true }), [], { category: 'request', kind: 'bulk', ref: `rater:${r.id}`, expiresAt: c.closes_at })
         .then(() => { reminded += 1; }).catch((x) => console.error('f360 reminder', r.id, x));
     }
   }
@@ -331,7 +333,13 @@ export async function adminClose(a: { email: string }, b: Body) {
     must(await db.from('feedback_cycles').update({ status: 'closed', closed_at: new Date().toISOString() }).eq('id', c.id).eq('status', 'open'));
     const adv = row?.participants ? await advisorOf(row.participants).catch(() => null) : null;
     const name = row?.participants?.full_name || 'مشارك';
-    const queued = adv ? await enqueueMail(adv.email, FEEDBACK_MAIL.ready.subject(name), feedbackMail('ready', adv.full_name, name, { url: `${CONFIG.appUrl}/x` }), `participant:${row.participant_id}`, 'bulk', 'f360_off') : false;
+    // بفئة المسار العادي ومستلمه (expert_digest): يصل صندوقه، ويحترم كتمه، ويحمل ترويستي الإلغاء في الطابور
+    let queued = false;
+    if (adv) {
+      const subject = FEEDBACK_MAIL.ready.subject(name), ref = `participant:${row.participant_id}`;
+      const prep = await notify({ to: adv.email, subject, html: feedbackMail('ready', adv.full_name, name, { url: `${CONFIG.appUrl}/x` }), category: 'expert_digest', ref, recipient: { kind: 'expert', id: adv.id }, about: row.participant_id });
+      if (prep.send) queued = await enqueueMail(adv.email, subject, prep.html, ref, 'bulk', 'f360_off', null, [], prep.headers);
+    }
     return { success: true, closed: 1, reminded: 0, mailed: false, queued };
   }
   return { success: true, ...(await sweep()) };
