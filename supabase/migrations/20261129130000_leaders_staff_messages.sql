@@ -21,11 +21,15 @@ create unique index if not exists participant_mail_prefs_participant_key on lead
 create unique index if not exists participant_mail_prefs_expert_key on leaders.participant_mail_prefs (expert_id);
 create unique index if not exists participant_mail_prefs_coordinator_key on leaders.participant_mail_prefs (coordinator_id);
 do $$
+declare
+  old_pk text;
 begin
-  -- المفتاح الأساسي القديم على participant_id يُستبدل بـid (الفهرس الفريد أعلاه يحفظ on conflict participant_id)
-  if exists (select 1 from pg_constraint where conrelid = 'leaders.participant_mail_prefs'::regclass and contype = 'p'
-             and pg_get_constraintdef(oid) ilike '%(participant_id)%') then
-    alter table leaders.participant_mail_prefs drop constraint participant_mail_prefs_pkey;
+  -- المفتاح الأساسي القديم على participant_id يُستبدل بـid (الفهرس الفريد أعلاه يحفظ on conflict participant_id).
+  -- يُسقط باسمه الفعلي من pg_constraint، فلا يفشل إن خالف الاسم الافتراضي
+  select conname into old_pk from pg_constraint where conrelid = 'leaders.participant_mail_prefs'::regclass and contype = 'p'
+    and pg_get_constraintdef(oid) ilike '%(participant_id)%';
+  if old_pk is not null then
+    execute format('alter table leaders.participant_mail_prefs drop constraint %I', old_pk);
   end if;
   if not exists (select 1 from pg_constraint where conrelid = 'leaders.participant_mail_prefs'::regclass and contype = 'p') then
     alter table leaders.participant_mail_prefs add constraint participant_mail_prefs_pkey primary key (id);

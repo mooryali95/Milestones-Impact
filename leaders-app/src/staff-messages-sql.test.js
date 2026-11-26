@@ -13,7 +13,7 @@ const P = '0b6f2a52-6a3e-4c1e-9d55-1f1e2a3b4c5d';
 const X = '5a1c2e3f-4b5d-4e6f-8a9b-0c1d2e3f4a5b';
 const C = '7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a';
 
-async function db() {
+async function db({ renamePk = false } = {}) {
   const d = new PGlite();
   await d.exec(`create role anon; create role authenticated; create role service_role; create schema leaders;
     create table leaders.schema_migrations (name text primary key);
@@ -25,6 +25,9 @@ async function db() {
   await d.exec(BEFORE);
   // صف قائم قبل الترحيل يبقى كما هو
   await d.exec(`insert into leaders.participant_mail_prefs (participant_id, muted) values ('${P}', '{journey}')`);
+  if (renamePk) await d.exec(`do $$ declare n text; begin
+    select conname into n from pg_constraint where conrelid = 'leaders.participant_mail_prefs'::regclass and contype = 'p';
+    execute format('alter table leaders.participant_mail_prefs rename constraint %I to prefs_pk_custom', n); end $$`);
   await d.exec(SQL);
   await d.exec(SQL);
   return d;
@@ -62,5 +65,13 @@ describe('ترحيل بريد الخبراء والمنسقين', () => {
     await d.exec(`delete from leaders.experts where id = '${X}'; delete from leaders.org_coordinators where id = '${C}'`);
     expect(await count(d, 'participant_notifications')).toBe(0);
     expect(await count(d, 'participant_mail_prefs')).toBe(0);
+  });
+  it('المفتاح الأساسي القديم باسم غير الافتراضي يُسقط باسمه الفعلي، والترحيل يُعاد بلا خطأ', async () => {
+    const d = await db({ renamePk: true });
+    const pk = (await d.query(`select conname, pg_get_constraintdef(oid) def from pg_constraint where conrelid = 'leaders.participant_mail_prefs'::regclass and contype = 'p'`)).rows;
+    expect(pk).toHaveLength(1);
+    expect(pk[0].def).toMatch(/\(id\)/);
+    await d.exec(`insert into leaders.participant_mail_prefs (expert_id, muted) values ('${X}', '{}')`);
+    expect(await count(d, 'participant_mail_prefs')).toBe(2);
   });
 });
