@@ -32,22 +32,46 @@ export function durationAr(days) {
 }
 
 const TOKEN = /\{(sessions|minutes|days):([A-Z0-9-]+)\}|\{(duration|ready_min|assessment_minutes)\}/g;
-// ctx: { reqs: [{code, config}], durationDays, readyMin, assessmentMinutes }
-// رمز لمتطلب غير موجود يبقى ظاهرًا كما هو فيلاحظه المحرر، ولا يُخترع رقم
+// ctx: { reqs: [{code, config}], durationDays, readyMin, assessmentMinutes, neutral }
+// رمز لمتطلب غير موجود يبقى ظاهرًا كما هو للمحرر وحده (neutral غير مفعّل) فيلاحظه، ولا يُخترع رقم؛
+// وفي الوضع المحايد (المشارك) يصير TOKEN_TBD_AR.
+// neutral (ما يراه المشارك، يُملأ على الخادم): الرمز بلا قيمة يصير عبارة محايدة، فلا يصل «{» إلى الرد
+export const ASSESSMENT_TBD_AR = 'مدة القياس تُحدد لاحقًا';
+export const TOKEN_TBD_AR = 'يُحدد لاحقًا';
+export const ASSESSMENT_MISSING_AR = 'مدة القياس غير محددة';
+const ANY_TOKEN = /\{[a-z_]+(?::[A-Z0-9-]+)?\}/g;
+// سياق الرموز المشترك الوحيد: كل استدعاء يبني سياقه من هنا، فلا تُنسى قيمة في موضع
+// src: { reqs|requirements|stage_requirements, readyMin, assessmentMinutes|assessment_minutes }
+export function journeyCtx(src = {}, stage = null, extra = {}) {
+  return {
+    reqs: src.reqs || src.requirements || src.stage_requirements || [],
+    readyMin: src.readyMin ?? src.ready_min ?? null,
+    assessmentMinutes: src.assessmentMinutes ?? src.assessment_minutes ?? null,
+    durationDays: stage?.duration_days,
+    ...extra,
+  };
+}
 export function renderJourneyText(text, ctx = {}) {
   if (typeof text !== 'string' || !text.includes('{')) return text;
   const byCode = new Map((ctx.reqs || []).map((r) => [r.code, r.config || {}]));
-  return text.replace(TOKEN, (all, kind, code, plain) => {
-    if (plain === 'duration') return durationAr(ctx.durationDays) || all;
-    if (plain === 'ready_min') return ctx.readyMin != null ? String(ctx.readyMin) : all;
-    if (plain === 'assessment_minutes') return ctx.assessmentMinutes ? minutesAr(ctx.assessmentMinutes) : all;
+  const out = text.replace(TOKEN, (all, kind, code, plain) => {
+    const miss = ctx.neutral ? (plain === 'assessment_minutes' ? ASSESSMENT_TBD_AR : TOKEN_TBD_AR) : all;
+    if (plain === 'duration') return durationAr(ctx.durationDays) || miss;
+    if (plain === 'ready_min') return ctx.readyMin != null ? String(ctx.readyMin) : miss;
+    if (plain === 'assessment_minutes') return ctx.assessmentMinutes ? minutesAr(ctx.assessmentMinutes) : miss;
     const c = byCode.get(code);
-    if (!c) return all;
+    if (!c) return miss;
     const n = Math.max(1, Number(c.sessions_required) || SESSION_DEFAULTS.sessions_required);
     if (kind === 'sessions') return sessionsAr(n);
     if (kind === 'days') return daysAr(n);
     return minutesAr(Number(c.minutes) || SESSION_DEFAULTS.minutes);
   });
+  return ctx.neutral ? out.replace(ANY_TOKEN, TOKEN_TBD_AR) : out;
+}
+// الرموز التي بقيت بلا قيمة بعد الملء (للمحرر): ['assessment_minutes', 'sessions:X', ...]
+export function unresolvedTokens(text, ctx = {}) {
+  const r = renderJourneyText(text, { ...ctx, neutral: false });
+  return typeof r === 'string' ? [...r.matchAll(ANY_TOKEN)].map((m) => m[0].slice(1, -1)) : [];
 }
 
 const STAGE_TEXT = ['title_ar', 'duration_label', 'description_ar', 'activities_ar', 'outcome_ar', 'mode_note_ar', 'builds_on_ar'];
@@ -56,7 +80,7 @@ const STAGE_TEXT = ['title_ar', 'duration_label', 'description_ar', 'activities_
  * @param {{ readyMin?: number|null, assessmentMinutes?: number|null }} [opts]
  */
 export function renderJourney(def, { readyMin = null, assessmentMinutes = null } = {}) {
-  const base = { reqs: def.requirements, readyMin, assessmentMinutes };
+  const base = journeyCtx({ reqs: def.requirements, readyMin, assessmentMinutes }, null, { neutral: true });
   const stages = def.stages.map((s) => {
     const ctx = { ...base, durationDays: s.duration_days };
     const out = { ...s };
@@ -94,14 +118,23 @@ export function unknownTokens(text, reqs) {
 // شاشة كل مرحلة قبول تُكمل متطلبها وحده (انظر leaders-app/src/gates.js)
 const ONBOARDING_GATE = { profile: 'P-INFO', assessment: 'A-DONE' };
 
-export function journeyCoherence(stages, requirements) {
+export function journeyCoherence(stages, requirements, opts = null) {
   const out = [];
+  // opts يُمرَّر من الإدارة حين تعرف القيم (journeyCtx): رمز بلا قيمة يُلاحظ، ويراه المشارك عبارة محايدة
+  const valueCtx = opts ? journeyCtx({ ...opts, reqs: requirements }) : null;
+  const noValue = (text, where, extra = {}) => {
+    if (!valueCtx) return;
+    for (const t of unresolvedTokens(text, valueCtx).filter((x) => x === 'assessment_minutes' || x === 'ready_min')) {
+      out.push({ level: 'warn', ...extra, msg: `${where}: رمز بلا قيمة {${t}}${t === 'assessment_minutes' ? ` (${ASSESSMENT_MISSING_AR})` : ''}، ويراه المشارك «${t === 'assessment_minutes' ? ASSESSMENT_TBD_AR : TOKEN_TBD_AR}»` });
+    }
+  };
   const reqs = (requirements || []).filter((r) => r.active !== false);
   for (const s of (stages || []).filter((x) => x.active !== false)) {
     const days = Number(s.duration_days) || 0;
     for (const f of STAGE_TEXT) {
       for (const c of unknownTokens(s[f], reqs)) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: الرمز يشير إلى نشاط غير موجود (${c})` });
       if (/\{duration\}/.test(s[f] || '') && !days) out.push({ level: 'error', stage: s.key, msg: `«${s.title_ar}»: {duration} بلا مدة بالأيام` });
+      noValue(s[f], `«${s.title_ar}»`, { stage: s.key });
     }
     for (const r of reqs.filter((x) => x.stage_key === s.key)) {
       const c = r.config || {};
@@ -114,6 +147,8 @@ export function journeyCoherence(stages, requirements) {
       if (range && c.minutes && (c.minutes < range[0] || c.minutes > range[1])) {
         out.push({ level: 'warn', stage: s.key, req: r.code, msg: `${r.code}: مدة الجلسة ${minutesAr(c.minutes)} خارج المعتاد (${range[0]} إلى ${range[1]} دقيقة)` });
       }
+      noValue(r.title_ar, r.code, { stage: s.key, req: r.code });
+      noValue(r.help_ar, r.code, { stage: s.key, req: r.code });
       for (const code of [...unknownTokens(r.title_ar, reqs), ...unknownTokens(r.help_ar, reqs)]) out.push({ level: 'error', stage: s.key, req: r.code, msg: `${r.code}: الرمز يشير إلى نشاط غير موجود (${code})` });
     }
     // مرحلتا القبول تُكملهما شاشتان مخصصتان؛ متطلب إلزامي آخر فيهما يُكمَل من الرحلة بعدهما لا من الشاشة

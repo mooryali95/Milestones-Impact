@@ -1288,6 +1288,8 @@ export async function catalog(b: Body = {}) {
   out.book_stats = await bookStats();
   // D07: دفعة جارية تقفل معيار التسكين (save أدناه)؛ تُعرض قبل التعديل لا بعد الضغط على حفظ
   out.running_cohort = await runningCohort(null);
+  // مدة القياس من المصدر الواحد (baselineMinutes) لتملأ {assessment_minutes} في معاينة الرحلة
+  out.assessment_minutes = await baselineMinutes().catch(() => null);
   return out;
 }
 

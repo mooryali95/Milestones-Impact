@@ -5,7 +5,7 @@
 // ما يُحرَّر هنا يظهر للمشارك مباشرة، فكل حفظ يعيد تحميل الكتالوج.
 import React, { useEffect, useMemo, useState } from 'react';
 import { DIM, DIMS, L, LVL, placementLockAr, withRunningReason } from '../leaders.js';
-import { completionSource, journeyCoherence, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
+import { ASSESSMENT_MISSING_AR, completionSource, journeyCoherence, journeyCtx, renderJourneyText, stageRuleSummary, stageRules } from '../../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { COMPLETION_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import {
@@ -68,8 +68,8 @@ function ProgramBar({ current, onProgram, programs }) {
 }
 
 // فحص الاتساق: هل تتسع كل مرحلة لجلساتها، وهل لكل رمز في النصوص مصدر
-function Coherence({ stages, reqs }) {
-  const issues = journeyCoherence(stages, reqs);
+function Coherence({ stages, reqs, opts }) {
+  const issues = journeyCoherence(stages, reqs, opts);
   if (!issues.length) return <p className="la-chip ok" role="status">الرحلة متسقة: كل رقم في النصوص من إعداد نشاطه، وكل مرحلة تتسع لجلساتها</p>;
   return (
     <section className="la-card" role="alert" aria-label="اتساق الرحلة">
@@ -86,6 +86,13 @@ function JourneyAudience({ pid, data }) {
   return <div className="j-audience" aria-label="من يصله التعديل">{lines.map((l, i) => <p key={i} className={l.tone === 'warn' ? 'la-note' : 'la-muted'} role={l.tone === 'warn' ? 'note' : undefined}>{l.text}</p>)}</div>;
 }
 
+// نص الرحلة كما يُعرض للمحرر: مدة القياس بلا قيمة تظهر شارة تنبيه لا رمزًا خامًا (الرمز يُرى في حقل التحرير وحده)
+const MISSING_TOKEN = '{assessment_minutes}';
+export function JourneyText({ text }) {
+  if (typeof text !== 'string' || !text.includes(MISSING_TOKEN)) return text ?? null;
+  return text.split(MISSING_TOKEN).flatMap((part, i) => (i ? [<span key={i} className="la-chip warn">{ASSESSMENT_MISSING_AR}</span>, part] : [part]));
+}
+
 export function Journey({ catalog, reload, canWrite, onProgram }) {
   const [edit, editor] = useEditor(reload);
   const { toast, prompt } = useUI();
@@ -95,7 +102,9 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
   const stages = [...catalog.journey_stages].sort((a, b) => a.sort - b.sort);
   const reqs = catalog.stage_requirements;
   const mv = { catalog, reload, canWrite };
-  const shown = (t, s) => renderJourneyText(t, { reqs, durationDays: s?.duration_days, readyMin: READY_MIN });
+  // سياق واحد (journeyCtx): مدة القياس من رد admin.catalog (baselineMinutes على الخادم)، لا قيمة ثابتة هنا
+  const ctxOf = (s) => journeyCtx({ reqs, readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes }, s);
+  const shown = (t, s) => <JourneyText text={renderJourneyText(t, ctxOf(s))} />;
   // الرحلة في لمحة (J1b): من الحمولة نفسها، فتتحدث فور الحفظ. النقر المزدوج أو «افتحه» ينقل إلى النشاط في القائمة تحتها
   const timeline = useMemo(() => journeyTimeline({ stages: catalog.journey_stages, requirements: reqs }, { title: 'رحلة البرنامج' }), [catalog.journey_stages, reqs]);
   const openReq = (a) => {
@@ -132,7 +141,7 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
       {onProgram && <ProgramBar current={pid} onProgram={onProgram} programs={pdata?.success ? pdata.programs : null} />}
       <JourneyAudience pid={pid} data={pdata} />
       <JourneyTimeline key={pid} id="jt-program" model={timeline} onOpen={openReq} openLabel={() => 'افتحه في القائمة'} onEmpty={canWrite ? toAddStage : undefined} />
-      <Coherence stages={stages} reqs={reqs} />
+      <Coherence stages={stages} reqs={reqs} opts={{ readyMin: READY_MIN, assessmentMinutes: catalog.assessment_minutes }} />
       <ProgramMilestones pid={pid} stages={stages} canWrite={canWrite} />
       <p className="la-muted">الترتيب بالأسهم، والمتطلب يمكن تخصيصه لبُعد ومستوى. لكل مرحلة نوع (إلزامية، عند الحاجة، اختيارية) وشرط فتح وشرط اكتمال تضبطها من «تحرير».</p>
       {Object.entries(PHASE).map(([ph, phl]) => (
@@ -151,10 +160,10 @@ export function Journey({ catalog, reload, canWrite, onProgram }) {
           {stages.filter((s) => s.phase === ph).map((s) => (
             <section key={s.key} className={`la-card la-stage-ed${s.active ? '' : ' off'}`}>
               <div className="la-row between">
-                <div><b>{s.sort}. {s.title_ar}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
+                <div><b>{s.sort}. {shown(s.title_ar, s)}</b> <small className="la-muted">{shown(s.duration_label, s)}{s.mode ? ` · ${MODE[s.mode]}` : ''}{s.active ? '' : ' · مخفية'}</small></div>
                 <div className="la-row">
                   <Move {...mv} entity="journey_stages" id={s.key} />
-                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
+                  {canWrite && <button className="btn-sm ghost" onClick={() => edit({ title: `مرحلة: ${s.title_ar}`, fields: stageFields(reqs, stages, s.key, catalog.assessment_minutes), values: stageToForm(s), onSave: (v) => save('journey_stages', { key: s.key, program_id: pid })(formToStage(v)) })}>تحرير</button>}
                 </div>
               </div>
               <p className={`la-rule ${stageRules(s).mode}`}>{stageRuleSummary(s, stages)}</p>
