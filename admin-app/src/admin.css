@@ -1610,3 +1610,6 @@ a.mx-stat:focus-visible, .mx-track:focus-visible, .mx-row-link:focus-visible { o
 .page-header .page-title:focus-visible { outline: 2px solid var(--petrol); outline-offset: 2px; border-radius: 2px; }
 .page-header .page-status { flex: 0 0 auto; align-self: center; white-space: nowrap; }
 .page-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; }
+
+/* شارة حساب الاختبار: نغمة محايدة متقطعة تميزها عن شارات الحالة */
+.la-chip.mx-test-chip { background: transparent; border: 1px dashed currentColor; opacity: .85; }

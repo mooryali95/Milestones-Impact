@@ -9,14 +9,14 @@ const regs = [
   { id: 2, name: 'شركة الطاقة', email: 'b@x.com', registeredAt: '2026-09-01', updatedAt: '2026-09-02', submitted: false, dates: {}, confirmed: {} },
 ];
 
-async function admin(page) {
+async function admin(page, list = regs) {
   const calls = [];
   await page.route(/rest\/v1\/process_details/, (r) => r.fulfill({ json: [] }));
   await page.route(/rest\/v1\/app_content/, (r) => r.fulfill({ json: [{ key: 'hero_title', value: 'هندسة القيمة' }, { key: 'cta_start', value: 'ابدأ رحلتك' }] }));
   await page.route(/functions\/v1\/admin-api/, async (route) => {
     const b = JSON.parse(route.request().postData() || '{}');
     calls.push(b);
-    const r = { 'list-regs': { success: true, registrations: regs }, 'unlock-reg': { success: true }, 'update-reg': { success: true }, 'save-process': { success: true }, 'save-content': { success: true }, 'list-contacts': { success: true, contacts: [] } }[b.action];
+    const r = { 'list-regs': { success: true, registrations: list }, 'unlock-reg': { success: true }, 'update-reg': { success: true }, 'save-process': { success: true }, 'save-content': { success: true }, 'list-contacts': { success: true, contacts: [] } }[b.action];
     await route.fulfill({ json: r ?? { success: true, contacts: [] } });
   });
   await page.route(/functions\/v1\/leaders-api/, (r) => r.fulfill({ json: { success: false, message: 'x' } }));
@@ -112,4 +112,25 @@ test('تحكم كامل: تعديل المواعيد والتأكيد، ورفض
   await page.getByLabel('hero_title').fill('هندسة القيمة الكامنة');
   await page.getByRole('button', { name: 'احفظ', exact: true }).click();
   await expect.poll(() => calls.find((c) => c.action === 'save-content')).toMatchObject({ key: 'hero_title', value: 'هندسة القيمة الكامنة' });
+});
+
+// المرحلة 5: حساب الاختبار خارج الأعداد و«متوقفون»، وفي القوائم بشارة، ووسمه عبر update-reg وحده
+test('حسابات الاختبار: تُستبعد من الأعداد وتبقى في التسجيلات بشارة، والوسم يُكتب في الخادم', async ({ page }) => {
+  await page.setViewportSize({ width: 1360, height: 1000 });
+  const list = [...regs, { id: 3, name: 'جهة تجريبية', email: 't@x.com', registeredAt: '2026-09-01', updatedAt: '2026-09-02', submitted: false, dates: {}, confirmed: {}, is_test: true }];
+  const calls = await admin(page, list);
+  await expect(page.getByRole('heading', { name: 'متوقفون وطلبات إعادة فتح' })).toBeVisible();
+  await expect(page.locator('a.mx-stat', { hasText: 'الجهات المسجلة' })).toContainText('2');
+  await expect(page.locator('.mx-att')).not.toContainText('جهة تجريبية');
+  await expect(page.locator('.mx-tests')).toContainText('استُبعد حساب اختبار واحد من الأعداد');
+  if (SHOT) await page.screenshot({ path: `${SHOT}/p5-matrix-overview.png`, fullPage: true });
+  await page.locator('.mx-tests a').click();
+  await expect(page).toHaveURL(/view=test/);
+  await expect(page.locator('.mx-table tbody tr')).toHaveCount(1);
+  await expect(page.locator('.mx-table tbody tr').first()).toContainText('اختبار');
+  if (SHOT) await page.screenshot({ path: `${SHOT}/p5-matrix-regs.png`, fullPage: true });
+  await page.locator('.mx-table tbody tr').first().click();
+  await page.getByRole('button', { name: 'إلغاء علامة الاختبار' }).click();
+  await expect.poll(() => calls.find((c) => c.action === 'update-reg')).toMatchObject({ id: 3, fields: { is_test: false } });
+  if (SHOT) await page.screenshot({ path: `${SHOT}/p5-matrix-detail.png`, fullPage: true });
 });

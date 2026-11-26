@@ -9,7 +9,7 @@ import { call } from '../api.js';
 import { date } from '../dates.js';
 import { Empty, LoadError, NoMatch, Spinner, useUI } from '../ui.jsx';
 import { Icon } from '../icons.jsx';
-import { apptsAr, attention, attentionSummary, booked, IDLE_DAYS, idleSince, idleTone, MATRIX_PRESETS, regHref, regsHref, regTracks, trackCounts } from '../matrix.js';
+import { apptsAr, attention, attentionSummary, booked, counted, excludedLine, IDLE_DAYS, isTest, testCount, idleSince, idleTone, MATRIX_PRESETS, regHref, regsHref, regTracks, trackCounts } from '../matrix.js';
 import { navigate } from '../route.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -70,7 +70,10 @@ function IdleRow({ r, days }) {
 }
 
 const MAX_IDLE = 8;
-function Overview({ regs, procs }) {
+function Overview({ regs: all, procs }) {
+  // الإحصاءات والقسم بقاعدة العد: حساب الاختبار خارجها، ويبقى في التسجيلات بشارة
+  const regs = counted(all);
+  const tests = testCount(all);
   const done = regs.filter((r) => r.submitted).length;
   const att = attention(regs);
   const shownIdle = att.idle.slice(0, MAX_IDLE);
@@ -80,11 +83,12 @@ function Overview({ regs, procs }) {
   return (
     <>
       <div className="stats-grid">
-        <StatLink href={regsHref()} label="الجهات المسجلة" value={regs.length} sub="في مصفوفة التأثير" />
+        <StatLink href={regsHref({ view: 'real' })} label="الجهات المسجلة" value={regs.length} sub="في مصفوفة التأثير" />
         <StatLink href={regsHref({ view: 'submitted' })} label="خطط مكتملة" value={done} tone="s-replied" sub={`${regs.length ? Math.round((done / regs.length) * 100) : 0}% من المسجلين`} />
         <StatLink href={regsHref({ view: 'reopen' })} label="تطلب إعادة الفتح" value={att.reopen.length} tone="s-new" sub="بانتظار قرارك" />
         <StatLink href={regsHref({ view: 'idle' })} label="متوقفة" value={att.idle.length} sub={`لم تُقدَّم ولم تُعدَّل منذ ${IDLE_DAYS} يومًا`} />
       </div>
+      {tests > 0 && <p className="la-muted small mx-tests">{excludedLine(tests)}. <a className="la-link" href={regsHref({ view: 'test' })}>اعرضها</a></p>}
       <section className="la-card mx-att" aria-labelledby="mx-att-h">
         <h3 id="mx-att-h">متوقفون وطلبات إعادة فتح</h3>
         <p className={att.reopen.length || att.idle.length ? 'mx-att-sum' : 'la-muted'}>{attentionSummary(att, regs.length)}</p>
@@ -138,7 +142,7 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
           const pct = Math.round((booked(r) / PROC_COUNT) * 100);
           return (
             <tr key={r.id} className="la-click" onClick={() => onOpen(r.id)}>
-              <td data-label="المسجّل"><a className="mx-row-link" href={regHref(r.id)} onClick={(e) => e.stopPropagation()}><b>{r.name}</b></a></td>
+              <td data-label="المسجّل"><a className="mx-row-link" href={regHref(r.id)} onClick={(e) => e.stopPropagation()}><b>{r.name}</b></a>{isTest(r) && <> <TestChip /></>}</td>
               <td data-label="الإنجاز"><span className="mx-prog"><i style={{ width: `${pct}%` }} /></span> {booked(r)}/{PROC_COUNT}</td>
               <td data-label="التأكيد">{confirmedOf(r)}</td>
               <td data-label="الشبكة">{people(r).length || <span className="la-muted">·</span>}</td>
@@ -151,6 +155,8 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
     </section>
   );
 }
+
+const TestChip = () => <span className="la-chip s-muted mx-test-chip">اختبار<span className="sr-only">: حساب اختبار، خارج الإحصاءات و«متوقفون وطلبات إعادة فتح»</span></span>;
 
 function RegDetail({ r, procs, canWrite, onBack, reload }) {
   const { toast, confirm } = useUI();
@@ -182,11 +188,13 @@ function RegDetail({ r, procs, canWrite, onBack, reload }) {
       <section className="la-card ex-head">
         <div><h3>{r.name}</h3><p className="la-muted" dir="ltr">{[r.email, r.phone].filter(Boolean).join(' · ')}</p>
           <small className="la-muted">سُجّل {fmt(r.registeredAt)}{r.submittedAt ? ` · قُدّمت ${fmt(r.submittedAt)}` : ''}</small></div>
-        <div className="ex-side"><span className={`la-chip ${t}`}>{l}</span>
+        <div className="ex-side"><span className={`la-chip ${t}`}>{l}</span>{isTest(r) && <TestChip />}
           {canWrite && <div className="la-row">
             {r.submitted && <button className="btn-sm primary" disabled={busy} onClick={unlock}>{r.reopenRequested ? 'اقبل إعادة الفتح' : 'افتح للتعديل'}</button>}
             {r.reopenRequested && <button className="btn-sm ghost" disabled={busy} onClick={() => save({ reopenRequested: false }, 'رُفض طلب إعادة الفتح، وبقيت الخطة مكتملة')}>ارفض الطلب</button>}
             {!r.submitted && <button className="btn-sm ghost" disabled={busy} onClick={async () => { if (await confirm(`اعتماد خطة ${r.name} مكتملة نيابة عنه؟`)) save({ submitted: true, submittedAt: new Date().toISOString() }, 'اعتُمدت الخطة مكتملة'); }}>اعتمدها مكتملة</button>}
+            <button className="btn-sm ghost" disabled={busy} aria-pressed={isTest(r)}
+              onClick={async () => { if (!isTest(r) && !(await confirm(`جعل ${r.name} حساب اختبار؟ يُستبعد من الإحصاءات و«متوقفون وطلبات إعادة فتح»، ويبقى في القوائم بشارة. لا يُحذف شيء.`))) return; save({ is_test: !isTest(r) }, isTest(r) ? 'عاد محسوبًا في الإحصاءات' : 'صار حساب اختبار، خارج الإحصاءات'); }}>{isTest(r) ? 'إلغاء علامة الاختبار' : 'اجعله حساب اختبار'}</button>
           </div>}
         </div>
       </section>

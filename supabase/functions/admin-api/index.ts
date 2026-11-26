@@ -295,7 +295,9 @@ async function challengeFlood(sb: SB): Promise<boolean> {
 
 // whitelists: what admin sessions may write
 const PROCESS_FIELDS = ["insight", "why_it_matters", "description", "outputs", "duration", "feeds", "fed_by"];
-const REG_ADMIN_FIELDS = ["submitted", "submittedAt", "reopenRequested", "dates", "confirmed"];
+// is_test: وسم حساب اختبار (20261129160000). يكتبه هذا المسار وحده بصلاحية الكتابة (المدير)، ويُدقَّق بالفاعل والوقت،
+// فيُستبعد من إحصاءات المصفوفة و«متوقفون وطلبات إعادة فتح» وحدها، ويبقى في القوائم بشارة. لا قاعدة له في الواجهة.
+const REG_ADMIN_FIELDS = ["submitted", "submittedAt", "reopenRequested", "dates", "confirmed", "is_test"];
 // مواعيد التسجيل وتأكيدها: مفاتيح العمليات الست عشرة وحدها، والقيمة تاريخ صحيح أو منطقية
 const PROC_KEY = /^(creation|innovation|establishment|making)-[1-4]$/;
 function cleanRegField(k: string, v: unknown): unknown {
@@ -320,6 +322,8 @@ function cleanRegField(k: string, v: unknown): unknown {
     return out;
   }
   if (k === "submitted" || k === "reopenRequested") return v === true;
+  // قيمة منطقية صريحة لا تُخمَّن: «"false"» نصًا كانت ستُقرأ وسمًا
+  if (k === "is_test") { if (typeof v !== "boolean") throw new Error("وسم الاختبار غير صحيح"); return v; }
   if (k === "submittedAt") return v ? new Date(String(v)).toISOString() : null;
   return v;
 }
@@ -741,6 +745,7 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
     }
 
     if (action === "list-regs") {
+      // كل الصفوف بلا حذف، ومعها is_test: الواجهة تستبعده من الإحصاءات وحدها (counted في matrix.js) وتُبقيه في القوائم
       const { data } = await sb.from("registrations").select("*").order("registeredAt", { ascending: false });
       return json({ success: true, registrations: data || [] });
     }
@@ -769,7 +774,8 @@ ${mailNote("إن لم تطلب هذا، أبلغ المالك فورًا.")}`, {
       }
       const { error } = await sb.from("registrations").update(updates).eq("id", id);
       if (error) throw error;
-      await audit("update-reg", { id, updates });
+      // الفاعل (user_id وuser_email) يكتبه audit، والوقت صريح هنا، وتغيّر وسم الاختبار ضمن updates
+      await audit("update-reg", { id, updates, at: new Date().toISOString() });
       return json({ success: true });
     }
 
