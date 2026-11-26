@@ -10,6 +10,7 @@
 // يُستورد كما هو في الخادم (Deno) وفي الواجهات (vitest/vite).
 import { latinDigits, meaningful, TEXTAREA_MIN } from './logic.js';
 import { costSummary, parseNumber } from './capstone.js';
+import { DOC_SUMMARY_AR } from './labels.js';
 
 export const REASONS = Object.freeze({
   empty: 'لم يُكتب بعد',
@@ -271,7 +272,7 @@ export function cleanDoc(doc, { strict = false, keep = false } = {}) {
   }
   const sumWhy = reasonOf('textarea', doc.summary);
   const summary = sumWhy ? '' : doc.summary;
-  if (doc.summary && sumWhy) gaps.unshift({ chapter: 'الملخص التنفيذي', chapter_key: 'summary', field: 'رسالة القائد', field_key: 'summary', reason: sumWhy, reason_ar: REASONS[sumWhy], value: quote(doc.summary) });
+  if (doc.summary && sumWhy) gaps.unshift({ chapter: 'الملخص التنفيذي', chapter_key: 'summary', field: DOC_SUMMARY_AR, field_key: 'summary', reason: sumWhy, reason_ar: REASONS[sumWhy], value: quote(doc.summary) });
   return { doc: { ...doc, meta, summary, sections, cost }, gaps };
 }
 
