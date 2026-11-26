@@ -34,7 +34,7 @@ Deno.test('التذييل صادق: المنسق يوقفه برابط إلغا�
 
 Deno.test('المصدر: الإرسال الأسبوعي يمرر raters_pending من dashboardFor نفسها، وهي بشرط list ومفتاح 360', async () => {
   const src = await Deno.readTextFile(new URL('./coordinator.ts', import.meta.url));
-  assert(/coordinatorWeeklyMail\(c\.full_name, c\.organizations\.name, d\.kpis, d\.raters_pending\)/.test(src));
+  assert(/coordinatorWeeklyMail\(c\.full_name, c\.organizations\.name, d\.kpis, \(d as any\)\.raters_pending\)/.test(src));
   assert(src.includes('list ? awaitingFor((r.participants || []).map((p: any) => p.id)) : Promise.resolve([])'));
   const imp = await Deno.readTextFile(new URL('./impact.ts', import.meta.url));
   assert(imp.includes('if (!ids.length || !(await features()).f360) return [];'));
