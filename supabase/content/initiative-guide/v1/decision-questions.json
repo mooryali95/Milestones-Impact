@@ -1,0 +1,22 @@
+{
+  "note": "سؤال صاحب القرار الذي يفتح كل باب في «حالة العمل» وفصله في ملف العمل. الأسئلة الخمسة للحالات (strategic وeconomic وcommercial وfinancial وmanagement) بعمق مستوى المشارك في الأثر مصدرها slices.json (frameworks.impact.case)، فلا تُكتب هنا مرة ثانية؛ وهنا ربطها بالأبواب والفصول، وسؤال باب الأثر الذي لا مقابل له في الشرائح.",
+  "questions": {
+    "impact": "هل يبقى ما تحقق بعد انتهاء المبادرة، ومن يحمله؟"
+  },
+  "doors": {
+    "Why": "strategic",
+    "Value": "economic",
+    "Plan": "financial",
+    "Commercial": "commercial",
+    "Governance & risks": "management",
+    "Impact": "impact"
+  },
+  "chapters": {
+    "options-analysis": "strategic",
+    "value-for-money": "economic",
+    "cost-plan": "financial",
+    "procurement": "commercial",
+    "governance": "management",
+    "change-sustain": "impact"
+  }
+}

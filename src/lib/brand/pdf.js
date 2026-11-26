@@ -116,6 +116,16 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
 // ── الرسم ──
 const sanitize = (s) => String(s || 'وثيقة').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
+// المرحلة 30: الترويسة والتذييل يُرسمان على لوحات من مستند الإطار (حيث حُمّلت خطوط الوثيقة) بعد انتظار الخطين بوزنهما وحجمهما،
+// كما فعلت المرحلة 28 بالعلامة المائية، فلا يقعان على الخط البديل. CHROME_FONTS مصدر الخطين للرسم والانتظار معًا
+export const CHROME_FONTS = Object.freeze({ ar: '"Noto Kufi Arabic", sans-serif', latin: '"Noto Sans", sans-serif' });
+export async function loadChromeFonts(doc, scale = 2, sample = 'صفحة ١') {
+  const px = ptPx(TYPE_SCALE.footer) * scale;
+  try {
+    await Promise.all([doc.fonts?.load?.(`400 ${px}px "Noto Kufi Arabic"`, sample), doc.fonts?.load?.(`400 ${px}px "Noto Sans"`, 'MI-CP-0 V1')]);
+  } catch { /* الخط البديل أهون من فشل الملف */ }
+}
+
 // التذييل: «صفحة N من M» والرقم المرجعي بالسلم نفسه (7.5pt وزن 400)، والترويسة: اسم الباب في الطرف المقابل للجهة
 function footer(ctx, n, of, scale, line) {
   const y = (PAGE.h - PAGE.bottom / 2) * scale;
@@ -123,11 +133,11 @@ function footer(ctx, n, of, scale, line) {
   ctx.fillStyle = TYPE_SCALE.footerColor;
   ctx.direction = 'rtl';
   ctx.textAlign = 'left';
-  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px "Noto Kufi Arabic", sans-serif`;
+  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.ar}`;
   ctx.fillText(`صفحة ${n} من ${of}`, PAGE.side * scale, y);
   ctx.direction = 'ltr';
   ctx.textAlign = 'right';
-  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px "Noto Sans", sans-serif`;
+  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.latin}`;
   ctx.fillText(line, (PAGE.w - PAGE.side) * scale, y);
   ctx.restore();
 }
@@ -137,7 +147,7 @@ function chapterHead(ctx, text, scale) {
   ctx.fillStyle = TYPE_SCALE.footerColor;
   ctx.direction = 'rtl';
   ctx.textAlign = 'left';
-  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px "Noto Kufi Arabic", sans-serif`;
+  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px ${CHROME_FONTS.ar}`;
   ctx.fillText(text.length > 60 ? `${text.slice(0, 59)}…` : text, PAGE.side * scale, (PAGE.top / 2 + 9) * scale);
   ctx.restore();
 }
@@ -227,9 +237,11 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
     pdf.setProperties({ title: meta.title || 'وثيقة', subject: meta.subtitle || '', creator: 'Milestone Impact', author: 'Milestone Impact' });
     // التذييل بالرقم المرجعي للوثيقة، ومعه عنوان الباب لكل صفحة
-    const line = meta.id;
+    // والبصمة المجمّدة معه للمعتمدة (meta.footer، المرحلة 32)
+    const line = meta.footer || meta.id;
     const heads = [...doc.querySelectorAll('.sec > header h2, .in-open h2')].map((h) => ({ y: h.getBoundingClientRect().top - base, text: h.textContent.trim() }));
     const PT = 595.28 / PAGE.w;
+    await loadChromeFonts(doc, scale, `${heads.map((h) => h.text).join(' ')} ${DOC_LIVE_HEAD_AR} صفحة ١ من ٢`);
     for (const ch of chunks) {
       onProgress(`صفحة ${ch.to + 1} من ${plan.length}…`);
       const canvas = await toCanvas(root, {
@@ -247,7 +259,7 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
       }
       for (let k = ch.from; k <= ch.to; k++) {
         const p = plan[k];
-        const page = document.createElement('canvas');
+        const page = doc.createElement('canvas');
         page.width = PAGE.w * scale; page.height = PAGE.h * scale;
         const ctx = page.getContext('2d');
         ctx.fillStyle = '#ffffff';
@@ -281,6 +293,43 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
   }
 }
 
+// ── المرحلة 30: تضمين الخطوط والشعارات في HTML الخادم ──
+// العامل يطبع HTML بلا سكربت وشبكته محصورة في أصول التطبيقات؛ التضمين يجعل الملف لا يعتمد على شبكته أصلًا، فيطابق ما يُرى في المتصفح.
+// الخطوط مقتطعة سلفًا في /fonts (مجموعات unicode-range)، وتُضمَّن data:font/woff2;base64. الشعار المحلي (/...) data URI.
+// ما يتعذر جلبه يبقى رابطه كما هو (مع <base>)، فلا يفشل الملف بسببه. منطق خالص بجالب يُمرَّر
+// يقبل أي ترتيب للسمات وأي سمات زائدة (crossorigin...) فلا يتوقف التضمين بصمت إن تغير الوسم في doc.js
+const FONT_LINK = /<link\b(?=[^>]*\brel=["']stylesheet["'])[^>]*?\bhref=["'](\/fonts\/[\w.-]+\.css)["'][^>]*>/g;
+const LOCAL_SRC = /(<img\b[^>]*?\ssrc=")(\/(?!\/)[^"]+)(")/g;
+const LOCAL_URL = /url\((['"]?)(\/(?!\/)[^)'"]+)\1\)/g;
+
+/** @param {string} html @param {(path: string, as: 'text' | 'data') => Promise<string>} get */
+export async function embedAssets(html, get) {
+  const memo = new Map();
+  const once = (path, as) => { const k = `${as}:${path}`; if (!memo.has(k)) memo.set(k, Promise.resolve().then(() => get(path, as)).catch(() => null)); return memo.get(k); };
+  const replaceAsync = async (str, re, fn) => {
+    const outs = await Promise.all([...str.matchAll(re)].map((m) => fn(...m)));
+    let i = 0;
+    return str.replace(re, () => outs[i++]);
+  };
+  let out = await replaceAsync(html, FONT_LINK, async (whole, href) => {
+    const css = await once(href, 'text');
+    if (!css) return whole;
+    const inlined = await replaceAsync(css, LOCAL_URL, async (u, q, path) => { const d = await once(path, 'data'); return d ? `url(${d})` : u; });
+    return `<style data-embedded="${href}">${inlined.replace(/<\/style/gi, '<\\/style')}</style>`;
+  });
+  out = await replaceAsync(out, LOCAL_SRC, async (whole, pre, path, post) => { const d = await once(path.replace(/&amp;/g, '&'), 'data'); return d ? `${pre}${d}${post}` : whole; });
+  return out;
+}
+
+/** جالب المتصفح لـ embedAssets: من أصل الصفحة نفسها، نصًا أو data URI */
+async function fetchAsset(path, as) {
+  const r = await fetch(new URL(path, location.origin), { cache: 'force-cache' });
+  if (!r.ok) throw new Error(`asset ${r.status}`);
+  if (as === 'text') return r.text();
+  const blob = await r.blob();
+  return new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result)); fr.onerror = no; fr.readAsDataURL(blob); });
+}
+
 /**
  * الملف المتجهي من الخادم (workers/pdf-render) من HTML الوثيقة نفسه، وإلا الملف المرسوم في المتصفح.
  * server: { url, ticket } من capstone.doc، أو null. يعيد 'server' أو 'browser'
@@ -289,7 +338,7 @@ export async function downloadBest(meta, body, { server = null, onProgress = () 
   if (server?.url && server?.ticket) {
     try {
       onProgress('يُولَّد الملف…');
-      const html = documentHtml({ ...withDocId(meta), selfFonts: true }, body, { print: true, base: `${location.origin}/` });
+      const html = await embedAssets(documentHtml({ ...withDocId(meta), selfFonts: true }, body, { print: true, base: `${location.origin}/` }), fetchAsset);
       const r = await fetch(`${server.url}/pdf`, { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ ticket: server.ticket, html, name: meta.pdfName || meta.title }) });
       if (!r.ok || !/pdf/.test(r.headers.get('content-type') || '')) throw new Error(`pdf-render ${r.status}`);
       saveBlob(await r.blob(), meta);

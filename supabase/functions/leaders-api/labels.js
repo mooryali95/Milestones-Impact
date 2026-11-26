@@ -380,10 +380,13 @@ export const DOC_SIGN_AR = Object.freeze({ reviewerPending: 'بانتظار مر
 export const DOC_VERIFY_AR = Object.freeze({
   lead: 'للتحقق من أصالة هذه النسخة امسح الرمز، فتظهر لك بياناتها كما صدرت.',
   note: 'تتغير البصمة بأي تعديل في المحتوى، وتطابقها يدل على أنها النسخة المحفوظة لدى المنصة.',
+  // المرحلة 32: سطر الرمز في صفحة الاعتماد، وسطر المعتمدة التي لا تحمل بصمة مجمدة في snapshot.issued (فلا رمز لها)
+  scan: 'للتحقق من أصالة هذه الوثيقة امسح الرمز',
+  unavailable: 'التحقق غير متاح لهذه النسخة',
   draft: 'تُبنى هذه المسودة من فصول المبادرة لحظة طلبها، فتعكس آخر ما كُتب، ولا تصلح للتحقق قبل الاعتماد.',
 });
 export const docClosingLiveAr = (date) => `بُنيت هذه النسخة في ${date} من فصول المبادرة كما كانت لحظتها، وتتغير بتغيّرها.`;
-export const docClosingApprovedAr = (date, fp) => `صدرت هذه النسخة المعتمدة في ${date}، ولا يغيّرها تعديل لاحق. بصمتها ${fp}.`;
+export const docClosingApprovedAr = (date, fp) => `صدرت هذه النسخة المعتمدة في ${date}، ولا يغيّرها تعديل لاحق.${fp ? ` بصمتها ${fp}.` : ''}`;
 // رسالة الحجب: عدد الأسئلة بلفظه العربي الصحيح، ثم عناوينها
 const questionsAr = (n) => (n === 1 ? 'سؤال واحد' : n === 2 ? 'سؤالان' : n <= 10 ? `${n} أسئلة` : `${n} سؤالًا`);
 export const docBlockedAr = (n, name, list) => `${n >= 3 && n <= 10 ? 'بقيت' : 'بقي'} ${questionsAr(n)} لتكتمل ${name}: ${list}. تجدها مفصلة في ملحق ملف العمل الكامل.`;
@@ -415,6 +418,22 @@ export const decisionDeadlineAr = (date) => `يلزم القرار قبل ${date
 export const fromToAr = (a, b) => [a && `من ${a}`, b && `إلى ${b}`].filter(Boolean).join(' ');
 export const docDownloadAr = (name) => `تحميل ${name} PDF`;
 export const WORKING_DOWNLOAD_AR = 'تحميل ملف العمل PDF';
+// ── أبواب الميثاق وحالة العمل (المرحلة 29): فهرس سطر القرار، والافتراضات من سجل RAID، وفصل نجاح المشروع عن نجاح المنافع ──
+export const DOC_DOORS_AR = Object.freeze({
+  toc: 'في هذه الوثيقة',
+  assumptions: 'الافتراضات',
+  assumptionsNote: 'ما نبني عليه ولم يُثبت بعد، ومن يتحقق منه.',
+  assumptionType: 'افتراض',
+  project: 'نجاح المشروع',
+  projectNote: 'النطاق والوقت والتكلفة: هل سُلّم ما وُعد به، في موعده، وبتكلفته.',
+  benefits: 'نجاح المنافع',
+  benefitsNote: 'ما يتغير للمستفيدين بعد التسليم، بخط أساسه ومستهدفه.',
+  scope: 'النطاق',
+  time: 'الوقت',
+  cost: 'التكلفة',
+  deliverables: (n) => `${n === 2 ? 'مخرجان' : `${n} ${n === 1 ? 'مخرج' : n <= 10 ? 'مخرجات' : 'مخرجًا'}`} بمعيار قبول`,
+  owner: 'يتحقق منه',
+});
 // ── فئات البريد ومركز الرسائل (المصدر الواحد، اعتمده المالك 2026-11-25، وتوسيعه للخبراء والمنسقين 2026-11-25) ──
 // كل sendMail في leaders-api يسمي فئته (اختبار mail-categories يمنع موضع إرسال بلا فئة). audience: لمن تُرسل الفئة
 // (participant مشارك، expert خبير أو مستشار، coordinator منسق جهة، ops المالك والإدارة، external طرف بلا حساب).

@@ -98,9 +98,13 @@ describe('الوثيقة المؤسسية', () => {
     expect(heads.length).toBeGreaterThan(4);
     expect(heads).toEqual(heads.map((_, i) => i + 1));
     expect(text(r.body)).toContain('الاعتماد');
-    expect(r.body).toContain(`FINGERPRINT <b>${r.fingerprint}</b>`);
-    // الأبواب تتتابع بلا صفحة مفروضة (فلا ذيل قصير وحده)، والاعتماد وحده يبدأ صفحته
-    expect((r.body.match(/class="in-sec np"/g) || []).length).toBe(1);
+    // المرحلة 32: المعتمدة بلا بصمة مجمّدة لا تطبع البصمة الحية (لا تُطابَق في التحقق)، والمجمّدة تطبع بصمتها
+    expect(r.body).not.toContain('FINGERPRINT');
+    const d = completeDoc(); const f = institutionalReport({ ...d, issued: freezeIssued(d) });
+    expect(f.body).toContain(`FINGERPRINT <b>${f.fingerprint}</b>`);
+    // حالة العمل (المرحلة 29): كل باب بعد الأول يبدأ صفحته؛ الميثاق والبطاقة: الاعتماد وحده يبدأ صفحته
+    const forced = (r.body.match(/class="in-sec np"/g) || []).length;
+    expect(forced).toBe(r.form.key === 'case' ? (r.body.match(/class="in-sec[ "]/g) || []).length - 1 : 1);
     expect(r.body).toContain('.in-open + * { break-before: avoid; }');
     expect(r.body).toContain('من 4 يناير 2026');
     expect(text(r.body)).not.toContain('لم يُملأ');
