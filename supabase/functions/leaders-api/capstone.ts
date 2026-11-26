@@ -248,6 +248,7 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       optional: s.state.counted === false,
       // الجدول بأعمدة المشارك الظاهرة وعناوينها (viewTable، أعمدة التأسيسي): مصدر واحد للوثيقة والطباعة ولوحات المستشار والإدارة
       fields: s.fields.map((f: any) => { const t = f.type === 'table' ? viewTable(f, s.answers[f.key] ?? null) : null;
+        // optional-exempt: حقل نموذج لا نشاط، ويُحمل اختياره للمستوى إلى فحص الإصدار
         return { key: f.key, label: f.label, type: f.type, columns: t ? t.columns : f.columns || null, ...(t?.labels ? { labels: t.labels } : {}), value: t ? t.rows : s.answers[f.key] ?? null, ...(f.required === false ? { required: false } : {}) }; }),
     })),
     cost: cost ? costSummary({ ...cost.model, fields: cost.fields }, cost.answers) : null,
