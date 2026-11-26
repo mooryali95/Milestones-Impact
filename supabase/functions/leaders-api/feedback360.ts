@@ -7,7 +7,7 @@
 // بنوع bulk يدخل الطابور عند الحد)، والسجل (audit).
 // للتطوير وحده: لا يقرؤه التقييم الختامي ولا الشهادة ولا تقارير الجهة الفردية (يحرسه eval360.test.js).
 // المشارك يرى أعدادًا لكل مجموعة بعد فتح النافذة، لا من أرسل ومن لم يرسل.
-import { actionDeadline, audit, CONFIG, db, enqueueMail, Fail, FEEDBACK_MAIL, feedbackMail, hash, must, randomToken, raterMail, resolveNotes, sendMail } from './core.ts';
+import { actionDeadline, audit, CONFIG, db, enqueueMail, Fail, FEEDBACK_MAIL, feedbackMail, hash, must, notify, randomToken, raterMail, resolveNotes, sendMail } from './core.ts';
 import { advisorOf, myParticipantIds } from './advisor.ts';
 import { lastBaseline } from './participant.ts';
 import { raterCheck, RELATION_AR, tokenPatch } from './impact.ts';
@@ -333,7 +333,13 @@ export async function adminClose(a: { email: string }, b: Body) {
     must(await db.from('feedback_cycles').update({ status: 'closed', closed_at: new Date().toISOString() }).eq('id', c.id).eq('status', 'open'));
     const adv = row?.participants ? await advisorOf(row.participants).catch(() => null) : null;
     const name = row?.participants?.full_name || 'مشارك';
-    const queued = adv ? await enqueueMail(adv.email, FEEDBACK_MAIL.ready.subject(name), feedbackMail('ready', adv.full_name, name, { url: `${CONFIG.appUrl}/x` }), `participant:${row.participant_id}`, 'bulk', 'f360_off') : false;
+    // بفئة المسار العادي ومستلمه (expert_digest): يصل صندوقه، ويحترم كتمه، ويحمل ترويستي الإلغاء في الطابور
+    let queued = false;
+    if (adv) {
+      const subject = FEEDBACK_MAIL.ready.subject(name), ref = `participant:${row.participant_id}`;
+      const prep = await notify({ to: adv.email, subject, html: feedbackMail('ready', adv.full_name, name, { url: `${CONFIG.appUrl}/x` }), category: 'expert_digest', ref, recipient: { kind: 'expert', id: adv.id }, about: row.participant_id });
+      if (prep.send) queued = await enqueueMail(adv.email, subject, prep.html, ref, 'bulk', 'f360_off', null, [], prep.headers);
+    }
     return { success: true, closed: 1, reminded: 0, mailed: false, queued };
   }
   return { success: true, ...(await sweep()) };
