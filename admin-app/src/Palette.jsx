@@ -9,15 +9,17 @@ import { L } from './leaders.js';
 import { navigate } from './route.js';
 import { KIND_LABEL, rank } from './search.js';
 import { phoneMatches } from '../../supabase/functions/leaders-api/search-text.js';
-import { AI_TABS, GROUP_OF, OWNER_TABS, TAB_KEYWORDS, TABS } from './leaders-tabs.js';
+import { featureFlags } from '../../supabase/functions/leaders-api/features.js';
+import { AI_TABS, FEATURE_TABS, GROUP_OF, groupOf, OWNER_TABS, TAB_KEYWORDS, TABS } from './leaders-tabs.js';
 import { useEscape } from './ui.jsx';
 import { ltrDigits } from './filters.js';
 
-const SECTIONS = [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
+const sections = (isHidden) => [{ kind: 'tab', id: 'contacts', title: 'طلبات التواصل', to: { ctx: 'contacts' } }, { kind: 'tab', id: 'visits', title: 'زيارات الموقع', to: { ctx: 'visits' } },
   // كل قسم باسم مجموعته في الشريط (المرحلة 2)، ويُوجد باسمها أيضًا
-  ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, sub: GROUP_OF[k], keys: [GROUP_OF[k], ...(TAB_KEYWORDS[k] || [])], to: { ctx: 'leaders', tab: k } })),
+  ...TABS.map(([k, l]) => ({ kind: 'tab', id: k, title: l, sub: groupOf(k, isHidden), keys: [groupOf(k, isHidden), ...(TAB_KEYWORDS[k] || [])], to: { ctx: 'leaders', tab: k } })),
   // تبويبات «المساعد الذكي» الداخلية: كل اسم يفتح تبويبه، ومعرّفها يبدأ بمفتاح القسم فتحجبها OWNER_TABS مثله
   ...AI_TABS.map(([k, l, keys]) => ({ kind: 'tab', id: `ai/${k}`, title: l, sub: `${GROUP_OF.ai} · المساعد الذكي`, keys, to: { ctx: 'leaders', tab: 'ai', id: k } }))];
+const SECTIONS = sections();
 const ownerOnly = (x) => x.kind === 'tab' && OWNER_TABS.has(String(x.id).split('/')[0]);
 
 async function loadIndex() {
@@ -25,9 +27,12 @@ async function loadIndex() {
   const safe = (x) => x.catch(() => ({}));
   const [p, o, c, e, g, k] = await Promise.all([L('admin.participants', {}), L('admin.orgs'), L('admin.catalog'),
     safe(L('admin.experts')), safe(L('admin.programs', {})), safe(L('admin.capstones', {}))]);
+  // مجموعة القسم من مفاتيح الميزات نفسها التي يقرؤها الشريط (groupOf)، فلا يظهر قسم في «تجريبي» هناك وفي غيرها هنا
+  const st = await L('admin.settings').catch(() => null);
+  const flags = st?.success ? featureFlags(st.values) : null;
   const at = (tab, id) => ({ ctx: 'leaders', tab, id });
   return [
-    ...SECTIONS,
+    ...(flags ? sections((k) => !flags[FEATURE_TABS[k]]) : SECTIONS),
     ...(p.participants || []).map((x) => ({ kind: 'participant', id: x.id, title: x.full_name, sub: x.organization_name || x.email, keys: [x.email, x.organization_name, x.job_title], phone: x.phone || null, to: at('participants', x.id) })),
     ...(o.orgs || []).map((x) => ({ kind: 'org', id: x.id, title: x.name, sub: x.short_name, keys: [x.short_name], to: at('orgs', x.id) })),
     ...(e.experts || []).map((x) => ({ kind: 'expert', id: x.id, title: x.full_name, sub: x.title || x.email, keys: [x.email, x.title, ...(x.sectors || [])], to: at('experts', x.id) })),

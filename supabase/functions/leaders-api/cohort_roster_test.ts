@@ -2,6 +2,7 @@
 // الرحلة، فعدد كل مرحلة في الخريطة هو عدد صفوفها دائمًا. قسمان: journeyMap برحلات مركبة (التوازي، المسار المستمر، المتأخر،
 // المرحلة الموقوفة، الخدمة، المنسحب)، ثم adminCohortJourney كاملة على قاعدة في الذاكرة (journeyFor لكل عضو، وحساب العرض
 // وحساب الاختبار خارجها، والقراءات الإضافية ثلاث للدفعة كلها لا واحدة لكل صف).
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 import { journeyMap, rosterAgrees, turnOf } from './journey-map.js';
@@ -157,6 +158,7 @@ Deno.test('على من الدور: مرحلة يفتحها الفريق عليك
 
 // ── 2. adminCohortJourney على قاعدة في الذاكرة ──
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   const reads: string[] = [];
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];

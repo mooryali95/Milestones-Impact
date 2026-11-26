@@ -341,15 +341,16 @@ function ReadMeter({ v }) {
 function Review({ data, onDone }) {
   const [answers, setAnswers] = useState(() => data.quiz.map(() => null));
   const [reflection, setReflection] = useState(data.done?.reflection || '');
+  const [apply, setApply] = useState(data.done?.apply || '');
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const ready = answers.every((x) => x !== null);
-  const potential = POINTS.chapter + data.quiz.length * POINTS.perCorrect + (data.reflection ? POINTS.reflection : 0);
+  const potential = POINTS.chapter + data.quiz.length * POINTS.perCorrect + (data.reflection ? POINTS.reflection + POINTS.reflectionApplied : 0);
 
   const submit = async () => {
     setBusy(true); setError('');
-    const r = await call('handbook.complete', { id: data.chapter.id, answers, reflection });
+    const r = await call('handbook.complete', { id: data.chapter.id, answers, reflection, apply });
     setBusy(false);
     if (!r.success) return setError(r.message);
     setResult(r);
@@ -373,6 +374,10 @@ function Review({ data, onDone }) {
           <textarea className="input" rows={3} value={reflection} onChange={(e) => setReflection(e.target.value)}
             placeholder="اكتب تأملك على عملك الحقيقي. سطران يكفيان." />
           <small className="muted">التأمل يمنحك {countAr(POINTS.reflection, 'نقطة إضافية', 'نقطتين إضافيتين', 'نقاط إضافية', 'نقطة إضافية')}، ويبقى بينك وبين مستشارك.</small>
+          <span className="reflect-q"><b>أين ستطبقه؟</b>موقف من عملك وما ستفعله فيه</span>
+          <input className="input" value={apply} onChange={(e) => setApply(e.target.value)} maxLength={1000}
+            placeholder="مثال: في اجتماع الفريق يوم الأحد سأبدأ بسؤال عن الأثر" />
+          <small className="muted">جوابك مع التأمل يضيف {countAr(POINTS.reflectionApplied, 'نقطة', 'نقطتين', 'نقاط', 'نقطة')}.</small>
         </label>
       )}
 

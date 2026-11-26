@@ -1,6 +1,7 @@
 // «بوابتان، والباقي ملاحظات» (قرار المالك 2026-11-23): التسليم يُحتسب فورًا، والإعادة لا تحبس الرحلة، والملخص اليومي
 // لكل مستشار بمشاركيه ولفريق البرنامج بمن لا مستشار له، وبطاقة المبادرة وحدها فورية، و«قرأتها كلها» لا تمس البطاقة.
 // قاعدة في الذاكرة وشبكة محاكاة، فلا يخرج طلب حقيقي.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 const { CONFIG, db } = await import('./core.ts');
@@ -14,6 +15,7 @@ const { modelStatusAr, REVIEWER_AR } = await import('./labels.js');
 type Row = Record<string, any>;
 const val = (r: Row, c: string) => c.split('.').reduce((o: any, k) => (o == null ? undefined : o[k]), r);
 function fakeFrom(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   return (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
     let mode: 'select' | 'insert' | 'update' = 'select';
@@ -204,6 +206,8 @@ Deno.test('advisorsOf بقراءات معدودة يطابق advisorOf لكل م
   tables.cohort_group_members.push({ participant_id: 'p3', cohort_id: 'cA', cohort_groups: { advisor_expert_id: 'xG' } }, { participant_id: 'p4', cohort_id: 'cA', cohort_groups: { advisor_expert_id: 'xN' } },
     { participant_id: 'p5', cohort_id: 'cB', cohort_groups: { advisor_expert_id: 'xG' } });
   tables.enrollments.push(...['p3', 'p4'].map((id) => ({ participant_id: id, cohort_id: 'cA', status: 'active', created_at: t })));
+  // عضو الجهة ملحق بدفعتها صراحة (تصور المرحلة 4: لا استنتاج بالجهة)
+  tables.enrollments.push({ participant_id: 'p6', cohort_id: 'cO', status: 'active', created_at: t });
   const ps = [P1, P2, { id: 'p3', organization_id: null }, { id: 'p4', organization_id: null }, { id: 'p5', organization_id: null }, { id: 'p6', organization_id: 'o1' }, { id: 'p7', organization_id: null, is_demo: true }];
   const restore = install(tables);
   try {

@@ -18,6 +18,7 @@ import { CONTACT_EMAIL, countAr, EXPERT_ROLE_AR, rubricLevelAr, RUBRIC_SCALE, ST
 import MessageCenter from './MessageCenter.jsx';
 import { assignmentScopeAr, codeDigits, MIN_RATINGS, cohortPeriodAr, readExpertInvite } from '../../../supabase/functions/leaders-api/logic.js';
 import { chapterNoteOnly, isGateModel, readingList } from '../../../supabase/functions/leaders-api/model-review.js';
+import { rosterLineAr } from '../../../supabase/functions/leaders-api/peer.js';
 import ExpertApply from './ExpertApply.jsx';
 import PortalConsent, { RatersAwaiting } from '../PortalConsent.jsx';
 import OtherDoors, { DoorButtons, doorsFromCode } from '../Doors.jsx';
@@ -261,7 +262,9 @@ function MyParticipants({ onOpen, initial, f360, show360 = false }) {
     <RatersAwaiting items={d?.raters_pending} onDecide={decide} />
     {show360 && <Advisor360 initial={f360} />}
     <section className="card stack" aria-labelledby="xp-mine">
-      <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.items.length}</small> : null}</h2>
+      <h2 className="as-h3" id="xp-mine">مشاركوك{d?.items?.length ? <small className="muted"> · {d.total || d.items.length}</small> : null}</h2>
+      {/* القائمة تُقطع عند حدها بعد ترتيبها بالعمل المعلق (pickRoster): السطر يقول كم ظهر ومن أولًا */}
+      {d?.truncated && <p className="small muted" role="note">{rosterLineAr(d)}</p>}
       {!d ? <p className="muted small">جارٍ التحميل…</p> : !d.success ? <p className="muted small">{d.message}</p> : !d.items.length ? <p className="muted small">لا مشاركين مسندين إليك الآن. حين تصير مستشارًا أساسيًا لدفعة أو يُقبل طلب خدمة لك يظهرون هنا.</p>
         : (
           <>

@@ -203,7 +203,8 @@ export async function auditMany(rows: AuditRow[]) {
 
 // سجل الموافقات التاريخي (D18): سطر لا يُكتب فوقه بالنسخة وبصمة نص الوثائق، وهو دليل الموافقة.
 // تعذّر كتابته يرمي، فيفشل الطلب قبل أثره في السجل ولا تُعد الموافقة مسجلة بلا دليلها.
-export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater';
+// الراعي (تصور المرحلة 2، 2.1): معرّفه معرّف ما قرر فيه (الوثيقة أو مراجعة الأثر) لا بريده (نوعه في القيد منذ 20261129170000)
+export type ConsentSubject = 'participant' | 'coordinator' | 'expert' | 'rater' | 'sponsor';
 export async function logConsent(subject: ConsentSubject, subjectId: string, kind: 'accept' | 'renew' | 'org_share_on' | 'org_share_off') {
   const { error } = await db.from('consent_events').insert({ subject, subject_id: subjectId, kind, version: POLICY_DIGEST.version, text_digest: POLICY_DIGEST.sha256 });
   if (error) {
@@ -1005,15 +1006,31 @@ export function coordinatorSignInMail(name: string | null, code: string, link: s
     `رمزك ${code} · صالح ${CONFIG.codeMinutes} دقيقة`);
 }
 
-export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>) {
+// raters: مقيّمو 360 بانتظار تأكيد المنسق (raters_pending من dashboardFor، أي awaitingFor بشرط صلاحية القائمة ومفتاح 360،
+// تصور المرحلة 1 البند 5). خمسة بحد أعلى، باسم المشارك وصلة المقيّم وحدهما: البريد يُحفظ خارج المنصة فلا بريد المقيّم
+// ولا اسمه، والتفاصيل في اللوحة بعد الدخول. ولا قسم إن لم يكن شيء ينتظر
+export const WEEKLY_RATERS_MAX = 5;
+function weeklyRatersBlock(raters: { participant?: string | null; relation_ar?: string | null }[] = []) {
+  if (!raters?.length) return '';
+  const top = raters.slice(0, WEEKLY_RATERS_MAX);
+  const more = raters.length - top.length;
+  return mailText('<b>مقيّمون ينتظرون تأكيدك</b>')
+    + mailText(top.map((r) => `${bdi(r.participant || 'مشارك')}: ${esc(r.relation_ar || 'مقيّم')}`).join('<br>')
+      + (more > 0 ? `<br>وغيرها ${more}` : ''))
+    + mailButton(`${CONFIG.appUrl}/org#ra-h`, more > 0 ? `راجع القائمة كاملة (${raters.length})` : 'أكّدهم في لوحة الجهة');
+}
+
+export function coordinatorWeeklyMail(name: string | null, org: string, k: Record<string, number>, raters: { participant?: string | null; relation_ar?: string | null }[] = []) {
   return shell('organization', mailTitle`ملخص ${org} الأسبوعي`,
     mailText(`${hello(name)} هذا ملخص مشاركي جهتك في برنامج القادة.`)
     + mailRows([['المشاركون', k.total], ['انضموا هذا الأسبوع', k.joined_week], ['نشطون هذا الأسبوع', k.active_week],
       ['اعتُمد مسارهم', k.approved], ['أنهوا البرنامج', k.completed], ['متوسط الإنجاز', `${k.avg_progress}%`],
       ...(k.seats ? [['مقاعد العقد', `${k.seats_used} من ${k.seats}`] as [string, unknown]] : []),
       ...(k.seats_waiting ? [['بانتظار قرار الرعاية', k.seats_waiting] as [string, unknown]] : [])])
+    + weeklyRatersBlock(raters)
     + mailButton(`${CONFIG.appUrl}/org`, 'التفاصيل في لوحة الجهة'),
-    `${k.active_week} نشطون · متوسط الإنجاز ${k.avg_progress}%`, 'يصلك هذا الملخص كل أسبوع، ويمكن للإدارة إيقافه متى طلبت.');
+    // الفئة coord_digest جماعية (bulk) يشملها إلغاء الاشتراك بنقرة، فالمنسق يوقفه بنفسه
+    `${k.active_week} نشطون · متوسط الإنجاز ${k.avg_progress}%`, 'يصلك هذا الملخص كل أسبوع، ويمكنك إيقافه من رابط إلغاء الاشتراك أسفل الرسالة.');
 }
 
 // إشعار المشارك حين تُفتح لجهته صلاحية تكشف بياناته (الشفافية قبل الاطلاع)
@@ -1282,7 +1299,7 @@ export const MAIL_GALLERY: { key: string; family: MailFamily; label: string; sub
   { key: 'new-device', family: 'access', label: 'دخول من جهاز جديد', subject: 'دخول جديد إلى حسابك', html: () => newDeviceMail('سارة', 'iPhone · Safari', 'الأحد 2 نوفمبر · 10:00') },
   { key: 'coord-invite', family: 'organization', label: 'دعوة مطّلع الجهة', subject: 'لوحة وزارة التجربة في برنامج القادة', html: () => coordinatorInviteMail('خالد', 'وزارة التجربة', { invite_code: 'tajriba', seats: 25, contract_starts: '2026-11-01', contract_ends: '2027-10-31' }) },
   { key: 'cohort-weekly', family: 'admin', label: 'ملخص الدفعة الأسبوعي', subject: cohortWeeklySubject('دفعة التجربة'), html: () => cohortWeeklyMail({ id: '00000000-0000-0000-0000-000000000000', name: 'دفعة التجربة' }, { members: 24, active_week: 17, late: 3, waiting: 2, finished: 1, done_week: 31, stages: [{ title: 'التدريب', here: 14 }, { title: 'التطبيق في العمل', here: 6 }], next_at: '2026-11-24T06:00:00Z', taken_at: '2026-11-22T00:17:00Z' }) },
-  { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }) },
+  { key: 'coord-weekly', family: 'organization', label: 'ملخص الجهة الأسبوعي', subject: 'ملخص وزارة التجربة الأسبوعي', html: () => coordinatorWeeklyMail('خالد', 'وزارة التجربة', { total: 24, joined_week: 3, active_week: 17, approved: 20, completed: 4, avg_progress: 46 }, [{ participant: 'سارة الأحمد', relation_ar: 'زميل' }, { participant: 'عمر خالد', relation_ar: 'مرؤوس' }]) },
   { key: 'org-access', family: 'organization', label: 'إشعار اطلاع الجهة', subject: 'وزارة التجربة تطّلع على رحلتك', html: () => orgAccessMail('سارة', 'وزارة التجربة', ['التواصل', 'المستويات']) },
   { key: 'team-assigned', family: 'experts', label: 'التكليف في فريق دفعة', subject: 'كُلّفت في فريق دفعة وزارة التجربة 2026', html: () => teamAssignedMail('منى', { cohort: 'دفعة وزارة التجربة 2026', org: 'وزارة التجربة', role: 'موجّه', scope: 'خبير المجموعة 2', period: '1 مارس 2026 إلى 30 يونيو 2026' }) },
   { key: 'health', family: 'admin', label: 'تقرير الأسبوع للإدارة', subject: 'تقرير الأسبوع: برنامج القادة', html: () => healthMail([['مشاركون جدد', '12'], ['بانتظار الاعتماد', '3']], ['3 مشاركين بانتظار اعتماد المستوى منذ أكثر من 3 أيام']) },

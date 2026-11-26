@@ -1,6 +1,7 @@
 // أعضاء الدفعة لخريطتها في ملفها (cohortMemberIds وadminCohortJourney، R0 في تصور محرر رحلة الدفعة): القاعدة نفسها
 // التي تعدّ بها memberCounts (pickCohort)، بلا حساب العرض ولا حساب الاختبار، والقراءة بصفحات فلا يسقط عضو عند 1000 صف.
 // قاعدة في الذاكرة بنمط cohort_guard_test.ts، بلا شبكة.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -10,6 +11,7 @@ const { adminCohortJourney, COHORT_JOURNEY_MAX } = await import('./coordinator.t
 type Row = Record<string, any>;
 const MAX_ROWS = 1000;
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];
     let single = false, limit = Infinity, range: [number, number] | null = null;

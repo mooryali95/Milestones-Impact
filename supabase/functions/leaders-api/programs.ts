@@ -7,7 +7,7 @@
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
 import { baselineMinutes } from './assessment-time.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, postInService, POST_IN_SERVICE_AR, upgradePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgCohort, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, postInService, POST_IN_SERVICE_AR, upgradePlan } from './logic.js';
 import { CHARTER_KEY, programEnd, READY_MIN } from './capstone.js';
 import { planUpgradeBlock } from './cohort-plan.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
@@ -16,6 +16,7 @@ import { cleanProfile } from './certificates.ts';
 import { seatsUsedByOrg } from './entitlements.ts';
 import { features } from './features.ts';
 import { featureHiddenCodes, featureHiddenFor } from './features.js';
+import { managerPreAllowed } from './manager-rating.js';
 import { isRunning, LIVE } from './cohort-running.js';
 import { listed } from './counting.ts';
 import { demoCohortOf, refuseDemo, removeCohortDemo } from './demo-cohort.ts';
@@ -84,13 +85,22 @@ export async function cohortOf(p: { id?: string | null; organization_id?: string
   // حساب الدفعة التجريبي (demo-cohort.ts): دفعته من عموده وحده، كأنها إلحاق صريح، ولا صف له في enrollments. فيرى خطة
   // دفعته ونسختها ومواعيدها وما أُوقف من مراحلها كما يراها أعضاؤها، ولا تجده قراءة بالدفعة. دفعة لم تعد موجودة: القاعدة العامة
   const demoCohort = demoCohortOf(p as any);
-  const [enr, cohorts] = await Promise.all([
-    p.id && !demoCohort ? db.from('enrollments').select('cohort_id, status, created_at').eq('participant_id', p.id) : Promise.resolve({ data: [] as any[], error: null }),
-    db.from('cohorts').select(COHORT_COLS),
+  // تصور المرحلة 4 (البند 10): دفعة الإلحاق بعينها والمفتوحة العامة وحدهما، لا مسح جدول الدفعات كله
+  const enr: any = p.id && !demoCohort ? await db.from('enrollments').select('cohort_id, status, created_at').eq('participant_id', p.id)
+    : { data: [] as any[], error: null };
+  if (strict) must(enr);
+  const enrollments = demoCohort ? [{ cohort_id: demoCohort, status: 'active', created_at: '' }] : (enr.data || []).filter((e: any) => e.status !== 'withdrawn');
+  const ids = [...new Set(enrollments.map((e: any) => e.cohort_id).filter(Boolean))] as string[];
+  const [own, def]: any[] = await Promise.all([
+    ids.length ? db.from('cohorts').select(COHORT_COLS).in('id', ids) : Promise.resolve({ data: [], error: null }),
+    db.from('cohorts').select(COHORT_COLS).eq('is_default', true),
   ]);
-  if (strict) { must(enr); must(cohorts); }
-  const enrollments = demoCohort ? [{ cohort_id: demoCohort, status: 'active', created_at: '' }] : enr.data || [];
-  return pickCohort({ enrollments, cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
+  if (strict) { must(own); must(def); }
+  const cohorts = { data: [...(own.data || []), ...(def.data || [])] };
+  const picked = pickCohort({ enrollments, cohorts: cohorts.data || [] });
+  // الاحتياط المعلن: مشارك حقيقي بلا إلحاق يرى المفتوحة العامة مؤقتًا، ويُسجَّل لتلتقطه أداة من لا دفعة له
+  if (picked.via === 'fallback' && p.id && !demoCohort) console.warn('cohort fallback:', p.id);
+  return picked;
 }
 
 // إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتاب فيه لحساب بند القراءة على إصدار الدفعة.
@@ -120,7 +130,8 @@ export async function journeyDefinition(p: { id?: string | null; organization_id
   // بنود أخفتها الدفعة: تختفي من رحلة أعضائها فورًا، ولا يُحذف ما أُنجز منها
   const cohortHidden = ((cohort as any)?.hidden_requirements || []) as string[];
   // وبنود يخفيها مفتاح ميزة مطفأ (تقدير المدير والزملاء مع 360): الطبقة نفسها، فلا تُمس النسخة ولا الصفوف وتعود حين يُظهَر
-  const fh = featureHiddenFor({ stages: def.stages, requirements: def.requirements, cohortHidden, flags: await features(), breaks: hideBreaksStage });
+  // والقبلي لتقييم المدير يُخفى لدفعة جارية بدأت قبل إطلاقه (تصور المرحلة 3، القرار 2)
+  const fh = featureHiddenFor({ stages: def.stages, requirements: def.requirements, cohortHidden, flags: await features(), breaks: hideBreaksStage, preAllowed: managerPreAllowed(cohort) });
   if (fh.kept.length) console.warn('feature-hidden kept to avoid a stuck stage:', fh.kept.join(','), cohort?.id || '');
   const hidden = new Set([...cohortHidden, ...fh.hidden]);
   if (hidden.size) def.requirements = def.requirements.filter((r: any) => !hidden.has(r.code));
@@ -225,7 +236,7 @@ export async function orgCohortSetups(orgIds: string[]) {
   const members = memberCounts(people.data || [], enr.data || [], all);
   const own: Record<string, any> = {};
   for (const id of orgIds) {
-    const c: any = pickCohort({ enrollments: [], cohorts: all, organizationId: id }).cohort;
+    const c: any = orgCohort(all, id).cohort;
     own[id] = c && c.organization_id === id ? c : null;
   }
   const advIds = [...new Set(Object.values(own).map((c: any) => c?.advisor_expert_id).filter(Boolean))] as string[];
@@ -333,7 +344,7 @@ export async function list(_b: Body = {}, opt: { desk?: boolean } = {}) {
     // عقد الجهة مصدرًا لسطر المقاعد في نموذج دفعتها: الحد والمستهلك من العقد كله (seatsUsedByOrg)، والدفعة التي
     // يدخلها أعضاؤها الجدد الآن (pickCohort). تعذّر عد المقاعد يترك seats_used فارغًا فلا يُعرض رقم خاطئ
     organizations: (orgs.data || []).map((o: any) => {
-      const auto = pickCohort({ enrollments: [], cohorts: cohorts.data || [], organizationId: o.id });
+      const auto = orgCohort(cohorts.data || [], o.id);
       return { ...o, seats_used: seated ? seated[o.id] || 0 : null, auto_cohort: auto.cohort ? { id: auto.cohort.id, name: auto.cohort.name, via: auto.via } : null };
     }),
     // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل
@@ -576,7 +587,7 @@ async function guardLive(b: Body, row: Body, prev: any, programId: string) {
     const def = await defOf(vid, programId);
     // وما يخفيه مفتاح ميزة مطفأ الآن (بنود تقدير المدير والزملاء مع 360) يُحسب مع إخفاء الدفعة: بند يبقيه featureHiddenFor
     // ظاهرًا لئلا تفرغ مرحلته لا يكتمل ما دام المفتاح مطفأ، فلا يُسمح بإخفاء يجعله وحده ما يكمل مرحلة
-    const fcodes = featureHiddenCodes(await features());
+    const fcodes = featureHiddenCodes(await features(), { preAllowed: managerPreAllowed({ ...(prev || {}), ...row }) });
     const broken = hideBreaksStage(def.stages || [], def.requirements || [], [...hidden, ...fcodes]);
     // يُرفض ما يزيد الكسر وحده: مجموعة قائمة كاسرة لم تُمس لا تمنع إغلاق الدفعة ولا تعديل اسمها، ولا كسر من شكل البرنامج والمفتاح وحدهما
     const was = !broken.length ? []
@@ -586,7 +597,7 @@ async function guardLive(b: Body, row: Body, prev: any, programId: string) {
     const worse = newlyBroken(broken, was);
     if (worse.length) {
       const byFeature = fcodes.length && newlyBroken(worse, hideBreaksStage(def.stages || [], def.requirements || [], hidden)).length > 0;
-      throw new Fail(hideBreaksMessage(worse) + (byFeature ? ' وبنود تقدير المدير والزملاء مخفية الآن مع تقييم 360، فلا تُحسب مما يكمل المرحلة.' : ''), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
+      throw new Fail(hideBreaksMessage(worse) + (byFeature ? ' وتقدير الزملاء بعد البرنامج مخفي الآن مع تقييم 360، فلا يُحسب مما يكمل المرحلة.' : ''), 400, 'hide_breaks_stage', { stages: worse.map((s: any) => s.key) });
     }
   }
   const touched = !prev || ['status', 'organization_id', 'starts_on', 'program_id'].some((k) => k in row && row[k] !== prev[k]);
@@ -725,6 +736,14 @@ export async function cohortSave(a: Admin, b: Body) {
       await audit('admin', a.email, 'program.version', 'program_versions', v.id, null, { number: v.number, label: v.label, auto: 'cohort.pin' });
     }
     row.program_version_id = v.id;
+  }
+  // دفعة بلا نسخة لا تُفتح (تصور المرحلة 4، م6، القرار 7): الإلحاق الصريح بها يعطي رحلة تتغير بتعديل البرنامج. يُمنع الانتقال
+  // من حال غير حية إلى «التسجيل مفتوح» أو «جارية» وإنشاؤها كذلك، ولا يُمس ما سواه لدفعة غير مثبتة (اسمها أو إغلاقها أو حية أصلًا)
+  const liveAfter = (s: unknown) => s === 'open' || s === 'running';
+  const vidFinal = 'program_version_id' in row ? row.program_version_id : prev?.program_version_id ?? null;
+  if (!vidFinal && liveAfter(row.status ?? prev?.status) && (!prev || ('status' in row && !liveAfter(prev.status)))) {
+    if (versionCreated) await db.from('program_versions').delete().eq('id', versionCreated.id).then(() => {}, () => {});
+    throw new Fail('لا تُفتح دفعة بلا نسخة من برنامجها: ثبّتها على نسخة من ملفها أولًا، فتبقى رحلة أعضائها ثابتة.', 400, 'version_required');
   }
   row.updated_at = new Date().toISOString();
   // نسخة أُنشئت لهذا الحفظ ثم رُفض حفظ الدفعة نفسه: تُحذف فلا تبقى نسخة بلا سبب (لم تُثبَّت عليها دفعة بعد)
@@ -890,9 +909,28 @@ export async function cohortEnroll(a: Admin, b: Body) {
       throw new Fail(`${moveConfirmText(extra)} أكّد النقل إن كان مقصودًا.`, 409, 'confirm_move', extra);
     }
   }
+  // النقل الذري (تصور المرحلة 4، م4، ترحيل 20261129240000): لكل مشارك في معاملة واحدة سحب إلحاقاته وإلحاقه بالهدف وحذف
+  // مجموعاته وأدواره في غيره وسطر cohort_placements. قبل الترحيل (لا دالة) تمضي الخطوات المتتابعة أدناه كما كانت
+  let atomic = 0;
+  for (const pid of ids) {
+    const r = await db.rpc('transfer_participant', { p_participant: pid, p_actor: a.email, p_org: null, p_set_org: false, p_cohort: c.id });
+    if (r.error) {
+      if (!atomic && ['PGRST202', '42883'].includes(String((r.error as any).code))) break;
+      throw r.error;
+    }
+    atomic++;
+  }
+  if (atomic) {
+    await audit('admin', a.email, 'cohort.enroll', 'cohorts', c.id, null, { participants: ids.length });
+    return { success: true, enrolled: ids.length };
+  }
   const now = new Date().toISOString();
   must(await db.from('enrollments').update({ status: 'withdrawn', updated_at: now }).in('participant_id', ids).neq('cohort_id', c.id).neq('status', 'withdrawn'));
   must(await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, status: 'active', updated_at: now })), { onConflict: 'participant_id,cohort_id' }));
+  // الوصول يتبع العلاقة الحالية (تصور المرحلة 1، البند 1): عضوية مجموعة المنقول ودوره في دفعاته الأخرى تُحذف، فلا يبقى
+  // خبير مجموعته القديمة يراه. مراجعات السابق وملاحظاته تبقى في سجلاتها (model_submissions وaudit_log)
+  must(await db.from('cohort_group_members').delete().in('participant_id', ids).neq('cohort_id', c.id));
+  must(await db.from('cohort_roles').delete().in('participant_id', ids).neq('cohort_id', c.id));
   await audit('admin', a.email, 'cohort.enroll', 'cohorts', c.id, null, { participants: ids.length });
   // سجل الإلحاق بمصدره (cohort_placements، ترحيل 20261128160000): النقل اليدوي «الإدارة». قبل الترحيل لا جدول فلا سطر
   const placed = await db.from('cohort_placements').insert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, wanted_cohort_id: c.id, organization_id: (c as any).organization_id || null, source: 'manual', outcome: 'placed', actor: a.email })));
