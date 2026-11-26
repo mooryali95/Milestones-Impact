@@ -9,7 +9,7 @@
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
 import QR from 'qrcode';
-import { controlStrip, esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
+import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, SEAL, structuralAccent } from './doc.js';
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -41,7 +41,7 @@ body { font-weight: 400; }
 .in-open + * { break-before: avoid; }
 .in-open .n { font: 400 32pt/0.9 "Noto Sans", sans-serif; color: var(--acc); letter-spacing: -.02em; }
 .in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .18em; }
-.in-open h2 { margin: 0; font-weight: 500; font-size: 18pt; line-height: 1.3; color: #0B272F; }
+.in-open h2 { margin: 0; font-weight: 600; font-size: 18pt; line-height: 1.3; color: #0B272F; }
 .in-open p { margin: 1.5mm 0 0; font-size: 9pt; color: #5F7176; line-height: 1.7; }
 .in-sec h3, .in-sec .cp-f > b { break-after: avoid; }
 .in-sec .cp-p { font-size: 10.5pt; line-height: 1.85; color: #22383F; }
@@ -58,7 +58,7 @@ body { font-weight: 400; }
 .in-lead { font-size: 11pt; line-height: 1.9; color: #0B272F; font-weight: 400; margin: 0 0 6mm; padding: 1mm 0; border-inline-start: 0.6mm solid var(--acc); padding-inline-start: 6mm; break-inside: avoid; }
 .in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 9mm; margin: 0 0 6mm; }
 .in-grid > div { border-top: 1px solid #DCE2E1; padding-top: 2.5mm; break-inside: avoid; }
-.in-grid > div span { display: block; font-size: 9pt; font-weight: 500; color: #8A6424; }
+.in-grid > div span { display: block; font-size: 8.5pt; font-weight: 600; color: #8A6424; }
 .in-grid > div p { margin: .8mm 0 0; font-size: 10.5pt; line-height: 1.75; color: #22383F; }
 .in-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 0 0 6mm; }
 .in-card { border: 1px solid #DCE2E1; border-top: 0.6mm solid var(--acc); padding: 3.5mm 4mm; break-inside: avoid; }
@@ -86,7 +86,7 @@ body { font-weight: 400; }
 .in-lean { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 0 0 6mm; }
 .in-lean > div { border: 1px solid #DCE2E1; padding: 3mm 3.5mm; break-inside: avoid; min-height: 30mm; }
 .in-lean > div.w2 { grid-column: span 2; }
-.in-lean span { display: block; font-size: 9pt; font-weight: 500; color: var(--acc); margin-bottom: 1mm; }
+.in-lean span { display: block; font-size: 8.5pt; font-weight: 600; color: var(--acc-text, #8A6424); margin-bottom: 1mm; }
 .in-lean p { margin: 0; font-size: 9.5pt; line-height: 1.7; color: #22383F; white-space: pre-line; }
 .in-90 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin: 0 0 6mm; }
 .in-90 > div { border-top: 0.6mm solid var(--acc); padding-top: 3mm; break-inside: avoid; }
@@ -201,6 +201,10 @@ export function qrSvg(text) {
 export const verifyUrl = (fp, base = SITES.leaders) => `${String(base || SITES.leaders).replace(/\/$/, '')}/v/doc/${encodeURIComponent(fp)}`;
 
 /** هوية الوثيقة: الجهة في الصدارة، والدفعة (اسم برنامجها وشعاره ولونها) توقيعًا، ولون البنية بعد فحص التباين */
+// لون البنية نصًا صغيرًا (تسميات .in-lean): يحتاج 4.5:1 على الأبيض لا 3:1، وإلا الذهبي النصي
+export const TEXT_MIN_CONTRAST = 4.5;
+export const accentText = (accent) => (accent && contrastRatio(accent) >= TEXT_MIN_CONTRAST ? accent : C.goldText);
+
 export function identityOf(m) {
   const org = m.org || null;
   const co = m.cohort_brand || null;
@@ -405,10 +409,10 @@ export function institutionalReport(input, options = {}) {
     ${url ? `<div class="in-verify">${qrSvg(url)}<p>${esc(DOC_VERIFY_AR.note)}<br><a href="${esc(url)}">${esc(url)}</a></p>${SEAL()}</div>` : approved ? `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.note)}</p>${SEAL()}</div>` : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p></div>`}</div>`,
   url ? DOC_VERIFY_AR.lead : null);
 
-  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${en === 'Approval' ? '◆' : String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const { brand, accent } = identityOf(m);
   const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}</section>` : '';
-  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
+  const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
   const subtitle = [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;

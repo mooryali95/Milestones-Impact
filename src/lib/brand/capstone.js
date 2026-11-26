@@ -28,7 +28,7 @@ export const STYLE = `<style>
 .cp-f > b { display: block; font-weight: 400; font-size: 8.4pt; color: #5F7176; margin-bottom: 1mm; }
 .cp-toc { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 10mm; }
 .cp-toc li { display: flex; gap: 3mm; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; font-size: 9.4pt; break-inside: avoid; }
-.cp-toc li span { font: 300 8pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 7mm; }
+.cp-toc li span { font: 400 8pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 7mm; }
 .cp-toc li small { margin-inline-start: auto; color: #5F7176; font-size: 7.6pt; }
 .cp-tree { margin: 3mm 0 0; padding: 0; list-style: none; }
 .cp-tree li { position: relative; padding: 1.2mm 0; font-size: 9pt; }
@@ -39,7 +39,7 @@ export const STYLE = `<style>
 .cp-tree li.l2::before, .cp-tree li.l3::before, .cp-tree li.l4::before { content: ''; position: absolute; top: 0; bottom: 50%; width: 3mm; border-bottom: 1px solid #DCE2E1; border-inline-start: 1px solid #DCE2E1; inset-inline-start: calc(var(--d) * 7mm - 4mm); }
 .cp-fig { margin: 4mm 0 2mm; break-inside: avoid; }
 .cp-fig figcaption { font-size: 7.6pt; color: #5F7176; margin-top: 1mm; }
-.cp-heat { display: grid; grid-template-columns: 8mm repeat(5, 1fr); gap: 1px; width: 92mm; font: 300 7.5pt "Noto Sans", sans-serif; direction: ltr; }
+.cp-heat { display: grid; grid-template-columns: 8mm repeat(5, 1fr); gap: 1px; width: 92mm; font: 400 7.5pt "Noto Sans", sans-serif; direction: ltr; }
 .cp-heat div { aspect-ratio: 1.6; display: grid; place-items: center; color: #0B272F; }
 .cp-heat .ax { color: #5F7176; aspect-ratio: auto; }
 .cp-heat .lo { background: #EEF1F0; } .cp-heat .md { background: #F2E6D0; } .cp-heat .hi { background: #E1BE85; }
@@ -52,17 +52,17 @@ export const STYLE = `<style>
 .cp-check li.ok::before { content: '✓'; color: #A97A2E; } .cp-check li.no::before { content: '○'; color: #5F7176; }
 .cp-check li small { display: block; color: #5F7176; font-size: 8pt; }
 .cp-stamp { display: inline-block; border: 1px solid #A97A2E; color: #8A6424; padding: 1mm 4mm; border-radius: 2px; font-size: 8.5pt; }
-.cp-gaps { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
-.cp-gaps th { text-align: right; font-weight: 400; font-size: 7.5pt; color: #5F7176; padding: 2mm 1.5mm; border-bottom: 1px solid #0B272F; }
+.cp-gaps { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.cp-gaps th { text-align: right; font-weight: 400; font-size: 8.5pt; color: #5F7176; padding: 2mm 1.5mm; border-bottom: 1px solid #0B272F; }
 .cp-gaps td { padding: 2mm 1.5mm; border-bottom: 1px solid #EEF1F0; vertical-align: top; }
 .cp-gaps td.ch { color: #0B272F; font-weight: 400; } .cp-gaps td.why { color: #5F7176; font-size: 8.2pt; }
-.cp-rev { display: inline-block; margin-inline-start: 1.5mm; font-size: 7.4pt; color: #8A6424; border-bottom: 1px dotted #A97A2E; }
+.cp-rev { display: inline-block; margin-inline-start: 1.5mm; font-size: 7.5pt; color: #8A6424; border-bottom: 1px dotted #A97A2E; }
 .cp-flag > .cp-p { color: #5F7176; }
 .cp-gaps td q { color: #2C4148; font-size: 8pt; }
 .cp-draft { border: 1px dashed #5F7176; color: #5F7176; padding: 3mm 5mm; border-radius: 2px; font-size: 9pt; margin-top: 6mm; }
-.cp-score b { font: 200 30pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
+.cp-score b { font: 400 28pt/1 "Noto Sans", sans-serif; } .cp-score span { color: #5F7176; font-size: 9pt; margin-inline-start: 2mm; }
 .cp-break { break-before: page; }
-.cp-charter { width: 100%; border-collapse: collapse; font-size: 8.9pt; }
+.cp-charter { width: 100%; border-collapse: collapse; font-size: 9pt; }
 .cp-charter th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; color: #5F7176; padding: 1.3mm 0; border-bottom: 1px solid #EEF1F0; }
 .cp-charter td { padding: 1.3mm 0 1.3mm 2mm; border-bottom: 1px solid #EEF1F0; line-height: 1.7; color: #2C4148; white-space: pre-line; }
 .cp-case { margin: 0 0 5mm; break-inside: avoid; }
@@ -83,18 +83,21 @@ export const STYLE = `<style>
 .kpis, .cp-case, .cp-launch > div, .cp-toc2 li, .cp-charter tr, .cp-gloss tr, .points li, .cp-check li, .cp-tree li { break-inside: avoid; }
 /* رقم الصفحة في الفهرس: مكانه محجوز في الملف وحده، يكتبه pdf.js بعد تقسيم الصفحات */
 .cp-pgno { display: none; }
-html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 300 8pt "Noto Sans", sans-serif; color: #5F7176; }
+/* الطباعة ومولّد الخادم: الرقم من target-counter (المرحلة 27)؛ وملف المتصفح يكتبه pdf.js في موضعه فلا يتكرر */
+@media print { html:not(.pdf) .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 400 8pt "Noto Sans", sans-serif; color: #5F7176; }
+  html:not(.pdf) .cp-pgno:empty::after { content: target-counter(attr(data-ref url), page); } }
+html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; font: 400 8pt "Noto Sans", sans-serif; color: #5F7176; }
 .cp-anchor { display: block; height: 0; }
 .cp-toc2 { display: grid; gap: 3mm; }
 .cp-toc2 .ph { break-inside: avoid; }
 .cp-toc2 .ph > h3 { margin: 0 0 1mm; font-weight: 400; font-size: 10pt; display: flex; gap: 2mm; align-items: baseline; }
-.cp-toc2 .ph > h3 small { color: #5F7176; font-size: 7.6pt; font-weight: 300; }
+.cp-toc2 .ph > h3 small { color: #5F7176; font-size: 7.6pt; font-weight: 400; }
 .cp-toc2 .ph > p { margin: 0 0 1.4mm; color: #5F7176; font-size: 7.8pt; }
 .cp-toc2 ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 8mm; }
 .cp-toc2 li { break-inside: avoid; border-bottom: 1px solid #EEF1F0; padding: 1.3mm 0; font-size: 9pt; display: flex; gap: 2.5mm; align-items: baseline; }
 .cp-toc2 li a { color: inherit; text-decoration: none; flex: 1; }
-.cp-toc2 li span.n { font: 300 8pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 6mm; }
-.cp-toc2 li i { font-style: normal; font-size: 7pt; color: #5F7176; white-space: nowrap; }
+.cp-toc2 li span.n { font: 400 8pt "Noto Sans", sans-serif; color: #A97A2E; min-width: 6mm; }
+.cp-toc2 li i { font-style: normal; font-size: 7.5pt; color: #5F7176; white-space: nowrap; }
 .cp-toc2 li i.no { color: #8A6424; }
 .cp-toc2 .front { columns: 1; display: flex; flex-wrap: wrap; gap: 0 6mm; }
 .cp-toc2 .front li { border: 0; padding: .6mm 0; }
@@ -106,16 +109,16 @@ html.pdf .cp-pgno { display: inline-block; min-width: 7mm; text-align: left; fon
 .cp-launch > div { padding: 3mm 3mm 3mm 0; border-inline-start: 1px solid #DCE2E1; padding-inline-start: 3mm; break-inside: avoid; }
 .cp-launch > div:first-child { border-inline-start: 0; padding-inline-start: 0; }
 .cp-launch h3 { margin: 0; font-weight: 400; font-size: 10pt; }
-.cp-launch small { display: block; color: #5F7176; font-size: 7.4pt; margin-bottom: 2mm; }
+.cp-launch small { display: block; color: #5F7176; font-size: 7.5pt; margin-bottom: 2mm; }
 .cp-launch ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1.6mm; }
 .cp-launch li { font-size: 8.6pt; line-height: 1.7; color: #2C4148; padding-inline-start: 3.5mm; position: relative; }
 .cp-launch li::before { content: ''; position: absolute; inset-inline-start: 0; top: 2.2mm; width: 1.4mm; height: 1.4mm; background: #A97A2E; transform: rotate(45deg); }
-.cp-gloss { width: 100%; border-collapse: collapse; font-size: 8.6pt; }
+.cp-gloss { width: 100%; border-collapse: collapse; font-size: 9pt; }
 .cp-gloss th { width: 34mm; text-align: start; vertical-align: top; font-weight: 400; padding: 1.6mm 0; border-bottom: 1px solid #EEF1F0; color: #0B272F; }
 .cp-gloss td { padding: 1.6mm 0 1.6mm 2mm; border-bottom: 1px solid #EEF1F0; color: #2C4148; line-height: 1.7; }
 .cp-gloss tr { break-inside: avoid; }
 .cp-fig svg.mi-narrow { max-width: 105mm !important; display: block; margin: 0 auto; }
-.mi-legend { display: flex; gap: 4mm; flex-wrap: wrap; font-size: 7.4pt; color: #5F7176; margin-top: 1.5mm; }
+.mi-legend { display: flex; gap: 4mm; flex-wrap: wrap; font-size: 7.5pt; color: #5F7176; margin-top: 1.5mm; }
 .mi-lg { display: inline-flex; align-items: center; gap: 1.2mm; }
 .mi-lg i { display: inline-block; width: 4mm; height: 1.6mm; border-radius: 1px; }
 .mi-lg i.dash { height: 0; border-top: 1px dashed #5F7176; background: none; }
@@ -383,9 +386,9 @@ function tocBlock(pages, front, { draft }) {
   // لا عدّ للحقول الفارغة في الفهرس (قرار المالك 2026-11-24): ما ينقص في ملحقه وحده
   const state = () => '';
   return anchor('toc', true) + section('الفهرس', 'فهرس الوثيقة', `<div class="cp-toc2">
-    <div class="ph"><h3>للقرار والتنفيذ</h3><ol class="front">${front.map(([k, t]) => `<li><a href="#ch-${k}">${esc(t)}</a><span class="cp-pgno"></span></li>`).join('')}</ol></div>
+    <div class="ph"><h3>للقرار والتنفيذ</h3><ol class="front">${front.map(([k, t]) => `<li><a href="#ch-${k}">${esc(t)}</a><span class="cp-pgno" data-ref="#ch-${k}"></span></li>`).join('')}</ol></div>
     ${groups.map((g, gi) => `<div class="ph"><h3>${gi + 1}. ${esc(g.title)} <small>${g.items.length} ${g.items.length === 1 ? 'فصل' : g.items.length === 2 ? 'فصلان' : 'فصول'}</small></h3>${g.lead ? `<p>${esc(g.lead)}</p>` : ''}
-      <ol>${g.items.map((s) => `<li><span class="n">${String(s.n).padStart(2, '0')}</span><a href="#ch-${esc(s.key)}">${esc(s.title)}</a>${state(s)}<span class="cp-pgno"></span></li>`).join('')}</ol></div>`).join('')}
+      <ol>${g.items.map((s) => `<li><span class="n">${String(s.n).padStart(2, '0')}</span><a href="#ch-${esc(s.key)}">${esc(s.title)}</a>${state(s)}<span class="cp-pgno" data-ref="#ch-${esc(s.key)}"></span></li>`).join('')}</ol></div>`).join('')}
   </div>`, draft ? 'الفصول مجمّعة بالأسئلة التي تجيب عنها، وما ينقص منها في الملحق الأخير. انقر عنوانًا لتنتقل إليه.' : 'الفصول مجمّعة بالأسئلة التي تجيب عنها. انقر عنوانًا لتنتقل إليه.');
 }
 
