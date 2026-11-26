@@ -200,7 +200,10 @@ export async function expertReview(e: any, b: Body) {
   const now = new Date().toISOString();
   must(await db.from('peer_answers').update({ status, expert_note: note || null, confirmed_by: e.email, confirmed_at: status === 'hidden' ? null : now, updated_at: now }).eq('id', a.id));
   const all = await answersFor([r.id]);
-  must(await db.from('peer_requests').update({ status: requestStatusFor(all, r.status), updated_at: now }).eq('id', r.id));
+  const next = requestStatusFor(all, r.status);
+  must(await db.from('peer_requests').update({ status: next, updated_at: now }).eq('id', r.id));
+  // صار الطلب مؤكَّدًا (تأكيد أو تصحيح): لا ينتظر المستشار فيه شيء بعد
+  if (next === 'confirmed') await resolveNotes(`peer:${r.id}`);
   await audit('system', e.email, `peer.${status}`, 'peer_answers', a.id, { status: a.status }, { status, note: note || null });
   // إخفاء إجابة كان يمر بلا علم صاحبها: ملاحظة في ملفه تُبلَّغ له مرة واحدة للإجابة (notice-rules.js)
   if (status === 'hidden' && a.author_id) await OB.record(a.author_id, { code: 'peer_hidden', ref: a.id, ...RULES.peer_hidden() });
