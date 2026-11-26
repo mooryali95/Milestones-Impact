@@ -1,6 +1,6 @@
 // معمارية الشريط (المرحلة 2 من تدقيق لوحة الإدارة): كل قسم في مجموعة واحدة، لا يضيع قسم ولا رابط قديم
 import { describe, expect, it } from 'vitest';
-import { GROUP_OF, groupOpen, NAV_GROUPS, SETUP_GROUP, TAB_ALIASES, TABS } from './leaders-tabs.js';
+import { FEATURE_TABS, GROUP_OF, groupOf, groupOpen, NAV_GROUPS, navGroups, navReady, SETUP_GROUP, TAB_ALIASES, TABS, TRIAL_GROUP } from './leaders-tabs.js';
 
 // أقسام الشريط قبل المرحلة 2 (المجموعات الأربع السابقة): كل مفتاح منها يبقى رابطًا صالحًا
 const OLD_KEYS = ['overview', 'insight', 'participants', 'hall', 'capstones', 'activities', 'experts', 'journey', 'book', 'handbook', 'katon', 'lab', 'assessment', 'content',
@@ -29,5 +29,18 @@ describe('مجموعات الشريط', () => {
     expect(groupOpen('العمل', work, 'mail', {})).toBe(true);
     expect(groupOpen('العمل', work, 'mail', { العمل: false })).toBe(false);
     expect(groupOpen('العمل', work, 'overview', { العمل: false })).toBe(true);
+  });
+});
+
+describe('مجموعة القسم الواحدة للشريط والبحث (المرحلة 7)', () => {
+  it('groupOf يطابق مجموعة الشريط لكل قسم مخفيًا أو ظاهرًا', () => {
+    const hid = (k) => k === 'f360';
+    for (const [g, keys] of navGroups(hid)) for (const k of keys) expect(groupOf(k, hid)).toBe(g);
+    expect(groupOf('f360', hid)).toBe(TRIAL_GROUP);
+  });
+  it('أقسام الميزات تُحجب قبل وصول المفاتيح فلا يتبدل ترتيب الشريط', () => {
+    for (const k of Object.keys(FEATURE_TABS)) { expect(navReady(k, false, 'home')).toBe(false); expect(navReady(k, true, 'home')).toBe(true); }
+    expect(navReady('f360', false, 'f360')).toBe(true);
+    expect(navReady('settings', false, 'home')).toBe(true);
   });
 });

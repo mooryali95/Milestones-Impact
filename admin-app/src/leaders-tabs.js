@@ -28,7 +28,23 @@ export const NAV_GROUPS = [
 // كلمات بحث إضافية للقسم (Ctrl K) فيُوجد بما كان يُعرف به: «صحة المنصة» بيت جاهزية الإطلاق وحالة النظام وبيئة التجربة
 // (تصور تبويبات الإدارة 2026-11-24، المرحلة أ)
 export const TAB_KEYWORDS = { health: ['جاهزية الإطلاق', 'حالة النظام', 'الفحوص التشغيلية', 'الحساب التجريبي', 'بيئة التجربة', 'الحالة'] };
-// مجموعة القسم: يقرؤها الشريط والبحث (Ctrl K) فيظهر كل قسم باسم مجموعته
+// مجموعة القسم الأصلية في NAV_GROUPS؛ الشريط والبحث (Ctrl K) يقرآن المجموعة الفعلية من groupOf أدناه فلا يختلفان
 export const GROUP_OF = Object.fromEntries(NAV_GROUPS.flatMap(([g, keys]) => keys.map((k) => [k, g])));
 // حال المجموعة: المفتوح فيه القسم الحالي مفتوحة دائمًا، وإلا ما اختاره المدير، وإلا الافتراضي (الإعداد مطوي وحده)
-export const groupOpen = (g, keys, tab, saved) => keys.includes(tab) || (saved && g in saved ? !!saved[g] : g !== SETUP_GROUP);
+// مجموعة «تجريبي» الأخيرة (المرحلة 7 من تصور تطبيق القادة 2026-11-26): أقسام الميزات المخفية عن المستخدمين (FEATURE_TABS) تخرج من
+// مجموعاتها إلى مجموعة أخيرة مطوية افتراضيًا، فلا تتوسط ما يعمل للمستخدمين
+export const TRIAL_GROUP = 'تجريبي';
+const SHUT_BY_DEFAULT = new Set([SETUP_GROUP, TRIAL_GROUP]);
+export const groupOpen = (g, keys, tab, saved) => keys.includes(tab) || (saved && g in saved ? !!saved[g] : !SHUT_BY_DEFAULT.has(g));
+// مصدر الشريط الواحد: يُرسم منه شكلان بالأنماط وحدها (عمود على العريض، صف يُسحب على الهاتف) من عنصر nav واحد.
+// isHidden(k) صحيح لقسم ميزة مطفأة؛ لا يُنقل إلا ما في FEATURE_TABS
+export function navGroups(isHidden = () => false) {
+  const trial = (k) => !!FEATURE_TABS[k] && !!isHidden(k);
+  const groups = NAV_GROUPS.map(([g, keys]) => [g, keys.filter((k) => !trial(k))]).filter(([, keys]) => keys.length);
+  const t = NAV_GROUPS.flatMap(([, keys]) => keys).filter(trial);
+  return t.length ? [...groups, [TRIAL_GROUP, t]] : groups;
+}
+// المجموعة الفعلية للقسم كما في الشريط: «تجريبي» لقسم ميزة مطفأة، وإلا مجموعته الأصلية
+export const groupOf = (k, isHidden = () => false) => (FEATURE_TABS[k] && isHidden(k) ? TRIAL_GROUP : GROUP_OF[k]);
+// قبل وصول مفاتيح الميزات لا يُعرف مكان أقسامها، فتُحجب من الشريط (إلا القسم المفتوح) حتى لا تقفز بعد الوصول
+export const navReady = (k, flagsLoaded, tab) => flagsLoaded || !FEATURE_TABS[k] || k === tab;
