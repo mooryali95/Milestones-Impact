@@ -117,6 +117,23 @@ export function useGuardedClose(dirty, onClose) {
 }
 
 export const Spinner = () => <div className="spinner" aria-label="جارٍ التحميل" />;
+// هيكل صفوف للتحميل الأول في جدول (مشترك): يحجز الارتفاع فلا تقفز الصفحة، ويعلن التحميل مرة واحدة
+export function SkeletonRows({ rows = 6, cols = 5 }) {
+  return Array.from({ length: rows }, (_, i) => (
+    <tr key={i} className="sk-row" aria-hidden={i > 0 || undefined}>
+      {Array.from({ length: cols }, (__, j) => <td key={j}>{i === 0 && j === 0 && <span className="sr-only">جارٍ التحميل</span>}<span className="sk" /></td>)}
+    </tr>
+  ));
+}
+// خطأ تحميل (مشترك): role=alert وزر إعادة. stale=true حين تبقى البيانات السابقة ظاهرة تحته
+export function LoadError({ message, onRetry, stale = false }) {
+  return (
+    <div className="load-err" role="alert">
+      <span>{stale ? 'تعذّر التحديث، والظاهر آخر ما حُمّل' : 'تعذّر تحميل البيانات'}{message ? `: ${message}` : ''}</span>
+      {onRetry && <button className="btn-sm ghost" type="button" onClick={onRetry}>حاول مرة أخرى</button>}
+    </div>
+  );
+}
 
 // حالة فارغة واحدة لكل الشاشات: ماذا يظهر هنا، ولماذا هو فارغ، وما الخطوة التالية.
 // كانت كل شاشة تكتب سطرها («لا نتائج») أو تترك جدولًا برؤوسه وحدها أو مساحة بيضاء.
@@ -186,9 +203,10 @@ export class ScreenBoundary extends React.Component {
 }
 
 // نسخ رابط إلى الحافظة، وإن منعها المتصفح يُعرض الرابط لينسخه المدير بنفسه (صفحة الجهة وملف الدفعة)
+// reveal=false لبيانات شخصية (البريد): عند الفشل يُعلن الفشل ولا يُعرض النص في نافذة
 export function useCopy() {
   const { toast, prompt } = useUI();
-  return async (text, ok) => {
-    try { await navigator.clipboard.writeText(text); toast(ok); } catch { await prompt('انسخ الرابط:', text); }
+  return async (text, ok, { reveal = true } = {}) => {
+    try { await navigator.clipboard.writeText(text); toast(ok); } catch { if (reveal) await prompt('انسخ الرابط:', text); else toast('تعذّر النسخ'); }
   };
 }
