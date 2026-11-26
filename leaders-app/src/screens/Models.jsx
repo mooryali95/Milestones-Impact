@@ -10,9 +10,9 @@ import { useUnsavedGuard } from '../unsaved.js';
 import { canStart, guideFor, nearExample, starterFor, untouchedStarters } from '../guide.js';
 import AskExpert from './AskExpert.jsx';
 import { FieldAsk, GateLine } from './Assistant.jsx';
-import { fieldFilled, isEmail, latinDigits, POINTS, RANKS } from '../../../supabase/functions/leaders-api/logic.js';
+import { fieldFilled, isEmail, latinDigits, POINTS, RANKS, viewTable } from '../../../supabase/functions/leaders-api/logic.js';
 import { columnKind, fieldKind, reasonOf, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
-import { APPROVAL_POINTS } from '../../../supabase/functions/leaders-api/capstone.js';
+import { APPROVAL_POINTS, dateAr, SCOPE_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
 import { DEP_AR, DEP_TYPES, depAr, formatDeps, parseDeps } from '../../../supabase/functions/leaders-api/schedule.js';
@@ -53,24 +53,28 @@ function Field({ f, value, onChange, locked, initiative, imp, id, labelId, model
     const rows = Array.isArray(value) && value.length ? value : Array.from({ length: f.min_rows || 1 }, () => cols.map(() => ''));
     // دلالة العمود من اسمه (doc-quality.js columnKind، المصدر نفسه الذي يحكم الوثيقة): تاريخ أو مبلغ أو نص
     const kinds = cols.map(columnKind);
-    const set = (ri, ci, v) => onChange(rows.map((r, i) => (i === ri ? r.map((c, j) => (j === ci ? v : c)) : r)));
+    // أعمدة المشارك الظاهرة بعناوينها (beginnerColumns في logic.js): الصف المخزن كامل، والمخفي يبقى في مكانه دون أن يُمس
+    const view = Array.isArray(f.cols_view) ? f.cols_view : cols.map((_, i) => i);
+    const head = (ci) => f.col_labels?.[ci] || cols[ci];
+    const extra = (ci) => Array.isArray(f.cols_req) && !f.cols_req.includes(ci);
+    const set = (ri, ci, v) => onChange(rows.map((r, i) => (i === ri ? cols.map((_, j) => (j === ci ? v : r[j] ?? '')) : r)));
     return (
       <div className="mtable-wrap">
-        <table className="mtable" aria-labelledby={labelId}>
-          <thead><tr><th>#</th>{cols.map((c) => <th key={c}><Annotated text={c} /></th>)}{!locked && <th />}</tr></thead>
+        <table className="mtable mtable-cards" aria-labelledby={labelId}>
+          <thead><tr><th>#</th>{view.map((ci) => <th key={cols[ci]}><Annotated text={head(ci)} />{extra(ci) && <small className="muted"> (اختياري)</small>}</th>)}{!locked && <th />}</tr></thead>
           <tbody>
             {rows.map((r, ri) => (
               <tr key={ri}>
                 <td className="mt-n">{ri + 1}</td>
-                {cols.map((c, ci) => (
-                  <td key={c}><Cell kind={kinds[ci]} locked={locked} value={r[ci] || ''} label={`${c} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
+                {view.map((ci) => { const c = cols[ci]; return (
+                  <td key={c} data-label={head(ci)}><Cell kind={kinds[ci]} locked={locked} value={r[ci] || ''} label={`${head(ci)} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
                     {/* علاقات الأنشطة في الجدول الزمني (schedule.js): أداة اختيار تكتب الصيغة، ووصفها العربي تحت الخلية */}
                     {modelKey === 'schedule' && String(c).includes('يعتمد') && (
                       <DepCell value={r[ci] || ''} own={String(r[0] || '').trim()} codes={rows.map((x) => String(x[0] || '').trim()).filter(Boolean)} level={level} locked={locked}
                         label={`${c} ${ri + 1}`} onChange={(v) => set(ri, ci, v)} />
                     )}
                   </td>
-                ))}
+                ); })}
                 {!locked && <td><button type="button" className="mt-x" title="حذف الصف" disabled={rows.length <= 1}
                   onClick={() => onChange(rows.filter((_, i) => i !== ri))}>×</button></td>}
               </tr>
@@ -129,7 +133,8 @@ function WhenInput({ id, value, locked, onChange, label = undefined, compact = f
   const v = latinDigits(String(value || '')).trim();
   const wk = v.match(WEEK_VAL);
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
-  const [mode, setMode] = useState(wk ? 'week' : 'date');
+  // الأسبوع هو الأصل (الزمن النسبي): يُفتح على التاريخ إن كان المخزن تاريخًا فقط
+  const [mode, setMode] = useState(iso ? 'date' : 'week');
   const [from, setFrom] = useState(wk ? wk[1] : '');
   const [to, setTo] = useState(wk?.[2] || '');
   const writeWeek = (a, b) => { if (a) onChange(b && b !== a ? `الأسبوع ${a}–${b}` : `الأسبوع ${a}`); };
@@ -222,14 +227,17 @@ const RUBRIC = [
 const STEPS = ['افهم النموذج', 'طبّقه على مبادرتك', 'قدّمه', 'الملاحظات'];
 
 // مثال الحقل من المبادرة المحلولة لقطاع المشارك: نص مقتبس، أو أول صفوف الجدول
-function FieldExample({ ex }) {
+// f: حقل المشارك، فيُعرض الجدول بأعمدته الظاهرة وعناوينها (أعمدة التأسيسي) كما يكتبه هو
+function FieldExample({ ex, f = null }) {
   if (!ex) return null;
-  const rows = Array.isArray(ex.value) ? ex.value.slice(0, 3) : null;
+  const view = Array.isArray(ex.value) && f?.columns ? viewTable(f, ex.value) : null;
+  const rows = Array.isArray(ex.value) ? (view ? view.rows : ex.value).slice(0, 3) : null;
+  const columns = view ? view.labels || view.columns : ex.columns || [];
   return (
     <div className="mf-ex">
-      <b>مثال من {ex.sector_title}:</b>
+      <b>مثال من {ex.sector_title}{ex.initiative ? ` («${ex.initiative}»)` : ''}:</b>
       {rows ? (
-        <div className="mf-ex-t"><table><thead><tr>{(ex.columns || []).map((c) => <th key={c}>{c}</th>)}</tr></thead>
+        <div className="mf-ex-t"><table><thead><tr>{columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
           <tbody>{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{isoLtr(String(c))}</td>)}</tr>)}</tbody></table></div>
       ) : <q>{isoLtr(String(ex.value))}</q>}
     </div>
@@ -242,15 +250,21 @@ function ContextNote({ c }) {
 }
 
 // دليل الحقل بمستوى المشارك: مفتوح للتأسيسي، ومطوي للمتوسط، وسؤال تحدٍّ للمتقدم (guide.js)
-function FieldGuide({ g }) {
+// التأسيسي (تخفيف وثيقة المبادرة، المرحلة 3): المطلوب في سطر ظاهر، والباقي خلف «اقرأ المزيد»، والمثال المحلول خلف «أرني مثالًا»
+function FieldGuide({ g, f = null }) {
   if (!g) return null;
   if (g.mode === 'open') {
     return (
       <div className="mf-guide open" role="note">
         <p><b>المطلوب:</b> {g.meaning}</p>
-        <p className="mf-avoid"><b>تجنّب:</b> {g.mistake}</p>
-        <ContextNote c={g.context} />
-        <FieldExample ex={g.example} />
+        <details className="mf-more"><summary>اقرأ المزيد</summary>
+          <p className="mf-avoid"><b>تجنّب:</b> {g.mistake}</p>
+          <ContextNote c={g.context} />
+        </details>
+        {(g.volunteer || g.example) && <details className="mf-more"><summary>أرني مثالًا</summary>
+          <FieldExample ex={g.volunteer} f={f} />
+          <FieldExample ex={g.example} />
+        </details>}
       </div>
     );
   }
@@ -320,7 +334,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
   }
   const m = d.model;
   // بطاقة المبادرة وحدها تُقفل باعتمادها؛ النموذج المقروء يبقى قابلًا للتعديل (الخادم يحكم بالقاعدة نفسها)
-  const locked = (s?.status === 'reviewed' && isGateModel(d.model.key)) || capLocked;
+  const locked = (s?.status === 'reviewed' && isGateModel(d.model.key)) || capLocked || !!chapter?.deferred;
   const initiative = d.initiative;
   const dim = DIMENSIONS.find((x) => x.key === m.dimension);
   const req = m.fields.filter((f) => f.required !== false);
@@ -399,8 +413,16 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
           <section>
             <span className="mg-cap">دليل الاستخدام</span>
             {m.when_ar && <><h4>متى تستخدمه</h4><p>{m.when_ar}</p></>}
-            {m.steps_ar && <><h4>الخطوات</h4><ol>{m.steps_ar.split('\n').filter(Boolean).map((x, i) => <li key={i}>{x}</li>)}</ol></>}
-            {m.source_ar && <p className="model-src">{m.source_ar}</p>}
+            {/* التأسيسي: فقرة واحدة ظاهرة، والخطوات والمصدر خلف «اقرأ المزيد» (تخفيف وثيقة المبادرة، المرحلة 3) */}
+            {m.level === 'beginner' && (m.steps_ar || m.source_ar) ? (
+              <details className="mf-more"><summary>اقرأ المزيد</summary>
+                {m.steps_ar && <><h4>الخطوات</h4><ol>{m.steps_ar.split('\n').filter(Boolean).map((x, i) => <li key={i}>{x}</li>)}</ol></>}
+                {m.source_ar && <p className="model-src">{m.source_ar}</p>}
+              </details>
+            ) : <>
+              {m.steps_ar && <><h4>الخطوات</h4><ol>{m.steps_ar.split('\n').filter(Boolean).map((x, i) => <li key={i}>{x}</li>)}</ol></>}
+              {m.source_ar && <p className="model-src">{m.source_ar}</p>}
+            </>}
           </section>
           <section>
             <span className="mg-cap">علامات النموذج الجيد</span>
@@ -423,6 +445,19 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             <dl><dt>القائد</dt><dd>{name}</dd><dt>التاريخ</dt><dd>{new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
           </header>
           {!locked && <GateLine />}
+          {/* نطاق العمل عند بدء البطاقة (متابعة التخفيف): يُحفظ بإجراء الملف القائم، وحارس التقديم في canSubmit باقٍ */}
+          {m.key === 'initiative-charter' && !d.work_scope && !locked && (
+            <div className="mf mf-select ws-scope" role="group" aria-labelledby={`${uid}-scope`}>
+              <label id={`${uid}-scope`}><span><b>ما نطاق مبادرتك؟</b><small>مشروع واحد، أو برنامج من مشاريع مترابطة، أو محفظة مبادرات. به تتحدد فصول وثيقتك، وتغيّره من ملفك لاحقًا.</small></span></label>
+              <div className="seg-opts" role="radiogroup" aria-labelledby={`${uid}-scope`}>
+                {Object.entries(SCOPE_TITLES).map(([k, t]) => (
+                  <button key={k} type="button" role="radio" aria-checked={false} disabled={!!busy}
+                    onClick={() => call('profile.save', { fields: { work_scope: k } }).then((r) => (r.success ? setD({ ...d, work_scope: k }) : setMsg({ err: r.message })))}>{t}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {chapter?.deferred && <p className="alert info" role="status"><b>{chapter.deferred.deferred_ar}.</b> هذا الفصل يُكتب بعد التنفيذ، فيُفتح في آخر أسبوعين من برنامجك{chapter.deferred.opens_at ? ` (${dateAr(chapter.deferred.opens_at)})` : ''}، ولا يُحسب قبلها في جاهزية وثيقتك.</p>}
           {m.fields.map((f, i) => {
             const ok = filledOf(f, answers[f.key], initiative);
             // التسمية مربوطة بالحقل: htmlFor لحقل الكتابة، وaria-labelledby لمجموعة الاختيار والجدول (فحص الجاهزية p-entry-8)
@@ -434,7 +469,7 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
               {f.group && <p className="mf-group">{f.group}</p>}
               <div className={`mf mf-${f.type}${ok ? ' ok' : ''}`}>
                 <label id={`${fid}-l`} htmlFor={single ? fid : undefined}><span className="mf-n" aria-hidden="true">{ok ? '✓' : i + 1}</span><span><b><Annotated text={f.label} />{f.required === false && <small className="mf-opt"> (اختياري)</small>}{chapter?.newFields?.includes(f.key) && <span className="chip gold sp-new"> جديد في مستواك</span>}</b>{f.hint && <small>{isoLtr(f.hint)}</small>}</span></label>
-                {!locked && <FieldGuide g={guideFor(m.key, f.key, m.level, d.sector, { ...d.examples, context: (m.key === 'initiative-charter' ? answers.context : null) ?? d.examples?.context ?? null })} />}
+                {!locked && <FieldGuide f={f} g={guideFor(m.key, f.key, m.level, d.sector, { ...d.examples, context: (m.key === 'initiative-charter' ? answers.context : null) ?? d.examples?.context ?? null })} />}
                 {/* داخل المبادرة وحدها (AssistantContext): المساعد نفسه بسياق اسم الحقل، والمسودة لا تُرسل */}
                 {!locked && <FieldAsk chapter={m.title_ar} field={f.label} />}
                 <Field f={f} modelKey={m.key} level={m.level} id={single ? fid : undefined} labelId={`${fid}-l`} locked={locked} value={answers[f.key]} onChange={(v) => set(f.key, v)} initiative={initiative} imp={d.imports?.[f.key]} />

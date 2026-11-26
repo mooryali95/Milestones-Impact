@@ -8,7 +8,7 @@
 //   A3 FF+2         ينتهي بعد انتهاء A3 بيومين
 //   A4 SF-1، A5     علاقتان، الفاصلة أو الفاصلة المنقوطة أو المسافة بينهما
 // الأيام تقويمية، والنشاط يشمل يومي بدايته ونهايته. يقرؤه محرك الاتساق (capstone.js) والرسوم (src/lib/brand/visuals.js).
-import { parseWhen } from './capstone.js';
+import { parseWhen, weekOf } from './capstone.js';
 
 export const DEP_TYPES = Object.freeze(['FS', 'SS', 'FF', 'SF']);
 export const DEP_AR = Object.freeze({
@@ -58,17 +58,23 @@ export function activitiesOf(columns, rows, { anchor = null } = {}) {
   const c = Math.max(0, colIn(columns, 'الرمز')), n = colIn(columns, 'النشاط', 'الحزمة'), s = colIn(columns, 'البداية'), e = colIn(columns, 'النهاية'), d = colIn(columns, 'يعتمد');
   return (rows || []).filter((r) => Array.isArray(r) && r.some((x) => String(x ?? '').trim())).map((r, i) => {
     const start = s >= 0 ? parseWhen(r[s], { anchor, virtual: true }) : null, end = e >= 0 ? parseWhen(r[e], { anchor, edge: 'end', virtual: true }) : null;
-    return { code: code(r[c]) || `#${i + 1}`, name: String(r[n >= 0 ? n : 1] ?? '').trim(), start, end, days: start != null && end != null && end >= start ? Math.round((end - start) / DAY) + 1 : null, deps: d >= 0 ? parseDeps(r[d]) : [], row: i };
+    // weekly: النشاط مكتوب بالأسابيع طرفيه، فالأسبوع وحدته لا اليوم (تخفيف المبادرة للتأسيسي، المرحلة 1)
+    const weekly = s >= 0 && e >= 0 && weekOf(r[s]) != null && weekOf(r[e]) != null;
+    return { code: code(r[c]) || `#${i + 1}`, name: String(r[n >= 0 ? n : 1] ?? '').trim(), start, end, days: start != null && end != null && end >= start ? Math.round((end - start) / DAY) + 1 : null, deps: d >= 0 ? parseDeps(r[d]) : [], row: i, weekly };
   });
 }
 
 // القيد الذي تفرضه علاقة على بداية النشاط اللاحق، بالأيام من مرجع واحد. f نهاية حصرية (اليوم التالي لآخر يوم)
-function earliestStart(dep, pred, dur) {
+// weekSlack: النشاطان بالأسابيع، فـ«بعد انتهاء» يسمح بالبدء في أسبوع انتهاء السابق نفسه. كان الأسبوع يُقرأ سبعة أيام كاملة
+// فتدفع كل علاقة النشاط أسبوعًا، ويصير جدول 12 أسبوعًا «105 يومًا» (تجربة سفراء 2026-11-26)
+export const WEEK_SLACK = 7;
+const slackOf = (a, b) => (a?.weekly && b?.weekly ? WEEK_SLACK : 0);
+function earliestStart(dep, pred, dur, slack = 0) {
   switch (dep.type) {
     case 'SS': return pred.es + dep.lag;
     case 'FF': return pred.ef + dep.lag - dur;
     case 'SF': return pred.es + dep.lag - dur;
-    default: return pred.ef + dep.lag;
+    default: return pred.ef + dep.lag - slack;
   }
 }
 
@@ -95,7 +101,7 @@ export function cpm(acts) {
     const a = by[k], dur = a.days;
     const planned = Math.round((a.start - origin) / DAY);
     // البداية المبكرة: أبعد قيد من سوابقه، ولا تسبق أول يوم في الجدول
-    const es = Math.max(0, ...preds[k].map((d) => earliestStart(d, N[d.code], dur)));
+    const es = Math.max(0, ...preds[k].map((d) => earliestStart(d, N[d.code], dur, slackOf(a, by[d.code]))));
     N[k] = { code: k, name: a.name, dur, es, ef: es + dur, planned, plannedEnd: planned + dur };
   }
   const finish = Math.max(...order.map((k) => N[k].ef));
@@ -109,7 +115,7 @@ export function cpm(acts) {
         case 'SS': return m.ls - dep.lag + n.dur;
         case 'FF': return m.lf - dep.lag;
         case 'SF': return m.lf - dep.lag + n.dur;
-        default: return m.ls - dep.lag;
+        default: return m.ls - dep.lag + slackOf(by[k], by[s]);
       }
     }));
     n.lf = lf; n.ls = lf - n.dur; n.float = n.ls - n.es; n.critical = n.float <= 0;
@@ -128,7 +134,7 @@ export function violations(acts) {
       const p = by[d.code];
       if (!p || p === a) continue;
       const sA = a.start / DAY, fA = a.end / DAY + 1, sP = p.start / DAY, fP = p.end / DAY + 1;
-      const ok = { FS: sA >= fP + d.lag, SS: sA >= sP + d.lag, FF: fA >= fP + d.lag, SF: fA >= sP + d.lag }[d.type];
+      const ok = { FS: sA >= fP + d.lag - slackOf(a, p), SS: sA >= sP + d.lag, FF: fA >= fP + d.lag, SF: fA >= sP + d.lag }[d.type];
       if (!ok) out.push({ code: a.code, dep: d });
     }
   }

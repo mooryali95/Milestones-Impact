@@ -97,7 +97,7 @@ export function Spine({ sections, checks = [], card = null, status = 'draft', cu
                   data-chapter={x.key} data-state={cs}>
                   <i className="sp-dot" aria-hidden="true" />
                   <span className="sp-t">{x.n}. {x.title}</span>
-                  <small className="sp-st">{x.optional && cs !== 'done' ? 'اختياري' : STATE_AR[cs]}{!expert && readByExpert(x) ? ' · قرأه خبيرك' : ''}</small>
+                  <small className="sp-st">{x.deferred ? `مقفل: ${x.deferred_ar}` : x.optional && cs !== 'done' ? 'اختياري' : STATE_AR[cs]}{!expert && readByExpert(x) ? ' · قرأه خبيرك' : ''}</small>
                   {isNew && <span className="chip gold sp-new">{expert ? 'جديد' : 'جديد في مستواك'}</span>}
                   {warn.length > 0 && <span className="chip bad sp-check" title={warn.map((w) => w.title).join('، ')}>{warn.length === 1 ? 'فحص' : `${warn.length} فحوص`}</span>}
                 </button>
@@ -128,8 +128,8 @@ export function Spine({ sections, checks = [], card = null, status = 'draft', cu
   );
   return (
     <>
-      <button type="button" className="sp-bar" aria-expanded={sheet} aria-controls="sp-panel" onClick={() => setSheet(true)}>
-        <span className="sp-bar-t">خط الوثيقة</span><span className="sp-bar-l">{sum.line}</span><span className="bar"><i style={{ width: `${sum.total ? Math.round((sum.done / sum.total) * 100) : 0}%` }} /></span>
+      <button type="button" className="sp-bar" aria-label={`الفصول: ${sum.line}`} aria-expanded={sheet} aria-controls="sp-panel" onClick={() => setSheet(true)}>
+        <span className="sp-bar-t">خط الوثيقة</span><span className="sp-bar-btn" aria-hidden="true">الفصول</span><span className="sp-bar-l">{sum.line}</span><span className="bar"><i style={{ width: `${sum.total ? Math.round((sum.done / sum.total) * 100) : 0}%` }} /></span>
       </button>
       {sheet && <div className="sp-scrim" onClick={() => setSheet(false)} aria-hidden="true" />}
       <aside id="sp-panel" className={`card sp${sheet ? ' open' : ''}`} data-tour="capstone-sections" aria-labelledby="sp-h">

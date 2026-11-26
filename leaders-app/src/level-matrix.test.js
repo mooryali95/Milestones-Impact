@@ -519,10 +519,11 @@ describe('المرحلة 5: صفحات العرض للتأسيسي', () => {
       expect(pages.flat().flatMap((s) => s.fields.map((f) => `${s.key}.${f.key}`)).sort()).toEqual(secs.flatMap((s) => s.fields.map((f) => `${s.key}.${f.key}`)).sort());
     }
   });
-  it('التأسيسي: المنافع مع سطر النجاح، والمعالم مع الجدول الزمني، في صفحتين بدل أربع', () => {
+  it('التأسيسي: الأزواج الخمسة كل زوج في صفحة، فالوثيقة في 8 صفحات بدل 13', () => {
     const secs = docOf(same('beginner')).sections;
     const pages = displayPages(secs);
     expect(pages.length).toBe(secs.length - DISPLAY_PAIRS.length);
+    expect(pages.length).toBe(8);
     for (const p of DISPLAY_PAIRS) expect(pages.find((x) => x[0].key === p.host).map((s) => s.key)).toEqual([p.host, p.joins]);
   });
   it('المتوسط والاحترافي كما هما: صفحة لكل فصل، وإطار بمستوى أعلى لا يُجمع', () => {
@@ -530,9 +531,10 @@ describe('المرحلة 5: صفحات العرض للتأسيسي', () => {
       const secs = docOf(same(lv)).sections;
       expect(displayPages(secs).every((p) => p.length === 1)).toBe(true);
     }
-    // المنافع وخطة القياس من إطار الأثر: أثر متوسط مع معالم تأسيسي يجمع المعالم وحدها
+    // المنافع وخطة القياس ونظرية التغيير من إطار الأثر: أثر متوسط مع معالم وقيادة تأسيسيين يجمع ما في إطاريهما وحدهما
+    // (المعالم مع الجدول، والموارد مع المخاطر، والاستدامة مع قصة التحول، تخفيف وثيقة المبادرة للتأسيسي، المرحلة 4)
     const mixed = docOf({ milestone: 'beginner', impact: 'intermediate', leadership: 'beginner' }).sections;
-    expect(displayPages(mixed).filter((p) => p.length === 2).map((p) => p[0].key)).toEqual(['milestone-register']);
+    expect(displayPages(mixed).filter((p) => p.length === 2).map((p) => p[0].key)).toEqual(['milestone-register', 'cost-plan', 'change-sustain']);
   });
   it('ملف العمل يطبع الصفحة المجمّعة بعنوانيها، وكل حقل بعنوانه، ومرساة لكل فصل', () => {
     const d = docOf(same('beginner'));

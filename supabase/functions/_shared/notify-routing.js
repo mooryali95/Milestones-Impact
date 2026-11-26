@@ -87,6 +87,8 @@ export const EVENTS = [
   // ── التشغيل ──
   ev('mail_failed', 'ops', 'critical', 'تعذر إرسال البريد'),
   ev('mail_unconfigured', 'ops', 'critical', 'خدمة البريد غير مهيأة'),
+  // بطاقة مبادرة مسلّمة تنتظر قرار المستشار أكثر من 7 أيام (staleCards في capstone.js): سطر بعددها في الملخص اليومي، لا بريد
+  ev('stale_cards', 'ops', 'info', 'بطاقات مبادرة تنتظر المستشار أكثر من 7 أيام', { allow: ['digest'], on: { digest: true }, screen: '#/leaders/capstones' }),
   ev('mail_cap', 'ops', 'critical', 'بلغ البريد سقفه اليومي'),
   ev('captcha_unconfigured', 'ops', 'critical', 'التحقق البشري غير مهيأ'),
   ev('audit_failed', 'ops', 'critical', 'تعذر الكتابة في سجل التدقيق'),

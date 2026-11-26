@@ -8,7 +8,7 @@
 //   المتقدم: «سؤال الخبير» مطويًا: تحدٍّ لا شرح، والمثال الكامل عند الطلب فقط
 // المحتوى في المستودع (supabase/content/initiative-guide)، غير مُقاس، يراجعه خبير المحتوى.
 import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
-import { EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
+import { BEGINNER_EXAMPLE, EXAMPLES } from '../../supabase/content/initiative-guide/v1/examples.js';
 import STARTERS from '../../supabase/content/initiative-guide/v1/starters.json';
 import { ANATOMY } from '../../supabase/content/initiative-guide/v1/anatomy.js';
 import { CARD_CRITERIA, costSummary } from '../../supabase/functions/leaders-api/capstone.js';
@@ -73,11 +73,21 @@ export function guideFor(modelKey, fieldKey, level, sectorText = null, examples 
   // المتقدم لا يُعرض له المثال بجانب الحقل: يُثقل عليه (انعكاس الخبرة)، والوثيقة الكاملة متاحة له في صفحة المبادرة.
   // وما حجبه المالك (examples.field أو قطاع بعينه) لا يُعرض
   const example = mode === 'expert' || examples?.field === false ? null : exampleFor(modelKey, fieldKey, sectorText, examples?.sectors ?? null, examples?.context ?? null);
-  return { mode, meaning: g.meaning, mistake: g.mistake, challenge: g.challenge, example, context: contextNote(modelKey, fieldKey, examples?.context) };
+  // التأسيسي يرى المثال التطوعي المحلول بأعمدته (BEGINNER_EXAMPLE) خلف «أرني مثالًا»، وإلا مثال قطاعه
+  const volunteer = mode === 'open' && examples?.field !== false ? beginnerExample(modelKey, fieldKey) : null;
+  // المعنى للتأسيسي بأعمدته وحدها (meaning_beginner) حين يذكر المعنى العام أعمدة مخفية عنه
+  return { mode, meaning: (mode === 'open' && g.meaning_beginner) || g.meaning, mistake: g.mistake, challenge: g.challenge, example, volunteer, context: contextNote(modelKey, fieldKey, examples?.context) };
+}
+
+/** حقل المثال التطوعي للتأسيسي: { value, sector_title } أو null */
+export function beginnerExample(modelKey, fieldKey) {
+  const f = BEGINNER_EXAMPLE.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey);
+  if (!f || f.value == null || (Array.isArray(f.value) ? !f.value.length : !String(f.value).trim())) return null;
+  return { value: f.value, sector_title: BEGINNER_EXAMPLE.sector_title, initiative: BEGINNER_EXAMPLE.initiative };
 }
 
 /** هل الجواب قريب جدًا من جواب أي مثال محلول للحقل نفسه؟ يُقارن بكل الأمثلة ولو حُجب بعضها، كما يقارن المستشار */
-export const nearExample = (modelKey, fieldKey, value) => EXAMPLES.some((ex) => nearCopy(value, ex.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey)?.value));
+export const nearExample = (modelKey, fieldKey, value) => [...EXAMPLES, BEGINNER_EXAMPLE].some((ex) => nearCopy(value, ex.sections.find((s) => s.key === modelKey)?.fields.find((x) => x.key === fieldKey)?.value));
 
 // ── صفوف البداية (4ج): هيكل لا محتوى للجدول الفارغ ──
 const blank = (rows) => !(Array.isArray(rows) ? rows : []).some((r) => Array.isArray(r) && r.some((c) => String(c ?? '').trim()));

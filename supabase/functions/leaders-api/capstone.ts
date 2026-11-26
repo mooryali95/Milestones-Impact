@@ -10,13 +10,13 @@
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
-import { cohortOf, contentLevelsFor } from './programs.ts';
-import { answeredModels, approvalOf, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
+import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
+import { answeredModels, approvalOf, viewTable, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
-  APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
+  APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
@@ -71,11 +71,16 @@ async function build(p: any) {
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
+  // نهاية برنامج المشارك للفصلين الختاميين (closingState): نهاية دفعته، وإلا انتهاء مبادرته من بطاقتها
+  const end = await programEndOf(p, since, charterAnswers);
   const sections = mine.map((m: any) => {
     const sub = by[m.id];
     const fields = modelFields(m, content, scope, priority, sub?.answers || null, since);
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
-    const state = sectionState(m, fields, { ...sub, answers });
+    const closing = closingState(m.key, content?.[m.dimension], end);
+    const base = sectionState(m, fields, { ...sub, answers });
+    // مؤجل: لا يُحسب في الجاهزية (counted: false) ولا يمنع التقديم الأول (deferred)، ويظهر مقفلًا حتى يُفتح
+    const state = closing.deferred ? { ...base, counted: false, deferred: true, opens_at: closing.opens_at } : base;
     // موقع الفصل من مستوى الوثيقة للمستشار والمراجع (المرحلة 4): مما حُسب هنا نفسه، لا قاعدة ثانية
     return { model: m, fields, answers, sub, state, chapter: chapterLevel(m, fields, state, content, levels) };
   });
@@ -90,9 +95,13 @@ async function build(p: any) {
 
 const sectionView = (s: any) => ({
   id: s.model.id, key: s.model.key, title: s.model.title_ar, icon: s.model.icon || '◆', dimension: s.model.dimension, points: s.model.points,
-  complete: s.state.complete, missing: s.state.missing.length, status: s.state.status, rating: s.state.rating,
+  complete: s.state.complete, missing: s.state.missing.length,
+  // زمن الفصل بالدقائق من حقوله الظاهرة المطلوبة (workMinutes): مصدر خط الوثيقة الواحد
+  minutes: workMinutes(s.fields), status: s.state.status, rating: s.state.rating,
   // فصل لا حقل مطلوبًا فيه للمشارك: لا يُحسب في الجاهزية (readiness)، فيُعرض «اختياري» لا «مكتمل»
   optional: s.state.counted === false,
+  // الفصل الختامي المؤجل للتأسيسي: مقفل حتى آخر أسبوعين من برنامجه (closingState)
+  ...(s.state.deferred ? { deferred: true, opens_at: s.state.opens_at, deferred_ar: CLOSING_AR } : {}),
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
   // «الوثيقة الحية»: ملاحظة الخبير على الفصل ووقت قراءته، منهما تُشتق الحالات الأربع و«قرأه خبيرك» و«جديد» (spine.js)
@@ -236,7 +245,10 @@ async function docOf(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'or
       ...(joins[s.model.key] ? { joins: joins[s.model.key] } : {}),
       // الفصل الاختياري للمشارك (لا حقل مطلوبًا فيه، counted: false): يُعرض «اختياري» ولا يُعد فراغه نقصًا في ملحق ما ينقص
       optional: s.state.counted === false,
-      fields: s.fields.map((f: any) => ({ key: f.key, label: f.label, type: f.type, columns: f.columns || null, value: s.answers[f.key] ?? null })),
+      // الجدول بأعمدة المشارك الظاهرة وعناوينها (viewTable، أعمدة التأسيسي): مصدر واحد للوثيقة والطباعة ولوحات المستشار والإدارة
+      fields: s.fields.map((f: any) => { const t = f.type === 'table' ? viewTable(f, s.answers[f.key] ?? null) : null;
+        // optional-exempt: حقل نموذج لا نشاط، ويُحمل اختياره للمستوى إلى فحص الإصدار
+        return { key: f.key, label: f.label, type: f.type, columns: t ? t.columns : f.columns || null, ...(t?.labels ? { labels: t.labels } : {}), value: t ? t.rows : s.answers[f.key] ?? null, ...(f.required === false ? { required: false } : {}) }; }),
     })),
     cost: cost ? costSummary({ ...cost.model, fields: cost.fields }, cost.answers) : null,
     checks: d.checks,

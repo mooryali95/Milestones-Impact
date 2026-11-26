@@ -91,7 +91,7 @@ export function afterOf(sections, id) {
   return rest.find((s) => !s.optional && chapterState(s) !== 'done') || rest[0] || null;
 }
 
-const hoursAr = (n) => (n <= 1 ? 'ساعة' : n === 2 ? 'ساعتين' : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
+export const hoursAr = (n) => (n <= 1 ? 'ساعة' : n === 2 ? 'ساعتين' : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
 const leftAr = (n) => (n === 1 ? 'فصل واحد' : n === 2 ? 'فصلان' : n <= 10 ? `${n} فصول` : `${n} فصلًا`);
 
 /**
@@ -103,7 +103,8 @@ export function spineSummary(sections) {
   const done = c.filter((s) => chapterState(s) === 'done').length;
   const total = c.length;
   const left = total - done;
-  const rest = c.filter((s) => chapterState(s) !== 'done').reduce((a, s) => a + chapterHours(s.level), 0);
+  // الزمن من حقول الفصل الظاهرة (minutes من الخادم، workMinutes)، وإلا تقدير المستوى العام (lens.json)
+  const rest = c.filter((s) => chapterState(s) !== 'done').reduce((a, s) => a + (Number.isFinite(s.minutes) ? s.minutes / 60 : chapterHours(s.level)), 0);
   const hours = left ? Math.max(1, Math.round(rest)) : 0;
   const next = nextOf(sections);
   const parts = [`أنجزت ${done} من ${total}`];
@@ -134,3 +135,6 @@ export const newInLevel = (sections, seen) => (seen ? (sections || []).filter((s
 export function checksOn(checks, key, map) {
   return (checks || []).filter((x) => !x.ok && (map[x.key] || []).includes(key));
 }
+
+/** زمن الوثيقة بالساعات من دقائقها (docMinutes في الخادم)، بالتقريب نفسه الذي يقول به الخط «نحو N ساعات» */
+export const docHoursAr = (minutes) => hoursAr(Math.max(1, Math.round(minutes / 60)));

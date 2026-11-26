@@ -11,7 +11,8 @@
 //   • نوع المبادرة (مشروع، برنامج، محفظة) من نطاق عمل المشارك في ملفه،
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
-import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor } from './logic.js';
+import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
+import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR } from './labels.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -113,8 +114,10 @@ export function cleanRubric(scores, notes) {
 /** @param {any[]} models @param {any} levels @param {any} scope @param {Set<string> | null} [kept] */
 export function capstoneModels(models, levels, scope, kept = null) {
   return modelsFor((models || []).filter((m) => m.capstone_sort != null), levels, scope, kept)
-    .sort((a, b) => a.capstone_sort - b.capstone_sort);
+    .sort((a, b) => a.capstone_sort - b.capstone_sort).map((m) => beginnerTitle(m, levels?.[m.dimension]));
 }
+/** عنوان الفصل بلغة التأسيسي (BEGINNER_CHAPTER_TITLES)، والنموذج كما هو لغيره */
+export const beginnerTitle = (/** @type {any} */ m, /** @type {string | null | undefined} */ level) => (level === 'beginner' && BEGINNER_CHAPTER_TITLES[m?.key] ? { ...m, title_ar: BEGINNER_CHAPTER_TITLES[m.key] } : m);
 
 // حقول نموذج للمشارك: بمستواه في بُعد النموذج ونطاقه، وحقول التعمق إن كان
 // بُعد النموذج محور الأولوية في مساره. answers: إجاباته، فيبقى ما كتبه في حقل رُفع مستواه
@@ -153,6 +156,10 @@ export function chapterLevel(model, fields, state, content, levels) {
 export const DISPLAY_PAIRS = Object.freeze([
   { host: 'benefits-register', joins: 'evidence-plan' },   // المنافع وسطر «كيف ستعرف أنك نجحت؟»
   { host: 'milestone-register', joins: 'schedule' },       // المعالم والجدول الزمني
+  // تخفيف وثيقة المبادرة للتأسيسي، المرحلة 4 (التصور §5 البند 6): الوثيقة في 8 صفحات دون حذف فصل
+  { host: 'options-analysis', joins: 'theory-of-change' }, // المبرر مع نظرية التغيير
+  { host: 'cost-plan', joins: 'raid' },                    // المخاطر مع الموارد
+  { host: 'change-sustain', joins: 'transformation-story' }, // التغيير والاستدامة مع قصة التحول
 ]);
 /**
  * يحسبه الخادم وحده (docFor) من مستويات المحتوى: مفتاح التابع ← مفتاح أصله، حين يكون الفصلان في الوثيقة بمستوى التأسيسي في إطارهما.
@@ -263,9 +270,13 @@ function table(model, answers, fieldKey) {
   const f = (model?.fields || []).find((x) => x.key === fieldKey && x.type === 'table');
   if (!f) return null;
   const rows = (Array.isArray(answers?.[fieldKey]) ? answers[fieldKey] : []).filter((r) => Array.isArray(r) && r.some((c) => String(c || '').trim()));
-  const cols = (f.columns || []).map(norm);
-  const col = (...words) => cols.findIndex((c) => words.some((w) => c.includes(norm(w))));
-  return { rows, col, columns: f.columns || [], cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
+  // أعمدة المشارك المطلوبة وحدها (cols_req للتأسيسي، beginnerColumns): الفحص لا يقرأ عمودًا مخفيًا عنه ولا يحجب به،
+  // ولو كتب فيه قبل التخفيف (يبقى ظاهرًا غير مطلوب). الأسماء المخزنة هي التي تُقرأ، لا عناوين العرض
+  const req = Array.isArray(f.cols_req) ? f.cols_req : null;
+  const columns = (f.columns || []).map((c, i) => (!req || req.includes(i) ? c : ''));
+  const cols = columns.map(norm);
+  const col = (...words) => cols.findIndex((c) => c && words.some((w) => c.includes(norm(w))));
+  return { rows, col, columns, cell: (r, i) => (i >= 0 ? String(r[i] ?? '').trim() : '') };
 }
 
 export function parseNumber(v) {
@@ -444,7 +455,10 @@ export function capstoneChecks(ctx) {
         // والمرساتان من نوع واحد: لا يُقارن جدول مؤرخ بانتهاء بالأسبوع بلا تاريخ بدء
         if (an.origin != null && !an.cycle && an.order.length && isVirtual(an.origin) === isVirtual(to)) {
           const lastDay = an.origin + (an.finish - 1) * 864e5;
-          add('critical-window', 'المسار الحرج ينتهي داخل مدة المبادرة', lastDay <= to, `المسار الحرج يحتاج ${an.finish} يومًا، فينتهي بعد ${A[CHARTER_KEY].end}. قصّر أنشطته أو مدّد المبادرة.`);
+          // جدول بالأسابيع يُقال بالأسابيع: «يحتاج 13 أسبوعًا» لا «105 يومًا»
+          const weekly = sc.acts.length && sc.acts.every((x) => x.weekly || x.days == null);
+          const need = weekly ? `${Math.ceil(an.finish / 7)} أسبوعًا` : `${an.finish} يومًا`;
+          add('critical-window', 'المسار الحرج ينتهي داخل مدة المبادرة', lastDay <= to, `المسار الحرج يحتاج ${need}، فينتهي بعد ${A[CHARTER_KEY].end}. قصّر أنشطته أو مدّد المبادرة.`);
         }
       }
     }
@@ -453,11 +467,18 @@ export function capstoneChecks(ctx) {
   if (raid) {
     const t = raid;
     const p = t.col('الاحتمال'), i = t.col('الاثر'), o = t.col('المالك'), res = t.col('الاستجابه'), link = t.col('مرتبط');
-    const high = t.rows.filter((r) => (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) >= RISK_HIGH);
-    const weak = high.filter((r) => !t.cell(r, o) || !t.cell(r, res)).map((r) => t.cell(r, 0) || t.cell(r, 2));
-    add('risk-owner', 'لكل خطر عالٍ مالك واستجابة', !weak.length, `مخاطر عالية بلا مالك أو استجابة: ${weak.slice(0, 6).join('، ')}`);
+    // التأسيسي بلا احتمال ولا أثر ولا مالك (تصور التخفيف §5): لكل بند ما ستفعله إن حدث، ولا يُحسب «خطر عالٍ» من عمود مخفي
+    if (p >= 0 && i >= 0) {
+      const high = t.rows.filter((r) => (parseNumber(t.cell(r, p)) || 0) * (parseNumber(t.cell(r, i)) || 0) >= RISK_HIGH);
+      const weak = high.filter((r) => (o >= 0 && !t.cell(r, o)) || !t.cell(r, res)).map((r) => t.cell(r, 0) || t.cell(r, 2));
+      add('risk-owner', o >= 0 ? 'لكل خطر عالٍ مالك واستجابة' : 'لكل خطر عالٍ استجابة', !weak.length, `مخاطر عالية بلا مالك أو استجابة: ${weak.slice(0, 6).join('، ')}`);
+    } else if (res >= 0) {
+      const d = t.col('الوصف');
+      const weak = t.rows.filter((r) => !t.cell(r, res)).map((r) => t.cell(r, d) || t.cell(r, 0));
+      add('risk-response', 'لكل ما قد يعطلك ما ستفعله إن حدث', !weak.length, `بنود بلا استجابة: ${weak.slice(0, 6).join('، ')}`);
+    }
     if (wbs) {
-      const loose = t.rows.filter((r) => t.cell(r, link) && listCodes(t.cell(r, link)).some((c) => !known(c))).map((r) => t.cell(r, 0));
+      const loose = link < 0 ? [] : t.rows.filter((r) => t.cell(r, link) && listCodes(t.cell(r, link)).some((c) => !known(c))).map((r) => t.cell(r, 0));
       add('risk-link', 'المخاطر مرتبطة بحزم موجودة في هيكل التجزئة', !loose.length, `روابط لا تجد حزمتها: ${loose.slice(0, 6).join('، ')}`);
     }
   }
@@ -465,9 +486,11 @@ export function capstoneChecks(ctx) {
   if (benefits) {
     const t = benefits;
     const base = t.col('خط الاساس'), target = t.col('المستهدف'), owner = t.col('المالك');
-    const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || !t.cell(r, owner)).map((r) => t.cell(r, 0));
-    add('benefit-owner', 'لكل منفعة خط أساس ومستهدف ومالك بعد التسليم', t.rows.length && !weak.length,
-      t.rows.length ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : 'لم تُدخل منافع في سجل المنافع بعد.');
+    // المالك بعد التسليم مخفي للتأسيسي (تصور التخفيف §5): الفحص له خط الأساس والمستهدف وحدهما
+    const withOwner = owner >= 0;
+    const weak = t.rows.filter((r) => !t.cell(r, base) || !t.cell(r, target) || (withOwner && !t.cell(r, owner))).map((r) => t.cell(r, 0));
+    add('benefit-owner', withOwner ? 'لكل منفعة خط أساس ومستهدف ومالك بعد التسليم' : 'لكل منفعة رقم اليوم ومستهدف', t.rows.length && !weak.length,
+      t.rows.length ? (withOwner ? `منافع ينقصها خط أساس أو مستهدف أو مالك: ${weak.slice(0, 6).join('، ')}` : `منافع ينقصها رقم اليوم أو المستهدف: ${weak.slice(0, 6).join('، ')}`) : 'لم تُدخل منافع في سجل المنافع بعد.');
     // خطة القياس تظهر للتأسيسي بسطر النجاح وحده (مصفوفة الوثيقة بحسب المستوى): الفحص لمن يرى جدول الخطة
     const ev = has('evidence-plan') ? table(M['evidence-plan'], A['evidence-plan'], 'plan') : null;
     if (ev) {
@@ -547,6 +570,56 @@ export function cardGate(status) {
   return { state: 'none', ok: false, reason: 'قدّم بطاقة المبادرة ليعتمد المستشار اختيارها قبل تقديم الوثيقة.' };
 }
 
+// ── الفصلان الختاميان للتأسيسي (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 5، قرار المالك 2026-11-26) ──
+// تقرير الأثر وقصة التحول لا يُكتبان بصدق قبل التنفيذ: يظهران للتأسيسي مقفلين «يُفتح في الأسابيع الأخيرة» حتى آخر
+// أسبوعين من برنامجه، ولا يُحسبان في جاهزية التقديم الأولى ولا اكتمالها. ثم يُفتحان ويُحسبان كما كانا.
+export const CLOSING_CHAPTERS = Object.freeze(['impact-report', 'transformation-story']);
+export const CLOSING_WEEKS = 2;
+export const CLOSING_AR = 'يُفتح في الأسابيع الأخيرة';
+/**
+ * نهاية برنامج المشارك: نهاية دفعته (cohorts.ends_on)، وإلا انتهاء مبادرته من بطاقتها: تاريخًا، أو أسبوعًا من تاريخ البدء فيها،
+ * أو أسبوعًا من أول اعتماد لمساره (since، بداية رحلته). null إن لم يُعرف شيء منها
+ * @param {{ ends_on?: string | null, start?: string | null, end?: string | null, since?: string | null }} src
+ */
+export function programEnd({ ends_on = null, start = null, end = null, since = null } = {}) {
+  const fixed = parseDate(ends_on || '');
+  if (fixed != null) return fixed;
+  const d = parseDate(end || '');
+  if (d != null) return d;
+  const w = weekOf(end || '');
+  const anchor = parseDate(start || '') ?? (since && Number.isFinite(Date.parse(since)) ? Date.parse(since) : null);
+  return w != null && anchor != null ? anchor + (w * 7 - 1) * 864e5 : null;
+}
+/** الفصل الختامي مؤجل لهذا المشارك الآن؟ { deferred, opens_at }. التأسيسي في إطار الفصل وحده، وبلا نهاية معروفة لا تأجيل */
+export function closingState(modelKey, level, end, now = Date.now()) {
+  if (!CLOSING_CHAPTERS.includes(modelKey) || level !== 'beginner' || end == null) return { deferred: false, opens_at: null };
+  const opens = end - (CLOSING_WEEKS * 7 - 1) * 864e5;
+  return { deferred: now < opens, opens_at: new Date(opens).toISOString().slice(0, 10) };
+}
+
+/** سبب رفض الحفظ في الفصل الختامي المؤجل (القاعدة نفسها: closingState)، أو null إن كان مفتوحًا. يقرؤه حفظ النموذج في الخادم */
+export const closingLock = (/** @type {string} */ modelKey, /** @type {string | null | undefined} */ level, /** @type {number | null} */ end, now = Date.now()) =>
+  (closingState(modelKey, level, end, now).deferred ? CLOSING_LOCKED_AR : null);
+
+// ── البطاقة المنتظرة عند المستشار (متابعة التخفيف): مسلّمة منذ أكثر من STALE_CARD_DAYS بلا قرار، سطر في ملخص الإدارة وعدد في لوحتها ──
+export const STALE_CARD_DAYS = 7;
+/** @param {{ status?: string, submitted_at?: string | null, learning_models?: { key?: string } | null }[]} rows @param {number} [now] */
+export function staleCards(rows, now = Date.now()) {
+  const cut = now - STALE_CARD_DAYS * 864e5;
+  return (rows || []).filter((r) => r?.status === 'submitted' && r.learning_models?.key === CHARTER_KEY && r.submitted_at && Date.parse(r.submitted_at) < cut).length;
+}
+
+/**
+ * زمن الوثيقة بالدقائق لبطاقة المسار: مجموع workMinutes لفصول المشارك المحسوبة، والفصل الختامي المؤجل خارجه (closingState)،
+ * كما يجمعه خط الوثيقة من دقائق فصوله، فيقول الموضعان رقمًا واحدًا
+ * @param {any[]} models @param {any} levels @param {any} scope @param {string | null} priority @param {string | null} since @param {number | null} end @param {number} [now]
+ */
+export function docMinutes(models, levels, scope, priority, since, end, now = Date.now()) {
+  return capstoneModels(models, levels, scope)
+    .filter((m) => !closingState(m.key, levels?.[m.dimension], end, now).deferred)
+    .reduce((a, m) => a + workMinutes(modelFields(m, levels, scope, priority, null, since)), 0);
+}
+
 // يمكن التسليم؟ كل الفصول مكتملة، والجاهزية فوق الحد، والحالة تسمح
 export function canSubmit(state) {
   if (!['draft', 'returned', undefined, null].includes(state.status)) return { ok: false, reason: 'الوثيقة قيد المراجعة أو معتمدة' };
@@ -554,7 +627,8 @@ export function canSubmit(state) {
   if (!state.initiative) return { ok: false, reason: 'اكتب اسم المبادرة في بطاقة المبادرة' };
   // state.card غائبة في وثيقة بلا فصل بطاقة (برنامج لا يضعها في الوثيقة): لا بوابة
   if (state.card) { const g = cardGate(state.card.status); if (!g.ok) return { ok: false, reason: g.reason }; }
-  const open = state.sections.filter((s) => !s.complete);
+  // الفصل الختامي المؤجل للتأسيسي (closingState) لا يمنع التقديم الأول
+  const open = state.sections.filter((s) => !s.complete && !s.deferred);
   if (open.length) return { ok: false, reason: `فصول لم تكتمل: ${open.map((s) => s.title).slice(0, 5).join('، ')}` };
   const blocked = (state.checks || []).filter((x) => x.blocking && !x.ok);
   if (blocked.length) return { ok: false, reason: `فحوص لازمة قبل التسليم: ${blocked.map((x) => x.title).join('، ')}` };

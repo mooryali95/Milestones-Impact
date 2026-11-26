@@ -21,7 +21,7 @@ import { ITEMS, pinSponsorFor, programPaymentDue, recordOrgDecisions } from './e
 import { checkImport, importCounts, importLimitIssue } from './import.js';
 import { adminPhoneTaken, assertPhoneFree, isPhoneConflict, lookalikeNote, nameLookalikes, phoneConflictFail, phoneOwner } from './phone-guard.ts';
 import { nameKey, phoneKey, phoneTakenAdminAr } from './phone-key.js';
-import { trackProject } from './capstone.js';
+import { staleCards, trackProject } from './capstone.js';
 import { labSummary } from './lab.js';
 import { displayTitles, profileFor } from './profiles.ts';
 import { cleanProfile } from './certificates.ts';
@@ -288,7 +288,7 @@ async function overviewMore(ids: string[] | null, keep: Set<string>) {
     // counting-exempt: تُحصر الصفوف بعد القراءة في من يُعدّون (only بـkeep من orgFilter)
     allFor(ids, () => db.from('assessments').select('id, participant_id, instruments(key, kind, title_ar, active), assessment_results(dimension, composite_pct)').eq('status', 'submitted').order('id')),
     allFor(ids, () => db.from('handbook_progress').select('participant_id, quiz_score, quiz_total').order('participant_id').order('module_id')),
-    allFor(ids, () => db.from('model_submissions').select('participant_id, status, rating').order('id')),
+    allFor(ids, () => db.from('model_submissions').select('participant_id, status, rating, submitted_at, learning_models(key)').order('id')),
     allFor(ids, () => db.from('points_ledger').select('participant_id, points').order('id')),
   ])).map(only);
   // القياس: لكل أداة عدد من أنهوها ومتوسط النسبة المركبة لكل إطار
@@ -312,6 +312,8 @@ async function overviewMore(ids: string[] | null, keep: Set<string>) {
   const totals = Object.values(pts);
   return {
     instruments,
+    // بطاقات تنتظر المستشار أكثر من 7 أيام (staleCards، السطر نفسه في الملخص اليومي)
+    stale_cards: staleCards(s),
     book: {
       readers: new Set(p.map((x) => x.participant_id)).size, chapters: p.length,
       accuracy: p.reduce((a, x) => a + x.quiz_total, 0) ? Math.round((p.reduce((a, x) => a + x.quiz_score, 0) / p.reduce((a, x) => a + x.quiz_total, 0)) * 100) : null,

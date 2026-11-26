@@ -52,11 +52,15 @@ test('اختيار «مبادرة ريادية» في البطاقة يُظهر 
   await page.getByRole('button', { name: /بطاقة المبادرة/ }).first().click();
   await expect(page.getByRole('heading', { name: 'بطاقة المبادرة' })).toBeVisible();
 
+  // التأسيسي: السياق خلف «اقرأ المزيد» والمثال خلف «أرني مثالًا» (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 3): تُفتح كلها للفحص
+  const unfold = () => page.locator('details.mf-more').evaluateAll((ds) => ds.forEach((d) => { d.open = true; }));
+  await unfold();
   // قبل اختيار السياق: مثال قطاعها (الصحة)، ولا تلميح سياق
   await expect(page.getByText('مثال من الصحة:').first()).toBeVisible();
   await expect(page.getByText(/في سياقك/)).toHaveCount(0);
 
   await page.getByRole('radio', { name: 'مبادرة ريادية أو مستقلة' }).click();
+  await unfold();
   await expect(page.getByText('في سياقك (مبادرة ريادية أو مستقلة):').first()).toBeVisible();
   await expect(page.getByText(/حاجة سوق مثبتة برقم ومصدر/)).toBeVisible();
   await expect(page.getByText(/المستثمر أو الشريك المموّل/)).toBeVisible();
@@ -65,6 +69,7 @@ test('اختيار «مبادرة ريادية» في البطاقة يُظهر 
 
   // سياق آخر: يتغير التلميح، والمثال يعود لقطاعها
   await page.getByRole('radio', { name: 'في جهة أخرى' }).click();
+  await unfold();
   await expect(page.getByText('في سياقك (في جهة أخرى):').first()).toBeVisible();
   await expect(page.getByText('مثال من الصحة:').first()).toBeVisible();
 });

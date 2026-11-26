@@ -30,16 +30,23 @@ async function open(page, level, viewport = { width: 1280, height: 900 }, exampl
   await expect(page.getByRole('heading', { name: 'الموارد والتكلفة' })).toBeVisible();
 }
 
-test('التأسيسي: المطلوب والخطأ الشائع مفتوحان بجانب كل حقل', async ({ page }) => {
+test('التأسيسي: المطلوب ظاهر بجانب كل حقل، والخطأ الشائع خلف «اقرأ المزيد»، والمثال خلف «أرني مثالًا»', async ({ page }) => {
   await open(page, 'beginner');
   const notes = page.getByRole('note').filter({ hasText: 'المطلوب:' });
   await expect(notes).toHaveCount(3);
-  await expect(notes.first()).toContainText('لا مبادرة بلا رقم');
-  await expect(notes.first()).toContainText('تجنّب:');
+  // المعنى للتأسيسي بأعمدته وحدها (meaning_beginner)
+  await expect(notes.first()).toContainText('ما تحتاجه للمبادرة وكلفته التقديرية');
   await expect(page.getByText('سؤال الخبير')).toHaveCount(0);
-  // مثال من قطاعه بجانب الحقل: أول صفوف جدول المبادرة الصحية المحلولة
+  // الإرشاد المختصر (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 3): الخطأ الشائع مطوي حتى يطلبه
+  const avoid = notes.first().getByText('تجنّب:');
+  await expect(avoid).toBeHidden();
+  await notes.first().getByText('اقرأ المزيد').click();
+  await expect(avoid).toBeVisible();
+  // المثال التطوعي المحلول بأعمدة التأسيسي، ثم مثال قطاعه: أول صفوف جدول المبادرة الصحية المحلولة
+  await notes.first().getByText('أرني مثالًا').click();
+  await expect(notes.first()).toContainText('مثال من العمل التطوعي');
   await expect(notes.first()).toContainText('مثال من الصحة:');
-  await expect(notes.first().locator('table')).toContainText('تحليل بيانات المواعيد');
+  await expect(notes.first().locator('table').last()).toContainText('تحليل بيانات المواعيد');
 });
 
 test('النقل من المثال يُنبَّه عليه عند الكتابة ولا يمنع، والمكتوب من الواقع لا يُنبَّه', async ({ page }) => {

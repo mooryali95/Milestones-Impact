@@ -186,6 +186,8 @@ export const MIGRATIONS = [
   '20261129110000_leaders_track_cards',
   '20261129120000_leaders_track_history',
   '20261129130000_leaders_staff_messages',
+  '20261129140000_leaders_beginner_columns',
+  '20261129150000_leaders_beginner_language',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -286,4 +288,6 @@ export const MIGRATION_GATES = {
   '20261129110000_leaders_track_cards': ["tolerant", "محتوى فقط: متطلبات رحلة ومختبرات وحقول جديدة، وأولوية أربعة مسارات. الدوال الأقدم تقرأ الصفوف الجديدة"],
   '20261129120000_leaders_track_history': ["tolerant", "الدوال تتسامح مع غيابه: الاعتماد يكتب السجل و«الجديد» بعد حفظ المستويات وخطؤه يُسجَّل ولا يُسقط الاعتماد،"],
   '20261129130000_leaders_staff_messages': ["tolerant", "الدوال تتسامح مع غيابه: تعذّر قراءة expert_id أو coordinator_id في participant_mail_prefs يُرسل بريد الخبير والمنسق كما كان"],
+  '20261129140000_leaders_beginner_columns': ["tolerant", "محتوى نماذج فقط. يضيف إلى اثني عشر جدولًا خاصيتين لا تقرؤهما الدوال الأقدم (columns_beginner وlabels_beginner)،"],
+  '20261129150000_leaders_beginner_language': ["tolerant", "محتوى نماذج فقط. خاصيتان لا تقرؤهما الدوال الأقدم (label_beginner وhint_beginner)، فتعرض العنوان والتلميح"],
 };

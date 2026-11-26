@@ -10,7 +10,7 @@ export const STUCK_DAYS = Object.freeze({ check: 7, draft: 14 });
 export const CHECK_CHAPTERS = Object.freeze({
   sponsor: ['initiative-charter'], 'do-nothing': ['options-analysis'], 'wbs-owner': ['wbs'],
   'raci-cover': ['governance', 'wbs'], 'raci-a': ['governance'], 'cost-cover': ['cost-plan', 'wbs'], 'cost-envelope': ['cost-plan'],
-  dates: ['schedule'], deps: ['schedule'], 'dep-cycle': ['schedule'], 'dep-logic': ['schedule'], 'critical-window': ['schedule', 'initiative-charter'], window: ['schedule', 'initiative-charter'], 'risk-owner': ['raid'], 'risk-link': ['raid', 'wbs'],
+  dates: ['schedule'], deps: ['schedule'], 'dep-cycle': ['schedule'], 'dep-logic': ['schedule'], 'critical-window': ['schedule', 'initiative-charter'], window: ['schedule', 'initiative-charter'], 'risk-owner': ['raid'], 'risk-response': ['raid'], 'risk-link': ['raid', 'wbs'],
   'benefit-owner': ['benefits-register'], evidence: ['evidence-plan', 'benefits-register'], procurement: ['procurement'],
   tranches: ['roadmap'], weights: ['portfolio-review'],
 });

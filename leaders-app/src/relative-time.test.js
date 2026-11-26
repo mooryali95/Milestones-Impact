@@ -41,7 +41,10 @@ describe('الجدول بالأسابيع', () => {
     expect(acts.map((a) => a.days)).toEqual([7, 14]);
     const sc = scheduleOf(cols, rows);
     expect(sc.broken).toEqual([]);
-    expect(sc.analysis.finish).toBe(21);
+    // «بعد انتهاء» بالأسابيع يسمح بالبدء في أسبوع انتهاء السابق (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 1)،
+    // فالمدة من الأسبوع 1 إلى نهاية الأسبوع 3 لا أكثر: 21 يومًا كما كُتب. والقيد لا يدفع A2 إلى الأمام
+    expect(sc.analysis.finish).toBeLessThanOrEqual(21);
+    expect(sc.analysis.nodes.A2.es).toBeLessThanOrEqual(7);
   });
   it('الجدول المؤرخ: النتيجة نفسها بمرساة أو بلاها', () => {
     const rows = [['A1', 'تحضير', '2027-01-04', '2027-01-10', ''], ['A2', 'تنفيذ', '2027-01-08', '2027-01-20', 'A1']];

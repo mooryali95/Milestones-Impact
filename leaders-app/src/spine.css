@@ -53,6 +53,11 @@
 @media (max-width: 900px) {
   .cp-live, .ch-layout { grid-template-columns: minmax(0, 1fr); }
   .sp-bar { all: unset; box-sizing: border-box; display: grid; gap: 4px; position: sticky; top: 8px; z-index: 50; width: 100%; padding: 10px 14px; border-radius: 12px; background: var(--bg, #fff); box-shadow: 0 2px 10px rgba(11, 39, 47, .14); cursor: pointer; }
+  /* زر «الفصول» ظاهر أعلى الصفحة في الجوال أيًا كان موضع الخط في الصفحة (تخفيف المبادرة للتأسيسي، المرحلة 1) */
+  .ch-layout > .sp-bar, .cp-live > .sp-bar { order: -1; }
+  .sp-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .sp-bar > .bar, .sp-bar > .sp-bar-l { grid-column: 1 / -1; }
+  .sp-bar-btn { grid-row: 1; grid-column: 2; padding: 4px 12px; border-radius: 999px; background: var(--gold); color: #fff; font-weight: 700; font-size: 13px; }
   .sp-bar-t { font-weight: 700; font-size: 13px; }
   .sp-bar-l { font-size: 12px; color: var(--muted); }
   .cp-live > .sp, .ch-layout > .sp { display: none; position: fixed; top: 0; bottom: 0; right: 0; width: min(88vw, 360px); max-height: none; z-index: 61; border-radius: 0; overflow: auto; }

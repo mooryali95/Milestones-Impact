@@ -71,7 +71,7 @@ describe('العون يتلاشى بالمستوى', () => {
   });
   it('الخادم يرسل مستوى المشارك في بُعد النموذج من مصدر حقوله نفسه', () => {
     const p = readFileSync(resolve(root, 'supabase/functions/leaders-api/participant.ts'), 'utf8');
-    expect(p).toContain('return { ...m, level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension]');
+    expect(p).toContain('return { ...beginnerTitle(m, levels[m.dimension]), level: levels[m.dimension] || null, fields: fieldsFor(m.fields, levels[m.dimension]');
   });
 });
 

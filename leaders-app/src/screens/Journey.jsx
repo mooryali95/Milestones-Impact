@@ -13,6 +13,7 @@ import { APPROVAL_SLA_AR } from '../../../supabase/functions/leaders-api/labels.
 import { OnboardingNextCard } from '../Onboarding.jsx';
 import { DIMENSIONS, dimOf, MODES, PHASES, REQ_STATUS } from '../labels.js';
 import { InitiativeNow } from './InitiativeNow.jsx';
+import { docHoursAr } from '../../../supabase/content/initiative-guide/v1/spine.js';
 import { POPUP_BLOCKED } from '../ui.jsx';
 import { countAr, sessionsBookedAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { sessionsAr } from '../../../supabase/functions/leaders-api/journey.js';
@@ -114,6 +115,8 @@ const SUPPORT_AR = { readiness: 'ثلاثة أسئلة جاهزية ومثال �
 export function TrackCardFacts({ card }) {
   const [a, b] = card.initiative.pages || [];
   const h = card.support?.estimate_hours || [];
+  // زمن الوثيقة من حقولها (docMinutes)، الرقم نفسه في خط الوثيقة؛ ومدى المسار العام حين لا يصل
+  const mins = card.support?.minutes;
   return (
     <div className="track-col track-facts" data-testid="track-card">
       <h4>بطاقة مسارك</h4>
@@ -121,7 +124,7 @@ export function TrackCardFacts({ card }) {
         <li><b>الكتاب</b> {HB_TYPE_AR[card.handbook.type]}، يبدأ بإطار {dimOf(card.handbook.deepened).title}</li>
         <li><b>وثيقتك</b> {card.initiative.name}{a ? ` · نحو ${a} إلى ${b} صفحات` : ''}</li>
         <li><b>رحلتك</b> {card.journey.requirements.length} أعمال بمستواك، ومعها {card.journey.labs.length} مختبرات</li>
-        <li><b>الدعم</b> {SUPPORT_AR[card.support.mode]}{h.length ? ` · نحو ${h[0]} إلى ${h[1]} ساعة لكتابة وثيقتك` : ''}</li>
+        <li><b>الدعم</b> {SUPPORT_AR[card.support.mode]}{Number.isFinite(mins) ? ` · نحو ${docHoursAr(mins)} لكتابة وثيقتك` : h.length ? ` · نحو ${h[0]} إلى ${h[1]} ساعة لكتابة وثيقتك` : ''}</li>
       </ul>
     </div>
   );
