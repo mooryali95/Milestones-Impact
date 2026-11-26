@@ -621,7 +621,7 @@ export async function sponsorSubmit(b: Body) {
   const now = new Date().toISOString();
   // دعوة قديمة أُرسلت إلى بريد المشارك نفسه قبل هذا الحارس: لا يؤيد نفسه، ويعتمد المستشار أو يعيد
   if (b.decision === 'endorse' && (await ownEmailsOf(p)).map((x) => normalizeEmail(x)).includes(normalizeEmail(c.sponsor_email))) {
-    throw new Fail('لا يؤيد صاحب المبادرة مبادرته. يعتمدها المستشار أو يعيدها لتصحيح بريد الراعي', 403, 'sponsor_self');
+    throw new Fail('لا يؤيد قائد المبادرة مبادرته. يعتمدها المستشار أو يعيدها لتصحيح بريد الراعي', 403, 'sponsor_self');
   }
   if (b.decision === 'endorse') {
     must(await db.from('capstones').update({ sponsor_status: 'endorsed', sponsor_note: note, sponsor_at: now, updated_at: now }).eq('participant_id', p.id));
