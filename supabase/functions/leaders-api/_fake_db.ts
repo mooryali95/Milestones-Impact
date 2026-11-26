@@ -1,6 +1,7 @@
 // قاعدة في الذاكرة لاختبارات Deno (طابور البريد وتنفيذ الحذف): تصفية eq وneq وis وnot وin وlt وgte وlte وlike وilike وor، وترتيب بأكثر من عمود،
 // وlimit والعدّ، والإدراج والتحديث والحذف، وكل كتابة تُسجَّل. fail: جدول وأعمدة يُرفض بها الطلب (ترحيل لم يُطبَّق)
 import { db } from './core.ts';
+import { orgCurrentCohort } from './cohort-intake.js';
 
 type Row = Record<string, any>;
 export type Write = { table: string; kind: 'insert' | 'update' | 'delete' | 'upsert'; value?: any; ids?: string[] };
@@ -180,3 +181,17 @@ export async function withNet<T>(fn: (calls: { url: string; body: any }[]) => Pr
 }
 export const resendCalls = (calls: { url: string; body: any }[]) => calls.filter((c) => c.url.includes('resend.com'));
 export const hoursAgo = (h: number, now = Date.now()) => new Date(now - h * 36e5).toISOString();
+
+// عالم الاختبار كما بعد ترحيل 20261129230000 (تصور المرحلة 4): كل عضو جهة قائم بلا إلحاق يُلحق بدفعة جهته الجارية، بقاعدة
+// place_participant نفسها (orgCurrentCohort). الدفعة إلحاق صريح لا استنتاج بالجهة، فالعالم المصطنع يحمل الإلحاق كما تحمله القاعدة
+export function placeOrgMembers<T extends Record<string, Row[]>>(tables: T): T {
+  const t = tables as Record<string, Row[]>;
+  t.enrollments ||= [];
+  const has = new Set(t.enrollments.filter((e) => e.status !== 'withdrawn').map((e) => e.participant_id));
+  for (const p of t.participants || []) {
+    if (!p.organization_id || p.is_demo || has.has(p.id)) continue;
+    const c = orgCurrentCohort(t.cohorts || [], p.organization_id);
+    if (c) t.enrollments.push({ participant_id: p.id, cohort_id: c.id, status: 'active', created_at: '2026-10-01T00:00:00Z' });
+  }
+  return tables;
+}

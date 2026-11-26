@@ -2,6 +2,7 @@
 // جهته قرأ طلبات أقران دفعتها بأسمائهم ورأى قاعتها وطلب خبراء الشبكة وأخذ رابط الجلسة قبل اعتماد مساره، والمنسحب
 // يستعمل البرنامج كله. هنا الموجّه الحقيقي (Deno.serve مستبدَل بالتقاط المعالج) على قاعدة في الذاكرة، والمستخدمون
 // الأحياء الثلاثة (الدافع والمرعي والمعفى قبل تفعيل الدفع) معتمدون يبقى لهم كل ما كان
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
 
@@ -19,6 +20,7 @@ const get = (r: Row, path: string) => path.split('.').reduce((v: any, k) => (v =
 // جداول في الذاكرة بنمط seat_return_test.ts: eq وneq وin وis وnot(is null) وlimit وrange وmaybeSingle وsingle والعدّ،
 // والإدراج والتحديث والحذف. مرشحات الجداول المضمّنة (participants.is_demo) والنص (or وilike) والترتيب لا تغيّر النتيجة
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let seq = 0;
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];

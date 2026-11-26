@@ -17,45 +17,37 @@ const world = {
 };
 
 describe('orgMoveImpact', () => {
-  it('دفعة جهة أحدث على برنامج آخر تنقل من له تقدم ولم يُلحق يدويًا', () => {
+  // تصور المرحلة 4: الدفعة إلحاق صريح لا استنتاج بالجهة، ففتح دفعة جهة أحدث أو أولى لا ينقل أحدًا، ولا يُسأل تأكيد نقل
+  it('دفعة جهة أحدث على برنامج آخر لا تنقل أحدًا: الملحق باقٍ في دفعته وغير الملحق على الاحتياط العام', () => {
     const next = { id: 'new', name: 'دفعة 2027', organization_id: 'o1', program_id: 'pb', status: 'open', starts_on: '2027-01-01' };
-    expect(orgMoveImpact(world, next)).toEqual({ count: 1, from: [{ id: 'c1', name: 'سفراء 2026' }] });
+    expect(orgMoveImpact(world, next)).toEqual({ count: 0, from: [] });
   });
-  it('على البرنامج نفسه لا نقل يُعد: معرفات المتطلبات واحدة', () => {
+  it('على البرنامج نفسه لا نقل يُعد', () => {
     expect(orgMoveImpact(world, { id: 'new', organization_id: 'o1', program_id: 'pa', status: 'open', starts_on: '2027-01-01' }).count).toBe(0);
   });
-  it('دفعة أقدم لا يضعها pickCohort مكان الحالية، ودفعة بلا جهة لا تمس أحدًا', () => {
+  it('دفعة أقدم، ودفعة بلا جهة، لا تمس أحدًا', () => {
     expect(orgMoveImpact(world, { id: 'new', organization_id: 'o1', program_id: 'pb', status: 'open', starts_on: '2025-01-01' }).count).toBe(0);
     expect(orgMoveImpact(world, { id: 'new', organization_id: null, program_id: 'pb', status: 'open' }).count).toBe(0);
   });
-  it('أول دفعة للجهة تنقل من يتبع الدفعة المفتوحة على برنامج آخر، ومنهم من ضاعت دفعة تسجيله', () => {
+  it('أول دفعة للجهة لا تنقل من على الدفعة المفتوحة', () => {
     const w = { ...world, cohorts: [world.cohorts[1]] };
-    expect(orgMoveImpact(w, { id: 'new', organization_id: 'o1', program_id: 'pb', status: 'open' })).toEqual({ count: 2, from: [{ id: 'c0', name: '' }] });
-    expect(orgMoveImpact(w, { id: 'new', organization_id: 'o1', program_id: 'pa', status: 'open' }).count).toBe(0);
+    expect(orgMoveImpact(w, { id: 'new', organization_id: 'o1', program_id: 'pb', status: 'open' })).toEqual({ count: 0, from: [] });
   });
 });
 
 describe('moveImpact', () => {
   const newer = { id: 'c2', name: 'دفعة 2027', organization_id: 'o1', program_id: 'pb', status: 'running', starts_on: '2027-01-01' };
   const cohorts = [...world.cohorts, newer];
-  it('إغلاق دفعة الجهة أو إرجاعها مخططًا لها أو نقلها لجهة أخرى يُخرج أعضاءها إلى برنامج آخر', () => {
-    for (const change of [{ status: 'closed' }, { status: 'planned' }, { organization_id: null }]) {
-      const r = moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, ...change }));
-      expect(r.moved).toBe(1);
-      expect(r.from).toEqual([{ id: 'c2', name: 'دفعة 2027' }]);
-      expect(r.to).toEqual([{ id: 'c1', name: 'سفراء 2026' }]);
+  // تصور المرحلة 4: العضوية إلحاق صريح، فتغيير حال الدفعة أو جهتها أو بدايتها لا يُخرج أحدًا منها (القرار 5: الإغلاق لا يسحب)
+  it('إغلاق دفعة الجهة أو إرجاعها مخططًا لها أو نقلها لجهة أخرى أو تبكيرها لا ينقل أحدًا', () => {
+    const w = { ...world, enrollments: [...world.enrollments, { participant_id: 'p1', cohort_id: 'c2', status: 'active', created_at: '2027-01-02' }] };
+    for (const change of [{ status: 'closed' }, { status: 'planned' }, { organization_id: null }, { organization_id: 'o2' }, { starts_on: '2025-01-01' }]) {
+      expect(moveImpact(w, cohorts, cohortsAfter(cohorts, { ...newer, ...change }))).toEqual({ moved: 0, stay: 0, from: [], to: [] });
     }
   });
-  it('نقلها لجهة أخرى يُخرج أعضاء الأولى ويُدخل أعضاء الثانية من الدفعة المفتوحة', () => {
-    const r = moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, organization_id: 'o2' }));
-    expect(r.moved).toBe(2);
-    expect(r.from.map((c) => c.id).sort()).toEqual(['c0', 'c2']);
-  });
-  it('تبكير بداية الدفعة الأحدث حتى تسبقها القديمة يُخرج أعضاءها كذلك', () => {
-    expect(moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, starts_on: '2025-01-01' })).moved).toBe(1);
-  });
-  it('تغيير برنامج الدفعة يُعد بقاءً على برنامج آخر، ومنه الدفعة المفتوحة', () => {
-    expect(moveImpact(world, cohorts, cohortsAfter(cohorts, { ...newer, program_id: 'pa' }))).toMatchObject({ moved: 0, stay: 1 });
+  it('تغيير برنامج الدفعة يُعد بقاءً على برنامج آخر لأعضائها الملحقين، ومنه الدفعة المفتوحة لمن على احتياطها', () => {
+    const w = { ...world, enrollments: [...world.enrollments, { participant_id: 'p1', cohort_id: 'c2', status: 'active', created_at: '2027-01-02' }] };
+    expect(moveImpact(w, cohorts, cohortsAfter(cohorts, { ...newer, program_id: 'pa' }))).toMatchObject({ moved: 0, stay: 1 });
     const def = world.cohorts[1];
     const solo = { ...world, participants: [{ id: 'p1', organization_id: null }] };
     expect(moveImpact(solo, world.cohorts, cohortsAfter(world.cohorts, { ...def, program_id: 'pb' }))).toMatchObject({ moved: 0, stay: 1 });
@@ -67,8 +59,8 @@ describe('moveImpact', () => {
 });
 
 describe('cohortProgressCount', () => {
-  it('أعضاء الدفعة فعلًا ولهم تقدم', () => {
-    expect(cohortProgressCount(world, 'c1')).toBe(2);
+  it('أعضاء الدفعة فعلًا (الملحقون بها) ولهم تقدم', () => {
+    expect(cohortProgressCount(world, 'c1')).toBe(1);
     expect(cohortProgressCount({ ...world, progress: [] }, 'c1')).toBe(0);
   });
 });
@@ -185,7 +177,12 @@ describe('أثر الإلحاق (enrollImpact)', () => {
     { id: 'c3', name: 'أفراد أ', organization_id: null, program_id: 'A', status: 'open', created_at: '2026-10-01' },
   ];
   const world = { cohorts, participants: [{ id: 'p1', organization_id: 'o1' }, { id: 'p2', organization_id: 'o1' }], enrollments: [], progress: [{ participant_id: 'p1' }] };
+  it('غير الملحق لا يُعد منقولًا: لا دفعة له يُنقل منها (تصور المرحلة 4)', () => {
+    expect(enrollImpact(world, cohorts[1]).moved).toBe(0);
+  });
   it('يُعد من له تقدم ويتغير برنامجه وحده، والبرنامج نفسه لا يُعد', () => {
+    const world = { cohorts, participants: [{ id: 'p1', organization_id: 'o1' }, { id: 'p2', organization_id: 'o1' }],
+      enrollments: [{ participant_id: 'p1', cohort_id: 'c1', status: 'active', created_at: '2026-09-02' }], progress: [{ participant_id: 'p1' }] };
     expect(enrollImpact(world, cohorts[1])).toEqual({ moved: 1, from: [{ id: 'c1', name: 'سفراء' }], to: [{ id: 'c2', name: 'أفراد ب' }] });
     expect(enrollImpact(world, cohorts[2]).moved).toBe(0);
     expect(enrollImpact(world, cohorts[0]).moved).toBe(0);

@@ -7,7 +7,7 @@
 // رحلة المشارك تُبنى من دفعته، فكل ما يقرأ متطلبًا للمشارك يمر من هنا.
 import { all, allFor, audit, db, Fail, must } from './core.ts';
 import { baselineMinutes } from './assessment-time.ts';
-import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, postInService, POST_IN_SERVICE_AR, upgradePlan } from './logic.js';
+import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgCohort, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, postInService, POST_IN_SERVICE_AR, upgradePlan } from './logic.js';
 import { CHARTER_KEY, programEnd, READY_MIN } from './capstone.js';
 import { planUpgradeBlock } from './cohort-plan.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
@@ -85,13 +85,22 @@ export async function cohortOf(p: { id?: string | null; organization_id?: string
   // حساب الدفعة التجريبي (demo-cohort.ts): دفعته من عموده وحده، كأنها إلحاق صريح، ولا صف له في enrollments. فيرى خطة
   // دفعته ونسختها ومواعيدها وما أُوقف من مراحلها كما يراها أعضاؤها، ولا تجده قراءة بالدفعة. دفعة لم تعد موجودة: القاعدة العامة
   const demoCohort = demoCohortOf(p as any);
-  const [enr, cohorts] = await Promise.all([
-    p.id && !demoCohort ? db.from('enrollments').select('cohort_id, status, created_at').eq('participant_id', p.id) : Promise.resolve({ data: [] as any[], error: null }),
-    db.from('cohorts').select(COHORT_COLS),
+  // تصور المرحلة 4 (البند 10): دفعة الإلحاق بعينها والمفتوحة العامة وحدهما، لا مسح جدول الدفعات كله
+  const enr: any = p.id && !demoCohort ? await db.from('enrollments').select('cohort_id, status, created_at').eq('participant_id', p.id)
+    : { data: [] as any[], error: null };
+  if (strict) must(enr);
+  const enrollments = demoCohort ? [{ cohort_id: demoCohort, status: 'active', created_at: '' }] : (enr.data || []).filter((e: any) => e.status !== 'withdrawn');
+  const ids = [...new Set(enrollments.map((e: any) => e.cohort_id).filter(Boolean))] as string[];
+  const [own, def]: any[] = await Promise.all([
+    ids.length ? db.from('cohorts').select(COHORT_COLS).in('id', ids) : Promise.resolve({ data: [], error: null }),
+    db.from('cohorts').select(COHORT_COLS).eq('is_default', true),
   ]);
-  if (strict) { must(enr); must(cohorts); }
-  const enrollments = demoCohort ? [{ cohort_id: demoCohort, status: 'active', created_at: '' }] : enr.data || [];
-  return pickCohort({ enrollments, cohorts: cohorts.data || [], organizationId: (p.organization_id || null) as any });
+  if (strict) { must(own); must(def); }
+  const cohorts = { data: [...(own.data || []), ...(def.data || [])] };
+  const picked = pickCohort({ enrollments, cohorts: cohorts.data || [] });
+  // الاحتياط المعلن: مشارك حقيقي بلا إلحاق يرى المفتوحة العامة مؤقتًا، ويُسجَّل لتلتقطه أداة من لا دفعة له
+  if (picked.via === 'fallback' && p.id && !demoCohort) console.warn('cohort fallback:', p.id);
+  return picked;
 }
 
 // إصدار محتوى دفعة المشارك (D02): رقمه، وأبواب الكتاب فيه لحساب بند القراءة على إصدار الدفعة.
@@ -227,7 +236,7 @@ export async function orgCohortSetups(orgIds: string[]) {
   const members = memberCounts(people.data || [], enr.data || [], all);
   const own: Record<string, any> = {};
   for (const id of orgIds) {
-    const c: any = pickCohort({ enrollments: [], cohorts: all, organizationId: id }).cohort;
+    const c: any = orgCohort(all, id).cohort;
     own[id] = c && c.organization_id === id ? c : null;
   }
   const advIds = [...new Set(Object.values(own).map((c: any) => c?.advisor_expert_id).filter(Boolean))] as string[];
@@ -335,7 +344,7 @@ export async function list(_b: Body = {}, opt: { desk?: boolean } = {}) {
     // عقد الجهة مصدرًا لسطر المقاعد في نموذج دفعتها: الحد والمستهلك من العقد كله (seatsUsedByOrg)، والدفعة التي
     // يدخلها أعضاؤها الجدد الآن (pickCohort). تعذّر عد المقاعد يترك seats_used فارغًا فلا يُعرض رقم خاطئ
     organizations: (orgs.data || []).map((o: any) => {
-      const auto = pickCohort({ enrollments: [], cohorts: cohorts.data || [], organizationId: o.id });
+      const auto = orgCohort(cohorts.data || [], o.id);
       return { ...o, seats_used: seated ? seated[o.id] || 0 : null, auto_cohort: auto.cohort ? { id: auto.cohort.id, name: auto.cohort.name, via: auto.via } : null };
     }),
     // هل فريق خبراء الدفعة جاهز (الدالة منشورة والجدول مطبّق)؟ اللوحة لا تعرض حقله قبل ذلك حتى لا يُحفظ فريق يُتجاهل

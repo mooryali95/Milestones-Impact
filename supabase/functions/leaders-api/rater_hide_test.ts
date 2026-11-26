@@ -1,6 +1,7 @@
 // تقدير الزملاء مع مفتاح 360، وتقييم المدير خارجه (تصور المرحلة 3، القرار 2، 2026-11-26؛ كانا معًا بقرار 2026-11-16).
 // المفتاح مطفأ: E-360 يختفي في طبقة التعريف (journeyDefinition) كالبنود المخفية فلا يحبس مرحلة، وT-360 يُخفى لدفعة جارية
 // بدأت قبل الإطلاق وحدها، وE-MGR ظاهر. دعوة المقيّم وإلغاؤه وتأكيده تعمل لخانة المدير، ومقيّم 360 مرفوض. قاعدة في الذاكرة.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail } = await import('./core.ts');
@@ -13,6 +14,7 @@ const { NO_PRE_RUNNING_AR } = await import('./manager-rating.js');
 
 type Row = Record<string, any>;
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let seq = 0;
   const hooks: Record<string, (payload: any) => any> = {};
   const from = (table: string) => {

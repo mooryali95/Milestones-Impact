@@ -83,7 +83,7 @@ describe('نطاق مستشار الدفعة بلا قراءة لكل مشارك
     expect(after('cur', data)).toEqual(['moved']);
   });
 
-  it('عضو مجموعة دفعته الفعلية غيرها لا يُحسب لخبيرها، والعضو بالجهة بلا تسجيل يبقى (currentGroupLinks)', () => {
+  it('عضو مجموعة دفعته الفعلية غيرها لا يُحسب لخبيرها، ولا العضو بالجهة بلا إلحاق (currentGroupLinks، تصور المرحلة 4)', () => {
     const cohorts = [
       { id: 'c1', organization_id: 'A', status: 'running', starts_on: '2026-10-01' },
       { id: 'c2', organization_id: 'B', status: 'running', starts_on: '2026-10-01' },
@@ -98,7 +98,7 @@ describe('نطاق مستشار الدفعة بلا قراءة لكل مشارك
       { participant_id: 'left', cohort_id: 'c1', status: 'withdrawn', created_at: '2026-10-02' },
       { participant_id: 'left', cohort_id: 'c2', status: 'active', created_at: '2026-11-02' },
     ];
-    expect(currentGroupLinks(links, { enrollments, cohorts, participants }).map((l) => l.participant_id)).toEqual(['stay', 'implicit']);
+    expect(currentGroupLinks(links, { enrollments, cohorts, participants }).map((l) => l.participant_id)).toEqual(['stay']);
   });
 
   it('مطابق للخوارزمية القديمة على 400 حالة عشوائية', () => {

@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // لا يخزّن شيئًا ولا يكرر قاعدة: البنود نفسها (الالتحاق والبرنامج والمدة والجدول والمستشار والجلسات والأعضاء والاعتماد)
 // في الخادم (cohort-readiness.js)، يقرؤها ملف الدفعة هنا ونبض الدفعات في «مكتب اليوم»، ويُضاف هنا رابط التسجيل وحده.
-import { pickCohort } from '../../supabase/functions/leaders-api/logic.js';
+import { orgCohort } from '../../supabase/functions/leaders-api/logic.js';
 import { cohortKind, cohortReadiness } from '../../supabase/functions/leaders-api/cohort-readiness.js';
 import { inviteUrl } from './leaders.js';
 import { cohortErrors } from './methodology.js';
@@ -49,9 +49,9 @@ export function wizardNotes({ v, cohorts = [], orgs = [], programs = [] }) {
   const org = v.kind === 'org' ? orgs.find((o) => o.id === v.organization_id) : null;
   if (org && org.status && org.status !== 'active') out.push(`جهة «${org.name}» غير فعّالة: رابط تسجيلها لا يعمل حتى تُفعَّل.`);
   if (org) {
-    const live = pickCohort({ enrollments: [], cohorts, organizationId: org.id }).cohort;
-    // بقاعدة pickCohort: من تبع الدفعة القائمة بجهته ينتقل إلى الأحدث، والملحق بها يدويًا يبقى (صياغة الزميل في تنسيق P1)
-    if (live && live.organization_id === org.id) out.push(`لجهة «${org.name}» دفعة قائمة: «${live.name}». الملحقون يدويًا باقون، والبقية ينتقلون إلى الدفعة الأحدث.`);
+    const live = orgCohort(cohorts, org.id).cohort;
+    // الدفعة إلحاق صريح (تصور المرحلة 4): أعضاء القائمة باقون فيها، والمسجلون الجدد يدخلون الأحدث
+    if (live && live.organization_id === org.id) out.push(`لجهة «${org.name}» دفعة قائمة: «${live.name}». أعضاؤها باقون فيها، والمسجلون الجدد يدخلون الدفعة الأحدث.`);
   }
   const p = programs.find((x) => x.id === v.program_id);
   if (p && !p.requirements) out.push(`البرنامج «${p.name}» بلا متطلبات بعد: لا تُنشأ عليه دفعة حتى تُبنى رحلته.`);

@@ -10,7 +10,7 @@ import { rolesOf, wrongDoor } from './doors.ts';
 import {
   allFor, audit, CONFIG, consentNeeded, coordinatorInviteMail, orgJoinUrl, logConsent, orgAccessMail, coordinatorSignInMail, coordinatorWeeklyMail, db, Fail, hash, mailGuard, must, randomCode, randomToken, reserveCodeAttempt, sendMail, sendOrDiscard,
 } from './core.ts';
-import { coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
+import { orgCohort, coordParticipant, coordPermissions, COORD_TEMPLATES, isEmail, MIN_COHORT, orgVisibility, templateOf, viewerActive, isoWeek, latinDigits, normalizeEmail, normalizePhone } from './logic.js';
 import { org as orgPayload, requireWrite } from './admin.ts';
 // لصفوف «المتابعة» في ملف الدفعة (rosterRows): القراءتان نفساهما اللتان في قائمة المشاركين
 import { baselineProgress, lastActiveFor } from './admin.ts';
@@ -205,7 +205,9 @@ export async function dashboardFor(c: any) {
   const waiting = counted(pending);
   // خريطة الرحلة (قرار المالك 2026-11-11): مراحل برنامج دفعة الجهة، ومن يقف عند كل منها من الرحلات المحسوبة أعلاه نفسها.
   // الأسماء لصلاحية «القائمة»، وما ينقص كل شخص لصلاحية «النشاط»، وإلا أسباب مجمّعة بلا أسماء
-  const def: any = await journeyDefinition({ organization_id: c.organization_id });
+  // سؤال «دفعة الجهة» لا «دفعة مشارك» (تصور المرحلة 4): orgCohort صراحة بدل الاستنتاج من pickCohort بلا إلحاق
+  const orgCohortRow = orgCohort([...(must(await db.from('cohorts').select('*').eq('organization_id', c.organization_id)) as any[] || []), ...(must(await db.from('cohorts').select('*').eq('is_default', true)) as any[] || [])], c.organization_id).cohort;
+  const def: any = await journeyDefinition({}, orgCohortRow);
   const program = def.program_id ? (await db.from('programs').select('name').eq('id', def.program_id).maybeSingle()).data : null;
   const mapStages = (def.stages || []).filter((s: any) => s.active !== false).sort((a: any, b: any) => a.sort - b.sort);
   const journey_map: any = journeyMap({

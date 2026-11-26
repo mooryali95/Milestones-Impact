@@ -1,5 +1,6 @@
 // نطاق مستشار الدفعة (server-sec-7) على قاعدة مزيفة تطبّق المرشحات فعلًا: myParticipantIds يعطي من كانت تعطيه
 // الحلقة القديمة (cohortOf لكل مرشح) بأعيانهم، وعدد استعلاماته ثابت لا يكبر بعدد المشاركين.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
@@ -9,6 +10,7 @@ const { cohortOf } = await import('./programs.ts');
 type Row = Record<string, any>;
 // جداول في الذاكرة، والاستعلام يطبّق eq وin وnot(is null) وorder وrange كما يفعل PostgREST
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let queries = 0;
   const from = (table: string) => {
     queries += 1;

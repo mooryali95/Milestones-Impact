@@ -4,7 +4,7 @@
 // سجل التدقيق دائمًا. والطلب المعاد لا يكتب مرتين. بقاعدة في الذاكرة (_fake_db.ts)
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake } from './_fake_db.ts';
+import { installFake, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 const IK = await import('./idempotency.ts');
 const { Fail } = await import('./core.ts');
@@ -42,6 +42,7 @@ function world() {
     idempotency_keys: [],
   };
   IK.resetIdemState();
+  placeOrgMembers(tables);
   const f = installFake(tables, {
     fail: (t, op) => {
       // القيد الفريد (actor, key) لمفتاح منع التكرار كما في ترحيله

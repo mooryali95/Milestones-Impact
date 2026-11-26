@@ -1,6 +1,7 @@
 // مفاتيح الميزات قيد البناء (P1): القاعة وكاتون و360 مطفأة افتراضيًا، ويرفضها الخادم برمز كل منها، والمدير مستثنى
 // إلا فتح القاعة، والمهمة الساعية لا تذكّر ولا تغلق، وبريد 360 في الطابور يُمسك، ومقيّم 360 يرى «متوقف مؤقتًا» ومثله مقيّم
 // الأثر قبل البرنامج وبعده (مؤجل مع 360 بقرار المالك 2026-11-16)، ورسائل الورشة بلا القاعة، وبطاقة المنسق null، وقفل القاعة مغلق، والدرجة لا تتغير.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 const { db, Fail, hash, workshopMail, WORKSHOP_MAIL, FEEDBACK_MAIL, drainMailQueue, stuckQueueAlert } = await import('./core.ts');
@@ -15,6 +16,7 @@ const { coordFeedbackShown, featureFlags, featureGate, FEATURE_ACTIONS, FEATURE_
 type Row = Record<string, any>;
 // قاعدة في الذاكرة: eq وneq وin وis وcontains وlimit والعدّ، والإدراج والتحديث، وكل كتابة تُسجَّل
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   const writes: { table: string; kind: string; value: any }[] = [];
   const from = (table: string) => {
     const filters: ((r: Row) => boolean)[] = [];

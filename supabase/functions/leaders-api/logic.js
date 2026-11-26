@@ -6,6 +6,7 @@
 
 import { countAr, DIM_AR, LEVEL_AR, TIER_AR } from './labels.js';
 import { latinDigits } from './digits.js';
+import { orgCurrentCohort } from './cohort-intake.js';
 import { MASTERY as LAB_MASTERY } from './lab.js';
 import { cleanScheduleReport } from './milestones.js';
 import { planOffKeys, planRules, planSchedule, planStages, planWithRules } from './stage-windows.js';
@@ -1821,22 +1822,34 @@ export function curriculumStatus(config, items, levels, progress) {
 // النسخة لقطة ثابتة من مراحل البرنامج ومتطلباته؛ الدفعة المثبتة على نسخة
 // لا تتأثر بتعديلات البرنامج حتى تُرقّى.
 
-// دفعة المشارك: تسجيله الصريح الأحدث (غير المنسحب)، ثم أحدث دفعة جارية
-// أو مفتوحة لجهته، ثم الدفعة الافتراضية المفتوحة.
+// دفعة المشارك = إلحاقه الصريح القائم (enrollments، صف واحد بالفهرس enrollments_one_active، تصور المرحلة 4). لا استنتاج بالجهة:
+// دفعة أحدث لجهته لا تنقله. ومن لا إلحاق له (تعذّر عابر عند التسجيل) يرى الدفعة المفتوحة العامة احتياطًا معلنًا (via 'fallback')
+// يُسجَّل في cohortOf وتلتقطه أداة من لا دفعة له. حساب العرض وحده دفعته من عموده (programs.ts cohortOf)
 /** @param {{ enrollments?: any[], cohorts?: any[], organizationId?: string|null }} [input] */
-export function pickCohort({ enrollments = [], cohorts = [], organizationId = null } = {}) {
+export function pickCohort({ enrollments = [], cohorts = [] } = {}) {
   const byId = new Map(cohorts.map((c) => [c.id, c]));
   const enr = enrollments.filter((e) => e.status !== 'withdrawn' && byId.has(e.cohort_id))
     .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
   if (enr.length) return { cohort: byId.get(enr[0].cohort_id), via: 'enrollment' };
-  if (organizationId) {
-    // دفعة الاستقبال (is_intake، ترحيل 20261128160000) لا تُستنتج بالجهة: عضويتها بالإلحاق الصريح وحده (place_participant)،
-    // فإنشاؤها الكسول لا ينقل بصمت أحدًا من أعضاء الجهة غير الملحقين إلى رحلة أخرى
-    const org = cohorts.filter((c) => c.organization_id === organizationId && !c.is_default && !c.is_intake && (c.status === 'open' || c.status === 'running'))
-      .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
-    if (org.length) return { cohort: org[0], via: 'organization' };
-  }
   const d = cohorts.find((c) => c.is_default);
+  return d ? { cohort: d, via: 'fallback' } : { cohort: null, via: 'none' };
+}
+// سؤال «دفعة الجهة» غير سؤال «دفعة المشارك»: دفعات الجهة الحالية (مفتوحة أو جارية، ومعها الاستقبال)، الأحدث أولًا والاستقبال آخرها
+/** @param {any[]} cohorts @param {string|null} orgId */
+export function orgCohorts(cohorts = [], orgId = null) {
+  if (!orgId) return [];
+  const cur = orgCurrentCohort(cohorts, orgId);
+  const stamp = (c) => String(c.starts_on || c.created_at || '');
+  return (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && (c.status === 'open' || c.status === 'running'))
+    .sort((a, b) => (a === cur ? -1 : b === cur ? 1 : (a.is_intake ? 1 : 0) - (b.is_intake ? 1 : 0) || stamp(b).localeCompare(stamp(a))));
+}
+// الدفعة التي يدخلها أعضاء الجهة الجدد الآن (place_participant): دفعتها الجارية الأحدث عدا الاستقبال (orgCurrentCohort)، وإلا
+// المفتوحة العامة. هو الجواب الذي كان يعطيه pickCohort بإلحاقات فارغة قبل حذف درجة الجهة منه
+/** @param {any[]} cohorts @param {string|null} orgId */
+export function orgCohort(cohorts = [], orgId = null) {
+  const cur = orgCurrentCohort(cohorts, orgId);
+  if (cur) return { cohort: cur, via: 'organization' };
+  const d = (cohorts || []).find((c) => c.is_default);
   return d ? { cohort: d, via: 'default' } : { cohort: null, via: 'none' };
 }
 
@@ -1848,7 +1861,7 @@ export function orgProgram(cohorts = [], programs = [], orgId = null) {
   if (!orgId) return null;
   const live = new Map((programs || []).filter((p) => !p.archived_at).map((p) => [p.id, p]));
   const of = (c, via) => ({ program_id: c.program_id, program_name: live.get(c.program_id)?.name || '', cohort_id: c.id, cohort_name: c.name || '', via });
-  const now = pickCohort({ enrollments: [], cohorts, organizationId: orgId }).cohort;
+  const now = orgCohort(cohorts, orgId).cohort;
   if (now && now.organization_id === orgId && live.has(now.program_id)) return of(now, 'current');
   const own = (cohorts || []).filter((c) => c.organization_id === orgId && !c.is_default && live.has(c.program_id))
     .sort((a, b) => String(b.starts_on || b.created_at || '').localeCompare(String(a.starts_on || a.created_at || '')));
@@ -1904,8 +1917,9 @@ export function enrollImpact({ participants = [], enrollments = [], progress = [
   let moved = 0;
   for (const p of participants || []) {
     if (!has.has(p.id) || !target) continue;
-    const a = pickCohort({ enrollments: byP.get(p.id) || [], cohorts, organizationId: p.organization_id || null }).cohort;
-    if (!a || a.id === target.id || a.program_id === target.program_id) continue;
+    // على الإلحاق وحده (تصور المرحلة 4): من لم يكن ملحقًا لا دفعة له يُنقل منها، فلا يُعد منقولًا
+    const { cohort: a, via } = pickCohort({ enrollments: byP.get(p.id) || [], cohorts });
+    if (via !== 'enrollment' || !a || a.id === target.id || a.program_id === target.program_id) continue;
     moved++;
     from.set(a.id, a.name || '');
   }
@@ -2927,7 +2941,7 @@ export function advisedParticipantIds(expertId, cohortParticipantIds, membership
  *  @param {{ id: string, organization_id?: string | null }[]} candidates المرشحون بالتبعية، بلا حساب العرض */
 // عضويات المجموعات التي تقع دفعة عضوها الفعلية (pickCohort) على دفعة المجموعة نفسها. فلتر دفاعي في نطاق خبير المجموعة
 // (تصور المرحلة 1، البند 1): cohortEnroll تحذف عضويات الدفعات الأخرى عند النقل، وهذا يمنع العودة لو كتب مسار آخر صفًا عالقًا.
-// الدفعة الفعلية لا «التسجيل النشط»: عضو دفعة الجهة بالتبعية بلا تسجيل صريح عضو حقيقي فيها (cohortMembers)، فلا يُستبعد
+// الدفعة الفعلية = الإلحاق القائم (تصور المرحلة 4)، فلا عضو بالتبعية بلا إلحاق
 /** @param {{ participant_id: string, cohort_id: string }[]} links
  *  @param {{ enrollments: any[], cohorts: any[], participants: { id: string, organization_id?: string | null }[] }} w */
 export function currentGroupLinks(links, { enrollments = [], cohorts = [], participants = [] } = {}) {
