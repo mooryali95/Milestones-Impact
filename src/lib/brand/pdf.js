@@ -237,7 +237,8 @@ export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 }
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
     pdf.setProperties({ title: meta.title || 'وثيقة', subject: meta.subtitle || '', creator: 'Milestone Impact', author: 'Milestone Impact' });
     // التذييل بالرقم المرجعي للوثيقة، ومعه عنوان الباب لكل صفحة
-    const line = meta.id;
+    // والبصمة المجمّدة معه للمعتمدة (meta.footer، المرحلة 32)
+    const line = meta.footer || meta.id;
     const heads = [...doc.querySelectorAll('.sec > header h2, .in-open h2')].map((h) => ({ y: h.getBoundingClientRect().top - base, text: h.textContent.trim() }));
     const PT = 595.28 / PAGE.w;
     await loadChromeFonts(doc, scale, `${heads.map((h) => h.text).join(' ')} ${DOC_LIVE_HEAD_AR} صفحة ١ من ٢`);

@@ -325,8 +325,19 @@ export function fingerprint(doc) {
 /** بصمة الوثيقة كما تُطبع: المجمّدة في issued للمعتمدة، وإلا المحسوبة من محتواها الآن. مصدر واحد للعارض (institutional.js)
  * وللخادم حين يربط تذكرة PDF بالوثيقة (pdf-ticket.ts، المرحلة 21) */
 export function docFingerprint(doc) {
-  const frozen = doc?.meta?.status === 'approved' && doc?.issued?.sections ? doc.issued : null;
-  return frozen?.fingerprint || fingerprint(doc);
+  // شرط واحد مع issuedFingerprint: المجمّدة الصالحة وحدها، فلا تظهر بصمتان على صفحة واحدة
+  return issuedFingerprint(doc) || fingerprint(doc);
+}
+
+/** البصمة المجمّدة وحدها (المرحلة 32): للمعتمدة التي تحمل snapshot.issued.fingerprint، وإلا null. لا يُطبع رمز تحقق
+ * ولا رابطه إلا بها، لأن verifyDoc (capstone.ts) لا يبحث إلا فيها؛ والبصمة المحسوبة حيًا لا تُطابَق أبدًا */
+const FP_RE = /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/;
+/** مفتاح البحث في verifyDoc من بصمة ممسوحة أو مكتوبة باليد: بأحرف كبيرة وبلا فراغ، وإلا null */
+// الفراغات الداخلية تُحذف، وأي شرطة (الواصلة والشرطة القصيرة والطويلة وعلامة الطرح) تُوحَّد إلى «-»
+export const verifyKey = (s) => { const fp = String(s || '').toUpperCase().replace(/\s+/g, '').replace(/[\u2010-\u2015\u2212\u0640]/g, '-'); return FP_RE.test(fp) ? fp : null; };
+export function issuedFingerprint(doc) {
+  const fp = doc?.meta?.status === 'approved' && doc?.issued?.sections ? doc?.issued?.fingerprint : null;
+  return typeof fp === 'string' && FP_RE.test(fp) ? fp : null;
 }
 
 /** ما يُجمَّد في snapshot.issued لحظة الاعتماد: المحتوى النظيف (strict) وبصمة الخام */
