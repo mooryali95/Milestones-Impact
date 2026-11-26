@@ -22,12 +22,12 @@ import {
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
-import { beginnerTitle, bindAnswers, CHARTER_KEY, importRows, initiativeOf, trackProject } from './capstone.js';
+import { beginnerTitle, bindAnswers, CHARTER_KEY, CLOSING_CHAPTERS, closingLock, docMinutes, importRows, initiativeOf, trackProject } from './capstone.js';
 import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
 import { trackHistory, unseenNew } from './track-history.ts';
 import { profileFor } from './profiles.ts';
 import { evidenceFor, participantItem } from './activities.ts';
-import { contentLevelsFor, groupOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
+import { contentLevelsFor, groupOf, programEndOf, journeyDefinition, releaseOf, requirementFor } from './programs.ts';
 import { brandOrgId } from './demo-cohort.ts';
 import { continuousEvents as katonEvents } from './katon.ts';
 import { CONTACT_EMAIL, consentState, POLICY_VERSION, UNEXPECTED_ERROR } from './labels.js';
@@ -524,14 +524,18 @@ async function trackFor(p: any, levels: Record<string, string>, scope: string | 
   if (!key) return null;
   const [{ data }, models] = await Promise.all([
     db.from('tracks').select(TRACK_FIELDS).eq('key', key).maybeSingle(),
-    db.from('learning_models').select('id, key, dimension, min_level, active, scopes, capstone_sort, title_ar').not('capstone_sort', 'is', null),
+    db.from('learning_models').select('id, key, dimension, min_level, active, scopes, capstone_sort, title_ar, fields').not('capstone_sort', 'is', null),
   ]);
   const t: any = data || { key };
   const priority = await participantPriority(p.id, levels, t.priority_dimension || null);
+  // زمن الوثيقة من حقولها الظاهرة (docMinutes) بمستويات المحتوى، كما يجمعه خط الوثيقة، فيقول الموضعان رقمًا واحدًا
+  const st = await approvedState(p).catch(() => null);
+  const minutes = st ? docMinutes(models.data || [], st.levels, scope, priority, st.since, await programEndOf(p, st.since)) : null;
+  const base = cardOnJourney(trackManifest(key, priority).card, requirements);
   return {
     ...t, priority_dimension: priority, profile: await profileFor(levels, priority), strengths: strengthsLine(levels, priority),
-    // بطاقة المسار من مصدرها الواحد (track-manifest.js)
-    card: cardOnJourney(trackManifest(key, priority).card, requirements),
+    // بطاقة المسار من مصدرها الواحد (track-manifest.js)، وزمن الوثيقة من حقولها
+    card: base && minutes != null ? { ...base, support: { ...base.support, minutes } } : base,
     project: trackProject(models.data || [], levels, scope, priority)?.text || null,
   };
 }
@@ -1459,6 +1463,8 @@ export async function modelGet(p: any, b: Body) {
   return {
     // sector: قطاع المشارك من ملفه، يختار به التطبيق المثال المحلول الأقرب (leaders-app/src/guide.js)
     success: true, model: m, submission, initiative, sector: p.sector || null, examples, reviewer,
+    // نطاق العمل: تعرض البطاقة اختياره في أعلاها إن كان فارغًا (متابعة التخفيف)
+    work_scope: p.work_scope || null,
     imports: await importsFor(p, m.fields),
     capstone: m.capstone_sort != null ? { status, locked: CAPSTONE_LOCKED.includes(status as string) } : null,
   };
@@ -1487,6 +1493,11 @@ export async function modelSave(p: any, b: Body) {
   // والحفظ لا يُنزل حالتها فتبقى محتسبة في الرحلة (تصور «بوابتان، والباقي ملاحظات»)
   if (prev?.status === 'reviewed' && isGateModel(m.key)) throw new Fail('اعتُمدت بطاقة المبادرة ولا يمكن تعديلها');
   if (CAPSTONE_LOCKED.includes(status as string)) throw new Fail('هذا فصل في وثيقة مبادرتك، وهي عند المراجعة أو معتمدة فلا يُعدَّل الآن', 409, 'capstone_locked');
+  // الفصل الختامي المقفل للتأسيسي حتى آخر أسبوعين من برنامجه: القاعدة نفسها التي تعرضه بها الوثيقة (closingLock وprogramEndOf)
+  if (CLOSING_CHAPTERS.includes(m.key) && m.level === 'beginner') {
+    const locked = closingLock(m.key, m.level, await programEndOf(p, (await approvedState(p)).since));
+    if (locked) throw new Fail(locked, 409, 'chapter_locked');
+  }
   // الحقل المربوط باسم المبادرة لا يُكتب هنا: يأتي من بطاقة المبادرة دائمًا
   const answers = bindAnswers(m.fields, cleanAnswers(m.fields, b.answers), initiative);
   const submit = !!b.submit;

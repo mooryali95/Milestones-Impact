@@ -12,7 +12,7 @@ import AskExpert from './AskExpert.jsx';
 import { FieldAsk, GateLine } from './Assistant.jsx';
 import { fieldFilled, isEmail, latinDigits, POINTS, RANKS, viewTable } from '../../../supabase/functions/leaders-api/logic.js';
 import { columnKind, fieldKind, reasonOf, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
-import { APPROVAL_POINTS, dateAr } from '../../../supabase/functions/leaders-api/capstone.js';
+import { APPROVAL_POINTS, dateAr, SCOPE_TITLES } from '../../../supabase/functions/leaders-api/capstone.js';
 import { DIMENSIONS, levelOf } from '../labels.js';
 import { Annotated } from '../Term.jsx';
 import { DEP_AR, DEP_TYPES, depAr, formatDeps, parseDeps } from '../../../supabase/functions/leaders-api/schedule.js';
@@ -445,6 +445,18 @@ export function ModelView({ id, name, onBack, onPoints, backLabel = 'مكتبة 
             <dl><dt>القائد</dt><dd>{name}</dd><dt>التاريخ</dt><dd>{new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' })}</dd></dl>
           </header>
           {!locked && <GateLine />}
+          {/* نطاق العمل عند بدء البطاقة (متابعة التخفيف): يُحفظ بإجراء الملف القائم، وحارس التقديم في canSubmit باقٍ */}
+          {m.key === 'initiative-charter' && !d.work_scope && !locked && (
+            <div className="mf mf-select ws-scope" role="group" aria-labelledby={`${uid}-scope`}>
+              <label id={`${uid}-scope`}><span><b>ما نطاق مبادرتك؟</b><small>مشروع واحد، أو برنامج من مشاريع مترابطة، أو محفظة مبادرات. به تتحدد فصول وثيقتك، وتغيّره من ملفك لاحقًا.</small></span></label>
+              <div className="seg-opts" role="radiogroup" aria-labelledby={`${uid}-scope`}>
+                {Object.entries(SCOPE_TITLES).map(([k, t]) => (
+                  <button key={k} type="button" role="radio" aria-checked={false} disabled={!!busy}
+                    onClick={() => call('profile.save', { fields: { work_scope: k } }).then((r) => (r.success ? setD({ ...d, work_scope: k }) : setMsg({ err: r.message })))}>{t}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {chapter?.deferred && <p className="alert info" role="status"><b>{chapter.deferred.deferred_ar}.</b> هذا الفصل يُكتب بعد التنفيذ، فيُفتح في آخر أسبوعين من برنامجك{chapter.deferred.opens_at ? ` (${dateAr(chapter.deferred.opens_at)})` : ''}، ولا يُحسب قبلها في جاهزية وثيقتك.</p>}
           {m.fields.map((f, i) => {
             const ok = filledOf(f, answers[f.key], initiative);

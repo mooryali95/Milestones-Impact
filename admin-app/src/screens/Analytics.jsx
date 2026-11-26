@@ -107,6 +107,7 @@ export default function OverviewAnalytics({ orgs = [], onTrack, onStatus, onOrg,
         <div className="stat-card"><div className="stat-label">المسجلون</div><div className="stat-value">{o.total}</div><div className="stat-sub">{o.new_week != null ? `${o.new_week} جديد هذا الأسبوع` : 'كل الحالات'}</div></div>
         <div className="stat-card"><div className="stat-label">{STATUS.pending_approval}</div><div className="stat-value s-new">{st('pending_approval')}</div><div className="stat-sub">أنهوا القياس القبلي</div></div>
         <div className="stat-card"><div className="stat-label">للمراجعة</div><div className="stat-value s-replied">{reqN + (bk?.to_review || 0)}</div><div className="stat-sub">{bk ? `${reqN} متطلبات و${bk.to_review} نماذج` : 'متطلبات أرسلها المشاركون'}</div></div>
+        {o.stale_cards > 0 && <div className="stat-card"><div className="stat-label">بطاقات تنتظر المستشار</div><div className="stat-value s-new">{o.stale_cards}</div><div className="stat-sub">أكثر من 7 أيام بلا قرار</div></div>}
         <div className="stat-card"><div className="stat-label">في البرنامج</div><div className="stat-value">{st('placed') + st('enrolled')}</div><div className="stat-sub">{o.active_week != null ? `${o.active_week} نشطون هذا الأسبوع` : 'معتمدون'}</div></div>
     </div>
       <div className="la-grid2">

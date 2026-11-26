@@ -20,6 +20,8 @@ import { notifySettings } from '../_shared/notify-settings.ts';
 import { NOTICE_ACTION } from './notify.ts';
 import { SITES } from '../_shared/sites.js';
 import { cohortDigest } from './cohort-pulse.ts';
+import { staleCards } from './capstone.js';
+import { listed } from './counting.ts';
 
 export const DIGEST_ACTION = 'system.digest';
 const DAY_MS = 864e5;
@@ -52,6 +54,17 @@ async function cohortRow(since: string, until: string, errors: string[]): Promis
   } catch (e) { errors.push(`cohorts: ${(e as Error)?.message || e}`); return []; }
 }
 
+// البطاقات المسلّمة التي تنتظر قرار المستشار أكثر من 7 أيام (staleCards): حالها الآن لا أحداث النافذة، فيتكرر السطر كل يوم
+// ما دامت تنتظر. بلا حساب العرض. تعذّر القراءة خطأ يعيد الملخص في الساعة التالية
+export const STALE_EVENT = 'stale_cards';
+async function staleRow(until: string, errors: string[]): Promise<DigestRow[]> {
+  const { data, error } = await listed(db.from('model_submissions').select('status, submitted_at, learning_models!inner(key), participants!inner(is_demo)')
+    .eq('status', 'submitted').eq('learning_models.key', 'initiative-charter'), 'participants').limit(READ_LIMIT);
+  if (error) { errors.push(`stale: ${error.message || error}`); return []; }
+  const n = staleCards((data || []) as any[], Date.parse(until));
+  return n ? [{ key: STALE_EVENT, label: eventOf(STALE_EVENT).label, count: n }] : [];
+}
+
 export async function digestRows(since: string, allowed: Set<string>, until = new Date().toISOString()): Promise<{ rows: DigestRow[]; errors: string[] }> {
   const counts = new Map<string, number>();
   const capped = new Set<string>();
@@ -72,6 +85,7 @@ export async function digestRows(since: string, allowed: Set<string>, until = ne
   const rows = [...counts.entries()]
     .sort(([a], [b]) => Object.keys(EVENT_INDEX).indexOf(a) - Object.keys(EVENT_INDEX).indexOf(b))
     .map(([key, count]) => ({ key, label: eventOf(key).label, count, ...(capped.has(key) ? { more: true } : {}) })) as DigestRow[];
+  if (allowed.has(STALE_EVENT)) rows.push(...await staleRow(until, errors));
   if (allowed.has(COHORT_EVENT)) rows.push(...await cohortRow(since, until, errors));
   return { rows, errors };
 }

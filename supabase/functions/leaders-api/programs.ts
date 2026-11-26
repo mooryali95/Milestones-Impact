@@ -8,7 +8,7 @@
 import { all, allFor, audit, db, Fail, must } from './core.ts';
 import { baselineMinutes } from './assessment-time.ts';
 import { journeyApproved, cleanSupervision, cleanRubricScores, autoGroups, cohortsAfter, hideBreaksMessage, hideBreaksStage, enrollImpact, moveConfirmText, moveImpact, newlyBroken, programLockedText, cleanGroupSettings, cleanTeamIds, cleanStageModes, contentLevels, cleanDelivery, cleanDueOverride, cleanMilestone, approvalOf, cohortDefinition, cohortDefinitionView, orgProgram, pickCohort, programDiff, programSnapshot, removedRequirementIds, renderJourney, restorePlan, stageRulesIssues, BLOCKING_RULES, postInTrack, POST_IN_TRACK_AR, postInService, POST_IN_SERVICE_AR, upgradePlan } from './logic.js';
-import { READY_MIN } from './capstone.js';
+import { CHARTER_KEY, programEnd, READY_MIN } from './capstone.js';
 import { planUpgradeBlock } from './cohort-plan.js';
 import { cohortSetup, sessionsFor, setupMissing, undatedFor } from './cohort-setup.js';
 import type { Actor, Admin } from './admin.ts';
@@ -67,6 +67,19 @@ function versionBlock(live: { stages: any[]; requirements: any[] }): { code: str
 
 // ── للمشارك ──
 // strict: خطأ القراءة يرمي بدل أن يُقرأ «بلا دفعة» (ختم الإصدار D02 لا يسقط بصمت)
+// نهاية برنامج المشارك للفصلين الختاميين (closingState في capstone.js): مصدر واحد يقرؤه بناء الوثيقة وحفظ النموذج وبطاقة المسار.
+// charter: إجابات البطاقة إن كانت بيد المستدعي، وإلا تُقرأ. تعذّر القراءة يعيد null (لا تأجيل ولا قفل)
+export async function programEndOf(p: any, since: string | null, charter: any = undefined): Promise<number | null> {
+  try {
+    const [{ cohort }, card] = await Promise.all([
+      cohortOf(p),
+      charter !== undefined ? Promise.resolve(charter) : db.from('model_submissions').select('answers, learning_models!inner(key)').eq('participant_id', p.id)
+        .eq('learning_models.key', CHARTER_KEY).maybeSingle().then((r: any) => r.data?.answers || {}),
+    ]);
+    return programEnd({ ends_on: cohort && !cohort.is_default ? cohort.ends_on : null, start: card?.start, end: card?.end, since });
+  } catch { return null; }
+}
+
 export async function cohortOf(p: { id?: string | null; organization_id?: string | null }, { strict = false } = {}) {
   // حساب الدفعة التجريبي (demo-cohort.ts): دفعته من عموده وحده، كأنها إلحاق صريح، ولا صف له في enrollments. فيرى خطة
   // دفعته ونسختها ومواعيدها وما أُوقف من مراحلها كما يراها أعضاؤها، ولا تجده قراءة بالدفعة. دفعة لم تعد موجودة: القاعدة العامة

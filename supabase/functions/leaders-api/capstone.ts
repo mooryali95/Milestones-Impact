@@ -10,13 +10,13 @@
 import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMail, sendMail } from './core.ts';
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
-import { cohortOf, contentLevelsFor } from './programs.ts';
+import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
 import { answeredModels, approvalOf, viewTable, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
-  APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, programEnd, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
+  APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
@@ -72,8 +72,7 @@ async function build(p: any) {
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
   // نهاية برنامج المشارك للفصلين الختاميين (closingState): نهاية دفعته، وإلا انتهاء مبادرته من بطاقتها
-  const { cohort } = await cohortOf(p).catch(() => ({ cohort: null as any }));
-  const end = programEnd({ ends_on: cohort && !cohort.is_default ? cohort.ends_on : null, start: charterAnswers.start, end: charterAnswers.end, since });
+  const end = await programEndOf(p, since, charterAnswers);
   const sections = mine.map((m: any) => {
     const sub = by[m.id];
     const fields = modelFields(m, content, scope, priority, sub?.answers || null, since);

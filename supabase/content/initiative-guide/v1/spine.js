@@ -91,7 +91,7 @@ export function afterOf(sections, id) {
   return rest.find((s) => !s.optional && chapterState(s) !== 'done') || rest[0] || null;
 }
 
-const hoursAr = (n) => (n <= 1 ? 'ساعة' : n === 2 ? 'ساعتين' : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
+export const hoursAr = (n) => (n <= 1 ? 'ساعة' : n === 2 ? 'ساعتين' : n <= 10 ? `${n} ساعات` : `${n} ساعة`);
 const leftAr = (n) => (n === 1 ? 'فصل واحد' : n === 2 ? 'فصلان' : n <= 10 ? `${n} فصول` : `${n} فصلًا`);
 
 /**
@@ -135,3 +135,6 @@ export const newInLevel = (sections, seen) => (seen ? (sections || []).filter((s
 export function checksOn(checks, key, map) {
   return (checks || []).filter((x) => !x.ok && (map[x.key] || []).includes(key));
 }
+
+/** زمن الوثيقة بالساعات من دقائقها (docMinutes في الخادم)، بالتقريب نفسه الذي يقول به الخط «نحو N ساعات» */
+export const docHoursAr = (minutes) => hoursAr(Math.max(1, Math.round(minutes / 60)));

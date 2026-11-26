@@ -53,7 +53,7 @@ describe('3. البطاقة المنتظرة عند المستشار أكثر م
   const card = (submitted_at, status = 'submitted', key = 'initiative-charter') => ({ status, submitted_at, learning_models: { key } });
   it('تُعد البطاقة المسلّمة التي مضى عليها أكثر من سبعة أيام بلا قرار، لا غيرها', () => {
     expect(STALE_CARD_DAYS).toBe(7);
-    const rows = [card('2026-11-10T00:00:00Z'), card('2026-11-18T23:00:00Z'), card('2026-11-01T00:00:00Z', 'reviewed'),
+    const rows = [card('2026-11-10T00:00:00Z'), card('2026-11-19T01:00:00Z'), card('2026-11-01T00:00:00Z', 'reviewed'),
       card('2026-11-01T00:00:00Z', 'submitted', 'raid'), card('2026-11-18T00:00:00Z'), card(null)];
     expect(staleCards(rows, now)).toBe(2);
   });

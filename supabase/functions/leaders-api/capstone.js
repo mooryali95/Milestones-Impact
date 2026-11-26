@@ -11,8 +11,8 @@
 //   • نوع المبادرة (مشروع، برنامج، محفظة) من نطاق عمل المشارك في ملفه،
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
-import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor } from './logic.js';
-import { BEGINNER_CHAPTER_TITLES } from './labels.js';
+import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
+import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR } from './labels.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -595,6 +595,29 @@ export function closingState(modelKey, level, end, now = Date.now()) {
   if (!CLOSING_CHAPTERS.includes(modelKey) || level !== 'beginner' || end == null) return { deferred: false, opens_at: null };
   const opens = end - (CLOSING_WEEKS * 7 - 1) * 864e5;
   return { deferred: now < opens, opens_at: new Date(opens).toISOString().slice(0, 10) };
+}
+
+/** سبب رفض الحفظ في الفصل الختامي المؤجل (القاعدة نفسها: closingState)، أو null إن كان مفتوحًا. يقرؤه حفظ النموذج في الخادم */
+export const closingLock = (/** @type {string} */ modelKey, /** @type {string | null | undefined} */ level, /** @type {number | null} */ end, now = Date.now()) =>
+  (closingState(modelKey, level, end, now).deferred ? CLOSING_LOCKED_AR : null);
+
+// ── البطاقة المنتظرة عند المستشار (متابعة التخفيف): مسلّمة منذ أكثر من STALE_CARD_DAYS بلا قرار، سطر في ملخص الإدارة وعدد في لوحتها ──
+export const STALE_CARD_DAYS = 7;
+/** @param {{ status?: string, submitted_at?: string | null, learning_models?: { key?: string } | null }[]} rows @param {number} [now] */
+export function staleCards(rows, now = Date.now()) {
+  const cut = now - STALE_CARD_DAYS * 864e5;
+  return (rows || []).filter((r) => r?.status === 'submitted' && r.learning_models?.key === CHARTER_KEY && r.submitted_at && Date.parse(r.submitted_at) < cut).length;
+}
+
+/**
+ * زمن الوثيقة بالدقائق لبطاقة المسار: مجموع workMinutes لفصول المشارك المحسوبة، والفصل الختامي المؤجل خارجه (closingState)،
+ * كما يجمعه خط الوثيقة من دقائق فصوله، فيقول الموضعان رقمًا واحدًا
+ * @param {any[]} models @param {any} levels @param {any} scope @param {string | null} priority @param {string | null} since @param {number | null} end @param {number} [now]
+ */
+export function docMinutes(models, levels, scope, priority, since, end, now = Date.now()) {
+  return capstoneModels(models, levels, scope)
+    .filter((m) => !closingState(m.key, levels?.[m.dimension], end, now).deferred)
+    .reduce((a, m) => a + workMinutes(modelFields(m, levels, scope, priority, null, since)), 0);
 }
 
 // يمكن التسليم؟ كل الفصول مكتملة، والجاهزية فوق الحد، والحالة تسمح

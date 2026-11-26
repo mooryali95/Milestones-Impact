@@ -18,6 +18,7 @@ import { CHECK_CHAPTERS, stuckSignals } from '../../../supabase/functions/leader
 import { GuidancePanel } from './Guidance.jsx';
 import { AssistantContext, AssistantDrawer, GateLine, useAssistantAccess } from './Assistant.jsx';
 import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { revisionRoundAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { docDownloadAr, WORKING_DOWNLOAD_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { caseStatus } from '../../../supabase/functions/leaders-api/business-case.js';
@@ -426,6 +427,8 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
             {editable && (
               <>
                 <button className="btn gold block" disabled={!!busy || !d.can_submit} onClick={submit}>{busy === 'submit' ? 'لحظة…' : 'قدّم الوثيقة إلى المستشار'}</button>
+                {/* قبل التقديم الأول: جولة التحسين من مصدرها (MAX_REVISIONS)، ونصها من labels.js */}
+                {!c.revisions && <small className="muted" data-testid="revision-round">{revisionRoundAr(MAX_REVISIONS)}</small>}
                 {!d.can_submit && d.blocker && <small className="muted">{d.blocker}</small>}
                 {d.can_submit && <small className="muted">بعد التقديم تُقفل الفصول حتى يرد المستشار، ولك {REVISIONS_AR} بعد ملاحظاته، ثم تأييد الراعي إن كتبت بريده.</small>}
               </>
