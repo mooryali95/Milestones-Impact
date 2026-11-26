@@ -27,7 +27,8 @@ import { isoLtr, POPUP_BLOCKED } from '../ui.jsx';
 import { Meaning, Spine } from './InitiativeMap.jsx';
 import { trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
 import { afterOf, chapterState, LENS, readinessQuestions, recentChanges, unitsFor, whereOf } from '../../../supabase/content/initiative-guide/v1/spine.js';
-import SharePanel, { ShareCard } from './Share.jsx';
+import SharePanel, { ShareCard, Toggle } from './Share.jsx';
+import { DOC_QR_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import Visuals, { VisualsCard } from './Visuals.jsx';
 import { Annotated, TermLevels } from '../Term.jsx';
 
@@ -54,6 +55,27 @@ export function lensLine(sections) {
 
 // بيان المسار الواحد (track-manifest.js): الكثافة لا تُحسب من المستويات هنا. بلا مسار بعد: كثافة المتوسط
 const manifestOf = (r) => trackManifest(r?.track_key, r?.profile?.dimension);
+
+// قرار رمز التحقق في الوثيقة المعتمدة (المرحلة 33): مفتاح وسطر يشرح ما يُرى عند المسح، ومعطل حين يقرر فريق البرنامج
+// أو قبل تجميد البصمة. القيمة الفعلية من الخادم (effectiveQr)، فلا يُحسب هنا شيء
+export function QrOption({ state, onSaved }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const locked = state.forced || !state.available;
+  const hint = state.forced ? `${DOC_QR_AR.forced}: ${state.qr ? DOC_QR_AR.owner_on : DOC_QR_AR.owner_off}` : !state.available ? DOC_QR_AR.unavailable : state.qr ? DOC_QR_AR.owner_on : DOC_QR_AR.owner_off;
+  const change = async (qr) => {
+    setBusy(true); setErr('');
+    const r = await call('capstone.options', { qr }).catch((e) => ({ success: false, message: e.message }));
+    setBusy(false);
+    if (r?.success) onSaved(r.qr_state); else setErr(r?.message || '');
+  };
+  return (
+    <div className="cp-qr" data-qr={state.qr ? 'on' : 'off'}>
+      <Toggle on={state.qr} label={DOC_QR_AR.owner_label} hint={hint} disabled={busy || locked} onChange={change} />
+      {err && <small className="bad" role="alert">{err}</small>}
+    </div>
+  );
+}
 
 const STATUS_CHIP = { draft: '', submitted: 'gold', returned: 'bad', accepted: 'gold', approved: 'ok' };
 const FLOW = [['draft', 'ابنِ الفصول'], ['submitted', 'مراجعة المستشار'], ['accepted', 'تأييد الراعي إن وُجد'], ['approved', 'الاعتماد']];
@@ -281,6 +303,7 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
           {c.review?.score != null && <p className="cp-score"><b>{c.review.score}</b> من 100 بمعيار التقييم</p>}
           {c.sponsor?.status === 'endorsed' && <p>أيّدها راعيها{c.sponsor.name ? ` ${c.sponsor.name}` : ''}{c.sponsor.note ? `: «${c.sponsor.note}»` : '.'}</p>}
           {c.review?.note && <p className="muted">{c.review.note}</p>}
+          {d.qr_state && <QrOption state={d.qr_state} onSaved={(qr_state) => setD((x) => ({ ...x, qr_state }))} />}
         </div>
       )}
       {/* الحساب التجريبي: المتابعة تُفتح للعرض بلا اعتماد (الخادم يحسبه له وحده ولا يخزّنه)، والشاشة تسمها «للعرض» */}

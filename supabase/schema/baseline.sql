@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261130020000_leaders_post_form
+-- as-of migration: 20261130030000_leaders_capstone_doc_options
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -381,6 +381,8 @@ create table if not exists leaders.capstones (
   updated_at timestamp with time zone default now() not null,
   tracking_reminded_at timestamp with time zone,
   sponsor_reminded_at timestamp with time zone,
+  doc_options jsonb default '{}'::jsonb not null,
+  constraint capstones_doc_options_check CHECK ((jsonb_typeof(doc_options) = 'object'::text)),
   constraint capstones_review_note_check CHECK (((review_note IS NULL) OR (char_length(review_note) <= 3000))),
   constraint capstones_sponsor_note_check CHECK (((sponsor_note IS NULL) OR (char_length(sponsor_note) <= 2000))),
   constraint capstones_sponsor_status_check CHECK (((sponsor_status IS NULL) OR (sponsor_status = ANY (ARRAY['pending'::text, 'endorsed'::text, 'declined'::text])))),

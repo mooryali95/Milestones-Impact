@@ -3,7 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // صفحة مفتوحة بلا دخول، يصلها من يمسح رمز QR على الشهادة. تعرض حالة
 // الشهادة وبياناتها من اللقطة المحفوظة على الخادم، وتفتح نسختها الرسمية.
-import { CONTACT_EMAIL } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONTACT_EMAIL, DOC_VERIFY_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import React, { useEffect, useState } from 'react';
 import { call } from '../api.js';
 
@@ -97,7 +97,14 @@ export function DocumentVerify() {
         {fp && !r && <div className="spinner" aria-label="جارٍ التحقق" style={{ margin: '20px auto' }} />}
         {r && !r.success && <p className="muted">{r.message}</p>}
         {r?.success && !r.found && <p className="vf-state missing"><i aria-hidden="true" />لا وثيقة معتمدة بهذه البصمة. تأكد منها كما هي مطبوعة في صفحة الاعتماد (مثل 1A2B-3C4D-5E6F-7A8B). النسخة الحية غير المعتمدة لا تُتحقق.</p>}
-        {d && <>
+        {d && r.withheld && <>
+          <p className="vf-state valid" data-verify="withheld"><i aria-hidden="true" />{DOC_VERIFY_AR.withheld}</p>
+          <dl>
+            <dt>البصمة</dt><dd className="ltr" style={{ textAlign: 'start' }}>{d.fingerprint}</dd>
+            <dt>الجهة المصدِرة</dt><dd>{d.issuer}</dd>
+          </dl>
+        </>}
+        {d && !r.withheld && <>
           <p className="vf-state valid"><i aria-hidden="true" />وثيقة معتمدة وأصلية: بصمتها تطابق النسخة المحفوظة لحظة اعتمادها</p>
           {d.initiative && <p className="vf-name">{d.initiative}</p>}
           <dl>

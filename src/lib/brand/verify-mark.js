@@ -8,6 +8,7 @@
 import QR from 'qrcode';
 import { esc } from './doc.js';
 import { issuedFingerprint } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { effectiveQr } from '../../../supabase/functions/leaders-api/doc-options.js';
 import { DOC_VERIFY_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 
@@ -40,10 +41,12 @@ export const VERIFY_STYLE = `<style>
 
 /**
  * علامة التحقق للمعتمدة: { html, fingerprint, url } أو null لغير المعتمدة (يرسم كل عارض سطر مسودته).
- * qr: خيار الرمز من معامل الخيارات (المرحلة 21). بلا بصمة مجمّدة: سطر «التحقق غير متاح لهذه النسخة» وحده
+ * qr: خيار الرمز من معامل الخيارات (المرحلة 21). بلا بصمة مجمّدة: سطر «التحقق غير متاح لهذه النسخة» وحده.
+ * المرحلة 33: قرار الرمز الحي (input.doc_options، effectiveQr) يعلو خيار التنزيل: المنع لا يطبع الرمز ولا الرابط، وتبقى البصمة
  */
-export function verifyMark(input, { qr = true, appUrl } = {}) {
+export function verifyMark(input, { qr: wanted = true, appUrl } = {}) {
   if (input?.meta?.status !== 'approved') return null;
+  const qr = wanted && effectiveQr(input?.doc_options).qr;
   const fp = issuedFingerprint(input);
   if (!fp) return { fingerprint: null, url: null, html: `<div class="vm off" data-verify="unavailable"><span>${esc(DOC_VERIFY_AR.unavailable)}</span></div>` };
   if (!qr) return { fingerprint: fp, url: null, html: `<div class="vm" data-verify="no-qr"><div class="vm-l"><span>${esc(DOC_VERIFY_AR.note)}</span><b class="vm-fp">${esc(fp)}</b></div></div>` };
