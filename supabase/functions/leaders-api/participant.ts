@@ -20,7 +20,7 @@ import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
-  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram } from './logic.js';
+  VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram, postRatedState } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { beginnerTitle, bindAnswers, CHARTER_KEY, CLOSING_CHAPTERS, closingLock, docMinutes, importRows, initiativeOf, trackProject } from './capstone.js';
 import { cardOnJourney, trackManifest, withBridges } from './track-manifest.js';
@@ -611,7 +611,8 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     db.from('participant_stage_overrides').select('program_id, stage_key, action').eq('participant_id', p.id),
     db.from('participant_milestones').select('milestone_id, done_at, due_override, note, scores').eq('participant_id', p.id),
     initiativeFor(p.id),
-    db.from('raters').select('phase').eq('participant_id', p.id).eq('status', 'submitted'),
+    // E-360 يحتاج الصلة والصلاحية والمنتظر لا المقدَّم وحده (postRatedState)، وT-360 من المقدَّم القبلي كما كان
+    db.from('raters').select('phase, status, relation, expires_at').eq('participant_id', p.id).in('phase', ['pre', 'post']).neq('status', 'revoked'),
     // التقييم الختامي مصدر بندين: «استلام التقرير النهائي» في الرحلة، والنتيجة التي تظهر للمشارك بعد اعتمادها
     db.from('final_evaluations').select('program_id, score, decision, status, decided_at, adjust, snapshot').eq('participant_id', p.id),
     // مراجعة اليوم 180 في متابعة المبادرة: مصدر «قراءة الأثر بعد ستة أشهر» (R-6M)
@@ -621,6 +622,7 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
   const pl = placements.data || [];
   const { levels, approved } = approvalOf(pl);
   const submitted = (kind: string) => (assessments.data || []).some((a: any) => a.status === 'submitted' && a.instruments?.kind === kind);
+  const post360 = postRatedState(rated.data || [], { minOthers: (await appSettings()).feedback360.min_others, finalApproved: fe?.status === 'approved' });
   const state = {
     profileCompleted: !!p.profile_completed_at,
     hasCv: !!p.cv_path,
@@ -630,8 +632,9 @@ export async function journeyFor(p: any, { lite = false, cohort = null, sessions
     // التقرير النهائي يُستلم حين يُعتمد التقييم الختامي فتظهر نتيجته المفصلة (وتعود عند إعادة فتحه)، أو بتقرير صادر في جدوله
     reportIssued: (reports.data || []).length > 0 || fe?.status === 'approved',
     initiativeNamed: !!initiative,
-    preRated: (rated.data || []).some((r: any) => r.phase === 'pre'),
-    postRated: (rated.data || []).some((r: any) => r.phase === 'post'),
+    preRated: (rated.data || []).some((r: any) => r.phase === 'pre' && r.status === 'submitted'),
+    postRated: post360.done,
+    postRatedFewer: post360.fewer,
     // «عرض المشروع أمام لجنة التقييم» (E-PRES): اعتماد التقييم الختامي لبرنامجه، لا مسودته ولا ما ينتظر الاعتماد
     finalApproved: fe?.status === 'approved',
     review180: (reviews.data || []).length > 0,

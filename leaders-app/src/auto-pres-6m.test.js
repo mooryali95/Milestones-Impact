@@ -41,6 +41,7 @@ describe('E-PRES وR-6M تلقائيان', () => {
     expect(j[0].items[0]).toMatchObject({ status: 'pending' });
     expect(j[0].items[0].override_ok).toBeUndefined();
     expect(AUTO_OVERRIDABLE).toEqual(['E-PRES', 'R-6M']);
-    expect(Object.keys(AUTO_EVIDENCE).sort()).toEqual(['E-PRES', 'R-6M']);
+    // E-360 له نص دليل («اكتمل بعدد أقل»، تصور المرحلة 1 البند 6) وليس قابلًا للتجاوز
+    expect(Object.keys(AUTO_EVIDENCE).sort()).toEqual(['E-360', 'E-PRES', 'R-6M']);
   });
 });

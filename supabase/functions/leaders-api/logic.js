@@ -422,11 +422,30 @@ export const AUTO_CHECKS = {
   'R-6M': (s) => !!s.review180,
 };
 
+// اكتمال E-360 (تصور المرحلة 1، البند 6): لا يُعد التقييم البعدي دليلًا بمقيّم واحد. يكتمل حين يبلغ المقدَّم البعدي من غير
+// المدير minOthers (حد «أقل عدد لإصدار التقرير» min_others من إعدادات 360 نفسها يمرره المستدعي، لا رقم ثانٍ)، أو حين يغلق حد التقييم ولو بأقل: لا مقيّم
+// بعدي ينتظر (awaiting) ولا مدعو برابط سارٍ، وقد قدّم واحد على الأقل، فيُوسم «اكتمل بعدد أقل». والسريان (القرار 3):
+// من اعتُمد تقييمه الختامي يُحفظ اكتماله بالقاعدة السابقة (مقدَّم بعدي واحد)
+/** @param {{ phase?: string, status?: string, relation?: string, expires_at?: string | null }[]} raters صفوف المقيّمين (القبلي والبعدي)
+ *  @param {{ minOthers: number, finalApproved?: boolean, now?: number }} o */
+export function postRatedState(raters, { minOthers, finalApproved = false, now = Date.now() }) {
+  const post = (raters || []).filter((r) => r.phase === 'post');
+  const submitted = post.filter((r) => r.status === 'submitted');
+  const others = submitted.filter((r) => r.relation !== 'manager').length;
+  if (others >= minOthers) return { done: true, fewer: false, others };
+  if (finalApproved && submitted.length) return { done: true, fewer: false, others };
+  const waiting = post.some((r) => r.status === 'awaiting' || (r.status === 'invited' && (!r.expires_at || Date.parse(r.expires_at) > now)));
+  if (!waiting && submitted.length) return { done: true, fewer: true, others };
+  return { done: false, fewer: false, others };
+}
+
 // بنود تلقائية تبقى قابلة للتجاوز اليدوي: صف «done» محفوظ لها (اعتماد سابق أو «تجاوز يدوي») يُعدّ كما كان،
 // فلا يتراجع من اعتُمدت له يدويًا قبل ربطها. بقية التلقائي يُقرأ من مصدره وحده كما كان
 export const AUTO_OVERRIDABLE = Object.freeze(['E-PRES', 'R-6M']);
 // نص الدليل حين يحسمها النظام، يظهر بجانب شارة «تلقائي» في ملف المشارك
 export const AUTO_EVIDENCE = {
+  // اكتمل بإغلاق حد التقييم قبل أن يبلغ العدد min_others (postRatedState): يراه المرشد والإدارة بجانب شارة «تلقائي»
+  'E-360': (s) => (s.postRated && s.postRatedFewer ? 'اكتمل بعدد أقل' : null),
   'E-PRES': (s) => (s.finalApproved ? 'اعتُمد التقييم الختامي' : null),
   'R-6M': (s) => (s.review180 ? (s.review180Verified ? 'سُجّلت مراجعة يوم 180 وأكّدها الراعي' : 'سُجّلت مراجعة يوم 180') : null),
 };
@@ -476,7 +495,7 @@ export function buildJourney({ stages, requirements, progress, levels, state, ac
         // الاختياري خارج العد (optional.js): يُختم هنا مرة، ومنه يقرأ كل عدّاد ونسبة وشرط بعده required وحده
         // الملف المرفوع (بند الرفع): اسمه كما سمّاه صاحبه ووقت رفعه، لصف «ملفك المرفوع» في رحلته (uploadedFile في upload-file.js)
         const file = r.kind === 'upload' ? uploadedFile(p) : null;
-        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, ...(keep ? { override_ok: true, auto_note: autoNote } : {}), status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
+        return { ...r, required: !itemOptional(r, act, p.status === 'done'), auto: !!auto, ...(keep ? { override_ok: true, auto_note: autoNote } : autoNote ? { auto_note: autoNote } : {}), status, note: p.note || null, evidence_path: p.evidence_path || null, completed_at: p.completed_at || null, ...(r.kind === 'survey' && p.answers ? { answers: p.answers } : {}), ...(file ? { file } : {}), ...(act ? { activity: act } : {}) };
       });
     // المنجز والمطلوب من البنود التي تُعد وحدها: الاختياري لا ينقص نسبة من يقف في المرحلة ولا يزيدها
     const n = countedProgress(items);

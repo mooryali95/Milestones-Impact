@@ -251,7 +251,9 @@ function MentorNudge({ pid }) {
 
 // الرحلة بعين الخبير كما يراها المشارك (التوازي 2): المراحل التي تسير معًا كتلة واحدة «تسير معًا»، ثم المسارات المستمرة
 // والخدمات لمن يريد، فلا تُقرأ مرحلتان متوازيتان كأنهما متتاليتان
-const stageRow = (s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{STAGE_STATUS_AR[s.status]}{s.total ? ` · ${s.done}/${s.total}` : ''}</small></li>;
+// وسم البند التلقائي غير القابل للتجاوز (auto_note، مثل «اكتمل بعدد أقل» في E-360، تصور المرحلة 1 البند 6) يراه المرشد بجانب مرحلته
+const autoNotes = (s) => (s.items || []).filter((i) => i.auto_note && !i.override_ok).map((i) => `${i.title_ar}: ${i.auto_note}`);
+const stageRow = (s) => <li key={s.key}><span>{s.title_ar}</span><small className="muted">{STAGE_STATUS_AR[s.status]}{s.total ? ` · ${s.done}/${s.total}` : ''}{autoNotes(s).map((t) => ` · ${t}`).join('')}</small></li>;
 function JourneyShape({ shape }) {
   return (
     <>
