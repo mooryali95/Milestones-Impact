@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
+import { BULK_REVIEW_REFUSED_AR, reviewClass } from './review-class.js';
 import { placeQuietly } from './cohort-intake.ts';
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
@@ -676,7 +677,7 @@ async function purgeQueuedMail(email: string, refs: string[]) {
 export async function reviews(b: Body = {}) {
   // حساب العرض لا يدخل طوابير المراجعة (participants!inner يسمح بالفلترة على المشارك)
   const rows = must(await scopeOrg(listed(db.from('participant_requirements')
-    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind, program_id)')
+    .select('participant_id, requirement_id, status, evidence_path, answers, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind, program_id)')
     .eq('status', 'submitted'), 'participants'), b.org, 'participants.organization_id').limit(200)) ?? [];
   const { data: waiting } = await scopeOrg(listed(db.from('participants').select('id, full_name, email, organization_name, updated_at')
     .eq('status', 'pending_approval')), b.org).order('updated_at', { ascending: true }).limit(200);
@@ -1058,6 +1059,14 @@ export async function reviewRequirement(a: Admin, b: Body) {
   requireWrite(a);
   const status = b.status === 'done' ? 'done' : b.status === 'returned' ? 'returned' : b.status === 'pending' ? 'pending' : null;
   if (!status) throw new Fail('حالة غير صالحة');
+  // الاعتماد الجماعي (bulk) للذاتي الإقرار وحده (تصور المرحلة 2، 2.4): الحارس هنا لا في الواجهة وحدها، والتصنيف من الثابت الواحد
+  if (b.bulk === true && status === 'done') {
+    const [{ data: r }, { data: s }] = await Promise.all([
+      db.from('stage_requirements').select('kind').eq('id', String(b.requirement_id)).maybeSingle(),
+      db.from('participant_requirements').select('evidence_path, answers').eq('participant_id', String(b.participant_id)).eq('requirement_id', String(b.requirement_id)).maybeSingle(),
+    ]);
+    if (reviewClass((r as any)?.kind, (s as any) || {}) !== 'self') throw new Fail(BULK_REVIEW_REFUSED_AR, 409, 'bulk_evidence');
+  }
   const now = new Date().toISOString();
   must(await db.from('participant_requirements').upsert({
     participant_id: String(b.participant_id), requirement_id: String(b.requirement_id), status,

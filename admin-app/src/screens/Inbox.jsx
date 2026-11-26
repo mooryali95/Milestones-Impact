@@ -14,6 +14,7 @@ import { askOpen } from './Erasure.jsx';
 import { ageAr, approvalIdsOf, INBOX_KINDS, readyLineAr } from '../../../supabase/functions/leaders-api/inbox.js';
 import { BULK_APPROVE_MAX } from '../../../supabase/functions/leaders-api/approval.js';
 import { INBOX_VIEWS, inboxView } from '../today.js';
+import { evidencePreview, reviewClass } from '../../../supabase/functions/leaders-api/review-class.js';
 
 // view: عرض تقود إليه أرقام مكتب اليوم («المتجاوز للمهلة» أو «المنتظر منذ أكثر من 7 أيام»)، فلتر فوق فلتر النوع.
 // بلا view يبقى الصندوق كما كان؛ onView يمسحه («اعرض الكل»)
@@ -55,7 +56,9 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
     L('admin.reviews', {}).then((r) => {
       if (!live) return;
       if (!r?.success) { failed(); return; }
-      setEvidence(Object.fromEntries((r.submitted || []).filter((x) => x.evidence_path).map((x) => [`${x.participant_id}:${x.requirement_id}`, x.evidence_path])));
+      // لكل متطلب دليله وصنفه (تصور المرحلة 2، 2.4): ذاتي يُعتمد جماعيًا، وبدليل منفردًا بعد رؤية دليله المضمّن
+      setEvidence(Object.fromEntries((r.submitted || []).map((x) => [`${x.participant_id}:${x.requirement_id}`,
+        { path: x.evidence_path || null, preview: evidencePreview(x), cls: reviewClass(x.stage_requirements?.kind, x) }])));
       setEvidenceState('ok');
     }, failed);
     return () => { live = false; };
@@ -64,7 +67,7 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
   const [ret, setRet] = useState(null);
   // الدليل يُفتح بطلب صريح يُسجَّل (admin.evidence-url)، للمدير وحده
   const openEvidence = async (i) => {
-    const r = await L('admin.evidence-url', { participant_id: reqKey(i).participant_id, path: evidence[i.id] });
+    const r = await L('admin.evidence-url', { participant_id: reqKey(i).participant_id, path: evidence[i.id]?.path });
     if (r.success) window.open(r.url, '_blank', 'noopener'); else toast(r.message);
   };
   // معاينة الاعتماد الجماعي للعدّ وحده (dry_run لا يكتب شيئًا): للمدير الذي يكتب، وتعذّرها يُبقي الزر بلا عدد
@@ -93,7 +96,9 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
   };
   const pendingN = counts.approval || 0;
   const writer = canWrite !== false;
-  const reqShown = shown.slice(0, 60).filter((i) => i.kind === 'requirement');
+  // الجماعي للذاتي الإقرار وحده، وصنفه من الأدلة المحمّلة: قبل تحميلها لا يُعرف فلا يُحدَّد شيء (والخادم يحرس بعلم bulk)
+  const reqShown = shown.slice(0, 60).filter((i) => i.kind === 'requirement' && evidenceState === 'ok' && evidence[i.id]?.cls === 'self');
+  const hasReqShown = shown.slice(0, 60).some((i) => i.kind === 'requirement');
   // الاعتماد على المحدد الظاهر وحده (تقاطع التحديد مع المعروض)
   const pickedReq = reqShown.filter((i) => picked.has(i.id));
   const allReq = reqShown.length > 0 && reqShown.every((i) => picked.has(i.id));
@@ -105,7 +110,7 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
     try {
       for (const [n, i] of list.entries()) {
         setBusy(`${n + 1}/${list.length}`);
-        const r = await L('admin.review', { ...reqKey(i), status: 'done' }).catch(() => null);
+        const r = await L('admin.review', { ...reqKey(i), status: 'done', bulk: true }).catch(() => null);
         if (!r?.success) failed.push(i);
       }
     } finally {
@@ -114,6 +119,16 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
       refreshPending();
     }
     toast(reqDoneAr(list.length, failed));
+  };
+  // اعتماد متطلب واحد بعد رؤية دليله (بلا علم bulk)
+  const approveOne = async (i) => {
+    setBusy('1/1');
+    const r = await L('admin.review', { ...reqKey(i), status: 'done' }).catch(() => null);
+    setBusy(null);
+    if (!r?.success) { toast(r?.message || 'تعذّر الاعتماد، حاول مرة أخرى'); return; }
+    setPicked((x) => { const n = new Set(x); n.delete(i.id); return n; });
+    toast('اعتُمد المتطلب');
+    refreshPending();
   };
   const sendReturn = async () => {
     const note = ret?.note.trim();
@@ -159,21 +174,25 @@ export default function Inbox({ contacts = 0, canWrite, onPerson, view = '', onV
           )}
           {writer && reqShown.length > 0 && (
             <div className="la-row inbox-req" role="group" aria-label="اعتماد المتطلبات">
-              <label className="la-check"><input type="checkbox" checked={allReq} onChange={() => setPicked(allReq ? new Set() : new Set(reqShown.map((i) => i.id)))} /> <span>حدد المتطلبات المعروضة ({reqShown.length})</span></label>
+              <label className="la-check"><input type="checkbox" checked={allReq} onChange={() => setPicked(allReq ? new Set() : new Set(reqShown.map((i) => i.id)))} /> <span>حدد المتطلبات ذاتية الإقرار المعروضة ({reqShown.length})</span></label>
               <button type="button" className="btn-sm primary" disabled={!pickedReq.length || !!busy || evidenceState !== 'ok'} onClick={approveReqs}>{busy ? `جارٍ الاعتماد ${busy}` : `اعتمد المحدد${pickedReq.length ? ` (${pickedReq.length})` : ''}`}</button>
             </div>
           )}
-          {writer && reqShown.length > 0 && evidenceState === 'failed' && (
+          {writer && hasReqShown && evidenceState === 'failed' && (
             <p className="la-err" role="alert">تعذّر تحميل الأدلة، فالاعتماد الجماعي معطّل حتى تُحمَّل. <button type="button" className="btn-sm ghost" onClick={() => { setEvidenceState('loading'); setEvidenceTry((n) => n + 1); }}>أعد المحاولة</button></p>
           )}
           <ul className="inbox-list">
             {shown.slice(0, 60).map((i) => (
               <li key={`${i.kind}-${i.id}`} className={i.late ? 'late' : i.soon ? 'soon' : ''}>
-                {writer && i.kind === 'requirement' && <input type="checkbox" aria-label={`تحديد ${i.sub || 'المتطلب'} لـ ${i.title}`} checked={picked.has(i.id)} onChange={() => togglePick(i.id)} />}
+                {writer && reqShown.includes(i) && <input type="checkbox" aria-label={`تحديد ${i.sub || 'المتطلب'} لـ ${i.title}`} checked={picked.has(i.id)} onChange={() => togglePick(i.id)} />}
                 <button type="button" className="la-link" onClick={() => open(i)}>{i.title || INBOX_KINDS[i.kind].label}</button>
                 <span className={`la-chip ${i.late ? 'bad' : i.soon ? 'warn' : ''}`}>{i.kind_ar}{i.late ? ' · متأخر' : i.soon ? ' · قريب' : ''}</span>
                 {i.sub && <small className="la-muted">{i.sub}</small>}
-                {i.kind === 'requirement' && evidence[i.id] && <button type="button" className="la-link" onClick={() => openEvidence(i)}>الدليل</button>}
+                {i.kind === 'requirement' && evidence[i.id]?.path && <button type="button" className="la-link" onClick={() => openEvidence(i)}>الدليل</button>}
+                {i.kind === 'requirement' && evidence[i.id]?.preview && (
+                  <small className="inbox-evidence">{evidence[i.id].preview.file ? `ملف: ${evidence[i.id].preview.file}` : `«${evidence[i.id].preview.text}»`}</small>
+                )}
+                {writer && i.kind === 'requirement' && evidence[i.id]?.cls !== 'self' && <button type="button" className="btn-sm primary" disabled={!!busy || evidenceState !== 'ok'} onClick={() => approveOne(i)}>اعتمد</button>}
                 {writer && i.kind === 'requirement' && ret?.id !== i.id && <button type="button" className="la-link" disabled={!!busy} onClick={() => setRet({ id: i.id, note: '' })}>أعد مع ملاحظة</button>}
                 <small className="inbox-age">{ageAr(i.days)}</small>
                 {ret?.id === i.id && (
