@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // طلبات التواصل: بطاقات مرشِّحة، بحث وفلاتر، جدول بصفحات يُتنقل فيه بالأسهم، ولوحة معاينة (درج على الهاتف)
 // ════════════════════════════════════════════════════════════════
+import { PageHeader } from '../PageHeader.jsx';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { call, fmtDate } from '../api.js';
 import { daysAr, relDate, riyadhFull, timeOnly } from '../dates.js';
@@ -239,14 +240,8 @@ export default function Contacts() {
   const firstLoad = !rows;
   return (
     <div className="dash-body">
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-eyebrow">الوارد من الموقع</div>
-          <h1 className="page-title">طلبات التواصل</h1>
-          <div className="page-title-ar">جميع الطلبات الواردة من المنظومة</div>
-        </div>
-        <div className="last-updated">{updated ? `آخر تحديث: ${timeOnly(updated)}` : '—'}</div>
-      </div>
+      <PageHeader eyebrow="الوارد من الموقع" title="طلبات التواصل" desc="جميع الطلبات الواردة من المنظومة"
+        actions={<div className="last-updated">{updated ? `آخر تحديث: ${timeOnly(updated)}` : '—'}</div>} />
 
       <FilterCards cards={CONTACT_CARDS} field="status" state={f} set={setF} counts={counts} loading={firstLoad} label="ترشيح بالحالة" clearLabel="عرض الكل" total={all.length} />
 

@@ -80,7 +80,9 @@ test('رأس الصفحة سطر واحد مضغوط، ومبدّل المنتج
   const head = page.locator('.page-header').first();
   await expect(head.getByRole('heading', { level: 1, name: 'تطبيق القادة' })).toBeVisible();
   expect((await head.boundingBox()).height).toBeLessThan(60);
-  await expect(head.locator('.page-title-ar')).toHaveAttribute('title', /leaders\.sunkvalue\.com/);
+  // النطاق في عنوان المستند لا في الترويسة (تصور 2026-11-26، المرحلة 4)
+  await expect(head).not.toContainText('sunkvalue');
+  await expect(page).toHaveTitle(/leaders\.sunkvalue\.com/);
   await expect(page.locator('.ctx-tab').first()).toBeVisible();
   // أول المحتوى قبل 200 بكسل من أعلى الصفحة (كان نحو 250 للرأس وحده)
   const nav = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });

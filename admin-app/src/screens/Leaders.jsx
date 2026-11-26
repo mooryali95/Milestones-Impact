@@ -1,6 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 // سياق تطبيق القادة: المنهجية والكتاب والمختبر والمشاركون والجهات والشهادات
 // ════════════════════════════════════════════════════════════════
+import { PageHeader } from '../PageHeader.jsx';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { lazyNamed, lazyRetry } from '../lazy-retry.js';
 import { L } from '../leaders.js';
@@ -160,14 +161,8 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
 
   return (
     <div className="dash-body">
-      <div className="page-header">
-        <div className="page-header-left">
-          <div className="page-eyebrow">المنتج الأول</div>
-          <h1 className="page-title">تطبيق القادة</h1>
-          <div className="page-title-ar" title="leaders.sunkvalue.com · المنهجية والمسارات والمشاركون والجهات والشهادات">leaders.sunkvalue.com · المنهجية والمسارات والمشاركون والجهات والشهادات</div>
-        </div>
-        {!canWrite && <span className="la-chip">عرض فقط</span>}
-      </div>
+      {/* الترويسة: العنوان وحده، والنطاق في عنوان المستند (تصور 2026-11-26، القسم العام البند 3) */}
+      <PageHeader eyebrow="المنتج الأول" title="تطبيق القادة" domain="leaders.sunkvalue.com" status={!canWrite ? 'عرض فقط' : null} />
       {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
