@@ -13,11 +13,12 @@ import { controlStrip, esc, isRaw, kpis, raw, section, SEAL, structuralAccent } 
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
-import { CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { BUDGET_PLAIN_AR, BUDGET_TOTAL_AR, budgetTotalPctAr, decisionDeadlineAr, decisionSentenceAr, DOC_DECISION_AR, fromToAr, CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
+import { FORMS } from '../../../supabase/functions/leaders-api/document-forms.js';
 import { SLICES, termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
 import { capstoneReport, heatmap, levelAnnex, levelAnnexEmpty, pdfFileName, paras, STYLE, tableOf, withoutReadiness } from './capstone.js';
-import { costLabel, dateAr, parseNumber, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
+import { dateAr, parseNumber, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
 import { costBarsSvg, ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
 
@@ -74,6 +75,13 @@ body { font-weight: 400; }
 .in-dec .q { border: 1px solid #DCE2E1; border-inline-start: 1.2mm solid var(--acc); padding: 4mm 5mm; margin: 0 0 5mm; background: #F7F8F6; }
 .in-dec .q span { display: block; font-size: 9pt; font-weight: 500; color: #8A6424; letter-spacing: .02em; }
 .in-dec .q p { margin: 1.5mm 0 0; font-size: 12.5pt; line-height: 1.75; font-weight: 500; color: #0B272F; }
+.in-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 4mm 0 0; }
+.in-strip > div { border-top: 0.6mm solid var(--acc); padding-top: 2mm; }
+.in-strip span { display: block; font-size: 9pt; color: #2C4148; font-weight: 400; }
+.in-strip b { display: block; font-size: 11pt; font-weight: 500; color: #0B272F; }
+.in-dec .q .in-choices { font-size: 10pt; font-weight: 500; margin: 4mm 0 0; color: #0B272F; }
+.in-dec .in-due { display: block; margin-top: 1.5mm; font-size: 9pt; color: #2C4148; }
+.in-dec .in-card i { font-style: normal; font-weight: 500; }
 .in-dec h3 { font-size: 10.5pt; font-weight: 500; margin: 6mm 0 2.5mm; color: #0B272F; }
 .in-lean { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 0 0 6mm; }
 .in-lean > div { border: 1px solid #DCE2E1; padding: 3mm 3.5mm; break-inside: avoid; min-height: 30mm; }
@@ -136,10 +144,33 @@ function risksOf(doc, limit = 3) {
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
-const riskCards = (list) => (list.length ? `<div class="in-cards">${list.map((x) => `<div class="in-card">${x.score ? `<span class="sc ${x.score >= RISK_HIGH ? 'hi' : x.score >= RISK_MID ? 'md' : ''}">${x.score}</span>` : ''}<b>${esc(x.title)}</b>${x.response ? `<p>${esc(x.response)}</p>` : ''}${x.owner ? `<small>المالك: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div>` : '');
-const benefitCards = (list) => (list.length ? `<div class="in-cards">${list.map((x) => `<div class="in-card"><b>${esc(x.title)}</b>${x.indicator ? `<p>${esc(x.indicator)}</p>` : ''}${x.baseline || x.target ? `<p>${x.baseline ? `من <bdi>${esc(x.baseline)}</bdi> ` : ''}${x.target ? `إلى <bdi>${esc(x.target)}</bdi>` : ''}</p>` : ''}${x.owner ? `<small>المالك: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div>` : '');
+// ── كلفة عدم القرار: من بديل «عدم التدخل» أو «الوضع الحالي» في جدول البدائل إن كتبه القائد، وإلا لا خانة ──
+export const STATUS_QUO = /^\s*(عدم التدخل|عدم القرار|الوضع الحالي|بلا تدخل|لا شيء|الإبقاء)/;
+function statusQuoCost(doc) {
+  const f = fld(doc, 'options-analysis', 'options');
+  if (!f || !Array.isArray(f.value)) return null;
+  const row = f.value.find((r) => Array.isArray(r) && STATUS_QUO.test(String(r[0] ?? '')));
+  const rest = row ? row.slice(1).map((c) => String(c ?? '').trim()).filter(Boolean) : [];
+  return rest.length ? rest.join('، ') : null;
+}
+const riskCards = (list, labelled = false) => (list.length ? `<div class="in-cards">${list.map((x) => `<div class="in-card">${x.score ? `<span class="sc ${x.score >= RISK_HIGH ? 'hi' : x.score >= RISK_MID ? 'md' : ''}">${x.score}</span>` : ''}<b>${esc(x.title)}</b>${x.response ? `<p>${labelled ? `<i>${esc(DOC_DECISION_AR.response)}:</i> ` : ''}${esc(x.response)}</p>` : ''}${x.owner ? `<small>المالك: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div>` : '');
+const benefitCards = (list) => (list.length ? `<div class="in-cards">${list.map((x) => `<div class="in-card"><b>${esc(x.title)}</b>${x.indicator ? `<p>${esc(x.indicator)}</p>` : ''}${x.baseline || x.target ? `<p>${fromToAr(x.baseline && `<bdi>${esc(x.baseline)}</bdi>`, x.target && `<bdi>${esc(x.target)}</bdi>`)}</p>` : ''}${x.owner ? `<small>المالك: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div>` : '');
 
 // ── رسم المنافع: خط الأساس مقابل المستهدف لكل منفعة رقمية الطرفين، بمقياس كل منفعة (لا محور مشترك بين وحدات مختلفة) ──
+// أول جملة من مصدر التمويل: يقطع عند الفاصلة العربية أو نقطة تنهي جملة فقط (لا يقطع 1.5)، وإن فرغ فالنص مقصوصًا
+export const fundingHead = (funding) => {
+  const t = String(funding ?? '').trim();
+  const head = t.split(/،|\.(?=\s|$)|[؟!](?=\s|$)/)[0].trim();
+  return head || (t.length > 60 ? `${t.slice(0, 60)}…` : t);
+};
+
+// موعد القرار يُعرض فقط إن كان بعد تاريخ إصدار الوثيقة؛ الموعد الفائت يضلل صاحب القرار
+export const isFutureDeadline = (start, issuedAt) => {
+  if (!start) return false;
+  const t = new Date(start).getTime();
+  return Number.isFinite(t) && t > new Date(issuedAt || Date.now()).getTime();
+};
+
 export function benefitsChart(doc) {
   const rows = benefitsOf(doc, 6).map((b) => ({ ...b, a: parseNumber(b.baseline), z: parseNumber(b.target) }))
     .filter((b) => Number.isFinite(b.a) && Number.isFinite(b.z) && (b.a || b.z));
@@ -204,7 +235,10 @@ export function institutionalReport(input, options = {}) {
   const parts = [];
   const add = (en, ar, body, note) => { if (body && body.replace(/<[^>]+>/g, '').trim()) parts.push([en, ar, body, note]); };
   const lean = form.key === 'card', full = form.key === 'case';
-  const benefits = benefitsOf(doc, full ? 8 : lean ? 3 : 5);
+  const limits = (FORMS[form.key] || FORMS.charter).limits;
+  const benefits = benefitsOf(doc, limits.benefits);
+  // وسم المبلغ بعد الاحتياطي في كل موضع من النسخة المؤسسية (المرحلة 26)
+  const budgetLabel = cost?.contingency ? BUDGET_TOTAL_AR : BUDGET_PLAIN_AR;
   // حالة العمل تُبنى على أسئلة صاحب القرار (slices.json، بمستوى المشارك في الأثر): كل باب يفتح بسؤاله، فيقرأ صاحب القرار
   // الحالات الخمس (الاستراتيجية والاقتصادية والتجارية والمالية والإدارية) في أبوابها. بلا مسار معروف: أسئلة الاحترافي
   const man = full ? trackManifest(m.track_key || null, m.priority || null) : null;
@@ -212,18 +246,31 @@ export function institutionalReport(input, options = {}) {
   const viz = scheduleModel(doc);
   const g = viz ? ganttSvg(viz, { today: null }) : null;
   const ganttFig = g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني؛ الذهبي على المسار الحرج</figcaption></figure>` : '';
-  const costKpis = cost ? kpis(cost.contingency ? [{ value: Math.round(cost.total).toLocaleString('en-US'), label: 'التكلفة التقديرية (ريال)' }, { value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` }] : [{ value: Math.round(cost.total).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` }]) : '';
+  const costKpis = cost ? kpis(cost.contingency ? [{ value: Math.round(cost.total).toLocaleString('en-US'), label: 'التكلفة التقديرية (ريال)' }, { value: `${cost.contingency}%`, label: 'الاحتياطي' }, { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${budgetLabel} (ريال)` }] : [{ value: Math.round(cost.total).toLocaleString('en-US'), label: `${budgetLabel} (ريال)` }]) : '';
   const cb = costBarsSvg(doc);
   const costFig = cb?.svg ? `<figure class="cp-fig in-chart">${cb.svg}<figcaption>التكلفة بحسب الحزمة</figcaption></figure>` : '';
 
-  // ── صفحة القرار التنفيذية: من الحقول القائمة وحدها (لا مصدر جديد) ──
-  const ask = cost ? `${money(cost.withContingency)}${duration ? `، على مدة ${duration}` : ''}${funding ? `، من ${funding}` : ''}` : duration ? `مدة ${duration}` : null;
+  // ── صفحة القرار التنفيذية (المرحلة 26): من الحقول القائمة وحدها (لا مصدر جديد)، ونصوصها من labels.js ──
+  const D = DOC_DECISION_AR;
+  const ask = cost ? `${budgetLabel}: ${money(cost.withContingency)}${duration ? `، على مدة ${duration}` : ''}${funding ? `، من ${funding}` : ''}` : duration ? `${D.duration}: ${duration}` : null;
   const recommendation = val(doc, 'options-analysis', 'recommendation') || val(doc, 'initiative-charter', 'objective');
+  const decisionStrip = [
+    cost && [cost.contingency ? budgetTotalPctAr(cost.contingency) : BUDGET_PLAIN_AR, money(cost.withContingency)],
+    duration && [D.duration, durationHtml || duration],
+    // الشريط مختصر: أول جملة من مصدر التمويل، ونصه كاملًا في «الموارد المطلوبة»
+    has(funding) && [D.funding, fundingHead(funding)],
+  ].filter(Boolean);
+  const deadline = !approved && isFutureDeadline(m.start, m.generated_at) ? dateAr(m.start) : null;
+  const noDecision = statusQuoCost(doc);
+  const topBenefits = benefits.slice(0, limits.decision);
+  const topRisks = risksOf(doc, limits.decision);
   const decision = [
-    `<div class="q"><span>القرار المطلوب</span><p>${esc(`اعتماد ${m.initiative ? `مبادرة «${m.initiative}»` : 'المبادرة'}${cost ? ` بتكلفة ${money(cost.withContingency)}` : ''}${duration ? ` على مدة ${duration}` : ''}${m.sponsor ? `، برعاية ${m.sponsor}` : ''}.`)}</p></div>`,
-    grid([['المشكلة', val(doc, 'initiative-charter', 'problem')], ['التوصية', recommendation], ['المطلوب', ask]]),
-    benefits.length ? `<h3>ثلاث منافع</h3>${benefitCards(benefits.slice(0, 3).map((b) => ({ ...b, indicator: null })))}` : '',
-    (() => { const r = risksOf(doc, 3); return r.length ? `<h3>أعلى ثلاث مخاطر</h3>${riskCards(r.map((x) => ({ ...x, response: null })))}` : ''; })(),
+    `<div class="q"><span>${esc(D.decision)}</span><p>${esc(decisionSentenceAr(m.initiative, m.sponsor ? String(m.sponsor).split(/[:：]/)[0].trim() : null))}</p>
+      ${decisionStrip.length ? `<div class="in-strip">${decisionStrip.map(([k, v]) => `<div><span>${esc(k)}</span><b>${isRaw(v) ? v.html : esc(v)}</b></div>`).join('')}</div>` : ''}
+      <p class="in-choices">${D.choices.map(esc).join(' · ')}</p>${deadline ? `<small class="in-due">${esc(decisionDeadlineAr(deadline))}</small>` : ''}</div>`,
+    grid([[D.issue, val(doc, 'initiative-charter', 'problem')], [D.recommend, recommendation], [D.resources, ask], [D.noDecision, noDecision]]),
+    topBenefits.length ? `<h3>${esc(D.benefits)}</h3>${benefitCards(topBenefits.map((b) => ({ ...b, indicator: null })))}` : '',
+    topRisks.length ? `<h3>${esc(D.risks)}</h3>${riskCards(topRisks.map((x) => ({ ...x, owner: '' })), true)}` : '',
   ].join('');
 
   if (lean) {
@@ -253,7 +300,7 @@ export function institutionalReport(input, options = {}) {
     // ── الميثاق وحالة العمل: نظرة عامة، ولماذا، والقيمة، والخطة، والحوكمة والمخاطر، والأثر (حالة العمل) ──
     const packages = (val(doc, 'wbs', 'packages') || []).length;
     const tiles = [
-      cost && { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${costLabel(cost)} (ريال)` },
+      cost && { value: Math.round(cost.withContingency).toLocaleString('en-US'), label: `${budgetLabel} (ريال)` },
       benefits.length && { value: benefits.length, label: 'منفعة مقيسة' },
       (val(doc, 'milestone-register', 'milestones') || []).length && { value: val(doc, 'milestone-register', 'milestones').length, label: 'معلمًا' },
       packages && { value: packages, label: 'حزمة عمل' },
@@ -265,7 +312,7 @@ export function institutionalReport(input, options = {}) {
         ['الهدف الأعلى', val(doc, 'initiative-charter', 'objective')],
         ['المستفيدون', val(doc, 'initiative-charter', 'beneficiaries')],
         ['المدة', durationHtml],
-        ['المطلوب', cost ? `${money(cost.withContingency)}${funding ? `، من ${funding}` : ''}` : null],
+        [budgetLabel, cost ? `${money(cost.withContingency)}${funding ? `، من ${funding}` : ''}` : null],
       ])}`);
     add('Why', 'لماذا هذه المبادرة', [
       full ? field(doc, 'options-analysis', 'evidence', 'الدليل على المشكلة') : '',
@@ -315,7 +362,7 @@ export function institutionalReport(input, options = {}) {
       grid([['الراعي ودوره', m.sponsor], ['من يقرر', val(doc, 'governance', 'structure')], ['إيقاع المتابعة', val(doc, 'governance', 'cadence')]]),
       field(doc, 'stakeholder-map', 'stakeholders', 'أصحاب المصلحة'),
       full ? field(doc, 'stakeholder-map', 'coalitions', 'التحالفات وتحريك المعارضين') : '',
-      (() => { const r = risksOf(doc, full ? 10 : 5); return r.length ? `<div class="cp-f"><b>سجل المخاطر</b>${riskCards(r)}</div>` : ''; })(),
+      (() => { const r = risksOf(doc, limits.risks); return r.length ? `<div class="cp-f"><b>سجل المخاطر</b>${riskCards(r)}</div>` : ''; })(),
       risks.length && raidF ? heatmap(raidF.columns, risks) : '',
       full ? field(doc, 'governance', 'raci', 'مصفوفة المسؤوليات') : '',
       full ? grid([['التصعيد', val(doc, 'governance', 'escalation')], ['شهية المخاطر', val(doc, 'raid', 'appetite')], ['أصحاب المصلحة الصامتون', val(doc, 'stakeholder-map', 'silent')], ['قرار البوابة', [val(doc, 'stage-gate', 'decision'), val(doc, 'stage-gate', 'justification')].filter(has).join(': ')]]) : '',
@@ -360,7 +407,7 @@ export function institutionalReport(input, options = {}) {
 
   const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
   const { brand, accent } = identityOf(m);
-  const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">Decision</span><h2>ما المطلوب منك</h2><p>صفحة واحدة لصاحب القرار، والتفصيل في الأبواب بعدها.</p></div></header>${decision}</section>` : '';
+  const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}</section>` : '';
   const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
@@ -390,7 +437,7 @@ export function institutionalReport(input, options = {}) {
  * معامل الخيارات الموحد للوثيقة (المرحلة 21): { annex, decision, appendix, qr }
  *   annex: ملحق المراجع (مستوى الوثيقة وموقع كل فصل منه). لا يُرسم إلا بطلب صريح من شاشة مراجع (الخبير والإدارة)،
  *     ولو وصل الحقل review_levels، فللحماية حاجزان: الخادم والعارض
- *   decision: صفحة «ما المطلوب منك» في المؤسسية. appendix: ملحق «ما ينقص» في ملف العمل. qr: رمز التحقق في المعتمدة
+ *   decision: صفحة القرار في المؤسسية. appendix: ملحق «ما ينقص» في ملف العمل. qr: رمز التحقق في المعتمدة
  * والأنواع الأربعة إعدادات مسبقة له لا قوالب موازية. ما لا يُمرَّر يأخذ قيمة النوع
  */
 export const DOC_PRESETS = Object.freeze({
