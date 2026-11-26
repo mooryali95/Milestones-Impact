@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = join(__dirname, '../..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
-const NAME = '20261129160000_leaders_group_members_cleanup';
+const NAME = '20261129250000_leaders_group_members_cleanup';
 const PRELUDE = `create role anon; create role authenticated; create role service_role; create schema auth; create schema extensions;
   create table auth.users (id uuid primary key, email text);
   create function auth.uid() returns uuid language sql as 'select null::uuid';

@@ -44,7 +44,7 @@ export const EXPORT_TABLES = {
   participant_track_history: ['decided_by'], participant_new_items: [],
   // سجل الدمج (participant_merges وparticipant_merge_rows) ونسخة الترحيل backup_20261128_account_merge لا تُصدَّر (داخلية)، ويمحوها
   // حذف المشارك: السجل بمفتاحه الأجنبي، والنسخة والحساب المدموج فيه بمشغّل participant_merge_erase قبل الحذف (erasure_purge وغيرها)
-  // ونسخة ترحيل تنظيف المجموعات backup_20261129_group_members_cleanup (20261129160000): عضويات مجموعات قديمة حُذفت بعد النقل،
+  // ونسخة ترحيل تنظيف المجموعات backup_20261129_group_members_cleanup (20261129250000): عضويات مجموعات قديمة حُذفت بعد النقل،
   // داخلية لا تُصدَّر، وتُمحى مع حذف المشارك بمفتاحها الأجنبي (on delete cascade)
   // ونسخة ترحيل الدفعة الواحدة backup_20261129_single_cohort (20261129230000): إلحاقات سُحبت لأنها ثانية، ومن أُلحق بالتعبئة،
   // داخلية لا تُصدَّر، وتُمحى مع حذف المشارك بمفتاحها الأجنبي (on delete cascade)

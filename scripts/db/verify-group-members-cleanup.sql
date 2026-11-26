@@ -1,4 +1,4 @@
--- تحقق الترحيل 20261129160000 على القاعدة الحية (قراءة فقط). يُشغَّل قبل التطبيق ليرى المالك ما سيُحذف، وبعده للتأكد
+-- تحقق الترحيل 20261129250000 على القاعدة الحية (قراءة فقط). يُشغَّل قبل التطبيق ليرى المالك ما سيُحذف، وبعده للتأكد
 -- كل فحص يعيد صفًا واحدًا: ok صحيح إن اجتاز، وdetail ما وجده
 -- 1) عضويات مجموعات عالقة سيحذفها الترحيل (قبل التطبيق: العدد للعرض على المالك؛ بعده المتوقع 0)
 select count(*) = 0 as ok, 'عالقة ' || count(*) || ' لـ' || count(distinct m.participant_id) || ' مشارك في ' || count(distinct m.cohort_id) || ' دفعة' as detail
@@ -17,7 +17,7 @@ select true as ok, 'أدوار في دفعة قديمة ' || count(*) as detail
    and exists (select 1 from leaders.enrollments e where e.participant_id = r.participant_id and e.cohort_id <> r.cohort_id and e.status <> 'withdrawn');
 -- 4) الترحيل في السجل (بعد التطبيق)
 select count(*) = 1 as ok, 'مسجل ' || count(*) || ' من 1' as detail from leaders.schema_migrations
- where name = '20261129160000_leaders_group_members_cleanup';
+ where name = '20261129250000_leaders_group_members_cleanup';
 -- 5) نسخته الاحتياطية محمية بـ RLS (بعد التطبيق)
 select count(*) = 1 as ok, string_agg(c.relname || case when c.relrowsecurity then '' else ' (بلا RLS)' end, '، ') as detail
   from pg_class c join pg_namespace n on n.oid = c.relnamespace

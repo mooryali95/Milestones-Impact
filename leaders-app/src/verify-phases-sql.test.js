@@ -23,7 +23,7 @@ beforeAll(async () => {
   await db.exec(PRELUDE);
   await db.exec(read('supabase/schema/baseline.sql'));
   const files = readdirSync(join(ROOT, 'supabase/migrations')).filter((x) => x.endsWith('.sql')).sort();
-  for (const f of files.filter((x) => x >= '20261129160000')) {
+  for (const f of files.filter((x) => x >= '20261129170000')) {
     try { await db.exec(read(`supabase/migrations/${f}`)); } catch (e) { failed.push(`${f}: ${e.message}`); await db.exec('rollback').catch(() => {}); }
     await db.exec('discard temp').catch(() => {});
   }

@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261129240000_leaders_transfer_participant
+-- as-of migration: 20261129250000_leaders_group_members_cleanup
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -368,7 +368,6 @@ create table if not exists leaders.capstones (
   sponsor_note text,
   sponsor_invited_at timestamp with time zone,
   sponsor_expires_at timestamp with time zone,
-  sponsor_reminded_at timestamp with time zone,
   sponsor_at timestamp with time zone,
   sponsor_waived text,
   approved_at timestamp with time zone,
@@ -377,6 +376,7 @@ create table if not exists leaders.capstones (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   tracking_reminded_at timestamp with time zone,
+  sponsor_reminded_at timestamp with time zone,
   constraint capstones_review_note_check CHECK (((review_note IS NULL) OR (char_length(review_note) <= 3000))),
   constraint capstones_sponsor_note_check CHECK (((sponsor_note IS NULL) OR (char_length(sponsor_note) <= 2000))),
   constraint capstones_sponsor_status_check CHECK (((sponsor_status IS NULL) OR (sponsor_status = ANY (ARRAY['pending'::text, 'endorsed'::text, 'declined'::text])))),
@@ -2781,6 +2781,7 @@ create table if not exists public.registrations (
   "submittedAt" timestamp with time zone,
   "reopenRequested" boolean default false,
   demographic_analysis jsonb,
+  is_test boolean default false not null,
   constraint registrations_pkey PRIMARY KEY (id)
 );
 

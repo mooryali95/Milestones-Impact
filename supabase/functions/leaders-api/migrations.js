@@ -188,7 +188,7 @@ export const MIGRATIONS = [
   '20261129130000_leaders_staff_messages',
   '20261129140000_leaders_beginner_columns',
   '20261129150000_leaders_beginner_language',
-  '20261129160000_leaders_group_members_cleanup',
+  '20261129160000_registrations_is_test',
   '20261129170000_leaders_consent_sponsor',
   '20261129180000_leaders_sponsor_reminded',
   '20261129190000_leaders_reflection_apply',
@@ -197,6 +197,7 @@ export const MIGRATIONS = [
   '20261129220000_leaders_reading_track',
   '20261129230000_leaders_single_cohort',
   '20261129240000_leaders_transfer_participant',
+  '20261129250000_leaders_group_members_cleanup',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -299,7 +300,7 @@ export const MIGRATION_GATES = {
   '20261129130000_leaders_staff_messages': ["tolerant", "الدوال تتسامح مع غيابه: تعذّر قراءة expert_id أو coordinator_id في participant_mail_prefs يُرسل بريد الخبير والمنسق كما كان"],
   '20261129140000_leaders_beginner_columns': ["tolerant", "محتوى نماذج فقط. يضيف إلى اثني عشر جدولًا خاصيتين لا تقرؤهما الدوال الأقدم (columns_beginner وlabels_beginner)،"],
   '20261129150000_leaders_beginner_language': ["tolerant", "محتوى نماذج فقط. خاصيتان لا تقرؤهما الدوال الأقدم (label_beginner وhint_beginner)، فتعرض العنوان والتلميح"],
-  '20261129160000_leaders_group_members_cleanup': ["deferred", "بقرار المالك (تصور المرحلة 1، القرار 2): يُطبَّق بعد عرض العد من scripts/db/verify-group-members-cleanup.sql قراءةً"],
+  '20261129160000_registrations_is_test': ["tolerant", "عمود جديد بقيمة افتراضية false: الدوال الأقدم تقرأ registrations بـ select * فيصلها حقل زائد لا تقرؤه،"],
   '20261129170000_leaders_consent_sponsor': ["tolerant", "قبله يرفض القيد نوع sponsor (23514) فيسجل logConsent الخطأ ولا يوقف قرار الراعي، كما كان قبل الإشعار"],
   '20261129180000_leaders_sponsor_reminded': ["tolerant", "قبله لا يُذكَّر الراعي (sponsorReminders يتجاوز عند غياب العمود فلا يتكرر)، ويبقى عدّ المنتهي في تقرير الأسبوع"],
   '20261129190000_leaders_reflection_apply': ["tolerant", "قبله يُحفظ التأمل وحده ويُحتسب بلا إضافة «أين ستطبقه؟» (handbookComplete يكتب الجواب بعد الختم وخطؤه يُسجَّل ولا يُسقط الإتمام)"],
@@ -307,4 +308,5 @@ export const MIGRATION_GATES = {
   '20261129210000_leaders_no_manager': ["tolerant", "قبله يرد «لا يوجد مدير متاح» بـ503 «غير متاح الآن» (missingColumn في impact.ts)، وتقييم المدير يعمل بخانته كما هو"],
   '20261129220000_leaders_reading_track': ["tolerant", "قبل نشر الدوال يُقرأ النطاق track كنطاق all (readingChapters يعيد كل الأبواب لما لا يعرفه)، فلا يتغير شيء حتى تُنشر"],
   '20261129240000_leaders_transfer_participant': ["tolerant", "قبله يُنقل المشارك بين الجهات كما كان (admin.assign-org يحدّث الجهة وحدها) ما دام لا إلحاق له بدفعة جهة أخرى،"],
+  '20261129250000_leaders_group_members_cleanup': ["deferred", "بقرار المالك (تصور المرحلة 1، القرار 2): يُطبَّق بعد عرض العد من scripts/db/verify-group-members-cleanup.sql قراءةً"],
 };
