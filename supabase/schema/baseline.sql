@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261130000000_leaders_beginner_benefits
+-- as-of migration: 20261130020000_leaders_post_form
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -185,8 +185,12 @@ create table if not exists leaders.assessments (
   retake_requested_at timestamp with time zone,
   retake_requested_by text,
   retake_reason text,
+  post_form text,
+  served_count integer,
   constraint assessments_form_check CHECK ((form = ANY (ARRAY['A'::text, 'B'::text]))),
+  constraint assessments_post_form_check CHECK (((post_form IS NULL) OR (post_form = ANY (ARRAY['short'::text, 'full'::text])))),
   constraint assessments_retake_reason_chk CHECK (((retake_reason IS NULL) OR (retake_reason = ANY (ARRAY['effort'::text, 'admin'::text])))),
+  constraint assessments_served_count_check CHECK (((served_count IS NULL) OR (served_count >= 0))),
   constraint assessments_status_check CHECK ((status = ANY (ARRAY['in_progress'::text, 'submitted'::text, 'void'::text]))),
   constraint assessments_pkey PRIMARY KEY (id)
 );
@@ -2166,6 +2170,7 @@ create table if not exists leaders.questions (
   updated_at timestamp with time zone,
   updated_by text,
   observable_by text[],
+  core boolean default false not null,
   constraint questions_form_check CHECK ((form = ANY (ARRAY['A'::text, 'B'::text]))),
   constraint questions_kind_check CHECK ((kind = ANY (ARRAY['likert'::text, 'choice'::text, 'text'::text]))),
   constraint questions_min_level_check CHECK ((min_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text]))),
@@ -3973,6 +3978,8 @@ CREATE INDEX IF NOT EXISTS points_ledger_participant ON leaders.points_ledger US
 CREATE INDEX IF NOT EXISTS program_milestones_program_idx ON leaders.program_milestones USING btree (program_id, sort);
 
 CREATE UNIQUE INDEX IF NOT EXISTS programs_one_default ON leaders.programs USING btree ((true)) WHERE is_default;
+
+CREATE INDEX IF NOT EXISTS questions_instrument_core_idx ON leaders.questions USING btree (instrument_id, core);
 
 CREATE INDEX IF NOT EXISTS questions_instrument_idx ON leaders.questions USING btree (instrument_id, dimension, sort);
 

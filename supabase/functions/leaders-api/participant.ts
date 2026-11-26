@@ -19,7 +19,7 @@ import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
   AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, firstSharedModule, commonHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
-  servedPost, anchorRepeat, levelGains, levelGated,
+  servedPost, anchorRepeat, levelGains, levelGated, postShortOn,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram, postRatedState } from './logic.js';
 import { guidanceAi, guidanceFor } from './guidance.ts';
 import { beginnerTitle, bindAnswers, CHARTER_KEY, CLOSING_CHAPTERS, closingLock, docMinutes, importRows, initiativeOf, trackProject } from './capstone.js';
@@ -918,9 +918,12 @@ export async function assessmentGet(p: any, b: Body = {}) {
   if (!a) {
     a = must(await db.from('assessments').insert({ participant_id: p.id, instrument_id: inst.id }).select('*').single());
   }
-  let qs = must(await db.from('questions').select('id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form, anchor_code, min_level')
+  // الصيغة القصيرة (مفتاح post_form.short، مطفأ): تُثبت على القياس عند أول فتح، وتُقرأ معها النواة. مطفأ: الاستعلام نفسه حرفيًا
+  const short = kind === 'post' && await shortPost(a);
+  if (short && a.post_form !== 'short') { must(await db.from('assessments').update({ post_form: 'short' }).eq('id', a.id)); a.post_form = 'short'; }
+  let qs = must(await db.from('questions').select(`id, dimension, code, tier, text_ar, help_ar, kind, options, sort, retro, form, anchor_code, min_level${short ? ', core' : ''}`)
     .eq('instrument_id', inst.id).eq('active', true)) ?? [];
-  if (kind === 'post') qs = await postServed(p, qs);
+  if (kind === 'post') qs = short ? await postServed(p, qs, true) : await postServed(p, qs);
   // أداة بصيغتين: المبدئي صيغة ثابتة للمشارك، والبعدي الصيغة الأخرى
   if (usesForms(qs)) {
     if (!a.form) {
@@ -974,10 +977,18 @@ export async function retakeNotice(participantId: string, minutes: number | null
 // ما يُقدَّم في القياس البعدي: فقرات المستوى حتى المستوى المعتمد في كل بُعد،
 // والتوأم بدل المشترك (أو الأصل لربع المشاركين لتقدير أثر التكرار).
 // العرض والإجابة والإرسال كلها تمر من هنا فتُحسب الدرجة على ما قُدِّم فقط.
-export async function postServed(p: any, qs: any[]) {
+export async function postServed(p: any, qs: any[], short = false) {
   const pl = must(await db.from('placements').select('dimension, level, approved_at').eq('participant_id', p.id)) ?? [];
   const levels = Object.fromEntries(pl.filter((x: any) => x.approved_at).map((x: any) => [x.dimension, x.level]));
-  return servedPost(qs, { levels, repeat: anchorRepeat(p.id) });
+  return short ? servedPost(qs, { levels, repeat: anchorRepeat(p.id), short }) : servedPost(qs, { levels, repeat: anchorRepeat(p.id) });
+}
+
+// هل يُقدَّم هذا البعدي بالصيغة القصيرة؟ ما ثُبّت على القياس أولًا، ثم المفتاح لقياس لم تُثبت صيغته. والإجابة (assessmentAnswer)
+// تتحقق بالكاملة دائمًا، والقصيرة جزء منها، فتُقبل النواة والممتدة بالدالة نفسها
+async function shortPost(a: any) {
+  if (a?.post_form === 'short') return true;
+  if (a?.post_form === 'full') return false;
+  return postShortOn(await appSettings().catch(() => null));
 }
 
 // القياس البعدي يُفتح حين يصل المشارك إلى مرحلة التقييم في رحلته
@@ -1029,8 +1040,19 @@ export async function assessmentSubmit(p: any, b: Body) {
   const { data: inst } = await db.from('instruments').select('kind').eq('id', a.instrument_id).maybeSingle();
   let questions = a.form ? forForm(qs.data || [], a.form) : (qs.data || []);
   // البعدي يُتحقق من اكتماله ويُحسب على المجموعة نفسها التي عُرضت
-  if (inst?.kind === 'post') questions = await postServed(p, questions);
   const answers = Object.fromEntries((ans.data || []).map((x: any) => [x.question_id, x.value?.k]));
+  // الصيغة القصيرة: النواة إلزامية، وما أجيب من الممتدة يُحسب معها. الصيغة المحفوظة full إن أجيب كل ما يُقدم في الكاملة
+  let form: { post_form: string; served_count: number } | null = null;
+  if (inst?.kind === 'post' && await shortPost(a)) {
+    const full = await postServed(p, questions);
+    const core = new Set((await postServed(p, questions, true)).map((q: any) => q.id));
+    const missingCore = full.filter((q: any) => core.has(q.id) && answers[q.id] == null).length;
+    if (missingCore) throw new Fail(`بقي ${missingCore} من الأسئلة دون إجابة`, 400, 'incomplete');
+    questions = full.filter((q: any) => core.has(q.id) || answers[q.id] != null);
+    form = { post_form: questions.length === full.length ? 'full' : 'short', served_count: questions.length };
+    return postSubmit(p, a, questions, ans.data || [], model.data || null, form);
+  }
+  if (inst?.kind === 'post') questions = await postServed(p, questions);
   const missing = questions.filter((q: any) => answers[q.id] == null).length;
   if (missing) throw new Fail(`بقي ${missing} من الأسئلة دون إجابة`, 400, 'incomplete');
   if (inst?.kind === 'post') return postSubmit(p, a, questions, ans.data || [], model.data || null);
@@ -1081,7 +1103,7 @@ export async function assessmentSubmit(p: any, b: Body) {
 
 // القياس البعدي: النتيجة تُحفظ للمقارنة، ولا تغيّر المستوى المعتمد ولا الرحلة.
 // "لا ينطبق" في الآن يُغني عن تقدير ما قبل البرنامج.
-async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: any) {
+async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: any, form: { post_form: string; served_count: number } | null = null) {
   const values = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value || {}]));
   const answers = Object.fromEntries(rows.map((x: any) => [x.question_id, x.value?.k]));
   const noBefore = questions.filter((q: any) => q.retro && (scoreFor(q, answers[q.id]) ?? 0) >= 0 && values[q.id]?.before == null).length;
@@ -1115,7 +1137,7 @@ async function postSubmit(p: any, a: any, questions: any[], rows: any[], model: 
     behavior_common_pct: common[r.dimension]?.post ?? null, behavior_pre_common_pct: common[r.dimension]?.pre ?? null,
     level_gain_pct: gains[r.dimension]?.pct ?? null, level_gain_n: gains[r.dimension]?.n ?? null, level_gain_level: gains[r.dimension]?.level ?? null,
   }))));
-  await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', a.id);
+  await db.from('assessments').update({ status: 'submitted', submitted_at: new Date().toISOString(), ...(form || {}) }).eq('id', a.id);
   await audit('participant', p.id, 'assessment.submit-post', 'assessments', a.id, null, result);
   return { success: true, ...(await mePayload(p)) };
 }

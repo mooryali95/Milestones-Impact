@@ -13,7 +13,7 @@ const PRELUDE = `create role anon; create role authenticated; create role servic
   create function auth.uid() returns uuid language sql as 'select null::uuid';
   create function auth.role() returns text language sql as 'select null::text';
   create function auth.jwt() returns jsonb language sql as 'select null::jsonb';`;
-const FILES = ['verify-group-members-cleanup', 'verify-e360-rule', 'verify-reading-track', 'verify-single-cohort'];
+const FILES = ['verify-group-members-cleanup', 'verify-e360-rule', 'verify-reading-track', 'verify-single-cohort', 'verify-post-core'];
 const checksOf = (sql) => sql.split(/;\s*\n/).map((s) => s.replace(/^\s*--.*$/gm, '').trim()).filter(Boolean);
 const failed = [];
 let db;
@@ -78,5 +78,30 @@ describe('ملفات التحقق للمراحل الأربع على قاعدة 
     expect(back.ok).toBe(false);
     expect(back.detail).toContain(P1);
     expect(fewer.detail).toBe('بعدد أقل 1');
+  });
+
+  it('نواة البعدي: إحصاء الفقرات المرتبطة من القبلي واقتراح النواة وزمنها (verify-post-core)', async () => {
+    const pre = (await db.query(`insert into leaders.instruments (key, title_ar, kind, version) values ('vpc-pre', 'ق', 'baseline', 98) returning id`)).rows[0].id;
+    const post = (await db.query(`insert into leaders.instruments (key, title_ar, kind, version, active, pairs_with) values ('vpc-post', 'ب', 'post', 99, true, 'vpc-pre') returning id`)).rows[0].id;
+    const codes = ['K1', 'K2', 'K3', 'K4', 'K5', 'K6', 'K7', 'K8'];
+    const qv = (inst, c, extra = '') => `('${inst}', 'milestone', '${c}', 'نص', 'knowledge'${extra})`;
+    await db.exec(`insert into leaders.questions (instrument_id, dimension, code, text_ar, tier) values ${codes.map((c) => qv(pre, c)).join(', ')}`);
+    await db.exec(`insert into leaders.questions (instrument_id, dimension, code, text_ar, tier, anchor_code) values ${codes.map((c) => qv(post, c, `, '${c}'`)).join(', ')}`);
+    await db.exec(`insert into leaders.questions (instrument_id, dimension, code, text_ar, tier) values ('${post}', 'leadership', 'T-1', 'نص', 'transfer')`);
+    const qid = Object.fromEntries((await db.query(`select code, id from leaders.questions where instrument_id = '${pre}'`)).rows.map((r) => [r.code, r.id]));
+    for (let i = 0; i < 12; i++) {
+      const pid = `00000000-0000-4000-8000-0000000009${String(i).padStart(2, '0')}`.slice(0, 36);
+      await db.exec(`insert into leaders.participants (id, full_name, email) values ('${pid}', 'م', 'vpc${i}@example.test') on conflict do nothing`);
+      const aid = (await db.query(`insert into leaders.assessments (participant_id, instrument_id, status) values ('${pid}', '${pre}', 'submitted') returning id`)).rows[0].id;
+      // قدرة الشخص i % 5 تحكم الدرجة، مع اختلاف يسير بالفقرة، فالارتباط المصحح موجب
+      await db.exec(`insert into leaders.assessment_answers (assessment_id, question_id, value, score) values ${codes.map((c, j) => `('${aid}', '${qid[c]}', '{}', ${Math.min(4, (i % 5) + ((i + j) % 3 === 0 ? 1 : 0))})`).join(', ')}`);
+    }
+    const [items, weak, core, time] = await run('verify-post-core');
+    expect(items.detail).toContain('milestone/knowledge K1: ن 12');
+    expect(weak.detail).toMatch(/من 8 فقرة مرتبطة/);
+    expect(core.detail).toMatch(/^milestone: \d+ موضعًا، 8 فقرة، ألفا 0\.\d\d/);
+    expect(core.ok).toBe(true);
+    expect(time.detail).toContain('مبتدئ: 9 فقرة، نحو 4 دقيقة');
+    expect(time.ok).toBe(true);
   });
 });
