@@ -9,7 +9,7 @@
 // اعتُمد مستواه إن كانت الأداة مفتوحة للجميع (labVisible في lab.js).
 import { all, audit, db, Fail, must } from './core.ts';
 import { journeyDefinition, releaseOf } from './programs.ts';
-import { approvedLevels, award, pointsOf } from './participant.ts';
+import { approvedLevels, award, participantPriority, pointsOf } from './participant.ts';
 import { requirementApplies, seededShuffle } from './logic.js';
 import type { Admin } from './admin.ts';
 import { counted } from './counting.ts';
@@ -37,12 +37,14 @@ async function requiredLabKeys(p: any, levels: Record<string, string> | null) {
 async function visible(p: any) {
   const levels = await approvedLevels(p).catch(() => null);
   const or = [`participant_id.eq.${p.id}`, ...(p.organization_id ? [`organization_id.eq.${p.organization_id}`] : [])].join(',');
-  const [items, grants, required] = await Promise.all([
+  const [items, grants, required, priority] = await Promise.all([
     db.from('lab_items').select(ITEM_COLS),
     db.from('lab_grants').select('organization_id, participant_id, item_id, expires_at').or(or),
     requiredLabKeys(p, levels),
+    // محور أولوية المسار يفتح أدواته بالمستوى (تصور المرحلة 3، 3.4). تعذّر قراءته لا يغلق ما سواه
+    levels ? participantPriority(p.id, levels).catch(() => null) : null,
   ]);
-  return { levels, items: labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, grants: must(grants) ?? [], required }) };
+  return { levels, items: labVisible(must(items) ?? [], { levels, participantId: p.id, organizationId: p.organization_id, priority, grants: must(grants) ?? [], required }) };
 }
 const visibleItems = async (p: any) => (await visible(p)).items;
 

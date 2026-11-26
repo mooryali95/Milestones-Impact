@@ -4,7 +4,7 @@
 //   3. جلسة غُيّر موعدها بلا إبلاغ ثم أُلغيت: المدعوون يُبلَّغون بإلغاء الموعد الذي في يدهم (من سجل العمليات)، والبريد يقوله.
 import './_test_env.ts';
 import { assert, assertEquals } from 'jsr:@std/assert@1.0.19';
-import { installFake, resendCalls, withNet } from './_fake_db.ts';
+import { installFake, resendCalls, withNet, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 const { CONFIG, DEMO_MAIL_DOMAIN, MAIL_GALLERY, WORKSHOP_CANCEL_MAIL, WORKSHOP_TRAINER_MAIL, WORKSHOP_UNDATE_MAIL, drainMailQueue } = await import('./core.ts');
 const { resetOptionalReady } = await import('./workshop-optional.ts');
@@ -56,6 +56,7 @@ function world() {
     cohort_experts: [{ cohort_id: COHORT, expert_id: SECOND }, { cohort_id: COHORT, expert_id: TWIN }, { cohort_id: COHORT, expert_id: DEMO }],
     audit_log: numbered(), mail_events: [], mail_queue: [],
   };
+  placeOrgMembers(tables);
   const f = installFake(tables);
   return { ps, tables, f };
 }
@@ -397,6 +398,7 @@ Deno.test('«دُعي من قبل» من سجل العمليات: الحذف و�
       // تعذّرت قراءة السجل: كأن لا دعوة، فلا بريد بلا يقين (السلوك السابق)
       const b = await quiet('والسجل متعذر');
       w.f.restore();
+      placeOrgMembers(w.tables);
       const f2 = installFake(w.tables, { fail: (table, op) => (table === 'audit_log' && op.kind === 'select' ? { message: 'down' } : null) });
       try {
         const pb: any = await V.workshopSave(ADMIN, { row: edit(b, { title_ar: 'والسجل متعذر', ...D2, active: false }), preview: true });

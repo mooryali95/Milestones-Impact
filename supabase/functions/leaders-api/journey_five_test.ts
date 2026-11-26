@@ -3,7 +3,7 @@
 // والمرحلة الموقوفة تُسمّى لمن عمل فيها وحده. الخلفية قاعدة في الذاكرة ومخزن وهمي.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake } from './_fake_db.ts';
+import { installFake, placeOrgMembers } from './_fake_db.ts';
 const { db, storage } = await import('./core.ts');
 const { journeyFor, mePayload, requirementUpdate } = await import('./participant.ts');
 const { stageWindows } = await import('./stage-windows.js');
@@ -50,6 +50,7 @@ function fakeStorage() {
 }
 async function withWorld<T>(tables: Record<string, Row[]>, fn: (t: Record<string, Row[]>, removed: string[]) => Promise<T>) {
   const prevFrom = (db as any).from;
+  placeOrgMembers(tables);
   installFake(tables);
   const st = fakeStorage();
   try { return await fn(tables, st.removed); } finally { (db as any).from = prevFrom; st.restore(); }

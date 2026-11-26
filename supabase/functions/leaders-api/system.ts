@@ -313,7 +313,8 @@ export async function weeklyNumbers(weekAgo = new Date(Date.now() - 7 * 864e5).t
 
 // تقرير الصحة الأسبوعي للمالك: يُرسل من تشغيلة cron.reminders نفسها. في سلسلة التنبيهات دائمًا، والبريد بجدول التوجيه:
 // فيه ما يحتاج تدخلًا (weekly_health_action، حرج) بريد وسلاك، وإلا (weekly_health، مهم) سلاك وحده والبريد إن لم يصل
-export async function weeklyHealth() {
+// sponsorExpired: وثائق انتهت مهلة راعيها، من عدّ تذكير الرعاة في التشغيلة نفسها (capstone.ts sponsorReminders، تصور المرحلة 2، 2.3)
+export async function weeklyHealth({ sponsorExpired = 0 }: { sponsorExpired?: number } = {}) {
   if (!CONFIG.alertEmail && !slackConfigured()) return { sent: false, reason: 'no LEADERS_ALERT_EMAIL' };
   const h = await health();
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
@@ -334,6 +335,7 @@ export async function weeklyHealth() {
     ...(mail.rejected ? [`رفض مزوّد البريد هذا الأسبوع: ${mail.rejected}. راجع حالة النطاق في مركز البريد`] : []),
     ...(mail.blocked ? [`حُجب بحصة البريد اليومية هذا الأسبوع: ${mail.blocked}. إن تكرر فارفع LEADERS_MAIL_DAILY_CAP بعد التأكد من خطة Resend`] : []),
     ...(pending ? [`${pending} مشاركًا ينتظرون اعتماد مستواهم`] : []),
+    ...(sponsorExpired ? [`${sponsorExpired} وثيقة انتهت مهلة راعيها: أعد الدعوة أو اعتمدها دون تأييد من «وثائق المبادرات»`] : []),
   ];
   const event = issues.length ? 'weekly_health_action' : 'weekly_health';
   const settings = await notifySettings(db);

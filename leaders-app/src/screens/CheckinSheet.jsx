@@ -4,6 +4,7 @@
 // يفتح الكاميرا داخل التطبيق ويقرأ الرمز المتغير على شاشة القاعة (scanner.js)، ثم يسجّل الحضور بمسار المسح القائم نفسه
 // (workshop.checkin برمزه). وتحته دائمًا الأرقام الستة الظاهرة تحت الرمز (workshop.checkin بالأرقام)، وآخر حل: المدرب يسجّله
 // يدويًا من قائمته. الكاميرا تُطفأ عند النجاح وعند الإغلاق وعند مغادرة الشاشة.
+import { CommitmentAsk } from './Commitments.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { call } from '../api.js';
@@ -100,6 +101,7 @@ export default function CheckinSheet({ session, onClose }) {
             <span className="checkin-mark ok" aria-hidden="true">✓</span>
             <h2 id="ck-title">{done.already ? 'حضورك مسجل مسبقًا' : `سُجّل حضورك في «${done.session.title}»`}</h2>
             {done.session.location && <p className="small muted">{done.session.location}</p>}
+            {!done.simulated && <CommitmentAsk sessionId={done.session.id} />}
             <button type="button" className="btn" onClick={() => onClose(done)}>تم</button>
           </div>
         ) : <>

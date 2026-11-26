@@ -4,10 +4,12 @@
 // الدخول هو نفسه دخول لوحة الإدارة: نفس توكن admin-api، يُتحقق منه في
 // جدول public.api_sessions بنفس الهاش (sha256 بلا ملح) الذي تكتبه admin-api.
 import { cleanLogoData } from './svg-clean.js';
+import { BULK_REVIEW_REFUSED_AR, reviewClass } from './review-class.js';
 import { placeQuietly } from './cohort-intake.ts';
 import { hasSecondFactor } from '../_shared/second_factor.js';
 import { baselineMinutes } from './assessment-time.ts';
 import { alertOps, all, allFor, approvedMail, audit, CONFIG, stageMoveMail, ERASE_DONE_SUBJECT, eraseDoneMail, mailWindow, resolveNotes, retakeMail, reviewMail, BUCKET, db, Fail, hash, must, publicDb, sendMail, storage, secretEquals } from './core.ts';
+import { orgCurrentCohort } from './cohort-intake.js';
 import { pickCohort, cleanConfig, cleanContentItem, curriculumFor, trackLevels, DEFAULT_MODEL, DIMENSIONS, acquiescenceFor, evaluatePlacement, tierMaxPointsOf, filterHandbookMd, handbookModulesFor, hardcodedFacts, cleanStageRules, stageRulesIssues, BLOCKING_RULES, isTrack, isService, POST_IN_TRACK_AR, POST_IN_SERVICE_AR, itemsToFlip, strengthsLine, unknownTokens, LEVELS, lintHandbookMd, SCOPES, modelsFor, overallLevel, quizFor, RANKS, rankFor, trackKey, VERIFIED_KINDS, isEmail, normalizeEmail, normalizePhone, approvalOf, overrideNeedsReason, OVERRIDE_REASON_MIN, orgAccessState, inProgram, statusAfterApprove, cleanModelFieldsOf } from './logic.js';
 import { journeyFor, mePayload, participantPriority, pointsOf } from './participant.ts';
 import { recordTrackChange } from './track-history.ts';
@@ -187,6 +189,36 @@ export async function org(b: Body) {
   return { success: true, org: o, participants, funnel: funnel(participants), by_track: byTrack, by_via: byVia, by_campaign: byCampaign, by_site: bySite };
 }
 
+// من تنقل دفعتَه الجهةُ الجديدة: إلحاقه القائم في دفعة جهة غير الهدف (لا الدفعة العامة)، والدفعات قبله وبعده للسؤال
+async function orgMoveConflicts(ids: string[], targetOrg: string | null) {
+  const out = { ids: [] as string[], from: [] as { id: string; name: string }[], to: [] as { id: string; name: string }[] };
+  if (!ids.length) return out;
+  const enr: any[] = [];
+  for (let i = 0; i < ids.length; i += 150) {
+    enr.push(...((must(await db.from('enrollments').select('participant_id, cohort_id, status').in('participant_id', ids.slice(i, i + 150))) ?? []) as any[]).filter((e: any) => e.status !== 'withdrawn'));
+  }
+  if (!enr.length) return out;
+  const cids = [...new Set(enr.map((e) => e.cohort_id))];
+  const cs = (must(await db.from('cohorts').select('id, name, organization_id, is_default').in('id', cids)) ?? []) as any[];
+  const byId = new Map(cs.map((c: any) => [c.id, c]));
+  const from = new Map<string, string>();
+  for (const e of enr) {
+    const c: any = byId.get(e.cohort_id);
+    if (!c || c.is_default || !c.organization_id || c.organization_id === targetOrg) continue;
+    if (!out.ids.includes(e.participant_id)) out.ids.push(e.participant_id);
+    from.set(c.id, c.name || '');
+  }
+  out.from = [...from].map(([id, name]) => ({ id, name }));
+  if (out.ids.length) {
+    const tc = targetOrg ? (must(await db.from('cohorts').select('*').eq('organization_id', targetOrg)) ?? []) as any[] : [];
+    const dc = (must(await db.from('cohorts').select('*').eq('is_default', true)) ?? []) as any[];
+    const next = targetOrg ? (orgCurrentCohort(tc, targetOrg) || tc.find((c: any) => c.is_intake)) : null;
+    const to = next || (targetOrg ? null : dc[0]);
+    if (to) out.to = [{ id: to.id, name: to.name || '' }];
+  }
+  return out;
+}
+
 export async function assignOrg(a: Admin, b: Body) {
   requireWrite(a);
   const ids = (Array.isArray(b.participant_ids) ? b.participant_ids : []).map(String).slice(0, 1000);
@@ -200,15 +232,38 @@ export async function assignOrg(a: Admin, b: Body) {
   let q = listed(db.from('participants').update({ organization_id: target?.id || null, org_via: target ? 'admin' : null }));   // جهة العمل يكتبها المشارك ولا تُستبدل
   // جهة كل منهم قبل الفعل: يُسجَّل معها القرار في سجله (recordOrgDecisions)، ومن كتب اسمًا بلا جهة قبله
   const before = new Map<string, string | null>();
-  if (b.typed_name) q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
-  else if (ids.length) {
+  let chosen: string[] = [];
+  if (b.typed_name) {
+    // من سيُربط بالاسم (بلا حساب العرض بـlisted)، لحارس نقل الدفعة أدناه
+    chosen = ((must(await listed(db.from('participants').select('id')).is('organization_id', null).eq('organization_name', String(b.typed_name))) ?? []) as any[]).map((r: any) => String(r.id));
+    q = q.is('organization_id', null).eq('organization_name', String(b.typed_name));
+  } else if (ids.length) {
     for (let i = 0; i < ids.length; i += 150) {
       // counting-exempt: جهة كل معرّف مختار قبل الفعل لسجل القرار، والكتابة نفسها بـlisted أعلاه
       for (const r of (must(await db.from('participants').select('id, organization_id').in('id', ids.slice(i, i + 150))) ?? []) as any[]) before.set(String(r.id), r.organization_id ?? null);
     }
+    chosen = ids;
     q = q.in('id', ids);
   } else throw new Fail('لم يُحدَّد مشاركون');
-  const done = (must(await q.select('id')) ?? []) as any[];
+  // نقل الجهة انتقال واحد (تصور المرحلة 4، البند 4): من إلحاقه في دفعة جهة غير الهدف تنتقل دفعته معه، بتأكيد صريح
+  // ثم بالدالة الذرية transfer_participant (الجهة والإلحاق والمجموعات في معاملة). الإلحاق بالدفعة العامة لا يُعد تعارضًا
+  const moving = await orgMoveConflicts(chosen, target?.id || null);
+  if (moving.ids.length && b.confirm_move !== true) {
+    const extra = { affected: moving.ids.length, from: moving.from, to: moving.to };
+    const n = moving.ids.length === 1 ? 'مشاركًا واحدًا' : `${moving.ids.length} مشاركين`;
+    throw new Fail(`نقل الجهة ينقل ${n} من ${moving.from.map((c) => `«${c.name}»`).join('، ')} إلى ${moving.to.length ? moving.to.map((c) => `«${c.name}»`).join('، ') : 'دفعة الجهة الجديدة'} مع جهته. أكّد النقل إن كان مقصودًا.`, 409, 'confirm_move', extra);
+  }
+  const transferred: string[] = [];
+  for (const pid of moving.ids) {
+    const r = await db.rpc('transfer_participant', { p_participant: pid, p_actor: a.email, p_org: target?.id || null, p_set_org: true, p_cohort: null });
+    if (r.error) {
+      if (!transferred.length && ['PGRST202', '42883'].includes(String((r.error as any).code))) throw new Fail('نقل الجهة مع الدفعة غير مفعّل بعد: يلزم تطبيق ترحيل القاعدة', 409, 'not_migrated');
+      throw r.error;
+    }
+    transferred.push(pid);
+  }
+  if (transferred.length) q = q.not('id', 'in', `(${transferred.join(',')})`);
+  const done = [...((must(await q.select('id')) ?? []) as any[]), ...transferred.map((id) => ({ id }))];
   // النقل أو الفك يُلغي إعفاء الراعي السابق: ما ثُبّت لجهة لا يبقى بعد مغادرتها
   // (الجهة الجديدة تثبّت إعفاءها عند أول دخول للمشارك، كالمعتاد في access())
   let revoked = 0;
@@ -677,7 +732,7 @@ async function purgeQueuedMail(email: string, refs: string[]) {
 export async function reviews(b: Body = {}) {
   // حساب العرض لا يدخل طوابير المراجعة (participants!inner يسمح بالفلترة على المشارك)
   const rows = must(await scopeOrg(listed(db.from('participant_requirements')
-    .select('participant_id, requirement_id, status, evidence_path, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind, program_id)')
+    .select('participant_id, requirement_id, status, evidence_path, answers, note, completed_at, participants!inner(full_name, email, is_demo, organization_id), stage_requirements(code, title_ar, stage_key, kind, program_id)')
     .eq('status', 'submitted'), 'participants'), b.org, 'participants.organization_id').limit(200)) ?? [];
   const { data: waiting } = await scopeOrg(listed(db.from('participants').select('id, full_name, email, organization_name, updated_at')
     .eq('status', 'pending_approval')), b.org).order('updated_at', { ascending: true }).limit(200);
@@ -1059,6 +1114,14 @@ export async function reviewRequirement(a: Admin, b: Body) {
   requireWrite(a);
   const status = b.status === 'done' ? 'done' : b.status === 'returned' ? 'returned' : b.status === 'pending' ? 'pending' : null;
   if (!status) throw new Fail('حالة غير صالحة');
+  // الاعتماد الجماعي (bulk) للذاتي الإقرار وحده (تصور المرحلة 2، 2.4): الحارس هنا لا في الواجهة وحدها، والتصنيف من الثابت الواحد
+  if (b.bulk === true && status === 'done') {
+    const [{ data: r }, { data: s }] = await Promise.all([
+      db.from('stage_requirements').select('kind').eq('id', String(b.requirement_id)).maybeSingle(),
+      db.from('participant_requirements').select('evidence_path, answers').eq('participant_id', String(b.participant_id)).eq('requirement_id', String(b.requirement_id)).maybeSingle(),
+    ]);
+    if (reviewClass((r as any)?.kind, (s as any) || {}) !== 'self') throw new Fail(BULK_REVIEW_REFUSED_AR, 409, 'bulk_evidence');
+  }
   const now = new Date().toISOString();
   must(await db.from('participant_requirements').upsert({
     participant_id: String(b.participant_id), requirement_id: String(b.requirement_id), status,

@@ -6,7 +6,7 @@
 // pickCohort نفسها التي تحدد دفعة كل مشارك، والبنود الخمسة (الأعضاء والمستشار والمدة والجدول والجلسات) من cohortSetup
 // نفسه الذي تقرؤه صفحة الجهة ولوحة المنسق. ويضيف ثلاثة بنود لا تُرى إلا من مكان واحد يجمع الدفعة: هل يدخلها المنضمون
 // تلقائيًا، والبرنامج ونسخته (والدفعة غير المثبتة نقص)، ومن ينتظر الاعتماد.
-import { pickCohort } from './logic.js';
+import { orgCohort } from './logic.js';
 import { cohortSetup } from './cohort-setup.js';
 
 // نوع الدفعة بجملة واحدة: ثلاثة أنواع فقط، ولكل نوع طريقة دخول واحدة
@@ -30,10 +30,10 @@ export function intake({ cohort: c, cohorts = [], org = null }) {
   if (c.status !== 'open' && c.status !== 'running') {
     return { ok: false, detail: 'الدفعة «مخطط لها»: من يسجّل برابط الجهة لا يدخلها حتى تجعل حالتها «التسجيل مفتوح» أو «جارية». إلى ذلك الحين يدخل الدفعة المفتوحة العامة.', action: 'edit' };
   }
-  const active = pickCohort({ enrollments: [], cohorts, organizationId: c.organization_id }).cohort;
+  const active = orgCohort(cohorts, c.organization_id).cohort;
   if (active && active.id !== c.id && active.organization_id === c.organization_id) {
-    // بقاعدة pickCohort: الملحق يدويًا (تسجيل صريح) يبقى في دفعته، ومن تبع الدفعة بجهته ينتقل إلى أحدث دفعة لها
-    return { ok: false, detail: `دفعة «${active.name}» أحدث لجهة «${org.name}»، وهي التي يتبعها منضموها: الملحقون يدويًا بهذه الدفعة باقون فيها، والبقية ينتقلون إلى الدفعة الأحدث.`, action: 'other', other: active.id };
+    // الدفعة إلحاق صريح (تصور المرحلة 4): أعضاء هذه الدفعة باقون فيها، والمسجلون الجدد يدخلون الأحدث (place_participant)
+    return { ok: false, detail: `دفعة «${active.name}» أحدث لجهة «${org.name}»، وهي التي يدخلها المسجلون الجدد: أعضاء هذه الدفعة باقون فيها حتى يُنقلوا صراحة.`, action: 'other', other: active.id };
   }
   return { ok: true, detail: `كل من يسجّل برابط «${org.name}» يدخل هذه الدفعة تلقائيًا، دون أي إلحاق يدوي.`, action: null };
 }

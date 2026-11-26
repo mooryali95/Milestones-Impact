@@ -5,7 +5,7 @@
 // وتغيير الوسم لا يلغي شيئًا. وإعادة الملغاة تدعو من جديد باختيار المدير برقم تسلسل أعلى من الإلغاء.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake, resendCalls, withNet } from './_fake_db.ts';
+import { installFake, resendCalls, withNet, placeOrgMembers } from './_fake_db.ts';
 const V = await import('./activities.ts');
 const { CONFIG, Fail, MAIL_GALLERY, WORKSHOP_CANCEL_MAIL, WORKSHOP_TRAINER_MAIL, drainMailQueue } = await import('./core.ts');
 const { resetOptionalReady } = await import('./workshop-optional.ts');
@@ -62,6 +62,7 @@ function world() {
     experts: [{ id: TRAINER, full_name: 'د. منى القحطاني', email: 'mona@x.sa', status: 'active', roles: ['coach'] }, { id: ELSE, full_name: 'مدرب دفعة أخرى', email: 'else@x.sa', status: 'active', roles: ['coach'] }],
     cohort_experts: [], audit_log: [], mail_events: [], mail_queue: [],
   };
+  placeOrgMembers(tables);
   const f = installFake(tables);
   return { ps, tables, f };
 }
