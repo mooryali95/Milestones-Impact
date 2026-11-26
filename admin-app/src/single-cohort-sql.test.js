@@ -96,3 +96,73 @@ describe('scripts/db/verify-single-cohort.sql (م1: القياس قبل الكت
     expect(mig.detail).toBe('enrollments_one_active=false · transfer_participant=false · 20261129230000=false');
   });
 });
+
+const M2_NAME = '20261129230000_leaders_single_cohort';
+const M2 = () => read(M2_NAME);
+const active = (d, pid) => rows(d, `select cohort_id from leaders.enrollments where participant_id = '${pid}' and status <> 'withdrawn' order by cohort_id`).then((r) => r.map((x) => x.cohort_id));
+const count = async (d, sql) => (await rows(d, sql))[0].n;
+
+describe(`ترحيل ${M2_NAME} (م2: التعبئة والفهرس الفريد الجزئي)`, { timeout: 60000 }, () => {
+  it('يلحق الحقيقي وحساب الاختبار ذا الجهة، ويبقي الأحدث من الإلحاقين، ولا يمس الموقوف والتجريبي', async () => {
+    const d = await db();
+    await d.exec(M2());
+    expect(await active(d, P(1))).toEqual([C_NEW]);         // دفعة جهته التي كان يحكمه بها الاستنتاج، فلا تتغير رحلته
+    expect(await active(d, P(2))).toEqual([C_ORG2]);        // الأحدث
+    expect(await active(d, P(4))).toEqual([C_NEW]);         // اختبار بجهة: يرى ما يراه المشارك (القرار 3)
+    expect(await active(d, P(5))).toEqual([]);
+    expect((await active(d, P(6))).length).toBe(1);         // المنصة العامة
+    expect(await active(d, P(8))).toEqual([]);
+    const src = await rows(d, `select distinct source, actor from leaders.cohort_placements`);
+    expect(src).toEqual([{ source: 'manual', actor: `migration:${M2_NAME.slice(0, 14)}` }]);
+    expect(await count(d, `select count(*)::int n from leaders.audit_log where action = 'enrollment.duplicate_withdrawn'`)).toBe(1);
+    expect(await count(d, `select count(*)::int n from leaders.schema_migrations where name = '${M2_NAME}'`)).toBe(1);
+  });
+
+  it('بعده يعطي الفحص صفرًا في الإلحاق المزدوج ومن بلا دفعة غير المستثنين والاستنتاج بالجهة', async () => {
+    const d = await db();
+    await d.exec(M2());
+    const [lone, dbl, , inferred, , , mig] = await verify(d);
+    expect(lone.ok).toBe(true);
+    expect(dbl.ok).toBe(true);
+    expect(inferred.ok).toBe(true);
+    expect(mig.detail).toBe('enrollments_one_active=true · transfer_participant=false · 20261129230000=true');
+  });
+
+  it('الفهرس الفريد الجزئي يرد إلحاقًا قائمًا ثانيًا، ويقبل المنسحب', async () => {
+    const d = await db();
+    await d.exec(M2());
+    await expect(d.exec(`insert into leaders.enrollments (participant_id, cohort_id, status) values ('${P(7)}', '${C_ORG}', 'active')`)).rejects.toThrow(/enrollments_one_active/);
+    await d.exec(`insert into leaders.enrollments (participant_id, cohort_id, status) values ('${P(7)}', '${C_ORG}', 'withdrawn')`);
+  });
+
+  it('إعادة التشغيل لا تغيّر شيئًا', async () => {
+    const d = await db();
+    await d.exec(M2());
+    const snap = async () => JSON.stringify([await rows(d, 'select participant_id, cohort_id, status from leaders.enrollments order by participant_id, cohort_id'),
+      await count(d, 'select count(*)::int n from leaders.audit_log'), await count(d, 'select count(*)::int n from leaders.cohort_placements'),
+      await count(d, 'select count(*)::int n from leaders.backup_20261129_single_cohort')]);
+    const before = await snap();
+    await d.exec(M2());
+    expect(await snap()).toBe(before);
+  });
+
+  it('سطر restore يعيد الحال: يحذف ما أضافه بفاعله، ويعيد المسحوب، ويسقط الفهرس، ويحذف الدفعة التي أنشأها فارغة', async () => {
+    const d = await db();
+    const enrBefore = await rows(d, 'select participant_id, cohort_id, status from leaders.enrollments order by participant_id, cohort_id');
+    const cohortsBefore = await count(d, 'select count(*)::int n from leaders.cohorts');
+    await d.exec(M2());
+    await d.exec(M2().match(/^-- restore: (.*)$/m)[1]);
+    expect(await rows(d, 'select participant_id, cohort_id, status from leaders.enrollments order by participant_id, cohort_id')).toEqual(enrBefore);
+    expect(await count(d, 'select count(*)::int n from leaders.cohort_placements')).toBe(0);
+    expect(await count(d, 'select count(*)::int n from leaders.cohorts')).toBe(cohortsBefore);
+    expect(await count(d, `select count(*)::int n from pg_indexes where indexname = 'enrollments_one_active'`)).toBe(0);
+  });
+
+  it('تعذر الإلحاق (none) يرمي ويُرجع الترحيل كله', async () => {
+    const d = await db('delete from leaders.program_versions');
+    await expect(d.exec(`begin; ${M2()}; commit;`)).rejects.toThrow(/single_cohort: place_participant returned none/);
+    await d.exec('rollback').catch(() => {});
+    expect(await active(d, P(2))).toEqual([C_ORG, C_ORG2]);
+    expect(await count(d, `select count(*)::int n from pg_tables where tablename = 'backup_20261129_single_cohort'`)).toBe(0);
+  });
+});

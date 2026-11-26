@@ -34,8 +34,9 @@ select count(*) = 0 as ok, 'ملحقون بدفعة جهة أخرى=' || count(*
   left join leaders.organizations o on o.id = pa.organization_id
  where e.status <> 'withdrawn' and c.organization_id is distinct from pa.organization_id;
 
--- 4) من يحكمه اليوم الاستنتاج بالجهة: بلا إلحاق، ولجهته دفعة مفتوحة أو جارية (غير العامة والاستقبال). ok = صفر قبل نشر م3
-select count(*) = 0 as ok, 'يحكمهم الاستنتاج بالجهة=' || count(*) || ' · منهم قائمون غير موقوفين=' || count(*) filter (where pa.status not in ('suspended', 'withdrawn')) as detail
+-- 4) من يحكمه اليوم الاستنتاج بالجهة: بلا إلحاق، ولجهته دفعة مفتوحة أو جارية (غير العامة والاستقبال).
+-- ok = صفر من القائمين قبل نشر م3 (الموقوف والمنسحب لا رحلة لهم فيُذكرون ولا يُفشلون الفحص)
+select count(*) filter (where pa.status not in ('suspended', 'withdrawn')) = 0 as ok, 'يحكمهم الاستنتاج بالجهة=' || count(*) || ' · منهم قائمون غير موقوفين=' || count(*) filter (where pa.status not in ('suspended', 'withdrawn')) as detail
   from leaders.participants pa
  where not pa.is_demo and pa.organization_id is not null
    and not exists (select 1 from leaders.enrollments e where e.participant_id = pa.id and e.status <> 'withdrawn')

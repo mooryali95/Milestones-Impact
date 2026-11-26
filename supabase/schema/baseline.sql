@@ -3795,6 +3795,7 @@ CREATE INDEX IF NOT EXISTS email_challenges_email_idx ON leaders.email_challenge
 CREATE INDEX IF NOT EXISTS email_challenges_ip_created_idx ON leaders.email_challenges USING btree (ip, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS enrollments_cohort_idx ON leaders.enrollments USING btree (cohort_id);
+CREATE UNIQUE INDEX IF NOT EXISTS enrollments_one_active ON leaders.enrollments USING btree (participant_id) WHERE (status <> 'withdrawn'::text);
 
 CREATE UNIQUE INDEX IF NOT EXISTS entitlements_one_live ON leaders.entitlements USING btree (participant_id, item) WHERE (revoked_at IS NULL);
 
