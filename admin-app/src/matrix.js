@@ -15,6 +15,17 @@ export const IDLE_DAYS = 14;
 export const IDLE_WARN = 30;
 export const IDLE_BAD = 90;
 
+/**
+ * قاعدة العد (على نمط counted في leaders-api/counting.ts): حساب الاختبار (is_test، يكتبه admin-api وحده)
+ * يُستبعد من الإحصاءات و«متوقفون وطلبات إعادة فتح» ومرشحات الحالة التي تطابق أرقامها، ويبقى في القوائم بشارة «اختبار».
+ * لا يُحذف أي صف، ولا قرار هنا غير القراءة.
+ */
+export const isTest = (r) => r?.is_test === true;
+export const counted = (regs) => regs.filter((r) => !isTest(r));
+export const testCount = (regs) => regs.length - counted(regs).length;
+export const testsAr = (n) => (n === 1 ? 'حساب اختبار واحد' : n === 2 ? 'حسابا اختبار' : n >= 3 && n <= 10 ? `${n} حسابات اختبار` : `${n} حساب اختبار`);
+export const excludedLine = (n) => (n ? `استُبعد ${testsAr(n)} من الأعداد` : '');
+
 export const booked = (r) => Object.keys(r?.dates || {}).length;
 
 // الأيام منذ آخر تعديل (updatedAt يتغير بكتابات المدير أيضًا، لذا الصياغة «منذ آخر تعديل» لا «منذ آخر نشاط»)
@@ -24,7 +35,7 @@ export const isIdle = (r, now = new Date()) => !r?.submitted && !r?.reopenReques
 export const idleTone = (d) => (d > IDLE_BAD ? 'bad' : d > IDLE_WARN ? 'warn' : '');
 export const idleSince = (d) => `منذ آخر تعديل ${daysAr(d)}`;
 
-export const idleRegs = (regs, now = new Date()) => regs.filter((r) => isIdle(r, now));
+export const idleRegs = (regs, now = new Date()) => counted(regs).filter((r) => isIdle(r, now));
 
 // جمع «جهة» بالعربية الصحيحة
 export const apptsAr = (n) => (n === 1 ? 'موعد واحد' : n === 2 ? 'موعدان' : n >= 3 && n <= 10 ? `${n} مواعيد` : `${n} موعدًا`);
@@ -34,7 +45,7 @@ export const orgsAr = (n) => (n === 1 ? 'جهة واحدة' : n === 2 ? 'جهت�
 export function attention(regs, now = new Date()) {
   const withDays = (r) => ({ r, days: idleDays(r, now) ?? 0 });
   const desc = (a, b) => b.days - a.days;
-  const reopen = regs.filter((r) => r.reopenRequested).map(withDays).sort(desc);
+  const reopen = counted(regs).filter((r) => r.reopenRequested).map(withDays).sort(desc);
   const idle = idleRegs(regs, now).map(withDays).sort(desc);
   return { reopen, idle, notStarted: idle.filter((x) => !booked(x.r)), midway: idle.filter((x) => booked(x.r) > 0) };
 }
@@ -54,10 +65,11 @@ export function attentionSummary({ reopen, idle }, total) {
 // عدد مواعيد كل مسار بربط مفتاح العملية بمسارها (trackId) من procs، لا بمطابقة بادئة الاسم
 export function trackCounts(regs, procs, tracks) {
   const of = Object.fromEntries(procs.map((p) => [p.key, p.trackId]));
-  const n = regs.length;
+  const real = counted(regs);
+  const n = real.length;
   return tracks.map((tr) => {
     const per = procs.filter((p) => p.trackId === tr.id).length;
-    const count = regs.reduce((a, r) => a + Object.keys(r.dates || {}).filter((k) => of[k] === tr.id).length, 0);
+    const count = real.reduce((a, r) => a + Object.keys(r.dates || {}).filter((k) => of[k] === tr.id).length, 0);
     const cap = per * n;
     return { track: tr, count, cap, pct: cap ? Math.round((count / cap) * 100) : 0 };
   });
@@ -68,10 +80,13 @@ export const regTracks = (r, procs) => {
 };
 
 export const MATRIX_PRESETS = [
-  { key: 'reopen', label: 'تطلب إعادة الفتح', test: (r) => !!r.reopenRequested },
-  { key: 'submitted', label: 'خطط مكتملة', test: (r) => !!r.submitted },
-  { key: 'progress', label: 'قيد التخطيط', test: (r) => !r.submitted && booked(r) > 0 },
-  { key: 'idle', label: `متوقفة ${IDLE_DAYS} يومًا`, test: (r, now) => isIdle(r, new Date(now)) },
+  // مرشحات الحالة بقاعدة العد نفسها، فيطابق عددها البطاقة التي تفتحها؛ وحسابات الاختبار مرشح وحدها
+  { key: 'real', label: 'المحسوبة', test: (r) => !isTest(r) },
+  { key: 'reopen', label: 'تطلب إعادة الفتح', test: (r) => !isTest(r) && !!r.reopenRequested },
+  { key: 'submitted', label: 'خطط مكتملة', test: (r) => !isTest(r) && !!r.submitted },
+  { key: 'progress', label: 'قيد التخطيط', test: (r) => !isTest(r) && !r.submitted && booked(r) > 0 },
+  { key: 'idle', label: `متوقفة ${IDLE_DAYS} يومًا`, test: (r, now) => !isTest(r) && isIdle(r, new Date(now)) },
+  { key: 'test', label: 'حسابات اختبار', test: (r) => isTest(r) },
 ];
 
 // رابط التسجيلات مرشحة: يكتب في العنوان وحده فيقرؤه useFilters، فيطابق التصدير ما يُرى

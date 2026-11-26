@@ -188,6 +188,7 @@ export const MIGRATIONS = [
   '20261129130000_leaders_staff_messages',
   '20261129140000_leaders_beginner_columns',
   '20261129150000_leaders_beginner_language',
+  '20261129160000_registrations_is_test',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -290,4 +291,5 @@ export const MIGRATION_GATES = {
   '20261129130000_leaders_staff_messages': ["tolerant", "الدوال تتسامح مع غيابه: تعذّر قراءة expert_id أو coordinator_id في participant_mail_prefs يُرسل بريد الخبير والمنسق كما كان"],
   '20261129140000_leaders_beginner_columns': ["tolerant", "محتوى نماذج فقط. يضيف إلى اثني عشر جدولًا خاصيتين لا تقرؤهما الدوال الأقدم (columns_beginner وlabels_beginner)،"],
   '20261129150000_leaders_beginner_language': ["tolerant", "محتوى نماذج فقط. خاصيتان لا تقرؤهما الدوال الأقدم (label_beginner وhint_beginner)، فتعرض العنوان والتلميح"],
+  '20261129160000_registrations_is_test': ["tolerant", "عمود جديد بقيمة افتراضية false: الدوال الأقدم تقرأ registrations بـ select * فيصلها حقل زائد لا تقرؤه،"],
 };
