@@ -12,7 +12,8 @@
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
 import { DIMENSIONS, fieldsFor, keptModel, overallLevel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
-import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR } from './labels.js';
+import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR, CONTACT_EMAIL } from './labels.js';
+import { RATER_FLAG_AR, raterVerification } from './domains.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -22,6 +23,28 @@ export const STATUS_TITLES = {
   accepted: 'بانتظار تأييد الراعي', approved: 'معتمد',
 };
 // ما تقوله الإدارة: المخاطَب هو المستشار نفسه
+// حالة تأييد الراعي (تصور المرحلة 2، 2.2): «منتهٍ» مشتقة لا مخزنة، دعوة بانتظار الرد انقضت مهلتها (sponsor_expires_at)،
+// بقاعدة واحدة يقرؤها الرابط وملف الوثيقة وقائمة الإدارة. لا راعٍ مدعو: null
+/** @param {{ sponsor_status?: string | null, sponsor_expires_at?: string | null } | null | undefined} c */
+export function sponsorState(c, now = Date.now()) {
+  if (!c?.sponsor_status) return null;
+  if (c.sponsor_status === 'pending' && c.sponsor_expires_at && Date.parse(c.sponsor_expires_at) < now) return 'expired';
+  return c.sponsor_status;
+}
+// تذكير الراعي (تصور المرحلة 2، 2.3): مرة واحدة لكل دعوة حين يبقى على انتهائها سبعة أيام أو أقل. المجدول أسبوعي، فيقع
+// التذكير مرة على الأقل قبل الانتهاء. «ذُكّر» = sponsor_reminded_at بعد sponsor_invited_at، فالدعوة الجديدة لها تذكيرها بلا تصفير
+export const SPONSOR_REMIND_DAYS = 7;
+/** @param {{ status?: string, sponsor_status?: string | null, sponsor_expires_at?: string | null, sponsor_invited_at?: string | null, sponsor_reminded_at?: string | null }} c */
+export function sponsorReminderDue(c, now = Date.now()) {
+  if (c?.status !== 'accepted' || sponsorState(c, now) !== 'pending' || !c.sponsor_expires_at) return false;
+  if (Date.parse(c.sponsor_expires_at) - now > SPONSOR_REMIND_DAYS * 864e5) return false;
+  return !c.sponsor_reminded_at || (!!c.sponsor_invited_at && Date.parse(c.sponsor_reminded_at) < Date.parse(c.sponsor_invited_at));
+}
+// سطر المشارك في صفحة مبادرته حين تنتهي مهلة راعيه (القرار 4: لا بريد له، والمدير يتصرف)
+export const SPONSOR_EXPIRED_PARTICIPANT_AR = 'انتهت مهلة الراعي، يتابعها فريق البرنامج';
+export const SPONSOR_STATE_AR = { pending: 'دُعي ولم يرد', expired: 'انتهت مهلة الرابط', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
+// رسالة الرابط المنتهي للراعي: الإعادة للمدير وحده (القرار 3)، فيُحال إلى فريق البرنامج ببريده لا إلى المستشار
+export const SPONSOR_LINK_EXPIRED_AR = `انتهت صلاحية الرابط. أبلغنا فريق البرنامج ليرسل دعوة جديدة على ${CONTACT_EMAIL}`;
 export const STATUS_TITLES_ADMIN = { ...STATUS_TITLES, submitted: 'بانتظار مراجعتك', accepted: 'بانتظار الراعي' };
 // الوثيقة لا تُسلَّم قبل اكتمال فصولها وبلوغ الجاهزية هذا الحد
 // نقاط اعتماد الوثيقة: تُمنح مرة عند الاعتماد، وتعرضها الواجهة من هنا
@@ -394,6 +417,23 @@ export function costSummary(model, answers) {
 export const costLabel = (/** @type {any} */ cost) => (cost?.contingency ? 'التكلفة مع الاحتياطي' : 'التكلفة');
 export const RISK_HIGH = 12, RISK_MID = 6;
 export const BLOCKING = new Set(['raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
+const ownOf = (list) => (list || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
+export const SPONSOR_SELF_AR = 'بريد الراعي هو بريدك أنت. الراعي شخص آخر يدعم مبادرتك، فاكتب بريده أو احذف البريد إن لم يكن لها راعٍ.';
+// بريد الراعي من بطاقة المبادرة مطبَّعًا، أو null إن غاب أو لم يصح أو كان أحد بُرُد المشارك (الراعي اختياري، قرار المالك
+// 2026-11-03؛ ولا يؤيد المشارك نفسه، تصور المرحلة 1 البند 2). المصدر الواحد للدعوة والقبول وشاشة المستشار
+/** @param {any} charter @param {string[]} [ownEmails] */
+export function sponsorEmailFrom(charter, ownEmails = []) {
+  const e = String(charter?.sponsor_email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)) return null;
+  return ownOf(ownEmails).includes(e) ? null : e;
+}
+// تنبيه غير مانع للمستشار في بطاقة القبول: بريد عام، أو نطاق غير نطاق جهة المشارك. بحكم التحقق نفسه الذي يُوسم به
+// المقيّم الخارجي (raterVerification)، بلا «فرد بلا جهة» لأن الراعي توضيح لا شرط فلا يُطلب له نطاق
+/** @param {string} email @param {{ orgDomains?: string[], linked?: boolean }} [opts] */
+export function sponsorWarnings(email, { orgDomains = [], linked = false } = {}) {
+  if (!email) return [];
+  return raterVerification(email, { orgDomains, linked }).flags.filter((f) => f === 'public_mail' || f === 'other_domain').map((f) => RATER_FLAG_AR[f]);
+}
 export function capstoneChecks(ctx) {
   const M = ctx.models || {}, A = ctx.answers || {};
   const has = (...keys) => keys.every((k) => M[k]);
@@ -408,7 +448,9 @@ export function capstoneChecks(ctx) {
   if (has(CHARTER_KEY)) {
     const e = String(A[CHARTER_KEY]?.sponsor_email || '').trim();
     // الراعي اختياري: يقوّي الوثيقة بتأييد من الجهة، ولا يمنع تسليمها (قرار المالك 2026-11-03)
-    if (e) add('sponsor', 'بريد راعي المبادرة صحيح', /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e), 'صحّح بريد الراعي في بطاقة المبادرة، أو احذفه إن لم يكن للمبادرة راعٍ.');
+    // ولا يكون المشارك راعيًا لنفسه (تصور المرحلة 1، البند 2): بريده الأساسي أو البديل (ownEmails) يفشل الفحص بسببه
+    const self = !!e && ownOf(ctx.ownEmails).includes(e.toLowerCase());
+    if (e) add('sponsor', 'بريد راعي المبادرة صحيح', !self && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e), self ? SPONSOR_SELF_AR : 'صحّح بريد الراعي في بطاقة المبادرة، أو احذفه إن لم يكن للمبادرة راعٍ.');
   }
   if (has('options-analysis')) {
     const t = table(M['options-analysis'], A['options-analysis'], 'options');

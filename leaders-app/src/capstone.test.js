@@ -284,7 +284,7 @@ describe('قبول المستشار لا يُحفظ جزئيًا', () => {
     const write = review.indexOf("status: 'accepted'");
     expect(write).toBeGreaterThan(0);
     // بلا بريد راعٍ يُعتمد بسبب ثابت (قرار المالك 2026-11-14: الراعي توضيح لا شرط)، قبل كتابة القبول أيضًا
-    for (const guard of ["if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي')", 'if (!waive && !sponsorEmailOf(charter)) waive = NO_SPONSOR_WAIVER_AR;']) {
+    for (const guard of ["if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي')", 'if (!waive && st && isSelfSponsor(charter, st.own)) waive = SPONSOR_SELF_WAIVER_AR;', 'if (!waive && !sponsorEmailFrom(charter, st?.own || [])) waive = NO_SPONSOR_WAIVER_AR;']) {
       expect(review.indexOf(guard)).toBeGreaterThan(0);
       expect(review.indexOf(guard)).toBeLessThan(write);
     }
@@ -292,7 +292,7 @@ describe('قبول المستشار لا يُحفظ جزئيًا', () => {
   it('تعذر الدعوة بعد الحفظ يعيد الوثيقة بحالتها مع تنبيه، والشاشة تعرف غياب الراعي سلفًا', () => {
     expect(review).toMatch(/try \{ await inviteSponsor\(p, c, charter\); \}\s+catch \(e\) \{/);
     expect(review).toContain('warning: `قُبلت الوثيقة ولم يُرسل طلب التأييد: ${why}`');
-    expect(src).toContain('sponsor_email: sponsorEmailOf(state.charter),');
+    expect(src).toContain('sponsor_email: sponsorEmailFrom(state.charter, state.own),');
   });
 });
 

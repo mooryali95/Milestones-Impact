@@ -139,6 +139,9 @@ for (const [label, size] of SIZES) {
       // مفتاح 360 لا يُعرض مرة ثانية في مجموعة 360
       await expect(page.getByRole('form', { name: 'تقييم 360 للتطوير' }).getByRole('checkbox')).toHaveCount(0);
       const tabs = page.getByRole('navigation', { name: 'أقسام تطبيق القادة' });
+      // الأقسام المخفية في مجموعة «تجريبي» أخيرة مطوية افتراضيًا (المرحلة 7)، فتُفتح أولًا
+      await expect(tabs.getByRole('group').last()).toHaveAttribute('aria-label', 'تجريبي');
+      await tabs.getByRole('button', { name: 'مجموعة تجريبي' }).click();
       for (const t of ['القاعة الحية', 'بنك كاتون', 'تقييم 360']) await expect(tabs.getByRole('button', { name: new RegExp(t) })).toContainText('مخفي عن المستخدمين');
       await expect(tabs.getByRole('button', { name: /المشاركون/ })).not.toContainText('مخفي');
 

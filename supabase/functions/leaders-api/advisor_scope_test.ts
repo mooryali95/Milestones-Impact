@@ -1,5 +1,6 @@
 // نطاق مستشار الدفعة (server-sec-7) على قاعدة مزيفة تطبّق المرشحات فعلًا: myParticipantIds يعطي من كانت تعطيه
 // الحلقة القديمة (cohortOf لكل مرشح) بأعيانهم، وعدد استعلاماته ثابت لا يكبر بعدد المشاركين.
+import { placeOrgMembers } from './_fake_db.ts';
 import './_test_env.ts';
 import { assertEquals } from 'jsr:@std/assert@1.0.19';
 const { db } = await import('./core.ts');
@@ -9,6 +10,7 @@ const { cohortOf } = await import('./programs.ts');
 type Row = Record<string, any>;
 // جداول في الذاكرة، والاستعلام يطبّق eq وin وnot(is null) وorder وrange كما يفعل PostgREST
 function install(tables: Record<string, Row[]>) {
+  placeOrgMembers(tables);
   let queries = 0;
   const from = (table: string) => {
     queries += 1;
@@ -35,13 +37,14 @@ function install(tables: Record<string, Row[]>) {
   return { count: () => queries, reset: () => { queries = 0; }, restore: () => { delete (db as any).from; } };
 }
 
-// الحلقة القديمة بنصها (قبل الإصلاح)، لمقارنة الأعيان
+// الحلقة القديمة بنصها (قبل الإصلاح)، لمقارنة الأعيان، بقاعدة المنسحب الجديدة
 async function before(expertId: string) {
   const { data: cohorts } = await db.from('cohorts').select('id, organization_id, is_default').eq('advisor_expert_id', expertId);
   const ids = new Set<string>();
   for (const c of cohorts || []) {
-    const { data: enr } = await db.from('enrollments').select('participant_id').eq('cohort_id', c.id);
-    (enr || []).forEach((x: any) => ids.add(x.participant_id));
+    const { data: enr } = await db.from('enrollments').select('participant_id, status').eq('cohort_id', c.id);
+    // المنسحب لا يبقى بتسجيله القديم (تصور المرحلة 1، البند 1)
+    (enr || []).filter((x: any) => x.status !== 'withdrawn').forEach((x: any) => ids.add(x.participant_id));
     const base = c.organization_id
       ? await db.from('participants').select('id, organization_id').eq('organization_id', c.organization_id).eq('is_demo', false)
       : c.is_default ? await db.from('participants').select('id, organization_id').eq('is_demo', false) : { data: [] as any[] };

@@ -50,7 +50,7 @@ test('الأبواب: معاينة بحسب المستوى، وأداة المح
   await expect(body).toHaveValue(/\n> نص للجميع\n/);
   // D01: الاختبار والمستوى محتوى مُقاس من المستودع، فيُعرضان للقراءة ولا يُرسلان مع الحفظ
   await ed.getByRole('button', { name: /التأمل والاختبار/ }).click();
-  await expect(ed.getByText('أقصى نقاط الباب: 20')).toBeVisible();
+  await expect(ed.getByText('أقصى نقاط الباب: 28')).toBeVisible();
   await expect(ed.getByRole('button', { name: '+ سؤال' })).toHaveCount(0);
   await expect(ed.getByLabel('أسئلة الاختبار')).toHaveAttribute('readonly', '');
   await expect(ed.getByRole('note').filter({ hasText: 'يُعدَّل من المستودع' })).toBeVisible();
@@ -106,7 +106,7 @@ test('المعاينة كمشارك، والتقييم بالسلّم الربا
   const views = page.getByRole('navigation', { name: 'أقسام الكتاب' });
   await views.getByRole('button', { name: /الكتاب الأم والكتب/ }).click();
   await expect(page.getByText('الإجابة الصحيحة')).toBeVisible();
-  await expect(page.getByText('أقصى نقاط هذا الباب: 20')).toBeVisible();
+  await expect(page.getByText('أقصى نقاط هذا الباب: 28')).toBeVisible();
   await views.getByRole('button', { name: /التقييم/ }).click();
   await page.getByRole('button', { name: 'قيّم' }).click();
   const ed = page.getByRole('dialog', { name: 'تقييم عمل سارة الأحمد' });

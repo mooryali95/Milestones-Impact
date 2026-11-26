@@ -45,14 +45,17 @@ export const grantLive = (g, now = Date.now()) => !g.expires_at || Date.parse(g.
 
 // ومصدر ثالث: متطلب «أداة من المختبر» في رحلة المشارك يفتح أداته له (required: مفاتيح الأدوات المطلوبة منه)،
 // فلا يُطلب من أحد ما لا يراه، ولا يلزم منح يدوي.
-/** @param {any[]} items @param {{ levels?: Record<string, string> | null, participantId?: string, organizationId?: string | null, grants?: any[], required?: string[], now?: number }} who */
-export function labVisible(items, { levels = null, participantId, organizationId = null, grants = [], required = [], now = Date.now() }) {
+// ومصدر رابع (تصور المرحلة 3 §5.4، البند 3.4): أدوات بُعد أولوية المسار (priority، من participantPriority) تظهر للمشارك
+// تلقائيًا ببلوغ مستواها، بلا منح يدوي ولو لم تُعلَّم «للجميع». المسار مصدره الواحد trackFor وأولويته، فلا يُنسخ هنا
+/** @param {any[]} items @param {{ levels?: Record<string, string> | null, participantId?: string, organizationId?: string | null, grants?: any[], required?: string[], priority?: string | null, now?: number }} who */
+export function labVisible(items, { levels = null, participantId, organizationId = null, grants = [], required = [], priority = null, now = Date.now() }) {
   const mine = grants.filter((g) => grantLive(g, now)
     && ((g.participant_id && g.participant_id === participantId) || (g.organization_id && g.organization_id === organizationId)));
   const whole = mine.some((g) => !g.item_id);
   const ids = new Set(mine.map((g) => g.item_id).filter(Boolean));
   const need = new Set(required || []);
-  const byLevel = (it) => it.audience === 'all' && !!levels?.[it.dimension] && LEVEL_RANK[levels[it.dimension]] >= LEVEL_RANK[it.min_level || 'beginner'];
+  const reached = (it) => !!levels?.[it.dimension] && LEVEL_RANK[levels[it.dimension]] >= LEVEL_RANK[it.min_level || 'beginner'];
+  const byLevel = (it) => (it.audience === 'all' || (!!priority && it.dimension === priority)) && reached(it);
   return items
     .filter((it) => it.active !== false && (whole || ids.has(it.id) || need.has(it.key) || byLevel(it)))
     .sort((a, b) => DIM_ORDER.indexOf(a.dimension) - DIM_ORDER.indexOf(b.dimension) || (a.sort || 0) - (b.sort || 0));

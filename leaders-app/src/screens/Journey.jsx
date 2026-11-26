@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
+import FirstChapter from './FirstChapter.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import Ico from '../Ico.jsx';
@@ -24,6 +25,8 @@ import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
+import { NoManager } from './Impact.jsx';
+import { CommitmentCard } from './Commitments.jsx';
 import { GuidancePanel } from './Guidance.jsx';
 import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
 import { FINAL_ASK_DETAIL_AR, FINAL_NO_DETAIL_AR, finalDetailView, finalView, fmtDate, fmtTime, fmtWhen, holdLine, lateBannerAr, lateByAr, lateShortAr, stageDates, stageOffAr, stageTally, stagesOfAr } from '../journey-copy.js';
@@ -659,9 +662,12 @@ function DemoCertificateCard() {
 
 // دعوة المدير المباشر قبل البرنامج: تقديره الآن هو خط الأساس الذي يُقارن به
 // تقديره بعد البرنامج، وهو أقوى من سؤاله لاحقًا عن "قبل" بالتذكر.
-// تظهر في الرحلة مرة حتى يُغلقها المشارك، وتبقى دائمًا في «ملفي» (inSettings)
+// تظهر في الرحلة، و«لاحقًا» يؤجلها أسبوعًا لا نهائيًا (تصور المرحلة 2، 2.5)، وتبقى دائمًا في «ملفي» (inSettings).
+// المخزَّن وقت التأجيل؛ والقيمة القديمة «1» (الإخفاء النهائي قبل هذا) لا وقت لها فتعود البطاقة
 const PRE_HIDE = 'mi_pre_manager_hidden';
-const preHidden = () => { try { return localStorage.getItem(PRE_HIDE) === '1'; } catch { return false; } };
+export const PRE_SNOOZE_DAYS = 7;
+export const preSnoozed = (v, now = Date.now()) => { const at = Number(v); return v !== '1' && Number.isFinite(at) && at > 0 && now - at < PRE_SNOOZE_DAYS * 864e5; };
+const preHidden = () => { try { return preSnoozed(localStorage.getItem(PRE_HIDE)); } catch { return false; } };
 export function PreManager({ inSettings = false }) {
   const [hidden, setHidden] = useState(() => !inSettings && preHidden());
   const [data, setData] = useState(null);
@@ -674,6 +680,7 @@ export function PreManager({ inSettings = false }) {
     call('impact.mine').then((r) => setData(r.success ? r : null));
   }, [hidden]);
   if (hidden || !data?.pre_available) return null;
+  const who = data.no_manager === 'senior' ? 'الزميل الأعلى' : 'المدير';
   const pre = data.raters.find((r) => r.phase === 'pre');
   if (pre?.status === 'submitted') return null;
   const send = async (e) => {
@@ -687,21 +694,22 @@ export function PreManager({ inSettings = false }) {
     <div className="banner mist">
       <span className="ico"><Ico name="people" /></span>
       <div className="grow stack" style={{ gap: 8 }}>
-        <div className="row between"><b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
-          {!inSettings && <button type="button" className="link small" aria-label="إخفاء" onClick={() => { try { localStorage.setItem(PRE_HIDE, '1'); } catch { /* خاص */ } setHidden(true); }}>إخفاء · تجدها في «ملفي»</button>}</div>
+        <div className="row between"><b>{data.no_manager === 'senior' ? 'ادعُ زميلًا أعلى يعرف عملك ليقدّر ممارستك الآن، قبل البرنامج' : 'ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج'}</b>
+          {!inSettings && <button type="button" className="link small" aria-label="لاحقًا" onClick={() => { try { localStorage.setItem(PRE_HIDE, String(Date.now())); } catch { /* خاص */ } setHidden(true); }}>لاحقًا · تجدها في «ملفي»</button>}</div>
         {pre?.status === 'awaiting'
           ? <p className="small">دعوة {pre.full_name || pre.email} بانتظار تأكيد مستشارك أو منسق جهتك ({pre.flags_ar?.join('، ') || 'بريد من غير نطاق جهتك'})، وتصله فور التأكيد. بريد جهتك يصل فورًا.</p>
           : pre
           ? <p className="small">أُرسلت الدعوة إلى {pre.full_name || pre.email}. ننتظر تقديره، وسنطلب منه التقدير نفسه بعد البرنامج.</p>
           : (
             <form className="row" style={{ gap: 8, flexWrap: 'wrap' }} onSubmit={send}>
-              <p className="small" style={{ flexBasis: '100%' }}>5 دقائق، بلا حساب، ولا يظهر لك تقديره منفردًا.</p>
-              <input className="input" aria-label="اسم المدير" autoComplete="off" placeholder="اسم المدير" value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
-              <EmailInput className="input ltr" type="email" required aria-label="بريد المدير" placeholder="بريد المدير" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+              <p className="small" style={{ flexBasis: '100%' }}>ثماني عبارات في نحو 6 دقائق، بلا حساب. ترى المتوسط لكل إطار لا إجاباته.</p>
+              <input className="input" aria-label={`اسم ${who}`} autoComplete="off" placeholder={`اسم ${who}`} value={f.full_name} onChange={(e) => setF({ ...f, full_name: e.target.value })} />
+              <EmailInput className="input ltr" type="email" required aria-label={`بريد ${who}`} placeholder={`بريد ${who}`} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
               <button className="btn gold sm" disabled={busy}>{busy ? 'جارٍ الإرسال…' : 'أرسل الدعوة'}</button>
               {msg && <div className="alert err" style={{ flexBasis: '100%' }}>{msg}</div>}
             </form>
           )}
+        {!pre && <NoManager data={data} onChange={setData} />}
       </div>
     </div>
   );
@@ -1057,6 +1065,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
     <div className="page wide">
       <Notices list={me.notices} />
       <NudgeBanner nudge={me.nudge} onGo={current ? () => goTo(current.key) : null} />
+      {approved && <CommitmentCard />}
       <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>
@@ -1134,6 +1143,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </div>
       )}
       {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
+      {/* الانتظار بعد القياس (تصور المرحلة 2، 2.5): الفصل الأول المشترك قراءة فقط، ودعوة المدير في j-asks بزر «لاحقًا» */}
+      {!approved && profile && participant.status !== 'completed' && <FirstChapter />}
 
       {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
           وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتاب والمختبر */}

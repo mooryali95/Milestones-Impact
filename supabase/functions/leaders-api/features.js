@@ -8,9 +8,9 @@
 // المفتاح للظهور وحده: لا يمس الدرجة ولا الاكتمال (وزن كاتون في final.js وcontinuous.js مستقل عنه)، إلا بنود 360 في الرحلة:
 // إخفاؤها كإخفاء الدفعة يغير ما يكمل المرحلة، فيمس اكتمال المعالم المربوطة بمرحلة والمؤشر المستمر ومكوّن المعالم في الختامي.
 // وذلك مقصود: لا يُحاسب المشارك على بند لا يستطيعه. والختامي المعتمد لا يُعاد حسابه إن أُظهر 360 بعده.
-// ومفتاح 360 يضم تقدير المدير والزملاء قبل البرنامج وبعده (قرار المالك 2026-11-16: يُدمج لاحقًا مع 360): حين يُطفأ تختفي
-// بنود الرحلة T-360 وE-360 وE-MGR كالبنود المخفية، وتُرفض دعوة مقيّمي الأثر وتأكيدهم، ويتوقف رابط المقيّم مؤقتًا.
-// ما أُرسل من تقديرات باقٍ كما هو ويدخل حساب الأثر.
+// ومفتاح 360 كان يضم تقدير المدير والزملاء قبل البرنامج وبعده (قرار المالك 2026-11-16). فصله تصور المرحلة 3 (القرار 2،
+// 2026-11-26): تقدير المدير قياسي بخانة واحدة والمفتاح مطفأ (manager-rating.js)، وحين يُطفأ يختفي E-360 وحده ودورة 360 كلها،
+// ويتوقف رابط مقيّم 360 مؤقتًا. ما أُرسل من تقديرات باقٍ كما هو ويدخل حساب الأثر.
 
 export const FEATURE_KEYS = ['hall', 'katon', 'f360'];
 export const FEATURE_OFF_CODE = { hall: 'hall_off', katon: 'katon_off', f360: 'f360_off' };
@@ -34,9 +34,9 @@ export function featureFlags(settings) {
 const REFUSED = {
   hall: ['hall.state', 'hall.join', 'hall.hand', 'hall.pick', 'xp.hall-open', 'xp.hall-step', 'xp.hall-split', 'xp.hall-assign', 'xp.hall-close', 'admin.hall-open'],
   katon: ['katon.mine'],
-  f360: ['f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan', 'xp.f360-decide', 'xp.f360-report', 'xp.f360-release',
-    // مقيّمو الأثر (pre وpost): الدعوة وإعادة الإرسال (rater.invite) والإلغاء، وتأكيد المستشار للمنتظر
-    'rater.invite', 'rater.revoke', 'xp.rater-confirm'],
+  // مقيّمو الأثر (pre وpost) خرجوا من المفتاح (تصور المرحلة 3، القرار 2): rater.invite وrater.revoke وxp.rater-confirm
+  // تمر والمفتاح مطفأ بخانة المدير وحدها (impact.ts)، وأفعال دورة 360 هنا مرفوضة كما كانت
+  f360: ['f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan', 'xp.f360-decide', 'xp.f360-report', 'xp.f360-release'],
 };
 // قراءات تُجاب بحال «لا شيء» لا بخطأ: الواجهة القائمة تخفي بطاقتها بنفسها (Feedback360Entry وAdvisor360 وExpertHall)
 const SOFT = {
@@ -57,18 +57,20 @@ export function featureGate(action, flags) {
   return { fail: { message: FEATURE_OFF_AR, status: 404, code: FEATURE_OFF_CODE[f] } };
 }
 
-// بنود الرحلة التي يخفيها مفتاح 360 وهو مطفأ: تقدير المدير والزملاء قبل البرنامج (T-360) وبعده (E-360) وإفادة المدير (E-MGR).
-// تُخفى في طبقة التعريف (journeyDefinition) كبنود الدفعة المخفية، فلا تُعد في التقدم ولا تحبس مرحلة ولا تُذكَّر بها
-export const F360_JOURNEY_CODES = ['T-360', 'E-360', 'E-MGR'];
-/** @param {{ f360?: boolean } | null | undefined} flags @returns {string[]} */
-export const featureHiddenCodes = (flags) => (flags?.f360 ? [] : [...F360_JOURNEY_CODES]);
+// بنود الرحلة التي يخفيها مفتاح 360 وهو مطفأ: تقدير الزملاء بعد البرنامج (E-360) وحده. تقدير المدير قبل البرنامج (T-360)
+// وإفادته بعده (E-MGR) خرجا من المفتاح (تصور المرحلة 3، القرار 2، manager-rating.js)، إلا القبلي لدفعة جارية بدأت قبل
+// الإطلاق (preAllowed false). تُخفى في طبقة التعريف (journeyDefinition) كبنود الدفعة المخفية، فلا تُعد في التقدم ولا تحبس مرحلة
+export const F360_JOURNEY_CODES = ['E-360'];
+export const MANAGER_JOURNEY_CODES = ['T-360', 'E-MGR'];
+/** @param {{ f360?: boolean } | null | undefined} flags @param {{ preAllowed?: boolean }} [o] @returns {string[]} */
+export const featureHiddenCodes = (flags, { preAllowed = true } = {}) => (flags?.f360 ? [] : [...F360_JOURNEY_CODES, ...(preAllowed ? [] : ['T-360'])]);
 // ما يُخفى فعلًا من رموز المفتاح فوق إخفاء الدفعة: رمز يترك إخفاؤه مرحلة بلا بند يكملها يبقى ظاهرًا (kept)، احتياط لا يقع في
 // البرنامج الحالي. والباقي ظاهرًا لا يكتمل ما دام المفتاح مطفأ (الدعوة مرفوضة)، فمرحلته تنتظر الإظهار: لذلك لا تقبل الدفعة إخفاءً
 // يجعله وحده ما يكملها (guardLive في programs.ts)، ويُسجَّل في السجل إن وقع من شكل البرنامج نفسه.
 // breaks هو hideBreaksStage من logic.js (يُمرَّر حتى لا تحمل الواجهة منطق الرحلة كله)
-/** @param {{ stages?: any[], requirements?: any[], cohortHidden?: string[], flags: any, breaks: (stages: any[], reqs: any[], hidden: string[]) => { key: string }[] }} a */
-export function featureHiddenFor({ stages = [], requirements = [], cohortHidden = [], flags, breaks }) {
-  const codes = featureHiddenCodes(flags).filter((c) => !cohortHidden.includes(c) && requirements.some((r) => r.code === c));
+/** @param {{ stages?: any[], requirements?: any[], cohortHidden?: string[], flags: any, preAllowed?: boolean, breaks: (stages: any[], reqs: any[], hidden: string[]) => { key: string }[] }} a */
+export function featureHiddenFor({ stages = [], requirements = [], cohortHidden = [], flags, breaks, preAllowed = true }) {
+  const codes = featureHiddenCodes(flags, { preAllowed }).filter((c) => !cohortHidden.includes(c) && requirements.some((r) => r.code === c));
   if (!codes.length) return { hidden: [], kept: [] };
   const was = new Set(breaks(stages, requirements, cohortHidden).map((s) => s.key));
   const now = breaks(stages, requirements, [...cohortHidden, ...codes]).filter((s) => !was.has(s.key)).map((s) => s.key);

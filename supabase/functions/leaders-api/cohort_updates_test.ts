@@ -8,7 +8,7 @@ import { journeyMap } from './journey-map.js';
 import {
   annotateJourney, cohortChanges, digestLine, doneAt, lateAlertText, sinceFor, snapshotOf, VISIT_GAP_MS, visitAdvance, visitRead, visitSince, weeklyBudgetOk, weeklyDue,
 } from './cohort-changes.js';
-import { withNet, resendCalls } from './_fake_db.ts';
+import { withNet, resendCalls, placeOrgMembers } from './_fake_db.ts';
 const { CONFIG, db, publicDb } = await import('./core.ts');
 const { adminCohortJourney } = await import('./coordinator.ts');
 const { completionTimes, READS } = await import('./cohort-times.ts');
@@ -232,6 +232,7 @@ Deno.test('الملخص الأسبوعي يستحق الأحد 9:00 بالريا
 // reads: اسم الجدول لكل استعلام قراءة. down: جدول تتعذر قراءته وكتابته (عطل عابر في القاعدة)
 const KEYS: Record<string, string[]> = { cohort_snapshots: ['cohort_id', 'day'], admin_cohort_visits: ['admin_email', 'cohort_id'] };
 function install(tables: Record<string, Row[]>, opts: { down?: Set<string> } = {}) {
+  placeOrgMembers(tables);
   const reads: string[] = [];
   const writes: { table: string; kind: string; value: any }[] = [];
   const get = (r: Row, c: string) => c.split('.').reduce((x: any, k) => x?.[k], r);

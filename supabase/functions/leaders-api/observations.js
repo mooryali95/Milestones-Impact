@@ -87,7 +87,7 @@ export const AUDIT_AR = {
   'demo.open': 'فُتح الحساب التجريبي', 'demo.reset': 'أُعيد ضبط الحساب التجريبي',
   'demo.stage-skip': 'تُخطيت مرحلة في الحساب التجريبي', 'demo.open-all': 'فُتحت كل مراحل الحساب التجريبي', 'demo.restart': 'أُعيد الحساب التجريبي إلى البداية من شريطه',
   // ما يفعله المشارك نفسه (السجل يُقرأ أيضًا بمعرّفه فاعلًا)
-  'assessment.submit-post': 'سلّم القياس البعدي', 'sponsor.request': 'طلب رعاية جهته', 'participant.sponsor': 'انضم إلى جهته', 'rater.invite': 'دعا مقيّمًا',
+  'assessment.submit-post': 'سلّم القياس البعدي', 'sponsor.request': 'طلب رعاية جهته', 'participant.sponsor': 'انضم إلى جهته', 'rater.invite': 'دعا مقيّمًا', 'rater.no-manager': 'اختار مسار «لا يوجد مدير متاح»',
   'f360.start': 'بدأ تقييم 360', 'f360.self': 'أكمل تقييمه الذاتي في 360', 'f360.nominate': 'رشّح مقيّمًا في 360', 'f360.submit': 'أرسل مقيّميه في 360 للاعتماد', 'f360.plan': 'حفظ خطته من تقرير 360',
   'expert-request.create': 'طلب خبيرًا', 'expert-request.cancel': 'ألغى طلب خبير', 'expert-request.chosen': 'اختار خبيرًا', 'expert.rated': 'قيّم خبيرًا',
   'peer.ask': 'سأل الأقران', 'peer.answer': 'أجاب سؤال زميل', 'peer.close': 'أغلق سؤاله للأقران', 'sus.submit': 'أجاب استبيان سهولة الاستخدام',
