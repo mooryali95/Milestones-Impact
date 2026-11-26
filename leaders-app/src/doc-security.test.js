@@ -176,18 +176,18 @@ describe('معامل الخيارات الموحد ونسختا تحميل ال�
     expect(off).not.toContain('/v/doc/');
     expect(off).toContain('FINGERPRINT');
   });
-  it('غير المعتمدة تُنزَّل بختم «غير معتمدة»، مؤسسية كانت أو ملف عمل', () => {
+  it('غير المعتمدة تُنزَّل بختم «مسودة للمراجعة»، مؤسسية كانت أو ملف عمل', () => {
     const d = doc({ approved: false });
-    expect(finalDocument(d).meta.stamp).toMatch(/غير معتمدة/);
+    expect(finalDocument(d).meta.stamp).toMatch(/مسودة للمراجعة/);
     const blocked = { ...d, sections: d.sections.map((s) => ({ ...s, fields: (s.fields || []).map((f) => ({ ...f, value: null })) })) };
     const w = finalDocument(blocked, EXPORT_PRESETS.send);
     expect(w.kind).toBe('working');
-    expect(w.meta.stamp).toMatch(/غير معتمدة/);
+    expect(w.meta.stamp).toMatch(/مسودة للمراجعة/);
     expect(w.body).not.toContain('id="ch-gaps"');
   });
   it('سطر الوصف يطابق الخيارات', () => {
     expect(exportSummary(EXPORT_PRESETS.send, { approved: true })).toMatch(/بلا صفحة القرار ولا ملحق ما ينقص ولا ملحق المراجع/);
-    expect(exportSummary(EXPORT_PRESETS.full, { approved: false })).toMatch(/غير معتمدة/);
+    expect(exportSummary(EXPORT_PRESETS.full, { approved: false })).toMatch(/مسودة للمراجعة/);
   });
   it('admin.doc-export: اطلاع يُسجَّل admin.docExport، وزر أساسي في الشاشتين عبر downloadBest', () => {
     expect(LEADERS_ADMIN_LOGGED_READS.has('admin.doc-export')).toBe(true);

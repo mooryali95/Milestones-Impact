@@ -9,7 +9,7 @@ import { bars, callout, esc, kpis, points, raw, section, table } from './doc.js'
 import { costLabel, displayPages, pageNumberOf, parseDate, parseNumber, PRIORITY_WEIGHT, RISK_HIGH, RISK_MID, RUBRIC, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
 import { CHECKPOINT_STATUS_AR } from '../../../supabase/functions/leaders-api/tracking.js';
 
-import { DIM_AR, DOC_LIVE_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
+import { CONFIDENTIAL_AR, DIM_AR, DOC_CHARTER_NOTE_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SUMMARY_AR, DOC_WORKING_AR, LEVEL_AR as LVL } from '../../../supabase/functions/leaders-api/labels.js';
 import { businessCase, charterData, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
 import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/initiative-guide/v1/anatomy.js';
 import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
@@ -263,7 +263,7 @@ const INLINE = Object.freeze({ wbs: 'wbs', 'milestone-register': 'roadmap', raid
 function boardFigures(key, doc, viz) {
   const b = BOARDS.find((x) => x.key === INLINE[key]);
   if (!b || !doc) return '';
-  return b.parts(doc, viz).filter((p) => p.svg).map((p) => `<figure class="cp-fig">${p.svg}${p.legend || ''}<figcaption>${esc(p.title || b.title)}: يُولَّد من هذا الفصل</figcaption></figure>`).join('');
+  return b.parts(doc, viz).filter((p) => p.svg).map((p) => `<figure class="cp-fig">${p.svg}${p.legend || ''}<figcaption>${esc(p.title || b.title)}</figcaption></figure>`).join('');
 }
 
 // متن الفصل: دليله وحقوله ورسومه، بلا فاتحة. يُطبع وحده في صفحته، أو بعد أصله في الصفحة المجمّعة للتأسيسي (displayPages)
@@ -338,7 +338,7 @@ function charterBlock(doc) {
   return anchor('charter', true) + section('للقرار · صفحة واحدة', 'ميثاق المبادرة', `
     <table class="cp-charter"><tbody>${c.rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</tbody></table>
     ${c.deliverables ? `<div class="cp-f" style="margin-top:4mm"><b>المخرجات الرئيسة</b>${tableOf(c.deliverables.columns, c.deliverables.rows)}</div>` : ''}`,
-  'يُولَّد من البطاقة والتكلفة والمنافع والمخاطر، فلا يُكتب مرتين. به يُؤذن بالبدء.');
+  DOC_CHARTER_NOTE_AR);
 }
 
 // مسوّغات المبادرة: النقاط هنا، والجداول في فصولها بإحالة إليها، فلا يقرأ صاحب القرار الجدول نفسه مرتين
@@ -526,15 +526,15 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
   ].filter(Boolean);
   if (tiles.length) body += section('نظرة أولى', 'المبادرة في سطور', kpis(tiles));
 
-  // الملخص لصاحب القرار: رسالة القائد، ثم ما يُطلب منه. الهدف والمشكلة في الميثاق فلا يتكرران هنا
+  // الملخص لصاحب القرار: الخلاصة التنفيذية، ثم ما يُطلب منه. الهدف والمشكلة في الميثاق فلا يتكرران هنا
   body += section('لصاحب القرار', 'الملخص التنفيذي', `
-    ${doc.summary ? callout(example ? 'عن المثال' : 'رسالة القائد', doc.summary) : ''}
+    ${doc.summary ? callout(example ? 'عن المثال' : DOC_SUMMARY_AR, doc.summary) : ''}
     ${points([
       doc.cost?.withContingency > 0 && raw(`<b>المطلوب:</b> ${esc(money(doc.cost.withContingency))}${doc.cost.contingency ? ` مع احتياطي ${esc(doc.cost.contingency)}%` : ''}${funding ? `، من ${esc(funding)}` : ''}`),
       (m.start || m.end) && raw(`<b>المدة:</b> <bdi dir="ltr">${esc(m.start || '·')}</bdi> إلى <bdi dir="ltr">${esc(m.end || '·')}</bdi>`),
       m.sponsor && raw(`<b>الراعي:</b> ${esc(m.sponsor)}`),
     ].filter(Boolean), '')}
-    ${approved || example ? '' : `<p class="cp-draft">مسودة عمل: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
+    ${approved || example ? '' : `<p class="cp-draft">${esc(DOC_WORKING_AR)}: لم تُعتمد هذه الوثيقة بعد (${esc(m.status_title || '')}). تُعتمد بعد مراجعة المستشار وتأييد الراعي.</p>`}`);
 
   const pages = displayPages(secs);
   const charter = charterBlock(doc), bcase = caseBlock(doc, pages), launch = launchBlock(doc);
@@ -600,8 +600,8 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
       subtitle: example ? `مثال محلول لقطاع ${m.org?.name || ''}: هكذا تبدو وثيقة مبادرة مكتملة` : `وثيقة المبادرة${m.scope_title ? ` (${m.scope_title})` : ''}، أُعدّت في برنامج القادة${m.track?.title ? ` · ${m.track.title}` : ''}`,
       rows: [['قائد المبادرة', m.participant?.name || '·'], ...placeRow(m), ['الدفعة', m.cohort || '·'], ['الحالة', m.status_title || '·']].filter(([k, v]) => v !== '·' || k === 'قائد المبادرة'),
       // ختم «مسودة عمل» في الغلاف لكل ما لم يُعتمد (doc.js meta.stamp)
-      stamp: approved || example ? null : final ? DOC_LIVE_AR : !appendix ? null : 'مسودة عمل',
-      confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : 'ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد',
+      stamp: approved || example ? null : final ? DOC_LIVE_AR : !appendix ? null : DOC_WORKING_AR,
+      confidential: example ? 'مثال تعليمي: مبادرة وجهة وأشخاص افتراضيون' : CONFIDENTIAL_AR, rights: example ? undefined : DOC_RIGHTS_AR,
       closing: example
         ? 'مثال محلول للتعلم منه لا للنقل: اكتب مبادرتك من واقع تعرفه، وقارن بنيتها بهذا المثال.'
         : approved

@@ -95,8 +95,8 @@ test('المشارك: الوثيقة المؤسسية محجوبة برسالة 
   let downloads = 0;
   page.on('download', () => { downloads++; });
   await page.getByRole('button', { name: 'الوثيقة المؤسسية', exact: true }).click();
-  // الرسالة تسمي شكل الوثيقة (missingMessage بـ formOfDoc)
-  await expect(page.getByText(new RegExp(`لا تُصدر ${FORM_NAME.replace(/-/g, ' ')} قبل أن تجيب عن`))).toBeVisible();
+  // الرسالة تسمي شكل الوثيقة (missingMessage بـ formOfDoc، ونصها docBlockedAr في labels.js)
+  await expect(page.getByText(new RegExp(`لتكتمل ${FORM_NAME.replace(/-/g, ' ')}: .*تجدها مفصلة في ملحق ملف العمل الكامل`))).toBeVisible();
   expect(downloads).toBe(0);
 });
 

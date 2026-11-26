@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import A from '../../supabase/content/initiative-guide/v1/anatomy.json';
 import FIELDS from '../../supabase/content/initiative-guide/v1/fields.json';
 import { CARD_CRITERIA, RUBRIC } from '../../supabase/functions/leaders-api/capstone.js';
+import { CONFIDENTIAL_AR } from '../../supabase/functions/leaders-api/labels.js';
 import { define } from '../../supabase/content/initiative-guide/v1/anatomy.js';
 import { CONTEXTS, contextNote, discoveryQuestions, examplesFor, guideFor, sectorOf } from './guide.js';
 import { charterData } from '../../supabase/functions/leaders-api/business-case.js';
@@ -37,7 +38,9 @@ describe('المبادرة ملك قائدها والجهة سياق مساعد'
   });
   it('الوثيقة المطبوعة ملك قائدها، والجهة لا تطّلع إلا بإذنه', () => {
     const t = readFileSync('src/lib/brand/capstone.js', 'utf8');
-    expect(t).toContain('ملك قائد المبادرة: يطّلع عليها مستشاره ومن يأذن له القائد');
+    // السرية ثابت واحد في labels.js (المرحلة 23) تستورده الوثيقة
+    expect(t).toMatch(/confidential: example \? .+ : CONFIDENTIAL_AR,/);
+    expect(CONFIDENTIAL_AR).toBe('ملك قائد المبادرة: يطّلع عليها مستشاره، ولا تُتداول إلا بإذنه.');
     expect(t).not.toMatch(/مخصص للقائد وجهته/);
   });
   it('شاشات المبادرة (صفحتها، والاكتشاف، والفصل، والمتابعة، والمشاركة، واللوحة، وصفحة الراعي) لا تفترض جهة ولا عملًا', () => {

@@ -79,7 +79,7 @@ describe('مصدر واحد للنسختين', () => {
     expect(rb.fingerprint).not.toBe(ra.fingerprint);
     expect(text(capstoneReport(b).body)).toContain('صياغة جديدة للمشكلة');
     // الحية معلّمة بتاريخ بنائها، بلا رمز تحقق
-    expect(rb.meta.stamp).toBe('نسخة حية غير معتمدة');
+    expect(rb.meta.stamp).toBe('مسودة للمراجعة');
     expect(rb.body).not.toContain('class="qr"');
   });
   it('اللقطة المعتمدة مجمّدة: المحتوى والبصمة والشكل والهوية لا تتغير بتعديل لاحق ولا بترقية المسار', () => {

@@ -7,6 +7,7 @@
 // المرجع: Milestone-Impact-Brand-Brief (الألوان، الخطوط الخفيفة، الماسة، الختم مرة واحدة).
 // كل نص يدخل الوثيقة يمر عبر esc(): النافذة ترث نطاق التطبيق.
 import { pdfServer } from './pdf-source.js';
+import { REPORT_RIGHTS_AR } from '../../../supabase/functions/leaders-api/labels.js';
 import LOGO_SRC from '../../assets/brand/milestone-impact.svg?raw';
 
 // الشعار من الملف الأصلي كما هو، دون إعلان XML لأنه يُضمَّن داخل HTML
@@ -275,7 +276,7 @@ html.pdf .mast.co .accent { bottom: 0; height: 2.4mm; }
   </div>
   <footer class="rights">
     <b>جميع الحقوق محفوظة <bdi dir="ltr">© ${year} Milestone Impact</bdi>.</b>
-    هذه الوثيقة ومحتواها ملكية فكرية لـ <bdi dir="ltr">Milestone Impact</bdi>. ${esc(conf)}. لا يجوز نسخها أو نشرها أو مشاركتها مع طرف ثالث دون إذن كتابي.
+    ${esc(meta.rights || REPORT_RIGHTS_AR).replace('Milestone Impact', '<bdi dir="ltr">Milestone Impact</bdi>')} ${esc(conf.replace(/\.$/, ''))}.
     <span class="mono"><bdi dir="ltr">${esc(id)}</bdi> · ${esc(today())}</span>
   </footer>
 </article>
