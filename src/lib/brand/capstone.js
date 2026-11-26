@@ -15,6 +15,8 @@ import { chapterInfo, groupByPhase, termsIn } from '../../../supabase/content/in
 import { BOARDS, costBarsSvg, ganttLegend, ganttSvg, networkLegend, networkSvg, sCurveSvg, scheduleModel } from './visuals.js';
 import { closureData } from '../../../supabase/functions/leaders-api/closure.js';
 import { cleanDoc, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
+import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
+import { caseQuestions, chapterQuestion } from './decision-questions.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
 const money = (n) => (n == null ? '·' : `${Math.round(n).toLocaleString('en-US')} ريال`);
@@ -297,11 +299,13 @@ export const pageTitle = (page) => page.map((s) => s.title).join(' و');
 
 // صفحة الفصل: فصل واحد، أو أصل وتابعه (displayPages). n رقم الصفحة في الوثيقة؛ ولكل فصل مرساته فلا ينكسر رابط إليه.
 // skipOf: حقول عُرضت في الميثاق لفصل بعينه
-function chapter(page, i, skipOf = () => null, viz = null, doc = null, gapKeys = null) {
+function chapter(page, i, skipOf = () => null, viz = null, doc = null, gapKeys = null, ask = null) {
   const [s, ...rest] = page;
   let body = chapterBody(s, skipOf(s), viz, doc, gapKeys);
   for (const j of rest) body += `${anchor(j.key)}<h3 class="cp-join">${esc(j.title)}</h3>${chapterBody(j, skipOf(j), viz, doc, gapKeys)}`;
-  return anchor(s.key, i === 0) + section(eyebrow(s, i + 1), `${i + 1}. ${pageTitle(page)}`, body);
+  // المرحلة 29: فصل يقابل بابًا في حالة العمل يُفتتح بسؤال صاحب القرار نفسه (decision-questions.js)
+  const q = ask ? page.map((x) => chapterQuestion(x.key, ask)).find(Boolean) : null;
+  return anchor(s.key, i === 0) + section(eyebrow(s, i + 1), `${i + 1}. ${pageTitle(page)}`, body, q);
 }
 
 // ── المتابعة بعد الاعتماد: الخطة المعتمدة وما تحقق منها ──
@@ -594,8 +598,10 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
 
   // الفصول بصفحات العرض: للتأسيسي يُجمع الفصلان القصيران في صفحة (displayPages)، والبيانات والجاهزية كما هي
   const marked = new Map(secs.map((s, i) => [s.key, annotated.sections[i] || s]));
+  // أسئلة صاحب القرار لملف عمل وثيقته «حالة العمل» وحدها، بمستوى المشارك كما في النسخة المؤسسية
+  const ask = formOfDoc(doc).key === 'case' ? caseQuestions(m) : null;
   pages.forEach((page, i) => {
-    body += chapter(page.map((s) => marked.get(s.key) || s), i, (s) => (s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null), viz, doc, appendix ? gapKeys : null);
+    body += chapter(page.map((s) => marked.get(s.key) || s), i, (s) => (s.key === 'initiative-charter' && charter ? CHARTER_FIELDS : null), viz, doc, appendix ? gapKeys : null, ask);
     if (page.some((s) => s.key === 'cost-plan') && doc.cost?.total > 0) body += section('ملخص', 'ملخص التكلفة', costBlock(doc.cost, doc));
   });
 

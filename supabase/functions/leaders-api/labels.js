@@ -412,6 +412,22 @@ export const decisionDeadlineAr = (date) => `يلزم القرار قبل ${date
 export const fromToAr = (a, b) => [a && `من ${a}`, b && `إلى ${b}`].filter(Boolean).join(' ');
 export const docDownloadAr = (name) => `تحميل ${name} PDF`;
 export const WORKING_DOWNLOAD_AR = 'تحميل ملف العمل PDF';
+// ── أبواب الميثاق وحالة العمل (المرحلة 29): فهرس سطر القرار، والافتراضات من سجل RAID، وفصل نجاح المشروع عن نجاح المنافع ──
+export const DOC_DOORS_AR = Object.freeze({
+  toc: 'في هذه الوثيقة',
+  assumptions: 'الافتراضات',
+  assumptionsNote: 'ما نبني عليه ولم يُثبت بعد، ومن يتحقق منه.',
+  assumptionType: 'افتراض',
+  project: 'نجاح المشروع',
+  projectNote: 'النطاق والوقت والتكلفة: هل سُلّم ما وُعد به، في موعده، وبتكلفته.',
+  benefits: 'نجاح المنافع',
+  benefitsNote: 'ما يتغير للمستفيدين بعد التسليم، بخط أساسه ومستهدفه.',
+  scope: 'النطاق',
+  time: 'الوقت',
+  cost: 'التكلفة',
+  deliverables: (n) => `${n === 2 ? 'مخرجان' : `${n} ${n === 1 ? 'مخرج' : n <= 10 ? 'مخرجات' : 'مخرجًا'}`} بمعيار قبول`,
+  owner: 'يتحقق منه',
+});
 // ── فئات البريد ومركز الرسائل (المصدر الواحد، اعتمده المالك 2026-11-25، وتوسيعه للخبراء والمنسقين 2026-11-25) ──
 // كل sendMail في leaders-api يسمي فئته (اختبار mail-categories يمنع موضع إرسال بلا فئة). audience: لمن تُرسل الفئة
 // (participant مشارك، expert خبير أو مستشار، coordinator منسق جهة، ops المالك والإدارة، external طرف بلا حساب).

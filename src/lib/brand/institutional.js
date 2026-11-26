@@ -13,14 +13,15 @@ import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RI
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { benefitsOf, charterData, durationAr, launchPlan } from '../../../supabase/functions/leaders-api/business-case.js';
-import { BUDGET_PLAIN_AR, BUDGET_TOTAL_AR, budgetTotalPctAr, decisionDeadlineAr, decisionSentenceAr, DOC_DECISION_AR, fromToAr, CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
+import { BUDGET_PLAIN_AR, BUDGET_TOTAL_AR, DOC_DOORS_AR, budgetTotalPctAr, decisionDeadlineAr, decisionSentenceAr, DOC_DECISION_AR, fromToAr, CONFIDENTIAL_AR, DOC_APPROVED_AR, DOC_LIVE_AR, DOC_RIGHTS_AR, DOC_SIGN_AR, DOC_VERIFY_AR, docBlockedAr, docClosingApprovedAr, docClosingLiveAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
 import { FORMS } from '../../../supabase/functions/leaders-api/document-forms.js';
-import { SLICES, termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
+import { termsAt, trackManifest } from '../../../supabase/functions/leaders-api/track-manifest.js';
 import { capstoneReport, heatmap, levelAnnex, levelAnnexEmpty, pdfFileName, paras, STYLE, tableOf, withoutReadiness } from './capstone.js';
 import { dateAr, parseNumber, RISK_HIGH, RISK_MID } from '../../../supabase/functions/leaders-api/capstone.js';
 import { costBarsSvg, ganttLegend, ganttSvg, scheduleModel } from './visuals.js';
 import { SITES } from '../../../supabase/functions/_shared/sites.js';
+import { caseQuestions, doorQuestion } from './decision-questions.js';
 
 const TZ = 'Asia/Riyadh';
 export const isoDay = (d) => { const t = new Date(d); return Number.isNaN(t.getTime()) ? '' : new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(t); };
@@ -39,10 +40,21 @@ body { font-weight: 400; }
 .in-sec.np { break-before: page; }
 .in-open { display: grid; grid-template-columns: 20mm 1fr; align-items: end; gap: 4mm; padding-bottom: 4mm; margin: 0 0 6mm; border-top: 0.6mm solid #0B272F; padding-top: 5mm; border-bottom: 1px solid var(--acc); break-after: avoid; break-inside: avoid; }
 .in-open + * { break-before: avoid; }
-.in-open .n { font: 400 32pt/0.9 "Noto Sans", sans-serif; color: var(--acc); letter-spacing: -.02em; }
-.in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .18em; }
+.in-open .n { font: 400 28pt/0.9 "Noto Sans", sans-serif; color: var(--acc); letter-spacing: -.02em; padding-inline-end: 3mm; border-inline-end: 0.4mm solid var(--acc); }
+.in-open .eyebrow { margin-bottom: 1mm; letter-spacing: .18em; font-size: 7.5pt; color: #5F7176; text-transform: none; }
 .in-open h2 { margin: 0; font-weight: 600; font-size: 18pt; line-height: 1.3; color: #0B272F; }
 .in-open p { margin: 1.5mm 0 0; font-size: 9pt; color: #5F7176; line-height: 1.7; }
+.in-open p.ask { font-size: 11pt; color: #0B272F; padding-inline-start: 3mm; border-inline-start: 2pt solid var(--acc); }
+/* المرحلة 29: حالة العمل كل باب في صفحة؛ الميثاق انسياب متصل، وحاجز 60 مم غير مرئي قبل الفاتحة يمنع بدء باب في أسفل صفحة */
+.in-keep { display: block; height: 60mm; margin-bottom: -60mm; break-inside: avoid; visibility: hidden; }
+.in-toc { margin-top: 6mm; padding-top: 2.5mm; border-top: 1px solid #DCE2E1; break-inside: avoid; }
+.in-toc span { font-size: 8pt; font-weight: 600; color: #8A6424; margin-inline-end: 2mm; }
+.in-toc ol { display: inline; list-style: none; margin: 0; padding: 0; }
+.in-toc li { display: inline; font-size: 8pt; color: #2C4148; }
+.in-toc li + li::before { content: ' · '; color: #8A979A; }
+.in-toc a { color: inherit; text-decoration: none; }
+.in-toc .cp-pgno { min-width: 0 !important; margin-inline-start: 1mm; }
+.in-toc .cp-pgno:empty { display: none !important; }
 .in-sec h3, .in-sec .cp-f > b { break-after: avoid; }
 .in-sec .cp-p { font-size: 10.5pt; line-height: 1.85; color: #22383F; }
 .in-sec .cp-f { margin: 0 0 6mm; break-inside: auto; }
@@ -136,14 +148,28 @@ function risksOf(doc, limit = 3) {
   const f = fld(doc, 'raid', 'items');
   if (!f || !Array.isArray(f.value)) return [];
   const col = (...w) => (f.columns || []).findIndex((c) => w.some((x) => String(c).includes(x)));
-  const p = col('الاحتمال'), i = col('الأثر'), d = col('الوصف'), o = col('المالك'), r = col('الاستجابة');
+  const p = col('الاحتمال'), i = col('الأثر'), d = col('الوصف'), o = col('المالك'), r = col('الاستجابة'), t = col('النوع');
   const cell = (row, k) => (k >= 0 ? String(row[k] ?? '').trim() : '');
-  return f.value.filter((row) => Array.isArray(row) && row.some((c) => String(c ?? '').trim()))
+  // الافتراض ليس خطرًا: يُعرض في بابه (assumptionsOf)، فلا يتكرر في سجل المخاطر ولا في صفحة القرار
+  return f.value.filter((row) => Array.isArray(row) && row.some((c) => String(c ?? '').trim()) && cell(row, t) !== DOC_DOORS_AR.assumptionType)
     .map((row) => ({ title: cell(row, d) || cell(row, 0), owner: cell(row, o), response: cell(row, r), score: (parseNumber(cell(row, p)) || 0) * (parseNumber(cell(row, i)) || 0) }))
     .filter((x) => x.title)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
+// ── الافتراضات (المرحلة 29): بنود سجل RAID التي نوعها «افتراض» كما كُتبت، بمالكها وطريقة التحقق منها ──
+export function assumptionsOf(doc) {
+  const f = fld(doc, 'raid', 'items');
+  if (!f || !Array.isArray(f.value)) return [];
+  const col = (w) => (f.columns || []).findIndex((c) => String(c).includes(w));
+  const t = col('النوع'), d = col('الوصف'), o = col('المالك'), r = col('الاستجابة');
+  if (t < 0) return [];
+  const cell = (row, k) => (k >= 0 ? String(row[k] ?? '').trim() : '');
+  return f.value.filter((row) => Array.isArray(row) && cell(row, t) === DOC_DOORS_AR.assumptionType)
+    .map((row) => ({ title: cell(row, d), owner: cell(row, o), response: cell(row, r) })).filter((x) => x.title);
+}
+const assumptionCards = (list) => (list.length ? `<div class="cp-f"><b>${esc(DOC_DOORS_AR.assumptions)}</b><p class="cp-p">${esc(DOC_DOORS_AR.assumptionsNote)}</p><div class="in-cards">${list.map((x) => `<div class="in-card"><b>${esc(x.title)}</b>${x.response ? `<p>${esc(x.response)}</p>` : ''}${x.owner ? `<small>${esc(DOC_DOORS_AR.owner)}: ${esc(x.owner)}</small>` : ''}</div>`).join('')}</div></div>` : '');
+
 // ── كلفة عدم القرار: من بديل «عدم التدخل» أو «الوضع الحالي» في جدول البدائل إن كتبه القائد، وإلا لا خانة ──
 export const STATUS_QUO = /^\s*(عدم التدخل|عدم القرار|الوضع الحالي|بلا تدخل|لا شيء|الإبقاء)/;
 function statusQuoCost(doc) {
@@ -246,7 +272,9 @@ export function institutionalReport(input, options = {}) {
   // حالة العمل تُبنى على أسئلة صاحب القرار (slices.json، بمستوى المشارك في الأثر): كل باب يفتح بسؤاله، فيقرأ صاحب القرار
   // الحالات الخمس (الاستراتيجية والاقتصادية والتجارية والمالية والإدارية) في أبوابها. بلا مسار معروف: أسئلة الاحترافي
   const man = full ? trackManifest(m.track_key || null, m.priority || null) : null;
-  const ask5 = full ? (man.card?.support.case.questions || SLICES.frameworks.impact.case.advanced.questions) : {};
+  const ask5 = full ? caseQuestions(m) : {};
+  // فاتحة الباب في حالة العمل: سؤال صاحب القرار من decision-questions.json (ومنه باب الأثر)، والميثاق بلا أسئلة
+  const askOf = (en) => (full ? doorQuestion(en, ask5) : null);
   const viz = scheduleModel(doc);
   const g = viz ? ganttSvg(viz, { today: null }) : null;
   const ganttFig = g?.svg ? `<figure class="cp-fig">${g.svg}${ganttLegend()}<figcaption>المخطط الزمني؛ الذهبي على المسار الحرج</figcaption></figure>` : '';
@@ -326,9 +354,18 @@ export function institutionalReport(input, options = {}) {
       full ? field(doc, 'theory-of-change', 'impact', 'الأثر المنشود') : '',
       full ? field(doc, 'options-analysis', 'criteria', 'معايير المفاضلة') : '',
       full ? grid([['أضعف حلقة في السلسلة', val(doc, 'theory-of-change', 'weakest')], ['كيف نختبرها مبكرًا', val(doc, 'theory-of-change', 'test')], ['ما خارج سيطرتنا', val(doc, 'theory-of-change', 'external')], ['القيود', val(doc, 'initiative-charter', 'constraints')]]) : '',
-    ].join(''), ask5.strategic);
+    ].join(''), askOf('Why'));
+    // فصل نجاح المشروع (النطاق والوقت والتكلفة) عن نجاح المنافع (المرحلة 29): الأول يُحكم عند التسليم، والثاني بعده
+    const T = DOC_DOORS_AR;
+    const nDel = c?.deliverables?.rows?.length || 0;
+    const project = grid([
+      [T.scope, nDel ? T.deliverables(nDel) : val(doc, 'initiative-charter', 'in_scope')],
+      [T.time, durationHtml],
+      [T.cost, cost ? `${money(cost.withContingency)} (${budgetLabel})` : null],
+    ]);
     add('Value', 'القيمة والقياس', [
-      benefits.length ? `<div class="cp-f"><b>المنافع</b>${benefitCards(benefits)}</div>` : '',
+      project ? `<div class="cp-f in-success" data-success="project"><b>${esc(T.project)}</b><p class="cp-p">${esc(T.projectNote)}</p>${project}</div>` : '',
+      benefits.length ? `<div class="cp-f in-success" data-success="benefits"><b>${esc(T.benefits)}</b><p class="cp-p">${esc(T.benefitsNote)}</p>${benefitCards(benefits)}</div>` : '',
       benefitsChart(doc),
       field(doc, 'evidence-plan', 'success_signal', 'مؤشرات النجاح'),
       full ? field(doc, 'evidence-plan', 'plan', 'خطة القياس') : '',
@@ -340,7 +377,7 @@ export function institutionalReport(input, options = {}) {
       full ? field(doc, 'benefits-register', 'benefits', 'سجل المنافع') : '',
       full ? field(doc, 'benefits-register', 'realization_curve', 'منحنى تحقق المنافع') : '',
       full ? grid([['مستوى الدليل', val(doc, 'evidence-plan', 'evidence_level')], ['نسبة الأثر إلى المبادرة', val(doc, 'evidence-plan', 'attribution')], ['الخصوصية', val(doc, 'evidence-plan', 'privacy')]]) : '',
-    ].join(''), ask5.economic);
+    ].join(''), askOf('Value'));
     add('Plan', 'الخطة والموارد', [
       grid([['داخل النطاق', val(doc, 'initiative-charter', 'in_scope')], ['خارج النطاق', val(doc, 'initiative-charter', 'out_scope')]]),
       c?.deliverables ? `<div class="cp-f"><b>المخرجات الرئيسة</b>${tableOf(c.deliverables.columns, c.deliverables.rows)}</div>` : '',
@@ -352,13 +389,13 @@ export function institutionalReport(input, options = {}) {
       full ? field(doc, 'cost-plan', 'items', 'الموارد والتكلفة') : '',
       full ? field(doc, 'wbs', 'packages', 'هيكل تجزئة العمل') : '',
       full ? grid([['الاحتياطي الزمني', val(doc, 'schedule', 'buffer')], ['حساسية الجدول', val(doc, 'schedule', 'sensitivity')], ['المفاضلة عند الضغط', val(doc, 'initiative-charter', 'trade_off')]]) : '',
-    ].join(''), ask5.financial);
+    ].join(''), askOf('Plan'));
     if (full) {
       add('Commercial', 'الشراء والتعاقد', [
         grid([['ما نحتاج شراءه', val(doc, 'procurement', 'need')], ['مدة التوريد', val(doc, 'procurement', 'lead_time')]]),
         field(doc, 'procurement', 'items', 'بنود الشراء'),
         field(doc, 'procurement', 'contract', 'شكل التعاقد وتوزيع المخاطر'),
-      ].join(''), ask5.commercial);
+      ].join(''), askOf('Commercial'));
     }
     const risks = val(doc, 'raid', 'items') || [];
     const raidF = fld(doc, 'raid', 'items');
@@ -368,9 +405,10 @@ export function institutionalReport(input, options = {}) {
       full ? field(doc, 'stakeholder-map', 'coalitions', 'التحالفات وتحريك المعارضين') : '',
       (() => { const r = risksOf(doc, limits.risks); return r.length ? `<div class="cp-f"><b>سجل المخاطر</b>${riskCards(r)}</div>` : ''; })(),
       risks.length && raidF ? heatmap(raidF.columns, risks) : '',
+      assumptionCards(assumptionsOf(doc)),
       full ? field(doc, 'governance', 'raci', 'مصفوفة المسؤوليات') : '',
       full ? grid([['التصعيد', val(doc, 'governance', 'escalation')], ['شهية المخاطر', val(doc, 'raid', 'appetite')], ['أصحاب المصلحة الصامتون', val(doc, 'stakeholder-map', 'silent')], ['قرار البوابة', [val(doc, 'stage-gate', 'decision'), val(doc, 'stage-gate', 'justification')].filter(has).join(': ')]]) : '',
-    ].join(''), ask5.management);
+    ].join(''), askOf('Governance & risks'));
     if (full) {
       add('Impact', 'الأثر والاستدامة', [
         field(doc, 'impact-report', 'program', 'البرنامج ومساره'),
@@ -382,7 +420,7 @@ export function institutionalReport(input, options = {}) {
         field(doc, 'change-sustain', 'handover', 'التسليم والتسلم'),
         field(doc, 'change-sustain', 'sustain', 'ما يحمي المنافع'),
         grid([['من يشغّل بعد المبادرة', val(doc, 'initiative-charter', 'operator')]]),
-      ].join(''));
+      ].join(''), askOf('Impact'));
     }
   }
 
@@ -409,9 +447,18 @@ export function institutionalReport(input, options = {}) {
     ${url ? `<div class="in-verify">${qrSvg(url)}<p>${esc(DOC_VERIFY_AR.note)}<br><a href="${esc(url)}">${esc(url)}</a></p></div>` : approved ? `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.note)}</p></div>` : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,
   url ? DOC_VERIFY_AR.lead : null);
 
-  const opener = ([en, ar, b, note], i) => `<section class="in-sec${i && en === 'Approval' ? ' np' : ''}"><header class="in-open"><span class="n">${en === 'Approval' ? '◆' : String(i + 1).padStart(2, '0')}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  // المرحلة 29: كل باب في حالة العمل يبدأ صفحة جديدة؛ الميثاق انسياب متصل بحاجز 60 مم؛ ولكل باب مرساة لفهرس سطر القرار
+  const doorId = (en) => `in-${String(en).toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '')}`;
+  const doorNo = (en, i) => (en === 'Approval' ? '◆' : String(i + 1).padStart(2, '0'));
+  const opener = ([en, ar, b, note], i) => {
+    const np = Boolean((i && en === 'Approval') || (full && i > 0));
+    const flow = !np && !lean && i > 0;
+    const isAsk = full && note && en !== 'Approval' && en !== 'Glossary';
+    return `<section class="in-sec${np ? ' np' : ''}" id="${doorId(en)}">${flow ? '<i class="in-keep" aria-hidden="true"></i>' : ''}<header class="in-open"><span class="n">${doorNo(en, i)}</span><div><span class="eyebrow">${esc(en)}</span><h2>${esc(ar)}</h2>${note ? `<p${isAsk ? ' class="ask"' : ''}>${esc(note)}</p>` : ''}</div></header>${b}</section>`;
+  };
+  const toc = lean ? '' : `<nav class="in-toc" aria-labelledby="in-toc-h"><span id="in-toc-h">${esc(DOC_DOORS_AR.toc)}</span><ol>${parts.map(([en, ar], i) => `<li><a href="#${doorId(en)}">${doorNo(en, i)} ${esc(ar)}</a><span class="cp-pgno" data-ref="#${doorId(en)}"></span></li>`).join('')}</ol></nav>`;
   const { brand, accent } = identityOf(m);
-  const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}</section>` : '';
+  const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}${toc}</section>` : '';
   const body = STYLE + IN_STYLE + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
