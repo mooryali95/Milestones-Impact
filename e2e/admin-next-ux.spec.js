@@ -204,7 +204,10 @@ test('دليل المتطلب في «قرارات اليوم»: من admin.revie
 
 test('اعتماد المتطلبات على المحدد الظاهر وحده: تغيير النوع يمسح التحديد، والتأكيد يسمّي، والمتعذر يُسمّى', async ({ page }) => {
   const reviewed = [];
-  await setup(page, '#/leaders/overview', REQ_INBOX, { 'admin.review': (b) => { reviewed.push(b); return b.participant_id === 'p2' ? { success: false, message: 'x' } : { success: true }; } });
+  // البندان إقرار ذاتي (check): الجماعي لهما وحدهما (تصور المرحلة 2، 2.4)
+  const self = (pid) => ({ participant_id: pid, requirement_id: 'r1', evidence_path: null, stage_requirements: { kind: 'check' } });
+  await setup(page, '#/leaders/overview', REQ_INBOX, { 'admin.review': (b) => { reviewed.push(b); return b.participant_id === 'p2' ? { success: false, message: 'x' } : { success: true }; },
+    'admin.reviews': { success: true, pending_approval: [], submitted: [self('p1'), self('p2')] } });
   const box = page.getByRole('group', { name: 'اعتماد المتطلبات' });
   await page.getByLabel('تحديد خطة التطوير لـ سارة الأحمد').check();
   await expect(box.getByRole('button', { name: 'اعتمد المحدد (1)' })).toBeEnabled();
@@ -212,14 +215,17 @@ test('اعتماد المتطلبات على المحدد الظاهر وحده:
   await page.getByRole('group', { name: 'نوع البند' }).getByRole('button', { name: /اعتماد مسار/ }).click();
   await page.getByRole('group', { name: 'نوع البند' }).getByRole('button', { name: /^الكل/ }).click();
   await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
-  await box.getByLabel(/حدد المتطلبات المعروضة/).check();
+  await box.getByLabel(/حدد المتطلبات ذاتية الإقرار المعروضة/).check();
   await box.getByRole('button', { name: 'اعتمد المحدد (2)' }).click();
   const dialog = page.getByRole('alertdialog');
   await expect(dialog).toContainText('سارة الأحمد (خطة التطوير)، عمر علي (خطة التطوير)');
   await dialog.getByRole('button', { name: 'تأكيد' }).click();
   await expect.poll(() => reviewed.length).toBe(2);
   await expect(page.getByText('اعتُمد 1 من 2، ولم يُحفظ: عمر علي (خطة التطوير)')).toBeVisible();
-  await expect(box.getByRole('button', { name: 'اعتمد المحدد' })).toBeDisabled();
+  // الفاشل وحده يبقى محددًا لإعادة المحاولة (تصور المرحلة 2، 2.4)
+  await expect(box.getByRole('button', { name: 'اعتمد المحدد (1)' })).toBeEnabled();
+  await expect(page.getByLabel('تحديد خطة التطوير لـ عمر علي')).toBeChecked();
+  await expect(page.getByLabel('تحديد خطة التطوير لـ سارة الأحمد')).not.toBeChecked();
 });
 
 test('المراقب لا يرى خانات اعتماد المتطلبات', async ({ page }) => {
