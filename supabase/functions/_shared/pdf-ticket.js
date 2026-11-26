@@ -15,6 +15,7 @@ async function mac(secret, msg) {
 export const FP_RE = /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/;
 
 /** «انتهاء.صاحب.توقيع»، أو «انتهاء.صاحب.بصمة.توقيع» حين تُربط التذكرة بوثيقة بعينها (المرحلة 21) */
+/** @param {string} secret @param {string} sub @param {number} [now] @param {string | null} [fp] */
 export async function signTicket(secret, sub, now = Date.now(), fp = null) {
   if (!secret) throw new Error('no secret');
   const f = fp == null ? '' : String(fp).toUpperCase();
