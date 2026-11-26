@@ -49,6 +49,16 @@
 .la-chip.warn { background: rgba(178,107,0,.12); color: var(--st-warn-text); }
 .la-chip.ok { background: rgba(46,125,91,.12); color: var(--st-ok-text); } /* axe 2026-11-24: --st-ok على هذه الأرضية 4.28 إلى 1 */
 .la-chip.bad { background: var(--st-bad-bg); color: var(--st-bad); }
+.la-chip.st-chip { white-space: nowrap; }
+/* المقياس الموحد (Meter في ui.jsx): شريط ونص «س من ص» */
+.la-meter { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.la-meter-bar { display: inline-block; width: 72px; height: 6px; border-radius: 99px; background: var(--sand-light); overflow: hidden; }
+.la-meter-bar > i { display: block; height: 100%; background: var(--gold); border-radius: inherit; }
+.la-meter.ok .la-meter-bar > i { background: var(--st-ok-text); }
+.la-meter.warn .la-meter-bar > i { background: var(--st-warn-text); }
+.la-meter.bad .la-meter-bar > i { background: var(--st-bad); }
+.la-meter-num { font-size: .8rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.pf-more-btn.labeled { white-space: nowrap; }
 .la-phase { font-size: .9rem; color: var(--gold-text); margin: 22px 0 10px; }
 
 .la-matrix { width: 100%; border-collapse: separate; border-spacing: 6px; }
@@ -73,7 +83,7 @@
    بين 1024 و1366 (تدقيق الجاهزية admin-core-5). الآن يتمرر الجدول داخل بطاقته، ودون 1200 عمود واحد */
 /* ملف المشارك (P2، 2026-11-16): رأس ثابت بالهوية والإجراء الأهم والتبويبات، ومتن من عمودين: المحتوى ولمحة.
    top تحت الشريط العلوي للوحة (58px). على الجوال الرأس غير ثابت فلا يأكل الشاشة، والتبويبات تمرر أفقيًا */
-.pf-head { position: sticky; top: 66px; z-index: 6; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px;
+.pf-head { position: sticky; top: calc(var(--la-head-h) + 8px); z-index: 6; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px;
   box-shadow: 0 4px 14px rgba(10,42,61,.07); padding: 12px 16px 0; margin-bottom: 16px; }
 .pf-head .pf-flags { margin: 4px 0 8px; }
 /* المراجعة المتتالية: موضعه في القائمة والسابق والتالي (review-queue.js) */
@@ -719,7 +729,7 @@
   .la-shell { display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 28px; align-items: start; }
   /* ملتصق بارتفاع الشاشة بتمرير داخلي: ظل أعلى وأسفل يظهر وحده حين يبقى ما لم يُعرض (تقنية ظلال التمرير بخلفيات local/scroll)،
      وشريط التمرير ظاهر دائمًا، فلا يبدو آخر البنود مقصوصًا بلا دليل (تدقيق 2026-11-23) */
-  .la-shell > .la-tabs-grouped { position: sticky; top: 70px; margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - 82px); overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; overscroll-behavior: contain;
+  .la-shell > .la-tabs-grouped { position: sticky; top: calc(var(--la-head-h) + 12px); margin-bottom: 0; gap: 0; flex-wrap: nowrap; max-height: calc(100vh - var(--la-head-h) - 24px); overflow-y: auto; scrollbar-width: thin; scrollbar-gutter: stable; overscroll-behavior: contain;
     border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px;
     background:
       linear-gradient(#fff 30%, rgba(255,255,255,0)) top / 100% 28px no-repeat local,
@@ -1507,6 +1517,11 @@
   min-inline-size: 32px; inline-size: 32px; block-size: 32px; min-block-size: 32px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; border-radius: 8px;
 }
+/* «إجراءات ▾» (MENU_TEXT): زر بنص لا مربع، بارتفاع أزرار الشريط */
+.pf-more > .pf-more-btn.labeled, .pj-stage-h .pf-more > .pf-more-btn.labeled, .pj-act .pf-more > .pf-more-btn.labeled {
+  inline-size: auto; min-inline-size: 44px; min-block-size: 40px; padding: 0 14px; gap: 4px; font-size: .85rem; font-weight: 600;
+  border: 1px solid var(--line-strong); background: #fff;
+}
 /* نافذة النقل قبل اختيار المرحلة: تلميح بدل فراغ */
 .pj-move-hint { margin: 4px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--gold-pale); color: var(--ink, inherit); font-size: 13px; line-height: 1.7; }
 
@@ -1542,11 +1557,11 @@
 /* ─── المرحلة 3 من تدقيق اللوحة (2026-11-23) ─── */
 /* تبويبات صفحة الجهة ومركز البريد: نمط تبويبات ملف المشارك خارج رأسه */
 .org-tabs, .mc-tabs { margin: 12px 0; padding: 0; border-top: 0; border-bottom: 1px solid var(--line); background: #fff; border-radius: 8px 8px 0 0; }
-.org-tabs { position: sticky; top: 66px; z-index: 5; }
+.org-tabs { position: sticky; top: calc(var(--la-head-h) + 8px); z-index: 5; }
 .mc-tabs { margin-top: 0; }
 /* الإعدادات العامة: فهرس ملتصق وبحث */
 .st-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
-.st-index { position: sticky; top: 76px; display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; max-height: calc(100vh - 96px); overflow: auto; }
+.st-index { position: sticky; top: calc(var(--la-head-h) + 18px); display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; max-height: calc(100vh - var(--la-head-h) - 38px); overflow: auto; }
 .st-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .st-index .la-link { text-align: start; font-size: .9rem; }
 .st-search input { inline-size: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; }
@@ -1577,7 +1592,7 @@
 /* طلبات التواصل: القائمة ولوحة المعاينة جنبًا إلى جنب على الشاشة العريضة */
 .ct-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 16px; align-items: start; }
 .ct-split > .table-wrap { min-inline-size: 0; }
-.ct-pane { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow: auto; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px; }
+.ct-pane { position: sticky; top: calc(var(--la-head-h) + 18px); max-height: calc(100vh - var(--la-head-h) - 38px); overflow: auto; background: #fff; border: 1px solid var(--line-strong); border-radius: 10px; }
 .ct-pane .drawer-body { padding: 12px 16px 16px; }
 .ct-pane-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 12px 16px 0; }
 .ct-msg { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--gold-pale); border-radius: 8px; padding: 10px 12px; line-height: 1.9; }

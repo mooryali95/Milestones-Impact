@@ -28,6 +28,12 @@ export const PARTICIPANT_STATUS = {
   registered: 'مسجّل', profiled: 'أكمل الملف', assessing: 'يجيب على القياس', pending_approval: 'بانتظار الاعتماد',
   placed: 'معتمد المستوى', enrolled: 'في البرنامج', completed: 'أنهى البرنامج', withdrawn: 'منسحب', suspended: 'موقوف',
 };
+// نبرة كل حالة بجوار تسميتها (مصدر واحد): يقرؤها مكون StatusChip وحده، فلا تختار شاشة النبرة في السطر.
+// '' محايدة · warn تنتظر فعلًا · ok منجزة · bad موقوفة
+export const PARTICIPANT_STATUS_TONE = {
+  registered: '', profiled: '', assessing: '', pending_approval: 'warn',
+  placed: '', enrolled: '', completed: 'ok', withdrawn: '', suspended: 'bad',
+};
 export const FUNNEL = [['registered', 'سجّل'], ['profiled', 'أكمل الملف'], ['assessed', 'أنهى القياس'], ['approved', 'اعتُمد مساره'], ['completed', 'أنهى البرنامج']];
 
 export const REQ_STATUS = { pending: 'لم يُنجز', submitted: 'بانتظار المراجعة', done: 'منجز', returned: 'أُعيد للتعديل' };

@@ -9,6 +9,7 @@ import { setLeadersExpired } from './leaders.js';
 import { resetAiData } from './ai-hub-data.js';
 import { UIProvider, useUI } from './ui.jsx';
 import { writeState } from './write-access.js';
+import { useHeadHeight } from './head-height.js';
 import StepUp from './StepUp.jsx';
 import Login from './screens/Login.jsx';
 const Settings = lazyRetry(() => import('./screens/Settings.jsx'));
@@ -48,6 +49,8 @@ function Dashboard({ user, onUser, onLogout, sessionGen = 0 }) {
   const { toast } = useUI();
   const [me, setMe] = useState(null);
   const [elevate, setElevate] = useState(false);
+  const headRef = useRef(null);
+  useHeadHeight(headRef);
   // كل قراءة برقمها: رد جلسة سابقة يصل متأخرًا لا يغلب رد الجلسة الحالية
   const meSeq = useRef(0);
   const readMe = useCallback(() => {
@@ -72,7 +75,7 @@ function Dashboard({ user, onUser, onLogout, sessionGen = 0 }) {
         </div>
       )}
       {elevate && <StepUp purpose="write" title="فعّل الكتابة في هذه الجلسة" onCancel={() => setElevate(false)} onDone={elevated} />}
-      <header className="dash-header">
+      <header className="dash-header" ref={headRef}>
         <div className="dash-header-left">
           <div className="mi-logo"><img className="mi-logo-img" src={LOGO} alt="Milestone Impact" width="132" height="60" /></div>
           <div className="dash-header-sep" />
