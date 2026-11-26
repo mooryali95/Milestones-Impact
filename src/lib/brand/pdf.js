@@ -9,10 +9,12 @@
 //   3. planPages (منطق خالص مختبر) يختار حد كل صفحة: لا عنوان وحده أسفل الصفحة، ولا صف جدول مقطوع، ولا سطر يتيم.
 //   4. تُرسم المقاطع (html-to-image) وتُركَّب صفحات A4 بهوامشها وترقيمها العربي، ويتكرر رأس الجدول المنقسم.
 //   5. jsPDF يجمعها ملفًا، وروابط الفهرس تقفز إلى صفحاتها، وأرقام صفحاتها تُكتب في الفهرس.
-import { documentHtml } from './doc.js';
+import { documentHtml, docId, PAGE_MM, TYPE_SCALE, mmPx } from './doc.js';
 
-// A4 بدقة 96: 210×297 مم. الهامش العلوي 16 مم والسفلي 20 مم كقاعدة @page في doc.js، والغلاف يبدأ من حافة الورقة
-export const PAGE = Object.freeze({ w: 794, h: 1123, top: 60, bottom: 76 });
+// A4 بدقة 96: 210×297 مم. الهوامش مشتقة من PAGE_MM في doc.js، وهو نفسه مصدر قاعدة @page، والغلاف يبدأ من حافة الورقة
+export const PAGE = Object.freeze({ w: mmPx(PAGE_MM.w), h: mmPx(PAGE_MM.h), top: mmPx(PAGE_MM.top), side: mmPx(PAGE_MM.side), bottom: mmPx(PAGE_MM.bottom) });
+// pt إلى بكسل بدقة 96
+const ptPx = (pt) => (pt * 96) / 72;
 const CONTENT_H = PAGE.h - PAGE.top - PAGE.bottom;
 const FIRST_H = PAGE.h - PAGE.bottom;
 const KEEP_NEXT = 110;
@@ -50,6 +52,23 @@ export function planPages({ total, cands, forced = [], pageH = CONTENT_H, firstH
   }
   return pages;
 }
+
+/**
+ * اسم الباب في ترويسة صفحة، كما تفعل string(chapter) في الطباعة: أول باب يبدأ في الصفحة، وإلا آخر باب بدأ قبلها. منطق خالص.
+ * @param {{ y: number, text: string }[]} heads عناوين الأبواب بمواضعها
+ */
+export function chapterAt(heads, start, end) {
+  let cur = '';
+  for (const h of [...heads].sort((a, b) => a.y - b.y)) {
+    if (h.y < start) cur = h.text;
+    else if (h.y < end) return h.text;
+    else break;
+  }
+  return cur;
+}
+
+/** يثبّت الرقم المرجعي مرة واحدة: الغلاف والتذييل وترويسة الطباعة من المصدر نفسه. منطق خالص. */
+export const withDocId = (meta = {}) => (meta.id ? meta : { ...meta, id: docId(meta.kind || 'DOC') });
 
 // ── القياس في الإطار ──
 const rectOf = (el, base) => { const r = el.getBoundingClientRect(); return { top: r.top - base, bottom: r.bottom - base, left: r.left, right: r.right }; };
@@ -96,17 +115,29 @@ export function collectBreaks(doc, pageH = CONTENT_H) {
 // ── الرسم ──
 const sanitize = (s) => String(s || 'وثيقة').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
 
+// التذييل: «صفحة N من M» والرقم المرجعي بالسلم نفسه (7.5pt وزن 400)، والترويسة: اسم الباب في الطرف المقابل للجهة
 function footer(ctx, n, of, scale, line) {
+  const y = (PAGE.h - PAGE.bottom / 2) * scale;
   ctx.save();
-  ctx.fillStyle = '#5F7176';
+  ctx.fillStyle = TYPE_SCALE.footerColor;
   ctx.direction = 'rtl';
   ctx.textAlign = 'left';
-  ctx.font = `300 ${9.3 * scale}px "Noto Kufi Arabic", sans-serif`;
-  ctx.fillText(`صفحة ${n} من ${of}`, 68 * scale, (PAGE.h - 34) * scale);
+  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px "Noto Kufi Arabic", sans-serif`;
+  ctx.fillText(`صفحة ${n} من ${of}`, PAGE.side * scale, y);
   ctx.direction = 'ltr';
   ctx.textAlign = 'right';
-  ctx.font = `300 ${8.6 * scale}px "Noto Sans", sans-serif`;
-  ctx.fillText(line, (PAGE.w - 68) * scale, (PAGE.h - 34) * scale);
+  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px "Noto Sans", sans-serif`;
+  ctx.fillText(line, (PAGE.w - PAGE.side) * scale, y);
+  ctx.restore();
+}
+function chapterHead(ctx, text, scale) {
+  if (!text) return;
+  ctx.save();
+  ctx.fillStyle = TYPE_SCALE.footerColor;
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'left';
+  ctx.font = `400 ${ptPx(TYPE_SCALE.footer) * scale}px "Noto Kufi Arabic", sans-serif`;
+  ctx.fillText(text.length > 60 ? `${text.slice(0, 59)}…` : text, PAGE.side * scale, (PAGE.top / 2 + 9) * scale);
   ctx.restore();
 }
 
@@ -114,7 +145,9 @@ function footer(ctx, n, of, scale, line) {
  * يبني ملف PDF ويعيده Blob. meta وbody كما يبنيهما قالب الوثيقة (capstoneReport)
  * @param {{ onProgress?: (t: string) => void, scale?: number }} [opts]
  */
-export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } = {}) {
+export async function buildPdf(meta0, body, { onProgress = () => {}, scale = 2 } = {}) {
+  // الرقم المرجعي يُولَّد مرة واحدة فيطابق الغلافُ التذييلَ
+  const meta = withDocId(meta0);
   onProgress('يُجهَّز الملف…');
   const [{ toCanvas, getFontEmbedCSS }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')]);
   const frame = document.createElement('iframe');
@@ -157,10 +190,12 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
       chunks.push({ from: i, to: j, start: plan[i].start, end: plan[j].end });
       i = j + 1;
     }
-    const heads = new Map();
+    const theads = new Map();
     const pdf = new jsPDF({ unit: 'pt', format: 'a4', compress: true });
     pdf.setProperties({ title: meta.title || 'وثيقة', subject: meta.subtitle || '', creator: 'Milestone Impact', author: 'Milestone Impact' });
-    const line = meta.brand ? 'Milestone Impact' : 'MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT';
+    // التذييل بالرقم المرجعي للوثيقة، ومعه عنوان الباب لكل صفحة
+    const line = meta.id;
+    const heads = [...doc.querySelectorAll('.sec > header h2, .in-open h2')].map((h) => ({ y: h.getBoundingClientRect().top - base, text: h.textContent.trim() }));
     const PT = 595.28 / PAGE.w;
     for (const ch of chunks) {
       onProgress(`صفحة ${ch.to + 1} من ${plan.length}…`);
@@ -170,11 +205,11 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
       });
       // رؤوس الجداول التي تتكرر تُقتطع من مقطعها حين تمر
       for (const p of plan) {
-        if (p.head && !heads.has(p.head.top) && p.head.top >= ch.start && p.head.bottom <= ch.end) {
+        if (p.head && !theads.has(p.head.top) && p.head.top >= ch.start && p.head.bottom <= ch.end) {
           const hc = document.createElement('canvas');
           hc.width = PAGE.w * scale; hc.height = Math.ceil((p.head.bottom - p.head.top) * scale);
           hc.getContext('2d').drawImage(canvas, 0, (p.head.top - ch.start) * scale, hc.width, hc.height, 0, 0, hc.width, hc.height);
-          heads.set(p.head.top, hc);
+          theads.set(p.head.top, hc);
         }
       }
       for (let k = ch.from; k <= ch.to; k++) {
@@ -185,8 +220,9 @@ export async function buildPdf(meta, body, { onProgress = () => {}, scale = 2 } 
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, page.width, page.height);
         if (k > 0 && runHead) ctx.drawImage(runHead, 0, 0, page.width, PAGE.top * scale);
+        if (k > 0 && runHead) chapterHead(ctx, chapterAt(heads, p.start, p.end) || meta.title || '', scale);
         let y = (k === 0 ? 0 : PAGE.top) * scale;
-        const hc = p.head && heads.get(p.head.top);
+        const hc = p.head && theads.get(p.head.top);
         if (hc) { ctx.drawImage(hc, 0, y); y += hc.height; }
         const h = (p.end - p.start) * scale;
         ctx.drawImage(canvas, 0, (p.start - ch.start) * scale, page.width, h, 0, y, page.width, h);
@@ -219,7 +255,7 @@ export async function downloadBest(meta, body, { server = null, onProgress = () 
   if (server?.url && server?.ticket) {
     try {
       onProgress('يُولَّد الملف…');
-      const html = documentHtml({ ...meta, selfFonts: true }, body, { print: true, base: `${location.origin}/` });
+      const html = documentHtml({ ...withDocId(meta), selfFonts: true }, body, { print: true, base: `${location.origin}/` });
       const r = await fetch(`${server.url}/pdf`, { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', body: JSON.stringify({ ticket: server.ticket, html, name: meta.pdfName || meta.title }) });
       if (!r.ok || !/pdf/.test(r.headers.get('content-type') || '')) throw new Error(`pdf-render ${r.status}`);
       saveBlob(await r.blob(), meta);

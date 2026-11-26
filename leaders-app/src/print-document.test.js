@@ -113,7 +113,9 @@ describe('الهوية والطباعة', () => {
     const html = documentHtml(r.meta, r.body, { print: true, base: 'https://leaders.sunkvalue.com/' });
     expect(html).toContain('@page :first { margin: 0;');
     expect(html).toContain('break-after: page');
-    expect(html).toContain('content: "Milestone Impact"');
+    // المرحلة 27: التذييل بالرقم المرجعي بدل «Milestone Impact» وحده
+    expect(html).toMatch(/@bottom-right \{ content: "MI-[^"]+"; font: 400 7\.5pt/);
+    expect(html).not.toContain('content: "Milestone Impact"');
     expect(html).not.toContain('DECISIONS  ·  DIRECTION');
     expect(html).toContain('<base href="https://leaders.sunkvalue.com/">');
     expect(r.body).toContain('class="in-dec"');
