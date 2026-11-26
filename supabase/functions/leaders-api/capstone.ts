@@ -11,13 +11,14 @@ import { audit, CONFIG, db, Fail, hash, mailButton, must, randomToken, reviewMai
 import { bdi, mailNote, mailShell, mailText, mailTitle } from '../_shared/mail.ts';
 import { approvalEvidence, award, CAPSTONE_LOCKED, examplesFor, initiativeFor, mePayload, participantPriority } from './participant.ts';
 import { cohortOf, contentLevelsFor, programEndOf } from './programs.ts';
+import { emailsOf } from './account-emails.ts';
 import { answeredModels, approvalOf, viewTable, workMinutes, coordPermissions, isEmail, linkAfterDecisionOk, LINK_CLOSED_AR, normalizeEmail, overallLevel, profileKey, rubricPriority, trackKey } from './logic.js';
 import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
+  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, sponsorWarnings } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { freezeIssued, rejectionStats } from './doc-quality.js';
@@ -84,13 +85,14 @@ async function build(p: any) {
     // موقع الفصل من مستوى الوثيقة للمستشار والمراجع (المرحلة 4): مما حُسب هنا نفسه، لا قاعدة ثانية
     return { model: m, fields, answers, sub, state, chapter: chapterLevel(m, fields, state, content, levels) };
   });
+  const own = await ownEmailsOf(p, false);
   const checks = capstoneChecks({
-    scope,
+    scope, ownEmails: own,
     models: Object.fromEntries(sections.map((s: any) => [s.model.key, { ...s.model, fields: s.fields }])),
     answers: Object.fromEntries(sections.map((s: any) => [s.model.key, s.answers])),
   });
   const ready = readiness(sections.map((s: any) => s.state), checks);
-  return { levels, content, scope, priority, weighted, project: trackProject(all, levels, scope, priority, kept), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers };
+  return { levels, content, scope, priority, weighted, project: trackProject(all, levels, scope, priority, kept), track: (track as any).data || null, capstone: (cap as any).data || null, sections, checks, readiness: ready, initiative, charter: charterAnswers, own };
 }
 
 const sectionView = (s: any) => ({
@@ -452,7 +454,10 @@ export async function adminGet(b: Body) {
     priority: state.weighted, max_revisions: MAX_REVISIONS,
     rubric: rubricFor(state.levels), leader: await leaderScore(p),
     // بلا بريد صحيح للراعي لا يُطلب تأييد: تعرض الشاشة القبول بالاعتماد دون تأييد بدل خطأ بعد الحفظ
-    sponsor_email: sponsorEmailOf(state.charter),
+    sponsor_email: sponsorEmailFrom(state.charter, state.own),
+    // المشارك كتب بريده هو راعيًا: لا يُدعى، ويُقال للمستشار سببه. والتنبيه غير المانع للنطاق العام أو الخارج عن الجهة
+    sponsor_self: isSelfSponsor(state.charter, state.own),
+    sponsor_warnings: await sponsorWarningsFor(p, sponsorEmailFrom(state.charter, state.own)),
   };
 }
 
@@ -465,17 +470,30 @@ export function sponsorMail(sponsor: string | null, who: string, initiative: str
     { family: 'capstone', preheader: `${who} يطلب تأييدك لمبادرة «${initiative}»`, footnote: '' });
 }
 
-// بريد الراعي من بطاقة المبادرة، أو null إن غاب أو لم يصح (الراعي اختياري، قرار المالك 2026-11-03)
-function sponsorEmailOf(charter: any): string | null {
-  const email = normalizeEmail(charter?.sponsor_email);
-  return isEmail(email) ? email : null;
+// بُرُد المشارك كلها (الأساسي والبديلة): لا يكون أي منها بريد راعٍ (sponsorEmailFrom، تصور المرحلة 1 البند 2).
+// تعذّر قراءة البدائل يوقف الطلب: افتراض «لا بدائل» يفتح للمشارك أن يؤيد نفسه ببريده الثاني
+// وفي عرض الوثيقة (build) يُكتفى بالأساسي عند التعذّر فلا تتعطل الوثيقة، والدعوة والتأييد يقرآن بصرامة
+async function ownEmailsOf(p: any, strict = true): Promise<string[]> {
+  const extra = await emailsOf(p.id).catch(() => { if (!strict) return [] as any[]; throw new Fail('تعذّر التحقق من بريد الراعي الآن، حاول بعد قليل', 503, 'busy'); });
+  return [p.email, ...extra.map((x: any) => x.email)].filter(Boolean);
+}
+// تنبيه بطاقة القبول للمستشار (غير مانع): بريد عام أو نطاق غير نطاق جهة المشارك
+async function sponsorWarningsFor(p: any, email: string | null) {
+  if (!email) return [];
+  const org = p.organization_id ? (await db.from('organizations').select('domains').eq('id', p.organization_id).maybeSingle()).data : null;
+  return sponsorWarnings(email, { orgDomains: (org as any)?.domains || [], linked: !!p.organization_id });
 }
 const NO_SPONSOR_WAIVER_AR = 'لا راعٍ فعلي للمبادرة: الراعي موضّح دوره في بطاقتها، فاعتمدها قبول المستشار';
 const NO_SPONSOR_EMAIL_AR = 'لا بريد صحيح للراعي في بطاقة المبادرة. اعتمد دون تأييد بسبب مكتوب، أو أعدها للمشارك ليصحح البريد';
+const SPONSOR_SELF_WAIVER_AR = 'بريد الراعي في بطاقة المبادرة هو بريد المشارك نفسه، فلا يؤيد نفسه: اعتمدها قبول المستشار';
+const SPONSOR_SELF_STAFF_AR = 'بريد الراعي في بطاقة المبادرة هو بريد المشارك نفسه، والمشارك لا يؤيد مبادرته. اعتمد دون تأييد بسبب مكتوب، أو أعدها له ليكتب بريد راعيها';
+const isSelfSponsor = (charter: any, own: string[]) => !!normalizeEmail(charter?.sponsor_email) && isEmail(normalizeEmail(charter?.sponsor_email)) && !sponsorEmailFrom(charter, own);
 
 export async function inviteSponsor(p: any, c: any, charter: any = null) {
   charter = charter || (await build(p)).charter;
-  const email = sponsorEmailOf(charter);
+  const own = await ownEmailsOf(p);
+  if (isSelfSponsor(charter, own)) throw new Fail(SPONSOR_SELF_STAFF_AR, 400, 'sponsor_self');
+  const email = sponsorEmailFrom(charter, own);
   if (!email) throw new Fail(NO_SPONSOR_EMAIL_AR, 400, 'sponsor_email');
   if (c?.sponsor_invited_at && Date.now() - Date.parse(c.sponsor_invited_at) < 10 * 60e3) throw new Fail('أُرسلت الدعوة قبل قليل، أعد الإرسال بعد عشر دقائق', 429, 'rate');
   const token = randomToken();
@@ -527,10 +545,12 @@ export async function adminReview(a: Admin, b: Body) {
   // على «بانتظار مراجعتك» والوثيقة مقبولة، ولا تصح «الإعادة للتحسين» التي تنصح بها الرسالة (التدقيق 2026-11-11)
   let waive = String(b.waive_sponsor || '').trim().slice(0, 500);
   if (waive && waive.length < 10) throw new Fail('اكتب سبب الاعتماد دون تأييد الراعي');
-  const charter = waive ? null : (await build(p)).charter;
+  const st = waive ? null : await build(p);
+  const charter = st?.charter || null;
   // المبادرة قد تكون افتراضية والراعي توضيح لا شرط (قرار المالك 2026-11-14): بلا بريد راعٍ فعلي يعتمدها قبول المستشار
-  // وحده، بسبب ثابت يُسجَّل، ولا يُطلب منه أن يكتب سببًا لكل وثيقة
-  if (!waive && !sponsorEmailOf(charter)) waive = NO_SPONSOR_WAIVER_AR;
+  // وحده، بسبب ثابت يُسجَّل، ولا يُطلب منه أن يكتب سببًا لكل وثيقة. وبريد المشارك نفسه ليس راعيًا (تصور المرحلة 1، البند 2)
+  if (!waive && st && isSelfSponsor(charter, st.own)) waive = SPONSOR_SELF_WAIVER_AR;
+  if (!waive && !sponsorEmailFrom(charter, st?.own || [])) waive = NO_SPONSOR_WAIVER_AR;
   const { levels } = await levelsOf(p.id);
   const key = trackKey(levels);
   const { data: t } = key ? await db.from('tracks').select('priority_dimension').eq('key', key).maybeSingle() : { data: null };
@@ -599,6 +619,10 @@ export async function sponsorSubmit(b: Body) {
   const p = c.participants;
   const note = String(b.note || '').trim().slice(0, 2000) || null;
   const now = new Date().toISOString();
+  // دعوة قديمة أُرسلت إلى بريد المشارك نفسه قبل هذا الحارس: لا يؤيد نفسه، ويعتمد المستشار أو يعيد
+  if (b.decision === 'endorse' && (await ownEmailsOf(p)).map((x) => normalizeEmail(x)).includes(normalizeEmail(c.sponsor_email))) {
+    throw new Fail('لا يؤيد صاحب المبادرة مبادرته. يعتمدها المستشار أو يعيدها لتصحيح بريد الراعي', 403, 'sponsor_self');
+  }
   if (b.decision === 'endorse') {
     must(await db.from('capstones').update({ sponsor_status: 'endorsed', sponsor_note: note, sponsor_at: now, updated_at: now }).eq('participant_id', p.id));
     await approve(p, `sponsor:${c.sponsor_email}`);

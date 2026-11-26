@@ -132,6 +132,8 @@ function Review({ d, canWrite, onSaved, onFailed }) {
   return (
     <section className="la-card cps-review">
       <h3>تقييمك بالمعيار <small className="la-muted">{d.priority ? <>· أبعاد {DIM[d.priority]} وزنها ×{PRIORITY_WEIGHT}</> : '· المستويات الثلاثة متساوية، فكل الأبعاد بوزن واحد'}</small></h3>
+      {d.sponsor_self && <p className="la-warn" role="note">بريد الراعي في بطاقة المبادرة هو بريد المشارك نفسه، فلا يُرسل له طلب تأييد. القبول يعتمدها دون تأييد، أو أعدها له ليكتب بريد راعيها.</p>}
+      {!!d.sponsor_warnings?.length && <p className="la-muted small" role="note">تنبيه عن بريد الراعي (لا يمنع القبول): {d.sponsor_warnings.join('، ')}. تأكد أنه صاحب قرار يعرف المبادرة قبل أن يُدعى.</p>}
       <fieldset disabled={!canWrite || !!busy}>
         {d.rubric.map((r) => (
           <div key={r.key} className="cps-crit">

@@ -13,6 +13,7 @@
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
 import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
 import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR } from './labels.js';
+import { RATER_FLAG_AR, raterVerification } from './domains.js';
 
 export const CHARTER_KEY = 'initiative-charter';
 export const SCOPE_TITLES = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
@@ -368,6 +369,23 @@ export function costSummary(model, answers) {
 export const costLabel = (/** @type {any} */ cost) => (cost?.contingency ? 'التكلفة مع الاحتياطي' : 'التكلفة');
 export const RISK_HIGH = 12, RISK_MID = 6;
 export const BLOCKING = new Set(['raci-a', 'cost-envelope', 'benefit-owner', 'risk-owner']);
+const ownOf = (list) => (list || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
+export const SPONSOR_SELF_AR = 'بريد الراعي هو بريدك أنت. الراعي شخص آخر يدعم مبادرتك، فاكتب بريده أو احذف البريد إن لم يكن لها راعٍ.';
+// بريد الراعي من بطاقة المبادرة مطبَّعًا، أو null إن غاب أو لم يصح أو كان أحد بُرُد المشارك (الراعي اختياري، قرار المالك
+// 2026-11-03؛ ولا يؤيد المشارك نفسه، تصور المرحلة 1 البند 2). المصدر الواحد للدعوة والقبول وشاشة المستشار
+/** @param {any} charter @param {string[]} [ownEmails] */
+export function sponsorEmailFrom(charter, ownEmails = []) {
+  const e = String(charter?.sponsor_email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)) return null;
+  return ownOf(ownEmails).includes(e) ? null : e;
+}
+// تنبيه غير مانع للمستشار في بطاقة القبول: بريد عام، أو نطاق غير نطاق جهة المشارك. بحكم التحقق نفسه الذي يُوسم به
+// المقيّم الخارجي (raterVerification)، بلا «فرد بلا جهة» لأن الراعي توضيح لا شرط فلا يُطلب له نطاق
+/** @param {string} email @param {{ orgDomains?: string[], linked?: boolean }} [opts] */
+export function sponsorWarnings(email, { orgDomains = [], linked = false } = {}) {
+  if (!email) return [];
+  return raterVerification(email, { orgDomains, linked }).flags.filter((f) => f === 'public_mail' || f === 'other_domain').map((f) => RATER_FLAG_AR[f]);
+}
 export function capstoneChecks(ctx) {
   const M = ctx.models || {}, A = ctx.answers || {};
   const has = (...keys) => keys.every((k) => M[k]);
@@ -382,7 +400,9 @@ export function capstoneChecks(ctx) {
   if (has(CHARTER_KEY)) {
     const e = String(A[CHARTER_KEY]?.sponsor_email || '').trim();
     // الراعي اختياري: يقوّي الوثيقة بتأييد من الجهة، ولا يمنع تسليمها (قرار المالك 2026-11-03)
-    if (e) add('sponsor', 'بريد راعي المبادرة صحيح', /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e), 'صحّح بريد الراعي في بطاقة المبادرة، أو احذفه إن لم يكن للمبادرة راعٍ.');
+    // ولا يكون المشارك راعيًا لنفسه (تصور المرحلة 1، البند 2): بريده الأساسي أو البديل (ownEmails) يفشل الفحص بسببه
+    const self = !!e && ownOf(ctx.ownEmails).includes(e.toLowerCase());
+    if (e) add('sponsor', 'بريد راعي المبادرة صحيح', !self && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e), self ? SPONSOR_SELF_AR : 'صحّح بريد الراعي في بطاقة المبادرة، أو احذفه إن لم يكن للمبادرة راعٍ.');
   }
   if (has('options-analysis')) {
     const t = table(M['options-analysis'], A['options-analysis'], 'options');
