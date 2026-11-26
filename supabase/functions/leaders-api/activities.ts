@@ -294,7 +294,7 @@ const DUP = (e: any) => String(e?.code) === '23505';
 async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' | 'code', after: Body | null) {
   // حساب العرض يُحاكى حضوره (تصور الحساب التجريبي 2026-11-19، المرحلة 0): يرى شاشة «سُجّل حضورك» نفسها، ولا يُكتب صف
   // حضور ولا سطر سجل، فلا يدخل «حضر» في شاشة القاعة ولا نظرة الأنشطة ولا بطاقة الدفعة، ولو مسح رمز جلسة حقيقية
-  if (simulated(p)) return { success: true, already: false, method, simulated: true, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: new Date().toISOString() };
+  if (simulated(p)) return { success: true, already: false, method, simulated: true, session: { id: s.id, title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: new Date().toISOString() };
   const { data: prev } = await db.from('workshop_attendance').select('checked_in_at').eq('session_id', s.id).eq('participant_id', p.id).maybeSingle();
   let already = !!prev;
   if (!prev) {
@@ -307,7 +307,7 @@ async function recordAttendance(p: any, s: any, r: any, ctx: Ctx, method: 'qr' |
       await audit('participant', p.email, 'workshop.checkin', 'workshop_sessions', s.id, null, after);
     }
   }
-  return { success: true, already, method, session: { title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
+  return { success: true, already, method, session: { id: s.id, title: s.title_ar, location: s.location_ar, requirement: r.title_ar }, at: prev?.checked_in_at || new Date().toISOString() };
 }
 
 // ── تسجيل الحضور بالأرقام الستة (W2، تصور الحضور 2026-11-18 ب5.5 البند 4) ──

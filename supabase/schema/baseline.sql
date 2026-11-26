@@ -2079,7 +2079,7 @@ create table if not exists leaders.points_ledger (
   points smallint not null,
   note text,
   created_at timestamp with time zone default now() not null,
-  constraint points_ledger_source_check CHECK ((source = ANY (ARRAY['chapter'::text, 'model'::text, 'review'::text, 'bonus'::text, 'lab'::text, 'lab_bonus'::text, 'capstone'::text, 'tracking'::text]))),
+  constraint points_ledger_source_check CHECK ((source = ANY (ARRAY['chapter'::text, 'model'::text, 'review'::text, 'bonus'::text, 'lab'::text, 'lab_bonus'::text, 'capstone'::text, 'tracking'::text, 'commitment'::text, 'commitment_review'::text]))),
   constraint points_ledger_pkey PRIMARY KEY (id),
   constraint points_ledger_participant_id_source_ref_id_key UNIQUE (participant_id, source, ref_id)
 );
@@ -2433,6 +2433,25 @@ create table if not exists leaders.workshop_scan_receipts (
   constraint workshop_scan_receipts_consumed_check CHECK (((participant_id IS NULL) = (consumed_at IS NULL))),
   constraint workshop_scan_receipts_ip_hash_check CHECK (((ip_hash IS NULL) OR (char_length(ip_hash) = 64))),
   constraint workshop_scan_receipts_pkey PRIMARY KEY (id)
+);
+
+create table if not exists leaders.workshop_commitments (
+  id uuid default gen_random_uuid() not null,
+  participant_id uuid not null,
+  session_id uuid not null,
+  action text not null,
+  due_on date not null,
+  created_at timestamp with time zone default now() not null,
+  reminded_at timestamp with time zone,
+  outcome text,
+  learned text,
+  reviewed_at timestamp with time zone,
+  added_at timestamp with time zone,
+  constraint workshop_commitments_action_check CHECK (((char_length(action) >= 1) AND (char_length(action) <= 500))),
+  constraint workshop_commitments_learned_check CHECK (((learned IS NULL) OR (char_length(learned) <= 1000))),
+  constraint workshop_commitments_outcome_check CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['yes'::text, 'partial'::text, 'no'::text])))),
+  constraint workshop_commitments_participant_id_session_id_key UNIQUE (participant_id, session_id),
+  constraint workshop_commitments_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.workshop_sessions (
@@ -3559,6 +3578,14 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
+  alter table leaders.workshop_commitments add constraint workshop_commitments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.workshop_commitments add constraint workshop_commitments_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
   alter table leaders.workshop_sessions add constraint workshop_sessions_cohort_id_fkey FOREIGN KEY (cohort_id) REFERENCES leaders.cohorts(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
@@ -3975,6 +4002,7 @@ CREATE INDEX IF NOT EXISTS stage_requirements_stage_idx ON leaders.stage_require
 
 CREATE INDEX IF NOT EXISTS sus_responses_role ON leaders.sus_responses USING btree (role, answered_at);
 
+CREATE INDEX IF NOT EXISTS workshop_commitments_due ON leaders.workshop_commitments USING btree (created_at) WHERE ((reviewed_at IS NULL) AND (reminded_at IS NULL));
 CREATE INDEX IF NOT EXISTS workshop_attendance_participant_idx ON leaders.workshop_attendance USING btree (participant_id);
 
 CREATE INDEX IF NOT EXISTS workshop_scan_receipts_expires_idx ON leaders.workshop_scan_receipts USING btree (expires_at);
@@ -4306,6 +4334,7 @@ alter table leaders.video_progress enable row level security;
 alter table leaders.webauthn_challenges enable row level security;
 
 alter table leaders.workshop_attendance enable row level security;
+alter table leaders.workshop_commitments enable row level security;
 
 alter table leaders.workshop_scan_receipts enable row level security;
 

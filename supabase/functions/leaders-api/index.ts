@@ -79,6 +79,7 @@ import * as GA from './guide-admin.ts';
 import * as TD from './today-desk.ts';
 import * as CV from './cohort-visits.ts';
 import * as CU from './cohort-pulse.ts';
+import * as CM from './commitments.ts';
 import * as GT from './guide-transcripts.ts';
 import { bookAccess } from './master-book.js';
 import * as IK from './idempotency.ts';
@@ -107,7 +108,9 @@ const open: Record<string, (b: Body, ctx: any) => Promise<unknown>> = {
     const r: any = await A.reminders(b);
     // تذكير الرعاة قبل انتهاء روابطهم، وعدّ المنتهي لتقرير الأسبوع (تصور المرحلة 2، 2.3): المجدول الأسبوعي نفسه، لا مجدول ثانٍ
     const sponsors: any = await X.sponsorReminders().catch((e) => ({ reminded: 0, expired: 0, error: String(e?.message || e) }));
-    return { ...r, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), sponsors, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth({ sponsorExpired: sponsors.expired || 0 }).catch((e) => ({ sent: false, reason: String(e?.message || e) })),
+    // تذكير الأسبوعين لالتزامات ما بعد الورش (تصور المرحلة 3، 3.2): مرة واحدة لكل التزام
+    const commitments: any = await CM.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) }));
+    return { ...r, commitments, tracking: await T.reminders().catch((e) => ({ sent: 0, error: String(e?.message || e) })), sponsors, coordinator_reports: await C.weeklyReports(), health: await S.weeklyHealth({ sponsorExpired: sponsors.expired || 0 }).catch((e) => ({ sent: false, reason: String(e?.message || e) })),
       // تنظيف دوري: رموز الدخول والجلسات المنتهية وسجلات التحقق وعناوين IP بعد 90 يومًا
       purge: await S.purge().catch((e) => ({ error: String(e?.message || e) })) };
   },
@@ -206,7 +209,8 @@ const DEMO_OPEN = new Set(['track.seen', 'guide.state', 'guide.clear', 'guide.co
   'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
   'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
   'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
-  'capstone.shares', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark']);
+  'capstone.shares', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark',
+  'commitment.mine', 'commitment.save', 'commitment.review', 'commitment.to-initiative']);
 
 // بوابة البرنامج (P1-04): كل فعل للمشارك في واحدة من ثلاث، وprogram_gate_test.ts يُسقط فعلًا لم يُصنَّف.
 // المعتمد مساره: approvalOf (ثلاثة تسكينات معتمدة، القاعدة نفسها في الكتاب وكاتون والمبادرة). وداخل البرنامج: inProgram
@@ -222,6 +226,8 @@ const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sess
 const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
   'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
   'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant',
+  // الالتزام بعد الورشة يتبع الحضور (commitments.ts)
+  'commitment.mine', 'commitment.save', 'commitment.review',
   // الفصل الأول قراءة فقط أثناء انتظار الاعتماد (تصور المرحلة 2، 2.5)
   'handbook.preview']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
@@ -230,7 +236,9 @@ const GATE_PROGRAM = new Set(['track.seen', 'guide.state', 'guide.ask', 'guide.c
   'models.list', 'models.get', 'models.save', 'achievements', 'content.ping', 'content.open',
   'f360.mine', 'f360.start', 'f360.self', 'f360.nominate', 'f360.remove', 'f360.submit', 'f360.report', 'f360.plan',
   'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
-  'capstone.shares', 'capstone.share-create', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark']);
+  'capstone.shares', 'capstone.share-create', 'capstone.share-update', 'capstone.share-revoke', 'capstone.note-mark',
+  // نقرة الالتزام المنجز إلى وثيقة المبادرة تحفظ فصلها بحراس models.save نفسها
+  'commitment.to-initiative']);
 // وما يبقى للمنسحب من الفئتين: الاطلاع على مخرجاته (تقرير 360 المسلَّم، ووثيقة مبادرته، ونسخة كتابه، وتقدير أثره) وتقييم
 // خدمة خبير انعقدت. قراءة لما أنجزه أو تقييم لخدمة اكتملت، لا عمل جديد في البرنامج. وتبقى لكل منها بوابتها بعدها: ما في
 // GATE_PROGRAM بالاعتماد، والدفع كما هو. وما سواها من الفئتين مغلق على المنسحب (program_gate_test.ts)
@@ -384,6 +392,11 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'content.open': (p, b) => V.contentOpen(p, b),
   'workshop.checkin': (p, b, _s, ctx) => V.workshopCheckin(p, b, ctx),
   'workshop.join': (p, b, _s, ctx) => V.workshopJoin(p, b, ctx),
+  // حلقة الالتزام بعد الورشة (تصور المرحلة 3، 3.2): لا تحبس مرحلة ولا تدخل التقدم
+  'commitment.mine': (p) => CM.mine(p),
+  'commitment.save': (p, b) => CM.save(p, b),
+  'commitment.review': (p, b) => CM.review(p, b),
+  'commitment.to-initiative': (p, b) => CM.toInitiative(p, b),
   'coaching.instant': (p, b) => V.coachingInstant(p, b),
   'impact.mine': (p) => I.mine(p),
   'rater.invite': (p, b) => I.invite(p, b),

@@ -192,6 +192,7 @@ export const MIGRATIONS = [
   '20261129170000_leaders_consent_sponsor',
   '20261129180000_leaders_sponsor_reminded',
   '20261129190000_leaders_reflection_apply',
+  '20261129200000_leaders_workshop_commitments',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -297,5 +298,6 @@ export const MIGRATION_GATES = {
   '20261129160000_leaders_group_members_cleanup': ["deferred", "بقرار المالك (تصور المرحلة 1، القرار 2): يُطبَّق بعد عرض العد من scripts/db/verify-group-members-cleanup.sql قراءةً"],
   '20261129170000_leaders_consent_sponsor': ["tolerant", "قبله يرفض القيد نوع sponsor (23514) فيسجل logConsent الخطأ ولا يوقف قرار الراعي، كما كان قبل الإشعار"],
   '20261129180000_leaders_sponsor_reminded': ["tolerant", "قبله لا يُذكَّر الراعي (sponsorReminders يتجاوز عند غياب العمود فلا يتكرر)، ويبقى عدّ المنتهي في تقرير الأسبوع"],
-  '20261129190000_leaders_reflection_apply': ["tolerant", "قبله يُحفظ التأمل وحده ويُحتسب بلا إضافة «أين ستطبقه؟» (handbookComplete يعيد الحفظ بدون العمود)"],
+  '20261129190000_leaders_reflection_apply': ["tolerant", "قبله يُحفظ التأمل وحده ويُحتسب بلا إضافة «أين ستطبقه؟» (handbookComplete يكتب الجواب بعد الختم وخطؤه يُسجَّل ولا يُسقط الإتمام)"],
+  '20261129200000_leaders_workshop_commitments': ["tolerant", "قبله تُرد التزامات المشارك فارغة والكتابة «غير متاح الآن» (missingTable في commitments.ts)، ويتجاوز التذكير"],
 };

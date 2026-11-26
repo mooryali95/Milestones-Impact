@@ -21,6 +21,8 @@ export const EXPORT_TABLES = {
   cohort_group_members: [], cohort_roles: [], hall_presence: [],
   // سبب التسجيل اليدوي (note، 20261119110000) ملاحظة داخلية يكتبها المدير أو المدرب: لا تخرج، ويخرج الحضور وطريقته ووقته كما كان
   workshop_attendance: ['note'],
+  // التزاماته بعد الورش ومراجعتها (20261129200000، تصور المرحلة 3): ملك له كاملًا
+  workshop_commitments: [],
   sponsor_requests: ['decided_by'],
   // التذكيرات التي وصلته (nudges.ts): نصها ومرسلها ومرحلتها. بريد المدير المرسل ولقطة القياس الداخلية لا يخرجان
   nudges: ['sender_ref', 'snapshot'],

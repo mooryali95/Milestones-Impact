@@ -383,10 +383,30 @@ export default function ExpertFile({ id, onBack }) {
           <p className="muted small">المحادثة نفسها خاصة به ولا تظهر لك.</p>
         </section>
       )}
+      {d.commitments && <CoachCommitments c={d.commitments} />}
       {d.mentor && <MentorNudge pid={p.id} />}
       <PeerPending peer={d.peer} advisor={advisor} reload={load} />
       <FinalEval pid={p.id} f={d.final} advisor={advisor} reload={load} />
       {answers && advisor && <ExpertAnswers participant={p} onClose={() => setAnswers(false)} />}
     </div>
+  );
+}
+
+// التزامات ما بعد الورش للمستشار (تصور المرحلة 3 §5.2): من طبّق ومن لم يطبق ومن ينتظر، لاختيار حديث الجلسة
+function CoachCommitments({ c }) {
+  const groups = [['طبّق', c.applied], ['لم يطبق', c.not_applied], ['ينتظر المراجعة', c.pending]].filter(([, l]) => l.length);
+  if (!groups.length) return null;
+  return (
+    <section className="card stack" aria-label="الالتزامات بعد الورش">
+      <h3>الالتزامات بعد الورش</h3>
+      {groups.map(([title, list]) => (
+        <div key={title} className="stack">
+          <b className="small">{title} ({list.length})</b>
+          <ul className="small">
+            {list.map((x) => <li key={x.id}>«{x.action}»{x.session ? ` · ${x.session}` : ''}{x.outcome_ar ? ` · ${x.outcome_ar}` : ''}{x.learned ? `: ${x.learned}` : ''}</li>)}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }

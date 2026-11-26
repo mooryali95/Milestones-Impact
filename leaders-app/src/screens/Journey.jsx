@@ -25,6 +25,7 @@ import HowEvaluated from './HowEvaluated.jsx';
 import { MASTERY } from '../../../supabase/functions/leaders-api/lab.js';
 import { CONTACT } from '../../../src/config/constants.js';
 import RateExpert from './RateExpert.jsx';
+import { CommitmentCard } from './Commitments.jsx';
 import { GuidancePanel } from './Guidance.jsx';
 import { currentStages } from '../../../supabase/functions/leaders-api/journey-map.js';
 import { FINAL_ASK_DETAIL_AR, FINAL_NO_DETAIL_AR, finalDetailView, finalView, fmtDate, fmtTime, fmtWhen, holdLine, lateBannerAr, lateByAr, lateShortAr, stageDates, stageOffAr, stageTally, stagesOfAr } from '../journey-copy.js';
@@ -1061,6 +1062,7 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
     <div className="page wide">
       <Notices list={me.notices} />
       <NudgeBanner nudge={me.nudge} onGo={current ? () => goTo(current.key) : null} />
+      {approved && <CommitmentCard />}
       <section className="hero" data-tour="journey-hero">
         <div className="stack">
           <p className="eyebrow">رحلتك القيادية</p>

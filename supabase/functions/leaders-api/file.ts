@@ -5,6 +5,7 @@
 // الدفعة والفريق، الجلسات والطلبات، طلبات الأقران، التقييم الختامي، وسطر «المطلوب منك الآن».
 // الخبير يرى مشاركي الدفعات التي هو مستشارها (كامل الصلاحية: الختامي والمعالم والقاعة)، ومن أُسند
 // إليه بطلب خدمة مقبول (قراءة الملف فقط). ما لا يحق له لا يُرسل أصلًا.
+import * as CM from './commitments.ts';
 import { allFor, audit, db, Fail } from './core.ts';
 import { awaitingFor, confirmRater } from './impact.ts';
 import { participant as adminParticipant, answersReview } from './admin.ts';
@@ -248,7 +249,9 @@ export async function participant(e: any, b: Body) {
   if (!scope.advisor.has(id) && !scope.assigned.has(id)) throw new Fail('هذا المشارك ليس من مشاركيك', 403);
   const f: any = await participantFile(id, 'expert', { viewer: { email: e.email }, advisor: scope.advisor.has(id) });
   // المرشد (مشرف الرحلة) يذكّر من يرشده بالمحرك الموحد (xp.nudge، nudges.ts)، والخادم يتحقق من الإسناد نفسه
-  return f?.success ? { ...f, mentor: scope.assigned.get(id) === 'mentor' } : f;
+  // التزامات ما بعد الورش للمستشار وحده: من طبّق ومن لم يطبق، مادة لحديث الجلسة (تصور المرحلة 3، 3.2)
+  const commitments = f?.success && scope.advisor.has(id) ? await CM.forCoach(id) : null;
+  return f?.success ? { ...f, mentor: scope.assigned.get(id) === 'mentor', commitments } : f;
 }
 
 // ── وثيقة المبادرة من البوابة (مرافق بناء المبادرة 4د): يقرؤها الخبير وهو يجيب سؤالًا عن فصل فيها ──
