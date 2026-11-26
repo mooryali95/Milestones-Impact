@@ -18,7 +18,7 @@ import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
-  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, sponsorWarnings } from './capstone.js';
+  capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, SPONSOR_LINK_EXPIRED_AR, sponsorState, sponsorWarnings } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
 import { freezeIssued, rejectionStats } from './doc-quality.js';
@@ -130,7 +130,7 @@ function reviewView(c: any, full = true) {
   };
 }
 const sponsorView = (c: any) => (c?.sponsor_status || c?.sponsor_waived ? {
-  name: c.sponsor_name, status: c.sponsor_status, at: c.sponsor_at, note: c.sponsor_note, waived: !!c.sponsor_waived,
+  name: c.sponsor_name, status: c.sponsor_status, state: sponsorState(c), at: c.sponsor_at, note: c.sponsor_note, waived: !!c.sponsor_waived,
 } : null);
 
 // فصل البطاقة في وثيقة المشارك وحالة تسليمه؛ null إن لم تكن البطاقة من فصول وثيقته
@@ -373,7 +373,7 @@ export async function adminQualityReport() {
 
 // ── المستشار ──
 export async function adminList(b: Body) {
-  let q = listed(db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)'), 'participants').order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
+  let q = listed(db.from('capstones').select('participant_id, status, readiness, revisions, submitted_at, reviewed_at, score, sponsor_status, sponsor_expires_at, approved_at, participants!inner(full_name, email, organization_name, work_scope, is_demo)'), 'participants').order('submitted_at', { ascending: false, nullsFirst: false }).limit(300);
   if (b.status) q = q.eq('status', String(b.status));
   const capRows = must(await q) as any[] ?? [];
   // من بدأ بطاقة مبادرته ولم يُنشأ له صف بعد (لم يسلّم ولم يحفظ ملخصًا) يظهر مسودةً، فلا تختفي وثيقة يعمل عليها
@@ -402,7 +402,7 @@ export async function adminList(b: Body) {
       participant_id: r.participant_id, full_name: r.participants?.full_name, email: r.participants?.email,
       organization: r.participants?.organization_name || null, scope: r.participants?.work_scope || null,
       initiative: title[r.participant_id] || null, status: r.status, readiness: r.readiness, revisions: r.revisions,
-      submitted_at: r.submitted_at, reviewed_at: r.reviewed_at, score: r.score, sponsor_status: r.sponsor_status, approved_at: r.approved_at,
+      submitted_at: r.submitted_at, reviewed_at: r.reviewed_at, score: r.score, sponsor_status: r.sponsor_status, sponsor_state: sponsorState(r), approved_at: r.approved_at,
       tracking: tr[r.participant_id] || null,
     })),
   };
@@ -448,7 +448,7 @@ export async function adminGet(b: Body) {
   const c = state.capstone;
   return {
     success: true, doc: await withTracking({ ...document, review_levels: levelsView(state, !r.d) }, p.id),
-    capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined } : { status: 'draft' },
+    capstone: c ? { ...c, sponsor_token_hash: undefined, snapshot: undefined, sponsor_state: sponsorState(c) } : { status: 'draft' },
     // الحالة والجاهزية بالقاعدة نفسها التي تقرأ بها قائمة الوثائق (capstoneState)
     sections: state.sections.map(sectionView), checks: state.checks, readiness: capstoneState(c, state.readiness).readiness ?? 0,
     priority: state.weighted, max_revisions: MAX_REVISIONS,
@@ -598,7 +598,7 @@ async function sponsorFrom(t: unknown) {
   if (token.length < 20) throw new Fail('الرابط غير صالح', 400, 'invalid');
   const c = must(await db.from('capstones').select('*, participants(*)').eq('sponsor_token_hash', await hash(token)).maybeSingle()) as any;
   if (!c) throw new Fail('الرابط غير صالح أو استُبدل بدعوة أحدث', 404, 'invalid');
-  if (c.sponsor_status === 'pending' && new Date(c.sponsor_expires_at) < new Date()) throw new Fail('انتهت صلاحية الرابط، اطلب من المستشار دعوة جديدة', 410, 'expired');
+  if (sponsorState(c) === 'expired') throw new Fail(SPONSOR_LINK_EXPIRED_AR, 410, 'expired');
   // بعد القرار: اطلاع محدود المدة (4.5)
   if (c.sponsor_status !== 'pending' && !linkAfterDecisionOk(c.sponsor_at)) throw new Fail(LINK_CLOSED_AR, 410, 'closed');
   return c;

@@ -52,3 +52,33 @@ Deno.test('2.1 قبل ترحيل نوع الراعي في السجل: رفض ا�
   const r = await withNet(() => X.sponsorSubmit({ t: TOKEN, decision: 'decline', note: 'عدّل الميزانية' }));
   assertEquals(r.decision, 'declined');
 });
+
+// 2.2: «منتهٍ» حالة مشتقة لا مخزنة: pending مع sponsor_expires_at ماضٍ، بقاعدة واحدة (sponsorState في capstone.js)
+const { sponsorState, SPONSOR_LINK_EXPIRED_AR } = await import('./capstone.js');
+const { CONTACT_EMAIL } = await import('./labels.js');
+
+Deno.test('2.2 الحالة المشتقة: المنتظر المنقضي منتهٍ، وما سواه بحاله', () => {
+  const s = (sponsor_status: string | null, ms: number | null) => sponsorState({ sponsor_status, sponsor_expires_at: ms == null ? null : iso(ms) });
+  assertEquals(s('pending', -DAY), 'expired');
+  assertEquals(s('pending', DAY), 'pending');
+  assertEquals(s('pending', null), 'pending');
+  assertEquals(s('endorsed', -DAY), 'endorsed');
+  assertEquals(s('declined', -DAY), 'declined');
+  assertEquals(s(null, -DAY), null);
+});
+
+Deno.test('2.2 الرابط المنتهي يرد 410 برسالة تحيل إلى فريق البرنامج وبريده لا إلى المستشار', async () => {
+  await world({ sponsor_expires_at: iso(-DAY) });
+  const e = await X.sponsorGet({ t: TOKEN }).then(() => null, (x: any) => x);
+  assertEquals([e?.status, e?.code], [410, 'expired']);
+  assertEquals(e.message, SPONSOR_LINK_EXPIRED_AR);
+  assert(SPONSOR_LINK_EXPIRED_AR.includes('فريق البرنامج') && SPONSOR_LINK_EXPIRED_AR.includes(CONTACT_EMAIL));
+  assert(!SPONSOR_LINK_EXPIRED_AR.includes('المستشار'));
+});
+
+Deno.test('2.2 قائمة الإدارة تحمل الحالة المشتقة لكل وثيقة', async () => {
+  const tables = await world({ sponsor_expires_at: iso(-DAY), submitted_at: iso(-30 * DAY) });
+  tables.model_submissions = [];
+  const r = await X.adminList({});
+  assertEquals(r.capstones.map((c: any) => c.sponsor_state), ['expired']);
+});

@@ -9,7 +9,7 @@ import { EXAMPLES } from '../../../supabase/content/initiative-guide/v1/examples
 import { copiedFromExamples } from '../../../supabase/functions/leaders-api/example-check.js';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
-import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
+import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, SPONSOR_STATE_AR, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
 import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
 // حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
@@ -71,7 +71,9 @@ export function ExpertSpine({ sections, checks, canWrite, onSaved }) {
 const STATUS = STATUS_TITLES_ADMIN;
 const CHIP = { submitted: 'warn', accepted: 'warn', approved: 'ok' };
 const SCOPE = { project: 'مشروع', program: 'برنامج', portfolio: 'محفظة' };
-const SPONSOR = { pending: 'دُعي ولم يرد', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
+// حالة الراعي من الخادم (sponsor_state): «انتهت مهلة الرابط» مشتقة هناك من sponsor_expires_at (تصور المرحلة 2، 2.2)
+const SPONSOR = SPONSOR_STATE_AR;
+const SPONSOR_EXPIRED_AR = 'انتهت مهلة الراعي';
 // طابور المراجعة أولًا، ثم ما قيد البناء، ثم «الكل» للمحفظة كاملة (تحليل لوحة الإدارة 2026-11-15)
 const FILTERS = ['submitted', 'accepted', 'returned', 'approved', 'draft'].map((k) => [k, STATUS[k]]);
 
@@ -176,12 +178,12 @@ function Sponsor({ d, canWrite, onSaved }) {
   return (
     <section className="la-card">
       <h3>تأييد الراعي</h3>
-      <p>{c.sponsor_name || 'الراعي'} {c.sponsor_email && <span className="la-muted" dir="ltr">{c.sponsor_email}</span>} · {SPONSOR[c.sponsor_status] || 'لم يُدعَ'}{c.sponsor_invited_at ? ` · دُعي ${date(c.sponsor_invited_at)}` : ''}</p>
+      <p>{c.sponsor_name || 'الراعي'} {c.sponsor_email && <span className="la-muted" dir="ltr">{c.sponsor_email}</span>} · {c.sponsor_state ? <span className={`la-chip ${c.sponsor_state === 'expired' ? 'bad' : ''}`}>{SPONSOR[c.sponsor_state]}</span> : 'لم يُدعَ'}{c.sponsor_invited_at ? ` · دُعي ${date(c.sponsor_invited_at)}` : ''}</p>
       {canWrite && (
         <div className="la-row">
-          <button className="btn-sm ghost" disabled={!!busy} onClick={() => act('invite')}>{busy === 'invite' ? 'لحظة…' : 'أعد إرسال الدعوة'}</button>
+          <button className="btn-sm ghost" disabled={!!busy} onClick={() => act('invite')}>{busy === 'invite' ? 'لحظة…' : 'أعد الدعوة'}</button>
           <input aria-label="سبب الاعتماد دون تأييد" placeholder="سبب الاعتماد دون تأييد الراعي" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <button className="btn-sm primary" disabled={!!busy || reason.trim().length < 10} onClick={() => act('waive')}>اعتماد دون تأييد</button>
+          <button className="btn-sm primary" disabled={!!busy || reason.trim().length < 10} onClick={() => act('waive')}>اعتمد دون تأييد</button>
         </div>
       )}
     </section>
@@ -268,18 +270,21 @@ function Detail({ id, canWrite, onBack, onPerson }) {
 }
 
 // الوثائق كلها مرة واحدة والفلترة في المتصفح (شريط الفلترة الموحد)، وتبدأ بما ينتظر القرار
+// بعد «بانتظار الراعي» مرشح من انتهت مهلة راعيه، ليعيد المدير الدعوة أو يعتمد دون تأييد (تصور المرحلة 2، 2.2)
+const EXPIRED_PRESET = { key: 'sponsor_expired', label: SPONSOR_EXPIRED_AR, test: (x) => x.sponsor_state === 'expired' };
 export const CAP_PRESETS = [...FILTERS.map(([k, l]) => ({ key: k, label: l, test: (x) => x.status === k })), { key: 'all', label: 'الكل', test: () => true }];
+CAP_PRESETS.splice(CAP_PRESETS.findIndex((p) => p.key === 'accepted') + 1, 0, EXPIRED_PRESET);
 // رسالة القائمة الفارغة بحسب سببها: لا وثائق أصلًا، أو لا وثيقة في هذه الحالة، أو فلاتر أخرى تحجبها
 export function capEmpty(state, total) {
   if (!total) return { title: 'لا وثائق بعد', hint: 'تظهر هنا وثيقة كل قائد حين يبدأ بناءها.' };
-  const status = STATUS[state.view];
+  const status = state.view === EXPIRED_PRESET.key ? EXPIRED_PRESET.label : STATUS[state.view];
   if (status && !isFiltered({ ...state, view: '' })) return { title: `لا وثائق في «${status}» الآن`, hint: 'اختر حالة أخرى من الأعلى، أو «الكل» لترى الوثائق بكل حالاتها.' };
   return { title: 'لا وثائق لهذه الفلاتر', hint: 'امسح البحث أو الفلاتر، أو اختر «الكل» لترى الوثائق بكل حالاتها.' };
 }
 const CAP_COLS = [
   { key: 'name', label: 'المبادرة', width: 34, get: (x) => x.initiative }, { key: 'lead', label: 'القائد', width: 26, get: (x) => x.full_name },
   { key: 'org', label: 'الجهة', width: 24, get: (x) => x.organization }, { key: 'scope', label: 'النوع', width: 10, get: (x) => SCOPE[x.scope] },
-  { key: 'status', label: 'الحالة', width: 18, get: (x) => STATUS[x.status] }, { key: 'sponsor', label: 'الراعي', width: 16, get: (x) => SPONSOR[x.sponsor_status] },
+  { key: 'status', label: 'الحالة', width: 18, get: (x) => STATUS[x.status] }, { key: 'sponsor', label: 'الراعي', width: 16, get: (x) => SPONSOR[x.sponsor_state] },
   { key: 'ready', label: 'الجاهزية %', width: 12, get: (x) => x.readiness }, { key: 'score', label: 'المعيار', width: 10, get: (x) => x.score },
   { key: 'health', label: 'صحة التنفيذ', width: 16, get: (x) => x.tracking?.health_title }, { key: 'at', label: 'قُدّمت', width: 16, get: (x) => date(x.submitted_at) },
 ];
@@ -313,7 +318,7 @@ export default function Capstones({ canWrite, capId, onOpen, onPerson }) {
             <tr key={x.participant_id}>
               <td><button className="la-link" onClick={() => onOpen(x.participant_id)}>{x.initiative || 'بلا اسم'}</button></td>
               <td>{x.full_name}</td><td>{x.organization || '·'}</td><td>{SCOPE[x.scope] || '·'}</td>
-              <td><span className={`la-chip ${CHIP[x.status] || ''}`}>{STATUS[x.status]}</span>{x.sponsor_status && x.status === 'accepted' ? <small className="la-muted"> · {SPONSOR[x.sponsor_status]}</small> : null}{x.tracking && <> <span className={`la-chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span></>}</td>
+              <td><span className={`la-chip ${CHIP[x.status] || ''}`}>{STATUS[x.status]}</span>{x.sponsor_state && x.status === 'accepted' ? (x.sponsor_state === 'expired' ? <> <span className={`la-chip ${x.sponsor_state === 'expired' ? 'bad' : ''}`}>{SPONSOR[x.sponsor_state]}</span></> : <small className="la-muted"> · {SPONSOR[x.sponsor_state]}</small>) : null}{x.tracking && <> <span className={`la-chip ${HEALTH_CHIP[x.tracking.health] || ''}`}>{x.tracking.health_title}</span></>}</td>
               <td>{x.readiness != null ? `${x.readiness}%` : '·'}</td><td>{x.score ?? '·'}</td><td>{date(x.submitted_at)}</td>
             </tr>
           ))}</tbody>

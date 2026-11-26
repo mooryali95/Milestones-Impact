@@ -12,7 +12,7 @@
 //     والمستوى من التسكين المعتمد، والمسار وأولويته من جدول المسارات.
 // بلا قاعدة بيانات ولا Deno، فيُختبر في vitest ويستورده الخادم والتطبيقان.
 import { DIMENSIONS, fieldsFor, keptModel, latinDigits, missingFields, modelsFor, workMinutes } from './logic.js';
-import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR } from './labels.js';
+import { BEGINNER_CHAPTER_TITLES, CLOSING_LOCKED_AR, CONTACT_EMAIL } from './labels.js';
 import { RATER_FLAG_AR, raterVerification } from './domains.js';
 
 export const CHARTER_KEY = 'initiative-charter';
@@ -23,6 +23,17 @@ export const STATUS_TITLES = {
   accepted: 'بانتظار تأييد الراعي', approved: 'معتمد',
 };
 // ما تقوله الإدارة: المخاطَب هو المستشار نفسه
+// حالة تأييد الراعي (تصور المرحلة 2، 2.2): «منتهٍ» مشتقة لا مخزنة، دعوة بانتظار الرد انقضت مهلتها (sponsor_expires_at)،
+// بقاعدة واحدة يقرؤها الرابط وملف الوثيقة وقائمة الإدارة. لا راعٍ مدعو: null
+/** @param {{ sponsor_status?: string | null, sponsor_expires_at?: string | null } | null | undefined} c */
+export function sponsorState(c, now = Date.now()) {
+  if (!c?.sponsor_status) return null;
+  if (c.sponsor_status === 'pending' && c.sponsor_expires_at && Date.parse(c.sponsor_expires_at) < now) return 'expired';
+  return c.sponsor_status;
+}
+export const SPONSOR_STATE_AR = { pending: 'دُعي ولم يرد', expired: 'انتهت مهلة الرابط', endorsed: 'أيّد', declined: 'طلب تعديلًا' };
+// رسالة الرابط المنتهي للراعي: الإعادة للمدير وحده (القرار 3)، فيُحال إلى فريق البرنامج ببريده لا إلى المستشار
+export const SPONSOR_LINK_EXPIRED_AR = `انتهت صلاحية الرابط. أبلغنا فريق البرنامج ليرسل دعوة جديدة على ${CONTACT_EMAIL}`;
 export const STATUS_TITLES_ADMIN = { ...STATUS_TITLES, submitted: 'بانتظار مراجعتك', accepted: 'بانتظار الراعي' };
 // الوثيقة لا تُسلَّم قبل اكتمال فصولها وبلوغ الجاهزية هذا الحد
 // نقاط اعتماد الوثيقة: تُمنح مرة عند الاعتماد، وتعرضها الواجهة من هنا
