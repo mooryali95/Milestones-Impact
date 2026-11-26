@@ -3,6 +3,7 @@
 // ════════════════════════════════════════════════════════════════
 // كل ما يظهر هنا (المراحل، المدد، الأنشطة، المخرجات، المتطلبات) يأتي
 // من الخادم كما ضبطته الإدارة؛ لا نص مثبت للمراحل في الواجهة.
+import FirstChapter from './FirstChapter.jsx';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SusCard from '../SusCard.jsx';
 import Ico from '../Ico.jsx';
@@ -659,9 +660,12 @@ function DemoCertificateCard() {
 
 // دعوة المدير المباشر قبل البرنامج: تقديره الآن هو خط الأساس الذي يُقارن به
 // تقديره بعد البرنامج، وهو أقوى من سؤاله لاحقًا عن "قبل" بالتذكر.
-// تظهر في الرحلة مرة حتى يُغلقها المشارك، وتبقى دائمًا في «ملفي» (inSettings)
+// تظهر في الرحلة، و«لاحقًا» يؤجلها أسبوعًا لا نهائيًا (تصور المرحلة 2، 2.5)، وتبقى دائمًا في «ملفي» (inSettings).
+// المخزَّن وقت التأجيل؛ والقيمة القديمة «1» (الإخفاء النهائي قبل هذا) لا وقت لها فتعود البطاقة
 const PRE_HIDE = 'mi_pre_manager_hidden';
-const preHidden = () => { try { return localStorage.getItem(PRE_HIDE) === '1'; } catch { return false; } };
+export const PRE_SNOOZE_DAYS = 7;
+export const preSnoozed = (v, now = Date.now()) => { const at = Number(v); return v !== '1' && Number.isFinite(at) && at > 0 && now - at < PRE_SNOOZE_DAYS * 864e5; };
+const preHidden = () => { try { return preSnoozed(localStorage.getItem(PRE_HIDE)); } catch { return false; } };
 export function PreManager({ inSettings = false }) {
   const [hidden, setHidden] = useState(() => !inSettings && preHidden());
   const [data, setData] = useState(null);
@@ -688,7 +692,7 @@ export function PreManager({ inSettings = false }) {
       <span className="ico"><Ico name="people" /></span>
       <div className="grow stack" style={{ gap: 8 }}>
         <div className="row between"><b>ادعُ مديرك المباشر ليقدّر ممارستك الآن، قبل البرنامج</b>
-          {!inSettings && <button type="button" className="link small" aria-label="إخفاء" onClick={() => { try { localStorage.setItem(PRE_HIDE, '1'); } catch { /* خاص */ } setHidden(true); }}>إخفاء · تجدها في «ملفي»</button>}</div>
+          {!inSettings && <button type="button" className="link small" aria-label="لاحقًا" onClick={() => { try { localStorage.setItem(PRE_HIDE, String(Date.now())); } catch { /* خاص */ } setHidden(true); }}>لاحقًا · تجدها في «ملفي»</button>}</div>
         {pre?.status === 'awaiting'
           ? <p className="small">دعوة {pre.full_name || pre.email} بانتظار تأكيد مستشارك أو منسق جهتك ({pre.flags_ar?.join('، ') || 'بريد من غير نطاق جهتك'})، وتصله فور التأكيد. بريد جهتك يصل فورًا.</p>
           : pre
@@ -1134,6 +1138,8 @@ export default function Journey({ me, onUpdate, onEditProfile, onHandbook, onImp
         </div>
       )}
       {nextCard && !approved && participant.status !== 'completed' && <OnboardingNextCard me={me} onClose={closeNext} />}
+      {/* الانتظار بعد القياس (تصور المرحلة 2، 2.5): الفصل الأول المشترك قراءة فقط، ودعوة المدير في j-asks بزر «لاحقًا» */}
+      {!approved && profile && participant.status !== 'completed' && <FirstChapter />}
 
       {/* على الحاسب عمودان: الرحلة في الوسط، وما تفعله الآن في عمود جانبي ثابت.
           وعلى الهاتف والتابلت عمود واحد: الخطوة التالية أولًا، ثم المسار والمراحل، ثم الكتاب والمختبر */}

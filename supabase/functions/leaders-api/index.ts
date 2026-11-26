@@ -202,7 +202,7 @@ const DEMO_BLOCKED = new Set(['guide.ask', 'experts.choose', 'rater.invite', 'f3
 const DEMO_OPEN = new Set(['track.seen', 'guide.state', 'guide.clear', 'guide.confirm', 'me', 'sus.state', 'sus.submit', 'org.logo', 'me.privacy', 'me.notice-ack', 'me.nudge-seen', 'me.messages', 'me.messages-read', 'me.mail-prefs', 'me.export', 'pay.access', 'sponsor.cancel', 'org.visibility',
   'consent.accept', 'org.share-consent', 'ratings.pending', 'experts.suggest', 'ratings.submit', 'katon.mine', 'katon.answer', 'hall.state', 'peer.list', 'peer.ask',
   'peer.answer', 'peer.close', 'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'logout', 'sessions.list', 'sessions.revoke', 'profile.save', 'profile.confirm-name',
-  'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete',
+  'assessment.get', 'assessment.answer', 'assessment.submit', 'requirement.update', 'passkey.list', 'passkey.dismiss', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.preview',
   'handbook.export', 'models.list', 'models.get', 'models.save', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft', 'lab.hint', 'lab.check', 'achievements', 'certificate',
   'handbook.ping', 'video.ping', 'content.ping', 'content.open', 'workshop.checkin', 'impact.mine', 'rater.revoke', 'f360.mine', 'f360.self', 'f360.remove', 'f360.report',
   'f360.plan', 'capstone.get', 'capstone.summary', 'capstone.submit', 'capstone.doc', 'tracking.get', 'tracking.save',
@@ -221,7 +221,9 @@ const GATE_ACCOUNT = new Set(['me', 'org.logo', 'logout', 'sessions.list', 'sess
 // الأدمن (sessionOpen في activities.ts)
 const GATE_PRE = new Set(['me.sponsor-code', 'pay.checkout', 'sponsor.request', 'upload.url', 'cv.attach', 'assessment.get', 'assessment.answer', 'assessment.submit',
   'demo.fill-profile', 'demo.fill-assessment', 'demo.skip-stage', 'demo.open-all', 'demo.certificate-preview', 'demo.restart', 'requirement.update', 'impact.mine', 'rater.invite', 'rater.revoke', 'lab.list', 'lab.start', 'lab.answer', 'lab.draft',
-  'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant']);
+  'lab.hint', 'lab.check', 'workshop.checkin', 'video.ping', 'ratings.pending', 'ratings.submit', 'workshop.join', 'coaching.instant',
+  // الفصل الأول قراءة فقط أثناء انتظار الاعتماد (تصور المرحلة 2، 2.5)
+  'handbook.preview']);
 // البرنامج نفسه: مسار معتمد وحالة داخل البرنامج. ما يكشف الدفعة (القاعة والأقران) أو يراسل خبيرًا
 const GATE_PROGRAM = new Set(['track.seen', 'guide.state', 'guide.ask', 'guide.clear', 'guide.confirm', 'experts.suggest', 'experts.choose', 'katon.mine', 'katon.answer', 'hall.state', 'hall.join', 'hall.hand', 'hall.pick',
   'peer.list', 'peer.ask', 'peer.answer', 'peer.close', 'handbook.toc', 'handbook.chapter', 'handbook.complete', 'handbook.export', 'handbook.ping',
@@ -362,6 +364,7 @@ const participant: Record<string, (p: any, b: Body, sessionId: string, ctx: any)
   'passkey.dismiss': (p) => P.passkeyDismiss(p),
   'handbook.toc': (p) => P.handbookToc(p),
   'handbook.chapter': (p, b, _s, ctx) => P.handbookChapter(p, b, ctx),
+  'handbook.preview': (p) => P.handbookPreview(p),
   'handbook.complete': (p, b) => P.handbookComplete(p, b),
   'handbook.export': (p, _b, _s, ctx) => P.handbookExport(p, ctx),
   'models.list': (p) => P.modelsList(p),

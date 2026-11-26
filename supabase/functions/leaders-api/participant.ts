@@ -17,7 +17,7 @@ import { QUIZ_LOW_COUNT, QUIZ_LOW_SHARE, quizLowCount, RULES } from './notice-ru
 import { appSettings } from './settings.ts';
 import { openRetake, RETAKE_TITLE, retakeText } from './retake.js';
 import {
-  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
+  AUTO_CHECKS, cleanSurvey, SCOPES, buildJourney, contentLevels, continuousAssessment, FINAL_DECISION_AR, milestoneStatuses, milestoneSummary, googleIdentity, chapterPoints, cleanAnswers, filterHandbookMd, firstSharedModule, commonHandbookMd, gradeQuiz, handbookModulesFor, missingFields, modelsFor, quizFor, rankFor, shuffleQuiz, isEmail, trackKey, journeyProgress, normalizeEmail, strengthsLine, latinDigits, normalizePhone, placementFromAnswers, priorityFor, reasonWithFlags, behaviorNaExcess, BEHAVIOR_NA_MESSAGE, scoreFor,
   seededShuffle, beforePercents, DEFAULT_MODEL, formFor, forForm, usesForms, skillSplit, commonBehavior,
   servedPost, anchorRepeat, levelGains, levelGated,
   VERIFIED_KINDS, readingVerdict, chapterCompletion, certNameOk, certNameEnOk, JOB_TITLE_MIN, fieldsFor, answeredModels, keptModel, orgVisibility, finalConfig, approvalOf, inProgram, postRatedState } from './logic.js';
@@ -1307,6 +1307,15 @@ export async function handbookChapter(p: any, b: Body, ctx: Ctx) {
     done: done ? { score: done.quiz_score, total: done.quiz_total, reflection: done.reflection, at: done.completed_at } : null,
     watermark: `${p.full_name} · ${p.email}`,
   };
+}
+
+// قراءة الفصل الأول أثناء الانتظار (تصور المرحلة 2، 2.5): قراءة فقط، بلا اختبار ولا عرض يُسجَّل ولا تقدم. الإتمام
+// (handbook.complete) والقراءة المحتسبة (handbook.ping) والكتاب نفسه في GATE_PROGRAM، فلا يُحتسب شيء قبل الاعتماد
+export async function handbookPreview(_p: any) {
+  const mods = must(await db.from('handbook_modules').select('id, dimension, chapter_key, sort, title_ar, min_level, body_md')) as any[] ?? [];
+  const m = firstSharedModule(mods);
+  if (!m) throw new Fail('لا فصل متاح للقراءة الآن', 404, 'none');
+  return { success: true, preview: true, chapter: { id: m.id, dimension: m.dimension, title: m.title_ar, md: commonHandbookMd(m.body_md) } };
 }
 
 // نسخة شخصية PDF من الكتاب: أبواب المسار نفسها المصفّاة بمستوى المشارك،

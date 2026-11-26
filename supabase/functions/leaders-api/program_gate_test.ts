@@ -583,3 +583,29 @@ Deno.test('مفاتيح الميزات مطفأة: القاعة وكاتون و3
     }
   } finally { w.restore(); }
 });
+
+// تصور المرحلة 2، 2.5: أثناء انتظار الاعتماد يُقرأ الفصل الأول المشترك بين المسارات قراءة فقط (handbook.preview في GATE_PRE)،
+// بلا كتل المستوى والنطاق، ولا يُسجَّل له عرض ولا تقدم. الإتمام والقراءة المحتسبة والكتاب نفسه تبقى بعد الاعتماد
+Deno.test('الانتظار: الفصل الأول قراءة فقط بلا تقدم، والإتمام والقراءة المحتسبة بعد الاعتماد', async () => {
+  const w = await world();
+  try {
+    w.tables.handbook_modules = [
+      { id: 'hm-adv', dimension: 'milestone', chapter_key: 'x', sort: 0, title_ar: 'باب المحترف', min_level: 'advanced', body_md: 'للمحترف' },
+      { id: 'hm-2', dimension: 'milestone', chapter_key: 'y', sort: 2, title_ar: 'الثاني', min_level: 'beginner', body_md: 'نص الثاني' },
+      { id: 'hm-1', dimension: 'milestone', chapter_key: 'intro', sort: 1, title_ar: 'المقدمة', min_level: 'beginner', body_md: '## لماذا المعالم\nنص مشترك\n:::min=intermediate\nللمتوسط فأعلى\n:::\n:::scope=portfolio\nللمحافظ\n:::\nخاتمة' },
+      { id: 'hm-i', dimension: 'impact', chapter_key: 'z', sort: 0, title_ar: 'الأثر', min_level: 'beginner', body_md: 'نص الأثر' },
+    ];
+    w.tables.handbook_views = []; w.tables.handbook_progress = []; w.tables.reading_progress = [];
+    const r = await w.call('pending', 'handbook.preview');
+    assertEquals([r.status, r.success, r.preview, r.chapter?.id, r.chapter?.title], [200, true, true, 'hm-1', 'المقدمة']);
+    assertEquals(r.chapter.md, '## لماذا المعالم\nنص مشترك\nخاتمة');
+    assertEquals([w.tables.handbook_views.length, w.tables.handbook_progress.length, w.tables.reading_progress.length], [0, 0, 0]);
+    for (const [action, body] of [['handbook.chapter', { id: 'hm-1' }], ['handbook.complete', { id: 'hm-1', answers: [] }], ['handbook.ping', { id: 'hm-1' }], ['handbook.toc', {}]] as [string, Row][]) {
+      const x = await w.call('pending', action, body);
+      assertEquals([action, x.status, x.code], [action, 403, 'locked']);
+    }
+    assertEquals(w.tables.handbook_progress.length, 0);
+    assert(ACTION_GATES.pre.has('handbook.preview') && ACTION_GATES.demoOpen.has('handbook.preview'));
+    assert(ACTION_GATES.program.has('handbook.complete') && ACTION_GATES.program.has('handbook.ping'));
+  } finally { w.restore(); }
+});

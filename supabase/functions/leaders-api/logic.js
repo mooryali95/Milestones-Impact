@@ -653,6 +653,24 @@ export function handbookModulesFor(modules, levels) {
     .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort);
 }
 
+// الفصل الأول المشترك بين المسارات (تصور المرحلة 2، 2.5): يُقرأ أثناء انتظار الاعتماد. باب لكل المستويات (min_level
+// beginner) بنص، أوله بترتيب الأطر ثم sort. لا يعتمد على المسار فلا يتعارض مع تثبيت البرنامج. لا باب: null
+export function firstSharedModule(modules) {
+  return [...(modules || [])].filter((m) => m.min_level === 'beginner' && (m.body_md || '').trim())
+    .sort((a, b) => DIMENSIONS.indexOf(a.dimension) - DIMENSIONS.indexOf(b.dimension) || a.sort - b.sort)[0] || null;
+}
+// النص المشترك وحده: تُحذف كل كتلة مشروطة (مستوى أو نطاق أو جسر)، فلا يكشف المقروء قبل الاعتماد مستوى ولا مسارًا
+export function commonHandbookMd(md) {
+  const out = [];
+  let keep = true;
+  for (const line of String(md || '').split('\n')) {
+    if (BLOCK_RE.test(line.trim())) { keep = false; continue; }
+    if (line.trim() === ':::') { keep = true; continue; }
+    if (keep) out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // نطاق العمل: المستوى يقيس الإتقان، والنطاق يحدد أين يمارسه المشارك.
 export const SCOPES = ['project', 'program', 'portfolio'];
 const SCOPE_RANK = { project: 0, program: 1, portfolio: 2 };
