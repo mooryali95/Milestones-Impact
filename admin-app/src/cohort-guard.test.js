@@ -188,3 +188,20 @@ describe('أثر الإلحاق (enrollImpact)', () => {
     expect(enrollImpact(world, cohorts[0]).moved).toBe(0);
   });
 });
+
+import { assignOrgGuarded, ORG_MOVE_CANCELLED } from './cohort-guard.js';
+describe('نقل الجهة بحارس الدفعة (assignOrgGuarded، تصور المرحلة 4)', () => {
+  it('confirm_move يُسأل بنص الخادم نفسه، ثم يُعاد بالتأكيد', async () => {
+    const call = vi.fn().mockResolvedValueOnce({ success: false, code: 'confirm_move', message: 'نقل الجهة ينقل مشاركًا واحدًا من «أ» إلى «ب» مع جهته. أكّد النقل إن كان مقصودًا.', affected: 1 })
+      .mockResolvedValueOnce({ success: true, moved: 1 });
+    const ask = vi.fn().mockResolvedValue(true);
+    expect(await assignOrgGuarded({ participant_ids: ['p1'], organization_id: 'o2' }, ask, call)).toEqual({ success: true, moved: 1 });
+    expect(ask.mock.calls[0][0]).toContain('من «أ» إلى «ب»');
+    expect(call.mock.calls[1]).toEqual(['admin.assign-org', { participant_ids: ['p1'], organization_id: 'o2', confirm_move: true }]);
+  });
+  it('الرفض لا يعيد الإرسال', async () => {
+    const call = vi.fn().mockResolvedValue({ success: false, code: 'confirm_move', message: 'x' });
+    expect(await assignOrgGuarded({ participant_ids: ['p1'] }, async () => false, call)).toEqual({ success: false, message: ORG_MOVE_CANCELLED });
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+});
