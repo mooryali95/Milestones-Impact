@@ -2,7 +2,7 @@
 // معًا بالدالة الذرية transfer_participant (دلالتها على قاعدة حقيقية في admin-app/src/single-cohort-sql.test.js، وهنا محاكاتها)،
 // فيبقى له إلحاق واحد ولا عضوية مجموعة قديمة ولا يراه مستشار دفعته القديمة. والإلحاق بالدفعة العامة لا يُعد تعارضًا.
 import './_test_env.ts';
-import { assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
+import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
 import { installFake } from './_fake_db.ts';
 const { assignOrg } = await import('./admin.ts');
 const { cohortEnroll } = await import('./programs.ts');
@@ -89,12 +89,13 @@ Deno.test('الإلحاق بالدفعة العامة لا يُعد تعارضً
   } finally { f.restore(); }
 });
 
-Deno.test('قبل ترحيل الدالة: النقل المؤكد لمن له إلحاق بدفعة جهة أخرى يرد not_migrated ولا يكتب شيئًا', async () => {
+// 20261129240000 مطبّق: تعذّر الدالة خطأ صريح لا «غير مفعّل بعد»، ولا يكتب شيئًا
+Deno.test('تعذّر دالة النقل: النقل المؤكد لمن له إلحاق بدفعة جهة أخرى يرمي خطأ الدالة ولا يكتب شيئًا', async () => {
   const tables = world();
   const f = installFake(tables);
   try {
-    const e: any = await assertRejects(() => assignOrg(ADMIN, { participant_ids: [P1, P2], organization_id: ORG_B, confirm_move: true }), Fail);
-    assertEquals([e.status, e.code], [409, 'not_migrated']);
+    const e: any = await assertRejects(() => assignOrg(ADMIN, { participant_ids: [P1, P2], organization_id: ORG_B, confirm_move: true }));
+    assert(e.code !== 'not_migrated');
     assertEquals([tables.participants[0].organization_id, tables.participants[1].organization_id, active(tables, P1)], [ORG_A, null, [CA]]);
   } finally { f.restore(); }
 });

@@ -82,9 +82,10 @@ Deno.test('3.2 يُطفأ من الإعدادات: لا سؤال ولا تذكي
   resetSettingsCache();
 });
 
-Deno.test('3.2 قبل الترحيل: القراءة فارغة والتذكير يتجاوز', async () => {
+// 20261129200000 مطبّق: غياب الجدول خطأ يُرفع لا قائمة فارغة صامتة
+Deno.test('3.2 تعذّر الجدول: القراءة والتذكير يرميان ولا يتجاوزان', async () => {
   const t = world();
   installFake(t, { fail: (tb) => (tb === 'workshop_commitments' ? { code: '42P01', message: 'relation "leaders.workshop_commitments" does not exist' } : null) });
-  assertEquals((await CM.mine(me) as any).items, []);
-  assertEquals((await CM.reminders() as any).sent, 0);
+  await assertRejects(() => CM.mine(me));
+  await assertRejects(() => CM.reminders());
 });

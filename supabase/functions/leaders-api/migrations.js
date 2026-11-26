@@ -198,6 +198,7 @@ export const MIGRATIONS = [
   '20261129230000_leaders_single_cohort',
   '20261129240000_leaders_transfer_participant',
   '20261129250000_leaders_group_members_cleanup',
+  '20261130000000_leaders_beginner_benefits',
 ];
 // وسم بوابة النشر لما يحمله في سطوره الأولى، بملاحظته (gateOf في scripts/ops/pending-migrations.mjs). ما ليس هنا حاجب
 export const MIGRATION_GATES = {
@@ -309,4 +310,5 @@ export const MIGRATION_GATES = {
   '20261129220000_leaders_reading_track': ["tolerant", "قبل نشر الدوال يُقرأ النطاق track كنطاق all (readingChapters يعيد كل الأبواب لما لا يعرفه)، فلا يتغير شيء حتى تُنشر"],
   '20261129240000_leaders_transfer_participant': ["tolerant", "قبله يُنقل المشارك بين الجهات كما كان (admin.assign-org يحدّث الجهة وحدها) ما دام لا إلحاق له بدفعة جهة أخرى،"],
   '20261129250000_leaders_group_members_cleanup': ["deferred", "بقرار المالك (تصور المرحلة 1، القرار 2): يُطبَّق بعد عرض العد من scripts/db/verify-group-members-cleanup.sql قراءةً"],
+  '20261130000000_leaders_beginner_benefits': ["tolerant", "محتوى نماذج فقط، كالترحيل 20261129140000: خاصيتان لا تقرؤهما الدوال الأقدم، فتعرض الجدول كاملًا."],
 };

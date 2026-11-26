@@ -8,7 +8,6 @@ import { CONFIG, db, Fail, mailButton, must, sendMail } from './core.ts';
 import { bdi, mailShell, mailText } from '../_shared/mail.ts';
 import { award, modelGet, modelSave } from './participant.ts';
 import { simulated } from './counting.ts';
-import { missingTable } from './missing-column.ts';
 import { appSettings } from './settings.ts';
 import { POINTS } from './logic.js';
 import {
@@ -31,7 +30,6 @@ export async function mine(p: any) {
   const texts = { question: COMMITMENT_Q_AR, review_question: COMMITMENT_REVIEW_Q_AR, learned: COMMITMENT_LEARNED_AR, outcomes: COMMITMENT_OUTCOME_AR };
   if (!(await on())) return { success: true, enabled: false, items: [], ...texts };
   const { data, error } = await db.from('workshop_commitments').select(`${COLS}, workshop_sessions(title_ar)`).eq('participant_id', p.id).order('created_at', { ascending: false });
-  if (missingTable(error)) return { success: true, enabled: false, items: [], ...texts };
   if (error) throw error;
   return { success: true, enabled: true, items: (data || []).map(view), ...texts };
 }
@@ -46,7 +44,7 @@ export async function save(p: any, b: Body) {
   if (!att) throw new Fail('يُكتب الالتزام بعد تسجيل حضورك في الورشة', 400, 'not_attended');
   if (simulated(p)) return { success: true, simulated: true, gained: 0 };
   const { data: prev, error: readErr } = await db.from('workshop_commitments').select('id, reviewed_at').eq('participant_id', p.id).eq('session_id', sid).maybeSingle();
-  if (missingTable(readErr)) throw new Fail(OFF_AR, 503, 'not_migrated');
+  if (readErr) throw readErr;
   if (prev?.reviewed_at) throw new Fail('راجعت هذا الالتزام، فلا يُعدَّل بعدها', 409, 'reviewed');
   const row: any = prev
     ? must(await db.from('workshop_commitments').update({ action: c.action, due_on: c.due_on }).eq('id', prev.id).select(COLS).single())
@@ -61,7 +59,7 @@ export async function review(p: any, b: Body) {
   const r = cleanReview(b) as any;
   if (r.error) throw new Fail(r.error, 400, 'invalid');
   const { data: row, error } = await db.from('workshop_commitments').select(COLS).eq('id', String(b.id || '')).eq('participant_id', p.id).maybeSingle();
-  if (missingTable(error)) throw new Fail(OFF_AR, 503, 'not_migrated');
+  if (error) throw error;
   if (!row) throw new Fail('لم نجد هذا الالتزام', 404);
   if (!reviewOpen(row)) throw new Fail('سجّلت مراجعته من قبل', 409, 'reviewed');
   if (simulated(p)) return { success: true, simulated: true, gained: 0 };
@@ -111,7 +109,6 @@ export async function reminders() {
   if (!(await on())) return { sent: 0, skipped: 'off' };
   const { data, error } = await db.from('workshop_commitments').select(`${COLS}, participant_id, participants(full_name, email, status, is_demo)`)
     .is('reviewed_at', null).is('reminded_at', null).lte('created_at', new Date(Date.now() - 14 * 864e5).toISOString()).limit(500);
-  if (missingTable(error)) return { sent: 0, skipped: 'workshop_commitments' };
   if (error) throw error;
   let sent = 0, failed = 0;
   for (const r of (data || []) as any[]) {

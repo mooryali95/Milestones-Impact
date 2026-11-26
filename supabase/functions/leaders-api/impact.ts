@@ -267,7 +267,6 @@ export async function noManager(p: any, b: Body) {
   const choice = b.choice == null || b.choice === '' ? null : String(b.choice);
   if (choice !== null && !NO_MANAGER.includes(choice)) throw new Fail('اختر: زميل أعلى أو ذاتي فقط');
   const { error } = await db.from('participants').update({ no_manager: choice, no_manager_at: choice ? new Date().toISOString() : null }).eq('id', p.id);
-  if (missingColumn(error)) throw new Fail('هذا غير متاح الآن.', 503, 'not_migrated');
   must({ data: null, error });
   if (choice === 'self') {
     // إفادة المدير بعد البرنامج تكتمل «ذاتي فقط»، وT-360 يكتمل من الحالة نفسها (AUTO_CHECKS selfOnly)
