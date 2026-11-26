@@ -34,7 +34,8 @@ test('التأسيسي: المطلوب ظاهر بجانب كل حقل، وال�
   await open(page, 'beginner');
   const notes = page.getByRole('note').filter({ hasText: 'المطلوب:' });
   await expect(notes).toHaveCount(3);
-  await expect(notes.first()).toContainText('لا مبادرة بلا رقم');
+  // المعنى للتأسيسي بأعمدته وحدها (meaning_beginner)
+  await expect(notes.first()).toContainText('ما تحتاجه للمبادرة وكلفته التقديرية');
   await expect(page.getByText('سؤال الخبير')).toHaveCount(0);
   // الإرشاد المختصر (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 3): الخطأ الشائع مطوي حتى يطلبه
   const avoid = notes.first().getByText('تجنّب:');
