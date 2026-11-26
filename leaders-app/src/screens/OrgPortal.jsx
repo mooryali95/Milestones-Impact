@@ -283,6 +283,12 @@ function Dashboard({ me, onLogout }) {
   useEffect(() => { if (!me.preload?.dashboard) load(); }, []);
 
   const rows = useMemo(() => (d?.success ? sortRows(filterRows(d.participants, f), sort) : []), [d, f, sort]);
+  // رابط «مقيّمون ينتظرون تأكيدك» في الملخص الأسبوعي (/org#ra-h، تصور المرحلة 1 البند 5): ينقل إلى القسم حين تُحمَّل اللوحة
+  const hasRaters = !!d?.raters_pending?.length;
+  useEffect(() => {
+    if (!hasRaters || window.location.hash !== '#ra-h') return;
+    requestAnimationFrame(() => { const el = document.getElementById('ra-h'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.focus({ preventScroll: true }); });
+  }, [hasRaters]);
   if (prefs) return <MessageCenter call={coordCall} actions={COORD_PREFS} inbox={false} text={STAFF_MESSAGES_TEXT.coordinator} backLabel="رجوع إلى لوحة الجهة"
     onBack={() => { setPrefs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } }} />;
   if (!d) return <JourneySkeleton />;
