@@ -19,7 +19,7 @@ export const tiered = (md) => /^:::(min|only)=/m.test(md || '');
 export const ratingLabel = (n) => (rubricLevelAr(n) ? `${rubricLevelAr(n)} (${Math.round(Number(n))} من ${RUBRIC_SCALE.levels.length})` : '');
 // الاسم القديم الذي تستورده شاشة المشاركين؛ الدالة نفسها
 export const stars = ratingLabel;
-export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCount * POINTS.perCorrect + (hasReflection ? POINTS.reflection : 0);
+export const maxPoints = (quizCount, hasReflection) => POINTS.chapter + quizCount * POINTS.perCorrect + (hasReflection ? POINTS.reflection + POINTS.reflectionApplied : 0);
 // أسئلة كُتبت لكن لن تظهر: بلا خيار صحيح أو بأقل من خيارين
 export const badQuiz = (md) => String(md || '').split('\n').filter((l) => /^س\s*[:：]/.test(l.trim())).length - parseQuiz(md).length;
 // كل ملاحظات الباب: كتله واختباره معًا، والخطأ أولًا

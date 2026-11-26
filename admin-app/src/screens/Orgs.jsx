@@ -6,6 +6,7 @@ import OrgFinance from './OrgFinance.jsx';
 import {
   date, domainsOf, FUNNEL, inviteUrl, L, orgColor, STATUS, validCampaign, VIA,
 } from '../leaders.js';
+import { assignOrgGuarded } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
@@ -100,7 +101,7 @@ function OrgCards({ data, canWrite, onOpen, onEdit, onAdd, reload }) {
     const org = list.find((o) => o.id === typedTo[t.name]);
     if (!org) return toast('اختر الجهة');
     if (!(await confirm(`ربط ${t.n} مشارك كتبوا «${t.name}» بجهة «${org.name}»؟ يُنسبون إليها، ويُثبَّت لهم إعفاء رعايتها إن كانت ترعى مشاركيها.`))) return;
-    const r = await L('admin.assign-org', { typed_name: t.name, organization_id: org.id });
+    const r = await assignOrgGuarded({ typed_name: t.name, organization_id: org.id }, confirm);
     toast(r.success ? `رُبط ${r.moved} مشارك` : r.message);
     if (r.success) reload();
   };
@@ -328,7 +329,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
   const move = async () => {
     if (!moveTo) return toast('اختر الجهة');
     if (!(await confirm(`نقل ${picked.size} مشارك إلى الجهة المختارة؟`))) return;
-    const r = await L('admin.assign-org', { participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo });
+    const r = await assignOrgGuarded({ participant_ids: [...picked], organization_id: moveTo === 'none' ? null : moveTo }, confirm);
     toast(r.success ? `نُقل ${r.moved} مشارك` : r.message);
     if (r.success) { setPicked(new Set()); load(); }
   };

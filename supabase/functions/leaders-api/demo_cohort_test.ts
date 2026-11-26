@@ -5,7 +5,7 @@
 // مشاركًا حقيقيًا، وأن كل شيء قبل الترحيل كما كان بالحساب الواحد.
 import './_test_env.ts';
 import { assert, assertEquals, assertRejects } from 'jsr:@std/assert@1.0.19';
-import { installFake } from './_fake_db.ts';
+import { installFake, placeOrgMembers } from './_fake_db.ts';
 
 let handler: (req: Request) => Promise<Response> = () => Promise.reject(new Error('no handler'));
 (Deno as any).serve = (h: any) => { handler = h; return { finished: Promise.resolve(), shutdown: () => Promise.resolve(), ref() {}, unref() {} }; };
@@ -103,6 +103,7 @@ function world({ before = false } = {}) {
     hall_sessions: [{ id: U(82), cohort_id: C1, stage: 'round', version: 1, mode: 'self', topic_id: 't', revealed: [] }], hall_presence: [{ session_id: U(82), participant_id: REAL, last_seen: now }],
     participant_stage_overrides: [], final_evaluations: [], points_ledger: [], handbook_progress: [], reports: [], tracks: [], model_submissions: [], capstones: [], capstone_updates: [], learning_models: [],
   };
+  placeOrgMembers(tables);
   const f = installFake(tables, {
     embed: (t, r, all) => ({
       ...(r.participant_id ? { participants: (all.participants || []).find((p) => p.id === r.participant_id) ?? null } : {}),
@@ -316,7 +317,8 @@ Deno.test('لا يُلحق بدفعة ولا بمجموعة ولو أُرسل م
     assertEquals(await failCode(() => G.cohortEnroll(ADMIN, { cohort_id: C2, participant_ids: [d.id], confirm_move: true })), [400, 'demo']);
     assertEquals(await failCode(() => G.cohortEnroll(ADMIN, { cohort_id: C1, participant_ids: [LONER, d.id], confirm_move: true })), [400, 'demo']);
     assertEquals(await failCode(() => G.cohortGroupAssign(ADMIN, { cohort_id: C1, participant_id: d.id, group_id: U(70) })), [400, 'demo']);
-    assertEquals([w.tables.enrollments.length, w.tables.cohort_group_members.length], [1, 2]);
+    // عضو الجهة ملحق بدفعتها صراحة (placeOrgMembers، تصور المرحلة 4)، فالإلحاقان قائمان كما كانا ولم يُضف صف
+    assertEquals([w.tables.enrollments.length, w.tables.cohort_group_members.length], [2, 2]);
     assertEquals(((await G.cohortEnroll(ADMIN, { cohort_id: C2, participant_ids: [LONER], confirm_move: true })) as any).enrolled, 1);
     assertEquals(((await G.cohortGroupAssign(ADMIN, { cohort_id: C1, participant_id: LONER, group_id: U(70) })) as any).success, true);
     // والربط بجهة يرده القيد participants_demo_no_org في القاعدة (demo_cohort_schema.test.js على قاعدة حقيقية)
@@ -492,7 +494,9 @@ Deno.test('إغلاق الدفعة يحذف حسابها التجريبي ويل
     const n = w.tables.participants.length;
     const again: any = await G.cohortSave(ADMIN, { id: C2, status: 'planned' });
     assertEquals([again.demo_closed, w.tables.participants.length], [undefined, n]);
-    // إعادة فتحها ثم الفتح: حساب جديد نظيف
+    // إعادة فتحها ثم الفتح: حساب جديد نظيف. الدفعة تُثبَّت على نسخة قبل فتحها (تصور المرحلة 4، م6)
+    await assertRejects(() => G.cohortSave(ADMIN, { id: C1, status: 'running' }));
+    w.tables.cohorts.find((c) => c.id === C1)!.program_version_id = U(990);
     await G.cohortSave(ADMIN, { id: C1, status: 'running' });
     await w.open(C1);
     assert(w.demoOf(C1)!.id !== d1);

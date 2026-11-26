@@ -283,6 +283,12 @@ function Dashboard({ me, onLogout }) {
   useEffect(() => { if (!me.preload?.dashboard) load(); }, []);
 
   const rows = useMemo(() => (d?.success ? sortRows(filterRows(d.participants, f), sort) : []), [d, f, sort]);
+  // رابط «مقيّمون ينتظرون تأكيدك» في الملخص الأسبوعي (/org#ra-h، تصور المرحلة 1 البند 5): ينقل إلى القسم حين تُحمَّل اللوحة
+  const hasRaters = !!d?.raters_pending?.length;
+  useEffect(() => {
+    if (!hasRaters || window.location.hash !== '#ra-h') return;
+    requestAnimationFrame(() => { const el = document.getElementById('ra-h'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); el?.focus({ preventScroll: true }); });
+  }, [hasRaters]);
   if (prefs) return <MessageCenter call={coordCall} actions={COORD_PREFS} inbox={false} text={STAFF_MESSAGES_TEXT.coordinator} backLabel="رجوع إلى لوحة الجهة"
     onBack={() => { setPrefs(false); try { history.replaceState(null, '', location.pathname); } catch { /* عنوان بلا تغيير */ } }} />;
   if (!d) return <JourneySkeleton />;
@@ -363,7 +369,7 @@ function Dashboard({ me, onLogout }) {
       </div>
 
       {/* خريطة الرحلة: مراحل برنامج الجهة وكم يقف عند كل منها (قرار المالك 2026-11-11)، وتحل محل أعمدة القمع الأربعة */}
-      {d.journey_map && <JourneyMap map={d.journey_map} />}
+      {d.journey_map && (d.journey_maps?.length > 1 ? <CohortMaps maps={d.journey_maps} /> : <JourneyMap map={d.journey_map} />)}
 
       <div className={`op-grid${d.journey_map ? ' two' : ''}`}>
         {!d.journey_map && <section className="card"><h3>مراحل الرحلة</h3><Bars obj={Object.fromEntries(FUNNEL.map(([k, l]) => [l, funnel[k] || 0]))} total={funnel.registered} /></section>}
@@ -427,6 +433,22 @@ function Dashboard({ me, onLogout }) {
 // ما يحتاج تدخل المنسق، أول اللوحة: كانت متفرقة في الرأس والجدول فتُعرض ولا توجّه. يُعدّ مما وصل اللوحة فعلًا
 // (بحسب صلاحياته)، ولا يظهر القسم إن لم يكن فيه شيء. «متوقف» من آخر دخول، فلا يُحسب إلا لمن له صلاحية النشاط.
 // show: ما يعرضهم بنقرة (org-7): بطاقة المقيّمين، أو مرشّح القائمة الذي يحصرهم
+// خريطة لكل دفعة حالية للجهة (تصور المرحلة 4، م5): محوّل بأسماء الدفعات وأعدادها، والافتراضية أكبرها عددًا (أولى ما يرسله الخادم)
+export function CohortMaps({ maps }) {
+  const [at, setAt] = useState(maps[0]?.cohort_id || '');
+  const cur = maps.find((m) => m.cohort_id === at) || maps[0];
+  return (
+    <>
+      <label className="small op-cohort-pick">الدفعة{' '}
+        <select value={cur.cohort_id || ''} onChange={(e) => setAt(e.target.value)}>
+          {maps.map((m) => <option key={m.cohort_id} value={m.cohort_id}>{`${m.name} (${m.members})`}</option>)}
+        </select>
+      </label>
+      <JourneyMap map={cur.map} />
+    </>
+  );
+}
+
 export function needsYou(d, now = Date.now()) {
   const ps = d.permissions?.list === false ? [] : (d.participants || []);
   const out = [];

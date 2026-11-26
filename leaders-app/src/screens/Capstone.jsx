@@ -17,7 +17,7 @@ import AskExpert from './AskExpert.jsx';
 import { CHECK_CHAPTERS, stuckSignals } from '../../../supabase/functions/leaders-api/stuck.js';
 import { GuidancePanel } from './Guidance.jsx';
 import { AssistantContext, AssistantDrawer, GateLine, useAssistantAccess } from './Assistant.jsx';
-import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX } from '../../../supabase/functions/leaders-api/capstone.js';
+import { MAX_REVISIONS, PRIORITY_WEIGHT, returnedBy, RUBRIC_MAX, SPONSOR_EXPIRED_PARTICIPANT_AR } from '../../../supabase/functions/leaders-api/capstone.js';
 import { revisionRoundAr } from '../../../supabase/functions/leaders-api/labels.js';
 import { countAr, TERMS } from '../../../supabase/functions/leaders-api/labels.js';
 import { docDownloadAr, WORKING_DOWNLOAD_AR } from '../../../supabase/functions/leaders-api/labels.js';
@@ -308,9 +308,10 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
       {c.status !== 'approved' && !ask && <GuidancePanel guidance={me.guidance} context="capstone" consultTitle="استشارة لمبادرتك" />}
       {/* المدخل العام: المحادثة نفسها داخل اللوحة أعلاه حين تكون البوابة مفتوحة، وسطر السبب حين يستطيع المشارك فتحها */}
       {c.status !== 'approved' && !ask && access.kind === 'line' && access.reason !== 'start' && <AssistantContext.Provider value={assistant}><GateLine /></AssistantContext.Provider>}
-      {c.status === 'accepted' && (
-        <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>
-      )}
+      {/* انتهت مهلة رابط الراعي (حالة مشتقة من الخادم): سطر للمشارك، والمدير يعيد الدعوة أو يعتمد (تصور المرحلة 2، 2.3) */}
+      {c.status === 'accepted' && (c.sponsor?.state === 'expired'
+        ? <div className="alert info cp-alert">{SPONSOR_EXPIRED_PARTICIPANT_AR}.</div>
+        : <div className="alert info cp-alert">قبل المستشار وثيقتك، وأُرسل طلب التأييد إلى راعيها{c.sponsor?.name ? ` ${c.sponsor.name}` : ''}. تُعتمد حين يؤيدها.</div>)}
 
       {/* ما المبادرة؟ مفتوحة لمن لم يسمّ مبادرته بعد، ومطوية بعدها (anatomy.json) */}
       <Meaning scope={d.scope} open={!d.initiative} onHandbook={onHandbook} />

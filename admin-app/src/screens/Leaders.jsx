@@ -37,10 +37,10 @@ const Insight = lazyRetry(() => import('./Insight.jsx'));
 // «المساعد الذكي» بتبويباته الداخلية الثلاثة، وكل شاشة فيه تُحمَّل عند أول فتح لتبويبها (AiHub.jsx)
 const AiHub = lazyRetry(() => import('./AiHub.jsx'));
 const MasterBookScreen = lazyRetry(() => import('./MasterBookScreen.jsx'));
-import { ScreenBoundary, Spinner } from '../ui.jsx';
+import { ScreenBoundary, Spinner, StatusChip } from '../ui.jsx';
 import { navigate, useRoute } from '../route.js';
 import { badgeLabel, badgeText, groupBadge, tabBadge } from '../pending.js';
-import { FEATURE_TABS, groupOpen, NAV_GROUPS, OWNER_TABS, SETUP_GROUP, TAB_ALIASES, TABS } from '../leaders-tabs.js';
+import { FEATURE_TABS, groupOpen, navGroups, navReady, OWNER_TABS, SETUP_GROUP, TAB_ALIASES, TABS, TRIAL_GROUP } from '../leaders-tabs.js';
 import { featureFlags } from '../../../supabase/functions/leaders-api/features.js';
 
 // قسم ميزة مخفية عن المستخدمين: ما يعنيه إخفاؤها هنا، والمدير يبني فيها كما يشاء (مفاتيح الميزات P2)
@@ -94,7 +94,8 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   const [catalog, setCatalog] = useState(null);
   // مفاتيح الميزات من المخزن نفسه الذي تحرره «الإعدادات العامة»، وتُحدَّث بعد كل حفظ هناك (onSettings)
   const [flags, setFlags] = useState(null);
-  useEffect(() => { L('admin.settings').then((r) => { if (r?.success) setFlags(featureFlags(r.values)); }); }, []);
+  // تعذّر الإعدادات لا يحجب أقسام الميزات من الشريط إلى الأبد: تُعرض بالمفاتيح الافتراضية
+  useEffect(() => { L('admin.settings').then((r) => setFlags(featureFlags(r?.success ? r.values : {}))).catch(() => setFlags(featureFlags({}))); }, []);
   const hiddenOf = (k) => !!flags && FEATURE_TABS[k] && !flags[FEATURE_TABS[k]];
   const [programId, setProgramId] = useState(() => (tab === 'journey' ? route.id || null : null));
   const wantPid = useRef(programId);
@@ -162,29 +163,25 @@ export default function Leaders({ canWrite, pending, isSuper = false, isOwner = 
   return (
     <div className="dash-body">
       {/* الترويسة: العنوان وحده، والنطاق في عنوان المستند (تصور 2026-11-26، القسم العام البند 3) */}
-      <PageHeader eyebrow="المنتج الأول" title="تطبيق القادة" domain="leaders.sunkvalue.com" status={!canWrite ? 'عرض فقط' : null} />
+      {/* مفتاحها القسم: التبديل بين الأقسام يعيد تركيبها فينتقل التركيز إلى h1 (PageHeader)، ولا يُسحب عند أول تحميل */}
+      <PageHeader key={tab} eyebrow="المنتج الأول" title="تطبيق القادة" domain="leaders.sunkvalue.com" status={!canWrite ? 'عرض فقط' : null} />
       {/* على الشاشات العريضة الأقسام عمود جانبي ثابت بجوار المحتوى، فلا تأخذ من ارتفاع الشاشة شيئًا (الأنماط في leaders-admin.css) */}
       <div className="la-shell">
       <nav className="la-tabs la-tabs-grouped" aria-label="أقسام تطبيق القادة">
-        {NAV_GROUPS.map(([g, keys]) => {
+        {navGroups(hiddenOf).map(([g, keys]) => {
           const open = groupOpen(g, keys, tab, saved);
           const gb = open ? null : groupOf(keys);
-          const shown = keys.filter(allowed);
+          const shown = keys.filter(allowed).filter((k) => navReady(k, !!flags, tab));
           if (!shown.length) return null;
-          // الأقسام المخفية عن المستخدمين آخر مجموعتها تحت عنوان صغير «تجريبي»، مع نقطتها، فلا تتوسط ما يعمل للمستخدمين
-          const live = shown.filter((k) => !hiddenOf(k));
-          const trial = shown.filter((k) => hiddenOf(k));
           const item = (k) => <button key={k} className={tab === k ? 'on' : ''} aria-current={tab === k ? 'page' : undefined} onClick={() => go(k)}>{TAB_LABEL[k]}<Badge b={tabBadge(pending, k)} />{hiddenOf(k) && <span className="ft-hidden-dot" title="مخفي عن المستخدمين"><span className="sr-only">مخفي عن المستخدمين</span></span>}</button>;
           return (
-          <div key={g} className={`la-tab-group${open ? '' : ' shut'}${g === SETUP_GROUP ? ' la-tab-group-setup' : ''}`} role="group" aria-label={g}>
+          <div key={g} className={`la-tab-group${open ? '' : ' shut'}${g === SETUP_GROUP ? ' la-tab-group-setup' : ''}${g === TRIAL_GROUP ? ' la-tab-group-trial' : ''}`} role="group" aria-label={g}>
             {/* عنوان المجموعة يطويها ويفتحها، ومجموعة القسم المفتوح لا تُطوى. عدد ما ينتظر يبقى ظاهرًا على العنوان وهي مطوية،
                 ويُضم وصفه المسموع إلى اسم الزر (aria-label يحجب ما في داخله عن قارئ الشاشة) */}
             <button type="button" className="la-tab-group-label" aria-label={gb?.n ? `مجموعة ${g}، ${badgeLabel(gb.n, gb.late, gb.partial)}` : `مجموعة ${g}`} aria-expanded={open} onClick={() => toggleGroup(g, open)}>
-              {g}{!open && <Badge b={gb} />}
+              {g === TRIAL_GROUP ? <StatusChip status="trial" labels={{ trial: g }} tones={{}} className="la-trial-chip" /> : g}{!open && <Badge b={gb} />}
             </button>
-            {live.map(item)}
-            {trial.length > 0 && <span className="la-tab-trial" aria-hidden="true">تجريبي</span>}
-            {trial.map(item)}
+            {shown.map(item)}
           </div>
           );
         })}
