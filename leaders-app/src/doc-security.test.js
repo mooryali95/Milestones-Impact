@@ -169,7 +169,9 @@ describe('معامل الخيارات الموحد ونسختا تحميل ال�
     expect(full.body).toContain('class="in-dec"');
   });
   it('مفتاح الرمز: بلا رمز ولا رابط تحقق، وتبقى البصمة', () => {
-    const d = doc();
+    // الرمز بالبصمة المجمّدة وحدها (المرحلة 32)، فالمعتمدة هنا تحمل issued كما يجمّدها الاعتماد
+    const d0 = doc();
+    const d = { ...d0, issued: freezeIssued(d0) };
     const on = finalDocument(d, { ...EXPORT_PRESETS.send, qr: true }).body;
     const off = finalDocument(d, { ...EXPORT_PRESETS.send, qr: false }).body;
     expect(on).toContain('/v/doc/');

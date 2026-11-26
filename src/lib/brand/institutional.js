@@ -8,7 +8,7 @@
 // الترتيب: غلاف صفحة كاملة، ثم صفحة القرار التنفيذية من الحقول القائمة، ثم أبواب الشكل، ثم الاعتماد ببصمة ورمز تحقق.
 // المصدر واحد: وثيقة الخادم (capstone.doc أو لقطة الاعتماد)؛ ملف العمل الكامل من المصدر نفسه في capstone.js capstoneReport.
 // المسودة الحية تُعلَّم بتاريخ بنائها وبصمتها، والمعتمدة بتاريخ اعتمادها وبصمتها المجمّدة ورابط تحققها.
-import QR from 'qrcode';
+import { footerLine, qrSvg, verifyMark, verifyUrl, VERIFY_STYLE } from './verify-mark.js';
 import { contrastRatio, controlStrip, C, esc, isRaw, kpis, raw, section, LIVE_RING, structuralAccent } from './doc.js';
 // تاريخ ISO لشريط الضبط (YYYY-MM-DD)، وفارغ لتاريخ غير صالح فلا يُكتب في الشريط
 import { cleanDoc, docFingerprint, fingerprint, institutionalGate } from '../../../supabase/functions/leaders-api/doc-quality.js';
@@ -241,16 +241,8 @@ export function benefitsChart(doc) {
 <figcaption>المنافع: الرمادي خط الأساس واللون المستهدف، كلٌ بمقياس منفعته</figcaption></figure>`;
 }
 
-// ── رمز QR متجهي (SVG) لرابط التحقق، من حزمة qrcode نفسها التي تبني رمز الشهادة، بلا شبكة ──
-export function qrSvg(text) {
-  const q = QR.create(text, { errorCorrectionLevel: 'M' });
-  const n = q.modules.size, d = q.modules.data;
-  let path = '';
-  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (d[y * n + x]) path += `M${x + 2} ${y + 2}h1v1h-1z`;
-  return `<svg class="qr" viewBox="0 0 ${n + 4} ${n + 4}" shape-rendering="crispEdges" aria-label="رمز التحقق"><rect width="100%" height="100%" fill="#fff"/><path d="${path}" fill="#0B272F"/></svg>`;
-}
-/** رابط التحقق العام بالبصمة: صفحة /v/doc/<البصمة> في تطبيق القادة (Verify.jsx، doc.verify) */
-export const verifyUrl = (fp, base = SITES.leaders) => `${String(base || SITES.leaders).replace(/\/$/, '')}/v/doc/${encodeURIComponent(fp)}`;
+// رمز التحقق ورابطه من مصدرهما الواحد (verify-mark.js، المرحلة 32)
+export { qrSvg, verifyUrl };
 
 /** هوية الوثيقة: الجهة في الصدارة، والدفعة (اسم برنامجها وشعاره ولونها) توقيعًا، ولون البنية بعد فحص التباين */
 // لون البنية نصًا صغيرًا (تسميات .in-lean): يحتاج 4.5:1 على الأبيض لا 3:1، وإلا الذهبي النصي
@@ -466,11 +458,15 @@ export function institutionalReport(input, options = {}) {
     ['تاريخ الاعتماد', approved ? fmt(m.approved_at) : 'لم تُعتمد بعد', null],
   ];
   const built = fmtAt(m.generated_at) || fmtAt(new Date());
-  const url = approved && opt.qr ? verifyUrl(fp, m.app_url) : null;
+  // المرحلة 32: الرمز بالبصمة المجمّدة وحدها؛ المعتمدة بلا issued بلا رمز ولا رابط وبسطر «التحقق غير متاح لهذه النسخة»
+  const mark = verifyMark(input, { qr: opt.qr, appUrl: m.app_url });
+  const url = mark?.url || null;
+  // المعتمدة تطبع البصمة المجمّدة وحدها (مصدر الرمز نفسه)؛ بلا مجمّدة لا بصمة مطبوعة تُكتب باليد فلا تُطابَق
+  const shownFp = approved ? mark?.fingerprint || null : fp;
   add('Approval', 'الاعتماد', `<div class="in-approve">${approved ? `<span class="st">${esc(DOC_APPROVED_AR)} · ${esc(fmt(m.approved_at) || '')}</span>` : `<span class="st live">${esc(DOC_LIVE_AR)} · بُنيت ${esc(built)}</span>`}
     <div class="in-sign">${signs.map(([k, v, d]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b>${d ? `<small>${esc(d)}</small>` : ''}</div>`).join('')}</div>
-    <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span><span>FINGERPRINT <b>${esc(fp)}</b></span></p>
-    ${url ? `<div class="in-verify">${qrSvg(url)}<p>${esc(DOC_VERIFY_AR.note)}<br><a href="${esc(url)}">${esc(url)}</a></p></div>` : approved ? `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.note)}</p></div>` : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,
+    <p class="in-fp"><span>DOCUMENT <b>${esc(`${m.ref || 'MI-CP'}-V${m.version || 1}`)}</b></span>${shownFp ? `<span>FINGERPRINT <b>${esc(shownFp)}</b></span>` : ''}</p>
+    ${mark ? mark.html : `<div class="in-verify"><p>${esc(DOC_VERIFY_AR.draft)}</p>${LIVE_RING()}</div>`}</div>`,
   url ? DOC_VERIFY_AR.lead : null);
 
   // المرحلة 29: كل باب في حالة العمل يبدأ صفحة جديدة؛ الميثاق انسياب متصل بحاجز 60 مم؛ ولكل باب مرساة لفهرس سطر القرار
@@ -486,7 +482,7 @@ export function institutionalReport(input, options = {}) {
   const { brand, accent } = identityOf(m);
   const decisionPage = opt.decision && decision.replace(/<[^>]+>/g, '').trim() ? `<section class="in-dec"><header class="in-open"><span class="n">◆</span><div><span class="eyebrow">${esc(DOC_DECISION_AR.eyebrow)}</span><h2>${esc(DOC_DECISION_AR.title)}</h2><p>${esc(DOC_DECISION_AR.lead)}</p></div></header>${decision}${toc}</section>` : '';
   const inner = (decisionPage || '') + parts.map(opener).join('') + (opt.annex ? levelAnnex(input) || levelAnnexEmpty() : '');
-  const body = STYLE + IN_STYLE + (lean ? LEAN_STYLE : '') + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (lean ? `<div class="in-lean-doc">${inner}</div>` : inner);
+  const body = STYLE + IN_STYLE + VERIFY_STYLE + (lean ? LEAN_STYLE : '') + `<style>:root { --acc: ${accent}; --acc-text: ${accentText(accent)}; }</style>` + (lean ? `<div class="in-lean-doc">${inner}</div>` : inner);
   // بلا اسم للمبادرة: العنوان اسم الوثيقة وحده، فلا يتكرر في العنوان الفرعي
   const title = m.initiative || form.name;
   const subtitle = [m.initiative ? form.name : null, m.scope_title].filter(Boolean).join(' · ') || null;
@@ -495,7 +491,9 @@ export function institutionalReport(input, options = {}) {
     fingerprint: fp,
     form,
     meta: {
-      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: form.en, pageAr: true, selfFonts: true,
+      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: form.en,
+      // التذييل: الرقم المرجعي والبصمة المجمّدة في كل صفحة بلا رمز (المرحلة 32)
+      footer: footerLine(`${m.ref || 'MI-CP'}-V${m.version || 1}`, mark?.fingerprint), pageAr: true, selfFonts: true,
       pdfName: pdfFileName({ ...m, initiative: m.initiative }, 'institutional').replace(/^وثيقة-المبادرة/, form.name.replace(/\s+/g, '-')),
       brand,
       eyebrow: brand.program || 'برنامج القادة', title, subtitle,
@@ -507,7 +505,7 @@ export function institutionalReport(input, options = {}) {
       live: !approved,
       controlLabel: `رمز الوثيقة ${m.ref || 'MI-CP'}، الإصدار ${m.version || 1}، التاريخ ${isoDay(approved ? m.approved_at : (m.generated_at || new Date()))}، الحالة ${approved ? DOC_APPROVED_AR : DOC_LIVE_AR}`,
       confidential: CONFIDENTIAL_AR, rights: DOC_RIGHTS_AR,
-      closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', fp) : docClosingLiveAr(built),
+      closing: approved ? docClosingApprovedAr(fmt(m.approved_at) || '', shownFp) : docClosingLiveAr(built),
     },
     body,
   };

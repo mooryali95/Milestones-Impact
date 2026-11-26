@@ -17,6 +17,7 @@ import { closureData } from '../../../supabase/functions/leaders-api/closure.js'
 import { cleanDoc, REASONS } from '../../../supabase/functions/leaders-api/doc-quality.js';
 import { formOfDoc } from '../../../supabase/functions/leaders-api/doc-form.js';
 import { caseQuestions, chapterQuestion } from './decision-questions.js';
+import { footerLine, verifyMark, VERIFY_STYLE } from './verify-mark.js';
 
 const fmt = (d) => (d ? new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }) : '·');
 const money = (n) => (n == null ? '·' : `${Math.round(n).toLocaleString('en-US')} ريال`);
@@ -549,7 +550,8 @@ const profileHint = (profile) => {
 };
 
 // appendix: ملحق «ما ينقص». annex: ملحق المراجع، بطلب صريح وحده (المرحلة 21). final: تحميل الأدمن للنهائية، فغير المعتمدة بختم ظاهر
-export function capstoneReport(input, { appendix = true, annex = false, final = false } = {}) {
+// qr: رمز التحقق في المعتمدة (المرحلة 32)، بالبصمة المجمّدة وحدها كما في المؤسسية
+export function capstoneReport(input, { appendix = true, annex = false, final = false, qr = true } = {}) {
   // ملف العمل الكامل: المشتق (الغلاف والميثاق وحالة العمل والمؤشرات) من القيم الصالحة، والفصول بكل ما كُتب
   // وتالفه معلَّم «يحتاج مراجعة»، وما ينقص في ملحقه. المثال المحلول يُعرض كما هو
   const exampleIn = !!input?.meta?.example;
@@ -624,6 +626,7 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
       ${r.note ? callout('خلاصة المستشار', r.note) : ''}`, r.priority ? `معيار من ${RUBRIC.length} أبعاد، وأبعاد الإطار ذي الأولوية في مسار القائد وزنها ×${PRIORITY_WEIGHT}.` : `معيار من ${RUBRIC.length} أبعاد بوزن واحد، لتساوي مستويات القائد في الأطر الثلاثة.`);
   }
 
+  const mark = example ? null : verifyMark(input, { qr, appUrl: m.app_url });
   if (approved) {
     const sp = doc.sponsor;
     body += section('الاعتماد', 'الاعتماد', `
@@ -632,7 +635,8 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
         raw(`<b>المستشار:</b> راجع الوثيقة وقبلها بمعيار التقييم.`),
         sp?.status === 'endorsed' ? raw(`<b>الراعي${sp.name ? `، ${esc(sp.name)}` : ''}:</b> أيّد المبادرة في ${esc(fmt(sp.at))}${sp.note ? `، وكتب: «${esc(sp.note)}»` : ''}.`)
           : raw('<b>الراعي:</b> اعتُمدت بقرار فريق البرنامج دون تأييد الراعي.'),
-      ], '')}`);
+      ], '')}
+      ${mark ? VERIFY_STYLE + mark.html : ''}`);
   }
 
   if (approved && doc.tracking?.summary) body += trackingBlock(doc.tracking);
@@ -644,7 +648,8 @@ export function capstoneReport(input, { appendix = true, annex = false, final = 
 
   return {
     meta: {
-      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document', pageAr: true, selfFonts: true,
+      id: `${m.ref || 'MI-CP'}-V${m.version || 1}`, kind: 'CP', kindLabel: 'Initiative Document',
+      footer: footerLine(`${m.ref || 'MI-CP'}-V${m.version || 1}`, mark?.fingerprint), pageAr: true, selfFonts: true,
       // ملف العمل بملحقه لمن يعمل عليها؛ وبلا ملحق (القارئ قبل الاعتماد) يُسمّى «وثيقة المبادرة»
       pdfName: pdfFileName(m, example ? 'institutional' : appendix ? 'working' : 'draft'),
       // شعار الجهة ولونها على الغلاف وترويسة الصفحات (doc.js)، كما في الوثيقة المؤسسية

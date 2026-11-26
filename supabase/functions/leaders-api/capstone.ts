@@ -21,7 +21,7 @@ import {
   capstoneListRows, capstoneState, chapterLevel, levelsView, dateAr, withoutReviewLevels, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, SPONSOR_LINK_EXPIRED_AR, sponsorReminderDue, sponsorState, sponsorWarnings } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
-import { docFingerprint, freezeIssued, rejectionStats } from './doc-quality.js';
+import { docFingerprint, freezeIssued, rejectionStats, verifyKey } from './doc-quality.js';
 import { docFormFor } from './doc-form.js';
 import { cohortIdentity } from './cohort-identity.js';
 import { pdfTicket } from './pdf-ticket.ts';
@@ -323,8 +323,10 @@ export async function doc(p: any) {
 // ── التحقق العام من وثيقة معتمدة ببصمتها (رمز QR في صفحة الاعتماد): ما تعرضه الوثيقة على غلافها وحده، بلا محتوى ولا بريد ──
 const DOC_CHECK_LIMIT = 40; // طلبًا لكل عنوان في 10 دقائق، كالتحقق من الشهادة
 export async function verifyDoc(b: Body, ctx: { ip: string | null; ua: string | null }) {
-  const fp = String(b.fingerprint || '').trim().toUpperCase();
-  const valid = /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(fp);
+  // المفتاح نفسه الذي يُطبع به الرمز (doc-quality.js verifyKey وissuedFingerprint، المرحلة 32)
+  const key = verifyKey(b.fingerprint);
+  const fp = key || '';
+  const valid = !!key;
   if (ctx.ip) {
     const since = new Date(Date.now() - 10 * 60e3).toISOString();
     const { count, error } = await db.from('document_checks').select('id', { count: 'exact', head: true }).eq('ip', ctx.ip).gte('created_at', since);
