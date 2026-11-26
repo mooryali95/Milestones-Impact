@@ -18,6 +18,13 @@ export const C = {
   paper: '#FFFFFF', slate: '#2C4148', muted: '#5F7176', line: '#DCE2E1', faint: '#EEF1F0',
 };
 
+// ── الصفحة (المرحلة 27): مصدر واحد لهوامش A4 يحكم @page في الطباعة ومولّد الخادم، ويشتق منه pdf.js (PAGE) هوامش ملفه المرسوم ──
+export const PAGE_MM = Object.freeze({ w: 210, h: 297, top: 22, side: 20, bottom: 24 });
+/** مم إلى بكسل بدقة 96 (A4 = 794×1123) */
+export const mmPx = (mm) => Math.round((mm * 96) / 25.4);
+// السلم الطباعي للصفحات الداخلية: لا وزن دون 400 في الطباعة
+export const TYPE_SCALE = Object.freeze({ body: 10.5, leading: 1.7, chapter: 18, chapterWeight: 600, h3: 12, h3Weight: 500, label: 8.5, labelWeight: 600, table: 9, footer: 7.5, footerColor: '#5F7176' });
+
 export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : esc(n));
 export const today = () => new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -138,6 +145,7 @@ export function documentHtml(meta, body, opts = {}) {
   const id = meta.id || docId(meta.kind || 'DOC');
   const year = new Date().getFullYear();
   const accent = meta.brand ? coverAccent(meta.brand.color) : null;
+  const T = TYPE_SCALE;
   const rows = (meta.rows || []).slice(0, meta.brand ? (meta.control ? 3 : 6) : 4);
   const conf = meta.confidential || 'سري: مخصص للجهة المعنية فقط';
   // opts.print: الوثيقة نفسها لمولّد PDF على الخادم (workers/pdf-render): بلا شريط، وbase لخطوط المنصة وصورها
@@ -146,12 +154,15 @@ export function documentHtml(meta, body, opts = {}) {
 ${opts.base ? `<base href="${esc(opts.base)}">` : ''}
 <title>${esc(meta.title)} · Milestone Impact</title>
 ${meta.selfFonts ? '<link rel="stylesheet" href="/fonts/fonts.css">' : `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500&family=Noto+Sans:wght@300;400&display=swap" rel="stylesheet">`}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500;600&family=Noto+Sans:wght@300;400;600&display=swap" rel="stylesheet">`}
 <style>
-@page { size: A4; margin: 16mm 18mm 20mm;
-  ${meta.brand ? '@bottom-right { content: "Milestone Impact"; font: 400 6pt "Noto Sans", sans-serif; letter-spacing: .08em; color: #8A979A; }' : `@bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${C.muted}; }`}
-  ${meta.brand ? `@top-right { content: "${cssStr(meta.title)}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 300 7pt "Noto Kufi Arabic", sans-serif; color: ${C.muted}; }` : ''}
-  @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 300 7pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${C.muted}; } }
+@page { size: A4; margin: ${PAGE_MM.top}mm ${PAGE_MM.side}mm ${PAGE_MM.bottom}mm;
+  ${meta.brand ? `@bottom-right { content: "${cssStr(id)}"; font: 400 ${T.footer}pt "Noto Sans", sans-serif; letter-spacing: .08em; color: ${T.footerColor}; }` : `@bottom-right { content: "MILESTONE IMPACT  ·  DECISIONS  ·  DIRECTION  ·  IMPACT"; font: 400 ${T.footer}pt "Noto Sans", sans-serif; letter-spacing: .25em; color: ${T.footerColor}; }`}
+  ${meta.brand ? `@top-right { content: "${cssStr(meta.title)}"; content: string(chapter); font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; color: ${T.footerColor}; } @top-left { content: "${cssStr(meta.brand.name || 'مبادرة مجتمعية')}"; font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; color: ${T.footerColor}; }` : ''}
+  @bottom-left { ${meta.pageAr ? `content: "صفحة " counter(page) " من " counter(pages); font: 400 ${T.footer}pt "Noto Kufi Arabic", sans-serif; letter-spacing: 0;` : `content: "PAGE " counter(page) " OF " counter(pages); font: 400 ${T.footer}pt "Noto Sans", sans-serif; letter-spacing: .2em;`} color: ${T.footerColor}; } }
+/* الترويسة باسم الباب الحالي (string set) */
+body { string-set: chapter "${cssStr(meta.title)}"; }
+.sec > header h2, .in-open h2 { string-set: chapter content(text); }
 ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا ترويسة (الطباعة ومولّد الخادم)، والمحتوى يبدأ الصفحة الثانية */
 @page :first { margin: 0; @top-right { content: none; } @top-left { content: none; } @bottom-right { content: none; } @bottom-left { content: none; } }
 @media print { html:not(.pdf) .mast.co { height: 296.5mm; overflow: hidden; display: flex; flex-direction: column; padding: 18mm 18mm 16mm; break-after: page; margin: 0; }
@@ -161,9 +172,10 @@ ${meta.brand ? `/* الغلاف صفحة كاملة بلا هامش ولا تر�
 /* الوثيقة فاتحة فقط (المرحلة 22): الإعلان في الجذر والرأس، ووسم قفل Dark Reader لأن الإعلان وحده لا يوقف الإضافة */
 :root { color-scheme: light; }
 html { background: ${C.faint}; background-color: ${C.faint}; }
-body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-serif; font-weight: 300; color: ${C.graphite}; font-size: 10pt; line-height: 1.65; }
+body { margin: 0; font-family: "Noto Kufi Arabic", "Noto Sans", system-ui, sans-serif; font-weight: 400; color: ${C.graphite}; font-size: ${T.body}pt; line-height: ${T.leading}; }
 .sheet { max-width: 210mm; margin: 0 auto; background: ${C.paper}; background-color: ${C.paper}; padding: 0 0 14mm; }
-@media screen { .sheet { margin: 12mm auto; box-shadow: 0 0 0 1px ${C.line}; } .sheet > *:not(.mast) { padding-inline: 18mm; } }
+@media screen { .sheet { margin: 12mm auto; box-shadow: 0 0 0 1px ${C.line}; } .sheet > *:not(.mast) { padding-inline: ${PAGE_MM.side}mm; } }
+html.pdf .sheet > *:not(.mast) { padding-inline: ${PAGE_MM.side}mm; }
 @media print { html { background: none; } .sheet { max-width: none; padding: 0; } .toolbar { display: none !important; } }
 html.pdf { background: ${C.paper}; } html.pdf .toolbar { display: none !important; }
 html.pdf .sheet { margin: 0; box-shadow: none; max-width: 210mm; width: 210mm; padding-bottom: 0; }
@@ -173,6 +185,7 @@ html.embed .sheet { margin: 0 auto; box-shadow: 0 0 0 1px ${C.line}; }
 @media screen and (max-width: 700px) { html.embed .sheet > *:not(.mast) { padding-inline: 6mm; } html.embed .mast { padding: 8mm 6mm; } html.embed .mast .meta { grid-template-columns: repeat(2, 1fr); } }
 p, li { orphans: 3; widows: 3; }
 h2, h3 { break-after: avoid; }
+h3 { font-size: ${T.h3}pt; font-weight: ${T.h3Weight}; }
 .toolbar { position: sticky; top: 0; z-index: 5; display: none; gap: 8px; justify-content: center; padding: 10px; background: ${C.graphite}; }
 @media screen { .toolbar { display: flex; } }
 .toolbar button { font: 400 11px "Noto Kufi Arabic", sans-serif; border: 1px solid ${C.gold}; background: transparent; color: ${C.mist}; padding: 7px 16px; border-radius: 2px; cursor: pointer; letter-spacing: 0; }
@@ -197,18 +210,18 @@ h2, h3 { break-after: avoid; }
 .sec.keep { break-inside: avoid; }
 .tbl tr { break-inside: avoid; }
 .sec > header { border-top: 1px solid ${C.line}; padding-top: 4mm; margin-bottom: 4mm; break-after: avoid; }
-.sec h2 { font-weight: 300; font-size: 15pt; margin: 1mm 0 0; }
+.sec h2 { font-weight: ${T.chapterWeight}; font-size: ${T.chapter}pt; margin: 1mm 0 0; }
 .sec .note { margin: 1mm 0 0; color: ${C.muted}; font-size: 8.5pt; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(30mm, 1fr)); border-top: 1px solid ${C.gold}; border-bottom: 1px solid ${C.line}; }
 .kpi { padding: 4mm 4mm 4mm 0; border-inline-start: 1px solid ${C.line}; padding-inline-start: 4mm; break-inside: avoid; }
 .kpi:first-child { border-inline-start: 0; padding-inline-start: 0; }
-.kpi b { display: block; font: 300 24pt/1.1 "Noto Sans", sans-serif; color: ${C.graphite}; }
-.kpi span { display: block; font-size: 8.5pt; color: ${C.slate}; }
+.kpi b { display: block; font: 400 22pt/1.1 "Noto Sans", sans-serif; color: ${C.graphite}; }
+.kpi span { display: block; font-size: ${T.label}pt; font-weight: ${T.labelWeight}; color: ${C.slate}; }
 .kpi small { color: ${C.muted}; font-size: 7.5pt; }
 .chain { display: flex; align-items: flex-start; margin: 2mm 0; break-inside: avoid; }
 .chain .node { text-align: center; width: 24mm; flex: none; display: grid; justify-items: center; gap: 1mm; }
-.chain .n { font: 300 15pt/1 "Noto Sans", sans-serif; min-height: 15pt; }
-.chain .l { font-size: 8.5pt; } .chain .e { font: 300 6.5pt "Noto Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: ${C.muted}; }
+.chain .n { font: 400 15pt/1 "Noto Sans", sans-serif; min-height: 15pt; }
+.chain .l { font-size: 8.5pt; } .chain .e { font: 400 7.5pt "Noto Sans", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: ${C.muted}; }
 .chain .node:not(.on) .n, .chain .node:not(.on) .l { color: ${C.muted}; }
 .chain .link { flex: 1; height: 1px; background: ${C.gold}; opacity: .45; margin-top: calc(15pt + 1mm + 6px); }
 .bars { display: grid; gap: 2.4mm; }
@@ -217,19 +230,19 @@ h2, h3 { break-after: avoid; }
 .bar .bt { position: relative; height: 1px; background: ${C.line}; display: flex; align-items: center; }
 .bar .bt i { display: block; height: 2px; background: ${C.graphite}; }
 .bar .bt .dm { margin-inline-start: -4px; }
-.bar b { font: 300 10pt "Noto Sans", sans-serif; text-align: left; }
-.tbl { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
+.bar b { font: 400 10pt "Noto Sans", sans-serif; text-align: left; }
+.tbl { width: 100%; border-collapse: collapse; font-size: ${T.table}pt; }
 .tbl thead { display: table-header-group; }
-.tbl th { text-align: right; font-weight: 400; font-size: 7.5pt; color: ${C.muted}; padding: 2mm 1.5mm; border-bottom: 1px solid ${C.graphite}; white-space: nowrap; }
+.tbl th { text-align: right; font-weight: 400; font-size: 8.5pt; color: ${C.muted}; padding: 2mm 1.5mm; border-bottom: 1px solid ${C.graphite}; white-space: nowrap; }
 .tbl td { padding: 2.2mm 1.5mm; border-bottom: 1px solid ${C.line}; vertical-align: top; }
 .tbl tr { break-inside: avoid; }
 .tbl td.c { text-align: center; padding: 6mm; }
 .tbl td:has(.pg) { white-space: nowrap; }
 .pg { display: inline-block; width: 16mm; height: 2px; background: ${C.line}; vertical-align: middle; margin-inline-end: 2mm; }
 .pg i { display: block; height: 100%; background: ${C.gold}; }
-.pgn { font: 300 8.5pt "Noto Sans", sans-serif; }
+.pgn { font: 400 8.5pt "Noto Sans", sans-serif; }
 .callout { border-right: 0.6mm solid ${C.gold}; background: ${C.mist}; padding: 4mm 5mm; border-radius: 2px; }
-.callout b { display: block; font-weight: 300; font-size: 15pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
+.callout b { display: block; font-weight: 400; font-size: 15pt; color: ${C.graphite}; margin-bottom: 1.5mm; }
 .callout p { margin: 0; font-size: 9.5pt; line-height: 1.9; color: ${C.slate}; }
 .points { list-style: none; margin: 0; padding: 0; display: grid; gap: 2.2mm; }
 .points li { position: relative; padding-right: 5mm; font-size: 9.5pt; line-height: 1.8; color: ${C.slate}; }
@@ -241,7 +254,7 @@ h2, h3 { break-after: avoid; }
 .close { break-before: avoid; display: flex; align-items: center; justify-content: space-between; gap: 8mm; margin-top: 12mm; padding-top: 6mm; border-top: 1px solid ${C.gold}; break-inside: avoid; }
 .close p { margin: 0; font-size: 8.5pt; color: ${C.slate}; max-width: 120mm; }
 .close .sig { font-size: 9pt; } .close .sig b { font-weight: 400; display: block; }
-.rights { margin-top: 8mm; font-size: 7.2pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
+.rights { margin-top: 8mm; font-size: 7.5pt; color: ${C.muted}; line-height: 1.7; border-top: 1px solid ${C.line}; padding-top: 3mm; }
 .rights b { font-weight: 400; color: ${C.slate}; }
 .dm { display: inline-block; vertical-align: middle; }
 .mast .stamp { display: inline-block; border: 1px solid ${C.gold}; color: ${C.goldText}; padding: .5mm 3mm; border-radius: 2px; font-size: 9pt; font-weight: 500; letter-spacing: 0; background: ${C.paper}; line-height: 1.6; }
@@ -272,9 +285,9 @@ h2, h3 { break-after: avoid; }
 .mast.co { border-bottom: 0; }
 .close .thesis { margin: 0 0 3mm; flex-basis: 100%; }
 .close { flex-wrap: wrap; }
-/* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل، 1047 بكسل = PAGE.h - PAGE.bottom في pdf.js)، والعنوان في ثلثه الأوسط،
+/* ملف PDF: الغلاف صفحة كاملة وحده (حتى هامش التذييل: PAGE.h - PAGE.bottom في pdf.js، من PAGE_MM)، والعنوان في ثلثه الأوسط،
    وبيانات الوثيقة وخط لون الجهة في أسفله؛ فتبدأ «نظرة عامة» كاملة في الصفحة الثانية ولا تنقسم مع الغلاف */
-html.pdf .mast.co { min-height: 1047px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
+html.pdf .mast.co { min-height: ${mmPx(PAGE_MM.h) - mmPx(PAGE_MM.bottom)}px; display: flex; flex-direction: column; padding: 16mm 18mm 14mm; break-inside: avoid; }
 html.pdf .mast.co .eyebrow { margin-top: auto; }
 html.pdf .mast.co .meta { margin-top: auto; }
 html.pdf .mast.co .accent { bottom: 0; }
@@ -307,17 +320,17 @@ ${opts.pdf ? runningHead(meta) : ''}
 </body></html>`;
 }
 
-// ترويسة صفحات ملف PDF بعد الغلاف (pdf.js يرسمها مرة ويكررها): شعار الجهة أو اسمها ولونها في البداية، وعنوان الوثيقة، وعلامة Milestone Impact في الطرف الآخر.
+// ترويسة صفحات ملف PDF بعد الغلاف (pdf.js يرسمها مرة ويكررها): شعار الجهة أو اسمها ولونها في جهة، واسم الباب الحالي في الأخرى
+// يكتبه pdf.js لكل صفحة (chapterAt) كما تفعل string(chapter) في الطباعة. الوثيقة بلا جهة تأخذ علامة Milestone Impact مكان الجهة.
 // خارج .sheet فلا تدخل في حساب الصفحات، وتُرسم بالخطوط والصور نفسها
 function runningHead(meta) {
   const b = meta.brand;
   const logo = b && safeLogo(b.logo);
   const color = (b && brandColor(b.color)) || C.gold;
   const org = b ? (logo ? `<img src="${esc(logo)}" alt="">` : `<b>${esc(b.name || 'مبادرة مجتمعية')}</b>`) : '';
-  return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:60px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px 68px 0;font:300 8pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
-<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:60%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:22px">${org}</span><i style="width:1px;height:14px;background:${C.line}"></i>` : ''}<span style="overflow:hidden;text-overflow:ellipsis">${esc(meta.title)}</span></span>
-<span style="margin-inline-start:auto;display:flex;align-items:center;direction:ltr" class="ph-mi">${LOGO}</span>
-<i style="position:absolute;bottom:8px;left:68px;right:68px;height:1px;background:${color};opacity:.7"></i>
+  return `<div id="pdf-head" style="position:absolute;top:0;left:0;width:794px;height:${mmPx(PAGE_MM.top)}px;background:#fff;direction:rtl;display:flex;align-items:center;gap:10px;padding:14px ${mmPx(PAGE_MM.side)}px 0;font:400 ${TYPE_SCALE.footer}pt 'Noto Kufi Arabic',sans-serif;color:${C.muted}">
+<span class="ph-org" style="display:flex;align-items:center;gap:8px;max-width:45%;white-space:nowrap;overflow:hidden">${org ? `<span style="display:flex;align-items:center;height:22px">${org}</span>` : ''}</span>${b ? '' : `<span style="display:flex;align-items:center;direction:ltr" class="ph-mi">${LOGO}</span>`}
+<i style="position:absolute;bottom:12px;left:${mmPx(PAGE_MM.side)}px;right:${mmPx(PAGE_MM.side)}px;height:1px;background:${color};opacity:.7"></i>
 </div><style>#pdf-head img{max-height:22px;max-width:150px;object-fit:contain;display:block}#pdf-head b{font-weight:400;color:${C.graphite}}#pdf-head .ph-mi svg{height:17px;width:auto;display:block}</style>`;
 }
 
