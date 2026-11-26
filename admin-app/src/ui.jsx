@@ -10,7 +10,7 @@ import React, { createContext, useCallback, useContext, useEffect, useLayoutEffe
 import { hardReload, isChunkError, reloadOnce } from './lazy-retry.js';
 import { useModalFocus } from '../../shared/ui/modal-focus.js';
 import { useUnsavedFlag } from '../../shared/ui/unsaved-registry.js';
-import { PARTICIPANT_STATUS, PARTICIPANT_STATUS_TONE } from '../../supabase/functions/leaders-api/labels.js';
+import { LEVELS, PARTICIPANT_STATUS, PARTICIPANT_STATUS_TONE } from '../../supabase/functions/leaders-api/labels.js';
 
 const Ctx = createContext(null);
 export const useUI = () => useContext(Ctx);
@@ -248,4 +248,11 @@ export function Meter({ value, max, label, tone = '', unit = '' }) {
       <span className="la-meter-num" aria-hidden="true">{text}</span>
     </span>
   );
+}
+
+// مستوى الوثيقة بالمكون Meter (المرحلة 24): خطوة المستوى من ثلاث بالاسم، الشكل نفسه في ملحق المراجع وشارة الإدارة
+export function DocLevelMeter({ level }) {
+  const l = LEVELS.find((x) => x.key === level);
+  if (!l) return null;
+  return <span className="la-chip">مستوى الوثيقة: {l.title} <Meter value={l.step} max={LEVELS.length} label="مستوى الوثيقة" /></span>;
 }
