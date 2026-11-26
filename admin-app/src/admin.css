@@ -1510,3 +1510,97 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 
 /* إعادة إسناد طلب خبير */
 .xm-reassign { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* ══ مكونات مشتركة (طلبات التواصل أولًا، ثم الزيارات والمصفوفة) ══ */
+/* أيقونات SVG من icons.jsx: بحجم النص ولونه */
+.ico { flex: none; vertical-align: -0.2em; }
+.ico-spin { animation: ico-spin 0.9s linear infinite; }
+@keyframes ico-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ico-spin { animation: none; } }
+/* زر أيقونة وحدها: هدف لمس 28 بكسل (فوق حد 24)، واسمه في aria-label */
+.icon-btn { display: inline-grid; place-items: center; min-inline-size: 28px; min-block-size: 28px; border-radius: 6px; border: 1px solid transparent; color: var(--ink-light); vertical-align: middle; }
+.icon-btn:hover, .icon-btn:focus-visible { color: var(--petrol-s); background: var(--sand-light); border-color: var(--line); }
+
+/* بطاقات مرشِّحة (FilterCards): أزرار بـaria-pressed تكتب في مرشح واحد */
+.fcards { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; margin-bottom: 18px; }
+.fcard { flex: 1 1 160px; display: grid; gap: 4px; text-align: start; padding: 14px 18px; background: var(--off-white); border: 1px solid var(--line); border-radius: 14px; border-block-start: 3px solid var(--fc, var(--petrol-s)); cursor: pointer; transition: box-shadow .15s, border-color .15s; }
+.fcard:hover { box-shadow: 0 4px 16px rgba(6,30,44,0.06); }
+.fcard.on { border-color: var(--fc, var(--petrol-s)); box-shadow: inset 0 0 0 1px var(--fc, var(--petrol-s)); background: var(--sand-light); }
+.fcard.t-new { --fc: var(--c-new); } .fcard.t-read { --fc: var(--c-read); } .fcard.t-replied { --fc: var(--c-replied); } .fcard.t-archived { --fc: var(--c-archived); }
+.fcard-l { font-size: .78rem; color: var(--ink-light); font-weight: 500; }
+.fcard-v { font-size: 1.6rem; font-weight: 700; color: var(--fc, var(--ink)); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.fcard-s { font-size: .72rem; color: var(--ink-light); }
+.fcards-all { align-self: center; }
+@media (max-width: 600px) { .fcards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .fcard { padding: 10px 10px; } .fcard-v { font-size: 1.3rem; } .fcards-all { grid-column: 1 / -1; justify-self: center; } }
+
+/* هيكل التحميل (SkeletonRows) */
+.sk-row td { padding-block: 14px; }
+.sk { display: block; block-size: 10px; border-radius: 99px; background: linear-gradient(90deg, var(--sand-light), var(--line), var(--sand-light)); background-size: 200% 100%; animation: sk 1.2s ease-in-out infinite; }
+@keyframes sk { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+/* خطأ التحميل (LoadError) */
+.load-err { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--st-bad); color: var(--st-bad); background: color-mix(in srgb, var(--st-bad) 7%, transparent); font-size: .86rem; }
+[aria-busy="true"] > .data-table tbody { opacity: .65; transition: opacity .2s; }
+
+/* وسوم سطرية (tag): سطر واحد، والمعنى بأيقونة ونص لا بلون وحده */
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: .74rem; font-weight: 600; white-space: nowrap; }
+.tag-warn { background: var(--st-warn-bg); color: var(--st-warn-text); }
+.tag-sm { font-size: .68rem; padding: 1px 6px; margin-inline-start: 6px; }
+.drawer-body > .tag { margin-bottom: 12px; }
+/* الشارات بسطر واحد دائمًا؛ نوع الطلب يُقص احتياطًا (الكامل في title)، والحالة لا تُقص */
+.interest-badge, .source-badge { white-space: nowrap; }
+.ct-table .interest-badge { display: inline-block; max-inline-size: 16ch; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.ltr { direction: ltr; unicode-bidi: isolate; }
+.page-gap { padding: 6px 4px; color: var(--ink-faint); }
+.exp-warn { padding: 8px 12px; border-radius: 8px; background: var(--st-warn-bg); color: var(--st-warn-text); font-size: .84rem; }
+
+/* طلبات التواصل */
+.ct-open { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; font: inherit; color: var(--ink); text-align: start; padding: 2px 0; border-radius: 4px; }
+.ct-open:hover { color: var(--petrol-s); text-decoration: underline; }
+.ct-open:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+tr.ct-new .ct-open { font-weight: 700; }
+.ct-dot { inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--c-new); flex: none; }
+.ct-org { color: var(--ink-mid); }
+.ct-date { color: var(--ink-light); font-size: .82rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ct-ctx { margin-top: 4px; }
+.ct-ctx-l { font-size: .78rem; color: var(--ink-light); margin-bottom: 6px; }
+.ct-unread { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; }
+/* النص المخفي (sr-only) مطلق الموضع: الجدول مرجعه، فلا يفلت من إطار التمرير فيمد الصفحة أفقيًا على الهاتف */
+.ct-table { position: relative; }
+
+/* الهاتف: تُخفى أعمدة الجهة ونوع الطلب والمصدر (وكلها في الدرج) لتبقى الحالة ووسم التأخر ظاهرين بلا تمرير أفقي */
+@media (max-width: 600px) { .ct-table th:nth-child(2), .ct-table td:nth-child(2), .ct-table th:nth-child(3), .ct-table td:nth-child(3), .ct-table th:nth-child(4), .ct-table td:nth-child(4) { display: none; } }
+/* سهم التقليب: الشكل يشير يسارًا، فالسابقة في RTL تشير يمينًا */
+[dir="rtl"] .ico-prev { transform: scaleX(-1); }
+[dir="ltr"] .ico-next { transform: scaleX(-1); }
+
+/* مصفوفة التأثير: بطاقات روابط، وقسم «متوقفون وطلبات إعادة فتح»، وتوزيع المسارات */
+a.mx-stat > span { display: block; }
+a.mx-stat { display: block; color: inherit; text-decoration: none; transition: box-shadow .15s, border-color .15s; }
+a.mx-stat:hover { box-shadow: 0 4px 16px rgba(6,30,44,0.06); }
+a.mx-stat:focus-visible, .mx-track:focus-visible, .mx-row-link:focus-visible { outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+/* الصفر خافت بتباين لا يقل عن 4.5:1 (لون الحبر الفاتح نفسه لا لون الخطوط) */
+.mx-stat.is-zero .stat-value { color: var(--ink-light); font-weight: 500; }
+.mx-num { font-variant-numeric: tabular-nums; }
+.mx-att-sum { font-weight: 600; margin-bottom: 8px; }
+.mx-att-g { font-size: .9rem; margin: 14px 0 6px; }
+.mx-att-sub { font-size: .8rem; color: var(--ink-mid); margin: 10px 0 4px; font-weight: 600; }
+.mx-att-list { list-style: none; display: grid; gap: 2px; }
+.mx-att-row { position: relative; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 8px 10px; border-radius: 8px; }
+.mx-att-row:hover { background: var(--sand-light); }
+.mx-att-row:focus-within { background: var(--sand-light); outline: 2px solid var(--petrol-s); outline-offset: 2px; }
+.mx-att-name:focus-visible { outline: none; }
+.mx-att-name { font-weight: 600; color: var(--ink); text-decoration: none; }
+/* الصف كله يُضغط من رابط الاسم (::after يمتد عليه)، فلا عمود إجراء مكرر */
+.mx-att-name::after { content: ''; position: absolute; inset: 0; border-radius: 8px; }
+.mx-att-name:hover { text-decoration: underline; }
+.mx-idle { white-space: nowrap; font-size: .8rem; color: var(--ink-mid); justify-self: end; }
+.tag-bad { background: var(--st-bad-bg); color: var(--st-bad); }
+.mx-att-more { display: inline-block; margin-top: 10px; }
+.mx-row-link { color: inherit; text-decoration: none; }
+.mx-row-link:hover { text-decoration: underline; }
+.mx-tracks .mx-track { grid-template-columns: 92px 1fr auto; color: inherit; text-decoration: none; padding: 4px 6px; border-radius: 6px; }
+.mx-track:hover { background: var(--sand-light); }
+.mx-track-bar { background: var(--sand-light); box-shadow: inset 0 0 0 1px var(--line); }
+.mx-track-v { text-align: end; min-inline-size: 15ch; color: var(--ink-mid); }
+@media (max-width: 600px) { .mx-att-row { grid-template-columns: 1fr auto; } .mx-att-prog { grid-column: 1; } }

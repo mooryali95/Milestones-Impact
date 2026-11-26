@@ -237,7 +237,7 @@ test('القوائم: فرز بالعمود يُحفظ في العنوان، و�
   await page.route(/functions\/v1\/admin-api/, (r) => r.fulfill({ json: { success: true, contacts } }));
   await page.goto(`${BASE}#/contacts`);
   await page.reload();
-  const names = () => page.locator('.data-table tbody tr td:first-child strong').allTextContents();
+  const names = () => page.locator('.data-table tbody tr td:first-child .ct-open').allTextContents();
   await expect(page.locator('.data-table tbody tr')).toHaveCount(4);
   const before = await names();
   const th = page.locator('thead th', { hasText: 'الاسم' });

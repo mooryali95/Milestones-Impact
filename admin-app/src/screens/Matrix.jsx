@@ -6,7 +6,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { call } from '../api.js';
 import { date } from '../dates.js';
-import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
+import { Empty, LoadError, NoMatch, Spinner, useUI } from '../ui.jsx';
+import { Icon } from '../icons.jsx';
+import { apptsAr, attention, attentionSummary, booked, IDLE_DAYS, idleSince, idleTone, MATRIX_PRESETS, regHref, regsHref, regTracks, trackCounts } from '../matrix.js';
 import { navigate } from '../route.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -17,61 +19,88 @@ import { publicRead } from '../../../src/lib/api.js';
 import { TRACKS } from '../../../src/config/constants.js';
 import { DEMO_KEY } from '../../../src/hooks/useDemographics.js';
 
-const TABS = [['overview', 'نظرة عامة'], ['regs', 'التسجيلات'], ['reports', 'التقارير'], ['content', 'المحتوى'], ['stats', 'الإحصاءات']];
-const DAY = 864e5;
+// تبويب «الإحصاءات» دُمج في النظرة العامة (كان يكرر توزيع المسارات حرفيًا)، ورابطه القديم يفتح النظرة العامة
+const TABS = [['overview', 'نظرة عامة'], ['regs', 'التسجيلات'], ['reports', 'التقارير'], ['content', 'المحتوى']];
 const fmt = (d) => date(d) || '·';
-const booked = (r) => Object.keys(r.dates || {}).length;
 const confirmedOf = (r) => Object.values(r.confirmed || {}).filter(Boolean).length;
 const people = (r) => (r[DEMO_KEY] || []).filter((x) => x.name?.trim());
 const statusOf = (r) => (r.reopenRequested ? 'reopen' : r.submitted ? 'submitted' : booked(r) ? 'progress' : 'new');
 const STATUS_AR = { reopen: ['يطلب إعادة الفتح', 'bad'], submitted: ['خطة مكتملة', 'ok'], progress: ['قيد التخطيط', 'warn'], new: ['لم يبدأ', ''] };
 
-const PRESETS = [
-  { key: 'reopen', label: 'تطلب إعادة الفتح', test: (r) => !!r.reopenRequested },
-  { key: 'submitted', label: 'خطط مكتملة', test: (r) => !!r.submitted },
-  { key: 'progress', label: 'قيد التخطيط', test: (r) => !r.submitted && booked(r) > 0 },
-  { key: 'idle', label: 'متوقف 14 يومًا', test: (r, now) => !r.submitted && now - Date.parse(r.updatedAt || r.registeredAt) > 14 * DAY },
-  { key: 'nodemo', label: 'بلا تحليل الشبكة', test: (r) => !people(r).length },
-];
+const PRESETS = [...MATRIX_PRESETS, { key: 'nodemo', label: 'بلا تحليل الشبكة', test: (r) => !people(r).length }];
 
 function useMatrix() {
   const [regs, setRegs] = useState(null);
   const [details, setDetails] = useState({});
   const [error, setError] = useState('');
+  const [detailsError, setDetailsError] = useState('');
   const load = useCallback(async () => {
     setError('');
     const r = await call('list-regs');
     if (!r.success) { setRegs([]); setError(r.message); return; }
     setRegs((r.registrations || []).sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt)));
   }, []);
-  const loadDetails = useCallback(() => publicRead('process_details?select=*').then((rows) => setDetails(Object.fromEntries((rows || []).map((x) => [x.process_key, x])))).catch(() => {}), []);
+  // فشل نصوص العمليات يُعلن ولا يُبتلع: تبقى العمليات بأسمائها من المصدر، ويظهر الخطأ مع إعادة المحاولة
+  const loadDetails = useCallback(() => { setDetailsError(''); return publicRead('process_details?select=*').then((rows) => setDetails(Object.fromEntries((rows || []).map((x) => [x.process_key, x])))).catch(() => setDetailsError('تعذّر تحميل نصوص العمليات وتبعياتها، فالتحليل والمحتوى قد يكونان ناقصين.')); }, []);
   useEffect(() => { load(); loadDetails(); }, [load, loadDetails]);
   const procs = useMemo(() => buildProcs(details), [details]);
-  return { regs, procs, error, load, loadDetails };
+  return { regs, procs, error, detailsError, load, loadDetails };
 }
 
-function Overview({ regs, procs, onOpen, onTab }) {
+// بطاقة رابط إلى التسجيلات مرشحة: لا تغيّر أي بيانات، والصفر خافت
+function StatLink({ href, label, value, sub, tone = '' }) {
+  return (
+    <a className={`stat-card mx-stat${value ? '' : ' is-zero'}`} href={href}>
+      <span className="stat-label">{label}</span><span className={`stat-value ${value ? tone : ''}`}>{value}</span><span className="stat-sub">{sub}</span>
+    </a>
+  );
+}
+
+const IDLE_ICON = { bad: 'alert', warn: 'clock' };
+function IdleRow({ r, days }) {
+  const tone = idleTone(days);
+  return (
+    <li className="mx-att-row">
+      <a className="mx-att-name" href={regHref(r.id)}>{r.name}</a>
+      <span className="mx-att-prog"><span className="mx-prog" aria-hidden="true"><i style={{ width: `${Math.round((booked(r) / PROC_COUNT) * 100)}%` }} /></span> <span className="mx-num">{booked(r)} من {PROC_COUNT}</span></span>
+      <span className={`mx-num mx-idle${tone ? ` tag tag-${tone}` : ''}`}>{tone && <Icon name={IDLE_ICON[tone]} size={13} />}{idleSince(days)}{tone === 'bad' ? ' (طويل جدًا)' : tone === 'warn' ? ' (طويل)' : ''}</span>
+    </li>
+  );
+}
+
+const MAX_IDLE = 8;
+function Overview({ regs, procs }) {
   const done = regs.filter((r) => r.submitted).length;
-  const reopen = regs.filter((r) => r.reopenRequested);
-  const avg = regs.length ? Math.round((regs.reduce((a, r) => a + booked(r), 0) / (regs.length * PROC_COUNT)) * 100) : 0;
-  const idle = regs.filter((r) => !r.submitted && Date.now() - Date.parse(r.updatedAt || r.registeredAt) > 14 * DAY);
+  const att = attention(regs);
+  const shownIdle = att.idle.slice(0, MAX_IDLE);
+  const keep = new Set(shownIdle.map((x) => x.r.id));
+  const groups = [['لم تبدأ', att.notStarted.filter((x) => keep.has(x.r.id)), att.notStarted.length], ['توقفت في المنتصف', att.midway.filter((x) => keep.has(x.r.id)), att.midway.length]];
+  const rest = att.idle.length - shownIdle.length;
   return (
     <>
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">الجهات المسجلة</div><div className="stat-value">{regs.length}</div><div className="stat-sub">في مصفوفة التأثير</div></div>
-        <div className="stat-card"><div className="stat-label">خطط مكتملة</div><div className="stat-value s-replied">{done}</div><div className="stat-sub">{regs.length ? Math.round((done / regs.length) * 100) : 0}% من المسجلين</div></div>
-        <div className="stat-card"><div className="stat-label">تطلب إعادة الفتح</div><div className="stat-value s-new">{reopen.length}</div><div className="stat-sub">بانتظار قرارك</div></div>
-        <div className="stat-card"><div className="stat-label">متوسط الإنجاز</div><div className="stat-value">{avg}%</div><div className="stat-sub">من {PROC_COUNT} عملية</div></div>
+        <StatLink href={regsHref()} label="الجهات المسجلة" value={regs.length} sub="في مصفوفة التأثير" />
+        <StatLink href={regsHref({ view: 'submitted' })} label="خطط مكتملة" value={done} tone="s-replied" sub={`${regs.length ? Math.round((done / regs.length) * 100) : 0}% من المسجلين`} />
+        <StatLink href={regsHref({ view: 'reopen' })} label="تطلب إعادة الفتح" value={att.reopen.length} tone="s-new" sub="بانتظار قرارك" />
+        <StatLink href={regsHref({ view: 'idle' })} label="متوقفة" value={att.idle.length} sub={`لم تُقدَّم ولم تُعدَّل منذ ${IDLE_DAYS} يومًا`} />
       </div>
-      <section className="la-card">
-        <h3>يحتاج تدخلك</h3>
-        {!reopen.length && !idle.length ? <p className="la-muted">لا شيء الآن.</p> : (
-          <ul className="la-reqs">
-            {reopen.map((r) => <li key={r.id}><span><b>{r.name}</b> طلب إعادة فتح خطته المكتملة</span><button className="la-link" onClick={() => onOpen(r.id)}>افتح</button></li>)}
-            {idle.slice(0, 8).map((r) => <li key={r.id}><span><b>{r.name}</b> متوقف منذ {fmt(r.updatedAt || r.registeredAt)} عند {booked(r)} من {PROC_COUNT}</span><button className="la-link" onClick={() => onOpen(r.id)}>افتح</button></li>)}
-          </ul>
-        )}
-        <div className="la-row" style={{ marginTop: 10 }}><button className="btn-sm ghost" onClick={() => onTab('regs')}>كل التسجيلات</button><button className="btn-sm ghost" onClick={() => onTab('reports')}>التقارير</button></div>
+      <section className="la-card mx-att" aria-labelledby="mx-att-h">
+        <h3 id="mx-att-h">متوقفون وطلبات إعادة فتح</h3>
+        <p className={att.reopen.length || att.idle.length ? 'mx-att-sum' : 'la-muted'}>{attentionSummary(att, regs.length)}</p>
+        {att.reopen.length > 0 && <>
+          <h4 className="mx-att-g">بانتظار قرارك <span className="la-muted">({att.reopen.length})</span></h4>
+          <ul className="mx-att-list">{att.reopen.map(({ r }) => (
+            <li key={r.id} className="mx-att-row"><a className="mx-att-name" href={regHref(r.id)}>{r.name}</a><span>طلب إعادة فتح خطته المكتملة</span></li>
+          ))}</ul>
+        </>}
+        {att.idle.length > 0 && <h4 className="mx-att-g">متوقفون <span className="la-muted">({att.idle.length})</span></h4>}
+        {groups.map(([label, list, n]) => list.length > 0 && (
+          <div key={label}>
+            <h5 className="mx-att-sub">{label} <span className="la-muted">({n})</span></h5>
+            <ul className="mx-att-list">{list.map(({ r, days }) => <IdleRow key={r.id} r={r} days={days} />)}</ul>
+          </div>
+        ))}
+        {rest > 0 && <a className="la-link mx-att-more" href={regsHref({ view: 'idle' })}>و{rest === 1 ? ' واحدة' : ` ${rest}`} أخرى، عرض الكل</a>}
       </section>
       <Stats regs={regs} procs={procs} />
     </>
@@ -80,15 +109,18 @@ function Overview({ regs, procs, onOpen, onTab }) {
 
 const REG_SORTS = { name: (r) => r.name, booked: (r) => booked(r), confirmed: (r) => confirmedOf(r), network: (r) => people(r).length, joined: (r) => r.registeredAt, status: (r) => STATUS_AR[statusOf(r)][0] };
 const REG_COLS = [
-  { key: 'name', label: 'الاسم', width: 26, get: (r) => r.name }, { key: 'email', label: 'البريد', width: 30, get: (r) => r.email }, { key: 'phone', label: 'الجوال', width: 16, get: (r) => r.phone },
+  { key: 'name', label: 'الاسم', width: 26, get: (r) => r.name }, { key: 'email', label: 'البريد', width: 30, get: (r) => r.email, sensitive: true }, { key: 'phone', label: 'الجوال', width: 16, get: (r) => r.phone, sensitive: true },
   { key: 'booked', label: 'بموعد', width: 10, get: (r) => booked(r) }, { key: 'confirmed', label: 'مؤكدة', width: 10, get: (r) => confirmedOf(r) }, { key: 'network', label: 'الشبكة', width: 10, get: (r) => people(r).length },
   { key: 'status', label: 'الحالة', width: 18, get: (r) => STATUS_AR[statusOf(r)][0] }, { key: 'joined', label: 'التسجيل', width: 16, get: (r) => fmt(r.registeredAt) },
   { key: 'submitted', label: 'التقديم', width: 16, get: (r) => (r.submittedAt ? fmt(r.submittedAt) : '') },
 ];
 
 function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
-  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'joined', 'sort'], {}, { scope: 'matrix' });
-  const fields = useMemo(() => [{ key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (r) => r.registeredAt }], []);
+  const [f, setF, clearF, replaceF] = useFilters(['q', 'view', 'track', 'joined', 'sort'], {}, { scope: 'matrix' });
+  const fields = useMemo(() => [
+    { key: 'track', label: 'المسار', all: 'كل المسارات', options: TRACKS.map((tr) => [tr.id, tr.nameAr]), get: (r) => regTracks(r, procs) },
+    { key: 'joined', label: 'التسجيل', all: 'أي تاريخ تسجيل', type: 'period', get: (r) => r.registeredAt },
+  ], [procs]);
   const rows = useMemo(() => sortRows(applyFilters(regs, { fields, presets: PRESETS, text: (r) => [r.name, r.email, r.phone, r.org].join(' ') }, f), REG_SORTS, f.sort), [regs, f, fields]);
   const counts = useMemo(() => presetCounts(regs, PRESETS), [regs]);
   const reg = regs.find((r) => String(r.id) === String(id));
@@ -105,7 +137,7 @@ function Registrations({ regs, procs, canWrite, id, onOpen, reload }) {
           const pct = Math.round((booked(r) / PROC_COUNT) * 100);
           return (
             <tr key={r.id} className="la-click" onClick={() => onOpen(r.id)}>
-              <td data-label="المسجّل"><b>{r.name}</b><br /><small className="la-muted" dir="ltr">{r.email}</small></td>
+              <td data-label="المسجّل"><a className="mx-row-link" href={regHref(r.id)} onClick={(e) => e.stopPropagation()}><b>{r.name}</b></a></td>
               <td data-label="الإنجاز"><span className="mx-prog"><i style={{ width: `${pct}%` }} /></span> {booked(r)}/{PROC_COUNT}</td>
               <td data-label="التأكيد">{confirmedOf(r)}</td>
               <td data-label="الشبكة">{people(r).length || <span className="la-muted">·</span>}</td>
@@ -316,23 +348,29 @@ function Content({ procs, canWrite, reloadDetails }) {
   );
 }
 
+// المقياس على السعة (عمليات المسار × عدد الجهات) لا على أكبر قيمة، والضغط يفتح التسجيلات مرشحة بالمسار
 function Stats({ regs, procs }) {
-  const n = regs.length || 1;
+  const rows = trackCounts(regs, procs, TRACKS);
+  const any = rows.some((x) => x.count > 0);
   return (
     <section className="la-card">
       <h3>توزيع المسارات</h3>
-      <div className="la-funnel">{TRACKS.map((tr) => {
-        const per = procs.filter((p) => p.trackId === tr.id).length || 1;
-        const count = regs.reduce((a, r) => a + Object.keys(r.dates || {}).filter((k) => k.startsWith(tr.id)).length, 0);
-        return <div key={tr.id} className="la-fn"><span className="la-fn-l" style={{ color: tr.color }}>{tr.nameAr}</span>
-          <span className="la-fn-bar"><i style={{ width: `${(count / (per * n)) * 100}%`, background: tr.color }} /></span><b>{count}</b></div>;
-      })}</div>
+      {!any ? <p className="la-muted">لم تحدد أي جهة موعدًا بعد، فلا توزيع للمسارات.</p> : (
+        <div className="la-funnel mx-tracks">{rows.map(({ track: tr, count, pct }) => (
+          <a key={tr.id} className="la-fn mx-track" href={regsHref({ track: tr.id })} aria-label={`${tr.nameAr}: ${apptsAr(count)}، ${pct}% من الممكن. اعرض الجهات`}>
+            <span className="la-fn-l" style={{ color: tr.color }}>{tr.nameAr}</span>
+            <span className="la-fn-bar mx-track-bar"><i style={{ width: `${pct}%`, background: tr.color }} /></span>
+            <span className="mx-num mx-track-v">{count} · {pct}% من الممكن</span>
+          </a>
+        ))}</div>
+      )}
     </section>
   );
 }
 
 export default function Matrix({ canWrite, tab, id }) {
-  const { regs, procs, error, load, loadDetails } = useMatrix();
+  const { regs, procs, error, detailsError, load, loadDetails } = useMatrix();
+  // روابط الأقسام القديمة (مثل #/matrix/stats) تعود إلى نظرة عامة بهذا الفحص وحده
   const t = TABS.some(([k]) => k === tab) ? tab : 'overview';
   const go = (k, rid = null) => navigate({ ctx: 'matrix', tab: k, id: rid });
   return (
@@ -341,7 +379,7 @@ export default function Matrix({ canWrite, tab, id }) {
         <div className="page-header-left">
           <div className="page-eyebrow">المنتج الثاني</div>
           <h1 className="page-title">مصفوفة التأثير</h1>
-          <div className="page-title-ar">matrix.sunkvalue.com · التسجيلات وخطط الجهات وتقاريرها</div>
+          <div className="page-title-ar"><bdi dir="ltr">matrix.sunkvalue.com</bdi> · التسجيلات وخطط الجهات وتقاريرها</div>
         </div>
         {!canWrite && <span className="la-chip">عرض فقط</span>}
       </div>
@@ -349,12 +387,13 @@ export default function Matrix({ canWrite, tab, id }) {
         {TABS.map(([k, l]) => <button key={k} className={t === k ? 'on' : ''} aria-current={t === k ? 'page' : undefined} onClick={() => go(k)}>{l}</button>)}
       </nav>
       <div className="la-body">
-        {!regs ? <Spinner /> : error ? <div className="la-err">{error} <button className="btn-sm ghost" onClick={load}>حاول مرة أخرى</button></div>
-          : t === 'overview' ? <Overview regs={regs} procs={procs} onOpen={(rid) => go('regs', rid)} onTab={go} />
+        {detailsError && <LoadError message={detailsError} onRetry={loadDetails} />}
+        {!regs ? <Spinner /> : error ? <LoadError message={error} onRetry={load} />
+          : t === 'overview' ? <Overview regs={regs} procs={procs} />
           : t === 'regs' ? <Registrations regs={regs} procs={procs} canWrite={canWrite} id={id} onOpen={(rid) => go('regs', rid)} reload={load} />
           : t === 'reports' ? <Reports regs={regs} procs={procs} onOpen={(rid) => go('regs', rid)} />
           : t === 'content' ? <Content procs={procs} canWrite={canWrite} reloadDetails={loadDetails} />
-          : <Stats regs={regs} procs={procs} />}
+          : null}
       </div>
     </div>
   );

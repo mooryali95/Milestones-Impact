@@ -6,7 +6,7 @@
 import { DIM, DIMS, LVL } from './leaders.js';
 import { CONTENT_LOCK, REPO_EDIT_AR } from '../../supabase/functions/leaders-api/content-lock.js';
 import { countAr, MODE_AR, PHASE_AR, SESSION_MODE_AR, STAGE_COMPLETE_AR, STAGE_MODE_AR, STAGE_UNLOCK_AR, TIER_AR, VERIFY_AR } from '../../supabase/functions/leaders-api/labels.js';
-import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, renderJourneyText, stageRules, withCandidates, SESSIONS_MAX_LIMIT, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
+import { evaluatePlacement, CODE_FEATURES, DEFAULT_MODEL, hideBreaksMessage, hideBreaksStage, newlyBroken, journeyCtx, renderJourneyText, stageRules, withCandidates, SESSIONS_MAX_LIMIT, LEVEL_MODE_AR, PROJECT_MODE_AR, SUPERVISION_AR, trackKey as trackKeyOf, trackLevels as trackLevelsOf, VERIFIED_KINDS, LAB_ACCEPT_AR } from '../../supabase/functions/leaders-api/logic.js';
 import { READY_MIN } from '../../supabase/functions/leaders-api/capstone.js';
 import { CONSULT_ANY_DEFAULT, GATE_STAGE_KEYS, SERVICE_NOTE_AR, SERVICE_UNLOCK_DEFAULT, TRACK_UNTIL_DEFAULT, untilOptions } from '../../supabase/functions/leaders-api/journey.js';
 
@@ -47,8 +47,9 @@ export const ROMAN = { beginner: 'I', intermediate: 'II', advanced: 'III' };
 // ── حقول النماذج (صيغة Form.jsx) ──
 // أرقام الجلسات والمدد لا تُكتب في النص؛ رموز تُملأ من إعداد النشاط فلا يتباعد الوصف عن الواقع
 export const TOKEN_HELP = 'للأرقام رموز تُملأ تلقائيًا: {duration} مدة المرحلة، {sessions:الرمز} عدد جلسات النشاط، {minutes:الرمز} مدة جلسته، {days:الرمز} عدد أيامه، {ready_min} عتبة وثيقة المبادرة، {assessment_minutes} مدة القياس.';
-const preview = (reqs, f) => (v) => {
-  const out = renderJourneyText(v[f] || '', { reqs, durationDays: v.duration_days, readyMin: READY_MIN });
+// المعاينة بسياق المشارك نفسه (journeyCtx محايد): مدة القياس من الكتالوج أو «تُحدد لاحقًا»، لا رمز خام
+export const preview = (reqs, f, assessmentMinutes = null) => (v) => {
+  const out = renderJourneyText(v[f] || '', journeyCtx({ reqs, readyMin: READY_MIN, assessmentMinutes }, { duration_days: v.duration_days }, { neutral: true }));
   return out && out !== v[f] ? `يظهر للمشارك: ${out}` : TOKEN_HELP;
 };
 // قواعد المرحلة في النموذج: حقول rule_* تُجمع في rules عند الحفظ
@@ -117,7 +118,7 @@ const LANE_HELP = {
 };
 // الخدمة لا يُشترط اكتمالها لفتح غيرها، ولا يبدأ معها شيء ولا تُشترط قبلها بنود مسار
 const notService = (s) => stageRules(s).lane !== 'service';
-export const stageFields = (reqs = [], stages = [], selfKey = null) => [
+export const stageFields = (reqs = [], stages = [], selfKey = null, assessmentMinutes = null) => [
   { name: 'rule_lane', label: 'طبيعتها في الرحلة', type: 'select', options: LANE_FORM_AR, help: (v) => LANE_HELP[v.rule_lane || 'stage'],
     show: () => !GATE_STAGE_KEYS.includes(selfKey) },
   { name: 'rule_mode', label: 'نوع المرحلة', type: 'select', options: STAGE_MODE_AR, help: (v) => RULE_HELP[v.rule_mode], show: (v) => v.rule_lane !== 'service' },
@@ -148,13 +149,13 @@ export const stageFields = (reqs = [], stages = [], selfKey = null) => [
   { name: 'rule_complete', label: 'متى تكتمل', type: 'select', options: STAGE_COMPLETE_AR },
   { name: 'title_ar', label: 'اسم المرحلة' },
   { name: 'phase', label: 'المحور', type: 'select', options: PHASE },
-  { name: 'duration_label', label: 'المدة كما تظهر للمشارك', help: preview(reqs, 'duration_label') },
+  { name: 'duration_label', label: 'المدة كما تظهر للمشارك', help: preview(reqs, 'duration_label', assessmentMinutes) },
   { name: 'duration_days', label: 'المدة بالأيام (مصدر {duration})', type: 'number' },
   { name: 'mode', label: 'طريقة التنفيذ', type: 'select', options: MODE, empty: 'غير محددة' },
   { name: 'mode_note_ar', label: 'تفصيل الطريقة (مثال: حضوري في الرياض أو مباشر عن بعد)' },
   { name: 'description_ar', label: 'الوصف', type: 'textarea', rows: 3 },
   { name: 'builds_on_ar', label: 'تنطلق من (مخرج المرحلة السابقة)' },
-  { name: 'activities_ar', label: 'ماذا يتم (كل سطر بند)', type: 'textarea', rows: 5, help: preview(reqs, 'activities_ar') },
+  { name: 'activities_ar', label: 'ماذا يتم (كل سطر بند)', type: 'textarea', rows: 5, help: preview(reqs, 'activities_ar', assessmentMinutes) },
   { name: 'outcome_ar', label: 'ما يخرج به المشارك', type: 'textarea', rows: 3 },
   { name: 'active', label: 'ظاهرة للمشاركين', type: 'check' },
 ];
