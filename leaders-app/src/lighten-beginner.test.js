@@ -69,3 +69,29 @@ describe('المرحلة 1: تقدير زمن واحد من الحقول الظ�
     expect(spineSummary([s('a', 90), s('b', 90)]).hours).toBe(3);
   });
 });
+
+import { canSubmit, closingState, CLOSING_AR, programEnd } from '../../supabase/functions/leaders-api/capstone.js';
+describe('المرحلة 5: الفصلان الختاميان للتأسيسي', () => {
+  const day = (s) => Date.parse(`${s}T00:00:00Z`);
+  it('نهاية البرنامج: الدفعة أولًا، ثم انتهاء المبادرة تاريخًا، ثم أسبوعًا من البدء أو من أول اعتماد', () => {
+    expect(programEnd({ ends_on: '2027-03-31', end: 'الأسبوع 12', since: '2026-01-01T00:00:00Z' })).toBe(day('2027-03-31'));
+    expect(programEnd({ end: '2027-02-28' })).toBe(day('2027-02-28'));
+    expect(programEnd({ start: '2027-01-03', end: 'الأسبوع 12' })).toBe(day('2027-03-27'));
+    expect(programEnd({ end: 'الأسبوع 12', since: '2027-01-03T00:00:00Z' })).toBe(day('2027-03-27'));
+    expect(programEnd({ end: 'الأسبوع 12' })).toBeNull();
+  });
+  it('مقفل للتأسيسي حتى آخر أسبوعين، ثم يُفتح؛ وغير التأسيسي والفصول الأخرى كما هي', () => {
+    const end = day('2027-03-27');
+    expect(closingState('impact-report', 'beginner', end, day('2027-03-01'))).toEqual({ deferred: true, opens_at: '2027-03-14' });
+    expect(closingState('transformation-story', 'beginner', end, day('2027-03-14')).deferred).toBe(false);
+    expect(closingState('impact-report', 'intermediate', end, day('2027-03-01')).deferred).toBe(false);
+    expect(closingState('raid', 'beginner', end, day('2027-03-01')).deferred).toBe(false);
+    expect(closingState('impact-report', 'beginner', null).deferred).toBe(false);
+    expect(CLOSING_AR).toBe('يُفتح في الأسابيع الأخيرة');
+  });
+  it('الفصل المؤجل الناقص لا يمنع التقديم الأول', () => {
+    const base = { status: 'draft', scope: 'project', initiative: 'م', readiness: 90, checks: [] };
+    expect(canSubmit({ ...base, sections: [{ title: 'أ', complete: true }, { title: 'تقرير الأثر', complete: false, deferred: true }] })).toEqual({ ok: true });
+    expect(canSubmit({ ...base, sections: [{ title: 'تقرير الأثر', complete: false }] }).ok).toBe(false);
+  });
+});

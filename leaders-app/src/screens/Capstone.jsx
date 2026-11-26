@@ -124,7 +124,9 @@ export default function Capstone({ me, onEditProfile, onBack, onHandbook = null,
     const unit = unitsFor(d.sections).find((u) => u.items.some((x) => x.id === id));
     return { where: whereOf(d.sections, id), nextId: next?.id || null, nextTitle: next?.title || '', unitLast: !!unit && unit.items.length > 1 && unit.items[unit.items.length - 1].id === id, onNext: (x) => go(x),
       // حقول أضافها مسار جديد في هذا الفصل («جديد في مستواك»)
-      newFields: d.sections.find((x) => x.id === id)?.new_fields || [] };
+      newFields: d.sections.find((x) => x.id === id)?.new_fields || [],
+      // الفصل الختامي المؤجل للتأسيسي: مقفل حتى آخر أسبوعين من برنامجه (closingState في capstone.js)
+      deferred: d.sections.find((x) => x.id === id)?.deferred ? d.sections.find((x) => x.id === id) : null };
   };
   if (open) {
     return (

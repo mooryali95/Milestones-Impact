@@ -97,7 +97,7 @@ export function Spine({ sections, checks = [], card = null, status = 'draft', cu
                   data-chapter={x.key} data-state={cs}>
                   <i className="sp-dot" aria-hidden="true" />
                   <span className="sp-t">{x.n}. {x.title}</span>
-                  <small className="sp-st">{x.optional && cs !== 'done' ? 'اختياري' : STATE_AR[cs]}{!expert && readByExpert(x) ? ' · قرأه خبيرك' : ''}</small>
+                  <small className="sp-st">{x.deferred ? `مقفل: ${x.deferred_ar}` : x.optional && cs !== 'done' ? 'اختياري' : STATE_AR[cs]}{!expert && readByExpert(x) ? ' · قرأه خبيرك' : ''}</small>
                   {isNew && <span className="chip gold sp-new">{expert ? 'جديد' : 'جديد في مستواك'}</span>}
                   {warn.length > 0 && <span className="chip bad sp-check" title={warn.map((w) => w.title).join('، ')}>{warn.length === 1 ? 'فحص' : `${warn.length} فحوص`}</span>}
                 </button>

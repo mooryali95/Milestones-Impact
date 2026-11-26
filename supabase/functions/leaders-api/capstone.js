@@ -570,6 +570,33 @@ export function cardGate(status) {
   return { state: 'none', ok: false, reason: 'قدّم بطاقة المبادرة ليعتمد المستشار اختيارها قبل تقديم الوثيقة.' };
 }
 
+// ── الفصلان الختاميان للتأسيسي (تخفيف وثيقة المبادرة للتأسيسي، المرحلة 5، قرار المالك 2026-11-26) ──
+// تقرير الأثر وقصة التحول لا يُكتبان بصدق قبل التنفيذ: يظهران للتأسيسي مقفلين «يُفتح في الأسابيع الأخيرة» حتى آخر
+// أسبوعين من برنامجه، ولا يُحسبان في جاهزية التقديم الأولى ولا اكتمالها. ثم يُفتحان ويُحسبان كما كانا.
+export const CLOSING_CHAPTERS = Object.freeze(['impact-report', 'transformation-story']);
+export const CLOSING_WEEKS = 2;
+export const CLOSING_AR = 'يُفتح في الأسابيع الأخيرة';
+/**
+ * نهاية برنامج المشارك: نهاية دفعته (cohorts.ends_on)، وإلا انتهاء مبادرته من بطاقتها: تاريخًا، أو أسبوعًا من تاريخ البدء فيها،
+ * أو أسبوعًا من أول اعتماد لمساره (since، بداية رحلته). null إن لم يُعرف شيء منها
+ * @param {{ ends_on?: string | null, start?: string | null, end?: string | null, since?: string | null }} src
+ */
+export function programEnd({ ends_on = null, start = null, end = null, since = null } = {}) {
+  const fixed = parseDate(ends_on || '');
+  if (fixed != null) return fixed;
+  const d = parseDate(end || '');
+  if (d != null) return d;
+  const w = weekOf(end || '');
+  const anchor = parseDate(start || '') ?? (since && Number.isFinite(Date.parse(since)) ? Date.parse(since) : null);
+  return w != null && anchor != null ? anchor + (w * 7 - 1) * 864e5 : null;
+}
+/** الفصل الختامي مؤجل لهذا المشارك الآن؟ { deferred, opens_at }. التأسيسي في إطار الفصل وحده، وبلا نهاية معروفة لا تأجيل */
+export function closingState(modelKey, level, end, now = Date.now()) {
+  if (!CLOSING_CHAPTERS.includes(modelKey) || level !== 'beginner' || end == null) return { deferred: false, opens_at: null };
+  const opens = end - (CLOSING_WEEKS * 7 - 1) * 864e5;
+  return { deferred: now < opens, opens_at: new Date(opens).toISOString().slice(0, 10) };
+}
+
 // يمكن التسليم؟ كل الفصول مكتملة، والجاهزية فوق الحد، والحالة تسمح
 export function canSubmit(state) {
   if (!['draft', 'returned', undefined, null].includes(state.status)) return { ok: false, reason: 'الوثيقة قيد المراجعة أو معتمدة' };
@@ -577,7 +604,8 @@ export function canSubmit(state) {
   if (!state.initiative) return { ok: false, reason: 'اكتب اسم المبادرة في بطاقة المبادرة' };
   // state.card غائبة في وثيقة بلا فصل بطاقة (برنامج لا يضعها في الوثيقة): لا بوابة
   if (state.card) { const g = cardGate(state.card.status); if (!g.ok) return { ok: false, reason: g.reason }; }
-  const open = state.sections.filter((s) => !s.complete);
+  // الفصل الختامي المؤجل للتأسيسي (closingState) لا يمنع التقديم الأول
+  const open = state.sections.filter((s) => !s.complete && !s.deferred);
   if (open.length) return { ok: false, reason: `فصول لم تكتمل: ${open.map((s) => s.title).slice(0, 5).join('، ')}` };
   const blocked = (state.checks || []).filter((x) => x.blocking && !x.ok);
   if (blocked.length) return { ok: false, reason: `فحوص لازمة قبل التسليم: ${blocked.map((x) => x.title).join('، ')}` };

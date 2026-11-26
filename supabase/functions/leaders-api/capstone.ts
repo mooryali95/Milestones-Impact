@@ -16,7 +16,7 @@ import { summaryFromCard } from './business-case.js';
 import { trackManifest } from './track-manifest.js';
 import { unseenNew } from './track-history.ts';
 import {
-  APPROVAL_POINTS, bindAnswers, canSubmit, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
+  APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, programEnd, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject } from './capstone.js';
 import { APPROVAL_SLA_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
@@ -71,11 +71,17 @@ async function build(p: any) {
   const charter = mine.find((m: any) => m.key === CHARTER_KEY);
   const charterAnswers = charter ? by[charter.id]?.answers || {} : {};
   const initiative = String(charterAnswers.title || '').trim() || null;
+  // نهاية برنامج المشارك للفصلين الختاميين (closingState): نهاية دفعته، وإلا انتهاء مبادرته من بطاقتها
+  const { cohort } = await cohortOf(p).catch(() => ({ cohort: null as any }));
+  const end = programEnd({ ends_on: cohort && !cohort.is_default ? cohort.ends_on : null, start: charterAnswers.start, end: charterAnswers.end, since });
   const sections = mine.map((m: any) => {
     const sub = by[m.id];
     const fields = modelFields(m, content, scope, priority, sub?.answers || null, since);
     const answers = bindAnswers(fields, sub?.answers || {}, m.key === CHARTER_KEY ? null : initiative);
-    const state = sectionState(m, fields, { ...sub, answers });
+    const closing = closingState(m.key, content?.[m.dimension], end);
+    const base = sectionState(m, fields, { ...sub, answers });
+    // مؤجل: لا يُحسب في الجاهزية (counted: false) ولا يمنع التقديم الأول (deferred)، ويظهر مقفلًا حتى يُفتح
+    const state = closing.deferred ? { ...base, counted: false, deferred: true, opens_at: closing.opens_at } : base;
     // موقع الفصل من مستوى الوثيقة للمستشار والمراجع (المرحلة 4): مما حُسب هنا نفسه، لا قاعدة ثانية
     return { model: m, fields, answers, sub, state, chapter: chapterLevel(m, fields, state, content, levels) };
   });
@@ -95,6 +101,8 @@ const sectionView = (s: any) => ({
   minutes: workMinutes(s.fields), status: s.state.status, rating: s.state.rating,
   // فصل لا حقل مطلوبًا فيه للمشارك: لا يُحسب في الجاهزية (readiness)، فيُعرض «اختياري» لا «مكتمل»
   optional: s.state.counted === false,
+  // الفصل الختامي المؤجل للتأسيسي: مقفل حتى آخر أسبوعين من برنامجه (closingState)
+  ...(s.state.deferred ? { deferred: true, opens_at: s.state.opens_at, deferred_ar: CLOSING_AR } : {}),
   // آخر حفظ للفصل: منه تُشتق إشارات التعثر في الواجهة (stuck.js)، ولا يُخزَّن شيء جديد
   updated_at: s.sub?.updated_at || null,
   // «الوثيقة الحية»: ملاحظة الخبير على الفصل ووقت قراءته، منهما تُشتق الحالات الأربع و«قرأه خبيرك» و«جديد» (spine.js)
