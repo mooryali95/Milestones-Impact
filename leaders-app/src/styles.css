@@ -810,7 +810,7 @@ body.protected { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 .mf-guide p { margin: 0; }
 .mf-guide p + p { margin-top: 4px; }
 .mf-more { margin-top: 4px; }
-.mf-more > summary { cursor: pointer; color: var(--teal, #0b4f5c); font-weight: 700; font-size: 13px; }
+.mf-more > summary { cursor: pointer; color: var(--slate); font-weight: 700; font-size: 13px; }
 .mf-more[open] > summary { margin-bottom: 4px; }
 .mf-guide b { font-weight: 600; color: var(--ink); }
 .mf-guide .mf-avoid b { color: color-mix(in srgb, var(--copper) 62%, #000); }

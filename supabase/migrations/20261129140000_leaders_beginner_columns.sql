@@ -56,3 +56,5 @@ select pg_temp.bc_patch('theory-of-change', 'chain', 3, '{"columns_beginner": [0
 select pg_temp.bc_patch('benefits-register', 'benefits', 6, '{"columns_beginner": [0, 1, 2, 3], "labels_beginner": ["المنفعة", "كيف تقيسها", "الرقم اليوم", "المستهدف"], "min_rows_beginner": 2}');
 -- قصة التحول: القرار وما تغيّر بسببه، صفان
 select pg_temp.bc_patch('transformation-story', 'decisions', 4, '{"columns_beginner": [0, 2], "labels_beginner": ["القرار", "ما الذي تغيّر بسببه"], "min_rows_beginner": 2}');
+
+insert into leaders.schema_migrations (name) values ('20261129140000_leaders_beginner_columns') on conflict do nothing;

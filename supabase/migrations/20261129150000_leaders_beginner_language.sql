@@ -53,3 +53,5 @@ select pg_temp.bl_patch('change-sustain', 'sustain', '{"label_beginner": "ما �
 select pg_temp.bl_patch('transformation-story', 'before', '{"label_beginner": "أين كانت المبادرة، وأين كنت أنت في البداية؟", "hint_beginner": "سطران: حال المبادرة يوم بدأت، وما كنت تعرفه أو تخشاه"}');
 select pg_temp.bl_patch('transformation-story', 'decisions', '{"label_beginner": "ما القرارات التي غيّرت مسار المبادرة؟", "hint_beginner": "قرار اتخذته أنت، وما الذي تغيّر بسببه. قراران يكفيان"}');
 select pg_temp.bl_patch('transformation-story', 'lessons', '{"label_beginner": "ماذا تعلمت عن نفسك قائدًا؟", "hint_beginner": "وما ستفعله بشكل مختلف في المرة القادمة"}');
+
+insert into leaders.schema_migrations (name) values ('20261129150000_leaders_beginner_language') on conflict do nothing;
