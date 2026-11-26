@@ -2854,18 +2854,35 @@ export function advisedParticipantIds(expertId, cohortParticipantIds, membership
   return [...out];
 }
 // مشاركو الدفعات التي هو مستشارها الأساسي، من قراءة واحدة لكل مصدر ثم pickCohort في الذاكرة (كان advisor.ts يقرأ
-// تسجيلات كل مرشح وكل الدفعات بالتتابع، قراءتين لكل مشارك). القاعدة نفسها: من سُجّل في إحداها بأي حالة، ومن تقع دفعته
+// تسجيلات كل مرشح وكل الدفعات بالتتابع، قراءتين لكل مشارك). القاعدة: من سُجّل في إحداها تسجيلًا غير منسحب (المنقول عنها
+// لا يبقى عند مستشارها القديم، تصور المرحلة 1 البند 1: الوصول يتبع العلاقة الحالية)، ومن تقع دفعته
 // الفعلية (pickCohort) على إحداها وهو في نطاقها: جهتها لدفعة جهة، والجميع للمفتوحة، ولا أحد لدفعة بلا جهة غير مفتوحة.
 /** @param {{ id: string, organization_id?: string | null, is_default?: boolean }[]} mine دفعاته
  *  @param {any[]} cohorts كل الدفعات (مدخل pickCohort)
  *  @param {{ participant_id: string, cohort_id: string, status?: string, created_at?: string }[]} enrollments كل التسجيلات
  *  @param {{ id: string, organization_id?: string | null }[]} candidates المرشحون بالتبعية، بلا حساب العرض */
+// عضويات المجموعات التي تقع دفعة عضوها الفعلية (pickCohort) على دفعة المجموعة نفسها. فلتر دفاعي في نطاق خبير المجموعة
+// (تصور المرحلة 1، البند 1): cohortEnroll تحذف عضويات الدفعات الأخرى عند النقل، وهذا يمنع العودة لو كتب مسار آخر صفًا عالقًا.
+// الدفعة الفعلية لا «التسجيل النشط»: عضو دفعة الجهة بالتبعية بلا تسجيل صريح عضو حقيقي فيها (cohortMembers)، فلا يُستبعد
+/** @param {{ participant_id: string, cohort_id: string }[]} links
+ *  @param {{ enrollments: any[], cohorts: any[], participants: { id: string, organization_id?: string | null }[] }} w */
+export function currentGroupLinks(links, { enrollments = [], cohorts = [], participants = [] } = {}) {
+  const byP = new Map();
+  for (const e of enrollments || []) { if (!byP.has(e.participant_id)) byP.set(e.participant_id, []); byP.get(e.participant_id).push(e); }
+  const org = new Map((participants || []).map((p) => [p.id, p.organization_id || null]));
+  const cur = new Map();
+  const of = (pid) => {
+    if (!cur.has(pid)) cur.set(pid, pickCohort({ enrollments: byP.get(pid) || [], cohorts, organizationId: org.get(pid) || null }).cohort?.id || null);
+    return cur.get(pid);
+  };
+  return (links || []).filter((l) => of(l.participant_id) === l.cohort_id);
+}
 export function advisorCohortParticipantIds(mine, cohorts, enrollments, candidates) {
   const mineById = new Map((mine || []).map((c) => [c.id, c]));
   const out = new Set();
   const byP = new Map();
   for (const e of enrollments || []) {
-    if (mineById.has(e.cohort_id)) out.add(e.participant_id);
+    if (mineById.has(e.cohort_id) && e.status !== 'withdrawn') out.add(e.participant_id);
     if (!byP.has(e.participant_id)) byP.set(e.participant_id, []);
     byP.get(e.participant_id).push(e);
   }

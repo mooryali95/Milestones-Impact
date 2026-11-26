@@ -7,7 +7,7 @@
 import { all, allFor, db, Fail } from './core.ts';
 import { cohortOf } from './programs.ts';
 import { reviewBulkBy, reviewSubmissionBy } from './admin.ts';
-import { advisedParticipantIds, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved, pickCohort } from './logic.js';
+import { advisedParticipantIds, currentGroupLinks, advisorCohortParticipantIds, effectiveAdvisorId, journeyApproved, pickCohort } from './logic.js';
 import { listed } from './counting.ts';
 import { isGateModel } from './model-review.js';
 
@@ -128,12 +128,26 @@ async function groupScoped(expertId: string, cohortIds: string[], myCohorts: str
   const groups = new Map<string, string>();
   for (const g of [...(mine.data || []), ...(inMyCohorts.data || [])]) groups.set(g.id, g.advisor_expert_id);
   if (!groups.size) return cohortIds;
-  const [{ data: links }, { data: ex }] = await Promise.all([
-    db.from('cohort_group_members').select('participant_id, group_id').in('group_id', [...groups.keys()]),
+  const [lk, { data: ex }] = await Promise.all([
+    db.from('cohort_group_members').select('participant_id, cohort_id, group_id').in('group_id', [...groups.keys()]),
     db.from('experts').select('id, status, roles').in('id', [...new Set(groups.values())]),
   ]);
+  if (lk.error) throw new Fail('تعذّر قراءة مجموعاتك الآن، حاول بعد قليل', 503, 'busy');
+  const raw = (lk.data || []) as any[];
+  // عضو دفعته الفعلية غير دفعة مجموعته (نُقل عنها) لا يُحسب لخبيرها (currentGroupLinks)
+  const pids = [...new Set(raw.map((l) => l.participant_id))];
+  const busy = () => { throw new Fail('تعذّر قراءة مجموعاتك الآن، حاول بعد قليل', 503, 'busy'); };
+  const [allCohorts, enrollments, people] = pids.length
+    ? await Promise.all([
+      all((f, t) => db.from('cohorts').select('*').order('id').range(f, t)).catch(busy),
+      allFor(pids, () => db.from('enrollments').select('participant_id, cohort_id, status, created_at').order('participant_id')).catch(busy),
+      // counting-exempt: جهات أعضاء مجموعات الخبير لحساب دفعتهم الفعلية، لا عدّ
+      allFor(pids, () => db.from('participants').select('id, organization_id').order('id'), 'id').catch(busy),
+    ])
+    : [[], [], []];
+  const links = currentGroupLinks(raw, { enrollments, cohorts: allCohorts, participants: people });
   const approved = (ex || []).filter(journeyApproved).map((e: any) => e.id);
-  return advisedParticipantIds(expertId, cohortIds, (links || []).map((l: any) => ({ participant_id: l.participant_id, advisor_expert_id: groups.get(l.group_id) || null })), approved);
+  return advisedParticipantIds(expertId, cohortIds, links.map((l: any) => ({ participant_id: l.participant_id, advisor_expert_id: groups.get(l.group_id) || null })), approved);
 }
 
 export async function reviews(e: any) {

@@ -893,6 +893,10 @@ export async function cohortEnroll(a: Admin, b: Body) {
   const now = new Date().toISOString();
   must(await db.from('enrollments').update({ status: 'withdrawn', updated_at: now }).in('participant_id', ids).neq('cohort_id', c.id).neq('status', 'withdrawn'));
   must(await db.from('enrollments').upsert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, status: 'active', updated_at: now })), { onConflict: 'participant_id,cohort_id' }));
+  // الوصول يتبع العلاقة الحالية (تصور المرحلة 1، البند 1): عضوية مجموعة المنقول ودوره في دفعاته الأخرى تُحذف، فلا يبقى
+  // خبير مجموعته القديمة يراه. مراجعات السابق وملاحظاته تبقى في سجلاتها (model_submissions وaudit_log)
+  must(await db.from('cohort_group_members').delete().in('participant_id', ids).neq('cohort_id', c.id));
+  must(await db.from('cohort_roles').delete().in('participant_id', ids).neq('cohort_id', c.id));
   await audit('admin', a.email, 'cohort.enroll', 'cohorts', c.id, null, { participants: ids.length });
   // سجل الإلحاق بمصدره (cohort_placements، ترحيل 20261128160000): النقل اليدوي «الإدارة». قبل الترحيل لا جدول فلا سطر
   const placed = await db.from('cohort_placements').insert(ids.map((participant_id) => ({ participant_id, cohort_id: c.id, wanted_cohort_id: c.id, organization_id: (c as any).organization_id || null, source: 'manual', outcome: 'placed', actor: a.email })));
