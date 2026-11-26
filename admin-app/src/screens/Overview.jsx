@@ -6,14 +6,16 @@
 // كله حين يسلم كل شيء)، ثم «تنبيهات» admin.today، ثم روابط سريعة. لا تُرسم هنا بطاقة مجال آخر: جاهزية الإطلاق والفحوص
 // وحالة النظام وبيئة التجربة في «الإعداد › صحة المنصة» (PlatformHealth.jsx)، وصحة البريد في مركز البريد، ونبض كل دفعة
 // في ملفها، وطلبات المتطلبات نوع في الصندوق نفسه. حارس ذلك single-source.test.js.
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import Inbox from './Inbox.jsx';
 import { L } from '../leaders.js';
 import { session } from '../api.js';
 import { dayFull } from '../dates.js';
 import { useOpsHealth } from '../ops-watch.js';
 import { useInbox } from '../pending.js';
-import { Spinner } from '../ui.jsx';
+import { SkeletonRows, Spinner } from '../ui.jsx';
+import { lazyRetry } from '../lazy-retry.js';
+import { readQuery } from '../route.js';
 import { ageAr } from '../../../supabase/functions/leaders-api/inbox.js';
 import { alertHref, deskNote, exceptionRows, greetingAr, HEALTH_HREF, STALE_DAYS, STRIP_MAX, todayNumbers, waitingSub } from '../today.js';
 
@@ -117,6 +119,25 @@ function Alerts({ t }) {
   );
 }
 
+// ── اتجاه البرنامج (نُقل من «زيارات الموقع»، تصور الزيارات 2026-11-26 البند 2): يُطلب admin.trends عند فتحه وحده،
+// أو فورًا إن جاء الرابط ‎?trend=1‎ من صفحة الزيارات. الأعداد 1 و2 تُعرض «أقل من 3» لدور المشاهد (لا يرى المشاركين)
+const ProgramTrend = lazyRetry(() => import('./ProgramTrend.jsx'));
+export const TREND_ID = 'program-trend';
+function TrendSection() {
+  const [open, setOpen] = useState(() => new URLSearchParams(readQuery()).get('trend') === '1');
+  const viewer = (session.load()?.user?.role_id || session.load()?.user?.role) === 'viewer';
+  useEffect(() => { if (open && new URLSearchParams(readQuery()).get('trend') === '1') document.getElementById(TREND_ID)?.scrollIntoView?.({ block: 'start' }); }, []); // eslint-disable-line
+  return (
+    <section className="la-card today-trend" id={TREND_ID} aria-labelledby="today-trend-h">
+      <div className="today-trend-head">
+        <h2 className="today-sec" id="today-trend-h">اتجاه البرنامج</h2>
+        <button type="button" className="btn-sm ghost" aria-expanded={open} aria-controls="today-trend-body" onClick={() => setOpen(!open)}>{open ? 'أخفِ' : 'اعرض أسبوعًا بأسبوع'}</button>
+      </div>
+      {open && <div id="today-trend-body"><Suspense fallback={<SkeletonRows rows={4} cols={5} />}><ProgramTrend hideSmall={viewer} /></Suspense></div>}
+    </section>
+  );
+}
+
 // ── روابط سريعة إلى أماكنها القائمة: «دفعة جديدة» معالج الدفعة (‎?new=‎ في البرامج)، والباقي تبويب يحمل الفعل ──
 function QuickLinks({ onTab, canWrite }) {
   const writer = canWrite !== false;
@@ -181,6 +202,7 @@ export default function Overview({ orgs, orgsLoaded, onPerson, onTab, pending, c
       {!o.success && <div className="la-err" role="alert">{o.message || 'تعذّرت قراءة أرقام النظرة العامة.'}</div>}
       <Alerts t={today} />
       <DeskNote t={today} />
+      <TrendSection />
       <QuickLinks onTab={onTab} canWrite={canWrite} />
     </>
   );
