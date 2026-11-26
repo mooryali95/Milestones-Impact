@@ -38,13 +38,11 @@ export const IMPACT_PHASES = ['pre', 'post'];
 async function latestResults(ids: string[] | null) {
   // ids = null يقرأ قياسات الجميع (أثر التكرار في impactConfig): بقاعدة العد (counted). وبمعرّفات، المستدعي مسؤول عنها
   // (تقرير الإدارة يمررها من قائمة counted، والمشارك يقرأ قياسه هو ولو كان حساب العرض)
-  // post_form وserved_count (ترحيل 20261130020000) يُقرآن إن وُجدا، وقبله بدونهما فيُعد كل بعدي كاملًا
+  // post_form وserved_count (ترحيل 20261130020000، مطبّق): null يعني بعديًا كاملًا
   const BASE = 'id, participant_id, submitted_at, instrument_id, form, instruments(kind, key, pairs_with)';
   const read = (COLS: string) => allFor(ids, () => (ids ? db.from('assessments').select(COLS) : counted(db.from('assessments').select(`${COLS}, participants!inner(is_demo, is_test)`), 'participants'))
     .eq('status', 'submitted').order('submitted_at', { ascending: false }).order('id'));
-  // counting-exempt: فحص وجود العمودين بصف واحد، لا يُعد ولا يُعرض
-  const probe = await db.from('assessments').select('post_form, served_count').limit(1);
-  const rows = await read(probe.error && missingColumn(probe.error) ? BASE : `${BASE}, post_form, served_count`);
+  const rows = await read(`${BASE}, post_form, served_count`);
   const pick: Record<string, { baseline?: any; post?: any; comparable?: boolean; reason?: string | null }> = {};
   for (const a of rows) {
     const kind = a.instruments?.kind;
