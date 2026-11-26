@@ -5,7 +5,7 @@
 -- يبني قاعدة جديدة كاملة، ولا يغيّر القاعدة الحية (كل أمر مشروط). الترحيلات في
 -- supabase/migrations هي سجل التغييرات، وهذا الملف حالتها المجمّعة الآن.
 -- server/*.sql أرشيف تاريخي لا مصدر.
--- as-of migration: 20261129160000_leaders_group_members_cleanup
+-- as-of migration: 20261129240000_leaders_transfer_participant
 
 -- كما في pg_dump: دوال SQL يشير بعضها إلى بعض، فلا يُتحقق من أجسامها لحظة الإنشاء
 set check_function_bodies = off;
@@ -1888,6 +1888,7 @@ create table if not exists leaders.participants (
   constraint participants_job_title_check CHECK ((char_length(job_title) <= 120)),
   constraint participants_linkedin_url_check CHECK ((char_length(linkedin_url) <= 300)),
   constraint participants_name_en_check CHECK (((name_en IS NULL) OR (char_length(name_en) <= 120))),
+  constraint participants_no_manager_check CHECK (((no_manager IS NULL) OR (no_manager = ANY (ARRAY['senior'::text, 'self'::text])))),
   constraint participants_org_via_check CHECK (((org_via IS NULL) OR (org_via = ANY (ARRAY['link'::text, 'domain'::text, 'admin'::text])))),
   constraint participants_organization_name_check CHECK ((char_length(organization_name) <= 200)),
   constraint participants_phone_check CHECK ((char_length(phone) <= 20)),
@@ -1897,7 +1898,6 @@ create table if not exists leaders.participants (
   constraint participants_status_check CHECK ((status = ANY (ARRAY['registered'::text, 'profiled'::text, 'assessing'::text, 'pending_approval'::text, 'placed'::text, 'enrolled'::text, 'completed'::text, 'withdrawn'::text, 'suspended'::text]))),
   constraint participants_work_scope_check CHECK (((work_scope IS NULL) OR (work_scope = ANY (ARRAY['project'::text, 'program'::text, 'portfolio'::text])))),
   constraint participants_years_experience_check CHECK (((years_experience >= 0) AND (years_experience <= 60))),
-  constraint participants_no_manager_check CHECK (((no_manager IS NULL) OR (no_manager = ANY (ARRAY['senior'::text, 'self'::text])))),
   constraint participants_pkey PRIMARY KEY (id)
 );
 
@@ -2425,19 +2425,6 @@ create table if not exists leaders.workshop_attendance (
   constraint workshop_attendance_pkey PRIMARY KEY (session_id, participant_id)
 );
 
-create table if not exists leaders.workshop_scan_receipts (
-  id uuid not null,
-  session_id uuid not null,
-  ip_hash text,
-  expires_at timestamp with time zone not null,
-  created_at timestamp with time zone default now() not null,
-  participant_id uuid,
-  consumed_at timestamp with time zone,
-  constraint workshop_scan_receipts_consumed_check CHECK (((participant_id IS NULL) = (consumed_at IS NULL))),
-  constraint workshop_scan_receipts_ip_hash_check CHECK (((ip_hash IS NULL) OR (char_length(ip_hash) = 64))),
-  constraint workshop_scan_receipts_pkey PRIMARY KEY (id)
-);
-
 create table if not exists leaders.workshop_commitments (
   id uuid default gen_random_uuid() not null,
   participant_id uuid not null,
@@ -2453,8 +2440,21 @@ create table if not exists leaders.workshop_commitments (
   constraint workshop_commitments_action_check CHECK (((char_length(action) >= 1) AND (char_length(action) <= 500))),
   constraint workshop_commitments_learned_check CHECK (((learned IS NULL) OR (char_length(learned) <= 1000))),
   constraint workshop_commitments_outcome_check CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['yes'::text, 'partial'::text, 'no'::text])))),
-  constraint workshop_commitments_participant_id_session_id_key UNIQUE (participant_id, session_id),
-  constraint workshop_commitments_pkey PRIMARY KEY (id)
+  constraint workshop_commitments_pkey PRIMARY KEY (id),
+  constraint workshop_commitments_participant_id_session_id_key UNIQUE (participant_id, session_id)
+);
+
+create table if not exists leaders.workshop_scan_receipts (
+  id uuid not null,
+  session_id uuid not null,
+  ip_hash text,
+  expires_at timestamp with time zone not null,
+  created_at timestamp with time zone default now() not null,
+  participant_id uuid,
+  consumed_at timestamp with time zone,
+  constraint workshop_scan_receipts_consumed_check CHECK (((participant_id IS NULL) = (consumed_at IS NULL))),
+  constraint workshop_scan_receipts_ip_hash_check CHECK (((ip_hash IS NULL) OR (char_length(ip_hash) = 64))),
+  constraint workshop_scan_receipts_pkey PRIMARY KEY (id)
 );
 
 create table if not exists leaders.workshop_sessions (
@@ -3573,19 +3573,19 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter table leaders.workshop_scan_receipts add constraint workshop_scan_receipts_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
-  alter table leaders.workshop_scan_receipts add constraint workshop_scan_receipts_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
-exception when duplicate_object then null; end $$;
-
-do $$ begin
   alter table leaders.workshop_commitments add constraint workshop_commitments_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
   alter table leaders.workshop_commitments add constraint workshop_commitments_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.workshop_scan_receipts add constraint workshop_scan_receipts_participant_id_fkey FOREIGN KEY (participant_id) REFERENCES leaders.participants(id) ON DELETE CASCADE;
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  alter table leaders.workshop_scan_receipts add constraint workshop_scan_receipts_session_id_fkey FOREIGN KEY (session_id) REFERENCES leaders.workshop_sessions(id) ON DELETE CASCADE;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -3795,6 +3795,7 @@ CREATE INDEX IF NOT EXISTS email_challenges_email_idx ON leaders.email_challenge
 CREATE INDEX IF NOT EXISTS email_challenges_ip_created_idx ON leaders.email_challenges USING btree (ip, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS enrollments_cohort_idx ON leaders.enrollments USING btree (cohort_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS enrollments_one_active ON leaders.enrollments USING btree (participant_id) WHERE (status <> 'withdrawn'::text);
 
 CREATE UNIQUE INDEX IF NOT EXISTS entitlements_one_live ON leaders.entitlements USING btree (participant_id, item) WHERE (revoked_at IS NULL);
@@ -4006,8 +4007,9 @@ CREATE INDEX IF NOT EXISTS stage_requirements_stage_idx ON leaders.stage_require
 
 CREATE INDEX IF NOT EXISTS sus_responses_role ON leaders.sus_responses USING btree (role, answered_at);
 
-CREATE INDEX IF NOT EXISTS workshop_commitments_due ON leaders.workshop_commitments USING btree (created_at) WHERE ((reviewed_at IS NULL) AND (reminded_at IS NULL));
 CREATE INDEX IF NOT EXISTS workshop_attendance_participant_idx ON leaders.workshop_attendance USING btree (participant_id);
+
+CREATE INDEX IF NOT EXISTS workshop_commitments_due ON leaders.workshop_commitments USING btree (created_at) WHERE ((reviewed_at IS NULL) AND (reminded_at IS NULL));
 
 CREATE INDEX IF NOT EXISTS workshop_scan_receipts_expires_idx ON leaders.workshop_scan_receipts USING btree (expires_at);
 
@@ -4338,6 +4340,7 @@ alter table leaders.video_progress enable row level security;
 alter table leaders.webauthn_challenges enable row level security;
 
 alter table leaders.workshop_attendance enable row level security;
+
 alter table leaders.workshop_commitments enable row level security;
 
 alter table leaders.workshop_scan_receipts enable row level security;
@@ -5576,44 +5579,6 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION leaders.transfer_participant(p_participant uuid, p_actor text DEFAULT NULL::text, p_org uuid DEFAULT NULL::uuid, p_set_org boolean DEFAULT false, p_cohort uuid DEFAULT NULL::uuid)
- RETURNS TABLE(cohort_id uuid, outcome text)
- LANGUAGE plpgsql
- SET search_path TO 'leaders', 'public'
-AS $function$
-#variable_conflict use_column
-declare
-  p record; res record; got uuid; how text := 'placed'; c record;
-begin
-  select id, is_demo, organization_id into p from leaders.participants where id = p_participant for no key update;
-  if not found then return query select null::uuid, 'none'::text; return; end if;
-  if p.is_demo then return query select null::uuid, 'demo'::text; return; end if;
-  if p_set_org then
-    update leaders.participants set organization_id = p_org, org_via = case when p_org is null then null else 'admin' end, updated_at = now()
-     where id = p_participant;
-  end if;
-  update leaders.enrollments set status = 'withdrawn', updated_at = now()
-   where participant_id = p_participant and status <> 'withdrawn' and (p_cohort is null or cohort_id <> p_cohort);
-  if p_cohort is not null then
-    select id, organization_id into c from leaders.cohorts where id = p_cohort;
-    if not found then raise exception 'transfer_participant: no cohort % for participant %', p_cohort, p_participant; end if;
-    insert into leaders.enrollments (participant_id, cohort_id, status) values (p_participant, p_cohort, 'active')
-    on conflict on constraint enrollments_participant_id_cohort_id_key do update set status = 'active', updated_at = now();
-    insert into leaders.cohort_placements (participant_id, cohort_id, wanted_cohort_id, organization_id, source, outcome, actor)
-    values (p_participant, p_cohort, p_cohort, c.organization_id, 'manual', 'placed', p_actor);
-    got := p_cohort;
-  else
-    select * into res from leaders.place_participant(p_participant, 'manual', null, p_actor);
-    if res.cohort_id is null then raise exception 'transfer_participant: no cohort for participant %', p_participant; end if;
-    got := res.cohort_id; how := res.outcome;
-  end if;
-  delete from leaders.cohort_group_members where participant_id = p_participant and cohort_id <> got;
-  delete from leaders.cohort_roles where participant_id = p_participant and cohort_id <> got;
-  return query select got, how;
-end;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION leaders.program_version_frozen()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -5728,6 +5693,44 @@ AS $function$
 begin
   new.updated_at := now();
   return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION leaders.transfer_participant(p_participant uuid, p_actor text DEFAULT NULL::text, p_org uuid DEFAULT NULL::uuid, p_set_org boolean DEFAULT false, p_cohort uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(cohort_id uuid, outcome text)
+ LANGUAGE plpgsql
+ SET search_path TO 'leaders', 'public'
+AS $function$
+#variable_conflict use_column
+declare
+  p record; res record; got uuid; how text := 'placed'; c record;
+begin
+  select id, is_demo, organization_id into p from leaders.participants where id = p_participant for no key update;
+  if not found then return query select null::uuid, 'none'::text; return; end if;
+  if p.is_demo then return query select null::uuid, 'demo'::text; return; end if;
+  if p_set_org then
+    update leaders.participants set organization_id = p_org, org_via = case when p_org is null then null else 'admin' end, updated_at = now()
+     where id = p_participant;
+  end if;
+  update leaders.enrollments set status = 'withdrawn', updated_at = now()
+   where participant_id = p_participant and status <> 'withdrawn' and (p_cohort is null or cohort_id <> p_cohort);
+  if p_cohort is not null then
+    select id, organization_id into c from leaders.cohorts where id = p_cohort;
+    if not found then raise exception 'transfer_participant: no cohort % for participant %', p_cohort, p_participant; end if;
+    insert into leaders.enrollments (participant_id, cohort_id, status) values (p_participant, p_cohort, 'active')
+    on conflict on constraint enrollments_participant_id_cohort_id_key do update set status = 'active', updated_at = now();
+    insert into leaders.cohort_placements (participant_id, cohort_id, wanted_cohort_id, organization_id, source, outcome, actor)
+    values (p_participant, p_cohort, p_cohort, c.organization_id, 'manual', 'placed', p_actor);
+    got := p_cohort;
+  else
+    select * into res from leaders.place_participant(p_participant, 'manual', null, p_actor);
+    if res.cohort_id is null then raise exception 'transfer_participant: no cohort for participant %', p_participant; end if;
+    got := res.cohort_id; how := res.outcome;
+  end if;
+  delete from leaders.cohort_group_members where participant_id = p_participant and cohort_id <> got;
+  delete from leaders.cohort_roles where participant_id = p_participant and cohort_id <> got;
+  return query select got, how;
 end;
 $function$
 ;
