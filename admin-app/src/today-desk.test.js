@@ -43,14 +43,23 @@ describe('الدفعة الجارية وأقرب جلسة', () => {
 });
 
 describe('التنبيهات', () => {
+  it('المرحلة 8: جلسات بلا موعد في دفعة جارية تنبيه بعددها (undatedFor)، لا في الصندوق، ولا للدفعة بصيغة الكتاب', () => {
+    const d = deskOf(src());
+    const u = d.alerts.filter((a) => a.kind === 'cohort_undated');
+    expect(u).toHaveLength(1);
+    expect(u[0]).toMatchObject({ severity: 'warn', id: 'undated:c2', target: { tab: 'programs', id: 'c2' } });
+    expect(u[0].text).toBe('دفعة «دفعة بلا جلسات» الجارية فيها جلسة واحدة بلا موعد');
+    const hb = deskOf(src({ programs: { cohorts: [{ ...quiet, delivery: { s1: { format: 'handbook' } } }], organizations: [], programs: [program] } }));
+    expect(hb.alerts.some((a) => a.kind === 'cohort_undated')).toBe(false);
+  });
   it('الأربعة بأهدافها، الممتلئ أولًا، والجهة غير الفعّالة لا تُنبَّه', () => {
     const d = deskOf(src());
-    expect(d.alerts.map((a) => a.kind)).toEqual(['seats_full', 'cohort_no_session', 'expert_over', 'org_readiness']);
+    expect(d.alerts.map((a) => a.kind)).toEqual(['seats_full', 'cohort_no_session', 'cohort_undated', 'expert_over', 'org_readiness']);
     expect(d.alerts[0]).toMatchObject({ severity: 'bad', target: { tab: 'orgs', id: 'o1' } });
     expect(d.alerts[0].text).toContain('10 من 10');
     expect(d.alerts[1]).toMatchObject({ target: { tab: 'programs', id: 'c2' } });
     expect(d.alerts[1].text).toContain(`الـ${UPCOMING_DAYS}`);
-    expect(d.alerts[2]).toMatchObject({ target: { tab: 'experts', id: 'e1' } });
+    expect(d.alerts[3]).toMatchObject({ target: { tab: 'experts', id: 'e1' } });
     expect(d.alerts.some((a) => a.target.id === 'o3')).toBe(false);
     expect(d.unchecked).toEqual([]);
   });
@@ -76,7 +85,7 @@ describe('التنبيهات', () => {
   it('المصدر المتعذر: لا تنبيه منه، ونوعه «لم يُفحص» لا «لا شيء»', () => {
     const d = deskOf(src({ experts: null, sessions: null, skipped: ['experts', 'sessions'] }));
     expect(d.alerts.some((a) => a.kind === 'expert_over' || a.kind === 'cohort_no_session')).toBe(false);
-    expect(d.unchecked).toEqual(['cohort_no_session', 'expert_over']);
+    expect(d.unchecked).toEqual(['cohort_no_session', 'cohort_undated', 'expert_over']);
     expect(d.skipped).toEqual(['experts', 'sessions']);
     expect(d.pulse.every((p) => p.next_at === null)).toBe(true);
   });

@@ -8,10 +8,16 @@ import { useEffect, useState } from 'react';
 export const CTXS = ['contacts', 'leaders', 'matrix', 'visits'];
 
 export function parseRoute(hash) {
-  const [ctx, tab, ...rest] = String(hash || '').split('?')[0].replace(/^#\/?/, '').split('/').map((x) => decodeURIComponent(x));
+  const [ctx, tab, ...rest] = String(hash || '').split('?')[0].replace(/^#\/?/, '').split('#')[0].split('/').map((x) => decodeURIComponent(x));
   if (!CTXS.includes(ctx)) return { ctx: null, tab: null, id: null };
   return { ctx, tab: tab || null, id: rest.join('/') || null };
 }
+
+// مرساة داخل الشاشة بعد المسار (‎#/leaders/health#ph-launch‎): موضع في الصفحة لا جزء من المسار، فلا تغيّر التبويب
+export const anchorOf = (hash) => {
+  const a = String(hash || '').split('?')[0].replace(/^#/, '').split('#')[1] || '';
+  return /^[a-z0-9_-]{1,64}$/.test(a) ? a : null;
+};
 
 export const formatRoute = ({ ctx, tab, id }) => `#/${[ctx, tab, id].filter(Boolean).map(encodeURIComponent).join('/')}`;
 

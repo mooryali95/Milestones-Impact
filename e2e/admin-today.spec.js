@@ -73,9 +73,13 @@ test('الخلل سطر لكل مشكلة برابط إلى مكان إصلاح�
   await expect(strip(page)).toContainText('حالة النظام تحتاج انتباهًا');
   // روابط تنقُّل لا أفعال: لا زر في الشريط
   await expect(strip(page).getByRole('button')).toHaveCount(0);
-  await rows.filter({ hasText: 'جاهزية الإطلاق' }).getByRole('link', { name: /صحة المنصة/ }).click();
-  await expect(page).toHaveURL(/#\/leaders\/health$/);
+  // المرحلة 8: الرابط يسمّي المكان ويقود إلى مرساته في صحة المنصة، فيُركَّز البند نفسه
+  await rows.filter({ hasText: 'جاهزية الإطلاق' }).getByRole('link', { name: /افتح جاهزية الإطلاق/ }).click();
+  await expect(page).toHaveURL(/#\/leaders\/health#ph-launch$/);
   await expect(page.getByRole('region', { name: 'جاهزية الإطلاق', exact: true })).toContainText('1 من 2');
+  await expect(page.locator('#ph-launch')).toBeFocused();
+  await page.goto(`${BASE}#/leaders/overview`);
+  await expect(strip(page).locator('li[data-key="ph-migrations"] a')).toHaveAttribute('href', '#/leaders/health#ph-check-migrations');
 });
 
 test('خمسة أسطر ثم «و… أخرى» إلى صحة المنصة، وعطل البريد يقود إلى مركز البريد', async ({ page }) => {
@@ -141,10 +145,16 @@ test('الأرقام الأربعة من الصندوق والنظرة العا�
   await expect(page.getByRole('status').filter({ hasText: 'يُعرض المتجاوز للمهلة وحده' })).toBeVisible();
   await n('stale').click();
   await expect(list).toHaveCount(2);
+  await expect(n('stale')).toHaveAttribute('aria-pressed', 'true');
+  await expect(n('late')).toHaveAttribute('aria-pressed', 'false');
   await page.getByRole('button', { name: 'اعرض الكل' }).click();
   await expect(list).toHaveCount(3);
+  // البطاقات أزرار بسهم وتلميح، والعرض النشط aria-pressed؛ الرابعة تفتح المشاركين بمرشح «في البرنامج» الذي حسب رقمها
+  await expect(n('waiting')).toHaveAttribute('aria-pressed', 'true');
+  await expect(n('program')).not.toHaveAttribute('aria-pressed', /.*/);
+  await expect(n('program')).toHaveAttribute('title', /في البرنامج/);
   await n('program').click();
-  await expect(page).toHaveURL(/#\/leaders\/participants$/);
+  await expect(page).toHaveURL(/#\/leaders\/participants\?view=inprogram$/);
 });
 
 test('الروابط السريعة تنقل إلى أماكنها القائمة، وبطاقات التحليل في «الرؤية الشاملة» لا في المكتب', async ({ page }) => {
@@ -191,17 +201,20 @@ const desk = {
 };
 
 
-test('3ب: التنبيهات بعد الأرقام وقبل الروابط، وكل تنبيه رابط إلى ملفه', async ({ page }) => {
+// المرحلة 8: «يحتاج انتباهك» و«تنبيهات» قسم عرض واحد «ما يحتاج انتباهك» (attentionRows)، والروابط السريعة في الرأس
+test('3ب: التنبيهات في «ما يحتاج انتباهك» بعد الأرقام، والروابط السريعة في الرأس، وكل تنبيه رابط إلى ملفه', async ({ page }) => {
   await setup(page, { replies: { 'admin.today': desk } });
-  const alerts = page.getByRole('region', { name: /تنبيهات/ });
+  const alerts = strip(page);
   await expect(alerts.locator('li')).toHaveCount(3);
   await expect(alerts.locator('li').first()).toHaveClass(/bad/);
-  const order = await page.evaluate(() => ['#today-decisions', '.today-nums', '.today-alerts', '.today-links'].map((q) => document.querySelector(q)?.getBoundingClientRect().top ?? -1));
+  await expect(page.locator('.today-alerts')).toHaveCount(0);
+  await expect(page.locator('.today-head .today-links')).toBeVisible();
+  const order = await page.evaluate(() => ['.today-links', '#today-decisions', '.today-nums', '.today-exc'].map((q) => document.querySelector(q)?.getBoundingClientRect().top ?? -1));
   expect(order.every((y, i) => y >= 0 && (i === 0 || y > order[i - 1]))).toBe(true);
-  await alerts.getByRole('link', { name: /مقاعد «جهة الشمال» ممتلئة/ }).click();
+  await alerts.locator('li', { hasText: 'مقاعد «جهة الشمال» ممتلئة' }).getByRole('link', { name: /افتح ملف الجهة/ }).click();
   await expect(page).toHaveURL(/#\/leaders\/orgs\/o1$/);
   await page.goto(`${BASE}#/leaders/overview`);
-  await page.getByRole('region', { name: /تنبيهات/ }).getByRole('link', { name: /سارة/ }).click();
+  await strip(page).locator('li', { hasText: 'سارة' }).getByRole('link').click();
   await expect(page).toHaveURL(/#\/leaders\/experts\/e1$/);
 });
 
@@ -229,17 +242,20 @@ test('3ب: المصدر المتعذر سطر خافت بأسمائه وما ل�
 
 test('3ب: admin.today متعذر كله: سطر خافت يقول إنه لم يُقرأ، والمكتب قائم', async ({ page }) => {
   await setup(page, { replies: { 'admin.today': { success: false, message: 'x' } } });
-  await expect(page.locator('.today-skip')).toContainText('تعذّرت قراءة التنبيهات الآن');
-  await expect(page.locator('.today-alerts')).toHaveCount(0);
+  // المرحلة 8: خطأ القسم بـrole=alert وزر إعادة، لا سطر خافت ولا Spinner عام
+  const err = strip(page).getByRole('alert');
+  await expect(err).toContainText('تعذّرت قراءة التنبيهات الآن');
+  await expect(page.locator('.today-skip')).toHaveCount(0);
+  await expect(err.getByRole('button', { name: 'حاول مرة أخرى' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'قرارات اليوم' })).toBeVisible();
 });
 
 test('3ب: العاجل يُقرأ «عاجل»، والقائمة بدورها الصريح', async ({ page }) => {
   await setup(page, { replies: { 'admin.today': desk } });
-  const alerts = page.getByRole('region', { name: /تنبيهات/ });
+  const alerts = strip(page);
   await expect(alerts.getByRole('list')).toHaveAttribute('role', 'list');
-  await expect(alerts.getByRole('link', { name: /^عاجل: مقاعد «جهة الشمال»/ })).toBeVisible();
-  await expect(alerts.getByRole('link', { name: /سارة/ })).not.toContainText('عاجل');
+  await expect(alerts.locator('li').first()).toContainText(/^!?عاجل: مقاعد «جهة الشمال»/);
+  await expect(alerts.locator('li', { hasText: 'سارة' })).not.toContainText('عاجل');
 });
 
 test('الترتيب: قرارات اليوم أولًا، ثم الأرقام، ثم «يحتاج انتباهك»', async ({ page }) => {

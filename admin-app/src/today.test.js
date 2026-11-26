@@ -99,3 +99,53 @@ describe('رابط التنبيه', () => {
     expect(alertHref({ target: { tab: 'programs', id: 'c1', query: 'view=follow&show=late' } })).toBe('#/leaders/programs/c1?view=follow&show=late');
   });
 });
+
+// ── المرحلة 8: «ما يحتاج انتباهك» قسم عرض واحد من مصدرين، والروابط العميقة إلى موضع الإصلاح ──
+import { attentionRows, exceptionRows, HEALTH_HREF, IN_PROGRAM, phAnchor, PROGRAM_VIEW } from './today.js';
+import { anchorOf, parseRoute } from './route.js';
+
+describe('المرحلة 8: ما يحتاج انتباهك', () => {
+  const okH = { success: true, readiness: [{ key: 'a', ok: true }, { key: 'b', ok: false }], pending_migrations: [], migrations_ledger: true, missing_secrets: [], mail: { today: 1, cap: 80 } };
+  const ph = { success: true, checks: [{ key: 'cron', label: 'المهمة الليلية', level: 'bad', line: 'متوقفة' }] };
+  const t = { success: true, alerts: [
+    { id: 'seats:o1', kind: 'seats_full', severity: 'bad', text: 'مقاعد ممتلئة', target: { tab: 'orgs', id: 'o1' } },
+    { id: 'undated:c1', kind: 'cohort_undated', severity: 'warn', text: 'جلستان بلا موعد', target: { tab: 'programs', id: 'c1' } },
+    { id: 'undated:c1', kind: 'cohort_undated', severity: 'warn', text: 'مكرر', target: { tab: 'programs', id: 'c1' } },
+  ] };
+  it('روابط الاستثناءات ليست كلها HEALTH_HREF: كل بند يشير إلى مرساته', () => {
+    const rows = exceptionRows({ ops: null, h: okH, orgs: [], ph, canWrite: true });
+    expect(rows.every((r) => r.href !== HEALTH_HREF)).toBe(true);
+    expect(rows.find((r) => r.key === 'launch').href).toBe(`${HEALTH_HREF}#ph-launch`);
+    expect(rows.find((r) => r.key === 'ph-cron').href).toBe(`${HEALTH_HREF}#ph-check-cron`);
+  });
+  it('phAnchor ثابت لكل مفتاح', () => {
+    expect(['system', 'system-unread', 'launch', 'orgs', 'ph-unread', 'ph-codes'].map(phAnchor)).toEqual(['ph-system', 'ph-system', 'ph-launch', 'ph-orgs', 'ph-checks', 'ph-check-codes']);
+    expect(phAnchor('ops-red')).toBe(null);
+  });
+  it('يدمج المصدرين: bad ثم warn، ويزيل المكرر بالمفتاح، ولكل صف شكل واحد', () => {
+    const exc = exceptionRows({ ops: null, h: okH, orgs: [], ph, canWrite: true });
+    const rows = attentionRows(exc, t);
+    expect(rows.map((r) => r.key)).toEqual(['ph-cron', 'alert:seats:o1', 'launch', 'alert:undated:c1']);
+    expect(rows.map((r) => r.source)).toEqual(['health', 'alert', 'health', 'alert']);
+    for (const r of rows) expect(Object.keys(r).sort()).toEqual(['href', 'key', 'kind', 'level', 'source', 'text', 'where']);
+    expect(rows[1]).toMatchObject({ href: '#/leaders/orgs/o1', where: 'ملف الجهة' });
+    expect(attentionRows(exc, t).filter((r) => r.key === 'alert:undated:c1')[0].text).toBe('جلستان بلا موعد');
+  });
+  it('تنبيهات متعذرة لا تُرسم بنودًا، والمصدران فارغان قائمة فارغة', () => {
+    expect(attentionRows([], { success: false })).toEqual([]);
+    expect(attentionRows([], null)).toEqual([]);
+  });
+  it('المرساة بعد المسار لا تغيّر التبويب، والمرساة غير الصالحة تُهمل', () => {
+    expect(parseRoute('#/leaders/health#ph-launch')).toEqual({ ctx: 'leaders', tab: 'health', id: null });
+    expect(anchorOf('#/leaders/health#ph-launch')).toBe('ph-launch');
+    expect(anchorOf('#/leaders/health')).toBe(null);
+    expect(anchorOf('#/leaders/health#<img>')).toBe(null);
+    // مفاتيح فحوص بشرطة سفلية (alert_email، sponsor_codes): المعرّف والرابط واحد
+    expect(anchorOf(`#/leaders/health#${phAnchor('ph-alert_email')}`)).toBe('ph-check-alert_email');
+    expect(anchorOf(`#/leaders/health#${phAnchor('ph-sponsor_codes')}`)).toBe('ph-check-sponsor_codes');
+  });
+  it('مرشح البطاقة الرابعة بالحالتين نفسيهما', () => {
+    expect(IN_PROGRAM).toEqual(['placed', 'enrolled']);
+    expect(PROGRAM_VIEW).toBe('inprogram');
+  });
+});

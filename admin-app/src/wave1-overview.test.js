@@ -19,7 +19,8 @@ describe('شريط «يحتاج انتباهك»', () => {
     const rows = exceptionRows({ ops: { verdict: { level: 'amber', title: 'اقترب السقف' } }, h, orgs: [], ph });
     expect(rows.map((r) => r.key)).toEqual(['system', 'ops-amber', 'launch', 'ph-codes']);
     expect(rows.find((r) => r.key === 'ops-amber').href).toBe('#/leaders/mailcenter');
-    expect(rows.find((r) => r.key === 'launch')).toMatchObject({ text: 'جاهزية الإطلاق 1 من 2', href: HEALTH_HREF });
+    expect(rows.find((r) => r.key === 'launch')).toMatchObject({ text: 'جاهزية الإطلاق 1 من 2', href: `${HEALTH_HREF}#ph-launch` });
+    expect(rows.find((r) => r.key === 'ph-codes').href).toBe(`${HEALTH_HREF}#ph-check-codes`);
     expect(rows.find((r) => r.key === 'ph-codes').text).toBe('رموز الرعاية: جهة بلا رمز');
   });
   it('ما لم يُقرأ لا يُعد سليمًا، ومن يقرأ وحده لا يرى ما لا يُعرض له', () => {
