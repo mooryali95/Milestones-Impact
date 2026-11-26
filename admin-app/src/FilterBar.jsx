@@ -1,7 +1,7 @@
 // شريط الفلترة الموحّد: بحث، وعروض سريعة بعدّاداتها، وحقول، ورقائق للفلاتر المفعّلة،
 // وعروض محفوظة باسم. المنطق في filters.js، والحالة في عنوان الصفحة عبر useFilters.
-import React, { useEffect, useState } from 'react';
-import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, ltrDigits, nextSort, PERIODS, recallState, rememberState, saveView, startState } from './filters.js';
+import React, { useEffect, useRef, useState } from 'react';
+import { activeChips, decodeState, deleteView, encodeState, isFiltered, loadViews, ltrDigits, nextSort, PERIODS, recallState, rememberState, saveView, splitPresets, startState } from './filters.js';
 import { readQuery, writeQuery } from './route.js';
 
 // حالة الفلاتر لشاشة واحدة، مقروءة من العنوان ومكتوبة إليه.
@@ -28,13 +28,28 @@ export function SortTh({ k, state, set, children, ...rest }) {
   );
 }
 
-export default function FilterBar({ scope, state, set, clear, replace, fields = [], presets = [], counts = {}, shown, total, noun, placeholder, actions, capped, sorts }) {
+export default function FilterBar({ scope, state, set, clear, replace, fields = [], presets = [], counts = {}, shown, total, noun, placeholder, actions, capped, sorts, collapseZero = false }) {
   const [views, setViews] = useState(() => loadViews(scope));
   const [more, setMore] = useState(false);
+  const [zeroOpen, setZeroOpen] = useState(false);
+  const searchRef = useRef(null);
+  const presetsRef = useRef(null);
+  // collapseZero: العروض السريعة الصفرية غير المختارة تُطوى تحت «المزيد (n)» (splitPresets في filters.js)
+  const { shown: presetsShown, folded } = splitPresets(presets, counts, state.view || '', collapseZero);
   const chips = activeChips(state, fields);
   // حقل { hidden: true } يُرشِّح ويظهر رقاقةً ويُحفظ في الرابط، ولا قائمة له هنا (تكتبه بطاقات FilterCards مثلًا)
   const visible = fields.filter((f) => !f.hidden);
   const filtered = isFiltered(state);
+  // حين لا يبقى ما يُطوى يعود الطي إلى أصله، ولا يسقط التركيز إلى body إن كان على زر «المزيد»
+  useEffect(() => {
+    if (folded.length === 0 && zeroOpen) {
+      const had = presetsRef.current && presetsRef.current.contains(document.activeElement);
+      setZeroOpen(false);
+      if (had || document.activeElement === document.body) presetsRef.current?.querySelector('button')?.focus();
+    }
+  }, [folded.length, zeroOpen]);
+  // «امسح الكل» يختفي بعد المسح، فيعود التركيز إلى البحث (WCAG 2.4.3)
+  const clearAll = () => { clear(); requestAnimationFrame(() => searchRef.current?.focus()); };
 
   const save = () => {
     const name = window.prompt('اسم العرض المحفوظ', '');
@@ -45,7 +60,7 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
     <div className="flt" role="search">
       <div className="flt-row">
         <div className="search-wrap flt-search">
-          <input className="search-input" type="search" aria-label="بحث" placeholder={placeholder || 'ابحث'} value={state.q || ''} {...ltrDigits(state.q)} onChange={(e) => set({ q: e.target.value })} />
+          <input ref={searchRef} className="search-input" type="search" aria-label="بحث" placeholder={placeholder || 'ابحث'} value={state.q || ''} {...ltrDigits(state.q)} onChange={(e) => set({ q: e.target.value })} />
         </div>
         {visible.slice(0, more ? visible.length : 3).map((f) => (
           <select key={f.key} className={`filter-select${state[f.key] ? ' on' : ''}`} aria-label={f.aria || f.label} value={state[f.key] || ''} onChange={(e) => set({ [f.key]: e.target.value })}>
@@ -63,13 +78,18 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
       </div>
 
       {presets.length > 0 && (
-        <div className="flt-row flt-presets" role="group" aria-label="عروض سريعة">
-          {presets.map((p) => (
-            <button key={p.key} type="button" className={`flt-preset${state.view === p.key ? ' on' : ''}`} aria-pressed={state.view === p.key}
+        <div ref={presetsRef} className="flt-row flt-presets" role="group" aria-label="عروض سريعة">
+          {[...presetsShown, ...(zeroOpen ? folded : [])].map((p) => (
+            <button key={p.key} type="button" className={`flt-preset${state.view === p.key ? ' on' : ''}${(counts[p.key] ?? 0) === 0 ? ' zero' : ''}`} aria-pressed={state.view === p.key}
               onClick={() => set({ view: state.view === p.key ? '' : p.key })}>
               {p.label}<b>{counts[p.key] ?? 0}</b>
             </button>
           ))}
+          {folded.length > 0 && (
+            <button type="button" className="flt-more flt-zero-more" aria-expanded={zeroOpen} onClick={() => setZeroOpen(!zeroOpen)}>
+              {`المزيد (${folded.length})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -78,7 +98,8 @@ export default function FilterBar({ scope, state, set, clear, replace, fields = 
         {chips.map((c) => (
           <span key={c.key} className="flt-chip">{c.label}<button type="button" aria-label={`إزالة ${c.label}`} onClick={() => set({ [c.key]: '' })}>×</button></span>
         ))}
-        {filtered && <button type="button" className="flt-link" onClick={clear}>مسح الكل</button>}
+        {/* «امسح الكل» رقاقة في صف الرقاقات نفسه (المرحلة 6)، تظهر مع أي فلتر مفعّل */}
+        {filtered && <button type="button" className="flt-chip flt-chip-clear" onClick={clearAll}>امسح الكل</button>}
         {filtered && <button type="button" className="flt-link" onClick={save}>حفظ هذا العرض</button>}
         {views.length > 0 && (
           <select className="filter-select flt-views" aria-label="العروض المحفوظة" value="" onChange={(e) => {

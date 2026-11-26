@@ -10,7 +10,7 @@ import Form from '../Form.jsx';
 import {
   date, DIM, DIMS, isSuperAdmin, L, LVL, STATUS, SUB_ST, trackOfPlacements,
 } from '../leaders.js';
-import { Empty, NoMatch, Spinner, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, StatusChip, useUI } from '../ui.jsx';
 import { assignOrgGuarded, enrollCohort } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
@@ -29,7 +29,7 @@ import { STATUS_REASON_MIN, statusNeedsReason } from '../../../supabase/function
 // حد الإجراء الجماعي وإجراءا الحالة والدفعة من BulkPeople.jsx: يستدعيهما تبويب «المتابعة» في ملف الدفعة أيضًا
 import { BULK_MAX, BulkEnroll, BulkStatus, useBulkCohorts } from '../BulkPeople.jsx';
 import { AccountEmails, FileExtras, FullTimeline, InitiativePanel, Observations } from './PersonFile.jsx';
-import { Glance, isChapter, NowStrip, keepTab, keptTab, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
+import { Glance, isChapter, NowStrip, keepTab, keptTab, MENU_TEXT, MoreMenu, PersonHeader, primaryAction, seenAt, startTab } from './PersonShell.jsx';
 import AssessmentAnswers from './AssessmentAnswers.jsx';
 import { NudgeLog, NudgeReport, NudgeSheet } from './Nudges.jsx';
 import BulkApprove from './BulkApprove.jsx';
@@ -242,7 +242,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
 
   return (
     <>
-      <FilterBar scope="participants" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts}
+      <FilterBar scope="participants" state={f} set={setF} clear={clearF} replace={replaceF} fields={fields} presets={PRESETS} counts={counts} collapseZero
         shown={shown.length} total={all.length} noun="مشارك" placeholder="ابحث بالاسم أو البريد أو الجوال أو الجهة"
         capped={cap ? { limit: cap, onSearch: (q) => load(q) } : null}
         actions={<>
@@ -251,7 +251,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
           <ColumnPicker cols={cols} onChange={setCols} />
           {canWrite && <button className="refresh-btn" type="button" onClick={() => setAdding(true)}>+ مشارك</button>}
           {/* فعل أساسي واحد ظاهر (+ مشارك) والثانوية في «المزيد» (تدقيق 2026-11-23، المرحلة 2) */}
-          <MoreMenu label="المزيد من إجراءات المشاركين" items={[
+          <MoreMenu text={MENU_TEXT} label="المزيد من إجراءات المشاركين" items={[
             canWrite && { label: 'استيراد', run: () => setImporting(true) },
             { label: 'فاعلية التذكير', run: () => setReport(true) },
           ]} />
@@ -302,7 +302,7 @@ function List({ orgs, canWrite, onOpen, initialStatus }) {
                       <td data-label="الجهة" className="col-wide col-org">{og && <><span className="la-orgtag" title="الجهة الراعية" style={{ '--org': og.color || 'var(--brand-gold)' }}>{og.short_name || og.name}</span><br /></>}{p.organization_name}<br /><small className="la-muted">{p.job_title}</small></td>
                       {DIMS.map((d) => <td key={d} data-label={DIM[d]} className="col-levels"><Lvl p={p} d={d} /></td>)}
                       <td data-label="المسار" className="col-wide col-track">{tk ? <code className="la-code">{tk}</code> : <span className="la-muted">·</span>}</td>
-                      <td data-label="الحالة"><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : ''}`}>{STATUS[p.status] || p.status}</span>
+                      <td data-label="الحالة"><StatusChip status={p.status} />
                         {p.effort?.level === 'low' && <> <span className="la-chip bad" title={p.effort.note}>مستعجل</span></>}
                         {p.effort?.level === 'watch' && <> <span className="la-chip warn" title={p.effort.note}>يُراجع</span></>}
                         {p.retake && <> <span className="la-chip" title={`طُلبت الإعادة ${date(p.retake.requested_at)}، ولم يسلّم قياسًا جديدًا بعد`}>طُلبت الإعادة</span></>}</td>

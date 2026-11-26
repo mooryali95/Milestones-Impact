@@ -10,7 +10,7 @@ import { assignOrgGuarded } from '../cohort-guard.js';
 import ExportButton from '../ExportButton.jsx';
 import FilterBar, { SortTh, useFilters } from '../FilterBar.jsx';
 import { applyFilters, presetCounts, sortRows } from '../filters.js';
-import { Empty, NoMatch, Spinner, useCopy, useUI } from '../ui.jsx';
+import { Empty, NoMatch, Spinner, StatusChip, useCopy, useUI } from '../ui.jsx';
 import { OrgSelect } from './Participants.jsx';
 import OrgForm from './OrgForm.jsx';
 import CoordinatorPanel from './CoordinatorPanel.jsx';
@@ -411,7 +411,7 @@ function OrgView({ id, orgs, canWrite, onBack, onPerson, onEdit }) {
               <td><button className="la-link" onClick={() => onPerson(p.id)}><b>{p.full_name}</b></button><br /><small className="la-muted" dir="ltr">{p.email}</small></td>
               <td>{p.job_title}</td>
               <td>{p.track ? <><code className="la-code">{p.track}</code> {!p.approved && <small className="la-muted">مبدئي</small>}</> : <span className="la-muted">·</span>}</td>
-              <td><span className={`la-chip ${p.status === 'pending_approval' ? 'warn' : p.status === 'completed' ? 'ok' : ''}`}>{STATUS[p.status] || p.status}</span></td>
+              <td><StatusChip status={p.status} /></td>
               <td>{date(p.last_login_at)}</td>
               <td>{date(p.created_at)}{p.org_via && <><br /><small className="la-muted">{VIA[p.org_via]}{p.campaign && <> · <span dir="ltr">{p.campaign}</span></>}</small></>}</td>
             </tr>

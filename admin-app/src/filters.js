@@ -130,3 +130,15 @@ export function deleteView(scope, name) {
   try { localStorage.setItem(savedKey(scope), JSON.stringify(list)); } catch { /* */ }
   return list;
 }
+
+// طي العروض السريعة الصفرية (المرحلة 6): العرض الذي عداده صفر وليس هو المختار يُطوى تحت «المزيد (n)»،
+// والمختار يبقى ظاهرًا ولو صار صفرًا كي يُلغى. العداد غير المعروف (لم يُحمّل) لا يُطوى.
+export function splitPresets(presets = [], counts = {}, active = '', collapseZero = false) {
+  if (!collapseZero) return { shown: presets, folded: [] };
+  const shown = []; const folded = [];
+  for (const p of presets) {
+    const n = counts[p.key];
+    if (n === 0 && p.key !== active) folded.push(p); else shown.push(p);
+  }
+  return { shown, folded };
+}
