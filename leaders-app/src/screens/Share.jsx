@@ -34,7 +34,7 @@ export function ShareCard({ data, onOpen }) {
   );
 }
 
-function Toggle({ on, label, hint, disabled, onChange }) {
+export function Toggle({ on, label, hint, disabled, onChange }) {
   return (
     <label className={`sh-toggle${disabled ? ' off' : ''}`}>
       <input type="checkbox" checked={!!on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />

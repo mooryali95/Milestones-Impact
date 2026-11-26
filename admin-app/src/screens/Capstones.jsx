@@ -10,7 +10,8 @@ import { copiedFromExamples } from '../../../supabase/functions/leaders-api/exam
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DIM, L, date } from '../leaders.js';
 import { CHAPTER_STANDING_AR, PRIORITY_WEIGHT, SPONSOR_STATE_AR, STATUS_TITLES_ADMIN } from '../../../supabase/functions/leaders-api/capstone.js';
-import { LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { DOC_QR_AR, LEVEL_AR, RUBRIC_LEVEL_AR, SUBMISSION_STATUS, SUBMISSION_STATUS_ADMIN } from '../../../supabase/functions/leaders-api/labels.js';
+import { ADMIN_QR_CHOICES, REASON_MAX } from '../../../supabase/functions/leaders-api/doc-options.js';
 // حالة الفصل في صفحة الوثيقة: الفصول يقرؤها المستشار في كتاب القائد لا المالك، فالتقديم والقراءة بلسانه،
 // و«أُعيد» بفعل الوثيقة نفسه (STATUS_TITLES_ADMIN.returned) فلا يختلف الفعلان في الصفحة الواحدة
 export const SECTION_STATUS_AR = { ...SUBMISSION_STATUS_ADMIN, submitted: SUBMISSION_STATUS.submitted, reviewed: SUBMISSION_STATUS.reviewed, returned: STATUS_TITLES_ADMIN.returned };
@@ -91,7 +92,9 @@ export async function openDoc(doc, toast, kind = 'working', onBlocked = null, op
 // ما ينقص، أو «نسخة كاملة»، ومفاتيح ثلاثة للتعديل اليدوي. الخيارات لكل تنزيل ولا تُحفظ. الوثيقة من الخادم لحظة الطلب مع تذكرة
 // مربوطة ببصمتها، ويُسجَّل التنزيل admin.docExport. الملف عبر downloadBest فيطابق ما يُرى، وبلا نسبة الجاهزية
 const EXPORT_SWITCHES = [['decision', 'صفحة القرار'], ['annex', 'ملحق المراجع'], ['appendix', 'ملحق ما ينقص'], ['qr', 'رمز التحقق']];
-export function FinalDocExport({ participantId, approved = false }) {
+// qrOk: قرار الرمز الفعلي (المرحلة 33، effectiveQr). المحجوب لا يُطبع رمزه في أي نسخة، فالمفتاح معطل بسببه
+export function FinalDocExport({ participantId, approved = false, qrOk = true }) {
+  const canQr = approved && qrOk;
   const { toast } = useUI();
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState('send');
@@ -111,7 +114,7 @@ export function FinalDocExport({ participantId, approved = false }) {
   }, [open, busy]);
   useEffect(() => { if (open && !mod) import('../../../src/lib/brand/institutional.js').then(setMod); }, [open, mod]);
   const base = mod?.EXPORT_PRESETS[preset];
-  const options = base ? { ...base, ...(opts || {}), ...(approved ? {} : { qr: false }) } : null;
+  const options = base ? { ...base, ...(opts || {}), ...(canQr ? {} : { qr: false }) } : null;
   const pick = (p) => { setPreset(p); setOpts(null); };
   const download = async () => {
     if (!options) return;
@@ -141,9 +144,10 @@ export function FinalDocExport({ participantId, approved = false }) {
           </div>
           <div className="la-row">
             {EXPORT_SWITCHES.map(([k, t]) => (
-              <label key={k} className="row" title={k === 'qr' && !approved ? 'رمز التحقق للوثيقة المعتمدة فقط' : undefined}><input type="checkbox" role="switch" disabled={!options || (k === 'qr' && !approved)} checked={k === 'qr' ? approved && !!options?.qr : !!options?.[k]} onChange={(e) => setOpts((o) => ({ ...(o || {}), [k]: e.target.checked }))} /> {t}</label>
+              <label key={k} className="row" title={k === 'qr' && !canQr ? (approved ? DOC_QR_AR.admin_now(false) : 'رمز التحقق للوثيقة المعتمدة فقط') : undefined}><input type="checkbox" role="switch" disabled={!options || (k === 'qr' && !canQr)} checked={k === 'qr' ? canQr && !!options?.qr : !!options?.[k]} onChange={(e) => setOpts((o) => ({ ...(o || {}), [k]: e.target.checked }))} /> {t}</label>
             ))}
           </div>
+          {options && approved && !qrOk && <p className="la-muted small">{DOC_QR_AR.admin_now(false)}</p>}
           {options && <p className="la-muted small" aria-live="polite">{mod.exportSummary(options, { approved })}</p>}
           <div className="la-row">
             <button type="button" className="btn-sm primary" disabled={!options || !!busy} onClick={download}>{busy || 'تحميل'}</button>
@@ -231,6 +235,43 @@ function Review({ d, canWrite, onSaved, onFailed }) {
   );
 }
 
+// قرار رمز التحقق (المرحلة 33): يتبع صاحبها (الافتراض) أو إظهار أو منع، ومن قرر ومتى وسبب اختياري. قرار الأدمن يعلو
+// تفضيل القائد، والقيمة الفعلية من الخادم (effectiveQr) وتُقرأ حيًا في كل نسخة وفي التحقق
+export function QrDecision({ id, q, canWrite, onSaved }) {
+  const { toast } = useUI();
+  const [choice, setChoice] = useState(q.choice || 'follow');
+  const [reason, setReason] = useState(q.admin?.reason || '');
+  const [busy, setBusy] = useState(false);
+  const dirty = choice !== (q.choice || 'follow') || (choice !== 'follow' && reason.trim() !== (q.admin?.reason || ''));
+  const save = async () => {
+    setBusy(true);
+    const r = await L('admin.capstone-options', { participant_id: id, qr: choice, reason: reason.trim() });
+    setBusy(false);
+    if (!r.success) return toast(r.message);
+    toast(DOC_QR_AR.saved);
+    onSaved();
+  };
+  const off = !canWrite || !q.available || busy;
+  return (
+    <section className="la-card cps-qr" data-qr={q.qr ? 'on' : 'off'}>
+      <h3>{DOC_QR_AR.admin_title}</h3>
+      <p className="la-muted small">{DOC_QR_AR.admin_now(q.qr)} · {DOC_QR_AR.owner_pref(q.owner)}{q.admin ? ` · ${DOC_QR_AR.admin_by(q.admin.by, q.admin.at ? date(q.admin.at) : '')}` : ''}</p>
+      {!q.available && <p className="la-muted small">{DOC_QR_AR.admin_unavailable}</p>}
+      <div className="la-row" role="radiogroup" aria-label={DOC_QR_AR.admin_title}>
+        {ADMIN_QR_CHOICES.map((k) => (
+          <label key={k} className="row"><input type="radio" name={`cps-qr-${id}`} disabled={off} checked={choice === k} onChange={() => setChoice(k)} /> {DOC_QR_AR.admin_choices[k]}</label>
+        ))}
+      </div>
+      {choice !== 'follow' && (
+        <div className="la-row">
+          <input aria-label={DOC_QR_AR.admin_reason} placeholder={DOC_QR_AR.admin_reason} maxLength={REASON_MAX} disabled={off} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
+      )}
+      {canWrite && <div className="la-row"><button type="button" className="btn-sm primary" disabled={off || !dirty} onClick={save}>{busy ? 'لحظة…' : 'حفظ'}</button></div>}
+    </section>
+  );
+}
+
 function Sponsor({ d, canWrite, onSaved }) {
   const { toast } = useUI();
   const c = d.capstone;
@@ -285,7 +326,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
           </div>
         </div>
         <div className="la-row">
-          <FinalDocExport participantId={id} approved={c.status === 'approved'} />
+          <FinalDocExport participantId={id} approved={c.status === 'approved'} qrOk={d.qr_state?.qr !== false} />
           <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast)}>ملف العمل الكامل</button>
           <button className="btn-sm ghost" onClick={() => openDoc(d.doc, toast, 'institutional', setBlocked)}>الوثيقة المؤسسية</button>
           <button className="btn-sm ghost" onClick={() => onPerson(id)}>ملف المشارك</button>
@@ -333,6 +374,7 @@ function Detail({ id, canWrite, onBack, onPerson }) {
       </div>
 
       {c.status === 'submitted' && <Review d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} onFailed={load} />}
+      {c.status === 'approved' && d.qr_state && <QrDecision id={id} q={d.qr_state} canWrite={canWrite} onSaved={load} />}
       {c.status === 'approved' && <TrackingPanel t={d.doc.tracking} />}
       {c.status === 'accepted' && <Sponsor d={d} canWrite={canWrite} onSaved={(r) => setD({ ...r, participant_id: id })} />}
     </div>

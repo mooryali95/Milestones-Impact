@@ -19,10 +19,12 @@ import { unseenNew } from './track-history.ts';
 import {
   APPROVAL_POINTS, bindAnswers, canSubmit, CLOSING_AR, closingState, cardGate, capstoneChecks, capstoneModels, CHARTER_KEY, cleanRubric, costSummary, docLevelsFor, MAX_REVISIONS,
   capstoneListRows, capstoneState, chapterLevel, levelsView, dateAr, withoutReviewLevels, CHAPTER_STANDING_AR, displayJoins, LIVE_READINESS, modelFields, READY_MIN, readiness, RUBRIC, rubricFor, rubricScore, SCOPE_TITLES, sectionState, STATUS_TITLES, trackProject, sponsorEmailFrom, SPONSOR_LINK_EXPIRED_AR, sponsorReminderDue, sponsorState, sponsorWarnings } from './capstone.js';
-import { APPROVAL_SLA_AR } from './labels.js';
+import { APPROVAL_SLA_AR, DOC_VERIFY_AR } from './labels.js';
 import { GATE_ACTIONS, gateDecisions } from './closure.js';
-import { docFingerprint, freezeIssued, rejectionStats, verifyKey } from './doc-quality.js';
+import { docFingerprint, freezeIssued, issuedFingerprint, rejectionStats, verifyKey } from './doc-quality.js';
 import { docFormFor } from './doc-form.js';
+import { adminChoice, docOptionsView, effectiveQr, withAdminQr, withOwnerQr } from './doc-options.js';
+import { missingColumn } from './missing-column.ts';
 import { cohortIdentity } from './cohort-identity.js';
 import { pdfTicket } from './pdf-ticket.ts';
 import type { Admin } from './admin.ts';
@@ -162,6 +164,8 @@ export async function get(p: any) {
     },
     // بوابة البطاقة: حالتها ومدة الاعتماد المعتادة، لتقول الواجهة ما ينتظره المشارك
     card: card ? { state: cardGate(card.status).state, sla: APPROVAL_SLA_AR } : null,
+    // قرار رمز التحقق في المعتمدة (المرحلة 33): مفتاح القائد، ومعطل حين يقرر فريق البرنامج أو لا بصمة مجمدة
+    qr_state: qrStateFor(c),
     can_submit: gate.ok, blocker: gate.ok ? null : gate.reason,
     rubric: rubricFor(d.levels).map((r) => ({ key: r.key, title: r.title, dimension: r.dimension, level: r.level, anchors: r.anchors })),
     // المبادرات المحلولة كما يضبطها المالك (examplesFor): أي القطاعات تُعرض، والوثيقة الكاملة أم لا
@@ -278,12 +282,15 @@ async function recordFor(p: any, audience: 'participant' | 'admin' | 'sponsor' |
 // السجل ومعه البناء الحي إن بُني (غير المعتمدة)، وإلا null: المعتمدة من لقطتها
 async function recordAndBuild(p: any, audience: 'participant' | 'admin' | 'sponsor' | 'org'): Promise<{ doc: any; d: any }> {
   const { data: c } = await db.from('capstones').select('status, snapshot, approved_at').eq('participant_id', p.id).maybeSingle();
+  // قرار رمز التحقق حيًا لا من اللقطة (المرحلة 33): القرار وحده بلا من قرر ولا سببه، وverify-mark.js يقرؤه بـ effectiveQr
+  const options = docOptionsView(await docOptionsOf(p.id));
   if (c?.status === 'approved' && c.snapshot) {
-    const doc = c.snapshot;
+    const doc = { ...c.snapshot, doc_options: options };
     if (audience !== 'admin' && audience !== 'participant') doc.review = null;
     return { doc: { ...doc, decisions: await decisionsFor(p.id, c.approved_at || null) }, d: null };
   }
-  const { d, doc } = await docAndBuild(p, audience);
+  const built = await docAndBuild(p, audience);
+  const d = built.d, doc = { ...built.doc, doc_options: options };
   return { doc: { ...doc, decisions: await decisionsFor(p.id, null) }, d };
 }
 
@@ -320,6 +327,65 @@ export async function doc(p: any) {
   return { success: true, doc: document, pdf: await pdfTicket(p.id, docFingerprint(document)).catch(() => null) };
 }
 
+// ── قرار رمز التحقق (المرحلة 33): capstones.doc_options { owner: { qr }, admin: { qr, by, at, reason } } ──
+// قبل الترحيل 20261130030000 يُقرأ فارغًا فيُطبع الرمز كما كان، والكتابة ترد «غير متاح الآن»
+async function docOptionsOf(participantId: string): Promise<Record<string, unknown>> {
+  const { data, error } = await db.from('capstones').select('doc_options').eq('participant_id', participantId).maybeSingle();
+  if (error) { if (!missingColumn(error)) console.error('capstone doc_options:', error.message); return {}; }
+  return ((data as any)?.doc_options as Record<string, unknown>) || {};
+}
+const OPTIONS_NOT_READY_AR = 'هذا الخيار غير متاح الآن، حاول لاحقًا';
+// صف الوثيقة لكتابة القرار: المعتمدة ذات البصمة المجمدة وحدها لها رمز يُقرر فيه (مفتاح القائد معطل في غيرها)
+async function optionsRow(participantId: string) {
+  const { data, error } = await db.from('capstones').select('status, snapshot, doc_options').eq('participant_id', participantId).maybeSingle();
+  if (error && missingColumn(error)) throw new Fail(OPTIONS_NOT_READY_AR, 503, 'not_migrated');
+  if (error) throw error;
+  const row = data as any;
+  if (row?.status !== 'approved' || !issuedFingerprint(row?.snapshot)) throw new Fail('رمز التحقق يخص الوثيقة المعتمدة ذات البصمة المجمدة', 409, 'not_issued');
+  return row;
+}
+// كتابة مشروطة بالقيمة المقروءة (تفاؤلية): إن كتب الطرف الآخر بينهما لا يُطمس قراره، ويُطلب إعادة المحاولة
+async function writeOptions(participantId: string, before: Record<string, unknown>, next: Record<string, unknown>) {
+  const res = await db.from('capstones').update({ doc_options: next }).eq('participant_id', participantId).eq('doc_options', JSON.stringify(before || {})).select('participant_id');
+  if (res.error && missingColumn(res.error)) throw new Fail(OPTIONS_NOT_READY_AR, 503, 'not_migrated');
+  must(res);
+  if (!(res as any).data?.length) throw new Fail('تغيّر هذا الخيار للتو، حدّث الصفحة وأعد المحاولة', 409, 'conflict');
+}
+/** ما تعرضه شاشة القائد: تفضيله، والقيمة الفعلية ومصدرها، وهل يملك التغيير. بلا من قرر من الأدمن ولا سببه */
+export const qrStateFor = (row: any) => {
+  const o = row?.doc_options || {};
+  const eff = effectiveQr(o);
+  const issued = row?.status === 'approved' && !!issuedFingerprint(row?.snapshot);
+  return { qr: eff.qr, source: eff.source, forced: eff.forced, owner: typeof o?.owner?.qr === 'boolean' ? o.owner.qr : null, available: issued };
+};
+
+// capstone.options: صاحب الوثيقة وحده (p جلسته هو)، ويكتب owner.qr وحده
+export async function ownerOptions(p: any, b: Body) {
+  if (typeof b.qr !== 'boolean') throw new Fail('قيمة الرمز غير صالحة');
+  const row = await optionsRow(p.id);
+  const before = row.doc_options || {};
+  const next = withOwnerQr(before, b.qr);
+  await writeOptions(p.id, before, next);
+  await audit('participant', p.email, 'capstone.options', 'capstones', p.id, { qr: before?.owner?.qr ?? null, effective: effectiveQr(before).qr }, { qr: b.qr, effective: effectiveQr(next).qr });
+  return { success: true, qr_state: qrStateFor({ ...row, doc_options: next }) };
+}
+
+// admin.capstone-options: قرار الأدمن (يتبع صاحبها أو إظهار أو منع) مع من قرر ومتى وسبب اختياري، بصلاحية الكتابة (A.writer)
+export async function adminOptions(a: Admin, b: Body) {
+  const p = await participantRow(b.participant_id);
+  const choice = String(b.qr || '');
+  const row = await optionsRow(p.id);
+  const before = row.doc_options || {};
+  let next: Record<string, unknown>;
+  try { next = withAdminQr(before, choice, { by: a.email, reason: b.reason as string }); } catch (e: any) { throw new Fail(e.message); }
+  await writeOptions(p.id, before, next);
+  // الإظهار المفروض على قائد منعه يظهر في السجل بتفضيله قبل القرار وبعده
+  await audit('admin', a.email, 'admin.capstone-options', 'capstones', p.id,
+    { choice: adminChoice(before), owner: (before as any)?.owner?.qr ?? null, effective: effectiveQr(before).qr },
+    { choice, owner: (next as any)?.owner?.qr ?? null, effective: effectiveQr(next).qr, reason: (next as any)?.admin?.reason ?? null });
+  return { success: true, doc_options: next, choice: adminChoice(next), effective: effectiveQr(next) };
+}
+
 // ── التحقق العام من وثيقة معتمدة ببصمتها (رمز QR في صفحة الاعتماد): ما تعرضه الوثيقة على غلافها وحده، بلا محتوى ولا بريد ──
 const DOC_CHECK_LIMIT = 40; // طلبًا لكل عنوان في 10 دقائق، كالتحقق من الشهادة
 export async function verifyDoc(b: Body, ctx: { ip: string | null; ua: string | null }) {
@@ -332,13 +398,18 @@ export async function verifyDoc(b: Body, ctx: { ip: string | null; ua: string | 
     const { count, error } = await db.from('document_checks').select('id', { count: 'exact', head: true }).eq('ip', ctx.ip).gte('created_at', since);
     if (!error && (count ?? 0) >= DOC_CHECK_LIMIT) throw new Fail('طلبات كثيرة، حاول بعد دقائق', 429, 'rate');
   }
-  const { data: rows } = valid
-    ? await db.from('capstones').select('status, approved_at, snapshot, participants(is_demo)').eq('status', 'approved').eq('snapshot->issued->>fingerprint', fp).limit(1)
-    : { data: [] as any[] };
+  // قرار الرمز يُقرأ حيًا مع الصف (المرحلة 33)، وقبل ترحيله يُعاد الطلب بدونه فيُعامل مفعّلًا
+  const lookup = (cols: string) => db.from('capstones').select(cols).eq('status', 'approved').eq('snapshot->issued->>fingerprint', fp).limit(1);
+  let { data: rows, error: lookErr } = valid ? await lookup('status, approved_at, snapshot, doc_options, participants(is_demo)') : { data: [] as any[], error: null };
+  if (valid && lookErr && missingColumn(lookErr)) ({ data: rows } = await lookup('status, approved_at, snapshot, participants(is_demo)'));
   const row = ((rows || []) as any[]).find((r) => r?.participants && !r.participants.is_demo) || null;
   // السجل اختياري: قبل ترحيله يعمل التحقق ولا يُسجَّل
   await db.from('document_checks').insert({ fingerprint: valid ? fp : null, found: !!row, ip: ctx.ip, user_agent: ctx.ua }).then(() => null, () => null);
   if (!row) return { success: true, found: false };
+  // المنع: رد محايد يثبت الصحة ولا يكشف شيئًا، بلا اسم المبادرة ولا الجهة ولا البرنامج (نهج الشهادات القابلة للتحقق)
+  if (!effectiveQr(row.doc_options).qr) {
+    return { success: true, found: true, authentic: true, withheld: true, message: DOC_VERIFY_AR.withheld, document: { fingerprint: fp, issuer: 'Milestone Impact' } };
+  }
   const s = row.snapshot || {}, m = { ...(s.meta || {}), ...(s.issued?.meta || {}) };
   return {
     success: true, found: true, authentic: true,
@@ -468,6 +539,8 @@ export async function adminGet(b: Body) {
     // الحالة والجاهزية بالقاعدة نفسها التي تقرأ بها قائمة الوثائق (capstoneState)
     sections: state.sections.map(sectionView), checks: state.checks, readiness: capstoneState(c, state.readiness).readiness ?? 0,
     priority: state.weighted, max_revisions: MAX_REVISIONS,
+    // قرار رمز التحقق (المرحلة 33): اختيار الأدمن الثلاثي ومن قرر ومتى وسببه، وتفضيل القائد والقيمة الفعلية
+    qr_state: { ...qrStateFor(c), choice: adminChoice(c?.doc_options), admin: (c?.doc_options as any)?.admin || null },
     rubric: rubricFor(state.levels), leader: await leaderScore(p),
     // بلا بريد صحيح للراعي لا يُطلب تأييد: تعرض الشاشة القبول بالاعتماد دون تأييد بدل خطأ بعد الحفظ
     sponsor_email: sponsorEmailFrom(state.charter, state.own),

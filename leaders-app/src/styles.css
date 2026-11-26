@@ -1192,6 +1192,7 @@ details.mf-guide:not([open]) { background: transparent; border-inline-start-colo
 .cp-review { margin-bottom: 14px; } .cp-review h2, .cp-review h3 { margin: 0 0 6px; font-size: 16px; }
 .cp-review.bad { box-shadow: inset 3px 0 0 var(--bad); } .cp-review.ok { box-shadow: inset 3px 0 0 var(--ok); }
 .cp-review ul { margin: 6px 0; padding-inline-start: 18px; line-height: 1.9; font-size: 14px; }
+.cp-qr { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .cp-score b { font-size: 28px; }
 .cp-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 .cp-grid .card + .card { margin-top: 0; }
